@@ -2425,6 +2425,111 @@ Set the time of loop start in seconds.
 Only used if option named @var{start} is set to @code{-1}.
 @end table
 
+@section ambisonic
+
+Apply ambisonic decoder to input audio stream.
+Currently 1st order ambisonics are supported.
+
+The filter accepts the following options:
+
+@table @option
+@item layout
+Set the channel layout of output audio stream.
+
+@item sequence
+Override input channel sequence.
+
+@item scaling
+Set the input scaling format.
+
+@item nearfield
+Set the near field.
+
+@item matching
+Set the mode for matching decode matrix.
+
+@item xoverfreq
+Set the cross-over frequency.
+
+@item xoverratio
+Set the cross-over HF/LF ratio.
+
+@item pgtype
+Set the perceptual LF/HF gains type.
+
+@item precision
+Set the processing precision.
+
+@item temp
+Set the temperature.
+
+@item yaw
+@item pitch
+@item roll
+Set the rotation angle.
+
+@item level
+Set the output level compensation.
+
+@item norm
+Enable matrix normalization.
+
+@item invert_x
+@item invert_y
+@item invert_z
+Set the invert odd/even harmonics.
+
+@item invert_c
+Set the circular invert.
+
+@item x_odd
+@item y_odd
+@item z_odd
+Set the odd harmonics gain.
+
+@item x_even
+@item y_even
+@item z_even
+Set the even harmonics gain.
+
+@item c_gain
+Set the circular gain.
+
+@item f_dom
+@item s_dom
+@item v_dom
+Set the soundfield dominance.
+
+@item o_dir
+@item x_dir
+@item y_dir
+@item z_dir
+Set the soundfield directivity.
+
+@item x_zoom
+@item y_zoom
+@item z_zoom
+Set the soundfield zoom.
+
+@item x_focus
+@item y_focus
+@item z_focus
+Set the soundfield focus.
+
+@item x_push
+@item y_push
+@item z_push
+Set the soundfield push.
+
+@item x_press
+@item y_press
+@item z_press
+Set the soundfield press.
+
+@item asymmetry
+Set the soundfield asymmetry.
+@end table
+
 @anchor{amerge}
 @section amerge
 
