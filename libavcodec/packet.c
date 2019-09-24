@@ -549,6 +549,7 @@ int avpriv_packet_list_put(PacketList *packet_buffer,
                            int flags)
 {
     PacketListEntry *pktl = av_malloc(sizeof(*pktl));
+    unsigned int update_end_point = 1;
     int ret;
 
     if (!pktl)
@@ -572,13 +573,22 @@ int avpriv_packet_list_put(PacketList *packet_buffer,
 
     pktl->next = NULL;
 
-    if (packet_buffer->head)
-        packet_buffer->tail->next = pktl;
-    else
+    if (packet_buffer->head) {
+        if (flags & FF_PACKETLIST_FLAG_PREPEND) {
+            pktl->next = packet_buffer->head;
+            packet_buffer->head = pktl;
+            update_end_point = 0;
+        } else {
+            packet_buffer->tail->next = pktl;
+        }
+    } else
         packet_buffer->head = pktl;
 
-    /* Add the packet in the buffered packet list. */
-    packet_buffer->tail = pktl;
+    if (update_end_point) {
+        /* Add the packet in the buffered packet list. */
+        packet_buffer->tail = pktl;
+    }
+
     return 0;
 }
 
