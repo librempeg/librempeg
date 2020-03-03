@@ -46,7 +46,7 @@ typedef struct PhotosensitivityContext {
 
     /* Circular buffer */
     int history[MAX_FRAMES];
-    int history_pos;
+    int history_pos, history_size;
 
     PhotosensitivityFrame last_frame_e;
     AVFrame *last_frame_av;
@@ -196,14 +196,14 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     PhotosensitivityContext *s = ctx->priv;
 
-    s->badness_threshold = (int)(GRID_SIZE * GRID_SIZE * 4 * 256 * s->nb_frames * s->threshold_multiplier / 128);
+    s->badness_threshold = (int)(GRID_SIZE * GRID_SIZE * 4 * 256 * s->threshold_multiplier / 128);
 
     return 0;
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
-    int this_badness, current_badness, fixed_badness, new_badness, i, res;
+    int this_badness, current_badness, fixed_badness, new_badness, badness_threshold, i, res, start;
     PhotosensitivityFrame ef;
     AVFrame *src, *out;
     int free_in = 0;
@@ -216,26 +216,32 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     /* weighted moving average */
     current_badness = 0;
-    for (i = 1; i < s->nb_frames; i++)
-        current_badness += i * s->history[(s->history_pos + i) % s->nb_frames];
-    current_badness /= s->nb_frames;
+    if (s->history_size) {
+        start = s->nb_frames + s->history_pos - s->history_size;
+        for (i = 1; i < s->history_size; i++)
+            current_badness += i * s->history[(start + i) % s->nb_frames];
+        current_badness /= s->history_size;
+        badness_threshold = s->badness_threshold * s->history_size;
+    } else {
+        badness_threshold = INT_MAX;
+    }
 
     convert_frame(ctx, in, &ef, s->skip);
     this_badness = get_badness(&ef, &s->last_frame_e);
     new_badness = current_badness + this_badness;
     av_log(ctx, AV_LOG_VERBOSE, "badness: %6d -> %6d / %6d (%3d%% - %s)\n",
-        current_badness, new_badness, s->badness_threshold,
-        100 * new_badness / s->badness_threshold, new_badness < s->badness_threshold ? "OK" : "EXCEEDED");
+        current_badness, new_badness, badness_threshold,
+        100 * new_badness / badness_threshold, new_badness < badness_threshold ? "OK" : "EXCEEDED");
 
     fixed_badness = new_badness;
-    if (new_badness < s->badness_threshold || !s->last_frame_av || s->bypass) {
+    if (new_badness < badness_threshold || !s->last_frame_av || s->bypass) {
         factor = 1; /* for metadata */
         av_frame_free(&s->last_frame_av);
         s->last_frame_av = src = in;
         s->last_frame_e = ef;
         s->history[s->history_pos] = this_badness;
     } else {
-        factor = (float)(s->badness_threshold - current_badness) / (new_badness - current_badness);
+        factor = (float)(badness_threshold - current_badness) / (new_badness - current_badness);
         if (factor <= 0) {
             /* just duplicate the frame */
             s->history[s->history_pos] = 0; /* frame was duplicated, thus, delta is zero */
@@ -251,8 +257,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             this_badness = get_badness(&ef, &s->last_frame_e);
             fixed_badness = current_badness + this_badness;
             av_log(ctx, AV_LOG_VERBOSE, "  fixed: %6d -> %6d / %6d (%3d%%) factor=%5.3f\n",
-                current_badness, fixed_badness, s->badness_threshold,
-                100 * new_badness / s->badness_threshold, factor);
+                current_badness, fixed_badness, badness_threshold,
+                100 * new_badness / badness_threshold, factor);
             s->last_frame_e = ef;
             s->history[s->history_pos] = this_badness;
         }
@@ -260,6 +266,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         free_in = 1;
     }
     s->history_pos = (s->history_pos + 1) % s->nb_frames;
+    if (s->history_size < s->nb_frames)
+        s->history_size++;
 
     out = ff_get_video_buffer(outlink, in->width, in->height);
     if (!out) {
@@ -272,13 +280,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (metadata) {
         char value[128];
 
-        snprintf(value, sizeof(value), "%f", (float)new_badness / s->badness_threshold);
+        snprintf(value, sizeof(value), "%f", (float)new_badness / badness_threshold);
         av_dict_set(metadata, "lavfi.photosensitivity.badness", value, 0);
 
-        snprintf(value, sizeof(value), "%f", (float)fixed_badness / s->badness_threshold);
+        snprintf(value, sizeof(value), "%f", (float)fixed_badness / badness_threshold);
         av_dict_set(metadata, "lavfi.photosensitivity.fixed-badness", value, 0);
 
-        snprintf(value, sizeof(value), "%f", (float)this_badness / s->badness_threshold);
+        snprintf(value, sizeof(value), "%f", (float)this_badness / badness_threshold);
         av_dict_set(metadata, "lavfi.photosensitivity.frame-badness", value, 0);
 
         snprintf(value, sizeof(value), "%f", factor);
