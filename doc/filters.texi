@@ -19774,6 +19774,12 @@ Allowed range is from 1 to 1024.
 
 @item bypass
 Leave frames unchanged. Default is disabled.
+
+@item blend
+Set the blending factor for frames that exceed the detection threshold.
+A value of 0 duplicates the last accepted frame, and a value of 1 blends up to
+the detection threshold. Default is 1.
+Allowed range is from 0 to 1.
 @end table
 
 @section pixdesctest

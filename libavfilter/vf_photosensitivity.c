@@ -39,7 +39,7 @@ typedef struct PhotosensitivityContext {
 
     int nb_frames;
     int skip;
-    float threshold_multiplier;
+    float threshold_multiplier, blend_factor;
     int bypass;
 
     int badness_threshold;
@@ -62,6 +62,7 @@ static const AVOption photosensitivity_options[] = {
     { "t",         "set detection threshold factor (lower is stricter)",  OFFSET(threshold_multiplier), AV_OPT_TYPE_FLOAT, {.dbl=1},  0.1, FLT_MAX,  FLAGS },
     { "skip",      "set pixels to skip when sampling frames",             OFFSET(skip),                 AV_OPT_TYPE_INT,   {.i64=1},  1, 1024,       FLAGS },
     { "bypass",    "leave frames unchanged",                              OFFSET(bypass),               AV_OPT_TYPE_BOOL,  {.i64=0},  0, 1,          FLAGS },
+    { "blend",     "set blending factor (0 always duplicates frames)",    OFFSET(blend_factor),         AV_OPT_TYPE_FLOAT, {.dbl=1},  0, 1,          FLAGS },
     { NULL }
 };
 
@@ -241,7 +242,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->last_frame_e = ef;
         s->history[s->history_pos] = this_badness;
     } else {
-        factor = (float)(badness_threshold - current_badness) / (new_badness - current_badness);
+        factor = (float)(badness_threshold - current_badness) / (new_badness - current_badness) * s->blend_factor;
         if (factor <= 0) {
             /* just duplicate the frame */
             s->history[s->history_pos] = 0; /* frame was duplicated, thus, delta is zero */
