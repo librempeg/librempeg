@@ -938,6 +938,14 @@ static int hls_mux_init(AVFormatContext *s, VariantStream *vs)
         st->id = vs->streams[i]->id;
     }
 
+    for (i = 0; i < s->nb_programs; i++) {
+        ret = av_program_copy(oc, (const AVFormatContext *)s, s->programs[i]->id, 0);
+        if (ret < 0) {
+            av_log(s, AV_LOG_ERROR, "unable to transfer program %d to child muxer\n", s->programs[i]->id);
+            return ret;
+        }
+    }
+
     vs->start_pos = 0;
     vs->new_start = 1;
 
