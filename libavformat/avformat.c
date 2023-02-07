@@ -330,6 +330,111 @@ void av_program_add_stream_index(AVFormatContext *ac, int progid, unsigned idx)
     return;
 }
 
+int av_program_copy(AVFormatContext *dst, const AVFormatContext *src, int progid, int flags)
+{
+    const AVProgram *src_prog = NULL;
+    AVProgram *dst_prog = NULL;
+    int ret, idx = -1, match = -1;
+    int overwrite = flags & AVFMT_PROGCOPY_OVERWRITE;
+
+    if ((flags & AVFMT_PROGCOPY_MATCH_BY_ID) && (flags & AVFMT_PROGCOPY_MATCH_BY_INDEX))
+        return AVERROR(EINVAL);
+    else if (flags & AVFMT_PROGCOPY_MATCH_BY_ID)
+        match = 0;
+    else if (flags & AVFMT_PROGCOPY_MATCH_BY_INDEX)
+        match = 1;
+
+    for (unsigned i = 0; i < src->nb_programs; i++) {
+        if (src->programs[i]->id == progid) {
+            if (src_prog) {
+                av_log(dst, AV_LOG_ERROR, "multiple programs found in source with same id 0x%04x. Not copying.\n", progid);
+                return AVERROR(EINVAL);
+            } else {
+                src_prog = src->programs[i];
+            }
+        }
+    }
+
+    if (!src_prog) {
+        av_log(dst, AV_LOG_ERROR, "source program not found: id=0x%04x\n", progid);
+        return AVERROR(EINVAL);
+    }
+
+    for (unsigned i = 0; i < dst->nb_programs; i++) {
+        if (dst->programs[i]->id == progid) {
+            if (idx > -1) {
+                av_log(dst, AV_LOG_ERROR, "multiple programs found in target with same id 0x%04x. Not copying.\n", progid);
+                return AVERROR(EINVAL);
+            } else {
+                idx = i;
+            }
+        }
+    }
+
+    if (idx >= 0 && !overwrite)
+        return AVERROR(EEXIST);
+
+    av_log(dst, AV_LOG_TRACE, "%s program: id=0x%04x\n", idx >= 0 ? "overwriting" : "copying", progid);
+
+    if (idx >= 0) {
+        dst_prog = dst->programs[idx];
+        av_dict_free(&dst_prog->metadata);
+        av_freep(&dst_prog->stream_index);
+        dst_prog->nb_stream_indexes = 0;
+    } else {
+        dst_prog = av_new_program(dst, progid);
+        if (!dst_prog)
+            return AVERROR(ENOMEM);
+    }
+
+    /* public fields */
+    dst_prog->id          = src_prog->id;
+    dst_prog->flags       = src_prog->flags;
+    dst_prog->discard     = src_prog->discard;
+    dst_prog->program_num = src_prog->program_num;
+    dst_prog->pmt_pid     = src_prog->pmt_pid;
+    dst_prog->pcr_pid     = src_prog->pcr_pid;
+    dst_prog->pmt_version = src_prog->pmt_version;
+
+    if (match == -1 && src->nb_streams) {
+        match = 0;
+        for (unsigned i = 0; i < src->nb_streams && !match; i++) {
+            int src_id = src->streams[i]->id;
+            if (!src_id) {
+                match = 1;
+                break;
+            }
+            for (unsigned j=i+1; j < src->nb_streams; j++) {
+                int sib_id = src->streams[j]->id;
+                if (src_id == sib_id) {
+                    match = 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    for (unsigned i = 0; i < dst->nb_streams; i++) {
+        int dst_val = match ? i : dst->streams[i]->id;
+
+        for (unsigned j = 0; j < src_prog->nb_stream_indexes; j++) {
+            int src_val = match ? src_prog->stream_index[j] : src->streams[src_prog->stream_index[j]]->id;
+
+            if (dst_val == src_val) {
+                ret = av_program_add_stream_index2(dst, dst_prog->id, i);
+                if (ret < 0)
+                    return ret;
+            }
+        }
+    }
+
+    ret = av_dict_copy(&dst_prog->metadata, src_prog->metadata, 0);
+    if (ret < 0)
+        return ret;
+
+    return 0;
+}
+
 AVProgram *av_find_program_from_stream(AVFormatContext *ic, AVProgram *last, int s)
 {
     for (unsigned i = 0; i < ic->nb_programs; i++) {
