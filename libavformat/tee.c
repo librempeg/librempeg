@@ -293,6 +293,14 @@ static int open_slave(AVFormatContext *avf, char *slave, TeeSlave *tee_slave)
         }
     }
 
+    for (unsigned i = 0; i < avf->nb_programs; i++) {
+        ret = av_program_copy(avf2, (const AVFormatContext *)avf, avf->programs[i]->id, 0);
+        if (ret < 0) {
+            av_log(avf, AV_LOG_ERROR, "unable to transfer program %d to child muxer\n", avf->programs[i]->id);
+            return ret;
+        }
+    }
+
     ret = ff_format_output_open(avf2, filename, &options);
     if (ret < 0) {
         av_log(avf, AV_LOG_ERROR, "Slave '%s': error opening: %s\n", slave,
