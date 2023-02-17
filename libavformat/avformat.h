@@ -2231,6 +2231,19 @@ AVProgram *av_find_program_from_stream(AVFormatContext *ic, AVProgram *last, int
 void av_program_add_stream_index(AVFormatContext *ac, int progid, unsigned int idx);
 
 /**
+ * Add the supplied index of a stream to the AVProgram with matching id.
+ *
+ * @param ac      the format context which contains the target AVProgram
+ * @param progid  the ID of the AVProgram whose stream index is to be updated
+ * @param idx     the index of the stream to be added
+ *
+ * @return >=0 upon successful addition or if index was already present,
+ *         AVERROR if no matching program is found or stream index is invalid or
+ *         the stream index array reallocation failed.
+ */
+int av_program_add_stream_index2(AVFormatContext *ac, int progid, unsigned int idx);
+
+/**
  * Find the "best" stream in the file.
  * The best stream is determined according to various heuristics as the most
  * likely to be what the user expects.

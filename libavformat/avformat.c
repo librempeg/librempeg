@@ -294,14 +294,14 @@ AVProgram *av_new_program(AVFormatContext *ac, int id)
     return program;
 }
 
-void av_program_add_stream_index(AVFormatContext *ac, int progid, unsigned idx)
+int av_program_add_stream_index2(AVFormatContext *ac, int progid, unsigned idx)
 {
     AVProgram *program = NULL;
     void *tmp;
 
     if (idx >= ac->nb_streams) {
-        av_log(ac, AV_LOG_ERROR, "stream index %d is not valid\n", idx);
-        return;
+        av_log(ac, AV_LOG_ERROR, "stream index %d is greater than stream count %d\n", idx, ac->nb_streams);
+        return AVERROR(EINVAL);
     }
 
     for (unsigned i = 0; i < ac->nb_programs; i++) {
@@ -310,15 +310,24 @@ void av_program_add_stream_index(AVFormatContext *ac, int progid, unsigned idx)
         program = ac->programs[i];
         for (unsigned j = 0; j < program->nb_stream_indexes; j++)
             if (program->stream_index[j] == idx)
-                return;
+                return 0;
 
         tmp = av_realloc_array(program->stream_index, program->nb_stream_indexes+1, sizeof(unsigned int));
         if (!tmp)
-            return;
+            return AVERROR(ENOMEM);
         program->stream_index = tmp;
         program->stream_index[program->nb_stream_indexes++] = idx;
-        return;
+        return 0;
     }
+
+    av_log(ac, AV_LOG_ERROR, "no program with id %d found\n", progid);
+    return AVERROR(EINVAL);
+}
+
+void av_program_add_stream_index(AVFormatContext *ac, int progid, unsigned idx)
+{
+    av_program_add_stream_index2(ac, progid, idx);
+    return;
 }
 
 AVProgram *av_find_program_from_stream(AVFormatContext *ic, AVProgram *last, int s)
