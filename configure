@@ -4067,7 +4067,7 @@ avfilter_extralibs="pthreads_extralibs"
 avutil_extralibs="d3d11va_extralibs d3d12va_extralibs mediacodec_extralibs nanosleep_extralibs pthreads_extralibs vaapi_drm_extralibs vaapi_x11_extralibs vaapi_win32_extralibs vdpau_x11_extralibs"
 
 # programs
-ffmpeg_deps="avcodec avfilter avformat threads"
+ffmpeg_deps="avcodec avfilter avformat threads agpl"
 ffmpeg_select="aformat_filter anull_filter atrim_filter crop_filter
                format_filter hflip_filter null_filter rotate_filter
                transpose_filter trim_filter vflip_filter"

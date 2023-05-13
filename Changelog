@@ -64,6 +64,7 @@ version <next>:
 - plasma video source filter
 - VVC decoder supports all content of SCC (Screen Content Coding):
   IBC (Inter Block Copy), Palette Mode and ACT (Adaptive Color Transform
+- ffmpeg CLI is now AGPL and requires passing --enable-agpl to configure
 
 
 version 7.1:
