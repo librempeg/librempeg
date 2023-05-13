@@ -1,21 +1,20 @@
 /*
  * ffmpeg filter configuration
  *
- * This file is part of FFmpeg.
+ * This file is part of Librempeg.
  *
- * FFmpeg is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * Librempeg is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- * FFmpeg is distributed in the hope that it will be useful,
+ * Librempeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with FFmpeg; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * You should have received a copy of the GNU Affero General Public License
+ * along with Librempeg.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <stdint.h>
@@ -102,6 +101,29 @@ typedef struct FilterGraphThread {
     uint8_t         *eof_out;
 } FilterGraphThread;
 
+typedef struct Prefilter {
+    AVFilterGraph      *graph;
+    AVFilterContext    *in;
+    AVFilterContext    *out;
+
+    // input parameters this graph has been configured for
+    int                 format;
+
+    int                 width;
+    int                 height;
+    enum AVColorSpace   color_space;
+    enum AVColorRange   color_range;
+    AVRational          sample_aspect_ratio;
+
+    int                 displaymatrix_present;
+    int32_t             displaymatrix[9];
+
+    int                 sample_rate;
+    AVChannelLayout     ch_layout;
+
+    AVRational          time_base;
+} Prefilter;
+
 typedef struct InputFilterPriv {
     InputFilter         ifilter;
 
@@ -149,10 +171,6 @@ typedef struct InputFilterPriv {
 
     AVBufferRef        *hw_frames_ctx;
 
-    int                 displaymatrix_present;
-    int                 displaymatrix_applied;
-    int32_t             displaymatrix[9];
-
     int                 downmixinfo_present;
     AVDownmixInfo       downmixinfo;
 
@@ -165,6 +183,10 @@ typedef struct InputFilterPriv {
         /// marks if sub2video_update should force an initialization
         unsigned int initialize;
     } sub2video;
+
+    // filters applied to input frames before passing them to the "main"
+    // user-specified filtergraph
+    Prefilter prefilter;
 } InputFilterPriv;
 
 static InputFilterPriv *ifp_from_ifilter(InputFilter *ifilter)
@@ -987,11 +1009,22 @@ static InputFilter *ifilter_alloc(FilterGraph *fg)
     ifp->color_space     = AVCOL_SPC_UNSPECIFIED;
     ifp->color_range     = AVCOL_RANGE_UNSPECIFIED;
 
+    ifp->prefilter.format = -1;
+
     ifp->frame_queue = av_fifo_alloc2(8, sizeof(AVFrame*), AV_FIFO_FLAG_AUTO_GROW);
     if (!ifp->frame_queue)
         return NULL;
 
     return ifilter;
+}
+
+static void prefilter_uninit(Prefilter *pf)
+{
+    avfilter_graph_free(&pf->graph);
+    av_channel_layout_uninit(&pf->ch_layout);
+
+    memset(pf, 0, sizeof(*pf));
+    pf->format = -1;
 }
 
 void fg_free(FilterGraph **pfg)
@@ -1006,6 +1039,8 @@ void fg_free(FilterGraph **pfg)
     for (int j = 0; j < fg->nb_inputs; j++) {
         InputFilter *ifilter = fg->inputs[j];
         InputFilterPriv *ifp = ifp_from_ifilter(ifilter);
+
+        prefilter_uninit(&ifp->prefilter);
 
         if (ifp->frame_queue) {
             AVFrame *frame;
@@ -1705,7 +1740,6 @@ static int configure_input_video_filter(FilterGraph *fg, AVFilterGraph *graph,
 
     AVFilterContext *last_filter;
     const AVFilter *buffer_filt = avfilter_get_by_name("buffer");
-    const AVPixFmtDescriptor *desc;
     char name[255];
     int ret, pad_idx = 0;
     AVBufferSrcParameters *par = av_buffersrc_parameters_alloc();
@@ -1748,9 +1782,6 @@ static int configure_input_video_filter(FilterGraph *fg, AVFilterGraph *graph,
 
     last_filter = ifp->filter;
 
-    desc = av_pix_fmt_desc_get(ifp->format);
-    av_assert0(desc);
-
     if ((ifp->opts.flags & IFILTER_FLAG_CROP)) {
         char crop_buf[64];
         snprintf(crop_buf, sizeof(crop_buf), "w=iw-%u-%u:h=ih-%u-%u:x=%u:y=%u",
@@ -1760,45 +1791,6 @@ static int configure_input_video_filter(FilterGraph *fg, AVFilterGraph *graph,
         ret = insert_filter(&last_filter, &pad_idx, "crop", crop_buf);
         if (ret < 0)
             return ret;
-    }
-
-    // TODO: insert hwaccel enabled filters like transpose_vaapi into the graph
-    ifp->displaymatrix_applied = 0;
-    if ((ifp->opts.flags & IFILTER_FLAG_AUTOROTATE) &&
-        !(desc->flags & AV_PIX_FMT_FLAG_HWACCEL)) {
-        int32_t *displaymatrix = ifp->displaymatrix;
-        double theta;
-
-        theta = get_rotation(displaymatrix);
-
-        if (fabs(theta - 90) < 1.0) {
-            ret = insert_filter(&last_filter, &pad_idx, "transpose",
-                                displaymatrix[3] > 0 ? "cclock_flip" : "clock");
-        } else if (fabs(theta - 180) < 1.0) {
-            if (displaymatrix[0] < 0) {
-                ret = insert_filter(&last_filter, &pad_idx, "hflip", NULL);
-                if (ret < 0)
-                    return ret;
-            }
-            if (displaymatrix[4] < 0) {
-                ret = insert_filter(&last_filter, &pad_idx, "vflip", NULL);
-            }
-        } else if (fabs(theta - 270) < 1.0) {
-            ret = insert_filter(&last_filter, &pad_idx, "transpose",
-                                displaymatrix[3] < 0 ? "clock_flip" : "cclock");
-        } else if (fabs(theta) > 1.0) {
-            char rotate_buf[64];
-            snprintf(rotate_buf, sizeof(rotate_buf), "%f*PI/180", theta);
-            ret = insert_filter(&last_filter, &pad_idx, "rotate", rotate_buf);
-        } else if (fabs(theta) < 1.0) {
-            if (displaymatrix && displaymatrix[4] < 0) {
-                ret = insert_filter(&last_filter, &pad_idx, "vflip", NULL);
-            }
-        }
-        if (ret < 0)
-            return ret;
-
-        ifp->displaymatrix_applied = 1;
     }
 
     snprintf(name, sizeof(name), "trim_in_%s", ifp->opts.name);
@@ -2042,10 +2034,6 @@ static int configure_filtergraph(FilterGraph *fg, FilterGraphThread *fgt)
             if (ifp->type_src == AVMEDIA_TYPE_SUBTITLE) {
                 sub2video_frame(&ifp->ifilter, tmp, !fgt->graph);
             } else {
-                if (ifp->type_src == AVMEDIA_TYPE_VIDEO) {
-                    if (ifp->displaymatrix_applied)
-                        av_frame_remove_side_data(tmp, AV_FRAME_DATA_DISPLAYMATRIX);
-                }
                 ret = av_buffersrc_add_frame(ifp->filter, tmp);
             }
             av_frame_free(&tmp);
@@ -2118,11 +2106,6 @@ static int ifilter_parameters_from_frame(InputFilter *ifilter, const AVFrame *fr
         if (ret < 0)
             return ret;
     }
-
-    sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DISPLAYMATRIX);
-    if (sd)
-        memcpy(ifp->displaymatrix, sd->data, sizeof(ifp->displaymatrix));
-    ifp->displaymatrix_present = !!sd;
 
     /* Copy downmix related side data to InputFilterPriv so it may be propagated
      * to the filter chain even though it's not "global", as filters like aresample
@@ -2848,10 +2831,266 @@ static int send_eof(FilterGraphThread *fgt, InputFilter *ifilter,
     return 0;
 }
 
+static int prefilter_init_in(Prefilter *pf, const InputFilterPriv *ifp)
+{
+    const AVFilter *filter;
+    AVBufferSrcParameters *par;
+    char name[128];
+    int ret;
+
+    filter = avfilter_get_by_name(ifp->type == AVMEDIA_TYPE_VIDEO ?
+                                  "buffer" : "abuffer");
+    if (!filter)
+        return AVERROR_FILTER_NOT_FOUND;
+
+    snprintf(name, sizeof(name), "prefilter %s/in", ifp->opts.name);
+
+    pf->in = avfilter_graph_alloc_filter(pf->graph, filter, name);
+    if (!pf->in)
+        return AVERROR(ENOMEM);
+
+    par = av_buffersrc_parameters_alloc();
+    if (!par)
+        return AVERROR(ENOMEM);
+
+    par->format                 = pf->format;
+    par->time_base              = pf->time_base;
+
+    par->width                  = pf->width;
+    par->height                 = pf->height;
+    par->sample_aspect_ratio    = pf->sample_aspect_ratio;
+    par->color_space            = pf->color_space;
+    par->color_range            = pf->color_range;
+
+    par->sample_rate            = pf->sample_rate;
+    par->ch_layout              = pf->ch_layout;
+
+    ret = av_buffersrc_parameters_set(pf->in, par);
+    av_freep(&par);
+    if (ret < 0)
+        return ret;
+
+    return avfilter_init_dict(pf->in, NULL);
+}
+
+static int prefilter_init_displaymatrix(Prefilter *pf, const InputFilterPriv *ifp,
+                                        AVFilterContext **last_filter, int *pad_idx)
+{
+    const int32_t *displaymatrix = pf->displaymatrix;
+    double theta;
+    int ret;
+
+    theta = get_rotation(pf->displaymatrix);
+
+    if (fabs(theta - 90) < 1.0) {
+        ret = insert_filter(last_filter, pad_idx, "transpose",
+                            displaymatrix[3] > 0 ? "cclock_flip" : "clock");
+    } else if (fabs(theta - 180) < 1.0) {
+        if (displaymatrix[0] < 0) {
+            ret = insert_filter(last_filter, pad_idx, "hflip", NULL);
+            if (ret < 0)
+                return ret;
+        }
+        if (displaymatrix[4] < 0) {
+            ret = insert_filter(last_filter, pad_idx, "vflip", NULL);
+        }
+    } else if (fabs(theta - 270) < 1.0) {
+        ret = insert_filter(last_filter, pad_idx, "transpose",
+                            displaymatrix[3] < 0 ? "clock_flip" : "cclock");
+    } else if (fabs(theta) > 1.0) {
+        char rotate_buf[64];
+        snprintf(rotate_buf, sizeof(rotate_buf), "%f*PI/180", theta);
+        ret = insert_filter(last_filter, pad_idx, "rotate", rotate_buf);
+    } else if (fabs(theta) < 1.0) {
+        if (displaymatrix && displaymatrix[4] < 0) {
+            ret = insert_filter(last_filter, pad_idx, "vflip", NULL);
+        }
+    }
+    if (ret < 0)
+        return ret;
+
+    return 0;
+}
+
+static int prefilter_init_out(Prefilter *pf, const InputFilterPriv *ifp,
+                              AVFilterContext *last_filter, int pad_idx)
+{
+    const AVFilter *filter;
+    char name[128];
+    int ret;
+
+    filter = avfilter_get_by_name(ifp->type == AVMEDIA_TYPE_VIDEO ?
+                                  "buffersink" : "abuffersink");
+    if (!filter)
+        return AVERROR_FILTER_NOT_FOUND;
+
+    snprintf(name, sizeof(name), "prefilter %s/out", ifp->opts.name);
+
+    pf->out = avfilter_graph_alloc_filter(pf->graph, filter, name);
+    if (!pf->out)
+        return AVERROR(ENOMEM);
+
+    ret = avfilter_init_dict(pf->out, NULL);
+    if (ret < 0)
+        return ret;
+
+    ret = avfilter_link(last_filter, pad_idx, pf->out, 0);
+    if (ret < 0)
+        return ret;
+
+    return 0;
+}
+
+static int prefilter_init(void *logctx, Prefilter *pf, const InputFilterPriv *ifp)
+{
+    int need_prefilter = pf->displaymatrix_present;
+
+    AVFilterContext *last_filter;
+    int pad_idx, ret;
+
+    if (!need_prefilter)
+        return 0;
+
+    pf->graph = avfilter_graph_alloc();
+    if (!pf->graph)
+        return AVERROR(ENOMEM);
+
+    ret = prefilter_init_in(pf, ifp);
+    if (ret < 0)
+        return ret;
+    last_filter = pf->in;
+    pad_idx     = 0;
+
+    if (pf->displaymatrix_present) {
+        ret = prefilter_init_displaymatrix(pf, ifp, &last_filter, &pad_idx);
+        if (ret < 0)
+            return ret;
+    }
+
+    ret = prefilter_init_out(pf, ifp, last_filter, pad_idx);
+    if (ret < 0)
+        return ret;
+
+    return avfilter_graph_config(pf->graph, NULL);
+}
+
+static int prefilter_refresh(void *logctx, InputFilterPriv *ifp, const AVFrame *frame)
+{
+    Prefilter                *pf = &ifp->prefilter;
+    const int32_t *displaymatrix = NULL;
+    int              need_reinit = frame->format != pf->format;
+    int                      ret = 0;
+
+    switch (ifp->type) {
+    case AVMEDIA_TYPE_VIDEO: {
+        const AVFrameSideData *sd;
+
+        need_reinit |= frame->width         != pf->width                          ||
+                       frame->height        != pf->height                         ||
+                       frame->colorspace    != pf->color_space                    ||
+                       frame->color_range   != pf->color_range                    ||
+                       av_cmp_q(frame->sample_aspect_ratio, pf->sample_aspect_ratio);
+
+        /* check whether the display transform matrix changed */
+        if ((ifp->opts.flags & IFILTER_FLAG_AUTOROTATE)) {
+            sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DISPLAYMATRIX);
+            if (sd)
+                displaymatrix = (const int32_t *)sd->data;
+
+            // TODO: insert hwaccel enabled filters like transpose_vaapi into the graph
+            if (displaymatrix &&
+                (av_pix_fmt_desc_get(frame->format)->flags & AV_PIX_FMT_FLAG_HWACCEL))
+                displaymatrix = NULL;
+
+            if (!!displaymatrix != pf->displaymatrix_present ||
+                (displaymatrix &&
+                 memcmp(displaymatrix, pf->displaymatrix, sizeof(pf->displaymatrix))))
+                need_reinit = 1;
+        }
+
+        break;
+        }
+    case AVMEDIA_TYPE_AUDIO:
+        need_reinit |= frame->sample_rate != pf->sample_rate ||
+                       av_channel_layout_compare(&frame->ch_layout, &pf->ch_layout);
+        break;
+    default: av_assert0(0);
+    }
+
+    if (!need_reinit)
+        return 0;
+
+    prefilter_uninit(pf);
+
+    pf->format    = frame->format;
+    pf->time_base = frame->time_base;
+
+    if (ifp->type == AVMEDIA_TYPE_VIDEO) {
+        pf->width               = frame->width;
+        pf->height              = frame->height;
+        pf->sample_aspect_ratio = frame->sample_aspect_ratio;
+        pf->color_space         = frame->colorspace;
+        pf->color_range         = frame->color_range;
+
+        pf->displaymatrix_present = !!displaymatrix;
+        if (displaymatrix)
+            memcpy(pf->displaymatrix, displaymatrix, sizeof(pf->displaymatrix));
+    } else {
+        pf->sample_rate = frame->sample_rate;
+
+        ret = av_channel_layout_copy(&pf->ch_layout, &frame->ch_layout);
+        if (ret < 0)
+            goto fail;
+    }
+
+    ret = prefilter_init(logctx, pf, ifp);
+fail:
+    if (ret < 0) {
+        av_log(logctx, AV_LOG_ERROR, "Error initializing pre-filtering graph\n");
+        prefilter_uninit(pf);
+    }
+
+    return ret;
+}
+
+static int prefilter_apply(void *logctx, InputFilterPriv *ifp, AVFrame *frame)
+{
+    Prefilter *pf = &ifp->prefilter;
+    int ret;
+
+    ret = prefilter_refresh(logctx, ifp, frame);
+    if (ret < 0)
+        return ret;
+
+    if (!pf->graph)
+        return 0;
+
+    if (pf->displaymatrix_present)
+        av_frame_remove_side_data(frame, AV_FRAME_DATA_DISPLAYMATRIX);
+
+    ret = av_buffersrc_add_frame(pf->in, frame);
+    if (ret < 0) {
+        av_log(logctx, AV_LOG_ERROR,
+               "Error submitting a frame for pre-filtering: %s\n",
+               av_err2str(ret));
+        return ret;
+    }
+
+    av_assert0(!frame->buf[0]);
+
+    ret = av_buffersink_get_frame(pf->out, frame);
+    if (ret < 0) {
+        av_log(logctx, AV_LOG_ERROR, "Error pre-filtering a frame: %s\n",
+               av_err2str(ret));
+        return ret;
+    }
+
+    return 0;
+}
+
 enum ReinitReason {
     VIDEO_CHANGED   = (1 << 0),
     AUDIO_CHANGED   = (1 << 1),
-    MATRIX_CHANGED  = (1 << 2),
     DOWNMIX_CHANGED = (1 << 3),
     HWACCEL_CHANGED = (1 << 4)
 };
@@ -2868,6 +3107,10 @@ static int send_frame(FilterGraph *fg, FilterGraphThread *fgt,
     FrameData       *fd;
     AVFrameSideData *sd;
     int need_reinit = 0, ret;
+
+    ret = prefilter_apply(fg, ifp, frame);
+    if (ret < 0)
+        return ret;
 
     /* determine if the parameters for this input changed */
     switch (ifp->type) {
@@ -2886,13 +3129,6 @@ static int send_frame(FilterGraph *fg, FilterGraphThread *fgt,
             need_reinit |= VIDEO_CHANGED;
         break;
     }
-
-    if (sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DISPLAYMATRIX)) {
-        if (!ifp->displaymatrix_present ||
-            memcmp(sd->data, ifp->displaymatrix, sizeof(ifp->displaymatrix)))
-            need_reinit |= MATRIX_CHANGED;
-    } else if (ifp->displaymatrix_present)
-        need_reinit |= MATRIX_CHANGED;
 
     if (sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DOWNMIX_INFO)) {
         if (!ifp->downmixinfo_present ||
@@ -2960,8 +3196,6 @@ static int send_frame(FilterGraph *fg, FilterGraphThread *fgt,
                         unknown_if_null(pixel_format_name), unknown_if_null(color_range_name),
                         unknown_if_null(color_space_name), frame->width, frame->height);
             }
-            if (need_reinit & MATRIX_CHANGED)
-                av_bprintf(&reason, "display matrix changed, ");
             if (need_reinit & DOWNMIX_CHANGED)
                 av_bprintf(&reason, "downmix medatata changed, ");
             if (need_reinit & HWACCEL_CHANGED)
@@ -2981,9 +3215,6 @@ static int send_frame(FilterGraph *fg, FilterGraphThread *fgt,
     frame->pts       = av_rescale_q(frame->pts,      frame->time_base, ifp->time_base);
     frame->duration  = av_rescale_q(frame->duration, frame->time_base, ifp->time_base);
     frame->time_base = ifp->time_base;
-
-    if (ifp->displaymatrix_applied)
-        av_frame_remove_side_data(frame, AV_FRAME_DATA_DISPLAYMATRIX);
 
     fd = frame_data(frame);
     if (!fd)
