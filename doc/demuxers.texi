@@ -899,6 +899,96 @@ the script is directly played, the actual times will match the absolute
 timestamps up to the sound controller's clock accuracy, but if the user
 somehow pauses the playback or seeks, all times will be shifted accordingly.
 
+@section sdr / sdrfile
+
+Software Defined Radio Demuxer. The sdr demuxer will demux radio streams
+through the use of a libsoapy compatible software defined radio. sdrfile
+will do the same from a file.
+The short seek forward and backward commands can be used to select the next and
+previous radio stations. Seeking to specific radio stations and similar will be
+supported in the future. This has been tested with a RTL-SDR blog V3 and sdrplay RSP1A,
+it should work with anything else libsoapy supports but may need minor tweaks.
+
+@table @option
+
+@item block_size
+size of FFT to use, leave at 0 to choose automatically
+
+@item video_size
+Enable vissualization with the specified video resolution. Default is
+disabled
+
+@item mode
+
+@table @samp
+
+@item single_mode
+Demodulate 1 station
+
+@item all_mode
+Demodulate all stations in view
+
+@end table
+
+@item station_freq
+Initial station to pick, if multiple are probed.
+
+@item driver
+libsoapy driver to use. Leave empty to attempt autodetection.
+
+@item sdr_sr
+SDR sample rate, this must be a value supported by the hardware. Leave 0 to attempt
+autodetection
+
+@item sdr_freq
+initial SDR center frequency, this must be a value supported by the hardware
+
+@item min_freq
+Minimum frequency, leave at 0 for autodetection
+
+@item max_freq
+Maximum frequency, leave at 0 for autodetection
+
+@item dumpurl
+URL to dump RAW SDR stream to, this can be played back later with sdrfile. Useful
+for debuging.
+
+@item kbd_alpha
+Kaiser Bessel derived window parameter
+
+@item am_mode
+AM Demodulation method. Several different methods are supported.
+@table @samp
+@item am_inphase
+Demodulate mono signal that is in phase with the carrier. This works well if there is one
+transmitter at the frequency and there is nothing disturbing the signal.
+
+@item am_midside
+Demodulate AM into a stereo signal so that the mid is from the in phase and side is from the
+quadrature signal. This can be used if there are Multiple transmitters that transmit at the same
+frequency. Or just for fun.
+
+@item am_envelope
+Demodulate mono signal that is basically the energy of the spectrum.
+
+@end table
+
+@item fm_emphasis
+FM Emphasis filter.
+@table @samp
+@item emphasis75us
+Used in the US (default)
+
+@item emphasis50us
+Used in the EU
+
+@item none
+No emphasis used
+
+@end table
+
+@end table
+
 @section tedcaptions
 
 JSON captions used for @url{http://www.ted.com/, TED Talks}.
