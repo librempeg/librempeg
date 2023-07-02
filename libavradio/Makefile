@@ -12,3 +12,4 @@ OBJS    = allradios.o                                                   \
 
 # input/output radios
 OBJS-$(CONFIG_SDR_INRADIO)            		+= sdrinradio.o
+OBJS-$(CONFIG_SDRFILE_INRADIO)                  += sdrdemux.o

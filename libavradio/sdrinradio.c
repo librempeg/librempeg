@@ -23,6 +23,7 @@
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
 
+#include "sdr.h"
 #include "libavutil/avassert.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/fifo.h"
@@ -35,7 +36,6 @@
 #include "libavformat/avformat.h"
 #include "libavformat/demux.h"
 #include "libavformat/internal.h"
-#include "libavformat/sdr.h"
 #include "libavdevice/avdevice.h"
 
 #define MAX_CHANNELS 4

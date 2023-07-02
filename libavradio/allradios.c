@@ -24,6 +24,7 @@
 
 /* radios */
 extern const AVInputFormat  ff_sdr_demuxer;
+extern const AVInputFormat  ff_sdrfile_demuxer;
 
 #include "libavradio/inradio_list.c"
 

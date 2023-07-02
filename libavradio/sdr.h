@@ -19,8 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVFORMAT_SDR_H
-#define AVFORMAT_SDR_H
+#ifndef AVRADIO_SDR_H
+#define AVRADIO_SDR_H
 
 #include <pthread.h>
 #include <stdatomic.h>
@@ -248,4 +248,4 @@ void avpriv_sdr_stop_threading(AVFormatContext *s);
 
 int avpriv_sdr_read_close(AVFormatContext *s);
 
-#endif /* AVFORMAT_SDR_H */
+#endif /* AVRADIO_SDR_H */
