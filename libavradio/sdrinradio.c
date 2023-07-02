@@ -36,6 +36,7 @@
 #include "libavformat/demux.h"
 #include "libavformat/internal.h"
 #include "libavformat/sdr.h"
+#include "libavdevice/avdevice.h"
 
 #define MAX_CHANNELS 4
 
@@ -348,6 +349,50 @@ static int sdrindev_read_close(AVFormatContext *s)
     return avpriv_sdr_read_close(s);
 }
 
+static int sdr_get_device_list(AVFormatContext *ctx, AVDeviceInfoList *device_list)
+{
+    SoapySDRKwargs *results = NULL;
+    size_t length;
+    int ret = 0;
+    int i;
+
+    if (!device_list)
+        return AVERROR(EINVAL);
+
+    results = SoapySDRDevice_enumerate(NULL, &length);
+    for (i = 0; i < length; i++) {
+        AVDeviceInfo *device = NULL;
+        device = av_mallocz(sizeof(AVDeviceInfo));
+        if (!device) {
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
+        for (int j = 0; j < results[i].size; j++) {
+            if (!strcmp("driver", results[i].keys[j]) && !device->device_name)
+                device->device_name = av_strdup(results[i].vals[j]);
+            if (!strcmp("label", results[i].keys[j]) && !device->device_description)
+                device->device_description = av_strdup(results[i].vals[j]);
+        }
+
+        if (device->device_name) {
+            if ((ret = av_dynarray_add_nofree(&device_list->devices,
+                                              &device_list->nb_devices, device)) < 0)
+                goto fail;
+        }
+        continue;
+        fail:
+        if (device) {
+            av_freep(&device->device_name);
+            av_freep(&device->device_description);
+            av_freep(&device);
+        }
+        break;
+    }
+    SoapySDRKwargsList_clear(results, length);
+
+    return ret;
+}
+
 static const AVClass sdr_demuxer_class = {
     .class_name = "sdr",
     .item_name  = av_default_item_name,
@@ -364,6 +409,7 @@ const AVInputFormat ff_sdr_demuxer = {
     .read_packet    = avpriv_sdr_read_packet,
     .read_close     = sdrindev_read_close,
     .read_seek      = avpriv_sdr_read_seek,
+    .get_device_list= sdr_get_device_list,
     .flags          = AVFMT_NOFILE,
     .flags_internal = FF_FMT_INIT_CLEANUP,
     .priv_class = &sdr_demuxer_class,
