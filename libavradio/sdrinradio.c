@@ -353,7 +353,7 @@ static const AVClass sdr_demuxer_class = {
     .item_name  = av_default_item_name,
     .option     = avpriv_sdr_options,
     .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_DEMUXER,
+    .category   = AV_CLASS_CATEGORY_RADIO_INPUT,
 };
 
 const AVInputFormat ff_sdr_demuxer = {

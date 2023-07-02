@@ -3,6 +3,7 @@
 #include <string.h>
 #include "libavutil/avassert.h"
 #include "libavdevice/avdevice.h"
+#include "libavradio/avradio.h"
 #include "libavfilter/avfilter.h"
 #include "libavfilter/buffersink.h"
 #include "libavformat/avformat.h"
@@ -64,6 +65,9 @@ int main(int argc, char **argv)
     nb_out_dev = argc - 2;
 
     avdevice_register_all();
+#if CONFIG_AVRADIO
+    avradio_register_all();
+#endif
 
     /* Create input graph */
     if (!(in_graph = avfilter_graph_alloc())) {

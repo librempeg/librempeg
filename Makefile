@@ -19,13 +19,14 @@ vpath %/fate_config.sh.template $(SRC_PATH)
 TESTTOOLS   = audiogen videogen rotozoom tiny_psnr tiny_ssim base64 audiomatch
 HOSTPROGS  := $(TESTTOOLS:%=tests/%) doc/print_options
 
-ALLFFLIBS = avcodec avdevice avfilter avformat avutil postproc swscale swresample
+ALLFFLIBS = avcodec avdevice avfilter avformat avradio avutil postproc swscale swresample
 
 # $(FFLIBS-yes) needs to be in linking order
 FFLIBS-$(CONFIG_AVDEVICE)   += avdevice
 FFLIBS-$(CONFIG_AVFILTER)   += avfilter
 FFLIBS-$(CONFIG_AVFORMAT)   += avformat
 FFLIBS-$(CONFIG_AVCODEC)    += avcodec
+FFLIBS-$(CONFIG_AVRADIO)    += avradio
 FFLIBS-$(CONFIG_POSTPROC)   += postproc
 FFLIBS-$(CONFIG_SWRESAMPLE) += swresample
 FFLIBS-$(CONFIG_SWSCALE)    += swscale
@@ -171,7 +172,7 @@ distclean:: clean
 		libavcodec/bsf_list.c libavformat/protocol_list.c \
 		libavcodec/codec_list.c libavcodec/parser_list.c \
 		libavfilter/filter_list.c libavdevice/indev_list.c libavdevice/outdev_list.c \
-		libavformat/muxer_list.c libavformat/demuxer_list.c
+		libavformat/muxer_list.c libavformat/demuxer_list.c libavradio/inradio_list.c
 ifeq ($(SRC_LINK),src)
 	$(RM) src
 endif

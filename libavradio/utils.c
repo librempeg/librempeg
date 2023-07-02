@@ -20,7 +20,7 @@
 #include "libavutil/opt.h"
 #include "libavformat/avformat.h"
 
-int ff_alloc_input_device_context(AVFormatContext **avctx, const AVInputFormat *iformat, const char *format)
+int ff_alloc_input_radio_context(AVFormatContext **avctx, const AVInputFormat *iformat, const char *format)
 {
     AVFormatContext *s;
     int ret = 0;
@@ -33,7 +33,7 @@ int ff_alloc_input_device_context(AVFormatContext **avctx, const AVInputFormat *
 
     if (!iformat)
         iformat = av_find_input_format(format);
-    if (!iformat || !iformat->priv_class || (!AV_IS_INPUT_DEVICE(iformat->priv_class->category) && iformat->priv_class->category != AV_CLASS_CATEGORY_RADIO_INPUT)) {
+    if (!iformat || !iformat->priv_class || iformat->priv_class->category != AV_CLASS_CATEGORY_RADIO_INPUT) {
         ret = AVERROR(EINVAL);
         goto error;
     }

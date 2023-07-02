@@ -39,6 +39,15 @@ int show_sinks(void *optctx, const char *opt, const char *arg);
 int show_sources(void *optctx, const char *opt, const char *arg);
 #endif
 
+#if CONFIG_AVRADIO
+/**
+ * Print a listing containing autodetected sources of the input radio.
+ * Device name with options may be passed as an argument to limit results.
+ */
+int show_radio_sources(void *optctx, const char *opt, const char *arg);
+#endif
+
+
 #if CONFIG_AVDEVICE
 #define CMDUTILS_COMMON_OPTIONS_AVDEVICE                                                                                \
     { "sources"    , OPT_EXIT | HAS_ARG, { .func_arg = show_sources },                                                  \
@@ -48,6 +57,15 @@ int show_sources(void *optctx, const char *opt, const char *arg);
 
 #else
 #define CMDUTILS_COMMON_OPTIONS_AVDEVICE
+#endif
+
+#if CONFIG_AVRADIO
+#define CMDUTILS_COMMON_OPTIONS_AVRADIO                                                                                 \
+    { "radio_sources"    , OPT_EXIT | HAS_ARG, { .func_arg = show_radio_sources },                                      \
+      "list sources of the input device", "device" },                                                                   \
+
+#else
+#define CMDUTILS_COMMON_OPTIONS_AVRADIO
 #endif
 
 /**
@@ -104,6 +122,13 @@ int show_demuxers(void *optctx, const char *opt, const char *arg);
  * This option processing function does not utilize the arguments.
  */
 int show_devices(void *optctx, const char *opt, const char *arg);
+
+/**
+ * Print a listing containing all the radios supported by the
+ * program.
+ * This option processing function does not utilize the arguments.
+ */
+int show_radios(void *optctx, const char *opt, const char *arg);
 
 /**
  * Print a listing containing all the codecs supported by the
@@ -208,6 +233,7 @@ int opt_cpucount(void *optctx, const char *opt, const char *arg);
     { "muxers",      OPT_EXIT,             { .func_arg = show_muxers },      "show available muxers" },                 \
     { "demuxers",    OPT_EXIT,             { .func_arg = show_demuxers },    "show available demuxers" },               \
     { "devices",     OPT_EXIT,             { .func_arg = show_devices },     "show available devices" },                \
+    { "radios",      OPT_EXIT,             { .func_arg = show_radios },      "show available radios" },                 \
     { "codecs",      OPT_EXIT,             { .func_arg = show_codecs },      "show available codecs" },                 \
     { "decoders",    OPT_EXIT,             { .func_arg = show_decoders },    "show available decoders" },               \
     { "encoders",    OPT_EXIT,             { .func_arg = show_encoders },    "show available encoders" },               \
@@ -227,5 +253,6 @@ int opt_cpucount(void *optctx, const char *opt, const char *arg);
     { "cpucount",    HAS_ARG | OPT_EXPERT, { .func_arg = opt_cpucount },     "force specific cpu count", "count" },     \
     { "hide_banner", OPT_BOOL | OPT_EXPERT, {&hide_banner},     "do not show program banner", "hide_banner" },          \
     CMDUTILS_COMMON_OPTIONS_AVDEVICE                                                                                    \
+    CMDUTILS_COMMON_OPTIONS_AVRADIO                                                                                     \
 
 #endif /* FFTOOLS_OPT_COMMON_H */

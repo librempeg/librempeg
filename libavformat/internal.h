@@ -719,5 +719,6 @@ int ff_match_url_ext(const char *url, const char *extensions);
 
 struct FFOutputFormat;
 void avpriv_register_devices(const struct FFOutputFormat * const o[], const AVInputFormat * const i[]);
+void avpriv_register_radios(const struct FFOutputFormat * const o[], const AVInputFormat * const i[]);
 
 #endif /* AVFORMAT_INTERNAL_H */

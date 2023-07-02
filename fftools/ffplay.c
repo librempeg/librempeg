@@ -45,6 +45,7 @@
 #include "libavutil/bprint.h"
 #include "libavformat/avformat.h"
 #include "libavdevice/avdevice.h"
+#include "libavradio/avradio.h"
 #include "libswscale/swscale.h"
 #include "libavutil/opt.h"
 #include "libavcodec/avfft.h"
@@ -3629,6 +3630,9 @@ int main(int argc, char **argv)
     /* register all codecs, demux and protocols */
 #if CONFIG_AVDEVICE
     avdevice_register_all();
+#endif
+#if CONFIG_AVRADIO
+    avradio_register_all();
 #endif
     avformat_network_init();
 
