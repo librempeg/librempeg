@@ -1401,6 +1401,8 @@ static int sdrfile_initial_setup(AVFormatContext *s)
         sdr->bandwidth       = sdr->sdr_sample_rate;
         sdr->fileheader_size = 40;
     }
+    if (sdr->bandwidth >= sdr->sdr_sample_rate)
+        sdr->bandwidth = sdr->sdr_sample_rate * 4 / 5;
 
     //After reading the first packet header we return to the begin so the packet can be read whole
     avio_seek(s->pb, 0, SEEK_SET);
