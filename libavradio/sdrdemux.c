@@ -1216,7 +1216,7 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
         // 2 blocks are needed with windowing to get a clean FFT output
         // Thus > 3 is the minimum for the next frequency update if we want to do something reliable with the data
         if (sdr->seek_direction && block_counter > 5) {
-            sdr->wanted_freq = snap2band(sdr, sdr->wanted_freq, sdr->seek_direction*sdr->bandwidth);
+            sdr->wanted_freq = snap2band(sdr, sdr->wanted_freq, sdr->seek_direction*sdr->bandwidth*0.5);
         }
         if (sdr->wanted_freq != sdr->freq) {
             //We could use a seperate MUTEX for the FIFO and for soapy
