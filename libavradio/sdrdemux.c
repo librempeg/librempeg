@@ -1045,9 +1045,11 @@ static int sdrfile_read_callback(SDRContext *sdr, FIFOElement *fifo_element, int
     size = FFMIN(remaining, sdr->remaining_file_block_size) * sdr->sample_size;
     ret = avio_read(avfmt->pb, buffer, size);
     if (ret == AVERROR_EOF || (ret > 0 && ret % sdr->sample_size)) {
+        fifo_element->center_frequency = AVERROR_EOF;
+        ret = remaining * sdr->sample_size;
+        sdr->remaining_file_block_size = remaining;
         avio_seek(avfmt->pb, SEEK_SET, 0);
-        av_log(avfmt, AV_LOG_INFO, "EOF, will wraparound\n");
-        return AVERROR(EAGAIN);
+        av_log(avfmt, AV_LOG_INFO, "EOF\n");
     } else if (ret == AVERROR(EAGAIN)) {
         av_log(avfmt, AV_LOG_DEBUG, "read EAGAIN\n");
         return AVERROR(EAGAIN);
@@ -1621,6 +1623,8 @@ process_next_block:
         av_log(s, AV_LOG_DEBUG, "EAGAIN on not enough data\n");
         return AVERROR(EAGAIN);
     }
+    if (fifo_element[0].center_frequency == AVERROR_EOF || fifo_element[1].center_frequency == AVERROR_EOF)
+        return AVERROR_EOF;
     if (fifo_element[0].center_frequency != fifo_element[1].center_frequency) {
         av_log(s, AV_LOG_DEBUG, "Mismatching frequency blocks\n");
 //         fifo_element[0].center_frequency = 0;
