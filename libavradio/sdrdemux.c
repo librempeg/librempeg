@@ -394,6 +394,7 @@ static int probe_am(SDRContext *sdr)
     int i;
     int bandwidth_f = 6000;
     int half_bw_i = bandwidth_f * (int64_t)sdr->block_size / sdr->sdr_sample_rate;
+    int border_i = (sdr->sdr_sample_rate - sdr->bandwidth) * sdr->block_size / sdr->sdr_sample_rate;
     double avg = 0;
 
     if (2*half_bw_i > 2*sdr->block_size)
@@ -408,6 +409,10 @@ static int probe_am(SDRContext *sdr)
         avg += sdr->len2block[i + half_bw_i];
         score = half_bw_i * mid / (avg - mid);
         avg -= sdr->len2block[i - half_bw_i];
+
+        if (i < border_i || i > 2*sdr->block_size - border_i)
+            continue;
+
         //TODO also check for symmetry in the spectrum
         if (mid > 0 && score > AM_THRESHOLD &&
             sdr->len2block[i - 1] <  mid          && sdr->len2block[i + 1] <= mid &&
@@ -703,6 +708,7 @@ static int probe_fm(SDRContext *sdr)
     int half_bw_i = bandwidth_f * (int64_t)sdr->block_size / sdr->sdr_sample_rate;
     double avg[2] = {0}, tri = 0;
     float last_score[3] = {FLT_MAX, FLT_MAX, FLT_MAX};
+    int border_i = (sdr->sdr_sample_rate - sdr->bandwidth) * sdr->block_size / sdr->sdr_sample_rate;
 
     if (2*half_bw_i > 2*sdr->block_size)
         return 0;
@@ -726,6 +732,8 @@ static int probe_fm(SDRContext *sdr)
         last_score[2] = last_score[1];
         last_score[1] = last_score[0];
         last_score[0] = tri / (b * half_bw_i);
+        if (i < border_i || i > 2*sdr->block_size - border_i)
+            continue;
 
         if (last_score[1] >= last_score[0] &&
             last_score[1] > last_score[2] &&
