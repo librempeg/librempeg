@@ -72,7 +72,7 @@
 #define AM_MAX23 0.06     //smaller causes failure on synthetic signals
 #define AM_MAX4  0.02
 
-#define FM_THRESHOLD .8 //TODO adjust
+#define FM_THRESHOLD  50 //TODO adjust
 
 //Least squares fit at 1khz points of frequency response shown by Frank McClatchie, FM SYSTEMS, INC. 800-235-6960
 static double emphasis75us(int f)
@@ -707,53 +707,61 @@ static int probe_fm(SDRContext *sdr)
     int bandwidth_f  = 180*1000;
     int bandwidth_p2 =  38*1000; //phase 2 bandwidth
     int half_bw_i = bandwidth_f * (int64_t)sdr->block_size / sdr->sdr_sample_rate;
-    double avg[2] = {0}, tri = 0;
     float last_score[3] = {FLT_MAX, FLT_MAX, FLT_MAX};
     int border_i = (sdr->sdr_sample_rate - sdr->bandwidth) * sdr->block_size / sdr->sdr_sample_rate;
+    double noise_floor = FLT_MAX;
 
     if (2*half_bw_i > 2*sdr->block_size)
         return 0;
 
-    for (i = 0; i<half_bw_i; i++) {
-        avg[0] += sdr->len2block[i];
-        tri    += i*sdr->len2block[i];
-    }
-    for (; i<2*half_bw_i; i++) {
-        avg[1] += sdr->len2block[i];
-        tri    += (2*half_bw_i-i)*sdr->len2block[i];
-    }
+    for (int pass = 0; pass < 2; pass ++) {
+        double avg[2] = {0}, tri = 0;
+        for (i = 0; i<half_bw_i; i++) {
+            avg[0] += sdr->len2block[i];
+            tri    += i*sdr->len2block[i];
+        }
+        for (; i<2*half_bw_i; i++) {
+            avg[1] += sdr->len2block[i];
+            tri    += (2*half_bw_i-i)*sdr->len2block[i];
+        }
 
-    for(i = half_bw_i; i<2*sdr->block_size - half_bw_i; i++) {
-        double b = avg[0] + sdr->len2block[i];
-        avg[0] += sdr->len2block[i] - sdr->len2block[i - half_bw_i];
-        avg[1] -= sdr->len2block[i] - sdr->len2block[i + half_bw_i];
-        b += avg[1];
-        tri += avg[1] - avg[0];
+        for(i = half_bw_i; i<2*sdr->block_size - half_bw_i; i++) {
+            double b = avg[0] + sdr->len2block[i];
+            avg[0] += sdr->len2block[i] - sdr->len2block[i - half_bw_i];
+            avg[1] -= sdr->len2block[i] - sdr->len2block[i + half_bw_i];
+            b += avg[1];
+            tri += avg[1] - avg[0];
 
-        last_score[2] = last_score[1];
-        last_score[1] = last_score[0];
-        last_score[0] = tri / (b * half_bw_i);
-        if (i < border_i || i > 2*sdr->block_size - border_i)
-            continue;
-
-        if (last_score[1] >= last_score[0] &&
-            last_score[1] > last_score[2] &&
-            last_score[1] > FM_THRESHOLD) {
-
-            float rmax   = max_in_range(sdr, i-half_bw_i/4, i+half_bw_i/4);
-            int lowcount = countbelow(sdr, i-half_bw_i/4, i+half_bw_i/4, rmax / 100);
-            double peak_i;
-
-            if (lowcount / (half_bw_i*0.5) > 0.99)
+            if (i < border_i || i > 2*sdr->block_size - border_i)
                 continue;
 
-            // as secondary check, we could check that without the center 3 samples we are still having a strong signal FIXME
+            if (pass == 0) {
+                noise_floor = FFMIN(noise_floor, tri);
+            } else {
+                last_score[2] = last_score[1];
+                last_score[1] = last_score[0];
+                last_score[0] = tri / (noise_floor);
 
-            peak_i = find_peak(sdr, last_score, 1, 3) + i - 1;
-            if (peak_i < 0)
-                continue;
-            av_assert0(fabs(peak_i-i) < 2);
-            create_candidate_station(sdr, FM, peak_i * 0.5 * sdr->sdr_sample_rate / sdr->block_size + sdr->block_center_freq - sdr->sdr_sample_rate/2, bandwidth_f, bandwidth_p2, last_score[1]);
+                if (last_score[1] >= last_score[0] &&
+                    last_score[1] > last_score[2] &&
+                    last_score[1] > FM_THRESHOLD) {
+
+                    float rmax   = max_in_range(sdr, i-half_bw_i/4, i+half_bw_i/4);
+                    int lowcount = countbelow(sdr, i-half_bw_i/4, i+half_bw_i/4, rmax / 100);
+                    double peak_i;
+
+                    if (lowcount / (half_bw_i*0.5) > 0.99)
+                        continue;
+
+                    // as secondary check, we could check that without the center 3 samples we are still having a strong signal FIXME
+
+                    peak_i = find_peak(sdr, last_score, 1, 3) + i - 1;
+                    if (peak_i < 0)
+                        continue;
+                    av_assert0(fabs(peak_i-i) < 2);
+                    create_candidate_station(sdr, FM, peak_i * 0.5 * sdr->sdr_sample_rate / sdr->block_size + sdr->block_center_freq - sdr->sdr_sample_rate/2, bandwidth_f, bandwidth_p2, last_score[1]);
+                }
+            }
         }
     }
 
