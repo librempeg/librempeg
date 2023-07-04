@@ -166,9 +166,10 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
         return best_station_index;
     }
     for (i=0; i<sdr->nb_candidate_stations; i++) {
+        int freq_precission = modulation == AM ? 5 : 50;
         double delta = fabs(sdr->candidate_station[i]->frequency - freq);
         // Station already added, or we have 2 rather close stations
-        if (modulation == sdr->candidate_station[i]->modulation && delta < 10 && sdr->candidate_station[i] != candidate_station) {
+        if (modulation == sdr->candidate_station[i]->modulation && delta < freq_precission && sdr->candidate_station[i] != candidate_station) {
             nb_candidate_match++;
         }
         if (modulation != sdr->candidate_station[i]->modulation && delta < (bandwidth + sdr->candidate_station[i]->bandwidth)/2.1)
