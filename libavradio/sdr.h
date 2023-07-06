@@ -30,6 +30,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/time.h"
 #include "libavutil/thread.h"
+#include "libavutil/tree.h"
 #include "libavutil/tx.h"
 #include "libavformat/avformat.h"
 
@@ -131,8 +132,7 @@ typedef struct SDRContext {
      * Current list of detected stations, these can be overlapping and low quality detections.
      * Used for probing. Stations are not removed from this when added to station.
      */
-    Station **candidate_station;
-    int nb_candidate_stations;
+    struct AVTreeNode *station_root;
     int width, height;
     int single_ch_audio_st_index;
     int waterfall_st_index;

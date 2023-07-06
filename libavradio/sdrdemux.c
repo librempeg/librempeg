@@ -46,6 +46,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/time.h"
 #include "libavutil/thread.h"
+#include "libavutil/tree.h"
 #include "libavutil/tx.h"
 #include "libavutil/xga_font_data.h"
 #include "libavcodec/kbdwin.h"
@@ -118,6 +119,55 @@ static void free_station(Station *station)
     av_free(station);
 }
 
+typedef struct FindStationContext {
+    double freq;
+    double range;
+    Station **station_list;
+    int station_list_size;
+    int nb_stations;
+} FindStationContext;
+
+static int find_station_cmp(void *opaque, void *elem)
+{
+    FindStationContext *c = opaque;
+    Station *station = elem;
+    double distance = station->frequency - c->freq;
+    if (distance < -c->range)
+        return -1;
+    if (distance >  c->range)
+        return  1;
+    return 0;
+}
+
+static int find_station_enu(void *opaque, void *elem)
+{
+    FindStationContext *c = opaque;
+    if (c->nb_stations < c->station_list_size) {
+        c->station_list[c->nb_stations++] = elem;
+    } else
+        av_log(NULL, AV_LOG_WARNING, "find station reached list size of %d\n", c->station_list_size);
+
+    return 0;
+}
+
+/**
+ * Find stations within the given parameters.
+ * @param[out] station_list array to return stations in
+ * @param nb_stations size of station array
+ * @returns number of stations found
+ */
+static int find_stations(SDRContext *sdr, double freq, double range, Station **station_list, int station_list_size)
+{
+    FindStationContext find_station_context;
+    find_station_context.freq = freq;
+    find_station_context.range = range;
+    find_station_context.station_list = station_list;
+    find_station_context.station_list_size = station_list_size;
+    find_station_context.nb_stations = 0;
+    av_tree_enumerate(sdr->station_root, &find_station_context, find_station_cmp, find_station_enu);
+    return find_station_context.nb_stations;
+}
+
 static int create_station(SDRContext *sdr, Station *candidate_station) {
     enum Modulation modulation  = candidate_station->modulation;
     double freq                 = candidate_station->frequency;
@@ -165,14 +215,17 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
         best_station->timeout = 0;
         return best_station_index;
     }
-    for (i=0; i<sdr->nb_candidate_stations; i++) {
+    Station *station_list[1000];
+    int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+
+    for (i=0; i<nb_stations; i++) {
         int freq_precission = modulation == AM ? 5 : 50;
-        double delta = fabs(sdr->candidate_station[i]->frequency - freq);
+        double delta = fabs(station_list[i]->frequency - freq);
         // Station already added, or we have 2 rather close stations
-        if (modulation == sdr->candidate_station[i]->modulation && delta < freq_precission && sdr->candidate_station[i] != candidate_station) {
+        if (modulation == station_list[i]->modulation && delta < freq_precission && station_list[i] != candidate_station) {
             nb_candidate_match++;
         }
-        if (modulation != sdr->candidate_station[i]->modulation && delta < (bandwidth + sdr->candidate_station[i]->bandwidth)/2.1)
+        if (modulation != station_list[i]->modulation && delta < (bandwidth + station_list[i]->bandwidth)/2.1)
             nb_candidate_conflict++;
     }
     //if we have a recent conflict with an established station, skip this one
@@ -225,10 +278,40 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
 
 static void create_stations(SDRContext *sdr)
 {
-    for(int i = 0; i<sdr->nb_candidate_stations; i++) {
-        Station *candidate_station = sdr->candidate_station[i];
-        create_station(sdr, candidate_station);
+    Station *station_list[1000];
+
+    if (!sdr->block_center_freq)
+        return;
+
+    int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+
+    for(int i = 0; i<nb_stations; i++) {
+        create_station(sdr, station_list[i]);
     }
+}
+
+static int station_cmp(const void *key, const void *b)
+{
+    const Station *sa = key;
+    const Station *sb = b;
+    return 2*((sa->frequency  > sb->frequency ) - (sa->frequency  < sb-> frequency))
+             +(sa->modulation > sb->modulation) - (sa->modulation < sb->modulation);
+}
+
+static void *tree_insert(struct AVTreeNode **rootp, void *key,
+                  int (*cmp)(const void *key, const void *b),
+                  struct AVTreeNode **next)
+{
+    if (!*next)
+        *next = av_mallocz(av_tree_node_size); //FIXME check ENOMEM
+    return av_tree_insert(rootp, key, cmp, next);
+}
+
+static void *tree_remove(struct AVTreeNode **rootp, void *key,
+                  int (*cmp)(const void *key, const void *b), struct AVTreeNode **next)
+{
+    av_freep(next);
+    return av_tree_insert(rootp, key, cmp, next);
 }
 
 /**
@@ -237,6 +320,9 @@ static void create_stations(SDRContext *sdr)
  */
 static void decay_stations(SDRContext *sdr)
 {
+    Station *station_list[1000];
+    int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->bandwidth*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+
     for (int i=0; i<sdr->nb_stations; i++) {
         Station *station = sdr->station[i];
 
@@ -252,12 +338,15 @@ static void decay_stations(SDRContext *sdr)
         }
     }
 
-    for (int i=0; i<sdr->nb_candidate_stations; i++) {
-        Station *station = sdr->candidate_station[i];
+    for (int i=0; i<nb_stations; i++) {
+        Station *station = station_list[i];
 
         if (station->timeout++ > CANDIDATE_STATION_TIMEOUT) {
+            struct AVTreeNode *next = NULL;
+            tree_remove(&sdr->station_root, station, station_cmp, &next);
+            av_freep(&next);
+
             free_station(station);
-            sdr->candidate_station[i--] = sdr->candidate_station[--sdr->nb_candidate_stations];
         }
     }
 }
@@ -265,17 +354,11 @@ static void decay_stations(SDRContext *sdr)
 static int create_candidate_station(SDRContext *sdr, enum Modulation modulation, double freq, int64_t bandwidth, int64_t bandwidth_p2, float score) {
     Station *station;
     void *tmp;
-
-    tmp = av_realloc_array(sdr->candidate_station, sdr->nb_candidate_stations+1, sizeof(*sdr->candidate_station));
-    if (!tmp)
-        return AVERROR(ENOMEM);
-    sdr->candidate_station = tmp;
+    struct AVTreeNode *next = NULL;
 
     station = av_mallocz(sizeof(*station));
     if (!station)
         return AVERROR(ENOMEM);
-
-    sdr->candidate_station[sdr->nb_candidate_stations++] = station;
 
     station->modulation   = modulation;
     station->frequency    = freq;
@@ -283,7 +366,14 @@ static int create_candidate_station(SDRContext *sdr, enum Modulation modulation,
     station->bandwidth_p2 = bandwidth_p2;
     station->score        = score;
 
-    return sdr->nb_candidate_stations - 1;
+    tmp = tree_insert(&sdr->station_root, station, station_cmp, &next);
+    if (tmp && tmp != station) {
+        //unlikely
+        av_freep(&station);
+    }
+    av_freep(&next);
+
+    return 1;
 }
 
 static void probe_common(SDRContext *sdr)
