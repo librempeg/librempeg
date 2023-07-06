@@ -74,6 +74,7 @@ typedef struct Station {
     int64_t bandwidth;
     int64_t bandwidth_p2;
     float score;
+    int in_station_list;    ///< non zero if this station is in the station list
     int timeout;            //since how many blocks was this detectable but not detected
     int multiplex_index;    //DAB can have multiple stations on one frequency
 
