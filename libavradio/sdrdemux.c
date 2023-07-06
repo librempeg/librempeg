@@ -183,7 +183,6 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
     void *tmp;
     int i;
     Station *best_station = NULL;
-    int best_station_index = -1;
     float drift = bandwidth/3.0;
     double best_distance = drift;
     int conflict = INT_MAX;
@@ -193,27 +192,32 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
     if (candidate_station->in_station_list)
         return 0;
 
-    for (i=0; i<sdr->nb_stations; i++) {
-        double delta = fabs(sdr->station[i]->frequency - freq);
+    Station *station_list[1000];
+    int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+    for (i=0; i<nb_stations; i++) {
+        Station *s = station_list[i];
+        double delta = fabs(s->frequency - freq);
+
+        if (!s->in_station_list)
+            continue;
+
         // Station already added, or we have 2 rather close stations
         //FIXME we want to make sure that the stronger station is not skiped but we also dont want to add a station twice
-        if (modulation == sdr->station[i]->modulation && delta < best_distance) {
+        if (modulation == s->modulation && delta < best_distance) {
             best_distance = delta;
-            best_station = sdr->station[i];
-            best_station_index = i;
+            best_station = s;
         }
-        if (modulation != sdr->station[i]->modulation && delta < (bandwidth + sdr->station[i]->bandwidth)/2.1) {
-            conflict = FFMIN(conflict, sdr->station[i]->timeout);
+        if (modulation !=s->modulation && delta < (bandwidth + s->bandwidth)/2.1) {
+            conflict = FFMIN(conflict, s->timeout);
             // special case, lets not remove an actively listen to station, this can be done too but that needs more thought
-            if (sdr->station[i]->stream)
+            if (s->stream)
                 conflict = 0;
         }
     }
     if (best_station) {
         if (score > best_station->score && conflict == INT_MAX) {
             int log_level = fabs(best_station->frequency - freq) < 3.0 ? AV_LOG_DEBUG : AV_LOG_WARNING;
-            av_log(sdr->avfmt, log_level, "Update station %d score:%f -> %f freq: %f %f -> %f\n",
-                    best_station_index,
+            av_log(sdr->avfmt, log_level, "Update station score:%f -> %f freq: %f %f -> %f\n",
                     best_station->score, score,
                     best_station->frequency - freq, best_station->frequency, freq
             );
@@ -225,12 +229,9 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
             }
             candidate_station->in_station_list = 1;
             best_station->in_station_list = 0;
-            sdr->station[best_station_index] = candidate_station;
         }
-        return best_station_index;
+        return 2;
     }
-    Station *station_list[1000];
-    int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
 
     nb_candidate_match += candidate_station->nb_frequency - 1;
     for (i=0; i<nb_stations; i++) {
@@ -262,29 +263,23 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
         return -1;
 
     if (conflict < INT_MAX) {
-        for (i=0; i<sdr->nb_stations; i++) {
-            double delta = fabs(sdr->station[i]->frequency - freq);
+        for (i=0; i<nb_stations; i++) {
+            Station *s = station_list[i];
+            double delta = fabs(s->frequency - freq);
             // We recheck that the stations we remove are not active because floating point could round differently
-            if (sdr->station[i]->stream == NULL &&
-                modulation != sdr->station[i]->modulation && delta < (bandwidth + sdr->station[i]->bandwidth)/2.1) {
+            if (s->stream == NULL &&
+                modulation != s->modulation && delta < (bandwidth + s->bandwidth)/2.1) {
 
-                sdr->station[i]->in_station_list = 0;
-                sdr->station[i--] = sdr->station[--sdr->nb_stations];
+                s->in_station_list = 0;
             }
         }
     }
 
-    tmp = av_realloc_array(sdr->station, sdr->nb_stations+1, sizeof(*sdr->station));
-    if (!tmp)
-        return AVERROR(ENOMEM);
-    sdr->station = tmp;
-
-    sdr->station[sdr->nb_stations++] = candidate_station;
     candidate_station->in_station_list = 1;
 
     av_log(sdr, AV_LOG_INFO, "create_station %d f:%f bw:%"PRId64"/%"PRId64" score: %f\n", modulation, freq, bandwidth, bandwidth_p2, score);
 
-    return sdr->nb_stations - 1;
+    return 1;
 }
 
 static void create_stations(SDRContext *sdr)
@@ -334,8 +329,8 @@ static void decay_stations(SDRContext *sdr)
     Station *station_list[1000];
     int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->bandwidth*0.5, station_list, FF_ARRAY_ELEMS(station_list));
 
-    for (int i=0; i<sdr->nb_stations; i++) {
-        Station *station = sdr->station[i];
+    for (int i=0; i<nb_stations; i++) {
+        Station *station = station_list[i];
 
         if (station->frequency - station->bandwidth/2 < sdr->block_center_freq - sdr->bandwidth/2 ||
             station->frequency + station->bandwidth/2 > sdr->block_center_freq + sdr->bandwidth/2)
@@ -343,21 +338,18 @@ static void decay_stations(SDRContext *sdr)
         if (station->stream)
             continue;
 
-        if (station->timeout++ > STATION_TIMEOUT) {
-            station->in_station_list = 0;
-            sdr->station[i--] = sdr->station[--sdr->nb_stations];
-        }
-    }
+        if (station->in_station_list) {
+            if (station->timeout++ > STATION_TIMEOUT) {
+                station->in_station_list = 0;
+            }
+        } else {
+            if (station->timeout++ > CANDIDATE_STATION_TIMEOUT) {
+                struct AVTreeNode *next = NULL;
+                tree_remove(&sdr->station_root, station, station_cmp, &next);
+                av_freep(&next);
 
-    for (int i=0; i<nb_stations; i++) {
-        Station *station = station_list[i];
-
-        if (station->timeout++ > CANDIDATE_STATION_TIMEOUT && !station->in_station_list) {
-            struct AVTreeNode *next = NULL;
-            tree_remove(&sdr->station_root, station, station_cmp, &next);
-            av_freep(&next);
-
-            free_station(station);
+                free_station(station);
+            }
         }
     }
 }
@@ -1209,6 +1201,8 @@ static int snap2station(SDRContext *sdr, int *seek_direction) {
     double current_freq;
     double best_distance = INT64_MAX;
     Station *best_station = NULL;
+    Station *station_list[1000];
+    int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
 
     if (sst->station) {
         current_freq = sst->station->frequency;
@@ -1217,9 +1211,12 @@ static int snap2station(SDRContext *sdr, int *seek_direction) {
     } else
         current_freq = sdr->block_center_freq;
 
-    for(int i = 0; i<sdr->nb_stations; i++) {
-        Station *station = sdr->station[i];
+    for(int i = 0; i<nb_stations; i++) {
+        Station *station = station_list[i];
         double distance = station->frequency - current_freq;
+
+        if (!station->in_station_list)
+            continue;
 
         if (distance * *seek_direction < 0 || station == sst->station)
             continue;
@@ -1685,14 +1682,20 @@ static int vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt)
         for (int y= h2; y<h; y++)
             memcpy(pkt->data + 4*y*w, sst->frame_buffer + 4*(y + sst->frame_buffer_line - h2)*w, 4*w);
 
-        for(int station_index = 0; station_index<sdr->nb_stations; station_index++) {
-            Station *s = sdr->station[station_index];
+        Station *station_list[1000];
+        int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.6, station_list, FF_ARRAY_ELEMS(station_list));
+        for(int station_index = 0; station_index<nb_stations; station_index++) {
+            Station *s = station_list[station_index];
             double f = s->frequency;
             int xmid  = 256*( f     - sdr->block_center_freq + sdr->sdr_sample_rate/2) * w / sdr->sdr_sample_rate;
             char text[20];
             int color = s->stream ? 64 : 32;
             int size = s->stream ? 181 : 128;
             int xd = size, yd = size;
+
+            if (!s->in_station_list)
+                continue;
+
             snprintf(text, sizeof(text), "%s %f Mhz",
                      modulation_descs[s->modulation].shortname,
                      f/1000000);
@@ -1928,8 +1931,10 @@ process_next_block:
             }
         } else {
             av_assert0(sdr->mode == AllStationMode);
-            for(int i = 0; i<sdr->nb_stations; i++) {
-                Station *station = sdr->station[i];
+            Station *station_list[1000];
+            int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+            for(int i = 0; i<nb_stations; i++) {
+                Station *station = station_list[i];
                 if (!station->stream) {
                     /* audio stream */
                     AVStream *st = avformat_new_stream(s, NULL);
@@ -2052,8 +2057,6 @@ int avpriv_sdr_read_close(AVFormatContext *s)
         sst->frame_size = 0;
     }
 
-    sdr->nb_stations = 0;
-    av_freep(&sdr->station);
     av_tree_enumerate(sdr->station_root, NULL, NULL, free_station_enu);
     av_tree_destroy(sdr->station_root);
     sdr->station_root = NULL;

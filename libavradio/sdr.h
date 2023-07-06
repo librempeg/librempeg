@@ -125,15 +125,6 @@ typedef struct SDRContext {
     char *dump_url;
     int fileheader_size;
     AVIOContext *dump_avio;
-    /**
-     * Current list of unambigously detected stations
-     */
-    Station **station;
-    int nb_stations;
-    /**
-     * Current list of detected stations, these can be overlapping and low quality detections.
-     * Used for probing. Stations are not removed from this when added to station.
-     */
     struct AVTreeNode *station_root;
     int width, height;
     int single_ch_audio_st_index;
