@@ -150,6 +150,12 @@ static int find_station_enu(void *opaque, void *elem)
     return 0;
 }
 
+static int free_station_enu(void *opaque, void *elem)
+{
+    free_station(elem);
+    return 0;
+}
+
 /**
  * Find stations within the given parameters.
  * @param[out] station_list array to return stations in
@@ -218,15 +224,16 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
     Station *station_list[1000];
     int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
 
+    nb_candidate_match += candidate_station->nb_frequency - 1;
     for (i=0; i<nb_stations; i++) {
         int freq_precission = modulation == AM ? 5 : 50;
         double delta = fabs(station_list[i]->frequency - freq);
         // Station already added, or we have 2 rather close stations
         if (modulation == station_list[i]->modulation && delta < freq_precission && station_list[i] != candidate_station) {
-            nb_candidate_match++;
+            nb_candidate_match += station_list[i]->nb_frequency;
         }
         if (modulation != station_list[i]->modulation && delta < (bandwidth + station_list[i]->bandwidth)/2.1)
-            nb_candidate_conflict++;
+            nb_candidate_conflict += station_list[i]->nb_frequency;
     }
     //if we have a recent conflict with an established station, skip this one
     if (conflict < CANDIDATE_STATION_TIMEOUT)
@@ -355,20 +362,41 @@ static int create_candidate_station(SDRContext *sdr, enum Modulation modulation,
     Station *station;
     void *tmp;
     struct AVTreeNode *next = NULL;
+    Station *station_list[1000];
+    double snapdistance = modulation == AM ? 5 : 50;
+    int nb_stations = find_stations(sdr, freq, snapdistance, station_list, FF_ARRAY_ELEMS(station_list));
 
-    station = av_mallocz(sizeof(*station));
-    if (!station)
-        return AVERROR(ENOMEM);
+    if (nb_stations) {
+        for(int i = 1; i<nb_stations; i++)
+            if (station_list[0]->modulation != modulation ||
+                (station_list[i]->modulation == modulation &&
+                 fabs(station_list[0]->frequency - freq) > fabs(station_list[i]->frequency - freq)))
+                station_list[0] = station_list[i];
+        nb_stations = station_list[0]->modulation == modulation;
+    }
+
+    if (!nb_stations) {
+        station = av_mallocz(sizeof(*station));
+        if (!station)
+            return AVERROR(ENOMEM);
+        station->frequency = freq;
+    } else {
+        station = station_list[0];
+        // We will update the frequency so we need to reinsert
+        tree_remove(&sdr->station_root, station, station_cmp, &next);
+        station->frequency = station->nb_frequency * station->frequency + freq;
+        station->timeout   = 0;
+    }
+    station->frequency /= ++station->nb_frequency;
 
     station->modulation   = modulation;
-    station->frequency    = freq;
     station->bandwidth    = bandwidth;
     station->bandwidth_p2 = bandwidth_p2;
     station->score        = score;
 
     tmp = tree_insert(&sdr->station_root, station, station_cmp, &next);
     if (tmp && tmp != station) {
-        //unlikely
+        //This will not happen in real C implementations but floats allow odd things in theory
         av_freep(&station);
     }
     av_freep(&next);
@@ -2025,6 +2053,9 @@ int avpriv_sdr_read_close(AVFormatContext *s)
     }
     sdr->nb_stations = 0;
     av_freep(&sdr->station);
+    av_tree_enumerate(sdr->station_root, NULL, NULL, free_station_enu);
+    av_tree_destroy(sdr->station_root);
+    sdr->station_root = NULL;
 
     av_freep(&sdr->windowed_block);
     av_freep(&sdr->block);

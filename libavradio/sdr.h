@@ -70,6 +70,7 @@ typedef struct Station {
     char *name;
     enum Modulation modulation;
     double frequency;
+    int nb_frequency;       ///< number of detections which are used to compute the frequency
     int64_t bandwidth;
     int64_t bandwidth_p2;
     float score;
