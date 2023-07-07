@@ -235,8 +235,8 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
             (sdr->sdr_sample_rate < ranges[i].minimum || sdr->sdr_sample_rate > ranges[i].maximum))
             continue;
         if (sdr->rtlsdr_fixes)
-            // 2.88 and 3.2 Mhz do not work reliable here so lets not automatically choose them, the user can override this
-            if (ranges[i].maximum > (2560000 + 2880000)/2)
+            // 2.56, 2.88 and 3.2 Mhz do not work reliable here so lets not automatically choose them, the user can override this
+            if (ranges[i].maximum > (2560000 + 2160000)/2)
                 continue;
         max_sample_rate = FFMAX(max_sample_rate, ranges[i].maximum);
     }
