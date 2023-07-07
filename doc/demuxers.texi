@@ -965,6 +965,13 @@ it can also result in the detection of SDR artifacts such as reflections of stro
 as weak stations. Future versions may be better able to separate weak stations from artifacts
 looking like weak stations.
 
+@item fm_multiple
+Multiple of frequency in hz at which to search for stations.
+you can set this to 100000 to probe stations at 0.1MHz increments
+Most SDR artifacts are not at exact multiplies, this is thus an effective
+way to eliminate these artifacts.
+disabled by default.
+
 @item am_mode
 AM Demodulation method. Several different methods are supported.
 @table @samp

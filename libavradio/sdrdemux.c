@@ -915,6 +915,14 @@ static int probe_fm(SDRContext *sdr)
 
                     if (fabs(f2 - f) > 1000)
                         continue;
+
+                    if (sdr->fm_multiple) {
+                        double f3 = lrint(f2 / sdr->fm_multiple) * sdr->fm_multiple;
+                        if (fabs(f2 - f3) > FM_FREQ_TOLERANCE)
+                            continue;
+                        f2 = f3;
+                    }
+
                     create_candidate_station(sdr, FM, f2, bandwidth_f, bandwidth_p2, score);
                 }
             }
@@ -2169,6 +2177,7 @@ const AVOption avpriv_sdr_options[] = {
 
     { "am_threshold"     , "AM detection threshold", OFFSET(am_threshold), AV_OPT_TYPE_FLOAT, {.dbl = 20}, 0, FLT_MAX, DEC},
     { "fm_threshold"     , "FM detection threshold", OFFSET(fm_threshold), AV_OPT_TYPE_FLOAT, {.dbl = 50}, 0, FLT_MAX, DEC},
+    { "fm_multiple"      , "FM frequency mutiple",   OFFSET(fm_multiple ), AV_OPT_TYPE_FLOAT, {.dbl =  0}, 0, FLT_MAX, DEC},
 
     { NULL },
 };
