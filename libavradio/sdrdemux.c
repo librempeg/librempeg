@@ -111,6 +111,23 @@ static void free_station(Station *station)
     av_free(station);
 }
 
+static inline int histogram_index(SDRContext *sdr, double f)
+{
+    f = HISTOGRAMM_SIZE*((f - sdr->block_center_freq) / sdr->sdr_sample_rate + 0.5);
+    return av_clip((int)f, 0, HISTOGRAMM_SIZE-1);
+}
+
+static int histogram_score(Station *s)
+{
+    int score = 0;
+    for(int i = 0; i<HISTOGRAMM_SIZE; i++) {
+        score +=
+             (5*s->detection_per_mix_frequency[i] > s->non_detection_per_mix_frequency[i])
+            -(5*s->detection_per_mix_frequency[i] < s->non_detection_per_mix_frequency[i]);
+    }
+    return score;
+}
+
 typedef struct FindStationContext {
     double freq;
     double range;
@@ -182,6 +199,10 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
     int nb_candidate_match = 0;
 
     if (candidate_station->in_station_list)
+        return 0;
+
+    // suspect looking histogram
+    if (histogram_score(candidate_station) <= 0)
         return 0;
 
     Station *station_list[1000];
@@ -328,8 +349,20 @@ static void decay_stations(SDRContext *sdr)
             station->frequency + station->bandwidth/2 > sdr->block_center_freq + sdr->bandwidth/2)
             continue;
 
+        if (station->timeout)
+            station->non_detection_per_mix_frequency[histogram_index(sdr, station->frequency)] ++;
+
         if (station->in_station_list) {
-            if (station->timeout++ > STATION_TIMEOUT) {
+            int station_timeout = STATION_TIMEOUT;
+            int hs = histogram_score(station);
+
+            if (hs == 0) {
+                station_timeout = 5; //give the station a moment to be properly detected and then discard it
+            } else if(hs < 0) {
+                station_timeout = 0; //probably not a station
+            }
+
+            if (station->timeout++ > station_timeout) {
                 if (!station->stream)
                     station->in_station_list = 0;
             }
@@ -376,6 +409,7 @@ static int create_candidate_station(SDRContext *sdr, enum Modulation modulation,
     }
     station->frequency /= ++station->nb_frequency;
 
+    station->detection_per_mix_frequency[histogram_index(sdr, freq)] ++;
     station->modulation   = modulation;
     station->bandwidth    = bandwidth;
     station->bandwidth_p2 = bandwidth_p2;

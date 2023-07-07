@@ -66,6 +66,8 @@ typedef enum Modulation {
     //QAM, PSK, ...
 } Modulation;
 
+#define HISTOGRAMM_SIZE 9
+
 typedef struct Station {
     char *name;
     enum Modulation modulation;
@@ -77,6 +79,9 @@ typedef struct Station {
     int in_station_list;    ///< non zero if this station is in the station list
     int timeout;            //since how many blocks was this detectable but not detected
     int multiplex_index;    //DAB can have multiple stations on one frequency
+
+    int detection_per_mix_frequency[HISTOGRAMM_SIZE];
+    int non_detection_per_mix_frequency[HISTOGRAMM_SIZE];
 
     struct SDRStream *stream;
 } Station;
