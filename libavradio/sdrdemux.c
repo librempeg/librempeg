@@ -1500,9 +1500,11 @@ int avpriv_sdr_common_init(AVFormatContext *s)
         SDRStream *sst = st->priv_data;
         av_assert0(st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO);
         sst->frame_size   = sdr->width * sdr->height * 4;
-        sst->frame_buffer = av_malloc(sst->frame_size * 2);
+        sst->frame_buffer = av_mallocz(sst->frame_size * 2);
         if (!sst->frame_buffer)
             return AVERROR(ENOMEM);
+        for(int i = 3; i<sst->frame_size * 2; i+=4)
+            sst->frame_buffer[i] = 255;
     }
 
     sdr->pts = 0;
