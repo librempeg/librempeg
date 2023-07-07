@@ -347,6 +347,7 @@ static void decay_stations(SDRContext *sdr)
 
     for (int i=0; i<nb_stations; i++) {
         Station *station = station_list[i];
+        int hs;
 
         if (station->frequency - station->bandwidth/2 < sdr->block_center_freq - sdr->bandwidth/2 ||
             station->frequency + station->bandwidth/2 > sdr->block_center_freq + sdr->bandwidth/2)
@@ -355,9 +356,10 @@ static void decay_stations(SDRContext *sdr)
         if (station->timeout)
             station->non_detection_per_mix_frequency[histogram_index(sdr, station->frequency)] ++;
 
+        hs = histogram_score(station);
+
         if (station->in_station_list) {
             int station_timeout = STATION_TIMEOUT;
-            int hs = histogram_score(station);
 
             if (hs == 0) {
                 station_timeout = 5; //give the station a moment to be properly detected and then discard it
@@ -370,7 +372,13 @@ static void decay_stations(SDRContext *sdr)
                     station->in_station_list = 0;
             }
         } else {
-            if (station->timeout++ > CANDIDATE_STATION_TIMEOUT) {
+            int station_timeout = CANDIDATE_STATION_TIMEOUT;
+
+            //We do not want to drop "negative" stations to avoid them being redetected
+            if (hs <= 0)
+                station_timeout = INT_MAX;
+
+            if (station->timeout++ > station_timeout) {
                 struct AVTreeNode *next = NULL;
                 tree_remove(&sdr->station_root, station, station_cmp, &next);
                 av_freep(&next);
