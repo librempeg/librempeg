@@ -855,13 +855,17 @@ static int probe_fm(SDRContext *sdr)
 
     for (int pass = 0; pass < 2; pass ++) {
         double avg[2] = {0}, tri = 0;
+        double mean = 0;
+        double center = 0;
         for (i = 0; i<half_bw_i; i++) {
             avg[0] += sdr->len2block[i];
             tri    += i*sdr->len2block[i];
         }
+        mean = tri;
         for (; i<2*half_bw_i; i++) {
             avg[1] += sdr->len2block[i];
             tri    += (2*half_bw_i-i)*sdr->len2block[i];
+            mean   += i*sdr->len2block[i];
         }
 
         for(i = half_bw_i; i<2*sdr->block_size - half_bw_i; i++) {
@@ -870,6 +874,10 @@ static int probe_fm(SDRContext *sdr)
             avg[1] -= sdr->len2block[i] - sdr->len2block[i + half_bw_i];
             b += avg[1];
             tri += avg[1] - avg[0];
+
+            mean += (i+half_bw_i)*sdr->len2block[i+half_bw_i];
+            center = mean / b;
+            mean -= (i-half_bw_i)*sdr->len2block[i-half_bw_i];
 
             if (i < border_i || i > 2*sdr->block_size - border_i)
                 continue;
@@ -884,6 +892,7 @@ static int probe_fm(SDRContext *sdr)
                 if (last_score[1] >= last_score[0] &&
                     last_score[1] > last_score[2] &&
                     last_score[1] > sdr->fm_threshold) {
+                    double score = last_score[1];
 
                     float rmax   = max_in_range(sdr, i-half_bw_i/4, i+half_bw_i/4);
                     int lowcount = countbelow(sdr, i-half_bw_i/4, i+half_bw_i/4, rmax / 100);
@@ -898,7 +907,12 @@ static int probe_fm(SDRContext *sdr)
                     if (peak_i < 0)
                         continue;
                     av_assert0(fabs(peak_i-i) < 2);
-                    create_candidate_station(sdr, FM, peak_i * 0.5 * sdr->sdr_sample_rate / sdr->block_size + sdr->block_center_freq - sdr->sdr_sample_rate/2, bandwidth_f, bandwidth_p2, last_score[1]);
+                    double f = peak_i * 0.5 * sdr->sdr_sample_rate / sdr->block_size + sdr->block_center_freq - sdr->sdr_sample_rate/2;
+                    double f2 = center * 0.5 * sdr->sdr_sample_rate / sdr->block_size + sdr->block_center_freq - sdr->sdr_sample_rate/2;
+
+                    if (fabs(f2 - f) > 1000)
+                        continue;
+                    create_candidate_station(sdr, FM, f2, bandwidth_f, bandwidth_p2, score);
                 }
             }
         }
