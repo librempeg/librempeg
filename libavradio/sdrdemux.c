@@ -61,6 +61,9 @@
 #define FREQ_BITS 22
 #define TIMEBASE ((48000ll / 128) << FREQ_BITS)
 
+#define AM_FREQ_TOLERANCE 5
+#define FM_FREQ_TOLERANCE 500
+
 #define STATION_TIMEOUT 100 ///< The number of frames after which a station is removed if it was not detected
 #define CANDIDATE_STATION_TIMEOUT 4
 
@@ -248,7 +251,7 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
 
     nb_candidate_match += candidate_station->nb_frequency - 1;
     for (i=0; i<nb_stations; i++) {
-        int freq_precission = modulation == AM ? 5 : 500;
+        int freq_precission = modulation == AM ? AM_FREQ_TOLERANCE : FM_FREQ_TOLERANCE;
         Station *s = station_list[i];
         double delta = fabs(s->frequency - freq);
 
@@ -383,7 +386,7 @@ static int create_candidate_station(SDRContext *sdr, enum Modulation modulation,
     void *tmp;
     struct AVTreeNode *next = NULL;
     Station *station_list[1000];
-    double snapdistance = modulation == AM ? 5 : 500;
+    double snapdistance = modulation == AM ? AM_FREQ_TOLERANCE : FM_FREQ_TOLERANCE;
     int nb_stations = find_stations(sdr, freq, snapdistance, station_list, FF_ARRAY_ELEMS(station_list));
 
     if (nb_stations) {
