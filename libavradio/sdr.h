@@ -152,6 +152,9 @@ typedef struct SDRContext {
     int emphasis_mode;
     int am_fft_ref;
 
+    float am_threshold;
+    float fm_threshold;
+
     pthread_t hw_thread;
     int thread_started;
     pthread_mutex_t mutex;                  ///< Mutex to protect common variable between mainthread and hw_thread, and also to protect soapy from concurrent calls

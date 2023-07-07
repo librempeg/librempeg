@@ -64,16 +64,8 @@
 #define STATION_TIMEOUT 100 ///< The number of frames after which a station is removed if it was not detected
 #define CANDIDATE_STATION_TIMEOUT 4
 
-/*
- * 100 detects nothing
- * 50 detects a good bit but not all
- */
-#define AM_THRESHOLD 20
-
 #define AM_MAX23 0.06     //smaller causes failure on synthetic signals
 #define AM_MAX4  0.02
-
-#define FM_THRESHOLD  50 //TODO adjust
 
 //Least squares fit at 1khz points of frequency response shown by Frank McClatchie, FM SYSTEMS, INC. 800-235-6960
 static double emphasis75us(int f)
@@ -529,7 +521,7 @@ static int probe_am(SDRContext *sdr)
             continue;
 
         //TODO also check for symmetry in the spectrum
-        if (mid > 0 && score > AM_THRESHOLD &&
+        if (mid > 0 && score > sdr->am_threshold &&
             sdr->len2block[i - 1] <  mid          && sdr->len2block[i + 1] <= mid &&
             sdr->len2block[i - 2] <  mid*AM_MAX23 && sdr->len2block[i + 2] <  mid*AM_MAX23 &&
             sdr->len2block[i - 3] <  mid*AM_MAX23 && sdr->len2block[i + 3] <  mid*AM_MAX23
@@ -583,7 +575,7 @@ static double find_am_carrier(SDRContext *sdr, const AVComplexFloat *data, int d
         avg += len2block[i + index];
     score = len * mid / (avg - mid);
     //find optimal frequency for this block if we have a carrier
-    if (score > AM_THRESHOLD / 4) {
+    if (score > sdr->am_threshold / 4) {
         double peak_i = find_peak_macleod(sdr, data, i_max, data_len, NULL);
         if (peak_i < 0)
             return peak_i;
@@ -858,7 +850,7 @@ static int probe_fm(SDRContext *sdr)
 
                 if (last_score[1] >= last_score[0] &&
                     last_score[1] > last_score[2] &&
-                    last_score[1] > FM_THRESHOLD) {
+                    last_score[1] > sdr->fm_threshold) {
 
                     float rmax   = max_in_range(sdr, i-half_bw_i/4, i+half_bw_i/4);
                     int lowcount = countbelow(sdr, i-half_bw_i/4, i+half_bw_i/4, rmax / 100);
@@ -2122,6 +2114,10 @@ const AVOption avpriv_sdr_options[] = {
         { "emphasis75us", "FM De-Emphasis 75us", 0, AV_OPT_TYPE_CONST, {.i64 = EMPHASIS_75us}, 0, 0, DEC, "fm_emphasis"},
         { "emphasis50us", "FM De-Emphasis 50us", 0, AV_OPT_TYPE_CONST, {.i64 = EMPHASIS_50us}, 0, 0, DEC, "fm_emphasis"},
         { "none"        , "No FM De-Emphasis"  , 0, AV_OPT_TYPE_CONST, {.i64 = EMPHASIS_NONE}, 0, 0, DEC, "fm_emphasis"},
+
+    { "am_threshold"     , "AM detection threshold", OFFSET(am_threshold), AV_OPT_TYPE_FLOAT, {.dbl = 20}, 0, FLT_MAX, DEC},
+    { "fm_threshold"     , "FM detection threshold", OFFSET(fm_threshold), AV_OPT_TYPE_FLOAT, {.dbl = 50}, 0, FLT_MAX, DEC},
+
     { NULL },
 };
 

@@ -956,6 +956,15 @@ for debuging.
 @item kbd_alpha
 Kaiser Bessel derived window parameter
 
+@item am_threshold
+AM station detection threshold
+
+@item fm_threshold
+FM station detection threshold, a lower value allows detection of weaker stations but
+it can also result in the detection of SDR artifacts such as reflections of strong FM stations
+as weak stations. Future versions may be better able to separate weak stations from artifacts
+looking like weak stations.
+
 @item am_mode
 AM Demodulation method. Several different methods are supported.
 @table @samp
