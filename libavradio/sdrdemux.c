@@ -327,12 +327,11 @@ static void decay_stations(SDRContext *sdr)
         if (station->frequency - station->bandwidth/2 < sdr->block_center_freq - sdr->bandwidth/2 ||
             station->frequency + station->bandwidth/2 > sdr->block_center_freq + sdr->bandwidth/2)
             continue;
-        if (station->stream)
-            continue;
 
         if (station->in_station_list) {
             if (station->timeout++ > STATION_TIMEOUT) {
-                station->in_station_list = 0;
+                if (!station->stream)
+                    station->in_station_list = 0;
             }
         } else {
             if (station->timeout++ > CANDIDATE_STATION_TIMEOUT) {
