@@ -843,7 +843,7 @@ static int probe_fm(SDRContext *sdr)
     int bandwidth_p2 =  38*1000; //phase 2 bandwidth
     int half_bw_i = bandwidth_f * (int64_t)sdr->block_size / sdr->sdr_sample_rate;
     float last_score[3] = {FLT_MAX, FLT_MAX, FLT_MAX};
-    int border_i = (sdr->sdr_sample_rate - sdr->bandwidth) * sdr->block_size / sdr->sdr_sample_rate;
+    int border_i = (sdr->sdr_sample_rate - FFMIN(sdr->bandwidth, sdr->sdr_sample_rate*7/8)) * sdr->block_size / sdr->sdr_sample_rate;
     double noise_floor = FLT_MAX;
 
     if (2*half_bw_i > 2*sdr->block_size)
