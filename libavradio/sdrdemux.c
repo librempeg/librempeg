@@ -979,7 +979,7 @@ static int demodulate_fm(SDRContext *sdr, int stream_index, AVPacket *pkt)
     //FIXME this only needs to be a RDFT
     //CONSIDER, this and in fact alot can be done with bandpass and lowpass filters instead of FFTs, find out which is better
     //CONSIDER synthesizing the carrier instead of IFFT, we have all parameters for that
-    sst->fft_p2(sst->fft_p2_ctx, sst->block, sst->iblock, sizeof(AVComplexFloat));
+    sst->fft(sst->fft_ctx, sst->block, sst->iblock, sizeof(AVComplexFloat));
     // Only the low N/2+1 are used the upper is just a reflection
 
     carrier19_i_exact = find_am_carrier(sdr, sst->block, 2*sst->block_size, (void*)(sst->block + 1 + sst->block_size), carrier19_i, 10, 10);
@@ -1078,10 +1078,10 @@ static void free_stream(SDRContext *sdr, int stream_index)
     SDRStream *sst = st->priv_data;
 
     av_tx_uninit(&sst->ifft_ctx);
-    av_tx_uninit(&sst->fft_p2_ctx);
+    av_tx_uninit(&sst->fft_ctx);
     av_tx_uninit(&sst->ifft_p2_ctx);
     sst->ifft = NULL;
-    sst->fft_p2 = NULL;
+    sst->fft  = NULL;
     sst->ifft_p2 = NULL;
     sst->block_size = 0;
 
@@ -1127,7 +1127,7 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
 
         if (sst->station->bandwidth_p2) {
             //Allocate 2nd stage demodulation fields if needed
-            ret = av_tx_init(&sst-> fft_p2_ctx, &sst-> fft_p2, AV_TX_FLOAT_FFT, 0, 2*sst->block_size   , NULL, 0);
+            ret = av_tx_init(&sst-> fft_ctx, &sst-> fft, AV_TX_FLOAT_FFT, 0, 2*sst->block_size   , NULL, 0);
             if (ret < 0)
                 return ret;
 

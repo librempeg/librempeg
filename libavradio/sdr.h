@@ -95,10 +95,10 @@ typedef struct FIFOElement {
 
 typedef struct SDRStream {
     AVTXContext *ifft_ctx;
-    AVTXContext *fft_p2_ctx;
+    AVTXContext *fft_ctx;
     AVTXContext *ifft_p2_ctx;
     av_tx_fn ifft;
-    av_tx_fn fft_p2;
+    av_tx_fn fft;
     av_tx_fn ifft_p2;
     int block_size;
     int block_size_p2;
