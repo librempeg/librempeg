@@ -171,6 +171,9 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
         return AVERROR_EXTERNAL;
     }
 
+    names = SoapySDRDevice_listTimeSources(soapy, &length);
+    print_and_free_list(s, names, length, "Clocks");
+
     //Go over all Antennas and print them
     names = SoapySDRDevice_listAntennas(soapy, SOAPY_SDR_RX, 0, &length);
     print_and_free_list(s, names, length, "Antennas");
