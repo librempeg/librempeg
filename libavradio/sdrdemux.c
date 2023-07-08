@@ -1425,6 +1425,7 @@ int ff_sdr_common_init(AVFormatContext *s)
     float scale = 1.0 / sdr->sample_scale;
 
     sdr->avfmt = s;
+    s->ctx_flags |= AVFMTCTX_NOHEADER;
 
     if (sdr->width>1 && sdr->height>1) {
         /* video stream */
