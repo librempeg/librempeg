@@ -93,6 +93,17 @@ static int sdrindev_set_frequency_callback(SDRContext *sdr, int64_t freq)
     return 0;
 }
 
+static void print_and_free_list(AVFormatContext *s, char** names, size_t length, const char *title)
+{
+    if (length) {
+        av_log(s, AV_LOG_INFO, "%s:", title);
+        for (int i = 0; i < length; i++)
+            av_log(s, AV_LOG_INFO, "%c%s", ", "[!i], names[i]);
+        av_log(s, AV_LOG_INFO, "\n");
+    }
+    SoapySDRStrings_clear(&names, length);
+}
+
 /**
  * Initial setup of SDR HW through soapy.
  * This will go over available settings and match them up with what the user requested
@@ -162,19 +173,11 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
 
     //Go over all Antennas and print them
     names = SoapySDRDevice_listAntennas(soapy, SOAPY_SDR_RX, 0, &length);
-    av_log(s, AV_LOG_INFO, "Antennas: ");
-    for (i = 0; i < length; i++)
-        av_log(s, AV_LOG_INFO, "%s, ", names[i]);
-    av_log(s, AV_LOG_INFO, "\n");
-    SoapySDRStrings_clear(&names, length);
+    print_and_free_list(s, names, length, "Antennas");
 
     //Go over all Gain Elements and print them
     names = SoapySDRDevice_listGains(soapy, SOAPY_SDR_RX, 0, &length);
-    av_log(s, AV_LOG_INFO, "Rx Gain Elements: ");
-    for (i = 0; i < length; i++)
-        av_log(s, AV_LOG_INFO, "%s, ", names[i]);
-    av_log(s, AV_LOG_INFO, "\n");
-    SoapySDRStrings_clear(&names, length);
+    print_and_free_list(s, names, length, "Rx Gain Elements");
 
     //Inform the user if AGC is supported and setup AGC as requested by the user
     has_agc = SoapySDRDevice_hasGainMode(soapy, SOAPY_SDR_RX, 0);
