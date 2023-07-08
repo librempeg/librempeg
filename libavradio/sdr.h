@@ -228,7 +228,7 @@ typedef struct BandDescriptor {
     int64_t freq_max;
 } BandDescriptor ;
 
-extern const AVOption avpriv_sdr_options[];
+extern const AVOption ff_sdr_options[];
 
 extern ModulationDescriptor ff_sdr_modulation_descs[];
 
@@ -237,21 +237,21 @@ extern ModulationDescriptor ff_sdr_modulation_descs[];
  * this will check the argument and call set_frequency_callback()
  * It can be called before the thread is started or from within the thread,
  */
-int avpriv_sdr_set_freq(SDRContext *sdr, int64_t freq);
+int ff_sdr_set_freq(SDRContext *sdr, int64_t freq);
 
-int avpriv_sdr_common_init(AVFormatContext *s);
+int ff_sdr_common_init(AVFormatContext *s);
 
-int avpriv_sdr_read_packet(AVFormatContext *s, AVPacket *pkt);
+int ff_sdr_read_packet(AVFormatContext *s, AVPacket *pkt);
 
-int avpriv_sdr_read_seek(AVFormatContext *s, int stream_index, int64_t target, int flags);
+int ff_sdr_read_seek(AVFormatContext *s, int stream_index, int64_t target, int flags);
 
 /**
  * shuts down threads, destroys mutex
  * Safe to call if no thread was started or after it was shutdown
  */
-void avpriv_sdr_stop_threading(AVFormatContext *s);
+void ff_sdr_stop_threading(AVFormatContext *s);
 
-int avpriv_sdr_read_close(AVFormatContext *s);
+int ff_sdr_read_close(AVFormatContext *s);
 
 int ff_sdr_vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt);
 

@@ -1056,7 +1056,7 @@ ModulationDescriptor ff_sdr_modulation_descs[] = {
     {"Frequency Modulation", "FM", FM, AVMEDIA_TYPE_AUDIO, probe_fm, demodulate_fm},
 };
 
-int avpriv_sdr_set_freq(SDRContext *sdr, int64_t freq)
+int ff_sdr_set_freq(SDRContext *sdr, int64_t freq)
 {
     freq = av_clip64(freq, sdr->min_center_freq, sdr->max_center_freq);
 
@@ -1390,9 +1390,9 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
         }
         if (sdr->wanted_freq != sdr->freq) {
             //We could use a seperate MUTEX for the FIFO and for soapy
-            avpriv_sdr_set_freq(sdr, sdr->wanted_freq);
+            ff_sdr_set_freq(sdr, sdr->wanted_freq);
             //This shouldnt really cause any problem if we just continue on error except that we continue returning data with the previous target frequency range
-            //And theres not much else we can do, an error message was already printed by avpriv_sdr_set_freq() in that case
+            //And theres not much else we can do, an error message was already printed by ff_sdr_set_freq() in that case
             block_counter = 0; // we just changed the frequency, do not trust the next blocks content
         }
         pthread_mutex_unlock(&sdr->mutex);
@@ -1416,7 +1416,7 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
     return NULL;
 }
 
-int avpriv_sdr_common_init(AVFormatContext *s)
+int ff_sdr_common_init(AVFormatContext *s)
 {
     SDRContext *sdr = s->priv_data;
     AVStream *st;
@@ -1588,16 +1588,16 @@ static int sdrfile_initial_setup(AVFormatContext *s)
     //After reading the first packet header we return to the begin so the packet can be read whole
     avio_seek(s->pb, 0, SEEK_SET);
 
-    ret = avpriv_sdr_set_freq(sdr, sdr->wanted_freq);
+    ret = ff_sdr_set_freq(sdr, sdr->wanted_freq);
     if (ret < 0)
         return ret;
 
     sdr->read_callback = sdrfile_read_callback;
 
-    return avpriv_sdr_common_init(s);
+    return ff_sdr_common_init(s);
 }
 
-int avpriv_sdr_read_packet(AVFormatContext *s, AVPacket *pkt)
+int ff_sdr_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     SDRContext *sdr = s->priv_data;
     int ret, i, full_blocks, seek_direction;
@@ -1860,7 +1860,7 @@ process_next_block:
     return AVERROR(EAGAIN);
 }
 
-int avpriv_sdr_read_seek(AVFormatContext *s, int stream_index,
+int ff_sdr_read_seek(AVFormatContext *s, int stream_index,
                          int64_t target, int flags)
 {
     SDRContext *sdr = s->priv_data;
@@ -1900,7 +1900,7 @@ int avpriv_sdr_read_seek(AVFormatContext *s, int stream_index,
     return 0;
 }
 
-void avpriv_sdr_stop_threading(AVFormatContext *s)
+void ff_sdr_stop_threading(AVFormatContext *s)
 {
     SDRContext *sdr = s->priv_data;
 
@@ -1919,12 +1919,12 @@ void avpriv_sdr_stop_threading(AVFormatContext *s)
     sdr->thread_started = 0;
 }
 
-int avpriv_sdr_read_close(AVFormatContext *s)
+int ff_sdr_read_close(AVFormatContext *s)
 {
     SDRContext *sdr = s->priv_data;
     int i;
 
-    avpriv_sdr_stop_threading(s);
+    ff_sdr_stop_threading(s);
 
     av_fifo_freep2(&sdr->empty_block_fifo);
     av_fifo_freep2(&sdr->full_block_fifo);
@@ -1969,7 +1969,7 @@ static int sdrfile_probe(const AVProbeData *p)
 #define OFFSET(x) offsetof(SDRContext, x)
 #define DEC AV_OPT_FLAG_DECODING_PARAM
 
-const AVOption avpriv_sdr_options[] = {
+const AVOption ff_sdr_options[] = {
     { "video_size", "set frame size", OFFSET(width), AV_OPT_TYPE_IMAGE_SIZE, {.str = "0x0"}, 0, 0, DEC },
     { "framerate" , "set frame rate", OFFSET(fps), AV_OPT_TYPE_VIDEO_RATE, {.str = "25"}, 0, INT_MAX,DEC },
     { "block_size", "FFT block size", OFFSET(block_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC},
@@ -2015,7 +2015,7 @@ const AVOption avpriv_sdr_options[] = {
 static const AVClass sdrfile_demuxer_class = {
     .class_name = "sdrfile",
     .item_name  = av_default_item_name,
-    .option     = avpriv_sdr_options,
+    .option     = ff_sdr_options,
     .version    = LIBAVUTIL_VERSION_INT,
     .category   = AV_CLASS_CATEGORY_DEMUXER,
 };
@@ -2026,9 +2026,9 @@ const AVInputFormat ff_sdrfile_demuxer = {
     .priv_data_size = sizeof(SDRContext),
     .read_probe     = sdrfile_probe,
     .read_header    = sdrfile_initial_setup,
-    .read_packet    = avpriv_sdr_read_packet,
-    .read_close     = avpriv_sdr_read_close,
-    .read_seek      = avpriv_sdr_read_seek,
+    .read_packet    = ff_sdr_read_packet,
+    .read_close     = ff_sdr_read_close,
+    .read_seek      = ff_sdr_read_seek,
     .flags_internal = FF_FMT_INIT_CLEANUP,
     .priv_class = &sdrfile_demuxer_class,
 };

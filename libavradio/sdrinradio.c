@@ -272,7 +272,7 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
         av_log(s, AV_LOG_ERROR, "setSampleRate fail: %s\n", SoapySDRDevice_lastError());
         return AVERROR_EXTERNAL;
     }
-    ret = avpriv_sdr_set_freq(sdr, sdr->wanted_freq);
+    ret = ff_sdr_set_freq(sdr, sdr->wanted_freq);
     if (ret < 0)
         return ret;
 
@@ -331,7 +331,7 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
 
     SoapySDRDevice_activateStream(soapy, soapyRxStream, 0, 0, 0);
 
-    return avpriv_sdr_common_init(s);
+    return ff_sdr_common_init(s);
 }
 
 static int sdrindev_read_close(AVFormatContext *s)
@@ -339,7 +339,7 @@ static int sdrindev_read_close(AVFormatContext *s)
     SDRContext *sdr = s->priv_data;
     SoapySDRDevice *soapy = sdr->soapy;
 
-    avpriv_sdr_stop_threading(s);
+    ff_sdr_stop_threading(s);
 
     if (soapy) {
         if (sdr->soapyRxStream) {
@@ -352,7 +352,7 @@ static int sdrindev_read_close(AVFormatContext *s)
         sdr->soapy = NULL;
     }
 
-    return avpriv_sdr_read_close(s);
+    return ff_sdr_read_close(s);
 }
 
 static int sdr_get_device_list(AVFormatContext *ctx, AVDeviceInfoList *device_list)
@@ -402,7 +402,7 @@ static int sdr_get_device_list(AVFormatContext *ctx, AVDeviceInfoList *device_li
 static const AVClass sdr_demuxer_class = {
     .class_name = "sdr",
     .item_name  = av_default_item_name,
-    .option     = avpriv_sdr_options,
+    .option     = ff_sdr_options,
     .version    = LIBAVUTIL_VERSION_INT,
     .category   = AV_CLASS_CATEGORY_RADIO_INPUT,
 };
@@ -412,9 +412,9 @@ const AVInputFormat ff_sdr_demuxer = {
     .long_name      = NULL_IF_CONFIG_SMALL("Software Defined Radio Demodulator"),
     .priv_data_size = sizeof(SDRContext),
     .read_header    = sdrindev_initial_hw_setup,
-    .read_packet    = avpriv_sdr_read_packet,
+    .read_packet    = ff_sdr_read_packet,
     .read_close     = sdrindev_read_close,
-    .read_seek      = avpriv_sdr_read_seek,
+    .read_seek      = ff_sdr_read_seek,
     .get_device_list= sdr_get_device_list,
     .flags          = AVFMT_NOFILE,
     .flags_internal = FF_FMT_INIT_CLEANUP,
