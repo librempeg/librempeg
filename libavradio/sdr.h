@@ -202,7 +202,6 @@ typedef struct SDRContext {
     int missing_streams;
 
     int rtlsdr_fixes;
-    float rtlsdr_dc_offset;
 } SDRContext;
 
 typedef struct ModulationDescriptor {

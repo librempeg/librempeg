@@ -1705,21 +1705,20 @@ process_next_block:
         const int8_t *halfblock0 = fifo_element[0].halfblock;
         const int8_t *halfblock1 = fifo_element[1].halfblock;
         if (sdr->rtlsdr_fixes>0) {
-            if (!sdr->rtlsdr_dc_offset || !sdr->block_center_freq) {
-                int sum = 0;
-                for (i = 0; i<2*sdr->block_size; i++)
-                    sum += halfblock0[i]
-                        +  halfblock1[i];
-                sdr->rtlsdr_dc_offset = -sum / (4.0*sdr->block_size);
-                av_log(s, AV_LOG_DEBUG, "Compensating DC offset %f (this should be around -0.6)\n", sdr->rtlsdr_dc_offset);
-            }
+            int sum = 0;
+            float offset;
+            for (i = 0; i<2*sdr->block_size; i++)
+                sum += halfblock0[i]
+                    +  halfblock1[i];
+            offset = -sum / (4.0*sdr->block_size);
+            av_log(s, AV_LOG_DEBUG, "Compensating DC offset %f (this should be around -0.6)\n", offset);
             for (i = 0; i<sdr->block_size; i++) {
-                sdr->windowed_block[i].re = (halfblock0[2*i+0] + sdr->rtlsdr_dc_offset) * sdr->window[i];
-                sdr->windowed_block[i].im = (halfblock0[2*i+1] + sdr->rtlsdr_dc_offset) * sdr->window[i];
+                sdr->windowed_block[i].re = (halfblock0[2*i+0] + offset) * sdr->window[i];
+                sdr->windowed_block[i].im = (halfblock0[2*i+1] + offset) * sdr->window[i];
             }
             for (i = sdr->block_size; i<2*sdr->block_size; i++) {
-                sdr->windowed_block[i].re = (halfblock1[2*(i - sdr->block_size)+0] + sdr->rtlsdr_dc_offset) * sdr->window[i];
-                sdr->windowed_block[i].im = (halfblock1[2*(i - sdr->block_size)+1] + sdr->rtlsdr_dc_offset) * sdr->window[i];
+                sdr->windowed_block[i].re = (halfblock1[2*(i - sdr->block_size)+0] + offset) * sdr->window[i];
+                sdr->windowed_block[i].im = (halfblock1[2*(i - sdr->block_size)+1] + offset) * sdr->window[i];
             }
         } else {
             for (i = 0; i<sdr->block_size; i++) {
