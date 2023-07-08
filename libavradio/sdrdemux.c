@@ -48,7 +48,6 @@
 #include "libavutil/thread.h"
 #include "libavutil/tree.h"
 #include "libavutil/tx.h"
-#include "libavutil/xga_font_data.h"
 #include "libavcodec/kbdwin.h"
 #include "libavformat/avformat.h"
 #include "libavformat/demux.h"
@@ -57,9 +56,6 @@
 #ifdef SYN_TEST
 #include "libavutil/lfg.h"
 #endif
-
-#define FREQ_BITS 22
-#define TIMEBASE ((48000ll / 128) << FREQ_BITS)
 
 #define AM_FREQ_TOLERANCE 5
 #define FM_FREQ_TOLERANCE 500
@@ -101,11 +97,6 @@ static void apply_deemphasis(SDRContext *sdr, AVComplexFloat *data, int len, int
     }
 }
 
-static float len2(AVComplexFloat c)
-{
-    return c.re*c.re + c.im*c.im;
-}
-
 static void free_station(Station *station)
 {
     av_freep(&station->name);
@@ -120,7 +111,7 @@ static inline int histogram_index(SDRContext *sdr, double f)
     return av_clip((int)f, 0, HISTOGRAMM_SIZE-1);
 }
 
-static int histogram_score(Station *s)
+int ff_sdr_histogram_score(Station *s)
 {
     int score = 0;
     for(int i = 0; i<HISTOGRAMM_SIZE; i++) {
@@ -168,13 +159,7 @@ static int free_station_enu(void *opaque, void *elem)
     return 0;
 }
 
-/**
- * Find stations within the given parameters.
- * @param[out] station_list array to return stations in
- * @param nb_stations size of station array
- * @returns number of stations found
- */
-static int find_stations(SDRContext *sdr, double freq, double range, Station **station_list, int station_list_size)
+int ff_sdr_find_stations(SDRContext *sdr, double freq, double range, Station **station_list, int station_list_size)
 {
     FindStationContext find_station_context;
     find_station_context.freq = freq;
@@ -205,11 +190,11 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
         return 0;
 
     // suspect looking histogram
-    if (histogram_score(candidate_station) <= 0)
+    if (ff_sdr_histogram_score(candidate_station) <= 0)
         return 0;
 
     Station *station_list[1000];
-    int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+    int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
     for (i=0; i<nb_stations; i++) {
         Station *s = station_list[i];
         double delta = fabs(s->frequency - freq);
@@ -305,7 +290,7 @@ static void create_stations(SDRContext *sdr)
     if (!sdr->block_center_freq)
         return;
 
-    int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+    int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
 
     for(int i = 0; i<nb_stations; i++) {
         create_station(sdr, station_list[i]);
@@ -343,7 +328,7 @@ static void *tree_remove(struct AVTreeNode **rootp, void *key,
 static void decay_stations(SDRContext *sdr)
 {
     Station *station_list[1000];
-    int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->bandwidth*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+    int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->bandwidth*0.5, station_list, FF_ARRAY_ELEMS(station_list));
 
     for (int i=0; i<nb_stations; i++) {
         Station *station = station_list[i];
@@ -356,7 +341,7 @@ static void decay_stations(SDRContext *sdr)
         if (station->timeout)
             station->non_detection_per_mix_frequency[histogram_index(sdr, station->frequency)] ++;
 
-        hs = histogram_score(station);
+        hs = ff_sdr_histogram_score(station);
 
         if (station->in_station_list) {
             int station_timeout = STATION_TIMEOUT;
@@ -395,7 +380,7 @@ static int create_candidate_station(SDRContext *sdr, enum Modulation modulation,
     struct AVTreeNode *next = NULL;
     Station *station_list[1000];
     double snapdistance = modulation == AM ? AM_FREQ_TOLERANCE : FM_FREQ_TOLERANCE;
-    int nb_stations = find_stations(sdr, freq, snapdistance, station_list, FF_ARRAY_ELEMS(station_list));
+    int nb_stations = ff_sdr_find_stations(sdr, freq, snapdistance, station_list, FF_ARRAY_ELEMS(station_list));
 
     if (nb_stations) {
         for(int i = 1; i<nb_stations; i++)
@@ -1066,7 +1051,7 @@ BandDescriptor band_descs[] = {
     {"FM broadcast band", "FM", 88000000, 108000000},
 };
 
-ModulationDescriptor modulation_descs[] = {
+ModulationDescriptor ff_sdr_modulation_descs[] = {
     {"Amplitude Modulation", "AM", AM, AVMEDIA_TYPE_AUDIO, probe_am, demodulate_am},
     {"Frequency Modulation", "FM", FM, AVMEDIA_TYPE_AUDIO, probe_fm, demodulate_fm},
 };
@@ -1260,7 +1245,7 @@ static int snap2station(SDRContext *sdr, int *seek_direction) {
     double best_distance = INT64_MAX;
     Station *best_station = NULL;
     Station *station_list[1000];
-    int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+    int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
 
     if (sst->station) {
         current_freq = sst->station->frequency;
@@ -1612,168 +1597,6 @@ static int sdrfile_initial_setup(AVFormatContext *s)
     return avpriv_sdr_common_init(s);
 }
 
-static inline void draw_point_component(uint8_t *frame_buffer, ptrdiff_t stride, int x, int y, int r, int g, int b, int w, int h)
-{
-    uint8_t *p;
-
-    if (x<0 || y<0 || x>=w || y>=h)
-        return;
-    p = frame_buffer + 4*x + stride*y;
-
-    p[0] = av_clip_uint8(p[0] + (b>>16));
-    p[1] = av_clip_uint8(p[1] + (g>>16));
-    p[2] = av_clip_uint8(p[2] + (r>>16));
-}
-
-// Draw a point with subpixel precission, (it looked bad otherwise)
-static void draw_point(uint8_t *frame_buffer, ptrdiff_t stride, int x, int y, int r, int g, int b, int w, int h)
-{
-    int px = x>>8;
-    int py = y>>8;
-    int sx = x&255;
-    int sy = y&255;
-    int s;
-
-    s = (256 - sx) * (256 - sy);
-    draw_point_component(frame_buffer, stride, px  , py  , r*s, g*s, b*s, w, h);
-    s = sx * (256 - sy);
-    draw_point_component(frame_buffer, stride, px+1, py  , r*s, g*s, b*s, w, h);
-    s = (256 - sx) * sy;
-    draw_point_component(frame_buffer, stride, px  , py+1, r*s, g*s, b*s, w, h);
-    s = sx * sy;
-    draw_point_component(frame_buffer, stride, px+1, py+1, r*s, g*s, b*s, w, h);
-}
-
-static void draw_char(uint8_t *frame_buffer, ptrdiff_t stride, char ch, int x0, int y0, int xd, int yd, int r, int g, int b, int w, int h)
-{
-    for(int y = 0; y < 16; y++) {
-        int mask = avpriv_vga16_font[16*ch + y];
-        for(int x = 0; x < 8; x++) {
-            if (mask&0x80)
-                draw_point(frame_buffer, stride, x0 + xd*x - yd*y, y0 + yd*x + xd*y, r, g, b, w, h);
-            mask<<=1;
-        }
-    }
-}
-
-static void draw_string(uint8_t *frame_buffer, ptrdiff_t stride, char *str, int x0, int y0, int xd, int yd, int r, int g, int b, int w, int h)
-{
-    while(*str) {
-        draw_char(frame_buffer, stride, *str++, x0, y0, xd, yd, r, g, b, w, h);
-        x0 += xd*9;
-        y0 += yd*9;
-    }
-}
-
-static int vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt)
-{
-    SDRStream *sst = st->priv_data;
-    int w = st->codecpar->width;
-    int h = st->codecpar->height;
-    int h2 = FFMIN(64, h / 4);
-    int frame_index = av_rescale(sdr->pts,        sdr->fps.num, sdr->fps.den * TIMEBASE);
-    int  last_index = av_rescale(sdr->last_pts,   sdr->fps.num, sdr->fps.den * TIMEBASE);
-    int skip = frame_index == last_index || sdr->missing_streams;
-    av_assert0(sdr->missing_streams >= 0);
-
-    for(int x= 0; x<w; x++) {
-        int color;
-        int idx = 4*(x + sst->frame_buffer_line*w);
-        int bindex  =  x    * 2ll * sdr->block_size / w;
-        int bindex2 = (x+1) * 2ll * sdr->block_size / w;
-        float a = 0;
-        av_assert0(bindex2 <= 2 * sdr->block_size);
-        for (int i = bindex; i < bindex2; i++) {
-            AVComplexFloat sample = sdr->block[i];
-            a += len2(sample);
-        }
-        color = lrintf(log(a)*8 + 32);
-
-        sst->frame_buffer[idx + 0] = color;
-        sst->frame_buffer[idx + 1] = color;
-        sst->frame_buffer[idx + 2] = color;
-        sst->frame_buffer[idx + 3] = 255;
-    }
-
-    // Display locations of all vissible stations
-//     for(int station_index = 0; station_index<sdr->nb_stations; station_index++) {
-//         Station *s = sdr->station[station_index];
-//         double f = s->frequency;
-// //                     int bw = s->bandwidth;
-// //                     int xleft = 256*((f-bw) - sdr->block_center_freq + sdr->sdr_sample_rate/2) * w / sdr->sdr_sample_rate;
-// //                     int xright= 256*((f+bw) - sdr->block_center_freq + sdr->sdr_sample_rate/2) * w / sdr->sdr_sample_rate;
-//         int xmid  = 256*( f     - sdr->block_center_freq + sdr->sdr_sample_rate/2) * w / sdr->sdr_sample_rate;
-//         int g = s->modulation == AM ? 50 : 0;
-//         int b = s->modulation == AM ? 0 : 70;
-//         int r = s->stream ? 50 : 0;
-//
-//         draw_point(sst->frame_buffer, 4*w, xmid, 256*(sst->frame_buffer_line+1), r, g, b, w, h);
-//     }
-
-    if (!skip) {
-        int ret = av_new_packet(pkt, sst->frame_size);
-        if (ret < 0)
-            return ret;
-
-        for(int y= 0; y<h2; y++) {
-            for(int x= 0; x<w; x++) {
-                int color;
-                int idx = x + y*w;
-                int idx_t = (idx / h2) + (idx % h2)*w;
-                int bindex  =  idx    * 2ll * sdr->block_size / (w * h2);
-                int bindex2 = (idx+1) * 2ll * sdr->block_size / (w * h2);
-                float a = 0;
-                av_assert0(bindex2 <= 2 * sdr->block_size);
-                for (int i = bindex; i < bindex2; i++) {
-                    AVComplexFloat sample = sdr->block[i];
-                    a += len2(sample);
-                }
-                color = lrintf(log(a)*9 + 64);
-
-                idx_t *= 4;
-
-                pkt->data[idx_t+0] = color;
-                pkt->data[idx_t+1] = color;
-                pkt->data[idx_t+2] = color;
-                pkt->data[idx_t+3] = 255;
-            }
-        }
-
-        for (int y= h2; y<h; y++)
-            memcpy(pkt->data + 4*y*w, sst->frame_buffer + 4*(y + sst->frame_buffer_line - h2)*w, 4*w);
-
-        Station *station_list[1000];
-        int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.6, station_list, FF_ARRAY_ELEMS(station_list));
-        for(int station_index = 0; station_index<nb_stations; station_index++) {
-            Station *s = station_list[station_index];
-            double f = s->frequency;
-            int xmid  = 256*( f     - sdr->block_center_freq + sdr->sdr_sample_rate/2) * w / sdr->sdr_sample_rate;
-            char text[20];
-            int color = s->stream ? 64 : 32;
-            int size = s->stream ? 181 : 128;
-            int xd = size, yd = size;
-
-            if (!s->in_station_list)
-                continue;
-
-            snprintf(text, sizeof(text), "%s %f Mhz",
-                     modulation_descs[s->modulation].shortname,
-                     f/1000000);
-            draw_string(pkt->data, 4*w, text, xmid + 8*yd, 320*h2, xd, yd, color, color, color, w, h);
-        }
-    }
-
-    if (!sst->frame_buffer_line) {
-        memcpy(sst->frame_buffer + sst->frame_size, sst->frame_buffer, sst->frame_size);
-        sst->frame_buffer_line = h-1;
-    } else
-        sst->frame_buffer_line--;
-
-//TODO
-//                 draw RDS*
-    return skip;
-}
-
 int avpriv_sdr_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     SDRContext *sdr = s->priv_data;
@@ -1789,13 +1612,13 @@ process_next_block:
         if (sst->processing_index) {
             int skip = 1;
             if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-                skip = vissualization(sdr, st, pkt);
+                skip = ff_sdr_vissualization(sdr, st, pkt);
                 if (skip < 0)
                     return skip;
             } else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
                 if (sst->station) {
                     skip = 0;
-                    ret = modulation_descs[ sst->station->modulation ].demodulate(sdr, stream_index, pkt);
+                    ret = ff_sdr_modulation_descs[ sst->station->modulation ].demodulate(sdr, stream_index, pkt);
                     if (ret < 0) {
                         av_log(s, AV_LOG_ERROR, "demodulation failed ret = %d\n", ret);
                     }
@@ -1970,8 +1793,8 @@ process_next_block:
             sdr->skip_probe = 5;
             probe_common(sdr);
 
-            for(int i = 0; i < FF_ARRAY_ELEMS(modulation_descs); i++) {
-                ModulationDescriptor *md = &modulation_descs[i];
+            for(int i = 0; i < FF_ARRAY_ELEMS(ff_sdr_modulation_descs); i++) {
+                ModulationDescriptor *md = &ff_sdr_modulation_descs[i];
                 md->probe(sdr);
                 av_assert0(i == md->modulation);
             }
@@ -1992,7 +1815,7 @@ process_next_block:
         } else {
             av_assert0(sdr->mode == AllStationMode);
             Station *station_list[1000];
-            int nb_stations = find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+            int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
             for(int i = 0; i<nb_stations; i++) {
                 Station *station = station_list[i];
                 if (!station->stream) {

@@ -34,6 +34,8 @@
 #include "libavutil/tx.h"
 #include "libavformat/avformat.h"
 
+#define FREQ_BITS 22
+#define TIMEBASE ((48000ll / 128) << FREQ_BITS)
 
 #define INDEX2F(INDEX) (((INDEX) - sdr->block_size  + 0.5) * 0.5 * sdr->sdr_sample_rate / sdr->block_size      + sdr->block_center_freq)
 #define F2INDEX(F)     (((    F) - sdr->block_center_freq) * 2   * sdr->block_size      / sdr->sdr_sample_rate + sdr->block_size  - 0.5)
@@ -229,6 +231,8 @@ typedef struct BandDescriptor {
 
 extern const AVOption avpriv_sdr_options[];
 
+extern ModulationDescriptor ff_sdr_modulation_descs[];
+
 /**
  * Set the center frequency of the hardware
  * this will check the argument and call set_frequency_callback()
@@ -249,5 +253,22 @@ int avpriv_sdr_read_seek(AVFormatContext *s, int stream_index, int64_t target, i
 void avpriv_sdr_stop_threading(AVFormatContext *s);
 
 int avpriv_sdr_read_close(AVFormatContext *s);
+
+int ff_sdr_vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt);
+
+/**
+ * Find stations within the given parameters.
+ * @param[out] station_list array to return stations in
+ * @param nb_stations size of station array
+ * @returns number of stations found
+ */
+int ff_sdr_find_stations(SDRContext *sdr, double freq, double range, Station **station_list, int station_list_size);
+
+int ff_sdr_histogram_score(Station *s);
+
+static inline float len2(AVComplexFloat c)
+{
+    return c.re*c.re + c.im*c.im;
+}
 
 #endif /* AVRADIO_SDR_H */
