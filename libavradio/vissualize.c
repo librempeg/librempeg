@@ -90,6 +90,14 @@ static void draw_string(uint8_t *frame_buffer, ptrdiff_t stride, char *str, int 
     }
 }
 
+static void advance_waterfall(SDRStream *sst, int h) {
+    if (!sst->frame_buffer_line) {
+        memcpy(sst->frame_buffer + sst->frame_size, sst->frame_buffer, sst->frame_size);
+        sst->frame_buffer_line = h-1;
+    } else
+        sst->frame_buffer_line--;
+}
+
 int ff_sdr_vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt)
 {
     SDRStream *sst = st->priv_data;
@@ -100,6 +108,27 @@ int ff_sdr_vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt)
     int  last_index = av_rescale(sdr->last_pts,   sdr->fps.num, sdr->fps.den * TIMEBASE);
     int skip = frame_index == last_index || sdr->missing_streams;
     av_assert0(sdr->missing_streams >= 0);
+
+    if (sdr->block_center_freq) {
+        if (sst->last_block_center_freq) {
+            int last_center = lrint((F2INDEX(sst->last_block_center_freq) - sdr->block_size) * w / (2*sdr->block_size));
+
+            last_center %= w;
+            if (last_center < 0)
+                last_center += w;
+            av_assert0(last_center >= 0 && last_center < w);
+
+            for(int y= 0; y<h - 1; y++) {
+                uint8_t *dst = sst->frame_buffer + 4*w*(sst->frame_buffer_line + y);
+                uint8_t *src = dst + 4*w;
+
+                memcpy(dst + 4*last_center, src,                       4*(w - last_center));
+                memcpy(dst                , src + 4*(w - last_center), 4*     last_center );
+            }
+            advance_waterfall(sst, h);
+        }
+        sst->last_block_center_freq = sdr->block_center_freq;
+    }
 
     for(int x= 0; x<w; x++) {
         int color;
@@ -188,11 +217,7 @@ int ff_sdr_vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt)
         }
     }
 
-    if (!sst->frame_buffer_line) {
-        memcpy(sst->frame_buffer + sst->frame_size, sst->frame_buffer, sst->frame_size);
-        sst->frame_buffer_line = h-1;
-    } else
-        sst->frame_buffer_line--;
+    advance_waterfall(sst, h);
 
 //TODO
 //                 draw RDS*

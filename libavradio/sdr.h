@@ -116,6 +116,7 @@ typedef struct SDRStream {
     int frame_size;
     int frame_buffer_line;
     uint8_t *frame_buffer;
+    int64_t last_block_center_freq;
 } SDRStream;
 
 typedef struct SDRContext {
