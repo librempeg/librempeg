@@ -740,7 +740,8 @@ static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
         AVComplexFloat mm;
         double s2 = 0;
         double dcw = 0;
-        float amp, amp2;
+        float amp, stamp, wamp;
+
         for(i = 0; i<2*sst->block_size; i++) {
             double tmp;
             AVComplexFloat v = sst->iblock[i];
@@ -755,17 +756,17 @@ static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
             dcw    += sst->window[i] * sst->window[i];
         }
 
-        amp = dcw / (dc1.re*dc1.re + dc1.im*dc1.im);
-        amp2= dcw / s2;
-        amp = FFMIN(amp, amp2 * 0.1);
+        stamp = dcw / (dc1.re*dc1.re + dc1.im*dc1.im);
+        amp = FFMIN(stamp, dcw / s2 * 0.1);
         if (sst->am_amplitude)
             amp = 0.9*sst->am_amplitude + 0.1*amp;
         sst->am_amplitude = amp;
+        wamp = amp/stamp;
 
         mm = (AVComplexFloat){dc1.re * amp, -dc1.im * amp};
         for(i = 0; i<2*sst->block_size; i++) {
             AVComplexFloat v = sst->iblock[i];
-            sst->iblock[i].re = v.re*mm.re - v.im*mm.im - sst->window[i];
+            sst->iblock[i].re = v.re*mm.re - v.im*mm.im - sst->window[i] * wamp;
             sst->iblock[i].im = v.re*mm.im + v.im*mm.re;
         }
 
