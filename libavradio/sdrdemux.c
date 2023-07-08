@@ -1818,7 +1818,7 @@ process_next_block:
             int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
             for(int i = 0; i<nb_stations; i++) {
                 Station *station = station_list[i];
-                if (!station->stream) {
+                if (!station->stream && station->in_station_list) {
                     /* audio stream */
                     AVStream *st = avformat_new_stream(s, NULL);
                     SDRStream *sst;
