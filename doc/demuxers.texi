@@ -1003,6 +1003,16 @@ No emphasis used
 
 @end table
 
+Example: Use ffplay to listen to radio, arrow keys allow switching stations
+@example
+ffplay -sdr_freq 88M -f sdr a -video_size 1600x600
+@end example
+
+Example: Record all radio stations between about 101Mhz and 107Mhz
+@example
+ffmpeg -sdr_freq 104M -sdr_sr 7M -mode all_mode -f sdr -i a -map 0 -y fm.nut
+@end example
+
 @end table
 
 @section tedcaptions
