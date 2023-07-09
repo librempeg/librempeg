@@ -983,15 +983,17 @@ static int demodulate_fm(SDRContext *sdr, int stream_index, AVPacket *pkt)
     carrier19_i = lrint(carrier19_i_exact);
 
     if (carrier19_i >= 0) {
-        int shift = carrier19_i/2;
         i = sst->block_size;
         memset(sst->block + i, 0, 2*sst->block_size_p2 * sizeof(AVComplexFloat));
-        memcpy(sst->block + i + carrier19_i - W - shift , sst->block + carrier19_i - W, sizeof(AVComplexFloat)*(2*W+1));
+        memcpy(sst->block + i, sst->block + carrier19_i, sizeof(AVComplexFloat)*(W+1));
+        memcpy(sst->block + i + 2*sst->block_size_p2 - W, sst->block + carrier19_i - W, sizeof(AVComplexFloat)*W);
         sst->ifft_p2(sst->ifft_p2_ctx, sst->icarrier, sst->block + i, sizeof(AVComplexFloat));
 
-        memcpy(sst->block + i + 2*carrier19_i - 2*shift - len17_i, sst->block + 2*carrier19_i - len17_i, sizeof(AVComplexFloat)*2*len17_i);
-        apply_deemphasis(sdr, sst->block + i + 2*carrier19_i - 2*shift, sst->block_size_p2, sample_rate_p2, + 1);
-        apply_deemphasis(sdr, sst->block + i + 2*carrier19_i - 2*shift, sst->block_size_p2, sample_rate_p2, - 1);
+        memcpy(sst->block + i, sst->block + 2*carrier19_i, sizeof(AVComplexFloat)*len17_i);
+        memcpy(sst->block + i + 2*sst->block_size_p2 - len17_i, sst->block + 2*carrier19_i - len17_i, sizeof(AVComplexFloat)*len17_i);
+
+        apply_deemphasis(sdr, sst->block + i, sst->block_size_p2, sample_rate_p2, + 1);
+        apply_deemphasis(sdr, sst->block + i + 2*sst->block_size_p2, sst->block_size_p2, sample_rate_p2, - 1);
         sst->ifft_p2(sst->ifft_p2_ctx, sst->iside   , sst->block + i, sizeof(AVComplexFloat));
         synchronous_am_demodulationN(sst->iside, sst->icarrier, sst->window_p2, 2*sst->block_size_p2, 2);
     }
