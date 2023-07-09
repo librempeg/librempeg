@@ -1099,6 +1099,7 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
     AVFormatContext *s = sdr->avfmt;
     AVStream *st = s->streams[stream_index];
     SDRStream *sst = st->priv_data;
+    double block_time = sdr->block_size / (double)sdr->sdr_sample_rate;
     int ret;
 
     //For now we expect each station to be only demodulated once, nothing should break though if its done more often
@@ -1116,7 +1117,7 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
     if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
         free_stream(sdr, stream_index);
 
-        for (sst->block_size = 4; 2ll *sst->station->bandwidth * sdr->block_size / sdr->sdr_sample_rate > sst->block_size; sst->block_size <<= 1)
+        for (sst->block_size = 4; 2ll *sst->station->bandwidth * block_time > sst->block_size; sst->block_size <<= 1)
             ;
         sst->block_size = FFMIN(sdr->block_size,  sst->block_size);
 
@@ -1130,7 +1131,7 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
             if (ret < 0)
                 return ret;
 
-            for (sst->block_size_p2 = 4; 2ll *sst->station->bandwidth_p2 * sdr->block_size / sdr->sdr_sample_rate > sst->block_size_p2; sst->block_size_p2 <<= 1)
+            for (sst->block_size_p2 = 4; 2ll *sst->station->bandwidth_p2 * block_time > sst->block_size_p2; sst->block_size_p2 <<= 1)
                 ;
             ret = av_tx_init(&sst->ifft_p2_ctx, &sst->ifft_p2, AV_TX_FLOAT_FFT, 1, 2*sst->block_size_p2, NULL, 0);
             if (ret < 0)
