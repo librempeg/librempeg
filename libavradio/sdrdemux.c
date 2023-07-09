@@ -616,43 +616,39 @@ static double find_am_carrier(SDRContext *sdr, const AVComplexFloat *data, int d
 }
 
 /**
- * Demodulate with a carrier that is in the middle of the signal like in AM
- * This will normalize the signal based on the carrier amplitude and subtract the carrier
+ * Demodulate with a carrier that is a N-th of the frequency.
+ * If N is one the carrier will be subtracted from the signal too.
+ * N==1 corresponds to classical AM, N>1 are demodulations with suppressed carriers.
+ *
+ * For N==1 and N==3 the signal will be normalized. For N==2 it will not be
+ * This is to avoid a sqrt() and happens to be what we want in the current use cases.
+ *
+ * The output will be scaled by the window.
  */
-static void synchronous_am_demodulation(AVComplexFloat *iblock, AVComplexFloat *icarrier, float *window, int len)
+static av_always_inline void synchronous_am_demodulationN(AVComplexFloat *iblock, AVComplexFloat *icarrier, float *window, int len, int N)
 {
+    av_assert0(N>=1 && N<=3); //currently supported, trivial to add more if needed
+
     for (int i = 0; i<len; i++) {
         AVComplexFloat c = icarrier[i];
         AVComplexFloat s = iblock[i];
         float          w = window[i];
-        float        den = w / (c.re*c.re + c.im*c.im);
-        av_assert0(c.re*c.re + c.im*c.im > 0);
+        AVComplexFloat c2= {c.re*c.re, c.im*c.im};
+        float den        = w/(c2.re + c2.im);
+
+        if (N==2) {
+            c.im *= c.re + c.re;
+            c.re = c2.re - c2.im;
+        } else if (N==3) {
+            den *= den;
+            c.re *=   c2.re - 3*c2.im;
+            c.im *= 3*c2.re -   c2.im;
+        }
 
         iblock[i].re = ( s.im*c.im + s.re*c.re) * den;
         iblock[i].im = ( s.im*c.re - s.re*c.im) * den;
-        iblock[i].re -= w;
-    }
-}
-
-/**
- * Demodulate with a carrier that is half the frequency and reduced amplitude
- * This will not normalize the signal based on the carrier amplitude
- */
-static void synchronous_am_demodulation2(AVComplexFloat *iblock, AVComplexFloat *icarrier, float *window, int len)
-{
-    for (int i = 0; i<len; i++) {
-        AVComplexFloat c = icarrier[i];
-        AVComplexFloat s = iblock[i];
-        AVComplexFloat c2;
-        float          w = window[i];
-        float        den = w / (c.re*c.re + c.im*c.im);
-        av_assert0(c.re*c.re + c.im*c.im > 0);
-
-        c2.re = c.re*c.re - c.im*c.im;
-        c2.im = c.re*c.im + c.im*c.re;
-
-        iblock[i].re = ( s.im*c2.im + s.re*c2.re) * den;
-        iblock[i].im = ( s.im*c2.re - s.re*c2.im) * den;
+        if (N==1)
+            iblock[i].re -= w;
     }
 }
 
@@ -728,7 +724,7 @@ static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
             sst->block[i] = sdr->block[index + i - len];
         sst->ifft(sst->ifft_ctx, sst->icarrier, sst->block, sizeof(AVComplexFloat));
 
-        synchronous_am_demodulation(sst->iblock, sst->icarrier, sst->window, 2*sst->block_size);
+        synchronous_am_demodulationN(sst->iblock, sst->icarrier, sst->window, 2*sst->block_size, 1);
         scale = 0.9;
     } else {
         // Synchronous demodulation using Macleod based systhesized carrier
@@ -997,7 +993,7 @@ static int demodulate_fm(SDRContext *sdr, int stream_index, AVPacket *pkt)
         apply_deemphasis(sdr, sst->block + i + 2*carrier19_i - 2*shift, sst->block_size_p2, sample_rate_p2, + 1);
         apply_deemphasis(sdr, sst->block + i + 2*carrier19_i - 2*shift, sst->block_size_p2, sample_rate_p2, - 1);
         sst->ifft_p2(sst->ifft_p2_ctx, sst->iside   , sst->block + i, sizeof(AVComplexFloat));
-        synchronous_am_demodulation2(sst->iside, sst->icarrier, sst->window_p2, 2*sst->block_size_p2);
+        synchronous_am_demodulationN(sst->iside, sst->icarrier, sst->window_p2, 2*sst->block_size_p2, 2);
     }
     memset(sst->block + len17_i, 0, (2*sst->block_size_p2 - len17_i) * sizeof(AVComplexFloat));
     apply_deemphasis(sdr, sst->block, 2*sst->block_size_p2, sample_rate_p2, + 1);
