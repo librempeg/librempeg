@@ -71,7 +71,9 @@ typedef enum Modulation {
 #define HISTOGRAMM_SIZE 9
 
 typedef struct Station {
-    char *name;
+    char name[9];
+    char radiotext[65];
+    char programm_type_name[9];
     enum Modulation modulation;
     double frequency;
     int nb_frequency;       ///< number of detections which are used to compute the frequency
@@ -110,6 +112,9 @@ typedef struct SDRStream {
     AVComplexFloat *iside;
     float *window;
     float *window_p2;
+    float (*rds_ring)[2];
+    int rds_ring_size;
+    int rds_ring_pos;
     Station *station;
     float am_amplitude;
 
@@ -265,6 +270,12 @@ int ff_sdr_vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt);
 int ff_sdr_find_stations(SDRContext *sdr, double freq, double range, Station **station_list, int station_list_size);
 
 int ff_sdr_histogram_score(Station *s);
+
+/**
+ * Decode RDS
+ * @param signal the time domain RDS signal
+ */
+int ff_sdr_decode_rds(SDRContext *sdr, SDRStream *sst, AVComplexFloat *signal);
 
 static inline float len2(AVComplexFloat c)
 {

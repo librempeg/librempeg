@@ -202,7 +202,7 @@ int ff_sdr_vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt)
             Station *s = station_list[station_index];
             double f = s->frequency;
             int xmid  = 256*( f     - sdr->block_center_freq + sdr->sdr_sample_rate/2) * w / sdr->sdr_sample_rate;
-            char text[80];
+            char text[100];
             int color = s->stream ? 64 : 32;
             int size = s->stream ? 181 : 128;
             int xd = size, yd = size;
@@ -210,10 +210,17 @@ int ff_sdr_vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt)
             if (!s->in_station_list)
                 continue;
 
-            snprintf(text, sizeof(text), "%s %f Mhz %d %d %d",
-                     ff_sdr_modulation_descs[s->modulation].shortname,
+            if (s->name[0]) {
+                snprintf(text, sizeof(text), "%s ", s->name);
+            } else {
+                snprintf(text, sizeof(text), "%s ", ff_sdr_modulation_descs[s->modulation].shortname);
+            }
+            av_strlcatf(text, sizeof(text), "%f Mhz %d %d %d",
                      f/1000000, (int)s->score, ff_sdr_histogram_score(s), s->timeout);
             draw_string(pkt->data, 4*w, text, xmid + 8*yd, 320*h2, xd, yd, color, color, color, w, h);
+            if (s->radiotext[0]) {
+                draw_string(pkt->data, 4*w, s->radiotext, xmid + 8*yd, 320*h2 + 24*yd, xd, yd, color, color, color, w, h);
+            }
         }
     }
 

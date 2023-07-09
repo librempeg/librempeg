@@ -99,7 +99,6 @@ static void apply_deemphasis(SDRContext *sdr, AVComplexFloat *data, int len, int
 
 static void free_station(Station *station)
 {
-    av_freep(&station->name);
     if (station->stream)
         station->stream->station = NULL;
     av_free(station);
@@ -937,7 +936,8 @@ static int demodulate_fm(SDRContext *sdr, int stream_index, AVPacket *pkt)
     int ret, i;
     float clip = 1.0;
     int carrier19_i = 2L*sst->block_size*19000 / sample_rate;
-    int len17_i     = 2L*sst->block_size*17000 / sample_rate;
+    int len17_i     = 2L*sst->block_size*16500 / sample_rate;
+    int len2_4_i    = 2L*sst->block_size* 2400 / sample_rate;
     double carrier19_i_exact;
     int W= 5;
 
@@ -989,9 +989,14 @@ static int demodulate_fm(SDRContext *sdr, int stream_index, AVPacket *pkt)
         memcpy(sst->block + i + 2*sst->block_size_p2 - W, sst->block + carrier19_i - W, sizeof(AVComplexFloat)*W);
         sst->ifft_p2(sst->ifft_p2_ctx, sst->icarrier, sst->block + i, sizeof(AVComplexFloat));
 
+        memcpy(sst->block + i, sst->block + 3*carrier19_i, sizeof(AVComplexFloat)*len2_4_i);
+        memcpy(sst->block + i + 2*sst->block_size_p2 - len2_4_i, sst->block + 3*carrier19_i - len2_4_i, sizeof(AVComplexFloat)*len2_4_i);
+        sst->ifft_p2(sst->ifft_p2_ctx, sst->iside   , sst->block + i, sizeof(AVComplexFloat));
+        synchronous_am_demodulationN(sst->iside, sst->icarrier, sst->window_p2, 2*sst->block_size_p2, 3);
+        ff_sdr_decode_rds(sdr, sst, sst->iside);
+
         memcpy(sst->block + i, sst->block + 2*carrier19_i, sizeof(AVComplexFloat)*len17_i);
         memcpy(sst->block + i + 2*sst->block_size_p2 - len17_i, sst->block + 2*carrier19_i - len17_i, sizeof(AVComplexFloat)*len17_i);
-
         apply_deemphasis(sdr, sst->block + i, sst->block_size_p2, sample_rate_p2, + 1);
         apply_deemphasis(sdr, sst->block + i + 2*sst->block_size_p2, sst->block_size_p2, sample_rate_p2, - 1);
         sst->ifft_p2(sst->ifft_p2_ctx, sst->iside   , sst->block + i, sizeof(AVComplexFloat));
@@ -1091,7 +1096,7 @@ static void free_stream(SDRContext *sdr, int stream_index)
     av_freep(&sst->iside);
     av_freep(&sst->window);
     av_freep(&sst->window_p2);
-
+    av_freep(&sst->rds_ring);
 }
 
 static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
@@ -1137,9 +1142,12 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
             if (ret < 0)
                 return ret;
 
+            sst->rds_ring_size = ceil((2*105 / 1187.5 + 2.0*block_time) * sst->block_size_p2 / block_time);
+
+            sst->rds_ring  = av_malloc(sizeof(*sst->rds_ring ) * sst->rds_ring_size);
             sst->window_p2 = av_malloc(sizeof(*sst->window_p2)* 2 * sst->block_size_p2);
             sst->iside     = av_malloc(sizeof(*sst->iside)    * 2 * sst->block_size_p2);
-            if (!sst->iside || !sst->window_p2)
+            if (!sst->iside || !sst->window_p2 || !sst->rds_ring)
                 return AVERROR(ENOMEM);
 
             avpriv_kbd_window_init(sst->window_p2, sdr->kbd_alpha, sst->block_size_p2);
