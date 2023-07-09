@@ -1136,16 +1136,23 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
             if (ret < 0)
                 return ret;
 
+            sst->window_p2 = av_malloc(sizeof(*sst->window_p2)* 2 * sst->block_size_p2);
+            sst->iside     = av_malloc(sizeof(*sst->iside)    * 2 * sst->block_size_p2);
+            if (!sst->iside || !sst->window_p2)
+                return AVERROR(ENOMEM);
+
+            avpriv_kbd_window_init(sst->window_p2, sdr->kbd_alpha, sst->block_size_p2);
+            for(int i = sst->block_size_p2; i < 2 * sst->block_size_p2; i++) {
+                sst->window_p2[i] = sst->window_p2[2*sst->block_size_p2 - i - 1];
+            }
         }
 
         sst->out_buf   = av_malloc(sizeof(*sst->out_buf)  * 2 * sst->block_size);
         sst->block     = av_malloc(sizeof(*sst-> block)   * 2 * sst->block_size);
         sst->iblock    = av_malloc(sizeof(*sst->iblock)   * 2 * sst->block_size);
         sst->icarrier  = av_malloc(sizeof(*sst->icarrier) * 2 * sst->block_size);
-        sst->iside     = av_malloc(sizeof(*sst->iside)    * 2 * sst->block_size_p2);
         sst->window    = av_malloc(sizeof(*sst->window)   * 2 * sst->block_size);
-        sst->window_p2 = av_malloc(sizeof(*sst->window_p2)* 2 * sst->block_size_p2);
-        if (!sst->out_buf || !sst->block || !sst->iblock || !sst->icarrier || !sst->iside || !sst->window || !sst->window_p2)
+        if (!sst->out_buf || !sst->block || !sst->iblock || !sst->icarrier || !sst->window)
             return AVERROR(ENOMEM);
 
         avpriv_kbd_window_init(sst->window, sdr->kbd_alpha, sst->block_size);
@@ -1153,10 +1160,6 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
             sst->window[i] = sst->window[2*sst->block_size - i - 1];
         }
 
-        avpriv_kbd_window_init(sst->window_p2, sdr->kbd_alpha, sst->block_size_p2);
-        for(int i = sst->block_size_p2; i < 2 * sst->block_size_p2; i++) {
-            sst->window_p2[i] = sst->window_p2[2*sst->block_size_p2 - i - 1];
-        }
         sst->am_amplitude = 0;
     }
 
