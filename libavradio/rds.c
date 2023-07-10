@@ -35,29 +35,42 @@
 #include "libavformat/avformat.h"
 #include "libavformat/demux.h"
 
+#define MAX_BURST 5 // Tradeoff between undetected errors and correction capacity values from 2 to 5 are reasonable
+
+static int burst_len(unsigned u)
+{
+    if (!u)
+        return 0;
+
+    while(!(u&1))
+        u>>=1;
+    return 1+av_log2(u);
+}
+
 /**
  * Check and correct RDS block
  * @param[out] group the data bits are returned here
  * @param block block nu,ber (0 to 3)
  * @return 1 if correctable single bit error, 0 if no error, >99 if non correctable errors
  */
-static int check_rds_block(uint16_t group[4], const float diff[104], int block)
+static int check_rds_block(Station *station, uint16_t group[4], const float diff[104], const int block)
 {
 #define RDS_G 0x5B9 //101 1011 1001
     static const uint16_t offset[4] = {0x0FC, 0x198, 0x168, 0x1B4};
     unsigned codeword = 0;
-    unsigned syndrom = 0;
-    //we carry floats through to here so we can do a soft decission decoder
-    //ATM lets just do hard decission decoding that should be more than good enough
+    unsigned syndrom  = 0;
+    const float *blockdiff = diff + block*26;
 
     //FIXME we could do this more efficiently but does it matter?
     for(int i=0; i<26; i++) {
-        int bit = (diff[i + block*26]<0);
+        int bit = blockdiff[i] < 0;
+
         codeword += codeword + bit;
         syndrom += syndrom + bit;
         if (syndrom & (1<<10))
             syndrom ^= RDS_G;
     }
+
     if (block==2 && (group[1]&0x800)) {
         syndrom ^= 0x350;
     }else
@@ -66,25 +79,24 @@ static int check_rds_block(uint16_t group[4], const float diff[104], int block)
 
     group[block] = codeword >> 10;
 
-    // try correcting some basic errors
-    if (syndrom) {
-        for (unsigned e = 1; e <= 2; e ++) {
-            unsigned mask = 255 >> (8-e);
-            unsigned syndrom1 = mask;
-            for(int i=0; i<27-e; i++) {
-                if (syndrom == syndrom1) {
-                    group[block] ^= (mask<<i) >> 10;
-                    return e;
+    // try correcting the most common error patterns
+    for (int i=0; i<27-MAX_BURST; i++) {
+        if (!(syndrom>>MAX_BURST)) {
+            int ret = burst_len(syndrom);
+            group[block] ^= (syndrom << i) >> 10;
+
+                    return ret;
                 }
-                syndrom1 += syndrom1;
-                if (syndrom1 & (1<<10))
-                    syndrom1 ^= RDS_G;
             }
+
+            return ret;
         }
-        return 100; // this is a good place do a 2nd pass with a soft decssion multi bit decoder
+        if (syndrom&1)
+            syndrom ^= RDS_G;
+        syndrom >>= 1;
     }
 
-    return 0;
+    return 20;
 }
 
 static int decode_rds_group(SDRContext *sdr, SDRStream *sst, uint16_t group[4])
@@ -131,6 +143,7 @@ int ff_sdr_decode_rds(SDRContext *sdr, SDRStream *sst, AVComplexFloat *signal)
     uint16_t group[4];
     int64_t num_step_in_p2 = sdr->sdr_sample_rate * (int64_t)sst->block_size_p2;
     int64_t den_step_on_p2 = sdr->block_size * 2375LL;
+    Station *station = sst->station;
 #define IDX(I) ((I)*num_step_in_p2/den_step_on_p2)
 
     av_assert0(sst->rds_ring_pos <= sst->rds_ring_size - 2*sst->block_size_p2);
@@ -171,7 +184,7 @@ int ff_sdr_decode_rds(SDRContext *sdr, SDRStream *sst, AVComplexFloat *signal)
         for (phase = 0; phase < 104; phase++) {
             int error = 0;
             for (int block = 0; block < 4; block++) {
-                error += check_rds_block(group, diff + phase, block);
+                error += check_rds_block(station, group, diff + phase, block);
             }
             if (error < best_errors) {
                 best_errors = error;
@@ -184,7 +197,7 @@ int ff_sdr_decode_rds(SDRContext *sdr, SDRStream *sst, AVComplexFloat *signal)
         if (best_errors < 10) {
             int error = 0;
             for (int block = 0; block < 4; block++) {
-                error += check_rds_block(group, diff + best_phase, block);
+                error += check_rds_block(station, group, diff + best_phase, block);
             }
             //have to recheck because of floats
             if (error < 10) {
