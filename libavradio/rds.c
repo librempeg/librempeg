@@ -85,7 +85,13 @@ static int check_rds_block(Station *station, uint16_t group[4], const float diff
             int ret = burst_len(syndrom);
             group[block] ^= (syndrom << i) >> 10;
 
+            if (block == 0 && station->program_id[0]) {
+                if (group[0] == station->program_id[0]) {
                     return ret;
+                } else if (group[0] == station->program_id[1]) {
+                    return ret;
+                } else if (ret) {
+                    return 20; //PI change is uncommon, so dont accept this in a damaged block, PI is repeated alot so we can wait for a clean block
                 }
             }
 
@@ -107,6 +113,16 @@ static int decode_rds_group(SDRContext *sdr, SDRStream *sst, uint16_t group[4])
     int b  = group[1] & 0x800;
     int tp = group[1] & 0x400;
     int pty= (group[1] >> 5) & 0x1F;
+
+    if (station->program_id[0] && station->program_id[0] != pi)
+        av_log(sdr->avfmt, AV_LOG_INFO, "PI changed to %X\n", pi);
+
+    if (station->program_id[1] == pi) {
+        FFSWAP(int, station->program_id[1], station->program_id[0]);
+    } else if (station->program_id[0] != pi) {
+        station->program_id[1] = pi;
+        return 0; // skip first packet with new PI, likely its just damaged
+    }
 
     switch(a) {
     case 0:
