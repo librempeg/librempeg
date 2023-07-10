@@ -1144,7 +1144,7 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
 
             sst->rds_ring_size = ceil((2*105 / 1187.5 + 2.0*block_time) * sst->block_size_p2 / block_time);
 
-            sst->rds_ring  = av_malloc(sizeof(*sst->rds_ring ) * sst->rds_ring_size);
+            sst->rds_ring  = av_mallocz(sizeof(*sst->rds_ring ) * sst->rds_ring_size);
             sst->window_p2 = av_malloc(sizeof(*sst->window_p2)* 2 * sst->block_size_p2);
             sst->iside     = av_malloc(sizeof(*sst->iside)    * 2 * sst->block_size_p2);
             if (!sst->iside || !sst->window_p2 || !sst->rds_ring)
@@ -1156,7 +1156,7 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
             }
         }
 
-        sst->out_buf   = av_malloc(sizeof(*sst->out_buf)  * 2 * sst->block_size);
+        sst->out_buf   = av_mallocz(sizeof(*sst->out_buf) * 2 * sst->block_size);
         sst->block     = av_malloc(sizeof(*sst-> block)   * 2 * sst->block_size);
         sst->iblock    = av_malloc(sizeof(*sst->iblock)   * 2 * sst->block_size);
         sst->icarrier  = av_malloc(sizeof(*sst->icarrier) * 2 * sst->block_size);
