@@ -216,7 +216,8 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
         }
     }
     if (best_station) {
-        if (score > best_station->score && conflict == INT_MAX) {
+        if (score > best_station->score && conflict == INT_MAX &&
+            candidate_station->timeout < best_station->timeout) {
             int log_level = fabs(best_station->frequency - freq) < 3.0 ? AV_LOG_DEBUG : AV_LOG_WARNING;
             av_log(sdr->avfmt, log_level, "Update station score:%f -> %f freq: %f %f -> %f\n",
                     best_station->score, score,
