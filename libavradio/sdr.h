@@ -105,11 +105,7 @@ typedef struct SDRStream {
     av_tx_fn ifft_p2;
     int processing_index;
     float *out_buf;
-    AVComplexFloat *block;
-    AVComplexFloat *iblock;
-    AVComplexFloat *icarrier;
-    AVComplexFloat *iside;
-    float *window;
+
     Station *station;
     float am_amplitude;
 
@@ -164,6 +160,15 @@ typedef struct SDRContext {
     int fm_block_size;
     int fm_block_size_p2;
     int rds_ring_size;
+    AVComplexFloat *am_block;
+    AVComplexFloat *am_iblock;
+    AVComplexFloat *am_icarrier;
+    float *am_window;
+    AVComplexFloat *fm_iside;
+    AVComplexFloat *fm_block;
+    AVComplexFloat *fm_iblock;
+    AVComplexFloat *fm_icarrier;
+    float *fm_window;
     float *fm_window_p2;
 
     AVTXContext *am_ifft_ctx;
