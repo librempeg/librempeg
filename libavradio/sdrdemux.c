@@ -1148,7 +1148,6 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
     AVFormatContext *s = sdr->avfmt;
     AVStream *st = s->streams[stream_index];
     SDRStream *sst = st->priv_data;
-    int ret;
 
     //For now we expect each station to be only demodulated once, nothing should break though if its done more often
     av_assert0(station->stream == NULL || station->stream == sst);
@@ -1163,9 +1162,9 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
     station->stream = sst;
 
     if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+        int block_size;
         free_stream(sdr, stream_index);
 
-        int block_size;
         if (sst->station->modulation == FM) {
             block_size = sdr->fm_block_size;
         } else
