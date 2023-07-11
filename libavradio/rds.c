@@ -105,9 +105,8 @@ static int check_rds_block(Station *station, uint16_t group[4], const float diff
     return 20;
 }
 
-static int decode_rds_group(SDRContext *sdr, SDRStream *sst, uint16_t group[4])
+static int decode_rds_group(SDRContext *sdr, Station *station, uint16_t group[4])
 {
-    Station *station = sst->station;
     int pi = group[0];
     int a  = group[1] >> 12;
     int b  = group[1] & 0x800;
@@ -154,26 +153,25 @@ static int decode_rds_group(SDRContext *sdr, SDRStream *sst, uint16_t group[4])
 int ff_sdr_decode_rds(SDRContext *sdr, SDRStream *sst, AVComplexFloat *signal)
 {
     int i, phase;
-    float (*ring)[2] = sst->rds_ring;
+    Station *station = sst->station;
+    float (*ring)[2] = station->rds_ring;
     float diff[2*104 - 1];
     uint16_t group[4];
-    int64_t num_step_in_p2 = sdr->sdr_sample_rate * (int64_t)sst->block_size_p2;
+    int64_t num_step_in_p2 = sdr->sdr_sample_rate * (int64_t)sdr->fm_block_size_p2;
     int64_t den_step_on_p2 = sdr->block_size * 2375LL;
-    Station *station = sst->station;
 #define IDX(I) ((I)*num_step_in_p2/den_step_on_p2)
-
-    av_assert0(sst->rds_ring_pos <= sst->rds_ring_size - 2*sst->block_size_p2);
+    av_assert0(station->rds_ring_pos <= sdr->rds_ring_size - 2*sdr->fm_block_size_p2);
 
     //For reasons that are beyond me, RDS spec allows inphase and quadrature so we have to compute and check both
-    for (int i=0; i < sst->block_size_p2; i++) {
-        ring[ sst->rds_ring_pos + i                      ][0] += signal[i].re * sst->window_p2[i];
-        ring[ sst->rds_ring_pos + i + sst->block_size_p2 ][0]  = signal[i + sst->block_size_p2].re * sst->window_p2[i + sst->block_size_p2];
-        ring[ sst->rds_ring_pos + i                      ][1] += signal[i].im * sst->window_p2[i];
-        ring[ sst->rds_ring_pos + i + sst->block_size_p2 ][1]  = signal[i + sst->block_size_p2].im * sst->window_p2[i + sst->block_size_p2];
+    for (int i=0; i < sdr->fm_block_size_p2; i++) {
+        ring[ station->rds_ring_pos + i                         ][0] += signal[i].re * sst->window_p2[i];
+        ring[ station->rds_ring_pos + i + sdr->fm_block_size_p2 ][0]  = signal[i + sdr->fm_block_size_p2].re * sst->window_p2[i + sdr->fm_block_size_p2];
+        ring[ station->rds_ring_pos + i                         ][1] += signal[i].im * sst->window_p2[i];
+        ring[ station->rds_ring_pos + i + sdr->fm_block_size_p2 ][1]  = signal[i + sdr->fm_block_size_p2].im * sst->window_p2[i + sdr->fm_block_size_p2];
     }
-    sst->rds_ring_pos += sst->block_size_p2;
+    station->rds_ring_pos += sdr->fm_block_size_p2;
 
-    while (sst->rds_ring_pos > IDX(2) + IDX(4*104-1)) {
+    while (station->rds_ring_pos > IDX(2) + IDX(4*104-1)) {
         int best_phase;
         float best_amplitude = -1;
         for (phase = 0; phase < 2*IDX(2); phase++) {
@@ -217,16 +215,16 @@ int ff_sdr_decode_rds(SDRContext *sdr, SDRStream *sst, AVComplexFloat *signal)
             }
             //have to recheck because of floats
             if (error < 10) {
-                decode_rds_group(sdr, sst, group);
+                decode_rds_group(sdr, station, group);
             }
         }
         int step = IDX(2*(best_phase + 103));
 
-        av_assert0(sst->rds_ring_pos >= step);
-        memmove(ring, ring + step, (sst->rds_ring_pos + sst->block_size_p2 - step) * sizeof(*sst->rds_ring));
-        sst->rds_ring_pos -= step;
+        av_assert0(station->rds_ring_pos >= step);
+        memmove(ring, ring + step, (station->rds_ring_pos + sdr->fm_block_size_p2 - step) * sizeof(*station->rds_ring));
+        station->rds_ring_pos -= step;
     }
-    av_assert0 (sst->rds_ring_pos + 2*sst->block_size_p2 <= sst->rds_ring_size);
+    av_assert0 (station->rds_ring_pos + 2*sdr->fm_block_size_p2 <= sdr->rds_ring_size);
 
     return 0;
 }

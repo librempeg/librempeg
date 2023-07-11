@@ -79,7 +79,6 @@ typedef struct Station {
     double frequency;
     int nb_frequency;       ///< number of detections which are used to compute the frequency
     int64_t bandwidth;
-    int64_t bandwidth_p2;
     float score;
     int in_station_list;    ///< non zero if this station is in the station list
     int timeout;            //since how many blocks was this detectable but not detected
@@ -87,6 +86,9 @@ typedef struct Station {
 
     int detection_per_mix_frequency[HISTOGRAMM_SIZE];
     int non_detection_per_mix_frequency[HISTOGRAMM_SIZE];
+
+    float (*rds_ring)[2];
+    int rds_ring_pos;
 
     struct SDRStream *stream;
 } Station;
@@ -104,7 +106,6 @@ typedef struct SDRStream {
     av_tx_fn fft;
     av_tx_fn ifft_p2;
     int block_size;
-    int block_size_p2;
     int processing_index;
     float *out_buf;
     AVComplexFloat *block;
@@ -113,9 +114,6 @@ typedef struct SDRStream {
     AVComplexFloat *iside;
     float *window;
     float *window_p2;
-    float (*rds_ring)[2];
-    int rds_ring_size;
-    int rds_ring_pos;
     Station *station;
     float am_amplitude;
 
@@ -161,6 +159,10 @@ typedef struct SDRContext {
     int64_t station_freq;
     int sample_size;
     double sample_scale;
+
+    int64_t fm_bandwidth_p2;
+    int fm_block_size_p2;
+    int rds_ring_size;
 
     int am_mode;                            ///< AMMode but using int for generic option access
     int emphasis_mode;
