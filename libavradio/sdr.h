@@ -99,10 +99,6 @@ typedef struct FIFOElement {
 } FIFOElement;
 
 typedef struct SDRStream {
-    AVTXContext *fft_ctx;
-    AVTXContext *ifft_p2_ctx;
-    av_tx_fn fft;
-    av_tx_fn ifft_p2;
     int processing_index;
     float *out_buf;
 
@@ -172,9 +168,15 @@ typedef struct SDRContext {
     float *fm_window_p2;
 
     AVTXContext *am_ifft_ctx;
+    AVTXContext *am_fft_ctx;
     AVTXContext *fm_ifft_ctx;
+    AVTXContext *fm_fft_ctx;
+    AVTXContext *fm_ifft_p2_ctx;
     av_tx_fn am_ifft;
+    av_tx_fn am_fft;
     av_tx_fn fm_ifft;
+    av_tx_fn fm_fft;
+    av_tx_fn fm_ifft_p2;
 
     int am_mode;                            ///< AMMode but using int for generic option access
     int emphasis_mode;
