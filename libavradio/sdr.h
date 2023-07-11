@@ -130,6 +130,7 @@ typedef struct SDRContext {
     int width, height;
     int single_ch_audio_st_index;
     int waterfall_st_index;
+    int demodulate_all_fm;
     int64_t freq;
     int64_t min_freq;
     int64_t max_freq;

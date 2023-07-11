@@ -1439,6 +1439,7 @@ int ff_sdr_common_init(AVFormatContext *s)
         st->codecpar->height = sdr->height;
         avpriv_set_pts_info(st, 64, 1, (48000/128) << FREQ_BITS);
         sdr->waterfall_st_index = st->index;
+        sdr->demodulate_all_fm = 1;
     } else
         sdr->waterfall_st_index = -1;
 
@@ -1679,7 +1680,7 @@ process_next_block:
         }
     }
 
-    if (sdr->width > 1) {
+    if (sdr->demodulate_all_fm) {
         Station *station_list[1000];
         int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
         for (int i= 0; i<nb_stations; i++) {
