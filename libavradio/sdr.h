@@ -152,6 +152,7 @@ typedef struct SDRContext {
     int64_t last_pts;
     int64_t pts;
     int block_size;
+    double block_time;
     int kbd_alpha;
     AVComplexFloat *windowed_block;
     int64_t block_center_freq;              ///< center frequency the current block contains

@@ -177,14 +177,15 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
     double freq                 = candidate_station->frequency;
     int64_t bandwidth           = candidate_station->bandwidth;
     float score                 = candidate_station->score;
-    void *tmp;
-    int i;
+    int i, nb_stations;
     Station *best_station = NULL;
     float drift = bandwidth/3.0;
     double best_distance = drift;
     int conflict = INT_MAX;
     int nb_candidate_conflict = 0;
     int nb_candidate_match = 0;
+    Station *station_list[1000];
+
 
     if (candidate_station->in_station_list)
         return 0;
@@ -193,8 +194,7 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
     if (ff_sdr_histogram_score(candidate_station) <= 0)
         return 0;
 
-    Station *station_list[1000];
-    int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+    nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
     for (i=0; i<nb_stations; i++) {
         Station *s = station_list[i];
         double delta = fabs(s->frequency - freq);
@@ -286,11 +286,12 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
 static void create_stations(SDRContext *sdr)
 {
     Station *station_list[1000];
+    int nb_stations;
 
     if (!sdr->block_center_freq)
         return;
 
-    int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+    nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
 
     for(int i = 0; i<nb_stations; i++) {
         create_station(sdr, station_list[i]);
@@ -392,7 +393,6 @@ static int create_candidate_station(SDRContext *sdr, enum Modulation modulation,
     }
 
     if (!nb_stations) {
-        double block_time = sdr->block_size / (double)sdr->sdr_sample_rate;
         station = av_mallocz(sizeof(*station));
         if (!station)
             return AVERROR(ENOMEM);
@@ -400,7 +400,7 @@ static int create_candidate_station(SDRContext *sdr, enum Modulation modulation,
 
 
         if (!sdr->rds_ring_size)
-            sdr->rds_ring_size = ceil((2*105 / 1187.5 + 2.0*block_time) * sdr->fm_block_size_p2 / block_time);
+            sdr->rds_ring_size = ceil((2*105 / 1187.5 + 2.0*sdr->block_time) * sdr->fm_block_size_p2 / sdr->block_time);
 
         station->rds_ring  = av_mallocz(sizeof(*station->rds_ring ) * sdr->rds_ring_size);
 
@@ -901,7 +901,7 @@ static int probe_fm(SDRContext *sdr)
 
                     float rmax   = max_in_range(sdr, i-half_bw_i/4, i+half_bw_i/4);
                     int lowcount = countbelow(sdr, i-half_bw_i/4, i+half_bw_i/4, rmax / 100);
-                    double peak_i;
+                    double peak_i, f, f2;
 
                     if (lowcount / (half_bw_i*0.5) > 0.99)
                         continue;
@@ -912,8 +912,8 @@ static int probe_fm(SDRContext *sdr)
                     if (peak_i < 0)
                         continue;
                     av_assert0(fabs(peak_i-i) < 2);
-                    double f = peak_i * 0.5 * sdr->sdr_sample_rate / sdr->block_size + sdr->block_center_freq - sdr->sdr_sample_rate/2;
-                    double f2 = center * 0.5 * sdr->sdr_sample_rate / sdr->block_size + sdr->block_center_freq - sdr->sdr_sample_rate/2;
+                    f = peak_i * 0.5 * sdr->sdr_sample_rate / sdr->block_size + sdr->block_center_freq - sdr->sdr_sample_rate/2;
+                    f2 = center * 0.5 * sdr->sdr_sample_rate / sdr->block_size + sdr->block_center_freq - sdr->sdr_sample_rate/2;
 
                     if (fabs(f2 - f) > 1000)
                         continue;
@@ -1115,7 +1115,6 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
     AVFormatContext *s = sdr->avfmt;
     AVStream *st = s->streams[stream_index];
     SDRStream *sst = st->priv_data;
-    double block_time = sdr->block_size / (double)sdr->sdr_sample_rate;
     int ret;
 
     //For now we expect each station to be only demodulated once, nothing should break though if its done more often
@@ -1133,7 +1132,7 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
     if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
         free_stream(sdr, stream_index);
 
-        for (sst->block_size = 4; 2ll *sst->station->bandwidth * block_time > sst->block_size; sst->block_size <<= 1)
+        for (sst->block_size = 4; 2ll *sst->station->bandwidth * sdr->block_time > sst->block_size; sst->block_size <<= 1)
             ;
         sst->block_size = FFMIN(sdr->block_size,  sst->block_size);
 
@@ -1491,10 +1490,10 @@ int ff_sdr_common_init(AVFormatContext *s)
     }
     av_log(s, AV_LOG_INFO, "Block size %d\n", sdr->block_size);
 
-    double block_time = sdr->block_size / (double)sdr->sdr_sample_rate;
+    sdr->block_time = sdr->block_size / (double)sdr->sdr_sample_rate;
     sdr->fm_bandwidth_p2 = 18 * 1000;
     if (!sdr->fm_block_size_p2)
-        for (sdr->fm_block_size_p2 = 4; 2ll *sdr->fm_bandwidth_p2 * block_time > sdr->fm_block_size_p2; sdr->fm_block_size_p2 <<= 1)
+        for (sdr->fm_block_size_p2 = 4; 2ll *sdr->fm_bandwidth_p2 * sdr->block_time > sdr->fm_block_size_p2; sdr->fm_block_size_p2 <<= 1)
             ;
 
     sdr->windowed_block = av_malloc(sizeof(*sdr->windowed_block) * 2 * sdr->block_size);
@@ -1836,9 +1835,9 @@ process_next_block:
                     return ret;
             }
         } else {
-            av_assert0(sdr->mode == AllStationMode);
             Station *station_list[1000];
             int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+            av_assert0(sdr->mode == AllStationMode);
             for(int i = 0; i<nb_stations; i++) {
                 Station *station = station_list[i];
                 if (!station->stream && station->in_station_list) {
