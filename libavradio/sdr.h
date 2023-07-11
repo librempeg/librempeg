@@ -241,7 +241,7 @@ typedef struct ModulationDescriptor {
     /**
      * Demodulate given station into packet
      */
-    int (*demodulate)(SDRContext *sdr, int stream_index, AVPacket *pkt);
+    int (*demodulate)(SDRContext *sdr, AVStream *st, AVPacket *pkt);
 } ModulationDescriptor;
 
 typedef struct BandDescriptor {

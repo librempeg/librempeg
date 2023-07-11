@@ -665,9 +665,8 @@ static av_always_inline void synchronous_am_demodulationN(AVComplexFloat *iblock
     }
 }
 
-static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
+static int demodulate_am(SDRContext *sdr, AVStream *st, AVPacket *pkt)
 {
-    AVStream *st   = sdr->avfmt->streams[stream_index];
     SDRStream *sst = st->priv_data;
     double freq    = sst->station->frequency;
     int64_t bandwidth = sst->station->bandwidth;
@@ -934,9 +933,8 @@ static int probe_fm(SDRContext *sdr)
     return 0;
 }
 
-static int demodulate_fm(SDRContext *sdr, int stream_index, AVPacket *pkt)
+static int demodulate_fm(SDRContext *sdr, AVStream *st, AVPacket *pkt)
 {
-    AVStream *st   = sdr->avfmt->streams[stream_index];
     SDRStream *sst = st->priv_data;
     Station *station = sst->station;
 
@@ -1653,7 +1651,7 @@ process_next_block:
             } else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
                 if (sst->station) {
                     skip = 0;
-                    ret = ff_sdr_modulation_descs[ sst->station->modulation ].demodulate(sdr, stream_index, pkt);
+                    ret = ff_sdr_modulation_descs[ sst->station->modulation ].demodulate(sdr, st, pkt);
                     if (ret < 0) {
                         av_log(s, AV_LOG_ERROR, "demodulation failed ret = %d\n", ret);
                     }
