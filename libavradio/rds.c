@@ -123,6 +123,9 @@ static int decode_rds_group(SDRContext *sdr, Station *station, uint16_t group[4]
         return 0; // skip first packet with new PI, likely its just damaged
     }
 
+    //sucessfully decoding a RDS group implies that the station has been detected correctly
+    station->timeout = 0;
+
     switch(a) {
     case 0:
         AV_WB16(station->name + 2*(group[1]&3), group[3]);
