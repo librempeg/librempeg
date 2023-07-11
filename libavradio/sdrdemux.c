@@ -383,6 +383,7 @@ static int create_candidate_station(SDRContext *sdr, enum Modulation modulation,
     Station *station_list[1000];
     double snapdistance = modulation == AM ? AM_FREQ_TOLERANCE : FM_FREQ_TOLERANCE;
     int nb_stations = ff_sdr_find_stations(sdr, freq, snapdistance, station_list, FF_ARRAY_ELEMS(station_list));
+    int update_freq = 1;
 
     if (nb_stations) {
         for(int i = 1; i<nb_stations; i++)
@@ -409,12 +410,18 @@ static int create_candidate_station(SDRContext *sdr, enum Modulation modulation,
             goto fail;
     } else {
         station = station_list[0];
+
+        //demodulated FM stations have their frequency computed exactly, so dont mess them up
+        update_freq = station->modulation != FM || !station->in_station_list || !sdr->demodulate_all_fm;
+
         // We will update the frequency so we need to reinsert
         tree_remove(&sdr->station_root, station, station_cmp, &next);
-        station->frequency = station->nb_frequency * station->frequency + freq;
+        if (update_freq)
+            station->frequency = station->nb_frequency * station->frequency + freq;
         station->timeout   = 0;
     }
-    station->frequency /= ++station->nb_frequency;
+    if(update_freq)
+        station->frequency /= ++station->nb_frequency;
 
     station->detection_per_mix_frequency[histogram_index(sdr, freq)] ++;
     station->modulation   = modulation;
@@ -934,6 +941,22 @@ static int probe_fm(SDRContext *sdr)
     return 0;
 }
 
+static void station_update_freq(SDRContext *sdr, Station *station, double freq)
+{
+    struct AVTreeNode *next = NULL;
+    void *tmp;
+
+    //We must reinsert the station if we change the key (frequency)
+    tree_remove(&sdr->station_root, station, station_cmp, &next);
+
+    station->frequency = station->nb_frequency * station->frequency + freq;
+    station->frequency /= ++station->nb_frequency;
+
+    tmp = tree_insert(&sdr->station_root, station, station_cmp, &next);
+    av_assert0(!tmp || tmp == station);
+    av_freep(&next);
+}
+
 static int demodulate_fm(SDRContext *sdr, Station *station, AVStream *st, AVPacket *pkt)
 {
     SDRStream *sst = st ? st->priv_data : NULL;
@@ -953,11 +976,12 @@ static int demodulate_fm(SDRContext *sdr, Station *station, AVStream *st, AVPack
     int len2_4_i    = 2L*sdr->fm_block_size* 2400 / sample_rate;
     double carrier19_i_exact;
     int W= 5;
+    double dc = 0, dcw = 0;
+    int len2 = FFMIN(index, 2*sdr->block_size - index);
 
     av_assert0(!st || (sst == station->stream && sst->station == station));
 
     //If only some of the bandwidth is available, just try with less
-    int len2 = FFMIN(index, 2*sdr->block_size - index);
     if (len2 < len && len2 > len/2)
         len = len2;
 
@@ -979,9 +1003,14 @@ static int demodulate_fm(SDRContext *sdr, Station *station, AVStream *st, AVPack
         sdr->fm_iblock[i].re = atan2(x.im * y.re - x.re * y.im,
                                      x.re * y.re + x.im * y.im) * sdr->fm_window[i];
         sdr->fm_iblock[i].im = 0;
+        dc += sdr->fm_iblock[i].re;
+        dcw+= sdr->fm_window[i] * sdr->fm_window[i];
     }
     sdr->fm_iblock[i].re = 0;
     sdr->fm_iblock[i].im = 0;
+    dc *= M_PI/2 * sqrt((2*sdr->fm_block_size - 1) / dcw);
+
+    station_update_freq(sdr, station, freq-dc);
 
     av_assert0(sdr->fm_block_size_p2 * 2 < sdr->fm_block_size);
     //FIXME this only needs to be a RDFT
