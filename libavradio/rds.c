@@ -150,10 +150,9 @@ static int decode_rds_group(SDRContext *sdr, Station *station, uint16_t group[4]
     return 0;
 }
 
-int ff_sdr_decode_rds(SDRContext *sdr, SDRStream *sst, AVComplexFloat *signal)
+int ff_sdr_decode_rds(SDRContext *sdr, Station *station, AVComplexFloat *signal)
 {
     int i, phase;
-    Station *station = sst->station;
     float (*ring)[2] = station->rds_ring;
     float diff[2*104 - 1];
     uint16_t group[4];
@@ -164,10 +163,10 @@ int ff_sdr_decode_rds(SDRContext *sdr, SDRStream *sst, AVComplexFloat *signal)
 
     //For reasons that are beyond me, RDS spec allows inphase and quadrature so we have to compute and check both
     for (int i=0; i < sdr->fm_block_size_p2; i++) {
-        ring[ station->rds_ring_pos + i                         ][0] += signal[i].re * sst->window_p2[i];
-        ring[ station->rds_ring_pos + i + sdr->fm_block_size_p2 ][0]  = signal[i + sdr->fm_block_size_p2].re * sst->window_p2[i + sdr->fm_block_size_p2];
-        ring[ station->rds_ring_pos + i                         ][1] += signal[i].im * sst->window_p2[i];
-        ring[ station->rds_ring_pos + i + sdr->fm_block_size_p2 ][1]  = signal[i + sdr->fm_block_size_p2].im * sst->window_p2[i + sdr->fm_block_size_p2];
+        ring[ station->rds_ring_pos + i                         ][0] += signal[i].re * sdr->fm_window_p2[i];
+        ring[ station->rds_ring_pos + i + sdr->fm_block_size_p2 ][0]  = signal[i + sdr->fm_block_size_p2].re * sdr->fm_window_p2[i + sdr->fm_block_size_p2];
+        ring[ station->rds_ring_pos + i                         ][1] += signal[i].im * sdr->fm_window_p2[i];
+        ring[ station->rds_ring_pos + i + sdr->fm_block_size_p2 ][1]  = signal[i + sdr->fm_block_size_p2].im * sdr->fm_window_p2[i + sdr->fm_block_size_p2];
     }
     station->rds_ring_pos += sdr->fm_block_size_p2;
 

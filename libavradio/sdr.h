@@ -113,7 +113,6 @@ typedef struct SDRStream {
     AVComplexFloat *icarrier;
     AVComplexFloat *iside;
     float *window;
-    float *window_p2;
     Station *station;
     float am_amplitude;
 
@@ -163,6 +162,7 @@ typedef struct SDRContext {
     int64_t fm_bandwidth_p2;
     int fm_block_size_p2;
     int rds_ring_size;
+    float *fm_window_p2;
 
     int am_mode;                            ///< AMMode but using int for generic option access
     int emphasis_mode;
@@ -278,7 +278,7 @@ int ff_sdr_histogram_score(Station *s);
  * Decode RDS
  * @param signal the time domain RDS signal
  */
-int ff_sdr_decode_rds(SDRContext *sdr, SDRStream *sst, AVComplexFloat *signal);
+int ff_sdr_decode_rds(SDRContext *sdr, Station *station, AVComplexFloat *signal);
 
 static inline float len2(AVComplexFloat c)
 {

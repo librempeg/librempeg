@@ -1005,15 +1005,15 @@ static int demodulate_fm(SDRContext *sdr, int stream_index, AVPacket *pkt)
         memcpy(sst->block + i, sst->block + 3*carrier19_i, sizeof(AVComplexFloat)*len2_4_i);
         memcpy(sst->block + i + 2*sdr->fm_block_size_p2 - len2_4_i, sst->block + 3*carrier19_i - len2_4_i, sizeof(AVComplexFloat)*len2_4_i);
         sst->ifft_p2(sst->ifft_p2_ctx, sst->iside   , sst->block + i, sizeof(AVComplexFloat));
-        synchronous_am_demodulationN(sst->iside, sst->icarrier, sst->window_p2, 2*sdr->fm_block_size_p2, 3);
-        ff_sdr_decode_rds(sdr, sst, sst->iside);
+        synchronous_am_demodulationN(sst->iside, sst->icarrier, sdr->fm_window_p2, 2*sdr->fm_block_size_p2, 3);
+        ff_sdr_decode_rds(sdr, sst->station, sst->iside);
 
         memcpy(sst->block + i, sst->block + 2*carrier19_i, sizeof(AVComplexFloat)*len17_i);
         memcpy(sst->block + i + 2*sdr->fm_block_size_p2 - len17_i, sst->block + 2*carrier19_i - len17_i, sizeof(AVComplexFloat)*len17_i);
         apply_deemphasis(sdr, sst->block + i, sdr->fm_block_size_p2, sample_rate_p2, + 1);
         apply_deemphasis(sdr, sst->block + i + 2*sdr->fm_block_size_p2, sdr->fm_block_size_p2, sample_rate_p2, - 1);
         sst->ifft_p2(sst->ifft_p2_ctx, sst->iside   , sst->block + i, sizeof(AVComplexFloat));
-        synchronous_am_demodulationN(sst->iside, sst->icarrier, sst->window_p2, 2*sdr->fm_block_size_p2, 2);
+        synchronous_am_demodulationN(sst->iside, sst->icarrier, sdr->fm_window_p2, 2*sdr->fm_block_size_p2, 2);
     }
     memset(sst->block + len17_i, 0, (2*sdr->fm_block_size_p2 - len17_i) * sizeof(AVComplexFloat));
     apply_deemphasis(sdr, sst->block, 2*sdr->fm_block_size_p2, sample_rate_p2, + 1);
@@ -1024,12 +1024,12 @@ static int demodulate_fm(SDRContext *sdr, int stream_index, AVPacket *pkt)
     for(i = 0; i<sdr->fm_block_size_p2; i++) {
         float m, q;
 
-        m = sst->out_buf[2*i+0] + (sst->iblock[i                     ].re) * sst->window_p2[i                     ] * scale;
-        newbuf[2*i+0]           = (sst->iblock[i + sdr->fm_block_size_p2].re) * sst->window_p2[i + sdr->fm_block_size_p2] * scale;
+        m = sst->out_buf[2*i+0] + (sst->iblock[i                     ].re) * sdr->fm_window_p2[i                     ] * scale;
+        newbuf[2*i+0]           = (sst->iblock[i + sdr->fm_block_size_p2].re) * sdr->fm_window_p2[i + sdr->fm_block_size_p2] * scale;
 
         if (carrier19_i >= 0) {
-            q = sst->out_buf[2*i+1] +  sst->iside[i                     ].im * sst->window_p2[i                     ] * scale;
-            newbuf[2*i+1]           =  sst->iside[i + sdr->fm_block_size_p2].im * sst->window_p2[i + sdr->fm_block_size_p2] * scale;
+            q = sst->out_buf[2*i+1] +  sst->iside[i                     ].im * sdr->fm_window_p2[i                     ] * scale;
+            newbuf[2*i+1]           =  sst->iside[i + sdr->fm_block_size_p2].im * sdr->fm_window_p2[i + sdr->fm_block_size_p2] * scale;
 
             sst->out_buf[2*i+0] = m + q;
             sst->out_buf[2*i+1] = m - q;
@@ -1108,7 +1108,6 @@ static void free_stream(SDRContext *sdr, int stream_index)
     av_freep(&sst->icarrier);
     av_freep(&sst->iside);
     av_freep(&sst->window);
-    av_freep(&sst->window_p2);
 }
 
 static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
@@ -1152,15 +1151,9 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
             if (ret < 0)
                 return ret;
 
-            sst->window_p2 = av_malloc(sizeof(*sst->window_p2)* 2 * sdr->fm_block_size_p2);
             sst->iside     = av_malloc(sizeof(*sst->iside)    * 2 * sdr->fm_block_size_p2);
-            if (!sst->iside || !sst->window_p2)
+            if (!sst->iside)
                 return AVERROR(ENOMEM);
-
-            avpriv_kbd_window_init(sst->window_p2, sdr->kbd_alpha, sdr->fm_block_size_p2);
-            for(int i = sdr->fm_block_size_p2; i < 2 * sdr->fm_block_size_p2; i++) {
-                sst->window_p2[i] = sst->window_p2[2*sdr->fm_block_size_p2 - i - 1];
-            }
         }
 
         sst->out_buf   = av_mallocz(sizeof(*sst->out_buf) * 2 * sst->block_size);
@@ -1508,7 +1501,9 @@ int ff_sdr_common_init(AVFormatContext *s)
     sdr->block     = av_malloc(sizeof(*sdr->block    ) * 2 * sdr->block_size);
     sdr->len2block = av_malloc(sizeof(*sdr->len2block) * 2 * sdr->block_size);
     sdr->window    = av_malloc(sizeof(*sdr->window   ) * 2 * sdr->block_size);
-    if (!sdr->windowed_block || !sdr->len2block || !sdr->block || !sdr->window)
+    sdr->fm_window_p2 = av_malloc(sizeof(*sdr->fm_window_p2)* 2 * sdr->fm_block_size_p2);
+
+    if (!sdr->windowed_block || !sdr->len2block || !sdr->block || !sdr->window || !sdr->fm_window_p2)
         return AVERROR(ENOMEM);
 
     ret = av_tx_init(&sdr->fft_ctx, &sdr->fft, AV_TX_FLOAT_FFT, 0, 2*sdr->block_size, NULL, 0);
@@ -1522,6 +1517,11 @@ int ff_sdr_common_init(AVFormatContext *s)
     }
     for (int i = 0; i < 2 * sdr->block_size; i++)
         sdr->window[i] *= ((i&1) ? 1:-1) * scale;
+
+    avpriv_kbd_window_init(sdr->fm_window_p2, sdr->kbd_alpha, sdr->fm_block_size_p2);
+    for(int i = sdr->fm_block_size_p2; i < 2 * sdr->fm_block_size_p2; i++) {
+        sdr->fm_window_p2[i] = sdr->fm_window_p2[2*sdr->fm_block_size_p2 - i - 1];
+    }
 
     if (sdr->waterfall_st_index >= 0) {
         AVStream *st = s->streams[sdr->waterfall_st_index];
@@ -1971,6 +1971,7 @@ int ff_sdr_read_close(AVFormatContext *s)
     av_freep(&sdr->block);
     av_freep(&sdr->len2block);
     av_freep(&sdr->window);
+    av_freep(&sdr->fm_window_p2);
 
     av_tx_uninit(&sdr->fft_ctx);
     sdr->fft = NULL;
