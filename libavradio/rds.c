@@ -171,8 +171,10 @@ int ff_sdr_decode_rds(SDRContext *sdr, Station *station, AVComplexFloat *signal)
     station->rds_ring_pos += sdr->fm_block_size_p2;
 
     while (station->rds_ring_pos > IDX(2) + IDX(4*104-1)) {
-        int best_phase;
+        int best_phase, step;
         float best_amplitude = -1;
+        float last_bpsk = 0;
+        int best_errors = INT_MAX;
         for (phase = 0; phase < 2*IDX(2); phase++) {
             double a = 0;
             for (i = 0; i<2*104; i++) {
@@ -185,7 +187,6 @@ int ff_sdr_decode_rds(SDRContext *sdr, Station *station, AVComplexFloat *signal)
         }
 
         phase = best_phase;
-        float last_bpsk = 0;
         for (i = 0; i<2*104; i++) {
             float bpsk = ring[IDX(2*i+1)][phase] - ring[IDX(2*i)][phase];
             if (i)
@@ -193,7 +194,6 @@ int ff_sdr_decode_rds(SDRContext *sdr, Station *station, AVComplexFloat *signal)
             last_bpsk = bpsk;
         }
 
-        int best_errors = INT_MAX;
         for (phase = 0; phase < 104; phase++) {
             int error = 0;
             for (int block = 0; block < 4; block++) {
@@ -217,7 +217,7 @@ int ff_sdr_decode_rds(SDRContext *sdr, Station *station, AVComplexFloat *signal)
                 decode_rds_group(sdr, station, group);
             }
         }
-        int step = IDX(2*(best_phase + 103));
+        step = IDX(2*(best_phase + 103));
 
         av_assert0(station->rds_ring_pos >= step);
         memmove(ring, ring + step, (station->rds_ring_pos + sdr->fm_block_size_p2 - step) * sizeof(*station->rds_ring));
