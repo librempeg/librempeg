@@ -665,11 +665,11 @@ static av_always_inline void synchronous_am_demodulationN(AVComplexFloat *iblock
     }
 }
 
-static int demodulate_am(SDRContext *sdr, AVStream *st, AVPacket *pkt)
+static int demodulate_am(SDRContext *sdr, Station *station, AVStream *st, AVPacket *pkt)
 {
     SDRStream *sst = st->priv_data;
-    double freq    = sst->station->frequency;
-    int64_t bandwidth = sst->station->bandwidth;
+    double freq    = station->frequency;
+    int64_t bandwidth = station->bandwidth;
     int index = lrint(F2INDEX(freq));
     int len   = (bandwidth * 2ll * sdr->block_size + sdr->sdr_sample_rate/2) / sdr->sdr_sample_rate;
     float *newbuf;
@@ -933,10 +933,9 @@ static int probe_fm(SDRContext *sdr)
     return 0;
 }
 
-static int demodulate_fm(SDRContext *sdr, AVStream *st, AVPacket *pkt)
+static int demodulate_fm(SDRContext *sdr, Station *station, AVStream *st, AVPacket *pkt)
 {
-    SDRStream *sst = st->priv_data;
-    Station *station = sst->station;
+    SDRStream *sst = st ? st->priv_data : NULL;
 
     double freq    = station->frequency;
     int64_t bandwidth = station->bandwidth;
@@ -954,6 +953,8 @@ static int demodulate_fm(SDRContext *sdr, AVStream *st, AVPacket *pkt)
     double carrier19_i_exact;
     int W= 5;
 
+    av_assert0(!st || (sst == station->stream && sst->station == station));
+
     //If only some of the bandwidth is available, just try with less
     int len2 = FFMIN(index, 2*sdr->block_size - index);
     if (len2 < len && len2 > len/2)
@@ -962,11 +963,7 @@ static int demodulate_fm(SDRContext *sdr, AVStream *st, AVPacket *pkt)
     if (index + len >= 2*sdr->block_size ||
         index - len < 0 ||
         2*len + 1   > 2*sdr->fm_block_size)
-    return AVERROR(ERANGE);
-
-    newbuf = av_malloc(sizeof(*sst->out_buf) * 2 * sdr->fm_block_size);
-    if (!newbuf)
-        return AVERROR(ENOMEM);
+        return AVERROR(ERANGE);
 
     i = 2*len+1;
     memcpy(sdr->fm_block, sdr->block + index, sizeof(*sdr->fm_block) * (len + 1));
@@ -1006,19 +1003,28 @@ static int demodulate_fm(SDRContext *sdr, AVStream *st, AVPacket *pkt)
         memcpy(sdr->fm_block + i + 2*sdr->fm_block_size_p2 - len2_4_i, sdr->fm_block + 3*carrier19_i - len2_4_i, sizeof(AVComplexFloat)*len2_4_i);
         sdr->fm_ifft_p2(sdr->fm_ifft_p2_ctx, sdr->fm_iside   , sdr->fm_block + i, sizeof(AVComplexFloat));
         synchronous_am_demodulationN(sdr->fm_iside, sdr->fm_icarrier, sdr->fm_window_p2, 2*sdr->fm_block_size_p2, 3);
-        ff_sdr_decode_rds(sdr, sst->station, sdr->fm_iside);
+        ff_sdr_decode_rds(sdr, station, sdr->fm_iside);
 
-        memcpy(sdr->fm_block + i, sdr->fm_block + 2*carrier19_i, sizeof(AVComplexFloat)*len17_i);
-        memcpy(sdr->fm_block + i + 2*sdr->fm_block_size_p2 - len17_i, sdr->fm_block + 2*carrier19_i - len17_i, sizeof(AVComplexFloat)*len17_i);
-        apply_deemphasis(sdr, sdr->fm_block + i, sdr->fm_block_size_p2, sample_rate_p2, + 1);
-        apply_deemphasis(sdr, sdr->fm_block + i + 2*sdr->fm_block_size_p2, sdr->fm_block_size_p2, sample_rate_p2, - 1);
-        sdr->fm_ifft_p2(sdr->fm_ifft_p2_ctx, sdr->fm_iside   , sdr->fm_block + i, sizeof(AVComplexFloat));
-        synchronous_am_demodulationN(sdr->fm_iside, sdr->fm_icarrier, sdr->fm_window_p2, 2*sdr->fm_block_size_p2, 2);
+        if (st) {
+            memcpy(sdr->fm_block + i, sdr->fm_block + 2*carrier19_i, sizeof(AVComplexFloat)*len17_i);
+            memcpy(sdr->fm_block + i + 2*sdr->fm_block_size_p2 - len17_i, sdr->fm_block + 2*carrier19_i - len17_i, sizeof(AVComplexFloat)*len17_i);
+            apply_deemphasis(sdr, sdr->fm_block + i, sdr->fm_block_size_p2, sample_rate_p2, + 1);
+            apply_deemphasis(sdr, sdr->fm_block + i + 2*sdr->fm_block_size_p2, sdr->fm_block_size_p2, sample_rate_p2, - 1);
+            sdr->fm_ifft_p2(sdr->fm_ifft_p2_ctx, sdr->fm_iside   , sdr->fm_block + i, sizeof(AVComplexFloat));
+            synchronous_am_demodulationN(sdr->fm_iside, sdr->fm_icarrier, sdr->fm_window_p2, 2*sdr->fm_block_size_p2, 2);
+        }
     }
+    if (!st)
+        return 0;
+
     memset(sdr->fm_block + len17_i, 0, (2*sdr->fm_block_size_p2 - len17_i) * sizeof(AVComplexFloat));
     apply_deemphasis(sdr, sdr->fm_block, 2*sdr->fm_block_size_p2, sample_rate_p2, + 1);
     sdr->fm_ifft_p2(sdr->fm_ifft_p2_ctx, sdr->fm_iblock  , sdr->fm_block, sizeof(AVComplexFloat));
     memset(sdr->fm_iblock + 2*sdr->fm_block_size_p2, 0 ,(2*sdr->fm_block_size -2*sdr->fm_block_size_p2) * sizeof(AVComplexFloat));
+
+    newbuf = av_malloc(sizeof(*sst->out_buf) * 2 * sdr->fm_block_size);
+    if (!newbuf)
+        return AVERROR(ENOMEM);
 
     scale      = 5 / (M_PI * 2*sdr->fm_block_size);
     for(i = 0; i<sdr->fm_block_size_p2; i++) {
@@ -1651,7 +1657,7 @@ process_next_block:
             } else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
                 if (sst->station) {
                     skip = 0;
-                    ret = ff_sdr_modulation_descs[ sst->station->modulation ].demodulate(sdr, st, pkt);
+                    ret = ff_sdr_modulation_descs[ sst->station->modulation ].demodulate(sdr, sst->station, st, pkt);
                     if (ret < 0) {
                         av_log(s, AV_LOG_ERROR, "demodulation failed ret = %d\n", ret);
                     }
@@ -1659,6 +1665,8 @@ process_next_block:
             } else
                 av_assert0(0);
             sst->processing_index = 0;
+            if (sst->station)
+                sst->station->processing_index = 0;
             if (pkt && !skip) {
                 pkt->stream_index = stream_index;
                 pkt->dts = (sdr->pts & (-1<<FREQ_BITS));
@@ -1668,6 +1676,18 @@ process_next_block:
 
                 return 0;
             }
+        }
+    }
+
+    if (sdr->width > 1) {
+        Station *station_list[1000];
+        int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+        for (int i= 0; i<nb_stations; i++) {
+            Station *station = station_list[i];
+            if (station->stream || station->modulation != FM || !station->processing_index || !station->in_station_list)
+                continue;
+            ff_sdr_modulation_descs[ FM ].demodulate(sdr, station, NULL, NULL);
+            station->processing_index = 0;
         }
     }
 
@@ -1820,6 +1840,8 @@ process_next_block:
     // windowed_block is unused now, we can fill it with the next blocks data
 
     if (sdr->block_center_freq) {
+        Station *station_list[1000];
+        int nb_stations;
         if (sdr->skip_probe-- <= 0) {
             //Probing takes a bit of time, lets not do it every time
             sdr->skip_probe = 5;
@@ -1835,6 +1857,7 @@ process_next_block:
             create_stations(sdr);
         }
 
+        nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
         if (sdr->mode == SingleStationMode) {
             AVStream *st = s->streams[sdr->single_ch_audio_st_index];
             SDRStream *sst = st->priv_data;
@@ -1845,8 +1868,6 @@ process_next_block:
                     return ret;
             }
         } else {
-            Station *station_list[1000];
-            int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
             av_assert0(sdr->mode == AllStationMode);
             for(int i = 0; i<nb_stations; i++) {
                 Station *station = station_list[i];
@@ -1880,6 +1901,10 @@ process_next_block:
             AVStream *st = s->streams[stream_index];
             SDRStream *sst = st->priv_data;
             sst->processing_index += sdr->block_size;
+        }
+        for(int i = 0; i<nb_stations; i++) {
+            Station *station = station_list[i];
+            station->processing_index += sdr->block_size;
         }
     }
 

@@ -91,6 +91,7 @@ typedef struct Station {
     int rds_ring_pos;
 
     struct SDRStream *stream;
+    int processing_index;
 } Station;
 
 typedef struct FIFOElement {
@@ -241,7 +242,7 @@ typedef struct ModulationDescriptor {
     /**
      * Demodulate given station into packet
      */
-    int (*demodulate)(SDRContext *sdr, AVStream *st, AVPacket *pkt);
+    int (*demodulate)(SDRContext *sdr, Station *station, AVStream *st, AVPacket *pkt);
 } ModulationDescriptor;
 
 typedef struct BandDescriptor {
