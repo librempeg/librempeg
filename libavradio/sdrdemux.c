@@ -541,7 +541,7 @@ static double find_peak_macleod(const SDRContext *sdr, const AVComplexFloat *dat
 static int probe_am(SDRContext *sdr)
 {
     int i;
-    int bandwidth_f = 6000;
+    int bandwidth_f = sdr->am_bandwidth;
     int half_bw_i = bandwidth_f * (int64_t)sdr->block_size / sdr->sdr_sample_rate;
     int border_i = (sdr->sdr_sample_rate - sdr->bandwidth) * sdr->block_size / sdr->sdr_sample_rate;
     double avg = 0;
@@ -675,7 +675,7 @@ static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
     int len   = (bandwidth * 2ll * sdr->block_size + sdr->sdr_sample_rate/2) / sdr->sdr_sample_rate;
     float *newbuf;
     float scale;
-    int sample_rate = sdr->sdr_sample_rate * (int64_t)sst->block_size / sdr->block_size;
+    int sample_rate = sdr->sdr_sample_rate * (int64_t)sdr->am_block_size / sdr->block_size;
     int ret, i;
     double current_station_i;
     float limits[2] = {-0.0, 0.0};
@@ -685,7 +685,7 @@ static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
 #define CARRIER_SEARCH 2
     if (index + len + CARRIER_SEARCH>= 2*sdr->block_size ||
         index - len - CARRIER_SEARCH < 0 ||
-        2*len + 1 > 2*sst->block_size)
+        2*len + 1 > 2*sdr->am_block_size)
         return AVERROR(ERANGE);
 
     current_station_i = find_am_carrier(sdr, sdr->block, 2*sdr->block_size, sdr->len2block, index, CARRIER_SEARCH, len);
@@ -699,21 +699,21 @@ static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
         am_mode = AMEnvelope;
     }
 
-    newbuf = av_malloc(sizeof(*sst->out_buf) * 2 * sst->block_size);
+    newbuf = av_malloc(sizeof(*sst->out_buf) * 2 * sdr->am_block_size);
     if (!newbuf)
         return AVERROR(ENOMEM);
 #define SEPC 4
 
     i = 2*len+1;
     memcpy(sst->block, sdr->block + index - len, sizeof(*sst->block) * i);
-    memset(sst->block + i, 0, sizeof(*sst->block) * (2 * sst->block_size - i));
+    memset(sst->block + i, 0, sizeof(*sst->block) * (2 * sdr->am_block_size - i));
 
-    sst->ifft(sst->ifft_ctx, sst->iblock  , sst->block, sizeof(AVComplexFloat));
+    sdr->am_ifft(sdr->am_ifft_ctx, sst->iblock  , sst->block, sizeof(AVComplexFloat));
 
     if (am_mode == AMEnvelope) {
         double vdotw = 0;
         double wdot = 0; // could be precalculated
-        for (i = 0; i<2*sst->block_size; i++) {
+        for (i = 0; i<2*sdr->am_block_size; i++) {
             float w = sst->window[i];
             float v = sqrt(len2(sst->iblock[i]));
             sst->iblock[i].re = v;
@@ -724,7 +724,7 @@ static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
         }
 
         vdotw /= wdot ;
-        for (i = 0; i<2*sst->block_size; i++) {
+        for (i = 0; i<2*sdr->am_block_size; i++) {
             float w = sst->window[i];
             sst->iblock[i].re -= w*vdotw;
         }
@@ -735,14 +735,14 @@ static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
         memset(sst->block, 0, sizeof(*sst->block) * i);
         for (i = len-SEPC+1; i<len+SEPC; i++)
             sst->block[i] = sdr->block[index + i - len];
-        sst->ifft(sst->ifft_ctx, sst->icarrier, sst->block, sizeof(AVComplexFloat));
+        sdr->am_ifft(sdr->am_ifft_ctx, sst->icarrier, sst->block, sizeof(AVComplexFloat));
 
-        synchronous_am_demodulationN(sst->iblock, sst->icarrier, sst->window, 2*sst->block_size, 1);
+        synchronous_am_demodulationN(sst->iblock, sst->icarrier, sst->window, 2*sdr->am_block_size, 1);
         scale = 0.9;
     } else {
         // Synchronous demodulation using Macleod based systhesized carrier
         double fcorr = F2INDEX(freq) - index + len;
-        double theta = -M_PI*fcorr / sst->block_size;
+        double theta = -M_PI*fcorr / sdr->am_block_size;
         AVComplexDouble mdelta = {cos(theta), sin(theta)};
         AVComplexDouble m = {1,0};
         AVComplexDouble dc1 = {0,0};
@@ -751,7 +751,7 @@ static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
         double dcw = 0;
         float amp, stamp, wamp;
 
-        for(i = 0; i<2*sst->block_size; i++) {
+        for(i = 0; i<2*sdr->am_block_size; i++) {
             double tmp;
             AVComplexFloat v = sst->iblock[i];
             sst->iblock[i].re = v.re*m.re - v.im*m.im;
@@ -773,7 +773,7 @@ static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
         wamp = amp/stamp;
 
         mm = (AVComplexFloat){dc1.re * amp, -dc1.im * amp};
-        for(i = 0; i<2*sst->block_size; i++) {
+        for(i = 0; i<2*sdr->am_block_size; i++) {
             AVComplexFloat v = sst->iblock[i];
             sst->iblock[i].re = v.re*mm.re - v.im*mm.im - sst->window[i] * wamp;
             sst->iblock[i].im = v.re*mm.im + v.im*mm.re;
@@ -782,7 +782,7 @@ static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
         scale = 0.9;
     }
 
-    for(i = 0; i<2*sst->block_size; i++) {
+    for(i = 0; i<2*sdr->am_block_size; i++) {
         av_assert0(isfinite(sst->iblock[i].re));
         av_assert0(isfinite(sst->iblock[i].im));
         limits[0] = FFMIN(limits[0], FFMIN(sst->iblock[i].re - sst->iblock[i].im,  sst->iblock[i].re + sst->iblock[i].im));
@@ -791,17 +791,17 @@ static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
     av_assert1(FFMAX(limits[1], -limits[0]) >= 0);
     scale = FFMIN(scale, 0.98 / FFMAX(limits[1], -limits[0]));
 
-    for(i = 0; i<sst->block_size; i++) {
+    for(i = 0; i<sdr->am_block_size; i++) {
         float m, q;
 
         m = sst->out_buf[2*i+0] + (sst->iblock[i                  ].re) * sst->window[i                  ] * scale;
-        newbuf[2*i+0]           = (sst->iblock[i + sst->block_size].re) * sst->window[i + sst->block_size] * scale;
+        newbuf[2*i+0]           = (sst->iblock[i + sdr->am_block_size].re) * sst->window[i + sdr->am_block_size] * scale;
 
         switch(am_mode) {
         case AMMidSide:
         case AMLeftRight:
             q = sst->out_buf[2*i+1] +  sst->iblock[i                  ].im * sst->window[i                  ] * scale;
-            newbuf[2*i+1]           =  sst->iblock[i + sst->block_size].im * sst->window[i + sst->block_size] * scale;
+            newbuf[2*i+1]           =  sst->iblock[i + sdr->am_block_size].im * sst->window[i + sdr->am_block_size] * scale;
             switch(am_mode) {
             case AMMidSide:
                 q *= 0.5;
@@ -828,7 +828,7 @@ static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
         }
     }
 
-    ret = av_packet_from_data(pkt, (void*)sst->out_buf, sizeof(*sst->out_buf) * 2 * sst->block_size);
+    ret = av_packet_from_data(pkt, (void*)sst->out_buf, sizeof(*sst->out_buf) * 2 * sdr->am_block_size);
     if (ret < 0)
         av_free(sst->out_buf);
     sst->out_buf = newbuf;
@@ -849,7 +849,7 @@ static int demodulate_am(SDRContext *sdr, int stream_index, AVPacket *pkt)
 static int probe_fm(SDRContext *sdr)
 {
     int i;
-    int bandwidth_f  = 180*1000;
+    int bandwidth_f  = sdr->fm_bandwidth;
     int half_bw_i = bandwidth_f * (int64_t)sdr->block_size / sdr->sdr_sample_rate;
     float last_score[3] = {FLT_MAX, FLT_MAX, FLT_MAX};
     int border_i = (sdr->sdr_sample_rate - FFMIN(sdr->bandwidth, sdr->sdr_sample_rate*7/8)) * sdr->block_size / sdr->sdr_sample_rate;
@@ -938,19 +938,21 @@ static int demodulate_fm(SDRContext *sdr, int stream_index, AVPacket *pkt)
 {
     AVStream *st   = sdr->avfmt->streams[stream_index];
     SDRStream *sst = st->priv_data;
-    double freq    = sst->station->frequency;
-    int64_t bandwidth = sst->station->bandwidth;
+    Station *station = sst->station;
+
+    double freq    = station->frequency;
+    int64_t bandwidth = station->bandwidth;
     int index = lrint(F2INDEX(freq));
     int len   = (bandwidth * 2ll * sdr->block_size + sdr->sdr_sample_rate/2) / sdr->sdr_sample_rate;
     float *newbuf;
     float scale;
-    int sample_rate    = sdr->sdr_sample_rate * (int64_t)sst->block_size    / sdr->block_size;
+    int sample_rate    = sdr->sdr_sample_rate * (int64_t)sdr->fm_block_size    / sdr->block_size;
     int sample_rate_p2 = sdr->sdr_sample_rate * (int64_t)sdr->fm_block_size_p2 / sdr->block_size;
     int ret, i;
     float clip = 1.0;
-    int carrier19_i = 2L*sst->block_size*19000 / sample_rate;
-    int len17_i     = 2L*sst->block_size*16500 / sample_rate;
-    int len2_4_i    = 2L*sst->block_size* 2400 / sample_rate;
+    int carrier19_i = 2L*sdr->fm_block_size*19000 / sample_rate;
+    int len17_i     = 2L*sdr->fm_block_size*16500 / sample_rate;
+    int len2_4_i    = 2L*sdr->fm_block_size* 2400 / sample_rate;
     double carrier19_i_exact;
     int W= 5;
 
@@ -961,21 +963,21 @@ static int demodulate_fm(SDRContext *sdr, int stream_index, AVPacket *pkt)
 
     if (index + len >= 2*sdr->block_size ||
         index - len < 0 ||
-        2*len + 1   > 2*sst->block_size)
+        2*len + 1   > 2*sdr->fm_block_size)
     return AVERROR(ERANGE);
 
-    newbuf = av_malloc(sizeof(*sst->out_buf) * 2 * sst->block_size);
+    newbuf = av_malloc(sizeof(*sst->out_buf) * 2 * sdr->fm_block_size);
     if (!newbuf)
         return AVERROR(ENOMEM);
 
     i = 2*len+1;
     memcpy(sst->block, sdr->block + index, sizeof(*sst->block) * (len + 1));
-    memcpy(sst->block + 2 * sst->block_size - len, sdr->block + index - len, sizeof(*sst->block) * len);
-    memset(sst->block + len + 1, 0, sizeof(*sst->block) * (2 * sst->block_size - i));
+    memcpy(sst->block + 2 * sdr->fm_block_size - len, sdr->block + index - len, sizeof(*sst->block) * len);
+    memset(sst->block + len + 1, 0, sizeof(*sst->block) * (2 * sdr->fm_block_size - i));
 
-    sst->ifft(sst->ifft_ctx, sst->iblock, sst->block, sizeof(AVComplexFloat));
+    sdr->fm_ifft(sdr->fm_ifft_ctx, sst->iblock, sst->block, sizeof(AVComplexFloat));
 
-    for (i = 0; i<2*sst->block_size - 1; i++) {
+    for (i = 0; i<2*sdr->fm_block_size - 1; i++) {
         AVComplexFloat x = sst->iblock[i];
         AVComplexFloat y = sst->iblock[i+1];
         sst->iblock[i].re = atan2(x.im * y.re - x.re * y.im,
@@ -985,18 +987,18 @@ static int demodulate_fm(SDRContext *sdr, int stream_index, AVPacket *pkt)
     sst->iblock[i].re = 0;
     sst->iblock[i].im = 0;
 
-    av_assert0(sdr->fm_block_size_p2 * 2 < sst->block_size);
+    av_assert0(sdr->fm_block_size_p2 * 2 < sdr->fm_block_size);
     //FIXME this only needs to be a RDFT
     //CONSIDER, this and in fact alot can be done with bandpass and lowpass filters instead of FFTs, find out which is better
     //CONSIDER synthesizing the carrier instead of IFFT, we have all parameters for that
     sst->fft(sst->fft_ctx, sst->block, sst->iblock, sizeof(AVComplexFloat));
     // Only the low N/2+1 are used the upper is just a reflection
 
-    carrier19_i_exact = find_am_carrier(sdr, sst->block, 2*sst->block_size, (void*)(sst->block + 1 + sst->block_size), carrier19_i, 10, 10);
+    carrier19_i_exact = find_am_carrier(sdr, sst->block, 2*sdr->fm_block_size, (void*)(sst->block + 1 + sdr->fm_block_size), carrier19_i, 10, 10);
     carrier19_i = lrint(carrier19_i_exact);
 
     if (carrier19_i >= 0) {
-        i = sst->block_size;
+        i = sdr->fm_block_size;
         memset(sst->block + i, 0, 2*sdr->fm_block_size_p2 * sizeof(AVComplexFloat));
         memcpy(sst->block + i, sst->block + carrier19_i, sizeof(AVComplexFloat)*(W+1));
         memcpy(sst->block + i + 2*sdr->fm_block_size_p2 - W, sst->block + carrier19_i - W, sizeof(AVComplexFloat)*W);
@@ -1018,9 +1020,9 @@ static int demodulate_fm(SDRContext *sdr, int stream_index, AVPacket *pkt)
     memset(sst->block + len17_i, 0, (2*sdr->fm_block_size_p2 - len17_i) * sizeof(AVComplexFloat));
     apply_deemphasis(sdr, sst->block, 2*sdr->fm_block_size_p2, sample_rate_p2, + 1);
     sst->ifft_p2(sst->ifft_p2_ctx, sst->iblock  , sst->block, sizeof(AVComplexFloat));
-    memset(sst->iblock + 2*sdr->fm_block_size_p2, 0 ,(2*sst->block_size -2*sdr->fm_block_size_p2) * sizeof(AVComplexFloat));
+    memset(sst->iblock + 2*sdr->fm_block_size_p2, 0 ,(2*sdr->fm_block_size -2*sdr->fm_block_size_p2) * sizeof(AVComplexFloat));
 
-    scale      = 5 / (M_PI * 2*sst->block_size);
+    scale      = 5 / (M_PI * 2*sdr->fm_block_size);
     for(i = 0; i<sdr->fm_block_size_p2; i++) {
         float m, q;
 
@@ -1094,13 +1096,10 @@ static void free_stream(SDRContext *sdr, int stream_index)
     AVStream *st = s->streams[stream_index];
     SDRStream *sst = st->priv_data;
 
-    av_tx_uninit(&sst->ifft_ctx);
     av_tx_uninit(&sst->fft_ctx);
     av_tx_uninit(&sst->ifft_p2_ctx);
-    sst->ifft = NULL;
     sst->fft  = NULL;
     sst->ifft_p2 = NULL;
-    sst->block_size = 0;
 
     av_freep(&sst->out_buf);
     av_freep(&sst->block);
@@ -1108,6 +1107,16 @@ static void free_stream(SDRContext *sdr, int stream_index)
     av_freep(&sst->icarrier);
     av_freep(&sst->iside);
     av_freep(&sst->window);
+}
+
+static int find_block_size(SDRContext *sdr, int64_t bandwidth)
+{
+    int block_size;
+
+    for (block_size = 4; 2ll * bandwidth * sdr->block_time > block_size; block_size <<= 1)
+        ;
+
+    return FFMIN(sdr->block_size,  block_size);
 }
 
 static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
@@ -1132,17 +1141,10 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
     if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
         free_stream(sdr, stream_index);
 
-        for (sst->block_size = 4; 2ll *sst->station->bandwidth * sdr->block_time > sst->block_size; sst->block_size <<= 1)
-            ;
-        sst->block_size = FFMIN(sdr->block_size,  sst->block_size);
-
-        ret = av_tx_init(&sst->ifft_ctx, &sst->ifft, AV_TX_FLOAT_FFT, 1, 2*sst->block_size, NULL, 0);
-        if (ret < 0)
-            return ret;
-
+        int block_size;
         if (sst->station->modulation == FM) {
             //Allocate 2nd stage demodulation fields if needed
-            ret = av_tx_init(&sst-> fft_ctx, &sst-> fft, AV_TX_FLOAT_FFT, 0, 2*sst->block_size   , NULL, 0);
+            ret = av_tx_init(&sst-> fft_ctx, &sst-> fft, AV_TX_FLOAT_FFT, 0, 2*sdr->fm_block_size   , NULL, 0);
             if (ret < 0)
                 return ret;
 
@@ -1153,19 +1155,21 @@ static int setup_stream(SDRContext *sdr, int stream_index, Station *station)
             sst->iside     = av_malloc(sizeof(*sst->iside)    * 2 * sdr->fm_block_size_p2);
             if (!sst->iside)
                 return AVERROR(ENOMEM);
-        }
+            block_size = sdr->fm_block_size;
+        } else
+            block_size = sdr->am_block_size;
 
-        sst->out_buf   = av_mallocz(sizeof(*sst->out_buf) * 2 * sst->block_size);
-        sst->block     = av_malloc(sizeof(*sst-> block)   * 2 * sst->block_size);
-        sst->iblock    = av_malloc(sizeof(*sst->iblock)   * 2 * sst->block_size);
-        sst->icarrier  = av_malloc(sizeof(*sst->icarrier) * 2 * sst->block_size);
-        sst->window    = av_malloc(sizeof(*sst->window)   * 2 * sst->block_size);
+        sst->out_buf   = av_mallocz(sizeof(*sst->out_buf) * 2 * block_size);
+        sst->block     = av_malloc(sizeof(*sst-> block)   * 2 * block_size);
+        sst->iblock    = av_malloc(sizeof(*sst->iblock)   * 2 * block_size);
+        sst->icarrier  = av_malloc(sizeof(*sst->icarrier) * 2 * block_size);
+        sst->window    = av_malloc(sizeof(*sst->window)   * 2 * block_size);
         if (!sst->out_buf || !sst->block || !sst->iblock || !sst->icarrier || !sst->window)
             return AVERROR(ENOMEM);
 
-        avpriv_kbd_window_init(sst->window, sdr->kbd_alpha, sst->block_size);
-        for(int i = sst->block_size; i < 2 * sst->block_size; i++) {
-            sst->window[i] = sst->window[2*sst->block_size - i - 1];
+        avpriv_kbd_window_init(sst->window, sdr->kbd_alpha, block_size);
+        for(int i = block_size; i < 2 * block_size; i++) {
+            sst->window[i] = sst->window[2*block_size - i - 1];
         }
 
         sst->am_amplitude = 0;
@@ -1491,10 +1495,13 @@ int ff_sdr_common_init(AVFormatContext *s)
     av_log(s, AV_LOG_INFO, "Block size %d\n", sdr->block_size);
 
     sdr->block_time = sdr->block_size / (double)sdr->sdr_sample_rate;
-    sdr->fm_bandwidth_p2 = 18 * 1000;
-    if (!sdr->fm_block_size_p2)
-        for (sdr->fm_block_size_p2 = 4; 2ll *sdr->fm_bandwidth_p2 * sdr->block_time > sdr->fm_block_size_p2; sdr->fm_block_size_p2 <<= 1)
-            ;
+    sdr->am_bandwidth    =   6 * 1000;
+    sdr->fm_bandwidth    = 180 * 1000;
+    sdr->fm_bandwidth_p2 =  18 * 1000;
+
+    sdr->am_block_size    = find_block_size(sdr, sdr->am_bandwidth);
+    sdr->fm_block_size    = find_block_size(sdr, sdr->fm_bandwidth);
+    sdr->fm_block_size_p2 = find_block_size(sdr, sdr->fm_bandwidth_p2);
 
     sdr->windowed_block = av_malloc(sizeof(*sdr->windowed_block) * 2 * sdr->block_size);
     sdr->block     = av_malloc(sizeof(*sdr->block    ) * 2 * sdr->block_size);
@@ -1508,6 +1515,15 @@ int ff_sdr_common_init(AVFormatContext *s)
     ret = av_tx_init(&sdr->fft_ctx, &sdr->fft, AV_TX_FLOAT_FFT, 0, 2*sdr->block_size, NULL, 0);
     if (ret < 0)
         return ret;
+
+    ret = av_tx_init(&sdr->am_ifft_ctx, &sdr->am_ifft, AV_TX_FLOAT_FFT, 1, 2*sdr->am_block_size, NULL, 0);
+    if (ret < 0)
+        return ret;
+
+    ret = av_tx_init(&sdr->fm_ifft_ctx, &sdr->fm_ifft, AV_TX_FLOAT_FFT, 1, 2*sdr->fm_block_size, NULL, 0);
+    if (ret < 0)
+        return ret;
+
 
     avpriv_kbd_window_init(sdr->window, sdr->kbd_alpha, sdr->block_size);
 
@@ -1973,7 +1989,11 @@ int ff_sdr_read_close(AVFormatContext *s)
     av_freep(&sdr->fm_window_p2);
 
     av_tx_uninit(&sdr->fft_ctx);
+    av_tx_uninit(&sdr->am_ifft_ctx);
+    av_tx_uninit(&sdr->fm_ifft_ctx);
     sdr->fft = NULL;
+    sdr->am_ifft = NULL;
+    sdr->fm_ifft = NULL;
 
     avio_close(sdr->dump_avio);
 

@@ -99,13 +99,10 @@ typedef struct FIFOElement {
 } FIFOElement;
 
 typedef struct SDRStream {
-    AVTXContext *ifft_ctx;
     AVTXContext *fft_ctx;
     AVTXContext *ifft_p2_ctx;
-    av_tx_fn ifft;
     av_tx_fn fft;
     av_tx_fn ifft_p2;
-    int block_size;
     int processing_index;
     float *out_buf;
     AVComplexFloat *block;
@@ -160,10 +157,19 @@ typedef struct SDRContext {
     int sample_size;
     double sample_scale;
 
+    int64_t am_bandwidth;
+    int64_t fm_bandwidth;
     int64_t fm_bandwidth_p2;
+    int am_block_size;
+    int fm_block_size;
     int fm_block_size_p2;
     int rds_ring_size;
     float *fm_window_p2;
+
+    AVTXContext *am_ifft_ctx;
+    AVTXContext *fm_ifft_ctx;
+    av_tx_fn am_ifft;
+    av_tx_fn fm_ifft;
 
     int am_mode;                            ///< AMMode but using int for generic option access
     int emphasis_mode;
