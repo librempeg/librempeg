@@ -1031,6 +1031,19 @@ static int demodulate_fm(SDRContext *sdr, Station *station, AVStream *st, AVPack
 
         memcpy(sdr->fm_block + i, sdr->fm_block + 3*carrier19_i, sizeof(AVComplexFloat)*len2_4_i);
         memcpy(sdr->fm_block + i + 2*sdr->fm_block_size_p2 - len2_4_i, sdr->fm_block + 3*carrier19_i - len2_4_i, sizeof(AVComplexFloat)*len2_4_i);
+
+        //This improves the decoder performace from an error rate per packet of 0.539578 to 0.410425
+        for (int j= 0; j<len2_4_i; j++) {
+            float J = j / (float)len2_4_i;
+            float W = 1 - J*J;
+            sdr->fm_block[i+j].re *= W;
+            sdr->fm_block[i+j].im *= W;
+            if (j) {
+                sdr->fm_block[i + 2*sdr->fm_block_size_p2 - j].re *= W;
+                sdr->fm_block[i + 2*sdr->fm_block_size_p2 - j].im *= W;
+            }
+        }
+
         sdr->fm_ifft_p2(sdr->fm_ifft_p2_ctx, sdr->fm_iside   , sdr->fm_block + i, sizeof(AVComplexFloat));
         synchronous_am_demodulationN(sdr->fm_iside, sdr->fm_icarrier, sdr->fm_window_p2, 2*sdr->fm_block_size_p2, 3);
         ff_sdr_decode_rds(sdr, station, sdr->fm_iside);
