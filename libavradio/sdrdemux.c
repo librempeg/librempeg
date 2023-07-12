@@ -1716,6 +1716,7 @@ process_next_block:
                         if (t)
                             value = t->value;
                         if (strcmp(value, metadata_values[i])) {
+                            av_log(s, AV_LOG_DEBUG, "METADATA %s update %s -> %s\n", metadata_keys[i], value, metadata_values[i]);
                             av_dict_set(&st->metadata, metadata_keys[i], metadata_values[i], 0);
                             s->event_flags |= AVFMT_EVENT_FLAG_METADATA_UPDATED;
                         }
