@@ -67,7 +67,7 @@
 #define AM_MAX4  0.02
 
 //Least squares fit at 1khz points of frequency response shown by Frank McClatchie, FM SYSTEMS, INC. 800-235-6960
-static double emphasis75us(int f)
+static double emphasis75us(double f)
 {
     return ((((((((- 4.79546E-9 * f + 5.32101E-7) * f - 0.0000254577) * f + 0.000687225) * f
                    - 0.0114925) * f + 0.122781  ) * f - 0.827885    ) * f + 3.25025    ) * f - 4.6049) * f + 2.06937;
@@ -76,15 +76,16 @@ static double emphasis75us(int f)
 /**
  * Apply emphasis filter in frequency domain
  */
-static void apply_deemphasis(SDRContext *sdr, AVComplexFloat *data, int len, int sample_rate, int dir)
+static void apply_deemphasis(SDRContext *sdr, AVComplexFloat *data, int len, int block_size, int sample_rate, int dir)
 {
+    double factor = sample_rate / (2000.0*block_size);
     if (sdr->emphasis_mode == EMPHASIS_NONE)
         return;
 
-    len = FFMIN(len, len * 19000 / sample_rate);
+    len = FFMIN(len, len * 2 * 19000 / sample_rate);
 
     for (int i = 1; i < len; i++) {
-        double index = 1.0 + i / 1000;
+        double index = 1.0 + i * factor;
         double scale;
 
         if (sdr->emphasis_mode == EMPHASIS_50us)
@@ -1051,8 +1052,8 @@ static int demodulate_fm(SDRContext *sdr, Station *station, AVStream *st, AVPack
         if (st) {
             memcpy(sdr->fm_block + i, sdr->fm_block + 2*carrier19_i, sizeof(AVComplexFloat)*len17_i);
             memcpy(sdr->fm_block + i + 2*sdr->fm_block_size_p2 - len17_i, sdr->fm_block + 2*carrier19_i - len17_i, sizeof(AVComplexFloat)*len17_i);
-            apply_deemphasis(sdr, sdr->fm_block + i, sdr->fm_block_size_p2, sample_rate_p2, + 1);
-            apply_deemphasis(sdr, sdr->fm_block + i + 2*sdr->fm_block_size_p2, sdr->fm_block_size_p2, sample_rate_p2, - 1);
+            apply_deemphasis(sdr, sdr->fm_block + i, sdr->fm_block_size_p2, sdr->fm_block_size_p2, sample_rate_p2, + 1);
+            apply_deemphasis(sdr, sdr->fm_block + i + 2*sdr->fm_block_size_p2, sdr->fm_block_size_p2, sdr->fm_block_size_p2, sample_rate_p2, - 1);
             sdr->fm_ifft_p2(sdr->fm_ifft_p2_ctx, sdr->fm_iside   , sdr->fm_block + i, sizeof(AVComplexFloat));
             synchronous_am_demodulationN(sdr->fm_iside, sdr->fm_icarrier, sdr->fm_window_p2, 2*sdr->fm_block_size_p2, 2);
         }
@@ -1061,7 +1062,7 @@ static int demodulate_fm(SDRContext *sdr, Station *station, AVStream *st, AVPack
         return 0;
 
     memset(sdr->fm_block + len17_i, 0, (2*sdr->fm_block_size_p2 - len17_i) * sizeof(AVComplexFloat));
-    apply_deemphasis(sdr, sdr->fm_block, 2*sdr->fm_block_size_p2, sample_rate_p2, + 1);
+    apply_deemphasis(sdr, sdr->fm_block, sdr->fm_block_size_p2, sdr->fm_block_size_p2, sample_rate_p2, + 1);
     sdr->fm_ifft_p2(sdr->fm_ifft_p2_ctx, sdr->fm_iblock  , sdr->fm_block, sizeof(AVComplexFloat));
     memset(sdr->fm_iblock + 2*sdr->fm_block_size_p2, 0 ,(2*sdr->fm_block_size -2*sdr->fm_block_size_p2) * sizeof(AVComplexFloat));
 
