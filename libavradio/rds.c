@@ -143,6 +143,17 @@ static int decode_rds_group(SDRContext *sdr, Station *station, uint16_t group[4]
             AV_WB16(station->radiotext + 4*(group[1]&15) + 2, group[3]);
         }
     break;}
+    case 3:
+        if (!b) {
+            int application_id = group[3];
+            switch (application_id) {
+            case 0x4BD7:
+                //RadioText Plus / RT+ for group 2A RT - IEC 62106-6:2023
+                station->rtp_appgroup = group[1] & 31;
+                break;
+            }
+        }
+    break;
     case 10:
         if (b==0) {
             AV_WB16(station->programm_type_name + 4*(group[1]&1)    , group[2]);
@@ -152,7 +163,38 @@ static int decode_rds_group(SDRContext *sdr, Station *station, uint16_t group[4]
 //     case 14:
 //     break;
     default:
-        av_log(sdr->avfmt, AV_LOG_DEBUG, "RDS: PI %X, A %X B %X PTY %X\n", pi,a,b,pty);
+        if (2*a + b == station->rtp_appgroup) {
+            int toggle_bit  = group[1]&16;
+            int running_bit = group[1]&8;
+            uint64_t v = ((group[1]&7LL)<<32) + ((uint64_t)group[2]<<16) + group[3];
+            int tag[2][3];
+            if (toggle_bit != station->rtp_toggle_bit) {
+                station->artist[0] =
+                station->title[0] =
+                station->album[0] = 0;
+            }
+            station->rtp_toggle_bit = toggle_bit;
+            for(int i = 0; i<6; i++) {
+                tag[i/3][i%3] = (v>>29) & 63;
+                v <<= 6;
+            }
+            tag[1][2] >>= 1;
+            av_log(0,0, "\n");
+            for(int i = 0; i<2; i++) {
+                char *target= NULL;
+                switch(tag[i][0]) {
+                case 1: target = station->title; break;
+                case 2: target = station->album; break;
+                case 4: target = station->artist; break;
+                default:
+                    av_log(sdr->avfmt, AV_LOG_DEBUG, "Unhandled RT+ code %d\n", tag[i][0]);
+                }
+                if (target) {
+                    memcpy(target, station->radiotext + tag[i][1], 1 + tag[i][2]);
+                    target[1+tag[i][2]] = 0;
+                }
+            }
+        }
     }
 
     return 0;

@@ -72,10 +72,17 @@ typedef enum Modulation {
 
 typedef struct Station {
     char name[9];
+
     char radiotext[65];
+    char artist[65];
+    char title[65];
+    char album[65];
     char programm_type_name[9];
     int program_id[2];
     uint8_t rt_ab_flag;
+    uint8_t rtp_toggle_bit;
+    uint8_t rtp_running_bit;
+    uint16_t rtp_appgroup;
 
     enum Modulation modulation;
     double frequency;

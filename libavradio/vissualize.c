@@ -221,6 +221,11 @@ int ff_sdr_vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt)
             if (s->radiotext[0]) {
                 draw_string(pkt->data, 4*w, s->radiotext, xmid + 8*yd, 320*h2 + 24*yd, xd, yd, color, color, color, w, h);
             }
+            if (s->title[0] || s->artist[0]) {
+                int len = strlen(s->title) + 1;
+                draw_string(pkt->data, 4*w, s->title , xmid + 8*yd, 320*h2 + 2*24*yd, xd, yd, color, color*1.5, color, w, h);
+                draw_string(pkt->data, 4*w, s->artist, xmid + 8*yd + 9*xd*len, 320*h2 + 2*24*yd + 9*yd*len, xd, yd, color, color*2, color, w, h);
+            }
         }
     }
 
