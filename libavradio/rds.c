@@ -179,7 +179,6 @@ static int decode_rds_group(SDRContext *sdr, Station *station, uint16_t group[4]
                 v <<= 6;
             }
             tag[1][2] >>= 1;
-            av_log(0,0, "\n");
             for(int i = 0; i<2; i++) {
                 char *target= NULL;
                 switch(tag[i][0]) {
