@@ -1,5 +1,5 @@
 /*
- * RDS
+ * Radio Data System
  * Copyright (c) 2023 Michael Niedermayer
  *
  * This file is part of FFmpeg.
