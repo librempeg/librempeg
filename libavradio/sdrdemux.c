@@ -1677,6 +1677,7 @@ process_next_block:
     for (int stream_index = 0; stream_index < s->nb_streams; stream_index++) {
         AVStream *st = s->streams[stream_index];
         SDRStream *sst = st->priv_data;
+        Station *station = sst->station;
 
         if (sst->processing_index) {
             int skip = 1;
@@ -1686,10 +1687,24 @@ process_next_block:
                     return skip;
             } else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
                 if (sst->station) {
+                    const char *metadata_keys[] = {"artist", "title"};
+                    const char *metadata_values[] = {station->artist, station->title};
+                    AVDictionaryEntry *t = NULL;
+
                     skip = 0;
                     ret = ff_sdr_modulation_descs[ sst->station->modulation ].demodulate(sdr, sst->station, st, pkt);
                     if (ret < 0) {
                         av_log(s, AV_LOG_ERROR, "demodulation failed ret = %d\n", ret);
+                    }
+                    for(int i = 0; i < FF_ARRAY_ELEMS(metadata_keys); i++) {
+                        const char *value = "";
+                        t = av_dict_get(st->metadata, metadata_keys[i], NULL, 0);
+                        if (t)
+                            value = t->value;
+                        if (strcmp(value, metadata_values[i])) {
+                            av_dict_set(&st->metadata, metadata_keys[i], metadata_values[i], 0);
+                            s->event_flags |= AVFMT_EVENT_FLAG_METADATA_UPDATED;
+                        }
                     }
                 }
             } else
