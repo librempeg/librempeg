@@ -75,6 +75,8 @@ typedef struct Station {
     char radiotext[65];
     char programm_type_name[9];
     int program_id[2];
+    uint8_t rt_ab_flag;
+
     enum Modulation modulation;
     double frequency;
     int nb_frequency;       ///< number of detections which are used to compute the frequency

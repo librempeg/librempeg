@@ -130,14 +130,19 @@ static int decode_rds_group(SDRContext *sdr, Station *station, uint16_t group[4]
     case 0:
         AV_WB16(station->name + 2*(group[1]&3), group[3]);
     break;
-    case 2:
+    case 2:{
+        int new_ab_flag = group[1] & 16;
+        if (new_ab_flag != station->rt_ab_flag) {
+            memset(station->radiotext, 0, sizeof(station->radiotext));
+            station->rt_ab_flag = new_ab_flag;
+        }
         if (b) {
             AV_WB16(station->radiotext + 2*(group[1]&15)    , group[3]);
         } else {
             AV_WB16(station->radiotext + 4*(group[1]&15)    , group[2]);
             AV_WB16(station->radiotext + 4*(group[1]&15) + 2, group[3]);
         }
-    break;
+    break;}
     case 10:
         if (b==0) {
             AV_WB16(station->programm_type_name + 4*(group[1]&1)    , group[2]);
