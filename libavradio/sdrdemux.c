@@ -1519,9 +1519,9 @@ int ff_sdr_common_init(AVFormatContext *s)
     av_log(s, AV_LOG_INFO, "Block size %d\n", sdr->block_size);
 
     sdr->block_time = sdr->block_size / (double)sdr->sdr_sample_rate;
-    sdr->am_bandwidth    =   6 * 1000;
-    sdr->fm_bandwidth    = 180 * 1000;
-    sdr->fm_bandwidth_p2 =  18 * 1000;
+    sdr->am_bandwidth    =   6   * 1000;
+    sdr->fm_bandwidth    = 180   * 1000;
+    sdr->fm_bandwidth_p2 =  16.5 * 1000; // Officially Stereo Broadcast FM has 15khz audio bandwidth
 
     sdr->am_block_size    = find_block_size(sdr, sdr->am_bandwidth);
     sdr->fm_block_size    = find_block_size(sdr, sdr->fm_bandwidth);
