@@ -656,7 +656,7 @@ static av_always_inline void synchronous_am_demodulationN(AVComplexFloat *iblock
     for (int i = 0; i<len; i++) {
         AVComplexFloat c = icarrier[i];
         AVComplexFloat s = iblock[i];
-        float          w = window[i];
+        float          w = N == 2 ? 1.0 : window[i];
         AVComplexFloat c2= {c.re*c.re, c.im*c.im};
         float den        = w/(c2.re + c2.im);
 
@@ -1080,8 +1080,9 @@ static int demodulate_fm(SDRContext *sdr, Station *station, AVStream *st, AVPack
         newbuf[2*i+0]           = (sdr->fm_iblock[i + sdr->fm_block_size_p2].re) * sdr->fm_window_p2[i + sdr->fm_block_size_p2] * scale;
 
         if (carrier19_i >= 0) {
-            q = sst->out_buf[2*i+1] +  sdr->fm_iside[i                        ].im * sdr->fm_window_p2[i                        ] * scale;
-            newbuf[2*i+1]           =  sdr->fm_iside[i + sdr->fm_block_size_p2].im * sdr->fm_window_p2[i + sdr->fm_block_size_p2] * scale;
+            //the 0.5 is because we have both sides of the spectrum for iside
+            q = sst->out_buf[2*i+1] +  sdr->fm_iside[i                        ].im * sdr->fm_window_p2[i                        ] * (scale * 0.5);
+            newbuf[2*i+1]           =  sdr->fm_iside[i + sdr->fm_block_size_p2].im * sdr->fm_window_p2[i + sdr->fm_block_size_p2] * (scale * 0.5);
 
             sst->out_buf[2*i+0] = m + q;
             sst->out_buf[2*i+1] = m - q;
