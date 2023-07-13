@@ -57,6 +57,8 @@
 #include "libavutil/lfg.h"
 #endif
 
+#define MAX_STATIONS 1000 // Maximum stations vissible at the same time
+
 #define AM_FREQ_TOLERANCE 5
 #define FM_FREQ_TOLERANCE 500
 
@@ -185,7 +187,7 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
     int conflict = INT_MAX;
     int nb_candidate_conflict = 0;
     int nb_candidate_match = 0;
-    Station *station_list[1000];
+    Station *station_list[MAX_STATIONS];
 
 
     if (candidate_station->in_station_list)
@@ -287,7 +289,7 @@ static int create_station(SDRContext *sdr, Station *candidate_station) {
 
 static void create_stations(SDRContext *sdr)
 {
-    Station *station_list[1000];
+    Station *station_list[MAX_STATIONS];
     int nb_stations;
 
     if (!sdr->block_center_freq)
@@ -330,7 +332,7 @@ static void *tree_remove(struct AVTreeNode **rootp, void *key,
  */
 static void decay_stations(SDRContext *sdr)
 {
-    Station *station_list[1000];
+    Station *station_list[MAX_STATIONS];
     int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->bandwidth*0.5, station_list, FF_ARRAY_ELEMS(station_list));
 
     for (int i=0; i<nb_stations; i++) {
@@ -381,7 +383,7 @@ static int create_candidate_station(SDRContext *sdr, enum Modulation modulation,
     Station *station;
     void *tmp;
     struct AVTreeNode *next = NULL;
-    Station *station_list[1000];
+    Station *station_list[MAX_STATIONS];
     double snapdistance = modulation == AM ? AM_FREQ_TOLERANCE : FM_FREQ_TOLERANCE;
     int nb_stations = ff_sdr_find_stations(sdr, freq, snapdistance, station_list, FF_ARRAY_ELEMS(station_list));
     int update_freq = 1;
@@ -1274,7 +1276,7 @@ static int snap2station(SDRContext *sdr, int *seek_direction) {
     double current_freq;
     double best_distance = INT64_MAX;
     Station *best_station = NULL;
-    Station *station_list[1000];
+    Station *station_list[MAX_STATIONS];
     int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
 
     if (sst->station) {
@@ -1740,7 +1742,7 @@ process_next_block:
     }
 
     if (sdr->demodulate_all_fm) {
-        Station *station_list[1000];
+        Station *station_list[MAX_STATIONS];
         int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
         for (int i= 0; i<nb_stations; i++) {
             Station *station = station_list[i];
@@ -1900,7 +1902,7 @@ process_next_block:
     // windowed_block is unused now, we can fill it with the next blocks data
 
     if (sdr->block_center_freq) {
-        Station *station_list[1000];
+        Station *station_list[MAX_STATIONS];
         int nb_stations;
         if (sdr->skip_probe-- <= 0) {
             //Probing takes a bit of time, lets not do it every time
