@@ -1543,7 +1543,7 @@ int ff_sdr_common_init(AVFormatContext *s)
     sdr->fm_iside     = av_malloc(sizeof(*sdr->fm_iside)    * 2 * sdr->fm_block_size_p2);
     sdr->fm_block     = av_malloc(sizeof(*sdr->fm_block)    * 2 * sdr->fm_block_size);
     sdr->fm_iblock    = av_malloc(sizeof(*sdr->fm_iblock)   * 2 * sdr->fm_block_size);
-    sdr->fm_icarrier  = av_malloc(sizeof(*sdr->fm_icarrier) * 2 * sdr->fm_block_size);
+    sdr->fm_icarrier  = av_malloc(sizeof(*sdr->fm_icarrier) * 2 * sdr->fm_block_size_p2);
     sdr->fm_window    = av_malloc(sizeof(*sdr->fm_window)   * 2 * sdr->fm_block_size);
 
     if (!sdr->windowed_block || !sdr->len2block || !sdr->block || !sdr->window || !sdr->fm_window_p2 || !sdr->fm_iside ||
