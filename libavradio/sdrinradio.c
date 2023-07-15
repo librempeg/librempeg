@@ -184,6 +184,10 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
     names = SoapySDRDevice_listAntennas(soapy, SOAPY_SDR_RX, 0, &length);
     print_and_free_list(s, names, length, "Antennas");
 
+    //Go over all tunable elements
+    names = SoapySDRDevice_listFrequencies(soapy, SOAPY_SDR_RX, 0, &length);
+    print_and_free_list(s, names, length, "Tunables");
+
     //Go over all Gain Elements and print them
     names = SoapySDRDevice_listGains(soapy, SOAPY_SDR_RX, 0, &length);
     print_and_free_list(s, names, length, "Rx Gain Elements");
