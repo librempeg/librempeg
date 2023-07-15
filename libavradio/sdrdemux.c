@@ -1129,11 +1129,10 @@ ModulationDescriptor ff_sdr_modulation_descs[] = {
 int ff_sdr_set_freq(SDRContext *sdr, int64_t freq)
 {
     freq = av_clip64(freq, sdr->min_center_freq, sdr->max_center_freq);
-
     if (sdr->set_frequency_callback) {
-        int ret = sdr->set_frequency_callback(sdr, freq);
-        if (ret < 0)
-            return ret;
+        freq = sdr->set_frequency_callback(sdr, freq);
+        if (freq < 0)
+            return freq;
     }
 
     sdr->freq = freq;
@@ -1421,7 +1420,7 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
         if (sdr->seek_direction && block_counter > 5) {
             sdr->wanted_freq = snap2band(sdr, sdr->wanted_freq, sdr->seek_direction*sdr->bandwidth*0.5);
         }
-        if (sdr->wanted_freq != sdr->freq) {
+        if (fabs(sdr->wanted_freq - sdr->freq) > 1500) {
             //We could use a seperate MUTEX for the FIFO and for soapy
             ff_sdr_set_freq(sdr, sdr->wanted_freq);
             //This shouldnt really cause any problem if we just continue on error except that we continue returning data with the previous target frequency range

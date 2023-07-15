@@ -210,7 +210,7 @@ typedef struct SDRContext {
     /**
      * Setup the hardware for the requested frequency
      */
-    int (*set_frequency_callback)(struct SDRContext *sdr, int64_t frequency);
+    int64_t (*set_frequency_callback)(struct SDRContext *sdr, int64_t frequency);
 
     /**
      * Read from the hardware, block if nothing available with a reasonable timeout

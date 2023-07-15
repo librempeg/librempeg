@@ -68,7 +68,7 @@ static int sdrindev_read_callback(SDRContext *sdr, FIFOElement *fifo_element, in
     return ret;
 }
 
-static int sdrindev_set_frequency_callback(SDRContext *sdr, int64_t freq)
+static int64_t sdrindev_set_frequency_callback(SDRContext *sdr, int64_t freq)
 {
     AVFormatContext *avfmt = sdr->avfmt;
     SoapySDRDevice *soapy = sdr->soapy;
@@ -83,6 +83,12 @@ static int sdrindev_set_frequency_callback(SDRContext *sdr, int64_t freq)
                 } else
                     sdr->current_direct_samp = value;
             }
+            //The R820T has a 16 bit fractional PLL which can do only multiplies of 439.45
+            //Its more complex but this approximation works
+            //It has to be noted that SOAPY does not tell us about this, instead saopy
+            //pretends whatever we ask for we get exactly, but we dont
+            //For more details see: michelebavaro.blogspot.com/2014/05/gnss-carrier-phase-rtlsdr-and.html
+            freq = lrint(freq / 439.45) * 439.45;
         }
 
         if (SoapySDRDevice_setFrequency(soapy, SOAPY_SDR_RX, 0, freq, NULL) != 0) {
@@ -90,7 +96,7 @@ static int sdrindev_set_frequency_callback(SDRContext *sdr, int64_t freq)
             return AVERROR_EXTERNAL;
         }
     }
-    return 0;
+    return freq;
 }
 
 static void print_and_free_list(AVFormatContext *s, char** names, size_t length, const char *title)
