@@ -861,17 +861,20 @@ static int probe_fm(SDRContext *sdr)
     int i;
     int bandwidth_f  = sdr->fm_bandwidth;
     int half_bw_i = bandwidth_f * (int64_t)sdr->block_size / sdr->sdr_sample_rate;
+    int floor_bw_i = 10*1000 * (int64_t)sdr->block_size / sdr->sdr_sample_rate;
     float last_score[3] = {FLT_MAX, FLT_MAX, FLT_MAX};
     int border_i = (sdr->sdr_sample_rate - FFMIN(sdr->bandwidth, sdr->sdr_sample_rate*7/8)) * sdr->block_size / sdr->sdr_sample_rate;
-    double noise_floor = FLT_MAX;
 
     if (2*half_bw_i > 2*sdr->block_size)
         return 0;
 
-    for (int pass = 0; pass < 2; pass ++) {
+    {
         double avg[2] = {0}, tri = 0;
+        double floor[2] = {0};
         double mean = 0;
         double center = 0;
+        float floor_compensation = half_bw_i * half_bw_i / (float)floor_bw_i;
+
         for (i = 0; i<half_bw_i; i++) {
             avg[0] += sdr->len2block[i];
             tri    += i*sdr->len2block[i];
@@ -883,12 +886,19 @@ static int probe_fm(SDRContext *sdr)
             mean   += i*sdr->len2block[i];
         }
 
+        for (i=0; i<floor_bw_i; i++)
+            floor[0] += sdr->len2block[i];
+        for (i=2*half_bw_i - floor_bw_i; i<2*half_bw_i; i++)
+            floor[1] += sdr->len2block[i];
+
         for(i = half_bw_i; i<2*sdr->block_size - half_bw_i; i++) {
             double b = avg[0] + sdr->len2block[i];
             avg[0] += sdr->len2block[i] - sdr->len2block[i - half_bw_i];
             avg[1] -= sdr->len2block[i] - sdr->len2block[i + half_bw_i];
             b += avg[1];
             tri += avg[1] - avg[0];
+            floor[0] += sdr->len2block[i - half_bw_i + floor_bw_i] - sdr->len2block[i - half_bw_i];
+            floor[1] -= sdr->len2block[i + half_bw_i - floor_bw_i] - sdr->len2block[i + half_bw_i];
 
             mean += (i+half_bw_i)*sdr->len2block[i+half_bw_i];
             center = mean / b;
@@ -897,17 +907,24 @@ static int probe_fm(SDRContext *sdr)
             if (i < border_i || i > 2*sdr->block_size - border_i)
                 continue;
 
-            if (pass == 0) {
-                noise_floor = FFMIN(noise_floor, tri);
-            } else {
+            {
+                float noise_floor;
+                if (i - half_bw_i < border_i) {
+                    noise_floor = floor[1];
+                } else if (i + half_bw_i >= 2*sdr->block_size - border_i) {
+                    noise_floor = floor[0];
+                } else
+                    noise_floor = (floor[0] + floor[1])/2;
+                noise_floor *= floor_compensation;
+
                 last_score[2] = last_score[1];
                 last_score[1] = last_score[0];
-                last_score[0] = tri / (noise_floor);
+                last_score[0] = tri;
 
                 if (last_score[1] >= last_score[0] &&
                     last_score[1] > last_score[2] &&
-                    last_score[1] > sdr->fm_threshold) {
-                    double score = last_score[1];
+                    last_score[1] / noise_floor > sdr->fm_threshold) {
+                    double score = last_score[1] / noise_floor;
 
                     float rmax   = max_in_range(sdr, i-half_bw_i/4, i+half_bw_i/4);
                     int lowcount = countbelow(sdr, i-half_bw_i/4, i+half_bw_i/4, rmax / 100);
