@@ -1409,6 +1409,7 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
         FIFOElement fifo_element;
         int remaining, ret;
         int empty_blocks, full_blocks;
+        float wanted_gain = atomic_load(&sdr->wanted_gain) / 65536.0;
 
         //i wish av_fifo was thread safe
         pthread_mutex_lock(&sdr->mutex);
@@ -1444,9 +1445,17 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
             //And theres not much else we can do, an error message was already printed by ff_sdr_set_freq() in that case
             block_counter = 0; // we just changed the frequency, do not trust the next blocks content
         }
+        if (sdr->sdr_gain == GAIN_SW_AGC &&
+            fabs(wanted_gain - sdr->agc_gain) > 0.001 &&
+            sdr->set_gain_callback
+        ) {
+            sdr->set_gain_callback(sdr, wanted_gain);
+            sdr->agc_gain = wanted_gain;
+        }
         pthread_mutex_unlock(&sdr->mutex);
 
         fifo_element.center_frequency = block_counter > 0 ? sdr->freq : 0;
+        fifo_element.gain             = sdr->agc_gain; //we make only small changes so slightly mixing should be ok
 
         remaining = sdr->block_size;
         while (remaining && !atomic_load(&sdr->close_requested)) {
@@ -1624,6 +1633,7 @@ int ff_sdr_common_init(AVFormatContext *s)
     av_fifo_auto_grow_limit(sdr-> full_block_fifo, sdr->sdr_sample_rate / sdr->block_size);
 
     atomic_init(&sdr->close_requested, 0);
+    atomic_init(&sdr->wanted_gain, lrint((sdr->min_gain + sdr->max_gain) * 65536 / 2));
     ret = pthread_mutex_init(&sdr->mutex, NULL);
     if (ret) {
         av_log(s, AV_LOG_ERROR, "pthread_mutex_init failed: %s\n", strerror(ret));
@@ -1886,6 +1896,37 @@ process_next_block:
         }
     }
 
+    float smaller_block_gain = FFMIN(fifo_element[0].gain, fifo_element[1].gain);
+    float  bigger_block_gain = FFMAX(fifo_element[0].gain, fifo_element[1].gain);
+
+    if (sdr->sdr_gain == GAIN_SW_AGC) {
+        float inmax = 0;
+        float wanted_gain = atomic_load(&sdr->wanted_gain) / 65536.0;
+        // We only check 25% of the data to safe computations
+        int start = 3*sdr->block_size / 4;
+        int end   = 5*sdr->block_size / 4;
+        for (i = start; i < end; i++) {
+            float v = fmaxf(fabsf(sdr->windowed_block[i].re), fabsf(sdr->windowed_block[i].im));
+            inmax = fmaxf(inmax, v);
+        }
+
+        if (inmax > 1.0 - sdr->agc_min_headroom && wanted_gain > sdr->min_gain) {
+            //according to docs this is a dB scale, in reality it beheaves differnt to that
+            //Because of this we will try to just make small changes and not assume too much
+            wanted_gain = FFMIN(wanted_gain, FFMAX(smaller_block_gain - 1.0, smaller_block_gain * 0.9));
+
+            sdr->agc_low_time = 0;
+        } else if (inmax < 1.0 - sdr->agc_max_headroom && wanted_gain < sdr->max_gain) {
+            sdr->agc_low_time += sdr->block_size;
+            if (sdr->agc_low_time > sdr->agc_max_headroom_time * sdr->sdr_sample_rate) {
+                sdr->agc_low_time = 0;
+                wanted_gain = FFMAX(wanted_gain, FFMIN(bigger_block_gain + 1.0, bigger_block_gain * 1.1));
+            }
+        } else
+            sdr->agc_low_time = 0;
+        atomic_store(&sdr->wanted_gain, (int)lrint(wanted_gain * 65536));
+    }
+
     inject_block_into_fifo(sdr, sdr->empty_block_fifo, &fifo_element[0], "Cannot pass next buffer, freeing it\n");
 #ifdef SYN_TEST //synthetic test signal
     static int64_t synp=0;
@@ -2141,7 +2182,17 @@ const AVOption ff_sdr_options[] = {
     { "rtlsdr_fixes" , "workaround rtlsdr issues", OFFSET(rtlsdr_fixes), AV_OPT_TYPE_INT , {.i64 = -1}, -1, 1, DEC},
     { "sdr_sr"  , "sdr sample rate"  , OFFSET(sdr_sample_rate ), AV_OPT_TYPE_INT , {.i64 = 0}, 0, INT_MAX, DEC},
     { "sdr_freq", "sdr frequency"    , OFFSET(wanted_freq), AV_OPT_TYPE_INT64 , {.i64 = 9000000}, 0, INT64_MAX, DEC},
-    { "sdr_agc" , "sdr automatic gain control",  OFFSET(sdr_agc),  AV_OPT_TYPE_BOOL , {.i64 =  1}, -1, 1, DEC},
+    { "gain" , "sdr overall gain",  OFFSET(sdr_gain),  AV_OPT_TYPE_INT , {.i64 =  GAIN_SDR_AGC}, -3, INT_MAX, DEC, "gain"},
+        { "sdr_agc", "SDR AGC (if supported)", 0, AV_OPT_TYPE_CONST, {.i64 = GAIN_SDR_AGC}, 0, 0, DEC, "gain"},
+        { "sw_agc", "Software AGC", 0, AV_OPT_TYPE_CONST, {.i64 = GAIN_SW_AGC}, 0, 0, DEC, "gain"},
+        { "default_gain", "Never touch gain", 0, AV_OPT_TYPE_CONST, {.i64 = GAIN_DEFAULT}, 0, 0, DEC, "gain"},
+
+    { "agc_min_headroom",  "AGC min headroom",  OFFSET(agc_min_headroom),  AV_OPT_TYPE_FLOAT, {.dbl = 0.4}, 0, 1.0, DEC},
+    { "agc_max_headroom",  "AGC max headroom",  OFFSET(agc_max_headroom),  AV_OPT_TYPE_FLOAT, {.dbl = 0.8}, 0, 1.0, DEC},
+    { "agc_max_headroom_time",  "AGC max headroom time",  OFFSET(agc_max_headroom_time),  AV_OPT_TYPE_FLOAT, {.dbl = 0.1}, 0, INT_MAX, DEC},
+    { "min_gain", "minimum gain", OFFSET(min_gain   ), AV_OPT_TYPE_FLOAT , {.dbl = 0}, 0, INT_MAX, DEC},
+    { "max_gain", "maximum gain", OFFSET(max_gain   ), AV_OPT_TYPE_FLOAT , {.dbl = 0}, 0, INT_MAX, DEC},
+
     { "sdr_adcc" ,"sdr automatic dc correction", OFFSET(sdr_adcc), AV_OPT_TYPE_BOOL , {.i64 = -1}, -1, 1, DEC},
     { "min_freq", "minimum frequency", OFFSET(min_freq   ), AV_OPT_TYPE_INT64 , {.i64 = 0}, 0, INT64_MAX, DEC},
     { "max_freq", "maximum frequency", OFFSET(max_freq   ), AV_OPT_TYPE_INT64 , {.i64 = 0}, 0, INT64_MAX, DEC},

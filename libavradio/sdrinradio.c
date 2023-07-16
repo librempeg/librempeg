@@ -68,6 +68,30 @@ static int sdrindev_read_callback(SDRContext *sdr, FIFOElement *fifo_element, in
     return ret;
 }
 
+static int sdrindev_set_gain_callback(SDRContext *sdr, float gain)
+{
+    AVFormatContext *avfmt = sdr->avfmt;
+    SoapySDRDevice *soapy = sdr->soapy;
+
+    if (sdr->sdr_gain == GAIN_DEFAULT)
+        return 0;
+
+    if (soapy) {
+        int ret = SoapySDRDevice_setGainMode(soapy, SOAPY_SDR_RX, 0, sdr->sdr_gain == GAIN_SDR_AGC);
+        if (ret) {
+            av_log(avfmt, AV_LOG_WARNING, "Failed to set gain mode %d (%s)\n", sdr->sdr_gain == GAIN_SDR_AGC, SoapySDRDevice_lastError());
+        }
+
+        if (sdr->sdr_gain != GAIN_SDR_AGC) {
+            ret = SoapySDRDevice_setGain(soapy, SOAPY_SDR_RX, 0, gain);
+            if (ret) {
+                av_log(avfmt, AV_LOG_WARNING, "Failed to set gain to %f (%s)\n", gain, SoapySDRDevice_lastError());
+            }
+        }
+    }
+    return 0;
+}
+
 static int64_t sdrindev_set_frequency_callback(SDRContext *sdr, int64_t freq)
 {
     AVFormatContext *avfmt = sdr->avfmt;
@@ -135,6 +159,7 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
 
     sdr->read_callback          = sdrindev_read_callback;
     sdr->set_frequency_callback = sdrindev_set_frequency_callback;
+    sdr->set_gain_callback      = sdrindev_set_gain_callback;
 
     // Go over all available soapy devices
     // Print the usable ones, and choose one unless the user has choosen one
@@ -195,8 +220,10 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
     //Inform the user if AGC is supported and setup AGC as requested by the user
     has_agc = SoapySDRDevice_hasGainMode(soapy, SOAPY_SDR_RX, 0);
     av_log(s, AV_LOG_INFO, "RX AGC Supported: %s\n", has_agc ? "yes" : "no");
-    if (has_agc && sdr->sdr_agc >= 0)
-        SoapySDRDevice_setGainMode(soapy, SOAPY_SDR_RX, 0, sdr->sdr_agc);
+    if (!has_agc &&  sdr->sdr_gain == GAIN_SDR_AGC) {
+        av_log(s, AV_LOG_WARNING, "hardware AGC unsupported switching to software AGC\n");
+        sdr->sdr_gain = GAIN_SW_AGC;
+    }
 
     //Inform the user if automatic DC correction is supported and setup DC correction as requested by the user
     has_adcc = SoapySDRDevice_hasDCOffsetMode(soapy, SOAPY_SDR_RX, 0);
@@ -207,6 +234,16 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
     //Inform the user about the Gain range available
     range = SoapySDRDevice_getGainRange(soapy, SOAPY_SDR_RX, 0);
     av_log(s, AV_LOG_INFO, "Rx Gain range: %f dB - %f dB\n", range.minimum, range.maximum);
+
+    if (!sdr->min_gain)
+        sdr->min_gain = range.minimum;
+
+    if (!sdr->max_gain)
+        sdr->max_gain = range.maximum;
+    if (sdr->min_gain > sdr->max_gain) {
+        av_log(s, AV_LOG_ERROR, "Invalid gain range\n");
+        return AVERROR(EINVAL);
+    }
 
     //Inform the user about the Frequency ranges available, verify the range requested by the user and set the range if the user has not specified one
     ranges = SoapySDRDevice_getFrequencyRange(soapy, SOAPY_SDR_RX, 0, &length);

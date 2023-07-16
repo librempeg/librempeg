@@ -68,6 +68,12 @@ typedef enum Modulation {
     //QAM, PSK, ...
 } Modulation;
 
+typedef enum SDR_GAIN {
+    GAIN_DEFAULT = -3,
+    GAIN_SW_AGC = -2,
+    GAIN_SDR_AGC = -1,
+} SDR_GAIN;
+
 #define HISTOGRAMM_SIZE 9
 
 typedef struct Station {
@@ -105,6 +111,7 @@ typedef struct Station {
 
 typedef struct FIFOElement {
     int64_t center_frequency;
+    float gain;
     void *halfblock;
 } FIFOElement;
 
@@ -146,7 +153,15 @@ typedef struct SDRContext {
     int64_t min_center_freq;
     int64_t max_center_freq;
     int sdr_sample_rate;
-    int sdr_agc;
+    float min_gain;
+    float max_gain;
+    int sdr_gain;
+    float agc_min_headroom;
+    float agc_max_headroom;
+    float agc_max_headroom_time;
+    int agc_low_time;
+    float agc_gain;                         ///< current gain, should be accessed only by buffer thread after init
+    atomic_int wanted_gain;
     int sdr_adcc;
     int64_t bandwidth;
     int64_t last_pts;
@@ -211,6 +226,12 @@ typedef struct SDRContext {
      * Setup the hardware for the requested frequency
      */
     int64_t (*set_frequency_callback)(struct SDRContext *sdr, int64_t frequency);
+
+    /**
+     * Setup the hardware for the requested gain
+     * This must only be called from the buffer thread after setup (or more mutex calls are needed)
+     */
+    int (*set_gain_callback)(struct SDRContext *sdr, float gain);
 
     /**
      * Read from the hardware, block if nothing available with a reasonable timeout
