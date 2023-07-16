@@ -2180,6 +2180,7 @@ const AVOption ff_sdr_options[] = {
 
     { "driver"  , "sdr driver name"  , OFFSET(driver_name), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC},
     { "rtlsdr_fixes" , "workaround rtlsdr issues", OFFSET(rtlsdr_fixes), AV_OPT_TYPE_INT , {.i64 = -1}, -1, 1, DEC},
+    { "sdrplay_fixes" , "workaround sdrplay issues", OFFSET(sdrplay_fixes), AV_OPT_TYPE_INT , {.i64 = -1}, -1, 1, DEC},
     { "sdr_sr"  , "sdr sample rate"  , OFFSET(sdr_sample_rate ), AV_OPT_TYPE_INT , {.i64 = 0}, 0, INT_MAX, DEC},
     { "sdr_freq", "sdr frequency"    , OFFSET(wanted_freq), AV_OPT_TYPE_INT64 , {.i64 = 9000000}, 0, INT64_MAX, DEC},
     { "gain" , "sdr overall gain",  OFFSET(sdr_gain),  AV_OPT_TYPE_INT , {.i64 =  GAIN_SDR_AGC}, -3, INT_MAX, DEC, "gain"},

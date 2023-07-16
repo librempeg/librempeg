@@ -76,6 +76,11 @@ static int sdrindev_set_gain_callback(SDRContext *sdr, float gain)
     if (sdr->sdr_gain == GAIN_DEFAULT)
         return 0;
 
+    //sdrplay has a inverted gain range, not using max_gain as this is a user parameter
+    if (sdr->sdrplay_fixes > 0) {
+        gain = FFMIN(48 - gain, 45);
+    }
+
     if (soapy) {
         int ret = SoapySDRDevice_setGainMode(soapy, SOAPY_SDR_RX, 0, sdr->sdr_gain == GAIN_SDR_AGC);
         if (ret) {
@@ -192,6 +197,8 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
 
     if (sdr->rtlsdr_fixes < 0)
         sdr->rtlsdr_fixes = !strcmp(sdr->driver_name, "rtlsdr");
+    if (sdr->sdrplay_fixes < 0)
+        sdr->sdrplay_fixes = !strcmp(sdr->driver_name, "sdrplay");
 
     SoapySDRKwargs_set(&args, "driver", sdr->driver_name);
     sdr->soapy = soapy = SoapySDRDevice_make(&args);

@@ -257,6 +257,7 @@ typedef struct SDRContext {
     int missing_streams;
 
     int rtlsdr_fixes;
+    int sdrplay_fixes;
 } SDRContext;
 
 typedef struct ModulationDescriptor {
