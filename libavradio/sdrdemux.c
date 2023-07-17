@@ -1134,6 +1134,7 @@ static int demodulate_fm(SDRContext *sdr, Station *station, AVStream *st, AVPack
 
 
 BandDescriptor band_descs[] = {
+    {"Mediumwave band"  , "MW",   520000,   1600000},
     {"Shortwave band"   , "SW",  6000000,  18000000},
     {"FM broadcast band", "FM", 88000000, 108000000},
 };
