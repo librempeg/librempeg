@@ -1322,6 +1322,7 @@ static int snap2station(SDRContext *sdr, int *seek_direction) {
     av_assert0(!best_station || best_station != sst->station);
 
     if (best_station) {
+        int64_t wanted_freq = av_clip64(lrint(best_station->frequency + 213*1000), sdr->min_center_freq, sdr->max_center_freq); // We target a bit off teh exact frequency to avoid artifacts
         int ret = setup_stream(sdr, sdr->single_ch_audio_st_index, best_station);
         if (ret < 0) {
             av_log(avfmt, AV_LOG_DEBUG, "setup_stream failed\n");
@@ -1331,7 +1332,7 @@ static int snap2station(SDRContext *sdr, int *seek_direction) {
         pthread_mutex_lock(&sdr->mutex);
         *seek_direction     =
         sdr->seek_direction = 0;
-        sdr->wanted_freq = lrint(best_station->frequency + 213*1000); // We target a bit off teh exact frequency to avoid artifacts
+        sdr->wanted_freq = wanted_freq;
         //200*1000 had artifacts
 
         av_log(avfmt, AV_LOG_DEBUG, "request f = %"PRId64"\n", sdr->wanted_freq);
