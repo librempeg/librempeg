@@ -1368,6 +1368,8 @@ static int64_t snap2band(SDRContext *sdr, int64_t wanted_freq, int64_t delta) {
             min_center_freq += sdr->bandwidth / 2;
             max_center_freq -= sdr->bandwidth / 2;
         }
+        min_center_freq = av_clip64(min_center_freq, sdr->min_center_freq, sdr->max_center_freq);
+        max_center_freq = av_clip64(max_center_freq, sdr->min_center_freq, sdr->max_center_freq);
 
         // Is the band in the direction we want to seek to ?
         if (FFSIGN(min_center_freq - wanted_freq) == FFSIGN(max_center_freq - wanted_freq))
