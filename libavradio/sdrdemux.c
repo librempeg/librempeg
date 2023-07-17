@@ -1291,11 +1291,11 @@ static int snap2station(SDRContext *sdr, int *seek_direction) {
     AVFormatContext *avfmt = sdr->avfmt;
     AVStream *st = avfmt->streams[sdr->single_ch_audio_st_index];
     SDRStream *sst = st->priv_data;
-    double current_freq;
+    double current_freq, current_view;
     double best_distance = INT64_MAX;
     Station *best_station = NULL;
     Station *station_list[MAX_STATIONS];
-    int nb_stations = ff_sdr_find_stations(sdr, sdr->block_center_freq, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+    int nb_stations;
 
     if (sst->station) {
         current_freq = sst->station->frequency;
@@ -1303,6 +1303,15 @@ static int snap2station(SDRContext *sdr, int *seek_direction) {
         current_freq = sdr->station_freq;
     } else
         current_freq = sdr->block_center_freq;
+
+    if (sdr->block_center_freq) {
+        current_view = sdr->block_center_freq;
+    } else if (sst->station) {
+        current_view = sst->station->frequency;
+    } else
+        current_view = sdr->station_freq;
+
+    nb_stations = ff_sdr_find_stations(sdr, current_view, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
 
     for(int i = 0; i<nb_stations; i++) {
         Station *station = station_list[i];
