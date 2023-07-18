@@ -1307,7 +1307,9 @@ static int snap2station(SDRContext *sdr, int *seek_direction) {
     Station *station_list[MAX_STATIONS];
     int nb_stations;
 
-    if (sst->station) {
+    if (sdr->wraparound) {
+        current_freq = (*seek_direction) > 0 ?  0 : INT64_MAX;
+    } else if (sst->station) {
         current_freq = sst->station->frequency;
     } else if (sdr->station_freq) {
         current_freq = sdr->station_freq;
@@ -1354,6 +1356,7 @@ static int snap2station(SDRContext *sdr, int *seek_direction) {
         *seek_direction     = 0;
         atomic_store(&sdr->seek_direction, 0);
         atomic_store(&sdr->wanted_freq, wanted_freq);
+        sdr->wraparound = 0;
         //200*1000 had artifacts
 
         av_log(avfmt, AV_LOG_DEBUG, "request f = %"PRId64"\n", atomic_load(&sdr->wanted_freq));
@@ -2021,6 +2024,13 @@ process_next_block:
                 ret = snap2station(sdr, &seek_direction);
                 if (ret < 0)
                     return ret;
+                if (seek_direction && !ret) {
+                    int wrapdir = sdr->wraparound == 0 ? seek_direction : -seek_direction;
+                    int64_t end_freq = snap2band(sdr, wrapdir > 0 ? 0 : INT64_MAX, wrapdir);
+                    if (fabs(end_freq - sdr->block_center_freq) < 1500)
+                        sdr->wraparound++;
+
+                }
             }
         } else {
             av_assert0(sdr->mode == AllStationMode);
@@ -2104,6 +2114,7 @@ int ff_sdr_read_seek(AVFormatContext *s, int stream_index,
         return ret;
     //snap2station found no station lets command the thread to seek
     if (!ret) {
+        sdr->wraparound = 0;
         atomic_store(&sdr->seek_direction, dir);
         flush_fifo(sdr, sdr->full_block_fifo);
     }
