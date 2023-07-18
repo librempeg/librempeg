@@ -1287,6 +1287,16 @@ static int sdrfile_read_callback(SDRContext *sdr, FIFOElement *fifo_element, int
     return ret;
 }
 
+/**
+ * switch to the closest station in view and the provided seek_direction.
+ *
+ * This function is scanning friendly, it will not consider stations not in
+ * view and rather wait for a future invocation when they are in view
+ *
+ * when a station is found, this will move to it and stop scanning if needed
+ *
+ * @return 1 if a station is found, 0 if not, or a negative error code on error
+ */
 static int snap2station(SDRContext *sdr, int *seek_direction) {
     AVFormatContext *avfmt = sdr->avfmt;
     AVStream *st = avfmt->streams[sdr->single_ch_audio_st_index];
