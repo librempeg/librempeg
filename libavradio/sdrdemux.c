@@ -1351,14 +1351,12 @@ static int snap2station(SDRContext *sdr, int *seek_direction) {
             return ret;
         }
 
-        pthread_mutex_lock(&sdr->mutex);
-        *seek_direction     =
-        sdr->seek_direction = 0;
-        sdr->wanted_freq = wanted_freq;
+        *seek_direction     = 0;
+        atomic_store(&sdr->seek_direction, 0);
+        atomic_store(&sdr->wanted_freq, wanted_freq);
         //200*1000 had artifacts
 
-        av_log(avfmt, AV_LOG_DEBUG, "request f = %"PRId64"\n", sdr->wanted_freq);
-        pthread_mutex_unlock(&sdr->mutex);
+        av_log(avfmt, AV_LOG_DEBUG, "request f = %"PRId64"\n", atomic_load(&sdr->wanted_freq));
         return 1;
     }
 
@@ -1426,6 +1424,8 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
 {
     AVFormatContext *avfmt = sdr->avfmt;
     unsigned block_counter = 0;
+    int64_t local_wanted_freq = 0;
+    int64_t last_wanted_freq = 0;
 
     sdr->remaining_file_block_size = 0;
 
@@ -1436,6 +1436,8 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
         int remaining, ret;
         int empty_blocks, full_blocks;
         float wanted_gain = atomic_load(&sdr->wanted_gain) / 65536.0;
+        int64_t wanted_freq = atomic_load(&sdr->wanted_freq);
+        int seek_direction = atomic_load(&sdr->seek_direction);
 
         //i wish av_fifo was thread safe
         pthread_mutex_lock(&sdr->mutex);
@@ -1457,16 +1459,22 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
 
         block_counter ++;
         pthread_mutex_lock(&sdr->mutex);
+        // Has the main thread changed the wanted frequency ? if so lets reset our loop to it
+        if (wanted_freq != last_wanted_freq) {
+            local_wanted_freq =
+            last_wanted_freq = wanted_freq;
+        }
+
         // we try to get 2 clean blocks after windowing, to improve chances scanning doesnt miss too much
         // First block after parameter change is not reliable, we do not assign it any frequency
         // 2 blocks are needed with windowing to get a clean FFT output
         // Thus > 3 is the minimum for the next frequency update if we want to do something reliable with the data
-        if (sdr->seek_direction && block_counter > 5) {
-            sdr->wanted_freq = snap2band(sdr, sdr->wanted_freq, sdr->seek_direction*sdr->bandwidth*0.5);
+        if (seek_direction && block_counter > 5) {
+            local_wanted_freq = snap2band(sdr, local_wanted_freq, seek_direction*sdr->bandwidth*0.5);
         }
-        if (fabs(sdr->wanted_freq - sdr->freq) > 1500) {
+        if (fabs(local_wanted_freq - sdr->freq) > 1500) {
             //We could use a seperate MUTEX for the FIFO and for soapy
-            ff_sdr_set_freq(sdr, sdr->wanted_freq);
+            ff_sdr_set_freq(sdr, local_wanted_freq);
             //This shouldnt really cause any problem if we just continue on error except that we continue returning data with the previous target frequency range
             //And theres not much else we can do, an error message was already printed by ff_sdr_set_freq() in that case
             block_counter = 0; // we just changed the frequency, do not trust the next blocks content
@@ -1662,6 +1670,8 @@ int ff_sdr_common_init(AVFormatContext *s)
     av_fifo_auto_grow_limit(sdr-> full_block_fifo, sdr->sdr_sample_rate / sdr->block_size);
 
     atomic_init(&sdr->close_requested, 0);
+    atomic_init(&sdr->seek_direction, 0);
+    atomic_init(&sdr->wanted_freq, sdr->user_wanted_freq);
     atomic_init(&sdr->wanted_gain, lrint((sdr->min_gain + sdr->max_gain) * 65536 / 2));
     ret = pthread_mutex_init(&sdr->mutex, NULL);
     if (ret) {
@@ -1810,8 +1820,8 @@ process_next_block:
     ret = av_fifo_peek(sdr->full_block_fifo, &fifo_element, 2, 0);
     if (ret >= 0)
         av_fifo_drain2(sdr->full_block_fifo, 1);
-    seek_direction = sdr->seek_direction; //This doesnt need a mutex here at all but tools might complain
     pthread_mutex_unlock(&sdr->mutex);
+    seek_direction = atomic_load(&sdr->seek_direction);
 
     if (ret < 0) {
         av_log(s, AV_LOG_DEBUG, "EAGAIN on not enough data\n");
@@ -2094,9 +2104,7 @@ int ff_sdr_read_seek(AVFormatContext *s, int stream_index,
         return ret;
     //snap2station found no station lets command the thread to seek
     if (!ret) {
-        pthread_mutex_lock(&sdr->mutex);
-        sdr->seek_direction = dir;
-        pthread_mutex_unlock(&sdr->mutex);
+        atomic_store(&sdr->seek_direction, dir);
         flush_fifo(sdr, sdr->full_block_fifo);
     }
 
@@ -2207,7 +2215,7 @@ const AVOption ff_sdr_options[] = {
     { "rtlsdr_fixes" , "workaround rtlsdr issues", OFFSET(rtlsdr_fixes), AV_OPT_TYPE_INT , {.i64 = -1}, -1, 1, DEC},
     { "sdrplay_fixes" , "workaround sdrplay issues", OFFSET(sdrplay_fixes), AV_OPT_TYPE_INT , {.i64 = -1}, -1, 1, DEC},
     { "sdr_sr"  , "sdr sample rate"  , OFFSET(sdr_sample_rate ), AV_OPT_TYPE_INT , {.i64 = 0}, 0, INT_MAX, DEC},
-    { "sdr_freq", "sdr frequency"    , OFFSET(wanted_freq), AV_OPT_TYPE_INT64 , {.i64 = 9000000}, 0, INT64_MAX, DEC},
+    { "sdr_freq", "sdr frequency"    , OFFSET(user_wanted_freq), AV_OPT_TYPE_INT64 , {.i64 = 9000000}, 0, INT64_MAX, DEC},
     { "gain" , "sdr overall gain",  OFFSET(sdr_gain),  AV_OPT_TYPE_INT , {.i64 =  GAIN_SDR_AGC}, -3, INT_MAX, DEC, "gain"},
         { "sdr_agc", "SDR AGC (if supported)", 0, AV_OPT_TYPE_CONST, {.i64 = GAIN_SDR_AGC}, 0, 0, DEC, "gain"},
         { "sw_agc", "Software AGC", 0, AV_OPT_TYPE_CONST, {.i64 = GAIN_SW_AGC}, 0, 0, DEC, "gain"},

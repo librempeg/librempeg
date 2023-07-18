@@ -172,6 +172,7 @@ typedef struct SDRContext {
     AVComplexFloat *windowed_block;
     int64_t block_center_freq;              ///< center frequency the current block contains
     int64_t station_freq;
+    int64_t user_wanted_freq;
     int sample_size;
     double sample_scale;
 
@@ -218,8 +219,8 @@ typedef struct SDRContext {
     AVFifo *empty_block_fifo;
     AVFifo *full_block_fifo;
     atomic_int close_requested;
-    int64_t wanted_freq;                    ///< center frequency we want the hw to provide next
-    int seek_direction;                     ///< if a seek is requested this is -1 or 1 otherwise 0
+    atomic_int_least64_t wanted_freq;       ///< center frequency we want the hw to provide next, only written to by main thread
+    atomic_int seek_direction;              ///< if a seek is requested this is -1 or 1 otherwise 0, only written to by main thread
     int skip_probe;
 
     /**
