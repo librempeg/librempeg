@@ -326,9 +326,6 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
         av_log(s, AV_LOG_ERROR, "setSampleRate fail: %s\n", SoapySDRDevice_lastError());
         return AVERROR_EXTERNAL;
     }
-    ret = ff_sdr_set_freq(sdr, sdr->wanted_freq);
-    if (ret < 0)
-        return ret;
 
     //List the available custom options for this specific driver to the user
     arg_info = SoapySDRDevice_getSettingInfo(soapy, &length);

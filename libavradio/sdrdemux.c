@@ -1729,10 +1729,6 @@ static int sdrfile_initial_setup(AVFormatContext *s)
     //After reading the first packet header we return to the begin so the packet can be read whole
     avio_seek(s->pb, 0, SEEK_SET);
 
-    ret = ff_sdr_set_freq(sdr, sdr->wanted_freq);
-    if (ret < 0)
-        return ret;
-
     sdr->read_callback = sdrfile_read_callback;
 
     return ff_sdr_common_init(s);
