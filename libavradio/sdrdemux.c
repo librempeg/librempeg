@@ -1367,7 +1367,7 @@ static int snap2station(SDRContext *sdr, int *seek_direction) {
  * move frequency in the delta direction within a band
  * This can be called from the thread so it must only access runtime constants from sdr->
  */
-static int64_t snap2band(SDRContext *sdr, int64_t wanted_freq, int64_t delta) {
+static int64_t snap2band(const SDRContext *sdr, int64_t wanted_freq, int64_t delta) {
     int64_t best_distance = INT64_MAX;
     int64_t best_frequency = wanted_freq;
     int64_t wrap_frequency = delta > 0 ? 0 : INT64_MAX;
