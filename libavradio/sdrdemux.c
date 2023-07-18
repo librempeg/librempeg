@@ -1321,7 +1321,10 @@ static int snap2station(SDRContext *sdr, int *seek_direction) {
     } else
         current_view = sdr->station_freq;
 
-    nb_stations = ff_sdr_find_stations(sdr, current_view, sdr->sdr_sample_rate*0.5, station_list, FF_ARRAY_ELEMS(station_list));
+    //We accept up to a a bandwidth steps minus a bit more than a typical FM channel distance. That ensures we will not have unscanned
+    //areas between the currently vissible and the vissible with the new station
+    //alternatively we could use half sdr->sample_rate or half sdr->bandwidth to be more conservative
+    nb_stations = ff_sdr_find_stations(sdr, current_view, sdr->bandwidth - 250*1000, station_list, FF_ARRAY_ELEMS(station_list));
 
     for(int i = 0; i<nb_stations; i++) {
         Station *station = station_list[i];
