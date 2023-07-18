@@ -1,0 +1,25 @@
+#tb 0: 12/187
+#media_type 0: video
+#codec_id 0: rawvideo
+#dimensions 0: 400x200
+#sar 0: 0/1
+#tb 1: 1/64000
+#media_type 1: audio
+#codec_id 1: pcm_u8
+#sample_rate 1: 64000
+#channel_layout_name 1: stereo
+#tb 2: 1/64000
+#media_type 2: audio
+#codec_id 2: pcm_u8
+#sample_rate 2: 64000
+#channel_layout_name 2: stereo
+0,          0,          0,        1,   320000, 0xf553af75
+0,          1,          1,        1,   320000, 0xeabc15b3
+1,       8196,       8196,     4096,     8192, 0x585d090e
+2,       8196,       8196,     4096,     8192, 0xb966fb19
+1,      12292,      12292,     4096,     8192, 0x6d8ffe6e
+2,      12292,      12292,     4096,     8192, 0x51d1fb50
+0,          3,          3,        1,   320000, 0x1b178638
+1,      16388,      16388,     4096,     8192, 0x8c000600
+2,      16388,      16388,     4096,     8192, 0x335ff20c
+0,          4,          4,        1,   320000, 0x49dd90cc
