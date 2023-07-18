@@ -1571,7 +1571,7 @@ int ff_sdr_common_init(AVFormatContext *s)
     }
 
     sdr->min_center_freq = sdr->min_freq + sdr->sdr_sample_rate / 2;
-    sdr->max_center_freq = sdr->max_freq + sdr->sdr_sample_rate / 2;
+    sdr->max_center_freq = sdr->max_freq - sdr->sdr_sample_rate / 2;
 
 
     if(!sdr->block_size) {
