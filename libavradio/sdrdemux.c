@@ -863,7 +863,7 @@ static int probe_fm(SDRContext *sdr)
     int half_bw_i = 200*1000 * (int64_t)sdr->block_size / sdr->sdr_sample_rate;
     int floor_bw_i = 10*1000 * (int64_t)sdr->block_size / sdr->sdr_sample_rate;
     float last_score[3] = {FLT_MAX, FLT_MAX, FLT_MAX};
-    int border_i = (sdr->sdr_sample_rate - FFMIN(sdr->bandwidth, sdr->sdr_sample_rate*7/8)) * sdr->block_size / sdr->sdr_sample_rate;
+    int border_i = (sdr->sdr_sample_rate - sdr->bandwidth) * sdr->block_size / sdr->sdr_sample_rate;
 
     if (2*half_bw_i > 2*sdr->block_size)
         return 0;
@@ -1515,6 +1515,9 @@ int ff_sdr_common_init(AVFormatContext *s)
 
     sdr->avfmt = s;
     s->ctx_flags |= AVFMTCTX_NOHEADER;
+
+    if (sdr->bandwidth > sdr->sdr_sample_rate * 7 / 8)
+        av_log(s, AV_LOG_WARNING, "Bandwidth looks suspicious\n");
 
     if (sdr->width>1 && sdr->height>1) {
         /* video stream */

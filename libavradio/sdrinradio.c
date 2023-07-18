@@ -379,7 +379,7 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
     sdr->bandwidth = SoapySDRDevice_getBandwidth(soapy, SOAPY_SDR_RX, 0);
 
     // rtlsdr doesnt return a valid value
-    if (!sdr->bandwidth)
+    if (!sdr->bandwidth || sdr->bandwidth >= sdr->sdr_sample_rate)
         sdr->bandwidth = sdr->sdr_sample_rate * 4 / 5;
     av_log(s, AV_LOG_INFO, "bandwidth %"PRId64"\n", sdr->bandwidth);
 
