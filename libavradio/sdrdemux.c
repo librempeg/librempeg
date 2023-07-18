@@ -1714,7 +1714,7 @@ static int sdrfile_initial_setup(AVFormatContext *s)
     avio_skip(s->pb, 3);        //BE
     sdr->sdr_sample_rate = avio_rb32(s->pb);
                            avio_rb32(s->pb); //block_size
-    sdr->wanted_freq     = av_int2double(avio_rb64(s->pb));
+    av_int2double(avio_rb64(s->pb));
     sdr->pts             = avio_rb64(s->pb);
     if (version > AV_RB24("000")) {
         sdr->bandwidth       = avio_rb32(s->pb);
