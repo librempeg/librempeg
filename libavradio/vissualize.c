@@ -81,8 +81,11 @@ static void draw_char(uint8_t *frame_buffer, ptrdiff_t stride, char ch, int x0, 
     }
 }
 
-static void draw_string(uint8_t *frame_buffer, ptrdiff_t stride, char *str, int x0, int y0, int xd, int yd, int r, int g, int b, int w, int h)
+static void draw_string(uint8_t *frame_buffer, ptrdiff_t stride, char *str, int x0, int y0, int xd, int yd, int r, int g, int b, int w, int h, int skipx)
 {
+    x0 += xd*9*skipx;
+    y0 += yd*9*skipx;
+
     while(*str) {
         draw_char(frame_buffer, stride, *str++, x0, y0, xd, yd, r, g, b, w, h);
         x0 += xd*9;
@@ -206,6 +209,7 @@ int ff_sdr_vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt)
             int color = s->stream ? 64 : 32;
             int size = s->stream ? 181 : 128;
             int xd = size, yd = size;
+            int pos;
 
             if (!s->in_station_list)
                 continue;
@@ -217,14 +221,14 @@ int ff_sdr_vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt)
             }
             av_strlcatf(text, sizeof(text), "%f Mhz %d %d %d",
                      f/1000000, (int)s->score, ff_sdr_histogram_score(s), s->timeout);
-            draw_string(pkt->data, 4*w, text, xmid + 8*yd, 320*h2, xd, yd, color, color, color, w, h);
+            draw_string(pkt->data, 4*w, text, xmid + 8*yd, 320*h2, xd, yd, color, color, color, w, h, 0);
             if (s->radiotext[0]) {
-                draw_string(pkt->data, 4*w, s->radiotext, xmid + 8*yd, 320*h2 + 24*yd, xd, yd, color, color, color, w, h);
+                draw_string(pkt->data, 4*w, s->radiotext, xmid + 8*yd, 320*h2 + 24*yd, xd, yd, color, color, color, w, h, 0);
             }
             if (s->title[0] || s->artist[0]) {
                 int len = strlen(s->title) + 1;
-                draw_string(pkt->data, 4*w, s->title , xmid + 8*yd, 320*h2 + 2*24*yd, xd, yd, color, color*1.5, color, w, h);
-                draw_string(pkt->data, 4*w, s->artist, xmid + 8*yd + 9*xd*len, 320*h2 + 2*24*yd + 9*yd*len, xd, yd, color, color*2, color, w, h);
+                draw_string(pkt->data, 4*w, s->title , xmid + 8*yd, 320*h2 + 2*24*yd, xd, yd, color, color*1.5, color, w, h, 0);
+                draw_string(pkt->data, 4*w, s->artist, xmid + 8*yd, 320*h2 + 2*24*yd, xd, yd, color, color*2, color, w, h, len);
             }
         }
     }
