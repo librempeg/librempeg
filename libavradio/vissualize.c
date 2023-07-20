@@ -219,9 +219,11 @@ int ff_sdr_vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt)
             } else {
                 snprintf(text, sizeof(text), "%s ", ff_sdr_modulation_descs[s->modulation].shortname);
             }
-            av_strlcatf(text, sizeof(text), "%f Mhz %d %d %d",
+            draw_string(pkt->data, 4*w, text, xmid + 8*yd, 320*h2, xd, yd, color, color, color*(s->stream ? 2 : 1), w, h, 0);
+            pos = strlen(text);
+            snprintf(text, sizeof(text), "%f Mhz %d %d %d",
                      f/1000000, (int)s->score, ff_sdr_histogram_score(s), s->timeout);
-            draw_string(pkt->data, 4*w, text, xmid + 8*yd, 320*h2, xd, yd, color, color, color, w, h, 0);
+            draw_string(pkt->data, 4*w, text, xmid + 8*yd, 320*h2, xd, yd, color, color, color, w, h, pos);
             if (s->radiotext[0]) {
                 draw_string(pkt->data, 4*w, s->radiotext, xmid + 8*yd, 320*h2 + 24*yd, xd, yd, color, color, color, w, h, 0);
             }
