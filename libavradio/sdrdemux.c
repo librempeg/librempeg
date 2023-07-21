@@ -1842,20 +1842,27 @@ process_next_block:
         sdr->block_center_freq = fifo_element[0].center_frequency;
 
     if (sdr->dump_avio) {
-        uint8_t header[48] = "FFSDR001int16BE";
+        uint8_t header[16] = "FFSDR001int16BE";
         uint8_t *tmp = (void*)sdr->windowed_block; //We use an unused array as temporary here
+        int64_t sizepos, endpos;
 
         if (sdr->sample_size == 2)
             memcpy(header + 11, "08", 2);
 
-        AV_WB32(header+16, sdr->sdr_sample_rate);
-        AV_WB32(header+20, sdr->block_size);
-        AV_WB64(header+24, av_double2int(fifo_element[0].center_frequency));
-        AV_WB64(header+32, sdr->pts);
-        AV_WB32(header+40, sdr->bandwidth);
-        AV_WB32(header+44, sizeof(header));
-
         avio_write(sdr->dump_avio, header, sizeof(header));
+        avio_wb32(sdr->dump_avio, sdr->sdr_sample_rate);
+        avio_wb32(sdr->dump_avio, sdr->block_size);
+        avio_wb64(sdr->dump_avio, av_double2int(fifo_element[0].center_frequency));
+        avio_wb64(sdr->dump_avio, sdr->pts);
+        avio_wb32(sdr->dump_avio, sdr->bandwidth);
+        sizepos = avio_tell(sdr->dump_avio);
+        avio_wb32(sdr->dump_avio, 0);
+
+        endpos = avio_tell(sdr->dump_avio);
+
+        avio_seek(sdr->dump_avio, sizepos, SEEK_SET);
+        avio_wb32(sdr->dump_avio, endpos);
+        avio_seek(sdr->dump_avio, endpos, SEEK_SET);
 
         if (sdr->sample_size == 2) {
             avio_write(sdr->dump_avio, fifo_element[0].halfblock, sdr->block_size * sdr->sample_size);
