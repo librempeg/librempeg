@@ -35,7 +35,6 @@
 
 #include "sdr.h"
 
-#include <pthread.h>
 #include <stdatomic.h>
 #include <float.h>
 #include "libavutil/avassert.h"

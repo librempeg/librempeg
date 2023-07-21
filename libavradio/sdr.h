@@ -22,7 +22,6 @@
 #ifndef AVRADIO_SDR_H
 #define AVRADIO_SDR_H
 
-#include <pthread.h>
 #include <stdatomic.h>
 #include <float.h>
 
