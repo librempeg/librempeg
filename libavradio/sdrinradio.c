@@ -161,6 +161,7 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
     SoapySDRDevice *soapy = NULL;
     SoapySDRStream *soapyRxStream = NULL;
     const char * soapy_format;
+    AVDictionaryEntry *e_label, *e_serial;
 
     sdr->read_callback          = sdrindev_read_callback;
     sdr->set_frequency_callback = sdrindev_set_frequency_callback;
@@ -171,6 +172,7 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
     results = SoapySDRDevice_enumerate(NULL, &length);
     for (i = 0; i < length; i++) {
         int usable = 1;
+        int selected = 0;
         for (int j = 0; j < results[i].size; j++) {
             if (!strcmp("driver", results[i].keys[j])) {
                 if (!strcmp("audio", results[i].vals[j])) {
@@ -180,7 +182,11 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
                     if (!sdr->driver_name)
                         return AVERROR(ENOMEM);
                 }
+                if(usable)
+                    selected = !strcmp(sdr->driver_name, results[i].vals[j]);
             }
+            if (selected)
+                av_dict_set(&sdr->driver_dict, results[i].keys[j], results[i].vals[j], 0);
         }
         if (!usable)
             continue;
@@ -190,6 +196,14 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
         }
     }
     SoapySDRKwargsList_clear(results, length);
+
+    e_serial = av_dict_get(sdr->driver_dict, "serial", NULL, 0);
+    e_label  = av_dict_get(sdr->driver_dict,  "label", NULL, 0);
+    if (e_serial && e_label) {
+        char *p = strstr(e_label->value, e_serial->value);
+        if (p)
+            *p = 0; // we store this in dump url, preserve users privacy
+    }
 
     av_log(s, AV_LOG_INFO, "Opening %s\n", sdr->driver_name);
     if (!sdr->driver_name)

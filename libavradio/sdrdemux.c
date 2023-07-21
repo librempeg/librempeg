@@ -1723,6 +1723,9 @@ static int sdrfile_initial_setup(AVFormatContext *s)
     } else
         return AVERROR_INVALIDDATA;
 
+    sdr->min_freq = 0;
+    sdr->max_freq = 40 * 1000*1000*1000LL;
+
     avio_skip(s->pb, 3);        //BE
     sdr->sdr_sample_rate = avio_rb32(s->pb);
                            avio_rb32(s->pb); //block_size
@@ -1731,6 +1734,26 @@ static int sdrfile_initial_setup(AVFormatContext *s)
     if (version > AV_RB24("000")) {
         sdr->bandwidth       = avio_rb32(s->pb);
         sdr->fileheader_size = avio_rb32(s->pb);
+        if (sdr->fileheader_size < 48 || sdr->fileheader_size > 100000)
+            return AVERROR_INVALIDDATA;
+        if (version > AV_RB24("001")) {
+            char *tmp = av_malloc(sdr->fileheader_size);
+            if (!tmp)
+                return AVERROR(ENOMEM);
+
+            sdr->min_freq    = avio_rb64(s->pb);
+            sdr->max_freq    = avio_rb64(s->pb);
+            avio_get_str(s->pb, sdr->fileheader_size, tmp, sdr->fileheader_size);
+            sdr->driver_name = av_strdup(tmp);
+
+            avio_get_str(s->pb, sdr->fileheader_size, tmp, sdr->fileheader_size);
+            if (*tmp)
+                av_dict_set(&sdr->driver_dict, "label", tmp, 0);
+
+            avio_get_str(s->pb, sdr->fileheader_size, tmp, sdr->fileheader_size);
+            if (*tmp)
+                av_dict_set(&sdr->driver_dict, "tuner", tmp, 0);
+        }
     } else {
         sdr->bandwidth       = sdr->sdr_sample_rate;
         sdr->fileheader_size = 40;
@@ -1842,9 +1865,11 @@ process_next_block:
         sdr->block_center_freq = fifo_element[0].center_frequency;
 
     if (sdr->dump_avio) {
-        uint8_t header[16] = "FFSDR001int16BE";
+        uint8_t header[16] = "FFSDR002int16BE";
         uint8_t *tmp = (void*)sdr->windowed_block; //We use an unused array as temporary here
         int64_t sizepos, endpos;
+        AVDictionaryEntry *e_label = av_dict_get(sdr->driver_dict, "label", NULL, 0);
+        AVDictionaryEntry *e_tuner = av_dict_get(sdr->driver_dict, "tuner", NULL, 0);
 
         if (sdr->sample_size == 2)
             memcpy(header + 11, "08", 2);
@@ -1857,6 +1882,12 @@ process_next_block:
         avio_wb32(sdr->dump_avio, sdr->bandwidth);
         sizepos = avio_tell(sdr->dump_avio);
         avio_wb32(sdr->dump_avio, 0);
+
+        avio_wb64(sdr->dump_avio, sdr->min_freq);
+        avio_wb64(sdr->dump_avio, sdr->max_freq);
+        avio_put_str(sdr->dump_avio, sdr->driver_name);
+        avio_put_str(sdr->dump_avio, e_label ? e_label->value : NULL);
+        avio_put_str(sdr->dump_avio, e_tuner ? e_tuner->value : NULL);
 
         endpos = avio_tell(sdr->dump_avio);
 
@@ -2201,6 +2232,8 @@ int ff_sdr_read_close(AVFormatContext *s)
     sdr->fm_ifft_p2 = NULL;
 
     avio_close(sdr->dump_avio);
+
+    av_dict_free(&sdr->driver_dict);
 
     return 0;
 }

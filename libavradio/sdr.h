@@ -138,6 +138,7 @@ typedef struct SDRContext {
     Mode mode;
     AVRational fps;
     char *driver_name;
+    AVDictionary *driver_dict;
     char *dump_url;
     int fileheader_size;
     AVIOContext *dump_avio;
