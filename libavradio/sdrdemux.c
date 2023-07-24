@@ -101,9 +101,9 @@ static void apply_deemphasis(SDRContext *sdr, AVComplexFloat *data, int len, int
 
 void ff_sdr_autodetect_workarounds(SDRContext *sdr)
 {
-    if (sdr->rtlsdr_fixes < 0)
+    if (sdr-> rtlsdr_fixes < 0 && sdr->driver_name)
         sdr->rtlsdr_fixes = !strcmp(sdr->driver_name, "rtlsdr");
-    if (sdr->sdrplay_fixes < 0)
+    if (sdr->sdrplay_fixes < 0 && sdr->driver_name)
         sdr->sdrplay_fixes = !strcmp(sdr->driver_name, "sdrplay");
 }
 
@@ -1536,6 +1536,8 @@ int ff_sdr_common_init(AVFormatContext *s)
 
     sdr->avfmt = s;
     s->ctx_flags |= AVFMTCTX_NOHEADER;
+
+    ff_sdr_autodetect_workarounds(sdr);
 
     if (sdr->bandwidth > sdr->sdr_sample_rate * 7 / 8)
         av_log(s, AV_LOG_WARNING, "Bandwidth looks suspicious\n");
