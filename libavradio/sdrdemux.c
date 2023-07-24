@@ -589,6 +589,7 @@ static int probe_am(SDRContext *sdr)
             if (max_in_range(sdr, i-half_bw_i, i-4) < mid*AM_MAX4 &&
                 max_in_range(sdr, i+4, i+half_bw_i) < mid*AM_MAX4) {
                 double peak_i = find_peak_macleod(sdr, sdr->block, i, 2*sdr->block_size, NULL);
+                double f = INDEX2F(peak_i);
                 if (peak_i < 0)
                     continue;
                 if (fabs(peak_i-i) > 1.0) {
@@ -604,7 +605,13 @@ static int probe_am(SDRContext *sdr)
                     }
                 }
 
-                create_candidate_station(sdr, AM, INDEX2F(peak_i), bandwidth_f, score);
+                if (sdr->am_multiple) {
+                    double f2 = lrint(f / sdr->am_multiple) * sdr->am_multiple;
+                    if (fabs(f2 - f) > sdr->am_multiple_tolerance)
+                        continue;
+                }
+
+                create_candidate_station(sdr, AM, f, bandwidth_f, score);
             }
         }
     }
@@ -2319,7 +2326,9 @@ const AVOption ff_sdr_options[] = {
 
     { "am_threshold"     , "AM detection threshold", OFFSET(am_threshold), AV_OPT_TYPE_FLOAT, {.dbl = 20}, 0, FLT_MAX, DEC},
     { "fm_threshold"     , "FM detection threshold", OFFSET(fm_threshold), AV_OPT_TYPE_FLOAT, {.dbl = 50}, 0, FLT_MAX, DEC},
+    { "am_multiple"      , "AM frequency mutiple",   OFFSET(am_multiple ), AV_OPT_TYPE_FLOAT, {.dbl =  0}, 0, FLT_MAX, DEC},
     { "fm_multiple"      , "FM frequency mutiple",   OFFSET(fm_multiple ), AV_OPT_TYPE_FLOAT, {.dbl =  0}, 0, FLT_MAX, DEC},
+    { "am_multiple_tolerance", "AM frequency mutiple tolerance", OFFSET(am_multiple_tolerance), AV_OPT_TYPE_FLOAT, {.dbl =  60}, 0, FLT_MAX, DEC},
 
     { NULL },
 };

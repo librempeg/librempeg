@@ -212,7 +212,9 @@ typedef struct SDRContext {
 
     float am_threshold;
     float fm_threshold;
+    float am_multiple;
     float fm_multiple;
+    float am_multiple_tolerance;
 
     pthread_t hw_thread;
     int thread_started;
