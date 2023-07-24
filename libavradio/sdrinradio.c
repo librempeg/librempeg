@@ -113,7 +113,7 @@ static int64_t sdrindev_set_frequency_callback(SDRContext *sdr, int64_t freq)
                 } else
                     sdr->current_direct_samp = value;
             }
-            if (e && strstr(e->value, "R820T")) {
+            if (e && strstr(e->value, "R820T") && !strcmp(value, "0")) {
                 //The R820T has a 16 bit fractional PLL which can do only multiplies of 439.45
                 //Its more complex but this approximation works
                 //It has to be noted that SOAPY does not tell us about this, instead saopy
