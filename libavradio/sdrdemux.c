@@ -596,6 +596,14 @@ static int probe_am(SDRContext *sdr)
                     continue;
                 }
 
+                if (i == sdr->block_size) {
+                    if (sdr->dc_fix < 0) {
+                        sdr->dc_fix = 1;
+                        av_log(sdr->avfmt, AV_LOG_INFO, "Skiping AM station detection at DC point and enabling DC correction\n");
+                        continue;
+                    }
+                }
+
                 create_candidate_station(sdr, AM, INDEX2F(peak_i), bandwidth_f, score);
             }
         }
@@ -1931,7 +1939,7 @@ process_next_block:
     if (sdr->sample_size == 2) {
         const int8_t *halfblock0 = fifo_element[0].halfblock;
         const int8_t *halfblock1 = fifo_element[1].halfblock;
-        if (sdr->rtlsdr_fixes>0) {
+        if (sdr->dc_fix>0) {
             int sum = 0;
             float offset;
             for (i = 0; i<2*sdr->block_size; i++)
@@ -2274,6 +2282,7 @@ const AVOption ff_sdr_options[] = {
     { "driver"  , "sdr driver name"  , OFFSET(driver_name), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC},
     { "rtlsdr_fixes" , "workaround rtlsdr issues", OFFSET(rtlsdr_fixes), AV_OPT_TYPE_INT , {.i64 = -1}, -1, 1, DEC},
     { "sdrplay_fixes" , "workaround sdrplay issues", OFFSET(sdrplay_fixes), AV_OPT_TYPE_INT , {.i64 = -1}, -1, 1, DEC},
+    { "dc_fix" , "Apply DC correction", OFFSET(dc_fix), AV_OPT_TYPE_INT , {.i64 = -1}, -1, 1, DEC},
     { "sdr_sr"  , "sdr sample rate"  , OFFSET(sdr_sample_rate ), AV_OPT_TYPE_INT , {.i64 = 0}, 0, INT_MAX, DEC},
     { "sdr_freq", "sdr frequency"    , OFFSET(user_wanted_freq), AV_OPT_TYPE_INT64 , {.i64 = 9000000}, 0, INT64_MAX, DEC},
     { "gain" , "sdr overall gain",  OFFSET(sdr_gain),  AV_OPT_TYPE_INT , {.i64 =  GAIN_SDR_AGC}, -3, INT_MAX, DEC, "gain"},

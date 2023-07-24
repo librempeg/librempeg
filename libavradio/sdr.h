@@ -260,6 +260,7 @@ typedef struct SDRContext {
 
     int rtlsdr_fixes;
     int sdrplay_fixes;
+    int dc_fix;
 } SDRContext;
 
 typedef struct ModulationDescriptor {
