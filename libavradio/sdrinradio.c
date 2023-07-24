@@ -212,10 +212,7 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
     if (!sdr->driver_name)
         return AVERROR(EINVAL); //No driver specified and none found
 
-    if (sdr->rtlsdr_fixes < 0)
-        sdr->rtlsdr_fixes = !strcmp(sdr->driver_name, "rtlsdr");
-    if (sdr->sdrplay_fixes < 0)
-        sdr->sdrplay_fixes = !strcmp(sdr->driver_name, "sdrplay");
+    ff_sdr_autodetect_workarounds(sdr);
 
     SoapySDRKwargs_set(&args, "driver", sdr->driver_name);
     sdr->soapy = soapy = SoapySDRDevice_make(&args);

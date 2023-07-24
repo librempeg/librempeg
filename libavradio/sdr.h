@@ -291,6 +291,11 @@ extern const AVOption ff_sdr_options[];
 extern ModulationDescriptor ff_sdr_modulation_descs[];
 
 /**
+ * Detect hw bug specific workarounds.
+ */
+void ff_sdr_autodetect_workarounds(SDRContext *sdr);
+
+/**
  * Set the center frequency of the hardware
  * this will check the argument and call set_frequency_callback()
  * It can be called before the thread is started or from within the thread,

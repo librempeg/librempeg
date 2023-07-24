@@ -99,6 +99,14 @@ static void apply_deemphasis(SDRContext *sdr, AVComplexFloat *data, int len, int
     }
 }
 
+void ff_sdr_autodetect_workarounds(SDRContext *sdr)
+{
+    if (sdr->rtlsdr_fixes < 0)
+        sdr->rtlsdr_fixes = !strcmp(sdr->driver_name, "rtlsdr");
+    if (sdr->sdrplay_fixes < 0)
+        sdr->sdrplay_fixes = !strcmp(sdr->driver_name, "sdrplay");
+}
+
 static void free_station(Station *station)
 {
     if (station->stream)
