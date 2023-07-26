@@ -50,6 +50,7 @@ typedef enum AMMode {
     AMLeftRight,
     AMInPhase,
     AMEnvelope,
+    AMCQUAM,
     AMModeNB,
 } AMMode;
 

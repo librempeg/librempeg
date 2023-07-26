@@ -805,13 +805,35 @@ static int demodulate_am(SDRContext *sdr, Station *station, AVStream *st, AVPack
         wamp = amp/stamp;
 
         mm = (AVComplexFloat){dc1.re * amp, -dc1.im * amp};
-        for(i = 0; i<2*sdr->am_block_size; i++) {
-            AVComplexFloat v = sdr->am_iblock[i];
-            sdr->am_iblock[i].re = v.re*mm.re - v.im*mm.im - sdr->am_window[i] * wamp;
-            sdr->am_iblock[i].im = v.re*mm.im + v.im*mm.re;
-        }
+        if (am_mode == AMCQUAM) {
+            double vdotw = 0;
+            for(i = 0; i<2*sdr->am_block_size; i++) {
+                AVComplexFloat v = sdr->am_iblock[i];
+                float I = v.re*mm.re - v.im*mm.im;
+                float Q = v.re*mm.im + v.im*mm.re;
+                float m = sqrt(I*I + Q*Q);
+                //An ideal signal needs no limit but a real noisy signal can become 0 and negative, The limit of 2.0 is arbitrary and still needs to be tuned once we have real world test signals
+                float s = Q * FFMIN(m / fabs(I), 2.0);
 
-        scale = 0.9;
+                sdr->am_iblock[i].re = m;
+                sdr->am_iblock[i].im = s;
+                vdotw += sdr->am_window[i] * m;
+            }
+            vdotw /= dcw ;
+            for (i = 0; i<2*sdr->am_block_size; i++) {
+                float w = sdr->am_window[i];
+                sdr->am_iblock[i].re -= w*vdotw;
+            }
+
+            scale = 0.9/vdotw;
+        } else {
+            for(i = 0; i<2*sdr->am_block_size; i++) {
+                AVComplexFloat v = sdr->am_iblock[i];
+                sdr->am_iblock[i].re = v.re*mm.re - v.im*mm.im - sdr->am_window[i] * wamp;
+                sdr->am_iblock[i].im = v.re*mm.im + v.im*mm.re;
+            }
+            scale = 0.9;
+        }
     }
 
     for(i = 0; i<2*sdr->am_block_size; i++) {
@@ -832,10 +854,12 @@ static int demodulate_am(SDRContext *sdr, Station *station, AVStream *st, AVPack
         switch(am_mode) {
         case AMMidSide:
         case AMLeftRight:
+        case AMCQUAM:
             q = sst->out_buf[2*i+1] +  sdr->am_iblock[i                     ].im * sdr->am_window[i                     ] * scale;
             newbuf[2*i+1]           =  sdr->am_iblock[i + sdr->am_block_size].im * sdr->am_window[i + sdr->am_block_size] * scale;
             switch(am_mode) {
             case AMMidSide:
+            case AMCQUAM:
                 q *= 0.5;
                 sst->out_buf[2*i+0] = m + q;
                 sst->out_buf[2*i+1] = m - q;
@@ -2316,6 +2340,7 @@ const AVOption ff_sdr_options[] = {
         { "am_midside", "AM Demodulation Mid Side", 0, AV_OPT_TYPE_CONST,   {.i64 = AMMidSide}, 0, 0, DEC, "am_mode"},
         { "am_inphase", "AM Demodulation In Phase", 0, AV_OPT_TYPE_CONST,   {.i64 = AMInPhase}, 0, 0, DEC, "am_mode"},
         { "am_envelope","AM Demodulation EnvelopeDC", 0, AV_OPT_TYPE_CONST, {.i64 = AMEnvelope}, 0, 0, DEC, "am_mode"},
+        { "am_cquam","CQUAM Stereo Demodulation", 0, AV_OPT_TYPE_CONST, {.i64 = AMCQUAM}, 0, 0, DEC, "am_mode"},
 
     { "am_fft_ref", "Use FFT Based carrier for AM demodulation", OFFSET(am_fft_ref), AV_OPT_TYPE_INT , {.i64 = 0}, 0, 1, DEC},
 
