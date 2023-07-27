@@ -51,9 +51,6 @@
 #include "libavdevice/avdevice.h"
 #include "libavdevice/version.h"
 
-#include "libavradio/avradio.h"
-#include "libavradio/version.h"
-
 #include "libavfilter/avfilter.h"
 #include "libavfilter/version.h"
 
@@ -190,7 +187,6 @@ static void print_all_libs_info(int flags, int level)
     PRINT_LIB_INFO(avutil,     AVUTIL,     flags, level);
     PRINT_LIB_INFO(avcodec,    AVCODEC,    flags, level);
     PRINT_LIB_INFO(avformat,   AVFORMAT,   flags, level);
-    PRINT_LIB_INFO(avradio,    AVRADIO,    flags, level);
     PRINT_LIB_INFO(avdevice,   AVDEVICE,   flags, level);
     PRINT_LIB_INFO(avfilter,   AVFILTER,   flags, level);
     PRINT_LIB_INFO(swscale,    SWSCALE,    flags, level);
@@ -844,13 +840,6 @@ static int is_device(const AVClass *avclass)
     return AV_IS_INPUT_DEVICE(avclass->category) || AV_IS_OUTPUT_DEVICE(avclass->category);
 }
 
-static int is_radio(const AVClass *avclass)
-{
-    if (!avclass)
-        return 0;
-    return avclass->category == AV_CLASS_CATEGORY_RADIO_INPUT;
-}
-
 static int show_formats_devices(void *optctx, const char *opt, const char *arg, int device_only, int muxdemuxers)
 {
     void *ifmt_opaque = NULL;
@@ -858,13 +847,12 @@ static int show_formats_devices(void *optctx, const char *opt, const char *arg, 
     void *ofmt_opaque = NULL;
     const AVOutputFormat *ofmt = NULL;
     const char *last_name;
-    int is_dev, is_rad;
-    const char *name[3] = {"File formats:", "Devices:", "Radios:"};
+    int is_dev;
 
     printf("%s\n"
            " D. = Demuxing supported\n"
            " .E = Muxing supported\n"
-           " --\n", name[device_only]);
+           " --\n", device_only ? "Devices:" : "File formats:");
     last_name = "000";
     for (;;) {
         int decode = 0;
@@ -876,9 +864,7 @@ static int show_formats_devices(void *optctx, const char *opt, const char *arg, 
             ofmt_opaque = NULL;
             while ((ofmt = av_muxer_iterate(&ofmt_opaque))) {
                 is_dev = is_device(ofmt->priv_class);
-                if (!is_dev && device_only == 1)
-                    continue;
-                if (device_only == 2)
+                if (!is_dev && device_only)
                     continue;
                 if ((!name || strcmp(ofmt->name, name) < 0) &&
                     strcmp(ofmt->name, last_name) > 0) {
@@ -892,10 +878,7 @@ static int show_formats_devices(void *optctx, const char *opt, const char *arg, 
             ifmt_opaque = NULL;
             while ((ifmt = av_demuxer_iterate(&ifmt_opaque))) {
                 is_dev = is_device(ifmt->priv_class);
-                is_rad = is_radio(ifmt->priv_class);
-                if (!is_dev && device_only == 1)
-                    continue;
-                if (!is_rad && device_only == 2)
+                if (!is_dev && device_only)
                     continue;
                 if ((!name || strcmp(ifmt->name, name) < 0) &&
                     strcmp(ifmt->name, last_name) > 0) {
@@ -938,11 +921,6 @@ int show_demuxers(void *optctx, const char *opt, const char *arg)
 int show_devices(void *optctx, const char *opt, const char *arg)
 {
     return show_formats_devices(optctx, opt, arg, 1, SHOW_DEFAULT);
-}
-
-int show_radios(void *optctx, const char *opt, const char *arg)
-{
-    return show_formats_devices(optctx, opt, arg, 2, SHOW_DEFAULT);
 }
 
 int show_protocols(void *optctx, const char *opt, const char *arg)
@@ -1351,7 +1329,7 @@ static int print_device_sources(const AVInputFormat *fmt, AVDictionary *opts)
     int ret;
     AVDeviceInfoList *device_list = NULL;
 
-    if (!fmt || !fmt->priv_class  || (!AV_IS_INPUT_DEVICE(fmt->priv_class->category) && fmt->priv_class->category != AV_CLASS_CATEGORY_RADIO_INPUT))
+    if (!fmt || !fmt->priv_class  || !AV_IS_INPUT_DEVICE(fmt->priv_class->category))
         return AVERROR(EINVAL);
 
     printf("Auto-detected sources for %s:\n", fmt->name);
@@ -1484,33 +1462,3 @@ int show_sinks(void *optctx, const char *opt, const char *arg)
     return ret;
 }
 #endif /* CONFIG_AVDEVICE */
-
-#if CONFIG_AVRADIO
-int show_radio_sources(void *optctx, const char *opt, const char *arg)
-{
-    const AVInputFormat *fmt = NULL;
-    char *dev = NULL;
-    AVDictionary *opts = NULL;
-    int ret = 0;
-    int error_level = av_log_get_level();
-
-    av_log_set_level(AV_LOG_WARNING);
-
-    if ((ret = show_sinks_sources_parse_arg(arg, &dev, &opts)) < 0)
-        goto fail;
-
-    do {
-        fmt = av_input_radio_next(fmt);
-        if (fmt) {
-            if (dev && !av_match_name(dev, fmt->name))
-                continue;
-            print_device_sources(fmt, opts);
-        }
-    } while (fmt);
-  fail:
-    av_dict_free(&opts);
-    av_free(dev);
-    av_log_set_level(error_level);
-    return ret;
-}
-#endif /* CONFIG_AVRADIO */

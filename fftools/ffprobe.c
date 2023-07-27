@@ -56,7 +56,6 @@
 #include "libavutil/timestamp.h"
 #include "libavdevice/avdevice.h"
 #include "libavdevice/version.h"
-#include "libavradio/avradio.h"
 #include "libswscale/swscale.h"
 #include "libswscale/version.h"
 #include "libswresample/swresample.h"
@@ -4109,9 +4108,6 @@ int main(int argc, char **argv)
     avformat_network_init();
 #if CONFIG_AVDEVICE
     avdevice_register_all();
-#endif
-#if CONFIG_AVRADIO
-    avradio_register_all();
 #endif
 
     show_banner(argc, argv, options);

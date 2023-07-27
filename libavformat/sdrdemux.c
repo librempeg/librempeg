@@ -99,7 +99,7 @@ static void apply_deemphasis(SDRContext *sdr, AVComplexFloat *data, int len, int
     }
 }
 
-void ff_sdr_autodetect_workarounds(SDRContext *sdr)
+void avpriv_sdr_autodetect_workarounds(SDRContext *sdr)
 {
     if (sdr-> rtlsdr_fixes < 0 && sdr->driver_name)
         sdr->rtlsdr_fixes = !strcmp(sdr->driver_name, "rtlsdr");
@@ -1565,7 +1565,7 @@ static void init_window(SDRContext *sdr, float *window, int block_size)
     }
 }
 
-int ff_sdr_common_init(AVFormatContext *s)
+int avpriv_sdr_common_init(AVFormatContext *s)
 {
     SDRContext *sdr = s->priv_data;
     AVStream *st;
@@ -1576,7 +1576,7 @@ int ff_sdr_common_init(AVFormatContext *s)
     sdr->avfmt = s;
     s->ctx_flags |= AVFMTCTX_NOHEADER;
 
-    ff_sdr_autodetect_workarounds(sdr);
+    avpriv_sdr_autodetect_workarounds(sdr);
 
     if (sdr->bandwidth > sdr->sdr_sample_rate * 7 / 8)
         av_log(s, AV_LOG_WARNING, "Bandwidth looks suspicious\n");
@@ -1815,10 +1815,10 @@ static int sdrfile_initial_setup(AVFormatContext *s)
 
     sdr->read_callback = sdrfile_read_callback;
 
-    return ff_sdr_common_init(s);
+    return avpriv_sdr_common_init(s);
 }
 
-int ff_sdr_read_packet(AVFormatContext *s, AVPacket *pkt)
+int avpriv_sdr_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     SDRContext *sdr = s->priv_data;
     int ret, i, full_blocks, seek_direction;
@@ -2169,7 +2169,7 @@ process_next_block:
     return AVERROR(EAGAIN);
 }
 
-int ff_sdr_read_seek(AVFormatContext *s, int stream_index,
+int avpriv_sdr_read_seek(AVFormatContext *s, int stream_index,
                          int64_t target, int flags)
 {
     SDRContext *sdr = s->priv_data;
@@ -2208,7 +2208,7 @@ int ff_sdr_read_seek(AVFormatContext *s, int stream_index,
     return 0;
 }
 
-void ff_sdr_stop_threading(AVFormatContext *s)
+void avpriv_sdr_stop_threading(AVFormatContext *s)
 {
     SDRContext *sdr = s->priv_data;
 
@@ -2227,12 +2227,12 @@ void ff_sdr_stop_threading(AVFormatContext *s)
     sdr->thread_started = 0;
 }
 
-int ff_sdr_read_close(AVFormatContext *s)
+int avpriv_sdr_read_close(AVFormatContext *s)
 {
     SDRContext *sdr = s->priv_data;
     int i;
 
-    ff_sdr_stop_threading(s);
+    avpriv_sdr_stop_threading(s);
 
     av_fifo_freep2(&sdr->empty_block_fifo);
     av_fifo_freep2(&sdr->full_block_fifo);
@@ -2300,7 +2300,7 @@ static int sdrfile_probe(const AVProbeData *p)
 #define OFFSET(x) offsetof(SDRContext, x)
 #define DEC AV_OPT_FLAG_DECODING_PARAM
 
-const AVOption ff_sdr_options[] = {
+const AVOption avpriv_sdr_options[] = {
     { "video_size", "set frame size", OFFSET(width), AV_OPT_TYPE_IMAGE_SIZE, {.str = "0x0"}, 0, 0, DEC },
     { "framerate" , "set frame rate", OFFSET(fps), AV_OPT_TYPE_VIDEO_RATE, {.str = "25"}, 0, INT_MAX,DEC },
     { "block_size", "FFT block size", OFFSET(block_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC},
@@ -2361,7 +2361,7 @@ const AVOption ff_sdr_options[] = {
 static const AVClass sdrfile_demuxer_class = {
     .class_name = "sdrfile",
     .item_name  = av_default_item_name,
-    .option     = ff_sdr_options,
+    .option     = avpriv_sdr_options,
     .version    = LIBAVUTIL_VERSION_INT,
     .category   = AV_CLASS_CATEGORY_DEMUXER,
 };
@@ -2372,9 +2372,9 @@ const AVInputFormat ff_sdrfile_demuxer = {
     .priv_data_size = sizeof(SDRContext),
     .read_probe     = sdrfile_probe,
     .read_header    = sdrfile_initial_setup,
-    .read_packet    = ff_sdr_read_packet,
-    .read_close     = ff_sdr_read_close,
-    .read_seek      = ff_sdr_read_seek,
+    .read_packet    = avpriv_sdr_read_packet,
+    .read_close     = avpriv_sdr_read_close,
+    .read_seek      = avpriv_sdr_read_seek,
     .flags_internal = FF_FMT_INIT_CLEANUP,
     .priv_class = &sdrfile_demuxer_class,
 };

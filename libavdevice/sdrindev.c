@@ -23,7 +23,6 @@
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
 
-#include "sdr.h"
 #include "libavutil/avassert.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/fifo.h"
@@ -36,6 +35,7 @@
 #include "libavformat/avformat.h"
 #include "libavformat/demux.h"
 #include "libavformat/internal.h"
+#include "libavformat/sdr.h"
 #include "libavdevice/avdevice.h"
 
 #define MAX_CHANNELS 4
@@ -212,7 +212,7 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
     if (!sdr->driver_name)
         return AVERROR(EINVAL); //No driver specified and none found
 
-    ff_sdr_autodetect_workarounds(sdr);
+    avpriv_sdr_autodetect_workarounds(sdr);
 
     SoapySDRKwargs_set(&args, "driver", sdr->driver_name);
     sdr->soapy = soapy = SoapySDRDevice_make(&args);
@@ -396,7 +396,7 @@ static int sdrindev_initial_hw_setup(AVFormatContext *s)
 
     SoapySDRDevice_activateStream(soapy, soapyRxStream, 0, 0, 0);
 
-    return ff_sdr_common_init(s);
+    return avpriv_sdr_common_init(s);
 }
 
 static int sdrindev_read_close(AVFormatContext *s)
@@ -404,7 +404,7 @@ static int sdrindev_read_close(AVFormatContext *s)
     SDRContext *sdr = s->priv_data;
     SoapySDRDevice *soapy = sdr->soapy;
 
-    ff_sdr_stop_threading(s);
+    avpriv_sdr_stop_threading(s);
 
     if (soapy) {
         if (sdr->soapyRxStream) {
@@ -417,7 +417,7 @@ static int sdrindev_read_close(AVFormatContext *s)
         sdr->soapy = NULL;
     }
 
-    return ff_sdr_read_close(s);
+    return avpriv_sdr_read_close(s);
 }
 
 static int sdr_get_device_list(AVFormatContext *ctx, AVDeviceInfoList *device_list)
@@ -467,9 +467,9 @@ static int sdr_get_device_list(AVFormatContext *ctx, AVDeviceInfoList *device_li
 static const AVClass sdr_demuxer_class = {
     .class_name = "sdr",
     .item_name  = av_default_item_name,
-    .option     = ff_sdr_options,
+    .option     = avpriv_sdr_options,
     .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_RADIO_INPUT,
+    .category   = AV_CLASS_CATEGORY_DEMUXER,
 };
 
 const AVInputFormat ff_sdr_demuxer = {
@@ -477,9 +477,9 @@ const AVInputFormat ff_sdr_demuxer = {
     .long_name      = NULL_IF_CONFIG_SMALL("Software Defined Radio Demodulator"),
     .priv_data_size = sizeof(SDRContext),
     .read_header    = sdrindev_initial_hw_setup,
-    .read_packet    = ff_sdr_read_packet,
+    .read_packet    = avpriv_sdr_read_packet,
     .read_close     = sdrindev_read_close,
-    .read_seek      = ff_sdr_read_seek,
+    .read_seek      = avpriv_sdr_read_seek,
     .get_device_list= sdr_get_device_list,
     .flags          = AVFMT_NOFILE,
     .flags_internal = FF_FMT_INIT_CLEANUP,

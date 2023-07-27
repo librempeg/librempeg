@@ -19,8 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVRADIO_SDR_H
-#define AVRADIO_SDR_H
+#ifndef AVFORMAT_SDR_H
+#define AVFORMAT_SDR_H
 
 #include <stdatomic.h>
 #include <float.h>
@@ -290,14 +290,14 @@ typedef struct BandDescriptor {
     int64_t freq_max;
 } BandDescriptor ;
 
-extern const AVOption ff_sdr_options[];
+extern const AVOption avpriv_sdr_options[];
 
 extern ModulationDescriptor ff_sdr_modulation_descs[];
 
 /**
  * Detect hw bug specific workarounds.
  */
-void ff_sdr_autodetect_workarounds(SDRContext *sdr);
+void avpriv_sdr_autodetect_workarounds(SDRContext *sdr);
 
 /**
  * Set the center frequency of the hardware
@@ -306,19 +306,19 @@ void ff_sdr_autodetect_workarounds(SDRContext *sdr);
  */
 int ff_sdr_set_freq(SDRContext *sdr, int64_t freq);
 
-int ff_sdr_common_init(AVFormatContext *s);
+int avpriv_sdr_common_init(AVFormatContext *s);
 
-int ff_sdr_read_packet(AVFormatContext *s, AVPacket *pkt);
+int avpriv_sdr_read_packet(AVFormatContext *s, AVPacket *pkt);
 
-int ff_sdr_read_seek(AVFormatContext *s, int stream_index, int64_t target, int flags);
+int avpriv_sdr_read_seek(AVFormatContext *s, int stream_index, int64_t target, int flags);
 
 /**
  * shuts down threads, destroys mutex
  * Safe to call if no thread was started or after it was shutdown
  */
-void ff_sdr_stop_threading(AVFormatContext *s);
+void avpriv_sdr_stop_threading(AVFormatContext *s);
 
-int ff_sdr_read_close(AVFormatContext *s);
+int avpriv_sdr_read_close(AVFormatContext *s);
 
 int ff_sdr_vissualization(SDRContext *sdr, AVStream *st, AVPacket *pkt);
 
@@ -343,4 +343,4 @@ static inline float len2(AVComplexFloat c)
     return c.re*c.re + c.im*c.im;
 }
 
-#endif /* AVRADIO_SDR_H */
+#endif /* AVFORMAT_SDR_H */

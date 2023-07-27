@@ -415,6 +415,7 @@ extern const AVInputFormat  ff_scd_demuxer;
 extern const AVInputFormat  ff_sdns_demuxer;
 extern const AVInputFormat  ff_sdp_demuxer;
 extern const AVInputFormat  ff_sdr2_demuxer;
+extern const AVInputFormat  ff_sdrfile_demuxer;
 extern const AVInputFormat  ff_sds_demuxer;
 extern const AVInputFormat  ff_sdx_demuxer;
 extern const AVInputFormat  ff_segafilm_demuxer;
@@ -570,7 +571,6 @@ extern const AVInputFormat  ff_vapoursynth_demuxer;
 
 static atomic_uintptr_t indev_list_intptr  = ATOMIC_VAR_INIT(0);
 static atomic_uintptr_t outdev_list_intptr = ATOMIC_VAR_INIT(0);
-static atomic_uintptr_t inradio_list_intptr= ATOMIC_VAR_INIT(0);
 
 const AVOutputFormat *av_muxer_iterate(void **opaque)
 {
@@ -595,32 +595,20 @@ const AVOutputFormat *av_muxer_iterate(void **opaque)
 
 const AVInputFormat *av_demuxer_iterate(void **opaque)
 {
+    static const uintptr_t size = sizeof(demuxer_list)/sizeof(demuxer_list[0]) - 1;
     uintptr_t i = (uintptr_t)*opaque;
     const AVInputFormat *f = NULL;
     uintptr_t tmp;
 
-    if (i % 4 == 0) {
-        f = demuxer_list[i/4];
-        if (!f)
-            i = 1;
-    }
-    if (i % 4 == 1) {
-        if(tmp = atomic_load_explicit(&indev_list_intptr, memory_order_relaxed)) {
-            const AVInputFormat *const *indev_list = (const AVInputFormat *const *)tmp;
-            f = indev_list[i/4];
-        }
-        if (!f)
-            i = 2;
-    }
-    if (i % 4 == 2) {
-        if(tmp = atomic_load_explicit(&inradio_list_intptr, memory_order_relaxed)) {
-            const AVInputFormat *const *indev_list = (const AVInputFormat *const *)tmp;
-            f = indev_list[i/4];
-        }
+    if (i < size) {
+        f = demuxer_list[i];
+    } else if (tmp = atomic_load_explicit(&indev_list_intptr, memory_order_relaxed)) {
+        const AVInputFormat *const *indev_list = (const AVInputFormat *const *)tmp;
+        f = indev_list[i - size];
     }
 
     if (f)
-        *opaque = (void*)(i + 4);
+        *opaque = (void*)(i + 1);
     return f;
 }
 
@@ -628,9 +616,4 @@ void avpriv_register_devices(const FFOutputFormat * const o[], const AVInputForm
 {
     atomic_store_explicit(&outdev_list_intptr, (uintptr_t)o, memory_order_relaxed);
     atomic_store_explicit(&indev_list_intptr,  (uintptr_t)i, memory_order_relaxed);
-}
-
-void avpriv_register_radios(const FFOutputFormat * const o[], const AVInputFormat * const i[])
-{
-    atomic_store_explicit(&inradio_list_intptr,  (uintptr_t)i, memory_order_relaxed);
 }

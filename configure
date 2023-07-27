@@ -75,7 +75,6 @@ Help options:
   --list-indevs            show all available input devices
   --list-outdevs           show all available output devices
   --list-filters           show all available filters
-  --list-inradios          show all available input radios
 
 Standard options:
   --logfile=FILE           log tests and output to FILE [ffbuild/config.log]
@@ -129,7 +128,6 @@ Component options:
   --disable-avdevice       disable libavdevice build
   --disable-avcodec        disable libavcodec build
   --disable-avformat       disable libavformat build
-  --disable-avradio        disable libavradio build
   --disable-swresample     disable libswresample build
   --disable-swscale        disable libswscale build
   --disable-postproc       disable libpostproc build
@@ -184,10 +182,6 @@ Individual component options:
   --enable-filter=NAME     enable filter NAME
   --disable-filter=NAME    disable filter NAME
   --disable-filters        disable all filters
-  --enable-inradios=NAME   enable input radio NAME
-  --disable-inradio=NAME   disable input radio NAME
-  --disable-inradios       disable input radios
-  --disable-radios         disable all radios
 
 External library support:
 
@@ -1750,16 +1744,11 @@ AVFORMAT_COMPONENTS="
     protocols
 "
 
-AVRADIO_COMPONENTS="
-    inradios
-"
-
 COMPONENT_LIST="
     $AVCODEC_COMPONENTS
     $AVDEVICE_COMPONENTS
     $AVFILTER_COMPONENTS
     $AVFORMAT_COMPONENTS
-    $AVRADIO_COMPONENTS
 "
 
 EXAMPLE_LIST="
@@ -1995,7 +1984,6 @@ FEATURE_LIST="
 # this list should be kept in linking order
 LIBRARY_LIST="
     avdevice
-    avradio
     avfilter
     swscale
     postproc
@@ -3627,6 +3615,7 @@ oss_outdev_deps_any="sys_soundcard_h"
 pulse_indev_deps="libpulse"
 pulse_outdev_deps="libpulse"
 sdl2_outdev_deps="sdl2"
+sdr_indev_deps="libsoapysdr sdrfile_demuxer"
 sndio_indev_deps="sndio"
 sndio_outdev_deps="sndio"
 v4l2_indev_deps_any="linux_videodev2_h sys_videoio_h"
@@ -3637,9 +3626,6 @@ vfwcap_indev_deps="vfw32 vfwcap_defines"
 xcbgrab_indev_deps="libxcb"
 xcbgrab_indev_suggest="libxcb_shm libxcb_shape libxcb_xfixes"
 xv_outdev_deps="xlib_xv xlib_x11 xlib_xext"
-
-# inradios
-sdr_inradio_deps="libsoapysdr"
 
 # protocols
 async_protocol_deps="threads"
@@ -3905,8 +3891,6 @@ avcodec_deps="avutil"
 avcodec_suggest="libm stdatomic"
 avdevice_deps="avformat avcodec avutil"
 avdevice_suggest="libm stdatomic"
-avradio_deps="avformat avcodec avutil"
-avradio_suggest="libm stdatomic"
 avfilter_deps="avutil"
 avfilter_suggest="libm stdatomic"
 avformat_deps="avcodec avutil"
@@ -4111,7 +4095,6 @@ find_filters_extern(){
 FILTER_LIST=$(find_filters_extern libavfilter/allfilters.c)
 OUTDEV_LIST=$(find_things_extern muxer FFOutputFormat libavdevice/alldevices.c outdev)
 INDEV_LIST=$(find_things_extern demuxer AVInputFormat libavdevice/alldevices.c indev)
-INRADIO_LIST=$(find_things_extern demuxer AVInputFormat libavradio/allradios.c inradio)
 MUXER_LIST=$(find_things_extern muxer FFOutputFormat libavformat/allformats.c)
 DEMUXER_LIST=$(find_things_extern demuxer AVInputFormat libavformat/allformats.c)
 ENCODER_LIST=$(find_things_extern encoder FFCodec libavcodec/allcodecs.c)
@@ -4148,16 +4131,11 @@ AVFORMAT_COMPONENTS_LIST="
     $PROTOCOL_LIST
 "
 
-AVRADIO_COMPONENTS_LIST="
-    $INRADIO_LIST
-"
-
 ALL_COMPONENTS="
     $AVCODEC_COMPONENTS_LIST
     $AVDEVICE_COMPONENTS_LIST
     $AVFILTER_COMPONENTS_LIST
     $AVFORMAT_COMPONENTS_LIST
-    $AVRADIO_COMPONENTS_LIST
 "
 
 for n in $COMPONENT_LIST; do
@@ -4243,9 +4221,6 @@ for opt do
         ;;
         --disable-devices)
             disable $INDEV_LIST $OUTDEV_LIST
-        ;;
-        --disable-radios)
-            disable $INRADIO_LIST
         ;;
         --enable-debug=*)
             debuglevel="$optval"
@@ -7280,7 +7255,7 @@ EOF
 
 # add some linker flags
 check_ldflags -Wl,--warn-common
-check_ldflags -Wl,-rpath-link=:libpostproc:libswresample:libswscale:libavfilter:libavdevice:libavradio:libavformat:libavcodec:libavutil
+check_ldflags -Wl,-rpath-link=:libpostproc:libswresample:libswscale:libavfilter:libavdevice:libavformat:libavcodec:libavutil
 enabled rpath && add_ldexeflags -Wl,-rpath,$libdir && add_ldsoflags -Wl,-rpath,$libdir
 test_ldflags -Wl,-Bsymbolic && append SHFLAGS -Wl,-Bsymbolic
 
@@ -7803,7 +7778,7 @@ echo "Programs:"
 print_enabled '' $PROGRAM_LIST | print_in_columns
 echo
 
-for type in decoder encoder hwaccel parser demuxer muxer protocol filter bsf indev outdev inradio; do
+for type in decoder encoder hwaccel parser demuxer muxer protocol filter bsf indev outdev; do
     echo "Enabled ${type}s:"
     eval list=\$$(toupper $type)_LIST
     print_enabled '_*' $list | print_in_columns
@@ -8109,9 +8084,6 @@ print_enabled_components(){
                 outdev_list)
                     c=${c%_outdev}_muxer
                 ;;
-                inradio_list)
-                    c=${c%_inradio}_demuxer
-                ;;
             esac
             printf "    &ff_%s,\n" $c >> $TMPH
         fi
@@ -8133,7 +8105,6 @@ print_enabled_components libavformat/demuxer_list.c AVInputFormat demuxer_list $
 print_enabled_components libavformat/muxer_list.c FFOutputFormat muxer_list $MUXER_LIST
 print_enabled_components libavdevice/indev_list.c AVInputFormat indev_list $INDEV_LIST
 print_enabled_components libavdevice/outdev_list.c FFOutputFormat outdev_list $OUTDEV_LIST
-print_enabled_components libavradio/inradio_list.c AVInputFormat inradio_list $INRADIO_LIST
 print_enabled_components libavformat/protocol_list.c URLProtocol url_protocols $PROTOCOL_LIST
 
 # Settings for pkg-config files
@@ -8152,7 +8123,6 @@ LIBSUF=${LIBSUF}
 extralibs_avutil="$avutil_extralibs"
 extralibs_avcodec="$avcodec_extralibs"
 extralibs_avformat="$avformat_extralibs"
-extralibs_avradio="$avradio_extralibs"
 extralibs_avdevice="$avdevice_extralibs"
 extralibs_avfilter="$avfilter_extralibs"
 extralibs_postproc="$postproc_extralibs"

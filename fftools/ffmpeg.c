@@ -95,8 +95,6 @@
 
 #include "libavdevice/avdevice.h"
 
-#include "libavradio/avradio.h"
-
 #include "libswresample/swresample.h"
 
 #include "libavfilter/avfilter.h"
@@ -1313,9 +1311,6 @@ int main(int argc, char **argv)
 
 #if CONFIG_AVDEVICE
     avdevice_register_all();
-#endif
-#if CONFIG_AVRADIO
-    avradio_register_all();
 #endif
     avformat_network_init();
 
