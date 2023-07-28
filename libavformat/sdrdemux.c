@@ -1475,6 +1475,7 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
     unsigned block_counter = 0;
     int64_t local_wanted_freq = 0;
     int64_t last_wanted_freq = 0;
+    float agc_gain = 0;
 
     sdr->remaining_file_block_size = 0;
 
@@ -1529,16 +1530,16 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
             block_counter = 0; // we just changed the frequency, do not trust the next blocks content
         }
         if (sdr->sdr_gain == GAIN_SW_AGC &&
-            fabs(wanted_gain - sdr->agc_gain) > 0.001 &&
+            fabs(wanted_gain - agc_gain) > 0.001 &&
             sdr->set_gain_callback
         ) {
             sdr->set_gain_callback(sdr, wanted_gain);
-            sdr->agc_gain = wanted_gain;
+            agc_gain = wanted_gain;
         }
         pthread_mutex_unlock(&sdr->mutex);
 
         fifo_element.center_frequency = block_counter > 0 ? sdr->freq : 0;
-        fifo_element.gain             = sdr->agc_gain; //we make only small changes so slightly mixing should be ok
+        fifo_element.gain             = agc_gain; //we make only small changes so slightly mixing should be ok
 
         remaining = sdr->block_size;
         while (remaining && !atomic_load(&sdr->close_requested)) {
