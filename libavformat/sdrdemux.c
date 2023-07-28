@@ -1475,6 +1475,7 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
     unsigned block_counter = 0;
     int64_t local_wanted_freq = 0;
     int64_t last_wanted_freq = 0;
+    float wanted_gain = (sdr->min_gain + sdr->max_gain) / 2;
     float agc_gain = 0;
 
     sdr->remaining_file_block_size = 0;
@@ -1485,7 +1486,6 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
         FIFOElement fifo_element;
         int remaining, ret;
         int empty_blocks, full_blocks;
-        float wanted_gain = atomic_load(&sdr->wanted_gain) / 65536.0;
         int64_t wanted_freq = atomic_load(&sdr->wanted_freq);
         int seek_direction = atomic_load(&sdr->seek_direction);
 
@@ -1549,6 +1549,49 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
 
             av_assert0(ret <= remaining);
             remaining -= ret;
+        }
+
+        if (sdr->sdr_gain == GAIN_SW_AGC) {
+            float inmax = 0;
+            int inmax1 = 0;
+            // We only check 25% of the data to safe computations
+            int start = 3*sdr->block_size / 4;
+            int end   = 5*sdr->block_size / 4;
+            if (sdr->sample_size == 2) {
+                const int8_t *halfblock = fifo_element.halfblock;
+                for (int i = start; i < end; i++) {
+                    int v = FFMAX(FFABS(halfblock[i]), FFABS(halfblock[i]));
+                    inmax1 = FFMAX(inmax1, v);
+                }
+            } else if (sdr->sample_size == 4) {
+                const int16_t *halfblock = fifo_element.halfblock;
+                for (int i = start; i < end; i++) {
+                    int v = FFMAX(FFABS(halfblock[i]), FFABS(halfblock[i]));
+                    inmax1 = FFMAX(inmax1, v);
+                }
+            } else {
+                const float *halfblock = fifo_element.halfblock;
+                for (int i = start; i < end; i++) {
+                    float v = fmaxf(fabsf(halfblock[i]), fabsf(halfblock[i]));
+                    inmax = fmaxf(inmax, v);
+                }
+            }
+            inmax = fmaxf(inmax, inmax1 / sdr->sample_scale);
+
+            if (inmax > 1.0 - sdr->agc_min_headroom && wanted_gain > sdr->min_gain) {
+                //according to docs this is a dB scale, in reality it beheaves differnt to that
+                //Because of this we will try to just make small changes and not assume too much
+                wanted_gain = FFMIN(wanted_gain, FFMAX(agc_gain - 1.0, agc_gain * 0.9));
+
+                sdr->agc_low_time = 0;
+            } else if (inmax < 1.0 - sdr->agc_max_headroom && wanted_gain < sdr->max_gain) {
+                sdr->agc_low_time += sdr->block_size;
+                if (sdr->agc_low_time > sdr->agc_max_headroom_time * sdr->sdr_sample_rate) {
+                    sdr->agc_low_time = 0;
+                    wanted_gain = FFMAX(wanted_gain, FFMIN(agc_gain + 1.0, agc_gain * 1.1));
+                }
+            } else
+                sdr->agc_low_time = 0;
         }
 
         inject_block_into_fifo(sdr, sdr->full_block_fifo, &fifo_element, "block fifo overflow, discarding block\n");
@@ -1724,7 +1767,6 @@ int avpriv_sdr_common_init(AVFormatContext *s)
     atomic_init(&sdr->close_requested, 0);
     atomic_init(&sdr->seek_direction, 0);
     atomic_init(&sdr->wanted_freq, sdr->user_wanted_freq);
-    atomic_init(&sdr->wanted_gain, lrint((sdr->min_gain + sdr->max_gain) * 65536 / 2));
     ret = pthread_mutex_init(&sdr->mutex, NULL);
     if (ret) {
         av_log(s, AV_LOG_ERROR, "pthread_mutex_init failed: %s\n", strerror(ret));
@@ -2019,37 +2061,6 @@ process_next_block:
             sdr->windowed_block[i].re = halfblock1[i - sdr->block_size].re * sdr->window[i];
             sdr->windowed_block[i].im = halfblock1[i - sdr->block_size].im * sdr->window[i];
         }
-    }
-
-    float smaller_block_gain = FFMIN(fifo_element[0].gain, fifo_element[1].gain);
-    float  bigger_block_gain = FFMAX(fifo_element[0].gain, fifo_element[1].gain);
-
-    if (sdr->sdr_gain == GAIN_SW_AGC) {
-        float inmax = 0;
-        float wanted_gain = atomic_load(&sdr->wanted_gain) / 65536.0;
-        // We only check 25% of the data to safe computations
-        int start = 3*sdr->block_size / 4;
-        int end   = 5*sdr->block_size / 4;
-        for (i = start; i < end; i++) {
-            float v = fmaxf(fabsf(sdr->windowed_block[i].re), fabsf(sdr->windowed_block[i].im));
-            inmax = fmaxf(inmax, v);
-        }
-
-        if (inmax > 1.0 - sdr->agc_min_headroom && wanted_gain > sdr->min_gain) {
-            //according to docs this is a dB scale, in reality it beheaves differnt to that
-            //Because of this we will try to just make small changes and not assume too much
-            wanted_gain = FFMIN(wanted_gain, FFMAX(smaller_block_gain - 1.0, smaller_block_gain * 0.9));
-
-            sdr->agc_low_time = 0;
-        } else if (inmax < 1.0 - sdr->agc_max_headroom && wanted_gain < sdr->max_gain) {
-            sdr->agc_low_time += sdr->block_size;
-            if (sdr->agc_low_time > sdr->agc_max_headroom_time * sdr->sdr_sample_rate) {
-                sdr->agc_low_time = 0;
-                wanted_gain = FFMAX(wanted_gain, FFMIN(bigger_block_gain + 1.0, bigger_block_gain * 1.1));
-            }
-        } else
-            sdr->agc_low_time = 0;
-        atomic_store(&sdr->wanted_gain, (int)lrint(wanted_gain * 65536));
     }
 
     inject_block_into_fifo(sdr, sdr->empty_block_fifo, &fifo_element[0], "Cannot pass next buffer, freeing it\n");

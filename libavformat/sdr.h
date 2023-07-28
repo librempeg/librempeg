@@ -161,7 +161,6 @@ typedef struct SDRContext {
     float agc_max_headroom;
     float agc_max_headroom_time;
     int agc_low_time;
-    atomic_int wanted_gain;
     int sdr_adcc;
     int64_t bandwidth;
     int64_t last_pts;
