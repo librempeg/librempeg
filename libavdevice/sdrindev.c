@@ -88,6 +88,10 @@ static int sdrindev_set_gain_callback(SDRContext *sdr, float gain)
         }
 
         if (sdr->sdr_gain != GAIN_SDR_AGC) {
+            if (sdr->current_direct_samp && !strcmp(sdr->current_direct_samp, "2")) {
+                return -1; // soapy ignores gain in direct sampling mode
+            }
+
             ret = SoapySDRDevice_setGain(soapy, SOAPY_SDR_RX, 0, gain);
             if (ret) {
                 av_log(avfmt, AV_LOG_WARNING, "Failed to set gain to %f (%s)\n", gain, SoapySDRDevice_lastError());
