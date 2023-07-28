@@ -1533,8 +1533,10 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
             fabs(wanted_gain - agc_gain) > 0.001 &&
             sdr->set_gain_callback
         ) {
-            sdr->set_gain_callback(sdr, wanted_gain);
-            agc_gain = wanted_gain;
+            int ret = sdr->set_gain_callback(sdr, wanted_gain);
+            if (ret >= 0) {
+                agc_gain = wanted_gain;
+            }
         }
         pthread_mutex_unlock(&sdr->mutex);
 
