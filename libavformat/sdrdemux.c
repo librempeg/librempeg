@@ -1476,7 +1476,7 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
     unsigned block_counter = 0;
     int64_t local_wanted_freq = 0;
     int64_t last_wanted_freq = 0;
-    float wanted_gain = (sdr->min_gain + sdr->max_gain) / 2;
+    float wanted_gain = sdr->sdr_gain < 0 ? (sdr->min_gain + sdr->max_gain) / 2 : sdr->sdr_gain;
     float agc_gain = 0;
 
     sdr->remaining_file_block_size = 0;
@@ -1530,7 +1530,8 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
             //And theres not much else we can do, an error message was already printed by ff_sdr_set_freq() in that case
             block_counter = 0; // we just changed the frequency, do not trust the next blocks content
         }
-        if (sdr->sdr_gain == GAIN_SW_AGC &&
+        if (sdr->sdr_gain != GAIN_SDR_AGC &&
+            sdr->sdr_gain != GAIN_DEFAULT &&
             fabs(wanted_gain - agc_gain) > 0.001 &&
             sdr->set_gain_callback
         ) {
@@ -1539,6 +1540,7 @@ static void *soapy_needs_bigger_buffers_worker(SDRContext *sdr)
                 agc_gain = wanted_gain;
                 if (block_counter)
                     block_counter = 1;
+                av_log(avfmt, AV_LOG_DEBUG, "GAIN changed %f\n", wanted_gain);
             }
         }
         pthread_mutex_unlock(&sdr->mutex);
