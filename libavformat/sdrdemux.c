@@ -1043,13 +1043,13 @@ static int demodulate_fm(SDRContext *sdr, Station *station, AVStream *st, AVPack
     double carrier19_i_exact;
     int W= 5;
     double dc = 0, dcw = 0;
-    int len2 = FFMIN(index, 2*sdr->block_size - index);
+    int lenmax = FFMIN(index, 2*sdr->block_size - index);
 
     av_assert0(!st || (sst == station->stream && sst->station == station));
 
     //If only some of the bandwidth is available, just try with less
-    if (len2 < len && len2 > len/2)
-        len = len2;
+    if (lenmax < len && lenmax > len/2)
+        len = lenmax;
 
     if (index + len >= 2*sdr->block_size ||
         index - len < 0 ||
