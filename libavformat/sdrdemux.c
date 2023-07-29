@@ -1692,7 +1692,7 @@ int avpriv_sdr_common_init(AVFormatContext *s)
     sdr->fm_bandwidth_p2 =  16.5 * 1000; // Officially Stereo Broadcast FM has 15khz audio bandwidth
 
     sdr->am_block_size    = find_block_size(sdr, sdr->am_bandwidth / 2);
-    sdr->fm_block_size    = find_block_size(sdr, sdr->fm_bandwidth);
+    sdr->fm_block_size    = find_block_size(sdr, sdr->fm_bandwidth / 2);
     sdr->fm_block_size_p2 = find_block_size(sdr, sdr->fm_bandwidth_p2);
 
     sdr->windowed_block = av_malloc(sizeof(*sdr->windowed_block) * 2 * sdr->block_size);
