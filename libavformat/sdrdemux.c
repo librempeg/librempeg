@@ -1153,10 +1153,9 @@ static int demodulate_fm(SDRContext *sdr, Station *station, AVStream *st, AVPack
             sst->out_buf[2*i+0] =
             sst->out_buf[2*i+1] = m;
         }
-
-        if (fabs(sst->out_buf[i]) > clip) {
-            av_log(sdr->avfmt, AV_LOG_WARNING, "CLIP %f\n", sst->out_buf[i]);
-            clip = fabs(sst->out_buf[i]) * 1.1;
+        if (fmax(fabs(sst->out_buf[2*i+0]), fabs(sst->out_buf[2*i+1])) > clip) {
+            av_log(sdr->avfmt, AV_LOG_WARNING, "CLIP %f %f\n", sst->out_buf[2*i+0], sst->out_buf[2*i+1]);
+            clip = fmax(fabs(sst->out_buf[2*i+0]), fabs(sst->out_buf[2*i+1])) * 1.1;
         }
     }
 
