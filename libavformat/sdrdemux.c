@@ -704,7 +704,7 @@ static int demodulate_am(SDRContext *sdr, Station *station, AVStream *st, AVPack
     double freq    = station->frequency;
     int64_t bandwidth = station->bandwidth;
     int index = lrint(F2INDEX(freq));
-    int len   = (bandwidth * 2ll * sdr->block_size + sdr->sdr_sample_rate/2) / sdr->sdr_sample_rate;
+    int len   = (bandwidth * 1ll * sdr->block_size + sdr->sdr_sample_rate/2) / sdr->sdr_sample_rate;
     float *newbuf;
     float scale;
     int sample_rate = sdr->sdr_sample_rate * (int64_t)sdr->am_block_size / sdr->block_size;
@@ -1030,7 +1030,7 @@ static int demodulate_fm(SDRContext *sdr, Station *station, AVStream *st, AVPack
     double freq    = station->frequency;
     int64_t bandwidth = station->bandwidth;
     int index = lrint(F2INDEX(freq));
-    int len   = (bandwidth * 2ll * sdr->block_size + sdr->sdr_sample_rate/2) / sdr->sdr_sample_rate;
+    int len   = (bandwidth * 1ll * sdr->block_size + sdr->sdr_sample_rate/2) / sdr->sdr_sample_rate;
     float *newbuf;
     float scale;
     int sample_rate    = sdr->sdr_sample_rate * (int64_t)sdr->fm_block_size    / sdr->block_size;
@@ -1687,11 +1687,11 @@ int avpriv_sdr_common_init(AVFormatContext *s)
     av_log(s, AV_LOG_INFO, "Block size %d\n", sdr->block_size);
 
     sdr->block_time = sdr->block_size / (double)sdr->sdr_sample_rate;
-    sdr->am_bandwidth    =   6   * 1000;
+    sdr->am_bandwidth    =  12   * 1000;
     sdr->fm_bandwidth    = 180   * 1000;
     sdr->fm_bandwidth_p2 =  16.5 * 1000; // Officially Stereo Broadcast FM has 15khz audio bandwidth
 
-    sdr->am_block_size    = find_block_size(sdr, sdr->am_bandwidth);
+    sdr->am_block_size    = find_block_size(sdr, sdr->am_bandwidth / 2);
     sdr->fm_block_size    = find_block_size(sdr, sdr->fm_bandwidth);
     sdr->fm_block_size_p2 = find_block_size(sdr, sdr->fm_bandwidth_p2);
 
