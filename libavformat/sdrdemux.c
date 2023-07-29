@@ -1150,6 +1150,8 @@ static int demodulate_fm(SDRContext *sdr, Station *station, AVStream *st, AVPack
             sst->out_buf[2*i+0] = m + q;
             sst->out_buf[2*i+1] = m - q;
         } else {
+            newbuf[2*i+1] = 0;
+
             sst->out_buf[2*i+0] =
             sst->out_buf[2*i+1] = m;
         }
