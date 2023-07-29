@@ -1135,7 +1135,9 @@ static int demodulate_fm(SDRContext *sdr, Station *station, AVStream *st, AVPack
     if (!newbuf)
         return AVERROR(ENOMEM);
 
-    scale      = 5 / (M_PI * 2*sdr->fm_block_size);
+    //ATAN gives us +-PI the following 2 transforms scale by the given values, we reverse this here
+    scale = 1.0 / (M_PI * sqrt(2*sdr->fm_block_size * 2*sdr->fm_block_size_p2));
+
     for(i = 0; i<sdr->fm_block_size_p2; i++) {
         float m, q;
 
