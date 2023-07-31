@@ -1809,7 +1809,7 @@ static int sdrfile_initial_setup(AVFormatContext *s)
 {
     SDRContext *sdr = s->priv_data;
 
-    int version, ret, bits;
+    int version, bits;
 
     avio_skip(s->pb, 5);        //FFSDR
     version = avio_rb24(s->pb); //000
