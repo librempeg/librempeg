@@ -2978,6 +2978,46 @@ Results are in dB per channel at end of either input.
 
 Pass the audio source unchanged to the output.
 
+@section aoverlay
+
+Replace a specified section of an audio stream with another input audio stream.
+
+In case no enable option for timeline editing is specified, the second audio stream will
+be output at sections of the first stream which have a gap in PTS (Presentation TimeStamp) values
+such that the output stream's PTS values are monotonous.
+
+This filter also supports linear cross fading when transitioning from one
+input stream to another.
+
+The filter accepts the following option:
+
+@table @option
+@item cf_duration
+Set duration (in seconds) for cross fade between the inputs. Default value is @code{100} milliseconds.
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Replace the first stream with the second stream from @code{t=10} seconds to @code{t=20} seconds:
+@example
+ffmpeg -i first.wav -i second.wav -filter_complex "aoverlay=enable='between(t,10,20)'" output.wav
+@end example
+
+@item
+Do the same as above, but with crossfading for @code{2} seconds between the streams:
+@example
+ffmpeg -i first.wav -i second.wav -filter_complex "aoverlay=cf_duration=2:enable='between(t,10,20)'" output.wav
+@end example
+
+@item
+Introduce a PTS gap from @code{t=4} seconds to @code{t=8} seconds in the first stream and output the second stream during this gap:
+@example
+ffmpeg -i first.wav -i second.wav -filter_complex "[0]aselect='not(between(t,4,8))'[temp];[temp][1]aoverlay[out]" -map "[out]" output.wav
+@end example
+@end itemize
+
 @section apad
 
 Pad the end of an audio stream with silence.

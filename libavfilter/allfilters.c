@@ -91,6 +91,7 @@ extern const FFFilter ff_af_anoformat;
 extern const FFFilter ff_af_anotch;
 extern const FFFilter ff_af_anrmse;
 extern const FFFilter ff_af_anull;
+extern const FFFilter ff_af_aoverlay;
 extern const FFFilter ff_af_apad;
 extern const FFFilter ff_af_aperms;
 extern const FFFilter ff_af_aphaser;
