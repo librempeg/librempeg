@@ -514,7 +514,7 @@ static int config_output(AVFilterLink *outlink)
     return 0;
 }
 
-static const AVFilterPad af_aoverlay_inputs[] = {
+static const AVFilterPad inputs[] = {
     {
         .name = "main",
         .type = AVMEDIA_TYPE_AUDIO,
@@ -525,7 +525,7 @@ static const AVFilterPad af_aoverlay_inputs[] = {
     },
 };
 
-static const AVFilterPad af_aoverlay_outputs[] = {
+static const AVFilterPad outputs[] = {
     {
         .name           = "default",
         .type           = AVMEDIA_TYPE_AUDIO,
@@ -541,8 +541,8 @@ const FFFilter ff_af_aoverlay = {
     .activate       = activate,
     .init           = init,
     .uninit         = uninit,
-    FILTER_INPUTS(af_aoverlay_inputs),
-    FILTER_OUTPUTS(af_aoverlay_outputs),
+    FILTER_INPUTS(inputs),
+    FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS_ARRAY(sample_fmts),
     .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
 };
