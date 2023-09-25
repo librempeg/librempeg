@@ -57,7 +57,6 @@ typedef struct AOverlayContext {
 
     uint8_t **cf0;
     uint8_t **cf1;
-    int cf_buffers_unavailable[2];
 } AOverlayContext;
 
 static const enum AVSampleFormat sample_fmts[] = {
@@ -121,9 +120,9 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_audio_fifo_free(s->overlay_sample_buffers);
 
     for (int i = 0; i < s->nb_channels; i++) {
-        if (!s->cf_buffers_unavailable[0])
+        if (s->cf0)
             av_freep(&s->cf0[i]);
-        if (!s->cf_buffers_unavailable[1])
+        if (s->cf1)
             av_freep(&s->cf1[i]);
     }
     av_freep(&s->cf0);
@@ -449,7 +448,7 @@ static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AOverlayContext *s = ctx->priv;
-    int error = 0, size, fifo_size;
+    int size, fifo_size;
 
     switch (outlink->format) {
     case AV_SAMPLE_FMT_DBLP: s->crossfade_samples = crossfade_samples_dblp;
@@ -477,39 +476,28 @@ static int config_output(AVFilterLink *outlink)
 
     s->main_sample_buffers = av_audio_fifo_alloc(outlink->format, s->nb_channels, fifo_size);
     if (!s->main_sample_buffers)
-        error = 1;
+        return AVERROR(ENOMEM);
 
     s->overlay_sample_buffers = av_audio_fifo_alloc(outlink->format, s->nb_channels, fifo_size);
     if (!s->overlay_sample_buffers)
-        error = 1;
+        return AVERROR(ENOMEM);
 
-    s->cf0 = av_malloc_array(s->nb_channels, sizeof(uint8_t*));
-    if (!s->cf0) {
-        s->cf_buffers_unavailable[0] = 1;
-        error = 1;
-    }
+    s->cf0 = av_calloc(s->nb_channels, sizeof(*s->cf0));
+    if (!s->cf0)
+        return AVERROR(ENOMEM);
 
-    s->cf1 = av_malloc_array(s->nb_channels, sizeof(uint8_t*));
-    if (!s->cf1) {
-        s->cf_buffers_unavailable[1] = 1;
-        error = 1;
-    }
+    s->cf1 = av_calloc(s->nb_channels, sizeof(*s->cf1));
+    if (!s->cf1)
+        return AVERROR(ENOMEM);
 
     for (int i = 0; i < s->nb_channels; i++) {
-        if (!s->cf_buffers_unavailable[0]) {
-            s->cf0[i] = av_malloc_array(s->cf_samples, size);
-            if (!s->cf0[i])
-                error = 1;
-        }
-        if (!s->cf_buffers_unavailable[1]) {
-            s->cf1[i] = av_malloc_array(s->cf_samples, size);
-            if (!s->cf1[i])
-                error = 1;
-        }
+        s->cf0[i] = av_malloc_array(s->cf_samples, size);
+        if (!s->cf0[i])
+            return AVERROR(ENOMEM);
+        s->cf1[i] = av_malloc_array(s->cf_samples, size);
+        if (!s->cf1[i])
+            return AVERROR(ENOMEM);
     }
-
-    if (error)
-        return AVERROR(ENOMEM);
 
     return 0;
 }
