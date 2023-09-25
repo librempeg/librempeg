@@ -218,7 +218,9 @@ static int consume_samples(AOverlayContext *s, AVFilterLink *overlay_inlink, AVF
         return 0;
     }
 
-    if ((ret = av_audio_fifo_write(s->overlay_sample_buffers, (void **)s->overlay_input->extended_data, nb_samples)) < 0)
+    ret = av_audio_fifo_write(s->overlay_sample_buffers, (void **)s->overlay_input->extended_data, nb_samples);
+    av_frame_free(&s->overlay_input);
+    if (ret < 0)
         return ret;
 
     return 1;
@@ -272,7 +274,9 @@ static int activate(AVFilterContext *ctx)
                 }
             }
 
-            if ((ret = av_audio_fifo_write(s->main_sample_buffers, (void **)s->main_input->extended_data, nb_samples)) < 0)
+            ret = av_audio_fifo_write(s->main_sample_buffers, (void **)s->main_input->extended_data, nb_samples);
+            av_frame_free(&s->main_input);
+            if (ret < 0)
                 return ret;
         } else if (ret < 0) {
             return ret;
