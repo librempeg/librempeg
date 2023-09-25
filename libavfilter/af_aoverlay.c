@@ -386,14 +386,14 @@ static int activate(AVFilterContext *ctx)
     }
 
     if (s->overlay_eof && av_audio_fifo_size(s->overlay_sample_buffers) > 0) {
-        if (av_audio_fifo_size(s->overlay_sample_buffers) != s->cf_samples) {
+        if (av_audio_fifo_size(s->overlay_sample_buffers) > s->cf_samples) {
             nb_samples = av_audio_fifo_size(s->overlay_sample_buffers) - s->cf_samples;
 
             if ((ret = crossfade_prepare(s, main_inlink, overlay_inlink, outlink, nb_samples, &main_buffer, &overlay_buffer, -1)) < 0)
                 return ret;
 
             return ff_filter_frame(outlink, overlay_buffer);
-        } else if (av_audio_fifo_size(s->overlay_sample_buffers) == s->cf_samples) {
+        } else if (av_audio_fifo_size(s->overlay_sample_buffers) >= s->cf_samples) {
             if ((ret = crossfade_samples(s, main_inlink, overlay_inlink, outlink, s->cf_samples, &out, -1)) < 0)
                 return ret;
 
