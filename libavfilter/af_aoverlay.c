@@ -145,7 +145,7 @@ static int crossfade_prepare(AOverlayContext *s, AVFilterLink *main_inlink, AVFi
     (*main_buffer)->pts = s->pts;
     s->pts += av_rescale_q(nb_samples, (AVRational){ 1, outlink->sample_rate }, outlink->time_base);
 
-    if (ret = av_audio_fifo_read(s->main_sample_buffers, (void **) (*main_buffer)->extended_data, nb_samples) < 0)
+    if ((ret = av_audio_fifo_read(s->main_sample_buffers, (void **)(*main_buffer)->extended_data, nb_samples)) < 0)
         return ret;
 
     if (mode == 1) {
@@ -155,7 +155,7 @@ static int crossfade_prepare(AOverlayContext *s, AVFilterLink *main_inlink, AVFi
         if (!(*overlay_buffer))
             return AVERROR(ENOMEM);
 
-        if (ret = av_audio_fifo_read(s->overlay_sample_buffers, (void **) (*overlay_buffer)->extended_data, nb_samples) < 0)
+        if ((ret = av_audio_fifo_read(s->overlay_sample_buffers, (void **)(*overlay_buffer)->extended_data, nb_samples)) < 0)
             return ret;
 
         (*overlay_buffer)->pts = (*main_buffer)->pts;
@@ -175,10 +175,10 @@ static int crossfade_samples(AOverlayContext *s, AVFilterLink *main_inlink, AVFi
     if (!(*out))
         return AVERROR(ENOMEM);
 
-    if (ret = av_audio_fifo_read(s->main_sample_buffers, (void **) s->cf0, nb_samples) < 0)
+    if ((ret = av_audio_fifo_read(s->main_sample_buffers, (void **) s->cf0, nb_samples)) < 0)
         return ret;
 
-    if (ret = av_audio_fifo_read(s->overlay_sample_buffers, (void **) s->cf1, nb_samples) < 0)
+    if ((ret = av_audio_fifo_read(s->overlay_sample_buffers, (void **) s->cf1, nb_samples)) < 0)
         return ret;
 
     if (mode == 0) {
@@ -219,7 +219,7 @@ static int consume_samples(AOverlayContext *s, AVFilterLink *overlay_inlink, AVF
         return 0;
     }
 
-    if (ret = av_audio_fifo_write(s->overlay_sample_buffers, (void **)s->overlay_input->extended_data, nb_samples) < 0)
+    if ((ret = av_audio_fifo_write(s->overlay_sample_buffers, (void **)s->overlay_input->extended_data, nb_samples)) < 0)
         return ret;
 
     return 1;
@@ -273,7 +273,7 @@ static int activate(AVFilterContext *ctx)
                 }
             }
 
-            if (ret = av_audio_fifo_write(s->main_sample_buffers, (void **)s->main_input->extended_data, nb_samples) < 0)
+            if ((ret = av_audio_fifo_write(s->main_sample_buffers, (void **)s->main_input->extended_data, nb_samples)) < 0)
                 return ret;
         } else if (ret < 0) {
             return ret;
@@ -329,14 +329,14 @@ static int activate(AVFilterContext *ctx)
         if (s->transition_pts != AV_NOPTS_VALUE && av_audio_fifo_size(s->main_sample_buffers) > s->cf_samples + SEGMENT_SIZE) {
             nb_samples = av_audio_fifo_size(s->main_sample_buffers) + av_audio_fifo_space(s->main_sample_buffers) - s->cf_samples - SEGMENT_SIZE;
 
-            if (ret = crossfade_prepare(s, main_inlink, overlay_inlink, outlink, nb_samples, &main_buffer, &overlay_buffer, 1) < 0)
+            if ((ret = crossfade_prepare(s, main_inlink, overlay_inlink, outlink, nb_samples, &main_buffer, &overlay_buffer, 1)) < 0)
                 return ret;
 
             return ff_filter_frame(outlink, main_buffer);
         } else if (s->transition_pts != AV_NOPTS_VALUE || s->transition_pts2 != AV_NOPTS_VALUE) {
             nb_samples = FFMIN(s->cf_samples, av_audio_fifo_size(s->main_sample_buffers) - SEGMENT_SIZE);
 
-            if (ret = crossfade_samples(s, main_inlink, overlay_inlink, outlink, nb_samples, &out, 1) < 0)
+            if ((ret = crossfade_samples(s, main_inlink, overlay_inlink, outlink, nb_samples, &out, 1)) < 0)
                 return ret;
 
             return ff_filter_frame(outlink, out);
@@ -350,7 +350,7 @@ static int activate(AVFilterContext *ctx)
             main_buffer->pts = s->pts;
             s->pts += av_rescale_q(nb_samples, (AVRational){ 1, outlink->sample_rate }, outlink->time_base);
 
-            if (ret = av_audio_fifo_read(s->main_sample_buffers, (void **)main_buffer->extended_data, nb_samples) < 0)
+            if ((ret = av_audio_fifo_read(s->main_sample_buffers, (void **)main_buffer->extended_data, nb_samples)) < 0)
                 return ret;
         }
 
@@ -367,7 +367,7 @@ static int activate(AVFilterContext *ctx)
         if (!overlay_buffer)
             return AVERROR(ENOMEM);
 
-        if (ret = av_audio_fifo_read(s->overlay_sample_buffers, (void **)overlay_buffer->extended_data, nb_samples) < 0)
+        if ((ret = av_audio_fifo_read(s->overlay_sample_buffers, (void **)overlay_buffer->extended_data, nb_samples)) < 0)
             return ret;
 
         s->previous_samples = nb_samples;
@@ -386,12 +386,12 @@ static int activate(AVFilterContext *ctx)
         if (av_audio_fifo_size(s->overlay_sample_buffers) != s->cf_samples) {
             nb_samples = av_audio_fifo_size(s->overlay_sample_buffers) - s->cf_samples;
 
-            if (ret = crossfade_prepare(s, main_inlink, overlay_inlink, outlink, nb_samples, &main_buffer, &overlay_buffer, -1) < 0)
+            if ((ret = crossfade_prepare(s, main_inlink, overlay_inlink, outlink, nb_samples, &main_buffer, &overlay_buffer, -1)) < 0)
                 return ret;
 
             return ff_filter_frame(outlink, overlay_buffer);
         } else if (av_audio_fifo_size(s->overlay_sample_buffers) == s->cf_samples) {
-            if (ret = crossfade_samples(s, main_inlink, overlay_inlink, outlink, s->cf_samples, &out, -1) < 0)
+            if ((ret = crossfade_samples(s, main_inlink, overlay_inlink, outlink, s->cf_samples, &out, -1)) < 0)
                 return ret;
 
             return ff_filter_frame(outlink, out);
@@ -401,7 +401,7 @@ static int activate(AVFilterContext *ctx)
     if (s->transition_pts != AV_NOPTS_VALUE && !s->crossfade_ready) {
         nb_samples = av_rescale_q(s->transition_pts - (s->cf_samples / 2) - s->pts, outlink->time_base, (AVRational) { 1, outlink->sample_rate });
 
-        if (ret = crossfade_prepare(s, main_inlink, overlay_inlink, outlink, nb_samples, &main_buffer, &overlay_buffer, 0) < 0)
+        if ((ret = crossfade_prepare(s, main_inlink, overlay_inlink, outlink, nb_samples, &main_buffer, &overlay_buffer, 0)) < 0)
             return ret;
     } else if (s->transition_pts != AV_NOPTS_VALUE) {
         nb_samples = s->main_eof ? av_audio_fifo_size(s->main_sample_buffers) : s->cf_samples;
@@ -409,7 +409,7 @@ static int activate(AVFilterContext *ctx)
             nb_samples = av_rescale_q(s->transition_pts, outlink->time_base, (AVRational){ 1, outlink->sample_rate });
         }
 
-        if (ret = crossfade_samples(s, main_inlink, overlay_inlink, outlink, nb_samples, &out, 0) < 0)
+        if ((ret = crossfade_samples(s, main_inlink, overlay_inlink, outlink, nb_samples, &out, 0)) < 0)
             return ret;
 
         return ff_filter_frame(outlink, out);
@@ -422,7 +422,7 @@ static int activate(AVFilterContext *ctx)
         main_buffer->pts = s->pts;
         s->pts += av_rescale_q(nb_samples, (AVRational){ 1, outlink->sample_rate }, outlink->time_base);
 
-        if (ret = av_audio_fifo_read(s->main_sample_buffers, (void **)main_buffer->extended_data, nb_samples) < 0)
+        if ((ret = av_audio_fifo_read(s->main_sample_buffers, (void **)main_buffer->extended_data, nb_samples)) < 0)
             return ret;
     }
 
@@ -435,7 +435,7 @@ static int activate(AVFilterContext *ctx)
             if (!overlay_buffer)
                 return AVERROR(ENOMEM);
 
-            if (ret = av_audio_fifo_read(s->overlay_sample_buffers, (void **)overlay_buffer->extended_data, nb_samples) < 0)
+            if ((ret = av_audio_fifo_read(s->overlay_sample_buffers, (void **)overlay_buffer->extended_data, nb_samples)) < 0)
                 return ret;
 
             overlay_buffer->pts = main_buffer->pts;
