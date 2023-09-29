@@ -156,7 +156,6 @@ OBJS-$(CONFIG_HIGHPASS_FILTER)               += af_biquads.o
 OBJS-$(CONFIG_HIGHSHELF_FILTER)              += af_biquads.o
 OBJS-$(CONFIG_JOIN_FILTER)                   += af_join.o
 OBJS-$(CONFIG_LADSPA_FILTER)                 += af_ladspa.o
-OBJS-$(CONFIG_LOUDNORM_FILTER)               += af_loudnorm.o ebur128.o
 OBJS-$(CONFIG_LOWPASS_FILTER)                += af_biquads.o
 OBJS-$(CONFIG_LOWSHELF_FILTER)               += af_biquads.o
 OBJS-$(CONFIG_LV2_FILTER)                    += af_lv2.o
