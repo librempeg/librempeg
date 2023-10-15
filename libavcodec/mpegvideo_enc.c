@@ -75,6 +75,7 @@
 #include "wmv2enc.h"
 #include "rv10enc.h"
 #include "packet_internal.h"
+#include "refstruct.h"
 #include <limits.h>
 #include "sp5x.h"
 
@@ -820,7 +821,8 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
         !FF_ALLOCZ_TYPED_ARRAY(s->q_inter_matrix16,        32) ||
         !FF_ALLOCZ_TYPED_ARRAY(s->input_picture,           MAX_B_FRAMES + 1) ||
         !FF_ALLOCZ_TYPED_ARRAY(s->reordered_input_picture, MAX_B_FRAMES + 1) ||
-        !(s->new_pic = av_frame_alloc()))
+        !(s->new_pic = av_frame_alloc()) ||
+        !(s->picture_pool = ff_mpv_alloc_pic_pool()))
         return AVERROR(ENOMEM);
 
     /* Allocate MV tables; the MV and MB tables will be copied
@@ -991,7 +993,14 @@ av_cold int ff_mpv_encode_end(AVCodecContext *avctx)
     ff_rate_control_uninit(&s->rc_context);
 
     ff_mpv_common_end(s);
+    ff_refstruct_pool_uninit(&s->picture_pool);
 
+    if (s->input_picture && s->reordered_input_picture) {
+        for (int i = 0; i < MAX_B_FRAMES + 1; i++) {
+            ff_refstruct_unref(&s->input_picture[i]);
+            ff_refstruct_unref(&s->reordered_input_picture[i]);
+        }
+    }
     for (i = 0; i < FF_ARRAY_ELEMS(s->tmp_frames); i++)
         av_frame_free(&s->tmp_frames[i]);
 
@@ -1130,11 +1139,13 @@ static int load_input_picture(MpegEncContext *s, const AVFrame *pic_arg)
 {
     MPVPicture *pic = NULL;
     int64_t pts;
-    int i, display_picture_number = 0, ret;
+    int display_picture_number = 0, ret;
     int encoding_delay = s->max_b_frames ? s->max_b_frames
                                          : (s->low_delay ? 0 : 1);
     int flush_offset = 1;
     int direct = 1;
+
+    av_assert1(!s->input_picture[0]);
 
     if (pic_arg) {
         pts = pic_arg->pts;
@@ -1181,16 +1192,13 @@ static int load_input_picture(MpegEncContext *s, const AVFrame *pic_arg)
         ff_dlog(s->avctx, "%d %d %"PTRDIFF_SPECIFIER" %"PTRDIFF_SPECIFIER"\n", pic_arg->linesize[0],
                 pic_arg->linesize[1], s->linesize, s->uvlinesize);
 
-        i = ff_find_unused_picture(s->avctx, s->picture, direct);
-        if (i < 0)
-            return i;
-
-        pic = &s->picture[i];
-        pic->reference = 3;
+        pic = ff_refstruct_pool_get(s->picture_pool);
+        if (!pic)
+            return AVERROR(ENOMEM);
 
         if (direct) {
             if ((ret = av_frame_ref(pic->f, pic_arg)) < 0)
-                return ret;
+                goto fail;
             pic->shared = 1;
         } else {
             ret = prepare_picture(s, pic->f, pic_arg);
@@ -1240,17 +1248,17 @@ static int load_input_picture(MpegEncContext *s, const AVFrame *pic_arg)
 
         pic->display_picture_number = display_picture_number;
         pic->f->pts = pts; // we set this here to avoid modifying pic_arg
-    } else {
-        /* Flushing: When we have not received enough input frames,
-         * ensure s->input_picture[0] contains the first picture */
+    } else if (!s->reordered_input_picture[1]) {
+        /* Flushing: When the above check is true, the encoder is about to run
+         * out of frames to encode. Check if there are input_pictures left;
+         * if so, ensure s->input_picture[0] contains the first picture.
+         * A flush_offset != 1 will only happen if we did not receive enough
+         * input frames. */
         for (flush_offset = 0; flush_offset < encoding_delay + 1; flush_offset++)
             if (s->input_picture[flush_offset])
                 break;
 
-        if (flush_offset <= 1)
-            flush_offset = 1;
-        else
-            encoding_delay = encoding_delay - flush_offset + 1;
+        encoding_delay -= flush_offset - 1;
     }
 
     /* shift buffer entries */
@@ -1261,7 +1269,7 @@ static int load_input_picture(MpegEncContext *s, const AVFrame *pic_arg)
 
     return 0;
 fail:
-    ff_mpeg_unref_picture(pic);
+    ff_refstruct_unref(&pic);
     return ret;
 }
 
@@ -1474,8 +1482,10 @@ fail:
 /**
  * Determines whether an input picture is discarded or not
  * and if not determines the length of the next chain of B frames
- * and puts these pictures (including the P frame) into
+ * and moves these pictures (including the P frame) into
  * reordered_input_picture.
+ * input_picture[0] is always NULL when exiting this function, even on error;
+ * reordered_input_picture[0] is always NULL when exiting this function on error.
  */
 static int set_bframe_chain_length(MpegEncContext *s)
 {
@@ -1489,7 +1499,7 @@ static int set_bframe_chain_length(MpegEncContext *s)
             s->next_pic.ptr &&
             skip_check(s, s->input_picture[0], s->next_pic.ptr)) {
             // FIXME check that the gop check above is +-1 correct
-            ff_mpeg_unref_picture(s->input_picture[0]);
+            ff_refstruct_unref(&s->input_picture[0]);
 
             ff_vbv_update(s, 0);
 
@@ -1500,6 +1510,7 @@ static int set_bframe_chain_length(MpegEncContext *s)
     if (/*s->picture_in_gop_number >= s->gop_size ||*/
         !s->next_pic.ptr || s->intra_only) {
         s->reordered_input_picture[0] = s->input_picture[0];
+        s->input_picture[0] = NULL;
         s->reordered_input_picture[0]->f->pict_type = AV_PICTURE_TYPE_I;
         s->reordered_input_picture[0]->coded_picture_number =
             s->coded_picture_number++;
@@ -1554,7 +1565,7 @@ static int set_bframe_chain_length(MpegEncContext *s)
         } else if (s->b_frame_strategy == 2) {
             b_frames = estimate_best_b_count(s);
             if (b_frames < 0) {
-                ff_mpeg_unref_picture(s->input_picture[0]);
+                ff_refstruct_unref(&s->input_picture[0]);
                 return b_frames;
             }
         }
@@ -1588,12 +1599,14 @@ static int set_bframe_chain_length(MpegEncContext *s)
             b_frames--;
 
         s->reordered_input_picture[0] = s->input_picture[b_frames];
+        s->input_picture[b_frames]    = NULL;
         if (s->reordered_input_picture[0]->f->pict_type != AV_PICTURE_TYPE_I)
             s->reordered_input_picture[0]->f->pict_type = AV_PICTURE_TYPE_P;
         s->reordered_input_picture[0]->coded_picture_number =
             s->coded_picture_number++;
         for (int i = 0; i < b_frames; i++) {
             s->reordered_input_picture[i + 1] = s->input_picture[i];
+            s->input_picture[i]               = NULL;
             s->reordered_input_picture[i + 1]->f->pict_type =
                 AV_PICTURE_TYPE_B;
             s->reordered_input_picture[i + 1]->coded_picture_number =
@@ -1608,11 +1621,14 @@ static int select_input_picture(MpegEncContext *s)
 {
     int ret;
 
+    av_assert1(!s->reordered_input_picture[0]);
+
     for (int i = 1; i <= MAX_B_FRAMES; i++)
         s->reordered_input_picture[i - 1] = s->reordered_input_picture[i];
     s->reordered_input_picture[MAX_B_FRAMES] = NULL;
 
     ret = set_bframe_chain_length(s);
+    av_assert1(!s->input_picture[0]);
     if (ret < 0)
         return ret;
 
@@ -1642,6 +1658,7 @@ static int select_input_picture(MpegEncContext *s)
             }
         }
         s->cur_pic.ptr = s->reordered_input_picture[0];
+        s->reordered_input_picture[0] = NULL;
         av_assert1(s->mb_width  == s->buffer_pools.alloc_mb_width);
         av_assert1(s->mb_height == s->buffer_pools.alloc_mb_height);
         av_assert1(s->mb_stride == s->buffer_pools.alloc_mb_stride);
@@ -1656,7 +1673,7 @@ static int select_input_picture(MpegEncContext *s)
     }
     return 0;
 fail:
-    ff_mpeg_unref_picture(s->reordered_input_picture[0]);
+    ff_refstruct_unref(&s->reordered_input_picture[0]);
     return ret;
 }
 
@@ -1719,13 +1736,6 @@ static void update_noise_reduction(MpegEncContext *s)
 
 static void frame_start(MpegEncContext *s)
 {
-    /* mark & release old frames */
-    if (s->pict_type != AV_PICTURE_TYPE_B && s->last_pic.ptr &&
-        s->last_pic.ptr != s->next_pic.ptr &&
-        s->last_pic.ptr->f->buf[0]) {
-        ff_mpv_unref_picture(&s->last_pic);
-    }
-
     s->cur_pic.ptr->f->pict_type = s->pict_type;
 
     if (s->pict_type != AV_PICTURE_TYPE_B) {
@@ -1745,6 +1755,8 @@ int ff_mpv_encode_picture(AVCodecContext *avctx, AVPacket *pkt,
     MpegEncContext *s = avctx->priv_data;
     int i, stuffing_count, ret;
     int context_count = s->slice_context_count;
+
+    ff_mpv_unref_picture(&s->cur_pic);
 
     s->vbv_ignore_qmax = 0;
 
@@ -1972,11 +1984,7 @@ vbv_retry:
         s->frame_bits = 0;
     }
 
-    /* release non-reference frames */
-    for (i = 0; i < MAX_PICTURE_COUNT; i++) {
-        if (!s->picture[i].reference)
-            ff_mpeg_unref_picture(&s->picture[i]);
-    }
+    ff_mpv_unref_picture(&s->cur_pic);
 
     av_assert1((s->frame_bits & 7) == 0);
 
