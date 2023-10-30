@@ -66,13 +66,11 @@ static const enum AVSampleFormat sample_fmts[] = {
 };
 
 #define SEGMENT_SIZE 1024
-
 #define OFFSET(x) offsetof(AOverlayContext, x)
-
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
 
 static const AVOption aoverlay_options[] = {
-    { "cf_duration",    "set duration (in seconds) for cross fade between the inputs", OFFSET(cf_duration),    AV_OPT_TYPE_DURATION,   {.i64 = 100000}, 0,  60000000,   FLAGS },
+    { "cf_duration",    "set duration for cross fade between the inputs", OFFSET(cf_duration),    AV_OPT_TYPE_DURATION,   {.i64 = 100000}, 0,  60000000,   FLAGS },
     { NULL }
 };
 
@@ -117,7 +115,10 @@ static av_cold void uninit(AVFilterContext *ctx)
     AOverlayContext *s = ctx->priv;
 
     av_audio_fifo_free(s->main_sample_buffers);
+    s->main_sample_buffers = NULL;
+
     av_audio_fifo_free(s->overlay_sample_buffers);
+    s->overlay_sample_buffers = NULL;
 
     for (int i = 0; i < s->nb_channels; i++) {
         if (s->cf0)
@@ -498,6 +499,7 @@ static int config_output(AVFilterLink *outlink)
         s->cf0[i] = av_malloc_array(s->cf_samples, size);
         if (!s->cf0[i])
             return AVERROR(ENOMEM);
+
         s->cf1[i] = av_malloc_array(s->cf_samples, size);
         if (!s->cf1[i])
             return AVERROR(ENOMEM);
