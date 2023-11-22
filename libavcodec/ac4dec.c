@@ -35,9 +35,9 @@
 
 #include "ac4dec_data.h"
 #include "avcodec.h"
-#include "get_bits.h"
 #include "codec_internal.h"
 #include "decode.h"
+#include "get_bits.h"
 #include "kbdwin.h"
 #include "unary.h"
 
@@ -540,25 +540,29 @@ static const uint8_t channel_mode_nb_channels[] = {
     1, 2, 3, 5, 6, 7, 8, 7, 8, 7, 8, 11, 12, 13, 14, 24, 0
 };
 
-static const uint64_t channel_mode_layouts[] = {
-    AV_CH_LAYOUT_MONO,
-    AV_CH_LAYOUT_STEREO,
-    AV_CH_LAYOUT_SURROUND,
-    AV_CH_LAYOUT_5POINT0,
-    AV_CH_LAYOUT_5POINT1,
-    AV_CH_LAYOUT_7POINT0,
-    AV_CH_LAYOUT_7POINT1,
-    AV_CH_LAYOUT_7POINT0_FRONT,
-    AV_CH_LAYOUT_7POINT0_FRONT|AV_CH_LOW_FREQUENCY,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
+static const AVChannelLayout ff_ac4_ch_layouts[] = {
+    AV_CHANNEL_LAYOUT_MONO,
+    AV_CHANNEL_LAYOUT_STEREO,
+    AV_CHANNEL_LAYOUT_SURROUND,
+    AV_CHANNEL_LAYOUT_5POINT0,
+    AV_CHANNEL_LAYOUT_5POINT1,
+    AV_CHANNEL_LAYOUT_7POINT0,
+    AV_CHANNEL_LAYOUT_7POINT1,
+    AV_CHANNEL_LAYOUT_7POINT0_FRONT,
+    {
+        .nb_channels = 7,
+        .order       = AV_CHANNEL_ORDER_NATIVE,
+        .u.mask      = AV_CH_LAYOUT_7POINT0 | AV_CH_LOW_FREQUENCY,
+    },
+    { 0 },
+    { 0 },
+    { 0 },
+    { 0 },
+    { 0 },
+    { 0 },
+    { 0 },
+    { 0 },
+    { 0 },
 };
 
 static VLC channel_mode_vlc;
@@ -5717,10 +5721,10 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     ssinfo = s->version == 2 ? &s->ssgroup[0].ssinfo : &s->pinfo[presentation].ssinfo;
     avctx->sample_rate = s->fs_index ? 48000 : 44100;
     avctx->channels = channel_mode_nb_channels[ssinfo->channel_mode];
-    avctx->channel_layout = channel_mode_layouts[ssinfo->channel_mode];
-    frame->nb_samples = av_rescale(s->frame_len_base,
-                                   s->resampling_ratio.num,
-                                   s->resampling_ratio.den);
+    avctx->ch_layout = ff_ac4_ch_layouts[ssinfo->channel_mode];
+    //frame->nb_samples = av_rescale(s->frame_len_base,
+    //                               s->resampling_ratio.num,
+    //                               s->resampling_ratio.den);
     frame->nb_samples = s->frame_len_base;
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
