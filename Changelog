@@ -15,6 +15,7 @@ version <next>:
   ffmpeg CLI now all run in parallel
 - atonesrc filter
 - enable gdigrab device to grab a window using the hwnd=HANDLER syntax
+- IAMF raw demuxer
 
 version 6.1:
 - libaribcaption decoder
