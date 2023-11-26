@@ -475,6 +475,21 @@ Always use double-floating point precision sample format.
 @end table
 @end table
 
+@section acentercut
+Cut the center audio from stereo.
+
+A description of the accepted options follows.
+
+@table @option
+@item factor
+Set the center cut factor, default is @var{1.0}.
+Allowed range is from @var{0.0} to @var{1.0}.
+@end table
+
+@subsection Commands
+
+This filter supports the above options as @ref{commands}.
+
 @section acompressor
 
 A compressor is mainly used to reduce the dynamic range of a signal.
