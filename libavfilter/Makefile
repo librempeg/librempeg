@@ -69,6 +69,7 @@ OBJS-$(CONFIG_AGATE_FILTER)                  += af_agate.o
 OBJS-$(CONFIG_AIIR_FILTER)                   += af_aiir.o
 OBJS-$(CONFIG_AINTEGRAL_FILTER)              += af_aderivative.o
 OBJS-$(CONFIG_AINTERLEAVE_FILTER)            += f_interleave.o
+OBJS-$(CONFIG_AKALMAN_FILTER)                += af_akalman.o
 OBJS-$(CONFIG_ALATENCY_FILTER)               += f_latency.o
 OBJS-$(CONFIG_ALIMITER_FILTER)               += af_alimiter.o
 OBJS-$(CONFIG_ALLPASS_FILTER)                += af_biquads.o
