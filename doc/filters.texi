@@ -3274,6 +3274,68 @@ Set oversampling factor.
 
 This filter supports the all above options as @ref{commands}.
 
+@section aspace
+Apply Arbitrary Distance-based Amplitude Panning to input audio stream.
+
+Accepted input audio channel layout is mono only.
+
+It accepts the following options:
+@table @option
+@item layout
+The channel layout of the output stream. The default is "stereo".
+
+@item a
+Set the source audio azimuth position in degrees.
+Allowed values are from @var{-180.0} to @var{180.0}.
+
+@item e
+Set the source audio elevation position in degrees.
+Allowed values are from @var{-90.0} to @var{90.0}.
+
+@item r
+Set the source audio distance from central point.
+
+@item b
+Set the spatial blur factor. Allowed values are from @var{0.001} to @var{1.0}.
+
+@item o
+Set the rolloff in decibels, this sets inverse distance law for sound propagating
+in a free field. Allowed range is from @var{0} to @var{90}.
+
+@item R
+Set the distance of each speaker in regular (circular) layout from central point.
+Allowed values are from @var{0.01} to @var{100.0}.
+
+@item precision
+Set which precision to use when processing samples.
+
+@table @option
+@item auto
+Auto pick internal sample format depending on other filters.
+
+@item float
+Always use single-floating point precision sample format.
+
+@item double
+Always use double-floating point precision sample format.
+@end table
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Pan single-channel input audio stream into 5.1 layout with custom azimuth position of -15 deg
+and spatial blur of 0.1 with custom rolloff of 6 dB:
+@example
+aspace=layout=5.1:b=0.1:o=6:a=-15
+@end example
+@end itemize
+
+@subsection Commands
+
+This filter supports the some of above options as @ref{commands}.
+
 @section aspectralstats
 
 Display frequency domain statistical information about the audio channels.

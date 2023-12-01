@@ -91,6 +91,7 @@ extern const AVFilter ff_af_ashowinfo;
 extern const AVFilter ff_af_asidedata;
 extern const AVFilter ff_af_asisdr;
 extern const AVFilter ff_af_asoftclip;
+extern const AVFilter ff_af_aspace;
 extern const AVFilter ff_af_aspectralstats;
 extern const AVFilter ff_af_asplit;
 extern const AVFilter ff_af_asr;
