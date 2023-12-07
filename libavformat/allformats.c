@@ -417,6 +417,7 @@ extern const AVInputFormat  ff_scd_demuxer;
 extern const AVInputFormat  ff_sdns_demuxer;
 extern const AVInputFormat  ff_sdp_demuxer;
 extern const AVInputFormat  ff_sdr2_demuxer;
+extern const AVInputFormat  ff_sdrfile_demuxer;
 extern const AVInputFormat  ff_sds_demuxer;
 extern const AVInputFormat  ff_sdx_demuxer;
 extern const AVInputFormat  ff_segafilm_demuxer;

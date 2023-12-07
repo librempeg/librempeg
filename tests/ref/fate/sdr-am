@@ -1,0 +1,46 @@
+#tb 0: 12/125
+#media_type 0: video
+#codec_id 0: rawvideo
+#dimensions 0: 400x200
+#sar 0: 0/1
+#tb 1: 1/16000
+#media_type 1: audio
+#codec_id 1: pcm_u8
+#sample_rate 1: 16000
+#channel_layout_name 1: stereo
+#tb 2: 1/16000
+#media_type 2: audio
+#codec_id 2: pcm_u8
+#sample_rate 2: 16000
+#channel_layout_name 2: stereo
+#tb 3: 1/16000
+#media_type 3: audio
+#codec_id 3: pcm_u8
+#sample_rate 3: 16000
+#channel_layout_name 3: stereo
+#tb 4: 1/16000
+#media_type 4: audio
+#codec_id 4: pcm_u8
+#sample_rate 4: 16000
+#channel_layout_name 4: stereo
+#tb 5: 1/16000
+#media_type 5: audio
+#codec_id 5: pcm_u8
+#sample_rate 5: 16000
+#channel_layout_name 5: stereo
+0,          0,          0,        1,   320000, 0x816a0964
+0,          1,          1,        1,   320000, 0x140ce2da
+1,       2048,       2048,     1024,     2048, 0x3cd002ad
+2,       2048,       2048,     1024,     2048, 0x8bdd034d
+3,       2048,       2048,     1024,     2048, 0xc6430169
+1,       3072,       3072,     1024,     2048, 0x3f6d01d4
+2,       3072,       3072,     1024,     2048, 0x2de9fde9
+3,       3072,       3072,     1024,     2048, 0xad7efe6f
+4,       3072,       3072,     1024,     2048, 0x2c18fef7
+5,       3072,       3072,     1024,     2048, 0x9c840168
+1,       4096,       4096,     1024,     2048, 0x6561fc7b
+2,       4096,       4096,     1024,     2048, 0xdcd6ff8d
+3,       4096,       4096,     1024,     2048, 0xedac0493
+4,       4096,       4096,     1024,     2048, 0x7e7cfe03
+5,       4096,       4096,     1024,     2048, 0x970a0066
+0,          3,          3,        1,   320000, 0x76d901a2
