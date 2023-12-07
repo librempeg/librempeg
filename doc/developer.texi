@@ -591,15 +591,6 @@ maintainer(s) will review and commit your stuff.
 Try to keep important discussions and requests (also) on the public
 developer mailing list, so that all developers can benefit from them.
 
-@subheading Check your entries in MAINTAINERS.
-Make sure that no parts of the codebase that you maintain are missing from the
-@file{MAINTAINERS} file. If something that you want to maintain is missing add it with
-your name after it.
-If at some point you no longer want to maintain some code, then please help in
-finding a new maintainer and also don't forget to update the @file{MAINTAINERS} file.
-
-We think our rules are not too hard. If you have comments, contact us.
-
 @anchor{Submitting patches}
 @chapter Submitting patches
 
