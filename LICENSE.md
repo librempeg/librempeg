@@ -12,7 +12,6 @@ configure to activate them. In this case, FFmpeg's license changes to GPL v2+.
 
 Specifically, the GPL parts of FFmpeg are:
 
-- libpostproc
 - optional x86 optimization in the files
     - `libavcodec/x86/flac_dsp_gpl.asm`
     - `libavcodec/x86/idct_mmx.c`

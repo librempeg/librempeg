@@ -60,8 +60,6 @@
 #include "libswscale/version.h"
 #include "libswresample/swresample.h"
 #include "libswresample/version.h"
-#include "libpostproc/postprocess.h"
-#include "libpostproc/version.h"
 #include "libavfilter/version.h"
 #include "cmdutils.h"
 #include "opt_common.h"
@@ -3653,7 +3651,6 @@ static void ffprobe_show_library_versions(WriterContext *w)
     SHOW_LIB_VERSION(avfilter,   AVFILTER);
     SHOW_LIB_VERSION(swscale,    SWSCALE);
     SHOW_LIB_VERSION(swresample, SWRESAMPLE);
-    SHOW_LIB_VERSION(postproc,   POSTPROC);
     writer_print_section_footer(w);
 }
 
