@@ -2880,6 +2880,13 @@ asplit[a][b],[a]adelay=32S|32S[a],[b][a]anlms=order=128:leakage=0.0005:mu=.5:out
 
 This filter supports the same commands as options, excluding option @code{order}.
 
+@section anrmse
+Measure Audio Normalized Root Mean Square Error.
+
+This filter takes two audio streams for input, and outputs first
+audio stream.
+Results are in dB per channel at end of either input.
+
 @section anull
 
 Pass the audio source unchanged to the output.

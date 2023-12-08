@@ -146,6 +146,44 @@ static int psnr_##name(AVFilterContext *ctx, void *arg, int jobnr,int nb_jobs)\
 PSNR_FILTER(fltp, float)
 PSNR_FILTER(dblp, double)
 
+#define NRMSE_FILTER(name, type)                                               \
+static int nrmse_##name(AVFilterContext *ctx, void *arg, int jobnr,int nb_jobs)\
+{                                                                             \
+    AudioSDRContext *s = ctx->priv;                                           \
+    AVFrame *u = s->cache[0];                                                 \
+    AVFrame *v = s->cache[1];                                                 \
+    const int channels = u->ch_layout.nb_channels;                            \
+    const int start = (channels * jobnr) / nb_jobs;                           \
+    const int end = (channels * (jobnr+1)) / nb_jobs;                         \
+    const int nb_samples = u->nb_samples;                                     \
+    const double current_sample = s->nb_samples + 1;                          \
+                                                                              \
+    for (int ch = start; ch < end; ch++) {                                    \
+        ChanStats *chs = &s->chs[ch];                                         \
+        const type *const us = (type *)u->extended_data[ch];                  \
+        const type *const vs = (type *)v->extended_data[ch];                  \
+        double uv = 0.;                                                       \
+        double v = chs->v;                                                    \
+        double u = chs->u;                                                    \
+                                                                              \
+        for (int n = 0; n < nb_samples; n++) {                                \
+            double ro = us[n] - v;                                            \
+            uv += (us[n] - vs[n]) * (us[n] - vs[n]);                          \
+            v += us[n] / (current_sample + n);                                \
+            u += (us[n] - v) * ro;                                            \
+        }                                                                     \
+                                                                              \
+        chs->uv += uv;                                                        \
+        chs->u = u;                                                           \
+        chs->v = v;                                                           \
+    }                                                                         \
+                                                                              \
+    return 0;                                                                 \
+}
+
+NRMSE_FILTER(fltp, float)
+NRMSE_FILTER(dblp, double)
+
 static int activate(AVFilterContext *ctx)
 {
     AudioSDRContext *s = ctx->priv;
@@ -211,6 +249,8 @@ static int config_output(AVFilterLink *outlink)
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? sdr_fltp : sdr_dblp;
     else if (!strcmp(ctx->filter->name, "asisdr"))
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? sisdr_fltp : sisdr_dblp;
+    else if (!strcmp(ctx->filter->name, "anrmse"))
+        s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? nrmse_fltp : nrmse_dblp;
     else
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? psnr_fltp : psnr_dblp;
 
@@ -234,6 +274,12 @@ static av_cold void uninit(AVFilterContext *ctx)
             double sisdr = scale * scale * s->chs[ch].v / fmax(0., s->chs[ch].u + scale*scale*s->chs[ch].v - 2.0*scale*s->chs[ch].uv);
 
             av_log(ctx, AV_LOG_INFO, "SI-SDR ch%d: %g dB\n", ch, 10. * log10(sisdr));
+        }
+    } else if (!strcmp(ctx->filter->name, "anrmse")) {
+        for (int ch = 0; ch < s->channels; ch++) {
+            double nrmse = s->chs[ch].uv / s->chs[ch].u;
+
+            av_log(ctx, AV_LOG_INFO, "NRMSE ch%d: %g dB\n", ch, -10. * log10(sqrt(nrmse)));
         }
     } else {
         for (int ch = 0; ch < s->channels; ch++) {
@@ -301,6 +347,21 @@ const AVFilter ff_af_apsnr = {
 const AVFilter ff_af_asisdr = {
     .name           = "asisdr",
     .description    = NULL_IF_CONFIG_SMALL("Measure Audio Scale-Invariant Signal-to-Distortion Ratio."),
+    .priv_size      = sizeof(AudioSDRContext),
+    .activate       = activate,
+    .uninit         = uninit,
+    .flags          = AVFILTER_FLAG_METADATA_ONLY |
+                      AVFILTER_FLAG_SLICE_THREADS |
+                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    FILTER_INPUTS(inputs),
+    FILTER_OUTPUTS(outputs),
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP,
+                      AV_SAMPLE_FMT_DBLP),
+};
+
+const AVFilter ff_af_anrmse = {
+    .name           = "anrmse",
+    .description    = NULL_IF_CONFIG_SMALL("Measure Audio Normalized Root Mean Square Error."),
     .priv_size      = sizeof(AudioSDRContext),
     .activate       = activate,
     .uninit         = uninit,
