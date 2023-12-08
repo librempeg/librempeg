@@ -146,6 +146,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     av_frame_copy_props(out, in);
     out->nb_samples = in->nb_samples;
+    out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
     ret = ff_filter_frame(outlink, out);
 fail:
     av_frame_free(&in);
