@@ -36,7 +36,6 @@ typedef struct ChanStats {
 typedef struct AudioSDRContext {
     int channels;
     uint64_t nb_samples;
-    double max;
 
     ChanStats *chs;
 
@@ -130,11 +129,15 @@ static int psnr_##name(AVFilterContext *ctx, void *arg, int jobnr,int nb_jobs)\
         const type *const us = (type *)u->extended_data[ch];                  \
         const type *const vs = (type *)v->extended_data[ch];                  \
         double sum_uv = 0.;                                                   \
+        double max = 0;                                                       \
                                                                               \
-        for (int n = 0; n < nb_samples; n++)                                  \
+        for (int n = 0; n < nb_samples; n++) {                                \
             sum_uv += (us[n] - vs[n]) * (us[n] - vs[n]);                      \
+            max = fmax(max, us[n] * us[n]);                                   \
+        }                                                                     \
                                                                               \
         chs->uv += sum_uv;                                                    \
+        chs->u = fmax(chs->u, max);                                           \
     }                                                                         \
                                                                               \
     return 0;                                                                 \
@@ -210,7 +213,6 @@ static int config_output(AVFilterLink *outlink)
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? sisdr_fltp : sisdr_dblp;
     else
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? psnr_fltp : psnr_dblp;
-    s->max = inlink->format == AV_SAMPLE_FMT_FLTP ? FLT_MAX : DBL_MAX;
 
     s->chs  = av_calloc(outlink->ch_layout.nb_channels, sizeof(*s->chs));
     if (!s->chs)
@@ -235,7 +237,7 @@ static av_cold void uninit(AVFilterContext *ctx)
         }
     } else {
         for (int ch = 0; ch < s->channels; ch++) {
-            double psnr = s->chs[ch].uv > 0.0 ? 2.0 * log(s->max) - log(s->nb_samples / s->chs[ch].uv) : INFINITY;
+            double psnr = s->chs[ch].uv > 0.0 ? 10. * log10(s->chs[ch].u * s->nb_samples / s->chs[ch].uv) : INFINITY;
 
             av_log(ctx, AV_LOG_INFO, "PSNR ch%d: %g dB\n", ch, psnr);
         }
