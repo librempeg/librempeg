@@ -49,7 +49,7 @@ typedef struct AudioCenterCutContext {
 
     int (*cc_stereo)(AVFilterContext *ctx, AVFrame *out);
 
-    AVTXContext *tx_ctx[2], *itx_ctx[2];
+    AVTXContext *tx_ctx, *itx_ctx;
     av_tx_fn tx_fn, itx_fn;
 } AudioCenterCutContext;
 
@@ -185,10 +185,8 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_frame_free(&s->windowed_frame);
     av_frame_free(&s->windowed_out);
 
-    av_tx_uninit(&s->tx_ctx[0]);
-    av_tx_uninit(&s->tx_ctx[1]);
-    av_tx_uninit(&s->itx_ctx[0]);
-    av_tx_uninit(&s->itx_ctx[1]);
+    av_tx_uninit(&s->tx_ctx);
+    av_tx_uninit(&s->itx_ctx);
 }
 
 static const AVFilterPad inputs[] = {
