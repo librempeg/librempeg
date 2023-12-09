@@ -206,7 +206,6 @@ static int fn(de_stereo)(AVFilterContext *ctx, AVFrame *out)
     ftype *left_in         = (ftype *)s->in_frame->extended_data[0];
     ftype *right_in        = (ftype *)s->in_frame->extended_data[1];
     ftype *left_out        = (ftype *)s->out_dist_frame->extended_data[0];
-    ftype *right_out       = (ftype *)s->out_dist_frame->extended_data[1];
     ftype *left_samples    = (ftype *)s->in->extended_data[0];
     ftype *right_samples   = (ftype *)s->in->extended_data[1];
     ftype *windowed_left   = (ftype *)s->windowed_frame->extended_data[0];
@@ -227,12 +226,10 @@ static int fn(de_stereo)(AVFilterContext *ctx, AVFrame *out)
     memmove(left_in, &left_in[overlap], offset * sizeof(ftype));
     memmove(right_in, &right_in[overlap], offset * sizeof(ftype));
     memmove(left_out, &left_out[overlap], offset * sizeof(ftype));
-    memmove(right_out, &right_out[overlap], offset * sizeof(ftype));
 
     memcpy(&left_in[offset], left_samples, nb_samples * sizeof(ftype));
     memcpy(&right_in[offset], right_samples, nb_samples * sizeof(ftype));
     memset(&left_out[offset], 0, overlap * sizeof(ftype));
-    memset(&right_out[offset], 0, overlap * sizeof(ftype));
 
     fn(apply_window)(s, left_in,  windowed_left,  0);
     fn(apply_window)(s, right_in, windowed_right, 0);
