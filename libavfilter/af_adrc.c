@@ -159,7 +159,7 @@ static int config_input(AVFilterLink *inlink)
         if (ret < 0)
             return ret;
 
-        scale = 1.f;
+        scale = 1.f / 1.5f;
         ret = av_tx_init(&s->itx_ctx[ch], &s->itx_fn, AV_TX_FLOAT_RDFT, 1, s->fft_size, &scale, 0);
         if (ret < 0)
             return ret;
@@ -313,13 +313,10 @@ static void feed(AVFilterContext *ctx, int ch,
 
     apply_window(s, drc_frame, out_dist_frame, 1);
 
-    // 4 times overlap with squared hanning window results in 1.5 time increase in amplitude
-    if (!ctx->is_disabled) {
-        for (int i = 0; i < overlap; i++)
-            out_samples[i] = out_dist_frame[i] / 1.5f;
-    } else {
+    if (ctx->is_disabled)
         memcpy(out_samples, in_frame, sizeof(*out_samples) * overlap);
-    }
+    else
+        memcpy(out_samples, out_dist_frame, sizeof(*out_samples) * overlap);
 }
 
 static int drc_channel(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int ch)
