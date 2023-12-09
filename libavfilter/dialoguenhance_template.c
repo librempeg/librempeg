@@ -68,7 +68,7 @@
 static int fn(de_tx_init)(AVFilterContext *ctx)
 {
     AudioDialogueEnhanceContext *s = ctx->priv;
-    ftype scale = ONE, iscale = ONE / (s->fft_size * 1.5f);
+    ftype scale = ONE, iscale = ONE / (s->fft_size * 2.f * 1.5f);
     int ret;
 
     s->window = av_calloc(s->fft_size, sizeof(ftype));
@@ -78,15 +78,15 @@ static int fn(de_tx_init)(AVFilterContext *ctx)
     for (int n = 0; n < s->fft_size; n++)
         fn(s->window)[n] = SIN(M_PI*n/(s->fft_size-1));
 
-    ret = av_tx_init(&s->tx_ctx[0], &s->tx_fn, TX_TYPE, 0, s->fft_size, &scale, 0);
+    ret = av_tx_init(&s->tx_ctx[0], &s->tx_fn, TX_TYPE, 0, s->fft_size * 2, &scale, 0);
     if (ret < 0)
         return ret;
 
-    ret = av_tx_init(&s->tx_ctx[1], &s->tx_fn, TX_TYPE, 0, s->fft_size, &scale, 0);
+    ret = av_tx_init(&s->tx_ctx[1], &s->tx_fn, TX_TYPE, 0, s->fft_size * 2, &scale, 0);
     if (ret < 0)
         return ret;
 
-    ret = av_tx_init(&s->itx_ctx, &s->itx_fn, TX_TYPE, 1, s->fft_size, &iscale, 0);
+    ret = av_tx_init(&s->itx_ctx, &s->itx_fn, TX_TYPE, 1, s->fft_size * 2, &iscale, 0);
     if (ret < 0)
         return ret;
 
@@ -240,11 +240,11 @@ static int fn(de_stereo)(AVFilterContext *ctx, AVFrame *out)
     fn(get_centere)((ctype *)windowed_oleft,
                     (ctype *)windowed_oright,
                     (ctype *)center,
-                    s->fft_size / 2 + 1);
+                    s->fft_size + 1);
 
-    vad = fn(calc_vad)(fn(flux)(center, center_prev, s->fft_size / 2 + 1),
+    vad = fn(calc_vad)(fn(flux)(center, center_prev, s->fft_size + 1),
                        fn(fluxlr)(windowed_oleft, windowed_pleft,
-                                  windowed_oright, windowed_pright, s->fft_size / 2 + 1), s->voice);
+                                  windowed_oright, windowed_pright, s->fft_size + 1), s->voice);
     vad = vad * 0.1 + 0.9 * fn(s->prev_vad);
     fn(s->prev_vad) = vad;
 
@@ -252,7 +252,7 @@ static int fn(de_stereo)(AVFilterContext *ctx, AVFrame *out)
     memcpy(windowed_pleft,  windowed_oleft,  s->fft_size * sizeof(ftype));
     memcpy(windowed_pright, windowed_oright, s->fft_size * sizeof(ftype));
 
-    fn(get_final)(center, windowed_oleft, windowed_oright, vad, s->fft_size / 2 + 1,
+    fn(get_final)(center, windowed_oleft, windowed_oright, vad, s->fft_size + 1,
                   s->original, s->enhance);
 
     s->itx_fn(s->itx_ctx, windowed_oleft, center, sizeof(ctype));
