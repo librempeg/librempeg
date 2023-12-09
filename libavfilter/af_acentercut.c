@@ -73,8 +73,7 @@ static int query_formats(AVFilterContext *ctx)
         (ret = ff_add_format                 (&formats, AV_SAMPLE_FMT_DBLP )) < 0 ||
         (ret = ff_set_common_formats         (ctx     , formats            )) < 0 ||
         (ret = ff_add_channel_layout         (&layout , &(AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO)) < 0 ||
-        (ret = ff_channel_layouts_ref(layout, &ctx->inputs[0]->outcfg.channel_layouts)) < 0 ||
-        (ret = ff_channel_layouts_ref(layout, &ctx->outputs[0]->incfg.channel_layouts)) < 0)
+        (ret = ff_set_common_channel_layouts (ctx     , layout             )) < 0)
         return ret;
 
     return ff_set_common_all_samplerates(ctx);
