@@ -1338,8 +1338,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     s->filter(ctx);
 
     out = ff_get_audio_buffer(outlink, s->hop_size);
-    if (!out)
+    if (!out) {
+        av_frame_free(&in);
         return AVERROR(ENOMEM);
+    }
 
     ff_filter_execute(ctx, ifft_channels, out, NULL,
                       FFMIN(outlink->ch_layout.nb_channels,
