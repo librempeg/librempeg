@@ -1024,10 +1024,10 @@ Default value is @code{p}.
 
 @item attack
 Set the attack in milliseconds. Default is @code{50} milliseconds.
-Allowed range is from 1 to 1000 milliseconds.
+Allowed range is from 0.1 to 1000 milliseconds.
 @item release
 Set the release in milliseconds. Default is @code{100} milliseconds.
-Allowed range is from 5 to 2000 milliseconds.
+Allowed range is from 0.1 to 2000 milliseconds.
 @item channels
 Set which channels to filter, by default @code{all} channels in audio stream are filtered.
 @end table

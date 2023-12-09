@@ -97,8 +97,8 @@ typedef struct AudioDRCContext {
 
 static const AVOption adrc_options[] = {
     { "transfer",    "set the transfer expression", OFFSET(expr_str),   AV_OPT_TYPE_STRING, {.str="p"},  0,    0, FLAGS },
-    { "attack",      "set the attack",              OFFSET(attack_ms),  AV_OPT_TYPE_DOUBLE, {.dbl=50.},  1, 1000, FLAGS },
-    { "release",     "set the release",             OFFSET(release_ms), AV_OPT_TYPE_DOUBLE, {.dbl=100.}, 5, 2000, FLAGS },
+    { "attack",      "set the attack",              OFFSET(attack_ms),  AV_OPT_TYPE_DOUBLE, {.dbl=50.}, 0.1, 1000, FLAGS },
+    { "release",     "set the release",             OFFSET(release_ms), AV_OPT_TYPE_DOUBLE, {.dbl=100.},0.1, 2000, FLAGS },
     { "channels",    "set channels to filter",OFFSET(channels_to_filter),AV_OPT_TYPE_STRING,{.str="all"},0,    0, FLAGS },
     {NULL}
 };
@@ -390,6 +390,11 @@ fail:
     return ret < 0 ? ret : 0;
 }
 
+static double get_coef(double x, double sr)
+{
+    return exp(-1.0 / (0.001 * x * sr));
+}
+
 static int activate(AVFilterContext *ctx)
 {
     AVFilterLink *inlink = ctx->inputs[0];
@@ -412,8 +417,8 @@ static int activate(AVFilterContext *ctx)
         return ret;
 
     if (ret > 0) {
-        s->attack  = expf(-1.f / (s->attack_ms  * inlink->sample_rate / 1000.f));
-        s->release = expf(-1.f / (s->release_ms * inlink->sample_rate / 1000.f));
+        s->attack  = get_coef(s->attack_ms, inlink->sample_rate);
+        s->release = get_coef(s->release_ms, inlink->sample_rate);
 
         return filter_frame(inlink, in);
     } else if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
