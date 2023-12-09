@@ -122,23 +122,23 @@ static int config_input(AVFilterLink *inlink)
     int ret;
 
     s->fft_size = inlink->sample_rate > 100000 ? 1024 : inlink->sample_rate > 50000 ? 512 : 256;
-    s->fx = inlink->sample_rate * 0.5f / (s->fft_size / 2 + 1);
+    s->fx = inlink->sample_rate * 0.5f / (s->fft_size + 1);
     s->overlap = s->fft_size / 4;
 
     s->window = av_calloc(s->fft_size, sizeof(*s->window));
     if (!s->window)
         return AVERROR(ENOMEM);
 
-    s->drc_frame      = ff_get_audio_buffer(inlink, s->fft_size * 2);
-    s->energy         = ff_get_audio_buffer(inlink, s->fft_size / 2 + 1);
-    s->envelope       = ff_get_audio_buffer(inlink, s->fft_size / 2 + 1);
-    s->factors        = ff_get_audio_buffer(inlink, s->fft_size / 2 + 1);
-    s->in_buffer      = ff_get_audio_buffer(inlink, s->fft_size * 2);
-    s->in_frame       = ff_get_audio_buffer(inlink, s->fft_size * 2);
-    s->out_dist_frame = ff_get_audio_buffer(inlink, s->fft_size * 2);
-    s->spectrum_buf   = ff_get_audio_buffer(inlink, s->fft_size * 2);
-    s->target_gain    = ff_get_audio_buffer(inlink, s->fft_size / 2 + 1);
-    s->windowed_frame = ff_get_audio_buffer(inlink, s->fft_size * 2);
+    s->drc_frame      = ff_get_audio_buffer(inlink, s->fft_size * 2 + 2);
+    s->energy         = ff_get_audio_buffer(inlink, s->fft_size + 1);
+    s->envelope       = ff_get_audio_buffer(inlink, s->fft_size + 1);
+    s->factors        = ff_get_audio_buffer(inlink, s->fft_size + 1);
+    s->in_buffer      = ff_get_audio_buffer(inlink, s->fft_size * 2 + 2);
+    s->in_frame       = ff_get_audio_buffer(inlink, s->fft_size * 2 + 2);
+    s->out_dist_frame = ff_get_audio_buffer(inlink, s->fft_size * 2 + 2);
+    s->spectrum_buf   = ff_get_audio_buffer(inlink, s->fft_size * 2 + 2);
+    s->target_gain    = ff_get_audio_buffer(inlink, s->fft_size + 1);
+    s->windowed_frame = ff_get_audio_buffer(inlink, s->fft_size * 2 + 2);
     if (!s->in_buffer || !s->in_frame || !s->target_gain ||
         !s->out_dist_frame || !s->windowed_frame || !s->envelope ||
         !s->drc_frame || !s->spectrum_buf || !s->energy || !s->factors)
@@ -154,13 +154,13 @@ static int config_input(AVFilterLink *inlink)
         return AVERROR(ENOMEM);
 
     for (int ch = 0; ch < s->channels; ch++) {
-        scale = 1.f / s->fft_size;
-        ret = av_tx_init(&s->tx_ctx[ch], &s->tx_fn, AV_TX_FLOAT_RDFT, 0, s->fft_size, &scale, 0);
+        scale = 1.f / (s->fft_size * 2);
+        ret = av_tx_init(&s->tx_ctx[ch], &s->tx_fn, AV_TX_FLOAT_RDFT, 0, s->fft_size * 2, &scale, 0);
         if (ret < 0)
             return ret;
 
         scale = 1.f / 1.5f;
-        ret = av_tx_init(&s->itx_ctx[ch], &s->itx_fn, AV_TX_FLOAT_RDFT, 1, s->fft_size, &scale, 0);
+        ret = av_tx_init(&s->itx_ctx[ch], &s->itx_fn, AV_TX_FLOAT_RDFT, 1, s->fft_size * 2, &scale, 0);
         if (ret < 0)
             return ret;
     }
@@ -283,7 +283,7 @@ static void feed(AVFilterContext *ctx, int ch,
     AudioDRCContext *s = ctx->priv;
     double var_values[VAR_VARS_NB];
     const int fft_size = s->fft_size;
-    const int nb_coeffs = s->fft_size / 2 + 1;
+    const int nb_coeffs = s->fft_size + 1;
     const int overlap = s->overlap;
     enum AVChannel channel = av_channel_layout_channel_from_index(&ctx->inputs[0]->ch_layout, ch);
     const int bypass = av_channel_layout_index_from_channel(&s->ch_layout, channel) < 0;
