@@ -264,7 +264,7 @@ static int config_input(AVFilterLink *inlink)
         ftype scale = 1.f;
 
         ret = av_tx_init(&s->rdft[ch], &s->tx_fn, TX_TYPE,
-                         0, s->win_size, &scale, 0);
+                         0, s->win_size * 2, &scale, 0);
         if (ret < 0)
             return ret;
     }
@@ -275,11 +275,11 @@ static int config_input(AVFilterLink *inlink)
 
     set_input_levels(ctx);
 
-    s->window = ff_get_audio_buffer(inlink, s->win_size * 2);
+    s->window = ff_get_audio_buffer(inlink, s->win_size * 2 + 2);
     if (!s->window)
         return AVERROR(ENOMEM);
 
-    s->input_in = ff_get_audio_buffer(inlink, s->win_size * 2);
+    s->input_in = ff_get_audio_buffer(inlink, s->win_size * 2 + 2);
     if (!s->input_in)
         return AVERROR(ENOMEM);
 
@@ -287,8 +287,8 @@ static int config_input(AVFilterLink *inlink)
     if (!s->input)
         return AVERROR(ENOMEM);
 
-    s->lowcut = 1.f * s->lowcutf / (inlink->sample_rate * 0.5) * (s->win_size / 2);
-    s->highcut = 1.f * s->highcutf / (inlink->sample_rate * 0.5) * (s->win_size / 2);
+    s->lowcut = 1.f * s->lowcutf / (inlink->sample_rate * 0.5) * s->win_size;
+    s->highcut = 1.f * s->highcutf / (inlink->sample_rate * 0.5) * s->win_size;
 
     return 0;
 }
@@ -308,7 +308,7 @@ static int config_output(AVFilterLink *outlink)
         ftype iscale = 1.f;
 
         ret = av_tx_init(&s->irdft[ch], &s->itx_fn, TX_TYPE,
-                         1, s->win_size, &iscale, 0);
+                         1, s->win_size * 2, &iscale, 0);
         if (ret < 0)
             return ret;
     }
@@ -319,18 +319,18 @@ static int config_output(AVFilterLink *outlink)
 
     set_output_levels(ctx);
 
-    s->factors = ff_get_audio_buffer(outlink, s->win_size + 2);
-    s->sfactors = ff_get_audio_buffer(outlink, s->win_size + 2);
-    s->output_ph = ff_get_audio_buffer(outlink, s->win_size + 2);
-    s->output_mag = ff_get_audio_buffer(outlink, s->win_size + 2);
-    s->output_out = ff_get_audio_buffer(outlink, s->win_size + 2);
-    s->output = ff_get_audio_buffer(outlink, s->win_size + 2);
-    s->overlap_buffer = ff_get_audio_buffer(outlink, s->win_size * 2);
+    s->factors = ff_get_audio_buffer(outlink, s->win_size * 2 + 2);
+    s->sfactors = ff_get_audio_buffer(outlink, s->win_size * 2 + 2);
+    s->output_ph = ff_get_audio_buffer(outlink, s->win_size * 2 + 2);
+    s->output_mag = ff_get_audio_buffer(outlink, s->win_size * 2 + 2);
+    s->output_out = ff_get_audio_buffer(outlink, s->win_size * 2 + 2);
+    s->output = ff_get_audio_buffer(outlink, s->win_size * 2 + 2);
+    s->overlap_buffer = ff_get_audio_buffer(outlink, s->win_size * 2 * 2);
     if (!s->overlap_buffer || !s->output || !s->output_out || !s->output_mag ||
         !s->output_ph || !s->factors || !s->sfactors)
         return AVERROR(ENOMEM);
 
-    s->rdft_size = s->win_size / 2 + 1;
+    s->rdft_size = s->win_size + 1;
 
     s->x_pos = av_calloc(s->rdft_size, sizeof(*s->x_pos));
     s->y_pos = av_calloc(s->rdft_size, sizeof(*s->y_pos));
