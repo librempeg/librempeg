@@ -59,7 +59,7 @@
 static int fn(cc_tx_init)(AVFilterContext *ctx)
 {
     AudioCenterCutContext *s = ctx->priv;
-    ftype scale = ONE, iscale = ONE / (s->fft_size * 1.5f);
+    ftype scale = ONE, iscale = ONE / (s->fft_size * 2.f * 1.5f);
     int ret;
 
     s->window = av_calloc(s->fft_size, sizeof(ftype));
@@ -69,19 +69,19 @@ static int fn(cc_tx_init)(AVFilterContext *ctx)
     for (int n = 0; n < s->fft_size; n++)
         fn(s->window)[n] = SIN(M_PI*n/(s->fft_size-1));
 
-    ret = av_tx_init(&s->tx_ctx[0], &s->tx_fn, TX_TYPE, 0, s->fft_size, &scale, 0);
+    ret = av_tx_init(&s->tx_ctx[0], &s->tx_fn, TX_TYPE, 0, s->fft_size * 2, &scale, 0);
     if (ret < 0)
         return ret;
 
-    ret = av_tx_init(&s->tx_ctx[1], &s->tx_fn, TX_TYPE, 0, s->fft_size, &scale, 0);
+    ret = av_tx_init(&s->tx_ctx[1], &s->tx_fn, TX_TYPE, 0, s->fft_size * 2, &scale, 0);
     if (ret < 0)
         return ret;
 
-    ret = av_tx_init(&s->itx_ctx[0], &s->itx_fn, TX_TYPE, 1, s->fft_size, &iscale, 0);
+    ret = av_tx_init(&s->itx_ctx[0], &s->itx_fn, TX_TYPE, 1, s->fft_size * 2, &iscale, 0);
     if (ret < 0)
         return ret;
 
-    ret = av_tx_init(&s->itx_ctx[1], &s->itx_fn, TX_TYPE, 1, s->fft_size, &iscale, 0);
+    ret = av_tx_init(&s->itx_ctx[1], &s->itx_fn, TX_TYPE, 1, s->fft_size * 2, &iscale, 0);
     if (ret < 0)
         return ret;
 
@@ -171,7 +171,7 @@ static int fn(cc_stereo)(AVFilterContext *ctx, AVFrame *out)
     s->tx_fn(s->tx_ctx[1], windowed_oright, windowed_right, sizeof(ftype));
 
     fn(center_cut)((ctype *)windowed_oleft, (ctype *)windowed_oright,
-                   s->fft_size / 2 + 1, factor);
+                   s->fft_size + 1, factor);
 
     s->itx_fn(s->itx_ctx[0], windowed_left, windowed_oleft, sizeof(ctype));
     s->itx_fn(s->itx_ctx[1], windowed_right, windowed_oright, sizeof(ctype));
