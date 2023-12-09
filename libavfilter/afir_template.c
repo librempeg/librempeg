@@ -31,6 +31,8 @@
 #undef TX_TYPE
 #undef FABS
 #undef POW
+#undef ONE
+#undef ZERO
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
 #define SQRT sqrtf
@@ -40,6 +42,8 @@
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #define FABS fabsf
 #define POW powf
+#define ZERO 0.f
+#define ONE 1.f
 #else
 #define SAMPLE_FORMAT double
 #define SQRT sqrt
@@ -49,6 +53,8 @@
 #define TX_TYPE AV_TX_DOUBLE_RDFT
 #define FABS fabs
 #define POW pow
+#define ZERO 0.0
+#define ONE 1.0
 #endif
 
 #define fn3(a,b)   a##_##b
@@ -58,20 +64,19 @@
 static ftype fn(ir_gain)(AVFilterContext *ctx, AudioFIRContext *s,
                          int cur_nb_taps, const ftype *time)
 {
+    ftype ir_norm = s->ir_norm;
     ftype ch_gain, sum = 0;
 
-    if (s->ir_norm < 0.f) {
-        ch_gain = 1;
-    } else if (s->ir_norm == 0.f) {
+    if (ir_norm < ZERO) {
+        ch_gain = ONE;
+    } else if (ir_norm == ZERO) {
         for (int i = 0; i < cur_nb_taps; i++)
             sum += time[i];
-        ch_gain = 1. / sum;
+        ch_gain = ONE / sum;
     } else {
-        ftype ir_norm = s->ir_norm;
-
         for (int i = 0; i < cur_nb_taps; i++)
             sum += POW(FABS(time[i]), ir_norm);
-        ch_gain = 1. / POW(sum, 1. / ir_norm);
+        ch_gain = ONE / POW(sum, ONE / ir_norm);
     }
 
     return ch_gain;
@@ -143,8 +148,8 @@ static int fn(fir_quantum)(AVFilterContext *ctx, AVFrame *out, int ch, int ioffs
     const int min_part_size = s->min_part_size;
     const int nb_samples = FFMIN(min_part_size, out->nb_samples - offset);
     const int nb_segments = s->nb_segments[selir];
-    const float dry_gain = s->dry_gain;
-    const float wet_gain = s->wet_gain;
+    const ftype dry_gain = s->dry_gain;
+    const ftype wet_gain = s->wet_gain;
 
     for (int segment = 0; segment < nb_segments; segment++) {
         AudioFIRSegment *seg = &s->seg[selir][segment];
@@ -161,7 +166,7 @@ static int fn(fir_quantum)(AVFilterContext *ctx, AVFrame *out, int ch, int ioffs
         int j;
 
         seg->part_index[ch] = seg->part_index[ch] % nb_partitions;
-        if (dry_gain == 1.f) {
+        if (dry_gain == ONE) {
             memcpy(src + input_offset, in, nb_samples * sizeof(*src));
         } else if (min_part_size >= 8) {
 #if DEPTH == 32
@@ -226,7 +231,7 @@ static int fn(fir_quantum)(AVFilterContext *ctx, AVFrame *out, int ch, int ioffs
         seg->part_index[ch] = (seg->part_index[ch] + 1) % nb_partitions;
     }
 
-    if (wet_gain == 1.f)
+    if (wet_gain == ONE)
         return 0;
 
     if (min_part_size >= 8) {
