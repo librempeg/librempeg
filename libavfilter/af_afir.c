@@ -402,7 +402,7 @@ static int activate(AVFilterContext *ctx)
     AVFrame *in = NULL;
     int64_t pts;
 
-    FF_FILTER_FORWARD_STATUS_BACK_ALL(ctx->outputs[0], ctx);
+    FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
 
     for (int i = 0; i < s->nb_irs; i++) {
         const int selir = i;
@@ -416,7 +416,7 @@ static int activate(AVFilterContext *ctx)
                 return ret;
 
             if (!s->eof_coeffs[selir]) {
-                if (ff_outlink_frame_wanted(ctx->outputs[0]))
+                if (ff_outlink_frame_wanted(outlink))
                     ff_inlink_request_frame(ctx->inputs[1 + selir]);
                 return 0;
             }
@@ -448,12 +448,12 @@ static int activate(AVFilterContext *ctx)
 
     if (ff_inlink_acknowledge_status(ctx->inputs[0], &status, &pts)) {
         if (status == AVERROR_EOF) {
-            ff_outlink_set_status(ctx->outputs[0], status, pts);
+            ff_outlink_set_status(outlink, status, pts);
             return 0;
         }
     }
 
-    if (ff_outlink_frame_wanted(ctx->outputs[0])) {
+    if (ff_outlink_frame_wanted(outlink)) {
         ff_inlink_request_frame(ctx->inputs[0]);
         return 0;
     }
