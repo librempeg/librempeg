@@ -287,17 +287,18 @@ static void feed(AVFilterContext *ctx, int ch,
     const int overlap = s->overlap;
     enum AVChannel channel = av_channel_layout_channel_from_index(&ctx->inputs[0]->ch_layout, ch);
     const int bypass = av_channel_layout_index_from_channel(&s->ch_layout, channel) < 0;
+    const int offset = fft_size - overlap;
 
     memcpy(var_values, s->var_values, sizeof(var_values));
 
     var_values[VAR_CH] = ch;
 
     // shift in/out buffers
-    memmove(in_frame, in_frame + overlap, (fft_size - overlap) * sizeof(*in_frame));
-    memmove(out_dist_frame, out_dist_frame + overlap, (fft_size - overlap) * sizeof(*out_dist_frame));
+    memmove(in_frame, in_frame + overlap, offset * sizeof(*in_frame));
+    memmove(out_dist_frame, out_dist_frame + overlap, offset * sizeof(*out_dist_frame));
 
-    memcpy(in_frame + fft_size - overlap, in_samples, sizeof(*in_frame) * overlap);
-    memset(out_dist_frame + fft_size - overlap, 0, sizeof(*out_dist_frame) * overlap);
+    memcpy(in_frame + offset, in_samples, sizeof(*in_frame) * overlap);
+    memset(out_dist_frame + offset, 0, sizeof(*out_dist_frame) * overlap);
 
     apply_window(s, in_frame, windowed_frame, 0);
     s->tx_fn(s->tx_ctx[ch], spectrum_buf, windowed_frame, sizeof(float));
