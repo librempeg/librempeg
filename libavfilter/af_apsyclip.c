@@ -34,8 +34,9 @@ typedef struct AudioPsyClipContext {
     double clip_level;
     double adaptive;
     int auto_level;
+    int max_iterations;
+    int min_iterations;
     int diff_only;
-    int iterations;
     char *protections_str;
     double *protections;
 
@@ -71,7 +72,8 @@ static const AVOption apsyclip_options[] = {
     { "clip",       "set clip level",          OFFSET(clip_level), AV_OPT_TYPE_DOUBLE, {.dbl=1},.015625,    1, FLAGS },
     { "diff",       "enable difference",       OFFSET(diff_only),  AV_OPT_TYPE_BOOL,   {.i64=0},      0,    1, FLAGS },
     { "adaptive",   "set adaptive distortion", OFFSET(adaptive),   AV_OPT_TYPE_DOUBLE, {.dbl=0.5},    0,    1, FLAGS },
-    { "iterations", "set iterations",          OFFSET(iterations), AV_OPT_TYPE_INT,    {.i64=10},     1,   20, FLAGS },
+    { "iterations", "set max iterations",      OFFSET(max_iterations), AV_OPT_TYPE_INT,{.i64=10},     1,   20, FLAGS },
+    { "min_iterations", "set min iterations",  OFFSET(min_iterations), AV_OPT_TYPE_INT,{.i64=1},      1,   20, FLAGS },
     { "level",      "set auto level",          OFFSET(auto_level), AV_OPT_TYPE_BOOL,   {.i64=0},      0,    1, FLAGS },
     {NULL}
 };
@@ -412,11 +414,11 @@ static void feed(AVFilterContext *ctx, int ch,
         clipping_delta[i] = 0.f;
 
     // repeat clipping-filtering process a few times to control both the peaks and the spectrum
-    for (int i = 0; i < s->iterations; i++) {
+    for (int i = 0; i < s->max_iterations; i++) {
         float mask_curve_shift = 1.122f; // 1.122 is 1dB
         // The last 1/3 of rounds have boosted delta to help reach the peak target faster
         float delta_boost = 1.f;
-        if (i >= s->iterations - s->iterations / 3) {
+        if (i >= s->max_iterations - s->max_iterations / 3) {
             // boosting the delta when largs peaks are still present is dangerous
             if (peak < 2.f)
                 delta_boost = 2.f;
@@ -438,7 +440,7 @@ static void feed(AVFilterContext *ctx, int ch,
         // Automatically adjust mask_curve as necessary to reach peak target
         if (orig_peak > 1.f && peak > 1.f) {
             float diff_achieved = orig_peak - peak;
-            if (i + 1 < s->iterations - s->iterations / 3 && diff_achieved > 0) {
+            if (i + 1 < s->max_iterations - s->max_iterations / 3 && diff_achieved > 0) {
                 float diff_needed = orig_peak - 1.f;
                 float diff_ratio = diff_needed / diff_achieved;
                 // If a good amount of peak reduction was already achieved,
@@ -452,6 +454,8 @@ static void feed(AVFilterContext *ctx, int ch,
                 // go back to the heavy-handed peak heuristic.
                 mask_curve_shift = fmaxf(mask_curve_shift, peak);
             }
+        } else if (peak < 1.f && i >= s->min_iterations) {
+            break;
         }
 
         mask_curve_shift = 1.f + (mask_curve_shift - 1.f) * s->adaptive;

@@ -3064,8 +3064,14 @@ Set strength of adaptive distortion applied. Default value is 0.5.
 Allowed range is from 0 to 1.
 
 @item iterations
-Set number of iterations of psychoacoustic clipper.
+Set max number of iterations of psychoacoustic clipper.
 Allowed range is from 1 to 20. Default value is 10.
+
+@item min_iterations
+Set min number of iterations of psychoacoustic clipper.
+This allows to exit processing loop if state reached unclipped
+samples earlier.
+Allowed range is from 1 to 20. Default value is 1.
 
 @item level
 Auto level output signal. Default is disabled.
