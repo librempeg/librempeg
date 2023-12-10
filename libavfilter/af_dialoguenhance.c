@@ -18,6 +18,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <float.h>
+
 #include "libavutil/channel_layout.h"
 #include "libavutil/opt.h"
 #include "libavutil/tx.h"
@@ -26,8 +28,6 @@
 #include "filters.h"
 #include "formats.h"
 #include "internal.h"
-
-#include <float.h>
 
 typedef struct AudioDialogueEnhancementContext {
     const AVClass *class;
