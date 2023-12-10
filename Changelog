@@ -7,6 +7,10 @@ version <next>:
 - EVC encoding using external library libxeve
 - QOA decoder and demuxer
 - aap filter
+- aspace filter
+- anrmse filter
+- ambisonic filter
+- acentercut filter
 
 version 6.1:
 - libaribcaption decoder
