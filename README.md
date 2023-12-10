@@ -1,7 +1,7 @@
-FFmpeg README
+Librempeg README
 =============
 
-FFmpeg is a collection of libraries and tools to process multimedia content
+Librempeg is a collection of libraries and tools to process multimedia content
 such as audio, video, subtitles and related metadata.
 
 ## Libraries
@@ -16,19 +16,14 @@ such as audio, video, subtitles and related metadata.
 
 ## Tools
 
-* [ffmpeg](https://ffmpeg.org/ffmpeg.html) is a command line toolbox to
-  manipulate, convert and stream multimedia content.
-* [ffplay](https://ffmpeg.org/ffplay.html) is a minimalistic multimedia player.
-* [ffprobe](https://ffmpeg.org/ffprobe.html) is a simple analysis tool to inspect
-  multimedia content.
+* `ffmpeg` is a command line toolbox to manipulate, convert and stream multimedia content.
+* `ffplay` is a minimalistic multimedia player.
+* `ffprobe` is a simple analysis tool to inspect multimedia content.
 * Additional small tools such as `aviocat`, `ismindex` and `qt-faststart`.
 
 ## Documentation
 
 The offline documentation is available in the **doc/** directory.
-
-The online documentation is available in the main [website](https://ffmpeg.org)
-and in the [wiki](https://trac.ffmpeg.org).
 
 ### Examples
 
@@ -36,11 +31,9 @@ Coding examples are available in the **doc/examples** directory.
 
 ## License
 
-FFmpeg codebase is mainly LGPL-licensed with optional components licensed under
+Librempeg codebase is mainly LGPL-licensed with optional components licensed under
 GPL. Please refer to the LICENSE file for detailed information.
 
 ## Contributing
 
-Patches should be submitted to the ffmpeg-devel mailing list using
-`git format-patch` or `git send-email`. Github pull requests should be
-avoided because they are not part of our review process and will be ignored.
+Contributing can be done via Github pull requests.
