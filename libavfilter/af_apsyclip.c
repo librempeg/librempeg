@@ -139,7 +139,7 @@ static void generate_spread_table(AudioPsyClipContext *s)
 
         for (int j = start_bin; j < end_bin; j++) {
             // add 0.5 so i=0 doesn't get log(0)
-            float rel_idx_log = FFABS(logf((j + 0.5f) / (bin + 0.5f)));
+            float rel_idx_log = fabsf(logf((j + 0.5f) / (bin + 0.5f)));
             float value;
             if (j >= bin) {
                 // mask up
@@ -186,7 +186,6 @@ static int config_input(AVFilterLink *inlink)
     AudioPsyClipContext *s = ctx->priv;
     static const int points[][2] = { {0,14}, {125,14}, {250,16}, {500,18}, {1000,20}, {2000,20}, {4000,20}, {8000,17}, {16000,14}, {20000,-10} };
     static const int num_points = 10;
-    float scale = 1.f;
     int ret;
 
     s->fft_size = inlink->sample_rate > 100000 ? 1024 : inlink->sample_rate > 50000 ? 512 : 256;
@@ -250,10 +249,13 @@ static int config_input(AVFilterLink *inlink)
         return AVERROR(ENOMEM);
 
     for (int ch = 0; ch < s->channels; ch++) {
+        float scale = 1.f;
+
         ret = av_tx_init(&s->tx_ctx[ch], &s->tx_fn, AV_TX_FLOAT_RDFT, 0, s->fft_size, &scale, 0);
         if (ret < 0)
             return ret;
 
+        scale = 1.f / (1.5f * s->fft_size);
         ret = av_tx_init(&s->itx_ctx[ch], &s->itx_fn, AV_TX_FLOAT_RDFT, 1, s->fft_size, &scale, 0);
         if (ret < 0)
             return ret;
@@ -289,9 +291,9 @@ static void calculate_mask_curve(AudioPsyClipContext *s,
         int range[2];
 
         if (i == 0) {
-            magnitude = FFABS(spectrum[0]);
+            magnitude = fabsf(spectrum[0]);
         } else if (i == s->fft_size / 2) {
-            magnitude = FFABS(spectrum[s->fft_size]);
+            magnitude = fabsf(spectrum[s->fft_size]);
         } else {
             // Because the input signal is real, the + and - frequencies are redundant.
             // Multiply the magnitude by 2 to simulate adding up the + and - frequencies.
@@ -313,7 +315,7 @@ static void calculate_mask_curve(AudioPsyClipContext *s,
     for (int i = s->num_psy_bins; i < s->fft_size / 2 + 1; i++) {
         float magnitude;
         if (i == s->fft_size / 2) {
-            magnitude = FFABS(spectrum[s->fft_size]);
+            magnitude = fabsf(spectrum[s->fft_size]);
         } else {
             // Because the input signal is real, the + and - frequencies are redundant.
             // Multiply the magnitude by 2 to simulate adding up the + and - frequencies.
@@ -348,7 +350,7 @@ static void limit_clip_spectrum(AudioPsyClipContext *s,
                                 float *clip_spectrum, const float *mask_curve)
 {
     // bin 0
-    float relative_distortion_level = FFABS(clip_spectrum[0]) / mask_curve[0];
+    float relative_distortion_level = fabsf(clip_spectrum[0]) / mask_curve[0];
 
     if (relative_distortion_level > 1.f)
         clip_spectrum[0] /= relative_distortion_level;
@@ -366,7 +368,7 @@ static void limit_clip_spectrum(AudioPsyClipContext *s,
         }
     }
     // bin N/2
-    relative_distortion_level = FFABS(clip_spectrum[s->fft_size]) / mask_curve[s->fft_size / 2];
+    relative_distortion_level = fabsf(clip_spectrum[s->fft_size]) / mask_curve[s->fft_size / 2];
     if (relative_distortion_level > 1.f)
         clip_spectrum[s->fft_size] /= relative_distortion_level;
 }
@@ -378,36 +380,35 @@ static void feed(AVFilterContext *ctx, int ch,
                  float *spectrum_buf, float *mask_curve)
 {
     AudioPsyClipContext *s = ctx->priv;
+    const float *inv_window = s->inv_window;
+    const int overlap = s->overlap;
+    const int fft_size = s->fft_size;
+    const int offset = fft_size - overlap;
     const float clip_level_inv = 1.f / s->clip_level;
     const float level_out = s->level_out;
-    float orig_peak = 0;
-    float peak;
+    float orig_peak = 0.f, peak;
 
     // shift in/out buffers
-    for (int i = 0; i < s->fft_size - s->overlap; i++) {
-        in_frame[i] = in_frame[i + s->overlap];
-        out_dist_frame[i] = out_dist_frame[i + s->overlap];
-    }
+    memmove(in_frame, &in_frame[overlap], offset * sizeof(float));
+    memmove(out_dist_frame, &out_dist_frame[overlap], offset * sizeof(float));
 
-    for (int i = 0; i < s->overlap; i++) {
-        in_frame[i + s->fft_size - s->overlap] = in_samples[i];
-        out_dist_frame[i + s->fft_size - s->overlap] = 0.f;
-    }
+    memcpy(&in_frame[offset], in_samples, overlap * sizeof(float));
+    memset(&out_dist_frame[offset], 0, overlap * sizeof(float));
 
     apply_window(s, in_frame, windowed_frame, 0);
     s->tx_fn(s->tx_ctx[ch], spectrum_buf, windowed_frame, sizeof(AVComplexFloat));
     calculate_mask_curve(s, spectrum_buf, mask_curve);
 
     // It would be easier to calculate the peak from the unwindowed input.
-    // This is just for consistency with the clipped peak calculateion
+    // This is just for consistency with the clipped peak calculation
     // because the inv_window zeros out samples on the edge of the window.
-    for (int i = 0; i < s->fft_size; i++)
-        orig_peak = FFMAX(orig_peak, FFABS(windowed_frame[i] * s->inv_window[i]));
+    for (int i = 0; i < fft_size; i++)
+        orig_peak = fmaxf(orig_peak, fabsf(windowed_frame[i] * inv_window[i]));
     orig_peak *= clip_level_inv;
     peak = orig_peak;
 
     // clear clipping_delta
-    for (int i = 0; i < s->fft_size * 2; i++)
+    for (int i = 0; i < fft_size * 2; i++)
         clipping_delta[i] = 0.f;
 
     // repeat clipping-filtering process a few times to control both the peaks and the spectrum
@@ -429,12 +430,9 @@ static void feed(AVFilterContext *ctx, int ch,
 
         s->itx_fn(s->itx_ctx[ch], clipping_delta, spectrum_buf, sizeof(AVComplexFloat));
 
-        for (int i = 0; i < s->fft_size; i++)
-            clipping_delta[i] /= s->fft_size;
-
-        peak = 0;
-        for (int i = 0; i < s->fft_size; i++)
-            peak = FFMAX(peak, FFABS((windowed_frame[i] + clipping_delta[i]) * s->inv_window[i]));
+        peak = 0.f;
+        for (int i = 0; i < fft_size; i++)
+            peak = fmaxf(peak, fabsf((windowed_frame[i] + clipping_delta[i]) * inv_window[i]));
         peak *= clip_level_inv;
 
         // Automatically adjust mask_curve as necessary to reach peak target
@@ -447,12 +445,12 @@ static void feed(AVFilterContext *ctx, int ch,
                 // don't shift the mask_curve by the full peak value
                 // On the other hand, if only a little peak reduction was achieved,
                 // don't shift the mask_curve by the enormous diff_ratio.
-                diff_ratio = FFMIN(diff_ratio, peak);
-                mask_curve_shift = FFMAX(mask_curve_shift, diff_ratio);
+                diff_ratio = fminf(diff_ratio, peak);
+                mask_curve_shift = fmaxf(mask_curve_shift, diff_ratio);
             } else {
                 // If the peak got higher than the input or we are in the last 1/3 rounds,
                 // go back to the heavy-handed peak heuristic.
-                mask_curve_shift = FFMAX(mask_curve_shift, peak);
+                mask_curve_shift = fmaxf(mask_curve_shift, peak);
             }
         }
 
@@ -460,25 +458,29 @@ static void feed(AVFilterContext *ctx, int ch,
 
         // Be less strict in the next iteration.
         // This helps with peak control.
-        for (int i = 0; i < s->fft_size / 2 + 1; i++)
+        for (int i = 0; i < fft_size / 2 + 1; i++)
             mask_curve[i] *= mask_curve_shift;
     }
 
     // do overlap & add
     apply_window(s, clipping_delta, out_dist_frame, 1);
 
-    for (int i = 0; i < s->overlap; i++) {
-        // 4 times overlap with squared hanning window results in 1.5 time increase in amplitude
-        if (!ctx->is_disabled) {
-            out_samples[i] = out_dist_frame[i] / 1.5f;
-            if (!diff_only)
+    if (ctx->is_disabled) {
+        memcpy(out_samples, in_frame, overlap * sizeof(float));
+    } else {
+        memcpy(out_samples, out_dist_frame, overlap * sizeof(float));
+        if (!diff_only) {
+            for (int i = 0; i < overlap; i++)
                 out_samples[i] += in_frame[i];
-            if (s->auto_level)
-                out_samples[i] *= clip_level_inv;
-            out_samples[i] *= level_out;
-        } else {
-            out_samples[i] = in_frame[i];
         }
+
+        if (s->auto_level) {
+            for (int i = 0; i < overlap; i++)
+                out_samples[i] *= clip_level_inv;
+        }
+
+        for (int i = 0; i < overlap; i++)
+            out_samples[i] *= level_out;
     }
 }
 
@@ -488,9 +490,11 @@ static int psy_channel(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int ch)
     const float *src = (const float *)in->extended_data[ch];
     float *in_buffer = (float *)s->in_buffer->extended_data[ch];
     float *dst = (float *)out->extended_data[ch];
+    const float level_in = s->level_in;
+    const int overlap = s->overlap;
 
-    for (int n = 0; n < s->overlap; n++)
-        in_buffer[n] = src[n] * s->level_in;
+    for (int n = 0; n < overlap; n++)
+        in_buffer[n] = src[n] * level_in;
 
     feed(ctx, ch, in_buffer, dst, s->diff_only,
          (float *)(s->in_frame->extended_data[ch]),
