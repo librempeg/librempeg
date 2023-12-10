@@ -58,10 +58,8 @@ typedef struct AudioPsyClipContext {
     AVFrame *spectrum_buf;
     AVFrame *mask_curve;
 
-    AVTXContext **tx_ctx;
-    av_tx_fn tx_fn;
-    AVTXContext **itx_ctx;
-    av_tx_fn itx_fn;
+    AVTXContext **tx_ctx, **itx_ctx;
+    av_tx_fn tx_fn, itx_fn;
 } AudioPsyClipContext;
 
 #define OFFSET(x) offsetof(AudioPsyClipContext, x)
@@ -252,11 +250,11 @@ static int config_input(AVFilterLink *inlink)
         return AVERROR(ENOMEM);
 
     for (int ch = 0; ch < s->channels; ch++) {
-        ret = av_tx_init(&s->tx_ctx[ch], &s->tx_fn, AV_TX_FLOAT_FFT, 0, s->fft_size, &scale, 0);
+        ret = av_tx_init(&s->tx_ctx[ch], &s->tx_fn, AV_TX_FLOAT_RDFT, 0, s->fft_size, &scale, 0);
         if (ret < 0)
             return ret;
 
-        ret = av_tx_init(&s->itx_ctx[ch], &s->itx_fn, AV_TX_FLOAT_FFT, 1, s->fft_size, &scale, 0);
+        ret = av_tx_init(&s->itx_ctx[ch], &s->itx_fn, AV_TX_FLOAT_RDFT, 1, s->fft_size, &scale, 0);
         if (ret < 0)
             return ret;
     }
@@ -365,32 +363,12 @@ static void limit_clip_spectrum(AudioPsyClipContext *s,
         if (relative_distortion_level > 1.0) {
             clip_spectrum[i * 2] /= relative_distortion_level;
             clip_spectrum[i * 2 + 1] /= relative_distortion_level;
-            clip_spectrum[s->fft_size * 2 - i * 2] /= relative_distortion_level;
-            clip_spectrum[s->fft_size * 2 - i * 2 + 1] /= relative_distortion_level;
         }
     }
     // bin N/2
     relative_distortion_level = FFABS(clip_spectrum[s->fft_size]) / mask_curve[s->fft_size / 2];
     if (relative_distortion_level > 1.f)
         clip_spectrum[s->fft_size] /= relative_distortion_level;
-}
-
-static void r2c(float *buffer, int size)
-{
-    for (int i = size - 1; i >= 0; i--)
-        buffer[2 * i] = buffer[i];
-
-    for (int i = size - 1; i >= 0; i--)
-        buffer[2 * i + 1] = 0.f;
-}
-
-static void c2r(float *buffer, int size)
-{
-    for (int i = 0; i < size; i++)
-        buffer[i] = buffer[2 * i];
-
-    for (int i = 0; i < size; i++)
-        buffer[i + size] = 0.f;
 }
 
 static void feed(AVFilterContext *ctx, int ch,
@@ -417,9 +395,7 @@ static void feed(AVFilterContext *ctx, int ch,
     }
 
     apply_window(s, in_frame, windowed_frame, 0);
-    r2c(windowed_frame, s->fft_size);
     s->tx_fn(s->tx_ctx[ch], spectrum_buf, windowed_frame, sizeof(AVComplexFloat));
-    c2r(windowed_frame, s->fft_size);
     calculate_mask_curve(s, spectrum_buf, mask_curve);
 
     // It would be easier to calculate the peak from the unwindowed input.
@@ -447,13 +423,11 @@ static void feed(AVFilterContext *ctx, int ch,
 
         clip_to_window(s, windowed_frame, clipping_delta, delta_boost);
 
-        r2c(clipping_delta, s->fft_size);
         s->tx_fn(s->tx_ctx[ch], spectrum_buf, clipping_delta, sizeof(AVComplexFloat));
 
         limit_clip_spectrum(s, spectrum_buf, mask_curve);
 
         s->itx_fn(s->itx_ctx[ch], clipping_delta, spectrum_buf, sizeof(AVComplexFloat));
-        c2r(clipping_delta, s->fft_size);
 
         for (int i = 0; i < s->fft_size; i++)
             clipping_delta[i] /= s->fft_size;
