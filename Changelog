@@ -20,6 +20,7 @@ version <next>:
 - tiltandshift filter
 - nist muxer
 - VVC decoder
+- ardftsrc audio filter
 
 version 6.1:
 - libaribcaption decoder
