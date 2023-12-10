@@ -268,13 +268,14 @@ static void apply_window(AudioPsyClipContext *s,
                          const float *in_frame, float *out_frame, const int add_to_out_frame)
 {
     const float *window = s->window;
+    const int fft_size = s->fft_size;
 
-    for (int i = 0; i < s->fft_size; i++) {
-        if (add_to_out_frame) {
+    if (add_to_out_frame) {
+        for (int i = 0; i < fft_size; i++)
             out_frame[i] += in_frame[i] * window[i];
-        } else {
+    } else {
+        for (int i = 0; i < fft_size; i++)
             out_frame[i] = in_frame[i] * window[i];
-        }
     }
 }
 
