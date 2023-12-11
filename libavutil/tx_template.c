@@ -874,6 +874,60 @@ static av_cold int TX_NAME(ff_tx_fft_init_naive_small)(AVTXContext *s,
     return 0;
 }
 
+static av_cold int TX_NAME(ff_tx_fft_init_bluestein)(AVTXContext *s,
+                                                     const FFTXCodelet *cd,
+                                                     uint64_t flags,
+                                                     FFTXCodeletOptions *opts,
+                                                     int len, int inv,
+                                                     const void *scale)
+{
+    const double phase = s->inv ? M_PI/len : -M_PI/len;
+    int is_inplace = !!(flags & AV_TX_INPLACE);
+    FFTXCodeletOptions sub_opts = {
+        .map_dir = is_inplace ? FF_TX_MAP_SCATTER : FF_TX_MAP_GATHER,
+    };
+    const int len2 = 1 << av_ceil_log2(2*len-1);
+    TXComplex *w;
+    int ret;
+
+    flags &= ~AV_TX_INPLACE;
+
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, &sub_opts, len2, 0, scale)))
+        return ret;
+
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, &sub_opts, len2, 1, scale)))
+        return ret;
+
+    if (is_inplace && (ret = ff_tx_gen_inplace_map(s, len2)))
+        return ret;
+
+    if (!(s->exp = av_mallocz(len2*4*sizeof(*s->exp))))
+        return AVERROR(ENOMEM);
+
+    s->exp[0] = (TXComplex){
+        RESCALE(cos(0.0)),
+        RESCALE(sin(0.0)),
+    };
+    for (int i = 1; i < len; i++) {
+        const double factor = phase*i*i;
+        s->exp[i] = (TXComplex){
+            RESCALE(cos(factor)),
+            RESCALE(sin(factor)),
+        };
+        s->exp[len2-i] = s->exp[i];
+    }
+
+    w = s->exp + len2 * 2;
+    for (int i = 0; i < len2; i++) {
+        w[i].re =  s->exp[i].re;
+        w[i].im = -s->exp[i].im;
+    }
+
+    s->fn[0](&s->sub[0], s->exp + len2, w, sizeof(TXComplex));
+
+    return 0;
+}
+
 static void TX_NAME(ff_tx_fft_naive)(AVTXContext *s, void *_dst, void *_src,
                                      ptrdiff_t stride)
 {
@@ -923,6 +977,42 @@ static void TX_NAME(ff_tx_fft_naive_small)(AVTXContext *s, void *_dst, void *_sr
     }
 }
 
+static void TX_NAME(ff_tx_fft_bluestein)(AVTXContext *s, void *_dst, void *_src,
+                                         ptrdiff_t stride)
+{
+    const int n = s->len;
+    TXComplex *src = _src;
+    TXComplex *dst = _dst;
+    const int m = s->sub[0].len;
+    const TXComplex *y = s->exp + m;
+    TXComplex *w = s->exp + 2*m;
+    TXComplex *ww = w + m;
+    const TXComplex *exp = s->exp;
+    const TXSample scale = 1.0/m;
+
+    stride /= sizeof(*dst);
+
+    for (int i = 0; i < n; i++)
+        CMUL3(ww[i], src[i], exp[i]);
+    memset(ww+n, 0, sizeof(*ww)*(m-n));
+
+    s->fn[0](&s->sub[0], w, ww, sizeof(TXComplex));
+
+    for (int i = 0; i < m; i++) {
+        const TXComplex x = w[i];
+        CMUL3(w[i], x, y[i]);
+    }
+
+    s->fn[1](&s->sub[1], ww, w, sizeof(TXComplex));
+
+    for (int i = 0; i < n; i++) {
+        TXComplex x;
+        CMUL3(x, ww[i], exp[i]);
+        dst[i*stride].re = RESCALE(x.re * scale);
+        dst[i*stride].im = RESCALE(x.im * scale);
+    }
+}
+
 static const FFTXCodelet TX_NAME(ff_tx_fft_naive_small_def) = {
     .name       = TX_NAME_STR("fft_naive_small"),
     .function   = TX_NAME(ff_tx_fft_naive_small),
@@ -935,6 +1025,20 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_naive_small_def) = {
     .init       = TX_NAME(ff_tx_fft_init_naive_small),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_MIN/2,
+};
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_bluestein_def) = {
+    .name       = TX_NAME_STR("fft_bluestein"),
+    .function   = TX_NAME(ff_tx_fft_bluestein),
+    .type       = TX_TYPE(FFT),
+    .flags      = AV_TX_UNALIGNED | AV_TX_INPLACE | FF_TX_OUT_OF_PLACE,
+    .factors[0] = TX_FACTOR_ANY,
+    .nb_factors = 1,
+    .min_len    = 2,
+    .max_len    = TX_LEN_UNLIMITED,
+    .init       = TX_NAME(ff_tx_fft_init_bluestein),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_MIN/3,
 };
 
 static const FFTXCodelet TX_NAME(ff_tx_fft_naive_def) = {
@@ -2184,6 +2288,7 @@ const FFTXCodelet * const TX_NAME(ff_tx_codelet_list)[] = {
     &TX_NAME(ff_tx_fft_pfa_ns_def),
     &TX_NAME(ff_tx_fft_naive_def),
     &TX_NAME(ff_tx_fft_naive_small_def),
+    &TX_NAME(ff_tx_fft_bluestein_def),
     &TX_NAME(ff_tx_mdct_fwd_def),
     &TX_NAME(ff_tx_mdct_inv_def),
     &TX_NAME(ff_tx_mdct_pfa_3xM_fwd_def),
