@@ -91,6 +91,11 @@ s16_perm:      dd 0, 1, 2, 3, 1, 0, 3, 2
 
 s15_perm:      dd 0, 6, 5, 3, 2, 4, 7, 1
 
+rdft_perm_pos: dd 3, 2, 2, 3, 1, 0, 0, 1
+rdft_perm_neg: dd 1, 0, 0, 1, 3, 2, 2, 3
+rdft_perm_exp: dd 1, 1, 0, 0, 3, 3, 2, 2
+rdft_m11:      times 2 dd 0x0, 0x0, 0x3f800000, 0x3f800000 ; 0, 0, 1, 1
+
 mask_mmppmmmm: dd NEG, NEG, POS, POS, NEG, NEG, NEG, NEG
 mask_mmmmpppm: dd NEG, NEG, NEG, NEG, POS, POS, POS, NEG
 mask_ppmpmmpm: dd POS, POS, NEG, POS, NEG, NEG, POS, NEG
@@ -1933,4 +1938,145 @@ cglobal fft_pfa_15xM_ns_float, 4, 14, 16, 320, ctx, out, in, stride, len, lut, b
 %if ARCH_X86_64 && HAVE_AVX2_EXTERNAL
 PFA_15_FN avx2, 0
 PFA_15_FN avx2, 1
+%endif
+
+%macro RDFT_CONV 3
+%endmacro
+
+%macro RDFT_FN 3
+INIT_YMM %1
+cglobal rdft_ %+ %2 %+ _float, 4, 14, 16, 320, ctx, out, in, stride, len, lut, exp, t1, t2, t3, \
+                                        t4, t5, btmp
+    ; FFT setup
+    mov btmpq, ctxq                                 ; backup original context
+    mov t3q, [ctxq + AVTXContext.fn]                ; subtransform's jump point
+
+    mov ctxq, [ctxq + AVTXContext.sub]              ; load subtransform's context
+    mov lutq, [ctxq + AVTXContext.map]              ; load subtransform's map
+    movsxd lenq, dword [ctxq + AVTXContext.len]     ; load subtransform's length
+
+    mov expq, outq
+.preshuf:
+    LOAD64_LUT m0, inq, lutq, 0, t4q, m1, m2
+    movaps [outq], m0
+    add outq, mmsize
+    add lutq, (mmsize/2)
+    sub lenq, (mmsize/8)
+    jg .preshuf
+
+    mov outq, expq
+    mov inq, expq
+    movsxd lenq, dword [ctxq + AVTXContext.len]     ; load subtransform's length
+
+    call t3q                                        ; call the FFT
+
+    mov ctxq, btmpq                                 ; restore original context
+
+    movsxd lenq, dword [ctxq + AVTXContext.len]
+    mov expq, [ctxq + AVTXContext.exp]
+
+    movsd  xm0, [outq]                               ; data[0].reim
+    movhps xm0, [outq + lenq*2]                      ; data[len4].reim
+
+    shufps xm1, xm0, xm0, q2301                     ; data[0].imre, data[1].imre
+    addsubps xm2, xm1, xm0                          ; t[0].imre, junk
+    shufps xm1, xm2, xm1, q2301                     ; t[0].reim, data[1].reim
+    mulps xm9, xm1, [expq]                          ; data[01].reim
+
+    movaps m10, [rdft_perm_neg]
+    movaps m11, [rdft_perm_pos]
+    vbroadcastf128 m12, [expq + 4*4]                ; fact[5476]
+    movaps m13, [mask_pmmppmmp]                     ; +--+
+
+    movaps m14, [rdft_m11]                          ; 0.0, 0.0, 1.0, 1.0
+    movaps m15, [rdft_perm_exp]
+
+    mov inq, outq
+    lea t1q, [outq + lenq*4 - mmsize]
+    mov t2q, lenq
+    add outq, 8
+
+.loop:
+    movups m8, [expq + (8 + 2)*4]
+
+    vperm2f128 m4, m8, m8, 0x00                     ; cos,sin,cos,sin x2
+    vperm2f128 m6, m8, m8, 0x11                     ; cos,sin,cos,sin x2
+
+    vpermilps m5, m4, m15                           ; cos1,cos1,cos1,cos1,sin2,sin2,cos2,cos2
+    vpermilps m7, m6, m15                           ; cos1,cos1,cos1,cos1,sin2,sin2,cos2,cos2
+
+    shufpd m4, m14, m5, 1111b                       ; 1,1,cos1,cos1,1,1,cos2,cos2
+    shufpd m5, m14, m5, 0000b                       ; 0,0,sin1,sin1,0,0,sin2,sin2
+    shufpd m6, m14, m7, 1111b                       ; 1,1,cos1,cos1,1,1,cos2,cos2
+    shufpd m7, m14, m7, 0000b                       ; 0,0,sin1,sin1,0,0,sin2,sin2
+
+    movups m2, [outq]
+    movups m3, [t1q]
+
+    vperm2f128 m0, m2, m2, 0x00
+    vperm2f128 m1, m3, m3, 0x11
+    vperm2f128 m2, m2, m2, 0x11
+    vperm2f128 m3, m3, m3, 0x00
+
+    vpermilps m0, m0, m10                           ; data[0].imrereim, data[1].imrereim
+    vpermilps m1, m1, m11                           ; data[len - 01].imrereim
+    vpermilps m2, m2, m10                           ; data[0].imrereim, data[1].imrereim
+    vpermilps m3, m3, m11                           ; data[len - 01].imrereim
+
+    addsubps m0, m1                                 ; data[0] - data[len - 0] x2
+    addsubps m2, m3                                 ; data[0] - data[len - 0] x2
+
+    mulps m0, m12                                   ; t[01].imre
+    mulps m2, m12                                   ; t[01].imre
+
+    shufps m1, m0, m0, q2301                        ; t[01].reim
+    shufps m3, m2, m2, q2301                        ; t[01].reim
+
+    mulps m1, m4                                    ; 1, 1, tcos, tcos x2
+    mulps m0, m5                                    ; 0, 0, tsin, tsin x2
+    mulps m3, m6                                    ; 1, 1, tcos, tcos x2
+    mulps m2, m7                                    ; 0, 0, tsin, tsin x2
+
+    addsubps m1, m0                                 ; t[02].reim
+    addsubps m3, m2                                 ; t[02].reim
+
+    shufpd m0, m1, m1, 0101b                        ; t[20].reim
+    shufpd m2, m3, m3, 0101b                        ; t[20].reim
+
+    xorps m1, m13                                   ; +--+t[02].reim
+    xorps m3, m13                                   ; +--+t[02].reim
+
+    addps m0, m1                                    ; data[0].reim, data[len2 - 0].reim x2
+    addps m2, m3                                    ; data[0].reim, data[len2 - 0].reim x2
+
+    shufpd m1, m0, m2, 0000b                        ; high
+    shufpd m3, m0, m2, 1111b                        ; low
+
+    vpermpd m0, m1, q3120
+    vpermpd m2, m3, q0213
+
+    movups [outq], m0
+    movups [t1q], m2
+
+    add expq, mmsize
+    sub t1q,  mmsize
+    add outq, mmsize
+
+    sub t2q, mmsize/2
+    jg .loop
+
+    ; Write DC, middle and tail
+    movhps [inq + lenq*2], xm9
+    xorps xm0, xm0
+    shufps xm9, xm9, xm0, q3210
+    shufps xm8, xm9, xm9, q2120
+    movsd [inq], xm8
+    movhps [inq + lenq*4], xm8
+
+    RET
+%endmacro
+
+%if ARCH_X86_64 && HAVE_AVX2_EXTERNAL
+RDFT_FN avx2, r2c, 0
+;RDFT_FN avx2, c2r, 1
 %endif

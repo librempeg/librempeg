@@ -52,6 +52,8 @@ TX_DECL_FN(fft_pfa_15xM_ns, avx2)
 
 TX_DECL_FN(mdct_inv, avx2)
 
+TX_DECL_FN(rdft_r2c, avx2)
+
 TX_DECL_FN(fft2_asm, sse3)
 TX_DECL_FN(fft4_fwd_asm, sse2)
 TX_DECL_FN(fft4_inv_asm, sse2)
@@ -163,6 +165,62 @@ static av_cold int m_inv_init(AVTXContext *s, const FFTXCodelet *cd,
 
     if ((ret = ff_tx_mdct_gen_exp_float(s, s->map)))
         return ret;
+
+    return 0;
+}
+
+static av_cold int rdft_init(AVTXContext *s, const FFTXCodelet *cd,
+                             uint64_t flags, FFTXCodeletOptions *opts,
+                             int len, int inv, const void *scale)
+{
+    int ret;
+    double f, m;
+    TXSample *tab;
+    uint64_t r2r = flags & AV_TX_REAL_TO_REAL;
+    int len4 = FFALIGN(len, 4) / 4;
+    FFTXCodeletOptions sub_opts = { .map_dir = FF_TX_MAP_GATHER };
+
+    s->scale_d = *((SCALE_TYPE *)scale);
+    s->scale_f = s->scale_d;
+
+    flags &= ~(AV_TX_REAL_TO_REAL | AV_TX_REAL_TO_IMAGINARY);
+    flags |=  FF_TX_PRESHUFFLE;   /* This function handles the permute step */
+    flags |=  FF_TX_ASM_CALL;     /* We want an assembly function, not C */
+
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, &sub_opts,
+                                len >> 1, inv, scale)))
+        return ret;
+
+    if (!(s->exp = av_mallocz((8 + 2*len4)*sizeof(*s->exp))))
+        return AVERROR(ENOMEM);
+
+    if (!(s->tmp = av_malloc(len*sizeof(*s->tmp))))
+        return AVERROR(ENOMEM);
+
+    tab = (TXSample *)s->exp;
+
+    f = 2*M_PI/len;
+
+    m = (inv ? 2*s->scale_d : s->scale_d);
+
+    *tab++ =  RESCALE((inv ? 0.5 : 1.0) * m);
+    *tab++ = -RESCALE(inv ? 0.5*m : 1.0*m);
+    *tab++ =  RESCALE( m);
+    *tab++ =  RESCALE(-m);
+
+    if (r2r)
+        *tab++ = 1 / s->scale_f;
+    else
+        *tab++ = RESCALE( (0.0 - 0.5) * m);
+    *tab++ = RESCALE( (0.5 - 0.0) * m);
+
+    *tab++ = RESCALE(-(0.5 - inv) * m);
+    *tab++ = RESCALE( (0.5 - inv) * m);
+
+    for (int i = 0; i < len4; i++) {
+        *tab++ = RESCALE(cos(i*f));
+        *tab++ = RESCALE(cos(((len - i*4)/4.0)*f)) * (inv ? 1 : -1);
+    }
 
     return 0;
 }
@@ -303,6 +361,9 @@ const FFTXCodelet * const ff_tx_codelet_list_float_x86[] = {
 
     TX_DEF(mdct_inv, MDCT, 16, TX_LEN_UNLIMITED, 2, TX_FACTOR_ANY, 384, m_inv_init, avx2, AVX2,
            FF_TX_INVERSE_ONLY, AV_CPU_FLAG_AVXSLOW | AV_CPU_FLAG_SLOW_GATHER),
+
+    TX_DEF(rdft_r2c, RDFT, 16, TX_LEN_UNLIMITED, 2, TX_FACTOR_ANY, 384, rdft_init, avx2, AVX2,
+           FF_TX_FORWARD_ONLY, AV_CPU_FLAG_AVXSLOW | AV_CPU_FLAG_SLOW_GATHER),
 #endif
 #endif
 

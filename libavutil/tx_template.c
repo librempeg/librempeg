@@ -1977,13 +1977,10 @@ static av_cold int TX_NAME(ff_tx_rdft_init)(AVTXContext *s,
     *tab++ = RESCALE( (0.5 - inv) * m);
     *tab++ = RESCALE(-(0.5 - inv) * m);
 
-    for (int i = 0; i < len4; i++)
+    for (int i = 0; i < len4; i++) {
         *tab++ = RESCALE(cos(i*f));
-
-    tab = ((TXSample *)s->exp) + len4 + 8;
-
-    for (int i = 0; i < len4; i++)
         *tab++ = RESCALE(cos(((len - i*4)/4.0)*f)) * (inv ? 1 : -1);
+    }
 
     return 0;
 }
@@ -1995,8 +1992,7 @@ static void TX_NAME(ff_tx_rdft_ ##n)(AVTXContext *s, void *_dst,               \
     const int len2 = s->len >> 1;                                              \
     const int len4 = s->len >> 2;                                              \
     const TXSample *fact = (void *)s->exp;                                     \
-    const TXSample *tcos = fact + 8;                                           \
-    const TXSample *tsin = tcos + len4;                                        \
+    const TXSample *exp = fact + 8;                                            \
     TXComplex *data = inv ? _src : _dst;                                       \
     TXComplex t[3];                                                            \
                                                                                \
@@ -2018,18 +2014,18 @@ static void TX_NAME(ff_tx_rdft_ ##n)(AVTXContext *s, void *_dst,               \
                                                                                \
     for (int i = 1; i < len4; i++) {                                           \
         /* Separate even and odd FFTs */                                       \
-        t[0].re = MULT(fact[4], (data[i].re + data[len2 - i].re));             \
         t[0].im = MULT(fact[5], (data[i].im - data[len2 - i].im));             \
-        t[1].re = MULT(fact[6], (data[i].im + data[len2 - i].im));             \
+        t[0].re = MULT(fact[4], (data[i].re + data[len2 - i].re));             \
         t[1].im = MULT(fact[7], (data[i].re - data[len2 - i].re));             \
+        t[1].re = MULT(fact[6], (data[i].im + data[len2 - i].im));             \
                                                                                \
         /* Apply twiddle factors to the odd FFT and add to the even FFT */     \
-        CMUL(t[2].re, t[2].im, t[1].re, t[1].im, tcos[i], tsin[i]);            \
+        CMUL(t[2].re, t[2].im, t[1].re, t[1].im, exp[i*2 + 0], exp[i*2 + 1]);  \
                                                                                \
-        data[       i].re = t[0].re + t[2].re;                                 \
+        data[       i].re = t[2].re + t[0].re;                                 \
         data[       i].im = t[2].im - t[0].im;                                 \
         data[len2 - i].re = t[0].re - t[2].re;                                 \
-        data[len2 - i].im = t[2].im + t[0].im;                                 \
+        data[len2 - i].im = t[0].im + t[2].im;                                 \
     }                                                                          \
                                                                                \
     if (inv) {                                                                 \

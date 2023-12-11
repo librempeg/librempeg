@@ -43,6 +43,10 @@ static const int check_lens[] = {
     2, 4, 8, 16, 32, 64, 120, 960, 1024, 1920, 16384,
 };
 
+static const int rdft_check_lens[] = {
+    32, 1024
+};
+
 static AVTXContext *tx_refs[AV_TX_NB][2 /* Direction */][FF_ARRAY_ELEMS(check_lens)] = { 0 };
 static int init = 0;
 
@@ -111,6 +115,9 @@ void checkasm_check_av_tx(void)
                    !float_near_abs_eps_array(out_ref, out_new, EPS, len*2));
 
     CHECK_TEMPLATE("float_imdct", AV_TX_FLOAT_MDCT, 1, float, float, check_lens,
+                   !float_near_abs_eps_array(out_ref, out_new, EPS, len));
+
+    CHECK_TEMPLATE("float_r2c", AV_TX_FLOAT_RDFT, 0, float, float, rdft_check_lens,
                    !float_near_abs_eps_array(out_ref, out_new, EPS, len));
 
     randomize_complex(in, 16384, AVComplexDouble, SCALE_NOOP);
