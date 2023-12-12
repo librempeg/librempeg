@@ -13,6 +13,7 @@ version <next>:
 - acentercut filter
 - demuxing, decoding, filtering, encoding, and muxing in the
   ffmpeg CLI now all run in parallel
+- atonesrc filter
 
 version 6.1:
 - libaribcaption decoder

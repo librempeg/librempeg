@@ -8214,6 +8214,49 @@ anullsrc=r=48000:cl=mono
 
 All the parameters need to be explicitly defined.
 
+@section atonesrc
+Generate a tone audio signal.
+
+The filter accepts the following options:
+@table @option
+@item frequency
+Set the tone frequency.
+
+@item phase
+Set the tone phase.
+
+@item amplitude
+Set the tone amplitude.
+
+@item fmf
+@item fmp
+@item fma
+Set the frequency/phase/amplitude modulation of the tone frequency.
+
+@item amf
+@item amp
+@item ama
+Set the frequency/phase/amplitude modulation of the tone amplitude.
+
+@item pmf
+@item pmp
+@item pma
+Set the frequency/phase/amplitude modulation of the tone phase.
+
+@item sample_rate
+Set the output audio stream sample rate.
+
+@item duration
+Set the output audio stream duration.
+
+@item samples_per_frame
+Set the output samples per each audio frame.
+@end table
+
+@subsection Commands
+
+This filter supports the some of above options as @ref{commands}.
+
 @section flite
 
 Synthesize a voice utterance using the libflite library.
