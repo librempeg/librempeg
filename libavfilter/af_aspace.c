@@ -455,7 +455,7 @@ AVFILTER_DEFINE_CLASS(aspace);
 
 const AVFilter ff_af_aspace = {
     .name            = "aspace",
-    .description     = NULL_IF_CONFIG_SMALL("Arbitrary Distance Amplitude Panning"),
+    .description     = NULL_IF_CONFIG_SMALL("Arbitrary Distance Amplitude Panning."),
     .priv_size       = sizeof(AudioSpaceContext),
     .priv_class      = &aspace_class,
     .init            = init,
