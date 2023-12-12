@@ -253,10 +253,10 @@ static int convert_coeffs(AVFilterContext *ctx, int selir)
             int step = (part_size == max_part_size) ? INT_MAX : 1 + (i == 0);
             int nb_partitions = FFMIN(step, (left + part_size - 1) / part_size);
 
-            s->nb_segments[selir] = i + 1;
             ret = init_segment(ctx, &s->seg[selir][i], selir, offset, nb_partitions, part_size, i);
             if (ret < 0)
                 return ret;
+            s->nb_segments[selir] = i + 1;
             offset += nb_partitions * part_size;
             s->max_offset[selir] = offset;
             left -= nb_partitions * part_size;
