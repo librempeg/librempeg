@@ -246,8 +246,8 @@ static int convert_coeffs(AVFilterContext *ctx, int selir)
             goto skip;
 
         left = s->nb_taps[selir];
-        part_size = 1 << av_log2(s->minp);
-        max_part_size = 1 << av_log2(s->maxp);
+        part_size = s->minp;
+        max_part_size = s->maxp;
 
         for (int i = 0; left > 0; i++) {
             int step = (part_size == max_part_size) ? INT_MAX : 1 + (i == 0);
@@ -622,8 +622,8 @@ static av_cold int init(AVFilterContext *ctx)
 
     ff_afir_init(&s->afirdsp);
 
-    s->min_part_size = 1 << av_log2(s->minp);
-    s->max_part_size = 1 << av_log2(s->maxp);
+    s->min_part_size = s->minp;
+    s->max_part_size = s->maxp;
 
     return 0;
 }
