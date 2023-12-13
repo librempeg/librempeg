@@ -24,6 +24,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/cpu.h"
+
 #define TABLE_DEF(name, size) \
     DECLARE_ALIGNED(32, TXSample, TX_TAB(ff_tx_tab_ ##name))[size]
 
@@ -874,6 +876,157 @@ static av_cold int TX_NAME(ff_tx_fft_init_naive_small)(AVTXContext *s,
     return 0;
 }
 
+static int add_mod(int x, int y, int p)
+{
+    return (x >= p-y) ? (x+(y-p)) : x+y;
+}
+
+static int mulmod(int x, int y, int p)
+{
+    int r = 0;
+
+    if (y > x)
+        FFSWAP(int, x, y);
+
+    while (y) {
+        r = add_mod(r, x*(y&1), p);
+        y >>= 1;
+        x = add_mod(x, x, p);
+    }
+
+    return r;
+}
+
+static int powmod(int64_t x, unsigned int y, int p)
+{
+    int res = 1;
+
+    x = x % p;
+
+    while (y > 0) {
+        if (y & 1)
+            res = (res*x) % p;
+        y = y >> 1;
+        x = (x*x) % p;
+    }
+
+    return res;
+}
+
+static int get_prime_factors(int n, int *primef)
+{
+    int i, size = 0;
+
+    primef[size++] = 2;
+    do {
+        n >>= 1;
+    } while ((n & 1) == 0);
+
+    if (n == 1)
+        return size;
+
+    for (i = 3; i * i <= n; i += 2) {
+        if (!(n % i)) {
+            primef[size++] = i;
+            do {
+                n /= i;
+            } while (!(n % i));
+        }
+    }
+
+    if (n == 1)
+        return size;
+
+    primef[size++] = n;
+
+    return size;
+}
+
+static int generator(int p)
+{
+    int n = 2, i, size, primef[16], pm1 = p-1;
+
+    if (p == 2)
+        return 1;
+
+    size = get_prime_factors(pm1, primef);
+    for (i = 0; i < size; i++) {
+        if (powmod(n, pm1 / primef[i], p) == 1) {
+            i = -1;
+            n++;
+        }
+    }
+
+    return n;
+}
+
+static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
+                                                 const FFTXCodelet *cd,
+                                                 uint64_t flags,
+                                                 FFTXCodeletOptions *opts,
+                                                 int len, int inv,
+                                                 const void *scale)
+{
+    int gen, igen, ret, is_inplace = !!(flags & AV_TX_INPLACE);
+    FFTXCodeletOptions sub_opts = {
+        .map_dir = is_inplace ? FF_TX_MAP_SCATTER : FF_TX_MAP_GATHER,
+    };
+    const int plen = FFALIGN(len, av_cpu_max_align());
+    const int len2 = len-1;
+    const double phase = -2.0*M_PI/len;
+    const double factor = 1.0 / len2;
+    TXComplex *exp;
+    int *imap, *map;
+
+    flags &= ~AV_TX_INPLACE;
+
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, &sub_opts, len2, 0, scale)))
+        return ret;
+
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, &sub_opts, len2, 1, scale)))
+        return ret;
+
+    if (is_inplace && (ret = ff_tx_gen_inplace_map(s, len2)))
+        return ret;
+
+    if (!(s->tmp = av_mallocz(len*2*sizeof(*map))))
+        return AVERROR(ENOMEM);
+
+    if (!(s->exp = av_mallocz(plen*3*sizeof(*s->exp))))
+        return AVERROR(ENOMEM);
+
+    map = (int *)s->tmp;
+    imap = map+len;
+    gen = generator(len);
+    igen = powmod(gen, len-2, len);
+    exp = s->exp + plen;
+
+    for (int i = 0, gp = 1, igp = 1; i < len2; i++) {
+        double factor;
+
+        map[i] = gp;
+        imap[i] = igp;
+        factor = phase*imap[i];
+        gp = mulmod(gp, gen, len);
+        igp = mulmod(igp, igen, len);
+
+        exp[i] = (TXComplex){
+            RESCALE(cos(factor)),
+            RESCALE(sin(factor)),
+        };
+    }
+
+    s->fn[0](&s->sub[0], s->exp, exp, sizeof(TXComplex));
+    exp = s->exp;
+
+    for (int i = 0; i < len2; i++) {
+        exp[i].re = RESCALE(exp[i].re * factor);
+        exp[i].im = RESCALE(exp[i].im * factor);
+    }
+
+    return 0;
+}
+
 static av_cold int TX_NAME(ff_tx_fft_init_bluestein)(AVTXContext *s,
                                                      const FFTXCodelet *cd,
                                                      uint64_t flags,
@@ -977,6 +1130,65 @@ static void TX_NAME(ff_tx_fft_naive_small)(AVTXContext *s, void *_dst, void *_sr
     }
 }
 
+static void TX_NAME(ff_tx_fft_rader)(AVTXContext *s, void *_dst, void *_src,
+                                     ptrdiff_t stride)
+{
+    const int n = s->len;
+    const int pn = FFALIGN(n, av_cpu_max_align());
+    const int m = n-1;
+    const TXComplex *y = s->exp;
+    TXComplex *src = _src;
+    TXComplex *dst = _dst;
+    const int *map = (const int *)s->tmp;
+    const int *imap = map+n;
+    TXComplex *w = s->exp+pn;
+    TXComplex *ww = w+pn;
+    TXComplex src0 = src[0];
+
+    stride /= sizeof(*dst);
+
+    if (s->inv) {
+        src0.im = -src0.im;
+        for (int i = 0; i < m; i++) {
+            ww[i].re =  src[map[i]].re;
+            ww[i].im = -src[map[i]].im;
+        }
+    } else {
+        for (int i = 0; i < m; i++)
+            ww[i] = src[map[i]];
+    }
+
+    s->fn[0](&s->sub[0], w, ww, sizeof(TXComplex));
+
+    dst[0].re = src0.re + w[0].re;
+    dst[0].im = src0.im + w[0].im;
+    if (s->inv)
+        dst[0].im = -dst[0].im;
+
+    for (int i = 0; i < m; i++) {
+        const TXComplex x = w[i];
+
+        CMUL3(w[i], x, y[i]);
+    }
+
+    w[0].re += src0.re;
+    w[0].im += src0.im;
+
+    s->fn[1](&s->sub[1], ww, w, sizeof(TXComplex));
+
+    if (s->inv) {
+        for (int i = 0; i < m; i++) {
+            dst[imap[i]*stride].re =  ww[i].re;
+            dst[imap[i]*stride].im = -ww[i].im;
+        }
+    } else {
+        for (int i = 0; i < m; i++) {
+            dst[imap[i]*stride].re = ww[i].re;
+            dst[imap[i]*stride].im = ww[i].im;
+        }
+    }
+}
+
 static void TX_NAME(ff_tx_fft_bluestein)(AVTXContext *s, void *_dst, void *_src,
                                          ptrdiff_t stride)
 {
@@ -1039,6 +1251,20 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_bluestein_def) = {
     .init       = TX_NAME(ff_tx_fft_init_bluestein),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_MIN/3,
+};
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_rader_def) = {
+    .name       = TX_NAME_STR("fft_rader"),
+    .function   = TX_NAME(ff_tx_fft_rader),
+    .type       = TX_TYPE(FFT),
+    .flags      = AV_TX_UNALIGNED | AV_TX_INPLACE | FF_TX_OUT_OF_PLACE,
+    .factors[0] = TX_FACTOR_NONE,
+    .nb_factors = 1,
+    .min_len    = 5,
+    .max_len    = TX_LEN_UNLIMITED,
+    .init       = TX_NAME(ff_tx_fft_init_rader),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_MIN/4,
 };
 
 static const FFTXCodelet TX_NAME(ff_tx_fft_naive_def) = {
@@ -2289,6 +2515,7 @@ const FFTXCodelet * const TX_NAME(ff_tx_codelet_list)[] = {
     &TX_NAME(ff_tx_fft_naive_def),
     &TX_NAME(ff_tx_fft_naive_small_def),
     &TX_NAME(ff_tx_fft_bluestein_def),
+    &TX_NAME(ff_tx_fft_rader_def),
     &TX_NAME(ff_tx_mdct_fwd_def),
     &TX_NAME(ff_tx_mdct_inv_def),
     &TX_NAME(ff_tx_mdct_pfa_3xM_fwd_def),
