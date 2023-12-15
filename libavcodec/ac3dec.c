@@ -1858,6 +1858,13 @@ skip:
     return FFMIN(full_buf_size, s->superframe_size + skip);
 }
 
+static av_cold void ac3_decode_flush(AVCodecContext *avctx)
+{
+    AC3DecodeContext *s = avctx->priv_data;
+
+    memset(s->delay, 0, sizeof(s->delay));
+}
+
 /**
  * Uninitialize the AC-3 decoder.
  */
