@@ -1967,6 +1967,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("LEAD MCMP"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_RFBW,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "rfbw",
+        .long_name = NULL_IF_CONFIG_SMALL("RFBW Video"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
 
     /* various PCM "codecs" */
     {

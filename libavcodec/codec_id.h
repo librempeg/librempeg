@@ -325,6 +325,7 @@ enum AVCodecID {
     AV_CODEC_ID_RTV1,
     AV_CODEC_ID_VMIX,
     AV_CODEC_ID_LEAD,
+    AV_CODEC_ID_RFBW,
 
     /* various PCM "codecs" */
     AV_CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
