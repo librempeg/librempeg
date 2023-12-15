@@ -1108,7 +1108,6 @@ OBJS-$(CONFIG_LIBGSM_DECODER)             += libgsmdec.o
 OBJS-$(CONFIG_LIBGSM_ENCODER)             += libgsmenc.o
 OBJS-$(CONFIG_LIBGSM_MS_DECODER)          += libgsmdec.o
 OBJS-$(CONFIG_LIBGSM_MS_ENCODER)          += libgsmenc.o
-OBJS-$(CONFIG_LIBILBC_DECODER)            += libilbc.o
 OBJS-$(CONFIG_LIBILBC_ENCODER)            += libilbc.o
 OBJS-$(CONFIG_LIBJXL_DECODER)             += libjxldec.o libjxl.o
 OBJS-$(CONFIG_LIBJXL_ENCODER)             += libjxlenc.o libjxl.o

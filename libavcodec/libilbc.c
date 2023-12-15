@@ -1,5 +1,5 @@
 /*
- * iLBC decoder/encoder stub
+ * iLBC encoder stub
  * Copyright (c) 2012 Martin Storsjo
  *
  * This file is part of FFmpeg.
@@ -44,91 +44,6 @@ static int get_mode(AVCodecContext *avctx)
     else
         return -1;
 }
-
-typedef struct ILBCDecContext {
-    const AVClass *class;
-#if LIBILBC_VERSION_MAJOR < 3
-    iLBC_Dec_Inst_t decoder;
-#else
-    IlbcDecoder decoder;
-#endif
-    int enhance;
-} ILBCDecContext;
-
-static const AVOption ilbc_dec_options[] = {
-    { "enhance", "Enhance the decoded audio (adds delay)", offsetof(ILBCDecContext, enhance), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_DECODING_PARAM },
-    { NULL }
-};
-
-static const AVClass ilbc_dec_class = {
-    .class_name = "libilbc",
-    .item_name  = av_default_item_name,
-    .option     = ilbc_dec_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
-
-static av_cold int ilbc_decode_init(AVCodecContext *avctx)
-{
-    ILBCDecContext *s  = avctx->priv_data;
-    int mode;
-
-    if ((mode = get_mode(avctx)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "iLBC frame mode not indicated\n");
-        return AVERROR(EINVAL);
-    }
-
-    WebRtcIlbcfix_InitDecode(&s->decoder, mode, s->enhance);
-
-    av_channel_layout_uninit(&avctx->ch_layout);
-    avctx->ch_layout      = (AVChannelLayout)AV_CHANNEL_LAYOUT_MONO;
-    avctx->sample_rate    = 8000;
-    avctx->sample_fmt     = AV_SAMPLE_FMT_S16;
-
-    return 0;
-}
-
-static int ilbc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
-                             int *got_frame_ptr, AVPacket *avpkt)
-{
-    const uint8_t *buf = avpkt->data;
-    int buf_size       = avpkt->size;
-    ILBCDecContext *s  = avctx->priv_data;
-    int ret;
-
-    if (s->decoder.no_of_bytes > buf_size) {
-#if LIBILBC_VERSION_MAJOR < 3
-        av_log(avctx, AV_LOG_ERROR, "iLBC frame too short (%u, should be %u)\n",
-#else
-        av_log(avctx, AV_LOG_ERROR, "iLBC frame too short (%u, should be "
-                                    "%"SIZE_SPECIFIER")\n",
-#endif
-               buf_size, s->decoder.no_of_bytes);
-        return AVERROR_INVALIDDATA;
-    }
-
-    frame->nb_samples = s->decoder.blockl;
-    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
-        return ret;
-
-    WebRtcIlbcfix_DecodeImpl((int16_t *) frame->data[0], (const uint16_t *) buf, &s->decoder, 1);
-
-    *got_frame_ptr = 1;
-
-    return s->decoder.no_of_bytes;
-}
-
-const FFCodec ff_libilbc_decoder = {
-    .p.name         = "libilbc",
-    CODEC_LONG_NAME("iLBC (Internet Low Bitrate Codec)"),
-    .p.type         = AVMEDIA_TYPE_AUDIO,
-    .p.id           = AV_CODEC_ID_ILBC,
-    .caps_internal  = FF_CODEC_CAP_NOT_INIT_THREADSAFE,
-    .priv_data_size = sizeof(ILBCDecContext),
-    .init           = ilbc_decode_init,
-    FF_CODEC_DECODE_CB(ilbc_decode_frame),
-    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_CHANNEL_CONF,
-    .p.priv_class   = &ilbc_dec_class,
-};
 
 typedef struct ILBCEncContext {
     const AVClass *class;
