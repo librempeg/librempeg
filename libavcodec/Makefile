@@ -1126,7 +1126,6 @@ OBJS-$(CONFIG_LIBOPUS_ENCODER)            += libopusenc.o libopus.o     \
                                              vorbis_data.o
 OBJS-$(CONFIG_LIBRAV1E_ENCODER)           += librav1e.o
 OBJS-$(CONFIG_LIBSHINE_ENCODER)           += libshine.o
-OBJS-$(CONFIG_LIBSPEEX_DECODER)           += libspeexdec.o
 OBJS-$(CONFIG_LIBSPEEX_ENCODER)           += libspeexenc.o
 OBJS-$(CONFIG_LIBSVTAV1_ENCODER)          += libsvtav1.o
 OBJS-$(CONFIG_LIBTHEORA_ENCODER)          += libtheoraenc.o
