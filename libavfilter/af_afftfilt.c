@@ -42,7 +42,7 @@ typedef struct AFFTFiltContext {
     AVComplexFloat **fft_temp;
     int nb_exprs;
     int channels;
-    int window_size;
+    int win_size;
     AVExpr **real;
     AVExpr **imag;
     int hop_size;
@@ -76,7 +76,7 @@ static inline double getreal(void *priv, double x, double ch)
     int ich, ix;
 
     ich = av_clip(ch, 0, s->nb_exprs - 1);
-    ix = av_clip(x, 0, s->window_size / 2);
+    ix = av_clip(x, 0, s->win_size / 2);
 
     return s->fft_out[ich][ix].re;
 }
@@ -87,7 +87,7 @@ static inline double getimag(void *priv, double x, double ch)
     int ich, ix;
 
     ich = av_clip(ch, 0, s->nb_exprs - 1);
-    ix = av_clip(x, 0, s->window_size / 2);
+    ix = av_clip(x, 0, s->win_size / 2);
 
     return s->fft_out[ich][ix].im;
 }
@@ -127,8 +127,8 @@ static int config_input(AVFilterLink *inlink)
             return ret;
     }
 
-    s->window_size = s->fft_size;
-    buf_size = FFALIGN(s->window_size, av_cpu_max_align());
+    s->win_size = s->fft_size;
+    buf_size = FFALIGN(s->win_size, av_cpu_max_align());
 
     s->fft_in = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->fft_in));
     if (!s->fft_in)
@@ -201,25 +201,25 @@ static int config_input(AVFilterLink *inlink)
 
     av_freep(&args);
 
-    s->window_func_lut = av_realloc_f(s->window_func_lut, s->window_size,
+    s->window_func_lut = av_realloc_f(s->window_func_lut, s->win_size,
                                       sizeof(*s->window_func_lut));
     if (!s->window_func_lut)
         return AVERROR(ENOMEM);
-    generate_window_func(s->window_func_lut, s->window_size, s->win_func, &overlap);
-    for (int i = 0; i < s->window_size; i++)
-        s->window_func_lut[i] = sqrtf(s->window_func_lut[i] / s->window_size);
+    generate_window_func(s->window_func_lut, s->win_size, s->win_func, &overlap);
+    for (int i = 0; i < s->win_size; i++)
+        s->window_func_lut[i] = sqrtf(s->window_func_lut[i] / s->win_size);
     if (s->overlap == 1)
         s->overlap = overlap;
 
-    s->hop_size = s->window_size * (1 - s->overlap);
+    s->hop_size = s->win_size * (1 - s->overlap);
     if (s->hop_size <= 0)
         return AVERROR(EINVAL);
 
-    s->window = ff_get_audio_buffer(inlink, s->window_size * 2);
+    s->window = ff_get_audio_buffer(inlink, s->win_size * 2);
     if (!s->window)
         return AVERROR(ENOMEM);
 
-    s->buffer = ff_get_audio_buffer(inlink, s->window_size * 2);
+    s->buffer = ff_get_audio_buffer(inlink, s->win_size * 2);
     if (!s->buffer)
         return AVERROR(ENOMEM);
 
@@ -249,7 +249,7 @@ static int tx_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AFFTFiltContext *s = ctx->priv;
-    const int window_size = s->window_size;
+    const int win_size = s->win_size;
     const float *window_lut = s->window_func_lut;
     const float f = sqrtf(1.f - s->overlap);
     const int channels = s->channels;
@@ -267,12 +267,12 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
         values[VAR_CHANNEL] = ch;
 
         if (ctx->is_disabled) {
-            for (int n = 0; n < window_size; n++) {
+            for (int n = 0; n < win_size; n++) {
                 fft_temp[n].re = fft_out[n].re;
                 fft_temp[n].im = fft_out[n].im;
             }
         } else {
-            for (int n = 0; n <= window_size / 2; n++) {
+            for (int n = 0; n <= win_size / 2; n++) {
                 float fr, fi;
 
                 values[VAR_BIN] = n;
@@ -286,7 +286,7 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
                 fft_temp[n].im = fi;
             }
 
-            for (int n = window_size / 2 + 1, x = window_size / 2 - 1; n < window_size; n++, x--) {
+            for (int n = win_size / 2 + 1, x = win_size / 2 - 1; n < win_size; n++, x--) {
                 fft_temp[n].re =  fft_temp[x].re;
                 fft_temp[n].im = -fft_temp[x].im;
             }
@@ -294,8 +294,8 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
 
         s->itx_fn(s->ifft[ch], fft_out, fft_temp, sizeof(*fft_temp));
 
-        memmove(buf, buf + s->hop_size, window_size * sizeof(float));
-        for (int i = 0; i < window_size; i++)
+        memmove(buf, buf + s->hop_size, win_size * sizeof(float));
+        for (int i = 0; i < win_size; i++)
             buf[i] += fft_out[i].re * window_lut[i] * f;
     }
 
@@ -307,14 +307,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AFFTFiltContext *s = ctx->priv;
-    const int window_size = s->window_size;
+    const int win_size = s->win_size;
     const float *window_lut = s->window_func_lut;
     double values[VAR_VARS_NB];
     int ch, n, ret;
     AVFrame *out;
 
     for (ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
-        const int offset = s->window_size - s->hop_size;
+        const int offset = s->win_size - s->hop_size;
         float *src = (float *)s->window->extended_data[ch];
         AVComplexFloat *fft_in = s->fft_in[ch];
 
@@ -322,7 +322,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         memcpy(&src[offset], in->extended_data[ch], in->nb_samples * sizeof(float));
         memset(&src[offset + in->nb_samples], 0, (s->hop_size - in->nb_samples) * sizeof(float));
 
-        for (n = 0; n < window_size; n++) {
+        for (n = 0; n < win_size; n++) {
             fft_in[n].re = src[n] * window_lut[n];
             fft_in[n].im = 0;
         }
@@ -330,7 +330,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     values[VAR_PTS]         = in->pts;
     values[VAR_SAMPLE_RATE] = inlink->sample_rate;
-    values[VAR_NBBINS]      = window_size / 2;
+    values[VAR_NBBINS]      = win_size / 2;
     values[VAR_CHANNELS]    = inlink->ch_layout.nb_channels;
 
     ff_filter_execute(ctx, tx_channel, NULL, NULL,
@@ -398,7 +398,6 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     AFFTFiltContext *s = ctx->priv;
     int i;
-
 
     for (i = 0; i < s->channels; i++) {
         if (s->ifft)
