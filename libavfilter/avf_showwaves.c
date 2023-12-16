@@ -578,6 +578,9 @@ inline static int push_frame(AVFilterLink *outlink, int i, int64_t pts)
                                              outlink->time_base);
 
     ret = ff_filter_frame(outlink, s->outpicref);
+    for (int i = 0; i < inlink->ch_layout.nb_channels; i++)
+        s->buf_idy[i] = -1;
+
     s->outpicref = NULL;
     s->buf_idx = 0;
     return ret;
