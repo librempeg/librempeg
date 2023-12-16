@@ -284,15 +284,18 @@ static void draw_sample_p2p_rgba_scale(uint8_t *buf, int height, int linesize,
                                        int16_t *prev_y,
                                        const uint8_t color[4], int h)
 {
+    if (*prev_y < 0)
+        *prev_y = h;
     if (h >= 0 && h < height) {
         buf[h * linesize + 0] += color[0];
         buf[h * linesize + 1] += color[1];
         buf[h * linesize + 2] += color[2];
         buf[h * linesize + 3] += color[3];
-        if (*prev_y && h != *prev_y) {
+        if (h != *prev_y) {
             int start = *prev_y;
             uint8_t *bufk;
             int end = av_clip(h, 0, height-1);
+            *prev_y = end;
             if (start > end)
                 FFSWAP(int16_t, start, end);
             bufk = buf + (start + 1) * linesize;
@@ -304,7 +307,6 @@ static void draw_sample_p2p_rgba_scale(uint8_t *buf, int height, int linesize,
             }
         }
     }
-    *prev_y = h;
 }
 
 static void draw_sample_p2p_rgba_full(uint8_t *buf, int height, int linesize,
@@ -312,12 +314,15 @@ static void draw_sample_p2p_rgba_full(uint8_t *buf, int height, int linesize,
                                       const uint8_t color[4], int h)
 {
     uint32_t clr = AV_RN32(color);
+    if (*prev_y < 0)
+        *prev_y = h;
     if (h >= 0 && h < height) {
         AV_WN32(buf + h * linesize, clr);
-        if (*prev_y && h != *prev_y) {
+        if (h != *prev_y) {
             int start = *prev_y;
             uint8_t *bufk;
             int end = av_clip(h, 0, height-1);
+            *prev_y = end;
             if (start > end)
                 FFSWAP(int16_t, start, end);
             bufk = buf + (start + 1) * linesize;
@@ -325,7 +330,6 @@ static void draw_sample_p2p_rgba_full(uint8_t *buf, int height, int linesize,
                 AV_WN32(bufk, clr);
         }
     }
-    *prev_y = h;
 }
 
 static void draw_sample_cline_rgba_scale(uint8_t *buf, int height, int linesize,
@@ -381,18 +385,20 @@ static void draw_sample_p2p_gray(uint8_t *buf, int height, int linesize,
                                  const uint8_t color[4], int h)
 {
     int k;
+    if (*prev_y < 0)
+        *prev_y = h;
     if (h >= 0 && h < height) {
         buf[h * linesize] += color[0];
-        if (*prev_y && h != *prev_y) {
+        if (h != *prev_y) {
             int start = *prev_y;
             int end = av_clip(h, 0, height-1);
+            *prev_y = end;
             if (start > end)
                 FFSWAP(int16_t, start, end);
             for (k = start + 1; k < end; k++)
                 buf[k * linesize] += color[0];
         }
     }
-    *prev_y = h;
 }
 
 static void draw_sample_cline_gray(uint8_t *buf, int height, int linesize,
@@ -437,6 +443,9 @@ static int config_output(AVFilterLink *outlink)
         av_log(ctx, AV_LOG_ERROR, "Could not allocate showwaves buffer\n");
         return AVERROR(ENOMEM);
     }
+
+    for (int i = 0; i < nb_channels; i++)
+        showwaves->buf_idy[i] = -1;
 
     showwaves->history_nb_samples = av_rescale(showwaves->w * nb_channels * 2,
                                                showwaves->n.num, showwaves->n.den);
@@ -563,7 +572,6 @@ inline static int push_frame(AVFilterLink *outlink, int i, int64_t pts)
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = ctx->inputs[0];
     ShowWavesContext *showwaves = outlink->src->priv;
-    int nb_channels = inlink->ch_layout.nb_channels;
     int ret;
 
     showwaves->outpicref->duration = 1;
@@ -574,8 +582,6 @@ inline static int push_frame(AVFilterLink *outlink, int i, int64_t pts)
     ret = ff_filter_frame(outlink, showwaves->outpicref);
     showwaves->outpicref = NULL;
     showwaves->buf_idx = 0;
-    for (int i = 0; i < nb_channels; i++)
-        showwaves->buf_idy[i] = 0;
     return ret;
 }
 
