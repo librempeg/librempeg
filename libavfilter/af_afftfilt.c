@@ -50,6 +50,7 @@ typedef struct AFFTFiltContext {
     AVFrame *window;
     AVFrame *buffer;
     int win_func;
+    float win_gain;
     float *window_func_lut;
 } AFFTFiltContext;
 
@@ -223,6 +224,23 @@ static int config_input(AVFilterLink *inlink)
     if (!s->buffer)
         return AVERROR(ENOMEM);
 
+    {
+        float max = 0.f, *temp_lut = av_calloc(s->win_size, sizeof(*temp_lut));
+        if (!temp_lut)
+            return AVERROR(ENOMEM);
+
+        for (int j = 0; j < s->win_size; j += s->hop_size) {
+            for (int i = 0; i < s->win_size; i++)
+                temp_lut[(i + j) % s->win_size] += s->window_func_lut[i];
+        }
+
+        for (int i = 0; i < s->win_size; i++)
+            max = fmaxf(temp_lut[i], max);
+        av_freep(&temp_lut);
+
+        s->win_gain = 1.f / (max * sqrtf(s->win_size));
+    }
+
 fail:
     av_freep(&args);
 
@@ -251,7 +269,7 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     AFFTFiltContext *s = ctx->priv;
     const int win_size = s->win_size;
     const float *window_lut = s->window_func_lut;
-    const float f = sqrtf(1.f - s->overlap);
+    const float f = s->win_gain;
     const int channels = s->channels;
     const int start = (channels * jobnr) / nb_jobs;
     const int end = (channels * (jobnr+1)) / nb_jobs;
