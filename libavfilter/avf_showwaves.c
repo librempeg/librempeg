@@ -134,15 +134,15 @@ AVFILTER_DEFINE_CLASS(showwaves);
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
-    ShowWavesContext *showwaves = ctx->priv;
+    ShowWavesContext *s = ctx->priv;
 
-    av_frame_free(&showwaves->outpicref);
-    av_freep(&showwaves->buf_idy);
-    av_freep(&showwaves->history);
-    av_freep(&showwaves->fg);
+    av_frame_free(&s->outpicref);
+    av_freep(&s->buf_idy);
+    av_freep(&s->history);
+    av_freep(&s->fg);
 
-    if (showwaves->single_pic) {
-        struct frame_node *node = showwaves->audio_frames;
+    if (s->single_pic) {
+        struct frame_node *node = s->audio_frames;
         while (node) {
             struct frame_node *tmp = node;
 
@@ -150,8 +150,8 @@ static av_cold void uninit(AVFilterContext *ctx)
             av_frame_free(&tmp->frame);
             av_freep(&tmp);
         }
-        av_freep(&showwaves->sum);
-        showwaves->last_frame = NULL;
+        av_freep(&s->sum);
+        s->last_frame = NULL;
     }
 }
 
@@ -416,131 +416,129 @@ static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = ctx->inputs[0];
-    ShowWavesContext *showwaves = ctx->priv;
+    ShowWavesContext *s = ctx->priv;
     int nb_channels = inlink->ch_layout.nb_channels;
     char *colors, *saveptr = NULL;
     uint8_t x;
     int ch;
 
-    showwaves->q = av_make_q(0, 1);
-    showwaves->c = av_make_q(0, 1);
+    s->q = av_make_q(0, 1);
+    s->c = av_make_q(0, 1);
 
-    if (showwaves->single_pic) {
-        showwaves->n = av_make_q(1, 1);
+    if (s->single_pic) {
+        s->n = av_make_q(1, 1);
         outlink->frame_rate = av_make_q(1, 1);
     } else {
-        if (!showwaves->n.num || !showwaves->n.den) {
-            showwaves->n = av_mul_q(av_make_q(inlink->sample_rate,
-                                              showwaves->w), av_inv_q(showwaves->rate));
-            outlink->frame_rate = showwaves->rate;
+        if (!s->n.num || !s->n.den) {
+            s->n = av_mul_q(av_make_q(inlink->sample_rate,
+                                              s->w), av_inv_q(s->rate));
+            outlink->frame_rate = s->rate;
         } else {
-            outlink->frame_rate = av_div_q(av_make_q(inlink->sample_rate, showwaves->w), showwaves->n);
+            outlink->frame_rate = av_div_q(av_make_q(inlink->sample_rate, s->w), s->n);
         }
     }
 
-    showwaves->buf_idx = 0;
-    if (!FF_ALLOCZ_TYPED_ARRAY(showwaves->buf_idy, nb_channels)) {
-        av_log(ctx, AV_LOG_ERROR, "Could not allocate showwaves buffer\n");
+    s->buf_idx = 0;
+    if (!FF_ALLOCZ_TYPED_ARRAY(s->buf_idy, nb_channels))
         return AVERROR(ENOMEM);
-    }
 
     for (int i = 0; i < nb_channels; i++)
-        showwaves->buf_idy[i] = -1;
+        s->buf_idy[i] = -1;
 
-    showwaves->history_nb_samples = av_rescale(showwaves->w * nb_channels * 2,
-                                               showwaves->n.num, showwaves->n.den);
-    showwaves->history = av_calloc(showwaves->history_nb_samples,
-                                   sizeof(*showwaves->history));
-    if (!showwaves->history)
+    s->history_nb_samples = av_rescale(s->w * nb_channels * 2,
+                                               s->n.num, s->n.den);
+    s->history = av_calloc(s->history_nb_samples,
+                           sizeof(*s->history));
+    if (!s->history)
         return AVERROR(ENOMEM);
 
     outlink->time_base = av_inv_q(outlink->frame_rate);
-    outlink->w = showwaves->w;
-    outlink->h = showwaves->h;
+    outlink->w = s->w;
+    outlink->h = s->h;
     outlink->sample_aspect_ratio = (AVRational){1,1};
 
     av_log(ctx, AV_LOG_VERBOSE, "s:%dx%d r:%f n:%f\n",
-           showwaves->w, showwaves->h, av_q2d(outlink->frame_rate), av_q2d(showwaves->n));
+           s->w, s->h, av_q2d(outlink->frame_rate), av_q2d(s->n));
 
     switch (outlink->format) {
     case AV_PIX_FMT_GRAY8:
-        switch (showwaves->mode) {
-        case MODE_POINT:         showwaves->draw_sample = draw_sample_point_gray; break;
-        case MODE_LINE:          showwaves->draw_sample = draw_sample_line_gray;  break;
-        case MODE_P2P:           showwaves->draw_sample = draw_sample_p2p_gray;   break;
-        case MODE_CENTERED_LINE: showwaves->draw_sample = draw_sample_cline_gray; break;
+        switch (s->mode) {
+        case MODE_POINT:         s->draw_sample = draw_sample_point_gray; break;
+        case MODE_LINE:          s->draw_sample = draw_sample_line_gray;  break;
+        case MODE_P2P:           s->draw_sample = draw_sample_p2p_gray;   break;
+        case MODE_CENTERED_LINE: s->draw_sample = draw_sample_cline_gray; break;
         default:
             return AVERROR_BUG;
         }
-        showwaves->pixstep = 1;
+        s->pixstep = 1;
         break;
     case AV_PIX_FMT_RGBA:
-        switch (showwaves->mode) {
-        case MODE_POINT:         showwaves->draw_sample = showwaves->draw_mode == DRAW_SCALE ? draw_sample_point_rgba_scale : draw_sample_point_rgba_full; break;
-        case MODE_LINE:          showwaves->draw_sample = showwaves->draw_mode == DRAW_SCALE ? draw_sample_line_rgba_scale  : draw_sample_line_rgba_full;  break;
-        case MODE_P2P:           showwaves->draw_sample = showwaves->draw_mode == DRAW_SCALE ? draw_sample_p2p_rgba_scale   : draw_sample_p2p_rgba_full;   break;
-        case MODE_CENTERED_LINE: showwaves->draw_sample = showwaves->draw_mode == DRAW_SCALE ? draw_sample_cline_rgba_scale : draw_sample_cline_rgba_full; break;
+        switch (s->mode) {
+        case MODE_POINT:         s->draw_sample = s->draw_mode == DRAW_SCALE ? draw_sample_point_rgba_scale : draw_sample_point_rgba_full; break;
+        case MODE_LINE:          s->draw_sample = s->draw_mode == DRAW_SCALE ? draw_sample_line_rgba_scale  : draw_sample_line_rgba_full;  break;
+        case MODE_P2P:           s->draw_sample = s->draw_mode == DRAW_SCALE ? draw_sample_p2p_rgba_scale   : draw_sample_p2p_rgba_full;   break;
+        case MODE_CENTERED_LINE: s->draw_sample = s->draw_mode == DRAW_SCALE ? draw_sample_cline_rgba_scale : draw_sample_cline_rgba_full; break;
         default:
             return AVERROR_BUG;
         }
-        showwaves->pixstep = 4;
+        s->pixstep = 4;
         break;
     }
 
-    switch (showwaves->scale) {
+    switch (s->scale) {
     case SCALE_LIN:
-        switch (showwaves->mode) {
+        switch (s->mode) {
         case MODE_POINT:
         case MODE_LINE:
-        case MODE_P2P:           showwaves->get_h = get_lin_h;  break;
-        case MODE_CENTERED_LINE: showwaves->get_h = get_lin_h2; break;
+        case MODE_P2P:           s->get_h = get_lin_h;  break;
+        case MODE_CENTERED_LINE: s->get_h = get_lin_h2; break;
         default:
             return AVERROR_BUG;
         }
         break;
     case SCALE_LOG:
-        switch (showwaves->mode) {
+        switch (s->mode) {
         case MODE_POINT:
         case MODE_LINE:
-        case MODE_P2P:           showwaves->get_h = get_log_h;  break;
-        case MODE_CENTERED_LINE: showwaves->get_h = get_log_h2; break;
+        case MODE_P2P:           s->get_h = get_log_h;  break;
+        case MODE_CENTERED_LINE: s->get_h = get_log_h2; break;
         default:
             return AVERROR_BUG;
         }
         break;
     case SCALE_SQRT:
-        switch (showwaves->mode) {
+        switch (s->mode) {
         case MODE_POINT:
         case MODE_LINE:
-        case MODE_P2P:           showwaves->get_h = get_sqrt_h;  break;
-        case MODE_CENTERED_LINE: showwaves->get_h = get_sqrt_h2; break;
+        case MODE_P2P:           s->get_h = get_sqrt_h;  break;
+        case MODE_CENTERED_LINE: s->get_h = get_sqrt_h2; break;
         default:
             return AVERROR_BUG;
         }
         break;
     case SCALE_CBRT:
-        switch (showwaves->mode) {
+        switch (s->mode) {
         case MODE_POINT:
         case MODE_LINE:
-        case MODE_P2P:           showwaves->get_h = get_cbrt_h;  break;
-        case MODE_CENTERED_LINE: showwaves->get_h = get_cbrt_h2; break;
+        case MODE_P2P:           s->get_h = get_cbrt_h;  break;
+        case MODE_CENTERED_LINE: s->get_h = get_cbrt_h2; break;
         default:
             return AVERROR_BUG;
         }
         break;
     }
 
-    showwaves->fg = av_malloc_array(nb_channels, 4 * sizeof(*showwaves->fg));
-    if (!showwaves->fg)
+    s->fg = av_malloc_array(nb_channels, 4 * sizeof(*s->fg));
+    if (!s->fg)
         return AVERROR(ENOMEM);
 
-    colors = av_strdup(showwaves->colors);
+    colors = av_strdup(s->colors);
     if (!colors)
         return AVERROR(ENOMEM);
 
-    if (showwaves->draw_mode == DRAW_SCALE) {
+    if (s->draw_mode == DRAW_SCALE) {
         /* multiplication factor, pre-computed to avoid in-loop divisions */
-        x = (showwaves->n.den * 255) / ((showwaves->split_channels ? 1 : nb_channels) * showwaves->n.num);
+        x = (s->n.den * 255) / ((s->split_channels ? 1 : nb_channels) * s->n.num);
     } else {
         x = 255;
     }
@@ -553,14 +551,14 @@ static int config_output(AVFilterLink *outlink)
             color = av_strtok(ch == 0 ? colors : NULL, " |", &saveptr);
             if (color)
                 av_parse_color(fg, color, -1, ctx);
-            showwaves->fg[4*ch + 0] = fg[0] * x / 255.;
-            showwaves->fg[4*ch + 1] = fg[1] * x / 255.;
-            showwaves->fg[4*ch + 2] = fg[2] * x / 255.;
-            showwaves->fg[4*ch + 3] = fg[3] * x / 255.;
+            s->fg[4*ch + 0] = fg[0] * x / 255.;
+            s->fg[4*ch + 1] = fg[1] * x / 255.;
+            s->fg[4*ch + 2] = fg[2] * x / 255.;
+            s->fg[4*ch + 3] = fg[3] * x / 255.;
         }
     } else {
         for (ch = 0; ch < nb_channels; ch++)
-            showwaves->fg[4 * ch + 0] = x;
+            s->fg[4 * ch + 0] = x;
     }
     av_free(colors);
 
@@ -571,17 +569,17 @@ inline static int push_frame(AVFilterLink *outlink, int i, int64_t pts)
 {
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = ctx->inputs[0];
-    ShowWavesContext *showwaves = outlink->src->priv;
+    ShowWavesContext *s = outlink->src->priv;
     int ret;
 
-    showwaves->outpicref->duration = 1;
-    showwaves->outpicref->pts = av_rescale_q(pts + i,
+    s->outpicref->duration = 1;
+    s->outpicref->pts = av_rescale_q(pts + i,
                                              inlink->time_base,
                                              outlink->time_base);
 
-    ret = ff_filter_frame(outlink, showwaves->outpicref);
-    showwaves->outpicref = NULL;
-    showwaves->buf_idx = 0;
+    ret = ff_filter_frame(outlink, s->outpicref);
+    s->outpicref = NULL;
+    s->buf_idx = 0;
     return ret;
 }
 
@@ -589,18 +587,18 @@ static int push_single_pic(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = ctx->inputs[0];
-    ShowWavesContext *showwaves = ctx->priv;
-    int64_t n = 0, column_max_samples = showwaves->total_samples / outlink->w;
-    int64_t remaining_samples = showwaves->total_samples - (column_max_samples * outlink->w);
+    ShowWavesContext *s = ctx->priv;
+    int64_t n = 0, column_max_samples = s->total_samples / outlink->w;
+    int64_t remaining_samples = s->total_samples - (column_max_samples * outlink->w);
     int64_t last_column_samples = column_max_samples + remaining_samples;
-    AVFrame *out = showwaves->outpicref;
+    AVFrame *out = s->outpicref;
     struct frame_node *node;
     const int nb_channels = inlink->ch_layout.nb_channels;
-    const int ch_height = showwaves->split_channels ? outlink->h / nb_channels : outlink->h;
+    const int ch_height = s->split_channels ? outlink->h / nb_channels : outlink->h;
     const int linesize = out->linesize[0];
-    const int pixstep = showwaves->pixstep;
+    const int pixstep = s->pixstep;
     int col = 0;
-    int64_t *sum = showwaves->sum;
+    int64_t *sum = s->sum;
 
     if (column_max_samples == 0) {
         av_log(ctx, AV_LOG_ERROR, "Too few samples\n");
@@ -611,7 +609,7 @@ static int push_single_pic(AVFilterLink *outlink)
 
     memset(sum, 0, nb_channels * sizeof(*sum));
 
-    for (node = showwaves->audio_frames; node; node = node->next) {
+    for (node = s->audio_frames; node; node = node->next) {
         int i;
         const AVFrame *frame = node->frame;
         const int16_t *p = (const int16_t *)frame->data[0];
@@ -620,7 +618,7 @@ static int push_single_pic(AVFilterLink *outlink)
             int64_t max_samples = col == outlink->w - 1 ? last_column_samples: column_max_samples;
             int ch;
 
-            switch (showwaves->filter_mode) {
+            switch (s->filter_mode) {
             case FILTER_AVERAGE:
                 for (ch = 0; ch < nb_channels; ch++)
                     sum[ch] += abs(p[ch + i*nb_channels]);
@@ -634,15 +632,15 @@ static int push_single_pic(AVFilterLink *outlink)
             n++;
             if (n == max_samples) {
                 for (ch = 0; ch < nb_channels; ch++) {
-                    int16_t sample = sum[ch] / (showwaves->filter_mode == FILTER_AVERAGE ? max_samples : 1);
+                    int16_t sample = sum[ch] / (s->filter_mode == FILTER_AVERAGE ? max_samples : 1);
                     uint8_t *buf = out->data[0] + col * pixstep;
                     int h;
 
-                    if (showwaves->split_channels)
+                    if (s->split_channels)
                         buf += ch*ch_height*linesize;
                     av_assert0(col < outlink->w);
-                    h = showwaves->get_h(sample, ch_height);
-                    showwaves->draw_sample(buf, ch_height, linesize, &showwaves->buf_idy[ch], &showwaves->fg[ch * 4], h);
+                    h = s->get_h(sample, ch_height);
+                    s->draw_sample(buf, ch_height, linesize, &s->buf_idy[ch], &s->fg[ch * 4], h);
                     sum[ch] = 0;
                 }
                 col++;
@@ -657,41 +655,41 @@ static int push_single_pic(AVFilterLink *outlink)
 
 static int request_frame(AVFilterLink *outlink)
 {
-    ShowWavesContext *showwaves = outlink->src->priv;
+    ShowWavesContext *s = outlink->src->priv;
     AVFilterLink *inlink = outlink->src->inputs[0];
     int ret;
 
     ret = ff_request_frame(inlink);
-    if (ret == AVERROR_EOF && showwaves->outpicref) {
+    if (ret == AVERROR_EOF && s->outpicref) {
         push_single_pic(outlink);
     }
 
     return ret;
 }
 
-static int alloc_out_frame(ShowWavesContext *showwaves,
+static int alloc_out_frame(ShowWavesContext *s,
                            AVFilterLink *outlink)
 {
-    if (!showwaves->outpicref) {
-        AVFrame *out = showwaves->outpicref =
+    if (!s->outpicref) {
+        AVFrame *out = s->outpicref =
             ff_get_video_buffer(outlink, outlink->w, outlink->h);
         if (!out)
             return AVERROR(ENOMEM);
         out->width  = outlink->w;
         out->height = outlink->h;
         for (int j = 0; j < outlink->h; j++)
-            memset(out->data[0] + j*out->linesize[0], 0, outlink->w * showwaves->pixstep);
+            memset(out->data[0] + j*out->linesize[0], 0, outlink->w * s->pixstep);
     }
     return 0;
 }
 
 static av_cold int init(AVFilterContext *ctx)
 {
-    ShowWavesContext *showwaves = ctx->priv;
+    ShowWavesContext *s = ctx->priv;
 
     if (!strcmp(ctx->filter->name, "showwavespic")) {
-        showwaves->single_pic = 1;
-        showwaves->mode = MODE_CENTERED_LINE;
+        s->single_pic = 1;
+        s->mode = MODE_CENTERED_LINE;
     }
 
     return 0;
@@ -703,25 +701,25 @@ static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
-    ShowWavesContext *showwaves = ctx->priv;
+    ShowWavesContext *s = ctx->priv;
     const int nb_samples = insamples->nb_samples;
-    AVFrame *outpicref = showwaves->outpicref;
+    AVFrame *outpicref = s->outpicref;
     const int16_t *p = (const int16_t *)insamples->data[0];
-    int16_t *history = showwaves->history;
+    int16_t *history = s->history;
     const int nb_channels = inlink->ch_layout.nb_channels;
     int i, j, ret = 0, linesize;
-    const int pixstep = showwaves->pixstep;
-    const int ch_height = showwaves->split_channels ? outlink->h / nb_channels : outlink->h;
-    const int history_nb_samples = showwaves->history_nb_samples;
-    const int split_channels = showwaves->split_channels;
-    const AVRational i_n = av_inv_q(showwaves->n);
+    const int pixstep = s->pixstep;
+    const int ch_height = s->split_channels ? outlink->h / nb_channels : outlink->h;
+    const int history_nb_samples = s->history_nb_samples;
+    const int split_channels = s->split_channels;
+    const AVRational i_n = av_inv_q(s->n);
     const AVRational u_q = av_make_q(1, 1);
     const AVRational z_q = av_make_q(0, 1);
-    int16_t *buf_idy = showwaves->buf_idy;
-    int idx = showwaves->history_index;
-    int buf_idx = showwaves->buf_idx;
-    const uint8_t *fg = showwaves->fg;
-    const int w = showwaves->w;
+    int16_t *buf_idy = s->buf_idy;
+    int idx = s->history_index;
+    int buf_idx = s->buf_idx;
+    const uint8_t *fg = s->fg;
+    const int w = s->w;
     uint8_t *dst;
 
     for (int n = 0; n < nb_samples * nb_channels; n++) {
@@ -729,12 +727,12 @@ static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *insamples)
         if (idx >= history_nb_samples)
             idx = 0;
     }
-    showwaves->history_index = idx;
+    s->history_index = idx;
 
-    ret = alloc_out_frame(showwaves, outlink);
+    ret = alloc_out_frame(s, outlink);
     if (ret < 0)
         goto end;
-    outpicref = showwaves->outpicref;
+    outpicref = s->outpicref;
     linesize = outpicref->linesize[0];
 
     /* draw data in the buffer */
@@ -746,27 +744,27 @@ static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 
             if (split_channels)
                 buf += j*ch_height*linesize;
-            h = showwaves->get_h(history[idx++], ch_height);
+            h = s->get_h(history[idx++], ch_height);
             if (idx >= history_nb_samples)
                 idx = 0;
-            showwaves->draw_sample(buf, ch_height, linesize,
+            s->draw_sample(buf, ch_height, linesize,
                                    &buf_idy[j], &fg[j * 4], h);
         }
 
-        showwaves->c = av_add_q(showwaves->c, i_n);
-        if (av_cmp_q(showwaves->c, u_q) >= 0) {
-            showwaves->c = z_q;
+        s->c = av_add_q(s->c, i_n);
+        if (av_cmp_q(s->c, u_q) >= 0) {
+            s->c = z_q;
             buf_idx++;
         }
         if (buf_idx == w)
             break;
     }
 
-    showwaves->buf_idx = buf_idx;
+    s->buf_idx = buf_idx;
 
     if ((ret = push_frame(outlink, history_nb_samples - i - 1, insamples->pts)) < 0)
         goto end;
-    outpicref = showwaves->outpicref;
+    outpicref = s->outpicref;
 end:
     av_frame_free(&insamples);
     return ret;
@@ -776,7 +774,7 @@ static int activate(AVFilterContext *ctx)
 {
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
-    ShowWavesContext *showwaves = ctx->priv;
+    ShowWavesContext *s = ctx->priv;
     AVRational q;
     AVFrame *in;
     int nb_samples;
@@ -784,13 +782,13 @@ static int activate(AVFilterContext *ctx)
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    q = av_add_q(showwaves->q, av_mul_q(av_make_q(outlink->w, 1), showwaves->n));
+    q = av_add_q(s->q, av_mul_q(av_make_q(outlink->w, 1), s->n));
     nb_samples = (q.num + (q.den / 2)) / q.den;
     ret = ff_inlink_consume_samples(inlink, nb_samples, nb_samples, &in);
     if (ret < 0)
         return ret;
     if (ret > 0) {
-        showwaves->q = av_sub_q(q, av_make_q(nb_samples, 1));
+        s->q = av_sub_q(q, av_make_q(nb_samples, 1));
         return showwaves_filter_frame(inlink, in);
     }
 
@@ -852,11 +850,11 @@ AVFILTER_DEFINE_CLASS(showwavespic);
 static int showwavespic_config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
-    ShowWavesContext *showwaves = ctx->priv;
+    ShowWavesContext *s = ctx->priv;
 
-    if (showwaves->single_pic) {
-        showwaves->sum = av_calloc(inlink->ch_layout.nb_channels, sizeof(*showwaves->sum));
-        if (!showwaves->sum)
+    if (s->single_pic) {
+        s->sum = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->sum));
+        if (!s->sum)
             return AVERROR(ENOMEM);
     }
 
@@ -867,13 +865,13 @@ static int showwavespic_filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
-    ShowWavesContext *showwaves = ctx->priv;
+    ShowWavesContext *s = ctx->priv;
     int ret = 0;
 
-    if (showwaves->single_pic) {
+    if (s->single_pic) {
         struct frame_node *f;
 
-        ret = alloc_out_frame(showwaves, outlink);
+        ret = alloc_out_frame(s, outlink);
         if (ret < 0)
             goto end;
 
@@ -885,14 +883,14 @@ static int showwavespic_filter_frame(AVFilterLink *inlink, AVFrame *insamples)
         }
         f->frame = insamples;
         f->next = NULL;
-        if (!showwaves->last_frame) {
-            showwaves->audio_frames =
-            showwaves->last_frame   = f;
+        if (!s->last_frame) {
+            s->audio_frames =
+            s->last_frame   = f;
         } else {
-            showwaves->last_frame->next = f;
-            showwaves->last_frame = f;
+            s->last_frame->next = f;
+            s->last_frame = f;
         }
-        showwaves->total_samples += insamples->nb_samples;
+        s->total_samples += insamples->nb_samples;
 
         return 0;
     }
