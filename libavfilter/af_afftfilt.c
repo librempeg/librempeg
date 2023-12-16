@@ -277,7 +277,6 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
 {
     AFFTFiltContext *s = ctx->priv;
     const int win_size = s->win_size;
-    const float *window_lut = s->window_func_lut;
     const float f = s->win_gain;
     const int channels = s->channels;
     const int start = (channels * jobnr) / nb_jobs;
@@ -321,7 +320,7 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
 
         memmove(buf, buf + s->hop_size, win_size * sizeof(float));
         for (int i = 0; i < win_size; i++)
-            buf[i] += tx_in[i] * window_lut[i] * f;
+            buf[i] += tx_in[i] * f;
 
         memcpy(dst, buf, s->hop_size * sizeof(float));
     }
