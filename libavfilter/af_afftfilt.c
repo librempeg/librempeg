@@ -78,7 +78,7 @@ static inline double getreal(void *priv, double x, double ch)
     int ich, ix;
 
     ich = av_clip(ch, 0, s->nb_exprs - 1);
-    ix = av_clip(x, 0, s->win_size / 2);
+    ix = av_clip(x, 0, s->win_size/2+1);
 
     return s->tx_out[ich][ix].re;
 }
@@ -89,7 +89,7 @@ static inline double getimag(void *priv, double x, double ch)
     int ich, ix;
 
     ich = av_clip(ch, 0, s->nb_exprs - 1);
-    ix = av_clip(x, 0, s->win_size / 2);
+    ix = av_clip(x, 0, s->win_size/2+1);
 
     return s->tx_out[ich][ix].im;
 }
