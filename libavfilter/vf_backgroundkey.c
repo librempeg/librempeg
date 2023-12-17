@@ -148,8 +148,8 @@ static int filter_frame(AVFilterLink *link, AVFrame *frame)
             goto fail;
     }
 
-    if (ret = ff_filter_execute(avctx, s->do_slice, frame, NULL,
-                                FFMIN(frame->height, s->nb_threads)))
+    if ((ret = ff_filter_execute(avctx, s->do_slice, frame, NULL,
+                                FFMIN(frame->height, s->nb_threads))) < 0)
         goto fail;
 
     for (int n = 0; n < s->nb_threads; n++)

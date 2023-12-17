@@ -623,7 +623,7 @@ static int var_size_bme(MIContext *mi_ctx, Block *block, int x_mb, int y_mb, int
                 sb->mvs[0][1] = mv_y;
 
                 if (n > 1) {
-                    if (ret = var_size_bme(mi_ctx, sb, x_mb + (x << (n - 1)), y_mb + (y << (n - 1)), n - 1))
+                    if ((ret = var_size_bme(mi_ctx, sb, x_mb + (x << (n - 1)), y_mb + (y << (n - 1)), n - 1)) < 0)
                         return ret;
                 } else
                     sb->sb = 0;
@@ -716,7 +716,7 @@ static int cluster_mvs(MIContext *mi_ctx)
                     if (block->cid != mi_ctx->int_blocks[x + y * mi_ctx->b_width].cid) {
                         if (!dx && block->cid == mi_ctx->int_blocks[x + (mb_y - dy) * mi_ctx->b_width].cid ||
                             !dy && block->cid == mi_ctx->int_blocks[(mb_x - dx) + y * mi_ctx->b_width].cid) {
-                            if (ret = var_size_bme(mi_ctx, block, mb_x << mi_ctx->log2_mb_size, mb_y << mi_ctx->log2_mb_size, mi_ctx->log2_mb_size))
+                            if ((ret = var_size_bme(mi_ctx, block, mb_x << mi_ctx->log2_mb_size, mb_y << mi_ctx->log2_mb_size, mi_ctx->log2_mb_size)) < 0)
                                 return ret;
                         }
                     }
@@ -803,7 +803,7 @@ static int inject_frame(AVFilterLink *inlink, AVFrame *avf_in)
 
                 mi_ctx->clusters[0].nb = mi_ctx->b_count;
 
-                if (ret = cluster_mvs(mi_ctx))
+                if ((ret = cluster_mvs(mi_ctx)) < 0)
                     return ret;
             }
         }
@@ -1164,10 +1164,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *avf_in)
     }
 
     if (!mi_ctx->frames[NB_FRAMES - 1].avf)
-        if (ret = inject_frame(inlink, av_frame_clone(avf_in)))
+        if ((ret = inject_frame(inlink, av_frame_clone(avf_in))) < 0)
             return ret;
 
-    if (ret = inject_frame(inlink, avf_in))
+    if ((ret = inject_frame(inlink, avf_in)) < 0)
         return ret;
 
     if (!mi_ctx->frames[0].avf)

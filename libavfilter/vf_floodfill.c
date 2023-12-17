@@ -315,7 +315,7 @@ static int filter_frame(AVFilterLink *link, AVFrame *frame)
             s->front++;
         }
 
-        if (ret = ff_inlink_make_frame_writable(link, &frame)) {
+        if ((ret = ff_inlink_make_frame_writable(link, &frame)) < 0) {
             av_frame_free(&frame);
             return ret;
         }

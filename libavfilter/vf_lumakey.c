@@ -134,8 +134,8 @@ static int filter_frame(AVFilterLink *link, AVFrame *frame)
     LumakeyContext *s = ctx->priv;
     int ret;
 
-    if (ret = ff_filter_execute(ctx, s->do_lumakey_slice, frame, NULL,
-                                FFMIN(frame->height, ff_filter_get_nb_threads(ctx))))
+    if ((ret = ff_filter_execute(ctx, s->do_lumakey_slice, frame, NULL,
+                                FFMIN(frame->height, ff_filter_get_nb_threads(ctx)))) < 0)
         return ret;
 
     return ff_filter_frame(ctx->outputs[0], frame);
