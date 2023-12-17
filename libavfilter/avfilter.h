@@ -39,6 +39,7 @@
 
 #include "libavutil/attributes.h"
 #include "libavutil/avutil.h"
+#include "libavutil/bprint.h"
 #include "libavutil/buffer.h"
 #include "libavutil/dict.h"
 #include "libavutil/frame.h"
@@ -1492,6 +1493,17 @@ char *avfilter_graph_dump(AVFilterGraph *graph, const char *options);
  *          or AVERROR_EOF if all links returned AVERROR_EOF
  */
 int avfilter_graph_request_oldest(AVFilterGraph *graph);
+
+/**
+ * Gets the formats from an AVFilterFormatsConfig.
+ *
+ * @param bp         an instance of AVBPrint
+ * @param filter     the AVFilter
+ * @param for_output set to 1 for filter outputs
+ * @param pad_index  the index of the input or output
+ * @return           zero on success
+ */
+int avfilter_print_config_formats(AVBPrint *bp, const AVFilter *filter, int for_output, unsigned pad_index);
 
 /**
  * @}

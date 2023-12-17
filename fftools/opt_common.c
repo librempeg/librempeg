@@ -498,6 +498,7 @@ static void show_help_filter(const char *name)
 {
 #if CONFIG_AVFILTER
     const AVFilter *f = avfilter_get_by_name(name);
+    AVBPrint bp;
     int i, count;
 
     if (!name) {
@@ -508,40 +509,52 @@ static void show_help_filter(const char *name)
         return;
     }
 
-    printf("Filter %s\n", f->name);
+    av_bprint_init(&bp, 0, AV_BPRINT_SIZE_UNLIMITED);
+    av_log_set_callback(NULL);
+
+    av_bprintf(&bp, "Filter %s\n", f->name);
     if (f->description)
-        printf("  %s\n", f->description);
+        av_bprintf(&bp, "  %s\n", f->description);
 
     if (f->flags & AVFILTER_FLAG_SLICE_THREADS)
-        printf("    slice threading supported\n");
+        av_bprintf(&bp, "    slice threading supported\n");
 
-    printf("    Inputs:\n");
+    av_bprintf(&bp, "    Inputs:\n");
     count = avfilter_filter_pad_count(f, 0);
     for (i = 0; i < count; i++) {
-        printf("       #%d: %s (%s)\n", i, avfilter_pad_get_name(f->inputs, i),
+        av_bprintf(&bp, "       #%d: %s (%s), Formats: ", i, avfilter_pad_get_name(f->inputs, i),
                av_get_media_type_string(avfilter_pad_get_type(f->inputs, i)));
+        avfilter_print_config_formats(&bp, f, 0, i);
+        av_bprintf(&bp, "\n");
     }
     if (f->flags & AVFILTER_FLAG_DYNAMIC_INPUTS)
-        printf("        dynamic (depending on the options)\n");
+        av_bprintf(&bp, "        dynamic (depending on the options)\n");
     else if (!count)
-        printf("        none (source filter)\n");
+        av_bprintf(&bp, "        none (source filter)\n");
 
-    printf("    Outputs:\n");
+    av_bprintf(&bp, "    Outputs:\n");
     count = avfilter_filter_pad_count(f, 1);
     for (i = 0; i < count; i++) {
-        printf("       #%d: %s (%s)\n", i, avfilter_pad_get_name(f->outputs, i),
+        av_bprintf(&bp, "       #%d: %s (%s), Formats: ", i, avfilter_pad_get_name(f->outputs, i),
                av_get_media_type_string(avfilter_pad_get_type(f->outputs, i)));
+
+        avfilter_print_config_formats(&bp, f, 1, i);
+        av_bprintf(&bp, "\n");
     }
     if (f->flags & AVFILTER_FLAG_DYNAMIC_OUTPUTS)
-        printf("        dynamic (depending on the options)\n");
+        av_bprintf(&bp, "        dynamic (depending on the options)\n");
     else if (!count)
-        printf("        none (sink filter)\n");
+        av_bprintf(&bp, "        none (sink filter)\n");
 
+    av_log_set_callback(log_callback_help);
+    printf("%s\n", bp.str);
     if (f->priv_class)
         show_help_children(f->priv_class, AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM |
                                           AV_OPT_FLAG_AUDIO_PARAM);
     if (f->flags & AVFILTER_FLAG_SUPPORT_TIMELINE)
         printf("This filter has support for timeline through the 'enable' option.\n");
+
+    av_bprint_finalize(&bp, NULL);
 #else
     av_log(NULL, AV_LOG_ERROR, "Build without libavfilter; "
            "can not to satisfy request\n");
