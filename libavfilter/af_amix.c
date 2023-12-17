@@ -608,7 +608,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     return 0;
 }
 
-static const AVFilterPad avfilter_af_amix_outputs[] = {
+static const AVFilterPad outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_AUDIO,
@@ -625,7 +625,7 @@ const AVFilter ff_af_amix = {
     .uninit         = uninit,
     .activate       = activate,
     .inputs         = NULL,
-    FILTER_OUTPUTS(avfilter_af_amix_outputs),
+    FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_FLTP,
                       AV_SAMPLE_FMT_DBL, AV_SAMPLE_FMT_DBLP),
     .process_command = process_command,

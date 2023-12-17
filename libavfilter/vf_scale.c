@@ -1030,7 +1030,7 @@ static const AVClass scale_class = {
     .child_next          = child_next,
 };
 
-static const AVFilterPad avfilter_vf_scale_inputs[] = {
+static const AVFilterPad scale_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -1038,7 +1038,7 @@ static const AVFilterPad avfilter_vf_scale_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_vf_scale_outputs[] = {
+static const AVFilterPad scale_outputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -1054,13 +1054,13 @@ const AVFilter ff_vf_scale = {
     .uninit          = uninit,
     .priv_size       = sizeof(ScaleContext),
     .priv_class      = &scale_class,
-    FILTER_INPUTS(avfilter_vf_scale_inputs),
-    FILTER_OUTPUTS(avfilter_vf_scale_outputs),
+    FILTER_INPUTS(scale_inputs),
+    FILTER_OUTPUTS(scale_outputs),
     FILTER_QUERY_FUNC(query_formats),
     .process_command = process_command,
 };
 
-static const AVFilterPad avfilter_vf_scale2ref_inputs[] = {
+static const AVFilterPad scale2ref_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -1073,7 +1073,7 @@ static const AVFilterPad avfilter_vf_scale2ref_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_vf_scale2ref_outputs[] = {
+static const AVFilterPad scale2ref_outputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -1096,8 +1096,8 @@ const AVFilter ff_vf_scale2ref = {
     .uninit          = uninit,
     .priv_size       = sizeof(ScaleContext),
     .priv_class      = &scale_class,
-    FILTER_INPUTS(avfilter_vf_scale2ref_inputs),
-    FILTER_OUTPUTS(avfilter_vf_scale2ref_outputs),
+    FILTER_INPUTS(scale2ref_inputs),
+    FILTER_OUTPUTS(scale2ref_outputs),
     FILTER_QUERY_FUNC(query_formats),
     .process_command = process_command,
 };

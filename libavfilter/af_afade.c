@@ -418,7 +418,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     return config_output(ctx->outputs[0]);
 }
 
-static const AVFilterPad avfilter_af_afade_inputs[] = {
+static const AVFilterPad afade_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
@@ -426,7 +426,7 @@ static const AVFilterPad avfilter_af_afade_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_af_afade_outputs[] = {
+static const AVFilterPad afade_outputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
@@ -439,8 +439,8 @@ const AVFilter ff_af_afade = {
     .description   = NULL_IF_CONFIG_SMALL("Fade in/out input audio."),
     .priv_size     = sizeof(AudioFadeContext),
     .init          = init,
-    FILTER_INPUTS(avfilter_af_afade_inputs),
-    FILTER_OUTPUTS(avfilter_af_afade_outputs),
+    FILTER_INPUTS(afade_inputs),
+    FILTER_OUTPUTS(afade_outputs),
     FILTER_SAMPLEFMTS_ARRAY(sample_fmts),
     .priv_class    = &afade_class,
     .process_command = process_command,
@@ -711,7 +711,7 @@ static AVFrame *get_audio_buffer(AVFilterLink *inlink, int nb_samples)
         ff_default_get_audio_buffer(inlink, nb_samples);
 }
 
-static const AVFilterPad avfilter_af_acrossfade_inputs[] = {
+static const AVFilterPad acrossfade_inputs[] = {
     {
         .name         = "crossfade0",
         .type         = AVMEDIA_TYPE_AUDIO,
@@ -724,7 +724,7 @@ static const AVFilterPad avfilter_af_acrossfade_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_af_acrossfade_outputs[] = {
+static const AVFilterPad acrossfade_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_AUDIO,
@@ -738,8 +738,8 @@ const AVFilter ff_af_acrossfade = {
     .priv_size     = sizeof(AudioFadeContext),
     .activate      = activate,
     .priv_class    = &acrossfade_class,
-    FILTER_INPUTS(avfilter_af_acrossfade_inputs),
-    FILTER_OUTPUTS(avfilter_af_acrossfade_outputs),
+    FILTER_INPUTS(acrossfade_inputs),
+    FILTER_OUTPUTS(acrossfade_outputs),
     FILTER_SAMPLEFMTS_ARRAY(sample_fmts),
 };
 

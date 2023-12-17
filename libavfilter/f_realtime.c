@@ -79,7 +79,7 @@ AVFILTER_DEFINE_CLASS_EXT(realtime, "(a)realtime", options);
 
 #if CONFIG_REALTIME_FILTER
 
-static const AVFilterPad avfilter_vf_realtime_inputs[] = {
+static const AVFilterPad realtime_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -93,7 +93,7 @@ const AVFilter ff_vf_realtime = {
     .priv_size   = sizeof(RealtimeContext),
     .priv_class  = &realtime_class,
     .flags       = AVFILTER_FLAG_METADATA_ONLY,
-    FILTER_INPUTS(avfilter_vf_realtime_inputs),
+    FILTER_INPUTS(realtime_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     .process_command = ff_filter_process_command,
 };

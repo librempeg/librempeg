@@ -110,7 +110,7 @@ static int request_frame(AVFilterLink *outlink)
     return ret;
 }
 
-static const AVFilterPad avfilter_vf_fifo_inputs[] = {
+static const AVFilterPad fifo_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -118,7 +118,7 @@ static const AVFilterPad avfilter_vf_fifo_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_vf_fifo_outputs[] = {
+static const AVFilterPad fifo_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
@@ -133,11 +133,11 @@ const AVFilter ff_vf_fifo = {
     .uninit      = uninit,
     .priv_size   = sizeof(FifoContext),
     .flags       = AVFILTER_FLAG_METADATA_ONLY,
-    FILTER_INPUTS(avfilter_vf_fifo_inputs),
-    FILTER_OUTPUTS(avfilter_vf_fifo_outputs),
+    FILTER_INPUTS(fifo_inputs),
+    FILTER_OUTPUTS(fifo_outputs),
 };
 
-static const AVFilterPad avfilter_af_afifo_inputs[] = {
+static const AVFilterPad afifo_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
@@ -145,7 +145,7 @@ static const AVFilterPad avfilter_af_afifo_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_af_afifo_outputs[] = {
+static const AVFilterPad afifo_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_AUDIO,
@@ -160,6 +160,6 @@ const AVFilter ff_af_afifo = {
     .uninit      = uninit,
     .priv_size   = sizeof(FifoContext),
     .flags       = AVFILTER_FLAG_METADATA_ONLY,
-    FILTER_INPUTS(avfilter_af_afifo_inputs),
-    FILTER_OUTPUTS(avfilter_af_afifo_outputs),
+    FILTER_INPUTS(afifo_inputs),
+    FILTER_OUTPUTS(afifo_outputs),
 };

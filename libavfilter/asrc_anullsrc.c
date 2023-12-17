@@ -111,7 +111,7 @@ static int activate(AVFilterContext *ctx)
     return FFERROR_NOT_READY;
 }
 
-static const AVFilterPad avfilter_asrc_anullsrc_outputs[] = {
+static const AVFilterPad outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_AUDIO,
@@ -124,7 +124,7 @@ const AVFilter ff_asrc_anullsrc = {
     .description   = NULL_IF_CONFIG_SMALL("Null audio source, return empty audio frames."),
     .priv_size     = sizeof(ANullContext),
     .inputs        = NULL,
-    FILTER_OUTPUTS(avfilter_asrc_anullsrc_outputs),
+    FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC(query_formats),
     .activate      = activate,
     .priv_class    = &anullsrc_class,

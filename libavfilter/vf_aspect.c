@@ -179,7 +179,7 @@ static const AVOption setdar_options[] = {
 
 AVFILTER_DEFINE_CLASS(setdar);
 
-static const AVFilterPad avfilter_vf_setdar_outputs[] = {
+static const AVFilterPad setdar_outputs[] = {
     {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
@@ -194,7 +194,7 @@ const AVFilter ff_vf_setdar = {
     .priv_class  = &setdar_class,
     .flags       = AVFILTER_FLAG_METADATA_ONLY,
     FILTER_INPUTS(aspect_inputs),
-    FILTER_OUTPUTS(avfilter_vf_setdar_outputs),
+    FILTER_OUTPUTS(setdar_outputs),
 };
 
 #endif /* CONFIG_SETDAR_FILTER */
@@ -234,7 +234,7 @@ static const AVOption setsar_options[] = {
 
 AVFILTER_DEFINE_CLASS(setsar);
 
-static const AVFilterPad avfilter_vf_setsar_outputs[] = {
+static const AVFilterPad setsar_outputs[] = {
     {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
@@ -249,7 +249,7 @@ const AVFilter ff_vf_setsar = {
     .priv_class  = &setsar_class,
     .flags       = AVFILTER_FLAG_METADATA_ONLY,
     FILTER_INPUTS(aspect_inputs),
-    FILTER_OUTPUTS(avfilter_vf_setsar_outputs),
+    FILTER_OUTPUTS(setsar_outputs),
 };
 
 #endif /* CONFIG_SETSAR_FILTER */

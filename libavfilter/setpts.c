@@ -318,7 +318,7 @@ static const AVOption setpts_options[] = {
 };
 AVFILTER_DEFINE_CLASS(setpts);
 
-static const AVFilterPad avfilter_vf_setpts_inputs[] = {
+static const AVFilterPad setpts_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -338,7 +338,7 @@ const AVFilter ff_vf_setpts = {
     .priv_size = sizeof(SetPTSContext),
     .priv_class = &setpts_class,
 
-    FILTER_INPUTS(avfilter_vf_setpts_inputs),
+    FILTER_INPUTS(setpts_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
 };
 #endif /* CONFIG_SETPTS_FILTER */

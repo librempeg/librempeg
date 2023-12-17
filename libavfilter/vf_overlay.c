@@ -1130,7 +1130,7 @@ static const AVOption overlay_options[] = {
 
 FRAMESYNC_DEFINE_CLASS(overlay, OverlayContext, fs);
 
-static const AVFilterPad avfilter_vf_overlay_inputs[] = {
+static const AVFilterPad overlay_inputs[] = {
     {
         .name         = "main",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -1143,7 +1143,7 @@ static const AVFilterPad avfilter_vf_overlay_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_vf_overlay_outputs[] = {
+static const AVFilterPad overlay_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
@@ -1161,8 +1161,8 @@ const AVFilter ff_vf_overlay = {
     .priv_class    = &overlay_class,
     .activate      = activate,
     .process_command = process_command,
-    FILTER_INPUTS(avfilter_vf_overlay_inputs),
-    FILTER_OUTPUTS(avfilter_vf_overlay_outputs),
+    FILTER_INPUTS(overlay_inputs),
+    FILTER_OUTPUTS(overlay_outputs),
     FILTER_QUERY_FUNC(query_formats),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                      AVFILTER_FLAG_SLICE_THREADS,

@@ -433,7 +433,7 @@ static const AVOption pad_options[] = {
 
 AVFILTER_DEFINE_CLASS(pad);
 
-static const AVFilterPad avfilter_vf_pad_inputs[] = {
+static const AVFilterPad pad_inputs[] = {
     {
         .name             = "default",
         .type             = AVMEDIA_TYPE_VIDEO,
@@ -443,7 +443,7 @@ static const AVFilterPad avfilter_vf_pad_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_vf_pad_outputs[] = {
+static const AVFilterPad pad_outputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -456,7 +456,7 @@ const AVFilter ff_vf_pad = {
     .description   = NULL_IF_CONFIG_SMALL("Pad the input video."),
     .priv_size     = sizeof(PadContext),
     .priv_class    = &pad_class,
-    FILTER_INPUTS(avfilter_vf_pad_inputs),
-    FILTER_OUTPUTS(avfilter_vf_pad_outputs),
+    FILTER_INPUTS(pad_inputs),
+    FILTER_OUTPUTS(pad_outputs),
     FILTER_QUERY_FUNC(query_formats),
 };

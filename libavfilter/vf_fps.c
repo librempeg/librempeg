@@ -377,7 +377,7 @@ static int activate(AVFilterContext *ctx)
     return FFERROR_NOT_READY;
 }
 
-static const AVFilterPad avfilter_vf_fps_outputs[] = {
+static const AVFilterPad fps_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
@@ -395,5 +395,5 @@ const AVFilter ff_vf_fps = {
     .activate    = activate,
     .flags       = AVFILTER_FLAG_METADATA_ONLY,
     FILTER_INPUTS(ff_video_default_filterpad),
-    FILTER_OUTPUTS(avfilter_vf_fps_outputs),
+    FILTER_OUTPUTS(fps_outputs),
 };

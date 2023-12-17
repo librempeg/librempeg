@@ -372,7 +372,7 @@ static int channelmap_config_input(AVFilterLink *inlink)
     return err;
 }
 
-static const AVFilterPad avfilter_af_channelmap_inputs[] = {
+static const AVFilterPad channelmap_inputs[] = {
     {
         .name           = "default",
         .type           = AVMEDIA_TYPE_AUDIO,
@@ -388,7 +388,7 @@ const AVFilter ff_af_channelmap = {
     .init          = channelmap_init,
     .priv_size     = sizeof(ChannelMapContext),
     .priv_class    = &channelmap_class,
-    FILTER_INPUTS(avfilter_af_channelmap_inputs),
+    FILTER_INPUTS(channelmap_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC(channelmap_query_formats),
 };

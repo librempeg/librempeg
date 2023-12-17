@@ -2179,7 +2179,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
     return ff_filter_frame(outlink, frame);
 }
 
-static const AVFilterPad avfilter_vf_drawtext_inputs[] = {
+static const AVFilterPad drawtext_inputs[] = {
     {
         .name           = "default",
         .type           = AVMEDIA_TYPE_VIDEO,
@@ -2196,7 +2196,7 @@ const AVFilter ff_vf_drawtext = {
     .priv_class    = &drawtext_class,
     .init          = init,
     .uninit        = uninit,
-    FILTER_INPUTS(avfilter_vf_drawtext_inputs),
+    FILTER_INPUTS(drawtext_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_QUERY_FUNC(query_formats),
     .process_command = command,

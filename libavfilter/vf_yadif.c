@@ -332,7 +332,7 @@ static const AVClass yadif_class = {
     .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
-static const AVFilterPad avfilter_vf_yadif_inputs[] = {
+static const AVFilterPad yadif_inputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
@@ -340,7 +340,7 @@ static const AVFilterPad avfilter_vf_yadif_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_vf_yadif_outputs[] = {
+static const AVFilterPad yadif_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
@@ -355,8 +355,8 @@ const AVFilter ff_vf_yadif = {
     .priv_size     = sizeof(YADIFContext),
     .priv_class    = &yadif_class,
     .uninit        = uninit,
-    FILTER_INPUTS(avfilter_vf_yadif_inputs),
-    FILTER_OUTPUTS(avfilter_vf_yadif_outputs),
+    FILTER_INPUTS(yadif_inputs),
+    FILTER_OUTPUTS(yadif_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,
 };

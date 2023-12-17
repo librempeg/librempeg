@@ -255,7 +255,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     return config_input(inlink);
 }
 
-static const AVFilterPad avfilter_af_aexciter_inputs[] = {
+static const AVFilterPad aexciter_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
@@ -270,7 +270,7 @@ const AVFilter ff_af_aexciter = {
     .priv_size     = sizeof(AExciterContext),
     .priv_class    = &aexciter_class,
     .uninit        = uninit,
-    FILTER_INPUTS(avfilter_af_aexciter_inputs),
+    FILTER_INPUTS(aexciter_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBL),
     .process_command = process_command,

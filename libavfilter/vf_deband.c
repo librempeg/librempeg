@@ -450,7 +450,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->y_pos);
 }
 
-static const AVFilterPad avfilter_vf_deband_inputs[] = {
+static const AVFilterPad deband_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -465,7 +465,7 @@ const AVFilter ff_vf_deband = {
     .priv_size     = sizeof(DebandContext),
     .priv_class    = &deband_class,
     .uninit        = uninit,
-    FILTER_INPUTS(avfilter_vf_deband_inputs),
+    FILTER_INPUTS(deband_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_QUERY_FUNC(query_formats),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,

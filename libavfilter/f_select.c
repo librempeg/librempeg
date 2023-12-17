@@ -470,7 +470,7 @@ static av_cold int aselect_init(AVFilterContext *ctx)
     return 0;
 }
 
-static const AVFilterPad avfilter_af_aselect_inputs[] = {
+static const AVFilterPad aselect_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
@@ -485,7 +485,7 @@ const AVFilter ff_af_aselect = {
     .init        = aselect_init,
     .uninit      = uninit,
     .priv_size   = sizeof(SelectContext),
-    FILTER_INPUTS(avfilter_af_aselect_inputs),
+    FILTER_INPUTS(aselect_inputs),
     .priv_class  = &aselect_class,
     .flags       = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
 };
@@ -525,7 +525,7 @@ static av_cold int select_init(AVFilterContext *ctx)
     return 0;
 }
 
-static const AVFilterPad avfilter_vf_select_inputs[] = {
+static const AVFilterPad select_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -541,7 +541,7 @@ const AVFilter ff_vf_select = {
     .uninit        = uninit,
     .priv_size     = sizeof(SelectContext),
     .priv_class    = &select_class,
-    FILTER_INPUTS(avfilter_vf_select_inputs),
+    FILTER_INPUTS(select_inputs),
     FILTER_QUERY_FUNC(query_formats),
     .flags         = AVFILTER_FLAG_DYNAMIC_OUTPUTS | AVFILTER_FLAG_METADATA_ONLY,
 };

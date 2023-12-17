@@ -26,7 +26,7 @@ static int filter_frame(AVFilterLink *link, AVFrame *frame)
     return 0;
 }
 
-static const AVFilterPad avfilter_vsink_nullsink_inputs[] = {
+static const AVFilterPad nullsink_inputs[] = {
     {
         .name        = "default",
         .type        = AVMEDIA_TYPE_VIDEO,
@@ -38,6 +38,6 @@ const AVFilter ff_vsink_nullsink = {
     .name        = "nullsink",
     .description = NULL_IF_CONFIG_SMALL("Do absolutely nothing with the input video."),
     .priv_size   = 0,
-    FILTER_INPUTS(avfilter_vsink_nullsink_inputs),
+    FILTER_INPUTS(nullsink_inputs),
     .outputs     = NULL,
 };

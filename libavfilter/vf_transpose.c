@@ -388,7 +388,7 @@ static const AVOption transpose_options[] = {
 
 AVFILTER_DEFINE_CLASS(transpose);
 
-static const AVFilterPad avfilter_vf_transpose_inputs[] = {
+static const AVFilterPad transpose_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -397,7 +397,7 @@ static const AVFilterPad avfilter_vf_transpose_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_vf_transpose_outputs[] = {
+static const AVFilterPad transpose_outputs[] = {
     {
         .name         = "default",
         .config_props = config_props_output,
@@ -410,8 +410,8 @@ const AVFilter ff_vf_transpose = {
     .description   = NULL_IF_CONFIG_SMALL("Transpose input video."),
     .priv_size     = sizeof(TransContext),
     .priv_class    = &transpose_class,
-    FILTER_INPUTS(avfilter_vf_transpose_inputs),
-    FILTER_OUTPUTS(avfilter_vf_transpose_outputs),
+    FILTER_INPUTS(transpose_inputs),
+    FILTER_OUTPUTS(transpose_outputs),
     FILTER_QUERY_FUNC(query_formats),
     .flags         = AVFILTER_FLAG_SLICE_THREADS,
 };

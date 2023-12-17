@@ -592,7 +592,7 @@ static int activate(AVFilterContext *ctx)
     return try_push_frame(ctx);
 }
 
-static const AVFilterPad avfilter_af_join_outputs[] = {
+static const AVFilterPad join_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_AUDIO,
@@ -610,7 +610,7 @@ const AVFilter ff_af_join = {
     .uninit         = join_uninit,
     .activate       = activate,
     .inputs         = NULL,
-    FILTER_OUTPUTS(avfilter_af_join_outputs),
+    FILTER_OUTPUTS(join_outputs),
     FILTER_QUERY_FUNC(join_query_formats),
     .flags          = AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

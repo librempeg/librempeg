@@ -106,7 +106,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
-static const AVFilterPad avfilter_vf_pixdesctest_inputs[] = {
+static const AVFilterPad pixdesctest_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -120,6 +120,6 @@ const AVFilter ff_vf_pixdesctest = {
     .description = NULL_IF_CONFIG_SMALL("Test pixel format definitions."),
     .priv_size   = sizeof(PixdescTestContext),
     .uninit      = uninit,
-    FILTER_INPUTS(avfilter_vf_pixdesctest_inputs),
+    FILTER_INPUTS(pixdesctest_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
 };

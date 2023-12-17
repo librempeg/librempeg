@@ -373,7 +373,7 @@ static const AVOption hqdn3d_options[] = {
 
 AVFILTER_DEFINE_CLASS(hqdn3d);
 
-static const AVFilterPad avfilter_vf_hqdn3d_inputs[] = {
+static const AVFilterPad hqdn3d_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -390,7 +390,7 @@ const AVFilter ff_vf_hqdn3d = {
     .priv_class    = &hqdn3d_class,
     .init          = init,
     .uninit        = uninit,
-    FILTER_INPUTS(avfilter_vf_hqdn3d_inputs),
+    FILTER_INPUTS(hqdn3d_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,

@@ -1755,7 +1755,7 @@ static int config_input(AVFilterLink *inlink) {
     return 0;
 }
 
-static const AVFilterPad avfilter_af_hdcd_inputs[] = {
+static const AVFilterPad hdcd_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
@@ -1771,7 +1771,7 @@ const AVFilter ff_af_hdcd = {
     .priv_class    = &hdcd_class,
     .init          = init,
     .uninit        = uninit,
-    FILTER_INPUTS(avfilter_af_hdcd_inputs),
+    FILTER_INPUTS(hdcd_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC(query_formats),
 };

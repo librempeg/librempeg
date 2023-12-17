@@ -455,7 +455,7 @@ end:
     return ff_filter_frame(outlink, out_buf);
 }
 
-static const AVFilterPad avfilter_af_volume_inputs[] = {
+static const AVFilterPad volume_inputs[] = {
     {
         .name           = "default",
         .type           = AVMEDIA_TYPE_AUDIO,
@@ -463,7 +463,7 @@ static const AVFilterPad avfilter_af_volume_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_af_volume_outputs[] = {
+static const AVFilterPad volume_outputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
@@ -478,8 +478,8 @@ const AVFilter ff_af_volume = {
     .priv_class     = &volume_class,
     .init           = init,
     .uninit         = uninit,
-    FILTER_INPUTS(avfilter_af_volume_inputs),
-    FILTER_OUTPUTS(avfilter_af_volume_outputs),
+    FILTER_INPUTS(volume_inputs),
+    FILTER_OUTPUTS(volume_outputs),
     FILTER_QUERY_FUNC(query_formats),
     .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
     .process_command = process_command,

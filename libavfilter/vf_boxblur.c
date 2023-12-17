@@ -286,7 +286,7 @@ static const AVOption boxblur_options[] = {
 
 AVFILTER_DEFINE_CLASS(boxblur);
 
-static const AVFilterPad avfilter_vf_boxblur_inputs[] = {
+static const AVFilterPad boxblur_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -301,7 +301,7 @@ const AVFilter ff_vf_boxblur = {
     .priv_size     = sizeof(BoxBlurContext),
     .priv_class    = &boxblur_class,
     .uninit        = uninit,
-    FILTER_INPUTS(avfilter_vf_boxblur_inputs),
+    FILTER_INPUTS(boxblur_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_QUERY_FUNC(query_formats),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,

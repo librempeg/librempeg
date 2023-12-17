@@ -274,7 +274,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
-static const AVFilterPad avfilter_vf_vidstabtransform_inputs[] = {
+static const AVFilterPad vidstabtransform_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -291,7 +291,7 @@ const AVFilter ff_vf_vidstabtransform = {
     .priv_size     = sizeof(TransformContext),
     .init          = init,
     .uninit        = uninit,
-    FILTER_INPUTS(avfilter_vf_vidstabtransform_inputs),
+    FILTER_INPUTS(vidstabtransform_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(ff_vidstab_pix_fmts),
     .priv_class    = &vidstabtransform_class,

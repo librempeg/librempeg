@@ -379,7 +379,7 @@ static const AVOption crop_options[] = {
 
 AVFILTER_DEFINE_CLASS(crop);
 
-static const AVFilterPad avfilter_vf_crop_inputs[] = {
+static const AVFilterPad crop_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -388,7 +388,7 @@ static const AVFilterPad avfilter_vf_crop_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_vf_crop_outputs[] = {
+static const AVFilterPad crop_outputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -402,8 +402,8 @@ const AVFilter ff_vf_crop = {
     .priv_size       = sizeof(CropContext),
     .priv_class      = &crop_class,
     .uninit          = uninit,
-    FILTER_INPUTS(avfilter_vf_crop_inputs),
-    FILTER_OUTPUTS(avfilter_vf_crop_outputs),
+    FILTER_INPUTS(crop_inputs),
+    FILTER_OUTPUTS(crop_outputs),
     FILTER_QUERY_FUNC(query_formats),
     .process_command = process_command,
 };

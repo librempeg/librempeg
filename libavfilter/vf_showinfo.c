@@ -853,7 +853,7 @@ static int config_props_out(AVFilterLink *link)
     return config_props(ctx, link, 1);
 }
 
-static const AVFilterPad avfilter_vf_showinfo_inputs[] = {
+static const AVFilterPad showinfo_inputs[] = {
     {
         .name             = "default",
         .type             = AVMEDIA_TYPE_VIDEO,
@@ -862,7 +862,7 @@ static const AVFilterPad avfilter_vf_showinfo_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_vf_showinfo_outputs[] = {
+static const AVFilterPad showinfo_outputs[] = {
     {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
@@ -873,8 +873,8 @@ static const AVFilterPad avfilter_vf_showinfo_outputs[] = {
 const AVFilter ff_vf_showinfo = {
     .name        = "showinfo",
     .description = NULL_IF_CONFIG_SMALL("Show textual information for each video frame."),
-    FILTER_INPUTS(avfilter_vf_showinfo_inputs),
-    FILTER_OUTPUTS(avfilter_vf_showinfo_outputs),
+    FILTER_INPUTS(showinfo_inputs),
+    FILTER_OUTPUTS(showinfo_outputs),
     .priv_size   = sizeof(ShowInfoContext),
     .priv_class  = &showinfo_class,
     .flags       = AVFILTER_FLAG_METADATA_ONLY,

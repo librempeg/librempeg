@@ -112,7 +112,7 @@ static int config_input(AVFilterLink *inlink)
     return 0;
 }
 
-static const AVFilterPad avfilter_af_tremolo_inputs[] = {
+static const AVFilterPad tremolo_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
@@ -127,7 +127,7 @@ const AVFilter ff_af_tremolo = {
     .priv_size     = sizeof(TremoloContext),
     .priv_class    = &tremolo_class,
     .uninit        = uninit,
-    FILTER_INPUTS(avfilter_af_tremolo_inputs),
+    FILTER_INPUTS(tremolo_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBL),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,

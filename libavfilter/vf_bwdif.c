@@ -229,7 +229,7 @@ static const AVOption bwdif_options[] = {
 
 AVFILTER_DEFINE_CLASS(bwdif);
 
-static const AVFilterPad avfilter_vf_bwdif_inputs[] = {
+static const AVFilterPad bwdif_inputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
@@ -237,7 +237,7 @@ static const AVFilterPad avfilter_vf_bwdif_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_vf_bwdif_outputs[] = {
+static const AVFilterPad bwdif_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
@@ -252,8 +252,8 @@ const AVFilter ff_vf_bwdif = {
     .priv_size     = sizeof(BWDIFContext),
     .priv_class    = &bwdif_class,
     .uninit        = uninit,
-    FILTER_INPUTS(avfilter_vf_bwdif_inputs),
-    FILTER_OUTPUTS(avfilter_vf_bwdif_outputs),
+    FILTER_INPUTS(bwdif_inputs),
+    FILTER_OUTPUTS(bwdif_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,
 };

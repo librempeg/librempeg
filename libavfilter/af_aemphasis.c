@@ -352,7 +352,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_frame_free(&s->w);
 }
 
-static const AVFilterPad avfilter_af_aemphasis_inputs[] = {
+static const AVFilterPad aemphasis_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
@@ -367,7 +367,7 @@ const AVFilter ff_af_aemphasis = {
     .priv_size     = sizeof(AudioEmphasisContext),
     .priv_class    = &aemphasis_class,
     .uninit        = uninit,
-    FILTER_INPUTS(avfilter_af_aemphasis_inputs),
+    FILTER_INPUTS(aemphasis_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
     .process_command = process_command,

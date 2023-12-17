@@ -503,7 +503,7 @@ static int activate(AVFilterContext *ctx)
     return FFERROR_NOT_READY;
 }
 
-static const AVFilterPad avfilter_vsrc_buffer_outputs[] = {
+static const AVFilterPad buffer_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
@@ -520,12 +520,12 @@ const AVFilter ff_vsrc_buffer = {
     .uninit    = uninit,
 
     .inputs    = NULL,
-    FILTER_OUTPUTS(avfilter_vsrc_buffer_outputs),
+    FILTER_OUTPUTS(buffer_outputs),
     FILTER_QUERY_FUNC(query_formats),
     .priv_class = &buffer_class,
 };
 
-static const AVFilterPad avfilter_asrc_abuffer_outputs[] = {
+static const AVFilterPad abuffer_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_AUDIO,
@@ -542,7 +542,7 @@ const AVFilter ff_asrc_abuffer = {
     .uninit    = uninit,
 
     .inputs    = NULL,
-    FILTER_OUTPUTS(avfilter_asrc_abuffer_outputs),
+    FILTER_OUTPUTS(abuffer_outputs),
     FILTER_QUERY_FUNC(query_formats),
     .priv_class = &abuffer_class,
 };

@@ -318,7 +318,7 @@ static const AVOption siti_options[] = {
 
 AVFILTER_DEFINE_CLASS(siti);
 
-static const AVFilterPad avfilter_vf_siti_inputs[] = {
+static const AVFilterPad siti_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -336,6 +336,6 @@ const AVFilter ff_vf_siti = {
     .uninit        = uninit,
     .flags         = AVFILTER_FLAG_METADATA_ONLY,
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    FILTER_INPUTS(avfilter_vf_siti_inputs),
+    FILTER_INPUTS(siti_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
 };

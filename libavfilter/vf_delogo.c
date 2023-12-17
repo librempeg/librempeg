@@ -371,7 +371,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
-static const AVFilterPad avfilter_vf_delogo_inputs[] = {
+static const AVFilterPad delogo_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -387,7 +387,7 @@ const AVFilter ff_vf_delogo = {
     .priv_class    = &delogo_class,
     .init          = init,
     .uninit        = uninit,
-    FILTER_INPUTS(avfilter_vf_delogo_inputs),
+    FILTER_INPUTS(delogo_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,

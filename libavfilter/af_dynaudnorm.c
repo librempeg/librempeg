@@ -1011,7 +1011,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     return 0;
 }
 
-static const AVFilterPad avfilter_af_dynaudnorm_inputs[] = {
+static const AVFilterPad dynaudnorm_inputs[] = {
     {
         .name           = "default",
         .type           = AVMEDIA_TYPE_AUDIO,
@@ -1026,7 +1026,7 @@ const AVFilter ff_af_dynaudnorm = {
     .init          = init,
     .uninit        = uninit,
     .activate      = activate,
-    FILTER_INPUTS(avfilter_af_dynaudnorm_inputs),
+    FILTER_INPUTS(dynaudnorm_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
     .priv_class    = &dynaudnorm_class,

@@ -399,7 +399,7 @@ static const AVOption ocv_options[] = {
 
 AVFILTER_DEFINE_CLASS(ocv);
 
-static const AVFilterPad avfilter_vf_ocv_inputs[] = {
+static const AVFilterPad ocv_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -407,7 +407,7 @@ static const AVFilterPad avfilter_vf_ocv_inputs[] = {
     },
 };
 
-static const AVFilterPad avfilter_vf_ocv_outputs[] = {
+static const AVFilterPad ocv_outputs[] = {
     {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
@@ -421,7 +421,7 @@ const AVFilter ff_vf_ocv = {
     .priv_class    = &ocv_class,
     .init          = init,
     .uninit        = uninit,
-    FILTER_INPUTS(avfilter_vf_ocv_inputs),
-    FILTER_OUTPUTS(avfilter_vf_ocv_outputs),
+    FILTER_INPUTS(ocv_inputs),
+    FILTER_OUTPUTS(ocv_outputs),
     FILTER_PIXFMTS(AV_PIX_FMT_BGR24, AV_PIX_FMT_BGRA, AV_PIX_FMT_GRAY8),
 };

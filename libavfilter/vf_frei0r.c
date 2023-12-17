@@ -414,7 +414,7 @@ static const AVOption frei0r_options[] = {
 
 AVFILTER_DEFINE_CLASS(frei0r);
 
-static const AVFilterPad avfilter_vf_frei0r_inputs[] = {
+static const AVFilterPad frei0r_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -430,7 +430,7 @@ const AVFilter ff_vf_frei0r = {
     .uninit        = uninit,
     .priv_size     = sizeof(Frei0rContext),
     .priv_class    = &frei0r_class,
-    FILTER_INPUTS(avfilter_vf_frei0r_inputs),
+    FILTER_INPUTS(frei0r_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_QUERY_FUNC(query_formats),
     .process_command = process_command,
@@ -502,7 +502,7 @@ static const AVOption frei0r_src_options[] = {
 
 AVFILTER_DEFINE_CLASS(frei0r_src);
 
-static const AVFilterPad avfilter_vsrc_frei0r_src_outputs[] = {
+static const AVFilterPad frei0r_src_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
@@ -519,6 +519,6 @@ const AVFilter ff_vsrc_frei0r_src = {
     .init          = source_init,
     .uninit        = uninit,
     .inputs        = NULL,
-    FILTER_OUTPUTS(avfilter_vsrc_frei0r_src_outputs),
+    FILTER_OUTPUTS(frei0r_src_outputs),
     FILTER_QUERY_FUNC(query_formats),
 };

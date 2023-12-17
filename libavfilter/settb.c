@@ -165,7 +165,7 @@ static int activate(AVFilterContext *ctx)
 DEFINE_OPTIONS(settb, VIDEO);
 AVFILTER_DEFINE_CLASS(settb);
 
-static const AVFilterPad avfilter_vf_settb_outputs[] = {
+static const AVFilterPad settb_outputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -179,7 +179,7 @@ const AVFilter ff_vf_settb = {
     .priv_size   = sizeof(SetTBContext),
     .priv_class  = &settb_class,
     FILTER_INPUTS(ff_video_default_filterpad),
-    FILTER_OUTPUTS(avfilter_vf_settb_outputs),
+    FILTER_OUTPUTS(settb_outputs),
     .activate    = activate,
     .flags       = AVFILTER_FLAG_METADATA_ONLY,
 };
@@ -190,7 +190,7 @@ const AVFilter ff_vf_settb = {
 DEFINE_OPTIONS(asettb, AUDIO);
 AVFILTER_DEFINE_CLASS(asettb);
 
-static const AVFilterPad avfilter_af_asettb_outputs[] = {
+static const AVFilterPad asettb_outputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
@@ -203,7 +203,7 @@ const AVFilter ff_af_asettb = {
     .description = NULL_IF_CONFIG_SMALL("Set timebase for the audio output link."),
     .priv_size   = sizeof(SetTBContext),
     FILTER_INPUTS(ff_audio_default_filterpad),
-    FILTER_OUTPUTS(avfilter_af_asettb_outputs),
+    FILTER_OUTPUTS(asettb_outputs),
     .priv_class  = &asettb_class,
     .activate    = activate,
     .flags       = AVFILTER_FLAG_METADATA_ONLY,

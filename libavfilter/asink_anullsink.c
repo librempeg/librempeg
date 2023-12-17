@@ -28,7 +28,7 @@ static int null_filter_frame(AVFilterLink *link, AVFrame *frame)
     return 0;
 }
 
-static const AVFilterPad avfilter_asink_anullsink_inputs[] = {
+static const AVFilterPad inputs[] = {
     {
         .name           = "default",
         .type           = AVMEDIA_TYPE_AUDIO,
@@ -40,6 +40,6 @@ const AVFilter ff_asink_anullsink = {
     .name        = "anullsink",
     .description = NULL_IF_CONFIG_SMALL("Do absolutely nothing with the input audio."),
     .priv_size   = 0,
-    FILTER_INPUTS(avfilter_asink_anullsink_inputs),
+    FILTER_INPUTS(inputs),
     .outputs     = NULL,
 };
