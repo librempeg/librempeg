@@ -33,6 +33,8 @@ typedef struct ASubBoostContext {
     double delay;
     double cutoff;
     double slope;
+    double attack;
+    double release;
 
     double a0, a1, a2;
     double b0, b1, b2;
@@ -77,6 +79,8 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     ASubBoostContext *s = ctx->priv;
 
+    s->attack = exp(-1.0 / (2.0 * inlink->sample_rate));
+    s->release = exp(-1.0 / (0.0001 * inlink->sample_rate));
     s->buffer = ff_get_audio_buffer(inlink, inlink->sample_rate / 10);
     s->w = ff_get_audio_buffer(inlink, 3);
     s->write_pos = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->write_pos));
@@ -109,6 +113,10 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
     const int buffer_samples = s->buffer_samples;
+    const double a = s->attack;
+    const double b = 1. - a;
+    const double c = s->release;
+    const double d = 1. - c;
 
     for (int ch = start; ch < end; ch++) {
         const double *src = (const double *)in->extended_data[ch];
@@ -118,8 +126,6 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
         int write_pos = s->write_pos[ch];
         enum AVChannel channel = av_channel_layout_channel_from_index(&in->ch_layout, ch);
         const int bypass = av_channel_layout_index_from_channel(&s->ch_layout, channel) < 0;
-        const double a = 0.00001;
-        const double b = 1. - a;
 
         if (bypass) {
             if (in != out)
@@ -136,8 +142,8 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
             w[1] = b2 * src[n] + a2 * out_sample;
 
             buffer[write_pos] = buffer[write_pos] * decay + out_sample * feedback;
-            boost = av_clipd((1. -  (fabs(src[n] * dry))) / fabs(buffer[write_pos]), 0., max_boost);
-            w[2] = boost > w[2] ? w[2] * b + a * boost : w[2] * a + b * boost;
+            boost = mix * av_clipd((0.9 - fabs(src[n] * dry)) / fabs(buffer[write_pos]), 0., max_boost);
+            w[2] = (boost > w[2]) ? w[2] * a + b * boost : w[2] * c + d * boost;
             w[2] = av_clipd(w[2], 0., max_boost);
             dst[n] = (src[n] * dry + w[2] * buffer[write_pos] * mix) * wet;
 
