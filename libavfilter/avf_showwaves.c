@@ -79,6 +79,7 @@ typedef struct ShowWavesContext {
     int buf_idx;
     int16_t *buf_idy;    /* y coordinate of previous sample for each channel */
     int16_t *history;
+    int history_filled;
     int history_nb_samples;
     int history_index;
     AVFrame *outpicref;
@@ -445,6 +446,7 @@ static int config_output(AVFilterLink *outlink)
     for (int i = 0; i < nb_channels; i++)
         s->buf_idy[i] = -1;
 
+    s->history_filled = 0;
     s->history_nb_samples = av_rescale(s->w * nb_channels * 2,
                                                s->n.num, s->n.den);
     s->history = av_calloc(s->history_nb_samples,
@@ -725,12 +727,21 @@ static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     const int w = s->w;
     uint8_t *dst;
 
+    if (s->history_filled < history_nb_samples)
+        s->history_filled += nb_samples * nb_channels;
+
     for (int n = 0; n < nb_samples * nb_channels; n++) {
         history[idx++] = p[n];
         if (idx >= history_nb_samples)
             idx = 0;
     }
     s->history_index = idx;
+
+    if (s->history_filled < history_nb_samples) {
+        av_frame_free(&insamples);
+        ff_filter_set_ready(ctx, 100);
+        return 0;
+    }
 
     ret = alloc_out_frame(s, outlink);
     if (ret < 0)
