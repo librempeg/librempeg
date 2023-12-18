@@ -1940,13 +1940,7 @@ PFA_15_FN avx2, 0
 PFA_15_FN avx2, 1
 %endif
 
-%macro RDFT_CONV 3
-%endmacro
-
-%macro RDFT_FN 3
-INIT_YMM %1
-cglobal rdft_ %+ %2 %+ _float, 4, 14, 16, 320, ctx, out, in, stride, len, lut, exp, t1, t2, t3, \
-                                        t4, t5, btmp
+%macro RDFT_CONV 2
     ; FFT setup
     mov btmpq, ctxq                                 ; backup original context
     mov t3q, [ctxq + AVTXContext.fn]                ; subtransform's jump point
@@ -1955,25 +1949,50 @@ cglobal rdft_ %+ %2 %+ _float, 4, 14, 16, 320, ctx, out, in, stride, len, lut, e
     mov lutq, [ctxq + AVTXContext.map]              ; load subtransform's map
     movsxd lenq, dword [ctxq + AVTXContext.len]     ; load subtransform's length
 
-    mov expq, outq
+    mov expq, %1
 .preshuf:
-    LOAD64_LUT m0, inq, lutq, 0, t4q, m1, m2
-    movaps [outq], m0
-    add outq, mmsize
+    LOAD64_LUT m0, %2, lutq, 0, t4q, m1, m2
+    movaps [%1], m0
+    add %1, mmsize
     add lutq, (mmsize/2)
     sub lenq, (mmsize/8)
     jg .preshuf
 
-    mov outq, expq
-    mov inq, expq
+    mov %1, expq
+    mov %2, expq
     movsxd lenq, dword [ctxq + AVTXContext.len]     ; load subtransform's length
 
     call t3q                                        ; call the FFT
 
     mov ctxq, btmpq                                 ; restore original context
+%endmacro
+
+%macro RDFT_FN 3
+INIT_YMM %1
+cglobal rdft_ %+ %2 %+ _float, 4, 14, 16, 320, ctx, out, in, stride, len, lut, exp, t1, t2, t3, \
+                                        t4, t5, btmp
+%if %3==0
+    RDFT_CONV outq, inq
+%else
+    mov btmpq, inq
+    mov inq, outq
+    mov outq, btmpq
+%endif
 
     movsxd lenq, dword [ctxq + AVTXContext.len]
     mov expq, [ctxq + AVTXContext.exp]
+
+%if %3==1
+    movss xm0, [outq]
+    movss xm1, [outq + lenq*4]
+
+    addss xm9, xm1, xm0
+    subss xm0, xm1, xm0
+    mulss xm9, xm9, [expq]
+    mulss xm0, xm0, [expq+4]
+    movss [outq], xm9
+    movss [outq+4], xm0
+%endif
 
     movsd  xm0, [outq]                               ; data[0].reim
     movhps xm0, [outq + lenq*2]                      ; data[len4].reim
@@ -1991,6 +2010,9 @@ cglobal rdft_ %+ %2 %+ _float, 4, 14, 16, 320, ctx, out, in, stride, len, lut, e
     movaps m14, [rdft_m11]                          ; 0.0, 0.0, 1.0, 1.0
     movaps m15, [rdft_perm_exp]
 
+%if %3==1
+    mov btmpq, inq
+%endif
     mov inq, outq
     lea t1q, [outq + lenq*4 - mmsize]
     mov t2q, lenq
@@ -2065,6 +2087,11 @@ cglobal rdft_ %+ %2 %+ _float, 4, 14, 16, 320, ctx, out, in, stride, len, lut, e
     sub t2q, mmsize/2
     jg .loop
 
+%if %3==1
+    movhps [inq + lenq*2], xm9
+    mov outq, btmpq
+    RDFT_CONV outq, inq
+%else
     ; Write DC, middle and tail
     movhps [inq + lenq*2], xm9
     xorps xm0, xm0
@@ -2072,11 +2099,12 @@ cglobal rdft_ %+ %2 %+ _float, 4, 14, 16, 320, ctx, out, in, stride, len, lut, e
     shufps xm8, xm9, xm9, q2120
     movsd [inq], xm8
     movhps [inq + lenq*4], xm8
+%endif
 
     RET
 %endmacro
 
 %if ARCH_X86_64 && HAVE_AVX2_EXTERNAL
 RDFT_FN avx2, r2c, 0
-;RDFT_FN avx2, c2r, 1
+RDFT_FN avx2, c2r, 1
 %endif

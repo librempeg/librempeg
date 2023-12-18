@@ -53,6 +53,7 @@ TX_DECL_FN(fft_pfa_15xM_ns, avx2)
 TX_DECL_FN(mdct_inv, avx2)
 
 TX_DECL_FN(rdft_r2c, avx2)
+TX_DECL_FN(rdft_c2r, avx2)
 
 TX_DECL_FN(fft2_asm, sse3)
 TX_DECL_FN(fft4_fwd_asm, sse2)
@@ -364,6 +365,8 @@ const FFTXCodelet * const ff_tx_codelet_list_float_x86[] = {
 
     TX_DEF(rdft_r2c, RDFT, 16, TX_LEN_UNLIMITED, 2, TX_FACTOR_ANY, 384, rdft_init, avx2, AVX2,
            FF_TX_FORWARD_ONLY, AV_CPU_FLAG_AVXSLOW | AV_CPU_FLAG_SLOW_GATHER),
+    TX_DEF(rdft_c2r, RDFT, 16, TX_LEN_UNLIMITED, 2, TX_FACTOR_ANY, 384, rdft_init, avx2, AVX2,
+           FF_TX_INVERSE_ONLY, AV_CPU_FLAG_AVXSLOW | AV_CPU_FLAG_SLOW_GATHER),
 #endif
 #endif
 
