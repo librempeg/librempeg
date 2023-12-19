@@ -57,7 +57,7 @@ typedef struct ShowFreqsContext {
     AVChannelLayout ch_layout;
     AVTXContext *fft;
     av_tx_fn tx_fn;
-    AVComplexFloat **fft_input;
+    float **fft_input;
     AVComplexFloat **fft_data;
     AVFrame *window;
     float **avg_data;
@@ -159,12 +159,9 @@ static int config_output(AVFilterLink *outlink)
     s->nb_freq = s->fft_size / 2;
     s->win_size = s->fft_size;
     av_tx_uninit(&s->fft);
-    ret = av_tx_init(&s->fft, &s->tx_fn, AV_TX_FLOAT_FFT, 0, s->fft_size, &scale, 0);
-    if (ret < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Unable to create FFT context. "
-               "The window size might be too high.\n");
+    ret = av_tx_init(&s->fft, &s->tx_fn, AV_TX_FLOAT_RDFT, 0, s->fft_size, &scale, 0);
+    if (ret < 0)
         return ret;
-    }
 
     /* FFT buffers: x2 for each (display) channel buffer.
      * Note: we use free and malloc instead of a realloc-like function to
@@ -393,10 +390,8 @@ static int plot_freqs(AVFilterLink *inlink, int64_t pts)
         if (s->bypass[ch])
             continue;
 
-        for (n = 0; n < win_size; n++) {
-            s->fft_input[ch][n].re = p[n] * s->window_func_lut[n];
-            s->fft_input[ch][n].im = 0;
-        }
+        for (n = 0; n < win_size; n++)
+            s->fft_input[ch][n] = p[n] * s->window_func_lut[n];
     }
 
     /* run FFT on each samples set */
