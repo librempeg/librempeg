@@ -72,7 +72,7 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     StereoWidenContext *s = ctx->priv;
 
-    s->length = s->delay * inlink->sample_rate / 1000;
+    s->length = (lrintf(s->delay * inlink->sample_rate) + 999) / 1000;
     s->length *= 2;
     s->buffer = av_calloc(s->length, sizeof(*s->buffer));
     if (!s->buffer)
@@ -110,7 +110,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     for (n = 0; n < in->nb_samples; n++, src += 2, dst += 2, s->cur += 2) {
         const float left = src[0], right = src[1];
 
-        if (s->cur == s->buffer + s->length)
+        if (s->cur >= s->buffer + s->length)
             s->cur = s->buffer;
 
         if (ctx->is_disabled) {
