@@ -73,7 +73,7 @@ typedef struct AudioSpectralStatsContext {
     float *window_func_lut;
     av_tx_fn tx_fn;
     AVTXContext **fft;
-    AVComplexFloat **fft_in;
+    float **fft_in;
     AVComplexFloat **fft_out;
     float **prev_magnitude;
     float **magnitude;
@@ -152,7 +152,7 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR(ENOMEM);
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
-        ret = av_tx_init(&s->fft[ch], &s->tx_fn, AV_TX_FLOAT_FFT, 0, s->win_size, &scale, 0);
+        ret = av_tx_init(&s->fft[ch], &s->tx_fn, AV_TX_FLOAT_RDFT, 0, s->win_size, &scale, 0);
         if (ret < 0)
             return ret;
 
@@ -440,64 +440,64 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     const int channels = s->nb_channels;
     const int start = (channels * jobnr) / nb_jobs;
     const int end = (channels * (jobnr+1)) / nb_jobs;
-    const int offset = s->win_size - s->hop_size;
+    const int win_size = s->win_size;
+    const int nb_bins = s->win_size/2 + 1;
+    const int offset = win_size - s->hop_size;
 
     for (int ch = start; ch < end; ch++) {
         float *window = (float *)s->window->extended_data[ch];
         ChannelSpectralStats *stats = &s->stats[ch];
         AVComplexFloat *fft_out = s->fft_out[ch];
-        AVComplexFloat *fft_in = s->fft_in[ch];
+        float *fft_in = s->fft_in[ch];
         float *magnitude = s->magnitude[ch];
         float *prev_magnitude = s->prev_magnitude[ch];
-        const float scale = 1.f / s->win_size;
+        const float scale = 1.f / win_size;
 
         memmove(window, &window[s->hop_size], offset * sizeof(float));
         memcpy(&window[offset], in->extended_data[ch], in->nb_samples * sizeof(float));
         memset(&window[offset + in->nb_samples], 0, (s->hop_size - in->nb_samples) * sizeof(float));
 
-        for (int n = 0; n < s->win_size; n++) {
-            fft_in[n].re = window[n] * window_func_lut[n];
-            fft_in[n].im = 0;
-        }
+        for (int n = 0; n < win_size; n++)
+            fft_in[n] = window[n] * window_func_lut[n];
 
         s->tx_fn(s->fft[ch], fft_out, fft_in, sizeof(*fft_in));
 
-        for (int n = 0; n < s->win_size / 2; n++) {
+        for (int n = 0; n < nb_bins; n++) {
             fft_out[n].re *= scale;
             fft_out[n].im *= scale;
         }
 
-        for (int n = 0; n < s->win_size / 2; n++)
+        for (int n = 0; n < nb_bins; n++)
             magnitude[n] = hypotf(fft_out[n].re, fft_out[n].im);
 
         if (s->measure & (MEASURE_MEAN | MEASURE_VARIANCE))
-            stats->mean     = spectral_mean(magnitude, s->win_size / 2, in->sample_rate / 2);
+            stats->mean     = spectral_mean(magnitude, nb_bins, in->sample_rate / 2);
         if (s->measure & MEASURE_VARIANCE)
-            stats->variance = spectral_variance(magnitude, s->win_size / 2, in->sample_rate / 2, stats->mean);
+            stats->variance = spectral_variance(magnitude, nb_bins, in->sample_rate / 2, stats->mean);
         if (s->measure & (MEASURE_SPREAD | MEASURE_KURTOSIS | MEASURE_SKEWNESS | MEASURE_CENTROID))
-            stats->centroid = spectral_centroid(magnitude, s->win_size / 2, in->sample_rate / 2);
+            stats->centroid = spectral_centroid(magnitude, nb_bins, in->sample_rate / 2);
         if (s->measure & (MEASURE_SPREAD | MEASURE_KURTOSIS | MEASURE_SKEWNESS))
-            stats->spread   = spectral_spread(magnitude, s->win_size / 2, in->sample_rate / 2, stats->centroid);
+            stats->spread   = spectral_spread(magnitude, nb_bins, in->sample_rate / 2, stats->centroid);
         if (s->measure & MEASURE_SKEWNESS)
-            stats->skewness = spectral_skewness(magnitude, s->win_size / 2, in->sample_rate / 2, stats->centroid, stats->spread);
+            stats->skewness = spectral_skewness(magnitude, nb_bins, in->sample_rate / 2, stats->centroid, stats->spread);
         if (s->measure & MEASURE_KURTOSIS)
-            stats->kurtosis = spectral_kurtosis(magnitude, s->win_size / 2, in->sample_rate / 2, stats->centroid, stats->spread);
+            stats->kurtosis = spectral_kurtosis(magnitude, nb_bins, in->sample_rate / 2, stats->centroid, stats->spread);
         if (s->measure & MEASURE_ENTROPY)
-            stats->entropy  = spectral_entropy(magnitude, s->win_size / 2, in->sample_rate / 2);
+            stats->entropy  = spectral_entropy(magnitude, nb_bins, in->sample_rate / 2);
         if (s->measure & MEASURE_FLATNESS)
-            stats->flatness = spectral_flatness(magnitude, s->win_size / 2, in->sample_rate / 2);
+            stats->flatness = spectral_flatness(magnitude, nb_bins, in->sample_rate / 2);
         if (s->measure & MEASURE_CREST)
-            stats->crest    = spectral_crest(magnitude, s->win_size / 2, in->sample_rate / 2);
+            stats->crest    = spectral_crest(magnitude, nb_bins, in->sample_rate / 2);
         if (s->measure & MEASURE_FLUX)
-            stats->flux     = spectral_flux(magnitude, prev_magnitude, s->win_size / 2, in->sample_rate / 2);
+            stats->flux     = spectral_flux(magnitude, prev_magnitude, nb_bins, in->sample_rate / 2);
         if (s->measure & MEASURE_SLOPE)
-            stats->slope    = spectral_slope(magnitude, s->win_size / 2, in->sample_rate / 2);
+            stats->slope    = spectral_slope(magnitude, nb_bins, in->sample_rate / 2);
         if (s->measure & MEASURE_DECREASE)
-            stats->decrease = spectral_decrease(magnitude, s->win_size / 2, in->sample_rate / 2);
+            stats->decrease = spectral_decrease(magnitude, nb_bins, in->sample_rate / 2);
         if (s->measure & MEASURE_ROLLOFF)
-            stats->rolloff  = spectral_rolloff(magnitude, s->win_size / 2, in->sample_rate / 2);
+            stats->rolloff  = spectral_rolloff(magnitude, nb_bins, in->sample_rate / 2);
 
-        memcpy(prev_magnitude, magnitude, s->win_size * sizeof(float));
+        memcpy(prev_magnitude, magnitude, win_size * sizeof(float));
     }
 
     return 0;
