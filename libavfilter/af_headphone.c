@@ -346,6 +346,7 @@ static int headphone_frame(HeadphoneContext *s, AVFrame *in, AVFilterLink *outli
         av_frame_free(&in);
         return AVERROR(ENOMEM);
     }
+    av_frame_copy_props(out, in);
     out->pts = in->pts;
 
     td.in = in; td.out = out; td.write = s->write;
