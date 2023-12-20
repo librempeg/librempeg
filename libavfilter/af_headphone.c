@@ -159,6 +159,8 @@ static int headphone_convolute(AVFilterContext *ctx, void *arg, int jobnr, int n
     const int in_channels = in->ch_layout.nb_channels;
     const int buffer_length = s->buffer_length;
     const uint32_t modulo = (uint32_t)buffer_length - 1;
+    const int nb_samples = in->nb_samples;
+    const float gain_lfe = s->gain_lfe;
     float *buffer[64];
     int wr = *write;
     int read;
@@ -169,7 +171,7 @@ static int headphone_convolute(AVFilterContext *ctx, void *arg, int jobnr, int n
         buffer[l] = ringbuffer + l * buffer_length;
     }
 
-    for (i = 0; i < in->nb_samples; i++) {
+    for (i = 0; i < nb_samples; i++) {
         const float *cur_ir = ir;
 
         *dst = 0;
@@ -181,7 +183,7 @@ static int headphone_convolute(AVFilterContext *ctx, void *arg, int jobnr, int n
             const float *const bptr = buffer[l];
 
             if (l == s->lfe_channel) {
-                *dst += *(buffer[s->lfe_channel] + wr) * s->gain_lfe;
+                *dst += *(buffer[s->lfe_channel] + wr) * gain_lfe;
                 continue;
             }
 
@@ -221,6 +223,7 @@ static int headphone_fast_convolute(AVFilterContext *ctx, void *arg, int jobnr, 
     int *write = &td->write[jobnr];
     AVComplexFloat *hrtf = s->data_hrtf[jobnr];
     int *n_clippings = &td->n_clippings[jobnr];
+    const int nb_samples = in->nb_samples;
     float *ringbuffer = td->ringbuffer[jobnr];
     const int ir_len = s->ir_len;
     const float *src = (const float *)in->data[0];
@@ -237,6 +240,7 @@ static int headphone_fast_convolute(AVFilterContext *ctx, void *arg, int jobnr, 
     av_tx_fn itx_fn = s->itx_fn[jobnr];
     const int n_fft = s->n_fft;
     const float fft_scale = 1.0f / s->n_fft;
+    const float gain_lfe = s->gain_lfe;
     AVComplexFloat *hrtf_offset;
     int wr = *write;
     int n_read;
@@ -244,24 +248,22 @@ static int headphone_fast_convolute(AVFilterContext *ctx, void *arg, int jobnr, 
 
     dst += offset;
 
-    n_read = FFMIN(ir_len, in->nb_samples);
+    n_read = FFMIN(ir_len, nb_samples);
     for (j = 0; j < n_read; j++) {
         dst[2 * j]     = ringbuffer[wr];
-        ringbuffer[wr] = 0.0;
+        ringbuffer[wr] = 0.f;
         wr  = (wr + 1) & modulo;
     }
 
-    for (j = n_read; j < in->nb_samples; j++) {
-        dst[2 * j] = 0;
-    }
+    for (j = n_read; j < nb_samples; j++)
+        dst[2 * j] = 0.f;
 
     memset(fft_acc, 0, sizeof(AVComplexFloat) * n_fft);
 
     for (i = 0; i < in_channels; i++) {
         if (i == s->lfe_channel) {
-            for (j = 0; j < in->nb_samples; j++) {
-                dst[2 * j] += src[i + j * in_channels] * s->gain_lfe;
-            }
+            for (j = 0; j < nb_samples; j++)
+                dst[2 * j] += src[i + j * in_channels] * gain_lfe;
             continue;
         }
 
@@ -270,9 +272,8 @@ static int headphone_fast_convolute(AVFilterContext *ctx, void *arg, int jobnr, 
 
         memset(fft_in, 0, sizeof(AVComplexFloat) * n_fft);
 
-        for (j = 0; j < in->nb_samples; j++) {
+        for (j = 0; j < nb_samples; j++)
             fft_in[j].re = src[j * in_channels + i];
-        }
 
         tx_fn(fft, fft_out, fft_in, sizeof(*fft_in));
 
@@ -288,7 +289,7 @@ static int headphone_fast_convolute(AVFilterContext *ctx, void *arg, int jobnr, 
 
     itx_fn(ifft, fft_out, fft_acc, sizeof(*fft_acc));
 
-    for (j = 0; j < in->nb_samples; j++) {
+    for (j = 0; j < nb_samples; j++) {
         dst[2 * j] += fft_out[j].re * fft_scale;
         if (fabsf(dst[2 * j]) > 1)
             n_clippings[0]++;
@@ -297,7 +298,7 @@ static int headphone_fast_convolute(AVFilterContext *ctx, void *arg, int jobnr, 
     for (j = 0; j < ir_len - 1; j++) {
         int write_pos = (wr + j) & modulo;
 
-        *(ringbuffer + write_pos) += fft_out[in->nb_samples + j].re * fft_scale;
+        *(ringbuffer + write_pos) += fft_out[nb_samples + j].re * fft_scale;
     }
 
     *write = wr;
