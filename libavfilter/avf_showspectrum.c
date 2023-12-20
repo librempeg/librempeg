@@ -1786,9 +1786,12 @@ static int showspectrumpic_request_frame(AVFilterLink *outlink)
 
             while (nb_frame <= s->nb_frames) {
                 AVFrame *cur_frame = s->frames[nb_frame];
-                int cur_frame_samples = cur_frame->nb_samples;
+                int cur_frame_samples;
                 int nb_samples = 0;
+                if (!cur_frame)
+                    break;
 
+                cur_frame_samples = cur_frame->nb_samples;
                 if (acc_samples < spf) {
                     nb_samples = FFMIN(spf - acc_samples, cur_frame_samples - src_offset);
                     acc_samples += nb_samples;
