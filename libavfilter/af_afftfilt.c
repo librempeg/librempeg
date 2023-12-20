@@ -36,10 +36,8 @@ typedef struct AFFTFiltContext {
     int tx_size;
 
     AVTXContext **tx, **itx;
-    av_tx_fn  tx_fn, itx_fn;
-    float **tx_in;
-    AVComplexFloat **tx_out;
-    AVComplexFloat **tx_temp;
+    av_tx_fn tx_fn, itx_fn;
+    AVFrame *tx_in, *tx_out, *tx_temp;
     int nb_exprs;
     int channels;
     int win_size;
@@ -75,23 +73,27 @@ AVFILTER_DEFINE_CLASS(afftfilt);
 static inline double getreal(void *priv, double x, double ch)
 {
     AFFTFiltContext *s = priv;
+    AVComplexFloat *tx_out;
     int ich, ix;
 
     ich = av_clip(ch, 0, s->nb_exprs - 1);
     ix = av_clip(x, 0, s->win_size/2+1);
+    tx_out = (AVComplexFloat *)s->tx_out->extended_data[ich];
 
-    return s->tx_out[ich][ix].re;
+    return tx_out[ix].re;
 }
 
 static inline double getimag(void *priv, double x, double ch)
 {
     AFFTFiltContext *s = priv;
+    AVComplexFloat *tx_out;
     int ich, ix;
 
     ich = av_clip(ch, 0, s->nb_exprs - 1);
     ix = av_clip(x, 0, s->win_size/2+1);
+    tx_out = (AVComplexFloat *)s->tx_out->extended_data[ich];
 
-    return s->tx_out[ich][ix].im;
+    return tx_out[ix].im;
 }
 
 static double realf(void *priv, double x, double ch) { return getreal(priv, x, ch); }
@@ -132,31 +134,11 @@ static int config_input(AVFilterLink *inlink)
     s->win_size = s->tx_size;
     buf_size = FFALIGN(s->win_size + 2, av_cpu_max_align());
 
-    s->tx_in = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->tx_in));
-    if (!s->tx_in)
+    s->tx_in = ff_get_audio_buffer(inlink, buf_size);
+    s->tx_out = ff_get_audio_buffer(inlink, buf_size);
+    s->tx_temp = ff_get_audio_buffer(inlink, buf_size);
+    if (!s->tx_in || !s->tx_out || !s->tx_temp)
         return AVERROR(ENOMEM);
-
-    s->tx_out = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->tx_out));
-    if (!s->tx_out)
-        return AVERROR(ENOMEM);
-
-    s->tx_temp = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->tx_temp));
-    if (!s->tx_temp)
-        return AVERROR(ENOMEM);
-
-    for (ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
-        s->tx_in[ch] = av_calloc(buf_size, sizeof(**s->tx_in));
-        if (!s->tx_in[ch])
-            return AVERROR(ENOMEM);
-
-        s->tx_out[ch] = av_calloc(buf_size/2, sizeof(**s->tx_out));
-        if (!s->tx_out[ch])
-            return AVERROR(ENOMEM);
-
-        s->tx_temp[ch] = av_calloc(buf_size/2, sizeof(**s->tx_temp));
-        if (!s->tx_temp[ch])
-            return AVERROR(ENOMEM);
-    }
 
     s->real = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->real));
     if (!s->real)
@@ -257,8 +239,8 @@ static int tx_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     for (int ch = start; ch < end; ch++) {
         const int offset = s->win_size - s->hop_size;
         float *src = (float *)s->window->extended_data[ch];
-        AVComplexFloat *tx_out = s->tx_out[ch];
-        float *tx_in = s->tx_in[ch];
+        AVComplexFloat *tx_out = (AVComplexFloat *)s->tx_out->extended_data[ch];
+        float *tx_in = (float *)s->tx_in->extended_data[ch];
 
         memmove(src, &src[s->hop_size], offset * sizeof(float));
         memcpy(&src[offset], in->extended_data[ch], in->nb_samples * sizeof(float));
@@ -287,11 +269,11 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     memcpy(values, arg, sizeof(values));
 
     for (int ch = start; ch < end; ch++) {
-        AVComplexFloat *tx_out = s->tx_out[ch];
-        AVComplexFloat *tx_temp = s->tx_temp[ch];
+        AVComplexFloat *tx_out = (AVComplexFloat *)s->tx_out->extended_data[ch];
+        AVComplexFloat *tx_temp = (AVComplexFloat *)s->tx_temp->extended_data[ch];
         float *buf = (float *)s->buffer->extended_data[ch];
         float *dst = (float *)out->extended_data[ch];
-        float *tx_in = s->tx_in[ch];
+        float *tx_in = (float *)s->tx_in->extended_data[ch];
 
         values[VAR_CHANNEL] = ch;
 
@@ -404,19 +386,14 @@ static av_cold void uninit(AVFilterContext *ctx)
             av_tx_uninit(&s->itx[i]);
         if (s->tx)
             av_tx_uninit(&s->tx[i]);
-        if (s->tx_in)
-            av_freep(&s->tx_in[i]);
-        if (s->tx_out)
-            av_freep(&s->tx_out[i]);
-        if (s->tx_temp)
-            av_freep(&s->tx_temp[i]);
     }
 
     av_freep(&s->tx);
     av_freep(&s->itx);
-    av_freep(&s->tx_in);
-    av_freep(&s->tx_out);
-    av_freep(&s->tx_temp);
+
+    av_frame_free(&s->tx_in);
+    av_frame_free(&s->tx_out);
+    av_frame_free(&s->tx_temp);
 
     for (i = 0; i < s->nb_exprs; i++) {
         av_expr_free(s->real[i]);
