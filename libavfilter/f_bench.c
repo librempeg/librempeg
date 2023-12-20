@@ -37,6 +37,7 @@ typedef struct BenchContext {
     int64_t max, min;
     int64_t sum;
     int n;
+    int loglevel;
 } BenchContext;
 
 #define OFFSET(x) offsetof(BenchContext, x)
@@ -45,6 +46,10 @@ static const AVOption filt_name##_options[] = {                                 
     { "action", "set action", OFFSET(action), AV_OPT_TYPE_INT, {.i64=ACTION_START}, 0, NB_ACTION-1, FLAGS, "action" },  \
         { "start", "start timer",  0, AV_OPT_TYPE_CONST, {.i64=ACTION_START}, INT_MIN, INT_MAX, FLAGS, "action" },      \
         { "stop",  "stop timer",   0, AV_OPT_TYPE_CONST, {.i64=ACTION_STOP},  INT_MIN, INT_MAX, FLAGS, "action" },      \
+    { "framelog", "force frame logging level", OFFSET(loglevel), AV_OPT_TYPE_INT, {.i64 = -1},   INT_MIN, INT_MAX, FLAGS, "level" }, \
+        { "quiet",   "logging disabled",          0, AV_OPT_TYPE_CONST, {.i64 = AV_LOG_QUIET},   INT_MIN, INT_MAX, FLAGS, "level" }, \
+        { "info",    "information logging level", 0, AV_OPT_TYPE_CONST, {.i64 = AV_LOG_INFO},    INT_MIN, INT_MAX, FLAGS, "level" }, \
+        { "verbose", "verbose logging level",     0, AV_OPT_TYPE_CONST, {.i64 = AV_LOG_VERBOSE}, INT_MIN, INT_MAX, FLAGS, "level" }, \
     { NULL }                                                                                                            \
 }
 
@@ -56,7 +61,23 @@ static av_cold int init(AVFilterContext *ctx)
     BenchContext *s = ctx->priv;
     s->min = INT64_MAX;
     s->max = INT64_MIN;
+
+    if (s->loglevel != AV_LOG_INFO &&
+        s->loglevel != AV_LOG_QUIET &&
+        s->loglevel != AV_LOG_VERBOSE) {
+        s->loglevel = AV_LOG_INFO;
+    }
+
     return 0;
+}
+
+static av_cold void uninit(AVFilterContext *ctx)
+{
+    BenchContext *s = ctx->priv;
+
+    if (s->n > 0)
+        av_log(s, AV_LOG_INFO, "avg:%f max:%f min:%f\n",
+               T2F(s->sum / s->n), T2F(s->max), T2F(s->min));
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
@@ -80,8 +101,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             s->n++;
             s->min = FFMIN(s->min, diff);
             s->max = FFMAX(s->max, diff);
-            av_log(s, AV_LOG_INFO, "t:%f avg:%f max:%f min:%f\n",
-                   T2F(diff), T2F(s->sum / s->n), T2F(s->max), T2F(s->min));
+            if (s->loglevel != AV_LOG_QUIET)
+                av_log(s, s->loglevel, "t:%f avg:%f max:%f min:%f\n",
+                       T2F(diff), T2F(s->sum / s->n), T2F(s->max), T2F(s->min));
         }
         av_dict_set(&in->metadata, START_TIME_KEY, NULL, 0);
     }
@@ -106,6 +128,7 @@ const AVFilter ff_vf_bench = {
     .description   = NULL_IF_CONFIG_SMALL("Benchmark part of a filtergraph."),
     .priv_size     = sizeof(BenchContext),
     .init          = init,
+    .uninit        = uninit,
     FILTER_INPUTS(bench_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     .priv_class    = &bench_class,
@@ -130,6 +153,7 @@ const AVFilter ff_af_abench = {
     .description   = NULL_IF_CONFIG_SMALL("Benchmark part of a filtergraph."),
     .priv_size     = sizeof(BenchContext),
     .init          = init,
+    .uninit        = uninit,
     FILTER_INPUTS(abench_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     .priv_class    = &abench_class,

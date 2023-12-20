@@ -29540,6 +29540,19 @@ the input frame metadata to get the time difference. Time difference, average,
 maximum and minimum time (respectively @code{t}, @code{avg}, @code{max} and
 @code{min}) are then printed. The timestamps are expressed in seconds.
 @end table
+
+@item framelog
+Force the frame logging level.
+
+Available values are:
+@table @samp
+@item quiet
+logging disabled
+@item info
+information logging level
+@item verbose
+verbose logging level
+@end table
 @end table
 
 @subsection Examples
