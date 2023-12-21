@@ -71,7 +71,7 @@ static void d3d12va_default_unlock(void *ctx)
     ReleaseMutex(ctx);
 }
 
-DXGI_FORMAT av_d3d12va_map_sw_to_hw_format(enum AVPixelFormat pix_fmt)
+static DXGI_FORMAT ff_d3d12va_map_sw_to_hw_format(enum AVPixelFormat pix_fmt)
 {
     switch (pix_fmt) {
     case AV_PIX_FMT_NV12:return DXGI_FORMAT_NV12;
