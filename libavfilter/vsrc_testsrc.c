@@ -1518,7 +1518,10 @@ static void smptebars_fill_picture(AVFilterContext *ctx, AVFrame *picref)
     int r_w, r_h, w_h, p_w, p_h, i, tmp, x = 0;
     const AVPixFmtDescriptor *pixdesc = av_pix_fmt_desc_get(picref->format);
 
-    picref->colorspace = AVCOL_SPC_BT470BG;
+    picref->color_range = AVCOL_RANGE_MPEG;
+    picref->color_primaries = AVCOL_PRI_SMPTE170M;
+    picref->color_trc = AVCOL_TRC_SMPTE170M;
+    picref->colorspace = AVCOL_SPC_SMPTE170M;
 
     r_w = FFALIGN((test->w + 6) / 7, 1 << pixdesc->log2_chroma_w);
     r_h = FFALIGN(test->h * 2 / 3, 1 << pixdesc->log2_chroma_h);
@@ -1583,6 +1586,9 @@ static void smptehdbars_fill_picture(AVFilterContext *ctx, AVFrame *picref)
     int d_w, r_w, r_h, l_w, i, tmp, x = 0, y = 0;
     const AVPixFmtDescriptor *pixdesc = av_pix_fmt_desc_get(picref->format);
 
+    picref->color_range = AVCOL_RANGE_MPEG;
+    picref->color_primaries = AVCOL_PRI_BT709;
+    picref->color_trc = AVCOL_TRC_BT709;
     picref->colorspace = AVCOL_SPC_BT709;
 
     d_w = FFALIGN(test->w / 8, 1 << pixdesc->log2_chroma_w);
