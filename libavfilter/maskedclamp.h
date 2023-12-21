@@ -27,7 +27,7 @@
 typedef struct MaskedClampDSPContext {
     void (*maskedclamp)(const uint8_t *bsrc, uint8_t *dst,
                         const uint8_t *darksrc, const uint8_t *brightsrc,
-                        int w, int undershoot, int overshoot);
+                        int w, const void *undershoot, const void *overshoot);
 } MaskedClampDSPContext;
 
 void ff_maskedclamp_init_x86(MaskedClampDSPContext *dsp, int depth);

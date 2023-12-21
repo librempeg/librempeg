@@ -26,11 +26,11 @@
 
 void ff_maskedclamp8_sse2(const uint8_t *bsrc, uint8_t *dst,
                           const uint8_t *darksrc, const uint8_t *brightsrc,
-                          int w, int undershoot, int overshoot);
+                          int w, const void *undershoot, const void *overshoot);
 
 void ff_maskedclamp16_sse4(const uint8_t *bsrc, uint8_t *dst,
                            const uint8_t *darksrc, const uint8_t *brightsrc,
-                           int w, int undershoot, int overshoot);
+                           int w, const void *undershoot, const void *overshoot);
 
 av_cold void ff_maskedclamp_init_x86(MaskedClampDSPContext *dsp, int depth)
 {
@@ -40,7 +40,7 @@ av_cold void ff_maskedclamp_init_x86(MaskedClampDSPContext *dsp, int depth)
         dsp->maskedclamp = ff_maskedclamp8_sse2;
     }
 
-    if (EXTERNAL_SSE4(cpu_flags) && depth > 8) {
+    if (EXTERNAL_SSE4(cpu_flags) && depth > 8 && depth <= 16) {
         dsp->maskedclamp = ff_maskedclamp16_sse4;
     }
 }

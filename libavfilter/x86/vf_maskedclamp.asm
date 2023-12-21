@@ -28,7 +28,7 @@ SECTION .text
 ; void ff_maskedclamp(const uint8_t *src, uint8_t *dst,
 ;                     const uint8_t *darksrc,
 ;                     const uint8_t *brightsrc,
-;                     int w, int undershoot, int overshoot)
+;                     int w, int *undershoot, int *overshoot)
 ;------------------------------------------------------------------------------
 
 INIT_XMM sse2
@@ -41,11 +41,11 @@ cglobal maskedclamp8, 5,5,5, src, dst, dark, bright, w, undershoot, overshoot
     add        dstq, wq
     neg          wq
 
-    movd         m3, r5m
+    movd         m3, [undershootq]
     punpcklbw    m3, m3
     SPLATW       m3, m3
 
-    movd         m4, r6m
+    movd         m4, [overshootq]
     punpcklbw    m4, m4
     SPLATW       m4, m4
 
@@ -73,10 +73,10 @@ cglobal maskedclamp16, 5,5,5, src, dst, dark, bright, w, undershoot, overshoot
     add        dstq, wq
     neg          wq
 
-    movd         m3, r5m
+    movd         m3, [undershootq]
     SPLATW       m3, m3
 
-    movd         m4, r6m
+    movd         m4, [overshootq]
     SPLATW       m4, m4
 
     .loop:

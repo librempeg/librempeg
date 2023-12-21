@@ -38,6 +38,8 @@ typedef struct MaskedClampContext {
     const AVClass *class;
 
     int planes;
+    float undershootp;
+    float overshootp;
     int undershoot;
     int overshoot;
 
@@ -51,8 +53,8 @@ typedef struct MaskedClampContext {
 } MaskedClampContext;
 
 static const AVOption maskedclamp_options[] = {
-    { "undershoot", "set undershoot", OFFSET(undershoot), AV_OPT_TYPE_INT, {.i64=0},   0, UINT16_MAX, FLAGS },
-    { "overshoot",  "set overshoot",  OFFSET(overshoot),  AV_OPT_TYPE_INT, {.i64=0},   0, UINT16_MAX, FLAGS },
+    { "undershoot", "set undershoot", OFFSET(undershootp),AV_OPT_TYPE_FLOAT,{.dbl=0},  0, UINT16_MAX, FLAGS },
+    { "overshoot",  "set overshoot",  OFFSET(overshootp), AV_OPT_TYPE_FLOAT,{.dbl=0},  0, UINT16_MAX, FLAGS },
     { "planes",     "set planes",     OFFSET(planes),     AV_OPT_TYPE_INT, {.i64=0xF}, 0, 0xF,        FLAGS },
     { NULL }
 };
@@ -78,6 +80,7 @@ static const enum AVPixelFormat pix_fmts[] = {
     AV_PIX_FMT_GBRP12, AV_PIX_FMT_GBRP14, AV_PIX_FMT_GBRP16,
     AV_PIX_FMT_GBRAP, AV_PIX_FMT_GBRAP10, AV_PIX_FMT_GBRAP12, AV_PIX_FMT_GBRAP16,
     AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY9, AV_PIX_FMT_GRAY10, AV_PIX_FMT_GRAY12, AV_PIX_FMT_GRAY14, AV_PIX_FMT_GRAY16,
+    AV_PIX_FMT_GRAYF32, AV_PIX_FMT_GBRPF32, AV_PIX_FMT_GBRAPF32,
     AV_PIX_FMT_NONE
 };
 
@@ -85,6 +88,8 @@ static int maskedclamp_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_
 {
     MaskedClampContext *s = ctx->priv;
     ThreadData *td = arg;
+    const void *undershoot = s->depth <= 16 ? (const void *)&s->undershoot : (const void *)&s->undershootp;
+    const void *overshoot = s->depth <= 16 ? (const void *)&s->overshoot : (const void *)&s->overshootp;
     int p;
 
     for (p = 0; p < s->nb_planes; p++) {
@@ -100,8 +105,6 @@ static int maskedclamp_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_
         const uint8_t *darksrc = td->o->data[p] + slice_start * darklinesize;
         const uint8_t *brightsrc = td->m->data[p] + slice_start * brightlinesize;
         uint8_t *dst = td->d->data[p] + slice_start * dlinesize;
-        const int undershoot = s->undershoot;
-        const int overshoot = s->overshoot;
         int y;
 
         if (!((1 << p) & s->planes)) {
@@ -153,6 +156,11 @@ static int process_frame(FFFrameSync *fs)
         td.m = bright;
         td.d = out;
 
+        s->undershoot = lrintf(s->undershootp);
+        s->overshoot = lrintf(s->undershootp);
+        s->undershoot = FFMIN(s->undershoot, (1 << s->depth) - 1);
+        s->overshoot = FFMIN(s->overshoot, (1 << s->depth) - 1);
+
         ff_filter_execute(ctx, maskedclamp_slice, &td, NULL,
                           FFMIN(s->height[0], ff_filter_get_nb_threads(ctx)));
     }
@@ -161,11 +169,13 @@ static int process_frame(FFFrameSync *fs)
     return ff_filter_frame(outlink, out);
 }
 
-#define MASKEDCLAMP(type, name)                                                   \
+#define MASKEDCLAMP(type, name, stype)                                            \
 static void maskedclamp##name(const uint8_t *bbsrc, uint8_t *ddst,                \
                               const uint8_t *ddarksrc, const uint8_t *bbrightsrc, \
-                              int w, int undershoot, int overshoot)               \
+                              int w, const void *_undershoot, const void *_overshoot)\
 {                                                                                 \
+    const stype undershoot = *(const stype *)_undershoot;                         \
+    const stype overshoot = *(const stype *)_overshoot;                           \
     const type *bsrc = (const type *)bbsrc;                                       \
     const type *darksrc = (const type *)ddarksrc;                                 \
     const type *brightsrc = (const type *)bbrightsrc;                             \
@@ -177,8 +187,9 @@ static void maskedclamp##name(const uint8_t *bbsrc, uint8_t *ddst,              
     }                                                                             \
 }
 
-MASKEDCLAMP(uint8_t, 8)
-MASKEDCLAMP(uint16_t, 16)
+MASKEDCLAMP(uint8_t, 8, int)
+MASKEDCLAMP(uint16_t, 16, int)
+MASKEDCLAMP(float, 32, float)
 
 static int config_input(AVFilterLink *inlink)
 {
@@ -200,13 +211,13 @@ static int config_input(AVFilterLink *inlink)
     s->width[0]  = s->width[3]  = inlink->w;
 
     s->depth = desc->comp[0].depth;
-    s->undershoot = FFMIN(s->undershoot, (1 << s->depth) - 1);
-    s->overshoot = FFMIN(s->overshoot, (1 << s->depth) - 1);
 
     if (s->depth <= 8)
         s->dsp.maskedclamp = maskedclamp8;
-    else
+    else if (s->depth <= 16)
         s->dsp.maskedclamp = maskedclamp16;
+    else
+        s->dsp.maskedclamp = maskedclamp32;
 
 #if ARCH_X86
     ff_maskedclamp_init_x86(&s->dsp, s->depth);
