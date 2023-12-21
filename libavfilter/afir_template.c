@@ -86,7 +86,7 @@ static void fn(ir_scale)(AVFilterContext *ctx, AudioFIRContext *s,
                          int cur_nb_taps, int ch,
                          ftype *time, ftype ch_gain)
 {
-    if (ch_gain != 1. || s->ir_gain != 1.) {
+    if (ch_gain != ONE || s->ir_gain != ONE) {
         ftype gain = ch_gain * s->ir_gain;
 
         av_log(ctx, AV_LOG_DEBUG, "ch%d gain %f\n", ch, gain);
