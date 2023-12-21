@@ -1427,6 +1427,8 @@ static void pal75bars_fill_picture(AVFilterContext *ctx, AVFrame *picref)
     const AVPixFmtDescriptor *pixdesc = av_pix_fmt_desc_get(picref->format);
 
     picref->color_range = AVCOL_RANGE_MPEG;
+    picref->color_trc = AVCOL_TRC_GAMMA22;
+    picref->color_primaries = AVCOL_PRI_BT470BG;
     picref->colorspace = AVCOL_SPC_BT470BG;
 
     r_w = FFALIGN((test->w + 7) / 8, 1 << pixdesc->log2_chroma_w);
@@ -1473,6 +1475,8 @@ static void pal100bars_fill_picture(AVFilterContext *ctx, AVFrame *picref)
     const AVPixFmtDescriptor *pixdesc = av_pix_fmt_desc_get(picref->format);
 
     picref->color_range = AVCOL_RANGE_MPEG;
+    picref->color_trc = AVCOL_TRC_GAMMA22;
+    picref->color_primaries = AVCOL_PRI_BT470BG;
     picref->colorspace = AVCOL_SPC_BT470BG;
 
     r_w = FFALIGN((test->w + 7) / 8, 1 << pixdesc->log2_chroma_w);
