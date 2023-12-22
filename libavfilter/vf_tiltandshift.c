@@ -305,28 +305,28 @@ static int request_frame(AVFilterLink *outlink)
 }
 
 #define OFFSET(x) offsetof(TiltandshiftContext, x)
-#define V AV_OPT_FLAG_VIDEO_PARAM
+#define V AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption tiltandshift_options[] = {
     { "tilt", "Tilt the video horizontally while shifting", OFFSET(tilt), AV_OPT_TYPE_INT,
         { .i64 = 1 }, 0, 1, .flags = V, .unit = "tilt" },
 
     { "start", "Action at the start of input", OFFSET(start), AV_OPT_TYPE_INT,
         { .i64 = TILT_NONE }, 0, TILT_OPT_MAX, .flags = V, .unit = "start" },
-    { "none", "Start immediately (default)", 0, AV_OPT_TYPE_CONST,
-        { .i64 = TILT_NONE }, INT_MIN, INT_MAX, .flags = V, .unit = "start" },
+    { "none", "Start immediately", 0, AV_OPT_TYPE_CONST,
+        { .i64 = TILT_NONE }, 0, 0, .flags = V, .unit = "start" },
     { "frame", "Use the first frames", 0, AV_OPT_TYPE_CONST,
-        { .i64 = TILT_FRAME }, INT_MIN, INT_MAX, .flags = V, .unit = "start" },
+        { .i64 = TILT_FRAME }, 0, 0, .flags = V, .unit = "start" },
     { "black", "Fill with black", 0, AV_OPT_TYPE_CONST,
-        { .i64 = TILT_BLACK }, INT_MIN, INT_MAX, .flags = V, .unit = "start" },
+        { .i64 = TILT_BLACK }, 0, 0, .flags = V, .unit = "start" },
 
     { "end", "Action at the end of input", OFFSET(end), AV_OPT_TYPE_INT,
         { .i64 = TILT_NONE }, 0, TILT_OPT_MAX, .flags = V, .unit = "end" },
-    { "none", "Do not pad at the end (default)", 0, AV_OPT_TYPE_CONST,
-        { .i64 = TILT_NONE }, INT_MIN, INT_MAX, .flags = V, .unit = "end" },
+    { "none", "Do not pad at the end", 0, AV_OPT_TYPE_CONST,
+        { .i64 = TILT_NONE }, 0, 0, .flags = V, .unit = "end" },
     { "frame", "Use the last frame", 0, AV_OPT_TYPE_CONST,
-        { .i64 = TILT_FRAME }, INT_MIN, INT_MAX, .flags = V, .unit = "end" },
+        { .i64 = TILT_FRAME }, 0, 0, .flags = V, .unit = "end" },
     { "black", "Fill with black", 0, AV_OPT_TYPE_CONST,
-        { .i64 = TILT_BLACK }, INT_MIN, INT_MAX, .flags = V, .unit = "end" },
+        { .i64 = TILT_BLACK }, 0, 0, .flags = V, .unit = "end" },
 
     { "hold", "Number of columns to hold at the start of the video", OFFSET(hold), AV_OPT_TYPE_INT,
         { .i64 = 0 }, 0, INT_MAX, .flags = V, .unit = "hold" },
