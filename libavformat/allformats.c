@@ -318,6 +318,7 @@ extern const FFOutputFormat ff_mxf_opatom_muxer;
 extern const AVInputFormat  ff_mxg_demuxer;
 extern const AVInputFormat  ff_nc_demuxer;
 extern const AVInputFormat  ff_nistsphere_demuxer;
+extern const FFOutputFormat ff_nistsphere_muxer;
 extern const AVInputFormat  ff_nsp_demuxer;
 extern const AVInputFormat  ff_nsv_demuxer;
 extern const FFOutputFormat ff_null_muxer;
