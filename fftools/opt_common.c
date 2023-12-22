@@ -1078,7 +1078,6 @@ int opt_cpucount(void *optctx, const char *opt, const char *arg)
     };
     static const AVClass class = {
         .class_name = "cpucount",
-        .item_name  = av_default_item_name,
         .option     = opts,
         .version    = LIBAVUTIL_VERSION_INT,
     };
