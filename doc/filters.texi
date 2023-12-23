@@ -7418,7 +7418,7 @@ It accepts the following values:
 @item bohman
 @item kaiser
 @end table
-Default is @code{hann}.
+Default is @code{sine}.
 
 @item overlap
 Set window overlap. If set to 1, the recommended overlap for selected

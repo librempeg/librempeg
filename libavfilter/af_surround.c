@@ -1492,7 +1492,7 @@ static const AVOption surround_options[] = {
     { "sry",       "set side right channel y spread",    OFFSET(f_y[SC_SR]),    AV_OPT_TYPE_FLOAT,  {.dbl=0.5}, .06,  15, TFLAGS },
     { "bcy",       "set back center channel y spread",   OFFSET(f_y[SC_BC]),    AV_OPT_TYPE_FLOAT,  {.dbl=0.5}, .06,  15, TFLAGS },
     { "win_size", "set window size",                     OFFSET(win_size),        AV_OPT_TYPE_INT,  {.i64=4096},1024,65536,FLAGS },
-    WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_HANNING),
+    WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_SINE),
     { "overlap", "set window overlap", OFFSET(overlap), AV_OPT_TYPE_FLOAT, {.dbl=0.5}, 0, 1, TFLAGS },
     { NULL }
 };
