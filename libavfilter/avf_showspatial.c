@@ -22,7 +22,6 @@
 #include <math.h>
 
 #include "libavutil/tx.h"
-#include "libavutil/audio_fifo.h"
 #include "libavutil/avassert.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/opt.h"
@@ -41,6 +40,7 @@ typedef struct ShowSpatialContext {
     AVRational frame_rate;
     AVTXContext *fft[2];          ///< Fast Fourier Transform context
     AVComplexFloat *fft_data[2];  ///< bins holder for each (displayed) channels
+    float *window[2];
     float *fft_tdata[2];
     float *window_func_lut;       ///< Window function LUT
     av_tx_fn tx_fn[2];
@@ -49,7 +49,7 @@ typedef struct ShowSpatialContext {
     int buf_size;
     int consumed;
     int hop_size;
-    AVAudioFifo *fifo;
+    int frame;
     int64_t pts;
 } ShowSpatialContext;
 
@@ -59,7 +59,7 @@ typedef struct ShowSpatialContext {
 static const AVOption showspatial_options[] = {
     { "size", "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "512x512"}, 0, 0, FLAGS },
     { "s",    "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "512x512"}, 0, 0, FLAGS },
-    { "win_size", "set window size", OFFSET(win_size), AV_OPT_TYPE_INT, {.i64 = 4096}, 1024, 65536, FLAGS },
+    { "resolution","set frequency resolution", OFFSET(frame), AV_OPT_TYPE_INT, {.i64=1}, 1, 4, FLAGS },
     WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_HANNING),
     { "rate", "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
     { "r",    "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
@@ -77,9 +77,9 @@ static av_cold void uninit(AVFilterContext *ctx)
     for (int i = 0; i < 2; i++) {
         av_freep(&s->fft_data[i]);
         av_freep(&s->fft_tdata[i]);
+        av_freep(&s->window[i]);
     }
     av_freep(&s->window_func_lut);
-    av_audio_fifo_free(s->fifo);
 }
 
 static int query_formats(AVFilterContext *ctx)
@@ -113,10 +113,9 @@ static int run_channel_fft(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
 {
     ShowSpatialContext *s = ctx->priv;
     const float *window_func_lut = s->window_func_lut;
-    AVFrame *fin = arg;
     const int ch = jobnr;
-    const float *p = (float *)fin->extended_data[ch];
-    const int nb_samples = fin->nb_samples;
+    const float *p = s->window[ch];
+    const int nb_samples = s->win_size;
     float *dst = s->fft_tdata[ch];
 
     for (int n = 0; n < nb_samples; n++)
@@ -141,13 +140,17 @@ static int config_output(AVFilterLink *outlink)
 
     outlink->frame_rate = s->frame_rate;
     outlink->time_base = av_inv_q(outlink->frame_rate);
+    s->hop_size = FFMAX(1, av_rescale(inlink->sample_rate, s->frame_rate.den, s->frame_rate.num));
+    s->win_size = s->frame << av_ceil_log2(s->hop_size);
     s->buf_size = s->win_size + 2;
 
     for (int i = 0; i < 2; i++) {
         av_tx_uninit(&s->fft[i]);
         av_freep(&s->fft_data[i]);
         av_freep(&s->fft_tdata[i]);
+        av_freep(&s->window[i]);
     }
+
     for (int i = 0; i < 2; i++) {
         float scale = 1.f;
         ret = av_tx_init(&s->fft[i], &s->tx_fn[i], AV_TX_FLOAT_RDFT,
@@ -157,6 +160,10 @@ static int config_output(AVFilterLink *outlink)
     }
 
     for (int i = 0; i < 2; i++) {
+        s->window[i] = av_calloc(s->win_size, sizeof(**s->window));
+        if (!s->window[i])
+            return AVERROR(ENOMEM);
+
         s->fft_tdata[i] = av_calloc(s->buf_size, sizeof(**s->fft_tdata));
         if (!s->fft_tdata[i])
             return AVERROR(ENOMEM);
@@ -174,12 +181,6 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR(ENOMEM);
     generate_window_func(s->window_func_lut, s->win_size, s->win_func, &overlap);
 
-    s->hop_size = FFMAX(1, av_rescale(inlink->sample_rate, s->frame_rate.den, s->frame_rate.num));
-
-    av_audio_fifo_free(s->fifo);
-    s->fifo = av_audio_fifo_alloc(inlink->format, inlink->ch_layout.nb_channels, s->win_size);
-    if (!s->fifo)
-        return AVERROR(ENOMEM);
     return 0;
 }
 
@@ -195,7 +196,7 @@ static void draw_dot(uint8_t *dst, int linesize, int value)
     dst[-linesize] = value;
 }
 
-static int draw_spatial(AVFilterLink *inlink, AVFrame *insamples)
+static int draw_spatial(AVFilterLink *inlink, int64_t in_pts)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
@@ -204,7 +205,7 @@ static int draw_spatial(AVFilterLink *inlink, AVFrame *insamples)
     int h = s->h - 2;
     int w = s->w - 2;
     int z = s->win_size / 2 + 1;
-    int64_t pts = av_rescale_q(insamples->pts, inlink->time_base, outlink->time_base);
+    int64_t pts = av_rescale_q(in_pts, inlink->time_base, outlink->time_base);
 
     outpicref = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     if (!outpicref)
@@ -251,61 +252,34 @@ static int spatial_activate(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     ShowSpatialContext *s = ctx->priv;
+    AVFrame *in;
     int ret;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    if (av_audio_fifo_size(s->fifo) < s->win_size) {
-        AVFrame *frame = NULL;
+    ret = ff_inlink_consume_samples(inlink, s->hop_size, s->hop_size, &in);
+    if (ret < 0)
+        return ret;
+    if (ret > 0) {
+        const int64_t pts = in->pts;
 
-        ret = ff_inlink_consume_frame(inlink, &frame);
-        if (ret < 0)
-            return ret;
-        if (ret > 0) {
-            s->pts = frame->pts;
-            s->consumed = 0;
+        for (int ch = 0; ch < 2; ch++) {
+            const int offset = s->win_size - s->hop_size;
+            float *src = s->window[ch];
 
-            av_audio_fifo_write(s->fifo, (void **)frame->extended_data, frame->nb_samples);
-            av_frame_free(&frame);
-        }
-    }
-
-    if (av_audio_fifo_size(s->fifo) >= s->win_size) {
-        AVFrame *fin = ff_get_audio_buffer(inlink, s->win_size);
-        if (!fin)
-            return AVERROR(ENOMEM);
-
-        fin->pts = s->pts + s->consumed;
-        s->consumed += s->hop_size;
-        ret = av_audio_fifo_peek(s->fifo, (void **)fin->extended_data,
-                                 FFMIN(s->win_size, av_audio_fifo_size(s->fifo)));
-        if (ret < 0) {
-            av_frame_free(&fin);
-            return ret;
+            memmove(src, &src[s->hop_size], offset * sizeof(*src));
+            memcpy(&src[offset], in->extended_data[ch], in->nb_samples * sizeof(*src));
         }
 
-        av_assert0(fin->nb_samples == s->win_size);
+        ff_filter_execute(ctx, run_channel_fft, in, NULL, 2);
+        av_frame_free(&in);
 
-        ff_filter_execute(ctx, run_channel_fft, fin, NULL, 2);
-
-        ret = draw_spatial(inlink, fin);
-
-        av_frame_free(&fin);
-        av_audio_fifo_drain(s->fifo, s->hop_size);
-        if (ret <= 0)
-            return ret;
+        return draw_spatial(inlink, pts);
     }
 
     FF_FILTER_FORWARD_STATUS(inlink, outlink);
-    if (ff_outlink_frame_wanted(outlink) && av_audio_fifo_size(s->fifo) < s->win_size) {
-        ff_inlink_request_frame(inlink);
-        return 0;
-    }
+    FF_FILTER_FORWARD_WANTED(outlink, inlink);
 
-    if (av_audio_fifo_size(s->fifo) >= s->win_size) {
-        ff_filter_set_ready(ctx, 10);
-        return 0;
-    }
     return FFERROR_NOT_READY;
 }
 
