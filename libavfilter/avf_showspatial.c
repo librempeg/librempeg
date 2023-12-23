@@ -41,7 +41,7 @@ typedef struct ShowSpatialContext {
     AVRational frame_rate;
     AVTXContext *fft[2];          ///< Fast Fourier Transform context
     AVComplexFloat *fft_data[2];  ///< bins holder for each (displayed) channels
-    AVComplexFloat *fft_tdata[2]; ///< bins holder for each (displayed) channels
+    float *fft_tdata[2];
     float *window_func_lut;       ///< Window function LUT
     av_tx_fn tx_fn[2];
     int win_func;
@@ -116,13 +116,13 @@ static int run_channel_fft(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     AVFrame *fin = arg;
     const int ch = jobnr;
     const float *p = (float *)fin->extended_data[ch];
+    const int nb_samples = fin->nb_samples;
+    float *dst = s->fft_tdata[ch];
 
-    for (int n = 0; n < fin->nb_samples; n++) {
-        s->fft_tdata[ch][n].re = p[n] * window_func_lut[n];
-        s->fft_tdata[ch][n].im = 0.f;
-    }
+    for (int n = 0; n < nb_samples; n++)
+        dst[n] = p[n] * window_func_lut[n];
 
-    s->tx_fn[ch](s->fft[ch], s->fft_data[ch], s->fft_tdata[ch], sizeof(AVComplexFloat));
+    s->tx_fn[ch](s->fft[ch], s->fft_data[ch], dst, sizeof(*dst));
 
     return 0;
 }
@@ -141,47 +141,40 @@ static int config_output(AVFilterLink *outlink)
 
     outlink->frame_rate = s->frame_rate;
     outlink->time_base = av_inv_q(outlink->frame_rate);
+    s->buf_size = s->win_size + 2;
 
-    /* (re-)configuration if the video output changed (or first init) */
-    if (s->win_size != s->buf_size) {
-        s->buf_size = s->win_size;
-
-        /* FFT buffers: x2 for each channel buffer.
-         * Note: we use free and malloc instead of a realloc-like function to
-         * make sure the buffer is aligned in memory for the FFT functions. */
-        for (int i = 0; i < 2; i++) {
-            av_tx_uninit(&s->fft[i]);
-            av_freep(&s->fft_data[i]);
-            av_freep(&s->fft_tdata[i]);
-        }
-        for (int i = 0; i < 2; i++) {
-            float scale = 1.f;
-            ret = av_tx_init(&s->fft[i], &s->tx_fn[i], AV_TX_FLOAT_FFT,
-                             0, s->win_size, &scale, 0);
-            if (ret < 0)
-                return ret;
-        }
-
-        for (int i = 0; i < 2; i++) {
-            s->fft_tdata[i] = av_calloc(s->buf_size, sizeof(**s->fft_tdata));
-            if (!s->fft_tdata[i])
-                return AVERROR(ENOMEM);
-
-            s->fft_data[i] = av_calloc(s->buf_size, sizeof(**s->fft_data));
-            if (!s->fft_data[i])
-                return AVERROR(ENOMEM);
-        }
-
-        /* pre-calc windowing function */
-        s->window_func_lut =
-            av_realloc_f(s->window_func_lut, s->win_size,
-                         sizeof(*s->window_func_lut));
-        if (!s->window_func_lut)
-            return AVERROR(ENOMEM);
-        generate_window_func(s->window_func_lut, s->win_size, s->win_func, &overlap);
-
-        s->hop_size = FFMAX(1, av_rescale(inlink->sample_rate, s->frame_rate.den, s->frame_rate.num));
+    for (int i = 0; i < 2; i++) {
+        av_tx_uninit(&s->fft[i]);
+        av_freep(&s->fft_data[i]);
+        av_freep(&s->fft_tdata[i]);
     }
+    for (int i = 0; i < 2; i++) {
+        float scale = 1.f;
+        ret = av_tx_init(&s->fft[i], &s->tx_fn[i], AV_TX_FLOAT_RDFT,
+                         0, s->win_size, &scale, 0);
+        if (ret < 0)
+            return ret;
+    }
+
+    for (int i = 0; i < 2; i++) {
+        s->fft_tdata[i] = av_calloc(s->buf_size, sizeof(**s->fft_tdata));
+        if (!s->fft_tdata[i])
+            return AVERROR(ENOMEM);
+
+        s->fft_data[i] = av_calloc(s->buf_size/2+1, sizeof(**s->fft_data));
+        if (!s->fft_data[i])
+            return AVERROR(ENOMEM);
+    }
+
+    /* pre-calc windowing function */
+    s->window_func_lut =
+        av_realloc_f(s->window_func_lut, s->win_size,
+                     sizeof(*s->window_func_lut));
+    if (!s->window_func_lut)
+        return AVERROR(ENOMEM);
+    generate_window_func(s->window_func_lut, s->win_size, s->win_func, &overlap);
+
+    s->hop_size = FFMAX(1, av_rescale(inlink->sample_rate, s->frame_rate.den, s->frame_rate.num));
 
     av_audio_fifo_free(s->fifo);
     s->fifo = av_audio_fifo_alloc(inlink->format, inlink->ch_layout.nb_channels, s->win_size);
@@ -210,7 +203,7 @@ static int draw_spatial(AVFilterLink *inlink, AVFrame *insamples)
     AVFrame *outpicref;
     int h = s->h - 2;
     int w = s->w - 2;
-    int z = s->win_size / 2;
+    int z = s->win_size / 2 + 1;
     int64_t pts = av_rescale_q(insamples->pts, inlink->time_base, outlink->time_base);
 
     outpicref = ff_get_video_buffer(outlink, outlink->w, outlink->h);
