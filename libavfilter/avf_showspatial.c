@@ -232,7 +232,7 @@ static int draw_spatial(AVFilterLink *inlink, AVFrame *insamples)
         float lp = atan2f(IM(idx, 0), RE(idx, 0));
         float rp = atan2f(IM(idx, 1), RE(idx, 1));
         float diffp = ((rp - lp) / (2.f * M_PI) + 1.f) * 0.5f;
-        float diff = (sum < 0.000001f ? 0.f : (r - l) / sum) * 0.5f + 0.5f;
+        float diff = ((l <= FLT_EPSILON || r <= FLT_EPSILON) ? 0.f : (r - l) / sum) * 0.5f + 0.5f;
         float cr = av_clipf(cbrtf(l / sum), 0, 1) * 255.f;
         float cb = av_clipf(cbrtf(r / sum), 0, 1) * 255.f;
         float cg;
