@@ -447,8 +447,8 @@ static int config_output(AVFilterLink *outlink)
         s->buf_idy[i] = -1;
 
     s->history_filled = 0;
-    s->history_nb_samples = av_rescale(s->w * nb_channels * 2,
-                                               s->n.num, s->n.den);
+    s->history_nb_samples = FFMAX(nb_channels, av_rescale(s->w * nb_channels * 2,
+                                                          s->n.num, s->n.den));
     s->history = av_calloc(s->history_nb_samples,
                            sizeof(*s->history));
     if (!s->history)
@@ -797,7 +797,7 @@ static int activate(AVFilterContext *ctx)
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
     q = av_add_q(s->q, av_mul_q(av_make_q(outlink->w, 1), s->n));
-    nb_samples = (q.num + (q.den / 2)) / q.den;
+    nb_samples = FFMAX(1, (q.num + (q.den / 2)) / q.den);
     ret = ff_inlink_consume_samples(inlink, nb_samples, nb_samples, &in);
     if (ret < 0)
         return ret;
