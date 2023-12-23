@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <float.h>
+
 #include "libavutil/avassert.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/opt.h"
@@ -45,6 +47,7 @@
 #define SQRT sqrtf
 #define FMIN fminf
 #define FMAX fmaxf
+#define EPSILON FLT_EPSILON
 #define CLIP av_clipf
 #define SAMPLE_FORMAT AV_SAMPLE_FMT_FLTP
 #define TX_TYPE AV_TX_FLOAT_RDFT
@@ -62,6 +65,7 @@
 #define SQRT sqrt
 #define FMIN fmin
 #define FMAX fmax
+#define EPSILON DBL_EPSILON
 #define CLIP av_clipd
 #define SAMPLE_FORMAT AV_SAMPLE_FMT_DBLP
 #define TX_TYPE AV_TX_DOUBLE_RDFT
@@ -261,10 +265,10 @@ static int config_input(AVFilterLink *inlink)
     s->nb_in_channels = inlink->ch_layout.nb_channels;
 
     for (int ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
-        ftype scale = 1.f;
+        ftype scale = 1.0 / sqrt(s->win_size);
 
         ret = av_tx_init(&s->rdft[ch], &s->tx_fn, TX_TYPE,
-                         0, s->win_size * 2, &scale, 0);
+                         0, s->win_size, &scale, 0);
         if (ret < 0)
             return ret;
     }
@@ -275,11 +279,11 @@ static int config_input(AVFilterLink *inlink)
 
     set_input_levels(ctx);
 
-    s->window = ff_get_audio_buffer(inlink, s->win_size * 2 + 2);
+    s->window = ff_get_audio_buffer(inlink, s->win_size);
     if (!s->window)
         return AVERROR(ENOMEM);
 
-    s->input_in = ff_get_audio_buffer(inlink, s->win_size * 2 + 2);
+    s->input_in = ff_get_audio_buffer(inlink, s->win_size);
     if (!s->input_in)
         return AVERROR(ENOMEM);
 
@@ -305,10 +309,10 @@ static int config_output(AVFilterLink *outlink)
     s->nb_out_channels = outlink->ch_layout.nb_channels;
 
     for (int ch = 0; ch < outlink->ch_layout.nb_channels; ch++) {
-        ftype iscale = 1.f;
+        ftype iscale = 1.0 / sqrt(s->win_size);
 
         ret = av_tx_init(&s->irdft[ch], &s->itx_fn, TX_TYPE,
-                         1, s->win_size * 2, &iscale, 0);
+                         1, s->win_size, &iscale, 0);
         if (ret < 0)
             return ret;
     }
@@ -319,18 +323,18 @@ static int config_output(AVFilterLink *outlink)
 
     set_output_levels(ctx);
 
-    s->factors = ff_get_audio_buffer(outlink, s->win_size * 2 + 2);
-    s->sfactors = ff_get_audio_buffer(outlink, s->win_size * 2 + 2);
-    s->output_ph = ff_get_audio_buffer(outlink, s->win_size * 2 + 2);
-    s->output_mag = ff_get_audio_buffer(outlink, s->win_size * 2 + 2);
-    s->output_out = ff_get_audio_buffer(outlink, s->win_size * 2 + 2);
-    s->output = ff_get_audio_buffer(outlink, s->win_size * 2 + 2);
-    s->overlap_buffer = ff_get_audio_buffer(outlink, s->win_size * 2 * 2);
+    s->rdft_size = s->win_size / 2 + 1;
+
+    s->factors = ff_get_audio_buffer(outlink, s->rdft_size);
+    s->sfactors = ff_get_audio_buffer(outlink, s->rdft_size);
+    s->output_ph = ff_get_audio_buffer(outlink, s->rdft_size);
+    s->output_mag = ff_get_audio_buffer(outlink, s->rdft_size);
+    s->output_out = ff_get_audio_buffer(outlink, s->win_size + 1);
+    s->output = ff_get_audio_buffer(outlink, s->rdft_size * 2);
+    s->overlap_buffer = ff_get_audio_buffer(outlink, s->win_size * 2);
     if (!s->overlap_buffer || !s->output || !s->output_out || !s->output_mag ||
         !s->output_ph || !s->factors || !s->sfactors)
         return AVERROR(ENOMEM);
-
-    s->rdft_size = s->win_size + 1;
 
     s->x_pos = av_calloc(s->rdft_size, sizeof(*s->x_pos));
     s->y_pos = av_calloc(s->rdft_size, sizeof(*s->y_pos));
@@ -357,8 +361,6 @@ static ftype r_distance(ftype a)
 {
     return FMIN(SQRT(1.f + sqrf(TAN(a))), SQRT(1.f + sqrf(1.f / TAN(a))));
 }
-
-#define MIN_MAG_SUM 0.00000001f
 
 static void angle_transform(ftype *x, ftype *y, ftype angle)
 {
@@ -421,9 +423,9 @@ static inline void get_lfe(int output_lfe, int n, ftype lowcut, ftype highcut,
     }
 }
 
-#define TRANSFORM                         \
-        dst[2 * n    ] = mag * COS(ph);  \
-        dst[2 * n + 1] = mag * SIN(ph);
+#define TRANSFORM                   \
+        dst[n].re = mag * COS(ph);  \
+        dst[n].im = mag * SIN(ph);
 
 static void calculate_factors(AVFilterContext *ctx, int ch, int chan)
 {
@@ -486,7 +488,7 @@ static void do_transform(AVFilterContext *ctx, int ch)
     ftype *factor = (ftype *)s->factors->extended_data[ch];
     ftype *omag = (ftype *)s->output_mag->extended_data[ch];
     ftype *oph = (ftype *)s->output_ph->extended_data[ch];
-    ftype *dst = (ftype *)s->output->extended_data[ch];
+    ctype *dst = (ctype *)s->output->extended_data[ch];
     const int rdft_size = s->rdft_size;
     const ftype smooth = s->smooth;
 
@@ -813,8 +815,7 @@ static void filter_stereo(AVFilterContext *ctx)
         ftype c_mag = mag_sum * 0.5f;
         ftype mag_dif, x, y;
 
-        mag_sum = mag_sum < MIN_MAG_SUM ? 1.f : mag_sum;
-        mag_dif = (l_mag - r_mag) / mag_sum;
+        mag_dif = (l_mag - r_mag) / (mag_sum + EPSILON);
         if (phase_dif > MPI)
             phase_dif = 2.f * MPI - phase_dif;
 
@@ -869,8 +870,7 @@ static void filter_2_1(AVFilterContext *ctx)
         ftype c_mag = mag_sum * 0.5f;
         ftype mag_dif, x, y;
 
-        mag_sum = mag_sum < MIN_MAG_SUM ? 1.f : mag_sum;
-        mag_dif = (l_mag - r_mag) / mag_sum;
+        mag_dif = (l_mag - r_mag) / (mag_sum + EPSILON);
         if (phase_dif > MPI)
             phase_dif = 2.f * MPI - phase_dif;
 
@@ -927,8 +927,7 @@ static void filter_surround(AVFilterContext *ctx)
         ftype mag_sum = l_mag + r_mag;
         ftype mag_dif, x, y;
 
-        mag_sum = mag_sum < MIN_MAG_SUM ? 1.f : mag_sum;
-        mag_dif = (l_mag - r_mag) / mag_sum;
+        mag_dif = (l_mag - r_mag) / (mag_sum + EPSILON);
         if (phase_dif > MPI)
             phase_dif = 2.f * MPI - phase_dif;
 
@@ -978,8 +977,8 @@ static void filter_5_0_side(AVFilterContext *ctx)
         ftype phase_difr = FABS(fr_phase - sr_phase);
         ftype magl_sum = fl_mag + sl_mag;
         ftype magr_sum = fr_mag + sr_mag;
-        ftype mag_difl = magl_sum < MIN_MAG_SUM ? FFDIFFSIGN(fl_mag, sl_mag) : (fl_mag - sl_mag) / magl_sum;
-        ftype mag_difr = magr_sum < MIN_MAG_SUM ? FFDIFFSIGN(fr_mag, sr_mag) : (fr_mag - sr_mag) / magr_sum;
+        ftype mag_difl = (fl_mag - sl_mag) / (magl_sum + EPSILON);
+        ftype mag_difr = (fr_mag - sr_mag) / (magr_sum + EPSILON);
         ftype mag_totall = HYPOT(fl_mag, sl_mag);
         ftype mag_totalr = HYPOT(fr_mag, sr_mag);
         ftype bl_phase = ATAN2(fl_im + sl_im, fl_re + sl_re);
@@ -1038,8 +1037,8 @@ static void filter_5_1_side(AVFilterContext *ctx)
         ftype phase_difr = FABS(fr_phase - sr_phase);
         ftype magl_sum = fl_mag + sl_mag;
         ftype magr_sum = fr_mag + sr_mag;
-        ftype mag_difl = magl_sum < MIN_MAG_SUM ? FFDIFFSIGN(fl_mag, sl_mag) : (fl_mag - sl_mag) / magl_sum;
-        ftype mag_difr = magr_sum < MIN_MAG_SUM ? FFDIFFSIGN(fr_mag, sr_mag) : (fr_mag - sr_mag) / magr_sum;
+        ftype mag_difl = (fl_mag - sl_mag) / (magl_sum + EPSILON);
+        ftype mag_difr = (fr_mag - sr_mag) / (magr_sum + EPSILON);
         ftype mag_totall = HYPOT(fl_mag, sl_mag);
         ftype mag_totalr = HYPOT(fr_mag, sr_mag);
         ftype bl_phase = ATAN2(fl_im + sl_im, fl_re + sl_re);
@@ -1098,8 +1097,8 @@ static void filter_5_1_back(AVFilterContext *ctx)
         ftype phase_difr = FABS(fr_phase - br_phase);
         ftype magl_sum = fl_mag + bl_mag;
         ftype magr_sum = fr_mag + br_mag;
-        ftype mag_difl = magl_sum < MIN_MAG_SUM ? FFDIFFSIGN(fl_mag, bl_mag) : (fl_mag - bl_mag) / magl_sum;
-        ftype mag_difr = magr_sum < MIN_MAG_SUM ? FFDIFFSIGN(fr_mag, br_mag) : (fr_mag - br_mag) / magr_sum;
+        ftype mag_difl = (fl_mag - bl_mag) / (magl_sum + EPSILON);
+        ftype mag_difr = (fr_mag - br_mag) / (magr_sum + EPSILON);
         ftype mag_totall = HYPOT(fl_mag, bl_mag);
         ftype mag_totalr = HYPOT(fr_mag, br_mag);
         ftype sl_phase = ATAN2(fl_im + bl_im, fl_re + bl_re);
@@ -1220,8 +1219,6 @@ fail:
     if (s->overlap == 1)
         s->overlap = overlap;
 
-    for (int i = 0; i < s->win_size; i++)
-        s->window_func_lut[i] = SQRT(s->window_func_lut[i] / s->win_size);
     s->hop_size = FFMAX(1, s->win_size * (1. - s->overlap));
 
     {
@@ -1238,7 +1235,7 @@ fail:
             max = FMAX(temp_lut[i], max);
         av_freep(&temp_lut);
 
-        s->win_gain = 1.f / (max * SQRT(s->win_size));
+        s->win_gain = 1.f / max;
     }
 
     allchannels_spread(ctx);
@@ -1252,7 +1249,7 @@ static int fft_channel(AVFilterContext *ctx, AVFrame *in, int ch)
     ftype *src = (ftype *)s->input_in->extended_data[ch];
     ftype *win = (ftype *)s->window->extended_data[ch];
     const float *window_func_lut = s->window_func_lut;
-    const int offset = s->win_size - s->hop_size;
+    const int offset = s->input_in->nb_samples - s->hop_size;
     const ftype level_in = s->input_levels[ch];
     const int win_size = s->win_size;
 
@@ -1283,8 +1280,8 @@ static int fft_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 static int ifft_channel(AVFilterContext *ctx, AVFrame *out, int ch)
 {
     AudioSurroundContext *s = ctx->priv;
-    const ftype level_out = s->output_levels[ch] * s->win_gain;
     const float *window_func_lut = s->window_func_lut;
+    const ftype level_out = s->output_levels[ch] * s->win_gain;
     const int win_size = s->win_size;
     ftype *dst, *ptr;
 
@@ -1292,16 +1289,11 @@ static int ifft_channel(AVFilterContext *ctx, AVFrame *out, int ch)
     ptr = (ftype *)s->overlap_buffer->extended_data[ch];
     s->itx_fn(s->irdft[ch], dst, (ftype *)s->output->extended_data[ch], sizeof(ctype));
 
-    memmove(s->overlap_buffer->extended_data[ch],
-            s->overlap_buffer->extended_data[ch] + s->hop_size * sizeof(ftype),
-            s->win_size * sizeof(ftype));
-    memset(s->overlap_buffer->extended_data[ch] + s->win_size * sizeof(ftype),
-           0, s->hop_size * sizeof(ftype));
+    memmove(ptr, ptr + s->hop_size, win_size * sizeof(ftype));
 
     for (int n = 0; n < win_size; n++)
         ptr[n] += dst[n] * window_func_lut[n] * level_out;
 
-    ptr = (ftype *)s->overlap_buffer->extended_data[ch];
     dst = (ftype *)out->extended_data[ch];
     memcpy(dst, ptr, s->hop_size * sizeof(ftype));
 
