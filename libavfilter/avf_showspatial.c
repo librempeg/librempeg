@@ -59,7 +59,7 @@ typedef struct ShowSpatialContext {
 static const AVOption showspatial_options[] = {
     { "size", "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "512x512"}, 0, 0, FLAGS },
     { "s",    "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "512x512"}, 0, 0, FLAGS },
-    { "resolution","set frequency resolution", OFFSET(frame), AV_OPT_TYPE_INT, {.i64=1}, 1, 4, FLAGS },
+    { "resolution","set frequency resolution", OFFSET(frame), AV_OPT_TYPE_INT, {.i64=1}, 1, 6, FLAGS },
     WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_HANNING),
     { "rate", "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
     { "r",    "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
@@ -89,7 +89,7 @@ static int query_formats(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE };
-    static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_GBRP, AV_PIX_FMT_NONE };
+    static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_YUV444P, AV_PIX_FMT_NONE };
     int ret;
 
     formats = ff_make_format_list(sample_fmts);
@@ -152,7 +152,7 @@ static int config_output(AVFilterLink *outlink)
     }
 
     for (int i = 0; i < 2; i++) {
-        float scale = 1.f;
+        float scale = 1.f / s->win_size;
         ret = av_tx_init(&s->fft[i], &s->tx_fn[i], AV_TX_FLOAT_RDFT,
                          0, s->win_size, &scale, 0);
         if (ret < 0)
@@ -187,7 +187,7 @@ static int config_output(AVFilterLink *outlink)
 #define RE(y, ch) s->fft_data[ch][y].re
 #define IM(y, ch) s->fft_data[ch][y].im
 
-static void draw_dot(uint8_t *dst, int linesize, int value)
+static void draw_dot(uint8_t *dst, ptrdiff_t linesize, int value)
 {
     dst[0] = value;
     dst[1] = value;
@@ -201,6 +201,10 @@ static int draw_spatial(AVFilterLink *inlink, int64_t in_pts)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     ShowSpatialContext *s = ctx->priv;
+    uint8_t *dst_y, *dst_u, *dst_v;
+    ptrdiff_t linesize_y;
+    ptrdiff_t linesize_u;
+    ptrdiff_t linesize_v;
     AVFrame *outpicref;
     int h = s->h - 2;
     int w = s->w - 2;
@@ -211,34 +215,41 @@ static int draw_spatial(AVFilterLink *inlink, int64_t in_pts)
     if (!outpicref)
         return AVERROR(ENOMEM);
 
+    dst_y = outpicref->data[0];
+    dst_u = outpicref->data[1];
+    dst_v = outpicref->data[2];
+
+    linesize_y = outpicref->linesize[0];
+    linesize_u = outpicref->linesize[1];
+    linesize_v = outpicref->linesize[2];
+
     outpicref->sample_aspect_ratio = (AVRational){1,1};
     for (int i = 0; i < outlink->h; i++) {
-        memset(outpicref->data[0] + i * outpicref->linesize[0], 0, outlink->w);
-        memset(outpicref->data[1] + i * outpicref->linesize[1], 0, outlink->w);
-        memset(outpicref->data[2] + i * outpicref->linesize[2], 0, outlink->w);
+        memset(dst_y + i * linesize_y,   0, outlink->w);
+        memset(dst_u + i * linesize_u, 128, outlink->w);
+        memset(dst_v + i * linesize_v, 128, outlink->w);
     }
 
     for (int j = 0; j < z; j++) {
         const int idx = z - 1 - j;
         float l = hypotf(RE(idx, 0), IM(idx, 0));
         float r = hypotf(RE(idx, 1), IM(idx, 1));
-        float sum = l + r;
+        float sum = atan2f(l, r);
         float lp = atan2f(IM(idx, 0), RE(idx, 0));
         float rp = atan2f(IM(idx, 1), RE(idx, 1));
         float diffp = ((rp - lp) / (2.f * M_PI) + 1.f) * 0.5f;
-        float diff = ((l <= FLT_EPSILON || r <= FLT_EPSILON) ? 0.f : (r - l) / sum) * 0.5f + 0.5f;
-        float cr = av_clipf(cbrtf(l / sum), 0, 1) * 255.f;
-        float cb = av_clipf(cbrtf(r / sum), 0, 1) * 255.f;
-        float cg;
+        float diff = sum / M_PI_2;
+        int cu = av_clip((1.f-diff) * 255.f, 0, 255);
+        int cv = av_clip(     diff  * 255.f, 0, 255);
+        int cy = av_clip(     diff  * 255.f, 0, 255);
         int x, y;
 
-        cg = diffp * 255.f;
         x = av_clip(w * diff,  0, w - 2) + 1;
         y = av_clip(h * diffp, 0, h - 2) + 1;
 
-        draw_dot(outpicref->data[0] + outpicref->linesize[0] * y + x, outpicref->linesize[0], cg);
-        draw_dot(outpicref->data[1] + outpicref->linesize[1] * y + x, outpicref->linesize[1], cb);
-        draw_dot(outpicref->data[2] + outpicref->linesize[2] * y + x, outpicref->linesize[2], cr);
+        draw_dot(dst_y + linesize_y * y + x, linesize_y, cy);
+        draw_dot(dst_u + linesize_u * y + x, linesize_u, cu);
+        draw_dot(dst_v + linesize_v * y + x, linesize_v, cv);
     }
 
     outpicref->pts = pts;
@@ -271,8 +282,8 @@ static int spatial_activate(AVFilterContext *ctx)
             memcpy(&src[offset], in->extended_data[ch], in->nb_samples * sizeof(*src));
         }
 
-        ff_filter_execute(ctx, run_channel_fft, in, NULL, 2);
         av_frame_free(&in);
+        ff_filter_execute(ctx, run_channel_fft, in, NULL, 2);
 
         return draw_spatial(inlink, pts);
     }
