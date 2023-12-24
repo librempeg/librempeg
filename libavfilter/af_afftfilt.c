@@ -121,9 +121,7 @@ static int config_input(AVFilterLink *inlink)
         ret = av_tx_init(&s->tx[ch], &s->tx_fn, tx_type, 0, s->tx_size, scale_ptr, 0);
         if (ret < 0)
             return ret;
-    }
 
-    for (int ch = 0; ch < s->channels; ch++) {
         ret = av_tx_init(&s->itx[ch], &s->itx_fn, tx_type, 1, s->tx_size, scale_ptr, 0);
         if (ret < 0)
             return ret;
