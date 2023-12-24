@@ -67,6 +67,22 @@ static double fn(getimag)(void *priv, double x, double ch)
     return tx_out[ix].im;
 }
 
+static void fn(apply_window)(AFFTFiltContext *s,
+                             const ftype *in_frame, ftype *out_frame,
+                             const int add_to_out_frame)
+{
+    const float *window = s->window_func_lut;
+    const int fft_size = s->win_size;
+
+    if (add_to_out_frame) {
+        for (int i = 0; i < fft_size; i++)
+            out_frame[i] += in_frame[i] * window[i];
+    } else {
+        for (int i = 0; i < fft_size; i++)
+            out_frame[i] = in_frame[i] * window[i];
+    }
+}
+
 static double (*const fn(func2)[])(void *, double, double) = {  fn(getreal),  fn(getimag), NULL };
 
 static int fn(tx_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
@@ -76,8 +92,6 @@ static int fn(tx_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     const int channels = s->channels;
     const int start = (channels * jobnr) / nb_jobs;
     const int end = (channels * (jobnr+1)) / nb_jobs;
-    const float *window_lut = s->window_func_lut;
-    const int win_size = s->win_size;
 
     for (int ch = start; ch < end; ch++) {
         const int offset = s->win_size - s->hop_size;
@@ -89,8 +103,7 @@ static int fn(tx_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
         memcpy(&src[offset], in->extended_data[ch], in->nb_samples * sizeof(ftype));
         memset(&src[offset + in->nb_samples], 0, (s->hop_size - in->nb_samples) * sizeof(ftype));
 
-        for (int n = 0; n < win_size; n++)
-            tx_in[n] = src[n] * window_lut[n];
+        fn(apply_window)(s, src, tx_in, 0);
 
         s->tx_fn(s->tx[ch], tx_out, tx_in, sizeof(*tx_in));
     }
@@ -102,7 +115,6 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
 {
     AFFTFiltContext *s = ctx->priv;
     const int win_size = s->win_size;
-    const ftype f = s->win_gain;
     const int channels = s->channels;
     const int start = (channels * jobnr) / nb_jobs;
     const int end = (channels * (jobnr+1)) / nb_jobs;
@@ -144,8 +156,8 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
         s->itx_fn(s->itx[ch], tx_in, tx_temp, sizeof(*tx_temp));
 
         memmove(buf, buf + s->hop_size, win_size * sizeof(ftype));
-        for (int i = 0; i < win_size; i++)
-            buf[i] += tx_in[i] * f;
+
+        fn(apply_window)(s, tx_in, buf, 1);
 
         memcpy(dst, buf, s->hop_size * sizeof(ftype));
     }

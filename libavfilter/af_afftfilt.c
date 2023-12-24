@@ -93,18 +93,23 @@ static int config_input(AVFilterLink *inlink)
     const char *last_expr = "1";
     float scale_float = 1.f;
     double scale_double = 1.0;
+    float iscale_float = 1.f;
+    double iscale_double = 1.0;
     void *scale_ptr;
+    void *iscale_ptr;
     int buf_size, ret = 0;
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_FLTP:
         scale_ptr = &scale_float;
+        iscale_ptr = &iscale_float;
         tx_type = AV_TX_FLOAT_RDFT;
         s->tx_channels = tx_channels_float;
         s->filter_channels = filter_channels_float;
         break;
     case AV_SAMPLE_FMT_DBLP:
         scale_ptr = &scale_double;
+        iscale_ptr = &iscale_double;
         tx_type = AV_TX_DOUBLE_RDFT;
         s->tx_channels = tx_channels_double;
         s->filter_channels = filter_channels_double;
@@ -116,16 +121,6 @@ static int config_input(AVFilterLink *inlink)
     s->itx = av_calloc(s->channels, sizeof(*s->itx));
     if (!s->tx || !s->itx)
         return AVERROR(ENOMEM);
-
-    for (int ch = 0; ch < s->channels; ch++) {
-        ret = av_tx_init(&s->tx[ch], &s->tx_fn, tx_type, 0, s->tx_size, scale_ptr, 0);
-        if (ret < 0)
-            return ret;
-
-        ret = av_tx_init(&s->itx[ch], &s->itx_fn, tx_type, 1, s->tx_size, scale_ptr, 0);
-        if (ret < 0)
-            return ret;
-    }
 
     s->win_size = s->tx_size;
     buf_size = FFALIGN(s->win_size + 2, av_cpu_max_align());
@@ -218,6 +213,19 @@ static int config_input(AVFilterLink *inlink)
         av_freep(&temp_lut);
 
         s->win_gain = 1.0 / (max * s->win_size);
+    }
+
+    iscale_float  *= s->win_gain;
+    iscale_double *= s->win_gain;
+
+    for (int ch = 0; ch < s->channels; ch++) {
+        ret = av_tx_init(&s->tx[ch], &s->tx_fn, tx_type, 0, s->tx_size, scale_ptr, 0);
+        if (ret < 0)
+            return ret;
+
+        ret = av_tx_init(&s->itx[ch], &s->itx_fn, tx_type, 1, s->tx_size, iscale_ptr, 0);
+        if (ret < 0)
+            return ret;
     }
 
 fail:
