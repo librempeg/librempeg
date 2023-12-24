@@ -404,8 +404,10 @@ static void focus_transform(ftype *x, ftype *y, ftype focus)
 
 static void stereo_position(ftype a, ftype p, ftype *x, ftype *y)
 {
-    av_assert2(a >= -1.f && a <= 1.f);
+    av_assert2(a >= 0.f && a <= MPI);
     av_assert2(p >= 0.f && p <= MPI);
+    a /= MPI;
+    a  = a * 4.f - 1.f;
     *x = CLIP(a+a*FMAX(0.f, p*p-M_PI_2f), -1.f, 1.f);
     *y = CLIP(COS(a*M_PI_2f+MPI)*COS(M_PI_2f-p/MPI)*M_LN10f+1.f, -1.f, 1.f);
 }
@@ -815,7 +817,7 @@ static void filter_stereo(AVFilterContext *ctx)
         ftype c_mag = mag_sum * 0.5f;
         ftype mag_dif, x, y;
 
-        mag_dif = (l_mag - r_mag) / (mag_sum + EPSILON);
+        mag_dif = ATAN2(l_mag, r_mag);
         if (phase_dif > MPI)
             phase_dif = 2.f * MPI - phase_dif;
 
@@ -870,7 +872,7 @@ static void filter_2_1(AVFilterContext *ctx)
         ftype c_mag = mag_sum * 0.5f;
         ftype mag_dif, x, y;
 
-        mag_dif = (l_mag - r_mag) / (mag_sum + EPSILON);
+        mag_dif = ATAN2(l_mag, r_mag);
         if (phase_dif > MPI)
             phase_dif = 2.f * MPI - phase_dif;
 
@@ -924,10 +926,9 @@ static void filter_surround(AVFilterContext *ctx)
         ftype l_phase = ATAN2(l_im, l_re);
         ftype r_phase = ATAN2(r_im, r_re);
         ftype phase_dif = FABS(l_phase - r_phase);
-        ftype mag_sum = l_mag + r_mag;
         ftype mag_dif, x, y;
 
-        mag_dif = (l_mag - r_mag) / (mag_sum + EPSILON);
+        mag_dif = ATAN2(l_mag, r_mag);
         if (phase_dif > MPI)
             phase_dif = 2.f * MPI - phase_dif;
 
@@ -975,10 +976,8 @@ static void filter_5_0_side(AVFilterContext *ctx)
         ftype sr_phase = ATAN2(sr_im, sr_re);
         ftype phase_difl = FABS(fl_phase - sl_phase);
         ftype phase_difr = FABS(fr_phase - sr_phase);
-        ftype magl_sum = fl_mag + sl_mag;
-        ftype magr_sum = fr_mag + sr_mag;
-        ftype mag_difl = (fl_mag - sl_mag) / (magl_sum + EPSILON);
-        ftype mag_difr = (fr_mag - sr_mag) / (magr_sum + EPSILON);
+        ftype mag_difl = ATAN2(fl_mag, sl_mag);
+        ftype mag_difr = ATAN2(fr_mag, sr_mag);
         ftype mag_totall = HYPOT(fl_mag, sl_mag);
         ftype mag_totalr = HYPOT(fr_mag, sr_mag);
         ftype bl_phase = ATAN2(fl_im + sl_im, fl_re + sl_re);
@@ -1035,10 +1034,8 @@ static void filter_5_1_side(AVFilterContext *ctx)
         ftype sr_phase = ATAN2(sr_im, sr_re);
         ftype phase_difl = FABS(fl_phase - sl_phase);
         ftype phase_difr = FABS(fr_phase - sr_phase);
-        ftype magl_sum = fl_mag + sl_mag;
-        ftype magr_sum = fr_mag + sr_mag;
-        ftype mag_difl = (fl_mag - sl_mag) / (magl_sum + EPSILON);
-        ftype mag_difr = (fr_mag - sr_mag) / (magr_sum + EPSILON);
+        ftype mag_difl = ATAN2(fl_mag, sl_mag);
+        ftype mag_difr = ATAN2(fr_mag, sr_mag);
         ftype mag_totall = HYPOT(fl_mag, sl_mag);
         ftype mag_totalr = HYPOT(fr_mag, sr_mag);
         ftype bl_phase = ATAN2(fl_im + sl_im, fl_re + sl_re);
@@ -1095,10 +1092,8 @@ static void filter_5_1_back(AVFilterContext *ctx)
         ftype br_phase = ATAN2(br_im, br_re);
         ftype phase_difl = FABS(fl_phase - bl_phase);
         ftype phase_difr = FABS(fr_phase - br_phase);
-        ftype magl_sum = fl_mag + bl_mag;
-        ftype magr_sum = fr_mag + br_mag;
-        ftype mag_difl = (fl_mag - bl_mag) / (magl_sum + EPSILON);
-        ftype mag_difr = (fr_mag - br_mag) / (magr_sum + EPSILON);
+        ftype mag_difl = ATAN2(fl_mag, bl_mag);
+        ftype mag_difr = ATAN2(fr_mag, br_mag);
         ftype mag_totall = HYPOT(fl_mag, bl_mag);
         ftype mag_totalr = HYPOT(fr_mag, br_mag);
         ftype sl_phase = ATAN2(fl_im + bl_im, fl_re + bl_re);
