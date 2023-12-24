@@ -3432,6 +3432,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("QOA (Quite OK Audio)"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_G719,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "g719",
+        .long_name = NULL_IF_CONFIG_SMALL("G.719"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
 
     /* subtitle codecs */
     {
