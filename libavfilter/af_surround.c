@@ -35,6 +35,7 @@
 
 #if DEPTH == 32
 #define MPI M_PIf
+#define MLN10 M_LN10f
 #define ftype float
 #define ctype AVComplexFloat
 #define HYPOT hypotf
@@ -53,6 +54,7 @@
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #else
 #define MPI M_PI
+#define MLN10 M_LN10
 #define ftype double
 #define ctype AVComplexDouble
 #define HYPOT hypot
@@ -70,6 +72,8 @@
 #define SAMPLE_FORMAT AV_SAMPLE_FMT_DBLP
 #define TX_TYPE AV_TX_DOUBLE_RDFT
 #endif
+
+#define F(x) ((ftype)(x))
 
 enum SurroundChannel {
     SC_FL, SC_FR, SC_FC, SC_LF, SC_BL, SC_BR, SC_BC, SC_SL, SC_SR,
@@ -359,17 +363,17 @@ static ftype sqrf(ftype x)
 
 static ftype r_distance(ftype a)
 {
-    return FMIN(SQRT(1.f + sqrf(TAN(a))), SQRT(1.f + sqrf(1.f / TAN(a))));
+    return FMIN(SQRT(F(1.0) + sqrf(TAN(a))), SQRT(F(1.0) + sqrf(F(1.0) / TAN(a))));
 }
 
 static void angle_transform(ftype *x, ftype *y, ftype angle)
 {
     ftype reference, r, a;
 
-    if (angle == 90.f)
+    if (angle == F(90.0))
         return;
 
-    reference = angle * MPI / 180.f;
+    reference = angle * MPI / F(180.0);
     r = HYPOT(*x, *y);
     a = ATAN2(*x, *y);
 
@@ -378,50 +382,50 @@ static void angle_transform(ftype *x, ftype *y, ftype angle)
     if (FABS(a) <= M_PI_4f)
         a *= reference / M_PI_2f;
     else
-        a = MPI + (-2.f * MPI + reference) * (MPI - FABS(a)) * FFDIFFSIGN(a, 0.f) / (3.f * M_PI_2f);
+        a = MPI + (F(-2.0) * MPI + reference) * (MPI - FABS(a)) * FFDIFFSIGN(a, F(0.0)) / (F(3.0) * M_PI_2f);
 
     r *= r_distance(a);
 
-    *x = CLIP(SIN(a) * r, -1.f, 1.f);
-    *y = CLIP(COS(a) * r, -1.f, 1.f);
+    *x = CLIP(SIN(a) * r, F(-1.0), F(1.0));
+    *y = CLIP(COS(a) * r, F(-1.0), F(1.0));
 }
 
 static void focus_transform(ftype *x, ftype *y, ftype focus)
 {
     ftype a, r, ra;
 
-    if (focus == 0.f)
+    if (focus == F(0.0))
         return;
 
     a = ATAN2(*x, *y);
     ra = r_distance(a);
-    r = CLIP(HYPOT(*x, *y) / ra, 0.f, 1.f);
-    r = focus > 0.f ? 1.f - POW(1.f - r, 1.f + focus * 20.f) : POW(r, 1.f - focus * 20.f);
+    r = CLIP(HYPOT(*x, *y) / ra, F(0.0), F(1.0));
+    r = focus > F(0.0) ? F(1.0) - POW(F(1.0) - r, F(1.0) + focus * F(20.0)) : POW(r, F(1.0) - focus * F(20.0));
     r *= ra;
-    *x = CLIP(SIN(a) * r, -1.f, 1.f);
-    *y = CLIP(COS(a) * r, -1.f, 1.f);
+    *x = CLIP(SIN(a) * r, F(-1.0), F(1.0));
+    *y = CLIP(COS(a) * r, F(-1.0), F(1.0));
 }
 
 static void stereo_position(ftype a, ftype p, ftype *x, ftype *y)
 {
-    av_assert2(a >= 0.f && a <= MPI);
-    av_assert2(p >= 0.f && p <= MPI);
+    av_assert2(a >= F(0.0) && a <= MPI);
+    av_assert2(p >= F(0.0) && p <= MPI);
     a /= MPI;
-    a  = a * 4.f - 1.f;
-    *x = CLIP(a+a*FMAX(0.f, p*p-M_PI_2f), -1.f, 1.f);
-    *y = CLIP(COS(a*M_PI_2f+MPI)*COS(M_PI_2f-p/MPI)*M_LN10f+1.f, -1.f, 1.f);
+    a  = a * F(4.0) - F(1.0);
+    *x = CLIP(a+a*FMAX(F(0.0), p*p-M_PI_2f), F(-1.0), F(1.0));
+    *y = CLIP(COS(a*M_PI_2f+MPI)*COS(M_PI_2f-p/MPI)*MLN10+F(1.0), F(-1.0), F(1.0));
 }
 
 static inline void get_lfe(int output_lfe, int n, ftype lowcut, ftype highcut,
                            ftype *lfe_mag, ftype c_mag, ftype *mag_total, int lfe_mode)
 {
     if (output_lfe && n < highcut) {
-        *lfe_mag    = n < lowcut ? 1.f : .5f*(1.f+COS(MPI*(lowcut-n)/(lowcut-highcut)));
+        *lfe_mag    = n < lowcut ? F(1.0) : F(0.5)*(F(1.0)+COS(MPI*(lowcut-n)/(lowcut-highcut)));
         *lfe_mag   *= c_mag;
         if (lfe_mode)
             *mag_total -= *lfe_mag;
     } else {
-        *lfe_mag = 0.f;
+        *lfe_mag = F(0.0);
     }
 }
 
@@ -442,43 +446,43 @@ static void calculate_factors(AVFilterContext *ctx, int ch, int chan)
     switch (chan) {
     case AV_CHAN_FRONT_CENTER:
         for (int n = 0; n < rdft_size; n++)
-            factor[n] = POW(1.f - FABS(x[n]), f_x) * POW((y[n] + 1.f) * .5f, f_y);
+            factor[n] = POW(F(1.0) - FABS(x[n]), f_x) * POW((y[n] + F(1.0)) * F(0.5), f_y);
         break;
     case AV_CHAN_FRONT_LEFT:
         for (int n = 0; n < rdft_size; n++)
-            factor[n] = POW(.5f * ( x[n] + 1.f), f_x) * POW((y[n] + 1.f) * .5f, f_y);
+            factor[n] = POW(F(0.5) * ( x[n] + F(1.0)), f_x) * POW((y[n] + F(1.0)) * F(0.5), f_y);
         break;
     case AV_CHAN_FRONT_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            factor[n] = POW(.5f * (-x[n] + 1.f), f_x) * POW((y[n] + 1.f) * .5f, f_y);
+            factor[n] = POW(F(0.5) * (-x[n] + F(1.0)), f_x) * POW((y[n] + F(1.0)) * F(0.5), f_y);
         break;
     case AV_CHAN_LOW_FREQUENCY:
         for (int n = 0; n < rdft_size; n++)
-            factor[n] = POW(1.f - FABS(x[n]), f_x) * POW((1.f - FABS(y[n])), f_y);
+            factor[n] = POW(F(1.0) - FABS(x[n]), f_x) * POW((F(1.0) - FABS(y[n])), f_y);
         break;
     case AV_CHAN_BACK_CENTER:
         for (int n = 0; n < rdft_size; n++)
-            factor[n] = POW(1.f - FABS(x[n]), f_x) * POW((1.f - y[n]) * .5f, f_y);
+            factor[n] = POW(F(1.0) - FABS(x[n]), f_x) * POW((F(1.0) - y[n]) * F(0.5), f_y);
         break;
     case AV_CHAN_BACK_LEFT:
         for (int n = 0; n < rdft_size; n++)
-            factor[n] = POW(.5f * ( x[n] + 1.f), f_x) * POW(1.f - ((y[n] + 1.f) * .5f), f_y);
+            factor[n] = POW(F(0.5) * ( x[n] + F(1.0)), f_x) * POW(F(1.0) - ((y[n] + F(1.0)) * F(0.5)), f_y);
         break;
     case AV_CHAN_BACK_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            factor[n] = POW(.5f * (-x[n] + 1.f), f_x) * POW(1.f - ((y[n] + 1.f) * .5f), f_y);
+            factor[n] = POW(F(0.5) * (-x[n] + F(1.0)), f_x) * POW(F(1.0) - ((y[n] + F(1.0)) * F(0.5)), f_y);
         break;
     case AV_CHAN_SIDE_LEFT:
         for (int n = 0; n < rdft_size; n++)
-            factor[n] = POW(.5f * ( x[n] + 1.f), f_x) * POW(1.f - FABS(y[n]), f_y);
+            factor[n] = POW(F(0.5) * ( x[n] + F(1.0)), f_x) * POW(F(1.0) - FABS(y[n]), f_y);
         break;
     case AV_CHAN_SIDE_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            factor[n] = POW(.5f * (-x[n] + 1.f), f_x) * POW(1.f - FABS(y[n]), f_y);
+            factor[n] = POW(F(0.5) * (-x[n] + F(1.0)), f_x) * POW(F(1.0) - FABS(y[n]), f_y);
         break;
     default:
         for (int n = 0; n < rdft_size; n++)
-            factor[n] = 1.f;
+            factor[n] = F(1.0);
         break;
     }
 }
@@ -494,9 +498,9 @@ static void do_transform(AVFilterContext *ctx, int ch)
     const int rdft_size = s->rdft_size;
     const ftype smooth = s->smooth;
 
-    if (smooth > 0.f) {
+    if (smooth > F(0.0)) {
         for (int n = 0; n < rdft_size; n++)
-            sfactor[n] = smooth * factor[n] + (1.f - smooth) * sfactor[n];
+            sfactor[n] = smooth * factor[n] + (F(1.0) - smooth) * sfactor[n];
 
         factor = sfactor;
     }
@@ -705,7 +709,7 @@ static void upmix_7_1_5_0_side(AVFilterContext *ctx,
 {
     ftype fl_mag, fr_mag, ls_mag, rs_mag, lb_mag, rb_mag;
     ftype *dstc, *dstl, *dstr, *dstls, *dstrs, *dstlb, *dstrb, *dstlfe;
-    ftype lfe_mag, c_phase, mag_total = (mag_totall + mag_totalr) * 0.5f;
+    ftype lfe_mag, c_phase, mag_total = (mag_totall + mag_totalr) * F(0.5);
     AudioSurroundContext *s = ctx->priv;
 
     dstl  = (ftype *)s->output->extended_data[0];
@@ -721,12 +725,12 @@ static void upmix_7_1_5_0_side(AVFilterContext *ctx,
 
     get_lfe(s->output_lfe, n, s->lowcut, s->highcut, &lfe_mag, HYPOT(c_re, c_im), &mag_total, s->lfe_mode);
 
-    fl_mag = POW(.5f * (xl + 1.f), s->f_x[SC_FL]) * POW((yl + 1.f) * .5f, s->f_y[SC_FL]) * mag_totall;
-    fr_mag = POW(.5f * (xr + 1.f), s->f_x[SC_FR]) * POW((yr + 1.f) * .5f, s->f_y[SC_FR]) * mag_totalr;
-    lb_mag = POW(.5f * (-xl + 1.f), s->f_x[SC_BL]) * POW((yl + 1.f) * .5f, s->f_y[SC_BL]) * mag_totall;
-    rb_mag = POW(.5f * (-xr + 1.f), s->f_x[SC_BR]) * POW((yr + 1.f) * .5f, s->f_y[SC_BR]) * mag_totalr;
-    ls_mag = POW(1.f - FABS(xl), s->f_x[SC_SL]) * POW((yl + 1.f) * .5f, s->f_y[SC_SL]) * mag_totall;
-    rs_mag = POW(1.f - FABS(xr), s->f_x[SC_SR]) * POW((yr + 1.f) * .5f, s->f_y[SC_SR]) * mag_totalr;
+    fl_mag = POW(F(0.5) * (xl + F(1.0)), s->f_x[SC_FL]) * POW((yl + F(1.0)) * F(0.5), s->f_y[SC_FL]) * mag_totall;
+    fr_mag = POW(F(0.5) * (xr + F(1.0)), s->f_x[SC_FR]) * POW((yr + F(1.0)) * F(0.5), s->f_y[SC_FR]) * mag_totalr;
+    lb_mag = POW(F(0.5) * (-xl + F(1.0)), s->f_x[SC_BL]) * POW((yl + F(1.0)) * F(0.5), s->f_y[SC_BL]) * mag_totall;
+    rb_mag = POW(F(0.5) * (-xr + F(1.0)), s->f_x[SC_BR]) * POW((yr + F(1.0)) * F(0.5), s->f_y[SC_BR]) * mag_totalr;
+    ls_mag = POW(F(1.0) - FABS(xl), s->f_x[SC_SL]) * POW((yl + F(1.0)) * F(0.5), s->f_y[SC_SL]) * mag_totall;
+    rs_mag = POW(F(1.0) - FABS(xr), s->f_x[SC_SR]) * POW((yr + F(1.0)) * F(0.5), s->f_y[SC_SR]) * mag_totalr;
 
     dstl[2 * n    ] = fl_mag * COS(fl_phase);
     dstl[2 * n + 1] = fl_mag * SIN(fl_phase);
@@ -777,12 +781,12 @@ static void upmix_7_1_5_1(AVFilterContext *ctx,
     dstls = (ftype *)s->output->extended_data[6];
     dstrs = (ftype *)s->output->extended_data[7];
 
-    fl_mag = POW(.5f * (xl + 1.f), s->f_x[SC_FL]) * POW((yl + 1.f) * .5f, s->f_y[SC_FL]) * mag_totall;
-    fr_mag = POW(.5f * (xr + 1.f), s->f_x[SC_FR]) * POW((yr + 1.f) * .5f, s->f_y[SC_FR]) * mag_totalr;
-    lb_mag = POW(.5f * (-xl + 1.f), s->f_x[SC_BL]) * POW((yl + 1.f) * .5f, s->f_y[SC_BL]) * mag_totall;
-    rb_mag = POW(.5f * (-xr + 1.f), s->f_x[SC_BR]) * POW((yr + 1.f) * .5f, s->f_y[SC_BR]) * mag_totalr;
-    ls_mag = POW(1.f - FABS(xl), s->f_x[SC_SL]) * POW((yl + 1.f) * .5f, s->f_y[SC_SL]) * mag_totall;
-    rs_mag = POW(1.f - FABS(xr), s->f_x[SC_SR]) * POW((yr + 1.f) * .5f, s->f_y[SC_SR]) * mag_totalr;
+    fl_mag = POW(F(0.5) * (xl + F(1.0)), s->f_x[SC_FL]) * POW((yl + F(1.0)) * F(0.5), s->f_y[SC_FL]) * mag_totall;
+    fr_mag = POW(F(0.5) * (xr + F(1.0)), s->f_x[SC_FR]) * POW((yr + F(1.0)) * F(0.5), s->f_y[SC_FR]) * mag_totalr;
+    lb_mag = POW(F(0.5) * (-xl + F(1.0)), s->f_x[SC_BL]) * POW((yl + F(1.0)) * F(0.5), s->f_y[SC_BL]) * mag_totall;
+    rb_mag = POW(F(0.5) * (-xr + F(1.0)), s->f_x[SC_BR]) * POW((yr + F(1.0)) * F(0.5), s->f_y[SC_BR]) * mag_totalr;
+    ls_mag = POW(F(1.0) - FABS(xl), s->f_x[SC_SL]) * POW((yl + F(1.0)) * F(0.5), s->f_y[SC_SL]) * mag_totall;
+    rs_mag = POW(F(1.0) - FABS(xr), s->f_x[SC_SR]) * POW((yr + F(1.0)) * F(0.5), s->f_y[SC_SR]) * mag_totalr;
 
     dstl[2 * n    ] = fl_mag * COS(fl_phase);
     dstl[2 * n + 1] = fl_mag * SIN(fl_phase);
@@ -841,12 +845,12 @@ static void filter_stereo(AVFilterContext *ctx)
         ftype r_phase = ATAN2(r_im, r_re);
         ftype phase_dif = FABS(l_phase - r_phase);
         ftype mag_sum = l_mag + r_mag;
-        ftype c_mag = mag_sum * 0.5f;
+        ftype c_mag = mag_sum * F(0.5);
         ftype mag_dif, x, y;
 
         mag_dif = ATAN2(l_mag, r_mag);
         if (phase_dif > MPI)
-            phase_dif = 2.f * MPI - phase_dif;
+            phase_dif = F(2.0) * MPI - phase_dif;
 
         stereo_position(mag_dif, phase_dif, &x, &y);
         angle_transform(&x, &y, angle);
@@ -896,12 +900,12 @@ static void filter_2_1(AVFilterContext *ctx)
         ftype r_phase = ATAN2(r_im, r_re);
         ftype phase_dif = FABS(l_phase - r_phase);
         ftype mag_sum = l_mag + r_mag;
-        ftype c_mag = mag_sum * 0.5f;
+        ftype c_mag = mag_sum * F(0.5);
         ftype mag_dif, x, y;
 
         mag_dif = ATAN2(l_mag, r_mag);
         if (phase_dif > MPI)
-            phase_dif = 2.f * MPI - phase_dif;
+            phase_dif = F(2.0) * MPI - phase_dif;
 
         stereo_position(mag_dif, phase_dif, &x, &y);
         angle_transform(&x, &y, angle);
@@ -957,7 +961,7 @@ static void filter_surround(AVFilterContext *ctx)
 
         mag_dif = ATAN2(l_mag, r_mag);
         if (phase_dif > MPI)
-            phase_dif = 2.f * MPI - phase_dif;
+            phase_dif = F(2.0) * MPI - phase_dif;
 
         stereo_position(mag_dif, phase_dif, &x, &y);
         angle_transform(&x, &y, angle);
@@ -1013,7 +1017,7 @@ static void filter_3_1(AVFilterContext *ctx)
 
         mag_dif = ATAN2(l_mag, r_mag);
         if (phase_dif > MPI)
-            phase_dif = 2.f * MPI - phase_dif;
+            phase_dif = F(2.0) * MPI - phase_dif;
 
         stereo_position(mag_dif, phase_dif, &x, &y);
         angle_transform(&x, &y, angle);
@@ -1070,10 +1074,10 @@ static void filter_5_0_side(AVFilterContext *ctx)
         ftype xr, yr;
 
         if (phase_difl > MPI)
-            phase_difl = 2.f * MPI - phase_difl;
+            phase_difl = F(2.0) * MPI - phase_difl;
 
         if (phase_difr > MPI)
-            phase_difr = 2.f * MPI - phase_difr;
+            phase_difr = F(2.0) * MPI - phase_difr;
 
         stereo_position(mag_difl, phase_difl, &xl, &yl);
         stereo_position(mag_difr, phase_difr, &xr, &yr);
@@ -1128,10 +1132,10 @@ static void filter_5_1_side(AVFilterContext *ctx)
         ftype xr, yr;
 
         if (phase_difl > MPI)
-            phase_difl = 2.f * MPI - phase_difl;
+            phase_difl = F(2.0) * MPI - phase_difl;
 
         if (phase_difr > MPI)
-            phase_difr = 2.f * MPI - phase_difr;
+            phase_difr = F(2.0) * MPI - phase_difr;
 
         stereo_position(mag_difl, phase_difl, &xl, &yl);
         stereo_position(mag_difr, phase_difr, &xr, &yr);
@@ -1186,10 +1190,10 @@ static void filter_5_1_back(AVFilterContext *ctx)
         ftype xr, yr;
 
         if (phase_difl > MPI)
-            phase_difl = 2.f * MPI - phase_difl;
+            phase_difl = F(2.0) * MPI - phase_difl;
 
         if (phase_difr > MPI)
-            phase_difr = 2.f * MPI - phase_difr;
+            phase_difr = F(2.0) * MPI - phase_difr;
 
         stereo_position(mag_difl, phase_difl, &xl, &yl);
         stereo_position(mag_difr, phase_difr, &xr, &yr);
