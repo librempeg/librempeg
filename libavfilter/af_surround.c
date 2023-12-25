@@ -466,11 +466,11 @@ static void calculate_factors(AVFilterContext *ctx, int ch, int chan)
         break;
     case AV_CHAN_BACK_LEFT:
         for (int n = 0; n < rdft_size; n++)
-            factor[n] = POW(F(0.5) * ( x[n] + F(1.0)), f_x) * POW(F(1.0) - ((y[n] + F(1.0)) * F(0.5)), f_y);
+            factor[n] = POW(F(0.5) * ( x[n] + F(1.0)), f_x) * POW((F(1.0) - y[n]) * F(0.5), f_y);
         break;
     case AV_CHAN_BACK_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            factor[n] = POW(F(0.5) * (-x[n] + F(1.0)), f_x) * POW(F(1.0) - ((y[n] + F(1.0)) * F(0.5)), f_y);
+            factor[n] = POW(F(0.5) * (-x[n] + F(1.0)), f_x) * POW((F(1.0) - y[n]) * F(0.5), f_y);
         break;
     case AV_CHAN_SIDE_LEFT:
         for (int n = 0; n < rdft_size; n++)
