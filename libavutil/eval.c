@@ -164,7 +164,7 @@ struct AVExpr {
         e_last, e_st, e_while, e_taylor, e_root, e_floor, e_ceil, e_trunc, e_round,
         e_sqrt, e_not, e_random, e_hypot, e_gcd,
         e_if, e_ifnot, e_print, e_bitand, e_bitor, e_between, e_clip, e_atan2, e_lerp,
-        e_sgn,
+        e_sgn, e_randomi
     } type;
     double value; // is sign in other types
     int const_index;
@@ -231,8 +231,9 @@ static double eval_expr(Parser *p, AVExpr *e)
             av_log(p, level, "%f\n", x);
             return x;
         }
-        case e_random:{
-            int idx= av_clip(eval_expr(p, e->param[0]), 0, VARS-1);
+
+#define COMPUTE_NEXT_RANDOM()                                        \
+            int idx = av_clip(eval_expr(p, e->param[0]), 0, VARS-1); \
             FFSFC64 *s = p->prng_state + idx;                        \
             uint64_t r;                                              \
                                                                      \
@@ -241,8 +242,17 @@ static double eval_expr(Parser *p, AVExpr *e)
                 ff_sfc64_init(s, r, r, r, 12);                       \
             }                                                        \
             r = ff_sfc64_get(s);                                     \
-            p->var[idx]= r;
-            return e->value * (r * (1.0/UINT64_MAX));
+            p->var[idx] = r;                                         \
+
+        case e_random: {
+            COMPUTE_NEXT_RANDOM();
+            return r * (1.0/UINT64_MAX);
+        }
+        case e_randomi: {
+            double min = eval_expr(p, e->param[1]);
+            double max = eval_expr(p, e->param[2]);
+            COMPUTE_NEXT_RANDOM();
+            return min + (max - min) * r / UINT64_MAX;
         }
         case e_while: {
             double d = NAN;
@@ -475,6 +485,7 @@ static int parse_primary(AVExpr **e, Parser *p)
     else if (strmatch(next, "pow"   )) d->type = e_pow;
     else if (strmatch(next, "print" )) d->type = e_print;
     else if (strmatch(next, "random")) d->type = e_random;
+    else if (strmatch(next, "randomi")) d->type = e_randomi;
     else if (strmatch(next, "hypot" )) d->type = e_hypot;
     else if (strmatch(next, "gcd"   )) d->type = e_gcd;
     else if (strmatch(next, "if"    )) d->type = e_if;
@@ -688,6 +699,7 @@ static int verify_expr(AVExpr *e)
         case e_between:
         case e_clip:
         case e_lerp:
+        case e_randomi:
             return verify_expr(e->param[0]) &&
                    verify_expr(e->param[1]) &&
                    verify_expr(e->param[2]);
