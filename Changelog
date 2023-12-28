@@ -19,6 +19,7 @@ version <next>:
 - D3D12VA hardware accelerated H264, HEVC, VP9, AV1, MPEG-2 and VC1 decoding
 - tiltandshift filter
 - nist muxer
+- VVC decoder
 
 version 6.1:
 - libaribcaption decoder
