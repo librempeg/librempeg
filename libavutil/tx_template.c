@@ -1200,7 +1200,7 @@ static void TX_NAME(ff_tx_fft_bluestein)(AVTXContext *s, void *_dst, void *_src,
     TXComplex *w = s->exp + 2*m;
     TXComplex *ww = w + m;
     const TXComplex *exp = s->exp;
-    const TXSample scale = 1.0/m;
+    const TXSample scale = RESCALE(1.0/m);
 
     stride /= sizeof(*dst);
 
@@ -1220,8 +1220,8 @@ static void TX_NAME(ff_tx_fft_bluestein)(AVTXContext *s, void *_dst, void *_src,
     for (int i = 0; i < n; i++) {
         TXComplex x;
         CMUL3(x, ww[i], exp[i]);
-        dst[i*stride].re = RESCALE(x.re * scale);
-        dst[i*stride].im = RESCALE(x.im * scale);
+        dst[i*stride].re = MULT(x.re, scale);
+        dst[i*stride].im = MULT(x.im, scale);
     }
 }
 
