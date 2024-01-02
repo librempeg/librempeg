@@ -1027,6 +1027,96 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
     return 0;
 }
 
+static void get_two_factors(int x, int *M, int *N)
+{
+    int m, n, i, size = 0, primef[16], powers[16] = {0};
+
+    while ((x & 1) == 0) {
+        x >>= 1;
+        powers[size]++;
+    };
+
+    if (powers[size])
+        primef[size++] = 2;
+
+    for (i = 3; i <= x; i += 2) {
+        while (!(x % i)) {
+            primef[size] = i;
+            powers[size]++;
+            x /= i;
+        }
+
+        if (powers[size])
+            size++;
+    }
+
+    m = 1;
+    n = 1;
+
+    while (size > 0) {
+        size--;
+        while (powers[size] > 0) {
+            m *= primef[size];
+            FFSWAP(int, m, n);
+            powers[size]--;
+            if (powers[size] > 0) {
+                m *= primef[size];
+                FFSWAP(int, m, n);
+                powers[size]--;
+            }
+        }
+    }
+
+    *M = m;
+    *N = n;
+}
+
+static av_cold int TX_NAME(ff_tx_fft_init_bailey)(AVTXContext *s,
+                                                  const FFTXCodelet *cd,
+                                                  uint64_t flags,
+                                                  FFTXCodeletOptions *opts,
+                                                  int len, int inv,
+                                                  const void *scale)
+{
+    const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
+    int is_inplace = !!(flags & AV_TX_INPLACE);
+    FFTXCodeletOptions sub_opts = {
+        .map_dir = is_inplace ? FF_TX_MAP_SCATTER : FF_TX_MAP_GATHER,
+    };
+    TXComplex *exp;
+    int ret, m, n;
+
+    get_two_factors(len, &m, &n);
+    if ((m * n) != len || m <= 1 || n <= 1)
+        return AVERROR(EINVAL);
+
+    flags &= ~AV_TX_INPLACE;
+
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, &sub_opts, m, s->inv, scale)))
+        return ret;
+
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, &sub_opts, n, s->inv, scale)))
+        return ret;
+
+    if (!(s->exp = av_mallocz(len*3*sizeof(*s->exp))))
+        return AVERROR(ENOMEM);
+
+    exp = s->exp;
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < m; j++) {
+            const double factor = phase*i*j;
+            exp[j] = (TXComplex){
+                RESCALE(cos(factor)),
+                RESCALE(sin(factor)),
+            };
+        }
+
+        exp += m;
+    }
+
+    return 0;
+}
+
 static av_cold int TX_NAME(ff_tx_fft_init_bluestein)(AVTXContext *s,
                                                      const FFTXCodelet *cd,
                                                      uint64_t flags,
@@ -1128,6 +1218,61 @@ static void TX_NAME(ff_tx_fft_naive_small)(AVTXContext *s, void *_dst, void *_sr
         }
         dst[i*stride] = tmp;
     }
+}
+
+static void transpose_matrix(TXComplex *out, const TXComplex *in, int m, int n)
+{
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++)
+            out[j] = in[i+j*m];
+        out += n;
+    }
+}
+
+static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
+                                      ptrdiff_t stride)
+{
+    const int len = s->len;
+    const int m = s->sub[0].len;
+    const int n = s->sub[1].len;
+    const TXComplex *exp = s->exp;
+    TXComplex *tmp2 = ((TXComplex *)s->exp) + len;
+    TXComplex *tmp = tmp2 + len;
+    TXComplex *src = _src;
+    TXComplex *dst = _dst;
+
+    stride /= sizeof(*dst);
+
+    transpose_matrix(tmp2, src, n, m);
+
+    for (int i = 0; i < n; i++) {
+        s->fn[0](&s->sub[0], tmp, tmp2, sizeof(TXComplex));
+        tmp2 += m;
+        tmp += m;
+    }
+
+    tmp2 = ((TXComplex *)s->exp) + len;
+    tmp = tmp2 + len;
+    for (int i = 0; i < len; i++) {
+        const TXComplex x = tmp[i];
+
+        CMUL3(tmp[i], x, exp[i]);
+    }
+
+    transpose_matrix(tmp2, tmp, m, n);
+
+    for (int i = 0; i < m; i++) {
+        s->fn[1](&s->sub[1], tmp, tmp2, sizeof(TXComplex));
+        tmp2 += n;
+        tmp += n;
+    }
+
+    tmp2 = ((TXComplex *)s->exp) + len;
+    tmp = tmp2 + len;
+    transpose_matrix(tmp2, tmp, n, m);
+
+    for (int i = 0; i < len; i++)
+        dst[i*stride] = tmp2[i];
 }
 
 static void TX_NAME(ff_tx_fft_rader)(AVTXContext *s, void *_dst, void *_src,
@@ -1263,6 +1408,20 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_rader_def) = {
     .min_len    = 5,
     .max_len    = TX_LEN_UNLIMITED,
     .init       = TX_NAME(ff_tx_fft_init_rader),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_MIN/4,
+};
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_bailey_def) = {
+    .name       = TX_NAME_STR("fft_bailey"),
+    .function   = TX_NAME(ff_tx_fft_bailey),
+    .type       = TX_TYPE(FFT),
+    .flags      = AV_TX_UNALIGNED | AV_TX_INPLACE | FF_TX_OUT_OF_PLACE,
+    .factors[0] = TX_FACTOR_ANY,
+    .nb_factors = 1,
+    .min_len    = 2,
+    .max_len    = TX_LEN_UNLIMITED,
+    .init       = TX_NAME(ff_tx_fft_init_bailey),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_MIN/4,
 };
@@ -2511,6 +2670,7 @@ const FFTXCodelet * const TX_NAME(ff_tx_codelet_list)[] = {
     &TX_NAME(ff_tx_fft_naive_def),
     &TX_NAME(ff_tx_fft_naive_small_def),
     &TX_NAME(ff_tx_fft_bluestein_def),
+    &TX_NAME(ff_tx_fft_bailey_def),
     &TX_NAME(ff_tx_fft_rader_def),
     &TX_NAME(ff_tx_mdct_fwd_def),
     &TX_NAME(ff_tx_mdct_inv_def),
