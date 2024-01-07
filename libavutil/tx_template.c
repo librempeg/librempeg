@@ -1222,9 +1222,9 @@ static void TX_NAME(ff_tx_fft_naive_small)(AVTXContext *s, void *_dst, void *_sr
 
 static void transpose_matrix(TXComplex *out, const TXComplex *in, int m, int n)
 {
-    for (int i = 0; i < m; i++) {
-        for (int j = 0; j < n; j++)
-            out[j] = in[i+j*m];
+    for (int i = 0; i < m; i++, in++) {
+        for (int j = 0, k = 0; j < n; j++, k+=m)
+            out[j] = in[k];
         out += n;
     }
 }
