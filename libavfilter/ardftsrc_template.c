@@ -50,7 +50,7 @@ static int fn(src_tx_init)(AVFilterContext *ctx)
 {
     AudioRDFTSRCContext *s = ctx->priv;
     const int taper_samples = s->taper_samples;
-    ftype *taper;
+    ctype *taper;
     int ret;
 
     for (int ch = 0; ch < s->channels; ch++) {
@@ -66,12 +66,12 @@ static int fn(src_tx_init)(AVFilterContext *ctx)
             return ret;
     }
 
-    s->taper = av_calloc(taper_samples, sizeof(ftype));
+    s->taper = av_calloc(taper_samples, sizeof(*taper));
     if (!s->taper)
         return AVERROR(ENOMEM);
     taper = s->taper;
     for (int n = 0; n < taper_samples; n++)
-        taper[n] = (F(1.0) + COS(F(M_PI) * (n + F(1.0)) / taper_samples)) * F(0.5);
+        taper[n].re = taper[n].im = (F(1.0) + COS(F(M_PI) * (n + F(1.0)) / taper_samples)) * F(0.5);
 
     return 0;
 }
@@ -92,7 +92,7 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int ch)
     const int taper_samples = s->taper_samples;
     const int in_offset = (s->in_rdft_size - in_nb_samples) >> 1;
     const int offset = tr_nb_samples - taper_samples;
-    const ftype *taper = s->taper;
+    const ctype *taper = s->taper;
 
     memset(rdft0, 0, in_offset * sizeof(*rdft0));
     memset(rdft0 + s->in_rdft_size - in_offset, 0, in_offset * sizeof(*rdft0));
@@ -102,9 +102,9 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int ch)
 
     memset(irdft0 + tr_nb_samples, 0, (s->out_rdft_size / 2 + 1 - tr_nb_samples) * sizeof(*irdft0));
     memcpy(irdft0, rdft1, tr_nb_samples * sizeof(*irdft0));
-    for (int n = 0; n < taper_samples; n++) {
-        irdft0[n + offset].re *= taper[n];
-        irdft0[n + offset].im *= taper[n];
+    for (int n = 0, m = offset; n < taper_samples; n++, m++) {
+        irdft0[m].re *= taper[n].re;
+        irdft0[m].im *= taper[n].im;
     }
 
     s->itx_fn(s->itx_ctx[ch], irdft1, irdft0, sizeof(*irdft0));
