@@ -1271,8 +1271,10 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
     tmp = tmp2 + len;
     transpose_matrix(tmp2, tmp, n, m);
 
-    for (int i = 0; i < len; i++)
-        dst[i*stride] = tmp2[i];
+    for (int i = 0; i < len; i++) {
+        dst[0] = tmp2[i];
+        dst += stride;
+    }
 }
 
 static void TX_NAME(ff_tx_fft_rader)(AVTXContext *s, void *_dst, void *_src,
@@ -1557,21 +1559,29 @@ static void TX_NAME(ff_tx_fft_pfa)(AVTXContext *s, void *_out,
     const int *in_map = s->map, *out_map = in_map + l;
     const int *sub_map = s->sub[1].map;
     TXComplex *tmp1 = s->sub[1].flags & AV_TX_INPLACE ? s->tmp : s->exp;
+    TXComplex *tmp2 = s->tmp;
+    TXComplex *exp = s->exp;
     TXComplex *in = _in, *out = _out;
 
     stride /= sizeof(*out);
 
     for (int i = 0; i < m; i++) {
         for (int j = 0; j < n; j++)
-            s->exp[j] = in[in_map[i*n + j]];
-        s->fn[0](&s->sub[0], &s->tmp[sub_map[i]], s->exp, m*sizeof(TXComplex));
+            exp[j] = in[in_map[i*n + j]];
+        s->fn[0](&s->sub[0], &tmp2[sub_map[i]], exp, m*sizeof(TXComplex));
     }
 
-    for (int i = 0; i < n; i++)
-        s->fn[1](&s->sub[1], &tmp1[m*i], &s->tmp[m*i], sizeof(TXComplex));
+    for (int i = 0; i < n; i++) {
+        s->fn[1](&s->sub[1], tmp1, tmp2, sizeof(TXComplex));
+        tmp1 += m;
+        tmp2 += m;
+    }
 
-    for (int i = 0; i < l; i++)
-        out[i*stride] = tmp1[out_map[i]];
+    tmp1 = s->sub[1].flags & AV_TX_INPLACE ? s->tmp : s->exp;
+    for (int i = 0; i < l; i++) {
+        out[0] = tmp1[out_map[i]];
+        out += stride;
+    }
 }
 
 static void TX_NAME(ff_tx_fft_pfa_ns)(AVTXContext *s, void *_out,
@@ -1581,18 +1591,28 @@ static void TX_NAME(ff_tx_fft_pfa_ns)(AVTXContext *s, void *_out,
     const int *in_map = s->map, *out_map = in_map + l;
     const int *sub_map = s->sub[1].map;
     TXComplex *tmp1 = s->sub[1].flags & AV_TX_INPLACE ? s->tmp : s->exp;
+    TXComplex *tmp2 = s->tmp;
     TXComplex *in = _in, *out = _out;
+    const ptrdiff_t tstride = m*sizeof(TXComplex);
 
     stride /= sizeof(*out);
 
-    for (int i = 0; i < m; i++)
-        s->fn[0](&s->sub[0], &s->tmp[sub_map[i]], &in[i*n], m*sizeof(TXComplex));
+    for (int i = 0; i < m; i++) {
+        s->fn[0](&s->sub[0], &tmp2[sub_map[i]], in, tstride);
+        in += n;
+    }
 
-    for (int i = 0; i < n; i++)
-        s->fn[1](&s->sub[1], &tmp1[m*i], &s->tmp[m*i], sizeof(TXComplex));
+    for (int i = 0; i < n; i++) {
+        s->fn[1](&s->sub[1], tmp1, tmp2, sizeof(TXComplex));
+        tmp1 += m;
+        tmp2 += m;
+    }
 
-    for (int i = 0; i < l; i++)
-        out[i*stride] = tmp1[out_map[i]];
+    tmp1 = s->sub[1].flags & AV_TX_INPLACE ? s->tmp : s->exp;
+    for (int i = 0; i < l; i++) {
+        out[0] = tmp1[out_map[i]];
+        out += stride;
+    }
 }
 
 static const FFTXCodelet TX_NAME(ff_tx_fft_pfa_def) = {
