@@ -188,7 +188,6 @@ const FFCodec ff_libcodec2_decoder = {
     .init                   = libcodec2_init_decoder,
     .close                  = libcodec2_close,
     FF_CODEC_DECODE_CB(libcodec2_decode),
-    CODEC_OLD_CHANNEL_LAYOUTS(AV_CH_LAYOUT_MONO)
 };
 
 const FFCodec ff_libcodec2_encoder = {
@@ -207,5 +206,4 @@ const FFCodec ff_libcodec2_encoder = {
     .init                   = libcodec2_init_encoder,
     .close                  = libcodec2_close,
     FF_CODEC_ENCODE_CB(libcodec2_encode),
-    CODEC_OLD_CHANNEL_LAYOUTS(AV_CH_LAYOUT_MONO)
 };
