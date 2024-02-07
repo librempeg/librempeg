@@ -649,10 +649,9 @@ skip:
     return 0;
 }
 
-static int run_channel_cwt(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+static int run_channel_cwt(AVFilterContext *ctx, int ch, int jobnr, int nb_jobs)
 {
     ShowCWTContext *s = ctx->priv;
-    const int ch = *(int *)arg;
     const AVComplexFloat *fft_out = (const AVComplexFloat *)s->fft_out->extended_data[ch];
     AVComplexFloat *isrc = (AVComplexFloat *)s->ifft_in->extended_data[jobnr];
     AVComplexFloat *idst = (AVComplexFloat *)s->ifft_out->extended_data[jobnr];
@@ -716,6 +715,16 @@ static int run_channel_cwt(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
         }
         memcpy(over, idst + ihop_size, sizeof(*over) * ihop_size);
     }
+
+    return 0;
+}
+
+static int run_channels_cwt(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    ShowCWTContext *s = ctx->priv;
+
+    for (int ch = 0; ch < s->nb_channels; ch++)
+        run_channel_cwt(ctx, ch, jobnr, nb_jobs);
 
     return 0;
 }
@@ -1277,8 +1286,8 @@ static int activate(AVFilterContext *ctx)
         }
 
         if (s->hop_index >= s->hop_size || s->ihop_index > 0) {
-            for (int ch = 0; ch < s->nb_channels && s->ihop_index == 0; ch++) {
-                ff_filter_execute(ctx, run_channel_cwt, (void *)&ch, NULL,
+            if (s->ihop_index == 0) {
+                ff_filter_execute(ctx, run_channels_cwt, NULL, NULL,
                                   s->nb_threads);
             }
 
