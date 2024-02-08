@@ -73,6 +73,15 @@ enum SlideMode {
     NB_SLIDE
 };
 
+enum FrequencyWeight {
+    WEIGHTING_0,
+    WEIGHTING_A,
+    WEIGHTING_B,
+    WEIGHTING_C,
+    WEIGHTING_D,
+    NB_WEIGHT
+};
+
 typedef struct ShowCWTContext {
     const AVClass *class;
     int w, h;
@@ -87,6 +96,8 @@ typedef struct ShowCWTContext {
     int64_t in_pts;
     int64_t old_pts;
     int64_t eof_pts;
+    int weighting_type;
+    float *frequency_weight;
     float *frequency_band;
     AVComplexFloat **kernel;
     unsigned *index;
@@ -177,6 +188,12 @@ static const AVOption showcwt_options[] = {
     {  "du", "down to up",    0, AV_OPT_TYPE_CONST,{.i64=DIRECTION_DU}, 0, 0, FLAGS, "direction" },
     { "bar", "set bargraph ratio", OFFSET(bar_ratio), AV_OPT_TYPE_FLOAT, {.dbl = 0.}, 0, 1, FLAGS },
     { "rotation", "set color rotation", OFFSET(rotation), AV_OPT_TYPE_FLOAT, {.dbl = 0}, -1, 1, FLAGS },
+    { "weighting", "set the frequency weighting", OFFSET(weighting_type), AV_OPT_TYPE_INT, {.i64=0}, 0, NB_WEIGHT-1, FLAGS, "weight" },
+    {  "none", "no weighting", 0, AV_OPT_TYPE_CONST,{.i64=WEIGHTING_0}, 0, 0, FLAGS, "weight" },
+    {  "A", "A-weighting", 0, AV_OPT_TYPE_CONST,{.i64=WEIGHTING_A}, 0, 0, FLAGS, "weight" },
+    {  "B", "B-weighting", 0, AV_OPT_TYPE_CONST,{.i64=WEIGHTING_B}, 0, 0, FLAGS, "weight" },
+    {  "C", "C-weighting", 0, AV_OPT_TYPE_CONST,{.i64=WEIGHTING_C}, 0, 0, FLAGS, "weight" },
+    {  "D", "D-weighting", 0, AV_OPT_TYPE_CONST,{.i64=WEIGHTING_D}, 0, 0, FLAGS, "weight" },
     { NULL }
 };
 
@@ -186,6 +203,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     ShowCWTContext *s = ctx->priv;
 
+    av_freep(&s->frequency_weight);
     av_freep(&s->frequency_band);
     av_freep(&s->kernel_start);
     av_freep(&s->kernel_stop);
@@ -253,11 +271,69 @@ static int query_formats(AVFilterContext *ctx)
     return 0;
 }
 
+static float frequency_weight_curve(float f, int type)
+{
+    float w;
+
+    switch (type) {
+    case WEIGHTING_A:
+        w = (powf(12194.f, 2.f) * powf(f, 4.f)) /
+            ((powf(f, 2.f) + powf(20.6, 2.f)) *
+             sqrtf((powf(f, 2.f) + powf(107.7f, 2.f)) *
+                   (powf(f, 2.f) + powf(737.9f, 2.f))) *
+             (powf(f, 2.f) + powf(12194.f, 2.f)));
+        break;
+    case WEIGHTING_B:
+        w = (powf(12194.f, 2.f) * powf(f, 3.f)) /
+            ((powf(f, 2.f) + powf(20.6, 2.f)) *
+             sqrtf(powf(f, 2.f) + powf(158.5f, 2.f)) *
+             (powf(f, 2.f) + powf(12194.f, 2.f)));
+        break;
+    case WEIGHTING_C:
+        w = (powf(12194.f, 2.f) * powf(f, 2.f)) /
+            ((powf(f, 2.f) + powf(20.6, 2.f)) *
+             (powf(f, 2.f) + powf(12194.f, 2.f)));
+        break;
+    case WEIGHTING_D:
+        w = (f / 6.8966888496476e-5f) *
+            sqrtf(((powf(1037918.48f - powf(f, 2.f), 2.f) + 1080768.16f * powf(f, 2.f)) /
+                   powf(9837328.f - powf(f, 2.f), 2.f) + 11723776.f * powf(f, 2.f)) /
+                  ((powf(f, 2.f) + 79919.29f) * (powf(f, 2.f) + 1345600.f)));
+        break;
+    default:
+        w = 1.f;
+        break;
+    }
+
+    return w;
+}
+
+static float frequency_weight(float f, int type)
+{
+    float w;
+
+    switch (type) {
+    case WEIGHTING_A:
+    case WEIGHTING_B:
+    case WEIGHTING_C:
+    case WEIGHTING_D:
+        w = frequency_weight_curve(f, type) / frequency_weight_curve(1000.f, type);
+        break;
+    default:
+        w = 1.f;
+        break;
+    }
+
+    return w;
+}
+
 static float frequency_band(float *frequency_band,
+                            float *frequency_weights,
                             int frequency_band_count,
                             float frequency_range,
                             float frequency_offset,
-                            int frequency_scale, float deviation)
+                            int frequency_scale, float deviation,
+                            int weighting_type)
 {
     float ret = 0.f;
 
@@ -304,18 +380,21 @@ static float frequency_band(float *frequency_band,
         frequency_band[y*2  ] = frequency;
         frequency_band[y*2+1] = frequency_derivative * deviation;
 
+        frequency_weights[y] = frequency_weight(frequency, weighting_type);
+
         ret = 1.f / (frequency_derivative * deviation);
     }
 
     return ret;
 }
 
-static float remap_log(ShowCWTContext *s, float value, int iscale, float log_factor)
+static float remap_log(ShowCWTContext *s, float value, float weight, int iscale, float log_factor)
 {
     const float max = s->maximum_intensity;
     const float min = s->minimum_intensity;
     float ret;
 
+    value *= weight;
     value += min;
 
     switch (iscale) {
@@ -456,6 +535,7 @@ static int draw(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const ptrdiff_t vlinesize = s->outpicref->linesize[2];
     const ptrdiff_t alinesize = s->outpicref->linesize[3];
     const float log_factor = 1.f/logf(s->logarithmic_basis);
+    const float *weights = s->frequency_weight;
     const int count = s->frequency_band_count;
     const int start = (count * jobnr) / nb_jobs;
     const int end = (count * (jobnr+1)) / nb_jobs;
@@ -474,6 +554,7 @@ static int draw(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     float Y, U, V;
 
     for (int y = start; y < end; y++) {
+        const float weight = weights[y];
         const AVComplexFloat *src = ((const AVComplexFloat *)s->ch_out->extended_data[y]) +
                                                     0 * ihop_size + ihop_index;
 
@@ -542,9 +623,9 @@ skip:
                 u = hypotf(src[0].re, src[0].im);
                 v = hypotf(src2[0].re, src2[0].im);
 
-                z  = remap_log(s, z, iscale, log_factor);
-                u  = remap_log(s, u, iscale, log_factor);
-                v  = remap_log(s, v, iscale, log_factor);
+                z  = remap_log(s, z, weight, iscale, log_factor);
+                u  = remap_log(s, u, weight, iscale, log_factor);
+                v  = remap_log(s, v, weight, iscale, log_factor);
 
                 Y  = z;
                 U  = sinf((v - u) * M_PI_2);
@@ -580,7 +661,7 @@ skip:
                     float z;
 
                     z = hypotf(srcn[0].re, srcn[0].im);
-                    z = remap_log(s, z, iscale, log_factor);
+                    z = remap_log(s, z, weight, iscale, log_factor);
 
                     Y += z * yf;
                     U += z * yf * sinf(2.f * M_PI * (ch * yf + rotation));
@@ -601,7 +682,7 @@ skip:
             break;
         case 2:
             Y = hypotf(src[0].re, src[0].im);
-            Y = remap_log(s, Y, iscale, log_factor);
+            Y = remap_log(s, Y, weight, iscale, log_factor);
             U = atan2f(src[0].im, src[0].re);
             U = 0.5f + 0.5f * U * Y / M_PI;
             V = 1.f - U;
@@ -632,7 +713,7 @@ skip:
             break;
         case 0:
             Y = hypotf(src[0].re, src[0].im);
-            Y = remap_log(s, Y, iscale, log_factor);
+            Y = remap_log(s, Y, weight, iscale, log_factor);
 
             if (sono_size > 0) {
                 dstY[0] = av_clip_uint8(lrintf(Y * 255.f));
@@ -891,15 +972,20 @@ static int config_output(AVFilterLink *outlink)
         break;
     }
 
+    s->frequency_weight = av_calloc(s->frequency_band_count, sizeof(*s->frequency_weight));
+    if (!s->frequency_weight)
+        return AVERROR(ENOMEM);
+
     s->frequency_band = av_calloc(s->frequency_band_count,
                                   sizeof(*s->frequency_band) * 2);
     if (!s->frequency_band)
         return AVERROR(ENOMEM);
 
     s->nb_consumed_samples = inlink->sample_rate *
-                             frequency_band(s->frequency_band,
+                             frequency_band(s->frequency_band, s->frequency_weight,
                                             s->frequency_band_count, maximum_frequency - minimum_frequency,
-                                            minimum_frequency, s->frequency_scale, s->deviation);
+                                            minimum_frequency, s->frequency_scale, s->deviation,
+                                            s->weighting_type);
     s->nb_consumed_samples = FFMIN(s->nb_consumed_samples, 131072);
 
     s->nb_threads = FFMIN(s->frequency_band_count, ff_filter_get_nb_threads(ctx));
