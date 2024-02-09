@@ -31186,6 +31186,8 @@ Show unique color per channel magnitude.
 Show unique color per stereo difference.
 @item monohue
 Show unique hue per frequency for single channel.
+@item stereohue
+Show unique hue per frequency for stereo channels.
 @end table
 
 Default value is @code{magnitude}.
