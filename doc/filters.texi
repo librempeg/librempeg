@@ -31221,6 +31221,23 @@ Set the ratio of bargraph display to display size. Default is 0.
 @item rotation
 Set color rotation, must be in [-1.0, 1.0] range.
 Default value is @code{0}.
+
+@item weighting
+Set the frequency weighting curve for intensity values. Allowed values are:
+
+@table @option
+@item none
+No weighting.
+@item A
+A-weighting curve.
+@item B
+B-weighting curve.
+@item C
+C-weighting curve.
+@item D
+D-weighting curve.
+@end table
+Default value is @code{none}.
 @end table
 
 @section showfreqs
