@@ -31188,6 +31188,10 @@ Show unique color per stereo difference.
 Show unique hue per frequency for single channel.
 @item stereohue
 Show unique hue per frequency for stereo channels.
+@item monocool
+Show cool intensity for single channel.
+@item stereocool
+Show cool intensity for stereo channels.
 @end table
 
 Default value is @code{magnitude}.
