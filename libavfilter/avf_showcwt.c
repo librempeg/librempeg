@@ -82,6 +82,16 @@ enum FrequencyWeight {
     NB_WEIGHT
 };
 
+enum DisplayMode {
+    MAGNITUDE,
+    PHASE,
+    MAGPHASE,
+    CHANNEL,
+    STEREO,
+    MONOHUE,
+    NB_MODE
+};
+
 typedef struct ShowCWTContext {
     const AVClass *class;
     int w, h;
@@ -171,12 +181,13 @@ static const AVOption showcwt_options[] = {
     { "logb", "set logarithmic basis", OFFSET(logarithmic_basis), AV_OPT_TYPE_FLOAT, {.dbl = 0.0001}, 0, 1, FLAGS },
     { "deviation", "set frequency deviation", OFFSET(deviation), AV_OPT_TYPE_FLOAT, {.dbl = 1.}, 0, 100, FLAGS },
     { "pps",  "set pixels per second", OFFSET(pps), AV_OPT_TYPE_INT, {.i64 = 64}, 1, 1024, FLAGS },
-    { "mode", "set output mode", OFFSET(mode), AV_OPT_TYPE_INT,  {.i64=0}, 0, 4, FLAGS, "mode" },
-    {  "magnitude", "magnitude",         0, AV_OPT_TYPE_CONST,{.i64=0}, 0, 0, FLAGS, "mode" },
-    {  "phase",     "phase",             0, AV_OPT_TYPE_CONST,{.i64=1}, 0, 0, FLAGS, "mode" },
-    {  "magphase",  "magnitude+phase",   0, AV_OPT_TYPE_CONST,{.i64=2}, 0, 0, FLAGS, "mode" },
-    {  "channel",   "color per channel", 0, AV_OPT_TYPE_CONST,{.i64=3}, 0, 0, FLAGS, "mode" },
-    {  "stereo",    "stereo difference", 0, AV_OPT_TYPE_CONST,{.i64=4}, 0, 0, FLAGS, "mode" },
+    { "mode", "set output mode", OFFSET(mode), AV_OPT_TYPE_INT,  {.i64=0}, 0, NB_MODE-1, FLAGS, "mode" },
+    {  "magnitude", "magnitude",         0, AV_OPT_TYPE_CONST,{.i64=MAGNITUDE}, 0, 0, FLAGS, "mode" },
+    {  "phase",     "phase",             0, AV_OPT_TYPE_CONST,{.i64=PHASE},     0, 0, FLAGS, "mode" },
+    {  "magphase",  "magnitude+phase",   0, AV_OPT_TYPE_CONST,{.i64=MAGPHASE},  0, 0, FLAGS, "mode" },
+    {  "channel",   "color per channel", 0, AV_OPT_TYPE_CONST,{.i64=CHANNEL},   0, 0, FLAGS, "mode" },
+    {  "stereo",    "stereo difference", 0, AV_OPT_TYPE_CONST,{.i64=STEREO},    0, 0, FLAGS, "mode" },
+    {  "monohue",   "mono hue",          0, AV_OPT_TYPE_CONST,{.i64=MONOHUE},   0, 0, FLAGS, "mode" },
     { "slide", "set slide mode", OFFSET(slide), AV_OPT_TYPE_INT,  {.i64=0}, 0, NB_SLIDE-1, FLAGS, "slide" },
     {  "replace", "replace", 0, AV_OPT_TYPE_CONST,{.i64=SLIDE_REPLACE},0, 0, FLAGS, "slide" },
     {  "scroll",  "scroll",  0, AV_OPT_TYPE_CONST,{.i64=SLIDE_SCROLL}, 0, 0, FLAGS, "slide" },
@@ -614,7 +625,24 @@ static int draw(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 skip:
 
         switch (mode) {
-        case 4:
+        case MONOHUE:
+            Y = hypotf(src[0].re, src[0].im);
+            Y = remap_log(s, Y, weight, iscale, log_factor);
+            U = 0.5f + 0.5f * Y * cosf(2.f * M_PI * y / count);
+            V = 0.5f + 0.5f * Y * sinf(2.f * M_PI * y / count);
+
+            if (sono_size > 0) {
+                dstY[0] = av_clip_uint8(lrintf(Y * 255.f));
+                dstU[0] = av_clip_uint8(lrintf(U * 255.f));
+                dstV[0] = av_clip_uint8(lrintf(V * 255.f));
+                if (dstA)
+                    dstA[0] = dstY[0];
+            }
+
+            if (bar_size > 0)
+                draw_bar(s, y, Y, U, V);
+            break;
+        case STEREO:
             {
                 const AVComplexFloat *src2 = (nb_channels > 1) ? src + ihop_size: src;
                 float z, u, v;
@@ -649,7 +677,7 @@ skip:
                     draw_bar(s, y, Y, U, V);
             }
             break;
-        case 3:
+        case CHANNEL:
             {
                 const int nb_channels = s->nb_channels;
                 const float yf = 1.f / nb_channels;
@@ -680,7 +708,7 @@ skip:
                     draw_bar(s, y, Y, U, V);
             }
             break;
-        case 2:
+        case MAGPHASE:
             Y = hypotf(src[0].re, src[0].im);
             Y = remap_log(s, Y, weight, iscale, log_factor);
             U = atan2f(src[0].im, src[0].re);
@@ -698,7 +726,7 @@ skip:
             if (bar_size > 0)
                 draw_bar(s, y, Y, U, V);
             break;
-        case 1:
+        case PHASE:
             Y = atan2f(src[0].im, src[0].re);
             Y = 0.5f + 0.5f * Y / M_PI;
 
@@ -711,7 +739,7 @@ skip:
             if (bar_size > 0)
                 draw_bar(s, y, Y, 0.5f, 0.5f);
             break;
-        case 0:
+        case MAGNITUDE:
             Y = hypotf(src[0].re, src[0].im);
             Y = remap_log(s, Y, weight, iscale, log_factor);
 
