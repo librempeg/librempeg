@@ -219,7 +219,7 @@
  */
 
 enum AVOptionType{
-    AV_OPT_TYPE_FLAGS,
+    AV_OPT_TYPE_FLAGS = 1,
     AV_OPT_TYPE_INT,
     AV_OPT_TYPE_INT64,
     AV_OPT_TYPE_DOUBLE,
