@@ -31192,6 +31192,8 @@ Show unique hue per frequency for stereo channels.
 Show cool intensity for single channel.
 @item stereocool
 Show cool intensity for stereo channels.
+@item stereocorr
+Show colors representing cross correlation for stereo channels.
 @end table
 
 Default value is @code{magnitude}.

@@ -92,6 +92,7 @@ enum DisplayMode {
     STEREOHUE,
     MONOCOOL,
     STEREOCOOL,
+    STEREOCORR,
     NB_MODE
 };
 
@@ -194,6 +195,7 @@ static const AVOption showcwt_options[] = {
     {  "stereohue", "stereo hue",        0, AV_OPT_TYPE_CONST,{.i64=STEREOHUE}, 0, 0, FLAGS, "mode" },
     {  "monocool",  "mono cool intensity",0,AV_OPT_TYPE_CONST,{.i64=MONOCOOL},  0, 0, FLAGS, "mode" },
     {  "stereocool","stereo cool intensity",0,AV_OPT_TYPE_CONST,{.i64=STEREOCOOL},0,0,FLAGS, "mode" },
+    {  "stereocorr","stereo corr intensity",0,AV_OPT_TYPE_CONST,{.i64=STEREOCORR},0,0,FLAGS, "mode" },
     { "slide", "set slide mode", OFFSET(slide), AV_OPT_TYPE_INT,  {.i64=0}, 0, NB_SLIDE-1, FLAGS, "slide" },
     {  "replace", "replace", 0, AV_OPT_TYPE_CONST,{.i64=SLIDE_REPLACE},0, 0, FLAGS, "slide" },
     {  "scroll",  "scroll",  0, AV_OPT_TYPE_CONST,{.i64=SLIDE_SCROLL}, 0, 0, FLAGS, "slide" },
@@ -631,6 +633,40 @@ static int draw(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 skip:
 
         switch (mode) {
+        case STEREOCORR:
+            {
+                const AVComplexFloat *src2 = (nb_channels > 1) ? src + ihop_size: src;
+                float a, z, u, v, corr, re, im;
+
+                u = hypotf(src[0].re, src[0].im);
+                v = hypotf(src2[0].re, src2[0].im);
+                z = 0.5f * (u + v);
+
+                re = src[0].re * src2[0].re + src[0].im * src2[0].im;
+                im = src2[0].re * src[0].im - src2[0].im * src[0].re;
+                corr = atan2f(im, re);
+                a = hypotf(re, im);
+
+                a = remap_log(s, a, weight, iscale, log_factor);
+                z = remap_log(s, z, weight, iscale, log_factor);
+
+                Y = z;
+                a = (z + a) * 0.125f;
+                U = a * cosf(corr) + 0.5f;
+                V = a * sinf(corr) + 0.5f;
+
+                if (sono_size > 0) {
+                    dstY[0] = av_clip_uint8(lrintf(Y * 255.f));
+                    dstU[0] = av_clip_uint8(lrintf(U * 255.f));
+                    dstV[0] = av_clip_uint8(lrintf(V * 255.f));
+                    if (dstA)
+                        dstA[0] = dstY[0];
+                }
+
+                if (bar_size > 0)
+                    draw_bar(s, y, Y, U, V);
+            }
+            break;
         case STEREOCOOL:
             {
                 const AVComplexFloat *src2 = (nb_channels > 1) ? src + ihop_size: src;
