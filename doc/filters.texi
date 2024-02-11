@@ -31192,6 +31192,8 @@ Show unique hue per frequency for stereo channels.
 Show cool intensity for single channel.
 @item stereocool
 Show cool intensity for stereo channels.
+@item monocorr
+Show colors representing auto correlation for mono channel.
 @item stereocorr
 Show colors representing cross correlation for stereo channels.
 @end table

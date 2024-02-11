@@ -92,6 +92,7 @@ enum DisplayMode {
     STEREOHUE,
     MONOCOOL,
     STEREOCOOL,
+    MONOCORR,
     STEREOCORR,
     NB_MODE
 };
@@ -125,6 +126,7 @@ typedef struct ShowCWTContext {
     AVFrame *ifft_in;
     AVFrame *ifft_out;
     AVFrame *ch_out;
+    AVFrame *ch_pout;
     AVFrame *over;
     AVFrame *bh_out;
     int nb_threads;
@@ -195,6 +197,7 @@ static const AVOption showcwt_options[] = {
     {  "stereohue", "stereo hue",        0, AV_OPT_TYPE_CONST,{.i64=STEREOHUE}, 0, 0, FLAGS, "mode" },
     {  "monocool",  "mono cool intensity",0,AV_OPT_TYPE_CONST,{.i64=MONOCOOL},  0, 0, FLAGS, "mode" },
     {  "stereocool","stereo cool intensity",0,AV_OPT_TYPE_CONST,{.i64=STEREOCOOL},0,0,FLAGS, "mode" },
+    {  "monocorr",  "mono corr intensity",0,AV_OPT_TYPE_CONST,{.i64=MONOCORR},  0, 0, FLAGS, "mode" },
     {  "stereocorr","stereo corr intensity",0,AV_OPT_TYPE_CONST,{.i64=STEREOCORR},0,0,FLAGS, "mode" },
     { "slide", "set slide mode", OFFSET(slide), AV_OPT_TYPE_INT,  {.i64=0}, 0, NB_SLIDE-1, FLAGS, "slide" },
     {  "replace", "replace", 0, AV_OPT_TYPE_CONST,{.i64=SLIDE_REPLACE},0, 0, FLAGS, "slide" },
@@ -237,6 +240,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_frame_free(&s->ifft_in);
     av_frame_free(&s->ifft_out);
     av_frame_free(&s->ch_out);
+    av_frame_free(&s->ch_pout);
     av_frame_free(&s->over);
     av_frame_free(&s->bh_out);
 
@@ -574,6 +578,8 @@ static int draw(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 
     for (int y = start; y < end; y++) {
         const float weight = weights[y];
+        const AVComplexFloat *old = ((const AVComplexFloat *)s->ch_pout->extended_data[y]) +
+                                                    0 * ihop_size + ihop_index;
         const AVComplexFloat *src = ((const AVComplexFloat *)s->ch_out->extended_data[y]) +
                                                     0 * ihop_size + ihop_index;
 
@@ -641,6 +647,38 @@ skip:
                 u = hypotf(src[0].re, src[0].im);
                 v = hypotf(src2[0].re, src2[0].im);
                 z = 0.5f * (u + v);
+
+                re = src[0].re * src2[0].re + src[0].im * src2[0].im;
+                im = src2[0].re * src[0].im - src2[0].im * src[0].re;
+                corr = atan2f(im, re);
+                a = hypotf(re, im);
+
+                a = remap_log(s, a, weight, iscale, log_factor);
+                z = remap_log(s, z, weight, iscale, log_factor);
+
+                Y = z;
+                a = hypotf(z, a) * 0.125f;
+                U = a * cosf(corr) + 0.5f;
+                V = a * sinf(corr) + 0.5f;
+
+                if (sono_size > 0) {
+                    dstY[0] = av_clip_uint8(lrintf(Y * 255.f));
+                    dstU[0] = av_clip_uint8(lrintf(U * 255.f));
+                    dstV[0] = av_clip_uint8(lrintf(V * 255.f));
+                    if (dstA)
+                        dstA[0] = dstY[0];
+                }
+
+                if (bar_size > 0)
+                    draw_bar(s, y, Y, U, V);
+            }
+            break;
+        case MONOCORR:
+            {
+                const AVComplexFloat *src2 = old;
+                float a, z, corr, re, im;
+
+                z = hypotf(src[0].re, src[0].im);
 
                 re = src[0].re * src2[0].re + src[0].im * src2[0].im;
                 im = src2[0].re * src[0].im - src2[0].im * src[0].re;
@@ -895,6 +933,7 @@ static int run_channel_cwt(AVFilterContext *ctx, int ch, int jobnr, int nb_jobs)
     const int end = (count * (jobnr+1)) / nb_jobs;
 
     for (int y = start; y < end; y++) {
+        AVComplexFloat *chpout = ((AVComplexFloat *)s->ch_pout->extended_data[y]) + ch * ihop_size;
         AVComplexFloat *chout = ((AVComplexFloat *)s->ch_out->extended_data[y]) + ch * ihop_size;
         AVComplexFloat *over = ((AVComplexFloat *)s->over->extended_data[ch]) + y * ihop_size;
         AVComplexFloat *dstx = (AVComplexFloat *)s->dst_x->extended_data[jobnr];
@@ -939,6 +978,7 @@ static int run_channel_cwt(AVFilterContext *ctx, int ch, int jobnr, int nb_jobs)
 
         s->itx_fn(s->ifft[jobnr], idst, isrc, sizeof(*isrc));
 
+        memcpy(chpout, chout, sizeof(*chpout) * ihop_size);
         memcpy(chout, idst, sizeof(*chout) * ihop_size);
         for (int n = 0; n < ihop_size; n++) {
             chout[n].re += over[n].re;
@@ -1189,14 +1229,22 @@ static int config_output(AVFilterLink *outlink)
     s->bh_out = ff_get_audio_buffer(inlink, s->frequency_band_count);
     s->ifft_in = av_frame_alloc();
     s->ifft_out = av_frame_alloc();
+    s->ch_pout = av_frame_alloc();
     s->ch_out = av_frame_alloc();
     s->index = av_calloc(s->input_padding_size, sizeof(*s->index));
     s->kernel_start = av_calloc(s->frequency_band_count, sizeof(*s->kernel_start));
     s->kernel_stop = av_calloc(s->frequency_band_count, sizeof(*s->kernel_stop));
     if (!s->outpicref || !s->fft_in || !s->fft_out || !s->src_x || !s->dst_x || !s->over ||
         !s->ifft_in || !s->ifft_out || !s->kernel_start || !s->kernel_stop || !s->ch_out ||
-        !s->cache || !s->index || !s->bh_out || !s->kernel)
+        !s->cache || !s->index || !s->bh_out || !s->kernel || !s->ch_pout)
         return AVERROR(ENOMEM);
+
+    s->ch_pout->format     = inlink->format;
+    s->ch_pout->nb_samples = 2 * s->ihop_size * inlink->ch_layout.nb_channels;
+    s->ch_pout->ch_layout.nb_channels = s->frequency_band_count;
+    ret = av_frame_get_buffer(s->ch_pout, 0);
+    if (ret < 0)
+        return ret;
 
     s->ch_out->format     = inlink->format;
     s->ch_out->nb_samples = 2 * s->ihop_size * inlink->ch_layout.nb_channels;
@@ -1204,6 +1252,11 @@ static int config_output(AVFilterLink *outlink)
     ret = av_frame_get_buffer(s->ch_out, 0);
     if (ret < 0)
         return ret;
+
+    av_samples_set_silence(s->ch_out->extended_data, 0,
+                           s->ch_out->nb_samples,
+                           s->ch_out->ch_layout.nb_channels,
+                           s->ch_out->format);
 
     s->ifft_in->format     = inlink->format;
     s->ifft_in->nb_samples = s->ifft_size * 2;
