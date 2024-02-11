@@ -239,7 +239,6 @@ static void hwframe_ctx_free(void *opaque, uint8_t *data)
     av_buffer_unref(&ctx->device_ref);
 
     av_freep(&ctx->hwctx);
-    av_freep(&ctx->internal->priv);
     av_freep(&ctx->internal);
     av_freep(&ctx);
 }
@@ -258,12 +257,6 @@ AVBufferRef *av_hwframe_ctx_alloc(AVBufferRef *device_ref_in)
     ctx->internal = av_mallocz(sizeof(*ctx->internal));
     if (!ctx->internal)
         goto fail;
-
-    if (hw_type->frames_priv_size) {
-        ctx->internal->priv = av_mallocz(hw_type->frames_priv_size);
-        if (!ctx->internal->priv)
-            goto fail;
-    }
 
     if (hw_type->frames_hwctx_size) {
         ctx->hwctx = av_mallocz(hw_type->frames_hwctx_size);
@@ -293,8 +286,6 @@ AVBufferRef *av_hwframe_ctx_alloc(AVBufferRef *device_ref_in)
 
 fail:
     av_buffer_unref(&device_ref);
-    if (ctx->internal)
-        av_freep(&ctx->internal->priv);
     av_freep(&ctx->internal);
     av_freep(&ctx->hwctx);
     av_freep(&ctx);
