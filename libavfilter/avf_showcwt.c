@@ -651,7 +651,7 @@ skip:
                 z = remap_log(s, z, weight, iscale, log_factor);
 
                 Y = z;
-                a = (z + a) * 0.125f;
+                a = hypotf(z, a) * 0.125f;
                 U = a * cosf(corr) + 0.5f;
                 V = a * sinf(corr) + 0.5f;
 
