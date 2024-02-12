@@ -46,6 +46,7 @@ enum FrequencyScale {
     FSCALE_CBRT,
     FSCALE_QDRT,
     FSCALE_FM,
+    FSCALE_GREENWOOD,
     NB_FSCALE
 };
 
@@ -174,6 +175,7 @@ static const AVOption showcwt_options[] = {
     {  "cbrt",    "cbrt",             0,                       AV_OPT_TYPE_CONST,{.i64=FSCALE_CBRT},   0, 0, FLAGS, "scale" },
     {  "qdrt",    "qdrt",             0,                       AV_OPT_TYPE_CONST,{.i64=FSCALE_QDRT},   0, 0, FLAGS, "scale" },
     {  "fm",      "fm",               0,                       AV_OPT_TYPE_CONST,{.i64=FSCALE_FM},     0, 0, FLAGS, "scale" },
+    {  "gwood",   "greenwood",        0,                       AV_OPT_TYPE_CONST,{.i64=FSCALE_GREENWOOD},0,0,FLAGS, "scale" },
     { "iscale", "set intensity scale", OFFSET(intensity_scale),AV_OPT_TYPE_INT,  {.i64=0},   0, NB_ISCALE-1, FLAGS, "iscale" },
     {  "linear",  "linear",           0,                       AV_OPT_TYPE_CONST,{.i64=ISCALE_LINEAR}, 0, 0, FLAGS, "iscale" },
     {  "log",     "logarithmic",      0,                       AV_OPT_TYPE_CONST,{.i64=ISCALE_LOG},    0, 0, FLAGS, "iscale" },
@@ -397,6 +399,10 @@ static float frequency_band(float *frequency_band,
         case FSCALE_FM:
             frequency = 2.f * powf(frequency, 3.f / 2.f) / 3.f;
             frequency_derivative *= sqrtf(frequency);
+            break;
+        case FSCALE_GREENWOOD:
+            frequency = 165.4f * (expf(frequency / 512.18f) - 1.f);
+            frequency_derivative *= (frequency / 165.4f + 1.f) / 3.09661f;
             break;
         }
 
@@ -1159,6 +1165,10 @@ static int config_output(AVFilterLink *outlink)
     case FSCALE_FM:
         minimum_frequency = powf(9.f * (minimum_frequency * minimum_frequency) / 4.f, 1.f / 3.f);
         maximum_frequency = powf(9.f * (maximum_frequency * maximum_frequency) / 4.f, 1.f / 3.f);
+        break;
+    case FSCALE_GREENWOOD:
+        minimum_frequency = 512.18f * logf(1.f + minimum_frequency / 165.4f);
+        maximum_frequency = 512.18f * logf(1.f + maximum_frequency / 165.4f);
         break;
     }
 
