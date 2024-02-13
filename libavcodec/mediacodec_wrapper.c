@@ -547,10 +547,8 @@ char *ff_AMediaCodecList_getCodecNameByType(const char *mime, int profile, int e
             goto done;
         }
 
-        if (codec_name) {
-            (*env)->DeleteLocalRef(env, codec_name);
-            codec_name = NULL;
-        }
+        (*env)->DeleteLocalRef(env, codec_name);
+        codec_name = NULL;
 
         /* Skip software decoders */
         if (
@@ -614,10 +612,8 @@ char *ff_AMediaCodecList_getCodecNameByType(const char *mime, int profile, int e
 
                 found_codec = profile == supported_profile;
 
-                if (profile_level) {
-                    (*env)->DeleteLocalRef(env, profile_level);
-                    profile_level = NULL;
-                }
+                (*env)->DeleteLocalRef(env, profile_level);
+                profile_level = NULL;
 
                 if (found_codec) {
                     break;
@@ -625,20 +621,14 @@ char *ff_AMediaCodecList_getCodecNameByType(const char *mime, int profile, int e
             }
 
 done_with_type:
-            if (profile_levels) {
-                (*env)->DeleteLocalRef(env, profile_levels);
-                profile_levels = NULL;
-            }
+            (*env)->DeleteLocalRef(env, profile_levels);
+            profile_levels = NULL;
 
-            if (capabilities) {
-                (*env)->DeleteLocalRef(env, capabilities);
-                capabilities = NULL;
-            }
+            (*env)->DeleteLocalRef(env, capabilities);
+            capabilities = NULL;
 
-            if (type) {
-                (*env)->DeleteLocalRef(env, type);
-                type = NULL;
-            }
+            (*env)->DeleteLocalRef(env, type);
+            type = NULL;
 
             av_freep(&supported_type);
 
@@ -648,15 +638,11 @@ done_with_type:
         }
 
 done_with_info:
-        if (info) {
-            (*env)->DeleteLocalRef(env, info);
-            info = NULL;
-        }
+        (*env)->DeleteLocalRef(env, info);
+        info = NULL;
 
-        if (types) {
-            (*env)->DeleteLocalRef(env, types);
-            types = NULL;
-        }
+        (*env)->DeleteLocalRef(env, types);
+        types = NULL;
 
         if (found_codec) {
             break;
@@ -666,33 +652,13 @@ done_with_info:
     }
 
 done:
-    if (codec_name) {
-        (*env)->DeleteLocalRef(env, codec_name);
-    }
-
-    if (info) {
-        (*env)->DeleteLocalRef(env, info);
-    }
-
-    if (type) {
-        (*env)->DeleteLocalRef(env, type);
-    }
-
-    if (types) {
-        (*env)->DeleteLocalRef(env, types);
-    }
-
-    if (capabilities) {
-        (*env)->DeleteLocalRef(env, capabilities);
-    }
-
-    if (profile_level) {
-        (*env)->DeleteLocalRef(env, profile_level);
-    }
-
-    if (profile_levels) {
-        (*env)->DeleteLocalRef(env, profile_levels);
-    }
+    (*env)->DeleteLocalRef(env, codec_name);
+    (*env)->DeleteLocalRef(env, info);
+    (*env)->DeleteLocalRef(env, type);
+    (*env)->DeleteLocalRef(env, types);
+    (*env)->DeleteLocalRef(env, capabilities);
+    (*env)->DeleteLocalRef(env, profile_level);
+    (*env)->DeleteLocalRef(env, profile_levels);
 
     av_freep(&supported_type);
 
@@ -739,9 +705,7 @@ static FFAMediaFormat *mediaformat_jni_new(void)
     }
 
 fail:
-    if (object) {
-        (*env)->DeleteLocalRef(env, object);
-    }
+    (*env)->DeleteLocalRef(env, object);
 
     if (!format->object) {
         ff_jni_reset_jfields(env, &format->jfields, jni_amediaformat_mapping, 1, format);
@@ -826,9 +790,7 @@ static char* mediaformat_jni_toString(FFAMediaFormat* ctx)
 
     ret = ff_jni_jstring_to_utf_chars(env, description, format);
 fail:
-    if (description) {
-        (*env)->DeleteLocalRef(env, description);
-    }
+    (*env)->DeleteLocalRef(env, description);
 
     return ret;
 }
@@ -865,9 +827,7 @@ static int mediaformat_jni_getInt32(FFAMediaFormat* ctx, const char *name, int32
 
     ret = 1;
 fail:
-    if (key) {
-        (*env)->DeleteLocalRef(env, key);
-    }
+    (*env)->DeleteLocalRef(env, key);
 
     return ret;
 }
@@ -904,9 +864,7 @@ static int mediaformat_jni_getInt64(FFAMediaFormat* ctx, const char *name, int64
 
     ret = 1;
 fail:
-    if (key) {
-        (*env)->DeleteLocalRef(env, key);
-    }
+    (*env)->DeleteLocalRef(env, key);
 
     return ret;
 }
@@ -943,9 +901,7 @@ static int mediaformat_jni_getFloat(FFAMediaFormat* ctx, const char *name, float
 
     ret = 1;
 fail:
-    if (key) {
-        (*env)->DeleteLocalRef(env, key);
-    }
+    (*env)->DeleteLocalRef(env, key);
 
     return ret;
 }
@@ -997,13 +953,8 @@ static int mediaformat_jni_getBuffer(FFAMediaFormat* ctx, const char *name, void
 
     ret = 1;
 fail:
-    if (key) {
-        (*env)->DeleteLocalRef(env, key);
-    }
-
-    if (result) {
-        (*env)->DeleteLocalRef(env, result);
-    }
+    (*env)->DeleteLocalRef(env, key);
+    (*env)->DeleteLocalRef(env, result);
 
     return ret;
 }
@@ -1047,13 +998,8 @@ static int mediaformat_jni_getString(FFAMediaFormat* ctx, const char *name, cons
 
     ret = 1;
 fail:
-    if (key) {
-        (*env)->DeleteLocalRef(env, key);
-    }
-
-    if (result) {
-        (*env)->DeleteLocalRef(env, result);
-    }
+    (*env)->DeleteLocalRef(env, key);
+    (*env)->DeleteLocalRef(env, result);
 
     return ret;
 }
@@ -1079,9 +1025,7 @@ static void mediaformat_jni_setInt32(FFAMediaFormat* ctx, const char* name, int3
     }
 
 fail:
-    if (key) {
-        (*env)->DeleteLocalRef(env, key);
-    }
+    (*env)->DeleteLocalRef(env, key);
 }
 
 static void mediaformat_jni_setInt64(FFAMediaFormat* ctx, const char* name, int64_t value)
@@ -1105,9 +1049,7 @@ static void mediaformat_jni_setInt64(FFAMediaFormat* ctx, const char* name, int6
     }
 
 fail:
-    if (key) {
-        (*env)->DeleteLocalRef(env, key);
-    }
+    (*env)->DeleteLocalRef(env, key);
 }
 
 static void mediaformat_jni_setFloat(FFAMediaFormat* ctx, const char* name, float value)
@@ -1131,9 +1073,7 @@ static void mediaformat_jni_setFloat(FFAMediaFormat* ctx, const char* name, floa
     }
 
 fail:
-    if (key) {
-        (*env)->DeleteLocalRef(env, key);
-    }
+    (*env)->DeleteLocalRef(env, key);
 }
 
 static void mediaformat_jni_setString(FFAMediaFormat* ctx, const char* name, const char* value)
@@ -1163,13 +1103,8 @@ static void mediaformat_jni_setString(FFAMediaFormat* ctx, const char* name, con
     }
 
 fail:
-    if (key) {
-        (*env)->DeleteLocalRef(env, key);
-    }
-
-    if (string) {
-        (*env)->DeleteLocalRef(env, string);
-    }
+    (*env)->DeleteLocalRef(env, key);
+    (*env)->DeleteLocalRef(env, string);
 }
 
 static void mediaformat_jni_setBuffer(FFAMediaFormat* ctx, const char* name, void* data, size_t size)
@@ -1211,13 +1146,8 @@ static void mediaformat_jni_setBuffer(FFAMediaFormat* ctx, const char* name, voi
     }
 
 fail:
-    if (key) {
-        (*env)->DeleteLocalRef(env, key);
-    }
-
-    if (buffer) {
-        (*env)->DeleteLocalRef(env, buffer);
-    }
+    (*env)->DeleteLocalRef(env, key);
+    (*env)->DeleteLocalRef(env, buffer);
 }
 
 static int codec_init_static_fields(FFAMediaCodecJni *codec)
@@ -1350,26 +1280,13 @@ static inline FFAMediaCodec *codec_create(int method, const char *arg)
 
     ret = 0;
 fail:
-    if (jarg) {
-        (*env)->DeleteLocalRef(env, jarg);
-    }
-
-    if (object) {
-        (*env)->DeleteLocalRef(env, object);
-    }
-
-    if (buffer_info) {
-        (*env)->DeleteLocalRef(env, buffer_info);
-    }
+    (*env)->DeleteLocalRef(env, jarg);
+    (*env)->DeleteLocalRef(env, object);
+    (*env)->DeleteLocalRef(env, buffer_info);
 
     if (ret < 0) {
-        if (codec->object) {
-            (*env)->DeleteGlobalRef(env, codec->object);
-        }
-
-        if (codec->buffer_info) {
-            (*env)->DeleteGlobalRef(env, codec->buffer_info);
-        }
+        (*env)->DeleteGlobalRef(env, codec->object);
+        (*env)->DeleteGlobalRef(env, codec->buffer_info);
 
         ff_jni_reset_jfields(env, &codec->jfields, jni_amediacodec_mapping, 1, codec);
         av_freep(&codec);
@@ -1690,13 +1607,8 @@ static uint8_t* mediacodec_jni_getInputBuffer(FFAMediaCodec* ctx, size_t idx, si
     ret = (*env)->GetDirectBufferAddress(env, buffer);
     *out_size = (*env)->GetDirectBufferCapacity(env, buffer);
 fail:
-    if (buffer) {
-        (*env)->DeleteLocalRef(env, buffer);
-    }
-
-    if (input_buffers) {
-        (*env)->DeleteLocalRef(env, input_buffers);
-    }
+    (*env)->DeleteLocalRef(env, buffer);
+    (*env)->DeleteLocalRef(env, input_buffers);
 
     return ret;
 }
@@ -1738,13 +1650,8 @@ static uint8_t* mediacodec_jni_getOutputBuffer(FFAMediaCodec* ctx, size_t idx, s
     ret = (*env)->GetDirectBufferAddress(env, buffer);
     *out_size = (*env)->GetDirectBufferCapacity(env, buffer);
 fail:
-    if (buffer) {
-        (*env)->DeleteLocalRef(env, buffer);
-    }
-
-    if (output_buffers) {
-        (*env)->DeleteLocalRef(env, output_buffers);
-    }
+    (*env)->DeleteLocalRef(env, buffer);
+    (*env)->DeleteLocalRef(env, output_buffers);
 
     return ret;
 }
@@ -1766,9 +1673,7 @@ static FFAMediaFormat* mediacodec_jni_getOutputFormat(FFAMediaCodec* ctx)
 
     ret = mediaformat_jni_newFromObject(mediaformat);
 fail:
-    if (mediaformat) {
-        (*env)->DeleteLocalRef(env, mediaformat);
-    }
+    (*env)->DeleteLocalRef(env, mediaformat);
 
     return ret;
 }
