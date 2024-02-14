@@ -115,6 +115,7 @@ typedef struct ShowCWTContext {
     int weighting_type;
     float *frequency_weight;
     float *frequency_band;
+    AVComplexFloat **dkernel;
     AVComplexFloat **kernel;
     unsigned *index;
     int *kernel_start, *kernel_stop;
@@ -126,8 +127,13 @@ typedef struct ShowCWTContext {
     AVFrame *src_x;
     AVFrame *ifft_in;
     AVFrame *ifft_out;
+    AVFrame *sync;
+    AVFrame *ph;
+    AVFrame *power;
     AVFrame *ch_out;
+    AVFrame *ch_dout;
     AVFrame *ch_pout;
+    AVFrame *dover;
     AVFrame *over;
     AVFrame *bh_out;
     int nb_threads;
@@ -136,6 +142,7 @@ typedef struct ShowCWTContext {
     int pps;
     int eof;
     int slide;
+    int ssq;
     int new_frame;
     int direction;
     int hop_size, ihop_size;
@@ -218,6 +225,7 @@ static const AVOption showcwt_options[] = {
     {  "B", "B-weighting", 0, AV_OPT_TYPE_CONST,{.i64=WEIGHTING_B}, 0, 0, FLAGS, "weight" },
     {  "C", "C-weighting", 0, AV_OPT_TYPE_CONST,{.i64=WEIGHTING_C}, 0, 0, FLAGS, "weight" },
     {  "D", "D-weighting", 0, AV_OPT_TYPE_CONST,{.i64=WEIGHTING_D}, 0, 0, FLAGS, "weight" },
+    { "ssq", "enable SSQ transform", OFFSET(ssq), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS },
     { NULL }
 };
 
@@ -241,10 +249,15 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_frame_free(&s->src_x);
     av_frame_free(&s->ifft_in);
     av_frame_free(&s->ifft_out);
+    av_frame_free(&s->power);
     av_frame_free(&s->ch_out);
+    av_frame_free(&s->ch_dout);
     av_frame_free(&s->ch_pout);
     av_frame_free(&s->over);
+    av_frame_free(&s->dover);
     av_frame_free(&s->bh_out);
+    av_frame_free(&s->sync);
+    av_frame_free(&s->ph);
 
     if (s->fft) {
         for (int n = 0; n < s->nb_threads; n++)
@@ -263,6 +276,12 @@ static av_cold void uninit(AVFilterContext *ctx)
             av_freep(&s->kernel[n]);
     }
     av_freep(&s->kernel);
+
+    if (s->dkernel) {
+        for (int n = 0; n < s->frequency_band_count; n++)
+            av_freep(&s->dkernel[n]);
+    }
+    av_freep(&s->dkernel);
 
     av_freep(&s->fdsp);
 }
@@ -354,6 +373,7 @@ static float frequency_weight(float f, int type)
 
 static float frequency_band(float *frequency_band,
                             float *frequency_weights,
+                            float fs,
                             int frequency_band_count,
                             float frequency_range,
                             float frequency_offset,
@@ -579,6 +599,7 @@ static int draw(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const int bar_size = s->bar_size;
     const int mode = s->mode;
     const int w_1 = s->w - 1;
+    const int ssq = s->ssq;
     const int x = s->pos;
     float Y, U, V;
 
@@ -586,8 +607,11 @@ static int draw(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
         const float weight = weights[y];
         const AVComplexFloat *old = ((const AVComplexFloat *)s->ch_pout->extended_data[y]) +
                                                     0 * ihop_size + ihop_index;
-        const AVComplexFloat *src = ((const AVComplexFloat *)s->ch_out->extended_data[y]) +
+        const AVComplexFloat *chout = ((const AVComplexFloat *)s->ch_out->extended_data[y]) +
                                                     0 * ihop_size + ihop_index;
+        const AVComplexFloat *sync = ((const AVComplexFloat *)s->sync->extended_data[y]) +
+                                                    0 * ihop_size + ihop_index;
+        const AVComplexFloat *src = ssq ? sync : chout;
 
         if (sono_size <= 0)
             goto skip;
@@ -937,13 +961,18 @@ static int run_channel_cwt(AVFilterContext *ctx, int ch, int jobnr, int nb_jobs)
     const int count = s->frequency_band_count;
     const int start = (count * jobnr) / nb_jobs;
     const int end = (count * (jobnr+1)) / nb_jobs;
+    const int coffset = ch * ihop_size;
 
     for (int y = start; y < end; y++) {
-        AVComplexFloat *chpout = ((AVComplexFloat *)s->ch_pout->extended_data[y]) + ch * ihop_size;
-        AVComplexFloat *chout = ((AVComplexFloat *)s->ch_out->extended_data[y]) + ch * ihop_size;
+        AVComplexFloat *chpout = ((AVComplexFloat *)s->ch_pout->extended_data[y]) + coffset;
+        AVComplexFloat *chdout = ((AVComplexFloat *)s->ch_dout->extended_data[y]) + coffset;
+        AVComplexFloat *chout = ((AVComplexFloat *)s->ch_out->extended_data[y]) + coffset;
+        AVComplexFloat *dover = ((AVComplexFloat *)s->dover->extended_data[ch]) + y * ihop_size;
         AVComplexFloat *over = ((AVComplexFloat *)s->over->extended_data[ch]) + y * ihop_size;
         AVComplexFloat *dstx = (AVComplexFloat *)s->dst_x->extended_data[jobnr];
         AVComplexFloat *srcx = (AVComplexFloat *)s->src_x->extended_data[jobnr];
+        AVComplexFloat *power = ((AVComplexFloat *)s->power->extended_data[y]) + coffset;
+        const AVComplexFloat *dkernel = s->dkernel[y];
         const AVComplexFloat *kernel = s->kernel[y];
         const unsigned *index = (const unsigned *)s->index;
         const int kernel_start = s->kernel_start[y];
@@ -991,6 +1020,44 @@ static int run_channel_cwt(AVFilterContext *ctx, int ch, int jobnr, int nb_jobs)
             chout[n].im += over[n].im;
         }
         memcpy(over, idst + ihop_size, sizeof(*over) * ihop_size);
+
+        if (!s->ssq)
+            continue;
+
+        s->fdsp->vector_fmul((float *)dstx, (const float *)srcx,
+                             (const float *)dkernel, FFALIGN(kernel_range * 2, 16));
+
+        memset(isrc, 0, sizeof(*isrc) * output_padding_size);
+        if (offset == 0) {
+            const unsigned *kindex = index + kernel_start;
+            for (int i = 0; i < kernel_range; i++) {
+                const unsigned n = kindex[i];
+
+                isrc[n].re += dstx[i].re;
+                isrc[n].im += dstx[i].im;
+            }
+        } else {
+            for (int i = 0; i < kernel_range; i++) {
+                const unsigned n = (i-kernel_start) & (output_padding_size-1);
+
+                isrc[n].re += dstx[i].re;
+                isrc[n].im += dstx[i].im;
+            }
+        }
+
+        s->itx_fn(s->ifft[jobnr], idst, isrc, sizeof(*isrc));
+
+        memcpy(chdout, idst, sizeof(*chdout) * ihop_size);
+        for (int n = 0; n < ihop_size; n++) {
+            chdout[n].re += dover[n].re;
+            chdout[n].im += dover[n].im;
+        }
+        memcpy(dover, idst + ihop_size, sizeof(*dover) * ihop_size);
+
+        for (int n = 0; n < ihop_size; n++) {
+            power[n].re = chout[n].re * chout[n].re + chout[n].im * chout[n].im;
+            power[n].im = chdout[n].re * chdout[n].re + chdout[n].im * chdout[n].im;
+        }
     }
 
     return 0;
@@ -1006,10 +1073,118 @@ static int run_channels_cwt(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     return 0;
 }
 
+static int run_channel_ssq(AVFilterContext *ctx, int ch, int jobnr, int nb_jobs)
+{
+    ShowCWTContext *s = ctx->priv;
+    const float *freqs = s->frequency_band;
+    const int count = s->frequency_band_count;
+    const int ihop_size = s->ihop_size;
+    const int start = (ihop_size * jobnr) / nb_jobs;
+    const int end = (ihop_size * (jobnr+1)) / nb_jobs;
+    const float delta = freqs[0]*0.005f;
+
+    for (int y = 0; y < count; y++) {
+        const float frequency = freqs[2*y];
+
+        for (int i = start; i < end; i++) {
+            const int offset = ch * ihop_size + i;
+            const AVComplexFloat *power = ((const AVComplexFloat *)s->power->extended_data[y]) + offset;
+            AVComplexFloat *phout = ((AVComplexFloat *)s->ph->extended_data[y]) + offset;
+            float den = power[0].re;
+
+            for (int Y = y; Y >= 0; Y--) {
+                const float Yfrequency = freqs[2*Y];
+
+                if (Yfrequency - frequency <= delta) {
+                    const AVComplexFloat *power = ((const AVComplexFloat *)s->power->extended_data[Y]) + offset;
+                    const float num = power[0].im;
+                    const float ph = fabsf(num - den) + power[0].re;
+
+                    if (ph > phout[0].re) {
+                        phout[0].re = ph;
+                        phout[0].im = Y;
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            for (int Y = y+1; Y < count; Y++) {
+                const float Yfrequency = freqs[2*Y];
+
+                if (frequency - Yfrequency <= delta) {
+                    const AVComplexFloat *power = ((const AVComplexFloat *)s->power->extended_data[Y]) + offset;
+                    const float num = power[0].im;
+                    const float ph = fabsf(num - den) + power[0].re;
+
+                    if (ph > phout[0].re) {
+                        phout[0].re = ph;
+                        phout[0].im = Y;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int run_channels_ssq(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    ShowCWTContext *s = ctx->priv;
+
+    for (int ch = 0; ch < s->nb_channels; ch++)
+        run_channel_ssq(ctx, ch, jobnr, nb_jobs);
+
+    return 0;
+}
+
+static int run_channel_sync(AVFilterContext *ctx, int ch, int jobnr, int nb_jobs)
+{
+    ShowCWTContext *s = ctx->priv;
+    const int count = s->frequency_band_count;
+    const float *freqs = s->frequency_band;
+    const int ihop_size = s->ihop_size;
+    const int start = (ihop_size * jobnr) / nb_jobs;
+    const int end = (ihop_size * (jobnr+1)) / nb_jobs;
+
+    for (int i = start; i < end; i++) {
+        for (int y = 0; y < count; y++) {
+            const int offset = ch * ihop_size + i;
+            const AVComplexFloat *phin = ((const AVComplexFloat *)s->ph->extended_data[y]) + offset;
+            const AVComplexFloat *chin = ((const AVComplexFloat *)s->ch_out->extended_data[y]) + offset;
+            const int Y = lrintf(phin[0].im);
+
+            if (Y >= 0) {
+                AVComplexFloat *Ysync = ((AVComplexFloat *)s->sync->extended_data[Y]) + offset;
+                const float pwr = expf(-fabsf(freqs[2*Y]-freqs[2*y])/freqs[0]);
+
+                Ysync[0].re += chin[0].re * pwr;
+                Ysync[0].im += chin[0].im * pwr;
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int run_channels_sync(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    ShowCWTContext *s = ctx->priv;
+
+    for (int ch = 0; ch < s->nb_channels; ch++)
+        run_channel_sync(ctx, ch, jobnr, nb_jobs);
+
+    return 0;
+}
+
 static int compute_kernel(AVFilterContext *ctx)
 {
     ShowCWTContext *s = ctx->priv;
     const int size = s->input_padding_size;
+    const int osize = s->output_padding_size;
     const int output_sample_count = s->output_sample_count;
     const int fsize = s->frequency_band_count;
     int *kernel_start = s->kernel_start;
@@ -1017,28 +1192,35 @@ static int compute_kernel(AVFilterContext *ctx)
     unsigned *index = s->index;
     int range_min = INT_MAX;
     int range_max = 0, ret = 0;
-    float *tkernel;
+    float *tkernel, *tdkernel;
 
     tkernel = av_malloc_array(size, sizeof(*tkernel));
-    if (!tkernel)
+    tdkernel = av_malloc_array(size, sizeof(*tdkernel));
+    if (!tkernel || !tdkernel) {
+        av_freep(&tdkernel);
+        av_freep(&tkernel);
         return AVERROR(ENOMEM);
+    }
 
     for (int y = 0; y < fsize; y++) {
+        AVComplexFloat *dkernel = s->dkernel[y];
         AVComplexFloat *kernel = s->kernel[y];
         int start = INT_MIN, stop = INT_MAX;
+        const float dfrequency = s->frequency_band[y*2+1];
         const float frequency = s->frequency_band[y*2];
-        const float deviation = 1.f / (s->frequency_band[y*2+1] *
+        const float deviation = 1.f / (dfrequency *
                                        output_sample_count);
         const int a = FFMAX(frequency-12.f*sqrtf(1.f/deviation)-0.5f, -size);
         const int b = FFMIN(frequency+12.f*sqrtf(1.f/deviation)-0.5f, size+a);
+        int kernel_size;
         const int range = -a;
 
         memset(tkernel, 0, size * sizeof(*tkernel));
         for (int n = a; n < b; n++) {
-            float ff, f = n+0.5f-frequency;
+            const float f = n+0.5f-frequency;
 
-            ff = expf(-f*f*deviation);
-            tkernel[n+range] = ff;
+            tkernel[n+range] = expf(-f*f*deviation);
+            tdkernel[n+range] = -2.f*f*deviation*expf(-f*f*deviation);
         }
 
         for (int n = a; n < b; n++) {
@@ -1066,30 +1248,45 @@ static int compute_kernel(AVFilterContext *ctx)
 
         kernel_start[y] = start;
         kernel_stop[y] = stop;
+        kernel_size = stop-start+1;
 
-        kernel = av_calloc(FFALIGN(stop-start+1, 16), sizeof(*kernel));
+        kernel = av_calloc(FFALIGN(kernel_size, 16), sizeof(*kernel));
         if (!kernel) {
             ret = AVERROR(ENOMEM);
             break;
         }
 
-        for (int n = 0; n <= stop - start; n++) {
+        for (int n = 0; n < kernel_size; n++) {
             kernel[n].re = tkernel[n+range+start];
             kernel[n].im = tkernel[n+range+start];
         }
 
-        range_min = FFMIN(range_min, stop+1-start);
-        range_max = FFMAX(range_max, stop+1-start);
+        range_min = FFMIN(range_min, kernel_size);
+        range_max = FFMAX(range_max, kernel_size);
 
         s->kernel[y] = kernel;
+
+        dkernel = av_calloc(FFALIGN(kernel_size, 16), sizeof(*dkernel));
+        if (!dkernel) {
+            ret = AVERROR(ENOMEM);
+            break;
+        }
+
+        for (int n = 0; n < kernel_size; n++) {
+            dkernel[n].re = tdkernel[n+range+start];
+            dkernel[n].im = tdkernel[n+range+start];
+        }
+
+        s->dkernel[y] = dkernel;
     }
 
     for (int n = 0; n < size; n++)
-        index[n] = n & (s->output_padding_size - 1);
+        index[n] = n & (osize - 1);
 
     av_log(ctx, AV_LOG_DEBUG, "range_min: %d\n", range_min);
     av_log(ctx, AV_LOG_DEBUG, "range_max: %d\n", range_max);
 
+    av_freep(&tdkernel);
     av_freep(&tkernel);
 
     return ret;
@@ -1183,6 +1380,7 @@ static int config_output(AVFilterLink *outlink)
 
     s->nb_consumed_samples = inlink->sample_rate *
                              frequency_band(s->frequency_band, s->frequency_weight,
+                                            inlink->sample_rate,
                                             s->frequency_band_count, maximum_frequency - minimum_frequency,
                                             minimum_frequency, s->frequency_scale, s->deviation,
                                             s->weighting_type);
@@ -1234,25 +1432,59 @@ static int config_output(AVFilterLink *outlink)
     s->dst_x = av_frame_alloc();
     s->src_x = av_frame_alloc();
     s->kernel = av_calloc(s->frequency_band_count, sizeof(*s->kernel));
+    s->dkernel = av_calloc(s->frequency_band_count, sizeof(*s->dkernel));
     s->cache = ff_get_audio_buffer(inlink, s->hop_size);
     s->over = ff_get_audio_buffer(inlink, s->frequency_band_count * 2 * s->ihop_size);
+    s->dover = ff_get_audio_buffer(inlink, s->frequency_band_count * 2 * s->ihop_size);
     s->bh_out = ff_get_audio_buffer(inlink, s->frequency_band_count);
     s->ifft_in = av_frame_alloc();
     s->ifft_out = av_frame_alloc();
     s->ch_pout = av_frame_alloc();
+    s->ch_dout = av_frame_alloc();
     s->ch_out = av_frame_alloc();
+    s->power = av_frame_alloc();
+    s->sync = av_frame_alloc();
+    s->ph = av_frame_alloc();
     s->index = av_calloc(s->input_padding_size, sizeof(*s->index));
     s->kernel_start = av_calloc(s->frequency_band_count, sizeof(*s->kernel_start));
     s->kernel_stop = av_calloc(s->frequency_band_count, sizeof(*s->kernel_stop));
-    if (!s->outpicref || !s->fft_in || !s->fft_out || !s->src_x || !s->dst_x || !s->over ||
-        !s->ifft_in || !s->ifft_out || !s->kernel_start || !s->kernel_stop || !s->ch_out ||
-        !s->cache || !s->index || !s->bh_out || !s->kernel || !s->ch_pout)
+    if (!s->outpicref || !s->fft_in || !s->fft_out || !s->src_x || !s->dst_x || !s->over || !s->dover || !s->power ||
+        !s->ifft_in || !s->ifft_out || !s->kernel_start || !s->kernel_stop || !s->ch_out || !s->dkernel ||
+        !s->cache || !s->index || !s->bh_out || !s->kernel || !s->ch_pout || !s->sync || !s->ch_dout || !s->ph)
         return AVERROR(ENOMEM);
+
+    s->ph->format     = inlink->format;
+    s->ph->nb_samples = 2 * s->ihop_size * inlink->ch_layout.nb_channels;
+    s->ph->ch_layout.nb_channels = s->frequency_band_count;
+    ret = av_frame_get_buffer(s->ph, 0);
+    if (ret < 0)
+        return ret;
 
     s->ch_pout->format     = inlink->format;
     s->ch_pout->nb_samples = 2 * s->ihop_size * inlink->ch_layout.nb_channels;
     s->ch_pout->ch_layout.nb_channels = s->frequency_band_count;
     ret = av_frame_get_buffer(s->ch_pout, 0);
+    if (ret < 0)
+        return ret;
+
+    s->sync->format     = inlink->format;
+    s->sync->nb_samples = 2 * s->ihop_size * inlink->ch_layout.nb_channels;
+    s->sync->ch_layout.nb_channels = s->frequency_band_count;
+    ret = av_frame_get_buffer(s->sync, 0);
+    if (ret < 0)
+        return ret;
+
+    s->ch_dout->format     = inlink->format;
+    s->ch_dout->nb_samples = 2 * s->ihop_size * inlink->ch_layout.nb_channels;
+    s->ch_dout->ch_layout.nb_channels = s->frequency_band_count;
+    ret = av_frame_get_buffer(s->ch_dout, 0);
+    if (ret < 0)
+        return ret;
+
+    s->power->format     = inlink->format;
+    s->power->nb_samples = 2 * s->ihop_size * inlink->ch_layout.nb_channels;
+    s->power->ch_layout.nb_channels = s->frequency_band_count;
+    ret = av_frame_get_buffer(s->power, 0);
     if (ret < 0)
         return ret;
 
@@ -1588,6 +1820,27 @@ static int activate(AVFilterContext *ctx)
             if (s->ihop_index == 0) {
                 ff_filter_execute(ctx, run_channels_cwt, NULL, NULL,
                                   s->nb_threads);
+
+                if (s->ssq) {
+                    av_samples_set_silence(s->sync->extended_data, 0,
+                                           s->sync->nb_samples,
+                                           s->sync->ch_layout.nb_channels,
+                                           s->sync->format);
+
+                    for (int y = 0; y < s->ph->ch_layout.nb_channels; y++) {
+                        AVComplexFloat *phout = ((AVComplexFloat *)s->ph->extended_data[y]);
+
+                        for (int n = 0; n < s->ph->nb_samples/2; n++) {
+                            phout[n].re = -1.f;
+                            phout[n].im = -1.f;
+                        }
+                    }
+
+                    ff_filter_execute(ctx, run_channels_ssq, NULL, NULL,
+                                      s->nb_threads);
+                    ff_filter_execute(ctx, run_channels_sync, NULL, NULL,
+                                      s->nb_threads);
+                }
             }
 
             ret = output_frame(ctx);
