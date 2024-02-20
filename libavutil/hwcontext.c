@@ -357,7 +357,7 @@ int av_hwframe_ctx_init(AVBufferRef *ref)
     if (ctx->internal->hw_type->frames_init) {
         ret = ctx->internal->hw_type->frames_init(ctx);
         if (ret < 0)
-            goto fail;
+            return ret;
     }
 
     if (ctx->internal->pool_internal && !ctx->pool)
@@ -367,14 +367,10 @@ int av_hwframe_ctx_init(AVBufferRef *ref)
     if (ctx->initial_pool_size > 0) {
         ret = hwframe_pool_prealloc(ref);
         if (ret < 0)
-            goto fail;
+            return ret;
     }
 
     return 0;
-fail:
-    if (ctx->internal->hw_type->frames_uninit)
-        ctx->internal->hw_type->frames_uninit(ctx);
-    return ret;
 }
 
 int av_hwframe_transfer_get_formats(AVBufferRef *hwframe_ref,
