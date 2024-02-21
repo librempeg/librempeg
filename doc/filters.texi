@@ -31436,6 +31436,9 @@ Default value is @code{hann}.
 
 @item rate, r
 Set output framerate.
+
+@item fade
+Set output fade step.
 @end table
 
 @anchor{showspectrum}

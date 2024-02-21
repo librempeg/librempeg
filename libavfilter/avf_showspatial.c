@@ -50,7 +50,9 @@ typedef struct ShowSpatialContext {
     int consumed;
     int hop_size;
     int frame;
+    int fade;
     int64_t pts;
+    AVFrame *outpicref;
 } ShowSpatialContext;
 
 #define OFFSET(x) offsetof(ShowSpatialContext, x)
@@ -63,6 +65,7 @@ static const AVOption showspatial_options[] = {
     WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_HANNING),
     { "rate", "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
     { "r",    "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
+    { "fade", "set fade step",  OFFSET(fade), AV_OPT_TYPE_INT, {.i64=12}, 1, 255, FLAGS },
     { NULL }
 };
 
@@ -188,6 +191,51 @@ static void draw_dot(uint8_t *dst, int value)
     dst[0] = value;
 }
 
+static int fade(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    ShowSpatialContext *s = ctx->priv;
+    const int ylinesize = s->outpicref->linesize[0];
+    const int ulinesize = s->outpicref->linesize[1];
+    const int vlinesize = s->outpicref->linesize[2];
+    const int width = s->outpicref->width;
+    const int height = s->outpicref->height;
+    const int slice_start = (height *  jobnr   ) / nb_jobs;
+    const int slice_end   = (height * (jobnr+1)) / nb_jobs;
+    const int fv = s->fade;
+
+    if (fv == 255) {
+        for (int i = slice_start; i < slice_end; i++) {
+            memset(s->outpicref->data[0] + i * ylinesize, 0, width);
+            memset(s->outpicref->data[1] + i * ulinesize, 128, width);
+            memset(s->outpicref->data[2] + i * vlinesize, 128, width);
+        }
+        return 0;
+    }
+
+    if (fv) {
+        uint8_t *y = s->outpicref->data[0] + slice_start * ylinesize;
+        uint8_t *u = s->outpicref->data[1] + slice_start * ulinesize;
+        uint8_t *v = s->outpicref->data[2] + slice_start * vlinesize;
+
+        for (int i = slice_start; i < slice_end; i++) {
+            for (int j = 0; j < width; j++) {
+                if (y[j]) {
+                    y[j] = FFMAX(y[j] - fv, 0);
+                } else {
+                    u[j] = 128;
+                    v[j] = 128;
+                }
+            }
+
+            y += ylinesize;
+            u += ulinesize;
+            v += vlinesize;
+        }
+    }
+
+    return 0;
+}
+
 static int draw_spatial(AVFilterLink *inlink, int64_t pts)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -197,29 +245,46 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
     ptrdiff_t linesize_y;
     ptrdiff_t linesize_u;
     ptrdiff_t linesize_v;
-    AVFrame *outpicref;
     const int h = s->h;
     const int w = s->w;
-    const int z = s->win_size / 2 + 1;
+    const int h1 = h-1;
+    const int w1 = w-1;
+    const int z = s->win_size + 1;
+    AVFrame *clone;
+    int ret;
 
-    outpicref = ff_get_video_buffer(outlink, outlink->w, outlink->h);
-    if (!outpicref)
-        return AVERROR(ENOMEM);
+    if (!s->outpicref || s->outpicref->width  != outlink->w ||
+                         s->outpicref->height != outlink->h) {
+        av_frame_free(&s->outpicref);
+        s->outpicref = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+        if (!s->outpicref)
+            return AVERROR(ENOMEM);
 
-    dst_y = outpicref->data[0];
-    dst_u = outpicref->data[1];
-    dst_v = outpicref->data[2];
+        linesize_y = s->outpicref->linesize[0];
+        linesize_u = s->outpicref->linesize[1];
+        linesize_v = s->outpicref->linesize[2];
 
-    linesize_y = outpicref->linesize[0];
-    linesize_u = outpicref->linesize[1];
-    linesize_v = outpicref->linesize[2];
-
-    outpicref->sample_aspect_ratio = (AVRational){1,1};
-    for (int i = 0; i < outlink->h; i++) {
-        memset(dst_y + i * linesize_y,   0, outlink->w);
-        memset(dst_u + i * linesize_u, 128, outlink->w);
-        memset(dst_v + i * linesize_v, 128, outlink->w);
+        s->outpicref->sample_aspect_ratio = (AVRational){1,1};
+        for (int i = 0; i < outlink->h; i++) {
+            memset(s->outpicref->data[0] + i * linesize_y,   0, w);
+            memset(s->outpicref->data[1] + i * linesize_u, 128, w);
+            memset(s->outpicref->data[2] + i * linesize_v, 128, w);
+        }
     }
+
+    ret = ff_inlink_make_frame_writable(outlink, &s->outpicref);
+    if (ret < 0)
+        return ret;
+
+    dst_y = s->outpicref->data[0];
+    dst_u = s->outpicref->data[1];
+    dst_v = s->outpicref->data[2];
+
+    linesize_y = s->outpicref->linesize[0];
+    linesize_u = s->outpicref->linesize[1];
+    linesize_v = s->outpicref->linesize[2];
+
+    ff_filter_execute(ctx, fade, NULL, NULL, FFMIN(outlink->h, ff_filter_get_nb_threads(ctx)));
 
     for (int j = 0; j < z; j++) {
         const int idx = z - 1 - j;
@@ -231,26 +296,29 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
         float im = r_re * l_im - r_im * l_re;
         float l = hypotf(l_re, l_im);
         float r = hypotf(r_re, r_im);
-        float sum = atan2f(r, l);
+        float sum = hypotf(l, r);
+        float sump = atan2f(r, l);
         float diffp = fabsf(atan2f(im, re) / M_PIf);
-        float diff = sum / M_PI_2f;
-        int cu = av_clip((1.f-diff) * 255.f, 0, 255);
-        int cv = av_clip(     diff  * 255.f, 0, 255);
-        int cy = av_clip(     diff  * 255.f, 0, 255);
-        int x, y;
-
-        x = av_clip(w * diff,  0, w - 1);
-        y = av_clip(h * diffp, 0, h - 1);
+        float diff = sump / M_PI_2f;
+        int cy = av_clip(((l+r) / sum) * 255.f, 0, 255);
+        int cu = av_clip(64.f * sinf(2.f * diff * M_PIf - M_PIf) + 127.5f, 0, 255);
+        int cv = av_clip(64.f * sinf(2.f * diff * M_PIf) + 127.5f, 0, 255);
+        int x = av_clip(w * diff,  0, w1);
+        int y = av_clip(h * diffp, 0, h1);
 
         draw_dot(dst_y + linesize_y * y + x, cy);
         draw_dot(dst_u + linesize_u * y + x, cu);
         draw_dot(dst_v + linesize_v * y + x, cv);
     }
 
-    outpicref->pts = pts;
-    outpicref->duration = 1;
+    s->outpicref->pts = pts;
+    s->outpicref->duration = 1;
 
-    return ff_filter_frame(outlink, outpicref);
+    clone = av_frame_clone(s->outpicref);
+    if (!clone)
+        return AVERROR(ENOMEM);
+
+    return ff_filter_frame(outlink, clone);
 }
 
 static int spatial_activate(AVFilterContext *ctx)
