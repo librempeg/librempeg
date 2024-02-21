@@ -232,13 +232,17 @@ static int draw_spatial(AVFilterLink *inlink, int64_t in_pts)
 
     for (int j = 0; j < z; j++) {
         const int idx = z - 1 - j;
-        float l = hypotf(RE(idx, 0), IM(idx, 0));
-        float r = hypotf(RE(idx, 1), IM(idx, 1));
-        float sum = atan2f(l, r);
-        float lp = atan2f(IM(idx, 0), RE(idx, 0));
-        float rp = atan2f(IM(idx, 1), RE(idx, 1));
-        float diffp = ((rp - lp) / (2.f * M_PI) + 1.f) * 0.5f;
-        float diff = sum / M_PI_2;
+        float l_re = RE(idx, 0);
+        float l_im = IM(idx, 0);
+        float r_re = RE(idx, 1);
+        float r_im = IM(idx, 1);
+        float re = l_re * r_re + l_im * r_im;
+        float im = r_re * l_im - r_im * l_re;
+        float l = hypotf(l_re, l_im);
+        float r = hypotf(r_re, r_im);
+        float sum = atan2f(r, l);
+        float diffp = fabsf(atan2f(im, re) / M_PIf);
+        float diff = sum / M_PI_2f;
         int cu = av_clip((1.f-diff) * 255.f, 0, 255);
         int cv = av_clip(     diff  * 255.f, 0, 255);
         int cy = av_clip(     diff  * 255.f, 0, 255);
