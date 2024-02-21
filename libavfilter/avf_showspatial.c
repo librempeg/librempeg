@@ -77,7 +77,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     for (int i = 0; i < 2; i++) {
         av_freep(&s->fft_data[i]);
         av_freep(&s->fft_tdata[i]);
-        av_freep(&s->window[i]);
     }
     av_freep(&s->window_func_lut);
 }
@@ -112,14 +111,15 @@ static int query_formats(AVFilterContext *ctx)
 static int run_channel_fft(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     ShowSpatialContext *s = ctx->priv;
+    AVFrame *in = arg;
     const float *window_func_lut = s->window_func_lut;
     const int ch = jobnr;
-    const float *p = s->window[ch];
-    const int nb_samples = s->win_size;
+    const float *src = (const float *)in->extended_data[ch];
+    const int nb_samples = in->nb_samples;
     float *dst = s->fft_tdata[ch];
 
     for (int n = 0; n < nb_samples; n++)
-        dst[n] = p[n] * window_func_lut[n];
+        dst[n] = src[n] * window_func_lut[n];
 
     s->tx_fn[ch](s->fft[ch], s->fft_data[ch], dst, sizeof(*dst));
 
@@ -142,28 +142,24 @@ static int config_output(AVFilterLink *outlink)
     outlink->time_base = av_inv_q(outlink->frame_rate);
     s->hop_size = FFMAX(1, av_rescale(inlink->sample_rate, s->frame_rate.den, s->frame_rate.num));
     s->win_size = s->frame << av_ceil_log2(s->hop_size);
-    s->buf_size = s->win_size + 2;
+    s->buf_size = s->win_size*2 + 2;
+    s->pts = AV_NOPTS_VALUE;
 
     for (int i = 0; i < 2; i++) {
         av_tx_uninit(&s->fft[i]);
         av_freep(&s->fft_data[i]);
         av_freep(&s->fft_tdata[i]);
-        av_freep(&s->window[i]);
     }
 
     for (int i = 0; i < 2; i++) {
-        float scale = 1.f / s->win_size;
+        float scale = 0.5f / s->win_size;
         ret = av_tx_init(&s->fft[i], &s->tx_fn[i], AV_TX_FLOAT_RDFT,
-                         0, s->win_size, &scale, 0);
+                         0, s->win_size*2, &scale, 0);
         if (ret < 0)
             return ret;
     }
 
     for (int i = 0; i < 2; i++) {
-        s->window[i] = av_calloc(s->win_size, sizeof(**s->window));
-        if (!s->window[i])
-            return AVERROR(ENOMEM);
-
         s->fft_tdata[i] = av_calloc(s->buf_size, sizeof(**s->fft_tdata));
         if (!s->fft_tdata[i])
             return AVERROR(ENOMEM);
@@ -187,16 +183,12 @@ static int config_output(AVFilterLink *outlink)
 #define RE(y, ch) s->fft_data[ch][y].re
 #define IM(y, ch) s->fft_data[ch][y].im
 
-static void draw_dot(uint8_t *dst, ptrdiff_t linesize, int value)
+static void draw_dot(uint8_t *dst, int value)
 {
     dst[0] = value;
-    dst[1] = value;
-    dst[-1] = value;
-    dst[linesize] = value;
-    dst[-linesize] = value;
 }
 
-static int draw_spatial(AVFilterLink *inlink, int64_t in_pts)
+static int draw_spatial(AVFilterLink *inlink, int64_t pts)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
@@ -206,10 +198,9 @@ static int draw_spatial(AVFilterLink *inlink, int64_t in_pts)
     ptrdiff_t linesize_u;
     ptrdiff_t linesize_v;
     AVFrame *outpicref;
-    int h = s->h - 2;
-    int w = s->w - 2;
-    int z = s->win_size / 2 + 1;
-    int64_t pts = av_rescale_q(in_pts, inlink->time_base, outlink->time_base);
+    const int h = s->h;
+    const int w = s->w;
+    const int z = s->win_size / 2 + 1;
 
     outpicref = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     if (!outpicref)
@@ -248,12 +239,12 @@ static int draw_spatial(AVFilterLink *inlink, int64_t in_pts)
         int cy = av_clip(     diff  * 255.f, 0, 255);
         int x, y;
 
-        x = av_clip(w * diff,  0, w - 2) + 1;
-        y = av_clip(h * diffp, 0, h - 2) + 1;
+        x = av_clip(w * diff,  0, w - 1);
+        y = av_clip(h * diffp, 0, h - 1);
 
-        draw_dot(dst_y + linesize_y * y + x, linesize_y, cy);
-        draw_dot(dst_u + linesize_u * y + x, linesize_u, cu);
-        draw_dot(dst_v + linesize_v * y + x, linesize_v, cv);
+        draw_dot(dst_y + linesize_y * y + x, cy);
+        draw_dot(dst_u + linesize_u * y + x, cu);
+        draw_dot(dst_v + linesize_v * y + x, cv);
     }
 
     outpicref->pts = pts;
@@ -276,20 +267,15 @@ static int spatial_activate(AVFilterContext *ctx)
     if (ret < 0)
         return ret;
     if (ret > 0) {
-        const int64_t pts = in->pts;
+        int64_t pts = av_rescale_q(in->pts, inlink->time_base, outlink->time_base);
 
-        for (int ch = 0; ch < 2; ch++) {
-            const int offset = s->win_size - s->hop_size;
-            float *src = s->window[ch];
-
-            memmove(src, &src[s->hop_size], offset * sizeof(*src));
-            memcpy(&src[offset], in->extended_data[ch], in->nb_samples * sizeof(*src));
-        }
-
-        av_frame_free(&in);
         ff_filter_execute(ctx, run_channel_fft, in, NULL, 2);
+        av_frame_free(&in);
 
-        return draw_spatial(inlink, pts);
+        if (s->pts != pts) {
+            s->pts = pts;
+            return draw_spatial(inlink, pts);
+        }
     }
 
     FF_FILTER_FORWARD_STATUS(inlink, outlink);
