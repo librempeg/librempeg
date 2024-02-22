@@ -1858,7 +1858,8 @@ static void xml_print_section_footer(WriterContext *wctx)
     }
 }
 
-static void xml_print_value(WriterContext *wctx, const char *key, const void *value, const int is_int)
+static void xml_print_value(WriterContext *wctx, const char *key,
+                            const char *str, long long int num, const int is_int)
 {
     AVBPrint buf;
     XMLContext *xml = wctx->priv;
@@ -1876,9 +1877,9 @@ static void xml_print_value(WriterContext *wctx, const char *key, const void *va
         av_bprint_clear(&buf);
 
         if (is_int) {
-            writer_printf(wctx, " value=\"%lld\"/>\n", *(long long int *)value);
+            writer_printf(wctx, " value=\"%lld\"/>\n", num);
         } else {
-            av_bprint_escape(&buf, (const char *)value, NULL,
+            av_bprint_escape(&buf, str, NULL,
                              AV_ESCAPE_MODE_XML, AV_ESCAPE_FLAG_XML_DOUBLE_QUOTES);
             writer_printf(wctx, " value=\"%s\"/>\n", buf.str);
         }
@@ -1888,9 +1889,9 @@ static void xml_print_value(WriterContext *wctx, const char *key, const void *va
             writer_w8(wctx, ' ');
 
         if (is_int) {
-            writer_printf(wctx, "%s=\"%lld\"", key, *(long long int *)value);
+            writer_printf(wctx, "%s=\"%lld\"", key, num);
         } else {
-            av_bprint_escape(&buf, (const char *)value, NULL,
+            av_bprint_escape(&buf, str, NULL,
                              AV_ESCAPE_MODE_XML, AV_ESCAPE_FLAG_XML_DOUBLE_QUOTES);
             writer_printf(wctx, "%s=\"%s\"", key, buf.str);
         }
@@ -1900,11 +1901,11 @@ static void xml_print_value(WriterContext *wctx, const char *key, const void *va
 }
 
 static inline void xml_print_str(WriterContext *wctx, const char *key, const char *value) {
-    xml_print_value(wctx, key, (const void *)value, 0);
+    xml_print_value(wctx, key, value, 0, 0);
 }
 
 static inline void xml_print_int(WriterContext *wctx, const char *key, long long int value) {
-    xml_print_value(wctx, key, (const void *)&value, 1);
+    xml_print_value(wctx, key, NULL, value, 1);
 }
 
 static Writer xml_writer = {
