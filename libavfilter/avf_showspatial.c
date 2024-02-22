@@ -34,22 +34,33 @@
 #include "internal.h"
 #include "window_func.h"
 
+enum ColorMode {
+    CM_LR,
+    CM_COR,
+    CM_FREQ,
+    NB_CMODE
+};
+
 typedef struct ShowSpatialContext {
     const AVClass *class;
     int w, h;
+    int nb_channels;
     AVRational frame_rate;
-    AVTXContext *fft[2];          ///< Fast Fourier Transform context
-    AVComplexFloat *fft_data[2];  ///< bins holder for each (displayed) channels
-    float *window[2];
-    float *fft_tdata[2];
-    float *window_func_lut;       ///< Window function LUT
-    av_tx_fn tx_fn[2];
+    AVTXContext **fft;          ///< Fast Fourier Transform context
+    AVComplexFloat **fft_data;  ///< bins holder for each (displayed) channels
+    float **fft_tdata;
+    float *window_func_lut;     ///< Window function LUT
+    av_tx_fn *tx_fn;
+    float *power;
+    AVComplexFloat *direction;
     int win_func;
     int win_size;
     int buf_size;
     int consumed;
     int hop_size;
     int frame;
+    int color;
+    int contrast;
     int fade;
     int64_t pts;
     AVFrame *outpicref;
@@ -65,7 +76,12 @@ static const AVOption showspatial_options[] = {
     WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_HANNING),
     { "rate", "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
     { "r",    "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
-    { "fade", "set fade step",  OFFSET(fade), AV_OPT_TYPE_INT, {.i64=12}, 1, 255, FLAGS },
+    { "contrast", "set contrast step",  OFFSET(contrast), AV_OPT_TYPE_INT, {.i64=170}, 1, 255, FLAGS },
+    { "fade", "set fade step",  OFFSET(fade), AV_OPT_TYPE_INT, {.i64=15}, 1, 255, FLAGS },
+    { "color", "set color mode",OFFSET(color), AV_OPT_TYPE_INT, {.i64=0}, 0, NB_CMODE-1, FLAGS, "color" },
+    {  "lr", "left-right", 0, AV_OPT_TYPE_CONST,{.i64=CM_LR},   0, 0, FLAGS, "color" },
+    {  "cor","correlation",0, AV_OPT_TYPE_CONST,{.i64=CM_COR},  0, 0, FLAGS, "color" },
+    {  "freq","frequency", 0, AV_OPT_TYPE_CONST,{.i64=CM_FREQ}, 0, 0, FLAGS, "color" },
     { NULL }
 };
 
@@ -75,29 +91,40 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     ShowSpatialContext *s = ctx->priv;
 
-    for (int i = 0; i < 2; i++)
-        av_tx_uninit(&s->fft[i]);
-    for (int i = 0; i < 2; i++) {
-        av_freep(&s->fft_data[i]);
-        av_freep(&s->fft_tdata[i]);
+    for (int i = 0; i < s->nb_channels; i++) {
+        if (s->fft)
+            av_tx_uninit(&s->fft[i]);
+        if (s->fft_data)
+            av_freep(&s->fft_data[i]);
+        if (s->fft_tdata)
+            av_freep(&s->fft_tdata[i]);
     }
+
+    av_freep(&s->fft);
+    av_freep(&s->tx_fn);
+    av_freep(&s->power);
+    av_freep(&s->direction);
+    av_freep(&s->fft_data);
+    av_freep(&s->fft_tdata);
     av_freep(&s->window_func_lut);
 }
 
 static int query_formats(AVFilterContext *ctx)
 {
     AVFilterFormats *formats = NULL;
-    AVFilterChannelLayouts *layout = NULL;
+    AVFilterChannelLayouts *layouts = NULL;
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE };
     static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_YUV444P, AV_PIX_FMT_NONE };
     int ret;
 
+    layouts = ff_all_channel_counts();
+    if ((ret = ff_channel_layouts_ref(layouts, &inlink->outcfg.channel_layouts)) < 0)
+        return ret;
+
     formats = ff_make_format_list(sample_fmts);
-    if ((ret = ff_formats_ref         (formats, &inlink->outcfg.formats        )) < 0 ||
-        (ret = ff_add_channel_layout  (&layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO)) < 0 ||
-        (ret = ff_channel_layouts_ref (layout , &inlink->outcfg.channel_layouts)) < 0)
+    if ((ret = ff_formats_ref(formats, &inlink->outcfg.formats)) < 0)
         return ret;
 
     formats = ff_all_samplerates();
@@ -147,22 +174,40 @@ static int config_output(AVFilterLink *outlink)
     s->win_size = s->frame << av_ceil_log2(s->hop_size);
     s->buf_size = s->win_size*2 + 2;
     s->pts = AV_NOPTS_VALUE;
+    s->nb_channels = inlink->ch_layout.nb_channels;
 
-    for (int i = 0; i < 2; i++) {
-        av_tx_uninit(&s->fft[i]);
-        av_freep(&s->fft_data[i]);
-        av_freep(&s->fft_tdata[i]);
+    for (int i = 0; i < s->nb_channels; i++) {
+        if (s->fft)
+            av_tx_uninit(&s->fft[i]);
+        if (s->fft_data)
+            av_freep(&s->fft_data[i]);
+        if (s->fft_tdata)
+            av_freep(&s->fft_tdata[i]);
     }
 
-    for (int i = 0; i < 2; i++) {
+    av_freep(&s->fft);
+    av_freep(&s->tx_fn);
+    av_freep(&s->power);
+    av_freep(&s->direction);
+    av_freep(&s->fft_data);
+    av_freep(&s->fft_tdata);
+
+    s->fft = av_calloc(s->nb_channels, sizeof(*s->fft));
+    s->tx_fn = av_calloc(s->nb_channels, sizeof(*s->tx_fn));
+    s->power = av_calloc(s->nb_channels, sizeof(*s->power));
+    s->direction = av_calloc(s->nb_channels, sizeof(*s->direction));
+    s->fft_data = av_calloc(s->nb_channels, sizeof(*s->fft_data));
+    s->fft_tdata = av_calloc(s->nb_channels, sizeof(*s->fft_tdata));
+    if (!s->fft || !s->fft_data || !s->fft_tdata || !s->tx_fn || !s->power || !s->direction)
+        return AVERROR(ENOMEM);
+
+    for (int i = 0; i < s->nb_channels; i++) {
         float scale = 0.5f / s->win_size;
         ret = av_tx_init(&s->fft[i], &s->tx_fn[i], AV_TX_FLOAT_RDFT,
                          0, s->win_size*2, &scale, 0);
         if (ret < 0)
             return ret;
-    }
 
-    for (int i = 0; i < 2; i++) {
         s->fft_tdata[i] = av_calloc(s->buf_size, sizeof(**s->fft_tdata));
         if (!s->fft_tdata[i])
             return AVERROR(ENOMEM);
@@ -180,11 +225,43 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR(ENOMEM);
     generate_window_func(s->window_func_lut, s->win_size, s->win_func, &overlap);
 
+    for (int ch = 0; ch < s->nb_channels; ch++) {
+        const int chan = av_channel_layout_channel_from_index(&inlink->ch_layout, ch);
+        AVComplexFloat dir;
+
+        dir.re = dir.im = 0.5;
+
+        switch (chan) {
+        case AV_CHAN_FRONT_LEFT:
+        case AV_CHAN_BACK_LEFT:
+        case AV_CHAN_SIDE_LEFT:
+            dir.re = -1.f;
+            break;
+        case AV_CHAN_FRONT_RIGHT:
+        case AV_CHAN_BACK_RIGHT:
+        case AV_CHAN_SIDE_RIGHT:
+            dir.re =  1.f;
+            break;
+        case AV_CHAN_LOW_FREQUENCY:
+        case AV_CHAN_FRONT_CENTER:
+        case AV_CHAN_BACK_CENTER:
+            dir.re =  0.f;
+            break;
+        }
+
+        s->direction[ch] = dir;
+    }
+
     return 0;
 }
 
 #define RE(y, ch) s->fft_data[ch][y].re
 #define IM(y, ch) s->fft_data[ch][y].im
+
+static void draw_idot(uint8_t *dst, int step)
+{
+    dst[0] = FFMIN(dst[0] + step, 255);
+}
 
 static void draw_dot(uint8_t *dst, int value)
 {
@@ -241,6 +318,9 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     ShowSpatialContext *s = ctx->priv;
+    const int nb_channels = s->nb_channels;
+    const int color = s->color;
+    const AVComplexFloat *direction = s->direction;
     uint8_t *dst_y, *dst_u, *dst_v;
     ptrdiff_t linesize_y;
     ptrdiff_t linesize_u;
@@ -250,6 +330,8 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
     const int h1 = h-1;
     const int w1 = w-1;
     const int z = s->win_size + 1;
+    const int cy = s->contrast;
+    float *power = s->power;
     AVFrame *clone;
     int ret;
 
@@ -288,25 +370,73 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
 
     for (int j = 0; j < z; j++) {
         const int idx = z - 1 - j;
-        float l_re = RE(idx, 0);
-        float l_im = IM(idx, 0);
-        float r_re = RE(idx, 1);
-        float r_im = IM(idx, 1);
-        float re = l_re * r_re + l_im * r_im;
-        float im = r_re * l_im - r_im * l_re;
-        float l = hypotf(l_re, l_im);
-        float r = hypotf(r_re, r_im);
-        float sum = hypotf(l, r);
-        float sump = atan2f(r, l);
-        float diffp = fabsf(atan2f(im, re) / M_PIf);
-        float diff = sump / M_PI_2f;
-        int cy = av_clip(((l+r) / sum) * 255.f, 0, 255);
-        int cu = av_clip(64.f * sinf(2.f * diff * M_PIf - M_PIf) + 127.5f, 0, 255);
-        int cv = av_clip(64.f * sinf(2.f * diff * M_PIf) + 127.5f, 0, 255);
-        int x = av_clip(w * diff,  0, w1);
-        int y = av_clip(h * diffp, 0, h1);
+        float Hsum = 0.f, Vsum = 0.f, hsum = 0.f, vsum = 0.f;
+        int cu, cv, x, y;
 
-        draw_dot(dst_y + linesize_y * y + x, cy);
+        for (int i = 0; i < nb_channels; i++) {
+            const float re = RE(idx, i);
+            const float im = IM(idx, i);
+
+            power[i] = hypotf(re, im);
+        }
+
+        for (int i = 0; i < nb_channels; i++) {
+            const float mre = RE(idx, i);
+            const float mim = IM(idx, i);
+            const float dm = direction[i].re;
+            const float m = power[i];
+
+            for (int k = i+1; k < nb_channels; k++) {
+                const float dn = direction[k].re;
+                const float n = power[k];
+
+                if (fminf(n, m) > FLT_MIN) {
+                    const float nre = RE(idx, k);
+                    const float nim = IM(idx, k);
+                    const float diff = hypotf(n, m);
+                    float dir = dn - dm;
+                    float re, im, H, V;
+
+                    re = nre * mre + nim * mim;
+                    im = mre * nim - mim * nre;
+
+                    H = av_clipf(2.f * atan2f(n, m) / M_PI_2f - 1.f, -1.f, 1.f);
+                    Hsum += H * diff * dir;
+                    hsum += diff * fabsf(dir);
+
+                    V = av_clipf(fabsf(atan2f(im, re)) / M_PIf, 0.f, 1.f);
+                    Vsum += V * diff;
+                    vsum += diff;
+                }
+            }
+        }
+
+        if (hsum != 0.f)
+            Hsum /= hsum * 2.f;
+        Hsum += 0.5f;
+
+        if (vsum != 0.f)
+            Vsum /= vsum;
+
+        switch (color) {
+        case CM_LR:
+            cu = av_clip(64.f * sinf(2.f * Hsum * M_PIf - M_PIf) + 127.5f, 0, 255);
+            cv = av_clip(64.f * sinf(2.f * Hsum * M_PIf) + 127.5f, 0, 255);
+            break;
+        case CM_COR:
+            cv = av_clip(64.f * sinf(2.f * Vsum * M_PIf - M_PIf) + 127.5f, 0, 255);
+            cu = av_clip(64.f * sinf(2.f * Vsum * M_PIf) + 127.5f, 0, 255);
+            break;
+        case CM_FREQ:
+            cu = av_clip(127.5f * cosf(idx * 2.f * M_PIf / z) + 127.5f, 0, 255);
+            cv = av_clip(127.5f * sinf(idx * 2.f * M_PIf / z) + 127.5f, 0, 255);
+            break;
+        }
+
+        x = av_clip(w * Hsum, 0, w1);
+        y = av_clip(h * Vsum, 0, h1);
+
+        draw_idot(dst_y + linesize_y * y + x, cy);
         draw_dot(dst_u + linesize_u * y + x, cu);
         draw_dot(dst_v + linesize_v * y + x, cv);
     }
@@ -337,7 +467,7 @@ static int spatial_activate(AVFilterContext *ctx)
     if (ret > 0) {
         int64_t pts = av_rescale_q(in->pts, inlink->time_base, outlink->time_base);
 
-        ff_filter_execute(ctx, run_channel_fft, in, NULL, 2);
+        ff_filter_execute(ctx, run_channel_fft, in, NULL, s->nb_channels);
         av_frame_free(&in);
 
         if (s->pts != pts) {

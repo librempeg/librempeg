@@ -31389,8 +31389,8 @@ Set channels to use when processing audio. By default all are processed.
 
 @section showspatial
 
-Convert stereo input audio to a video output, representing the spatial relationship
-between two channels.
+Convert input audio to a video output, representing the spatial relationship
+between channels.
 
 The filter accepts the following options:
 
@@ -31399,9 +31399,6 @@ The filter accepts the following options:
 Specify the video size for the output. For the syntax of this option, check the
 @ref{video size syntax,,"Video size" section in the ffmpeg-utils manual,ffmpeg-utils}.
 Default value is @code{512x512}.
-
-@item win_size
-Set window size. Allowed range is from @var{1024} to @var{65536}. Default size is @var{4096}.
 
 @item win_func
 Set window function.
@@ -31437,8 +31434,14 @@ Default value is @code{hann}.
 @item rate, r
 Set output framerate.
 
+@item contrast
+Set output contrast step.
+
 @item fade
 Set output fade step.
+
+@item color
+Set output color mode.
 @end table
 
 @anchor{showspectrum}
