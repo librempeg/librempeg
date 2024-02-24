@@ -219,11 +219,11 @@ static int config_output(AVFilterLink *outlink)
 
     /* pre-calc windowing function */
     s->window_func_lut =
-        av_realloc_f(s->window_func_lut, s->win_size,
+        av_realloc_f(s->window_func_lut, s->hop_size,
                      sizeof(*s->window_func_lut));
     if (!s->window_func_lut)
         return AVERROR(ENOMEM);
-    generate_window_func(s->window_func_lut, s->win_size, s->win_func, &overlap);
+    generate_window_func(s->window_func_lut, s->hop_size, s->win_func, &overlap);
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
         const int chan = av_channel_layout_channel_from_index(&inlink->ch_layout, ch);
