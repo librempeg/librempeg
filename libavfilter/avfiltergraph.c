@@ -1513,109 +1513,39 @@ int ff_filter_graph_run_once(AVFilterGraph *graph)
     return ff_filter_activate(filter);
 }
 
-static unsigned get_nb_pix_fmts(void)
-{
-    unsigned i = 0;
-    while (av_pix_fmt_desc_get(i++)) {}
-    return i - 1;
-}
-
-static unsigned get_nb_sample_fmts(void)
-{
-    unsigned i = 0;
-    while (av_get_sample_fmt_name(i++)) {}
-    return i - 1;
-}
-
-static int nfilter_query_formats(AVFilterContext *filter)
-{
-    if (filter->filter->formats_state == FF_FILTER_FORMATS_QUERY_FUNC)
-        return filter_query_formats(filter);
-
-    return ff_default_query_formats(filter);
-}
-
 int avfilter_print_config_formats(AVBPrint *bp, const struct AVFilter *filter, int for_output, unsigned pad_index)
 {
-    AVFilterGraph *graph;
-    AVFilterContext *filter_context;
-    AVFilterFormatsConfig *config;
-    enum AVMediaType media_type;
-    int ret = 0;
-
     if (filter->formats_state == FF_FILTER_FORMATS_PASSTHROUGH) {
         av_bprintf(bp, "All (passthrough)");
-        return 0;
     }
-
-    graph = avfilter_graph_alloc();
-    if (!graph) {
-        av_log(NULL, AV_LOG_ERROR, "Failed to create filtergraph\n");
-        ret = AVERROR(ENOMEM);
-        goto cleanup;
-    }
-
-    filter_context = avfilter_graph_alloc_filter(graph, filter, "filter");
-    if (!filter_context) {
-        av_log(NULL, AV_LOG_ERROR, "Failed to create filter\n");
-        ret = AVERROR(ENOMEM);
-        goto cleanup;
-    }
-
-    avfilter_init_str(filter_context, NULL);
-
-    if (filter->formats_state == FF_FILTER_FORMATS_QUERY_FUNC)
-        av_bprintf(bp, "Dynamic");
-
-    if ((!for_output && pad_index >= filter_context->nb_inputs) ||
-        (for_output && pad_index >= filter_context->nb_outputs))
-        goto cleanup;
-
-    avfilter_graph_config(graph, graph);
-
-    for (unsigned i = 0; i < filter_context->nb_inputs; i++)
-        filter_context->inputs[i] = (AVFilterLink *)av_mallocz(sizeof(AVFilterLink));
-
-    for (unsigned i = 0; i < filter_context->nb_outputs; i++)
-        filter_context->outputs[i] = (AVFilterLink *)av_mallocz(sizeof(AVFilterLink));
-
-    nfilter_query_formats(filter_context);
-
-    config = for_output ? &filter_context->outputs[pad_index]->incfg : &filter_context->inputs[pad_index]->outcfg;
-
-    if (!config || !config->formats)
-        goto cleanup;
-
-    media_type = for_output ? filter->outputs[pad_index].type : filter->inputs[pad_index].type;
 
     if (filter->formats_state == FF_FILTER_FORMATS_QUERY_FUNC) {
-        if (config->formats && config->formats->nb_formats)
-            av_bprintf(bp, ", Default: ");
+        av_bprintf(bp, "Dynamic");
     }
 
-    if (config->formats == NULL) {
-        av_bprintf(bp, "unknown");
-    } else if (media_type == AVMEDIA_TYPE_VIDEO && config->formats->nb_formats == get_nb_pix_fmts() ||
-               media_type == AVMEDIA_TYPE_AUDIO && config->formats->nb_formats == get_nb_sample_fmts()) {
-        av_bprintf(bp, "All");
-    } else {
-        for (unsigned i = 0; i < config->formats->nb_formats; i++) {
-            if (i == 0)
-                av_bprintf(bp, "[");
-
-            if (media_type == AVMEDIA_TYPE_VIDEO)
-                av_bprintf(bp, "%s", av_get_pix_fmt_name(config->formats->formats[i]));
-            else if (media_type == AVMEDIA_TYPE_AUDIO)
-                av_bprintf(bp, "%s", av_get_sample_fmt_name(config->formats->formats[i]));
-
-            if (i < config->formats->nb_formats - 1)
-                av_bprintf(bp, ", ");
-            else
-                av_bprintf(bp, "]");
+    if (filter->formats_state == FF_FILTER_FORMATS_PIXFMT_LIST) {
+        for (int i = 0;; i++) {
+            if (filter->formats.pixels_list[i] == AV_PIX_FMT_NONE)
+                break;
+            av_bprintf(bp, "%s ", av_get_pix_fmt_name(filter->formats.pixels_list[i]));
         }
     }
 
-cleanup:
-    avfilter_graph_free(&graph);
-    return ret;
+    if (filter->formats_state == FF_FILTER_FORMATS_SAMPLEFMTS_LIST) {
+        for (int i = 0;; i++) {
+            if (filter->formats.samples_list[i] == AV_SAMPLE_FMT_NONE)
+                break;
+            av_bprintf(bp, "%s ", av_get_sample_fmt_name(filter->formats.samples_list[i]));
+        }
+    }
+
+    if (filter->formats_state == FF_FILTER_FORMATS_SINGLE_PIXFMT) {
+        av_bprintf(bp, "%s", av_get_pix_fmt_name(filter->formats.pix_fmt));
+    }
+
+    if (filter->formats_state == FF_FILTER_FORMATS_SINGLE_SAMPLEFMT) {
+        av_bprintf(bp, "%s", av_get_sample_fmt_name(filter->formats.sample_fmt));
+    }
+
+    return 0;
 }
