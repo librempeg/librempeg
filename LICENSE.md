@@ -1,3 +1,7 @@
+# Librempeg License
+
+All Librempeg modifications, and any new files not available in FFmpeg, are licensed under GPL v2.
+
 # License
 
 Most files in FFmpeg are under the GNU Lesser General Public License version 2.1
