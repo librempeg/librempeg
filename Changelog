@@ -22,6 +22,7 @@ version <next>:
 - nist muxer
 - VVC decoder
 - ardftsrc audio filter
+- atransient audio filter
 
 version 6.1:
 - libaribcaption decoder
