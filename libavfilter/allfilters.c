@@ -149,7 +149,6 @@ extern const AVFilter ff_af_mcompand;
 extern const AVFilter ff_af_pan;
 extern const AVFilter ff_af_replaygain;
 extern const AVFilter ff_af_rubberband;
-extern const AVFilter ff_af_sidechaincompress;
 extern const AVFilter ff_af_silencedetect;
 extern const AVFilter ff_af_silenceremove;
 extern const AVFilter ff_af_sofalizer;

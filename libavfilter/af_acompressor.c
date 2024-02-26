@@ -24,9 +24,6 @@
  * Audio (Sidechain) Compressor filter
  */
 
-#include "config_components.h"
-
-#include "libavutil/audio_fifo.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
 #include "libavutil/opt.h"
@@ -38,7 +35,7 @@
 #include "hermite.h"
 #include "internal.h"
 
-typedef struct SidechainCompressContext {
+typedef struct AudioCompressorContext {
     const AVClass *class;
 
     double level_in;
@@ -63,17 +60,17 @@ typedef struct SidechainCompressContext {
     int link;
     int detection;
     int mode;
+    int sidechain;
 
-    AVAudioFifo *fifo[2];
-    int64_t pts;
-} SidechainCompressContext;
+    AVFrame *in, *sc;
+} AudioCompressorContext;
 
-#define OFFSET(x) offsetof(SidechainCompressContext, x)
+#define OFFSET(x) offsetof(AudioCompressorContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM
 #define F AV_OPT_FLAG_FILTERING_PARAM
 #define R AV_OPT_FLAG_RUNTIME_PARAM
 
-static const AVOption options[] = {
+static const AVOption acompressor_options[] = {
     { "level_in",  "set input gain",     OFFSET(level_in),  AV_OPT_TYPE_DOUBLE, {.dbl=1},        0.015625,   64, A|F|R },
     { "mode",      "set mode",           OFFSET(mode),      AV_OPT_TYPE_INT,    {.i64=0},               0,    1, A|F|R, .unit = "mode" },
     {   "downward",0,                    0,                 AV_OPT_TYPE_CONST,  {.i64=0},               0,    0, A|F|R, .unit = "mode" },
@@ -92,12 +89,11 @@ static const AVOption options[] = {
     {   "rms",     0,                    0,                 AV_OPT_TYPE_CONST,  {.i64=1},               0,    0, A|F|R, .unit = "detection" },
     { "level_sc",  "set sidechain gain", OFFSET(level_sc),  AV_OPT_TYPE_DOUBLE, {.dbl=1},        0.015625,   64, A|F|R },
     { "mix",       "set mix",            OFFSET(mix),       AV_OPT_TYPE_DOUBLE, {.dbl=1},               0,    1, A|F|R },
+    { "sidechain", "enable sidechain input",OFFSET(sidechain),AV_OPT_TYPE_BOOL, {.i64=0},               0,    1, A|F },
     { NULL }
 };
 
-AVFILTER_DEFINE_CLASS_EXT(sidechaincompress_acompressor,
-                          "acompressor/sidechaincompress",
-                          options);
+AVFILTER_DEFINE_CLASS(acompressor);
 
 // A fake infinity value (because real infinity may break some hosts)
 #define FAKE_INFINITY (65536.0 * 65536.0)
@@ -141,39 +137,19 @@ static double output_gain(double lin_slope, double ratio, double thres,
     return exp(gain - slope);
 }
 
-static int compressor_config_output(AVFilterLink *outlink)
-{
-    AVFilterContext *ctx = outlink->src;
-    SidechainCompressContext *s = ctx->priv;
-
-    s->thres = log(s->threshold);
-    s->lin_knee_start = s->threshold / sqrt(s->knee);
-    s->lin_knee_stop = s->threshold * sqrt(s->knee);
-    s->adj_knee_start = s->lin_knee_start * s->lin_knee_start;
-    s->adj_knee_stop = s->lin_knee_stop * s->lin_knee_stop;
-    s->knee_start = log(s->lin_knee_start);
-    s->knee_stop = log(s->lin_knee_stop);
-    s->compressed_knee_start = (s->knee_start - s->thres) / s->ratio + s->thres;
-    s->compressed_knee_stop = (s->knee_stop - s->thres) / s->ratio + s->thres;
-
-    s->attack_coeff = FFMIN(1., 1. / (s->attack * outlink->sample_rate / 4000.));
-    s->release_coeff = FFMIN(1., 1. / (s->release * outlink->sample_rate / 4000.));
-
-    return 0;
-}
-
-static void compressor(SidechainCompressContext *s,
+static void compressor(AudioCompressorContext *s,
                        const double *src, double *dst, const double *scsrc, int nb_samples,
                        double level_in, double level_sc,
                        AVFilterLink *inlink, AVFilterLink *sclink)
 {
+    AVFilterContext *ctx = inlink->dst;
     const double makeup = s->makeup;
     const double mix = s->mix;
     int i, c;
 
     for (i = 0; i < nb_samples; i++) {
         double abs_sample, gain = 1.0;
-        double detector;
+        double detector, factor;
         int detected;
 
         abs_sample = fabs(scsrc[0] * level_sc);
@@ -208,13 +184,38 @@ static void compressor(SidechainCompressContext *s,
                                s->compressed_knee_stop,
                                s->detection, s->mode);
 
+        factor = ctx->is_disabled ? 1.0 : level_in * (gain * makeup * mix + (1. - mix));
         for (c = 0; c < inlink->ch_layout.nb_channels; c++)
-            dst[c] = src[c] * level_in * (gain * makeup * mix + (1. - mix));
+            dst[c] = src[c] * factor;
 
         src += inlink->ch_layout.nb_channels;
         dst += inlink->ch_layout.nb_channels;
         scsrc += sclink->ch_layout.nb_channels;
     }
+}
+
+static int config_output(AVFilterLink *outlink)
+{
+    AVFilterContext *ctx = outlink->src;
+    AVFilterLink *inlink = ctx->inputs[0];
+    AudioCompressorContext *s = ctx->priv;
+
+    outlink->time_base = inlink->time_base;
+
+    s->thres = log(s->threshold);
+    s->lin_knee_start = s->threshold / sqrt(s->knee);
+    s->lin_knee_stop = s->threshold * sqrt(s->knee);
+    s->adj_knee_start = s->lin_knee_start * s->lin_knee_start;
+    s->adj_knee_stop = s->lin_knee_stop * s->lin_knee_stop;
+    s->knee_start = log(s->lin_knee_start);
+    s->knee_stop = log(s->lin_knee_stop);
+    s->compressed_knee_start = (s->knee_start - s->thres) / s->ratio + s->thres;
+    s->compressed_knee_stop = (s->knee_stop - s->thres) / s->ratio + s->thres;
+
+    s->attack_coeff = FFMIN(1., 1. / (s->attack * outlink->sample_rate / 4000.));
+    s->release_coeff = FFMIN(1., 1. / (s->release * outlink->sample_rate / 4000.));
+
+    return 0;
 }
 
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
@@ -226,136 +227,117 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     if (ret < 0)
         return ret;
 
-    compressor_config_output(ctx->outputs[0]);
+    config_output(ctx->outputs[0]);
 
     return 0;
 }
 
-#if CONFIG_SIDECHAINCOMPRESS_FILTER
-static int activate(AVFilterContext *ctx)
+static int filter_frame(AVFilterLink *outlink)
 {
-    SidechainCompressContext *s = ctx->priv;
-    AVFrame *out = NULL, *in[2] = { NULL };
-    int ret, i, nb_samples;
+    AVFilterContext *ctx = outlink->src;
+    AudioCompressorContext *s = ctx->priv;
+    AVFilterLink *inlink = ctx->inputs[0];
+    AVFilterLink *sclink = s->sidechain ? ctx->inputs[1] : inlink;
+    AVFrame *sc = s->sc ? s->sc : s->in;
+    const double *scsrc = (const double *)sc->data[0];
+    const double *src = (const double *)s->in->data[0];
+    AVFrame *out;
     double *dst;
 
-    FF_FILTER_FORWARD_STATUS_BACK_ALL(ctx->outputs[0], ctx);
-    if ((ret = ff_inlink_consume_frame(ctx->inputs[0], &in[0])) > 0) {
-        av_audio_fifo_write(s->fifo[0], (void **)in[0]->extended_data,
-                            in[0]->nb_samples);
-        av_frame_free(&in[0]);
-    }
-    if (ret < 0)
-        return ret;
-    if ((ret = ff_inlink_consume_frame(ctx->inputs[1], &in[1])) > 0) {
-        av_audio_fifo_write(s->fifo[1], (void **)in[1]->extended_data,
-                            in[1]->nb_samples);
-        av_frame_free(&in[1]);
-    }
-    if (ret < 0)
-        return ret;
-
-    nb_samples = FFMIN(av_audio_fifo_size(s->fifo[0]), av_audio_fifo_size(s->fifo[1]));
-    if (nb_samples) {
-        out = ff_get_audio_buffer(ctx->outputs[0], nb_samples);
-        if (!out)
+    if (av_frame_is_writable(s->in)) {
+        out = s->in;
+    } else {
+        out = ff_get_audio_buffer(outlink, s->in->nb_samples);
+        if (!out) {
+            av_frame_free(&s->in);
+            av_frame_free(&s->sc);
             return AVERROR(ENOMEM);
-        for (i = 0; i < 2; i++) {
-            in[i] = ff_get_audio_buffer(ctx->inputs[i], nb_samples);
-            if (!in[i]) {
-                av_frame_free(&in[0]);
-                av_frame_free(&in[1]);
-                av_frame_free(&out);
-                return AVERROR(ENOMEM);
-            }
-            av_audio_fifo_read(s->fifo[i], (void **)in[i]->data, nb_samples);
         }
+        av_frame_copy_props(out, s->in);
+    }
+    dst = (double *)out->data[0];
 
-        dst = (double *)out->data[0];
-        out->pts = s->pts;
-        s->pts += av_rescale_q(nb_samples, (AVRational){1, ctx->outputs[0]->sample_rate}, ctx->outputs[0]->time_base);
+    compressor(s, src, dst, scsrc, s->in->nb_samples,
+               s->level_in, s->level_in,
+               inlink, sclink);
 
-        compressor(s, (double *)in[0]->data[0], dst,
-                   (double *)in[1]->data[0], nb_samples,
-                   s->level_in, s->level_sc,
-                   ctx->inputs[0], ctx->inputs[1]);
+    if (out != s->in)
+        av_frame_free(&s->in);
+    s->in = NULL;
+    av_frame_free(&s->sc);
+    return ff_filter_frame(outlink, out);
+}
 
-        av_frame_free(&in[0]);
-        av_frame_free(&in[1]);
+static int activate(AVFilterContext *ctx)
+{
+    AVFilterLink *outlink = ctx->outputs[0];
+    AVFilterLink *inlink = ctx->inputs[0];
+    AudioCompressorContext *s = ctx->priv;
 
-        ret = ff_filter_frame(ctx->outputs[0], out);
+    FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
+
+    if (!s->in) {
+        int ret = ff_inlink_consume_frame(inlink, &s->in);
         if (ret < 0)
             return ret;
     }
-    FF_FILTER_FORWARD_STATUS(ctx->inputs[0], ctx->outputs[0]);
-    FF_FILTER_FORWARD_STATUS(ctx->inputs[1], ctx->outputs[0]);
-    if (ff_outlink_frame_wanted(ctx->outputs[0])) {
-        if (!av_audio_fifo_size(s->fifo[0]))
-            ff_inlink_request_frame(ctx->inputs[0]);
-        if (!av_audio_fifo_size(s->fifo[1]))
-            ff_inlink_request_frame(ctx->inputs[1]);
+
+    if (s->in) {
+        if (s->sidechain && !s->sc) {
+            AVFilterLink *sclink = ctx->inputs[1];
+            int ret = ff_inlink_consume_samples(sclink, s->in->nb_samples,
+                                                s->in->nb_samples, &s->sc);
+            if (ret < 0)
+                return ret;
+        }
+
+        return filter_frame(outlink);
     }
-    return 0;
+
+    FF_FILTER_FORWARD_STATUS(inlink, outlink);
+    if (s->sidechain)
+        FF_FILTER_FORWARD_STATUS(ctx->inputs[1], outlink);
+    FF_FILTER_FORWARD_WANTED(outlink, inlink);
+
+    return FFERROR_NOT_READY;
 }
 
-static int query_formats(AVFilterContext *ctx)
+static av_cold int init(AVFilterContext *ctx)
 {
-    static const enum AVSampleFormat sample_fmts[] = {
-        AV_SAMPLE_FMT_DBL,
-        AV_SAMPLE_FMT_NONE
-    };
-    int ret = ff_channel_layouts_ref(ff_all_channel_counts(),
-                                     &ctx->inputs[1]->outcfg.channel_layouts);
-    if (ret < 0)
-        return ret;
+    AudioCompressorContext *s = ctx->priv;
+    AVFilterPad pad = { NULL };
+    int ret;
 
-    /* This will link the channel properties of the main input and the output;
-     * it won't touch the second input as its channel_layouts is already set. */
-    if ((ret = ff_set_common_all_channel_counts(ctx)) < 0)
-        return ret;
-
-    if ((ret = ff_set_common_formats_from_list(ctx, sample_fmts)) < 0)
-        return ret;
-
-    return ff_set_common_all_samplerates(ctx);
-}
-
-static int config_output(AVFilterLink *outlink)
-{
-    AVFilterContext *ctx = outlink->src;
-    SidechainCompressContext *s = ctx->priv;
-
-    outlink->time_base   = ctx->inputs[0]->time_base;
-
-    s->fifo[0] = av_audio_fifo_alloc(ctx->inputs[0]->format, ctx->inputs[0]->ch_layout.nb_channels, 1024);
-    s->fifo[1] = av_audio_fifo_alloc(ctx->inputs[1]->format, ctx->inputs[1]->ch_layout.nb_channels, 1024);
-    if (!s->fifo[0] || !s->fifo[1])
+    pad.type = AVMEDIA_TYPE_AUDIO;
+    pad.name = av_asprintf("main");
+    if (!pad.name)
         return AVERROR(ENOMEM);
+    if ((ret = ff_append_inpad_free_name(ctx, &pad)) < 0)
+        return ret;
 
-    compressor_config_output(outlink);
+    if (s->sidechain) {
+        AVFilterPad pad = { NULL };
+
+        pad.type = AVMEDIA_TYPE_AUDIO;
+        pad.name = av_asprintf("sidechain");
+        if (!pad.name)
+            return AVERROR(ENOMEM);
+        if ((ret = ff_append_inpad_free_name(ctx, &pad)) < 0)
+            return ret;
+    }
 
     return 0;
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
-    SidechainCompressContext *s = ctx->priv;
+    AudioCompressorContext *s = ctx->priv;
 
-    av_audio_fifo_free(s->fifo[0]);
-    av_audio_fifo_free(s->fifo[1]);
+    av_frame_free(&s->in);
+    av_frame_free(&s->sc);
 }
 
-static const AVFilterPad sidechaincompress_inputs[] = {
-    {
-        .name           = "main",
-        .type           = AVMEDIA_TYPE_AUDIO,
-    },{
-        .name           = "sidechain",
-        .type           = AVMEDIA_TYPE_AUDIO,
-    },
-};
-
-static const AVFilterPad sidechaincompress_outputs[] = {
+static const AVFilterPad outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_AUDIO,
@@ -363,75 +345,18 @@ static const AVFilterPad sidechaincompress_outputs[] = {
     },
 };
 
-const AVFilter ff_af_sidechaincompress = {
-    .name           = "sidechaincompress",
-    .description    = NULL_IF_CONFIG_SMALL("Sidechain compressor."),
-    .priv_class     = &sidechaincompress_acompressor_class,
-    .priv_size      = sizeof(SidechainCompressContext),
-    .activate       = activate,
-    .uninit         = uninit,
-    FILTER_INPUTS(sidechaincompress_inputs),
-    FILTER_OUTPUTS(sidechaincompress_outputs),
-    FILTER_QUERY_FUNC(query_formats),
-    .process_command = process_command,
-};
-#endif  /* CONFIG_SIDECHAINCOMPRESS_FILTER */
-
-#if CONFIG_ACOMPRESSOR_FILTER
-static int acompressor_filter_frame(AVFilterLink *inlink, AVFrame *in)
-{
-    const double *src = (const double *)in->data[0];
-    AVFilterContext *ctx = inlink->dst;
-    SidechainCompressContext *s = ctx->priv;
-    AVFilterLink *outlink = ctx->outputs[0];
-    AVFrame *out;
-    double *dst;
-
-    if (av_frame_is_writable(in)) {
-        out = in;
-    } else {
-        out = ff_get_audio_buffer(outlink, in->nb_samples);
-        if (!out) {
-            av_frame_free(&in);
-            return AVERROR(ENOMEM);
-        }
-        av_frame_copy_props(out, in);
-    }
-    dst = (double *)out->data[0];
-
-    compressor(s, src, dst, src, in->nb_samples,
-               s->level_in, s->level_in,
-               inlink, inlink);
-
-    if (out != in)
-        av_frame_free(&in);
-    return ff_filter_frame(outlink, out);
-}
-
-static const AVFilterPad acompressor_inputs[] = {
-    {
-        .name           = "default",
-        .type           = AVMEDIA_TYPE_AUDIO,
-        .filter_frame   = acompressor_filter_frame,
-    },
-};
-
-static const AVFilterPad acompressor_outputs[] = {
-    {
-        .name          = "default",
-        .type          = AVMEDIA_TYPE_AUDIO,
-        .config_props  = compressor_config_output,
-    },
-};
-
 const AVFilter ff_af_acompressor = {
     .name           = "acompressor",
     .description    = NULL_IF_CONFIG_SMALL("Audio compressor."),
-    .priv_class     = &sidechaincompress_acompressor_class,
-    .priv_size      = sizeof(SidechainCompressContext),
-    FILTER_INPUTS(acompressor_inputs),
-    FILTER_OUTPUTS(acompressor_outputs),
+    .priv_class     = &acompressor_class,
+    .priv_size      = sizeof(AudioCompressorContext),
+    .activate       = activate,
+    .init           = init,
+    .uninit         = uninit,
+    .inputs         = NULL,
+    FILTER_OUTPUTS(outputs),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBL),
     .process_command = process_command,
+    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                      AVFILTER_FLAG_DYNAMIC_INPUTS,
 };
-#endif  /* CONFIG_ACOMPRESSOR_FILTER */

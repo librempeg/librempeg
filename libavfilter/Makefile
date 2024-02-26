@@ -38,7 +38,7 @@ include $(SRC_PATH)/libavfilter/dnn/Makefile
 OBJS-$(CONFIG_AAP_FILTER)                    += af_aap.o
 OBJS-$(CONFIG_ABENCH_FILTER)                 += f_bench.o
 OBJS-$(CONFIG_ACENTERCUT_FILTER)             += af_acentercut.o
-OBJS-$(CONFIG_ACOMPRESSOR_FILTER)            += af_sidechaincompress.o
+OBJS-$(CONFIG_ACOMPRESSOR_FILTER)            += af_acompressor.o
 OBJS-$(CONFIG_ACONTRAST_FILTER)              += af_acontrast.o
 OBJS-$(CONFIG_ACOPY_FILTER)                  += af_acopy.o
 OBJS-$(CONFIG_ACROSSFADE_FILTER)             += af_afade.o
@@ -163,7 +163,6 @@ OBJS-$(CONFIG_MCOMPAND_FILTER)               += af_mcompand.o
 OBJS-$(CONFIG_PAN_FILTER)                    += af_pan.o
 OBJS-$(CONFIG_REPLAYGAIN_FILTER)             += af_replaygain.o
 OBJS-$(CONFIG_RUBBERBAND_FILTER)             += af_rubberband.o
-OBJS-$(CONFIG_SIDECHAINCOMPRESS_FILTER)      += af_sidechaincompress.o
 OBJS-$(CONFIG_SILENCEDETECT_FILTER)          += af_silencedetect.o
 OBJS-$(CONFIG_SILENCEREMOVE_FILTER)          += af_silenceremove.o
 OBJS-$(CONFIG_SOFALIZER_FILTER)              += af_sofalizer.o
