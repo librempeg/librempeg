@@ -117,23 +117,22 @@ static int query_formats(AVFilterContext *ctx)
 static int activate(AVFilterContext *ctx)
 {
     AudioAPContext *s = ctx->priv;
-    int i, ret, status;
-    int nb_samples;
-    int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK_ALL(ctx->outputs[0], ctx);
 
-    nb_samples = FFMIN(ff_inlink_queued_samples(ctx->inputs[0]),
-                       ff_inlink_queued_samples(ctx->inputs[1]));
-    for (i = 0; i < ctx->nb_inputs && nb_samples > 0; i++) {
-        if (s->frame[i])
-            continue;
+    if (!s->frame[0]) {
+        int ret = ff_inlink_consume_frame(ctx->inputs[0], &s->frame[0]);
+        if (ret < 0)
+            return ret;
+    }
 
-        if (ff_inlink_check_available_samples(ctx->inputs[i], nb_samples) > 0) {
-            ret = ff_inlink_consume_samples(ctx->inputs[i], nb_samples, nb_samples, &s->frame[i]);
-            if (ret < 0)
-                return ret;
-        }
+    if (s->frame[0] && !s->frame[1]) {
+        int ret = ff_inlink_consume_samples(ctx->inputs[1],
+                                            s->frame[0]->nb_samples,
+                                            s->frame[0]->nb_samples,
+                                            &s->frame[1]);
+        if (ret < 0)
+            return ret;
     }
 
     if (s->frame[0] && s->frame[1]) {
@@ -149,29 +148,27 @@ static int activate(AVFilterContext *ctx)
         ff_filter_execute(ctx, s->filter_channels, out, NULL,
                           FFMIN(ctx->outputs[0]->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
-        out->pts = s->frame[0]->pts;
-        out->duration = s->frame[0]->duration;
+        av_frame_copy_props(out, s->frame[0]);
 
         av_frame_free(&s->frame[0]);
         av_frame_free(&s->frame[1]);
 
-        ret = ff_filter_frame(ctx->outputs[0], out);
-        if (ret < 0)
-            return ret;
+        return ff_filter_frame(ctx->outputs[0], out);
     }
 
-    if (!nb_samples) {
-        for (i = 0; i < 2; i++) {
-            if (ff_inlink_acknowledge_status(ctx->inputs[i], &status, &pts)) {
-                ff_outlink_set_status(ctx->outputs[0], status, pts);
-                return 0;
-            }
+    for (int i = 0; i < 2; i++) {
+        int64_t pts;
+        int status;
+
+        if (ff_inlink_acknowledge_status(ctx->inputs[i], &status, &pts)) {
+            ff_outlink_set_status(ctx->outputs[0], status, pts);
+            return 0;
         }
     }
 
     if (ff_outlink_frame_wanted(ctx->outputs[0])) {
-        for (i = 0; i < 2; i++) {
-            if (s->frame[i] || ff_inlink_queued_samples(ctx->inputs[i]) > 0)
+        for (int i = 0; i < 2; i++) {
+            if (s->frame[i])
                 continue;
             ff_inlink_request_frame(ctx->inputs[i]);
             return 0;
@@ -294,6 +291,9 @@ static av_cold void uninit(AVFilterContext *ctx)
 
     av_freep(&s->tmpmp);
     av_freep(&s->itmpmp);
+
+    av_frame_free(&s->frame[0]);
+    av_frame_free(&s->frame[1]);
 }
 
 static const AVFilterPad inputs[] = {
