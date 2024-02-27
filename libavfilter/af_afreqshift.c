@@ -52,107 +52,6 @@ static const enum AVSampleFormat sample_fmts[] = {
     AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_NONE
 };
 
-#define PFILTER(name, type, sin, cos, cc)                     \
-static void pfilter_channel_## name(AVFilterContext *ctx,     \
-                            int ch,                           \
-                            AVFrame *in, AVFrame *out)        \
-{                                                             \
-    AFreqShift *s = ctx->priv;                                \
-    const int nb_samples = in->nb_samples;                    \
-    const type *src = (const type *)in->extended_data[ch];    \
-    type *dst = (type *)out->extended_data[ch];               \
-    type *i1 = (type *)s->i1->extended_data[ch];              \
-    type *o1 = (type *)s->o1->extended_data[ch];              \
-    type *i2 = (type *)s->i2->extended_data[ch];              \
-    type *o2 = (type *)s->o2->extended_data[ch];              \
-    const int nb_coeffs = s->nb_coeffs;                       \
-    const type *c = s->cc;                                    \
-    const type level = s->level;                              \
-    type shift = s->shift * M_PI;                             \
-    type cos_theta = cos(shift);                              \
-    type sin_theta = sin(shift);                              \
-                                                              \
-    for (int n = 0; n < nb_samples; n++) {                    \
-        type xn1 = src[n], xn2 = src[n];                      \
-        type I, Q;                                            \
-                                                              \
-        for (int j = 0; j < nb_coeffs; j++) {                 \
-            I = c[j] * (xn1 + o2[j]) - i2[j];                 \
-            i2[j] = i1[j];                                    \
-            i1[j] = xn1;                                      \
-            o2[j] = o1[j];                                    \
-            o1[j] = I;                                        \
-            xn1 = I;                                          \
-        }                                                     \
-                                                              \
-        for (int j = nb_coeffs; j < nb_coeffs*2; j++) {       \
-            Q = c[j] * (xn2 + o2[j]) - i2[j];                 \
-            i2[j] = i1[j];                                    \
-            i1[j] = xn2;                                      \
-            o2[j] = o1[j];                                    \
-            o1[j] = Q;                                        \
-            xn2 = Q;                                          \
-        }                                                     \
-        Q = o2[nb_coeffs * 2 - 1];                            \
-                                                              \
-        dst[n] = (I * cos_theta - Q * sin_theta) * level;     \
-    }                                                         \
-}
-
-PFILTER(flt, float, sin, cos, cf)
-PFILTER(dbl, double, sin, cos, cd)
-
-#define FFILTER(name, type, sin, cos, fmod, cc)               \
-static void ffilter_channel_## name(AVFilterContext *ctx,     \
-                            int ch,                           \
-                            AVFrame *in, AVFrame *out)        \
-{                                                             \
-    AFreqShift *s = ctx->priv;                                \
-    const int nb_samples = in->nb_samples;                    \
-    const type *src = (const type *)in->extended_data[ch];    \
-    type *dst = (type *)out->extended_data[ch];               \
-    type *i1 = (type *)s->i1->extended_data[ch];              \
-    type *o1 = (type *)s->o1->extended_data[ch];              \
-    type *i2 = (type *)s->i2->extended_data[ch];              \
-    type *o2 = (type *)s->o2->extended_data[ch];              \
-    const int nb_coeffs = s->nb_coeffs;                       \
-    const type *c = s->cc;                                    \
-    const type level = s->level;                              \
-    type ts = 1. / in->sample_rate;                           \
-    type shift = s->shift;                                    \
-    int64_t N = s->in_samples;                                \
-                                                              \
-    for (int n = 0; n < nb_samples; n++) {                    \
-        type xn1 = src[n], xn2 = src[n];                      \
-        type I, Q, theta;                                     \
-                                                              \
-        for (int j = 0; j < nb_coeffs; j++) {                 \
-            I = c[j] * (xn1 + o2[j]) - i2[j];                 \
-            i2[j] = i1[j];                                    \
-            i1[j] = xn1;                                      \
-            o2[j] = o1[j];                                    \
-            o1[j] = I;                                        \
-            xn1 = I;                                          \
-        }                                                     \
-                                                              \
-        for (int j = nb_coeffs; j < nb_coeffs*2; j++) {       \
-            Q = c[j] * (xn2 + o2[j]) - i2[j];                 \
-            i2[j] = i1[j];                                    \
-            i1[j] = xn2;                                      \
-            o2[j] = o1[j];                                    \
-            o1[j] = Q;                                        \
-            xn2 = Q;                                          \
-        }                                                     \
-        Q = o2[nb_coeffs * 2 - 1];                            \
-                                                              \
-        theta = 2. * M_PI * fmod(shift * (N + n) * ts, 1.);   \
-        dst[n] = (I * cos(theta) - Q * sin(theta)) * level;   \
-    }                                                         \
-}
-
-FFILTER(flt, float, sinf, cosf, fmodf, cf)
-FFILTER(dbl, double, sin, cos, fmod, cd)
-
 static void compute_transition_param(double *K, double *Q, double transition)
 {
     double kksqrt, e, e2, e4, k, q;
@@ -250,6 +149,13 @@ static void compute_coefs(double *coef_arrd, float *coef_arrf, int nbr_coefs, do
     }
 }
 
+#define DEPTH 32
+#include "afreqshift_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "afreqshift_template.c"
+
 static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -268,14 +174,14 @@ static int config_input(AVFilterLink *inlink)
 
     if (inlink->format == AV_SAMPLE_FMT_DBLP) {
         if (!strcmp(ctx->filter->name, "afreqshift"))
-            s->filter_channel = ffilter_channel_dbl;
+            s->filter_channel = ffilter_channel_dblp;
         else
-            s->filter_channel = pfilter_channel_dbl;
+            s->filter_channel = pfilter_channel_dblp;
     } else {
         if (!strcmp(ctx->filter->name, "afreqshift"))
-            s->filter_channel = ffilter_channel_flt;
+            s->filter_channel = ffilter_channel_fltp;
         else
-            s->filter_channel = pfilter_channel_flt;
+            s->filter_channel = pfilter_channel_fltp;
     }
 
     return 0;
