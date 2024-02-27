@@ -186,25 +186,28 @@ NRMSE_FILTER(dblp, double)
 
 static int activate(AVFilterContext *ctx)
 {
-    AudioSDRContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
-    int ret, status, available;
-    int64_t pts;
+    AudioSDRContext *s = ctx->priv;
 
     FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
 
-    available = FFMIN(ff_inlink_queued_samples(ctx->inputs[0]), ff_inlink_queued_samples(ctx->inputs[1]));
-    if (available > 0) {
-        AVFrame *out;
+    if (!s->cache[0]) {
+        int ret = ff_inlink_consume_frame(ctx->inputs[0], &s->cache[0]);
+        if (ret < 0)
+            return ret;
+    }
 
-        for (int i = 0; i < 2; i++) {
-            ret = ff_inlink_consume_samples(ctx->inputs[i], available, available, &s->cache[i]);
-            if (ret < 0) {
-                av_frame_free(&s->cache[0]);
-                av_frame_free(&s->cache[1]);
-                return ret;
-            }
-        }
+    if (s->cache[0] && !s->cache[1]) {
+        int ret = ff_inlink_consume_samples(ctx->inputs[1],
+                                            s->cache[0]->nb_samples,
+                                            s->cache[0]->nb_samples,
+                                            &s->cache[1]);
+        if (ret < 0)
+            return ret;
+    }
+
+    if (s->cache[0] && s->cache[1]) {
+        AVFrame *out;
 
         if (!ctx->is_disabled)
             ff_filter_execute(ctx, s->filter, NULL, NULL,
@@ -212,13 +215,16 @@ static int activate(AVFilterContext *ctx)
 
         av_frame_free(&s->cache[1]);
         out = s->cache[0];
-        s->cache[0] = NULL;
 
-        s->nb_samples += available;
+        s->nb_samples += s->cache[0]->nb_samples;
+        s->cache[0] = NULL;
         return ff_filter_frame(outlink, out);
     }
 
     for (int i = 0; i < 2; i++) {
+        int64_t pts;
+        int status;
+
         if (ff_inlink_acknowledge_status(ctx->inputs[i], &status, &pts)) {
             ff_outlink_set_status(outlink, status, pts);
             return 0;
@@ -227,7 +233,7 @@ static int activate(AVFilterContext *ctx)
 
     if (ff_outlink_frame_wanted(outlink)) {
         for (int i = 0; i < 2; i++) {
-            if (s->cache[i] || ff_inlink_queued_samples(ctx->inputs[i]) > 0)
+            if (s->cache[i])
                 continue;
             ff_inlink_request_frame(ctx->inputs[i]);
             return 0;
@@ -325,8 +331,7 @@ const AVFilter ff_af_asdr = {
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP,
-                      AV_SAMPLE_FMT_DBLP),
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
 };
 
 const AVFilter ff_af_apsnr = {
@@ -340,8 +345,7 @@ const AVFilter ff_af_apsnr = {
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP,
-                      AV_SAMPLE_FMT_DBLP),
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
 };
 
 const AVFilter ff_af_asisdr = {
@@ -355,8 +359,7 @@ const AVFilter ff_af_asisdr = {
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP,
-                      AV_SAMPLE_FMT_DBLP),
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
 };
 
 const AVFilter ff_af_anrmse = {
@@ -370,6 +373,5 @@ const AVFilter ff_af_anrmse = {
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP,
-                      AV_SAMPLE_FMT_DBLP),
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
 };
