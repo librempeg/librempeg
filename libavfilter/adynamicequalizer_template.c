@@ -170,7 +170,8 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
             if (front < 0)                   \
                 front = n - 1;               \
         }                                    \
-        empty = front == back;               \
+        empty = (front == back) &&           \
+                (ss[front] == empty_value);  \
     }                                        \
                                              \
     if (!empty && sample op ss[front]) {     \
@@ -232,7 +233,7 @@ static void fn(queue_sample)(ChannelContext *cc,
     n = cc->size;
 
     empty = (front == back) && (ss[front] == ZERO);
-    PEAKS(ZERO, >, x, px)
+    PEAKS(ZERO, >=, x, px)
 
     ss[back] = x;
 
