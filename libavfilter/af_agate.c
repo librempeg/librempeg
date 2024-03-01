@@ -222,14 +222,18 @@ static int activate(AVFilterContext *ctx)
                                                 s->in->nb_samples, &s->sc);
             if (ret < 0)
                 return ret;
+
+            if (!ret) {
+                FF_FILTER_FORWARD_STATUS(sclink, outlink);
+                FF_FILTER_FORWARD_WANTED(outlink, sclink);
+                return 0;
+            }
         }
 
         return filter_frame(outlink);
     }
 
     FF_FILTER_FORWARD_STATUS(inlink, outlink);
-    if (s->sidechain)
-        FF_FILTER_FORWARD_STATUS(ctx->inputs[1], outlink);
     FF_FILTER_FORWARD_WANTED(outlink, inlink);
 
     return FFERROR_NOT_READY;
