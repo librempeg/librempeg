@@ -77,7 +77,7 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     BPNContext *s = ctx->priv;
 
-    s->nb_planes = desc->nb_components;
+    s->nb_planes = av_pix_fmt_count_planes(inlink->format);
 
     s->planeheight[1] = s->planeheight[2] = AV_CEIL_RSHIFT(inlink->h, desc->log2_chroma_h);
     s->planeheight[0] = s->planeheight[3] = inlink->h;
