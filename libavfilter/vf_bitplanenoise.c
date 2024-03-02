@@ -25,7 +25,7 @@
 #include "video.h"
 
 typedef struct SliceStats {
-    float stats[4];
+    uint64_t stats[4];
 } SliceStats;
 
 typedef struct BPNContext {
@@ -199,7 +199,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     BPNContext *s = ctx->priv;
-    float stats[4] = { 0 };
+    uint64_t stats[4] = { 0 };
     char metabuf[128];
     ThreadData td;
     AVFrame *out = s->filter ? NULL : in;
@@ -226,10 +226,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     for (int plane = 0; plane < s->nb_planes; plane++) {
         char key[32];
+        double value;
 
-        stats[plane] /= s->planewidth[plane] * s->planeheight[plane];
+        value = stats[plane] / ((double)s->planewidth[plane] * s->planeheight[plane]);
         snprintf(key, sizeof(key), "lavfi.bitplanenoise.%d.%d", plane, s->bitplane);
-        snprintf(metabuf, sizeof(metabuf), "%f", 1. - 2.* fabs((stats[plane] - 0.5)));
+        snprintf(metabuf, sizeof(metabuf), "%f", 1. - 2.* fabs(value - 0.5));
         av_dict_set(&out->metadata, key, metabuf, 0);
     }
 
