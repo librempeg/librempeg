@@ -24,13 +24,20 @@
 #include "internal.h"
 #include "video.h"
 
+typedef struct SliceStats {
+    float stats[4];
+} SliceStats;
+
 typedef struct BPNContext {
     const AVClass *class;
 
     int bitplane;
     int filter;
 
+    SliceStats *stats;
+
     int nb_planes;
+    int nb_threads;
     int planeheight[4];
     int planewidth[4];
     int depth;
@@ -77,29 +84,124 @@ static int config_input(AVFilterLink *inlink)
     s->planewidth[1]  = s->planewidth[2]  = AV_CEIL_RSHIFT(inlink->w, desc->log2_chroma_w);
     s->planewidth[0]  = s->planewidth[3]  = inlink->w;
 
+    s->nb_threads = FFMAX(1, FFMIN(s->planeheight[1], ff_filter_get_nb_threads(ctx)));
+    s->stats = av_calloc(s->nb_threads, sizeof(*s->stats));
+    if (!s->stats)
+        return AVERROR(ENOMEM);
+
     s->depth = desc->comp[0].depth;
 
     return 0;
 }
 
+typedef struct ThreadData {
+    AVFrame *in, *out;
+} ThreadData;
+
 #define CHECK_BIT(x, a, b, c) { \
-    bit = (((val[(x)] & mask) == (val[(x) + (a)] & mask)) + \
-           ((val[(x)] & mask) == (val[(x) + (b)] & mask)) + \
-           ((val[(x)] & mask) == (val[(x) + (c)] & mask))) > 1; \
+    int bit = (((val[(x)] & mask) == (val[(x) + (a)] & mask)) + \
+               ((val[(x)] & mask) == (val[(x) + (b)] & mask)) + \
+               ((val[(x)] & mask) == (val[(x) + (c)] & mask))) > 1; \
     if (dst) \
-        dst[(x)] = factor * bit; \
-    stats[plane] += bit; }
+        dst[(x)] = bit ? factor : 0; \
+    stats->stats[plane] += bit; }
+
+static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    BPNContext *s = ctx->priv;
+    ThreadData *td = arg;
+    AVFrame *in = td->in;
+    AVFrame *out = td->out;
+    const int mask = (1 << (s->bitplane - 1));
+    const int factor = (1 << s->depth) - 1;
+    SliceStats *stats = &s->stats[jobnr];
+
+    if (s->depth <= 8) {
+        for (int plane = 0; plane < s->nb_planes; plane++) {
+            const int h = s->planeheight[plane];
+            const int w = s->planewidth[plane];
+            const int slice_h_start = ((h-1) * jobnr) / nb_jobs;
+            const int slice_h_end = ((h-1) * (jobnr+1)) / nb_jobs;
+            const int linesize = s->planeheight[plane] > 1 ? in->linesize[plane] : 0;
+            const int dlinesize = out->linesize[plane];
+            uint8_t *val = in->data[plane] + slice_h_start * linesize;
+            uint8_t *dst = s->filter ? out->data[plane] + slice_h_start * dlinesize : NULL;
+
+            for (int y = slice_h_start; y < slice_h_end; y++) {
+                CHECK_BIT(0, 1, 1 + linesize, linesize)
+
+                for (int x = 1; x < w - 1; x++) {
+                    CHECK_BIT(x, -1, 1, linesize)
+                }
+
+                CHECK_BIT(w, -1, -1 + linesize, linesize)
+
+                val += linesize;
+                if (dst)
+                    dst += dlinesize;
+            }
+
+            if (jobnr < nb_jobs-1)
+                continue;
+
+            CHECK_BIT(0, 1, 1 - linesize, -linesize)
+
+            for (int x = 1; x < w - 1; x++) {
+                CHECK_BIT(x, -1, 1, -linesize)
+            }
+
+            CHECK_BIT(w, -1, -1 - linesize, -linesize)
+        }
+    } else {
+        for (int plane = 0; plane < s->nb_planes; plane++) {
+            const int h = s->planeheight[plane];
+            const int w = s->planewidth[plane];
+            const int slice_h_start = ((h-1) * jobnr) / nb_jobs;
+            const int slice_h_end = ((h-1) * (jobnr+1)) / nb_jobs;
+            const int linesize = s->planeheight[plane] > 1 ? in->linesize[plane] / 2 : 0;
+            const int dlinesize = out->linesize[plane] / 2;
+            uint16_t *val = (uint16_t *)in->data[plane] + slice_h_start * linesize;
+            uint16_t *dst = s->filter ? (uint16_t *)out->data[plane] + slice_h_start * dlinesize : NULL;
+
+            val = (uint16_t *)in->data[plane];
+            for (int y = slice_h_start; y < slice_h_end; y++) {
+                CHECK_BIT(0, 1, 1 + linesize, linesize)
+
+                for (int x = 1; x < w - 1; x++) {
+                    CHECK_BIT(x, -1, 1, linesize)
+                }
+
+                CHECK_BIT(w, -1, -1 + linesize, linesize)
+
+                val += linesize;
+                if (dst)
+                    dst += dlinesize;
+            }
+
+            if (jobnr < nb_jobs-1)
+                continue;
+
+            CHECK_BIT(0, 1, 1 - linesize, -linesize)
+
+            for (int x = 1; x < w - 1; x++) {
+                CHECK_BIT(x, -1, 1, -linesize)
+            }
+
+            CHECK_BIT(w, -1, -1 -linesize, -linesize)
+        }
+    }
+
+    return 0;
+}
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     BPNContext *s = ctx->priv;
-    const int mask = (1 << (s->bitplane - 1));
-    const int factor = (1 << s->depth) - 1;
     float stats[4] = { 0 };
     char metabuf[128];
-    int plane, y, x, bit;
+    ThreadData td;
     AVFrame *out = s->filter ? NULL : in;
 
     if (!out) {
@@ -111,68 +213,18 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
 
-    if (s->depth <= 8) {
-        for (plane = 0; plane < s->nb_planes; plane++) {
-            const int linesize = s->planeheight[plane] > 1 ? in->linesize[plane] : 0;
-            const int dlinesize = out->linesize[plane];
-            uint8_t *val = in->data[plane];
-            uint8_t *dst = s->filter ? out->data[plane]: NULL;
+    memset(s->stats, 0, sizeof(*s->stats) * s->nb_threads);
+    td.in = in; td.out = out;
+    ff_filter_execute(ctx, filter_slice, &td, NULL, s->nb_threads);
 
-            for (y = 0; y < s->planeheight[plane] - 1; y++) {
-                CHECK_BIT(0, 1, 1 + linesize, linesize)
+    for (int n = 0; n < s->nb_threads; n++) {
+        SliceStats *slice_stats = &s->stats[n];
 
-                for (x = 1; x < s->planewidth[plane] - 1; x++) {
-                    CHECK_BIT(x, -1, 1, linesize)
-                }
-
-                CHECK_BIT(x, -1, -1 + linesize, linesize)
-
-                val += linesize;
-                if (dst)
-                    dst += dlinesize;
-            }
-
-            CHECK_BIT(0, 1, 1 - linesize, -linesize)
-
-            for (x = 1; x < s->planewidth[plane] - 1; x++) {
-                CHECK_BIT(x, -1, 1, -linesize)
-            }
-
-            CHECK_BIT(x, -1, -1 - linesize, -linesize)
-        }
-    } else {
-        for (plane = 0; plane < s->nb_planes; plane++) {
-            const int linesize = s->planeheight[plane] > 1 ? in->linesize[plane] / 2 : 0;
-            const int dlinesize = out->linesize[plane] / 2;
-            uint16_t *val = (uint16_t *)in->data[plane];
-            uint16_t *dst = s->filter ? (uint16_t *)out->data[plane] : NULL;
-
-            val = (uint16_t *)in->data[plane];
-            for (y = 0; y < s->planeheight[plane] - 1; y++) {
-                CHECK_BIT(0, 1, 1 + linesize, linesize)
-
-                for (x = 1; x < s->planewidth[plane] - 1; x++) {
-                    CHECK_BIT(x, -1, 1, linesize)
-                }
-
-                CHECK_BIT(x, -1, -1 + linesize, linesize)
-
-                val += linesize;
-                if (dst)
-                    dst += dlinesize;
-            }
-
-            CHECK_BIT(0, 1, 1 - linesize, -linesize)
-
-            for (x = 1; x < s->planewidth[plane] - 1; x++) {
-                CHECK_BIT(x, -1, 1, -linesize)
-            }
-
-            CHECK_BIT(x, -1, -1 -linesize, -linesize)
-        }
+        for (int plane = 0; plane < s->nb_planes; plane++)
+            stats[plane] += slice_stats->stats[plane];
     }
 
-    for (plane = 0; plane < s->nb_planes; plane++) {
+    for (int plane = 0; plane < s->nb_planes; plane++) {
         char key[32];
 
         stats[plane] /= s->planewidth[plane] * s->planeheight[plane];
@@ -185,6 +237,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_free(&in);
 
     return ff_filter_frame(outlink, out);
+}
+
+static av_cold void uninit(AVFilterContext *ctx)
+{
+    BPNContext *s = ctx->priv;
+
+    av_freep(&s->stats);
 }
 
 static const AVFilterPad inputs[] = {
@@ -200,9 +259,10 @@ const AVFilter ff_vf_bitplanenoise = {
     .name           = "bitplanenoise",
     .description    = NULL_IF_CONFIG_SMALL("Measure bit plane noise."),
     .priv_size      = sizeof(BPNContext),
+    .uninit         = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pixfmts),
     .priv_class     = &bitplanenoise_class,
-    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
+    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
 };
