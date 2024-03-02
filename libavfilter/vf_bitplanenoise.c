@@ -44,7 +44,7 @@ typedef struct BPNContext {
 } BPNContext;
 
 #define OFFSET(x) offsetof(BPNContext, x)
-#define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
+#define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 static const AVOption bitplanenoise_options[] = {
     { "bitplane", "set bit plane to use for measuring noise",  OFFSET(bitplane), AV_OPT_TYPE_INT,  {.i64=1}, 1, 16, FLAGS},
     { "filter",   "show noisy pixels",                         OFFSET(filter),   AV_OPT_TYPE_BOOL, {.i64=0}, 0,  1, FLAGS},
@@ -264,5 +264,6 @@ const AVFilter ff_vf_bitplanenoise = {
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pixfmts),
     .priv_class     = &bitplanenoise_class,
+    .process_command = ff_filter_process_command,
     .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
 };
