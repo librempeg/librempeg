@@ -100,28 +100,35 @@ static void fn(xcorrelate_slow)(AVFilterContext *ctx,
     AudioXCorrelateContext *s = ctx->priv;
     const ftype *x = (const ftype *)s->cache[0]->extended_data[ch];
     const ftype *y = (const ftype *)s->cache[1]->extended_data[ch];
-    ftype *sumx = (ftype *)s->mean_sum[0]->extended_data[ch];
-    ftype *sumy = (ftype *)s->mean_sum[1]->extended_data[ch];
+    ftype *sumxp = (ftype *)s->mean_sum[0]->extended_data[ch];
+    ftype *sumyp = (ftype *)s->mean_sum[1]->extended_data[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
     const int size = s->size;
+    ftype sumx, sumy;
 
     if (!s->used[ch]) {
-        sumx[0] = fn(mean_sum)(x, size);
-        sumy[0] = fn(mean_sum)(y, size);
+        sumx = fn(mean_sum)(x, size);
+        sumy = fn(mean_sum)(y, size);
+    } else {
+        sumx = sumxp[0];
+        sumy = sumyp[0];
     }
 
     for (int n = 0; n < out->nb_samples; n++) {
         const int idx = n + size;
 
         dst[n] = fn(xcorrelate)(x + n, y + n,
-                                sumx[0], sumy[0],
+                                sumx, sumy,
                                 size);
 
-        sumx[0] -= x[n];
-        sumx[0] += x[idx];
-        sumy[0] -= y[n];
-        sumy[0] += y[idx];
+        sumx -= x[n];
+        sumx += x[idx];
+        sumy -= y[n];
+        sumy += y[idx];
     }
+
+    sumxp[0] = sumx;
+    sumyp[0] = sumy;
 
     s->used[ch] = 1;
 }
@@ -132,36 +139,49 @@ static void fn(xcorrelate_fast)(AVFilterContext *ctx,
     AudioXCorrelateContext *s = ctx->priv;
     const ftype *x = (const ftype *)s->cache[0]->extended_data[ch];
     const ftype *y = (const ftype *)s->cache[1]->extended_data[ch];
-    ftype *num_sum = (ftype *)s->num_sum->extended_data[ch];
-    ftype *den_sumx = (ftype *)s->den_sum[0]->extended_data[ch];
-    ftype *den_sumy = (ftype *)s->den_sum[1]->extended_data[ch];
+    ftype *num_sump = (ftype *)s->num_sum->extended_data[ch];
+    ftype *den_sumxp = (ftype *)s->den_sum[0]->extended_data[ch];
+    ftype *den_sumyp = (ftype *)s->den_sum[1]->extended_data[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
+    ftype num_sum, den_sumx, den_sumy;
     const int size = s->size;
 
     if (!s->used[ch]) {
-        num_sum[0]  = fn(square_sum)(x, y, size);
-        den_sumx[0] = fn(square_sum)(x, x, size);
-        den_sumy[0] = fn(square_sum)(y, y, size);
+        num_sum  = fn(square_sum)(x, y, size);
+        den_sumx = fn(square_sum)(x, x, size);
+        den_sumy = fn(square_sum)(y, y, size);
+    } else {
+        num_sum = num_sump[0];
+        den_sumx = den_sumxp[0];
+        den_sumy = den_sumyp[0];
     }
 
     for (int n = 0; n < out->nb_samples; n++) {
         const int idx = n + size;
+        const ftype xidx = x[idx];
+        const ftype yidx = y[idx];
+        const ftype xn = x[n];
+        const ftype yn = y[n];
         ftype num, den;
 
-        num = num_sum[0] / size;
-        den = SQRT((den_sumx[0] * den_sumy[0]) / size / size);
+        num = num_sum / size;
+        den = SQRT((den_sumx * den_sumy) / size / size);
 
         dst[n] = den <= SMALL ? ZERO : CLIP(num / den, -ONE, ONE);
 
-        num_sum[0]  -= x[n] * y[n];
-        num_sum[0]  += x[idx] * y[idx];
-        den_sumx[0] -= x[n] * x[n];
-        den_sumx[0] += x[idx] * x[idx];
-        den_sumx[0]  = FFMAX(den_sumx[0], ZERO);
-        den_sumy[0] -= y[n] * y[n];
-        den_sumy[0] += y[idx] * y[idx];
-        den_sumy[0]  = FFMAX(den_sumy[0], ZERO);
+        num_sum  -= xn * yn;
+        num_sum  += xidx * yidx;
+        den_sumx -= xn * xn;
+        den_sumx += xidx * xidx;
+        den_sumx  = FFMAX(den_sumx, ZERO);
+        den_sumy -= yn * yn;
+        den_sumy += yidx * yidx;
+        den_sumy  = FFMAX(den_sumy, ZERO);
     }
+
+    num_sump[0] = num_sum;
+    den_sumxp[0] = den_sumx;
+    den_sumyp[0] = den_sumy;
 
     s->used[ch] = 1;
 }
@@ -172,47 +192,64 @@ static void fn(xcorrelate_best)(AVFilterContext *ctx, AVFrame *out,
     AudioXCorrelateContext *s = ctx->priv;
     const ftype *x = (const ftype *)s->cache[0]->extended_data[ch];
     const ftype *y = (const ftype *)s->cache[1]->extended_data[ch];
-    ftype *mean_sumx = (ftype *)s->mean_sum[0]->extended_data[ch];
-    ftype *mean_sumy = (ftype *)s->mean_sum[1]->extended_data[ch];
-    ftype *num_sum = (ftype *)s->num_sum->extended_data[ch];
-    ftype *den_sumx = (ftype *)s->den_sum[0]->extended_data[ch];
-    ftype *den_sumy = (ftype *)s->den_sum[1]->extended_data[ch];
+    ftype *mean_sumxp = (ftype *)s->mean_sum[0]->extended_data[ch];
+    ftype *mean_sumyp = (ftype *)s->mean_sum[1]->extended_data[ch];
+    ftype *num_sump = (ftype *)s->num_sum->extended_data[ch];
+    ftype *den_sumxp = (ftype *)s->den_sum[0]->extended_data[ch];
+    ftype *den_sumyp = (ftype *)s->den_sum[1]->extended_data[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
+    ftype mean_sumx, mean_sumy, num_sum, den_sumx, den_sumy;
     const int size = s->size;
 
     if (!s->used[ch]) {
-        num_sum[0]  = fn(square_sum)(x, y, size);
-        den_sumx[0] = fn(square_sum)(x, x, size);
-        den_sumy[0] = fn(square_sum)(y, y, size);
-        mean_sumx[0] = fn(mean_sum)(x, size);
-        mean_sumy[0] = fn(mean_sum)(y, size);
+        num_sum  = fn(square_sum)(x, y, size);
+        den_sumx = fn(square_sum)(x, x, size);
+        den_sumy = fn(square_sum)(y, y, size);
+        mean_sumx = fn(mean_sum)(x, size);
+        mean_sumy = fn(mean_sum)(y, size);
+    } else {
+        num_sum = num_sump[0];
+        den_sumx = den_sumxp[0];
+        den_sumy = den_sumyp[0];
+        mean_sumx = mean_sumxp[0];
+        mean_sumy = mean_sumyp[0];
     }
 
     for (int n = 0; n < out->nb_samples; n++) {
         const int idx = n + size;
         ftype num, den, xm, ym;
+        const ftype xidx = x[idx];
+        const ftype yidx = y[idx];
+        const ftype xn = x[n];
+        const ftype yn = y[n];
 
-        xm = mean_sumx[0] / size;
-        ym = mean_sumy[0] / size;
-        num = num_sum[0] - size * xm * ym;
-        den = SQRT(FMAX(den_sumx[0] - size * xm * xm, ZERO)) *
-              SQRT(FMAX(den_sumy[0] - size * ym * ym, ZERO));
+        xm = mean_sumx / size;
+        ym = mean_sumy / size;
+        num = num_sum - size * xm * ym;
+        den = SQRT(FMAX(den_sumx - size * xm * xm, ZERO)) *
+              SQRT(FMAX(den_sumy - size * ym * ym, ZERO));
 
         dst[n] = den <= SMALL ? ZERO : CLIP(num / den, -ONE, ONE);
 
-        mean_sumx[0]-= x[n];
-        mean_sumx[0]+= x[idx];
-        mean_sumy[0]-= y[n];
-        mean_sumy[0]+= y[idx];
-        num_sum[0]  -= x[n] * y[n];
-        num_sum[0]  += x[idx] * y[idx];
-        den_sumx[0] -= x[n] * x[n];
-        den_sumx[0] += x[idx] * x[idx];
-        den_sumx[0]  = FMAX(den_sumx[0], ZERO);
-        den_sumy[0] -= y[n] * y[n];
-        den_sumy[0] += y[idx] * y[idx];
-        den_sumy[0]  = FMAX(den_sumy[0], ZERO);
+        mean_sumx-= xn;
+        mean_sumx+= xidx;
+        mean_sumy-= yn;
+        mean_sumy+= yidx;
+        num_sum  -= xn * yn;
+        num_sum  += xidx * yidx;
+        den_sumx -= xn * xn;
+        den_sumx += xidx * xidx;
+        den_sumx  = FMAX(den_sumx, ZERO);
+        den_sumy -= yn * yn;
+        den_sumy += yidx * yidx;
+        den_sumy  = FMAX(den_sumy, ZERO);
     }
+
+    num_sump[0] = num_sum;
+    den_sumxp[0] = den_sumx;
+    den_sumyp[0] = den_sumy;
+    mean_sumxp[0] = mean_sumx;
+    mean_sumyp[0] = mean_sumy;
 
     s->used[ch] = 1;
 }
