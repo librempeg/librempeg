@@ -37,14 +37,13 @@ typedef struct AudioXCorrelateContext {
 
     AVFrame *in[2];
     AVFrame *cache[2];
-    AVFrame *mean_sum[2];
-    AVFrame *num_sum;
-    AVFrame *den_sum[2];
     int samples_in_cache[2];
     int *used;
     int eof;
     int eof_status;
     int64_t eof_pts;
+
+    void *ch_state;
 
     void (*xcorrelate)(AVFilterContext *ctx, AVFrame *out, const int ch);
 } AudioXCorrelateContext;
@@ -210,33 +209,33 @@ static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AudioXCorrelateContext *s = ctx->priv;
+    size_t state_size;
 
     s->used = av_calloc(outlink->ch_layout.nb_channels, sizeof(*s->used));
     if (!s->used)
         return AVERROR(ENOMEM);
 
-    s->mean_sum[0] = ff_get_audio_buffer(outlink, 1);
-    s->mean_sum[1] = ff_get_audio_buffer(outlink, 1);
-    s->num_sum = ff_get_audio_buffer(outlink, 1);
-    s->den_sum[0] = ff_get_audio_buffer(outlink, 1);
-    s->den_sum[1] = ff_get_audio_buffer(outlink, 1);
-    if (!s->mean_sum[0] || !s->mean_sum[1] || !s->num_sum ||
-        !s->den_sum[0] || !s->den_sum[1])
-        return AVERROR(ENOMEM);
-
-    switch (s->algo) {
-    case 0: s->xcorrelate = xcorrelate_slow_fltp; break;
-    case 1: s->xcorrelate = xcorrelate_fast_fltp; break;
-    case 2: s->xcorrelate = xcorrelate_best_fltp; break;
-    }
-
     if (outlink->format == AV_SAMPLE_FMT_DBLP) {
+        state_size = sizeof(ChannelState_dblp);
+
         switch (s->algo) {
         case 0: s->xcorrelate = xcorrelate_slow_dblp; break;
         case 1: s->xcorrelate = xcorrelate_fast_dblp; break;
         case 2: s->xcorrelate = xcorrelate_best_dblp; break;
         }
+    } else {
+        state_size = sizeof(ChannelState_fltp);
+
+        switch (s->algo) {
+        case 0: s->xcorrelate = xcorrelate_slow_fltp; break;
+        case 1: s->xcorrelate = xcorrelate_fast_fltp; break;
+        case 2: s->xcorrelate = xcorrelate_best_fltp; break;
+        }
     }
+
+    s->ch_state = av_calloc(outlink->ch_layout.nb_channels, state_size);
+    if (!s->ch_state)
+        return AVERROR(ENOMEM);
 
     return 0;
 }
@@ -246,15 +245,11 @@ static av_cold void uninit(AVFilterContext *ctx)
     AudioXCorrelateContext *s = ctx->priv;
 
     av_freep(&s->used);
+    av_freep(&s->ch_state);
     av_frame_free(&s->in[0]);
     av_frame_free(&s->in[1]);
     av_frame_free(&s->cache[0]);
     av_frame_free(&s->cache[1]);
-    av_frame_free(&s->mean_sum[0]);
-    av_frame_free(&s->mean_sum[1]);
-    av_frame_free(&s->num_sum);
-    av_frame_free(&s->den_sum[0]);
-    av_frame_free(&s->den_sum[1]);
 }
 
 static const AVFilterPad inputs[] = {
