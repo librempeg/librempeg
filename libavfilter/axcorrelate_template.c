@@ -23,7 +23,7 @@
 #undef ONE
 #undef CLIP
 #undef SQRT
-#undef SMALL
+#undef EPS
 #if DEPTH == 32
 #define SAMPLE_FORMAT fltp
 #define FMAX fmaxf
@@ -32,7 +32,7 @@
 #define ONE 1.f
 #define CLIP av_clipf
 #define SQRT sqrtf
-#define SMALL 1e-6f
+#define EPS FLT_EPSILON
 #else
 #define SAMPLE_FORMAT dblp
 #define FMAX fmax
@@ -41,7 +41,7 @@
 #define ONE 1.0
 #define CLIP av_clipd
 #define SQRT sqrt
-#define SMALL 1e-9
+#define EPS DBL_EPSILON
 #endif
 
 #define fn3(a,b)   a##_##b
@@ -88,10 +88,10 @@ static ftype fn(xcorrelate)(const ftype *x,
         den1 += yd * yd;
     }
 
-    num /= size;
-    den  = SQRT((den0 * den1) / size / size);
+    den = SQRT(den0) * SQRT(den1);
+    den = den < EPS ? EPS : den;
 
-    return den <= SMALL ? ZERO : num / den;
+    return num / den;
 }
 
 static void fn(xcorrelate_slow)(AVFilterContext *ctx,
@@ -121,10 +121,10 @@ static void fn(xcorrelate_slow)(AVFilterContext *ctx,
                                 sumx, sumy,
                                 size);
 
-        sumx -= x[n];
         sumx += x[idx];
-        sumy -= y[n];
+        sumx -= x[n];
         sumy += y[idx];
+        sumy -= y[n];
     }
 
     sumxp[0] = sumx;
@@ -164,18 +164,19 @@ static void fn(xcorrelate_fast)(AVFilterContext *ctx,
         const ftype yn = y[n];
         ftype num, den;
 
-        num = num_sum / size;
-        den = SQRT((den_sumx * den_sumy) / size / size);
+        num = num_sum;
+        den = SQRT(den_sumx) * SQRT(den_sumy);
+        den = den < EPS ? EPS : den;
 
-        dst[n] = den <= SMALL ? ZERO : CLIP(num / den, -ONE, ONE);
+        dst[n] = CLIP(num / den, -ONE, ONE);
 
-        num_sum  -= xn * yn;
         num_sum  += xidx * yidx;
-        den_sumx -= xn * xn;
+        num_sum  -= xn * yn;
         den_sumx += xidx * xidx;
+        den_sumx -= xn * xn;
         den_sumx  = FFMAX(den_sumx, ZERO);
-        den_sumy -= yn * yn;
         den_sumy += yidx * yidx;
+        den_sumy -= yn * yn;
         den_sumy  = FFMAX(den_sumy, ZERO);
     }
 
@@ -217,31 +218,30 @@ static void fn(xcorrelate_best)(AVFilterContext *ctx, AVFrame *out,
 
     for (int n = 0; n < out->nb_samples; n++) {
         const int idx = n + size;
-        ftype num, den, xm, ym;
         const ftype xidx = x[idx];
         const ftype yidx = y[idx];
         const ftype xn = x[n];
         const ftype yn = y[n];
+        ftype num, den;
 
-        xm = mean_sumx / size;
-        ym = mean_sumy / size;
-        num = num_sum - size * xm * ym;
-        den = SQRT(FMAX(den_sumx - size * xm * xm, ZERO)) *
-              SQRT(FMAX(den_sumy - size * ym * ym, ZERO));
+        num = num_sum * size - mean_sumx * mean_sumy;
+        den = SQRT(FMAX(size * den_sumx - mean_sumx * mean_sumx, ZERO)) *
+              SQRT(FMAX(size * den_sumy - mean_sumy * mean_sumy, ZERO));
+        den = den < EPS ? EPS : den;
 
-        dst[n] = den <= SMALL ? ZERO : CLIP(num / den, -ONE, ONE);
+        dst[n] = CLIP(num / den, -ONE, ONE);
 
-        mean_sumx-= xn;
         mean_sumx+= xidx;
-        mean_sumy-= yn;
+        mean_sumx-= xn;
         mean_sumy+= yidx;
-        num_sum  -= xn * yn;
+        mean_sumy-= yn;
         num_sum  += xidx * yidx;
-        den_sumx -= xn * xn;
+        num_sum  -= xn * yn;
         den_sumx += xidx * xidx;
+        den_sumx -= xn * xn;
         den_sumx  = FMAX(den_sumx, ZERO);
-        den_sumy -= yn * yn;
         den_sumy += yidx * yidx;
+        den_sumy -= yn * yn;
         den_sumy  = FMAX(den_sumy, ZERO);
     }
 
