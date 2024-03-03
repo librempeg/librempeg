@@ -40,10 +40,10 @@ typedef struct AudioXCorrelateContext {
     AVFrame *mean_sum[2];
     AVFrame *num_sum;
     AVFrame *den_sum[2];
-    int used;
+    int *used;
     int eof;
 
-    int (*xcorrelate)(AVFilterContext *ctx, AVFrame *out, int available);
+    void (*xcorrelate)(AVFilterContext *ctx, AVFrame *out, const int ch);
 } AudioXCorrelateContext;
 
 #define DEPTH 32
@@ -52,6 +52,19 @@ typedef struct AudioXCorrelateContext {
 #undef DEPTH
 #define DEPTH 64
 #include "axcorrelate_template.c"
+
+static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    AVFrame *out = arg;
+    AudioXCorrelateContext *s = ctx->priv;
+    const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
+    const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+
+    for (int ch = start; ch < end; ch++)
+        s->xcorrelate(ctx, out, ch);
+
+    return 0;
+}
 
 static int activate(AVFilterContext *ctx)
 {
@@ -108,7 +121,8 @@ static int activate(AVFilterContext *ctx)
         if (!out)
             return AVERROR(ENOMEM);
 
-        s->used = s->xcorrelate(ctx, out, available);
+        ff_filter_execute(ctx, filter_channels, out, NULL,
+                          FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
         out->pts = s->pts;
         s->pts += out_samples;
@@ -169,9 +183,10 @@ static int config_output(AVFilterLink *outlink)
 
     s->pts = AV_NOPTS_VALUE;
 
+    s->used = av_calloc(outlink->ch_layout.nb_channels, sizeof(*s->used));
     s->fifo[0] = av_audio_fifo_alloc(outlink->format, outlink->ch_layout.nb_channels, s->size);
     s->fifo[1] = av_audio_fifo_alloc(outlink->format, outlink->ch_layout.nb_channels, s->size);
-    if (!s->fifo[0] || !s->fifo[1])
+    if (!s->fifo[0] || !s->fifo[1] || !s->used)
         return AVERROR(ENOMEM);
 
     s->mean_sum[0] = ff_get_audio_buffer(outlink, 1);
@@ -204,6 +219,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     AudioXCorrelateContext *s = ctx->priv;
 
+    av_freep(&s->used);
     av_audio_fifo_free(s->fifo[0]);
     av_audio_fifo_free(s->fifo[1]);
     av_frame_free(&s->cache[0]);
@@ -255,6 +271,7 @@ const AVFilter ff_af_axcorrelate = {
     .priv_class     = &axcorrelate_class,
     .activate       = activate,
     .uninit         = uninit,
+    .flags          = AVFILTER_FLAG_SLICE_THREADS,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
