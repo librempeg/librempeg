@@ -18,7 +18,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/audio_fifo.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
 #include "libavutil/opt.h"
@@ -33,15 +32,17 @@ typedef struct AudioXCorrelateContext {
 
     int size;
     int algo;
-    int64_t pts;
 
-    AVAudioFifo *fifo[2];
+    AVFrame *in[2];
     AVFrame *cache[2];
     AVFrame *mean_sum[2];
     AVFrame *num_sum;
     AVFrame *den_sum[2];
+    int samples_in_cache[2];
     int *used;
     int eof;
+    int eof_status;
+    int64_t eof_pts;
 
     void (*xcorrelate)(AVFilterContext *ctx, AVFrame *out, const int ch);
 } AudioXCorrelateContext;
@@ -70,103 +71,130 @@ static int activate(AVFilterContext *ctx)
 {
     AudioXCorrelateContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
-    AVFrame *frame = NULL;
-    int ret, status;
-    int available;
-    int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
 
-    for (int i = 0; i < 2 && !s->eof; i++) {
-        ret = ff_inlink_consume_frame(ctx->inputs[i], &frame);
-        if (ret > 0) {
-            if (s->pts == AV_NOPTS_VALUE)
-                s->pts = frame->pts;
-            ret = av_audio_fifo_write(s->fifo[i], (void **)frame->extended_data,
-                                      frame->nb_samples);
-            av_frame_free(&frame);
-            if (ret < 0)
-                return ret;
-        }
+    if (!s->in[0] && !s->eof) {
+        int ret = ff_inlink_consume_frame(ctx->inputs[0], &s->in[0]);
+        if (ret < 0)
+            return ret;
     }
 
-    available = FFMIN(av_audio_fifo_size(s->fifo[0]), av_audio_fifo_size(s->fifo[1]));
-    if (available > s->size) {
-        const int out_samples = available - s->size;
+    if (s->in[0] && !s->eof && !s->in[1]) {
+        const int ns = s->in[0]->nb_samples;
+        int ret = ff_inlink_consume_samples(ctx->inputs[1], ns, ns, &s->in[1]);
+        if (ret < 0)
+            return ret;
+    }
+
+    if (s->in[0] && s->in[1]) {
+        const int out_samples = s->in[0]->nb_samples;
+        const int needed = s->size + out_samples;
         AVFrame *out;
 
-        if (!s->cache[0] || s->cache[0]->nb_samples < available) {
-            av_frame_free(&s->cache[0]);
-            s->cache[0] = ff_get_audio_buffer(outlink, available);
+        if (!s->cache[0] || s->cache[0]->nb_samples < needed) {
+            AVFrame *old_cache = s->cache[0];
+
+            s->cache[0] = ff_get_audio_buffer(outlink, needed);
             if (!s->cache[0])
                 return AVERROR(ENOMEM);
+            av_samples_copy(s->cache[0]->extended_data,
+                            s->cache[0]->extended_data, 0,
+                            s->cache[0]->nb_samples-s->size,
+                            s->size,
+                            s->cache[0]->ch_layout.nb_channels,
+                            s->cache[0]->format);
+            av_samples_copy(s->cache[0]->extended_data,
+                            s->in[0]->extended_data,
+                            s->size, 0,
+                            s->in[0]->nb_samples,
+                            s->in[0]->ch_layout.nb_channels,
+                            s->in[0]->format);
+            s->samples_in_cache[0] = needed;
+            av_frame_free(&old_cache);
+        } else {
+            av_samples_copy(s->cache[0]->extended_data,
+                            s->cache[0]->extended_data, 0,
+                            s->samples_in_cache[0]-s->size,
+                            s->size,
+                            s->cache[0]->ch_layout.nb_channels,
+                            s->cache[0]->format);
+            av_samples_copy(s->cache[0]->extended_data,
+                            s->in[0]->extended_data,
+                            s->size, 0,
+                            s->in[0]->nb_samples,
+                            s->in[0]->ch_layout.nb_channels,
+                            s->in[0]->format);
+            s->samples_in_cache[0] = needed;
         }
 
-        if (!s->cache[1] || s->cache[1]->nb_samples < available) {
-            av_frame_free(&s->cache[1]);
-            s->cache[1] = ff_get_audio_buffer(outlink, available);
+        if (!s->cache[1] || s->cache[1]->nb_samples < needed) {
+            AVFrame *old_cache = s->cache[1];
+
+            s->cache[1] = ff_get_audio_buffer(outlink, needed);
             if (!s->cache[1])
                 return AVERROR(ENOMEM);
+            av_samples_copy(s->cache[1]->extended_data,
+                            s->cache[1]->extended_data, 0,
+                            s->cache[1]->nb_samples-s->size,
+                            s->size,
+                            s->cache[1]->ch_layout.nb_channels,
+                            s->cache[1]->format);
+            av_samples_copy(s->cache[1]->extended_data,
+                            s->in[1]->extended_data,
+                            s->size, 0,
+                            s->in[1]->nb_samples,
+                            s->in[1]->ch_layout.nb_channels,
+                            s->in[1]->format);
+            s->samples_in_cache[1] = needed;
+            av_frame_free(&old_cache);
+        } else {
+            av_samples_copy(s->cache[1]->extended_data,
+                            s->cache[1]->extended_data, 0,
+                            s->samples_in_cache[1]-s->size,
+                            s->size,
+                            s->cache[1]->ch_layout.nb_channels,
+                            s->cache[1]->format);
+            av_samples_copy(s->cache[1]->extended_data,
+                            s->in[1]->extended_data,
+                            s->size, 0,
+                            s->in[1]->nb_samples,
+                            s->in[1]->ch_layout.nb_channels,
+                            s->in[1]->format);
+            s->samples_in_cache[1] = needed;
         }
 
-        ret = av_audio_fifo_peek(s->fifo[0], (void **)s->cache[0]->extended_data, available);
-        if (ret < 0)
-            return ret;
-
-        ret = av_audio_fifo_peek(s->fifo[1], (void **)s->cache[1]->extended_data, available);
-        if (ret < 0)
-            return ret;
-
         out = ff_get_audio_buffer(outlink, out_samples);
-        if (!out)
+        if (!out) {
+            av_frame_free(&s->in[0]);
+            av_frame_free(&s->in[1]);
             return AVERROR(ENOMEM);
+        }
 
         ff_filter_execute(ctx, filter_channels, out, NULL,
                           FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
-        out->pts = s->pts;
-        s->pts += out_samples;
+        av_frame_copy_props(out, s->in[0]);
 
-        av_audio_fifo_drain(s->fifo[0], out_samples);
-        av_audio_fifo_drain(s->fifo[1], out_samples);
+        av_frame_free(&s->in[0]);
+        av_frame_free(&s->in[1]);
 
         return ff_filter_frame(outlink, out);
     }
 
     for (int i = 0; i < 2 && !s->eof; i++) {
-        if (ff_inlink_acknowledge_status(ctx->inputs[i], &status, &pts)) {
-            AVFrame *silence = ff_get_audio_buffer(outlink, s->size);
-
+        if (ff_inlink_acknowledge_status(ctx->inputs[i], &s->eof_status, &s->eof_pts))
             s->eof = 1;
-            if (!silence)
-                return AVERROR(ENOMEM);
-
-            av_audio_fifo_write(s->fifo[0], (void **)silence->extended_data,
-                                silence->nb_samples);
-
-            av_audio_fifo_write(s->fifo[1], (void **)silence->extended_data,
-                                silence->nb_samples);
-
-            av_frame_free(&silence);
-        }
     }
 
-    if (s->eof &&
-        (av_audio_fifo_size(s->fifo[0]) <= s->size ||
-         av_audio_fifo_size(s->fifo[1]) <= s->size)) {
-        ff_outlink_set_status(outlink, AVERROR_EOF, s->pts);
-        return 0;
-    }
-
-    if ((av_audio_fifo_size(s->fifo[0]) > s->size &&
-         av_audio_fifo_size(s->fifo[1]) > s->size) || s->eof) {
-        ff_filter_set_ready(ctx, 10);
+    if (s->eof && !s->in[0] && !s->in[1]) {
+        ff_outlink_set_status(outlink, s->eof_status, s->eof_pts);
         return 0;
     }
 
     if (ff_outlink_frame_wanted(outlink) && !s->eof) {
         for (int i = 0; i < 2; i++) {
-            if (av_audio_fifo_size(s->fifo[i]) > s->size)
+            if (s->in[i])
                 continue;
             ff_inlink_request_frame(ctx->inputs[i]);
             return 0;
@@ -181,12 +209,8 @@ static int config_output(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     AudioXCorrelateContext *s = ctx->priv;
 
-    s->pts = AV_NOPTS_VALUE;
-
     s->used = av_calloc(outlink->ch_layout.nb_channels, sizeof(*s->used));
-    s->fifo[0] = av_audio_fifo_alloc(outlink->format, outlink->ch_layout.nb_channels, s->size);
-    s->fifo[1] = av_audio_fifo_alloc(outlink->format, outlink->ch_layout.nb_channels, s->size);
-    if (!s->fifo[0] || !s->fifo[1] || !s->used)
+    if (!s->used)
         return AVERROR(ENOMEM);
 
     s->mean_sum[0] = ff_get_audio_buffer(outlink, 1);
@@ -220,8 +244,8 @@ static av_cold void uninit(AVFilterContext *ctx)
     AudioXCorrelateContext *s = ctx->priv;
 
     av_freep(&s->used);
-    av_audio_fifo_free(s->fifo[0]);
-    av_audio_fifo_free(s->fifo[1]);
+    av_frame_free(&s->in[0]);
+    av_frame_free(&s->in[1]);
     av_frame_free(&s->cache[0]);
     av_frame_free(&s->cache[1]);
     av_frame_free(&s->mean_sum[0]);
