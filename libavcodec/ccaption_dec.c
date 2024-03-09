@@ -948,14 +948,14 @@ static const AVOption options[] = {
 };
 
 static const AVClass ccaption_dec_class = {
-    .class_name = "Closed caption Decoder",
+    .class_name = "Closed Captions Decoder",
     .option     = options,
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
 const FFCodec ff_ccaption_decoder = {
     .p.name         = "cc_dec",
-    CODEC_LONG_NAME("Closed Caption (EIA-608 / CEA-708)"),
+    CODEC_LONG_NAME("Closed Captions (EIA-608 / CEA-708)"),
     .p.type         = AVMEDIA_TYPE_SUBTITLE,
     .p.id           = AV_CODEC_ID_EIA_608,
     .p.priv_class   = &ccaption_dec_class,
