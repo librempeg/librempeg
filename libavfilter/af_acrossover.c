@@ -24,7 +24,6 @@
  */
 
 #include "libavutil/attributes.h"
-#include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/eval.h"
 #include "libavutil/float_dsp.h"
@@ -54,8 +53,10 @@ typedef struct BiquadCoeffs {
 typedef struct AudioCrossoverContext {
     const AVClass *class;
 
-    char *splits_str;
-    char *gains_str;
+    float *splits_opt;
+    unsigned nb_splits_opt;
+    float *gains_opt;
+    unsigned nb_gains_opt;
     int order_opt;
     float level_in;
     int precision;
@@ -84,9 +85,13 @@ typedef struct AudioCrossoverContext {
 
 #define OFFSET(x) offsetof(AudioCrossoverContext, x)
 #define AF AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_splits = {.def="500",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_gains = {.def="1",.size_min=1,.sep=' '};
 
 static const AVOption acrossover_options[] = {
-    { "split", "set split frequencies", OFFSET(splits_str), AV_OPT_TYPE_STRING, {.str="500"}, 0, 0, AF },
+    { "split", "set split frequencies", OFFSET(splits_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_splits}, .min=0, .max=INT_MAX, .flags=AF },
     { "order", "set filter order",      OFFSET(order_opt),  AV_OPT_TYPE_INT,    {.i64=1},     0, 9, AF, .unit = "m" },
     { "2nd",   "2nd order (12 dB/8ve)", 0,                  AV_OPT_TYPE_CONST,  {.i64=0},     0, 0, AF, .unit = "m" },
     { "4th",   "4th order (24 dB/8ve)", 0,                  AV_OPT_TYPE_CONST,  {.i64=1},     0, 0, AF, .unit = "m" },
@@ -99,7 +104,7 @@ static const AVOption acrossover_options[] = {
     { "18th",  "18th order (108 dB/8ve)",0,                 AV_OPT_TYPE_CONST,  {.i64=8},     0, 0, AF, .unit = "m" },
     { "20th",  "20th order (120 dB/8ve)",0,                 AV_OPT_TYPE_CONST,  {.i64=9},     0, 0, AF, .unit = "m" },
     { "level", "set input gain",        OFFSET(level_in),   AV_OPT_TYPE_FLOAT,  {.dbl=1},     0, 1, AF },
-    { "gain",  "set output bands gain", OFFSET(gains_str),  AV_OPT_TYPE_STRING, {.str="1.f"}, 0, 0, AF },
+    { "gain",  "set output bands gain", OFFSET(gains_opt),  AV_OPT_TYPE_FLOAT|AR, {.arr=&def_gains}, .min=0, .max=INT_MAX, .flags=AF },
     { "precision",  "set processing precision", OFFSET(precision),   AV_OPT_TYPE_INT,   {.i64=0}, 0, 2, AF, .unit = "precision" },
     {  "auto",  "set auto processing precision",                  0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, AF, .unit = "precision" },
     {  "float", "set single-floating point processing precision", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, AF, .unit = "precision" },
@@ -149,30 +154,12 @@ static int query_formats(AVFilterContext *ctx)
 static int parse_gains(AVFilterContext *ctx)
 {
     AudioCrossoverContext *s = ctx->priv;
-    char *p, *arg, *saveptr = NULL;
     int i, ret = 0;
 
-    saveptr = NULL;
-    p = s->gains_str;
-    for (i = 0; i < MAX_BANDS; i++) {
-        float gain;
-        char c[3] = { 0 };
-
-        if (!(arg = av_strtok(p, " |", &saveptr)))
+    for (i = 0; i < s->nb_gains_opt; i++) {
+        if (i >= MAX_BANDS)
             break;
-
-        p = NULL;
-
-        if (av_sscanf(arg, "%f%2s", &gain, c) < 1) {
-            av_log(ctx, AV_LOG_ERROR, "Invalid syntax for gain[%d].\n", i);
-            ret = AVERROR(EINVAL);
-            break;
-        }
-
-        if (c[0] == 'd' && c[1] == 'B')
-            s->gains[i] = expf(gain * M_LN10 / 20.f);
-        else
-            s->gains[i] = gain;
+        s->gains[i] = s->gains_opt[i];
     }
 
     for (; i < MAX_BANDS; i++)
@@ -184,26 +171,18 @@ static int parse_gains(AVFilterContext *ctx)
 static av_cold int init(AVFilterContext *ctx)
 {
     AudioCrossoverContext *s = ctx->priv;
-    char *p, *arg, *saveptr = NULL;
     int i, ret = 0;
 
     s->fdsp = avpriv_float_dsp_alloc(0);
     if (!s->fdsp)
         return AVERROR(ENOMEM);
 
-    p = s->splits_str;
-    for (i = 0; i < MAX_SPLITS; i++) {
-        float freq;
+    for (i = 0; i < s->nb_splits_opt; i++) {
+        float freq = s->splits_opt[i];
 
-        if (!(arg = av_strtok(p, " |", &saveptr)))
+        if (i >= MAX_SPLITS)
             break;
 
-        p = NULL;
-
-        if (av_sscanf(arg, "%f", &freq) != 1) {
-            av_log(ctx, AV_LOG_ERROR, "Invalid syntax for frequency[%d].\n", i);
-            return AVERROR(EINVAL);
-        }
         if (freq <= 0) {
             av_log(ctx, AV_LOG_ERROR, "Frequency %f must be positive number.\n", freq);
             return AVERROR(EINVAL);
