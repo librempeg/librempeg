@@ -31,7 +31,6 @@
 #include "libavutil/attributes.h"
 #include "libavutil/audio_fifo.h"
 #include "libavutil/avassert.h"
-#include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
 #include "libavutil/eval.h"
@@ -162,7 +161,8 @@ typedef struct MixContext {
     int active_inputs;          /**< number of input currently active */
     int duration_mode;          /**< mode for determining duration */
     float dropout_transition;   /**< transition time when an input drops out */
-    char *weights_str;          /**< string for custom weights for every input */
+    float *weights_opt;         /**< array of custom weights for every input */
+    unsigned nb_weights;
     int normalize;              /**< if inputs are scaled */
 
     int nb_channels;            /**< number of channels */
@@ -182,6 +182,8 @@ typedef struct MixContext {
 #define A AV_OPT_FLAG_AUDIO_PARAM
 #define F AV_OPT_FLAG_FILTERING_PARAM
 #define T AV_OPT_FLAG_RUNTIME_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+static const AVOptionArrayDef def_weights = {.def="1 1",.size_min=1,.sep=' '};
 static const AVOption amix_options[] = {
     { "inputs", "Number of inputs.",
             OFFSET(nb_inputs), AV_OPT_TYPE_INT, { .i64 = 2 }, 1, INT16_MAX, A|F },
@@ -194,7 +196,7 @@ static const AVOption amix_options[] = {
                             "renormalization when an input stream ends.",
             OFFSET(dropout_transition), AV_OPT_TYPE_FLOAT, { .dbl = 2.0 }, 0, INT_MAX, A|F },
     { "weights", "Set weight for each input.",
-            OFFSET(weights_str), AV_OPT_TYPE_STRING, {.str="1 1"}, 0, 0, A|F|T },
+            OFFSET(weights_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_weights}, INT_MIN, INT_MAX, A|F|T },
     { "normalize", "Scale inputs",
             OFFSET(normalize), AV_OPT_TYPE_BOOL, {.i64=1}, 0, 1, A|F|T },
     { NULL }
@@ -518,21 +520,16 @@ static void parse_weights(AVFilterContext *ctx)
 {
     MixContext *s = ctx->priv;
     float last_weight = 1.f;
-    char *p;
     int i;
 
     s->weight_sum = 0.f;
-    p = s->weights_str;
-    for (i = 0; i < s->nb_inputs; i++) {
-        last_weight = av_strtod(p, &p);
+    for (i = 0; i < s->nb_weights; i++) {
+        if (i >= s->nb_inputs)
+            break;
+
+        last_weight = s->weights_opt[i];
         s->weights[i] = last_weight;
         s->weight_sum += FFABS(last_weight);
-        if (p && *p) {
-            p++;
-        } else {
-            i++;
-            break;
-        }
     }
 
     for (; i < s->nb_inputs; i++) {
