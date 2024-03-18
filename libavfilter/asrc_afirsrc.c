@@ -34,9 +34,12 @@
 typedef struct AudioFIRSourceContext {
     const AVClass *class;
 
-    char *freq_points_str;
-    char *magnitude_str;
-    char *phase_str;
+    float *freq_points_opt;
+    unsigned nb_freq;
+    float *magnitude_opt;
+    unsigned nb_magnitude;
+    float *phase_opt;
+    unsigned nb_phase;
     int nb_taps;
     int sample_rate;
     int nb_samples;
@@ -48,13 +51,9 @@ typedef struct AudioFIRSourceContext {
     AVComplexFloat *complexf;
     float *freq;
     float *magnitude;
-    float *phase;
     int freq_size;
     int magnitude_size;
     int phase_size;
-    int nb_freq;
-    int nb_magnitude;
-    int nb_phase;
 
     float *taps;
     float *win;
@@ -66,16 +65,21 @@ typedef struct AudioFIRSourceContext {
 
 #define OFFSET(x) offsetof(AudioFIRSourceContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_freqs = {.def="0 1",.size_min=2,.sep=' '};
+static const AVOptionArrayDef def_mags  = {.def="1 1",.size_min=2,.sep=' '};
+static const AVOptionArrayDef def_phase = {.def="0 0",.size_min=2,.sep=' '};
 
 static const AVOption afirsrc_options[] = {
     { "taps",      "set number of taps",   OFFSET(nb_taps),         AV_OPT_TYPE_INT,    {.i64=1025}, 9, UINT16_MAX, FLAGS },
     { "t",         "set number of taps",   OFFSET(nb_taps),         AV_OPT_TYPE_INT,    {.i64=1025}, 9, UINT16_MAX, FLAGS },
-    { "frequency", "set frequency points", OFFSET(freq_points_str), AV_OPT_TYPE_STRING, {.str="0 1"}, 0, 0, FLAGS },
-    { "f",         "set frequency points", OFFSET(freq_points_str), AV_OPT_TYPE_STRING, {.str="0 1"}, 0, 0, FLAGS },
-    { "magnitude", "set magnitude values", OFFSET(magnitude_str),   AV_OPT_TYPE_STRING, {.str="1 1"}, 0, 0, FLAGS },
-    { "m",         "set magnitude values", OFFSET(magnitude_str),   AV_OPT_TYPE_STRING, {.str="1 1"}, 0, 0, FLAGS },
-    { "phase",     "set phase values",     OFFSET(phase_str),       AV_OPT_TYPE_STRING, {.str="0 0"}, 0, 0, FLAGS },
-    { "p",         "set phase values",     OFFSET(phase_str),       AV_OPT_TYPE_STRING, {.str="0 0"}, 0, 0, FLAGS },
+    { "frequency", "set frequency points", OFFSET(freq_points_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_freqs}, 0, 1, FLAGS },
+    { "f",         "set frequency points", OFFSET(freq_points_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_freqs}, 0, 1, FLAGS },
+    { "magnitude", "set magnitude values", OFFSET(magnitude_opt),   AV_OPT_TYPE_FLOAT|AR, {.arr=&def_mags},  0, 1, FLAGS },
+    { "m",         "set magnitude values", OFFSET(magnitude_opt),   AV_OPT_TYPE_FLOAT|AR, {.arr=&def_mags},  0, 1, FLAGS },
+    { "phase",     "set phase values",     OFFSET(phase_opt),       AV_OPT_TYPE_FLOAT|AR, {.arr=&def_phase},-1, 1, FLAGS },
+    { "p",         "set phase values",     OFFSET(phase_opt),       AV_OPT_TYPE_FLOAT|AR, {.arr=&def_phase},-1, 1, FLAGS },
     { "sample_rate", "set sample rate",    OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=44100},  1, INT_MAX,    FLAGS },
     { "r",           "set sample rate",    OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=44100},  1, INT_MAX,    FLAGS },
     { "nb_samples", "set the number of samples per requested frame", OFFSET(nb_samples), AV_OPT_TYPE_INT, {.i64 = 1024}, 1, INT_MAX, FLAGS },
@@ -107,7 +111,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->taps);
     av_freep(&s->freq);
     av_freep(&s->magnitude);
-    av_freep(&s->phase);
     av_freep(&s->complexf);
     av_tx_uninit(&s->tx_ctx);
     av_tx_uninit(&s->itx_ctx);
@@ -131,33 +134,6 @@ static av_cold int query_formats(AVFilterContext *ctx)
         return ret;
 
     return ff_set_common_samplerates_from_list(ctx, sample_rates);
-}
-
-static int parse_string(char *str, float **items, int *nb_items, int *items_size)
-{
-    float *new_items;
-    char *tail;
-
-    new_items = av_fast_realloc(NULL, items_size, sizeof(float));
-    if (!new_items)
-        return AVERROR(ENOMEM);
-    *items = new_items;
-
-    tail = str;
-    if (!tail)
-        return AVERROR(EINVAL);
-
-    do {
-        (*items)[(*nb_items)++] = av_strtod(tail, &tail);
-        new_items = av_fast_realloc(*items, items_size, (*nb_items + 2) * sizeof(float));
-        if (!new_items)
-            return AVERROR(ENOMEM);
-        *items = new_items;
-        if (tail && *tail)
-            tail++;
-    } while (tail && *tail);
-
-    return 0;
 }
 
 static void lininterp(AVComplexFloat *complexf,
@@ -189,37 +165,23 @@ static av_cold int config_output(AVFilterLink *outlink)
     float overlap, scale = 1.f, compensation;
     int fft_size, middle, ret;
 
-    s->nb_freq = s->nb_magnitude = s->nb_phase = 0;
-
-    ret = parse_string(s->freq_points_str, &s->freq, &s->nb_freq, &s->freq_size);
-    if (ret < 0)
-        return ret;
-
-    ret = parse_string(s->magnitude_str, &s->magnitude, &s->nb_magnitude, &s->magnitude_size);
-    if (ret < 0)
-        return ret;
-
-    ret = parse_string(s->phase_str, &s->phase, &s->nb_phase, &s->phase_size);
-    if (ret < 0)
-        return ret;
-
     if (s->nb_freq != s->nb_magnitude && s->nb_freq != s->nb_phase && s->nb_freq >= 2) {
         av_log(ctx, AV_LOG_ERROR, "Number of frequencies, magnitudes and phases must be same and >= 2.\n");
         return AVERROR(EINVAL);
     }
 
     for (int i = 0; i < s->nb_freq; i++) {
-        if (i == 0 && s->freq[i] != 0.f) {
+        if (i == 0 && s->freq_points_opt[i] != 0.f) {
             av_log(ctx, AV_LOG_ERROR, "First frequency must be 0.\n");
             return AVERROR(EINVAL);
         }
 
-        if (i == s->nb_freq - 1 && s->freq[i] != 1.f) {
+        if (i == s->nb_freq - 1 && s->freq_points_opt[i] != 1.f) {
             av_log(ctx, AV_LOG_ERROR, "Last frequency must be 1.\n");
             return AVERROR(EINVAL);
         }
 
-        if (i && s->freq[i] < s->freq[i-1]) {
+        if (i && s->freq_points_opt[i] < s->freq_points_opt[i-1]) {
             av_log(ctx, AV_LOG_ERROR, "Frequencies must be in increasing order.\n");
             return AVERROR(EINVAL);
         }
@@ -244,7 +206,7 @@ static av_cold int config_output(AVFilterLink *outlink)
 
     generate_window_func(s->win, s->nb_taps, s->win_func, &overlap);
 
-    lininterp(s->complexf, s->freq, s->magnitude, s->phase, s->nb_freq, fft_size / 2);
+    lininterp(s->complexf, s->freq_points_opt, s->magnitude_opt, s->phase_opt, s->nb_freq, fft_size / 2);
 
     s->tx_fn(s->tx_ctx, s->complexf + fft_size, s->complexf, sizeof(*s->complexf));
 
@@ -309,6 +271,10 @@ const AVFilter ff_asrc_afirsrc = {
 };
 
 #define DEFAULT_BANDS "25 40 63 100 160 250 400 630 1000 1600 2500 4000 6300 10000 16000 24000"
+#define DEFAULT_GAINS "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+
+static const AVOptionArrayDef def_bands = {.def=DEFAULT_BANDS,.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_gains = {.def=DEFAULT_GAINS,.size_min=1,.sep=' '};
 
 typedef struct EqPreset {
     char name[16];
@@ -358,10 +324,10 @@ static const AVOption afireqsrc_options[] = {
     { eq_presets[15].name, NULL, 0, AV_OPT_TYPE_CONST, {.i64=15}, 0, 0, FLAGS, .unit = "preset" },
     { eq_presets[16].name, NULL, 0, AV_OPT_TYPE_CONST, {.i64=16}, 0, 0, FLAGS, .unit = "preset" },
     { eq_presets[17].name, NULL, 0, AV_OPT_TYPE_CONST, {.i64=17}, 0, 0, FLAGS, .unit = "preset" },
-    { "gains", "set gain values per band", OFFSET(magnitude_str), AV_OPT_TYPE_STRING, {.str="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"}, 0, 0, FLAGS },
-    { "g",     "set gain values per band", OFFSET(magnitude_str), AV_OPT_TYPE_STRING, {.str="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"}, 0, 0, FLAGS },
-    { "bands", "set central frequency values per band", OFFSET(freq_points_str), AV_OPT_TYPE_STRING, {.str=DEFAULT_BANDS}, 0, 0, FLAGS },
-    { "b",     "set central frequency values per band", OFFSET(freq_points_str), AV_OPT_TYPE_STRING, {.str=DEFAULT_BANDS}, 0, 0, FLAGS },
+    { "gains", "set gain values per band", OFFSET(magnitude_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_gains}, INT_MIN, INT_MAX, FLAGS },
+    { "g",     "set gain values per band", OFFSET(magnitude_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_gains}, INT_MIN, INT_MAX, FLAGS },
+    { "bands", "set central frequency values per band", OFFSET(freq_points_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_bands}, 0, INT_MAX, FLAGS },
+    { "b",     "set central frequency values per band", OFFSET(freq_points_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_bands}, 0, INT_MAX, FLAGS },
     { "taps", "set number of taps", OFFSET(nb_taps), AV_OPT_TYPE_INT, {.i64=4096}, 16, UINT16_MAX, FLAGS },
     { "t",    "set number of taps", OFFSET(nb_taps), AV_OPT_TYPE_INT, {.i64=4096}, 16, UINT16_MAX, FLAGS },
     { "sample_rate", "set sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=44100},  1, INT_MAX,    FLAGS },
@@ -457,38 +423,34 @@ static av_cold int config_eq_output(AVFilterLink *outlink)
     int fft_size, middle, asize, ret;
     float scale, factor;
 
-    s->nb_freq = s->nb_magnitude = 0;
-    if (s->preset < 0) {
-        ret = parse_string(s->freq_points_str, &s->freq, &s->nb_freq, &s->freq_size);
-        if (ret < 0)
-            return ret;
+    if (s->preset >= 0) {
+        const int nb_magnitude = FF_ARRAY_ELEMS(eq_presets[s->preset].gains);
 
-        ret = parse_string(s->magnitude_str, &s->magnitude, &s->nb_magnitude, &s->magnitude_size);
-        if (ret < 0)
-            return ret;
+        if (s->nb_freq != nb_magnitude) {
+            av_log(ctx, AV_LOG_ERROR, "Number of bands and gains must be same and >= 2.\n");
+            return AVERROR(EINVAL);
+        }
+
+        s->freq = av_calloc(s->nb_freq+1, sizeof(*s->freq));
+        s->magnitude = av_calloc(nb_magnitude+1, sizeof(*s->magnitude));
+        if (!s->magnitude || !s->freq)
+            return AVERROR(ENOMEM);
+
+        memcpy(s->freq, s->freq_points_opt, sizeof(*s->freq) * s->nb_freq);
+        memcpy(s->magnitude, eq_presets[s->preset].gains, sizeof(*s->magnitude) * nb_magnitude);
     } else {
-        char *freq_str;
+        if (s->nb_freq != s->nb_magnitude || s->nb_freq < 2) {
+            av_log(ctx, AV_LOG_ERROR, "Number of bands and gains must be same and >= 2.\n");
+            return AVERROR(EINVAL);
+        }
 
-        s->nb_magnitude = FF_ARRAY_ELEMS(eq_presets[s->preset].gains);
-
-        freq_str = av_strdup(DEFAULT_BANDS);
-        if (!freq_str)
+        s->freq = av_calloc(s->nb_magnitude+1, sizeof(*s->freq));
+        s->magnitude = av_calloc(s->nb_magnitude+1, sizeof(*s->magnitude));
+        if (!s->magnitude || !s->freq)
             return AVERROR(ENOMEM);
 
-        ret = parse_string(freq_str, &s->freq, &s->nb_freq, &s->freq_size);
-        av_free(freq_str);
-        if (ret < 0)
-            return ret;
-
-        s->magnitude = av_calloc(s->nb_magnitude + 1, sizeof(*s->magnitude));
-        if (!s->magnitude)
-            return AVERROR(ENOMEM);
-        memcpy(s->magnitude, eq_presets[s->preset].gains, sizeof(*s->magnitude) * s->nb_magnitude);
-    }
-
-    if (s->nb_freq != s->nb_magnitude || s->nb_freq < 2) {
-        av_log(ctx, AV_LOG_ERROR, "Number of bands and gains must be same and >= 2.\n");
-        return AVERROR(EINVAL);
+        memcpy(s->freq, s->freq_points_opt, sizeof(*s->freq) * s->nb_magnitude);
+        memcpy(s->magnitude, s->magnitude_opt, sizeof(*s->magnitude) * s->nb_magnitude);
     }
 
     s->freq[s->nb_freq] = outlink->sample_rate * 0.5f;
