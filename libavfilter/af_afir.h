@@ -62,17 +62,12 @@ typedef struct AudioFIRContext {
     float wet_gain;
     float dry_gain;
     float length;
-    int gtype;
     float ir_norm;
-    float ir_link;
+    int ir_link;
     float ir_gain;
     int ir_format;
     int ir_load;
     float max_ir_len;
-    int response;
-    int w, h;
-    AVRational frame_rate;
-    int ir_channel;
     int minp;
     int maxp;
     int nb_irs;
