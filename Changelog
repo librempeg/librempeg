@@ -5,6 +5,7 @@ version <next>:
 - CLAP wrapper audio filter
 - more truehd encoder channel-layouts
 - LC3/LC3plus demuxer and muxer
+- pad_vaapi, drawbox_vaapi filters
 
 version 7.0:
 - DXV DXT1 encoder
