@@ -96,6 +96,7 @@ typedef struct AudioFIRContext {
     AVFrame *norm_ir[MAX_IR_STREAMS];
     int min_part_size;
     int max_part_size;
+    int64_t delay;
     int64_t pts;
 
     AudioFIRDSPContext afirdsp;

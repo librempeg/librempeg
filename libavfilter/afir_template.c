@@ -33,6 +33,7 @@
 #undef POW
 #undef ONE
 #undef ZERO
+#undef EPS
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
 #define SQRT sqrtf
@@ -44,6 +45,7 @@
 #define POW powf
 #define ZERO 0.f
 #define ONE 1.f
+#define EPS FLT_EPSILON
 #else
 #define SAMPLE_FORMAT double
 #define SQRT sqrt
@@ -55,11 +57,56 @@
 #define POW pow
 #define ZERO 0.0
 #define ONE 1.0
+#define EPS DBL_EPSILON
 #endif
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
+
+static int fn(ir_delay)(AVFilterContext *ctx, AudioFIRContext *s,
+                        int cur_nb_taps, const ftype *time)
+{
+    int delay = 0, start = 0, stop = cur_nb_taps-1;
+    int real_nb_taps, linear = 1;
+
+    for (int i = 0; i < cur_nb_taps; i++) {
+        if (FABS(time[i]) > EPS)
+            break;
+        start++;
+    }
+
+    for (int i = cur_nb_taps-1; i >= 0; i--) {
+        if (FABS(time[i]) > EPS)
+            break;
+        stop--;
+    }
+
+    real_nb_taps = stop-start+1;
+    for (int i = 0; i < real_nb_taps/2; i++) {
+        if (time[start+i] != time[stop-i]) {
+            linear = 0;
+            break;
+        }
+    }
+
+    if (!linear) {
+        linear = 1;
+        for (int i = 0; i < real_nb_taps/2; i++) {
+            if (time[start+i] != -time[stop-i]) {
+                linear = 0;
+                break;
+            }
+        }
+    }
+
+    if (linear)
+        delay = start + (real_nb_taps-1)/2;
+    else
+        delay = start;
+
+    return delay;
+}
 
 static ftype fn(ir_gain)(AVFilterContext *ctx, AudioFIRContext *s,
                          int cur_nb_taps, const ftype *time)

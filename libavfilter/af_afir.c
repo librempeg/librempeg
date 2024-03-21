@@ -100,7 +100,7 @@ static int fir_frame(AudioFIRContext *s, AVFrame *in, AVFilterLink *outlink)
         return AVERROR(ENOMEM);
     }
     av_frame_copy_props(out, in);
-    out->pts = s->pts = in->pts;
+    out->pts = s->pts = in->pts - s->delay;
 
     s->in = in;
     ff_filter_execute(ctx, fir_channels, out, NULL,
@@ -229,7 +229,7 @@ static void uninit_segment(AVFilterContext *ctx, AudioFIRSegment *seg)
 static int convert_coeffs(AVFilterContext *ctx, int selir)
 {
     AudioFIRContext *s = ctx->priv;
-    int ret, nb_taps, cur_nb_taps;
+    int ret, nb_taps, cur_nb_taps, delay;
 
     if (!s->nb_taps[selir]) {
         int part_size, max_part_size;
@@ -276,6 +276,7 @@ skip:
 
     cur_nb_taps  = s->ir[selir]->nb_samples;
     nb_taps      = cur_nb_taps;
+    delay        = nb_taps;
 
     if (!s->norm_ir[selir] || s->norm_ir[selir]->nb_samples < nb_taps) {
         av_frame_free(&s->norm_ir[selir]);
@@ -291,8 +292,11 @@ skip:
     case AV_SAMPLE_FMT_FLTP:
         for (int ch = 0; ch < s->nb_channels; ch++) {
             const float *tsrc = (const float *)s->ir[selir]->extended_data[!s->one2many * ch];
+            int ch_delay;
 
             s->ch_gain[ch] = ir_gain_float(ctx, s, nb_taps, tsrc);
+            ch_delay = ir_delay_float(ctx, s, nb_taps, tsrc);
+            delay = FFMIN(delay, ch_delay);
         }
 
         if (s->ir_link) {
@@ -331,8 +335,11 @@ skip:
     case AV_SAMPLE_FMT_DBLP:
         for (int ch = 0; ch < s->nb_channels; ch++) {
             const double *tsrc = (const double *)s->ir[selir]->extended_data[!s->one2many * ch];
+            int ch_delay;
 
             s->ch_gain[ch] = ir_gain_double(ctx, s, nb_taps, tsrc);
+            ch_delay = ir_delay_double(ctx, s, nb_taps, tsrc);
+            delay = FFMIN(delay, ch_delay);
         }
 
         if (s->ir_link) {
@@ -371,6 +378,9 @@ skip:
     }
 
     s->have_coeffs[selir] = 1;
+    s->delay = delay;
+
+    av_log(ctx, AV_LOG_DEBUG, "delay: %d\n", delay);
 
     return 0;
 }
@@ -651,7 +661,6 @@ static int process_command(AVFilterContext *ctx,
 
 #define AF AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 #define AFR AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
-#define VF AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 #define OFFSET(x) offsetof(AudioFIRContext, x)
 
 static const AVOption afir_options[] = {
