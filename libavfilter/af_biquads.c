@@ -206,15 +206,15 @@ static void biquad_## name (BiquadsContext *s,                                \
     type *obuf = output;                                                      \
     ftype *fcache = cache;                                                    \
     ftype i1 = fcache[0], i2 = fcache[1], o1 = fcache[2], o2 = fcache[3];     \
-    ftype *a = s->a_##ftype;                                                  \
-    ftype *b = s->b_##ftype;                                                  \
-    ftype a1 = -a[1];                                                         \
-    ftype a2 = -a[2];                                                         \
-    ftype b0 = b[0];                                                          \
-    ftype b1 = b[1];                                                          \
-    ftype b2 = b[2];                                                          \
-    ftype wet = s->mix;                                                       \
-    ftype dry = 1. - wet;                                                     \
+    const ftype *a = s->a_##ftype;                                            \
+    const ftype *b = s->b_##ftype;                                            \
+    const ftype a1 = -a[1];                                                   \
+    const ftype a2 = -a[2];                                                   \
+    const ftype b0 = b[0];                                                    \
+    const ftype b1 = b[1];                                                    \
+    const ftype b2 = b[2];                                                    \
+    const ftype wet = s->mix;                                                 \
+    const ftype dry = 1. - wet;                                               \
     ftype out;                                                                \
     int i;                                                                    \
                                                                               \
@@ -287,17 +287,17 @@ static void biquad_dii_## name (BiquadsContext *s,                            \
     const type *ibuf = input;                                                 \
     type *obuf = output;                                                      \
     ftype *fcache = cache;                                                    \
-    ftype *a = s->a_##ftype;                                                  \
-    ftype *b = s->b_##ftype;                                                  \
-    ftype a1 = -a[1];                                                         \
-    ftype a2 = -a[2];                                                         \
-    ftype b0 = b[0];                                                          \
-    ftype b1 = b[1];                                                          \
-    ftype b2 = b[2];                                                          \
+    const ftype *a = s->a_##ftype;                                            \
+    const ftype *b = s->b_##ftype;                                            \
+    const ftype a1 = -a[1];                                                   \
+    const ftype a2 = -a[2];                                                   \
+    const ftype b0 = b[0];                                                    \
+    const ftype b1 = b[1];                                                    \
+    const ftype b2 = b[2];                                                    \
     ftype w1 = fcache[0];                                                     \
     ftype w2 = fcache[1];                                                     \
-    ftype wet = s->mix;                                                       \
-    ftype dry = 1. - wet;                                                     \
+    const ftype wet = s->mix;                                                 \
+    const ftype dry = 1. - wet;                                               \
     ftype in, out, w0;                                                        \
                                                                               \
     for (int i = 0; i < len; i++) {                                           \
@@ -336,19 +336,19 @@ static void biquad_tdi_## name (BiquadsContext *s,                            \
     const type *ibuf = input;                                                 \
     type *obuf = output;                                                      \
     ftype *fcache = cache;                                                    \
-    ftype *a = s->a_##ftype;                                                  \
-    ftype *b = s->b_##ftype;                                                  \
-    ftype a1 = -a[1];                                                         \
-    ftype a2 = -a[2];                                                         \
-    ftype b0 = b[0];                                                          \
-    ftype b1 = b[1];                                                          \
-    ftype b2 = b[2];                                                          \
+    const ftype *a = s->a_##ftype;                                            \
+    const ftype *b = s->b_##ftype;                                            \
+    const ftype a1 = -a[1];                                                   \
+    const ftype a2 = -a[2];                                                   \
+    const ftype b0 = b[0];                                                    \
+    const ftype b1 = b[1];                                                    \
+    const ftype b2 = b[2];                                                    \
     ftype s1 = fcache[0];                                                     \
     ftype s2 = fcache[1];                                                     \
     ftype s3 = fcache[2];                                                     \
     ftype s4 = fcache[3];                                                     \
-    ftype wet = s->mix;                                                       \
-    ftype dry = 1. - wet;                                                     \
+    const ftype wet = s->mix;                                                 \
+    const ftype dry = 1. - wet;                                               \
     ftype in, out;                                                            \
                                                                               \
     for (int i = 0; i < len; i++) {                                           \
@@ -393,17 +393,17 @@ static void biquad_tdii_## name (BiquadsContext *s,                           \
     const type *ibuf = input;                                                 \
     type *obuf = output;                                                      \
     ftype *fcache = cache;                                                    \
-    ftype *a = s->a_##ftype;                                                  \
-    ftype *b = s->b_##ftype;                                                  \
-    ftype a1 = -a[1];                                                         \
-    ftype a2 = -a[2];                                                         \
-    ftype b0 = b[0];                                                          \
-    ftype b1 = b[1];                                                          \
-    ftype b2 = b[2];                                                          \
+    const ftype *a = s->a_##ftype;                                            \
+    const ftype *b = s->b_##ftype;                                            \
+    const ftype a1 = -a[1];                                                   \
+    const ftype a2 = -a[2];                                                   \
+    const ftype b0 = b[0];                                                    \
+    const ftype b1 = b[1];                                                    \
+    const ftype b2 = b[2];                                                    \
     ftype w1 = fcache[0];                                                     \
     ftype w2 = fcache[1];                                                     \
-    ftype wet = s->mix;                                                       \
-    ftype dry = 1. - wet;                                                     \
+    const ftype wet = s->mix;                                                 \
+    const ftype dry = 1. - wet;                                               \
     ftype in, out;                                                            \
                                                                               \
     for (int i = 0; i < len; i++) {                                           \
@@ -441,17 +441,17 @@ static void biquad_latt_## name (BiquadsContext *s,                           \
     const type *ibuf = input;                                                 \
     type *obuf = output;                                                      \
     ftype *fcache = cache;                                                    \
-    ftype *a = s->a_##ftype;                                                  \
-    ftype *b = s->b_##ftype;                                                  \
-    ftype k0 = a[1];                                                          \
-    ftype k1 = a[2];                                                          \
-    ftype v0 = b[0];                                                          \
-    ftype v1 = b[1];                                                          \
-    ftype v2 = b[2];                                                          \
+    const ftype *a = s->a_##ftype;                                            \
+    const ftype *b = s->b_##ftype;                                            \
+    const ftype k0 = a[1];                                                    \
+    const ftype k1 = a[2];                                                    \
+    const ftype v0 = b[0];                                                    \
+    const ftype v1 = b[1];                                                    \
+    const ftype v2 = b[2];                                                    \
     ftype s0 = fcache[0];                                                     \
     ftype s1 = fcache[1];                                                     \
-    ftype wet = s->mix;                                                       \
-    ftype dry = 1. - wet;                                                     \
+    const ftype wet = s->mix;                                                 \
+    const ftype dry = 1. - wet;                                               \
     ftype in, out;                                                            \
     ftype t0, t1;                                                             \
                                                                               \
@@ -500,17 +500,17 @@ static void biquad_svf_## name (BiquadsContext *s,                            \
     const type *ibuf = input;                                                 \
     type *obuf = output;                                                      \
     ftype *fcache = cache;                                                    \
-    ftype *a = s->a_##ftype;                                                  \
-    ftype *b = s->b_##ftype;                                                  \
-    ftype a1 = a[1];                                                          \
-    ftype a2 = a[2];                                                          \
-    ftype b0 = b[0];                                                          \
-    ftype b1 = b[1];                                                          \
-    ftype b2 = b[2];                                                          \
+    const ftype *a = s->a_##ftype;                                            \
+    const ftype *b = s->b_##ftype;                                            \
+    const ftype a1 = a[1];                                                    \
+    const ftype a2 = a[2];                                                    \
+    const ftype b0 = b[0];                                                    \
+    const ftype b1 = b[1];                                                    \
+    const ftype b2 = b[2];                                                    \
     ftype s0 = fcache[0];                                                     \
     ftype s1 = fcache[1];                                                     \
-    ftype wet = s->mix;                                                       \
-    ftype dry = 1. - wet;                                                     \
+    const ftype wet = s->mix;                                                 \
+    const ftype dry = 1. - wet;                                               \
     ftype in, out;                                                            \
     ftype t0, t1;                                                             \
                                                                               \
@@ -552,18 +552,18 @@ static void biquad_zdf_## name (BiquadsContext *s,                            \
     const type *ibuf = input;                                                 \
     type *obuf = output;                                                      \
     ftype *fcache = cache;                                                    \
-    ftype *a = s->a_##ftype;                                                  \
-    ftype *b = s->b_##ftype;                                                  \
-    ftype m0 = b[0];                                                          \
-    ftype m1 = b[1];                                                          \
-    ftype m2 = b[2];                                                          \
-    ftype a0 = a[0];                                                          \
-    ftype a1 = a[1];                                                          \
-    ftype a2 = a[2];                                                          \
+    const ftype *a = s->a_##ftype;                                            \
+    const ftype *b = s->b_##ftype;                                            \
+    const ftype m0 = b[0];                                                    \
+    const ftype m1 = b[1];                                                    \
+    const ftype m2 = b[2];                                                    \
+    const ftype a0 = a[0];                                                    \
+    const ftype a1 = a[1];                                                    \
+    const ftype a2 = a[2];                                                    \
     ftype b0 = fcache[0];                                                     \
     ftype b1 = fcache[1];                                                     \
-    ftype wet = s->mix;                                                       \
-    ftype dry = 1. - wet;                                                     \
+    const ftype wet = s->mix;                                                 \
+    const ftype dry = 1. - wet;                                               \
     ftype out;                                                                \
                                                                               \
     for (int i = 0; i < len; i++) {                                           \
