@@ -266,13 +266,16 @@ static void drawtext(AVFrame *pic, int x, int y, const char *txt, int o)
 
 static void clear_picture(ShowVolumeContext *s, AVFilterLink *outlink)
 {
-    int i, j;
     const uint32_t bg = (uint32_t)(s->bgopacity * 255) << 24;
+    const int w = outlink->w;
+    const int h = outlink->h;
+    uint8_t *dst8 = s->out->data[0];;
 
-    for (i = 0; i < outlink->h; i++) {
-        uint32_t *dst = (uint32_t *)(s->out->data[0] + i * s->out->linesize[0]);
-        for (j = 0; j < outlink->w; j++)
+    for (int i = 0; i < h; i++) {
+        uint32_t *dst = (uint32_t *)dst8;
+        for (int j = 0; j < w; j++)
             AV_WN32A(dst + j, bg);
+        dst8 += s->out->linesize[0];
     }
 }
 
@@ -345,12 +348,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
         for (j = 0; j < outlink->h; j++) {
             uint8_t *dst = s->out->data[0] + j * s->out->linesize[0];
             const uint32_t alpha = s->bgopacity * 255;
+            const float f = s->f;
+            const int w = outlink->w;
 
-            for (k = 0; k < outlink->w; k++) {
-                dst[k * 4 + 0] = FFMAX(dst[k * 4 + 0] * s->f, 0);
-                dst[k * 4 + 1] = FFMAX(dst[k * 4 + 1] * s->f, 0);
-                dst[k * 4 + 2] = FFMAX(dst[k * 4 + 2] * s->f, 0);
-                dst[k * 4 + 3] = FFMAX(dst[k * 4 + 3] * s->f, alpha);
+            for (k = 0; k < w; k++) {
+                dst[k * 4 + 0] = FFMAX(dst[k * 4 + 0] * f, 0);
+                dst[k * 4 + 1] = FFMAX(dst[k * 4 + 1] * f, 0);
+                dst[k * 4 + 2] = FFMAX(dst[k * 4 + 2] * f, 0);
+                dst[k * 4 + 3] = FFMAX(dst[k * 4 + 3] * f, alpha);
             }
         }
     } else if (s->f == 0.) {
@@ -372,9 +377,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 
             for (j = s->w - 1; j >= max_draw; j--) {
                 uint8_t *dst = s->out->data[0] + j * s->out->linesize[0] + c * (s->b + s->h) * 4;
-                for (k = 0; k < s->h; k++) {
-                    AV_WN32A(&dst[k * 4], lut[s->w - j - 1]);
-                }
+                const int w = s->w;
+                const int h = s->h;
+
+                for (k = 0; k < h; k++)
+                    AV_WN32A(&dst[k * 4], lut[w - j - 1]);
                 if (j & step)
                     j -= step;
             }
