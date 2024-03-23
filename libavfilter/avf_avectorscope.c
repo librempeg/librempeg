@@ -204,25 +204,28 @@ static int fade(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const int height = s->outpicref->height;
     const int slice_start = (height *  jobnr   ) / nb_jobs;
     const int slice_end   = (height * (jobnr+1)) / nb_jobs;
+    const int *fade = s->fade;
 
-    if (s->fade[0] == 255 && s->fade[1] == 255 && s->fade[2] == 255) {
+    if (fade[0] == 255 && fade[1] == 255 && fade[2] == 255) {
         for (int i = slice_start; i < slice_end; i++)
             memset(s->outpicref->data[0] + i * linesize, 0, s->outpicref->width * 4);
         return 0;
     }
 
-    if (s->fade[0] || s->fade[1] || s->fade[2]) {
+    if (fade[0] || fade[1] || fade[2]) {
         uint8_t *d = s->outpicref->data[0] + slice_start * linesize;
+        const int w = s->w;
+
         for (int i = slice_start; i < slice_end; i++) {
-            for (int j = 0; j < s->w*4; j+=4) {
+            for (int j = 0; j < w*4; j+=4) {
                 if (d[j+0])
-                    d[j+0] = FFMAX(d[j+0] - s->fade[0], 0);
+                    d[j+0] = FFMAX(d[j+0] - fade[0], 0);
                 if (d[j+1])
-                    d[j+1] = FFMAX(d[j+1] - s->fade[1], 0);
+                    d[j+1] = FFMAX(d[j+1] - fade[1], 0);
                 if (d[j+2])
-                    d[j+2] = FFMAX(d[j+2] - s->fade[2], 0);
+                    d[j+2] = FFMAX(d[j+2] - fade[2], 0);
                 if (d[j+3])
-                    d[j+3] = FFMAX(d[j+3] - s->fade[3], 0);
+                    d[j+3] = FFMAX(d[j+3] - fade[3], 0);
             }
             d += linesize;
         }
@@ -297,6 +300,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     unsigned x, y;
     unsigned prev_x = s->prev_x, prev_y = s->prev_y;
     double zoom = s->zoom;
+    const int nb_samples = insamples->nb_samples;
     int ret;
 
     if (!s->outpicref || s->outpicref->width  != outlink->w ||
@@ -327,13 +331,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 
         switch (insamples->format) {
         case AV_SAMPLE_FMT_S16:
-            for (int i = 0; i < insamples->nb_samples * 2; i++) {
+            for (int i = 0; i < nb_samples * 2; i++) {
                 float sample = samples[i] / (float)INT16_MAX;
                 max = FFMAX(FFABS(sample), max);
             }
             break;
         case AV_SAMPLE_FMT_FLT:
-            for (int i = 0; i < insamples->nb_samples * 2; i++) {
+            for (int i = 0; i < nb_samples * 2; i++) {
                 max = FFMAX(FFABS(samplesf[i]), max);
             }
             break;
@@ -357,7 +361,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
             zoom = 1. / max;
     }
 
-    for (int i = 0; i < insamples->nb_samples; i++) {
+    for (int i = 0; i < nb_samples; i++) {
         float src[2];
 
         switch (insamples->format) {
