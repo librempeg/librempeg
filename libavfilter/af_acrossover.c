@@ -89,6 +89,7 @@ typedef struct AudioCrossoverContext {
 
 #define OFFSET(x) offsetof(AudioCrossoverContext, x)
 #define AF AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+#define AFR AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_RUNTIME_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
 static const AVOptionArrayDef def_splits = {.def="500",.size_min=1,.sep=' '};
@@ -98,10 +99,10 @@ static const AVOptionArrayDef def_res = {.def="0.25",.size_min=1,.sep=' '};
 
 static const AVOption acrossover_options[] = {
     { "split", "set the split frequencies", OFFSET(splits_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_splits}, .min=0, .max=INT_MAX, .flags=AF },
-    { "resonance", "set the bands resonance", OFFSET(resonance_opt),  AV_OPT_TYPE_FLOAT|AR, {.arr=&def_res}, .min=0, .max=1.0, .flags=AF, },
-    { "level", "set the input gain",        OFFSET(level_in),   AV_OPT_TYPE_FLOAT,  {.dbl=1}, 0, 1, AF },
-    { "gain",  "set the output bands gain", OFFSET(gains_opt),  AV_OPT_TYPE_FLOAT|AR, {.arr=&def_gains}, .min=-9.0, .max=9.0, .flags=AF },
-    { "active", "set the active bands", OFFSET(active_opt), AV_OPT_TYPE_BOOL|AR, {.arr=&def_active}, .min=0, .max=1, .flags=AF },
+    { "resonance", "set the bands resonance", OFFSET(resonance_opt),  AV_OPT_TYPE_FLOAT|AR, {.arr=&def_res}, .min=0, .max=1.0, .flags=AFR },
+    { "level", "set the input gain",        OFFSET(level_in),   AV_OPT_TYPE_FLOAT,  {.dbl=1}, 0, 1, AFR },
+    { "gain",  "set the output bands gain", OFFSET(gains_opt),  AV_OPT_TYPE_FLOAT|AR, {.arr=&def_gains}, .min=-9.0, .max=9.0, .flags=AFR },
+    { "active", "set the active bands", OFFSET(active_opt), AV_OPT_TYPE_BOOL|AR, {.arr=&def_active}, .min=0, .max=1, .flags=AFR },
     { "precision",  "set the processing precision", OFFSET(precision),   AV_OPT_TYPE_INT,   {.i64=0}, 0, 2, AF, .unit = "precision" },
     {  "auto",  "set auto processing precision",                  0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, AF, .unit = "precision" },
     {  "float", "set single-floating point processing precision", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, AF, .unit = "precision" },
@@ -405,6 +406,23 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->svf);
 }
 
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
+                           char *res, int res_len, int flags)
+{
+    int ret;
+
+    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    if (ret < 0)
+        return ret;
+
+    parse_active(ctx);
+    parse_gains(ctx);
+    parse_resonance(ctx);
+    set_params(ctx);
+
+    return 0;
+}
+
 static const AVFilterPad inputs[] = {
     {
         .name         = "default",
@@ -424,6 +442,7 @@ const AVFilter ff_af_acrossover = {
     FILTER_INPUTS(inputs),
     .outputs        = NULL,
     FILTER_QUERY_FUNC(query_formats),
+    .process_command = process_command,
     .flags          = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
                       AVFILTER_FLAG_SLICE_THREADS,
 };
