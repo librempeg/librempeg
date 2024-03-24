@@ -106,8 +106,8 @@ typedef struct SendCmdContext {
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_VIDEO_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
-static const AVOptionArrayDef def_start    = {.def="0.0",  .size_min=1,.sep='|'};
-static const AVOptionArrayDef def_end      = {.def="0.0",  .size_min=1,.sep='|'};
+static const AVOptionArrayDef def_start    = {.def=NULL,   .size_min=0,.sep='|'};
+static const AVOptionArrayDef def_end      = {.def=NULL,   .size_min=0,.sep='|'};
 static const AVOptionArrayDef def_flags    = {.def="enter",.size_min=1,.sep='|'};
 static const AVOptionArrayDef def_targets  = {.def=NULL,   .size_min=1,.sep='|'};
 static const AVOptionArrayDef def_commands = {.def=NULL,   .size_min=1,.sep='|'};
@@ -139,6 +139,11 @@ static int config_input(AVFilterLink *inlink)
     SendCmdContext *s = ctx->priv;
 
     s->nb_intervals = FFMAX(s->nb_start_opt, s->nb_end_opt);
+    if (!s->nb_intervals) {
+        av_log(ctx, AV_LOG_ERROR, "start and/or end interval not set\n");
+        return AVERROR(EINVAL);
+    }
+
     s->intervals = av_calloc(s->nb_intervals, sizeof(*s->intervals));
     if (!s->intervals)
         return AVERROR(ENOMEM);
@@ -179,25 +184,26 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
 {
     AVFilterContext *ctx = inlink->dst;
     SendCmdContext *s = ctx->priv;
-    int64_t ts;
+    int64_t ts, duration;
     int i, j, ret;
 
     if (ref->pts == AV_NOPTS_VALUE)
         goto end;
 
     ts = ref->pts;
+    duration = ref->duration;
 
-#define WITHIN_INTERVAL(ts, start_ts, end_ts) ((ts) >= (start_ts) && (ts) < (end_ts))
+#define WITHIN_INTERVAL(ts, duration, start_ts, end_ts) ((ts)+(duration) >= (start_ts) && (ts) < (end_ts))
 
     for (i = 0; i < s->nb_intervals; i++) {
         Interval *interval = &s->intervals[i];
         int flags = 0;
 
-        if (!interval->enabled && WITHIN_INTERVAL(ts, interval->start_ts, interval->end_ts)) {
+        if (!interval->enabled && WITHIN_INTERVAL(ts, duration, interval->start_ts, interval->end_ts)) {
             flags += COMMAND_FLAG_ENTER;
             interval->enabled = 1;
         }
-        if (interval->enabled && !WITHIN_INTERVAL(ts, interval->start_ts, interval->end_ts)) {
+        if (interval->enabled && !WITHIN_INTERVAL(ts, duration, interval->start_ts, interval->end_ts)) {
             flags += COMMAND_FLAG_LEAVE;
             interval->enabled = 0;
         }
