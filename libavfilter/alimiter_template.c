@@ -151,22 +151,25 @@ static int fn(filter_channels_link)(AVFilterContext *ctx, AVFrame *out)
 
     for (int n = 0; n < nb_samples; n++) {
         ftype max_sc_sample = F(0.0);
+        int new_sign;
         fn(rtype) r;
 
+        hold++;
         for (int ch = 0; ch < nb_channels; ch++) {
             const ftype *sc_src = (const ftype *)sc->extended_data[ch];
-            const ftype prev_max_sc_sample = max_sc_sample;
-            int new_sign;
+            const ftype abs_sample = FABS(sc_src[n]);
 
-            max_sc_sample = FMAX(max_sc_sample, FABS(sc_src[n]));
-            if (max_sc_sample != prev_max_sc_sample) {
+            if (abs_sample > max_sc_sample) {
+                max_sc_sample = abs_sample;
                 new_sign = FFDIFFSIGN(sc_src[n], F(0.0));
-                if (new_sign) {
-                    if (new_sign != sign) {
-                        hold = stn;
-                        sign = new_sign;
-                    }
-                }
+            }
+        }
+
+        if (new_sign) {
+            if (new_sign != sign) {
+                hold = 0;
+                sign = new_sign;
+                drop = gain * release;
             }
         }
 
@@ -175,16 +178,16 @@ static int fn(filter_channels_link)(AVFilterContext *ctx, AVFrame *out)
             step = F(0.0);
 
             if (hold == 0) {
-                gain -= drop;
+                if (gain > drop) {
+                    gain -= drop;
+                } else {
+                    drop = F(0.0);
+                    gain = F(0.0);
+                }
             } else if (hold > 0) {
                 hold--;
                 if (hold == 0)
                     drop = gain * release;
-            } else if (gain > drop) {
-                gain -= drop;
-            } else {
-                drop = F(0.0);
-                gain = F(0.0);
             }
         }
 
@@ -192,7 +195,6 @@ static int fn(filter_channels_link)(AVFilterContext *ctx, AVFrame *out)
             const ftype new_gain = LIN2LOG(max_sc_sample)-llimit;
             const ftype new_dgain = new_gain-gain;
 
-            hold += 4;
             if ((new_dgain > EPS) && (new_dgain - inacc > EPS)) {
                 inacc = new_dgain;
                 step += inacc*attack;
@@ -275,10 +277,12 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
             const ftype sample = src[n];
             fn(rtype) r;
 
+            hold++;
             if (new_sign) {
                 if (new_sign != sign) {
-                    hold = stn;
+                    hold = 0;
                     sign = new_sign;
+                    drop = gain * release;
                 }
             }
 
@@ -290,16 +294,16 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
                 step = F(0.0);
 
                 if (hold == 0) {
-                    gain -= drop;
+                    if (gain > drop) {
+                        gain -= drop;
+                    } else {
+                        drop = F(0.0);
+                        gain = F(0.0);
+                    }
                 } else if (hold > 0) {
                     hold--;
                     if (hold == 0)
                         drop = gain * release;
-                } else if (gain > drop) {
-                    gain -= drop;
-                } else {
-                    drop = F(0.0);
-                    gain = F(0.0);
                 }
             }
 
@@ -307,7 +311,6 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
                 const ftype new_gain = LIN2LOG(sc_sample)-llimit;
                 const ftype new_dgain = new_gain-gain;
 
-                hold += 4;
                 if ((new_dgain > EPS) && (new_dgain - inacc > EPS)) {
                     inacc = new_dgain;
                     step += inacc*attack;
