@@ -19,14 +19,18 @@
 #ifndef AVFILTER_HERMITE_H
 #define AVFILTER_HERMITE_H
 
-static inline double hermite_interpolation(double x, double x0, double x1,
-                                    double p0, double p1,
-                                    double m0, double m1)
+#ifndef ftype
+#define ftype double
+#endif
+
+static inline ftype hermite_interpolation(ftype x, ftype x0, ftype x1,
+                                    ftype p0, ftype p1,
+                                    ftype m0, ftype m1)
 {
-    double width = x1 - x0;
-    double t = (x - x0) / width;
-    double t2, t3;
-    double ct0, ct1, ct2, ct3;
+    ftype width = x1 - x0;
+    ftype t = (x - x0) / width;
+    ftype t2, t3;
+    ftype ct0, ct1, ct2, ct3;
 
     m0 *= width;
     m1 *= width;
