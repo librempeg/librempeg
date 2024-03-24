@@ -19,10 +19,6 @@
 #ifndef AVFILTER_HERMITE_H
 #define AVFILTER_HERMITE_H
 
-#ifndef ftype
-#define ftype double
-#endif
-
 static inline ftype hermite_interpolation(ftype x, ftype x0, ftype x1,
                                     ftype p0, ftype p1,
                                     ftype m0, ftype m1)

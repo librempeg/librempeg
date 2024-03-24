@@ -29,7 +29,6 @@
 #include "audio.h"
 #include "filters.h"
 #include "formats.h"
-#include "hermite.h"
 
 enum LinkMode {
     LINK_NONE,

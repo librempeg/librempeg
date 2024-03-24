@@ -38,6 +38,8 @@
 #define SAMPLE_FORMAT dbl
 #endif
 
+#include "hermite.h"
+
 #define F(x) ((ftype)(x))
 
 #define LIN2LOG(x) (FLOG((x)))

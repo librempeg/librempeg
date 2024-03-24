@@ -32,7 +32,6 @@
 #include "avfilter.h"
 #include "filters.h"
 #include "formats.h"
-#include "hermite.h"
 #include "internal.h"
 
 enum LinkMode {
