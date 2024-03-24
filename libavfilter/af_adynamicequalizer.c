@@ -22,6 +22,7 @@
 #include "libavutil/opt.h"
 #include "avfilter.h"
 #include "audio.h"
+#include "filters.h"
 #include "formats.h"
 
 enum DetectionModes {
@@ -98,12 +99,15 @@ typedef struct AudioDynamicEqualizerContext {
     int precision;
     int format;
     int nb_channels;
+    int sidechain;
 
     int (*filter_prepare)(AVFilterContext *ctx);
     int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 
     double da_double[3], dm_double[3];
     float da_float[3], dm_float[3];
+
+    AVFrame *in, *sc;
 
     ChannelContext *cc;
 } AudioDynamicEqualizerContext;
@@ -133,7 +137,7 @@ static double get_coef(double x, double sr)
 }
 
 typedef struct ThreadData {
-    AVFrame *in, *out;
+    AVFrame *in, *out, *sc;
 } ThreadData;
 
 #define DEPTH 32
@@ -143,16 +147,43 @@ typedef struct ThreadData {
 #define DEPTH 64
 #include "adynamicequalizer_template.c"
 
-static int config_input(AVFilterLink *inlink)
+static av_cold int init(AVFilterContext *ctx)
 {
-    AVFilterContext *ctx = inlink->dst;
+    AudioDynamicEqualizerContext *s = ctx->priv;
+    AVFilterPad pad = { NULL };
+    int ret;
+
+    pad.type = AVMEDIA_TYPE_AUDIO;
+    pad.name = av_asprintf("main");
+    if (!pad.name)
+        return AVERROR(ENOMEM);
+    if ((ret = ff_append_inpad_free_name(ctx, &pad)) < 0)
+        return ret;
+
+    if (s->sidechain) {
+        AVFilterPad pad = { NULL };
+
+        pad.type = AVMEDIA_TYPE_AUDIO;
+        pad.name = av_asprintf("sidechain");
+        if (!pad.name)
+            return AVERROR(ENOMEM);
+        if ((ret = ff_append_inpad_free_name(ctx, &pad)) < 0)
+            return ret;
+    }
+
+    return 0;
+}
+
+static int config_output(AVFilterLink *outlink)
+{
+    AVFilterContext *ctx = outlink->src;
     AudioDynamicEqualizerContext *s = ctx->priv;
 
-    s->format = inlink->format;
-    s->cc = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->cc));
+    s->format = outlink->format;
+    s->cc = av_calloc(outlink->ch_layout.nb_channels, sizeof(*s->cc));
     if (!s->cc)
         return AVERROR(ENOMEM);
-    s->nb_channels = inlink->ch_layout.nb_channels;
+    s->nb_channels = outlink->ch_layout.nb_channels;
 
     switch (s->format) {
     case AV_SAMPLE_FMT_DBLP:
@@ -167,8 +198,8 @@ static int config_input(AVFilterLink *inlink)
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
         ChannelContext *cc = &s->cc[ch];
-        cc->queue = av_calloc(inlink->sample_rate, sizeof(double));
-        cc->dqueue = av_calloc(inlink->sample_rate, sizeof(double));
+        cc->queue = av_calloc(outlink->sample_rate, sizeof(double));
+        cc->dqueue = av_calloc(outlink->sample_rate, sizeof(double));
         if (!cc->queue || !cc->dqueue)
             return AVERROR(ENOMEM);
     }
@@ -176,7 +207,7 @@ static int config_input(AVFilterLink *inlink)
     return 0;
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *in)
+static int filter_frame(AVFilterLink *inlink, AVFrame *in, AVFrame *sc)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
@@ -197,18 +228,62 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     td.in = in;
     td.out = out;
+    td.sc = sc;
     s->filter_prepare(ctx);
     ff_filter_execute(ctx, s->filter_channels, &td, NULL,
                      FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     if (out != in)
-        av_frame_free(&in);
+        av_frame_free(&s->in);
+    s->in = NULL;
+    av_frame_free(&s->sc);
     return ff_filter_frame(outlink, out);
+}
+
+static int activate(AVFilterContext *ctx)
+{
+    AudioDynamicEqualizerContext *s = ctx->priv;
+    AVFilterLink *outlink = ctx->outputs[0];
+    AVFilterLink *inlink = ctx->inputs[0];
+
+    FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
+
+    if (!s->in) {
+        int ret = ff_inlink_consume_frame(inlink, &s->in);
+        if (ret < 0)
+            return ret;
+    }
+
+    if (s->in) {
+        if (s->sidechain && !s->sc) {
+            AVFilterLink *sclink = ctx->inputs[1];
+            int ret = ff_inlink_consume_samples(sclink, s->in->nb_samples,
+                                                s->in->nb_samples, &s->sc);
+            if (ret < 0)
+                return ret;
+
+            if (!ret) {
+                FF_FILTER_FORWARD_STATUS(sclink, outlink);
+                FF_FILTER_FORWARD_WANTED(outlink, sclink);
+                return 0;
+            }
+        }
+
+        return filter_frame(inlink, s->in, s->sc);
+    }
+
+    FF_FILTER_FORWARD_STATUS(inlink, outlink);
+    FF_FILTER_FORWARD_WANTED(outlink, inlink);
+
+    return FFERROR_NOT_READY;
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
     AudioDynamicEqualizerContext *s = ctx->priv;
+
+    av_frame_free(&s->in);
+    av_frame_free(&s->sc);
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
         ChannelContext *cc = &s->cc[ch];
@@ -257,17 +332,17 @@ static const AVOption adynamicequalizer_options[] = {
     {   "auto",  "set auto processing precision",                  0, AV_OPT_TYPE_CONST, {.i64=0},      0, 0,       AF, .unit = "precision" },
     {   "float", "set single-floating point processing precision", 0, AV_OPT_TYPE_CONST, {.i64=1},      0, 0,       AF, .unit = "precision" },
     {   "double","set double-floating point processing precision", 0, AV_OPT_TYPE_CONST, {.i64=2},      0, 0,       AF, .unit = "precision" },
+    { "sidechain",  "enable sidechain input",  OFFSET(sidechain),  AV_OPT_TYPE_BOOL,   {.i64=0},        0, 1,       AF },
     { NULL }
 };
 
 AVFILTER_DEFINE_CLASS(adynamicequalizer);
 
-static const AVFilterPad inputs[] = {
+static const AVFilterPad outputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
-        .filter_frame = filter_frame,
-        .config_props = config_input,
+        .config_props = config_output,
     },
 };
 
@@ -276,11 +351,14 @@ const AVFilter ff_af_adynamicequalizer = {
     .description     = NULL_IF_CONFIG_SMALL("Apply Dynamic Equalization of input audio."),
     .priv_size       = sizeof(AudioDynamicEqualizerContext),
     .priv_class      = &adynamicequalizer_class,
+    .init            = init,
+    .activate        = activate,
     .uninit          = uninit,
-    FILTER_INPUTS(inputs),
-    FILTER_OUTPUTS(ff_audio_default_filterpad),
+    .inputs          = NULL,
+    FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC(query_formats),
     .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                       AVFILTER_FLAG_DYNAMIC_INPUTS |
                        AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

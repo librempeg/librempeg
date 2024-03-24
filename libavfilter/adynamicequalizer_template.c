@@ -254,6 +254,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     AudioDynamicEqualizerContext *s = ctx->priv;
     ThreadData *td = arg;
     AVFrame *in = td->in;
+    AVFrame *sc = td->sc ? td->sc : in;
     AVFrame *out = td->out;
     const ftype sample_rate = in->sample_rate;
     const int isample_rate = in->sample_rate;
@@ -280,7 +281,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
 
     if (detection == DET_ON) {
         for (int ch = start; ch < end; ch++) {
-            const ftype *src = (const ftype *)in->extended_data[ch];
+            const ftype *src = (const ftype *)sc->extended_data[ch];
             ChannelContext *cc = &s->cc[ch];
             ftype *tstate = fn(cc->tstate);
             ftype new_threshold = ZERO;
@@ -290,7 +291,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
                 fn(cc->new_threshold_log) = LIN2LOG(EPSILON);
             }
 
-            for (int n = 0; n < in->nb_samples; n++) {
+            for (int n = 0; n < sc->nb_samples; n++) {
                 ftype detect = FABS(fn(get_svf)(src[n], dm, da, tstate));
                 new_threshold = FMAX(new_threshold, detect);
             }
@@ -299,12 +300,12 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
         }
     } else if (detection == DET_ADAPTIVE) {
         for (int ch = start; ch < end; ch++) {
-            const ftype *src = (const ftype *)in->extended_data[ch];
+            const ftype *src = (const ftype *)sc->extended_data[ch];
             ChannelContext *cc = &s->cc[ch];
             ftype *tstate = fn(cc->tstate);
             ftype score, peak;
 
-            for (int n = 0; n < in->nb_samples; n++) {
+            for (int n = 0; n < sc->nb_samples; n++) {
                 ftype detect = FMAX(FABS(fn(get_svf)(src[n], dm, da, tstate)), EPSILON);
                 fn(queue_sample)(cc, detect, isample_rate);
             }
@@ -336,6 +337,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     }
 
     for (int ch = start; ch < end; ch++) {
+        const ftype *scsrc = (const ftype *)sc->extended_data[ch];
         const ftype *src = (const ftype *)in->extended_data[ch];
         ftype *dst = (ftype *)out->extended_data[ch];
         ChannelContext *cc = &s->cc[ch];
@@ -351,7 +353,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
             ftype new_detect, new_lin_gain = ONE;
             ftype f, v, listen, k, g, ld;
 
-            listen = fn(get_svf)(src[n], dm, da, dstate);
+            listen = fn(get_svf)(scsrc[n], dm, da, dstate);
             if (mode > LISTEN) {
                 new_detect = FABS(listen);
                 f = (new_detect > detect) * dattack + (new_detect <= detect) * drelease;
