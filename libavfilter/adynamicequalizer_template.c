@@ -19,9 +19,6 @@
 #undef ftype
 #undef SQRT
 #undef TAN
-#undef ONE
-#undef TWO
-#undef ZERO
 #undef FMAX
 #undef FMIN
 #undef CLIP
@@ -38,9 +35,6 @@
 #define SAMPLE_FORMAT float
 #define SQRT sqrtf
 #define TAN tanf
-#define ONE 1.f
-#define TWO 2.f
-#define ZERO 0.f
 #define FMIN fminf
 #define FMAX fmaxf
 #define CLIP av_clipf
@@ -57,9 +51,6 @@
 #define SAMPLE_FORMAT double
 #define SQRT sqrt
 #define TAN tan
-#define ONE 1.0
-#define TWO 2.0
-#define ZERO 0.0
 #define FMIN fmin
 #define FMAX fmax
 #define CLIP av_clipd
@@ -74,8 +65,10 @@
 #define ftype double
 #endif
 
-#define LIN2LOG(x) (20.0 * FLOG10(x))
-#define LOG2LIN(x) (FEXP10(x / 20.0))
+#define F(x) ((ftype)(x))
+
+#define LIN2LOG(x) (F(20.0) * FLOG10(x))
+#define LOG2LIN(x) (FEXP10(x / F(20.0)))
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
@@ -88,8 +81,8 @@ static ftype fn(get_svf)(ftype in, const ftype *m, const ftype *a, ftype *b)
     const ftype v1 = a[0] * b[0] + a[1] * v3;
     const ftype v2 = b[1] + a[1] * b[0] + a[2] * v3;
 
-    b[0] = TWO * v1 - b[0];
-    b[1] = TWO * v2 - b[1];
+    b[0] = F(2.0) * v1 - b[0];
+    b[1] = F(2.0) * v2 - b[1];
 
     return m[0] * v0 + m[1] * v1 + m[2] * v2;
 }
@@ -114,48 +107,48 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
 
     switch (dftype) {
     case 0:
-        k = ONE / dqfactor;
+        k = F(1.0) / dqfactor;
 
-        da[0] = ONE / (ONE + dg * (dg + k));
+        da[0] = F(1.0) / (F(1.0) + dg * (dg + k));
         da[1] = dg * da[0];
         da[2] = dg * da[1];
 
-        dm[0] = ZERO;
+        dm[0] = F(0.0);
         dm[1] = k;
-        dm[2] = ZERO;
+        dm[2] = F(0.0);
         break;
     case 1:
-        k = ONE / dqfactor;
+        k = F(1.0) / dqfactor;
 
-        da[0] = ONE / (ONE + dg * (dg + k));
+        da[0] = F(1.0) / (F(1.0) + dg * (dg + k));
         da[1] = dg * da[0];
         da[2] = dg * da[1];
 
-        dm[0] = ZERO;
-        dm[1] = ZERO;
-        dm[2] = ONE;
+        dm[0] = F(0.0);
+        dm[1] = F(0.0);
+        dm[2] = F(1.0);
         break;
     case 2:
-        k = ONE / dqfactor;
+        k = F(1.0) / dqfactor;
 
-        da[0] = ONE / (ONE + dg * (dg + k));
+        da[0] = F(1.0) / (F(1.0) + dg * (dg + k));
         da[1] = dg * da[0];
         da[2] = dg * da[1];
 
-        dm[0] = ZERO;
+        dm[0] = F(0.0);
         dm[1] = -k;
-        dm[2] = -ONE;
+        dm[2] = -F(1.0);
         break;
     case 3:
-        k = ONE / dqfactor;
+        k = F(1.0) / dqfactor;
 
-        da[0] = ONE / (ONE + dg * (dg + k));
+        da[0] = F(1.0) / (F(1.0) + dg * (dg + k));
         da[1] = dg * da[0];
         da[2] = dg * da[1];
 
-        dm[0] = ONE;
+        dm[0] = F(1.0);
         dm[1] = -k;
-        dm[2] = -TWO;
+        dm[2] = F(-2.0);
         break;
     }
 
@@ -232,8 +225,8 @@ static void fn(queue_sample)(ChannelContext *cc,
         cc->size++;
     n = cc->size;
 
-    empty = (front == back) && (ss[front] == ZERO);
-    PEAKS(ZERO, >=, x, px)
+    empty = (front == back) && (ss[front] == F(0.0));
+    PEAKS(F(0.0), >=, x, px)
 
     ss[back] = x;
 
@@ -263,13 +256,13 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     const ftype range = s->range;
     const ftype tfrequency = FMIN(s->tfrequency, sample_rate * 0.5);
     const int mode = s->mode;
-    const ftype power = (mode == CUT_BELOW || mode == CUT_ABOVE) ? -ONE : ONE;
+    const ftype power = (mode == CUT_BELOW || mode == CUT_ABOVE) ? F(-1.0) : F(1.0);
     const ftype grelease = s->grelease_coef;
     const ftype gattack = s->gattack_coef;
     const ftype drelease = s->drelease_coef;
     const ftype dattack = s->dattack_coef;
     const ftype tqfactor = s->tqfactor;
-    const ftype itqfactor = ONE / tqfactor;
+    const ftype itqfactor = F(1.0) / tqfactor;
     const ftype fg = TAN(M_PI * tfrequency / sample_rate);
     const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
@@ -284,7 +277,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
             const ftype *src = (const ftype *)sc->extended_data[ch];
             ChannelContext *cc = &s->cc[ch];
             ftype *tstate = fn(cc->tstate);
-            ftype new_threshold = ZERO;
+            ftype new_threshold = F(0.0);
 
             if (cc->detection != detection) {
                 cc->detection = detection;
@@ -303,14 +296,21 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
             const ftype *src = (const ftype *)sc->extended_data[ch];
             ChannelContext *cc = &s->cc[ch];
             ftype *tstate = fn(cc->tstate);
-            ftype score, peak;
+            ftype score = -FLT_MAX, peak;
 
             for (int n = 0; n < sc->nb_samples; n++) {
                 ftype detect = FMAX(FABS(fn(get_svf)(src[n], dm, da, tstate)), EPSILON);
                 fn(queue_sample)(cc, detect, isample_rate);
-            }
+                if (cc->size >= isample_rate) {
+                    ftype new_score, new_peak;
 
-            peak = fn(get_peak)(cc, &score);
+                    new_peak = fn(get_peak)(cc, &new_score);
+                    if (new_score >= score) {
+                        score = new_score;
+                        peak = new_peak;
+                    }
+                }
+            }
 
             if (score >= -3.5) {
                 fn(cc->threshold_log) = LIN2LOG(peak);
@@ -350,14 +350,14 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
         int init = cc->init;
 
         for (int n = 0; n < out->nb_samples; n++) {
-            ftype new_detect, new_lin_gain = ONE;
+            ftype new_detect, new_lin_gain = F(1.0);
             ftype f, v, listen, k, g, ld;
 
             listen = fn(get_svf)(scsrc[n], dm, da, dstate);
             if (mode > LISTEN) {
                 new_detect = FABS(listen);
                 f = (new_detect > detect) * dattack + (new_detect <= detect) * drelease;
-                detect = f * new_detect + (ONE - f) * detect;
+                detect = f * new_detect + (F(1.0) - f) * detect;
             }
 
             switch (mode) {
@@ -367,7 +367,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
             case BOOST_BELOW:
                 ld = LIN2LOG(detect);
                 if (ld < threshold_log) {
-                    ftype new_log_gain = CLIP(makeup + (threshold_log - ld) * ratio, ZERO, range) * power;
+                    ftype new_log_gain = CLIP(makeup + (threshold_log - ld) * ratio, F(0.0), range) * power;
                     new_lin_gain = LOG2LIN(new_log_gain);
                 }
                 break;
@@ -375,14 +375,14 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
             case BOOST_ABOVE:
                 ld = LIN2LOG(detect);
                 if (ld > threshold_log) {
-                    ftype new_log_gain = CLIP(makeup + (ld - threshold_log) * ratio, ZERO, range) * power;
+                    ftype new_log_gain = CLIP(makeup + (ld - threshold_log) * ratio, F(0.0), range) * power;
                     new_lin_gain = LOG2LIN(new_log_gain);
                 }
                 break;
             }
 
             f = (new_lin_gain > lin_gain) * gattack + (new_lin_gain <= lin_gain) * grelease;
-            new_lin_gain = f * new_lin_gain + (ONE - f) * lin_gain;
+            new_lin_gain = f * new_lin_gain + (F(1.0) - f) * lin_gain;
 
             if (lin_gain != new_lin_gain || !init) {
                 init = 1;
@@ -392,37 +392,37 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
                 case 0:
                     k = itqfactor / lin_gain;
 
-                    fa[0] = ONE / (ONE + fg * (fg + k));
+                    fa[0] = F(1.0) / (F(1.0) + fg * (fg + k));
                     fa[1] = fg * fa[0];
                     fa[2] = fg * fa[1];
 
-                    fm[0] = ONE;
-                    fm[1] = k * (lin_gain * lin_gain - ONE);
-                    fm[2] = ZERO;
+                    fm[0] = F(1.0);
+                    fm[1] = k * (lin_gain * lin_gain - F(1.0));
+                    fm[2] = F(0.0);
                     break;
                 case 1:
                     k = itqfactor;
                     g = fg / SQRT(lin_gain);
 
-                    fa[0] = ONE / (ONE + g * (g + k));
+                    fa[0] = F(1.0) / (F(1.0) + g * (g + k));
                     fa[1] = g * fa[0];
                     fa[2] = g * fa[1];
 
-                    fm[0] = ONE;
-                    fm[1] = k * (lin_gain - ONE);
-                    fm[2] = lin_gain * lin_gain - ONE;
+                    fm[0] = F(1.0);
+                    fm[1] = k * (lin_gain - F(1.0));
+                    fm[2] = lin_gain * lin_gain - F(1.0);
                     break;
                 case 2:
                     k = itqfactor;
                     g = fg * SQRT(lin_gain);
 
-                    fa[0] = ONE / (ONE + g * (g + k));
+                    fa[0] = F(1.0) / (F(1.0) + g * (g + k));
                     fa[1] = g * fa[0];
                     fa[2] = g * fa[1];
 
                     fm[0] = lin_gain * lin_gain;
-                    fm[1] = k * (ONE - lin_gain) * lin_gain;
-                    fm[2] = ONE - lin_gain * lin_gain;
+                    fm[1] = k * (F(1.0) - lin_gain) * lin_gain;
+                    fm[2] = F(1.0) - lin_gain * lin_gain;
                     break;
                 }
             }
