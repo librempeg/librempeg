@@ -457,7 +457,7 @@ static av_cold int config_eq_output(AVFilterLink *outlink)
     s->magnitude[s->nb_freq] = s->magnitude[s->nb_freq-1];
 
     fft_size = s->nb_taps * 2;
-    factor = FFMIN(outlink->sample_rate * 0.5f, s->freq[s->nb_freq - 1]) / (float)fft_size;
+    factor = FFMIN(outlink->sample_rate * 0.5f, s->freq[s->nb_freq - 1]) / (float)s->nb_taps;
     asize = FFALIGN(fft_size, av_cpu_max_align());
     s->complexf = av_calloc(asize * 2, sizeof(*s->complexf));
     if (!s->complexf)
@@ -489,7 +489,7 @@ static av_cold int config_eq_output(AVFilterLink *outlink)
         for (int i = 0; i < fft_size; i++)
             s->complexf[i].re = s->complexf[i].re < threshold ? logt : logf(s->complexf[i].re);
 
-        s->itx_fn(s->itx_ctx, s->complexf + asize, s->complexf, sizeof(float));
+        s->itx_fn(s->itx_ctx, s->complexf + asize, s->complexf, sizeof(AVComplexFloat));
         for (int i = 0; i < fft_size; i++) {
             s->complexf[i + asize].re /= fft_size;
             s->complexf[i + asize].im /= fft_size;
@@ -503,7 +503,7 @@ static av_cold int config_eq_output(AVFilterLink *outlink)
         }
         s->complexf[asize + s->nb_taps - 1].im *= -1.f;
 
-        s->tx_fn(s->tx_ctx, s->complexf, s->complexf + asize, sizeof(float));
+        s->tx_fn(s->tx_ctx, s->complexf, s->complexf + asize, sizeof(AVComplexFloat));
 
         for (int i = 0; i < fft_size; i++) {
             float eR = expf(s->complexf[i].re);
@@ -512,12 +512,12 @@ static av_cold int config_eq_output(AVFilterLink *outlink)
             s->complexf[i].im = eR * sinf(s->complexf[i].im);
         }
 
-        s->itx_fn(s->itx_ctx, s->complexf + asize, s->complexf, sizeof(float));
+        s->itx_fn(s->itx_ctx, s->complexf + asize, s->complexf, sizeof(AVComplexFloat));
 
         for (int i = 0; i < s->nb_taps; i++)
             s->taps[i] = s->complexf[i + asize].re / fft_size;
     } else {
-        s->itx_fn(s->itx_ctx, s->complexf + asize, s->complexf, sizeof(float));
+        s->itx_fn(s->itx_ctx, s->complexf + asize, s->complexf, sizeof(AVComplexFloat));
 
         middle = s->nb_taps / 2;
         for (int i = 0; i < middle; i++) {
