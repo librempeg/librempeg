@@ -398,7 +398,7 @@ static void feed(AVFilterContext *ctx, int ch,
     memset(&out_dist_frame[offset], 0, overlap * sizeof(float));
 
     apply_window(s, in_frame, windowed_frame, 0);
-    s->tx_fn(s->tx_ctx[ch], spectrum_buf, windowed_frame, sizeof(AVComplexFloat));
+    s->tx_fn(s->tx_ctx[ch], spectrum_buf, windowed_frame, sizeof(float));
     calculate_mask_curve(s, spectrum_buf, mask_curve);
 
     // It would be easier to calculate the peak from the unwindowed input.
@@ -426,7 +426,7 @@ static void feed(AVFilterContext *ctx, int ch,
 
         clip_to_window(s, windowed_frame, clipping_delta, delta_boost);
 
-        s->tx_fn(s->tx_ctx[ch], spectrum_buf, clipping_delta, sizeof(AVComplexFloat));
+        s->tx_fn(s->tx_ctx[ch], spectrum_buf, clipping_delta, sizeof(float));
 
         limit_clip_spectrum(s, spectrum_buf, mask_curve);
 
