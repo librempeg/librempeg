@@ -322,22 +322,26 @@ static void feed(AVFilterContext *ctx, int ch,
 static int drc_channel(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int ch)
 {
     AudioDRCContext *s = ctx->priv;
-    const float *src = (const float *)in->extended_data[ch];
     float *in_buffer = (float *)s->in_buffer->extended_data[ch];
-    float *dst = (float *)out->extended_data[ch];
+    const int overlap = s->overlap;
 
-    memcpy(in_buffer, src, sizeof(*in_buffer) * s->overlap);
+    for (int offset = 0; offset < out->nb_samples; offset += overlap) {
+        const float *src = ((const float *)in->extended_data[ch])+offset;
+        float *dst = ((float *)out->extended_data[ch])+offset;
 
-    feed(ctx, ch, in_buffer, dst,
-         (float *)(s->in_frame->extended_data[ch]),
-         (float *)(s->out_dist_frame->extended_data[ch]),
-         (float *)(s->windowed_frame->extended_data[ch]),
-         (float *)(s->drc_frame->extended_data[ch]),
-         (float *)(s->spectrum_buf->extended_data[ch]),
-         (float *)(s->energy->extended_data[ch]),
-         (float *)(s->target_gain->extended_data[ch]),
-         (float *)(s->envelope->extended_data[ch]),
-         (float *)(s->factors->extended_data[ch]));
+        memcpy(in_buffer, src, sizeof(*in_buffer) * overlap);
+
+        feed(ctx, ch, in_buffer, dst,
+             (float *)(s->in_frame->extended_data[ch]),
+             (float *)(s->out_dist_frame->extended_data[ch]),
+             (float *)(s->windowed_frame->extended_data[ch]),
+             (float *)(s->drc_frame->extended_data[ch]),
+             (float *)(s->spectrum_buf->extended_data[ch]),
+             (float *)(s->energy->extended_data[ch]),
+             (float *)(s->target_gain->extended_data[ch]),
+             (float *)(s->envelope->extended_data[ch]),
+             (float *)(s->factors->extended_data[ch]));
+    }
 
     return 0;
 }
@@ -364,7 +368,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFrame *out;
     int ret;
 
-    out = ff_get_audio_buffer(outlink, s->overlap);
+    out = ff_get_audio_buffer(outlink, in->nb_samples);
     if (!out) {
         ret = AVERROR(ENOMEM);
         goto fail;
@@ -398,8 +402,8 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     AudioDRCContext *s = ctx->priv;
+    int ret, status, available, wanted;
     AVFrame *in = NULL;
-    int ret = 0, status;
     int64_t pts;
 
     ret = av_channel_layout_copy(&s->ch_layout, &inlink->ch_layout);
@@ -410,7 +414,9 @@ static int activate(AVFilterContext *ctx)
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    ret = ff_inlink_consume_samples(inlink, s->overlap, s->overlap, &in);
+    available = ff_inlink_queued_samples(inlink);
+    wanted = FFMAX(s->overlap, (available / s->overlap) * s->overlap);
+    ret = ff_inlink_consume_samples(inlink, wanted, wanted, &in);
     if (ret < 0)
         return ret;
 
