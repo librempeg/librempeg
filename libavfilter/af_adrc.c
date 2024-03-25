@@ -37,6 +37,7 @@ static const char * const var_names[] = {
     "sr",           ///< sample rate
     "p",            ///< input power in dB for frequency bin
     "f",            ///< frequency in Hz
+    "th",           ///< current threshold
     NULL
 };
 
@@ -48,6 +49,7 @@ enum var_name {
     VAR_SR,
     VAR_P,
     VAR_F,
+    VAR_TH,
     VAR_VARS_NB
 };
 
@@ -56,7 +58,8 @@ typedef struct AudioDRCContext {
 
     double attack_ms;
     double release_ms;
-    char *expr_str;
+    char *transfer_str;
+    char *threshold_str;
 
     double attack;
     double release;
@@ -78,6 +81,7 @@ typedef struct AudioDRCContext {
     AVFrame *out_dist_frame;
     AVFrame *spectrum_buf;
     AVFrame *target_gain;
+    AVFrame *threshold;
     AVFrame *windowed_frame;
 
     char *channels_to_filter;
@@ -88,7 +92,7 @@ typedef struct AudioDRCContext {
     AVTXContext **itx_ctx;
     av_tx_fn itx_fn;
 
-    AVExpr *expr;
+    AVExpr *transfer_expr, *threshold_expr;
     double var_values[VAR_VARS_NB];
 } AudioDRCContext;
 
@@ -96,10 +100,11 @@ typedef struct AudioDRCContext {
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_RUNTIME_PARAM
 
 static const AVOption adrc_options[] = {
-    { "transfer",    "set the transfer expression", OFFSET(expr_str),   AV_OPT_TYPE_STRING, {.str="p"},  0,    0, FLAGS },
-    { "attack",      "set the attack",              OFFSET(attack_ms),  AV_OPT_TYPE_DOUBLE, {.dbl=50.}, 0.1, 1000, FLAGS },
-    { "release",     "set the release",             OFFSET(release_ms), AV_OPT_TYPE_DOUBLE, {.dbl=100.},0.1, 2000, FLAGS },
-    { "channels",    "set channels to filter",OFFSET(channels_to_filter),AV_OPT_TYPE_STRING,{.str="all"},0,    0, FLAGS },
+    { "transfer",  "set the transfer expression", OFFSET(transfer_str),  AV_OPT_TYPE_STRING, {.str="p"},   0,    0, FLAGS },
+    { "threshold", "set the threshold expression",OFFSET(threshold_str), AV_OPT_TYPE_STRING, {.str="-30"}, 0,    0, FLAGS },
+    { "attack",    "set the attack",              OFFSET(attack_ms),     AV_OPT_TYPE_DOUBLE, {.dbl=50.}, 0.1, 1000, FLAGS },
+    { "release",   "set the release",             OFFSET(release_ms),    AV_OPT_TYPE_DOUBLE, {.dbl=100.},0.1, 2000, FLAGS },
+    { "channels",  "set channels to filter", OFFSET(channels_to_filter), AV_OPT_TYPE_STRING, {.str="all"}, 0,    0, FLAGS },
     {NULL}
 };
 
@@ -138,8 +143,9 @@ static int config_output(AVFilterLink *outlink)
     s->out_dist_frame = ff_get_audio_buffer(outlink, s->fft_size * 2 + 2);
     s->spectrum_buf   = ff_get_audio_buffer(outlink, s->fft_size * 2 + 2);
     s->target_gain    = ff_get_audio_buffer(outlink, s->fft_size + 1);
+    s->threshold      = ff_get_audio_buffer(outlink, s->fft_size + 1);
     s->windowed_frame = ff_get_audio_buffer(outlink, s->fft_size * 2 + 2);
-    if (!s->in_buffer || !s->in_frame || !s->target_gain ||
+    if (!s->in_buffer || !s->in_frame || !s->target_gain || !s->threshold ||
         !s->out_dist_frame || !s->windowed_frame || !s->envelope ||
         !s->drc_frame || !s->spectrum_buf || !s->energy || !s->factors)
         return AVERROR(ENOMEM);
@@ -154,6 +160,11 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR(ENOMEM);
 
     for (int ch = 0; ch < s->channels; ch++) {
+        float *thr = (float *)s->threshold->extended_data[ch];
+
+        for (int n = 0; n < s->threshold->nb_samples; n++)
+            thr[n] = -321.f;
+
         scale = 1.f / (s->fft_size * 2);
         ret = av_tx_init(&s->tx_ctx[ch], &s->tx_fn, AV_TX_FLOAT_RDFT, 0, s->fft_size * 2, &scale, 0);
         if (ret < 0)
@@ -168,8 +179,12 @@ static int config_output(AVFilterLink *outlink)
     s->var_values[VAR_SR] = outlink->sample_rate;
     s->var_values[VAR_NB_CHANNELS] = s->channels;
 
-    return av_expr_parse(&s->expr, s->expr_str, var_names, NULL, NULL,
-                         NULL, NULL, 0, ctx);
+    ret = av_expr_parse(&s->threshold_expr, s->threshold_str, var_names,
+                        NULL, NULL, NULL, NULL, 0, ctx);
+    if (ret < 0)
+        return ret;
+    return av_expr_parse(&s->transfer_expr, s->transfer_str, var_names,
+                         NULL, NULL, NULL, NULL, 0, ctx);
 }
 
 static void apply_window(AudioDRCContext *s,
@@ -204,8 +219,29 @@ static void get_energy(AVFilterContext *ctx,
     }
 }
 
+static void get_threshold(AVFilterContext *ctx,
+                          int len,
+                          float *threshold,
+                          const float *energy,
+                          double *var_values,
+                          float fx, int bypass)
+{
+    AudioDRCContext *s = ctx->priv;
+
+    for (int n = 0; n < len; n++) {
+        const float Xg = energy[n];
+
+        var_values[VAR_P] = Xg;
+        var_values[VAR_F] = n * fx;
+        var_values[VAR_TH] = threshold[n];
+
+        threshold[n] = av_expr_eval(s->threshold_expr, var_values, s);
+    }
+}
+
 static void get_target_gain(AVFilterContext *ctx,
                             int len,
+                            float *threshold,
                             float *gain,
                             const float *energy,
                             double *var_values,
@@ -223,8 +259,9 @@ static void get_target_gain(AVFilterContext *ctx,
 
         var_values[VAR_P] = Xg;
         var_values[VAR_F] = n * fx;
+        var_values[VAR_TH] = threshold[n];
 
-        gain[n] = av_expr_eval(s->expr, var_values, s);
+        gain[n] = av_expr_eval(s->transfer_expr, var_values, s);
     }
 }
 
@@ -276,7 +313,7 @@ static void feed(AVFilterContext *ctx, int ch,
                  const float *in_samples, float *out_samples,
                  float *in_frame, float *out_dist_frame,
                  float *windowed_frame, float *drc_frame,
-                 float *spectrum_buf, float *energy,
+                 float *spectrum_buf, float *energy, float *threshold,
                  float *target_gain, float *envelope,
                  float *factors)
 {
@@ -304,7 +341,8 @@ static void feed(AVFilterContext *ctx, int ch,
     s->tx_fn(s->tx_ctx[ch], spectrum_buf, windowed_frame, sizeof(float));
 
     get_energy(ctx, nb_coeffs, energy, spectrum_buf);
-    get_target_gain(ctx, nb_coeffs, target_gain, energy, var_values, s->fx, bypass);
+    get_threshold(ctx, nb_coeffs, threshold, energy, var_values, s->fx, bypass);
+    get_target_gain(ctx, nb_coeffs, threshold, target_gain, energy, var_values, s->fx, bypass);
     get_envelope(ctx, nb_coeffs, envelope, energy, target_gain);
     get_factors(ctx, nb_coeffs, factors, envelope);
     apply_factors(ctx, nb_coeffs, spectrum_buf, factors);
@@ -338,6 +376,7 @@ static int drc_channel(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int ch)
              (float *)(s->drc_frame->extended_data[ch]),
              (float *)(s->spectrum_buf->extended_data[ch]),
              (float *)(s->energy->extended_data[ch]),
+             (float *)(s->threshold->extended_data[ch]),
              (float *)(s->target_gain->extended_data[ch]),
              (float *)(s->envelope->extended_data[ch]),
              (float *)(s->factors->extended_data[ch]));
@@ -444,8 +483,11 @@ static av_cold void uninit(AVFilterContext *ctx)
 
     av_channel_layout_uninit(&s->ch_layout);
 
-    av_expr_free(s->expr);
-    s->expr = NULL;
+    av_expr_free(s->transfer_expr);
+    s->transfer_expr = NULL;
+
+    av_expr_free(s->threshold_expr);
+    s->threshold_expr = NULL;
 
     av_freep(&s->window);
 
@@ -458,6 +500,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_frame_free(&s->out_dist_frame);
     av_frame_free(&s->spectrum_buf);
     av_frame_free(&s->target_gain);
+    av_frame_free(&s->threshold);
     av_frame_free(&s->windowed_frame);
 
     for (int ch = 0; ch < s->channels; ch++) {
@@ -475,15 +518,21 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
                            char *res, int res_len, int flags)
 {
     AudioDRCContext *s = ctx->priv;
-    char *old_expr_str = av_strdup(s->expr_str);
+    char *old_transfer_str = av_strdup(s->transfer_str);
+    char *old_threshold_str = av_strdup(s->threshold_str);
     int ret;
 
     ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
-    if (ret >= 0 && strcmp(old_expr_str, s->expr_str)) {
-        ret = av_expr_parse(&s->expr, s->expr_str, var_names, NULL, NULL,
-                            NULL, NULL, 0, ctx);
+    if (ret >= 0 && strcmp(old_transfer_str, s->transfer_str)) {
+        ret = av_expr_parse(&s->transfer_expr, s->transfer_str, var_names,
+                            NULL, NULL, NULL, NULL, 0, ctx);
     }
-    av_free(old_expr_str);
+    if (ret >= 0 && strcmp(old_threshold_str, s->threshold_str)) {
+        ret = av_expr_parse(&s->threshold_expr, s->threshold_str, var_names,
+                            NULL, NULL, NULL, NULL, 0, ctx);
+    }
+    av_free(old_transfer_str);
+    av_free(old_threshold_str);
     return ret;
 }
 
