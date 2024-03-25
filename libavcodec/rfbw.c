@@ -27,6 +27,7 @@
 #include "codec_internal.h"
 #include "decode.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/mem.h"
 #include "thread.h"
 #include "zlib_wrapper.h"
 

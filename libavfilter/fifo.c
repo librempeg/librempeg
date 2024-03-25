@@ -25,6 +25,7 @@
 
 #include "libavutil/common.h"
 #include "libavutil/mathematics.h"
+#include "libavutil/mem.h"
 
 #include "audio.h"
 #include "avfilter.h"

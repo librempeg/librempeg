@@ -25,7 +25,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/opt.h"
-#include "libavutil/parseutils.h"
+#include "libavutil/mem.h"
 #include "audio.h"
 #include "formats.h"
 #include "video.h"

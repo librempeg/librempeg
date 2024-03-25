@@ -28,6 +28,7 @@
 #include "libavutil/bprint.h"
 #include "libavutil/eval.h"
 #include "libavutil/file.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/parseutils.h"
 #include "avfilter.h"
