@@ -114,31 +114,31 @@ static void generate_hann_window(float *window, int size)
     }
 }
 
-static int config_input(AVFilterLink *inlink)
+static int config_output(AVFilterLink *outlink)
 {
-    AVFilterContext *ctx = inlink->dst;
+    AVFilterContext *ctx = outlink->src;
     AudioDRCContext *s = ctx->priv;
     float scale;
     int ret;
 
-    s->fft_size = inlink->sample_rate > 100000 ? 1024 : inlink->sample_rate > 50000 ? 512 : 256;
-    s->fx = inlink->sample_rate * 0.5f / (s->fft_size + 1);
+    s->fft_size = outlink->sample_rate > 100000 ? 1024 : outlink->sample_rate > 50000 ? 512 : 256;
+    s->fx = outlink->sample_rate * 0.5f / (s->fft_size + 1);
     s->overlap = s->fft_size / 4;
 
     s->window = av_calloc(s->fft_size, sizeof(*s->window));
     if (!s->window)
         return AVERROR(ENOMEM);
 
-    s->drc_frame      = ff_get_audio_buffer(inlink, s->fft_size * 2 + 2);
-    s->energy         = ff_get_audio_buffer(inlink, s->fft_size + 1);
-    s->envelope       = ff_get_audio_buffer(inlink, s->fft_size + 1);
-    s->factors        = ff_get_audio_buffer(inlink, s->fft_size + 1);
-    s->in_buffer      = ff_get_audio_buffer(inlink, s->fft_size * 2 + 2);
-    s->in_frame       = ff_get_audio_buffer(inlink, s->fft_size * 2 + 2);
-    s->out_dist_frame = ff_get_audio_buffer(inlink, s->fft_size * 2 + 2);
-    s->spectrum_buf   = ff_get_audio_buffer(inlink, s->fft_size * 2 + 2);
-    s->target_gain    = ff_get_audio_buffer(inlink, s->fft_size + 1);
-    s->windowed_frame = ff_get_audio_buffer(inlink, s->fft_size * 2 + 2);
+    s->drc_frame      = ff_get_audio_buffer(outlink, s->fft_size * 2 + 2);
+    s->energy         = ff_get_audio_buffer(outlink, s->fft_size + 1);
+    s->envelope       = ff_get_audio_buffer(outlink, s->fft_size + 1);
+    s->factors        = ff_get_audio_buffer(outlink, s->fft_size + 1);
+    s->in_buffer      = ff_get_audio_buffer(outlink, s->fft_size * 2 + 2);
+    s->in_frame       = ff_get_audio_buffer(outlink, s->fft_size * 2 + 2);
+    s->out_dist_frame = ff_get_audio_buffer(outlink, s->fft_size * 2 + 2);
+    s->spectrum_buf   = ff_get_audio_buffer(outlink, s->fft_size * 2 + 2);
+    s->target_gain    = ff_get_audio_buffer(outlink, s->fft_size + 1);
+    s->windowed_frame = ff_get_audio_buffer(outlink, s->fft_size * 2 + 2);
     if (!s->in_buffer || !s->in_frame || !s->target_gain ||
         !s->out_dist_frame || !s->windowed_frame || !s->envelope ||
         !s->drc_frame || !s->spectrum_buf || !s->energy || !s->factors)
@@ -146,7 +146,7 @@ static int config_input(AVFilterLink *inlink)
 
     generate_hann_window(s->window, s->fft_size);
 
-    s->channels = inlink->ch_layout.nb_channels;
+    s->channels = outlink->ch_layout.nb_channels;
 
     s->tx_ctx = av_calloc(s->channels, sizeof(*s->tx_ctx));
     s->itx_ctx = av_calloc(s->channels, sizeof(*s->itx_ctx));
@@ -165,7 +165,7 @@ static int config_input(AVFilterLink *inlink)
             return ret;
     }
 
-    s->var_values[VAR_SR] = inlink->sample_rate;
+    s->var_values[VAR_SR] = outlink->sample_rate;
     s->var_values[VAR_NB_CHANNELS] = s->channels;
 
     return av_expr_parse(&s->expr, s->expr_str, var_names, NULL, NULL,
@@ -375,7 +375,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
 
     s->var_values[VAR_SN] = outlink->sample_count_in;
-    s->var_values[VAR_T] = s->var_values[VAR_SN] * (double)1/outlink->sample_rate;
+    s->var_values[VAR_T] = s->var_values[VAR_SN] / outlink->sample_rate;
 
     s->in = in;
     av_frame_copy_props(out, in);
@@ -487,11 +487,11 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     return ret;
 }
 
-static const AVFilterPad inputs[] = {
+static const AVFilterPad outputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
-        .config_props = config_input,
+        .config_props = config_output,
     },
 };
 
@@ -501,8 +501,8 @@ const AVFilter ff_af_adrc = {
     .priv_size       = sizeof(AudioDRCContext),
     .priv_class      = &adrc_class,
     .uninit          = uninit,
-    FILTER_INPUTS(inputs),
-    FILTER_OUTPUTS(ff_audio_default_filterpad),
+    FILTER_INPUTS(ff_audio_default_filterpad),
+    FILTER_OUTPUTS(outputs),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_FLTP),
     .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                        AVFILTER_FLAG_SLICE_THREADS,
