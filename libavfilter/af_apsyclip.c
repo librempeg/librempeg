@@ -29,6 +29,11 @@
 typedef struct AudioPsyClipContext {
     const AVClass *class;
 
+    float *bands_opt;
+    unsigned nb_bands_opt;
+    float *gains_opt;
+    unsigned nb_gains_opt;
+
     double level_in;
     double level_out;
     double clip_level;
@@ -65,6 +70,13 @@ typedef struct AudioPsyClipContext {
 
 #define OFFSET(x) offsetof(AudioPsyClipContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_RUNTIME_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+#define DEFAULT_BANDS "0 125 250 500 1000 2000 4000 8000 16000 20000"
+#define DEFAULT_GAINS "14 14 16 18 20 20 20 17 14 -10"
+
+static const AVOptionArrayDef def_bands = {.def=DEFAULT_BANDS,.size_min=2,.sep=' '};
+static const AVOptionArrayDef def_gains = {.def=DEFAULT_GAINS,.size_min=2,.sep=' '};
 
 static const AVOption apsyclip_options[] = {
     { "level_in",   "set input level",         OFFSET(level_in),   AV_OPT_TYPE_DOUBLE, {.dbl=1},.015625,   64, FLAGS },
@@ -75,6 +87,8 @@ static const AVOption apsyclip_options[] = {
     { "iterations", "set max iterations",      OFFSET(max_iterations), AV_OPT_TYPE_INT,{.i64=10},     1,   20, FLAGS },
     { "min_iterations", "set min iterations",  OFFSET(min_iterations), AV_OPT_TYPE_INT,{.i64=1},      1,   20, FLAGS },
     { "level",      "set auto level",          OFFSET(auto_level), AV_OPT_TYPE_BOOL,   {.i64=0},      0,    1, FLAGS },
+    { "bands", "set frequency values per band",OFFSET(bands_opt),  AV_OPT_TYPE_FLOAT|AR,{.arr=&def_bands}, 0, INT_MAX, FLAGS },
+    { "gains", "set gain values per band",     OFFSET(gains_opt),  AV_OPT_TYPE_FLOAT|AR,{.arr=&def_gains}, INT_MIN, INT_MAX, FLAGS },
     {NULL}
 };
 
@@ -92,23 +106,24 @@ static void generate_hann_window(float *window, float *inv_window, int size)
 }
 
 static void set_margin_curve(AudioPsyClipContext *s,
-                             const int (*points)[2], int num_points, int sample_rate)
+                             const float *bands, const float *gains,
+                             int num_points, int sample_rate)
 {
     int j = 0;
 
-    s->margin_curve[0] = points[0][1];
+    s->margin_curve[0] = gains[0];
 
     for (int i = 0; i < num_points - 1; i++) {
-        while (j < s->fft_size / 2 + 1 && j * sample_rate / s->fft_size < points[i + 1][0]) {
+        while (j < s->fft_size / 2 + 1 && j * sample_rate / s->fft_size < bands[i + 1]) {
             // linearly interpolate between points
             int binHz = j * sample_rate / s->fft_size;
-            s->margin_curve[j] = points[i][1] + (binHz - points[i][0]) * (points[i + 1][1] - points[i][1]) / (points[i + 1][0] - points[i][0]);
+            s->margin_curve[j] = gains[i] + (binHz - bands[i]) * (gains[i + 1] - gains[i]) / (bands[i + 1] - bands[i]);
             j++;
         }
     }
     // handle bins after the last point
     while (j < s->fft_size / 2 + 1) {
-        s->margin_curve[j] = points[num_points - 1][1];
+        s->margin_curve[j] = gains[num_points - 1];
         j++;
     }
 
@@ -186,9 +201,7 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     AudioPsyClipContext *s = ctx->priv;
-    static const int points[][2] = { {0,14}, {125,14}, {250,16}, {500,18}, {1000,20}, {2000,20}, {4000,20}, {8000,17}, {16000,14}, {20000,-10} };
-    static const int num_points = 10;
-    int ret;
+    int ret, nb_points;
 
     s->fft_size = inlink->sample_rate > 100000 ? 1024 : inlink->sample_rate > 50000 ? 512 : 256;
     s->overlap = s->fft_size / 4;
@@ -239,7 +252,8 @@ static int config_input(AVFilterLink *inlink)
     if (!s->spread_table_index)
         return AVERROR(ENOMEM);
 
-    set_margin_curve(s, points, num_points, inlink->sample_rate);
+    nb_points = FFMIN(s->nb_bands_opt, s->nb_gains_opt);
+    set_margin_curve(s, s->bands_opt, s->gains_opt, nb_points, inlink->sample_rate);
 
     generate_spread_table(s);
 
