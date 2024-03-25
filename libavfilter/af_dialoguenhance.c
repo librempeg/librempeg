@@ -51,7 +51,7 @@ typedef struct AudioDialogueEnhancementContext {
     AVFrame *windowed_prev;
     AVFrame *center_frame;
 
-    int (*de_stereo)(AVFilterContext *ctx, AVFrame *out);
+    int (*de_stereo)(AVFilterContext *ctx, AVFrame *out, const int offset);
 
     AVTXContext *tx_ctx[2], *itx_ctx;
     av_tx_fn tx_fn, itx_fn;
@@ -135,14 +135,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFrame *out;
     int ret;
 
-    out = ff_get_audio_buffer(outlink, s->overlap);
+    out = ff_get_audio_buffer(outlink, in->nb_samples);
     if (!out) {
         ret = AVERROR(ENOMEM);
         goto fail;
     }
 
     s->in = in;
-    s->de_stereo(ctx, out);
+    for (int offset = 0; offset < out->nb_samples; offset += s->overlap)
+        s->de_stereo(ctx, out, offset);
 
     av_frame_copy_props(out, in);
     out->nb_samples = in->nb_samples;
@@ -159,13 +160,15 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     AudioDialogueEnhanceContext *s = ctx->priv;
+    int ret, status, available, wanted;
     AVFrame *in = NULL;
-    int ret = 0, status;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    ret = ff_inlink_consume_samples(inlink, s->overlap, s->overlap, &in);
+    available = ff_inlink_queued_samples(inlink);
+    wanted = FFMAX(s->overlap, (available / s->overlap) * s->overlap);
+    ret = ff_inlink_consume_samples(inlink, wanted, wanted, &in);
     if (ret < 0)
         return ret;
 

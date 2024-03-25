@@ -198,7 +198,7 @@ static void fn(get_final)(ftype *c, ftype *l,
     }
 }
 
-static int fn(de_stereo)(AVFilterContext *ctx, AVFrame *out)
+static int fn(de_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
 {
     AudioDialogueEnhanceContext *s = ctx->priv;
     ftype *center          = (ftype *)s->center_frame->extended_data[0];
@@ -206,17 +206,17 @@ static int fn(de_stereo)(AVFilterContext *ctx, AVFrame *out)
     ftype *left_in         = (ftype *)s->in_frame->extended_data[0];
     ftype *right_in        = (ftype *)s->in_frame->extended_data[1];
     ftype *left_out        = (ftype *)s->out_dist_frame->extended_data[0];
-    ftype *left_samples    = (ftype *)s->in->extended_data[0];
-    ftype *right_samples   = (ftype *)s->in->extended_data[1];
+    ftype *left_samples    = ((ftype *)s->in->extended_data[0])+doffset;
+    ftype *right_samples   = ((ftype *)s->in->extended_data[1])+doffset;
     ftype *windowed_left   = (ftype *)s->windowed_frame->extended_data[0];
     ftype *windowed_right  = (ftype *)s->windowed_frame->extended_data[1];
     ftype *windowed_oleft  = (ftype *)s->windowed_out->extended_data[0];
     ftype *windowed_oright = (ftype *)s->windowed_out->extended_data[1];
     ftype *windowed_pleft  = (ftype *)s->windowed_prev->extended_data[0];
     ftype *windowed_pright = (ftype *)s->windowed_prev->extended_data[1];
-    ftype *left_osamples   = (ftype *)out->extended_data[0];
-    ftype *right_osamples  = (ftype *)out->extended_data[1];
-    ftype *center_osamples = (ftype *)out->extended_data[2];
+    ftype *left_osamples   = ((ftype *)out->extended_data[0])+doffset;
+    ftype *right_osamples  = ((ftype *)out->extended_data[1])+doffset;
+    ftype *center_osamples = ((ftype *)out->extended_data[2])+doffset;
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
     const int nb_samples = FFMIN(overlap, s->in->nb_samples);
