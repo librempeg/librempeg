@@ -24,10 +24,10 @@
 #include "avfilter.h"
 #include "internal.h"
 
-#define NOISE_FLOOR_DB_FLT -758
-#define MAX_DB_FLT 770
+#define MAX_DB_FLT 1024
 #define MAX_DB 91
 #define HISTOGRAM_SIZE 0x10000
+#define HISTOGRAM_SIZE_FLT (MAX_DB_FLT*2)
 
 typedef struct VolDetectContext {
     uint64_t* histogram; ///< for integer number of samples at each PCM value, for float number of samples at each dB
@@ -42,7 +42,7 @@ static inline double logdb(double v, enum AVSampleFormat sample_fmt)
     if (sample_fmt == AV_SAMPLE_FMT_FLT) {
         if (!v)
             return MAX_DB_FLT;
-        return 10.0 * log10(v);
+        return -log10(v) * 10;
     } else {
         double d = v / (double)(0x8000 * 0x8000);
         if (!v)
@@ -53,15 +53,17 @@ static inline double logdb(double v, enum AVSampleFormat sample_fmt)
 
 static void update_float_stats(VolDetectContext *vd, float *audio_data)
 {
-    double max_sample;
-    if(isnan(*audio_data) || isinf(*audio_data) || *audio_data == HUGE_VALF || fpclassify(*audio_data) == FP_SUBNORMAL)
+    double sample;
+    int idx;
+
+    if (!isnormal(*audio_data))
         return;
-    max_sample = fabsf(*audio_data);
-    if (max_sample > vd->max)
-        vd->max = max_sample;
-    vd->sum2 += *audio_data * *audio_data;
-    vd->histogram[lrintf(logdb(*audio_data * *audio_data, AV_SAMPLE_FMT_FLT)) + MAX_DB_FLT]++;
-    vd->nb_samples++;
+    sample = fabsf(*audio_data);
+    if (sample > vd->max)
+        vd->max = sample;
+    vd->sum2 += sample * sample;
+    idx = MAX_DB_FLT + lrintf(floorf(logdb(sample*sample, AV_SAMPLE_FMT_FLT)));
+    vd->histogram[idx]++;
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *samples)
@@ -96,16 +98,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *samples)
             for (i = 0; i < samples->nb_samples; i++) {
                 if (planar) {
                     vd->histogram[pcm[i] + 0x8000]++;
-                    vd->nb_samples++;
                 } else {
                     for (int j = 0; j < nb_channels; j++) {
                         vd->histogram[pcm[i * nb_channels + j] + 0x8000]++;
-                        vd->nb_samples++;
                     }
                 }
             }
         }
     }
+    vd->nb_samples += samples->nb_samples * nb_channels;
     return ff_filter_frame(inlink->dst->outputs[0], samples);
 }
 
@@ -116,15 +117,17 @@ static void print_stats(AVFilterContext *ctx)
     if (!vd->nb_samples)
         return;
     if (vd->is_float) {
-        int i, sum = 0;
+        uint64_t sum = 0;
+        int i;
+
         av_log(ctx, AV_LOG_INFO, "n_samples: %" PRId64 "\n", vd->nb_samples);
-        av_log(ctx, AV_LOG_INFO, "mean_volume: %.1f dB\n", logdb(vd->sum2 / vd->nb_samples, AV_SAMPLE_FMT_FLT));
-        av_log(ctx, AV_LOG_INFO, "max_volume: %.1f dB\n", logdb(vd->max * vd->max, AV_SAMPLE_FMT_FLT));
-        for (i = MAX_DB_FLT - NOISE_FLOOR_DB_FLT; i >= 0 && !vd->histogram[i]; i--);
-        for (; i >= 0 && sum < vd->nb_samples / 1000; i--) {
+        av_log(ctx, AV_LOG_INFO, "mean_volume: %.1f dB\n", -logdb(vd->sum2 / vd->nb_samples, AV_SAMPLE_FMT_FLT));
+        av_log(ctx, AV_LOG_INFO, "max_volume: %.1f dB\n", -2.0*logdb(vd->max, AV_SAMPLE_FMT_FLT));
+        for (i = 0; i < HISTOGRAM_SIZE_FLT && !vd->histogram[i]; i++)
+        for (; i < HISTOGRAM_SIZE_FLT && sum < vd->nb_samples / 1000; i++) {
             if (!vd->histogram[i])
                 continue;
-            av_log(ctx, AV_LOG_INFO, "histogram_%ddb: %" PRId64 "\n", MAX_DB_FLT - i, vd->histogram[i]);
+            av_log(ctx, AV_LOG_INFO, "histogram_%ddb: %" PRId64 "\n", MAX_DB_FLT-i, vd->histogram[i]);
             sum += vd->histogram[i];
         }
     } else {
@@ -159,7 +162,7 @@ static void print_stats(AVFilterContext *ctx)
             histdb[(int)logdb((double)(i - 0x8000) * (i - 0x8000), AV_SAMPLE_FMT_S16)] += vd->histogram[i];
         for (i = 0; i <= MAX_DB && !histdb[i]; i++);
         for (; i <= MAX_DB && sum < nb_samples / 1000; i++) {
-            av_log(ctx, AV_LOG_INFO, "histogram_%ddb: %" PRId64 "\n", i, histdb[i]);
+            av_log(ctx, AV_LOG_INFO, "histogram_%ddb: %" PRId64 "\n", -i, histdb[i]);
             sum += histdb[i];
         }
     }
@@ -169,6 +172,7 @@ static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     VolDetectContext *vd = ctx->priv;
+    size_t histogram_elements;
 
     vd->is_float = outlink->format == AV_SAMPLE_FMT_FLT ||
                    outlink->format == AV_SAMPLE_FMT_FLTP;
@@ -181,19 +185,17 @@ static int config_output(AVFilterLink *outlink)
         * histogram[0x8000 + i] is the number of samples at value i.
         * The extra element is there for symmetry.
         */
-        vd->histogram = av_calloc(HISTOGRAM_SIZE + 1, sizeof(uint64_t));
-        if (!vd->histogram)
-            return AVERROR(ENOMEM);
+        histogram_elements = HISTOGRAM_SIZE + 1;
     } else {
         /*
         * The histogram is used to store the number of samples at each dB
         * instead of the number of samples at each PCM value.
-        * The range of dB is from -758 to 770.
         */
-        vd->histogram = av_calloc(MAX_DB_FLT - NOISE_FLOOR_DB_FLT + 1, sizeof(uint64_t));
-        if (!vd->histogram)
-            return AVERROR(ENOMEM);
+        histogram_elements = HISTOGRAM_SIZE_FLT + 1;
     }
+    vd->histogram = av_calloc(histogram_elements, sizeof(*vd->histogram));
+    if (!vd->histogram)
+        return AVERROR(ENOMEM);
     return 0;
 }
 
@@ -201,8 +203,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     VolDetectContext *vd = ctx->priv;
     print_stats(ctx);
-    if (vd->histogram)
-        av_freep(&vd->histogram);
+    av_freep(&vd->histogram);
 }
 
 static const AVFilterPad volumedetect_inputs[] = {
