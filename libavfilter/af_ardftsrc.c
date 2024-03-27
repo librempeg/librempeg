@@ -46,7 +46,8 @@ typedef struct AudioRDFTSRCContext {
     AVFrame *rdft_in[2];
     AVFrame *rdft_out[2];
 
-    int (*do_src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int ch);
+    int (*do_src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
+                  const int ch, const int soffset, const int doffset);
 
     AVTXContext **tx_ctx, **itx_ctx;
     av_tx_fn tx_fn, itx_fn;
@@ -163,8 +164,11 @@ static int src_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
 
-    for (int ch = start; ch < end; ch++)
-        s->do_src(ctx, s->in, out, ch);
+    for (int ch = start; ch < end; ch++) {
+        for (int soffset = 0, doffset = 0; soffset < s->in->nb_samples;
+             soffset += s->in_nb_samples, doffset += s->out_nb_samples)
+            s->do_src(ctx, s->in, out, ch, soffset, doffset);
+    }
 
     return 0;
 }
@@ -175,13 +179,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = ctx->outputs[0];
     AudioRDFTSRCContext *s = ctx->priv;
     const int offset = (s->in_rdft_size - s->in_nb_samples) >> 1;
+    const int factor = FFMAX(1, in->nb_samples / s->in_nb_samples);
     AVFrame *out;
     int ret;
 
     if (inlink->sample_rate == outlink->sample_rate)
         return ff_filter_frame(outlink, in);
 
-    out = ff_get_audio_buffer(outlink, s->out_nb_samples);
+    out = ff_get_audio_buffer(outlink, s->out_nb_samples * factor);
     if (!out) {
         ret = AVERROR(ENOMEM);
         goto fail;
@@ -209,15 +214,19 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *outlink = ctx->outputs[0];
     AudioRDFTSRCContext *s = ctx->priv;
     AVFrame *in = NULL;
-    int ret = 0, status;
+    int ret, status;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    if (inlink->sample_rate == outlink->sample_rate)
+    if (inlink->sample_rate == outlink->sample_rate) {
         ret = ff_inlink_consume_frame(inlink, &in);
-    else
-        ret = ff_inlink_consume_samples(inlink, s->in_nb_samples, s->in_nb_samples, &in);
+    } else {
+        const int available = ff_inlink_queued_samples(inlink);
+        const int wanted = FFMAX(s->in_nb_samples, (available / s->in_nb_samples) * s->in_nb_samples);
+
+        ret = ff_inlink_consume_samples(inlink, wanted, wanted, &in);
+    }
     if (ret < 0)
         return ret;
 
