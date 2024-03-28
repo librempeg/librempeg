@@ -96,21 +96,19 @@ static void fn(pfilter_channel)(AVFilterContext *ctx, int ch,
         ftype I, Q;
 
         prev = xn1;
-        for (int j = 0; j < nb_coeffs; j++) {
+        for (int j = 0, k = nb_coeffs; j < nb_coeffs; j++, k++) {
             I = c[j] * (xn1 + o2[j]) - i2[j];
             i2[j] = i1[j];
             i1[j] = xn1;
             o2[j] = o1[j];
             o1[j] = I;
             xn1 = I;
-        }
 
-        for (int j = nb_coeffs; j < nb_coeffs*2; j++) {
-            Q = c[j] * (xn2 + o2[j]) - i2[j];
-            i2[j] = i1[j];
-            i1[j] = xn2;
-            o2[j] = o1[j];
-            o1[j] = Q;
+            Q = c[k] * (xn2 + o2[k]) - i2[k];
+            i2[k] = i1[k];
+            i1[k] = xn2;
+            o2[k] = o1[k];
+            o1[k] = Q;
             xn2 = Q;
         }
 
@@ -147,21 +145,19 @@ static void fn(ffilter_channel)(AVFilterContext *ctx, int ch,
         ftype I, Q, theta;
 
         prev = xn1;
-        for (int j = 0; j < nb_coeffs; j++) {
+        for (int j = 0, k = nb_coeffs; j < nb_coeffs; j++, k++) {
             I = c[j] * (xn1 + o2[j]) - i2[j];
             i2[j] = i1[j];
             i1[j] = xn1;
             o2[j] = o1[j];
             o1[j] = I;
             xn1 = I;
-        }
 
-        for (int j = nb_coeffs; j < nb_coeffs*2; j++) {
-            Q = c[j] * (xn2 + o2[j]) - i2[j];
-            i2[j] = i1[j];
-            i1[j] = xn2;
-            o2[j] = o1[j];
-            o1[j] = Q;
+            Q = c[k] * (xn2 + o2[k]) - i2[k];
+            i2[k] = i1[k];
+            i1[k] = xn2;
+            o2[k] = o1[k];
+            o1[k] = Q;
             xn2 = Q;
         }
 
