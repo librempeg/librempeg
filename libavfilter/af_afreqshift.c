@@ -38,8 +38,6 @@ typedef struct AFreqShift {
     double cd[MAX_NB_COEFFS * 2];
     float cf[MAX_NB_COEFFS * 2];
 
-    int64_t in_samples;
-
     void *state;
 
     int (*init_state)(AVFilterContext *ctx, int channels);
@@ -134,18 +132,20 @@ static double compute_coef(int index, double k, double q, int order)
     return coef;
 }
 
-static void compute_coefs(double *coef_arrd, float *coef_arrf, int nbr_coefs, double transition)
+static void compute_coefs(double *coef_arrd, float *coef_arrf, int nbr_coefs,
+                          double transition)
 {
-    const int order = nbr_coefs * 2 + 1;
+    const int order = nbr_coefs*2+1;
+    const int N = nbr_coefs/2;
     double k, q;
 
     compute_transition_param(&k, &q, transition);
 
-    for (int n = 0; n < nbr_coefs; n++) {
-        const int idx = (n / 2) + (n & 1) * nbr_coefs / 2;
-
-        coef_arrd[idx] = compute_coef(n, k, q, order);
-        coef_arrf[idx] = coef_arrd[idx];
+    for (int n = 0; n < N; n++) {
+        coef_arrd[n+0] = compute_coef(2*n+0, k, q, order);
+        coef_arrf[n+0] = coef_arrd[n+0];
+        coef_arrd[n+N] = compute_coef(2*n+1, k, q, order);
+        coef_arrf[n+N] = coef_arrd[n+N];
     }
 }
 
@@ -232,8 +232,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     td.in = in; td.out = out;
     ff_filter_execute(ctx, filter_channels, &td, NULL,
                       FFMIN(inlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
-
-    s->in_samples += in->nb_samples;
 
     if (out != in)
         av_frame_free(&in);

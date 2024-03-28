@@ -55,6 +55,7 @@
 
 typedef struct fn(StateContext) {
     ftype prev;
+    ftype phase;
     ftype c[4][MAX_NB_COEFFS*2];
 } fn(StateContext);
 
@@ -85,9 +86,9 @@ static void fn(pfilter_channel)(AVFilterContext *ctx, int ch,
     const int nb_coeffs = s->nb_coeffs;
     const ftype *c = cname;
     const ftype level = s->level;
-    ftype shift = s->shift * MPI;
-    ftype cos_theta = COS(shift);
-    ftype sin_theta = SIN(shift);
+    const ftype shift = s->shift * MPI;
+    const ftype cos_theta = COS(shift);
+    const ftype sin_theta = SIN(shift);
     ftype prev = stc->prev;
 
     for (int n = 0; n < nb_samples; n++) {
@@ -135,9 +136,10 @@ static void fn(ffilter_channel)(AVFilterContext *ctx, int ch,
     const int nb_coeffs = s->nb_coeffs;
     const ftype *c = cname;
     const ftype level = s->level;
-    ftype ts = ONE / in->sample_rate;
-    int64_t N = s->in_samples;
-    ftype shift = s->shift;
+    const ftype fs = in->sample_rate;
+    const ftype ts = ONE / fs;
+    const ftype shift = s->shift;
+    ftype phase = stc->phase;
     ftype prev = stc->prev;
 
     for (int n = 0; n < nb_samples; n++) {
@@ -163,9 +165,11 @@ static void fn(ffilter_channel)(AVFilterContext *ctx, int ch,
             xn2 = Q;
         }
 
-        theta = TWO * MPI * FMOD(shift * (N + n) * ts, ONE);
+        phase = FMOD(phase + shift * ts, ONE);
+        theta = TWO * MPI * phase;
         dst[n] = (I * COS(theta) - Q * SIN(theta)) * level;
     }
 
     stc->prev = prev;
+    stc->phase = phase;
 }
