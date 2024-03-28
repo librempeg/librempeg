@@ -54,6 +54,7 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 typedef struct fn(StateContext) {
+    ftype prev;
     ftype c[4][MAX_NB_COEFFS*2];
 } fn(StateContext);
 
@@ -87,11 +88,13 @@ static void fn(pfilter_channel)(AVFilterContext *ctx, int ch,
     ftype shift = s->shift * MPI;
     ftype cos_theta = COS(shift);
     ftype sin_theta = SIN(shift);
+    ftype prev = stc->prev;
 
     for (int n = 0; n < nb_samples; n++) {
-        ftype xn1 = src[n], xn2 = src[n];
+        ftype xn1 = src[n], xn2 = prev;
         ftype I, Q;
 
+        prev = xn1;
         for (int j = 0; j < nb_coeffs; j++) {
             I = c[j] * (xn1 + o2[j]) - i2[j];
             i2[j] = i1[j];
@@ -109,10 +112,11 @@ static void fn(pfilter_channel)(AVFilterContext *ctx, int ch,
             o1[j] = Q;
             xn2 = Q;
         }
-        Q = o2[nb_coeffs * 2 - 1];
 
         dst[n] = (I * cos_theta - Q * sin_theta) * level;
     }
+
+    stc->prev = prev;
 }
 
 static void fn(ffilter_channel)(AVFilterContext *ctx, int ch,
@@ -132,13 +136,15 @@ static void fn(ffilter_channel)(AVFilterContext *ctx, int ch,
     const ftype *c = cname;
     const ftype level = s->level;
     ftype ts = ONE / in->sample_rate;
-    ftype shift = s->shift;
     int64_t N = s->in_samples;
+    ftype shift = s->shift;
+    ftype prev = stc->prev;
 
     for (int n = 0; n < nb_samples; n++) {
-        ftype xn1 = src[n], xn2 = src[n];
+        ftype xn1 = src[n], xn2 = prev;
         ftype I, Q, theta;
 
+        prev = xn1;
         for (int j = 0; j < nb_coeffs; j++) {
             I = c[j] * (xn1 + o2[j]) - i2[j];
             i2[j] = i1[j];
@@ -156,9 +162,10 @@ static void fn(ffilter_channel)(AVFilterContext *ctx, int ch,
             o1[j] = Q;
             xn2 = Q;
         }
-        Q = o2[nb_coeffs * 2 - 1];
 
         theta = TWO * MPI * FMOD(shift * (N + n) * ts, ONE);
         dst[n] = (I * COS(theta) - Q * SIN(theta)) * level;
     }
+
+    stc->prev = prev;
 }
