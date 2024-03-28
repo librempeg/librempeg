@@ -40,9 +40,9 @@ typedef struct AFreqShift {
 
     int64_t in_samples;
 
-    AVFrame *i1, *o1;
-    AVFrame *i2, *o2;
+    void *state;
 
+    int (*init_state)(AVFilterContext *ctx, int channels);
     void (*filter_channel)(AVFilterContext *ctx,
                            int channel,
                            AVFrame *in, AVFrame *out);
@@ -160,29 +160,29 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     AFreqShift *s = ctx->priv;
+    int ret;
 
     if (s->old_nb_coeffs != s->nb_coeffs)
         compute_coefs(s->cd, s->cf, s->nb_coeffs * 2, 2. * 20. / inlink->sample_rate);
     s->old_nb_coeffs = s->nb_coeffs;
 
-    s->i1 = ff_get_audio_buffer(inlink, MAX_NB_COEFFS * 2);
-    s->o1 = ff_get_audio_buffer(inlink, MAX_NB_COEFFS * 2);
-    s->i2 = ff_get_audio_buffer(inlink, MAX_NB_COEFFS * 2);
-    s->o2 = ff_get_audio_buffer(inlink, MAX_NB_COEFFS * 2);
-    if (!s->i1 || !s->o1 || !s->i2 || !s->o2)
-        return AVERROR(ENOMEM);
-
     if (inlink->format == AV_SAMPLE_FMT_DBLP) {
+        s->init_state = init_state_dblp;
         if (!strcmp(ctx->filter->name, "afreqshift"))
             s->filter_channel = ffilter_channel_dblp;
         else
             s->filter_channel = pfilter_channel_dblp;
     } else {
+        s->init_state = init_state_fltp;
         if (!strcmp(ctx->filter->name, "afreqshift"))
             s->filter_channel = ffilter_channel_fltp;
         else
             s->filter_channel = pfilter_channel_fltp;
     }
+
+    ret = s->init_state(ctx, inlink->ch_layout.nb_channels);
+    if (ret < 0)
+        return ret;
 
     return 0;
 }
@@ -244,10 +244,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     AFreqShift *s = ctx->priv;
 
-    av_frame_free(&s->i1);
-    av_frame_free(&s->o1);
-    av_frame_free(&s->i2);
-    av_frame_free(&s->o2);
+    av_freep(&s->state);
 }
 
 #define OFFSET(x) offsetof(AFreqShift, x)

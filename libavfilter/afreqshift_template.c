@@ -53,6 +53,21 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
+typedef struct fn(StateContext) {
+    ftype c[4][MAX_NB_COEFFS*2];
+} fn(StateContext);
+
+static int fn(init_state)(AVFilterContext *ctx, int nb_channels)
+{
+    AFreqShift *s = ctx->priv;
+    fn(StateContext) *stc;
+
+    s->state = av_calloc(nb_channels, sizeof(*stc));
+    if (!s->state)
+        return AVERROR(ENOMEM);
+    return 0;
+}
+
 static void fn(pfilter_channel)(AVFilterContext *ctx, int ch,
                                 AVFrame *in, AVFrame *out)
 {
@@ -60,10 +75,12 @@ static void fn(pfilter_channel)(AVFilterContext *ctx, int ch,
     const int nb_samples = in->nb_samples;
     const ftype *src = (const ftype *)in->extended_data[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
-    ftype *i1 = (ftype *)s->i1->extended_data[ch];
-    ftype *o1 = (ftype *)s->o1->extended_data[ch];
-    ftype *i2 = (ftype *)s->i2->extended_data[ch];
-    ftype *o2 = (ftype *)s->o2->extended_data[ch];
+    fn(StateContext) *state = s->state;
+    fn(StateContext) *stc = &state[ch];
+    ftype *i1 = stc->c[0];
+    ftype *o1 = stc->c[1];
+    ftype *i2 = stc->c[2];
+    ftype *o2 = stc->c[3];
     const int nb_coeffs = s->nb_coeffs;
     const ftype *c = cname;
     const ftype level = s->level;
@@ -105,10 +122,12 @@ static void fn(ffilter_channel)(AVFilterContext *ctx, int ch,
     const int nb_samples = in->nb_samples;
     const ftype *src = (const ftype *)in->extended_data[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
-    ftype *i1 = (ftype *)s->i1->extended_data[ch];
-    ftype *o1 = (ftype *)s->o1->extended_data[ch];
-    ftype *i2 = (ftype *)s->i2->extended_data[ch];
-    ftype *o2 = (ftype *)s->o2->extended_data[ch];
+    fn(StateContext) *state = s->state;
+    fn(StateContext) *stc = &state[ch];
+    ftype *i1 = stc->c[0];
+    ftype *o1 = stc->c[1];
+    ftype *i2 = stc->c[2];
+    ftype *o2 = stc->c[3];
     const int nb_coeffs = s->nb_coeffs;
     const ftype *c = cname;
     const ftype level = s->level;
