@@ -137,12 +137,13 @@ static void fn(ffilter_channel)(AVFilterContext *ctx, int ch,
     const ftype fs = in->sample_rate;
     const ftype ts = ONE / fs;
     const ftype shift = s->shift;
+    const ftype step = TWO * MPI * shift * ts;
     ftype phase = stc->phase;
     ftype prev = stc->prev;
 
     for (int n = 0; n < nb_samples; n++) {
         ftype xn1 = src[n], xn2 = prev;
-        ftype I, Q, theta;
+        ftype I, Q;
 
         prev = xn1;
         for (int j = 0, k = nb_coeffs; j < nb_coeffs; j++, k++) {
@@ -161,9 +162,8 @@ static void fn(ffilter_channel)(AVFilterContext *ctx, int ch,
             xn2 = Q;
         }
 
-        phase = FMOD(phase + shift * ts, ONE);
-        theta = TWO * MPI * phase;
-        dst[n] = (I * COS(theta) - Q * SIN(theta)) * level;
+        phase = FMOD(phase + step, TWO*MPI);
+        dst[n] = (I * COS(phase) - Q * SIN(phase)) * level;
     }
 
     stc->prev = prev;
