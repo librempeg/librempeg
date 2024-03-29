@@ -31,12 +31,15 @@ typedef struct AFreqShift {
     const AVClass *class;
 
     double shift;
+    double old_shift;
     double level;
     int nb_coeffs;
     int old_nb_coeffs;
 
     double cd[MAX_NB_COEFFS * 2];
     float cf[MAX_NB_COEFFS * 2];
+
+    double k1, k2;
 
     void *state;
 
@@ -149,6 +152,17 @@ static void compute_coefs(double *coef_arrd, float *coef_arrf, int nbr_coefs,
     }
 }
 
+static void compute_osc(AVFilterContext *ctx)
+{
+    AVFilterLink *inlink = ctx->inputs[0];
+    AFreqShift *s = ctx->priv;
+    double w0 = 2.0*M_PI*fmod(s->shift/inlink->sample_rate, 0.49999);
+
+    s->k1 = tan(0.5*w0);
+    s->k2 = sin(w0);
+    s->old_shift = s->shift;
+}
+
 #define DEPTH 32
 #include "afreqshift_template.c"
 
@@ -165,6 +179,9 @@ static int config_input(AVFilterLink *inlink)
     if (s->old_nb_coeffs != s->nb_coeffs)
         compute_coefs(s->cd, s->cf, s->nb_coeffs * 2, 2. * 20. / inlink->sample_rate);
     s->old_nb_coeffs = s->nb_coeffs;
+
+    if (s->old_shift != s->shift)
+        compute_osc(ctx);
 
     if (inlink->format == AV_SAMPLE_FMT_DBLP) {
         s->init_state = init_state_dblp;
@@ -217,6 +234,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (s->old_nb_coeffs != s->nb_coeffs)
         compute_coefs(s->cd, s->cf, s->nb_coeffs * 2, 2. * 20. / inlink->sample_rate);
     s->old_nb_coeffs = s->nb_coeffs;
+
+    if (s->old_shift != s->shift)
+        compute_osc(ctx);
 
     if (av_frame_is_writable(in)) {
         out = in;

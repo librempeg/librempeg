@@ -23,7 +23,6 @@
 #undef TWO
 #undef SIN
 #undef COS
-#undef FMOD
 #undef MPI
 #if DEPTH == 32
 #define SAMPLE_FORMAT fltp
@@ -33,7 +32,6 @@
 #define TWO 2.f
 #define SIN sinf
 #define COS cosf
-#define FMOD fmodf
 #define MPI M_PIf
 #else
 #define SAMPLE_FORMAT dblp
@@ -43,7 +41,6 @@
 #define TWO 2.0
 #define SIN sin
 #define COS cos
-#define FMOD fmod
 #define MPI M_PI
 #endif
 
@@ -54,6 +51,7 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 typedef struct fn(StateContext) {
+    ftype u, v;
     ftype prev;
     ftype phase;
     ftype c[4][MAX_NB_COEFFS*2];
@@ -67,6 +65,14 @@ static int fn(init_state)(AVFilterContext *ctx, int nb_channels)
     s->state = av_calloc(nb_channels, sizeof(*stc));
     if (!s->state)
         return AVERROR(ENOMEM);
+    stc = s->state;
+    for (int ch = 0; ch < nb_channels; ch++) {
+        fn(StateContext) *st = &stc[ch];
+
+        st->u = cos(0);
+        st->v = sin(0);
+    }
+
     return 0;
 }
 
@@ -132,18 +138,17 @@ static void fn(ffilter_channel)(AVFilterContext *ctx, int ch,
     ftype *i2 = stc->c[2];
     ftype *o2 = stc->c[3];
     const int nb_coeffs = s->nb_coeffs;
-    const ftype *c = cname;
     const ftype level = s->level;
-    const ftype fs = in->sample_rate;
-    const ftype ts = ONE / fs;
-    const ftype shift = s->shift;
-    const ftype step = TWO * MPI * shift * ts;
-    ftype phase = stc->phase;
+    const ftype k1 = s->k1;
+    const ftype k2 = s->k2;
     ftype prev = stc->prev;
+    const ftype *c = cname;
+    ftype u = stc->u;
+    ftype v = stc->v;
 
     for (int n = 0; n < nb_samples; n++) {
         ftype xn1 = src[n], xn2 = prev;
-        ftype I, Q;
+        ftype I, Q, w;
 
         prev = xn1;
         for (int j = 0, k = nb_coeffs; j < nb_coeffs; j++, k++) {
@@ -162,10 +167,14 @@ static void fn(ffilter_channel)(AVFilterContext *ctx, int ch,
             xn2 = Q;
         }
 
-        phase = FMOD(phase + step, TWO*MPI);
-        dst[n] = (I * COS(phase) - Q * SIN(phase)) * level;
+        dst[n] = (I * u - Q * v) * level;
+
+        w = u - k1 * v;
+        v += k2 * w;
+        u = w - k1 * v;
     }
 
+    stc->u = u;
+    stc->v = v;
     stc->prev = prev;
-    stc->phase = phase;
 }
