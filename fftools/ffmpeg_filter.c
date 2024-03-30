@@ -1905,7 +1905,7 @@ static void send_command(FilterGraph *fg, AVFilterGraph *graph,
     }
 }
 
-static int choose_input(const FilterGraph *fg)
+static int choose_input(const FilterGraph *fg, const FilterGraphThread *fgt)
 {
     int nb_requests, nb_requests_max = -1;
     int best_input = -1;
@@ -1913,6 +1913,9 @@ static int choose_input(const FilterGraph *fg)
     for (int i = 0; i < fg->nb_inputs; i++) {
         InputFilter *ifilter = fg->inputs[i];
         InputFilterPriv *ifp = ifp_from_ifilter(ifilter);
+
+        if (fgt->eof_in[i])
+            continue;
 
         nb_requests = av_buffersrc_get_nb_failed_requests(ifp->filter);
         if (nb_requests > nb_requests_max) {
@@ -2407,7 +2410,7 @@ static int read_frames(FilterGraph *fg, FilterGraphThread *fgt,
 
         ret = avfilter_graph_request_oldest(fgt->graph);
         if (ret == AVERROR(EAGAIN)) {
-            fgt->next_in = choose_input(fg);
+            fgt->next_in = choose_input(fg, fgt);
             break;
         } else if (ret < 0) {
             if (ret == AVERROR_EOF)
