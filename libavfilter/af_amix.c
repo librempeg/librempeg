@@ -55,6 +55,8 @@ typedef struct MixContext {
     AVFloatDSPContext *fdsp;
 
     int nb_inputs;              /**< number of inputs */
+    int got_inputs;
+    int active_inputs;
     int duration_mode;          /**< mode for determining duration */
     float dropout_transition;   /**< transition time when an input drops out */
     float *weights_opt;         /**< array of custom weights for every input */
@@ -145,6 +147,8 @@ static int config_output(AVFilterLink *outlink)
     MixContext *s      = ctx->priv;
     char buf[64];
 
+    s->got_inputs      = 0;
+    s->active_inputs   = s->nb_inputs;
     s->first_input     = -1;
     s->planar          = av_sample_fmt_is_planar(outlink->format);
     s->sample_rate     = outlink->sample_rate;
@@ -182,6 +186,7 @@ static void free_frames(AVFilterContext *ctx)
     MixContext *s = ctx->priv;
 
     s->first_input = -1;
+    s->got_inputs = 0;
     s->nb_samples = 0;
     for (int i = 0; i < s->nb_inputs; i++)
         av_frame_free(&s->frames[i]);
@@ -268,11 +273,17 @@ static int activate(AVFilterContext *ctx)
 {
     AVFilterLink *outlink = ctx->outputs[0];
     MixContext *s = ctx->priv;
-    int status, ret, got_inputs = 0, active_inputs = s->nb_inputs;
+    int status, ret;
 
     FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
 
     for (int i = 0; i < s->nb_inputs; i++) {
+        if (s->input_state[i] == INPUT_OFF)
+            continue;
+
+        if (s->frames[i])
+            continue;
+
         if (ff_inlink_acknowledge_status(ctx->inputs[i], &status, &s->eof_pts)) {
             if (status == AVERROR_EOF)
                 s->input_state[i] |= INPUT_EOF;
@@ -283,39 +294,32 @@ static int activate(AVFilterContext *ctx)
         else
             s->input_state[i] &= ~INPUT_EMPTY;
 
-        if ((s->first_input < 0) && (s->input_state[i] != INPUT_OFF))
-            s->first_input = i;
-
-        if (s->frames[i]) {
-            got_inputs++;
-            if ((s->first_input == i) && (!s->nb_samples))
-                s->nb_samples = s->frames[i]->nb_samples;
-            continue;
-        } else if (s->input_state[i] == INPUT_OFF) {
-            active_inputs--;
-            if (!active_inputs ||
+        if (s->input_state[i] == INPUT_OFF) {
+            s->active_inputs--;
+            if (!s->active_inputs ||
                 (!i && (s->duration_mode == DURATION_FIRST)) ||
-                ((s->duration_mode == DURATION_SHORTEST) && active_inputs != s->nb_inputs)) {
+                ((s->duration_mode == DURATION_SHORTEST) && s->active_inputs != s->nb_inputs)) {
                 ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_pts);
                 return 0;
             }
             continue;
         }
 
-        if (s->first_input == i) {
+        if (s->first_input == -1) {
             ret = ff_inlink_consume_frame(ctx->inputs[i], &s->frames[i]);
             if (ret < 0)
                 return ret;
             if (ret > 0) {
-                got_inputs++;
+                s->got_inputs++;
                 s->nb_samples = s->frames[i]->nb_samples;
+                s->first_input = i;
             }
         } else if (s->nb_samples > 0) {
             ret = ff_inlink_consume_samples(ctx->inputs[i], s->nb_samples, s->nb_samples, &s->frames[i]);
             if (ret < 0)
                 return ret;
             if (ret > 0)
-                got_inputs++;
+                s->got_inputs++;
         }
 
         if (!s->frames[i] && !(s->input_state[i] & INPUT_EOF)) {
@@ -327,7 +331,7 @@ static int activate(AVFilterContext *ctx)
     if (!ff_outlink_frame_wanted(outlink))
         return 0;
 
-    if ((s->nb_samples > 0) && (active_inputs == got_inputs))
+    if ((s->nb_samples > 0) && (s->active_inputs == s->got_inputs))
         return output_frame(outlink);
 
     return FFERROR_NOT_READY;
