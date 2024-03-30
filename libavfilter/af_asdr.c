@@ -53,7 +53,7 @@ static int sdr_##name(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)\
     const int channels = u->ch_layout.nb_channels;                            \
     const int start = (channels * jobnr) / nb_jobs;                           \
     const int end = (channels * (jobnr+1)) / nb_jobs;                         \
-    const int nb_samples = u->nb_samples;                                     \
+    const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);               \
                                                                               \
     for (int ch = start; ch < end; ch++) {                                    \
         ChanStats *chs = &s->chs[ch];                                         \
@@ -86,7 +86,7 @@ static int sisdr_##name(AVFilterContext *ctx, void *arg,int jobnr,int nb_jobs)\
     const int channels = u->ch_layout.nb_channels;                            \
     const int start = (channels * jobnr) / nb_jobs;                           \
     const int end = (channels * (jobnr+1)) / nb_jobs;                         \
-    const int nb_samples = u->nb_samples;                                     \
+    const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);               \
                                                                               \
     for (int ch = start; ch < end; ch++) {                                    \
         ChanStats *chs = &s->chs[ch];                                         \
@@ -122,7 +122,7 @@ static int psnr_##name(AVFilterContext *ctx, void *arg, int jobnr,int nb_jobs)\
     const int channels = u->ch_layout.nb_channels;                            \
     const int start = (channels * jobnr) / nb_jobs;                           \
     const int end = (channels * (jobnr+1)) / nb_jobs;                         \
-    const int nb_samples = u->nb_samples;                                     \
+    const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);               \
                                                                               \
     for (int ch = start; ch < end; ch++) {                                    \
         ChanStats *chs = &s->chs[ch];                                         \
@@ -155,7 +155,7 @@ static int nrmse_##name(AVFilterContext *ctx, void *arg, int jobnr,int nb_jobs)\
     const int channels = u->ch_layout.nb_channels;                            \
     const int start = (channels * jobnr) / nb_jobs;                           \
     const int end = (channels * (jobnr+1)) / nb_jobs;                         \
-    const int nb_samples = u->nb_samples;                                     \
+    const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);               \
     const double current_sample = s->nb_samples + 1;                          \
                                                                               \
     for (int ch = start; ch < end; ch++) {                                    \
@@ -224,6 +224,9 @@ static int activate(AVFilterContext *ctx)
     for (int i = 0; i < 2; i++) {
         int64_t pts;
         int status;
+
+        if (ff_inlink_queued_samples(ctx->inputs[i]) || s->cache[i])
+            continue;
 
         if (ff_inlink_acknowledge_status(ctx->inputs[i], &status, &pts)) {
             ff_outlink_set_status(outlink, status, pts);
