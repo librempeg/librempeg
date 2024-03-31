@@ -351,6 +351,11 @@ static double floor_offset(const double *S, int size, double mean)
     return offset / mean;
 }
 
+static double get_power(double x, double y)
+{
+    return x*x + y*y;
+}
+
 static void process_frame(AVFilterContext *ctx,
                           AudioFFTDeNoiseContext *s, DeNoiseChannel *dnch,
                           double *prior, double *prior_band_excit, int track_noise)
@@ -369,18 +374,17 @@ static void process_frame(AVFilterContext *ctx,
     double *gain = dnch->gain;
 
     for (int i = 0; i < s->bin_count; i++) {
-        double sqr_new_gain, new_gain, power, mag, mag_abs_var, new_mag_abs_var;
+        double sqr_new_gain, new_gain, power, mag_abs_var, new_mag_abs_var;
 
         switch (s->format) {
         case AV_SAMPLE_FMT_FLTP:
-            noisy_data[i] = mag = hypot(fft_data_flt[i].re, fft_data_flt[i].im);
+            noisy_data[i] = power = get_power(fft_data_flt[i].re, fft_data_flt[i].im);
             break;
         case AV_SAMPLE_FMT_DBLP:
-            noisy_data[i] = mag = hypot(fft_data_dbl[i].re, fft_data_dbl[i].im);
+            noisy_data[i] = power = get_power(fft_data_dbl[i].re, fft_data_dbl[i].im);
             break;
         }
 
-        power = mag * mag;
         mag_abs_var = power / abs_var[i];
         new_mag_abs_var = ratio * prior[i] + rratio * fmax(mag_abs_var - 1.0, 0.0);
         new_gain = new_mag_abs_var / (1.0 + new_mag_abs_var);
