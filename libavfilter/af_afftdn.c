@@ -1080,24 +1080,27 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     return 0;
 }
 
-static int output_frame(AVFilterLink *inlink, AVFrame *in)
+static int output_subframe(AVFilterLink *inlink,
+                           AVFrame *in, AVFrame *out,
+                           const int doffset)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioFFTDeNoiseContext *s = ctx->priv;
     const int output_mode = ctx->is_disabled ? IN_MODE : s->output_mode;
     const int offset = s->window_length - s->sample_advance;
-    AVFrame *out;
+    const int in_nb_samples = FFMIN(in->nb_samples, s->sample_advance);
 
     for (int ch = 0; ch < s->channels; ch++) {
         uint8_t *src = (uint8_t *)s->winframe->extended_data[ch];
 
         memmove(src, src + s->sample_advance * s->sample_size,
                 offset * s->sample_size);
-        memcpy(src + offset * s->sample_size, in->extended_data[ch],
-               in->nb_samples * s->sample_size);
-        memset(src + s->sample_size * (offset + in->nb_samples), 0,
-               (s->sample_advance - in->nb_samples) * s->sample_size);
+        memcpy(src + offset * s->sample_size,
+               in->extended_data[ch] + doffset*s->sample_size,
+               in_nb_samples * s->sample_size);
+        memset(src + s->sample_size * (offset + in_nb_samples), 0,
+               (s->sample_advance - in_nb_samples) * s->sample_size);
     }
 
     if (s->track_noise) {
@@ -1169,35 +1172,23 @@ static int output_frame(AVFilterLink *inlink, AVFrame *in)
     ff_filter_execute(ctx, filter_channel, s->winframe, NULL,
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
-    if (av_frame_is_writable(in)) {
-        out = in;
-    } else {
-        out = ff_get_audio_buffer(outlink, in->nb_samples);
-        if (!out) {
-            av_frame_free(&in);
-            return AVERROR(ENOMEM);
-        }
-
-        av_frame_copy_props(out, in);
-    }
-
     for (int ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
         DeNoiseChannel *dnch = &s->dnch[ch];
         double *src = dnch->out_samples;
         const double *orig_dbl = (const double *)s->winframe->extended_data[ch];
         const float *orig_flt = (const float *)s->winframe->extended_data[ch];
-        double *dst_dbl = (double *)out->extended_data[ch];
-        float *dst_flt = (float *)out->extended_data[ch];
+        double *dst_dbl = ((double *)out->extended_data[ch])+doffset;
+        float *dst_flt = ((float *)out->extended_data[ch])+doffset;
 
         switch (output_mode) {
         case IN_MODE:
             switch (s->format) {
             case AV_SAMPLE_FMT_FLTP:
-                for (int m = 0; m < out->nb_samples; m++)
+                for (int m = 0; m < in_nb_samples; m++)
                     dst_flt[m] = orig_flt[m];
                 break;
             case AV_SAMPLE_FMT_DBLP:
-                for (int m = 0; m < out->nb_samples; m++)
+                for (int m = 0; m < in_nb_samples; m++)
                     dst_dbl[m] = orig_dbl[m];
                 break;
             }
@@ -1205,11 +1196,11 @@ static int output_frame(AVFilterLink *inlink, AVFrame *in)
         case OUT_MODE:
             switch (s->format) {
             case AV_SAMPLE_FMT_FLTP:
-                for (int m = 0; m < out->nb_samples; m++)
+                for (int m = 0; m < in_nb_samples; m++)
                     dst_flt[m] = src[m];
                 break;
             case AV_SAMPLE_FMT_DBLP:
-                for (int m = 0; m < out->nb_samples; m++)
+                for (int m = 0; m < in_nb_samples; m++)
                     dst_dbl[m] = src[m];
                 break;
             }
@@ -1217,19 +1208,16 @@ static int output_frame(AVFilterLink *inlink, AVFrame *in)
         case NOISE_MODE:
             switch (s->format) {
             case AV_SAMPLE_FMT_FLTP:
-                for (int m = 0; m < out->nb_samples; m++)
+                for (int m = 0; m < in_nb_samples; m++)
                     dst_flt[m] = orig_flt[m] - src[m];
                 break;
             case AV_SAMPLE_FMT_DBLP:
-                for (int m = 0; m < out->nb_samples; m++)
+                for (int m = 0; m < in_nb_samples; m++)
                     dst_dbl[m] = orig_dbl[m] - src[m];
                 break;
             }
             break;
         default:
-            if (in != out)
-                av_frame_free(&in);
-            av_frame_free(&out);
             return AVERROR_BUG;
         }
 
@@ -1237,9 +1225,7 @@ static int output_frame(AVFilterLink *inlink, AVFrame *in)
         memset(src + (s->window_length - s->sample_advance), 0, s->sample_advance * sizeof(*src));
     }
 
-    if (out != in)
-        av_frame_free(&in);
-    return ff_filter_frame(outlink, out);
+    return 0;
 }
 
 static int activate(AVFilterContext *ctx)
@@ -1247,16 +1233,36 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     AudioFFTDeNoiseContext *s = ctx->priv;
-    AVFrame *in = NULL;
-    int ret;
+    int ret, available, wanted;
+    AVFrame *in;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    ret = ff_inlink_consume_samples(inlink, s->sample_advance, s->sample_advance, &in);
+    available = ff_inlink_queued_samples(inlink);
+    wanted = FFMAX(s->sample_advance, (available / s->sample_advance) * s->sample_advance);
+    ret = ff_inlink_consume_samples(inlink, wanted, wanted, &in);
     if (ret < 0)
         return ret;
-    if (ret > 0)
-        return output_frame(inlink, in);
+    if (ret > 0) {
+        AVFrame *out;
+
+        if (av_frame_is_writable(in)) {
+            out = in;
+        } else {
+            out = ff_get_audio_buffer(outlink, in->nb_samples);
+            if (!out) {
+                av_frame_free(&in);
+                return AVERROR(ENOMEM);
+            }
+            av_frame_copy_props(out, in);
+        }
+
+        for (int offset = 0; offset < out->nb_samples; offset += s->sample_advance)
+            output_subframe(inlink, in, out, offset);
+        if (out != in)
+            av_frame_free(&in);
+        return ff_filter_frame(outlink, out);
+    }
 
     if (ff_inlink_queued_samples(inlink) >= s->sample_advance) {
         ff_filter_set_ready(ctx, 10);
