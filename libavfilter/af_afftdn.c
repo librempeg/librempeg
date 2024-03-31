@@ -20,7 +20,6 @@
 
 #include <float.h>
 
-#include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/opt.h"
 #include "libavutil/tx.h"
@@ -111,7 +110,8 @@ typedef struct AudioFFTDeNoiseContext {
     float   noise_reduction;
     float   noise_floor;
     int     noise_type;
-    char   *band_noise_str;
+    float   *band_noise_opt;
+    unsigned nb_band_noise_opt;
     float   residual_floor;
     int     track_noise;
     int     track_residual;
@@ -161,6 +161,9 @@ typedef struct AudioFFTDeNoiseContext {
 #define OFFSET(x) offsetof(AudioFFTDeNoiseContext, x)
 #define AF  AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 #define AFR AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_noise_bands = {.def=NULL,.size_min=0,.sep=' '};
 
 static const AVOption afftdn_options[] = {
     { "noise_reduction", "set the noise reduction",OFFSET(noise_reduction), AV_OPT_TYPE_FLOAT,{.dbl = 12},   .01, 97, AFR },
@@ -177,8 +180,8 @@ static const AVOption afftdn_options[] = {
     {  "s", "shellac noise",              0,                       AV_OPT_TYPE_CONST,  {.i64 = SHELLAC_NOISE}, 0,  0, AF, .unit = "type" },
     {  "custom", "custom noise",          0,                       AV_OPT_TYPE_CONST,  {.i64 = CUSTOM_NOISE},  0,  0, AF, .unit = "type" },
     {  "c", "custom noise",               0,                       AV_OPT_TYPE_CONST,  {.i64 = CUSTOM_NOISE},  0,  0, AF, .unit = "type" },
-    { "band_noise", "set the custom bands noise", OFFSET(band_noise_str),  AV_OPT_TYPE_STRING, {.str = 0},     0,  0, AF },
-    { "bn", "set the custom bands noise", OFFSET(band_noise_str),  AV_OPT_TYPE_STRING, {.str = 0},             0,  0, AF },
+    { "band_noise", "set the custom bands noise", OFFSET(band_noise_opt),  AV_OPT_TYPE_FLOAT|AR, {.arr=&def_noise_bands}, -24, 24, AF },
+    { "bn", "set the custom bands noise", OFFSET(band_noise_opt),  AV_OPT_TYPE_FLOAT|AR, {.arr=&def_noise_bands},         -24, 24, AF },
     { "residual_floor", "set the residual floor",OFFSET(residual_floor),  AV_OPT_TYPE_FLOAT, {.dbl =-38},    -80,-20, AFR },
     { "rf", "set the residual floor",     OFFSET(residual_floor),  AV_OPT_TYPE_FLOAT,  {.dbl =-38},          -80,-20, AFR },
     { "track_noise", "track noise",       OFFSET(track_noise),     AV_OPT_TYPE_BOOL,   {.i64 =  0},            0,  1, AFR },
@@ -539,35 +542,15 @@ static void set_band_parameters(AudioFFTDeNoiseContext *s,
 static void read_custom_noise(AudioFFTDeNoiseContext *s, int ch)
 {
     DeNoiseChannel *dnch = &s->dnch[ch];
-    char *custom_noise_str, *p, *arg, *saveptr = NULL;
     double band_noise[NB_PROFILE_BANDS] = { 0.f };
-    int ret;
+    int nb_noise_bands = FFMIN(NB_PROFILE_BANDS, s->nb_band_noise_opt);
 
-    if (!s->band_noise_str)
+    if (!nb_noise_bands)
         return;
 
-    custom_noise_str = p = av_strdup(s->band_noise_str);
-    if (!p)
-        return;
+    for (int i = 0; i < nb_noise_bands; i++)
+        band_noise[i] = s->band_noise_opt[i];
 
-    for (int i = 0; i < NB_PROFILE_BANDS; i++) {
-        float noise;
-
-        if (!(arg = av_strtok(p, "| ", &saveptr)))
-            break;
-
-        p = NULL;
-
-        ret = av_sscanf(arg, "%f", &noise);
-        if (ret != 1) {
-            av_log(s, AV_LOG_ERROR, "Custom band noise must be float.\n");
-            break;
-        }
-
-        band_noise[i] = av_clipd(noise, -24., 24.);
-    }
-
-    av_free(custom_noise_str);
     memcpy(dnch->band_noise, band_noise, sizeof(band_noise));
 }
 
