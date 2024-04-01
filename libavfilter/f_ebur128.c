@@ -1551,7 +1551,7 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
                 double *dst = (double *)out->data[0];
                 const double measured = get_loudness(s, s->dynamic_mode, s->mean_mode);
                 const double limit = s->target_tp - fmax(s->peaks[0], s->peaks[1]);
-                const double rangemin = -s->rangedown;
+                const double rangemin = fmin(-s->rangedown, limit);
                 const double rangemax = fmin(s->rangeup, limit);
                 const double target = av_clipd(s->target_i - measured, rangemin, rangemax);
                 const double new_offset = pow(10., target / 20.);
@@ -1671,7 +1671,7 @@ static const AVOption loudnorm_options[] = {
     {  "g",               "geometric",                         0,                        AV_OPT_TYPE_CONST,   {.i64 =  MM_GEOMETRIC},     0, 0,  FLAGS, "mean_mode" },
     {  "m",               "maximum",                           0,                        AV_OPT_TYPE_CONST,   {.i64 =  MM_MAXIMUM},       0, 0,  FLAGS, "mean_mode" },
     { "rangeup",          "set max expansion",                 OFFSET(rangeup),          AV_OPT_TYPE_DOUBLE,  {.dbl =  0},        0,      70,    FLAGS },
-    { "rangedown",        "set max compression",               OFFSET(rangedown),        AV_OPT_TYPE_DOUBLE,  {.dbl =  70},       0,      70,    FLAGS },
+    { "rangedown",        "set max compression",               OFFSET(rangedown),        AV_OPT_TYPE_DOUBLE,  {.dbl =  70},       1,      70,    FLAGS },
     { "attack",           "set attack",                        OFFSET(attack),           AV_OPT_TYPE_DOUBLE,  {.dbl =  1},        1,      2000,  FLAGS },
     { "release",          "set release",                       OFFSET(release),          AV_OPT_TYPE_DOUBLE,  {.dbl =  1},        1,      2000,  FLAGS },
     { NULL }
