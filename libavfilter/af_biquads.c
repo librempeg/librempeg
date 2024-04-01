@@ -88,6 +88,7 @@ enum FilterType {
     lowshelf,
     highshelf,
     tiltshelf,
+    transform,
 };
 
 enum WidthType {
@@ -123,6 +124,9 @@ typedef struct BiquadsContext {
     int block_samples;
 
     int bypass;
+
+    double fz, fp;
+    double qz, qp;
 
     double gain;
     double frequency;
@@ -697,6 +701,18 @@ static void convert_dir2zdf(BiquadsContext *s, int sample_rate)
         m[1] = k * (A * A - 1.);
         m[2] = 0.;
         break;
+    case transform:
+        A = s->fz / s->fp;
+        Q = s->qp / s->qz;
+        g = tan(M_PI * s->fp / sample_rate);
+        k = 1. / s->qp;
+        a[0] = 1. / (1. + g * (g + k));
+        a[1] = g * a[0];
+        a[2] = g * a[1];
+        m[0] = 1.;
+        m[1] = k * (A * Q - 1.);
+        m[2] = A * A - 1.;
+        break;
     case bass:
     case lowshelf:
         A = ff_exp10(s->gain / 40.);
@@ -805,13 +821,13 @@ static int config_filter(AVFilterLink *outlink, int reset)
     double K = tan(w0 / 2.);
     double alpha, beta;
 
-    s->bypass = (((w0 > M_PI || w0 <= 0.) && reset) || (s->width <= 0.)) && (s->filter_type != biquad);
+    s->bypass = (((w0 > M_PI || w0 <= 0.) && reset) || (s->width <= 0.)) && (s->filter_type != biquad && s->filter_type != transform);
     if (s->bypass) {
         av_log(ctx, AV_LOG_WARNING, "Invalid frequency and/or width!\n");
         return 0;
     }
 
-    if ((w0 > M_PI || w0 <= 0.) && (s->filter_type != biquad))
+    if ((w0 > M_PI || w0 <= 0.) && (s->filter_type != biquad && s->filter_type != transform))
         return AVERROR(EINVAL);
 
     switch (s->width_type) {
@@ -986,6 +1002,30 @@ static int config_filter(AVFilterLink *outlink, int reset)
             s->b_double[1] = -2 * cos(w0);
             s->b_double[2] =  1 + alpha;
         break;
+        }
+        break;
+    case transform:
+        {
+            double fs = inlink->sample_rate;
+            double fc = (s->fz + s->fp) / 2.0;
+
+            double d0i = pow(2.0 * M_PI * s->fz, 2.0);
+            double d1i = (2.0 * M_PI * s->fz) / s->qz;
+            double d2i = 1.0;
+
+            double c0i = pow(2.0 * M_PI * s->fp, 2.0);
+            double c1i = (2.0 * M_PI * s->fp) / s->qp;
+            double c2i = 1.0;
+
+            double gn = (2.0 * M_PI * fc) / tan(M_PI * fc / fs);
+            double cci = c0i + gn * c1i + pow(gn, 2.0) * c2i;
+
+            s->b_double[0] = (d0i + gn * d1i + pow(gn, 2.0) * d2i) / cci;
+            s->b_double[1] = 2.0 * (d0i - pow(gn, 2.0) * d2i) / cci;
+            s->b_double[2] = (d0i - gn * d1i + pow(gn, 2.0) * d2i) / cci;
+            s->a_double[0] = 1.0;
+            s->a_double[1] = (2.0 * (c0i - pow(gn, 2.0) * c2i) / cci);
+            s->a_double[2] = ((c0i - gn * c1i + pow(gn, 2.0) * c2i) / cci);
         }
         break;
     default:
@@ -1692,3 +1732,18 @@ static const AVOption biquad_options[] = {
 
 DEFINE_BIQUAD_FILTER(biquad, "Apply a biquad IIR filter with the given coefficients.");
 #endif  /* CONFIG_BIQUAD_FILTER */
+#if CONFIG_TRANSFORM_FILTER
+static const AVOption transform_options[] = {
+    {"fz", "source frequency",      OFFSET(fz), AV_OPT_TYPE_DOUBLE, {.dbl=1000}, 0, 999999, FLAGS},
+    {"qz", "source Q-Factor",       OFFSET(qz), AV_OPT_TYPE_DOUBLE, {.dbl=1},    0, 99999,  FLAGS},
+    {"fp", "destination frequency", OFFSET(fp), AV_OPT_TYPE_DOUBLE, {.dbl=1000}, 0, 999999, FLAGS},
+    {"qp", "destination Q-Factor",  OFFSET(qp), AV_OPT_TYPE_DOUBLE, {.dbl=1},    0, 99999,  FLAGS},
+    MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
+    TRANSFORM_OPTION(DI),
+    PRECISION_OPTION(-1),
+    BLOCKSIZE_OPTION(0),
+    {NULL}
+};
+
+DEFINE_BIQUAD_FILTER(transform, "Apply a Linkwitz transform IIR filter with the given Hz/Q.");
+#endif  /* CONFIG_TRANSFORM_FILTER */

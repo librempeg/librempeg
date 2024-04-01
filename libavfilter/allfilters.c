@@ -159,6 +159,7 @@ extern const AVFilter ff_af_stereowiden;
 extern const AVFilter ff_af_superequalizer;
 extern const AVFilter ff_af_surround;
 extern const AVFilter ff_af_tiltshelf;
+extern const AVFilter ff_af_transform;
 extern const AVFilter ff_af_treble;
 extern const AVFilter ff_af_tremolo;
 extern const AVFilter ff_af_vibrato;
