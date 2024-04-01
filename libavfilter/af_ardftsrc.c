@@ -70,6 +70,9 @@ static int query_formats(AVFilterContext *ctx)
     AVFilterFormats *formats = NULL;
     int ret, sample_rates[] = { s->sample_rate, -1 };
 
+    ret = ff_add_format(&formats, AV_SAMPLE_FMT_S16P);
+    if (ret)
+        return ret;
     ret = ff_add_format(&formats, AV_SAMPLE_FMT_FLTP);
     if (ret)
         return ret;
@@ -95,6 +98,10 @@ static int query_formats(AVFilterContext *ctx)
                           &ctx->outputs[0]->incfg.samplerates);
 }
 
+#define DEPTH 16
+#include "ardftsrc_template.c"
+
+#undef DEPTH
 #define DEPTH 32
 #include "ardftsrc_template.c"
 
@@ -129,15 +136,20 @@ static int config_input(AVFilterLink *inlink)
     s->channels = inlink->ch_layout.nb_channels;
 
     switch (inlink->format) {
+    case AV_SAMPLE_FMT_S16P:
+        s->do_src = src_s16;
+        s->src_uninit = src_uninit_s16;
+        ret = src_init_s16(ctx);
+        break;
     case AV_SAMPLE_FMT_FLTP:
-        s->do_src = src_float;
-        s->src_uninit = src_uninit_float;
-        ret = src_init_float(ctx);
+        s->do_src = src_fltp;
+        s->src_uninit = src_uninit_fltp;
+        ret = src_init_fltp(ctx);
         break;
     case AV_SAMPLE_FMT_DBLP:
-        s->do_src = src_double;
-        s->src_uninit = src_uninit_double;
-        ret = src_init_double(ctx);
+        s->do_src = src_dblp;
+        s->src_uninit = src_uninit_dblp;
+        ret = src_init_dblp(ctx);
         break;
     }
 

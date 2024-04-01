@@ -23,26 +23,38 @@
 
 #undef ctype
 #undef stype
+#undef itype
 #undef ftype
 #undef ttype
 #undef COS
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
-#if DEPTH == 32
-#define SAMPLE_FORMAT float
+#if DEPTH == 16
 #define COS cosf
 #define ctype AVComplexFloat
-#define ttype AVComplexFloat
-#define stype float
 #define ftype float
+#define itype int16_t
+#define SAMPLE_FORMAT s16
+#define stype float
+#define ttype AVComplexFloat
+#define TX_TYPE AV_TX_FLOAT_RDFT
+#elif DEPTH == 32
+#define COS cosf
+#define ctype AVComplexFloat
+#define ftype float
+#define itype float
+#define SAMPLE_FORMAT fltp
+#define stype float
+#define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #else
-#define SAMPLE_FORMAT double
 #define COS cos
 #define ctype AVComplexDouble
-#define ttype AVComplexDouble
-#define stype double
 #define ftype double
+#define itype double
+#define SAMPLE_FORMAT dblp
+#define stype double
+#define ttype AVComplexDouble
 #define TX_TYPE AV_TX_DOUBLE_RDFT
 #endif
 
@@ -158,11 +170,11 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
                    const int ch, const int soffset, const int doffset)
 {
     AudioRDFTSRCContext *s = ctx->priv;
-    const stype *src = ((const stype *)in->extended_data[ch]) + soffset;
+    const itype *src = ((const itype *)in->extended_data[ch]) + soffset;
     fn(StateContext) *state = s->state;
     fn(StateContext) *stc = &state[ch];
     stype *over = stc->over;
-    stype *dst = ((stype *)out->extended_data[ch]) + doffset;
+    itype *dst = ((itype *)out->extended_data[ch]) + doffset;
     stype *rdft0 = stc->rdft_in0;
     ctype *rdft1 = stc->rdft_in1;
     ctype *irdft0 = stc->rdft_out0;
@@ -178,7 +190,12 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 
     memset(rdft0, 0, in_offset * sizeof(*rdft0));
     memset(rdft0 + s->in_rdft_size - in_offset, 0, in_offset * sizeof(*rdft0));
+#if DEPTH == 16
+    for (int n = 0; n < copy_samples; n++)
+        rdft0[in_offset+n] = src[n] / F(1<<(DEPTH-1));
+#else
     memcpy(rdft0 + in_offset, src, copy_samples * sizeof(*rdft0));
+#endif
 
     stc->tx_fn(stc->tx_ctx, rdft1, rdft0, sizeof(*rdft0));
 
@@ -191,9 +208,16 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 
     stc->itx_fn(stc->itx_ctx, irdft1, irdft0, sizeof(*irdft0));
 
+#if DEPTH == 16
+    for (int n = 0; n < out_nb_samples; n++) {
+        dst[n] = irdft1[n] * F(1<<(DEPTH-1));
+        dst[n] += over[n] * F(1<<(DEPTH-1));
+    }
+#else
     memcpy(dst, irdft1, out_nb_samples * sizeof(*dst));
     for (int n = 0; n < out_nb_samples; n++)
         dst[n] += over[n];
+#endif
     memcpy(over, irdft1 + out_nb_samples, sizeof(*over) * out_nb_samples);
 
     return 0;
