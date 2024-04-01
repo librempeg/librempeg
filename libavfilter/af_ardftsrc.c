@@ -38,6 +38,7 @@ typedef struct AudioRDFTSRCContext {
     int taper_samples;
     int out_nb_samples;
     int channels;
+    float bandwidth;
 
     void *taper;
 
@@ -59,6 +60,7 @@ typedef struct AudioRDFTSRCContext {
 static const AVOption ardftsrc_options[] = {
     { "sample_rate", "set the sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=0}, 0, INT_MAX, FLAGS },
     { "quality", "set the quality", OFFSET(quality), AV_OPT_TYPE_INT, {.i64=1024}, 1, UINT16_MAX, FLAGS },
+    { "bandwidth", "set the bandwidth", OFFSET(bandwidth), AV_OPT_TYPE_FLOAT, {.dbl=0.98}, 0, 1, FLAGS },
     {NULL}
 };
 
@@ -123,7 +125,7 @@ static int config_input(AVFilterLink *inlink)
     s->in_rdft_size = s->in_nb_samples * 2;
     s->out_rdft_size = s->out_nb_samples * 2;
     s->tr_nb_samples = FFMIN(s->in_nb_samples, s->out_nb_samples);
-    s->taper_samples = (s->tr_nb_samples + 19) / 20;
+    s->taper_samples = lrint(s->tr_nb_samples * (1.0-s->bandwidth));
     av_log(ctx, AV_LOG_DEBUG, "%d: %d => %d\n", factor, s->in_rdft_size, s->out_rdft_size);
 
     s->over = ff_get_audio_buffer(inlink, s->out_rdft_size);
