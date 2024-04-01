@@ -43,15 +43,13 @@ typedef struct AudioRDFTSRCContext {
     void *taper;
 
     AVFrame *in;
-    AVFrame *over;
-    AVFrame *rdft_in[2];
-    AVFrame *rdft_out[2];
+
+    void *state;
 
     int (*do_src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
                   const int ch, const int soffset, const int doffset);
 
-    AVTXContext **tx_ctx, **itx_ctx;
-    av_tx_fn tx_fn, itx_fn;
+    void (*src_uninit)(AVFilterContext *ctx);
 } AudioRDFTSRCContext;
 
 #define OFFSET(x) offsetof(AudioRDFTSRCContext, x)
@@ -109,7 +107,7 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioRDFTSRCContext *s = ctx->priv;
-    int ret, channels, factor;
+    int ret, factor;
 
     if (inlink->sample_rate == outlink->sample_rate)
         return 0;
@@ -128,32 +126,18 @@ static int config_input(AVFilterLink *inlink)
     s->taper_samples = lrint(s->tr_nb_samples * (1.0-s->bandwidth));
     av_log(ctx, AV_LOG_DEBUG, "%d: %d => %d\n", factor, s->in_rdft_size, s->out_rdft_size);
 
-    s->over = ff_get_audio_buffer(inlink, s->out_rdft_size);
-
-    s->rdft_in[0] = ff_get_audio_buffer(inlink, s->in_rdft_size + 2);
-    s->rdft_in[1] = ff_get_audio_buffer(inlink, s->in_rdft_size + 2);
-
-    s->rdft_out[0] = ff_get_audio_buffer(inlink, s->out_rdft_size + 2);
-    s->rdft_out[1] = ff_get_audio_buffer(inlink, s->out_rdft_size + 2);
-
-    channels = inlink->ch_layout.nb_channels;
-    s->tx_ctx = av_calloc(channels, sizeof(*s->tx_ctx));
-    s->itx_ctx = av_calloc(channels, sizeof(*s->itx_ctx));
-    if (!s->tx_ctx || !s->itx_ctx || !s->over ||
-        !s->rdft_in[0] || !s->rdft_in[1] ||
-        !s->rdft_out[0] || !s->rdft_out[1])
-        return AVERROR(ENOMEM);
-
-    s->channels = channels;
+    s->channels = inlink->ch_layout.nb_channels;
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_FLTP:
         s->do_src = src_float;
-        ret = src_tx_init_float(ctx);
+        s->src_uninit = src_uninit_float;
+        ret = src_init_float(ctx);
         break;
     case AV_SAMPLE_FMT_DBLP:
         s->do_src = src_double;
-        ret = src_tx_init_double(ctx);
+        s->src_uninit = src_uninit_double;
+        ret = src_init_double(ctx);
         break;
     }
 
@@ -253,23 +237,8 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     AudioRDFTSRCContext *s = ctx->priv;
 
-    av_freep(&s->taper);
-
-    av_frame_free(&s->over);
-    av_frame_free(&s->rdft_in[0]);
-    av_frame_free(&s->rdft_in[1]);
-    av_frame_free(&s->rdft_out[0]);
-    av_frame_free(&s->rdft_out[1]);
-
-    for (int ch = 0; ch < s->channels; ch++) {
-        if (s->tx_ctx)
-            av_tx_uninit(&s->tx_ctx[ch]);
-        if (s->itx_ctx)
-            av_tx_uninit(&s->itx_ctx[ch]);
-    }
-
-    av_freep(&s->tx_ctx);
-    av_freep(&s->itx_ctx);
+    if (s->src_uninit)
+        s->src_uninit(ctx);
 }
 
 static const AVFilterPad inputs[] = {

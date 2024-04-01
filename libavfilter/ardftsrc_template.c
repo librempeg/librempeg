@@ -22,7 +22,9 @@
 #include "audio.h"
 
 #undef ctype
+#undef stype
 #undef ftype
+#undef ttype
 #undef COS
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
@@ -30,12 +32,16 @@
 #define SAMPLE_FORMAT float
 #define COS cosf
 #define ctype AVComplexFloat
+#define ttype AVComplexFloat
+#define stype float
 #define ftype float
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #else
 #define SAMPLE_FORMAT double
 #define COS cos
 #define ctype AVComplexDouble
+#define ttype AVComplexDouble
+#define stype double
 #define ftype double
 #define TX_TYPE AV_TX_DOUBLE_RDFT
 #endif
@@ -46,24 +52,96 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
-static int fn(src_tx_init)(AVFilterContext *ctx)
+typedef struct fn(StateContext) {
+    stype *over;
+    stype *rdft_in0;
+    ctype *rdft_in1;
+    ctype *rdft_out0;
+    stype *rdft_out1;
+
+    AVTXContext *tx_ctx, *itx_ctx;
+    av_tx_fn tx_fn, itx_fn;
+} fn(StateContext);
+
+static ftype fn(get_scale)(ftype in_size, ftype out_size)
+{
+    return F(1.0) / out_size;
+}
+
+static ftype fn(get_iscale)(ftype in_size, ftype out_size)
+{
+    return F(1.0) * out_size / in_size;
+}
+
+static void fn(src_uninit)(AVFilterContext *ctx)
+{
+    AudioRDFTSRCContext *s = ctx->priv;
+
+    if (s->state) {
+        fn(StateContext) *state = s->state;
+
+        for (int ch = 0; ch < s->channels; ch++) {
+            fn(StateContext) *stc = &state[ch];
+
+            av_freep(&stc->over);
+            av_tx_uninit(&stc->tx_ctx);
+            av_tx_uninit(&stc->itx_ctx);
+            av_freep(&stc->rdft_in0);
+            av_freep(&stc->rdft_out0);
+            av_freep(&stc->rdft_in1);
+            av_freep(&stc->rdft_out1);
+        }
+    }
+
+    av_freep(&s->state);
+    av_freep(&s->taper);
+}
+
+static int fn(src_init)(AVFilterContext *ctx)
 {
     AudioRDFTSRCContext *s = ctx->priv;
     const int taper_samples = s->taper_samples;
-    ctype *taper;
+    ftype iscale = fn(get_iscale)(s->in_rdft_size, s->out_rdft_size);
+    ftype scale = fn(get_scale)(s->in_rdft_size, s->out_rdft_size);
+    fn(StateContext) *state;
+    ttype *taper;
     int ret;
 
+    s->state = av_calloc(s->channels, sizeof(*state));
+    if (!s->state)
+        return AVERROR(ENOMEM);
+    state = s->state;
+
     for (int ch = 0; ch < s->channels; ch++) {
-        ftype scale = F(1.0) / s->out_rdft_size;
+        fn(StateContext) *stc = &state[ch];
 
-        ret = av_tx_init(&s->tx_ctx[ch], &s->tx_fn, TX_TYPE, 0, s->in_rdft_size, &scale, 0);
+        ret = av_tx_init(&stc->tx_ctx, &stc->tx_fn, TX_TYPE, 0, s->in_rdft_size, &scale, 0);
         if (ret < 0)
             return ret;
 
-        scale = (F(1.0) * s->out_rdft_size) / s->in_rdft_size;
-        ret = av_tx_init(&s->itx_ctx[ch], &s->itx_fn, TX_TYPE, 1, s->out_rdft_size, &scale, 0);
+        ret = av_tx_init(&stc->itx_ctx, &stc->itx_fn, TX_TYPE, 1, s->out_rdft_size, &iscale, 0);
         if (ret < 0)
             return ret;
+
+        stc->over = av_calloc(s->out_rdft_size, sizeof(*stc->over));
+        if (!stc->over)
+            return AVERROR(ENOMEM);
+
+        stc->rdft_in0 = av_calloc(s->in_rdft_size+2, sizeof(*stc->rdft_in0));
+        if (!stc->rdft_in0)
+            return AVERROR(ENOMEM);
+
+        stc->rdft_in1 = av_calloc(s->in_rdft_size+2, sizeof(*stc->rdft_in1));
+        if (!stc->rdft_in1)
+            return AVERROR(ENOMEM);
+
+        stc->rdft_out0 = av_calloc(s->out_rdft_size+2, sizeof(*stc->rdft_out0));
+        if (!stc->rdft_out0)
+            return AVERROR(ENOMEM);
+
+        stc->rdft_out1 = av_calloc(s->out_rdft_size+2, sizeof(*stc->rdft_out1));
+        if (!stc->rdft_out1)
+            return AVERROR(ENOMEM);
     }
 
     s->taper = av_calloc(taper_samples, sizeof(*taper));
@@ -80,13 +158,15 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
                    const int ch, const int soffset, const int doffset)
 {
     AudioRDFTSRCContext *s = ctx->priv;
-    const ftype *src = ((const ftype *)in->extended_data[ch]) + soffset;
-    ftype *over = (ftype *)s->over->extended_data[ch];
-    ftype *dst = ((ftype *)out->extended_data[ch]) + doffset;
-    ftype *rdft0 = (ftype *)s->rdft_in[0]->extended_data[ch];
-    ctype *rdft1 = (ctype *)s->rdft_in[1]->extended_data[ch];
-    ctype *irdft0 = (ctype *)s->rdft_out[0]->extended_data[ch];
-    ftype *irdft1 = (ftype *)s->rdft_out[1]->extended_data[ch];
+    const stype *src = ((const stype *)in->extended_data[ch]) + soffset;
+    fn(StateContext) *state = s->state;
+    fn(StateContext) *stc = &state[ch];
+    stype *over = stc->over;
+    stype *dst = ((stype *)out->extended_data[ch]) + doffset;
+    stype *rdft0 = stc->rdft_in0;
+    ctype *rdft1 = stc->rdft_in1;
+    ctype *irdft0 = stc->rdft_out0;
+    stype *irdft1 = stc->rdft_out1;
     const int out_nb_samples = s->out_nb_samples;
     const int in_nb_samples = s->in_nb_samples;
     const int tr_nb_samples = s->tr_nb_samples;
@@ -94,13 +174,13 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const int in_offset = (s->in_rdft_size - in_nb_samples) >> 1;
     const int offset = tr_nb_samples - taper_samples;
     const int copy_samples = FFMIN(s->in_nb_samples, in->nb_samples-soffset);
-    const ctype *taper = s->taper;
+    const ttype *taper = s->taper;
 
     memset(rdft0, 0, in_offset * sizeof(*rdft0));
     memset(rdft0 + s->in_rdft_size - in_offset, 0, in_offset * sizeof(*rdft0));
     memcpy(rdft0 + in_offset, src, copy_samples * sizeof(*rdft0));
 
-    s->tx_fn(s->tx_ctx[ch], rdft1, rdft0, sizeof(*rdft0));
+    stc->tx_fn(stc->tx_ctx, rdft1, rdft0, sizeof(*rdft0));
 
     memset(irdft0 + tr_nb_samples, 0, (s->out_rdft_size / 2 + 1 - tr_nb_samples) * sizeof(*irdft0));
     memcpy(irdft0, rdft1, tr_nb_samples * sizeof(*irdft0));
@@ -109,7 +189,7 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         irdft0[m].im *= taper[n].im;
     }
 
-    s->itx_fn(s->itx_ctx[ch], irdft1, irdft0, sizeof(*irdft0));
+    stc->itx_fn(stc->itx_ctx, irdft1, irdft0, sizeof(*irdft0));
 
     memcpy(dst, irdft1, out_nb_samples * sizeof(*dst));
     for (int n = 0; n < out_nb_samples; n++)
