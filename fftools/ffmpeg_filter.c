@@ -2327,7 +2327,6 @@ static int fg_output_step(OutputFilterPriv *ofp, FilterGraphThread *fgt,
                           AVFrame *frame)
 {
     FilterGraphPriv    *fgp = fgp_from_fg(ofp->ofilter.graph);
-    OutputStream       *ost = ofp->ofilter.ost;
     AVFilterContext *filter = ofp->filter;
     FrameData *fd;
     int ret;
@@ -2381,7 +2380,7 @@ static int fg_output_step(OutputFilterPriv *ofp, FilterGraphThread *fgt,
     if (!fgp->is_meta)
         fd->bits_per_raw_sample = 0;
 
-    if (ost->type == AVMEDIA_TYPE_VIDEO) {
+    if (ofp->ofilter.type == AVMEDIA_TYPE_VIDEO) {
         if (!frame->duration) {
             AVRational fr = av_buffersink_get_frame_rate(filter);
             if (fr.num > 0 && fr.den > 0)
