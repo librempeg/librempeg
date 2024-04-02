@@ -20,7 +20,6 @@
 
 #include <math.h>
 
-#include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/float_dsp.h"
 #include "libavutil/intmath.h"
@@ -43,7 +42,8 @@
 typedef struct HeadphoneContext {
     const AVClass *class;
 
-    char *map;
+    char **map;
+    unsigned nb_maps;
     int type;
 
     int lfe_channel;
@@ -102,14 +102,15 @@ static int parse_channel_name(const char *arg, enum AVChannel *rchannel)
 static void parse_map(AVFilterContext *ctx)
 {
     HeadphoneContext *s = ctx->priv;
-    char *arg, *tokenizer, *p;
     uint64_t used_channels = 0;
 
-    p = s->map;
-    while ((arg = av_strtok(p, "|", &tokenizer))) {
+    for (int i = 0; i < s->nb_maps; i++) {
         enum AVChannel out_channel;
+        const char *arg = s->map[i];
 
-        p = NULL;
+        if (s->nb_irs >= FF_ARRAY_ELEMS(s->mapping))
+            break;
+
         if (parse_channel_name(arg, &out_channel)) {
             av_log(ctx, AV_LOG_WARNING, "Failed to parse \'%s\' as channel name.\n", arg);
             continue;
@@ -674,7 +675,7 @@ static av_cold int init(AVFilterContext *ctx)
     if ((ret = ff_append_inpad(ctx, &pad)) < 0)
         return ret;
 
-    if (!s->map) {
+    if (!s->nb_maps) {
         av_log(ctx, AV_LOG_ERROR, "Valid mapping must be set.\n");
         return AVERROR(EINVAL);
     }
@@ -750,9 +751,12 @@ static av_cold void uninit(AVFilterContext *ctx)
 
 #define OFFSET(x) offsetof(HeadphoneContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_map = {.def=NULL,.size_min=1,.sep='|'};
 
 static const AVOption headphone_options[] = {
-    { "map",       "set channels convolution mappings",  OFFSET(map),      AV_OPT_TYPE_STRING, {.str=NULL},            .flags = FLAGS },
+    { "map",       "set channels convolution mappings",  OFFSET(map),   AV_OPT_TYPE_STRING|AR, {.arr=&def_map},        .flags = FLAGS },
     { "gain",      "set gain in dB",                     OFFSET(gain),     AV_OPT_TYPE_FLOAT,  {.dbl=0},     -20,  40, .flags = FLAGS },
     { "lfe",       "set lfe gain in dB",                 OFFSET(lfe_gain), AV_OPT_TYPE_FLOAT,  {.dbl=0},     -20,  40, .flags = FLAGS },
     { "type",      "set processing",                     OFFSET(type),     AV_OPT_TYPE_INT,    {.i64=1},       0,   1, .flags = FLAGS, .unit = "type" },
