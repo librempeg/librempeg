@@ -28,6 +28,7 @@
 
 #include "config_components.h"
 
+#include <float.h>
 #include <stdint.h>
 
 #include "libavutil/attributes.h"
@@ -63,6 +64,7 @@ typedef struct MovieContext {
     const AVClass *class;
     int64_t seek_point;   ///< seekpoint in microseconds
     double seek_point_d;
+    double duration_d;
     char *format_name;
     char *file_name;
     char *stream_specs; /**< user-provided list of streams, separated by + */
@@ -84,6 +86,9 @@ typedef struct MovieContext {
 
 #define OFFSET(x) offsetof(MovieContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_VIDEO_PARAM
+#define TFLAGS AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_RUNTIME_PARAM
+#define X AV_OPT_FLAG_EXPORT
+#define R AV_OPT_FLAG_READONLY
 
 static const AVOption movie_options[]= {
     { "filename",     NULL,                      OFFSET(file_name),    AV_OPT_TYPE_STRING,                                    .flags = FLAGS },
@@ -91,14 +96,15 @@ static const AVOption movie_options[]= {
     { "f",            "set format name",         OFFSET(format_name),  AV_OPT_TYPE_STRING,                                    .flags = FLAGS },
     { "stream_index", "set stream index",        OFFSET(stream_index), AV_OPT_TYPE_INT,    { .i64 = -1 }, -1, INT_MAX,                 FLAGS  },
     { "si",           "set stream index",        OFFSET(stream_index), AV_OPT_TYPE_INT,    { .i64 = -1 }, -1, INT_MAX,                 FLAGS  },
-    { "seek_point",   "set seekpoint (seconds)", OFFSET(seek_point_d), AV_OPT_TYPE_DOUBLE, { .dbl =  0 },  0, (INT64_MAX-1) / 1000000, FLAGS },
-    { "sp",           "set seekpoint (seconds)", OFFSET(seek_point_d), AV_OPT_TYPE_DOUBLE, { .dbl =  0 },  0, (INT64_MAX-1) / 1000000, FLAGS },
+    { "seek_point",   "set seekpoint (seconds)", OFFSET(seek_point_d), AV_OPT_TYPE_DOUBLE, {.dbl =  0},  0, (INT64_MAX-1) / 1000000, TFLAGS },
+    { "sp",           "set seekpoint (seconds)", OFFSET(seek_point_d), AV_OPT_TYPE_DOUBLE, {.dbl =  0},  0, (INT64_MAX-1) / 1000000, TFLAGS },
     { "streams",      "set streams",             OFFSET(stream_specs), AV_OPT_TYPE_STRING, {.str =  0},  0, 0, FLAGS },
     { "s",            "set streams",             OFFSET(stream_specs), AV_OPT_TYPE_STRING, {.str =  0},  0, 0, FLAGS },
     { "loop",         "set loop count",          OFFSET(loop_count),   AV_OPT_TYPE_INT,    {.i64 =  1},  0,        INT_MAX, FLAGS },
     { "discontinuity", "set discontinuity threshold", OFFSET(discontinuity_threshold), AV_OPT_TYPE_DURATION, {.i64 = 0}, 0, INT64_MAX, FLAGS },
     { "dec_threads",  "set the number of threads for decoding", OFFSET(dec_threads), AV_OPT_TYPE_INT, {.i64 =  0}, 0, INT_MAX, FLAGS },
     { "format_opts",  "set format options for the opened file", OFFSET(format_opts), AV_OPT_TYPE_DICT, {.str = NULL}, 0, 0, FLAGS},
+    { "duration",     "estimated stream duration (seconds)", OFFSET(duration_d), AV_OPT_TYPE_DOUBLE, {.dbl = 0}, -DBL_MAX, DBL_MAX, FLAGS|X|R},
     { NULL },
 };
 
@@ -457,6 +463,7 @@ static int movie_config_output_props(AVFilterLink *outlink)
     AVCodecParameters *c = st->st->codecpar;
 
     outlink->time_base = st->st->time_base;
+    movie->duration_d = st->st->duration * av_q2d(outlink->time_base);
 
     switch (c->codec_type) {
     case AVMEDIA_TYPE_VIDEO:
@@ -631,42 +638,18 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
                            char *res, int res_len, int flags)
 {
     MovieContext *movie = ctx->priv;
-    int ret = AVERROR(ENOSYS);
+    int ret;
 
-    if (!strcmp(cmd, "seek")) {
-        int idx, flags, i;
-        int64_t ts;
-        char tail[2];
-
-        if (sscanf(args, "%i|%"SCNi64"|%i %1s", &idx, &ts, &flags, tail) != 3)
-            return AVERROR(EINVAL);
-
-        ret = av_seek_frame(movie->format_ctx, idx, ts, flags);
-        if (ret < 0)
-            return ret;
-
-        for (i = 0; i < ctx->nb_outputs; i++) {
-            avcodec_flush_buffers(movie->st[i].codec_ctx);
-        }
+    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    if (ret < 0)
         return ret;
-    } else if (!strcmp(cmd, "get_duration")) {
-        int print_len;
-        char tail[2];
 
-        if (!res || res_len <= 0)
-            return AVERROR(EINVAL);
-
-        if (args && sscanf(args, "%1s", tail) == 1)
-            return AVERROR(EINVAL);
-
-        print_len = snprintf(res, res_len, "%"PRId64, movie->format_ctx->duration);
-        if (print_len < 0 || print_len >= res_len)
-            return AVERROR(EINVAL);
-
-        return 0;
+    if (!strcmp(cmd, "seek_point") || !strcmp(cmd, "sp")) {
+        movie->seek_point = movie->seek_point_d * 1000000 + 0.5;
+        return rewind_file(ctx);
     }
 
-    return ret;
+    return 0;
 }
 
 AVFILTER_DEFINE_CLASS_EXT(movie, "(a)movie", movie_options);
