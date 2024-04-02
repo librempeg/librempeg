@@ -42,7 +42,9 @@
 
 typedef struct PanContext {
     const AVClass *class;
-    char *args;
+    char *layout;
+    char **args;
+    unsigned nb_args;
     AVChannelLayout out_channel_layout;
     double gain[MAX_CHANNELS][MAX_CHANNELS];
     uint8_t need_renorm[MAX_CHANNELS];
@@ -94,34 +96,35 @@ static int parse_channel_name(char **arg, int *rchannel, int *rnamed)
 static av_cold int init(AVFilterContext *ctx)
 {
     PanContext *const pan = ctx->priv;
-    char *arg, *arg0, *tokenizer, *args = av_strdup(pan->args);
+    char *args = NULL;
     int out_ch_id, in_ch_id, len, named, ret, sign = 1;
     int nb_in_channels[2] = { 0, 0 }; // number of unnamed and named input channels
     int used_out_ch[MAX_CHANNELS] = {0};
     double gain;
 
-    if (!pan->args) {
+    if (!pan->layout || !pan->nb_args) {
         av_log(ctx, AV_LOG_ERROR,
-               "pan filter needs a channel layout and a set "
+               "pan filter needs a output channel layout and a set "
                "of channel definitions as parameter\n");
         return AVERROR(EINVAL);
     }
-    if (!args)
-        return AVERROR(ENOMEM);
-    arg = av_strtok(args, "|", &tokenizer);
-    if (!arg) {
-        av_log(ctx, AV_LOG_ERROR, "Channel layout not specified\n");
-        ret = AVERROR(EINVAL);
-        goto fail;
-    }
     ret = ff_parse_channel_layout(&pan->out_channel_layout,
-                                  &pan->nb_output_channels, arg, ctx);
+                                  &pan->nb_output_channels, pan->layout, ctx);
     if (ret < 0)
         goto fail;
 
     /* parse channel specifications */
-    while ((arg = arg0 = av_strtok(NULL, "|", &tokenizer))) {
+    for (int n = 0; n < pan->nb_args; n++) {
+        const char *arg0 = pan->args[n];
         int used_in_ch[MAX_CHANNELS] = {0};
+        char *arg;
+
+        av_freep(&args);
+        args = arg = av_strdup(pan->args[n]);
+        if (!args) {
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
         /* channel name */
         if (parse_channel_name(&arg, &out_ch_id, &named)) {
             av_log(ctx, AV_LOG_ERROR,
@@ -208,7 +211,7 @@ static av_cold int init(AVFilterContext *ctx)
 
     ret = 0;
 fail:
-    av_free(args);
+    av_freep(&args);
     return ret;
 }
 
@@ -398,9 +401,13 @@ static av_cold void uninit(AVFilterContext *ctx)
 }
 
 #define OFFSET(x) offsetof(PanContext, x)
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_mix = {.def=NULL,.size_min=1,.sep='|'};
 
 static const AVOption pan_options[] = {
-    { "args", NULL, OFFSET(args), AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
+    { "layout", "set the output channel layout", OFFSET(layout), AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
+    { "mix", "set the output channel mix gains", OFFSET(args),   AV_OPT_TYPE_STRING|AR, { .arr = &def_mix }, 0, 0, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { NULL }
 };
 
