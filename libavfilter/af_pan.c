@@ -45,7 +45,7 @@ typedef struct PanContext {
     char *args;
     AVChannelLayout out_channel_layout;
     double gain[MAX_CHANNELS][MAX_CHANNELS];
-    int64_t need_renorm;
+    uint8_t need_renorm[MAX_CHANNELS];
     int need_renumber;
     int nb_output_channels;
 
@@ -154,7 +154,7 @@ static av_cold int init(AVFilterContext *ctx)
         if (*arg == '=') {
             arg++;
         } else if (*arg == '<') {
-            pan->need_renorm |= (int64_t)1 << out_ch_id;
+            pan->need_renorm[out_ch_id] = 1;
             arg++;
         } else {
             av_log(ctx, AV_LOG_ERROR,
@@ -319,7 +319,7 @@ static int config_props(AVFilterLink *link)
     } else {
         // renormalize
         for (i = 0; i < pan->nb_output_channels; i++) {
-            if (!((pan->need_renorm >> i) & 1))
+            if (!pan->need_renorm[i])
                 continue;
             t = 0;
             for (j = 0; j < link->ch_layout.nb_channels; j++)
