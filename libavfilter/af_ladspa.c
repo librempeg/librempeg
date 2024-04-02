@@ -46,7 +46,8 @@ typedef struct LADSPAContext {
     const AVClass *class;
     char *dl_name;
     char *plugin;
-    char *options;
+    char **options;
+    unsigned nb_options;
     void *dl_handle;
 
     unsigned long nb_inputs;
@@ -83,13 +84,15 @@ typedef struct LADSPAContext {
 
 #define OFFSET(x) offsetof(LADSPAContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+static const AVOptionArrayDef def_controls = {.def=NULL,.size_min=0,.sep='|'};
 static const AVOption ladspa_options[] = {
     { "file", "set library name or full path", OFFSET(dl_name), AV_OPT_TYPE_STRING, .flags = FLAGS },
     { "f",    "set library name or full path", OFFSET(dl_name), AV_OPT_TYPE_STRING, .flags = FLAGS },
     { "plugin", "set plugin name", OFFSET(plugin), AV_OPT_TYPE_STRING, .flags = FLAGS },
     { "p",      "set plugin name", OFFSET(plugin), AV_OPT_TYPE_STRING, .flags = FLAGS },
-    { "controls", "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING, .flags = FLAGS },
-    { "c",        "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING, .flags = FLAGS },
+    { "controls", "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING|AR, {.arr=&def_controls}, .flags = FLAGS },
+    { "c",        "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING|AR, {.arr=&def_controls}, .flags = FLAGS },
     { "sample_rate", "set sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=44100}, 1, INT32_MAX, FLAGS },
     { "s",           "set sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=44100}, 1, INT32_MAX, FLAGS },
     { "nb_samples", "set the number of samples per requested frame", OFFSET(nb_samples), AV_OPT_TYPE_INT, {.i64=1024}, 1, INT_MAX, FLAGS },
@@ -489,7 +492,6 @@ static av_cold int init(AVFilterContext *ctx)
     const LADSPA_Descriptor *desc;
     LADSPA_PortDescriptor pd;
     AVFilterPad pad = { NULL };
-    char *p, *arg, *saveptr = NULL;
     unsigned long nb_ports;
     int i, j = 0, ret;
 
@@ -503,6 +505,7 @@ static av_cold int init(AVFilterContext *ctx)
         s->dl_handle = dlopen(s->dl_name, RTLD_LOCAL|RTLD_NOW);
     } else {
         // argument is a shared object name
+        char *p, *arg, *saveptr = NULL;
         char *paths = av_strdup(getenv("LADSPA_PATH"));
         const char *home_path = getenv("HOME");
         const char *separator = ":";
@@ -618,7 +621,7 @@ static av_cold int init(AVFilterContext *ctx)
     }
 
     // List Control Ports if "help" is specified
-    if (s->options && !strcmp(s->options, "help")) {
+    if (s->nb_options > 0 && !strcmp(s->options[0], "help")) {
         if (!s->nb_inputcontrols) {
             av_log(ctx, AV_LOG_INFO,
                    "The '%s' plugin does not have any input controls.\n",
@@ -634,14 +637,10 @@ static av_cold int init(AVFilterContext *ctx)
     }
 
     // Parse control parameters
-    p = s->options;
-    while (s->options) {
+    for (int i = 0; i < s->nb_options; i++) {
+        const char *arg = s->options[i];
         LADSPA_Data val;
         int ret;
-
-        if (!(arg = av_strtok(p, " |", &saveptr)))
-            break;
-        p = NULL;
 
         if (av_sscanf(arg, "c%d=%f", &i, &val) != 2) {
             if (av_sscanf(arg, "%f", &val) != 1) {
