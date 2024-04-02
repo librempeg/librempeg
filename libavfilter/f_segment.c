@@ -20,7 +20,6 @@
 
 #include <stdint.h>
 
-#include "libavutil/avstring.h"
 #include "libavutil/log.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/mem.h"
@@ -34,8 +33,10 @@
 typedef struct SegmentContext {
     const AVClass *class;
 
-    char *timestamps_str;
-    char *points_str;
+    char **timestamps_str;
+    unsigned nb_timestamps_opt;
+    char **points_str;
+    unsigned nb_points_opt;
     int use_timestamps;
 
     int current_point;
@@ -45,33 +46,15 @@ typedef struct SegmentContext {
     int64_t *points;
 } SegmentContext;
 
-static void count_points(char *item_str, int *nb_items)
-{
-    char *p;
-
-    if (!item_str)
-        return;
-
-    *nb_items = 1;
-    for (p = item_str; *p; p++) {
-        if (*p == '|')
-            (*nb_items)++;
-    }
-}
-
-static int parse_points(AVFilterContext *ctx, char *item_str, int nb_points, int64_t *points)
+static int parse_points(AVFilterContext *ctx, char **item_str, int nb_points, int64_t *points)
 {
     SegmentContext *s = ctx->priv;
-    char *arg, *p = item_str;
-    char *saveptr = NULL;
     int64_t ref, cur = 0;
     int ret = 0;
 
     for (int i = 0; i < nb_points; i++) {
-        if (!(arg = av_strtok(p, "|", &saveptr)))
-            return AVERROR(EINVAL);
+        const char *arg = item_str[i];
 
-        p = NULL;
         ref = 0;
         if (*arg == '+') {
             ref = cur;
@@ -100,24 +83,23 @@ static int parse_points(AVFilterContext *ctx, char *item_str, int nb_points, int
 static av_cold int init(AVFilterContext *ctx, enum AVMediaType type)
 {
     SegmentContext *s = ctx->priv;
-    char *split_str;
+    char **split_str;
     int ret;
 
-    if (s->timestamps_str && s->points_str) {
+    if (s->nb_timestamps_opt && s->nb_points_opt) {
         av_log(ctx, AV_LOG_ERROR, "Both timestamps and counts supplied.\n");
         return AVERROR(EINVAL);
-    } else if (s->timestamps_str) {
+    } else if (s->nb_timestamps_opt) {
         s->use_timestamps = 1;
         split_str = s->timestamps_str;
-    } else if (s->points_str) {
+        s->nb_points = s->nb_timestamps_opt;
+    } else if (s->nb_points_opt) {
         split_str = s->points_str;
+        s->nb_points = s->nb_points_opt;
     } else {
         av_log(ctx, AV_LOG_ERROR, "Neither timestamps nor durations nor counts supplied.\n");
         return AVERROR(EINVAL);
     }
-
-    count_points(split_str, &s->nb_points);
-    s->nb_points++;
 
     s->points = av_calloc(s->nb_points, sizeof(*s->points));
     if (!s->points)
@@ -260,8 +242,10 @@ static av_cold void uninit(AVFilterContext *ctx)
 }
 
 #define OFFSET(x) offsetof(SegmentContext, x)
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+static const AVOptionArrayDef def_timestamps = {.def=NULL,.size_min=0,.sep='|'};
 #define COMMON_OPTS \
-    { "timestamps", "timestamps of input at which to split input", OFFSET(timestamps_str),  AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, FLAGS }, \
+{ "timestamps", "timestamps of input at which to split input", OFFSET(timestamps_str),  AV_OPT_TYPE_STRING|AR, {.arr=&def_timestamps}, 0, 0, FLAGS }, \
 
 #if CONFIG_SEGMENT_FILTER
 
@@ -271,9 +255,10 @@ static av_cold int video_init(AVFilterContext *ctx)
 }
 
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+static const AVOptionArrayDef def_frames = {.def=NULL,.size_min=0,.sep='|'};
 static const AVOption segment_options[] = {
     COMMON_OPTS
-    { "frames", "frames at which to split input", OFFSET(points_str), AV_OPT_TYPE_STRING,  { .str = NULL }, 0, 0, FLAGS },
+    { "frames", "frames at which to split input", OFFSET(points_str), AV_OPT_TYPE_STRING|AR, {.arr=&def_frames}, 0, 0, FLAGS },
     { NULL }
 };
 #undef FLAGS
@@ -310,9 +295,10 @@ static av_cold int audio_init(AVFilterContext *ctx)
 }
 
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+static const AVOptionArrayDef def_samples = {.def=NULL,.size_min=0,.sep='|'};
 static const AVOption asegment_options[] = {
     COMMON_OPTS
-    { "samples", "samples at which to split input", OFFSET(points_str), AV_OPT_TYPE_STRING,  { .str = NULL }, 0, 0, FLAGS },
+    { "samples", "samples at which to split input", OFFSET(points_str), AV_OPT_TYPE_STRING|AR, {.arr=&def_samples}, 0, 0, FLAGS },
     { NULL }
 };
 #undef FLAGS
