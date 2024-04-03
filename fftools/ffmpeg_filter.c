@@ -1096,11 +1096,13 @@ int init_simple_filtergraph(InputStream *ist, OutputStream *ost,
              av_get_media_type_string(ost->type)[0],
              ost->file->index, ost->index);
 
-    if (fg->nb_inputs != 1 || fg->nb_outputs != 1) {
+    if (fg->nb_inputs != 1 || fg->nb_outputs != 1 ||
+        ifp_from_ifilter(fg->inputs[0])->type != fg->outputs[0]->type) {
         av_log(fg, AV_LOG_ERROR, "Simple filtergraph '%s' was expected "
-               "to have exactly 1 input and 1 output. "
-               "However, it had %d input(s) and %d output(s). Please adjust, "
-               "or use a complex filtergraph (-filter_complex) instead.\n",
+               "to have exactly 1 input and 1 output of same media type. "
+               "However, it had %d input(s) and %d output(s) and/or "
+               "different media types. Please adjust, or use a complex "
+               "filtergraph (-filter_complex) instead.\n",
                graph_desc, fg->nb_inputs, fg->nb_outputs);
         return AVERROR(EINVAL);
     }
