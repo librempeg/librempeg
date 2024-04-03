@@ -482,10 +482,8 @@ static int run_channel_cwt_prepare(AVFilterContext *ctx, void *arg, int jobnr, i
 
     if (fin) {
         const float *input = (const float *)fin->extended_data[ch];
-        const int offset = hop_size - fin->nb_samples;
 
-        memmove(cache, &cache[fin->nb_samples], offset * sizeof(*cache));
-        memcpy(&cache[offset], input, fin->nb_samples * sizeof(*cache));
+        memcpy(cache + s->hop_index, input, fin->nb_samples * sizeof(*cache));
     }
 
     if (fin && s->hop_index + fin->nb_samples < hop_size)
