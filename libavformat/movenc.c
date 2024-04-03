@@ -317,6 +317,7 @@ static int mov_write_sdtp_tag(AVIOContext *pb, MOVTrack *track)
     return update_size(pb, pos);
 }
 
+#if CONFIG_IAMFENC
 static int mov_write_iacb_tag(AVFormatContext *s, AVIOContext *pb, MOVTrack *track)
 {
     AVIOContext *dyn_bc;
@@ -342,6 +343,7 @@ static int mov_write_iacb_tag(AVFormatContext *s, AVIOContext *pb, MOVTrack *tra
 
     return update_size(pb, pos);
 }
+#endif
 
 static int mov_write_amr_tag(AVIOContext *pb, MOVTrack *track)
 {
@@ -1385,8 +1387,10 @@ static int mov_write_audio_tag(AVFormatContext *s, AVIOContext *pb, MOVMuxContex
         ret = mov_write_wave_tag(s, pb, track);
     else if (track->tag == MKTAG('m','p','4','a'))
         ret = mov_write_esds_tag(pb, track);
+#if CONFIG_IAMFENC
     else if (track->tag == MKTAG('i','a','m','f'))
         ret = mov_write_iacb_tag(mov->fc, pb, track);
+#endif
     else if (track->par->codec_id == AV_CODEC_ID_AMR_NB)
         ret = mov_write_amr_tag(pb, track);
     else if (track->par->codec_id == AV_CODEC_ID_AC3)
@@ -5519,6 +5523,7 @@ static int mov_write_ftyp_tag(AVIOContext *pb, AVFormatContext *s)
     int has_h264 = 0, has_av1 = 0, has_video = 0, has_dolby = 0;
     int has_iamf = 0;
 
+#if CONFIG_IAMFENC
     for (int i = 0; i < s->nb_stream_groups; i++) {
         const AVStreamGroup *stg = s->stream_groups[i];
 
@@ -5528,6 +5533,7 @@ static int mov_write_ftyp_tag(AVIOContext *pb, AVFormatContext *s)
             break;
         }
     }
+#endif
     for (int i = 0; i < mov->nb_streams; i++) {
         AVStream *st = mov->tracks[i].st;
         if (is_cover_image(st))
@@ -6654,6 +6660,7 @@ static int mov_write_subtitle_end_packet(AVFormatContext *s,
     return ret;
 }
 
+#if CONFIG_IAMFENC
 static int mov_build_iamf_packet(AVFormatContext *s, MOVTrack *trk, AVPacket *pkt)
 {
     int ret;
@@ -6704,6 +6711,7 @@ static int mov_build_iamf_packet(AVFormatContext *s, MOVTrack *trk, AVPacket *pk
 
     return ret;
 }
+#endif
 
 static int mov_write_packet(AVFormatContext *s, AVPacket *pkt)
 {
@@ -6717,6 +6725,7 @@ static int mov_write_packet(AVFormatContext *s, AVPacket *pkt)
 
     trk = s->streams[pkt->stream_index]->priv_data;
 
+#if CONFIG_IAMFENC
     if (trk->iamf) {
         int ret = mov_build_iamf_packet(s, trk, pkt);
         if (ret < 0) {
@@ -6727,6 +6736,7 @@ static int mov_write_packet(AVFormatContext *s, AVPacket *pkt)
             return ret;
         }
     }
+#endif
 
     if (is_cover_image(trk->st)) {
         int ret;
@@ -7066,10 +7076,12 @@ static void mov_free(AVFormatContext *s)
         ff_mov_cenc_free(&track->cenc);
         ffio_free_dyn_buf(&track->mdat_buf);
 
+#if CONFIG_IAMFENC
         ffio_free_dyn_buf(&track->iamf_buf);
         if (track->iamf)
             ff_iamf_uninit_context(track->iamf);
         av_freep(&track->iamf);
+#endif
 
         avpriv_packet_list_free(&track->squashed_packet_queue);
     }
@@ -7144,6 +7156,7 @@ static int mov_create_dvd_sub_decoder_specific_info(MOVTrack *track,
     return 0;
 }
 
+#if CONFIG_IAMFENC
 static int mov_init_iamf_track(AVFormatContext *s)
 {
     MOVMuxContext *mov = s->priv_data;
@@ -7203,6 +7216,7 @@ static int mov_init_iamf_track(AVFormatContext *s)
 
     return 0;
 }
+#endif
 
 static int mov_init(AVFormatContext *s)
 {
@@ -7341,6 +7355,7 @@ static int mov_init(AVFormatContext *s)
         s->streams[0]->disposition |= AV_DISPOSITION_DEFAULT;
     }
 
+#if CONFIG_IAMFENC
     for (i = 0; i < s->nb_stream_groups; i++) {
         AVStreamGroup *stg = s->stream_groups[i];
 
@@ -7361,6 +7376,7 @@ static int mov_init(AVFormatContext *s)
         if (!mov->nb_tracks) // We support one track for the entire IAMF structure
             mov->nb_tracks++;
     }
+#endif
 
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
@@ -7446,9 +7462,11 @@ static int mov_init(AVFormatContext *s)
         }
     }
 
+#if CONFIG_IAMFENC
     ret = mov_init_iamf_track(s);
     if (ret < 0)
         return ret;
+#endif
 
     for (int j = 0, i = 0; j < s->nb_streams; j++) {
         AVStream *st = s->streams[j];
