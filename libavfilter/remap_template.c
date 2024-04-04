@@ -141,6 +141,7 @@ static int fn(remap_packed)(AVFilterContext *ctx, void *arg,
     pixel_type *dst = (pixel_type *)out->data[0] + slice_start * dlinesize;
     const map_type *xmap = (const map_type *)xin->data[0] + slice_start * xlinesize;
     const map_type *ymap = (const map_type *)yin->data[0] + slice_start * ylinesize;
+    const int nb_components = td->nb_components;
     const int in_height = in->height;
     const int in_width = in->width;
     const int step = td->step / sizeof(pixel_type);
@@ -157,7 +158,7 @@ static int fn(remap_packed)(AVFilterContext *ctx, void *arg,
                 const float du = xmap[x] - xm;
                 const float dv = ymap[x] - ym;
 
-                for (int c = 0; c < td->nb_components; c++) {
+                for (int c = 0; c < nb_components; c++) {
                     float p0 = src[ym * slinesize + xm * step + c];
                     float p1 = src[ym * slinesize + xn * step + c];
                     float p2 = src[yn * slinesize + xm * step + c];
@@ -172,17 +173,17 @@ static int fn(remap_packed)(AVFilterContext *ctx, void *arg,
                     dst[x * step + c] = lrintf(sum);
                 }
             } else {
-                for (int c = 0; c < td->nb_components; c++) {
+                for (int c = 0; c < nb_components; c++) {
                     dst[x * step + c] = s->fill_color[c];
                 }
             }
 #else
             if (ymap[x] < in_height && xmap[x] < in_width) {
-                for (int c = 0; c < td->nb_components; c++) {
+                for (int c = 0; c < nb_components; c++) {
                     dst[x * step + c] = src[ymap[x] * slinesize + xmap[x] * step + c];
                 }
             } else {
-                for (int c = 0; c < td->nb_components; c++) {
+                for (int c = 0; c < nb_components; c++) {
                     dst[x * step + c] = s->fill_color[c];
                 }
             }
