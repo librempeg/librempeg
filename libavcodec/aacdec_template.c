@@ -1032,6 +1032,12 @@ static int decode_audio_specific_config_gb(AACDecContext *ac,
                                               m4ac, m4ac->chan_config)) < 0)
             return ret;
         break;
+    case AOT_USAC:
+    case AOT_USAC_NOSBR:
+        av_log(avctx, AV_LOG_WARNING,
+            "USAC is not supported by the native decoder."
+            " libfdk_aac can be used instead\n");
+        return AVERROR_DECODER_NOT_FOUND;
     default:
         avpriv_report_missing_feature(avctx,
                                       "Audio object type %s%d",

@@ -609,6 +609,8 @@ enum AVCodecID {
      * Null encoder/decoder discard all input and never return any output.
      */
     AV_CODEC_ID_ANULL,
+
+    AV_CODEC_ID_USAC,
 };
 
 /**

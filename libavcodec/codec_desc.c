@@ -3721,6 +3721,14 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "anull",
         .long_name = NULL_IF_CONFIG_SMALL("Null audio codec"),
     },
+    {
+        .id        = AV_CODEC_ID_USAC,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "usac",
+        .long_name = NULL_IF_CONFIG_SMALL("AAC USAC"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_aac_profiles),
+    },
 };
 
 static int descriptor_compare(const void *key, const void *member)

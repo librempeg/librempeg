@@ -487,3 +487,23 @@ const FFCodec ff_libfdk_aac_decoder = {
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
     .p.wrapper_name = "libfdk",
 };
+
+const FFCodec ff_libfdk_usac_decoder = {
+    .p.name         = "libfdk_aac",
+    CODEC_LONG_NAME("Fraunhofer FDK AAC (USAC)"),
+    .p.type         = AVMEDIA_TYPE_AUDIO,
+    .p.id           = AV_CODEC_ID_USAC,
+    .priv_data_size = sizeof(FDKAACDecContext),
+    .init           = fdk_aac_decode_init,
+    FF_CODEC_DECODE_CB(fdk_aac_decode_frame),
+    .close          = fdk_aac_decode_close,
+    .flush          = fdk_aac_decode_flush,
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_CHANNEL_CONF
+#if FDKDEC_VER_AT_LEAST(2, 5) // 2.5.10
+                      | AV_CODEC_CAP_DELAY
+#endif
+    ,
+    .p.priv_class   = &fdk_aac_dec_class,
+    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
+    .p.wrapper_name = "libfdk",
+};

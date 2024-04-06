@@ -2586,10 +2586,29 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
         // Also ensure that subtitle_header is properly set.
         if (!has_codec_parameters(st, NULL) && sti->request_probe <= 0 ||
             st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE) {
-            if (codec && !avctx->codec)
-                if (avcodec_open2(avctx, codec, options ? &options[i] : &thread_opt) < 0)
-                    av_log(ic, AV_LOG_WARNING,
-                           "Failed to open codec in %s\n", __func__);
+            if (codec && !avctx->codec) {
+                int open_ret = 0;
+                const AVCodec *fdk_fallback = NULL;
+                if ((open_ret = avcodec_open2(avctx, codec, options ? &options[i] : &thread_opt)) < 0) {
+                    if (codec->id == AV_CODEC_ID_AAC &&
+                        open_ret == AVERROR_DECODER_NOT_FOUND &&
+                        (fdk_fallback = avcodec_find_decoder_by_name("libfdk_aac"))) {
+                        codec = fdk_fallback;
+                        av_log(ic, AV_LOG_WARNING,
+                               "Try using libfdk_aac decoder for USAC stream in %s\n", __func__);
+                        if (!avcodec_open2(avctx, codec, options ? &options[i] : &thread_opt)) {
+                            avctx->codec_id = AV_CODEC_ID_USAC;
+                            avctx->codec_descriptor = avcodec_descriptor_get(AV_CODEC_ID_USAC);
+                        } else {
+                            av_log(ic, AV_LOG_WARNING,
+                                   "Failed to open codec in %s\n", __func__);
+                        }
+                    } else {
+                        av_log(ic, AV_LOG_WARNING,
+                               "Failed to open codec in %s\n", __func__);
+                    }
+                }
+            }
         }
         if (!options)
             av_dict_free(&thread_opt);
