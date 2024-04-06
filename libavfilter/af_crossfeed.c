@@ -136,6 +136,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in, int eof)
     AVFilterLink *outlink = ctx->outputs[0];
     CrossfeedContext *s = ctx->priv;
     const double *src = (const double *)in->data[0];
+    const int is_disabled = ctx->is_disabled;
     const double level_in = s->level_in;
     const double level_out = s->level_out;
     const double b0 = s->b0;
@@ -163,10 +164,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in, int eof)
         drop = 1;
 
     if (s->block_samples == 0) {
+        const int nb_samples = out->nb_samples;
         double w1 = s->w1;
         double w2 = s->w2;
 
-        for (int n = 0; n < out->nb_samples; n++, src += 2, dst += 2) {
+        for (int n = 0; n < nb_samples; n++, src += 2, dst += 2) {
             double mid = (src[0] + src[1]) * level_in * .5;
             double side = (src[0] - src[1]) * level_in * .5;
             double oside = side * b0 + w1;
@@ -174,7 +176,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in, int eof)
             w1 = b1 * side + w2 + a1 * oside;
             w2 = b2 * side + a2 * oside;
 
-            if (ctx->is_disabled) {
+            if (is_disabled) {
                 dst[0] = src[0];
                 dst[1] = src[1];
             } else {
@@ -186,12 +188,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in, int eof)
         s->w1 = w1;
         s->w2 = w2;
     } else if (eof) {
+        const int nb_samples = out->nb_samples;
         const double *src = (const double *)in->data[0];
         double *ssrc = s->side[1] + s->block_samples;
         double *msrc = s->mid;
 
-        for (int n = 0; n < out->nb_samples; n++, src += 2, dst += 2) {
-            if (ctx->is_disabled) {
+        for (int n = 0; n < nb_samples; n++, src += 2, dst += 2) {
+            if (is_disabled) {
                 dst[0] = src[0];
                 dst[1] = src[1];
             } else {
@@ -200,6 +203,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in, int eof)
             }
         }
     } else {
+        const int nb_samples = out->nb_samples;
         double *mdst = s->mid + s->block_samples;
         double *sdst = s->side[0] + s->block_samples;
         double *ssrc = s->side[0];
@@ -207,7 +211,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in, int eof)
         double w1 = s->w1;
         double w2 = s->w2;
 
-        for (int n = 0; n < out->nb_samples; n++, src += 2) {
+        for (int n = 0; n < nb_samples; n++, src += 2) {
             mdst[n] = (src[0] + src[1]) * level_in * .5;
             sdst[n] = (src[0] - src[1]) * level_in * .5;
         }
@@ -235,8 +239,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in, int eof)
 
         src = (const double *)in->data[0];
         ssrc = s->side[1];
-        for (int n = 0; n < out->nb_samples; n++, src += 2, dst += 2) {
-            if (ctx->is_disabled) {
+        for (int n = 0; n < nb_samples; n++, src += 2, dst += 2) {
+            if (is_disabled) {
                 dst[0] = src[0];
                 dst[1] = src[1];
             } else {
