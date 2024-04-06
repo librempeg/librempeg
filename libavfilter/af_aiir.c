@@ -64,12 +64,6 @@ typedef struct AudioIIRContext {
     int format;
     int process;
     int precision;
-    int response;
-    int w, h;
-    int ir_channel;
-    AVRational rate;
-
-    AVFrame *video;
 
     IIRChannel *iir;
     int channels;
@@ -81,24 +75,11 @@ typedef struct AudioIIRContext {
 static int query_formats(AVFilterContext *ctx)
 {
     AudioIIRContext *s = ctx->priv;
-    AVFilterFormats *formats;
     enum AVSampleFormat sample_fmts[] = {
         AV_SAMPLE_FMT_DBLP,
         AV_SAMPLE_FMT_NONE
     };
-    static const enum AVPixelFormat pix_fmts[] = {
-        AV_PIX_FMT_RGB0,
-        AV_PIX_FMT_NONE
-    };
     int ret;
-
-    if (s->response) {
-        AVFilterLink *videolink = ctx->outputs[1];
-
-        formats = ff_make_format_list(pix_fmts);
-        if ((ret = ff_formats_ref(formats, &videolink->incfg.formats)) < 0)
-            return ret;
-    }
 
     ret = ff_set_common_all_channel_counts(ctx);
     if (ret < 0)
@@ -1041,224 +1022,6 @@ static void check_stability(AVFilterContext *ctx, int channels)
     }
 }
 
-static void drawtext(AVFrame *pic, int x, int y, const char *txt, uint32_t color)
-{
-    const uint8_t *font;
-    int font_height;
-    int i;
-
-    font = avpriv_cga_font, font_height = 8;
-
-    for (i = 0; txt[i]; i++) {
-        int char_y, mask;
-
-        uint8_t *p = pic->data[0] + y * pic->linesize[0] + (x + i * 8) * 4;
-        for (char_y = 0; char_y < font_height; char_y++) {
-            for (mask = 0x80; mask; mask >>= 1) {
-                if (font[txt[i] * font_height + char_y] & mask)
-                    AV_WL32(p, color);
-                p += 4;
-            }
-            p += pic->linesize[0] - 8 * 4;
-        }
-    }
-}
-
-static void draw_line(AVFrame *out, int x0, int y0, int x1, int y1, uint32_t color)
-{
-    int dx = FFABS(x1-x0);
-    int dy = FFABS(y1-y0), sy = y0 < y1 ? 1 : -1;
-    int err = (dx>dy ? dx : -dy) / 2, e2;
-
-    for (;;) {
-        AV_WL32(out->data[0] + y0 * out->linesize[0] + x0 * 4, color);
-
-        if (x0 == x1 && y0 == y1)
-            break;
-
-        e2 = err;
-
-        if (e2 >-dx) {
-            err -= dy;
-            x0--;
-        }
-
-        if (e2 < dy) {
-            err += dx;
-            y0 += sy;
-        }
-    }
-}
-
-static double distance(double x0, double x1, double y0, double y1)
-{
-    return hypot(x0 - x1, y0 - y1);
-}
-
-static void get_response(int channel, int format, double w,
-                         const double *b, const double *a,
-                         int nb_b, int nb_a, double *magnitude, double *phase)
-{
-    double realz, realp;
-    double imagz, imagp;
-    double real, imag;
-    double div;
-
-    if (format == 0) {
-        realz = 0., realp = 0.;
-        imagz = 0., imagp = 0.;
-        for (int x = 0; x < nb_a; x++) {
-            realz += cos(-x * w) * a[x];
-            imagz += sin(-x * w) * a[x];
-        }
-
-        for (int x = 0; x < nb_b; x++) {
-            realp += cos(-x * w) * b[x];
-            imagp += sin(-x * w) * b[x];
-        }
-
-        div = realp * realp + imagp * imagp;
-        real = (realz * realp + imagz * imagp) / div;
-        imag = (imagz * realp - imagp * realz) / div;
-
-        *magnitude = hypot(real, imag);
-        *phase = atan2(imag, real);
-    } else {
-        double p = 1., z = 1.;
-        double acc = 0.;
-
-        for (int x = 0; x < nb_a; x++) {
-            z *= distance(cos(w), a[2 * x], sin(w), a[2 * x + 1]);
-            acc += atan2(sin(w) - a[2 * x + 1], cos(w) - a[2 * x]);
-        }
-
-        for (int x = 0; x < nb_b; x++) {
-            p *= distance(cos(w), b[2 * x], sin(w), b[2 * x + 1]);
-            acc -= atan2(sin(w) - b[2 * x + 1], cos(w) - b[2 * x]);
-        }
-
-        *magnitude = z / p;
-        *phase = acc;
-    }
-}
-
-static void draw_response(AVFilterContext *ctx, AVFrame *out, int sample_rate)
-{
-    AudioIIRContext *s = ctx->priv;
-    double *mag, *phase, *temp, *delay, min = DBL_MAX, max = -DBL_MAX;
-    double min_delay = DBL_MAX, max_delay = -DBL_MAX, min_phase, max_phase;
-    int prev_ymag = -1, prev_yphase = -1, prev_ydelay = -1;
-    char text[32];
-    int ch, i;
-
-    memset(out->data[0], 0, s->h * out->linesize[0]);
-
-    phase = av_malloc_array(s->w, sizeof(*phase));
-    temp = av_malloc_array(s->w, sizeof(*temp));
-    mag = av_malloc_array(s->w, sizeof(*mag));
-    delay = av_malloc_array(s->w, sizeof(*delay));
-    if (!mag || !phase || !delay || !temp)
-        goto end;
-
-    ch = av_clip(s->ir_channel, 0, s->channels - 1);
-    for (i = 0; i < s->w; i++) {
-        const double *b = s->iir[ch].ab[0];
-        const double *a = s->iir[ch].ab[1];
-        const int nb_b = s->iir[ch].nb_ab[0];
-        const int nb_a = s->iir[ch].nb_ab[1];
-        double w = i * M_PI / (s->w - 1);
-        double m, p;
-
-        get_response(ch, s->format, w, b, a, nb_b, nb_a, &m, &p);
-
-        mag[i] = s->iir[ch].g * m;
-        phase[i] = p;
-        min = fmin(min, mag[i]);
-        max = fmax(max, mag[i]);
-    }
-
-    temp[0] = 0.;
-    for (i = 0; i < s->w - 1; i++) {
-        double d = phase[i] - phase[i + 1];
-        temp[i + 1] = ceil(fabs(d) / (2. * M_PI)) * 2. * M_PI * ((d > M_PI) - (d < -M_PI));
-    }
-
-    min_phase = phase[0];
-    max_phase = phase[0];
-    for (i = 1; i < s->w; i++) {
-        temp[i] += temp[i - 1];
-        phase[i] += temp[i];
-        min_phase = fmin(min_phase, phase[i]);
-        max_phase = fmax(max_phase, phase[i]);
-    }
-
-    for (i = 0; i < s->w - 1; i++) {
-        double div = s->w / (double)sample_rate;
-
-        delay[i + 1] = -(phase[i] - phase[i + 1]) / div;
-        min_delay = fmin(min_delay, delay[i + 1]);
-        max_delay = fmax(max_delay, delay[i + 1]);
-    }
-    delay[0] = delay[1];
-
-    for (i = 0; i < s->w; i++) {
-        int ymag = mag[i] / max * (s->h - 1);
-        int ydelay = (delay[i] - min_delay) / (max_delay - min_delay) * (s->h - 1);
-        int yphase = (phase[i] - min_phase) / (max_phase - min_phase) * (s->h - 1);
-
-        ymag = s->h - 1 - av_clip(ymag, 0, s->h - 1);
-        yphase = s->h - 1 - av_clip(yphase, 0, s->h - 1);
-        ydelay = s->h - 1 - av_clip(ydelay, 0, s->h - 1);
-
-        if (prev_ymag < 0)
-            prev_ymag = ymag;
-        if (prev_yphase < 0)
-            prev_yphase = yphase;
-        if (prev_ydelay < 0)
-            prev_ydelay = ydelay;
-
-        draw_line(out, i,   ymag, FFMAX(i - 1, 0),   prev_ymag, 0xFFFF00FF);
-        draw_line(out, i, yphase, FFMAX(i - 1, 0), prev_yphase, 0xFF00FF00);
-        draw_line(out, i, ydelay, FFMAX(i - 1, 0), prev_ydelay, 0xFF00FFFF);
-
-        prev_ymag   = ymag;
-        prev_yphase = yphase;
-        prev_ydelay = ydelay;
-    }
-
-    if (s->w > 400 && s->h > 100) {
-        drawtext(out, 2, 2, "Max Magnitude:", 0xDDDDDDDD);
-        snprintf(text, sizeof(text), "%.2f", max);
-        drawtext(out, 15 * 8 + 2, 2, text, 0xDDDDDDDD);
-
-        drawtext(out, 2, 12, "Min Magnitude:", 0xDDDDDDDD);
-        snprintf(text, sizeof(text), "%.2f", min);
-        drawtext(out, 15 * 8 + 2, 12, text, 0xDDDDDDDD);
-
-        drawtext(out, 2, 22, "Max Phase:", 0xDDDDDDDD);
-        snprintf(text, sizeof(text), "%.2f", max_phase);
-        drawtext(out, 15 * 8 + 2, 22, text, 0xDDDDDDDD);
-
-        drawtext(out, 2, 32, "Min Phase:", 0xDDDDDDDD);
-        snprintf(text, sizeof(text), "%.2f", min_phase);
-        drawtext(out, 15 * 8 + 2, 32, text, 0xDDDDDDDD);
-
-        drawtext(out, 2, 42, "Max Delay:", 0xDDDDDDDD);
-        snprintf(text, sizeof(text), "%.2f", max_delay);
-        drawtext(out, 11 * 8 + 2, 42, text, 0xDDDDDDDD);
-
-        drawtext(out, 2, 52, "Min Delay:", 0xDDDDDDDD);
-        snprintf(text, sizeof(text), "%.2f", min_delay);
-        drawtext(out, 11 * 8 + 2, 52, text, 0xDDDDDDDD);
-    }
-
-end:
-    av_free(delay);
-    av_free(temp);
-    av_free(phase);
-    av_free(mag);
-}
-
 static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
@@ -1295,15 +1058,6 @@ static int config_output(AVFilterLink *outlink)
     }
     if (s->format > 0) {
         check_stability(ctx, inlink->ch_layout.nb_channels);
-    }
-
-    av_frame_free(&s->video);
-    if (s->response) {
-        s->video = ff_get_video_buffer(ctx->outputs[1], s->w, s->h);
-        if (!s->video)
-            return AVERROR(ENOMEM);
-
-        draw_response(ctx, s->video, inlink->sample_rate);
     }
 
     if (s->format == 0)
@@ -1389,7 +1143,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = ctx->outputs[0];
     ThreadData td;
     AVFrame *out;
-    int ch, ret;
+    int ch;
 
     if (av_frame_is_writable(in) && s->process != 2) {
         out = in;
@@ -1416,46 +1170,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (in != out)
         av_frame_free(&in);
 
-    if (s->response) {
-        AVFilterLink *outlink = ctx->outputs[1];
-        int64_t old_pts = s->video->pts;
-        int64_t new_pts = av_rescale_q(out->pts, ctx->inputs[0]->time_base, outlink->time_base);
-
-        if (new_pts > old_pts) {
-            AVFrame *clone;
-
-            s->video->pts = new_pts;
-            clone = av_frame_clone(s->video);
-            if (!clone)
-                return AVERROR(ENOMEM);
-            ret = ff_filter_frame(outlink, clone);
-            if (ret < 0)
-                return ret;
-        }
-    }
-
     return ff_filter_frame(outlink, out);
-}
-
-static int config_video(AVFilterLink *outlink)
-{
-    AVFilterContext *ctx = outlink->src;
-    AudioIIRContext *s = ctx->priv;
-
-    outlink->sample_aspect_ratio = (AVRational){1,1};
-    outlink->w = s->w;
-    outlink->h = s->h;
-    outlink->frame_rate = s->rate;
-    outlink->time_base = av_inv_q(outlink->frame_rate);
-
-    return 0;
 }
 
 static av_cold int init(AVFilterContext *ctx)
 {
     AudioIIRContext *s = ctx->priv;
-    AVFilterPad pad, vpad;
-    int ret;
 
     if (!s->a_str || !s->b_str || !s->g_str) {
         av_log(ctx, AV_LOG_ERROR, "Valid coefficients are mandatory.\n");
@@ -1468,28 +1188,6 @@ static av_cold int init(AVFilterContext *ctx)
     case 2: s->sample_format = AV_SAMPLE_FMT_S32P; break;
     case 3: s->sample_format = AV_SAMPLE_FMT_S16P; break;
     default: return AVERROR_BUG;
-    }
-
-    pad = (AVFilterPad){
-        .name         = "default",
-        .type         = AVMEDIA_TYPE_AUDIO,
-        .config_props = config_output,
-    };
-
-    ret = ff_append_outpad(ctx, &pad);
-    if (ret < 0)
-        return ret;
-
-    if (s->response) {
-        vpad = (AVFilterPad){
-            .name         = "filter_response",
-            .type         = AVMEDIA_TYPE_VIDEO,
-            .config_props = config_video,
-        };
-
-        ret = ff_append_outpad(ctx, &vpad);
-        if (ret < 0)
-            return ret;
     }
 
     return 0;
@@ -1511,8 +1209,6 @@ static av_cold void uninit(AVFilterContext *ctx)
         }
     }
     av_freep(&s->iir);
-
-    av_frame_free(&s->video);
 }
 
 static const AVFilterPad inputs[] = {
@@ -1520,6 +1216,14 @@ static const AVFilterPad inputs[] = {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
         .filter_frame = filter_frame,
+    },
+};
+
+static const AVFilterPad outputs[] = {
+    {
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_AUDIO,
+        .config_props = config_output,
     },
 };
 
@@ -1559,10 +1263,6 @@ static const AVOption aiir_options[] = {
     { "normalize", "normalize coefficients",       OFFSET(normalize),AV_OPT_TYPE_BOOL,   {.i64=1},     0, 1, AF },
     { "n", "normalize coefficients",               OFFSET(normalize),AV_OPT_TYPE_BOOL,   {.i64=1},     0, 1, AF },
     { "mix", "set mix",                            OFFSET(mix),      AV_OPT_TYPE_DOUBLE, {.dbl=1},     0, 1, AF },
-    { "response", "show IR frequency response",    OFFSET(response), AV_OPT_TYPE_BOOL,   {.i64=0},     0, 1, VF },
-    { "channel", "set IR channel to display frequency response", OFFSET(ir_channel), AV_OPT_TYPE_INT, {.i64=0}, 0, 1024, VF },
-    { "size",   "set video size",                  OFFSET(w),        AV_OPT_TYPE_IMAGE_SIZE, {.str = "hd720"}, 0, 0, VF },
-    { "rate",   "set video rate",                  OFFSET(rate),     AV_OPT_TYPE_VIDEO_RATE, {.str = "25"}, 0, INT32_MAX, VF },
     { NULL },
 };
 
@@ -1576,7 +1276,7 @@ const AVFilter ff_af_aiir = {
     .init          = init,
     .uninit        = uninit,
     FILTER_INPUTS(inputs),
+    FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC(query_formats),
-    .flags         = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
-                     AVFILTER_FLAG_SLICE_THREADS,
+    .flags         = AVFILTER_FLAG_SLICE_THREADS,
 };
