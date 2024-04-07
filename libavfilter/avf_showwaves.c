@@ -78,14 +78,13 @@ typedef struct ShowWavesContext {
     AVRational rate;
     uint32_t *colors;
     unsigned nb_colors;
-    int buf_idx;
     int16_t *buf_idy;    /* y coordinate of previous sample for each channel */
     int16_t *history;
     int history_filled;
     int history_nb_samples;
-    int history_index;
     AVFrame *outpicref;
     AVRational n, q, c;
+    int step_size;
     int pixstep;
     int mode;                   ///< ShowWavesMode
     int scale;                  ///< ShowWavesScale
@@ -93,6 +92,7 @@ typedef struct ShowWavesContext {
     int split_channels;
     int filter_mode;
     uint8_t *fg;
+    int64_t in_pts;
 
     int (*get_h)(int16_t sample, int height);
     void (*draw_sample)(uint8_t *buf, int height, int linesize,
@@ -427,44 +427,40 @@ static int config_output(AVFilterLink *outlink)
     uint8_t x;
     int ch;
 
-    s->q = av_make_q(0, 1);
-    s->c = av_make_q(0, 1);
-
     if (s->single_pic) {
-        s->n = av_make_q(1, 1);
         outlink->frame_rate = av_make_q(1, 1);
     } else {
-        if (!s->n.num || !s->n.den) {
-            s->n = av_mul_q(av_make_q(inlink->sample_rate,
-                                              s->w), av_inv_q(s->rate));
-            outlink->frame_rate = s->rate;
-        } else {
-            outlink->frame_rate = av_div_q(av_make_q(inlink->sample_rate, s->w), s->n);
-        }
+        outlink->frame_rate = s->rate;
     }
 
-    s->buf_idx = 0;
     if (!FF_ALLOCZ_TYPED_ARRAY(s->buf_idy, nb_channels))
         return AVERROR(ENOMEM);
 
     for (int i = 0; i < nb_channels; i++)
         s->buf_idy[i] = -1;
 
+    s->c = av_make_q(0, 1);
+
+    s->step_size = FFMAX(1, av_rescale(inlink->sample_rate, s->rate.den, s->rate.num));
+    if (s->n.num <= 0 || s->n.den <= 0 || s->n.num < s->n.den)
+        av_reduce(&s->n.num, &s->n.den, s->step_size, s->w, 256);
+    if (s->n.num <= 0 || s->n.den <= 0 || s->n.num < s->n.den)
+        s->n.num = s->n.den = 1;
+
     s->history_filled = 0;
-    s->history_nb_samples = FFMAX(nb_channels, av_rescale(s->w * nb_channels * 2,
-                                                          s->n.num, s->n.den));
-    s->history = av_calloc(s->history_nb_samples,
-                           sizeof(*s->history));
+    s->history_nb_samples = nb_channels * av_rescale_rnd(s->step_size, s->n.num,
+                                                         s->n.den, AV_ROUND_UP);
+    s->history = av_calloc(2 * s->history_nb_samples, sizeof(*s->history));
     if (!s->history)
         return AVERROR(ENOMEM);
 
+    outlink->sample_aspect_ratio = (AVRational){1,1};
     outlink->time_base = av_inv_q(outlink->frame_rate);
     outlink->w = s->w;
     outlink->h = s->h;
-    outlink->sample_aspect_ratio = (AVRational){1,1};
 
-    av_log(ctx, AV_LOG_VERBOSE, "s:%dx%d r:%f n:%f\n",
-           s->w, s->h, av_q2d(outlink->frame_rate), av_q2d(s->n));
+    av_log(ctx, AV_LOG_VERBOSE, "s:%dx%d r:%f n:%f h:%d\n",
+           s->w, s->h, av_q2d(outlink->frame_rate), av_q2d(s->n), s->step_size);
 
     switch (outlink->format) {
     case AV_PIX_FMT_GRAY8:
@@ -540,7 +536,7 @@ static int config_output(AVFilterLink *outlink)
 
     if (s->draw_mode == DRAW_SCALE) {
         /* multiplication factor, pre-computed to avoid in-loop divisions */
-        x = (s->n.den * 255) / ((s->split_channels ? 1 : nb_channels) * s->n.num);
+        x = 255.f / ((s->split_channels ? 1 : nb_channels) * av_q2d(s->n));
     } else {
         x = 255;
     }
@@ -565,24 +561,19 @@ static int config_output(AVFilterLink *outlink)
     return 0;
 }
 
-inline static int push_frame(AVFilterLink *outlink, int i, int64_t pts)
+inline static int push_frame(AVFilterLink *outlink, AVFrame *out, int64_t pts)
 {
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = ctx->inputs[0];
-    ShowWavesContext *s = outlink->src->priv;
+    ShowWavesContext *s = ctx->priv;
     int ret;
 
-    s->outpicref->duration = 1;
-    s->outpicref->pts = av_rescale_q(pts + i,
-                                             inlink->time_base,
-                                             outlink->time_base);
+    out->duration = 1;
+    out->pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
 
-    ret = ff_filter_frame(outlink, s->outpicref);
+    ret = ff_filter_frame(outlink, out);
     for (int i = 0; i < inlink->ch_layout.nb_channels; i++)
         s->buf_idy[i] = -1;
-
-    s->outpicref = NULL;
-    s->buf_idx = 0;
     return ret;
 }
 
@@ -652,7 +643,8 @@ static int push_single_pic(AVFilterLink *outlink)
         }
     }
 
-    return push_frame(outlink, 0, 0);
+    s->outpicref = NULL;
+    return push_frame(outlink, out, 0);
 }
 
 
@@ -670,20 +662,15 @@ static int request_frame(AVFilterLink *outlink)
     return ret;
 }
 
-static int alloc_out_frame(ShowWavesContext *s,
-                           AVFilterLink *outlink)
+static AVFrame *alloc_out_frame(ShowWavesContext *s,
+                                AVFilterLink *outlink)
 {
-    if (!s->outpicref) {
-        AVFrame *out = s->outpicref =
-            ff_get_video_buffer(outlink, outlink->w, outlink->h);
-        if (!out)
-            return AVERROR(ENOMEM);
-        out->width  = outlink->w;
-        out->height = outlink->h;
-        for (int j = 0; j < outlink->h; j++)
-            memset(out->data[0] + j*out->linesize[0], 0, outlink->w * s->pixstep);
-    }
-    return 0;
+    AVFrame *out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    if (!out)
+        return NULL;
+    for (int y = 0; y < outlink->h; y++)
+        memset(out->data[0] + y*out->linesize[0], 0, outlink->w * s->pixstep);
+    return out;
 }
 
 static av_cold int init(AVFilterContext *ctx)
@@ -700,86 +687,73 @@ static av_cold int init(AVFilterContext *ctx)
 
 #if CONFIG_SHOWWAVES_FILTER
 
-static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *insamples)
+static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     ShowWavesContext *s = ctx->priv;
-    const int nb_samples = insamples->nb_samples;
-    AVFrame *outpicref = s->outpicref;
-    const int16_t *p = (const int16_t *)insamples->data[0];
     int16_t *history = s->history;
     const int nb_channels = inlink->ch_layout.nb_channels;
-    int i, j, ret = 0, linesize;
     const int pixstep = s->pixstep;
     const int ch_height = s->split_channels ? outlink->h / nb_channels : outlink->h;
-    const int history_nb_samples = s->history_nb_samples;
     const int split_channels = s->split_channels;
-    const AVRational i_n = av_inv_q(s->n);
+    const AVRational in_q = av_inv_q(s->n);
     const AVRational u_q = av_make_q(1, 1);
-    const AVRational z_q = av_make_q(0, 1);
     int16_t *buf_idy = s->buf_idy;
-    int idx = s->history_index;
-    int buf_idx = s->buf_idx;
     const uint8_t *fg = s->fg;
     const int w = s->w;
+    ptrdiff_t linesize;
     uint8_t *dst;
+    AVFrame *out;
 
-    if (s->history_filled < history_nb_samples)
+    if (in) {
+        const int nb_samples = in->nb_samples;
+        const int16_t *p = (const int16_t *)in->data[0];
+
+        memcpy(history + s->history_filled, p, nb_samples * nb_channels * sizeof(*history));
         s->history_filled += nb_samples * nb_channels;
-
-    for (int n = 0; n < nb_samples * nb_channels; n++) {
-        history[idx++] = p[n];
-        if (idx >= history_nb_samples)
-            idx = 0;
+        s->in_pts = in->pts;
+        av_frame_free(&in);
     }
-    s->history_index = idx;
 
-    if (s->history_filled < history_nb_samples) {
-        av_frame_free(&insamples);
-        ff_filter_set_ready(ctx, 100);
+    if (s->history_filled < s->history_nb_samples) {
+        FF_FILTER_FORWARD_STATUS(inlink, outlink);
+        ff_inlink_request_frame(inlink);
         return 0;
     }
 
-    ret = alloc_out_frame(s, outlink);
-    if (ret < 0)
-        goto end;
-    outpicref = s->outpicref;
-    linesize = outpicref->linesize[0];
+    out = alloc_out_frame(s, outlink);
+    if (out == NULL)
+        return AVERROR(ENOMEM);
 
     /* draw data in the buffer */
-    dst = outpicref->data[0];
-    for (i = 0; i < history_nb_samples; i++) {
-        for (j = 0; j < nb_channels; j++) {
-            uint8_t *buf = dst + buf_idx * pixstep;
+    dst = out->data[0];
+    linesize = out->linesize[0];
+    for (int i = 0, k = 0;;) {
+        s->c = av_add_q(s->c, in_q);
+        if (av_cmp_q(s->c, u_q) >= 0) {
+            s->c = av_sub_q(s->c, u_q);
+            i++;
+            if (i >= w)
+                break;
+        }
+
+        for (int j = 0; j < nb_channels; j++, k++) {
+            uint8_t *buf = dst + i * pixstep;
             int h;
 
             if (split_channels)
                 buf += j*ch_height*linesize;
-            h = s->get_h(history[idx++], ch_height);
-            if (idx >= history_nb_samples)
-                idx = 0;
+            h = s->get_h(history[k], ch_height);
             s->draw_sample(buf, ch_height, linesize,
-                                   &buf_idy[j], &fg[j * 4], h);
+                           &buf_idy[j], &fg[j * 4], h);
         }
-
-        s->c = av_add_q(s->c, i_n);
-        if (av_cmp_q(s->c, u_q) >= 0) {
-            s->c = z_q;
-            buf_idx++;
-        }
-        if (buf_idx == w)
-            break;
     }
 
-    s->buf_idx = buf_idx;
+    s->history_filled -= s->step_size * nb_channels;
+    memmove(history, history + s->step_size * nb_channels, s->history_filled * sizeof(*history));
 
-    if ((ret = push_frame(outlink, history_nb_samples - i - 1, insamples->pts)) < 0)
-        goto end;
-    outpicref = s->outpicref;
-end:
-    av_frame_free(&insamples);
-    return ret;
+    return push_frame(outlink, out, s->in_pts);
 }
 
 static int activate(AVFilterContext *ctx)
@@ -787,22 +761,16 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     ShowWavesContext *s = ctx->priv;
-    AVRational q;
     AVFrame *in;
-    int nb_samples;
     int ret;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    q = av_add_q(s->q, av_mul_q(av_make_q(outlink->w, 1), s->n));
-    nb_samples = FFMAX(1, (q.num + (q.den / 2)) / q.den);
-    ret = ff_inlink_consume_samples(inlink, nb_samples, nb_samples, &in);
+    ret = ff_inlink_consume_samples(inlink, s->step_size, s->step_size, &in);
     if (ret < 0)
         return ret;
-    if (ret > 0) {
-        s->q = av_sub_q(q, av_make_q(nb_samples, 1));
+    if (ret > 0)
         return showwaves_filter_frame(inlink, in);
-    }
 
     FF_FILTER_FORWARD_STATUS(inlink, outlink);
     FF_FILTER_FORWARD_WANTED(outlink, inlink);
@@ -883,9 +851,12 @@ static int showwavespic_filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     if (s->single_pic) {
         struct frame_node *f;
 
-        ret = alloc_out_frame(s, outlink);
-        if (ret < 0)
+        if (!s->outpicref)
+            s->outpicref = alloc_out_frame(s, outlink);
+        if (!s->outpicref) {
+            ret = AVERROR(ENOMEM);
             goto end;
+        }
 
         /* queue the audio frame */
         f = av_malloc(sizeof(*f));
