@@ -76,7 +76,8 @@ typedef struct ShowWavesContext {
     const AVClass *class;
     int w, h;
     AVRational rate;
-    char *colors;
+    uint32_t *colors;
+    unsigned nb_colors;
     int buf_idx;
     int16_t *buf_idy;    /* y coordinate of previous sample for each channel */
     int16_t *history;
@@ -107,6 +108,9 @@ typedef struct ShowWavesContext {
 
 #define OFFSET(x) offsetof(ShowWavesContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_colors = {.def="red|green|blue|yellow|orange|lime|pink|magenta|brown",.size_min=1,.sep='|'};
 
 static const AVOption showwaves_options[] = {
     { "size", "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "600x240"}, 0, 0, FLAGS },
@@ -120,7 +124,7 @@ static const AVOption showwaves_options[] = {
     { "rate", "set video rate", OFFSET(rate), AV_OPT_TYPE_VIDEO_RATE, {.str = "25"}, 0, INT_MAX, FLAGS },
     { "r",    "set video rate", OFFSET(rate), AV_OPT_TYPE_VIDEO_RATE, {.str = "25"}, 0, INT_MAX, FLAGS },
     { "split_channels", "draw channels separately", OFFSET(split_channels), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, FLAGS },
-    { "colors", "set channels colors", OFFSET(colors), AV_OPT_TYPE_STRING, {.str = "red|green|blue|yellow|orange|lime|pink|magenta|brown" }, 0, 0, FLAGS },
+    { "colors", "set channels colors", OFFSET(colors), AV_OPT_TYPE_COLOR|AR, {.arr=&def_colors}, 0, 0, FLAGS },
     { "scale", "set amplitude scale", OFFSET(scale), AV_OPT_TYPE_INT, {.i64 = 0 }, 0, SCALE_NB-1, FLAGS, .unit="scale" },
         { "lin", "linear",         0, AV_OPT_TYPE_CONST, {.i64=SCALE_LIN}, .flags=FLAGS, .unit="scale"},
         { "log", "logarithmic",    0, AV_OPT_TYPE_CONST, {.i64=SCALE_LOG}, .flags=FLAGS, .unit="scale"},
@@ -420,7 +424,6 @@ static int config_output(AVFilterLink *outlink)
     AVFilterLink *inlink = ctx->inputs[0];
     ShowWavesContext *s = ctx->priv;
     int nb_channels = inlink->ch_layout.nb_channels;
-    char *colors, *saveptr = NULL;
     uint8_t x;
     int ch;
 
@@ -535,10 +538,6 @@ static int config_output(AVFilterLink *outlink)
     if (!s->fg)
         return AVERROR(ENOMEM);
 
-    colors = av_strdup(s->colors);
-    if (!colors)
-        return AVERROR(ENOMEM);
-
     if (s->draw_mode == DRAW_SCALE) {
         /* multiplication factor, pre-computed to avoid in-loop divisions */
         x = (s->n.den * 255) / ((s->split_channels ? 1 : nb_channels) * s->n.num);
@@ -549,11 +548,10 @@ static int config_output(AVFilterLink *outlink)
         uint8_t fg[4] = { 0xff, 0xff, 0xff, 0xff };
 
         for (ch = 0; ch < nb_channels; ch++) {
-            char *color;
+            const int idx = FFMIN(ch, s->nb_colors-1);
 
-            color = av_strtok(ch == 0 ? colors : NULL, " |", &saveptr);
-            if (color)
-                av_parse_color(fg, color, -1, ctx);
+            AV_WN32(fg, s->colors[idx]);
+
             s->fg[4*ch + 0] = fg[0] * x / 255.;
             s->fg[4*ch + 1] = fg[1] * x / 255.;
             s->fg[4*ch + 2] = fg[2] * x / 255.;
@@ -563,7 +561,6 @@ static int config_output(AVFilterLink *outlink)
         for (ch = 0; ch < nb_channels; ch++)
             s->fg[4 * ch + 0] = x;
     }
-    av_free(colors);
 
     return 0;
 }
