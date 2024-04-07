@@ -114,6 +114,7 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
     const int buffer_samples = s->buffer_samples;
+    const int nb_samples = in->nb_samples;
     const double a = s->attack;
     const double b = 1. - a;
     const double c = s->release;
@@ -131,11 +132,11 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
         if (bypass) {
             if (in != out)
                 memcpy(out->extended_data[ch], in->extended_data[ch],
-                       in->nb_samples * sizeof(double));
+                       nb_samples * sizeof(double));
             continue;
         }
 
-        for (int n = 0; n < in->nb_samples; n++) {
+        for (int n = 0; n < nb_samples; n++) {
             double out_sample, boost;
 
             out_sample = src[n] * b0 + w[0];
