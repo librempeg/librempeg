@@ -16,21 +16,17 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#undef ZERO
-#undef ONE
 #undef ftype
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
 #define ftype float
-#define ONE 1.f
-#define ZERO 0.f
 #else
 #define SAMPLE_FORMAT double
 #define ftype double
-#define ONE 1.0
-#define ZERO 0.0
 #endif
+
+#define F(x) ((ftype)(x))
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
@@ -75,7 +71,7 @@ static int fn(lup_decompose)(ftype **MA, const int N, const ftype tol, int *P)
         P[i] = i;
 
     for (int i = 0; i < N; i++) {
-        ftype maxA = ZERO;
+        ftype maxA = F(0.0);
         int imax = i;
 
         for (int k = i; k < N; k++) {
@@ -110,7 +106,7 @@ static void fn(lup_invert)(ftype *const *MA, const int *P, const int N, ftype **
 {
     for (int j = 0; j < N; j++) {
         for (int i = 0; i < N; i++) {
-            IA[i][j] = P[i] == j ? ONE : ZERO;
+            IA[i][j] = P[i] == j ? F(1.0) : F(0.0);
 
             for (int k = 0; k < i; k++)
                 IA[i][j] -= MA[i][k] * IA[k][j];
@@ -157,7 +153,7 @@ static ftype fn(process_sample)(AudioAPContext *s, ftype input, ftype desired, i
         const int iprojection = i * projection;
 
         for (int j = i; j < projection; j++) {
-            ftype sum = ZERO;
+            ftype sum = F(0.0);
             for (int k = 0; k < order; k++)
                 sum += x[offset[2] + i + k] * x[offset[2] + j + k];
             tmpm[iprojection + j] = sum;
@@ -172,14 +168,14 @@ static ftype fn(process_sample)(AudioAPContext *s, ftype input, ftype desired, i
     fn(lup_invert)(tmpmp, p, projection, itmpmp);
 
     for (int i = 0; i < projection; i++) {
-        ftype sum = ZERO;
+        ftype sum = F(0.0);
         for (int j = 0; j < projection; j++)
             sum += itmpmp[i][j] * e[j + offset[1]];
         w[i] = sum;
     }
 
     for (int i = 0; i < order; i++) {
-        ftype sum = ZERO;
+        ftype sum = F(0.0);
         for (int j = 0; j < projection; j++)
             sum += x[offset[2] + i + j] * w[j];
         dcoeffs[i] = sum;
