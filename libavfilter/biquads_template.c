@@ -132,10 +132,10 @@ static void fn(biquad_di)(BiquadsContext *s,
             obuf[i] = out;
         }
     }
-    fcache[0] = i1;
-    fcache[1] = i2;
-    fcache[2] = o1;
-    fcache[3] = o2;
+    fcache[0] = isnormal(i1) ? i1 : F(0.0);
+    fcache[1] = isnormal(i2) ? i2 : F(0.0);
+    fcache[2] = isnormal(o1) ? o1 : F(0.0);
+    fcache[3] = isnormal(o2) ? o2 : F(0.0);
 }
 
 static void fn(biquad_dii)(BiquadsContext *s,
@@ -177,8 +177,8 @@ static void fn(biquad_dii)(BiquadsContext *s,
             obuf[i] = out;
         }
     }
-    fcache[0] = w1;
-    fcache[1] = w2;
+    fcache[0] = isnormal(w1) ? w1 : F(0.0);
+    fcache[1] = isnormal(w2) ? w2 : F(0.0);
 }
 
 static void fn(biquad_tdi)(BiquadsContext *s,
@@ -226,10 +226,10 @@ static void fn(biquad_tdi)(BiquadsContext *s,
         }
     }
 
-    fcache[0] = s1;
-    fcache[1] = s2;
-    fcache[2] = s3;
-    fcache[3] = s4;
+    fcache[0] = isnormal(s1) ? s1 : F(0.0);
+    fcache[1] = isnormal(s2) ? s2 : F(0.0);
+    fcache[2] = isnormal(s3) ? s3 : F(0.0);
+    fcache[3] = isnormal(s4) ? s4 : F(0.0);
 }
 
 static void fn(biquad_tdii)(BiquadsContext *s,
@@ -270,8 +270,8 @@ static void fn(biquad_tdii)(BiquadsContext *s,
             obuf[i] = out;
         }
     }
-    fcache[0] = w1;
-    fcache[1] = w2;
+    fcache[0] = isnormal(w1) ? w1 : F(0.0);
+    fcache[1] = isnormal(w2) ? w2 : F(0.0);
 }
 
 static void fn(biquad_latt)(BiquadsContext *s,
@@ -323,8 +323,8 @@ static void fn(biquad_latt)(BiquadsContext *s,
             obuf[i] = out;
         }
     }
-    fcache[0] = s0;
-    fcache[1] = s1;
+    fcache[0] = isnormal(s0) ? s0 : F(0.0);
+    fcache[1] = isnormal(s1) ? s1 : F(0.0);
 }
 
 static void fn(biquad_svf)(BiquadsContext *s,
@@ -369,8 +369,8 @@ static void fn(biquad_svf)(BiquadsContext *s,
             obuf[i] = out;
         }
     }
-    fcache[0] = s0;
-    fcache[1] = s1;
+    fcache[0] = isnormal(s0) ? s0 : F(0.0);
+    fcache[1] = isnormal(s1) ? s1 : F(0.0);
 }
 
 static void fn(biquad_zdf)(BiquadsContext *s,
@@ -418,6 +418,6 @@ static void fn(biquad_zdf)(BiquadsContext *s,
             obuf[i] = out;
         }
     }
-    fcache[0] = b0;
-    fcache[1] = b1;
+    fcache[0] = isnormal(b0) ? b0 : F(0.0);
+    fcache[1] = isnormal(b1) ? b1 : F(0.0);
 }
