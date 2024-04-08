@@ -448,7 +448,7 @@ static int config_output(AVFilterLink *outlink)
         s->n.num = s->n.den = 1;
 
     s->history_filled = 0;
-    s->history_nb_samples = nb_channels * av_rescale_rnd(s->step_size, s->n.num,
+    s->history_nb_samples = nb_channels * av_rescale_rnd(FFMAX(s->step_size, s->w), s->n.num,
                                                          s->n.den, AV_ROUND_UP);
     s->history = av_calloc(2 * s->history_nb_samples, sizeof(*s->history));
     if (!s->history)
