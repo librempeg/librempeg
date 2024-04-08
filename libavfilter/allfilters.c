@@ -120,6 +120,7 @@ extern const AVFilter ff_af_bass;
 extern const AVFilter ff_af_biquad;
 extern const AVFilter ff_af_bs2b;
 extern const AVFilter ff_af_channelmap;
+extern const AVFilter ff_af_channelmix;
 extern const AVFilter ff_af_channelsplit;
 extern const AVFilter ff_af_chorus;
 extern const AVFilter ff_af_compand;

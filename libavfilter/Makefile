@@ -134,6 +134,7 @@ OBJS-$(CONFIG_BASS_FILTER)                   += af_biquads.o
 OBJS-$(CONFIG_BIQUAD_FILTER)                 += af_biquads.o
 OBJS-$(CONFIG_BS2B_FILTER)                   += af_bs2b.o
 OBJS-$(CONFIG_CHANNELMAP_FILTER)             += af_channelmap.o
+OBJS-$(CONFIG_CHANNELMIX_FILTER)             += af_channelmix.o
 OBJS-$(CONFIG_CHANNELSPLIT_FILTER)           += af_channelsplit.o
 OBJS-$(CONFIG_CHORUS_FILTER)                 += af_chorus.o generate_wave_table.o
 OBJS-$(CONFIG_COMPAND_FILTER)                += af_compand.o
