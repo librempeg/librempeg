@@ -16,24 +16,17 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#undef ZERO
-#undef HALF
-#undef ONE
 #undef ftype
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
 #define ftype float
-#define ONE 1.f
-#define HALF 0.5f
-#define ZERO 0.f
 #else
 #define SAMPLE_FORMAT double
 #define ftype double
-#define ONE 1.0
-#define HALF 0.5
-#define ZERO 0.0
 #endif
+
+#define F(x) ((ftype)(x))
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
@@ -98,21 +91,21 @@ static ftype fn(process_sample)(AudioRLSContext *s, ftype input, ftype desired, 
     for (int i = 0, pos = offset; i < order; i++, pos++) {
         const int ikernel_size = i * kernel_size;
 
-        u[i] = ZERO;
+        u[i] = F(0.0);
         for (int k = 0, pos = offset; k < order; k++, pos++)
             u[i] += p[ikernel_size + k] * delay[pos];
 
         g += u[i] * delay[pos];
     }
 
-    g = ONE / g;
+    g = F(1.0) / g;
 
     for (int i = 0; i < order; i++) {
         const int ikernel_size = i * kernel_size;
 
         gains[i] = u[i] * g;
         coeffs[i] = coeffs[order + i] = coeffs[i] + gains[i] * e;
-        tmp[i] = ZERO;
+        tmp[i] = F(0.0);
         for (int k = 0, pos = offset; k < order; k++, pos++)
             tmp[i] += p[ikernel_size + k] * delay[pos];
     }
@@ -128,7 +121,7 @@ static ftype fn(process_sample)(AudioRLSContext *s, ftype input, ftype desired, 
         const int ikernel_size = i * kernel_size;
 
         for (int k = 0; k < order; k++)
-            p[ikernel_size + k] = (p[ikernel_size + k] - (dp[ikernel_size + k] + dp[kernel_size * k + i]) * HALF) * lambda;
+            p[ikernel_size + k] = (p[ikernel_size + k] - (dp[ikernel_size + k] + dp[kernel_size * k + i]) * F(0.5)) * lambda;
     }
 
     switch (s->output_mode) {
