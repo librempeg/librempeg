@@ -74,6 +74,12 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
+static void fn(update_state)(ftype *b)
+{
+    b[0] = isnormal(b[0]) ? b[0] : F(0.0);
+    b[1] = isnormal(b[1]) ? b[1] : F(0.0);
+}
+
 static ftype fn(get_svf)(ftype in, const ftype *m, const ftype *a, ftype *b)
 {
     const ftype v0 = in;
@@ -289,6 +295,8 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
                 new_threshold = FMAX(new_threshold, detect);
             }
 
+            fn(update_state)(tstate);
+
             fn(cc->new_threshold_log) = FMAX(fn(cc->new_threshold_log), LIN2LOG(new_threshold));
         }
     } else if (detection == DET_ADAPTIVE) {
@@ -311,6 +319,8 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
                     }
                 }
             }
+
+            fn(update_state)(tstate);
 
             if (score >= -3.5) {
                 fn(cc->threshold_log) = LIN2LOG(peak);
@@ -431,6 +441,9 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
             v = mode == LISTEN ? listen : v;
             dst[n] = is_disabled ? src[n] : v;
         }
+
+        fn(update_state)(dstate);
+        fn(update_state)(fstate);
 
         fn(cc->detect) = detect;
         fn(cc->lin_gain) = lin_gain;
