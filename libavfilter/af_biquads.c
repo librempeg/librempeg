@@ -159,6 +159,21 @@ typedef struct BiquadsContext {
                    void *cache, int *clip, int disabled);
 } BiquadsContext;
 
+#define DEPTH 16
+#include "biquads_template.c"
+
+#undef DEPTH
+#define DEPTH 31
+#include "biquads_template.c"
+
+#undef DEPTH
+#define DEPTH 32
+#include "biquads_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "biquads_template.c"
+
 static int query_formats(AVFilterContext *ctx)
 {
     BiquadsContext *s = ctx->priv;
@@ -201,408 +216,6 @@ static int query_formats(AVFilterContext *ctx)
 
     return ff_set_common_all_samplerates(ctx);
 }
-
-#define BIQUAD_FILTER(name, type, ftype, min, max, need_clipping)             \
-static void biquad_## name (BiquadsContext *s,                                \
-                            const void *input, void *output, int len,         \
-                            void *cache, int *clippings, int disabled)        \
-{                                                                             \
-    const type *ibuf = input;                                                 \
-    type *obuf = output;                                                      \
-    ftype *fcache = cache;                                                    \
-    ftype i1 = fcache[0], i2 = fcache[1], o1 = fcache[2], o2 = fcache[3];     \
-    const ftype *a = s->a_##ftype;                                            \
-    const ftype *b = s->b_##ftype;                                            \
-    const ftype a1 = -a[1];                                                   \
-    const ftype a2 = -a[2];                                                   \
-    const ftype b0 = b[0];                                                    \
-    const ftype b1 = b[1];                                                    \
-    const ftype b2 = b[2];                                                    \
-    const ftype wet = s->mix;                                                 \
-    const ftype dry = 1. - wet;                                               \
-    ftype out;                                                                \
-    int i;                                                                    \
-                                                                              \
-    for (i = 0; i+1 < len; i++) {                                             \
-        o2 = i2 * b2 + i1 * b1 + ibuf[i] * b0 + o2 * a2 + o1 * a1;            \
-        i2 = ibuf[i];                                                         \
-        out = o2 * wet + i2 * dry;                                            \
-        if (disabled) {                                                       \
-            obuf[i] = i2;                                                     \
-        } else if (need_clipping && out < min) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = min;                                                    \
-        } else if (need_clipping && out > max) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = max;                                                    \
-        } else {                                                              \
-            obuf[i] = out;                                                    \
-        }                                                                     \
-        i++;                                                                  \
-        o1 = i1 * b2 + i2 * b1 + ibuf[i] * b0 + o1 * a2 + o2 * a1;            \
-        i1 = ibuf[i];                                                         \
-        out = o1 * wet + i1 * dry;                                            \
-        if (disabled) {                                                       \
-            obuf[i] = i1;                                                     \
-        } else if (need_clipping && out < min) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = min;                                                    \
-        } else if (need_clipping && out > max) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = max;                                                    \
-        } else {                                                              \
-            obuf[i] = out;                                                    \
-        }                                                                     \
-    }                                                                         \
-    if (i < len) {                                                            \
-        ftype o0 = ibuf[i] * b0 + i1 * b1 + i2 * b2 + o1 * a1 + o2 * a2;      \
-        i2 = i1;                                                              \
-        i1 = ibuf[i];                                                         \
-        o2 = o1;                                                              \
-        o1 = o0;                                                              \
-        out = o0 * wet + i1 * dry;                                            \
-        if (disabled) {                                                       \
-            obuf[i] = i1;                                                     \
-        } else if (need_clipping && out < min) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = min;                                                    \
-        } else if (need_clipping && out > max) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = max;                                                    \
-        } else {                                                              \
-            obuf[i] = out;                                                    \
-        }                                                                     \
-    }                                                                         \
-    fcache[0] = i1;                                                           \
-    fcache[1] = i2;                                                           \
-    fcache[2] = o1;                                                           \
-    fcache[3] = o2;                                                           \
-}
-
-BIQUAD_FILTER(s16, int16_t, float,  INT16_MIN, INT16_MAX, 1)
-BIQUAD_FILTER(s32, int32_t, double, INT32_MIN, INT32_MAX, 1)
-BIQUAD_FILTER(flt, float,   float,  -1.f, 1.f, 0)
-BIQUAD_FILTER(dbl, double,  double, -1.,  1.,  0)
-
-#define BIQUAD_DII_FILTER(name, type, ftype, min, max, need_clipping)         \
-static void biquad_dii_## name (BiquadsContext *s,                            \
-                            const void *input, void *output, int len,         \
-                            void *cache, int *clippings, int disabled)        \
-{                                                                             \
-    const type *ibuf = input;                                                 \
-    type *obuf = output;                                                      \
-    ftype *fcache = cache;                                                    \
-    const ftype *a = s->a_##ftype;                                            \
-    const ftype *b = s->b_##ftype;                                            \
-    const ftype a1 = -a[1];                                                   \
-    const ftype a2 = -a[2];                                                   \
-    const ftype b0 = b[0];                                                    \
-    const ftype b1 = b[1];                                                    \
-    const ftype b2 = b[2];                                                    \
-    ftype w1 = fcache[0];                                                     \
-    ftype w2 = fcache[1];                                                     \
-    const ftype wet = s->mix;                                                 \
-    const ftype dry = 1. - wet;                                               \
-    ftype in, out, w0;                                                        \
-                                                                              \
-    for (int i = 0; i < len; i++) {                                           \
-        in = ibuf[i];                                                         \
-        w0 = in + a1 * w1 + a2 * w2;                                          \
-        out = b0 * w0 + b1 * w1 + b2 * w2;                                    \
-        w2 = w1;                                                              \
-        w1 = w0;                                                              \
-        out = out * wet + in * dry;                                           \
-        if (disabled) {                                                       \
-            obuf[i] = in;                                                     \
-        } else if (need_clipping && out < min) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = min;                                                    \
-        } else if (need_clipping && out > max) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = max;                                                    \
-        } else {                                                              \
-            obuf[i] = out;                                                    \
-        }                                                                     \
-    }                                                                         \
-    fcache[0] = w1;                                                           \
-    fcache[1] = w2;                                                           \
-}
-
-BIQUAD_DII_FILTER(s16, int16_t, float,  INT16_MIN, INT16_MAX, 1)
-BIQUAD_DII_FILTER(s32, int32_t, double, INT32_MIN, INT32_MAX, 1)
-BIQUAD_DII_FILTER(flt, float,   float,  -1.f, 1.f, 0)
-BIQUAD_DII_FILTER(dbl, double,  double, -1.,  1.,  0)
-
-#define BIQUAD_TDI_FILTER(name, type, ftype, min, max, need_clipping)         \
-static void biquad_tdi_## name (BiquadsContext *s,                            \
-                            const void *input, void *output, int len,         \
-                            void *cache, int *clippings, int disabled)        \
-{                                                                             \
-    const type *ibuf = input;                                                 \
-    type *obuf = output;                                                      \
-    ftype *fcache = cache;                                                    \
-    const ftype *a = s->a_##ftype;                                            \
-    const ftype *b = s->b_##ftype;                                            \
-    const ftype a1 = -a[1];                                                   \
-    const ftype a2 = -a[2];                                                   \
-    const ftype b0 = b[0];                                                    \
-    const ftype b1 = b[1];                                                    \
-    const ftype b2 = b[2];                                                    \
-    ftype s1 = fcache[0];                                                     \
-    ftype s2 = fcache[1];                                                     \
-    ftype s3 = fcache[2];                                                     \
-    ftype s4 = fcache[3];                                                     \
-    const ftype wet = s->mix;                                                 \
-    const ftype dry = 1. - wet;                                               \
-    ftype in, out;                                                            \
-                                                                              \
-    for (int i = 0; i < len; i++) {                                           \
-        ftype t1, t2, t3, t4;                                                 \
-        in = ibuf[i] + s1;                                                    \
-        t1 = in * a1 + s2;                                                    \
-        t2 = in * a2;                                                         \
-        t3 = in * b1 + s4;                                                    \
-        t4 = in * b2;                                                         \
-        out = b0 * in + s3;                                                   \
-        out = out * wet + in * dry;                                           \
-        s1 = t1; s2 = t2; s3 = t3; s4 = t4;                                   \
-        if (disabled) {                                                       \
-            obuf[i] = in;                                                     \
-        } else if (need_clipping && out < min) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = min;                                                    \
-        } else if (need_clipping && out > max) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = max;                                                    \
-        } else {                                                              \
-            obuf[i] = out;                                                    \
-        }                                                                     \
-    }                                                                         \
-                                                                              \
-    fcache[0] = s1;                                                           \
-    fcache[1] = s2;                                                           \
-    fcache[2] = s3;                                                           \
-    fcache[3] = s4;                                                           \
-}
-
-BIQUAD_TDI_FILTER(s16, int16_t, float,  INT16_MIN, INT16_MAX, 1)
-BIQUAD_TDI_FILTER(s32, int32_t, double, INT32_MIN, INT32_MAX, 1)
-BIQUAD_TDI_FILTER(flt, float,   float,  -1.f, 1.f, 0)
-BIQUAD_TDI_FILTER(dbl, double,  double, -1.,  1.,  0)
-
-#define BIQUAD_TDII_FILTER(name, type, ftype, min, max, need_clipping)        \
-static void biquad_tdii_## name (BiquadsContext *s,                           \
-                            const void *input, void *output, int len,         \
-                            void *cache, int *clippings, int disabled)        \
-{                                                                             \
-    const type *ibuf = input;                                                 \
-    type *obuf = output;                                                      \
-    ftype *fcache = cache;                                                    \
-    const ftype *a = s->a_##ftype;                                            \
-    const ftype *b = s->b_##ftype;                                            \
-    const ftype a1 = -a[1];                                                   \
-    const ftype a2 = -a[2];                                                   \
-    const ftype b0 = b[0];                                                    \
-    const ftype b1 = b[1];                                                    \
-    const ftype b2 = b[2];                                                    \
-    ftype w1 = fcache[0];                                                     \
-    ftype w2 = fcache[1];                                                     \
-    const ftype wet = s->mix;                                                 \
-    const ftype dry = 1. - wet;                                               \
-    ftype in, out;                                                            \
-                                                                              \
-    for (int i = 0; i < len; i++) {                                           \
-        in = ibuf[i];                                                         \
-        out = b0 * in + w1;                                                   \
-        w1 = b1 * in + w2 + a1 * out;                                         \
-        w2 = b2 * in + a2 * out;                                              \
-        out = out * wet + in * dry;                                           \
-        if (disabled) {                                                       \
-            obuf[i] = in;                                                     \
-        } else if (need_clipping && out < min) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = min;                                                    \
-        } else if (need_clipping && out > max) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = max;                                                    \
-        } else {                                                              \
-            obuf[i] = out;                                                    \
-        }                                                                     \
-    }                                                                         \
-    fcache[0] = w1;                                                           \
-    fcache[1] = w2;                                                           \
-}
-
-BIQUAD_TDII_FILTER(s16, int16_t, float,  INT16_MIN, INT16_MAX, 1)
-BIQUAD_TDII_FILTER(s32, int32_t, double, INT32_MIN, INT32_MAX, 1)
-BIQUAD_TDII_FILTER(flt, float,   float,  -1.f, 1.f, 0)
-BIQUAD_TDII_FILTER(dbl, double,  double, -1.,  1.,  0)
-
-#define BIQUAD_LATT_FILTER(name, type, ftype, min, max, need_clipping)        \
-static void biquad_latt_## name (BiquadsContext *s,                           \
-                           const void *input, void *output, int len,          \
-                           void *cache, int *clippings, int disabled)         \
-{                                                                             \
-    const type *ibuf = input;                                                 \
-    type *obuf = output;                                                      \
-    ftype *fcache = cache;                                                    \
-    const ftype *a = s->a_##ftype;                                            \
-    const ftype *b = s->b_##ftype;                                            \
-    const ftype k0 = a[1];                                                    \
-    const ftype k1 = a[2];                                                    \
-    const ftype v0 = b[0];                                                    \
-    const ftype v1 = b[1];                                                    \
-    const ftype v2 = b[2];                                                    \
-    ftype s0 = fcache[0];                                                     \
-    ftype s1 = fcache[1];                                                     \
-    const ftype wet = s->mix;                                                 \
-    const ftype dry = 1. - wet;                                               \
-    ftype in, out;                                                            \
-    ftype t0, t1;                                                             \
-                                                                              \
-    for (int i = 0; i < len; i++) {                                           \
-        out  = 0.;                                                            \
-        in   = ibuf[i];                                                       \
-        t0   = in - k1 * s0;                                                  \
-        t1   = t0 * k1 + s0;                                                  \
-        out += t1 * v2;                                                       \
-                                                                              \
-        t0    = t0 - k0 * s1;                                                 \
-        t1    = t0 * k0 + s1;                                                 \
-        out  += t1 * v1;                                                      \
-                                                                              \
-        out  += t0 * v0;                                                      \
-        s0    = t1;                                                           \
-        s1    = t0;                                                           \
-                                                                              \
-        out = out * wet + in * dry;                                           \
-        if (disabled) {                                                       \
-            obuf[i] = in;                                                     \
-        } else if (need_clipping && out < min) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = min;                                                    \
-        } else if (need_clipping && out > max) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = max;                                                    \
-        } else {                                                              \
-            obuf[i] = out;                                                    \
-        }                                                                     \
-    }                                                                         \
-    fcache[0] = s0;                                                           \
-    fcache[1] = s1;                                                           \
-}
-
-BIQUAD_LATT_FILTER(s16, int16_t, float,  INT16_MIN, INT16_MAX, 1)
-BIQUAD_LATT_FILTER(s32, int32_t, double, INT32_MIN, INT32_MAX, 1)
-BIQUAD_LATT_FILTER(flt, float,   float,  -1.f, 1.f, 0)
-BIQUAD_LATT_FILTER(dbl, double,  double, -1.,  1.,  0)
-
-#define BIQUAD_SVF_FILTER(name, type, ftype, min, max, need_clipping)         \
-static void biquad_svf_## name (BiquadsContext *s,                            \
-                           const void *input, void *output, int len,          \
-                           void *cache, int *clippings, int disabled)         \
-{                                                                             \
-    const type *ibuf = input;                                                 \
-    type *obuf = output;                                                      \
-    ftype *fcache = cache;                                                    \
-    const ftype *a = s->a_##ftype;                                            \
-    const ftype *b = s->b_##ftype;                                            \
-    const ftype a1 = a[1];                                                    \
-    const ftype a2 = a[2];                                                    \
-    const ftype b0 = b[0];                                                    \
-    const ftype b1 = b[1];                                                    \
-    const ftype b2 = b[2];                                                    \
-    ftype s0 = fcache[0];                                                     \
-    ftype s1 = fcache[1];                                                     \
-    const ftype wet = s->mix;                                                 \
-    const ftype dry = 1. - wet;                                               \
-    ftype in, out;                                                            \
-    ftype t0, t1;                                                             \
-                                                                              \
-    for (int i = 0; i < len; i++) {                                           \
-        in   = ibuf[i];                                                       \
-        out  = b2 * in + s0;                                                  \
-        t0   = b0 * in + a1 * s0 + s1;                                        \
-        t1   = b1 * in + a2 * s0;                                             \
-        s0   = t0;                                                            \
-        s1   = t1;                                                            \
-                                                                              \
-        out = out * wet + in * dry;                                           \
-        if (disabled) {                                                       \
-            obuf[i] = in;                                                     \
-        } else if (need_clipping && out < min) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = min;                                                    \
-        } else if (need_clipping && out > max) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = max;                                                    \
-        } else {                                                              \
-            obuf[i] = out;                                                    \
-        }                                                                     \
-    }                                                                         \
-    fcache[0] = s0;                                                           \
-    fcache[1] = s1;                                                           \
-}
-
-BIQUAD_SVF_FILTER(s16, int16_t, float,  INT16_MIN, INT16_MAX, 1)
-BIQUAD_SVF_FILTER(s32, int32_t, double, INT32_MIN, INT32_MAX, 1)
-BIQUAD_SVF_FILTER(flt, float,   float,  -1.f, 1.f, 0)
-BIQUAD_SVF_FILTER(dbl, double,  double, -1.,  1.,  0)
-
-#define BIQUAD_ZDF_FILTER(name, type, ftype, min, max, need_clipping, two)    \
-static void biquad_zdf_## name (BiquadsContext *s,                            \
-                           const void *input, void *output, int len,          \
-                           void *cache, int *clippings, int disabled)         \
-{                                                                             \
-    const type *ibuf = input;                                                 \
-    type *obuf = output;                                                      \
-    ftype *fcache = cache;                                                    \
-    const ftype *a = s->a_##ftype;                                            \
-    const ftype *b = s->b_##ftype;                                            \
-    const ftype m0 = b[0];                                                    \
-    const ftype m1 = b[1];                                                    \
-    const ftype m2 = b[2];                                                    \
-    const ftype a0 = a[0];                                                    \
-    const ftype a1 = a[1];                                                    \
-    const ftype a2 = a[2];                                                    \
-    ftype b0 = fcache[0];                                                     \
-    ftype b1 = fcache[1];                                                     \
-    const ftype wet = s->mix;                                                 \
-    const ftype dry = 1. - wet;                                               \
-    ftype out;                                                                \
-                                                                              \
-    for (int i = 0; i < len; i++) {                                           \
-        const ftype in = ibuf[i];                                             \
-        const ftype v0 = in;                                                  \
-        const ftype v3 = v0 - b1;                                             \
-        const ftype v1 = a0 * b0 + a1 * v3;                                   \
-        const ftype v2 = b1 + a1 * b0 + a2 * v3;                              \
-                                                                              \
-        b0 = two * v1 - b0;                                                   \
-        b1 = two * v2 - b1;                                                   \
-                                                                              \
-        out = m0 * v0 + m1 * v1 + m2 * v2;                                    \
-        out = out * wet + in * dry;                                           \
-        if (disabled) {                                                       \
-            obuf[i] = in;                                                     \
-        } else if (need_clipping && out < min) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = min;                                                    \
-        } else if (need_clipping && out > max) {                              \
-            (*clippings)++;                                                   \
-            obuf[i] = max;                                                    \
-        } else {                                                              \
-            obuf[i] = out;                                                    \
-        }                                                                     \
-    }                                                                         \
-    fcache[0] = b0;                                                           \
-    fcache[1] = b1;                                                           \
-}
-
-BIQUAD_ZDF_FILTER(s16, int16_t, float,  INT16_MIN, INT16_MAX, 1, 2.f)
-BIQUAD_ZDF_FILTER(s32, int32_t, double, INT32_MIN, INT32_MAX, 1, 2.0)
-BIQUAD_ZDF_FILTER(flt, float,   float,  -1.f, 1.f, 0, 2.f)
-BIQUAD_ZDF_FILTER(dbl, double,  double, -1.,  1.,  0, 2.0)
 
 static void convert_dir2latt(BiquadsContext *s)
 {
@@ -1092,16 +705,16 @@ static int config_filter(AVFilterLink *outlink, int reset)
     case DI:
         switch (inlink->format) {
         case AV_SAMPLE_FMT_S16P:
-            s->filter = biquad_s16;
+            s->filter = biquad_di_s16;
             break;
         case AV_SAMPLE_FMT_S32P:
-            s->filter = biquad_s32;
+            s->filter = biquad_di_s32;
             break;
         case AV_SAMPLE_FMT_FLTP:
-            s->filter = biquad_flt;
+            s->filter = biquad_di_flt;
             break;
         case AV_SAMPLE_FMT_DBLP:
-            s->filter = biquad_dbl;
+            s->filter = biquad_di_dbl;
             break;
         default: av_assert0(0);
         }
