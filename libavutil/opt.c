@@ -1465,9 +1465,10 @@ static void log_type(void *av_log_obj, const AVOption *o,
     if (o->type == AV_OPT_TYPE_CONST && TYPE_BASE(parent_type) == AV_OPT_TYPE_INT)
         av_log(av_log_obj, AV_LOG_INFO, "%-12"PRId64" ", o->default_val.i64);
     else if (type < FF_ARRAY_ELEMS(desc) && desc[type]) {
-        if (o->type & AV_OPT_TYPE_FLAG_ARRAY)
-            av_log(av_log_obj, AV_LOG_INFO, "[%-10s] ", desc[type]);
-        else
+        if (o->type & AV_OPT_TYPE_FLAG_ARRAY) {
+            const char sep = o->default_val.arr->sep;
+            av_log(av_log_obj, AV_LOG_INFO, "[%-9s%c] ", desc[type], sep ? sep : ',');
+        } else
             av_log(av_log_obj, AV_LOG_INFO, "%-12s ", desc[type]);
     }
     else
