@@ -35,6 +35,7 @@ typedef struct AQuadOscContext {
     double amplitude;
     double phase;
     double old_phase;
+    double offset;
     double u, v;
     double k1, k2;
 
@@ -53,6 +54,7 @@ static const AVOption aquadosc_options[] = {
     { "frequency", "set the oscillator frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=0.01}, 0.0, 0.5, AFT },
     { "amplitude", "set the oscillator amplitude", OFFSET(amplitude), AV_OPT_TYPE_DOUBLE, {.dbl=1.0}, 0.0, 1.0, AFT },
     { "phase", "set the oscillator phase", OFFSET(phase), AV_OPT_TYPE_DOUBLE, {.dbl=0.0}, -1.0, 1.0, AFT },
+    { "offset", "set the oscillator offset", OFFSET(offset), AV_OPT_TYPE_DOUBLE, {.dbl=0.0}, -1.0, 1.0, AFT },
     { "sample_rate", "set the sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=44100}, 1, INT_MAX, AF },
     { "duration", "set the duration", OFFSET(duration), AV_OPT_TYPE_DURATION, {.i64=0}, 0, INT64_MAX, AF },
     { "samples_per_frame", "set the samples per frame", OFFSET(samples_per_frame), AV_OPT_TYPE_INT,  {.i64=1024}, 64, 65536, AFT },
@@ -139,6 +141,7 @@ static int activate(AVFilterContext *ctx)
         {
             double *real = (double *)frame->extended_data[0];
             double *imag = (double *)frame->extended_data[1];
+            const double offset = s->offset;
             const double a = s->amplitude;
             const double k1 = s->k1;
             const double k2 = s->k2;
@@ -147,8 +150,8 @@ static int activate(AVFilterContext *ctx)
             double w;
 
             for (int i = 0; i < nb_samples; i++) {
-                real[i] = u * a;
-                imag[i] = v * a;
+                real[i] = u * a + offset;
+                imag[i] = v * a + offset;
                 w = u - k1 * v;
                 v += k2 * w;
                 u = w - k1 * v;
@@ -162,6 +165,7 @@ static int activate(AVFilterContext *ctx)
         {
             float *real = (float *)frame->extended_data[0];
             float *imag = (float *)frame->extended_data[1];
+            const float offset = s->offset;
             const float a = s->amplitude;
             const float k1 = s->k1;
             const float k2 = s->k2;
@@ -170,8 +174,8 @@ static int activate(AVFilterContext *ctx)
             float w;
 
             for (int i = 0; i < nb_samples; i++) {
-                real[i] = u * a;
-                imag[i] = v * a;
+                real[i] = u * a + offset;
+                imag[i] = v * a + offset;
                 w = u - k1 * v;
                 v += k2 * w;
                 u = w - k1 * v;
