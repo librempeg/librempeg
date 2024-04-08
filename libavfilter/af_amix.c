@@ -434,7 +434,7 @@ static const AVFilterPad outputs[] = {
 
 const AVFilter ff_af_amix = {
     .name           = "amix",
-    .description    = NULL_IF_CONFIG_SMALL("Audio mixing."),
+    .description    = NULL_IF_CONFIG_SMALL("Audio streams mixing."),
     .priv_size      = sizeof(MixContext),
     .priv_class     = &amix_class,
     .init           = init,
