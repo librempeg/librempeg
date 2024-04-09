@@ -338,29 +338,34 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 
     s->next_pts = av_rescale_q(frame->pts, inlink->time_base, outlink->time_base);
 
-    out_frame = ff_get_audio_buffer(outlink, frame->nb_samples);
-    if (!out_frame) {
-        s->input = NULL;
-        av_frame_free(&frame);
-        return AVERROR(ENOMEM);
-    }
-    av_frame_copy_props(out_frame, frame);
+    if (s->max_delay) {
+        out_frame = ff_get_audio_buffer(outlink, frame->nb_samples);
+        if (!out_frame) {
+            s->input = NULL;
+            av_frame_free(&frame);
+            return AVERROR(ENOMEM);
+        }
+        av_frame_copy_props(out_frame, frame);
 
-    for (i = 0; i < s->nb_delays; i++) {
-        ChanDelay *d = &s->chandelay[i];
-        const uint8_t *src = frame->extended_data[i];
-        uint8_t *dst = out_frame->extended_data[i];
+        for (i = 0; i < s->nb_delays; i++) {
+            ChanDelay *d = &s->chandelay[i];
+            const uint8_t *src = frame->extended_data[i];
+            uint8_t *dst = out_frame->extended_data[i];
 
-        if (!d->delay)
-            memcpy(dst, src, frame->nb_samples * s->block_align);
-        else
-            s->delay_channel(d, frame->nb_samples, src, dst);
+            if (!d->delay)
+                memcpy(dst, src, frame->nb_samples * s->block_align);
+            else
+                s->delay_channel(d, frame->nb_samples, src, dst);
+        }
+    } else {
+        out_frame = frame;
     }
 
     out_frame->pts = s->next_pts + s->offset;
     out_frame->duration = av_rescale_q(out_frame->nb_samples, (AVRational){1, outlink->sample_rate}, outlink->time_base);
     s->next_pts += out_frame->duration;
-    av_frame_free(&frame);
+    if (out_frame != frame)
+        av_frame_free(&frame);
     s->input = NULL;
     return ff_filter_frame(outlink, out_frame);
 }
@@ -458,11 +463,22 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->chandelay);
 }
 
+static AVFrame *get_audio_buffer(AVFilterLink *inlink, int nb_samples)
+{
+    AVFilterContext *ctx = inlink->dst;
+    AudioDelayContext *s = ctx->priv;
+
+    return !s->max_delay ?
+        ff_null_get_audio_buffer   (inlink, nb_samples) :
+        ff_default_get_audio_buffer(inlink, nb_samples);
+}
+
 static const AVFilterPad adelay_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
         .config_props = config_input,
+        .get_buffer.audio = get_audio_buffer,
     },
 };
 
