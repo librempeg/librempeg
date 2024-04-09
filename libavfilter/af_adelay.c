@@ -38,7 +38,8 @@ typedef struct ChanDelay {
 typedef struct AudioDelayContext {
     const AVClass *class;
     int all;
-    char *delays;
+    char **delays;
+    unsigned nb_delays_opt;
     ChanDelay *chandelay;
     int nb_delays;
     int block_align;
@@ -57,9 +58,12 @@ typedef struct AudioDelayContext {
 
 #define OFFSET(x) offsetof(AudioDelayContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_delays = {.def=NULL,.size_min=0,.sep='|'};
 
 static const AVOption adelay_options[] = {
-    { "delays", "set list of delays for each channel", OFFSET(delays), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, A | AV_OPT_FLAG_RUNTIME_PARAM },
+    { "delays", "set list of delays for each channel", OFFSET(delays), AV_OPT_TYPE_STRING|AR, {.arr=&def_delays}, 0, 0, A | AV_OPT_FLAG_RUNTIME_PARAM },
     { "all",    "use last available delay for remained channels", OFFSET(all), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, A },
     { NULL }
 };
@@ -157,14 +161,11 @@ CHANGE_DELAY(s32, int32_t, 0)
 CHANGE_DELAY(flt, float,   0)
 CHANGE_DELAY(dbl, double,  0)
 
-static int parse_delays(char *p, char **saveptr, int64_t *result, AVFilterContext *ctx, int sample_rate) {
+static int parse_delay(const char *arg, int64_t *result, AVFilterContext *ctx, int sample_rate)
+{
     float delay, div;
     int ret;
-    char *arg;
     char type = 0;
-
-    if (!(arg = av_strtok(p, "|", saveptr)))
-        return 1;
 
     ret = av_sscanf(arg, "%"SCNd64"%c", result, &type);
     if (ret != 2 || type != 'S') {
@@ -187,8 +188,7 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     AudioDelayContext *s = ctx->priv;
-    char *p, *saveptr = NULL;
-    int i;
+    unsigned i;
 
     s->next_pts = AV_NOPTS_VALUE;
     s->chandelay = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->chandelay));
@@ -197,21 +197,19 @@ static int config_input(AVFilterLink *inlink)
     s->nb_delays = inlink->ch_layout.nb_channels;
     s->block_align = av_get_bytes_per_sample(inlink->format);
 
-    p = s->delays;
-    for (i = 0; i < s->nb_delays; i++) {
+    for (i = 0; i < FFMIN(s->nb_delays_opt, s->nb_delays); i++) {
         ChanDelay *d = &s->chandelay[i];
         int ret;
 
-        ret = parse_delays(p, &saveptr, &d->delay, ctx, inlink->sample_rate);
+        ret = parse_delay(s->delays[i], &d->delay, ctx, inlink->sample_rate);
         if (ret == 1)
             break;
         else if (ret < 0)
             return ret;
-        p = NULL;
     }
 
     if (s->all && i) {
-        for (int j = i; j < s->nb_delays; j++)
+        for (unsigned j = i; j < s->nb_delays; j++)
             s->chandelay[j].delay = s->chandelay[i-1].delay;
     }
 
@@ -272,54 +270,47 @@ static int config_input(AVFilterLink *inlink)
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
                            char *res, int res_len, int flags)
 {
-    int ret = AVERROR(ENOSYS);
     AVFilterLink *inlink = ctx->inputs[0];
     AudioDelayContext *s = ctx->priv;
+    int64_t max_delay = 0;
+    unsigned i;
+    int ret;
 
-    if (!strcmp(cmd, "delays")) {
-        int64_t delay;
-        char *p, *saveptr = NULL;
-        int64_t all_delay = -1;
-        int64_t max_delay = 0;
-        char *args_cpy = av_strdup(args);
-        if (args_cpy == NULL) {
-            return AVERROR(ENOMEM);
-        }
+    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    if (ret < 0)
+        return ret;
 
-        ret = 0;
-        p = args_cpy;
+    for (i = 0; i < FFMIN(s->nb_delays_opt, s->nb_delays); i++) {
+        ChanDelay *d = &s->chandelay[i];
+        int64_t new_delay = 0;
+        int ret;
 
-        if (!strncmp(args, "all:", 4)) {
-            p = &args_cpy[4];
-            ret = parse_delays(p, &saveptr, &all_delay, ctx, inlink->sample_rate);
-            if (ret == 1)
-                ret = AVERROR(EINVAL);
-            else if (ret == 0)
-                delay = all_delay;
-        }
+        ret = parse_delay(s->delays[i], &new_delay, ctx, inlink->sample_rate);
+        if (ret == 1)
+            break;
+        else if (ret < 0)
+            return ret;
 
-        if (!ret) {
-            for (int i = 0; i < s->nb_delays; i++) {
-                ChanDelay *d = &s->chandelay[i];
-
-                if (all_delay < 0) {
-                    ret = parse_delays(p, &saveptr, &delay, ctx, inlink->sample_rate);
-                    if (ret != 0) {
-                        ret = 0;
-                        break;
-                    }
-                    p = NULL;
-                }
-
-                ret = s->resize_channel_samples(d, delay);
-                if (ret)
-                    break;
-                max_delay = FFMAX(max_delay, d->delay);
-            }
-            s->max_delay = FFMAX(s->max_delay, max_delay);
-        }
-        av_freep(&args_cpy);
+        ret = s->resize_channel_samples(d, new_delay);
+        if (ret)
+            break;
+        max_delay = FFMAX(max_delay, d->delay);
     }
+
+    s->max_delay = FFMAX(s->max_delay, max_delay);
+
+    if (s->all && i) {
+        for (unsigned j = i; j < s->nb_delays; j++) {
+            ChanDelay *d = &s->chandelay[j];
+            int64_t new_delay;
+
+            new_delay = s->chandelay[i-1].delay;
+            ret = s->resize_channel_samples(d, new_delay);
+            if (ret)
+                break;
+        }
+    }
+
     return ret;
 }
 
