@@ -23,6 +23,8 @@
  * format audio filter
  */
 
+#include "config_components.h"
+
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
 #include "libavutil/opt.h"
@@ -111,6 +113,35 @@ static int parse_channel_layouts(AVFilterContext *ctx)
     return 0;
 }
 
+static av_cold int invert_formats(AVFilterFormats **fmts,
+                                  AVFilterFormats *allfmts)
+{
+    if (!allfmts)
+        return AVERROR(ENOMEM);
+    if (!*fmts) {
+        /* empty fmt list means no restriction, regardless of filter type */
+        ff_formats_unref(&allfmts);
+        return 0;
+    }
+
+    for (int i = 0; i < allfmts->nb_formats; i++) {
+        for (int j = 0; j < (*fmts)->nb_formats; j++) {
+            if (allfmts->formats[i] == (*fmts)->formats[j]) {
+                /* format is forbidden, remove it from allfmts list */
+                memmove(&allfmts->formats[i], &allfmts->formats[i+1],
+                        (allfmts->nb_formats - (i+1)) * sizeof(*allfmts->formats));
+                allfmts->nb_formats--;
+                i--; /* repeat loop with same idx */
+                break;
+            }
+        }
+    }
+
+    ff_formats_unref(fmts);
+    *fmts = allfmts;
+    return 0;
+}
+
 static av_cold int init(AVFilterContext *ctx)
 {
     AFormatContext *s = ctx->priv;
@@ -123,6 +154,11 @@ static av_cold int init(AVFilterContext *ctx)
     ret = parse_channel_layouts(ctx);
     if (ret < 0)
         return ret;
+
+    if (!strcmp(ctx->filter->name, "anoformat")) {
+        if ((ret = invert_formats(&s->formats, ff_all_formats(AVMEDIA_TYPE_AUDIO))) < 0)
+            return ret;
+    }
 
     return 0;
 }
@@ -157,6 +193,7 @@ static int query_formats(AVFilterContext *ctx)
     return ret;
 }
 
+#if CONFIG_AFORMAT_FILTER
 const AVFilter ff_af_aformat = {
     .name          = "aformat",
     .description   = NULL_IF_CONFIG_SMALL("Convert the input audio to one of the specified formats."),
@@ -169,3 +206,27 @@ const AVFilter ff_af_aformat = {
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC(query_formats),
 };
+#endif /* CONFIG_AFORMAT_FILTER */
+
+#if CONFIG_ANOFORMAT_FILTER
+static const AVOption anoformat_options[] = {
+    { "sample_fmts", "set the list of sample formats.", OFFSET(formats_str), AV_OPT_TYPE_STRING|AR, {.arr=&def_array}, .flags = A|F },
+    { "f",           "set the list of sample formats.", OFFSET(formats_str), AV_OPT_TYPE_STRING|AR, {.arr=&def_array}, .flags = A|F },
+    { NULL }
+};
+
+AVFILTER_DEFINE_CLASS(anoformat);
+
+const AVFilter ff_af_anoformat = {
+    .name          = "anoformat",
+    .description   = NULL_IF_CONFIG_SMALL("Force libavfilter not to use any of the specified sample formats for the input to the next filter."),
+    .priv_class    = &anoformat_class,
+    .init          = init,
+    .uninit        = uninit,
+    .priv_size     = sizeof(AFormatContext),
+    .flags         = AVFILTER_FLAG_METADATA_ONLY,
+    FILTER_INPUTS(ff_audio_default_filterpad),
+    FILTER_OUTPUTS(ff_audio_default_filterpad),
+    FILTER_QUERY_FUNC(query_formats),
+};
+#endif /* CONFIG_ANOFORMAT_FILTER */
