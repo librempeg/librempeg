@@ -25,8 +25,6 @@
 
 #include "config_components.h"
 
-#include <string.h>
-
 #include "libavutil/internal.h"
 #include "libavutil/mem.h"
 #include "libavutil/pixdesc.h"
@@ -39,9 +37,12 @@
 
 typedef struct FormatContext {
     const AVClass *class;
-    char *pix_fmts;
-    char *csps;
-    char *ranges;
+    char **pix_fmts;
+    unsigned nb_pix_fmts;
+    char **csps;
+    unsigned nb_csps;
+    char **ranges;
+    unsigned nb_ranges;
 
     AVFilterFormats *formats; ///< parsed from `pix_fmts`
     AVFilterFormats *color_spaces; ///< parsed from `csps`
@@ -91,28 +92,25 @@ static av_cold int init(AVFilterContext *ctx)
     enum AVPixelFormat pix_fmt;
     int ret;
 
-    for (char *sep, *cur = s->pix_fmts; cur; cur = sep) {
-        sep = strchr(cur, '|');
-        if (sep && *sep)
-            *sep++ = 0;
+    for (unsigned n = 0; n < s->nb_pix_fmts; n++) {
+        const char *cur = s->pix_fmts[n];
+
         if ((ret = ff_parse_pixel_format(&pix_fmt, cur, ctx)) < 0 ||
             (ret = ff_add_format(&s->formats, pix_fmt)) < 0)
             return ret;
     }
 
-    for (char *sep, *cur = s->csps; cur; cur = sep) {
-        sep = strchr(cur, '|');
-        if (sep && *sep)
-            *sep++ = 0;
+    for (unsigned n = 0; n < s->nb_csps; n++) {
+        const char *cur = s->csps[n];
+
         if ((ret = av_color_space_from_name(cur)) < 0 ||
             (ret = ff_add_format(&s->color_spaces, ret)) < 0)
             return ret;
     }
 
-    for (char *sep, *cur = s->ranges; cur; cur = sep) {
-        sep = strchr(cur, '|');
-        if (sep && *sep)
-            *sep++ = 0;
+    for (unsigned n = 0; n < s->nb_ranges; n++) {
+        const char *cur = s->ranges[n];
+
         if ((ret = av_color_range_from_name(cur)) < 0 ||
             (ret = ff_add_format(&s->color_ranges, ret)) < 0)
             return ret;
@@ -149,10 +147,12 @@ static int query_formats(AVFilterContext *ctx)
 
 
 #define OFFSET(x) offsetof(FormatContext, x)
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+static const AVOptionArrayDef def_array = {.def=NULL,.size_min=0,.sep='|'};
 static const AVOption options[] = {
-    { "pix_fmts", "A '|'-separated list of pixel formats", OFFSET(pix_fmts), AV_OPT_TYPE_STRING, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
-    { "color_spaces", "A '|'-separated list of color spaces", OFFSET(csps), AV_OPT_TYPE_STRING, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
-    { "color_ranges", "A '|'-separated list of color ranges", OFFSET(ranges), AV_OPT_TYPE_STRING, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
+    { "pix_fmts", "set the list of pixel formats", OFFSET(pix_fmts), AV_OPT_TYPE_STRING|AR, {.arr=&def_array}, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
+    { "color_spaces", "set the list of color spaces", OFFSET(csps), AV_OPT_TYPE_STRING|AR, {.arr=&def_array}, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
+    { "color_ranges", "set the list of color ranges", OFFSET(ranges), AV_OPT_TYPE_STRING|AR, {.arr=&def_array}, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { NULL }
 };
 
