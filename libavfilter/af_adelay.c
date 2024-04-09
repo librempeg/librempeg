@@ -433,6 +433,18 @@ static int activate(AVFilterContext *ctx)
                                outlink->ch_layout.nb_channels,
                                frame->format);
 
+        for (int i = 0; i < s->nb_delays; i++) {
+            ChanDelay *d = &s->chandelay[i];
+            const uint8_t *src = frame->extended_data[i];
+            uint8_t *dst = frame->extended_data[i];
+            const int ch_nb_samples = FFMIN(d->delay, nb_samples);
+
+            if (ch_nb_samples > 0) {
+                s->delay_channel(d, ch_nb_samples, src, dst);
+                d->delay -= ch_nb_samples;
+            }
+        }
+
         frame->duration = av_rescale_q(frame->nb_samples,
                                        (AVRational){1, outlink->sample_rate},
                                        outlink->time_base);
