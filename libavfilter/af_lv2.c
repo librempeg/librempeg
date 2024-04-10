@@ -45,7 +45,8 @@ typedef struct URITable {
 typedef struct LV2Context {
     const AVClass *class;
     char *plugin_uri;
-    char *options;
+    char **options;
+    unsigned nb_options;
 
     unsigned nb_inputs;
     unsigned nb_inputcontrols;
@@ -91,12 +92,15 @@ typedef struct LV2Context {
 
 #define OFFSET(x) offsetof(LV2Context, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_controls = {.def=NULL,.size_min=0,.sep='|'};
 
 static const AVOption lv2_options[] = {
     { "plugin", "set plugin uri", OFFSET(plugin_uri), AV_OPT_TYPE_STRING, .flags = FLAGS },
     { "p",      "set plugin uri", OFFSET(plugin_uri), AV_OPT_TYPE_STRING, .flags = FLAGS },
-    { "controls", "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING, .flags = FLAGS },
-    { "c",        "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING, .flags = FLAGS },
+    { "controls", "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING|AR, {.arr=&def_controls}, .flags = FLAGS },
+    { "c",        "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING|AR, {.arr=&def_controls}, .flags = FLAGS },
     { "sample_rate", "set sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=44100}, 1, INT32_MAX, FLAGS },
     { "s",           "set sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=44100}, 1, INT32_MAX, FLAGS },
     { "nb_samples", "set the number of samples per requested frame", OFFSET(nb_samples), AV_OPT_TYPE_INT, {.i64=1024}, 1, INT_MAX, FLAGS },
@@ -266,7 +270,6 @@ static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     LV2Context *s = ctx->priv;
-    char *p, *arg, *saveptr = NULL;
     int i, sample_rate;
 
     uri_table_init(&s->uri_table);
@@ -318,7 +321,7 @@ static int config_output(AVFilterLink *outlink)
     if (!s->seq_out)
         return AVERROR(ENOMEM);
 
-    if (s->options && !strcmp(s->options, "help")) {
+    if (s->nb_options > 0 && !strcmp(s->options[0], "help")) {
         if (!s->nb_inputcontrols) {
             av_log(ctx, AV_LOG_INFO,
                    "The '%s' plugin does not have any input controls.\n",
@@ -345,17 +348,14 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR_EXIT;
     }
 
-    p = s->options;
-    while (s->options) {
+    for (int i = 0; i < s->nb_options; i++) {
+        const char *arg = s->options[i];
         const LilvPort *port;
+        const char *vstr;
+        char *option;
         LilvNode *sym;
         float val;
-        char *str, *vstr;
         int index;
-
-        if (!(arg = av_strtok(p, " |", &saveptr)))
-            break;
-        p = NULL;
 
         vstr = strstr(arg, "=");
         if (vstr == NULL) {
@@ -363,18 +363,18 @@ static int config_output(AVFilterLink *outlink)
             return AVERROR(EINVAL);
         }
 
-        vstr[0] = 0;
-        str  = arg;
+        option = av_strndup(arg, vstr-arg);
         val  = atof(vstr+1);
-        sym  = lilv_new_string(s->world, str);
+        sym  = lilv_new_string(s->world, option);
         port = lilv_plugin_get_port_by_symbol(s->plugin, sym);
         lilv_node_free(sym);
         if (!port) {
-            av_log(s, AV_LOG_WARNING, "Unknown option: <%s>\n", str);
+            av_log(s, AV_LOG_WARNING, "Unknown option: <%s>\n", arg);
         } else {
             index = lilv_port_get_index(s->plugin, port);
             s->controls[index] = val;
         }
+        av_free(option);
     }
 
     if (s->nb_inputs &&
