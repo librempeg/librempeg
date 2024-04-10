@@ -84,6 +84,7 @@ typedef struct LADSPAContext {
 
 #define OFFSET(x) offsetof(LADSPAContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+#define TFLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 static const AVOptionArrayDef def_controls = {.def=NULL,.size_min=0,.sep='|'};
 static const AVOption ladspa_options[] = {
@@ -91,8 +92,8 @@ static const AVOption ladspa_options[] = {
     { "f",    "set library name or full path", OFFSET(dl_name), AV_OPT_TYPE_STRING, .flags = FLAGS },
     { "plugin", "set plugin name", OFFSET(plugin), AV_OPT_TYPE_STRING, .flags = FLAGS },
     { "p",      "set plugin name", OFFSET(plugin), AV_OPT_TYPE_STRING, .flags = FLAGS },
-    { "controls", "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING|AR, {.arr=&def_controls}, .flags = FLAGS },
-    { "c",        "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING|AR, {.arr=&def_controls}, .flags = FLAGS },
+    { "controls", "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING|AR, {.arr=&def_controls}, .flags = TFLAGS },
+    { "c",        "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING|AR, {.arr=&def_controls}, .flags = TFLAGS },
     { "sample_rate", "set sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=44100}, 1, INT32_MAX, FLAGS },
     { "s",           "set sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=44100}, 1, INT32_MAX, FLAGS },
     { "nb_samples", "set the number of samples per requested frame", OFFSET(nb_samples), AV_OPT_TYPE_INT, {.i64=1024}, 1, INT_MAX, FLAGS },
@@ -485,6 +486,36 @@ static int set_control(AVFilterContext *ctx, unsigned long port, LADSPA_Data val
     return 0;
 }
 
+// Parse control parameters
+static int parse_controls(AVFilterContext *ctx)
+{
+    LADSPAContext *s = ctx->priv;
+    unsigned last_port = 0;
+
+    for (int i = 0; i < s->nb_options; i++) {
+        const char *arg = s->options[i];
+        unsigned port = 0;
+        LADSPA_Data val;
+        int ret;
+
+        if (av_sscanf(arg, "c%d=%f", &port, &val) != 2) {
+            if (av_sscanf(arg, "%f", &val) != 1) {
+                av_log(ctx, AV_LOG_ERROR, "Invalid syntax.\n");
+                return AVERROR(EINVAL);
+            }
+
+            port = last_port;
+        }
+
+        if ((ret = set_control(ctx, port, val)) < 0)
+            return ret;
+        s->ctl_needs_value[i] = 0;
+        last_port = port+1;
+    }
+
+    return 0;
+}
+
 static av_cold int init(AVFilterContext *ctx)
 {
     LADSPAContext *s = ctx->priv;
@@ -493,7 +524,7 @@ static av_cold int init(AVFilterContext *ctx)
     LADSPA_PortDescriptor pd;
     AVFilterPad pad = { NULL };
     unsigned long nb_ports;
-    int i, j = 0, ret;
+    int i, ret;
 
     if (!s->dl_name) {
         av_log(ctx, AV_LOG_ERROR, "No plugin name provided\n");
@@ -636,24 +667,9 @@ static av_cold int init(AVFilterContext *ctx)
         return AVERROR_EXIT;
     }
 
-    // Parse control parameters
-    for (int i = 0; i < s->nb_options; i++) {
-        const char *arg = s->options[i];
-        LADSPA_Data val;
-        int ret;
-
-        if (av_sscanf(arg, "c%d=%f", &i, &val) != 2) {
-            if (av_sscanf(arg, "%f", &val) != 1) {
-                av_log(ctx, AV_LOG_ERROR, "Invalid syntax.\n");
-                return AVERROR(EINVAL);
-            }
-            i = j++;
-        }
-
-        if ((ret = set_control(ctx, i, val)) < 0)
-            return ret;
-        s->ctl_needs_value[i] = 0;
-    }
+    ret = parse_controls(ctx);
+    if (ret < 0)
+        return ret;
 
     // Check if any controls are not set
     for (i = 0; i < s->nb_inputcontrols; i++) {
@@ -796,13 +812,12 @@ static av_cold void uninit(AVFilterContext *ctx)
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
                            char *res, int res_len, int flags)
 {
-    LADSPA_Data value;
-    unsigned long port;
+    int ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
 
-    if (av_sscanf(cmd, "c%ld", &port) + av_sscanf(args, "%f", &value) != 2)
-        return AVERROR(EINVAL);
+    if (ret < 0)
+        return ret;
 
-    return set_control(ctx, port, value);
+    return parse_controls(ctx);
 }
 
 static const AVFilterPad ladspa_outputs[] = {
