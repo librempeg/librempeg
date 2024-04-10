@@ -92,6 +92,7 @@ typedef struct LV2Context {
 
 #define OFFSET(x) offsetof(LV2Context, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+#define TFLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
 static const AVOptionArrayDef def_controls = {.def=NULL,.size_min=0,.sep='|'};
@@ -99,8 +100,8 @@ static const AVOptionArrayDef def_controls = {.def=NULL,.size_min=0,.sep='|'};
 static const AVOption lv2_options[] = {
     { "plugin", "set plugin uri", OFFSET(plugin_uri), AV_OPT_TYPE_STRING, .flags = FLAGS },
     { "p",      "set plugin uri", OFFSET(plugin_uri), AV_OPT_TYPE_STRING, .flags = FLAGS },
-    { "controls", "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING|AR, {.arr=&def_controls}, .flags = FLAGS },
-    { "c",        "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING|AR, {.arr=&def_controls}, .flags = FLAGS },
+    { "controls", "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING|AR, {.arr=&def_controls}, .flags = TFLAGS },
+    { "c",        "set plugin options", OFFSET(options), AV_OPT_TYPE_STRING|AR, {.arr=&def_controls}, .flags = TFLAGS },
     { "sample_rate", "set sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=44100}, 1, INT32_MAX, FLAGS },
     { "s",           "set sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=44100}, 1, INT32_MAX, FLAGS },
     { "nb_samples", "set the number of samples per requested frame", OFFSET(nb_samples), AV_OPT_TYPE_INT, {.i64=1024}, 1, INT_MAX, FLAGS },
@@ -266,11 +267,47 @@ static const LV2_Feature buf_size_features[3] = {
     { LV2_BUF_SIZE__boundedBlockLength,  NULL },
 };
 
+static int process_options(AVFilterContext *ctx)
+{
+    LV2Context *s = ctx->priv;
+
+    for (int i = 0; i < s->nb_options; i++) {
+        const char *arg = s->options[i];
+        const LilvPort *port;
+        const char *vstr;
+        char *option;
+        LilvNode *sym;
+        float val;
+        int index;
+
+        vstr = strstr(arg, "=");
+        if (vstr == NULL) {
+            av_log(ctx, AV_LOG_ERROR, "Invalid syntax.\n");
+            return AVERROR(EINVAL);
+        }
+
+        option = av_strndup(arg, vstr-arg);
+        val  = atof(vstr+1);
+        sym  = lilv_new_string(s->world, option);
+        port = lilv_plugin_get_port_by_symbol(s->plugin, sym);
+        lilv_node_free(sym);
+        if (!port) {
+            av_log(s, AV_LOG_WARNING, "Unknown option: <%s>\n", option);
+        } else {
+            index = lilv_port_get_index(s->plugin, port);
+            s->controls[index] = val;
+        }
+        av_free(option);
+    }
+
+    return 0;
+}
+
 static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     LV2Context *s = ctx->priv;
-    int i, sample_rate;
+    int ret, i, sample_rate;
 
     uri_table_init(&s->uri_table);
     s->map.handle = &s->uri_table;
@@ -348,34 +385,9 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR_EXIT;
     }
 
-    for (int i = 0; i < s->nb_options; i++) {
-        const char *arg = s->options[i];
-        const LilvPort *port;
-        const char *vstr;
-        char *option;
-        LilvNode *sym;
-        float val;
-        int index;
-
-        vstr = strstr(arg, "=");
-        if (vstr == NULL) {
-            av_log(ctx, AV_LOG_ERROR, "Invalid syntax.\n");
-            return AVERROR(EINVAL);
-        }
-
-        option = av_strndup(arg, vstr-arg);
-        val  = atof(vstr+1);
-        sym  = lilv_new_string(s->world, option);
-        port = lilv_plugin_get_port_by_symbol(s->plugin, sym);
-        lilv_node_free(sym);
-        if (!port) {
-            av_log(s, AV_LOG_WARNING, "Unknown option: <%s>\n", arg);
-        } else {
-            index = lilv_port_get_index(s->plugin, port);
-            s->controls[index] = val;
-        }
-        av_free(option);
-    }
+    ret = process_options(ctx);
+    if (ret < 0)
+        return ret;
 
     if (s->nb_inputs &&
         (lilv_plugin_has_feature(s->plugin, s->powerOf2BlockLength) ||
@@ -544,21 +556,12 @@ static int query_formats(AVFilterContext *ctx)
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
                            char *res, int res_len, int flags)
 {
-    LV2Context *s = ctx->priv;
-    const LilvPort *port;
-    LilvNode *sym;
-    int index;
+    int ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
 
-    sym  = lilv_new_string(s->world, cmd);
-    port = lilv_plugin_get_port_by_symbol(s->plugin, sym);
-    lilv_node_free(sym);
-    if (!port) {
-        av_log(s, AV_LOG_WARNING, "Unknown option: <%s>\n", cmd);
-    } else {
-        index = lilv_port_get_index(s->plugin, port);
-        s->controls[index] = atof(args);
-    }
-    return 0;
+    if (ret < 0)
+        return ret;
+
+    return process_options(ctx);
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
