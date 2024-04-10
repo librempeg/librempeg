@@ -62,7 +62,8 @@ typedef struct EqualizatorFilter {
 
 typedef struct AudioNEqualizerContext {
     const AVClass *class;
-    char *args;
+    char **args;
+    unsigned nb_args;
 
     int nb_filters;
     int nb_allocated;
@@ -73,9 +74,12 @@ typedef struct AudioNEqualizerContext {
 #define A AV_OPT_FLAG_AUDIO_PARAM
 #define V AV_OPT_FLAG_VIDEO_PARAM
 #define F AV_OPT_FLAG_FILTERING_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_args = {.def=NULL,.size_min=1,.sep='|'};
 
 static const AVOption anequalizer_options[] = {
-    { "params", NULL,                             OFFSET(args),        AV_OPT_TYPE_STRING,     {.str=""}, 0, 0, A|F },
+    { "params", NULL, OFFSET(args), AV_OPT_TYPE_STRING|AR, {.arr=&def_args}, 0, 0, A|F },
     { NULL }
 };
 
@@ -397,26 +401,17 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     AudioNEqualizerContext *s = ctx->priv;
-    char *args = av_strdup(s->args);
-    char *saveptr = NULL;
     int ret = 0;
 
-    if (!args)
-        return AVERROR(ENOMEM);
-
-    s->nb_allocated = 32 * inlink->ch_layout.nb_channels;
-    s->filters = av_calloc(inlink->ch_layout.nb_channels, 32 * sizeof(*s->filters));
+    s->nb_allocated = s->nb_args * inlink->ch_layout.nb_channels;
+    s->filters = av_calloc(inlink->ch_layout.nb_channels, s->nb_args * sizeof(*s->filters));
     if (!s->filters) {
         s->nb_allocated = 0;
-        av_free(args);
         return AVERROR(ENOMEM);
     }
 
-    while (1) {
-        char *arg = av_strtok(s->nb_filters == 0 ? args : NULL, "|", &saveptr);
-
-        if (!arg)
-            break;
+    for (int n = 0; n < s->nb_args; n++) {
+        const char *arg = s->args[n];
 
         s->filters[s->nb_filters].type = 0;
         if (sscanf(arg, "c%d f=%lf w=%lf g=%lf t=%d", &s->filters[s->nb_filters].channel,
@@ -428,7 +423,6 @@ static int config_input(AVFilterLink *inlink)
                                                 &s->filters[s->nb_filters].freq,
                                                 &s->filters[s->nb_filters].width,
                                                 &s->filters[s->nb_filters].gain) != 4 ) {
-            av_free(args);
             return AVERROR(EINVAL);
         }
 
@@ -445,8 +439,6 @@ static int config_input(AVFilterLink *inlink)
         if (ret < 0)
             break;
     }
-
-    av_free(args);
 
     return ret;
 }
