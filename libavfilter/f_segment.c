@@ -92,10 +92,10 @@ static av_cold int init(AVFilterContext *ctx, enum AVMediaType type)
     } else if (s->nb_timestamps_opt) {
         s->use_timestamps = 1;
         split_str = s->timestamps_str;
-        s->nb_points = s->nb_timestamps_opt;
+        s->nb_points = s->nb_timestamps_opt+1;
     } else if (s->nb_points_opt) {
         split_str = s->points_str;
-        s->nb_points = s->nb_points_opt;
+        s->nb_points = s->nb_points_opt+1;
     } else {
         av_log(ctx, AV_LOG_ERROR, "Neither timestamps nor durations nor counts supplied.\n");
         return AVERROR(EINVAL);
