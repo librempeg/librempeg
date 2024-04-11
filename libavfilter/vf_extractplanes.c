@@ -131,91 +131,39 @@ AVFILTER_DEFINE_CLASS(extractplanes);
 
 static int query_formats(AVFilterContext *ctx)
 {
-    static const enum AVPixelFormat in_pixfmts_le[] = {
+    static const enum AVPixelFormat in_pixfmts[] = {
         EIGHTBIT_FORMATS,
         HIGHDEPTH_FORMATS(LE),
         FLOAT_FORMATS(LE),
-        AV_PIX_FMT_NONE,
-    };
-    static const enum AVPixelFormat in_pixfmts_be[] = {
-        EIGHTBIT_FORMATS,
         HIGHDEPTH_FORMATS(BE),
         FLOAT_FORMATS(BE),
         AV_PIX_FMT_NONE,
     };
-    static const enum AVPixelFormat out8_pixfmts[] = { AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE };
-    static const enum AVPixelFormat out9le_pixfmts[] = { AV_PIX_FMT_GRAY9LE, AV_PIX_FMT_NONE };
-    static const enum AVPixelFormat out9be_pixfmts[] = { AV_PIX_FMT_GRAY9BE, AV_PIX_FMT_NONE };
-    static const enum AVPixelFormat out10le_pixfmts[] = { AV_PIX_FMT_GRAY10LE, AV_PIX_FMT_NONE };
-    static const enum AVPixelFormat out10be_pixfmts[] = { AV_PIX_FMT_GRAY10BE, AV_PIX_FMT_NONE };
-    static const enum AVPixelFormat out12le_pixfmts[] = { AV_PIX_FMT_GRAY12LE, AV_PIX_FMT_NONE };
-    static const enum AVPixelFormat out12be_pixfmts[] = { AV_PIX_FMT_GRAY12BE, AV_PIX_FMT_NONE };
-    static const enum AVPixelFormat out14le_pixfmts[] = { AV_PIX_FMT_GRAY14LE, AV_PIX_FMT_NONE };
-    static const enum AVPixelFormat out14be_pixfmts[] = { AV_PIX_FMT_GRAY14BE, AV_PIX_FMT_NONE };
-    static const enum AVPixelFormat out16le_pixfmts[] = { AV_PIX_FMT_GRAY16LE, AV_PIX_FMT_NONE };
-    static const enum AVPixelFormat out16be_pixfmts[] = { AV_PIX_FMT_GRAY16BE, AV_PIX_FMT_NONE };
-    static const enum AVPixelFormat out32le_pixfmts[] = { AV_PIX_FMT_GRAYF32LE, AV_PIX_FMT_NONE };
-    static const enum AVPixelFormat out32be_pixfmts[] = { AV_PIX_FMT_GRAYF32BE, AV_PIX_FMT_NONE };
-    const enum AVPixelFormat *out_pixfmts, *in_pixfmts;
-    const AVPixFmtDescriptor *desc;
-    AVFilterFormats *avff;
-    int i, ret, depth = 0, be = 0;
+    static const enum AVPixelFormat out_pixfmts[] = {
+        AV_PIX_FMT_GRAY8,
+        AV_PIX_FMT_GRAY9LE,   AV_PIX_FMT_GRAY9BE,
+        AV_PIX_FMT_GRAY10LE,  AV_PIX_FMT_GRAY10BE,
+        AV_PIX_FMT_GRAY12LE,  AV_PIX_FMT_GRAY12BE,
+        AV_PIX_FMT_GRAY14LE,  AV_PIX_FMT_GRAY14BE,
+        AV_PIX_FMT_GRAY16LE,  AV_PIX_FMT_GRAY16BE,
+        AV_PIX_FMT_GRAYF32LE, AV_PIX_FMT_GRAYF32BE,
+        AV_PIX_FMT_NONE
+    };
+    AVFilterFormats *formats = ff_make_format_list(in_pixfmts);
+    int ret;
 
-    if (!ctx->inputs[0]->incfg.formats ||
-        !ctx->inputs[0]->incfg.formats->nb_formats) {
-        return AVERROR(EAGAIN);
-    }
+    if (!formats)
+        return AVERROR(ENOMEM);
+    formats->same_bitdepth = formats->same_endianness = 1;
+    if ((ret = ff_formats_ref(formats, &ctx->inputs[0]->outcfg.formats)) < 0)
+        return ret;
 
-    avff = ctx->inputs[0]->incfg.formats;
-    desc = av_pix_fmt_desc_get(avff->formats[0]);
-    depth = desc->comp[0].depth;
-    be = desc->flags & AV_PIX_FMT_FLAG_BE;
-    if (be) {
-        in_pixfmts = in_pixfmts_be;
-    } else {
-        in_pixfmts = in_pixfmts_le;
-    }
-    if (!ctx->inputs[0]->outcfg.formats)
-        if ((ret = ff_formats_ref(ff_make_format_list(in_pixfmts), &ctx->inputs[0]->outcfg.formats)) < 0)
-            return ret;
-
-    for (i = 1; i < avff->nb_formats; i++) {
-        desc = av_pix_fmt_desc_get(avff->formats[i]);
-        if (depth != desc->comp[0].depth ||
-            be    != (desc->flags & AV_PIX_FMT_FLAG_BE)) {
-            return AVERROR(EAGAIN);
-        }
-    }
-
-    if (depth == 8)
-        out_pixfmts = out8_pixfmts;
-    else if (!be && depth == 9)
-        out_pixfmts = out9le_pixfmts;
-    else if (be && depth == 9)
-        out_pixfmts = out9be_pixfmts;
-    else if (!be && depth == 10)
-        out_pixfmts = out10le_pixfmts;
-    else if (be && depth == 10)
-        out_pixfmts = out10be_pixfmts;
-    else if (!be && depth == 12)
-        out_pixfmts = out12le_pixfmts;
-    else if (be && depth == 12)
-        out_pixfmts = out12be_pixfmts;
-    else if (!be && depth == 14)
-        out_pixfmts = out14le_pixfmts;
-    else if (be && depth == 14)
-        out_pixfmts = out14be_pixfmts;
-    else if (be && depth == 16)
-        out_pixfmts = out16be_pixfmts;
-    else if (!be && depth == 16)
-        out_pixfmts = out16le_pixfmts;
-    else if (be && depth == 32)
-        out_pixfmts = out32be_pixfmts;
-    else
-        out_pixfmts = out32le_pixfmts;
-
-    for (i = 0; i < ctx->nb_outputs; i++)
-        if ((ret = ff_formats_ref(ff_make_format_list(out_pixfmts), &ctx->outputs[i]->incfg.formats)) < 0)
+    formats = ff_make_format_list(out_pixfmts);
+    if (!formats)
+        return AVERROR(ENOMEM);
+    formats->same_bitdepth = formats->same_endianness = 1;
+    for (int i = 0; i < ctx->nb_outputs; i++)
+        if ((ret = ff_formats_ref(formats, &ctx->outputs[i]->incfg.formats)) < 0)
             return ret;
     return 0;
 }
