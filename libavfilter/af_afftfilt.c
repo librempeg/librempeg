@@ -18,7 +18,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/avstring.h"
 #include "libavutil/mem.h"
 #include "libavfilter/internal.h"
 #include "libavutil/common.h"
@@ -32,8 +31,10 @@
 
 typedef struct AFFTFiltContext {
     const AVClass *class;
-    char *real_str;
-    char *img_str;
+    char **real_str;
+    unsigned nb_real_str;
+    char **imag_str;
+    unsigned nb_imag_str;
     int tx_size;
 
     AVTXContext **tx, **itx;
@@ -62,10 +63,14 @@ enum                                   { VAR_SAMPLE_RATE, VAR_BIN, VAR_NBBINS, V
 
 #define OFFSET(x) offsetof(AFFTFiltContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_real = {.def="re",.size_min=1,.sep='|'};
+static const AVOptionArrayDef def_imag = {.def="im",.size_min=1,.sep='|'};
 
 static const AVOption afftfilt_options[] = {
-    { "real", "set channels real expressions",       OFFSET(real_str), AV_OPT_TYPE_STRING, {.str = "re" }, 0, 0, A },
-    { "imag", "set channels imaginary expressions",  OFFSET(img_str),  AV_OPT_TYPE_STRING, {.str = "im" }, 0, 0, A },
+    { "real", "set channels real expressions",       OFFSET(real_str), AV_OPT_TYPE_STRING|AR, {.arr = &def_real }, 0, 0, A },
+    { "imag", "set channels imaginary expressions",  OFFSET(imag_str), AV_OPT_TYPE_STRING|AR, {.arr = &def_imag }, 0, 0, A },
     { "win_size", "set window size", OFFSET(tx_size), AV_OPT_TYPE_INT, {.i64=4096}, 16, 131072, A },
     WIN_FUNC_OPTION("win_func", OFFSET(win_func), A, WFUNC_HANNING),
     { "overlap", "set window overlap", OFFSET(overlap), AV_OPT_TYPE_FLOAT, {.dbl=0.75}, 0,  1, A },
@@ -87,11 +92,8 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     AFFTFiltContext *s = ctx->priv;
-    char *saveptr = NULL;
     enum AVTXType tx_type;
     float overlap;
-    char *args;
-    const char *last_expr = "1";
     float scale_float = 1.f;
     double scale_double = 1.0;
     float iscale_float = 1.f;
@@ -140,46 +142,30 @@ static int config_input(AVFilterLink *inlink)
     if (!s->imag)
         return AVERROR(ENOMEM);
 
-    args = av_strdup(s->real_str);
-    if (!args)
-        return AVERROR(ENOMEM);
-
     for (int ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
-        char *arg = av_strtok(ch == 0 ? args : NULL, "|", &saveptr);
+        const unsigned idx = FFMIN(ch, s->nb_real_str-1);
+        const char *arg = s->real_str[idx];
 
-        ret = av_expr_parse(&s->real[ch], arg ? arg : last_expr, var_names,
+        ret = av_expr_parse(&s->real[ch], arg, var_names,
                             NULL, NULL, func2_names,
                             inlink->format == AV_SAMPLE_FMT_FLTP ? func2_float : func2_double,
                             0, ctx);
         if (ret < 0)
             goto fail;
-        if (arg)
-            last_expr = arg;
         s->nb_exprs++;
     }
 
-    av_freep(&args);
-
-    args = av_strdup(s->img_str ? s->img_str : s->real_str);
-    if (!args)
-        return AVERROR(ENOMEM);
-
-    saveptr = NULL;
-    last_expr = "1";
     for (int ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
-        char *arg = av_strtok(ch == 0 ? args : NULL, "|", &saveptr);
+        const unsigned idx = FFMIN(ch, s->nb_imag_str-1);
+        const char *arg = s->imag_str[idx];
 
-        ret = av_expr_parse(&s->imag[ch], arg ? arg : last_expr, var_names,
+        ret = av_expr_parse(&s->imag[ch], arg, var_names,
                             NULL, NULL, func2_names,
                             inlink->format == AV_SAMPLE_FMT_FLTP ? func2_float : func2_double,
                             0, ctx);
         if (ret < 0)
             goto fail;
-        if (arg)
-            last_expr = arg;
     }
-
-    av_freep(&args);
 
     s->window_func_lut = av_realloc_f(s->window_func_lut, s->win_size,
                                       sizeof(*s->window_func_lut));
@@ -230,8 +216,6 @@ static int config_input(AVFilterLink *inlink)
     }
 
 fail:
-    av_freep(&args);
-
     return ret;
 }
 
