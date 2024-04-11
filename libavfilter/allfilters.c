@@ -99,6 +99,7 @@ extern const AVFilter ff_af_asetnsamples;
 extern const AVFilter ff_af_asetpts;
 extern const AVFilter ff_af_asetrate;
 extern const AVFilter ff_af_asettb;
+extern const AVFilter ff_af_asf2sf;
 extern const AVFilter ff_af_ashowinfo;
 extern const AVFilter ff_af_asidedata;
 extern const AVFilter ff_af_asisdr;
