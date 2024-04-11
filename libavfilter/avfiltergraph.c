@@ -638,6 +638,24 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
             int i;
             for (i = 0; i < link->incfg.formats->nb_formats; i++) {
                 enum AVPixelFormat p = link->incfg.formats->formats[i];
+                if (link->incfg.formats->same_bitdepth ||
+                    link->incfg.formats->same_endianness) {
+                    const AVPixFmtDescriptor *a = av_pix_fmt_desc_get(p);
+                    const AVPixFmtDescriptor *b = av_pix_fmt_desc_get(ref->format);
+                    if (link->incfg.formats->same_bitdepth) {
+                        const int abits = a->comp[0].depth;
+                        const int bbits = b->comp[0].depth;
+                        if (abits != bbits)
+                            continue;
+                    }
+
+                    if (link->incfg.formats->same_endianness) {
+                        const int abe = !!(a->flags & AV_PIX_FMT_FLAG_BE);
+                        const int bbe = !!(b->flags & AV_PIX_FMT_FLAG_BE);
+                        if (abe != bbe)
+                            continue;
+                    }
+                }
                 best= av_find_best_pix_fmt_of_2(best, p, ref->format, has_alpha, NULL);
             }
             av_log(link->src,AV_LOG_DEBUG, "picking %s out of %d ref:%s alpha:%d\n",
@@ -651,6 +669,11 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
             int i;
             for (i = 0; i < link->incfg.formats->nb_formats; i++) {
                 enum AVSampleFormat p = link->incfg.formats->formats[i];
+                if (link->incfg.formats->same_bitdepth) {
+                    if (av_get_bytes_per_sample(p) !=
+                        av_get_bytes_per_sample(ref->format))
+                        continue;
+                }
                 best = find_best_sample_fmt_of_2(best, p, ref->format);
             }
             av_log(link->src,AV_LOG_DEBUG, "picking %s out of %d ref:%s\n",

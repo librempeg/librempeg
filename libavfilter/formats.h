@@ -64,6 +64,8 @@
 struct AVFilterFormats {
     unsigned nb_formats;        ///< number of formats
     int *formats;               ///< list of media formats
+    uint8_t same_bitdepth;      ///< accept only formats pairs with same bitdepth
+    uint8_t same_endianness;    ///< accept only formats pairs with same endianness
 
     unsigned refcount;          ///< number of references to this list
     struct AVFilterFormats ***refs; ///< references to this list
