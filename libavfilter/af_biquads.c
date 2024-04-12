@@ -159,6 +159,10 @@ typedef struct BiquadsContext {
                    void *cache, int *clip, int disabled);
 } BiquadsContext;
 
+#define DEPTH 8
+#include "biquads_template.c"
+
+#undef DEPTH
 #define DEPTH 16
 #include "biquads_template.c"
 
@@ -178,6 +182,7 @@ static int query_formats(AVFilterContext *ctx)
 {
     BiquadsContext *s = ctx->priv;
     static const enum AVSampleFormat auto_sample_fmts[] = {
+        AV_SAMPLE_FMT_U8P,
         AV_SAMPLE_FMT_S16P,
         AV_SAMPLE_FMT_S32P,
         AV_SAMPLE_FMT_FLTP,
@@ -205,6 +210,9 @@ static int query_formats(AVFilterContext *ctx)
         break;
     case 3:
         sample_fmts[0] = AV_SAMPLE_FMT_DBLP;
+        break;
+    case 4:
+        sample_fmts[0] = AV_SAMPLE_FMT_U8P;
         break;
     default:
         sample_fmts_list = auto_sample_fmts;
@@ -704,6 +712,9 @@ static int config_filter(AVFilterLink *outlink, int reset)
     switch (s->transform_type) {
     case DI:
         switch (inlink->format) {
+        case AV_SAMPLE_FMT_U8P:
+            s->filter = biquad_di_u8;
+            break;
         case AV_SAMPLE_FMT_S16P:
             s->filter = biquad_di_s16;
             break;
@@ -721,6 +732,9 @@ static int config_filter(AVFilterLink *outlink, int reset)
         break;
     case DII:
         switch (inlink->format) {
+        case AV_SAMPLE_FMT_U8P:
+            s->filter = biquad_dii_u8;
+            break;
         case AV_SAMPLE_FMT_S16P:
             s->filter = biquad_dii_s16;
             break;
@@ -738,6 +752,9 @@ static int config_filter(AVFilterLink *outlink, int reset)
         break;
     case TDI:
         switch (inlink->format) {
+        case AV_SAMPLE_FMT_U8P:
+            s->filter = biquad_tdi_u8;
+            break;
         case AV_SAMPLE_FMT_S16P:
             s->filter = biquad_tdi_s16;
             break;
@@ -755,6 +772,9 @@ static int config_filter(AVFilterLink *outlink, int reset)
         break;
     case TDII:
         switch (inlink->format) {
+        case AV_SAMPLE_FMT_U8P:
+            s->filter = biquad_tdii_u8;
+            break;
         case AV_SAMPLE_FMT_S16P:
             s->filter = biquad_tdii_s16;
             break;
@@ -772,6 +792,9 @@ static int config_filter(AVFilterLink *outlink, int reset)
         break;
     case LATT:
         switch (inlink->format) {
+        case AV_SAMPLE_FMT_U8P:
+            s->filter = biquad_latt_u8;
+            break;
         case AV_SAMPLE_FMT_S16P:
             s->filter = biquad_latt_s16;
             break;
@@ -789,6 +812,9 @@ static int config_filter(AVFilterLink *outlink, int reset)
         break;
     case SVF:
         switch (inlink->format) {
+        case AV_SAMPLE_FMT_U8P:
+            s->filter = biquad_svf_u8;
+            break;
         case AV_SAMPLE_FMT_S16P:
             s->filter = biquad_svf_s16;
             break;
@@ -806,6 +832,9 @@ static int config_filter(AVFilterLink *outlink, int reset)
         break;
     case ZDF:
         switch (inlink->format) {
+        case AV_SAMPLE_FMT_U8P:
+            s->filter = biquad_zdf_u8;
+            break;
         case AV_SAMPLE_FMT_S16P:
             s->filter = biquad_zdf_s16;
             break;
@@ -1159,9 +1188,10 @@ const AVFilter ff_af_##name_ = {                         \
     {"zdf",  "zero-delay filter form", 0, AV_OPT_TYPE_CONST, {.i64=ZDF}, 0, 0, AF, .unit = "transform_type"}
 
 #define PRECISION_OPTION(x)                                                                                           \
-    {"precision", "set filtering precision", OFFSET(precision), AV_OPT_TYPE_INT, {.i64=x}, -1, 3, AF, .unit = "precision"},   \
-    {"r",         "set filtering precision", OFFSET(precision), AV_OPT_TYPE_INT, {.i64=x}, -1, 3, AF, .unit = "precision"},   \
+    {"precision", "set filtering precision", OFFSET(precision), AV_OPT_TYPE_INT, {.i64=x}, -1, 4, AF, .unit = "precision"},   \
+    {"r",         "set filtering precision", OFFSET(precision), AV_OPT_TYPE_INT, {.i64=x}, -1, 4, AF, .unit = "precision"},   \
     {"auto", "automatic",            0, AV_OPT_TYPE_CONST, {.i64=-1}, 0, 0, AF, .unit = "precision"},                         \
+    {"u8",  "unsigned 8-bit",        0, AV_OPT_TYPE_CONST, {.i64=4},  0, 0, AF, .unit = "precision"},                         \
     {"s16", "signed 16-bit",         0, AV_OPT_TYPE_CONST, {.i64=0},  0, 0, AF, .unit = "precision"},                         \
     {"s32", "signed 32-bit",         0, AV_OPT_TYPE_CONST, {.i64=1},  0, 0, AF, .unit = "precision"},                         \
     {"f32", "floating-point single", 0, AV_OPT_TYPE_CONST, {.i64=2},  0, 0, AF, .unit = "precision"},                         \
