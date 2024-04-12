@@ -380,8 +380,10 @@ static int channelmap_filter_frame(AVFilterLink *inlink, AVFrame *buf)
         memcpy(buf->data, buf->extended_data,
            FFMIN(FF_ARRAY_ELEMS(buf->data), nch_out) * sizeof(buf->data[0]));
 
-    if ((ret = av_channel_layout_copy(&buf->ch_layout, &outlink->ch_layout)) < 0)
+    if ((ret = av_channel_layout_copy(&buf->ch_layout, &outlink->ch_layout)) < 0) {
+        av_frame_free(&buf);
         return ret;
+    }
 
     return ff_filter_frame(outlink, buf);
 }
