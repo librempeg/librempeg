@@ -40,11 +40,6 @@ static int nist_write_header(AVFormatContext *s)
     const char *format[] = { "01", "10" };
     int index = 0, bps;
 
-    if (s->nb_streams != 1) {
-        av_log(s, AV_LOG_ERROR, "only one stream is supported\n");
-        return AVERROR(EINVAL);
-    }
-
     switch (par->codec_id) {
     case AV_CODEC_ID_PCM_S16LE:
     case AV_CODEC_ID_PCM_S24LE:
@@ -107,6 +102,8 @@ const FFOutputFormat ff_nistsphere_muxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("NIST SPeech HEader REsources"),
     .p.audio_codec  = AV_CODEC_ID_PCM_S16LE,
     .p.video_codec  = AV_CODEC_ID_NONE,
+    .p.subtitle_codec = AV_CODEC_ID_NONE,
+    .flags_internal = FF_OFMT_FLAG_MAX_ONE_OF_EACH,
     .priv_data_size = sizeof(NISTContext),
     .write_header   = nist_write_header,
     .write_packet   = ff_raw_write_packet,
