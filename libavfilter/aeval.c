@@ -67,7 +67,8 @@ typedef struct EvalContext {
     int same_chlayout;          ///< set output as input channel layout
     int64_t pts;
     AVExpr **expr;
-    char *exprs;
+    char **exprs;
+    unsigned nb_exprs;
     int nb_samples;             ///< number of samples per requested frame
     int64_t duration;
     uint64_t n;
@@ -86,9 +87,12 @@ static const char * const aeval_func1_names[] = { "val", NULL };
 
 #define OFFSET(x) offsetof(EvalContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_exprs = {.def=NULL,.size_min=1,.sep='|'};
 
 static const AVOption aevalsrc_options[]= {
-    { "exprs",       "set the '|'-separated list of channels expressions", OFFSET(exprs), AV_OPT_TYPE_STRING, {.str = NULL}, .flags = FLAGS },
+    { "exprs",       "set the list of channels expressions",          OFFSET(exprs),        AV_OPT_TYPE_STRING|AR, {.arr=&def_exprs}, .flags = FLAGS },
     { "nb_samples",  "set the number of samples per requested frame", OFFSET(nb_samples),      AV_OPT_TYPE_INT,    {.i64 = 1024},    0,        INT_MAX, FLAGS },
     { "n",           "set the number of samples per requested frame", OFFSET(nb_samples),      AV_OPT_TYPE_INT,    {.i64 = 1024},    0,        INT_MAX, FLAGS },
     { "sample_rate", "set the sample rate",                           OFFSET(sample_rate_str), AV_OPT_TYPE_STRING, {.str = "44100"}, 0, 0, FLAGS },
@@ -106,19 +110,9 @@ static int parse_channel_expressions(AVFilterContext *ctx,
                                      int expected_nb_channels)
 {
     EvalContext *eval = ctx->priv;
-    char *args1 = av_strdup(eval->exprs);
-    char *expr, *last_expr = NULL, *buf;
     double (* const *func1)(void *, double) = NULL;
     const char * const *func1_names = NULL;
     int i, ret = 0;
-
-    if (!args1)
-        return AVERROR(ENOMEM);
-
-    if (!eval->exprs) {
-        av_log(ctx, AV_LOG_ERROR, "Channels expressions list is empty\n");
-        return AVERROR(EINVAL);
-    }
 
     if (!strcmp(ctx->filter->name, "aeval")) {
         func1 = aeval_func1;
@@ -146,15 +140,11 @@ static int parse_channel_expressions(AVFilterContext *ctx,
     av_freep(&eval->expr);
     eval->nb_channels = 0;
 
-    buf = args1;
-    while (expr = av_strtok(buf, "|", &buf)) {
+    for (int n = 0; n < FFMAX(expected_nb_channels, eval->nb_exprs); n++) {
+        const int idx = FFMIN(n, eval->nb_exprs-1);
+        const char *expr = eval->exprs[idx];
         ADD_EXPRESSION(expr);
-        last_expr = expr;
     }
-
-    if (expected_nb_channels > eval->nb_channels)
-        for (i = eval->nb_channels; i < expected_nb_channels; i++)
-            ADD_EXPRESSION(last_expr);
 
     if (expected_nb_channels > 0 && eval->nb_channels != expected_nb_channels) {
         av_log(ctx, AV_LOG_ERROR,
@@ -166,7 +156,6 @@ static int parse_channel_expressions(AVFilterContext *ctx,
     }
 
 end:
-    av_free(args1);
     return ret;
 }
 
@@ -336,9 +325,10 @@ const AVFilter ff_asrc_aevalsrc = {
 
 #define OFFSET(x) offsetof(EvalContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
 
 static const AVOption aeval_options[]= {
-    { "exprs", "set the '|'-separated list of channels expressions", OFFSET(exprs), AV_OPT_TYPE_STRING, {.str = NULL}, .flags = FLAGS },
+    { "exprs", "set the of channels expressions", OFFSET(exprs), AV_OPT_TYPE_STRING|AR, {.arr = &def_exprs}, .flags = FLAGS },
     { "channel_layout", "set channel layout", OFFSET(chlayout_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
     { "c",              "set channel layout", OFFSET(chlayout_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
     { NULL }
