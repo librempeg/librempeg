@@ -58,7 +58,6 @@ enum var_name {
 
 typedef struct EvalContext {
     const AVClass *class;
-    char *sample_rate_str;
     int sample_rate;
     AVChannelLayout chlayout;
     char *chlayout_str;
@@ -95,8 +94,8 @@ static const AVOption aevalsrc_options[]= {
     { "exprs",       "set the list of channels expressions",          OFFSET(exprs),        AV_OPT_TYPE_STRING|AR, {.arr=&def_exprs}, .flags = FLAGS },
     { "nb_samples",  "set the number of samples per requested frame", OFFSET(nb_samples),      AV_OPT_TYPE_INT,    {.i64 = 1024},    0,        INT_MAX, FLAGS },
     { "n",           "set the number of samples per requested frame", OFFSET(nb_samples),      AV_OPT_TYPE_INT,    {.i64 = 1024},    0,        INT_MAX, FLAGS },
-    { "sample_rate", "set the sample rate",                           OFFSET(sample_rate_str), AV_OPT_TYPE_STRING, {.str = "44100"}, 0, 0, FLAGS },
-    { "s",           "set the sample rate",                           OFFSET(sample_rate_str), AV_OPT_TYPE_STRING, {.str = "44100"}, 0, 0, FLAGS },
+    { "sample_rate", "set the sample rate",                           OFFSET(sample_rate),     AV_OPT_TYPE_INT,    {.i64 = 44100},   0,        INT_MAX, FLAGS },
+    { "s",           "set the sample rate",                           OFFSET(sample_rate),     AV_OPT_TYPE_INT,    {.i64 = 44100},   0,        INT_MAX, FLAGS },
     { "duration",    "set audio duration", OFFSET(duration), AV_OPT_TYPE_DURATION, {.i64 = -1}, -1, INT64_MAX, FLAGS },
     { "d",           "set audio duration", OFFSET(duration), AV_OPT_TYPE_DURATION, {.i64 = -1}, -1, INT64_MAX, FLAGS },
     { "channel_layout", "set channel layout", OFFSET(chlayout_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
@@ -189,9 +188,6 @@ static av_cold int init(AVFilterContext *ctx)
         }
     }
 
-    if (eval->sample_rate_str)
-        if ((ret = ff_parse_sample_rate(&eval->sample_rate, eval->sample_rate_str, ctx)))
-            return ret;
     eval->n = 0;
 
     return ret;
