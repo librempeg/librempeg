@@ -153,6 +153,10 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
                 write_pos = 0;
         }
 
+        w[0] = isnormal(w[0]) ? w[0] : 0.0;
+        w[1] = isnormal(w[1]) ? w[1] : 0.0;
+        w[2] = isnormal(w[2]) ? w[2] : 0.0;
+
         s->write_pos[ch] = write_pos;
     }
 
