@@ -18,7 +18,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/avstring.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
@@ -34,14 +33,14 @@ typedef struct AudioBitScopeContext {
     const AVClass *class;
     int w, h;
     AVRational frame_rate;
-    char *colors;
+    uint32_t *colors;
+    unsigned nb_colors;
     int mode;
 
     int nb_channels;
     int nb_samples;
     int depth;
     int current_vpos;
-    uint8_t *fg;
 
     uint64_t counter[64];
 
@@ -50,13 +49,16 @@ typedef struct AudioBitScopeContext {
 
 #define OFFSET(x) offsetof(AudioBitScopeContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_colors = {.def="red|green|blue|yellow|orange|lime|pink|magenta|brown",.size_min=1,.sep='|'};
 
 static const AVOption abitscope_options[] = {
     { "rate", "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
     { "r",    "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
     { "size", "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str="1024x256"}, 0, 0, FLAGS },
     { "s",    "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str="1024x256"}, 0, 0, FLAGS },
-    { "colors", "set channels colors", OFFSET(colors), AV_OPT_TYPE_STRING, {.str = "red|green|blue|yellow|orange|lime|pink|magenta|brown" }, 0, 0, FLAGS },
+    { "colors", "set channels colors", OFFSET(colors), AV_OPT_TYPE_COLOR|AR, {.arr = &def_colors }, 0, 0, FLAGS },
     { "mode", "set output mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64 = 0 }, 0, 1, FLAGS, .unit = "mode" },
     { "m",    "set output mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64 = 0 }, 0, 1, FLAGS, .unit = "mode" },
     { "bars",  NULL, 0, AV_OPT_TYPE_CONST, {.i64 = 0 }, 0, 0, FLAGS, .unit = "mode" },
@@ -104,34 +106,10 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     AudioBitScopeContext *s = ctx->priv;
-    int ch;
-    char *colors, *saveptr = NULL;
 
     s->nb_samples = FFMAX(1, av_rescale(inlink->sample_rate, s->frame_rate.den, s->frame_rate.num));
     s->nb_channels = inlink->ch_layout.nb_channels;
     s->depth = inlink->format == AV_SAMPLE_FMT_S16P ? 16 : 32;
-
-    s->fg = av_malloc_array(s->nb_channels, 4 * sizeof(*s->fg));
-    if (!s->fg)
-        return AVERROR(ENOMEM);
-
-    colors = av_strdup(s->colors);
-    if (!colors)
-        return AVERROR(ENOMEM);
-
-    for (ch = 0; ch < s->nb_channels; ch++) {
-        uint8_t fg[4] = { 0xff, 0xff, 0xff, 0xff };
-        char *color;
-
-        color = av_strtok(ch == 0 ? colors : NULL, " |", &saveptr);
-        if (color)
-            av_parse_color(fg, color, -1, ctx);
-        s->fg[4 * ch + 0] = fg[0];
-        s->fg[4 * ch + 1] = fg[1];
-        s->fg[4 * ch + 2] = fg[2];
-        s->fg[4 * ch + 3] = fg[3];
-    }
-    av_free(colors);
 
     return 0;
 }
@@ -158,20 +136,21 @@ static int config_output(AVFilterLink *outlink)
         }
 
 #define BARS(type, depth, one)                                              \
-    for (int ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {            \
+    for (int ch = 0; ch < s->nb_channels; ch++) {                           \
         const int nb_samples = insamples->nb_samples;                       \
         const type *in = (const type *)insamples->extended_data[ch];        \
-        const int w = outpicref->width / inlink->ch_layout.nb_channels;     \
+        const int w = outpicref->width / s->nb_channels;                    \
         const int h = outpicref->height / depth;                            \
-        const uint32_t color = AV_RN32(&s->fg[4 * ch]);                     \
+        const int idx = FFMIN(ch, s->nb_colors-1);                          \
+        const uint32_t color = AV_RN32(&s->colors[idx]);                    \
         uint64_t *counter = s->counter;                                     \
                                                                             \
         BITCOUNTER(type, depth, one)                                        \
                                                                             \
         for (int b = 0; b < depth; b++) {                                   \
             for (int j = 1; j < h - 1; j++) {                               \
-                uint8_t *dst = outpicref->data[0] + (b * h + j) * outpicref->linesize[0] + w * ch * 4; \
-                const int ww = (counter[depth - b - 1] / (float)nb_samples) * (w - 1); \
+                uint8_t *dst = outpicref->data[0]+(b*h+j)*outpicref->linesize[0]+w*ch*4; \
+                const int ww = (counter[depth-b-1]/(float)nb_samples)*(w-1);\
                                                                             \
                 for (int i = 0; i < ww; i++) {                              \
                     AV_WN32(&dst[i * 4], color);                            \
@@ -181,30 +160,33 @@ static int config_output(AVFilterLink *outlink)
     }
 
 #define DO_TRACE(type, depth, one)                                          \
-    for (int ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {            \
+    for (int ch = 0; ch < s->nb_channels; ch++) {                           \
         const int nb_samples = insamples->nb_samples;                       \
-        const int w = outpicref->width / inlink->ch_layout.nb_channels;     \
+        const int w = outpicref->width / s->nb_channels;                    \
         const type *in = (const type *)insamples->extended_data[ch];        \
+        const ptrdiff_t linesize = outpicref->linesize[0];                  \
+        const int idx = FFMIN(ch, s->nb_colors-1);                          \
         uint64_t *counter = s->counter;                                     \
         const int wb = w / depth;                                           \
-        int wv;                                                             \
+        uint8_t color[4];                                                   \
+        uint32_t wv;                                                        \
                                                                             \
         BITCOUNTER(type, depth, one)                                        \
                                                                             \
+        AV_WN32(&color[0], AV_RN32(&s->colors[idx]));                       \
         for (int b = 0; b < depth; b++) {                                   \
-            uint8_t colors[4];                                              \
-            uint32_t color;                                                 \
-            uint8_t *dst = outpicref->data[0] + w * ch * 4 + wb * b * 4 +   \
-                           s->current_vpos * outpicref->linesize[0];        \
+            uint8_t *dst = outpicref->data[0]+w*ch*4+wb*b*4+                \
+                           s->current_vpos*linesize;                        \
+            uint8_t new_color[4];                                           \
+                                                                            \
             wv = (counter[depth - b - 1] * 255) / nb_samples;               \
-            colors[0] = (wv * s->fg[ch * 4 + 0] + 127) / 255;               \
-            colors[1] = (wv * s->fg[ch * 4 + 1] + 127) / 255;               \
-            colors[2] = (wv * s->fg[ch * 4 + 2] + 127) / 255;               \
-            colors[3] = (wv * s->fg[ch * 4 + 3] + 127) / 255;               \
-            color = AV_RN32(colors);                                        \
+            new_color[0] = (wv * color[0] + 127) / 255;                     \
+            new_color[1] = (wv * color[1] + 127) / 255;                     \
+            new_color[2] = (wv * color[2] + 127) / 255;                     \
+            new_color[3] = (wv * color[3] + 127) / 255;                     \
                                                                             \
             for (int x = 0; x < wb; x++)                                    \
-                AV_WN32(&dst[x * 4], color);                                \
+                AV_WN32(&dst[x * 4], AV_RN32(&new_color[0]));               \
         }                                                                   \
     }
 
