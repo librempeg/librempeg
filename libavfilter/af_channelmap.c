@@ -43,6 +43,8 @@ struct ChannelMap {
     int out_channel;
     int in_channel_idx;
     int out_channel_idx;
+    uint8_t in_empty;
+    uint8_t out_empty;
 };
 
 enum MappingMode {
@@ -55,6 +57,9 @@ enum MappingMode {
     MAP_PAIR_STR_STR
 };
 
+#define IN_EMPTY  1
+#define OUT_EMPTY 2
+
 #define MAX_CH 64
 typedef struct ChannelMapContext {
     const AVClass *class;
@@ -62,6 +67,7 @@ typedef struct ChannelMapContext {
     AVChannelLayout output_layout;
     struct ChannelMap map[MAX_CH];
     int nch;
+    int flags;
     enum MappingMode mode;
 } ChannelMapContext;
 
@@ -73,6 +79,10 @@ static const AVOption channelmap_options[] = {
           OFFSET(mapping_str),        AV_OPT_TYPE_STRING, .flags = A|F },
     { "channel_layout", "Output channel layout.",
           OFFSET(output_layout),      AV_OPT_TYPE_CHLAYOUT, .flags = A|F },
+    { "flags", "set the mapping flags.",
+          OFFSET(flags),              AV_OPT_TYPE_FLAGS, {.i64 = 0}, 0, 3, .flags = A|F, .unit = "flags" },
+    {  "in_empty",  "allow empty input channels",  0, AV_OPT_TYPE_CONST, {.i64 = IN_EMPTY},  .flags = A|F, .unit = "flags" },
+    {  "out_empty", "allow empty output channels", 0, AV_OPT_TYPE_CONST, {.i64 = OUT_EMPTY}, .flags = A|F, .unit = "flags" },
     { NULL }
 };
 
@@ -117,13 +127,17 @@ static int get_channel(char **map, int *ch, char delim)
     return 0;
 }
 
-static int check_idx_and_id(AVFilterContext *ctx, int channel_idx, int channel, AVChannelLayout *ch_layout, const char *io)
+static int check_idx_and_id(AVFilterContext *ctx, int channel_idx, int channel, AVChannelLayout *ch_layout, const char *io,
+                            const int flag)
 {
+    ChannelMapContext *s = ctx->priv;
     char channel_name[64];
     char layout_name[256];
     int nb_channels = ch_layout->nb_channels;
 
     if (channel_idx < 0 || channel_idx >= nb_channels) {
+        if (s->flags & flag)
+            return 1;
         av_channel_layout_describe(ch_layout, layout_name, sizeof(layout_name));
         if (channel >= 0) {
             av_channel_name(channel_name, sizeof(channel_name), channel);
@@ -304,9 +318,12 @@ static av_cold int channelmap_init(AVFilterContext *ctx)
     presence_mask = 0;
     for (i = 0; i < s->nch; i++) {
         uint64_t idx_mask;
-        int ret = check_idx_and_id(ctx, s->map[i].out_channel_idx, s->map[i].out_channel, &s->output_layout, "out");
+        int ret = check_idx_and_id(ctx, s->map[i].out_channel_idx, s->map[i].out_channel, &s->output_layout, "out", OUT_EMPTY);
         if (ret < 0)
             return ret;
+        s->map[i].out_empty = ret;
+        if (s->map[i].out_empty)
+            continue;
         idx_mask = (1ULL << s->map[i].out_channel_idx);
         if (presence_mask & idx_mask) {
             char layout_name[256];
@@ -338,72 +355,53 @@ static int channelmap_query_formats(AVFilterContext *ctx)
                                   &ctx->inputs[0]->outcfg.channel_layouts);
 }
 
-static int channelmap_filter_frame(AVFilterLink *inlink, AVFrame *buf)
+static int channelmap_filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext  *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     const ChannelMapContext *s = ctx->priv;
-    const int nch_in = inlink->ch_layout.nb_channels;
+    const int sample_size = av_get_bytes_per_sample(in->format);
     const int nch_out = s->nch;
-    int ch, ret;
-    uint8_t *source_planes[MAX_CH];
+    AVFrame *out;
 
-    memcpy(source_planes, buf->extended_data,
-           nch_in * sizeof(source_planes[0]));
-
-    if (nch_out > nch_in) {
-        if (nch_out > FF_ARRAY_ELEMS(buf->data)) {
-            uint8_t **new_extended_data =
-                av_calloc(nch_out, sizeof(*buf->extended_data));
-            if (!new_extended_data) {
-                av_frame_free(&buf);
-                return AVERROR(ENOMEM);
-            }
-            if (buf->extended_data == buf->data) {
-                buf->extended_data = new_extended_data;
-            } else {
-                av_free(buf->extended_data);
-                buf->extended_data = new_extended_data;
-            }
-        } else if (buf->extended_data != buf->data) {
-            av_free(buf->extended_data);
-            buf->extended_data = buf->data;
-        }
+    out = ff_get_audio_buffer(outlink, in->nb_samples);
+    if (!out) {
+        av_frame_free(&in);
+        return AVERROR(ENOMEM);
     }
 
-    for (ch = 0; ch < nch_out; ch++) {
-        buf->extended_data[s->map[ch].out_channel_idx] =
-            source_planes[s->map[ch].in_channel_idx];
+    for (int ch = 0; ch < nch_out; ch++) {
+        if (s->map[ch].out_empty || s->map[ch].in_empty)
+            continue;
+        memcpy(out->extended_data[s->map[ch].out_channel_idx],
+               in->extended_data[s->map[ch].in_channel_idx],
+               in->nb_samples * sample_size);
     }
 
-    if (buf->data != buf->extended_data)
-        memcpy(buf->data, buf->extended_data,
-           FFMIN(FF_ARRAY_ELEMS(buf->data), nch_out) * sizeof(buf->data[0]));
-
-    if ((ret = av_channel_layout_copy(&buf->ch_layout, &outlink->ch_layout)) < 0) {
-        av_frame_free(&buf);
-        return ret;
-    }
-
-    return ff_filter_frame(outlink, buf);
+    av_frame_copy_props(out, in);
+    av_frame_free(&in);
+    return ff_filter_frame(outlink, out);
 }
 
 static int channelmap_config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     ChannelMapContext *s = ctx->priv;
-    int i, err = 0;
+    int err = 0;
 
-    for (i = 0; i < s->nch; i++) {
+    for (int i = 0; i < s->nch; i++) {
         struct ChannelMap *m = &s->map[i];
+        int ret;
 
         if (s->mode == MAP_PAIR_STR_INT || s->mode == MAP_PAIR_STR_STR || s->mode == MAP_ONE_STR) {
             m->in_channel_idx = av_channel_layout_index_from_channel(
                 &inlink->ch_layout, m->in_channel);
         }
 
-        if (check_idx_and_id(ctx, m->in_channel_idx, m->in_channel, &inlink->ch_layout, "in") < 0)
+        ret = check_idx_and_id(ctx, m->in_channel_idx, m->in_channel, &inlink->ch_layout, "in", IN_EMPTY);
+        if (ret < 0)
             err = AVERROR(EINVAL);
+        m->in_empty = ret == 1;
     }
 
     return err;
@@ -413,7 +411,6 @@ static const AVFilterPad channelmap_inputs[] = {
     {
         .name           = "default",
         .type           = AVMEDIA_TYPE_AUDIO,
-        .flags          = AVFILTERPAD_FLAG_NEEDS_WRITABLE,
         .filter_frame   = channelmap_filter_frame,
         .config_props   = channelmap_config_input,
     },
