@@ -169,11 +169,13 @@ static av_cold int init(AVFilterContext *ctx)
         if (!strcmp(eval->chlayout_str, "same") && !strcmp(ctx->filter->name, "aeval")) {
             eval->same_chlayout = 1;
         } else {
-            ret = ff_parse_channel_layout(&eval->chlayout, NULL, eval->chlayout_str, ctx);
+            int nb_output_channels = 0;
+
+            ret = ff_parse_channel_layout(&eval->chlayout, &nb_output_channels, eval->chlayout_str, ctx);
             if (ret < 0)
                 return ret;
 
-            ret = parse_channel_expressions(ctx, eval->chlayout.nb_channels);
+            ret = parse_channel_expressions(ctx, nb_output_channels);
             if (ret < 0)
                 return ret;
         }
