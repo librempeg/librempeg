@@ -246,8 +246,7 @@ static int activate(AVFilterContext *ctx)
             for (int i = 1; i < ctx->nb_inputs; i++) {
                 if (s->frames[i])
                     available_inputs++;
-
-                if (s->eofs[i] && ff_inlink_queued_samples(ctx->inputs[i]) <= 0)
+                else if (s->eofs[i] && ff_inlink_queued_samples(ctx->inputs[i]) <= 0)
                     active_inputs--;
             }
 
@@ -296,7 +295,6 @@ static int activate(AVFilterContext *ctx)
             }
         } else if (!s->eofs[i] && ff_outlink_frame_wanted(outlink)) {
             ff_inlink_request_frame(ctx->inputs[i]);
-            return 0;
         }
     }
 
