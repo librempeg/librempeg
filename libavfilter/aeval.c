@@ -92,9 +92,9 @@ static const AVOptionArrayDef def_exprs = {.def=NULL,.size_min=1,.sep='|'};
 
 static const AVOption aevalsrc_options[]= {
     { "exprs",       "set the list of channels expressions",          OFFSET(exprs),        AV_OPT_TYPE_STRING|AR, {.arr=&def_exprs}, .flags = FLAGS },
-    { "nb_samples",  "set the number of samples per requested frame", OFFSET(nb_samples),      AV_OPT_TYPE_INT,    {.i64 = 1024},    0,        INT_MAX, FLAGS },
-    { "n",           "set the number of samples per requested frame", OFFSET(nb_samples),      AV_OPT_TYPE_INT,    {.i64 = 1024},    0,        INT_MAX, FLAGS },
-    { "sample_rate", "set the sample rate",                           OFFSET(sample_rate),     AV_OPT_TYPE_INT,    {.i64 = 44100},   0,        INT_MAX, FLAGS },
+    { "nb_samples",  "set the number of samples per requested frame", OFFSET(nb_samples),      AV_OPT_TYPE_INT,    {.i64 = 1024},    1,        INT_MAX, FLAGS },
+    { "n",           "set the number of samples per requested frame", OFFSET(nb_samples),      AV_OPT_TYPE_INT,    {.i64 = 1024},    1,        INT_MAX, FLAGS },
+    { "sample_rate", "set the sample rate",                           OFFSET(sample_rate),     AV_OPT_TYPE_INT,    {.i64 = 44100},   1,        INT_MAX, FLAGS },
     { "s",           "set the sample rate",                           OFFSET(sample_rate),     AV_OPT_TYPE_INT,    {.i64 = 44100},   0,        INT_MAX, FLAGS },
     { "duration",    "set audio duration", OFFSET(duration), AV_OPT_TYPE_DURATION, {.i64 = -1}, -1, INT64_MAX, FLAGS },
     { "d",           "set audio duration", OFFSET(duration), AV_OPT_TYPE_DURATION, {.i64 = -1}, -1, INT64_MAX, FLAGS },
@@ -139,7 +139,9 @@ static int parse_channel_expressions(AVFilterContext *ctx,
     av_freep(&eval->expr);
     eval->nb_channels = 0;
 
-    for (int n = 0; n < FFMAX(expected_nb_channels, eval->nb_exprs); n++) {
+    for (unsigned n = 0;
+         n < ((expected_nb_channels > 0) ? FFMAX(expected_nb_channels, eval->nb_exprs) :
+         eval->nb_exprs); n++) {
         const int idx = FFMIN(n, eval->nb_exprs-1);
         const char *expr = eval->exprs[idx];
         ADD_EXPRESSION(expr);
@@ -250,7 +252,7 @@ static int query_formats(AVFilterContext *ctx)
 static int activate(AVFilterContext *ctx)
 {
     AVFilterLink *outlink = ctx->outputs[0];
-    EvalContext *eval = outlink->src->priv;
+    EvalContext *eval = ctx->priv;
     AVFrame *samplesref;
     int i, j;
     int64_t t = av_rescale(eval->n, AV_TIME_BASE, eval->sample_rate);
@@ -324,7 +326,7 @@ const AVFilter ff_asrc_aevalsrc = {
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
 static const AVOption aeval_options[]= {
-    { "exprs", "set the of channels expressions", OFFSET(exprs), AV_OPT_TYPE_STRING|AR, {.arr = &def_exprs}, .flags = FLAGS },
+    { "exprs", "set the list of channels expressions", OFFSET(exprs), AV_OPT_TYPE_STRING|AR, {.arr = &def_exprs}, .flags = FLAGS },
     { "channel_layout", "set channel layout", OFFSET(chlayout_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
     { "c",              "set channel layout", OFFSET(chlayout_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
     { NULL }
