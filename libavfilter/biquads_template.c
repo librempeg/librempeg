@@ -79,8 +79,8 @@ static void fn(biquad_di)(BiquadsContext *s,
                           const void *input, void *output, int len,
                           void *cache, int *clippings, int disabled)
 {
-    const stype *ibuf = input;
-    stype *obuf = output;
+    const stype *restrict ibuf = input;
+    stype *restrict obuf = output;
     ftype *fcache = cache;
     ftype i1 = fcache[0], i2 = fcache[1], o1 = fcache[2], o2 = fcache[3];
     const ftype *a = ft(s->a);
@@ -158,8 +158,8 @@ static void fn(biquad_dii)(BiquadsContext *s,
                            const void *input, void *output, int len,
                            void *cache, int *clippings, int disabled)
 {
-    const stype *ibuf = input;
-    stype *obuf = output;
+    const stype *restrict ibuf = input;
+    stype *restrict obuf = output;
     ftype *fcache = cache;
     const ftype *a = ft(s->a);
     const ftype *b = ft(s->b);
@@ -200,8 +200,8 @@ static void fn(biquad_tdi)(BiquadsContext *s,
                            const void *input, void *output, int len,
                            void *cache, int *clippings, int disabled)
 {
-    const stype *ibuf = input;
-    stype *obuf = output;
+    const stype *restrict ibuf = input;
+    stype *restrict obuf = output;
     ftype *fcache = cache;
     const ftype *a = ft(s->a);
     const ftype *b = ft(s->b);
@@ -252,8 +252,8 @@ static void fn(biquad_tdii)(BiquadsContext *s,
                             const void *input, void *output, int len,
                             void *cache, int *clippings, int disabled)
 {
-    const stype *ibuf = input;
-    stype *obuf = output;
+    const stype *restrict ibuf = input;
+    stype *restrict obuf = output;
     ftype *fcache = cache;
     const ftype *a = ft(s->a);
     const ftype *b = ft(s->b);
@@ -293,8 +293,8 @@ static void fn(biquad_latt)(BiquadsContext *s,
                            const void *input, void *output, int len,
                            void *cache, int *clippings, int disabled)
 {
-    const stype *ibuf = input;
-    stype *obuf = output;
+    const stype *restrict ibuf = input;
+    stype *restrict obuf = output;
     ftype *fcache = cache;
     const ftype *a = ft(s->a);
     const ftype *b = ft(s->b);
@@ -345,8 +345,8 @@ static void fn(biquad_svf)(BiquadsContext *s,
                            const void *input, void *output, int len,
                            void *cache, int *clippings, int disabled)
 {
-    const stype *ibuf = input;
-    stype *obuf = output;
+    const stype *restrict ibuf = input;
+    stype *restrict obuf = output;
     ftype *fcache = cache;
     const ftype *a = ft(s->a);
     const ftype *b = ft(s->b);
@@ -438,8 +438,8 @@ static void fn(biquad_zdf)(BiquadsContext *s,
                            const void *input, void *output, int len,
                            void *cache, int *clippings, int disabled)
 {
-    const stype *ibuf = input;
-    stype *obuf = output;
+    const stype *restrict ibuf = input;
+    stype *restrict obuf = output;
     ftype *fcache = cache;
     const ftype *a = ft(s->a);
     const ftype *b = ft(s->b);
