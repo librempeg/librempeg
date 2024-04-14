@@ -256,7 +256,6 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     AVFrame *sc = td->sc ? td->sc : in;
     AVFrame *out = td->out;
     const ftype sample_rate = in->sample_rate;
-    const int isample_rate = in->sample_rate;
     const ftype makeup = s->makeup;
     const ftype ratio = s->ratio;
     const ftype range = s->range;
@@ -301,6 +300,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
         }
     } else if (detection == DET_ADAPTIVE) {
         for (int ch = start; ch < end; ch++) {
+            const int queue_size = s->awindow * sample_rate;
             const ftype *src = (const ftype *)sc->extended_data[ch];
             ChannelContext *cc = &s->cc[ch];
             ftype *tstate = fn(cc->tstate);
@@ -308,8 +308,8 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
 
             for (int n = 0; n < sc->nb_samples; n++) {
                 ftype detect = FMAX(FABS(fn(get_svf)(src[n], dm, da, tstate)), EPSILON);
-                fn(queue_sample)(cc, detect, isample_rate);
-                if (cc->size >= isample_rate) {
+                fn(queue_sample)(cc, detect, queue_size);
+                if (cc->size >= queue_size) {
                     ftype new_score, new_peak;
 
                     new_peak = fn(get_peak)(cc, &new_score);

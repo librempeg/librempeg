@@ -93,6 +93,7 @@ typedef struct AudioDynamicEqualizerContext {
     double drelease_coef;
     double gattack_coef;
     double grelease_coef;
+    double awindow;
     int mode;
     int detection;
     int tftype;
@@ -329,6 +330,7 @@ static const AVOption adynamicequalizer_options[] = {
     {   "off",      0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_OFF},      0, 0,   FLAGS, .unit = "auto" },
     {   "on",       0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_ON},       0, 0,   FLAGS, .unit = "auto" },
     {   "adaptive", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_ADAPTIVE}, 0, 0,   FLAGS, .unit = "auto" },
+    { "awindow",   "set adaptive window ratio",OFFSET(awindow),    AV_OPT_TYPE_DOUBLE, {.dbl=1},      0.1, 3,       FLAGS },
     { "precision", "set processing precision", OFFSET(precision),  AV_OPT_TYPE_INT,    {.i64=0},        0, 2,       AF, .unit = "precision" },
     {   "auto",  "set auto processing precision",                  0, AV_OPT_TYPE_CONST, {.i64=0},      0, 0,       AF, .unit = "precision" },
     {   "float", "set single-floating point processing precision", 0, AV_OPT_TYPE_CONST, {.i64=1},      0, 0,       AF, .unit = "precision" },
