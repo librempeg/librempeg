@@ -137,6 +137,7 @@ OBJS-$(CONFIG_CHANNELMAP_FILTER)             += af_channelmap.o
 OBJS-$(CONFIG_CHANNELMIX_FILTER)             += af_channelmix.o
 OBJS-$(CONFIG_CHANNELSPLIT_FILTER)           += af_channelsplit.o
 OBJS-$(CONFIG_CHORUS_FILTER)                 += af_chorus.o generate_wave_table.o
+OBJS-$(CONFIG_CLAP_FILTER)                   += af_clap.o
 OBJS-$(CONFIG_COMPAND_FILTER)                += af_compand.o
 OBJS-$(CONFIG_COMPENSATIONDELAY_FILTER)      += af_compensationdelay.o
 OBJS-$(CONFIG_CROSSFEED_FILTER)              += af_crossfeed.o

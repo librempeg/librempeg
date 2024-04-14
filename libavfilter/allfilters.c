@@ -123,6 +123,7 @@ extern const AVFilter ff_af_channelmap;
 extern const AVFilter ff_af_channelmix;
 extern const AVFilter ff_af_channelsplit;
 extern const AVFilter ff_af_chorus;
+extern const AVFilter ff_af_clap;
 extern const AVFilter ff_af_compand;
 extern const AVFilter ff_af_compensationdelay;
 extern const AVFilter ff_af_crossfeed;
