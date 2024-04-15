@@ -25,6 +25,7 @@
  */
 
 #include <lilv/lilv.h>
+#include <lv2/log/log.h>
 #include <lv2/lv2plug.in/ns/ext/atom/atom.h>
 #include <lv2/lv2plug.in/ns/ext/buf-size/buf-size.h>
 
@@ -68,7 +69,10 @@ typedef struct LV2Context {
     LV2_Feature        unmap_feature;
     LV2_Atom_Sequence  seq_in[2];
     LV2_Atom_Sequence *seq_out;
-    const LV2_Feature *features[5];
+    const LV2_Feature *features[7];
+
+    LV2_Log_Log lv2_log;
+    LV2_Feature avlog_feature;
 
     float *mins;
     float *maxes;
@@ -267,6 +271,26 @@ static const LV2_Feature buf_size_features[3] = {
     { LV2_BUF_SIZE__boundedBlockLength,  NULL },
 };
 
+static int lv2_printf(LV2_Log_Handle handle, LV2_URID type, const char* format, ...)
+{
+    va_list args;
+
+    va_start(args, format);
+
+    av_log(handle, AV_LOG_DEBUG, format, args);
+
+    va_end(args);
+
+    return 0;
+}
+
+static int lv2_vprintf(LV2_Log_Handle handle, LV2_URID type,
+                       const char *fmt, va_list ap)
+{
+    av_log(handle, AV_LOG_DEBUG, fmt, ap);
+    return 0;
+}
+
 static int process_options(AVFilterContext *ctx)
 {
     LV2Context *s = ctx->priv;
@@ -309,6 +333,13 @@ static int config_output(AVFilterLink *outlink)
     LV2Context *s = ctx->priv;
     int ret, i, sample_rate;
 
+    s->lv2_log.handle = ctx;
+    s->lv2_log.printf = &lv2_printf;
+    s->lv2_log.vprintf = &lv2_vprintf;
+
+    s->avlog_feature.URI = LV2_LOG__log;
+    s->avlog_feature.data = &s->lv2_log;
+
     uri_table_init(&s->uri_table);
     s->map.handle = &s->uri_table;
     s->map.map = uri_table_map;
@@ -323,6 +354,8 @@ static int config_output(AVFilterLink *outlink)
     s->features[2] = &buf_size_features[0];
     s->features[3] = &buf_size_features[1];
     s->features[4] = &buf_size_features[2];
+    s->features[5] = &s->avlog_feature;
+    s->features[6] = NULL;
 
     if (ctx->nb_inputs) {
         AVFilterLink *inlink = ctx->inputs[0];
