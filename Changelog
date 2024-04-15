@@ -3,6 +3,7 @@ releases are sorted from youngest to oldest.
 
 version <next>:
 - CLAP wrapper audio filter
+- more truehd encoder channel-layouts
 
 version 7.0:
 - DXV DXT1 encoder

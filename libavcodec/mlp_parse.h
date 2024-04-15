@@ -113,11 +113,12 @@ static inline uint64_t truehd_layout(int chanmap)
     return layout;
 }
 
-static inline int layout_truehd(uint64_t layout)
+static inline int layout_truehd(uint64_t layout, int ch8_mode)
 {
+    const int bits = ch8_mode ? 13 : 5;
     int chanmap = 0;
 
-    for (int i = 0; i < 13; i++) {
+    for (int i = 0; i < bits; i++) {
         if ((layout & thd_layout[i]) == thd_layout[i])
             chanmap |= 1 << i;
     }

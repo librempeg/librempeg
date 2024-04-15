@@ -127,6 +127,7 @@ typedef struct MLPSubstream {
     MLPBlock        b[MAX_HEADER_INTERVAL + 1];
     unsigned int    major_cur_subblock_index;
     unsigned int    major_filter_state_subblock;
+    uint8_t         noise_type;
     int32_t         coefs[MAX_CHANNELS][MAX_LPC_ORDER][MAX_LPC_ORDER];
 } MLPSubstream;
 
@@ -178,7 +179,6 @@ typedef struct MLPEncodeContext {
     uint16_t        output_timing;          ///< Timestamp of current access unit.
     uint16_t        input_timing;           ///< Decoding timestamp of current access unit.
 
-    uint8_t         noise_type;
     uint8_t         channel_arrangement;    ///< channel arrangement for MLP streams
     uint16_t        channel_arrangement8;   ///< 8 channel arrangement for THD streams
 
@@ -188,7 +188,7 @@ typedef struct MLPEncodeContext {
     uint8_t         ch6_presentation_mod;   ///< channel modifier for TrueHD stream 1
     uint8_t         ch8_presentation_mod;   ///< channel modifier for TrueHD stream 2
 
-    MLPSubstream    s[2];
+    MLPSubstream    s[MAX_SUBSTREAMS];
     int32_t         filter_state[NUM_FILTERS][MAX_HEADER_INTERVAL * MAX_BLOCKSIZE];
     int32_t         lpc_sample_buffer[MAX_HEADER_INTERVAL * MAX_BLOCKSIZE];
 
@@ -199,6 +199,7 @@ typedef struct MLPEncodeContext {
     unsigned int    number_of_subblocks;
 
     int             shorten_by;
+    uint8_t         remap_channel[MAX_CHANNELS];
 
     LPCContext      lpc_ctx;
 } MLPEncodeContext;
@@ -586,7 +587,8 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         ctx->summary_info      = ff_mlp_ch_info[ctx->channel_arrangement].summary_info     ;
     } else {
         /* TrueHD */
-        ctx->num_substreams = 1 + (avctx->ch_layout.nb_channels > 2);
+        ctx->num_substreams = 1 + (avctx->ch_layout.nb_channels > 2) + (avctx->ch_layout.nb_channels > 6);
+        ctx->flags = 0;
         switch (channels_present) {
         case AV_CH_LAYOUT_MONO:
             ctx->ch2_presentation_mod= 3;
@@ -607,19 +609,29 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         case AV_CH_LAYOUT_4POINT1:
         case AV_CH_LAYOUT_5POINT0:
         case AV_CH_LAYOUT_5POINT1:
+        case AV_CH_LAYOUT_5POINT0_BACK:
+        case AV_CH_LAYOUT_5POINT1_BACK:
+        case AV_CH_LAYOUT_6POINT0:
+        case AV_CH_LAYOUT_6POINT1:
             ctx->ch2_presentation_mod= 0;
             ctx->ch6_presentation_mod= 0;
             ctx->ch8_presentation_mod= 0;
             ctx->thd_substream_info  = 0x3C;
             break;
+        case AV_CH_LAYOUT_7POINT0:
+        case AV_CH_LAYOUT_7POINT1:
+            ctx->ch2_presentation_mod= 0;
+            ctx->ch6_presentation_mod= 0;
+            ctx->ch8_presentation_mod= 0;
+            ctx->thd_substream_info  = 0x7C;
+            break;
         default:
             av_assert1(!"AVCodec.ch_layouts needs to be updated");
         }
-        ctx->flags = 0;
         ctx->channel_occupancy = 0;
         ctx->summary_info = 0;
-        ctx->channel_arrangement =
-        ctx->channel_arrangement8 = layout_truehd(channels_present);
+        ctx->channel_arrangement  = layout_truehd(channels_present, 0);
+        ctx->channel_arrangement8 = layout_truehd(channels_present, 1);
     }
 
     for (unsigned int index = 0; index < ctx->restart_intervals; index++) {
@@ -651,6 +663,37 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
             rh->min_channel        = 2;
             rh->max_channel        = avctx->ch_layout.nb_channels - 1;
             rh->max_matrix_channel = rh->max_channel;
+            if (avctx->ch_layout.nb_channels > 6) {
+                rh->max_channel        = 5;
+                rh->max_matrix_channel = rh->max_channel;
+
+                ctx->s[2].noise_type   = 1;
+                rh = &ctx->s[2].restart_header;
+
+                rh->noisegen_seed      = 0;
+                rh->min_channel        = 6;
+                rh->max_channel        = avctx->ch_layout.nb_channels - 1;
+                rh->max_matrix_channel = rh->max_channel;
+            }
+        }
+    }
+
+    for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++)
+        ctx->remap_channel[ch] = ch;
+
+    if (ctx->avctx->codec_id == AV_CODEC_ID_TRUEHD) {
+        int bl = av_channel_layout_index_from_channel(&avctx->ch_layout,
+                                                      AV_CHAN_BACK_LEFT);
+        int sl = av_channel_layout_index_from_channel(&avctx->ch_layout,
+                                                      AV_CHAN_SIDE_LEFT);
+        int br = av_channel_layout_index_from_channel(&avctx->ch_layout,
+                                                      AV_CHAN_BACK_RIGHT);
+        int sr = av_channel_layout_index_from_channel(&avctx->ch_layout,
+                                                      AV_CHAN_SIDE_RIGHT);
+
+        if (bl >= 0 && sl >= 0 && br >= 0 && sr >= 0) {
+            FFSWAP(uint8_t, ctx->remap_channel[bl], ctx->remap_channel[sl]);
+            FFSWAP(uint8_t, ctx->remap_channel[br], ctx->remap_channel[sr]);
         }
     }
 
@@ -761,7 +804,8 @@ static void write_restart_header(MLPEncodeContext *ctx, MLPSubstream *s,
     PutBitContext tmpb;
     uint8_t checksum;
 
-    put_bits(pb, 14, 0x31ea                ); /* TODO 0x31eb */
+    put_bits(pb, 13, (0x31ea>>1)           );
+    put_bits(pb,  1, s->noise_type         );
     put_bits(pb, 16, ctx->output_timing    );
     put_bits(pb,  4, rh->min_channel       );
     put_bits(pb,  4, rh->max_channel       );
@@ -800,7 +844,7 @@ static void write_matrix_params(MLPEncodeContext *ctx,
 
     put_bits(pb, 4, mp->count);
 
-    if (!ctx->noise_type)
+    if (!s->noise_type)
         max_channel += 2;
 
     for (unsigned int mat = 0; mat < mp->count; mat++) {
@@ -821,6 +865,9 @@ static void write_matrix_params(MLPEncodeContext *ctx,
                 put_bits(pb, 1, 0);
             }
         }
+
+        if (s->noise_type)
+            put_bits(pb, 4, 0);
     }
 }
 
@@ -1193,8 +1240,9 @@ static void input_data_internal(MLPEncodeContext *ctx, MLPSubstream *s,
 
     for (int i = 0; i < nb_samples; i++) {
         for (int ch = 0; ch <= rh->max_channel; ch++) {
-            const int32_t *samples_32 = (const int32_t *)samples[ch];
-            const int16_t *samples_16 = (const int16_t *)samples[ch];
+            const int ch_idx = ctx->remap_channel[ch];
+            const int32_t *samples_32 = (const int32_t *)samples[ch_idx];
+            const int16_t *samples_16 = (const int16_t *)samples[ch_idx];
             int32_t *sample_buffer = s->b[ctx->frame_index].inout_buffer[ch];
             int32_t sample;
 
@@ -2338,6 +2386,12 @@ const FFCodec ff_truehd_encoder = {
                                   AV_CHANNEL_LAYOUT_4POINT1,
                                   AV_CHANNEL_LAYOUT_5POINT0,
                                   AV_CHANNEL_LAYOUT_5POINT1,
+                                  AV_CHANNEL_LAYOUT_5POINT0_BACK,
+                                  AV_CHANNEL_LAYOUT_5POINT1_BACK,
+                                  AV_CHANNEL_LAYOUT_6POINT0,
+                                  AV_CHANNEL_LAYOUT_6POINT1,
+                                  AV_CHANNEL_LAYOUT_7POINT0,
+                                  AV_CHANNEL_LAYOUT_7POINT1,
                                   { 0 }
                               },
     .caps_internal          = FF_CODEC_CAP_INIT_CLEANUP,
