@@ -44,74 +44,76 @@ enum FilterModes {
     NB_FMODES,
 };
 
-typedef struct ChannelContext {
-    double fa_double[3], fm_double[3];
-    double dstate_double[2];
-    double fstate_double[2];
-    double tstate_double[2];
-    double lin_gain_double;
-    double detect_double;
-    double threshold_log_double;
-    double new_threshold_log_double;
-    double log_sum_double;
-    double sum_double;
-    float fa_float[3], fm_float[3];
-    float dstate_float[2];
-    float fstate_float[2];
-    float tstate_float[2];
-    float lin_gain_float;
-    float detect_float;
-    float threshold_log_float;
-    float new_threshold_log_float;
-    float log_sum_float;
-    float sum_float;
-    void *dqueue;
-    void *queue;
-    int position;
-    int size;
-    int front;
-    int back;
-    int detection;
-    int init;
-} ChannelContext;
+enum DetectFilter {
+    DBANDPASS,
+    DLOWPASS,
+    DHIGHPASS,
+    DPEAK,
+    NB_DFILTERS
+};
+
+enum TargetFilter {
+    TBELL,
+    TLOWSHELF,
+    THIGHSHELF,
+    NB_TFILTERS
+};
 
 typedef struct AudioDynamicEqualizerContext {
     const AVClass *class;
 
-    double threshold;
-    double threshold_log;
-    double dfrequency;
-    double dqfactor;
-    double tfrequency;
-    double tqfactor;
-    double ratio;
-    double range;
-    double makeup;
-    double dattack;
-    double drelease;
-    double dattack_coef;
-    double drelease_coef;
-    double gattack_coef;
-    double grelease_coef;
-    double awindow;
+    double *threshold;
+    unsigned nb_threshold;
+
+    double *dfrequency;
+    unsigned nb_dfrequency;
+
+    double *dqfactor;
+    unsigned nb_dqfactor;
+
+    double *tfrequency;
+    unsigned nb_tfrequency;
+
+    double *tqfactor;
+    unsigned nb_tqfactor;
+
+    double *ratio;
+    unsigned nb_ratio;
+
+    double *range;
+    unsigned nb_range;
+
+    double *makeup;
+    unsigned nb_makeup;
+
+    double *dattack;
+    unsigned nb_dattack;
+
+    double *drelease;
+    unsigned nb_drelease;
+
+    int *tftype;
+    unsigned nb_tftype;
+
+    int *dftype;
+    unsigned nb_dftype;
+
+    int sidechain;
     int mode;
     int detection;
-    int tftype;
-    int dftype;
     int precision;
     int format;
+    int nb_bands;
     int nb_channels;
-    int sidechain;
 
     int (*filter_prepare)(AVFilterContext *ctx);
     int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
-
-    double da_double[3], dm_double[3];
-    float da_float[3], dm_float[3];
+    int (*init_state)(AVFilterContext *ctx, int nb_channels, int nb_bands);
+    void (*uninit_state)(AVFilterContext *ctx);
 
     AVFrame *in, *sc;
 
-    ChannelContext *cc;
+    void *bc;
 } AudioDynamicEqualizerContext;
 
 static int query_formats(AVFilterContext *ctx)
@@ -131,11 +133,6 @@ static int query_formats(AVFilterContext *ctx)
         return ret;
 
     return ff_set_common_all_samplerates(ctx);
-}
-
-static double get_coef(double x, double sr)
-{
-    return 1.0 - exp(-1.0 / (0.001 * x * sr));
 }
 
 typedef struct ThreadData {
@@ -180,31 +177,29 @@ static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AudioDynamicEqualizerContext *s = ctx->priv;
+    int ret, nb_bands;
 
     s->format = outlink->format;
-    s->cc = av_calloc(outlink->ch_layout.nb_channels, sizeof(*s->cc));
-    if (!s->cc)
-        return AVERROR(ENOMEM);
-    s->nb_channels = outlink->ch_layout.nb_channels;
-
     switch (s->format) {
     case AV_SAMPLE_FMT_DBLP:
+        s->init_state      = init_state_double;
+        s->uninit_state    = uninit_state_double;
         s->filter_prepare  = filter_prepare_double;
         s->filter_channels = filter_channels_double;
         break;
     case AV_SAMPLE_FMT_FLTP:
+        s->init_state      = init_state_float;
+        s->uninit_state    = uninit_state_float;
         s->filter_prepare  = filter_prepare_float;
         s->filter_channels = filter_channels_float;
         break;
     }
 
-    for (int ch = 0; ch < s->nb_channels; ch++) {
-        ChannelContext *cc = &s->cc[ch];
-        cc->queue = av_calloc(outlink->sample_rate, sizeof(double));
-        cc->dqueue = av_calloc(outlink->sample_rate, sizeof(double));
-        if (!cc->queue || !cc->dqueue)
-            return AVERROR(ENOMEM);
-    }
+    nb_bands = s->nb_tfrequency;
+    ret = s->init_state(ctx, outlink->ch_layout.nb_channels, nb_bands);
+    if (ret < 0)
+        return ret;
+    s->nb_channels = outlink->ch_layout.nb_channels;
 
     return 0;
 }
@@ -233,7 +228,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in, AVFrame *sc)
     td.sc = sc;
     s->filter_prepare(ctx);
     ff_filter_execute(ctx, s->filter_channels, &td, NULL,
-                     FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
+                      FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     if (out != in)
         av_frame_free(&s->in);
@@ -287,50 +282,59 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_frame_free(&s->in);
     av_frame_free(&s->sc);
 
-    for (int ch = 0; ch < s->nb_channels; ch++) {
-        ChannelContext *cc = &s->cc[ch];
-        av_freep(&cc->queue);
-        av_freep(&cc->dqueue);
-    }
-    av_freep(&s->cc);
+    if (s->uninit_state)
+        s->uninit_state(ctx);
 }
 
 #define OFFSET(x) offsetof(AudioDynamicEqualizerContext, x)
 #define AF AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_threshold  = {.def="0",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_dfrequency = {.def="1000",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_dqfactor   = {.def="1",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_tfrequency = {.def="1000",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_tqfactor   = {.def="1",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_dattack    = {.def="20",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_drelease   = {.def="200",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_ratio      = {.def="1",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_makeup     = {.def="0",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_range      = {.def="50",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_dftype     = {.def="bandpass",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_tftype     = {.def="bell",.size_min=1,.sep=' '};
 
 static const AVOption adynamicequalizer_options[] = {
-    { "threshold",  "set detection threshold", OFFSET(threshold),  AV_OPT_TYPE_DOUBLE, {.dbl=0},        0, 100,     FLAGS },
-    { "dfrequency", "set detection frequency", OFFSET(dfrequency), AV_OPT_TYPE_DOUBLE, {.dbl=1000},     2, 1000000, FLAGS },
-    { "dqfactor",   "set detection Q factor",  OFFSET(dqfactor),   AV_OPT_TYPE_DOUBLE, {.dbl=1},    0.001, 1000,    FLAGS },
-    { "tfrequency", "set target frequency",    OFFSET(tfrequency), AV_OPT_TYPE_DOUBLE, {.dbl=1000},     2, 1000000, FLAGS },
-    { "tqfactor",   "set target Q factor",     OFFSET(tqfactor),   AV_OPT_TYPE_DOUBLE, {.dbl=1},    0.001, 1000,    FLAGS },
-    { "attack", "set detection attack duration", OFFSET(dattack),  AV_OPT_TYPE_DOUBLE, {.dbl=20},    0.01, 2000,    FLAGS },
-    { "release","set detection release duration",OFFSET(drelease), AV_OPT_TYPE_DOUBLE, {.dbl=200},   0.01, 2000,    FLAGS },
-    { "ratio",      "set ratio factor",        OFFSET(ratio),      AV_OPT_TYPE_DOUBLE, {.dbl=1},        0, 30,      FLAGS },
-    { "makeup",     "set makeup gain",         OFFSET(makeup),     AV_OPT_TYPE_DOUBLE, {.dbl=0},        0, 1000,    FLAGS },
-    { "range",      "set max gain",            OFFSET(range),      AV_OPT_TYPE_DOUBLE, {.dbl=50},       1, 2000,    FLAGS },
+    { "threshold",  "set detection threshold", OFFSET(threshold),  AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_threshold}, 0, 100,     FLAGS },
+    { "dfrequency", "set detection frequency", OFFSET(dfrequency), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_dfrequency},2, 1000000, FLAGS },
+    { "dqfactor",   "set detection Q factor",  OFFSET(dqfactor),   AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_dqfactor},  0.001, 1000,    FLAGS },
+    { "tfrequency", "set target frequency",    OFFSET(tfrequency), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_tfrequency},2, 1000000, FLAGS },
+    { "tqfactor",   "set target Q factor",     OFFSET(tqfactor),   AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_tqfactor},  0.001, 1000,    FLAGS },
+    { "attack", "set detection attack duration", OFFSET(dattack),  AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_dattack},   0.01, 2000,    FLAGS },
+    { "release","set detection release duration",OFFSET(drelease), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_drelease},  0.01, 2000,    FLAGS },
+    { "ratio",      "set ratio factor",        OFFSET(ratio),      AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_ratio},     0, 30,      FLAGS },
+    { "makeup",     "set makeup gain",         OFFSET(makeup),     AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_makeup},    0, 1000,    FLAGS },
+    { "range",      "set max gain",            OFFSET(range),      AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_range},     1, 2000,    FLAGS },
     { "mode",       "set mode",                OFFSET(mode),       AV_OPT_TYPE_INT,    {.i64=0},  LISTEN,NB_FMODES-1,FLAGS, .unit = "mode" },
     {   "listen",   0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=LISTEN},   0, 0,       FLAGS, .unit = "mode" },
     {   "cutbelow", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=CUT_BELOW},0, 0,       FLAGS, .unit = "mode" },
     {   "cutabove", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=CUT_ABOVE},0, 0,       FLAGS, .unit = "mode" },
     { "boostbelow", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=BOOST_BELOW},0, 0,     FLAGS, .unit = "mode" },
     { "boostabove", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=BOOST_ABOVE},0, 0,     FLAGS, .unit = "mode" },
-    { "dftype",     "set detection filter type",OFFSET(dftype),    AV_OPT_TYPE_INT,    {.i64=0},        0, 3,       FLAGS, .unit = "dftype" },
-    {   "bandpass", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=0},        0, 0,       FLAGS, .unit = "dftype" },
-    {   "lowpass",  0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=1},        0, 0,       FLAGS, .unit = "dftype" },
-    {   "highpass", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=2},        0, 0,       FLAGS, .unit = "dftype" },
-    {   "peak",     0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=3},        0, 0,       FLAGS, .unit = "dftype" },
-    { "tftype",     "set target filter type",  OFFSET(tftype),     AV_OPT_TYPE_INT,    {.i64=0},        0, 2,       FLAGS, .unit = "tftype" },
-    {   "bell",     0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=0},        0, 0,       FLAGS, .unit = "tftype" },
-    {   "lowshelf", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=1},        0, 0,       FLAGS, .unit = "tftype" },
-    {   "highshelf",0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=2},        0, 0,       FLAGS, .unit = "tftype" },
+    { "dftype",     "set detection filter type",OFFSET(dftype),    AV_OPT_TYPE_INT|AR, {.arr=&def_dftype}, 0,NB_DFILTERS-1,FLAGS, .unit = "dftype" },
+    {   "bandpass", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DBANDPASS},0, 0,       FLAGS, .unit = "dftype" },
+    {   "lowpass",  0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DLOWPASS}, 0, 0,       FLAGS, .unit = "dftype" },
+    {   "highpass", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DHIGHPASS},0, 0,       FLAGS, .unit = "dftype" },
+    {   "peak",     0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DPEAK},    0, 0,       FLAGS, .unit = "dftype" },
+    { "tftype",     "set target filter type",  OFFSET(tftype),     AV_OPT_TYPE_INT|AR, {.arr=&def_tftype}, 0, NB_TFILTERS-1,FLAGS, .unit = "tftype" },
+    {   "bell",     0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=TBELL},    0, 0,       FLAGS, .unit = "tftype" },
+    {   "lowshelf", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=TLOWSHELF},0, 0,       FLAGS, .unit = "tftype" },
+    {   "highshelf",0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=THIGHSHELF},0,0,       FLAGS, .unit = "tftype" },
     { "auto",       "set auto threshold",      OFFSET(detection),  AV_OPT_TYPE_INT,    {.i64=DET_OFF},DET_DISABLED,NB_DMODES-1,FLAGS, .unit = "auto" },
     {   "disabled", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_DISABLED}, 0, 0,   FLAGS, .unit = "auto" },
     {   "off",      0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_OFF},      0, 0,   FLAGS, .unit = "auto" },
     {   "on",       0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_ON},       0, 0,   FLAGS, .unit = "auto" },
     {   "adaptive", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_ADAPTIVE}, 0, 0,   FLAGS, .unit = "auto" },
-    { "awindow",   "set adaptive window ratio",OFFSET(awindow),    AV_OPT_TYPE_DOUBLE, {.dbl=1},      0.1, 3,       FLAGS },
     { "precision", "set processing precision", OFFSET(precision),  AV_OPT_TYPE_INT,    {.i64=0},        0, 2,       AF, .unit = "precision" },
     {   "auto",  "set auto processing precision",                  0, AV_OPT_TYPE_CONST, {.i64=0},      0, 0,       AF, .unit = "precision" },
     {   "float", "set single-floating point processing precision", 0, AV_OPT_TYPE_CONST, {.i64=1},      0, 0,       AF, .unit = "precision" },
