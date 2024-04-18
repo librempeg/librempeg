@@ -389,7 +389,7 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
     const ftype makeup = s->makeup[FFMIN(band, s->nb_makeup-1)];
     const ftype ratio = s->ratio[FFMIN(band, s->nb_ratio-1)];
     const ftype range = s->range[FFMIN(band, s->nb_range-1)];
-    const ftype tfrequency = FMIN(s->tfrequency[band], sample_rate * F(0.5));
+    const ftype tfrequency = FMIN(s->tfrequency[FFMIN(band, s->nb_tfrequency-1)], sample_rate * F(0.5));
     const int mode = s->mode;
     const ftype power = (mode == CUT_BELOW || mode == CUT_ABOVE) ? F(-1.0) : F(1.0);
     const ftype grelease = b->grelease_coef;
