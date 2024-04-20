@@ -440,14 +440,14 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
             ftype *lstate = cc->lstate;
             ftype *tstate = cc->tstate;
 
-            detect = FABS(b->detect_svf(src[0], dm, da, tstate));
+            detect = FABS(b->detect_svf(src[0], dm, da, tstate)) + EPSILON;
             cc->avg = b->lowpass_svf(detect, am, aa, astate);
             cc->log_avg = b->lowpass_svf(FLOG2(detect), am, aa, lstate);
 
             score = LIN2LOG(FEXP2(cc->log_avg) / cc->avg);
             peak = FMAX(FEXP2(cc->log_avg), cc->avg);
             for (int n = 1; n < sc->nb_samples; n++) {
-                detect = FABS(b->detect_svf(src[n], dm, da, tstate));
+                detect = FABS(b->detect_svf(src[n], dm, da, tstate)) + EPSILON;
                 cc->avg = b->lowpass_svf(detect, am, aa, astate);
                 cc->log_avg = b->lowpass_svf(FLOG2(detect), am, aa, lstate);
 
@@ -465,7 +465,7 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
             fn(update_state)(tstate);
 
             if (score >= F(0.0) && cc->size >= sample_rate) {
-                cc->threshold     = peak * F(20.0);
+                cc->threshold     = peak * F(10.0);
                 cc->threshold_log = LIN2LOG(cc->threshold);
                 av_log(ctx, AV_LOG_DEBUG, "[%d]: %g %g|%g\n", band, score, cc->threshold, cc->threshold_log);
             } else if (cc->detection == DET_UNSET) {
@@ -487,6 +487,7 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
             if (cc->detection == DET_ON) {
                 cc->threshold     = cc->new_threshold;
                 cc->threshold_log = cc->new_threshold_log;
+                av_log(ctx, AV_LOG_DEBUG, "[%d]: %g|%g\n", band, cc->threshold, cc->threshold_log);
             } else if (cc->detection == DET_UNSET) {
                 cc->threshold     = b->threshold;
                 cc->threshold_log = b->threshold_log;
