@@ -67,8 +67,8 @@
 
 #define F(x) ((ftype)(x))
 
-#define LIN2LOG(x) (F(20.0) * FLOG10(x))
-#define LOG2LIN(x) (FEXP10(x / F(20.0)))
+#define LIN2LOG(x) (F(20.0) * FLOG10((x) + EPSILON))
+#define LOG2LIN(x) (FEXP10((x) / F(20.0)))
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
@@ -101,10 +101,8 @@ typedef struct fn(BandContext) {
     ftype aa[3], am[3];
     ftype da[3], dm[3];
 
-    ftype dattack_coef;
-    ftype drelease_coef;
-    ftype gattack_coef;
-    ftype grelease_coef;
+    ftype tattack_coef;
+    ftype trelease_coef;
     ftype threshold_log;
 
     fn(ChannelContext) *cc;
@@ -284,10 +282,8 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
 
         b->threshold = s->threshold[FFMIN(band, s->nb_threshold-1)];
         b->threshold_log = LIN2LOG(b->threshold);
-        b->dattack_coef = fn(get_coef)(s->dattack[FFMIN(band, s->nb_dattack-1)], sample_rate);
-        b->drelease_coef = fn(get_coef)(s->drelease[FFMIN(band, s->nb_drelease-1)], sample_rate);
-        b->gattack_coef = b->dattack_coef * F(0.25);
-        b->grelease_coef = b->drelease_coef * F(0.25);
+        b->tattack_coef = fn(get_coef)(s->tattack[FFMIN(band, s->nb_tattack-1)], sample_rate);
+        b->trelease_coef = fn(get_coef)(s->trelease[FFMIN(band, s->nb_trelease-1)], sample_rate);
 
         switch (dftype) {
         case DBANDPASS:
@@ -392,10 +388,8 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
     const ftype tfrequency = FMIN(s->tfrequency[FFMIN(band, s->nb_tfrequency-1)], sample_rate * F(0.5));
     const int mode = s->mode;
     const ftype power = (mode == CUT_BELOW || mode == CUT_ABOVE) ? F(-1.0) : F(1.0);
-    const ftype grelease = b->grelease_coef;
-    const ftype gattack = b->gattack_coef;
-    const ftype drelease = b->drelease_coef;
-    const ftype dattack = b->dattack_coef;
+    const ftype trelease = b->trelease_coef;
+    const ftype tattack = b->tattack_coef;
     const ftype tqfactor = s->tqfactor[FFMIN(band, s->nb_tqfactor-1)];
     const ftype itqfactor = F(1.0) / tqfactor;
     const ftype fg = FTAN(F(M_PI) * tfrequency / sample_rate);
@@ -412,12 +406,12 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
             const ftype *srcn = (const ftype *)out->extended_data[ch];
             const ftype *src = band ? srcn : (const ftype *)sc->extended_data[ch];
             fn(ChannelContext) *cc = &cs[ch];
-            ftype new_threshold = F(0.0);
+            ftype new_threshold = EPSILON;
             ftype *tstate = cc->tstate;
 
             if (cc->detection != detection) {
                 cc->detection = detection;
-                cc->new_threshold_log = LIN2LOG(EPSILON);
+                cc->new_threshold_log = LIN2LOG(new_threshold);
             }
 
             for (int n = 0; n < sc->nb_samples; n++) {
@@ -440,16 +434,16 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
             ftype *lstate = cc->lstate;
             ftype *tstate = cc->tstate;
 
-            detect = FABS(b->detect_svf(src[0], dm, da, tstate)) + EPSILON;
+            detect = FABS(b->detect_svf(src[0], dm, da, tstate));
             cc->avg = b->lowpass_svf(detect, am, aa, astate);
-            cc->log_avg = b->lowpass_svf(FLOG2(detect), am, aa, lstate);
+            cc->log_avg = b->lowpass_svf(FLOG2(detect + EPSILON), am, aa, lstate);
 
             score = LIN2LOG(FEXP2(cc->log_avg) / cc->avg);
             peak = FMAX(FEXP2(cc->log_avg), cc->avg);
             for (int n = 1; n < sc->nb_samples; n++) {
-                detect = FABS(b->detect_svf(src[n], dm, da, tstate)) + EPSILON;
+                detect = FABS(b->detect_svf(src[n], dm, da, tstate));
                 cc->avg = b->lowpass_svf(detect, am, aa, astate);
-                cc->log_avg = b->lowpass_svf(FLOG2(detect), am, aa, lstate);
+                cc->log_avg = b->lowpass_svf(FLOG2(detect + EPSILON), am, aa, lstate);
 
                 new_score = LIN2LOG(FEXP2(cc->log_avg) / cc->avg);
                 if (new_score >= score) {
@@ -511,15 +505,12 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
         int init = cc->init;
 
         for (int n = 0; n < out->nb_samples; n++) {
-            ftype new_detect, new_lin_gain = F(1.0);
-            ftype f, v, listen;
+            ftype new_lin_gain = F(1.0);
+            ftype v, listen;
 
             listen = b->detect_svf(scsrc[n], dm, da, dstate);
-            if (mode > LISTEN) {
-                new_detect = FABS(listen);
-                f = (new_detect > detect) * dattack + (new_detect <= detect) * drelease;
-                detect = f * new_detect + (F(1.0) - f) * detect;
-            }
+            if (mode > LISTEN)
+                detect = FABS(listen);
 
             switch (mode) {
             case LISTEN:
@@ -543,7 +534,7 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
             }
 
             if (lin_gain != new_lin_gain || !init) {
-                f = (new_lin_gain > lin_gain) * gattack + (new_lin_gain <= lin_gain) * grelease;
+                ftype f = (new_lin_gain > lin_gain) * tattack + (new_lin_gain < lin_gain) * trelease;
                 new_lin_gain = f * new_lin_gain + (F(1.0) - f) * lin_gain;
 
                 if (lin_gain != new_lin_gain || !init) {

@@ -71,11 +71,23 @@ typedef struct AudioDynamicEqualizerContext {
     double *dqfactor;
     unsigned nb_dqfactor;
 
+    int *dftype;
+    unsigned nb_dftype;
+
     double *tfrequency;
     unsigned nb_tfrequency;
 
     double *tqfactor;
     unsigned nb_tqfactor;
+
+    double *tattack;
+    unsigned nb_tattack;
+
+    double *trelease;
+    unsigned nb_trelease;
+
+    int *tftype;
+    unsigned nb_tftype;
 
     double *ratio;
     unsigned nb_ratio;
@@ -85,18 +97,6 @@ typedef struct AudioDynamicEqualizerContext {
 
     double *makeup;
     unsigned nb_makeup;
-
-    double *dattack;
-    unsigned nb_dattack;
-
-    double *drelease;
-    unsigned nb_drelease;
-
-    int *tftype;
-    unsigned nb_tftype;
-
-    int *dftype;
-    unsigned nb_dftype;
 
     int *detection;
     unsigned nb_detection;
@@ -298,23 +298,32 @@ static const AVOptionArrayDef def_dfrequency = {.def="1000",.size_min=1,.sep=' '
 static const AVOptionArrayDef def_dqfactor   = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_tfrequency = {.def="1000",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_tqfactor   = {.def="1",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_dattack    = {.def="20",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_drelease   = {.def="200",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_dftype     = {.def="bandpass",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_tattack    = {.def="20",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_trelease   = {.def="200",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_tftype     = {.def="bell",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_ratio      = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_makeup     = {.def="0",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_range      = {.def="50",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_dftype     = {.def="bandpass",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_tftype     = {.def="bell",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_auto       = {.def="off",.size_min=1,.sep=' '};
 
 static const AVOption adynamicequalizer_options[] = {
     { "threshold",  "set detection threshold", OFFSET(threshold),  AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_threshold}, 0, 100,     FLAGS },
     { "dfrequency", "set detection frequency", OFFSET(dfrequency), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_dfrequency},2, 1000000, FLAGS },
     { "dqfactor",   "set detection Q factor",  OFFSET(dqfactor),   AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_dqfactor},  0.001, 1000,FLAGS },
+    { "dftype",     "set detection filter type",OFFSET(dftype),    AV_OPT_TYPE_INT|AR, {.arr=&def_dftype}, 0,NB_DFILTERS-1,FLAGS, .unit = "dftype" },
+    {   "bandpass", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DBANDPASS},0, 0,       FLAGS, .unit = "dftype" },
+    {   "lowpass",  0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DLOWPASS}, 0, 0,       FLAGS, .unit = "dftype" },
+    {   "highpass", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DHIGHPASS},0, 0,       FLAGS, .unit = "dftype" },
+    {   "peak",     0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DPEAK},    0, 0,       FLAGS, .unit = "dftype" },
     { "tfrequency", "set target frequency",    OFFSET(tfrequency), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_tfrequency},2, 1000000, FLAGS },
     { "tqfactor",   "set target Q factor",     OFFSET(tqfactor),   AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_tqfactor},  0.001, 1000,FLAGS },
-    { "attack", "set detection attack duration", OFFSET(dattack),  AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_dattack},   0.01, 2000, FLAGS },
-    { "release","set detection release duration",OFFSET(drelease), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_drelease},  0.01, 2000, FLAGS },
+    { "attack", "set target attack duration",  OFFSET(tattack),    AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_tattack},   0.01, 2000, FLAGS },
+    { "release","set target release duration", OFFSET(trelease),   AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_trelease},  0.01, 2000, FLAGS },
+    { "tftype",     "set target filter type",  OFFSET(tftype),     AV_OPT_TYPE_INT|AR, {.arr=&def_tftype}, 0, NB_TFILTERS-1,FLAGS, .unit = "tftype" },
+    {   "bell",     0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=TBELL},    0, 0,       FLAGS, .unit = "tftype" },
+    {   "lowshelf", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=TLOWSHELF},0, 0,       FLAGS, .unit = "tftype" },
+    {   "highshelf",0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=THIGHSHELF},0,0,       FLAGS, .unit = "tftype" },
     { "ratio",      "set ratio factor",        OFFSET(ratio),      AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_ratio},     0, 30,      FLAGS },
     { "makeup",     "set makeup gain",         OFFSET(makeup),     AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_makeup},    0, 1000,    FLAGS },
     { "range",      "set max gain",            OFFSET(range),      AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_range},     0, 2000,    FLAGS },
@@ -324,15 +333,6 @@ static const AVOption adynamicequalizer_options[] = {
     {   "cutabove", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=CUT_ABOVE},0, 0,       FLAGS, .unit = "mode" },
     { "boostbelow", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=BOOST_BELOW},0, 0,     FLAGS, .unit = "mode" },
     { "boostabove", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=BOOST_ABOVE},0, 0,     FLAGS, .unit = "mode" },
-    { "dftype",     "set detection filter type",OFFSET(dftype),    AV_OPT_TYPE_INT|AR, {.arr=&def_dftype}, 0,NB_DFILTERS-1,FLAGS, .unit = "dftype" },
-    {   "bandpass", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DBANDPASS},0, 0,       FLAGS, .unit = "dftype" },
-    {   "lowpass",  0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DLOWPASS}, 0, 0,       FLAGS, .unit = "dftype" },
-    {   "highpass", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DHIGHPASS},0, 0,       FLAGS, .unit = "dftype" },
-    {   "peak",     0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DPEAK},    0, 0,       FLAGS, .unit = "dftype" },
-    { "tftype",     "set target filter type",  OFFSET(tftype),     AV_OPT_TYPE_INT|AR, {.arr=&def_tftype}, 0, NB_TFILTERS-1,FLAGS, .unit = "tftype" },
-    {   "bell",     0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=TBELL},    0, 0,       FLAGS, .unit = "tftype" },
-    {   "lowshelf", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=TLOWSHELF},0, 0,       FLAGS, .unit = "tftype" },
-    {   "highshelf",0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=THIGHSHELF},0,0,       FLAGS, .unit = "tftype" },
     { "auto",       "set auto threshold",      OFFSET(detection),  AV_OPT_TYPE_INT|AR, {.arr=&def_auto},DET_DISABLED,NB_DMODES-1,FLAGS, .unit = "auto" },
     {   "disabled", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_DISABLED}, 0, 0,   FLAGS, .unit = "auto" },
     {   "off",      0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_OFF},      0, 0,   FLAGS, .unit = "auto" },
