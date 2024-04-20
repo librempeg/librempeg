@@ -122,8 +122,34 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
                     alpha1 |= adesc->flags & AV_PIX_FMT_FLAG_ALPHA;
                     chroma1|= adesc->nb_components > 1;
                 }
+                if (check && (a->same_bitdepth || a->same_endianness)) {
+                    if (a->same_bitdepth) {
+                        const int abits = adesc->comp[0].depth;
+                        const int bbits = bdesc->comp[0].depth;
+                        if (abits != bbits)
+                            return 0;
+                    }
+                    if (a->same_endianness) {
+                        const int abe = !!(adesc->flags & AV_PIX_FMT_FLAG_BE);
+                        const int bbe = !!(bdesc->flags & AV_PIX_FMT_FLAG_BE);
+                        if (abe != bbe)
+                            return 0;
+                    }
+                }
             }
         }
+
+    if (type == AVMEDIA_TYPE_AUDIO) {
+        for (i = 0; i < a->nb_formats; i++) {
+            for (j = 0; j < b->nb_formats; j++) {
+                if (check && a->same_bitdepth) {
+                    if (av_get_bytes_per_sample(a->formats[i]) !=
+                        av_get_bytes_per_sample(b->formats[j]))
+                        return 0;
+                }
+            }
+        }
+    }
 
     // If chroma or alpha can be lost through merging then do not merge
     if (alpha2 > alpha1 || chroma2 > chroma1)
