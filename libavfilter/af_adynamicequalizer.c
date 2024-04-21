@@ -230,7 +230,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in, AVFrame *sc)
     td.sc = sc;
     s->filter_prepare(ctx);
     ff_filter_execute(ctx, s->filter_channels, &td, NULL,
-                      FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
+                      FFMIN(s->nb_channels, ff_filter_get_nb_threads(ctx)));
 
     if (out != in)
         av_frame_free(&s->in);

@@ -87,11 +87,8 @@ typedef struct fn(ChannelContext) {
     ftype new_threshold;
     ftype threshold_log;
     ftype new_threshold_log;
-    ftype log_avg;
-    ftype avg;
 
     int size;
-    int init;
     int detection;
 } fn(ChannelContext);
 
@@ -111,9 +108,13 @@ typedef struct fn(BandContext) {
     ftype (*target_svf)(ftype in, const ftype m[3], const ftype a[3], ftype b[2]);
     ftype (*lowpass_svf)(ftype in, const ftype m[3], const ftype a[3], ftype b[2]);
     ftype (*detect_svf)(ftype in, const ftype m[3], const ftype a[3], ftype b[2]);
+    ftype (*target_gain)(const ftype detect, const ftype threshold, const ftype threshold_log,
+                         const ftype makeup, const ftype ratio, const ftype range,
+                         const ftype power, const int mode);
 } fn(BandContext);
 
-static int fn(init_state)(AVFilterContext *ctx, int nb_channels, int nb_bands)
+static int fn(init_state)(AVFilterContext *ctx, const int nb_channels,
+                          const int nb_bands)
 {
     AudioDynamicEqualizerContext *s = ctx->priv;
     fn(ChannelContext) *stc;
@@ -126,11 +127,18 @@ static int fn(init_state)(AVFilterContext *ctx, int nb_channels, int nb_bands)
     s->nb_bands = nb_bands;
 
     for (int n = 0; n < nb_bands; n++) {
-        fn(BandContext) *bc = &bct[n];
+        fn(BandContext) *b = &bct[n];
+        fn(ChannelContext) *cs;
 
-        bc->cc = av_calloc(nb_channels, sizeof(*stc));
-        if (!bc->cc)
+        b->cc = av_calloc(nb_channels, sizeof(*stc));
+        if (!b->cc)
             return AVERROR(ENOMEM);
+
+        cs = b->cc;
+        for (int ch = 0; ch < nb_channels; ch++) {
+            fn(ChannelContext) *cc = &cs[ch];
+            cc->lin_gain = F(1.0);
+        }
     }
 
     return 0;
@@ -259,6 +267,60 @@ static void fn(update_high)(ftype iQ, ftype A, ftype g,
     m[2] = F(1.0) - A * A;
 }
 
+static ftype fn(target_gain)(const ftype detect, const ftype threshold,
+                             const ftype threshold_log,
+                             const ftype makeup, const ftype ratio,
+                             const ftype range,  const ftype power,
+                             const int mode)
+{
+    switch (mode) {
+    case CUT_BELOW:
+    case BOOST_BELOW:
+        if (detect < threshold) {
+            ftype ld = LIN2LOG(detect);
+            ftype new_log_gain = CLIP(makeup + (threshold_log - ld) * ratio, F(0.0), range) * power;
+            return LOG2LIN(new_log_gain);
+        }
+        break;
+    case CUT_ABOVE:
+    case BOOST_ABOVE:
+        if (detect > threshold) {
+            ftype ld = LIN2LOG(detect);
+            ftype new_log_gain = CLIP(makeup + (ld - threshold_log) * ratio, F(0.0), range) * power;
+            return LOG2LIN(new_log_gain);
+        }
+        break;
+    }
+
+    return F(1.0);
+}
+
+static ftype fn(target_gain_noratio)(const ftype detect, const ftype threshold,
+                                     const ftype unused2,
+                                     const ftype makeup, const ftype unused3,
+                                     const ftype range,  const ftype power,
+                                     const int mode)
+{
+    switch (mode) {
+    case CUT_BELOW:
+    case BOOST_BELOW:
+        if (detect < threshold) {
+            ftype new_log_gain = FMIN(makeup, range) * power;
+            return LOG2LIN(new_log_gain);
+        }
+        break;
+    case CUT_ABOVE:
+    case BOOST_ABOVE:
+        if (detect > threshold) {
+            ftype new_log_gain = FMIN(makeup, range) * power;
+            return LOG2LIN(new_log_gain);
+        }
+        break;
+    }
+
+    return F(1.0);
+}
+
 static int fn(filter_prepare)(AVFilterContext *ctx)
 {
     AudioDynamicEqualizerContext *s = ctx->priv;
@@ -268,17 +330,17 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
     for (int band = 0; band < s->nb_bands; band++) {
         fn(BandContext) *b = &bc[band];
         const ftype dfrequency = FMIN(s->dfrequency[FFMIN(band, s->nb_dfrequency-1)], sample_rate * F(0.5));
-        const ftype ag = FTAN(F(M_PI) * F(1.0) / sample_rate);
+        const ftype ratio = s->ratio[FFMIN(band, s->nb_ratio-1)];
         const ftype dg = FTAN(F(M_PI) * dfrequency / sample_rate);
-        const ftype aqfactor = F(M_SQRT1_2);
         const ftype dqfactor = s->dqfactor[FFMIN(band, s->nb_dqfactor-1)];
         const int tftype = s->tftype[FFMIN(band, s->nb_tftype-1)];
         const int dftype = s->dftype[FFMIN(band, s->nb_dftype-1)];
+        const ftype k = F(1.0) / dqfactor;
+        fn(ChannelContext) *cs = b->cc;
         ftype *aa = b->aa;
         ftype *am = b->am;
         ftype *da = b->da;
         ftype *dm = b->dm;
-        ftype k;
 
         b->threshold = s->threshold[FFMIN(band, s->nb_threshold-1)];
         b->threshold_log = LIN2LOG(b->threshold);
@@ -287,8 +349,6 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
 
         switch (dftype) {
         case DBANDPASS:
-            k = F(1.0) / dqfactor;
-
             da[0] = F(1.0) / (F(1.0) + dg * (dg + k));
             da[1] = dg * da[0];
             da[2] = dg * da[1];
@@ -300,8 +360,6 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
             b->detect_svf = fn(get_svf_band);
             break;
         case DLOWPASS:
-            k = F(1.0) / dqfactor;
-
             da[0] = F(1.0) / (F(1.0) + dg * (dg + k));
             da[1] = dg * da[0];
             da[2] = dg * da[1];
@@ -313,8 +371,6 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
             b->detect_svf = fn(get_svf_low);
             break;
         case DHIGHPASS:
-            k = F(1.0) / dqfactor;
-
             da[0] = F(1.0) / (F(1.0) + dg * (dg + k));
             da[1] = dg * da[0];
             da[2] = dg * da[1];
@@ -326,8 +382,6 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
             b->detect_svf = fn(get_svf);
             break;
         case DPEAK:
-            k = F(1.0) / dqfactor;
-
             da[0] = F(1.0) / (F(1.0) + dg * (dg + k));
             da[1] = dg * da[0];
             da[2] = dg * da[1];
@@ -355,17 +409,36 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
             break;
         }
 
-        k = F(1.0) / aqfactor;
+        {
+            const ftype ag = FTAN(F(M_PI) * F(1.0) / sample_rate);
+            const ftype aqfactor = F(M_SQRT1_2);
 
-        aa[0] = F(1.0) / (F(1.0) + ag * (ag + k));
-        aa[1] = ag * aa[0];
-        aa[2] = ag * aa[1];
+            ftype k = F(1.0) / aqfactor;
 
-        am[0] = F(0.0);
-        am[1] = F(0.0);
-        am[2] = F(1.0);
+            aa[0] = F(1.0) / (F(1.0) + ag * (ag + k));
+            aa[1] = ag * aa[0];
+            aa[2] = ag * aa[1];
+
+            am[0] = F(0.0);
+            am[1] = F(0.0);
+            am[2] = F(1.0);
+        }
 
         b->lowpass_svf = fn(get_svf_low);
+        if (ratio > F(0.0))
+            b->target_gain = fn(target_gain);
+        else
+            b->target_gain = fn(target_gain_noratio);
+
+        for (int ch = 0; ch < s->nb_channels; ch++) {
+            const ftype tfrequency = FMIN(s->tfrequency[FFMIN(band, s->nb_tfrequency-1)], sample_rate * F(0.5));
+            const ftype tqfactor = s->tqfactor[FFMIN(band, s->nb_tqfactor-1)];
+            const ftype fg = FTAN(F(M_PI) * tfrequency / sample_rate);
+            const ftype itqfactor = F(1.0) / tqfactor;
+            fn(ChannelContext) *cc = &cs[ch];
+
+            b->target_update(itqfactor, cc->lin_gain, fg, cc->fa, cc->fm);
+        }
     }
 
     return 0;
@@ -428,27 +501,23 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
         for (int ch = start; ch < end; ch++) {
             const ftype *srcn = (const ftype *)out->extended_data[ch];
             const ftype *src = band ? srcn : (const ftype *)sc->extended_data[ch];
-            ftype score, peak, new_score, detect;
+            ftype score = F(-1.0), peak = F(0.0), new_score, detect, log_avg, avg;
             fn(ChannelContext) *cc = &cs[ch];
             ftype *astate = cc->astate;
             ftype *lstate = cc->lstate;
             ftype *tstate = cc->tstate;
 
-            detect = FABS(b->detect_svf(src[0], dm, da, tstate));
-            cc->avg = b->lowpass_svf(detect, am, aa, astate);
-            cc->log_avg = b->lowpass_svf(FLOG2(detect + EPSILON), am, aa, lstate);
-
-            score = LIN2LOG(FEXP2(cc->log_avg) / cc->avg);
-            peak = FMAX(FEXP2(cc->log_avg), cc->avg);
-            for (int n = 1; n < sc->nb_samples; n++) {
+            for (int n = 0; n < sc->nb_samples; n++) {
                 detect = FABS(b->detect_svf(src[n], dm, da, tstate));
-                cc->avg = b->lowpass_svf(detect, am, aa, astate);
-                cc->log_avg = b->lowpass_svf(FLOG2(detect + EPSILON), am, aa, lstate);
+                avg = b->lowpass_svf(detect, am, aa, astate);
+                log_avg = b->lowpass_svf(FLOG2(detect + EPSILON), am, aa, lstate);
 
-                new_score = LIN2LOG(FEXP2(cc->log_avg) / cc->avg);
-                if (new_score >= score) {
-                    score = new_score;
-                    peak = FMAX(FEXP2(cc->log_avg), cc->avg);
+                if (avg > F(0.0)) {
+                    new_score = LIN2LOG(FEXP2(log_avg) / avg);
+                    if (new_score >= F(0.0)) {
+                        score = new_score;
+                        peak = FMAX(peak, FMAX(FEXP2(log_avg), avg));
+                    }
                 }
             }
 
@@ -502,7 +571,6 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
         ftype *dstate = cc->dstate;
         ftype detect = cc->detect;
         ftype lin_gain = cc->lin_gain;
-        int init = cc->init;
 
         for (int n = 0; n < out->nb_samples; n++) {
             ftype new_lin_gain = F(1.0);
@@ -512,33 +580,14 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
             if (mode > LISTEN)
                 detect = FABS(listen);
 
-            switch (mode) {
-            case LISTEN:
-                break;
-            case CUT_BELOW:
-            case BOOST_BELOW:
-                if (detect < threshold) {
-                    ftype ld = LIN2LOG(detect);
-                    ftype new_log_gain = CLIP(makeup + (threshold_log - ld) * ratio, F(0.0), range) * power;
-                    new_lin_gain = LOG2LIN(new_log_gain);
-                }
-                break;
-            case CUT_ABOVE:
-            case BOOST_ABOVE:
-                if (detect > threshold) {
-                    ftype ld = LIN2LOG(detect);
-                    ftype new_log_gain = CLIP(makeup + (ld - threshold_log) * ratio, F(0.0), range) * power;
-                    new_lin_gain = LOG2LIN(new_log_gain);
-                }
-                break;
-            }
+            new_lin_gain = b->target_gain(detect, threshold, threshold_log,
+                                          makeup, ratio, range, power, mode);
 
-            if (lin_gain != new_lin_gain || !init) {
+            if (lin_gain != new_lin_gain) {
                 ftype f = (new_lin_gain > lin_gain) * tattack + (new_lin_gain < lin_gain) * trelease;
                 new_lin_gain = f * new_lin_gain + (F(1.0) - f) * lin_gain;
 
-                if (lin_gain != new_lin_gain || !init) {
-                    init = 1;
+                if (lin_gain != new_lin_gain) {
                     lin_gain = new_lin_gain;
 
                     b->target_update(itqfactor, lin_gain, fg, fa, fm);
@@ -555,7 +604,6 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
 
         cc->detect = detect;
         cc->lin_gain = lin_gain;
-        cc->init = 1;
     }
 
     return 0;
