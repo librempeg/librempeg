@@ -79,6 +79,7 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     ASubBoostContext *s = ctx->priv;
+    int ret;
 
     s->attack = exp(-1.0 / (2.0 * inlink->sample_rate));
     s->release = exp(-1.0 / (0.0001 * inlink->sample_rate));
@@ -88,6 +89,13 @@ static int config_input(AVFilterLink *inlink)
     if (!s->buffer || !s->w || !s->write_pos)
         return AVERROR(ENOMEM);
 
+    ret = av_channel_layout_copy(&s->ch_layout, &inlink->ch_layout);
+    if (ret < 0)
+        return ret;
+
+    if (strcmp(s->ch_layout_str, "all"))
+        av_channel_layout_from_string(&s->ch_layout,
+                                      s->ch_layout_str);
     return get_coeffs(ctx);
 }
 
@@ -166,20 +174,9 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
-    ASubBoostContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     ThreadData td;
     AVFrame *out;
-    int ret;
-
-    ret = av_channel_layout_copy(&s->ch_layout, &inlink->ch_layout);
-    if (ret < 0) {
-        av_frame_free(&in);
-        return ret;
-    }
-    if (strcmp(s->ch_layout_str, "all"))
-        av_channel_layout_from_string(&s->ch_layout,
-                                      s->ch_layout_str);
 
     if (av_frame_is_writable(in)) {
         out = in;
@@ -214,12 +211,21 @@ static av_cold void uninit(AVFilterContext *ctx)
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
                            char *res, int res_len, int flags)
 {
+    ASubBoostContext *s = ctx->priv;
+    AVFilterLink *inlink = ctx->inputs[0];
     int ret;
 
     ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
     if (ret < 0)
         return ret;
 
+    ret = av_channel_layout_copy(&s->ch_layout, &inlink->ch_layout);
+    if (ret < 0)
+        return ret;
+
+    if (strcmp(s->ch_layout_str, "all"))
+        av_channel_layout_from_string(&s->ch_layout,
+                                      s->ch_layout_str);
     return get_coeffs(ctx);
 }
 
