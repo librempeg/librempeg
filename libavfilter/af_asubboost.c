@@ -48,6 +48,8 @@ typedef struct ASubBoostContext {
 
     AVFrame *w;
     AVFrame *buffer;
+
+    int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } ASubBoostContext;
 
 static int get_coeffs(AVFilterContext *ctx)
@@ -75,11 +77,31 @@ static int get_coeffs(AVFilterContext *ctx)
     return 0;
 }
 
+typedef struct ThreadData {
+    AVFrame *in, *out;
+} ThreadData;
+
+#define DEPTH 32
+#include "asubboost_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "asubboost_template.c"
+
 static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     ASubBoostContext *s = ctx->priv;
     int ret;
+
+    switch (inlink->format) {
+    case AV_SAMPLE_FMT_FLTP:
+        s->filter_channels = filter_channels_fltp;
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        s->filter_channels = filter_channels_dblp;
+        break;
+    }
 
     s->attack = exp(-1.0 / (2.0 * inlink->sample_rate));
     s->release = exp(-1.0 / (0.0001 * inlink->sample_rate));
@@ -99,82 +121,11 @@ static int config_input(AVFilterLink *inlink)
     return get_coeffs(ctx);
 }
 
-typedef struct ThreadData {
-    AVFrame *in, *out;
-} ThreadData;
-
-static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    ASubBoostContext *s = ctx->priv;
-    ThreadData *td = arg;
-    AVFrame *out = td->out;
-    AVFrame *in = td->in;
-    const double mix = ctx->is_disabled ? 0. : 1.;
-    const double wet = ctx->is_disabled ? 1. : s->wet_gain;
-    const double dry = ctx->is_disabled ? 1. : s->dry_gain;
-    const double feedback = s->feedback, decay = s->decay;
-    const double max_boost = s->max_boost;
-    const double b0 = s->b0;
-    const double b1 = s->b1;
-    const double b2 = s->b2;
-    const double a1 = -s->a1;
-    const double a2 = -s->a2;
-    const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
-    const int buffer_samples = s->buffer_samples;
-    const int nb_samples = in->nb_samples;
-    const double a = s->attack;
-    const double b = 1. - a;
-    const double c = s->release;
-    const double d = 1. - c;
-
-    for (int ch = start; ch < end; ch++) {
-        const double *src = (const double *)in->extended_data[ch];
-        double *dst = (double *)out->extended_data[ch];
-        double *buffer = (double *)s->buffer->extended_data[ch];
-        double *w = (double *)s->w->extended_data[ch];
-        int write_pos = s->write_pos[ch];
-        enum AVChannel channel = av_channel_layout_channel_from_index(&in->ch_layout, ch);
-        const int bypass = av_channel_layout_index_from_channel(&s->ch_layout, channel) < 0;
-
-        if (bypass) {
-            if (in != out)
-                memcpy(out->extended_data[ch], in->extended_data[ch],
-                       nb_samples * sizeof(double));
-            continue;
-        }
-
-        for (int n = 0; n < nb_samples; n++) {
-            double out_sample, boost;
-
-            out_sample = src[n] * b0 + w[0];
-            w[0] = b1 * src[n] + w[1] + a1 * out_sample;
-            w[1] = b2 * src[n] + a2 * out_sample;
-
-            buffer[write_pos] = buffer[write_pos] * decay + out_sample * feedback;
-            boost = mix * av_clipd((0.9 - fabs(src[n] * dry)) / fabs(buffer[write_pos]), 0., max_boost);
-            w[2] = (boost > w[2]) ? w[2] * a + b * boost : w[2] * c + d * boost;
-            w[2] = av_clipd(w[2], 0., max_boost);
-            dst[n] = (src[n] * dry + w[2] * buffer[write_pos] * mix) * wet;
-
-            if (++write_pos >= buffer_samples)
-                write_pos = 0;
-        }
-
-        w[0] = isnormal(w[0]) ? w[0] : 0.0;
-        w[1] = isnormal(w[1]) ? w[1] : 0.0;
-        w[2] = isnormal(w[2]) ? w[2] : 0.0;
-
-        s->write_pos[ch] = write_pos;
-    }
-
-    return 0;
-}
-
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
+    ASubBoostContext *s = ctx->priv;
     ThreadData td;
     AVFrame *out;
 
@@ -190,7 +141,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
 
     td.in = in; td.out = out;
-    ff_filter_execute(ctx, filter_channels, &td, NULL,
+    ff_filter_execute(ctx, s->filter_channels, &td, NULL,
                       FFMIN(inlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     if (out != in)
@@ -264,7 +215,7 @@ const AVFilter ff_af_asubboost = {
     .uninit         = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
-    FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_FLTP),
     .process_command = process_command,
     .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                        AVFILTER_FLAG_SLICE_THREADS,
