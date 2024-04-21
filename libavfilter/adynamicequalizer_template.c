@@ -80,13 +80,11 @@ typedef struct fn(ChannelContext) {
     ftype lstate[2];
     ftype dstate[2];
     ftype fstate[2];
-    ftype tstate[2];
     ftype lin_gain;
     ftype detect;
     ftype threshold;
     ftype new_threshold;
     ftype threshold_log;
-    ftype new_threshold_log;
 
     int size;
     int detection;
@@ -138,6 +136,9 @@ static int fn(init_state)(AVFilterContext *ctx, const int nb_channels,
         for (int ch = 0; ch < nb_channels; ch++) {
             fn(ChannelContext) *cc = &cs[ch];
             cc->lin_gain = F(1.0);
+            cc->new_threshold = EPSILON;
+            cc->threshold = cc->new_threshold;
+            cc->threshold_log = LIN2LOG(cc->threshold);
         }
     }
 
@@ -461,124 +462,97 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
     const ftype tfrequency = FMIN(s->tfrequency[FFMIN(band, s->nb_tfrequency-1)], sample_rate * F(0.5));
     const int mode = s->mode;
     const ftype power = (mode == CUT_BELOW || mode == CUT_ABOVE) ? F(-1.0) : F(1.0);
+    const ftype band_threshold_log = b->threshold_log;
+    const ftype band_threshold = b->threshold;
     const ftype trelease = b->trelease_coef;
     const ftype tattack = b->tattack_coef;
     const ftype tqfactor = s->tqfactor[FFMIN(band, s->nb_tqfactor-1)];
     const ftype itqfactor = F(1.0) / tqfactor;
     const ftype fg = FTAN(F(M_PI) * tfrequency / sample_rate);
     const int is_disabled = ctx->is_disabled;
-    const int detection = s->detection[FFMIN(band, s->nb_detection-1)];
+    const int band_detection = s->detection[FFMIN(band, s->nb_detection-1)];
     fn(ChannelContext) *cs = b->cc;
     const ftype *aa = b->aa;
     const ftype *am = b->am;
     const ftype *da = b->da;
     const ftype *dm = b->dm;
 
-    if (detection == DET_ON) {
-        for (int ch = start; ch < end; ch++) {
-            const ftype *srcn = (const ftype *)out->extended_data[ch];
-            const ftype *src = band ? srcn : (const ftype *)sc->extended_data[ch];
-            fn(ChannelContext) *cc = &cs[ch];
-            ftype new_threshold = EPSILON;
-            ftype *tstate = cc->tstate;
-
-            if (cc->detection != detection) {
-                cc->detection = detection;
-                cc->new_threshold_log = LIN2LOG(new_threshold);
-            }
-
-            for (int n = 0; n < sc->nb_samples; n++) {
-                ftype detect = FABS(b->detect_svf(src[n], dm, da, tstate));
-                new_threshold = FMAX(new_threshold, detect);
-            }
-
-            fn(update_state)(tstate);
-
-            cc->new_threshold     = FMAX(cc->new_threshold,             new_threshold);
-            cc->new_threshold_log = FMAX(cc->new_threshold_log, LIN2LOG(new_threshold));
-        }
-    } else if (detection == DET_ADAPTIVE) {
-        for (int ch = start; ch < end; ch++) {
-            const ftype *srcn = (const ftype *)out->extended_data[ch];
-            const ftype *src = band ? srcn : (const ftype *)sc->extended_data[ch];
-            ftype score = F(-1.0), peak = F(0.0), new_score, detect, log_avg, avg;
-            fn(ChannelContext) *cc = &cs[ch];
-            ftype *astate = cc->astate;
-            ftype *lstate = cc->lstate;
-            ftype *tstate = cc->tstate;
-
-            for (int n = 0; n < sc->nb_samples; n++) {
-                detect = FABS(b->detect_svf(src[n], dm, da, tstate));
-                avg = b->lowpass_svf(detect, am, aa, astate);
-                log_avg = b->lowpass_svf(FLOG2(detect + EPSILON), am, aa, lstate);
-
-                if (avg > F(0.0)) {
-                    new_score = LIN2LOG(FEXP2(log_avg) / avg);
-                    if (new_score >= F(0.0)) {
-                        score = new_score;
-                        peak = FMAX(peak, FMAX(FEXP2(log_avg), avg));
-                    }
-                }
-            }
-
-            cc->size = FFMIN(cc->size + sc->nb_samples, sample_rate);
-
-            fn(update_state)(astate);
-            fn(update_state)(lstate);
-            fn(update_state)(tstate);
-
-            if (score >= F(0.0) && cc->size >= sample_rate) {
-                cc->threshold     = peak * F(10.0);
-                cc->threshold_log = LIN2LOG(cc->threshold);
-                av_log(ctx, AV_LOG_DEBUG, "[%d]: %g %g|%g\n", band, score, cc->threshold, cc->threshold_log);
-            } else if (cc->detection == DET_UNSET) {
-                cc->threshold     = b->threshold;
-                cc->threshold_log = b->threshold_log;
-            }
-            cc->detection = detection;
-        }
-    } else if (detection == DET_DISABLED) {
-        for (int ch = start; ch < end; ch++) {
-            fn(ChannelContext) *cc = &cs[ch];
-            cc->threshold     = b->threshold;
-            cc->threshold_log = b->threshold_log;
-            cc->detection = detection;
-        }
-    } else if (detection == DET_OFF) {
-        for (int ch = start; ch < end; ch++) {
-            fn(ChannelContext) *cc = &cs[ch];
-            if (cc->detection == DET_ON) {
-                cc->threshold     = cc->new_threshold;
-                cc->threshold_log = cc->new_threshold_log;
-                av_log(ctx, AV_LOG_DEBUG, "[%d]: %g|%g\n", band, cc->threshold, cc->threshold_log);
-            } else if (cc->detection == DET_UNSET) {
-                cc->threshold     = b->threshold;
-                cc->threshold_log = b->threshold_log;
-            }
-            cc->detection = detection;
-        }
-    }
-
     for (int ch = start; ch < end; ch++) {
         ftype *dst = (ftype *)out->extended_data[ch];
         const ftype *scsrc = band ? dst : (const ftype *)sc->extended_data[ch];
         const ftype *src = band ? dst : (const ftype *)in->extended_data[ch];
         fn(ChannelContext) *cc = &cs[ch];
-        const ftype threshold_log = cc->threshold_log;
-        const ftype threshold = cc->threshold;
+        ftype threshold_log = cc->threshold_log;
+        ftype new_threshold = cc->new_threshold;
+        ftype threshold = cc->threshold;
         ftype *fa = cc->fa, *fm = cc->fm;
-        ftype *fstate = cc->fstate;
-        ftype *dstate = cc->dstate;
-        ftype detect = cc->detect;
         ftype lin_gain = cc->lin_gain;
+        int detection = cc->detection;
+        ftype *astate = cc->astate;
+        ftype *dstate = cc->dstate;
+        ftype *fstate = cc->fstate;
+        ftype *lstate = cc->lstate;
+        ftype detect = cc->detect;
+        ftype score = F(-1.0);
+        ftype peak = F(0.0);
+        int size = cc->size;
 
         for (int n = 0; n < out->nb_samples; n++) {
             ftype new_lin_gain = F(1.0);
             ftype v, listen;
 
             listen = b->detect_svf(scsrc[n], dm, da, dstate);
-            if (mode > LISTEN)
-                detect = FABS(listen);
+            detect = FABS(listen);
+
+            if (band_detection == DET_ON) {
+                new_threshold = FMAX(new_threshold, detect);
+                detection = band_detection;
+            } else if (band_detection == DET_ADAPTIVE) {
+                ftype avg = b->lowpass_svf(detect, am, aa, astate);
+                ftype log_avg = b->lowpass_svf(FLOG2(detect + EPSILON), am, aa, lstate);
+
+                if (avg > F(0.0)) {
+                    ftype new_score = LIN2LOG(FEXP2(log_avg) / avg);
+                    if (new_score >= F(0.0)) {
+                        score = new_score;
+                        peak = FMAX(peak, FMAX(FEXP2(log_avg), avg));
+                    }
+                }
+
+                size = FFMIN(size + 1, sample_rate);
+
+                fn(update_state)(astate);
+                fn(update_state)(lstate);
+
+                if (score >= F(0.0) && size >= sample_rate) {
+                    threshold     = peak * F(10.0);
+                    threshold_log = LIN2LOG(threshold);
+                    av_log(ctx, AV_LOG_DEBUG, "[%d]: %g %g|%g\n", band, score, threshold, threshold_log);
+                } else if (detection == DET_UNSET) {
+                    threshold     = band_threshold;
+                    threshold_log = band_threshold_log;
+                    new_threshold = EPSILON;
+                }
+                detection = band_detection;
+            } else if (band_detection == DET_DISABLED) {
+                if (detection != band_detection) {
+                    threshold     = band_threshold;
+                    threshold_log = band_threshold_log;
+                    new_threshold = EPSILON;
+                    detection     = band_detection;
+                }
+            } else if (band_detection == DET_OFF) {
+                if (detection == DET_ON) {
+                    threshold     = new_threshold;
+                    threshold_log = LIN2LOG(new_threshold);
+                    av_log(ctx, AV_LOG_DEBUG, "[%d]: %g|%g\n", band, threshold, threshold_log);
+                } else if (detection == DET_UNSET) {
+                    threshold     = band_threshold;
+                    threshold_log = band_threshold_log;
+                    new_threshold = EPSILON;
+                }
+                detection = band_detection;
+            }
 
             new_lin_gain = b->target_gain(detect, threshold, threshold_log,
                                           makeup, ratio, range, power, mode);
@@ -602,8 +576,13 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
         fn(update_state)(dstate);
         fn(update_state)(fstate);
 
+        cc->size = size;
         cc->detect = detect;
         cc->lin_gain = lin_gain;
+        cc->detection = detection;
+        cc->threshold = threshold;
+        cc->threshold_log = threshold_log;
+        cc->new_threshold = new_threshold;
     }
 
     return 0;
