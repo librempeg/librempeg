@@ -41,6 +41,9 @@ typedef struct CrossfeedContext {
 
     double w1, w2;
 
+    int64_t pts;
+    int nb_samples;
+
     double *mid;
     double *side[3];
 } CrossfeedContext;
@@ -125,7 +128,7 @@ static void filter_samples(double *dst, const double *src,
     *sw2 = w2;
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *in)
+static int filter_frame(AVFilterLink *inlink, AVFrame *in, int eof)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
@@ -141,12 +144,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     const double a1 = s->a1;
     const double a2 = s->a2;
     AVFrame *out;
+    int drop = 0;
     double *dst;
 
     if (av_frame_is_writable(in) && s->block_samples == 0) {
         out = in;
     } else {
-        out = ff_get_audio_buffer(outlink, in->nb_samples);
+        out = ff_get_audio_buffer(outlink, s->block_samples > 0 ? s->block_samples : in->nb_samples);
         if (!out) {
             av_frame_free(&in);
             return AVERROR(ENOMEM);
@@ -154,6 +158,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
     dst = (double *)out->data[0];
+
+    if (s->block_samples > 0 && s->pts == AV_NOPTS_VALUE)
+        drop = 1;
 
     if (s->block_samples == 0) {
         const int nb_samples = out->nb_samples;
@@ -190,8 +197,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         const int nb_samples = out->nb_samples;
         double *mdst = s->mid + s->block_samples;
         double *sdst = s->side[0] + s->block_samples;
-        double *ssrc = s->side[0];
-        double *msrc = s->mid;
         double w1 = s->w1;
         double w2 = s->w2;
 
@@ -200,37 +205,30 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             sdst[n] = (src[0] - src[1]) * level_in * .5;
         }
 
-        sdst = s->side[1];
-        filter_samples(sdst, ssrc, nb_samples,
-                       b0, b1, b2, a0, a1, a2,
-                       &w1, &w2);
+        for (int n = nb_samples; n < s->block_samples; n++)
+            sdst[n] = 0.0;
 
-        s->w1 = isnormal(w1) ? w1 : 0.0;
-        s->w2 = isnormal(w2) ? w2 : 0.0;
+        filter_samples(sdst, sdst, s->block_samples,
+                       b0, b1, b2, a0, a1, a2, &w1, &w2);
+        s->w1 = w1;
+        s->w2 = w2;
 
-        ssrc = s->side[0] + s->block_samples;
-        sdst = s->side[1] + s->block_samples;
-        filter_samples(sdst, ssrc, nb_samples,
-                       b0, b1, b2, a0, a1, a2,
-                       &w1, &w2);
-
-        reverse_samples(s->side[2], s->side[1], nb_samples * 2);
+        reverse_samples(s->side[1], s->side[0], s->block_samples * 2);
         w1 = w2 = 0.;
-        filter_samples(s->side[2], s->side[2], nb_samples * 2,
-                       b0, b1, b2, a0, a1, a2,
-                       &w1, &w2);
+        filter_samples(s->side[1], s->side[1], s->block_samples * 2,
+                       b0, b1, b2, a0, a1, a2, &w1, &w2);
 
-        reverse_samples(s->side[1], s->side[2], nb_samples * 2);
+        reverse_samples(s->side[2], s->side[1], s->block_samples * 2);
 
         src = (const double *)in->data[0];
-        ssrc = s->side[1];
+        sdst = s->side[2];
         for (int n = 0; n < nb_samples; n++, src += 2, dst += 2) {
             if (is_disabled) {
                 dst[0] = src[0];
                 dst[1] = src[1];
             } else {
-                dst[0] = (msrc[n] + ssrc[n]) * level_out;
-                dst[1] = (msrc[n] - ssrc[n]) * level_out;
+                dst[0] = (mdst[n] + sdst[n]) * level_out;
+                dst[1] = (mdst[n] - sdst[n]) * level_out;
             }
         }
 
@@ -240,9 +238,25 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                 s->block_samples * sizeof(*s->side[0]));
     }
 
+    if (s->block_samples > 0) {
+        int nb_samples = in->nb_samples;
+        int64_t pts = in->pts;
+
+        out->pts = s->pts;
+        out->nb_samples = s->nb_samples;
+        s->pts = pts;
+        s->nb_samples = nb_samples;
+    }
+
     if (out != in)
         av_frame_free(&in);
-    return ff_filter_frame(outlink, out);
+    if (!drop) {
+        return ff_filter_frame(outlink, out);
+    } else {
+        av_frame_free(&out);
+        ff_filter_set_ready(ctx, 10);
+        return 0;
+    }
 }
 
 static int activate(AVFilterContext *ctx)
@@ -265,7 +279,7 @@ static int activate(AVFilterContext *ctx)
     if (ret < 0)
         return ret;
     if (ret > 0)
-        return filter_frame(inlink, in);
+        return filter_frame(inlink, in, 0);
 
     if (s->block_samples > 0 && ff_inlink_queued_samples(inlink) >= s->block_samples) {
         ff_filter_set_ready(ctx, 10);
@@ -273,8 +287,17 @@ static int activate(AVFilterContext *ctx)
     }
 
     if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+        if (s->block_samples > 0) {
+            AVFrame *in = ff_get_audio_buffer(outlink, s->block_samples);
+            if (!in)
+                return AVERROR(ENOMEM);
+
+            ret = filter_frame(inlink, in, 1);
+        }
+
         ff_outlink_set_status(outlink, status, pts);
-        return 0;
+
+        return ret;
     }
 
     FF_FILTER_FORWARD_WANTED(outlink, inlink);
