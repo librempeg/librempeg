@@ -887,6 +887,13 @@ static void reverse_samples(AVFrame *out, AVFrame *in, int p,
                             int oo, int io, int nb_samples)
 {
     switch (out->format) {
+    case AV_SAMPLE_FMT_U8P: {
+        const uint8_t *src = ((const uint8_t *)in->extended_data[p]) + io;
+        uint8_t *dst = ((uint8_t *)out->extended_data[p]) + oo;
+        for (int i = 0, j = nb_samples - 1; i < nb_samples; i++, j--)
+            dst[i] = src[j];
+    }
+        break;
     case AV_SAMPLE_FMT_S16P: {
         const int16_t *src = ((const int16_t *)in->extended_data[p]) + io;
         int16_t *dst = ((int16_t *)out->extended_data[p]) + oo;
