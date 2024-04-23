@@ -942,33 +942,19 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
         if (!s->block_samples) {
             s->filter(s, buf->extended_data[ch], out_buf->extended_data[ch], buf->nb_samples,
                       s->cache[0]->extended_data[ch], s->clip+ch, ctx->is_disabled);
-        } else if (td->eof) {
-            memcpy(out_buf->extended_data[ch], s->block[1]->extended_data[ch] + s->block_align * s->block_samples,
-                   s->nb_samples * s->block_align);
         } else {
-            memcpy(s->block[0]->extended_data[ch] + s->block_align * s->block_samples, buf->extended_data[ch],
-                   buf->nb_samples * s->block_align);
+            s->filter(s, buf->extended_data[ch], s->block[0]->extended_data[ch] + s->block_align * s->block_samples,
+                      buf->nb_samples, s->cache[0]->extended_data[ch], s->clip+ch, ctx->is_disabled);
             memset(s->block[0]->extended_data[ch] + s->block_align * (s->block_samples + buf->nb_samples),
                    0, (s->block_samples - buf->nb_samples) * s->block_align);
-            s->filter(s, s->block[0]->extended_data[ch], s->block[1]->extended_data[ch], s->block_samples,
-                      s->cache[0]->extended_data[ch], s->clip+ch, ctx->is_disabled);
-            av_samples_copy(s->cache[1]->extended_data, s->cache[0]->extended_data, 0, 0,
-                            s->cache[0]->nb_samples, s->cache[0]->ch_layout.nb_channels,
-                            s->cache[0]->format);
-            s->filter(s, s->block[0]->extended_data[ch] + s->block_samples * s->block_align,
-                      s->block[1]->extended_data[ch] + s->block_samples * s->block_align,
-                      s->block_samples, s->cache[1]->extended_data[ch], s->clip+ch,
-                      ctx->is_disabled);
-            reverse_samples(s->block[2], s->block[1], ch, 0, 0, 2 * s->block_samples);
-            av_samples_set_silence(s->cache[1]->extended_data, 0, s->cache[1]->nb_samples,
-                                   s->cache[1]->ch_layout.nb_channels, s->cache[1]->format);
-            s->filter(s, s->block[2]->extended_data[ch], s->block[2]->extended_data[ch], 2 * s->block_samples,
+            reverse_samples(s->block[1], s->block[0], ch, 0, 0, 2 * s->block_samples);
+            s->filter(s, s->block[1]->extended_data[ch], s->block[1]->extended_data[ch], 2 * s->block_samples,
                       s->cache[1]->extended_data[ch], s->clip+ch, ctx->is_disabled);
-            reverse_samples(s->block[1], s->block[2], ch, 0, 0, 2 * s->block_samples);
-            memcpy(out_buf->extended_data[ch], s->block[1]->extended_data[ch],
+            reverse_samples(s->block[2], s->block[1], ch, 0, 0, 2 * s->block_samples);
+            memcpy(out_buf->extended_data[ch], s->block[2]->extended_data[ch],
                    s->block_samples * s->block_align);
-            memmove(s->block[0]->extended_data[ch], s->block[0]->extended_data[ch] + s->block_align * s->block_samples,
-                    s->block_samples * s->block_align);
+            memcpy(s->block[0]->extended_data[ch], s->block[0]->extended_data[ch] + s->block_align * s->block_samples,
+                   s->block_samples * s->block_align);
         }
     }
 
