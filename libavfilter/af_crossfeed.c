@@ -40,6 +40,7 @@ typedef struct CrossfeedContext {
     double b0, b1, b2;
 
     double w1, w2;
+    double rw1, rw2;
 
     int64_t pts;
     int nb_samples;
@@ -83,6 +84,7 @@ static int config_input(AVFilterLink *inlink)
     s->b2 = A * A - 1.;
 
     if (s->block_samples == 0 && s->block_size > 0) {
+        s->pts = AV_NOPTS_VALUE;
         s->block_samples = s->block_size;
         s->mid = av_calloc(s->block_samples * 2, sizeof(*s->mid));
         for (int i = 0; i < 3; i++) {
@@ -128,7 +130,7 @@ static void filter_samples(double *dst, const double *src,
     *sw2 = w2;
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *in, int eof)
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
@@ -194,7 +196,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in, int eof)
         s->w1 = isnormal(w1) ? w1 : 0.0;
         s->w2 = isnormal(w2) ? w2 : 0.0;
     } else {
-        const int nb_samples = out->nb_samples;
+        const int block_samples = s->block_samples;
+        const int nb_samples = in->nb_samples;
         double *mdst = s->mid + s->block_samples;
         double *sdst = s->side[0] + s->block_samples;
         double w1 = s->w1;
@@ -205,24 +208,28 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in, int eof)
             sdst[n] = (src[0] - src[1]) * level_in * .5;
         }
 
-        for (int n = nb_samples; n < s->block_samples; n++)
+        for (int n = nb_samples; n < block_samples; n++) {
+            mdst[n] = 0.0;
             sdst[n] = 0.0;
+        }
 
-        filter_samples(sdst, sdst, s->block_samples,
-                       b0, b1, b2, a0, a1, a2, &w1, &w2);
-        s->w1 = w1;
-        s->w2 = w2;
-
-        reverse_samples(s->side[1], s->side[0], s->block_samples * 2);
-        w1 = w2 = 0.;
-        filter_samples(s->side[1], s->side[1], s->block_samples * 2,
+        filter_samples(sdst, sdst, nb_samples,
                        b0, b1, b2, a0, a1, a2, &w1, &w2);
 
-        reverse_samples(s->side[2], s->side[1], s->block_samples * 2);
+        s->w1 = isnormal(w1) ? w1 : 0.0;
+        s->w2 = isnormal(w2) ? w2 : 0.0;
+
+        reverse_samples(s->side[1], s->side[0], block_samples * 2);
+        filter_samples(s->side[1], s->side[1], block_samples * 2,
+                       b0, b1, b2, a0, a1, a2, &s->rw1, &s->rw2);
+        s->rw1 = isnormal(s->rw1) ? s->rw1 : 0.0;
+        s->rw2 = isnormal(s->rw2) ? s->rw2 : 0.0;
+        reverse_samples(s->side[2], s->side[1], block_samples * 2);
 
         src = (const double *)in->data[0];
+        mdst = s->mid;
         sdst = s->side[2];
-        for (int n = 0; n < nb_samples; n++, src += 2, dst += 2) {
+        for (int n = 0; n < block_samples; n++, src += 2, dst += 2) {
             if (is_disabled) {
                 dst[0] = src[0];
                 dst[1] = src[1];
@@ -232,10 +239,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in, int eof)
             }
         }
 
-        memmove(s->mid, s->mid + s->block_samples,
-                s->block_samples * sizeof(*s->mid));
-        memmove(s->side[0], s->side[0] + s->block_samples,
-                s->block_samples * sizeof(*s->side[0]));
+        memcpy(s->mid, s->mid + block_samples,
+               block_samples * sizeof(*s->mid));
+        memcpy(s->side[0], s->side[0] + block_samples,
+               block_samples * sizeof(*s->side[0]));
     }
 
     if (s->block_samples > 0) {
@@ -279,7 +286,7 @@ static int activate(AVFilterContext *ctx)
     if (ret < 0)
         return ret;
     if (ret > 0)
-        return filter_frame(inlink, in, 0);
+        return filter_frame(inlink, in);
 
     if (s->block_samples > 0 && ff_inlink_queued_samples(inlink) >= s->block_samples) {
         ff_filter_set_ready(ctx, 10);
@@ -292,7 +299,7 @@ static int activate(AVFilterContext *ctx)
             if (!in)
                 return AVERROR(ENOMEM);
 
-            ret = filter_frame(inlink, in, 1);
+            ret = filter_frame(inlink, in);
         }
 
         ff_outlink_set_status(outlink, status, pts);
