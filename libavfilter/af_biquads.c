@@ -880,7 +880,6 @@ static int config_output(AVFilterLink *outlink)
 
 typedef struct ThreadData {
     AVFrame *in, *out;
-    int eof;
 } ThreadData;
 
 static void reverse_samples(AVFrame *out, AVFrame *in, int p,
@@ -968,7 +967,7 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     return 0;
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *buf, int eof)
+static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
 {
     AVFilterContext  *ctx = inlink->dst;
     BiquadsContext *s     = ctx->priv;
@@ -1004,7 +1003,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf, int eof)
         drop = 1;
     td.in = buf;
     td.out = out_buf;
-    td.eof = eof;
     ff_filter_execute(ctx, filter_channel, &td, NULL,
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
@@ -1057,7 +1055,7 @@ static int activate(AVFilterContext *ctx)
     if (ret < 0)
         return ret;
     if (ret > 0)
-        return filter_frame(inlink, in, 0);
+        return filter_frame(inlink, in);
 
     if (s->block_samples > 0 && ff_inlink_queued_samples(inlink) >= s->block_samples) {
         ff_filter_set_ready(ctx, 10);
@@ -1070,7 +1068,7 @@ static int activate(AVFilterContext *ctx)
             if (!in)
                 return AVERROR(ENOMEM);
 
-            ret = filter_frame(inlink, in, 1);
+            ret = filter_frame(inlink, in);
         }
 
         ff_outlink_set_status(outlink, status, pts);
