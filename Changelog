@@ -6,6 +6,7 @@ version <next>:
 - more truehd encoder channel-layouts
 - LC3/LC3plus demuxer and muxer
 - pad_vaapi, drawbox_vaapi filters
+- vf_scale supports secondary ref input and framesync options
 
 version 7.0:
 - DXV DXT1 encoder
