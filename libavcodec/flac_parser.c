@@ -43,6 +43,7 @@
 #define FLAC_MIN_HEADERS 10
 /** estimate for average size of a FLAC frame                                 */
 #define FLAC_AVG_FRAME_SIZE 8192
+#define FLAC_MAX_FRAME_SAMPLES 16384
 
 /** scoring settings for score_header */
 #define FLAC_HEADER_BASE_SCORE        10
@@ -122,7 +123,7 @@ static int frame_header_is_valid(AVCodecContext *avctx, const uint8_t *buf,
     // 001xxx : if(xxx <= 4) SUBFRAME_FIXED, xxx=order ; else reserved
     // 01xxxx : reserved
     // 1xxxxx : SUBFRAME_LPC, xxxxx=order-1
-    subframe_type = get_bits(&gb, 6);
+    fi->subframe_type = subframe_type = get_bits(&gb, 6);
     if (!(subframe_type == 0 ||
           subframe_type == 1 ||
           ((subframe_type >= 8) && (subframe_type <= 12)) ||
@@ -767,8 +768,10 @@ static int flac_parse(AVCodecParserContext *s, AVCodecContext *avctx,
         }
 
         if (!flac_fifo_space(&fpc->fifo_buf) &&
-            flac_fifo_size(&fpc->fifo_buf) / FLAC_AVG_FRAME_SIZE >
-            fpc->nb_headers_buffered * 20) {
+            (flac_fifo_size(&fpc->fifo_buf) / FLAC_AVG_FRAME_SIZE >
+             fpc->nb_headers_buffered * 20) &&
+            (fpc->headers->fi.subframe_type != 1 ||
+             flac_fifo_size(&fpc->fifo_buf) > FLAC_MAX_FRAME_SAMPLES * fpc->headers->fi.channels * 3LL)) {
             /* There is less than one valid flac header buffered for 20 headers
              * buffered. Therefore the fifo is most likely filled with invalid
              * data and the input is not a flac file. */

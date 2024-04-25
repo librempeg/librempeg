@@ -50,6 +50,7 @@ typedef struct FLACFrameInfo {
                                          block sizes or a fixed block size;
                                          also determines the meaning of
                                          frame_or_sample_num             */
+    int subframe_type;      /**< subframe-type */
 } FLACFrameInfo;
 
 /**
