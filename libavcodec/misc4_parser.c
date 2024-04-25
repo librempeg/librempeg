@@ -67,6 +67,8 @@ static int misc4_parse(AVCodecParserContext *s, AVCodecContext *avctx,
         }
     }
 
+    s->duration = 29 * (1 + (avctx->ch_layout.nb_channels == 1)) * (buf_size / 29);
+
     *poutbuf      = buf;
     *poutbuf_size = buf_size;
 

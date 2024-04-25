@@ -57,7 +57,10 @@ static av_cold int misc4_init(AVCodecContext *avctx)
 {
     MISC4Context *s = avctx->priv_data;
 
-    avctx->sample_fmt = AV_SAMPLE_FMT_S16;
+    if (avctx->ch_layout.nb_channels <= 0 ||
+        avctx->ch_layout.nb_channels >  2)
+       return AVERROR_INVALIDDATA;
+
     switch (avctx->sample_rate) {
     case 8000:
     case 11025:
@@ -67,7 +70,11 @@ static av_cold int misc4_init(AVCodecContext *avctx)
     case 32000:
         s->marker = 0x2b2;
         break;
+    default:
+        return AVERROR_INVALIDDATA;
     }
+
+    avctx->sample_fmt = AV_SAMPLE_FMT_S16;
 
     return 0;
 }
@@ -133,42 +140,45 @@ static int misc4_decode(AVCodecContext *avctx, AVFrame *frame,
 {
     MISC4Context *s = avctx->priv_data;
     GetByteContext *gb = &s->gb;
+    int ret, m = 0;
     uint32_t hdr;
-    int ret;
 
     bytestream2_init(gb, pkt->data, pkt->size);
 
-    frame->nb_samples = 29 * (1 + (avctx->ch_layout.nb_channels == 1));
+    frame->nb_samples = 29 * (1 + (avctx->ch_layout.nb_channels == 1)) * (pkt->size / 29);
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
 
-    hdr = bytestream2_peek_be32(gb);
-    if (hdr == s->marker) {
-        bytestream2_skip(gb, 5);
-    } else if ((hdr >> 16) == s->marker) {
-        bytestream2_skip(gb, 3);
-    }
-
-    {
+    do {
         int16_t *samples = (int16_t *)frame->data[0];
         const int st = avctx->ch_layout.nb_channels == 2;
         int n;
 
+        hdr = bytestream2_peek_be32(gb);
+        if (hdr == s->marker) {
+            bytestream2_skip(gb, 5);
+        } else if ((hdr >> 16) == s->marker) {
+            bytestream2_skip(gb, 3);
+        }
+
         for (n = 0; n < 29; n++) {
             int nibble = bytestream2_get_byte(gb);
-            samples[2*n+0] = decode(&s->ch[0 ], nibble >> 4);
-            samples[2*n+1] = decode(&s->ch[st], nibble & 15);
+            samples[2*(m+n)+0] = decode(&s->ch[0 ], nibble >> 4);
+            samples[2*(m+n)+1] = decode(&s->ch[st], nibble & 15);
             if (bytestream2_get_bytes_left(gb) <= 0)
                 break;
         }
 
         if (n == 29 && bytestream2_get_byte(gb) != 0x55)
             return AVERROR_INVALIDDATA;
-    }
+        m += n;
+    } while (bytestream2_get_bytes_left(gb) > 0);
+
+    frame->nb_samples = m;
 
     *got_frame_ptr = 1;
 
-    return bytestream2_tell(gb);
+    return pkt->size;
 }
 
 const FFCodec ff_misc4_decoder = {
@@ -179,11 +189,7 @@ const FFCodec ff_misc4_decoder = {
     .priv_data_size   = sizeof(MISC4Context),
     .init             = misc4_init,
     FF_CODEC_DECODE_CB(misc4_decode),
-    .p.capabilities   = AV_CODEC_CAP_DR1 |
-#if FF_API_SUBFRAMES
-                        AV_CODEC_CAP_SUBFRAMES |
-#endif
-                        AV_CODEC_CAP_CHANNEL_CONF,
+    .p.capabilities   = AV_CODEC_CAP_DR1,
     .p.sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_S16,
                                                         AV_SAMPLE_FMT_NONE },
 };
