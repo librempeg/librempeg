@@ -50,6 +50,7 @@ OBJS-$(CONFIG_ADECLIP_FILTER)                += af_adeclick.o
 OBJS-$(CONFIG_ADECORRELATE_FILTER)           += af_adecorrelate.o
 OBJS-$(CONFIG_ADELAY_FILTER)                 += af_adelay.o
 OBJS-$(CONFIG_ADENORM_FILTER)                += af_adenorm.o
+OBJS-$(CONFIG_ADEQUANT_FILTER)               += af_adequant.o
 OBJS-$(CONFIG_ADERIVATIVE_FILTER)            += af_aderivative.o
 OBJS-$(CONFIG_ADESURGE_FILTER)               += af_adeclick.o
 OBJS-$(CONFIG_ADRC_FILTER)                   += af_adrc.o
