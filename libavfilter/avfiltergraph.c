@@ -662,6 +662,7 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
                    av_get_pix_fmt_name(best), link->incfg.formats->nb_formats,
                    av_get_pix_fmt_name(ref->format), has_alpha);
             link->incfg.formats->formats[0] = best;
+            link->incfg.formats->nb_formats = 1;
         }
     } else if (link->type == AVMEDIA_TYPE_AUDIO) {
         if(ref && ref->type == AVMEDIA_TYPE_AUDIO){
@@ -680,11 +681,21 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
                    av_get_sample_fmt_name(best), link->incfg.formats->nb_formats,
                    av_get_sample_fmt_name(ref->format));
             link->incfg.formats->formats[0] = best;
+            link->incfg.formats->nb_formats = 1;
         }
     }
 
-    link->incfg.formats->nb_formats = 1;
     link->format = link->incfg.formats->formats[0];
+    if (link->type == AVMEDIA_TYPE_VIDEO) {
+        link->incfg.formats->nb_formats = 1;
+    } else if (link->type == AVMEDIA_TYPE_AUDIO) {
+        for (int n = 1; n < link->incfg.formats->nb_formats; n++) {
+            if (av_get_bytes_per_sample(link->format) <
+                av_get_bytes_per_sample(link->incfg.formats->formats[n]))
+                link->format = link->incfg.formats->formats[n];
+        }
+        link->incfg.formats->nb_formats = 1;
+    }
 
     if (link->type == AVMEDIA_TYPE_VIDEO) {
         enum AVPixelFormat swfmt = link->format;
