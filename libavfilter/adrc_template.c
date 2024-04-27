@@ -153,10 +153,10 @@ static void fn(get_envelope)(AVFilterContext *ctx,
 
         if (Bg > Vg) {
             envelope[n] = attack  * Vg + (F(1.0) - attack)  * Bg;
-        } else if (Bg <= Vg)  {
+        } else if (Bg < Vg)  {
             envelope[n] = release * Vg + (F(1.0) - release) * Bg;
         } else {
-            envelope[n] = F(0.0);
+            envelope[n] = Vg;
         }
     }
 }
