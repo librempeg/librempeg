@@ -70,7 +70,7 @@ typedef struct AudioDRCContext {
     int channels;
 
     float fx;
-    float *window;
+    void *window;
 
     AVFrame *drc_frame;
     AVFrame *energy;
@@ -95,6 +95,9 @@ typedef struct AudioDRCContext {
 
     AVExpr *transfer_expr, *threshold_expr;
     double var_values[VAR_VARS_NB];
+
+    void (*generate_window)(void *window, int size);
+    int (*drc_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int ch);
 } AudioDRCContext;
 
 #define OFFSET(x) offsetof(AudioDRCContext, x)
@@ -111,27 +114,46 @@ static const AVOption adrc_options[] = {
 
 AVFILTER_DEFINE_CLASS(adrc);
 
-static void generate_hann_window(float *window, int size)
-{
-    for (int i = 0; i < size; i++) {
-        float value = 0.5f * (1.f - cosf(2.f * M_PI * i / size));
+#define DEPTH 32
+#include "adrc_template.c"
 
-        window[i] = value;
-    }
-}
+#undef DEPTH
+#define DEPTH 64
+#include "adrc_template.c"
 
 static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AudioDRCContext *s = ctx->priv;
-    float scale;
+    union { double d; float f; } scale, iscale;
+    enum AVTXType tx_type;
+    size_t sample_size;
     int ret;
 
     s->fft_size = outlink->sample_rate > 100000 ? 1024 : outlink->sample_rate > 50000 ? 512 : 256;
     s->fx = outlink->sample_rate * 0.5f / (s->fft_size + 1);
     s->overlap = s->fft_size / 4;
 
-    s->window = av_calloc(s->fft_size, sizeof(*s->window));
+    switch (outlink->format) {
+    case AV_SAMPLE_FMT_FLTP:
+        scale.f  = 1.f / (s->fft_size * 2);
+        iscale.f = 1.f / 1.5f;
+        tx_type  = AV_TX_FLOAT_RDFT;
+        sample_size = sizeof(float);
+        s->generate_window = generate_hann_window_fltp;
+        s->drc_channel = drc_channel_fltp;
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        scale.d  = 1.0 / (s->fft_size * 2);
+        iscale.d = 1.0 / 1.5;
+        tx_type  = AV_TX_DOUBLE_RDFT;
+        sample_size = sizeof(double);
+        s->generate_window = generate_hann_window_dblp;
+        s->drc_channel = drc_channel_dblp;
+        break;
+    }
+
+    s->window = av_calloc(s->fft_size, sample_size);
     if (!s->window)
         return AVERROR(ENOMEM);
 
@@ -151,7 +173,7 @@ static int config_output(AVFilterLink *outlink)
         !s->drc_frame || !s->spectrum_buf || !s->energy || !s->factors)
         return AVERROR(ENOMEM);
 
-    generate_hann_window(s->window, s->fft_size);
+    s->generate_window(s->window, s->fft_size);
 
     s->channels = outlink->ch_layout.nb_channels;
 
@@ -161,18 +183,28 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR(ENOMEM);
 
     for (int ch = 0; ch < s->channels; ch++) {
-        float *thr = (float *)s->threshold->extended_data[ch];
+        switch (outlink->format) {
+        case AV_SAMPLE_FMT_FLTP: {
+            float *thr = (float *)s->threshold->extended_data[ch];
 
-        for (int n = 0; n < s->threshold->nb_samples; n++)
-            thr[n] = -321.f;
+            for (int n = 0; n < s->threshold->nb_samples; n++)
+                thr[n] = -321.f;
+                                 }
+            break;
+        case AV_SAMPLE_FMT_DBLP: {
+            double *thr = (double *)s->threshold->extended_data[ch];
 
-        scale = 1.f / (s->fft_size * 2);
-        ret = av_tx_init(&s->tx_ctx[ch], &s->tx_fn, AV_TX_FLOAT_RDFT, 0, s->fft_size * 2, &scale, 0);
+            for (int n = 0; n < s->threshold->nb_samples; n++)
+                thr[n] = -321.0;
+                                 }
+            break;
+        }
+
+        ret = av_tx_init(&s->tx_ctx[ch], &s->tx_fn, tx_type, 0, s->fft_size * 2, &scale, 0);
         if (ret < 0)
             return ret;
 
-        scale = 1.f / 1.5f;
-        ret = av_tx_init(&s->itx_ctx[ch], &s->itx_fn, AV_TX_FLOAT_RDFT, 1, s->fft_size * 2, &scale, 0);
+        ret = av_tx_init(&s->itx_ctx[ch], &s->itx_fn, tx_type, 1, s->fft_size * 2, &iscale, 0);
         if (ret < 0)
             return ret;
     }
@@ -188,204 +220,6 @@ static int config_output(AVFilterLink *outlink)
                          NULL, NULL, NULL, NULL, 0, ctx);
 }
 
-static void apply_window(AudioDRCContext *s,
-                         const float *in_frame, float *out_frame, const int add_to_out_frame)
-{
-    const float *window = s->window;
-    const int fft_size = s->fft_size;
-
-    if (add_to_out_frame) {
-        for (int i = 0; i < fft_size; i++)
-            out_frame[i] += in_frame[i] * window[i];
-    } else {
-        for (int i = 0; i < fft_size; i++)
-            out_frame[i] = in_frame[i] * window[i];
-    }
-}
-
-static float sqrf(float x)
-{
-    return x * x;
-}
-
-static void get_energy(AVFilterContext *ctx,
-                       int len,
-                       float *energy,
-                       const float *spectral)
-{
-    for (int n = 0; n < len; n++) {
-        energy[n] = 10.f * log10f(sqrf(spectral[2 * n]) + sqrf(spectral[2 * n + 1]));
-        if (!isnormal(energy[n]))
-            energy[n] = -351.f;
-    }
-}
-
-static void get_threshold(AVFilterContext *ctx,
-                          int len,
-                          float *threshold,
-                          const float *energy,
-                          double *var_values,
-                          float fx, int bypass)
-{
-    AudioDRCContext *s = ctx->priv;
-
-    for (int n = 0; n < len; n++) {
-        const float Xg = energy[n];
-
-        var_values[VAR_P] = Xg;
-        var_values[VAR_F] = n * fx;
-        var_values[VAR_TH] = threshold[n];
-
-        threshold[n] = av_expr_eval(s->threshold_expr, var_values, s);
-    }
-}
-
-static void get_target_gain(AVFilterContext *ctx,
-                            int len,
-                            float *threshold,
-                            float *gain,
-                            const float *energy,
-                            double *var_values,
-                            float fx, int bypass)
-{
-    AudioDRCContext *s = ctx->priv;
-
-    if (bypass) {
-        memcpy(gain, energy, sizeof(*gain) * len);
-        return;
-    }
-
-    for (int n = 0; n < len; n++) {
-        const float Xg = energy[n];
-
-        var_values[VAR_P] = Xg;
-        var_values[VAR_F] = n * fx;
-        var_values[VAR_TH] = threshold[n];
-
-        gain[n] = av_expr_eval(s->transfer_expr, var_values, s);
-    }
-}
-
-static void get_envelope(AVFilterContext *ctx,
-                         int len,
-                         float *envelope,
-                         const float *energy,
-                         const float *gain)
-{
-    AudioDRCContext *s = ctx->priv;
-    const float release = s->release;
-    const float attack = s->attack;
-
-    for (int n = 0; n < len; n++) {
-        const float Bg = gain[n] - energy[n];
-        const float Vg = envelope[n];
-
-        if (Bg > Vg) {
-            envelope[n] = attack  * Vg + (1.f - attack)  * Bg;
-        } else if (Bg <= Vg)  {
-            envelope[n] = release * Vg + (1.f - release) * Bg;
-        } else {
-            envelope[n] = 0.f;
-        }
-    }
-}
-
-static void get_factors(AVFilterContext *ctx,
-                        int len,
-                        float *factors,
-                        const float *envelope)
-{
-    for (int n = 0; n < len; n++)
-        factors[n] = sqrtf(ff_exp10f(envelope[n] / 10.f));
-}
-
-static void apply_factors(AVFilterContext *ctx,
-                          int len,
-                          float *spectrum,
-                          const float *factors)
-{
-    for (int n = 0; n < len; n++) {
-        spectrum[2*n+0] *= factors[n];
-        spectrum[2*n+1] *= factors[n];
-    }
-}
-
-static void feed(AVFilterContext *ctx, int ch,
-                 const float *in_samples, float *out_samples,
-                 float *in_frame, float *out_dist_frame,
-                 float *windowed_frame, float *drc_frame,
-                 float *spectrum_buf, float *energy, float *threshold,
-                 float *target_gain, float *envelope,
-                 float *factors)
-{
-    AudioDRCContext *s = ctx->priv;
-    double var_values[VAR_VARS_NB];
-    const int fft_size = s->fft_size;
-    const int nb_coeffs = s->fft_size + 1;
-    const int overlap = s->overlap;
-    enum AVChannel channel = av_channel_layout_channel_from_index(&ctx->inputs[0]->ch_layout, ch);
-    const int bypass = av_channel_layout_index_from_channel(&s->ch_layout, channel) < 0;
-    const int offset = fft_size - overlap;
-
-    memcpy(var_values, s->var_values, sizeof(var_values));
-
-    var_values[VAR_CH] = ch;
-
-    // shift in/out buffers
-    memmove(in_frame, in_frame + overlap, offset * sizeof(*in_frame));
-    memmove(out_dist_frame, out_dist_frame + overlap, offset * sizeof(*out_dist_frame));
-
-    memcpy(in_frame + offset, in_samples, sizeof(*in_frame) * overlap);
-    memset(out_dist_frame + offset, 0, sizeof(*out_dist_frame) * overlap);
-
-    apply_window(s, in_frame, windowed_frame, 0);
-    s->tx_fn(s->tx_ctx[ch], spectrum_buf, windowed_frame, sizeof(float));
-
-    get_energy(ctx, nb_coeffs, energy, spectrum_buf);
-    get_threshold(ctx, nb_coeffs, threshold, energy, var_values, s->fx, bypass);
-    get_target_gain(ctx, nb_coeffs, threshold, target_gain, energy, var_values, s->fx, bypass);
-    get_envelope(ctx, nb_coeffs, envelope, energy, target_gain);
-    get_factors(ctx, nb_coeffs, factors, envelope);
-    apply_factors(ctx, nb_coeffs, spectrum_buf, factors);
-
-    s->itx_fn(s->itx_ctx[ch], drc_frame, spectrum_buf, sizeof(AVComplexFloat));
-
-    apply_window(s, drc_frame, out_dist_frame, 1);
-
-    if (ctx->is_disabled)
-        memcpy(out_samples, in_frame, sizeof(*out_samples) * overlap);
-    else
-        memcpy(out_samples, out_dist_frame, sizeof(*out_samples) * overlap);
-}
-
-static int drc_channel(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int ch)
-{
-    AudioDRCContext *s = ctx->priv;
-    float *in_buffer = (float *)s->in_buffer->extended_data[ch];
-    const int overlap = s->overlap;
-
-    for (int offset = 0; offset < out->nb_samples; offset += overlap) {
-        const float *src = ((const float *)in->extended_data[ch])+offset;
-        float *dst = ((float *)out->extended_data[ch])+offset;
-
-        memcpy(in_buffer, src, sizeof(*in_buffer) * overlap);
-
-        feed(ctx, ch, in_buffer, dst,
-             (float *)(s->in_frame->extended_data[ch]),
-             (float *)(s->out_dist_frame->extended_data[ch]),
-             (float *)(s->windowed_frame->extended_data[ch]),
-             (float *)(s->drc_frame->extended_data[ch]),
-             (float *)(s->spectrum_buf->extended_data[ch]),
-             (float *)(s->energy->extended_data[ch]),
-             (float *)(s->threshold->extended_data[ch]),
-             (float *)(s->target_gain->extended_data[ch]),
-             (float *)(s->envelope->extended_data[ch]),
-             (float *)(s->factors->extended_data[ch]));
-    }
-
-    return 0;
-}
-
 static int drc_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AudioDRCContext *s = ctx->priv;
@@ -395,7 +229,7 @@ static int drc_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
 
     for (int ch = start; ch < end; ch++)
-        drc_channel(ctx, in, out, ch);
+        s->drc_channel(ctx, in, out, ch);
 
     return 0;
 }
@@ -553,7 +387,7 @@ const AVFilter ff_af_adrc = {
     .uninit          = uninit,
     FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(outputs),
-    FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_FLTP),
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_FLTP),
     .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                        AVFILTER_FLAG_SLICE_THREADS,
     .activate        = activate,
