@@ -43,6 +43,14 @@
 #define fN2(a,b,c) fN3(a,b,c)
 #define fN(a,b)    fN2(a, SAMPLE_SUFFIX, b)
 
+static void fn(update_state)(ftype *lo, ftype *hi)
+{
+    lo[0] = isnormal(lo[0]) ? lo[0] : F(0.0);
+    lo[1] = isnormal(lo[1]) ? lo[1] : F(0.0);
+    hi[0] = isnormal(hi[0]) ? hi[0] : F(0.0);
+    hi[1] = isnormal(hi[1]) ? hi[1] : F(0.0);
+}
+
 static ftype fn(svf_xover_lo)(const SVFCoeffs *svf, ftype *sc,
                               const ftype in)
 {
@@ -132,6 +140,8 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
                     next_dst[n] = high;
                 }
 
+                fn(update_state)(svf_lo, svf_hi);
+
                 src = next_dst;
                 in_gain = F(1.0);
                 last_next_band = next_band;
@@ -163,6 +173,8 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
                 else
                     dst[n] = low * out_gain;
             }
+
+            fn(update_state)(svf_lo, svf_hi);
         }
     }
 
