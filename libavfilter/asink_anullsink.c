@@ -20,26 +20,41 @@
 
 #include "libavutil/internal.h"
 #include "avfilter.h"
+#include "filters.h"
 #include "internal.h"
+#include "audio.h"
 
-static int null_filter_frame(AVFilterLink *link, AVFrame *frame)
+typedef struct ANullSinkContext {
+    const AVClass *class;
+    unsigned eof;
+} ANullSinkContext;
+
+static int activate(AVFilterContext *ctx)
 {
-    av_frame_free(&frame);
+    ANullSinkContext *s = ctx->priv;
+    AVFilterLink *inlink = ctx->inputs[0];
+    AVFrame *in;
+    int64_t pts;
+    int status;
+
+    if (ff_inlink_queued_frames(inlink) > 0) {
+        int ret = ff_inlink_consume_frame(inlink, &in);
+        if (ret > 0)
+            av_frame_free(&in);
+    }
+    if (ff_inlink_acknowledge_status(inlink, &status, &pts))
+        s->eof = 1;
+
+    if (s->eof)
+        return AVERROR_EOF;
     return 0;
 }
-
-static const AVFilterPad inputs[] = {
-    {
-        .name           = "default",
-        .type           = AVMEDIA_TYPE_AUDIO,
-        .filter_frame   = null_filter_frame,
-    },
-};
 
 const AVFilter ff_asink_anullsink = {
     .name        = "anullsink",
     .description = NULL_IF_CONFIG_SMALL("Do absolutely nothing with the input audio."),
-    .priv_size   = 0,
-    FILTER_INPUTS(inputs),
+    .priv_size   = sizeof(ANullSinkContext),
+    .activate    = activate,
+    FILTER_INPUTS(ff_audio_default_filterpad),
     .outputs     = NULL,
 };
