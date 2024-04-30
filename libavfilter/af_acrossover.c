@@ -320,7 +320,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AudioCrossoverContext *s = ctx->priv;
     AVFrame **frames = s->frames;
-    int ret = 0;
+    int ret = 1;
 
     for (int i = 0; i < ctx->nb_outputs; i++) {
         frames[i] = ff_get_audio_buffer(ctx->outputs[i], in->nb_samples);
@@ -374,7 +374,7 @@ static int activate(AVFilterContext *ctx)
     if (ret > 0) {
         ret = filter_frame(inlink, in);
         av_frame_free(&in);
-        if (ret < 0)
+        if (ret <= 0)
             return ret;
     }
 
