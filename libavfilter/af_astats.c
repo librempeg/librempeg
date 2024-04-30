@@ -296,7 +296,7 @@ static double calc_noise_floor(double *ss, double x, double px,
             if (front < 0)
                 front = n - 1;
         }
-        empty = front == back;
+        empty = (front == back) && (ss[front] == -1.0);
     }
 
     if (!empty && ax >= ss[front]) {
