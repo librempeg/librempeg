@@ -25,7 +25,6 @@
  */
 
 #include "libavutil/avassert.h"
-#include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
 #include "libavutil/mem.h"
@@ -48,7 +47,8 @@ typedef struct JoinContext {
     const AVClass *class;
 
     int inputs;
-    char *map;
+    char **map;
+    unsigned nb_map;
     AVChannelLayout ch_layout;
 
     int64_t  eof_pts;
@@ -67,41 +67,42 @@ typedef struct JoinContext {
     AVBufferRef **buffers;
 } JoinContext;
 
+#define MAP_SEPARATOR '|'
 #define OFFSET(x) offsetof(JoinContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM
 #define F AV_OPT_FLAG_FILTERING_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+static const AVOptionArrayDef def_map = {.def=NULL,.size_min=0,.sep=MAP_SEPARATOR};
 static const AVOption join_options[] = {
     { "inputs",         "Number of input streams.", OFFSET(inputs),             AV_OPT_TYPE_INT,    { .i64 = 2 }, 1, INT_MAX,       A|F },
     { "channel_layout", "Channel layout of the "
                         "output stream.",           OFFSET(ch_layout),          AV_OPT_TYPE_CHLAYOUT, {.str = "stereo"}, 0, 0, A|F },
-    { "map",            "A comma-separated list of channels maps in the format "
+    { "map",            "set the list of channels maps in the format "
                         "'input_stream.input_channel-output_channel.",
-                                                    OFFSET(map),                AV_OPT_TYPE_STRING,                 .flags = A|F },
+                                                    OFFSET(map),                AV_OPT_TYPE_STRING|AR, {.arr=&def_map}, .flags = A|F },
     { NULL }
 };
-
-#define MAP_SEPARATOR '|'
 
 AVFILTER_DEFINE_CLASS(join);
 
 static int parse_maps(AVFilterContext *ctx)
 {
     JoinContext *s = ctx->priv;
-    char *cur      = s->map;
 
-    while (cur && *cur) {
+    for (int n = 0; n < s->nb_map; n++) {
+        char *orig_cur, *cur;
         ChannelMap *map;
-        char *sep, *next, *p;
+        char *sep, *p;
         int input_idx, out_ch_idx;
 
-        next = strchr(cur, MAP_SEPARATOR);
-        if (next)
-            *next++ = 0;
-
+        orig_cur = cur = av_strdup(s->map[n]);
+        if (!orig_cur)
+            continue;
         /* split the map into input and output parts */
         if (!(sep = strchr(cur, '-'))) {
             av_log(ctx, AV_LOG_ERROR, "Missing separator '-' in channel "
                    "map '%s'\n", cur);
+            av_freep(&orig_cur);
             return AVERROR(EINVAL);
         }
         *sep++ = 0;
@@ -110,6 +111,7 @@ static int parse_maps(AVFilterContext *ctx)
         out_ch_idx = av_channel_layout_index_from_string(&s->ch_layout, sep);
         if (out_ch_idx < 0) {
             av_log(ctx, AV_LOG_ERROR, "Invalid output channel: %s.\n", sep);
+            av_freep(&orig_cur);
             return AVERROR(EINVAL);
         }
 
@@ -118,6 +120,7 @@ static int parse_maps(AVFilterContext *ctx)
         if (map->input >= 0) {
             av_log(ctx, AV_LOG_ERROR, "Multiple maps for output channel "
                    "'%s'.\n", sep);
+            av_freep(&orig_cur);
             return AVERROR(EINVAL);
         }
 
@@ -126,6 +129,7 @@ static int parse_maps(AVFilterContext *ctx)
         if (input_idx < 0 || input_idx >= s->inputs) {
             av_log(ctx, AV_LOG_ERROR, "Invalid input stream index: %d.\n",
                    input_idx);
+            av_freep(&orig_cur);
             return AVERROR(EINVAL);
         }
 
@@ -140,14 +144,15 @@ static int parse_maps(AVFilterContext *ctx)
             map->in_channel = av_channel_from_string(cur);
             if (map->in_channel < 0) {
                 av_log(ctx, AV_LOG_ERROR, "Invalid input channel: %s.\n", cur);
+                av_freep(&orig_cur);
                 return AVERROR(EINVAL);
             }
         } else if (map->in_channel_idx < 0) {
             av_log(ctx, AV_LOG_ERROR, "Invalid input channel index: %d\n", map->in_channel_idx);
+            av_freep(&orig_cur);
             return AVERROR(EINVAL);
         }
-
-        cur = next;
+        av_freep(&orig_cur);
     }
     return 0;
 }
