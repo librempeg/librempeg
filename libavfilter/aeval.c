@@ -25,7 +25,6 @@
 
 #include "config_components.h"
 
-#include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/eval.h"
 #include "libavutil/mem.h"
