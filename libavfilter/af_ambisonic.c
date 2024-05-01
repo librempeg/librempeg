@@ -23,7 +23,6 @@
 #include <math.h>
 #include <stdio.h>
 
-#include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/float_dsp.h"
 #include "libavutil/mem.h"

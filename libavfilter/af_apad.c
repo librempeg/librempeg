@@ -25,7 +25,6 @@
  * Based on af_aresample.c
  */
 
-#include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/opt.h"
 #include "libavutil/samplefmt.h"
