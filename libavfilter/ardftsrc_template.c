@@ -161,7 +161,7 @@ static int fn(src_init)(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
     taper = s->taper;
     for (int n = 0; n < taper_samples; n++)
-        taper[n].re = taper[n].im = (F(1.0) + COS(F(M_PI) * (n + F(1.0)) / taper_samples)) * F(0.5);
+        taper[n].re = taper[n].im = (F(1.0) + COS(F(M_PI) * (n + F(0.0)) / taper_samples)) * F(0.5);
 
     return 0;
 }
@@ -185,7 +185,7 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const int taper_samples = s->taper_samples;
     const int in_offset = (s->in_rdft_size - in_nb_samples) >> 1;
     const int offset = tr_nb_samples - taper_samples;
-    const int copy_samples = FFMIN(s->in_nb_samples, in->nb_samples-soffset);
+    const int copy_samples = FFMIN(in_nb_samples, in->nb_samples-soffset);
     const ttype *taper = s->taper;
 
     memset(rdft0, 0, in_offset * sizeof(*rdft0));
