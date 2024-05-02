@@ -35,6 +35,8 @@ typedef struct AudioVirtualBassContext {
     double strength;
 
     double a[3], m[3], cf[2];
+
+    void (*vb_stereo)(AVFilterContext *ctx, AVFrame *out, AVFrame *in);
 } AudioVirtualBassContext;
 
 #define OFFSET(x) offsetof(AudioVirtualBassContext, x)
@@ -56,6 +58,7 @@ static int query_formats(AVFilterContext *ctx)
     int ret;
 
     if ((ret = ff_add_format                 (&formats, AV_SAMPLE_FMT_DBLP )) < 0 ||
+        (ret = ff_add_format                 (&formats, AV_SAMPLE_FMT_FLTP )) < 0 ||
         (ret = ff_set_common_formats         (ctx,      formats            )) < 0 ||
         (ret = ff_add_channel_layout         (&in_layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO)) < 0 ||
         (ret = ff_channel_layouts_ref(in_layout, &ctx->inputs[0]->outcfg.channel_layouts)) < 0 ||
@@ -65,6 +68,13 @@ static int query_formats(AVFilterContext *ctx)
 
     return ff_set_common_all_samplerates(ctx);
 }
+
+#define DEPTH 32
+#include "virtualbass_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "virtualbass_template.c"
 
 static int config_input(AVFilterLink *inlink)
 {
@@ -82,63 +92,22 @@ static int config_input(AVFilterLink *inlink)
     s->m[1] = 0.;
     s->m[2] = 1.;
 
-    return 0;
-}
-
-#define SQR(x) ((x) * (x))
-
-static double vb_fun(double x)
-{
-    double y = 2.5 * atan(0.9 * x) + 2.5 * sqrt(1. - SQR(0.9 * x)) - 2.5;
-
-    return y < 0. ? sin(y) : y;
-}
-
-static void vb_stereo(AVFilterContext *ctx, AVFrame *out, AVFrame *in)
-{
-    AudioVirtualBassContext *s = ctx->priv;
-    const double *lsrc = (const double *)in->extended_data[0];
-    const double *rsrc = (const double *)in->extended_data[1];
-    double *ldst = (double *)out->extended_data[0];
-    double *rdst = (double *)out->extended_data[1];
-    double *lfe = (double *)out->extended_data[2];
-    const double st = M_PI / s->strength;
-    const double a0 = s->a[0];
-    const double a1 = s->a[1];
-    const double a2 = s->a[2];
-    const double m0 = s->m[0];
-    const double m1 = s->m[1];
-    const double m2 = s->m[2];
-    double b0 = s->cf[0];
-    double b1 = s->cf[1];
-
-    memcpy(ldst, lsrc, in->nb_samples * sizeof(double));
-    memcpy(rdst, rsrc, in->nb_samples * sizeof(double));
-
-    for (int n = 0; n < in->nb_samples; n++) {
-        const double center = (lsrc[n] + rsrc[n]) * 0.5;
-        const double v0 = center;
-        const double v3 = v0 - b1;
-        const double v1 = a0 * b0 + a1 * v3;
-        const double v2 = b1 + a1 * b0 + a2 * v3;
-        double b, vb;
-
-        b0 = 2. * v1 - b0;
-        b1 = 2. * v2 - b1;
-
-        b = m0 * v0 + m1 * v1 + m2 * v2;
-        vb = sin(vb_fun(b) * st);
-
-        lfe[n] = vb;
+    switch (inlink->format) {
+    case AV_SAMPLE_FMT_FLTP:
+        s->vb_stereo = vb_stereo_fltp;
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        s->vb_stereo = vb_stereo_dblp;
+        break;
     }
 
-    s->cf[0] = b0;
-    s->cf[1] = b1;
+    return 0;
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
+    AudioVirtualBassContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out;
 
@@ -149,7 +118,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
     av_frame_copy_props(out, in);
 
-    vb_stereo(ctx, out, in);
+    s->vb_stereo(ctx, out, in);
 
     av_frame_free(&in);
     return ff_filter_frame(outlink, out);
