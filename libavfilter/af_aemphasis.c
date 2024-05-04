@@ -230,59 +230,46 @@ static int config_input(AVFilterLink *inlink)
 
     switch (s->type) {
     case COL: //"Columbia"
-        i = 100.;
-        j = 500.;
-        k = 1590.;
+        tau1 = 0.001590;
+        tau2 = 0.000500;
+        tau3 = 0.000100;
         break;
     case EMI: //"EMI"
-        i = 70.;
-        j = 500.;
-        k = 2500.;
+        tau1 = 0.002500;
+        tau2 = 0.000500;
+        tau3 = 0.000070;
         break;
     case BSI: //"BSI(78rpm)"
-        i = 50.;
-        j = 353.;
-        k = 3180.;
+        tau1 = 0.003180;
+        tau2 = 0.000353;
+        tau3 = 0.000050;
         break;
     case RIAA: //"RIAA"
     default:
         tau1 = 0.003180;
         tau2 = 0.000318;
         tau3 = 0.000075;
-        i = 1. / (2. * M_PI * tau1);
-        j = 1. / (2. * M_PI * tau2);
-        k = 1. / (2. * M_PI * tau3);
         break;
     case CD: //"CD Mastering"
         tau1 = 0.000050;
         tau2 = 0.000015;
         tau3 = 0.0000001;// 1.6MHz out of audible range for null impact
-        i = 1. / (2. * M_PI * tau1);
-        j = 1. / (2. * M_PI * tau2);
-        k = 1. / (2. * M_PI * tau3);
         break;
     case FM50: //"50µs FM (Europe)"
         tau1 = 0.000050;
         tau2 = tau1 / 20;// not used
         tau3 = tau1 / 50;//
-        i = 1. / (2. * M_PI * tau1);
-        j = 1. / (2. * M_PI * tau2);
-        k = 1. / (2. * M_PI * tau3);
         break;
     case FM75: //"75µs FM (US)"
         tau1 = 0.000075;
         tau2 = tau1 / 20;// not used
         tau3 = tau1 / 50;//
-        i = 1. / (2. * M_PI * tau1);
-        j = 1. / (2. * M_PI * tau2);
-        k = 1. / (2. * M_PI * tau3);
         break;
     }
 
-    i *= 2 * M_PI;
-    j *= 2 * M_PI;
-    k *= 2 * M_PI;
-
+    i = 1. / tau1;
+    j = 1. / tau2;
+    k = 1. / tau3;
     t = 1. / sr;
 
     s->rc.use_brickw = 0;
