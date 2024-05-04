@@ -23,6 +23,19 @@
 #include "internal.h"
 #include "audio.h"
 
+enum FilterType {
+    COL,
+    EMI,
+    BSI,
+    RIAA,
+    CD,
+    FM50,
+    FM75,
+    KF50,
+    KF75,
+    NB_TYPES
+};
+
 typedef struct BiquadCoeffs {
     double a0, a1, a2, b1, b2;
 } BiquadCoeffs;
@@ -52,16 +65,16 @@ static const AVOption aemphasis_options[] = {
     { "mode",         "set filter mode", OFFSET(mode), AV_OPT_TYPE_INT,   {.i64=0}, 0, 1, FLAGS, .unit = "mode" },
     { "reproduction",              NULL,            0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, FLAGS, .unit = "mode" },
     { "production",                NULL,            0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, FLAGS, .unit = "mode" },
-    { "type",         "set filter type", OFFSET(type), AV_OPT_TYPE_INT,   {.i64=4}, 0, 8, FLAGS, .unit = "type" },
-    { "col",                 "Columbia",            0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, FLAGS, .unit = "type" },
-    { "emi",                      "EMI",            0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, FLAGS, .unit = "type" },
-    { "bsi",              "BSI (78RPM)",            0, AV_OPT_TYPE_CONST, {.i64=2}, 0, 0, FLAGS, .unit = "type" },
-    { "riaa",                    "RIAA",            0, AV_OPT_TYPE_CONST, {.i64=3}, 0, 0, FLAGS, .unit = "type" },
-    { "cd",         "Compact Disc (CD)",            0, AV_OPT_TYPE_CONST, {.i64=4}, 0, 0, FLAGS, .unit = "type" },
-    { "50fm",               "50µs (FM)",            0, AV_OPT_TYPE_CONST, {.i64=5}, 0, 0, FLAGS, .unit = "type" },
-    { "75fm",               "75µs (FM)",            0, AV_OPT_TYPE_CONST, {.i64=6}, 0, 0, FLAGS, .unit = "type" },
-    { "50kf",            "50µs (FM-KF)",            0, AV_OPT_TYPE_CONST, {.i64=7}, 0, 0, FLAGS, .unit = "type" },
-    { "75kf",            "75µs (FM-KF)",            0, AV_OPT_TYPE_CONST, {.i64=8}, 0, 0, FLAGS, .unit = "type" },
+    { "type",         "set filter type", OFFSET(type), AV_OPT_TYPE_INT,   {.i64=CD}, 0, NB_TYPES-1, FLAGS, .unit = "type" },
+    { "col",                 "Columbia",            0, AV_OPT_TYPE_CONST, {.i64=COL}, 0, 0, FLAGS, .unit = "type" },
+    { "emi",                      "EMI",            0, AV_OPT_TYPE_CONST, {.i64=EMI}, 0, 0, FLAGS, .unit = "type" },
+    { "bsi",              "BSI (78RPM)",            0, AV_OPT_TYPE_CONST, {.i64=BSI}, 0, 0, FLAGS, .unit = "type" },
+    { "riaa",                    "RIAA",            0, AV_OPT_TYPE_CONST, {.i64=RIAA},0, 0, FLAGS, .unit = "type" },
+    { "cd",         "Compact Disc (CD)",            0, AV_OPT_TYPE_CONST, {.i64=CD},  0, 0, FLAGS, .unit = "type" },
+    { "50fm",               "50µs (FM)",            0, AV_OPT_TYPE_CONST, {.i64=FM50},0, 0, FLAGS, .unit = "type" },
+    { "75fm",               "75µs (FM)",            0, AV_OPT_TYPE_CONST, {.i64=FM75},0, 0, FLAGS, .unit = "type" },
+    { "50kf",            "50µs (FM-KF)",            0, AV_OPT_TYPE_CONST, {.i64=KF50},0, 0, FLAGS, .unit = "type" },
+    { "75kf",            "75µs (FM-KF)",            0, AV_OPT_TYPE_CONST, {.i64=KF75},0, 0, FLAGS, .unit = "type" },
     { NULL }
 };
 
@@ -216,22 +229,22 @@ static int config_input(AVFilterLink *inlink)
         return AVERROR(ENOMEM);
 
     switch (s->type) {
-    case 0: //"Columbia"
+    case COL: //"Columbia"
         i = 100.;
         j = 500.;
         k = 1590.;
         break;
-    case 1: //"EMI"
+    case EMI: //"EMI"
         i = 70.;
         j = 500.;
         k = 2500.;
         break;
-    case 2: //"BSI(78rpm)"
+    case BSI: //"BSI(78rpm)"
         i = 50.;
         j = 353.;
         k = 3180.;
         break;
-    case 3: //"RIAA"
+    case RIAA: //"RIAA"
     default:
         tau1 = 0.003180;
         tau2 = 0.000318;
@@ -240,7 +253,7 @@ static int config_input(AVFilterLink *inlink)
         j = 1. / (2. * M_PI * tau2);
         k = 1. / (2. * M_PI * tau3);
         break;
-    case 4: //"CD Mastering"
+    case CD: //"CD Mastering"
         tau1 = 0.000050;
         tau2 = 0.000015;
         tau3 = 0.0000001;// 1.6MHz out of audible range for null impact
@@ -248,7 +261,7 @@ static int config_input(AVFilterLink *inlink)
         j = 1. / (2. * M_PI * tau2);
         k = 1. / (2. * M_PI * tau3);
         break;
-    case 5: //"50µs FM (Europe)"
+    case FM50: //"50µs FM (Europe)"
         tau1 = 0.000050;
         tau2 = tau1 / 20;// not used
         tau3 = tau1 / 50;//
@@ -256,7 +269,7 @@ static int config_input(AVFilterLink *inlink)
         j = 1. / (2. * M_PI * tau2);
         k = 1. / (2. * M_PI * tau3);
         break;
-    case 6: //"75µs FM (US)"
+    case FM75: //"75µs FM (US)"
         tau1 = 0.000075;
         tau2 = tau1 / 20;// not used
         tau3 = tau1 / 50;//
@@ -273,17 +286,17 @@ static int config_input(AVFilterLink *inlink)
     t = 1. / sr;
 
     //swap a1 b1, a2 b2
-    if (s->type == 7 || s->type == 8) {
-        double tau = (s->type == 7 ? 0.000050 : 0.000075);
+    if (s->type == KF50 || s->type == KF75) {
+        double tau = (s->type == KF50 ? 0.000050 : 0.000075);
         double f = 1.0 / (2 * M_PI * tau);
         double nyq = sr * 0.5;
         double gain = sqrt(1.0 + nyq * nyq / (f * f)); // gain at Nyquist
         double cfreq = sqrt((gain - 1.0) * f * f); // frequency
         double q = 1.0;
 
-        if (s->type == 8)
+        if (s->type == KF75)
             q = pow((sr / 3269.0) + 19.5, -0.25); // somewhat poor curve-fit
-        if (s->type == 7)
+        if (s->type == KF50)
             q = pow((sr / 4750.0) + 19.5, -0.25);
         if (s->mode == 0)
             set_highshelf_rbj(&s->rc.r1, cfreq, q, 1. / gain, sr);
