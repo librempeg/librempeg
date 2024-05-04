@@ -102,8 +102,8 @@ static inline void biquad_process(BiquadCoeffs *bq, double *dst, const double *s
         dst[i] = out * level_out;
     }
 
-    w[0] = w1;
-    w[1] = w2;
+    w[0] = isnormal(w1) ? w1 : 0.0;
+    w[1] = isnormal(w2) ? w2 : 0.0;
 }
 
 typedef struct ThreadData {
