@@ -285,6 +285,8 @@ static int config_input(AVFilterLink *inlink)
 
     t = 1. / sr;
 
+    s->rc.use_brickw = 0;
+
     //swap a1 b1, a2 b2
     if (s->type == KF50 || s->type == KF75) {
         double tau = (s->type == KF50 ? 0.000050 : 0.000075);
@@ -302,9 +304,7 @@ static int config_input(AVFilterLink *inlink)
             set_highshelf_rbj(&s->rc.r1, cfreq, q, 1. / gain, sr);
         else
             set_highshelf_rbj(&s->rc.r1, cfreq, q, gain, sr);
-        s->rc.use_brickw = 0;
     } else {
-        s->rc.use_brickw = 1;
         if (s->mode == 0) { // Reproduction
             g  = 1. / (4.+2.*i*t+2.*k*t+i*k*t*t);
             a0 = (2.*t+j*t*t)*g;
@@ -313,6 +313,7 @@ static int config_input(AVFilterLink *inlink)
             b1 = (-8.+2.*i*k*t*t)*g;
             b2 = (4.-2.*i*t-2.*k*t+i*k*t*t)*g;
         } else {  // Production
+            s->rc.use_brickw = 1;
             g  = 1. / (2.*t+j*t*t);
             a0 = (4.+2.*i*t+2.*k*t+i*k*t*t)*g;
             a1 = (-8.+2.*i*k*t*t)*g;
