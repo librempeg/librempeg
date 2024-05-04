@@ -31,19 +31,15 @@ enum FilterType {
     CD,
     FM50,
     FM75,
-    KF50,
-    KF75,
     NB_TYPES
 };
 
 typedef struct BiquadCoeffs {
-    double a0, a1, a2, b1, b2;
+    double b0, b1, b2, a1, a2;
 } BiquadCoeffs;
 
 typedef struct RIAACurve {
     BiquadCoeffs r1;
-    BiquadCoeffs brickw;
-    int use_brickw;
 } RIAACurve;
 
 typedef struct AudioEmphasisContext {
@@ -73,8 +69,6 @@ static const AVOption aemphasis_options[] = {
     { "cd",         "Compact Disc (CD)",            0, AV_OPT_TYPE_CONST, {.i64=CD},  0, 0, FLAGS, .unit = "type" },
     { "50fm",               "50µs (FM)",            0, AV_OPT_TYPE_CONST, {.i64=FM50},0, 0, FLAGS, .unit = "type" },
     { "75fm",               "75µs (FM)",            0, AV_OPT_TYPE_CONST, {.i64=FM75},0, 0, FLAGS, .unit = "type" },
-    { "50kf",            "50µs (FM-KF)",            0, AV_OPT_TYPE_CONST, {.i64=KF50},0, 0, FLAGS, .unit = "type" },
-    { "75kf",            "75µs (FM-KF)",            0, AV_OPT_TYPE_CONST, {.i64=KF75},0, 0, FLAGS, .unit = "type" },
     { NULL }
 };
 
@@ -83,21 +77,19 @@ AVFILTER_DEFINE_CLASS(aemphasis);
 static inline void biquad_process(BiquadCoeffs *bq, double *dst, const double *src, int nb_samples,
                                   double *w, double level_in, double level_out)
 {
-    const double a0 = bq->a0;
-    const double a1 = bq->a1;
-    const double a2 = bq->a2;
+    const double b0 = bq->b0;
     const double b1 = bq->b1;
     const double b2 = bq->b2;
+    const double a1 = -bq->a1;
+    const double a2 = -bq->a2;
     double w1 = w[0];
     double w2 = w[1];
 
     for (int i = 0; i < nb_samples; i++) {
-        double n = src[i] * level_in;
-        double tmp = n - w1 * b1 - w2 * b2;
-        double out = tmp * a0 + w1 * a1 + w2 * a2;
-
-        w2 = w1;
-        w1 = tmp;
+        double in = src[i] * level_in;
+        double out = b0 * in + w1;
+        w1 = b1 * in + w2 + a1 * out;
+        w2 = b2 * in + a2 * out;
 
         dst[i] = out * level_out;
     }
@@ -126,12 +118,7 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
         double *w = (double *)s->w->extended_data[ch];
         double *dst = (double *)out->extended_data[ch];
 
-        if (s->rc.use_brickw) {
-            biquad_process(&s->rc.brickw, dst, src, in->nb_samples, w + 2, level_in, 1.);
-            biquad_process(&s->rc.r1, dst, dst, in->nb_samples, w, 1., level_out);
-        } else {
-            biquad_process(&s->rc.r1, dst, src, in->nb_samples, w, level_in, level_out);
-        }
+        biquad_process(&s->rc.r1, dst, src, in->nb_samples, w, level_in, level_out);
     }
 
     return 0;
@@ -164,69 +151,35 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
-static inline void set_highshelf_rbj(BiquadCoeffs *bq, double freq, double q, double peak, double sr)
-{
-    double A = sqrt(peak);
-    double w0 = freq * 2 * M_PI / sr;
-    double alpha = sin(w0) / (2 * q);
-    double cw0 = cos(w0);
-    double tmp = 2 * sqrt(A) * alpha;
-    double b0 = 0, ib0 = 0;
-
-    bq->a0 =    A*( (A+1) + (A-1)*cw0 + tmp);
-    bq->a1 = -2*A*( (A-1) + (A+1)*cw0);
-    bq->a2 =    A*( (A+1) + (A-1)*cw0 - tmp);
-        b0 =        (A+1) - (A-1)*cw0 + tmp;
-    bq->b1 =    2*( (A-1) - (A+1)*cw0);
-    bq->b2 =        (A+1) - (A-1)*cw0 - tmp;
-
-    ib0     = 1 / b0;
-    bq->b1 *= ib0;
-    bq->b2 *= ib0;
-    bq->a0 *= ib0;
-    bq->a1 *= ib0;
-    bq->a2 *= ib0;
-}
-
-static inline void set_lp_rbj(BiquadCoeffs *bq, double fc, double q, double sr, double gain)
-{
-    double omega = 2.0 * M_PI * fc / sr;
-    double sn = sin(omega);
-    double cs = cos(omega);
-    double alpha = sn/(2 * q);
-    double inv = 1.0/(1.0 + alpha);
-
-    bq->a2 = bq->a0 = gain * inv * (1.0 - cs) * 0.5;
-    bq->a1 = bq->a0 + bq->a0;
-    bq->b1 = (-2.0 * cs * inv);
-    bq->b2 = ((1.0 - alpha) * inv);
-}
-
 static double freq_gain(BiquadCoeffs *c, double freq, double sr)
 {
-    double zr, zi;
+    double w = 2.0*M_PI*freq/sr;
+    double b0 = c->b0;
+    double b1 = c->b1;
+    double b2 = c->b2;
+    double a0 = 1.0;
+    double a1 = c->a1;
+    double a2 = c->a2;
+    double numerator = b0*b0 + b1*b1 + b2*b2 + 2.0*(b0*b1 + b1*b2)*cos(w) + 2.0*b0*b2*cos(2.0*w);
+    double denominator = a0*a0 + a1*a1 + a2*a2 + 2.0*(a0*a1 + a1*a2)*cos(w) + 2.0*a0*a2*cos(2.0*w);
 
-    freq *= 2.0 * M_PI / sr;
-    zr = cos(freq);
-    zi = -sin(freq);
-
-    /* |(a0 + a1*z + a2*z^2)/(1 + b1*z + b2*z^2)| */
-    return hypot(c->a0 + c->a1*zr + c->a2*(zr*zr-zi*zi), c->a1*zi + 2*c->a2*zr*zi) /
-           hypot(1 + c->b1*zr + c->b2*(zr*zr-zi*zi), c->b1*zi + 2*c->b2*zr*zi);
+    return sqrt(numerator / denominator);
 }
 
 static int config_input(AVFilterLink *inlink)
 {
-    double i, j, k, g, t, a0, a1, a2, b1, b2, tau1, tau2, tau3;
-    double cutfreq, gain1kHz, gc, sr = inlink->sample_rate;
+    double i, j, k, b0, b1, b2, a1, a2, tau1, tau2, tau3, nf;
+    double gain, sr = inlink->sample_rate;
     AVFilterContext *ctx = inlink->dst;
     AudioEmphasisContext *s = ctx->priv;
     BiquadCoeffs coeffs;
 
     if (!s->w)
-        s->w = ff_get_audio_buffer(inlink, 4);
+        s->w = ff_get_audio_buffer(inlink, 2);
     if (!s->w)
         return AVERROR(ENOMEM);
+
+    nf = 1000.0;
 
     switch (s->type) {
     case COL: //"Columbia"
@@ -253,83 +206,51 @@ static int config_input(AVFilterLink *inlink)
     case CD: //"CD Mastering"
         tau1 = 0.000050;
         tau2 = 0.000015;
-        tau3 = 0.0000001;// 1.6MHz out of audible range for null impact
+        tau3 = 0.000000;
+        nf = 100.0;
         break;
     case FM50: //"50µs FM (Europe)"
         tau1 = 0.000050;
-        tau2 = tau1 / 20;// not used
-        tau3 = tau1 / 50;//
+        tau2 = 0.000000;
+        tau3 = 0.000000;
+        nf = 100.0;
         break;
     case FM75: //"75µs FM (US)"
         tau1 = 0.000075;
-        tau2 = tau1 / 20;// not used
-        tau3 = tau1 / 50;//
+        tau2 = 0.000000;
+        tau3 = 0.000000;
+        nf = 100.0;
         break;
     }
 
-    i = 1. / tau1;
-    j = 1. / tau2;
-    k = 1. / tau3;
-    t = 1. / sr;
+    i = (tau1 > 0.0) ? -exp(-1.0/(sr*tau1)) : 0.0;
+    j = (tau2 > 0.0) ? -exp(-1.0/(sr*tau2)) : 0.0;
+    k = (tau3 > 0.0) ? -exp(-1.0/(sr*tau3)) : 0.0;
 
-    s->rc.use_brickw = 0;
+    a1 = j;
+    a2 = 0.0;
+    b0 = 1.0;
+    b1 = i + k;
+    b2 = i * k;
 
-    //swap a1 b1, a2 b2
-    if (s->type == KF50 || s->type == KF75) {
-        double tau = (s->type == KF50 ? 0.000050 : 0.000075);
-        double f = 1.0 / (2 * M_PI * tau);
-        double nyq = sr * 0.5;
-        double gain = sqrt(1.0 + nyq * nyq / (f * f)); // gain at Nyquist
-        double cfreq = sqrt((gain - 1.0) * f * f); // frequency
-        double q = 1.0;
-
-        if (s->type == KF75)
-            q = pow((sr / 3269.0) + 19.5, -0.25); // somewhat poor curve-fit
-        if (s->type == KF50)
-            q = pow((sr / 4750.0) + 19.5, -0.25);
-        if (s->mode == 0)
-            set_highshelf_rbj(&s->rc.r1, cfreq, q, 1. / gain, sr);
-        else
-            set_highshelf_rbj(&s->rc.r1, cfreq, q, gain, sr);
-    } else {
-        if (s->mode == 0) { // Reproduction
-            g  = 1. / (4.+2.*i*t+2.*k*t+i*k*t*t);
-            a0 = (2.*t+j*t*t)*g;
-            a1 = (2.*j*t*t)*g;
-            a2 = (-2.*t+j*t*t)*g;
-            b1 = (-8.+2.*i*k*t*t)*g;
-            b2 = (4.-2.*i*t-2.*k*t+i*k*t*t)*g;
-        } else {  // Production
-            s->rc.use_brickw = 1;
-            g  = 1. / (2.*t+j*t*t);
-            a0 = (4.+2.*i*t+2.*k*t+i*k*t*t)*g;
-            a1 = (-8.+2.*i*k*t*t)*g;
-            a2 = (4.-2.*i*t-2.*k*t+i*k*t*t)*g;
-            b1 = (2.*j*t*t)*g;
-            b2 = (-2.*t+j*t*t)*g;
-        }
-
-        coeffs.a0 = a0;
-        coeffs.a1 = a1;
-        coeffs.a2 = a2;
-        coeffs.b1 = b1;
-        coeffs.b2 = b2;
-
-        // the coeffs above give non-normalized value, so it should be normalized to produce 0dB at 1 kHz
-        // find actual gain
-        // Note: for FM emphasis, use 100 Hz for normalization instead
-        gain1kHz = freq_gain(&coeffs, 1000.0, sr);
-        // divide one filter's x[n-m] coefficients by that value
-        gc = 1.0 / gain1kHz;
-        s->rc.r1.a0 = coeffs.a0 * gc;
-        s->rc.r1.a1 = coeffs.a1 * gc;
-        s->rc.r1.a2 = coeffs.a2 * gc;
-        s->rc.r1.b1 = coeffs.b1;
-        s->rc.r1.b2 = coeffs.b2;
+    if (!s->mode) {
+        FFSWAP(double, a1, b1);
+        FFSWAP(double, a2, b2);
     }
 
-    cutfreq = FFMIN(0.45 * sr, 21000.);
-    set_lp_rbj(&s->rc.brickw, cutfreq, 0.707, sr, 1.);
+    coeffs.b0 = b0;
+    coeffs.b1 = b1;
+    coeffs.b2 = b2;
+    coeffs.a1 = a1;
+    coeffs.a2 = a2;
+
+    gain = 1.0 / freq_gain(&coeffs, nf, sr);
+    // divide one filter's x[n-m] coefficients by that value
+    s->rc.r1.b0 = coeffs.b0 * gain;
+    s->rc.r1.b1 = coeffs.b1 * gain;
+    s->rc.r1.b2 = coeffs.b2 * gain;
+    s->rc.r1.a1 = coeffs.a1;
+    s->rc.r1.a2 = coeffs.a2;
 
     return 0;
 }

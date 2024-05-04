@@ -13,10 +13,10 @@ fate-filter-aemphasis-50fm: tests/data/asynth-44100-2.wav
 fate-filter-aemphasis-50fm: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
 fate-filter-aemphasis-50fm: CMD = framecrc -i $(SRC) -af aresample,aemphasis=1:5:reproduction:50fm,aresample
 
-FATE_FILTER_AEMPHASIS += fate-filter-aemphasis-75kf
-fate-filter-aemphasis-75kf: tests/data/asynth-44100-2.wav
-fate-filter-aemphasis-75kf: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
-fate-filter-aemphasis-75kf: CMD = framecrc -i $(SRC) -af aresample,aemphasis=2:8:reproduction:75kf,aresample
+FATE_FILTER_AEMPHASIS += fate-filter-aemphasis-cd
+fate-filter-aemphasis-cd: tests/data/asynth-44100-2.wav
+fate-filter-aemphasis-cd: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
+fate-filter-aemphasis-cd: CMD = framecrc -i $(SRC) -af aresample,aemphasis=2:8:reproduction:cd,aresample
 
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, AEMPHASIS ARESAMPLE, WAV, PCM_S16LE, PCM_S16LE, WAV) += $(FATE_FILTER_AEMPHASIS)
 
