@@ -128,6 +128,7 @@ extern const AVFilter ff_af_compand;
 extern const AVFilter ff_af_compensationdelay;
 extern const AVFilter ff_af_crossfeed;
 extern const AVFilter ff_af_crystalizer;
+extern const AVFilter ff_af_dcblock;
 extern const AVFilter ff_af_dcshift;
 extern const AVFilter ff_af_deesser;
 extern const AVFilter ff_af_dialoguenhance;
