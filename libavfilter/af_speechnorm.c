@@ -60,6 +60,7 @@ typedef struct ChannelContext {
     int pi_start;
     int pi_end;
     int pi_size;
+    int acc;
 } ChannelContext;
 
 typedef struct SpeechNormalizerContext {
@@ -121,25 +122,12 @@ static const AVOption speechnorm_options[] = {
 
 AVFILTER_DEFINE_CLASS(speechnorm);
 
-static int get_pi_samples(PeriodItem *pi, int start, int end, int remain)
+static int get_pi_samples(PeriodItem *pi, int start, int acc, int remain)
 {
-    int sum;
-
     if (pi[start].type == 0)
         return remain;
 
-    sum = remain;
-    while (start != end) {
-        start++;
-        if (start >= MAX_ITEMS)
-            start = 0;
-        if (pi[start].type == 0)
-            break;
-        av_assert1(pi[start].size > 0);
-        sum += pi[start].size;
-    }
-
-    return sum;
+    return remain + acc;
 }
 
 static int available_samples(AVFilterContext *ctx)
@@ -148,11 +136,11 @@ static int available_samples(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     int min_pi_nb_samples;
 
-    min_pi_nb_samples = get_pi_samples(s->cc[0].pi, s->cc[0].pi_start, s->cc[0].pi_end, s->cc[0].pi_size);
+    min_pi_nb_samples = get_pi_samples(s->cc[0].pi, s->cc[0].pi_start, s->cc[0].acc, s->cc[0].pi_size);
     for (int ch = 1; ch < inlink->ch_layout.nb_channels && min_pi_nb_samples > 0; ch++) {
         ChannelContext *cc = &s->cc[ch];
 
-        min_pi_nb_samples = FFMIN(min_pi_nb_samples, get_pi_samples(cc->pi, cc->pi_start, cc->pi_end, cc->pi_size));
+        min_pi_nb_samples = FFMIN(min_pi_nb_samples, get_pi_samples(cc->pi, cc->pi_start, cc->acc, cc->pi_size));
     }
 
     return min_pi_nb_samples;
@@ -199,6 +187,7 @@ static void next_pi(AVFilterContext *ctx, ChannelContext *cc, int bypass)
         cc->pi_size = cc->pi[start].size;
         cc->pi_rms_sum = cc->pi[start].rms_sum;
         cc->pi_max_peak = cc->pi[start].max_peak;
+        cc->acc -= cc->pi_size;
         av_assert1(cc->pi_start != cc->pi_end || s->eof);
         start++;
         if (start >= MAX_ITEMS)
@@ -263,6 +252,7 @@ static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  
             if (max_peak >= min_peak ||                                         \
                 pi[pi_end].size > max_period) {                                 \
                 pi[pi_end].type = 1;                                            \
+                cc->acc += pi[pi_end].size;                                     \
                 pi_end++;                                                       \
                 if (pi_end >= MAX_ITEMS)                                        \
                     pi_end = 0;                                                 \
