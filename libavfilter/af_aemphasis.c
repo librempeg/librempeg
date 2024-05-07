@@ -50,6 +50,8 @@ typedef struct AudioEmphasisContext {
     RIAACurve rc;
 
     AVFrame *w;
+
+    int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } AudioEmphasisContext;
 
 #define OFFSET(x) offsetof(AudioEmphasisContext, x)
@@ -74,60 +76,22 @@ static const AVOption aemphasis_options[] = {
 
 AVFILTER_DEFINE_CLASS(aemphasis);
 
-static inline void biquad_process(BiquadCoeffs *bq, double *dst, const double *src, int nb_samples,
-                                  double *w, double level_in, double level_out)
-{
-    const double b0 = bq->b0;
-    const double b1 = bq->b1;
-    const double b2 = bq->b2;
-    const double a1 = -bq->a1;
-    const double a2 = -bq->a2;
-    double w1 = w[0];
-    double w2 = w[1];
-
-    for (int i = 0; i < nb_samples; i++) {
-        double in = src[i] * level_in;
-        double out = b0 * in + w1;
-        w1 = b1 * in + w2 + a1 * out;
-        w2 = b2 * in + a2 * out;
-
-        dst[i] = out * level_out;
-    }
-
-    w[0] = isnormal(w1) ? w1 : 0.0;
-    w[1] = isnormal(w2) ? w2 : 0.0;
-}
-
 typedef struct ThreadData {
     AVFrame *in, *out;
 } ThreadData;
 
-static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    AudioEmphasisContext *s = ctx->priv;
-    const double level_out = s->level_out;
-    const double level_in = s->level_in;
-    ThreadData *td = arg;
-    AVFrame *out = td->out;
-    AVFrame *in = td->in;
-    const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+#define DEPTH 32
+#include "aemphasis_template.c"
 
-    for (int ch = start; ch < end; ch++) {
-        const double *src = (const double *)in->extended_data[ch];
-        double *w = (double *)s->w->extended_data[ch];
-        double *dst = (double *)out->extended_data[ch];
-
-        biquad_process(&s->rc.r1, dst, src, in->nb_samples, w, level_in, level_out);
-    }
-
-    return 0;
-}
+#undef DEPTH
+#define DEPTH 64
+#include "aemphasis_template.c"
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
+    AudioEmphasisContext *s = ctx->priv;
     ThreadData td;
     AVFrame *out;
 
@@ -143,7 +107,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
 
     td.in = in; td.out = out;
-    ff_filter_execute(ctx, filter_channels, &td, NULL,
+    ff_filter_execute(ctx, s->filter_channels, &td, NULL,
                       FFMIN(inlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     if (in != out)
@@ -173,6 +137,15 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     AudioEmphasisContext *s = ctx->priv;
     BiquadCoeffs coeffs;
+
+    switch (inlink->format) {
+    case AV_SAMPLE_FMT_DBLP:
+        s->filter_channels = filter_channels_dblp;
+        break;
+    case AV_SAMPLE_FMT_FLTP:
+        s->filter_channels = filter_channels_fltp;
+        break;
+    }
 
     if (!s->w)
         s->w = ff_get_audio_buffer(inlink, 2);
@@ -291,7 +264,7 @@ const AVFilter ff_af_aemphasis = {
     .uninit        = uninit,
     FILTER_INPUTS(aemphasis_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
-    FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_FLTP),
     .process_command = process_command,
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
                      AVFILTER_FLAG_SLICE_THREADS,
