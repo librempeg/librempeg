@@ -238,18 +238,10 @@ static int activate(AVFilterContext *ctx)
 static av_cold int init(AVFilterContext *ctx)
 {
     AudioCompressorContext *s = ctx->priv;
-    AVFilterPad pad = { NULL };
-    int ret;
-
-    pad.type = AVMEDIA_TYPE_AUDIO;
-    pad.name = av_asprintf("main");
-    if (!pad.name)
-        return AVERROR(ENOMEM);
-    if ((ret = ff_append_inpad_free_name(ctx, &pad)) < 0)
-        return ret;
 
     if (s->sidechain) {
         AVFilterPad pad = { NULL };
+        int ret;
 
         pad.type = AVMEDIA_TYPE_AUDIO;
         pad.name = av_asprintf("sidechain");
@@ -288,7 +280,7 @@ const AVFilter ff_af_acompressor = {
     .activate       = activate,
     .init           = init,
     .uninit         = uninit,
-    .inputs         = NULL,
+    FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_DBL),
     .process_command = process_command,
