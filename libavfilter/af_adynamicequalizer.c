@@ -154,14 +154,10 @@ static av_cold int init(AVFilterContext *ctx)
 
     if (s->sidechain) {
         AVFilterPad pad = { NULL };
-        int ret;
 
         pad.type = AVMEDIA_TYPE_AUDIO;
-        pad.name = av_asprintf("sidechain");
-        if (!pad.name)
-            return AVERROR(ENOMEM);
-        if ((ret = ff_append_inpad_free_name(ctx, &pad)) < 0)
-            return ret;
+        pad.name = "sidechain";
+        return ff_append_inpad(ctx, &pad);
     }
 
     return 0;
