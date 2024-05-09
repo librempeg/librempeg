@@ -667,14 +667,6 @@ static av_cold int init(AVFilterContext *ctx)
     HeadphoneContext *s = ctx->priv;
     int i, ret;
 
-    AVFilterPad pad = {
-        .name         = "in0",
-        .type         = AVMEDIA_TYPE_AUDIO,
-        .config_props = config_input,
-    };
-    if ((ret = ff_append_inpad(ctx, &pad)) < 0)
-        return ret;
-
     if (!s->nb_maps) {
         av_log(ctx, AV_LOG_ERROR, "Valid mapping must be set.\n");
         return AVERROR(EINVAL);
@@ -771,6 +763,14 @@ static const AVOption headphone_options[] = {
 
 AVFILTER_DEFINE_CLASS(headphone);
 
+static const AVFilterPad inputs[] = {
+    {
+        .name          = "default",
+        .type          = AVMEDIA_TYPE_AUDIO,
+        .config_props  = config_input,
+    },
+};
+
 static const AVFilterPad outputs[] = {
     {
         .name          = "default",
@@ -787,7 +787,7 @@ const AVFilter ff_af_headphone = {
     .init          = init,
     .uninit        = uninit,
     .activate      = activate,
-    .inputs        = NULL,
+    FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC(query_formats),
     .flags         = AVFILTER_FLAG_SLICE_THREADS | AVFILTER_FLAG_DYNAMIC_INPUTS,
