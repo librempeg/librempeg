@@ -188,8 +188,6 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const int copy_samples = FFMIN(in_nb_samples, in->nb_samples-soffset);
     const ttype *taper = s->taper;
 
-    memset(rdft0, 0, in_offset * sizeof(*rdft0));
-    memset(rdft0 + s->in_rdft_size - in_offset, 0, in_offset * sizeof(*rdft0));
 #if DEPTH == 16
     for (int n = 0; n < copy_samples; n++)
         rdft0[in_offset+n] = src[n] / F(1<<(DEPTH-1));
