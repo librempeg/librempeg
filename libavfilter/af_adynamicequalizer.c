@@ -151,18 +151,10 @@ typedef struct ThreadData {
 static av_cold int init(AVFilterContext *ctx)
 {
     AudioDynamicEqualizerContext *s = ctx->priv;
-    AVFilterPad pad = { NULL };
-    int ret;
-
-    pad.type = AVMEDIA_TYPE_AUDIO;
-    pad.name = av_asprintf("main");
-    if (!pad.name)
-        return AVERROR(ENOMEM);
-    if ((ret = ff_append_inpad_free_name(ctx, &pad)) < 0)
-        return ret;
 
     if (s->sidechain) {
         AVFilterPad pad = { NULL };
+        int ret;
 
         pad.type = AVMEDIA_TYPE_AUDIO;
         pad.name = av_asprintf("sidechain");
@@ -364,7 +356,7 @@ const AVFilter ff_af_adynamicequalizer = {
     .init            = init,
     .activate        = activate,
     .uninit          = uninit,
-    .inputs          = NULL,
+    FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC(query_formats),
     .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
