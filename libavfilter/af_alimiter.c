@@ -146,18 +146,10 @@ static int config_output(AVFilterLink *outlink)
 static av_cold int init(AVFilterContext *ctx)
 {
     AudioLimiterContext *s = ctx->priv;
-    AVFilterPad pad = { NULL };
-    int ret;
-
-    pad.type = AVMEDIA_TYPE_AUDIO;
-    pad.name = av_asprintf("main");
-    if (!pad.name)
-        return AVERROR(ENOMEM);
-    if ((ret = ff_append_inpad_free_name(ctx, &pad)) < 0)
-        return ret;
 
     if (s->sidechain) {
         AVFilterPad pad = { NULL };
+        int ret;
 
         pad.type = AVMEDIA_TYPE_AUDIO;
         pad.name = av_asprintf("sidechain");
@@ -237,7 +229,7 @@ const AVFilter ff_af_alimiter = {
     .init           = init,
     .activate       = activate,
     .uninit         = uninit,
-    .inputs         = NULL,
+    FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
     .process_command = ff_filter_process_command,
