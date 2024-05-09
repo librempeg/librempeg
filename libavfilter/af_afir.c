@@ -589,21 +589,13 @@ static av_cold void uninit(AVFilterContext *ctx)
 static av_cold int init(AVFilterContext *ctx)
 {
     AudioFIRContext *s = ctx->priv;
-    AVFilterPad pad;
-    int ret;
 
     s->prev_selir = FFMIN(s->nb_irs - 1, s->selir);
 
-    pad = (AVFilterPad) {
-        .name = "main",
-        .type = AVMEDIA_TYPE_AUDIO,
-    };
-
-    ret = ff_append_inpad(ctx, &pad);
-    if (ret < 0)
-        return ret;
-
     for (int n = 0; n < s->nb_irs; n++) {
+        AVFilterPad pad;
+        int ret;
+
         pad = (AVFilterPad) {
             .name = av_asprintf("ir%d", n),
             .type = AVMEDIA_TYPE_AUDIO,
@@ -700,6 +692,7 @@ const AVFilter ff_af_afir = {
     .priv_size     = sizeof(AudioFIRContext),
     .priv_class    = &afir_class,
     FILTER_QUERY_FUNC(query_formats),
+    FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(outputs),
     .init          = init,
     .activate      = activate,
