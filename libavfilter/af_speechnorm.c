@@ -231,23 +231,24 @@ static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  
     const int max_period = s->max_period;                                       \
     PeriodItem *pi = (PeriodItem *)&cc->pi;                                     \
     int pi_end = cc->pi_end;                                                    \
+    int state = cc->state;                                                      \
     int n = 0;                                                                  \
                                                                                 \
-    if (cc->state < 0)                                                          \
-        cc->state = src[0] >= zero;                                             \
+    if (state < 0)                                                              \
+        state = src[0] >= zero;                                                 \
                                                                                 \
     while (n < nb_samples) {                                                    \
         ptype new_max_peak;                                                     \
         ptype new_rms_sum;                                                      \
         int new_size;                                                           \
                                                                                 \
-        if ((cc->state != (src[n] >= zero)) ||                                  \
+        if ((state != (src[n] >= zero)) ||                                      \
             (pi[pi_end].size > max_period)) {                                   \
             ptype max_peak = pi[pi_end].max_peak;                               \
             ptype rms_sum = pi[pi_end].rms_sum;                                 \
-            int state = cc->state;                                              \
+            int old_state = state;                                              \
                                                                                 \
-            cc->state = src[n] >= zero;                                         \
+            state = src[n] >= zero;                                             \
             av_assert1(pi[pi_end].size > 0);                                    \
             if (max_peak >= min_peak ||                                         \
                 pi[pi_end].size > max_period) {                                 \
@@ -256,7 +257,7 @@ static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  
                 pi_end++;                                                       \
                 if (pi_end >= MAX_ITEMS)                                        \
                     pi_end = 0;                                                 \
-                if (cc->state != state) {                                       \
+                if (state != old_state) {                                       \
                     pi[pi_end].max_peak = DBL_MIN;                              \
                     pi[pi_end].rms_sum = 0.0;                                   \
                 } else {                                                        \
@@ -272,7 +273,7 @@ static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  
         new_max_peak = pi[pi_end].max_peak;                                     \
         new_rms_sum = pi[pi_end].rms_sum;                                       \
         new_size = pi[pi_end].size;                                             \
-        if (cc->state) {                                                        \
+        if (state) {                                                            \
             while (src[n] >= zero) {                                            \
                 new_max_peak = FFMAX(new_max_peak,  src[n]);                    \
                 new_rms_sum += src[n] * src[n];                                 \
@@ -297,6 +298,7 @@ static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  
         pi[pi_end].size = new_size;                                             \
     }                                                                           \
     cc->pi_end = pi_end;                                                        \
+    cc->state = state;                                                          \
 }
 
 ANALYZE_CHANNEL(dbl, double, 0.0, MIN_PEAK)
@@ -326,8 +328,12 @@ static void filter_channels_## name (AVFilterContext *ctx,                      
             av_assert1(size > 0);                                               \
             gain = cc->gain_state;                                              \
             consume_pi(cc, size);                                               \
-            for (int i = n; !ctx->is_disabled && i < n + size; i++)             \
-                dst[i] = src[i] * gain;                                         \
+            if (ctx->is_disabled) {                                             \
+                memcpy(dst + n, src + n, size * sizeof(*dst));                  \
+            } else {                                                            \
+                for (int i = n; i < n + size; i++)                              \
+                    dst[i] = src[i] * gain;                                     \
+            }                                                                   \
             n += size;                                                          \
         }                                                                       \
     }                                                                           \
@@ -384,12 +390,13 @@ static void filter_link_channels_## name (AVFilterContext *ctx,                 
             ptype *dst = (ptype *)out->extended_data[ch];                       \
                                                                                 \
             consume_pi(cc, min_size);                                           \
-            if (cc->bypass)                                                     \
-                continue;                                                       \
-                                                                                \
-            for (int i = n; !ctx->is_disabled && i < n + min_size; i++) {       \
-                ptype g = tlerp(s->prev_gain, gain, (i - n) / (ptype)min_size); \
-                dst[i] = src[i] * g;                                            \
+            if (cc->bypass || ctx->is_disabled) {                               \
+                memcpy(dst + n, src + n, min_size * sizeof(*dst));              \
+            } else {                                                            \
+                for (int i = n; i < n + min_size; i++) {                        \
+                    ptype g = tlerp(s->prev_gain, gain, (i-n)/(ptype)min_size); \
+                    dst[i] = src[i] * g;                                        \
+                }                                                               \
             }                                                                   \
         }                                                                       \
                                                                                 \
