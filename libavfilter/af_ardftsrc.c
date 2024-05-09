@@ -38,6 +38,9 @@ typedef struct AudioRDFTSRCContext {
     int tr_nb_samples;
     int taper_samples;
     int out_nb_samples;
+    int in_offset;
+    int out_offset;
+    int delay;
     int channels;
     float bandwidth;
 
@@ -120,6 +123,8 @@ static int config_input(AVFilterLink *inlink)
     if (inlink->sample_rate == outlink->sample_rate)
         return 0;
 
+    outlink->time_base = (AVRational) {1, outlink->sample_rate};
+
     av_reduce(&s->in_nb_samples, &s->out_nb_samples,
               inlink->sample_rate, outlink->sample_rate, INT_MAX);
 
@@ -130,9 +135,12 @@ static int config_input(AVFilterLink *inlink)
 
     s->in_rdft_size = s->in_nb_samples * 2;
     s->out_rdft_size = s->out_nb_samples * 2;
+    s->out_offset = (s->out_rdft_size - s->out_nb_samples) >> 1;
+    s->in_offset = (s->in_rdft_size - s->in_nb_samples) >> 1;
+    s->delay = FFABS(s->out_offset - s->in_offset);
     s->tr_nb_samples = FFMIN(s->in_nb_samples, s->out_nb_samples);
     s->taper_samples = lrint(s->tr_nb_samples * (1.0-s->bandwidth));
-    av_log(ctx, AV_LOG_DEBUG, "%d: %d => %d\n", factor, s->in_rdft_size, s->out_rdft_size);
+    av_log(ctx, AV_LOG_DEBUG, "%d: %d => %d | %d\n", factor, s->in_rdft_size, s->out_rdft_size, s->delay);
 
     s->channels = inlink->ch_layout.nb_channels;
 
@@ -178,7 +186,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioRDFTSRCContext *s = ctx->priv;
-    const int offset = (s->in_rdft_size - s->in_nb_samples) >> 1;
     const int factor = FFMAX(1, in->nb_samples / s->in_nb_samples);
     AVFrame *out;
     int ret;
@@ -198,9 +205,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     out->sample_rate = outlink->sample_rate;
-    out->pts = in->pts;
-    out->pts -= av_rescale_q(offset, av_make_q(1, inlink->sample_rate), inlink->time_base);
-    out->pts = av_rescale_q(out->pts, outlink->time_base, inlink->time_base);
+    out->pts = av_rescale_q(in->pts, inlink->time_base, outlink->time_base) - s->delay;
     ret = ff_filter_frame(outlink, out);
 fail:
     av_frame_free(&in);
