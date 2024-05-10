@@ -125,13 +125,13 @@ static void fn(xcorrelate_slow)(AVFilterContext *ctx,
     for (int n = 0; n < out->nb_samples; n++) {
         const int idx = n + size;
 
-        dst[n] = fn(xcorrelate)(x + n, y + n,
-                                sumx, sumy,
-                                size);
-
         sumx += x[idx];
-        sumx -= x[n];
         sumy += y[idx];
+
+        dst[n] = fn(xcorrelate)(x + n, y + n,
+                                sumx, sumy, size);
+
+        sumx -= x[n];
         sumy -= y[n];
     }
 
@@ -171,19 +171,21 @@ static void fn(xcorrelate_fast)(AVFilterContext *ctx,
         const ftype yn = y[n];
         ftype num, den;
 
+        num_sum  += xidx * yidx;
+        den_sumx += xidx * xidx;
+        den_sumy += yidx * yidx;
+
         num = num_sum;
         den = SQRT(den_sumx) * SQRT(den_sumy);
         den = den < EPS ? EPS : den;
 
         dst[n] = CLIP(num / den, -ONE, ONE);
 
-        num_sum  += xidx * yidx;
         num_sum  -= xn * yn;
-        den_sumx += xidx * xidx;
         den_sumx -= xn * xn;
-        den_sumx  = FFMAX(den_sumx, ZERO);
-        den_sumy += yidx * yidx;
         den_sumy -= yn * yn;
+
+        den_sumx  = FFMAX(den_sumx, ZERO);
         den_sumy  = FFMAX(den_sumy, ZERO);
     }
 
@@ -228,6 +230,12 @@ static void fn(xcorrelate_best)(AVFilterContext *ctx, AVFrame *out,
         const ftype yn = y[n];
         ftype num, den;
 
+        mean_sumx+= xidx;
+        mean_sumy+= yidx;
+        num_sum  += xidx * yidx;
+        den_sumx += xidx * xidx;
+        den_sumy += yidx * yidx;
+
         num = num_sum * size - mean_sumx * mean_sumy;
         den = SQRT(FMAX(size * den_sumx - mean_sumx * mean_sumx, ZERO)) *
               SQRT(FMAX(size * den_sumy - mean_sumy * mean_sumy, ZERO));
@@ -235,17 +243,13 @@ static void fn(xcorrelate_best)(AVFilterContext *ctx, AVFrame *out,
 
         dst[n] = CLIP(num / den, -ONE, ONE);
 
-        mean_sumx+= xidx;
-        mean_sumx-= xn;
-        mean_sumy+= yidx;
-        mean_sumy-= yn;
-        num_sum  += xidx * yidx;
         num_sum  -= xn * yn;
-        den_sumx += xidx * xidx;
+        mean_sumx-= xn;
+        mean_sumy-= yn;
         den_sumx -= xn * xn;
-        den_sumx  = FMAX(den_sumx, ZERO);
-        den_sumy += yidx * yidx;
         den_sumy -= yn * yn;
+
+        den_sumx  = FMAX(den_sumx, ZERO);
         den_sumy  = FMAX(den_sumy, ZERO);
     }
 
