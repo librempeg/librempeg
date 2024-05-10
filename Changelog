@@ -9,6 +9,8 @@ version <next>:
 - vf_scale supports secondary ref input and framesync options
 - vf_scale2ref deprecated
 - qsv_params option added for QSV encoders
+- dcblock audio filter
+- amae audio filter
 
 version 7.0:
 - DXV DXT1 encoder
