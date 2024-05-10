@@ -155,7 +155,7 @@ static int get_log_bin_abs(float in, int w)
 
 static int get_log_bin_sign(float in, int w)
 {
-    return (w / 2) + FFSIGN(in) * lrintf(av_clipf(1.f + log10f(fabsf(in)) / 6.f, 0.f, 1.f) * (w / 2));
+    return (w / 2) + FFSIGN(in) * lrintf(av_clipf(1.f + log10f(fabsf(in)) / 6.f, 0.f, 1.f) * ((w-1) / 2));
 }
 
 static int config_output(AVFilterLink *outlink)
