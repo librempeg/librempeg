@@ -208,7 +208,6 @@ static int fn(filter_channels_link)(AVFilterContext *ctx, AVFrame *out)
         for (int ch = 0; ch < nb_channels; ch++) {
             const ftype *src = (const ftype *)in->extended_data[ch];
             ftype *dst = (ftype *)out->extended_data[ch];
-            fn(StateContext) *stc = s->st;
             fn(StateContext) *st = &stc[ch];
             const ftype sample = src[n];
             ftype *sq = st->sq;
@@ -253,12 +252,12 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     const ftype attack = s->attack;
     const ftype llevel = s->level ? -llimit : F(0.0);
     const ftype scale = s->level ? F(1.0)/limit : F(1.0);
+    fn(StateContext) *stc = s->st;
 
     for (int ch = start; ch < end; ch++) {
         const ftype *sc_src = (const ftype *)sc->extended_data[ch];
         const ftype *src = (const ftype *)in->extended_data[ch];
         ftype *dst = (ftype *)out->extended_data[ch];
-        fn(StateContext) *stc = s->st;
         fn(StateContext) *st = &stc[ch];
         ftype inacc = st->inacc;
         ftype lgain = st->lgain;
