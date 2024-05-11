@@ -34,9 +34,11 @@ typedef struct StereoWidenContext {
     float crossfeed;
     float drymix;
 
-    float *buffer;
-    float *cur;
+    void *buffer;
+    int idx;
     int length;
+
+    void (*do_widen)(AVFilterContext *ctx, AVFrame *in, AVFrame *out);
 } StereoWidenContext;
 
 #define OFFSET(x) offsetof(StereoWidenContext, x)
@@ -60,6 +62,7 @@ static int query_formats(AVFilterContext *ctx)
     int ret;
 
     if ((ret = ff_add_format                 (&formats, AV_SAMPLE_FMT_FLT  )) < 0 ||
+        (ret = ff_add_format                 (&formats, AV_SAMPLE_FMT_DBL  )) < 0 ||
         (ret = ff_set_common_formats         (ctx     , formats            )) < 0 ||
         (ret = ff_add_channel_layout         (&layout , &(AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO)) < 0 ||
         (ret = ff_set_common_channel_layouts (ctx     , layout             )) < 0)
@@ -68,17 +71,36 @@ static int query_formats(AVFilterContext *ctx)
     return ff_set_common_all_samplerates(ctx);
 }
 
+#define DEPTH 32
+#include "stereowiden_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "stereowiden_template.c"
+
 static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     StereoWidenContext *s = ctx->priv;
+    size_t sample_size;
+
+    switch (inlink->format) {
+    case AV_SAMPLE_FMT_FLT:
+        s->do_widen = stereowiden_flt;
+        sample_size = sizeof(float);
+        break;
+    case AV_SAMPLE_FMT_DBL:
+        s->do_widen = stereowiden_dbl;
+        sample_size = sizeof(double);
+        break;
+    }
 
     s->length = (lrintf(s->delay * inlink->sample_rate) + 999) / 1000;
     s->length *= 2;
-    s->buffer = av_calloc(s->length, sizeof(*s->buffer));
+    s->buffer = av_calloc(s->length, sample_size);
     if (!s->buffer)
         return AVERROR(ENOMEM);
-    s->cur = s->buffer;
+    s->idx = 0;
 
     return 0;
 }
@@ -88,13 +110,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     StereoWidenContext *s = ctx->priv;
-    const float *src = (const float *)in->data[0];
-    const float drymix = s->drymix;
-    const float crossfeed = s->crossfeed;
-    const float feedback = s->feedback;
     AVFrame *out;
-    float *dst;
-    int n;
 
     if (av_frame_is_writable(in)) {
         out = in;
@@ -106,25 +122,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
         av_frame_copy_props(out, in);
     }
-    dst = (float *)out->data[0];
 
-    for (n = 0; n < in->nb_samples; n++, src += 2, dst += 2, s->cur += 2) {
-        const float left = src[0], right = src[1];
-
-        if (s->cur >= s->buffer + s->length)
-            s->cur = s->buffer;
-
-        if (ctx->is_disabled) {
-            dst[0] = left;
-            dst[1] = right;
-        } else {
-            dst[0] = drymix * left - crossfeed * right - feedback * s->cur[1];
-            dst[1] = drymix * right - crossfeed * left - feedback * s->cur[0];
-        }
-
-        s->cur[0] = left;
-        s->cur[1] = right;
-    }
+    s->do_widen(ctx, in, out);
 
     if (out != in)
         av_frame_free(&in);
