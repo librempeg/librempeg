@@ -87,8 +87,8 @@ static av_cold int init(AVFilterContext *ctx)
     if (!s->frames || !s->eofs)
         return AVERROR(ENOMEM);
 
-    for (int i = 0; i < nb_inputs; i++) {
-        char *name = i ? av_asprintf("cf%d", i-1) : av_asprintf("input");
+    for (int i = 0; i < nb_inputs-1; i++) {
+        char *name = av_asprintf("cf%d", i);
         AVFilterPad pad = {
             .name = name,
             .type = AVMEDIA_TYPE_AUDIO,
@@ -342,7 +342,7 @@ const AVFilter ff_af_channelmix = {
     .init          = init,
     .uninit        = uninit,
     .activate      = activate,
-    .inputs        = NULL,
+    FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC(query_formats),
     .flags         = AVFILTER_FLAG_DYNAMIC_INPUTS |
