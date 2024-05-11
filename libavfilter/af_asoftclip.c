@@ -60,8 +60,7 @@ typedef struct ASoftClipContext {
     Lowpass lowpass[MAX_OVERSAMPLE];
     AVFrame *frame[2];
 
-    void (*filter)(struct ASoftClipContext *s, void **dst, const void **src,
-                   int nb_samples, int channels, int start, int end);
+    int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } ASoftClipContext;
 
 #define OFFSET(x) offsetof(ASoftClipContext, x)
@@ -122,255 +121,16 @@ static void get_lowpass(Lowpass *s,
     s->fb2 = s->db2;
 }
 
-static inline float run_lowpassf(const Lowpass *const s,
-                                 float src, float *w)
-{
-    float dst;
+typedef struct ThreadData {
+    AVFrame *in, *out;
+} ThreadData;
 
-    dst = src * s->fb0 + w[0];
-    w[0] = s->fb1 * src + w[1] - s->fa1 * dst;
-    w[1] = s->fb2 * src - s->fa2 * dst;
+#define DEPTH 32
+#include "asoftclip_template.c"
 
-    return dst;
-}
-
-static void filter_flt(ASoftClipContext *s,
-                       void **dptr, const void **sptr,
-                       int nb_samples, int channels,
-                       int start, int end)
-{
-    const int oversample = s->oversample;
-    const int nb_osamples = nb_samples * oversample;
-    const float scale = oversample > 1 ? oversample * 0.5f : 1.f;
-    float threshold = s->threshold;
-    float gain = s->output * threshold;
-    float factor = 1.f / threshold;
-    float param = s->param;
-
-    for (int c = start; c < end; c++) {
-        float *w = (float *)(s->frame[0]->extended_data[c]) + 2 * (oversample - 1);
-        const float *src = sptr[c];
-        float *dst = dptr[c];
-
-        for (int n = 0; n < nb_samples; n++) {
-            dst[oversample * n] = src[n];
-
-            for (int m = 1; m < oversample; m++)
-                dst[oversample * n + m] = 0.f;
-        }
-
-        for (int n = 0; n < nb_osamples && oversample > 1; n++)
-            dst[n] = run_lowpassf(&s->lowpass[oversample - 1], dst[n], w);
-
-        switch (s->type) {
-        case ASC_HARD:
-            for (int n = 0; n < nb_osamples; n++) {
-                dst[n] = av_clipf(dst[n] * factor, -1.f, 1.f);
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_TANH:
-            for (int n = 0; n < nb_osamples; n++) {
-                dst[n] = tanhf(dst[n] * factor * param);
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_ATAN:
-            for (int n = 0; n < nb_osamples; n++) {
-                dst[n] = 2.f / M_PI * atanf(dst[n] * factor * param);
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_CUBIC:
-            for (int n = 0; n < nb_osamples; n++) {
-                float sample = dst[n] * factor;
-
-                if (FFABS(sample) >= 1.5f)
-                    dst[n] = FFSIGN(sample);
-                else
-                    dst[n] = sample - 0.1481f * powf(sample, 3.f);
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_EXP:
-            for (int n = 0; n < nb_osamples; n++) {
-                dst[n] = 2.f / (1.f + expf(-2.f * dst[n] * factor)) - 1.;
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_ALG:
-            for (int n = 0; n < nb_osamples; n++) {
-                float sample = dst[n] * factor;
-
-                dst[n] = sample / (sqrtf(param + sample * sample));
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_QUINTIC:
-            for (int n = 0; n < nb_osamples; n++) {
-                float sample = dst[n] * factor;
-
-                if (FFABS(sample) >= 1.25)
-                    dst[n] = FFSIGN(sample);
-                else
-                    dst[n] = sample - 0.08192f * powf(sample, 5.f);
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_SIN:
-            for (int n = 0; n < nb_osamples; n++) {
-                float sample = dst[n] * factor;
-
-                if (FFABS(sample) >= M_PI_2)
-                    dst[n] = FFSIGN(sample);
-                else
-                    dst[n] = sinf(sample);
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_ERF:
-            for (int n = 0; n < nb_osamples; n++) {
-                dst[n] = erff(dst[n] * factor);
-                dst[n] *= gain;
-            }
-            break;
-        default:
-            av_assert0(0);
-        }
-
-        w = (float *)(s->frame[1]->extended_data[c]) + 2 * (oversample - 1);
-        for (int n = 0; n < nb_osamples && oversample > 1; n++)
-            dst[n] = run_lowpassf(&s->lowpass[oversample - 1], dst[n], w);
-
-        for (int n = 0; n < nb_samples; n++)
-            dst[n] = dst[n * oversample] * scale;
-    }
-}
-
-static inline double run_lowpassd(const Lowpass *const s,
-                                  double src, double *w)
-{
-    double dst;
-
-    dst = src * s->db0 + w[0];
-    w[0] = s->db1 * src + w[1] - s->da1 * dst;
-    w[1] = s->db2 * src - s->da2 * dst;
-
-    return dst;
-}
-
-static void filter_dbl(ASoftClipContext *s,
-                       void **dptr, const void **sptr,
-                       int nb_samples, int channels,
-                       int start, int end)
-{
-    const int oversample = s->oversample;
-    const int nb_osamples = nb_samples * oversample;
-    const double scale = oversample > 1 ? oversample * 0.5 : 1.;
-    double threshold = s->threshold;
-    double gain = s->output * threshold;
-    double factor = 1. / threshold;
-    double param = s->param;
-
-    for (int c = start; c < end; c++) {
-        double *w = (double *)(s->frame[0]->extended_data[c]) + 2 * (oversample - 1);
-        const double *src = sptr[c];
-        double *dst = dptr[c];
-
-        for (int n = 0; n < nb_samples; n++) {
-            dst[oversample * n] = src[n];
-
-            for (int m = 1; m < oversample; m++)
-                dst[oversample * n + m] = 0.f;
-        }
-
-        for (int n = 0; n < nb_osamples && oversample > 1; n++)
-            dst[n] = run_lowpassd(&s->lowpass[oversample - 1], dst[n], w);
-
-        switch (s->type) {
-        case ASC_HARD:
-            for (int n = 0; n < nb_osamples; n++) {
-                dst[n] = av_clipd(dst[n] * factor, -1., 1.);
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_TANH:
-            for (int n = 0; n < nb_osamples; n++) {
-                dst[n] = tanh(dst[n] * factor * param);
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_ATAN:
-            for (int n = 0; n < nb_osamples; n++) {
-                dst[n] = 2. / M_PI * atan(dst[n] * factor * param);
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_CUBIC:
-            for (int n = 0; n < nb_osamples; n++) {
-                double sample = dst[n] * factor;
-
-                if (FFABS(sample) >= 1.5)
-                    dst[n] = FFSIGN(sample);
-                else
-                    dst[n] = sample - 0.1481 * pow(sample, 3.);
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_EXP:
-            for (int n = 0; n < nb_osamples; n++) {
-                dst[n] = 2. / (1. + exp(-2. * dst[n] * factor)) - 1.;
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_ALG:
-            for (int n = 0; n < nb_osamples; n++) {
-                double sample = dst[n] * factor;
-
-                dst[n] = sample / (sqrt(param + sample * sample));
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_QUINTIC:
-            for (int n = 0; n < nb_osamples; n++) {
-                double sample = dst[n] * factor;
-
-                if (FFABS(sample) >= 1.25)
-                    dst[n] = FFSIGN(sample);
-                else
-                    dst[n] = sample - 0.08192 * pow(sample, 5.);
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_SIN:
-            for (int n = 0; n < nb_osamples; n++) {
-                double sample = dst[n] * factor;
-
-                if (FFABS(sample) >= M_PI_2)
-                    dst[n] = FFSIGN(sample);
-                else
-                    dst[n] = sin(sample);
-                dst[n] *= gain;
-            }
-            break;
-        case ASC_ERF:
-            for (int n = 0; n < nb_osamples; n++) {
-                dst[n] = erf(dst[n] * factor);
-                dst[n] *= gain;
-            }
-            break;
-        default:
-            av_assert0(0);
-        }
-
-        w = (double *)(s->frame[1]->extended_data[c]) + 2 * (oversample - 1);
-        for (int n = 0; n < nb_osamples && oversample > 1; n++)
-            dst[n] = run_lowpassd(&s->lowpass[oversample - 1], dst[n], w);
-
-        for (int n = 0; n < nb_samples; n++)
-            dst[n] = dst[n * oversample] * scale;
-    }
-}
+#undef DEPTH
+#define DEPTH 64
+#include "asoftclip_template.c"
 
 static int config_input(AVFilterLink *inlink)
 {
@@ -378,8 +138,8 @@ static int config_input(AVFilterLink *inlink)
     ASoftClipContext *s = ctx->priv;
 
     switch (inlink->format) {
-    case AV_SAMPLE_FMT_FLTP: s->filter = filter_flt; break;
-    case AV_SAMPLE_FMT_DBLP: s->filter = filter_dbl; break;
+    case AV_SAMPLE_FMT_FLTP: s->filter_channels = filter_channels_fltp; break;
+    case AV_SAMPLE_FMT_DBLP: s->filter_channels = filter_channels_dblp; break;
     default: av_assert0(0);
     }
 
@@ -395,35 +155,11 @@ static int config_input(AVFilterLink *inlink)
     return 0;
 }
 
-typedef struct ThreadData {
-    AVFrame *in, *out;
-    int nb_samples;
-    int channels;
-} ThreadData;
-
-static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    ASoftClipContext *s = ctx->priv;
-    ThreadData *td = arg;
-    AVFrame *out = td->out;
-    AVFrame *in = td->in;
-    const int channels = td->channels;
-    const int nb_samples = td->nb_samples;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
-
-    s->filter(s, (void **)out->extended_data, (const void **)in->extended_data,
-              nb_samples, channels, start, end);
-
-    return 0;
-}
-
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
-    ASoftClipContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
-    int nb_samples, channels;
+    ASoftClipContext *s = ctx->priv;
     ThreadData td;
     AVFrame *out;
 
@@ -438,15 +174,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
 
-    nb_samples = in->nb_samples;
-    channels = in->ch_layout.nb_channels;
-
     td.in = in;
     td.out = out;
-    td.nb_samples = nb_samples;
-    td.channels = channels;
-    ff_filter_execute(ctx, filter_channels, &td, NULL,
-                      FFMIN(channels, ff_filter_get_nb_threads(ctx)));
+
+    ff_filter_execute(ctx, s->filter_channels, &td, NULL,
+                      FFMIN(outlink->ch_layout.nb_channels,
+                            ff_filter_get_nb_threads(ctx)));
 
     if (out != in)
         av_frame_free(&in);
