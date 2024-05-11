@@ -140,6 +140,9 @@ static int fn(filter_channels_link)(AVFilterContext *ctx, AVFrame *out)
     const int stn = st->nb_samples;
     const ftype llevel = s->level ? -llimit : F(0.0);
     const ftype scale = s->level ? F(1.0)/limit : F(1.0);
+    const uint8_t **srce = (const uint8_t **)in->extended_data;
+    const uint8_t **sce = (const uint8_t **)sc->extended_data;
+    uint8_t **dste = (uint8_t **)out->extended_data;
     ftype inacc = st->inacc;
     ftype lgain = st->lgain;
     ftype gain = st->gain;
@@ -156,7 +159,7 @@ static int fn(filter_channels_link)(AVFilterContext *ctx, AVFrame *out)
 
         hold++;
         for (int ch = 0; ch < nb_channels; ch++) {
-            const ftype *sc_src = (const ftype *)sc->extended_data[ch];
+            const ftype *sc_src = (const ftype *)sce[ch];
             const ftype abs_sample = FABS(sc_src[n]);
 
             if (abs_sample > max_sc_sample) {
@@ -206,8 +209,8 @@ static int fn(filter_channels_link)(AVFilterContext *ctx, AVFrame *out)
 
         lgain = (gain > EPS) ? LOG2LIN(-gain+llevel) : scale;
         for (int ch = 0; ch < nb_channels; ch++) {
-            const ftype *src = (const ftype *)in->extended_data[ch];
-            ftype *dst = (ftype *)out->extended_data[ch];
+            const ftype *src = (const ftype *)srce[ch];
+            ftype *dst = (ftype *)dste[ch];
             fn(StateContext) *st = &stc[ch];
             const ftype sample = src[n];
             ftype *sq = st->sq;
