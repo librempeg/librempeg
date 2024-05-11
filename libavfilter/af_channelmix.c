@@ -61,9 +61,11 @@ static int query_formats(AVFilterContext *ctx)
     if (!layouts)
         return AVERROR(ENOMEM);
 
-    ret = ff_channel_layouts_ref(layouts, &ctx->inputs[0]->outcfg.channel_layouts);
-    if (ret)
-        return ret;
+    for (int n = 0; n < ctx->nb_inputs; n++) {
+        ret = ff_channel_layouts_ref(layouts, &ctx->inputs[n]->outcfg.channel_layouts);
+        if (ret)
+            return ret;
+    }
 
     ret = ff_set_common_formats_from_list(ctx, sample_fmts);
     if (ret)
