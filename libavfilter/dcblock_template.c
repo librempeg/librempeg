@@ -18,14 +18,17 @@
 
 #undef ltype
 #undef stype
+#undef CLIP
 #undef SAMPLE_FORMAT
 #if DEPTH == 16
 #define ltype int32_t
 #define stype int16_t
+#define CLIP av_clip_int16
 #define SAMPLE_FORMAT s16p
 #else
 #define ltype int64_t
 #define stype int32_t
+#define CLIP av_clipl_int32
 #define SAMPLE_FORMAT s32p
 #endif
 
@@ -74,7 +77,7 @@ static void fn(dc_block)(fn(StateContext) *st, stype *dst,
         acc += prev_x;
         acc -= A * prev_y;
         prev_y = acc >> (DEPTH-1);
-        dst[n] = (stype)prev_y;
+        dst[n] = CLIP(prev_y);
     }
 
     st->prev_y = prev_y;
