@@ -829,7 +829,7 @@ static void ebur128_loudness(AVFilterLink *inlink,
 
             /* get lower loudness to consider */
             n = 0;
-            nb_pow = LRA_LOWER_PRC * nb_powers * 0.01 + 0.5;
+            nb_pow = llrint(LRA_LOWER_PRC * nb_powers * 0.01);
             for (int i = gate_hist_pos; i < HIST_SIZE; i++) {
                 n += ebur128->i3000.histogram[i].count;
                 if (n >= nb_pow) {
@@ -840,7 +840,7 @@ static void ebur128_loudness(AVFilterLink *inlink,
 
             /* get higher loudness to consider */
             n = nb_powers;
-            nb_pow = LRA_HIGHER_PRC * nb_powers * 0.01 + 0.5;
+            nb_pow = llrint(LRA_HIGHER_PRC * nb_powers * 0.01);
             for (int i = HIST_SIZE - 1; i >= 0; i--) {
                 n -= FFMIN(n, ebur128->i3000.histogram[i].count);
                 if (n < nb_pow) {
