@@ -210,7 +210,7 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 
 #if DEPTH == 16
     for (int n = 0; n < out_nb_samples; n++) {
-        dst[n] = (irdft1[n+diff_offset] + over[n]) * F(1<<(DEPTH-1));
+        dst[n] = av_clip_int16(lrintf((irdft1[n+diff_offset] + over[n]) * F(1<<(DEPTH-1))));
     }
 #else
     memcpy(dst, irdft1 + diff_offset, out_nb_samples * sizeof(*dst));
