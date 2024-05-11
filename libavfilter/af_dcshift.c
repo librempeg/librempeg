@@ -27,27 +27,48 @@
 
 typedef struct DCShiftContext {
     const AVClass *class;
+
     double dcshift;
-    double limiterthreshold;
     double limitergain;
+
+    int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } DCShiftContext;
 
 #define OFFSET(x) offsetof(DCShiftContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 
 static const AVOption dcshift_options[] = {
-    { "shift",       "set DC shift",     OFFSET(dcshift),       AV_OPT_TYPE_DOUBLE, {.dbl=0}, -1, 1, A },
-    { "limitergain", "set limiter gain", OFFSET(limitergain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, 0, 1, A },
+    { "shift",       "set DC shift",     OFFSET(dcshift),     AV_OPT_TYPE_DOUBLE, {.dbl=0}, -1, 1, A },
+    { "limitergain", "set limiter gain", OFFSET(limitergain), AV_OPT_TYPE_DOUBLE, {.dbl=0},  0, 1, A },
     { NULL }
 };
 
 AVFILTER_DEFINE_CLASS(dcshift);
 
-static av_cold int init(AVFilterContext *ctx)
+typedef struct ThreadData {
+    AVFrame *in, *out;
+} ThreadData;
+
+#define DEPTH 16
+#include "dcshift_template.c"
+
+#undef DEPTH
+#define DEPTH 32
+#include "dcshift_template.c"
+
+static int config_input(AVFilterLink *inlink)
 {
+    AVFilterContext *ctx = inlink->dst;
     DCShiftContext *s = ctx->priv;
 
-    s->limiterthreshold = INT32_MAX * (1.0 - (fabs(s->dcshift) - s->limitergain));
+    switch (inlink->format) {
+    case AV_SAMPLE_FMT_S32P:
+        s->filter_channels = filter_channels_s32p;
+        break;
+    case AV_SAMPLE_FMT_S16P:
+        s->filter_channels = filter_channels_s16p;
+        break;
+    }
 
     return 0;
 }
@@ -56,10 +77,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
-    AVFrame *out;
     DCShiftContext *s = ctx->priv;
-    int i, j;
-    double dcshift = s->dcshift;
+    ThreadData td;
+    AVFrame *out;
 
     if (av_frame_is_writable(in)) {
         out = in;
@@ -72,53 +92,23 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
 
-    if (s->limitergain > 0) {
-        for (i = 0; i < inlink->ch_layout.nb_channels; i++) {
-            const int32_t *src = (int32_t *)in->extended_data[i];
-            int32_t *dst = (int32_t *)out->extended_data[i];
+    td.in = in;
+    td.out = out;
 
-            for (j = 0; j < in->nb_samples; j++) {
-                double d;
-
-                d = src[j];
-
-                if (d > s->limiterthreshold && dcshift > 0) {
-                    d = (d - s->limiterthreshold) * s->limitergain /
-                             (INT32_MAX - s->limiterthreshold) +
-                             s->limiterthreshold + dcshift;
-                } else if (d < -s->limiterthreshold && dcshift < 0) {
-                    d = (d + s->limiterthreshold) * s->limitergain /
-                             (INT32_MAX - s->limiterthreshold) -
-                             s->limiterthreshold + dcshift;
-                } else {
-                    d = dcshift * INT32_MAX + d;
-                }
-
-                dst[j] = av_clipl_int32(d);
-            }
-        }
-    } else {
-        for (i = 0; i < inlink->ch_layout.nb_channels; i++) {
-            const int32_t *src = (int32_t *)in->extended_data[i];
-            int32_t *dst = (int32_t *)out->extended_data[i];
-
-            for (j = 0; j < in->nb_samples; j++) {
-                double d = dcshift * (INT32_MAX + 1.) + src[j];
-
-                dst[j] = av_clipl_int32(d);
-            }
-        }
-    }
-
-    if (out != in)
+    ff_filter_execute(ctx, s->filter_channels, &td, NULL,
+                      FFMIN(outlink->ch_layout.nb_channels,
+                            ff_filter_get_nb_threads(ctx)));
+     if (out != in)
         av_frame_free(&in);
     return ff_filter_frame(outlink, out);
 }
+
 static const AVFilterPad dcshift_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
         .filter_frame = filter_frame,
+        .config_props = config_input,
     },
 };
 
@@ -127,9 +117,8 @@ const AVFilter ff_af_dcshift = {
     .description    = NULL_IF_CONFIG_SMALL("Apply a DC shift to the audio."),
     .priv_size      = sizeof(DCShiftContext),
     .priv_class     = &dcshift_class,
-    .init           = init,
     FILTER_INPUTS(dcshift_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
-    FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_S32P),
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P),
     .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };
