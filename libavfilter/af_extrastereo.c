@@ -28,6 +28,7 @@ typedef struct ExtraStereoContext {
     const AVClass *class;
     float mult;
     int clip;
+    void (*do_extrastereo)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int clip);
 } ExtraStereoContext;
 
 #define OFFSET(x) offsetof(ExtraStereoContext, x)
@@ -48,6 +49,7 @@ static int query_formats(AVFilterContext *ctx)
     int ret;
 
     if ((ret = ff_add_format                 (&formats, AV_SAMPLE_FMT_FLT  )) < 0 ||
+        (ret = ff_add_format                 (&formats, AV_SAMPLE_FMT_DBL  )) < 0 ||
         (ret = ff_set_common_formats         (ctx     , formats            )) < 0 ||
         (ret = ff_add_channel_layout         (&layout , &(AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO)) < 0 ||
         (ret = ff_set_common_channel_layouts (ctx     , layout             )) < 0)
@@ -56,16 +58,36 @@ static int query_formats(AVFilterContext *ctx)
     return ff_set_common_all_samplerates(ctx);
 }
 
+#define DEPTH 32
+#include "extrastereo_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "extrastereo_template.c"
+
+static int config_input(AVFilterLink *inlink)
+{
+    AVFilterContext *ctx = inlink->dst;
+    ExtraStereoContext *s = ctx->priv;
+
+    switch (inlink->format) {
+    case AV_SAMPLE_FMT_FLT:
+        s->do_extrastereo = extrastereo_flt;
+        break;
+    case AV_SAMPLE_FMT_DBL:
+        s->do_extrastereo = extrastereo_dbl;
+        break;
+    }
+
+    return 0;
+}
+
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     ExtraStereoContext *s = ctx->priv;
-    const float *src = (const float *)in->data[0];
-    const float mult = s->mult;
     AVFrame *out;
-    float *dst;
-    int n;
 
     if (av_frame_is_writable(in)) {
         out = in;
@@ -77,25 +99,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
         av_frame_copy_props(out, in);
     }
-    dst = (float *)out->data[0];
 
-    for (n = 0; n < in->nb_samples; n++) {
-        float average, left, right;
-
-        left    = src[n * 2    ];
-        right   = src[n * 2 + 1];
-        average = (left + right) / 2.;
-        left    = average + mult * (left  - average);
-        right   = average + mult * (right - average);
-
-        if (s->clip) {
-            left  = av_clipf(left,  -1, 1);
-            right = av_clipf(right, -1, 1);
-        }
-
-        dst[n * 2    ] = left;
-        dst[n * 2 + 1] = right;
-    }
+    s->do_extrastereo(ctx, in, out, s->clip);
 
     if (out != in)
         av_frame_free(&in);
@@ -107,6 +112,7 @@ static const AVFilterPad inputs[] = {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
         .filter_frame = filter_frame,
+        .config_props = config_input,
     },
 };
 
