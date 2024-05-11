@@ -62,7 +62,7 @@ typedef struct AudioRDFTSRCContext {
 static const AVOption ardftsrc_options[] = {
     { "sample_rate", "set the sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=0}, 0, INT_MAX, FLAGS },
     { "quality", "set the quality", OFFSET(quality), AV_OPT_TYPE_INT, {.i64=1024}, 1, UINT16_MAX, FLAGS },
-    { "bandwidth", "set the bandwidth", OFFSET(bandwidth), AV_OPT_TYPE_FLOAT, {.dbl=0.98}, 0, 1, FLAGS },
+    { "bandwidth", "set the bandwidth", OFFSET(bandwidth), AV_OPT_TYPE_FLOAT, {.dbl=0.95}, 0, 1, FLAGS },
     {NULL}
 };
 
