@@ -398,26 +398,16 @@ static av_cold void uninit(AVFilterContext *ctx)
 static av_cold int init(AVFilterContext *ctx)
 {
     AudioPhaseMeterContext *s = ctx->priv;
-    AVFilterPad pad;
-    int ret;
-
-    pad = (AVFilterPad){
-        .name         = "out0",
-        .type         = AVMEDIA_TYPE_AUDIO,
-    };
-    ret = ff_append_outpad(ctx, &pad);
-    if (ret < 0)
-        return ret;
 
     if (s->do_video) {
+        AVFilterPad pad;
+
         pad = (AVFilterPad){
             .name         = "out1",
             .type         = AVMEDIA_TYPE_VIDEO,
             .config_props = config_video_output,
         };
-        ret = ff_append_outpad(ctx, &pad);
-        if (ret < 0)
-            return ret;
+        return ff_append_outpad(ctx, &pad);
     }
 
     return 0;
@@ -435,11 +425,11 @@ const AVFilter ff_avf_aphasemeter = {
     .name          = "aphasemeter",
     .description   = NULL_IF_CONFIG_SMALL("Convert input audio to phase meter video output."),
     .init          = init,
+    .activate      = activate,
     .uninit        = uninit,
     .priv_size     = sizeof(AudioPhaseMeterContext),
     FILTER_INPUTS(inputs),
-    .activate      = activate,
-    .outputs       = NULL,
+    FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC(query_formats),
     .priv_class    = &aphasemeter_class,
     .flags         = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
