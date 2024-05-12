@@ -51,7 +51,12 @@ typedef struct CompandSegment {
 typedef struct CompandContext {
     const AVClass *class;
     int nb_segments;
-    char *attacks, *decays, *points;
+    float *attacks;
+    unsigned nb_attacks;
+    float *decays;
+    unsigned nb_decays;
+    char **points;
+    unsigned nb_points;
     CompandSegment *segments;
     ChanParam *channels;
     double in_min_lin;
@@ -71,11 +76,16 @@ typedef struct CompandContext {
 
 #define OFFSET(x) offsetof(CompandContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_attacks = {.def="0",.size_min=1,.sep='|'};
+static const AVOptionArrayDef def_decays  = {.def="0.8",.size_min=1,.sep='|'};
+static const AVOptionArrayDef def_points  = {.def="-70/-70|-60/-20|1/0",.size_min=1,.sep='|'};
 
 static const AVOption compand_options[] = {
-    { "attacks", "set time over which increase of volume is determined", OFFSET(attacks), AV_OPT_TYPE_STRING, { .str = "0" }, 0, 0, A },
-    { "decays", "set time over which decrease of volume is determined", OFFSET(decays), AV_OPT_TYPE_STRING, { .str = "0.8" }, 0, 0, A },
-    { "points", "set points of transfer function", OFFSET(points), AV_OPT_TYPE_STRING, { .str = "-70/-70|-60/-20|1/0" }, 0, 0, A },
+    { "attacks", "set time over which increase of volume is determined", OFFSET(attacks), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_attacks }, 0, 10, A },
+    { "decays", "set time over which decrease of volume is determined", OFFSET(decays), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_decays }, 0, 10, A },
+    { "points", "set points of transfer function", OFFSET(points), AV_OPT_TYPE_STRING|AR, { .arr = &def_points }, 0, 0, A },
     { "soft-knee", "set soft-knee", OFFSET(curve_dB), AV_OPT_TYPE_DOUBLE, { .dbl = 0.01 }, 0.01, 900, A },
     { "gain", "set output gain", OFFSET(gain_dB), AV_OPT_TYPE_DOUBLE, { .dbl = 0 }, -900, 900, A },
     { "volume", "set initial volume", OFFSET(initial_volume), AV_OPT_TYPE_DOUBLE, { .dbl = 0 }, -900, 0, A },
@@ -99,17 +109,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->channels);
     av_freep(&s->segments);
     av_frame_free(&s->delay_frame);
-}
-
-static void count_items(char *item_str, int *nb_items)
-{
-    char *p;
-
-    *nb_items = 1;
-    for (p = item_str; *p; p++) {
-        if (*p == ' ' || *p == '|')
-            (*nb_items)++;
-    }
 }
 
 static void update_volume(ChanParam *cp, double in)
@@ -302,20 +301,8 @@ static int config_output(AVFilterLink *outlink)
     CompandContext *s     = ctx->priv;
     const int sample_rate = outlink->sample_rate;
     double radius         = s->curve_dB * M_LN10 / 20.0;
-    char *p, *saveptr     = NULL;
     const int channels    = outlink->ch_layout.nb_channels;
-    int nb_attacks, nb_decays, nb_points;
-    int new_nb_items, num;
-    int i;
-
-    count_items(s->attacks, &nb_attacks);
-    count_items(s->decays, &nb_decays);
-    count_items(s->points, &nb_points);
-
-    if (channels <= 0) {
-        av_log(ctx, AV_LOG_ERROR, "Invalid number of channels: %d\n", channels);
-        return AVERROR(EINVAL);
-    }
+    unsigned nb_attacks = s->nb_attacks, nb_decays = s->nb_decays, num;
 
     if (nb_attacks > channels || nb_decays > channels) {
         av_log(ctx, AV_LOG_WARNING,
@@ -326,82 +313,40 @@ static int config_output(AVFilterLink *outlink)
 
     uninit(ctx);
 
+    s->nb_segments = (s->nb_points + 4) * 2;
     s->channels = av_calloc(channels, sizeof(*s->channels));
-    s->nb_segments = (nb_points + 4) * 2;
     s->segments = av_calloc(s->nb_segments, sizeof(*s->segments));
-
-    if (!s->channels || !s->segments) {
-        uninit(ctx);
+    if (!s->channels || !s->segments)
         return AVERROR(ENOMEM);
-    }
 
-    p = s->attacks;
-    for (i = 0, new_nb_items = 0; i < nb_attacks; i++) {
-        char *tstr = av_strtok(p, " |", &saveptr);
-        if (!tstr) {
-            uninit(ctx);
-            return AVERROR(EINVAL);
-        }
-        p = NULL;
-        new_nb_items += sscanf(tstr, "%lf", &s->channels[i].attack) == 1;
-        if (s->channels[i].attack < 0) {
-            uninit(ctx);
-            return AVERROR(EINVAL);
-        }
-    }
-    nb_attacks = new_nb_items;
+    for (int i = 0; i < nb_attacks; i++)
+        s->channels[i].attack = s->attacks[i];
 
-    p = s->decays;
-    for (i = 0, new_nb_items = 0; i < nb_decays; i++) {
-        char *tstr = av_strtok(p, " |", &saveptr);
-        if (!tstr) {
-            uninit(ctx);
-            return AVERROR(EINVAL);
-        }
-        p = NULL;
-        new_nb_items += sscanf(tstr, "%lf", &s->channels[i].decay) == 1;
-        if (s->channels[i].decay < 0) {
-            uninit(ctx);
-            return AVERROR(EINVAL);
-        }
-    }
-    nb_decays = new_nb_items;
+    for (int i = nb_attacks; i < channels; i++)
+        s->channels[i].attack = s->channels[nb_attacks-1].attack;
 
-    if (nb_attacks != nb_decays) {
-        av_log(ctx, AV_LOG_ERROR,
-                "Number of attacks %d differs from number of decays %d.\n",
-                nb_attacks, nb_decays);
-        uninit(ctx);
-        return AVERROR(EINVAL);
-    }
+    for (int i = 0; i < nb_decays; i++)
+        s->channels[i].decay = s->decays[i];
 
-    for (i = nb_decays; i < channels; i++) {
-        s->channels[i].attack = s->channels[nb_decays - 1].attack;
-        s->channels[i].decay = s->channels[nb_decays - 1].decay;
-    }
+    for (int i = nb_decays; i < channels; i++)
+        s->channels[i].decay = s->channels[nb_decays-1].decay;
 
 #define S(x) s->segments[2 * ((x) + 1)]
-    p = s->points;
-    for (i = 0, new_nb_items = 0; i < nb_points; i++) {
-        char *tstr = av_strtok(p, " |", &saveptr);
-        p = NULL;
-        if (!tstr || sscanf(tstr, "%lf/%lf", &S(i).x, &S(i).y) != 2) {
+    for (int i = 0; i < s->nb_points; i++) {
+        if (av_sscanf(s->points[i], "%lf/%lf", &S(i).x, &S(i).y) != 2) {
             av_log(ctx, AV_LOG_ERROR,
                     "Invalid and/or missing input/output value.\n");
-            uninit(ctx);
             return AVERROR(EINVAL);
         }
         if (i && S(i - 1).x > S(i).x) {
             av_log(ctx, AV_LOG_ERROR,
                     "Transfer function input values must be increasing.\n");
-            uninit(ctx);
             return AVERROR(EINVAL);
         }
         S(i).y -= S(i).x;
         av_log(ctx, AV_LOG_DEBUG, "%d: x=%f y=%f\n", i, S(i).x, S(i).y);
-        new_nb_items++;
     }
-    num = new_nb_items;
+    num = s->nb_points;
 
     /* Add 0,0 if necessary */
     if (num == 0 || S(num - 1).x)
@@ -415,66 +360,65 @@ static int config_output(AVFilterLink *outlink)
     num++;
 
     /* Join adjacent colinear segments */
-    for (i = 2; i < num; i++) {
+    for (int i = 2; i < num; i++) {
         double g1 = (S(i - 1).y - S(i - 2).y) * (S(i - 0).x - S(i - 1).x);
         double g2 = (S(i - 0).y - S(i - 1).y) * (S(i - 1).x - S(i - 2).x);
-        int j;
 
         if (fabs(g1 - g2))
             continue;
         num--;
-        for (j = --i; j < num; j++)
+        for (int j = --i; j < num; j++)
             S(j) = S(j + 1);
     }
 
-    for (i = 0; i < s->nb_segments; i += 2) {
+    for (int i = 0; i < s->nb_segments; i += 2) {
         s->segments[i].y += s->gain_dB;
         s->segments[i].x *= M_LN10 / 20;
         s->segments[i].y *= M_LN10 / 20;
     }
 
-#define L(x) s->segments[i - (x)]
-    for (i = 4; i < s->nb_segments; i += 2) {
+#define L(x, i) s->segments[(i) - (x)]
+    for (int i = 4; i < s->nb_segments; i += 2) {
         double x, y, cx, cy, in1, in2, out1, out2, theta, len, r;
 
-        L(4).a = 0;
-        L(4).b = (L(2).y - L(4).y) / (L(2).x - L(4).x);
+        L(4, i).a = 0;
+        L(4, i).b = (L(2, i).y - L(4, i).y) / (L(2, i).x - L(4, i).x);
 
-        L(2).a = 0;
-        L(2).b = (L(0).y - L(2).y) / (L(0).x - L(2).x);
+        L(2, i).a = 0;
+        L(2, i).b = (L(0, i).y - L(2, i).y) / (L(0, i).x - L(2, i).x);
 
-        theta = atan2(L(2).y - L(4).y, L(2).x - L(4).x);
-        len = hypot(L(2).x - L(4).x, L(2).y - L(4).y);
+        theta = atan2(L(2, i).y - L(4, i).y, L(2, i).x - L(4, i).x);
+        len = hypot(L(2, i).x - L(4, i).x, L(2, i).y - L(4, i).y);
         r = FFMIN(radius, len);
-        L(3).x = L(2).x - r * cos(theta);
-        L(3).y = L(2).y - r * sin(theta);
+        L(3, i).x = L(2, i).x - r * cos(theta);
+        L(3, i).y = L(2, i).y - r * sin(theta);
 
-        theta = atan2(L(0).y - L(2).y, L(0).x - L(2).x);
-        len = hypot(L(0).x - L(2).x, L(0).y - L(2).y);
+        theta = atan2(L(0, i).y - L(2, i).y, L(0, i).x - L(2, i).x);
+        len = hypot(L(0, i).x - L(2, i).x, L(0, i).y - L(2, i).y);
         r = FFMIN(radius, len / 2);
-        x = L(2).x + r * cos(theta);
-        y = L(2).y + r * sin(theta);
+        x = L(2, i).x + r * cos(theta);
+        y = L(2, i).y + r * sin(theta);
 
-        cx = (L(3).x + L(2).x + x) / 3;
-        cy = (L(3).y + L(2).y + y) / 3;
+        cx = (L(3, i).x + L(2, i).x + x) / 3;
+        cy = (L(3, i).y + L(2, i).y + y) / 3;
 
-        L(2).x = x;
-        L(2).y = y;
+        L(2, i).x = x;
+        L(2, i).y = y;
 
-        in1  = cx - L(3).x;
-        out1 = cy - L(3).y;
-        in2  = L(2).x - L(3).x;
-        out2 = L(2).y - L(3).y;
-        L(3).a = (out2 / in2 - out1 / in1) / (in2 - in1);
-        L(3).b = out1 / in1 - L(3).a * in1;
+        in1  = cx - L(3, i).x;
+        out1 = cy - L(3, i).y;
+        in2  = L(2, i).x - L(3, i).x;
+        out2 = L(2, i).y - L(3, i).y;
+        L(3, i).a = (out2 / in2 - out1 / in1) / (in2 - in1);
+        L(3, i).b = out1 / in1 - L(3, i).a * in1;
     }
-    L(3).x = 0;
-    L(3).y = L(2).y;
+    L(3, s->nb_segments).x = 0;
+    L(3, s->nb_segments).y = L(2, s->nb_segments).y;
 
     s->in_min_lin  = exp(s->segments[1].x);
     s->out_min_lin = exp(s->segments[1].y);
 
-    for (i = 0; i < channels; i++) {
+    for (int i = 0; i < channels; i++) {
         ChanParam *cp = &s->channels[i];
 
         if (cp->attack > 1.0 / sample_rate)
