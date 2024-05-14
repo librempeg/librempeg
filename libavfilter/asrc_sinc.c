@@ -94,29 +94,24 @@ static int query_formats(AVFilterContext *ctx)
 }
 
 static float *make_lpf(int num_taps, float Fc, float beta, float rho,
-                       float scale, int dc_norm)
+                       float scale)
 {
-    int i, m = num_taps - 1;
-    float *h = av_calloc(num_taps, sizeof(*h)), sum = 0;
+    int m = num_taps - 1;
     float mult = scale / av_bessel_i0(beta), mult1 = 1.f / (.5f * m + rho);
+    float *h = av_calloc(num_taps, sizeof(*h));
 
     if (!h)
         return NULL;
 
     av_assert0(Fc >= 0 && Fc <= 1);
 
-    for (i = 0; i <= m / 2; i++) {
+    for (int i = 0; i <= m / 2; i++) {
         float z = i - .5f * m, x = z * M_PI, y = z * mult1;
         h[i] = x ? sinf(Fc * x) / x : Fc;
-        sum += h[i] *= av_bessel_i0(beta * sqrtf(1.f - y * y)) * mult;
-        if (m - i != i) {
+        h[i] *= av_bessel_i0(beta * sqrtf(1.f - y * y)) * mult;
+        if (m - i != i)
             h[m - i] = h[i];
-            sum += h[i];
-        }
     }
-
-    for (i = 0; dc_norm && i < num_taps; i++)
-        h[i] *= scale / sum;
 
     return h;
 }
@@ -179,7 +174,7 @@ static float *lpf(float Fn, float Fc, float tbw, int *num_taps, float att, float
             *num_taps = 1 + 2 * (int)((int)((*num_taps / 2) * Fc + .5f) / Fc + .5f);
     }
 
-    return make_lpf(*num_taps |= 1, Fc, *beta, 0.f, 1.f, 0);
+    return make_lpf(*num_taps |= 1, Fc, *beta, 0.f, 1.f);
 }
 
 static void invert(float *h, int n)
