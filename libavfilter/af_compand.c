@@ -252,10 +252,8 @@ static int compand_delay(AVFilterContext *ctx, AVFrame *frame)
 
     av_frame_free(&frame);
 
-    if (out_frame) {
-        err = ff_filter_frame(ctx->outputs[0], out_frame);
-        return err;
-    }
+    if (out_frame)
+        return ff_filter_frame(ctx->outputs[0], out_frame);
 
     return 0;
 }
