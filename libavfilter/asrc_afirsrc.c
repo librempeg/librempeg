@@ -151,8 +151,8 @@ static void lininterp(AVComplexFloat *complexf,
                 const float mg = (x - freq[j-1]) / (freq[j] - freq[j-1]) * (magnitude[j] - magnitude[j-1]) + magnitude[j-1];
                 const float ph = (x - freq[j-1]) / (freq[j] - freq[j-1]) * (phase[j] - phase[j-1]) + phase[j-1];
 
-                complexf[i].re = mg * cosf(ph);
-                complexf[i].im = mg * sinf(ph);
+                complexf[i].re = mg * cosf(ph * M_PI);
+                complexf[i].im = mg * sinf(ph * M_PI);
                 break;
             }
         }
@@ -163,7 +163,7 @@ static av_cold int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AudioFIRSourceContext *s = ctx->priv;
-    float overlap, scale = 1.f, compensation;
+    float overlap, scale, *output;
     int fft_size, middle, ret;
 
     if (s->nb_freq != s->nb_magnitude && s->nb_freq != s->nb_phase && s->nb_freq >= 2) {
@@ -193,7 +193,8 @@ static av_cold int config_output(AVFilterLink *outlink)
     if (!s->complexf)
         return AVERROR(ENOMEM);
 
-    ret = av_tx_init(&s->tx_ctx, &s->tx_fn, AV_TX_FLOAT_FFT, 1, fft_size, &scale, 0);
+    scale = 1.f / fft_size;
+    ret = av_tx_init(&s->tx_ctx, &s->tx_fn, AV_TX_FLOAT_RDFT, 1, fft_size, &scale, 0);
     if (ret < 0)
         return ret;
 
@@ -211,12 +212,12 @@ static av_cold int config_output(AVFilterLink *outlink)
 
     s->tx_fn(s->tx_ctx, s->complexf + fft_size, s->complexf, sizeof(*s->complexf));
 
-    compensation = 2.f / fft_size;
     middle = s->nb_taps / 2;
+    output = (float *)(s->complexf + fft_size);
 
     for (int i = 0; i <= middle; i++) {
-        s->taps[         i] = s->complexf[fft_size + middle - i].re * compensation * s->win[i];
-        s->taps[middle + i] = s->complexf[fft_size          + i].re * compensation * s->win[middle + i];
+        s->taps[         i] = output[middle - i] * s->win[i];
+        s->taps[middle + i] = output[i] * s->win[middle + i];
     }
 
     s->pts = 0;
