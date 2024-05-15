@@ -138,8 +138,6 @@ static ftype *fn(lpf)(ftype Fn, ftype Fc, ftype tbw, int *num_taps, ftype att, d
         return NULL;
     }
 
-    att = att ? att : F(120.0);
-
     fn(kaiser_params)(att, Fc, (tbw ? tbw / Fn : F(0.05)) * F(0.5), beta, num_taps);
 
     if (!n) {
