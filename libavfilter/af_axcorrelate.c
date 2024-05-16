@@ -30,6 +30,8 @@
 #include "filters.h"
 #include "internal.h"
 
+#define MAX_SIZE 131072
+
 typedef struct AudioXCorrelateContext {
     const AVClass *class;
 
@@ -39,7 +41,6 @@ typedef struct AudioXCorrelateContext {
     AVFrame *in[2];
     AVFrame *cache[2];
     int samples_in_cache[2];
-    int *used;
     int eof;
     int eof_status;
     int64_t eof_pts;
@@ -77,7 +78,7 @@ static int activate(AVFilterContext *ctx)
     FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
 
     if (!s->in[0] && !s->eof) {
-        int ret = ff_inlink_consume_frame(ctx->inputs[0], &s->in[0]);
+        int ret = ff_inlink_consume_samples(ctx->inputs[0], s->size, MAX_SIZE, &s->in[0]);
         if (ret < 0)
             return ret;
     }
@@ -94,15 +95,28 @@ static int activate(AVFilterContext *ctx)
         const int needed = s->size + out_samples;
         AVFrame *out;
 
-        if (!s->cache[0] || s->cache[0]->nb_samples < needed) {
-            AVFrame *old_cache = s->cache[0];
-
+        if (!s->cache[0]) {
             s->cache[0] = ff_get_audio_buffer(outlink, needed);
             if (!s->cache[0])
                 return AVERROR(ENOMEM);
             av_samples_copy(s->cache[0]->extended_data,
-                            s->cache[0]->extended_data, 0,
-                            s->cache[0]->nb_samples-s->size,
+                            s->in[0]->extended_data,
+                            s->size, 0,
+                            s->in[0]->nb_samples,
+                            s->in[0]->ch_layout.nb_channels,
+                            s->in[0]->format);
+            s->samples_in_cache[0] = needed;
+        } else if (s->cache[0]->nb_samples < needed) {
+            AVFrame *old_cache = s->cache[0];
+
+            s->cache[0] = ff_get_audio_buffer(outlink, needed);
+            if (!s->cache[0]) {
+                av_frame_free(&old_cache);
+                return AVERROR(ENOMEM);
+            }
+            av_samples_copy(s->cache[0]->extended_data,
+                            old_cache->extended_data, 0,
+                            old_cache->nb_samples-s->size,
                             s->size,
                             s->cache[0]->ch_layout.nb_channels,
                             s->cache[0]->format);
@@ -130,15 +144,28 @@ static int activate(AVFilterContext *ctx)
             s->samples_in_cache[0] = needed;
         }
 
-        if (!s->cache[1] || s->cache[1]->nb_samples < needed) {
-            AVFrame *old_cache = s->cache[1];
-
+        if (!s->cache[1]) {
             s->cache[1] = ff_get_audio_buffer(outlink, needed);
             if (!s->cache[1])
                 return AVERROR(ENOMEM);
             av_samples_copy(s->cache[1]->extended_data,
-                            s->cache[1]->extended_data, 0,
-                            s->cache[1]->nb_samples-s->size,
+                            s->in[1]->extended_data,
+                            s->size, 0,
+                            s->in[1]->nb_samples,
+                            s->in[1]->ch_layout.nb_channels,
+                            s->in[1]->format);
+            s->samples_in_cache[1] = needed;
+        } else if (s->cache[1]->nb_samples < needed) {
+            AVFrame *old_cache = s->cache[1];
+
+            s->cache[1] = ff_get_audio_buffer(outlink, needed);
+            if (!s->cache[1]) {
+                av_frame_free(&old_cache);
+                return AVERROR(ENOMEM);
+            }
+            av_samples_copy(s->cache[1]->extended_data,
+                            old_cache->extended_data, 0,
+                            old_cache->nb_samples-s->size,
                             s->size,
                             s->cache[1]->ch_layout.nb_channels,
                             s->cache[1]->format);
@@ -212,10 +239,6 @@ static int config_output(AVFilterLink *outlink)
     AudioXCorrelateContext *s = ctx->priv;
     size_t state_size;
 
-    s->used = av_calloc(outlink->ch_layout.nb_channels, sizeof(*s->used));
-    if (!s->used)
-        return AVERROR(ENOMEM);
-
     if (outlink->format == AV_SAMPLE_FMT_DBLP) {
         state_size = sizeof(ChannelState_dblp);
 
@@ -245,7 +268,6 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     AudioXCorrelateContext *s = ctx->priv;
 
-    av_freep(&s->used);
     av_freep(&s->ch_state);
     av_frame_free(&s->in[0]);
     av_frame_free(&s->in[1]);
@@ -276,7 +298,7 @@ static const AVFilterPad outputs[] = {
 #define OFFSET(x) offsetof(AudioXCorrelateContext, x)
 
 static const AVOption axcorrelate_options[] = {
-    { "size", "set the segment size", OFFSET(size), AV_OPT_TYPE_INT, {.i64=256}, 2, 131072, AF },
+    { "size", "set the segment size", OFFSET(size), AV_OPT_TYPE_INT, {.i64=256}, 2, MAX_SIZE, AF },
     { "algo", "set the algorithm",    OFFSET(algo), AV_OPT_TYPE_INT, {.i64=2},   0,      2, AF, .unit = "algo" },
     { "slow", "slow algorithm",   0,            AV_OPT_TYPE_CONST, {.i64=0},   0,      0, AF, .unit = "algo" },
     { "fast", "fast algorithm",   0,            AV_OPT_TYPE_CONST, {.i64=1},   0,      0, AF, .unit = "algo" },

@@ -49,35 +49,13 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 typedef struct fn(ChannelState) {
+    int used;
     ftype num_sum;
     ftype mean_sumx;
     ftype mean_sumy;
     ftype den_sumx;
     ftype den_sumy;
 } fn(ChannelState);
-
-static ftype fn(mean_sum)(const ftype *in,
-                          const int size)
-{
-    ftype mean_sum = ZERO;
-
-    for (int i = 0; i < size; i++)
-        mean_sum += in[i];
-
-    return mean_sum;
-}
-
-static ftype fn(square_sum)(const ftype *x,
-                        const ftype *y,
-                        const int size)
-{
-    ftype square_sum = ZERO;
-
-    for (int i = 0; i < size; i++)
-        square_sum += x[i] * y[i];
-
-    return square_sum;
-}
 
 static ftype fn(xcorrelate)(const ftype *x,
                             const ftype *y,
@@ -112,15 +90,11 @@ static void fn(xcorrelate_slow)(AVFilterContext *ctx,
     fn(ChannelState) *state = &ch_state[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
     const int size = s->size;
+    int used = state->used;
     ftype sumx, sumy;
 
-    if (!s->used[ch]) {
-        sumx = fn(mean_sum)(x, size);
-        sumy = fn(mean_sum)(y, size);
-    } else {
-        sumx = state->mean_sumx;
-        sumy = state->mean_sumy;
-    }
+    sumx = state->mean_sumx;
+    sumy = state->mean_sumy;
 
     for (int n = 0; n < out->nb_samples; n++) {
         const int idx = n + size;
@@ -131,14 +105,16 @@ static void fn(xcorrelate_slow)(AVFilterContext *ctx,
         dst[n] = fn(xcorrelate)(x + n, y + n,
                                 sumx, sumy, size);
 
-        sumx -= x[n];
-        sumy -= y[n];
+        used++;
+        if (used >= size) {
+            sumx -= x[n];
+            sumy -= y[n];
+        }
     }
 
     state->mean_sumx = sumx;
     state->mean_sumy = sumy;
-
-    s->used[ch] = 1;
+    state->used = FFMIN(used, size);
 }
 
 static void fn(xcorrelate_fast)(AVFilterContext *ctx,
@@ -152,16 +128,11 @@ static void fn(xcorrelate_fast)(AVFilterContext *ctx,
     ftype *dst = (ftype *)out->extended_data[ch];
     ftype num_sum, den_sumx, den_sumy;
     const int size = s->size;
+    int used = state->used;
 
-    if (!s->used[ch]) {
-        num_sum  = fn(square_sum)(x, y, size);
-        den_sumx = fn(square_sum)(x, x, size);
-        den_sumy = fn(square_sum)(y, y, size);
-    } else {
-        num_sum = state->num_sum;
-        den_sumx = state->den_sumx;
-        den_sumy = state->den_sumy;
-    }
+    num_sum = state->num_sum;
+    den_sumx = state->den_sumx;
+    den_sumy = state->den_sumy;
 
     for (int n = 0; n < out->nb_samples; n++) {
         const int idx = n + size;
@@ -181,19 +152,21 @@ static void fn(xcorrelate_fast)(AVFilterContext *ctx,
 
         dst[n] = CLIP(num / den, -ONE, ONE);
 
-        num_sum  -= xn * yn;
-        den_sumx -= xn * xn;
-        den_sumy -= yn * yn;
+        used++;
+        if (used >= size) {
+            num_sum  -= xn * yn;
+            den_sumx -= xn * xn;
+            den_sumy -= yn * yn;
 
-        den_sumx  = FFMAX(den_sumx, ZERO);
-        den_sumy  = FFMAX(den_sumy, ZERO);
+            den_sumx  = FFMAX(den_sumx, ZERO);
+            den_sumy  = FFMAX(den_sumy, ZERO);
+        }
     }
 
     state->num_sum = num_sum;
     state->den_sumx = den_sumx;
     state->den_sumy = den_sumy;
-
-    s->used[ch] = 1;
+    state->used = FFMIN(used, size);
 }
 
 static void fn(xcorrelate_best)(AVFilterContext *ctx, AVFrame *out,
@@ -207,20 +180,13 @@ static void fn(xcorrelate_best)(AVFilterContext *ctx, AVFrame *out,
     ftype *dst = (ftype *)out->extended_data[ch];
     ftype mean_sumx, mean_sumy, num_sum, den_sumx, den_sumy;
     const int size = s->size;
+    int used = state->used;
 
-    if (!s->used[ch]) {
-        num_sum  = fn(square_sum)(x, y, size);
-        den_sumx = fn(square_sum)(x, x, size);
-        den_sumy = fn(square_sum)(y, y, size);
-        mean_sumx = fn(mean_sum)(x, size);
-        mean_sumy = fn(mean_sum)(y, size);
-    } else {
-        num_sum = state->num_sum;
-        den_sumx = state->den_sumx;
-        den_sumy = state->den_sumy;
-        mean_sumx = state->mean_sumx;
-        mean_sumy = state->mean_sumy;
-    }
+    num_sum = state->num_sum;
+    den_sumx = state->den_sumx;
+    den_sumy = state->den_sumy;
+    mean_sumx = state->mean_sumx;
+    mean_sumy = state->mean_sumy;
 
     for (int n = 0; n < out->nb_samples; n++) {
         const int idx = n + size;
@@ -243,14 +209,17 @@ static void fn(xcorrelate_best)(AVFilterContext *ctx, AVFrame *out,
 
         dst[n] = CLIP(num / den, -ONE, ONE);
 
-        num_sum  -= xn * yn;
-        mean_sumx-= xn;
-        mean_sumy-= yn;
-        den_sumx -= xn * xn;
-        den_sumy -= yn * yn;
+        used++;
+        if (used >= size) {
+            num_sum  -= xn * yn;
+            mean_sumx-= xn;
+            mean_sumy-= yn;
+            den_sumx -= xn * xn;
+            den_sumy -= yn * yn;
 
-        den_sumx  = FMAX(den_sumx, ZERO);
-        den_sumy  = FMAX(den_sumy, ZERO);
+            den_sumx  = FMAX(den_sumx, ZERO);
+            den_sumy  = FMAX(den_sumy, ZERO);
+        }
     }
 
     state->num_sum = num_sum;
@@ -258,6 +227,5 @@ static void fn(xcorrelate_best)(AVFilterContext *ctx, AVFrame *out,
     state->den_sumy = den_sumy;
     state->mean_sumx = mean_sumx;
     state->mean_sumy = mean_sumy;
-
-    s->used[ch] = 1;
+    state->used = FFMIN(used, size);
 }
