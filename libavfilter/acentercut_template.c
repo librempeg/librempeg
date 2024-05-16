@@ -104,12 +104,12 @@ static void fn(center_cut)(ctype *left, ctype *right, const int N, const ftype f
         const ftype l_im = left[i].im;
         const ftype r_re = right[i].re;
         const ftype r_im = right[i].im;
-        const ftype sum_re = F(0.5) * (l_re + r_re);
-        const ftype sum_im = F(0.5) * (l_im + r_im);
-        const ftype diff_re = F(0.5) * (l_re - r_re);
-        const ftype diff_im = F(0.5) * (l_im - r_im);
-        const ftype a = (F(1.0) - SQRT((fn(sqr)(diff_re) + fn(sqr)(diff_im)) /
-                                       (fn(sqr)(sum_re) + fn(sqr)(sum_im) + EPSILON))) * factor;
+        const ftype sum_re = l_re + r_re;
+        const ftype sum_im = l_im + r_im;
+        const ftype diff_re = l_re - r_re;
+        const ftype diff_im = l_im - r_im;
+        const ftype a = F(0.5) * (F(1.0) - SQRT((fn(sqr)(diff_re) + fn(sqr)(diff_im)) /
+                                                (fn(sqr)(sum_re) + fn(sqr)(sum_im) + EPSILON))) * factor;
         ftype c_im, c_re;
 
         c_re = a * sum_re;
