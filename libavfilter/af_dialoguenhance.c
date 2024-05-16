@@ -39,8 +39,6 @@ typedef struct AudioDialogueEnhancementContext {
     int overlap;
 
     void *window;
-    float *window_float;
-    double *window_double;
     float prev_vad_float;
     double prev_vad_double;
 

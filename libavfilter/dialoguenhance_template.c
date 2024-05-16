@@ -28,9 +28,6 @@
 #undef HYPOT
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
-#undef ONE
-#undef ZERO
-#undef HALF
 #undef SIN
 #undef CLIP
 #undef EPSILON
@@ -41,9 +38,6 @@
 #define ctype AVComplexFloat
 #define ftype float
 #define TX_TYPE AV_TX_FLOAT_RDFT
-#define ONE 1.f
-#define ZERO 0.f
-#define HALF 0.5f
 #define SIN sinf
 #define CLIP av_clipf
 #define EPSILON FLT_EPSILON
@@ -54,13 +48,12 @@
 #define ctype AVComplexDouble
 #define ftype double
 #define TX_TYPE AV_TX_DOUBLE_RDFT
-#define ONE 1.0
-#define ZERO 0.0
-#define HALF 0.5
 #define SIN sin
 #define CLIP av_clipd
 #define EPSILON DBL_EPSILON
 #endif
+
+#define F(x) ((ftype)(x))
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
@@ -69,15 +62,16 @@
 static int fn(de_tx_init)(AVFilterContext *ctx)
 {
     AudioDialogueEnhanceContext *s = ctx->priv;
-    ftype scale = ONE, iscale = ONE / (s->fft_size * 2.f * 1.5f);
+    ftype scale = F(1.0), iscale = F(1.0) / (s->fft_size * F(2.0 * 1.5));
+    ftype *window;
     int ret;
 
-    s->window = av_calloc(s->fft_size, sizeof(ftype));
+    s->window = av_calloc(s->fft_size, sizeof(*window));
     if (!s->window)
         return AVERROR(ENOMEM);
-    fn(s->window) = s->window;
+    window = s->window;
     for (int n = 0; n < s->fft_size; n++)
-        fn(s->window)[n] = SIN(M_PI*n/(s->fft_size-1));
+        window[n] = SIN(M_PI*n/(s->fft_size-1));
 
     ret = av_tx_init(&s->tx_ctx[0], &s->tx_fn, TX_TYPE, 0, s->fft_size * 2, &scale, 0);
     if (ret < 0)
@@ -97,7 +91,7 @@ static int fn(de_tx_init)(AVFilterContext *ctx)
 static void fn(apply_window)(AudioDialogueEnhanceContext *s,
                              const ftype *in_frame, ftype *out_frame, const int add_to_out_frame)
 {
-    const ftype *window = fn(s->window);
+    const ftype *window = s->window;
     const int fft_size = s->fft_size;
 
     if (add_to_out_frame) {
@@ -122,7 +116,7 @@ static void fn(get_centere)(ctype *left, ctype *right,
         const ftype l_im = left[i].im;
         const ftype r_re = right[i].re;
         const ftype r_im = right[i].im;
-        const ftype a = HALF * (ONE - SQRT((fn(sqr)(l_re - r_re) + fn(sqr)(l_im - r_im))/
+        const ftype a = F(0.5) * (F(1.0) - SQRT((fn(sqr)(l_re - r_re) + fn(sqr)(l_im - r_im))/
                                            (fn(sqr)(l_re + r_re) + fn(sqr)(l_im + r_im) + EPSILON)));
 
         center[i].re = a * (l_re + r_re);
@@ -134,7 +128,7 @@ static ftype fn(flux)(ftype *curf, ftype *prevf, int N)
 {
     ctype *cur  = (ctype *)curf;
     ctype *prev = (ctype *)prevf;
-    ftype sum = ZERO;
+    ftype sum = F(0.0);
 
     for (int i = 0; i < N; i++) {
         ftype c_re = cur[i].re;
@@ -156,7 +150,7 @@ static ftype fn(fluxlr)(ftype *lf, ftype *lpf,
     ctype *lp = (ctype *)lpf;
     ctype *r  = (ctype *)rf;
     ctype *rp = (ctype *)rpf;
-    ftype sum = ZERO;
+    ftype sum = F(0.0);
 
     for (int i = 0; i < N; i++) {
         ftype c_re = l[i].re - r[i].re;
@@ -172,9 +166,9 @@ static ftype fn(fluxlr)(ftype *lf, ftype *lpf,
 
 static ftype fn(calc_vad)(ftype fc, ftype flr, ftype a)
 {
-    const ftype vad = a * (fc / (fc + flr) - HALF);
+    const ftype vad = a * (fc / (fc + flr) - F(0.5));
 
-    return CLIP(vad, ZERO, ONE);
+    return CLIP(vad, F(0.0), F(1.0));
 }
 
 static void fn(get_final)(ftype *c, ftype *l,
