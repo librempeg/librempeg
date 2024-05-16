@@ -26,8 +26,6 @@
 #undef SQRT
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
-#undef ONE
-#undef HALF
 #undef SIN
 #undef EPSILON
 #if DEPTH == 32
@@ -36,8 +34,6 @@
 #define ctype AVComplexFloat
 #define ftype float
 #define TX_TYPE AV_TX_FLOAT_RDFT
-#define ONE 1.f
-#define HALF 0.5f
 #define SIN sinf
 #define EPSILON FLT_EPSILON
 #else
@@ -46,11 +42,11 @@
 #define ctype AVComplexDouble
 #define ftype double
 #define TX_TYPE AV_TX_DOUBLE_RDFT
-#define ONE 1.0
-#define HALF 0.5
 #define SIN sin
 #define EPSILON DBL_EPSILON
 #endif
+
+#define F(x) ((ftype)(x))
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
@@ -59,15 +55,16 @@
 static int fn(cc_tx_init)(AVFilterContext *ctx)
 {
     AudioCenterCutContext *s = ctx->priv;
-    ftype scale = ONE, iscale = ONE / (s->fft_size * 2.f * 1.5f);
+    ftype scale = F(1.0), iscale = F(1.0) / (s->fft_size * F(2.0 * 1.5));
+    ftype *window;
     int ret;
 
-    s->window = av_calloc(s->fft_size, sizeof(ftype));
+    s->window = av_calloc(s->fft_size, sizeof(*window));
     if (!s->window)
         return AVERROR(ENOMEM);
-    fn(s->window) = s->window;
+    window = s->window;
     for (int n = 0; n < s->fft_size; n++)
-        fn(s->window)[n] = SIN(M_PI*n/(s->fft_size-1));
+        window[n] = SIN(M_PI*n/(s->fft_size-1));
 
     ret = av_tx_init(&s->tx_ctx, &s->tx_fn, TX_TYPE, 0, s->fft_size * 2, &scale, 0);
     if (ret < 0)
@@ -83,7 +80,7 @@ static int fn(cc_tx_init)(AVFilterContext *ctx)
 static void fn(apply_window)(AudioCenterCutContext *s,
                              const ftype *in_frame, ftype *out_frame, const int add_to_out_frame)
 {
-    const ftype *window = fn(s->window);
+    const ftype *window = s->window;
     const int fft_size = s->fft_size;
 
     if (add_to_out_frame) {
@@ -107,12 +104,12 @@ static void fn(center_cut)(ctype *left, ctype *right, const int N, const ftype f
         const ftype l_im = left[i].im;
         const ftype r_re = right[i].re;
         const ftype r_im = right[i].im;
-        const ftype sum_re = HALF * (l_re + r_re);
-        const ftype sum_im = HALF * (l_im + r_im);
-        const ftype diff_re = HALF * (l_re - r_re);
-        const ftype diff_im = HALF * (l_im - r_im);
-        const ftype a = (ONE - SQRT((fn(sqr)(diff_re) + fn(sqr)(diff_im))/
-                                    (fn(sqr)(sum_re) + fn(sqr)(sum_im) + EPSILON))) * factor;
+        const ftype sum_re = F(0.5) * (l_re + r_re);
+        const ftype sum_im = F(0.5) * (l_im + r_im);
+        const ftype diff_re = F(0.5) * (l_re - r_re);
+        const ftype diff_im = F(0.5) * (l_im - r_im);
+        const ftype a = (F(1.0) - SQRT((fn(sqr)(diff_re) + fn(sqr)(diff_im)) /
+                                       (fn(sqr)(sum_re) + fn(sqr)(sum_im) + EPSILON))) * factor;
         ftype c_im, c_re;
 
         c_re = a * sum_re;

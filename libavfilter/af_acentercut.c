@@ -39,8 +39,6 @@ typedef struct AudioCenterCutContext {
     int overlap;
 
     void *window;
-    float *window_float;
-    double *window_double;
 
     AVFrame *in;
     AVFrame *in_frame;
