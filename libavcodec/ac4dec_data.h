@@ -22,6 +22,7 @@
 #define AVCODEC_AC4DEC_DATA_H
 
 #include <stdint.h>
+#include <libavutil/mem.h>
 
 static const uint8_t aspx_hcb_env_level_15_f0_bits[71] = {
      7,  9,  9,  9,  9,  8,  8,  7,  7,  7,  7,  7,  6,  6,  6,  6,
@@ -1260,7 +1261,7 @@ static const uint32_t acpl_hcb_gamma_fine_dt_codes[81] = {
     0x031e10,
 };
 
-static const float qwin[640] = {
+DECLARE_ASM_CONST(16, float, qwin)[640] = {
     0,
     1.990318758627504e-004,  2.494762615491542e-004,  3.021769445225078e-004,
     3.548460080857985e-004,  4.058915811480806e-004,  4.546408052001889e-004,
@@ -1661,4 +1662,4 @@ static const float aspx_noise[512][2] = {
     { 0.998266, 0.0588631}, {-0.145619, 0.989341}
 };
 
-#endif /* AVCODEC_AC4DECDATA_H */
+#endif /* AVCODEC_AC4DEC_DATA_H */
