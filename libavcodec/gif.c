@@ -371,7 +371,7 @@ static int gif_image_write_image(AVCodecContext *avctx,
     bytestream_put_byte(bytestream, 0x04); /* block size */
     bytestream_put_byte(bytestream, disposal<<2 | (bcid >= 0));
     bytestream_put_le16(bytestream, 5); // default delay
-    bytestream_put_byte(bytestream, bcid < 0 ? DEFAULT_TRANSPARENCY_INDEX : (shrunk_palette_count ? map[bcid] : bcid));
+    bytestream_put_byte(bytestream, bcid < 0 ? DEFAULT_TRANSPARENCY_INDEX : bcid);
     bytestream_put_byte(bytestream, 0x00);
 
     /* image block */
