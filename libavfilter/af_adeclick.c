@@ -27,6 +27,8 @@
 #include "filters.h"
 #include "internal.h"
 
+static const char *filter_modes[] = {"clicks", "clips", "surges" };
+
 typedef struct DeclickChannel {
     double *auxiliary;
     double *detection;
@@ -57,8 +59,9 @@ typedef struct AudioDeclickContext {
     int method;
     int nb_hbins;
 
-    int is_declip;
+    int mode;
     int ar_order;
+    int nb_surge_samples;
     int nb_burst_samples;
     int window_size;
     int hop_size;
@@ -523,6 +526,46 @@ static int detect_clicks(AudioDeclickContext *s, DeclickChannel *c,
     return nb_clicks;
 }
 
+static int detect_surges(AudioDeclickContext *s, DeclickChannel *c,
+                         double sigmae,
+                         double *detection, double *acoefficients,
+                         uint8_t *surge, int *index,
+                         const double *src, double *dst)
+{
+    const double threshold = s->threshold;
+    const int size = s->nb_surge_samples * 2;
+    int i, j, nb_surges = 0;
+
+    memset(detection, 0, s->window_size * sizeof(*detection));
+
+    for (i = s->ar_order; i < s->window_size; i++) {
+        for (j = 0; j <= s->ar_order; j++) {
+            detection[i] += acoefficients[j] * src[i - j];
+        }
+    }
+
+    for (i = 0; i < s->window_size; i++) {
+        surge[i] = fabs(detection[i]) > sigmae * threshold;
+        dst[i] = src[i];
+    }
+
+    for (i = 0; i < s->window_size;) {
+        if (!surge[i++])
+            continue;
+        memset(surge + FFMAX(i - size/2, 0), 1, FFMIN(size, s->window_size - i));
+        i += size/2;
+    }
+
+    memset(surge, 0, s->ar_order * sizeof(*surge));
+    memset(surge + (s->window_size - s->ar_order), 0, s->ar_order * sizeof(*surge));
+
+    for (i = s->ar_order; i < s->window_size - s->ar_order; i++)
+        if (surge[i])
+            index[nb_surges++] = i;
+
+    return nb_surges;
+}
+
 typedef struct ThreadData {
     AVFrame *out;
 } ThreadData;
@@ -716,10 +759,14 @@ static av_cold int init(AVFilterContext *ctx)
 {
     AudioDeclickContext *s = ctx->priv;
 
-    s->is_declip = !strcmp(ctx->filter->name, "adeclip");
-    if (s->is_declip) {
+    if (!strcmp(ctx->filter->name, "adesurge")) {
+        s->mode = 2;
+        s->detector = detect_surges;
+    } else if (!strcmp(ctx->filter->name, "adeclip")) {
+        s->mode = 1;
         s->detector = detect_clips;
     } else {
+        s->mode = 0;
         s->detector = detect_clicks;
     }
 
@@ -733,7 +780,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 
     if (s->nb_samples > 0)
         av_log(ctx, AV_LOG_INFO, "Detected %s in %"PRId64" of %"PRId64" samples (%g%%).\n",
-               s->is_declip ? "clips" : "clicks", s->detected_errors,
+               filter_modes[s->mode], s->detected_errors,
                s->nb_samples, 100. * s->detected_errors / s->nb_samples);
 
     av_audio_fifo_free(s->fifo);
@@ -820,6 +867,42 @@ const AVFilter ff_af_adeclip = {
     .description   = NULL_IF_CONFIG_SMALL("Remove clipping from input audio."),
     .priv_size     = sizeof(AudioDeclickContext),
     .priv_class    = &adeclip_class,
+    .init          = init,
+    .activate      = activate,
+    .uninit        = uninit,
+    FILTER_INPUTS(inputs),
+    FILTER_OUTPUTS(ff_audio_default_filterpad),
+    FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
+    .flags         = AVFILTER_FLAG_SLICE_THREADS | AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+};
+
+static const AVOption adesurge_options[] = {
+    { "window", "set window size",     OFFSET(w),         AV_OPT_TYPE_DOUBLE, {.dbl=85},     10,  100, AF },
+    { "w", "set window size",          OFFSET(w),         AV_OPT_TYPE_DOUBLE, {.dbl=85},     10,  100, AF },
+    { "overlap", "set window overlap", OFFSET(overlap),   AV_OPT_TYPE_DOUBLE, {.dbl=75},     50,   95, AF },
+    { "o", "set window overlap",       OFFSET(overlap),   AV_OPT_TYPE_DOUBLE, {.dbl=75},     50,   95, AF },
+    { "arorder", "set autoregression order", OFFSET(ar),  AV_OPT_TYPE_DOUBLE, {.dbl=0.5},     0,   25, AF },
+    { "a", "set autoregression order", OFFSET(ar),        AV_OPT_TYPE_DOUBLE, {.dbl=0.5},     0,   25, AF },
+    { "threshold", "set threshold",    OFFSET(threshold), AV_OPT_TYPE_DOUBLE, {.dbl=20},      1,  100, AF },
+    { "t", "set threshold",            OFFSET(threshold), AV_OPT_TYPE_DOUBLE, {.dbl=20},      1,  100, AF },
+    { "surges", "set surge size",      OFFSET(nb_surge_samples), AV_OPT_TYPE_INT, {.i64=5},   1,   50, AF },
+    { "s", "set surge size",           OFFSET(nb_surge_samples), AV_OPT_TYPE_INT, {.i64=5},   1,   50, AF },
+    { "method", "set overlap method",  OFFSET(method),    AV_OPT_TYPE_INT,    {.i64=1},       0,    1, AF, "m" },
+    { "m", "set overlap method",       OFFSET(method),    AV_OPT_TYPE_INT,    {.i64=1},       0,    1, AF, "m" },
+    { "add", "overlap-add",            0,                 AV_OPT_TYPE_CONST,  {.i64=0},       0,    0, AF, "m" },
+    { "a", "overlap-add",              0,                 AV_OPT_TYPE_CONST,  {.i64=0},       0,    0, AF, "m" },
+    { "save", "overlap-save",          0,                 AV_OPT_TYPE_CONST,  {.i64=1},       0,    0, AF, "m" },
+    { "s", "overlap-save",             0,                 AV_OPT_TYPE_CONST,  {.i64=1},       0,    0, AF, "m" },
+    { NULL }
+};
+
+AVFILTER_DEFINE_CLASS(adesurge);
+
+const AVFilter ff_af_adesurge = {
+    .name          = "adesurge",
+    .description   = NULL_IF_CONFIG_SMALL("Remove surges from input audio."),
+    .priv_size     = sizeof(AudioDeclickContext),
+    .priv_class    = &adesurge_class,
     .init          = init,
     .activate      = activate,
     .uninit        = uninit,

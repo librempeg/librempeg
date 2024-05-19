@@ -995,6 +995,57 @@ Compute derivative/integral of audio stream.
 
 Applying both filters one after another produces original audio.
 
+@section adesurge
+Remove big surge in audio samples from input audio.
+
+Samples detected as instant increase or decrease of volume are replaced by
+interpolated samples using autoregressive modelling.
+
+@table @option
+@item window, w
+Set window size, in milliseconds. Allowed range is from @code{10} to
+@code{100}. Default value is @code{85} milliseconds.
+This sets size of window which will be processed at once.
+
+@item overlap, o
+Set window overlap, in percentage of window size. Allowed range is from
+@code{50} to @code{95}. Default value is @code{75} percent.
+Setting this to a very high value may increases surges removal but makes
+whole process much slower.
+
+@item arorder, a
+Set autoregression order, in percentage of window size. Allowed range is from
+@code{0} to @code{25}. Default value is @code{0.5} percent. This option also
+controls quality of interpolated samples using neighbour good samples.
+
+@item threshold, t
+Set threshold value. Allowed range is from @code{1} to @code{100}.
+Default value is @code{20}.
+This controls the strength of surges which is going to be removed.
+The lower value, the more samples will be detected as surges.
+
+@item surges, s
+Set surges size, in number of samples. Allowed range is @code{1} to
+@code{50}. Default value is @code{5}.
+For any sample detected as surge then also its surrounding samples of this size
+will be interpolated also.
+
+@item method, m
+Set overlap method.
+
+It accepts the following values:
+@table @option
+@item add, a
+Select overlap-add method. Even not interpolated samples are slightly
+changed with this method.
+
+@item save, s
+Select overlap-save method. Not interpolated samples remain unchanged.
+@end table
+
+Default value is @code{s}.
+@end table
+
 @section adrc
 
 Apply spectral dynamic range controller filter to input audio stream.
