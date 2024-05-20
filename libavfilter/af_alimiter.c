@@ -105,6 +105,7 @@ static int filter_frame(AVFilterLink *outlink)
         av_frame_free(&s->in);
     s->in = NULL;
     av_frame_free(&s->sc);
+    out->pts -= av_rescale_q(s->l_size, av_make_q(1, outlink->sample_rate), outlink->time_base);
     return ff_filter_frame(outlink, out);
 }
 
