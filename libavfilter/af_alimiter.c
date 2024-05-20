@@ -164,6 +164,8 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *outlink = ctx->outputs[0];
     AVFilterLink *inlink = ctx->inputs[0];
     AudioLimiterContext *s = ctx->priv;
+    int64_t eof_pts;
+    int status;
 
     FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
 
@@ -193,7 +195,19 @@ static int activate(AVFilterContext *ctx)
         return filter_frame(outlink);
     }
 
-    FF_FILTER_FORWARD_STATUS(inlink, outlink);
+    if (ff_inlink_acknowledge_status(inlink, &status, &eof_pts)) {
+        if (status == AVERROR_EOF) {
+            s->in = ff_get_audio_buffer(outlink, s->l_size);
+            if (!s->in)
+                return AVERROR(ENOMEM);
+
+            s->in->pts = eof_pts;
+            ff_outlink_set_status(outlink, status, eof_pts);
+
+            return filter_frame(outlink);
+        }
+    }
+
     FF_FILTER_FORWARD_WANTED(outlink, inlink);
 
     return FFERROR_NOT_READY;
