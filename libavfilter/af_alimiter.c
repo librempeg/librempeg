@@ -47,6 +47,8 @@ typedef struct AudioLimiterContext {
     int nb_channels;
 
     int l_size;
+    int eof;
+    int64_t eof_pts;
 
     void *st;
 
@@ -80,6 +82,7 @@ static int filter_frame(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     AudioLimiterContext *s = ctx->priv;
     AVFrame *out;
+    int ret;
 
     if (av_frame_is_writable(s->in)) {
         out = s->in;
@@ -106,7 +109,10 @@ static int filter_frame(AVFilterLink *outlink)
     s->in = NULL;
     av_frame_free(&s->sc);
     out->pts -= av_rescale_q(s->l_size, av_make_q(1, outlink->sample_rate), outlink->time_base);
-    return ff_filter_frame(outlink, out);
+    ret = ff_filter_frame(outlink, out);
+    if (s->eof)
+        ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_pts);
+    return ret;
 }
 
 #define DEPTH 32
@@ -164,7 +170,6 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *outlink = ctx->outputs[0];
     AVFilterLink *inlink = ctx->inputs[0];
     AudioLimiterContext *s = ctx->priv;
-    int64_t eof_pts;
     int status;
 
     FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
@@ -173,6 +178,15 @@ static int activate(AVFilterContext *ctx)
         int ret = ff_inlink_consume_frame(inlink, &s->in);
         if (ret < 0)
             return ret;
+
+        if (s->eof && ret == 0) {
+            s->in = ff_get_audio_buffer(outlink, s->l_size);
+            if (!s->in)
+                return AVERROR(ENOMEM);
+
+            s->in->pts = s->eof_pts;
+            s->in->pts += av_rescale_q(s->l_size, av_make_q(1, inlink->sample_rate), inlink->time_base);
+        }
     }
 
     if (s->in) {
@@ -195,16 +209,11 @@ static int activate(AVFilterContext *ctx)
         return filter_frame(outlink);
     }
 
-    if (ff_inlink_acknowledge_status(inlink, &status, &eof_pts)) {
+    if (ff_inlink_acknowledge_status(inlink, &status, &s->eof_pts)) {
         if (status == AVERROR_EOF) {
-            s->in = ff_get_audio_buffer(outlink, s->l_size);
-            if (!s->in)
-                return AVERROR(ENOMEM);
-
-            s->in->pts = eof_pts;
-            ff_outlink_set_status(outlink, status, eof_pts);
-
-            return filter_frame(outlink);
+            s->eof = 1;
+            ff_filter_set_ready(ctx, 100);
+            return 0;
         }
     }
 
