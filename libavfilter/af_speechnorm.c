@@ -234,21 +234,21 @@ static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  
     int state = cc->state;                                                      \
     int n = 0;                                                                  \
                                                                                 \
-    if (state < 0)                                                              \
-        state = src[0] >= zero;                                                 \
+    if (state == -2)                                                            \
+        state = FFDIFFSIGN(src[0], zero);                                       \
                                                                                 \
     while (n < nb_samples) {                                                    \
         ptype new_max_peak;                                                     \
         ptype new_rms_sum;                                                      \
         int new_size;                                                           \
                                                                                 \
-        if ((state != (src[n] >= zero)) ||                                      \
+        if ((state != FFDIFFSIGN(src[n], zero)) ||                              \
             (pi[pi_end].size > max_period)) {                                   \
             ptype max_peak = pi[pi_end].max_peak;                               \
             ptype rms_sum = pi[pi_end].rms_sum;                                 \
             int old_state = state;                                              \
                                                                                 \
-            state = src[n] >= zero;                                             \
+            state = FFDIFFSIGN(src[n], zero);                                   \
             av_assert1(pi[pi_end].size > 0);                                    \
             if (max_peak >= min_peak ||                                         \
                 pi[pi_end].size > max_period) {                                 \
@@ -273,8 +273,8 @@ static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  
         new_max_peak = pi[pi_end].max_peak;                                     \
         new_rms_sum = pi[pi_end].rms_sum;                                       \
         new_size = pi[pi_end].size;                                             \
-        if (state) {                                                            \
-            while (src[n] >= zero) {                                            \
+        if (state > zero) {                                                     \
+            while (src[n] > zero) {                                             \
                 new_max_peak = FFMAX(new_max_peak,  src[n]);                    \
                 new_rms_sum += src[n] * src[n];                                 \
                 new_size++;                                                     \
@@ -282,10 +282,18 @@ static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  
                 if (n >= nb_samples)                                            \
                     break;                                                      \
             }                                                                   \
-        } else {                                                                \
+        } else if (state < zero) {                                              \
             while (src[n] < zero) {                                             \
                 new_max_peak = FFMAX(new_max_peak, -src[n]);                    \
                 new_rms_sum += src[n] * src[n];                                 \
+                new_size++;                                                     \
+                n++;                                                            \
+                if (n >= nb_samples)                                            \
+                    break;                                                      \
+            }                                                                   \
+        } else {                                                                \
+            while (src[n] == zero) {                                            \
+                new_max_peak = zero;                                            \
                 new_size++;                                                     \
                 n++;                                                            \
                 if (n >= nb_samples)                                            \
@@ -533,7 +541,7 @@ static int config_input(AVFilterLink *inlink)
     for (int ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
         ChannelContext *cc = &s->cc[ch];
 
-        cc->state = -1;
+        cc->state = -2;
         cc->gain_state = s->max_expansion;
     }
 
