@@ -161,7 +161,8 @@ static double next_gain(AVFilterContext *ctx, double pi_max_peak, int bypass, do
     SpeechNormalizerContext *s = ctx->priv;
     const double compression = 1. / s->max_compression;
     const int type = s->invert ? pi_max_peak <= s->threshold_value : pi_max_peak >= s->threshold_value;
-    double expansion = FFMIN(s->max_expansion, s->peak_value / pi_max_peak);
+    const double ratio = s->peak_value / pi_max_peak;
+    double expansion = FFMIN(s->max_expansion, ratio);
 
     if (s->rms_value > DBL_EPSILON)
         expansion = FFMIN(expansion, s->rms_value / sqrt(pi_rms_sum / pi_size));
@@ -169,6 +170,8 @@ static double next_gain(AVFilterContext *ctx, double pi_max_peak, int bypass, do
     if (bypass) {
         return 1.;
     } else if (type) {
+        if (ratio > 1.0 && state < 1.0 && s->raise_amount == 0.0)
+            state = 1.0;
         return FFMIN(expansion, state + s->raise_amount);
     } else {
         return FFMIN(expansion, FFMAX(compression, state - s->fall_amount));
