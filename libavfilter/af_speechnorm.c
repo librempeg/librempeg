@@ -29,11 +29,9 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/channel_layout.h"
+#include "libavutil/fifo.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
-
-#define FF_BUFQUEUE_SIZE (1024)
-#include "bufferqueue.h"
 
 #include "audio.h"
 #include "avfilter.h"
@@ -81,11 +79,10 @@ typedef struct SpeechNormalizerContext {
     ChannelContext *cc;
     double prev_gain;
 
-    int max_period;
     int eof;
     int64_t pts;
 
-    struct FFBufQueue queue;
+    AVFifo *fifo;
 
     void (*analyze_channel)(AVFilterContext *ctx, ChannelContext *cc,
                             const uint8_t *srcp, int nb_samples);
@@ -229,9 +226,7 @@ static double min_gain(AVFilterContext *ctx, ChannelContext *cc, int max_size)
 static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  \
                                      const uint8_t *srcp, int nb_samples)       \
 {                                                                               \
-    SpeechNormalizerContext *s = ctx->priv;                                     \
     const ptype *src = (const ptype *)srcp;                                     \
-    const int max_period = s->max_period;                                       \
     PeriodItem *pi = (PeriodItem *)&cc->pi;                                     \
     int pi_end = cc->pi_end;                                                    \
     int state = cc->state;                                                      \
@@ -245,16 +240,14 @@ static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  
         ptype new_rms_sum;                                                      \
         int new_size;                                                           \
                                                                                 \
-        if ((state != FFDIFFSIGN(src[n], zero)) ||                              \
-            (pi[pi_end].size > max_period)) {                                   \
+        if ((state != FFDIFFSIGN(src[n], zero))) {                              \
             ptype max_peak = pi[pi_end].max_peak;                               \
             ptype rms_sum = pi[pi_end].rms_sum;                                 \
             int old_state = state;                                              \
                                                                                 \
             state = FFDIFFSIGN(src[n], zero);                                   \
             av_assert1(pi[pi_end].size > 0);                                    \
-            if (max_peak >= min_peak ||                                         \
-                pi[pi_end].size > max_period) {                                 \
+            if (max_peak >= min_peak) {                                         \
                 pi[pi_end].type = 1;                                            \
                 cc->acc += pi[pi_end].size;                                     \
                 pi_end++;                                                       \
@@ -426,11 +419,11 @@ static int filter_frame(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     int ret;
 
-    while (s->queue.available > 0) {
+    while (av_fifo_can_read(s->fifo) > 0) {
         int min_pi_nb_samples;
-        AVFrame *in, *out;
+        AVFrame *in = NULL, *out;
 
-        in = ff_bufqueue_peek(&s->queue, 0);
+        av_fifo_peek(s->fifo, &in, 1, 0);
         if (!in)
             break;
 
@@ -438,7 +431,9 @@ static int filter_frame(AVFilterContext *ctx)
         if (min_pi_nb_samples < in->nb_samples && !s->eof)
             break;
 
-        in = ff_bufqueue_get(&s->queue);
+        av_fifo_read(s->fifo, &in, 1);
+        if (!in)
+            break;
 
         if (av_frame_is_writable(in)) {
             out = in;
@@ -470,7 +465,7 @@ static int filter_frame(AVFilterContext *ctx)
         if (ret == 0)
             break;
 
-        ff_bufqueue_add(ctx, &s->queue, in);
+        av_fifo_write(s->fifo, &in, 1);
 
         for (int ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
             ChannelContext *cc = &s->cc[ch];
@@ -509,15 +504,16 @@ static int activate(AVFilterContext *ctx)
     }
 
     if (s->eof && ff_inlink_queued_samples(inlink) == 0 &&
-        s->queue.available == 0) {
+        av_fifo_can_read(s->fifo) == 0) {
         ff_outlink_set_status(outlink, AVERROR_EOF, s->pts);
         return 0;
     }
 
-    if (s->queue.available > 0) {
-        AVFrame *in = ff_bufqueue_peek(&s->queue, 0);
+    if (av_fifo_can_read(s->fifo) > 0) {
         const int nb_samples = available_samples(ctx);
+        AVFrame *in;
 
+        av_fifo_peek(s->fifo, &in, 1, 0);
         if (nb_samples >= in->nb_samples || s->eof) {
             ff_filter_set_ready(ctx, 10);
             return 0;
@@ -533,8 +529,6 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     SpeechNormalizerContext *s = ctx->priv;
-
-    s->max_period = inlink->sample_rate / 10;
 
     s->prev_gain = 1.;
     s->cc = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->cc));
@@ -563,6 +557,10 @@ static int config_input(AVFilterLink *inlink)
         av_assert1(0);
     }
 
+    s->fifo = av_fifo_alloc2(1024, sizeof(AVFrame *), AV_FIFO_FLAG_AUTO_GROW);
+    if (!s->fifo)
+        return AVERROR(ENOMEM);
+
     return 0;
 }
 
@@ -586,7 +584,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     SpeechNormalizerContext *s = ctx->priv;
 
-    ff_bufqueue_discard_all(&s->queue);
+    av_fifo_freep2(&s->fifo);
     av_channel_layout_uninit(&s->ch_layout);
     av_freep(&s->cc);
 }
