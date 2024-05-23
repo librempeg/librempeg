@@ -222,6 +222,8 @@ static double min_gain(AVFilterContext *ctx, ChannelContext *cc, int max_size)
     return min_gain;
 }
 
+#define DIFFSIGN(x,y) (((x)>(y)) - ((x)<-(y)))
+
 #define ANALYZE_CHANNEL(name, ptype, zero, min_peak)                            \
 static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  \
                                      const uint8_t *srcp, int nb_samples)       \
@@ -233,21 +235,22 @@ static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  
     int n = 0;                                                                  \
                                                                                 \
     if (state == -2)                                                            \
-        state = FFDIFFSIGN(src[0], zero);                                       \
+        state = DIFFSIGN(src[0], min_peak);                                     \
                                                                                 \
     while (n < nb_samples) {                                                    \
+        int new_size, split = 0;                                                \
         ptype new_max_peak;                                                     \
         ptype new_rms_sum;                                                      \
-        int new_size;                                                           \
                                                                                 \
-        if ((state != FFDIFFSIGN(src[n], zero))) {                              \
+        split = (!state) && pi[pi_end].size >= nb_samples;                      \
+        if (state != DIFFSIGN(src[n], min_peak) || split) {                     \
             ptype max_peak = pi[pi_end].max_peak;                               \
             ptype rms_sum = pi[pi_end].rms_sum;                                 \
             int old_state = state;                                              \
                                                                                 \
-            state = FFDIFFSIGN(src[n], zero);                                   \
+            state = DIFFSIGN(src[n], min_peak);                                 \
             av_assert1(pi[pi_end].size > 0);                                    \
-            if (max_peak >= min_peak) {                                         \
+            if (max_peak >= min_peak || split) {                                \
                 pi[pi_end].type = 1;                                            \
                 cc->acc += pi[pi_end].size;                                     \
                 pi_end++;                                                       \
@@ -270,7 +273,7 @@ static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  
         new_rms_sum = pi[pi_end].rms_sum;                                       \
         new_size = pi[pi_end].size;                                             \
         if (state > zero) {                                                     \
-            while (src[n] > zero) {                                             \
+            while (src[n] > min_peak) {                                         \
                 new_max_peak = FFMAX(new_max_peak,  src[n]);                    \
                 new_rms_sum += src[n] * src[n];                                 \
                 new_size++;                                                     \
@@ -279,7 +282,7 @@ static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  
                     break;                                                      \
             }                                                                   \
         } else if (state < zero) {                                              \
-            while (src[n] < zero) {                                             \
+            while (src[n] < min_peak) {                                         \
                 new_max_peak = FFMAX(new_max_peak, -src[n]);                    \
                 new_rms_sum += src[n] * src[n];                                 \
                 new_size++;                                                     \
@@ -288,8 +291,8 @@ static void analyze_channel_## name (AVFilterContext *ctx, ChannelContext *cc,  
                     break;                                                      \
             }                                                                   \
         } else {                                                                \
-            while (src[n] == zero) {                                            \
-                new_max_peak = zero;                                            \
+            while (src[n] >= -min_peak && src[n] <= min_peak) {                 \
+                new_max_peak = min_peak;                                        \
                 new_size++;                                                     \
                 n++;                                                            \
                 if (n >= nb_samples)                                            \
