@@ -67,16 +67,10 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     CompensationDelayContext *s = ctx->priv;
-    unsigned min_size, new_size = 1;
 
     s->delay = (s->distance_m * 100. + s->distance_cm * 1. + s->distance_mm * .1) *
                COMP_DELAY_SOUND_FRONT_DELAY(s->temp) * inlink->sample_rate;
-    min_size = inlink->sample_rate * COMP_DELAY_MAX_DELAY;
-
-    while (new_size < min_size)
-        new_size <<= 1;
-
-    s->buf_size = new_size;
+    s->buf_size = 1 << av_ceil_log2(lrint(inlink->sample_rate * COMP_DELAY_MAX_DELAY));
     s->delay_frame = ff_get_audio_buffer(inlink, s->buf_size);
     if (!s->delay_frame)
         return AVERROR(ENOMEM);
