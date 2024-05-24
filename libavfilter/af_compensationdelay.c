@@ -27,13 +27,16 @@
 
 typedef struct CompensationDelayContext {
     const AVClass *class;
-    int distance_mm;
-    int distance_cm;
-    int distance_m;
+    int *distance_mm;
+    unsigned distance_mm_size;
+    int *distance_cm;
+    unsigned distance_cm_size;
+    int *distance_m;
+    unsigned distance_m_size;
     double dry, wet;
-    int temp;
+    int *temp;
+    unsigned temp_size;
 
-    unsigned delay;
     unsigned w_ptr;
     unsigned buf_size;
     AVFrame *delay_frame;
@@ -41,14 +44,20 @@ typedef struct CompensationDelayContext {
 
 #define OFFSET(x) offsetof(CompensationDelayContext, x)
 #define A (AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM)
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_mm = {.def="0",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_cm = {.def="0",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_m  = {.def="0",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_t  = {.def="20",.size_min=1,.sep=' '};
 
 static const AVOption compensationdelay_options[] = {
-    { "mm",   "set mm distance",    OFFSET(distance_mm), AV_OPT_TYPE_INT,    {.i64=0},    0,  10, A },
-    { "cm",   "set cm distance",    OFFSET(distance_cm), AV_OPT_TYPE_INT,    {.i64=0},    0, 100, A },
-    { "m",    "set meter distance", OFFSET(distance_m),  AV_OPT_TYPE_INT,    {.i64=0},    0, 100, A },
-    { "dry",  "set dry amount",     OFFSET(dry),         AV_OPT_TYPE_DOUBLE, {.dbl=0},    0,   1, A },
-    { "wet",  "set wet amount",     OFFSET(wet),         AV_OPT_TYPE_DOUBLE, {.dbl=1},    0,   1, A },
-    { "temp", "set temperature °C", OFFSET(temp),        AV_OPT_TYPE_INT,    {.i64=20}, -50,  50, A },
+    { "mm",   "set mm distance",    OFFSET(distance_mm), AV_OPT_TYPE_INT|AR, {.arr=&def_mm}, 0,  10, A },
+    { "cm",   "set cm distance",    OFFSET(distance_cm), AV_OPT_TYPE_INT|AR, {.arr=&def_cm}, 0, 100, A },
+    { "m",    "set meter distance", OFFSET(distance_m),  AV_OPT_TYPE_INT|AR, {.arr=&def_m},  0, 100, A },
+    { "dry",  "set dry amount",     OFFSET(dry),         AV_OPT_TYPE_DOUBLE, {.dbl=0},       0,   1, A },
+    { "wet",  "set wet amount",     OFFSET(wet),         AV_OPT_TYPE_DOUBLE, {.dbl=1},       0,   1, A },
+    { "temp", "set temperature °C", OFFSET(temp),        AV_OPT_TYPE_INT|AR, {.arr=&def_t},-50,  50, A },
     { NULL }
 };
 
@@ -68,8 +77,6 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     CompensationDelayContext *s = ctx->priv;
 
-    s->delay = (s->distance_m * 100. + s->distance_cm * 1. + s->distance_mm * .1) *
-               COMP_DELAY_SOUND_FRONT_DELAY(s->temp) * inlink->sample_rate;
     s->buf_size = 1 << av_ceil_log2(lrint(inlink->sample_rate * COMP_DELAY_MAX_DELAY));
     s->delay_frame = ff_get_audio_buffer(inlink, s->buf_size);
     if (!s->delay_frame)
@@ -85,7 +92,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     CompensationDelayContext *s = ctx->priv;
     const unsigned b_mask = s->buf_size - 1;
     const unsigned buf_size = s->buf_size;
-    const unsigned delay = s->delay;
     const double dry = s->dry;
     const double wet = s->wet;
     unsigned r_ptr, w_ptr = 0;
@@ -106,6 +112,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         const double *src = (const double *)in->extended_data[ch];
         double *dst = (double *)out->extended_data[ch];
         double *buffer = (double *)s->delay_frame->extended_data[ch];
+        const int cm_idx = FFMIN(ch, s->distance_cm_size-1);
+        const int mm_idx = FFMIN(ch, s->distance_mm_size-1);
+        const int m_idx  = FFMIN(ch, s->distance_m_size-1);
+        const int t_idx  = FFMIN(ch, s->temp_size-1);
+        unsigned delay = (s->distance_m[m_idx] * 100. + s->distance_cm[cm_idx] * 1. + s->distance_mm[mm_idx] * .1) *
+            COMP_DELAY_SOUND_FRONT_DELAY(s->temp[t_idx]) * outlink->sample_rate;
 
         w_ptr =  s->w_ptr;
         r_ptr = (w_ptr + buf_size - delay) & b_mask;
@@ -125,23 +137,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (out != in)
         av_frame_free(&in);
     return ff_filter_frame(outlink, out);
-}
-
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
-{
-    CompensationDelayContext *s = ctx->priv;
-    AVFilterLink *outlink = ctx->outputs[0];
-    int ret;
-
-    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
-    if (ret < 0)
-        return ret;
-
-    s->delay = (s->distance_m * 100. + s->distance_cm * 1. + s->distance_mm * .1) *
-               COMP_DELAY_SOUND_FRONT_DELAY(s->temp) * outlink->sample_rate;
-
-    return 0;
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
@@ -169,6 +164,6 @@ const AVFilter ff_af_compensationdelay = {
     FILTER_INPUTS(compensationdelay_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
-    .process_command = process_command,
+    .process_command = ff_filter_process_command,
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
 };
