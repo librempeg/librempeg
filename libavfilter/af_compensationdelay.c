@@ -90,16 +90,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     const double wet = s->wet;
     unsigned r_ptr, w_ptr = 0;
     AVFrame *out;
-    int n, ch;
 
-    out = ff_get_audio_buffer(outlink, in->nb_samples);
-    if (!out) {
-        av_frame_free(&in);
-        return AVERROR(ENOMEM);
+    if (ctx->is_disabled) {
+        out = in;
+    } else {
+        out = ff_get_audio_buffer(outlink, in->nb_samples);
+        if (!out) {
+            av_frame_free(&in);
+            return AVERROR(ENOMEM);
+        }
+        av_frame_copy_props(out, in);
     }
-    av_frame_copy_props(out, in);
 
-    for (ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
+    for (int ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
         const double *src = (const double *)in->extended_data[ch];
         double *dst = (double *)out->extended_data[ch];
         double *buffer = (double *)s->delay_frame->extended_data[ch];
@@ -107,23 +110,20 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         w_ptr =  s->w_ptr;
         r_ptr = (w_ptr + buf_size - delay) & b_mask;
 
-        for (n = 0; n < in->nb_samples; n++) {
+        for (int n = 0; n < in->nb_samples; n++) {
             const double sample = src[n];
 
             buffer[w_ptr] = sample;
-            dst[n] = dry * sample + wet * buffer[r_ptr];
+            if (out != in)
+                dst[n] = dry * sample + wet * buffer[r_ptr];
             w_ptr = (w_ptr + 1) & b_mask;
             r_ptr = (r_ptr + 1) & b_mask;
         }
     }
     s->w_ptr = w_ptr;
 
-    if (ctx->is_disabled) {
-        av_frame_free(&out);
-        return ff_filter_frame(outlink, in);
-    }
-
-    av_frame_free(&in);
+    if (out != in)
+        av_frame_free(&in);
     return ff_filter_frame(outlink, out);
 }
 
