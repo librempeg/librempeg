@@ -153,7 +153,7 @@ static void consume_pi(ChannelContext *cc, int nb_samples)
 }
 
 static double next_gain(AVFilterContext *ctx, double pi_max_peak, int bypass, double state,
-                        double pi_rms_sum, int pi_size)
+                        double pi_rms_sum, int pi_size, double scale)
 {
     SpeechNormalizerContext *s = ctx->priv;
     const double compression = 1. / s->max_compression;
@@ -167,11 +167,13 @@ static double next_gain(AVFilterContext *ctx, double pi_max_peak, int bypass, do
     if (bypass) {
         return 1.;
     } else if (type) {
-        if (ratio > 1.0 && state < 1.0 && s->raise_amount == 0.0)
+        const double raise_amount = s->raise_amount * scale;
+
+        if (ratio > 1.0 && state < 1.0 && raise_amount == 0.0)
             state = 1.0;
-        return FFMIN(expansion, state + s->raise_amount);
+        return FFMIN(expansion, state + raise_amount);
     } else {
-        return FFMIN(expansion, FFMAX(compression, state - s->fall_amount));
+        return FFMIN(expansion, FFMAX(compression, state - s->fall_amount * scale));
     }
 }
 
@@ -181,6 +183,7 @@ static void next_pi(AVFilterContext *ctx, ChannelContext *cc, int bypass)
     if (cc->pi_size == 0) {
         SpeechNormalizerContext *s = ctx->priv;
         int start = cc->pi_start;
+        double scale;
 
         av_assert1(cc->pi[start].size > 0);
         av_assert0(cc->pi[start].type > 0 || s->eof);
@@ -193,8 +196,9 @@ static void next_pi(AVFilterContext *ctx, ChannelContext *cc, int bypass)
         if (start >= MAX_ITEMS)
             start = 0;
         cc->pi_start = start;
+        scale = fmin(1.0, cc->pi_size / (double)ctx->inputs[0]->sample_rate);
         cc->gain_state = next_gain(ctx, cc->pi_max_peak, bypass, cc->gain_state,
-                                   cc->pi_rms_sum, cc->pi_size);
+                                   cc->pi_rms_sum, cc->pi_size, scale);
     }
 }
 
@@ -205,13 +209,15 @@ static double min_gain(AVFilterContext *ctx, ChannelContext *cc, int max_size)
     double gain_state = cc->gain_state;
     int size = cc->pi_size;
     int idx = cc->pi_start;
+    double scale;
 
     min_gain = FFMIN(min_gain, gain_state);
     while (size <= max_size) {
         if (idx == cc->pi_end)
             break;
+        scale = fmin(1.0, cc->pi[idx].size / (double)ctx->inputs[0]->sample_rate);
         gain_state = next_gain(ctx, cc->pi[idx].max_peak, 0, gain_state,
-                               cc->pi[idx].rms_sum, cc->pi[idx].size);
+                               cc->pi[idx].rms_sum, cc->pi[idx].size, scale);
         min_gain = FFMIN(min_gain, gain_state);
         size += cc->pi[idx].size;
         idx++;
