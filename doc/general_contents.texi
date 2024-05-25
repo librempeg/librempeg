@@ -607,6 +607,7 @@ library:
 @item TechnoTrend PVA           @tab   @tab X
     @tab Used by TechnoTrend DVB PCI boards.
 @item QCP                       @tab   @tab X
+@item QOA                       @tab X @tab X
 @item raw ADTS (AAC)            @tab X @tab X
 @item raw AC-3                  @tab X @tab X
 @item raw AMR-NB                @tab   @tab X
@@ -1364,6 +1365,7 @@ following image formats are supported:
 @item QDesign Music Codec 1  @tab     @tab  X
 @item QDesign Music Codec 2  @tab     @tab  X
     @tab There are still some distortions.
+@item QOA (Quite OK Audio)   @tab  X  @tab  X
 @item RealAudio 1.0 (14.4K)  @tab  X  @tab  X
     @tab Real 14400 bit/s codec
 @item RealAudio 2.0 (28.8K)  @tab     @tab  X

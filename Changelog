@@ -11,6 +11,7 @@ version <next>:
 - qsv_params option added for QSV encoders
 - dcblock audio filter
 - amae audio filter
+- QOA encoder and muxer
 
 version 7.0:
 - DXV DXT1 encoder
