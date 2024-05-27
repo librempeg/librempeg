@@ -16,6 +16,7 @@ version <next>:
 - QOA encoder and muxer
 - xHE-AAC decoder
 - removed DEC Alpha DSP and support code
+- perlin video source filter
 
 version 7.0:
 - DXV DXT1 encoder
