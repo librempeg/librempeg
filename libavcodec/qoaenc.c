@@ -26,12 +26,13 @@
 
 typedef struct QOAChannel {
     int16_t history[QOA_LMS_LEN];
-    int16_t weights[QOA_LMS_LEN];
+    int weights[QOA_LMS_LEN];
     int error;
 } QOAChannel;
 
 typedef struct QOAContext {
     QOAChannel ch[255];
+    int init_history;
 } QOAContext;
 
 static const uint8_t qoa_quant_tab[17] = {
@@ -64,19 +65,12 @@ static const int32_t qoa_reciprocal_tab[16] = {
 static av_cold int qoa_encode_init(AVCodecContext *avctx)
 {
     const int nb_channels = avctx->ch_layout.nb_channels;
-    QOAContext *s = avctx->priv_data;
 
     if (nb_channels > 255) {
         av_log(avctx, AV_LOG_ERROR, "Invalid number of channels\n");
         return AVERROR(EINVAL);
     }
     avctx->frame_size = FFMIN((((1<<16)-1)-8-QOA_LMS_LEN*4*nb_channels) / (QOA_SLICE_LEN*8), 256) * QOA_SLICE_LEN;
-
-    for (int ch = 0; ch < nb_channels; ch++) {
-        s->ch[ch].weights[0] = s->ch[ch].weights[1] = 0;
-        s->ch[ch].weights[2] = -(1<<13);
-        s->ch[ch].weights[3] =  (1<<14);
-    }
 
     return 0;
 }
@@ -117,8 +111,11 @@ static int qoa_lms_predict(QOAChannel *lms)
 static void qoa_lms_update(QOAChannel *lms, int sample, int residual)
 {
     int delta = residual >> 4;
-    for (int i = 0; i < QOA_LMS_LEN; i++)
+    for (int i = 0; i < QOA_LMS_LEN; i++) {
         lms->weights[i] += lms->history[i] < 0 ? -delta : delta;
+        av_assert2(lms->weights[i] <= INT16_MAX);
+        av_assert2(lms->weights[i] >= INT16_MIN);
+    }
     for (int i = 0; i < QOA_LMS_LEN-1; i++)
         lms->history[i] = lms->history[i+1];
     lms->history[QOA_LMS_LEN-1] = sample;
@@ -152,6 +149,20 @@ static int qoa_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
         return ret;
     dst = avpkt->data;
 
+    if (!s->init_history) {
+        for (int ch = 0; ch < nb_channels; ch++) {
+            QOAChannel *qch = &s->ch[ch];
+
+            for (int n = 0; n < QOA_LMS_LEN; n++) {
+                qch->history[QOA_LMS_LEN-1-n] = samples[n * nb_channels + ch];
+                qch->weights[0] = qch->weights[1] = 0;
+                qch->weights[2] = -(1<<13);
+                qch->weights[3] =  (1<<14);
+            }
+        }
+        s->init_history = 1;
+    }
+
     dst += qoa_encode_header(avctx, s, frame->nb_samples,
                              out_size, dst, avpkt->size);
 
@@ -173,7 +184,7 @@ static int qoa_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                 QOAChannel new_lms = *lms;
 
                 for (int si = slice_start; si < slice_end; si += nb_channels) {
-                    int sample = samples[si] - new_lms.error;
+                    int sample = av_clip_int16(samples[si] - new_lms.error);
                     int predicted = qoa_lms_predict(&new_lms);
                     int residual = sample - predicted;
                     int scaled = qoa_div(residual, scalefactor);
