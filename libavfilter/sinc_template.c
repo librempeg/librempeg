@@ -163,7 +163,7 @@ static void fn(invert)(ftype *h, int n)
 static ftype fn(safe_log)(ftype x)
 {
     av_assert0(x >= F(0.0));
-    if (x > F(0.0))
+    if (x > FMINV)
         return FLOG(x);
     return FLOG(FMINV);
 }
@@ -178,7 +178,7 @@ static int fn(fir_to_phase)(SincContext *s, ftype **h, int *len, int *post_len, 
     for (int i = *len; i > 1; work_len <<= 1, i >>= 1);
 
     /* The first part is for work (+2 for (UN)PACK), the latter for pi_wraps. */
-    work = av_calloc((work_len + 2) + (work_len / 2 + 1), sizeof(ftype));
+    work = av_calloc((work_len + 2) + ((work_len + 2) / 2), sizeof(ftype));
     if (!work)
         return AVERROR(ENOMEM);
     pi_wraps = &work[work_len + 2];
@@ -215,14 +215,14 @@ static int fn(fir_to_phase)(SincContext *s, ftype **h, int *len, int *post_len, 
         pi_wraps[i >> 1] = cum_1pi;
 
         work[i] = fn(safe_log)(SQRT(SQR(work[i]) + SQR(work[i + 1])));
-        work[i + 1] = 0;
+        work[i + 1] = F(0.0);
     }
 
     s->itx_fn(s->itx, work, work, sizeof(ctype));
 
-    for (int i = 1; i < work_len / 2; i++) {        /* Window to reject acausal components */
-        work[i] *= 2;
-        work[i + work_len / 2] = 0;
+    for (int i = 1; i < work_len/2; i++) { /* Window to reject acausal components */
+        work[i] *= F(2.0);
+        work[i + work_len/2] = F(0.0);
     }
     s->tx_fn(s->tx, work, work, sizeof(ftype));
 
@@ -230,13 +230,15 @@ static int fn(fir_to_phase)(SincContext *s, ftype **h, int *len, int *post_len, 
         work[i + 1] = phase1 * i / work_len * pi_wraps[work_len >> 1] + (F(1.0) - phase1) * (work[i + 1] + pi_wraps[i >> 1]) - pi_wraps[i >> 1];
 
     work[0] = FEXP(work[0]);
-    work[1] = FEXP(work[1]);
+    work[1] = F(0.0);
     for (int i = 2; i < work_len; i += 2) {
         ftype x = FEXP(work[i]);
 
         work[i    ] = x * FCOS(work[i + 1]);
         work[i + 1] = x * FSIN(work[i + 1]);
     }
+    work[work_len] = FEXP(work[work_len]);
+    work[work_len+1] = F(0.0);
 
     s->itx_fn(s->itx, work, work, sizeof(ctype));
 
@@ -255,9 +257,9 @@ static int fn(fir_to_phase)(SincContext *s, ftype **h, int *len, int *post_len, 
         peak--;
     }
 
-    if (!phase1) {
+    if (phase == F(0.0)) {
         begin = 0;
-    } else if (phase1 == 1) {
+    } else if (phase == F(100.0)) {
         begin = peak - *len / 2;
     } else {
         begin = (F(0.997) - (2 - phase1) * F(0.22)) * *len + F(0.5);
