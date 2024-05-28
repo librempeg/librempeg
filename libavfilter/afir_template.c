@@ -31,8 +31,6 @@
 #undef TX_TYPE
 #undef FABS
 #undef POW
-#undef ONE
-#undef ZERO
 #undef EPS
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
@@ -43,8 +41,6 @@
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #define FABS fabsf
 #define POW powf
-#define ZERO 0.f
-#define ONE 1.f
 #define EPS FLT_EPSILON
 #else
 #define SAMPLE_FORMAT double
@@ -55,10 +51,10 @@
 #define TX_TYPE AV_TX_DOUBLE_RDFT
 #define FABS fabs
 #define POW pow
-#define ZERO 0.0
-#define ONE 1.0
 #define EPS DBL_EPSILON
 #endif
+
+#define F(x) ((ftype)(x))
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
@@ -100,10 +96,18 @@ static int fn(ir_delay)(AVFilterContext *ctx, AudioFIRContext *s,
         }
     }
 
-    if (linear)
+    if (linear) {
         delay = start + (real_nb_taps-1)/2;
-    else
-        delay = start;
+    } else {
+        ftype max_peak = F(0.0);
+
+        for (int i = 0; i < real_nb_taps; i++) {
+            if (FABS(time[start+i]) > max_peak) {
+                delay = start+i;
+                max_peak = FABS(time[start+i]);
+            }
+        }
+    }
 
     return delay;
 }
@@ -114,16 +118,16 @@ static ftype fn(ir_gain)(AVFilterContext *ctx, AudioFIRContext *s,
     ftype ir_norm = s->ir_norm;
     ftype ch_gain, sum = 0;
 
-    if (ir_norm < ZERO) {
-        ch_gain = ONE;
-    } else if (ir_norm == ZERO) {
+    if (ir_norm < F(0.0)) {
+        ch_gain = F(1.0);
+    } else if (ir_norm == F(0.0)) {
         for (int i = 0; i < cur_nb_taps; i++)
             sum += time[i];
-        ch_gain = ONE / sum;
+        ch_gain = F(1.0) / sum;
     } else {
         for (int i = 0; i < cur_nb_taps; i++)
             sum += POW(FABS(time[i]), ir_norm);
-        ch_gain = ONE / POW(sum, ONE / ir_norm);
+        ch_gain = F(1.0) / POW(sum, F(1.0) / ir_norm);
     }
 
     return ch_gain;
@@ -133,7 +137,7 @@ static void fn(ir_scale)(AVFilterContext *ctx, AudioFIRContext *s,
                          int cur_nb_taps, int ch,
                          ftype *time, ftype ch_gain)
 {
-    if (ch_gain != ONE || s->ir_gain != ONE) {
+    if (ch_gain != F(1.0) || s->ir_gain != F(1.0)) {
         ftype gain = ch_gain * s->ir_gain;
 
         av_log(ctx, AV_LOG_DEBUG, "ch%d gain %f\n", ch, gain);
@@ -213,7 +217,7 @@ static int fn(fir_quantum)(AVFilterContext *ctx, AVFrame *out, int ch, int ioffs
         int j;
 
         seg->part_index[ch] = seg->part_index[ch] % nb_partitions;
-        if (dry_gain == ONE) {
+        if (dry_gain == F(1.0)) {
             memcpy(src + input_offset, in, nb_samples * sizeof(*src));
         } else if (min_part_size >= 8) {
 #if DEPTH == 32
@@ -278,7 +282,7 @@ static int fn(fir_quantum)(AVFilterContext *ctx, AVFrame *out, int ch, int ioffs
         seg->part_index[ch] = (seg->part_index[ch] + 1) % nb_partitions;
     }
 
-    if (wet_gain == ONE)
+    if (wet_gain == F(1.0))
         return 0;
 
     if (min_part_size >= 8) {
