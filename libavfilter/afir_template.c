@@ -30,6 +30,7 @@
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
 #undef FABS
+#undef FMIN
 #undef POW
 #undef EPS
 #if DEPTH == 32
@@ -40,6 +41,7 @@
 #define ftype float
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #define FABS fabsf
+#define FMIN fminf
 #define POW powf
 #define EPS FLT_EPSILON
 #else
@@ -50,6 +52,7 @@
 #define ftype double
 #define TX_TYPE AV_TX_DOUBLE_RDFT
 #define FABS fabs
+#define FMIN fmin
 #define POW pow
 #define EPS DBL_EPSILON
 #endif
@@ -61,18 +64,18 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 static int fn(ir_delay)(AVFilterContext *ctx, AudioFIRContext *s,
-                        int cur_nb_taps, const ftype *time)
+                        int *cur_nb_taps, const ftype *time)
 {
-    int delay = 0, start = 0, stop = cur_nb_taps-1;
+    int delay = 0, start = 0, stop = *cur_nb_taps-1;
     int real_nb_taps, linear = 1;
 
-    for (int i = 0; i < cur_nb_taps; i++) {
+    for (int i = 0; i < *cur_nb_taps; i++) {
         if (FABS(time[i]) > EPS)
             break;
         start++;
     }
 
-    for (int i = cur_nb_taps-1; i >= 0; i--) {
+    for (int i = *cur_nb_taps-1; i >= 0; i--) {
         if (FABS(time[i]) > EPS)
             break;
         stop--;
@@ -109,6 +112,8 @@ static int fn(ir_delay)(AVFilterContext *ctx, AudioFIRContext *s,
         }
     }
 
+    *cur_nb_taps = stop+1;
+
     return delay;
 }
 
@@ -134,8 +139,8 @@ static ftype fn(ir_gain)(AVFilterContext *ctx, AudioFIRContext *s,
 }
 
 static void fn(ir_scale)(AVFilterContext *ctx, AudioFIRContext *s,
-                         int cur_nb_taps, int ch,
-                         ftype *time, ftype ch_gain)
+                         const int cur_nb_taps, const int ch,
+                         ftype *time, const ftype ch_gain)
 {
     if (ch_gain != F(1.0) || s->ir_gain != F(1.0)) {
         ftype gain = ch_gain * s->ir_gain;
@@ -175,6 +180,74 @@ static void fn(convert_channel)(AVFilterContext *ctx, AudioFIRContext *s, int ch
     av_log(ctx, AV_LOG_DEBUG, "coeff_size: %d\n", seg->coeff_size);
     av_log(ctx, AV_LOG_DEBUG, "input_size: %d\n", seg->input_size);
     av_log(ctx, AV_LOG_DEBUG, "input_offset: %d\n", seg->input_offset);
+}
+
+static int fn(ir_convert)(AVFilterContext *ctx, AudioFIRContext *s,
+                          const int selir)
+{
+    int cur_nb_taps = s->ir[selir]->nb_samples;
+    int nb_taps = 0;
+    int delay = cur_nb_taps;
+
+    for (int ch = 0; ch < s->nb_channels; ch++) {
+        const ftype *tsrc = (const ftype *)s->ir[selir]->extended_data[!s->one2many * ch];
+        int ch_delay, ch_nb_taps = cur_nb_taps;
+
+        s->ch_gain[ch] = fn(ir_gain)(ctx, s, cur_nb_taps, tsrc);
+        ch_delay = fn(ir_delay)(ctx, s, &ch_nb_taps, tsrc);
+        delay = FFMIN(delay, ch_delay);
+        nb_taps = FFMAX(nb_taps, ch_nb_taps);
+    }
+
+    if (s->ir_link) {
+        ftype gain = +INFINITY;
+
+        for (int ch = 0; ch < s->nb_channels; ch++)
+            gain = FMIN(gain, s->ch_gain[ch]);
+
+        for (int ch = 0; ch < s->nb_channels; ch++)
+            s->ch_gain[ch] = gain;
+    }
+
+    av_log(ctx, AV_LOG_DEBUG, "nb_taps: %d\n", nb_taps);
+    av_log(ctx, AV_LOG_DEBUG, "nb_segments: %d\n", s->nb_segments[selir]);
+
+    if (!s->norm_ir[selir] || s->norm_ir[selir]->nb_samples < nb_taps) {
+        av_frame_free(&s->norm_ir[selir]);
+        s->norm_ir[selir] = ff_get_audio_buffer(ctx->inputs[0], FFALIGN(nb_taps, 8));
+        if (!s->norm_ir[selir])
+            return AVERROR(ENOMEM);
+    }
+
+    for (int ch = 0; ch < s->nb_channels; ch++) {
+        const ftype *tsrc = (const ftype *)s->ir[selir]->extended_data[!s->one2many * ch];
+        ftype *time = (ftype *)s->norm_ir[selir]->extended_data[ch];
+
+        memcpy(time, tsrc, sizeof(*time) * nb_taps);
+        for (int i = FFMAX(1, s->length * nb_taps); i < nb_taps; i++)
+            time[i] = 0;
+
+        fn(ir_scale)(ctx, s, nb_taps, ch, time, s->ch_gain[ch]);
+
+        for (int n = 0; n < s->nb_segments[selir]; n++) {
+            AudioFIRSegment *seg = &s->seg[selir][n];
+
+            if (!seg->coeff)
+                seg->coeff = ff_get_audio_buffer(ctx->inputs[0], seg->nb_partitions * seg->coeff_size * 2);
+            if (!seg->coeff)
+                return AVERROR(ENOMEM);
+
+            for (int i = 0; i < seg->nb_partitions; i++)
+                fn(convert_channel)(ctx, s, ch, seg, i, selir);
+        }
+    }
+
+    s->have_coeffs[selir] = 1;
+    s->delay = delay;
+
+    av_log(ctx, AV_LOG_DEBUG, "delay: %d\n", delay);
+
+    return 0;
 }
 
 static void fn(fir_fadd)(AudioFIRContext *s, ftype *dst, const ftype *src, int nb_samples)

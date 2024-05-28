@@ -225,7 +225,7 @@ static void uninit_segment(AVFilterContext *ctx, AudioFIRSegment *seg)
 static int convert_coeffs(AVFilterContext *ctx, int selir)
 {
     AudioFIRContext *s = ctx->priv;
-    int ret, nb_taps, cur_nb_taps, delay;
+    int ret;
 
     if (!s->nb_taps[selir]) {
         int part_size, max_part_size;
@@ -270,115 +270,16 @@ skip:
             return AVERROR_BUG;
     }
 
-    cur_nb_taps  = s->ir[selir]->nb_samples;
-    nb_taps      = cur_nb_taps;
-    delay        = nb_taps;
-
-    if (!s->norm_ir[selir] || s->norm_ir[selir]->nb_samples < nb_taps) {
-        av_frame_free(&s->norm_ir[selir]);
-        s->norm_ir[selir] = ff_get_audio_buffer(ctx->inputs[0], FFALIGN(nb_taps, 8));
-        if (!s->norm_ir[selir])
-            return AVERROR(ENOMEM);
-    }
-
-    av_log(ctx, AV_LOG_DEBUG, "nb_taps: %d\n", cur_nb_taps);
-    av_log(ctx, AV_LOG_DEBUG, "nb_segments: %d\n", s->nb_segments[selir]);
-
     switch (s->format) {
     case AV_SAMPLE_FMT_FLTP:
-        for (int ch = 0; ch < s->nb_channels; ch++) {
-            const float *tsrc = (const float *)s->ir[selir]->extended_data[!s->one2many * ch];
-            int ch_delay;
-
-            s->ch_gain[ch] = ir_gain_float(ctx, s, nb_taps, tsrc);
-            ch_delay = ir_delay_float(ctx, s, nb_taps, tsrc);
-            delay = FFMIN(delay, ch_delay);
-        }
-
-        if (s->ir_link) {
-            float gain = +INFINITY;
-
-            for (int ch = 0; ch < s->nb_channels; ch++)
-                gain = fminf(gain, s->ch_gain[ch]);
-
-            for (int ch = 0; ch < s->nb_channels; ch++)
-                s->ch_gain[ch] = gain;
-        }
-
-        for (int ch = 0; ch < s->nb_channels; ch++) {
-            const float *tsrc = (const float *)s->ir[selir]->extended_data[!s->one2many * ch];
-            float *time = (float *)s->norm_ir[selir]->extended_data[ch];
-
-            memcpy(time, tsrc, sizeof(*time) * nb_taps);
-            for (int i = FFMAX(1, s->length * nb_taps); i < nb_taps; i++)
-                time[i] = 0;
-
-            ir_scale_float(ctx, s, nb_taps, ch, time, s->ch_gain[ch]);
-
-            for (int n = 0; n < s->nb_segments[selir]; n++) {
-                AudioFIRSegment *seg = &s->seg[selir][n];
-
-                if (!seg->coeff)
-                    seg->coeff = ff_get_audio_buffer(ctx->inputs[0], seg->nb_partitions * seg->coeff_size * 2);
-                if (!seg->coeff)
-                    return AVERROR(ENOMEM);
-
-                for (int i = 0; i < seg->nb_partitions; i++)
-                    convert_channel_float(ctx, s, ch, seg, i, selir);
-            }
-        }
+        ret = ir_convert_float(ctx, s, selir);
         break;
     case AV_SAMPLE_FMT_DBLP:
-        for (int ch = 0; ch < s->nb_channels; ch++) {
-            const double *tsrc = (const double *)s->ir[selir]->extended_data[!s->one2many * ch];
-            int ch_delay;
-
-            s->ch_gain[ch] = ir_gain_double(ctx, s, nb_taps, tsrc);
-            ch_delay = ir_delay_double(ctx, s, nb_taps, tsrc);
-            delay = FFMIN(delay, ch_delay);
-        }
-
-        if (s->ir_link) {
-            double gain = +INFINITY;
-
-            for (int ch = 0; ch < s->nb_channels; ch++)
-                gain = fmin(gain, s->ch_gain[ch]);
-
-            for (int ch = 0; ch < s->nb_channels; ch++)
-                s->ch_gain[ch] = gain;
-        }
-
-        for (int ch = 0; ch < s->nb_channels; ch++) {
-            const double *tsrc = (const double *)s->ir[selir]->extended_data[!s->one2many * ch];
-            double *time = (double *)s->norm_ir[selir]->extended_data[ch];
-
-            memcpy(time, tsrc, sizeof(*time) * nb_taps);
-            for (int i = FFMAX(1, s->length * nb_taps); i < nb_taps; i++)
-                time[i] = 0;
-
-            ir_scale_double(ctx, s, nb_taps, ch, time, s->ch_gain[ch]);
-
-            for (int n = 0; n < s->nb_segments[selir]; n++) {
-                AudioFIRSegment *seg = &s->seg[selir][n];
-
-                if (!seg->coeff)
-                    seg->coeff = ff_get_audio_buffer(ctx->inputs[0], seg->nb_partitions * seg->coeff_size * 2);
-                if (!seg->coeff)
-                    return AVERROR(ENOMEM);
-
-                for (int i = 0; i < seg->nb_partitions; i++)
-                    convert_channel_double(ctx, s, ch, seg, i, selir);
-            }
-        }
+        ret = ir_convert_double(ctx, s, selir);
         break;
     }
 
-    s->have_coeffs[selir] = 1;
-    s->delay = delay;
-
-    av_log(ctx, AV_LOG_DEBUG, "delay: %d\n", delay);
-
-    return 0;
+    return ret;
 }
 
 static int check_ir(AVFilterLink *link, int selir)
