@@ -326,8 +326,7 @@ static int fn(generate)(AVFilterContext *ctx)
         post_peak = n >> 1;
     }
 
-    s->n = 1 << (av_log2(n) + 1);
-    s->rdft_len = 1 << av_log2(n);
+    s->n = 1 << av_ceil_log2(n);
     s->coeffs = coeffs = av_calloc(s->n, s->sample_size);
     if (!s->coeffs)
         return AVERROR(ENOMEM);

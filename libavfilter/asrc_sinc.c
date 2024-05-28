@@ -42,7 +42,7 @@ typedef struct SincContext {
     int num_taps[2];
     int round;
 
-    int n, rdft_len;
+    int n;
     void *coeffs;
     int64_t pts;
 
