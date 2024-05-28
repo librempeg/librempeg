@@ -42,73 +42,6 @@
 #include "af_afir.h"
 #include "af_afirdsp.h"
 
-#define DEPTH 32
-#include "afir_template.c"
-
-#undef DEPTH
-#define DEPTH 64
-#include "afir_template.c"
-
-static int fir_channel(AVFilterContext *ctx, AVFrame *out, int ch)
-{
-    AudioFIRContext *s = ctx->priv;
-    const int min_part_size = s->min_part_size;
-    const int prev_selir = s->prev_selir;
-    const int selir = s->selir;
-
-    for (int offset = 0; offset < out->nb_samples; offset += min_part_size) {
-        switch (s->format) {
-        case AV_SAMPLE_FMT_FLTP:
-            fir_quantums_float(ctx, s, out, min_part_size, ch, offset, prev_selir, selir);
-            break;
-        case AV_SAMPLE_FMT_DBLP:
-            fir_quantums_double(ctx, s, out, min_part_size, ch, offset, prev_selir, selir);
-            break;
-        }
-
-        if (selir != prev_selir && s->loading[ch] != 0)
-            s->loading[ch] += min_part_size;
-    }
-
-    return 0;
-}
-
-static int fir_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    AVFrame *out = arg;
-    const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
-
-    for (int ch = start; ch < end; ch++)
-        fir_channel(ctx, out, ch);
-
-    return 0;
-}
-
-static int fir_frame(AudioFIRContext *s, AVFrame *in, AVFilterLink *outlink)
-{
-    AVFilterContext *ctx = outlink->src;
-    AVFrame *out;
-
-    out = ff_get_audio_buffer(outlink, in->nb_samples);
-    if (!out) {
-        av_frame_free(&in);
-        return AVERROR(ENOMEM);
-    }
-    av_frame_copy_props(out, in);
-    out->pts = s->pts = in->pts - s->delay;
-
-    s->in = in;
-    ff_filter_execute(ctx, fir_channels, out, NULL,
-                      FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
-    s->prev_is_disabled = ctx->is_disabled;
-
-    av_frame_free(&in);
-    s->in = NULL;
-
-    return ff_filter_frame(outlink, out);
-}
-
 static int init_segment(AVFilterContext *ctx, AudioFIRSegment *seg, int selir,
                         int offset, int nb_partitions, int part_size, int index)
 {
@@ -183,6 +116,73 @@ static int init_segment(AVFilterContext *ctx, AudioFIRSegment *seg, int selir,
     return 0;
 }
 
+#define DEPTH 32
+#include "afir_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "afir_template.c"
+
+static int fir_channel(AVFilterContext *ctx, AVFrame *out, int ch)
+{
+    AudioFIRContext *s = ctx->priv;
+    const int min_part_size = s->min_part_size;
+    const int prev_selir = s->prev_selir;
+    const int selir = s->selir;
+
+    for (int offset = 0; offset < out->nb_samples; offset += min_part_size) {
+        switch (s->format) {
+        case AV_SAMPLE_FMT_FLTP:
+            fir_quantums_float(ctx, s, out, min_part_size, ch, offset, prev_selir, selir);
+            break;
+        case AV_SAMPLE_FMT_DBLP:
+            fir_quantums_double(ctx, s, out, min_part_size, ch, offset, prev_selir, selir);
+            break;
+        }
+
+        if (selir != prev_selir && s->loading[ch] != 0)
+            s->loading[ch] += min_part_size;
+    }
+
+    return 0;
+}
+
+static int fir_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    AVFrame *out = arg;
+    const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
+    const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+
+    for (int ch = start; ch < end; ch++)
+        fir_channel(ctx, out, ch);
+
+    return 0;
+}
+
+static int fir_frame(AudioFIRContext *s, AVFrame *in, AVFilterLink *outlink)
+{
+    AVFilterContext *ctx = outlink->src;
+    AVFrame *out;
+
+    out = ff_get_audio_buffer(outlink, in->nb_samples);
+    if (!out) {
+        av_frame_free(&in);
+        return AVERROR(ENOMEM);
+    }
+    av_frame_copy_props(out, in);
+    out->pts = s->pts = in->pts - s->delay;
+
+    s->in = in;
+    ff_filter_execute(ctx, fir_channels, out, NULL,
+                      FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
+    s->prev_is_disabled = ctx->is_disabled;
+
+    av_frame_free(&in);
+    s->in = NULL;
+
+    return ff_filter_frame(outlink, out);
+}
+
 static void uninit_segment(AVFilterContext *ctx, AudioFIRSegment *seg)
 {
     AudioFIRContext *s = ctx->priv;
@@ -228,40 +228,14 @@ static int convert_coeffs(AVFilterContext *ctx, int selir)
     int ret;
 
     if (!s->nb_taps[selir]) {
-        int part_size, max_part_size;
-        int left, offset = 0;
-
         s->nb_taps[selir] = ff_inlink_queued_samples(ctx->inputs[1 + selir]);
         if (s->nb_taps[selir] <= 0)
             return AVERROR(EINVAL);
 
         if (s->minp > s->maxp)
             s->maxp = s->minp;
-
-        if (s->nb_segments[selir])
-            goto skip;
-
-        left = s->nb_taps[selir];
-        part_size = s->minp;
-        max_part_size = s->maxp;
-
-        for (int i = 0; left > 0; i++) {
-            int step = (part_size == max_part_size) ? INT_MAX : 1 + (i == 0);
-            int nb_partitions = FFMIN(step, (left + part_size - 1) / part_size);
-
-            ret = init_segment(ctx, &s->seg[selir][i], selir, offset, nb_partitions, part_size, i);
-            if (ret < 0)
-                return ret;
-            s->nb_segments[selir] = i + 1;
-            offset += nb_partitions * part_size;
-            s->max_offset[selir] = offset;
-            left -= nb_partitions * part_size;
-            part_size *= 2;
-            part_size = FFMIN(part_size, max_part_size);
-        }
     }
 
-skip:
     if (!s->ir[selir]) {
         ret = ff_inlink_consume_samples(ctx->inputs[1 + selir], s->nb_taps[selir], s->nb_taps[selir], &s->ir[selir]);
         if (ret < 0)

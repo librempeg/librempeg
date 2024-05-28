@@ -154,11 +154,11 @@ static void fn(ir_scale)(AVFilterContext *ctx, AudioFIRContext *s,
     }
 }
 
-static void fn(convert_channel)(AVFilterContext *ctx, AudioFIRContext *s, int ch,
-                                AudioFIRSegment *seg, int coeff_partition, int selir)
+static void fn(convert_channel)(AVFilterContext *ctx, AudioFIRContext *s, const int ch,
+                                AudioFIRSegment *seg, const int coeff_partition, const int selir)
 {
     const int coffset = coeff_partition * seg->coeff_size;
-    const int nb_taps = s->nb_taps[selir];
+    const int nb_taps = s->norm_ir[selir]->nb_samples;
     ftype *time = (ftype *)s->norm_ir[selir]->extended_data[ch];
     ftype *tempin = (ftype *)seg->tempin->extended_data[ch];
     ftype *tempout = (ftype *)seg->tempout->extended_data[ch];
@@ -186,8 +186,8 @@ static int fn(ir_convert)(AVFilterContext *ctx, AudioFIRContext *s,
                           const int selir)
 {
     int cur_nb_taps = s->ir[selir]->nb_samples;
-    int nb_taps = 0;
     int delay = cur_nb_taps;
+    int nb_taps = 0;
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
         const ftype *tsrc = (const ftype *)s->ir[selir]->extended_data[!s->one2many * ch];
@@ -210,7 +210,6 @@ static int fn(ir_convert)(AVFilterContext *ctx, AudioFIRContext *s,
     }
 
     av_log(ctx, AV_LOG_DEBUG, "nb_taps: %d\n", nb_taps);
-    av_log(ctx, AV_LOG_DEBUG, "nb_segments: %d\n", s->nb_segments[selir]);
 
     if (!s->norm_ir[selir] || s->norm_ir[selir]->nb_samples < nb_taps) {
         av_frame_free(&s->norm_ir[selir]);
@@ -219,13 +218,39 @@ static int fn(ir_convert)(AVFilterContext *ctx, AudioFIRContext *s,
             return AVERROR(ENOMEM);
     }
 
+    if (!s->nb_segments[selir]) {
+        int part_size, max_part_size;
+        int ret, left, offset = 0;
+
+        left = nb_taps;
+        part_size = s->minp;
+        max_part_size = s->maxp;
+
+        for (int i = 0; left > 0; i++) {
+            int step = (part_size == max_part_size) ? INT_MAX : 1 + (i == 0);
+            int nb_partitions = FFMIN(step, (left + part_size - 1) / part_size);
+
+            ret = init_segment(ctx, &s->seg[selir][i], selir, offset, nb_partitions, part_size, i);
+            if (ret < 0)
+                return ret;
+            s->nb_segments[selir] = i + 1;
+            offset += nb_partitions * part_size;
+            s->max_offset[selir] = offset;
+            left -= nb_partitions * part_size;
+            part_size *= 2;
+            part_size = FFMIN(part_size, max_part_size);
+        }
+    }
+
+    av_log(ctx, AV_LOG_DEBUG, "nb_segments: %d\n", s->nb_segments[selir]);
+
     for (int ch = 0; ch < s->nb_channels; ch++) {
         const ftype *tsrc = (const ftype *)s->ir[selir]->extended_data[!s->one2many * ch];
         ftype *time = (ftype *)s->norm_ir[selir]->extended_data[ch];
 
         memcpy(time, tsrc, sizeof(*time) * nb_taps);
         for (int i = FFMAX(1, s->length * nb_taps); i < nb_taps; i++)
-            time[i] = 0;
+            time[i] = F(0.0);
 
         fn(ir_scale)(ctx, s, nb_taps, ch, time, s->ch_gain[ch]);
 
