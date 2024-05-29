@@ -216,10 +216,8 @@ static void uninit_segment(AVFilterContext *ctx, AudioFIRSegment *seg)
     av_frame_free(&seg->buffer);
     av_frame_free(&seg->input);
     av_frame_free(&seg->output);
+    av_frame_free(&seg->coeff);
     seg->input_size = 0;
-
-    for (int i = 0; i < MAX_IR_STREAMS; i++)
-        av_frame_free(&seg->coeff);
 }
 
 static int convert_coeffs(AVFilterContext *ctx, int selir)
