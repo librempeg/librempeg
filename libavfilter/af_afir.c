@@ -42,6 +42,29 @@
 #include "af_afir.h"
 #include "af_afirdsp.h"
 
+static int get_nb_segments(AVFilterContext *ctx, AudioFIRContext *s,
+                           const int nb_taps)
+{
+    int part_size, max_part_size;
+    int left, nb_segments = 0;
+
+    left = nb_taps;
+    part_size = s->minp;
+    max_part_size = s->maxp;
+
+    for (int i = 0; left > 0; i++) {
+        int step = (part_size == max_part_size) ? INT_MAX : 1 + (i == 0);
+        int nb_partitions = FFMIN(step, (left + part_size - 1) / part_size);
+
+        nb_segments = i + 1;
+        left -= nb_partitions * part_size;
+        part_size *= 2;
+        part_size = FFMIN(part_size, max_part_size);
+    }
+
+    return nb_segments;
+}
+
 static int init_segment(AVFilterContext *ctx, AudioFIRSegment *seg, int selir,
                         int offset, int nb_partitions, int part_size, int index)
 {
@@ -456,6 +479,8 @@ static av_cold void uninit(AVFilterContext *ctx)
 
             av_frame_free(&ir->ir);
             av_frame_free(&ir->norm_ir);
+
+            av_freep(&ir->seg);
         }
         av_freep(&s->irs);
     }

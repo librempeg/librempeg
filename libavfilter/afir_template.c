@@ -228,6 +228,10 @@ static int fn(ir_convert)(AVFilterContext *ctx, AudioFIRContext *s,
         part_size = s->minp;
         max_part_size = s->maxp;
 
+        ir->seg = av_calloc(get_nb_segments(ctx, s, nb_taps), sizeof(*ir->seg));
+        if (!ir->seg)
+            return AVERROR(ENOMEM);
+
         for (int i = 0; left > 0; i++) {
             int step = (part_size == max_part_size) ? INT_MAX : 1 + (i == 0);
             int nb_partitions = FFMIN(step, (left + part_size - 1) / part_size);

@@ -62,7 +62,7 @@ typedef struct AudioIR {
     int max_offset;
     AVFrame *ir;
     AVFrame *norm_ir;
-    AudioFIRSegment seg[1024];
+    AudioFIRSegment *seg;
 } AudioIR;
 
 typedef struct AudioFIRContext {
