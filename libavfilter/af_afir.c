@@ -220,22 +220,23 @@ static void uninit_segment(AVFilterContext *ctx, AudioFIRSegment *seg)
     seg->input_size = 0;
 }
 
-static int convert_coeffs(AVFilterContext *ctx, int selir)
+static int convert_coeffs(AVFilterContext *ctx, const int selir)
 {
     AudioFIRContext *s = ctx->priv;
+    AudioIR *ir = &s->irs[selir];
     int ret;
 
-    if (!s->nb_taps[selir]) {
-        s->nb_taps[selir] = ff_inlink_queued_samples(ctx->inputs[1 + selir]);
-        if (s->nb_taps[selir] <= 0)
+    if (!ir->nb_taps) {
+        ir->nb_taps = ff_inlink_queued_samples(ctx->inputs[1 + selir]);
+        if (ir->nb_taps <= 0)
             return AVERROR(EINVAL);
 
         if (s->minp > s->maxp)
             s->maxp = s->minp;
     }
 
-    if (!s->ir[selir]) {
-        ret = ff_inlink_consume_samples(ctx->inputs[1 + selir], s->nb_taps[selir], s->nb_taps[selir], &s->ir[selir]);
+    if (!ir->ir) {
+        ret = ff_inlink_consume_samples(ctx->inputs[1 + selir], ir->nb_taps, ir->nb_taps, &ir->ir);
         if (ret < 0)
             return ret;
         if (ret == 0)
@@ -254,10 +255,11 @@ static int convert_coeffs(AVFilterContext *ctx, int selir)
     return ret;
 }
 
-static int check_ir(AVFilterLink *link, int selir)
+static int check_ir(AVFilterLink *link, const int selir)
 {
     AVFilterContext *ctx = link->dst;
     AudioFIRContext *s = ctx->priv;
+    AudioIR *ir = &s->irs[selir];
     int nb_taps, max_nb_taps;
 
     nb_taps = ff_inlink_queued_samples(link);
@@ -268,7 +270,7 @@ static int check_ir(AVFilterLink *link, int selir)
     }
 
     if (ff_inlink_check_available_samples(link, nb_taps + 1) == 1)
-        s->eof_coeffs[selir] = 1;
+        ir->eof_coeffs = 1;
 
     return 0;
 }
@@ -284,24 +286,25 @@ static int activate(AVFilterContext *ctx)
     FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
 
     for (int i = 0; i < s->nb_irs; i++) {
+        AudioIR *ir = &s->irs[i];
         const int selir = i;
 
         if (s->ir_load && selir != s->selir)
             continue;
 
-        if (!s->eof_coeffs[selir]) {
+        if (!ir->eof_coeffs) {
             ret = check_ir(ctx->inputs[1 + selir], selir);
             if (ret < 0)
                 return ret;
 
-            if (!s->eof_coeffs[selir]) {
+            if (!ir->eof_coeffs) {
                 if (ff_outlink_frame_wanted(outlink))
                     ff_inlink_request_frame(ctx->inputs[1 + selir]);
                 return 0;
             }
         }
 
-        if (!s->have_coeffs[selir] && s->eof_coeffs[selir]) {
+        if (!ir->have_coeffs && ir->eof_coeffs) {
             ret = convert_coeffs(ctx, selir);
             if (ret < 0)
                 return ret;
@@ -444,12 +447,17 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->ch_gain);
     av_freep(&s->loading);
 
-    for (int i = 0; i < s->nb_irs; i++) {
-        for (int j = 0; j < s->nb_segments[i]; j++)
-            uninit_segment(ctx, &s->seg[i][j]);
+    if (s->irs) {
+        for (int i = 0; i < s->nb_irs; i++) {
+            AudioIR *ir = &s->irs[i];
 
-        av_frame_free(&s->ir[i]);
-        av_frame_free(&s->norm_ir[i]);
+            for (int j = 0; j < ir->nb_segments; j++)
+                uninit_segment(ctx, &ir->seg[j]);
+
+            av_frame_free(&ir->ir);
+            av_frame_free(&ir->norm_ir);
+        }
+        av_freep(&s->irs);
     }
 
     av_frame_free(&s->fadein[0]);
@@ -464,6 +472,9 @@ static av_cold int init(AVFilterContext *ctx)
     AudioFIRContext *s = ctx->priv;
 
     s->prev_selir = FFMIN(s->nb_irs - 1, s->selir);
+    s->irs = av_calloc(s->nb_irs, sizeof(*s->irs));
+    if (!s->irs)
+        return AVERROR(ENOMEM);
 
     for (int n = 0; n < s->nb_irs; n++) {
         AVFilterPad pad;
@@ -537,8 +548,8 @@ static const AVOption afir_options[] = {
     { "maxir",  "set max IR length", OFFSET(max_ir_len), AV_OPT_TYPE_FLOAT, {.dbl=30}, 0.1, 60, AF },
     { "minp",   "set min partition size", OFFSET(minp),  AV_OPT_TYPE_INT,   {.i64=8192}, 1, 65536, AF },
     { "maxp",   "set max partition size", OFFSET(maxp),  AV_OPT_TYPE_INT,   {.i64=8192}, 8, 65536, AF },
-    { "nbirs",  "set number of input IRs",OFFSET(nb_irs),AV_OPT_TYPE_INT,   {.i64=1},    1,    32, AF },
-    { "ir",     "select IR",              OFFSET(selir), AV_OPT_TYPE_INT,   {.i64=0},    0,    31, AFR },
+    { "nbirs",  "set number of input IRs",OFFSET(nb_irs),AV_OPT_TYPE_INT,   {.i64=1},    1, INT_MAX, AF },
+    { "ir",     "select IR",              OFFSET(selir), AV_OPT_TYPE_INT,   {.i64=0},    0, INT_MAX-1, AFR },
     { "precision", "set processing precision",    OFFSET(precision), AV_OPT_TYPE_INT,   {.i64=0}, 0, 2, AF, .unit = "precision" },
     {  "auto", "set auto processing precision",                   0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, AF, .unit = "precision" },
     {  "float", "set single-floating point processing precision", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, AF, .unit = "precision" },

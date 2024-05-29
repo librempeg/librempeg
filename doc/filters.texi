@@ -1926,9 +1926,6 @@ Set wet gain. This sets final output gain.
 @item length
 Set Impulse Response filter length. Default is 1, which means whole IR is processed.
 
-@item gtype
-This option is deprecated, and does nothing.
-
 @item irnorm
 Set norm to be applied to IR coefficients before filtering.
 Allowed range is from @var{-1} to @var{2}.
@@ -1954,18 +1951,6 @@ Default is @code{input}.
 Set max allowed Impulse Response filter duration in seconds. Default is 30 seconds.
 Allowed range is 0.1 to 60 seconds.
 
-@item response
-This option is deprecated, and does nothing.
-
-@item channel
-This option is deprecated, and does nothing.
-
-@item size
-This option is deprecated, and does nothing.
-
-@item rate
-This option is deprecated, and does nothing.
-
 @item minp
 Set minimal partition size used for convolution. Default is @var{8192}.
 Allowed range is from @var{1} to @var{65536}.
@@ -1978,7 +1963,7 @@ Lower values may increase CPU usage.
 
 @item nbirs
 Set number of input impulse responses streams which will be switchable at runtime.
-Allowed range is from @var{1} to @var{32}. Default is @var{1}.
+Allowed range is from @var{1} to @var{INT_MAX}. Default is @var{1}.
 
 @item ir
 Set IR stream which will be used for convolution, starting from @var{0}, should always be
