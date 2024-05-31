@@ -142,7 +142,6 @@ static ftype *fn(lpf)(ftype Fn, ftype Fc, ftype tbw, int *num_taps, ftype att, d
 
     if (!n) {
         n = *num_taps;
-        *num_taps = av_clip(n, 11, 32767);
         if (round)
             *num_taps = 1 + 2 * (int)((int)((*num_taps / 2) * Fc + F(0.5)) / Fc + F(0.5));
     }
