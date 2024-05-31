@@ -189,7 +189,7 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const int in_offset = s->in_offset;
     const int offset = tr_nb_samples - taper_samples;
     const int copy_samples = FFMIN(in_nb_samples, in->nb_samples-soffset);
-    const int diff_offset = FFABS(out_offset - s->delay);
+    const int diff_offset = FFMAX(out_offset - s->delay, 0);
     const ttype *taper = s->taper;
 
 #if DEPTH == 16
