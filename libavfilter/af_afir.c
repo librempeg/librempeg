@@ -39,8 +39,84 @@
 #include "filters.h"
 #include "formats.h"
 #include "internal.h"
-#include "af_afir.h"
 #include "af_afirdsp.h"
+
+typedef struct AudioFIRSegment {
+    int nb_partitions;
+    int part_size;
+    int block_size;
+    int fft_length;
+    int coeff_size;
+    int input_size;
+    int input_offset;
+
+    int *output_offset;
+    int *part_index;
+
+    AVFrame *sumin;
+    AVFrame *sumout;
+    AVFrame *blockout;
+    AVFrame *tempin;
+    AVFrame *tempout;
+    AVFrame *buffer;
+    AVFrame *coeff;
+    AVFrame *input;
+    AVFrame *output;
+
+    AVTXContext **ctx, **tx, **itx;
+    av_tx_fn ctx_fn, tx_fn, itx_fn;
+} AudioFIRSegment;
+
+typedef struct AudioIR {
+    int eof_coeffs;
+    int have_coeffs;
+    int nb_taps;
+    int nb_segments;
+    int max_offset;
+    AVFrame *ir;
+    AVFrame *norm_ir;
+    AudioFIRSegment *seg;
+} AudioIR;
+
+typedef struct AudioFIRContext {
+    const AVClass *class;
+
+    float wet_gain;
+    float dry_gain;
+    float length;
+    float ir_norm;
+    int ir_link;
+    float ir_gain;
+    int ir_format;
+    int ir_load;
+    float max_ir_len;
+    int minp;
+    int maxp;
+    int nb_irs;
+    int prev_selir;
+    int selir;
+    int precision;
+    int format;
+
+    int nb_channels;
+    int one2many;
+    int prev_is_disabled;
+    int *loading;
+    double *ch_gain;
+
+    AudioIR *irs;
+
+    AVFrame *in;
+    AVFrame *xfade[2];
+    AVFrame *fadein[2];
+    int min_part_size;
+    int max_part_size;
+    int64_t delay;
+    int64_t pts;
+
+    AudioFIRDSPContext afirdsp;
+    AVFloatDSPContext *fdsp;
+} AudioFIRContext;
 
 static int get_nb_segments(AVFilterContext *ctx, AudioFIRContext *s,
                            const int nb_taps)
