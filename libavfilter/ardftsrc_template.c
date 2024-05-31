@@ -112,6 +112,7 @@ static void fn(src_uninit)(AVFilterContext *ctx)
 static int fn(src_init)(AVFilterContext *ctx)
 {
     AudioRDFTSRCContext *s = ctx->priv;
+    const int channels = ctx->inputs[0]->ch_layout.nb_channels;
     const int taper_samples = s->taper_samples;
     ftype iscale = fn(get_iscale)(s->in_rdft_size, s->out_rdft_size);
     ftype scale = fn(get_scale)(s->in_rdft_size, s->out_rdft_size);
@@ -119,12 +120,13 @@ static int fn(src_init)(AVFilterContext *ctx)
     ttype *taper;
     int ret;
 
-    s->state = av_calloc(s->channels, sizeof(*state));
+    s->state = av_calloc(channels, sizeof(*state));
     if (!s->state)
         return AVERROR(ENOMEM);
+    s->channels = channels;
     state = s->state;
 
-    for (int ch = 0; ch < s->channels; ch++) {
+    for (int ch = 0; ch < channels; ch++) {
         fn(StateContext) *stc = &state[ch];
 
         ret = av_tx_init(&stc->tx_ctx, &stc->tx_fn, TX_TYPE, 0, s->in_rdft_size, &scale, 0);

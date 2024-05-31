@@ -142,8 +142,6 @@ static int config_input(AVFilterLink *inlink)
     s->taper_samples = lrint(s->tr_nb_samples * (1.0-s->bandwidth));
     av_log(ctx, AV_LOG_DEBUG, "%d: %d => %d | %d\n", factor, s->in_rdft_size, s->out_rdft_size, s->delay);
 
-    s->channels = inlink->ch_layout.nb_channels;
-
     switch (inlink->format) {
     case AV_SAMPLE_FMT_S16P:
         s->do_src = src_s16;
