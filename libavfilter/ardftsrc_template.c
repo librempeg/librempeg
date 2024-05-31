@@ -77,12 +77,12 @@ typedef struct fn(StateContext) {
 
 static ftype fn(get_scale)(ftype in_size, ftype out_size)
 {
-    return F(1.0) / out_size;
+    return F(1.0);
 }
 
 static ftype fn(get_iscale)(ftype in_size, ftype out_size)
 {
-    return F(1.0) * out_size / in_size;
+    return F(1.0) / in_size;
 }
 
 static void fn(src_uninit)(AVFilterContext *ctx)
