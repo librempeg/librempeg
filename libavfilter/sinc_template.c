@@ -170,11 +170,11 @@ static ftype fn(safe_log)(ftype x)
 static int fn(fir_to_phase)(SincContext *s, ftype **h, int *len, int *post_len, ftype phase)
 {
     ftype *pi_wraps, *work, phase1 = (phase > F(50.0) ? F(100.0) - phase : phase) / F(50.0);
-    int work_len = 2 * 2 * 8, begin, end, imp_peak = 0, peak = 0, ret;
+    int work_len, begin, end, imp_peak = 0, peak = 0, ret;
     ftype imp_sum = 0, peak_imp_sum = 0, scale = F(1.0), iscale;
     ftype prev_angle2 = 0, cum_2pi = 0, prev_angle1 = 0, cum_1pi = 0;
 
-    for (int i = *len; i > 1; work_len <<= 1, i >>= 1);
+    work_len = 4 << av_ceil_log2(*len);
 
     /* The first part is for work (+2 for (UN)PACK), the latter for pi_wraps. */
     work = av_calloc((work_len + 2) + ((work_len + 2) / 2), sizeof(ftype));
