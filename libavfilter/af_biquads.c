@@ -78,7 +78,7 @@ typedef struct BiquadsContext {
 
     enum FilterType filter_type;
     int width_type;
-    int poles;
+    int order;
     int csg;
     int transform_type;
     int precision;
@@ -458,7 +458,7 @@ static int config_filter(AVFilterLink *outlink, int reset)
         beta = sqrt((A * A + 1) - (A - 1) * (A - 1));
     case tiltshelf:
     case lowshelf:
-        if (s->poles == 1) {
+        if (s->order == 1) {
             s->a_double[0] = sin_w0 / A + 1.0 + cos_w0;
             s->a_double[1] = sin_w0 / A - 1.0 - cos_w0;
             s->a_double[2] = 0.0;
@@ -477,7 +477,7 @@ static int config_filter(AVFilterLink *outlink, int reset)
     case treble:
         beta = sqrt((A * A + 1) - (A - 1) * (A - 1));
     case highshelf:
-        if (s->poles == 1) {
+        if (s->order == 1) {
             s->a_double[0] = sin_w0 + 1.0/A + cos_w0 / A;
             s->a_double[1] = sin_w0 - 1.0/A - cos_w0 / A;
             s->a_double[2] = 0.0;
@@ -519,7 +519,7 @@ static int config_filter(AVFilterLink *outlink, int reset)
         s->b_double[2] =  1.0;
         break;
     case lowpass:
-        if (s->poles == 1) {
+        if (s->order == 1) {
             s->a_double[0] = sin_w0 + 1.0 + cos_w0;
             s->a_double[1] = sin_w0 - 1.0 - cos_w0;
             s->a_double[2] = 0.0;
@@ -536,7 +536,7 @@ static int config_filter(AVFilterLink *outlink, int reset)
         }
         break;
     case highpass:
-        if (s->poles == 1) {
+        if (s->order == 1) {
             s->a_double[0] = sin_w0 + 1.0 + cos_w0;
             s->a_double[1] = sin_w0 - 1.0 - cos_w0;
             s->a_double[2] = 0.0;
@@ -553,7 +553,7 @@ static int config_filter(AVFilterLink *outlink, int reset)
         }
         break;
     case allpass:
-        switch (s->poles) {
+        switch (s->order) {
         case 1:
             s->a_double[0] = sin_w0 + 1.0 + cos_w0;
             s->a_double[1] = sin_w0 - 1.0 - cos_w0;
@@ -1097,9 +1097,9 @@ const AVFilter ff_af_##name_ = {                         \
     {"width", "set width", OFFSET(width), AV_OPT_TYPE_DOUBLE, {.dbl=x}, 0, 99999, FLAGS}, \
     {"w",     "set width", OFFSET(width), AV_OPT_TYPE_DOUBLE, {.dbl=x}, 0, 99999, FLAGS}
 
-#define POLES_OPTION(x)                                                                   \
-    {"poles", "set number of poles", OFFSET(poles), AV_OPT_TYPE_INT, {.i64=x}, 1, 2, AF}, \
-    {"p",     "set number of poles", OFFSET(poles), AV_OPT_TYPE_INT, {.i64=x}, 1, 2, AF}
+#define ORDER_OPTION(x)                                                                   \
+    {"order", "set filter order", OFFSET(order), AV_OPT_TYPE_INT, {.i64=x}, 1, 2, AF}, \
+    {"o",     "set filter order", OFFSET(order), AV_OPT_TYPE_INT, {.i64=x}, 1, 2, AF}
 
 #define WIDTH_TYPE_OPTION(x)                                                                                                        \
     {"width_type", "set filter-width type", OFFSET(width_type), AV_OPT_TYPE_INT, {.i64=x}, HERTZ, NB_WTYPE-1, FLAGS, .unit = "width_type"}, \
@@ -1168,7 +1168,7 @@ static const AVOption bass_lowshelf_options[] = {
     WIDTH_OPTION(0.5),
     {"gain", "set gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, -900, 900, FLAGS},
     {"g",    "set gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, -900, 900, FLAGS},
-    POLES_OPTION(2),
+    ORDER_OPTION(2),
     MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
@@ -1193,7 +1193,7 @@ static const AVOption treble_highshelf_options[] = {
     WIDTH_OPTION(0.5),
     {"gain", "set gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, -900, 900, FLAGS},
     {"g",    "set gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, -900, 900, FLAGS},
-    POLES_OPTION(2),
+    ORDER_OPTION(2),
     MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
@@ -1254,7 +1254,7 @@ static const AVOption lowpass_options[] = {
     {"f",         "set frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=500}, 0, 999999, FLAGS},
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(0.707),
-    POLES_OPTION(2),
+    ORDER_OPTION(2),
     MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
@@ -1270,7 +1270,7 @@ static const AVOption highpass_options[] = {
     {"f",         "set frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=3000}, 0, 999999, FLAGS},
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(0.707),
-    POLES_OPTION(2),
+    ORDER_OPTION(2),
     MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
@@ -1287,13 +1287,13 @@ static const AVOption allpass_options[] = {
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(0.707),
     MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
-    POLES_OPTION(2),
+    ORDER_OPTION(2),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     {NULL}
 };
 
-DEFINE_BIQUAD_FILTER(allpass, "Apply a two-pole all-pass filter.");
+DEFINE_BIQUAD_FILTER(allpass, "Apply an all-pass filter.");
 #endif  /* CONFIG_ALLPASS_FILTER */
 #if CONFIG_BIQUAD_FILTER
 static const AVOption biquad_options[] = {

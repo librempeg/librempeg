@@ -4370,8 +4370,8 @@ kHz
 @item width, w
 Determine how steep is the filter's shelf transition.
 
-@item poles, p
-Set number of poles. Default is 2.
+@item order, o
+Set filter order. Default is 2.
 
 @item mix, m
 How much to use filtered signal in output. Default is 1.
@@ -5793,8 +5793,8 @@ The filter accepts the following options:
 @item frequency, f
 Set frequency in Hz. Default is 3000.
 
-@item poles, p
-Set number of poles. Default is 2.
+@item order, o
+Set filter order. Default is 2.
 
 @item width_type, t
 Set method to specify band-width of filter.
@@ -6153,8 +6153,8 @@ The filter accepts the following options:
 @item frequency, f
 Set frequency in Hz. Default is 500.
 
-@item poles, p
-Set number of poles. Default is 2.
+@item order, o
+Set filter order. Default is 2.
 
 @item width_type, t
 Set method to specify band-width of filter.
@@ -7377,8 +7377,8 @@ kHz
 @item width, w
 Determine how steep is the filter's shelf transition.
 
-@item poles, p
-Set number of poles. Default is 2.
+@item order, o
+Set filter order. Default is 2.
 
 @item mix, m
 How much to use filtered signal in output. Default is 1.
@@ -7467,8 +7467,8 @@ kHz
 @item width, w
 Determine how steep is the filter's shelf transition.
 
-@item poles, p
-Set number of poles. Default is 2.
+@item order, o
+Set filter order. Default is 2.
 
 @item mix, m
 How much to use filtered signal in output. Default is 1.
