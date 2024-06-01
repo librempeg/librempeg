@@ -438,7 +438,9 @@ static int config_filter(AVFilterLink *outlink, int reset)
     AVFilterLink *inlink    = ctx->inputs[0];
     double gain = s->gain * ((s->filter_type == tiltshelf) + 1.);
     double A = ff_exp10(gain / 40);
-    double w0 = 2 * M_PI * s->frequency / inlink->sample_rate;
+    const double w0 = 2.0 * M_PI * s->frequency / inlink->sample_rate;
+    const double cos_w0 = cos(w0);
+    const double sin_w0 = sin(w0);
     double K = tan(w0 / 2.);
     double alpha, beta;
 
@@ -456,19 +458,19 @@ static int config_filter(AVFilterLink *outlink, int reset)
         alpha = 0.0;
         break;
     case HERTZ:
-        alpha = sin(w0) / (2 * s->frequency / s->width);
+        alpha = sin_w0 / (2.0 * s->frequency / s->width);
         break;
     case KHERTZ:
-        alpha = sin(w0) / (2 * s->frequency / (s->width * 1000));
+        alpha = sin_w0 / (2.0 * s->frequency / (s->width * 1000.0));
         break;
     case OCTAVE:
-        alpha = sin(w0) * sinh(log(2.) / 2 * s->width * w0 / sin(w0));
+        alpha = sin_w0 * sinh(log(2.) / 2.0 * s->width * w0 / sin_w0);
         break;
     case QFACTOR:
-        alpha = sin(w0) / (2 * s->width);
+        alpha = sin_w0 / (2.0 * s->width);
         break;
     case SLOPE:
-        alpha = sin(w0) / 2 * sqrt((A + 1 / A) * (1 / s->width - 1) + 2);
+        alpha = sin_w0 / 2.0 * sqrt((A + 1.0 / A) * (1.0 / s->width - 1.0) + 2.0);
         break;
     default:
         av_assert0(0);
@@ -486,12 +488,12 @@ static int config_filter(AVFilterLink *outlink, int reset)
         s->b_double[2] = s->ob[2];
         break;
     case equalizer:
-        s->a_double[0] =   1 + alpha / A;
-        s->a_double[1] =  -2 * cos(w0);
-        s->a_double[2] =   1 - alpha / A;
-        s->b_double[0] =   1 + alpha * A;
-        s->b_double[1] =  -2 * cos(w0);
-        s->b_double[2] =   1 - alpha * A;
+        s->a_double[0] =   1.0 + alpha / A;
+        s->a_double[1] =  -2.0 * cos_w0;
+        s->a_double[2] =   1.0 - alpha / A;
+        s->b_double[0] =   1.0 + alpha * A;
+        s->b_double[1] =  -2.0 * cos_w0;
+        s->b_double[2] =   1.0 - alpha * A;
         break;
     case bass:
         beta = sqrt((A * A + 1) - (A - 1) * (A - 1));
@@ -512,12 +514,12 @@ static int config_filter(AVFilterLink *outlink, int reset)
             s->b_double[1] = -beta1 - ro * beta0;
             s->b_double[2] = 0;
         } else {
-            s->a_double[0] =          (A + 1) + (A - 1) * cos(w0) + beta * alpha;
-            s->a_double[1] =    -2 * ((A - 1) + (A + 1) * cos(w0));
-            s->a_double[2] =          (A + 1) + (A - 1) * cos(w0) - beta * alpha;
-            s->b_double[0] =     A * ((A + 1) - (A - 1) * cos(w0) + beta * alpha);
-            s->b_double[1] = 2 * A * ((A - 1) - (A + 1) * cos(w0));
-            s->b_double[2] =     A * ((A + 1) - (A - 1) * cos(w0) - beta * alpha);
+            s->a_double[0] =          (A + 1) + (A - 1) * cos_w0 + beta * alpha;
+            s->a_double[1] =    -2 * ((A - 1) + (A + 1) * cos_w0);
+            s->a_double[2] =          (A + 1) + (A - 1) * cos_w0 - beta * alpha;
+            s->b_double[0] =     A * ((A + 1) - (A - 1) * cos_w0 + beta * alpha);
+            s->b_double[1] = 2 * A * ((A - 1) - (A + 1) * cos_w0);
+            s->b_double[2] =     A * ((A + 1) - (A - 1) * cos_w0 - beta * alpha);
         }
         break;
     case treble:
@@ -538,38 +540,38 @@ static int config_filter(AVFilterLink *outlink, int reset)
             s->b_double[1] = beta1 + ro * beta0;
             s->b_double[2] = 0;
         } else {
-            s->a_double[0] =          (A + 1) - (A - 1) * cos(w0) + beta * alpha;
-            s->a_double[1] =     2 * ((A - 1) - (A + 1) * cos(w0));
-            s->a_double[2] =          (A + 1) - (A - 1) * cos(w0) - beta * alpha;
-            s->b_double[0] =     A * ((A + 1) + (A - 1) * cos(w0) + beta * alpha);
-            s->b_double[1] =-2 * A * ((A - 1) + (A + 1) * cos(w0));
-            s->b_double[2] =     A * ((A + 1) + (A - 1) * cos(w0) - beta * alpha);
+            s->a_double[0] =          (A + 1) - (A - 1) * cos_w0 + beta * alpha;
+            s->a_double[1] =     2 * ((A - 1) - (A + 1) * cos_w0);
+            s->a_double[2] =          (A + 1) - (A - 1) * cos_w0 - beta * alpha;
+            s->b_double[0] =     A * ((A + 1) + (A - 1) * cos_w0 + beta * alpha);
+            s->b_double[1] =-2 * A * ((A - 1) + (A + 1) * cos_w0);
+            s->b_double[2] =     A * ((A + 1) + (A - 1) * cos_w0 - beta * alpha);
         }
         break;
     case bandpass:
         if (s->csg) {
-            s->a_double[0] =  1 + alpha;
-            s->a_double[1] = -2 * cos(w0);
-            s->a_double[2] =  1 - alpha;
-            s->b_double[0] =  sin(w0) / 2;
+            s->a_double[0] =  1.0 + alpha;
+            s->a_double[1] = -2.0 * cos_w0;
+            s->a_double[2] =  1.0 - alpha;
+            s->b_double[0] =  sin_w0 * 0.5;
             s->b_double[1] =  0;
-            s->b_double[2] = -sin(w0) / 2;
+            s->b_double[2] = -sin_w0 * 0.5;
         } else {
-            s->a_double[0] =  1 + alpha;
-            s->a_double[1] = -2 * cos(w0);
-            s->a_double[2] =  1 - alpha;
+            s->a_double[0] =  1.0 + alpha;
+            s->a_double[1] = -2.0 * cos_w0;
+            s->a_double[2] =  1.0 - alpha;
             s->b_double[0] =  alpha;
-            s->b_double[1] =  0;
+            s->b_double[1] =  0.0;
             s->b_double[2] = -alpha;
         }
         break;
     case bandreject:
-        s->a_double[0] =  1 + alpha;
-        s->a_double[1] = -2 * cos(w0);
-        s->a_double[2] =  1 - alpha;
-        s->b_double[0] =  1;
-        s->b_double[1] = -2 * cos(w0);
-        s->b_double[2] =  1;
+        s->a_double[0] =  1.0 + alpha;
+        s->a_double[1] = -2.0 * cos_w0;
+        s->a_double[2] =  1.0 - alpha;
+        s->b_double[0] =  1.0;
+        s->b_double[1] = -2.0 * cos_w0;
+        s->b_double[2] =  1.0;
         break;
     case lowpass:
         if (s->poles == 1) {
@@ -580,12 +582,12 @@ static int config_filter(AVFilterLink *outlink, int reset)
             s->b_double[1] = 0;
             s->b_double[2] = 0;
         } else {
-            s->a_double[0] =  1 + alpha;
-            s->a_double[1] = -2 * cos(w0);
-            s->a_double[2] =  1 - alpha;
-            s->b_double[0] = (1 - cos(w0)) / 2;
-            s->b_double[1] =  1 - cos(w0);
-            s->b_double[2] = (1 - cos(w0)) / 2;
+            s->a_double[0] =  1.0 + alpha;
+            s->a_double[1] = -2.0 * cos_w0;
+            s->a_double[2] =  1.0 - alpha;
+            s->b_double[0] = (1.0 - cos_w0) * 0.5;
+            s->b_double[1] =  1.0 - cos_w0;
+            s->b_double[2] = (1.0 - cos_w0) * 0.5;
         }
         break;
     case highpass:
@@ -597,12 +599,12 @@ static int config_filter(AVFilterLink *outlink, int reset)
             s->b_double[1] = -s->b_double[0];
             s->b_double[2] = 0;
         } else {
-            s->a_double[0] =   1 + alpha;
-            s->a_double[1] =  -2 * cos(w0);
-            s->a_double[2] =   1 - alpha;
-            s->b_double[0] =  (1 + cos(w0)) / 2;
-            s->b_double[1] = -(1 + cos(w0));
-            s->b_double[2] =  (1 + cos(w0)) / 2;
+            s->a_double[0] =   1.0 + alpha;
+            s->a_double[1] =  -2.0 * cos_w0;
+            s->a_double[2] =   1.0 - alpha;
+            s->b_double[0] =  (1.0 + cos_w0) * 0.5;
+            s->b_double[1] = -(1.0 + cos_w0);
+            s->b_double[2] =  (1.0 + cos_w0) * 0.5;
         }
         break;
     case allpass:
@@ -616,12 +618,12 @@ static int config_filter(AVFilterLink *outlink, int reset)
             s->b_double[2] = 0.;
             break;
         case 2:
-            s->a_double[0] =  1 + alpha;
-            s->a_double[1] = -2 * cos(w0);
-            s->a_double[2] =  1 - alpha;
-            s->b_double[0] =  1 - alpha;
-            s->b_double[1] = -2 * cos(w0);
-            s->b_double[2] =  1 + alpha;
+            s->a_double[0] =  1.0 + alpha;
+            s->a_double[1] = -2.0 * cos_w0;
+            s->a_double[2] =  1.0 - alpha;
+            s->b_double[0] =  1.0 - alpha;
+            s->b_double[1] = -2.0 * cos_w0;
+            s->b_double[2] =  1.0 + alpha;
         break;
         }
         break;
