@@ -106,7 +106,7 @@ static int config_input(AVFilterLink *inlink)
     s->attack = exp(-1.0 / (2.0 * inlink->sample_rate));
     s->release = exp(-1.0 / (0.0001 * inlink->sample_rate));
     s->buffer = ff_get_audio_buffer(inlink, inlink->sample_rate / 10);
-    s->w = ff_get_audio_buffer(inlink, 3);
+    s->w = ff_get_audio_buffer(inlink, 4);
     s->write_pos = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->write_pos));
     if (!s->buffer || !s->w || !s->write_pos)
         return AVERROR(ENOMEM);

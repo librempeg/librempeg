@@ -41,13 +41,14 @@
 static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     ASubBoostContext *s = ctx->priv;
+    const int disabled = ctx->is_disabled;
     ThreadData *td = arg;
     AVFrame *out = td->out;
     AVFrame *in = td->in;
-    const ftype mix = ctx->is_disabled ? F(0.0) : F(1.0);
-    const ftype wet = ctx->is_disabled ? F(1.0) : s->wet_gain;
-    const ftype dry = ctx->is_disabled ? F(1.0) : s->dry_gain;
-    const ftype feedback = s->feedback, decay = s->decay;
+    const ftype wet = disabled ? F(1.0) : s->wet_gain;
+    const ftype dry = disabled ? F(1.0) : s->dry_gain;
+    const ftype feedback = s->feedback;
+    const ftype decay = s->decay;
     const ftype max_boost = s->max_boost;
     const ftype b0 = s->b0;
     const ftype b1 = s->b1;
@@ -62,6 +63,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     const ftype b = F(1.0) - a;
     const ftype c = s->release;
     const ftype d = F(1.0) - c;
+    const ftype fade = disabled ? b : -b;
 
     for (int ch = start; ch < end; ch++) {
         const ftype *src = (const ftype *)in->extended_data[ch];
@@ -86,13 +88,16 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
             w[1] = b2 * src[n] + a2 * out_sample;
 
             buffer[write_pos] = buffer[write_pos] * decay + out_sample * feedback;
-            boost = mix * CLIP((F(0.9) - FABS(src[n] * dry)) / FABS(buffer[write_pos]), F(0.0), max_boost);
+            boost = CLIP((F(0.9) - FABS(src[n] * dry)) / FABS(buffer[write_pos]), F(0.0), max_boost);
             w[2] = (boost > w[2]) ? w[2] * a + b * boost : w[2] * c + d * boost;
+            w[2] *= (F(1.0) - w[3]);
             w[2] = CLIP(w[2], F(0.0), max_boost);
-            dst[n] = (src[n] * dry + w[2] * buffer[write_pos] * mix) * wet;
+            dst[n] = (src[n] * dry + w[2] * buffer[write_pos]) * wet;
 
             if (++write_pos >= buffer_samples)
                 write_pos = 0;
+            w[3] += fade;
+            w[3] = CLIP(w[3], F(0.0), F(1.0));
         }
 
         w[0] = isnormal(w[0]) ? w[0] : F(0.0);
