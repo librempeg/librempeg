@@ -135,7 +135,6 @@ typedef struct BiquadsContext {
     char *ch_layout_str;
     AVChannelLayout ch_layout;
     int normalize;
-    int order;
 
     double a_double[3];
     double b_double[3];
@@ -441,7 +440,6 @@ static int config_filter(AVFilterLink *outlink, int reset)
     const double w0 = 2.0 * M_PI * s->frequency / inlink->sample_rate;
     const double cos_w0 = cos(w0);
     const double sin_w0 = sin(w0);
-    double K = tan(w0 / 2.);
     double alpha, beta;
 
     s->bypass = (((w0 > M_PI || w0 <= 0.) && reset) || (s->width <= 0.)) && (s->filter_type != biquad && s->filter_type != transform);
@@ -608,10 +606,10 @@ static int config_filter(AVFilterLink *outlink, int reset)
         }
         break;
     case allpass:
-        switch (s->order) {
+        switch (s->poles) {
         case 1:
-            s->a_double[0] = 1.;
-            s->a_double[1] = -(1. - K) / (1. + K);
+            s->a_double[0] = sin_w0 + 1.0 + cos_w0;
+            s->a_double[1] = sin_w0 - 1.0 - cos_w0;
             s->a_double[2] = 0.;
             s->b_double[0] = s->a_double[1];
             s->b_double[1] = s->a_double[0];
@@ -1342,8 +1340,8 @@ static const AVOption allpass_options[] = {
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(0.707),
     MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
-    {"order", "set filter order", OFFSET(order), AV_OPT_TYPE_INT, {.i64=2}, 1, 2, FLAGS},
-    {"o",     "set filter order", OFFSET(order), AV_OPT_TYPE_INT, {.i64=2}, 1, 2, FLAGS},
+    {"poles", "set number of poles", OFFSET(poles), AV_OPT_TYPE_INT, {.i64=2}, 1, 2, AF},
+    {"p",     "set number of poles", OFFSET(poles), AV_OPT_TYPE_INT, {.i64=2}, 1, 2, AF},
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     {NULL}
