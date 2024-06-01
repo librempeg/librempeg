@@ -102,8 +102,7 @@ static int config_input(AVFilterLink *inlink)
     size_t min_buf_size = (size_t)(inlink->sample_rate * MAX_HAAS_DELAY * 0.001);
     size_t new_buf_size = 1;
 
-    while (new_buf_size < min_buf_size)
-        new_buf_size <<= 1;
+    new_buf_size = 1LL << av_ceil_log2(min_buf_size);
 
     av_freep(&s->buffer);
     s->buffer = av_calloc(new_buf_size, sizeof(*s->buffer));
