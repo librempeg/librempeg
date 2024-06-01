@@ -20,46 +20,7 @@
  */
 
 /*
- * 2-pole filters designed by Robert Bristow-Johnson <rbj@audioimagination.com>
- *   see http://www.musicdsp.org/files/Audio-EQ-Cookbook.txt
- *
- * 1-pole filters based on code (c) 2000 Chris Bagwell <cbagwell@sprynet.com>
- *   Algorithms: Recursive single pole low/high pass filter
- *   Reference: The Scientist and Engineer's Guide to Digital Signal Processing
- *
- *   low-pass: output[N] = input[N] * A + output[N-1] * B
- *     X = exp(-2.0 * pi * Fc)
- *     A = 1 - X
- *     B = X
- *     Fc = cutoff freq / sample rate
- *
- *     Mimics an RC low-pass filter:
- *
- *     ---/\/\/\/\----------->
- *                   |
- *                  --- C
- *                  ---
- *                   |
- *                   |
- *                   V
- *
- *   high-pass: output[N] = A0 * input[N] + A1 * input[N-1] + B1 * output[N-1]
- *     X  = exp(-2.0 * pi * Fc)
- *     A0 = (1 + X) / 2
- *     A1 = -(1 + X) / 2
- *     B1 = X
- *     Fc = cutoff freq / sample rate
- *
- *     Mimics an RC high-pass filter:
- *
- *         || C
- *     ----||--------->
- *         ||    |
- *               <
- *               > R
- *               <
- *               |
- *               V
+ * 1/2-pole filters designed by Robert Bristow-Johnson <rbj@audioimagination.com>
  */
 
 #include "config_components.h"
@@ -436,7 +397,7 @@ static int config_filter(AVFilterLink *outlink, int reset)
     BiquadsContext *s       = ctx->priv;
     AVFilterLink *inlink    = ctx->inputs[0];
     double gain = s->gain * ((s->filter_type == tiltshelf) + 1.);
-    double A = ff_exp10(gain / 40);
+    const double A = ff_exp10(gain / 40.0);
     const double w0 = 2.0 * M_PI * s->frequency / inlink->sample_rate;
     const double cos_w0 = cos(w0);
     const double sin_w0 = sin(w0);
@@ -498,19 +459,12 @@ static int config_filter(AVFilterLink *outlink, int reset)
     case tiltshelf:
     case lowshelf:
         if (s->poles == 1) {
-            double A = ff_exp10(gain / 20);
-            double ro = -sin(w0 / 2. - M_PI_4) / sin(w0 / 2. + M_PI_4);
-            double n = (A + 1) / (A - 1);
-            double alpha1 = A == 1. ? 0. : n - FFSIGN(n) * sqrt(n * n - 1);
-            double beta0 = ((1 + A) + (1 - A) * alpha1) * 0.5;
-            double beta1 = ((1 - A) + (1 + A) * alpha1) * 0.5;
-
-            s->a_double[0] = 1 + ro * alpha1;
-            s->a_double[1] = -ro - alpha1;
-            s->a_double[2] = 0;
-            s->b_double[0] = beta0 + ro * beta1;
-            s->b_double[1] = -beta1 - ro * beta0;
-            s->b_double[2] = 0;
+            s->a_double[0] = sin_w0 / A + 1.0 + cos_w0;
+            s->a_double[1] = sin_w0 / A - 1.0 - cos_w0;
+            s->a_double[2] = 0.0;
+            s->b_double[0] = sin_w0 * A + 1.0 + cos_w0;
+            s->b_double[1] = sin_w0 * A - 1.0 - cos_w0;
+            s->b_double[2] = 0.0;
         } else {
             s->a_double[0] =          (A + 1) + (A - 1) * cos_w0 + beta * alpha;
             s->a_double[1] =    -2 * ((A - 1) + (A + 1) * cos_w0);
@@ -524,19 +478,12 @@ static int config_filter(AVFilterLink *outlink, int reset)
         beta = sqrt((A * A + 1) - (A - 1) * (A - 1));
     case highshelf:
         if (s->poles == 1) {
-            double A = ff_exp10(gain / 20);
-            double ro = sin(w0 / 2. - M_PI_4) / sin(w0 / 2. + M_PI_4);
-            double n = (A + 1) / (A - 1);
-            double alpha1 = A == 1. ? 0. : n - FFSIGN(n) * sqrt(n * n - 1);
-            double beta0 = ((1 + A) + (1 - A) * alpha1) * 0.5;
-            double beta1 = ((1 - A) + (1 + A) * alpha1) * 0.5;
-
-            s->a_double[0] = 1 + ro * alpha1;
-            s->a_double[1] = ro + alpha1;
-            s->a_double[2] = 0;
-            s->b_double[0] = beta0 + ro * beta1;
-            s->b_double[1] = beta1 + ro * beta0;
-            s->b_double[2] = 0;
+            s->a_double[0] = sin_w0 + 1.0/A + cos_w0 / A;
+            s->a_double[1] = sin_w0 - 1.0/A - cos_w0 / A;
+            s->a_double[2] = 0.0;
+            s->b_double[0] = sin_w0 + A + A * cos_w0;
+            s->b_double[1] = sin_w0 - A - A * cos_w0;
+            s->b_double[2] = 0.0;
         } else {
             s->a_double[0] =          (A + 1) - (A - 1) * cos_w0 + beta * alpha;
             s->a_double[1] =     2 * ((A - 1) - (A + 1) * cos_w0);
@@ -573,12 +520,12 @@ static int config_filter(AVFilterLink *outlink, int reset)
         break;
     case lowpass:
         if (s->poles == 1) {
-            s->a_double[0] = 1;
-            s->a_double[1] = -exp(-w0);
-            s->a_double[2] = 0;
-            s->b_double[0] = 1 + s->a_double[1];
-            s->b_double[1] = 0;
-            s->b_double[2] = 0;
+            s->a_double[0] = sin_w0 + 1.0 + cos_w0;
+            s->a_double[1] = sin_w0 - 1.0 - cos_w0;
+            s->a_double[2] = 0.0;
+            s->b_double[0] = sin_w0;
+            s->b_double[1] = sin_w0;
+            s->b_double[2] = 0.0;
         } else {
             s->a_double[0] =  1.0 + alpha;
             s->a_double[1] = -2.0 * cos_w0;
@@ -590,12 +537,12 @@ static int config_filter(AVFilterLink *outlink, int reset)
         break;
     case highpass:
         if (s->poles == 1) {
-            s->a_double[0] = 1;
-            s->a_double[1] = -exp(-w0);
-            s->a_double[2] = 0;
-            s->b_double[0] = (1 - s->a_double[1]) / 2;
+            s->a_double[0] = sin_w0 + 1.0 + cos_w0;
+            s->a_double[1] = sin_w0 - 1.0 - cos_w0;
+            s->a_double[2] = 0.0;
+            s->b_double[0] = 1.0 + cos_w0;
             s->b_double[1] = -s->b_double[0];
-            s->b_double[2] = 0;
+            s->b_double[2] = 0.0;
         } else {
             s->a_double[0] =   1.0 + alpha;
             s->a_double[1] =  -2.0 * cos_w0;
