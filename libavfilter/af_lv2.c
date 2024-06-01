@@ -25,7 +25,9 @@
  */
 
 #include <lilv/lilv.h>
+#include <lv2/atom/atom.h>
 #include <lv2/log/log.h>
+#include <lv2/options/options.h>
 #include <lv2/lv2plug.in/ns/ext/atom/atom.h>
 #include <lv2/lv2plug.in/ns/ext/buf-size/buf-size.h>
 
@@ -55,6 +57,8 @@ typedef struct LV2Context {
 
     int sample_rate;
     int nb_samples;
+    int min_samples;
+    int max_samples;
     int64_t pts;
     int64_t duration;
 
@@ -69,10 +73,12 @@ typedef struct LV2Context {
     LV2_Feature        unmap_feature;
     LV2_Atom_Sequence  seq_in[2];
     LV2_Atom_Sequence *seq_out;
-    const LV2_Feature *features[7];
+    const LV2_Feature *features[12];
 
     LV2_Log_Log lv2_log;
     LV2_Feature avlog_feature;
+    LV2_Options_Option lv2_option[3];
+    LV2_Feature option_feature;
 
     float *mins;
     float *maxes;
@@ -92,6 +98,10 @@ typedef struct LV2Context {
     LilvNode  *powerOf2BlockLength;
     LilvNode  *fixedBlockLength;
     LilvNode  *boundedBlockLength;
+    LilvNode  *coarseBlockLength;
+    LilvNode  *nominalBlockLength;
+    LilvNode  *minBlockLength;
+    LilvNode  *maxBlockLength;
 } LV2Context;
 
 #define OFFSET(x) offsetof(LV2Context, x)
@@ -112,6 +122,8 @@ static const AVOption lv2_options[] = {
     { "n",          "set the number of samples per requested frame", OFFSET(nb_samples), AV_OPT_TYPE_INT, {.i64=1024}, 1, INT_MAX, FLAGS },
     { "duration", "set audio duration", OFFSET(duration), AV_OPT_TYPE_DURATION, {.i64=-1}, -1, INT64_MAX, FLAGS },
     { "d",        "set audio duration", OFFSET(duration), AV_OPT_TYPE_DURATION, {.i64=-1}, -1, INT64_MAX, FLAGS },
+    { "min_samples", "set the min number of samples per input frame", OFFSET(min_samples), AV_OPT_TYPE_INT, {.i64=4096},         2, UINT16_MAX+1, FLAGS },
+    { "max_samples", "set the max number of samples per input frame", OFFSET(max_samples), AV_OPT_TYPE_INT, {.i64=UINT16_MAX+1}, 2, UINT16_MAX+1, FLAGS },
     { NULL }
 };
 
@@ -265,10 +277,14 @@ static int request_frame(AVFilterLink *outlink)
     return ff_filter_frame(outlink, out);
 }
 
-static const LV2_Feature buf_size_features[3] = {
+static const LV2_Feature buf_size_features[7] = {
     { LV2_BUF_SIZE__powerOf2BlockLength, NULL },
     { LV2_BUF_SIZE__fixedBlockLength,    NULL },
     { LV2_BUF_SIZE__boundedBlockLength,  NULL },
+    { LV2_BUF_SIZE__coarseBlockLength,   NULL },
+    { LV2_BUF_SIZE__nominalBlockLength,  NULL },
+    { LV2_BUF_SIZE__minBlockLength,      NULL },
+    { LV2_BUF_SIZE__maxBlockLength,      NULL },
 };
 
 static int lv2_printf(LV2_Log_Handle handle, LV2_URID type, const char* format, ...)
@@ -333,6 +349,23 @@ static int config_output(AVFilterLink *outlink)
     LV2Context *s = ctx->priv;
     int ret, i, sample_rate;
 
+    if (s->nb_inputs) {
+        AVFilterLink *inlink = ctx->inputs[0];
+
+        if (lilv_plugin_has_feature(s->plugin, s->powerOf2BlockLength)) {
+            s->min_samples = 1 << av_ceil_log2(s->min_samples);
+            s->max_samples = 1 << av_ceil_log2(s->max_samples);
+        }
+
+        if (lilv_plugin_has_feature(s->plugin, s->fixedBlockLength)) {
+            s->min_samples = FFMIN(s->min_samples, s->max_samples);
+            s->max_samples = s->min_samples;
+        }
+
+        inlink->min_samples = s->min_samples;
+        inlink->max_samples = s->max_samples;
+    }
+
     s->lv2_log.handle = ctx;
     s->lv2_log.printf = &lv2_printf;
     s->lv2_log.vprintf = &lv2_vprintf;
@@ -349,13 +382,43 @@ static int config_output(AVFilterLink *outlink)
     s->unmap.unmap  = uri_table_unmap;
     s->unmap_feature.URI = LV2_URID_UNMAP_URI;
     s->unmap_feature.data = &s->unmap;
-    s->features[0] = &s->map_feature;
-    s->features[1] = &s->unmap_feature;
-    s->features[2] = &buf_size_features[0];
-    s->features[3] = &buf_size_features[1];
-    s->features[4] = &buf_size_features[2];
-    s->features[5] = &s->avlog_feature;
-    s->features[6] = NULL;
+
+    s->lv2_option[0].context = LV2_OPTIONS_INSTANCE;
+    s->lv2_option[0].subject = 0;
+    s->lv2_option[0].key = uri_table_map(&s->uri_table, LV2_BUF_SIZE__minBlockLength);
+    s->lv2_option[0].size = sizeof(int);
+    s->lv2_option[0].type = uri_table_map(&s->uri_table, LV2_ATOM__Int);
+    s->lv2_option[0].value = &s->min_samples;
+
+    s->lv2_option[1].context = LV2_OPTIONS_INSTANCE;
+    s->lv2_option[1].subject = 0;
+    s->lv2_option[1].key = uri_table_map(&s->uri_table, LV2_BUF_SIZE__maxBlockLength);
+    s->lv2_option[1].size = sizeof(int);
+    s->lv2_option[1].type = uri_table_map(&s->uri_table, LV2_ATOM__Int);
+    s->lv2_option[1].value = &s->max_samples;
+
+    s->lv2_option[2].context = LV2_OPTIONS_INSTANCE;
+    s->lv2_option[2].subject = 0;
+    s->lv2_option[2].key = 0;
+    s->lv2_option[2].size = 0;
+    s->lv2_option[2].type = 0;
+    s->lv2_option[2].value = NULL;
+
+    s->option_feature.URI = LV2_OPTIONS__options;
+    s->option_feature.data = &s->lv2_option;
+
+    s->features[0] = &s->avlog_feature;
+    s->features[1] = &s->option_feature;
+    s->features[2] = &s->map_feature;
+    s->features[3] = &s->unmap_feature;
+    s->features[4] = &buf_size_features[0];
+    s->features[5] = &buf_size_features[1];
+    s->features[6] = &buf_size_features[2];
+    s->features[7] = &buf_size_features[3];
+    s->features[8] = &buf_size_features[4];
+    s->features[9] = &buf_size_features[5];
+    s->features[10]= &buf_size_features[6];
+    s->features[11]= NULL;
 
     if (ctx->nb_inputs) {
         AVFilterLink *inlink = ctx->inputs[0];
@@ -422,15 +485,6 @@ static int config_output(AVFilterLink *outlink)
     if (ret < 0)
         return ret;
 
-    if (s->nb_inputs &&
-        (lilv_plugin_has_feature(s->plugin, s->powerOf2BlockLength) ||
-         lilv_plugin_has_feature(s->plugin, s->fixedBlockLength) ||
-         lilv_plugin_has_feature(s->plugin, s->boundedBlockLength))) {
-        AVFilterLink *inlink = ctx->inputs[0];
-
-        inlink->min_samples = inlink->max_samples = 4096;
-    }
-
     return 0;
 }
 
@@ -442,6 +496,9 @@ static av_cold int init(AVFilterContext *ctx)
     AVFilterPad pad = { NULL };
     LilvNode *uri;
     int i, ret;
+
+    if (s->min_samples > s->max_samples)
+        FFSWAP(int, s->min_samples, s->max_samples);
 
     s->world = lilv_world_new();
     if (!s->world)
@@ -477,6 +534,10 @@ static av_cold int init(AVFilterContext *ctx)
     s->powerOf2BlockLength = lilv_new_uri(s->world, LV2_BUF_SIZE__powerOf2BlockLength);
     s->fixedBlockLength    = lilv_new_uri(s->world, LV2_BUF_SIZE__fixedBlockLength);
     s->boundedBlockLength  = lilv_new_uri(s->world, LV2_BUF_SIZE__boundedBlockLength);
+    s->coarseBlockLength   = lilv_new_uri(s->world, LV2_BUF_SIZE__coarseBlockLength);
+    s->nominalBlockLength  = lilv_new_uri(s->world, LV2_BUF_SIZE__nominalBlockLength);
+    s->minBlockLength      = lilv_new_uri(s->world, LV2_BUF_SIZE__minBlockLength);
+    s->maxBlockLength      = lilv_new_uri(s->world, LV2_BUF_SIZE__maxBlockLength);
 
     for (i = 0; i < s->nb_ports; i++) {
         const LilvPort *lport = lilv_plugin_get_port_by_index(s->plugin, i);
@@ -604,6 +665,10 @@ static av_cold void uninit(AVFilterContext *ctx)
     lilv_node_free(s->powerOf2BlockLength);
     lilv_node_free(s->fixedBlockLength);
     lilv_node_free(s->boundedBlockLength);
+    lilv_node_free(s->coarseBlockLength);
+    lilv_node_free(s->nominalBlockLength);
+    lilv_node_free(s->minBlockLength);
+    lilv_node_free(s->maxBlockLength);
     lilv_node_free(s->urid_map);
     lilv_node_free(s->atom_Sequence);
     lilv_node_free(s->atom_AtomPort);
