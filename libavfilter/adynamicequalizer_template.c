@@ -23,16 +23,17 @@
 #undef FMIN
 #undef CLIP
 #undef SAMPLE_FORMAT
+#undef SAMPLE_SUFFIX
 #undef FABS
 #undef FLOG
 #undef FEXP
 #undef FLOG2
-#undef FLOG10
 #undef FEXP2
 #undef FEXP10
 #undef EPSILON
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
+#define SAMPLE_SUFFIX f
 #define SQRT sqrtf
 #define FTAN tanf
 #define FMIN fminf
@@ -42,13 +43,13 @@
 #define FLOG logf
 #define FEXP expf
 #define FLOG2 log2f
-#define FLOG10 log10f
 #define FEXP2 exp2f
 #define FEXP10 ff_exp10f
 #define EPSILON (1.f / (1 << 23))
 #define ftype float
 #else
 #define SAMPLE_FORMAT double
+#define SAMPLE_SUFFIX
 #define SQRT sqrt
 #define FTAN tan
 #define FMIN fmin
@@ -58,17 +59,18 @@
 #define FLOG log
 #define FEXP exp
 #define FLOG2 log2
-#define FLOG10 log10
 #define FEXP2 exp2
 #define FEXP10 ff_exp10
 #define EPSILON (1.0 / (1LL << 53))
 #define ftype double
 #endif
 
-#define F(x) ((ftype)(x))
+#define Fn3(a,b)   a##b
+#define Fn2(a,b)   Fn3(a,b)
+#define F(a)       Fn2(a, SAMPLE_SUFFIX)
 
-#define LIN2LOG(x) (F(20.0) * FLOG10((x) + EPSILON))
-#define LOG2LIN(x) (FEXP10((x) / F(20.0)))
+#define LIN2LOG(x) (F(6.0206) * FLOG2((x) + EPSILON))
+#define LOG2LIN(x) (FEXP2((x) / F(6.0206)))
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
