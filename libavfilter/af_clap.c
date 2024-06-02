@@ -333,14 +333,11 @@ static int process_options(AVFilterContext *ctx, clap_plugin_params_t *plugin_pa
         const char *arg = s->options[i];
         clap_param_info_t inf;
         const char *vstr;
-        char *option;
         double val;
+        int j;
 
-        if (s->nb_options >= s->control_count)
+        if (i >= s->control_count)
             break;
-
-        plugin_params->get_info(s->clap_plugin, i, &inf);
-        s->plugin_controls[i].id = inf.id;
 
         vstr = strstr(arg, "=");
         if (vstr == NULL) {
@@ -348,11 +345,24 @@ static int process_options(AVFilterContext *ctx, clap_plugin_params_t *plugin_pa
             return AVERROR(EINVAL);
         }
 
-        option = av_strndup(arg, vstr-arg);
+        for (j = 0; j < s->control_count; j++) {
+            plugin_params->get_info(s->clap_plugin, j, &inf);
+            if ((strlen(inf.name) == vstr-arg) &&
+                !strncmp(arg, inf.name, vstr-arg))
+                break;
+        }
+
+        if (j >= s->control_count) {
+            av_log(ctx, AV_LOG_ERROR, "Option: %s not found.\n", arg);
+            continue;
+        }
+
+        s->plugin_controls[i].id = inf.id;
+
         val  = atof(vstr+1);
         if (val < inf.min_value || val > inf.max_value) {
             av_log(ctx, AV_LOG_WARNING, "[%d] value %g out of range: [%g, %g]\n",
-                   i, val, inf.min_value, inf.max_value);
+                   j, val, inf.min_value, inf.max_value);
         } else {
             clap_event_param_value_t *ev = &s->plugin_controls[i].ev;
 
@@ -371,7 +381,6 @@ static int process_options(AVFilterContext *ctx, clap_plugin_params_t *plugin_pa
 
             s->plugin_controls[i].val = val;
         }
-        av_free(option);
     }
 
     s->update_controls = s->nb_options != 0;
@@ -540,13 +549,11 @@ static av_cold int init(AVFilterContext *ctx)
             av_log(ctx, AV_LOG_INFO, "Plugin has %d controls\n", control_count);
             for (unsigned i = 0; i < control_count; i++) {
                 clap_param_info_t inf;
-                double d;
 
                 plugin_params->get_info(s->clap_plugin, i, &inf);
-                plugin_params->get_value(s->clap_plugin, inf.id, &d);
 
-                av_log(ctx, AV_LOG_INFO, " [%d]: %s: <%s> = <%g> [%g,%g] (default: %g)\n",
-                       i, inf.module, inf.name, d, inf.min_value, inf.max_value, inf.default_value);
+                av_log(ctx, AV_LOG_INFO, "%s\t\t <double> (from %g to %g) (default: %g)\n",
+                       inf.name, inf.min_value, inf.max_value, inf.default_value);
             }
         } else {
             av_log(ctx, AV_LOG_INFO, "No Controls Available\n");
