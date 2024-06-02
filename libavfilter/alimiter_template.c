@@ -81,7 +81,7 @@ static int fn(init_state)(AVFilterContext *ctx)
     for (int ch = 0; ch < s->nb_channels; ch++) {
         fn(StateContext) *st = &stc[ch];
 
-        st->nb_samples = s->l_size;
+        st->nb_samples = 1 << av_ceil_log2(s->l_size);
         st->lgain = F(1.0);
         st->sq = av_calloc(st->nb_samples, sizeof(*st->sq));
         if (!st->sq)
@@ -114,8 +114,7 @@ static av_always_inline fn(rtype) fn(queue_sample)(const ftype s,
 
     sq[pos] = s;
     pos++;
-    if (pos >= n)
-        pos = 0;
+    pos &= n;
 
     r.s = prev_s;
     r.pos = pos;
@@ -137,7 +136,7 @@ static int fn(filter_channels_link)(AVFilterContext *ctx, AVFrame *out)
     const ftype llimit = LIN2LOG(limit);
     fn(StateContext) *stc = s->st;
     fn(StateContext) *st = &stc[0];
-    const int stn = st->nb_samples;
+    const int stn = st->nb_samples-1;
     const ftype llevel = s->level ? -llimit : F(0.0);
     const ftype scale = s->level ? F(1.0)/limit : F(1.0);
     const uint8_t **srce = (const uint8_t **)in->extended_data;
@@ -267,7 +266,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
         ftype gain = st->gain;
         ftype drop = st->drop;
         ftype step = st->step;
-        const int stn = st->nb_samples;
+        const int stn = st->nb_samples-1;
         int pos = st->position;
         int sign = st->sign;
         int hold = st->hold;
