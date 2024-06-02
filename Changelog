@@ -12,6 +12,7 @@ version <next>:
 - dcblock audio filter
 - amae audio filter
 - ADPCM IMA PDA decoder
+- Playdate PDA demuxer
 - QOA encoder and muxer
 - xHE-AAC decoder
 
