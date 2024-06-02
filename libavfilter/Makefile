@@ -60,6 +60,7 @@ OBJS-$(CONFIG_AEMPHASIS_FILTER)              += af_aemphasis.o
 OBJS-$(CONFIG_AEVAL_FILTER)                  += aeval.o
 OBJS-$(CONFIG_AEXCITER_FILTER)               += af_aexciter.o
 OBJS-$(CONFIG_AFADE_FILTER)                  += af_afade.o
+OBJS-$(CONFIG_AFDELAY_FILTER)                += af_afdelay.o
 OBJS-$(CONFIG_AFFTDN_FILTER)                 += af_afftdn.o
 OBJS-$(CONFIG_AFFTFILT_FILTER)               += af_afftfilt.o
 OBJS-$(CONFIG_AFIR_FILTER)                   += af_afir.o
