@@ -694,6 +694,7 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
                 av_get_bytes_per_sample(link->incfg.formats->formats[n]))
                 link->format = link->incfg.formats->formats[n];
         }
+        link->incfg.formats->formats[0] = link->format;
         link->incfg.formats->nb_formats = 1;
     }
 
