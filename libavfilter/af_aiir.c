@@ -973,18 +973,15 @@ static void convert_pd2zp(AVFilterContext *ctx, int channels)
 static void check_stability(AVFilterContext *ctx, int channels)
 {
     AudioIIRContext *s = ctx->priv;
-    int ch;
 
-    for (ch = 0; ch < channels; ch++) {
+    for (int ch = 0; ch < channels; ch++) {
         IIRChannel *iir = &s->iir[ch];
 
         for (int n = 0; n < iir->nb_ab[0]; n++) {
             double pr = hypot(iir->ab[0][2*n], iir->ab[0][2*n+1]);
 
-            if (pr >= 1.) {
+            if (pr >= 1.)
                 av_log(ctx, AV_LOG_WARNING, "pole %d at channel %d is unstable\n", n, ch);
-                break;
-            }
         }
     }
 }
