@@ -74,6 +74,7 @@ static int config_input(AVFilterLink *inlink)
 
         s->max_delay = FFMAX(s->max_delay, delay);
     }
+    s->max_delay++;
 
     s->nb_channels = inlink->ch_layout.nb_channels;
 
@@ -119,6 +120,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->filter_channel(ctx, in->nb_samples, src, dst, ch);
     }
 
+    out->pts--;
     s->next_pts = in->pts;
     s->next_pts += in->duration;
 
