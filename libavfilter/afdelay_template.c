@@ -16,12 +16,18 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#undef ROUND
+#undef LRINT
 #undef ftype
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
+#define ROUND roundf
+#define LRINT lrintf
 #define ftype float
 #define SAMPLE_FORMAT fltp
 #else
+#define ROUND round
+#define LRINT lrint
 #define ftype double
 #define SAMPLE_FORMAT dblp
 #endif
@@ -32,35 +38,52 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
+typedef struct fn(DelayContext) {
+    ftype a, b, c;
+    ftype u, y, t;
+} fn(DelayContext);
+
 typedef struct fn(StateContext) {
-    ftype *buffer;
-    ftype v0;
-    ftype alpha;
-    ftype state;
-    ftype delay_frac;
-    size_t size;
-    size_t delay_int;
-    unsigned position;
+    unsigned N;
+    fn(DelayContext) *dc;
 } fn(StateContext);
 
-static void fn(update_state)(AVFilterContext *ctx)
+static int fn(update_state)(AVFilterContext *ctx)
 {
     AudioFDelayContext *s = ctx->priv;
     fn(StateContext) *stc = s->st;
 
+    if (s->nb_delays == 0)
+        return 0;
+
     for (int ch = 0; ch < s->nb_channels; ch++) {
         const int idx = FFMIN(ch, s->nb_delays-1);
         fn(StateContext) *st = &stc[ch];
-        const double delay = fmin(s->delays_opt[idx], st->size);
+        const ftype D = s->delays_opt[idx];
+        const unsigned N = FFMAX(LRINT(ROUND(D)),1);
+        const unsigned L = N-1;
 
-        st->delay_int = lrint(floor(delay));
-        st->delay_frac = delay - st->delay_int;
-        if (st->delay_frac < F(0.618) && st->delay_int >= 1) {
-            st->delay_frac += F(1.0);
-            st->delay_int--;
+        av_assert0(D > L);
+
+        st->dc = av_realloc_f(st->dc, N+1, sizeof(*st->dc));
+        if (!st->dc)
+            return AVERROR(ENOMEM);
+
+        st->N = N;
+        for (int n = 0; n < N+1; n++) {
+            fn(DelayContext) *dc = &st->dc[n];
+
+            dc->a = D-F(n+1)+F(1.0);
+            dc->b = -F(1.0)/(D+F(n+1));
+            dc->c = F(2.0)*F(n+1)-F(1.0);
+            dc->u = F(0.0);
+            dc->y = F(0.0);
+            dc->t = F(0.0);
+            av_log(ctx, AV_LOG_DEBUG, "[%d]: %g %g %g\n", n, dc->a, dc->b, dc->c);
         }
-        st->alpha = (F(1.0) - st->delay_frac) / (F(1.0) + st->delay_frac);
     }
+
+    return 0;
 }
 
 static int fn(init_state)(AVFilterContext *ctx)
@@ -72,25 +95,7 @@ static int fn(init_state)(AVFilterContext *ctx)
     if (!s->st)
         return AVERROR(ENOMEM);
 
-    stc = s->st;
-    for (int ch = 0; ch < s->nb_channels; ch++) {
-        const int idx = FFMIN(ch, s->nb_delays-1);
-        const double delay = s->delays_opt[idx];
-        fn(StateContext) *st = &stc[ch];
-
-        st->size = st->delay_int = lrint(floor(delay));
-        st->delay_frac = delay - st->delay_int;
-        if (st->delay_frac < F(0.618) && st->delay_int >= 1) {
-            st->delay_frac += F(1.0);
-            st->delay_int--;
-        }
-        st->alpha = (F(1.0) - st->delay_frac) / (F(1.0) + st->delay_frac);
-        st->buffer = av_calloc(st->delay_int+1, sizeof(*st->buffer));
-        if (!st->buffer)
-            return AVERROR(ENOMEM);
-    }
-
-    return 0;
+    return fn(update_state)(ctx);
 }
 
 static void fn(uninit_state)(AVFilterContext *ctx)
@@ -98,10 +103,10 @@ static void fn(uninit_state)(AVFilterContext *ctx)
     AudioFDelayContext *s = ctx->priv;
     fn(StateContext) *stc = s->st;
 
-    for (int ch = 0; ch < s->nb_channels && stc; ch++) {
+    for (int ch = 0; ch < s->nb_channels; ch++) {
         fn(StateContext) *st = &stc[ch];
 
-        av_freep(&st->buffer);
+        av_freep(&st->dc);
     }
 
     av_freep(&s->st);
@@ -113,30 +118,38 @@ static void fn(filter_channel)(AVFilterContext *ctx, const int nb_samples,
     AudioFDelayContext *s = ctx->priv;
     fn(StateContext) *stc = s->st;
     fn(StateContext) *st = &stc[ch];
-    const ftype alpha = st->alpha;
     const ftype *src = (const ftype *)ssrc;
-    const size_t delay_int = st->delay_int;
-    unsigned position = st->position;
-    ftype *buffer = st->buffer;
     ftype *dst = (ftype *)ddst;
-    ftype state = st->state;
-    ftype v0 = st->v0;
+    fn(DelayContext) *sdc = st->dc;
+    const unsigned N = st->N;
+    const unsigned L = N-1;
 
-    for (int n = 0; n < nb_samples; n++) {
-        const ftype in = src[n];
-        ftype v1;
+    for (int i = 0; i < nb_samples; i++) {
+        fn(DelayContext) *d0 = &sdc[0];
+        const ftype in = src[i];
+        ftype v;
 
-        v1 = buffer[position];
-        buffer[position] = in;
-        position++;
-        if (position >= delay_int)
-            position = 0;
-        state = v0 + alpha * (v1 - state);
-        dst[n] = state;
-        v0 = v1;
+        d0->u = in;
+        for (int n = 0; n < N; n++) {
+            fn(DelayContext) *dn = &sdc[n+1];
+            fn(DelayContext) *dc = &sdc[n];
+
+            dc->t += dc->y * dc->c;
+            v = dc->a * dc->u + dc->t;
+            v *= dc->b;
+            dn->u = v;
+            dc->y = v * F(2.0);
+
+            dc->t = isnormal(dc->t) ? dc->t : F(0.0);
+            dc->y = isnormal(dc->y) ? dc->y : F(0.0);
+            dn->u = isnormal(dn->u) ? dn->u : F(0.0);
+
+            if (n == L) {
+                for (int j = n-1; j >= 0; j--)
+                    sdc[j].y += sdc[j+1].y;
+            }
+        }
+
+        dst[i] = d0->y + in;
     }
-
-    st->v0 = v0;
-    st->state = state;
-    st->position = position;
 }
