@@ -25,6 +25,8 @@
 #include "filters.h"
 #include "internal.h"
 
+#define MAX_DELAY 33
+
 typedef struct AudioFDelayContext {
     const AVClass *class;
     double *delays_opt;
@@ -51,7 +53,7 @@ typedef struct AudioFDelayContext {
 static const AVOptionArrayDef def_delays = {.def="0.5",.size_min=1,.sep=' '};
 
 static const AVOption afdelay_options[] = {
-    { "delays", "set the list of delays for each channel", OFFSET(delays_opt), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_delays}, 0.0, 16, A},
+    { "delays", "set the list of delays for each channel", OFFSET(delays_opt), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_delays}, 0.0, MAX_DELAY, A},
     { NULL }
 };
 

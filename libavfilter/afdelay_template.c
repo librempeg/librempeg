@@ -38,14 +38,13 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
-typedef struct fn(DelayContext) {
-    ftype a, b, c;
-    ftype u, y, t;
-} fn(DelayContext);
-
 typedef struct fn(StateContext) {
     unsigned N;
-    fn(DelayContext) *dc;
+    ftype a[MAX_DELAY+1];
+    ftype b[MAX_DELAY+1];
+    ftype c[MAX_DELAY+1];
+    ftype t[MAX_DELAY+1];
+    ftype y[MAX_DELAY+1];
 } fn(StateContext);
 
 static int fn(update_state)(AVFilterContext *ctx)
@@ -65,21 +64,14 @@ static int fn(update_state)(AVFilterContext *ctx)
 
         av_assert0(D > L);
 
-        st->dc = av_realloc_f(st->dc, N+1, sizeof(*st->dc));
-        if (!st->dc)
-            return AVERROR(ENOMEM);
-
         st->N = N;
         for (int n = 0; n < N+1; n++) {
-            fn(DelayContext) *dc = &st->dc[n];
-
-            dc->a = D-F(n+1)+F(1.0);
-            dc->b = -F(1.0)/(D+F(n+1));
-            dc->c = F(2.0)*F(n+1)-F(1.0);
-            dc->u = F(0.0);
-            dc->y = F(0.0);
-            dc->t = F(0.0);
-            av_log(ctx, AV_LOG_DEBUG, "[%d]: %g %g %g\n", n, dc->a, dc->b, dc->c);
+            st->a[n] = D-F(n+1)+F(1.0);
+            st->b[n] = -F(1.0)/(D+F(n+1));
+            st->c[n] = F(2.0)*F(n+1)-F(1.0);
+            st->t[n] = F(0.0);
+            av_log(ctx, AV_LOG_DEBUG, "[%d]: %g %g %g\n",
+                   n, st->a[n], st->b[n], st->c[n]);
         }
     }
 
@@ -101,13 +93,6 @@ static int fn(init_state)(AVFilterContext *ctx)
 static void fn(uninit_state)(AVFilterContext *ctx)
 {
     AudioFDelayContext *s = ctx->priv;
-    fn(StateContext) *stc = s->st;
-
-    for (int ch = 0; ch < s->nb_channels; ch++) {
-        fn(StateContext) *st = &stc[ch];
-
-        av_freep(&st->dc);
-    }
 
     av_freep(&s->st);
 }
@@ -118,38 +103,32 @@ static void fn(filter_channel)(AVFilterContext *ctx, const int nb_samples,
     AudioFDelayContext *s = ctx->priv;
     fn(StateContext) *stc = s->st;
     fn(StateContext) *st = &stc[ch];
-    const ftype *src = (const ftype *)ssrc;
-    ftype *dst = (ftype *)ddst;
-    fn(DelayContext) *sdc = st->dc;
+    const ftype *restrict src = (const ftype *restrict)ssrc;
+    ftype *restrict dst = (ftype *restrict)ddst;
+    const ftype *restrict a = st->a;
+    const ftype *restrict b = st->b;
+    const ftype *restrict c = st->c;
+    ftype *restrict y = st->y;
+    ftype *restrict t = st->t;
     const unsigned N = st->N;
     const unsigned L = N-1;
 
     for (int i = 0; i < nb_samples; i++) {
-        fn(DelayContext) *d0 = &sdc[0];
         const ftype in = src[i];
-        ftype v;
+        ftype v, u;
 
-        d0->u = in;
+        u = in;
         for (int n = 0; n < N; n++) {
-            fn(DelayContext) *dn = &sdc[n+1];
-            fn(DelayContext) *dc = &sdc[n];
-
-            dc->t += dc->y * dc->c;
-            v = dc->a * dc->u + dc->t;
-            v *= dc->b;
-            dn->u = v;
-            dc->y = v * F(2.0);
-
-            dc->t = isnormal(dc->t) ? dc->t : F(0.0);
-            dc->y = isnormal(dc->y) ? dc->y : F(0.0);
-            dn->u = isnormal(dn->u) ? dn->u : F(0.0);
-
-            if (n == L) {
-                for (int j = n-1; j >= 0; j--)
-                    sdc[j].y += sdc[j+1].y;
-            }
+            t[n] += y[n] * c[n];
+            v = a[n] * u + t[n];
+            v *= b[n];
+            u = v;
+            y[n] = v + v;
         }
 
-        dst[i] = d0->y + in;
+        for (int n = L-1; n >= 0; n--)
+            y[n] += y[n+1];
+
+        dst[i] = y[0] + in;
     }
 }
