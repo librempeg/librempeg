@@ -101,6 +101,8 @@ typedef struct SendCmdContext {
 
     Interval *intervals;
     unsigned nb_intervals;
+
+    AVExpr **e;
 } SendCmdContext;
 
 #define OFFSET(x) offsetof(SendCmdContext, x)
@@ -149,6 +151,10 @@ static int config_input(AVFilterLink *inlink)
     if (!s->intervals)
         return AVERROR(ENOMEM);
 
+    s->e = av_calloc(s->nb_args_opt, sizeof(*s->e));
+    if (!s->e)
+        return AVERROR(ENOMEM);
+
     for (int i = 0; i < s->nb_intervals; i++) {
         Interval *interval = &s->intervals[i];
 
@@ -178,6 +184,13 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     SendCmdContext *s = ctx->priv;
 
+    if (s->e) {
+        for (int n = 0; n < s->nb_args_opt; n++) {
+            av_expr_free(s->e[n]);
+            s->e[n] = NULL;
+        }
+        av_freep(&s->e);
+    }
     av_freep(&s->intervals);
 }
 
@@ -240,13 +253,16 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
                         var_values[VAR_W]   = ref->width;
                         var_values[VAR_H]   = ref->height;
 
-                        if ((ret = av_expr_parse_and_eval(&res, cmd_arg, var_names, var_values,
-                                                          NULL, NULL, NULL, NULL, NULL, 0, NULL)) < 0) {
-                            av_log(ctx, AV_LOG_ERROR, "Invalid expression '%s' for command argument.\n", cmd_arg);
-                            av_frame_free(&ref);
-                            return AVERROR(EINVAL);
+                        if (!s->e[j]) {
+                            ret = av_expr_parse(&s->e[j], cmd_arg, var_names,
+                                                NULL, NULL, NULL, NULL, 0, NULL);
+                            if (ret < 0) {
+                                av_log(ctx, AV_LOG_ERROR, "Invalid expression '%s' for command argument.\n", cmd_arg);
+                                av_frame_free(&ref);
+                                return ret;
+                            }
                         }
-
+                        res = av_expr_eval(s->e[j], var_values, NULL);
                         cmd_arg = av_asprintf("%g", res);
                         if (!cmd_arg) {
                             av_frame_free(&ref);
