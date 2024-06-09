@@ -126,6 +126,13 @@ static void fn(filter_channel)(AVFilterContext *ctx, const int nb_samples,
             y[n] = v + v;
         }
 
+        for (int n = 0; n < N; n++) {
+            if (!isnormal(t[n]))
+                t[n] = F(0.0);
+            if (!isnormal(y[n]))
+                y[n] = F(0.0);
+        }
+
         for (int n = L-1; n >= 0; n--)
             y[n] += y[n+1];
 
