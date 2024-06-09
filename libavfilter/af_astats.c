@@ -62,6 +62,7 @@
 #define MEASURE_ABS_PEAK_COUNT          (1 << 25)
 
 #define MEASURE_MINMAXPEAK              (MEASURE_MIN_LEVEL | MEASURE_MAX_LEVEL | MEASURE_PEAK_LEVEL)
+#define MEASURE_DENORMALS               (MEASURE_NUMBER_OF_NANS | MEASURE_NUMBER_OF_INFS | MEASURE_NUMBER_OF_DENORMALS)
 
 typedef struct ChannelStats {
     double last;
@@ -670,10 +671,13 @@ static void set_metadata(AudioStatsContext *s, AVDictionary **metadata)
     }
 
 #define UPDATE_STATS(planar, type, sample, normalizer_suffix, int_sample) \
-    if ((s->measure_overall | s->measure_perchannel) & ~MEASURE_MINMAXPEAK) {                          \
-        UPDATE_STATS_##planar(type, update_stat(s, p, sample, sample normalizer_suffix, int_sample), s->is_float ? update_float_stat(s, p, sample) : s->is_double ? update_double_stat(s, p, sample) : (void)NULL, ); \
-    } else {                                                                                           \
+    if ((s->measure_overall | s->measure_perchannel) == ((s->measure_overall | s->measure_perchannel) & MEASURE_MINMAXPEAK)) {               \
         UPDATE_STATS_##planar(type, update_minmax(s, p, sample), , p->nmin = p->min normalizer_suffix; p->nmax = p->max normalizer_suffix;); \
+    } else if ((s->measure_overall | s->measure_perchannel) == ((s->measure_overall | s->measure_perchannel) & MEASURE_DENORMALS)) {         \
+        UPDATE_STATS_##planar(type, s->is_float ? update_float_stat(s, p, sample) :\
+                                   s->is_double ? update_double_stat(s, p, sample): (void)NULL, , ); \
+    } else {                                                                                           \
+        UPDATE_STATS_##planar(type, update_stat(s, p, sample, sample normalizer_suffix, int_sample), s->is_float ? update_float_stat(s, p, sample) : s->is_double ? update_double_stat(s, p, sample) : (void)NULL, ); \
     }
 
 static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
