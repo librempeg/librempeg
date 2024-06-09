@@ -2125,7 +2125,6 @@ AUTODETECT_LIBS="
 ARCH_LIST="
     aarch64
     arm
-    bfin
     ia64
     loongarch
     loongarch32
@@ -5326,10 +5325,6 @@ elif enabled arm; then
     esac
 
     test_cflags -mfp16-format=ieee && add_cflags -mfp16-format=ieee
-
-elif enabled bfin; then
-
-    cpuflags="-mcpu=$cpu"
 
 elif enabled loongarch; then
 
