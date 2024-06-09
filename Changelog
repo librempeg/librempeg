@@ -15,6 +15,7 @@ version <next>:
 - Playdate PDA demuxer
 - QOA encoder and muxer
 - xHE-AAC decoder
+- removed DEC Alpha DSP and support code
 
 version 7.0:
 - DXV DXT1 encoder
