@@ -547,6 +547,13 @@ eof:
     return 0;
 }
 
+static int check_input(AVFilterLink *inlink)
+{
+    const int queued_samples = ff_inlink_queued_samples(inlink);
+
+    return ff_inlink_check_available_samples(inlink, queued_samples + 1) == 1;
+}
+
 static int activate(AVFilterContext *ctx)
 {
     JoinContext *s = ctx->priv;
@@ -583,7 +590,7 @@ static int activate(AVFilterContext *ctx)
             s->eof |= status == AVERROR_EOF;
         }
 
-        if (!s->eof && !s->input_frames[i]) {
+        if (!s->input_frames[i] && !check_input(ctx->inputs[i])) {
             ff_inlink_request_frame(ctx->inputs[i]);
             return 0;
         }
