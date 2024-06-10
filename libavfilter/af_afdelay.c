@@ -39,7 +39,7 @@ typedef struct AudioFDelayContext {
     void *st;
 
     int (*init_state)(AVFilterContext *ctx);
-    int (*update_state)(AVFilterContext *ctx);
+    int (*update_state)(AVFilterContext *ctx, const int reset);
     void (*uninit_state)(AVFilterContext *ctx);
 
     void (*filter_channel)(AVFilterContext *ctx, const int nb_samples,
@@ -47,7 +47,7 @@ typedef struct AudioFDelayContext {
 } AudioFDelayContext;
 
 #define OFFSET(x) offsetof(AudioFDelayContext, x)
-#define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM//|AV_OPT_FLAG_RUNTIME_PARAM
+#define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
 static const AVOptionArrayDef def_delays = {.def="0.5",.size_min=1,.sep=' '};
@@ -225,7 +225,7 @@ static int process_command(AVFilterContext *ctx,
     if (ret < 0)
         return ret;
 
-    s->update_state(ctx);
+    s->update_state(ctx, 0);
 
     return 0;
 }

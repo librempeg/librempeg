@@ -47,7 +47,7 @@ typedef struct fn(StateContext) {
     ftype y[MAX_DELAY+1];
 } fn(StateContext);
 
-static int fn(update_state)(AVFilterContext *ctx)
+static int fn(update_state)(AVFilterContext *ctx, const int reset)
 {
     AudioFDelayContext *s = ctx->priv;
     fn(StateContext) *stc = s->st;
@@ -69,7 +69,8 @@ static int fn(update_state)(AVFilterContext *ctx)
             st->a[n] = D-F(n+1)+F(1.0);
             st->b[n] = -F(1.0)/(D+F(n+1));
             st->c[n] = F(2.0)*F(n+1)-F(1.0);
-            st->t[n] = F(0.0);
+            if (reset)
+                st->t[n] = F(0.0);
             av_log(ctx, AV_LOG_DEBUG, "[%d]: %g %g %g\n",
                    n, st->a[n], st->b[n], st->c[n]);
         }
@@ -87,7 +88,7 @@ static int fn(init_state)(AVFilterContext *ctx)
     if (!s->st)
         return AVERROR(ENOMEM);
 
-    return fn(update_state)(ctx);
+    return fn(update_state)(ctx, 1);
 }
 
 static void fn(uninit_state)(AVFilterContext *ctx)
