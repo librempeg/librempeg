@@ -106,6 +106,14 @@ static av_cold int init(AVFilterContext *ctx)
         return AVERROR(EINVAL);
     }
 
+    if (pan->layout.nb_channels > MAX_CHANNELS) {
+        av_log(ctx, AV_LOG_ERROR,
+               "af_pan supports a maximum of %d channels. "
+               "Feel free to ask for a higher limit.\n", MAX_CHANNELS);
+        ret = AVERROR_PATCHWELCOME;
+        goto fail;
+    }
+
     /* parse channel specifications */
     for (int n = 0; n < pan->nb_args; n++) {
         const char *arg0 = pan->args[n];
