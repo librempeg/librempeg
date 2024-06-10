@@ -50,6 +50,14 @@
 #define DURATION_SHORTEST 1
 #define DURATION_FIRST    2
 
+typedef struct InputContext {
+    AVFrame *frame;
+    uint8_t input_state;       /**< current state of each input */
+    float input_scale;         /**< mixing scale factor for this input */
+    float weight;              /**< custom weight for this input */
+    float scale_norm;          /**< normalization factor for this input */
+} InputContext;
+
 typedef struct MixContext {
     const AVClass *class;       /**< class for AVOptions */
     AVFloatDSPContext *fdsp;
@@ -63,19 +71,16 @@ typedef struct MixContext {
     unsigned nb_weights;
     int normalize;              /**< if inputs are scaled */
 
-    AVFrame **frames;
     int64_t eof_pts;
+
+    InputContext *inputs;
 
     int first_input;
     int nb_samples;
     int nb_channels;            /**< number of channels */
     int sample_rate;            /**< sample rate */
     int planar;
-    uint8_t *input_state;       /**< current state of each input */
-    float *input_scale;         /**< mixing scale factor for each input */
-    float *weights;             /**< custom weights for every input */
     float weight_sum;           /**< sum of custom weights for every input */
-    float *scale_norm;          /**< normalization factor for every input */
 } MixContext;
 
 #define OFFSET(x) offsetof(MixContext, x)
@@ -115,29 +120,63 @@ static void calculate_scales(MixContext *s)
 {
     float weight_sum = 0.f;
 
-    for (int i = 0; i < s->nb_inputs; i++)
-        if (s->frames[i] && !(s->input_state[i] & INPUT_EOF))
-            weight_sum += FFABS(s->weights[i]);
+    for (int i = 0; i < s->nb_inputs; i++) {
+        InputContext *ic = &s->inputs[i];
+
+        if (ic->frame && !(ic->input_state & INPUT_EOF))
+            weight_sum += FFABS(ic->weight);
+    }
 
     for (int i = 0; i < s->nb_inputs; i++) {
-        if (s->frames[i]) {
-            if (s->scale_norm[i] > weight_sum / FFABS(s->weights[i])) {
-                s->scale_norm[i] -= ((s->weight_sum / FFABS(s->weights[i])) / s->nb_inputs) *
-                                    s->frames[i]->nb_samples / (s->dropout_transition * s->sample_rate);
-                s->scale_norm[i] = FFMAX(s->scale_norm[i], weight_sum / FFABS(s->weights[i]));
+        InputContext *ic = &s->inputs[i];
+
+        if (ic->frame) {
+            if (ic->scale_norm > weight_sum / FFABS(ic->weight)) {
+                ic->scale_norm -= ((s->weight_sum / FFABS(ic->weight)) / s->nb_inputs) *
+                                    ic->frame->nb_samples / (s->dropout_transition * s->sample_rate);
+                ic->scale_norm = FFMAX(ic->scale_norm, weight_sum / FFABS(ic->weight));
             }
         }
     }
 
     for (int i = 0; i < s->nb_inputs; i++) {
-        if (s->frames[i]) {
+        InputContext *ic = &s->inputs[i];
+
+        if (ic->frame) {
             if (!s->normalize)
-                s->input_scale[i] = FFABS(s->weights[i]);
+                ic->input_scale = FFABS(ic->weight);
             else
-                s->input_scale[i] = 1.0f / s->scale_norm[i] * FFSIGN(s->weights[i]);
+                ic->input_scale = 1.0f / ic->scale_norm * FFSIGN(ic->weight);
         } else {
-            s->input_scale[i] = 0.0f;
+            ic->input_scale = 0.0f;
         }
+    }
+}
+
+static void parse_weights(AVFilterContext *ctx)
+{
+    MixContext *s = ctx->priv;
+    float last_weight = 1.f;
+    int i;
+
+    s->weight_sum = 0.f;
+    for (i = 0; i < s->nb_weights; i++) {
+        InputContext *ic;
+
+        if (i >= s->nb_inputs)
+            break;
+
+        ic = &s->inputs[i];
+        last_weight = s->weights_opt[i];
+        ic->weight = last_weight;
+        s->weight_sum += FFABS(last_weight);
+    }
+
+    for (; i < s->nb_inputs; i++) {
+        InputContext *ic = &s->inputs[i];
+
+        ic->weight = last_weight;
+        s->weight_sum += FFABS(last_weight);
     }
 }
 
@@ -154,22 +193,16 @@ static int config_output(AVFilterLink *outlink)
     s->sample_rate     = outlink->sample_rate;
     outlink->time_base = (AVRational){ 1, outlink->sample_rate };
 
-    s->frames = av_calloc(s->nb_inputs, sizeof(*s->frames));
-    if (!s->frames)
+    s->inputs = av_calloc(s->nb_inputs, sizeof(*s->inputs));
+    if (!s->inputs)
         return AVERROR(ENOMEM);
+
+    parse_weights(ctx);
 
     s->nb_channels = outlink->ch_layout.nb_channels;
 
-    s->input_state = av_calloc(s->nb_inputs, sizeof(*s->input_state));
-    if (!s->input_state)
-        return AVERROR(ENOMEM);
-
-    s->input_scale = av_calloc(s->nb_inputs, sizeof(*s->input_scale));
-    s->scale_norm  = av_calloc(s->nb_inputs, sizeof(*s->scale_norm));
-    if (!s->input_scale || !s->scale_norm)
-        return AVERROR(ENOMEM);
     for (int i = 0; i < s->nb_inputs; i++)
-        s->scale_norm[i] = s->weight_sum / FFABS(s->weights[i]);
+        s->inputs[i].scale_norm = s->weight_sum / FFABS(s->inputs[i].weight);
     calculate_scales(s);
 
     av_channel_layout_describe(&outlink->ch_layout, buf, sizeof(buf));
@@ -189,7 +222,7 @@ static void free_frames(AVFilterContext *ctx)
     s->got_inputs = 0;
     s->nb_samples = 0;
     for (int i = 0; i < s->nb_inputs; i++)
-        av_frame_free(&s->frames[i]);
+        av_frame_free(&s->inputs[i].frame);
 }
 
 /**
@@ -204,13 +237,13 @@ static int output_frame(AVFilterLink *outlink)
 
     switch (s->duration_mode) {
     case DURATION_FIRST:
-        nb_samples = s->frames[0]->nb_samples;
+        nb_samples = s->inputs[0].frame->nb_samples;
         break;
     case DURATION_SHORTEST:
         nb_samples = INT_MAX;
         for (int i = 0; i < s->nb_inputs; i++) {
-            if (s->frames[i]) {
-                int ns = s->frames[i]->nb_samples;
+            if (s->inputs[i].frame) {
+                int ns = s->inputs[i].frame->nb_samples;
                 nb_samples = FFMIN(nb_samples, ns);
             }
         }
@@ -218,8 +251,8 @@ static int output_frame(AVFilterLink *outlink)
     case DURATION_LONGEST:
         nb_samples = 0;
         for (int i = 0; i < s->nb_inputs; i++) {
-            if (s->frames[i]) {
-                int ns = s->frames[i]->nb_samples;
+            if (s->inputs[i].frame) {
+                int ns = s->inputs[i].frame->nb_samples;
                 nb_samples = FFMAX(nb_samples, ns);
             }
         }
@@ -235,10 +268,12 @@ static int output_frame(AVFilterLink *outlink)
     }
 
     for (int i = 0; i < s->nb_inputs; i++) {
-        if (s->frames[i]) {
+        InputContext *ic = &s->inputs[i];
+
+        if (ic->frame) {
             int planes, plane_size, nb_samples;
 
-            nb_samples = s->frames[i]->nb_samples;
+            nb_samples = s->inputs[i].frame->nb_samples;
             planes     = s->planar ? s->nb_channels : 1;
             plane_size = nb_samples * (s->planar ? 1 : s->nb_channels);
             plane_size = FFALIGN(plane_size, 16);
@@ -247,20 +282,20 @@ static int output_frame(AVFilterLink *outlink)
                 out->format == AV_SAMPLE_FMT_FLTP) {
                 for (int p = 0; p < planes; p++) {
                     s->fdsp->vector_fmac_scalar((float *)out->extended_data[p],
-                                                (float *) s->frames[i]->extended_data[p],
-                                                s->input_scale[i], plane_size);
+                                                (float *) ic->frame->extended_data[p],
+                                                ic->input_scale, plane_size);
                 }
             } else {
                 for (int p = 0; p < planes; p++) {
                     s->fdsp->vector_dmac_scalar((double *)out->extended_data[p],
-                                                (double *) s->frames[i]->extended_data[p],
-                                                s->input_scale[i], plane_size);
+                                                (double *) ic->frame->extended_data[p],
+                                                ic->input_scale, plane_size);
                 }
             }
 
             if (!got_pts) {
                 got_pts = 1;
-                av_frame_copy_props(out, s->frames[i]);
+                av_frame_copy_props(out, ic->frame);
             }
         }
     }
@@ -278,23 +313,25 @@ static int activate(AVFilterContext *ctx)
     FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
 
     for (int i = 0; i < s->nb_inputs; i++) {
-        if (s->input_state[i] == INPUT_OFF)
+        InputContext *ic = &s->inputs[i];
+
+        if (ic->input_state == INPUT_OFF)
             continue;
 
-        if (s->frames[i])
+        if (ic->frame)
             continue;
 
         if (ff_inlink_acknowledge_status(ctx->inputs[i], &status, &s->eof_pts)) {
             if (status == AVERROR_EOF)
-                s->input_state[i] |= INPUT_EOF;
+                ic->input_state |= INPUT_EOF;
         }
 
         if (ff_inlink_queued_samples(ctx->inputs[i]) <= 0)
-            s->input_state[i] |= INPUT_EMPTY;
+            ic->input_state |= INPUT_EMPTY;
         else
-            s->input_state[i] &= ~INPUT_EMPTY;
+            ic->input_state &= ~INPUT_EMPTY;
 
-        if (s->input_state[i] == INPUT_OFF) {
+        if (ic->input_state == INPUT_OFF) {
             s->active_inputs--;
             if (!s->active_inputs ||
                 (!i && (s->duration_mode == DURATION_FIRST)) ||
@@ -306,23 +343,23 @@ static int activate(AVFilterContext *ctx)
         }
 
         if (s->first_input == -1) {
-            ret = ff_inlink_consume_frame(ctx->inputs[i], &s->frames[i]);
+            ret = ff_inlink_consume_frame(ctx->inputs[i], &ic->frame);
             if (ret < 0)
                 return ret;
             if (ret > 0) {
                 s->got_inputs++;
-                s->nb_samples = s->frames[i]->nb_samples;
+                s->nb_samples = ic->frame->nb_samples;
                 s->first_input = i;
             }
         } else if (s->nb_samples > 0) {
-            ret = ff_inlink_consume_samples(ctx->inputs[i], s->nb_samples, s->nb_samples, &s->frames[i]);
+            ret = ff_inlink_consume_samples(ctx->inputs[i], s->nb_samples, s->nb_samples, &ic->frame);
             if (ret < 0)
                 return ret;
             if (ret > 0)
                 s->got_inputs++;
         }
 
-        if (!s->frames[i] && !(s->input_state[i] & INPUT_EOF)) {
+        if (!ic->frame && !(ic->input_state & INPUT_EOF)) {
             ff_inlink_request_frame(ctx->inputs[i]);
             return 0;
         }
@@ -335,28 +372,6 @@ static int activate(AVFilterContext *ctx)
         return output_frame(outlink);
 
     return FFERROR_NOT_READY;
-}
-
-static void parse_weights(AVFilterContext *ctx)
-{
-    MixContext *s = ctx->priv;
-    float last_weight = 1.f;
-    int i;
-
-    s->weight_sum = 0.f;
-    for (i = 0; i < s->nb_weights; i++) {
-        if (i >= s->nb_inputs)
-            break;
-
-        last_weight = s->weights_opt[i];
-        s->weights[i] = last_weight;
-        s->weight_sum += FFABS(last_weight);
-    }
-
-    for (; i < s->nb_inputs; i++) {
-        s->weights[i] = last_weight;
-        s->weight_sum += FFABS(last_weight);
-    }
 }
 
 static av_cold int init(AVFilterContext *ctx)
@@ -380,12 +395,6 @@ static av_cold int init(AVFilterContext *ctx)
     if (!s->fdsp)
         return AVERROR(ENOMEM);
 
-    s->weights = av_calloc(s->nb_inputs, sizeof(*s->weights));
-    if (!s->weights)
-        return AVERROR(ENOMEM);
-
-    parse_weights(ctx);
-
     return 0;
 }
 
@@ -393,15 +402,11 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     MixContext *s = ctx->priv;
 
-    if (s->frames) {
+    if (s->inputs) {
         for (int i = 0; i < s->nb_inputs; i++)
-            av_frame_free(&s->frames[i]);
+            av_frame_free(&s->inputs[i].frame);
+        av_freep(&s->inputs);
     }
-    av_freep(&s->frames);
-    av_freep(&s->input_state);
-    av_freep(&s->input_scale);
-    av_freep(&s->scale_norm);
-    av_freep(&s->weights);
     av_freep(&s->fdsp);
 }
 
@@ -416,8 +421,11 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
         return ret;
 
     parse_weights(ctx);
-    for (int i = 0; i < s->nb_inputs; i++)
-        s->scale_norm[i] = s->weight_sum / FFABS(s->weights[i]);
+    for (int i = 0; i < s->nb_inputs; i++) {
+        InputContext *ic = &s->inputs[i];
+
+        ic->scale_norm = s->weight_sum / FFABS(ic->weight);
+    }
     calculate_scales(s);
 
     return 0;
