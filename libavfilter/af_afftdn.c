@@ -20,6 +20,7 @@
 
 #include <float.h>
 
+#include "libavutil/avassert.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
@@ -384,6 +385,8 @@ static void process_frame(AVFilterContext *ctx,
         case AV_SAMPLE_FMT_DBLP:
             noisy_data[i] = power = get_power(fft_data_dbl[i].re, fft_data_dbl[i].im);
             break;
+        default:
+            av_assert2(0);
         }
 
         mag_abs_var = power / abs_var[i];
@@ -483,6 +486,8 @@ static void process_frame(AVFilterContext *ctx,
             fft_data_dbl[i].im *= new_gain;
         }
         break;
+    default:
+        av_assert2(0);
     }
 }
 
@@ -636,6 +641,8 @@ static int config_input(AVFilterLink *inlink)
         tx_type = AV_TX_DOUBLE_RDFT;
         scale = &dscale;
         break;
+    default:
+        av_assert2(0);
     }
 
     s->dnch = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->dnch));
@@ -916,6 +923,8 @@ static void sample_noise_block(AudioFFTDeNoiseContext *s,
         for (int i = s->window_length; i < s->fft_length2; i++)
             fft_in_dbl[i] = 0.;
         break;
+    default:
+        av_assert2(0);
     }
 
     dnch->tx_fn(dnch->fft, dnch->fft_out, dnch->fft_in, s->sample_size);
@@ -957,6 +966,8 @@ static void sample_noise_block(AudioFFTDeNoiseContext *s,
             mag2 = fft_out_dbl[n].re * fft_out_dbl[n].re +
                    fft_out_dbl[n].im * fft_out_dbl[n].im;
             break;
+        default:
+            av_assert2(0);
         }
 
         mag2 = fmax(mag2, s->sample_floor);
@@ -1059,6 +1070,8 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
             for (int m = window_length; m < s->fft_length2; m++)
                 fft_in_dbl[m] = 0.;
             break;
+        default:
+            av_assert2(0);
         }
 
         dnch->tx_fn(dnch->fft, dnch->fft_out, dnch->fft_in, s->sample_size);
@@ -1079,6 +1092,8 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
             for (int m = 0; m < window_length; m++)
                 dst[m] += s->window[m] * fft_in_dbl[m] / (1LL << 23);
             break;
+        default:
+            av_assert2(0);
         }
     }
 
@@ -1196,6 +1211,8 @@ static int output_subframe(AVFilterLink *inlink,
                 for (int m = 0; m < in_nb_samples; m++)
                     dst_dbl[m] = orig_dbl[m];
                 break;
+            default:
+                av_assert2(0);
             }
             break;
         case OUT_MODE:
@@ -1208,6 +1225,8 @@ static int output_subframe(AVFilterLink *inlink,
                 for (int m = 0; m < in_nb_samples; m++)
                     dst_dbl[m] = src[m];
                 break;
+            default:
+                av_assert2(0);
             }
             break;
         case NOISE_MODE:
@@ -1220,6 +1239,8 @@ static int output_subframe(AVFilterLink *inlink,
                 for (int m = 0; m < in_nb_samples; m++)
                     dst_dbl[m] = orig_dbl[m] - src[m];
                 break;
+            default:
+                av_assert2(0);
             }
             break;
         default:
