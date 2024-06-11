@@ -119,12 +119,20 @@ static const AVOption speechnorm_options[] = {
 
 AVFILTER_DEFINE_CLASS(speechnorm);
 
-static int get_pi_samples(PeriodItem *pi, int start, int acc, int remain)
+static int get_pi_samples(ChannelContext *cc, int eof)
 {
-    if (pi[start].type == 0)
-        return remain;
+    if (eof) {
+        PeriodItem *pi = cc->pi;
 
-    return remain + acc;
+        return cc->acc + pi[cc->pi_end].size;
+    } else {
+        PeriodItem *pi = cc->pi;
+
+        if (pi[cc->pi_start].type == 0)
+            return cc->pi_size;
+    }
+
+    return cc->acc;
 }
 
 static int available_samples(AVFilterContext *ctx)
@@ -133,11 +141,11 @@ static int available_samples(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     int min_pi_nb_samples;
 
-    min_pi_nb_samples = get_pi_samples(s->cc[0].pi, s->cc[0].pi_start, s->cc[0].acc, s->cc[0].pi_size);
+    min_pi_nb_samples = get_pi_samples(&s->cc[0], s->eof);
     for (int ch = 1; ch < inlink->ch_layout.nb_channels && min_pi_nb_samples > 0; ch++) {
         ChannelContext *cc = &s->cc[ch];
 
-        min_pi_nb_samples = FFMIN(min_pi_nb_samples, get_pi_samples(cc->pi, cc->pi_start, cc->acc, cc->pi_size));
+        min_pi_nb_samples = FFMIN(min_pi_nb_samples, get_pi_samples(cc, s->eof));
     }
 
     return min_pi_nb_samples;
@@ -147,6 +155,7 @@ static void consume_pi(ChannelContext *cc, int nb_samples)
 {
     if (cc->pi_size >= nb_samples) {
         cc->pi_size -= nb_samples;
+        cc->acc -= FFMIN(cc->acc, nb_samples);
     } else {
         av_assert1(0);
     }
@@ -181,17 +190,18 @@ static void next_pi(AVFilterContext *ctx, ChannelContext *cc, int bypass)
 {
     av_assert1(cc->pi_size >= 0);
     if (cc->pi_size == 0) {
-        SpeechNormalizerContext *s = ctx->priv;
+        SpeechNormalizerContext *av_unused s = ctx->priv;
         int start = cc->pi_start;
         double scale;
 
         av_assert1(cc->pi[start].size > 0);
-        av_assert0(cc->pi[start].type > 0 || s->eof);
+        av_assert1(cc->pi[start].type > 0 || s->eof);
         cc->pi_size = cc->pi[start].size;
         cc->pi_rms_sum = cc->pi[start].rms_sum;
         cc->pi_max_peak = cc->pi[start].max_peak;
-        cc->acc -= cc->pi_size;
         av_assert1(cc->pi_start != cc->pi_end || s->eof);
+        cc->pi[start].size = 0;
+        cc->pi[start].type = 0;
         start++;
         if (start >= MAX_ITEMS)
             start = 0;
