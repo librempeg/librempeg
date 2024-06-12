@@ -144,7 +144,7 @@ static void calculate_scales(MixContext *s)
 
         if (ic->frame) {
             if (!s->normalize)
-                ic->input_scale = FFABS(ic->weight);
+                ic->input_scale = ic->weight;
             else
                 ic->input_scale = 1.0f / ic->scale_norm * FFSIGN(ic->weight);
         } else {
