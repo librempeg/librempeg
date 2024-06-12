@@ -625,6 +625,57 @@ int ff_fmt_is_regular_yuv(enum AVPixelFormat fmt)
     }
 }
 
+static int pick_samplerate(AVFilterLink *link, AVFilterLink *ref)
+{
+    if (!link || !link->incfg.samplerates)
+        return 0;
+
+    if (link->type != AVMEDIA_TYPE_AUDIO)
+        return 0;
+
+    if (link->incfg.samplerates->nb_formats == 0) {
+        if (ref && ref->type == AVMEDIA_TYPE_AUDIO && ref->sample_rate > 0) {
+            link->sample_rate = ref->sample_rate;
+            goto end;
+        }
+        return 0;
+    }
+
+    if (ref && ref->type == AVMEDIA_TYPE_AUDIO && ref->sample_rate > 0) {
+        unsigned max_diff = UINT_MAX;
+        int best = 0;
+
+        for (int i = 0; i < link->incfg.samplerates->nb_formats; i++) {
+            int p = link->incfg.samplerates->formats[i];
+            unsigned diff;
+
+            diff = abs(p - ref->sample_rate);
+            if (diff < max_diff) {
+                best = p;
+                max_diff = diff;
+            }
+        }
+        av_log(link->src,AV_LOG_DEBUG, "picking samplerate %d out of %d ref:%d\n",
+               best, link->incfg.samplerates->nb_formats, ref->sample_rate);
+        link->incfg.samplerates->formats[0] = best;
+        link->incfg.samplerates->nb_formats = 1;
+    }
+
+    link->sample_rate = link->incfg.samplerates->formats[0];
+    for (int n = 1; n < link->incfg.samplerates->nb_formats; n++) {
+        if (link->sample_rate < link->incfg.samplerates->formats[n])
+            link->sample_rate = link->incfg.samplerates->formats[n];
+    }
+    link->incfg.samplerates->formats[0] = link->sample_rate;
+    link->incfg.samplerates->nb_formats = 1;
+
+end:
+    ff_formats_unref(&link->incfg.samplerates);
+    ff_formats_unref(&link->outcfg.samplerates);
+
+    return 0;
+}
+
 static int pick_format(AVFilterLink *link, AVFilterLink *ref)
 {
     if (!link || !link->incfg.formats)
@@ -744,15 +795,6 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
     } else if (link->type == AVMEDIA_TYPE_AUDIO) {
         int ret;
 
-        if (!link->incfg.samplerates->nb_formats) {
-            av_log(link->src, AV_LOG_ERROR, "Cannot select sample rate for"
-                   " the link between filters %s and %s.\n", link->src->name,
-                   link->dst->name);
-            return AVERROR(EINVAL);
-        }
-        link->incfg.samplerates->nb_formats = 1;
-        link->sample_rate = link->incfg.samplerates->formats[0];
-
         if (link->incfg.channel_layouts->all_layouts) {
             av_log(link->src, AV_LOG_ERROR, "Cannot select channel layout for"
                    " the link between filters %s and %s.\n", link->src->name,
@@ -771,8 +813,6 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
 
     ff_formats_unref(&link->incfg.formats);
     ff_formats_unref(&link->outcfg.formats);
-    ff_formats_unref(&link->incfg.samplerates);
-    ff_formats_unref(&link->outcfg.samplerates);
     ff_channel_layouts_unref(&link->incfg.channel_layouts);
     ff_channel_layouts_unref(&link->outcfg.channel_layouts);
     ff_formats_unref(&link->incfg.color_spaces);
@@ -1151,52 +1191,72 @@ static void swap_sample_fmts(AVFilterGraph *graph)
 
 static int pick_formats(AVFilterGraph *graph)
 {
-    int i, j, ret;
-    int change;
+    int ret, change;
 
-    do{
+    do {
         change = 0;
-        for (i = 0; i < graph->nb_filters; i++) {
+        for (int i = 0; i < graph->nb_filters; i++) {
             AVFilterContext *filter = graph->filters[i];
             if (filter->nb_inputs){
-                for (j = 0; j < filter->nb_inputs; j++){
+                for (int j = 0; j < filter->nb_inputs; j++){
                     if (filter->inputs[j]->incfg.formats && filter->inputs[j]->incfg.formats->nb_formats == 1) {
                         if ((ret = pick_format(filter->inputs[j], NULL)) < 0)
+                            return ret;
+                        change = 1;
+                    }
+                    if (filter->inputs[j]->incfg.samplerates && filter->inputs[j]->incfg.samplerates->nb_formats == 1) {
+                        if ((ret = pick_samplerate(filter->inputs[j], NULL)) < 0)
                             return ret;
                         change = 1;
                     }
                 }
             }
             if (filter->nb_outputs){
-                for (j = 0; j < filter->nb_outputs; j++){
+                for (int j = 0; j < filter->nb_outputs; j++){
                     if (filter->outputs[j]->incfg.formats && filter->outputs[j]->incfg.formats->nb_formats == 1) {
                         if ((ret = pick_format(filter->outputs[j], NULL)) < 0)
+                            return ret;
+                        change = 1;
+                    }
+                    if (filter->outputs[j]->incfg.samplerates && filter->outputs[j]->incfg.samplerates->nb_formats == 1) {
+                        if ((ret = pick_samplerate(filter->outputs[j], NULL)) < 0)
                             return ret;
                         change = 1;
                     }
                 }
             }
             if (filter->nb_inputs && filter->nb_outputs && filter->inputs[0]->format>=0) {
-                for (j = 0; j < filter->nb_outputs; j++) {
+                for (int j = 0; j < filter->nb_outputs; j++) {
                     if (filter->outputs[j]->format<0) {
                         if ((ret = pick_format(filter->outputs[j], filter->inputs[0])) < 0)
+                            return ret;
+                        change = 1;
+                    }
+                    if (filter->outputs[j]->sample_rate<=0) {
+                        if ((ret = pick_samplerate(filter->outputs[j], filter->inputs[0])) < 0)
                             return ret;
                         change = 1;
                     }
                 }
             }
         }
-    }while(change);
+    } while (change);
 
-    for (i = 0; i < graph->nb_filters; i++) {
+    for (int i = 0; i < graph->nb_filters; i++) {
         AVFilterContext *filter = graph->filters[i];
 
-        for (j = 0; j < filter->nb_inputs; j++)
+        for (int j = 0; j < filter->nb_inputs; j++) {
             if ((ret = pick_format(filter->inputs[j], NULL)) < 0)
                 return ret;
-        for (j = 0; j < filter->nb_outputs; j++)
+            if ((ret = pick_samplerate(filter->inputs[j], NULL)) < 0)
+                return ret;
+        }
+        for (int j = 0; j < filter->nb_outputs; j++) {
             if ((ret = pick_format(filter->outputs[j], NULL)) < 0)
                 return ret;
+            if ((ret = pick_samplerate(filter->outputs[j], NULL)) < 0)
+                return ret;
+        }
     }
     return 0;
 }
