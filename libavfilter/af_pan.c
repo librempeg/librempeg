@@ -41,14 +41,12 @@
 
 typedef struct PanContext {
     const AVClass *class;
-    char *layout;
+    AVChannelLayout layout;
     char **args;
     unsigned nb_args;
-    AVChannelLayout out_channel_layout;
     double gain[MAX_CHANNELS][MAX_CHANNELS];
     uint8_t need_renorm[MAX_CHANNELS];
     int need_renumber;
-    int nb_output_channels;
 
     int pure_gains;
     /* channel mapping specific */
@@ -101,16 +99,12 @@ static av_cold int init(AVFilterContext *ctx)
     int used_out_ch[MAX_CHANNELS] = {0};
     double gain;
 
-    if (!pan->layout || !pan->nb_args) {
+    if (!pan->layout.nb_channels || !pan->nb_args) {
         av_log(ctx, AV_LOG_ERROR,
                "pan filter needs a output channel layout and a set "
                "of channel definitions as parameter\n");
         return AVERROR(EINVAL);
     }
-    ret = ff_parse_channel_layout(&pan->out_channel_layout,
-                                  &pan->nb_output_channels, pan->layout, ctx);
-    if (ret < 0)
-        goto fail;
 
     /* parse channel specifications */
     for (int n = 0; n < pan->nb_args; n++) {
@@ -132,14 +126,14 @@ static av_cold int init(AVFilterContext *ctx)
             goto fail;
         }
         if (named) {
-            if ((out_ch_id = av_channel_layout_index_from_channel(&pan->out_channel_layout, out_ch_id)) < 0) {
+            if ((out_ch_id = av_channel_layout_index_from_channel(&pan->layout, out_ch_id)) < 0) {
                 av_log(ctx, AV_LOG_ERROR,
                        "Channel \"%.8s\" does not exist in the chosen layout\n", arg0);
                 ret = AVERROR(EINVAL);
                 goto fail;
             }
         }
-        if (out_ch_id < 0 || out_ch_id >= pan->nb_output_channels) {
+        if (out_ch_id < 0 || out_ch_id >= pan->layout.nb_channels) {
             av_log(ctx, AV_LOG_ERROR,
                    "Invalid out channel name \"%.8s\"\n", arg0);
             ret = AVERROR(EINVAL);
@@ -259,7 +253,7 @@ static int query_formats(AVFilterContext *ctx)
 
     // outlink supports only requested output channel layout
     layouts = NULL;
-    if ((ret = ff_add_channel_layout(&layouts, &pan->out_channel_layout)) < 0)
+    if ((ret = ff_add_channel_layout(&layouts, &pan->layout)) < 0)
         return ret;
     return ff_channel_layouts_ref(layouts, &outlink->incfg.channel_layouts);
 }
@@ -276,7 +270,7 @@ static int config_props(AVFilterLink *link)
         // input channels were given by their name: renumber them
         for (i = j = 0; i < MAX_CHANNELS; i++) {
             if (av_channel_layout_index_from_channel(&link->ch_layout, i) >= 0) {
-                for (k = 0; k < pan->nb_output_channels; k++)
+                for (k = 0; k < pan->layout.nb_channels; k++)
                     pan->gain[k][j] = pan->gain[k][i];
                 j++;
             }
@@ -286,7 +280,7 @@ static int config_props(AVFilterLink *link)
     // sanity check; can't be done in query_formats since the inlink
     // channel layout is unknown at that time
     if (link->ch_layout.nb_channels > MAX_CHANNELS ||
-        pan->nb_output_channels > MAX_CHANNELS) {
+        pan->layout.nb_channels > MAX_CHANNELS) {
         av_log(ctx, AV_LOG_ERROR,
                "af_pan supports a maximum of %d channels. "
                "Feel free to ask for a higher limit.\n", MAX_CHANNELS);
@@ -295,7 +289,7 @@ static int config_props(AVFilterLink *link)
 
     // init libswresample context
     ret = swr_alloc_set_opts2(&pan->swr,
-                              &pan->out_channel_layout, link->format, link->sample_rate,
+                              &pan->layout, link->format, link->sample_rate,
                               &link->ch_layout, link->format, link->sample_rate,
                               0, ctx);
     if (ret < 0)
@@ -305,7 +299,7 @@ static int config_props(AVFilterLink *link)
     if (pan->pure_gains) {
 
         // get channel map from the pure gains
-        for (i = 0; i < pan->nb_output_channels; i++) {
+        for (i = 0; i < pan->layout.nb_channels; i++) {
             int ch_id = -1;
             for (j = 0; j < link->ch_layout.nb_channels; j++) {
                 if (pan->gain[i][j]) {
@@ -316,11 +310,11 @@ static int config_props(AVFilterLink *link)
             pan->channel_map[i] = ch_id;
         }
 
-        av_opt_set_chlayout(pan->swr, "uchl", &pan->out_channel_layout, 0);
+        av_opt_set_chlayout(pan->swr, "uchl", &pan->layout, 0);
         swr_set_channel_mapping(pan->swr, pan->channel_map);
     } else {
         // renormalize
-        for (i = 0; i < pan->nb_output_channels; i++) {
+        for (i = 0; i < pan->layout.nb_channels; i++) {
             if (!pan->need_renorm[i])
                 continue;
             t = 0;
@@ -344,7 +338,7 @@ static int config_props(AVFilterLink *link)
         return r;
 
     // summary
-    for (i = 0; i < pan->nb_output_channels; i++) {
+    for (i = 0; i < pan->layout.nb_channels; i++) {
         cur = buf;
         for (j = 0; j < link->ch_layout.nb_channels; j++) {
             r = snprintf(cur, buf + sizeof(buf) - cur, "%s%.3g i%d",
@@ -356,7 +350,7 @@ static int config_props(AVFilterLink *link)
     // add channel mapping summary if possible
     if (pan->pure_gains) {
         av_log(ctx, AV_LOG_INFO, "Pure channel mapping detected:");
-        for (i = 0; i < pan->nb_output_channels; i++)
+        for (i = 0; i < pan->layout.nb_channels; i++)
             if (pan->channel_map[i] < 0)
                 av_log(ctx, AV_LOG_INFO, " M");
             else
@@ -396,7 +390,6 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     PanContext *pan = ctx->priv;
     swr_free(&pan->swr);
-    av_channel_layout_uninit(&pan->out_channel_layout);
 }
 
 #define OFFSET(x) offsetof(PanContext, x)
@@ -405,7 +398,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 static const AVOptionArrayDef def_mix = {.def=NULL,.size_min=1,.sep='|'};
 
 static const AVOption pan_options[] = {
-    { "layout", "set the output channel layout", OFFSET(layout), AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
+    { "layout", "set the output channel layout", OFFSET(layout), AV_OPT_TYPE_CHLAYOUT,  { .str = NULL }, 0, 0, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { "mix", "set the output channel mix gains", OFFSET(args),   AV_OPT_TYPE_STRING|AR, { .arr = &def_mix }, 0, 0, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { NULL }
 };
