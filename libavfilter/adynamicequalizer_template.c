@@ -513,9 +513,9 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
                 ftype avg = b->lowpass_svf(detect, am, aa, astate);
                 ftype log_avg = b->lowpass_svf(FLOG2(detect + EPSILON), am, aa, lstate);
 
-                if (avg > F(0.0)) {
+                if (avg > EPSILON) {
                     ftype new_score = LIN2LOG(FEXP2(log_avg) / avg);
-                    if (new_score >= F(0.0)) {
+                    if (new_score >= EPSILON) {
                         score = new_score;
                         peak = FMAX(peak, FMAX(FEXP2(log_avg), avg));
                     }
@@ -559,11 +559,11 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
             new_lin_gain = b->target_gain(detect, threshold, threshold_log,
                                           makeup, ratio, range, power, mode);
 
-            if (lin_gain != new_lin_gain) {
+            if (FABS(lin_gain - new_lin_gain) > EPSILON) {
                 ftype f = (new_lin_gain > lin_gain) * tattack + (new_lin_gain < lin_gain) * trelease;
                 new_lin_gain = f * new_lin_gain + (F(1.0) - f) * lin_gain;
 
-                if (lin_gain != new_lin_gain) {
+                if (FABS(lin_gain - new_lin_gain) > EPSILON) {
                     lin_gain = new_lin_gain;
 
                     b->target_update(itqfactor, lin_gain, fg, fa, fm);
