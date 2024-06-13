@@ -54,6 +54,7 @@ extern const AVFilter ff_af_aformat;
 extern const AVFilter ff_af_afreqshift;
 extern const AVFilter ff_af_afwtdn;
 extern const AVFilter ff_af_agate;
+extern const AVFilter ff_af_aidentity;
 extern const AVFilter ff_af_aiir;
 extern const AVFilter ff_af_aintegral;
 extern const AVFilter ff_af_ainterleave;

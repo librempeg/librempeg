@@ -19,14 +19,17 @@
 #undef ftype
 #undef SAMPLE_FORMAT
 #undef FABS
+#undef FEPS
 #if DEPTH == 32
 #define ftype float
 #define SAMPLE_FORMAT fltp
 #define FABS fabsf
+#define FEPS FLT_EPSILON
 #elif DEPTH == 64
 #define ftype double
 #define SAMPLE_FORMAT dblp
 #define FABS fabs
+#define FEPS DBL_EPSILON
 #endif
 
 #define fn3(a,b)   a##_##b
@@ -177,6 +180,31 @@ static int fn(mae)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
             uv += FABS(us[n] - vs[n]);
 
         chs->uv += uv;
+    }
+
+    return 0;
+}
+
+static int fn(identity)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    AudioSDRContext *s = ctx->priv;
+    AVFrame *u = s->cache[0];
+    AVFrame *v = s->cache[1];
+    const int channels = u->ch_layout.nb_channels;
+    const int start = (channels * jobnr) / nb_jobs;
+    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);
+
+    for (int ch = start; ch < end; ch++) {
+        ChanStats *chs = &s->chs[ch];
+        const ftype *const us = (ftype *)u->extended_data[ch];
+        const ftype *const vs = (ftype *)v->extended_data[ch];
+        unsigned cnt = 0;
+
+        for (int n = 0; n < nb_samples; n++)
+            cnt += FABS(us[n] - vs[n]) < FEPS;
+
+        chs->cnt += cnt;
     }
 
     return 0;

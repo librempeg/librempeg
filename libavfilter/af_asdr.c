@@ -32,6 +32,7 @@ typedef struct ChanStats {
     double u;
     double v;
     double uv;
+    uint64_t cnt;
 } ChanStats;
 
 typedef struct AudioSDRContext {
@@ -130,6 +131,8 @@ static int config_output(AVFilterLink *outlink)
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? nrmse_fltp : nrmse_dblp;
     else if (!strcmp(ctx->filter->name, "amae"))
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? mae_fltp : mae_dblp;
+    else if (!strcmp(ctx->filter->name, "aidentity"))
+        s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? identity_fltp : identity_dblp;
     else
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? psnr_fltp : psnr_dblp;
 
@@ -165,6 +168,12 @@ static av_cold void uninit(AVFilterContext *ctx)
             double mae = s->chs[ch].uv / s->nb_samples;
 
             av_log(ctx, AV_LOG_INFO, "MAE ch%d: %g dB\n", ch, -10. * log10(mae));
+        }
+    } else if (!strcmp(ctx->filter->name, "aidentity")) {
+        for (int ch = 0; ch < s->channels; ch++) {
+            double identity = s->chs[ch].cnt / (double)s->nb_samples;
+
+            av_log(ctx, AV_LOG_INFO, "Identity ch%d: %g dB\n", ch, 10. * log10(identity));
         }
     } else {
         for (int ch = 0; ch < s->channels; ch++) {
@@ -258,6 +267,20 @@ const AVFilter ff_af_anrmse = {
 const AVFilter ff_af_amae = {
     .name           = "amae",
     .description    = NULL_IF_CONFIG_SMALL("Measure Audio Mean Absolute Error."),
+    .priv_size      = sizeof(AudioSDRContext),
+    .activate       = activate,
+    .uninit         = uninit,
+    .flags          = AVFILTER_FLAG_METADATA_ONLY |
+                      AVFILTER_FLAG_SLICE_THREADS |
+                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    FILTER_INPUTS(inputs),
+    FILTER_OUTPUTS(outputs),
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
+};
+
+const AVFilter ff_af_aidentity = {
+    .name           = "aidentity",
+    .description    = NULL_IF_CONFIG_SMALL("Measure Identity between two audio streams."),
     .priv_size      = sizeof(AudioSDRContext),
     .activate       = activate,
     .uninit         = uninit,
