@@ -1232,7 +1232,11 @@ static int pick_formats(AVFilterGraph *graph)
                             return ret;
                         change = 1;
                     }
-                    if (filter->outputs[j]->sample_rate<=0) {
+                }
+            }
+            if (filter->nb_inputs && filter->nb_outputs && filter->inputs[0]->sample_rate>0) {
+                for (int j = 0; j < filter->nb_outputs; j++) {
+                    if (filter->outputs[j]->incfg.samplerates && filter->outputs[j]->sample_rate<=0) {
                         if ((ret = pick_samplerate(filter->outputs[j], filter->inputs[0])) < 0)
                             return ret;
                         change = 1;
