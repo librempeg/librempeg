@@ -141,7 +141,7 @@ static int activate(AVFilterContext *ctx)
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    if (!s->eof && ff_inlink_queued_frames(inlink)) {
+    if (ff_inlink_queued_frames(inlink)) {
         AVFrame *frame = NULL;
         int ret;
 
@@ -163,9 +163,9 @@ static int activate(AVFilterContext *ctx)
             return 0;
         }
         return ret;
+    } else {
+        FF_FILTER_FORWARD_WANTED(outlink, inlink);
     }
-
-    FF_FILTER_FORWARD_WANTED(outlink, inlink);
 
     return FFERROR_NOT_READY;
 }
