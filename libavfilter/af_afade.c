@@ -72,184 +72,20 @@ enum CurveType { NONE = -1, TRI, QSIN, ESIN, HSIN, LOG, IPAR, QUA, CUB, SQU, CBR
         AV_SAMPLE_FMT_NONE
     };
 
-static double fade_gain(int curve, int64_t index, int64_t range, double silence, double unity)
-{
-#define CUBE(a) ((a)*(a)*(a))
-    double gain;
+#define DEPTH 16
+#include "afade_template.c"
 
-    gain = av_clipd(1.0 * index / range, 0, 1.0);
+#undef DEPTH
+#define DEPTH 31
+#include "afade_template.c"
 
-    switch (curve) {
-    case QSIN:
-        gain = sin(gain * M_PI / 2.0);
-        break;
-    case IQSIN:
-        /* 0.6... = 2 / M_PI */
-        gain = 0.6366197723675814 * asin(gain);
-        break;
-    case ESIN:
-        gain = 1.0 - cos(M_PI / 4.0 * (CUBE(2.0*gain - 1) + 1));
-        break;
-    case HSIN:
-        gain = (1.0 - cos(gain * M_PI)) / 2.0;
-        break;
-    case IHSIN:
-        /* 0.3... = 1 / M_PI */
-        gain = 0.3183098861837907 * acos(1 - 2 * gain);
-        break;
-    case EXP:
-        /* -11.5... = 5*ln(0.1) */
-        gain = exp(-11.512925464970227 * (1 - gain));
-        break;
-    case LOG:
-        gain = av_clipd(1 + 0.2 * log10(gain), 0, 1.0);
-        break;
-    case PAR:
-        gain = 1 - sqrt(1 - gain);
-        break;
-    case IPAR:
-        gain = (1 - (1 - gain) * (1 - gain));
-        break;
-    case QUA:
-        gain *= gain;
-        break;
-    case CUB:
-        gain = CUBE(gain);
-        break;
-    case SQU:
-        gain = sqrt(gain);
-        break;
-    case CBR:
-        gain = cbrt(gain);
-        break;
-    case DESE:
-        gain = gain <= 0.5 ? cbrt(2 * gain) / 2: 1 - cbrt(2 * (1 - gain)) / 2;
-        break;
-    case DESI:
-        gain = gain <= 0.5 ? CUBE(2 * gain) / 2: 1 - CUBE(2 * (1 - gain)) / 2;
-        break;
-    case LOSI: {
-                   const double a = 1. / (1. - 0.787) - 1;
-                   double A = 1. / (1.0 + exp(0 -((gain-0.5) * a * 2.0)));
-                   double B = 1. / (1.0 + exp(a));
-                   double C = 1. / (1.0 + exp(0-a));
-                   gain = (A - B) / (C - B);
-               }
-        break;
-    case SINC:
-        gain = gain >= 1.0 ? 1.0 : sin(M_PI * (1.0 - gain)) / (M_PI * (1.0 - gain));
-        break;
-    case ISINC:
-        gain = gain <= 0.0 ? 0.0 : 1.0 - sin(M_PI * gain) / (M_PI * gain);
-        break;
-    case QUAT:
-        gain = gain * gain * gain * gain;
-        break;
-    case QUATR:
-        gain = pow(gain, 0.25);
-        break;
-    case QSIN2:
-        gain = sin(gain * M_PI / 2.0) * sin(gain * M_PI / 2.0);
-        break;
-    case HSIN2:
-        gain = pow((1.0 - cos(gain * M_PI)) / 2.0, 2.0);
-        break;
-    case NONE:
-        gain = 1.0;
-        break;
-    }
+#undef DEPTH
+#define DEPTH 32
+#include "afade_template.c"
 
-    return silence + (unity - silence) * gain;
-}
-
-#define FADE_PLANAR(name, type, gtype)                                      \
-static void fade_samples_## name ##p(uint8_t **dst, uint8_t * const *src,   \
-                                     int nb_samples, int channels, int dir, \
-                                     int64_t start, int64_t range,int curve,\
-                                     double silence, double unity)          \
-{                                                                           \
-    int i, c;                                                               \
-                                                                            \
-    for (i = 0; i < nb_samples; i++) {                                      \
-        const gtype gain = fade_gain(curve,start+i*dir,range,silence,unity);\
-        for (c = 0; c < channels; c++) {                                    \
-            type *d = (type *)dst[c];                                       \
-            const type *s = (type *)src[c];                                 \
-                                                                            \
-            d[i] = s[i] * gain;                                             \
-        }                                                                   \
-    }                                                                       \
-}
-
-#define FADE(name, type, gtype)                                             \
-static void fade_samples_## name (uint8_t **dst, uint8_t * const *src,      \
-                                  int nb_samples, int channels, int dir,    \
-                                  int64_t start, int64_t range, int curve,  \
-                                  double silence, double unity)             \
-{                                                                           \
-    type *d = (type *)dst[0];                                               \
-    const type *s = (type *)src[0];                                         \
-    int i, c, k = 0;                                                        \
-                                                                            \
-    for (i = 0; i < nb_samples; i++) {                                      \
-        const gtype gain = fade_gain(curve,start+i*dir,range,silence,unity);\
-        for (c = 0; c < channels; c++, k++)                                 \
-            d[k] = s[k] * gain;                                             \
-    }                                                                       \
-}
-
-FADE_PLANAR(dbl, double, double)
-FADE_PLANAR(flt, float, float)
-FADE_PLANAR(s16, int16_t, float)
-FADE_PLANAR(s32, int32_t, double)
-
-FADE(dbl, double, double)
-FADE(flt, float, float)
-FADE(s16, int16_t, float)
-FADE(s32, int32_t, double)
-
-#define SCALE_PLANAR(name, type, gtype)                                     \
-static void scale_samples_## name ##p(uint8_t **dst, uint8_t * const *src,  \
-                                     int nb_samples, int channels,          \
-                                     double _gain)                          \
-{                                                                           \
-    const gtype gain = _gain;                                               \
-    int i, c;                                                               \
-                                                                            \
-    for (i = 0; i < nb_samples; i++) {                                      \
-        for (c = 0; c < channels; c++) {                                    \
-            type *d = (type *)dst[c];                                       \
-            const type *s = (type *)src[c];                                 \
-                                                                            \
-            d[i] = s[i] * gain;                                             \
-        }                                                                   \
-    }                                                                       \
-}
-
-#define SCALE(name, type, gtype)                                            \
-static void scale_samples_## name (uint8_t **dst, uint8_t * const *src,     \
-                                 int nb_samples, int channels, double _gain)\
-{                                                                           \
-    const gtype gain = _gain;                                               \
-    type *d = (type *)dst[0];                                               \
-    const type *s = (type *)src[0];                                         \
-    int i, c, k = 0;                                                        \
-                                                                            \
-    for (i = 0; i < nb_samples; i++) {                                      \
-        for (c = 0; c < channels; c++, k++)                                 \
-            d[k] = s[k] * gain;                                             \
-    }                                                                       \
-}
-
-SCALE_PLANAR(dbl, double, double)
-SCALE_PLANAR(flt, float, float)
-SCALE_PLANAR(s16, int16_t, float)
-SCALE_PLANAR(s32, int32_t, double)
-
-SCALE(dbl, double, double)
-SCALE(flt, float, float)
-SCALE(s16, int16_t, float)
-SCALE(s32, int32_t, double)
+#undef DEPTH
+#define DEPTH 64
+#include "afade_template.c"
 
 static int config_output(AVFilterLink *outlink)
 {
@@ -260,26 +96,26 @@ static int config_output(AVFilterLink *outlink)
     case AV_SAMPLE_FMT_DBL:  s->fade_samples = fade_samples_dbl;
                              s->scale_samples = scale_samples_dbl;
                              break;
-    case AV_SAMPLE_FMT_DBLP: s->fade_samples = fade_samples_dblp;
-                             s->scale_samples = scale_samples_dblp;
+    case AV_SAMPLE_FMT_DBLP: s->fade_samples = fade_samplesp_dbl;
+                             s->scale_samples = scale_samplesp_dbl;
                              break;
     case AV_SAMPLE_FMT_FLT:  s->fade_samples = fade_samples_flt;
                              s->scale_samples = scale_samples_flt;
                              break;
-    case AV_SAMPLE_FMT_FLTP: s->fade_samples = fade_samples_fltp;
-                             s->scale_samples = scale_samples_fltp;
+    case AV_SAMPLE_FMT_FLTP: s->fade_samples = fade_samplesp_flt;
+                             s->scale_samples = scale_samplesp_flt;
                              break;
     case AV_SAMPLE_FMT_S16:  s->fade_samples = fade_samples_s16;
                              s->scale_samples = scale_samples_s16;
                              break;
-    case AV_SAMPLE_FMT_S16P: s->fade_samples = fade_samples_s16p;
-                             s->scale_samples = scale_samples_s16p;
+    case AV_SAMPLE_FMT_S16P: s->fade_samples = fade_samplesp_s16;
+                             s->scale_samples = scale_samplesp_s16;
                              break;
     case AV_SAMPLE_FMT_S32:  s->fade_samples = fade_samples_s32;
                              s->scale_samples = scale_samples_s32;
                              break;
-    case AV_SAMPLE_FMT_S32P: s->fade_samples = fade_samples_s32p;
-                             s->scale_samples = scale_samples_s32p;
+    case AV_SAMPLE_FMT_S32P: s->fade_samples = fade_samplesp_s32;
+                             s->scale_samples = scale_samplesp_s32;
                              break;
     }
 
@@ -493,56 +329,6 @@ static const AVOption acrossfade_options[] = {
 
 AVFILTER_DEFINE_CLASS(acrossfade);
 
-#define CROSSFADE_PLANAR(name, type, gtype)                                    \
-static void crossfade_samples_## name ##p(uint8_t **dst, uint8_t * const *cf0, \
-                                          uint8_t * const *cf1,                \
-                                          int nb_samples, int channels,        \
-                                          int curve0, int curve1)              \
-{                                                                              \
-    int i, c;                                                                  \
-                                                                               \
-    for (i = 0; i < nb_samples; i++) {                                         \
-        const gtype gain0 = fade_gain(curve0, nb_samples - 1 - i, nb_samples,0.,1.);\
-        const gtype gain1 = fade_gain(curve1, i, nb_samples, 0., 1.);               \
-        for (c = 0; c < channels; c++) {                                       \
-            type *d = (type *)dst[c];                                          \
-            const type *s0 = (type *)cf0[c];                                   \
-            const type *s1 = (type *)cf1[c];                                   \
-                                                                               \
-            d[i] = s0[i] * gain0 + s1[i] * gain1;                              \
-        }                                                                      \
-    }                                                                          \
-}
-
-#define CROSSFADE(name, type, gtype)                                        \
-static void crossfade_samples_## name (uint8_t **dst, uint8_t * const *cf0, \
-                                       uint8_t * const *cf1,                \
-                                       int nb_samples, int channels,        \
-                                       int curve0, int curve1)              \
-{                                                                           \
-    type *d = (type *)dst[0];                                               \
-    const type *s0 = (type *)cf0[0];                                        \
-    const type *s1 = (type *)cf1[0];                                        \
-    int i, c, k = 0;                                                        \
-                                                                            \
-    for (i = 0; i < nb_samples; i++) {                                      \
-        const gtype gain0 = fade_gain(curve0, nb_samples - 1-i,nb_samples,0.,1.);\
-        const gtype gain1 = fade_gain(curve1, i, nb_samples, 0., 1.);            \
-        for (c = 0; c < channels; c++, k++)                                 \
-            d[k] = s0[k] * gain0 + s1[k] * gain1;                           \
-    }                                                                       \
-}
-
-CROSSFADE_PLANAR(dbl, double, double)
-CROSSFADE_PLANAR(flt, float, float)
-CROSSFADE_PLANAR(s16, int16_t, float)
-CROSSFADE_PLANAR(s32, int32_t, double)
-
-CROSSFADE(dbl, double, double)
-CROSSFADE(flt, float, float)
-CROSSFADE(s16, int16_t, float)
-CROSSFADE(s32, int32_t, double)
-
 static int check_input(AVFilterLink *inlink)
 {
     const int queued_samples = ff_inlink_queued_samples(inlink);
@@ -689,13 +475,13 @@ static int acrossfade_config_output(AVFilterLink *outlink)
 
     switch (outlink->format) {
     case AV_SAMPLE_FMT_DBL:  s->crossfade_samples = crossfade_samples_dbl;  break;
-    case AV_SAMPLE_FMT_DBLP: s->crossfade_samples = crossfade_samples_dblp; break;
+    case AV_SAMPLE_FMT_DBLP: s->crossfade_samples = crossfade_samplesp_dbl; break;
     case AV_SAMPLE_FMT_FLT:  s->crossfade_samples = crossfade_samples_flt;  break;
-    case AV_SAMPLE_FMT_FLTP: s->crossfade_samples = crossfade_samples_fltp; break;
+    case AV_SAMPLE_FMT_FLTP: s->crossfade_samples = crossfade_samplesp_flt; break;
     case AV_SAMPLE_FMT_S16:  s->crossfade_samples = crossfade_samples_s16;  break;
-    case AV_SAMPLE_FMT_S16P: s->crossfade_samples = crossfade_samples_s16p; break;
+    case AV_SAMPLE_FMT_S16P: s->crossfade_samples = crossfade_samplesp_s16; break;
     case AV_SAMPLE_FMT_S32:  s->crossfade_samples = crossfade_samples_s32;  break;
-    case AV_SAMPLE_FMT_S32P: s->crossfade_samples = crossfade_samples_s32p; break;
+    case AV_SAMPLE_FMT_S32P: s->crossfade_samples = crossfade_samplesp_s32; break;
     }
 
     config_output(outlink);
