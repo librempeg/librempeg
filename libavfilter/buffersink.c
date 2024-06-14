@@ -320,6 +320,11 @@ static int asink_query_formats(AVFilterContext *ctx)
     return 0;
 }
 
+void av_buffersink_close(AVFilterContext *ctx)
+{
+    ff_inlink_set_status(ctx->inputs[0], AVERROR_EOF);
+}
+
 #define OFFSET(x) offsetof(BufferSinkContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
 static const AVOption buffersink_options[] = {

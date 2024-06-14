@@ -167,6 +167,11 @@ int av_buffersink_get_frame(AVFilterContext *ctx, AVFrame *frame);
 int av_buffersink_get_samples(AVFilterContext *ctx, AVFrame *frame, int nb_samples);
 
 /**
+ * Close the buffer sink.
+ */
+void av_buffersink_close(AVFilterContext *ctx);
+
+/**
  * @}
  */
 
