@@ -73,6 +73,8 @@ typedef struct AudioIR {
     int nb_taps;
     int nb_segments;
     int max_offset;
+    int64_t delay;
+    double *ch_gain;
     AVFrame *ir;
     AVFrame *norm_ir;
     AudioFIRSegment *seg;
@@ -102,7 +104,6 @@ typedef struct AudioFIRContext {
     int one2many;
     int prev_is_disabled;
     int *loading;
-    double *ch_gain;
 
     AudioIR *irs;
 
@@ -111,8 +112,6 @@ typedef struct AudioFIRContext {
     AVFrame *fadein[2];
     int min_part_size;
     int max_part_size;
-    int64_t delay;
-    int64_t pts;
 
     AudioFIRDSPContext afirdsp;
     AVFloatDSPContext *fdsp;
@@ -269,7 +268,7 @@ static int fir_frame(AudioFIRContext *s, AVFrame *in, AVFilterLink *outlink)
         return AVERROR(ENOMEM);
     }
     av_frame_copy_props(out, in);
-    out->pts = s->pts = in->pts - s->delay;
+    out->pts = in->pts - s->irs[s->selir].delay;
 
     s->in = in;
     ff_filter_execute(ctx, fir_channels, out, NULL,
@@ -495,9 +494,8 @@ static int config_output(AVFilterLink *outlink)
 
     s->format = outlink->format;
     s->nb_channels = outlink->ch_layout.nb_channels;
-    s->ch_gain = av_calloc(ctx->inputs[0]->ch_layout.nb_channels, sizeof(*s->ch_gain));
     s->loading = av_calloc(ctx->inputs[0]->ch_layout.nb_channels, sizeof(*s->loading));
-    if (!s->loading || !s->ch_gain)
+    if (!s->loading)
         return AVERROR(ENOMEM);
 
     s->fadein[0] = ff_get_audio_buffer(outlink, s->min_part_size);
@@ -543,7 +541,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     AudioFIRContext *s = ctx->priv;
 
     av_freep(&s->fdsp);
-    av_freep(&s->ch_gain);
     av_freep(&s->loading);
 
     if (s->irs) {
@@ -556,6 +553,7 @@ static av_cold void uninit(AVFilterContext *ctx)
             av_frame_free(&ir->ir);
             av_frame_free(&ir->norm_ir);
 
+            av_freep(&ir->ch_gain);
             av_freep(&ir->seg);
         }
         av_freep(&s->irs);

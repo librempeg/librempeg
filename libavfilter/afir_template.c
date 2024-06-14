@@ -191,11 +191,15 @@ static int fn(ir_convert)(AVFilterContext *ctx, AudioFIRContext *s,
     int delay = cur_nb_taps;
     int nb_taps = 0;
 
+    ir->ch_gain = av_calloc(s->nb_channels, sizeof(*ir->ch_gain));
+    if (!ir->ch_gain)
+        return AVERROR(ENOMEM);
+
     for (int ch = 0; ch < s->nb_channels; ch++) {
         const ftype *tsrc = (const ftype *)ir->ir->extended_data[!s->one2many * ch];
         int ch_delay, ch_nb_taps = cur_nb_taps;
 
-        s->ch_gain[ch] = fn(ir_gain)(ctx, s, cur_nb_taps, tsrc);
+        ir->ch_gain[ch] = fn(ir_gain)(ctx, s, cur_nb_taps, tsrc);
         ch_delay = fn(ir_delay)(ctx, s, &ch_nb_taps, tsrc);
         delay = FFMIN(delay, ch_delay);
         nb_taps = FFMAX(nb_taps, ch_nb_taps);
@@ -205,10 +209,10 @@ static int fn(ir_convert)(AVFilterContext *ctx, AudioFIRContext *s,
         ftype gain = +INFINITY;
 
         for (int ch = 0; ch < s->nb_channels; ch++)
-            gain = FMIN(gain, s->ch_gain[ch]);
+            gain = FMIN(gain, ir->ch_gain[ch]);
 
         for (int ch = 0; ch < s->nb_channels; ch++)
-            s->ch_gain[ch] = gain;
+            ir->ch_gain[ch] = gain;
     }
 
     av_log(ctx, AV_LOG_DEBUG, "nb_taps: %d\n", nb_taps);
@@ -258,7 +262,7 @@ static int fn(ir_convert)(AVFilterContext *ctx, AudioFIRContext *s,
         for (int i = FFMAX(1, s->length * nb_taps); i < nb_taps; i++)
             time[i] = F(0.0);
 
-        fn(ir_scale)(ctx, s, nb_taps, ch, time, s->ch_gain[ch]);
+        fn(ir_scale)(ctx, s, nb_taps, ch, time, ir->ch_gain[ch]);
 
         for (int n = 0; n < ir->nb_segments; n++) {
             AudioFIRSegment *seg = &ir->seg[n];
@@ -274,7 +278,10 @@ static int fn(ir_convert)(AVFilterContext *ctx, AudioFIRContext *s,
     }
 
     ir->have_coeffs = 1;
-    s->delay = delay;
+    ir->delay = delay;
+
+    av_frame_free(&ir->ir);
+    av_frame_free(&ir->norm_ir);
 
     av_log(ctx, AV_LOG_DEBUG, "delay: %d\n", delay);
 
