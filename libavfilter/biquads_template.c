@@ -386,6 +386,54 @@ static void fn(biquad_svf)(BiquadsContext *s,
     fcache[1] = isnormal(s1) ? s1 : F(0.0);
 }
 
+static void fn(biquad_wdf)(BiquadsContext *s,
+                           const void *input, void *output, int len,
+                           void *cache, int *clippings, int disabled)
+{
+    const stype *restrict ibuf = input;
+    stype *restrict obuf = output;
+    ftype *fcache = cache;
+    const ftype *a = ft(s->a);
+    const ftype *b = ft(s->b);
+    const ftype b0 = b[0];
+    const ftype b1 = -b[1];
+    const ftype b2 = -b[2];
+    const ftype a1 = a[1];
+    const ftype a2 = a[2];
+    ftype w0 = fcache[0];
+    ftype w1 = fcache[1];
+    const ftype wet = s->mix;
+    const ftype dry = F(1.0) - wet;
+
+    for (int i = 0; i < len; i++) {
+        const ftype in = ibuf[i] - uhalf;
+        ftype out, v0, v1;
+
+        out = in * b0 + w0 + w1;
+
+        v0 = in * b1 + out * a1 + w1;
+        v1 = out * a2 + in * b2 - w0;
+
+        w0 = v0;
+        w1 = v1;
+
+        out = out * wet + in * dry;
+        if (disabled) {
+            obuf[i] = in + uhalf;
+        } else if (need_clipping && out < min) {
+            (*clippings)++;
+            obuf[i] = min;
+        } else if (need_clipping && out > max) {
+            (*clippings)++;
+            obuf[i] = max;
+        } else {
+            obuf[i] = out + uhalf;
+        }
+    }
+    fcache[0] = isnormal(w0) ? w0 : F(0.0);
+    fcache[1] = isnormal(w1) ? w1 : F(0.0);
+}
+
 static void fn(biquad_zdf)(BiquadsContext *s,
                            const void *input, void *output, int len,
                            void *cache, int *clippings, int disabled)

@@ -70,6 +70,7 @@ enum TransformType {
     LATT,
     SVF,
     ZDF,
+    WDF,
     NB_TTYPE,
 };
 
@@ -215,6 +216,26 @@ static void convert_dir2svf(BiquadsContext *s)
 
     s->a_double[1] = a[0];
     s->a_double[2] = a[1];
+    s->b_double[0] = b[0];
+    s->b_double[1] = b[1];
+    s->b_double[2] = b[2];
+}
+
+static void convert_dir2wdf(BiquadsContext *s)
+{
+    double a[3];
+    double b[3];
+
+    b[0] = s->b_double[0];
+    b[1] = ((s->b_double[2] - s->b_double[1] - s->b_double[0]) * 0.5);
+    b[2] = ((s->b_double[0] - s->b_double[1] - s->b_double[2]) * 0.5);
+    a[0] = 1.0;
+    a[1] = (s->a_double[2] - s->a_double[1] - 1.0) * 0.5;
+    a[2] = (1.0 - s->a_double[1] - s->a_double[2]) * 0.5;
+
+    s->a_double[0] = a[0];
+    s->a_double[1] = a[1];
+    s->a_double[2] = a[2];
     s->b_double[0] = b[0];
     s->b_double[1] = b[1];
     s->b_double[2] = b[2];
@@ -777,6 +798,26 @@ static int config_filter(AVFilterLink *outlink, int reset)
         default: av_assert0(0);
         }
         break;
+    case WDF:
+        switch (inlink->format) {
+        case AV_SAMPLE_FMT_U8P:
+            s->filter = biquad_wdf_u8;
+            break;
+        case AV_SAMPLE_FMT_S16P:
+            s->filter = biquad_wdf_s16;
+            break;
+        case AV_SAMPLE_FMT_S32P:
+            s->filter = biquad_wdf_s32;
+            break;
+        case AV_SAMPLE_FMT_FLTP:
+            s->filter = biquad_wdf_flt;
+            break;
+        case AV_SAMPLE_FMT_DBLP:
+            s->filter = biquad_wdf_dbl;
+            break;
+        default: av_assert0(0);
+        }
+        break;
     case ZDF:
         switch (inlink->format) {
         case AV_SAMPLE_FMT_U8P:
@@ -807,6 +848,8 @@ static int config_filter(AVFilterLink *outlink, int reset)
         convert_dir2latt(s);
     else if (s->transform_type == SVF)
         convert_dir2svf(s);
+    else if (s->transform_type == WDF)
+        convert_dir2wdf(s);
     else if (s->transform_type == ZDF)
         convert_dir2zdf(s, inlink->sample_rate);
 
@@ -1127,7 +1170,8 @@ const AVFilter ff_af_##name_ = {                         \
     {"tdii", "transposed direct form II", 0, AV_OPT_TYPE_CONST, {.i64=TDII}, 0, 0, AF, .unit = "transform_type"},                        \
     {"latt", "lattice-ladder form", 0, AV_OPT_TYPE_CONST, {.i64=LATT}, 0, 0, AF, .unit = "transform_type"},                              \
     {"svf",  "state variable filter form", 0, AV_OPT_TYPE_CONST, {.i64=SVF}, 0, 0, AF, .unit = "transform_type"},                        \
-    {"zdf",  "zero-delay filter form", 0, AV_OPT_TYPE_CONST, {.i64=ZDF}, 0, 0, AF, .unit = "transform_type"}
+    {"zdf",  "zero-delay filter form", 0, AV_OPT_TYPE_CONST, {.i64=ZDF}, 0, 0, AF, .unit = "transform_type"},                            \
+    {"wdf",  "wave digital filter form", 0, AV_OPT_TYPE_CONST, {.i64=WDF}, 0, 0, AF, .unit = "transform_type"}
 
 #define PRECISION_OPTION(x)                                                                                           \
     {"precision", "set filtering precision", OFFSET(precision), AV_OPT_TYPE_INT, {.i64=x}, -1, 4, AF, .unit = "precision"},   \
