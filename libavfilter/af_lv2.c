@@ -59,6 +59,7 @@ typedef struct LV2Context {
     int nb_samples;
     int min_samples;
     int max_samples;
+    int inplace_broken;
     int64_t pts;
     int64_t duration;
 
@@ -94,6 +95,7 @@ typedef struct LV2Context {
     LilvNode  *lv2_Optional;
     LilvNode  *lv2_InputPort;
     LilvNode  *lv2_OutputPort;
+    LilvNode  *lv2_inPlaceBroken;
     LilvNode  *urid_map;
     LilvNode  *powerOf2BlockLength;
     LilvNode  *fixedBlockLength;
@@ -226,8 +228,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     LV2Context *s = ctx->priv;
     AVFrame *out;
 
-    if (!s->nb_outputs ||
-        (av_frame_is_writable(in) && s->nb_inputs == s->nb_outputs)) {
+    if (!s->inplace_broken && (!s->nb_outputs ||
+        (av_frame_is_writable(in) && s->nb_inputs == s->nb_outputs))) {
         out = in;
     } else {
         out = ff_get_audio_buffer(ctx->outputs[0], in->nb_samples);
@@ -348,6 +350,8 @@ static int config_output(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     LV2Context *s = ctx->priv;
     int ret, i, sample_rate;
+
+    s->inplace_broken = lilv_plugin_has_feature(s->plugin, s->lv2_inPlaceBroken);
 
     if (s->nb_inputs) {
         AVFilterLink *inlink = ctx->inputs[0];
@@ -531,6 +535,7 @@ static av_cold int init(AVFilterContext *ctx)
     s->atom_AtomPort       = lilv_new_uri(s->world, LV2_ATOM__AtomPort);
     s->atom_Sequence       = lilv_new_uri(s->world, LV2_ATOM__Sequence);
     s->urid_map            = lilv_new_uri(s->world, LV2_URID__map);
+    s->lv2_inPlaceBroken   = lilv_new_uri(s->world, LV2_CORE__inPlaceBroken);
     s->powerOf2BlockLength = lilv_new_uri(s->world, LV2_BUF_SIZE__powerOf2BlockLength);
     s->fixedBlockLength    = lilv_new_uri(s->world, LV2_BUF_SIZE__fixedBlockLength);
     s->boundedBlockLength  = lilv_new_uri(s->world, LV2_BUF_SIZE__boundedBlockLength);
@@ -677,6 +682,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     lilv_node_free(s->lv2_AudioPort);
     lilv_node_free(s->lv2_OutputPort);
     lilv_node_free(s->lv2_InputPort);
+    lilv_node_free(s->lv2_inPlaceBroken);
     uri_table_destroy(&s->uri_table);
     lilv_instance_free(s->instance);
     lilv_world_free(s->world);
