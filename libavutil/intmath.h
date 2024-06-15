@@ -75,7 +75,7 @@ static av_always_inline av_const int ff_log2_16bit_c(unsigned int v)
         v >>= 8;
         n += 8;
     }
-    n += ff_log2_tab[v];
+    n += ff_log2_tab[v & 0xff];
 
     return n;
 }
