@@ -489,5 +489,6 @@ int sch_mux_sub_heartbeat_add(Scheduler *sch, unsigned mux_idx, unsigned stream_
                               unsigned dec_idx);
 int sch_mux_sub_heartbeat(Scheduler *sch, unsigned mux_idx, unsigned stream_idx,
                           const AVPacket *pkt);
+int sch_terminated(Scheduler *sch);
 
 #endif /* FFTOOLS_FFMPEG_SCHED_H */

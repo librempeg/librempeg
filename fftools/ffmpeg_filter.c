@@ -2461,6 +2461,8 @@ static int fg_output_step(OutputFilterPriv *ofp, FilterGraphThread *fgt,
     FrameData *fd;
     int ret;
 
+    if (sch_terminated(fgp->sch))
+        av_buffersink_close(filter);
     ret = av_buffersink_get_frame_flags(filter, frame,
                                         AV_BUFFERSINK_FLAG_NO_REQUEST);
     if (ret == AVERROR_EOF && !fgt->eof_out[ofp->index]) {

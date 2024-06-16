@@ -2558,3 +2558,8 @@ int sch_stop(Scheduler *sch, int64_t *finish_ts)
 
     return ret;
 }
+
+int sch_terminated(Scheduler *sch)
+{
+    return atomic_load(&sch->terminate) == 1;
+}
