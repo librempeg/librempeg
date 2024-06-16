@@ -213,14 +213,14 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
         ftype *hc = stc->hc;
         ftype f = stc->f;
 
-        ip = isnan(ip) ? F(0.0) : ip;
-        op = isnan(op) ? F(0.0) : op;
-
         for (int n = 0; n < nb_samples; n++) {
             const unsigned idx = (pos >= cur_size)? (pos-cur_size) : (pos+max_size-cur_size);
             const unsigned pidx = (idx < max_size-1) ? (idx+1) : 0;
             const ftype isample = src[n];
             ftype osample;
+
+            ip = isnan(ip) ? isample : ip;
+            op = isnan(op) ? isample : op;
 
             flat += isample == ip;
             flat -= q[idx] == q[pidx];
@@ -235,6 +235,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
             if (f != pf)
                 fn(lfilter_prepare)(f, gain, la, lm);
             pf = f;
+
             osample = fn(filter_sample)(isample-ip, la, lm, lc);
             osample = op + fn(filter_sample)(osample, ha, hm, hc);
 
@@ -310,14 +311,14 @@ static int fn(filter_block_channels)(AVFilterContext *ctx, void *arg, int jobnr,
         ftype pf = stc->pf;
         ftype f = stc->f;
 
-        ip = isnan(ip) ? F(0.0) : ip;
-        op = isnan(op) ? F(0.0) : op;
-
         for (int n = 0; n < nb_samples; n++) {
             const unsigned idx = (pos >= cur_size)? (pos-cur_size) : (pos+max_size-cur_size);
             const unsigned pidx = (idx < max_size-1) ? (idx+1) : 0;
             const ftype isample = src[n];
             ftype osample;
+
+            ip = isnan(ip) ? isample : ip;
+            op = isnan(op) ? isample : op;
 
             flat += isample == ip;
             flat -= q[idx] == q[pidx];
