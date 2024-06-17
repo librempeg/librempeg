@@ -71,20 +71,69 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
-#define ft3(a,b)   a##_##b
-#define ft2(a,b)   ft3(a,b)
-#define ft(a)      ft2(a, ftype)
+typedef struct fn(StateContext) {
+    ftype a[3];
+    ftype b[3];
+    ftype c[4];
+    unsigned clip;
+} fn(StateContext);
+
+static int fn(init_state)(AVFilterContext *ctx, int reset)
+{
+    BiquadsContext *s = ctx->priv;
+    fn(StateContext) *stc;
+
+    if (!s->st)
+        s->st = av_calloc(s->nb_channels * (1+(s->block_samples>0)), sizeof(*stc));
+    if (!s->st)
+        return AVERROR(ENOMEM);
+
+    stc = s->st;
+    for (int ch = 0; ch < s->nb_channels * (1+(s->block_samples>0)); ch++) {
+        fn(StateContext) *st = &stc[ch];
+
+        if (reset)
+            memset(st->c, 0, sizeof(st->c));
+
+        st->a[0] = s->a[0];
+        st->a[1] = s->a[1];
+        st->a[2] = s->a[2];
+        st->b[0] = s->b[0];
+        st->b[1] = s->b[1];
+        st->b[2] = s->b[2];
+    }
+
+    return 0;
+}
+
+static void fn(clip_reset)(AVFilterContext *ctx)
+{
+    BiquadsContext *s = ctx->priv;
+    fn(StateContext) *state = s->st;
+
+    for (int ch = 0; ch < s->nb_channels; ch++) {
+        fn(StateContext) *stc = &state[ch];
+
+        if (stc->clip > 0) {
+            av_log(ctx, AV_LOG_WARNING, "Channel %d clipping %d times. Please reduce gain.\n",
+                   ch, stc->clip);
+            stc->clip = 0;
+        }
+    }
+}
 
 static void fn(biquad_di)(BiquadsContext *s,
                           const void *input, void *output, int len,
-                          void *cache, int *clippings, int disabled)
+                          int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    ftype *fcache = cache;
+    fn(StateContext) *state = s->st;
+    fn(StateContext) *stc = &state[ch];
+    ftype *fcache = stc->c;
     ftype i1 = fcache[0], i2 = fcache[1], o1 = fcache[2], o2 = fcache[3];
-    const ftype *a = ft(s->a);
-    const ftype *b = ft(s->b);
+    const ftype *a = stc->a;
+    const ftype *b = stc->b;
     const ftype a1 = -a[1];
     const ftype a2 = -a[2];
     const ftype b0 = b[0];
@@ -103,10 +152,10 @@ static void fn(biquad_di)(BiquadsContext *s,
         if (disabled) {
             obuf[i] = i2 + uhalf;
         } else if (need_clipping && out < min) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = min;
         } else if (need_clipping && out > max) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = max;
         } else {
             obuf[i] = out + uhalf;
@@ -119,10 +168,10 @@ static void fn(biquad_di)(BiquadsContext *s,
         if (disabled) {
             obuf[i] = i1 + uhalf;
         } else if (need_clipping && out < min) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = min;
         } else if (need_clipping && out > max) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = max;
         } else {
             obuf[i] = out + uhalf;
@@ -139,10 +188,10 @@ static void fn(biquad_di)(BiquadsContext *s,
         if (disabled) {
             obuf[i] = i1 + uhalf;
         } else if (need_clipping && out < min) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = min;
         } else if (need_clipping && out > max) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = max;
         } else {
             obuf[i] = out + uhalf;
@@ -156,13 +205,15 @@ static void fn(biquad_di)(BiquadsContext *s,
 
 static void fn(biquad_dii)(BiquadsContext *s,
                            const void *input, void *output, int len,
-                           void *cache, int *clippings, int disabled)
+                           int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    ftype *fcache = cache;
-    const ftype *a = ft(s->a);
-    const ftype *b = ft(s->b);
+    fn(StateContext) *state = s->st;
+    fn(StateContext) *stc = &state[ch];
+    ftype *fcache = stc->c;
+    const ftype *a = stc->a;
+    const ftype *b = stc->b;
     const ftype a1 = -a[1];
     const ftype a2 = -a[2];
     const ftype b0 = b[0];
@@ -183,10 +234,10 @@ static void fn(biquad_dii)(BiquadsContext *s,
         if (disabled) {
             obuf[i] = in + uhalf;
         } else if (need_clipping && out < min) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = min;
         } else if (need_clipping && out > max) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = max;
         } else {
             obuf[i] = out + uhalf;
@@ -198,13 +249,15 @@ static void fn(biquad_dii)(BiquadsContext *s,
 
 static void fn(biquad_tdi)(BiquadsContext *s,
                            const void *input, void *output, int len,
-                           void *cache, int *clippings, int disabled)
+                           int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    ftype *fcache = cache;
-    const ftype *a = ft(s->a);
-    const ftype *b = ft(s->b);
+    fn(StateContext) *state = s->st;
+    fn(StateContext) *stc = &state[ch];
+    ftype *fcache = stc->c;
+    const ftype *a = (const ftype *)stc->a;
+    const ftype *b = (const ftype *)stc->b;
     const ftype a1 = -a[1];
     const ftype a2 = -a[2];
     const ftype b0 = b[0];
@@ -232,10 +285,10 @@ static void fn(biquad_tdi)(BiquadsContext *s,
         if (disabled) {
             obuf[i] = in + uhalf;
         } else if (need_clipping && out < min) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = min;
         } else if (need_clipping && out > max) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = max;
         } else {
             obuf[i] = out + uhalf;
@@ -250,13 +303,15 @@ static void fn(biquad_tdi)(BiquadsContext *s,
 
 static void fn(biquad_tdii)(BiquadsContext *s,
                             const void *input, void *output, int len,
-                            void *cache, int *clippings, int disabled)
+                            int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    ftype *fcache = cache;
-    const ftype *a = ft(s->a);
-    const ftype *b = ft(s->b);
+    fn(StateContext) *state = s->st;
+    fn(StateContext) *stc = &state[ch];
+    ftype *fcache = stc->c;
+    const ftype *a = stc->a;
+    const ftype *b = stc->b;
     const ftype a1 = -a[1];
     const ftype a2 = -a[2];
     const ftype b0 = b[0];
@@ -276,10 +331,10 @@ static void fn(biquad_tdii)(BiquadsContext *s,
         if (disabled) {
             obuf[i] = in + uhalf;
         } else if (need_clipping && out < min) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = min;
         } else if (need_clipping && out > max) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = max;
         } else {
             obuf[i] = out + uhalf;
@@ -291,13 +346,15 @@ static void fn(biquad_tdii)(BiquadsContext *s,
 
 static void fn(biquad_latt)(BiquadsContext *s,
                            const void *input, void *output, int len,
-                           void *cache, int *clippings, int disabled)
+                           int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    ftype *fcache = cache;
-    const ftype *a = ft(s->a);
-    const ftype *b = ft(s->b);
+    fn(StateContext) *state = s->st;
+    fn(StateContext) *stc = &state[ch];
+    ftype *fcache = stc->c;
+    const ftype *a = (const ftype *)stc->a;
+    const ftype *b = (const ftype *)stc->b;
     const ftype k0 = a[1];
     const ftype k1 = a[2];
     const ftype v0 = b[0];
@@ -328,10 +385,10 @@ static void fn(biquad_latt)(BiquadsContext *s,
         if (disabled) {
             obuf[i] = in + uhalf;
         } else if (need_clipping && out < min) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = min;
         } else if (need_clipping && out > max) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = max;
         } else {
             obuf[i] = out + uhalf;
@@ -343,13 +400,15 @@ static void fn(biquad_latt)(BiquadsContext *s,
 
 static void fn(biquad_svf)(BiquadsContext *s,
                            const void *input, void *output, int len,
-                           void *cache, int *clippings, int disabled)
+                           int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    ftype *fcache = cache;
-    const ftype *a = ft(s->a);
-    const ftype *b = ft(s->b);
+    fn(StateContext) *state = s->st;
+    fn(StateContext) *stc = &state[ch];
+    ftype *fcache = stc->c;
+    const ftype *a = stc->a;
+    const ftype *b = stc->b;
     const ftype a1 = a[1];
     const ftype a2 = a[2];
     const ftype b0 = b[0];
@@ -373,10 +432,10 @@ static void fn(biquad_svf)(BiquadsContext *s,
         if (disabled) {
             obuf[i] = in + uhalf;
         } else if (need_clipping && out < min) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = min;
         } else if (need_clipping && out > max) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = max;
         } else {
             obuf[i] = out + uhalf;
@@ -388,13 +447,15 @@ static void fn(biquad_svf)(BiquadsContext *s,
 
 static void fn(biquad_wdf)(BiquadsContext *s,
                            const void *input, void *output, int len,
-                           void *cache, int *clippings, int disabled)
+                           int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    ftype *fcache = cache;
-    const ftype *a = ft(s->a);
-    const ftype *b = ft(s->b);
+    fn(StateContext) *state = s->st;
+    fn(StateContext) *stc = &state[ch];
+    ftype *fcache = stc->c;
+    const ftype *a = (const ftype *)stc->a;
+    const ftype *b = (const ftype *)stc->b;
     const ftype b0 = b[0];
     const ftype b1 = -b[1];
     const ftype b2 = -b[2];
@@ -421,10 +482,10 @@ static void fn(biquad_wdf)(BiquadsContext *s,
         if (disabled) {
             obuf[i] = in + uhalf;
         } else if (need_clipping && out < min) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = min;
         } else if (need_clipping && out > max) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = max;
         } else {
             obuf[i] = out + uhalf;
@@ -436,21 +497,22 @@ static void fn(biquad_wdf)(BiquadsContext *s,
 
 static void fn(biquad_zdf)(BiquadsContext *s,
                            const void *input, void *output, int len,
-                           void *cache, int *clippings, int disabled)
+                           int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    ftype *fcache = cache;
-    const ftype *a = ft(s->a);
-    const ftype *b = ft(s->b);
+    fn(StateContext) *state = s->st;
+    fn(StateContext) *stc = &state[ch];
+    const ftype *a = stc->a;
+    const ftype *b = stc->b;
     const ftype m0 = b[0];
     const ftype m1 = b[1];
     const ftype m2 = b[2];
     const ftype a0 = a[0];
     const ftype a1 = a[1];
     const ftype a2 = a[2];
-    ftype b0 = fcache[0];
-    ftype b1 = fcache[1];
+    ftype b0 = stc->c[0];
+    ftype b1 = stc->c[1];
     const ftype wet = s->mix;
     const ftype dry = F(1.0) - wet;
 
@@ -470,15 +532,15 @@ static void fn(biquad_zdf)(BiquadsContext *s,
         if (disabled) {
             obuf[i] = in + uhalf;
         } else if (need_clipping && out < min) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = min;
         } else if (need_clipping && out > max) {
-            (*clippings)++;
+            stc->clip++;
             obuf[i] = max;
         } else {
             obuf[i] = out + uhalf;
         }
     }
-    fcache[0] = isnormal(b0) ? b0 : F(0.0);
-    fcache[1] = isnormal(b1) ? b1 : F(0.0);
+    stc->c[0] = isnormal(b0) ? b0 : F(0.0);
+    stc->c[1] = isnormal(b1) ? b1 : F(0.0);
 }

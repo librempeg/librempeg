@@ -98,26 +98,26 @@ typedef struct BiquadsContext {
     AVChannelLayout ch_layout;
     int normalize;
 
-    double a_double[3];
-    double b_double[3];
-
-    float a_float[3];
-    float b_float[3];
+    double a[3];
+    double b[3];
 
     double oa[3];
     double ob[3];
 
     AVFrame *block[3];
 
-    int *clip;
-    AVFrame *cache[2];
+    void *st;
+
     int block_align;
 
     int64_t pts;
+    int nb_channels;
     int nb_samples;
 
+    int (*init_state)(AVFilterContext *ctx, int reset);
+    void (*clip_reset)(AVFilterContext *ctx);
     void (*filter)(struct BiquadsContext *s, const void *ibuf, void *obuf, int len,
-                   void *cache, int *clip, int disabled);
+                   int ch, int disabled);
 } BiquadsContext;
 
 #define DEPTH 8
@@ -190,17 +190,17 @@ static void convert_dir2latt(BiquadsContext *s)
 {
     double k0, k1, v0, v1, v2;
 
-    k1 = s->a_double[2];
-    k0 = s->a_double[1] / (1. + k1);
-    v2 = s->b_double[2];
-    v1 = s->b_double[1] - v2 * s->a_double[1];
-    v0 = s->b_double[0] - v1 * k0 - v2 * k1;
+    k1 = s->a[2];
+    k0 = s->a[1] / (1. + k1);
+    v2 = s->b[2];
+    v1 = s->b[1] - v2 * s->a[1];
+    v0 = s->b[0] - v1 * k0 - v2 * k1;
 
-    s->a_double[1] = k0;
-    s->a_double[2] = k1;
-    s->b_double[0] = v0;
-    s->b_double[1] = v1;
-    s->b_double[2] = v2;
+    s->a[1] = k0;
+    s->a[2] = k1;
+    s->b[0] = v0;
+    s->b[1] = v1;
+    s->b[2] = v2;
 }
 
 static void convert_dir2svf(BiquadsContext *s)
@@ -208,17 +208,17 @@ static void convert_dir2svf(BiquadsContext *s)
     double a[2];
     double b[3];
 
-    a[0] = -s->a_double[1];
-    a[1] = -s->a_double[2];
-    b[0] = s->b_double[1] - s->a_double[1] * s->b_double[0];
-    b[1] = s->b_double[2] - s->a_double[2] * s->b_double[0];
-    b[2] = s->b_double[0];
+    a[0] = -s->a[1];
+    a[1] = -s->a[2];
+    b[0] = s->b[1] - s->a[1] * s->b[0];
+    b[1] = s->b[2] - s->a[2] * s->b[0];
+    b[2] = s->b[0];
 
-    s->a_double[1] = a[0];
-    s->a_double[2] = a[1];
-    s->b_double[0] = b[0];
-    s->b_double[1] = b[1];
-    s->b_double[2] = b[2];
+    s->a[1] = a[0];
+    s->a[2] = a[1];
+    s->b[0] = b[0];
+    s->b[1] = b[1];
+    s->b[2] = b[2];
 }
 
 static void convert_dir2wdf(BiquadsContext *s)
@@ -226,19 +226,19 @@ static void convert_dir2wdf(BiquadsContext *s)
     double a[3];
     double b[3];
 
-    b[0] = s->b_double[0];
-    b[1] = ((s->b_double[2] - s->b_double[1] - s->b_double[0]) * 0.5);
-    b[2] = ((s->b_double[0] - s->b_double[1] - s->b_double[2]) * 0.5);
+    b[0] = s->b[0];
+    b[1] = ((s->b[2] - s->b[1] - s->b[0]) * 0.5);
+    b[2] = ((s->b[0] - s->b[1] - s->b[2]) * 0.5);
     a[0] = 1.0;
-    a[1] = (s->a_double[2] - s->a_double[1] - 1.0) * 0.5;
-    a[2] = (1.0 - s->a_double[1] - s->a_double[2]) * 0.5;
+    a[1] = (s->a[2] - s->a[1] - 1.0) * 0.5;
+    a[2] = (1.0 - s->a[1] - s->a[2]) * 0.5;
 
-    s->a_double[0] = a[0];
-    s->a_double[1] = a[1];
-    s->a_double[2] = a[2];
-    s->b_double[0] = b[0];
-    s->b_double[1] = b[1];
-    s->b_double[2] = b[2];
+    s->a[0] = a[0];
+    s->a[1] = a[1];
+    s->a[2] = a[2];
+    s->b[0] = b[0];
+    s->b[1] = b[1];
+    s->b[2] = b[2];
 }
 
 static double convert_width2qfactor(double width,
@@ -404,12 +404,12 @@ static void convert_dir2zdf(BiquadsContext *s, int sample_rate)
         av_assert0(0);
     }
 
-    s->a_double[0] = a[0];
-    s->a_double[1] = a[1];
-    s->a_double[2] = a[2];
-    s->b_double[0] = m[0];
-    s->b_double[1] = m[1];
-    s->b_double[2] = m[2];
+    s->a[0] = a[0];
+    s->a[1] = a[1];
+    s->a[2] = a[2];
+    s->b[0] = m[0];
+    s->b[1] = m[1];
+    s->b[2] = m[2];
 }
 
 static int config_filter(AVFilterLink *outlink, int reset)
@@ -460,136 +460,136 @@ static int config_filter(AVFilterLink *outlink, int reset)
 
     switch (s->filter_type) {
     case biquad:
-        s->a_double[0] = s->oa[0];
-        s->a_double[1] = s->oa[1];
-        s->a_double[2] = s->oa[2];
-        s->b_double[0] = s->ob[0];
-        s->b_double[1] = s->ob[1];
-        s->b_double[2] = s->ob[2];
+        s->a[0] = s->oa[0];
+        s->a[1] = s->oa[1];
+        s->a[2] = s->oa[2];
+        s->b[0] = s->ob[0];
+        s->b[1] = s->ob[1];
+        s->b[2] = s->ob[2];
         break;
     case equalizer:
-        s->a_double[0] =   1.0 + alpha / A;
-        s->a_double[1] =  -2.0 * cos_w0;
-        s->a_double[2] =   1.0 - alpha / A;
-        s->b_double[0] =   1.0 + alpha * A;
-        s->b_double[1] =  -2.0 * cos_w0;
-        s->b_double[2] =   1.0 - alpha * A;
+        s->a[0] =   1.0 + alpha / A;
+        s->a[1] =  -2.0 * cos_w0;
+        s->a[2] =   1.0 - alpha / A;
+        s->b[0] =   1.0 + alpha * A;
+        s->b[1] =  -2.0 * cos_w0;
+        s->b[2] =   1.0 - alpha * A;
         break;
     case bass:
         beta = sqrt((A * A + 1) - (A - 1) * (A - 1));
     case tiltshelf:
     case lowshelf:
         if (s->order == 1) {
-            s->a_double[0] = sin_w0 / A + 1.0 + cos_w0;
-            s->a_double[1] = sin_w0 / A - 1.0 - cos_w0;
-            s->a_double[2] = 0.0;
-            s->b_double[0] = sin_w0 * A + 1.0 + cos_w0;
-            s->b_double[1] = sin_w0 * A - 1.0 - cos_w0;
-            s->b_double[2] = 0.0;
+            s->a[0] = sin_w0 / A + 1.0 + cos_w0;
+            s->a[1] = sin_w0 / A - 1.0 - cos_w0;
+            s->a[2] = 0.0;
+            s->b[0] = sin_w0 * A + 1.0 + cos_w0;
+            s->b[1] = sin_w0 * A - 1.0 - cos_w0;
+            s->b[2] = 0.0;
         } else {
-            s->a_double[0] =          (A + 1) + (A - 1) * cos_w0 + beta * alpha;
-            s->a_double[1] =    -2 * ((A - 1) + (A + 1) * cos_w0);
-            s->a_double[2] =          (A + 1) + (A - 1) * cos_w0 - beta * alpha;
-            s->b_double[0] =     A * ((A + 1) - (A - 1) * cos_w0 + beta * alpha);
-            s->b_double[1] = 2 * A * ((A - 1) - (A + 1) * cos_w0);
-            s->b_double[2] =     A * ((A + 1) - (A - 1) * cos_w0 - beta * alpha);
+            s->a[0] =          (A + 1) + (A - 1) * cos_w0 + beta * alpha;
+            s->a[1] =    -2 * ((A - 1) + (A + 1) * cos_w0);
+            s->a[2] =          (A + 1) + (A - 1) * cos_w0 - beta * alpha;
+            s->b[0] =     A * ((A + 1) - (A - 1) * cos_w0 + beta * alpha);
+            s->b[1] = 2 * A * ((A - 1) - (A + 1) * cos_w0);
+            s->b[2] =     A * ((A + 1) - (A - 1) * cos_w0 - beta * alpha);
         }
         break;
     case treble:
         beta = sqrt((A * A + 1) - (A - 1) * (A - 1));
     case highshelf:
         if (s->order == 1) {
-            s->a_double[0] = sin_w0 + 1.0/A + cos_w0 / A;
-            s->a_double[1] = sin_w0 - 1.0/A - cos_w0 / A;
-            s->a_double[2] = 0.0;
-            s->b_double[0] = sin_w0 + A + A * cos_w0;
-            s->b_double[1] = sin_w0 - A - A * cos_w0;
-            s->b_double[2] = 0.0;
+            s->a[0] = sin_w0 + 1.0/A + cos_w0 / A;
+            s->a[1] = sin_w0 - 1.0/A - cos_w0 / A;
+            s->a[2] = 0.0;
+            s->b[0] = sin_w0 + A + A * cos_w0;
+            s->b[1] = sin_w0 - A - A * cos_w0;
+            s->b[2] = 0.0;
         } else {
-            s->a_double[0] =          (A + 1) - (A - 1) * cos_w0 + beta * alpha;
-            s->a_double[1] =     2 * ((A - 1) - (A + 1) * cos_w0);
-            s->a_double[2] =          (A + 1) - (A - 1) * cos_w0 - beta * alpha;
-            s->b_double[0] =     A * ((A + 1) + (A - 1) * cos_w0 + beta * alpha);
-            s->b_double[1] =-2 * A * ((A - 1) + (A + 1) * cos_w0);
-            s->b_double[2] =     A * ((A + 1) + (A - 1) * cos_w0 - beta * alpha);
+            s->a[0] =          (A + 1) - (A - 1) * cos_w0 + beta * alpha;
+            s->a[1] =     2 * ((A - 1) - (A + 1) * cos_w0);
+            s->a[2] =          (A + 1) - (A - 1) * cos_w0 - beta * alpha;
+            s->b[0] =     A * ((A + 1) + (A - 1) * cos_w0 + beta * alpha);
+            s->b[1] =-2 * A * ((A - 1) + (A + 1) * cos_w0);
+            s->b[2] =     A * ((A + 1) + (A - 1) * cos_w0 - beta * alpha);
         }
         break;
     case bandpass:
         if (s->csg) {
-            s->a_double[0] =  1.0 + alpha;
-            s->a_double[1] = -2.0 * cos_w0;
-            s->a_double[2] =  1.0 - alpha;
-            s->b_double[0] =  sin_w0 * 0.5;
-            s->b_double[1] =  0;
-            s->b_double[2] = -sin_w0 * 0.5;
+            s->a[0] =  1.0 + alpha;
+            s->a[1] = -2.0 * cos_w0;
+            s->a[2] =  1.0 - alpha;
+            s->b[0] =  sin_w0 * 0.5;
+            s->b[1] =  0;
+            s->b[2] = -sin_w0 * 0.5;
         } else {
-            s->a_double[0] =  1.0 + alpha;
-            s->a_double[1] = -2.0 * cos_w0;
-            s->a_double[2] =  1.0 - alpha;
-            s->b_double[0] =  alpha;
-            s->b_double[1] =  0.0;
-            s->b_double[2] = -alpha;
+            s->a[0] =  1.0 + alpha;
+            s->a[1] = -2.0 * cos_w0;
+            s->a[2] =  1.0 - alpha;
+            s->b[0] =  alpha;
+            s->b[1] =  0.0;
+            s->b[2] = -alpha;
         }
         break;
     case bandreject:
-        s->a_double[0] =  1.0 + alpha;
-        s->a_double[1] = -2.0 * cos_w0;
-        s->a_double[2] =  1.0 - alpha;
-        s->b_double[0] =  1.0;
-        s->b_double[1] = -2.0 * cos_w0;
-        s->b_double[2] =  1.0;
+        s->a[0] =  1.0 + alpha;
+        s->a[1] = -2.0 * cos_w0;
+        s->a[2] =  1.0 - alpha;
+        s->b[0] =  1.0;
+        s->b[1] = -2.0 * cos_w0;
+        s->b[2] =  1.0;
         break;
     case lowpass:
         if (s->order == 1) {
-            s->a_double[0] = sin_w0 + 1.0 + cos_w0;
-            s->a_double[1] = sin_w0 - 1.0 - cos_w0;
-            s->a_double[2] = 0.0;
-            s->b_double[0] = sin_w0;
-            s->b_double[1] = sin_w0;
-            s->b_double[2] = 0.0;
+            s->a[0] = sin_w0 + 1.0 + cos_w0;
+            s->a[1] = sin_w0 - 1.0 - cos_w0;
+            s->a[2] = 0.0;
+            s->b[0] = sin_w0;
+            s->b[1] = sin_w0;
+            s->b[2] = 0.0;
         } else {
-            s->a_double[0] =  1.0 + alpha;
-            s->a_double[1] = -2.0 * cos_w0;
-            s->a_double[2] =  1.0 - alpha;
-            s->b_double[0] = (1.0 - cos_w0) * 0.5;
-            s->b_double[1] =  1.0 - cos_w0;
-            s->b_double[2] = (1.0 - cos_w0) * 0.5;
+            s->a[0] =  1.0 + alpha;
+            s->a[1] = -2.0 * cos_w0;
+            s->a[2] =  1.0 - alpha;
+            s->b[0] = (1.0 - cos_w0) * 0.5;
+            s->b[1] =  1.0 - cos_w0;
+            s->b[2] = (1.0 - cos_w0) * 0.5;
         }
         break;
     case highpass:
         if (s->order == 1) {
-            s->a_double[0] = sin_w0 + 1.0 + cos_w0;
-            s->a_double[1] = sin_w0 - 1.0 - cos_w0;
-            s->a_double[2] = 0.0;
-            s->b_double[0] = 1.0 + cos_w0;
-            s->b_double[1] = -s->b_double[0];
-            s->b_double[2] = 0.0;
+            s->a[0] = sin_w0 + 1.0 + cos_w0;
+            s->a[1] = sin_w0 - 1.0 - cos_w0;
+            s->a[2] = 0.0;
+            s->b[0] = 1.0 + cos_w0;
+            s->b[1] = -s->b[0];
+            s->b[2] = 0.0;
         } else {
-            s->a_double[0] =   1.0 + alpha;
-            s->a_double[1] =  -2.0 * cos_w0;
-            s->a_double[2] =   1.0 - alpha;
-            s->b_double[0] =  (1.0 + cos_w0) * 0.5;
-            s->b_double[1] = -(1.0 + cos_w0);
-            s->b_double[2] =  (1.0 + cos_w0) * 0.5;
+            s->a[0] =   1.0 + alpha;
+            s->a[1] =  -2.0 * cos_w0;
+            s->a[2] =   1.0 - alpha;
+            s->b[0] =  (1.0 + cos_w0) * 0.5;
+            s->b[1] = -(1.0 + cos_w0);
+            s->b[2] =  (1.0 + cos_w0) * 0.5;
         }
         break;
     case allpass:
         switch (s->order) {
         case 1:
-            s->a_double[0] = sin_w0 + 1.0 + cos_w0;
-            s->a_double[1] = sin_w0 - 1.0 - cos_w0;
-            s->a_double[2] = 0.;
-            s->b_double[0] = s->a_double[1];
-            s->b_double[1] = s->a_double[0];
-            s->b_double[2] = 0.;
+            s->a[0] = sin_w0 + 1.0 + cos_w0;
+            s->a[1] = sin_w0 - 1.0 - cos_w0;
+            s->a[2] = 0.;
+            s->b[0] = s->a[1];
+            s->b[1] = s->a[0];
+            s->b[2] = 0.;
             break;
         case 2:
-            s->a_double[0] =  1.0 + alpha;
-            s->a_double[1] = -2.0 * cos_w0;
-            s->a_double[2] =  1.0 - alpha;
-            s->b_double[0] =  1.0 - alpha;
-            s->b_double[1] = -2.0 * cos_w0;
-            s->b_double[2] =  1.0 + alpha;
+            s->a[0] =  1.0 + alpha;
+            s->a[1] = -2.0 * cos_w0;
+            s->a[2] =  1.0 - alpha;
+            s->b[0] =  1.0 - alpha;
+            s->b[1] = -2.0 * cos_w0;
+            s->b[2] =  1.0 + alpha;
         break;
         }
         break;
@@ -609,12 +609,12 @@ static int config_filter(AVFilterLink *outlink, int reset)
             double gn = (2.0 * M_PI * fc) / tan(M_PI * fc / fs);
             double cci = c0i + gn * c1i + pow(gn, 2.0) * c2i;
 
-            s->b_double[0] = (d0i + gn * d1i + pow(gn, 2.0) * d2i) / cci;
-            s->b_double[1] = 2.0 * (d0i - pow(gn, 2.0) * d2i) / cci;
-            s->b_double[2] = (d0i - gn * d1i + pow(gn, 2.0) * d2i) / cci;
-            s->a_double[0] = 1.0;
-            s->a_double[1] = (2.0 * (c0i - pow(gn, 2.0) * c2i) / cci);
-            s->a_double[2] = ((c0i - gn * c1i + pow(gn, 2.0) * c2i) / cci);
+            s->b[0] = (d0i + gn * d1i + pow(gn, 2.0) * d2i) / cci;
+            s->b[1] = 2.0 * (d0i - pow(gn, 2.0) * d2i) / cci;
+            s->b[2] = (d0i - gn * d1i + pow(gn, 2.0) * d2i) / cci;
+            s->a[0] = 1.0;
+            s->a[1] = (2.0 * (c0i - pow(gn, 2.0) * c2i) / cci);
+            s->a[2] = ((c0i - gn * c1i + pow(gn, 2.0) * c2i) / cci);
         }
         break;
     default:
@@ -622,51 +622,34 @@ static int config_filter(AVFilterLink *outlink, int reset)
     }
 
     av_log(ctx, AV_LOG_VERBOSE, "a=%f %f %f:b=%f %f %f\n",
-           s->a_double[0], s->a_double[1], s->a_double[2],
-           s->b_double[0], s->b_double[1], s->b_double[2]);
+           s->a[0], s->a[1], s->a[2],
+           s->b[0], s->b[1], s->b[2]);
 
-    s->a_double[1] /= s->a_double[0];
-    s->a_double[2] /= s->a_double[0];
-    s->b_double[0] /= s->a_double[0];
-    s->b_double[1] /= s->a_double[0];
-    s->b_double[2] /= s->a_double[0];
-    s->a_double[0] /= s->a_double[0];
+    s->a[1] /= s->a[0];
+    s->a[2] /= s->a[0];
+    s->b[0] /= s->a[0];
+    s->b[1] /= s->a[0];
+    s->b[2] /= s->a[0];
+    s->a[0] /= s->a[0];
 
-    if (s->normalize && fabs(s->b_double[0] + s->b_double[1] + s->b_double[2]) > 1e-6) {
-        double factor = (s->a_double[0] + s->a_double[1] + s->a_double[2]) /
-                        (s->b_double[0] + s->b_double[1] + s->b_double[2]);
+    if (s->normalize && fabs(s->b[0] + s->b[1] + s->b[2]) > 1e-6) {
+        double factor = (s->a[0] + s->a[1] + s->a[2]) /
+                        (s->b[0] + s->b[1] + s->b[2]);
 
-        s->b_double[0] *= factor;
-        s->b_double[1] *= factor;
-        s->b_double[2] *= factor;
+        s->b[0] *= factor;
+        s->b[1] *= factor;
+        s->b[2] *= factor;
     }
 
     switch (s->filter_type) {
     case tiltshelf:
-        s->b_double[0] /= A;
-        s->b_double[1] /= A;
-        s->b_double[2] /= A;
+        s->b[0] /= A;
+        s->b[1] /= A;
+        s->b[2] /= A;
         break;
     }
 
-    if (!s->cache[0])
-        s->cache[0] = ff_get_audio_buffer(outlink, 4 * sizeof(double));
-    if (!s->clip)
-        s->clip = av_calloc(outlink->ch_layout.nb_channels, sizeof(*s->clip));
-    if (!s->cache[0] || !s->clip)
-        return AVERROR(ENOMEM);
-    if (reset) {
-        av_samples_set_silence(s->cache[0]->extended_data, 0, s->cache[0]->nb_samples,
-                               s->cache[0]->ch_layout.nb_channels, s->cache[0]->format);
-    }
-
     if (reset && s->block_samples > 0) {
-        if (!s->cache[1])
-            s->cache[1] = ff_get_audio_buffer(outlink, 4 * sizeof(double));
-        if (!s->cache[1])
-            return AVERROR(ENOMEM);
-        av_samples_set_silence(s->cache[1]->extended_data, 0, s->cache[1]->nb_samples,
-                               s->cache[1]->ch_layout.nb_channels, s->cache[1]->format);
         for (int i = 0; i < 3; i++) {
             if (!s->block[i])
                 s->block[i] = ff_get_audio_buffer(outlink, s->block_samples * 2);
@@ -853,18 +836,41 @@ static int config_filter(AVFilterLink *outlink, int reset)
     else if (s->transform_type == ZDF)
         convert_dir2zdf(s, inlink->sample_rate);
 
-    s->a_float[0] = s->a_double[0];
-    s->a_float[1] = s->a_double[1];
-    s->a_float[2] = s->a_double[2];
-    s->b_float[0] = s->b_double[0];
-    s->b_float[1] = s->b_double[1];
-    s->b_float[2] = s->b_double[2];
-
-    return 0;
+    return s->init_state(ctx, reset);
 }
 
 static int config_output(AVFilterLink *outlink)
 {
+    AVFilterContext *ctx = outlink->src;
+    BiquadsContext *s = ctx->priv;
+
+    s->nb_channels = outlink->ch_layout.nb_channels;
+
+    switch (outlink->format) {
+    case AV_SAMPLE_FMT_U8P:
+        s->init_state = init_state_u8;
+        s->clip_reset = clip_reset_u8;
+        break;
+    case AV_SAMPLE_FMT_S16P:
+        s->init_state = init_state_s16;
+        s->clip_reset = clip_reset_s16;
+        break;
+    case AV_SAMPLE_FMT_S32P:
+        s->init_state = init_state_s32;
+        s->clip_reset = clip_reset_s32;
+        break;
+    case AV_SAMPLE_FMT_FLTP:
+        s->init_state = init_state_flt;
+        s->clip_reset = clip_reset_flt;
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        s->init_state = init_state_dbl;
+        s->clip_reset = clip_reset_dbl;
+        break;
+    default:
+        av_assert0(0);
+    }
+
     return config_filter(outlink, 1);
 }
 
@@ -923,9 +929,8 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     BiquadsContext *s = ctx->priv;
     const int start = (buf->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (buf->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
-    int ch;
 
-    for (ch = start; ch < end; ch++) {
+    for (int ch = start; ch < end; ch++) {
         enum AVChannel channel = av_channel_layout_channel_from_index(&inlink->ch_layout, ch);
 
         if (av_channel_layout_index_from_channel(&s->ch_layout, channel) < 0) {
@@ -937,15 +942,15 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
 
         if (!s->block_samples) {
             s->filter(s, buf->extended_data[ch], out_buf->extended_data[ch], buf->nb_samples,
-                      s->cache[0]->extended_data[ch], s->clip+ch, ctx->is_disabled);
+                      ch, ctx->is_disabled);
         } else {
             s->filter(s, buf->extended_data[ch], s->block[0]->extended_data[ch] + s->block_align * s->block_samples,
-                      buf->nb_samples, s->cache[0]->extended_data[ch], s->clip+ch, ctx->is_disabled);
+                      buf->nb_samples, ch, ctx->is_disabled);
             memset(s->block[0]->extended_data[ch] + s->block_align * (s->block_samples + buf->nb_samples),
                    0, (s->block_samples - buf->nb_samples) * s->block_align);
             reverse_samples(s->block[1], s->block[0], ch, 0, 0, 2 * s->block_samples);
             s->filter(s, s->block[1]->extended_data[ch], s->block[1]->extended_data[ch], 2 * s->block_samples,
-                      s->cache[1]->extended_data[ch], s->clip+ch, ctx->is_disabled);
+                      s->nb_channels+ch, ctx->is_disabled);
             reverse_samples(s->block[2], s->block[1], ch, 0, 0, 2 * s->block_samples);
             memcpy(out_buf->extended_data[ch], s->block[2]->extended_data[ch],
                    s->block_samples * s->block_align);
@@ -964,7 +969,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out_buf;
     ThreadData td;
-    int ch, ret, drop = 0;
+    int ret, drop = 0;
 
     if (s->bypass)
         return ff_filter_frame(outlink, buf);
@@ -996,12 +1001,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     ff_filter_execute(ctx, filter_channel, &td, NULL,
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
-    for (ch = 0; ch < outlink->ch_layout.nb_channels; ch++) {
-        if (s->clip[ch] > 0)
-            av_log(ctx, AV_LOG_WARNING, "Channel %d clipping %d times. Please reduce gain.\n",
-                   ch, s->clip[ch]);
-        s->clip[ch] = 0;
-    }
+    s->clip_reset(ctx);
 
     if (s->block_samples > 0) {
         int nb_samples = buf->nb_samples;
@@ -1090,9 +1090,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 
     for (int i = 0; i < 3; i++)
         av_frame_free(&s->block[i]);
-    av_frame_free(&s->cache[0]);
-    av_frame_free(&s->cache[1]);
-    av_freep(&s->clip);
+    av_freep(&s->st);
     av_channel_layout_uninit(&s->ch_layout);
 }
 
