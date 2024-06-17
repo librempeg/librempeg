@@ -16,52 +16,106 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#undef imin
+#undef imax
 #undef min
 #undef max
+#undef atype
+#undef itype
 #undef stype
 #undef ftype
+#undef ISNORMAL
+#undef IDEPTH
+#undef FRACT
+#undef RSHIFT
 #undef SAMPLE_FORMAT
+#undef LRINT
 #undef need_clipping
 #undef uhalf
 #if DEPTH == 8
+#define IDEPTH 6
 #define need_clipping 1
+#define FRACT(x) ((x) & ((1L << IDEPTH)-1))
+#define RSHIFT(x) ((x) >> IDEPTH)
+#define LRINT lrintf
+#define atype int16_t
+#define itype int8_t
 #define ftype float
 #define stype uint8_t
+#define imin -(1LL << (IDEPTH*2+1))
+#define imax ((1LL << (IDEPTH*2+1))-1)
 #define min INT8_MIN
 #define max INT8_MAX
 #define uhalf 0x80
+#define ISNORMAL(x) ((x)==(x))
 #define SAMPLE_FORMAT u8
 #elif DEPTH == 16
+#define IDEPTH 14
+#define FRACT(x) ((x) & ((1L << IDEPTH)-1))
+#define RSHIFT(x) ((x) >> IDEPTH)
+#define LRINT lrintf
 #define need_clipping 1
+#define atype int32_t
+#define itype int16_t
 #define ftype float
 #define stype int16_t
+#define imin -(1LL << (IDEPTH*2+1))
+#define imax ((1LL << (IDEPTH*2+1))-1)
 #define min INT16_MIN
 #define max INT16_MAX
 #define uhalf 0
+#define ISNORMAL(x) ((x)==(x))
 #define SAMPLE_FORMAT s16
 #elif DEPTH == 31
+#define IDEPTH 30
+#define FRACT(x) ((x) & ((1LL << IDEPTH)-1))
+#define RSHIFT(x) ((x) >> IDEPTH)
+#define LRINT lrint
 #define need_clipping 1
+#define atype int64_t
+#define itype int32_t
 #define ftype double
 #define stype int32_t
+#define imin -(1LL << (IDEPTH*2+1))
+#define imax ((1LL << (IDEPTH*2+1))-1)
 #define min INT32_MIN
 #define max INT32_MAX
 #define uhalf 0
+#define ISNORMAL(x) ((x)==(x))
 #define SAMPLE_FORMAT s32
 #elif DEPTH == 32
+#define IDEPTH 0
+#define FRACT(x) ((x)!=(x))
+#define RSHIFT(x) (x)
+#define LRINT(x) (x)
 #define need_clipping 0
+#define atype float
+#define itype float
 #define ftype float
 #define stype float
+#define imin -1.f
+#define imax  1.f
 #define min -1.f
 #define max  1.f
 #define uhalf 0
+#define ISNORMAL isnormal
 #define SAMPLE_FORMAT flt
 #else
+#define IDEPTH 0
+#define FRACT(x) ((x)!=(x))
+#define RSHIFT(x) (x)
+#define LRINT(x) (x)
 #define need_clipping 0
+#define atype double
+#define itype double
 #define ftype double
 #define stype double
+#define imin -1.0
+#define imax  1.0
 #define min -1.0
 #define max  1.0
 #define uhalf 0
+#define ISNORMAL isnormal
 #define SAMPLE_FORMAT dbl
 #endif
 
@@ -75,6 +129,10 @@ typedef struct fn(StateContext) {
     ftype a[3];
     ftype b[3];
     ftype c[4];
+    itype ia[3];
+    itype ib[3];
+    itype ic[4];
+    itype fraction;
     unsigned clip;
 } fn(StateContext);
 
@@ -101,6 +159,13 @@ static int fn(init_state)(AVFilterContext *ctx, int reset)
         st->b[0] = s->b[0];
         st->b[1] = s->b[1];
         st->b[2] = s->b[2];
+
+        st->ia[0] = LRINT(s->a[0] * (1LL << IDEPTH));
+        st->ia[1] = LRINT(s->a[1] * (1LL << IDEPTH));
+        st->ia[2] = LRINT(s->a[2] * (1LL << IDEPTH));
+        st->ib[0] = LRINT(s->b[0] * (1LL << IDEPTH));
+        st->ib[1] = LRINT(s->b[1] * (1LL << IDEPTH));
+        st->ib[2] = LRINT(s->b[2] * (1LL << IDEPTH));
     }
 
     return 0;
@@ -130,77 +195,58 @@ static void fn(biquad_di)(BiquadsContext *s,
     stype *restrict obuf = output;
     fn(StateContext) *state = s->st;
     fn(StateContext) *stc = &state[ch];
-    ftype *fcache = stc->c;
-    ftype i1 = fcache[0], i2 = fcache[1], o1 = fcache[2], o2 = fcache[3];
-    const ftype *a = stc->a;
-    const ftype *b = stc->b;
-    const ftype a1 = -a[1];
-    const ftype a2 = -a[2];
-    const ftype b0 = b[0];
-    const ftype b1 = b[1];
-    const ftype b2 = b[2];
+    itype *fcache = stc->ic;
+    itype i1 = fcache[0], i2 = fcache[1], o1 = fcache[2], o2 = fcache[3];
+    itype fraction = stc->fraction;
+    const itype *a = stc->ia;
+    const itype *b = stc->ib;
+    const itype a1 = -a[1];
+    const itype a2 = -a[2];
+    const itype b0 = b[0];
+    const itype b1 = b[1];
+    const itype b2 = b[2];
     const ftype wet = s->mix;
     const ftype dry = F(1.0) - wet;
-    ftype out;
-    int i;
 
-    for (i = 0; i+1 < len; i++) {
-        ftype in = ibuf[i] - uhalf;
-        o2 = i2 * b2 + i1 * b1 + in * b0 + o2 * a2 + o1 * a1;
-        i2 = in;
-        out = o2 * wet + i2 * dry;
-        if (disabled) {
-            obuf[i] = i2 + uhalf;
-        } else if (need_clipping && out < min) {
+    for (int i = 0; i < len; i++) {
+        itype out, in = ibuf[i] - uhalf;
+        atype o0;
+
+        o0  = fraction;
+        o0 += (atype)in * b0;
+        o0 += (atype)i1 * b1;
+        o0 += (atype)i2 * b2;
+        o0 += (atype)o1 * a1;
+        o0 += (atype)o2 * a2;
+
+        if (need_clipping && o0 > imax) {
             stc->clip++;
-            obuf[i] = min;
-        } else if (need_clipping && out > max) {
+            o0 = imax;
+        } else if (need_clipping && o0 < imin) {
             stc->clip++;
-            obuf[i] = max;
-        } else {
-            obuf[i] = out + uhalf;
+            o0 = imin;
         }
-        i++;
-        in = ibuf[i] - uhalf;
-        o1 = i1 * b2 + i2 * b1 + in * b0 + o1 * a2 + o2 * a1;
-        i1 = in;
-        out = o1 * wet + i1 * dry;
-        if (disabled) {
-            obuf[i] = i1 + uhalf;
-        } else if (need_clipping && out < min) {
-            stc->clip++;
-            obuf[i] = min;
-        } else if (need_clipping && out > max) {
-            stc->clip++;
-            obuf[i] = max;
-        } else {
-            obuf[i] = out + uhalf;
-        }
-    }
-    if (i < len) {
-        ftype in = ibuf[i] - uhalf;
-        ftype o0 = in * b0 + i1 * b1 + i2 * b2 + o1 * a1 + o2 * a2;
+
+        fraction = FRACT(o0);
+        out = RSHIFT(o0);
         i2 = i1;
         i1 = in;
         o2 = o1;
-        o1 = o0;
-        out = o0 * wet + i1 * dry;
+        o1 = out;
+
+        out = out * wet + in * dry;
         if (disabled) {
-            obuf[i] = i1 + uhalf;
-        } else if (need_clipping && out < min) {
-            stc->clip++;
-            obuf[i] = min;
-        } else if (need_clipping && out > max) {
-            stc->clip++;
-            obuf[i] = max;
+            obuf[i] = in + uhalf;
         } else {
             obuf[i] = out + uhalf;
         }
     }
-    fcache[0] = isnormal(i1) ? i1 : F(0.0);
-    fcache[1] = isnormal(i2) ? i2 : F(0.0);
-    fcache[2] = isnormal(o1) ? o1 : F(0.0);
-    fcache[3] = isnormal(o2) ? o2 : F(0.0);
+    fcache[0] = ISNORMAL(i1) ? i1 : F(0.0);
+    fcache[1] = ISNORMAL(i2) ? i2 : F(0.0);
+    fcache[2] = ISNORMAL(o1) ? o1 : F(0.0);
+    fcache[3] = ISNORMAL(o2) ? o2 : F(0.0);
+
+    stc->fraction = fraction;
 }
 
 static void fn(biquad_dii)(BiquadsContext *s,
