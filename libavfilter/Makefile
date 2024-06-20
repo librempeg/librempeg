@@ -36,6 +36,7 @@ include $(SRC_PATH)/libavfilter/dnn/Makefile
 
 # audio filters
 OBJS-$(CONFIG_AAP_FILTER)                    += af_aap.o
+OBJS-$(CONFIG_AASRC_FILTER)                  += af_aasrc.o
 OBJS-$(CONFIG_ABENCH_FILTER)                 += f_bench.o
 OBJS-$(CONFIG_ACENTERCUT_FILTER)             += af_acentercut.o
 OBJS-$(CONFIG_ACOMPRESSOR_FILTER)            += af_acompressor.o
