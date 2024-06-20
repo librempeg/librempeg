@@ -1168,6 +1168,7 @@ OBJS-$(CONFIG_AAC_LATM_PARSER)         += latm_parser.o
 OBJS-$(CONFIG_AAC_PARSER)              += aac_parser.o aac_ac3_parser.o
 OBJS-$(CONFIG_AC3_PARSER)              += aac_ac3_parser.o ac3tab.o \
                                           ac3_channel_layout_tab.o
+OBJS-$(CONFIG_ADPCM_HVQM4_PARSER)      += adpcm_hvqm4_parser.o
 OBJS-$(CONFIG_ADX_PARSER)              += adx_parser.o
 OBJS-$(CONFIG_AMR_PARSER)              += amr_parser.o
 OBJS-$(CONFIG_AV1_PARSER)              += av1_parser.o av1_parse.o
