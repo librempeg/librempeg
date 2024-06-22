@@ -51,13 +51,17 @@ static int hvqm4_read_header(AVFormatContext *s)
     AVIOContext *pb = s->pb;
     AVStream *vst, *ast;
     uint32_t header_size, usec_per_frame;
-    int audio_format;
+    int audio_format, ret;
 
     vst = avformat_new_stream(s, NULL);
     if (!vst)
         return AVERROR(ENOMEM);
 
-    avio_skip(pb, 16);
+    avio_skip(pb, 8);
+    ret = ff_get_extradata(s, vst->codecpar, pb, 1);
+    if (ret < 0)
+        return ret;
+    avio_skip(pb, 7);
 
     header_size = avio_rb32(pb);
     avio_skip(pb, 8);
