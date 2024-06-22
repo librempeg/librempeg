@@ -69,13 +69,13 @@ void ff_mpc_dequantize_and_synth(MPCContext * c, int maxband, int16_t **out,
                 j = 0;
                 mul = (mpc_CC+1)[bands[i].res[ch]] * mpc_SCF[bands[i].scf_idx[ch][0] & 0xFF];
                 for(; j < 12; j++)
-                    c->sb_samples[ch][j][i] = av_clipf(mul * c->Q[ch][j + off], INT32_MIN, INT32_MAX);
+                    c->sb_samples[ch][j][i] = av_clipl_int32(mul * c->Q[ch][j + off]);
                 mul = (mpc_CC+1)[bands[i].res[ch]] * mpc_SCF[bands[i].scf_idx[ch][1] & 0xFF];
                 for(; j < 24; j++)
-                    c->sb_samples[ch][j][i] = av_clipf(mul * c->Q[ch][j + off], INT32_MIN, INT32_MAX);
+                    c->sb_samples[ch][j][i] = av_clipl_int32(mul * c->Q[ch][j + off]);
                 mul = (mpc_CC+1)[bands[i].res[ch]] * mpc_SCF[bands[i].scf_idx[ch][2] & 0xFF];
                 for(; j < 36; j++)
-                    c->sb_samples[ch][j][i] = av_clipf(mul * c->Q[ch][j + off], INT32_MIN, INT32_MAX);
+                    c->sb_samples[ch][j][i] = av_clipl_int32(mul * c->Q[ch][j + off]);
             }
         }
         if(bands[i].msf){
