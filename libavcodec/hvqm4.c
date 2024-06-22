@@ -1478,7 +1478,7 @@ static void PrediAotBlock(VideoState *state, uint8_t *dst, uint8_t const *src, p
             max = value > max ? value : max;
         }
     }
-    addend = (decode_sovf_sym(&state->dc_values[plane_idx], state->dc_min, state->dc_max) >> state->dc_shift << state->unk_shift) - aot_sum;
+    addend = ((decode_sovf_sym(&state->dc_values[plane_idx], state->dc_min, state->dc_max) >> state->dc_shift) * (1 << state->unk_shift)) - aot_sum;
     factor = (decode_sovf_sym(&state->dc_values[plane_idx], state->dc_min, state->dc_max) >> state->dc_shift);
     factor *= mcdiv_tab[max - min];
     for (int i = 0; i < 4; i++)
