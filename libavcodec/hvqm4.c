@@ -485,12 +485,12 @@ static int get_code(GetBitContext *new_gb, GetBitContext *gb, int skip)
 
 static int decode_huff(GBCWithVLC *buf)
 {
-    av_assert0(&buf->gb);
+    av_assert2(&buf->gb);
     if (get_bits_left(&buf->gb) <= 0)
         return 0;
     if (!buf->vlc->bits)
         return 0;
-    av_assert0(buf->vlc->table);
+    av_assert2(buf->vlc->table);
     return get_vlc2(&buf->gb, buf->vlc->table, buf->vlc->bits, 3);
 }
 
@@ -843,7 +843,7 @@ static int get_aot_basis(VideoState *state, uint8_t basis_out[4][4],
             max = nest_value > max ? nest_value : max;
         }
     }
-    av_assert0(plane_idx < 3);
+    av_assert1(plane_idx < 3);
     sum[0] += decode_huff(&state->bufTree0[plane_idx]);
     inverse = div_tab[max - min];
     if (bits & 0x8000)
