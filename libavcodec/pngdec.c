@@ -589,7 +589,7 @@ static int decode_text_chunk(PNGDecContext *s, GetByteContext *gb, int compresse
 static int decode_ihdr_chunk(AVCodecContext *avctx, PNGDecContext *s,
                              GetByteContext *gb)
 {
-    if (bytestream2_get_bytes_left(gb) != 13)
+    if (bytestream2_get_bytes_left(gb) < 13)
         return AVERROR_INVALIDDATA;
 
     if (s->pic_state & PNG_IDAT) {
@@ -1085,7 +1085,7 @@ static int decode_sbit_chunk(AVCodecContext *avctx, PNGDecContext *s,
 
     channels = ff_png_get_nb_channels(s->color_type);
 
-    if (bytestream2_get_bytes_left(gb) != channels)
+    if (bytestream2_get_bytes_left(gb) < channels)
         return AVERROR_INVALIDDATA;
 
     for (int i = 0; i < channels; i++) {
@@ -1181,7 +1181,7 @@ static int decode_fctl_chunk(AVCodecContext *avctx, PNGDecContext *s,
     uint32_t sequence_number;
     int cur_w, cur_h, x_offset, y_offset, dispose_op, blend_op;
 
-    if (bytestream2_get_bytes_left(gb) != APNG_FCTL_CHUNK_SIZE)
+    if (bytestream2_get_bytes_left(gb) < APNG_FCTL_CHUNK_SIZE)
         return AVERROR_INVALIDDATA;
 
     if (!(s->hdr_state & PNG_IHDR)) {
@@ -1563,7 +1563,7 @@ static int decode_frame_common(AVCodecContext *avctx, PNGDecContext *s,
             break;
         }
         case MKTAG('c', 'L', 'L', 'i'):
-            if (bytestream2_get_bytes_left(&gb_chunk) != 8) {
+            if (bytestream2_get_bytes_left(&gb_chunk) < 8) {
                 av_log(avctx, AV_LOG_WARNING, "Invalid cLLi chunk size: %d\n", bytestream2_get_bytes_left(&gb_chunk));
                 break;
             }
@@ -1572,7 +1572,7 @@ static int decode_frame_common(AVCodecContext *avctx, PNGDecContext *s,
             s->clli_avg = bytestream2_get_be32u(&gb_chunk);
             break;
         case MKTAG('m', 'D', 'V', 'c'):
-            if (bytestream2_get_bytes_left(&gb_chunk) != 24) {
+            if (bytestream2_get_bytes_left(&gb_chunk) < 24) {
                 av_log(avctx, AV_LOG_WARNING, "Invalid mDVc chunk size: %d\n", bytestream2_get_bytes_left(&gb_chunk));
                 break;
             }
