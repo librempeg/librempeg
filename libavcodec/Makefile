@@ -488,6 +488,7 @@ OBJS-$(CONFIG_MACE3_DECODER)           += mace.o
 OBJS-$(CONFIG_MACE6_DECODER)           += mace.o
 OBJS-$(CONFIG_MAGICYUV_DECODER)        += magicyuv.o
 OBJS-$(CONFIG_MAGICYUV_ENCODER)        += magicyuvenc.o
+OBJS-$(CONFIG_MCRAW_DECODER)           += mcrawdec.o
 OBJS-$(CONFIG_MDEC_DECODER)            += mdec.o mpeg12.o mpeg12data.o
 OBJS-$(CONFIG_MEDIA100_DECODER)        += mjpegbdec.o
 OBJS-$(CONFIG_METASOUND_DECODER)       += metasound.o twinvq.o
