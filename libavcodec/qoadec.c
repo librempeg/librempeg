@@ -58,7 +58,7 @@ static const int16_t qoa_dequant_tab[16][8] = {
 
 static av_cold int qoa_decode_init(AVCodecContext *avctx)
 {
-    avctx->sample_fmt = AV_SAMPLE_FMT_S16;
+    avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
 
     return 0;
 }
@@ -87,7 +87,6 @@ static int qoa_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     QOAContext *s = avctx->priv_data;
     int ret, frame_size, nb_channels, sample_rate;
     GetByteContext gb;
-    int16_t *samples;
 
     bytestream2_init(&gb, avpkt->data, avpkt->size);
 
@@ -116,7 +115,6 @@ static int qoa_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
-    samples = (int16_t *)frame->data[0];
 
     for (int ch = 0; ch < nb_channels; ch++) {
         QOAChannel *qch = &s->ch[ch];
@@ -130,13 +128,14 @@ static int qoa_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     for (int sample_index = 0; sample_index < frame->nb_samples;
          sample_index += QOA_SLICE_LEN) {
         for (int ch = 0; ch < nb_channels; ch++) {
+            int16_t *samples = (int16_t *)frame->extended_data[ch];
             QOAChannel *lms = &s->ch[ch];
             uint64_t slice = bytestream2_get_be64u(&gb);
             int scalefactor = (slice >> 60) & 0xf;
-            int slice_start = sample_index * nb_channels + ch;
-            int slice_end = av_clip(sample_index + QOA_SLICE_LEN, 0, frame->nb_samples) * nb_channels + ch;
+            int slice_start = sample_index;
+            int slice_end = av_clip(sample_index + QOA_SLICE_LEN, 0, frame->nb_samples);
 
-            for (int si = slice_start; si < slice_end; si += nb_channels) {
+            for (int si = slice_start; si < slice_end; si++) {
                 int predicted = qoa_lms_predict(lms);
                 int quantized = (slice >> 57) & 0x7;
                 int dequantized = qoa_dequant_tab[scalefactor][quantized];
@@ -165,6 +164,6 @@ const FFCodec ff_qoa_decoder = {
     FF_CODEC_DECODE_CB(qoa_decode_frame),
     .p.capabilities = AV_CODEC_CAP_CHANNEL_CONF |
                       AV_CODEC_CAP_DR1,
-    .p.sample_fmts  = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_S16,
+    .p.sample_fmts  = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_S16P,
                                                       AV_SAMPLE_FMT_NONE },
 };
