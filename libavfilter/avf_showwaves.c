@@ -90,7 +90,9 @@ typedef struct ShowWavesContext {
     int draw_mode;              ///< ShowWavesDrawMode
     int split_channels;
     int filter_mode;
+    int status;
     uint8_t *fg;
+    int64_t eof_pts;
     int64_t in_pts;
 
     int (*get_h)(int16_t sample, int height);
@@ -569,10 +571,15 @@ inline static int push_frame(AVFilterLink *outlink, AVFrame *out, int64_t pts)
 
     out->duration = 1;
     out->pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
+    s->eof_pts = out->pts + out->duration;
 
     ret = ff_filter_frame(outlink, out);
     for (int i = 0; i < inlink->ch_layout.nb_channels; i++)
         s->buf_idy[i] = -1;
+
+    if (s->status && s->history_filled <= 0)
+        ff_outlink_set_status(outlink, s->status, s->eof_pts);
+
     return ret;
 }
 
@@ -646,7 +653,6 @@ static int push_single_pic(AVFilterLink *outlink)
     return push_frame(outlink, out, 0);
 }
 
-
 static int request_frame(AVFilterLink *outlink)
 {
     ShowWavesContext *s = outlink->src->priv;
@@ -704,6 +710,7 @@ static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *in)
     ptrdiff_t linesize;
     uint8_t *dst;
     AVFrame *out;
+    int ret;
 
     if (in) {
         const int nb_samples = in->nb_samples;
@@ -713,13 +720,17 @@ static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->history_filled += nb_samples * nb_channels;
         s->in_pts = in->pts;
         av_frame_free(&in);
+
+        if (s->history_filled < s->history_nb_samples) {
+            int64_t pts;
+            if (!ff_inlink_acknowledge_status(inlink, &s->status, &pts)) {
+                ff_inlink_request_frame(inlink);
+                return 0;
+            }
+        }
     }
 
-    if (s->history_filled < s->history_nb_samples) {
-        FF_FILTER_FORWARD_STATUS(inlink, outlink);
-        ff_inlink_request_frame(inlink);
-        return 0;
-    }
+flush:
 
     out = alloc_out_frame(s, outlink);
     if (out == NULL)
@@ -749,10 +760,19 @@ static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
     }
 
-    s->history_filled -= s->step_size * nb_channels;
+    s->history_filled -= FFMIN(s->history_filled, s->step_size * nb_channels);
     memmove(history, history + s->step_size * nb_channels, s->history_filled * sizeof(*history));
+    memset(history + s->history_filled, 0, (2 * s->history_nb_samples - s->history_filled) * sizeof(*history));
 
-    return push_frame(outlink, out, s->in_pts);
+    ret = push_frame(outlink, out, s->in_pts);
+    if (ret < 0)
+        return ret;
+    if (s->status && s->history_filled > 0) {
+        s->in_pts += s->step_size;
+        goto flush;
+    }
+
+    return 0;
 }
 
 static int activate(AVFilterContext *ctx)
@@ -761,6 +781,7 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *outlink = ctx->outputs[0];
     ShowWavesContext *s = ctx->priv;
     AVFrame *in;
+    int64_t pts;
     int ret;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
@@ -771,10 +792,17 @@ static int activate(AVFilterContext *ctx)
     if (ret > 0)
         return showwaves_filter_frame(inlink, in);
 
-    FF_FILTER_FORWARD_STATUS(inlink, outlink);
-    FF_FILTER_FORWARD_WANTED(outlink, inlink);
+    if (!ff_inlink_acknowledge_status(inlink, &s->status, &pts) &&
+        ff_outlink_frame_wanted(outlink)) {
+        if (ff_inlink_queued_samples(inlink) < s->step_size)
+            ff_inlink_request_frame(inlink);
+        else
+            ff_filter_set_ready(ctx, 100);
+    } else {
+        ff_outlink_set_status(outlink, s->status, s->eof_pts);
+    }
 
-    return FFERROR_NOT_READY;
+    return 0;
 }
 
 static const AVFilterPad showwaves_outputs[] = {
