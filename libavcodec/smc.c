@@ -393,10 +393,8 @@ static int smc_decode_stream(SmcContext *s, GetByteContext *gb)
             while (n_blocks--) {
                 block_ptr = row_ptr + pixel_ptr;
                 for (pixel_y = 0; pixel_y < 4; pixel_y++) {
-                    for (pixel_x = 0; pixel_x < 4; pixel_x++) {
-                        pixels[block_ptr++] = bytestream2_get_byte(gb);
-                    }
-                    block_ptr += row_inc;
+                    bytestream2_get_buffer(gb, pixels + block_ptr, 4);
+                    block_ptr += row_inc + 4;
                 }
                 ADVANCE_BLOCK();
             }
