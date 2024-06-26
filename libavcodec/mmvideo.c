@@ -82,7 +82,7 @@ static int mm_decode_raw(MmContext * s)
     if (bytestream2_get_bytes_left(&s->gb) < s->avctx->width * s->avctx->height)
         return AVERROR_INVALIDDATA;
     for (int y = 0; y < s->avctx->height; y++)
-        bytestream2_get_buffer(&s->gb, s->frame->data[0] + y*s->frame->linesize[0], s->avctx->width);
+        bytestream2_get_bufferu(&s->gb, s->frame->data[0] + y*s->frame->linesize[0], s->avctx->width);
     return 0;
 }
 
