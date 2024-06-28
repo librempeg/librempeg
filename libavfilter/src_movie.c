@@ -67,7 +67,8 @@ typedef struct MovieContext {
     double duration_d;
     char *format_name;
     char *file_name;
-    char *stream_specs; /**< user-provided list of streams, separated by + */
+    char **stream_specs;
+    unsigned nb_stream_specs;
     int stream_index; /**< for compatibility */
     int loop_count;
     int64_t discontinuity_threshold;
@@ -89,6 +90,8 @@ typedef struct MovieContext {
 #define TFLAGS AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_RUNTIME_PARAM
 #define X AV_OPT_FLAG_EXPORT
 #define R AV_OPT_FLAG_READONLY
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+static const AVOptionArrayDef def_streams = {.def=NULL,.size_min=0,.sep='+'};
 
 static const AVOption movie_options[]= {
     { "filename",     NULL,                      OFFSET(file_name),    AV_OPT_TYPE_STRING,                                    .flags = FLAGS },
@@ -98,8 +101,8 @@ static const AVOption movie_options[]= {
     { "si",           "set stream index",        OFFSET(stream_index), AV_OPT_TYPE_INT,    { .i64 = -1 }, -1, INT_MAX,                 FLAGS  },
     { "seek_point",   "set seekpoint (seconds)", OFFSET(seek_point_d), AV_OPT_TYPE_DOUBLE, {.dbl =  0},  0, (INT64_MAX-1) / 1000000, TFLAGS },
     { "sp",           "set seekpoint (seconds)", OFFSET(seek_point_d), AV_OPT_TYPE_DOUBLE, {.dbl =  0},  0, (INT64_MAX-1) / 1000000, TFLAGS },
-    { "streams",      "set streams",             OFFSET(stream_specs), AV_OPT_TYPE_STRING, {.str =  0},  0, 0, FLAGS },
-    { "s",            "set streams",             OFFSET(stream_specs), AV_OPT_TYPE_STRING, {.str =  0},  0, 0, FLAGS },
+    { "streams",      "set streams",             OFFSET(stream_specs), AV_OPT_TYPE_STRING|AR, {.arr = &def_streams}, 0, 0, FLAGS },
+    { "s",            "set streams",             OFFSET(stream_specs), AV_OPT_TYPE_STRING|AR, {.arr = &def_streams}, 0, 0, FLAGS },
     { "loop",         "set loop count",          OFFSET(loop_count),   AV_OPT_TYPE_INT,    {.i64 =  1},  0,        INT_MAX, FLAGS },
     { "discontinuity", "set discontinuity threshold", OFFSET(discontinuity_threshold), AV_OPT_TYPE_DURATION, {.i64 = 0}, 0, INT64_MAX, FLAGS },
     { "dec_threads",  "set the number of threads for decoding", OFFSET(dec_threads), AV_OPT_TYPE_INT, {.i64 =  0}, 0, INT_MAX, FLAGS },
@@ -275,9 +278,9 @@ static av_cold int movie_common_init(AVFilterContext *ctx)
 {
     MovieContext *movie = ctx->priv;
     const AVInputFormat *iformat = NULL;
+    char default_streams[16];
     int64_t timestamp;
-    int nb_streams = 1, ret, i;
-    char default_streams[16], *stream_specs, *spec, *cursor;
+    int ret, i;
     AVStream *st;
 
     if (!movie->file_name) {
@@ -287,18 +290,7 @@ static av_cold int movie_common_init(AVFilterContext *ctx)
 
     movie->seek_point = movie->seek_point_d * 1000000 + 0.5;
 
-    stream_specs = movie->stream_specs;
-    if (!stream_specs) {
-        snprintf(default_streams, sizeof(default_streams), "d%c%d",
-                 !strcmp(ctx->filter->name, "amovie") ? 'a' : 'v',
-                 movie->stream_index);
-        stream_specs = default_streams;
-    }
-    for (cursor = stream_specs; *cursor; cursor++)
-        if (*cursor == '+')
-            nb_streams++;
-
-    if (movie->loop_count != 1 && nb_streams != 1) {
+    if (movie->loop_count != 1 && movie->nb_stream_specs != 1) {
         av_log(ctx, AV_LOG_ERROR,
                "Loop with several streams is currently unsupported\n");
         return AVERROR_PATCHWELCOME;
@@ -342,15 +334,17 @@ static av_cold int movie_common_init(AVFilterContext *ctx)
     movie->pkt = av_packet_alloc();
     if (!movie->pkt)
         return AVERROR(ENOMEM);
-    movie->st = av_calloc(nb_streams, sizeof(*movie->st));
+    movie->st = av_calloc(FFMAX(1, movie->nb_stream_specs), sizeof(*movie->st));
     if (!movie->st)
         return AVERROR(ENOMEM);
 
-    for (i = 0; i < nb_streams; i++) {
-        spec = av_strtok(stream_specs, "+", &cursor);
+    snprintf(default_streams, sizeof(default_streams), "d%c%d",
+             !strcmp(ctx->filter->name, "amovie") ? 'a' : 'v',
+             movie->stream_index);
+    for (i = 0; i < FFMAX(1, movie->nb_stream_specs); i++) {
+        const char *spec = movie->nb_stream_specs ? movie->stream_specs[i] : default_streams;
         if (!spec)
             return AVERROR_BUG;
-        stream_specs = NULL; /* for next strtok */
         st = find_stream(ctx, movie->format_ctx, spec);
         if (!st)
             return AVERROR(EINVAL);
@@ -364,8 +358,6 @@ static av_cold int movie_common_init(AVFilterContext *ctx)
         if (!movie->st[i].frame)
             return AVERROR(ENOMEM);
     }
-    if (av_strtok(NULL, "+", &cursor))
-        return AVERROR_BUG;
 
     movie->out_index = av_calloc(movie->max_stream_index + 1,
                                  sizeof(*movie->out_index));
@@ -373,7 +365,7 @@ static av_cold int movie_common_init(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
     for (i = 0; i <= movie->max_stream_index; i++)
         movie->out_index[i] = -1;
-    for (i = 0; i < nb_streams; i++) {
+    for (i = 0; i < FFMAX(1, movie->nb_stream_specs); i++) {
         AVFilterPad pad = { 0 };
         movie->out_index[movie->st[i].st->index] = i;
         pad.type          = movie->st[i].st->codecpar->codec_type;
