@@ -141,13 +141,6 @@ static int request_frame(AVFilterLink *outlink)
     return ff_filter_frame(outlink, picref);
 }
 
-static int query_formats(AVFilterContext *ctx)
-{
-    enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE };
-
-    return ff_set_common_formats_from_list(ctx, pix_fmts);
-}
-
 static const AVFilterPad perlin_outputs[] = {
     {
         .name          = "default",
@@ -165,5 +158,5 @@ const AVFilter ff_vsrc_perlin = {
     .init          = init,
     .inputs        = NULL,
     FILTER_OUTPUTS(perlin_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_SINGLE_PIXFMT(AV_PIX_FMT_GRAY8),
 };
