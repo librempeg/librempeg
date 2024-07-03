@@ -75,7 +75,7 @@ static void parse_qn(GetBitContext *gb, int *qn, int nk_mode, int no_qn)
     if (nk_mode == 2) {
         for (int k = 0; k < no_qn; k++) {
             if (qn[k] > 4) {
-                qn[k] = get_unary(gb, 0, INT32_MAX);;
+                qn[k] = get_unary(gb, 0, INT32_MAX);
                 if (qn[k])
                     qn[k] += 4;
             }
@@ -85,7 +85,7 @@ static void parse_qn(GetBitContext *gb, int *qn, int nk_mode, int no_qn)
 
     for (int k = 0; k < no_qn; k++) {
         if (qn[k] > 4) {
-            int qn_ext = get_unary(gb, 0, INT32_MAX);;
+            int qn_ext = get_unary(gb, 0, INT32_MAX);
             switch (qn_ext) {
             case 0: qn[k] = 5; break;
             case 1: qn[k] = 6; break;

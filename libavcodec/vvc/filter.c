@@ -323,7 +323,7 @@ void ff_vvc_sao_filter(VVCLocalContext *lc, int x0, int y0)
     uint8_t vert_edge[]  = { 0, 0 };
     uint8_t horiz_edge[] = { 0, 0 };
     uint8_t diag_edge[]  = { 0, 0, 0, 0 };
-    int restore, vb_x = 0, vb_y = 0;;
+    int restore, vb_x = 0, vb_y = 0;
 
     if (sps->r->sps_virtual_boundaries_enabled_flag) {
         vb_x = get_virtual_boundary(fc, rx, 1);

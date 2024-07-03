@@ -267,7 +267,7 @@ static void clear_picture(ShowVolumeContext *s, AVFilterLink *outlink)
     const uint32_t bg = (uint32_t)(s->bgopacity * 255) << 24;
     const int w = outlink->w;
     const int h = outlink->h;
-    uint8_t *dst8 = s->out->data[0];;
+    uint8_t *dst8 = s->out->data[0];
 
     for (int i = 0; i < h; i++) {
         uint32_t *dst = (uint32_t *)dst8;

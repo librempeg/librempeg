@@ -600,7 +600,7 @@ int find_codec(void *logctx, const char *name,
     }
 
     *pcodec = codec;
-    return 0;;
+    return 0;
 }
 
 int assert_file_overwrite(const char *filename)

@@ -1100,7 +1100,7 @@ int fg_create(FilterGraph **pfg, char *graph_desc, Scheduler *sch)
      * and outputs we have, and is discarded on exit from this function */
     graph = avfilter_graph_alloc();
     if (!graph)
-        return AVERROR(ENOMEM);;
+        return AVERROR(ENOMEM);
     graph->nb_threads = 1;
 
     ret = graph_parse(graph, fgp->graph_desc, &inputs, &outputs, NULL);
