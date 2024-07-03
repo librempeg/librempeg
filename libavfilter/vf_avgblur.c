@@ -65,7 +65,7 @@ typedef struct ThreadData {
     int width;
     const void *ptr;
     void *dptr;
-    int linesize, dlinesize;
+    ptrdiff_t linesize, dlinesize;
 } ThreadData;
 
 #define LUT_DIV(sum, area) (lut[(sum)])
@@ -81,8 +81,8 @@ static int filter_##name(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
     const int size_w = s->radius;                                                 \
     const int size_h = s->radiusV;                                                \
     btype *col_sum = (btype *)s->buffer + size_w;                                 \
-    const int dlinesize = td->dlinesize / sizeof(type);                           \
-    const int linesize = td->linesize / sizeof(type);                             \
+    const ptrdiff_t dlinesize = td->dlinesize / sizeof(type);                     \
+    const ptrdiff_t linesize = td->linesize / sizeof(type);                       \
     const int height = td->height;                                                \
     const int width = td->width;                                                  \
     const type *src = td->ptr;                                                    \
@@ -130,8 +130,8 @@ static int filter_##name(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
     dst += dlinesize;                                                             \
                                                                                   \
     for (int y = 1; y < height; y++) {                                            \
-        const int syp = FFMIN(size_h, height - y - 1) * linesize;                 \
-        const int syn = FFMIN(y, size_h + 1) * linesize;                          \
+        const ptrdiff_t syp = FFMIN(size_h, height - y - 1) * linesize;           \
+        const ptrdiff_t syn = FFMIN(y, size_h + 1) * linesize;                    \
                                                                                   \
         sum = 0;                                                                  \
                                                                                   \
@@ -274,7 +274,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AverageBlurContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out;
-    int plane;
 
     out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     if (!out) {
@@ -283,7 +282,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
     av_frame_copy_props(out, in);
 
-    for (plane = 0; plane < s->nb_planes; plane++) {
+    for (int plane = 0; plane < s->nb_planes; plane++) {
         const int height = s->planeheight[plane];
         const int width = s->planewidth[plane];
 
