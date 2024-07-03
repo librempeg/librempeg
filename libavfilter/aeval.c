@@ -87,7 +87,7 @@ static const char * const aeval_func1_names[] = { "val", NULL };
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
-static const AVOptionArrayDef def_exprs = {.def=NULL,.size_min=1,.sep='|'};
+static const AVOptionArrayDef def_exprs = {.def="0",.size_min=1,.sep='|'};
 
 static const AVOption aevalsrc_options[]= {
     { "exprs",       "set the list of channels expressions",          OFFSET(exprs),        AV_OPT_TYPE_STRING|AR, {.arr=&def_exprs}, .flags = FLAGS },
