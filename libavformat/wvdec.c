@@ -138,13 +138,15 @@ static int wv_read_block_header(AVFormatContext *ctx, AVIOContext *pb)
                 size--;
             switch (id & 0x3F) {
             case 0xD:
-                if (size <= 1) {
+                if (size < 1) {
                     av_log(ctx, AV_LOG_ERROR,
                            "Insufficient channel information\n");
                     return AVERROR_INVALIDDATA;
                 }
                 chan = avio_r8(pb);
                 switch (size - 2) {
+                case -1:
+                    break;
                 case 0:
                     chmask = avio_r8(pb);
                     break;

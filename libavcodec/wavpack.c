@@ -1398,13 +1398,15 @@ static int wavpack_decode_block(AVCodecContext *avctx, AVFrame *frame, int block
             s->got_extra_bits  = 1;
             break;
         case WP_ID_CHANINFO:
-            if (size <= 1) {
+            if (size < 1) {
                 av_log(avctx, AV_LOG_ERROR,
                        "Insufficient channel information\n");
                 return AVERROR_INVALIDDATA;
             }
             chan = bytestream2_get_byte(&gb);
             switch (size - 2) {
+            case -1:
+                break;
             case 0:
                 chmask = bytestream2_get_byte(&gb);
                 break;
