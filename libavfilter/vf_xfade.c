@@ -2007,7 +2007,7 @@ static inline double getpix(void *priv, double x, double y, int plane, int nb)
     XFadeContext *s = priv;
     AVFrame *in = s->xf[nb];
     const uint8_t *src = in->data[FFMIN(plane, s->nb_planes - 1)];
-    int linesize = in->linesize[FFMIN(plane, s->nb_planes - 1)];
+    ptrdiff_t linesize = in->linesize[FFMIN(plane, s->nb_planes - 1)];
     const int w = in->width;
     const int h = in->height;
 

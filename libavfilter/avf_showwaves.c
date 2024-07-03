@@ -96,7 +96,7 @@ typedef struct ShowWavesContext {
     int64_t in_pts;
 
     int (*get_h)(int16_t sample, int height);
-    void (*draw_sample)(uint8_t *buf, int height, int linesize,
+    void (*draw_sample)(uint8_t *buf, int height, ptrdiff_t linesize,
                         int16_t *prev_y, const uint8_t color[4], int h);
 
     /* single picture */
@@ -233,7 +233,7 @@ static int get_cbrt_h2(int16_t sample, int height)
     return cbrt(FFABS(sample)) * height / cbrt(INT16_MAX);
 }
 
-static void draw_sample_point_rgba_scale(uint8_t *buf, int height, int linesize,
+static void draw_sample_point_rgba_scale(uint8_t *buf, int height, ptrdiff_t linesize,
                                          int16_t *prev_y,
                                          const uint8_t color[4], int h)
 {
@@ -245,7 +245,7 @@ static void draw_sample_point_rgba_scale(uint8_t *buf, int height, int linesize,
     }
 }
 
-static void draw_sample_point_rgba_full(uint8_t *buf, int height, int linesize,
+static void draw_sample_point_rgba_full(uint8_t *buf, int height, ptrdiff_t linesize,
                                    int16_t *prev_y,
                                    const uint8_t color[4], int h)
 {
@@ -254,7 +254,7 @@ static void draw_sample_point_rgba_full(uint8_t *buf, int height, int linesize,
         AV_WN32(buf + h * linesize, clr);
 }
 
-static void draw_sample_line_rgba_scale(uint8_t *buf, int height, int linesize,
+static void draw_sample_line_rgba_scale(uint8_t *buf, int height, ptrdiff_t linesize,
                                         int16_t *prev_y,
                                         const uint8_t color[4], int h)
 {
@@ -272,7 +272,7 @@ static void draw_sample_line_rgba_scale(uint8_t *buf, int height, int linesize,
     }
 }
 
-static void draw_sample_line_rgba_full(uint8_t *buf, int height, int linesize,
+static void draw_sample_line_rgba_full(uint8_t *buf, int height, ptrdiff_t linesize,
                                        int16_t *prev_y,
                                        const uint8_t color[4], int h)
 {
@@ -287,7 +287,7 @@ static void draw_sample_line_rgba_full(uint8_t *buf, int height, int linesize,
         AV_WN32(bufk, clr);
 }
 
-static void draw_sample_p2p_rgba_scale(uint8_t *buf, int height, int linesize,
+static void draw_sample_p2p_rgba_scale(uint8_t *buf, int height, ptrdiff_t linesize,
                                        int16_t *prev_y,
                                        const uint8_t color[4], int h)
 {
@@ -316,7 +316,7 @@ static void draw_sample_p2p_rgba_scale(uint8_t *buf, int height, int linesize,
     }
 }
 
-static void draw_sample_p2p_rgba_full(uint8_t *buf, int height, int linesize,
+static void draw_sample_p2p_rgba_full(uint8_t *buf, int height, ptrdiff_t linesize,
                                       int16_t *prev_y,
                                       const uint8_t color[4], int h)
 {
@@ -339,7 +339,7 @@ static void draw_sample_p2p_rgba_full(uint8_t *buf, int height, int linesize,
     }
 }
 
-static void draw_sample_cline_rgba_scale(uint8_t *buf, int height, int linesize,
+static void draw_sample_cline_rgba_scale(uint8_t *buf, int height, ptrdiff_t linesize,
                                          int16_t *prev_y,
                                          const uint8_t color[4], int h)
 {
@@ -354,7 +354,7 @@ static void draw_sample_cline_rgba_scale(uint8_t *buf, int height, int linesize,
     }
 }
 
-static void draw_sample_cline_rgba_full(uint8_t *buf, int height, int linesize,
+static void draw_sample_cline_rgba_full(uint8_t *buf, int height, ptrdiff_t linesize,
                                          int16_t *prev_y,
                                          const uint8_t color[4], int h)
 {
@@ -366,7 +366,7 @@ static void draw_sample_cline_rgba_full(uint8_t *buf, int height, int linesize,
         AV_WN32(bufk, clr);
 }
 
-static void draw_sample_point_gray(uint8_t *buf, int height, int linesize,
+static void draw_sample_point_gray(uint8_t *buf, int height, ptrdiff_t linesize,
                                    int16_t *prev_y,
                                    const uint8_t color[4], int h)
 {
@@ -374,7 +374,7 @@ static void draw_sample_point_gray(uint8_t *buf, int height, int linesize,
         buf[h * linesize] += color[0];
 }
 
-static void draw_sample_line_gray(uint8_t *buf, int height, int linesize,
+static void draw_sample_line_gray(uint8_t *buf, int height, ptrdiff_t linesize,
                                   int16_t *prev_y,
                                   const uint8_t color[4], int h)
 {
@@ -387,7 +387,7 @@ static void draw_sample_line_gray(uint8_t *buf, int height, int linesize,
         buf[k * linesize] += color[0];
 }
 
-static void draw_sample_p2p_gray(uint8_t *buf, int height, int linesize,
+static void draw_sample_p2p_gray(uint8_t *buf, int height, ptrdiff_t linesize,
                                  int16_t *prev_y,
                                  const uint8_t color[4], int h)
 {
@@ -408,7 +408,7 @@ static void draw_sample_p2p_gray(uint8_t *buf, int height, int linesize,
     }
 }
 
-static void draw_sample_cline_gray(uint8_t *buf, int height, int linesize,
+static void draw_sample_cline_gray(uint8_t *buf, int height, ptrdiff_t linesize,
                                    int16_t *prev_y,
                                    const uint8_t color[4], int h)
 {
@@ -595,7 +595,7 @@ static int push_single_pic(AVFilterLink *outlink)
     struct frame_node *node;
     const int nb_channels = inlink->ch_layout.nb_channels;
     const int ch_height = s->split_channels ? outlink->h / nb_channels : outlink->h;
-    const int linesize = out->linesize[0];
+    const ptrdiff_t linesize = out->linesize[0];
     const int pixstep = s->pixstep;
     int col = 0;
     int64_t *sum = s->sum;

@@ -200,7 +200,7 @@ static void draw_aaline(AudioVectorScopeContext *s, int x0, int y0, int x1, int 
 static int fade(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AudioVectorScopeContext *s = ctx->priv;
-    const int linesize = s->outpicref->linesize[0];
+    const ptrdiff_t linesize = s->outpicref->linesize[0];
     const int height = s->outpicref->height;
     const int slice_start = (height *  jobnr   ) / nb_jobs;
     const int slice_end   = (height * (jobnr+1)) / nb_jobs;

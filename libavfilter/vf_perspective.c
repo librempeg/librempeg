@@ -286,7 +286,7 @@ static int resample_cubic(AVFilterContext *ctx, void *arg,
     int vsub = td->vsub;
     int start = (h * job) / nb_jobs;
     int end   = (h * (job+1)) / nb_jobs;
-    const int linesize = s->linesize[0];
+    const ptrdiff_t linesize = s->linesize[0];
     int x, y;
 
     for (y = start; y < end; y++) {
@@ -365,7 +365,7 @@ static int resample_linear(AVFilterContext *ctx, void *arg,
     int vsub = td->vsub;
     int start = (h * job) / nb_jobs;
     int end   = (h * (job+1)) / nb_jobs;
-    const int linesize = s->linesize[0];
+    const ptrdiff_t linesize = s->linesize[0];
     int x, y;
 
     for (y = start; y < end; y++){
