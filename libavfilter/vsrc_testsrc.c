@@ -320,7 +320,7 @@ AVFILTER_DEFINE_CLASS(haldclutsrc);
 
 static void haldclutsrc_fill_picture(AVFilterContext *ctx, AVFrame *frame)
 {
-    int i, j, k, x = 0, y = 0, is16bit = 0, step;
+    int i, j, k, x = 0, y = 0, is16bit = 0, step, is32bit = 0;
     uint32_t alpha = 0;
     const TestSourceContext *hc = ctx->priv;
     int level = hc->level;
@@ -339,10 +339,11 @@ static void haldclutsrc_fill_picture(AVFilterContext *ctx, AVFrame *frame)
 
     ff_fill_rgba_map(rgba_map, frame->format);
 
-    alpha = (1 << depth) - 1;
+    is32bit = depth == 32;
+    alpha = is32bit ? 1 : (1 << depth) - 1;
     is16bit = depth > 8;
 
-    step  = av_get_padded_bits_per_pixel(desc) >> (3 + is16bit);
+    step  = av_get_padded_bits_per_pixel(desc) >> (3 + is16bit + is32bit);
     scale = ((float)alpha) / (level*level - 1);
 
 #define LOAD_CLUT(nbits) do {                                                   \
@@ -354,13 +355,13 @@ static void haldclutsrc_fill_picture(AVFilterContext *ctx, AVFrame *frame)
         dst[rgba_map[3]] = alpha;                                               \
 } while (0)
 
-#define LOAD_CLUT_PLANAR(type, nbits) do {                                      \
+#define LOAD_CLUT_PLANAR(type, nbits, clip) do {                                \
     type *dst = ((type *)(frame->data[2] + y*frame->linesize[2])) + x;          \
-    dst[0] = av_clip_uintp2(i * scale, nbits);                                  \
+    dst[0] = clip(i * scale, nbits);                                            \
     dst = ((type *)(frame->data[0] + y*frame->linesize[0])) + x;                \
-    dst[0] = av_clip_uintp2(j * scale, nbits);                                  \
+    dst[0] = clip(j * scale, nbits);                                            \
     dst = ((type *)(frame->data[1] + y*frame->linesize[1])) + x;                \
-    dst[0] = av_clip_uintp2(k * scale, nbits);                                  \
+    dst[0] = clip(k * scale, nbits);                                            \
     if (planes == 4) {                                                          \
         dst = ((type *)(frame->data[3] + y*linesize)) + x;                      \
         dst[0] = alpha;                                                         \
@@ -378,12 +379,13 @@ static void haldclutsrc_fill_picture(AVFilterContext *ctx, AVFrame *frame)
                         LOAD_CLUT(16);
                 } else {
                     switch (depth) {
-                    case  8: LOAD_CLUT_PLANAR(uint8_t,  8); break;
-                    case  9: LOAD_CLUT_PLANAR(uint16_t, 9); break;
-                    case 10: LOAD_CLUT_PLANAR(uint16_t,10); break;
-                    case 12: LOAD_CLUT_PLANAR(uint16_t,12); break;
-                    case 14: LOAD_CLUT_PLANAR(uint16_t,14); break;
-                    case 16: LOAD_CLUT_PLANAR(uint16_t,16); break;
+                    case  8: LOAD_CLUT_PLANAR(uint8_t,  8, av_clip_uintp2); break;
+                    case  9: LOAD_CLUT_PLANAR(uint16_t, 9, av_clip_uintp2); break;
+                    case 10: LOAD_CLUT_PLANAR(uint16_t,10, av_clip_uintp2); break;
+                    case 12: LOAD_CLUT_PLANAR(uint16_t,12, av_clip_uintp2); break;
+                    case 14: LOAD_CLUT_PLANAR(uint16_t,14, av_clip_uintp2); break;
+                    case 16: LOAD_CLUT_PLANAR(uint16_t,16, av_clip_uintp2); break;
+                    case 32: LOAD_CLUT_PLANAR(float,   32, ); break;
                     }
                 }
                 if (++x == w) {
@@ -417,6 +419,7 @@ static const enum AVPixelFormat haldclutsrc_pix_fmts[] = {
     AV_PIX_FMT_GBRP12, AV_PIX_FMT_GBRAP12,
     AV_PIX_FMT_GBRP14,
     AV_PIX_FMT_GBRP16, AV_PIX_FMT_GBRAP16,
+    AV_PIX_FMT_GBRPF32, AV_PIX_FMT_GBRAPF32,
     AV_PIX_FMT_NONE,
 };
 
