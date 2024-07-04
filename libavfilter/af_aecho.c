@@ -19,7 +19,6 @@
  */
 
 #include "libavutil/avassert.h"
-#include "libavutil/avstring.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/samplefmt.h"
@@ -31,9 +30,11 @@
 typedef struct AudioEchoContext {
     const AVClass *class;
     float in_gain, out_gain;
-    char *delays, *decays;
-    float *delay, *decay;
-    int nb_echoes;
+    float *delays;
+    unsigned nb_delays;
+    float *decays;
+    unsigned nb_decays;
+    unsigned nb_echoes;
     int delay_index;
     uint8_t **delayptrs;
     int max_samples, fade_out;
@@ -48,51 +49,24 @@ typedef struct AudioEchoContext {
 
 #define OFFSET(x) offsetof(AudioEchoContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+static const AVOptionArrayDef def_delays = {.def="1000",.size_min=1,.sep='|'};
+static const AVOptionArrayDef def_decays = {.def="0.5",.size_min=1,.sep='|'};
 
 static const AVOption aecho_options[] = {
     { "in_gain",  "set signal input gain",  OFFSET(in_gain),  AV_OPT_TYPE_FLOAT,  {.dbl=0.6}, 0, 1, A },
     { "out_gain", "set signal output gain", OFFSET(out_gain), AV_OPT_TYPE_FLOAT,  {.dbl=0.3}, 0, 1, A },
-    { "delays",   "set list of signal delays", OFFSET(delays), AV_OPT_TYPE_STRING, {.str="1000"}, 0, 0, A },
-    { "decays",   "set list of signal decays", OFFSET(decays), AV_OPT_TYPE_STRING, {.str="0.5"}, 0, 0, A },
+    { "delays",   "set list of signal delays", OFFSET(delays), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_delays}, 0, 90000, A },
+    { "decays",   "set list of signal decays", OFFSET(decays), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_decays}, 0, 1, A },
     { NULL }
 };
 
 AVFILTER_DEFINE_CLASS(aecho);
 
-static void count_items(char *item_str, int *nb_items)
-{
-    char *p;
-
-    *nb_items = 1;
-    for (p = item_str; *p; p++) {
-        if (*p == '|')
-            (*nb_items)++;
-    }
-
-}
-
-static void fill_items(char *item_str, int *nb_items, float *items)
-{
-    char *p, *saveptr = NULL;
-    int i, new_nb_items = 0;
-
-    p = item_str;
-    for (i = 0; i < *nb_items; i++) {
-        char *tstr = av_strtok(p, "|", &saveptr);
-        p = NULL;
-        if (tstr)
-            new_nb_items += av_sscanf(tstr, "%f", &items[new_nb_items]) == 1;
-    }
-
-    *nb_items = new_nb_items;
-}
-
 static av_cold void uninit(AVFilterContext *ctx)
 {
     AudioEchoContext *s = ctx->priv;
 
-    av_freep(&s->delay);
-    av_freep(&s->decay);
     av_freep(&s->samples);
 
     if (s->delayptrs)
@@ -103,50 +77,11 @@ static av_cold void uninit(AVFilterContext *ctx)
 static av_cold int init(AVFilterContext *ctx)
 {
     AudioEchoContext *s = ctx->priv;
-    int nb_delays, nb_decays, i;
 
-    if (!s->delays || !s->decays) {
-        av_log(ctx, AV_LOG_ERROR, "Missing delays and/or decays.\n");
-        return AVERROR(EINVAL);
-    }
-
-    count_items(s->delays, &nb_delays);
-    count_items(s->decays, &nb_decays);
-
-    s->delay = av_realloc_f(s->delay, nb_delays, sizeof(*s->delay));
-    s->decay = av_realloc_f(s->decay, nb_decays, sizeof(*s->decay));
-    if (!s->delay || !s->decay)
-        return AVERROR(ENOMEM);
-
-    fill_items(s->delays, &nb_delays, s->delay);
-    fill_items(s->decays, &nb_decays, s->decay);
-
-    if (nb_delays != nb_decays) {
-        av_log(ctx, AV_LOG_ERROR, "Number of delays %d differs from number of decays %d.\n", nb_delays, nb_decays);
-        return AVERROR(EINVAL);
-    }
-
-    s->nb_echoes = nb_delays;
-    if (!s->nb_echoes) {
-        av_log(ctx, AV_LOG_ERROR, "At least one decay & delay must be set.\n");
-        return AVERROR(EINVAL);
-    }
-
-    s->samples = av_realloc_f(s->samples, nb_delays, sizeof(*s->samples));
+    s->nb_echoes = FFMAX(s->nb_delays, s->nb_decays);
+    s->samples = av_realloc_f(s->samples, s->nb_echoes, sizeof(*s->samples));
     if (!s->samples)
         return AVERROR(ENOMEM);
-
-    for (i = 0; i < nb_delays; i++) {
-        if (s->delay[i] <= 0 || s->delay[i] > 90000) {
-            av_log(ctx, AV_LOG_ERROR, "delay[%d]: %f is out of allowed range: (0, 90000]\n", i, s->delay[i]);
-            return AVERROR(EINVAL);
-        }
-        if (s->decay[i] <= 0 || s->decay[i] > 1) {
-            av_log(ctx, AV_LOG_ERROR, "decay[%d]: %f is out of allowed range: (0, 1]\n", i, s->decay[i]);
-            return AVERROR(EINVAL);
-        }
-    }
-
     s->next_pts = AV_NOPTS_VALUE;
 
     av_log(ctx, AV_LOG_DEBUG, "nb_echoes:%d\n", s->nb_echoes);
@@ -163,27 +98,29 @@ static void echo_samples_## name ##p(AudioEchoContext *ctx,                 \
 {                                                                           \
     const double out_gain = ctx->out_gain;                                  \
     const double in_gain = ctx->in_gain;                                    \
-    const int nb_echoes = ctx->nb_echoes;                                   \
+    const unsigned nb_decays = ctx->nb_decays;                              \
+    const unsigned nb_echoes = ctx->nb_echoes;                              \
     const int max_samples = ctx->max_samples;                               \
-    int i, j, chan, av_uninit(index);                                       \
+    int av_uninit(index);                                                   \
                                                                             \
     av_assert1(channels > 0); /* would corrupt delay_index */               \
                                                                             \
-    for (chan = 0; chan < channels; chan++) {                               \
+    for (int chan = 0; chan < channels; chan++) {                           \
         const type *s = (type *)src[chan];                                  \
         type *d = (type *)dst[chan];                                        \
         type *dbuf = (type *)delayptrs[chan];                               \
                                                                             \
         index = ctx->delay_index;                                           \
-        for (i = 0; i < nb_samples; i++, s++, d++) {                        \
+        for (int i = 0; i < nb_samples; i++, s++, d++) {                    \
             double out, in;                                                 \
                                                                             \
             in = *s;                                                        \
             out = in * in_gain;                                             \
-            for (j = 0; j < nb_echoes; j++) {                               \
+            for (unsigned j = 0; j < nb_echoes; j++) {                      \
+                int jidx = FFMIN(j, nb_decays-1);                           \
                 int ix = index + max_samples - ctx->samples[j];             \
                 ix = MOD(ix, max_samples);                                  \
-                out += dbuf[ix] * ctx->decay[j];                            \
+                out += dbuf[ix] * ctx->decays[jidx];                        \
             }                                                               \
             out *= out_gain;                                                \
                                                                             \
@@ -206,12 +143,13 @@ static int config_output(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     AudioEchoContext *s = ctx->priv;
     float volume = 1.0;
-    int i;
 
-    for (i = 0; i < s->nb_echoes; i++) {
-        s->samples[i] = s->delay[i] * outlink->sample_rate / 1000.0;
+    for (int i = 0; i < s->nb_echoes; i++) {
+        const unsigned didx = FFMIN(i, s->nb_delays-1);
+        const unsigned cidx = FFMIN(i, s->nb_decays-1);
+        s->samples[i] = lrintf(s->delays[didx] * outlink->sample_rate / 1000.0);
         s->max_samples = FFMAX(s->max_samples, s->samples[i]);
-        volume += s->decay[i];
+        volume += s->decays[cidx];
     }
 
     if (s->max_samples <= 0) {
