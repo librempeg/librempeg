@@ -90,6 +90,7 @@ extern const AVFilter ff_af_aresample;
 extern const AVFilter ff_af_areverse;
 extern const AVFilter ff_af_arls;
 extern const AVFilter ff_af_arnndn;
+extern const AVFilter ff_af_ascale;
 extern const AVFilter ff_af_asdr;
 extern const AVFilter ff_af_asegment;
 extern const AVFilter ff_af_aselect;
