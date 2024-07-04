@@ -44,12 +44,12 @@ typedef struct BenchContext {
 #define DEFINE_OPTIONS(filt_name, FLAGS)                                                                                \
 static const AVOption filt_name##_options[] = {                                                                         \
     { "action", "set action", OFFSET(action), AV_OPT_TYPE_INT, {.i64=ACTION_START}, 0, NB_ACTION-1, FLAGS, .unit = "action" },  \
-        { "start", "start timer",  0, AV_OPT_TYPE_CONST, {.i64=ACTION_START}, INT_MIN, INT_MAX, FLAGS, .unit = "action" },      \
-        { "stop",  "stop timer",   0, AV_OPT_TYPE_CONST, {.i64=ACTION_STOP},  INT_MIN, INT_MAX, FLAGS, .unit = "action" },      \
+        { "start", "start timer",  0, AV_OPT_TYPE_CONST, {.i64=ACTION_START}, 0, 0, FLAGS, .unit = "action" },      \
+        { "stop",  "stop timer",   0, AV_OPT_TYPE_CONST, {.i64=ACTION_STOP},  0, 0, FLAGS, .unit = "action" },      \
     { "framelog", "force frame logging level", OFFSET(loglevel), AV_OPT_TYPE_INT, {.i64 = -1},   INT_MIN, INT_MAX, FLAGS, .unit = "level" }, \
-        { "quiet",   "logging disabled",          0, AV_OPT_TYPE_CONST, {.i64 = AV_LOG_QUIET},   INT_MIN, INT_MAX, FLAGS, .unit = "level" }, \
-        { "info",    "information logging level", 0, AV_OPT_TYPE_CONST, {.i64 = AV_LOG_INFO},    INT_MIN, INT_MAX, FLAGS, .unit = "level" }, \
-        { "verbose", "verbose logging level",     0, AV_OPT_TYPE_CONST, {.i64 = AV_LOG_VERBOSE}, INT_MIN, INT_MAX, FLAGS, .unit = "level" }, \
+        { "quiet",   "logging disabled",          0, AV_OPT_TYPE_CONST, {.i64 = AV_LOG_QUIET},   0, 0, FLAGS, .unit = "level" }, \
+        { "info",    "information logging level", 0, AV_OPT_TYPE_CONST, {.i64 = AV_LOG_INFO},    0, 0, FLAGS, .unit = "level" }, \
+        { "verbose", "verbose logging level",     0, AV_OPT_TYPE_CONST, {.i64 = AV_LOG_VERBOSE}, 0, 0, FLAGS, .unit = "level" }, \
     { NULL }                                                                                                            \
 }
 

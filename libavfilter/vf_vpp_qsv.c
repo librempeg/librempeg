@@ -884,13 +884,13 @@ static const AVOption vpp_options[] = {
 #else
     { "scale_mode", "scaling & format conversion mode", OFFSET(scale_mode), AV_OPT_TYPE_INT, { .i64 = MFX_SCALING_MODE_DEFAULT }, MFX_SCALING_MODE_DEFAULT, MFX_SCALING_MODE_QUALITY, .flags = FLAGS, .unit = "scale mode" },
 #endif
-    { "auto",      "auto mode",             0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_DEFAULT},  INT_MIN, INT_MAX, FLAGS, .unit = "scale mode"},
-    { "low_power", "low power mode",        0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_LOWPOWER}, INT_MIN, INT_MAX, FLAGS, .unit = "scale mode"},
-    { "hq",        "high quality mode",     0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_QUALITY},  INT_MIN, INT_MAX, FLAGS, .unit = "scale mode"},
+    { "auto",      "auto mode",             0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_DEFAULT},  0, 0, FLAGS, .unit = "scale mode"},
+    { "low_power", "low power mode",        0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_LOWPOWER}, 0, 0, FLAGS, .unit = "scale mode"},
+    { "hq",        "high quality mode",     0,    AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_QUALITY},  0, 0, FLAGS, .unit = "scale mode"},
 #if QSV_ONEVPL
-    { "compute",   "compute",               0,    AV_OPT_TYPE_CONST,  { .i64 = 3},  INT_MIN, INT_MAX, FLAGS, .unit = "scale mode"},
-    { "vd",        "vd",                    0,    AV_OPT_TYPE_CONST,  { .i64 = 4},  INT_MIN, INT_MAX, FLAGS, .unit = "scale mode"},
-    { "ve",        "ve",                    0,    AV_OPT_TYPE_CONST,  { .i64 = 5},  INT_MIN, INT_MAX, FLAGS, .unit = "scale mode"},
+    { "compute",   "compute",               0,    AV_OPT_TYPE_CONST,  { .i64 = 3},  0, 0, FLAGS, .unit = "scale mode"},
+    { "vd",        "vd",                    0,    AV_OPT_TYPE_CONST,  { .i64 = 4},  0, 0, FLAGS, .unit = "scale mode"},
+    { "ve",        "ve",                    0,    AV_OPT_TYPE_CONST,  { .i64 = 5},  0, 0, FLAGS, .unit = "scale mode"},
 #endif
 
     { "rate", "Generate output at frame rate or field rate, available only for deinterlace mode",
@@ -982,12 +982,12 @@ static const AVOption qsvscale_options[] = {
 #else
     { "mode",      "scaling & format conversion mode",    OFFSET(scale_mode),    AV_OPT_TYPE_INT,    { .i64 = MFX_SCALING_MODE_DEFAULT}, MFX_SCALING_MODE_DEFAULT, MFX_SCALING_MODE_QUALITY, FLAGS, .unit = "mode"},
 #endif
-    { "low_power", "low power mode",        0,             AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_LOWPOWER}, INT_MIN, INT_MAX, FLAGS, .unit = "mode"},
-    { "hq",        "high quality mode",     0,             AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_QUALITY},  INT_MIN, INT_MAX, FLAGS, .unit = "mode"},
+    { "low_power", "low power mode",        0,             AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_LOWPOWER}, 0, 0, FLAGS, .unit = "mode"},
+    { "hq",        "high quality mode",     0,             AV_OPT_TYPE_CONST,  { .i64 = MFX_SCALING_MODE_QUALITY},  0, 0, FLAGS, .unit = "mode"},
 #if QSV_ONEVPL
-    { "compute",   "compute",               0,             AV_OPT_TYPE_CONST,  { .i64 = 3},  INT_MIN, INT_MAX, FLAGS, .unit = "mode"},
-    { "vd",        "vd",                    0,             AV_OPT_TYPE_CONST,  { .i64 = 4},  INT_MIN, INT_MAX, FLAGS, .unit = "mode"},
-    { "ve",        "ve",                    0,             AV_OPT_TYPE_CONST,  { .i64 = 5},  INT_MIN, INT_MAX, FLAGS, .unit = "mode"},
+    { "compute",   "compute",               0,             AV_OPT_TYPE_CONST,  { .i64 = 3},  0, 0, FLAGS, .unit = "mode"},
+    { "vd",        "vd",                    0,             AV_OPT_TYPE_CONST,  { .i64 = 4},  0, 0, FLAGS, .unit = "mode"},
+    { "ve",        "ve",                    0,             AV_OPT_TYPE_CONST,  { .i64 = 5},  0, 0, FLAGS, .unit = "mode"},
 #endif
 
     { NULL },

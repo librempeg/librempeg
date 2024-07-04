@@ -102,16 +102,16 @@ static const AVOption mandelbrot_options[] = {
     {"morphamp",    "set morph amplitude",           OFFSET(morphamp), AV_OPT_TYPE_DOUBLE,    {.dbl=0},      -FLT_MAX, FLT_MAX, FLAGS },
 
     {"outer",       "set outer coloring mode",       OFFSET(outer), AV_OPT_TYPE_INT, {.i64=NORMALIZED_ITERATION_COUNT}, 0, INT_MAX, FLAGS, .unit = "outer" },
-    {"iteration_count", "set iteration count mode",  0, AV_OPT_TYPE_CONST, {.i64=ITERATION_COUNT}, INT_MIN, INT_MAX, FLAGS, .unit = "outer" },
-    {"normalized_iteration_count", "set normalized iteration count mode",   0, AV_OPT_TYPE_CONST, {.i64=NORMALIZED_ITERATION_COUNT}, INT_MIN, INT_MAX, FLAGS, .unit = "outer" },
-    {"white", "set white mode",                      0, AV_OPT_TYPE_CONST, {.i64=WHITE}, INT_MIN, INT_MAX, FLAGS, .unit = "outer" },
-    {"outz",        "set outz mode",                 0, AV_OPT_TYPE_CONST, {.i64=OUTZ}, INT_MIN, INT_MAX, FLAGS, .unit = "outer" },
+    {"iteration_count", "set iteration count mode",  0, AV_OPT_TYPE_CONST, {.i64=ITERATION_COUNT}, 0, 0, FLAGS, .unit = "outer" },
+    {"normalized_iteration_count", "set normalized iteration count mode",   0, AV_OPT_TYPE_CONST, {.i64=NORMALIZED_ITERATION_COUNT}, 0, 0, FLAGS, .unit = "outer" },
+    {"white", "set white mode",                      0, AV_OPT_TYPE_CONST, {.i64=WHITE}, 0, 0, FLAGS, .unit = "outer" },
+    {"outz",        "set outz mode",                 0, AV_OPT_TYPE_CONST, {.i64=OUTZ}, 0, 0, FLAGS, .unit = "outer" },
 
     {"inner",       "set inner coloring mode",       OFFSET(inner), AV_OPT_TYPE_INT, {.i64=MINCOL}, 0, INT_MAX, FLAGS, .unit = "inner" },
-    {"black",       "set black mode",                0, AV_OPT_TYPE_CONST, {.i64=BLACK}, INT_MIN, INT_MAX, FLAGS, .unit = "inner"},
-    {"period",      "set period mode",               0, AV_OPT_TYPE_CONST, {.i64=PERIOD}, INT_MIN, INT_MAX, FLAGS, .unit = "inner"},
-    {"convergence", "show time until convergence",   0, AV_OPT_TYPE_CONST, {.i64=CONVTIME}, INT_MIN, INT_MAX, FLAGS, .unit = "inner"},
-    {"mincol",      "color based on point closest to the origin of the iterations",   0, AV_OPT_TYPE_CONST, {.i64=MINCOL}, INT_MIN, INT_MAX, FLAGS, .unit = "inner"},
+    {"black",       "set black mode",                0, AV_OPT_TYPE_CONST, {.i64=BLACK}, 0, 0, FLAGS, .unit = "inner"},
+    {"period",      "set period mode",               0, AV_OPT_TYPE_CONST, {.i64=PERIOD}, 0, 0, FLAGS, .unit = "inner"},
+    {"convergence", "show time until convergence",   0, AV_OPT_TYPE_CONST, {.i64=CONVTIME}, 0, 0, FLAGS, .unit = "inner"},
+    {"mincol",      "color based on point closest to the origin of the iterations",   0, AV_OPT_TYPE_CONST, {.i64=MINCOL}, 0, 0, FLAGS, .unit = "inner"},
 
     {NULL},
 };

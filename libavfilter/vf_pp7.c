@@ -49,9 +49,9 @@ enum mode {
 static const AVOption pp7_options[] = {
     { "qp", "force a constant quantizer parameter", OFFSET(qp), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 64, FLAGS },
     { "mode", "set thresholding mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64 = MODE_MEDIUM}, 0, 2, FLAGS, .unit = "mode" },
-        { "hard",   "hard thresholding",   0, AV_OPT_TYPE_CONST, {.i64 = MODE_HARD},   INT_MIN, INT_MAX, FLAGS, .unit = "mode" },
-        { "soft",   "soft thresholding",   0, AV_OPT_TYPE_CONST, {.i64 = MODE_SOFT},   INT_MIN, INT_MAX, FLAGS, .unit = "mode" },
-        { "medium", "medium thresholding", 0, AV_OPT_TYPE_CONST, {.i64 = MODE_MEDIUM}, INT_MIN, INT_MAX, FLAGS, .unit = "mode" },
+        { "hard",   "hard thresholding",   0, AV_OPT_TYPE_CONST, {.i64 = MODE_HARD},   0, 0, FLAGS, .unit = "mode" },
+        { "soft",   "soft thresholding",   0, AV_OPT_TYPE_CONST, {.i64 = MODE_SOFT},   0, 0, FLAGS, .unit = "mode" },
+        { "medium", "medium thresholding", 0, AV_OPT_TYPE_CONST, {.i64 = MODE_MEDIUM}, 0, 0, FLAGS, .unit = "mode" },
     { NULL }
 };
 

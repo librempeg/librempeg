@@ -42,8 +42,8 @@ typedef struct FieldContext {
 
 static const AVOption field_options[] = {
     {"type", "set field type (top or bottom)", OFFSET(type), AV_OPT_TYPE_INT, {.i64=FIELD_TYPE_TOP}, 0, 1, FLAGS, .unit = "field_type" },
-    {"top",    "select top field",    0, AV_OPT_TYPE_CONST, {.i64=FIELD_TYPE_TOP},    INT_MIN, INT_MAX, FLAGS, .unit = "field_type"},
-    {"bottom", "select bottom field", 0, AV_OPT_TYPE_CONST, {.i64=FIELD_TYPE_BOTTOM}, INT_MIN, INT_MAX, FLAGS, .unit = "field_type"},
+    {"top",    "select top field",    0, AV_OPT_TYPE_CONST, {.i64=FIELD_TYPE_TOP},    0, 0, FLAGS, .unit = "field_type"},
+    {"bottom", "select bottom field", 0, AV_OPT_TYPE_CONST, {.i64=FIELD_TYPE_BOTTOM}, 0, 0, FLAGS, .unit = "field_type"},
     {NULL}
 };
 

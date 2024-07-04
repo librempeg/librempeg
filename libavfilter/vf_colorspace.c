@@ -889,7 +889,7 @@ static int config_props(AVFilterLink *outlink)
 
 #define OFFSET(x) offsetof(ColorSpaceContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_VIDEO_PARAM
-#define ENUM(x, y, z) { x, "", 0, AV_OPT_TYPE_CONST, { .i64 = y }, INT_MIN, INT_MAX, FLAGS, .unit = z }
+#define ENUM(x, y, z) { x, "", 0, AV_OPT_TYPE_CONST, { .i64 = y }, 0, 0, FLAGS, .unit = z }
 
 static const AVOption colorspace_options[] = {
     { "all",        "Set all color properties together",
