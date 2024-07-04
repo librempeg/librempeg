@@ -19,7 +19,6 @@
  */
 
 #include "libavutil/avassert.h"
-#include "libavutil/avstring.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
@@ -28,11 +27,6 @@
 #include "internal.h"
 #include "framesync.h"
 #include "video.h"
-
-typedef struct Mapping {
-    int input;
-    int plane;
-} Mapping;
 
 typedef struct InputParam {
     int depth[4];
@@ -43,13 +37,17 @@ typedef struct InputParam {
 
 typedef struct MergePlanesContext {
     const AVClass *class;
-    int64_t mapping;
     const enum AVPixelFormat out_fmt;
+
+    int *input_map;
+    unsigned nb_input_map;
+    int *plane_map;
+    unsigned nb_plane_map;
+
     int nb_inputs;
     int nb_planes;
     int planewidth[4];
     int planeheight[4];
-    Mapping map[4];
     const AVPixFmtDescriptor *indesc[4];
     const AVPixFmtDescriptor *outdesc;
 
@@ -58,17 +56,13 @@ typedef struct MergePlanesContext {
 
 #define OFFSET(x) offsetof(MergePlanesContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+static const AVOptionArrayDef def_map = {.def="0",.size_min=1,.size_max=4,.sep=' '};
+
 static const AVOption mergeplanes_options[] = {
-    { "mapping", "set input to output plane mapping", OFFSET(mapping), AV_OPT_TYPE_INT, {.i64=-1}, -1, 0x33333333, FLAGS|AV_OPT_FLAG_DEPRECATED },
     { "format", "set output pixel format", OFFSET(out_fmt), AV_OPT_TYPE_PIXEL_FMT, {.i64=AV_PIX_FMT_YUVA444P}, 0, INT_MAX, .flags=FLAGS },
-    { "map0s", "set 1st input to output stream mapping", OFFSET(map[0].input), AV_OPT_TYPE_INT, {.i64=0}, 0, 3, FLAGS },
-    { "map0p", "set 1st input to output plane mapping",  OFFSET(map[0].plane), AV_OPT_TYPE_INT, {.i64=0}, 0, 3, FLAGS },
-    { "map1s", "set 2nd input to output stream mapping", OFFSET(map[1].input), AV_OPT_TYPE_INT, {.i64=0}, 0, 3, FLAGS },
-    { "map1p", "set 2nd input to output plane mapping",  OFFSET(map[1].plane), AV_OPT_TYPE_INT, {.i64=0}, 0, 3, FLAGS },
-    { "map2s", "set 3rd input to output stream mapping", OFFSET(map[2].input), AV_OPT_TYPE_INT, {.i64=0}, 0, 3, FLAGS },
-    { "map2p", "set 3rd input to output plane mapping",  OFFSET(map[2].plane), AV_OPT_TYPE_INT, {.i64=0}, 0, 3, FLAGS },
-    { "map3s", "set 4th input to output stream mapping", OFFSET(map[3].input), AV_OPT_TYPE_INT, {.i64=0}, 0, 3, FLAGS },
-    { "map3p", "set 4th input to output plane mapping",  OFFSET(map[3].plane), AV_OPT_TYPE_INT, {.i64=0}, 0, 3, FLAGS },
+    { "input", "set input stream to output stream mapping", OFFSET(input_map), AV_OPT_TYPE_INT|AR, {.arr=&def_map}, 0, 3, FLAGS },
+    { "plane", "set input plane to output plane mapping",   OFFSET(plane_map), AV_OPT_TYPE_INT|AR, {.arr=&def_map}, 0, 3, FLAGS },
     { NULL }
 };
 
@@ -77,8 +71,7 @@ AVFILTER_DEFINE_CLASS(mergeplanes);
 static av_cold int init(AVFilterContext *ctx)
 {
     MergePlanesContext *s = ctx->priv;
-    int64_t m = s->mapping;
-    int i, ret;
+    int ret;
 
     s->outdesc = av_pix_fmt_desc_get(s->out_fmt);
     if (!(s->outdesc->flags & AV_PIX_FMT_FLAG_PLANAR) ||
@@ -88,25 +81,12 @@ static av_cold int init(AVFilterContext *ctx)
     }
     s->nb_planes = av_pix_fmt_count_planes(s->out_fmt);
 
-    for (i = s->nb_planes - 1; i >= 0; i--) {
-        if (m >= 0 && m <= 0x33333333) {
-            s->map[i].plane = m & 0xf;
-            m >>= 4;
-            s->map[i].input = m & 0xf;
-            m >>= 4;
-        }
-
-        if (s->map[i].plane > 3 || s->map[i].input > 3) {
-            av_log(ctx, AV_LOG_ERROR, "Mapping with out of range input and/or plane number.\n");
-            return AVERROR(EINVAL);
-        }
-
-        s->nb_inputs = FFMAX(s->nb_inputs, s->map[i].input + 1);
-    }
+    for (int i = 0; i < s->nb_input_map; i++)
+        s->nb_inputs = FFMAX(s->nb_inputs, s->input_map[i]+1);
 
     av_assert0(s->nb_inputs && s->nb_inputs <= 4);
 
-    for (i = 0; i < s->nb_inputs; i++) {
+    for (int i = 0; i < s->nb_inputs; i++) {
         AVFilterPad pad = { 0 };
 
         pad.type = AVMEDIA_TYPE_VIDEO;
@@ -125,10 +105,10 @@ static int query_formats(AVFilterContext *ctx)
 {
     MergePlanesContext *s = ctx->priv;
     AVFilterFormats *formats = NULL;
-    int i, ret;
+    int ret;
 
     s->outdesc = av_pix_fmt_desc_get(s->out_fmt);
-    for (i = 0; av_pix_fmt_desc_get(i); i++) {
+    for (int i = 0; av_pix_fmt_desc_get(i); i++) {
         const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(i);
         if (desc->comp[0].depth == s->outdesc->comp[0].depth &&
             (desc->comp[0].depth <= 8 || (desc->flags & AV_PIX_FMT_FLAG_BE) == (s->outdesc->flags & AV_PIX_FMT_FLAG_BE)) &&
@@ -137,7 +117,7 @@ static int query_formats(AVFilterContext *ctx)
                 return ret;
     }
 
-    for (i = 0; i < s->nb_inputs; i++)
+    for (int i = 0; i < s->nb_inputs; i++)
         if ((ret = ff_formats_ref(formats, &ctx->inputs[i]->outcfg.formats)) < 0)
             return ret;
 
@@ -156,9 +136,9 @@ static int process_frame(FFFrameSync *fs)
     MergePlanesContext *s = fs->opaque;
     AVFrame *in[4] = { NULL };
     AVFrame *out;
-    int i, ret;
+    int ret;
 
-    for (i = 0; i < s->nb_inputs; i++) {
+    for (int i = 0; i < s->nb_inputs; i++) {
         if ((ret = ff_framesync_get_frame(&s->fs, i, &in[i], 0)) < 0)
             return ret;
     }
@@ -168,9 +148,9 @@ static int process_frame(FFFrameSync *fs)
         return AVERROR(ENOMEM);
     out->pts = av_rescale_q(s->fs.pts, s->fs.time_base, outlink->time_base);
 
-    for (i = 0; i < s->nb_planes; i++) {
-        const int input = s->map[i].input;
-        const int plane = s->map[i].plane;
+    for (int i = 0; i < s->nb_planes; i++) {
+        const int input = s->input_map[FFMIN(i, s->nb_input_map-1)];
+        const int plane = s->plane_map[FFMIN(i, s->nb_plane_map-1)];
 
         av_image_copy_plane(out->data[i], out->linesize[i],
                             in[input]->data[plane], in[input]->linesize[plane],
@@ -187,7 +167,7 @@ static int config_output(AVFilterLink *outlink)
     MergePlanesContext *s = ctx->priv;
     InputParam inputsp[4];
     FFFrameSyncIn *in;
-    int i, ret;
+    int ret;
 
     if ((ret = ff_framesync_init(&s->fs, ctx, s->nb_inputs)) < 0)
         return ret;
@@ -211,14 +191,14 @@ static int config_output(AVFilterLink *outlink)
     s->planeheight[0] =
     s->planeheight[3] = outlink->h;
 
-    for (i = 0; i < s->nb_inputs; i++) {
+    for (int i = 0; i < s->nb_inputs; i++) {
         InputParam *inputp = &inputsp[i];
         AVFilterLink *inlink = ctx->inputs[i];
         s->indesc[i] = av_pix_fmt_desc_get(inlink->format);
 
         if (outlink->sample_aspect_ratio.num != inlink->sample_aspect_ratio.num ||
             outlink->sample_aspect_ratio.den != inlink->sample_aspect_ratio.den) {
-            av_log(ctx, AV_LOG_ERROR, "input #%d link %s SAR %d:%d "
+            av_log(ctx, AV_LOG_WARNING, "input #%d link %s SAR %d:%d "
                                       "does not match output link %s SAR %d:%d\n",
                                       i, ctx->input_pads[i].name,
                                       inlink->sample_aspect_ratio.num,
@@ -226,7 +206,6 @@ static int config_output(AVFilterLink *outlink)
                                       ctx->output_pads[0].name,
                                       outlink->sample_aspect_ratio.num,
                                       outlink->sample_aspect_ratio.den);
-            return AVERROR(EINVAL);
         }
 
         inputp->planewidth[1]  =
@@ -248,9 +227,9 @@ static int config_output(AVFilterLink *outlink)
         in[i].after  = EXT_STOP;
     }
 
-    for (i = 0; i < s->nb_planes; i++) {
-        const int input = s->map[i].input;
-        const int plane = s->map[i].plane;
+    for (int i = 0; i < s->nb_planes; i++) {
+        const int input = s->input_map[FFMIN(i, s->nb_input_map-1)];
+        const int plane = s->plane_map[FFMIN(i, s->nb_plane_map-1)];
         InputParam *inputp = &inputsp[input];
 
         if (plane + 1 > inputp->nb_planes) {
