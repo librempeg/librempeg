@@ -35,15 +35,13 @@
 #include "formats.h"
 #include "internal.h"
 
-#define MAX_CH 64
-
 typedef struct ChannelSplitContext {
     const AVClass *class;
 
     AVChannelLayout channel_layout;
     char    *channels_str;
 
-    int      map[64];
+    int     *map;
 } ChannelSplitContext;
 
 #define OFFSET(x) offsetof(ChannelSplitContext, x)
@@ -61,7 +59,7 @@ static av_cold int init(AVFilterContext *ctx)
 {
     ChannelSplitContext *s = ctx->priv;
     AVChannelLayout channel_layout = { 0 };
-    int all = 0, ret = 0, i;
+    int all = 0, ret = 0;
 
     if (!strcmp(s->channels_str, "all")) {
         if ((ret = av_channel_layout_copy(&channel_layout, &s->channel_layout)) < 0)
@@ -72,12 +70,11 @@ static av_cold int init(AVFilterContext *ctx)
             goto fail;
     }
 
-    if (channel_layout.nb_channels > MAX_CH) {
-        av_log(ctx, AV_LOG_ERROR, "Too many channels\n");
-        goto fail;
-    }
+    s->map = av_calloc(channel_layout.nb_channels, sizeof(*s->map));
+    if (!s->map)
+        return AVERROR(ENOMEM);
 
-    for (i = 0; i < channel_layout.nb_channels; i++) {
+    for (int i = 0; i < channel_layout.nb_channels; i++) {
         enum AVChannel channel = av_channel_layout_channel_from_index(&channel_layout, i);
         char buf[64];
         AVFilterPad pad = { .flags = AVFILTERPAD_FLAG_FREE_NAME };
@@ -119,13 +116,14 @@ static av_cold void uninit(AVFilterContext *ctx)
     ChannelSplitContext *s = ctx->priv;
 
     av_channel_layout_uninit(&s->channel_layout);
+    av_freep(&s->map);
 }
 
 static int query_formats(AVFilterContext *ctx)
 {
     ChannelSplitContext *s = ctx->priv;
     AVFilterChannelLayouts *in_layouts = NULL;
-    int i, ret;
+    int ret;
 
     if ((ret = ff_set_common_formats(ctx, ff_planar_sample_fmts())) < 0 ||
         (ret = ff_set_common_all_samplerates(ctx)) < 0)
@@ -135,7 +133,7 @@ static int query_formats(AVFilterContext *ctx)
         (ret = ff_channel_layouts_ref(in_layouts, &ctx->inputs[0]->outcfg.channel_layouts)) < 0)
         return ret;
 
-    for (i = 0; i < ctx->nb_outputs; i++) {
+    for (int i = 0; i < ctx->nb_outputs; i++) {
         AVChannelLayout channel_layout = { 0 };
         AVFilterChannelLayouts *out_layouts = NULL;
         enum AVChannel channel = av_channel_layout_channel_from_index(&s->channel_layout, s->map[i]);
