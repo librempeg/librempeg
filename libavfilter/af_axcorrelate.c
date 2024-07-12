@@ -78,7 +78,12 @@ static int activate(AVFilterContext *ctx)
     FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
 
     if (!s->in[0] && !s->eof) {
-        int ret = ff_inlink_consume_samples(ctx->inputs[0], s->size, MAX_SIZE, &s->in[0]);
+        int ret;
+
+        if (s->algo == 3)
+            ret = ff_inlink_consume_frame(ctx->inputs[0], &s->in[0]);
+        else
+            ret = ff_inlink_consume_samples(ctx->inputs[0], s->size, MAX_SIZE, &s->in[0]);
         if (ret < 0)
             return ret;
     }
@@ -95,6 +100,8 @@ static int activate(AVFilterContext *ctx)
         const int needed = s->size + out_samples;
         AVFrame *out;
 
+        if (s->algo == 3)
+            goto skip;
         if (!s->cache[0]) {
             s->cache[0] = ff_get_audio_buffer(outlink, needed);
             if (!s->cache[0])
@@ -193,6 +200,7 @@ static int activate(AVFilterContext *ctx)
             s->samples_in_cache[1] = needed;
         }
 
+skip:
         out = ff_get_audio_buffer(outlink, out_samples);
         if (!out) {
             av_frame_free(&s->in[0]);
@@ -246,6 +254,7 @@ static int config_output(AVFilterLink *outlink)
         case 0: s->xcorrelate = xcorrelate_slow_dblp; break;
         case 1: s->xcorrelate = xcorrelate_fast_dblp; break;
         case 2: s->xcorrelate = xcorrelate_best_dblp; break;
+        case 3: s->xcorrelate = xcorrelate_iir_dblp;  break;
         }
     } else {
         state_size = sizeof(ChannelState_fltp);
@@ -254,6 +263,7 @@ static int config_output(AVFilterLink *outlink)
         case 0: s->xcorrelate = xcorrelate_slow_fltp; break;
         case 1: s->xcorrelate = xcorrelate_fast_fltp; break;
         case 2: s->xcorrelate = xcorrelate_best_fltp; break;
+        case 3: s->xcorrelate = xcorrelate_iir_fltp;  break;
         }
     }
 
@@ -299,10 +309,11 @@ static const AVFilterPad outputs[] = {
 
 static const AVOption axcorrelate_options[] = {
     { "size", "set the segment size", OFFSET(size), AV_OPT_TYPE_INT, {.i64=256}, 2, MAX_SIZE, AF },
-    { "algo", "set the algorithm",    OFFSET(algo), AV_OPT_TYPE_INT, {.i64=2},   0,      2, AF, .unit = "algo" },
+    { "algo", "set the algorithm",    OFFSET(algo), AV_OPT_TYPE_INT, {.i64=2}, 0,      3, AF, .unit = "algo" },
     { "slow", "slow algorithm",   0,            AV_OPT_TYPE_CONST, {.i64=0},   0,      0, AF, .unit = "algo" },
     { "fast", "fast algorithm",   0,            AV_OPT_TYPE_CONST, {.i64=1},   0,      0, AF, .unit = "algo" },
     { "best", "best algorithm",   0,            AV_OPT_TYPE_CONST, {.i64=2},   0,      0, AF, .unit = "algo" },
+    { "iir",  "iir algorithm",    0,            AV_OPT_TYPE_CONST, {.i64=3},   0,      0, AF, .unit = "algo" },
     { NULL }
 };
 
