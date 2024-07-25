@@ -28,9 +28,6 @@
 #include "avfilter.h"
 #include "internal.h"
 
-#define HISTOGRAM_SIZE                  8192
-#define HISTOGRAM_MAX                   (HISTOGRAM_SIZE-1)
-
 #define MEASURE_ALL                     UINT_MAX
 #define MEASURE_NONE                           0
 
@@ -69,6 +66,7 @@ typedef struct ChannelStats {
     double last_non_zero;
     double min_non_zero;
     double sigma_x, sigma_x2;
+    double sigma_ax, sigma_log2_ax;
     double avg_sigma_x2, min_sigma_x2, max_sigma_x2;
     double min, max;
     double nmin, nmax;
@@ -89,12 +87,10 @@ typedef struct ChannelStats {
     uint64_t nb_denormals;
     double *win_samples;
     double *sorted_samples;
-    uint64_t ehistogram[HISTOGRAM_SIZE];
     int64_t lasti;
     int sorted_front;
     int sorted_back;
     int win_pos;
-    int max_index;
     double noise_floor;
     double entropy;
 } ChannelStats;
@@ -173,6 +169,8 @@ static void reset_stats(AudioStatsContext *s)
         p->min_diff = DBL_MAX;
         p->max_diff = 0;
         p->sigma_x = 0;
+        p->sigma_ax = 0;
+        p->sigma_log2_ax = 0;
         p->sigma_x2 = 0;
         p->avg_sigma_x2 = 0;
         p->min_run = 0;
@@ -201,7 +199,6 @@ static void reset_stats(AudioStatsContext *s)
         p->sorted_front = 0;
         p->sorted_back = 0;
         memset(p->win_samples, 0, s->tc_samples * sizeof(*p->win_samples));
-        memset(p->ehistogram, 0, sizeof(p->ehistogram));
         for (int n = 0; n < s->tc_samples; n++)
             p->sorted_samples[n] = -1.0;
     }
@@ -270,16 +267,7 @@ static void bit_depth(AudioStatsContext *s, const uint64_t *const mask, uint8_t 
 
 static double calc_entropy(AudioStatsContext *s, ChannelStats *p)
 {
-    double entropy = 0.;
-
-    for (int i = 0; i < HISTOGRAM_SIZE; i++) {
-        double entry = p->ehistogram[i] / ((double)p->nb_samples);
-
-        if (entry > 1e-8)
-            entropy += entry * log2(entry);
-    }
-
-    return -entropy / log2(HISTOGRAM_SIZE);
+    return exp2(p->sigma_log2_ax / p->nb_samples) / (p->sigma_ax / p->nb_samples);
 }
 
 static double calc_noise_floor(double *ss, double x, double px,
@@ -351,7 +339,6 @@ static inline void update_stat(AudioStatsContext *s, ChannelStats *p, double d, 
 {
     double abs_d = FFABS(d);
     double drop, noise_floor;
-    int index;
 
     if (p->abs_peak < abs_d) {
         p->abs_peak = abs_d;
@@ -394,6 +381,9 @@ static inline void update_stat(AudioStatsContext *s, ChannelStats *p, double d, 
     }
 
     p->sigma_x += nd;
+    p->sigma_ax += fabs(nd);
+    if (fabs(nd) > 1e-16)
+        p->sigma_log2_ax += log2(fabs(nd));
     p->sigma_x2 += nd * nd;
     p->avg_sigma_x2 = p->avg_sigma_x2 * s->mult + (1.0 - s->mult) * nd * nd;
     if (!isnan(p->last)) {
@@ -412,9 +402,6 @@ static inline void update_stat(AudioStatsContext *s, ChannelStats *p, double d, 
 
     drop = p->win_samples[p->win_pos];
     p->win_samples[p->win_pos] = nd;
-    index = av_clip(lrint(av_clipd(FFABS(nd), 0.0, 1.0) * HISTOGRAM_MAX), 0, HISTOGRAM_MAX);
-    p->max_index = FFMAX(p->max_index, index);
-    p->ehistogram[index]++;
     p->win_pos++;
 
     if (p->win_pos >= s->tc_samples)
