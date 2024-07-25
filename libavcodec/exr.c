@@ -1032,10 +1032,9 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
         unsigned long dest_len;
         GetByteContext agb = gb;
 
-        if (ac_count > 3LL * td->xsize * s->scan_lines_per_block)
-            return AVERROR_INVALIDDATA;
-
         dest_len = ac_count * 2LL;
+        if (dest_len >= INT32_MAX)
+            return AVERROR_INVALIDDATA;
 
         av_fast_padded_malloc(&td->ac_data, &td->ac_size, dest_len);
         if (!td->ac_data)
@@ -1063,10 +1062,12 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
         unsigned long dest_len;
         GetByteContext agb = gb;
 
-        if (dc_count != dc_w * dc_h * 3)
+        if (dc_count < dc_w * (dc_h * 3LL))
             return AVERROR_INVALIDDATA;
 
         dest_len = dc_count * 2LL;
+        if (dest_len >= INT32_MAX)
+            return AVERROR_INVALIDDATA;
 
         av_fast_padded_malloc(&td->dc_data, &td->dc_size, FFALIGN(dest_len, 64) * 2);
         if (!td->dc_data)
