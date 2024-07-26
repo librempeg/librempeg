@@ -100,6 +100,7 @@ typedef struct HuffEntry {
 
 typedef struct EXRChannel {
     int xsub, ysub;
+    int plane;
     enum ExrPixelType pixel_type;
 } EXRChannel;
 
@@ -132,7 +133,7 @@ typedef struct EXRThreadData {
     uint8_t *rle_raw_data;
     unsigned rle_raw_size;
 
-    float block[3][64];
+    float block[64];
 
     int ysize, xsize;
 
@@ -1108,64 +1109,94 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
 
     for (int y = 0; y < td->ysize; y += 8) {
         for (int x = 0; x < td->xsize; x += 8) {
-            memset(td->block, 0, sizeof(td->block));
+            int dc_j = 0;
 
-            for (int j = 0; j < 3; j++) {
-                float *block = td->block[j];
-                const int idx = (x >> 3) + (y >> 3) * dc_w + dc_w * dc_h * j;
-                uint16_t *dc = (uint16_t *)td->dc_data;
-                union av_intfloat32 dc_val;
+            for (int j = 0; j < s->nb_channels; j++) {
+                const int plane = s->channels[j].plane;
+                float *block = td->block;
 
-                dc_val.i = half2float(dc[idx], &s->h2f_tables);
+                if (plane >= 0 && plane < 3) {
+                    const int idx = (x >> 3) + (y >> 3) * dc_w + dc_w * dc_h * dc_j++;
+                    uint16_t *dc = (uint16_t *)td->dc_data;
+                    float *dst = ((float *)td->uncompressed_data) +
+                        y * td->xsize * s->nb_channels + td->xsize * j + x;
+                    union av_intfloat32 dc_val;
 
-                block[0] = dc_val.f;
-                ac_uncompress(s, &agb, block);
-                dct_inverse(block);
-            }
+                    memset(td->block, 0, sizeof(td->block));
+                    dc_val.i = half2float(dc[idx], &s->h2f_tables);
 
-            {
-                const int o = s->nb_channels == 4;
-                float *bo = ((float *)td->uncompressed_data) +
-                    y * td->xsize * s->nb_channels + td->xsize * (o + 0) + x;
-                float *go = ((float *)td->uncompressed_data) +
-                    y * td->xsize * s->nb_channels + td->xsize * (o + 1) + x;
-                float *ro = ((float *)td->uncompressed_data) +
-                    y * td->xsize * s->nb_channels + td->xsize * (o + 2) + x;
-                float *yb = td->block[0];
-                float *ub = td->block[1];
-                float *vb = td->block[2];
+                    block[0] = dc_val.f;
+                    ac_uncompress(s, &agb, block);
+                    dct_inverse(block);
 
-                for (int yy = 0; yy < 8; yy++) {
-                    for (int xx = 0; xx < 8; xx++) {
-                        const int idx = xx + yy * 8;
+                    for (int yy = 0; yy < 8; yy++) {
+                        for (int xx = 0; xx < 8; xx++) {
+                            const int idx = xx + yy * 8;
 
-                        convert(yb[idx], ub[idx], vb[idx], &bo[xx], &go[xx], &ro[xx]);
+                            dst[xx] = block[idx];
+                        }
 
-                        bo[xx] = to_linear(bo[xx], 1.f);
-                        go[xx] = to_linear(go[xx], 1.f);
-                        ro[xx] = to_linear(ro[xx], 1.f);
+                        dst += td->xsize * s->nb_channels;
                     }
-
-                    bo += td->xsize * s->nb_channels;
-                    go += td->xsize * s->nb_channels;
-                    ro += td->xsize * s->nb_channels;
                 }
             }
         }
     }
 
-    if (s->nb_channels < 4)
-        return 0;
-
     for (int y = 0; y < td->ysize && td->rle_raw_data; y++) {
-        uint32_t *ao = ((uint32_t *)td->uncompressed_data) + y * td->xsize * s->nb_channels;
-        uint8_t *ai0 = td->rle_raw_data + y * td->xsize;
-        uint8_t *ai1 = td->rle_raw_data + y * td->xsize + rle_raw_size / 2;
+        for (int j = 0; j < s->nb_channels; j++) {
+            const int plane = s->channels[j].plane;
 
-        for (int x = 0; x < td->xsize; x++) {
-            uint16_t ha = ai0[x] | (ai1[x] << 8);
+            if (plane != 3)
+                continue;
 
-            ao[x] = half2float(ha, &s->h2f_tables);
+            for (int x = 0; x < td->xsize; x++) {
+                float *dst = ((float *)td->uncompressed_data) + y * td->xsize * s->nb_channels + td->xsize * j;
+                uint8_t *ai0 = td->rle_raw_data + y * td->xsize;
+                uint8_t *ai1 = td->rle_raw_data + y * td->xsize + rle_raw_size / 2;
+                uint16_t ha = ai0[x] | (ai1[x] << 8);
+
+                dst[x] = half2float(ha, &s->h2f_tables);
+            }
+        }
+    }
+
+    for (int y = 0; y < td->ysize; y++) {
+        for (int p = 0; p < s->nb_channels;) {
+            float *yuv[4] = {NULL}, *rgb[4] = {NULL};
+
+            for (int j = p; j < s->nb_channels; j++) {
+                float *dst = ((float *)td->uncompressed_data) + y * td->xsize * s->nb_channels + td->xsize * j;
+                const int plane = s->channels[j].plane;
+
+                if (plane < 0 || plane > 3)
+                    continue;
+
+                if (yuv[plane] == NULL)
+                    yuv[plane] = rgb[plane] = dst;
+
+                if (yuv[0] != NULL &&
+                    yuv[1] != NULL &&
+                    yuv[2] != NULL) {
+                    p = j+1;
+                    break;
+                }
+            }
+
+            if (yuv[0] == NULL ||
+                yuv[1] == NULL ||
+                yuv[2] == NULL) {
+                p++;
+                continue;
+            }
+
+            for (int x = 0; x < td->xsize; x++) {
+                convert(yuv[2][x], yuv[1][x], yuv[0][x], &rgb[2][x], &rgb[1][x], &rgb[0][x]);
+
+                rgb[0][x] = to_linear(rgb[0][x], 1.f);
+                rgb[1][x] = to_linear(rgb[1][x], 1.f);
+                rgb[2][x] = to_linear(rgb[2][x], 1.f);
+            }
         }
     }
 
@@ -1756,6 +1787,7 @@ static int decode_header(EXRContext *s, AVFrame *frame)
                 channel->pixel_type = current_pixel_type;
                 channel->xsub       = xsub;
                 channel->ysub       = ysub;
+                channel->plane      = channel_index;
 
                 if (current_pixel_type == EXR_HALF) {
                     s->current_channel_offset += 2;
