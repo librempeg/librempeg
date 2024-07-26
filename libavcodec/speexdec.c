@@ -1564,10 +1564,11 @@ static int speex_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             return ret;
         if (avctx->ch_layout.nb_channels == 2)
             speex_decode_stereo(dst + i * s->frame_size, s->frame_size, &s->stereo);
-        if (get_bits_left(&s->gb) < 5 ||
-            show_bits(&s->gb, 5) == 15) {
-            frames_per_packet = i + 1;
+        if (get_bits_left(&s->gb) < 5)
             break;
+        if (show_bits(&s->gb, 5) == 15) {
+            frames_per_packet = i + 1;
+            skip_bits(&s->gb, 5);
         }
     }
 
