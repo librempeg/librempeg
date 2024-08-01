@@ -343,6 +343,13 @@ static int config_output(AVFilterLink *outlink)
         !s->output_ph || !s->factors || !s->sfactors)
         return AVERROR(ENOMEM);
 
+    for (int ch = 0; ch < outlink->ch_layout.nb_channels; ch++) {
+        ftype *src = (ftype *)s->sfactors->extended_data[ch];
+
+        for (int n = 0; n < s->rdft_size; n++)
+            src[n] = F(1.0);
+    }
+
     s->x_pos = av_calloc(s->rdft_size, sizeof(*s->x_pos));
     s->y_pos = av_calloc(s->rdft_size, sizeof(*s->y_pos));
     s->l_phase = av_calloc(s->rdft_size, sizeof(*s->l_phase));
