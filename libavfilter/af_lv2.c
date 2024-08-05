@@ -37,6 +37,7 @@
 #include "libavutil/opt.h"
 #include "audio.h"
 #include "avfilter.h"
+#include "filters.h"
 #include "formats.h"
 #include "internal.h"
 
@@ -354,7 +355,7 @@ static int config_output(AVFilterLink *outlink)
     s->inplace_broken = lilv_plugin_has_feature(s->plugin, s->lv2_inPlaceBroken);
 
     if (s->nb_inputs) {
-        AVFilterLink *inlink = ctx->inputs[0];
+        FilterLink *inlink = ff_filter_link(ctx->inputs[0]);
 
         if (lilv_plugin_has_feature(s->plugin, s->powerOf2BlockLength)) {
             s->min_samples = 1 << av_ceil_log2(s->min_samples);
