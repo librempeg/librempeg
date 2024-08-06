@@ -421,6 +421,7 @@ static void draw_sample_cline_gray(uint8_t *buf, int height, ptrdiff_t linesize,
 
 static int config_output(AVFilterLink *outlink)
 {
+    FilterLink *l = ff_filter_link(outlink);
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = ctx->inputs[0];
     ShowWavesContext *s = ctx->priv;
@@ -429,9 +430,9 @@ static int config_output(AVFilterLink *outlink)
     int ch;
 
     if (s->single_pic) {
-        outlink->frame_rate = av_make_q(1, 1);
+        l->frame_rate = av_make_q(1, 1);
     } else {
-        outlink->frame_rate = s->rate;
+        l->frame_rate = s->rate;
     }
 
     if (!FF_ALLOCZ_TYPED_ARRAY(s->buf_idy, nb_channels))
@@ -456,12 +457,12 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR(ENOMEM);
 
     outlink->sample_aspect_ratio = (AVRational){1,1};
-    outlink->time_base = av_inv_q(outlink->frame_rate);
+    outlink->time_base = av_inv_q(l->frame_rate);
     outlink->w = s->w;
     outlink->h = s->h;
 
     av_log(ctx, AV_LOG_VERBOSE, "s:%dx%d r:%f n:%f h:%d\n",
-           s->w, s->h, av_q2d(outlink->frame_rate), av_q2d(s->n), s->step_size);
+           s->w, s->h, av_q2d(l->frame_rate), av_q2d(s->n), s->step_size);
 
     switch (outlink->format) {
     case AV_PIX_FMT_GRAY8:

@@ -754,6 +754,7 @@ static int compute_kernel(AVFilterContext *ctx)
 
 static int config_output(AVFilterLink *outlink)
 {
+    FilterLink *l = ff_filter_link(outlink);
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = ctx->inputs[0];
     ShowFreqsContext *s = ctx->priv;
@@ -946,8 +947,8 @@ static int config_output(AVFilterLink *outlink)
     av_log(ctx, AV_LOG_DEBUG, "output_sample_count: %d\n", s->output_sample_count);
     av_log(ctx, AV_LOG_DEBUG, "output_padding_size: %d\n", s->output_padding_size);
 
-    outlink->frame_rate = s->frame_rate;
-    outlink->time_base = av_inv_q(outlink->frame_rate);
+    l->frame_rate = s->frame_rate;
+    outlink->time_base = av_inv_q(l->frame_rate);
 
     ret = compute_kernel(ctx);
     if (ret < 0)

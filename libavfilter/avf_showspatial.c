@@ -158,6 +158,7 @@ static int run_channel_fft(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
 
 static int config_output(AVFilterLink *outlink)
 {
+    FilterLink *l = ff_filter_link(outlink);
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = ctx->inputs[0];
     ShowSpatialContext *s = ctx->priv;
@@ -168,8 +169,8 @@ static int config_output(AVFilterLink *outlink)
     outlink->h = s->h;
     outlink->sample_aspect_ratio = (AVRational){1,1};
 
-    outlink->frame_rate = s->frame_rate;
-    outlink->time_base = av_inv_q(outlink->frame_rate);
+    l->frame_rate = s->frame_rate;
+    outlink->time_base = av_inv_q(l->frame_rate);
     s->hop_size = FFMAX(1, av_rescale(inlink->sample_rate, s->frame_rate.den, s->frame_rate.num));
     s->win_size = s->frame << av_ceil_log2(s->hop_size);
     s->buf_size = s->win_size*2 + 2;
