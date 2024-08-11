@@ -340,6 +340,7 @@ static void select_frame(AVFilterContext *ctx, AVFrame *frame)
 {
     SelectContext *select = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
+    FilterLink      *inl = ff_filter_link(inlink);
     double res;
 
     if (isnan(select->var_values[VAR_START_PTS]))
@@ -347,7 +348,7 @@ static void select_frame(AVFilterContext *ctx, AVFrame *frame)
     if (isnan(select->var_values[VAR_START_T]))
         select->var_values[VAR_START_T] = TS2D(frame->pts) * av_q2d(inlink->time_base);
 
-    select->var_values[VAR_N  ] = inlink->frame_count_out;
+    select->var_values[VAR_N  ] = inl->frame_count_out;
     select->var_values[VAR_PTS] = TS2D(frame->pts);
     select->var_values[VAR_T  ] = TS2D(frame->pts) * av_q2d(inlink->time_base);
 #if FF_API_FRAME_PKT

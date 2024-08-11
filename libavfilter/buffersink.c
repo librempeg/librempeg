@@ -88,6 +88,7 @@ static int get_frame_internal(AVFilterContext *ctx, AVFrame *frame, int flags, i
 {
     BufferSinkContext *buf = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
+    FilterLinkInternal *li = ff_link_internal(inlink);
     int status, ret;
     AVFrame *cur_frame;
     int64_t pts;
@@ -107,7 +108,7 @@ static int get_frame_internal(AVFilterContext *ctx, AVFrame *frame, int flags, i
             return status;
         } else if ((flags & AV_BUFFERSINK_FLAG_NO_REQUEST)) {
             return AVERROR(EAGAIN);
-        } else if (inlink->frame_wanted_out) {
+        } else if (li->frame_wanted_out) {
             ret = ff_filter_graph_run_once(ctx->graph);
             if (ret < 0)
                 return ret;
@@ -179,7 +180,6 @@ MAKE_AVFILTERLINK_ACCESSOR(enum AVMediaType , type               )
 MAKE_AVFILTERLINK_ACCESSOR(AVRational       , time_base          )
 MAKE_AVFILTERLINK_ACCESSOR(int              , format             )
 
-MAKE_AVFILTERLINK_ACCESSOR(AVRational       , frame_rate         )
 MAKE_AVFILTERLINK_ACCESSOR(int              , w                  )
 MAKE_AVFILTERLINK_ACCESSOR(int              , h                  )
 MAKE_AVFILTERLINK_ACCESSOR(AVRational       , sample_aspect_ratio)
@@ -187,6 +187,13 @@ MAKE_AVFILTERLINK_ACCESSOR(enum AVColorSpace, colorspace)
 MAKE_AVFILTERLINK_ACCESSOR(enum AVColorRange, color_range)
 
 MAKE_AVFILTERLINK_ACCESSOR(int              , sample_rate        )
+
+AVRational av_buffersink_get_frame_rate(const AVFilterContext *ctx)
+{
+    FilterLink *l = ff_filter_link(ctx->inputs[0]);
+    av_assert0(ctx->filter->activate == activate);
+    return l->frame_rate;
+}
 
 AVBufferRef* av_buffersink_get_hw_frames_ctx(const AVFilterContext *ctx)
 {

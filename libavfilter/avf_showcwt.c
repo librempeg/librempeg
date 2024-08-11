@@ -1291,6 +1291,7 @@ static int compute_kernel(AVFilterContext *ctx)
 
 static int config_output(AVFilterLink *outlink)
 {
+    FilterLink *l = ff_filter_link(outlink);
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = ctx->inputs[0];
     ShowCWTContext *s = ctx->priv;
@@ -1571,8 +1572,8 @@ static int config_output(AVFilterLink *outlink)
     } else {
         s->frame_rate = s->auto_frame_rate;
     }
-    outlink->frame_rate = s->frame_rate;
-    outlink->time_base = av_inv_q(outlink->frame_rate);
+    l->frame_rate = s->frame_rate;
+    outlink->time_base = av_inv_q(l->frame_rate);
 
     ret = compute_kernel(ctx);
     if (ret < 0)

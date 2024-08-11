@@ -1500,11 +1500,11 @@ int avfilter_graph_request_oldest(AVFilterGraph *graph)
         return AVERROR_EOF;
     av_assert1(!oldest->dst->filter->activate);
     av_assert1(oldesti->age_index >= 0);
-    frame_count = oldest->frame_count_out;
-    while (frame_count == oldest->frame_count_out) {
+    frame_count = oldesti->l.frame_count_out;
+    while (frame_count == oldesti->l.frame_count_out) {
         r = ff_filter_graph_run_once(graph);
         if (r == AVERROR(EAGAIN) &&
-            !oldest->frame_wanted_out && !oldesti->frame_blocked_in &&
+            !oldesti->frame_wanted_out && !oldesti->frame_blocked_in &&
             !oldesti->status_in)
             (void)ff_request_frame(oldest);
         else if (r < 0)

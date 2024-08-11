@@ -742,6 +742,7 @@ static const AVFrame *ref_frame(const struct pl_frame_mix *mix)
 static void update_crops(AVFilterContext *ctx, LibplaceboInput *in,
                          struct pl_frame *target, double target_pts)
 {
+    FilterLink     *outl = ff_filter_link(ctx->outputs[0]);
     LibplaceboContext *s = ctx->priv;
     const AVFrame *ref = ref_frame(&in->mix);
 
@@ -761,7 +762,7 @@ static void update_crops(AVFilterContext *ctx, LibplaceboInput *in,
             av_q2d(in->link->sample_aspect_ratio) : 1.0;
         s->var_values[VAR_IN_T]   = s->var_values[VAR_T]  = image_pts;
         s->var_values[VAR_OUT_T]  = s->var_values[VAR_OT] = target_pts;
-        s->var_values[VAR_N]      = ctx->outputs[0]->frame_count_out;
+        s->var_values[VAR_N]      = outl->frame_count_out;
 
         /* Clear these explicitly to avoid leaking previous frames' state */
         s->var_values[VAR_CROP_W] = s->var_values[VAR_CW] = NAN;
@@ -886,7 +887,9 @@ static int output_frame(AVFilterContext *ctx, int64_t pts)
     opts->params.blend_params = NULL;
     for (int i = 0; i < s->nb_inputs; i++) {
         LibplaceboInput *in = &s->inputs[i];
-        int high_fps = av_cmp_q(in->link->frame_rate, outlink->frame_rate) >= 0;
+        FilterLink *il = ff_filter_link(in->link);
+        FilterLink *ol = ff_filter_link(outlink);
+        int high_fps = av_cmp_q(il->frame_rate, ol->frame_rate) >= 0;
         if (in->qstatus != PL_QUEUE_OK)
             continue;
         opts->params.skip_caching_single_frame = high_fps;
@@ -998,6 +1001,7 @@ static int libplacebo_activate(AVFilterContext *ctx)
     int ret, ok = 0, retry = 0;
     LibplaceboContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
+    FilterLink *outl      = ff_filter_link(outlink);
     int64_t pts, out_pts;
 
     FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
@@ -1010,7 +1014,7 @@ static int libplacebo_activate(AVFilterContext *ctx)
 
     if (ff_outlink_frame_wanted(outlink)) {
         if (s->fps.num) {
-            out_pts = outlink->frame_count_out;
+            out_pts = outl->frame_count_out;
         } else {
             /* Determine the PTS of the next frame from any active input */
             out_pts = INT64_MAX;
@@ -1031,6 +1035,7 @@ static int libplacebo_activate(AVFilterContext *ctx)
         /* Update all input queues to the chosen out_pts */
         for (int i = 0; i < s->nb_inputs; i++) {
             LibplaceboInput *in = &s->inputs[i];
+            FilterLink *l = ff_filter_link(outlink);
             if (in->status && out_pts >= in->status_pts) {
                 in->qstatus = PL_QUEUE_EOF;
                 continue;
@@ -1039,7 +1044,7 @@ static int libplacebo_activate(AVFilterContext *ctx)
             in->qstatus = pl_queue_update(in->queue, &in->mix, pl_queue_params(
                 .pts            = out_pts * av_q2d(outlink->time_base),
                 .radius         = pl_frame_mix_radius(&s->opts->params),
-                .vsync_duration = av_q2d(av_inv_q(outlink->frame_rate)),
+                .vsync_duration = av_q2d(av_inv_q(l->frame_rate)),
             ));
 
             switch (in->qstatus) {
@@ -1192,6 +1197,7 @@ static int libplacebo_config_output(AVFilterLink *outlink)
     AVFilterContext *avctx = outlink->src;
     LibplaceboContext *s   = avctx->priv;
     AVFilterLink *inlink   = outlink->src->inputs[0];
+    FilterLink       *ol   = ff_filter_link(outlink);
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
     const AVPixFmtDescriptor *out_desc = av_pix_fmt_desc_get(outlink->format);
     AVHWFramesContext *hwfc;
@@ -1218,14 +1224,15 @@ static int libplacebo_config_output(AVFilterLink *outlink)
 
     /* Frame rate */
     if (s->fps.num) {
-        outlink->frame_rate = s->fps;
+        ol->frame_rate = s->fps;
         outlink->time_base = av_inv_q(s->fps);
     } else {
-        outlink->frame_rate = avctx->inputs[0]->frame_rate;
+        FilterLink *il = ff_filter_link(avctx->inputs[0]);
+        ol->frame_rate = il->frame_rate;
         outlink->time_base = avctx->inputs[0]->time_base;
         for (int i = 1; i < s->nb_inputs; i++) {
-            outlink->frame_rate = max_q(outlink->frame_rate,
-                                        avctx->inputs[i]->frame_rate);
+            il = ff_filter_link(avctx->inputs[i]);
+            ol->frame_rate = max_q(ol->frame_rate, il->frame_rate);
             outlink->time_base = av_gcd_q(outlink->time_base,
                                           avctx->inputs[i]->time_base,
                                           AV_TIME_BASE / 2, AV_TIME_BASE_Q);

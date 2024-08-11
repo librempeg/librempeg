@@ -47,6 +47,7 @@
 #include "libavutil/uuid.h"
 
 #include "avfilter.h"
+#include "filters.h"
 #include "internal.h"
 #include "video.h"
 
@@ -114,8 +115,9 @@ static void dump_stereo3d(AVFilterContext *ctx, const AVFrameSideData *sd)
         av_log(ctx, AV_LOG_INFO, ", horizontal_field_of_view: %0.3f", av_q2d(stereo->horizontal_field_of_view));
 }
 
-static void dump_s12m_timecode(AVFilterContext *ctx, AVRational frame_rate, const AVFrameSideData *sd)
+static void dump_s12m_timecode(AVFilterContext *ctx, AVFilterLink *inlink, const AVFrameSideData *sd)
 {
+    FilterLink      *l = ff_filter_link(inlink);
     const uint32_t *tc = (const uint32_t *)sd->data;
 
     if ((sd->size != sizeof(uint32_t) * 4) || (tc[0] > 3)) {
@@ -125,7 +127,7 @@ static void dump_s12m_timecode(AVFilterContext *ctx, AVRational frame_rate, cons
 
     for (int j = 1; j <= tc[0]; j++) {
         char tcbuf[AV_TIMECODE_STR_SIZE];
-        av_timecode_make_smpte_tc_string2(tcbuf, frame_rate, tc[j], 0, 0);
+        av_timecode_make_smpte_tc_string2(tcbuf, l->frame_rate, tc[j], 0, 0);
         av_log(ctx, AV_LOG_INFO, "timecode - %s%s", tcbuf, j != tc[0]  ? ", " : "");
     }
 }
@@ -726,6 +728,7 @@ static void update_sample_stats(int depth, int be, const uint8_t *src, int len, 
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 {
+    FilterLink *inl = ff_filter_link(inlink);
     AVFilterContext *ctx = inlink->dst;
     ShowInfoContext *s = ctx->priv;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
@@ -759,7 +762,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
            "n:%4"PRId64" pts:%7s pts_time:%-7s duration:%7"PRId64
            " duration_time:%-7s "
            "fmt:%s cl:%s sar:%d/%d s:%dx%d i:%c iskey:%d type:%c ",
-           inlink->frame_count_out,
+           inl->frame_count_out,
            av_ts2str(frame->pts), av_ts2timestr(frame->pts, &inlink->time_base),
            frame->duration, av_ts2timestr(frame->duration, &inlink->time_base),
            desc->name, av_chroma_location_name(frame->chroma_location),
@@ -806,7 +809,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
             dump_stereo3d(ctx, sd);
             break;
         case AV_FRAME_DATA_S12M_TIMECODE: {
-            dump_s12m_timecode(ctx, inlink->frame_rate, sd);
+            dump_s12m_timecode(ctx, inlink, sd);
             break;
         }
         case AV_FRAME_DATA_DISPLAYMATRIX:
@@ -875,11 +878,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 
 static int config_props(AVFilterContext *ctx, AVFilterLink *link, int is_out)
 {
+    FilterLink *l = ff_filter_link(link);
 
     av_log(ctx, AV_LOG_INFO, "config %s time_base: %d/%d, frame_rate: %d/%d\n",
            is_out ? "out" : "in",
            link->time_base.num, link->time_base.den,
-           link->frame_rate.num, link->frame_rate.den);
+           l->frame_rate.num, l->frame_rate.den);
 
     return 0;
 }

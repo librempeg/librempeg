@@ -28,6 +28,7 @@
 #include <string.h>
 
 #include "avfilter.h"
+#include "filters.h"
 #include "formats.h"
 #include "framesync.h"
 #include "internal.h"
@@ -800,12 +801,14 @@ fail:
 static int config_props_ref(AVFilterLink *outlink)
 {
     AVFilterLink *inlink = outlink->src->inputs[1];
+    FilterLink *il = ff_filter_link(inlink);
+    FilterLink *ol = ff_filter_link(outlink);
 
     outlink->w = inlink->w;
     outlink->h = inlink->h;
     outlink->sample_aspect_ratio = inlink->sample_aspect_ratio;
     outlink->time_base = inlink->time_base;
-    outlink->frame_rate = inlink->frame_rate;
+    ol->frame_rate = il->frame_rate;
     outlink->colorspace = inlink->colorspace;
     outlink->color_range = inlink->color_range;
 
@@ -876,6 +879,7 @@ static int scale_field(ScaleContext *scale, AVFrame *dst, AVFrame *src,
 static int scale_frame(AVFilterLink *link, AVFrame **frame_in,
                        AVFrame **frame_out)
 {
+    FilterLink *inl = ff_filter_link(link);
     AVFilterContext *ctx = link->dst;
     ScaleContext *scale = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
@@ -935,7 +939,7 @@ static int scale_frame(AVFilterLink *link, AVFrame **frame_in,
         }
 
         if (ctx->filter == &ff_vf_scale2ref) {
-            scale->var_values[VAR_S2R_MAIN_N] = link->frame_count_out;
+            scale->var_values[VAR_S2R_MAIN_N] = inl->frame_count_out;
             scale->var_values[VAR_S2R_MAIN_T] = TS2T(in->pts, link->time_base);
 #if FF_API_FRAME_PKT
 FF_DISABLE_DEPRECATION_WARNINGS
@@ -943,7 +947,7 @@ FF_DISABLE_DEPRECATION_WARNINGS
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
         } else {
-            scale->var_values[VAR_N] = link->frame_count_out;
+            scale->var_values[VAR_N] = inl->frame_count_out;
             scale->var_values[VAR_T] = TS2T(in->pts, link->time_base);
 #if FF_API_FRAME_PKT
 FF_DISABLE_DEPRECATION_WARNINGS
@@ -1032,6 +1036,8 @@ static int do_scale(FFFrameSync *fs)
 
     if (ref) {
         AVFilterLink *reflink = ctx->inputs[1];
+        FilterLink      *rl   = ff_filter_link(reflink);
+
         frame_changed = ref->width  != reflink->w ||
                         ref->height != reflink->h ||
                         ref->format != reflink->format ||
@@ -1055,7 +1061,7 @@ static int do_scale(FFFrameSync *fs)
         }
 
         if (scale->eval_mode == EVAL_MODE_FRAME) {
-            scale->var_values[VAR_REF_N] = reflink->frame_count_out;
+            scale->var_values[VAR_REF_N] = rl->frame_count_out;
             scale->var_values[VAR_REF_T] = TS2T(ref->pts, reflink->time_base);
 #if FF_API_FRAME_PKT
 FF_DISABLE_DEPRECATION_WARNINGS
@@ -1094,6 +1100,7 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
 
 static int filter_frame_ref(AVFilterLink *link, AVFrame *in)
 {
+    FilterLink *l = ff_filter_link(link);
     ScaleContext *scale = link->dst->priv;
     AVFilterLink *outlink = link->dst->outputs[1];
     int frame_changed;
@@ -1119,7 +1126,7 @@ static int filter_frame_ref(AVFilterLink *link, AVFrame *in)
     }
 
     if (scale->eval_mode == EVAL_MODE_FRAME) {
-        scale->var_values[VAR_N] = link->frame_count_out;
+        scale->var_values[VAR_N] = l->frame_count_out;
         scale->var_values[VAR_T] = TS2T(in->pts, link->time_base);
 #if FF_API_FRAME_PKT
 FF_DISABLE_DEPRECATION_WARNINGS
