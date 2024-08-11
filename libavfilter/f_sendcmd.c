@@ -276,7 +276,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
                         av_log(ctx, AV_LOG_VERBOSE,
                                "Processing command #%d target:%s command:%s arg:%s\n",
                                j, s->targets_opt[k], s->commands_opt[j], cmd_arg);
-                        ret = avfilter_graph_send_command(inlink->graph,
+                        ret = avfilter_graph_send_command(inl->graph,
                                                           s->targets_opt[k], s->commands_opt[j], cmd_arg,
                                                           buf, sizeof(buf),
                                                           AVFILTER_CMD_FLAG_ONE);
