@@ -28,172 +28,6 @@
 #include "avfilter.h"
 
 /**
- * A filter pad used for either input or output.
- */
-struct AVFilterPad {
-    /**
-     * Pad name. The name is unique among inputs and among outputs, but an
-     * input may have the same name as an output. This may be NULL if this
-     * pad has no need to ever be referenced by name.
-     */
-    const char *name;
-
-    /**
-     * AVFilterPad type.
-     */
-    enum AVMediaType type;
-
-    /**
-     * The filter expects writable frames from its input link,
-     * duplicating data buffers if needed.
-     *
-     * input pads only.
-     */
-#define AVFILTERPAD_FLAG_NEEDS_WRITABLE                  (1 << 0)
-
-    /**
-     * The pad's name is allocated and should be freed generically.
-     */
-#define AVFILTERPAD_FLAG_FREE_NAME                       (1 << 1)
-
-    /**
-     * A combination of AVFILTERPAD_FLAG_* flags.
-     */
-    int flags;
-
-    /**
-     * Callback functions to get a video/audio buffers. If NULL,
-     * the filter system will use ff_default_get_video_buffer() for video
-     * and ff_default_get_audio_buffer() for audio.
-     *
-     * The state of the union is determined by type.
-     *
-     * Input pads only.
-     */
-    union {
-        AVFrame *(*video)(AVFilterLink *link, int w, int h);
-        AVFrame *(*audio)(AVFilterLink *link, int nb_samples);
-    } get_buffer;
-
-    /**
-     * Filtering callback. This is where a filter receives a frame with
-     * audio/video data and should do its processing.
-     *
-     * Input pads only.
-     *
-     * @return >= 0 on success, a negative AVERROR on error. This function
-     * must ensure that frame is properly unreferenced on error if it
-     * hasn't been passed on to another filter.
-     */
-    int (*filter_frame)(AVFilterLink *link, AVFrame *frame);
-
-    /**
-     * Frame request callback. A call to this should result in some progress
-     * towards producing output over the given link. This should return zero
-     * on success, and another value on error.
-     *
-     * Output pads only.
-     */
-    int (*request_frame)(AVFilterLink *link);
-
-    /**
-     * Link configuration callback.
-     *
-     * For output pads, this should set the link properties such as
-     * width/height. This should NOT set the format property - that is
-     * negotiated between filters by the filter system using the
-     * query_formats() callback before this function is called.
-     *
-     * For input pads, this should check the properties of the link, and update
-     * the filter's internal state as necessary.
-     *
-     * For both input and output filters, this should return zero on success,
-     * and another value on error.
-     */
-    int (*config_props)(AVFilterLink *link);
-};
-
-typedef struct FFFilterContext {
-    /**
-     * The public AVFilterContext. See avfilter.h for it.
-     */
-    AVFilterContext p;
-
-    avfilter_execute_func *execute;
-
-    // 1 when avfilter_init_*() was successfully called on this filter
-    // 0 otherwise
-    int initialized;
-} FFFilterContext;
-
-static inline FFFilterContext *fffilterctx(AVFilterContext *ctx)
-{
-    return (FFFilterContext*)ctx;
-}
-
-static av_always_inline int ff_filter_execute(AVFilterContext *ctx, avfilter_action_func *func,
-                                              void *arg, int *ret, int nb_jobs)
-{
-    return fffilterctx(ctx)->execute(ctx, func, arg, ret, nb_jobs);
-}
-
-enum FilterFormatsState {
-    /**
-     * The default value meaning that this filter supports all formats
-     * and (for audio) sample rates and channel layouts/counts as long
-     * as these properties agree for all inputs and outputs.
-     * This state is only allowed in case all inputs and outputs actually
-     * have the same type.
-     * The union is unused in this state.
-     *
-     * This value must always be zero (for default static initialization).
-     */
-    FF_FILTER_FORMATS_PASSTHROUGH = 0,
-    FF_FILTER_FORMATS_QUERY_FUNC,       ///< formats.query active.
-    FF_FILTER_FORMATS_PIXFMT_LIST,      ///< formats.pixels_list active.
-    FF_FILTER_FORMATS_SAMPLEFMTS_LIST,  ///< formats.samples_list active.
-    FF_FILTER_FORMATS_SINGLE_PIXFMT,    ///< formats.pix_fmt active
-    FF_FILTER_FORMATS_SINGLE_SAMPLEFMT, ///< formats.sample_fmt active.
-};
-
-#define FILTER_QUERY_FUNC(func)        \
-        .formats.query_func   = func,  \
-        .formats_state        = FF_FILTER_FORMATS_QUERY_FUNC
-#define FILTER_PIXFMTS_ARRAY(array)    \
-        .formats.pixels_list  = array, \
-        .formats_state        = FF_FILTER_FORMATS_PIXFMT_LIST
-#define FILTER_SAMPLEFMTS_ARRAY(array) \
-        .formats.samples_list = array, \
-        .formats_state        = FF_FILTER_FORMATS_SAMPLEFMTS_LIST
-#define FILTER_PIXFMTS(...)            \
-    FILTER_PIXFMTS_ARRAY(((const enum AVPixelFormat []) { __VA_ARGS__, AV_PIX_FMT_NONE }))
-#define FILTER_SAMPLEFMTS(...)         \
-    FILTER_SAMPLEFMTS_ARRAY(((const enum AVSampleFormat[]) { __VA_ARGS__, AV_SAMPLE_FMT_NONE }))
-#define FILTER_SINGLE_PIXFMT(pix_fmt_)  \
-        .formats.pix_fmt = pix_fmt_,    \
-        .formats_state   = FF_FILTER_FORMATS_SINGLE_PIXFMT
-#define FILTER_SINGLE_SAMPLEFMT(sample_fmt_) \
-        .formats.sample_fmt = sample_fmt_,   \
-        .formats_state      = FF_FILTER_FORMATS_SINGLE_SAMPLEFMT
-
-#define FILTER_INOUTPADS(inout, array) \
-       .inout        = array, \
-       .nb_ ## inout = FF_ARRAY_ELEMS(array)
-#define FILTER_INPUTS(array) FILTER_INOUTPADS(inputs, (array))
-#define FILTER_OUTPUTS(array) FILTER_INOUTPADS(outputs, (array))
-
-/**
- * Tell if an integer is contained in the provided -1-terminated list of integers.
- * This is useful for determining (for instance) if an AVPixelFormat is in an
- * array of supported formats.
- *
- * @param fmt provided format
- * @param fmts -1-terminated list of formats
- * @return 1 if present, 0 if absent
- */
-int ff_fmt_is_in(int fmt, const int *fmts);
-
-/**
  * Returns true if a pixel format is "regular YUV", which includes all pixel
  * formats that are affected by YUV colorspace negotiation.
  */
@@ -238,25 +72,12 @@ int ff_parse_channel_layout(AVChannelLayout *ret, int *nret, const char *arg,
                             void *log_ctx);
 
 /**
- * Set the status field of a link from the source filter.
- * The pts should reflect the timestamp of the status change,
- * in link time base and relative to the frames timeline.
- * In particular, for AVERROR_EOF, it should reflect the
- * end time of the last frame.
- */
-void ff_avfilter_link_set_in_status(AVFilterLink *link, int status, int64_t pts);
-
-/**
  * Negotiate the media format, dimensions, etc of all inputs to a filter.
  *
  * @param filter the filter to negotiate the properties for its inputs
  * @return       zero on successful negotiation
  */
 int ff_filter_config_links(AVFilterContext *filter);
-
-#define D2TS(d)      (isnan(d) ? AV_NOPTS_VALUE : (int64_t)(d))
-#define TS2D(ts)     ((ts) == AV_NOPTS_VALUE ? NAN : (double)(ts))
-#define TS2T(ts, tb) ((ts) == AV_NOPTS_VALUE ? NAN : (double)(ts) * av_q2d(tb))
 
 /* misc trace functions */
 
