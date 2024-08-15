@@ -55,6 +55,7 @@ enum Projections {
     ORTHOGRAPHIC,
     OCTAHEDRON,
     CYLINDRICALEA,
+    DUAL_SQUARE,
     NB_PROJECTIONS,
 };
 
