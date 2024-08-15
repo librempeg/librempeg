@@ -33,7 +33,6 @@
 #include "formats.h"
 #include "video.h"
 #include "avfilter.h"
-#include "internal.h"
 
 enum FrequencyScale {
     FSCALE_LINEAR,

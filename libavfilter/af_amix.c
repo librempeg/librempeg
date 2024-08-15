@@ -40,7 +40,6 @@
 #include "audio.h"
 #include "avfilter.h"
 #include "filters.h"
-#include "internal.h"
 
 #define INPUT_EOF      1    /**< input has reached EOF (may still be active) */
 #define INPUT_EMPTY    2    /**< input have no more samples */

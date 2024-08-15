@@ -23,7 +23,6 @@
 #include "avfilter.h"
 #include "audio.h"
 #include "filters.h"
-#include "internal.h"
 
 #define MAX_DELAY 33
 

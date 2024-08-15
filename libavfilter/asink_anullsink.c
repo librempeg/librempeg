@@ -21,7 +21,6 @@
 #include "libavutil/internal.h"
 #include "avfilter.h"
 #include "filters.h"
-#include "internal.h"
 #include "audio.h"
 
 typedef struct ANullSinkContext {

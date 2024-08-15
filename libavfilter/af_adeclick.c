@@ -25,7 +25,6 @@
 #include "avfilter.h"
 #include "audio.h"
 #include "filters.h"
-#include "internal.h"
 
 static const char *filter_modes[] = {"clicks", "clips", "surges" };
 

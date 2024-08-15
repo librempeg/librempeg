@@ -31,7 +31,6 @@
 #include "audio.h"
 #include "avfilter.h"
 #include "formats.h"
-#include "internal.h"
 
 enum PrecisionType {
     P_AUTO = -1,

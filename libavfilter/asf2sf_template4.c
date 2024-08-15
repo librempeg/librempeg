@@ -17,7 +17,6 @@
  */
 
 #include "avfilter.h"
-#include "internal.h"
 #include "audio.h"
 
 #define fn3(a,b,c,d,e) a##_##b##_##c##_to_##d##_##e

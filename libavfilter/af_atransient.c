@@ -25,7 +25,6 @@
 #include "audio.h"
 #include "filters.h"
 #include "avfilter.h"
-#include "internal.h"
 
 typedef struct PeakContext {
     void *iqueue;

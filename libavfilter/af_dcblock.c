@@ -21,7 +21,6 @@
 #include "libavutil/samplefmt.h"
 #include "avfilter.h"
 #include "audio.h"
-#include "internal.h"
 
 typedef struct DCBlockContext {
     const AVClass *class;

@@ -25,7 +25,6 @@
 #include "formats.h"
 #include "avfilter.h"
 #include "filters.h"
-#include "internal.h"
 
 typedef struct AudioRDFTSRCContext {
     const AVClass *class;

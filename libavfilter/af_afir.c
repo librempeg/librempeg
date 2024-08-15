@@ -39,7 +39,6 @@
 #include "avfilter.h"
 #include "filters.h"
 #include "formats.h"
-#include "internal.h"
 #include "af_afirdsp.h"
 
 typedef struct AudioFIRSegment {
