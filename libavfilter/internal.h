@@ -27,12 +27,6 @@
 #include "libavutil/internal.h"
 #include "avfilter.h"
 
-/**
- * Returns true if a pixel format is "regular YUV", which includes all pixel
- * formats that are affected by YUV colorspace negotiation.
- */
-int ff_fmt_is_regular_yuv(enum AVPixelFormat fmt);
-
 /* Functions to parse audio format arguments */
 
 /**
