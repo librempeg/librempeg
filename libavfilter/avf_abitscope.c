@@ -27,7 +27,6 @@
 #include "formats.h"
 #include "audio.h"
 #include "video.h"
-#include "internal.h"
 
 typedef struct AudioBitScopeContext {
     const AVClass *class;
