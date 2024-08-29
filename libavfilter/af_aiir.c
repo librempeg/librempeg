@@ -77,25 +77,23 @@ typedef struct AudioIIRContext {
     int (*iir_channel)(AVFilterContext *ctx, void *arg, int ch, int nb_jobs);
 } AudioIIRContext;
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    AudioIIRContext *s = ctx->priv;
+    const AudioIIRContext *s = ctx->priv;
     enum AVSampleFormat sample_fmts[] = {
         AV_SAMPLE_FMT_DBLP,
         AV_SAMPLE_FMT_NONE
     };
     int ret;
 
-    ret = ff_set_common_all_channel_counts(ctx);
-    if (ret < 0)
-        return ret;
-
     sample_fmts[0] = s->sample_format;
-    ret = ff_set_common_formats_from_list(ctx, sample_fmts);
+    ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
     if (ret < 0)
         return ret;
 
-    return ff_set_common_all_samplerates(ctx);
+    return 0;
 }
 
 #define IIR_CH(name, type, min, max, need_clipping)                     \
@@ -1237,7 +1235,7 @@ const AVFilter ff_af_aiir = {
     .uninit        = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
                      AVFILTER_FLAG_SLICE_THREADS,
 };
