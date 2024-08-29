@@ -137,25 +137,32 @@ static av_cold void uninit(AVFilterContext *ctx)
     ff_channel_layouts_unref(&s->channel_layouts);
 }
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    AFormatContext *s = ctx->priv;
+    const AFormatContext *s = ctx->priv;
     int ret;
 
-    ret = ff_set_common_formats(ctx, s->formats ? s->formats :
-                                            ff_all_formats(AVMEDIA_TYPE_AUDIO));
-    s->formats = NULL;
-    if (ret < 0)
-        return ret;
-    ret = ff_set_common_samplerates(ctx, s->sample_rates ? s->sample_rates :
-                                                     ff_all_samplerates());
-    s->sample_rates = NULL;
-    if (ret < 0)
-        return ret;
-    ret = ff_set_common_channel_layouts(ctx, s->channel_layouts ? s->channel_layouts :
-                                                            ff_all_channel_counts());
-    s->channel_layouts = NULL;
-    return ret;
+    if (s->formats) {
+        ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, s->formats);
+        if (ret < 0)
+            return ret;
+    }
+
+    if (s->sample_rates) {
+        ret = ff_set_common_samplerates_from_list2(ctx, cfg_in, cfg_out, s->sample_rates);
+        if (ret < 0)
+            return ret;
+    }
+
+    if (s->channel_layouts) {
+        ret = ff_set_common_channel_layouts_from_list2(ctx, cfg_in, cfg_out, s->channel_layouts);
+        if (ret < 0)
+            return ret;
+    }
+
+    return 0;
 }
 
 static const AVFilterPad inputs[] = {
@@ -177,7 +184,7 @@ const AVFilter ff_af_aformat = {
     .flags         = AVFILTER_FLAG_METADATA_ONLY,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
 };
 #endif /* CONFIG_AFORMAT_FILTER */
 
@@ -200,6 +207,6 @@ const AVFilter ff_af_anoformat = {
     .flags         = AVFILTER_FLAG_METADATA_ONLY,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
 };
 #endif /* CONFIG_ANOFORMAT_FILTER */
