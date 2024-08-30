@@ -271,7 +271,7 @@ static int decode_palmapdata(AVCodecContext *avctx)
         dst += s->tiles_w;
     }
 
-    return 0;
+    return ret;
 }
 
 static int decode_tiledata(AVCodecContext *avctx)
@@ -307,7 +307,7 @@ static int decode_tiledata(AVCodecContext *avctx)
         }
     }
 
-    return 0;
+    return ret;
 }
 
 static int sga_decode_frame(AVCodecContext *avctx, AVFrame *frame,
