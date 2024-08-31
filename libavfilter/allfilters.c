@@ -84,6 +84,7 @@ extern const AVFilter ff_af_aphaseshift;
 extern const AVFilter ff_af_apsnr;
 extern const AVFilter ff_af_apsyclip;
 extern const AVFilter ff_af_apulsator;
+extern const AVFilter ff_af_aquant;
 extern const AVFilter ff_af_ardftsrc;
 extern const AVFilter ff_af_arealtime;
 extern const AVFilter ff_af_aresample;
