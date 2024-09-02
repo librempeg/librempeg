@@ -59,13 +59,12 @@ enum MappingMode {
 #define IN_EMPTY  1
 #define OUT_EMPTY 2
 
-#define MAX_CH 64
 typedef struct ChannelMapContext {
     const AVClass *class;
     char **mapping_str;
     unsigned nb_mapping_str;
     AVChannelLayout output_layout;
-    struct ChannelMap map[MAX_CH];
+    struct ChannelMap *map;
     int nch;
     int flags;
     enum MappingMode mode;
@@ -92,12 +91,19 @@ static const AVOption channelmap_options[] = {
 
 AVFILTER_DEFINE_CLASS(channelmap);
 
+static void channelmap_uninit(AVFilterContext *ctx)
+{
+    ChannelMapContext *s = ctx->priv;
+
+    av_freep(&s->map);
+}
+
 static const char* split(const char *message, char delim) {
     const char *next = strchr(message, delim);
     return next;
 }
 
-static int get_channel_idx(const char **map, int *ch, char delim, int max_nb_channels)
+static int get_channel_idx(const char **map, int *ch, char delim)
 {
     const char *next;
     int len;
@@ -111,7 +117,7 @@ static int get_channel_idx(const char **map, int *ch, char delim, int max_nb_cha
     sscanf(*map, "%d%n", ch, &n);
     if (n != len)
         return AVERROR(EINVAL);
-    if (*ch < 0 || *ch >= max_nb_channels)
+    if (*ch < 0)
         return AVERROR(EINVAL);
     *map = next;
     return 0;
@@ -162,7 +168,8 @@ static av_cold int channelmap_init(AVFilterContext *ctx)
     ChannelMapContext *s = ctx->priv;
     enum MappingMode mode;
     int64_t out_ch_mask = 0;
-    uint64_t presence_mask;
+    uint8_t *presence_map = NULL;
+    int ret = 0;
     int i;
 
     if (!s->nb_mapping_str) {
@@ -186,28 +193,26 @@ static av_cold int channelmap_init(AVFilterContext *ctx)
             else
                 mode = MAP_PAIR_STR_STR;
         }
+
+        s->map = av_malloc_array(s->nb_mapping_str, sizeof(*s->map));
+        if (!s->map)
+            return AVERROR(ENOMEM);
     }
 
-    if (s->nb_mapping_str > MAX_CH) {
-        av_log(ctx, AV_LOG_ERROR, "Too many channels mapped: '%d'.\n", s->nb_mapping_str);
-        return AVERROR(EINVAL);
-    }
+    for (i = 0; i < s->nb_mapping_str; i++) {
+        int in_ch_idx = -1, out_ch_idx = -1;
+        int in_ch = -1, out_ch = -1;
+        static const char err[] = "Failed to parse channel map\n";
+        const char *mapping = s->mapping_str[i];
 
-    for (i = 0; i < MAX_CH; i++) {
         s->map[i].in_channel_idx  = -1;
         s->map[i].out_channel_idx = -1;
         s->map[i].in_channel      = -1;
         s->map[i].out_channel     = -1;
-    }
 
-    for (i = 0; i < s->nb_mapping_str; i++) {
-        const char *mapping = s->mapping_str[i];
-        int in_ch_idx = -1, out_ch_idx = -1;
-        int in_ch = -1, out_ch = -1;
-        static const char err[] = "Failed to parse channel map\n";
         switch (mode) {
         case MAP_ONE_INT:
-            if (get_channel_idx(&mapping, &in_ch_idx, 0, MAX_CH) < 0) {
+            if (get_channel_idx(&mapping, &in_ch_idx, 0) < 0) {
                 av_log(ctx, AV_LOG_ERROR, err);
                 return AVERROR(EINVAL);
             }
@@ -223,8 +228,8 @@ static av_cold int channelmap_init(AVFilterContext *ctx)
             s->map[i].out_channel_idx = i;
             break;
         case MAP_PAIR_INT_INT:
-            if (get_channel_idx(&mapping, &in_ch_idx, '-', MAX_CH) < 0 ||
-                get_channel_idx(&mapping, &out_ch_idx, 0, MAX_CH) < 0) {
+            if (get_channel_idx(&mapping, &in_ch_idx, '-') < 0 ||
+                get_channel_idx(&mapping, &out_ch_idx, 0) < 0) {
                 av_log(ctx, AV_LOG_ERROR, err);
                 return AVERROR(EINVAL);
             }
@@ -232,7 +237,7 @@ static av_cold int channelmap_init(AVFilterContext *ctx)
             s->map[i].out_channel_idx = out_ch_idx;
             break;
         case MAP_PAIR_INT_STR:
-            if (get_channel_idx(&mapping, &in_ch_idx, '-', MAX_CH) < 0 ||
+            if (get_channel_idx(&mapping, &in_ch_idx, '-') < 0 ||
                 get_channel(&mapping, &out_ch, 0) < 0) {
                 av_log(ctx, AV_LOG_ERROR, err);
                 return AVERROR(EINVAL);
@@ -246,7 +251,7 @@ static av_cold int channelmap_init(AVFilterContext *ctx)
             break;
         case MAP_PAIR_STR_INT:
             if (get_channel(&mapping, &in_ch, '-') < 0 ||
-                get_channel_idx(&mapping, &out_ch_idx, 0, MAX_CH) < 0) {
+                get_channel_idx(&mapping, &out_ch_idx, 0) < 0) {
                 av_log(ctx, AV_LOG_ERROR, err);
                 return AVERROR(EINVAL);
             }
@@ -280,6 +285,11 @@ static av_cold int channelmap_init(AVFilterContext *ctx)
     if (mode == MAP_NONE) {
         int i;
         s->nch = s->output_layout.nb_channels;
+
+        s->map = av_malloc_array(s->nch, sizeof(*s->map));
+        if (!s->map)
+            return AVERROR(ENOMEM);
+
         for (i = 0; i < s->nch; i++) {
             s->map[i].in_channel_idx  = i;
             s->map[i].out_channel_idx = i;
@@ -306,25 +316,32 @@ static av_cold int channelmap_init(AVFilterContext *ctx)
         }
     }
 
-    presence_mask = 0;
+    presence_map = av_calloc(s->nch, sizeof(*presence_map));
+    if (!presence_map)
+        return AVERROR(ENOMEM);
+
     for (i = 0; i < s->nch; i++) {
-        uint64_t idx_mask;
-        int ret = check_idx_and_id(ctx, s->map[i].out_channel_idx, s->map[i].out_channel, &s->output_layout, "out", OUT_EMPTY);
+        const int out_idx = s->map[i].out_channel_idx;
+        int ret = check_idx_and_id(ctx, out_idx, s->map[i].out_channel, &s->output_layout, "out", OUT_EMPTY);
         if (ret < 0)
             return ret;
         s->map[i].out_empty = ret;
         if (s->map[i].out_empty)
             continue;
-        idx_mask = (1ULL << s->map[i].out_channel_idx);
-        if (presence_mask & idx_mask) {
+        if (presence_map[out_idx]) {
             char layout_name[256];
             av_channel_layout_describe(&s->output_layout, layout_name, sizeof(layout_name));
             av_log(ctx, AV_LOG_ERROR, "Mapping %d assigns channel #%d twice in output layout '%s'.\n",
                    i + 1, s->map[i].out_channel_idx, layout_name);
-            return AVERROR(EINVAL);
+            ret = AVERROR(EINVAL);
+            break;
         }
-        presence_mask |= idx_mask;
+        presence_map[out_idx] = 1;
     }
+
+    av_freep(&presence_map);
+    if (ret < 0)
+        return ret;
 
     return 0;
 }
@@ -413,6 +430,7 @@ const AVFilter ff_af_channelmap = {
     .name          = "channelmap",
     .description   = NULL_IF_CONFIG_SMALL("Remap audio channels."),
     .init          = channelmap_init,
+    .uninit        = channelmap_uninit,
     .priv_size     = sizeof(ChannelMapContext),
     .priv_class    = &channelmap_class,
     FILTER_INPUTS(channelmap_inputs),
