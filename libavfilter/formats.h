@@ -312,6 +312,13 @@ int ff_set_common_formats_from_list2(const AVFilterContext *ctx,
                                      const int *fmts);
 
 av_warn_unused_result
+int ff_set_common_formats_from_list2_invert(const AVFilterContext *ctx,
+                                            AVFilterFormatsConfig **cfg_in,
+                                            AVFilterFormatsConfig **cfg_out,
+                                            const int *fmts,
+                                            enum AVMediaType type);
+
+av_warn_unused_result
 int ff_add_channel_layout(AVFilterChannelLayouts **l,
                           const AVChannelLayout *channel_layout);
 

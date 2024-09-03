@@ -1048,6 +1048,49 @@ int ff_set_common_formats_from_list2(const AVFilterContext *ctx,
     return ff_set_common_formats2(ctx, cfg_in, cfg_out, ff_make_format_list(fmts));
 }
 
+int ff_set_common_formats_from_list2_invert(const AVFilterContext *ctx,
+                                            AVFilterFormatsConfig **cfg_in,
+                                            AVFilterFormatsConfig **cfg_out,
+                                            const int *fmts,
+                                            enum AVMediaType type)
+{
+    AVFilterFormats *formats = NULL;
+    int ret;
+
+    if (type == AVMEDIA_TYPE_AUDIO) {
+        enum AVSampleFormat fmt = 0;
+
+        while (av_get_sample_fmt_name(fmt)) {
+            int i = 0;
+            while (fmts[i] != AV_SAMPLE_FMT_NONE) {
+                if (fmt == fmts[i])
+                    goto skipa;
+                i++;
+            }
+            if ((ret = ff_add_format(&formats, fmt)) < 0)
+                return ret;
+skipa:
+            fmt++;
+        }
+    } else if (type == AVMEDIA_TYPE_VIDEO) {
+        enum AVPixelFormat fmt = 0;
+
+        while (av_get_pix_fmt_name(fmt)) {
+            int i = 0;
+            while (fmts[i] != AV_PIX_FMT_NONE) {
+                if (fmt == fmts[i])
+                    goto skipv;
+                i++;
+            }
+            if ((ret = ff_add_format(&formats, fmt)) < 0)
+                return ret;
+skipv:
+            fmt++;
+        }
+    }
+
+    return ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
+}
 
 int ff_default_query_formats(AVFilterContext *ctx)
 {
