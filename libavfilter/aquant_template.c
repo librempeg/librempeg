@@ -17,14 +17,14 @@
  */
 
 #undef ftype
-#undef FLOOR
+#undef ROUND
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
-#define FLOOR floorf
+#define ROUND roundf
 #define SAMPLE_FORMAT float
 #define ftype float
 #else
-#define FLOOR floor
+#define ROUND round
 #define SAMPLE_FORMAT double
 #define ftype double
 #endif
@@ -58,14 +58,14 @@ static int fn(shaper_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
             for (int n = 0; n < nb_samples; n++) {
                 const ftype wanted = input[n] - filter[n];
 
-                output[n] = FLOOR(wanted * factor) * scale;
+                output[n] = ROUND(wanted * factor) * scale;
                 error[n] = output[n] - wanted;
             }
         } else {
             for (int n = 0; n < nb_samples; n++) {
                 const ftype wanted = input[n];
 
-                output[n] = FLOOR(wanted * factor) * scale;
+                output[n] = ROUND(wanted * factor) * scale;
                 error[n] = output[n] - wanted;
             }
         }
@@ -90,7 +90,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
         ftype *output = (ftype *)out->extended_data[c];
 
         for (int n = 0; n < nb_samples; n++)
-            output[n] = FLOOR(input[n] * factor) * scale;
+            output[n] = ROUND(input[n] * factor) * scale;
     }
 
     return 0;
