@@ -17,6 +17,7 @@ version <next>:
 - xHE-AAC decoder
 - removed DEC Alpha DSP and support code
 - perlin video source filter
+- YUV colorspace negotiation for codecs and filters, obsoleting YUVJ
 
 version 7.0:
 - DXV DXT1 encoder
