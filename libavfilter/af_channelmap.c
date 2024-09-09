@@ -98,7 +98,8 @@ static void channelmap_uninit(AVFilterContext *ctx)
     av_freep(&s->map);
 }
 
-static const char* split(const char *message, char delim) {
+static const char* split(const char *message, char delim)
+{
     const char *next = strchr(message, delim);
     return next;
 }
@@ -126,12 +127,15 @@ static int get_channel_idx(const char **map, int *ch, char delim)
 static int get_channel(const char **map, int *ch, char delim)
 {
     const char *next = split(*map, delim);
+    char *nmap;
     if (!next && delim == '-')
         return AVERROR(EINVAL);
-    *ch = av_channel_from_string(*map);
+    nmap = next ? av_strndup(*map, next-*map) : av_strdup(*map);
+    *ch = av_channel_from_string(nmap);
+    av_freep(&nmap);
     if (*ch < 0)
         return AVERROR(EINVAL);
-    *map = next;
+    *map = next ? next+1 : next;
     return 0;
 }
 
