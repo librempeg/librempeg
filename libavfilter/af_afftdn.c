@@ -387,7 +387,7 @@ static void process_frame(AVFilterContext *ctx,
             noisy_data[i] = power = get_power(fft_data_dbl[i].re, fft_data_dbl[i].im);
             break;
         default:
-            av_assert2(0);
+            av_assert0(0);
         }
 
         mag_abs_var = power / abs_var[i];
@@ -488,7 +488,7 @@ static void process_frame(AVFilterContext *ctx,
         }
         break;
     default:
-        av_assert2(0);
+        av_assert0(0);
     }
 }
 
@@ -643,7 +643,7 @@ static int config_input(AVFilterLink *inlink)
         scale = &dscale;
         break;
     default:
-        av_assert2(0);
+        av_assert0(0);
     }
 
     s->dnch = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->dnch));
@@ -925,7 +925,7 @@ static void sample_noise_block(AudioFFTDeNoiseContext *s,
             fft_in_dbl[i] = 0.;
         break;
     default:
-        av_assert2(0);
+        av_assert0(0);
     }
 
     dnch->tx_fn(dnch->fft, dnch->fft_out, dnch->fft_in, s->sample_size);
@@ -968,7 +968,7 @@ static void sample_noise_block(AudioFFTDeNoiseContext *s,
                    fft_out_dbl[n].im * fft_out_dbl[n].im;
             break;
         default:
-            av_assert2(0);
+            av_assert0(0);
         }
 
         mag2 = fmax(mag2, s->sample_floor);
@@ -1072,7 +1072,7 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
                 fft_in_dbl[m] = 0.;
             break;
         default:
-            av_assert2(0);
+            av_assert0(0);
         }
 
         dnch->tx_fn(dnch->fft, dnch->fft_out, dnch->fft_in, s->sample_size);
@@ -1094,7 +1094,7 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
                 dst[m] += s->window[m] * fft_in_dbl[m] / (1LL << 23);
             break;
         default:
-            av_assert2(0);
+            av_assert0(0);
         }
     }
 
@@ -1213,7 +1213,7 @@ static int output_subframe(AVFilterLink *inlink,
                     dst_dbl[m] = orig_dbl[m];
                 break;
             default:
-                av_assert2(0);
+                av_assert0(0);
             }
             break;
         case OUT_MODE:
@@ -1227,7 +1227,7 @@ static int output_subframe(AVFilterLink *inlink,
                     dst_dbl[m] = src[m];
                 break;
             default:
-                av_assert2(0);
+                av_assert0(0);
             }
             break;
         case NOISE_MODE:
@@ -1241,7 +1241,7 @@ static int output_subframe(AVFilterLink *inlink,
                     dst_dbl[m] = orig_dbl[m] - src[m];
                 break;
             default:
-                av_assert2(0);
+                av_assert0(0);
             }
             break;
         default:
