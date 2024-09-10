@@ -19,7 +19,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/intreadwrite.h"
 #include "libavutil/avstring.h"
 #include "libavutil/ffmath.h"
 #include "libavutil/mem.h"
@@ -29,7 +28,6 @@
 #include "filters.h"
 #include "formats.h"
 #include "audio.h"
-#include "video.h"
 
 #define FILTER_ORDER 4
 
