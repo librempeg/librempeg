@@ -70,15 +70,7 @@ static int activate(AVFilterContext *ctx)
     if (!(frame = ff_get_audio_buffer(outlink, nb_samples)))
         return AVERROR(ENOMEM);
 
-    if (outlink->format == AV_SAMPLE_FMT_FLT) {
-        float *coeffs = s->coeffs;
-
-        memcpy(frame->data[0], coeffs + s->pts, nb_samples * s->sample_size);
-    } else {
-        double *coeffs = s->coeffs;
-
-        memcpy(frame->data[0], coeffs + s->pts, nb_samples * s->sample_size);
-    }
+    memcpy(frame->data[0], (uint8_t *)s->coeffs + s->pts * s->sample_size, nb_samples * s->sample_size);
 
     frame->pts = s->pts;
     s->pts    += nb_samples;
