@@ -70,7 +70,6 @@ typedef struct AudioNEqualizerContext {
 
 #define OFFSET(x) offsetof(AudioNEqualizerContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM
-#define V AV_OPT_FLAG_VIDEO_PARAM
 #define F AV_OPT_FLAG_FILTERING_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
@@ -570,7 +569,6 @@ const AVFilter ff_af_anequalizer = {
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
     .process_command = process_command,
-    .flags         = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
-                     AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                      AVFILTER_FLAG_SLICE_THREADS,
 };
