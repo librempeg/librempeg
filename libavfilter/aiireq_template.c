@@ -97,27 +97,39 @@ static void fn(filter_channel)(AVFilterContext *ctx, AVFrame *out, AVFrame *in, 
     fn(ChState) *state = s->chs;
     fn(Equalizer) *eq = s->eqs;
 
-    for (int i = 0; i < nb_samples; i++) {
-        ftype x = src[i];
+    memcpy(dst, src, nb_samples * sizeof(*dst));
 
-        if (!is_disabled) {
-            for (int n = 0; n < s->nb_bands; n++) {
-                const fn(Equalizer) *eqs = &eq[n];
-                fn(ChState) *chs = &state[start + n];
+    for (int n = 0; n < s->nb_bands; n++) {
+        const fn(Equalizer) *eqs = &eq[n];
+        fn(ChState) *chs = &state[start + n];
 
-                for (int j = 0; j < eqs->nb_sections; j++) {
-                    const fn(Section) *sec = &eqs->sections[j];
-                    const ftype y = x - chs->z1[j] - chs->z2[j];
+        for (int j = 0; j < eqs->nb_sections; j++) {
+            const fn(Section) *sec = &eqs->sections[j];
+            const ftype c1 = sec->c1;
+            const ftype c2 = sec->c2;
+            const ftype d0 = sec->d0;
+            const ftype d1 = sec->d1;
+            ftype z1 = chs->z1[j];
+            ftype z2 = chs->z2[j];
 
-                    x = sec->d0 * y + sec->d1 * chs->z1[j] + chs->z2[j];
-                    chs->z2[j] += sec->c2 * chs->z1[j];
-                    chs->z1[j] += sec->c1 * y;
-                }
+            for (int i = 0; i < nb_samples; i++) {
+                ftype x = dst[i];
+                const ftype y = x - z1 - z2;
+
+                x = d0 * y + d1 * z1 + z2;
+                z2 += c2 * z1;
+                z1 += c1 * y;
+
+                dst[i] = x * overall_gain;
             }
-        }
 
-        dst[i] = x * overall_gain;
+            chs->z1[j] = z1;
+            chs->z2[j] = z2;
+        }
     }
+
+    if (is_disabled)
+        memcpy(dst, src, nb_samples * sizeof(*dst));
 }
 
 static int fn(init_filter)(AVFilterContext *ctx)
