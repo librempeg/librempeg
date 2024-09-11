@@ -61,7 +61,7 @@ static int fn(get_svf)(double fs, double fc, int filter_order, double gain, doub
     Dw = M_PI * (fc / fs - 0.5);
     GB = pow(10.0, ((1.0 / sqrt(2.0)) * gain / 20.0));
     G = pow(10.0, gain / 20.0);
-    gR = (G * G - GB * GB) / (GB * GB - 1);
+    gR = (G * G - GB * GB) / (GB * GB - 1.0);
     reci1Ord = 1.0 / filter_order;
     rat_ord = pow(gR, reci1Ord);
     nt_D = tan(Dw);
@@ -74,7 +74,7 @@ static int fn(get_svf)(double fs, double fc, int filter_order, double gain, doub
 
     for (int n = 0; n < L; n++) {
         fn(Section) *sec = &eq->sections[n];
-        double si = sin((2.0 * (n + 1) - 1.0) * M_PI / (2.0 * filter_order));
+        double si = sin((2.0 * (n + 1.0) - 1.0) * M_PI / (2.0 * filter_order));
 
         sec->c1 = 2.0 - 2.0 * (nt_D2 - rat_ord) / (nt_D2 + rat_ord - 2.0 * rat_ro * nt_D * si);
         sec->c2 = (rat_ro * ct_D) / (rat_ro * ct_D - si * stD);
