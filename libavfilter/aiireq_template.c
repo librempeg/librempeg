@@ -47,13 +47,11 @@ typedef struct fn(ChState) {
     ftype z2[6];
 } fn(ChState);
 
-static int fn(get_svf)(double fs, double fc, int filter_order, double gain, double overall_gain_dB,
-                       fn(Equalizer) *eq, float *overall_gain)
+static int fn(get_svf)(double fs, double fc, int filter_order, double gain, fn(Equalizer) *eq)
 {
     double Dw, GB, G, gR, reci1Ord, rat_ord, nt_D, nt_D2, stD, ct_D, rat_ro, gP1, gP2;
     int L;
 
-    *overall_gain = pow(10.0, overall_gain_dB / 20.0);
     if (fabs(gain) <= FLT_EPSILON)
         return 0;
 
@@ -120,7 +118,7 @@ static void fn(filter_channel)(AVFilterContext *ctx, AVFrame *out, AVFrame *in, 
                 z2 += c2 * z1;
                 z1 += c1 * y;
 
-                dst[i] = x * overall_gain;
+                dst[i] = x;
             }
 
             chs->z1[j] = z1;
@@ -128,8 +126,12 @@ static void fn(filter_channel)(AVFilterContext *ctx, AVFrame *out, AVFrame *in, 
         }
     }
 
-    if (is_disabled)
+    if (is_disabled) {
         memcpy(dst, src, nb_samples * sizeof(*dst));
+    } else {
+        for (int n = 0; n < nb_samples; n++)
+            dst[n] *= overall_gain;
+    }
 }
 
 static int fn(init_filter)(AVFilterContext *ctx)
@@ -152,34 +154,25 @@ static int fn(init_filter)(AVFilterContext *ctx)
         fn(Equalizer) *eqs = &eq[n];
         const int gn = FFMIN(n, s->nb_gains-1);
         const int sn = FFMIN(n, s->nb_sections-1);
-        double design_freq, overall_gain, dB;
+        double design_freq, dB;
 
         if (n == 0) {
             eqs->nb_sections = s->section_opt[0];
             design_freq = s->band_opt[0];
-            overall_gain = s->gain_opt[0];
-            dB = (s->nb_gains > 1) ? s->gain_opt[1] - s->gain_opt[0] : s->gain_opt[0];
+            dB = s->gain_opt[0];
         } else if (n == s->nb_bands) {
             eqs->nb_sections = s->section_opt[sn];
             design_freq = s->band_opt[n-1];
-            overall_gain = 0.0;
             dB = 0.0;
         } else {
             eqs->nb_sections = s->section_opt[sn];
-            design_freq = (s->band_opt[n] + s->band_opt[n-1]) * 0.5;
-            overall_gain = 0.0;
+            design_freq = s->band_opt[n-1];
             dB = s->gain_opt[gn] - s->gain_opt[gn-1];
         }
 
         design_freq = av_clipd(design_freq, 0.0, fs-0.1);
 
-        if (n == 0) {
-            eqs->nb_sections = fn(get_svf)(fs, design_freq, eqs->nb_sections * 2, dB, overall_gain, eqs, &s->overall_gain);
-        } else {
-            float dummy;
-
-            eqs->nb_sections = fn(get_svf)(fs, design_freq, eqs->nb_sections * 2, dB, overall_gain, eqs, &dummy);
-        }
+        eqs->nb_sections = fn(get_svf)(fs, design_freq, eqs->nb_sections * 2, dB, eqs);
     }
 
     s->filter_channel = fn(filter_channel);

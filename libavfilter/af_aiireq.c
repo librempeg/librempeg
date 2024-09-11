@@ -64,6 +64,8 @@ static const AVOption aiireq_options[] = {
     { "b",     "set central frequency values per band", OFFSET(band_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_bands}, 0, INT_MAX, FLAGS },
     { "sections", "set number of sections per band", OFFSET(section_opt), AV_OPT_TYPE_INT|AR, {.arr=&def_sections}, 1, 6, FLAGS },
     { "s",        "set number of sections per band", OFFSET(section_opt), AV_OPT_TYPE_INT|AR, {.arr=&def_sections}, 1, 6, FLAGS },
+    { "gain",  "set output gain",                    OFFSET(overall_gain), AV_OPT_TYPE_FLOAT, {.dbl=1.0},           0, 2, FLAGS },
+    { "a",     "set output gain",                    OFFSET(overall_gain), AV_OPT_TYPE_FLOAT, {.dbl=1.0},           0, 2, FLAGS },
     { NULL }
 };
 
