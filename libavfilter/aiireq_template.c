@@ -122,8 +122,8 @@ static void fn(filter_channel)(AVFilterContext *ctx, AVFrame *out, AVFrame *in, 
                 dst[i] = x;
             }
 
-            chs->z1[j] = z1;
-            chs->z2[j] = z2;
+            chs->z1[j] = isnormal(z1) ? z1 : F(0.0);
+            chs->z2[j] = isnormal(z2) ? z2 : F(0.0);
         }
     }
 
