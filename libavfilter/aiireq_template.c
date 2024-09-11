@@ -95,7 +95,8 @@ static void fn(filter_channel)(AVFilterContext *ctx, AVFrame *out, AVFrame *in, 
     fn(ChState) *state = s->chs;
     fn(Equalizer) *eq = s->eqs;
 
-    memcpy(dst, src, nb_samples * sizeof(*dst));
+    if (dst != src)
+        memcpy(dst, src, nb_samples * sizeof(*dst));
 
     for (int n = 0; n < s->nb_bands; n++) {
         const fn(Equalizer) *eqs = &eq[n];
