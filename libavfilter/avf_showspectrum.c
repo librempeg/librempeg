@@ -396,7 +396,6 @@ static int run_channel_fft(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     const float *window_func_lut = s->window_func_lut;
     AVFrame *fin = arg;
     const int ch = jobnr;
-    int n;
 
     /* fill FFT input with the number of samples available */
     const float *p = (float *)fin->extended_data[ch];
@@ -417,7 +416,7 @@ static int run_channel_fft(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
         int N = s->win_size;
         int M = s->win_size / 2;
 
-        for (n = 0; n < s->win_size; n++) {
+        for (int n = 0; n < s->win_size; n++) {
             s->fft_data[ch][n].re = in_frame[n] * window_func_lut[n];
             s->fft_data[ch][n].im = 0;
         }
@@ -484,7 +483,7 @@ static int run_channel_fft(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
             s->fft_data[ch][k].im = b;
         }
     } else {
-        for (n = 0; n < s->win_size; n++) {
+        for (int n = 0; n < s->win_size; n++) {
             s->fft_in[ch][n].re = in_frame[n] * window_func_lut[n];
             s->fft_in[ch][n].im = 0;
         }
@@ -964,7 +963,6 @@ static int draw_legend(AVFilterContext *ctx, uint64_t samples)
             static const char *lin_fmt = "%.3f";
             const float a = av_clipf(1.f - y / (float)(h - 1), 0.f, 1.f);
             const float value = s->scale == LOG ? log10f(get_iscale(ctx, s->scale, a)) * 20.f : get_iscale(ctx, s->scale, a);
-            char *text;
 
             text = av_asprintf(s->scale == LOG ? log_fmt : lin_fmt, value);
             if (!text)
@@ -1275,7 +1273,7 @@ static int config_output(AVFilterLink *outlink)
     if (s->orientation == HORIZONTAL && s->sliding == FULLFRAME)
         s->auto_frame_rate = av_mul_q(s->auto_frame_rate, av_make_q(1, s->h));
     if (!s->single_pic && strcmp(s->rate_str, "auto")) {
-        int ret = av_parse_video_rate(&s->frame_rate, s->rate_str);
+        ret = av_parse_video_rate(&s->frame_rate, s->rate_str);
         if (ret < 0)
             return ret;
     } else if (s->single_pic) {
