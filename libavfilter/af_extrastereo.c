@@ -56,8 +56,7 @@ static int query_formats(const AVFilterContext *ctx,
         AV_CHANNEL_LAYOUT_STEREO,
         { .nb_channels = 0 },
     };
-
-     int ret;
+    int ret;
 
     ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, formats);
     if (ret < 0)
