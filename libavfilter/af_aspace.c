@@ -314,10 +314,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                     Speaker *speaker = &s->speakers[ch];
                     const float gain = speaker->gain;
 
-                    for (int n = 0; n < out->nb_samples; n++) {
+                    for (int m = 0; m < out->nb_samples; m++) {
                         float *w = (float *)s->w->extended_data[ch];
 
-                        w[n] = gain;
+                        w[m] = gain;
                     }
                 }
                 break;
@@ -326,10 +326,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                     Speaker *speaker = &s->speakers[ch];
                     const double gain = speaker->gain;
 
-                    for (int n = 0; n < out->nb_samples; n++) {
+                    for (int m = 0; m < out->nb_samples; m++) {
                         double *w = (double *)s->w->extended_data[ch];
 
-                        w[n] = gain;
+                        w[m] = gain;
                     }
                 }
                 break;
