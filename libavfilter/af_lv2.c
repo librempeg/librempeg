@@ -430,7 +430,6 @@ static int config_output(AVFilterLink *outlink)
         outlink->format      = inlink->format;
         outlink->sample_rate = sample_rate = inlink->sample_rate;
         if (s->nb_inputs == s->nb_outputs) {
-            int ret;
             if ((ret = av_channel_layout_copy(&outlink->ch_layout, &inlink->ch_layout)) < 0)
                 return ret;
         }
