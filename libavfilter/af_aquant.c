@@ -54,23 +54,19 @@ static const AVOption aquant_options[] = {
 
 AVFILTER_DEFINE_CLASS(aquant);
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    AudioQuantContext *s = ctx->priv;
+    const AudioQuantContext *s = ctx->priv;
     static const enum AVSampleFormat sample_fmts[3][3] = {
         { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_NONE },
         { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE },
         { AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_NONE },
     };
-    int ret;
 
-    if ((ret = ff_set_common_all_channel_counts(ctx)) < 0)
-        return ret;
-
-    if ((ret = ff_set_common_formats_from_list(ctx, sample_fmts[s->precision])) < 0)
-        return ret;
-
-    return ff_set_common_all_samplerates(ctx);
+    return ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out,
+                                            sample_fmts[s->precision]);
 }
 
 static int activate(AVFilterContext *ctx)
@@ -274,7 +270,7 @@ const AVFilter ff_af_aquant = {
     .activate       = activate,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .flags          = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
                       AVFILTER_FLAG_DYNAMIC_INPUTS |
                       AVFILTER_FLAG_SLICE_THREADS,
