@@ -87,6 +87,7 @@ typedef struct CLAPContext {
     AVFrame **in_frames;
     AVFrame **out_frames;
 
+    int64_t steady_time;
     int64_t pts;
     int64_t duration;
 } CLAPContext;
@@ -146,7 +147,7 @@ static int filter_frame(AVFilterContext *ctx)
             s->out_buffers[i].data32[ch] = (float *)s->out_frames[i]->extended_data[ch];
     }
 
-    process.steady_time = -1;
+    process.steady_time = s->steady_time;
     process.frames_count = s->in_frames[0]->nb_samples;
     process.transport = NULL;
 
@@ -174,6 +175,8 @@ static int filter_frame(AVFilterContext *ctx)
     }
 
     err = s->clap_plugin->process(s->clap_plugin, &process);
+
+    s->steady_time += s->in_frames[0]->nb_samples;
 
     for (int i = 0; i < s->in_ports; i++)
         av_frame_free(&s->in_frames[i]);
