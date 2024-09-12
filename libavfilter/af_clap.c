@@ -125,8 +125,8 @@ static int filter_frame(AVFilterContext *ctx)
         s->out_frames[i] = ff_get_audio_buffer(ctx->outputs[i],
                                                s->in_frames[0]->nb_samples);
         if (!s->out_frames[i]) {
-            for (int i = 0; i < s->in_ports; i++)
-                av_frame_free(&s->in_frames[i]);
+            for (int j = 0; j < s->in_ports; j++)
+                av_frame_free(&s->in_frames[j]);
             return AVERROR(ENOMEM);
         }
         if (s->in_frames[0])
@@ -512,9 +512,9 @@ static av_cold int init(AVFilterContext *ctx)
     plugin_index = 0;
     if (s->plugin) {
         for (int i = 0; i < plugin_count; i++) {
-            const clap_plugin_descriptor_t *plugin_desc = s->plugin_factory->get_plugin_descriptor(s->plugin_factory, i);
+            const clap_plugin_descriptor_t *plugin_desci = s->plugin_factory->get_plugin_descriptor(s->plugin_factory, i);
 
-            if (!strcmp(s->plugin, plugin_desc->id)) {
+            if (!strcmp(s->plugin, plugin_desci->id)) {
                 plugin_index = i;
                 break;
             }
@@ -523,10 +523,10 @@ static av_cold int init(AVFilterContext *ctx)
                 av_log(ctx, AV_LOG_ERROR, "Requested plugin '%s' is not found.\n", s->plugin);
                 av_log(ctx, AV_LOG_ERROR, "Available plugins are:\n");
 
-                for (int i = 0; i < plugin_count; i++) {
-                    const clap_plugin_descriptor_t *plugin_desc = s->plugin_factory->get_plugin_descriptor(s->plugin_factory, i);
+                for (int j = 0; j < plugin_count; j++) {
+                    const clap_plugin_descriptor_t *plugin_descj = s->plugin_factory->get_plugin_descriptor(s->plugin_factory, j);
 
-                    av_log(ctx, AV_LOG_ERROR, "%s\n", plugin_desc->id);
+                    av_log(ctx, AV_LOG_ERROR, "%s\n", plugin_descj->id);
                 }
 
                 return AVERROR_EXIT;
@@ -793,10 +793,10 @@ static int activate(AVFilterContext *ctx)
             continue;
 
         if (ff_outlink_frame_wanted(ctx->outputs[i])) {
-            for (int i = 0; i < ctx->nb_inputs; i++) {
-                if (s->in_frames[i])
+            for (int j = 0; j < ctx->nb_inputs; j++) {
+                if (s->in_frames[j])
                     continue;
-                ff_inlink_request_frame(ctx->inputs[i]);
+                ff_inlink_request_frame(ctx->inputs[j]);
             }
 
             return 0;
