@@ -75,7 +75,7 @@ static av_cold int init(AVFilterContext *ctx)
 
     for (int i = 0; i < channel_layout.nb_channels; i++) {
         enum AVChannel channel = av_channel_layout_channel_from_index(&channel_layout, i);
-        char buf[64];
+        char buf[128];
         AVFilterPad pad = { .flags = AVFILTERPAD_FLAG_FREE_NAME };
 
         av_channel_name(buf, sizeof(buf), channel);
@@ -89,7 +89,6 @@ static av_cold int init(AVFilterContext *ctx)
         if (all) {
             s->map[i] = i;
         } else {
-            char buf[128];
             av_channel_layout_describe(&s->channel_layout, buf, sizeof(buf));
             if ((ret = av_channel_layout_index_from_channel(&s->channel_layout, channel)) < 0) {
                 av_log(ctx, AV_LOG_ERROR, "Channel name '%s' not present in channel layout '%s'.\n",
