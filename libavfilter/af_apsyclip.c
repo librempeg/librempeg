@@ -447,8 +447,8 @@ static void feed(AVFilterContext *ctx, int ch,
         s->itx_fn(s->itx_ctx[ch], clipping_delta, spectrum_buf, sizeof(AVComplexFloat));
 
         peak = 0.f;
-        for (int i = 0; i < fft_size; i++)
-            peak = fmaxf(peak, fabsf((windowed_frame[i] + clipping_delta[i]) * inv_window[i]));
+        for (int j = 0; j < fft_size; j++)
+            peak = fmaxf(peak, fabsf((windowed_frame[j] + clipping_delta[j]) * inv_window[j]));
         peak *= clip_level_inv;
 
         // Automatically adjust mask_curve as necessary to reach peak target
@@ -476,8 +476,8 @@ static void feed(AVFilterContext *ctx, int ch,
 
         // Be less strict in the next iteration.
         // This helps with peak control.
-        for (int i = 0; i < fft_size / 2 + 1; i++)
-            mask_curve[i] *= mask_curve_shift;
+        for (int j = 0; j < fft_size / 2 + 1; j++)
+            mask_curve[j] *= mask_curve_shift;
     }
 
     // do overlap & add
