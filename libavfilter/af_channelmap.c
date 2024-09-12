@@ -174,7 +174,6 @@ static av_cold int channelmap_init(AVFilterContext *ctx)
     int64_t out_ch_mask = 0;
     uint8_t *presence_map = NULL;
     int ret = 0;
-    int i;
 
     if (!s->nb_mapping_str) {
         mode = MAP_NONE;
@@ -203,7 +202,7 @@ static av_cold int channelmap_init(AVFilterContext *ctx)
             return AVERROR(ENOMEM);
     }
 
-    for (i = 0; i < s->nb_mapping_str; i++) {
+    for (int i = 0; i < s->nb_mapping_str; i++) {
         int in_ch_idx = -1, out_ch_idx = -1;
         int in_ch = -1, out_ch = -1;
         static const char err[] = "Failed to parse channel map\n";
@@ -287,14 +286,13 @@ static av_cold int channelmap_init(AVFilterContext *ctx)
     }
 
     if (mode == MAP_NONE) {
-        int i;
         s->nch = s->output_layout.nb_channels;
 
         s->map = av_malloc_array(s->nch, sizeof(*s->map));
         if (!s->map)
             return AVERROR(ENOMEM);
 
-        for (i = 0; i < s->nch; i++) {
+        for (int i = 0; i < s->nch; i++) {
             s->map[i].in_channel_idx  = i;
             s->map[i].out_channel_idx = i;
         }
@@ -314,7 +312,7 @@ static av_cold int channelmap_init(AVFilterContext *ctx)
     }
 
     if (mode == MAP_PAIR_INT_STR || mode == MAP_PAIR_STR_STR) {
-        for (i = 0; i < s->nch; i++) {
+        for (int i = 0; i < s->nch; i++) {
             s->map[i].out_channel_idx = av_channel_layout_index_from_channel(
                 &s->output_layout, s->map[i].out_channel);
         }
@@ -324,7 +322,7 @@ static av_cold int channelmap_init(AVFilterContext *ctx)
     if (!presence_map)
         return AVERROR(ENOMEM);
 
-    for (i = 0; i < s->nch; i++) {
+    for (int i = 0; i < s->nch; i++) {
         const int out_idx = s->map[i].out_channel_idx;
         ret = check_idx_and_id(ctx, out_idx, s->map[i].out_channel, &s->output_layout, "out", OUT_EMPTY);
         if (ret < 0)
