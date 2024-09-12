@@ -247,7 +247,7 @@ static int config_output(AVFilterLink *outlink)
     int height = ctx->inputs[0]->h;
     int width = ctx->inputs[0]->w;
     FFFrameSyncIn *in;
-    int i, ret;
+    int ret;
 
     for (int i = 1; i < s->nb_inputs && s->xmedian; i++) {
         if (ctx->inputs[i]->h != height || ctx->inputs[i]->w != width) {
@@ -300,10 +300,8 @@ static int config_output(AVFilterLink *outlink)
     s->fs.opaque = s;
     s->fs.on_event = process_frame;
 
-    for (i = 0; i < s->nb_inputs; i++) {
-        AVFilterLink *inlink = ctx->inputs[i];
-
-        in[i].time_base = inlink->time_base;
+    for (int i = 0; i < s->nb_inputs; i++) {
+        in[i].time_base = ctx->inputs[i]->time_base;
         in[i].sync   = 1;
         in[i].before = EXT_STOP;
         in[i].after  = EXT_INFINITY;
