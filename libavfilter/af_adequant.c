@@ -158,7 +158,7 @@ static int activate(AVFilterContext *ctx)
 
     if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
         if (s->blocksize > 0) {
-            AVFrame *in = ff_get_audio_buffer(outlink, s->blocksize);
+            in = ff_get_audio_buffer(outlink, s->blocksize);
             if (!in)
                 return AVERROR(ENOMEM);
 
