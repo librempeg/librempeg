@@ -115,7 +115,7 @@ static int query_formats(AVFilterContext *ctx)
         return ret;
 
     if (s->do_video) {
-        AVFilterLink *outlink = ctx->outputs[1];
+        outlink = ctx->outputs[1];
 
         formats = ff_make_format_list(pix_fmts);
         if ((ret = ff_formats_ref(formats, &outlink->incfg.formats)) < 0)
