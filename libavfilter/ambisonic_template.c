@@ -70,14 +70,14 @@ static int fn(transform)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
     AVFrame *in = s->sframe;
 
     for (int ch = start; ch < end; ch++) {
-        const ftype *src = (const ftype *)in->extended_data[0];
+        const ftype *src0 = (const ftype *)in->extended_data[0];
         ftype *dst = (ftype *)out->extended_data[ch];
-        ftype mul = s->transform_mat[s->seq_map[ch]][s->seq_map[0]];
+        ftype mul0 = s->transform_mat[s->seq_map[ch]][s->seq_map[0]];
 
 #if DEPTH == 32
-        s->fdsp->vector_fmul_scalar(dst, src, mul, FFALIGN(nb_samples, 16));
+        s->fdsp->vector_fmul_scalar(dst, src0, mul0, FFALIGN(nb_samples, 16));
 #else
-        s->fdsp->vector_dmul_scalar(dst, src, mul, FFALIGN(nb_samples, 16));
+        s->fdsp->vector_dmul_scalar(dst, src0, mul0, FFALIGN(nb_samples, 16));
 #endif
         for (int ch2 = 1; ch2 < nb_channels; ch2++) {
             const ftype *src = (const ftype *)in->extended_data[ch2];
