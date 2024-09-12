@@ -201,9 +201,7 @@ static int config_input(AVFilterLink *inlink)
         int ret;
 
         ret = parse_delay(s->delays[i], &d->delay, ctx, inlink->sample_rate);
-        if (ret == 1)
-            break;
-        else if (ret < 0)
+        if (ret < 0)
             return ret;
     }
 
@@ -282,12 +280,9 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     for (i = 0; i < FFMIN(s->nb_delays_opt, s->nb_delays); i++) {
         ChanDelay *d = &s->chandelay[i];
         int64_t new_delay = 0;
-        int ret;
 
         ret = parse_delay(s->delays[i], &new_delay, ctx, inlink->sample_rate);
-        if (ret == 1)
-            break;
-        else if (ret < 0)
+        if (ret < 0)
             return ret;
 
         ret = s->resize_channel_samples(d, new_delay);
