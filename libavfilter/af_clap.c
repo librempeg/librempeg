@@ -387,6 +387,44 @@ static int process_options(AVFilterContext *ctx, clap_plugin_params_t *plugin_pa
     return 0;
 }
 
+static int config_input(AVFilterLink *inlink)
+{
+    AVFilterContext *ctx = inlink->dst;
+    CLAPContext *s = ctx->priv;
+    const int i = FF_INLINK_IDX(inlink);
+    clap_audio_port_info_t inf;
+
+    s->clap_ports->get(s->clap_plugin, i, 1, &inf);
+
+    s->in_buffers[i].latency = 0;
+    s->in_buffers[i].constant_mask = 0;
+    s->in_buffers[i].channel_count = inf.channel_count;
+    s->in_buffers[i].data32 = av_calloc(inf.channel_count, sizeof(*s->in_buffers[i].data32));
+    if (!s->in_buffers[i].data32)
+        return AVERROR(ENOMEM);
+
+    return 0;
+}
+
+static int config_output(AVFilterLink *outlink)
+{
+    AVFilterContext *ctx = outlink->src;
+    CLAPContext *s = ctx->priv;
+    const int i = FF_OUTLINK_IDX(outlink);
+    clap_audio_port_info_t inf;
+
+    s->clap_ports->get(s->clap_plugin, i, 0, &inf);
+
+    s->out_buffers[i].latency = 0;
+    s->out_buffers[i].constant_mask = 0;
+    s->out_buffers[i].channel_count = inf.channel_count;
+    s->out_buffers[i].data32 = av_calloc(inf.channel_count, sizeof(*s->out_buffers[i].data32));
+    if (!s->out_buffers[i].data32)
+        return AVERROR(ENOMEM);
+
+    return 0;
+}
+
 static av_cold int init(AVFilterContext *ctx)
 {
     CLAPContext *s = ctx->priv;
@@ -599,6 +637,7 @@ static av_cold int init(AVFilterContext *ctx)
             if (!pad.name)
                 return AVERROR(ENOMEM);
 
+            pad.config_props = config_input;
             if ((ret = ff_append_inpad_free_name(ctx, &pad)) < 0)
                 return ret;
         }
@@ -608,6 +647,7 @@ static av_cold int init(AVFilterContext *ctx)
             if (!pad.name)
                 return AVERROR(ENOMEM);
 
+            pad.config_props = config_output;
             if ((ret = ff_append_outpad_free_name(ctx, &pad)) < 0)
                 return ret;
         }
@@ -656,13 +696,6 @@ static int query_formats(AVFilterContext *ctx)
         ret = ff_channel_layouts_ref(layouts, &inlink->outcfg.channel_layouts);
         if (ret < 0)
             return ret;
-
-        s->in_buffers[i].latency = 0;
-        s->in_buffers[i].constant_mask = 0;
-        s->in_buffers[i].channel_count = inf.channel_count;
-        s->in_buffers[i].data32 = av_calloc(inf.channel_count, sizeof(*s->in_buffers[i].data32));
-        if (!s->in_buffers[i].data32)
-            return AVERROR(ENOMEM);
     }
 
     for (int i = 0; i < s->out_ports; i++) {
@@ -680,13 +713,6 @@ static int query_formats(AVFilterContext *ctx)
         ret = ff_channel_layouts_ref(layouts, &outlink->incfg.channel_layouts);
         if (ret < 0)
             return ret;
-
-        s->out_buffers[i].latency = 0;
-        s->out_buffers[i].constant_mask = 0;
-        s->out_buffers[i].channel_count = inf.channel_count;
-        s->out_buffers[i].data32 = av_calloc(inf.channel_count, sizeof(*s->out_buffers[i].data32));
-        if (!s->out_buffers[i].data32)
-            return AVERROR(ENOMEM);
     }
 
     return 0;
