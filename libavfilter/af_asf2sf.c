@@ -30,31 +30,25 @@ typedef struct AudioSF2SFContext {
     int (*do_sf2sf)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } AudioSF2SFContext;
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
     AVFilterFormats *formats;
     int ret;
 
-    ret = ff_set_common_all_channel_counts(ctx);
-    if (ret)
-        return ret;
+    formats = ff_all_formats(AVMEDIA_TYPE_AUDIO);
+    if (!formats)
+        return AVERROR(ENOMEM);
 
-    ret = ff_set_common_all_samplerates(ctx);
-    if (ret)
+    if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
     formats = ff_all_formats(AVMEDIA_TYPE_AUDIO);
     if (!formats)
         return AVERROR(ENOMEM);
 
-    if ((ret = ff_formats_ref(formats, &ctx->inputs[0]->outcfg.formats)) < 0)
-        return ret;
-
-    formats = ff_all_formats(AVMEDIA_TYPE_AUDIO);
-    if (!formats)
-        return AVERROR(ENOMEM);
-
-    if ((ret = ff_formats_ref(formats, &ctx->outputs[0]->incfg.formats)) < 0)
+    if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
     return 0;
@@ -381,7 +375,7 @@ const AVFilter ff_af_asf2sf = {
     .description   = NULL_IF_CONFIG_SMALL("Switch audio sample format."),
     .priv_size     = sizeof(AudioSF2SFContext),
     .activate      = activate,
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     .flags         = AVFILTER_FLAG_SLICE_THREADS,
