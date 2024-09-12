@@ -94,14 +94,14 @@ static int filter##name##_slice(AVFilterContext *ctx, void *arg, int job,      \
     type *outrow = (type *)out->data[plane] + start * outlinesize;             \
     for (int i = start; i < end; i++, outrow += outlinesize) {                 \
         const int off_y = i - ycenter;                                         \
-        type *out = outrow;                                                    \
+        type *outr = outrow;                                                   \
         for (int j = 0; j < w; j++) {                                          \
             const int off_x = j - xcenter;                                     \
             const int64_t radius_mult = correction[j + i*w];                   \
             const int x = xcenter + ((radius_mult * off_x + (1<<23))>>24);     \
             const int y = ycenter + ((radius_mult * off_y + (1<<23))>>24);     \
             const char isvalid = x >= 0 && x < w && y >= 0 && y < h;           \
-            *out++ =  isvalid ? indata[y * inlinesize + x] : fill_color;       \
+            *outr++ =  isvalid ? indata[y * inlinesize + x] : fill_color;      \
         }                                                                      \
     }                                                                          \
     return 0;                                                                  \
@@ -137,7 +137,7 @@ static int filter##name##_slice_bilinear(AVFilterContext *ctx, void *arg,      \
                                                                                \
     for (int i = start; i < end; i++, outrow += outlinesize) {                 \
         const int off_y = i - ycenter;                                         \
-        type *out = outrow;                                                    \
+        type *outr = outrow;                                                   \
                                                                                \
         for (int j = 0; j < w; j++) {                                          \
             const int off_x = j - xcenter;                                     \
@@ -162,9 +162,9 @@ static int filter##name##_slice_bilinear(AVFilterContext *ctx, void *arg,      \
                 sum += (max - du) * (      dv) * p2;                           \
                 sum += (      du) * (      dv) * p3;                           \
                                                                                \
-                out[j] = av_clip_uintp2_c((sum + (1ULL << 47)) >> 48, depth);  \
+                outr[j] = av_clip_uintp2_c((sum + (1ULL << 47)) >> 48, depth); \
             } else {                                                           \
-                out[j] = fill_color;                                           \
+                outr[j] = fill_color;                                          \
             }                                                                  \
         }                                                                      \
     }                                                                          \
