@@ -112,7 +112,7 @@ static int query_formats(const AVFilterContext *ctx,
 
 //FIXME: replace with DSPContext.scalarproduct_int16
 static inline int16_t *scalarproduct(const int16_t *in, const int16_t *endin,
-                                     const int16_t *filt, int16_t *out)
+                                     const int16_t *filter, int16_t *out)
 {
     int32_t sample;
     int16_t j;
@@ -120,7 +120,7 @@ static inline int16_t *scalarproduct(const int16_t *in, const int16_t *endin,
     while (in < endin) {
         sample = 0;
         for (j = 0; j < NUMTAPS; j++)
-            sample += in[j] * filt[j];
+            sample += in[j] * filter[j];
         *out = av_clip_int16(sample >> 7);
         out++;
         in++;
