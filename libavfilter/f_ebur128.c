@@ -301,7 +301,7 @@ static void drawline(AVFrame *pic, int x, int y, int len, int step)
 
 static int config_video_output(AVFilterLink *outlink)
 {
-    int i, x, y;
+    int i, x;
     uint8_t *p;
     FilterLink *l = ff_filter_link(outlink);
     AVFilterContext *ctx = outlink->src;
@@ -363,7 +363,7 @@ static int config_video_output(AVFilterLink *outlink)
     /* draw LU legends */
     drawtext(outpicref, PAD, PAD+16, FONT8, font_colors+3, " LU");
     for (i = ebur128->meter; i >= -ebur128->meter * 2; i--) {
-        y = lu_to_y(ebur128, i);
+        int y = lu_to_y(ebur128, i);
         x = PAD + (i < 10 && i > -10) * 8;
         ebur128->y_line_ref[y] = i;
         y -= 4; // -4 to center vertically
@@ -377,7 +377,7 @@ static int config_video_output(AVFilterLink *outlink)
     ebur128->y_opt_min = lu_to_y(ebur128, -1);
     p = outpicref->data[0] + ebur128->graph.y * outpicref->linesize[0]
                            + ebur128->graph.x * 3;
-    for (y = 0; y < ebur128->graph.h; y++) {
+    for (int y = 0; y < ebur128->graph.h; y++) {
         const uint8_t *c = get_graph_color(ebur128, INT_MAX, y);
 
         for (x = 0; x < ebur128->graph.w; x++)
