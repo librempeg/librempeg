@@ -270,7 +270,7 @@ static int output_frame(AVFilterLink *outlink)
         InputContext *ic = &s->inputs[i];
 
         if (ic->frame) {
-            int planes, plane_size, nb_samples;
+            int planes, plane_size;
 
             nb_samples = s->inputs[i].frame->nb_samples;
             planes     = s->planar ? s->nb_channels : 1;
