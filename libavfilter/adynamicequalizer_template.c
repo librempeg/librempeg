@@ -416,9 +416,9 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
             const ftype ag = FTAN(F(M_PI) * F(1.0) / sample_rate);
             const ftype aqfactor = F(M_SQRT1_2);
 
-            ftype k = F(1.0) / aqfactor;
+            ftype ka = F(1.0) / aqfactor;
 
-            aa[0] = F(1.0) / (F(1.0) + ag * (ag + k));
+            aa[0] = F(1.0) / (F(1.0) + ag * (ag + ka));
             aa[1] = ag * aa[0];
             aa[2] = ag * aa[1];
 
