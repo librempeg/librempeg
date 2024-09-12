@@ -148,7 +148,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     }
 
     if (dptr2y[max_period] > F(0.0) && dptr2x[max_period] > F(0.0)) {
-        int n;
+        int ns;
 
         memset(rptrx+max_period, 0, (max_size-max_period) * sizeof(*rptrx));
         memcpy(rptrx, dptrx, max_period * sizeof(*rptrx));
@@ -171,12 +171,13 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
 
         c->c2r_fn(c->c2r, rptrx, cptrx, sizeof(*cptrx));
 
-        for (n = 1; n < max_period; n++) {
+        for (int n = 1; n < max_period; n++) {
+            ns = n;
             if (rptrx[n] < F(0.0) && rptrx[n-1] > F(0.0))
                 break;
         }
 
-        for (; n < max_period-1; n++) {
+        for (int n = ns; n < max_period-1; n++) {
             if (rptrx[n] >= rptrx[n-1] &&
                 rptrx[n] >= rptrx[n+1]) {
                 const ftype score = COPYSIGN(SQRT(FABS(rptrx[n])*n), rptrx[n]);
@@ -262,7 +263,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
         memset(dptr+size, 0, (max_period*2-size)*sizeof(*dptr));
 
     {
-        int n;
+        int ns;
 
         memset(rptr+max_period*2, 0, (max_asize+2-max_period*2) * sizeof(*rptr));
         memcpy(rptr, dptr, max_period*2 * sizeof(*rptr));
@@ -279,12 +280,13 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
 
         c->ac2r_fn(c->ac2r, rptr, cptr, sizeof(*cptr));
 
-        for (n = 1; n < max_period; n++) {
+        for (int n = 1; n < max_period; n++) {
+            ns = n;
             if (rptr[n] < F(0.0) && rptr[n-1] > F(0.0))
                 break;
         }
 
-        for (; n < max_period-1; n++) {
+        for (int n = ns; n < max_period-1; n++) {
             if (rptr[n] >= rptr[n-1] &&
                 rptr[n] >= rptr[n+1]) {
                 const ftype score = COPYSIGN(SQRT(FABS(F(2.0)*rptr[n]-rptr[2*n])*n), F(2.0)*rptr[n]-rptr[2*n]);
