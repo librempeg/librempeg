@@ -366,7 +366,7 @@ static int fn(fir_quantum)(AVFilterContext *ctx, AVFrame *out, const int ch,
             const int input_partition = j;
             const int coeff_partition = i;
             const int coffset = coeff_partition * seg->coeff_size;
-            const ftype *blockout = (const ftype *)seg->blockout->extended_data[ch] + input_partition * seg->block_size;
+            const ftype *blockouti = (const ftype *)seg->blockout->extended_data[ch] + input_partition * seg->block_size;
             const ctype *coeff = ((const ctype *)seg->coeff->extended_data[ch]) + coffset;
 
             if (j == 0)
@@ -374,9 +374,9 @@ static int fn(fir_quantum)(AVFilterContext *ctx, AVFrame *out, const int ch,
             j--;
 
 #if DEPTH == 32
-            s->afirdsp.fcmul_add(sumin, blockout, (const ftype *)coeff, part_size);
+            s->afirdsp.fcmul_add(sumin, blockouti, (const ftype *)coeff, part_size);
 #else
-            s->afirdsp.dcmul_add(sumin, blockout, (const ftype *)coeff, part_size);
+            s->afirdsp.dcmul_add(sumin, blockouti, (const ftype *)coeff, part_size);
 #endif
         }
 
