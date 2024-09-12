@@ -432,9 +432,9 @@ static inline void ff_outlink_set_status(AVFilterLink *link, int status, int64_t
  * will return immediately.
  */
 #define FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink) do { \
-    int ret = ff_outlink_get_status(outlink); \
-    if (ret) { \
-        ff_inlink_set_status(inlink, ret); \
+    int retl = ff_outlink_get_status(outlink); \
+    if (retl) { \
+        ff_inlink_set_status(inlink, retl); \
         return 0; \
     } \
 } while (0)
@@ -445,11 +445,11 @@ static inline void ff_outlink_set_status(AVFilterLink *link, int status, int64_t
  * will return immediately.
  */
 #define FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, filter) do { \
-    int ret = ff_outlink_get_status(outlink); \
-    if (ret) { \
+    int retl = ff_outlink_get_status(outlink); \
+    if (retl) { \
         unsigned i; \
         for (i = 0; i < filter->nb_inputs; i++) \
-            ff_inlink_set_status(filter->inputs[i], ret); \
+            ff_inlink_set_status(filter->inputs[i], retl); \
         return 0; \
     } \
 } while (0)
