@@ -128,6 +128,7 @@ extern const FFInputFormat  ff_concat_demuxer;
 extern const FFOutputFormat ff_crc_muxer;
 extern const FFInputFormat  ff_dash_demuxer;
 extern const FFOutputFormat ff_dash_muxer;
+extern const FFInputFormat  ff_dat_demuxer;
 extern const FFInputFormat  ff_data_demuxer;
 extern const FFOutputFormat ff_data_muxer;
 extern const FFInputFormat  ff_daud_demuxer;
