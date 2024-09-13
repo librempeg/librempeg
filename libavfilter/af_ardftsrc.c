@@ -67,9 +67,11 @@ static const AVOption ardftsrc_options[] = {
 
 AVFILTER_DEFINE_CLASS(ardftsrc);
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    AudioRDFTSRCContext *s = ctx->priv;
+    const AudioRDFTSRCContext *s = ctx->priv;
     AVFilterFormats *formats = NULL;
     int ret, sample_rates[] = { s->sample_rate, -1 };
 
@@ -82,23 +84,19 @@ static int query_formats(AVFilterContext *ctx)
     ret = ff_add_format(&formats, AV_SAMPLE_FMT_DBLP);
     if (ret)
         return ret;
-    ret = ff_set_common_formats(ctx, formats);
-    if (ret)
-        return ret;
-
-    ret = ff_set_common_all_channel_counts(ctx);
+    ret = ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
     if (ret)
         return ret;
 
     if (!s->sample_rate)
-        return ff_set_common_all_samplerates(ctx);
+        return 0;
 
     if ((ret = ff_formats_ref(ff_all_samplerates(),
-                              &ctx->inputs[0]->outcfg.samplerates)) < 0)
+                              &cfg_in[0]->samplerates)) < 0)
         return ret;
 
     return ff_formats_ref(ff_make_format_list(sample_rates),
-                          &ctx->outputs[0]->incfg.samplerates);
+                          &cfg_out[0]->samplerates);
 }
 
 #define DEPTH 16
@@ -272,7 +270,7 @@ const AVFilter ff_af_ardftsrc = {
     .uninit          = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .flags           = AVFILTER_FLAG_SLICE_THREADS,
     .activate        = activate,
 };
