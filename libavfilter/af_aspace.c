@@ -88,9 +88,11 @@ static const AVOption aspace_options[] = {
     {NULL}
 };
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    AudioSpaceContext *s = ctx->priv;
+    const AudioSpaceContext *s = ctx->priv;
     AVFilterFormats *formats = NULL;
     AVFilterChannelLayouts *outlayouts = NULL;
     AVFilterChannelLayouts *inlayouts = NULL;
@@ -109,7 +111,7 @@ static int query_formats(AVFilterContext *ctx)
     }
     if (ret)
         return ret;
-    ret = ff_set_common_formats(ctx, formats);
+    ret = ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
     if (ret)
         return ret;
 
@@ -117,7 +119,7 @@ static int query_formats(AVFilterContext *ctx)
     if (ret)
         return ret;
 
-    ret = ff_channel_layouts_ref(outlayouts, &ctx->outputs[0]->incfg.channel_layouts);
+    ret = ff_channel_layouts_ref(outlayouts, &cfg_out[0]->channel_layouts);
     if (ret)
         return ret;
 
@@ -125,11 +127,7 @@ static int query_formats(AVFilterContext *ctx)
     if (ret)
         return ret;
 
-    ret = ff_channel_layouts_ref(inlayouts, &ctx->inputs[0]->outcfg.channel_layouts);
-    if (ret)
-        return ret;
-
-    return ff_set_common_all_samplerates(ctx);
+    return ff_channel_layouts_ref(inlayouts, &cfg_in[0]->channel_layouts);
 }
 
 #define DEPTH 32
@@ -459,7 +457,7 @@ const AVFilter ff_af_aspace = {
     .priv_class      = &aspace_class,
     .init            = init,
     .uninit          = uninit,
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     .process_command = ff_filter_process_command,
