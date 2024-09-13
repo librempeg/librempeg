@@ -12414,29 +12414,11 @@ Draw a graph using input video metadata.
 It accepts the following parameters:
 
 @table @option
-@item m1
-Set 1st frame metadata key from which metadata values will be used to draw a graph.
+@item keys
+Set the frame metadata keys from which metadata values will be used to draw a graph.
 
-@item fg1
-Set 1st foreground color expression.
-
-@item m2
-Set 2nd frame metadata key from which metadata values will be used to draw a graph.
-
-@item fg2
-Set 2nd foreground color expression.
-
-@item m3
-Set 3rd frame metadata key from which metadata values will be used to draw a graph.
-
-@item fg3
-Set 3rd foreground color expression.
-
-@item m4
-Set 4th frame metadata key from which metadata values will be used to draw a graph.
-
-@item fg4
-Set 4th foreground color expression.
+@item fg
+Set the foreground color expressions for each metadata key.
 
 @item min
 Set minimal value of metadata value.

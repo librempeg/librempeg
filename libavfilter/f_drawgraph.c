@@ -33,10 +33,12 @@
 typedef struct DrawGraphContext {
     const AVClass *class;
 
-    char          *key[4];
+    char          **keys;
+    unsigned      nb_keys;
+    char          **fg_str;
+    unsigned      nb_fg_str;
     float         min, max;
-    char          *fg_str[4];
-    AVExpr        *fg_expr[4];
+    AVExpr        **fg_expr;
     uint8_t       bg[4];
     int           mode;
     int           slide;
@@ -45,26 +47,24 @@ typedef struct DrawGraphContext {
 
     AVFrame       *out;
     int           x;
-    int           prev_y[4];
-    int           first[4];
-    float         *values[4];
-    int           values_size[4];
+    int           *prev_y;
+    int           *first;
+    float         **values;
+    int           *values_size;
     int           nb_values;
     int64_t       prev_pts;
 } DrawGraphContext;
 
 #define OFFSET(x) offsetof(DrawGraphContext, x)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_keys = {.def="",.size_min=0,.sep='|'};
+static const AVOptionArrayDef def_fgs = {.def="0xffff0000|0xff00ff00|0xffff00ff|0xffffff00",.size_min=1,.sep='|'};
 
 static const AVOption drawgraph_options[] = {
-    { "m1", "set 1st metadata key", OFFSET(key[0]), AV_OPT_TYPE_STRING, {.str=""}, 0, 0, FLAGS },
-    { "fg1", "set 1st foreground color expression", OFFSET(fg_str[0]), AV_OPT_TYPE_STRING, {.str="0xffff0000"}, 0, 0, FLAGS },
-    { "m2", "set 2nd metadata key", OFFSET(key[1]), AV_OPT_TYPE_STRING, {.str=""}, 0, 0, FLAGS },
-    { "fg2", "set 2nd foreground color expression", OFFSET(fg_str[1]), AV_OPT_TYPE_STRING, {.str="0xff00ff00"}, 0, 0, FLAGS },
-    { "m3", "set 3rd metadata key", OFFSET(key[2]), AV_OPT_TYPE_STRING, {.str=""}, 0, 0, FLAGS },
-    { "fg3", "set 3rd foreground color expression", OFFSET(fg_str[2]), AV_OPT_TYPE_STRING, {.str="0xffff00ff"}, 0, 0, FLAGS },
-    { "m4", "set 4th metadata key", OFFSET(key[3]), AV_OPT_TYPE_STRING, {.str=""}, 0, 0, FLAGS },
-    { "fg4", "set 4th foreground color expression", OFFSET(fg_str[3]), AV_OPT_TYPE_STRING, {.str="0xffffff00"}, 0, 0, FLAGS },
+    { "keys", "set the metadata key", OFFSET(keys), AV_OPT_TYPE_STRING|AR, {.arr=&def_keys}, 0, 0, FLAGS },
+    { "fg", "set the foreground colors", OFFSET(fg_str), AV_OPT_TYPE_STRING|AR, {.arr=&def_fgs}, 0, 0, FLAGS },
     { "bg", "set background color", OFFSET(bg), AV_OPT_TYPE_COLOR, {.str="white"}, 0, 0, FLAGS },
     { "min", "set minimal value", OFFSET(min), AV_OPT_TYPE_FLOAT, {.dbl=-1.}, INT_MIN, INT_MAX, FLAGS },
     { "max", "set maximal value", OFFSET(max), AV_OPT_TYPE_FLOAT, {.dbl=1.}, INT_MIN, INT_MAX, FLAGS },
@@ -93,14 +93,37 @@ enum                                   { VAR_MAX, VAR_MIN, VAR_VAL, VAR_VARS_NB 
 static av_cold int init(AVFilterContext *ctx)
 {
     DrawGraphContext *s = ctx->priv;
-    int ret, i;
+    int ret;
 
     if (s->max <= s->min) {
         av_log(ctx, AV_LOG_ERROR, "max is same or lower than min\n");
         return AVERROR(EINVAL);
     }
 
-    for (i = 0; i < 4; i++) {
+    s->fg_expr = av_calloc(s->nb_fg_str, sizeof(*s->fg_expr));
+    if (!s->fg_expr)
+        return AVERROR(ENOMEM);
+
+    s->values = av_calloc(s->nb_keys, sizeof(*s->values));
+    if (!s->values)
+        return AVERROR(ENOMEM);
+
+    s->values_size = av_calloc(s->nb_keys, sizeof(*s->values_size));
+    if (!s->values_size)
+        return AVERROR(ENOMEM);
+
+    s->prev_y = av_calloc(s->nb_keys, sizeof(*s->prev_y));
+    if (!s->prev_y)
+        return AVERROR(ENOMEM);
+
+    s->first = av_calloc(s->nb_keys, sizeof(*s->first));
+    if (!s->first)
+        return AVERROR(ENOMEM);
+
+    for (int i = 0; i < s->nb_keys; i++)
+        s->first[i] = 1;
+
+    for (int i = 0; i < s->nb_fg_str; i++) {
         if (s->fg_str[i]) {
             ret = av_expr_parse(&s->fg_expr[i], s->fg_str[i], var_names,
                                 NULL, NULL, NULL, NULL, 0, ctx);
@@ -110,17 +133,11 @@ static av_cold int init(AVFilterContext *ctx)
         }
     }
 
-    s->first[0] = s->first[1] = s->first[2] = s->first[3] = 1;
-
     if (s->slide == 4) {
-        s->values[0] = av_fast_realloc(NULL, &s->values_size[0], 2000);
-        s->values[1] = av_fast_realloc(NULL, &s->values_size[1], 2000);
-        s->values[2] = av_fast_realloc(NULL, &s->values_size[2], 2000);
-        s->values[3] = av_fast_realloc(NULL, &s->values_size[3], 2000);
-
-        if (!s->values[0] || !s->values[1] ||
-            !s->values[2] || !s->values[3]) {
-            return AVERROR(ENOMEM);
+        for (int i = 0; i < s->nb_keys; i++) {
+            s->values[i] = av_fast_realloc(NULL, &s->values_size[i], 2000);
+            if (!s->values[i])
+                return AVERROR(ENOMEM);
         }
     }
 
@@ -171,27 +188,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     int i;
 
     if (s->slide == 4 && s->nb_values >= s->values_size[0] / sizeof(float)) {
-        float *ptr;
-
-        ptr = av_fast_realloc(s->values[0], &s->values_size[0], s->values_size[0] * 2);
-        if (!ptr)
-            return AVERROR(ENOMEM);
-        s->values[0] = ptr;
-
-        ptr = av_fast_realloc(s->values[1], &s->values_size[1], s->values_size[1] * 2);
-        if (!ptr)
-            return AVERROR(ENOMEM);
-        s->values[1] = ptr;
-
-        ptr = av_fast_realloc(s->values[2], &s->values_size[2], s->values_size[2] * 2);
-        if (!ptr)
-            return AVERROR(ENOMEM);
-        s->values[2] = ptr;
-
-        ptr = av_fast_realloc(s->values[3], &s->values_size[3], s->values_size[3] * 2);
-        if (!ptr)
-            return AVERROR(ENOMEM);
-        s->values[3] = ptr;
+        for (int i = 0; i < s->nb_keys; i++) {
+            float *ptr = av_fast_realloc(s->values[i], &s->values_size[i], s->values_size[i] * 2);
+            if (!ptr)
+                return AVERROR(ENOMEM);
+            s->values[i] = ptr;
+        }
     }
 
     if (s->slide != 4 || s->nb_values == 0) {
@@ -212,7 +214,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     metadata = in->metadata;
 
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < s->nb_keys; i++) {
         double values[VAR_VARS_NB];
         int j, y, x, old;
         uint32_t fg, bg;
@@ -221,7 +223,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         if (s->slide == 4)
             s->values[i][s->nb_values] = NAN;
 
-        e = av_dict_get(metadata, s->key[i], NULL, 0);
+        e = av_dict_get(metadata, s->keys[i], NULL, 0);
         if (!e || !e->value)
             continue;
 
@@ -239,7 +241,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         values[VAR_MAX] = s->max;
         values[VAR_VAL] = vf;
 
-        fg = av_expr_eval(s->fg_expr[i], values, NULL);
+        fg = av_expr_eval(s->fg_expr[FFMIN(i, s->nb_fg_str-1)], values, NULL);
         bg = AV_RN32(s->bg);
 
         if (i == 0 && (s->x >= outlink->w || s->slide == 3)) {
@@ -354,7 +356,7 @@ static int request_frame(AVFilterLink *outlink)
         step = ceil(s->nb_values / (float)s->w);
 
         for (k = 0; k < s->nb_values; k++) {
-            for (i = 0; i < 4; i++) {
+            for (i = 0; i < s->nb_keys; i++) {
                 double values[VAR_VARS_NB];
                 int j, y, x, old;
                 uint32_t fg, bg;
@@ -367,7 +369,7 @@ static int request_frame(AVFilterLink *outlink)
                 values[VAR_MAX] = s->max;
                 values[VAR_VAL] = vf;
 
-                fg = av_expr_eval(s->fg_expr[i], values, NULL);
+                fg = av_expr_eval(s->fg_expr[FFMIN(i, s->nb_fg_str-1)], values, NULL);
                 bg = AV_RN32(s->bg);
 
                 x = s->x;
@@ -440,18 +442,25 @@ static int config_output(AVFilterLink *outlink)
 static av_cold void uninit(AVFilterContext *ctx)
 {
     DrawGraphContext *s = ctx->priv;
-    int i;
 
-    for (i = 0; i < 4; i++)
-        av_expr_free(s->fg_expr[i]);
+    if (s->fg_expr) {
+        for (int i = 0; i < s->nb_fg_str; i++)
+            av_expr_free(s->fg_expr[i]);
+        av_freep(&s->fg_expr);
+    }
 
     if (s->slide != 4)
         av_frame_free(&s->out);
 
-    av_freep(&s->values[0]);
-    av_freep(&s->values[1]);
-    av_freep(&s->values[2]);
-    av_freep(&s->values[3]);
+    if (s->values) {
+        for (int i = 0; i < s->nb_keys; i++)
+            av_freep(&s->values[i]);
+        av_freep(&s->values);
+    }
+
+    av_freep(&s->values_size);
+    av_freep(&s->prev_y);
+    av_freep(&s->first);
 }
 
 static const AVFilterPad drawgraph_outputs[] = {
