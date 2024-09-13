@@ -668,24 +668,21 @@ static av_cold int init(AVFilterContext *ctx)
     return 0;
 }
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    CLAPContext *s = ctx->priv;
+    const CLAPContext *s = ctx->priv;
     AVFilterChannelLayouts *layouts;
     static const enum AVSampleFormat sample_fmts[] = {
         AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE };
     int ret;
 
-    ret = ff_set_common_formats_from_list(ctx, sample_fmts);
-    if (ret < 0)
-        return ret;
-
-    ret = ff_set_common_all_samplerates(ctx);
+    ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
     if (ret < 0)
         return ret;
 
     for (int i = 0; i < s->in_ports; i++) {
-        AVFilterLink *inlink = ctx->inputs[i];
         clap_audio_port_info_t inf;
         AVChannelLayout inlayout;
 
@@ -696,13 +693,12 @@ static int query_formats(AVFilterContext *ctx)
         ret = ff_add_channel_layout(&layouts, &inlayout);
         if (ret < 0)
             return ret;
-        ret = ff_channel_layouts_ref(layouts, &inlink->outcfg.channel_layouts);
+        ret = ff_channel_layouts_ref(layouts, &cfg_in[i]->channel_layouts);
         if (ret < 0)
             return ret;
     }
 
     for (int i = 0; i < s->out_ports; i++) {
-        AVFilterLink *outlink = ctx->outputs[i];
         clap_audio_port_info_t inf;
         AVChannelLayout outlayout;
 
@@ -713,7 +709,7 @@ static int query_formats(AVFilterContext *ctx)
         ret = ff_add_channel_layout(&layouts, &outlayout);
         if (ret < 0)
             return ret;
-        ret = ff_channel_layouts_ref(layouts, &outlink->incfg.channel_layouts);
+        ret = ff_channel_layouts_ref(layouts, &cfg_out[i]->channel_layouts);
         if (ret < 0)
             return ret;
     }
@@ -874,7 +870,7 @@ const AVFilter ff_af_clap = {
     .process_command = process_command,
     .inputs        = NULL,
     .outputs       = NULL,
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .flags         = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
                      AVFILTER_FLAG_DYNAMIC_INPUTS,
 };
