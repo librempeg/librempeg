@@ -248,7 +248,7 @@ static int compand_drain(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     CompandContext *s    = ctx->priv;
     const int channels   = outlink->ch_layout.nb_channels;
-    AVFrame *frame       = NULL;
+    AVFrame *frame;
     int chan, i, dindex;
 
     /* 2048 is to limit output frame size during drain */
