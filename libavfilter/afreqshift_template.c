@@ -19,8 +19,6 @@
 #undef ftype
 #undef cname
 #undef SAMPLE_FORMAT
-#undef ONE
-#undef TWO
 #undef SIN
 #undef COS
 #undef MPI
@@ -28,8 +26,6 @@
 #define SAMPLE_FORMAT fltp
 #define ftype float
 #define cname s->cf
-#define ONE 1.f
-#define TWO 2.f
 #define SIN sinf
 #define COS cosf
 #define MPI M_PIf
@@ -37,14 +33,10 @@
 #define SAMPLE_FORMAT dblp
 #define ftype double
 #define cname s->cd
-#define ONE 1.0
-#define TWO 2.0
 #define SIN sin
 #define COS cos
 #define MPI M_PI
 #endif
-
-#define cn(x)      s->c##x
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
