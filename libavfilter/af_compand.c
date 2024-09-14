@@ -95,13 +95,6 @@ static const AVOption compand_options[] = {
 
 AVFILTER_DEFINE_CLASS(compand);
 
-static av_cold int init(AVFilterContext *ctx)
-{
-    CompandContext *s = ctx->priv;
-    s->pts            = AV_NOPTS_VALUE;
-    return 0;
-}
-
 static av_cold void uninit(AVFilterContext *ctx)
 {
     CompandContext *s = ctx->priv;
@@ -194,15 +187,9 @@ static int compand_delay(AVFilterContext *ctx, AVFrame *frame)
     AVFilterLink *inlink = ctx->inputs[0];
     const int channels = inlink->ch_layout.nb_channels;
     const int nb_samples = frame->nb_samples;
-    int chan, i, av_uninit(dindex), oindex, av_uninit(count);
-    AVFrame *out_frame   = NULL;
+    int chan, dindex = 0, count = 0;
+    AVFrame *out_frame = NULL;
     int err;
-
-    if (s->pts == AV_NOPTS_VALUE) {
-        s->pts = (frame->pts == AV_NOPTS_VALUE) ? 0 : frame->pts;
-    }
-
-    av_assert1(channels > 0); /* would corrupt delay_count and delay_index */
 
     for (chan = 0; chan < channels; chan++) {
         AVFrame *delay_frame = s->delay_frame;
@@ -213,7 +200,7 @@ static int compand_delay(AVFilterContext *ctx, AVFrame *frame)
 
         count  = s->delay_count;
         dindex = s->delay_index;
-        for (i = 0, oindex = 0; i < nb_samples; i++) {
+        for (int i = 0, oindex = 0; i < nb_samples; i++) {
             const double in = src[i];
             update_volume(cp, fabs(in));
 
@@ -230,10 +217,8 @@ static int compand_delay(AVFilterContext *ctx, AVFrame *frame)
                         av_frame_free(&frame);
                         return err;
                     }
-                    out_frame->pts = s->pts;
-                    s->pts += av_rescale_q(nb_samples - i,
-                        (AVRational){ 1, inlink->sample_rate },
-                        inlink->time_base);
+                    s->pts = out_frame->pts + out_frame->nb_samples;
+                    out_frame->pts -= s->delay_samples - i;
                 }
 
                 dst = (double *)out_frame->extended_data[chan];
@@ -271,8 +256,7 @@ static int compand_drain(AVFilterLink *outlink)
     if (!frame)
         return AVERROR(ENOMEM);
     frame->pts = s->pts;
-    s->pts += av_rescale_q(frame->nb_samples,
-            (AVRational){ 1, outlink->sample_rate }, outlink->time_base);
+    s->pts += frame->nb_samples;
 
     av_assert0(channels > 0);
     for (chan = 0; chan < channels; chan++) {
@@ -430,7 +414,7 @@ static int config_output(AVFilterLink *outlink)
         cp->volume = ff_exp10(s->initial_volume / 20);
     }
 
-    s->delay_samples = s->delay * sample_rate;
+    s->delay_samples = lrint(s->delay * sample_rate);
     if (s->delay_samples <= 0) {
         s->compand = compand_nodelay;
         return 0;
@@ -490,7 +474,6 @@ const AVFilter ff_af_compand = {
             "Compress or expand audio dynamic range."),
     .priv_size      = sizeof(CompandContext),
     .priv_class     = &compand_class,
-    .init           = init,
     .uninit         = uninit,
     FILTER_INPUTS(compand_inputs),
     FILTER_OUTPUTS(compand_outputs),
