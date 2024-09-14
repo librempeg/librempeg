@@ -27,6 +27,8 @@
  * audio compand filter
  */
 
+#include <float.h>
+
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/ffmath.h"
@@ -59,7 +61,7 @@ typedef struct CompandContext {
     unsigned nb_points;
     CompandSegment *segments;
     ChanParam *channels;
-    double in_min_lin;
+    double in_min_log;
     double out_min_lin;
     double curve_dB;
     double gain_dB;
@@ -106,7 +108,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 
 static void update_volume(ChanParam *cp, double in)
 {
-    double delta = in - cp->volume;
+    double delta = log(in + FLT_EPSILON) - cp->volume;
 
     if (delta > 0.0)
         cp->volume += delta * cp->attack;
@@ -114,16 +116,14 @@ static void update_volume(ChanParam *cp, double in)
         cp->volume += delta * cp->decay;
 }
 
-static double get_volume(CompandContext *s, double in_lin)
+static double get_volume(CompandContext *s, double in_log)
 {
     CompandSegment *cs;
-    double in_log, out_log;
+    double out_log;
     int i;
 
-    if (in_lin < s->in_min_lin)
+    if (in_log < s->in_min_log)
         return s->out_min_lin;
-
-    in_log = log(in_lin);
 
     for (i = 1; i < s->nb_segments; i++)
         if (in_log <= s->segments[i].x)
@@ -396,7 +396,7 @@ static int config_output(AVFilterLink *outlink)
     L(3, s->nb_segments).x = 0;
     L(3, s->nb_segments).y = L(2, s->nb_segments).y;
 
-    s->in_min_lin  = exp(s->segments[1].x);
+    s->in_min_log  = s->segments[1].x;
     s->out_min_lin = exp(s->segments[1].y);
 
     for (int i = 0; i < channels; i++) {
@@ -410,7 +410,7 @@ static int config_output(AVFilterLink *outlink)
             cp->decay = 1.0 - exp(-1.0 / (sample_rate * cp->decay));
         else
             cp->decay = 1.0;
-        cp->volume = ff_exp10(s->initial_volume / 20);
+        cp->volume = s->initial_volume * M_LN10 / 20.0;
     }
 
     s->delay_samples = lrint(s->delay * sample_rate);
