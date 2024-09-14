@@ -21,12 +21,15 @@
 
 #undef ftype
 #undef SAMPLE_FORMAT
+#undef VECTOR_MUL
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
 #define ftype float
+#define VECTOR_MUL s->fdsp->vector_fmul
 #else
 #define SAMPLE_FORMAT double
 #define ftype double
+#define VECTOR_MUL s->fdsp->vector_dmul
 #endif
 
 #define fn3(a,b)   a##_##b
@@ -41,16 +44,9 @@ static void fn(process)(AVFilterContext *ctx,
     AudioSpaceContext *s = ctx->priv;
 
     for (int i = 0; i < nb_channels; i++) {
-#if DEPTH == 32
-        s->fdsp->vector_fmul((ftype *)out->extended_data[i],
-                             (const ftype *)in->extended_data[0],
-                             (const ftype *)w->extended_data[i],
-                             nb_samples);
-#else
-        s->fdsp->vector_dmul((ftype *)out->extended_data[i],
-                             (const ftype *)in->extended_data[0],
-                             (const ftype *)w->extended_data[i],
-                             nb_samples);
-#endif
+        VECTOR_MUL((ftype *)out->extended_data[i],
+                   (const ftype *)in->extended_data[0],
+                   (const ftype *)w->extended_data[i],
+                   nb_samples);
     }
 }
