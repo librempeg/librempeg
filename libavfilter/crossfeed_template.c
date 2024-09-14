@@ -130,8 +130,8 @@ static void fn(filter_samples)(ftype *dst, const ftype *src,
         const ftype v1 = a0 * w1 + a1 * v3;
         const ftype v2 = w2 + a1 * w1 + a2 * v3;
 
-        w1 = 2.0 * v1 - w1;
-        w2 = 2.0 * v2 - w2;
+        w1 = F(2.0) * v1 - w1;
+        w2 = F(2.0) * v2 - w2;
 
         dst[n] = m0 * v0 + m1 * v1 + m2 * v2;
     }
