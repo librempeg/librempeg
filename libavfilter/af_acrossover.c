@@ -127,7 +127,6 @@ static int query_formats(const AVFilterContext *ctx,
         AV_SAMPLE_FMT_NONE
     };
     const enum AVSampleFormat *sample_fmts_list = sample_fmts;
-    int ret;
 
     switch (s->precision) {
     case 0:
@@ -142,11 +141,8 @@ static int query_formats(const AVFilterContext *ctx,
     default:
         break;
     }
-    ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts_list);
-    if (ret < 0)
-        return ret;
 
-    return 0;
+    return ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts_list);
 }
 
 static int parse_splits(AVFilterContext *ctx)
