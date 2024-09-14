@@ -130,10 +130,10 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
                 ftype *dst = (ftype *)frames[band]->extended_data[ch];
                 ftype *next_dst = (ftype *)frames[next_band]->extended_data[ch];
                 const ftype out_gain = gains[band];
-                ftype high = F(0.0);
-                ftype low = F(0.0);
 
                 for (int n = 0; n < nb_samples; n++) {
+                    ftype high = F(0.0), low = F(0.0);
+
                     fn(run_lh)(svf_cf, svf_lo, svf_hi,
                                src[n] * in_gain, &low, &high);
                     dst[n] = low * out_gain;
@@ -162,10 +162,10 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
             ftype *svf_hi = ft(s->svf[ch].sc)[band][1];
             ftype *dst = (ftype *)frames[band]->extended_data[ch];
             const ftype out_gain = gains[band];
-            ftype high = F(0.0);
-            ftype low = F(0.0);
 
             for (int n = 0; n < nb_samples; n++) {
+                ftype high = F(0.0), low = F(0.0);
+
                 fn(run_lh)(svf_cf, svf_lo, svf_hi,
                            src[n] * in_gain, &low, &high);
                 if (last_band == (nb_outs-1))
