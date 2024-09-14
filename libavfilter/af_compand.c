@@ -142,7 +142,6 @@ static int compand_nodelay(AVFilterContext *ctx, AVFrame *frame)
     const int channels   = inlink->ch_layout.nb_channels;
     const int nb_samples = frame->nb_samples;
     AVFrame *out_frame;
-    int chan, i;
     int err;
 
     if (av_frame_is_writable(frame)) {
@@ -161,12 +160,12 @@ static int compand_nodelay(AVFilterContext *ctx, AVFrame *frame)
         }
     }
 
-    for (chan = 0; chan < channels; chan++) {
+    for (int chan = 0; chan < channels; chan++) {
         const double *src = (double *)frame->extended_data[chan];
         double *dst = (double *)out_frame->extended_data[chan];
         ChanParam *cp = &s->channels[chan];
 
-        for (i = 0; i < nb_samples; i++) {
+        for (int i = 0; i < nb_samples; i++) {
             update_volume(cp, fabs(src[i]));
 
             dst[i] = src[i] * get_volume(s, cp->volume);
@@ -187,11 +186,11 @@ static int compand_delay(AVFilterContext *ctx, AVFrame *frame)
     AVFilterLink *inlink = ctx->inputs[0];
     const int channels = inlink->ch_layout.nb_channels;
     const int nb_samples = frame->nb_samples;
-    int chan, dindex = 0, count = 0;
+    int dindex = 0, count = 0;
     AVFrame *out_frame = NULL;
     int err;
 
-    for (chan = 0; chan < channels; chan++) {
+    for (int chan = 0; chan < channels; chan++) {
         AVFrame *delay_frame = s->delay_frame;
         const double *src    = (double *)frame->extended_data[chan];
         double *dbuf         = (double *)delay_frame->extended_data[chan];
@@ -249,7 +248,7 @@ static int compand_drain(AVFilterLink *outlink)
     CompandContext *s    = ctx->priv;
     const int channels   = outlink->ch_layout.nb_channels;
     AVFrame *frame;
-    int chan, i, dindex;
+    int dindex;
 
     /* 2048 is to limit output frame size during drain */
     frame = ff_get_audio_buffer(outlink, FFMIN(2048, s->delay_count));
@@ -259,14 +258,14 @@ static int compand_drain(AVFilterLink *outlink)
     s->pts += frame->nb_samples;
 
     av_assert0(channels > 0);
-    for (chan = 0; chan < channels; chan++) {
+    for (int chan = 0; chan < channels; chan++) {
         AVFrame *delay_frame = s->delay_frame;
         double *dbuf = (double *)delay_frame->extended_data[chan];
         double *dst = (double *)frame->extended_data[chan];
         ChanParam *cp = &s->channels[chan];
 
         dindex = s->delay_index;
-        for (i = 0; i < frame->nb_samples; i++) {
+        for (int i = 0; i < frame->nb_samples; i++) {
             dst[i] = dbuf[dindex] * get_volume(s, cp->volume);
             dindex = MOD(dindex + 1, s->delay_samples);
         }
