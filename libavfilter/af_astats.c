@@ -267,7 +267,7 @@ static void bit_depth(AudioStatsContext *s, const uint64_t *const mask, uint8_t 
 
 static double calc_entropy(AudioStatsContext *s, ChannelStats *p)
 {
-    return exp2(p->sigma_log2_ax / p->nb_samples) / (p->sigma_ax / p->nb_samples);
+    return -(p->sigma_log2_ax / p->nb_samples) * (p->sigma_ax / p->nb_samples);
 }
 
 static double calc_noise_floor(double *ss, double x, double px,
