@@ -37,26 +37,6 @@
 #define MAX_SPLITS 16
 #define MAX_BANDS MAX_SPLITS + 1
 
-typedef struct SVFCache {
-    double scd[MAX_BANDS][2][2];
-    float scf[MAX_BANDS][2][2];
-} SVFCache;
-
-typedef struct SVFCoeffs {
-    double gd;
-    double rd;
-    double kd;
-    double gkd;
-    double g2d;
-    double g2kd;
-    float gf;
-    float rf;
-    float kf;
-    float gkf;
-    float g2f;
-    float g2kf;
-} SVFCoeffs;
-
 typedef struct AudioCrossoverContext {
     const AVClass *class;
 
@@ -78,13 +58,13 @@ typedef struct AudioCrossoverContext {
     float gains[MAX_BANDS];
     int active[MAX_BANDS];
 
-    SVFCoeffs svf_cf[MAX_BANDS];
-
-    SVFCache *svf;
+    void *svf_cf;
+    void *svf;
 
     AVFrame *frames[MAX_BANDS];
 
     int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+    int (*set_params)(AVFilterContext *ctx);
 } AudioCrossoverContext;
 
 #define OFFSET(x) offsetof(AudioCrossoverContext, x)
@@ -266,48 +246,25 @@ static av_cold int init(AVFilterContext *ctx)
 #define DEPTH 64
 #include "acrossover_template.c"
 
-static void set_params(AVFilterContext *ctx)
-{
-    AudioCrossoverContext *s = ctx->priv;
-    const double sample_rate = ctx->inputs[0]->sample_rate;
-
-    for (int band = 0; band <= s->nb_splits; band++) {
-        SVFCoeffs *sf = &s->svf_cf[band];
-
-        sf->gd = tan(M_PI*s->splits[band]/sample_rate);
-        sf->kd = 2.0 - 2.0 * s->resonance[band];
-        sf->g2d = sf->gd*sf->gd;
-        sf->g2kd = sf->g2d*sf->kd;
-        sf->gkd = sf->gd*sf->kd;
-        sf->rd = 1.0 - s->resonance[band];
-
-        sf->gf = sf->gd;
-        sf->kf = sf->kd;
-        sf->g2f = sf->g2d;
-        sf->g2kf = sf->g2kd;
-        sf->gkf = sf->gkd;
-        sf->rf = sf->rd;
-    }
-}
-
 static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     AudioCrossoverContext *s = ctx->priv;
 
-    s->svf = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->svf));
-    if (!s->svf)
-        return AVERROR(ENOMEM);
-
-    set_params(ctx);
-
     switch (inlink->format) {
-    case AV_SAMPLE_FMT_FLTP: s->filter_channels = filter_channels_fltp; break;
-    case AV_SAMPLE_FMT_DBLP: s->filter_channels = filter_channels_dblp; break;
-    default: return AVERROR_BUG;
+    case AV_SAMPLE_FMT_FLTP:
+        s->set_params = set_params_fltp;
+        s->filter_channels = filter_channels_fltp;
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        s->set_params = set_params_dblp;
+        s->filter_channels = filter_channels_dblp;
+        break;
+    default:
+        return AVERROR_BUG;
     }
 
-    return 0;
+    return s->set_params(ctx);
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
@@ -405,6 +362,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
                            char *res, int res_len, int flags)
 {
+    AudioCrossoverContext *s = ctx->priv;
     int ret;
 
     ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
@@ -414,9 +372,8 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     parse_active(ctx);
     parse_gains(ctx);
     parse_resonance(ctx);
-    set_params(ctx);
 
-    return 0;
+    return s->set_params(ctx);
 }
 
 static const AVFilterPad inputs[] = {
