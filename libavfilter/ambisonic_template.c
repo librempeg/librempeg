@@ -21,12 +21,18 @@
 
 #undef ftype
 #undef SAMPLE_FORMAT
+#undef VECTOR_MAC_SCALAR
+#undef VECTOR_MUL_SCALAR
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
 #define ftype float
+#define VECTOR_MAC_SCALAR s->fdsp->vector_fmac_scalar
+#define VECTOR_MUL_SCALAR s->fdsp->vector_fmul_scalar
 #else
 #define SAMPLE_FORMAT double
 #define ftype double
+#define VECTOR_MAC_SCALAR s->fdsp->vector_dmac_scalar
+#define VECTOR_MUL_SCALAR s->fdsp->vector_dmul_scalar
 #endif
 
 #define fn3(a,b)   a##_##b
@@ -48,11 +54,7 @@ static int fn(scale)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
         ftype *dst = (ftype *)out->extended_data[ch];
         ftype mul = s->norm_tab[s->scaling_norm][s->seq_map[ch]];
 
-#if DEPTH == 32
-        s->fdsp->vector_fmul_scalar(dst, src, mul, FFALIGN(nb_samples, 16));
-#else
-        s->fdsp->vector_dmul_scalar(dst, src, mul, FFALIGN(nb_samples, 16));
-#endif
+        VECTOR_MUL_SCALAR(dst, src, mul, FFALIGN(nb_samples, 16));
     }
 
     return 0;
@@ -74,20 +76,13 @@ static int fn(transform)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
         ftype *dst = (ftype *)out->extended_data[ch];
         ftype mul0 = s->transform_mat[s->seq_map[ch]][s->seq_map[0]];
 
-#if DEPTH == 32
-        s->fdsp->vector_fmul_scalar(dst, src0, mul0, FFALIGN(nb_samples, 16));
-#else
-        s->fdsp->vector_dmul_scalar(dst, src0, mul0, FFALIGN(nb_samples, 16));
-#endif
+        VECTOR_MUL_SCALAR(dst, src0, mul0, FFALIGN(nb_samples, 16));
+
         for (int ch2 = 1; ch2 < nb_channels; ch2++) {
             const ftype *src = (const ftype *)in->extended_data[ch2];
             ftype mul = s->transform_mat[s->seq_map[ch]][s->seq_map[ch2]];
 
-#if DEPTH == 32
-            s->fdsp->vector_fmac_scalar(dst, src, mul, FFALIGN(nb_samples, 16));
-#else
-            s->fdsp->vector_dmac_scalar(dst, src, mul, FFALIGN(nb_samples, 16));
-#endif
+            VECTOR_MAC_SCALAR(dst, src, mul, FFALIGN(nb_samples, 16));
         }
     }
 
@@ -116,11 +111,7 @@ static int fn(multiply)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
             const ftype gain = gains_tab ? gains_tab[ch2] : 1.f;
             const ftype mul = s->norm_decode_mat[ch][ch2] * gain;
 
-#if DEPTH == 32
-            s->fdsp->vector_fmac_scalar(dst, src, mul, FFALIGN(in->nb_samples, 16));
-#else
-            s->fdsp->vector_dmac_scalar(dst, src, mul, FFALIGN(in->nb_samples, 16));
-#endif
+            VECTOR_MAC_SCALAR(dst, src, mul, FFALIGN(in->nb_samples, 16));
         }
     }
 
@@ -197,11 +188,7 @@ static int fn(level)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
         ftype *dst = (ftype *)out->extended_data[ch];
         const ftype mul = s->level_tab[ch];
 
-#if DEPTH == 32
-        s->fdsp->vector_fmul_scalar(dst, dst, mul, FFALIGN(nb_samples, 16));
-#else
-        s->fdsp->vector_dmul_scalar(dst, dst, mul, FFALIGN(nb_samples, 16));
-#endif
+        VECTOR_MUL_SCALAR(dst, dst, mul, FFALIGN(nb_samples, 16));
     }
 
     return 0;
