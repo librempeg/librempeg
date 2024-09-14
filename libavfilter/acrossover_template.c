@@ -36,7 +36,7 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 typedef struct fn(SVFCoeffs) {
-    ftype g, r, k;
+    ftype g, r, k, f;
     ftype gk, g2, g2k;
 } fn(SVFCoeffs);
 
@@ -73,6 +73,7 @@ static int fn(set_params)(AVFilterContext *ctx)
         sf->g2k = sf->g2*sf->k;
         sf->gk = sf->g*sf->k;
         sf->r = F(1.0) - s->resonance[band];
+        sf->f = F(-1.0) / (F(1.0)+sf->g2+sf->gk);
     }
 
     return 0;
@@ -90,6 +91,7 @@ static ftype fn(svf_xover_lo)(const fn(SVFCoeffs) *svf, ftype *sc,
                               const ftype in)
 {
     const ftype g = svf->g;
+    const ftype f = svf->f;
     const ftype gk = svf->gk;
     const ftype g2 = svf->g2;
     const ftype g2k = svf->g2k;
@@ -99,8 +101,8 @@ static ftype fn(svf_xover_lo)(const fn(SVFCoeffs) *svf, ftype *sc,
     ftype vlow = in;
     ftype v2, v3;
 
-    v2 = F(-1.) / (F(1.) + g2 + gk) * (-s0 + g*s1 - gk*s0 + g2*vband - g*vlow - g2k*vlow);
-    v3 = F(-1.) / (F(1.) + g2 + gk) * (-g*s0 - s1 - g*vband - g2*vlow);
+    v2 = f * (-s0 + g*s1 - gk*s0 + g2*vband - g*vlow - g2k*vlow);
+    v3 = f * (-g*s0 - s1 - g*vband - g2*vlow);
     sc[0] = F(2.) * v2 - s0;
     sc[1] = F(2.) * v3 - s1;
 
@@ -111,6 +113,7 @@ static ftype fn(svf_xover_hi)(const fn(SVFCoeffs) *svf, ftype *sc,
                               const ftype in)
 {
     const ftype g = svf->g;
+    const ftype f = svf->f;
     const ftype gk = svf->gk;
     const ftype g2 = svf->g2;
     ftype s0 = sc[0];
@@ -119,8 +122,8 @@ static ftype fn(svf_xover_hi)(const fn(SVFCoeffs) *svf, ftype *sc,
     ftype vband = in * svf->r;
     ftype v2, v3;
 
-    v2 = F(-1.) / (F(1.) + g2 + gk) * (-s0 + g*s1 - gk*s0 + g2*vband + g*vhigh);
-    v3 = F(-1.) / (F(1.) + g2 + gk) * (-g*s0 - s1 - g*vband + g2*vhigh + gk*vhigh);
+    v2 = f * (-s0 + g*s1 - gk*s0 + g2*vband + g*vhigh);
+    v3 = f * (-g*s0 - s1 - g*vband + g2*vhigh + gk*vhigh);
     sc[0] = F(2.) * v2 - s0;
     sc[1] = F(2.) * v3 - s1;
 
