@@ -1587,7 +1587,8 @@ int avfilter_print_config_formats(AVBPrint *bp, const struct AVFilter *filter, i
         av_bprintf(bp, "All (passthrough)");
     }
 
-    if (filter->formats_state == FF_FILTER_FORMATS_QUERY_FUNC) {
+    if (filter->formats_state == FF_FILTER_FORMATS_QUERY_FUNC ||
+        filter->formats_state == FF_FILTER_FORMATS_QUERY_FUNC2) {
         av_bprintf(bp, "Dynamic");
     }
 
