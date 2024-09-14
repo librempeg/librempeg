@@ -18,18 +18,15 @@
 
 #undef ftype
 #undef SAMPLE_FORMAT
-#undef SAMPLE_SUFFIX
 #undef FTAN
 #if DEPTH == 32
 #define ftype float
 #define FTAN tanf
 #define SAMPLE_FORMAT fltp
-#define SAMPLE_SUFFIX f
 #else
 #define ftype double
 #define FTAN tan
 #define SAMPLE_FORMAT dblp
-#define SAMPLE_SUFFIX d
 #endif
 
 #define F(x) ((ftype)(x))
