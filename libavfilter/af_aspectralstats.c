@@ -45,6 +45,7 @@
 #define MEASURE_DECREASE (1 << 11)
 #define MEASURE_ROLLOFF  (1 << 12)
 #define MEASURE_CONTRAST (1 << 13)
+#define MEASURE_TENERGY  (1 << 14)
 
 typedef struct ChannelSpectralStats {
     float mean;
@@ -61,6 +62,7 @@ typedef struct ChannelSpectralStats {
     float decrease;
     float rolloff;
     float contrast;
+    float total_energy;
 } ChannelSpectralStats;
 
 typedef struct AudioSpectralStatsContext {
@@ -106,6 +108,7 @@ static const AVOption aspectralstats_options[] = {
     { "decrease", "", 0, AV_OPT_TYPE_CONST, {.i64=MEASURE_DECREASE}, 0, 0, A, .unit = "measure" },
     { "rolloff",  "", 0, AV_OPT_TYPE_CONST, {.i64=MEASURE_ROLLOFF }, 0, 0, A, .unit = "measure" },
     { "contrast", "", 0, AV_OPT_TYPE_CONST, {.i64=MEASURE_CONTRAST}, 0, 0, A, .unit = "measure" },
+    { "total_energy","",0,AV_OPT_TYPE_CONST,{.i64=MEASURE_TENERGY }, 0, 0, A, .unit = "measure" },
     { NULL }
 };
 
@@ -230,6 +233,8 @@ static void set_metadata(AudioSpectralStatsContext *s, AVDictionary **metadata)
             set_meta(metadata, ch + 1, "rolloff",  "%g", stats->rolloff);
         if (s->measure & MEASURE_CONTRAST)
             set_meta(metadata, ch + 1, "contrast", "%g", stats->contrast);
+        if (s->measure & MEASURE_TENERGY)
+            set_meta(metadata, ch + 1, "total_energy", "%g", stats->total_energy);
     }
 }
 
@@ -452,6 +457,16 @@ static float spectral_contrast(const float *const spectral, int size, int max_fr
     return high / (low + FLT_EPSILON);
 }
 
+static float spectral_tenergy(const float *const spectral, int size, int max_freq)
+{
+    float sum = 0.f;
+
+    for (int n = 0; n < size; n++)
+        sum += spectral[n]*spectral[n];
+
+    return sum;
+}
+
 static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AudioSpectralStatsContext *s = ctx->priv;
@@ -518,6 +533,8 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
             stats->rolloff  = spectral_rolloff(magnitude, nb_bins, in->sample_rate / 2);
         if (s->measure & MEASURE_CONTRAST)
             stats->contrast = spectral_contrast(magnitude, nb_bins, in->sample_rate / 2);
+        if (s->measure & MEASURE_TENERGY)
+            stats->total_energy = spectral_tenergy(magnitude, nb_bins, in->sample_rate / 2);
 
         memcpy(prev_magnitude, magnitude, win_size * sizeof(float));
     }
