@@ -28,6 +28,7 @@
 #include "avfilter.h"
 #include "filters.h"
 #include "formats.h"
+#include "audio.h"
 #include "video.h"
 
 typedef struct DrawGraphContext {
@@ -44,6 +45,8 @@ typedef struct DrawGraphContext {
     int           slide;
     int           w, h;
     AVRational    frame_rate;
+
+    int           nb_samples;
 
     AVFrame       *out;
     int           x;
@@ -342,21 +345,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, clone);
 }
 
-static int request_frame(AVFilterLink *outlink)
+static int flush_frame(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     DrawGraphContext *s = ctx->priv;
     AVFrame *out = s->out;
-    int ret, i, k, step, l;
 
-    ret = ff_request_frame(ctx->inputs[0]);
+    if (s->slide == 4 && s->nb_values > 0) {
+        int step = ceil(s->nb_values / (float)s->w), l = 0;
 
-    if (s->slide == 4 && ret == AVERROR_EOF && s->nb_values > 0) {
-        s->x = l = 0;
-        step = ceil(s->nb_values / (float)s->w);
+        s->x = l;
 
-        for (k = 0; k < s->nb_values; k++) {
-            for (i = 0; i < s->nb_keys; i++) {
+        for (int k = 0; k < s->nb_values; k++) {
+            for (int i = 0; i < s->nb_keys; i++) {
                 double values[VAR_VARS_NB];
                 int j, y, x, old;
                 uint32_t fg, bg;
@@ -418,10 +419,10 @@ static int request_frame(AVFilterLink *outlink)
 
         s->nb_values = 0;
         out->pts = 0;
-        ret = ff_filter_frame(ctx->outputs[0], s->out);
+        return ff_filter_frame(ctx->outputs[0], s->out);
     }
 
-    return ret;
+    return 0;
 }
 
 static int config_output(AVFilterLink *outlink)
@@ -437,6 +438,45 @@ static int config_output(AVFilterLink *outlink)
     s->prev_pts = AV_NOPTS_VALUE;
 
     return 0;
+}
+
+static int activate(AVFilterContext *ctx)
+{
+    AVFilterLink *inlink = ctx->inputs[0];
+    AVFilterLink *outlink = ctx->outputs[0];
+    DrawGraphContext *s = ctx->priv;
+    int ret, status;
+    int64_t pts;
+    AVFrame *in;
+
+    FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
+
+    if (inlink->sample_rate > 0) {
+        s->nb_samples = FFMAX(1, av_rescale(inlink->sample_rate, s->frame_rate.den, s->frame_rate.num));
+
+        ret = ff_inlink_consume_samples(inlink, s->nb_samples, s->nb_samples, &in);
+    } else {
+        ret = ff_inlink_consume_frame(inlink, &in);
+    }
+    if (ret < 0)
+        return ret;
+    if (ret > 0)
+        return filter_frame(inlink, in);
+
+    if (s->nb_samples > 0 && ff_inlink_queued_samples(inlink) >= s->nb_samples) {
+        ff_filter_set_ready(ctx, 10);
+        return 0;
+    }
+
+    if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+        ret = flush_frame(outlink);
+        ff_outlink_set_status(outlink, status, pts);
+        return ret;
+    }
+
+    FF_FILTER_FORWARD_WANTED(outlink, inlink);
+
+    return FFERROR_NOT_READY;
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
@@ -468,19 +508,10 @@ static const AVFilterPad drawgraph_outputs[] = {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
         .config_props = config_output,
-        .request_frame = request_frame,
     },
 };
 
 #if CONFIG_DRAWGRAPH_FILTER
-
-static const AVFilterPad drawgraph_inputs[] = {
-    {
-        .name         = "default",
-        .type         = AVMEDIA_TYPE_VIDEO,
-        .filter_frame = filter_frame,
-    },
-};
 
 const AVFilter ff_vf_drawgraph = {
     .name          = "drawgraph",
@@ -488,8 +519,9 @@ const AVFilter ff_vf_drawgraph = {
     .priv_size     = sizeof(DrawGraphContext),
     .priv_class    = &drawgraph_class,
     .init          = init,
+    .activate      = activate,
     .uninit        = uninit,
-    FILTER_INPUTS(drawgraph_inputs),
+    FILTER_INPUTS(ff_video_default_filterpad),
     FILTER_OUTPUTS(drawgraph_outputs),
     FILTER_QUERY_FUNC(query_formats),
 };
@@ -498,22 +530,15 @@ const AVFilter ff_vf_drawgraph = {
 
 #if CONFIG_ADRAWGRAPH_FILTER
 
-static const AVFilterPad adrawgraph_inputs[] = {
-    {
-        .name         = "default",
-        .type         = AVMEDIA_TYPE_AUDIO,
-        .filter_frame = filter_frame,
-    },
-};
-
 const AVFilter ff_avf_adrawgraph = {
     .name          = "adrawgraph",
     .description   = NULL_IF_CONFIG_SMALL("Draw a graph using input audio metadata."),
     .priv_class    = &drawgraph_class,
     .priv_size     = sizeof(DrawGraphContext),
     .init          = init,
+    .activate      = activate,
     .uninit        = uninit,
-    FILTER_INPUTS(adrawgraph_inputs),
+    FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(drawgraph_outputs),
     FILTER_QUERY_FUNC(query_formats),
 };
