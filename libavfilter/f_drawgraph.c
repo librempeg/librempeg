@@ -147,20 +147,17 @@ static av_cold int init(AVFilterContext *ctx)
     return 0;
 }
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    AVFilterLink *outlink = ctx->outputs[0];
     static const enum AVPixelFormat pix_fmts[] = {
         AV_PIX_FMT_RGBA,
         AV_PIX_FMT_NONE
     };
-    int ret;
+    AVFilterFormats *formats = ff_make_format_list(pix_fmts);
 
-    AVFilterFormats *fmts_list = ff_make_format_list(pix_fmts);
-    if ((ret = ff_formats_ref(fmts_list, &outlink->incfg.formats)) < 0)
-        return ret;
-
-    return 0;
+    return ff_formats_ref(formats, &cfg_out[0]->formats);
 }
 
 static void clear_image(DrawGraphContext *s, AVFrame *out, AVFilterLink *outlink)
@@ -523,7 +520,7 @@ const AVFilter ff_vf_drawgraph = {
     .uninit        = uninit,
     FILTER_INPUTS(ff_video_default_filterpad),
     FILTER_OUTPUTS(drawgraph_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
 };
 
 #endif // CONFIG_DRAWGRAPH_FILTER
@@ -540,6 +537,6 @@ const AVFilter ff_avf_adrawgraph = {
     .uninit        = uninit,
     FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(drawgraph_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
 };
 #endif // CONFIG_ADRAWGRAPH_FILTER
