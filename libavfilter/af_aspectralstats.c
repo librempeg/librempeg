@@ -44,6 +44,7 @@
 #define MEASURE_SLOPE    (1 << 10)
 #define MEASURE_DECREASE (1 << 11)
 #define MEASURE_ROLLOFF  (1 << 12)
+#define MEASURE_CONTRAST (1 << 13)
 
 typedef struct ChannelSpectralStats {
     float mean;
@@ -59,6 +60,7 @@ typedef struct ChannelSpectralStats {
     float slope;
     float decrease;
     float rolloff;
+    float contrast;
 } ChannelSpectralStats;
 
 typedef struct AudioSpectralStatsContext {
@@ -103,6 +105,7 @@ static const AVOption aspectralstats_options[] = {
     { "slope",    "", 0, AV_OPT_TYPE_CONST, {.i64=MEASURE_SLOPE   }, 0, 0, A, .unit = "measure" },
     { "decrease", "", 0, AV_OPT_TYPE_CONST, {.i64=MEASURE_DECREASE}, 0, 0, A, .unit = "measure" },
     { "rolloff",  "", 0, AV_OPT_TYPE_CONST, {.i64=MEASURE_ROLLOFF }, 0, 0, A, .unit = "measure" },
+    { "contrast", "", 0, AV_OPT_TYPE_CONST, {.i64=MEASURE_CONTRAST}, 0, 0, A, .unit = "measure" },
     { NULL }
 };
 
@@ -225,6 +228,8 @@ static void set_metadata(AudioSpectralStatsContext *s, AVDictionary **metadata)
             set_meta(metadata, ch + 1, "decrease", "%g", stats->decrease);
         if (s->measure & MEASURE_ROLLOFF)
             set_meta(metadata, ch + 1, "rolloff",  "%g", stats->rolloff);
+        if (s->measure & MEASURE_CONTRAST)
+            set_meta(metadata, ch + 1, "contrast", "%g", stats->contrast);
     }
 }
 
@@ -432,6 +437,21 @@ static float spectral_rolloff(const float *const spectral, int size, int max_fre
     return idx * scale;
 }
 
+static float spectral_contrast(const float *const spectral, int size, int max_freq)
+{
+    float high = 0.f, low = 0.f;
+
+    for (int n = 1; n < size-1; n++) {
+        if (spectral[n] > spectral[n-1] && spectral[n] > spectral[n+1])
+            high += spectral[n];
+
+        if (spectral[n] < spectral[n-1] && spectral[n] < spectral[n+1])
+            low += spectral[n];
+    }
+
+    return high / (low + FLT_EPSILON);
+}
+
 static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AudioSpectralStatsContext *s = ctx->priv;
@@ -496,6 +516,8 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
             stats->decrease = spectral_decrease(magnitude, nb_bins, in->sample_rate / 2);
         if (s->measure & MEASURE_ROLLOFF)
             stats->rolloff  = spectral_rolloff(magnitude, nb_bins, in->sample_rate / 2);
+        if (s->measure & MEASURE_CONTRAST)
+            stats->contrast = spectral_contrast(magnitude, nb_bins, in->sample_rate / 2);
 
         memcpy(prev_magnitude, magnitude, win_size * sizeof(float));
     }

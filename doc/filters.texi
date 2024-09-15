@@ -3599,6 +3599,7 @@ A list of each metadata key follows:
 @item slope
 @item decrease
 @item rolloff
+@item contrast
 @end table
 
 @section asr
