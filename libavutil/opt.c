@@ -1602,7 +1602,7 @@ static void opt_list(void *obj, void *av_log_obj, const char *unit,
             av_log(av_log_obj, AV_LOG_INFO, " %s", opt->help);
 
         if (av_opt_query_ranges(&r, obj, opt->name, AV_OPT_SEARCH_FAKE_OBJ) >= 0) {
-            switch (opt->type) {
+            switch (TYPE_BASE(opt->type)) {
             case AV_OPT_TYPE_INT:
             case AV_OPT_TYPE_UINT:
             case AV_OPT_TYPE_INT64:
@@ -2471,7 +2471,7 @@ int av_opt_query_ranges_default(AVOptionRanges **ranges_arg, void *obj, const ch
     range->value_min = field->min;
     range->value_max = field->max;
 
-    switch (field->type) {
+    switch (TYPE_BASE(field->type)) {
     case AV_OPT_TYPE_BOOL:
     case AV_OPT_TYPE_INT:
     case AV_OPT_TYPE_UINT:
