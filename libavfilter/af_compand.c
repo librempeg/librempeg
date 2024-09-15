@@ -30,7 +30,6 @@
 #include <float.h>
 
 #include "libavutil/avassert.h"
-#include "libavutil/avstring.h"
 #include "libavutil/ffmath.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
@@ -39,28 +38,22 @@
 #include "avfilter.h"
 #include "filters.h"
 
-typedef struct ChanParam {
-    double attack;
-    double decay;
-    double volume;
-} ChanParam;
-
-typedef struct CompandSegment {
-    double x, y;
-    double a, b;
-} CompandSegment;
-
 typedef struct CompandContext {
     const AVClass *class;
+
     int nb_segments;
     float *attacks;
     unsigned nb_attacks;
     float *decays;
     unsigned nb_decays;
-    char **points;
-    unsigned nb_points;
-    CompandSegment *segments;
-    ChanParam *channels;
+    float *in_points;
+    unsigned nb_in_points;
+    float *out_points;
+    unsigned nb_out_points;
+
+    void *segments;
+    void *channels;
+
     double in_min_log;
     double out_min_lin;
     double curve_dB;
@@ -73,7 +66,9 @@ typedef struct CompandContext {
     int delay_index;
     int64_t pts;
 
+    int (*prepare)(AVFilterContext *ctx, AVFilterLink *outlink);
     int (*compand)(AVFilterContext *ctx, AVFrame *frame);
+    void (*drain)(AVFilterContext *ctx, AVFrame *frame);
 } CompandContext;
 
 #define OFFSET(x) offsetof(CompandContext, x)
@@ -82,12 +77,14 @@ typedef struct CompandContext {
 
 static const AVOptionArrayDef def_attacks = {.def="0",.size_min=1,.sep='|'};
 static const AVOptionArrayDef def_decays  = {.def="0.8",.size_min=1,.sep='|'};
-static const AVOptionArrayDef def_points  = {.def="-70/-70|-60/-20|1/0",.size_min=1,.sep='|'};
+static const AVOptionArrayDef def_in_points  = {.def="-70|-60|1",.size_min=1,.sep='|'};
+static const AVOptionArrayDef def_out_points = {.def="-70|-20|0",.size_min=1,.sep='|'};
 
 static const AVOption compand_options[] = {
     { "attacks", "set time over which increase of volume is determined", OFFSET(attacks), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_attacks }, 0, 10, A },
     { "decays", "set time over which decrease of volume is determined", OFFSET(decays), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_decays }, 0, 10, A },
-    { "points", "set points of transfer function", OFFSET(points), AV_OPT_TYPE_STRING|AR, { .arr = &def_points }, 0, 0, A },
+    { "ipoints", "set input points of transfer function", OFFSET(in_points), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_in_points }, -900, 900, A },
+    { "opoints", "set output points of transfer function", OFFSET(out_points), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_out_points }, -900, 900, A },
     { "soft-knee", "set soft-knee", OFFSET(curve_dB), AV_OPT_TYPE_DOUBLE, { .dbl = 0.01 }, 0.01, 900, A },
     { "gain", "set output gain", OFFSET(gain_dB), AV_OPT_TYPE_DOUBLE, { .dbl = 0 }, -900, 900, A },
     { "volume", "set initial volume", OFFSET(initial_volume), AV_OPT_TYPE_DOUBLE, { .dbl = 0 }, -900, 0, A },
@@ -106,149 +103,18 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_frame_free(&s->delay_frame);
 }
 
-static void update_volume(ChanParam *cp, double in)
-{
-    double delta = log(in + FLT_EPSILON) - cp->volume;
+#define DEPTH 32
+#include "compand_template.c"
 
-    if (delta > 0.0)
-        cp->volume += delta * cp->attack;
-    else
-        cp->volume += delta * cp->decay;
-}
-
-static double get_volume(CompandContext *s, double in_log)
-{
-    CompandSegment *cs;
-    double out_log;
-    int i;
-
-    if (in_log < s->in_min_log)
-        return s->out_min_lin;
-
-    for (i = 1; i < s->nb_segments; i++)
-        if (in_log <= s->segments[i].x)
-            break;
-    cs = &s->segments[i - 1];
-    in_log -= cs->x;
-    out_log = cs->y + in_log * (cs->a * in_log + cs->b);
-
-    return exp(out_log);
-}
-
-static int compand_nodelay(AVFilterContext *ctx, AVFrame *frame)
-{
-    CompandContext *s    = ctx->priv;
-    AVFilterLink *inlink = ctx->inputs[0];
-    const int channels   = inlink->ch_layout.nb_channels;
-    const int nb_samples = frame->nb_samples;
-    AVFrame *out_frame;
-    int err;
-
-    if (av_frame_is_writable(frame)) {
-        out_frame = frame;
-    } else {
-        out_frame = ff_get_audio_buffer(ctx->outputs[0], nb_samples);
-        if (!out_frame) {
-            av_frame_free(&frame);
-            return AVERROR(ENOMEM);
-        }
-        err = av_frame_copy_props(out_frame, frame);
-        if (err < 0) {
-            av_frame_free(&out_frame);
-            av_frame_free(&frame);
-            return err;
-        }
-    }
-
-    for (int chan = 0; chan < channels; chan++) {
-        const double *src = (double *)frame->extended_data[chan];
-        double *dst = (double *)out_frame->extended_data[chan];
-        ChanParam *cp = &s->channels[chan];
-
-        for (int i = 0; i < nb_samples; i++) {
-            update_volume(cp, fabs(src[i]));
-
-            dst[i] = src[i] * get_volume(s, cp->volume);
-        }
-    }
-
-    if (frame != out_frame)
-        av_frame_free(&frame);
-
-    return ff_filter_frame(ctx->outputs[0], out_frame);
-}
-
-#define MOD(a, b) (((a) >= (b)) ? (a) - (b) : (a))
-
-static int compand_delay(AVFilterContext *ctx, AVFrame *frame)
-{
-    CompandContext *s    = ctx->priv;
-    AVFilterLink *inlink = ctx->inputs[0];
-    const int channels = inlink->ch_layout.nb_channels;
-    const int nb_samples = frame->nb_samples;
-    int dindex = 0, count = 0;
-    AVFrame *out_frame = NULL;
-    int err;
-
-    for (int chan = 0; chan < channels; chan++) {
-        AVFrame *delay_frame = s->delay_frame;
-        const double *src    = (double *)frame->extended_data[chan];
-        double *dbuf         = (double *)delay_frame->extended_data[chan];
-        ChanParam *cp        = &s->channels[chan];
-        double *dst;
-
-        count  = s->delay_count;
-        dindex = s->delay_index;
-        for (int i = 0, oindex = 0; i < nb_samples; i++) {
-            const double in = src[i];
-            update_volume(cp, fabs(in));
-
-            if (count >= s->delay_samples) {
-                if (!out_frame) {
-                    out_frame = ff_get_audio_buffer(ctx->outputs[0], nb_samples - i);
-                    if (!out_frame) {
-                        av_frame_free(&frame);
-                        return AVERROR(ENOMEM);
-                    }
-                    err = av_frame_copy_props(out_frame, frame);
-                    if (err < 0) {
-                        av_frame_free(&out_frame);
-                        av_frame_free(&frame);
-                        return err;
-                    }
-                    s->pts = out_frame->pts + out_frame->nb_samples;
-                    out_frame->pts -= s->delay_samples - i;
-                }
-
-                dst = (double *)out_frame->extended_data[chan];
-                dst[oindex++] = dbuf[dindex] * get_volume(s, cp->volume);
-            } else {
-                count++;
-            }
-
-            dbuf[dindex] = in;
-            dindex = MOD(dindex + 1, s->delay_samples);
-        }
-    }
-
-    s->delay_count = count;
-    s->delay_index = dindex;
-
-    av_frame_free(&frame);
-
-    if (out_frame)
-        return ff_filter_frame(ctx->outputs[0], out_frame);
-
-    return 0;
-}
+#undef DEPTH
+#define DEPTH 64
+#include "compand_template.c"
 
 static int compand_drain(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     CompandContext *s    = ctx->priv;
-    const int channels   = outlink->ch_layout.nb_channels;
     AVFrame *frame;
-    int dindex;
 
     /* 2048 is to limit output frame size during drain */
     frame = ff_get_audio_buffer(outlink, FFMIN(2048, s->delay_count));
@@ -257,21 +123,7 @@ static int compand_drain(AVFilterLink *outlink)
     frame->pts = s->pts;
     s->pts += frame->nb_samples;
 
-    av_assert0(channels > 0);
-    for (int chan = 0; chan < channels; chan++) {
-        AVFrame *delay_frame = s->delay_frame;
-        double *dbuf = (double *)delay_frame->extended_data[chan];
-        double *dst = (double *)frame->extended_data[chan];
-        ChanParam *cp = &s->channels[chan];
-
-        dindex = s->delay_index;
-        for (int i = 0; i < frame->nb_samples; i++) {
-            dst[i] = dbuf[dindex] * get_volume(s, cp->volume);
-            dindex = MOD(dindex + 1, s->delay_samples);
-        }
-    }
-    s->delay_count -= frame->nb_samples;
-    s->delay_index = dindex;
+    s->drain(ctx, frame);
 
     return ff_filter_frame(outlink, frame);
 }
@@ -281,149 +133,45 @@ static int config_output(AVFilterLink *outlink)
     AVFilterContext *ctx  = outlink->src;
     CompandContext *s     = ctx->priv;
     const int sample_rate = outlink->sample_rate;
-    double radius         = s->curve_dB * M_LN10 / 20.0;
     const int channels    = outlink->ch_layout.nb_channels;
-    unsigned nb_attacks = s->nb_attacks, nb_decays = s->nb_decays, num;
+    int ret;
 
-    if (nb_attacks > channels || nb_decays > channels) {
+    if (s->nb_attacks > channels || s->nb_decays > channels)
         av_log(ctx, AV_LOG_WARNING,
                 "Number of attacks/decays bigger than number of channels. Ignoring rest of entries.\n");
-        nb_attacks = FFMIN(nb_attacks, channels);
-        nb_decays  = FFMIN(nb_decays, channels);
-    }
 
     uninit(ctx);
 
-    s->nb_segments = (s->nb_points + 4) * 2;
-    s->channels = av_calloc(channels, sizeof(*s->channels));
-    s->segments = av_calloc(s->nb_segments, sizeof(*s->segments));
-    if (!s->channels || !s->segments)
-        return AVERROR(ENOMEM);
-
-    for (int i = 0; i < nb_attacks; i++)
-        s->channels[i].attack = s->attacks[i];
-
-    for (int i = nb_attacks; i < channels; i++)
-        s->channels[i].attack = s->channels[nb_attacks-1].attack;
-
-    for (int i = 0; i < nb_decays; i++)
-        s->channels[i].decay = s->decays[i];
-
-    for (int i = nb_decays; i < channels; i++)
-        s->channels[i].decay = s->channels[nb_decays-1].decay;
-
-#define S(x) s->segments[2 * ((x) + 1)]
-    for (int i = 0; i < s->nb_points; i++) {
-        if (av_sscanf(s->points[i], "%lf/%lf", &S(i).x, &S(i).y) != 2) {
-            av_log(ctx, AV_LOG_ERROR,
-                    "Invalid and/or missing input/output value.\n");
-            return AVERROR(EINVAL);
-        }
-        if (i && S(i - 1).x > S(i).x) {
-            av_log(ctx, AV_LOG_ERROR,
-                    "Transfer function input values must be increasing.\n");
-            return AVERROR(EINVAL);
-        }
-        S(i).y -= S(i).x;
-        av_log(ctx, AV_LOG_DEBUG, "%d: x=%f y=%f\n", i, S(i).x, S(i).y);
-    }
-    num = s->nb_points;
-
-    /* Add 0,0 if necessary */
-    if (num == 0 || S(num - 1).x)
-        num++;
-
-#undef S
-#define S(x) s->segments[2 * (x)]
-    /* Add a tail off segment at the start */
-    S(0).x = S(1).x - 2 * s->curve_dB;
-    S(0).y = S(1).y;
-    num++;
-
-    /* Join adjacent colinear segments */
-    for (int i = 2; i < num; i++) {
-        double g1 = (S(i - 1).y - S(i - 2).y) * (S(i - 0).x - S(i - 1).x);
-        double g2 = (S(i - 0).y - S(i - 1).y) * (S(i - 1).x - S(i - 2).x);
-
-        if (fabs(g1 - g2))
-            continue;
-        num--;
-        for (int j = --i; j < num; j++)
-            S(j) = S(j + 1);
+    switch (outlink->format) {
+    case AV_SAMPLE_FMT_FLTP:
+        s->drain = drain_fltp;
+        s->prepare = prepare_fltp;
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        s->drain = drain_dblp;
+        s->prepare = prepare_dblp;
+        break;
+    default:
+        return AVERROR_BUG;
     }
 
-    for (int i = 0; i < s->nb_segments; i += 2) {
-        s->segments[i].y += s->gain_dB;
-        s->segments[i].x *= M_LN10 / 20;
-        s->segments[i].y *= M_LN10 / 20;
-    }
+    s->nb_segments = (FFMAX(s->nb_in_points, s->nb_out_points) + 4) * 2;
 
-#define L(x, i) s->segments[(i) - (x)]
-    for (int i = 4; i < s->nb_segments; i += 2) {
-        double x, y, cx, cy, in1, in2, out1, out2, theta, len, r;
-
-        L(4, i).a = 0;
-        L(4, i).b = (L(2, i).y - L(4, i).y) / (L(2, i).x - L(4, i).x);
-
-        L(2, i).a = 0;
-        L(2, i).b = (L(0, i).y - L(2, i).y) / (L(0, i).x - L(2, i).x);
-
-        theta = atan2(L(2, i).y - L(4, i).y, L(2, i).x - L(4, i).x);
-        len = hypot(L(2, i).x - L(4, i).x, L(2, i).y - L(4, i).y);
-        r = FFMIN(radius, len);
-        L(3, i).x = L(2, i).x - r * cos(theta);
-        L(3, i).y = L(2, i).y - r * sin(theta);
-
-        theta = atan2(L(0, i).y - L(2, i).y, L(0, i).x - L(2, i).x);
-        len = hypot(L(0, i).x - L(2, i).x, L(0, i).y - L(2, i).y);
-        r = FFMIN(radius, len / 2);
-        x = L(2, i).x + r * cos(theta);
-        y = L(2, i).y + r * sin(theta);
-
-        cx = (L(3, i).x + L(2, i).x + x) / 3;
-        cy = (L(3, i).y + L(2, i).y + y) / 3;
-
-        L(2, i).x = x;
-        L(2, i).y = y;
-
-        in1  = cx - L(3, i).x;
-        out1 = cy - L(3, i).y;
-        in2  = L(2, i).x - L(3, i).x;
-        out2 = L(2, i).y - L(3, i).y;
-        L(3, i).a = (out2 / in2 - out1 / in1) / (in2 - in1);
-        L(3, i).b = out1 / in1 - L(3, i).a * in1;
-    }
-    L(3, s->nb_segments).x = 0;
-    L(3, s->nb_segments).y = L(2, s->nb_segments).y;
-
-    s->in_min_log  = s->segments[1].x;
-    s->out_min_lin = exp(s->segments[1].y);
-
-    for (int i = 0; i < channels; i++) {
-        ChanParam *cp = &s->channels[i];
-
-        if (cp->attack > 1.0 / sample_rate)
-            cp->attack = 1.0 - exp(-1.0 / (sample_rate * cp->attack));
-        else
-            cp->attack = 1.0;
-        if (cp->decay > 1.0 / sample_rate)
-            cp->decay = 1.0 - exp(-1.0 / (sample_rate * cp->decay));
-        else
-            cp->decay = 1.0;
-        cp->volume = s->initial_volume * M_LN10 / 20.0;
-    }
+    ret = s->prepare(ctx, outlink);
+    if (ret < 0)
+        return ret;
 
     s->delay_samples = lrint(s->delay * sample_rate);
     if (s->delay_samples <= 0) {
-        s->compand = compand_nodelay;
-        return 0;
+        s->compand = (outlink->format == AV_SAMPLE_FMT_FLTP) ? compand_nodelay_fltp : compand_nodelay_dblp;
+    } else {
+        s->delay_frame = ff_get_audio_buffer(outlink, s->delay_samples);
+        if (!s->delay_frame)
+            return AVERROR(ENOMEM);
+
+        s->compand = (outlink->format == AV_SAMPLE_FMT_FLTP) ? compand_delay_fltp : compand_delay_dblp;
     }
 
-    s->delay_frame = ff_get_audio_buffer(outlink, s->delay_samples);
-    if (!s->delay_frame)
-        return AVERROR(ENOMEM);
-
-    s->compand = compand_delay;
     return 0;
 }
 
@@ -476,5 +224,5 @@ const AVFilter ff_af_compand = {
     .uninit         = uninit,
     FILTER_INPUTS(compand_inputs),
     FILTER_OUTPUTS(compand_outputs),
-    FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
 };

@@ -4711,16 +4711,14 @@ a typical value for decay is 0.8 seconds.
 If specified number of attacks & decays is lower than number of channels, the last
 set attack/decay will be used for all remaining channels.
 
-@item points
-A list of points for the transfer function, specified in dB relative to the
-maximum possible signal amplitude. Each key points list must be defined using
-the following syntax: @code{x0/y0|x1/y1|x2/y2|....} or
-@code{x0/y0 x1/y1 x2/y2 ....}
+@item ipoints
+A list of input points for the transfer function, specified in dB relative to the
+maximum possible signal amplitude.
+The input points values must be in strictly increasing order.
 
-The input values must be in strictly increasing order but the transfer function
-does not have to be monotonically rising. The point @code{0/0} is assumed but
-may be overridden (by @code{0/out-dBn}). Typical values for the transfer
-function are @code{-70/-70|-60/-20|1/0}.
+@item opoints
+A list of output points for the transfer function, specified in dB relative to the
+maximum possible signal amplitude.
 
 @item soft-knee
 Set the curve radius in dB for all joints. It defaults to 0.01.
@@ -4752,12 +4750,12 @@ operate in predictive rather than reactive mode. It defaults to 0.
 Make music with both quiet and loud passages suitable for listening to in a
 noisy environment:
 @example
-compand=.3|.3:1|1:-90/-60|-60/-40|-40/-30|-20/-20:6:0:-90:0.2
+compand=.3|.3:1|1:-90|-60|-40|-20:-60|-40|-30|-20:6:0:-90:0.2
 @end example
 
 Another example for audio with whisper and explosion parts:
 @example
-compand=0|0:1|1:-90/-900|-70/-70|-30/-9|0/-3:6:0:0:0
+compand=0|0:1|1:-90|-70|-30|0:-900|-70|-9|-3:6:0:0:0
 @end example
 
 @item
@@ -4818,7 +4816,7 @@ compand=attacks=0:points=-80/-169|-54/-80|-49.5/-64.6|-41.1/-41.1|-25.8/-15|-10.
 @item
 Hard limiter at -6dB:
 @example
-compand=attacks=0:points=-80/-80|-6/-6|20/-6
+compand=attacks=0:ipoints=-80|-6|20:opoints=-80|-6|-6
 @end example
 
 @item
@@ -4836,7 +4834,7 @@ compand=attacks=0:points=-80/-115|-35.1/-80|-35/-35|20/20
 @item
 Soft limiter:
 @example
-compand=attacks=0:points=-80/-80|-12.4/-12.4|-6/-8|0/-6.8|20/-2.8
+compand=attacks=0:ipoints=-80|-12.4|-6|0|20:opoints=-80|-12.4|-8|-6.8|-2.8
 @end example
 @end itemize
 
