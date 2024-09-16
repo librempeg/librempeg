@@ -28,6 +28,8 @@
 #undef HYPOT
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
+#undef VECTOR_MAC_SCALAR
+#undef VECTOR_MUL_SCALAR
 #undef FABS
 #undef FMIN
 #undef POW
@@ -39,6 +41,8 @@
 #define ctype AVComplexFloat
 #define ftype float
 #define TX_TYPE AV_TX_FLOAT_RDFT
+#define VECTOR_MAC_SCALAR s->fdsp->vector_fmac_scalar
+#define VECTOR_MUL_SCALAR s->fdsp->vector_fmul_scalar
 #define FABS fabsf
 #define FMIN fminf
 #define POW powf
@@ -50,6 +54,8 @@
 #define ctype AVComplexDouble
 #define ftype double
 #define TX_TYPE AV_TX_DOUBLE_RDFT
+#define VECTOR_MAC_SCALAR s->fdsp->vector_dmac_scalar
+#define VECTOR_MUL_SCALAR s->fdsp->vector_dmul_scalar
 #define FABS fabs
 #define FMIN fmin
 #define POW pow
@@ -145,11 +151,7 @@ static void fn(ir_scale)(AVFilterContext *ctx, AudioFIRContext *s,
         ftype gain = ch_gain * s->ir_gain;
 
         av_log(ctx, AV_LOG_DEBUG, "ch%d gain %f\n", ch, gain);
-#if DEPTH == 32
-        s->fdsp->vector_fmul_scalar(time, time, gain, FFALIGN(cur_nb_taps, 4));
-#else
-        s->fdsp->vector_dmul_scalar(time, time, gain, FFALIGN(cur_nb_taps, 8));
-#endif
+        VECTOR_MUL_SCALAR(time, time, gain, FFALIGN(cur_nb_taps, DEPTH/8));
     }
 }
 
@@ -290,11 +292,7 @@ static int fn(ir_convert)(AVFilterContext *ctx, AudioFIRContext *s,
 static void fn(fir_fadd)(AudioFIRContext *s, ftype *dst, const ftype *src, int nb_samples)
 {
     if ((nb_samples & 15) == 0 && nb_samples >= 8) {
-#if DEPTH == 32
-        s->fdsp->vector_fmac_scalar(dst, src, 1.f, nb_samples);
-#else
-        s->fdsp->vector_dmac_scalar(dst, src, 1.0, nb_samples);
-#endif
+        VECTOR_MAC_SCALAR(dst, src, F(1.0), nb_samples);
     } else {
         for (int n = 0; n < nb_samples; n++)
             dst[n] += src[n];
@@ -332,11 +330,7 @@ static int fn(fir_quantum)(AVFilterContext *ctx, AVFrame *out, const int ch,
         if (dry_gain == F(1.0)) {
             memcpy(src + input_offset, in, nb_samples * sizeof(*src));
         } else if (min_part_size >= 8) {
-#if DEPTH == 32
-            s->fdsp->vector_fmul_scalar(src + input_offset, in, dry_gain, FFALIGN(nb_samples, 4));
-#else
-            s->fdsp->vector_dmul_scalar(src + input_offset, in, dry_gain, FFALIGN(nb_samples, 8));
-#endif
+            VECTOR_MUL_SCALAR(src + input_offset, in, dry_gain, FFALIGN(nb_samples, DEPTH/8));
         } else {
             ftype *src2 = src + input_offset;
             for (int n = 0; n < nb_samples; n++)
@@ -398,11 +392,7 @@ static int fn(fir_quantum)(AVFilterContext *ctx, AVFrame *out, const int ch,
         return 0;
 
     if (min_part_size >= 8) {
-#if DEPTH == 32
-        s->fdsp->vector_fmul_scalar(ptr, ptr, wet_gain, FFALIGN(nb_samples, 4));
-#else
-        s->fdsp->vector_dmul_scalar(ptr, ptr, wet_gain, FFALIGN(nb_samples, 8));
-#endif
+        VECTOR_MUL_SCALAR(ptr, ptr, wet_gain, FFALIGN(nb_samples, DEPTH/8));
     } else {
         for (int n = 0; n < nb_samples; n++)
             ptr[n] *= wet_gain;
