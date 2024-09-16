@@ -300,7 +300,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         td.in = in;
         td.out = out;
 
-        nb_jobs = (in->nb_samples + 4096) / 8192;
+        nb_jobs = (in->nb_samples + 8191) / 8192;
 
         ff_filter_execute(ctx, s->do_sf2sf, &td, NULL,
                           FFMIN(nb_jobs, ff_filter_get_nb_threads(ctx)));
