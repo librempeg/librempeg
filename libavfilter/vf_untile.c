@@ -28,7 +28,7 @@
 
 typedef struct UntileContext {
     const AVClass *class;
-    unsigned w, h;
+    int w, h;
     unsigned current;
     unsigned nb_frames;
     AVFrame *frame;
