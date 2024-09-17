@@ -34,13 +34,13 @@
 
 typedef struct TileContext {
     const AVClass *class;
-    unsigned w, h;
-    unsigned margin;
-    unsigned padding;
-    unsigned overlap;
-    unsigned init_padding;
-    unsigned current;
-    unsigned nb_frames;
+    int w, h;
+    int margin;
+    int padding;
+    int overlap;
+    int init_padding;
+    int current;
+    int nb_frames;
     FFDrawContext draw;
     FFDrawColor blank;
     AVFrame *out_ref;
@@ -74,15 +74,15 @@ static av_cold int init(AVFilterContext *ctx)
 {
     TileContext *tile = ctx->priv;
 
-    if (tile->w > UINT_MAX / tile->h) {
+    if (tile->w > INT_MAX / tile->h) {
         av_log(ctx, AV_LOG_ERROR, "Tile size %ux%u is insane.\n",
                tile->w, tile->h);
         return AVERROR(EINVAL);
     }
 
     if (tile->padding) {
-        if ((tile->w - 1 > (UINT32_MAX - 2 * tile->margin) / tile->padding) ||
-            (tile->h - 1 > (UINT32_MAX - 2 * tile->margin) / tile->padding)) {
+        if ((tile->w - 1 > (INT32_MAX - 2 * tile->margin) / tile->padding) ||
+            (tile->h - 1 > (INT32_MAX - 2 * tile->margin) / tile->padding)) {
             av_log(ctx, AV_LOG_ERROR, "Combination of Tile size %ux%u, padding %d and margin %d overflows.\n",
                    tile->w, tile->h, tile->padding, tile->margin);
             return AVERROR(EINVAL);
