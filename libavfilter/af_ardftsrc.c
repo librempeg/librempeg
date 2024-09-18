@@ -39,7 +39,6 @@ typedef struct AudioRDFTSRCContext {
     int out_nb_samples;
     int in_offset;
     int out_offset;
-    int delay;
     int channels;
     float bandwidth;
 
@@ -134,10 +133,9 @@ static int config_input(AVFilterLink *inlink)
     s->out_rdft_size = s->out_nb_samples * 2;
     s->out_offset = (s->out_rdft_size - s->out_nb_samples) >> 1;
     s->in_offset = (s->in_rdft_size - s->in_nb_samples) >> 1;
-    s->delay = FFABS(s->out_offset - s->in_offset);
     s->tr_nb_samples = FFMIN(s->in_nb_samples, s->out_nb_samples);
     s->taper_samples = lrint(s->tr_nb_samples * (1.0-s->bandwidth));
-    av_log(ctx, AV_LOG_DEBUG, "%d: %d => %d | %d\n", factor, s->in_rdft_size, s->out_rdft_size, s->delay);
+    av_log(ctx, AV_LOG_DEBUG, "factor: %d | %d => %d | delay: %d\n", factor, s->in_rdft_size, s->out_rdft_size, s->out_offset);
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_S16P:
@@ -200,7 +198,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     out->sample_rate = outlink->sample_rate;
-    out->pts = av_rescale_q(in->pts, inlink->time_base, outlink->time_base) - s->delay;
+    out->pts = av_rescale_q(in->pts, inlink->time_base, outlink->time_base) - s->out_offset;
     out->duration = av_rescale_q(out->nb_samples,
                                  (AVRational){1, outlink->sample_rate},
                                  outlink->time_base);

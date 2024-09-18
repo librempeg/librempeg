@@ -184,11 +184,9 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const int in_nb_samples = s->in_nb_samples;
     const int tr_nb_samples = s->tr_nb_samples;
     const int taper_samples = s->taper_samples;
-    const int out_offset = s->out_offset;
     const int in_offset = s->in_offset;
     const int offset = tr_nb_samples - taper_samples;
     const int copy_samples = FFMIN(in_nb_samples, in->nb_samples-soffset);
-    const int diff_offset = FFMAX(out_offset - s->delay, 0);
     const ttype *taper = s->taper;
 
 #if DEPTH == 16
@@ -211,14 +209,14 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 
 #if DEPTH == 16
     for (int n = 0; n < out_nb_samples; n++) {
-        dst[n] = av_clip_int16(lrintf((irdft1[n+diff_offset] + over[n]) * F(1<<(DEPTH-1))));
+        dst[n] = av_clip_int16(lrintf((irdft1[n] + over[n]) * F(1<<(DEPTH-1))));
     }
 #else
-    memcpy(dst, irdft1 + diff_offset, out_nb_samples * sizeof(*dst));
+    memcpy(dst, irdft1, out_nb_samples * sizeof(*dst));
     for (int n = 0; n < out_nb_samples; n++)
         dst[n] += over[n];
 #endif
-    memcpy(over, irdft1 + out_nb_samples + diff_offset, sizeof(*over) * (out_nb_samples - diff_offset));
+    memcpy(over, irdft1 + out_nb_samples, sizeof(*over) * out_nb_samples);
 
     return 0;
 }
