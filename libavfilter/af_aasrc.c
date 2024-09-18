@@ -211,8 +211,9 @@ static int activate(AVFilterContext *ctx)
 {
     AVFilterLink *outlink = ctx->outputs[0];
     AVFilterLink *inlink = ctx->inputs[0];
+    int ret, status;
     AVFrame *in;
-    int ret;
+    int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
@@ -226,7 +227,12 @@ static int activate(AVFilterContext *ctx)
             return filter_frame(inlink, in);
     }
 
-    FF_FILTER_FORWARD_STATUS(inlink, outlink);
+    if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+        pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
+        ff_outlink_set_status(outlink, status, pts);
+        return 0;
+    }
+
     FF_FILTER_FORWARD_WANTED(outlink, inlink);
 
     return FFERROR_NOT_READY;
