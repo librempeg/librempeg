@@ -201,6 +201,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     out->sample_rate = outlink->sample_rate;
     out->pts = av_rescale_q(in->pts, inlink->time_base, outlink->time_base) - s->delay;
+    out->duration = av_rescale_q(out->nb_samples,
+                                 (AVRational){1, outlink->sample_rate},
+                                 outlink->time_base);
     ret = ff_filter_frame(outlink, out);
 fail:
     av_frame_free(&in);
