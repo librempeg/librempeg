@@ -261,7 +261,7 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         stc->filter_state[n].im = isnormal(z.im) ? z.im : F(0.0);
     }
 
-    for (int n = 0; n < n_out_samples; n++) {
+    for (int n = 0; n < n_out_samples && in_idx < n_in_samples; n++) {
         ftype delta_t_frac, y = F(0.0);
         ctype *h = stc->hat;
         int frac_carry;
@@ -303,8 +303,6 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         stc->pAdv = (frac_carry == 0) ? stc->pAdvDown : stc->pAdvUp;
 
         stc->out_idx = n+1;
-        if (in_idx >= n_in_samples)
-            break;
     }
 
     stc->delta_t = delta_t;
