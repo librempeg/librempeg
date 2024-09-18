@@ -181,13 +181,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioRDFTSRCContext *s = ctx->priv;
-    const int factor = FFMAX(1, in->nb_samples / s->in_nb_samples);
+    int ret, factor;
     AVFrame *out;
-    int ret;
 
     if (inlink->sample_rate == outlink->sample_rate)
         return ff_filter_frame(outlink, in);
 
+    factor = FFMAX(1, in->nb_samples / s->in_nb_samples);
     out = ff_get_audio_buffer(outlink, s->out_nb_samples * factor);
     if (!out) {
         ret = AVERROR(ENOMEM);
