@@ -16,7 +16,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#undef ctype
 #undef ftype
 #undef itype
 #undef ATAN2
@@ -29,7 +28,6 @@
 #undef LRINT
 #undef SAMPLE_FORMAT
 #if DEPTH == 16
-#define ctype AVComplexFloat
 #define ftype float
 #define itype int16_t
 #define ATAN2 atan2f
@@ -42,7 +40,6 @@
 #define LRINT lrintf
 #define SAMPLE_FORMAT s16p
 #elif DEPTH == 32
-#define ctype AVComplexFloat
 #define ftype float
 #define itype float
 #define ATAN2 atan2f
@@ -55,7 +52,6 @@
 #define LRINT lrintf
 #define SAMPLE_FORMAT fltp
 #else
-#define ctype AVComplexDouble
 #define ftype double
 #define itype double
 #define ATAN2 atan2
@@ -76,6 +72,12 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 #define MAX_NB_POLES 8
+
+typedef struct fn(complex_ftype) {
+    ftype re, im;
+} fn(complex_ftype);
+
+#define ctype fn(complex_ftype)
 
 typedef struct fn(StateContext) {
     int   K1;
@@ -154,17 +156,17 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
     }
 
     for (int n = 0; n < stc->nb_poles; n++) {
-        stc->rFixed[n].re = rs1[n].re * stc->scale_factor;
-        stc->rFixed[n].im = rs1[n].im * stc->scale_factor;
+        stc->rFixed[n].re = rs1[n][0] * stc->scale_factor;
+        stc->rFixed[n].im = rs1[n][1] * stc->scale_factor;
     }
 
     fn(vector_mul_complex)(stc->pCur, stc->pCur, stc->rFixed, stc->nb_poles);
 
     for (int n = 0; n < stc->nb_poles; n++)
-        stc->Log2MagP[n] = FLOG2(HYPOT(ps1[n].re, ps1[n].im));
+        stc->Log2MagP[n] = FLOG2(HYPOT(ps1[n][0], ps1[n][1]));
 
     for (int n = 0; n < stc->nb_poles; n++)
-        stc->thetaP[n] = ATAN2(ps1[n].im, ps1[n].re);
+        stc->thetaP[n] = ATAN2(ps1[n][1], ps1[n][0]);
 
     for (int n = 0; n < stc->nb_poles; n++)
         stc->Log2MagP_Fsf[n] = stc->Log2MagP[n] * stc->scale_factor;

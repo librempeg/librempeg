@@ -21,7 +21,6 @@
 #include "libavutil/avassert.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
-#include "libavutil/tx.h"
 #include "audio.h"
 #include "formats.h"
 #include "avfilter.h"
@@ -85,7 +84,7 @@ static int query_formats(const AVFilterContext *ctx,
                           &cfg_out[0]->samplerates);
 }
 
-static const AVComplexDouble ps1[] =
+static const double ps1[][2] =
 {
     { -0.853180483919851, -0.453826604489550 },
     { -0.767355986709350, -0.463102704860227 },
@@ -97,7 +96,7 @@ static const AVComplexDouble ps1[] =
     {  0.411025147807168,  0.0               },
 };
 
-static const AVComplexDouble rs1[] =
+static const double rs1[][2] =
 {
     {  1.559454965418541e-02, -8.711330296099162e-02 },
     { -2.821143538662592e-01,  1.931070842024560e-01 },
