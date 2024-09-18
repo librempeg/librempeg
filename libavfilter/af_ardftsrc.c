@@ -41,6 +41,7 @@ typedef struct AudioRDFTSRCContext {
     int out_offset;
     int channels;
     float bandwidth;
+    int64_t last_in_pts;
 
     void *taper;
 
@@ -139,9 +140,9 @@ static int config_input(AVFilterLink *inlink)
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_S16P:
-        s->do_src = src_s16;
-        s->src_uninit = src_uninit_s16;
-        ret = src_init_s16(ctx);
+        s->do_src = src_s16p;
+        s->src_uninit = src_uninit_s16p;
+        ret = src_init_s16p(ctx);
         break;
     case AV_SAMPLE_FMT_FLTP:
         s->do_src = src_fltp;
@@ -179,14 +180,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioRDFTSRCContext *s = ctx->priv;
-    int ret, factor;
     AVFrame *out;
+    int ret;
 
     if (inlink->sample_rate == outlink->sample_rate)
         return ff_filter_frame(outlink, in);
 
-    factor = FFMAX(1, in->nb_samples / s->in_nb_samples);
-    out = ff_get_audio_buffer(outlink, s->out_nb_samples * factor);
+    out = ff_get_audio_buffer(outlink, av_rescale(in->nb_samples, s->out_nb_samples, s->in_nb_samples));
     if (!out) {
         ret = AVERROR(ENOMEM);
         goto fail;
@@ -194,14 +194,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     s->in = in;
     av_frame_copy_props(out, in);
+
     ff_filter_execute(ctx, src_channels, out, NULL,
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     out->sample_rate = outlink->sample_rate;
     out->pts = av_rescale_q(in->pts, inlink->time_base, outlink->time_base) - s->out_offset;
+
     out->duration = av_rescale_q(out->nb_samples,
                                  (AVRational){1, outlink->sample_rate},
                                  outlink->time_base);
+
+    s->last_in_pts = in->pts + in->duration;
+
     ret = ff_filter_frame(outlink, out);
 fail:
     av_frame_free(&in);
@@ -214,8 +219,8 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     AudioRDFTSRCContext *s = ctx->priv;
-    AVFrame *in = NULL;
     int ret, status;
+    AVFrame *in = NULL;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
@@ -234,9 +239,31 @@ static int activate(AVFilterContext *ctx)
     if (ret > 0) {
         return filter_frame(inlink, in);
     } else if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+        const int available = ff_inlink_queued_samples(inlink);
+        AVFrame *flush_frame;
+
+        if (available > 0) {
+            ret = ff_inlink_consume_samples(inlink, available, available, &in);
+            if (ret < 0)
+                return ret;
+        }
+
+        flush_frame = ff_get_audio_buffer(outlink, available + s->in_offset);
+        if (flush_frame) {
+            flush_frame->pts = s->last_in_pts;
+
+            if (in) {
+                av_samples_copy(flush_frame->extended_data, in->extended_data, 0, 0,
+                                in->nb_samples, in->ch_layout.nb_channels, in->format);
+                av_frame_free(&in);
+            }
+
+            ret = filter_frame(inlink, flush_frame);
+        }
+
         pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
         ff_outlink_set_status(outlink, status, pts);
-        return 0;
+        return ret;
     } else {
         if (inlink->sample_rate != outlink->sample_rate &&
             ff_inlink_queued_samples(inlink) >= s->in_nb_samples) {

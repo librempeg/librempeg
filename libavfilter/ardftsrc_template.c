@@ -33,7 +33,7 @@
 #define ctype AVComplexFloat
 #define ftype float
 #define itype int16_t
-#define SAMPLE_FORMAT s16
+#define SAMPLE_FORMAT s16p
 #define stype float
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
@@ -186,6 +186,7 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const int taper_samples = s->taper_samples;
     const int in_offset = s->in_offset;
     const int offset = tr_nb_samples - taper_samples;
+    const int write_samples = FFMIN(out_nb_samples, out->nb_samples-doffset);
     const int copy_samples = FFMIN(in_nb_samples, in->nb_samples-soffset);
     const ttype *taper = s->taper;
 
@@ -208,12 +209,12 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     stc->itx_fn(stc->itx_ctx, irdft1, irdft0, sizeof(*irdft0));
 
 #if DEPTH == 16
-    for (int n = 0; n < out_nb_samples; n++) {
+    for (int n = 0; n < write_samples; n++) {
         dst[n] = av_clip_int16(lrintf((irdft1[n] + over[n]) * F(1<<(DEPTH-1))));
     }
 #else
-    memcpy(dst, irdft1, out_nb_samples * sizeof(*dst));
-    for (int n = 0; n < out_nb_samples; n++)
+    memcpy(dst, irdft1, write_samples * sizeof(*dst));
+    for (int n = 0; n < write_samples; n++)
         dst[n] += over[n];
 #endif
     memcpy(over, irdft1 + out_nb_samples, sizeof(*over) * out_nb_samples);
