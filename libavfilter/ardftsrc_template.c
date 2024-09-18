@@ -21,7 +21,6 @@
 #include "audio.h"
 
 #undef ctype
-#undef stype
 #undef itype
 #undef ftype
 #undef ttype
@@ -34,7 +33,6 @@
 #define ftype float
 #define itype int16_t
 #define SAMPLE_FORMAT s16p
-#define stype float
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #elif DEPTH == 32
@@ -43,7 +41,6 @@
 #define ftype float
 #define itype float
 #define SAMPLE_FORMAT fltp
-#define stype float
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #else
@@ -52,7 +49,6 @@
 #define ftype double
 #define itype double
 #define SAMPLE_FORMAT dblp
-#define stype double
 #define ttype AVComplexDouble
 #define TX_TYPE AV_TX_DOUBLE_RDFT
 #endif
@@ -64,11 +60,11 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 typedef struct fn(StateContext) {
-    stype *over;
-    stype *rdft_in0;
+    ftype *over;
+    ftype *rdft_in0;
     ctype *rdft_in1;
     ctype *rdft_out0;
-    stype *rdft_out1;
+    ftype *rdft_out1;
 
     AVTXContext *tx_ctx, *itx_ctx;
     av_tx_fn tx_fn, itx_fn;
@@ -174,12 +170,12 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const itype *src = ((const itype *)in->extended_data[ch]) + soffset;
     fn(StateContext) *state = s->state;
     fn(StateContext) *stc = &state[ch];
-    stype *over = stc->over;
+    ftype *over = stc->over;
     itype *dst = ((itype *)out->extended_data[ch]) + doffset;
-    stype *rdft0 = stc->rdft_in0;
+    ftype *rdft0 = stc->rdft_in0;
     ctype *rdft1 = stc->rdft_in1;
     ctype *irdft0 = stc->rdft_out0;
-    stype *irdft1 = stc->rdft_out1;
+    ftype *irdft1 = stc->rdft_out1;
     const int out_nb_samples = s->out_nb_samples;
     const int in_nb_samples = s->in_nb_samples;
     const int tr_nb_samples = s->tr_nb_samples;
