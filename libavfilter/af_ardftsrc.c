@@ -233,6 +233,7 @@ static int activate(AVFilterContext *ctx)
     if (ret > 0) {
         return filter_frame(inlink, in);
     } else if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+        pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
         ff_outlink_set_status(outlink, status, pts);
         return 0;
     } else {
