@@ -65,7 +65,7 @@ typedef struct AudioRDFTSRCContext {
 
 static const AVOption ardftsrc_options[] = {
     { "sample_rate", "set the sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=0}, 0, INT_MAX, FLAGS },
-    { "quality", "set the quality", OFFSET(quality), AV_OPT_TYPE_INT, {.i64=1024}, 1, UINT16_MAX, FLAGS },
+    { "quality", "set the quality", OFFSET(quality), AV_OPT_TYPE_INT, {.i64=1024}, 1, INT32_MAX, FLAGS },
     { "bandwidth", "set the bandwidth", OFFSET(bandwidth), AV_OPT_TYPE_FLOAT, {.dbl=0.95}, 0, 1, FLAGS },
     {NULL}
 };
@@ -130,8 +130,7 @@ static int config_input(AVFilterLink *inlink)
     av_reduce(&s->in_nb_samples, &s->out_nb_samples,
               inlink->sample_rate, outlink->sample_rate, INT_MAX);
 
-    factor = FFMAX(s->in_nb_samples, s->out_nb_samples);
-    factor = 1 << av_log2((s->quality + factor - 1) / factor);
+    factor = lrint(2.0*ceil(s->quality/(2.0*s->out_nb_samples)));
     s->in_nb_samples *= factor;
     s->out_nb_samples *= factor;
 
