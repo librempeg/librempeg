@@ -132,7 +132,7 @@ static int fn(src_init)(AVFilterContext *ctx)
         if (ret < 0)
             return ret;
 
-        stc->over = av_calloc(s->out_rdft_size, sizeof(*stc->over));
+        stc->over = av_calloc(s->out_nb_samples, sizeof(*stc->over));
         if (!stc->over)
             return AVERROR(ENOMEM);
 
