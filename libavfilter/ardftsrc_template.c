@@ -192,6 +192,7 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 #else
     memcpy(rdft0 + in_offset, src, copy_samples * sizeof(*rdft0));
 #endif
+    memset(rdft0 + in_offset+copy_samples, 0, (in_nb_samples-copy_samples) * sizeof(*rdft0));
 
     stc->tx_fn(stc->tx_ctx, rdft1, rdft0, sizeof(*rdft0));
 
@@ -213,7 +214,26 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     for (int n = 0; n < write_samples; n++)
         dst[n] += over[n];
 #endif
-    memcpy(over, irdft1 + out_nb_samples, sizeof(*over) * out_nb_samples);
+    memcpy(over, irdft1 + write_samples, sizeof(*over) * out_nb_samples);
+
+    return 0;
+}
+
+static int fn(flush)(AVFilterContext *ctx, AVFrame *out, const int ch)
+{
+    itype *dst = ((itype *)out->extended_data[ch]);
+    const int nb_samples = out->nb_samples;
+    AudioRDFTSRCContext *s = ctx->priv;
+    fn(StateContext) *state = s->state;
+    fn(StateContext) *stc = &state[ch];
+    ftype *over = stc->over;
+
+#if DEPTH == 16
+    for (int n = 0; n < nb_samples; n++)
+        dst[n] = av_clip_int16(lrintf(over[n] * F(1<<(DEPTH-1))));
+#else
+    memcpy(dst, over, nb_samples * sizeof(*dst));
+#endif
 
     return 0;
 }

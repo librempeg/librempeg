@@ -41,13 +41,16 @@ typedef struct AudioRDFTSRCContext {
     int out_offset;
     int channels;
     float bandwidth;
-    int64_t last_in_pts;
+    int64_t last_out_pts;
+    int flush_size;
 
     void *taper;
 
     AVFrame *in;
 
     void *state;
+
+    int (*flush_src)(AVFilterContext *ctx, AVFrame *out, const int ch);
 
     int (*do_src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
                   const int ch, const int soffset, const int doffset);
@@ -133,23 +136,26 @@ static int config_input(AVFilterLink *inlink)
     s->in_rdft_size = s->in_nb_samples * 2;
     s->out_rdft_size = s->out_nb_samples * 2;
     s->out_offset = (s->out_rdft_size - s->out_nb_samples) >> 1;
-    s->in_offset = (s->in_rdft_size - s->in_nb_samples) >> 1;
+    s->in_offset = s->flush_size = (s->in_rdft_size - s->in_nb_samples) >> 1;
     s->tr_nb_samples = FFMIN(s->in_nb_samples, s->out_nb_samples);
     s->taper_samples = lrint(s->tr_nb_samples * (1.0-s->bandwidth));
     av_log(ctx, AV_LOG_DEBUG, "factor: %d | %d => %d | delay: %d\n", factor, s->in_rdft_size, s->out_rdft_size, s->out_offset);
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_S16P:
+        s->flush_src = flush_s16p;
         s->do_src = src_s16p;
         s->src_uninit = src_uninit_s16p;
         ret = src_init_s16p(ctx);
         break;
     case AV_SAMPLE_FMT_FLTP:
+        s->flush_src = flush_fltp;
         s->do_src = src_fltp;
         s->src_uninit = src_uninit_fltp;
         ret = src_init_fltp(ctx);
         break;
     case AV_SAMPLE_FMT_DBLP:
+        s->flush_src = flush_dblp;
         s->do_src = src_dblp;
         s->src_uninit = src_uninit_dblp;
         ret = src_init_dblp(ctx);
@@ -157,6 +163,19 @@ static int config_input(AVFilterLink *inlink)
     }
 
     return ret;
+}
+
+static int flush_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    AudioRDFTSRCContext *s = ctx->priv;
+    AVFrame *out = arg;
+    const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
+    const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+
+    for (int ch = start; ch < end; ch++)
+        s->flush_src(ctx, out, ch);
+
+    return 0;
 }
 
 static int src_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
@@ -175,18 +194,42 @@ static int src_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     return 0;
 }
 
+static int flush_frame(AVFilterLink *outlink)
+{
+    AVFilterContext *ctx = outlink->src;
+    AudioRDFTSRCContext *s = ctx->priv;
+    AVFrame *out = ff_get_audio_buffer(outlink, s->flush_size);
+
+    if (!out)
+        return AVERROR(ENOMEM);
+
+    ff_filter_execute(ctx, flush_channels, out, NULL,
+                      FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
+
+    out->sample_rate = outlink->sample_rate;
+    out->pts = s->last_out_pts;
+    out->duration = av_rescale_q(out->nb_samples,
+                                 (AVRational){1, outlink->sample_rate},
+                                 outlink->time_base);
+
+    return ff_filter_frame(outlink, out);
+}
+
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioRDFTSRCContext *s = ctx->priv;
+    int ret, in_samples;
     AVFrame *out;
-    int ret;
 
     if (inlink->sample_rate == outlink->sample_rate)
         return ff_filter_frame(outlink, in);
 
-    out = ff_get_audio_buffer(outlink, av_rescale(in->nb_samples, s->out_nb_samples, s->in_nb_samples));
+    in_samples = (in->nb_samples < s->in_nb_samples) ? FFMIN(in->nb_samples+s->in_offset, s->in_nb_samples) : in->nb_samples;
+    s->flush_size -= in_samples - in->nb_samples;
+
+    out = ff_get_audio_buffer(outlink, av_rescale(in_samples, s->out_nb_samples, s->in_nb_samples));
     if (!out) {
         ret = AVERROR(ENOMEM);
         goto fail;
@@ -205,7 +248,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                                  (AVRational){1, outlink->sample_rate},
                                  outlink->time_base);
 
-    s->last_in_pts = in->pts + in->duration;
+    s->last_out_pts = out->pts + out->duration;
 
     ret = ff_filter_frame(outlink, out);
 fail:
@@ -239,27 +282,8 @@ static int activate(AVFilterContext *ctx)
     if (ret > 0) {
         return filter_frame(inlink, in);
     } else if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
-        const int available = ff_inlink_queued_samples(inlink);
-        AVFrame *flush_frame;
-
-        if (available > 0) {
-            ret = ff_inlink_consume_samples(inlink, available, available, &in);
-            if (ret < 0)
-                return ret;
-        }
-
-        flush_frame = ff_get_audio_buffer(outlink, available + s->in_offset);
-        if (flush_frame) {
-            flush_frame->pts = s->last_in_pts;
-
-            if (in) {
-                av_samples_copy(flush_frame->extended_data, in->extended_data, 0, 0,
-                                in->nb_samples, in->ch_layout.nb_channels, in->format);
-                av_frame_free(&in);
-            }
-
-            ret = filter_frame(inlink, flush_frame);
-        }
+        if (s->out_offset > 0 && s->flush_size > 0)
+            ret = flush_frame(outlink);
 
         pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
         ff_outlink_set_status(outlink, status, pts);
