@@ -18,6 +18,7 @@ version <next>:
 - removed DEC Alpha DSP and support code
 - perlin video source filter
 - YUV colorspace negotiation for codecs and filters, obsoleting YUVJ
+- removed ocv filter wrapper
 
 version 7.0:
 - DXV DXT1 encoder
