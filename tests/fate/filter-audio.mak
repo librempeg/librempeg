@@ -136,52 +136,52 @@ fate-filter-firequalizer: SIZE_TOLERANCE = 1058400 - 1097208
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, PAN, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-pan-mono1
 fate-filter-pan-mono1: tests/data/asynth-44100-2.wav
 fate-filter-pan-mono1: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
-fate-filter-pan-mono1: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=mono|FC=FL"
+fate-filter-pan-mono1: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=mono:mix=FC=FL"
 
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, PAN, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-pan-mono2
 fate-filter-pan-mono2: tests/data/asynth-44100-2.wav
 fate-filter-pan-mono2: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
-fate-filter-pan-mono2: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=1C|c0=c0+c1"
+fate-filter-pan-mono2: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=1C:mix=c0=c0+c1"
 
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, PAN, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-pan-stereo1
 fate-filter-pan-stereo1: tests/data/asynth-44100-3.wav
 fate-filter-pan-stereo1: SRC = $(TARGET_PATH)/tests/data/asynth-44100-3.wav
-fate-filter-pan-stereo1: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=2c|FL=FR|FR=FL"
+fate-filter-pan-stereo1: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=2c:mix=FL=FR|FR=FL"
 
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, PAN, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-pan-stereo2
 fate-filter-pan-stereo2: tests/data/asynth-44100-3.wav
 fate-filter-pan-stereo2: SRC = $(TARGET_PATH)/tests/data/asynth-44100-3.wav
-fate-filter-pan-stereo2: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=stereo|c0=c0-c2|c1=c1-c2"
+fate-filter-pan-stereo2: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=stereo:mix=c0=c0-c2|c1=c1-c2"
 
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, PAN, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-pan-stereo3
 fate-filter-pan-stereo3: tests/data/asynth-44100-2.wav
 fate-filter-pan-stereo3: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
-fate-filter-pan-stereo3: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=FL+FR|FL<3*c0+2*c1|FR<2*c0+3*c1"
+fate-filter-pan-stereo3: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=FL+FR:mix=FL<3*c0+2*c1|FR<2*c0+3*c1"
 
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, PAN, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-pan-stereo4
 fate-filter-pan-stereo4: tests/data/asynth-44100-2.wav
 fate-filter-pan-stereo4: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
-fate-filter-pan-stereo4: CMD = framecrc -ss 3.14 -guess_layout_max 0 -i $(SRC) -frames:a 20 -filter:a "pan=2C|c0=c0-0.5*c1|c1=c1+0.5*c0"
+fate-filter-pan-stereo4: CMD = framecrc -ss 3.14 -guess_layout_max 0 -i $(SRC) -frames:a 20 -filter:a "pan=2C:mix=c0=c0-0.5*c1|c1=c1+0.5*c0"
 
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, PAN, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-pan-upmix1
 fate-filter-pan-upmix1: tests/data/asynth-44100-2.wav
 fate-filter-pan-upmix1: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
-fate-filter-pan-upmix1: CMD = framecrc -ss 3.14 -guess_layout_max 0 -i $(SRC) -frames:a 20 -filter:a "pan=4C|c0=c0-0.5*c1|c1=c1+0.5*c0|c2=0*c0|c3=0*c0"
+fate-filter-pan-upmix1: CMD = framecrc -ss 3.14 -guess_layout_max 0 -i $(SRC) -frames:a 20 -filter:a "pan=4C:mix=c0=c0-0.5*c1|c1=c1+0.5*c0|c2=0*c0|c3=0*c0"
 
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, PAN, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-pan-upmix2
 fate-filter-pan-upmix2: tests/data/asynth-44100-4.wav
 fate-filter-pan-upmix2: SRC = $(TARGET_PATH)/tests/data/asynth-44100-4.wav
-fate-filter-pan-upmix2: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=9C|c0=c0-c1|c1=c2+c3|c2=c0+c1|c3=c2-c3|c4=c1-c0|c5=c3+c2|c6=c1+c0|c7=c3-c2|c8=c0-c3"
+fate-filter-pan-upmix2: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=9C:mix=c0=c0-c1|c1=c2+c3|c2=c0+c1|c3=c2-c3|c4=c1-c0|c5=c3+c2|c6=c1+c0|c7=c3-c2|c8=c0-c3"
 
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, PAN, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-pan-downmix1
 fate-filter-pan-downmix1: tests/data/asynth-44100-4.wav
 fate-filter-pan-downmix1: SRC = $(TARGET_PATH)/tests/data/asynth-44100-4.wav
-fate-filter-pan-downmix1: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=2c|FL<FL+0.5*FC+0.6*BL+0.6*SL|FR<FR+0.5*FC+0.6*BR+0.6*SR"
+fate-filter-pan-downmix1: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=2c:mix=FL<FL+0.5*FC+0.6*BL+0.6*SL|FR<FR+0.5*FC+0.6*BR+0.6*SR"
 
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, PAN, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-pan-downmix2
 fate-filter-pan-downmix2: tests/data/asynth-44100-11.wav
 fate-filter-pan-downmix2: SRC = $(TARGET_PATH)/tests/data/asynth-44100-11.wav
-fate-filter-pan-downmix2: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=5C|c0=0.7*c0+0.7*c10|c1=c9|c2=c8|c3=c7|c4=c6"
+fate-filter-pan-downmix2: CMD = framecrc -ss 3.14 -i $(SRC) -frames:a 20 -filter:a "pan=5C:mix=c0=0.7*c0+0.7*c10|c1=c9|c2=c8|c3=c7|c4=c6"
 
 FATE_AFILTER-$(call ALLYES, LAVFI_INDEV AEVALSRC_FILTER SILENCEREMOVE_FILTER ARESAMPLE_FILTER) += fate-filter-silenceremove
 fate-filter-silenceremove: CMD = framecrc -auto_conversion_filters -f lavfi -i "aevalsrc=between(t\,1\,2)+between(t\,4\,5)+between(t\,7\,9):d=10:n=8192,silenceremove=start_periods=0:start_duration=0:start_threshold=0:stop_periods=-1:stop_duration=0:stop_threshold=-90dB:window=0:detection=avg"
