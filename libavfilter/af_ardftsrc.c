@@ -41,7 +41,9 @@ typedef struct AudioRDFTSRCContext {
     int out_offset;
     int channels;
     float bandwidth;
+    int64_t delay;
     int64_t last_out_pts;
+    int trim_size;
     int flush_size;
 
     void *taper;
@@ -135,11 +137,12 @@ static int config_input(AVFilterLink *inlink)
 
     s->in_rdft_size = s->in_nb_samples * 2;
     s->out_rdft_size = s->out_nb_samples * 2;
-    s->out_offset = (s->out_rdft_size - s->out_nb_samples) >> 1;
+    s->out_offset = s->trim_size = (s->out_rdft_size - s->out_nb_samples) >> 1;
     s->in_offset = s->flush_size = (s->in_rdft_size - s->in_nb_samples) >> 1;
+    s->delay = av_rescale_q(s->in_offset, (AVRational){ 1, inlink->sample_rate }, inlink->time_base);
     s->tr_nb_samples = FFMIN(s->in_nb_samples, s->out_nb_samples);
     s->taper_samples = lrint(s->tr_nb_samples * (1.0-s->bandwidth));
-    av_log(ctx, AV_LOG_DEBUG, "factor: %d | %d => %d | delay: %d\n", factor, s->in_rdft_size, s->out_rdft_size, s->out_offset);
+    av_log(ctx, AV_LOG_DEBUG, "factor: %d | %d => %d | delay: %"PRId64"\n", factor, s->in_rdft_size, s->out_rdft_size, s->delay);
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_S16P:
@@ -198,10 +201,13 @@ static int flush_frame(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AudioRDFTSRCContext *s = ctx->priv;
-    AVFrame *out = ff_get_audio_buffer(outlink, s->flush_size);
+    const int nb_samples = av_rescale(s->flush_size, s->out_nb_samples, s->in_nb_samples);
+    AVFrame *out = ff_get_audio_buffer(outlink, nb_samples);
 
     if (!out)
         return AVERROR(ENOMEM);
+
+    s->flush_size = 0;
 
     ff_filter_execute(ctx, flush_channels, out, NULL,
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
@@ -227,7 +233,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         return ff_filter_frame(outlink, in);
 
     in_samples = (in->nb_samples < s->in_nb_samples) ? FFMIN(in->nb_samples+s->in_offset, s->in_nb_samples) : in->nb_samples;
-    s->flush_size -= in_samples - in->nb_samples;
+    s->flush_size -= FFMAX(in_samples-in->nb_samples, 0);
 
     out = ff_get_audio_buffer(outlink, av_rescale(in_samples, s->out_nb_samples, s->in_nb_samples));
     if (!out) {
@@ -242,7 +248,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     out->sample_rate = outlink->sample_rate;
-    out->pts = av_rescale_q(in->pts, inlink->time_base, outlink->time_base) - s->out_offset;
+    out->pts = av_rescale_q(in->pts - (s->trim_size ? 0 : s->delay), inlink->time_base, outlink->time_base);
+    if (s->trim_size > 0) {
+        for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
+            out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
+    }
+
+    out->nb_samples -= s->trim_size;
+    s->trim_size = 0;
 
     out->duration = av_rescale_q(out->nb_samples,
                                  (AVRational){1, outlink->sample_rate},
