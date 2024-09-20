@@ -43,115 +43,12 @@ typedef struct ADenormContext {
                              const void *src, int nb_samples);
 } ADenormContext;
 
-static void dc_denorm_fltp(AVFilterContext *ctx, void *dstp,
-                           const void *srcp, int nb_samples)
-{
-    ADenormContext *s = ctx->priv;
-    const float *src = (const float *)srcp;
-    float *dst = (float *)dstp;
-    const float dc = s->level;
+#define DEPTH 32
+#include "adenorm_template.c"
 
-    for (int n = 0; n < nb_samples; n++) {
-        dst[n] = src[n] + dc;
-    }
-}
-
-static void dc_denorm_dblp(AVFilterContext *ctx, void *dstp,
-                           const void *srcp, int nb_samples)
-{
-    ADenormContext *s = ctx->priv;
-    const double *src = (const double *)srcp;
-    double *dst = (double *)dstp;
-    const double dc = s->level;
-
-    for (int n = 0; n < nb_samples; n++) {
-        dst[n] = src[n] + dc;
-    }
-}
-
-static void ac_denorm_fltp(AVFilterContext *ctx, void *dstp,
-                           const void *srcp, int nb_samples)
-{
-    ADenormContext *s = ctx->priv;
-    const float *src = (const float *)srcp;
-    float *dst = (float *)dstp;
-    const float dc = s->level;
-    const int64_t N = s->in_samples;
-
-    for (int n = 0; n < nb_samples; n++) {
-        dst[n] = src[n] + dc * (((N + n) & 1) ? -1.f : 1.f);
-    }
-}
-
-static void ac_denorm_dblp(AVFilterContext *ctx, void *dstp,
-                           const void *srcp, int nb_samples)
-{
-    ADenormContext *s = ctx->priv;
-    const double *src = (const double *)srcp;
-    double *dst = (double *)dstp;
-    const double dc = s->level;
-    const int64_t N = s->in_samples;
-
-    for (int n = 0; n < nb_samples; n++) {
-        dst[n] = src[n] + dc * (((N + n) & 1) ? -1. : 1.);
-    }
-}
-
-static void sq_denorm_fltp(AVFilterContext *ctx, void *dstp,
-                           const void *srcp, int nb_samples)
-{
-    ADenormContext *s = ctx->priv;
-    const float *src = (const float *)srcp;
-    float *dst = (float *)dstp;
-    const float dc = s->level;
-    const int64_t N = s->in_samples;
-
-    for (int n = 0; n < nb_samples; n++) {
-        dst[n] = src[n] + dc * ((((N + n) >> 8) & 1) ? -1.f : 1.f);
-    }
-}
-
-static void sq_denorm_dblp(AVFilterContext *ctx, void *dstp,
-                           const void *srcp, int nb_samples)
-{
-    ADenormContext *s = ctx->priv;
-    const double *src = (const double *)srcp;
-    double *dst = (double *)dstp;
-    const double dc = s->level;
-    const int64_t N = s->in_samples;
-
-    for (int n = 0; n < nb_samples; n++) {
-        dst[n] = src[n] + dc * ((((N + n) >> 8) & 1) ? -1. : 1.);
-    }
-}
-
-static void ps_denorm_fltp(AVFilterContext *ctx, void *dstp,
-                           const void *srcp, int nb_samples)
-{
-    ADenormContext *s = ctx->priv;
-    const float *src = (const float *)srcp;
-    float *dst = (float *)dstp;
-    const float dc = s->level;
-    const int64_t N = s->in_samples;
-
-    for (int n = 0; n < nb_samples; n++) {
-        dst[n] = src[n] + dc * (((N + n) & 255) ? 0.f : 1.f);
-    }
-}
-
-static void ps_denorm_dblp(AVFilterContext *ctx, void *dstp,
-                           const void *srcp, int nb_samples)
-{
-    ADenormContext *s = ctx->priv;
-    const double *src = (const double *)srcp;
-    double *dst = (double *)dstp;
-    const double dc = s->level;
-    const int64_t N = s->in_samples;
-
-    for (int n = 0; n < nb_samples; n++) {
-        dst[n] = src[n] + dc * (((N + n) & 255) ? 0. : 1.);
-    }
-}
+#undef DEPTH
+#define DEPTH 64
+#include "adenorm_template.c"
 
 static int config_output(AVFilterLink *outlink)
 {
