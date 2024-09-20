@@ -980,6 +980,8 @@ Add AC signal.
 Add square signal.
 @item pulse
 Add pulse signal.
+@item random
+Add random signal.
 @end table
 
 Default is @code{dc}.

@@ -32,7 +32,8 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 static void fn(dc_denorm)(AVFilterContext *ctx, void *dstp,
-                          const void *srcp, int nb_samples)
+                          const void *srcp, int nb_samples,
+                          const int ch)
 {
     ADenormContext *s = ctx->priv;
     const ftype *src = (const ftype *)srcp;
@@ -45,7 +46,8 @@ static void fn(dc_denorm)(AVFilterContext *ctx, void *dstp,
 }
 
 static void fn(ac_denorm)(AVFilterContext *ctx, void *dstp,
-                          const void *srcp, int nb_samples)
+                          const void *srcp, int nb_samples,
+                          const int ch)
 {
     ADenormContext *s = ctx->priv;
     const ftype *src = (const ftype *)srcp;
@@ -59,7 +61,8 @@ static void fn(ac_denorm)(AVFilterContext *ctx, void *dstp,
 }
 
 static void fn(sq_denorm)(AVFilterContext *ctx, void *dstp,
-                          const void *srcp, int nb_samples)
+                          const void *srcp, int nb_samples,
+                          const int ch)
 {
     ADenormContext *s = ctx->priv;
     const ftype *src = (const ftype *)srcp;
@@ -73,7 +76,8 @@ static void fn(sq_denorm)(AVFilterContext *ctx, void *dstp,
 }
 
 static void fn(ps_denorm)(AVFilterContext *ctx, void *dstp,
-                          const void *srcp, int nb_samples)
+                          const void *srcp, int nb_samples,
+                          const int ch)
 {
     ADenormContext *s = ctx->priv;
     const ftype *src = (const ftype *)srcp;
@@ -83,5 +87,22 @@ static void fn(ps_denorm)(AVFilterContext *ctx, void *dstp,
 
     for (int n = 0; n < nb_samples; n++) {
         dst[n] = src[n] + dc * (((N + n) & 255) ? F(0.0) : F(1.0));
+    }
+}
+
+static void fn(rn_denorm)(AVFilterContext *ctx, void *dstp,
+                          const void *srcp, const int nb_samples,
+                          const int ch)
+{
+    ADenormContext *s = ctx->priv;
+    const ftype *src = (const ftype *)srcp;
+    FFSFC64 *state = &s->prng_state[ch];
+    ftype *dst = (ftype *)dstp;
+    const ftype dc = s->level;
+
+    for (int n = 0; n < nb_samples; n++) {
+        const ftype rnd = (((int64_t)(ff_sfc64_get(state)))&((1ULL<<(DEPTH-1))-1))/((ftype)(1LL<<(DEPTH-1)));
+
+        dst[n] = src[n] + dc * rnd;
     }
 }
