@@ -35,11 +35,14 @@
 #define VECTOR_MUL_SCALAR s->fdsp->vector_dmul_scalar
 #endif
 
+#define F(x) ((ftype)(x))
+
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
-static int fn(scale)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+static int fn(scale)(AVFilterContext *ctx, void *arg,
+                     const int jobnr, const int nb_jobs)
 {
     AmbisonicContext *s = ctx->priv;
     AVFrame *in = arg;
@@ -52,7 +55,7 @@ static int fn(scale)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     for (int ch = start; ch < end; ch++) {
         const ftype *src = (const ftype *)in->extended_data[ch];
         ftype *dst = (ftype *)out->extended_data[ch];
-        ftype mul = s->norm_tab[s->scaling_norm][s->seq_map[ch]];
+        const ftype mul = s->norm_tab[s->scaling_norm][s->seq_map[ch]];
 
         VECTOR_MUL_SCALAR(dst, src, mul, FFALIGN(nb_samples, 16));
     }
@@ -60,7 +63,8 @@ static int fn(scale)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     return 0;
 }
 
-static int fn(transform)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+static int fn(transform)(AVFilterContext *ctx, void *arg,
+                         const int jobnr, const int nb_jobs)
 {
     AVFrame *input = arg;
     AmbisonicContext *s = ctx->priv;
@@ -74,13 +78,13 @@ static int fn(transform)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
     for (int ch = start; ch < end; ch++) {
         const ftype *src0 = (const ftype *)in->extended_data[0];
         ftype *dst = (ftype *)out->extended_data[ch];
-        ftype mul0 = s->transform_mat[s->seq_map[ch]][s->seq_map[0]];
+        const ftype mul0 = s->transform_mat[s->seq_map[ch]][s->seq_map[0]];
 
         VECTOR_MUL_SCALAR(dst, src0, mul0, FFALIGN(nb_samples, 16));
 
         for (int ch2 = 1; ch2 < nb_channels; ch2++) {
             const ftype *src = (const ftype *)in->extended_data[ch2];
-            ftype mul = s->transform_mat[s->seq_map[ch]][s->seq_map[ch2]];
+            const ftype mul = s->transform_mat[s->seq_map[ch]][s->seq_map[ch2]];
 
             VECTOR_MAC_SCALAR(dst, src, mul, FFALIGN(nb_samples, 16));
         }
@@ -89,7 +93,8 @@ static int fn(transform)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
     return 0;
 }
 
-static int fn(multiply)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+static int fn(multiply)(AVFilterContext *ctx, void *arg,
+                        const int jobnr, const int nb_jobs)
 {
     AmbisonicContext *s = ctx->priv;
     ThreadData *td = arg;
@@ -108,7 +113,7 @@ static int fn(multiply)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
         for (int ch2 = 0; ch2 < FFMIN3(nb_channels, s->max_channels, inputs); ch2++) {
             const int index = FFMIN(s->seq_map[ch2], nb_channels - 1);
             const ftype *src = (const ftype *)in->extended_data[index];
-            const ftype gain = gains_tab ? gains_tab[ch2] : 1.f;
+            const ftype gain = gains_tab ? gains_tab[ch2] : F(1.0);
             const ftype mul = s->norm_decode_mat[ch][ch2] * gain;
 
             VECTOR_MAC_SCALAR(dst, src, mul, FFALIGN(in->nb_samples, 16));
@@ -142,16 +147,17 @@ static void fn(nfield1_process)(NearField *nf, AVFrame *frame,
         }
     }
 
-    nf->z[0] = z0;
+    nf->z[0] = isnormal(z0) ? z0 : F(0.0);
 }
 
-static void fn(xover_process)(Xover *xover, const ftype *src, ftype *dst, int nb_samples)
+static void fn(xover_process)(Xover *xover, const ftype *src, ftype *dst,
+                              const int nb_samples)
 {
-    ftype b0 = xover->b[0];
-    ftype b1 = xover->b[1];
-    ftype b2 = xover->b[2];
-    ftype a1 = xover->a[1];
-    ftype a2 = xover->a[2];
+    const ftype b0 = xover->b[0];
+    const ftype b1 = xover->b[1];
+    const ftype b2 = xover->b[2];
+    const ftype a1 = xover->a[1];
+    const ftype a2 = xover->a[2];
     ftype w0 = xover->w[0];
     ftype w1 = xover->w[1];
 
@@ -165,8 +171,8 @@ static void fn(xover_process)(Xover *xover, const ftype *src, ftype *dst, int nb
         dst[i] = out;
     }
 
-    xover->w[0] = w0;
-    xover->w[1] = w1;
+    xover->w[0] = isnormal(w0) ? w0 : F(0.0);
+    xover->w[1] = isnormal(w1) ? w1 : F(0.0);
 }
 
 static void fn(xover)(AmbisonicContext *s,
@@ -183,7 +189,8 @@ static void fn(xover)(AmbisonicContext *s,
     }
 }
 
-static int fn(level)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+static int fn(level)(AVFilterContext *ctx, void *arg,
+                     const int jobnr, const int nb_jobs)
 {
     AmbisonicContext *s = ctx->priv;
     AVFrame *out = arg;
