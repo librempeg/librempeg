@@ -246,13 +246,6 @@ static av_cold int init(AVFilterContext *ctx)
     return 0;
 }
 
-static const AVFilterPad inputs[] = {
-    {
-        .name = "input",
-        .type = AVMEDIA_TYPE_AUDIO,
-    }
-};
-
 static const AVFilterPad outputs[] = {
     {
         .name = "default",
@@ -268,7 +261,7 @@ const AVFilter ff_af_aquant = {
     .priv_class     = &aquant_class,
     .init           = init,
     .activate       = activate,
-    FILTER_INPUTS(inputs),
+    FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
     .flags          = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
