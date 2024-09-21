@@ -75,7 +75,7 @@ typedef struct CompandContext {
 #define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
-static const AVOptionArrayDef def_attacks = {.def="0",.size_min=1,.sep='|'};
+static const AVOptionArrayDef def_attacks = {.def="0.01",.size_min=1,.sep='|'};
 static const AVOptionArrayDef def_decays  = {.def="0.8",.size_min=1,.sep='|'};
 static const AVOptionArrayDef def_in_points  = {.def="-70|-60|1",.size_min=1,.sep='|'};
 static const AVOptionArrayDef def_out_points = {.def="-70|-20|0",.size_min=1,.sep='|'};

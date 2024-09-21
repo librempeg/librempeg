@@ -191,11 +191,11 @@ static int fn(prepare)(AVFilterContext *ctx, AVFilterLink *outlink)
         fn(ChanParam) *cp = &channels[i];
 
         if (cp->attack > F(1.0) / sample_rate)
-            cp->attack = F(1.0) - FEXP(F(-1.0) / (sample_rate * cp->attack));
+            cp->attack = F(M_LN10) / (sample_rate * cp->attack);
         else
             cp->attack = F(1.0);
         if (cp->decay > F(1.0) / sample_rate)
-            cp->decay = F(1.0) - FEXP(F(-1.0) / (sample_rate * cp->decay));
+            cp->decay = F(M_LN10) / (sample_rate * cp->decay);
         else
             cp->decay = F(1.0);
         cp->volume = s->initial_volume * F(M_LN10/20.0);
@@ -250,13 +250,14 @@ static void fn(drain)(AVFilterContext *ctx, AVFrame *frame)
     s->delay_index = dindex;
 }
 
-static void fn(update_volume)(fn(ChanParam) *cp, ftype in)
+static void fn(update_volume)(fn(ChanParam) *cp, const ftype in)
 {
-    ftype delta = FLOG(in + EPS) - cp->volume;
+    const ftype in_log = in > EPS ? FLOG(in) : FLOG(EPS);
+    const ftype delta = in_log - cp->volume;
 
     if (delta > F(0.0))
         cp->volume += delta * cp->attack;
-    else
+    else if (delta < F(0.0))
         cp->volume += delta * cp->decay;
 }
 
