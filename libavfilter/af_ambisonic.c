@@ -1562,7 +1562,8 @@ static void calc_transform_mat(AVFilterContext *ctx, AmbisonicContext *s)
     LOG_MATRIX("transform", s->transform_mat, inputs, inputs)
 }
 
-static void near_field(AmbisonicContext *s, AVFrame *frame, int out, int add)
+static void near_field(AmbisonicContext *s, AVFrame *frame,
+                       const int out, const int add)
 {
     for (int ch = 1 - out; ch < frame->ch_layout.nb_channels; ch++) {
         int n, m;

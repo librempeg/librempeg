@@ -118,20 +118,28 @@ static int fn(multiply)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     return 0;
 }
 
-static void fn(nfield1_process)(NearField *nf, AVFrame *frame, int ch, int add,
-                                double gain)
+static void fn(nfield1_process)(NearField *nf, AVFrame *frame,
+                                const int ch, const int add,
+                                const double gain)
 {
+    const int nb_samples = frame->nb_samples;
     ftype *dst = (ftype *)frame->extended_data[ch];
-    ftype z0, d0, d1;
+    const ftype d0 = nf->d[0] * gain;
+    const ftype d1 = nf->d[1];
+    ftype z0 = nf->z[0];
 
-    z0 = nf->z[0];
-    d0 = nf->d[0] * gain;
-    d1 = nf->d[1];
-
-    for (int n = 0; n < frame->nb_samples; n++) {
-        ftype x = dst[n] * d0 - d1 * z0;
-        dst[n] = x + (add ? dst[n] : 0.f);
-        z0 += x;
+    if (add) {
+        for (int n = 0; n < nb_samples; n++) {
+            ftype x = dst[n] * d0 - d1 * z0;
+            dst[n] += x;
+            z0 += x;
+        }
+    } else {
+        for (int n = 0; n < nb_samples; n++) {
+            ftype x = dst[n] * d0 - d1 * z0;
+            dst[n] = x;
+            z0 += x;
+        }
     }
 
     nf->z[0] = z0;
