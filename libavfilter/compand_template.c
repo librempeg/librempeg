@@ -261,64 +261,72 @@ static void fn(update_volume)(fn(ChanParam) *cp, const ftype in)
         cp->volume += delta * cp->decay;
 }
 
-static int fn(compand_nodelay)(AVFilterContext *ctx, AVFrame *frame)
+static int fn(compand_nodelay)(AVFilterContext *ctx)
 {
     CompandContext *s    = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
     const int channels   = inlink->ch_layout.nb_channels;
-    const int nb_samples = frame->nb_samples;
+    const int nb_samples = s->in->nb_samples;
+    AVFrame *sc = s->sc ? s->sc : s->in;
     fn(ChanParam) *cps = s->channels;
-    AVFrame *out_frame;
+    AVFrame *out;
     int err;
 
-    if (av_frame_is_writable(frame)) {
-        out_frame = frame;
+    if (av_frame_is_writable(s->in)) {
+        out = s->in;
     } else {
-        out_frame = ff_get_audio_buffer(ctx->outputs[0], nb_samples);
-        if (!out_frame) {
-            av_frame_free(&frame);
+        out = ff_get_audio_buffer(ctx->outputs[0], nb_samples);
+        if (!out) {
+            av_frame_free(&s->in);
+            av_frame_free(&s->sc);
             return AVERROR(ENOMEM);
         }
-        err = av_frame_copy_props(out_frame, frame);
+        err = av_frame_copy_props(out, s->in);
         if (err < 0) {
-            av_frame_free(&out_frame);
-            av_frame_free(&frame);
+            av_frame_free(&out);
+            av_frame_free(&s->in);
+            av_frame_free(&s->sc);
             return err;
         }
     }
 
     for (int chan = 0; chan < channels; chan++) {
-        const ftype *src = (ftype *)frame->extended_data[chan];
-        ftype *dst = (ftype *)out_frame->extended_data[chan];
+        const ftype *scsrc = (const ftype *)sc->extended_data[chan];
+        const ftype *src = (const ftype *)s->in->extended_data[chan];
+        ftype *dst = (ftype *)out->extended_data[chan];
         fn(ChanParam) *cp = &cps[chan];
 
         for (int i = 0; i < nb_samples; i++) {
-            fn(update_volume)(cp, FABS(src[i]));
+            fn(update_volume)(cp, FABS(scsrc[i]));
 
             dst[i] = src[i] * fn(get_volume)(s, cp->volume);
         }
     }
 
-    if (frame != out_frame)
-        av_frame_free(&frame);
+    if (s->in != out)
+        av_frame_free(&s->in);
 
-    return ff_filter_frame(ctx->outputs[0], out_frame);
+    s->in = NULL;
+    av_frame_free(&s->sc);
+    return ff_filter_frame(ctx->outputs[0], out);
 }
 
-static int fn(compand_delay)(AVFilterContext *ctx, AVFrame *frame)
+static int fn(compand_delay)(AVFilterContext *ctx)
 {
     CompandContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
     const int channels = inlink->ch_layout.nb_channels;
-    const int nb_samples = frame->nb_samples;
+    const int nb_samples = s->in->nb_samples;
+    AVFrame *sc = s->sc ? s->sc : s->in;
     fn(ChanParam) *cps = s->channels;
     int dindex = 0, count = 0;
-    AVFrame *out_frame = NULL;
+    AVFrame *out = NULL;
     int err;
 
     for (int chan = 0; chan < channels; chan++) {
         AVFrame *delay_frame = s->delay_frame;
-        const ftype *src = (ftype *)frame->extended_data[chan];
+        const ftype *scsrc = (const ftype *)sc->extended_data[chan];
+        const ftype *src = (const ftype *)s->in->extended_data[chan];
         ftype *dbuf = (ftype *)delay_frame->extended_data[chan];
         fn(ChanParam) *cp = &cps[chan];
         ftype *dst;
@@ -326,34 +334,37 @@ static int fn(compand_delay)(AVFilterContext *ctx, AVFrame *frame)
         count  = s->delay_count;
         dindex = s->delay_index;
         for (int i = 0, oindex = 0; i < nb_samples; i++) {
-            const ftype in = src[i];
+            const ftype scsample = scsrc[i];
+            const ftype sample = src[i];
 
-            fn(update_volume)(cp, FABS(in));
+            fn(update_volume)(cp, FABS(scsample));
 
             if (count >= s->delay_samples) {
-                if (!out_frame) {
-                    out_frame = ff_get_audio_buffer(ctx->outputs[0], nb_samples - i);
-                    if (!out_frame) {
-                        av_frame_free(&frame);
+                if (!out) {
+                    out = ff_get_audio_buffer(ctx->outputs[0], nb_samples - i);
+                    if (!out) {
+                        av_frame_free(&s->in);
+                        av_frame_free(&s->sc);
                         return AVERROR(ENOMEM);
                     }
-                    err = av_frame_copy_props(out_frame, frame);
+                    err = av_frame_copy_props(out, s->in);
                     if (err < 0) {
-                        av_frame_free(&out_frame);
-                        av_frame_free(&frame);
+                        av_frame_free(&out);
+                        av_frame_free(&s->in);
+                        av_frame_free(&s->sc);
                         return err;
                     }
-                    s->pts = out_frame->pts + out_frame->nb_samples;
-                    out_frame->pts -= s->delay_samples - i;
+                    s->pts = out->pts + out->nb_samples;
+                    out->pts -= s->delay_samples - i;
                 }
 
-                dst = (ftype *)out_frame->extended_data[chan];
+                dst = (ftype *)out->extended_data[chan];
                 dst[oindex++] = dbuf[dindex] * fn(get_volume)(s, cp->volume);
             } else {
                 count++;
             }
 
-            dbuf[dindex] = in;
+            dbuf[dindex] = sample;
             dindex = MOD(dindex + 1, s->delay_samples);
         }
     }
@@ -361,10 +372,11 @@ static int fn(compand_delay)(AVFilterContext *ctx, AVFrame *frame)
     s->delay_count = count;
     s->delay_index = dindex;
 
-    av_frame_free(&frame);
+    av_frame_free(&s->in);
+    av_frame_free(&s->sc);
 
-    if (out_frame)
-        return ff_filter_frame(ctx->outputs[0], out_frame);
+    if (out)
+        return ff_filter_frame(ctx->outputs[0], out);
 
     return 0;
 }

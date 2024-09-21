@@ -4744,6 +4744,8 @@ delayed before being fed to the volume adjuster. Specifying a delay
 approximately equal to the attack/decay times allows the filter to effectively
 operate in predictive rather than reactive mode. It defaults to 0.
 
+@item sidechain
+Enables sidechain mode. Default is disabled.
 @end table
 
 @subsection Examples

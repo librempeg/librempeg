@@ -50,6 +50,7 @@ typedef struct CompandContext {
     unsigned nb_in_points;
     float *out_points;
     unsigned nb_out_points;
+    int sidechain;
 
     void *segments;
     void *channels;
@@ -60,14 +61,14 @@ typedef struct CompandContext {
     double gain_dB;
     double initial_volume;
     double delay;
-    AVFrame *delay_frame;
+    AVFrame *delay_frame, *in, *sc;
     int delay_samples;
     int delay_count;
     int delay_index;
     int64_t pts;
 
     int (*prepare)(AVFilterContext *ctx, AVFilterLink *outlink);
-    int (*compand)(AVFilterContext *ctx, AVFrame *frame);
+    int (*compand)(AVFilterContext *ctx);
     void (*drain)(AVFilterContext *ctx, AVFrame *frame);
 } CompandContext;
 
@@ -89,10 +90,26 @@ static const AVOption compand_options[] = {
     { "gain", "set output gain", OFFSET(gain_dB), AV_OPT_TYPE_DOUBLE, { .dbl = 0 }, -900, 900, A },
     { "volume", "set initial volume", OFFSET(initial_volume), AV_OPT_TYPE_DOUBLE, { .dbl = 0 }, -900, 0, A },
     { "delay", "set delay for samples before sending them to volume adjuster", OFFSET(delay), AV_OPT_TYPE_DOUBLE, { .dbl = 0 }, 0, 20, A },
+    { "sidechain", "enable sidechain input", OFFSET(sidechain), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, A },
     { NULL }
 };
 
 AVFILTER_DEFINE_CLASS(compand);
+
+static av_cold int init(AVFilterContext *ctx)
+{
+    CompandContext *s = ctx->priv;
+
+    if (s->sidechain) {
+        AVFilterPad pad = { NULL };
+
+        pad.type = AVMEDIA_TYPE_AUDIO;
+        pad.name = "sidechain";
+        return ff_append_inpad(ctx, &pad);
+    }
+
+    return 0;
+}
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
@@ -100,6 +117,8 @@ static av_cold void uninit(AVFilterContext *ctx)
 
     av_freep(&s->channels);
     av_freep(&s->segments);
+    av_frame_free(&s->in);
+    av_frame_free(&s->sc);
     av_frame_free(&s->delay_frame);
 }
 
@@ -113,19 +132,19 @@ static av_cold void uninit(AVFilterContext *ctx)
 static int compand_drain(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
-    CompandContext *s    = ctx->priv;
-    AVFrame *frame;
+    CompandContext *s = ctx->priv;
+    AVFrame *out;
 
     /* 2048 is to limit output frame size during drain */
-    frame = ff_get_audio_buffer(outlink, FFMIN(2048, s->delay_count));
-    if (!frame)
+    out = ff_get_audio_buffer(outlink, FFMIN(2048, s->delay_count));
+    if (!out)
         return AVERROR(ENOMEM);
-    frame->pts = s->pts;
-    s->pts += frame->nb_samples;
+    out->pts = s->pts;
+    s->pts += out->nb_samples;
 
-    s->drain(ctx, frame);
+    s->drain(ctx, out);
 
-    return ff_filter_frame(outlink, frame);
+    return ff_filter_frame(outlink, out);
 }
 
 static int config_output(AVFilterLink *outlink)
@@ -175,45 +194,60 @@ static int config_output(AVFilterLink *outlink)
     return 0;
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
+static int activate(AVFilterContext *ctx)
 {
-    AVFilterContext *ctx = inlink->dst;
-    CompandContext *s    = ctx->priv;
+    AVFilterLink *outlink = ctx->outputs[0];
+    AVFilterLink *inlink = ctx->inputs[0];
+    CompandContext *s = ctx->priv;
+    int64_t pts;
+    int status;
 
-    return s->compand(ctx, frame);
+    FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
+
+    if (!s->in) {
+        int ret = ff_inlink_consume_frame(inlink, &s->in);
+        if (ret < 0)
+            return ret;
+    }
+
+    if (s->in) {
+        if (s->sidechain && !s->sc) {
+            AVFilterLink *sclink = ctx->inputs[1];
+            int ret = ff_inlink_consume_samples(sclink, s->in->nb_samples,
+                                                s->in->nb_samples, &s->sc);
+            if (ret < 0)
+                return ret;
+
+            if (!ret) {
+                FF_FILTER_FORWARD_STATUS(sclink, outlink);
+                FF_FILTER_FORWARD_WANTED(outlink, sclink);
+                return 0;
+            }
+        }
+
+        return s->compand(ctx);
+    }
+
+    if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+        int ret = (s->delay_count > 0) ? compand_drain(outlink) : 0;
+
+        ff_outlink_set_status(outlink, status, pts);
+
+        return ret;
+    }
+
+    FF_FILTER_FORWARD_WANTED(outlink, inlink);
+
+    return FFERROR_NOT_READY;
 }
-
-static int request_frame(AVFilterLink *outlink)
-{
-    AVFilterContext *ctx = outlink->src;
-    CompandContext *s    = ctx->priv;
-    int ret = 0;
-
-    ret = ff_request_frame(ctx->inputs[0]);
-
-    if (ret == AVERROR_EOF && !ctx->is_disabled && s->delay_count)
-        ret = compand_drain(outlink);
-
-    return ret;
-}
-
-static const AVFilterPad compand_inputs[] = {
-    {
-        .name         = "default",
-        .type         = AVMEDIA_TYPE_AUDIO,
-        .filter_frame = filter_frame,
-    },
-};
 
 static const AVFilterPad compand_outputs[] = {
     {
-        .name          = "default",
-        .request_frame = request_frame,
-        .config_props  = config_output,
-        .type          = AVMEDIA_TYPE_AUDIO,
+        .name         = "default",
+        .config_props = config_output,
+        .type         = AVMEDIA_TYPE_AUDIO,
     },
 };
-
 
 const AVFilter ff_af_compand = {
     .name           = "compand",
@@ -221,8 +255,11 @@ const AVFilter ff_af_compand = {
             "Compress or expand audio dynamic range."),
     .priv_size      = sizeof(CompandContext),
     .priv_class     = &compand_class,
+    .init           = init,
+    .activate       = activate,
     .uninit         = uninit,
-    FILTER_INPUTS(compand_inputs),
+    FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(compand_outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
+    .flags          = AVFILTER_FLAG_DYNAMIC_INPUTS,
 };
