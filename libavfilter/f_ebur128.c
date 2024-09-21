@@ -543,7 +543,7 @@ static int config_audio_output(AVFilterLink *outlink)
 }
 
 #define ENERGY(loudness) (ff_exp10(((loudness) + 0.691) / 10.))
-#define LOUDNESS(energy) (-0.691 + 10 * log10(energy))
+#define LOUDNESS(energy) (-0.691 + 10 * log10(energy + DBL_EPSILON))
 #define DBFS(energy) (20 * log10(energy))
 
 static struct hist_entry *get_histogram(void)
@@ -646,8 +646,6 @@ static int gate_update(struct integrator *integ, double power,
     integ->sum_kept_powers += power;
     integ->nb_kept_powers++;
     relative_threshold = integ->sum_kept_powers / integ->nb_kept_powers;
-    if (!relative_threshold)
-        relative_threshold = 1e-12;
     integ->rel_threshold = LOUDNESS(relative_threshold) + gate_thres;
     gate_hist_pos = av_clip(HIST_POS(integ->rel_threshold), 0, HIST_SIZE - 1);
 
@@ -767,7 +765,7 @@ static void ebur128_loudness(AVFilterLink *inlink,
                              double *l400, double *l3000, double *integrated, double *peak)
 {
     const int nb_channels = ebur128->nb_channels;
-    double power_400 = 1e-12, power_3000 = 1e-12;
+    double power_400 = 0.0, power_3000 = 0.0;
     double loudness_400, loudness_3000;
 
     ebur128->sample_count = 0;
