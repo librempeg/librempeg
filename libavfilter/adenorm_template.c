@@ -32,7 +32,7 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 static void fn(dc_denorm)(AVFilterContext *ctx, void *dstp,
-                          const void *srcp, int nb_samples,
+                          const void *srcp, const int nb_samples,
                           const int ch)
 {
     ADenormContext *s = ctx->priv;
@@ -46,7 +46,7 @@ static void fn(dc_denorm)(AVFilterContext *ctx, void *dstp,
 }
 
 static void fn(ac_denorm)(AVFilterContext *ctx, void *dstp,
-                          const void *srcp, int nb_samples,
+                          const void *srcp, const int nb_samples,
                           const int ch)
 {
     ADenormContext *s = ctx->priv;
@@ -61,7 +61,7 @@ static void fn(ac_denorm)(AVFilterContext *ctx, void *dstp,
 }
 
 static void fn(sq_denorm)(AVFilterContext *ctx, void *dstp,
-                          const void *srcp, int nb_samples,
+                          const void *srcp, const int nb_samples,
                           const int ch)
 {
     ADenormContext *s = ctx->priv;
@@ -76,7 +76,7 @@ static void fn(sq_denorm)(AVFilterContext *ctx, void *dstp,
 }
 
 static void fn(ps_denorm)(AVFilterContext *ctx, void *dstp,
-                          const void *srcp, int nb_samples,
+                          const void *srcp, const int nb_samples,
                           const int ch)
 {
     ADenormContext *s = ctx->priv;
