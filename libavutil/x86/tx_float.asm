@@ -1971,35 +1971,32 @@ PFA_15_FN avx2, 1
     mov ctxq, btmpq                                 ; restore original context
 %endmacro
 
-%macro RDFT_FN 3
+%macro RDFT_FN 4
 INIT_YMM %1
 cglobal rdft_ %+ %2 %+ _float, 4, 14, 16, 320, ctx, out, in, stride, len, lut, exp, t1, t2, t3, \
                                         t4, t5, btmp
 %if %3==0
     RDFT_CONV outq, inq
-%else
-    mov btmpq, inq
-    mov inq, outq
-    mov outq, btmpq
 %endif
 
     movsxd lenq, dword [ctxq + AVTXContext.len]
     mov expq, [ctxq + AVTXContext.exp]
 
 %if %3==1
-    movss xm0, [outq]
-    movss xm1, [outq + lenq*4]
+    movss xm0, [inq]
+    movss xm1, [inq + lenq*4]
 
     addss xm9, xm1, xm0
     subss xm0, xm1, xm0
     mulss xm9, xm9, [expq]
     mulss xm0, xm0, [expq+4]
-    movss [outq], xm9
-    movss [outq+4], xm0
+    movss [inq], xm9
+    movss [inq+4], xm0
 %endif
 
-    movsd  xm0, [outq]                               ; data[0].reim
-    movhps xm0, [outq + lenq*2]                      ; data[len4].reim
+    mov t5q, %4
+    movsd  xm0, [t5q]                               ; data[0].reim
+    movhps xm0, [t5q + lenq*2]                      ; data[len4].reim
 
     shufps xm1, xm0, xm0, q2301                     ; data[0].imre, data[1].imre
     addsubps xm2, xm1, xm0                          ; t[0].imre, junk
@@ -2014,13 +2011,9 @@ cglobal rdft_ %+ %2 %+ _float, 4, 14, 16, 320, ctx, out, in, stride, len, lut, e
     movaps m14, [rdft_m11]                          ; 0.0, 0.0, 1.0, 1.0
     movaps m15, [rdft_perm_exp]
 
-%if %3==1
-    mov btmpq, inq
-%endif
-    mov inq, outq
-    lea t1q, [outq + lenq*4 - mmsize]
+    lea t1q, [t5q + lenq*4 - mmsize]
     mov t2q, lenq
-    add outq, 8
+    add t5q, 8
 
 .loop:
     movups m8, [expq + (8 + 2)*4]
@@ -2036,7 +2029,7 @@ cglobal rdft_ %+ %2 %+ _float, 4, 14, 16, 320, ctx, out, in, stride, len, lut, e
     shufpd m6, m14, m7, 1111b                       ; 1,1,cos1,cos1,1,1,cos2,cos2
     shufpd m7, m14, m7, 0000b                       ; 0,0,sin1,sin1,0,0,sin2,sin2
 
-    movups m2, [outq]
+    movups m2, [t5q]
     movups m3, [t1q]
 
     vperm2f128 m0, m2, m2, 0x00
@@ -2081,34 +2074,33 @@ cglobal rdft_ %+ %2 %+ _float, 4, 14, 16, 320, ctx, out, in, stride, len, lut, e
     vpermpd m0, m1, q3120
     vpermpd m2, m3, q0213
 
-    movups [outq], m0
+    movups [t5q], m0
     movups [t1q], m2
 
     add expq, mmsize
     sub t1q,  mmsize
-    add outq, mmsize
+    add t5q,  mmsize
 
     sub t2q, mmsize/2
     jg .loop
 
 %if %3==1
     movhps [inq + lenq*2], xm9
-    mov outq, btmpq
     RDFT_CONV outq, inq
 %else
     ; Write DC, middle and tail
-    movhps [inq + lenq*2], xm9
+    movhps [outq + lenq*2], xm9
     xorps xm0, xm0
     shufps xm9, xm9, xm0, q3210
     shufps xm8, xm9, xm9, q2120
-    movsd [inq], xm8
-    movhps [inq + lenq*4], xm8
+    movsd [outq], xm8
+    movhps [outq + lenq*4], xm8
 %endif
 
     RET
 %endmacro
 
 %if ARCH_X86_64 && HAVE_AVX2_EXTERNAL
-RDFT_FN avx2, r2c, 0
-RDFT_FN avx2, c2r, 1
+RDFT_FN avx2, r2c, 0, outq
+RDFT_FN avx2, c2r, 1, inq
 %endif
