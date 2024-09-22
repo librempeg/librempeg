@@ -711,17 +711,17 @@ int ff_yuv2rgb_c_init_tables(SwsInternal *c, const int inv_table[4],
                              int contrast, int saturation);
 void ff_yuv2rgb_init_tables_ppc(SwsInternal *c, const int inv_table[4],
                                 int brightness, int contrast, int saturation);
- 
+
 void ff_updateMMXDitherTables(SwsInternal *c, int dstY);
- 
+
 void ff_update_palette(SwsInternal *c, const uint32_t *pal);
- 
+
 av_cold void ff_sws_init_range_convert(SwsInternal *c);
 av_cold void ff_sws_init_range_convert_aarch64(SwsInternal *c);
 av_cold void ff_sws_init_range_convert_loongarch(SwsInternal *c);
 av_cold void ff_sws_init_range_convert_riscv(SwsInternal *c);
 av_cold void ff_sws_init_range_convert_x86(SwsInternal *c);
-  
+
 SwsFunc ff_yuv2rgb_init_x86(SwsInternal *c);
 SwsFunc ff_yuv2rgb_init_ppc(SwsInternal *c);
 
