@@ -3602,7 +3602,6 @@ static int xyz_to_dsquare(const V360Context *s,
     return 1;
 }
 
-
 /**
  * Calculate 3D coordinates on sphere for corresponding frame position in barrel facebook's format.
  *
