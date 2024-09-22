@@ -867,7 +867,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_naive_small)(AVTXContext *s,
     for (int i = 0; i < len; i++) {
         for (int j = 0; j < len; j++) {
             const double factor = phase*i*j;
-            s->exp[i*j] = (TXComplex){
+            s->exp[i*len+j] = (TXComplex){
                 RESCALE(cos(factor)),
                 RESCALE(sin(factor)),
             };
@@ -1202,6 +1202,7 @@ static void TX_NAME(ff_tx_fft_naive)(AVTXContext *s, void *_dst, void *_src,
 static void TX_NAME(ff_tx_fft_naive_small)(AVTXContext *s, void *_dst, void *_src,
                                            ptrdiff_t stride)
 {
+    const TXComplex *exp = s->exp;
     TXComplex *src = _src;
     TXComplex *dst = _dst;
     const int n = s->len;
@@ -1212,12 +1213,13 @@ static void TX_NAME(ff_tx_fft_naive_small)(AVTXContext *s, void *_dst, void *_sr
         TXComplex tmp = { 0 };
         for (int j = 0; j < n; j++) {
             TXComplex res;
-            const TXComplex mult = s->exp[i*j];
+            const TXComplex mult = exp[j];
             CMUL3(res, src[j], mult);
             tmp.re += res.re;
             tmp.im += res.im;
         }
         dst[i*stride] = tmp;
+        exp += n;
     }
 }
 
