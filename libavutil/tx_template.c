@@ -974,7 +974,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
     };
     const int plen = FFALIGN(len, av_cpu_max_align());
     const int len2 = len-1;
-    const double phase = -2.0*M_PI/len;
+    const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
     const double factor = 1.0 / len2;
     TXComplex *exp;
     int *imap, *map;
@@ -1301,23 +1301,13 @@ static void TX_NAME(ff_tx_fft_rader)(AVTXContext *s, void *_dst, void *_src,
 
     stride /= sizeof(*dst);
 
-    if (s->inv) {
-        src0.im = -src0.im;
-        for (int i = 0; i < m; i++) {
-            ww[i].re =  src[map[i]].re;
-            ww[i].im = -src[map[i]].im;
-        }
-    } else {
-        for (int i = 0; i < m; i++)
-            ww[i] = src[map[i]];
-    }
+    for (int i = 0; i < m; i++)
+        ww[i] = src[map[i]];
 
     s->fn[0](&s->sub[0], w, ww, sizeof(TXComplex));
 
     dst[0].re = src0.re + w[0].re;
     dst[0].im = src0.im + w[0].im;
-    if (s->inv)
-        dst[0].im = -dst[0].im;
 
     for (int i = 0; i < m; i++) {
         const TXComplex x = w[i];
@@ -1330,17 +1320,8 @@ static void TX_NAME(ff_tx_fft_rader)(AVTXContext *s, void *_dst, void *_src,
 
     s->fn[1](&s->sub[1], ww, w, sizeof(TXComplex));
 
-    if (s->inv) {
-        for (int i = 0; i < m; i++) {
-            dst[imap[i]*stride].re =  ww[i].re;
-            dst[imap[i]*stride].im = -ww[i].im;
-        }
-    } else {
-        for (int i = 0; i < m; i++) {
-            dst[imap[i]*stride].re = ww[i].re;
-            dst[imap[i]*stride].im = ww[i].im;
-        }
-    }
+    for (int i = 0; i < m; i++)
+        dst[imap[i]*stride] = ww[i];
 }
 
 static void TX_NAME(ff_tx_fft_bluestein)(AVTXContext *s, void *_dst, void *_src,
