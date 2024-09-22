@@ -955,7 +955,7 @@ static void vertopen##name##_transition(AVFilterContext *ctx,                   
 {                                                                                    \
     XFadeContext *s = ctx->priv;                                                     \
     const int width = out->width;                                                    \
-    const float w2 = out->width / 2.f;                                               \
+    const float w2 = width / 2.f;                                                    \
                                                                                      \
     for (int y = slice_start; y < slice_end; y++) {                                  \
         for (int x = 0; x < width; x++) {                                            \
@@ -983,7 +983,7 @@ static void vertclose##name##_transition(AVFilterContext *ctx,                  
     XFadeContext *s = ctx->priv;                                                     \
     const int nb_planes = s->nb_planes;                                              \
     const int width = out->width;                                                    \
-    const float w2 = out->width / 2.f;                                               \
+    const float w2 = width / 2.f;                                                    \
                                                                                      \
     for (int y = slice_start; y < slice_end; y++) {                                  \
         for (int x = 0; x < width; x++) {                                            \
@@ -1492,7 +1492,7 @@ static void wipetl##name##_transition(AVFilterContext *ctx,                     
     XFadeContext *s = ctx->priv;                                                     \
     const int height = slice_end - slice_start;                                      \
     const int width = out->width;                                                    \
-    const int zw = out->width * progress;                                            \
+    const int zw = width * progress;                                                 \
     const int zh = out->height * progress;                                           \
                                                                                      \
     for (int p = 0; p < s->nb_planes; p++) {                                         \
@@ -1842,9 +1842,10 @@ static void v##z##wind##name##_transition(AVFilterContext *ctx,                 
 {                                                                                    \
     XFadeContext *s = ctx->priv;                                                     \
     const int width = out->width;                                                    \
+    const float h = out->height;                                                     \
                                                                                      \
     for (int y = slice_start; y < slice_end; y++) {                                  \
-        const float fy = expr y / (float)out->height;                                \
+        const float fy = expr y / h;                                                 \
         for (int x = 0; x < width; x++) {                                            \
             const float r = frand(x, 0);                                             \
             for (int p = 0; p < s->nb_planes; p++) {                                 \
