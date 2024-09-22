@@ -1239,6 +1239,10 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
     const int m = s->sub[0].len;
     const int n = s->sub[1].len;
     const TXComplex *exp = s->exp;
+    AVTXContext *sub0 = &s->sub[0];
+    AVTXContext *sub1 = &s->sub[1];
+    const av_tx_fn fn0 = s->fn[0];
+    const av_tx_fn fn1 = s->fn[1];
     TXComplex *tmp2 = ((TXComplex *)s->exp) + len;
     TXComplex *tmp = tmp2 + len;
     TXComplex *src = _src;
@@ -1249,7 +1253,7 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
     transpose_matrix(tmp2, src, n, m);
 
     for (int i = 0; i < n; i++) {
-        s->fn[0](&s->sub[0], tmp, tmp2, sizeof(TXComplex));
+        fn0(sub0, tmp, tmp2, sizeof(TXComplex));
         tmp2 += m;
         tmp += m;
     }
@@ -1265,7 +1269,7 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
     transpose_matrix(tmp2, tmp, m, n);
 
     for (int i = 0; i < m; i++) {
-        s->fn[1](&s->sub[1], tmp, tmp2, sizeof(TXComplex));
+        fn1(sub1, tmp, tmp2, sizeof(TXComplex));
         tmp2 += n;
         tmp += n;
     }
