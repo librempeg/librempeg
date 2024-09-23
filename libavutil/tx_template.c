@@ -1437,7 +1437,7 @@ static av_cold int TX_NAME(ff_tx_fft_pfa_init)(AVTXContext *s,
                                                int len, int inv,
                                                const void *scale)
 {
-    int ret, *tmp, ps = flags & FF_TX_PRESHUFFLE;
+    int ret, *tmp, ps = flags & FF_TX_PRESHUFFLE, nb_decomp;
     FFTXCodeletOptions sub_opts = { .map_dir = FF_TX_MAP_GATHER };
     size_t extra_tmp_len = 0;
     int len_list[TX_MAX_DECOMPOSITIONS];
@@ -1445,8 +1445,9 @@ static av_cold int TX_NAME(ff_tx_fft_pfa_init)(AVTXContext *s,
     if ((ret = ff_tx_decompose_length(len_list, TX_TYPE(FFT), len, inv)) < 0)
         return ret;
 
+    nb_decomp = ret;
     /* Two iterations to test both orderings. */
-    for (int i = 0; i < ret; i++) {
+    for (int i = 0; i < nb_decomp; i++) {
         int len1 = len_list[i];
         int len2 = len / len1;
 
