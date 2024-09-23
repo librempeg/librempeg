@@ -1278,6 +1278,10 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
     tmp = tmp2 + len;
     transpose_matrix(tmp2, tmp, n, m);
 
+    if (stride == sizeof(TXComplex)) {
+        memcpy(dst, tmp2, len * sizeof(TXComplex));
+        return;
+    }
     for (int i = 0; i < len; i++) {
         dst[0] = tmp2[i];
         dst += stride;
