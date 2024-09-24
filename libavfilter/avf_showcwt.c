@@ -1618,6 +1618,10 @@ static int output_frame(AVFilterContext *ctx)
         break;
     }
 
+    ret = ff_inlink_make_frame_writable(outlink, &s->outpicref);
+    if (ret < 0)
+        return ret;
+
     ff_filter_execute(ctx, draw, NULL, NULL, s->nb_threads);
 
     switch (s->slide) {
@@ -1743,23 +1747,14 @@ static int output_frame(AVFilterContext *ctx)
         return 1;
 
     if (s->old_pts < s->outpicref->pts) {
-        AVFrame *out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+        AVFrame *out = av_frame_clone(s->outpicref);
         if (!out)
             return AVERROR(ENOMEM);
-        ret = av_frame_copy_props(out, s->outpicref);
-        if (ret < 0)
-            goto fail;
-        ret = av_frame_copy(out, s->outpicref);
-        if (ret < 0)
-            goto fail;
         s->old_pts = s->outpicref->pts;
         s->new_frame = 0;
         ret = ff_filter_frame(outlink, out);
         if (ret <= 0)
             return ret;
-fail:
-        av_frame_free(&out);
-        return ret;
     }
 
     return 1;
