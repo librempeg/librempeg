@@ -273,8 +273,7 @@ static float spectral_centroid(const float *const spectral, int size, int max_fr
         den += spectral[n];
     }
 
-    if (den <= FLT_EPSILON)
-        return 1.f;
+    den += FLT_EPSILON;
     return num / den;
 }
 
@@ -288,8 +287,7 @@ static float spectral_spread(const float *const spectral, int size, int max_freq
         den += spectral[n];
     }
 
-    if (den <= FLT_EPSILON)
-        return 1.f;
+    den += FLT_EPSILON;
     return sqrtf(num / den);
 }
 
@@ -309,8 +307,7 @@ static float spectral_skewness(const float *const spectral, int size, int max_fr
     }
 
     den *= cbrf(spread);
-    if (den <= FLT_EPSILON)
-        return 1.f;
+    den += FLT_EPSILON;
     return num / den;
 }
 
@@ -325,8 +322,7 @@ static float spectral_kurtosis(const float *const spectral, int size, int max_fr
     }
 
     den *= sqrf(sqrf(spread));
-    if (den <= FLT_EPSILON)
-        return 1.f;
+    den += FLT_EPSILON;
     return num / den;
 }
 
@@ -338,9 +334,7 @@ static float spectral_entropy(const float *const spectral, int size, int max_fre
         num += spectral[n] * logf(spectral[n] + FLT_EPSILON);
     }
 
-    den = logf(size);
-    if (den <= FLT_EPSILON)
-        return 1.f;
+    den = logf(size + FLT_EPSILON);
     return -num / den;
 }
 
@@ -349,16 +343,15 @@ static float spectral_flatness(const float *const spectral, int size, int max_fr
     float num = 0.f, den = 0.f;
 
     for (int n = 0; n < size; n++) {
-        float v = FLT_EPSILON + spectral[n];
-        num += logf(v);
+        float v = spectral[n];
+        num += logf(v + FLT_EPSILON);
         den += v;
     }
 
     num /= size;
     den /= size;
     num = expf(num);
-    if (den <= FLT_EPSILON)
-        return 0.f;
+    den += FLT_EPSILON;
     return num / den;
 }
 
@@ -372,8 +365,7 @@ static float spectral_crest(const float *const spectral, int size, int max_freq)
     }
 
     mean /= size;
-    if (mean <= FLT_EPSILON)
-        return 0.f;
+    mean += FLT_EPSILON;
     return max / mean;
 }
 
@@ -402,8 +394,7 @@ static float spectral_slope(const float *const spectral, int size, int max_freq)
         den += sqrf((n - mean_freq) / mean_freq);
     }
 
-    if (fabsf(den) <= FLT_EPSILON)
-        return 0.f;
+    den += FLT_EPSILON;
     return num / den;
 }
 
@@ -416,8 +407,7 @@ static float spectral_decrease(const float *const spectral, int size, int max_fr
         den += spectral[n];
     }
 
-    if (den <= FLT_EPSILON)
-        return 0.f;
+    den += FLT_EPSILON;
     return num / den;
 }
 
