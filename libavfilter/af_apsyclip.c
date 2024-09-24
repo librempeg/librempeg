@@ -207,7 +207,7 @@ static int config_input(AVFilterLink *inlink)
     s->overlap = s->fft_size / 4;
 
     // The psy masking calculation is O(n^2),
-    // so skip it for frequencies not covered by base sampling rantes (i.e. 44k)
+    // so skip it for frequencies not covered by base sampling rates (i.e. 44.1k)
     if (inlink->sample_rate <= 50000) {
         s->num_psy_bins = s->fft_size / 2;
     } else if (inlink->sample_rate <= 100000) {
