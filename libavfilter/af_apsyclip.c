@@ -46,6 +46,7 @@ typedef struct AudioPsyClipContext {
     double *protections;
 
     int num_psy_bins;
+    int nb_bins;
     int fft_size;
     int overlap;
     int channels;
@@ -114,21 +115,23 @@ static void set_margin_curve(AudioPsyClipContext *s,
     s->margin_curve[0] = gains[0];
 
     for (int i = 0; i < num_points - 1; i++) {
-        while (j < s->fft_size / 2 + 1 && j * sample_rate / s->fft_size < bands[i + 1]) {
+        while (j < s->nb_bins) {
             // linearly interpolate between points
-            int binHz = j * sample_rate / s->fft_size;
+            float binHz = (j * sample_rate) / (float)s->fft_size;
             s->margin_curve[j] = gains[i] + (binHz - bands[i]) * (gains[i + 1] - gains[i]) / (bands[i + 1] - bands[i]);
             j++;
+            if (binHz >= bands[i])
+                break;
         }
     }
     // handle bins after the last point
-    while (j < s->fft_size / 2 + 1) {
+    while (j < s->nb_bins) {
         s->margin_curve[j] = gains[num_points - 1];
         j++;
     }
 
     // convert margin curve to linear amplitude scale
-    for (int i = 0; i < s->fft_size / 2 + 1; i++)
+    for (int i = 0; i < s->nb_bins; i++)
         s->margin_curve[i] = powf(10.f, s->margin_curve[i] / 20.f);
 }
 
@@ -204,6 +207,7 @@ static int config_input(AVFilterLink *inlink)
     int ret, nb_points;
 
     s->fft_size = inlink->sample_rate > 100000 ? 1024 : inlink->sample_rate > 50000 ? 512 : 256;
+    s->nb_bins = s->fft_size / 2 + 1;
     s->overlap = s->fft_size / 4;
 
     // The psy masking calculation is O(n^2),
@@ -221,13 +225,13 @@ static int config_input(AVFilterLink *inlink)
     if (!s->window || !s->inv_window)
         return AVERROR(ENOMEM);
 
-    s->in_buffer      = ff_get_audio_buffer(inlink, s->fft_size * 2);
-    s->in_frame       = ff_get_audio_buffer(inlink, s->fft_size * 2);
-    s->out_dist_frame = ff_get_audio_buffer(inlink, s->fft_size * 2);
-    s->windowed_frame = ff_get_audio_buffer(inlink, s->fft_size * 2);
-    s->clipping_delta = ff_get_audio_buffer(inlink, s->fft_size * 2);
-    s->spectrum_buf   = ff_get_audio_buffer(inlink, s->fft_size * 2);
-    s->mask_curve     = ff_get_audio_buffer(inlink, s->fft_size / 2 + 1);
+    s->in_buffer      = ff_get_audio_buffer(inlink, s->fft_size*2);
+    s->in_frame       = ff_get_audio_buffer(inlink, s->fft_size);
+    s->out_dist_frame = ff_get_audio_buffer(inlink, s->fft_size);
+    s->windowed_frame = ff_get_audio_buffer(inlink, s->fft_size);
+    s->clipping_delta = ff_get_audio_buffer(inlink, s->fft_size);
+    s->spectrum_buf   = ff_get_audio_buffer(inlink, s->fft_size+2);
+    s->mask_curve     = ff_get_audio_buffer(inlink, s->nb_bins);
     if (!s->in_buffer || !s->in_frame ||
         !s->out_dist_frame || !s->windowed_frame ||
         !s->clipping_delta || !s->spectrum_buf || !s->mask_curve)
@@ -235,7 +239,7 @@ static int config_input(AVFilterLink *inlink)
 
     generate_hann_window(s->window, s->inv_window, s->fft_size);
 
-    s->margin_curve = av_calloc(s->fft_size / 2 + 1, sizeof(*s->margin_curve));
+    s->margin_curve = av_calloc(s->nb_bins, sizeof(*s->margin_curve));
     if (!s->margin_curve)
         return AVERROR(ENOMEM);
 
@@ -296,9 +300,9 @@ static void apply_window(AudioPsyClipContext *s,
 }
 
 static void calculate_mask_curve(AudioPsyClipContext *s,
-                                 const float *spectrum, float *mask_curve)
+                                 const AVComplexFloat *spectrum, float *mask_curve)
 {
-    for (int i = 0; i < s->fft_size / 2 + 1; i++)
+    for (int i = 0; i < s->nb_bins; i++)
         mask_curve[i] = 0;
 
     for (int i = 0; i < s->num_psy_bins; i++) {
@@ -307,13 +311,11 @@ static void calculate_mask_curve(AudioPsyClipContext *s,
         int range[2];
 
         if (i == 0) {
-            magnitude = fabsf(spectrum[0]);
-        } else if (i == s->fft_size / 2) {
-            magnitude = fabsf(spectrum[s->fft_size]);
+            magnitude = fabsf(spectrum[0].re);
+        } else if (i == s->nb_bins-1) {
+            magnitude = fabsf(spectrum[i].re);
         } else {
-            // Because the input signal is real, the + and - frequencies are redundant.
-            // Multiply the magnitude by 2 to simulate adding up the + and - frequencies.
-            magnitude = hypotf(spectrum[2 * i], spectrum[2 * i + 1]) * 2;
+            magnitude = hypotf(spectrum[i].re, spectrum[i].im);
         }
 
         table_idx = s->spread_table_index[i];
@@ -328,30 +330,30 @@ static void calculate_mask_curve(AudioPsyClipContext *s,
     }
 
     // for ultrasonic frequencies, skip the O(n^2) spread calculation and just copy the magnitude
-    for (int i = s->num_psy_bins; i < s->fft_size / 2 + 1; i++) {
+    for (int i = s->num_psy_bins; i < s->nb_bins; i++) {
         float magnitude;
-        if (i == s->fft_size / 2) {
-            magnitude = fabsf(spectrum[s->fft_size]);
+        if (i == s->nb_bins-1) {
+            magnitude = fabsf(spectrum[i].re);
         } else {
-            // Because the input signal is real, the + and - frequencies are redundant.
-            // Multiply the magnitude by 2 to simulate adding up the + and - frequencies.
-            magnitude = hypotf(spectrum[2 * i], spectrum[2 * i + 1]) * 2;
+            magnitude = hypotf(spectrum[i].re, spectrum[i].im);
         }
 
         mask_curve[i] = magnitude;
     }
 
-    for (int i = 0; i < s->fft_size / 2 + 1; i++)
+    for (int i = 0; i < s->nb_bins; i++)
         mask_curve[i] = mask_curve[i] / s->margin_curve[i];
 }
 
 static void clip_to_window(AudioPsyClipContext *s,
                            const float *windowed_frame, float *clipping_delta, float delta_boost)
 {
+    const float clip_level = s->clip_level;
+    const int fft_size = s->fft_size;
     const float *window = s->window;
 
-    for (int i = 0; i < s->fft_size; i++) {
-        const float limit = s->clip_level * window[i];
+    for (int i = 0; i < fft_size; i++) {
+        const float limit = clip_level * window[i];
         const float effective_value = windowed_frame[i] + clipping_delta[i];
 
         if (effective_value > limit) {
@@ -363,37 +365,35 @@ static void clip_to_window(AudioPsyClipContext *s,
 }
 
 static void limit_clip_spectrum(AudioPsyClipContext *s,
-                                float *clip_spectrum, const float *mask_curve)
+                                AVComplexFloat *clip_spectrum, const float *mask_curve)
 {
     // bin 0
-    float relative_distortion_level = fabsf(clip_spectrum[0]) / mask_curve[0];
+    float relative_distortion_level = fabsf(clip_spectrum[0].re) / mask_curve[0];
 
     if (relative_distortion_level > 1.f)
-        clip_spectrum[0] /= relative_distortion_level;
+        clip_spectrum[0].re /= relative_distortion_level;
 
     // bin 1..N/2-1
-    for (int i = 1; i < s->fft_size / 2; i++) {
-        float real = clip_spectrum[i * 2];
-        float imag = clip_spectrum[i * 2 + 1];
-        // Because the input signal is real, the + and - frequencies are redundant.
-        // Multiply the magnitude by 2 to simulate adding up the + and - frequencies.
-        relative_distortion_level = hypotf(real, imag) * 2 / mask_curve[i];
-        if (relative_distortion_level > 1.0) {
-            clip_spectrum[i * 2] /= relative_distortion_level;
-            clip_spectrum[i * 2 + 1] /= relative_distortion_level;
+    for (int i = 1; i < s->nb_bins-1; i++) {
+        float re = clip_spectrum[i].re;
+        float im = clip_spectrum[i].im;
+        relative_distortion_level = hypotf(re, im) / mask_curve[i];
+        if (relative_distortion_level > 1.f) {
+            clip_spectrum[i].re /= relative_distortion_level;
+            clip_spectrum[i].im /= relative_distortion_level;
         }
     }
     // bin N/2
-    relative_distortion_level = fabsf(clip_spectrum[s->fft_size]) / mask_curve[s->fft_size / 2];
+    relative_distortion_level = fabsf(clip_spectrum[s->nb_bins-1].re) / mask_curve[s->nb_bins-1];
     if (relative_distortion_level > 1.f)
-        clip_spectrum[s->fft_size] /= relative_distortion_level;
+        clip_spectrum[s->nb_bins-1].re /= relative_distortion_level;
 }
 
 static void feed(AVFilterContext *ctx, int ch,
                  const float *in_samples, float *out_samples, int diff_only,
                  float *in_frame, float *out_dist_frame,
                  float *windowed_frame, float *clipping_delta,
-                 float *spectrum_buf, float *mask_curve)
+                 AVComplexFloat *spectrum_buf, float *mask_curve)
 {
     AudioPsyClipContext *s = ctx->priv;
     const float *inv_window = s->inv_window;
@@ -405,14 +405,14 @@ static void feed(AVFilterContext *ctx, int ch,
     float orig_peak = 0.f, peak;
 
     // shift in/out buffers
-    memmove(in_frame, &in_frame[overlap], offset * sizeof(float));
-    memmove(out_dist_frame, &out_dist_frame[overlap], offset * sizeof(float));
+    memmove(in_frame, &in_frame[overlap], offset * sizeof(*in_frame));
+    memmove(out_dist_frame, &out_dist_frame[overlap], offset * sizeof(*out_dist_frame));
 
-    memcpy(&in_frame[offset], in_samples, overlap * sizeof(float));
-    memset(&out_dist_frame[offset], 0, overlap * sizeof(float));
+    memcpy(&in_frame[offset], in_samples, overlap * sizeof(*in_frame));
+    memset(&out_dist_frame[offset], 0, overlap * sizeof(*out_dist_frame));
 
     apply_window(s, in_frame, windowed_frame, 0);
-    s->tx_fn(s->tx_ctx[ch], spectrum_buf, windowed_frame, sizeof(float));
+    s->tx_fn(s->tx_ctx[ch], spectrum_buf, windowed_frame, sizeof(*windowed_frame));
     calculate_mask_curve(s, spectrum_buf, mask_curve);
 
     // It would be easier to calculate the peak from the unwindowed input.
@@ -424,7 +424,7 @@ static void feed(AVFilterContext *ctx, int ch,
     peak = orig_peak;
 
     // clear clipping_delta
-    for (int i = 0; i < fft_size * 2; i++)
+    for (int i = 0; i < fft_size; i++)
         clipping_delta[i] = 0.f;
 
     // repeat clipping-filtering process a few times to control both the peaks and the spectrum
@@ -440,11 +440,11 @@ static void feed(AVFilterContext *ctx, int ch,
 
         clip_to_window(s, windowed_frame, clipping_delta, delta_boost);
 
-        s->tx_fn(s->tx_ctx[ch], spectrum_buf, clipping_delta, sizeof(float));
+        s->tx_fn(s->tx_ctx[ch], spectrum_buf, clipping_delta, sizeof(*clipping_delta));
 
         limit_clip_spectrum(s, spectrum_buf, mask_curve);
 
-        s->itx_fn(s->itx_ctx[ch], clipping_delta, spectrum_buf, sizeof(AVComplexFloat));
+        s->itx_fn(s->itx_ctx[ch], clipping_delta, spectrum_buf, sizeof(*spectrum_buf));
 
         peak = 0.f;
         for (int j = 0; j < fft_size; j++)
@@ -484,9 +484,9 @@ static void feed(AVFilterContext *ctx, int ch,
     apply_window(s, clipping_delta, out_dist_frame, 1);
 
     if (ctx->is_disabled) {
-        memcpy(out_samples, in_frame, overlap * sizeof(float));
+        memcpy(out_samples, in_frame, overlap * sizeof(*out_samples));
     } else {
-        memcpy(out_samples, out_dist_frame, overlap * sizeof(float));
+        memcpy(out_samples, out_dist_frame, overlap * sizeof(*out_samples));
         if (!diff_only) {
             for (int i = 0; i < overlap; i++)
                 out_samples[i] += in_frame[i];
@@ -521,7 +521,7 @@ static int psy_channel(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int ch)
              (float *)(s->out_dist_frame->extended_data[ch]),
              (float *)(s->windowed_frame->extended_data[ch]),
              (float *)(s->clipping_delta->extended_data[ch]),
-             (float *)(s->spectrum_buf->extended_data[ch]),
+             (AVComplexFloat *)(s->spectrum_buf->extended_data[ch]),
              (float *)(s->mask_curve->extended_data[ch]));
     }
 
