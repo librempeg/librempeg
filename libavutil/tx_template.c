@@ -1358,6 +1358,217 @@ static void TX_NAME(ff_tx_fft_bluestein)(AVTXContext *s, void *_dst, void *_src,
     }
 }
 
+static av_always_inline void cpx_add(TXComplex *out,
+                                     const TXComplex *in1,
+                                     const TXComplex *in2)
+{
+    out->re = in1->re + in2->re;
+    out->im = in1->im + in2->im;
+}
+
+static av_always_inline void cpx_sub(TXComplex *out,
+                                     const TXComplex *in1,
+                                     const TXComplex *in2)
+{
+    out->re = in1->re - in2->re;
+    out->im = in1->im - in2->im;
+}
+
+static av_always_inline void cpx_mul_s(TXComplex *out,
+                                       const TXComplex *in,
+                                       const TXSample s)
+{
+    out->re = MULT(in->re, s);
+    out->im = MULT(in->im, s);
+}
+
+static av_always_inline void cpx_out(TXComplex *head,
+                                     TXComplex *tail,
+                                     const TXComplex *A,
+                                     const TXComplex *B)
+{
+    head->re = A->re - B->im;
+    head->im = A->im + B->re;
+    tail->re = A->re + B->im;
+    tail->im = A->im - B->re;
+}
+
+static av_always_inline void cpx_mla(TXComplex *out,
+                                     const TXComplex *in1,
+                                     const TXComplex *in2,
+                                     const TXSample s)
+{
+    out->re = in1->re + MULT(in2->re, s);
+    out->im = in1->im + MULT(in2->im, s);
+}
+
+static av_always_inline void cpx_neg(TXComplex *out,
+                                     const TXComplex *in)
+{
+    out->re = -in->re;
+    out->im = -in->im;
+}
+
+static av_always_inline void cpx_zero(TXComplex *out)
+{
+    out->re = 0;
+    out->im = 0;
+}
+
+static av_always_inline void like_terms(TXComplex *add,
+                                        TXComplex *sub,
+                                        const TXComplex *in,
+                                        const int r)
+{
+    const int m = (r-1)/2;
+
+    if (r&1) {
+        add[0] = in[0];
+        cpx_neg(&sub[0], &in[0]);
+    } else {
+        cpx_add(&add[0], &in[0], &in[r/2]);
+        cpx_sub(&sub[0], &in[0], &in[r/2]);
+    }
+
+    for (int h = 1, t = r-1; h <= m; h++, t--) {
+        cpx_add(&add[h], &in[h], &in[t]);
+        cpx_sub(&sub[h], &in[h], &in[t]);
+    }
+}
+
+static av_always_inline void out_special(TXComplex *out,
+                                         const TXComplex *add,
+                                         const TXComplex *sub,
+                                         const int r)
+{
+    const int m = r/2;
+
+    cpx_zero(&out[0]);
+    cpx_zero(&out[m]);
+
+    for (int i = 0; i <= m; i++)
+        cpx_add(&out[0], &out[0], &add[i]);
+
+    if (r&1)
+        return;
+
+    for (int i = 0; i < m; i += 2) {
+        cpx_add(&out[m], &out[m], &add[i+0]);
+        cpx_sub(&out[m], &out[m], &add[i+1]);
+    }
+}
+
+static av_always_inline void out_pair(TXComplex *out,
+                                      const TXComplex *add,
+                                      const TXComplex *sub,
+                                      const TXComplex *Wr,
+                                      const int k,
+                                      const int r)
+{
+    TXComplex P, Q;
+
+    cpx_mla(&P, &add[0], &add[1], Wr[k].re);
+    cpx_mul_s(&Q, &sub[1], Wr[k].im);
+
+    for (int i = 2; i <= r/2; i++) {
+        cpx_mla(&P, &P, &add[i], Wr[i*k].re);
+        cpx_mla(&Q, &Q, &sub[i], Wr[i*k].im);
+    }
+
+    cpx_out(&out[k], &out[r-k], &P, &Q);
+}
+
+static av_always_inline void butterfly_kernel(TXComplex *out,
+                                              const TXComplex *in,
+                                              const TXComplex *Wr,
+                                              const int r, const int stage,
+                                              const int stride)
+{
+    TXComplex tmp_out[r], tmp_in[r];
+    TXComplex add[r], sub[r];
+
+    memcpy(tmp_in, in, sizeof(*in) * r);
+
+    like_terms(add, sub, tmp_in, r);
+    out_special(tmp_out, add, sub, r);
+
+    if (1) {
+        for (int i = 1; i <= r/2; i++)
+            out_pair(tmp_out, add, sub, Wr, i, r);
+    } else {
+    }
+
+    for (int i = 0; i < r; i++)
+        out[i*stride] = tmp_out[i];
+}
+
+static int init_twiddles(AVTXContext *s, const int len)
+{
+    const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
+
+    if (!(s->exp = av_mallocz((len/2+1)*(len/2+1)*sizeof(*s->exp))))
+        return AVERROR(ENOMEM);
+
+    for (int i = 0; i <= len/2; i++) {
+        for (int j = 0; j <= len/2; j++) {
+            const double factor = phase*i*j;
+            s->exp[i*j] = (TXComplex){
+                RESCALE(cos(factor)),
+                RESCALE(sin(factor)),
+            };
+        }
+    }
+
+    return 0;
+}
+
+static av_cold int TX_NAME(ff_tx_fft_auto_init)(AVTXContext *s,
+                                                const FFTXCodelet *cd,
+                                                uint64_t flags,
+                                                FFTXCodeletOptions *opts,
+                                                int len, int inv,
+                                                const void *scale)
+{
+    return init_twiddles(s, len);
+}
+
+#define DECL_BUTTERFLY_CODELET(n)                           \
+static void TX_NAME(ff_tx_fft##n##_butterfly)(AVTXContext *s,\
+                                    void *_dst, void *_src, \
+                                    ptrdiff_t stride)       \
+{                                                           \
+    TXComplex *in = _src;                                   \
+    TXComplex *out = _dst;                                  \
+    TXComplex *W = s->exp;                                  \
+                                                            \
+    stride /= sizeof(*out);                                 \
+                                                            \
+    butterfly_kernel(out, in, W, n, 0, stride);             \
+}                                                           \
+                                                            \
+static const FFTXCodelet TX_NAME(ff_tx_fft##n##_butterfly_def) = { \
+    .name       = TX_NAME_STR("fft" #n "_butterfly"),       \
+    .function   = TX_NAME(ff_tx_fft##n##_butterfly),        \
+    .type       = TX_TYPE(FFT),                             \
+    .flags      = FF_TX_OUT_OF_PLACE | AV_TX_INPLACE |      \
+                  AV_TX_UNALIGNED,                          \
+    .factors[0] = n,                                        \
+    .nb_factors = 1,                                        \
+    .min_len    = n,                                        \
+    .max_len    = n,                                        \
+    .init       = TX_NAME(ff_tx_fft_auto_init),             \
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,                      \
+    .prio       = FF_TX_PRIO_MIN/5,                         \
+};
+
+DECL_BUTTERFLY_CODELET(11)
+DECL_BUTTERFLY_CODELET(13)
+DECL_BUTTERFLY_CODELET(17)
+DECL_BUTTERFLY_CODELET(19)
+DECL_BUTTERFLY_CODELET(23)
+DECL_BUTTERFLY_CODELET(29)
+DECL_BUTTERFLY_CODELET(31)
+
 static const FFTXCodelet TX_NAME(ff_tx_fft_naive_small_def) = {
     .name       = TX_NAME_STR("fft_naive_small"),
     .function   = TX_NAME(ff_tx_fft_naive_small),
@@ -2667,6 +2878,15 @@ const FFTXCodelet * const TX_NAME(ff_tx_codelet_list)[] = {
     &TX_NAME(ff_tx_fft5_fwd_def),
     &TX_NAME(ff_tx_fft7_fwd_def),
     &TX_NAME(ff_tx_fft9_fwd_def),
+
+    /* Butterfly prime transforms */
+    &TX_NAME(ff_tx_fft11_butterfly_def),
+    &TX_NAME(ff_tx_fft13_butterfly_def),
+    &TX_NAME(ff_tx_fft17_butterfly_def),
+    &TX_NAME(ff_tx_fft19_butterfly_def),
+    &TX_NAME(ff_tx_fft23_butterfly_def),
+    &TX_NAME(ff_tx_fft29_butterfly_def),
+    &TX_NAME(ff_tx_fft31_butterfly_def),
 
     /* Standalone transforms */
     &TX_NAME(ff_tx_fft_def),
