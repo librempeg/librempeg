@@ -128,8 +128,8 @@ static void set_margin_curve(AudioPsyClipContext *s,
     }
 
     // convert margin curve to linear amplitude scale
-    for (j = 0; j < s->fft_size / 2 + 1; j++)
-        s->margin_curve[j] = powf(10.f, s->margin_curve[j] / 20.f);
+    for (int i = 0; i < s->fft_size / 2 + 1; i++)
+        s->margin_curve[i] = powf(10.f, s->margin_curve[i] / 20.f);
 }
 
 static void generate_spread_table(AudioPsyClipContext *s)
