@@ -1030,46 +1030,13 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
 
 static void get_two_factors(int x, int *M, int *N)
 {
-    int m, n, i, size = 0, primef[16], powers[16] = {0};
+    int i = lrint(sqrt(x));
 
-    while ((x & 1) == 0) {
-        x >>= 1;
-        powers[size]++;
-    };
+    while ((x % i) != 0)
+        i--;
 
-    if (powers[size])
-        primef[size++] = 2;
-
-    for (i = 3; i <= x; i += 2) {
-        while (!(x % i)) {
-            primef[size] = i;
-            powers[size]++;
-            x /= i;
-        }
-
-        if (powers[size])
-            size++;
-    }
-
-    m = 1;
-    n = 1;
-
-    while (size > 0) {
-        size--;
-        while (powers[size] > 0) {
-            m *= primef[size];
-            FFSWAP(int, m, n);
-            powers[size]--;
-            if (powers[size] > 0) {
-                m *= primef[size];
-                FFSWAP(int, m, n);
-                powers[size]--;
-            }
-        }
-    }
-
-    *M = m;
-    *N = n;
+    *M = i;
+    *N = x/i;
 }
 
 static av_cold int TX_NAME(ff_tx_fft_init_bailey)(AVTXContext *s,
