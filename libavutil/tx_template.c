@@ -2367,7 +2367,7 @@ static void TX_NAME(ff_tx_rdft_ ##n)(AVTXContext *s, void *_dst,               \
                                      void *_src, ptrdiff_t stride)             \
 {                                                                              \
     const int len2 = s->len >> 1;                                              \
-    const int len4 = s->len >> 2;                                              \
+    const int len4 = FFALIGN(s->len, 4) >> 2;                                  \
     const TXSample *fact = (void *)s->exp;                                     \
     const TXSample *exp = fact + 8;                                            \
     TXComplex *data = inv ? _src : _dst;                                       \
@@ -2386,8 +2386,10 @@ static void TX_NAME(ff_tx_rdft_ ##n)(AVTXContext *s, void *_dst,               \
     data[0].im = t[0].re - data[0].im;                                         \
     data[   0].re = MULT(fact[0], data[   0].re);                              \
     data[   0].im = MULT(fact[1], data[   0].im);                              \
-    data[len4].re = MULT(fact[2], data[len4].re);                              \
-    data[len4].im = MULT(fact[3], data[len4].im);                              \
+    if (!(len2 & 1)) {                                                         \
+        data[len4].re = MULT(fact[2], data[len4].re);                          \
+        data[len4].im = MULT(fact[3], data[len4].im);                          \
+    }                                                                          \
                                                                                \
     for (int i = 1; i < len4; i++) {                                           \
         /* Separate even and odd FFTs */                                       \
