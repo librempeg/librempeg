@@ -2182,7 +2182,7 @@ static const FFTXCodelet TX_NAME(ff_tx_rdft_ ##n## _def) = {                   \
     .type       = TX_TYPE(RDFT),                                               \
     .flags      = AV_TX_UNALIGNED | AV_TX_INPLACE | FF_TX_OUT_OF_PLACE |       \
                   (inv ? FF_TX_INVERSE_ONLY : FF_TX_FORWARD_ONLY),             \
-    .factors    = { 4, TX_FACTOR_ANY },                                        \
+    .factors    = { 2, TX_FACTOR_ANY },                                        \
     .nb_factors = 2,                                                           \
     .min_len    = 4,                                                           \
     .max_len    = TX_LEN_UNLIMITED,                                            \
