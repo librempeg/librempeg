@@ -62,23 +62,25 @@ static const AVOption aquadosc_options[] = {
 
 AVFILTER_DEFINE_CLASS(aquadosc);
 
-static av_cold int query_formats(AVFilterContext *ctx)
+static av_cold int query_formats(const AVFilterContext *ctx,
+                                 AVFilterFormatsConfig **cfg_in,
+                                 AVFilterFormatsConfig **cfg_out)
 {
-    AQuadOscContext *s = ctx->priv;
+    const AQuadOscContext *s = ctx->priv;
     static const AVChannelLayout chlayouts[] = { AV_CHANNEL_LAYOUT_STEREO, { 0 } };
     int sample_rates[] = { s->sample_rate, -1 };
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP,
                                                        AV_SAMPLE_FMT_DBLP,
                                                        AV_SAMPLE_FMT_NONE };
-    int ret = ff_set_common_formats_from_list(ctx, sample_fmts);
+    int ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
     if (ret < 0)
         return ret;
 
-    ret = ff_set_common_channel_layouts_from_list(ctx, chlayouts);
+    ret = ff_set_common_channel_layouts_from_list2(ctx, cfg_in, cfg_out, chlayouts);
     if (ret < 0)
         return ret;
 
-    return ff_set_common_samplerates_from_list(ctx, sample_rates);
+    return ff_set_common_samplerates_from_list2(ctx, cfg_in, cfg_out, sample_rates);
 }
 
 static av_cold void init_state(AQuadOscContext *s)
@@ -223,7 +225,7 @@ const AVFilter ff_asrc_aquadosc = {
     .priv_size       = sizeof(AQuadOscContext),
     .inputs          = NULL,
     FILTER_OUTPUTS(outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .priv_class      = &aquadosc_class,
     .process_command = process_command,
 };
