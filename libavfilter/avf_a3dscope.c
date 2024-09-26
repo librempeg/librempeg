@@ -197,13 +197,12 @@ static void view_matrix(const float eye[3],
     m[3][2] = -vdot(m[2], eye);
 }
 
-static void draw_dot(AVFrame *out, unsigned x, unsigned y, float z,
-                     int r, int g, int b)
+static void draw_dot(uint8_t *out, unsigned x, unsigned y, float z,
+                     int r, int g, int b, const ptrdiff_t linesize)
 {
-    const ptrdiff_t linesize = out->linesize[0];
     uint8_t *dst;
 
-    dst = out->data[0] + y * linesize + x * 4;
+    dst = out + y * linesize + x * 4;
     dst[0] = r * z;
     dst[1] = g * z;
     dst[2] = b * z;
@@ -241,38 +240,45 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     mmultiply(s->projection_matrix, s->view_matrix, matrix);
 
     for (int nb_frame = s->size - 1; nb_frame >= 0; nb_frame--) {
-        const float scale = 1.f / s->nb_samples;
+        const int nb_samples = s->nb_samples;
+        const float scale = 1.f / nb_samples;
         AVFrame *frame = s->frames[nb_frame];
+        int frame_nb_samples;
         float channels;
 
         if (!frame)
             continue;
 
         channels = frame->ch_layout.nb_channels;
+        frame_nb_samples = frame->nb_samples;
         for (int ch = 0; ch < channels; ch++) {
             const float *src = (float *)frame->extended_data[ch];
             const int r = 128.f + 127.f * sinf(ch / (channels - 1) * M_PI);
             const int g = 128.f + 127.f * ch / (channels - 1);
             const int b = 128.f + 127.f * cosf(ch / (channels - 1) * M_PI);
+            const float ch_y = ch - (channels - 1) * 0.5f;
+            const ptrdiff_t linesize = out->linesize[0];
+            uint8_t *dst = out->data[0];
 
-            for (int n = frame->nb_samples - 1, nn = s->nb_samples * nb_frame; n >= 0; n--, nn++) {
-                float v[4] = { src[n], ch - (channels - 1) * 0.5f, -0.1f + -nn * scale, 1.f };
+            for (int n = frame_nb_samples - 1, nn = nb_samples * nb_frame; n >= 0; n--, nn++) {
+                float v[4] = { src[n], ch_y, -0.1f + -nn * scale, 1.f };
                 float d[4];
                 int x, y;
 
                 vmultiply(v, matrix, d);
 
                 d[0] /= d[3];
-                d[1] /= d[3];
-
                 x = d[0] * half_width  + half_width;
-                y = d[1] * half_height + half_height;
-
-                if (x >= w || y >= h || x < 0 || y < 0)
+                if (x >= w || x < 0)
                     continue;
 
-                draw_dot(out, x, y, av_clipf(1.f / d[3], 0.f, 1.f),
-                         r, g, b);
+                d[1] /= d[3];
+                y = d[1] * half_height + half_height;
+                if (y >= h || y < 0)
+                    continue;
+
+                draw_dot(dst, x, y, av_clipf(1.f / d[3], 0.f, 1.f),
+                         r, g, b, linesize);
             }
         }
     }
