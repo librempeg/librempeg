@@ -109,24 +109,26 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->taps);
 }
 
-static av_cold int query_formats(AVFilterContext *ctx)
+static av_cold int query_formats(const AVFilterContext *ctx,
+                                 AVFilterFormatsConfig **cfg_in,
+                                 AVFilterFormatsConfig **cfg_out)
 {
-    ALSFIRSRCContext *s = ctx->priv;
+    const ALSFIRSRCContext *s = ctx->priv;
     static const AVChannelLayout chlayouts[] = { AV_CHANNEL_LAYOUT_MONO, { 0 } };
     int sample_rates[] = { s->sample_rate, -1 };
     static const enum AVSampleFormat sample_fmts[] = {
         AV_SAMPLE_FMT_DBL,
         AV_SAMPLE_FMT_NONE
     };
-    int ret = ff_set_common_formats_from_list(ctx, sample_fmts);
+    int ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
     if (ret < 0)
         return ret;
 
-    ret = ff_set_common_channel_layouts_from_list(ctx, chlayouts);
+    ret = ff_set_common_channel_layouts_from_list2(ctx, cfg_in, cfg_out, chlayouts);
     if (ret < 0)
         return ret;
 
-    return ff_set_common_samplerates_from_list(ctx, sample_rates);
+    return ff_set_common_samplerates_from_list2(ctx, cfg_in, cfg_out, sample_rates);
 }
 
 static void cmul(ctype a, ctype b, ctype *c)
@@ -409,6 +411,6 @@ const AVFilter ff_asrc_alsfirsrc = {
     .priv_size     = sizeof(ALSFIRSRCContext),
     .inputs        = NULL,
     FILTER_OUTPUTS(alsfirsrc_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .priv_class    = &alsfirsrc_class,
 };
