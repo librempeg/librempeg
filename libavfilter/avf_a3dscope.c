@@ -39,6 +39,20 @@ typedef struct Audio3dScopeContext {
     float zoom[3];
     float eye[3];
 
+    float *ch_x0;
+    unsigned nb_ch_x0;
+    float *ch_y0;
+    unsigned nb_ch_y0;
+    float *ch_z0;
+    unsigned nb_ch_z0;
+
+    float *ch_x1;
+    unsigned nb_ch_x1;
+    float *ch_y1;
+    unsigned nb_ch_y1;
+    float *ch_z1;
+    unsigned nb_ch_z1;
+
     AVRational frame_rate;
     int nb_samples;
 
@@ -51,6 +65,14 @@ typedef struct Audio3dScopeContext {
 #define OFFSET(x) offsetof(Audio3dScopeContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
 #define TFLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_ch_x0 = {.def="-1",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_ch_y0 = {.def="-1",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_ch_z0 = {.def="-8",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_ch_x1 = {.def="1",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_ch_y1 = {.def="1",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_ch_z1 = {.def="-0.25",.size_min=1,.sep=' '};
 
 static const AVOption a3dscope_options[] = {
     { "rate", "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
@@ -68,6 +90,12 @@ static const AVOption a3dscope_options[] = {
     { "ypos", "set camera position", OFFSET(eye[1]), AV_OPT_TYPE_FLOAT, {.dbl=0.f},-60.f, 60.f, TFLAGS },
     { "zpos", "set camera position", OFFSET(eye[2]), AV_OPT_TYPE_FLOAT, {.dbl=0.f},-60.f, 60.f, TFLAGS },
     { "length","set length",    OFFSET(size),   AV_OPT_TYPE_INT,   {.i64=15},      1,  60,  FLAGS },
+    { "ch_x0", "set channel's X-axis start position", OFFSET(ch_x0), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_ch_x0}, -60, 60, FLAGS },
+    { "ch_y0", "set channel's Y-axis start position", OFFSET(ch_y0), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_ch_y0}, -60, 60, FLAGS },
+    { "ch_z0", "set channel's Z-axis start position", OFFSET(ch_z0), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_ch_z0}, -60, 60, FLAGS },
+    { "ch_x1", "set channel's X-axis stop position",  OFFSET(ch_x1), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_ch_x1}, -60, 60, FLAGS },
+    { "ch_y1", "set channel's Y-axis stop position",  OFFSET(ch_y1), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_ch_y1}, -60, 60, FLAGS },
+    { "ch_z1", "set channel's Z-axis stop position",  OFFSET(ch_z1), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_ch_z1}, -60, 60, FLAGS },
     { NULL }
 };
 
@@ -203,10 +231,19 @@ static void draw_dot(uint8_t *out, unsigned x, unsigned y, float z,
     uint8_t *dst;
 
     dst = out + y * linesize + x * 4;
-    dst[0] = r * z;
-    dst[1] = g * z;
-    dst[2] = b * z;
-    dst[3] = 255 * z;
+    if (dst[3] == 0) {
+        dst[0] = r * z;
+        dst[1] = g * z;
+        dst[2] = b * z;
+        dst[3] = 255 * z;
+    }
+}
+
+static float lerpf(float a, float b, float x)
+{
+    const float y = 1.f - x;
+
+    return a * y + b * x;
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
@@ -241,7 +278,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     for (int nb_frame = s->size - 1; nb_frame >= 0; nb_frame--) {
         const int nb_samples = s->nb_samples;
-        const float scale = 1.f / nb_samples;
+        const float scale = 1.f / (nb_samples * s->size);
         AVFrame *frame = s->frames[nb_frame];
         int frame_nb_samples;
         float channels;
@@ -256,12 +293,21 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             const int r = 128.f + 127.f * sinf(ch / (channels - 1) * M_PI);
             const int g = 128.f + 127.f * ch / (channels - 1);
             const int b = 128.f + 127.f * cosf(ch / (channels - 1) * M_PI);
-            const float ch_y = ch - (channels - 1) * 0.5f;
             const ptrdiff_t linesize = out->linesize[0];
+            const float ch_x0 = s->ch_x0[FFMIN(ch, s->nb_ch_x0-1)];
+            const float ch_x1 = s->ch_x1[FFMIN(ch, s->nb_ch_x1-1)];
+            const float ch_y0 = s->ch_y0[FFMIN(ch, s->nb_ch_y0-1)];
+            const float ch_y1 = s->ch_y1[FFMIN(ch, s->nb_ch_y1-1)];
+            const float ch_z0 = s->ch_z0[FFMIN(ch, s->nb_ch_z0-1)];
+            const float ch_z1 = s->ch_z1[FFMIN(ch, s->nb_ch_z1-1)];
+            const float chan = ch / (float)(channels-1);
             uint8_t *dst = out->data[0];
 
             for (int n = frame_nb_samples - 1, nn = nb_samples * nb_frame; n >= 0; n--, nn++) {
-                float v[4] = { src[n], ch_y, -0.1f + -nn * scale, 1.f };
+                const float ch_x = lerpf(ch_x0, ch_x1, 0.5f*(1.f + src[n]));
+                const float ch_y = lerpf(ch_y0, ch_y1, chan);
+                const float ch_z = lerpf(ch_z0, ch_z1, nn * scale);
+                float v[4] = { ch_x, ch_y, ch_z,  1.f };
                 float d[4];
                 int x, y;
 
