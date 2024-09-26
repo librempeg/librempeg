@@ -104,8 +104,8 @@ static int fn(prepare)(AVFilterContext *ctx, AVFilterLink *outlink)
 #undef S
 #define S(x) segments[2*((x)+1)]
     for (int i = 0; i < FFMAX(s->nb_in_points, s->nb_out_points); i++) {
-        S(i).x = s->in_points[FFMIN(i, s->nb_in_points)];
-        S(i).y = s->out_points[FFMIN(i, s->nb_out_points)];
+        S(i).x = s->in_points[FFMIN(i, s->nb_in_points-1)];
+        S(i).y = s->out_points[FFMIN(i, s->nb_out_points-1)];
 
         if (i && S(i - 1).x > S(i).x) {
             av_log(ctx, AV_LOG_ERROR,
