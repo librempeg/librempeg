@@ -117,11 +117,14 @@ typedef struct AudioSurroundContext {
     float *f_o;
     unsigned nb_f_o;
 
-    int   lfe_mode;
     float *smooth;
     unsigned nb_smooth;
     float angle;
+    float shift;
+    float depth;
     float focus;
+
+    int   lfe_mode;
     int   win_size;
     int   win_func;
     float win_gain;
@@ -392,6 +395,28 @@ static void angle_transform(ftype *x, ftype *y, ftype angle)
 
     *x = CLIP(SIN(a) * r, F(-1.0), F(1.0));
     *y = CLIP(COS(a) * r, F(-1.0), F(1.0));
+}
+
+static void shift_transform(ftype *y, const ftype shift)
+{
+    if (shift == F(0.0))
+        return;
+
+    *y = CLIP(*y + shift, F(-1.0), F(1.0));
+}
+
+static void depth_transform(ftype *y, const ftype depth)
+{
+    if (depth == F(0.0))
+        return;
+
+    if (depth < F(0.0) && *y > F(0.0))
+        return;
+
+    if (depth > F(0.0) && *y < F(0.0))
+        return;
+
+    *y = CLIP(*y + *y * depth, F(-1.0), F(1.0));
 }
 
 static void focus_transform(ftype *x, ftype *y, ftype focus)
@@ -823,8 +848,6 @@ static void filter_stereo(AVFilterContext *ctx)
     const int lfe_mode = s->lfe_mode;
     const ftype highcut = s->highcut;
     const ftype lowcut = s->lowcut;
-    const ftype angle = s->angle;
-    const ftype focus = s->focus;
     ftype *magtotal = s->mag_total;
     ftype *lfemag = s->lfe_mag;
     ftype *lphase = s->l_phase;
@@ -853,8 +876,6 @@ static void filter_stereo(AVFilterContext *ctx)
         mag_dif = F(2.0) * (ATAN2(l_mag, r_mag) / MPI2) - F(1.0);
 
         stereo_position(mag_dif, phase_dif, &x, &y);
-        angle_transform(&x, &y, angle);
-        focus_transform(&x, &y, focus);
         get_lfe(output_lfe, n, lowcut, highcut, &lfemag[n], c_mag, &mag_total, lfe_mode);
 
         xpos[n]   = x;
@@ -874,8 +895,6 @@ static void filter_2_1(AVFilterContext *ctx)
     const ftype *srcr = (const ftype *)s->input->extended_data[1];
     const ftype *srclfe = (const ftype *)s->input->extended_data[2];
     const int rdft_size = s->rdft_size;
-    const ftype angle = s->angle;
-    const ftype focus = s->focus;
     ftype *magtotal = s->mag_total;
     ftype *lfephase = s->lfe_phase;
     ftype *lfemag = s->lfe_mag;
@@ -908,8 +927,6 @@ static void filter_2_1(AVFilterContext *ctx)
         mag_dif = F(2.0) * (ATAN2(l_mag, r_mag) / MPI2) - F(1.0);
 
         stereo_position(mag_dif, phase_dif, &x, &y);
-        angle_transform(&x, &y, angle);
-        focus_transform(&x, &y, focus);
 
         xpos[n]   = x;
         ypos[n]   = y;
@@ -934,8 +951,6 @@ static void filter_surround(AVFilterContext *ctx)
     const int lfe_mode = s->lfe_mode;
     const ftype highcut = s->highcut;
     const ftype lowcut = s->lowcut;
-    const ftype angle = s->angle;
-    const ftype focus = s->focus;
     ftype *magtotal = s->mag_total;
     ftype *lfemag = s->lfe_mag;
     ftype *lphase = s->l_phase;
@@ -964,8 +979,6 @@ static void filter_surround(AVFilterContext *ctx)
         mag_dif = F(2.0) * (ATAN2(l_mag, r_mag) / MPI2) - F(1.0);
 
         stereo_position(mag_dif, phase_dif, &x, &y);
-        angle_transform(&x, &y, angle);
-        focus_transform(&x, &y, focus);
         get_lfe(output_lfe, n, lowcut, highcut, &lfemag[n], c_mag, &mag_total, lfe_mode);
 
         xpos[n]   = x;
@@ -986,8 +999,6 @@ static void filter_3_1(AVFilterContext *ctx)
     const ftype *srcc = (const ftype *)s->input->extended_data[2];
     const ftype *srclfe = (const ftype *)s->input->extended_data[3];
     const int rdft_size = s->rdft_size;
-    const ftype angle = s->angle;
-    const ftype focus = s->focus;
     ftype *magtotal = s->mag_total;
     ftype *lfephase = s->lfe_phase;
     ftype *lfemag = s->lfe_mag;
@@ -1020,8 +1031,6 @@ static void filter_3_1(AVFilterContext *ctx)
         mag_dif = F(2.0) * (ATAN2(l_mag, r_mag) / MPI2) - F(1.0);
 
         stereo_position(mag_dif, phase_dif, &x, &y);
-        angle_transform(&x, &y, angle);
-        focus_transform(&x, &y, focus);
 
         xpos[n]   = x;
         ypos[n]   = y;
@@ -1396,6 +1405,29 @@ static int ifft_channel(AVFilterContext *ctx, AVFrame *out, int ch)
     return 0;
 }
 
+static int transform_xy(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    AudioSurroundContext *s = ctx->priv;
+    const int rdft_size = s->rdft_size;
+    const int start = (rdft_size * jobnr) / nb_jobs;
+    const int end = (rdft_size * (jobnr+1)) / nb_jobs;
+    const ftype angle = s->angle;
+    const ftype focus = s->focus;
+    const ftype shift = s->shift;
+    const ftype depth = s->depth;
+    ftype *x = s->x_pos;
+    ftype *y = s->y_pos;
+
+    for (int n = start; n < end; n++) {
+        angle_transform(&x[n], &y[n], angle);
+        shift_transform(&y[n], shift);
+        depth_transform(&y[n], depth);
+        focus_transform(&x[n], &y[n], focus);
+    }
+
+    return 0;
+}
+
 static int ifft_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AudioSurroundContext *s = ctx->priv;
@@ -1430,6 +1462,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_free(&in);
         return AVERROR(ENOMEM);
     }
+
+    if (s->angle != 0.90f ||
+        s->shift != 0.f ||
+        s->depth != 0.f ||
+        s->focus != 0.f)
+    ff_filter_execute(ctx, transform_xy, NULL, NULL,
+                      FFMIN(s->rdft_size,
+                            ff_filter_get_nb_threads(ctx)));
 
     ff_filter_execute(ctx, ifft_channels, out, NULL,
                       FFMIN(outlink->ch_layout.nb_channels,
@@ -1537,7 +1577,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
 #define TFLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
-static const AVOptionArrayDef def_smooth  = {.def="0",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_smooth = {.def="0",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_o  = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_i  = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_x  = {.def="0.5",.size_min=1,.sep=' '};
@@ -1554,11 +1594,13 @@ static const AVOption surround_options[] = {
     { "lfe_mode",  "set LFE channel mode",      OFFSET(lfe_mode),          AV_OPT_TYPE_INT,      {.i64=0},     0,   1, TFLAGS, .unit = "lfe_mode" },
     {  "add",      "just add LFE channel",                  0,             AV_OPT_TYPE_CONST,    {.i64=0},     0,   1, TFLAGS, .unit = "lfe_mode" },
     {  "sub",      "subtract LFE channel with others",      0,             AV_OPT_TYPE_CONST,    {.i64=1},     0,   1, TFLAGS, .unit = "lfe_mode" },
-    { "smooth",    "set temporal smoothness strength",   OFFSET(smooth),   AV_OPT_TYPE_FLOAT|AR, {.arr=&def_smooth},0,1,TFLAGS },
     { "angle",     "set soundfield transform angle",     OFFSET(angle),    AV_OPT_TYPE_FLOAT,    {.dbl=90},    0, 360, TFLAGS },
+    { "shift",     "set soundfield shift amount",        OFFSET(shift),    AV_OPT_TYPE_FLOAT,    {.dbl=0},    -1,   1, TFLAGS },
+    { "depth",     "set soundfield depth amount",        OFFSET(depth),    AV_OPT_TYPE_FLOAT,    {.dbl=0},    -1,   1, TFLAGS },
     { "focus",     "set soundfield transform focus",     OFFSET(focus),    AV_OPT_TYPE_FLOAT,    {.dbl=0},    -1,   1, TFLAGS },
     { "spread_x",  "set channels x spread",              OFFSET(f_x),      AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_x}, .06, 15, TFLAGS },
     { "spread_y",  "set channels y spread",              OFFSET(f_y),      AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_y}, .06, 15, TFLAGS },
+    { "smooth",    "set temporal smoothness strength",   OFFSET(smooth),   AV_OPT_TYPE_FLOAT|AR, {.arr=&def_smooth},0,1,TFLAGS },
     { "win_size", "set window size",                     OFFSET(win_size), AV_OPT_TYPE_INT,  {.i64=4096},1024,65536,FLAGS },
     WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_SINE),
     { "overlap", "set window overlap", OFFSET(overlap), AV_OPT_TYPE_FLOAT, {.dbl=0.5}, 0, 1, TFLAGS },
