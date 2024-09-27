@@ -258,7 +258,7 @@ static int aevalsrc_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_
     const int start = (s->nb_channels * jobnr) / nb_jobs;
     const int end = (s->nb_channels * (jobnr+1)) / nb_jobs;
     const int nb_samples = out->nb_samples;
-    double scale = 1.0 / s->sample_rate;
+    const double scale = 1.0 / s->sample_rate;
     double var_values[VAR_VARS_NB];
     const uint64_t n = s->n;
 
