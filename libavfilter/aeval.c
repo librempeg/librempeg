@@ -251,12 +251,39 @@ static int query_formats(const AVFilterContext *ctx,
     return ff_set_common_samplerates_from_list2(ctx, cfg_in, cfg_out, sample_rates);
 }
 
+static int aevalsrc_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    EvalContext *s = ctx->priv;
+    AVFrame *out = arg;
+    const int start = (s->nb_channels * jobnr) / nb_jobs;
+    const int end = (s->nb_channels * (jobnr+1)) / nb_jobs;
+    const int nb_samples = out->nb_samples;
+    double scale = 1.0 / s->sample_rate;
+    double var_values[VAR_VARS_NB];
+    const uint64_t n = s->n;
+
+    memcpy(var_values, s->var_values, sizeof(var_values));
+
+    for (int ch = start; ch < end; ch++) {
+        double *dst = (double *)out->extended_data[ch];
+        AVExpr *expr = s->expr[ch];
+
+        for (int i = 0; i < nb_samples; i++) {
+            var_values[VAR_N] = n + i;
+            var_values[VAR_T] = var_values[VAR_N] * scale;
+
+            dst[i] = av_expr_eval(expr, var_values, NULL);
+        }
+    }
+
+    return 0;
+}
+
 static int activate(AVFilterContext *ctx)
 {
     AVFilterLink *outlink = ctx->outputs[0];
     EvalContext *eval = ctx->priv;
     AVFrame *samplesref;
-    int i, j;
     int64_t t = av_rescale(eval->n, AV_TIME_BASE, eval->sample_rate);
     int nb_samples;
 
@@ -281,19 +308,12 @@ static int activate(AVFilterContext *ctx)
     if (!samplesref)
         return AVERROR(ENOMEM);
 
-    /* evaluate expression for each single sample and for each channel */
-    for (i = 0; i < nb_samples; i++, eval->n++) {
-        eval->var_values[VAR_N] = eval->n;
-        eval->var_values[VAR_T] = eval->var_values[VAR_N] * (double)1/eval->sample_rate;
-
-        for (j = 0; j < eval->nb_channels; j++) {
-            *((double *) samplesref->extended_data[j] + i) =
-                av_expr_eval(eval->expr[j], eval->var_values, NULL);
-        }
-    }
+    ff_filter_execute(ctx, aevalsrc_channels, samplesref, NULL,
+                      FFMIN(eval->nb_channels, ff_filter_get_nb_threads(ctx)));
 
     samplesref->pts = eval->pts;
     samplesref->sample_rate = eval->sample_rate;
+    eval->n += nb_samples;
     eval->pts += nb_samples;
 
     return ff_filter_frame(outlink, samplesref);
@@ -319,6 +339,7 @@ const AVFilter ff_asrc_aevalsrc = {
     FILTER_OUTPUTS(aevalsrc_outputs),
     FILTER_QUERY_FUNC2(query_formats),
     .priv_class    = &aevalsrc_class,
+    .flags         = AVFILTER_FLAG_SLICE_THREADS,
 };
 
 #endif /* CONFIG_AEVALSRC_FILTER */
