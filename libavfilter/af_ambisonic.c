@@ -107,9 +107,14 @@ enum Layouts {
 
 enum Rotation { YAW, PITCH, ROLL };
 
+typedef struct SOSSection {
+    double b[3];
+    double a[2];
+    double z[2];
+} SOSSection;
+
 typedef struct NearField {
-    double d[MAX_ORDER];
-    double z[MAX_ORDER];
+    SOSSection sos[MAX_ORDER];
 } NearField;
 
 typedef struct Xover {
@@ -344,6 +349,9 @@ typedef struct AmbisonicContext {
 
     double rotate[3]; /* Angles for yaw(x), pitch(y), roll(z) rotation */
 
+    double distance;
+    double proximity;
+
     int pgtype;
     int max_channels;             /* Max Channels */
     int matrix_norm;
@@ -388,7 +396,7 @@ typedef struct AmbisonicContext {
     AVFrame *rframe;
     AVFrame *frame2;
 
-    void (*nf_init[MAX_ORDER])(NearField *nf, double radius,
+    void (*nf_init[MAX_ORDER])(NearField *nf, double r0, double r1,
                                double speed, double rate,
                                double gain);
     void (*nf_process[MAX_ORDER])(NearField *nf,
@@ -453,6 +461,8 @@ static const AVOption ambisonic_options[] = {
     { "roll",   "angle for roll (z-axis)",  OFFSET(rotate[ROLL]),  AV_OPT_TYPE_DOUBLE, {.dbl=0.}, -180., 180., AFT },
     { "level",  "output level compensation", OFFSET(level), AV_OPT_TYPE_BOOL, {.i64=1}, 0, 1, AFT },
     { "norm",   "enable matrix normalization", OFFSET(matrix_norm), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, AFT },
+    { "distance",  "set distance",  OFFSET(distance),  AV_OPT_TYPE_DOUBLE, {.dbl=1.0}, 0.1, 33, AF },
+    { "proximity", "set proximity", OFFSET(proximity), AV_OPT_TYPE_DOUBLE, {.dbl=1.0}, 0.1, 33, AF },
     { "invert_x", "invert X", OFFSET(invert[D_X]), AV_OPT_TYPE_FLAGS, {.i64=0}, 0, 3, AFT, "ix"},
     {   "odd",  "invert odd harmonics",  0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, AFT, "ix"},
     {   "even", "invert even harmonics", 0, AV_OPT_TYPE_CONST, {.i64=2}, 0, 0, AFT, "ix"},
@@ -1595,14 +1605,20 @@ static double speed_of_sound(double temp)
     return 1.85325 * (643.95 * sqrt(((temp + 273.15) / 273.15))) * 1000.0 / (60. * 60.);
 }
 
-static void nfield1_init(NearField *nf, double radius,
+static void nfield1_init(NearField *nf, double distance, double proximity,
                          double speed, double rate,
                          double gain)
 {
-    double w = 0.5 * speed / (radius * rate);
+    const double w0 = 2.0 * rate * proximity / speed;
+    const double w1 = 2.0 * rate * distance  / speed;
+    const double c0 = -1.0 / w0;
+    const double c1 = -1.0 / w1;
 
-    nf->d[0] = 1. / (1. + w);
-    nf->d[1] = (2. * w) * nf->d[0];
+    nf->sos[0].b[0] = (1.0-c0) / (1.0 - c1);
+    nf->sos[0].b[1] = (-1.0*(1.0+c0)) / (1.0 - c1);
+    nf->sos[0].b[2] = 0.0;
+    nf->sos[0].a[0] = (-1.0 * (1.0 + c1)) / (1.0 - c1);
+    nf->sos[0].a[1] = 0.0;
 }
 
 static void near_field_init(AmbisonicContext *s, int out,
@@ -1616,7 +1632,8 @@ static void near_field_init(AmbisonicContext *s, int out,
         if (!s->nf_init[n - 1])
             break;
 
-        s->nf_init[n - 1](&s->nf[out][ch], 1., speed, rate, gain);
+        s->nf_init[n - 1](&s->nf[out][ch], s->distance, s->proximity,
+                          speed, rate, gain);
     }
 }
 

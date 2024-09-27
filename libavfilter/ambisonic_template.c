@@ -129,25 +129,31 @@ static void fn(nfield1_process)(NearField *nf, AVFrame *frame,
 {
     const int nb_samples = frame->nb_samples;
     ftype *dst = (ftype *)frame->extended_data[ch];
-    const ftype d0 = nf->d[0] * gain;
-    const ftype d1 = nf->d[1];
-    ftype z0 = nf->z[0];
+    const ftype a1 = -nf->sos[0].a[0];
+    const ftype b0 = nf->sos[0].b[0] * gain;
+    const ftype b1 = nf->sos[0].b[1];
+    ftype z0 = nf->sos[0].z[0];
+    ftype z1 = nf->sos[0].z[1];
 
     if (add) {
         for (int n = 0; n < nb_samples; n++) {
-            ftype x = dst[n] * d0 - d1 * z0;
+            ftype x = dst[n] * b0 + b1 * z0 + a1 * z1;
+            z0 = dst[n];
             dst[n] += x;
-            z0 += x;
+            z1 = x;
+
         }
     } else {
         for (int n = 0; n < nb_samples; n++) {
-            ftype x = dst[n] * d0 - d1 * z0;
+            ftype x = dst[n] * b0 + b1 * z0 + a1 * z1;
+            z0 = dst[n];
             dst[n] = x;
-            z0 += x;
+            z1 = x;
         }
     }
 
-    nf->z[0] = isnormal(z0) ? z0 : F(0.0);
+    nf->sos[0].z[0] = isnormal(z0) ? z0 : F(0.0);
+    nf->sos[0].z[1] = isnormal(z1) ? z1 : F(0.0);
 }
 
 static void fn(xover_process)(Xover *xover, const ftype *src, ftype *dst,
