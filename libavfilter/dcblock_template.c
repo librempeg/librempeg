@@ -48,7 +48,8 @@ static int fn(init_state)(AVFilterContext *ctx)
     DCBlockContext *s = ctx->priv;
     fn(StateContext) *stc;
 
-    s->st = av_calloc(s->nb_channels, sizeof(*stc));
+    if (!s->st)
+        s->st = av_calloc(s->nb_channels, sizeof(*stc));
     if (!s->st)
         return AVERROR(ENOMEM);
 

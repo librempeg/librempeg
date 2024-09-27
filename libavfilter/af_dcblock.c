@@ -34,7 +34,7 @@ typedef struct DCBlockContext {
 } DCBlockContext;
 
 #define OFFSET(x) offsetof(DCBlockContext, x)
-#define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 
 static const AVOption dcblock_options[] = {
     { "cut", "set the cut in Hz", OFFSET(cut), AV_OPT_TYPE_DOUBLE, {.dbl=1}, 1, 25, FLAGS },
@@ -105,6 +105,21 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
+                           char *res, int res_len, int flags)
+{
+    DCBlockContext *s = ctx->priv;
+    int ret;
+
+    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    if (ret < 0)
+        return ret;
+
+    s->init_state(ctx);
+
+    return 0;
+}
+
 static av_cold void uninit(AVFilterContext *ctx)
 {
     DCBlockContext *s = ctx->priv;
@@ -130,6 +145,7 @@ const AVFilter ff_af_dcblock = {
     FILTER_INPUTS(dcblock_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P),
+    .process_command = process_command,
     .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
                       AVFILTER_FLAG_SLICE_THREADS,
 };
