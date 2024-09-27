@@ -65,7 +65,8 @@ typedef struct AudioSpaceContext {
     Speaker *speakers;
     Speaker *sorted_speakers;
 
-    void (*process)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, AVFrame *w);
+    int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+
     AVFloatDSPContext *fdsp;
 } AudioSpaceContext;
 
@@ -130,6 +131,10 @@ static int query_formats(const AVFilterContext *ctx,
     return ff_channel_layouts_ref(inlayouts, &cfg_in[0]->channel_layouts);
 }
 
+typedef struct ThreadData {
+    AVFrame *in, *out, *w;
+} ThreadData;
+
 #define DEPTH 32
 #include "aspace_template.c"
 
@@ -149,13 +154,13 @@ static int config_output(AVFilterLink *outlink)
 
     switch (s->precision) {
     case P_AUTO:
-        s->process = outlink->format == AV_SAMPLE_FMT_FLTP ? process_float : process_double;
+        s->filter_channels = outlink->format == AV_SAMPLE_FMT_FLTP ? filter_channels_float : filter_channels_double;
         break;
     case P_SINGLE:
-        s->process = process_float;
+        s->filter_channels = filter_channels_float;
         break;
     case P_DOUBLE:
-        s->process = process_double;
+        s->filter_channels = filter_channels_double;
         break;
     default: av_assert0(0);
     }
@@ -277,6 +282,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AudioSpaceContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     const int nb_speakers = outlink->ch_layout.nb_channels;
+    ThreadData td;
     double scale;
     AVFrame *out;
 
@@ -406,7 +412,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     memcpy(s->prev_source, s->source, sizeof(s->prev_source));
 
-    s->process(ctx, in, out, s->w);
+    td.out = out;
+    td.in = in;
+    td.w = s->w;
+    ff_filter_execute(ctx, s->filter_channels, &td, NULL,
+                      FFMIN(outlink->ch_layout.nb_channels,
+                            ff_filter_get_nb_threads(ctx)));
 
     av_frame_free(&in);
     return ff_filter_frame(outlink, out);
@@ -461,4 +472,5 @@ const AVFilter ff_af_aspace = {
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     .process_command = ff_filter_process_command,
+    .flags           = AVFILTER_FLAG_SLICE_THREADS,
 };

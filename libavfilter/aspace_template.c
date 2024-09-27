@@ -36,17 +36,24 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
-static void fn(process)(AVFilterContext *ctx,
-                        AVFrame *in, AVFrame *out, AVFrame *w)
+static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
+    ThreadData *td = arg;
+    AVFrame *out = td->out;
+    AVFrame *in = td->in;
+    AVFrame *w = td->w;
     const int nb_channels = out->ch_layout.nb_channels;
     const int nb_samples = FFALIGN(in->nb_samples, 16);
+    const int start = (nb_channels * jobnr) / nb_jobs;
+    const int end = (nb_channels * (jobnr+1)) / nb_jobs;
     AudioSpaceContext *s = ctx->priv;
 
-    for (int i = 0; i < nb_channels; i++) {
-        VECTOR_MUL((ftype *)out->extended_data[i],
+    for (int ch = start; ch < end; ch++) {
+        VECTOR_MUL((ftype *)out->extended_data[ch],
                    (const ftype *)in->extended_data[0],
-                   (const ftype *)w->extended_data[i],
+                   (const ftype *)w->extended_data[ch],
                    nb_samples);
     }
+
+    return 0;
 }
