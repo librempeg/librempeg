@@ -35,7 +35,7 @@ typedef struct DCShiftContext {
 } DCShiftContext;
 
 #define OFFSET(x) offsetof(DCShiftContext, x)
-#define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 
 static const AVOption dcshift_options[] = {
     { "shift",       "set DC shift",     OFFSET(dcshift),     AV_OPT_TYPE_DOUBLE, {.dbl=0}, -1, 1, A },
@@ -120,5 +120,7 @@ const AVFilter ff_af_dcshift = {
     FILTER_INPUTS(dcshift_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P),
-    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
+    .process_command = ff_filter_process_command,
+    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+                      AVFILTER_FLAG_SLICE_THREADS,
 };
