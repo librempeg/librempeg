@@ -170,15 +170,22 @@ static void convolve(AVFilterContext *ctx, AVFrame *in,
     }
 }
 
-static void mix(AVFilterContext *ctx, AVFrame *out,
+static void mix(AVFilterContext *ctx, AVFrame *out, AVFrame *in,
                 int output_ch, int f0, int f1, int i0, int i1)
 {
     EarwaxContext *s = ctx->priv;
     const int16_t *srcl = (const int16_t *)s->frame[f0]->data[i0];
     const int16_t *srcr = (const int16_t *)s->frame[f1]->data[i1];
+    const int16_t *src = (const int16_t *)in->data[output_ch];
     int16_t *dst = (int16_t *)out->data[output_ch];
+    const int nb_samples = out->nb_samples;
 
-    for (int n = 0; n < out->nb_samples; n++)
+    if (ctx->is_disabled) {
+        memcpy(dst, src, nb_samples * sizeof(*dst));
+        return;
+    }
+
+    for (int n = 0; n < nb_samples; n++)
         dst[n] = av_clip_int16(srcl[n] + srcr[n]);
 }
 
@@ -212,8 +219,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     convolve(ctx, in, 1, 0, 0, 2);
     convolve(ctx, in, 1, 1, 1, 3);
 
-    mix(ctx, out, 0, 0, 1, 1, 0);
-    mix(ctx, out, 1, 0, 1, 0, 1);
+    mix(ctx, out, in, 0, 0, 1, 1, 0);
+    mix(ctx, out, in, 1, 0, 1, 0, 1);
 
     av_frame_free(&in);
     return ff_filter_frame(outlink, out);
@@ -244,4 +251,5 @@ const AVFilter ff_af_earwax = {
     FILTER_INPUTS(earwax_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC2(query_formats),
+    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
 };
