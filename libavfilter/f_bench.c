@@ -112,7 +112,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 }
 
 #if CONFIG_BENCH_FILTER
-DEFINE_OPTIONS(bench, AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM);
+DEFINE_OPTIONS(bench, AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_RUNTIME_PARAM);
 AVFILTER_DEFINE_CLASS(bench);
 
 static const AVFilterPad bench_inputs[] = {
@@ -131,13 +131,14 @@ const AVFilter ff_vf_bench = {
     .uninit        = uninit,
     FILTER_INPUTS(bench_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
+    .process_command = ff_filter_process_command,
     .priv_class    = &bench_class,
     .flags         = AVFILTER_FLAG_METADATA_ONLY,
 };
 #endif /* CONFIG_BENCH_FILTER */
 
 #if CONFIG_ABENCH_FILTER
-DEFINE_OPTIONS(abench, AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_AUDIO_PARAM);
+DEFINE_OPTIONS(abench, AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_RUNTIME_PARAM);
 AVFILTER_DEFINE_CLASS(abench);
 
 static const AVFilterPad abench_inputs[] = {
@@ -156,6 +157,7 @@ const AVFilter ff_af_abench = {
     .uninit        = uninit,
     FILTER_INPUTS(abench_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
+    .process_command = ff_filter_process_command,
     .priv_class    = &abench_class,
     .flags         = AVFILTER_FLAG_METADATA_ONLY,
 };
