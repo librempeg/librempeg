@@ -146,43 +146,50 @@ static int fn(prepare)(AVFilterContext *ctx, AVFilterLink *outlink)
         segments[i].y *= F(M_LN10/20.0);
     }
 
-#define L(x, i) segments[(i) - (x)]
+#define line1 segments[i - 4]
+#define curve segments[i - 3]
+#define line2 segments[i - 2]
+#define line3 segments[i - 0]
     for (int i = 4; i < s->nb_segments; i += 2) {
         ftype x, y, cx, cy, in1, in2, out1, out2, theta, len, r;
 
-        L(4, i).a = 0;
-        L(4, i).b = (L(2, i).y - L(4, i).y) / (L(2, i).x - L(4, i).x);
+        line1.a = 0;
+        line1.b = (line2.y - line1.y) / (line2.x - line1.x);
 
-        L(2, i).a = 0;
-        L(2, i).b = (L(0, i).y - L(2, i).y) / (L(0, i).x - L(2, i).x);
+        line2.a = 0;
+        line2.b = (line3.y - line2.y) / (line3.x - line2.x);
 
-        theta = ATAN2(L(2, i).y - L(4, i).y, L(2, i).x - L(4, i).x);
-        len = HYPOT(L(2, i).x - L(4, i).x, L(2, i).y - L(4, i).y);
+        theta = ATAN2(line2.y - line1.y, line2.x - line1.x);
+        len = HYPOT(line2.x - line1.x, line2.y - line1.y);
         r = FMIN(radius, len);
-        L(3, i).x = L(2, i).x - r * FCOS(theta);
-        L(3, i).y = L(2, i).y - r * FSIN(theta);
+        curve.x = line2.x - r * FCOS(theta);
+        curve.y = line2.y - r * FSIN(theta);
 
-        theta = ATAN2(L(0, i).y - L(2, i).y, L(0, i).x - L(2, i).x);
-        len = HYPOT(L(0, i).x - L(2, i).x, L(0, i).y - L(2, i).y);
-        r = FMIN(radius, len / 2);
-        x = L(2, i).x + r * FCOS(theta);
-        y = L(2, i).y + r * FSIN(theta);
+        theta = ATAN2(line3.y - line2.y, line3.x - line2.x);
+        len = HYPOT(line3.x - line2.x, line3.y - line2.y);
+        r = FMIN(radius, len * F(0.5));
+        x = line2.x + r * FCOS(theta);
+        y = line2.y + r * FSIN(theta);
 
-        cx = (L(3, i).x + L(2, i).x + x) / 3;
-        cy = (L(3, i).y + L(2, i).y + y) / 3;
+        cx = (curve.x + line2.x + x) / F(3.0);
+        cy = (curve.y + line2.y + y) / F(3.0);
 
-        L(2, i).x = x;
-        L(2, i).y = y;
+        line2.x = x;
+        line2.y = y;
 
-        in1  = cx - L(3, i).x;
-        out1 = cy - L(3, i).y;
-        in2  = L(2, i).x - L(3, i).x;
-        out2 = L(2, i).y - L(3, i).y;
-        L(3, i).a = (out2 / in2 - out1 / in1) / (in2 - in1);
-        L(3, i).b = out1 / in1 - L(3, i).a * in1;
+        in1  = cx - curve.x;
+        out1 = cy - curve.y;
+        in2  = line2.x - curve.x;
+        out2 = line2.y - curve.y;
+        curve.a = (out2 / in2 - out1 / in1) / (in2 - in1);
+        curve.b = out1 / in1 - curve.a * in1;
     }
-    L(3, s->nb_segments).x = 0;
-    L(3, s->nb_segments).y = L(2, s->nb_segments).y;
+#undef line1
+#undef curve
+#undef line2
+#undef line3
+    segments[s->nb_segments-3].x = segments[s->nb_segments-2].x;
+    segments[s->nb_segments-3].y = segments[s->nb_segments-2].y;
 
     s->in_min_log  = segments[1].x;
     s->out_min_lin = FEXP(segments[1].y);
