@@ -63,12 +63,12 @@ typedef struct CompandContext {
     double delay;
     AVFrame *delay_frame, *in, *sc;
     int delay_samples;
-    int delay_count;
-    int delay_index;
     int64_t pts;
 
     int (*prepare)(AVFilterContext *ctx, AVFilterLink *outlink);
     int (*compand)(AVFilterContext *ctx);
+    int (*compand_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+    int (*delay_count)(AVFilterContext *ctx);
     void (*drain)(AVFilterContext *ctx, AVFrame *frame);
 } CompandContext;
 
@@ -136,13 +136,96 @@ static int compand_drain(AVFilterLink *outlink)
     AVFrame *out;
 
     /* 2048 is to limit output frame size during drain */
-    out = ff_get_audio_buffer(outlink, FFMIN(2048, s->delay_count));
+    out = ff_get_audio_buffer(outlink, FFMIN(2048, s->delay_count(ctx)));
     if (!out)
         return AVERROR(ENOMEM);
     out->pts = s->pts;
     s->pts += out->nb_samples;
 
     s->drain(ctx, out);
+
+    return ff_filter_frame(outlink, out);
+}
+
+static int compand_nodelay(AVFilterContext *ctx)
+{
+    CompandContext *s = ctx->priv;
+    AVFilterLink *outlink = ctx->outputs[0];
+    const int nb_samples = s->in->nb_samples;
+    AVFrame *out;
+    int ret;
+
+    if (av_frame_is_writable(s->in)) {
+        out = s->in;
+    } else {
+        out = ff_get_audio_buffer(outlink, nb_samples);
+        if (!out) {
+            av_frame_free(&s->in);
+            av_frame_free(&s->sc);
+            return AVERROR(ENOMEM);
+        }
+        ret = av_frame_copy_props(out, s->in);
+        if (ret < 0) {
+            av_frame_free(&out);
+            av_frame_free(&s->in);
+            av_frame_free(&s->sc);
+            return ret;
+        }
+    }
+
+    ff_filter_execute(ctx, s->compand_channels, out, NULL,
+                      FFMIN(outlink->ch_layout.nb_channels,
+                            ff_filter_get_nb_threads(ctx)));
+
+    if (s->in != out)
+        av_frame_free(&s->in);
+
+    s->in = NULL;
+    av_frame_free(&s->sc);
+
+    return ff_filter_frame(outlink, out);
+}
+
+static int compand_delay(AVFilterContext *ctx)
+{
+    CompandContext *s = ctx->priv;
+    AVFilterLink *outlink = ctx->outputs[0];
+    AVFilterLink *inlink = ctx->inputs[0];
+    const int nb_samples = s->in->nb_samples;
+    AVFrame *out;
+    int ret;
+
+    out = ff_get_audio_buffer(outlink, nb_samples);
+    if (!out) {
+        av_frame_free(&s->in);
+        av_frame_free(&s->sc);
+        return AVERROR(ENOMEM);
+    }
+    ret = av_frame_copy_props(out, s->in);
+    if (ret < 0) {
+        av_frame_free(&out);
+        av_frame_free(&s->in);
+        av_frame_free(&s->sc);
+        return ret;
+    }
+
+    ff_filter_execute(ctx, s->compand_channels, out, NULL,
+                      FFMIN(outlink->ch_layout.nb_channels,
+                            ff_filter_get_nb_threads(ctx)));
+
+    s->pts = out->pts + out->nb_samples;
+    out->pts -= s->delay_samples;
+
+    av_frame_free(&s->in);
+    av_frame_free(&s->sc);
+
+    if (s->delay_count(ctx) < s->delay_samples) {
+        av_frame_free(&out);
+
+        ff_inlink_request_frame(inlink);
+
+        return 0;
+    }
 
     return ff_filter_frame(outlink, out);
 }
@@ -182,13 +265,37 @@ static int config_output(AVFilterLink *outlink)
 
     s->delay_samples = lrint(s->delay * sample_rate);
     if (s->delay_samples <= 0) {
-        s->compand = (outlink->format == AV_SAMPLE_FMT_FLTP) ? compand_nodelay_fltp : compand_nodelay_dblp;
+        s->compand = compand_nodelay;
+        switch (outlink->format) {
+        case AV_SAMPLE_FMT_FLTP:
+            s->compand_channels = compand_nodelay_channels_fltp;
+            s->delay_count = delay_count_fltp;
+            break;
+        case AV_SAMPLE_FMT_DBLP:
+            s->compand_channels = compand_nodelay_channels_dblp;
+            s->delay_count = delay_count_dblp;
+            break;
+        default:
+            return AVERROR_BUG;
+        }
     } else {
         s->delay_frame = ff_get_audio_buffer(outlink, s->delay_samples);
         if (!s->delay_frame)
             return AVERROR(ENOMEM);
 
-        s->compand = (outlink->format == AV_SAMPLE_FMT_FLTP) ? compand_delay_fltp : compand_delay_dblp;
+        s->compand = compand_delay;
+        switch (outlink->format) {
+        case AV_SAMPLE_FMT_FLTP:
+            s->compand_channels = compand_delay_channels_fltp;
+            s->delay_count = delay_count_fltp;
+            break;
+        case AV_SAMPLE_FMT_DBLP:
+            s->compand_channels = compand_delay_channels_dblp;
+            s->delay_count = delay_count_dblp;
+            break;
+        default:
+            return AVERROR_BUG;
+        }
     }
 
     return 0;
@@ -229,7 +336,7 @@ static int activate(AVFilterContext *ctx)
     }
 
     if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
-        int ret = (s->delay_count > 0) ? compand_drain(outlink) : 0;
+        int ret = (s->delay_count(ctx) > 0) ? compand_drain(outlink) : 0;
 
         ff_outlink_set_status(outlink, status, pts);
 
@@ -262,5 +369,6 @@ const AVFilter ff_af_compand = {
     FILTER_OUTPUTS(compand_outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
     .flags          = AVFILTER_FLAG_DYNAMIC_INPUTS |
+                      AVFILTER_FLAG_SLICE_THREADS |
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
 };

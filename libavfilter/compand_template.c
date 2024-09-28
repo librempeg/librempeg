@@ -63,6 +63,9 @@ typedef struct fn(ChanParam) {
     ftype attack;
     ftype decay;
     ftype volume;
+
+    int delay_count;
+    int delay_index;
 } fn(ChanParam);
 
 typedef struct fn(CompandSegment) {
@@ -231,30 +234,40 @@ static ftype fn(get_volume)(const CompandContext *s, ftype in_log)
     return FEXP(out_log);
 }
 
+static int fn(delay_count)(AVFilterContext *ctx)
+{
+    CompandContext *s = ctx->priv;
+    fn(ChanParam) *cps = s->channels;
+    fn(ChanParam) *cp = &cps[0];
+
+    return cp->delay_count;
+}
+
 static void fn(drain)(AVFilterContext *ctx, AVFrame *frame)
 {
     AVFilterLink *outlink = ctx->outputs[0];
     const int channels = outlink->ch_layout.nb_channels;
     CompandContext *s = ctx->priv;
+    const int delay_samples = s->delay_samples;
+    const int nb_samples = frame->nb_samples;
     fn(ChanParam) *cps = s->channels;
-    int dindex = 0;
 
-    for (int chan = 0; chan < channels; chan++) {
+    for (int ch = 0; ch < channels; ch++) {
         AVFrame *delay_frame = s->delay_frame;
-        ftype *dbuf = (ftype *)delay_frame->extended_data[chan];
-        ftype *dst = (ftype *)frame->extended_data[chan];
-        fn(ChanParam) *cp = &cps[chan];
+        ftype *dbuf = (ftype *)delay_frame->extended_data[ch];
+        ftype *dst = (ftype *)frame->extended_data[ch];
+        fn(ChanParam) *cp = &cps[ch];
+        int dindex = cp->delay_index;
 
-        dindex = s->delay_index;
-        for (int i = 0; i < frame->nb_samples; i++) {
+        for (int i = 0; i < nb_samples; i++) {
             dst[i] = dbuf[dindex] * fn(get_volume)(s, cp->volume);
 #define MOD(a, b) (((a) >= (b)) ? (a) - (b) : (a))
-            dindex = MOD(dindex + 1, s->delay_samples);
+            dindex = MOD(dindex + 1, delay_samples);
         }
-    }
 
-    s->delay_count -= frame->nb_samples;
-    s->delay_index = dindex;
+        cp->delay_index = dindex;
+        cp->delay_count -= nb_samples;
+    }
 }
 
 static void fn(update_volume)(fn(ChanParam) *cp, const ftype in)
@@ -268,41 +281,24 @@ static void fn(update_volume)(fn(ChanParam) *cp, const ftype in)
         cp->volume += delta * cp->decay;
 }
 
-static int fn(compand_nodelay)(AVFilterContext *ctx)
+static int fn(compand_nodelay_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    CompandContext *s    = ctx->priv;
-    AVFilterLink *inlink = ctx->inputs[0];
-    const int channels   = inlink->ch_layout.nb_channels;
-    const int nb_samples = s->in->nb_samples;
-    const int is_disabled = ctx->is_disabled;
+    CompandContext *s = ctx->priv;
     AVFrame *sc = s->sc ? s->sc : s->in;
+    AVFrame *in = s->in;
+    AVFrame *out = arg;
     fn(ChanParam) *cps = s->channels;
-    AVFrame *out;
-    int err;
+    const int nb_samples = s->in->nb_samples;
+    const int channels = in->ch_layout.nb_channels;
+    const int is_disabled = ctx->is_disabled;
+    const int start = (channels * jobnr) / nb_jobs;
+    const int end = (channels * (jobnr+1)) / nb_jobs;
 
-    if (av_frame_is_writable(s->in)) {
-        out = s->in;
-    } else {
-        out = ff_get_audio_buffer(ctx->outputs[0], nb_samples);
-        if (!out) {
-            av_frame_free(&s->in);
-            av_frame_free(&s->sc);
-            return AVERROR(ENOMEM);
-        }
-        err = av_frame_copy_props(out, s->in);
-        if (err < 0) {
-            av_frame_free(&out);
-            av_frame_free(&s->in);
-            av_frame_free(&s->sc);
-            return err;
-        }
-    }
-
-    for (int chan = 0; chan < channels; chan++) {
-        const ftype *scsrc = (const ftype *)sc->extended_data[chan];
-        const ftype *src = (const ftype *)s->in->extended_data[chan];
-        ftype *dst = (ftype *)out->extended_data[chan];
-        fn(ChanParam) *cp = &cps[chan];
+    for (int ch = start; ch < end; ch++) {
+        const ftype *scsrc = (const ftype *)sc->extended_data[ch];
+        const ftype *src = (const ftype *)in->extended_data[ch];
+        ftype *dst = (ftype *)out->extended_data[ch];
+        fn(ChanParam) *cp = &cps[ch];
 
         if (is_disabled) {
             for (int i = 0; i < nb_samples; i++) {
@@ -319,63 +315,40 @@ static int fn(compand_nodelay)(AVFilterContext *ctx)
         }
     }
 
-    if (s->in != out)
-        av_frame_free(&s->in);
-
-    s->in = NULL;
-    av_frame_free(&s->sc);
-    return ff_filter_frame(ctx->outputs[0], out);
+    return 0;
 }
 
-static int fn(compand_delay)(AVFilterContext *ctx)
+static int fn(compand_delay_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     CompandContext *s = ctx->priv;
-    AVFilterLink *inlink = ctx->inputs[0];
-    const int channels = inlink->ch_layout.nb_channels;
-    const int nb_samples = s->in->nb_samples;
+    const int channels = s->in->ch_layout.nb_channels;
+    const int delay_samples = s->delay_samples;
     const int is_enabled = !ctx->is_disabled;
+    const int start = (channels * jobnr) / nb_jobs;
+    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int nb_samples = s->in->nb_samples;
+    AVFrame *delay_frame = s->delay_frame;
     AVFrame *sc = s->sc ? s->sc : s->in;
     fn(ChanParam) *cps = s->channels;
-    int dindex = 0, count = 0;
-    AVFrame *out = NULL;
-    int err;
+    AVFrame *in = s->in;
+    AVFrame *out = arg;
 
-    for (int chan = 0; chan < channels; chan++) {
-        AVFrame *delay_frame = s->delay_frame;
-        const ftype *scsrc = (const ftype *)sc->extended_data[chan];
-        const ftype *src = (const ftype *)s->in->extended_data[chan];
-        ftype *dbuf = (ftype *)delay_frame->extended_data[chan];
-        fn(ChanParam) *cp = &cps[chan];
-        ftype *dst = out ? (ftype *)out->extended_data[chan] : NULL;
+    for (int ch = start; ch < end; ch++) {
+        const ftype *scsrc = (const ftype *)sc->extended_data[ch];
+        const ftype *src = (const ftype *)in->extended_data[ch];
+        ftype *dbuf = (ftype *)delay_frame->extended_data[ch];
+        ftype *dst = (ftype *)out->extended_data[ch];
+        fn(ChanParam) *cp = &cps[ch];
+        int count  = cp->delay_count;
+        int dindex = cp->delay_index;
 
-        count  = s->delay_count;
-        dindex = s->delay_index;
         for (int i = 0, oindex = 0; i < nb_samples; i++) {
             const ftype scsample = scsrc[i];
             const ftype sample = src[i];
 
             fn(update_volume)(cp, FABS(scsample));
 
-            if (count >= s->delay_samples) {
-                if (!out) {
-                    out = ff_get_audio_buffer(ctx->outputs[0], nb_samples - i);
-                    if (!out) {
-                        av_frame_free(&s->in);
-                        av_frame_free(&s->sc);
-                        return AVERROR(ENOMEM);
-                    }
-                    err = av_frame_copy_props(out, s->in);
-                    if (err < 0) {
-                        av_frame_free(&out);
-                        av_frame_free(&s->in);
-                        av_frame_free(&s->sc);
-                        return err;
-                    }
-                    s->pts = out->pts + out->nb_samples;
-                    out->pts -= s->delay_samples - i;
-                    dst = (ftype *)out->extended_data[chan];
-                }
-
+            if (count >= delay_samples) {
                 dst[oindex] = dbuf[dindex];
                 if (is_enabled)
                     dst[oindex] *= fn(get_volume)(s, cp->volume);
@@ -385,20 +358,12 @@ static int fn(compand_delay)(AVFilterContext *ctx)
             }
 
             dbuf[dindex] = sample;
-            dindex = MOD(dindex + 1, s->delay_samples);
+            dindex = MOD(dindex + 1, delay_samples);
         }
+
+        cp->delay_count = count;
+        cp->delay_index = dindex;
     }
-
-    s->delay_count = count;
-    s->delay_index = dindex;
-
-    av_frame_free(&s->in);
-    av_frame_free(&s->sc);
-
-    if (out)
-        return ff_filter_frame(ctx->outputs[0], out);
-
-    ff_inlink_request_frame(inlink);
 
     return 0;
 }
