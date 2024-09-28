@@ -154,10 +154,10 @@ static int fn(prepare)(AVFilterContext *ctx, AVFilterLink *outlink)
         ftype x, y, cx, cy, in1, in2, out1, out2, theta, len, r;
 
         line1.a = 0;
-        line1.b = (line2.y - line1.y) / (line2.x - line1.x);
+        line1.b = (line2.y - line1.y) / (line2.x - line1.x + EPS);
 
         line2.a = 0;
-        line2.b = (line3.y - line2.y) / (line3.x - line2.x);
+        line2.b = (line3.y - line2.y) / (line3.x - line2.x + EPS);
 
         theta = ATAN2(line2.y - line1.y, line2.x - line1.x);
         len = HYPOT(line2.x - line1.x, line2.y - line1.y);
@@ -177,11 +177,11 @@ static int fn(prepare)(AVFilterContext *ctx, AVFilterLink *outlink)
         line2.x = x;
         line2.y = y;
 
-        in1  = cx - curve.x;
-        out1 = cy - curve.y;
-        in2  = line2.x - curve.x;
-        out2 = line2.y - curve.y;
-        curve.a = (out2 / in2 - out1 / in1) / (in2 - in1);
+        in1  = cx - curve.x + EPS;
+        out1 = cy - curve.y + EPS;
+        in2  = line2.x - curve.x + EPS;
+        out2 = line2.y - curve.y + EPS;
+        curve.a = (out2 / in2 - out1 / in1) / (in2 - in1 + EPS);
         curve.b = out1 / in1 - curve.a * in1;
     }
 #undef line1
