@@ -385,5 +385,7 @@ static int fn(compand_delay)(AVFilterContext *ctx)
     if (out)
         return ff_filter_frame(ctx->outputs[0], out);
 
+    ff_inlink_request_frame(inlink);
+
     return 0;
 }
