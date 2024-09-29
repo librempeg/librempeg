@@ -570,9 +570,9 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
 static const AVOptionArrayDef def_smooth = {.def="0",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_o  = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_i  = {.def="1",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_f_x  = {.def="0.5",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_f_y  = {.def="0.5",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_f_z  = {.def="0.5",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_f_x  = {.def="2",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_f_y  = {.def="2",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_f_z  = {.def="2",.size_min=1,.sep=' '};
 
 static const AVOption surround_options[] = {
     { "chl_out",   "set output channel layout", OFFSET(out_ch_layout),     AV_OPT_TYPE_CHLAYOUT, {.str="5.1"}, 0,   0, FLAGS },

@@ -20,6 +20,7 @@
 #undef MPI2
 #undef MPI4
 #undef MLN10
+#undef MSQRT1_2
 #undef ftype
 #undef ctype
 #undef HYPOT
@@ -42,6 +43,7 @@
 #define MPI2 M_PI_2f
 #define MPI4 M_PI_4f
 #define MLN10 M_LN10f
+#define MSQRT1_2 M_SQRT1_2f
 #define ftype float
 #define ctype AVComplexFloat
 #define HYPOT hypotf
@@ -63,6 +65,7 @@
 #define MPI2 M_PI_2
 #define MPI4 M_PI_4
 #define MLN10 M_LN10
+#define MSQRT1_2 M_SQRT1_2
 #define ftype double
 #define ctype AVComplexDouble
 #define HYPOT hypot
@@ -119,13 +122,13 @@ static void fn(stereo_position)(const ftype l, const ftype r,
     const ftype re2 = re*re;
     const ftype l2 = l*l;
     const ftype r2 = r*r;
-    const ftype h2 = SQRT(F(2.0) * (l2 + r2) + EPSILON) + EPSILON;
+    const ftype h2 = SQRT(l2 + r2 + EPSILON) + EPSILON;
     const ftype h1 = SQRT(im2 + re2 + EPSILON) + EPSILON;
     const ftype h1h2 = h1*h2 + EPSILON;
     const ftype rel = re * l;
     const ftype rer = re * r;
-    ftype x0 = (rer - rel) / h1h2;
-    ftype y0 = (rer + rel) / h1h2;
+    ftype x0 = MSQRT1_2 * (rer - rel) / h1h2;
+    ftype y0 = MSQRT1_2 * (rer + rel) / h1h2;
     ftype z0 = im / h1;
 
     x0 = CLIP(x0, F(-1.0), F(1.0));
@@ -363,7 +366,7 @@ static int fn(config_output)(AVFilterContext *ctx)
     s->nb_out_channels = outlink->ch_layout.nb_channels;
 
     for (int ch = 0; ch < outlink->ch_layout.nb_channels; ch++) {
-        ftype iscale = 1.0 / sqrt(s->win_size);
+        ftype iscale = F(1.0) / SQRT(s->win_size);
         int ret;
 
         ret = av_tx_init(&s->irdft[ch], &s->itx_fn, TX_TYPE,
@@ -474,7 +477,7 @@ static ftype fn(sqrf)(ftype x)
 
 static ftype fn(r_distance)(ftype a)
 {
-    return FMIN(SQRT(F(1.0) + fn(sqrf)(TAN(a))), SQRT(F(1.0) + fn(sqrf)(F(1.0) / TAN(a))));
+    return FMIN(SQRT(F(1.0) + fn(sqrf)(TAN(a))), SQRT(F(1.0) + fn(sqrf)(F(1.0) / (TAN(a) + EPSILON))));
 }
 
 static void fn(angle_transform)(ftype *x, ftype *y, ftype angle)
@@ -655,10 +658,12 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
         break;
     }
 
-    for (int n = 0; n < rdft_size; n++)
+    for (int n = 0; n < rdft_size; n++) {
         factor[n] = POW(x_out[n], f_x) *
                     POW(y_out[n], f_y) *
                     POW(z_out[n], f_z);
+        factor[n] = isnormal(factor[n]) ? factor[n] : F(0.0);
+    }
 }
 
 static void fn(do_transform)(AVFilterContext *ctx, int ch)
@@ -921,7 +926,7 @@ static int fn(config_input)(AVFilterContext *ctx)
     s->nb_in_channels = inlink->ch_layout.nb_channels;
 
     for (int ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
-        ftype scale = 1.0 / sqrt(s->win_size);
+        ftype scale = F(1.0) / SQRT(s->win_size);
         int ret;
 
         ret = av_tx_init(&s->rdft[ch], &s->tx_fn, TX_TYPE,
