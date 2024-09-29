@@ -121,6 +121,10 @@ static void fn(stereo_position)(const ftype l, const ftype r, const ftype ph,
     *x = CLIP(a, F(-1.0), F(1.0));
     *y = CLIP(p, F(-1.0), F(1.0));
     *z = CLIP(v, F(-1.0), F(1.0));
+
+    *x = isnormal(*x) ? *x : F(0.0);
+    *y = isnormal(*y) ? *y : F(0.0);
+    *z = isnormal(*z) ? *z : F(0.0);
 }
 
 static inline void fn(get_lfe)(int output_lfe, int n, ftype lowcut, ftype highcut,
@@ -663,8 +667,10 @@ static void fn(do_transform)(AVFilterContext *ctx, int ch)
     const ftype smooth = s->smooth[FFMIN(ch, s->nb_smooth-1)];
 
     if (smooth > F(0.0)) {
-        for (int n = 0; n < rdft_size; n++)
+        for (int n = 0; n < rdft_size; n++) {
             sfactor[n] = smooth * factor[n] + (F(1.0) - smooth) * sfactor[n];
+            sfactor[n] = isnormal(sfactor[n]) ? sfactor[n] : F(0.0);
+        }
 
         factor = sfactor;
     }
