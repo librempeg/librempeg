@@ -78,7 +78,7 @@
 #define F(x) ((ftype)(x))
 
 enum SurroundChannel {
-    SC_FL, SC_FR, SC_FC, SC_LF, SC_BL, SC_BR, SC_BC, SC_SL, SC_SR,
+    SC_FL = 1, SC_FR, SC_FC, SC_LF, SC_BL, SC_BR, SC_BC, SC_SL, SC_SR,
     SC_TC, SC_TFC, SC_TFL, SC_TFR, SC_TBC, SC_TBL, SC_TBR,
     SC_LF2,
     SC_NB,
@@ -1026,11 +1026,25 @@ static void filter_3_1(AVFilterContext *ctx)
     }
 }
 
+static int can_upmix(AVFilterContext *ctx)
+{
+    AudioSurroundContext *s = ctx->priv;
+
+    for (int ch = 0; ch < s->out_ch_layout.nb_channels; ch++) {
+        const int chan = av_channel_layout_channel_from_index(&s->out_ch_layout, ch);
+
+        if ((chan < 0 || chan >= FF_ARRAY_ELEMS(sc_map)) || sc_map[chan] <= 0)
+            return 0;
+    }
+
+    return 1;
+}
+
 static av_cold int init(AVFilterContext *ctx)
 {
     AudioSurroundContext *s = ctx->priv;
-    int64_t in_channel_layout, out_channel_layout;
     char in_name[128], out_name[128];
+    int64_t in_channel_layout;
     float overlap;
 
     if (s->lowcutf >= s->highcutf) {
@@ -1041,45 +1055,12 @@ static av_cold int init(AVFilterContext *ctx)
 
     in_channel_layout  = s->in_ch_layout.order == AV_CHANNEL_ORDER_NATIVE ?
                          s->in_ch_layout.u.mask : 0;
-    out_channel_layout = s->out_ch_layout.order == AV_CHANNEL_ORDER_NATIVE ?
-                         s->out_ch_layout.u.mask : 0;
 
     s->create_lfe = av_channel_layout_index_from_channel(&s->out_ch_layout,
                                                          AV_CHAN_LOW_FREQUENCY) >= 0;
 
-    switch (out_channel_layout) {
-    case AV_CH_LAYOUT_MONO:
-    case AV_CH_LAYOUT_STEREO:
-    case AV_CH_LAYOUT_2POINT1:
-    case AV_CH_LAYOUT_2_1:
-    case AV_CH_LAYOUT_2_2:
-    case AV_CH_LAYOUT_SURROUND:
-    case AV_CH_LAYOUT_3POINT1:
-    case AV_CH_LAYOUT_QUAD:
-    case AV_CH_LAYOUT_4POINT0:
-    case AV_CH_LAYOUT_4POINT1:
-    case AV_CH_LAYOUT_5POINT0:
-    case AV_CH_LAYOUT_5POINT1:
-    case AV_CH_LAYOUT_5POINT0_BACK:
-    case AV_CH_LAYOUT_5POINT1_BACK:
-    case AV_CH_LAYOUT_6POINT0:
-    case AV_CH_LAYOUT_6POINT1:
-    case AV_CH_LAYOUT_6POINT1_BACK:
-    case AV_CH_LAYOUT_7POINT0:
-    case AV_CH_LAYOUT_7POINT1:
-    case AV_CH_LAYOUT_HEXAGONAL:
-    case AV_CH_LAYOUT_OCTAGONAL:
-    case AV_CH_LAYOUT_5POINT1POINT2_BACK:
-    case AV_CH_LAYOUT_CUBE:
-    case AV_CH_LAYOUT_5POINT1POINT4_BACK:
-    case AV_CH_LAYOUT_7POINT1POINT2:
-    case AV_CH_LAYOUT_7POINT1POINT4_BACK:
-    case AV_CH_LAYOUT_7POINT2POINT3:
-    case AV_CH_LAYOUT_3POINT1POINT2:
-        break;
-    default:
+    if (!can_upmix(ctx))
         goto fail;
-    }
 
     switch (in_channel_layout) {
     case AV_CH_LAYOUT_STEREO:
