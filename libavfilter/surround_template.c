@@ -111,20 +111,30 @@ static void fn(set_output_levels)(AVFilterContext *ctx)
     }
 }
 
-static void fn(stereo_position)(const ftype l, const ftype r, const ftype ph,
+static void fn(stereo_position)(const ftype l, const ftype r,
+                                const ftype im, const ftype re,
                                 ftype *x, ftype *y, ftype *z)
 {
-    const ftype a = F(2.0) * (ATAN2(l, r) / MPI2) - F(1.0);
-    const ftype p = F(1.0) - F(2.0) * FABS(ph);
-    const ftype v = (ph >= F(0.0)) ? F(1.0)-F(2.0)*FABS(F(0.5)-ph) : F(-1.0)+F(2.0)*FABS(F(0.5)+ph);
+    const ftype im2 = im*im;
+    const ftype re2 = re*re;
+    const ftype l2 = l*l;
+    const ftype r2 = r*r;
+    const ftype h2 = SQRT(F(2.0) * (l2 + r2) + EPSILON) + EPSILON;
+    const ftype h1 = SQRT(im2 + re2 + EPSILON) + EPSILON;
+    const ftype h1h2 = h1*h2 + EPSILON;
+    const ftype rel = re * l;
+    const ftype rer = re * r;
+    ftype x0 = (rer - rel) / h1h2;
+    ftype y0 = (rer + rel) / h1h2;
+    ftype z0 = im / h1;
 
-    *x = CLIP(a, F(-1.0), F(1.0));
-    *y = CLIP(p, F(-1.0), F(1.0));
-    *z = CLIP(v, F(-1.0), F(1.0));
+    x0 = CLIP(x0, F(-1.0), F(1.0));
+    y0 = CLIP(y0, F(-1.0), F(1.0));
+    z0 = CLIP(z0, F(-1.0), F(1.0));
 
-    *x = isnormal(*x) ? *x : F(0.0);
-    *y = isnormal(*y) ? *y : F(0.0);
-    *z = isnormal(*z) ? *z : F(0.0);
+    *x = isnormal(x0) ? x0 : F(0.0);
+    *y = isnormal(y0) ? y0 : F(0.0);
+    *z = isnormal(z0) ? z0 : F(0.0);
 }
 
 static inline void fn(get_lfe)(int output_lfe, int n, ftype lowcut, ftype highcut,
@@ -171,12 +181,11 @@ static void fn(filter_stereo)(AVFilterContext *ctx)
         ftype r_phase = ATAN2(r_im, r_re);
         ftype re = l_re * r_re + l_im * r_im;
         ftype im = r_re * l_im - r_im * l_re;
-        ftype phase = ATAN2(im, re) / MPI;
         ftype mag_sum = l_mag + r_mag;
         ftype c_mag = mag_sum * F(0.5);
         ftype x, y, z;
 
-        fn(stereo_position)(l_mag, r_mag, phase, &x, &y, &z);
+        fn(stereo_position)(l_mag, r_mag, im, re, &x, &y, &z);
         fn(get_lfe)(output_lfe, n, lowcut, highcut, &lfemag[n], c_mag, &mag_total, lfe_mode);
 
         xpos[n]   = x;
@@ -222,12 +231,11 @@ static void fn(filter_2_1)(AVFilterContext *ctx)
         ftype r_phase = ATAN2(r_im, r_re);
         ftype re = l_re * r_re + l_im * r_im;
         ftype im = r_re * l_im - r_im * l_re;
-        ftype phase = ATAN2(im, re) / MPI;
         ftype mag_sum = l_mag + r_mag;
         ftype c_mag = mag_sum * F(0.5);
         ftype x, y, z;
 
-        fn(stereo_position)(l_mag, r_mag, phase, &x, &y, &z);
+        fn(stereo_position)(l_mag, r_mag, im, re, &x, &y, &z);
 
         xpos[n]   = x;
         ypos[n]   = y;
@@ -276,10 +284,9 @@ static void fn(filter_surround)(AVFilterContext *ctx)
         ftype r_phase = ATAN2(r_im, r_re);
         ftype re = l_re * r_re + l_im * r_im;
         ftype im = r_re * l_im - r_im * l_re;
-        ftype phase = ATAN2(im, re) / MPI;
         ftype x, y, z;
 
-        fn(stereo_position)(l_mag, r_mag, phase, &x, &y, &z);
+        fn(stereo_position)(l_mag, r_mag, im, re, &x, &y, &z);
         fn(get_lfe)(output_lfe, n, lowcut, highcut, &lfemag[n], c_mag, &mag_total, lfe_mode);
 
         xpos[n]   = x;
@@ -328,10 +335,9 @@ static void fn(filter_3_1)(AVFilterContext *ctx)
         ftype r_phase = ATAN2(r_im, r_re);
         ftype re = l_re * r_re + l_im * r_im;
         ftype im = r_re * l_im - r_im * l_re;
-        ftype phase = ATAN2(im, re) / MPI;
         ftype x, y, z;
 
-        fn(stereo_position)(l_mag, r_mag, phase, &x, &y, &z);
+        fn(stereo_position)(l_mag, r_mag, im, re, &x, &y, &z);
 
         xpos[n]   = x;
         ypos[n]   = y;
@@ -568,7 +574,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_SIDE_LEFT:
     case AV_CHAN_BACK_LEFT:
         for (int n = 0; n < rdft_size; n++)
-            x_out[n] = (x[n] + F(1.0)) * F(0.5);
+            x_out[n] = (F(1.0) + x[n]) * F(0.5);
         break;
     case AV_CHAN_BOTTOM_FRONT_RIGHT:
     case AV_CHAN_TOP_FRONT_RIGHT:
@@ -597,7 +603,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_BOTTOM_FRONT_LEFT:
     case AV_CHAN_BOTTOM_FRONT_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            y_out[n] = (y[n] + F(1.0)) * F(0.5);
+            y_out[n] = (F(1.0) + y[n]) * F(0.5);
         break;
     case AV_CHAN_TOP_CENTER:
     case AV_CHAN_SIDE_LEFT:
@@ -635,7 +641,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_SIDE_LEFT:
     case AV_CHAN_TOP_SIDE_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            z_out[n] = (z[n] + F(1.0)) * F(0.5);
+            z_out[n] = (F(1.0) + z[n]) * F(0.5);
         break;
     case AV_CHAN_BOTTOM_FRONT_LEFT:
     case AV_CHAN_BOTTOM_FRONT_CENTER:
