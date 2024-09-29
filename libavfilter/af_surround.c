@@ -353,7 +353,7 @@ static int config_output(AVFilterLink *outlink)
         ftype *src = (ftype *)s->sfactors->extended_data[ch];
 
         for (int n = 0; n < s->rdft_size; n++)
-            src[n] = F(1.0);
+            src[n] = F(1.0) / s->nb_out_channels;
     }
 
     s->x_pos = av_calloc(s->rdft_size, sizeof(*s->x_pos));
