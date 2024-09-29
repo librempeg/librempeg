@@ -34,7 +34,7 @@
 enum SurroundChannel {
     SC_FL = 1, SC_FR, SC_FC, SC_LF, SC_BL, SC_BR, SC_BC, SC_SL, SC_SR,
     SC_TC, SC_TFC, SC_TFL, SC_TFR, SC_TBC, SC_TBL, SC_TBR,
-    SC_LF2,
+    SC_LF2, SC_TSL, SC_TSR, SC_BFC, SC_BFL, SC_BFR,
     SC_NB,
 };
 
@@ -56,6 +56,11 @@ static const int ch_map[SC_NB] = {
     [SC_TBL] = AV_CHAN_TOP_BACK_LEFT,
     [SC_TBR] = AV_CHAN_TOP_BACK_RIGHT,
     [SC_LF2] = AV_CHAN_LOW_FREQUENCY_2,
+    [SC_TSL] = AV_CHAN_TOP_SIDE_LEFT,
+    [SC_TSR] = AV_CHAN_TOP_SIDE_RIGHT,
+    [SC_BFC] = AV_CHAN_BOTTOM_FRONT_CENTER,
+    [SC_BFL] = AV_CHAN_BOTTOM_FRONT_LEFT,
+    [SC_BFR] = AV_CHAN_BOTTOM_FRONT_RIGHT,
 };
 
 static const int sc_map[64] = {
@@ -76,6 +81,11 @@ static const int sc_map[64] = {
     [AV_CHAN_TOP_BACK_LEFT   ] = SC_TBL,
     [AV_CHAN_TOP_BACK_RIGHT  ] = SC_TBR,
     [AV_CHAN_LOW_FREQUENCY_2 ] = SC_LF2,
+    [AV_CHAN_TOP_SIDE_LEFT   ] = SC_TSL,
+    [AV_CHAN_TOP_SIDE_RIGHT  ] = SC_TSR,
+    [AV_CHAN_BOTTOM_FRONT_CENTER] = SC_BFC,
+    [AV_CHAN_BOTTOM_FRONT_LEFT  ] = SC_BFL,
+    [AV_CHAN_BOTTOM_FRONT_RIGHT ] = SC_BFR,
 };
 
 typedef struct AudioSurroundContext {

@@ -552,21 +552,26 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_BACK_CENTER:
     case AV_CHAN_LOW_FREQUENCY:
     case AV_CHAN_LOW_FREQUENCY_2:
+    case AV_CHAN_BOTTOM_FRONT_CENTER:
         for (int n = 0; n < rdft_size; n++)
             x_out[n] = F(1.0) - FABS(x[n]);
         break;
+    case AV_CHAN_BOTTOM_FRONT_LEFT:
     case AV_CHAN_TOP_FRONT_LEFT:
     case AV_CHAN_TOP_BACK_LEFT:
     case AV_CHAN_FRONT_LEFT:
     case AV_CHAN_SIDE_LEFT:
+    case AV_CHAN_TOP_SIDE_LEFT:
     case AV_CHAN_BACK_LEFT:
         for (int n = 0; n < rdft_size; n++)
             x_out[n] = (x[n] + F(1.0)) * F(0.5);
         break;
+    case AV_CHAN_BOTTOM_FRONT_RIGHT:
     case AV_CHAN_TOP_FRONT_RIGHT:
     case AV_CHAN_TOP_BACK_RIGHT:
     case AV_CHAN_FRONT_RIGHT:
     case AV_CHAN_SIDE_RIGHT:
+    case AV_CHAN_TOP_SIDE_RIGHT:
     case AV_CHAN_BACK_RIGHT:
         for (int n = 0; n < rdft_size; n++)
             x_out[n] = (F(1.0) - x[n]) * F(0.5);
@@ -584,12 +589,17 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_FRONT_CENTER:
     case AV_CHAN_TOP_FRONT_LEFT:
     case AV_CHAN_TOP_FRONT_RIGHT:
+    case AV_CHAN_BOTTOM_FRONT_CENTER:
+    case AV_CHAN_BOTTOM_FRONT_LEFT:
+    case AV_CHAN_BOTTOM_FRONT_RIGHT:
         for (int n = 0; n < rdft_size; n++)
             y_out[n] = (y[n] + F(1.0)) * F(0.5);
         break;
     case AV_CHAN_TOP_CENTER:
     case AV_CHAN_SIDE_LEFT:
     case AV_CHAN_SIDE_RIGHT:
+    case AV_CHAN_TOP_SIDE_LEFT:
+    case AV_CHAN_TOP_SIDE_RIGHT:
     case AV_CHAN_LOW_FREQUENCY:
     case AV_CHAN_LOW_FREQUENCY_2:
         for (int n = 0; n < rdft_size; n++)
@@ -618,8 +628,16 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_BACK_CENTER:
     case AV_CHAN_TOP_BACK_LEFT:
     case AV_CHAN_TOP_BACK_RIGHT:
+    case AV_CHAN_TOP_SIDE_LEFT:
+    case AV_CHAN_TOP_SIDE_RIGHT:
         for (int n = 0; n < rdft_size; n++)
             z_out[n] = (z[n] + F(1.0)) * F(0.5);
+        break;
+    case AV_CHAN_BOTTOM_FRONT_LEFT:
+    case AV_CHAN_BOTTOM_FRONT_CENTER:
+    case AV_CHAN_BOTTOM_FRONT_RIGHT:
+        for (int n = 0; n < rdft_size; n++)
+            z_out[n] = (F(1.0) - z[n]) * F(0.5);
         break;
     default:
         for (int n = 0; n < rdft_size; n++)
@@ -721,6 +739,11 @@ static void fn(stereo_copy)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_BACK_RIGHT:
     case AV_CHAN_SIDE_LEFT:
     case AV_CHAN_SIDE_RIGHT:
+    case AV_CHAN_TOP_SIDE_LEFT:
+    case AV_CHAN_TOP_SIDE_RIGHT:
+    case AV_CHAN_BOTTOM_FRONT_CENTER:
+    case AV_CHAN_BOTTOM_FRONT_LEFT:
+    case AV_CHAN_BOTTOM_FRONT_RIGHT:
         memcpy(omag, mag_total, rdft_size * sizeof(*omag));
         break;
     default:
@@ -735,20 +758,25 @@ static void fn(stereo_copy)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_BACK_CENTER:
     case AV_CHAN_BACK_CENTER:
     case AV_CHAN_TOP_CENTER:
+    case AV_CHAN_BOTTOM_FRONT_CENTER:
         memcpy(oph, c_phase, rdft_size * sizeof(*oph));
         break;
     case AV_CHAN_FRONT_LEFT:
     case AV_CHAN_BACK_LEFT:
     case AV_CHAN_SIDE_LEFT:
     case AV_CHAN_TOP_FRONT_LEFT:
+    case AV_CHAN_TOP_SIDE_LEFT:
     case AV_CHAN_TOP_BACK_LEFT:
+    case AV_CHAN_BOTTOM_FRONT_LEFT:
         memcpy(oph, l_phase, rdft_size * sizeof(*oph));
         break;
     case AV_CHAN_FRONT_RIGHT:
     case AV_CHAN_BACK_RIGHT:
     case AV_CHAN_SIDE_RIGHT:
     case AV_CHAN_TOP_FRONT_RIGHT:
+    case AV_CHAN_TOP_SIDE_RIGHT:
     case AV_CHAN_TOP_BACK_RIGHT:
+    case AV_CHAN_BOTTOM_FRONT_RIGHT:
         memcpy(oph, r_phase, rdft_size * sizeof(*oph));
         break;
     default:
@@ -789,9 +817,14 @@ static void fn(stereo_lfe_copy)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_FRONT_CENTER:
     case AV_CHAN_TOP_FRONT_LEFT:
     case AV_CHAN_TOP_FRONT_RIGHT:
+    case AV_CHAN_TOP_SIDE_LEFT:
+    case AV_CHAN_TOP_SIDE_RIGHT:
     case AV_CHAN_TOP_BACK_CENTER:
     case AV_CHAN_TOP_BACK_LEFT:
     case AV_CHAN_TOP_BACK_RIGHT:
+    case AV_CHAN_BOTTOM_FRONT_CENTER:
+    case AV_CHAN_BOTTOM_FRONT_LEFT:
+    case AV_CHAN_BOTTOM_FRONT_RIGHT:
         memcpy(omag, mag_total, rdft_size * sizeof(*omag));
         break;
     default:
@@ -808,20 +841,25 @@ static void fn(stereo_lfe_copy)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_FRONT_CENTER:
     case AV_CHAN_TOP_BACK_CENTER:
     case AV_CHAN_TOP_CENTER:
+    case AV_CHAN_BOTTOM_FRONT_CENTER:
         memcpy(oph, c_phase, rdft_size * sizeof(*oph));
         break;
     case AV_CHAN_FRONT_LEFT:
     case AV_CHAN_BACK_LEFT:
     case AV_CHAN_SIDE_LEFT:
     case AV_CHAN_TOP_FRONT_LEFT:
+    case AV_CHAN_TOP_SIDE_LEFT:
     case AV_CHAN_TOP_BACK_LEFT:
+    case AV_CHAN_BOTTOM_FRONT_LEFT:
         memcpy(oph, l_phase, rdft_size * sizeof(*oph));
         break;
     case AV_CHAN_FRONT_RIGHT:
     case AV_CHAN_BACK_RIGHT:
     case AV_CHAN_SIDE_RIGHT:
     case AV_CHAN_TOP_FRONT_RIGHT:
+    case AV_CHAN_TOP_SIDE_RIGHT:
     case AV_CHAN_TOP_BACK_RIGHT:
+    case AV_CHAN_BOTTOM_FRONT_RIGHT:
         memcpy(oph, r_phase, rdft_size * sizeof(*oph));
         break;
     default:
