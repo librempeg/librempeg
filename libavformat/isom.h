@@ -282,6 +282,8 @@ typedef struct HEIFItem {
     int width;
     int height;
     int rotation;
+    int hflip;
+    int vflip;
     int type;
     int is_idat_relative;
     uint8_t *icc_profile;
