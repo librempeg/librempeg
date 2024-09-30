@@ -176,15 +176,15 @@ static void fn(filter_stereo)(AVFilterContext *ctx)
     for (int n = 0; n < rdft_size; n++) {
         ftype l_re = srcl[2 * n], r_re = srcr[2 * n];
         ftype l_im = srcl[2 * n + 1], r_im = srcr[2 * n + 1];
-        ftype c_phase = ATAN2(l_im + r_im, l_re + r_re);
         ftype l_mag = HYPOT(l_re, l_im);
         ftype r_mag = HYPOT(r_re, r_im);
-        ftype mag_total = HYPOT(l_mag, r_mag);
         ftype l_phase = ATAN2(l_im, l_re);
         ftype r_phase = ATAN2(r_im, r_re);
         ftype re = l_re * r_re + l_im * r_im;
         ftype im = r_re * l_im - r_im * l_re;
         ftype mag_sum = l_mag + r_mag;
+        ftype mag_total = mag_sum;
+        ftype c_phase = (l_phase + r_phase) * F(0.5);
         ftype c_mag = mag_sum * F(0.5);
         ftype x, y, z;
 
@@ -224,17 +224,17 @@ static void fn(filter_2_1)(AVFilterContext *ctx)
         ftype l_re = srcl[2 * n], r_re = srcr[2 * n];
         ftype l_im = srcl[2 * n + 1], r_im = srcr[2 * n + 1];
         ftype lfe_re = srclfe[2 * n], lfe_im = srclfe[2 * n + 1];
-        ftype c_phase = ATAN2(l_im + r_im, l_re + r_re);
         ftype l_mag = HYPOT(l_re, l_im);
         ftype r_mag = HYPOT(r_re, r_im);
         ftype lfe_mag = HYPOT(lfe_re, lfe_im);
         ftype lfe_phase = ATAN2(lfe_im, lfe_re);
-        ftype mag_total = HYPOT(l_mag, r_mag);
         ftype l_phase = ATAN2(l_im, l_re);
         ftype r_phase = ATAN2(r_im, r_re);
         ftype re = l_re * r_re + l_im * r_im;
         ftype im = r_re * l_im - r_im * l_re;
         ftype mag_sum = l_mag + r_mag;
+        ftype mag_total = mag_sum;
+        ftype c_phase = (l_phase + r_phase) * F(0.5);
         ftype c_mag = mag_sum * F(0.5);
         ftype x, y, z;
 
@@ -282,9 +282,9 @@ static void fn(filter_surround)(AVFilterContext *ctx)
         ftype c_mag = HYPOT(c_re, c_im);
         ftype l_mag = HYPOT(l_re, l_im);
         ftype r_mag = HYPOT(r_re, r_im);
-        ftype mag_total = HYPOT(l_mag, r_mag);
         ftype l_phase = ATAN2(l_im, l_re);
         ftype r_phase = ATAN2(r_im, r_re);
+        ftype mag_total = c_mag + l_mag + r_mag;
         ftype re = l_re * r_re + l_im * r_im;
         ftype im = r_re * l_im - r_im * l_re;
         ftype x, y, z;
@@ -333,7 +333,7 @@ static void fn(filter_3_1)(AVFilterContext *ctx)
         ftype r_mag = HYPOT(r_re, r_im);
         ftype lfe_mag = HYPOT(lfe_re, lfe_im);
         ftype lfe_phase = ATAN2(lfe_im, lfe_re);
-        ftype mag_total = HYPOT(l_mag, r_mag);
+        ftype mag_total = c_mag + l_mag + r_mag;
         ftype l_phase = ATAN2(l_im, l_re);
         ftype r_phase = ATAN2(r_im, r_re);
         ftype re = l_re * r_re + l_im * r_im;
