@@ -102,8 +102,10 @@ typedef struct AudioSurroundContext {
     float *smooth;
     unsigned nb_smooth;
     float angle;
-    float shift;
-    float depth;
+    float *shift;
+    unsigned nb_shift;
+    float *depth;
+    unsigned nb_depth;
     float focus;
 
     int   lfe_mode;
@@ -450,8 +452,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
 
     if (s->angle != 0.90f ||
-        s->shift != 0.f ||
-        s->depth != 0.f ||
+        s->shift[0] != 0.f ||
+        s->shift[1] != 0.f ||
+        s->shift[2] != 0.f ||
+        s->depth[0] != 0.f ||
+        s->depth[1] != 0.f ||
+        s->depth[2] != 0.f ||
         s->focus != 0.f)
     ff_filter_execute(ctx, s->transform_xy, NULL, NULL,
                       FFMIN(s->rdft_size,
@@ -573,6 +579,8 @@ static const AVOptionArrayDef def_f_i  = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_x  = {.def="2",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_y  = {.def="2",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_z  = {.def="2",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_shift= {.def="0 0 0",.size_min=3,.size_max=3,.sep=' '};
+static const AVOptionArrayDef def_depth= {.def="0 0 0",.size_min=3,.size_max=3,.sep=' '};
 
 static const AVOption surround_options[] = {
     { "chl_out",   "set output channel layout", OFFSET(out_ch_layout),     AV_OPT_TYPE_CHLAYOUT, {.str="5.1"}, 0,   0, FLAGS },
@@ -586,8 +594,8 @@ static const AVOption surround_options[] = {
     {  "add",      "just add LFE channel",                  0,             AV_OPT_TYPE_CONST,    {.i64=0},     0,   1, TFLAGS, .unit = "lfe_mode" },
     {  "sub",      "subtract LFE channel with others",      0,             AV_OPT_TYPE_CONST,    {.i64=1},     0,   1, TFLAGS, .unit = "lfe_mode" },
     { "angle",     "set soundfield transform angle",     OFFSET(angle),    AV_OPT_TYPE_FLOAT,    {.dbl=90},    0, 360, TFLAGS },
-    { "shift",     "set soundfield shift amount",        OFFSET(shift),    AV_OPT_TYPE_FLOAT,    {.dbl=0},    -1,   1, TFLAGS },
-    { "depth",     "set soundfield depth amount",        OFFSET(depth),    AV_OPT_TYPE_FLOAT,    {.dbl=0},    -1,   1, TFLAGS },
+    { "shift",     "set soundfield shift amount",        OFFSET(shift),    AV_OPT_TYPE_FLOAT|AR, {.arr=&def_shift},-1,1,TFLAGS },
+    { "depth",     "set soundfield depth amount",        OFFSET(depth),    AV_OPT_TYPE_FLOAT|AR, {.arr=&def_depth},-1,1,TFLAGS },
     { "focus",     "set soundfield transform focus",     OFFSET(focus),    AV_OPT_TYPE_FLOAT,    {.dbl=0},    -1,   1, TFLAGS },
     { "spread_x",  "set channels X-axis spread",         OFFSET(f_x),      AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_x}, .06, 15, TFLAGS },
     { "spread_y",  "set channels Y-axis spread",         OFFSET(f_y),      AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_y}, .06, 15, TFLAGS },

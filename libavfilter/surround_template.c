@@ -706,15 +706,24 @@ static int fn(transform_xy)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     const int end = (rdft_size * (jobnr+1)) / nb_jobs;
     const ftype angle = s->angle;
     const ftype focus = s->focus;
-    const ftype shift = s->shift;
-    const ftype depth = s->depth;
+    const ftype shift_x = s->shift[0];
+    const ftype shift_y = s->shift[1];
+    const ftype shift_z = s->shift[2];
+    const ftype depth_x = s->depth[0];
+    const ftype depth_y = s->depth[1];
+    const ftype depth_z = s->depth[2];
     ftype *x = s->x_pos;
     ftype *y = s->y_pos;
+    ftype *z = s->z_pos;
 
     for (int n = start; n < end; n++) {
         fn(angle_transform)(&x[n], &y[n], angle);
-        fn(shift_transform)(&y[n], shift);
-        fn(depth_transform)(&y[n], depth);
+        fn(shift_transform)(&x[n], shift_x);
+        fn(shift_transform)(&y[n], shift_y);
+        fn(shift_transform)(&z[n], shift_z);
+        fn(depth_transform)(&x[n], depth_x);
+        fn(depth_transform)(&y[n], depth_y);
+        fn(depth_transform)(&z[n], depth_z);
         fn(focus_transform)(&x[n], &y[n], focus);
     }
 
