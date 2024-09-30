@@ -63,6 +63,31 @@ static const int ch_map[SC_NB] = {
     [SC_BFR] = AV_CHAN_BOTTOM_FRONT_RIGHT,
 };
 
+static const int8_t ch_dif[SC_NB] = {
+    [SC_FL]  =  1,
+    [SC_FR]  = -1,
+    [SC_FC]  =  0,
+    [SC_LF]  =  0,
+    [SC_BL]  =  1,
+    [SC_BR]  = -1,
+    [SC_BC]  =  0,
+    [SC_SL]  =  1,
+    [SC_SR]  = -1,
+    [SC_TC]  =  0,
+    [SC_TFC] =  0,
+    [SC_TFL] =  1,
+    [SC_TFR] = -1,
+    [SC_TBC] =  0,
+    [SC_TBL] =  1,
+    [SC_TBR] = -1,
+    [SC_LF2] =  0,
+    [SC_TSL] =  1,
+    [SC_TSR] = -1,
+    [SC_BFC] =  0,
+    [SC_BFL] =  1,
+    [SC_BFR] = -1,
+};
+
 static const int sc_map[64] = {
     [AV_CHAN_FRONT_LEFT      ] = SC_FL,
     [AV_CHAN_FRONT_RIGHT     ] = SC_FR,
@@ -108,6 +133,7 @@ typedef struct AudioSurroundContext {
     unsigned nb_depth;
     float focus;
 
+    int   smooth_init;
     int   lfe_mode;
     int   win_size;
     int   win_func;
@@ -143,21 +169,22 @@ typedef struct AudioSurroundContext {
     AVFrame *output_mag;
     AVFrame *output_ph;
     AVFrame *output_out;
+    AVFrame *output_sum;
+    AVFrame *output_dif;
     AVFrame *overlap_buffer;
     AVFrame *window;
 
     void *input_levels;
     void *output_levels;
+
     void *x_pos;
     void *y_pos;
     void *z_pos;
-    void *l_phase;
-    void *r_phase;
-    void *c_phase;
-    void *c_mag;
-    void *lfe_mag;
-    void *lfe_phase;
-    void *mag_total;
+
+    void *sum;
+    void *dif;
+    void *cnt;
+    void *lfe;
 
     int rdft_size;
     int hop_size;
@@ -175,6 +202,7 @@ typedef struct AudioSurroundContext {
     void (*stereo_copy)(AVFilterContext *ctx, int ch, int chan);
     void (*stereo_lfe_copy)(AVFilterContext *ctx, int ch, int chan);
     void (*do_transform)(AVFilterContext *ctx, int ch);
+    void (*bypass_transform)(AVFilterContext *ctx, int ch, int is_lfe);
     int (*transform_xy)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } AudioSurroundContext;
 
@@ -231,8 +259,8 @@ static void l2_1_upmix(AVFilterContext *ctx, int ch)
     switch (chan) {
     case AV_CHAN_LOW_FREQUENCY:
     case AV_CHAN_LOW_FREQUENCY_2:
-        s->calculate_factors(ctx, ch, -1);
-        break;
+        s->bypass_transform(ctx, ch, 1);
+        return;
     default:
         s->calculate_factors(ctx, ch, chan);
         break;
@@ -250,8 +278,8 @@ static void surround_upmix(AVFilterContext *ctx, int ch)
 
     switch (chan) {
     case AV_CHAN_FRONT_CENTER:
-        s->calculate_factors(ctx, ch, -1);
-        break;
+        s->bypass_transform(ctx, ch, 0);
+        return;
     default:
         s->calculate_factors(ctx, ch, chan);
         break;
@@ -269,10 +297,12 @@ static void l3_1_upmix(AVFilterContext *ctx, int ch)
 
     switch (chan) {
     case AV_CHAN_FRONT_CENTER:
+        s->bypass_transform(ctx, ch, 0);
+        return;
     case AV_CHAN_LOW_FREQUENCY:
     case AV_CHAN_LOW_FREQUENCY_2:
-        s->calculate_factors(ctx, ch, -1);
-        break;
+        s->bypass_transform(ctx, ch, 1);
+        return;
     default:
         s->calculate_factors(ctx, ch, chan);
         break;
@@ -467,6 +497,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                       FFMIN(outlink->ch_layout.nb_channels,
                             ff_filter_get_nb_threads(ctx)));
 
+    s->smooth_init = 1;
+
     av_frame_copy_props(out, in);
     out->nb_samples = in->nb_samples;
     out->pts -= av_rescale_q(s->win_size - s->hop_size, av_make_q(1, outlink->sample_rate), outlink->time_base);
@@ -523,6 +555,8 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_frame_free(&s->output_ph);
     av_frame_free(&s->output_mag);
     av_frame_free(&s->output_out);
+    av_frame_free(&s->output_sum);
+    av_frame_free(&s->output_dif);
     av_frame_free(&s->overlap_buffer);
     av_frame_free(&s->x_out);
     av_frame_free(&s->y_out);
@@ -541,13 +575,10 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->x_pos);
     av_freep(&s->y_pos);
     av_freep(&s->z_pos);
-    av_freep(&s->l_phase);
-    av_freep(&s->r_phase);
-    av_freep(&s->c_mag);
-    av_freep(&s->c_phase);
-    av_freep(&s->mag_total);
-    av_freep(&s->lfe_mag);
-    av_freep(&s->lfe_phase);
+    av_freep(&s->sum);
+    av_freep(&s->dif);
+    av_freep(&s->cnt);
+    av_freep(&s->lfe);
 }
 
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
