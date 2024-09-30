@@ -107,7 +107,7 @@ static ftype fn(sqr)(ftype x)
     return x * x;
 }
 
-static void fn(get_centere)(ctype *left, ctype *right,
+static void fn(get_centere)(const ctype *left, const ctype *right,
                             ctype *center, int N)
 {
     for (int i = 0; i < N; i++) {
