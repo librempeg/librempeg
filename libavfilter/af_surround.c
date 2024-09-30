@@ -585,8 +585,8 @@ static const AVOptionArrayDef def_depth= {.def="0 0 0",.size_min=3,.size_max=3,.
 static const AVOption surround_options[] = {
     { "chl_out",   "set output channel layout", OFFSET(out_ch_layout),     AV_OPT_TYPE_CHLAYOUT, {.str="5.1"}, 0,   0, FLAGS },
     { "chl_in",    "set input channel layout",  OFFSET(in_ch_layout),      AV_OPT_TYPE_CHLAYOUT, {.str="stereo"},0, 0, FLAGS },
-    { "level_out", "set channels output levels",OFFSET(f_o),               AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_o}, 0,10, TFLAGS },
-    { "level_in",  "set channels input levels", OFFSET(f_i),               AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_i}, 0,10, TFLAGS },
+    { "level_out", "set channels output levels",OFFSET(f_o),               AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_o}, 0,30, TFLAGS },
+    { "level_in",  "set channels input levels", OFFSET(f_i),               AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_i}, 0,30, TFLAGS },
     { "lfe",       "output LFE",                OFFSET(output_lfe),        AV_OPT_TYPE_BOOL,     {.i64=1},     0,   1, TFLAGS },
     { "lfe_low",   "LFE low cut off",           OFFSET(lowcutf),           AV_OPT_TYPE_INT,      {.i64=128},   0, 256, FLAGS },
     { "lfe_high",  "LFE high cut off",          OFFSET(highcutf),          AV_OPT_TYPE_INT,      {.i64=256},   0, 512, FLAGS },
