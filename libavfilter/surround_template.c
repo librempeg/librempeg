@@ -375,8 +375,6 @@ static int fn(config_output)(AVFilterContext *ctx)
     s->sfactors = ff_get_audio_buffer(outlink, s->rdft_size);
     s->output_sum = ff_get_audio_buffer(outlink, s->rdft_size * 2);
     s->output_dif = ff_get_audio_buffer(outlink, s->rdft_size * 2);
-    s->output_ph = ff_get_audio_buffer(outlink, s->rdft_size);
-    s->output_mag = ff_get_audio_buffer(outlink, s->rdft_size);
     s->output_out = ff_get_audio_buffer(outlink, s->win_size + 1);
     s->output = ff_get_audio_buffer(outlink, s->rdft_size * 2);
     s->overlap_buffer = ff_get_audio_buffer(outlink, s->win_size * 2);
@@ -385,7 +383,7 @@ static int fn(config_output)(AVFilterContext *ctx)
     s->z_out = ff_get_audio_buffer(outlink, s->rdft_size);
     if (!s->overlap_buffer || !s->factors || !s->sfactors ||
         !s->output_sum || !s->output_dif ||
-        !s->output || !s->output_out || !s->output_mag || !s->output_ph ||
+        !s->output || !s->output_out ||
         !s->x_out || !s->y_out || !s->z_out)
         return AVERROR(ENOMEM);
 

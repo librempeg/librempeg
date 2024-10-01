@@ -167,8 +167,6 @@ typedef struct AudioSurroundContext {
     AVFrame *x_out;
     AVFrame *y_out;
     AVFrame *z_out;
-    AVFrame *output_mag;
-    AVFrame *output_ph;
     AVFrame *output_out;
     AVFrame *output_sum;
     AVFrame *output_dif;
@@ -555,8 +553,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_frame_free(&s->input_in);
     av_frame_free(&s->input);
     av_frame_free(&s->output);
-    av_frame_free(&s->output_ph);
-    av_frame_free(&s->output_mag);
     av_frame_free(&s->output_out);
     av_frame_free(&s->output_sum);
     av_frame_free(&s->output_dif);
