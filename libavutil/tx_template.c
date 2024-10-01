@@ -1478,30 +1478,6 @@ static av_always_inline void out_pair(TXComplex *out,
     cpx_out(&out[k], &out[r-k], &P, &Q);
 }
 
-static av_always_inline void butterfly_kernel(TXComplex *out,
-                                              const TXComplex *in,
-                                              const TXComplex *Wr,
-                                              const int r, const int stage,
-                                              const int stride)
-{
-    TXComplex tmp_out[r], tmp_in[r];
-    TXComplex add[r], sub[r];
-
-    memcpy(tmp_in, in, sizeof(*in) * r);
-
-    like_terms(add, sub, tmp_in, r);
-    out_special(tmp_out, add, sub, r);
-
-    if (1) {
-        for (int i = 1; i <= r/2; i++)
-            out_pair(tmp_out, add, sub, Wr, i, r);
-    } else {
-    }
-
-    for (int i = 0; i < r; i++)
-        out[i*stride] = tmp_out[i];
-}
-
 static int init_twiddles(AVTXContext *s, const int len)
 {
     const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
@@ -1532,18 +1508,32 @@ static av_cold int TX_NAME(ff_tx_fft_auto_init)(AVTXContext *s,
     return init_twiddles(s, len);
 }
 
-#define DECL_BUTTERFLY_CODELET(n)                           \
+#define DECL_BUTTERFLY_CODELET(n) \
 static void TX_NAME(ff_tx_fft##n##_butterfly)(AVTXContext *s,\
                                     void *_dst, void *_src, \
                                     ptrdiff_t stride)       \
 {                                                           \
+    TXComplex tmp_out[n], tmp_in[n];                        \
+    TXComplex add[n], sub[n];                               \
     TXComplex *in = _src;                                   \
     TXComplex *out = _dst;                                  \
     TXComplex *W = s->exp;                                  \
                                                             \
     stride /= sizeof(*out);                                 \
                                                             \
-    butterfly_kernel(out, in, W, n, 0, stride);             \
+    memcpy(tmp_in, in, sizeof(*in) * n);                    \
+                                                            \
+    like_terms(add, sub, tmp_in, n);                        \
+    out_special(tmp_out, add, sub, n);                      \
+                                                            \
+    if (1) {                                                \
+        for (int i = 1; i <= n/2; i++)                      \
+            out_pair(tmp_out, add, sub, W, i, n);           \
+    } else {                                                \
+    }                                                       \
+                                                            \
+    for (int i = 0; i < n; i++)                             \
+        out[i*stride] = tmp_out[i];                         \
 }                                                           \
                                                             \
 static const FFTXCodelet TX_NAME(ff_tx_fft##n##_butterfly_def) = { \
