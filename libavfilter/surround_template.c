@@ -135,9 +135,9 @@ static void fn(stereo_position)(const ftype l, const ftype r,
     y0 = isnormal(y0) ? y0 : F(0.0);
     z0 = isnormal(z0) ? z0 : F(0.0);
 
-    *x = CLIP(x0, F(-1.0), F(1.0));
-    *y = CLIP(y0, F(-1.0), F(1.0));
-    *z = CLIP(z0, F(-1.0), F(1.0));
+    x[0] = CLIP(x0, F(-1.0), F(1.0));
+    y[0] = CLIP(y0, F(-1.0), F(1.0));
+    z[0] = CLIP(z0, F(-1.0), F(1.0));
 }
 
 static inline void fn(get_lfe)(int output_lfe, int n, ftype lowcut, ftype highcut,
@@ -452,7 +452,15 @@ static ftype fn(sqr)(ftype x)
     return x * x;
 }
 
-static ftype fn(r_distance)(ftype a)
+static ftype fn(r_distance_xy)(ftype x, ftype y)
+{
+    const ftype x2 = x*x;
+    const ftype y2 = y*y;
+
+    return FMIN(SQRT(F(1.0) + x2/(y2 + EPSILON)), SQRT(F(1.0) + (y2)/(x2 + EPSILON)));
+}
+
+static ftype fn(r_distance_a)(ftype a)
 {
     return FMIN(SQRT(F(1.0) + fn(sqr)(TAN(a))), SQRT(F(1.0) + fn(sqr)(F(1.0) / (TAN(a) + EPSILON))));
 }
@@ -465,20 +473,20 @@ static void fn(angle_transform)(ftype *x, ftype *y, ftype angle)
         return;
 
     reference = angle * MPI / F(180.0);
-    r = HYPOT(*x, *y);
-    a = ATAN2(*x, *y);
+    r = HYPOT(x[0], y[0]);
+    a = ATAN2(x[0], y[0]);
 
-    r /= fn(r_distance)(a);
+    r /= fn(r_distance_xy)(x[0], y[0]);
 
     if (FABS(a) <= MPI4)
         a *= reference / MPI2;
     else
         a = MPI + (F(-2.0) * MPI + reference) * (MPI - FABS(a)) * FFDIFFSIGN(a, F(0.0)) / (F(3.0) * MPI2);
 
-    r *= fn(r_distance)(a);
+    r *= fn(r_distance_a)(a);
 
-    *x = CLIP(SIN(a) * r, F(-1.0), F(1.0));
-    *y = CLIP(COS(a) * r, F(-1.0), F(1.0));
+    x[0] = CLIP(SIN(a) * r, F(-1.0), F(1.0));
+    y[0] = CLIP(COS(a) * r, F(-1.0), F(1.0));
 }
 
 static void fn(shift_transform)(ftype *y, const ftype shift)
@@ -486,7 +494,7 @@ static void fn(shift_transform)(ftype *y, const ftype shift)
     if (shift == F(0.0))
         return;
 
-    *y = CLIP(*y + shift, F(-1.0), F(1.0));
+    y[0] = CLIP(y[0] + shift, F(-1.0), F(1.0));
 }
 
 static void fn(depth_transform)(ftype *y, const ftype depth)
@@ -494,29 +502,29 @@ static void fn(depth_transform)(ftype *y, const ftype depth)
     if (depth == F(0.0))
         return;
 
-    if (depth < F(0.0) && *y > F(0.0))
+    if (depth < F(0.0) && y[0] > F(0.0))
         return;
 
-    if (depth > F(0.0) && *y < F(0.0))
+    if (depth > F(0.0) && y[0] < F(0.0))
         return;
 
-    *y = CLIP(*y + *y * depth, F(-1.0), F(1.0));
+    y[0] = CLIP(FMA(y[0], depth, y[0]), F(-1.0), F(1.0));
 }
 
 static void fn(focus_transform)(ftype *x, ftype *y, ftype focus)
 {
-    ftype a, r, ra;
+    ftype r, ra, h;
 
     if (focus == F(0.0))
         return;
 
-    a = ATAN2(*x, *y);
-    ra = fn(r_distance)(a);
-    r = CLIP(HYPOT(*x, *y) / ra, F(0.0), F(1.0));
+    h = HYPOT(x[0], y[0]) + EPSILON;
+    ra = fn(r_distance_xy)(x[0], y[0]);
+    r = CLIP(h / ra, F(0.0), F(1.0));
     r = focus > F(0.0) ? F(1.0) - POW(F(1.0) - r, F(1.0) + focus * F(20.0)) : POW(r, F(1.0) - focus * F(20.0));
     r *= ra;
-    *x = CLIP(SIN(a) * r, F(-1.0), F(1.0));
-    *y = CLIP(COS(a) * r, F(-1.0), F(1.0));
+    x[0] = CLIP(x[0]*r/h, F(-1.0), F(1.0));
+    y[0] = CLIP(y[0]*r/h, F(-1.0), F(1.0));
 }
 
 static void fn(powerXYZ_factors)(AVFilterContext *ctx, const int ch,
