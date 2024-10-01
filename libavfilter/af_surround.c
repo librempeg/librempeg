@@ -131,7 +131,8 @@ typedef struct AudioSurroundContext {
     unsigned nb_shift;
     float *depth;
     unsigned nb_depth;
-    float focus;
+    float *focus;
+    unsigned nb_focus;
 
     int   smooth_init;
     int   lfe_mode;
@@ -488,7 +489,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->depth[0] != 0.f ||
         s->depth[1] != 0.f ||
         s->depth[2] != 0.f ||
-        s->focus != 0.f)
+        s->focus[0] != 0.f ||
+        s->focus[1] != 0.f ||
+        s->focus[2] != 0.f)
     ff_filter_execute(ctx, s->transform_xy, NULL, NULL,
                       FFMIN(s->rdft_size,
                             ff_filter_get_nb_threads(ctx)));
@@ -612,6 +615,7 @@ static const AVOptionArrayDef def_f_y  = {.def="2",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_z  = {.def="2",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_shift= {.def="0 0 0",.size_min=3,.size_max=3,.sep=' '};
 static const AVOptionArrayDef def_depth= {.def="0 0 0",.size_min=3,.size_max=3,.sep=' '};
+static const AVOptionArrayDef def_focus= {.def="0 0 0",.size_min=3,.size_max=3,.sep=' '};
 
 static const AVOption surround_options[] = {
     { "chl_out",   "set output channel layout", OFFSET(out_ch_layout),     AV_OPT_TYPE_CHLAYOUT, {.str="5.1"}, 0,   0, FLAGS },
@@ -627,7 +631,7 @@ static const AVOption surround_options[] = {
     { "angle",     "set soundfield transform angle",     OFFSET(angle),    AV_OPT_TYPE_FLOAT,    {.dbl=90},    0, 360, TFLAGS },
     { "shift",     "set soundfield shift amount",        OFFSET(shift),    AV_OPT_TYPE_FLOAT|AR, {.arr=&def_shift},-1,1,TFLAGS },
     { "depth",     "set soundfield depth amount",        OFFSET(depth),    AV_OPT_TYPE_FLOAT|AR, {.arr=&def_depth},-1,1,TFLAGS },
-    { "focus",     "set soundfield transform focus",     OFFSET(focus),    AV_OPT_TYPE_FLOAT,    {.dbl=0},    -1,   1, TFLAGS },
+    { "focus",     "set soundfield transform focus",     OFFSET(focus),    AV_OPT_TYPE_FLOAT|AR, {.arr=&def_focus},-1,1,TFLAGS },
     { "spread_x",  "set channels X-axis spread",         OFFSET(f_x),      AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_x}, .06, 15, TFLAGS },
     { "spread_y",  "set channels Y-axis spread",         OFFSET(f_y),      AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_y}, .06, 15, TFLAGS },
     { "spread_z",  "set channels Z-axis spread",         OFFSET(f_z),      AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_z}, .06, 15, TFLAGS },

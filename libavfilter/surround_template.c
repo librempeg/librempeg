@@ -22,6 +22,7 @@
 #undef MSQRT1_2
 #undef ftype
 #undef ctype
+#undef COPYSIGN
 #undef HYPOT
 #undef ATAN2
 #undef FABS
@@ -45,6 +46,7 @@
 #define MSQRT1_2 M_SQRT1_2f
 #define ftype float
 #define ctype AVComplexFloat
+#define COPYSIGN copysignf
 #define HYPOT hypotf
 #define ATAN2 atan2f
 #define FABS fabsf
@@ -67,6 +69,7 @@
 #define MSQRT1_2 M_SQRT1_2
 #define ftype double
 #define ctype AVComplexDouble
+#define COPYSIGN copysign
 #define HYPOT hypot
 #define ATAN2 atan2
 #define FABS fabs
@@ -511,20 +514,17 @@ static void fn(depth_transform)(ftype *y, const ftype depth)
     y[0] = CLIP(FMA(y[0], depth, y[0]), F(-1.0), F(1.0));
 }
 
-static void fn(focus_transform)(ftype *x, ftype *y, ftype focus)
+static void fn(focus_transform)(ftype *x, ftype focus)
 {
-    ftype r, ra, h;
-
     if (focus == F(0.0))
         return;
 
-    h = HYPOT(x[0], y[0]) + EPSILON;
-    ra = fn(r_distance_xy)(x[0], y[0]);
-    r = CLIP(h / ra, F(0.0), F(1.0));
-    r = focus > F(0.0) ? F(1.0) - POW(F(1.0) - r, F(1.0) + focus * F(20.0)) : POW(r, F(1.0) - focus * F(20.0));
-    r *= ra;
-    x[0] = CLIP(x[0]*r/h, F(-1.0), F(1.0));
-    y[0] = CLIP(y[0]*r/h, F(-1.0), F(1.0));
+    if (focus > F(0.0))
+        focus = F(1.0) / (F(1.0) +  focus * F(10.0));
+    if (focus < F(0.0))
+        focus = F(1.0) * (F(1.0) + -focus * F(10.0));
+
+    x[0] = CLIP(COPYSIGN(POW(FABS(x[0]), focus), x[0]), F(-1.0), F(1.0));
 }
 
 static void fn(powerXYZ_factors)(AVFilterContext *ctx, const int ch,
@@ -757,7 +757,9 @@ static int fn(transform_xy)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     const int start = (rdft_size * jobnr) / nb_jobs;
     const int end = (rdft_size * (jobnr+1)) / nb_jobs;
     const ftype angle = s->angle;
-    const ftype focus = s->focus;
+    const ftype focus_x = s->focus[0];
+    const ftype focus_y = s->focus[1];
+    const ftype focus_z = s->focus[2];
     const ftype shift_x = s->shift[0];
     const ftype shift_y = s->shift[1];
     const ftype shift_z = s->shift[2];
@@ -770,13 +772,18 @@ static int fn(transform_xy)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
 
     for (int n = start; n < end; n++) {
         fn(angle_transform)(&x[n], &y[n], angle);
+
         fn(shift_transform)(&x[n], shift_x);
         fn(shift_transform)(&y[n], shift_y);
         fn(shift_transform)(&z[n], shift_z);
+
         fn(depth_transform)(&x[n], depth_x);
         fn(depth_transform)(&y[n], depth_y);
         fn(depth_transform)(&z[n], depth_z);
-        fn(focus_transform)(&x[n], &y[n], focus);
+
+        fn(focus_transform)(&x[n], focus_x);
+        fn(focus_transform)(&y[n], focus_y);
+        fn(focus_transform)(&z[n], focus_z);
     }
 
     return 0;
