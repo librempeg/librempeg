@@ -246,9 +246,11 @@ static av_cold int color_init(AVFilterContext *ctx)
     return init(ctx);
 }
 
-static int color_query_formats(AVFilterContext *ctx)
+static int color_query_formats(const AVFilterContext *ctx,
+                               AVFilterFormatsConfig **cfg_in,
+                               AVFilterFormatsConfig **cfg_out)
 {
-    return ff_set_common_formats(ctx, ff_draw_supported_pixel_formats(0));
+    return ff_set_common_formats2(ctx, cfg_in, cfg_out, ff_draw_supported_pixel_formats(0));
 }
 
 static int color_config_props(AVFilterLink *inlink)
@@ -303,7 +305,7 @@ const AVFilter ff_vsrc_color = {
     .activate        = activate,
     .inputs          = NULL,
     FILTER_OUTPUTS(color_outputs),
-    FILTER_QUERY_FUNC(color_query_formats),
+    FILTER_QUERY_FUNC2(color_query_formats),
     .process_command = color_process_command,
 };
 
@@ -930,9 +932,11 @@ static av_cold int test2_init(AVFilterContext *ctx)
     return init(ctx);
 }
 
-static int test2_query_formats(AVFilterContext *ctx)
+static int test2_query_formats(const AVFilterContext *ctx,
+                               AVFilterFormatsConfig **cfg_in,
+                               AVFilterFormatsConfig **cfg_out)
 {
-    return ff_set_common_formats(ctx, ff_draw_supported_pixel_formats(0));
+    return ff_set_common_formats2(ctx, cfg_in, cfg_out, ff_draw_supported_pixel_formats(0));
 }
 
 static int test2_config_props(AVFilterLink *inlink)
@@ -967,7 +971,7 @@ const AVFilter ff_vsrc_testsrc2 = {
     .activate      = activate,
     .inputs        = NULL,
     FILTER_OUTPUTS(testsrc2_outputs),
-    FILTER_QUERY_FUNC(test2_query_formats),
+    FILTER_QUERY_FUNC2(test2_query_formats),
 };
 
 #endif /* CONFIG_TESTSRC2_FILTER */
