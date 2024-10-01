@@ -25,6 +25,7 @@
 #undef HYPOT
 #undef ATAN2
 #undef FABS
+#undef FMA
 #undef SIN
 #undef COS
 #undef POW
@@ -47,6 +48,7 @@
 #define HYPOT hypotf
 #define ATAN2 atan2f
 #define FABS fabsf
+#define FMA fmaf
 #define SIN sinf
 #define COS cosf
 #define POW powf
@@ -68,6 +70,7 @@
 #define HYPOT hypot
 #define ATAN2 atan2
 #define FABS fabs
+#define FMA fma
 #define SIN sin
 #define COS cos
 #define POW pow
@@ -601,7 +604,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_SIDE_LEFT:
     case AV_CHAN_BACK_LEFT:
         for (int n = 0; n < rdft_size; n++)
-            x_out[n] = (F(1.0) + x[n]) * F(0.5);
+            x_out[n] = FMA(x[n], F(0.5), F(0.5));
         break;
     case AV_CHAN_BOTTOM_FRONT_RIGHT:
     case AV_CHAN_TOP_FRONT_RIGHT:
@@ -611,7 +614,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_SIDE_RIGHT:
     case AV_CHAN_BACK_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            x_out[n] = (F(1.0) - x[n]) * F(0.5);
+            x_out[n] = FMA(x[n], F(-0.5), F(0.5));
         break;
     default:
         for (int n = 0; n < rdft_size; n++)
@@ -630,7 +633,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_BOTTOM_FRONT_LEFT:
     case AV_CHAN_BOTTOM_FRONT_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            y_out[n] = (F(1.0) + y[n]) * F(0.5);
+            y_out[n] = FMA(y[n], F(0.5), F(0.5));
         break;
     case AV_CHAN_TOP_CENTER:
     case AV_CHAN_SIDE_LEFT:
@@ -649,7 +652,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_BACK_LEFT:
     case AV_CHAN_TOP_BACK_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            y_out[n] = (F(1.0) - y[n]) * F(0.5);
+            y_out[n] = FMA(y[n], F(-0.5), F(0.5));
         break;
     default:
         for (int n = 0; n < rdft_size; n++)
@@ -668,13 +671,13 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_SIDE_LEFT:
     case AV_CHAN_TOP_SIDE_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            z_out[n] = (F(1.0) + z[n]) * F(0.5);
+            z_out[n] = FMA(z[n], F(0.5), F(0.5));
         break;
     case AV_CHAN_BOTTOM_FRONT_LEFT:
     case AV_CHAN_BOTTOM_FRONT_CENTER:
     case AV_CHAN_BOTTOM_FRONT_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            z_out[n] = (F(1.0) - z[n]) * F(0.5);
+            z_out[n] = FMA(z[n], F(-0.5), F(0.5));
         break;
     default:
         for (int n = 0; n < rdft_size; n++)
@@ -714,7 +717,7 @@ static void fn(do_transform)(AVFilterContext *ctx, int ch)
     if (smooth > F(0.0)) {
         if (s->smooth_init) {
             for (int n = 0; n < rdft_size; n++) {
-                sfactor[n] = smooth * factor[n] + (F(1.0) - smooth) * sfactor[n];
+                sfactor[n] = FMA(factor[n] - sfactor[n], smooth, sfactor[n]);
                 sfactor[n] = isnormal(sfactor[n]) ? sfactor[n] : F(0.0);
             }
         } else {
