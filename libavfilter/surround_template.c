@@ -516,16 +516,63 @@ static void fn(focus_transform)(ftype *x, ftype *y, ftype focus)
     *y = CLIP(COS(a) * r, F(-1.0), F(1.0));
 }
 
-static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
+static void fn(powerXYZ_factors)(AVFilterContext *ctx, const int ch,
+                                 const int chan)
 {
     AudioSurroundContext *s = ctx->priv;
-    ftype *factor = (ftype *)s->factors->extended_data[ch];
-    ftype *x_out = (ftype *)s->x_out->extended_data[ch];
-    ftype *y_out = (ftype *)s->y_out->extended_data[ch];
-    ftype *z_out = (ftype *)s->z_out->extended_data[ch];
     const ftype f_x = s->f_x[FFMIN(sc_map[chan >= 0 ? chan : 0], s->nb_f_x-1)];
     const ftype f_y = s->f_y[FFMIN(sc_map[chan >= 0 ? chan : 0], s->nb_f_y-1)];
     const ftype f_z = s->f_z[FFMIN(sc_map[chan >= 0 ? chan : 0], s->nb_f_z-1)];
+    const ftype *xin = (const ftype *)s->x_out->extended_data[ch];
+    const ftype *yin = (const ftype *)s->y_out->extended_data[ch];
+    const ftype *zin = (const ftype *)s->z_out->extended_data[ch];
+    ftype *factor = (ftype *)s->factors->extended_data[ch];
+    const int rdft_size = s->rdft_size;
+
+    for (int n = 0; n < rdft_size; n++) {
+        factor[n] = POW(xin[n], f_x) *
+                    POW(yin[n], f_y) *
+                    POW(zin[n], f_z);
+        factor[n] = isnormal(factor[n]) ? factor[n] : F(0.0);
+    }
+}
+
+static void fn(power2_factors)(AVFilterContext *ctx, const int ch,
+                               const int chan)
+{
+    AudioSurroundContext *s = ctx->priv;
+    const ftype *xin = (const ftype *)s->x_out->extended_data[ch];
+    const ftype *yin = (const ftype *)s->y_out->extended_data[ch];
+    const ftype *zin = (const ftype *)s->z_out->extended_data[ch];
+    ftype *factor = (ftype *)s->factors->extended_data[ch];
+    const int rdft_size = s->rdft_size;
+
+    for (int n = 0; n < rdft_size; n++) {
+        ftype x = xin[n];
+        ftype y = yin[n];
+        ftype z = zin[n];
+
+        if (x > z)
+            FFSWAP(ftype, x, z);
+        if (x > y)
+            FFSWAP(ftype, x, y);
+        if (y > z)
+            FFSWAP(ftype, y, z);
+
+        factor[n] = (y*x)*(y*((x*z)*z));
+        factor[n] = isnormal(factor[n]) ? factor[n] : F(0.0);
+    }
+}
+
+static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
+{
+    AudioSurroundContext *s = ctx->priv;
+    const ftype f_x = s->f_x[FFMIN(sc_map[chan >= 0 ? chan : 0], s->nb_f_x-1)];
+    const ftype f_y = s->f_y[FFMIN(sc_map[chan >= 0 ? chan : 0], s->nb_f_y-1)];
+    const ftype f_z = s->f_z[FFMIN(sc_map[chan >= 0 ? chan : 0], s->nb_f_z-1)];
+    ftype *x_out = (ftype *)s->x_out->extended_data[ch];
+    ftype *y_out = (ftype *)s->y_out->extended_data[ch];
+    ftype *z_out = (ftype *)s->z_out->extended_data[ch];
     const int rdft_size = s->rdft_size;
     const ftype *x = s->x_pos;
     const ftype *y = s->y_pos;
@@ -635,12 +682,10 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
         break;
     }
 
-    for (int n = 0; n < rdft_size; n++) {
-        factor[n] = POW(x_out[n], f_x) *
-                    POW(y_out[n], f_y) *
-                    POW(z_out[n], f_z);
-        factor[n] = isnormal(factor[n]) ? factor[n] : F(0.0);
-    }
+    if (f_x == F(2.0) && f_x == f_y && f_x == f_z)
+        fn(power2_factors)(ctx, ch, chan);
+    else
+        fn(powerXYZ_factors)(ctx, ch, chan);
 }
 
 static void fn(bypass_transform)(AVFilterContext *ctx, int ch, int is_lfe)
