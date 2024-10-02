@@ -26,6 +26,7 @@
 #undef HYPOT
 #undef ATAN2
 #undef FABS
+#undef FEXP
 #undef FMA
 #undef SIN
 #undef COS
@@ -51,6 +52,7 @@
 #define HYPOT hypotf
 #define ATAN2 atan2f
 #define FABS fabsf
+#define FEXP expf
 #define FMA fmaf
 #define SIN sinf
 #define COS cosf
@@ -75,6 +77,7 @@
 #define HYPOT hypot
 #define ATAN2 atan2
 #define FABS fabs
+#define FEXP exp
 #define FMA fma
 #define SIN sin
 #define COS cos
@@ -101,7 +104,7 @@ static void fn(set_input_levels)(AVFilterContext *ctx)
     AudioSurroundContext *s = ctx->priv;
     ftype *input_levels = s->input_levels;
 
-    for (int ch = 0;  ch < s->nb_in_channels; ch++) {
+    for (int ch = 0; ch < s->nb_in_channels; ch++) {
         const int fch = FFMIN3(ch, s->nb_f_i-1, SC_NB-1);
 
         input_levels[ch] = s->f_i[fch];
@@ -113,10 +116,30 @@ static void fn(set_output_levels)(AVFilterContext *ctx)
     AudioSurroundContext *s = ctx->priv;
     ftype *output_levels = s->output_levels;
 
-    for (int ch = 0;  ch < s->nb_out_channels; ch++) {
+    for (int ch = 0; ch < s->nb_out_channels; ch++) {
         const int fch = FFMIN3(ch, s->nb_f_o-1, SC_NB-1);
 
         output_levels[ch] = s->f_o[fch];
+    }
+}
+
+static void fn(set_smooth_levels)(AVFilterContext *ctx)
+{
+    AudioSurroundContext *s = ctx->priv;
+    ftype *smooth_levels = s->smooth_levels;
+    const int rdft_size = s->rdft_size;
+    const ftype fs = ctx->inputs[0]->sample_rate;
+    const ftype scale = F(0.5) * fs / rdft_size;
+
+    for (int ch = 0; ch < s->nb_out_channels; ch++) {
+        const ftype S = s->smooth[FFMIN(ch, s->nb_smooth-1)];
+        ftype *smooth = smooth_levels + ch * rdft_size;
+
+        for (int n = 0; n < rdft_size; n++) {
+            const ftype rk = S / ((n+F(1.0)) * scale);
+
+            smooth[n] = F(1.0) - FEXP(F(-1.0)/(rk*fs));
+        }
     }
 }
 
@@ -366,13 +389,13 @@ static int fn(config_output)(AVFilterContext *ctx)
             return ret;
     }
 
+    s->smooth_levels = av_malloc_array(s->nb_out_channels, sizeof(ftype) * s->rdft_size);
     s->output_levels = av_malloc_array(s->nb_out_channels, sizeof(ftype));
-    if (!s->output_levels)
+    if (!s->output_levels || !s->smooth_levels)
         return AVERROR(ENOMEM);
 
     fn(set_output_levels)(ctx);
-
-    s->rdft_size = s->win_size / 2 + 1;
+    fn(set_smooth_levels)(ctx);
 
     s->factors = ff_get_audio_buffer(outlink, s->rdft_size);
     s->sfactors = ff_get_audio_buffer(outlink, s->rdft_size);
@@ -715,7 +738,7 @@ static void fn(bypass_transform)(AVFilterContext *ctx, int ch, int is_lfe)
 static void fn(do_transform)(AVFilterContext *ctx, int ch)
 {
     AudioSurroundContext *s = ctx->priv;
-    const ftype smooth = s->smooth[FFMIN(ch, s->nb_smooth-1)];
+    const ftype *smooth_levels = s->smooth_levels;
     ftype *sfactor = (ftype *)s->sfactors->extended_data[ch];
     ftype *factor = (ftype *)s->factors->extended_data[ch];
     const ctype *odif = (const ctype *)s->output_dif->extended_data[ch];
@@ -723,17 +746,17 @@ static void fn(do_transform)(AVFilterContext *ctx, int ch)
     ctype *dst = (ctype *)s->output->extended_data[ch];
     const int rdft_size = s->rdft_size;
 
-    if (smooth > F(0.0)) {
-        if (s->smooth_init) {
-            for (int n = 0; n < rdft_size; n++) {
-                sfactor[n] = FMA(factor[n] - sfactor[n], smooth, sfactor[n]);
-                sfactor[n] = isnormal(sfactor[n]) ? sfactor[n] : F(0.0);
-            }
-        } else {
-            memcpy(sfactor, factor, rdft_size * sizeof(*sfactor));
+    if (s->smooth_init) {
+        const ftype *smooth = smooth_levels + ch * rdft_size;
+
+        for (int n = 0; n < rdft_size; n++) {
+            sfactor[n] = FMA(factor[n] - sfactor[n], smooth[n], sfactor[n]);
+            sfactor[n] = isnormal(sfactor[n]) ? sfactor[n] : F(0.0);
         }
-        factor = sfactor;
+    } else {
+        memcpy(sfactor, factor, rdft_size * sizeof(*sfactor));
     }
+    factor = sfactor;
 
     for (int n = 0; n < rdft_size; n++) {
         const ctype dif = odif[n];
@@ -849,6 +872,7 @@ static int fn(config_input)(AVFilterContext *ctx)
     float overlap;
 
     s->win_size = 1 << av_ceil_log2((inlink->sample_rate + 19) / 20);
+    s->rdft_size = s->win_size / 2 + 1;
     s->hop_size = FFMAX(1, LRINT(s->win_size * (F(1.0) - s->overlap)));
     s->trim_size = s->win_size;
     s->flush_size = s->win_size - s->hop_size;
@@ -880,6 +904,7 @@ static int fn(config_input)(AVFilterContext *ctx)
 
     s->set_input_levels = fn(set_input_levels);
     s->set_output_levels = fn(set_output_levels);
+    s->set_smooth_levels = fn(set_smooth_levels);
     s->ifft_channel = fn(ifft_channel);
     s->fft_channel = fn(fft_channel);
     s->calculate_factors = fn(calculate_factors);

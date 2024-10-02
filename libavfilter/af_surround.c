@@ -175,6 +175,7 @@ typedef struct AudioSurroundContext {
 
     void *input_levels;
     void *output_levels;
+    void *smooth_levels;
 
     void *x_pos;
     void *y_pos;
@@ -197,6 +198,7 @@ typedef struct AudioSurroundContext {
     void (*filter)(AVFilterContext *ctx);
     void (*set_input_levels)(AVFilterContext *ctx);
     void (*set_output_levels)(AVFilterContext *ctx);
+    void (*set_smooth_levels)(AVFilterContext *ctx);
     void (*upmix)(AVFilterContext *ctx, int ch);
     int (*fft_channel)(AVFilterContext *ctx, AVFrame *out, int ch);
     int (*ifft_channel)(AVFilterContext *ctx, AVFrame *out, int ch);
@@ -598,6 +600,7 @@ static av_cold void uninit(AVFilterContext *ctx)
         av_tx_uninit(&s->irdft[ch]);
     av_freep(&s->input_levels);
     av_freep(&s->output_levels);
+    av_freep(&s->smooth_levels);
     av_freep(&s->rdft);
     av_freep(&s->irdft);
     av_freep(&s->window_func_lut);
@@ -625,6 +628,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
 
     s->set_input_levels(ctx);
     s->set_output_levels(ctx);
+    s->set_smooth_levels(ctx);
 
     return 0;
 }
@@ -634,7 +638,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
 #define TFLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
-static const AVOptionArrayDef def_smooth = {.def="0",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_smooth = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_o  = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_i  = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_x  = {.def="2",.size_min=1,.sep=' '};
