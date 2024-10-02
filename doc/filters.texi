@@ -7204,11 +7204,11 @@ Set input channel layout. By default, this is @var{stereo}.
 See @ref{channel layout syntax,,the Channel Layout section in the ffmpeg-utils(1) manual,ffmpeg-utils}
 for the required syntax.
 
-@item level_in
-Set input volume level. By default, this is @var{1}.
-
 @item level_out
-Set output volume level. By default, this is @var{1}.
+Set the output volume level for the each output channel. By default, this is @var{1}.
+
+@item level_in
+Set the input volume level for the each input channel. By default, this is @var{1}.
 
 @item lfe
 Enable LFE channel output if output channel layout has it. By default, this is enabled.
@@ -7235,86 +7235,35 @@ Default is @var{0.0}. Only values inside this range and without edges are effect
 Set angle of stereo surround transform, Allowed range is from @var{0} to @var{360}.
 Default is @var{90}.
 
+@item shift
+Set the shift of stereo surround transform, Allowed range is from @var{-1} to @var{1}.
+Default is @var{0 0 0}.
+
+@item depth
+Set the depth of stereo surround transform, Allowed range is from @var{-1} to @var{1}.
+Default is @var{0 0 0}.
+
 @item focus
-Set focus of stereo surround transform, Allowed range is from @var{-1} to @var{1}.
-Default is @var{0}.
+Set the focus of stereo surround transform, Allowed range is from @var{-1} to @var{1}.
+Default is @var{0 0 0}.
 
-@item fc_in
-Set front center input volume. By default, this is @var{1}.
-
-@item fc_out
-Set front center output volume. By default, this is @var{1}.
-
-@item fl_in
-Set front left input volume. By default, this is @var{1}.
-
-@item fl_out
-Set front left output volume. By default, this is @var{1}.
-
-@item fr_in
-Set front right input volume. By default, this is @var{1}.
-
-@item fr_out
-Set front right output volume. By default, this is @var{1}.
-
-@item sl_in
-Set side left input volume. By default, this is @var{1}.
-
-@item sl_out
-Set side left output volume. By default, this is @var{1}.
-
-@item sr_in
-Set side right input volume. By default, this is @var{1}.
-
-@item sr_out
-Set side right output volume. By default, this is @var{1}.
-
-@item bl_in
-Set back left input volume. By default, this is @var{1}.
-
-@item bl_out
-Set back left output volume. By default, this is @var{1}.
-
-@item br_in
-Set back right input volume. By default, this is @var{1}.
-
-@item br_out
-Set back right output volume. By default, this is @var{1}.
-
-@item bc_in
-Set back center input volume. By default, this is @var{1}.
-
-@item bc_out
-Set back center output volume. By default, this is @var{1}.
-
-@item lfe_in
-Set LFE input volume. By default, this is @var{1}.
-
-@item lfe_out
-Set LFE output volume. By default, this is @var{1}.
-
-@item allx
-Set spread usage of stereo image across X axis for all channels.
-Allowed range is from @var{-1} to @var{15}.
-By default this value is negative @var{-1}, and thus unused.
-
-@item ally
-Set spread usage of stereo image across Y axis for all channels.
-Allowed range is from @var{-1} to @var{15}.
-By default this value is negative @var{-1}, and thus unused.
-
-@item fcx, flx, frx, blx, brx, slx, srx, bcx
+@item spread_x
 Set spread usage of stereo image across X axis for each channel.
 Allowed range is from @var{0.06} to @var{15}.
-By default this value is @var{0.5}.
+By default this value is @var{2.0}.
 
-@item fcy, fly, fry, bly, bry, sly, sry, bcy
+@item spread_y
 Set spread usage of stereo image across Y axis for each channel.
 Allowed range is from @var{0.06} to @var{15}.
-By default this value is @var{0.5}.
+By default this value is @var{2.0}.
 
-@item win_size
-Set window size. Allowed range is from @var{1024} to @var{65536}. Default size is @var{4096}.
+@item spread_z
+Set spread usage of stereo image across Z axis for each channel.
+Allowed range is from @var{0.06} to @var{15}.
+By default this value is @var{2.0}.
+
+@item smooth
+Set temporal smoothness strength.
 
 @item win_func
 Set window function.
