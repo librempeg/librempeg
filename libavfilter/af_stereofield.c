@@ -45,6 +45,10 @@ typedef struct StereoFieldContext {
     int fft_size;
     int overlap;
 
+    int trim_size;
+    int flush_size;
+    int64_t last_pts;
+
     void *window;
 
     AVFrame *in;
@@ -54,6 +58,7 @@ typedef struct StereoFieldContext {
     AVFrame *windowed_out;
 
     int (*sf_stereo)(AVFilterContext *ctx, AVFrame *out);
+    int (*sf_flush)(AVFilterContext *ctx, AVFrame *out);
 
     AVTXContext *tx_ctx, *itx_ctx;
     av_tx_fn tx_fn, itx_fn;
@@ -110,21 +115,25 @@ static int config_input(AVFilterLink *inlink)
 
     s->fft_size = 1 << av_ceil_log2((inlink->sample_rate + 19) / 20);
     s->overlap = (s->fft_size + 3) / 4;
+    s->trim_size = s->fft_size;
+    s->flush_size = s->fft_size - s->overlap;
 
-    s->in_frame       = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
-    s->out_dist_frame = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
-    s->windowed_frame = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
-    s->windowed_out   = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
+    s->in_frame       = ff_get_audio_buffer(inlink, s->fft_size + 2);
+    s->out_dist_frame = ff_get_audio_buffer(inlink, s->fft_size * 2);
+    s->windowed_frame = ff_get_audio_buffer(inlink, s->fft_size + 2);
+    s->windowed_out   = ff_get_audio_buffer(inlink, s->fft_size + 2);
     if (!s->in_frame || !s->windowed_out || !s->out_dist_frame || !s->windowed_frame)
         return AVERROR(ENOMEM);
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_FLTP:
         s->sf_stereo = sf_stereo_float;
+        s->sf_flush = sf_flush_float;
         ret = sf_tx_init_float(ctx);
         break;
     case AV_SAMPLE_FMT_DBLP:
         s->sf_stereo = sf_stereo_double;
+        s->sf_flush = sf_flush_double;
         ret = sf_tx_init_double(ctx);
         break;
     }
@@ -137,8 +146,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     StereoFieldContext *s = ctx->priv;
+    int extra_samples, ret;
     AVFrame *out;
-    int ret;
 
     out = ff_get_audio_buffer(outlink, s->overlap);
     if (!out) {
@@ -150,13 +159,74 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     s->sf_stereo(ctx, out);
 
     av_frame_copy_props(out, in);
-    out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
+    extra_samples = FFMIN(s->overlap - in->nb_samples, s->flush_size);
     out->nb_samples = in->nb_samples;
+    if (extra_samples > 0) {
+        out->nb_samples += extra_samples;
+        s->flush_size -= extra_samples;
+    }
+    out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
+    out->duration = av_rescale_q(out->nb_samples,
+                                 (AVRational){1, outlink->sample_rate},
+                                 outlink->time_base);
+
+    s->last_pts = out->pts + out->duration;
+
+    if (s->trim_size > 0) {
+        if (s->trim_size < in->nb_samples) {
+            for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
+                out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
+
+            s->trim_size = 0;
+        } else {
+            s->trim_size -= in->nb_samples;
+        }
+    }
+
+    if (s->trim_size > 0) {
+        ff_inlink_request_frame(inlink);
+        av_frame_free(&out);
+        ret = 0;
+
+        goto fail;
+    }
+
     ret = ff_filter_frame(outlink, out);
 fail:
     av_frame_free(&in);
     s->in = NULL;
     return ret < 0 ? ret : 0;
+}
+
+static int flush_frame(AVFilterLink *outlink)
+{
+    AVFilterContext *ctx = outlink->src;
+    StereoFieldContext *s = ctx->priv;
+    int ret = 0;
+
+    while (s->flush_size > 0) {
+        const int nb_samples = FFMIN(s->flush_size, s->overlap);
+        AVFrame *out = ff_get_audio_buffer(outlink, nb_samples);
+
+        if (!out)
+            return AVERROR(ENOMEM);
+
+        s->flush_size -= nb_samples;
+
+        s->sf_flush(ctx, out);
+
+        out->pts = s->last_pts;
+        out->duration = av_rescale_q(out->nb_samples,
+                                     (AVRational){1, outlink->sample_rate},
+                                     outlink->time_base);
+        s->last_pts += out->duration;
+
+        ret = ff_filter_frame(outlink, out);
+        if (ret < 0)
+            break;
+    }
+
+    return ret;
 }
 
 static int activate(AVFilterContext *ctx)
@@ -165,7 +235,7 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *outlink = ctx->outputs[0];
     StereoFieldContext *s = ctx->priv;
     AVFrame *in = NULL;
-    int ret = 0, status;
+    int ret, status;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
@@ -177,8 +247,11 @@ static int activate(AVFilterContext *ctx)
     if (ret > 0) {
         return filter_frame(inlink, in);
     } else if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+        if (s->flush_size > 0)
+            ret = flush_frame(outlink);
+
         ff_outlink_set_status(outlink, status, pts);
-        return 0;
+        return ret;
     } else {
         if (ff_inlink_queued_samples(inlink) >= s->overlap) {
             ff_filter_set_ready(ctx, 10);

@@ -60,7 +60,7 @@
 static int fn(sf_tx_init)(AVFilterContext *ctx)
 {
     StereoFieldContext *s = ctx->priv;
-    ftype scale = F(1.0), iscale = F(1.0) / (s->fft_size * 2 * F(2.0));
+    ftype scale = F(1.0), iscale = F(0.5) / s->fft_size;
     ftype *window;
     int ret;
 
@@ -71,11 +71,11 @@ static int fn(sf_tx_init)(AVFilterContext *ctx)
     for (int n = 0; n < s->fft_size; n++)
         window[n] = SIN(M_PI*n/(s->fft_size-1));
 
-    ret = av_tx_init(&s->tx_ctx, &s->tx_fn, TX_TYPE, 0, s->fft_size * 2, &scale, 0);
+    ret = av_tx_init(&s->tx_ctx, &s->tx_fn, TX_TYPE, 0, s->fft_size, &scale, 0);
     if (ret < 0)
         return ret;
 
-    ret = av_tx_init(&s->itx_ctx, &s->itx_fn, TX_TYPE, 1, s->fft_size * 2, &iscale, 0);
+    ret = av_tx_init(&s->itx_ctx, &s->itx_fn, TX_TYPE, 1, s->fft_size, &iscale, 0);
     if (ret < 0)
         return ret;
 
@@ -86,13 +86,13 @@ static void fn(apply_window)(StereoFieldContext *s,
                              const ftype *in_frame, ftype *out_frame, const int add_to_out_frame)
 {
     const ftype *window = s->window;
-    const int fft_size = s->fft_size;
+    const int size = s->fft_size;
 
     if (add_to_out_frame) {
-        for (int i = 0; i < fft_size; i++)
+        for (int i = 0; i < size; i++)
             out_frame[i] += in_frame[i] * window[i];
     } else {
-        for (int i = 0; i < fft_size; i++)
+        for (int i = 0; i < size; i++)
             out_frame[i] = in_frame[i] * window[i];
     }
 }
@@ -192,13 +192,11 @@ static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out)
     // shift in/out buffers
     memmove(left_in, &left_in[overlap], offset * sizeof(*left_in));
     memmove(right_in, &right_in[overlap], offset * sizeof(*right_in));
-    memmove(left_out, &left_out[overlap], offset * sizeof(*left_out));
-    memmove(right_out, &right_out[overlap], offset * sizeof(*right_out));
 
     memcpy(&left_in[offset], left_samples, nb_samples * sizeof(*left_in));
     memcpy(&right_in[offset], right_samples, nb_samples * sizeof(*right_in));
-    memset(&left_out[offset], 0, overlap * sizeof(*left_out));
-    memset(&right_out[offset], 0, overlap * sizeof(*right_out));
+    memset(&left_in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*left_in));
+    memset(&right_in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*right_in));
 
     fn(apply_window)(s, left_in,  windowed_left,  0);
     fn(apply_window)(s, right_in, windowed_right, 0);
@@ -207,20 +205,82 @@ static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out)
     s->tx_fn(s->tx_ctx, windowed_oright, windowed_right, sizeof(ftype));
 
     fn(stereofield)(windowed_oleft, windowed_oright,
-                    s->fft_size + 1, D, M);
+                    s->fft_size/2 + 1, D, M);
 
     s->itx_fn(s->itx_ctx, windowed_left, windowed_oleft, sizeof(ctype));
     s->itx_fn(s->itx_ctx, windowed_right, windowed_oright, sizeof(ctype));
+
+    memmove(left_out, &left_out[overlap], offset * sizeof(*left_out));
+    memmove(right_out, &right_out[overlap], offset * sizeof(*right_out));
+    memset(&left_out[offset], 0, overlap * sizeof(*left_out));
+    memset(&right_out[offset], 0, overlap * sizeof(*right_out));
 
     fn(apply_window)(s, windowed_left,  left_out,  1);
     fn(apply_window)(s, windowed_right, right_out, 1);
 
     if (ctx->is_disabled) {
-        memcpy(left_osamples, left_in, overlap * sizeof(*left_osamples));
-        memcpy(right_osamples, right_in, overlap * sizeof(*right_osamples));
+        memcpy(left_osamples, left_in, out->nb_samples * sizeof(*left_osamples));
+        memcpy(right_osamples, right_in, out->nb_samples * sizeof(*right_osamples));
     } else {
-        memcpy(left_osamples, left_out, overlap * sizeof(*left_osamples));
-        memcpy(right_osamples, right_out, overlap * sizeof(*right_osamples));
+        memcpy(left_osamples, left_out, out->nb_samples * sizeof(*left_osamples));
+        memcpy(right_osamples, right_out, out->nb_samples * sizeof(*right_osamples));
+    }
+
+    return 0;
+}
+
+static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out)
+{
+    StereoFieldContext *s = ctx->priv;
+    ftype *left_in         = (ftype *)s->in_frame->extended_data[0];
+    ftype *right_in        = (ftype *)s->in_frame->extended_data[1];
+    ftype *left_out        = (ftype *)s->out_dist_frame->extended_data[0];
+    ftype *right_out       = (ftype *)s->out_dist_frame->extended_data[1];
+    ftype *windowed_left   = (ftype *)s->windowed_frame->extended_data[0];
+    ftype *windowed_right  = (ftype *)s->windowed_frame->extended_data[1];
+    ctype *windowed_oleft  = (ctype *)s->windowed_out->extended_data[0];
+    ctype *windowed_oright = (ctype *)s->windowed_out->extended_data[1];
+    ftype *left_osamples   = (ftype *)out->extended_data[0];
+    ftype *right_osamples  = (ftype *)out->extended_data[1];
+    const int overlap = s->overlap;
+    const int offset = s->fft_size - overlap;
+    const int nb_samples = 0;
+    const int M = s->mode;
+    const ftype D = s->D;
+
+    // shift in/out buffers
+    memmove(left_in, &left_in[overlap], offset * sizeof(*left_in));
+    memmove(right_in, &right_in[overlap], offset * sizeof(*right_in));
+
+    memset(&left_in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*left_in));
+    memset(&right_in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*right_in));
+
+    fn(apply_window)(s, left_in,  windowed_left,  0);
+    fn(apply_window)(s, right_in, windowed_right, 0);
+
+    s->tx_fn(s->tx_ctx, windowed_oleft,  windowed_left,  sizeof(ftype));
+    s->tx_fn(s->tx_ctx, windowed_oright, windowed_right, sizeof(ftype));
+
+    fn(stereofield)(windowed_oleft, windowed_oright,
+                    s->fft_size/2 + 1, D, M);
+
+    s->itx_fn(s->itx_ctx, windowed_left, windowed_oleft, sizeof(ctype));
+    s->itx_fn(s->itx_ctx, windowed_right, windowed_oright, sizeof(ctype));
+
+    memmove(left_out, &left_out[overlap], offset * sizeof(*left_out));
+    memmove(right_out, &right_out[overlap], offset * sizeof(*right_out));
+    memset(&left_out[offset], 0, overlap * sizeof(*left_out));
+    memset(&right_out[offset], 0, overlap * sizeof(*right_out));
+
+    fn(apply_window)(s, windowed_left,  left_out,  1);
+    fn(apply_window)(s, windowed_right, right_out, 1);
+
+    if (ctx->is_disabled) {
+        memcpy(left_osamples, left_in, out->nb_samples * sizeof(*left_osamples));
+        memcpy(right_osamples, right_in, out->nb_samples * sizeof(*right_osamples));
+    } else {
+        memcpy(left_osamples, left_out, out->nb_samples * sizeof(*left_osamples));
+        memcpy(right_osamples, right_out, out->nb_samples * sizeof(*right_osamples));
     }
 
     return 0;
