@@ -495,11 +495,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     s->last_pts = out->pts + out->duration;
 
     if (s->trim_size > 0) {
-        s->trim_size -= in->nb_samples;
-
-        if (s->trim_size > 0) {
+        if (s->trim_size < in->nb_samples) {
             for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
                 out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
+
+            s->trim_size = 0;
+        } else {
+            s->trim_size -= in->nb_samples;
         }
     }
 
