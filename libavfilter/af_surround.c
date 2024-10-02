@@ -185,6 +185,9 @@ typedef struct AudioSurroundContext {
     void *cnt;
     void *lfe;
 
+    int trim_size;
+    int flush_size;
+    int64_t last_pts;
     int rdft_size;
     int hop_size;
     AVTXContext **rdft, **irdft;
@@ -203,6 +206,7 @@ typedef struct AudioSurroundContext {
     void (*do_transform)(AVFilterContext *ctx, int ch);
     void (*bypass_transform)(AVFilterContext *ctx, int ch, int is_lfe);
     int (*transform_xy)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+    int (*flush)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } AudioSurroundContext;
 
 static int query_formats(const AVFilterContext *ctx,
@@ -438,6 +442,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioSurroundContext *s = ctx->priv;
+    int extra_samples;
     AVFrame *out;
 
     ff_filter_execute(ctx, fft_channels, in, NULL,
@@ -473,10 +478,61 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     s->smooth_init = 1;
 
     av_frame_copy_props(out, in);
+    extra_samples = FFMIN(s->hop_size - in->nb_samples, s->flush_size);
     out->nb_samples = in->nb_samples;
+    if (extra_samples > 0) {
+        out->nb_samples += extra_samples;
+        s->flush_size -= extra_samples;
+    }
+    out->pts = in->pts;
     out->pts -= av_rescale_q(s->win_size - s->hop_size, av_make_q(1, outlink->sample_rate), outlink->time_base);
+    out->duration = av_rescale_q(out->nb_samples,
+                                 (AVRational){1, outlink->sample_rate},
+                                 outlink->time_base);
+
+    s->last_pts = out->pts + out->duration;
+
+    if (s->trim_size > 0) {
+        s->trim_size -= in->nb_samples;
+
+        if (s->trim_size > 0) {
+            for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
+                out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
+        }
+    }
+
+    if (s->trim_size > 0) {
+        av_frame_free(&in);
+        av_frame_free(&out);
+        ff_inlink_request_frame(inlink);
+
+        return 0;
+    }
 
     av_frame_free(&in);
+    return ff_filter_frame(outlink, out);
+}
+
+static int flush_frame(AVFilterLink *outlink)
+{
+    AVFilterContext *ctx = outlink->src;
+    AudioSurroundContext *s = ctx->priv;
+    const int nb_samples = s->flush_size;
+    AVFrame *out = ff_get_audio_buffer(outlink, nb_samples);
+
+    if (!out)
+        return AVERROR(ENOMEM);
+
+    s->flush_size = 0;
+
+    ff_filter_execute(ctx, s->flush, out, NULL,
+                      FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
+
+    out->pts = s->last_pts;
+    out->duration = av_rescale_q(out->nb_samples,
+                                 (AVRational){1, outlink->sample_rate},
+                                 outlink->time_base);
+
     return ff_filter_frame(outlink, out);
 }
 
@@ -506,8 +562,11 @@ static int activate(AVFilterContext *ctx)
     }
 
     if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+        if (s->flush_size > 0)
+            ret = flush_frame(outlink);
+
         ff_outlink_set_status(outlink, status, pts);
-        return 0;
+        return ret;
     }
 
     FF_FILTER_FORWARD_WANTED(outlink, inlink);
