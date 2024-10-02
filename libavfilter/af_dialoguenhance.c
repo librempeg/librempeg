@@ -106,8 +106,8 @@ static int config_input(AVFilterLink *inlink)
     AudioDialogueEnhanceContext *s = ctx->priv;
     int ret;
 
-    s->fft_size = inlink->sample_rate > 100000 ? 8192 : inlink->sample_rate > 50000 ? 4096 : 2048;
-    s->overlap = s->fft_size / 4;
+    s->fft_size = 1 << av_ceil_log2((inlink->sample_rate + 19) / 20);
+    s->overlap = (s->fft_size + 3) / 4;
 
     s->in_frame       = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
     s->center_frame   = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
