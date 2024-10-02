@@ -215,7 +215,7 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *outlink = ctx->outputs[0];
     AudioCenterCutContext *s = ctx->priv;
     AVFrame *in = NULL;
-    int ret = 0, status;
+    int ret, status;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
