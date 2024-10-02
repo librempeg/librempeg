@@ -34,6 +34,7 @@
 #undef SQRT
 #undef FMIN
 #undef FMAX
+#undef LRINT
 #undef EPSILON
 #undef CLIP
 #undef SAMPLE_FORMAT
@@ -58,6 +59,7 @@
 #define SQRT sqrtf
 #define FMIN fminf
 #define FMAX fmaxf
+#define LRINT lrintf
 #define EPSILON FLT_EPSILON
 #define CLIP av_clipf
 #define SAMPLE_FORMAT fltp
@@ -81,6 +83,7 @@
 #define SQRT sqrt
 #define FMIN fmin
 #define FMAX fmax
+#define LRINT lrint
 #define EPSILON FLT_EPSILON /* to keep similar output with float */
 #define CLIP av_clipd
 #define SAMPLE_FORMAT dblp
@@ -825,6 +828,36 @@ static int fn(config_input)(AVFilterContext *ctx)
 {
     AudioSurroundContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
+    float overlap;
+
+    s->win_size = 1 << av_ceil_log2((inlink->sample_rate + 19) / 20);
+
+    s->window_func_lut = av_calloc(s->win_size, sizeof(*s->window_func_lut));
+    if (!s->window_func_lut)
+        return AVERROR(ENOMEM);
+
+    generate_window_func(s->window_func_lut, s->win_size, s->win_func, &overlap);
+    if (s->overlap == 1)
+        s->overlap = overlap;
+
+    s->hop_size = FFMAX(1, LRINT(s->win_size * (F(1.0) - s->overlap)));
+
+    {
+        ftype max = 0.f, *temp_lut = av_calloc(s->win_size, sizeof(*temp_lut));
+        if (!temp_lut)
+            return AVERROR(ENOMEM);
+
+        for (int j = 0; j < s->win_size; j += s->hop_size) {
+            for (int i = 0; i < s->win_size; i++)
+                temp_lut[(i + j) % s->win_size] += s->window_func_lut[i];
+        }
+
+        for (int i = 0; i < s->win_size; i++)
+            max = FMAX(temp_lut[i], max);
+        av_freep(&temp_lut);
+
+        s->win_gain = F(1.0) / max;
+    }
 
     s->set_input_levels = fn(set_input_levels);
     s->set_output_levels = fn(set_output_levels);

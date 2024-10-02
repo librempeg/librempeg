@@ -370,7 +370,6 @@ static av_cold int init(AVFilterContext *ctx)
     AudioSurroundContext *s = ctx->priv;
     char in_name[128], out_name[128];
     int64_t in_channel_layout;
-    float overlap;
 
     if (s->lowcutf >= s->highcutf) {
         av_log(ctx, AV_LOG_ERROR, "Low cut-off '%d' should be less than high cut-off '%d'.\n",
@@ -400,33 +399,6 @@ fail:
         av_log(ctx, AV_LOG_ERROR, "Unsupported upmix: '%s' -> '%s'.\n",
                in_name, out_name);
         return AVERROR(EINVAL);
-    }
-
-    s->window_func_lut = av_calloc(s->win_size, sizeof(*s->window_func_lut));
-    if (!s->window_func_lut)
-        return AVERROR(ENOMEM);
-
-    generate_window_func(s->window_func_lut, s->win_size, s->win_func, &overlap);
-    if (s->overlap == 1)
-        s->overlap = overlap;
-
-    s->hop_size = FFMAX(1, s->win_size * (1. - s->overlap));
-
-    {
-        float max = 0.f, *temp_lut = av_calloc(s->win_size, sizeof(*temp_lut));
-        if (!temp_lut)
-            return AVERROR(ENOMEM);
-
-        for (int j = 0; j < s->win_size; j += s->hop_size) {
-            for (int i = 0; i < s->win_size; i++)
-                temp_lut[(i + j) % s->win_size] += s->window_func_lut[i];
-        }
-
-        for (int i = 0; i < s->win_size; i++)
-            max = FMAX(temp_lut[i], max);
-        av_freep(&temp_lut);
-
-        s->win_gain = 1.f / max;
     }
 
     return 0;
@@ -632,7 +604,6 @@ static const AVOption surround_options[] = {
     { "spread_y",  "set channels Y-axis spread",         OFFSET(f_y),      AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_y}, .06, 15, TFLAGS },
     { "spread_z",  "set channels Z-axis spread",         OFFSET(f_z),      AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_z}, .06, 15, TFLAGS },
     { "smooth",    "set temporal smoothness strength",   OFFSET(smooth),   AV_OPT_TYPE_FLOAT|AR, {.arr=&def_smooth},0,1,TFLAGS },
-    { "win_size", "set window size",                     OFFSET(win_size), AV_OPT_TYPE_INT,  {.i64=4096},1024,65536,FLAGS },
     WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_SINE),
     { "overlap", "set window overlap", OFFSET(overlap), AV_OPT_TYPE_FLOAT, {.dbl=0.5}, 0, 1, TFLAGS },
     { NULL }
