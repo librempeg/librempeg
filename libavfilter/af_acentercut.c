@@ -50,6 +50,7 @@ typedef struct AudioCenterCutContext {
     AVFrame *windowed_out;
 
     int (*cc_stereo)(AVFilterContext *ctx, AVFrame *out);
+    int (*cc_flush)(AVFilterContext *ctx, AVFrame *out);
 
     AVTXContext *tx_ctx, *itx_ctx;
     av_tx_fn tx_fn, itx_fn;
@@ -105,20 +106,22 @@ static int config_input(AVFilterLink *inlink)
     s->trim_size = s->fft_size;
     s->flush_size = s->fft_size - s->overlap;
 
-    s->in_frame       = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
-    s->out_dist_frame = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
-    s->windowed_frame = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
-    s->windowed_out   = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
+    s->in_frame       = ff_get_audio_buffer(inlink, s->fft_size + 2);
+    s->out_dist_frame = ff_get_audio_buffer(inlink, s->fft_size * 2);
+    s->windowed_frame = ff_get_audio_buffer(inlink, s->fft_size + 2);
+    s->windowed_out   = ff_get_audio_buffer(inlink, s->fft_size + 2);
     if (!s->in_frame || !s->windowed_out || !s->out_dist_frame || !s->windowed_frame)
         return AVERROR(ENOMEM);
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_FLTP:
         s->cc_stereo = cc_stereo_float;
+        s->cc_flush = cc_flush_float;
         ret = cc_tx_init_float(ctx);
         break;
     case AV_SAMPLE_FMT_DBLP:
         s->cc_stereo = cc_stereo_double;
+        s->cc_flush = cc_flush_double;
         ret = cc_tx_init_double(ctx);
         break;
     }
@@ -131,10 +134,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioCenterCutContext *s = ctx->priv;
+    int extra_samples, nb_samples, ret;
     AVFrame *out;
-    int ret;
 
-    out = ff_get_audio_buffer(outlink, s->overlap);
+    extra_samples = in->nb_samples % s->overlap;
+    if (extra_samples)
+        extra_samples = FFMIN(s->overlap - extra_samples, s->flush_size);
+    nb_samples = in->nb_samples;
+    if (extra_samples > 0) {
+        nb_samples += extra_samples;
+        s->flush_size -= extra_samples;
+    }
+
+    out = ff_get_audio_buffer(outlink, nb_samples);
     if (!out) {
         ret = AVERROR(ENOMEM);
         goto fail;
@@ -144,7 +156,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     s->cc_stereo(ctx, out);
 
     av_frame_copy_props(out, in);
-    out->nb_samples = in->nb_samples;
     out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
     out->duration = av_rescale_q(out->nb_samples,
                                  (AVRational){1, outlink->sample_rate},
@@ -182,31 +193,31 @@ static int flush_frame(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AudioCenterCutContext *s = ctx->priv;
-    const int nb_samples = s->flush_size;
-    AVFrame *out = ff_get_audio_buffer(outlink, nb_samples);
+    int ret = 0;
 
-    if (!out)
-        return AVERROR(ENOMEM);
+    while (s->flush_size > 0) {
+        const int nb_samples = FFMIN(s->flush_size, s->overlap);
+        AVFrame *out = ff_get_audio_buffer(outlink, nb_samples);
 
-    s->flush_size = 0;
+        if (!out)
+            return AVERROR(ENOMEM);
 
-    {
-        const uint8_t *left_in = (const uint8_t *)s->out_dist_frame->extended_data[0];
-        const uint8_t *right_in = (const uint8_t *)s->out_dist_frame->extended_data[1];
-        const size_t sample_size = av_get_bytes_per_sample(out->format);
-        uint8_t *right_dst = ((uint8_t *)out->extended_data[1]);
-        uint8_t *left_dst = ((uint8_t *)out->extended_data[0]);
+        s->flush_size -= nb_samples;
 
-        memcpy(right_dst, right_in, nb_samples * sample_size);
-        memcpy(left_dst, left_in, nb_samples * sample_size);
+        s->cc_flush(ctx, out);
+
+        out->pts = s->last_pts;
+        out->duration = av_rescale_q(out->nb_samples,
+                                     (AVRational){1, outlink->sample_rate},
+                                     outlink->time_base);
+        s->last_pts += out->duration;
+
+        ret = ff_filter_frame(outlink, out);
+        if (ret < 0)
+            break;
     }
 
-    out->pts = s->last_pts;
-    out->duration = av_rescale_q(out->nb_samples,
-                                 (AVRational){1, outlink->sample_rate},
-                                 outlink->time_base);
-
-    return ff_filter_frame(outlink, out);
+    return ret;
 }
 
 static int activate(AVFilterContext *ctx)
