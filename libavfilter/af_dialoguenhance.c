@@ -54,6 +54,7 @@ typedef struct AudioDialogueEnhancementContext {
     AVFrame *center_frame;
 
     int (*de_stereo)(AVFilterContext *ctx, AVFrame *out, const int offset);
+    int (*de_flush)(AVFilterContext *ctx, AVFrame *out, const int offset);
 
     AVTXContext *tx_ctx[2], *itx_ctx;
     av_tx_fn tx_fn, itx_fn;
@@ -115,12 +116,12 @@ static int config_input(AVFilterLink *inlink)
     s->trim_size = s->fft_size;
     s->flush_size = s->fft_size - s->overlap;
 
-    s->in_frame       = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
-    s->center_frame   = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
-    s->out_dist_frame = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
-    s->windowed_frame = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
-    s->windowed_out   = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
-    s->windowed_prev  = ff_get_audio_buffer(inlink, (s->fft_size + 2) * 2);
+    s->in_frame       = ff_get_audio_buffer(inlink, s->fft_size + 2);
+    s->center_frame   = ff_get_audio_buffer(inlink, s->fft_size + 2);
+    s->out_dist_frame = ff_get_audio_buffer(inlink, s->fft_size * 2);
+    s->windowed_frame = ff_get_audio_buffer(inlink, s->fft_size + 2);
+    s->windowed_out   = ff_get_audio_buffer(inlink, s->fft_size + 2);
+    s->windowed_prev  = ff_get_audio_buffer(inlink, s->fft_size + 2);
     if (!s->in_frame || !s->windowed_out || !s->windowed_prev ||
         !s->out_dist_frame || !s->windowed_frame || !s->center_frame)
         return AVERROR(ENOMEM);
@@ -128,10 +129,12 @@ static int config_input(AVFilterLink *inlink)
     switch (inlink->format) {
     case AV_SAMPLE_FMT_FLTP:
         s->de_stereo = de_stereo_float;
+        s->de_flush = de_flush_float;
         ret = de_tx_init_float(ctx);
         break;
     case AV_SAMPLE_FMT_DBLP:
         s->de_stereo = de_stereo_double;
+        s->de_flush = de_flush_double;
         ret = de_tx_init_double(ctx);
         break;
     }
@@ -144,10 +147,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioDialogueEnhanceContext *s = ctx->priv;
+    int extra_samples, nb_samples, ret;
     AVFrame *out;
-    int ret;
 
-    out = ff_get_audio_buffer(outlink, in->nb_samples);
+    extra_samples = in->nb_samples % s->overlap;
+    if (extra_samples)
+        extra_samples = FFMIN(s->overlap - extra_samples, s->flush_size);
+    nb_samples = in->nb_samples;
+    if (extra_samples > 0) {
+        nb_samples += extra_samples;
+        s->flush_size -= extra_samples;
+    }
+
+    out = ff_get_audio_buffer(outlink, nb_samples);
     if (!out) {
         ret = AVERROR(ENOMEM);
         goto fail;
@@ -158,7 +170,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->de_stereo(ctx, out, offset);
 
     av_frame_copy_props(out, in);
-    out->nb_samples = in->nb_samples;
     out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
     out->duration = av_rescale_q(out->nb_samples,
                                  (AVRational){1, outlink->sample_rate},
@@ -167,13 +178,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     s->last_pts = out->pts + out->duration;
 
     if (s->trim_size > 0) {
-        s->trim_size -= in->nb_samples;
-
-        if (s->trim_size > 0 && s->trim_size < in->nb_samples) {
+        if (s->trim_size < in->nb_samples) {
             for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
                 out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
 
             s->trim_size = 0;
+        } else {
+            s->trim_size -= in->nb_samples;
         }
     }
 
@@ -196,34 +207,31 @@ static int flush_frame(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AudioDialogueEnhanceContext *s = ctx->priv;
-    const int nb_samples = s->flush_size;
-    AVFrame *out = ff_get_audio_buffer(outlink, nb_samples);
+    int ret = 0;
 
-    if (!out)
-        return AVERROR(ENOMEM);
+    while (s->flush_size > 0) {
+        const int nb_samples = FFMIN(s->flush_size, s->overlap);
+        AVFrame *out = ff_get_audio_buffer(outlink, nb_samples);
 
-    s->flush_size = 0;
+        if (!out)
+            return AVERROR(ENOMEM);
 
-    {
-        const uint8_t *left_in = (const uint8_t *)s->in_frame->extended_data[0];
-        const uint8_t *right_in = (const uint8_t *)s->in_frame->extended_data[1];
-        const uint8_t *center_in = (const uint8_t *)s->out_dist_frame->extended_data[0];
-        const size_t sample_size = av_get_bytes_per_sample(out->format);
-        uint8_t *center_dst = ((uint8_t *)out->extended_data[2]);
-        uint8_t *right_dst = ((uint8_t *)out->extended_data[1]);
-        uint8_t *left_dst = ((uint8_t *)out->extended_data[0]);
+        s->flush_size -= nb_samples;
 
-        memcpy(center_dst, center_in, nb_samples * sample_size);
-        memcpy(right_dst, right_in, nb_samples * sample_size);
-        memcpy(left_dst, left_in, nb_samples * sample_size);
+        s->de_flush(ctx, out, 0);
+
+        out->pts = s->last_pts;
+        out->duration = av_rescale_q(out->nb_samples,
+                                     (AVRational){1, outlink->sample_rate},
+                                     outlink->time_base);
+        s->last_pts += out->duration;
+
+        ret = ff_filter_frame(outlink, out);
+        if (ret < 0)
+            break;
     }
 
-    out->pts = s->last_pts;
-    out->duration = av_rescale_q(out->nb_samples,
-                                 (AVRational){1, outlink->sample_rate},
-                                 outlink->time_base);
-
-    return ff_filter_frame(outlink, out);
+    return ret;
 }
 
 static int activate(AVFilterContext *ctx)
@@ -232,7 +240,7 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *outlink = ctx->outputs[0];
     AudioDialogueEnhanceContext *s = ctx->priv;
     int ret, status, available, wanted;
-    AVFrame *in = NULL;
+    AVFrame *in;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);

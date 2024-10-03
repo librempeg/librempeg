@@ -61,7 +61,7 @@
 static int fn(de_tx_init)(AVFilterContext *ctx)
 {
     AudioDialogueEnhanceContext *s = ctx->priv;
-    ftype scale = F(1.0), iscale = F(1.0) / (s->fft_size * F(2.0 * 1.5));
+    ftype scale = F(1.0), iscale = F(1.0) / (s->fft_size * F(1.5));
     ftype *window;
     int ret;
 
@@ -72,15 +72,15 @@ static int fn(de_tx_init)(AVFilterContext *ctx)
     for (int n = 0; n < s->fft_size; n++)
         window[n] = SIN(M_PI*n/(s->fft_size-1));
 
-    ret = av_tx_init(&s->tx_ctx[0], &s->tx_fn, TX_TYPE, 0, s->fft_size * 2, &scale, 0);
+    ret = av_tx_init(&s->tx_ctx[0], &s->tx_fn, TX_TYPE, 0, s->fft_size, &scale, 0);
     if (ret < 0)
         return ret;
 
-    ret = av_tx_init(&s->tx_ctx[1], &s->tx_fn, TX_TYPE, 0, s->fft_size * 2, &scale, 0);
+    ret = av_tx_init(&s->tx_ctx[1], &s->tx_fn, TX_TYPE, 0, s->fft_size, &scale, 0);
     if (ret < 0)
         return ret;
 
-    ret = av_tx_init(&s->itx_ctx, &s->itx_fn, TX_TYPE, 1, s->fft_size * 2, &iscale, 0);
+    ret = av_tx_init(&s->itx_ctx, &s->itx_fn, TX_TYPE, 1, s->fft_size, &iscale, 0);
     if (ret < 0)
         return ret;
 
@@ -213,17 +213,18 @@ static int fn(de_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     ftype *center_osamples = ((ftype *)out->extended_data[2])+doffset;
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
-    const int nb_samples = FFMIN(overlap, s->in->nb_samples);
+    const int out_nb_samples = FFMIN(overlap, out->nb_samples - doffset);
+    const int nb_samples = FFMIN(overlap, s->in->nb_samples - doffset);
     ftype vad;
 
     // shift in/out buffers
     memmove(left_in, &left_in[overlap], offset * sizeof(ftype));
     memmove(right_in, &right_in[overlap], offset * sizeof(ftype));
-    memmove(left_out, &left_out[overlap], offset * sizeof(ftype));
 
     memcpy(&left_in[offset], left_samples, nb_samples * sizeof(ftype));
     memcpy(&right_in[offset], right_samples, nb_samples * sizeof(ftype));
-    memset(&left_out[offset], 0, overlap * sizeof(ftype));
+    memset(&left_in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*left_in));
+    memset(&right_in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*right_in));
 
     fn(apply_window)(s, left_in,  windowed_left,  0);
     fn(apply_window)(s, right_in, windowed_right, 0);
@@ -234,32 +235,106 @@ static int fn(de_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     fn(get_centere)((ctype *)windowed_oleft,
                     (ctype *)windowed_oright,
                     (ctype *)center,
-                    s->fft_size + 1);
+                    s->fft_size/2 + 1);
 
-    vad = fn(calc_vad)(fn(flux)(center, center_prev, s->fft_size + 1),
+    vad = fn(calc_vad)(fn(flux)(center, center_prev, s->fft_size/2 + 1),
                        fn(fluxlr)(windowed_oleft, windowed_pleft,
-                                  windowed_oright, windowed_pright, s->fft_size + 1), s->voice);
+                                  windowed_oright, windowed_pright, s->fft_size/2 + 1), s->voice);
     vad = vad * 0.1 + 0.9 * fn(s->prev_vad);
     fn(s->prev_vad) = vad;
 
-    memcpy(center_prev,     center,          s->fft_size * sizeof(ftype));
-    memcpy(windowed_pleft,  windowed_oleft,  s->fft_size * sizeof(ftype));
-    memcpy(windowed_pright, windowed_oright, s->fft_size * sizeof(ftype));
+    memcpy(center_prev,     center,          (s->fft_size/2+1) * sizeof(ftype));
+    memcpy(windowed_pleft,  windowed_oleft,  (s->fft_size/2+1) * sizeof(ftype));
+    memcpy(windowed_pright, windowed_oright, (s->fft_size/2+1) * sizeof(ftype));
 
-    fn(get_final)(center, windowed_oleft, windowed_oright, vad, s->fft_size + 1,
+    fn(get_final)(center, windowed_oleft, windowed_oright, vad, s->fft_size/2 + 1,
                   s->original, s->enhance);
 
     s->itx_fn(s->itx_ctx, windowed_oleft, center, sizeof(ctype));
 
+    memmove(left_out, &left_out[overlap], offset * sizeof(*left_out));
+    memset(&left_out[offset], 0, overlap * sizeof(*left_out));
+
     fn(apply_window)(s, windowed_oleft, left_out, 1);
 
-    memcpy(left_osamples, left_in, overlap * sizeof(ftype));
-    memcpy(right_osamples, right_in, overlap * sizeof(ftype));
+    memcpy(left_osamples, left_in, out_nb_samples * sizeof(ftype));
+    memcpy(right_osamples, right_in, out_nb_samples * sizeof(ftype));
 
     if (ctx->is_disabled)
-        memset(center_osamples, 0, overlap * sizeof(ftype));
+        memset(center_osamples, 0, out_nb_samples * sizeof(ftype));
     else
-        memcpy(center_osamples, left_out, overlap * sizeof(ftype));
+        memcpy(center_osamples, left_out, out_nb_samples * sizeof(ftype));
+
+    return 0;
+}
+
+static int fn(de_flush)(AVFilterContext *ctx, AVFrame *out, const int doffset)
+{
+    AudioDialogueEnhanceContext *s = ctx->priv;
+    ftype *center          = (ftype *)s->center_frame->extended_data[0];
+    ftype *center_prev     = (ftype *)s->center_frame->extended_data[1];
+    ftype *left_in         = (ftype *)s->in_frame->extended_data[0];
+    ftype *right_in        = (ftype *)s->in_frame->extended_data[1];
+    ftype *left_out        = (ftype *)s->out_dist_frame->extended_data[0];
+    ftype *windowed_left   = (ftype *)s->windowed_frame->extended_data[0];
+    ftype *windowed_right  = (ftype *)s->windowed_frame->extended_data[1];
+    ftype *windowed_oleft  = (ftype *)s->windowed_out->extended_data[0];
+    ftype *windowed_oright = (ftype *)s->windowed_out->extended_data[1];
+    ftype *windowed_pleft  = (ftype *)s->windowed_prev->extended_data[0];
+    ftype *windowed_pright = (ftype *)s->windowed_prev->extended_data[1];
+    ftype *left_osamples   = ((ftype *)out->extended_data[0])+doffset;
+    ftype *right_osamples  = ((ftype *)out->extended_data[1])+doffset;
+    ftype *center_osamples = ((ftype *)out->extended_data[2])+doffset;
+    const int overlap = s->overlap;
+    const int offset = s->fft_size - overlap;
+    const int nb_samples = 0;
+    ftype vad;
+
+    // shift in/out buffers
+    memmove(left_in, &left_in[overlap], offset * sizeof(ftype));
+    memmove(right_in, &right_in[overlap], offset * sizeof(ftype));
+
+    memset(&left_in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*left_in));
+    memset(&right_in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*right_in));
+
+    fn(apply_window)(s, left_in,  windowed_left,  0);
+    fn(apply_window)(s, right_in, windowed_right, 0);
+
+    s->tx_fn(s->tx_ctx[0], windowed_oleft,  windowed_left,  sizeof(ftype));
+    s->tx_fn(s->tx_ctx[1], windowed_oright, windowed_right, sizeof(ftype));
+
+    fn(get_centere)((ctype *)windowed_oleft,
+                    (ctype *)windowed_oright,
+                    (ctype *)center,
+                    s->fft_size/2 + 1);
+
+    vad = fn(calc_vad)(fn(flux)(center, center_prev, s->fft_size/2 + 1),
+                       fn(fluxlr)(windowed_oleft, windowed_pleft,
+                                  windowed_oright, windowed_pright, s->fft_size/2 + 1), s->voice);
+    vad = vad * 0.1 + 0.9 * fn(s->prev_vad);
+    fn(s->prev_vad) = vad;
+
+    memcpy(center_prev,     center,          (s->fft_size/2+1) * sizeof(ftype));
+    memcpy(windowed_pleft,  windowed_oleft,  (s->fft_size/2+1) * sizeof(ftype));
+    memcpy(windowed_pright, windowed_oright, (s->fft_size/2+1) * sizeof(ftype));
+
+    fn(get_final)(center, windowed_oleft, windowed_oright, vad, s->fft_size/2 + 1,
+                  s->original, s->enhance);
+
+    s->itx_fn(s->itx_ctx, windowed_oleft, center, sizeof(ctype));
+
+    memmove(left_out, &left_out[overlap], offset * sizeof(*left_out));
+    memset(&left_out[offset], 0, overlap * sizeof(*left_out));
+
+    fn(apply_window)(s, windowed_oleft, left_out, 1);
+
+    memcpy(left_osamples, left_in, out->nb_samples * sizeof(ftype));
+    memcpy(right_osamples, right_in, out->nb_samples * sizeof(ftype));
+
+    if (ctx->is_disabled)
+        memset(center_osamples, 0, out->nb_samples * sizeof(ftype));
+    else
+        memcpy(center_osamples, left_out, out->nb_samples * sizeof(ftype));
 
     return 0;
 }
