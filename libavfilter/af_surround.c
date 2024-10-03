@@ -208,7 +208,6 @@ typedef struct AudioSurroundContext {
     void (*do_transform)(AVFilterContext *ctx, int ch);
     void (*bypass_transform)(AVFilterContext *ctx, int ch, int is_lfe);
     int (*transform_xy)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
-    int (*flush)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } AudioSurroundContext;
 
 static int query_formats(const AVFilterContext *ctx,
@@ -414,8 +413,8 @@ static int fft_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AudioSurroundContext *s = ctx->priv;
     AVFrame *in = arg;
-    const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = (s->in_ch_layout.nb_channels * jobnr) / nb_jobs;
+    const int end = (s->in_ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
 
     for (int ch = start; ch < end; ch++)
         s->fft_channel(ctx, in, ch);
@@ -444,7 +443,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioSurroundContext *s = ctx->priv;
-    int extra_samples;
+    int extra_samples, nb_samples;
     AVFrame *out;
 
     ff_filter_execute(ctx, fft_channels, in, NULL,
@@ -453,7 +452,20 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     s->filter(ctx);
 
-    out = ff_get_audio_buffer(outlink, s->hop_size);
+    if (in) {
+        extra_samples = FFMIN(s->hop_size - in->nb_samples, s->flush_size);
+        nb_samples = in->nb_samples;
+        if (extra_samples > 0) {
+            nb_samples += extra_samples;
+            s->flush_size -= extra_samples;
+        }
+    } else {
+        nb_samples = FFMIN(s->flush_size, s->hop_size);
+        s->flush_size -= nb_samples;
+        extra_samples = 0;
+    }
+
+    out = ff_get_audio_buffer(outlink, nb_samples);
     if (!out) {
         av_frame_free(&in);
         return AVERROR(ENOMEM);
@@ -479,22 +491,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     s->smooth_init = 1;
 
-    av_frame_copy_props(out, in);
-    extra_samples = FFMIN(s->hop_size - in->nb_samples, s->flush_size);
-    out->nb_samples = in->nb_samples;
-    if (extra_samples > 0) {
-        out->nb_samples += extra_samples;
-        s->flush_size -= extra_samples;
+    if (in) {
+        av_frame_copy_props(out, in);
+        out->pts -= av_rescale_q(s->win_size - s->hop_size, av_make_q(1, outlink->sample_rate), outlink->time_base);
+    } else {
+        out->pts = s->last_pts;
     }
-    out->pts = in->pts;
-    out->pts -= av_rescale_q(s->win_size - s->hop_size, av_make_q(1, outlink->sample_rate), outlink->time_base);
     out->duration = av_rescale_q(out->nb_samples,
                                  (AVRational){1, outlink->sample_rate},
                                  outlink->time_base);
 
     s->last_pts = out->pts + out->duration;
 
-    if (s->trim_size > 0) {
+    if (s->trim_size > 0 && in) {
         if (s->trim_size < in->nb_samples) {
             for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
                 out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
@@ -521,23 +530,15 @@ static int flush_frame(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AudioSurroundContext *s = ctx->priv;
-    const int nb_samples = s->flush_size;
-    AVFrame *out = ff_get_audio_buffer(outlink, nb_samples);
+    int ret = 0;
 
-    if (!out)
-        return AVERROR(ENOMEM);
+    while (s->flush_size > 0) {
+        ret = filter_frame(ctx->inputs[0], NULL);
+        if (ret < 0)
+            break;
+    }
 
-    s->flush_size = 0;
-
-    ff_filter_execute(ctx, s->flush, out, NULL,
-                      FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
-
-    out->pts = s->last_pts;
-    out->duration = av_rescale_q(out->nb_samples,
-                                 (AVRational){1, outlink->sample_rate},
-                                 outlink->time_base);
-
-    return ff_filter_frame(outlink, out);
+    return ret;
 }
 
 static int activate(AVFilterContext *ctx)
@@ -556,7 +557,7 @@ static int activate(AVFilterContext *ctx)
         return ret;
 
     if (ret > 0)
-        ret = filter_frame(inlink, in);
+        return filter_frame(inlink, in);
     if (ret < 0)
         return ret;
 
@@ -569,7 +570,7 @@ static int activate(AVFilterContext *ctx)
         if (s->flush_size > 0)
             ret = flush_frame(outlink);
 
-        ff_outlink_set_status(outlink, status, pts);
+        ff_outlink_set_status(outlink, status, s->last_pts);
         return ret;
     }
 

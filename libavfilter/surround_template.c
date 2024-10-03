@@ -463,8 +463,12 @@ static int fn(fft_channel)(AVFilterContext *ctx, AVFrame *in, int ch)
     const int win_size = s->win_size;
 
     memmove(src, &src[s->hop_size], offset * sizeof(ftype));
-    memcpy(&src[offset], in->extended_data[ch], in->nb_samples * sizeof(ftype));
-    memset(&src[offset + in->nb_samples], 0, (s->hop_size - in->nb_samples) * sizeof(ftype));
+    if (in) {
+        memcpy(&src[offset], in->extended_data[ch], in->nb_samples * sizeof(ftype));
+        memset(&src[offset + in->nb_samples], 0, (s->hop_size - in->nb_samples) * sizeof(ftype));
+    } else {
+        memset(&src[offset], 0, s->hop_size * sizeof(ftype));
+    }
 
     for (int n = 0; n < win_size; n++)
         win[n] = src[n] * window_func_lut[n] * level_in;
@@ -847,24 +851,6 @@ static void fn(stereo_lfe_copy)(AVFilterContext *ctx, int ch, int chan)
     }
 }
 
-static int fn(flush)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    AVFrame *out = arg;
-    const int nb_samples = out->nb_samples;
-    AudioSurroundContext *s = ctx->priv;
-    const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
-
-    for (int ch = start; ch < end; ch++) {
-        const ftype *over = (const ftype *)s->overlap_buffer->extended_data[ch];
-        ftype *dst = ((ftype *)out->extended_data[ch]);
-
-        memcpy(dst, over, nb_samples * sizeof(*dst));
-    }
-
-    return 0;
-}
-
 static int fn(config_input)(AVFilterContext *ctx)
 {
     AudioSurroundContext *s = ctx->priv;
@@ -913,7 +899,6 @@ static int fn(config_input)(AVFilterContext *ctx)
     s->do_transform = fn(do_transform);
     s->bypass_transform = fn(bypass_transform);
     s->transform_xy = fn(transform_xy);
-    s->flush = fn(flush);
 
     switch (s->in_ch_layout.u.mask) {
     case AV_CH_LAYOUT_STEREO:
