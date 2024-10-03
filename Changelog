@@ -2,6 +2,9 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>:
++- yasm support dropped, users need to use nasm
+
+version 7.1:
 - CLAP wrapper audio filter
 - more truehd encoder channel-layouts
 - LC3/LC3plus demuxer and muxer
