@@ -443,7 +443,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioSurroundContext *s = ctx->priv;
-    int extra_samples, nb_samples;
+    int nb_samples;
     AVFrame *out;
 
     ff_filter_execute(ctx, fft_channels, in, NULL,
@@ -453,7 +453,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     s->filter(ctx);
 
     if (in) {
-        extra_samples = FFMIN(s->hop_size - in->nb_samples, s->flush_size);
+        const int extra_samples = FFMIN(s->hop_size - in->nb_samples, s->flush_size);
+
         nb_samples = in->nb_samples;
         if (extra_samples > 0) {
             nb_samples += extra_samples;
@@ -462,7 +463,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     } else {
         nb_samples = FFMIN(s->flush_size, s->hop_size);
         s->flush_size -= nb_samples;
-        extra_samples = 0;
     }
 
     out = ff_get_audio_buffer(outlink, nb_samples);
