@@ -84,7 +84,6 @@ typedef struct AudioDRCContext {
     AVFrame *threshold;
     AVFrame *windowed_frame;
 
-    char *channels_to_filter;
     AVChannelLayout ch_layout;
 
     AVTXContext **tx_ctx;
@@ -107,7 +106,7 @@ static const AVOption adrc_options[] = {
     { "threshold", "set the threshold expression",OFFSET(threshold_str), AV_OPT_TYPE_STRING, {.str="-30"}, 0,    0, FLAGS },
     { "attack",    "set the attack",              OFFSET(attack_ms),     AV_OPT_TYPE_DOUBLE, {.dbl=50.}, 0.1, 1000, FLAGS },
     { "release",   "set the release",             OFFSET(release_ms),    AV_OPT_TYPE_DOUBLE, {.dbl=100.},0.1, 2000, FLAGS },
-    { "channels",  "set channels to filter", OFFSET(channels_to_filter), AV_OPT_TYPE_STRING, {.str="all"}, 0,    0, FLAGS },
+    { "channels",  "set channels to filter",      OFFSET(ch_layout),   AV_OPT_TYPE_CHLAYOUT, {.str="24c"}, 0,    0, FLAGS },
     {NULL}
 };
 
@@ -280,12 +279,6 @@ static int activate(AVFilterContext *ctx)
     AVFrame *in = NULL;
     int64_t pts;
 
-    ret = av_channel_layout_copy(&s->ch_layout, &inlink->ch_layout);
-    if (ret < 0)
-        return ret;
-    if (strcmp(s->channels_to_filter, "all"))
-        av_channel_layout_from_string(&s->ch_layout, s->channels_to_filter);
-
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
     available = ff_inlink_queued_samples(inlink);
@@ -315,8 +308,6 @@ static int activate(AVFilterContext *ctx)
 static av_cold void uninit(AVFilterContext *ctx)
 {
     AudioDRCContext *s = ctx->priv;
-
-    av_channel_layout_uninit(&s->ch_layout);
 
     av_expr_free(s->transfer_expr);
     s->transfer_expr = NULL;
