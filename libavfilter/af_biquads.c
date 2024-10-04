@@ -93,7 +93,6 @@ typedef struct BiquadsContext {
     double frequency;
     double width;
     double mix;
-    char *ch_layout_str;
     AVChannelLayout ch_layout;
     int normalize;
 
@@ -968,19 +967,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out_buf;
     ThreadData td;
-    int ret, drop = 0;
+    int drop = 0;
 
     if (s->bypass)
         return ff_filter_frame(outlink, buf);
-
-    ret = av_channel_layout_copy(&s->ch_layout, &inlink->ch_layout);
-    if (ret < 0) {
-        av_frame_free(&buf);
-        return ret;
-    }
-    if (strcmp(s->ch_layout_str, "all"))
-        av_channel_layout_from_string(&s->ch_layout,
-                                      s->ch_layout_str);
 
     if (av_frame_is_writable(buf) && s->block_samples == 0) {
         out_buf = buf;
@@ -1090,7 +1080,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     for (int i = 0; i < 3; i++)
         av_frame_free(&s->block[i]);
     av_freep(&s->st);
-    av_channel_layout_uninit(&s->ch_layout);
 }
 
 static const AVFilterPad outputs[] = {
@@ -1153,8 +1142,8 @@ const AVFilter ff_af_##name_ = {                         \
 #define MIX_CHANNELS_NORMALIZE_OPTION(x, y, z)                                                                \
     {"mix", "set mix", OFFSET(mix), AV_OPT_TYPE_DOUBLE, {.dbl=x}, 0, 1, FLAGS},                               \
     {"m",   "set mix", OFFSET(mix), AV_OPT_TYPE_DOUBLE, {.dbl=x}, 0, 1, FLAGS},                               \
-    {"channels", "set channels to filter", OFFSET(ch_layout_str), AV_OPT_TYPE_STRING, {.str=y}, 0, 0, FLAGS}, \
-    {"c",        "set channels to filter", OFFSET(ch_layout_str), AV_OPT_TYPE_STRING, {.str=y}, 0, 0, FLAGS}, \
+    {"channels", "set channels to filter", OFFSET(ch_layout),  AV_OPT_TYPE_CHLAYOUT, {.str=y}, 0, 0, FLAGS}, \
+    {"c",        "set channels to filter", OFFSET(ch_layout),  AV_OPT_TYPE_CHLAYOUT, {.str=y}, 0, 0, FLAGS}, \
     {"normalize", "normalize coefficients", OFFSET(normalize), AV_OPT_TYPE_BOOL, {.i64=z}, 0, 1, FLAGS},      \
     {"n",         "normalize coefficients", OFFSET(normalize), AV_OPT_TYPE_BOOL, {.i64=z}, 0, 1, FLAGS}
 
@@ -1192,7 +1181,7 @@ static const AVOption equalizer_options[] = {
     WIDTH_OPTION(1.0),
     {"gain", "set gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, -900, 900, FLAGS},
     {"g",    "set gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, -900, 900, FLAGS},
-    MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
+    MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
@@ -1210,7 +1199,7 @@ static const AVOption bass_lowshelf_options[] = {
     {"gain", "set gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, -900, 900, FLAGS},
     {"g",    "set gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, -900, 900, FLAGS},
     ORDER_OPTION(2),
-    MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
+    MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
@@ -1235,7 +1224,7 @@ static const AVOption treble_highshelf_options[] = {
     {"gain", "set gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, -900, 900, FLAGS},
     {"g",    "set gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, -900, 900, FLAGS},
     ORDER_OPTION(2),
-    MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
+    MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
@@ -1265,7 +1254,7 @@ static const AVOption bandpass_options[] = {
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(0.5),
     {"csg",   "use constant skirt gain", OFFSET(csg), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS},
-    MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
+    MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
@@ -1280,7 +1269,7 @@ static const AVOption bandreject_options[] = {
     {"f",         "set central frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=3000}, 0, 999999, FLAGS},
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(0.5),
-    MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
+    MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
@@ -1296,7 +1285,7 @@ static const AVOption lowpass_options[] = {
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(0.707),
     ORDER_OPTION(2),
-    MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
+    MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
@@ -1312,7 +1301,7 @@ static const AVOption highpass_options[] = {
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(0.707),
     ORDER_OPTION(2),
-    MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
+    MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
@@ -1327,7 +1316,7 @@ static const AVOption allpass_options[] = {
     {"f",         "set central frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=3000}, 0, 999999, FLAGS},
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(0.707),
-    MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
+    MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     ORDER_OPTION(2),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
@@ -1344,7 +1333,7 @@ static const AVOption biquad_options[] = {
     {"b0", NULL, OFFSET(ob[0]), AV_OPT_TYPE_DOUBLE, {.dbl=0}, INT32_MIN, INT32_MAX, FLAGS},
     {"b1", NULL, OFFSET(ob[1]), AV_OPT_TYPE_DOUBLE, {.dbl=0}, INT32_MIN, INT32_MAX, FLAGS},
     {"b2", NULL, OFFSET(ob[2]), AV_OPT_TYPE_DOUBLE, {.dbl=0}, INT32_MIN, INT32_MAX, FLAGS},
-    MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
+    MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
@@ -1359,7 +1348,7 @@ static const AVOption transform_options[] = {
     {"qz", "source Q-Factor",       OFFSET(qz), AV_OPT_TYPE_DOUBLE, {.dbl=1},    0, 99999,  FLAGS},
     {"fp", "destination frequency", OFFSET(fp), AV_OPT_TYPE_DOUBLE, {.dbl=1000}, 0, 999999, FLAGS},
     {"qp", "destination Q-Factor",  OFFSET(qp), AV_OPT_TYPE_DOUBLE, {.dbl=1},    0, 99999,  FLAGS},
-    MIX_CHANNELS_NORMALIZE_OPTION(1, "all", 0),
+    MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
