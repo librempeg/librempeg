@@ -378,11 +378,11 @@ static int fn(init_state)(AVFilterContext *ctx)
         if (!c->r_data[1])
             return AVERROR(ENOMEM);
 
-        c->c_data[0] = av_calloc(s->max_size+2, sizeof(ctype));
+        c->c_data[0] = av_calloc(s->max_size/2+1, sizeof(ctype));
         if (!c->c_data[0])
             return AVERROR(ENOMEM);
 
-        c->c_data[1] = av_calloc(s->max_size+2, sizeof(ctype));
+        c->c_data[1] = av_calloc(s->max_size/2+1, sizeof(ctype));
         if (!c->c_data[1])
             return AVERROR(ENOMEM);
 
