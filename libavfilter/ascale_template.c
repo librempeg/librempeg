@@ -289,7 +289,8 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
         for (int n = ns; n < max_period-1; n++) {
             if (rptr[n] >= rptr[n-1] &&
                 rptr[n] >= rptr[n+1]) {
-                const ftype score = COPYSIGN(SQRT(FABS(F(2.0)*rptr[n]-rptr[2*n])*n), F(2.0)*rptr[n]-rptr[2*n]);
+                const ftype xcorr = F(2.0)*rptr[n]-rptr[2*n];
+                const ftype score = COPYSIGN(SQRT(FABS(xcorr)*n), xcorr);
 
                 if (score > best_score) {
                     best_score = score;
