@@ -19,7 +19,6 @@
 #undef EPS
 #undef SQRT
 #undef FABS
-#undef COPYSIGN
 #undef ctype
 #undef ftype
 #undef CLIP
@@ -29,7 +28,6 @@
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
 #define EPS FLT_EPSILON
-#define COPYSIGN copysignf
 #define SQRT sqrtf
 #define FABS fabsf
 #define FSIN sinf
@@ -41,7 +39,6 @@
 #define SAMPLE_FORMAT fltp
 #else
 #define EPS DBL_EPSILON
-#define COPYSIGN copysign
 #define SQRT sqrt
 #define FABS fabs
 #define FSIN sin
@@ -85,11 +82,19 @@ static ftype fn(get_gain)(const ftype w, const ftype c)
     return SQRT(F(0.5)/b-(F(1.0)-c)*a*a/b)+a;
 }
 
+static ftype fn(get_score)(const ftype xcorr,
+                           const ftype half_size,
+                           const ftype n)
+{
+    return (n)*(half_size-n) * xcorr;
+}
+
 static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
 {
     AScaleContext *s = ctx->priv;
     const int max_period = s->max_period;
     const int max_size = s->max_size;
+    const int half_size = max_size/2;
     ChannelContext *c = &s->c[ch];
     void *datax[1] = { (void *)c->data[0] };
     void *datay[1] = { (void *)c->data[1] };
@@ -180,7 +185,8 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
         for (int n = ns; n < max_period-1; n++) {
             if (rptrx[n] >= rptrx[n-1] &&
                 rptrx[n] >= rptrx[n+1]) {
-                const ftype score = COPYSIGN(SQRT(FABS(rptrx[n])*n), rptrx[n]);
+                const ftype xcorr = rptrx[n];
+                const ftype score = fn(get_score)(xcorr, half_size, n);
 
                 if (score > best_score) {
                     best_score = score;
@@ -193,19 +199,15 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
             const ftype xy = rptrx[max_period-best_period];
             const ftype xx = dptr2x[max_period] - dptr2x[max_period-best_period];
             const ftype yy = dptr2y[best_period];
-            const ftype den = SQRT(xx)*SQRT(yy);
+            const ftype den = SQRT(xx)*SQRT(yy) + EPS;
 
-            if (den <= EPS) {
-                best_xcorr = F(0.0);
-            } else {
-                best_xcorr = xy/den;
-                best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
-            }
+            best_xcorr = xy/den;
+            best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
         }
     }
 
     if (best_period <= 0) {
-        best_period = max_period;
+        best_period = max_period/2;
         best_xcorr = F(0.0);
     }
 
@@ -239,6 +241,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     AScaleContext *s = ctx->priv;
     const int max_period = s->max_period;
     const int max_size = s->max_size;
+    const int half_size = max_size/2;
     ChannelContext *c = &s->c[ch];
     void *data[1] = { (void *)c->data[0] };
     ctype *cptr = c->c_data[0];
@@ -290,7 +293,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
             if (rptr[n] >= rptr[n-1] &&
                 rptr[n] >= rptr[n+1]) {
                 const ftype xcorr = F(2.0)*rptr[n]-rptr[2*n];
-                const ftype score = COPYSIGN(SQRT(FABS(xcorr)*n), xcorr);
+                const ftype score = fn(get_score)(xcorr, half_size, n);
 
                 if (score > best_score) {
                     best_score = score;
@@ -306,7 +309,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     }
 
     if (best_period <= 0) {
-        best_period = max_period;
+        best_period = max_period/2;
         best_xcorr = F(0.0);
     }
 
@@ -365,9 +368,7 @@ static int fn(init_state)(AVFilterContext *ctx)
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
         ChannelContext *c = &s->c[ch];
-        const ftype ascale = pow(s->max_size, -0.5);
-        const ftype iscale = F(1.0) / s->max_size;
-        const ftype scale = F(1.0);
+        const ftype scale = pow(s->max_size, -0.5);
         int ret;
 
         c->r_data[0] = av_calloc(s->max_size+2, sizeof(ftype));
@@ -416,17 +417,17 @@ static int fn(init_state)(AVFilterContext *ctx)
             return ret;
 
         ret = av_tx_init(&c->c2r, &c->c2r_fn,
-                         TX_TYPE, 1, s->max_size, &iscale, 0);
+                         TX_TYPE, 1, s->max_size, &scale, 0);
         if (ret < 0)
             return ret;
 
         ret = av_tx_init(&c->ar2c, &c->ar2c_fn,
-                         TX_TYPE, 0, s->max_size, &ascale, 0);
+                         TX_TYPE, 0, s->max_size, &scale, 0);
         if (ret < 0)
             return ret;
 
         ret = av_tx_init(&c->ac2r, &c->ac2r_fn,
-                         TX_TYPE, 1, s->max_size, &ascale, 0);
+                         TX_TYPE, 1, s->max_size, &scale, 0);
         if (ret < 0)
             return ret;
     }
