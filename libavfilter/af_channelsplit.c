@@ -38,7 +38,7 @@ typedef struct ChannelSplitContext {
     const AVClass *class;
 
     AVChannelLayout channel_layout;
-    char    *channels_str;
+    AVChannelLayout channels;
 
     int     *map;
 } ChannelSplitContext;
@@ -47,8 +47,8 @@ typedef struct ChannelSplitContext {
 #define A AV_OPT_FLAG_AUDIO_PARAM
 #define F AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption channelsplit_options[] = {
-    { "channel_layout", "Input channel layout.", OFFSET(channel_layout),   AV_OPT_TYPE_CHLAYOUT, { .str = "stereo" }, .flags = A|F },
-    { "channels",        "Channels to extract.", OFFSET(channels_str),       AV_OPT_TYPE_STRING, { .str = "all" },    .flags = A|F },
+    { "channel_layout", "Input channel layout", OFFSET(channel_layout),   AV_OPT_TYPE_CHLAYOUT, { .str = "stereo" }, .flags = A|F },
+    { "channels",        "Channels to extract", OFFSET(channels),         AV_OPT_TYPE_CHLAYOUT, { .str = "24c" },    .flags = A|F },
     { NULL }
 };
 
@@ -58,16 +58,10 @@ static av_cold int init(AVFilterContext *ctx)
 {
     ChannelSplitContext *s = ctx->priv;
     AVChannelLayout channel_layout = { 0 };
-    int all = 0, ret = 0;
+    int ret;
 
-    if (!strcmp(s->channels_str, "all")) {
-        if ((ret = av_channel_layout_copy(&channel_layout, &s->channel_layout)) < 0)
-            goto fail;
-        all = 1;
-    } else {
-        if ((ret = av_channel_layout_from_string(&channel_layout, s->channels_str)) < 0)
-            goto fail;
-    }
+    if ((ret = av_channel_layout_copy(&channel_layout, &s->channel_layout)) < 0)
+        goto fail;
 
     s->map = av_calloc(channel_layout.nb_channels, sizeof(*s->map));
     if (!s->map)
@@ -86,19 +80,15 @@ static av_cold int init(AVFilterContext *ctx)
             goto fail;
         }
 
-        if (all) {
-            s->map[i] = i;
-        } else {
-            av_channel_layout_describe(&s->channel_layout, buf, sizeof(buf));
-            if ((ret = av_channel_layout_index_from_channel(&s->channel_layout, channel)) < 0) {
-                av_log(ctx, AV_LOG_ERROR, "Channel name '%s' not present in channel layout '%s'.\n",
-                       pad.name, buf);
-                av_freep(&pad.name);
-                goto fail;
-            }
-
-            s->map[i] = ret;
+        av_channel_layout_describe(&s->channel_layout, buf, sizeof(buf));
+        if ((ret = av_channel_layout_index_from_channel(&s->channels, channel)) < 0) {
+            av_log(ctx, AV_LOG_ERROR, "Channel name '%s' not present in channel layout '%s'.\n",
+                   pad.name, buf);
+            av_freep(&pad.name);
+            goto fail;
         }
+
+        s->map[i] = ret;
 
         if ((ret = ff_append_outpad(ctx, &pad)) < 0)
             goto fail;
