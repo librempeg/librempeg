@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/samplefmt.h"
 #include "avfilter.h"
@@ -37,9 +38,11 @@ typedef struct CompensationDelayContext {
     int *temp;
     unsigned temp_size;
 
-    unsigned w_ptr;
+    unsigned *w_ptr;
     unsigned buf_size;
     AVFrame *delay_frame;
+
+    int (*delay_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } CompensationDelayContext;
 
 #define OFFSET(x) offsetof(CompensationDelayContext, x)
@@ -63,14 +66,16 @@ static const AVOption compensationdelay_options[] = {
 
 AVFILTER_DEFINE_CLASS(compensationdelay);
 
-// The maximum distance for options
-#define COMP_DELAY_MAX_DISTANCE            (100.0 * 100.0 + 100.0 * 1.0 + 1.0)
-// The actual speed of sound in normal conditions
-#define COMP_DELAY_SOUND_SPEED_KM_H(temp)  1.85325 * (643.95 * sqrt(((temp + 273.15) / 273.15)))
-#define COMP_DELAY_SOUND_SPEED_CM_S(temp)  (COMP_DELAY_SOUND_SPEED_KM_H(temp) * (1000.0 * 100.0) /* cm/km */ / (60.0 * 60.0) /* s/h */)
-#define COMP_DELAY_SOUND_FRONT_DELAY(temp) (1.0 / COMP_DELAY_SOUND_SPEED_CM_S(temp))
-// The maximum delay may be reached by this filter
-#define COMP_DELAY_MAX_DELAY               (COMP_DELAY_MAX_DISTANCE * COMP_DELAY_SOUND_FRONT_DELAY(50))
+typedef struct ThreadData {
+    AVFrame *out, *in;
+} ThreadData;
+
+#define DEPTH 32
+#include "compensationdelay_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "compensationdelay_template.c"
 
 static int config_input(AVFilterLink *inlink)
 {
@@ -79,8 +84,20 @@ static int config_input(AVFilterLink *inlink)
 
     s->buf_size = 1 << av_ceil_log2(lrint(inlink->sample_rate * COMP_DELAY_MAX_DELAY));
     s->delay_frame = ff_get_audio_buffer(inlink, s->buf_size);
-    if (!s->delay_frame)
+    s->w_ptr = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->w_ptr));
+    if (!s->delay_frame || !s->w_ptr)
         return AVERROR(ENOMEM);
+
+    switch (inlink->format) {
+    case AV_SAMPLE_FMT_FLTP:
+        s->delay_channels = delay_channels_fltp;
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        s->delay_channels = delay_channels_dblp;
+        break;
+    default:
+        return AVERROR_BUG;
+    }
 
     return 0;
 }
@@ -90,11 +107,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     CompensationDelayContext *s = ctx->priv;
-    const unsigned b_mask = s->buf_size - 1;
-    const unsigned buf_size = s->buf_size;
-    const double dry = s->dry;
-    const double wet = s->wet;
-    unsigned r_ptr, w_ptr = 0;
+    ThreadData td;
     AVFrame *out;
 
     if (ctx->is_disabled) {
@@ -108,31 +121,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
 
-    for (int ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
-        const double *src = (const double *)in->extended_data[ch];
-        double *dst = (double *)out->extended_data[ch];
-        double *buffer = (double *)s->delay_frame->extended_data[ch];
-        const int cm_idx = FFMIN(ch, s->distance_cm_size-1);
-        const int mm_idx = FFMIN(ch, s->distance_mm_size-1);
-        const int m_idx  = FFMIN(ch, s->distance_m_size-1);
-        const int t_idx  = FFMIN(ch, s->temp_size-1);
-        unsigned delay = (s->distance_m[m_idx] * 100. + s->distance_cm[cm_idx] * 1. + s->distance_mm[mm_idx] * .1) *
-            COMP_DELAY_SOUND_FRONT_DELAY(s->temp[t_idx]) * outlink->sample_rate;
-
-        w_ptr =  s->w_ptr;
-        r_ptr = (w_ptr + buf_size - delay) & b_mask;
-
-        for (int n = 0; n < in->nb_samples; n++) {
-            const double sample = src[n];
-
-            buffer[w_ptr] = sample;
-            if (out != in)
-                dst[n] = dry * sample + wet * buffer[r_ptr];
-            w_ptr = (w_ptr + 1) & b_mask;
-            r_ptr = (r_ptr + 1) & b_mask;
-        }
-    }
-    s->w_ptr = w_ptr;
+    td.out = out;
+    td.in = in;
+    ff_filter_execute(ctx, s->delay_channels, &td, NULL,
+                      FFMIN(outlink->ch_layout.nb_channels,
+                            ff_filter_get_nb_threads(ctx)));
 
     if (out != in)
         av_frame_free(&in);
@@ -144,9 +137,10 @@ static av_cold void uninit(AVFilterContext *ctx)
     CompensationDelayContext *s = ctx->priv;
 
     av_frame_free(&s->delay_frame);
+    av_freep(&s->w_ptr);
 }
 
-static const AVFilterPad compensationdelay_inputs[] = {
+static const AVFilterPad inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
@@ -161,9 +155,10 @@ const AVFilter ff_af_compensationdelay = {
     .priv_size     = sizeof(CompensationDelayContext),
     .priv_class    = &compensationdelay_class,
     .uninit        = uninit,
-    FILTER_INPUTS(compensationdelay_inputs),
+    FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
-    FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
     .process_command = ff_filter_process_command,
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS,
 };
