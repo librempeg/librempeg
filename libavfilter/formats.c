@@ -376,16 +376,19 @@ static const AVFilterFormatsMerger mergers_video[] = {
         .offset     = offsetof(AVFilterFormatsConfig, formats),
         .merge      = merge_pix_fmts,
         .can_merge  = can_merge_pix_fmts,
+        .conversion_filter = "scale",
     },
     {
         .offset     = offsetof(AVFilterFormatsConfig, color_spaces),
         .merge      = merge_generic,
         .can_merge  = can_merge_generic,
+        .conversion_filter = "scale",
     },
     {
         .offset     = offsetof(AVFilterFormatsConfig, color_ranges),
         .merge      = merge_generic,
         .can_merge  = can_merge_generic,
+        .conversion_filter = "scale",
     },
 };
 
@@ -394,16 +397,19 @@ static const AVFilterFormatsMerger mergers_audio[] = {
         .offset     = offsetof(AVFilterFormatsConfig, channel_layouts),
         .merge      = merge_channel_layouts,
         .can_merge  = can_merge_channel_layouts,
+        .conversion_filter = "aresample",
     },
     {
         .offset     = offsetof(AVFilterFormatsConfig, samplerates),
         .merge      = merge_samplerates,
         .can_merge  = can_merge_samplerates,
+        .conversion_filter = "aresample",
     },
     {
         .offset     = offsetof(AVFilterFormatsConfig, formats),
         .merge      = merge_sample_fmts,
         .can_merge  = can_merge_sample_fmts,
+        .conversion_filter = "asf2sf",
     },
 };
 

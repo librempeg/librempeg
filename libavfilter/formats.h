@@ -479,6 +479,7 @@ typedef struct AVFilterFormatMerger {
     unsigned offset;
     int (*merge)(void *a, void *b);
     int (*can_merge)(const void *a, const void *b);
+    const char *conversion_filter;
 } AVFilterFormatsMerger;
 
 /**

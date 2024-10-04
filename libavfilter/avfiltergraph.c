@@ -473,8 +473,7 @@ static int query_formats(AVFilterGraph *graph, void *log_ctx)
         for (j = 0; j < filter->nb_inputs; j++) {
             AVFilterLink *link = filter->inputs[j];
             const AVFilterNegotiation *neg;
-            unsigned neg_step;
-            int convert_needed = 0;
+            unsigned neg_step, convert_needed = 0;
 
             if (!link)
                 continue;
@@ -486,7 +485,7 @@ static int query_formats(AVFilterGraph *graph, void *log_ctx)
                 void *a = FF_FIELD_AT(void *, m->offset, link->incfg);
                 void *b = FF_FIELD_AT(void *, m->offset, link->outcfg);
                 if (a && b && a != b && !m->can_merge(a, b)) {
-                    convert_needed = 1;
+                    convert_needed |= 1U << neg_step;
                     break;
                 }
             }
@@ -504,11 +503,11 @@ static int query_formats(AVFilterGraph *graph, void *log_ctx)
                     if (ret < 0)
                         return ret;
                     if (!ret)
-                        convert_needed = 1;
+                        convert_needed |= 1U << neg_step;
                 }
             }
 
-            if (convert_needed) {
+            if (av_popcount(convert_needed) > 0) {
                 AVFilterContext *convert;
                 const AVFilter *filter;
                 AVFilterLink *inlink, *outlink;
@@ -524,7 +523,14 @@ static int query_formats(AVFilterGraph *graph, void *log_ctx)
                 }
 
                 /* couldn't merge format lists. auto-insert conversion filter */
-                if (!(filter = avfilter_get_by_name(neg->conversion_filter))) {
+                if (av_popcount(convert_needed) == 1) {
+                    const AVFilterFormatsMerger *m = &neg->mergers[av_log2(convert_needed)];
+
+                    filter = avfilter_get_by_name(m->conversion_filter);
+                } else {
+                    filter = avfilter_get_by_name(neg->conversion_filter);
+                }
+                if (!filter) {
                     av_log(log_ctx, AV_LOG_ERROR,
                            "'%s' filter not present, cannot convert formats.\n",
                            neg->conversion_filter);
