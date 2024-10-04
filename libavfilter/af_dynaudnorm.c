@@ -101,7 +101,6 @@ typedef struct DynamicAudioNormalizerContext {
     int channels;
     int sample_advance;
     int eof;
-    char *channels_to_filter;
     AVChannelLayout ch_layout;
     int64_t pts;
 
@@ -147,8 +146,8 @@ static const AVOption dynaudnorm_options[] = {
     { "s",           "set the compress factor",          OFFSET(compress_factor),   AV_OPT_TYPE_DOUBLE, {.dbl = 0.0},  0.0,  30.0, FLAGS },
     { "threshold",   "set the threshold value",          OFFSET(threshold),         AV_OPT_TYPE_DOUBLE, {.dbl = 0.0},  0.0,   1.0, FLAGS },
     { "t",           "set the threshold value",          OFFSET(threshold),         AV_OPT_TYPE_DOUBLE, {.dbl = 0.0},  0.0,   1.0, FLAGS },
-    { "channels",    "set channels to filter",           OFFSET(channels_to_filter),AV_OPT_TYPE_STRING, {.str="all"},    0,     0, FLAGS },
-    { "h",           "set channels to filter",           OFFSET(channels_to_filter),AV_OPT_TYPE_STRING, {.str="all"},    0,     0, FLAGS },
+    { "channels",    "set channels to filter",           OFFSET(ch_layout),         AV_OPT_TYPE_CHLAYOUT,{.str="24c"},   0,     0, FLAGS },
+    { "h",           "set channels to filter",           OFFSET(ch_layout),         AV_OPT_TYPE_CHLAYOUT,{.str="24c"},   0,     0, FLAGS },
     { "overlap",     "set the frame overlap",            OFFSET(overlap),           AV_OPT_TYPE_DOUBLE, {.dbl=.0},     0.0,   1.0, FLAGS },
     { "o",           "set the frame overlap",            OFFSET(overlap),           AV_OPT_TYPE_DOUBLE, {.dbl=.0},     0.0,   1.0, FLAGS },
     { "curve",       "set the custom peak mapping curve",OFFSET(expr_str),          AV_OPT_TYPE_STRING, {.str=NULL},      .flags = FLAGS },
@@ -330,8 +329,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     s->is_enabled = NULL;
 
     av_freep(&s->weights);
-
-    av_channel_layout_uninit(&s->ch_layout);
 
     ff_bufqueue_discard_all(&s->queue);
 
@@ -934,12 +931,6 @@ static int activate(AVFilterContext *ctx)
     AVFrame *in = NULL;
     int ret = 0, status;
     int64_t pts;
-
-    ret = av_channel_layout_copy(&s->ch_layout, &inlink->ch_layout);
-    if (ret < 0)
-        return ret;
-    if (strcmp(s->channels_to_filter, "all"))
-        av_channel_layout_from_string(&s->ch_layout, s->channels_to_filter);
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
