@@ -159,7 +159,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
         c->r2c_fn(c->r2c, cptrx, rptrx, sizeof(*rptrx));
         c->r2c_fn(c->r2c, cptry, rptry, sizeof(*rptry));
 
-        for (int n = 0; n < max_size+1; n++) {
+        for (int n = 0; n < max_size/2+1; n++) {
             const ftype re0 = cptrx[n].re;
             const ftype im0 = cptrx[n].im;
             const ftype re1 = cptry[n].re;
@@ -270,7 +270,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
 
         c->ar2c_fn(c->ar2c, cptr, rptr, sizeof(*rptr));
 
-        for (int n = 0; n < max_asize+1; n++) {
+        for (int n = 0; n < max_asize/2+1; n++) {
             const ftype re = cptr[n].re;
             const ftype im = cptr[n].im;
 
