@@ -193,7 +193,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
             const ftype xy = rptrx[max_period-best_period];
             const ftype xx = dptr2x[max_period] - dptr2x[max_period-best_period];
             const ftype yy = dptr2y[best_period];
-            const ftype den = SQRT(xx*yy);
+            const ftype den = SQRT(xx)*SQRT(yy);
 
             if (den <= EPS) {
                 best_xcorr = F(0.0);
@@ -238,7 +238,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
 {
     AScaleContext *s = ctx->priv;
     const int max_period = s->max_period;
-    const int max_asize = s->max_asize;
+    const int max_size = s->max_size;
     ChannelContext *c = &s->c[ch];
     void *data[1] = { (void *)c->data[0] };
     ctype *cptr = c->c_data[0];
@@ -265,12 +265,12 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     {
         int ns;
 
-        memset(rptr+max_period*2, 0, (max_asize+2-max_period*2) * sizeof(*rptr));
+        memset(rptr+max_period*2, 0, (max_size+2-max_period*2) * sizeof(*rptr));
         memcpy(rptr, dptr, max_period*2 * sizeof(*rptr));
 
         c->ar2c_fn(c->ar2c, cptr, rptr, sizeof(*rptr));
 
-        for (int n = 0; n < max_asize/2+1; n++) {
+        for (int n = 0; n < max_size/2+1; n++) {
             const ftype re = cptr[n].re;
             const ftype im = cptr[n].im;
 
@@ -365,12 +365,12 @@ static int fn(init_state)(AVFilterContext *ctx)
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
         ChannelContext *c = &s->c[ch];
-        const ftype aiscale = F(1.0)/s->max_asize;
-        const ftype iscale = F(1.0)/s->max_size;
+        const ftype ascale = pow(s->max_size, -0.5);
+        const ftype iscale = F(1.0) / s->max_size;
         const ftype scale = F(1.0);
         int ret;
 
-        c->r_data[0] = av_calloc(s->max_asize+2, sizeof(ftype));
+        c->r_data[0] = av_calloc(s->max_size+2, sizeof(ftype));
         if (!c->r_data[0])
             return AVERROR(ENOMEM);
 
@@ -378,7 +378,7 @@ static int fn(init_state)(AVFilterContext *ctx)
         if (!c->r_data[1])
             return AVERROR(ENOMEM);
 
-        c->c_data[0] = av_calloc(s->max_asize+2, sizeof(ctype));
+        c->c_data[0] = av_calloc(s->max_size+2, sizeof(ctype));
         if (!c->c_data[0])
             return AVERROR(ENOMEM);
 
@@ -421,12 +421,12 @@ static int fn(init_state)(AVFilterContext *ctx)
             return ret;
 
         ret = av_tx_init(&c->ar2c, &c->ar2c_fn,
-                         TX_TYPE, 0, s->max_asize, &scale, 0);
+                         TX_TYPE, 0, s->max_size, &ascale, 0);
         if (ret < 0)
             return ret;
 
         ret = av_tx_init(&c->ac2r, &c->ac2r_fn,
-                         TX_TYPE, 1, s->max_asize, &aiscale, 0);
+                         TX_TYPE, 1, s->max_size, &ascale, 0);
         if (ret < 0)
             return ret;
     }

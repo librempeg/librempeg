@@ -55,7 +55,6 @@ typedef struct AScaleContext {
 
     double tempo;
     int max_period;
-    int max_asize;
     int max_size;
 
     int eof;
@@ -270,7 +269,6 @@ static int config_input(AVFilterLink *inlink)
     s->pts[0] = AV_NOPTS_VALUE;
     s->max_period = (inlink->sample_rate + MIN_HZ-1) / MIN_HZ;
     s->max_size = 1 << av_ceil_log2(s->max_period*2);
-    s->max_asize = 1 << av_ceil_log2(s->max_period*4);
     s->nb_channels = inlink->ch_layout.nb_channels;
 
     switch (inlink->format) {
