@@ -69,7 +69,6 @@ typedef struct SpeechNormalizerContext {
     double threshold_value;
     double raise_amount;
     double fall_amount;
-    char *ch_layout_str;
     AVChannelLayout ch_layout;
     int invert;
     int link;
@@ -104,8 +103,8 @@ static const AVOption speechnorm_options[] = {
     { "r",     "set the expansion raising amount", OFFSET(raise_amount), AV_OPT_TYPE_DOUBLE, {.dbl=0.001}, 0.0, 1.0, FLAGS },
     { "fall", "set the compression raising amount", OFFSET(fall_amount), AV_OPT_TYPE_DOUBLE, {.dbl=0.001}, 0.0, 1.0, FLAGS },
     { "f",    "set the compression raising amount", OFFSET(fall_amount), AV_OPT_TYPE_DOUBLE, {.dbl=0.001}, 0.0, 1.0, FLAGS },
-    { "channels", "set channels to filter", OFFSET(ch_layout_str), AV_OPT_TYPE_STRING, {.str="all"}, 0, 0, FLAGS },
-    { "h",        "set channels to filter", OFFSET(ch_layout_str), AV_OPT_TYPE_STRING, {.str="all"}, 0, 0, FLAGS },
+    { "channels", "set channels to filter", OFFSET(ch_layout), AV_OPT_TYPE_CHLAYOUT, {.str="24c"}, 0, 0, FLAGS },
+    { "h",        "set channels to filter", OFFSET(ch_layout), AV_OPT_TYPE_CHLAYOUT, {.str="24c"}, 0, 0, FLAGS },
     { "invert", "set inverted filtering", OFFSET(invert), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS },
     { "i",      "set inverted filtering", OFFSET(invert), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS },
     { "link", "set linked channels filtering", OFFSET(link), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS },
@@ -316,13 +315,6 @@ static int activate(AVFilterContext *ctx)
     int ret, status;
     int64_t pts;
 
-    ret = av_channel_layout_copy(&s->ch_layout, &inlink->ch_layout);
-    if (ret < 0)
-        return ret;
-    if (strcmp(s->ch_layout_str, "all"))
-        av_channel_layout_from_string(&s->ch_layout,
-                                      s->ch_layout_str);
-
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
     ret = filter_frame(ctx);
@@ -416,7 +408,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     SpeechNormalizerContext *s = ctx->priv;
 
     av_fifo_freep2(&s->fifo);
-    av_channel_layout_uninit(&s->ch_layout);
     av_freep(&s->cc);
 }
 
