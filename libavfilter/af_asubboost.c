@@ -41,7 +41,6 @@ typedef struct ASubBoostContext {
     double a0, a1, a2;
     double b0, b1, b2;
 
-    char *ch_layout_str;
     AVChannelLayout ch_layout;
 
     int *write_pos;
@@ -93,7 +92,6 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     ASubBoostContext *s = ctx->priv;
-    int ret;
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_FLTP:
@@ -112,13 +110,6 @@ static int config_input(AVFilterLink *inlink)
     if (!s->buffer || !s->w || !s->write_pos)
         return AVERROR(ENOMEM);
 
-    ret = av_channel_layout_copy(&s->ch_layout, &inlink->ch_layout);
-    if (ret < 0)
-        return ret;
-
-    if (strcmp(s->ch_layout_str, "all"))
-        av_channel_layout_from_string(&s->ch_layout,
-                                      s->ch_layout_str);
     return get_coeffs(ctx);
 }
 
@@ -154,7 +145,6 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     ASubBoostContext *s = ctx->priv;
 
-    av_channel_layout_uninit(&s->ch_layout);
     av_frame_free(&s->buffer);
     av_frame_free(&s->w);
     av_freep(&s->write_pos);
@@ -163,21 +153,12 @@ static av_cold void uninit(AVFilterContext *ctx)
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
                            char *res, int res_len, int flags)
 {
-    ASubBoostContext *s = ctx->priv;
-    AVFilterLink *inlink = ctx->inputs[0];
     int ret;
 
     ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
     if (ret < 0)
         return ret;
 
-    ret = av_channel_layout_copy(&s->ch_layout, &inlink->ch_layout);
-    if (ret < 0)
-        return ret;
-
-    if (strcmp(s->ch_layout_str, "all"))
-        av_channel_layout_from_string(&s->ch_layout,
-                                      s->ch_layout_str);
     return get_coeffs(ctx);
 }
 
@@ -193,7 +174,7 @@ static const AVOption asubboost_options[] = {
     { "cutoff",   "set cutoff",   OFFSET(cutoff),   AV_OPT_TYPE_DOUBLE, {.dbl=100},     50, 900, FLAGS },
     { "slope",    "set slope",    OFFSET(slope),    AV_OPT_TYPE_DOUBLE, {.dbl=0.5}, 0.0001,   1, FLAGS },
     { "delay",    "set delay",    OFFSET(delay),    AV_OPT_TYPE_DOUBLE, {.dbl=20},       1, 100, FLAGS },
-    { "channels", "set channels to filter", OFFSET(ch_layout_str), AV_OPT_TYPE_STRING, {.str="all"}, 0, 0, FLAGS },
+    { "channels", "set channels to filter", OFFSET(ch_layout), AV_OPT_TYPE_CHLAYOUT, {.str="24c"}, 0, 0, FLAGS },
     { NULL }
 };
 
