@@ -150,10 +150,10 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     if (dptr2y[max_period] > F(0.0) && dptr2x[max_period] > F(0.0)) {
         int ns;
 
-        memset(rptrx+max_period, 0, (max_size-max_period) * sizeof(*rptrx));
+        memset(rptrx+max_period, 0, (max_size+2-max_period) * sizeof(*rptrx));
         memcpy(rptrx, dptrx, max_period * sizeof(*rptrx));
 
-        memset(rptry+max_period, 0, (max_size-max_period) * sizeof(*rptry));
+        memset(rptry+max_period, 0, (max_size+2-max_period) * sizeof(*rptry));
         memcpy(rptry, dptry, max_period * sizeof(*rptry));
 
         c->r2c_fn(c->r2c, cptrx, rptrx, sizeof(*rptrx));
