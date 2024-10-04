@@ -66,7 +66,7 @@ fate-filter-agate: CMD = framecrc -i $(SRC) -af aresample,agate=level_in=10:rang
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, ALIMITER ARESAMPLE, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-alimiter
 fate-filter-alimiter: tests/data/asynth-44100-2.wav
 fate-filter-alimiter: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
-fate-filter-alimiter: CMD = framecrc -i $(SRC) -af aresample,alimiter=level_in=1:level_out=2:limit=0.2,aresample
+fate-filter-alimiter: CMD = framecrc -i $(SRC) -af aresample,alimiter=limit=0.2,aresample
 
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, AMERGE, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-amerge
 fate-filter-amerge: tests/data/asynth-44100-1.wav
