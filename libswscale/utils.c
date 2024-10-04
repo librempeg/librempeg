@@ -1131,7 +1131,7 @@ int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
                 tmp_height = srcH;
             }
 
-            ret = av_image_alloc(c->cascaded_tmp, c->cascaded_tmpStride,
+            ret = av_image_alloc(c->cascaded_tmp[0], c->cascaded_tmpStride[0],
                                 tmp_width, tmp_height, tmp_format, 64);
             if (ret < 0)
                 return ret;
@@ -1611,7 +1611,7 @@ static av_cold int sws_init_single_context(SwsContext *c, SwsFilter *srcFilter,
         SwsContext *c2;
         c->cascaded_context[0] = NULL;
 
-        ret = av_image_alloc(c->cascaded_tmp, c->cascaded_tmpStride,
+        ret = av_image_alloc(c->cascaded_tmp[0], c->cascaded_tmpStride[0],
                             srcW, srcH, tmpFmt, 64);
         if (ret < 0)
             return ret;
@@ -1649,7 +1649,7 @@ static av_cold int sws_init_single_context(SwsContext *c, SwsFilter *srcFilter,
 
         c->cascaded_context[2] = NULL;
         if (dstFormat != tmpFmt) {
-            ret = av_image_alloc(c->cascaded1_tmp, c->cascaded1_tmpStride,
+            ret = av_image_alloc(c->cascaded_tmp[1], c->cascaded_tmpStride[1],
                                 dstW, dstH, tmpFmt, 64);
             if (ret < 0)
                 return ret;
@@ -1669,7 +1669,7 @@ static av_cold int sws_init_single_context(SwsContext *c, SwsFilter *srcFilter,
              dstFormat != AV_PIX_FMT_RGB48)) {
             enum AVPixelFormat tmpFormat = isBayer16BPS(srcFormat) ? AV_PIX_FMT_RGB48 : AV_PIX_FMT_RGB24;
 
-            ret = av_image_alloc(c->cascaded_tmp, c->cascaded_tmpStride,
+            ret = av_image_alloc(c->cascaded_tmp[0], c->cascaded_tmpStride[0],
                                 srcW, srcH, tmpFormat, 64);
             if (ret < 0)
                 return ret;
@@ -1712,7 +1712,7 @@ static av_cold int sws_init_single_context(SwsContext *c, SwsFilter *srcFilter,
                 c->srcRange != c->dstRange
             ) {
                 c->cascaded_mainindex = 1;
-                ret = av_image_alloc(c->cascaded_tmp, c->cascaded_tmpStride,
+                ret = av_image_alloc(c->cascaded_tmp[0], c->cascaded_tmpStride[0],
                                      srcW, srcH, tmpFormat, 64);
                 if (ret < 0)
                     return ret;
@@ -1994,7 +1994,7 @@ fail: // FIXME replace things by appropriate error codes
         if (srcW*(int64_t)srcH <= 4LL*dstW*dstH)
             return AVERROR(EINVAL);
 
-        ret = av_image_alloc(c->cascaded_tmp, c->cascaded_tmpStride,
+        ret = av_image_alloc(c->cascaded_tmp[0], c->cascaded_tmpStride[0],
                              tmpW, tmpH, tmpFormat, 64);
         if (ret < 0)
             return ret;
@@ -2488,8 +2488,8 @@ void sws_freeContext(SwsContext *c)
     sws_freeContext(c->cascaded_context[1]);
     sws_freeContext(c->cascaded_context[2]);
     memset(c->cascaded_context, 0, sizeof(c->cascaded_context));
-    av_freep(&c->cascaded_tmp[0]);
-    av_freep(&c->cascaded1_tmp[0]);
+    av_freep(&c->cascaded_tmp[0][0]);
+    av_freep(&c->cascaded_tmp[1][0]);
 
     av_freep(&c->gamma);
     av_freep(&c->inv_gamma);
