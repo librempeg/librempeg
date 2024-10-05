@@ -32,9 +32,6 @@
 #define MIN_HZ 20
 
 typedef struct ChannelContext {
-    AVTXContext *ar2c, *ac2r;
-    av_tx_fn ar2c_fn, ac2r_fn;
-
     AVTXContext *r2c, *c2r;
     av_tx_fn r2c_fn, c2r_fn;
 

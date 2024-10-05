@@ -271,7 +271,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
         memset(rptr+max_period*2, 0, (max_size+2-max_period*2) * sizeof(*rptr));
         memcpy(rptr, dptr, max_period*2 * sizeof(*rptr));
 
-        c->ar2c_fn(c->ar2c, cptr, rptr, sizeof(*rptr));
+        c->r2c_fn(c->r2c, cptr, rptr, sizeof(*rptr));
 
         for (int n = 0; n < max_size/2+1; n++) {
             const ftype re = cptr[n].re;
@@ -281,7 +281,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
             cptr[n].im = F(0.0);
         }
 
-        c->ac2r_fn(c->ac2r, rptr, cptr, sizeof(*cptr));
+        c->c2r_fn(c->c2r, rptr, cptr, sizeof(*cptr));
 
         for (int n = 1; n < max_period; n++) {
             ns = n;
@@ -420,16 +420,6 @@ static int fn(init_state)(AVFilterContext *ctx)
                          TX_TYPE, 1, s->max_size, &scale, 0);
         if (ret < 0)
             return ret;
-
-        ret = av_tx_init(&c->ar2c, &c->ar2c_fn,
-                         TX_TYPE, 0, s->max_size, &scale, 0);
-        if (ret < 0)
-            return ret;
-
-        ret = av_tx_init(&c->ac2r, &c->ac2r_fn,
-                         TX_TYPE, 1, s->max_size, &scale, 0);
-        if (ret < 0)
-            return ret;
     }
 
     return 0;
@@ -460,8 +450,6 @@ static void fn(uninit_state)(AVFilterContext *ctx)
         av_audio_fifo_free(c->in_fifo);
         c->in_fifo = NULL;
 
-        av_tx_uninit(&c->ar2c);
-        av_tx_uninit(&c->ac2r);
         av_tx_uninit(&c->r2c);
         av_tx_uninit(&c->c2r);
     }
