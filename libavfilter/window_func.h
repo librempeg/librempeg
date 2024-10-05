@@ -128,7 +128,7 @@ static inline void generate_window_func(float *lut, int N, int win_func,
     case WFUNC_NUTTALL:
         for (n = 0; n < N; n++)
             lut[n] = 0.355768-0.487396*cos(2*M_PI*n/(N-1))+0.144232*cos(4*M_PI*n/(N-1))-0.012604*cos(6*M_PI*n/(N-1));
-        *overlap = 0.663;
+        *overlap = 0.75;
         break;
     case WFUNC_LANCZOS:
         #define SINC(x) (!(x)) ? 1 : sin(M_PI * (x))/(M_PI * (x));
