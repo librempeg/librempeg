@@ -859,9 +859,6 @@ static int fn(config_input)(AVFilterContext *ctx)
 
     s->win_size = 1 << av_ceil_log2((inlink->sample_rate + 19) / 20);
     s->rdft_size = s->win_size / 2 + 1;
-    s->hop_size = FFMAX(1, LRINT(s->win_size * (F(1.0) - s->overlap)));
-    s->trim_size = s->win_size;
-    s->flush_size = s->win_size - s->hop_size;
 
     s->window_func_lut = av_calloc(s->win_size, sizeof(*s->window_func_lut));
     if (!s->window_func_lut)
@@ -870,6 +867,10 @@ static int fn(config_input)(AVFilterContext *ctx)
     generate_window_func(s->window_func_lut, s->win_size, s->win_func, &overlap);
     if (s->overlap == 1)
         s->overlap = overlap;
+
+    s->hop_size = FFMAX(1, LRINT(s->win_size * (F(1.0) - s->overlap)));
+    s->trim_size = s->win_size;
+    s->flush_size = s->win_size - s->hop_size;
 
     {
         ftype max = 0.f, *temp_lut = av_calloc(s->win_size, sizeof(*temp_lut));
