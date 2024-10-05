@@ -110,10 +110,8 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     HaasContext *s = ctx->priv;
-    size_t min_buf_size = (size_t)(inlink->sample_rate * MAX_HAAS_DELAY * 0.001);
-    size_t new_buf_size = 1;
-
-    new_buf_size = 1LL << av_ceil_log2(min_buf_size);
+    const size_t min_buf_size = FFMAX(1, lrint(inlink->sample_rate * MAX_HAAS_DELAY * 0.001));
+    const size_t new_buf_size = 1LL << av_ceil_log2(min_buf_size);
 
     av_freep(&s->buffer);
     s->buffer = av_calloc(new_buf_size, sizeof(*s->buffer));
