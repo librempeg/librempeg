@@ -32,31 +32,28 @@ typedef struct HaasContext {
     const AVClass *class;
 
     int par_m_source;
-    double par_delay0;
-    double par_delay1;
-    int par_phase0;
-    int par_phase1;
+    double par_delay[2];
+    int par_phase[2];
     int par_middle_phase;
     double par_side_gain;
-    double par_gain0;
-    double par_gain1;
-    double par_balance0;
-    double par_balance1;
+    double par_gain[2];
+    double par_balance[2];
     double level_in;
     double level_out;
 
-    double *buffer;
+    void *buffer;
     size_t buffer_size;
-    uint32_t write_ptr;
-    uint32_t delay[2];
+    size_t write_ptr;
+    size_t delay[2];
     double balance_l[2];
     double balance_r[2];
-    double phase0;
-    double phase1;
+    double phase[2];
+
+    void (*do_haas)(AVFilterContext *ctx, AVFrame *out, AVFrame *in);
 } HaasContext;
 
 #define OFFSET(x) offsetof(HaasContext, x)
-#define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 
 static const AVOption haas_options[] = {
     { "level_in",      "set level in",      OFFSET(level_in),         AV_OPT_TYPE_DOUBLE,  {.dbl=1}, 0.015625,  64, A },
@@ -68,14 +65,14 @@ static const AVOption haas_options[] = {
     {   "mid",         "L+R",               0,                        AV_OPT_TYPE_CONST,   {.i64=2},        0,   0, A, .unit = "source" },
     {   "side",        "L-R",               0,                        AV_OPT_TYPE_CONST,   {.i64=3},        0,   0, A, .unit = "source" },
     { "middle_phase",  "set middle phase",  OFFSET(par_middle_phase), AV_OPT_TYPE_BOOL,    {.i64=0},        0,   1, A },
-    { "left_delay",    "set left delay",    OFFSET(par_delay0),       AV_OPT_TYPE_DOUBLE,  {.dbl=2.05},     0,  MAX_HAAS_DELAY, A },
-    { "left_balance",  "set left balance",  OFFSET(par_balance0),     AV_OPT_TYPE_DOUBLE,  {.dbl=-1.0},    -1,   1, A },
-    { "left_gain",     "set left gain",     OFFSET(par_gain0),        AV_OPT_TYPE_DOUBLE,  {.dbl=1}, 0.015625,  64, A },
-    { "left_phase",    "set left phase",    OFFSET(par_phase0),       AV_OPT_TYPE_BOOL,    {.i64=0},        0,   1, A },
-    { "right_delay",   "set right delay",   OFFSET(par_delay1),       AV_OPT_TYPE_DOUBLE,  {.dbl=2.12},     0,  MAX_HAAS_DELAY, A },
-    { "right_balance", "set right balance", OFFSET(par_balance1),     AV_OPT_TYPE_DOUBLE,  {.dbl=1},       -1,   1, A },
-    { "right_gain",    "set right gain",    OFFSET(par_gain1),        AV_OPT_TYPE_DOUBLE,  {.dbl=1}, 0.015625,  64, A },
-    { "right_phase",   "set right phase",   OFFSET(par_phase1),       AV_OPT_TYPE_BOOL,    {.i64=1},        0,   1, A },
+    { "left_delay",    "set left delay",    OFFSET(par_delay[0]),     AV_OPT_TYPE_DOUBLE,  {.dbl=2.05},     0,  MAX_HAAS_DELAY, A },
+    { "left_balance",  "set left balance",  OFFSET(par_balance[0]),   AV_OPT_TYPE_DOUBLE,  {.dbl=-1.0},    -1,   1, A },
+    { "left_gain",     "set left gain",     OFFSET(par_gain[0]),      AV_OPT_TYPE_DOUBLE,  {.dbl=1}, 0.015625,  64, A },
+    { "left_phase",    "set left phase",    OFFSET(par_phase[0]),     AV_OPT_TYPE_BOOL,    {.i64=0},        0,   1, A },
+    { "right_delay",   "set right delay",   OFFSET(par_delay[1]),     AV_OPT_TYPE_DOUBLE,  {.dbl=2.12},     0,  MAX_HAAS_DELAY, A },
+    { "right_balance", "set right balance", OFFSET(par_balance[1]),   AV_OPT_TYPE_DOUBLE,  {.dbl=1},       -1,   1, A },
+    { "right_gain",    "set right gain",    OFFSET(par_gain[1]),      AV_OPT_TYPE_DOUBLE,  {.dbl=1}, 0.015625,  64, A },
+    { "right_phase",   "set right phase",   OFFSET(par_phase[1]),     AV_OPT_TYPE_BOOL,    {.i64=1},        0,   1, A },
     { NULL }
 };
 
@@ -86,7 +83,8 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_out)
 {
     static const enum AVSampleFormat formats[] = {
-        AV_SAMPLE_FMT_DBL,
+        AV_SAMPLE_FMT_FLTP,
+        AV_SAMPLE_FMT_DBLP,
         AV_SAMPLE_FMT_NONE,
     };
     static const AVChannelLayout layouts[] = {
@@ -99,38 +97,52 @@ static int query_formats(const AVFilterContext *ctx,
     if (ret < 0)
         return ret;
 
-    ret = ff_set_common_channel_layouts_from_list2(ctx, cfg_in, cfg_out, layouts);
-    if (ret < 0)
-        return ret;
-
-    return 0;
+    return ff_set_common_channel_layouts_from_list2(ctx, cfg_in, cfg_out, layouts);
 }
+
+#define DEPTH 32
+#include "haas_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "haas_template.c"
 
 static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
-    HaasContext *s = ctx->priv;
     const size_t min_buf_size = FFMAX(1, lrint(inlink->sample_rate * MAX_HAAS_DELAY * 0.001));
     const size_t new_buf_size = 1LL << av_ceil_log2(min_buf_size);
+    HaasContext *s = ctx->priv;
 
-    av_freep(&s->buffer);
-    s->buffer = av_calloc(new_buf_size, sizeof(*s->buffer));
+    if (!s->buffer)
+        s->buffer = av_calloc(new_buf_size, av_get_bytes_per_sample(inlink->format));
     if (!s->buffer)
         return AVERROR(ENOMEM);
 
     s->buffer_size = new_buf_size;
     s->write_ptr = 0;
 
-    s->delay[0] = (uint32_t)(s->par_delay0 * 0.001 * inlink->sample_rate);
-    s->delay[1] = (uint32_t)(s->par_delay1 * 0.001 * inlink->sample_rate);
+    s->delay[0] = lrint(s->par_delay[0] * 0.001 * inlink->sample_rate);
+    s->delay[1] = lrint(s->par_delay[1] * 0.001 * inlink->sample_rate);
 
-    s->phase0 = s->par_phase0 ? 1.0 : -1.0;
-    s->phase1 = s->par_phase1 ? 1.0 : -1.0;
+    s->phase[0] = s->par_phase[0] ? 1.0 : -1.0;
+    s->phase[1] = s->par_phase[1] ? 1.0 : -1.0;
 
-    s->balance_l[0] = (s->par_balance0 + 1) / 2 * s->par_gain0 * s->phase0;
-    s->balance_r[0] = (1.0 - (s->par_balance0 + 1) / 2) * (s->par_gain0) * s->phase0;
-    s->balance_l[1] = (s->par_balance1 + 1) / 2 * s->par_gain1 * s->phase1;
-    s->balance_r[1] = (1.0 - (s->par_balance1 + 1) / 2) * (s->par_gain1) * s->phase1;
+    s->balance_l[0] = (s->par_balance[0] + 1) / 2 * s->par_gain[0] * s->phase[0];
+    s->balance_r[0] = (1.0 - (s->par_balance[0] + 1) / 2) * (s->par_gain[0]) * s->phase[0];
+    s->balance_l[1] = (s->par_balance[1] + 1) / 2 * s->par_gain[1] * s->phase[1];
+    s->balance_r[1] = (1.0 - (s->par_balance[1] + 1) / 2) * (s->par_gain[1]) * s->phase[1];
+
+    switch (inlink->format) {
+    case AV_SAMPLE_FMT_FLTP:
+        s->do_haas = do_haas_fltp;
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        s->do_haas = do_haas_dblp;
+        break;
+    default:
+        return AVERROR_BUG;
+    }
 
     return 0;
 }
@@ -140,14 +152,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     HaasContext *s = ctx->priv;
-    const double *src = (const double *)in->data[0];
-    const double level_in = s->level_in;
-    const double level_out = s->level_out;
-    const uint32_t mask = s->buffer_size - 1;
-    double *buffer = s->buffer;
     AVFrame *out;
-    double *dst;
-    int n;
 
     if (av_frame_is_writable(in)) {
         out = in;
@@ -159,43 +164,37 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
         av_frame_copy_props(out, in);
     }
-    dst = (double *)out->data[0];
 
-    for (n = 0; n < in->nb_samples; n++, src += 2, dst += 2) {
-        double mid, side[2], side_l, side_r;
-        uint32_t s0_ptr, s1_ptr;
-
-        switch (s->par_m_source) {
-        case 0: mid = src[0]; break;
-        case 1: mid = src[1]; break;
-        case 2: mid = (src[0] + src[1]) * 0.5; break;
-        case 3: mid = (src[0] - src[1]) * 0.5; break;
-        }
-
-        mid *= level_in;
-
-        buffer[s->write_ptr] = mid;
-
-        s0_ptr = (s->write_ptr + s->buffer_size - s->delay[0]) & mask;
-        s1_ptr = (s->write_ptr + s->buffer_size - s->delay[1]) & mask;
-
-        if (s->par_middle_phase)
-            mid = -mid;
-
-        side[0] = buffer[s0_ptr] * s->par_side_gain;
-        side[1] = buffer[s1_ptr] * s->par_side_gain;
-        side_l  = side[0] * s->balance_l[0] - side[1] * s->balance_l[1];
-        side_r  = side[1] * s->balance_r[1] - side[0] * s->balance_r[0];
-
-        dst[0] = (mid + side_l) * level_out;
-        dst[1] = (mid + side_r) * level_out;
-
-        s->write_ptr = (s->write_ptr + 1) & mask;
-    }
+    s->do_haas(ctx, out, in);
 
     if (out != in)
         av_frame_free(&in);
     return ff_filter_frame(outlink, out);
+}
+
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
+                           char *res, int res_len, int flags)
+{
+    HaasContext *s = ctx->priv;
+    AVFilterLink *inlink = ctx->inputs[0];
+    int ret;
+
+    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    if (ret < 0)
+        return ret;
+
+    s->delay[0] = lrint(s->par_delay[0] * 0.001 * inlink->sample_rate);
+    s->delay[1] = lrint(s->par_delay[1] * 0.001 * inlink->sample_rate);
+
+    s->phase[0] = s->par_phase[0] ? 1.0 : -1.0;
+    s->phase[1] = s->par_phase[1] ? 1.0 : -1.0;
+
+    s->balance_l[0] = (s->par_balance[0] + 1) / 2 * s->par_gain[0] * s->phase[0];
+    s->balance_r[0] = (1.0 - (s->par_balance[0] + 1) / 2) * (s->par_gain[0]) * s->phase[0];
+    s->balance_l[1] = (s->par_balance[1] + 1) / 2 * s->par_gain[1] * s->phase[1];
+    s->balance_r[1] = (1.0 - (s->par_balance[1] + 1) / 2) * (s->par_gain[1]) * s->phase[1];
+
+    return 0;
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
@@ -224,4 +223,6 @@ const AVFilter ff_af_haas = {
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC2(query_formats),
+    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    .process_command = process_command,
 };
