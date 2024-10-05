@@ -59,6 +59,7 @@
 static int fn(copy_samples)(AVFilterContext *ctx, const int ch)
 {
     AScaleContext *s = ctx->priv;
+    const ftype fs = F(1.0)/ctx->inputs[0]->sample_rate;
     const int max_period = s->max_period;
     ChannelContext *c = &s->c[ch];
     void *datax[1] = { (void *)c->data[0] };
@@ -67,6 +68,7 @@ static int fn(copy_samples)(AVFilterContext *ctx, const int ch)
     size = av_audio_fifo_peek(c->in_fifo, datax, max_period);
     if (size > 0) {
         av_audio_fifo_write(c->out_fifo, datax, size);
+        c->state[OUT] += size * fs;
         av_audio_fifo_drain(c->in_fifo, size);
     }
 
@@ -92,6 +94,7 @@ static ftype fn(get_score)(const ftype xcorr,
 static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
 {
     AScaleContext *s = ctx->priv;
+    const ftype fs = F(1.0)/ctx->inputs[0]->sample_rate;
     const int max_period = s->max_period;
     const int max_size = s->max_size;
     const int half_size = max_size/2;
@@ -123,6 +126,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
         size = av_audio_fifo_read(c->in_fifo, datax, size);
         if (size > 0) {
             av_audio_fifo_write(c->out_fifo, datax, size);
+            c->state[OUT] += size * fs;
             c->keep[0] += size;
         }
 
@@ -232,6 +236,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
 
     av_audio_fifo_write(c->out_fifo, datax, best_period);
     av_audio_fifo_write(c->out_fifo, datay, best_period);
+    c->state[OUT] += best_period*2*fs;
     av_audio_fifo_drain(c->in_fifo, best_period);
     return av_audio_fifo_size(c->in_fifo) >= max_period*2;
 }
@@ -239,6 +244,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
 static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
 {
     AScaleContext *s = ctx->priv;
+    const ftype fs = F(1.0)/ctx->inputs[0]->sample_rate;
     const int max_period = s->max_period;
     const int max_size = s->max_size;
     const int half_size = max_size/2;
@@ -330,6 +336,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     }
 
     av_audio_fifo_write(c->out_fifo, data, best_period);
+    c->state[OUT] += best_period*fs;
     av_audio_fifo_drain(c->in_fifo, best_period*2);
     return av_audio_fifo_size(c->in_fifo) >= max_period*2;
 }
@@ -337,14 +344,16 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
 static int fn(filter_samples)(AVFilterContext *ctx, const int ch)
 {
     AScaleContext *s = ctx->priv;
+    ChannelContext *c = &s->c[ch];
+    double state = c->state[OUT] * s->tempo - c->state[IN];
 
     if (s->tempo == 1.0 || ctx->is_disabled)
         return fn(copy_samples)(ctx, ch);
-    if (s->tempo < 1.0)
+    else if (state < 0.0 && s->tempo < 1.0)
         return fn(expand_samples)(ctx, ch);
-    else if (s->tempo > 1.0)
+    else if (state > 0.0 && s->tempo > 1.0)
         return fn(compress_samples)(ctx, ch);
-    return -1;
+    return fn(copy_samples)(ctx, ch);
 }
 
 static void fn(filter_channel)(AVFilterContext *ctx, const int ch)

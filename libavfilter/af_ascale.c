@@ -30,10 +30,14 @@
 #include "filters.h"
 
 #define MIN_HZ 20
+#define IN 0
+#define OUT 1
 
 typedef struct ChannelContext {
     AVTXContext *r2c, *c2r;
     av_tx_fn r2c_fn, c2r_fn;
+
+    double state[2];
 
     int keep[2];
 
@@ -167,6 +171,7 @@ static void filter_frame(AVFilterContext *ctx)
 static void write_input_samples(AVFilterContext *ctx, AVFrame *in)
 {
     AScaleContext *s = ctx->priv;
+    const double fs = F(1.0)/in->sample_rate;
     const int nb_samples = in->nb_samples;
 
     if (s->pts[0] == AV_NOPTS_VALUE)
@@ -178,6 +183,7 @@ static void write_input_samples(AVFilterContext *ctx, AVFrame *in)
         void *data[1] = { (void *)dptr };
 
         av_audio_fifo_write(c->in_fifo, data, nb_samples);
+        c->state[IN] += nb_samples * fs;
     }
 }
 
