@@ -155,7 +155,7 @@ static inline void generate_window_func(float *lut, int N, int win_func,
         *overlap = 0.33;
         break;
     case WFUNC_DOLPH: {
-        double b = cosh(7.6009022095419887 / (N-1)), sum, t, c, norm = 0;
+        double b = cosh(acosh(pow(10.0, 5.0)) / (N-1)), sum, t, c, norm = 0;
         int j;
         for (c = 1 - 1 / (b*b), n = (N-1) / 2; n >= 0; --n) {
             for (sum = !n, b = t = j = 1; j <= n && sum != t; b *= (n-j) * (1./j), ++j)
@@ -164,7 +164,7 @@ static inline void generate_window_func(float *lut, int N, int win_func,
             lut[n] = sum;
             lut[N - 1 - n] = sum;
         }
-        *overlap = 0.5;}
+        *overlap = 0.75;}
         break;
     case WFUNC_CAUCHY:
         for (n = 0; n < N; n++) {
