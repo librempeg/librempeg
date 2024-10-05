@@ -593,26 +593,21 @@ static int config_filter(AVFilterLink *outlink, int reset)
         break;
     case transform:
         {
-            double fs = inlink->sample_rate;
-            double fc = (s->fz + s->fp) / 2.0;
+            const double fs = inlink->sample_rate;
+            const double fz = s->fz, qz = s->qz;
+            const double fp = s->fp, qp = s->qp;
 
-            double d0i = pow(2.0 * M_PI * s->fz, 2.0);
-            double d1i = (2.0 * M_PI * s->fz) / s->qz;
-            double d2i = 1.0;
+            const double w0z = 2.0*M_PI*fz / fs, w0p = 2.0*M_PI*fp / fs;
+            const double cos_w0z = cos(w0z), cos_w0p = cos(w0p);
+            const double alpha_z = sin(w0z) / (2.0*qz), alpha_p = sin(w0p) / (2.0*qp);
+            const double kz = 2.0/(1.0+cos_w0z), kp = 2.0/(1.0+cos_w0p);
 
-            double c0i = pow(2.0 * M_PI * s->fp, 2.0);
-            double c1i = (2.0 * M_PI * s->fp) / s->qp;
-            double c2i = 1.0;
-
-            double gn = (2.0 * M_PI * fc) / tan(M_PI * fc / fs);
-            double cci = c0i + gn * c1i + pow(gn, 2.0) * c2i;
-
-            s->b[0] = (d0i + gn * d1i + pow(gn, 2.0) * d2i) / cci;
-            s->b[1] = 2.0 * (d0i - pow(gn, 2.0) * d2i) / cci;
-            s->b[2] = (d0i - gn * d1i + pow(gn, 2.0) * d2i) / cci;
-            s->a[0] = 1.0;
-            s->a[1] = (2.0 * (c0i - pow(gn, 2.0) * c2i) / cci);
-            s->a[2] = ((c0i - gn * c1i + pow(gn, 2.0) * c2i) / cci);
+            s->b[0] = ( 1.0 + alpha_z) * kz;
+            s->b[1] = (-2.0 * cos_w0z) * kz;
+            s->b[2] = ( 1.0 - alpha_z) * kz;
+            s->a[0] = ( 1.0 + alpha_p) * kp;
+            s->a[1] = (-2.0 * cos_w0p) * kp;
+            s->a[2] = ( 1.0 - alpha_p) * kp;
         }
         break;
     default:
