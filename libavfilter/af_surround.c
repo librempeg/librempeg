@@ -470,7 +470,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         return AVERROR(ENOMEM);
     }
 
-    if (s->angle != 0.90f ||
+
+    if (s->angle != 90.f ||
         s->shift[0] != 0.f ||
         s->shift[1] != 0.f ||
         s->shift[2] != 0.f ||

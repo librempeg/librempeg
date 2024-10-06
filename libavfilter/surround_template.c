@@ -484,46 +484,14 @@ static int fn(fft_channel)(AVFilterContext *ctx, AVFrame *in, int ch)
     return 0;
 }
 
-static ftype fn(sqr)(ftype x)
+static void fn(angle_transform)(ftype *x, ftype *y, ftype a)
 {
-    return x * x;
-}
-
-static ftype fn(r_distance_xy)(ftype x, ftype y)
-{
-    const ftype x2 = x*x;
-    const ftype y2 = y*y;
-
-    return FMIN(SQRT(F(1.0) + x2/(y2 + EPSILON)), SQRT(F(1.0) + (y2)/(x2 + EPSILON)));
-}
-
-static ftype fn(r_distance_a)(ftype a)
-{
-    return FMIN(SQRT(F(1.0) + fn(sqr)(TAN(a))), SQRT(F(1.0) + fn(sqr)(F(1.0) / (TAN(a) + EPSILON))));
-}
-
-static void fn(angle_transform)(ftype *x, ftype *y, ftype angle)
-{
-    ftype reference, r, a;
-
-    if (angle == F(90.0))
+    if (a == F(90.0))
         return;
 
-    reference = angle * MPI / F(180.0);
-    r = HYPOT(x[0], y[0]);
-    a = ATAN2(x[0], y[0]);
+    a /= F(90.0);
 
-    r /= fn(r_distance_xy)(x[0], y[0]);
-
-    if (FABS(a) <= MPI4)
-        a *= reference / MPI2;
-    else
-        a = MPI + (F(-2.0) * MPI + reference) * (MPI - FABS(a)) * FFDIFFSIGN(a, F(0.0)) / (F(3.0) * MPI2);
-
-    r *= fn(r_distance_a)(a);
-
-    x[0] = CLIP(SIN(a) * r, F(-1.0), F(1.0));
-    y[0] = CLIP(COS(a) * r, F(-1.0), F(1.0));
+    y[0] = CLIP(y[0] - (FABS(x[0]) * (F(1.0)+y[0])) * (a - F(1.0)), F(-1.0), F(1.0));
 }
 
 static void fn(shift_transform)(ftype *y, const ftype shift)
