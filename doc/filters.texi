@@ -5363,7 +5363,7 @@ Note that filter delay will be exactly this many samples when set to non-zero va
 @subsection Examples
 @itemize
 @item
-Attenuate 10 dB at 1000 Hz, with a bandwidth of 200 Hz:
+Attenuate 10 dB at 1000 Hz, with a band-width of 200 Hz:
 @example
 equalizer=f=1000:t=h:width=200:g=-10
 @end example
@@ -8302,6 +8302,12 @@ Set stop-band attenuation. Default is 120dB, allowed range is from 40 to 180 dB.
 
 @item round
 Enable rounding, by default is disabled.
+
+@item ht
+Set high-pass filter band-width transition percentage. Default value is 0.05.
+
+@item lt
+Set low-pass filter band-width transition percentage. Default value is 0.05.
 
 @item hptaps
 Set number of taps for high-pass filter.

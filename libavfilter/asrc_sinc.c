@@ -156,6 +156,8 @@ static const AVOption sinc_options[] = {
     { "beta",        "set kaiser window beta",                        OFFSET(beta),        AV_OPT_TYPE_DOUBLE,{.dbl=-1},    -1,     256, AF },
     { "att",         "set stop-band attenuation",                     OFFSET(att),         AV_OPT_TYPE_DOUBLE,{.dbl=120},   40,     300, AF },
     { "round",       "enable rounding",                               OFFSET(round),       AV_OPT_TYPE_BOOL,  {.i64=0},      0,       1, AF },
+    { "ht",          "set high-pass filter transition band-width",    OFFSET(tbw0),        AV_OPT_TYPE_FLOAT, {.dbl=0.05},   0,     1.0, AF },
+    { "lt",          "set low-pass filter transition band-width",     OFFSET(tbw1),        AV_OPT_TYPE_FLOAT, {.dbl=0.05},   0,     1.0, AF },
     { "hptaps",      "set number of taps for high-pass filter",       OFFSET(num_taps[0]), AV_OPT_TYPE_INT,   {.i64=0},      0, 1048575, AF },
     { "lptaps",      "set number of taps for low-pass filter",        OFFSET(num_taps[1]), AV_OPT_TYPE_INT,   {.i64=0},      0, 1048575, AF },
     { NULL }

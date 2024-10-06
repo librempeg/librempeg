@@ -123,7 +123,7 @@ static ftype fn(kaiser_beta)(ftype att, ftype tr_bw)
 
 static void fn(kaiser_params)(ftype att, ftype Fc, ftype tr_bw, double *beta, int *num_taps)
 {
-    *beta = *beta < F(0.0) ? fn(kaiser_beta)(att, tr_bw * F(0.5) / Fc): *beta;
+    *beta = *beta < F(0.0) ? fn(kaiser_beta)(att, tr_bw): *beta;
     att = att < F(60.0) ? (att - F(7.95)) / (F(2.285) * M_PI * F(2.0)) :
         ((F(0.0007528358)-F(1.577737e-05) * *beta) * *beta + F(0.6248022)) * *beta + F(.06186902);
     *num_taps = !*num_taps ? CEIL(att/tr_bw + 1) : *num_taps;
@@ -138,7 +138,7 @@ static ftype *fn(lpf)(ftype Fn, ftype Fc, ftype tbw, int *num_taps, ftype att, d
         return NULL;
     }
 
-    fn(kaiser_params)(att, Fc, (tbw ? tbw / Fn : F(0.05)) * F(0.5), beta, num_taps);
+    fn(kaiser_params)(att, Fc, (tbw ? tbw : F(0.05)), beta, num_taps);
 
     if (!n) {
         n = *num_taps;
