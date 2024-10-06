@@ -204,7 +204,6 @@ typedef struct AudioSurroundContext {
     int (*ifft_channel)(AVFilterContext *ctx, AVFrame *out, int ch);
     void (*calculate_factors)(AVFilterContext *ctx, int ch, int chan);
     void (*stereo_copy)(AVFilterContext *ctx, int ch, int chan);
-    void (*stereo_lfe_copy)(AVFilterContext *ctx, int ch, int chan);
     void (*do_transform)(AVFilterContext *ctx, int ch);
     void (*bypass_transform)(AVFilterContext *ctx, int ch, int is_lfe);
     int (*transform_xy)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
@@ -270,7 +269,7 @@ static void l2_1_upmix(AVFilterContext *ctx, int ch)
         break;
     }
 
-    s->stereo_lfe_copy(ctx, ch, chan);
+    s->stereo_copy(ctx, ch, chan);
 
     s->do_transform(ctx, ch);
 }
@@ -312,7 +311,7 @@ static void l3_1_upmix(AVFilterContext *ctx, int ch)
         break;
     }
 
-    s->stereo_lfe_copy(ctx, ch, chan);
+    s->stereo_copy(ctx, ch, chan);
 
     s->do_transform(ctx, ch);
 }

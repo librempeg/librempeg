@@ -204,6 +204,7 @@ static void fn(filter_stereo)(AVFilterContext *ctx)
     ftype *zpos = s->z_pos;
     ctype *osum = s->sum;
     ctype *odif = s->dif;
+    ctype *olfe = s->lfe;
 
     for (int n = 0; n < rdft_size; n++) {
         ftype l_re = srcl[n].re, r_re = srcr[n].re;
@@ -228,6 +229,7 @@ static void fn(filter_stereo)(AVFilterContext *ctx)
         zpos[n] = z;
         osum[n] = sum;
         odif[n] = dif;
+        olfe[n] = lfe;
     }
 }
 
@@ -291,6 +293,7 @@ static void fn(filter_surround)(AVFilterContext *ctx)
     ctype *osum = s->sum;
     ctype *odif = s->dif;
     ctype *ocnt = s->cnt;
+    ctype *olfe = s->lfe;
 
     for (int n = 0; n < rdft_size; n++) {
         ftype l_re = srcl[n].re, r_re = srcr[n].re;
@@ -319,6 +322,7 @@ static void fn(filter_surround)(AVFilterContext *ctx)
         osum[n] = sum;
         odif[n] = dif;
         ocnt[n] = cnt;
+        olfe[n] = lfe;
     }
 }
 
@@ -744,6 +748,7 @@ static void fn(bypass_transform)(AVFilterContext *ctx, int ch, int is_lfe)
 static void fn(do_transform)(AVFilterContext *ctx, int ch)
 {
     AudioSurroundContext *s = ctx->priv;
+    const int chan = av_channel_layout_channel_from_index(&s->out_ch_layout, ch);
     const ftype *smooth_levels = s->smooth_levels;
     ftype *sfactor = (ftype *)s->sfactors->extended_data[ch];
     ftype *factor = (ftype *)s->factors->extended_data[ch];
@@ -751,6 +756,12 @@ static void fn(do_transform)(AVFilterContext *ctx, int ch)
     const ctype *osum = (const ctype *)s->output_sum->extended_data[ch];
     ctype *dst = (ctype *)s->output->extended_data[ch];
     const int rdft_size = s->rdft_size;
+
+    if (chan == AV_CHAN_LOW_FREQUENCY ||
+        chan == AV_CHAN_LOW_FREQUENCY_2) {
+        memcpy(dst, osum, rdft_size * sizeof(*dst));
+        return;
+    }
 
     if (s->smooth_init) {
         const ftype *smooth = smooth_levels + ch * rdft_size;
@@ -829,22 +840,11 @@ static void fn(stereo_copy)(AVFilterContext *ctx, int ch, int chan)
     const ctype *sum = s->sum;
     const ctype *dif = s->dif;
 
-    memcpy(osum, sum, rdft_size * sizeof(*osum));
-    for (int n = 0; n < rdft_size; n++) {
-        odif[n].re = dif[n].re * dif_factor;
-        odif[n].im = dif[n].im * dif_factor;
+    if (chan == AV_CHAN_LOW_FREQUENCY ||
+        chan == AV_CHAN_LOW_FREQUENCY_2) {
+        memcpy(osum, s->lfe, rdft_size * sizeof(*osum));
+        return;
     }
-}
-
-static void fn(stereo_lfe_copy)(AVFilterContext *ctx, int ch, int chan)
-{
-    AudioSurroundContext *s = ctx->priv;
-    ctype *odif = (ctype *)s->output_dif->extended_data[ch];
-    ctype *osum = (ctype *)s->output_sum->extended_data[ch];
-    const ftype dif_factor = ch_dif[sc_map[chan]];
-    const int rdft_size = s->rdft_size;
-    const ctype *sum = s->sum;
-    const ctype *dif = s->dif;
 
     memcpy(osum, sum, rdft_size * sizeof(*osum));
     for (int n = 0; n < rdft_size; n++) {
@@ -898,7 +898,6 @@ static int fn(config_input)(AVFilterContext *ctx)
     s->fft_channel = fn(fft_channel);
     s->calculate_factors = fn(calculate_factors);
     s->stereo_copy = fn(stereo_copy);
-    s->stereo_lfe_copy = fn(stereo_lfe_copy);
     s->do_transform = fn(do_transform);
     s->bypass_transform = fn(bypass_transform);
     s->transform_xy = fn(transform_xy);
