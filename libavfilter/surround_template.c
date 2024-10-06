@@ -173,8 +173,10 @@ static inline void fn(get_lfe)(int output_lfe, int n, ftype lowcut, ftype highcu
                                ctype *lfe, ctype sum, ctype *osum, int lfe_mode)
 {
     if (output_lfe && n < highcut) {
-        lfe->re    = n < lowcut ? F(1.0) : F(0.5)*(F(1.0)+COS(MPI*(lowcut-n)/(lowcut-highcut)));
-        lfe->im    = n < lowcut ? F(1.0) : F(0.5)*(F(1.0)+COS(MPI*(lowcut-n)/(lowcut-highcut)));
+        const ftype f = n < lowcut ? F(1.0) : F(0.5)*(F(1.0)+COS(MPI*(lowcut-n)/(lowcut-highcut)));
+
+        lfe->re    = f;
+        lfe->im    = f;
         lfe->re   *= sum.re;
         lfe->im   *= sum.im;
         if (lfe_mode) {
