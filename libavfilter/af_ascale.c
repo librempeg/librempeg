@@ -45,6 +45,7 @@ typedef struct ChannelContext {
     void *c_data[2];
 
     void *data[2];
+    void *datam[2];
     void *data2[2];
 
     AVAudioFifo *in_fifo;
