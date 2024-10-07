@@ -85,7 +85,7 @@ static int min_output_fifo_samples(AVFilterContext *ctx)
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
         ChannelContext *c = &s->c[ch];
-        const int size = FFMAX(av_audio_fifo_size(c->out_fifo)-c->keep[1],0);
+        const int size = FFMAX(av_audio_fifo_size(c->out_fifo)-c->keep[OUT],0);
 
         nb_samples = FFMIN(size, nb_samples);
     }
@@ -132,9 +132,9 @@ static void read_output_samples(AVFilterContext *ctx, AVFrame *out)
         void *data[1] = { (void *)out->extended_data[ch] };
         int size;
 
-        size = av_audio_fifo_peek_at(c->out_fifo, data, nb_samples, c->keep[1]);
+        size = av_audio_fifo_peek_at(c->out_fifo, data, nb_samples, c->keep[OUT]);
         if (size > 0) {
-            c->keep[1] = FFMIN(c->keep[1]+size, max_period);
+            c->keep[OUT] = FFMIN(c->keep[OUT]+size, max_period);
             av_audio_fifo_drain(c->out_fifo, size);
         }
     }
@@ -174,8 +174,8 @@ static void write_input_samples(AVFilterContext *ctx, AVFrame *in)
     const double fs = F(1.0)/in->sample_rate;
     const int nb_samples = in->nb_samples;
 
-    if (s->pts[0] == AV_NOPTS_VALUE)
-        s->pts[0] = s->pts[1] = in->pts;
+    if (s->pts[IN] == AV_NOPTS_VALUE)
+        s->pts[IN] = s->pts[OUT] = in->pts;
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
         ChannelContext *c = &s->c[ch];
@@ -198,8 +198,8 @@ static int output_frame(AVFilterContext *ctx)
     if (!out)
         return AVERROR(ENOMEM);
 
-    out->pts = s->pts[1];
-    s->pts[1] += out->nb_samples;
+    out->pts = s->pts[OUT];
+    s->pts[OUT] += out->nb_samples;
     read_output_samples(ctx, out);
     return ff_filter_frame(outlink, out);
 }
@@ -246,7 +246,7 @@ static int activate(AVFilterContext *ctx)
         if (max_input_fifo_samples(ctx) <= 0) {
             if (min_output_fifo_samples(ctx) > 0)
                 output_frame(ctx);
-            ff_outlink_set_status(outlink, AVERROR_EOF, s->pts[1]);
+            ff_outlink_set_status(outlink, AVERROR_EOF, s->pts[OUT]);
         } else {
             if (min_output_fifo_samples(ctx) > 0)
                 return output_frame(ctx);
@@ -269,7 +269,7 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     AScaleContext *s = ctx->priv;
 
-    s->pts[0] = AV_NOPTS_VALUE;
+    s->pts[IN] = AV_NOPTS_VALUE;
     s->max_period = (inlink->sample_rate + MIN_HZ-1) / MIN_HZ;
     s->max_size = 1 << av_ceil_log2(s->max_period*2);
     s->nb_channels = inlink->ch_layout.nb_channels;

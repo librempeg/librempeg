@@ -122,16 +122,16 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     if (!s->eof && av_audio_fifo_size(c->in_fifo) < max_period)
         return 0;
 
-    if (c->keep[0] < max_period) {
-        size = max_period-c->keep[0];
+    if (c->keep[IN] < max_period) {
+        size = max_period-c->keep[IN];
         size = av_audio_fifo_read(c->in_fifo, datax, size);
         if (size > 0) {
             av_audio_fifo_write(c->out_fifo, datax, size);
             c->state[OUT] += size * fs;
-            c->keep[0] += size;
+            c->keep[IN] += size;
         }
 
-        if (!s->eof && c->keep[0] < max_period)
+        if (!s->eof && c->keep[IN] < max_period)
             return 0;
 
         if (av_audio_fifo_size(c->in_fifo) < max_period)
