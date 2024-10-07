@@ -144,8 +144,12 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     size = av_audio_fifo_peek_at(c->out_fifo, datax, max_period, FFMAX(av_audio_fifo_size(c->out_fifo)-max_period, 0));
     if (size < 0)
         size = 0;
-    if (size < max_period)
-        memset(dptrx+size, 0, (max_period-size)*sizeof(*dptrx));
+    if (size < max_period) {
+        const int offset = max_period - size;
+
+        memmove(dptrx + offset, dptrx, size * sizeof(*dptrx));
+        memset(dptrx, 0, offset * sizeof(*dptrx));
+    }
 
     size = av_audio_fifo_peek(c->in_fifo, datay, max_period);
     if (size < 0)
