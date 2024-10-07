@@ -398,6 +398,8 @@ static int fn(init_state)(AVFilterContext *ctx)
         const ftype iscale = F(1.0) / s->max_size;
         int ret;
 
+        c->keep[OUT] = s->max_period;
+
         c->r_data[0] = av_calloc(s->max_size+2, sizeof(ftype));
         if (!c->r_data[0])
             return AVERROR(ENOMEM);
