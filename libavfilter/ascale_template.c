@@ -379,7 +379,8 @@ static int fn(init_state)(AVFilterContext *ctx)
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
         ChannelContext *c = &s->c[ch];
-        const ftype scale = pow(s->max_size, -0.5);
+        const ftype scale = F(1.0);
+        const ftype iscale = F(1.0) / s->max_size;
         int ret;
 
         c->r_data[0] = av_calloc(s->max_size+2, sizeof(ftype));
@@ -428,7 +429,7 @@ static int fn(init_state)(AVFilterContext *ctx)
             return ret;
 
         ret = av_tx_init(&c->c2r, &c->c2r_fn,
-                         TX_TYPE, 1, s->max_size, &scale, 0);
+                         TX_TYPE, 1, s->max_size, &iscale, 0);
         if (ret < 0)
             return ret;
     }
