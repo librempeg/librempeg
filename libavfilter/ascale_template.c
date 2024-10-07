@@ -57,23 +57,23 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 static int fn(copy_samples)(AVFilterContext *ctx, const int ch,
-                            const int period)
+                            const int req_period)
 {
     AScaleContext *s = ctx->priv;
     const ftype fs = F(1.0)/ctx->inputs[0]->sample_rate;
-    const int max_period = FFMIN(period, s->max_period);
+    const int period = req_period ? FFMIN(req_period, s->max_period) : 1;
     ChannelContext *c = &s->c[ch];
     void *datax[1] = { (void *)c->data[0] };
     int size;
 
-    size = av_audio_fifo_peek(c->in_fifo, datax, max_period);
+    size = av_audio_fifo_peek(c->in_fifo, datax, period);
     if (size > 0) {
         av_audio_fifo_write(c->out_fifo, datax, size);
         c->state[OUT] += size * fs;
         av_audio_fifo_drain(c->in_fifo, size);
     }
 
-    return (max_period > 0) && av_audio_fifo_size(c->in_fifo) >= max_period;
+    return av_audio_fifo_size(c->in_fifo) >= s->max_period;
 }
 
 static ftype fn(get_gain)(const ftype w, const ftype c)
