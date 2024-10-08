@@ -20,7 +20,7 @@
 #undef FABS
 #undef FEXP
 #undef FLOG
-#undef FMAX
+#undef FMA
 #undef ftype
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
@@ -28,7 +28,7 @@
 #define FABS fabsf
 #define FEXP exp2f
 #define FLOG log2f
-#define FMAX fmaxf
+#define FMA fmaf
 #define ftype float
 #define SAMPLE_FORMAT fltp
 #else
@@ -36,7 +36,7 @@
 #define FABS fabs
 #define FEXP exp2
 #define FLOG log2
-#define FMAX fmax
+#define FMA fma
 #define ftype double
 #define SAMPLE_FORMAT dblp
 #endif
@@ -199,7 +199,7 @@ static int fn(filter_channels_link)(AVFilterContext *ctx, AVFrame *out)
 
             if ((new_dgain > EPS) && (new_dgain - inacc > EPS)) {
                 inacc = new_dgain;
-                step += inacc*attack;
+                step = FMA(inacc, attack, step);
             }
         }
 
@@ -314,7 +314,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
 
                 if ((new_dgain > EPS) && (new_dgain - inacc > EPS)) {
                     inacc = new_dgain;
-                    step += inacc*attack;
+                    step = FMA(inacc, attack, step);
                 }
             }
 
