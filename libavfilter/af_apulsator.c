@@ -107,112 +107,16 @@ static const AVOption apulsator_options[] = {
 
 AVFILTER_DEFINE_CLASS(apulsator);
 
-static double lfo_get_value(const int mode, double amount,
-                            double phase, double width, double offset)
-{
-    double phs = phase / width + offset;
-    double val;
-
-    if (phs > 1)
-        phs = fmod(phs, 1.);
-
-    switch (mode) {
-    case SINE:
-        val = sin(phs * 2.0 * M_PI);
-        break;
-    case TRIANGLE:
-        if (phs > 0.75)
-            val = (phs - 0.75) * 4.0 - 1.0;
-        else if (phs > 0.25)
-            val = -4.0 * phs + 2.0;
-        else
-            val = phs * 4.0;
-        break;
-    case SQUARE:
-        val = phs < 0.5 ? -1.0 : 1.0;
-        break;
-    case SAWUP:
-        val = phs * 2.0 - 1.0;
-        break;
-    case SAWDOWN:
-        val = 1.0 - phs * 2.0;
-        break;
-    default:
-        av_assert0(0);
-    }
-
-    return val * amount;
-}
-
 typedef struct ThreadData {
     AVFrame *out, *in;
 } ThreadData;
 
-static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    AudioPulsatorContext *s = ctx->priv;
-    ThreadData *td = arg;
-    AVFrame *out = td->out;
-    AVFrame *in = td->in;
-    const int nb_channels = in->ch_layout.nb_channels;
-    const int start = (nb_channels * jobnr) / nb_jobs;
-    const int end = (nb_channels * (jobnr+1)) / nb_jobs;
+#define DEPTH 32
+#include "apulsator_template.c"
 
-    for (int ch = start; ch < end; ch++) {
-        const double *src = (const double *)in->extended_data[ch];
-        const double level_out = s->level_out[FFMIN(ch, s->nb_level_out-1)];
-        const double level_in = s->level_in[FFMIN(ch, s->nb_level_in-1)];
-        const double amount = s->amount[FFMIN(ch, s->nb_amount-1)];
-        const int timing = s->timing[FFMIN(ch, s->nb_timing-1)];
-        const double offset = s->offset[FFMIN(ch, s->nb_offset-1)];
-        const double width = s->width[FFMIN(ch, s->nb_width-1)];
-        const double hertz = s->hertz[FFMIN(ch, s->nb_hertz-1)];
-        const double bpm = s->bpm[FFMIN(ch, s->nb_bpm-1)];
-        const int mode = s->mode[FFMIN(ch, s->nb_mode-1)];
-        const double ms = s->ms[FFMIN(ch, s->nb_ms-1)];
-        double *dst = (double *)out->extended_data[ch];
-        const double fs = 1.0 / in->sample_rate;
-        const int nb_samples = in->nb_samples;
-        double phase = s->phase[ch];
-        double freq;
-
-        switch (timing) {
-        case UNIT_BPM:
-            freq = bpm / 60.0;
-            break;
-        case UNIT_MS:
-            freq = 1.0 / (ms / 1000.0);
-            break;
-        case UNIT_HZ:
-            freq = hertz;
-            break;
-        default:
-            av_assert0(0);
-        }
-
-        for (int n = 0; n < nb_samples; n++) {
-            double in = src[n] * level_in;
-            double proc = in;
-            double out;
-
-            proc *= lfo_get_value(mode, amount, phase, width,
-                                  offset) * 0.5 + amount / 2.0;
-
-            out = proc + in * (1.0 - amount);
-            out *= level_out;
-
-            dst[n] = out;
-
-            phase = fabs(phase + freq * fs);
-            if (phase >= 1.0)
-                phase = fmod(phase, 1.0);
-        }
-
-        s->phase[ch] = phase;
-    }
-
-    return 0;
-}
+#undef DEPTH
+#define DEPTH 64
+#include "apulsator_template.c"
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
@@ -250,7 +154,16 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     AudioPulsatorContext *s = ctx->priv;
 
-    s->filter_channels = filter_channels;
+    switch (inlink->format) {
+    case AV_SAMPLE_FMT_FLTP:
+        s->filter_channels = filter_channels_fltp;
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        s->filter_channels = filter_channels_dblp;
+        break;
+    default:
+        return AVERROR_BUG;
+    }
 
     s->phase = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->phase));
     if (!s->phase)
@@ -283,7 +196,7 @@ const AVFilter ff_af_apulsator = {
     .uninit        = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
-    FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
                      AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
