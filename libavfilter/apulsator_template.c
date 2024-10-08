@@ -42,7 +42,7 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 static ftype fn(lfo_get_value)(const int mode, ftype amount,
-                                ftype phase, ftype width, ftype offset)
+                               ftype phase, ftype width, ftype offset)
 {
     ftype phs = phase / width + offset;
     ftype val;
