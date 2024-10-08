@@ -65,6 +65,8 @@ typedef struct AudioPulsatorContext {
     unsigned nb_timing;
 
     double *phase;
+
+    int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } AudioPulsatorContext;
 
 #define OFFSET(x) offsetof(AudioPulsatorContext, x)
@@ -142,25 +144,21 @@ static double lfo_get_value(const int mode, double amount,
     return val * amount;
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *in)
+typedef struct ThreadData {
+    AVFrame *out, *in;
+} ThreadData;
+
+static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    AVFilterContext *ctx = inlink->dst;
-    AVFilterLink *outlink = ctx->outputs[0];
     AudioPulsatorContext *s = ctx->priv;
-    AVFrame *out;
+    ThreadData *td = arg;
+    AVFrame *out = td->out;
+    AVFrame *in = td->in;
+    const int nb_channels = in->ch_layout.nb_channels;
+    const int start = (nb_channels * jobnr) / nb_jobs;
+    const int end = (nb_channels * (jobnr+1)) / nb_jobs;
 
-    if (av_frame_is_writable(in)) {
-        out = in;
-    } else {
-        out = ff_get_audio_buffer(inlink, in->nb_samples);
-        if (!out) {
-            av_frame_free(&in);
-            return AVERROR(ENOMEM);
-        }
-        av_frame_copy_props(out, in);
-    }
-
-    for (int ch = 0; ch < in->ch_layout.nb_channels; ch++) {
+    for (int ch = start; ch < end; ch++) {
         const double *src = (const double *)in->extended_data[ch];
         const double level_out = s->level_out[FFMIN(ch, s->nb_level_out-1)];
         const double level_in = s->level_in[FFMIN(ch, s->nb_level_in-1)];
@@ -173,7 +171,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         const int mode = s->mode[FFMIN(ch, s->nb_mode-1)];
         const double ms = s->ms[FFMIN(ch, s->nb_ms-1)];
         double *dst = (double *)out->extended_data[ch];
-        const double fs = 1.0 / inlink->sample_rate;
+        const double fs = 1.0 / in->sample_rate;
         const int nb_samples = in->nb_samples;
         double phase = s->phase[ch];
         double freq;
@@ -213,6 +211,34 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->phase[ch] = phase;
     }
 
+    return 0;
+}
+
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
+{
+    AVFilterContext *ctx = inlink->dst;
+    AVFilterLink *outlink = ctx->outputs[0];
+    AudioPulsatorContext *s = ctx->priv;
+    ThreadData td;
+    AVFrame *out;
+
+    if (av_frame_is_writable(in)) {
+        out = in;
+    } else {
+        out = ff_get_audio_buffer(inlink, in->nb_samples);
+        if (!out) {
+            av_frame_free(&in);
+            return AVERROR(ENOMEM);
+        }
+        av_frame_copy_props(out, in);
+    }
+
+    td.in = in;
+    td.out = out;
+    ff_filter_execute(ctx, s->filter_channels, &td, NULL,
+                      FFMIN(inlink->ch_layout.nb_channels,
+                            ff_filter_get_nb_threads(ctx)));
+
     if (in != out)
         av_frame_free(&in);
 
@@ -223,6 +249,8 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     AudioPulsatorContext *s = ctx->priv;
+
+    s->filter_channels = filter_channels;
 
     s->phase = av_calloc(inlink->ch_layout.nb_channels, sizeof(*s->phase));
     if (!s->phase)
@@ -256,6 +284,7 @@ const AVFilter ff_af_apulsator = {
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
+    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+                     AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };
