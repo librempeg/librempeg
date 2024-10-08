@@ -91,7 +91,7 @@ static ftype fn(get_gain)(const ftype w, const ftype c)
 static ftype fn(get_score)(const ftype xcorr,
                            const ftype n)
 {
-    return (n) * xcorr;
+    return n * xcorr;
 }
 
 static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
@@ -107,8 +107,6 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     ctype *cptry = c->c_data[1];
     ftype *dptr2x = c->data2[0];
     ftype *dptr2y = c->data2[1];
-    ftype *dptrmx = c->datam[0];
-    ftype *dptrmy = c->datam[1];
     ftype *rptrx = c->r_data[0];
     ftype *rptry = c->r_data[1];
     ftype *dptrx = c->data[0];
@@ -157,14 +155,10 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     if (size < max_period)
         memset(dptry+size, 0, (max_period-size)*sizeof(*dptry));
 
-    dptrmx[0] = F(0.0);
-    dptrmy[0] = F(0.0);
     dptr2x[0] = F(0.0);
     dptr2y[0] = F(0.0);
     for (int n = 0; n < max_period; n++) {
-        dptrmx[n+1] = dptrmx[n] + dptrx[n];
-        dptrmy[n+1] = dptrmy[n] + dptry[n];
-        dptr2x[n+1] = dptr2x[n] + dptrx[n] * dptrx[n];
+        dptr2x[n+1] = dptr2x[n] + dptrx[max_period-n-1] * dptrx[max_period-n-1];
         dptr2y[n+1] = dptr2y[n] + dptry[n] * dptry[n];
     }
 
@@ -213,14 +207,11 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
 
         if (best_period > 0) {
             const int n = max_period-best_period;
-            const ftype mx = dptrmx[max_period] - dptrmx[n];
-            const ftype xx = dptr2x[max_period] - dptr2x[n];
-            const ftype my = dptrmy[best_period];
-            const ftype yy = dptr2y[best_period];
+            const ftype xx = dptr2x[n];
+            const ftype yy = dptr2y[n];
             const ftype xy = rptrx[n];
-            const ftype num = xy*best_period-mx*my;
-            const ftype den = SQRT(FMAX(best_period*xx-mx*mx, F(0.0))) *
-                              SQRT(FMAX(best_period*yy-my*my, F(0.0))) + EPS;
+            const ftype num = xy;
+            const ftype den = SQRT(xx) * SQRT(yy) + EPS;
 
             best_xcorr = num/den;
             best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
@@ -424,14 +415,6 @@ static int fn(init_state)(AVFilterContext *ctx)
         if (!c->data[1])
             return AVERROR(ENOMEM);
 
-        c->datam[0] = av_calloc(s->max_period+1, sizeof(ftype));
-        if (!c->datam[0])
-            return AVERROR(ENOMEM);
-
-        c->datam[1] = av_calloc(s->max_period+1, sizeof(ftype));
-        if (!c->datam[1])
-            return AVERROR(ENOMEM);
-
         c->data2[0] = av_calloc(s->max_period+1, sizeof(ftype));
         if (!c->data2[0])
             return AVERROR(ENOMEM);
@@ -471,8 +454,6 @@ static void fn(uninit_state)(AVFilterContext *ctx)
 
         av_freep(&c->data[0]);
         av_freep(&c->data[1]);
-        av_freep(&c->datam[0]);
-        av_freep(&c->datam[1]);
         av_freep(&c->data2[0]);
         av_freep(&c->data2[1]);
         av_freep(&c->c_data[0]);
