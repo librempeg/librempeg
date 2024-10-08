@@ -37,6 +37,7 @@
 
 static int fn(shaper_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
+    const int is_disabled = ctx->is_disabled;
     AudioQuantContext *s = ctx->priv;
     AVFrame **frames = s->frame;
     AVFrame **outs = arg;
@@ -54,7 +55,10 @@ static int fn(shaper_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
         ftype *output = (ftype *)out0->extended_data[c];
         ftype *error = (ftype *)out1->extended_data[c];
 
-        if (filter) {
+        if (is_disabled) {
+            for (int n = 0; n < nb_samples; n++)
+                output[n] = input[n];
+        } else if (filter) {
             for (int n = 0; n < nb_samples; n++) {
                 const ftype wanted = input[n] - filter[n];
 
@@ -76,6 +80,7 @@ static int fn(shaper_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
 
 static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
+    const int is_disabled = ctx->is_disabled;
     AudioQuantContext *s = ctx->priv;
     AVFrame **frames = s->frame;
     AVFrame *out = arg;
@@ -88,6 +93,13 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     for (int c = start; c < end; c++) {
         const ftype *input = (const ftype *)frames[0]->extended_data[c];
         ftype *output = (ftype *)out->extended_data[c];
+
+        if (is_disabled) {
+            for (int n = 0; n < nb_samples; n++)
+                output[n] = input[n];
+
+            continue;
+        }
 
         for (int n = 0; n < nb_samples; n++)
             output[n] = ROUND(input[n] * factor) * scale;

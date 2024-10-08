@@ -266,6 +266,7 @@ const AVFilter ff_af_aquant = {
     FILTER_QUERY_FUNC2(query_formats),
     .flags          = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
                       AVFILTER_FLAG_DYNAMIC_INPUTS |
+                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                       AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };
