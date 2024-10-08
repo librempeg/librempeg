@@ -125,9 +125,9 @@ static int query_formats(const AVFilterContext *ctx,
 
         channel_layout.u.map[0].id = channel;
         channel_layout.nb_channels = 1;
-        channel_layout.order       = AV_CHANNEL_ORDER_CUSTOM;
+        channel_layout.order       = (channel == AV_CHAN_NONE) ? AV_CHANNEL_ORDER_UNSPEC : AV_CHANNEL_ORDER_CUSTOM;
 
-        ret = av_channel_layout_retype(&channel_layout, 0, AV_CHANNEL_LAYOUT_RETYPE_FLAG_CANONICAL);
+        ret = av_channel_layout_retype(&channel_layout, AV_CHANNEL_ORDER_UNSPEC, AV_CHANNEL_LAYOUT_RETYPE_FLAG_CANONICAL);
         if (ret < 0) {
             av_channel_layout_uninit(&channel_layout);
             return ret;
