@@ -17,6 +17,7 @@
  */
 
 #undef ftype
+#undef FMA
 #undef SQRT
 #undef FTAN
 #undef FMAX
@@ -34,6 +35,7 @@
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
 #define SAMPLE_SUFFIX f
+#define FMA fmaf
 #define SQRT sqrtf
 #define FTAN tanf
 #define FMIN fminf
@@ -50,6 +52,7 @@
 #else
 #define SAMPLE_FORMAT double
 #define SAMPLE_SUFFIX
+#define FMA fma
 #define SQRT sqrt
 #define FTAN tan
 #define FMIN fmin
@@ -561,7 +564,7 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
 
             if (FABS(lin_gain - new_lin_gain) > EPSILON) {
                 ftype f = (new_lin_gain > lin_gain) * tattack + (new_lin_gain < lin_gain) * trelease;
-                new_lin_gain = f * new_lin_gain + (F(1.0) - f) * lin_gain;
+                new_lin_gain = FMA(new_lin_gain - lin_gain, f, lin_gain);
 
                 if (FABS(lin_gain - new_lin_gain) > EPSILON) {
                     lin_gain = new_lin_gain;
