@@ -68,7 +68,7 @@ typedef struct AudioPulsatorContext {
 } AudioPulsatorContext;
 
 #define OFFSET(x) offsetof(AudioPulsatorContext, x)
-#define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
 static const AVOptionArrayDef def_level = {.def="1",.size_min=1,.sep=' '};
@@ -257,4 +257,5 @@ const AVFilter ff_af_apulsator = {
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
+    .process_command = ff_filter_process_command,
 };
