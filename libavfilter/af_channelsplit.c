@@ -57,20 +57,21 @@ AVFILTER_DEFINE_CLASS(channelsplit);
 static av_cold int init(AVFilterContext *ctx)
 {
     ChannelSplitContext *s = ctx->priv;
-    AVChannelLayout channel_layout = { 0 };
     int ret;
 
-    if ((ret = av_channel_layout_copy(&channel_layout, &s->channel_layout)) < 0)
-        goto fail;
-
-    s->map = av_calloc(channel_layout.nb_channels, sizeof(*s->map));
+    s->map = av_calloc(s->channel_layout.nb_channels, sizeof(*s->map));
     if (!s->map)
         return AVERROR(ENOMEM);
 
-    for (int i = 0; i < channel_layout.nb_channels; i++) {
-        enum AVChannel channel = av_channel_layout_channel_from_index(&channel_layout, i);
-        char buf[128];
+    for (int i = 0; i < s->channel_layout.nb_channels; i++) {
+        enum AVChannel channel = av_channel_layout_channel_from_index(&s->channel_layout, i);
         AVFilterPad pad = { .flags = AVFILTERPAD_FLAG_FREE_NAME };
+        char buf[128];
+
+        if (channel > AV_CHAN_NONE) {
+            if (av_channel_layout_index_from_channel(&s->channels, channel) < 0)
+                continue;
+        }
 
         av_channel_name(buf, sizeof(buf), channel);
         pad.type = AVMEDIA_TYPE_AUDIO;
@@ -80,22 +81,13 @@ static av_cold int init(AVFilterContext *ctx)
             goto fail;
         }
 
-        av_channel_layout_describe(&s->channel_layout, buf, sizeof(buf));
-        if ((ret = av_channel_layout_index_from_channel(&s->channels, channel)) < 0) {
-            av_log(ctx, AV_LOG_ERROR, "Channel name '%s' not present in channel layout '%s'.\n",
-                   pad.name, buf);
-            av_freep(&pad.name);
-            goto fail;
-        }
-
-        s->map[i] = ret;
+        s->map[ctx->nb_outputs] = i;
 
         if ((ret = ff_append_outpad(ctx, &pad)) < 0)
             goto fail;
     }
 
 fail:
-    av_channel_layout_uninit(&channel_layout);
     return ret;
 }
 
@@ -103,7 +95,6 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     ChannelSplitContext *s = ctx->priv;
 
-    av_channel_layout_uninit(&s->channel_layout);
     av_freep(&s->map);
 }
 
