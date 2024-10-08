@@ -43,7 +43,7 @@ typedef struct AudioQuantContext {
 #define AT AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 
 static const AVOption aquant_options[] = {
-    { "bitdepth",  "set output quantization precision", OFFSET(bits), AV_OPT_TYPE_INT,   {.i64=16},16,24,A },
+    { "bitdepth",  "set output quantization precision", OFFSET(bits), AV_OPT_TYPE_INT,   {.i64=16},16,24,AT },
     { "noise-shaping", "enable noise-shaping",  OFFSET(noise_shaper), AV_OPT_TYPE_BOOL,  {.i64=1}, 0, 1, A },
     { "precision", "set input processing precision", OFFSET(precision),AV_OPT_TYPE_INT,  {.i64=0}, 0, 2, A, .unit = "precision" },
     {   "auto",  "set auto processing precision",                  0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, A, .unit = "precision" },
