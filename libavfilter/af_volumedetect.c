@@ -118,7 +118,8 @@ const AVFilter ff_af_volumedetect = {
     .description   = NULL_IF_CONFIG_SMALL("Detect audio volume."),
     .priv_size     = sizeof(VolDetectContext),
     .uninit        = uninit,
-    .flags         = AVFILTER_FLAG_METADATA_ONLY,
+    .flags         = AVFILTER_FLAG_METADATA_ONLY |
+                     AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
     FILTER_INPUTS(volumedetect_inputs),
     FILTER_OUTPUTS(volumedetect_outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_S16,
