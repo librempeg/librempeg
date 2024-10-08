@@ -22,6 +22,7 @@
 #undef ctype
 #undef FEXP10
 #undef FLOG10
+#undef FMA
 #undef FPI
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
@@ -31,6 +32,7 @@
 #define ctype AVComplexFloat
 #define FEXP10 ff_exp10f
 #define FLOG10 log10f
+#define FMA fmaf
 #define FPI M_PIf
 #define SAMPLE_FORMAT fltp
 #else
@@ -40,6 +42,7 @@
 #define ctype AVComplexDouble
 #define FEXP10 ff_exp10
 #define FLOG10 log10
+#define FMA fma
 #define FPI M_PI
 #define SAMPLE_FORMAT dblp
 #endif
@@ -152,9 +155,9 @@ static void fn(get_envelope)(AVFilterContext *ctx,
         const ftype Vg = envelope[n];
 
         if (Bg > Vg) {
-            envelope[n] = attack  * Vg + (F(1.0) - attack)  * Bg;
+            envelope[n] = FMA(Vg - Bg, attack, Bg);
         } else if (Bg < Vg)  {
-            envelope[n] = release * Vg + (F(1.0) - release) * Bg;
+            envelope[n] = FMA(Vg - Bg, release, Bg);
         } else {
             envelope[n] = Vg;
         }
