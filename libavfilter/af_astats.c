@@ -746,7 +746,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     if (s->metadata)
         set_metadata(s, metadata);
 
-    return ff_filter_frame(inlink->dst->outputs[0], buf);
+    return ff_filter_frame(ctx->outputs[0], buf);
 }
 
 static void print_stats(AVFilterContext *ctx)
