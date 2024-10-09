@@ -3677,6 +3677,7 @@ Available keys for each channel are:
 @var{Number_of_denormals}
 @var{Peak_count}
 @var{Abs_Peak_count}
+@var{Clip_count}
 @var{Peak_level}
 @var{RMS_difference}
 @var{RMS_peak}
@@ -3702,6 +3703,7 @@ and for @code{Overall}:
 @var{Number_of_samples}
 @var{Peak_count}
 @var{Abs_Peak_count}
+@var{Clip_count}
 @var{Peak_level}
 @var{RMS_difference}
 @var{RMS_level}
