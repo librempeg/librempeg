@@ -73,11 +73,13 @@ static int fn(get_svf)(double fs, double fc, int filter_order, double gain, fn(E
     for (int n = 0; n < L; n++) {
         fn(Section) *sec = &eq->sections[n];
         double si = sin((2.0 * (n + 1.0) - 1.0) * M_PI / (2.0 * filter_order));
+        double den1 = nt_D2 + rat_ord - 2.0 * rat_ro * nt_D * si;
+        double den2 = rat_ro * ct_D - si * stD;
 
-        sec->c1 = 2.0 - 2.0 * (nt_D2 - rat_ord) / (nt_D2 + rat_ord - 2.0 * rat_ro * nt_D * si);
-        sec->c2 = (rat_ro * ct_D) / (rat_ro * ct_D - si * stD);
-        sec->d0 = (rat_ord + gP2 * nt_D2 - 2.0 * gP1 * rat_ro * nt_D * si) / (nt_D2 + rat_ord - 2.0 * rat_ro * nt_D * si);
-        sec->d1 = (rat_ro * ct_D - gP1 * si * stD) / (rat_ro * ct_D - si * stD);
+        sec->c1 = 2.0 - 2.0 * (nt_D2 - rat_ord) / den1;
+        sec->c2 = (rat_ro * ct_D) / den2;
+        sec->d0 = (rat_ord + gP2 * nt_D2 - 2.0 * gP1 * rat_ro * nt_D * si) / den1;
+        sec->d1 = (rat_ro * ct_D - gP1 * si * stD) / den2;
     }
 
     return L;
