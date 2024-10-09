@@ -59,7 +59,8 @@
 #define MEASURE_ABS_PEAK_COUNT          (1 << 25)
 #define MEASURE_CLIP_COUNT              (1 << 26)
 
-#define MEASURE_MINMAXPEAK              (MEASURE_MIN_LEVEL | MEASURE_MAX_LEVEL | MEASURE_PEAK_LEVEL)
+#define MEASURE_PEAK                    (MEASURE_PEAK_LEVEL)
+#define MEASURE_MINMAX                  (MEASURE_MIN_LEVEL | MEASURE_MAX_LEVEL)
 #define MEASURE_DENORMALS               (MEASURE_NUMBER_OF_NANS | MEASURE_NUMBER_OF_INFS | MEASURE_NUMBER_OF_DENORMALS)
 
 typedef struct ChannelStats {
@@ -112,7 +113,8 @@ typedef struct AudioStatsContext {
     int measure_perchannel;
     int measure_overall;
     int is_float;
-    int is_double;
+
+    int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } AudioStatsContext;
 
 #define OFFSET(x) offsetof(AudioStatsContext, x)
@@ -208,43 +210,6 @@ static void reset_stats(AudioStatsContext *s)
     }
 }
 
-static int config_output(AVFilterLink *outlink)
-{
-    AudioStatsContext *s = outlink->src->priv;
-
-    s->chstats = av_calloc(sizeof(*s->chstats), outlink->ch_layout.nb_channels);
-    if (!s->chstats)
-        return AVERROR(ENOMEM);
-
-    s->tc_samples = FFMAX(s->time_constant * outlink->sample_rate + .5, 1);
-    s->nb_channels = outlink->ch_layout.nb_channels;
-
-    for (int i = 0; i < s->nb_channels; i++) {
-        ChannelStats *p = &s->chstats[i];
-
-        p->win_samples = av_calloc(s->tc_samples, sizeof(*p->win_samples));
-        if (!p->win_samples)
-            return AVERROR(ENOMEM);
-
-        p->sorted_samples = av_calloc(s->tc_samples, sizeof(*p->sorted_samples));
-        if (!p->sorted_samples)
-            return AVERROR(ENOMEM);
-    }
-
-    s->mult = exp((-1 / s->time_constant / outlink->sample_rate));
-    s->nb_frames = 0;
-    s->maxbitdepth = av_get_bytes_per_sample(outlink->format) * 8;
-    s->is_double = outlink->format == AV_SAMPLE_FMT_DBL  ||
-                   outlink->format == AV_SAMPLE_FMT_DBLP;
-
-    s->is_float = outlink->format == AV_SAMPLE_FMT_FLT  ||
-                  outlink->format == AV_SAMPLE_FMT_FLTP;
-
-    reset_stats(s);
-
-    return 0;
-}
-
 static void bit_depth(AudioStatsContext *s, const uint64_t *const mask, uint8_t *depth)
 {
     unsigned result = s->maxbitdepth;
@@ -331,126 +296,94 @@ static double calc_noise_floor(double *ss, double x, double px,
     return r;
 }
 
-static inline void update_minmax(AudioStatsContext *s, ChannelStats *p, double d)
+#define DEPTH 16
+#include "astats_template.c"
+
+#undef DEPTH
+#define DEPTH 31
+#include "astats_template.c"
+
+#undef DEPTH
+#define DEPTH 32
+#include "astats_template.c"
+
+#undef DEPTH
+#define DEPTH 63
+#include "astats_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "astats_template.c"
+
+static int config_output(AVFilterLink *outlink)
 {
-    if (d < p->min)
-        p->min = d;
-    if (d > p->max)
-        p->max = d;
-}
+    AudioStatsContext *s = outlink->src->priv;
 
-static inline void update_stat(AudioStatsContext *s, ChannelStats *p, double d, double nd, int64_t i)
-{
-    double abs_d = FFABS(d);
-    double drop, noise_floor;
+    s->chstats = av_calloc(sizeof(*s->chstats), outlink->ch_layout.nb_channels);
+    if (!s->chstats)
+        return AVERROR(ENOMEM);
 
-    if (p->abs_peak < abs_d) {
-        p->abs_peak = abs_d;
-        p->abs_peak_count = 1;
-    } else if (p->abs_peak == abs_d) {
-        p->abs_peak_count++;
-    }
-    p->clip_count += fabs(nd) > 1.0;
-    if (d < p->min) {
-        p->min = d;
-        p->nmin = nd;
-        p->min_run = 1;
-        p->min_runs = 0;
-        p->min_count = 1;
-    } else if (d == p->min) {
-        p->min_count++;
-        p->min_run = d == p->last ? p->min_run + 1 : 1;
-    } else if (p->last == p->min) {
-        p->min_runs += p->min_run * p->min_run;
+    s->tc_samples = FFMAX(s->time_constant * outlink->sample_rate + .5, 1);
+    s->nb_channels = outlink->ch_layout.nb_channels;
+
+    for (int i = 0; i < s->nb_channels; i++) {
+        ChannelStats *p = &s->chstats[i];
+
+        p->win_samples = av_calloc(s->tc_samples, sizeof(*p->win_samples));
+        if (!p->win_samples)
+            return AVERROR(ENOMEM);
+
+        p->sorted_samples = av_calloc(s->tc_samples, sizeof(*p->sorted_samples));
+        if (!p->sorted_samples)
+            return AVERROR(ENOMEM);
     }
 
-    if (d != 0 && FFABS(d) < p->min_non_zero)
-        p->min_non_zero = FFABS(d);
+    s->mult = exp((-1 / s->time_constant / outlink->sample_rate));
+    s->nb_frames = 0;
+    s->maxbitdepth = av_get_bytes_per_sample(outlink->format) * 8;
 
-    if (d > p->max) {
-        p->max = d;
-        p->nmax = nd;
-        p->max_run = 1;
-        p->max_runs = 0;
-        p->max_count = 1;
-    } else if (d == p->max) {
-        p->max_count++;
-        p->max_run = d == p->last ? p->max_run + 1 : 1;
-    } else if (p->last == p->max) {
-        p->max_runs += p->max_run * p->max_run;
+    switch (outlink->format) {
+    case AV_SAMPLE_FMT_S16:
+        s->filter_channels = filter_channels_packed_s16;
+        break;
+    case AV_SAMPLE_FMT_S32:
+        s->filter_channels = filter_channels_packed_s32;
+        break;
+    case AV_SAMPLE_FMT_S64:
+        s->filter_channels = filter_channels_packed_s64;
+        break;
+    case AV_SAMPLE_FMT_FLT:
+        s->filter_channels = filter_channels_packed_flt;
+        s->is_float = 1;
+        break;
+    case AV_SAMPLE_FMT_DBL:
+        s->filter_channels = filter_channels_packed_dbl;
+        s->is_float = 1;
+        break;
+    case AV_SAMPLE_FMT_S16P:
+        s->filter_channels = filter_channels_planar_s16;
+        break;
+    case AV_SAMPLE_FMT_S32P:
+        s->filter_channels = filter_channels_planar_s32;
+        break;
+    case AV_SAMPLE_FMT_S64P:
+        s->filter_channels = filter_channels_planar_s64;
+        break;
+    case AV_SAMPLE_FMT_FLTP:
+        s->filter_channels = filter_channels_planar_flt;
+        s->is_float = 1;
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        s->filter_channels = filter_channels_planar_dbl;
+        s->is_float = 1;
+        break;
+    default:
+        AVERROR_BUG;
     }
 
-    if (d != 0) {
-        p->zero_runs += FFSIGN(d) != FFSIGN(p->last_non_zero);
-        p->last_non_zero = d;
-    }
+    reset_stats(s);
 
-    p->sigma_x += nd;
-    p->sigma_ax += fabs(nd);
-    if (fabs(nd) > 1e-16)
-        p->sigma_log2_ax += log2(fabs(nd));
-    p->sigma_x2 += nd * nd;
-    p->avg_sigma_x2 = p->avg_sigma_x2 * s->mult + (1.0 - s->mult) * nd * nd;
-    if (!isnan(p->last)) {
-        p->min_diff = FFMIN(p->min_diff, fabs(d - p->last));
-        p->max_diff = FFMAX(p->max_diff, fabs(d - p->last));
-        p->diff1_sum += fabs(d - p->last);
-        p->diff1_sum_x2 += (d - p->last) * (d - p->last);
-    }
-    p->mask[0] |= (i < 0) ? -i : i;
-    p->mask[1] |= i;
-    p->mask[2] &= i;
-    if (!isnan(p->last))
-        p->mask[3] |= i ^ p->lasti;
-    p->lasti = i;
-    p->last = d;
-
-    drop = p->win_samples[p->win_pos];
-    p->win_samples[p->win_pos] = nd;
-    p->win_pos++;
-
-    if (p->win_pos >= s->tc_samples)
-        p->win_pos = 0;
-
-    if (p->nb_samples >= s->tc_samples) {
-        p->max_sigma_x2 = FFMAX(p->max_sigma_x2, p->avg_sigma_x2);
-        p->min_sigma_x2 = FFMIN(p->min_sigma_x2, p->avg_sigma_x2);
-    }
-    p->nb_samples++;
-
-    noise_floor = calc_noise_floor(p->sorted_samples, nd, drop,
-                                   s->tc_samples, &p->sorted_front, &p->sorted_back);
-    if (p->nb_samples >= s->tc_samples) {
-        if (isnan(p->noise_floor)) {
-            p->noise_floor = noise_floor;
-            p->noise_floor_count = 1;
-        } else {
-            if (noise_floor < p->noise_floor) {
-                p->noise_floor = noise_floor;
-                p->noise_floor_count = 1;
-            } else if (noise_floor == p->noise_floor) {
-                p->noise_floor_count++;
-            }
-        }
-    }
-}
-
-static inline void update_float_stat(AudioStatsContext *s, ChannelStats *p, float d)
-{
-    int type = fpclassify(d);
-
-    p->nb_nans      += type == FP_NAN;
-    p->nb_infs      += type == FP_INFINITE;
-    p->nb_denormals += type == FP_SUBNORMAL;
-}
-
-static inline void update_double_stat(AudioStatsContext *s, ChannelStats *p, double d)
-{
-    int type = fpclassify(d);
-
-    p->nb_nans      += type == FP_NAN;
-    p->nb_infs      += type == FP_INFINITE;
-    p->nb_denormals += type == FP_SUBNORMAL;
+    return 0;
 }
 
 static void set_meta(AVDictionary **metadata, int chan, const char *key,
@@ -582,11 +515,11 @@ static void set_metadata(AudioStatsContext *s, AVDictionary **metadata)
             set_meta(metadata, c + 1, "Zero_crossings", "%f", p->zero_runs);
         if (s->measure_perchannel & MEASURE_ZERO_CROSSINGS_RATE)
             set_meta(metadata, c + 1, "Zero_crossings_rate", "%f", p->zero_runs/(double)p->nb_samples);
-        if ((s->is_float || s->is_double) && s->measure_perchannel & MEASURE_NUMBER_OF_NANS)
+        if (s->is_float && s->measure_perchannel & MEASURE_NUMBER_OF_NANS)
             set_meta(metadata, c + 1, "Number of NaNs", "%f", p->nb_nans);
-        if ((s->is_float || s->is_double) && s->measure_perchannel & MEASURE_NUMBER_OF_INFS)
+        if (s->is_float && s->measure_perchannel & MEASURE_NUMBER_OF_INFS)
             set_meta(metadata, c + 1, "Number of Infs", "%f", p->nb_infs);
-        if ((s->is_float || s->is_double) && s->measure_perchannel & MEASURE_NUMBER_OF_DENORMALS)
+        if (s->is_float && s->measure_perchannel & MEASURE_NUMBER_OF_DENORMALS)
             set_meta(metadata, c + 1, "Number of denormals", "%f", p->nb_denormals);
     }
 
@@ -635,100 +568,19 @@ static void set_metadata(AudioStatsContext *s, AVDictionary **metadata)
     }
     if (s->measure_overall & MEASURE_NUMBER_OF_SAMPLES)
         set_meta(metadata, 0, "Overall.Number_of_samples", "%f", nb_samples / s->nb_channels);
-    if ((s->is_float || s->is_double) && s->measure_overall & MEASURE_NUMBER_OF_NANS)
+    if (s->is_float && s->measure_overall & MEASURE_NUMBER_OF_NANS)
         set_meta(metadata, 0, "Number of NaNs", "%f", nb_nans / (float)s->nb_channels);
-    if ((s->is_float || s->is_double) && s->measure_overall & MEASURE_NUMBER_OF_INFS)
+    if (s->is_float && s->measure_overall & MEASURE_NUMBER_OF_INFS)
         set_meta(metadata, 0, "Number of Infs", "%f", nb_infs / (float)s->nb_channels);
-    if ((s->is_float || s->is_double) && s->measure_overall & MEASURE_NUMBER_OF_DENORMALS)
+    if (s->is_float && s->measure_overall & MEASURE_NUMBER_OF_DENORMALS)
         set_meta(metadata, 0, "Number of denormals", "%f", nb_denormals / (float)s->nb_channels);
 }
 
-#define UPDATE_STATS_P(type, update_func, update_float, channel_func)           \
-    for (int c = start; c < end; c++) {                                         \
-        ChannelStats *p = &s->chstats[c];                                       \
-        const type *src = (const type *)data[c];                                \
-        const type * const srcend = src + samples;                              \
-        for (; src < srcend; src++) {                                           \
-            update_func;                                                        \
-            update_float;                                                       \
-        }                                                                       \
-        channel_func;                                                           \
-    }
-
-#define UPDATE_STATS_I(type, update_func, update_float, channel_func)           \
-    for (int c = start; c < end; c++) {                                         \
-        ChannelStats *p = &s->chstats[c];                                       \
-        const type *src = (const type *)data[0];                                \
-        const type * const srcend = src + samples * channels;                   \
-        for (src += c; src < srcend; src += channels) {                         \
-            update_func;                                                        \
-            update_float;                                                       \
-        }                                                                       \
-        channel_func;                                                           \
-    }
-
-#define UPDATE_STATS(planar, type, sample, normalizer_suffix, int_sample) \
-    if ((s->measure_overall | s->measure_perchannel) == ((s->measure_overall | s->measure_perchannel) & MEASURE_MINMAXPEAK)) {               \
-        UPDATE_STATS_##planar(type, update_minmax(s, p, sample), , p->nmin = p->min normalizer_suffix; p->nmax = p->max normalizer_suffix;); \
-    } else if ((s->measure_overall | s->measure_perchannel) == ((s->measure_overall | s->measure_perchannel) & MEASURE_DENORMALS)) {         \
-        UPDATE_STATS_##planar(type, s->is_float ? update_float_stat(s, p, sample) :\
-                                   s->is_double ? update_double_stat(s, p, sample): (void)NULL, , ); \
-    } else {                                                                                           \
-        UPDATE_STATS_##planar(type, update_stat(s, p, sample, sample normalizer_suffix, int_sample), s->is_float ? update_float_stat(s, p, sample) : s->is_double ? update_double_stat(s, p, sample) : (void)NULL, ); \
-    }
-
-static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    AudioStatsContext *s = ctx->priv;
-    AVFilterLink *inlink = ctx->inputs[0];
-    AVFrame *buf = arg;
-    const uint8_t * const * const data = (const uint8_t * const *)buf->extended_data;
-    const int channels = s->nb_channels;
-    const int samples = buf->nb_samples;
-    const int start = (buf->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (buf->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
-
-    switch (inlink->format) {
-    case AV_SAMPLE_FMT_DBLP:
-        UPDATE_STATS(P, double, *src, , llrint(*src * (UINT64_C(1) << 63)));
-        break;
-    case AV_SAMPLE_FMT_DBL:
-        UPDATE_STATS(I, double, *src, , llrint(*src * (UINT64_C(1) << 63)));
-        break;
-    case AV_SAMPLE_FMT_FLTP:
-        UPDATE_STATS(P, float, *src, , llrint(*src * (UINT64_C(1) << 31)));
-        break;
-    case AV_SAMPLE_FMT_FLT:
-        UPDATE_STATS(I, float, *src, , llrint(*src * (UINT64_C(1) << 31)));
-        break;
-    case AV_SAMPLE_FMT_S64P:
-        UPDATE_STATS(P, int64_t, *src, / (double)INT64_MAX, *src);
-        break;
-    case AV_SAMPLE_FMT_S64:
-        UPDATE_STATS(I, int64_t, *src, / (double)INT64_MAX, *src);
-        break;
-    case AV_SAMPLE_FMT_S32P:
-        UPDATE_STATS(P, int32_t, *src, / (double)INT32_MAX, *src);
-        break;
-    case AV_SAMPLE_FMT_S32:
-        UPDATE_STATS(I, int32_t, *src, / (double)INT32_MAX, *src);
-        break;
-    case AV_SAMPLE_FMT_S16P:
-        UPDATE_STATS(P, int16_t, *src, / (double)INT16_MAX, *src);
-        break;
-    case AV_SAMPLE_FMT_S16:
-        UPDATE_STATS(I, int16_t, *src, / (double)INT16_MAX, *src);
-        break;
-    }
-
-    return 0;
-}
-
-static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     AudioStatsContext *s = ctx->priv;
-    AVDictionary **metadata = &buf->metadata;
+    AVDictionary **metadata = &in->metadata;
 
     if (s->reset_count > 0) {
         if (s->nb_frames >= s->reset_count) {
@@ -739,14 +591,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     }
 
     if (s->used == 0)
-        s->used = buf->nb_samples > 0;
-    ff_filter_execute(ctx, filter_channel, buf, NULL,
+        s->used = in->nb_samples > 0;
+    ff_filter_execute(ctx, s->filter_channels, in, NULL,
                       FFMIN(inlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     if (s->metadata)
         set_metadata(s, metadata);
 
-    return ff_filter_frame(ctx->outputs[0], buf);
+    return ff_filter_frame(ctx->outputs[0], in);
 }
 
 static void print_stats(AVFilterContext *ctx)
@@ -865,11 +717,11 @@ static void print_stats(AVFilterContext *ctx)
             av_log(ctx, AV_LOG_INFO, "Zero crossings: %"PRId64"\n", p->zero_runs);
         if (s->measure_perchannel & MEASURE_ZERO_CROSSINGS_RATE)
             av_log(ctx, AV_LOG_INFO, "Zero crossings rate: %f\n", p->zero_runs/(double)p->nb_samples);
-        if ((s->is_float || s->is_double) && s->measure_perchannel & MEASURE_NUMBER_OF_NANS)
+        if (s->is_float && s->measure_perchannel & MEASURE_NUMBER_OF_NANS)
             av_log(ctx, AV_LOG_INFO, "Number of NaNs: %"PRId64"\n", p->nb_nans);
-        if ((s->is_float || s->is_double) && s->measure_perchannel & MEASURE_NUMBER_OF_INFS)
+        if (s->is_float && s->measure_perchannel & MEASURE_NUMBER_OF_INFS)
             av_log(ctx, AV_LOG_INFO, "Number of Infs: %"PRId64"\n", p->nb_infs);
-        if ((s->is_float || s->is_double) && s->measure_perchannel & MEASURE_NUMBER_OF_DENORMALS)
+        if (s->is_float && s->measure_perchannel & MEASURE_NUMBER_OF_DENORMALS)
             av_log(ctx, AV_LOG_INFO, "Number of denormals: %"PRId64"\n", p->nb_denormals);
     }
 
@@ -921,11 +773,11 @@ static void print_stats(AVFilterContext *ctx)
     }
     if (s->measure_overall & MEASURE_NUMBER_OF_SAMPLES)
         av_log(ctx, AV_LOG_INFO, "Number of samples: %"PRId64"\n", nb_samples / s->nb_channels);
-    if ((s->is_float || s->is_double) && s->measure_overall & MEASURE_NUMBER_OF_NANS)
+    if (s->is_float && s->measure_overall & MEASURE_NUMBER_OF_NANS)
         av_log(ctx, AV_LOG_INFO, "Number of NaNs: %f\n", nb_nans / (float)s->nb_channels);
-    if ((s->is_float || s->is_double) && s->measure_overall & MEASURE_NUMBER_OF_INFS)
+    if (s->is_float && s->measure_overall & MEASURE_NUMBER_OF_INFS)
         av_log(ctx, AV_LOG_INFO, "Number of Infs: %f\n", nb_infs / (float)s->nb_channels);
-    if ((s->is_float || s->is_double) && s->measure_overall & MEASURE_NUMBER_OF_DENORMALS)
+    if (s->is_float && s->measure_overall & MEASURE_NUMBER_OF_DENORMALS)
         av_log(ctx, AV_LOG_INFO, "Number of denormals: %f\n", nb_denormals / (float)s->nb_channels);
 }
 
