@@ -132,51 +132,56 @@ typedef struct fn(StateContext) {
     itype ia[3];
     itype ib[3];
     itype ic[4];
+    ftype mix;
     itype fraction;
     unsigned clip;
 } fn(StateContext);
 
-static int fn(init_state)(AVFilterContext *ctx, int reset)
+static int fn(init_state)(AVFilterContext *ctx, void **st,
+                          const int nb_channels,
+                          const int block_samples, const int reset,
+                          const double a[3], const double b[3],
+                          const double mix)
 {
-    BiquadsContext *s = ctx->priv;
     fn(StateContext) *stc;
 
-    if (!s->st)
-        s->st = av_calloc(s->nb_channels * (1+(s->block_samples>0)), sizeof(*stc));
-    if (!s->st)
+    if (!st[0])
+        st[0] = av_calloc(nb_channels * (1+(block_samples>0)), sizeof(*stc));
+    if (!st[0])
         return AVERROR(ENOMEM);
 
-    stc = s->st;
-    for (int ch = 0; ch < s->nb_channels * (1+(s->block_samples>0)); ch++) {
+    stc = st[0];
+    for (int ch = 0; ch < nb_channels * (1+(block_samples>0)); ch++) {
         fn(StateContext) *st = &stc[ch];
 
         if (reset)
             memset(st->c, 0, sizeof(st->c));
 
-        st->a[0] = s->a[0];
-        st->a[1] = s->a[1];
-        st->a[2] = s->a[2];
-        st->b[0] = s->b[0];
-        st->b[1] = s->b[1];
-        st->b[2] = s->b[2];
+        st->mix = mix;
+        st->a[0] = a[0];
+        st->a[1] = a[1];
+        st->a[2] = a[2];
+        st->b[0] = b[0];
+        st->b[1] = b[1];
+        st->b[2] = b[2];
 
-        st->ia[0] = LRINT(s->a[0] * (1LL << IDEPTH));
-        st->ia[1] = LRINT(s->a[1] * (1LL << IDEPTH));
-        st->ia[2] = LRINT(s->a[2] * (1LL << IDEPTH));
-        st->ib[0] = LRINT(s->b[0] * (1LL << IDEPTH));
-        st->ib[1] = LRINT(s->b[1] * (1LL << IDEPTH));
-        st->ib[2] = LRINT(s->b[2] * (1LL << IDEPTH));
+        st->ia[0] = LRINT(a[0] * (1LL << IDEPTH));
+        st->ia[1] = LRINT(a[1] * (1LL << IDEPTH));
+        st->ia[2] = LRINT(a[2] * (1LL << IDEPTH));
+        st->ib[0] = LRINT(b[0] * (1LL << IDEPTH));
+        st->ib[1] = LRINT(b[1] * (1LL << IDEPTH));
+        st->ib[2] = LRINT(b[2] * (1LL << IDEPTH));
     }
 
     return 0;
 }
 
-static void fn(clip_reset)(AVFilterContext *ctx)
+static void fn(clip_reset)(AVFilterContext *ctx,
+                           void *st, const int nb_channels)
 {
-    BiquadsContext *s = ctx->priv;
-    fn(StateContext) *state = s->st;
+    fn(StateContext) *state = st;
 
-    for (int ch = 0; ch < s->nb_channels; ch++) {
+    for (int ch = 0; ch < nb_channels; ch++) {
         fn(StateContext) *stc = &state[ch];
 
         if (stc->clip > 0) {
@@ -187,13 +192,13 @@ static void fn(clip_reset)(AVFilterContext *ctx)
     }
 }
 
-static void fn(biquad_di)(BiquadsContext *s,
+static void fn(biquad_di)(void *st,
                           const void *input, void *output, int len,
                           int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = s->st;
+    fn(StateContext) *state = st;
     fn(StateContext) *stc = &state[ch];
     itype *fcache = stc->ic;
     itype i1 = fcache[0], i2 = fcache[1], o1 = fcache[2], o2 = fcache[3];
@@ -205,7 +210,7 @@ static void fn(biquad_di)(BiquadsContext *s,
     const itype b0 = b[0];
     const itype b1 = b[1];
     const itype b2 = b[2];
-    const ftype wet = s->mix;
+    const ftype wet = stc->mix;
     const ftype dry = F(1.0) - wet;
 
     for (int i = 0; i < len; i++) {
@@ -249,13 +254,13 @@ static void fn(biquad_di)(BiquadsContext *s,
     stc->fraction = fraction;
 }
 
-static void fn(biquad_dii)(BiquadsContext *s,
+static void fn(biquad_dii)(void *st,
                            const void *input, void *output, int len,
                            int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = s->st;
+    fn(StateContext) *state = st;
     fn(StateContext) *stc = &state[ch];
     ftype *fcache = stc->c;
     const ftype *a = stc->a;
@@ -267,7 +272,7 @@ static void fn(biquad_dii)(BiquadsContext *s,
     const ftype b2 = b[2];
     ftype w1 = fcache[0];
     ftype w2 = fcache[1];
-    const ftype wet = s->mix;
+    const ftype wet = stc->mix;
     const ftype dry = F(1.0) - wet;
 
     for (int i = 0; i < len; i++) {
@@ -293,13 +298,13 @@ static void fn(biquad_dii)(BiquadsContext *s,
     fcache[1] = isnormal(w2) ? w2 : F(0.0);
 }
 
-static void fn(biquad_tdi)(BiquadsContext *s,
+static void fn(biquad_tdi)(void *st,
                            const void *input, void *output, int len,
                            int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = s->st;
+    fn(StateContext) *state = st;
     fn(StateContext) *stc = &state[ch];
     ftype *fcache = stc->c;
     const ftype *a = (const ftype *)stc->a;
@@ -313,7 +318,7 @@ static void fn(biquad_tdi)(BiquadsContext *s,
     ftype s2 = fcache[1];
     ftype s3 = fcache[2];
     ftype s4 = fcache[3];
-    const ftype wet = s->mix;
+    const ftype wet = stc->mix;
     const ftype dry = F(1.0) - wet;
     ftype out;
 
@@ -347,13 +352,13 @@ static void fn(biquad_tdi)(BiquadsContext *s,
     fcache[3] = isnormal(s4) ? s4 : F(0.0);
 }
 
-static void fn(biquad_tdii)(BiquadsContext *s,
+static void fn(biquad_tdii)(void *st,
                             const void *input, void *output, int len,
                             int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = s->st;
+    fn(StateContext) *state = st;
     fn(StateContext) *stc = &state[ch];
     ftype *fcache = stc->c;
     const ftype *a = stc->a;
@@ -365,7 +370,7 @@ static void fn(biquad_tdii)(BiquadsContext *s,
     const ftype b2 = b[2];
     ftype w1 = fcache[0];
     ftype w2 = fcache[1];
-    const ftype wet = s->mix;
+    const ftype wet = stc->mix;
     const ftype dry = F(1.0) - wet;
 
     for (int i = 0; i < len; i++) {
@@ -390,13 +395,13 @@ static void fn(biquad_tdii)(BiquadsContext *s,
     fcache[1] = isnormal(w2) ? w2 : F(0.0);
 }
 
-static void fn(biquad_latt)(BiquadsContext *s,
+static void fn(biquad_latt)(void *st,
                            const void *input, void *output, int len,
                            int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = s->st;
+    fn(StateContext) *state = st;
     fn(StateContext) *stc = &state[ch];
     ftype *fcache = stc->c;
     const ftype *a = (const ftype *)stc->a;
@@ -408,7 +413,7 @@ static void fn(biquad_latt)(BiquadsContext *s,
     const ftype v2 = b[2];
     ftype s0 = fcache[0];
     ftype s1 = fcache[1];
-    const ftype wet = s->mix;
+    const ftype wet = stc->mix;
     const ftype dry = F(1.0) - wet;
     ftype t0, t1;
 
@@ -444,13 +449,13 @@ static void fn(biquad_latt)(BiquadsContext *s,
     fcache[1] = isnormal(s1) ? s1 : F(0.0);
 }
 
-static void fn(biquad_svf)(BiquadsContext *s,
+static void fn(biquad_svf)(void *st,
                            const void *input, void *output, int len,
                            int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = s->st;
+    fn(StateContext) *state = st;
     fn(StateContext) *stc = &state[ch];
     ftype *fcache = stc->c;
     const ftype *a = stc->a;
@@ -462,7 +467,7 @@ static void fn(biquad_svf)(BiquadsContext *s,
     const ftype b2 = b[2];
     ftype s0 = fcache[0];
     ftype s1 = fcache[1];
-    const ftype wet = s->mix;
+    const ftype wet = stc->mix;
     const ftype dry = F(1.0) - wet;
     ftype t0, t1;
 
@@ -491,13 +496,13 @@ static void fn(biquad_svf)(BiquadsContext *s,
     fcache[1] = isnormal(s1) ? s1 : F(0.0);
 }
 
-static void fn(biquad_wdf)(BiquadsContext *s,
+static void fn(biquad_wdf)(void *st,
                            const void *input, void *output, int len,
                            int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = s->st;
+    fn(StateContext) *state = st;
     fn(StateContext) *stc = &state[ch];
     ftype *fcache = stc->c;
     const ftype *a = (const ftype *)stc->a;
@@ -509,7 +514,7 @@ static void fn(biquad_wdf)(BiquadsContext *s,
     const ftype a2 = a[2];
     ftype w0 = fcache[0];
     ftype w1 = fcache[1];
-    const ftype wet = s->mix;
+    const ftype wet = stc->mix;
     const ftype dry = F(1.0) - wet;
 
     for (int i = 0; i < len; i++) {
@@ -541,13 +546,13 @@ static void fn(biquad_wdf)(BiquadsContext *s,
     fcache[1] = isnormal(w1) ? w1 : F(0.0);
 }
 
-static void fn(biquad_zdf)(BiquadsContext *s,
+static void fn(biquad_zdf)(void *st,
                            const void *input, void *output, int len,
                            int ch, int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = s->st;
+    fn(StateContext) *state = st;
     fn(StateContext) *stc = &state[ch];
     const ftype *a = stc->a;
     const ftype *b = stc->b;
@@ -559,7 +564,7 @@ static void fn(biquad_zdf)(BiquadsContext *s,
     const ftype a2 = a[2];
     ftype b0 = stc->c[0];
     ftype b1 = stc->c[1];
-    const ftype wet = s->mix;
+    const ftype wet = stc->mix;
     const ftype dry = F(1.0) - wet;
 
     for (int i = 0; i < len; i++) {

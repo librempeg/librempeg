@@ -112,9 +112,11 @@ typedef struct BiquadsContext {
     int nb_channels;
     int nb_samples;
 
-    int (*init_state)(AVFilterContext *ctx, int reset);
-    void (*clip_reset)(AVFilterContext *ctx);
-    void (*filter)(struct BiquadsContext *s, const void *ibuf, void *obuf, int len,
+    int (*init_state)(AVFilterContext *ctx, void **st,
+                      const int nb_channels, const int block_samples, const int reset,
+                      const double a[3], const double b[3], const double mix);
+    void (*clip_reset)(AVFilterContext *ctx, void *st, const int nb_channels);
+    void (*filter)(void *st, const void *ibuf, void *obuf, int len,
                    int ch, int disabled);
 } BiquadsContext;
 
@@ -829,7 +831,8 @@ static int config_filter(AVFilterLink *outlink, int reset)
     else if (s->transform_type == ZDF)
         convert_dir2zdf(s, inlink->sample_rate);
 
-    return s->init_state(ctx, reset);
+    return s->init_state(ctx, &s->st, outlink->ch_layout.nb_channels,
+                         s->block_samples, reset, s->a, s->b, s->mix);
 }
 
 static int config_output(AVFilterLink *outlink)
@@ -934,15 +937,15 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
         }
 
         if (!s->block_samples) {
-            s->filter(s, buf->extended_data[ch], out_buf->extended_data[ch], buf->nb_samples,
+            s->filter(s->st, buf->extended_data[ch], out_buf->extended_data[ch], buf->nb_samples,
                       ch, ctx->is_disabled);
         } else {
-            s->filter(s, buf->extended_data[ch], s->block[0]->extended_data[ch] + s->block_align * s->block_samples,
+            s->filter(s->st, buf->extended_data[ch], s->block[0]->extended_data[ch] + s->block_align * s->block_samples,
                       buf->nb_samples, ch, ctx->is_disabled);
             memset(s->block[0]->extended_data[ch] + s->block_align * (s->block_samples + buf->nb_samples),
                    0, (s->block_samples - buf->nb_samples) * s->block_align);
             reverse_samples(s->block[1], s->block[0], ch, 0, 0, 2 * s->block_samples);
-            s->filter(s, s->block[1]->extended_data[ch], s->block[1]->extended_data[ch], 2 * s->block_samples,
+            s->filter(s->st, s->block[1]->extended_data[ch], s->block[1]->extended_data[ch], 2 * s->block_samples,
                       s->nb_channels+ch, ctx->is_disabled);
             reverse_samples(s->block[2], s->block[1], ch, 0, 0, 2 * s->block_samples);
             memcpy(out_buf->extended_data[ch], s->block[2]->extended_data[ch],
@@ -985,7 +988,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     ff_filter_execute(ctx, filter_channel, &td, NULL,
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
-    s->clip_reset(ctx);
+    s->clip_reset(ctx, s->st, outlink->ch_layout.nb_channels);
 
     if (s->block_samples > 0) {
         int nb_samples = buf->nb_samples;
