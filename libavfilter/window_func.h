@@ -84,7 +84,7 @@ static inline void generate_window_func(float *lut, int N, int win_func,
     case WFUNC_HAMMING:
         for (n = 0; n < N; n++)
             lut[n] = .54-.46*cos(2*M_PI*n/(N-1));
-        *overlap = 0.5;
+        *overlap = 0.75;
         break;
     case WFUNC_BLACKMAN:
         for (n = 0; n < N; n++)
@@ -113,7 +113,7 @@ static inline void generate_window_func(float *lut, int N, int win_func,
     case WFUNC_BNUTTALL:
         for (n = 0; n < N; n++)
             lut[n] = 0.3635819-0.4891775*cos(2*M_PI*n/(N-1))+0.1365995*cos(4*M_PI*n/(N-1))-0.0106411*cos(6*M_PI*n/(N-1));
-        *overlap = 0.661;
+        *overlap = 0.75;
         break;
     case WFUNC_BHANN:
         for (n = 0; n < N; n++)
