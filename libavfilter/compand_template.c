@@ -17,6 +17,7 @@
  */
 
 #undef EPS
+#undef FMA
 #undef FABS
 #undef FEXP
 #undef FLOG
@@ -29,6 +30,7 @@
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
 #define EPS FLT_EPSILON
+#define FMA fmaf
 #define FABS fabsf
 #define FEXP expf
 #define FLOG logf
@@ -41,6 +43,7 @@
 #define SAMPLE_FORMAT fltp
 #else
 #define EPS DBL_EPSILON
+#define FMA fma
 #define FABS fabs
 #define FEXP exp
 #define FLOG log
@@ -229,7 +232,7 @@ static ftype fn(get_volume)(const CompandContext *s, ftype in_log)
             break;
     cs = &css[i - 1];
     in_log -= cs->x;
-    out_log = cs->y + in_log * (cs->a * in_log + cs->b);
+    out_log = FMA(in_log, FMA(cs->a, in_log, cs->b), cs->y);
 
     return FEXP(out_log);
 }
