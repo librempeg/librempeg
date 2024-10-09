@@ -173,7 +173,10 @@ static int fn(init_filter)(AVFilterContext *ctx)
             dB = s->gain_opt[gn] - s->gain_opt[gn-1];
         }
 
-        design_freq = av_clipd(design_freq, 0.0, fs-0.1);
+        if (design_freq >= fs * 0.5) {
+            eqs->nb_sections = 0;
+            continue;
+        }
 
         eqs->nb_sections = fn(get_svf)(fs, design_freq, eqs->nb_sections * 2, dB, eqs);
     }
