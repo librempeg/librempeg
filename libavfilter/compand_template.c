@@ -279,9 +279,9 @@ static void fn(update_volume)(fn(ChanParam) *cp, const ftype in)
     const ftype delta = in_log - cp->volume;
 
     if (delta > F(0.0))
-        cp->volume += delta * cp->attack;
+        cp->volume = FMA(delta, cp->attack, cp->volume);
     else if (delta < F(0.0))
-        cp->volume += delta * cp->decay;
+        cp->volume = FMA(delta, cp->decay, cp->volume);
 }
 
 static int fn(compand_nodelay_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
