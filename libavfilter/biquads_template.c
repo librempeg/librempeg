@@ -176,6 +176,7 @@ static int fn(init_state)(AVFilterContext *ctx, void **st,
     return 0;
 }
 
+#if CLIP_RESET
 static void fn(clip_reset)(AVFilterContext *ctx,
                            void *st, const int nb_channels)
 {
@@ -191,7 +192,9 @@ static void fn(clip_reset)(AVFilterContext *ctx,
         }
     }
 }
+#endif
 
+#if BIQUAD_DI
 static void fn(biquad_di)(void *st,
                           const void *input, void *output, int len,
                           int ch, int disabled)
@@ -253,7 +256,9 @@ static void fn(biquad_di)(void *st,
 
     stc->fraction = fraction;
 }
+#endif
 
+#if BIQUAD_DII
 static void fn(biquad_dii)(void *st,
                            const void *input, void *output, int len,
                            int ch, int disabled)
@@ -297,7 +302,9 @@ static void fn(biquad_dii)(void *st,
     fcache[0] = isnormal(w1) ? w1 : F(0.0);
     fcache[1] = isnormal(w2) ? w2 : F(0.0);
 }
+#endif
 
+#if BIQUAD_TDI
 static void fn(biquad_tdi)(void *st,
                            const void *input, void *output, int len,
                            int ch, int disabled)
@@ -351,7 +358,9 @@ static void fn(biquad_tdi)(void *st,
     fcache[2] = isnormal(s3) ? s3 : F(0.0);
     fcache[3] = isnormal(s4) ? s4 : F(0.0);
 }
+#endif
 
+#if BIQUAD_TDII
 static void fn(biquad_tdii)(void *st,
                             const void *input, void *output, int len,
                             int ch, int disabled)
@@ -394,7 +403,9 @@ static void fn(biquad_tdii)(void *st,
     fcache[0] = isnormal(w1) ? w1 : F(0.0);
     fcache[1] = isnormal(w2) ? w2 : F(0.0);
 }
+#endif
 
+#if BIQUAD_LATT
 static void fn(biquad_latt)(void *st,
                            const void *input, void *output, int len,
                            int ch, int disabled)
@@ -448,7 +459,9 @@ static void fn(biquad_latt)(void *st,
     fcache[0] = isnormal(s0) ? s0 : F(0.0);
     fcache[1] = isnormal(s1) ? s1 : F(0.0);
 }
+#endif
 
+#if BIQUAD_SVF
 static void fn(biquad_svf)(void *st,
                            const void *input, void *output, int len,
                            int ch, int disabled)
@@ -495,7 +508,9 @@ static void fn(biquad_svf)(void *st,
     fcache[0] = isnormal(s0) ? s0 : F(0.0);
     fcache[1] = isnormal(s1) ? s1 : F(0.0);
 }
+#endif
 
+#if BIQUAD_WDF
 static void fn(biquad_wdf)(void *st,
                            const void *input, void *output, int len,
                            int ch, int disabled)
@@ -545,7 +560,9 @@ static void fn(biquad_wdf)(void *st,
     fcache[0] = isnormal(w0) ? w0 : F(0.0);
     fcache[1] = isnormal(w1) ? w1 : F(0.0);
 }
+#endif
 
+#if BIQUAD_ZDF
 static void fn(biquad_zdf)(void *st,
                            const void *input, void *output, int len,
                            int ch, int disabled)
@@ -595,3 +612,4 @@ static void fn(biquad_zdf)(void *st,
     stc->c[0] = isnormal(b0) ? b0 : F(0.0);
     stc->c[1] = isnormal(b1) ? b1 : F(0.0);
 }
+#endif

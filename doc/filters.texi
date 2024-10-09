@@ -3884,9 +3884,6 @@ Default value is 20.
 @item order
 Set filter order. Available values are from 3 to 20.
 Default value is 10.
-
-@item level
-Set input gain level. Allowed range is from 0 to 1. Default value is 1.
 @end table
 
 @subsection Commands
@@ -3906,9 +3903,6 @@ Default value is 20000.
 @item order
 Set filter order. Available values are from 3 to 20.
 Default value is 10.
-
-@item level
-Set input gain level. Allowed range is from 0 to 1. Default value is 1.
 @end table
 
 @subsection Commands
@@ -3931,9 +3925,6 @@ Default value is 4.
 
 @item qfactor
 Set Q-factor. Allowed range is from 0.01 to 100. Default value is 1.
-
-@item level
-Set input gain level. Allowed range is from 0 to 2. Default value is 1.
 @end table
 
 @subsection Commands
@@ -3956,9 +3947,6 @@ Default value is 4.
 
 @item qfactor
 Set Q-factor. Allowed range is from 0.01 to 100. Default value is 1.
-
-@item level
-Set input gain level. Allowed range is from 0 to 2. Default value is 1.
 @end table
 
 @subsection Commands

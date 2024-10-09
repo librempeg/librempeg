@@ -120,6 +120,16 @@ typedef struct BiquadsContext {
                    int ch, int disabled);
 } BiquadsContext;
 
+#define CLIP_RESET 1
+#define BIQUAD_DI 1
+#define BIQUAD_DII 1
+#define BIQUAD_TDI 1
+#define BIQUAD_TDII 1
+#define BIQUAD_LATT 1
+#define BIQUAD_SVF 1
+#define BIQUAD_WDF 1
+#define BIQUAD_ZDF 1
+
 #define DEPTH 8
 #include "biquads_template.c"
 

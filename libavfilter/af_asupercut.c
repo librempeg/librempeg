@@ -21,33 +21,53 @@
 
 #include "libavutil/channel_layout.h"
 #include "libavutil/ffmath.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "avfilter.h"
 #include "audio.h"
 #include "filters.h"
 
 typedef struct BiquadCoeffs {
-    double a1, a2;
-    double b0, b1, b2;
+    double a[3], b[3];
 } BiquadCoeffs;
 
 typedef struct ASuperCutContext {
     const AVClass *class;
 
     double cutoff;
-    double level;
     double qfactor;
     int order;
 
     int filter_count;
     int bypass;
 
-    BiquadCoeffs coeffs[10];
+    void *st[10];
 
-    AVFrame *w;
+    int (*init_state)(AVFilterContext *ctx, void **st,
+                      const int nb_channels, const int block_samples, const int reset,
+                      const double a[3], const double b[3], const double mix);
 
-    int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+    void (*filter)(void *st, const void *ibuf, void *obuf, int len,
+                   int ch, int disabled);
 } ASuperCutContext;
+
+#define CLIP_RESET 0
+#define BIQUAD_DI 0
+#define BIQUAD_DII 0
+#define BIQUAD_TDI 0
+#define BIQUAD_TDII 1
+#define BIQUAD_LATT 0
+#define BIQUAD_SVF 0
+#define BIQUAD_WDF 0
+#define BIQUAD_ZDF 0
+
+#undef DEPTH
+#define DEPTH 32
+#include "biquads_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "biquads_template.c"
 
 static const enum AVSampleFormat sample_fmts[] = {
     AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_NONE
@@ -63,6 +83,7 @@ static int get_coeffs(AVFilterContext *ctx)
 {
     ASuperCutContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
+    const int nb_channels = inlink->ch_layout.nb_channels;
     double w0 = s->cutoff / inlink->sample_rate;
     double K = tan(M_PI * w0);
     double q[10];
@@ -77,26 +98,30 @@ static int get_coeffs(AVFilterContext *ctx)
         calc_q_factors(s->order, q);
 
         if (s->order & 1) {
-            BiquadCoeffs *coeffs = &s->coeffs[0];
             double omega = 2. * tan(M_PI * w0);
+            BiquadCoeffs c;
 
-            coeffs->b0 = 2. / (2. + omega);
-            coeffs->b1 = -coeffs->b0;
-            coeffs->b2 = 0.;
-            coeffs->a1 = -(omega - 2.) / (2. + omega);
-            coeffs->a2 = 0.;
+            c.b[0] = 2. / (2. + omega);
+            c.b[1] = -c.b[0];
+            c.b[2] = 0.;
+            c.a[1] = -(omega - 2.) / (2. + omega);
+            c.a[2] = 0.;
+
+            s->init_state(ctx, &s->st[0], nb_channels, 0, 0, c.a, c.b, 1.0);
         }
 
         for (int b = (s->order & 1); b < s->filter_count; b++) {
-            BiquadCoeffs *coeffs = &s->coeffs[b];
             const int idx = b - (s->order & 1);
             double norm = 1.0 / (1.0 + K / q[idx] + K * K);
+            BiquadCoeffs c;
 
-            coeffs->b0 = norm;
-            coeffs->b1 = -2.0 * coeffs->b0;
-            coeffs->b2 = coeffs->b0;
-            coeffs->a1 = -2.0 * (K * K - 1.0) * norm;
-            coeffs->a2 = -(1.0 - K / q[idx] + K * K) * norm;
+            c.b[0] = norm;
+            c.b[1] = -2.0 * c.b[0];
+            c.b[2] = c.b[0];
+            c.a[1] = 2.0 * (K * K - 1.0) * norm;
+            c.a[2] = (1.0 - K / q[idx] + K * K) * norm;
+
+            s->init_state(ctx, &s->st[b], nb_channels, 0, 0, c.a, c.b, 1.0);
         }
     } else if (!strcmp(ctx->filter->name, "asupercut")) {
         s->filter_count = s->order / 2 + (s->order & 1);
@@ -104,26 +129,30 @@ static int get_coeffs(AVFilterContext *ctx)
         calc_q_factors(s->order, q);
 
         if (s->order & 1) {
-            BiquadCoeffs *coeffs = &s->coeffs[0];
             double omega = 2. * tan(M_PI * w0);
+            BiquadCoeffs c;
 
-            coeffs->b0 = omega / (2. + omega);
-            coeffs->b1 = coeffs->b0;
-            coeffs->b2 = 0.;
-            coeffs->a1 = -(omega - 2.) / (2. + omega);
-            coeffs->a2 = 0.;
+            c.b[0] = omega / (2. + omega);
+            c.b[1] = c.b[0];
+            c.b[2] = 0.;
+            c.a[1] = -(omega - 2.) / (2. + omega);
+            c.a[2] = 0.;
+
+            s->init_state(ctx, &s->st[0], nb_channels, 0, 0, c.a, c.b, 1.0);
         }
 
         for (int b = (s->order & 1); b < s->filter_count; b++) {
-            BiquadCoeffs *coeffs = &s->coeffs[b];
             const int idx = b - (s->order & 1);
             double norm = 1.0 / (1.0 + K / q[idx] + K * K);
+            BiquadCoeffs c;
 
-            coeffs->b0 = K * K * norm;
-            coeffs->b1 = 2.0 * coeffs->b0;
-            coeffs->b2 = coeffs->b0;
-            coeffs->a1 = -2.0 * (K * K - 1.0) * norm;
-            coeffs->a2 = -(1.0 - K / q[idx] + K * K) * norm;
+            c.b[0] = K * K * norm;
+            c.b[1] = 2.0 * c.b[0];
+            c.b[2] = c.b[0];
+            c.a[1] = 2.0 * (K * K - 1.0) * norm;
+            c.a[2] = (1.0 - K / q[idx] + K * K) * norm;
+
+            s->init_state(ctx, &s->st[b], nb_channels, 0, 0, c.a, c.b, 1.0);
         }
     } else if (!strcmp(ctx->filter->name, "asuperpass")) {
         double alpha, beta, gamma, theta;
@@ -141,7 +170,7 @@ static int get_coeffs(AVFilterContext *ctx)
             double W = B + sqrt(B * B - 1.);
 
             for (int j = 0; j < 2; j++) {
-                BiquadCoeffs *coeffs = &s->coeffs[b + j];
+                BiquadCoeffs c;
 
                 if (j == 1)
                     theta = 2. * atan(tan(theta_0 / 2.) / W);
@@ -152,11 +181,13 @@ static int get_coeffs(AVFilterContext *ctx)
                 gamma = (0.5 + beta) * cos(theta);
                 alpha = 0.5 * (0.5 - beta) * sqrt(1. + pow((W - (1. / W)) / d, 2.));
 
-                coeffs->a1 =  2. * gamma;
-                coeffs->a2 = -2. * beta;
-                coeffs->b0 =  2. * alpha;
-                coeffs->b1 =  0.;
-                coeffs->b2 = -2. * alpha;
+                c.a[1] = -2. * gamma;
+                c.a[2] =  2. * beta;
+                c.b[0] =  2. * alpha;
+                c.b[1] =  0.;
+                c.b[2] = -2. * alpha;
+
+                s->init_state(ctx, &s->st[b+j], nb_channels, 0, 0, c.a, c.b, 1.0);
             }
         }
     } else if (!strcmp(ctx->filter->name, "asuperstop")) {
@@ -175,7 +206,7 @@ static int get_coeffs(AVFilterContext *ctx)
             double W = B + sqrt(B * B - 1.);
 
             for (int j = 0; j < 2; j++) {
-                BiquadCoeffs *coeffs = &s->coeffs[b + j];
+                BiquadCoeffs c;
 
                 if (j == 1)
                     theta = 2. * atan(tan(theta_0 / 2.) / W);
@@ -186,11 +217,13 @@ static int get_coeffs(AVFilterContext *ctx)
                 gamma = (0.5 + beta) * cos(theta);
                 alpha = 0.5 * (0.5 + beta) * ((1. - cos(theta)) / (1. - cos(theta_0)));
 
-                coeffs->a1 =  2. * gamma;
-                coeffs->a2 = -2. * beta;
-                coeffs->b0 =  2. * alpha;
-                coeffs->b1 = -4. * alpha * cos(theta_0);
-                coeffs->b2 =  2. * alpha;
+                c.a[1] = -2. * gamma;
+                c.a[2] =  2. * beta;
+                c.b[0] =  2. * alpha;
+                c.b[1] = -4. * alpha * cos(theta_0);
+                c.b[2] =  2. * alpha;
+
+                s->init_state(ctx, &s->st[b+j], nb_channels, 0, 0, c.a, c.b, 1.0);
             }
         }
     }
@@ -202,71 +235,57 @@ typedef struct ThreadData {
     AVFrame *in, *out;
 } ThreadData;
 
-#define FILTER(name, type)                                          \
-static int filter_channels_## name(AVFilterContext *ctx, void *arg, \
-                                   int jobnr, int nb_jobs)          \
-{                                                                   \
-    ASuperCutContext *s = ctx->priv;                                \
-    ThreadData *td = arg;                                           \
-    AVFrame *out = td->out;                                         \
-    AVFrame *in = td->in;                                           \
-    const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs; \
-    const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs; \
-    const double level = s->level;                                  \
-                                                                    \
-    for (int ch = start; ch < end; ch++) {                          \
-        const type *src = (const type *)in->extended_data[ch];      \
-        type *dst = (type *)out->extended_data[ch];                 \
-                                                                    \
-        for (int b = 0; b < s->filter_count; b++) {                 \
-            BiquadCoeffs *coeffs = &s->coeffs[b];                   \
-            const type a1 = coeffs->a1;                             \
-            const type a2 = coeffs->a2;                             \
-            const type b0 = coeffs->b0;                             \
-            const type b1 = coeffs->b1;                             \
-            const type b2 = coeffs->b2;                             \
-            type *w = ((type *)s->w->extended_data[ch]) + b * 2;    \
-                                                                    \
-            for (int n = 0; n < in->nb_samples; n++) {              \
-                type sin = b ? dst[n] : src[n] * level;             \
-                type sout = sin * b0 + w[0];                        \
-                                                                    \
-                w[0] = b1 * sin + w[1] + a1 * sout;                 \
-                w[1] = b2 * sin + a2 * sout;                        \
-                                                                    \
-                dst[n] = sout;                                      \
-            }                                                       \
-        }                                                           \
-    }                                                               \
-                                                                    \
-    return 0;                                                       \
-}
-
-FILTER(fltp, float)
-FILTER(dblp, double)
-
 static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     ASuperCutContext *s = ctx->priv;
 
     switch (inlink->format) {
-    case AV_SAMPLE_FMT_FLTP: s->filter_channels = filter_channels_fltp; break;
-    case AV_SAMPLE_FMT_DBLP: s->filter_channels = filter_channels_dblp; break;
+    case AV_SAMPLE_FMT_FLTP:
+        s->filter = biquad_tdii_flt;
+        s->init_state = init_state_flt;
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        s->filter = biquad_tdii_dbl;
+        s->init_state = init_state_dbl;
+        break;
     }
 
-    s->w = ff_get_audio_buffer(inlink, 2 * 10);
-    if (!s->w)
-        return AVERROR(ENOMEM);
-
     return get_coeffs(ctx);
+}
+
+static int filter_channels(AVFilterContext *ctx, void *arg,
+                           int jobnr, int nb_jobs)
+{
+    ASuperCutContext *s = ctx->priv;
+    ThreadData *td = arg;
+    AVFrame *out = td->out;
+    AVFrame *in = td->in;
+    const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
+    const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int filter_count = s->filter_count;
+    const int is_disabled = ctx->is_disabled;
+
+    for (int ch = start; ch < end; ch++) {
+        s->filter(s->st[0], in->extended_data[ch],
+                  out->extended_data[ch],
+                  out->nb_samples, ch, is_disabled);
+
+        for (int b = 1; b < filter_count; b++) {
+            s->filter(s->st[b], out->extended_data[ch],
+                      out->extended_data[ch],
+                      out->nb_samples, ch, is_disabled);
+        }
+    }
+
+    return 0;
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
-    ASuperCutContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
+    ASuperCutContext *s = ctx->priv;
     ThreadData td;
     AVFrame *out;
 
@@ -285,7 +304,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
 
     td.in = in; td.out = out;
-    ff_filter_execute(ctx, s->filter_channels, &td, NULL,
+    ff_filter_execute(ctx, filter_channels, &td, NULL,
                       FFMIN(inlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     if (out != in)
@@ -309,7 +328,8 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     ASuperCutContext *s = ctx->priv;
 
-    av_frame_free(&s->w);
+    for (int i = 0; i < FF_ARRAY_ELEMS(s->st); i++)
+        av_freep(&s->st[i]);
 }
 
 #define OFFSET(x) offsetof(ASuperCutContext, x)
@@ -318,7 +338,6 @@ static av_cold void uninit(AVFilterContext *ctx)
 static const AVOption asupercut_options[] = {
     { "cutoff", "set cutoff frequency", OFFSET(cutoff), AV_OPT_TYPE_DOUBLE, {.dbl=20000}, 20000, 192000, FLAGS },
     { "order",  "set filter order",     OFFSET(order),  AV_OPT_TYPE_INT,    {.i64=10},        3,     20, FLAGS },
-    { "level",  "set input level",      OFFSET(level),  AV_OPT_TYPE_DOUBLE, {.dbl=1.},        0.,    1., FLAGS },
     { NULL }
 };
 
@@ -350,7 +369,6 @@ const AVFilter ff_af_asupercut = {
 static const AVOption asubcut_options[] = {
     { "cutoff", "set cutoff frequency", OFFSET(cutoff), AV_OPT_TYPE_DOUBLE, {.dbl=20},  2, 200, FLAGS },
     { "order",  "set filter order",     OFFSET(order),  AV_OPT_TYPE_INT,    {.i64=10},  3,  20, FLAGS },
-    { "level",  "set input level",      OFFSET(level),  AV_OPT_TYPE_DOUBLE, {.dbl=1.}, 0.,  1., FLAGS },
     { NULL }
 };
 
@@ -374,7 +392,6 @@ static const AVOption asuperpass_asuperstop_options[] = {
     { "centerf","set center frequency", OFFSET(cutoff), AV_OPT_TYPE_DOUBLE, {.dbl=1000}, 2, 999999, FLAGS },
     { "order",  "set filter order",     OFFSET(order),  AV_OPT_TYPE_INT,    {.i64=4},    4,     20, FLAGS },
     { "qfactor","set Q-factor",         OFFSET(qfactor),AV_OPT_TYPE_DOUBLE, {.dbl=1.},0.01,   100., FLAGS },
-    { "level",  "set input level",      OFFSET(level),  AV_OPT_TYPE_DOUBLE, {.dbl=1.},   0.,    2., FLAGS },
     { NULL }
 };
 
