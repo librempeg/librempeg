@@ -428,6 +428,7 @@ static void vp56_idct_add(VP56Context *s, uint8_t * dest, ptrdiff_t stride, int1
 
 static av_always_inline void vp56_render_mb(VP56Context *s, int row, int col, int is_alpha, VP56mb mb_type)
 {
+    ptrdiff_t ref_stride[4];
     int b, ab, b_max, plane, off;
     AVFrame *frame_current, *frame_ref;
     VP56Frame ref_frame = ff_vp56_reference_frame[mb_type];
@@ -438,6 +439,13 @@ static av_always_inline void vp56_render_mb(VP56Context *s, int row, int col, in
     frame_ref = s->frames[ref_frame];
     if (mb_type != VP56_MB_INTRA && !frame_ref->data[0])
         return;
+
+    memcpy(ref_stride, s->stride, sizeof(s->stride));
+    if (s->interlaced && s->il_block) {
+        s->block_offset[2] -= s->stride[0] * 7;
+        s->block_offset[3] -= s->stride[0] * 7;
+        s->stride[0] *= 2;
+    }
 
     ab = 6*is_alpha;
     b_max = 6 - 2*is_alpha;
@@ -475,7 +483,7 @@ static av_always_inline void vp56_render_mb(VP56Context *s, int row, int col, in
                 int x_off = b==1 || b==3 ? 8 : 0;
                 int y_off = b==2 || b==3 ? 8 : 0;
                 plane = ff_vp56_b2p[b+ab];
-                vp56_mc(s, b, plane, frame_ref->data[plane], s->stride[plane],
+                vp56_mc(s, b, plane, frame_ref->data[plane], ref_stride[plane],
                         16*col+x_off, 16*row+y_off);
                 vp56_idct_add(s, frame_current->data[plane] + s->block_offset[b],
                               s->stride[plane], s->block_coeff[b], s->idct_selector[b]);
@@ -487,12 +495,31 @@ static av_always_inline void vp56_render_mb(VP56Context *s, int row, int col, in
         s->block_coeff[4][0] = 0;
         s->block_coeff[5][0] = 0;
     }
+
+    if (s->interlaced && s->il_block) {
+        s->stride[0] /= 2;
+        s->block_offset[2] += s->stride[0] * 7;
+        s->block_offset[3] += s->stride[0] * 7;
+    }
 }
 
 static int vp56_decode_mb(VP56Context *s, int row, int col, int is_alpha)
 {
     VP56mb mb_type;
     int ret;
+
+    if (s->interlaced) {
+        int prob = s->il_prob;
+
+        if (col > 0) {
+            if (s->il_block)
+                prob -= prob >> 1;
+            else
+                prob += (256 - prob) >> 1;  /* can be simplified/combined */
+        }
+
+        s->il_block = vpx_rac_get_prob(&s->c, prob);
+    }
 
     if (s->frames[VP56_FRAME_CURRENT]->flags & AV_FRAME_FLAG_KEY)
         mb_type = VP56_MB_INTRA;
@@ -685,6 +712,9 @@ static int ff_vp56_decode_mbs(AVCodecContext *avctx, void *data,
 
     if (s->parse_coeff_models(s))
         goto next;
+
+    if (s->interlaced)
+       s->il_prob = vp56_rac_gets(&s->c, 8);
 
     memset(s->prev_dc, 0, sizeof(s->prev_dc));
     s->prev_dc[1][VP56_FRAME_CURRENT] = 128;
