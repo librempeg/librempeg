@@ -178,7 +178,7 @@ static void parse_gains(AVFilterContext *ctx)
         s->gains[i] = s->gains_opt[i];
     }
 
-    for (; i < MAX_BANDS; i++)
+    for (; i < MAX_BANDS && i > 0; i++)
         s->gains[i] = s->gains[i-1];
 }
 

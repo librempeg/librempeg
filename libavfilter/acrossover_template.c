@@ -38,6 +38,7 @@
 typedef struct fn(SVFCoeffs) {
     ftype g, r, k, f;
     ftype gk, g2, g2k;
+    int valid;
 } fn(SVFCoeffs);
 
 typedef struct fn(SVFCache) {
@@ -64,9 +65,10 @@ static int fn(set_params)(AVFilterContext *ctx)
 
     svf_cf = s->svf_cf;
 
-    for (int band = 0; band <= s->nb_splits; band++) {
+    for (int band = 0; band < s->nb_splits; band++) {
         fn(SVFCoeffs) *sf = &svf_cf[band];
 
+        sf->valid = s->splits[band] < sample_rate * F(0.5);
         sf->g = FTAN(F(M_PI)*s->splits[band]/sample_rate);
         sf->k = F(2.0) - F(2.0) * s->resonance[band];
         sf->g2 = sf->g*sf->g;
@@ -160,11 +162,11 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
         int last_band = -1;
 
         for (int band = 0; band < nb_outs-1; band++) {
+            const fn(SVFCoeffs) *svf_cf = &svfcf[band];
             const int next_band = next_active_band(active, band, nb_outs);
 
             last_band = active[band] ? band : last_band;
-            if (active[band] && next_band) {
-                const fn(SVFCoeffs) *svf_cf = &svfcf[band];
+            if (svf_cf->valid && active[band] && next_band) {
                 ftype *svf_lo = svf[ch].sc[band][0];
                 ftype *svf_hi = svf[ch].sc[band][1];
                 ftype *dst = (ftype *)frames[band]->extended_data[ch];
@@ -202,6 +204,9 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
             ftype *svf_hi = svf[ch].sc[band][1];
             ftype *dst = (ftype *)frames[band]->extended_data[ch];
             const ftype out_gain = gains[band];
+
+            if (!svf_cf->valid)
+                continue;
 
             for (int n = 0; n < nb_samples; n++) {
                 ftype high = F(0.0), low = F(0.0);
