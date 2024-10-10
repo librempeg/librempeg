@@ -137,21 +137,11 @@ static void fn(filter_channel)(AVFilterContext *ctx, AVFrame *out, AVFrame *in, 
     }
 }
 
-static int fn(init_filter)(AVFilterContext *ctx)
+static void fn(update_filter)(AVFilterContext *ctx)
 {
     AudioIIREQContext *s = ctx->priv;
-    const int nb_channels = ctx->inputs[0]->ch_layout.nb_channels;
     const double fs = ctx->inputs[0]->sample_rate * 1.0;
-    fn(Equalizer) *eq;
-
-    s->eqs = av_calloc(s->nb_bands+1, sizeof(fn(Equalizer)));
-    if (!s->eqs)
-        return AVERROR(ENOMEM);
-    eq = s->eqs;
-
-    s->chs = av_calloc((s->nb_bands+1) * nb_channels, sizeof(fn(ChState)));
-    if (!s->chs)
-        return AVERROR(ENOMEM);
+    fn(Equalizer) *eq = s->eqs;
 
     for (int n = 0; n < s->nb_bands+1; n++) {
         fn(Equalizer) *eqs = &eq[n];
@@ -180,7 +170,24 @@ static int fn(init_filter)(AVFilterContext *ctx)
 
         eqs->nb_sections = fn(get_svf)(fs, design_freq, eqs->nb_sections * 2, dB, eqs);
     }
+}
 
+static int fn(init_filter)(AVFilterContext *ctx)
+{
+    AudioIIREQContext *s = ctx->priv;
+    const int nb_channels = ctx->inputs[0]->ch_layout.nb_channels;
+
+    s->eqs = av_calloc(s->nb_bands+1, sizeof(fn(Equalizer)));
+    if (!s->eqs)
+        return AVERROR(ENOMEM);
+
+    s->chs = av_calloc((s->nb_bands+1) * nb_channels, sizeof(fn(ChState)));
+    if (!s->chs)
+        return AVERROR(ENOMEM);
+
+    fn(update_filter)(ctx);
+
+    s->update_filter = fn(update_filter);
     s->filter_channel = fn(filter_channel);
 
     return 0;

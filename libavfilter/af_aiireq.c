@@ -42,11 +42,13 @@ typedef struct AudioIIREQContext {
     void *eqs;
     void *chs;
 
+    void (*update_filter)(AVFilterContext *ctx);
     void (*filter_channel)(AVFilterContext *ctx, AVFrame *out, AVFrame *in, int ch);
 } AudioIIREQContext;
 
 #define OFFSET(x) offsetof(AudioIIREQContext, x)
 #define FLAGS (AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM)
+#define TFLAGS (AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_RUNTIME_PARAM)
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
 #define DEFAULT_BANDS "25 40 63 100 160 250 400 630 1000 1600 2500 4000 6300 10000 16000 24000"
@@ -58,14 +60,14 @@ static const AVOptionArrayDef def_gains = {.def=DEFAULT_GAINS,.size_min=1,.sep='
 static const AVOptionArrayDef def_sections = {.def=DEFAULT_SECTIONS,.size_min=1,.sep=' '};
 
 static const AVOption aiireq_options[] = {
-    { "gains", "set gain values per band", OFFSET(gain_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_gains}, -64, 64, FLAGS },
-    { "g",     "set gain values per band", OFFSET(gain_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_gains}, -64, 64, FLAGS },
+    { "gains", "set gain values per band", OFFSET(gain_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_gains}, -64, 64, TFLAGS },
+    { "g",     "set gain values per band", OFFSET(gain_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_gains}, -64, 64, TFLAGS },
     { "bands", "set central frequency values per band", OFFSET(band_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_bands}, 0, INT_MAX, FLAGS },
     { "b",     "set central frequency values per band", OFFSET(band_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_bands}, 0, INT_MAX, FLAGS },
     { "sections", "set number of sections per band", OFFSET(section_opt), AV_OPT_TYPE_INT|AR, {.arr=&def_sections}, 1, 6, FLAGS },
     { "s",        "set number of sections per band", OFFSET(section_opt), AV_OPT_TYPE_INT|AR, {.arr=&def_sections}, 1, 6, FLAGS },
-    { "gain",  "set output gain",                    OFFSET(overall_gain), AV_OPT_TYPE_FLOAT, {.dbl=1.0},           0, 2, FLAGS },
-    { "a",     "set output gain",                    OFFSET(overall_gain), AV_OPT_TYPE_FLOAT, {.dbl=1.0},           0, 2, FLAGS },
+    { "gain",  "set output gain",                    OFFSET(overall_gain), AV_OPT_TYPE_FLOAT, {.dbl=1.0},           0, 2, TFLAGS },
+    { "a",     "set output gain",                    OFFSET(overall_gain), AV_OPT_TYPE_FLOAT, {.dbl=1.0},           0, 2, TFLAGS },
     { NULL }
 };
 
@@ -152,6 +154,21 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
+                           char *res, int res_len, int flags)
+{
+    AudioIIREQContext *s = ctx->priv;
+    int ret;
+
+    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    if (ret < 0)
+        return ret;
+
+    s->update_filter(ctx);
+
+    return 0;
+}
+
 static const AVFilterPad inputs[] = {
     {
         .name           = "default",
@@ -172,4 +189,5 @@ const AVFilter ff_af_aiireq = {
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                      AVFILTER_FLAG_SLICE_THREADS,
+    .process_command = process_command,
 };
