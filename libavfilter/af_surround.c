@@ -38,31 +38,6 @@ enum SurroundChannel {
     SC_NB,
 };
 
-static const int ch_map[SC_NB] = {
-    [SC_FL]  = AV_CHAN_FRONT_LEFT,
-    [SC_FR]  = AV_CHAN_FRONT_RIGHT,
-    [SC_FC]  = AV_CHAN_FRONT_CENTER,
-    [SC_LF]  = AV_CHAN_LOW_FREQUENCY,
-    [SC_BL]  = AV_CHAN_BACK_LEFT,
-    [SC_BR]  = AV_CHAN_BACK_RIGHT,
-    [SC_BC]  = AV_CHAN_BACK_CENTER,
-    [SC_SL]  = AV_CHAN_SIDE_LEFT,
-    [SC_SR]  = AV_CHAN_SIDE_RIGHT,
-    [SC_TC]  = AV_CHAN_TOP_CENTER,
-    [SC_TFC] = AV_CHAN_TOP_FRONT_CENTER,
-    [SC_TFL] = AV_CHAN_TOP_FRONT_LEFT,
-    [SC_TFR] = AV_CHAN_TOP_FRONT_RIGHT,
-    [SC_TBC] = AV_CHAN_TOP_BACK_CENTER,
-    [SC_TBL] = AV_CHAN_TOP_BACK_LEFT,
-    [SC_TBR] = AV_CHAN_TOP_BACK_RIGHT,
-    [SC_LF2] = AV_CHAN_LOW_FREQUENCY_2,
-    [SC_TSL] = AV_CHAN_TOP_SIDE_LEFT,
-    [SC_TSR] = AV_CHAN_TOP_SIDE_RIGHT,
-    [SC_BFC] = AV_CHAN_BOTTOM_FRONT_CENTER,
-    [SC_BFL] = AV_CHAN_BOTTOM_FRONT_LEFT,
-    [SC_BFR] = AV_CHAN_BOTTOM_FRONT_RIGHT,
-};
-
 static const int8_t ch_dif[SC_NB] = {
     [SC_FL]  =  1,
     [SC_FR]  = -1,
