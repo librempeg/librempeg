@@ -248,11 +248,12 @@ static void draw_sample_line_rgba_scale(uint8_t *buf, int height, ptrdiff_t line
                                         int16_t *prev_y,
                                         const uint8_t color[4], int h)
 {
-    int start   = height/2;
-    int end     = av_clip(h, 0, height-1);
+    int start = height/2;
+    int end = av_clip(h, 0, height-1);
     uint8_t *bufk;
+
     if (start > end)
-        FFSWAP(int16_t, start, end);
+        FFSWAP(int, start, end);
     bufk = buf + start * linesize;
     for (int k = start; k < end; k++, bufk += linesize) {
         bufk[0] += color[0];
@@ -266,12 +267,13 @@ static void draw_sample_line_rgba_full(uint8_t *buf, int height, ptrdiff_t lines
                                        int16_t *prev_y,
                                        const uint8_t color[4], int h)
 {
-    int start   = height/2;
-    int end     = av_clip(h, 0, height-1);
+    int start = height/2;
+    int end = av_clip(h, 0, height-1);
     uint32_t clr = AV_RN32(color);
     uint8_t *bufk;
+
     if (start > end)
-        FFSWAP(int16_t, start, end);
+        FFSWAP(int, start, end);
     bufk = buf + start * linesize;
     for (int k = start; k < end; k++, bufk += linesize)
         AV_WN32(bufk, clr);
@@ -289,12 +291,12 @@ static void draw_sample_p2p_rgba_scale(uint8_t *buf, int height, ptrdiff_t lines
         buf[h * linesize + 2] += color[2];
         buf[h * linesize + 3] += color[3];
         if (h != *prev_y) {
-            int start = *prev_y;
+            int start = *prev_y, end = h;
             uint8_t *bufk;
-            int end = av_clip(h, 0, height-1);
+
             *prev_y = end;
             if (start > end)
-                FFSWAP(int16_t, start, end);
+                FFSWAP(int, start, end);
             bufk = buf + (start + 1) * linesize;
             for (int k = start + 1; k < end; k++, bufk += linesize) {
                 bufk[0] += color[0];
@@ -316,12 +318,12 @@ static void draw_sample_p2p_rgba_full(uint8_t *buf, int height, ptrdiff_t linesi
     if (h >= 0 && h < height) {
         AV_WN32(buf + h * linesize, clr);
         if (h != *prev_y) {
-            int start = *prev_y;
+            int start = *prev_y, end = h;
             uint8_t *bufk;
-            int end = av_clip(h, 0, height-1);
+
             *prev_y = end;
             if (start > end)
-                FFSWAP(int16_t, start, end);
+                FFSWAP(int, start, end);
             bufk = buf + (start + 1) * linesize;
             for (int k = start + 1; k < end; k++, bufk += linesize)
                 AV_WN32(bufk, clr);
@@ -368,12 +370,12 @@ static void draw_sample_line_gray(uint8_t *buf, int height, ptrdiff_t linesize,
                                   int16_t *prev_y,
                                   const uint8_t color[4], int h)
 {
-    int k;
-    int start   = height/2;
-    int end     = av_clip(h, 0, height-1);
+    int start = height/2;
+    int end = av_clip(h, 0, height-1);
+
     if (start > end)
-        FFSWAP(int16_t, start, end);
-    for (k = start; k < end; k++)
+        FFSWAP(int, start, end);
+    for (int k = start; k < end; k++)
         buf[k * linesize] += color[0];
 }
 
@@ -381,18 +383,17 @@ static void draw_sample_p2p_gray(uint8_t *buf, int height, ptrdiff_t linesize,
                                  int16_t *prev_y,
                                  const uint8_t color[4], int h)
 {
-    int k;
     if (*prev_y < 0)
         *prev_y = h;
     if (h >= 0 && h < height) {
         buf[h * linesize] += color[0];
         if (h != *prev_y) {
-            int start = *prev_y;
-            int end = av_clip(h, 0, height-1);
+            int start = *prev_y, end = h;
+
             *prev_y = end;
             if (start > end)
-                FFSWAP(int16_t, start, end);
-            for (k = start + 1; k < end; k++)
+                FFSWAP(int, start, end);
+            for (int k = start + 1; k < end; k++)
                 buf[k * linesize] += color[0];
         }
     }
