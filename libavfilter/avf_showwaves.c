@@ -185,12 +185,12 @@ static int query_formats(const AVFilterContext *ctx,
 
 static int get_lin_h(int16_t sample, int height)
 {
-    return height/2 - av_rescale(sample, height/2, INT16_MAX);
+    return height/2 - ((sample * (height/2)) / INT16_MAX);
 }
 
 static int get_lin_h2(int16_t sample, int height)
 {
-    return av_rescale(FFABS(sample), height, INT16_MAX);
+    return (FFABS(sample) * height) / INT16_MAX;
 }
 
 static int get_log_h(int16_t sample, int height)
