@@ -2,7 +2,9 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>:
-+- yasm support dropped, users need to use nasm
+- yasm support dropped, users need to use nasm
+- aasrc audio filter
+- peakpass audio filter
 
 version 7.1:
 - CLAP wrapper audio filter
@@ -14,6 +16,10 @@ version 7.1:
 - qsv_params option added for QSV encoders
 - dcblock audio filter
 - amae audio filter
+- stereofield audio filter
+- ascale audio filter
+- aquant audio filter
+- aiireq equalizer audio filter
 - ADPCM IMA PDA decoder
 - Playdate PDA demuxer
 - QOA encoder and muxer
@@ -21,6 +27,9 @@ version 7.1:
 - removed DEC Alpha DSP and support code
 - perlin video source filter
 - YUV colorspace negotiation for codecs and filters, obsoleting YUVJ
+- HVQM4 video decoder
+- MotionCam RAW video decoder
+- Digital Audio Tape demuxer
 - removed ocv filter wrapper
 
 version 7.0:
