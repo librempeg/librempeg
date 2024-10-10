@@ -49,6 +49,7 @@ enum FilterType {
     highshelf,
     tiltshelf,
     transform,
+    peakpass,
 };
 
 enum WidthType {
@@ -400,6 +401,16 @@ static void convert_dir2zdf(BiquadsContext *s, int sample_rate)
         m[1] = -k;
         m[2] = -1.;
         break;
+    case peakpass:
+        g = tan(M_PI * s->frequency / sample_rate);
+        k = 1. / Q;
+        a[0] = 1. / (1. + g * (g + k));
+        a[1] = g * a[0];
+        a[2] = g * a[1];
+        m[0] = -1.;
+        m[1] =  k;
+        m[2] =  2.;
+        break;
     case allpass:
         g = tan(M_PI * s->frequency / sample_rate);
         k = 1. / Q;
@@ -548,6 +559,14 @@ static int config_filter(AVFilterLink *outlink, int reset)
         s->b[0] =  1.0;
         s->b[1] = -2.0 * cos_w0;
         s->b[2] =  1.0;
+        break;
+    case peakpass:
+        s->a[0] =  1.0 + alpha;
+        s->a[1] = -2.0 * cos_w0;
+        s->a[2] =  1.0 - alpha;
+        s->b[0] = -cos_w0;
+        s->b[1] =  2.0;
+        s->b[2] = -cos_w0;
         break;
     case lowpass:
         if (s->order == 1) {
@@ -1365,3 +1384,19 @@ static const AVOption transform_options[] = {
 
 DEFINE_BIQUAD_FILTER(transform, "Apply a Linkwitz transform IIR filter with the given Hz/Q.");
 #endif  /* CONFIG_TRANSFORM_FILTER */
+
+#if CONFIG_PEAKPASS_FILTER
+static const AVOption peakpass_options[] = {
+    {"frequency", "set central frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=3000}, 0, 999999, FLAGS},
+    {"f",         "set central frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=3000}, 0, 999999, FLAGS},
+    WIDTH_TYPE_OPTION(QFACTOR),
+    WIDTH_OPTION(0.5),
+    MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
+    TRANSFORM_OPTION(DI),
+    PRECISION_OPTION(-1),
+    BLOCKSIZE_OPTION(0),
+    {NULL}
+};
+
+DEFINE_BIQUAD_FILTER(peakpass, "Apply a peak-pass filter.");
+#endif  /* CONFIG_PEAKPASS_FILTER */
