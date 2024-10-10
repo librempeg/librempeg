@@ -446,16 +446,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
 
 
-    if (s->angle != 90.f ||
-        s->shift[0] != 0.f ||
-        s->shift[1] != 0.f ||
-        s->shift[2] != 0.f ||
-        s->depth[0] != 0.f ||
-        s->depth[1] != 0.f ||
-        s->depth[2] != 0.f ||
-        s->focus[0] != 0.f ||
-        s->focus[1] != 0.f ||
-        s->focus[2] != 0.f)
     ff_filter_execute(ctx, s->transform_xy, NULL, NULL,
                       FFMIN(s->rdft_size,
                             ff_filter_get_nb_threads(ctx)));
@@ -622,9 +612,9 @@ static const AVOptionArrayDef def_f_i  = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_x  = {.def="2",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_y  = {.def="2",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_z  = {.def="2",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_shift= {.def="0 0 0",.size_min=3,.size_max=3,.sep=' '};
-static const AVOptionArrayDef def_depth= {.def="0 0 0",.size_min=3,.size_max=3,.sep=' '};
-static const AVOptionArrayDef def_focus= {.def="0 0 0",.size_min=3,.size_max=3,.sep=' '};
+static const AVOptionArrayDef def_shift= {.def="0 0 0",.size_min=1,.size_max=3,.sep=' '};
+static const AVOptionArrayDef def_depth= {.def="0 0 0",.size_min=1,.size_max=3,.sep=' '};
+static const AVOptionArrayDef def_focus= {.def="0 0 0",.size_min=1,.size_max=3,.sep=' '};
 
 static const AVOption surround_options[] = {
     { "chl_out",   "set output channel layout", OFFSET(out_ch_layout),     AV_OPT_TYPE_CHLAYOUT, {.str="5.1"}, 0,   0, FLAGS },
