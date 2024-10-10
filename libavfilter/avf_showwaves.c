@@ -94,7 +94,7 @@ typedef struct ShowWavesContext {
     int64_t eof_pts;
     int64_t in_pts;
 
-    int (*get_h)(int16_t sample, int height);
+    int (*get_size)(int16_t sample, int size);
     void (*draw_sample)(uint8_t *buf, int height, ptrdiff_t linesize,
                         int16_t *prev_y, const uint8_t color[4], int h);
 
@@ -183,44 +183,44 @@ static int query_formats(const AVFilterContext *ctx,
     return 0;
 }
 
-static int get_lin_h(int16_t sample, int height)
+static int get_linear_size(int16_t sample, int size)
 {
-    return height/2 - ((sample * (height/2)) / INT16_MAX);
+    return size/2 - ((sample * (size/2)) / INT16_MAX);
 }
 
-static int get_lin_h2(int16_t sample, int height)
+static int get_linear_size2(int16_t sample, int size)
 {
-    return (FFABS(sample) * height) / INT16_MAX;
+    return (FFABS(sample) * size) / INT16_MAX;
 }
 
-static int get_log_h(int16_t sample, int height)
+static int get_log_size(int16_t sample, int size)
 {
-    return height/2 - FFSIGN(sample) * (log10(1 + FFABS(sample)) * (height/2) / log10(1 + INT16_MAX));
+    return size/2 - FFSIGN(sample) * (log10(1 + FFABS(sample)) * (size/2) / log10(1 + INT16_MAX));
 }
 
-static int get_log_h2(int16_t sample, int height)
+static int get_log_size2(int16_t sample, int size)
 {
-    return log10(1 + FFABS(sample)) * height / log10(1 + INT16_MAX);
+    return log10(1 + FFABS(sample)) * size / log10(1 + INT16_MAX);
 }
 
-static int get_sqrt_h(int16_t sample, int height)
+static int get_sqrt_size(int16_t sample, int size)
 {
-    return height/2 - FFSIGN(sample) * (sqrt(FFABS(sample)) * (height/2) / sqrt(INT16_MAX));
+    return size/2 - FFSIGN(sample) * (sqrt(FFABS(sample)) * (size/2) / sqrt(INT16_MAX));
 }
 
-static int get_sqrt_h2(int16_t sample, int height)
+static int get_sqrt_size2(int16_t sample, int size)
 {
-    return sqrt(FFABS(sample)) * height / sqrt(INT16_MAX);
+    return sqrt(FFABS(sample)) * size / sqrt(INT16_MAX);
 }
 
-static int get_cbrt_h(int16_t sample, int height)
+static int get_cbrt_size(int16_t sample, int size)
 {
-    return height/2 - FFSIGN(sample) * (cbrt(FFABS(sample)) * (height/2) / cbrt(INT16_MAX));
+    return size/2 - FFSIGN(sample) * (cbrt(FFABS(sample)) * (size/2) / cbrt(INT16_MAX));
 }
 
-static int get_cbrt_h2(int16_t sample, int height)
+static int get_cbrt_size2(int16_t sample, int size)
 {
-    return cbrt(FFABS(sample)) * height / cbrt(INT16_MAX);
+    return cbrt(FFABS(sample)) * size / cbrt(INT16_MAX);
 }
 
 static void draw_sample_point_rgba_scale(uint8_t *buf, int height, ptrdiff_t linesize,
@@ -485,8 +485,8 @@ static int config_output(AVFilterLink *outlink)
         switch (s->mode) {
         case MODE_POINT:
         case MODE_LINE:
-        case MODE_P2P:           s->get_h = get_lin_h;  break;
-        case MODE_CENTERED_LINE: s->get_h = get_lin_h2; break;
+        case MODE_P2P:           s->get_size = get_linear_size;  break;
+        case MODE_CENTERED_LINE: s->get_size = get_linear_size2; break;
         default:
             return AVERROR_BUG;
         }
@@ -495,8 +495,8 @@ static int config_output(AVFilterLink *outlink)
         switch (s->mode) {
         case MODE_POINT:
         case MODE_LINE:
-        case MODE_P2P:           s->get_h = get_log_h;  break;
-        case MODE_CENTERED_LINE: s->get_h = get_log_h2; break;
+        case MODE_P2P:           s->get_size = get_log_size;  break;
+        case MODE_CENTERED_LINE: s->get_size = get_log_size2; break;
         default:
             return AVERROR_BUG;
         }
@@ -505,8 +505,8 @@ static int config_output(AVFilterLink *outlink)
         switch (s->mode) {
         case MODE_POINT:
         case MODE_LINE:
-        case MODE_P2P:           s->get_h = get_sqrt_h;  break;
-        case MODE_CENTERED_LINE: s->get_h = get_sqrt_h2; break;
+        case MODE_P2P:           s->get_size = get_sqrt_size;  break;
+        case MODE_CENTERED_LINE: s->get_size = get_sqrt_size2; break;
         default:
             return AVERROR_BUG;
         }
@@ -515,8 +515,8 @@ static int config_output(AVFilterLink *outlink)
         switch (s->mode) {
         case MODE_POINT:
         case MODE_LINE:
-        case MODE_P2P:           s->get_h = get_cbrt_h;  break;
-        case MODE_CENTERED_LINE: s->get_h = get_cbrt_h2; break;
+        case MODE_P2P:           s->get_size = get_cbrt_size;  break;
+        case MODE_CENTERED_LINE: s->get_size = get_cbrt_size2; break;
         default:
             return AVERROR_BUG;
         }
@@ -631,7 +631,7 @@ static int push_single_pic(AVFilterLink *outlink)
                     if (s->split_channels)
                         buf += ch*ch_height*linesize;
                     av_assert0(col < outlink->w);
-                    h = s->get_h(sample, ch_height);
+                    h = s->get_size(sample, ch_height);
                     s->draw_sample(buf, ch_height, linesize, &s->buf_idy[ch], &s->fg[ch * 4], h);
                     sum[ch] = 0;
                 }
@@ -746,7 +746,7 @@ flush:
 
             if (split_channels)
                 buf += j*ch_height*linesize;
-            h = s->get_h(history[k], ch_height);
+            h = s->get_size(history[k], ch_height);
             s->draw_sample(buf, ch_height, linesize,
                            &buf_idy[j], &fg[j * 4], h);
         }
