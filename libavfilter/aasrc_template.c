@@ -153,42 +153,29 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
     for (int n = 0; n < stc->nb_poles; n++) {
         stc->pCur[n].re = F(1.0);
         stc->pCur[n].im = F(0.0);
-    }
-
-    for (int n = 0; n < stc->nb_poles; n++) {
         stc->rFixed[n].re = rs1[n][0] * stc->scale_factor;
         stc->rFixed[n].im = rs1[n][1] * stc->scale_factor;
     }
 
     fn(vector_mul_complex)(stc->pCur, stc->pCur, stc->rFixed, stc->nb_poles);
 
-    for (int n = 0; n < stc->nb_poles; n++)
+    for (int n = 0; n < stc->nb_poles; n++) {
         stc->Log2MagP[n] = FLOG2(HYPOT(ps1[n][0], ps1[n][1]));
-
-    for (int n = 0; n < stc->nb_poles; n++)
         stc->thetaP[n] = ATAN2(ps1[n][1], ps1[n][0]);
-
-    for (int n = 0; n < stc->nb_poles; n++)
         stc->Log2MagP_Fsf[n] = stc->Log2MagP[n] * stc->scale_factor;
-
-    for (int n = 0; n < stc->nb_poles; n++)
         stc->thetaP_Fsf[n] = stc->thetaP[n] * stc->scale_factor;
+    }
 
     stc->pAdv = NULL;
 
     for (int n = 0; n < stc->nb_poles; n++) {
-        const ftype pCos = FCOS(stc->thetaP_Fsf[n]);
-        const ftype pSin = FSIN(stc->thetaP_Fsf[n]);
         const ftype pInvMag = FEXP2(-stc->Log2MagP_Fsf[n]);
-
-        stc->pInv[n].re = pInvMag *  pCos;
-        stc->pInv[n].im = pInvMag * -pSin;
-    }
-
-    for (int n = 0; n < stc->nb_poles; n++) {
         const ftype pCos = FCOS(stc->thetaP_Fsf[n]);
         const ftype pSin = FSIN(stc->thetaP_Fsf[n]);
         const ftype pMag = FEXP2(stc->Log2MagP_Fsf[n]);
+
+        stc->pInv[n].re = pInvMag *  pCos;
+        stc->pInv[n].im = pInvMag * -pSin;
 
         stc->pFixed[n].re = pMag * pCos;
         stc->pFixed[n].im = pMag * pSin;
