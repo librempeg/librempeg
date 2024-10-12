@@ -73,12 +73,14 @@ static int query_formats(const AVFilterContext *ctx,
     if (ret)
         return ret;
 
-    if (!s->sample_rate)
-        return 0;
-
     if ((ret = ff_formats_ref(ff_all_samplerates(),
                               &cfg_in[0]->samplerates)) < 0)
         return ret;
+
+    if (!s->sample_rate) {
+        return ff_formats_ref(ff_all_samplerates(),
+                              &cfg_out[0]->samplerates);
+    }
 
     return ff_formats_ref(ff_make_format_list(sample_rates),
                           &cfg_out[0]->samplerates);
