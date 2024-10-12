@@ -18,9 +18,7 @@
 
 #undef ftype
 #undef itype
-#undef ATAN2
 #undef FLOG2
-#undef HYPOT
 #undef FSIN
 #undef FCOS
 #undef FEXP2
@@ -30,9 +28,7 @@
 #if DEPTH == 16
 #define ftype float
 #define itype int16_t
-#define ATAN2 atan2f
 #define FLOG2 log2f
-#define HYPOT hypotf
 #define FSIN sinf
 #define FCOS cosf
 #define FEXP2 exp2f
@@ -42,9 +38,7 @@
 #elif DEPTH == 32
 #define ftype float
 #define itype float
-#define ATAN2 atan2f
 #define FLOG2 log2f
-#define HYPOT hypotf
 #define FSIN sinf
 #define FCOS cosf
 #define FEXP2 exp2f
@@ -54,9 +48,7 @@
 #else
 #define ftype double
 #define itype double
-#define ATAN2 atan2
 #define FLOG2 log2
-#define HYPOT hypot
 #define FSIN sin
 #define FCOS cos
 #define FEXP2 exp2
@@ -160,8 +152,8 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
     fn(vector_mul_complex)(stc->pCur, stc->pCur, stc->rFixed, stc->nb_poles);
 
     for (int n = 0; n < stc->nb_poles; n++) {
-        stc->Log2MagP[n] = FLOG2(HYPOT(ps1[n][0], ps1[n][1]));
-        stc->thetaP[n] = ATAN2(ps1[n][1], ps1[n][0]);
+        stc->Log2MagP[n] = FLOG2(ps1[n][0]);
+        stc->thetaP[n] = ps1[n][1];
         stc->Log2MagP_Fsf[n] = stc->Log2MagP[n] * stc->scale_factor;
         stc->thetaP_Fsf[n] = stc->thetaP[n] * stc->scale_factor;
     }
