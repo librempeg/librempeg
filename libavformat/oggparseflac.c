@@ -126,10 +126,31 @@ fail:
     return ret;
 }
 
+static int flac_packet(AVFormatContext *s, int idx)
+{
+    struct ogg *ogg = s->priv_data;
+    struct ogg_stream *os = ogg->streams + idx;
+    int ret;
+
+    if (os->psize > 4 && (*(os->buf + os->pstart) & 0x7F) == FLAC_METADATA_TYPE_VORBIS_COMMENT) {
+        AVStream *st = s->streams[idx];
+
+        av_dict_free(&st->metadata);
+        ret = ff_vorbis_stream_comment(s, st, os->buf + os->pstart + 4,
+                                       os->psize - 4);
+
+        if (ret < 0)
+            return ret;
+    }
+
+    return 0;
+}
+
 const struct ogg_codec ff_flac_codec = {
     .magic = "\177FLAC",
     .magicsize = 5,
     .header = flac_header,
+    .packet = flac_packet,
     .nb_header = 2,
 };
 
