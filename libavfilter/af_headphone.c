@@ -132,14 +132,7 @@ static void parse_map(AVFilterContext *ctx)
 
 typedef struct ThreadData {
     AVFrame *in, *out;
-    int *write;
-    float **ir;
     int *n_clippings;
-    float **ringbuffer;
-    float **temp_src;
-    AVComplexFloat **out_fft;
-    AVComplexFloat **in_fft;
-    AVComplexFloat **temp_afft;
 } ThreadData;
 
 static int headphone_convolute(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
@@ -148,11 +141,11 @@ static int headphone_convolute(AVFilterContext *ctx, void *arg, int jobnr, int n
     ThreadData *td = arg;
     AVFrame *in = td->in, *out = td->out;
     int offset = jobnr;
-    int *write = &td->write[jobnr];
-    const float *const ir = td->ir[jobnr];
+    int *write = &s->write[jobnr];
+    const float *const ir = s->data_ir[jobnr];
     int *n_clippings = &td->n_clippings[jobnr];
-    float *ringbuffer = td->ringbuffer[jobnr];
-    float *temp_src = td->temp_src[jobnr];
+    float *ringbuffer = s->ringbuffer[jobnr];
+    float *temp_src = s->temp_src[jobnr];
     const int ir_len = s->ir_len;
     const int air_len = s->air_len;
     const float *src = (const float *)in->data[0];
@@ -221,11 +214,11 @@ static int headphone_fast_convolute(AVFilterContext *ctx, void *arg, int jobnr, 
     ThreadData *td = arg;
     AVFrame *in = td->in, *out = td->out;
     int offset = jobnr;
-    int *write = &td->write[jobnr];
+    int *write = &s->write[jobnr];
     AVComplexFloat *hrtf = s->data_hrtf[jobnr];
     int *n_clippings = &td->n_clippings[jobnr];
     const int nb_samples = in->nb_samples;
-    float *ringbuffer = td->ringbuffer[jobnr];
+    float *ringbuffer = s->ringbuffer[jobnr];
     const int ir_len = s->ir_len;
     const float *src = (const float *)in->data[0];
     float *dst = (float *)out->data[0];
@@ -350,12 +343,8 @@ static int headphone_frame(HeadphoneContext *s, AVFrame *in, AVFilterLink *outli
     av_frame_copy_props(out, in);
     out->pts = in->pts;
 
-    td.in = in; td.out = out; td.write = s->write;
-    td.ir = s->data_ir; td.n_clippings = n_clippings;
-    td.ringbuffer = s->ringbuffer; td.temp_src = s->temp_src;
-    td.out_fft = s->out_fft;
-    td.in_fft = s->in_fft;
-    td.temp_afft = s->temp_afft;
+    td.in = in; td.out = out;
+    td.n_clippings = n_clippings;
 
     if (s->type == TIME_DOMAIN) {
         ff_filter_execute(ctx, headphone_convolute, &td, NULL, 2);
