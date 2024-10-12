@@ -28,6 +28,7 @@
 #include <math.h>
 #include <mysofa.h>
 
+#include "libavutil/cpu.h"
 #include "libavutil/mem.h"
 #include "libavutil/tx.h"
 #include "libavutil/channel_layout.h"
@@ -82,7 +83,8 @@ typedef struct SOFAlizerContext {
     int write[2];               /* current write position to ringbuffer */
     int buffer_length;          /* is: longest IR plus max. delay in all SOFA files */
                                 /* then choose next power of 2 */
-    int n_fft;                  /* number of samples in one FFT block */
+    int n_tx;                   /* number of samples in one TX block */
+    int atx_len;
     int nb_samples;
 
                                 /* netCDF variables */
@@ -91,9 +93,9 @@ typedef struct SOFAlizerContext {
     float *data_ir[2];          /* IRs for all channels to be convolved */
                                 /* (this excludes the LFE) */
     float *temp_src[2];
-    AVComplexFloat *in_fft[2];   /* Array to hold input FFT values */
-    AVComplexFloat *out_fft[2];  /* Array to hold output FFT values */
-    AVComplexFloat *temp_afft[2];   /* Array to accumulate FFT values prior to IFFT */
+    float *in_tx[2];            /* Array to hold input TX values */
+    AVComplexFloat *out_tx[2];  /* Array to hold output TX values */
+    AVComplexFloat *temp_atx[2];   /* Array to accumulate TX values prior to ITX */
 
                          /* control variables */
     float gain;          /* filter gain (in dB) */
@@ -110,7 +112,7 @@ typedef struct SOFAlizerContext {
 
     VirtualSpeaker vspkrpos[64];
 
-    AVTXContext *fft[2], *ifft[2];
+    AVTXContext *tx_ctx[2], *itx_ctx[2];
     av_tx_fn tx_fn[2], itx_fn[2];
     AVComplexFloat *data_hrtf[2];
 
@@ -319,9 +321,9 @@ typedef struct ThreadData {
     int *n_clippings;
     float **ringbuffer;
     float **temp_src;
-    AVComplexFloat **in_fft;
-    AVComplexFloat **out_fft;
-    AVComplexFloat **temp_afft;
+    float **in_tx;
+    AVComplexFloat **out_tx;
+    AVComplexFloat **temp_atx;
 } ThreadData;
 
 static int sofalizer_convolute(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
@@ -443,18 +445,17 @@ static int sofalizer_fast_convolute(AVFilterContext *ctx, void *arg, int jobnr, 
     const int buffer_length = s->buffer_length;
     /* -1 for AND instead of MODULO (applied to powers of 2): */
     const uint32_t modulo = (uint32_t)buffer_length - 1;
-    AVComplexFloat *fft_in = s->in_fft[jobnr]; /* temporary array for FFT input data */
-    AVComplexFloat *fft_out = s->out_fft[jobnr]; /* temporary array for FFT output data */
-    AVComplexFloat *fft_acc = s->temp_afft[jobnr];
-    AVTXContext *ifft = s->ifft[jobnr];
+    float *tx_in = s->in_tx[jobnr]; /* temporary array for TX input data */
+    AVComplexFloat *tx_out = s->out_tx[jobnr]; /* temporary array for TX output data */
+    AVComplexFloat *tx_acc = s->temp_atx[jobnr];
+    AVTXContext *itx_ctx = s->itx_ctx[jobnr];
     av_tx_fn itx_fn = s->itx_fn[jobnr];
-    AVTXContext *fft = s->fft[jobnr];
+    AVTXContext *tx_ctx = s->tx_ctx[jobnr];
     av_tx_fn tx_fn = s->tx_fn[jobnr];
     const int nb_samples = in->nb_samples;
     const float gain_lfe = s->gain_lfe;
     const int n_conv = s->n_conv;
-    const int n_fft = s->n_fft;
-    const float fft_scale = 1.0f / s->n_fft;
+    const int n_tx = s->n_tx;
     AVComplexFloat *hrtf_offset;
     int wr = *write;
     int n_read;
@@ -478,8 +479,8 @@ static int sofalizer_fast_convolute(AVFilterContext *ctx, void *arg, int jobnr, 
     for (j = n_read; j < nb_samples; j++)
         dst[mult * j] = 0;
 
-    /* fill FFT accumulation with 0 */
-    memset(fft_acc, 0, sizeof(AVComplexFloat) * n_fft);
+    /* fill TX accumulation with 0 */
+    memset(tx_acc, 0, sizeof(AVComplexFloat) * (n_tx/2+1));
 
     for (i = 0; i < n_conv; i++) {
         const float *src = (const float *)in->extended_data[i * planar]; /* get pointer to audio input buffer */
@@ -500,55 +501,55 @@ static int sofalizer_fast_convolute(AVFilterContext *ctx, void *arg, int jobnr, 
         }
 
         /* outer loop: go through all input channels to be convolved */
-        offset = i * n_fft; /* no. samples already processed */
+        offset = i * s->atx_len;
         hrtf_offset = hrtf + offset;
 
-        /* fill FFT input with 0 (we want to zero-pad) */
-        memset(fft_in, 0, sizeof(AVComplexFloat) * n_fft);
+        /* fill TX input with 0 (we want to zero-pad) */
+        memset(tx_in, 0, sizeof(*tx_in) * n_tx);
 
         if (in->format == AV_SAMPLE_FMT_FLT) {
             for (j = 0; j < nb_samples; j++) {
-                /* prepare input for FFT */
-                /* write all samples of current input channel to FFT input array */
-                fft_in[j].re = src[j * in_channels + i];
+                /* prepare input for TX */
+                /* write all samples of current input channel to TX input array */
+                tx_in[j] = src[j * in_channels + i];
             }
         } else {
             for (j = 0; j < nb_samples; j++) {
-                /* prepare input for FFT */
-                /* write all samples of current input channel to FFT input array */
-                fft_in[j].re = src[j];
+                /* prepare input for TX */
+                /* write all samples of current input channel to TX input array */
+                tx_in[j] = src[j];
             }
         }
 
         /* transform input signal of current channel to frequency domain */
-        tx_fn(fft, fft_out, fft_in, sizeof(*fft_in));
+        tx_fn(tx_ctx, tx_out, tx_in, sizeof(*tx_in));
 
-        for (j = 0; j < n_fft; j++) {
+        for (j = 0; j < n_tx/2+1; j++) {
             const AVComplexFloat *hcomplex = hrtf_offset + j;
-            const float re = fft_out[j].re;
-            const float im = fft_out[j].im;
+            const float re = tx_out[j].re;
+            const float im = tx_out[j].im;
 
             /* complex multiplication of input signal and HRTFs */
             /* output channel (real): */
-            fft_acc[j].re += re * hcomplex->re - im * hcomplex->im;
+            tx_acc[j].re += re * hcomplex->re - im * hcomplex->im;
             /* output channel (imag): */
-            fft_acc[j].im += re * hcomplex->im + im * hcomplex->re;
+            tx_acc[j].im += re * hcomplex->im + im * hcomplex->re;
         }
     }
 
     /* transform output signal of current channel back to time domain */
-    itx_fn(ifft, fft_out, fft_acc, sizeof(*fft_acc));
+    itx_fn(itx_ctx, tx_in, tx_acc, sizeof(*tx_acc));
 
     for (j = 0; j < nb_samples; j++) {
         /* write output signal of current channel to output buffer */
-        dst[mult * j] += fft_out[j].re * fft_scale;
+        dst[mult * j] += tx_in[j];
     }
 
     for (j = 0; j < ir_samples - 1; j++) { /* overflow length is IR length - 1 */
         /* write the rest of output signal to overflow buffer */
         int write_pos = (wr + j) & modulo;
 
-        *(ringbuffer + write_pos) += fft_out[nb_samples + j].re * fft_scale;
+        *(ringbuffer + write_pos) += tx_in[nb_samples + j];
     }
 
     /* go through all samples of current output buffer: count clippings */
@@ -584,9 +585,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     td.in = in; td.out = out; td.write = s->write;
     td.delay = s->delay; td.ir = s->data_ir; td.n_clippings = n_clippings;
     td.ringbuffer = s->ringbuffer; td.temp_src = s->temp_src;
-    td.in_fft = s->in_fft;
-    td.out_fft = s->out_fft;
-    td.temp_afft = s->temp_afft;
+    td.in_tx = s->in_tx;
+    td.out_tx = s->out_tx;
+    td.temp_atx = s->temp_atx;
 
     if (s->type == TIME_DOMAIN) {
         ff_filter_execute(ctx, sofalizer_convolute, &td, NULL, 2);
@@ -716,17 +717,17 @@ static int load_data(AVFilterContext *ctx, int azim, int elev, float radius, int
     int n_samples;
     int ir_samples;
     int n_conv = s->n_conv; /* no. channels to convolve */
-    int n_fft;
+    int n_tx;
     float delay_l; /* broadband delay for each IR */
     float delay_r;
     int nb_input_channels = ctx->inputs[0]->ch_layout.nb_channels; /* no. input channels */
     float gain_lin = expf((s->gain - 3 * nb_input_channels) / 20 * M_LN10); /* gain - 3dB/channel */
     AVComplexFloat *data_hrtf_l = NULL;
     AVComplexFloat *data_hrtf_r = NULL;
-    AVComplexFloat *fft_out_l = NULL;
-    AVComplexFloat *fft_out_r = NULL;
-    AVComplexFloat *fft_in_l = NULL;
-    AVComplexFloat *fft_in_r = NULL;
+    AVComplexFloat *tx_out_l = NULL;
+    AVComplexFloat *tx_out_r = NULL;
+    float *tx_in_l = NULL;
+    float *tx_in_r = NULL;
     float *data_ir_l = NULL;
     float *data_ir_r = NULL;
     int offset = 0; /* used for faster pointer arithmetics in for-loop */
@@ -826,25 +827,29 @@ static int load_data(AVFilterContext *ctx, int azim, int elev, float radius, int
     /* buffer length is longest IR plus max. delay -> next power of 2
        (32 - count leading zeros gives required exponent)  */
     s->buffer_length = 1 << (32 - ff_clz(n_max));
-    s->n_fft = n_fft = 1 << (32 - ff_clz(n_max + s->framesize));
+    s->n_tx = n_tx = 1 << (32 - ff_clz(n_max + s->framesize));
 
     if (s->type == FREQUENCY_DOMAIN) {
+        const size_t cpu_align = av_cpu_max_align();
+        float iscale = 1.f / s->n_tx;
         float scale = 1.f;
 
-        av_tx_uninit(&s->fft[0]);
-        av_tx_uninit(&s->fft[1]);
-        ret = av_tx_init(&s->fft[0], &s->tx_fn[0], AV_TX_FLOAT_FFT, 0, s->n_fft, &scale, 0);
+        s->atx_len = FFALIGN(n_tx/2+1, cpu_align);
+
+        av_tx_uninit(&s->tx_ctx[0]);
+        av_tx_uninit(&s->tx_ctx[1]);
+        ret = av_tx_init(&s->tx_ctx[0], &s->tx_fn[0], AV_TX_FLOAT_RDFT, 0, s->n_tx, &scale, 0);
         if (ret < 0)
             goto fail;
-        ret = av_tx_init(&s->fft[1], &s->tx_fn[1], AV_TX_FLOAT_FFT, 0, s->n_fft, &scale, 0);
+        ret = av_tx_init(&s->tx_ctx[1], &s->tx_fn[1], AV_TX_FLOAT_RDFT, 0, s->n_tx, &scale, 0);
         if (ret < 0)
             goto fail;
-        av_tx_uninit(&s->ifft[0]);
-        av_tx_uninit(&s->ifft[1]);
-        ret = av_tx_init(&s->ifft[0], &s->itx_fn[0], AV_TX_FLOAT_FFT, 1, s->n_fft, &scale, 0);
+        av_tx_uninit(&s->itx_ctx[0]);
+        av_tx_uninit(&s->itx_ctx[1]);
+        ret = av_tx_init(&s->itx_ctx[0], &s->itx_fn[0], AV_TX_FLOAT_RDFT, 1, s->n_tx, &iscale, 0);
         if (ret < 0)
             goto fail;
-        ret = av_tx_init(&s->ifft[1], &s->itx_fn[1], AV_TX_FLOAT_FFT, 1, s->n_fft, &scale, 0);
+        ret = av_tx_init(&s->itx_ctx[1], &s->itx_fn[1], AV_TX_FLOAT_RDFT, 1, s->n_tx, &iscale, 0);
         if (ret < 0)
             goto fail;
     }
@@ -854,8 +859,8 @@ static int load_data(AVFilterContext *ctx, int azim, int elev, float radius, int
         s->ringbuffer[1] = av_calloc(s->buffer_length, sizeof(float) * nb_input_channels);
     } else if (s->type == FREQUENCY_DOMAIN) {
         /* get temporary HRTF memory for L and R channel */
-        data_hrtf_l = av_malloc_array(n_fft, sizeof(*data_hrtf_l) * n_conv);
-        data_hrtf_r = av_malloc_array(n_fft, sizeof(*data_hrtf_r) * n_conv);
+        data_hrtf_l = av_malloc_array(n_tx, sizeof(*data_hrtf_l) * n_conv);
+        data_hrtf_r = av_malloc_array(n_tx, sizeof(*data_hrtf_r) * n_conv);
         if (!data_hrtf_r || !data_hrtf_l) {
             ret = AVERROR(ENOMEM);
             goto fail;
@@ -863,15 +868,15 @@ static int load_data(AVFilterContext *ctx, int azim, int elev, float radius, int
 
         s->ringbuffer[0] = av_calloc(s->buffer_length, sizeof(float));
         s->ringbuffer[1] = av_calloc(s->buffer_length, sizeof(float));
-        s->in_fft[0] = av_malloc_array(s->n_fft, sizeof(AVComplexFloat));
-        s->in_fft[1] = av_malloc_array(s->n_fft, sizeof(AVComplexFloat));
-        s->out_fft[0] = av_malloc_array(s->n_fft, sizeof(AVComplexFloat));
-        s->out_fft[1] = av_malloc_array(s->n_fft, sizeof(AVComplexFloat));
-        s->temp_afft[0] = av_malloc_array(s->n_fft, sizeof(AVComplexFloat));
-        s->temp_afft[1] = av_malloc_array(s->n_fft, sizeof(AVComplexFloat));
-        if (!s->in_fft[0] || !s->in_fft[1] ||
-            !s->out_fft[0] || !s->out_fft[1] ||
-            !s->temp_afft[0] || !s->temp_afft[1]) {
+        s->in_tx[0] = av_malloc_array(s->n_tx, sizeof(float));
+        s->in_tx[1] = av_malloc_array(s->n_tx, sizeof(float));
+        s->out_tx[0] = av_malloc_array(s->n_tx, sizeof(AVComplexFloat));
+        s->out_tx[1] = av_malloc_array(s->n_tx, sizeof(AVComplexFloat));
+        s->temp_atx[0] = av_malloc_array(s->n_tx, sizeof(AVComplexFloat));
+        s->temp_atx[1] = av_malloc_array(s->n_tx, sizeof(AVComplexFloat));
+        if (!s->in_tx[0] || !s->in_tx[1] ||
+            !s->out_tx[0] || !s->out_tx[1] ||
+            !s->temp_atx[0] || !s->temp_atx[1]) {
             ret = AVERROR(ENOMEM);
             goto fail;
         }
@@ -883,12 +888,12 @@ static int load_data(AVFilterContext *ctx, int azim, int elev, float radius, int
     }
 
     if (s->type == FREQUENCY_DOMAIN) {
-        fft_out_l = av_calloc(n_fft, sizeof(*fft_out_l));
-        fft_out_r = av_calloc(n_fft, sizeof(*fft_out_r));
-        fft_in_l = av_calloc(n_fft, sizeof(*fft_in_l));
-        fft_in_r = av_calloc(n_fft, sizeof(*fft_in_r));
-        if (!fft_in_l || !fft_in_r ||
-            !fft_out_l || !fft_out_r) {
+        tx_out_l = av_calloc(n_tx, sizeof(*tx_out_l));
+        tx_out_r = av_calloc(n_tx, sizeof(*tx_out_r));
+        tx_in_l = av_calloc(n_tx, sizeof(*tx_in_l));
+        tx_in_r = av_calloc(n_tx, sizeof(*tx_in_r));
+        if (!tx_in_l || !tx_in_r ||
+            !tx_out_l || !tx_out_r) {
             ret = AVERROR(ENOMEM);
             goto fail;
         }
@@ -910,39 +915,39 @@ static int load_data(AVFilterContext *ctx, int azim, int elev, float radius, int
                 s->data_ir[1][offset + j] = rir[ir_samples - 1 - j] * gain_lin;
             }
         } else if (s->type == FREQUENCY_DOMAIN) {
-            memset(fft_in_l, 0, n_fft * sizeof(*fft_in_l));
-            memset(fft_in_r, 0, n_fft * sizeof(*fft_in_r));
+            memset(tx_in_l, 0, n_tx * sizeof(*tx_in_l));
+            memset(tx_in_r, 0, n_tx * sizeof(*tx_in_r));
 
-            offset = i * n_fft; /* no. samples already written */
+            offset = i * s->atx_len;
             for (j = 0; j < ir_samples; j++) {
                 /* load non-reversed IRs of the specified source position
                  * sample-by-sample and apply gain,
                  * L channel is loaded to real part, R channel to imag part,
                  * IRs are shifted by L and R delay */
-                fft_in_l[s->delay[0][i] + j].re = lir[j] * gain_lin;
-                fft_in_r[s->delay[1][i] + j].re = rir[j] * gain_lin;
+                tx_in_l[s->delay[0][i] + j] = lir[j] * gain_lin;
+                tx_in_r[s->delay[1][i] + j] = rir[j] * gain_lin;
             }
 
             /* actually transform to frequency domain (IRs -> HRTFs) */
-            s->tx_fn[0](s->fft[0], fft_out_l, fft_in_l, sizeof(*fft_in_l));
-            memcpy(data_hrtf_l + offset, fft_out_l, n_fft * sizeof(*fft_out_l));
-            s->tx_fn[1](s->fft[1], fft_out_r, fft_in_r, sizeof(*fft_in_r));
-            memcpy(data_hrtf_r + offset, fft_out_r, n_fft * sizeof(*fft_out_r));
+            s->tx_fn[0](s->tx_ctx[0], tx_out_l, tx_in_l, sizeof(*tx_in_l));
+            memcpy(data_hrtf_l + offset, tx_out_l, (n_tx/2+1) * sizeof(*tx_out_l));
+            s->tx_fn[1](s->tx_ctx[1], tx_out_r, tx_in_r, sizeof(*tx_in_r));
+            memcpy(data_hrtf_r + offset, tx_out_r, (n_tx/2+1) * sizeof(*tx_out_r));
         }
     }
 
     if (s->type == FREQUENCY_DOMAIN) {
-        s->data_hrtf[0] = av_malloc_array(n_fft * s->n_conv, sizeof(AVComplexFloat));
-        s->data_hrtf[1] = av_malloc_array(n_fft * s->n_conv, sizeof(AVComplexFloat));
+        s->data_hrtf[0] = av_malloc_array(n_tx * s->n_conv, sizeof(AVComplexFloat));
+        s->data_hrtf[1] = av_malloc_array(n_tx * s->n_conv, sizeof(AVComplexFloat));
         if (!s->data_hrtf[0] || !s->data_hrtf[1]) {
             ret = AVERROR(ENOMEM);
             goto fail;
         }
 
         memcpy(s->data_hrtf[0], data_hrtf_l, /* copy HRTF data to */
-            sizeof(AVComplexFloat) * n_conv * n_fft); /* filter struct */
+            sizeof(AVComplexFloat) * n_conv * n_tx); /* filter struct */
         memcpy(s->data_hrtf[1], data_hrtf_r,
-            sizeof(AVComplexFloat) * n_conv * n_fft);
+            sizeof(AVComplexFloat) * n_conv * n_tx);
     }
 
 fail:
@@ -952,11 +957,11 @@ fail:
     av_freep(&data_ir_l); /* free temprary IR memory */
     av_freep(&data_ir_r);
 
-    av_freep(&fft_out_l); /* free temporary FFT memory */
-    av_freep(&fft_out_r);
+    av_freep(&tx_out_l);
+    av_freep(&tx_out_r);
 
-    av_freep(&fft_in_l); /* free temporary FFT memory */
-    av_freep(&fft_in_r);
+    av_freep(&tx_in_l);
+    av_freep(&tx_in_r);
 
     return ret;
 }
@@ -1021,14 +1026,10 @@ static av_cold void uninit(AVFilterContext *ctx)
     SOFAlizerContext *s = ctx->priv;
 
     close_sofa(&s->sofa);
-    av_tx_uninit(&s->ifft[0]);
-    av_tx_uninit(&s->ifft[1]);
-    av_tx_uninit(&s->fft[0]);
-    av_tx_uninit(&s->fft[1]);
-    s->ifft[0] = NULL;
-    s->ifft[1] = NULL;
-    s->fft[0] = NULL;
-    s->fft[1] = NULL;
+    av_tx_uninit(&s->itx_ctx[0]);
+    av_tx_uninit(&s->itx_ctx[1]);
+    av_tx_uninit(&s->tx_ctx[0]);
+    av_tx_uninit(&s->tx_ctx[1]);
     av_freep(&s->delay[0]);
     av_freep(&s->delay[1]);
     av_freep(&s->data_ir[0]);
@@ -1039,12 +1040,12 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->speaker_elev);
     av_freep(&s->temp_src[0]);
     av_freep(&s->temp_src[1]);
-    av_freep(&s->temp_afft[0]);
-    av_freep(&s->temp_afft[1]);
-    av_freep(&s->in_fft[0]);
-    av_freep(&s->in_fft[1]);
-    av_freep(&s->out_fft[0]);
-    av_freep(&s->out_fft[1]);
+    av_freep(&s->temp_atx[0]);
+    av_freep(&s->temp_atx[1]);
+    av_freep(&s->in_tx[0]);
+    av_freep(&s->in_tx[1]);
+    av_freep(&s->out_tx[0]);
+    av_freep(&s->out_tx[1]);
     av_freep(&s->data_hrtf[0]);
     av_freep(&s->data_hrtf[1]);
     av_freep(&s->fdsp);
