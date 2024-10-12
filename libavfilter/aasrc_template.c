@@ -98,6 +98,7 @@ typedef struct fn(StateContext) {
     ctype filter_state[MAX_NB_POLES];
 
     ctype *hat;
+    int   hat_samples;
 } fn(StateContext);
 
 static void fn(complex_exponential)(ctype *x,
@@ -214,9 +215,13 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     ftype delta_t = stc->delta_t;
     int in_idx = stc->in_idx;
 
-    stc->hat = av_realloc_f(stc->hat, n_in_samples, nb_poles * sizeof(*stc->hat));
-    if (!stc->hat)
-        return;
+    if (stc->hat_samples < n_in_samples) {
+        stc->hat = av_realloc_f(stc->hat, n_in_samples, nb_poles * sizeof(*stc->hat));
+        if (!stc->hat)
+            return;
+
+        stc->hat_samples = n_in_samples;
+    }
 
     for (int n = 0; n < nb_poles; n++) {
         ctype *h = stc->hat + n * n_in_samples;
