@@ -28,14 +28,14 @@
 #define FABS fabsf
 #define FEXP expf
 #define SAMPLE_FORMAT flt
-#define TX_TYPE AV_TX_FLOAT_FFT
+#define TX_TYPE AV_TX_FLOAT_RDFT
 #else
 #define ctype AVComplexDouble
 #define ftype double
 #define FABS fabs
 #define FEXP exp
 #define SAMPLE_FORMAT dbl
-#define TX_TYPE AV_TX_DOUBLE_FFT
+#define TX_TYPE AV_TX_DOUBLE_RDFT
 #endif
 
 #define F(x) ((ftype)(x))
@@ -138,15 +138,14 @@ static int fn(headphone_fast_convolute)(AVFilterContext *ctx, void *arg, int job
     const int in_channels = in->ch_layout.nb_channels;
     const int buffer_length = s->buffer_length;
     const uint32_t modulo = (uint32_t)buffer_length - 1;
-    ctype *fft_out = s->out_fft[jobnr];
-    ctype *fft_in = s->in_fft[jobnr];
+    ctype *tx_out = s->out_tx[jobnr];
+    ftype *tx_in = s->in_tx[jobnr];
     ctype *fft_acc = s->temp_afft[jobnr];
-    AVTXContext *ifft = s->ifft[jobnr];
-    AVTXContext *fft = s->fft[jobnr];
+    AVTXContext *itx_ctx = s->itx_ctx[jobnr];
+    AVTXContext *tx_ctx = s->tx_ctx[jobnr];
     av_tx_fn tx_fn = s->tx_fn[jobnr];
     av_tx_fn itx_fn = s->itx_fn[jobnr];
-    const int n_fft = s->n_fft;
-    const ftype fft_scale = F(1.0) / s->n_fft;
+    const int n_tx = s->n_tx;
     const ftype gain_lfe = s->gain_lfe;
     ctype *hrtf_offset;
     int wr = *write;
@@ -165,7 +164,7 @@ static int fn(headphone_fast_convolute)(AVFilterContext *ctx, void *arg, int job
     for (j = n_read; j < nb_samples; j++)
         dst[2 * j] = F(0.0);
 
-    memset(fft_acc, 0, sizeof(ctype) * n_fft);
+    memset(fft_acc, 0, sizeof(ctype) * (n_tx/2+1));
 
     for (i = 0; i < in_channels; i++) {
         if (i == s->lfe_channel) {
@@ -174,30 +173,29 @@ static int fn(headphone_fast_convolute)(AVFilterContext *ctx, void *arg, int job
             continue;
         }
 
-        offset = i * n_fft;
-        hrtf_offset = hrtf + s->hrir_map[i] * n_fft;
-
-        memset(fft_in, 0, sizeof(ctype) * n_fft);
+        offset = i * n_tx;
+        hrtf_offset = hrtf + s->hrir_map[i] * s->atx_len;
 
         for (j = 0; j < nb_samples; j++)
-            fft_in[j].re = src[j * in_channels + i];
+            tx_in[j] = src[j * in_channels + i];
+        memset(tx_in + nb_samples, 0, sizeof(ftype) * (n_tx - nb_samples));
 
-        tx_fn(fft, fft_out, fft_in, sizeof(*fft_in));
+        tx_fn(tx_ctx, tx_out, tx_in, sizeof(*tx_in));
 
-        for (j = 0; j < n_fft; j++) {
+        for (j = 0; j < (n_tx/2+1); j++) {
             const ctype *hcomplex = hrtf_offset + j;
-            const ftype re = fft_out[j].re;
-            const ftype im = fft_out[j].im;
+            const ftype re = tx_out[j].re;
+            const ftype im = tx_out[j].im;
 
             fft_acc[j].re += re * hcomplex->re - im * hcomplex->im;
             fft_acc[j].im += re * hcomplex->im + im * hcomplex->re;
         }
     }
 
-    itx_fn(ifft, fft_out, fft_acc, sizeof(*fft_acc));
+    itx_fn(itx_ctx, tx_in, fft_acc, sizeof(*fft_acc));
 
     for (j = 0; j < nb_samples; j++) {
-        dst[2 * j] += fft_out[j].re * fft_scale;
+        dst[2 * j] += tx_in[j];
         if (FABS(dst[2 * j]) > 1)
             n_clippings[0]++;
     }
@@ -205,7 +203,7 @@ static int fn(headphone_fast_convolute)(AVFilterContext *ctx, void *arg, int job
     for (j = 0; j < ir_len - 1; j++) {
         int write_pos = (wr + j) & modulo;
 
-        *(ringbuffer + write_pos) += fft_out[nb_samples + j].re * fft_scale;
+        *(ringbuffer + write_pos) += tx_in[nb_samples + j];
     }
 
     *write = wr;
@@ -222,7 +220,7 @@ static int fn(convert_coeffs)(AVFilterContext *ctx, AVFilterLink *inlink)
     ftype gain_lin = FEXP((s->gain - 3 * nb_input_channels) / 20 * M_LN10);
     AVFrame *frame;
     int ret = 0;
-    int n_fft;
+    int n_tx;
     int i, j, k;
 
     s->air_len = 1 << (32 - ff_clz(ir_len));
@@ -230,26 +228,30 @@ static int fn(convert_coeffs)(AVFilterContext *ctx, AVFilterLink *inlink)
         s->air_len = FFALIGN(s->air_len, 32);
     }
     s->buffer_length = 1 << (32 - ff_clz(s->air_len));
-    s->n_fft = n_fft = 1 << (32 - ff_clz(ir_len + s->size));
+    s->n_tx = n_tx = 1 << (32 - ff_clz(ir_len + s->size));
 
     if (s->type == FREQUENCY_DOMAIN) {
+        const size_t cpu_align = av_cpu_max_align();
         ftype scale = F(1.0);
+        ftype iscale = F(1.0) / s->n_tx;
 
-        ret = av_tx_init(&s->fft[0], &s->tx_fn[0], TX_TYPE, 0, s->n_fft, &scale, 0);
+        s->atx_len = FFALIGN(n_tx/2+1, cpu_align);
+
+        ret = av_tx_init(&s->tx_ctx[0], &s->tx_fn[0], TX_TYPE, 0, s->n_tx, &scale, 0);
         if (ret < 0)
             goto fail;
-        ret = av_tx_init(&s->fft[1], &s->tx_fn[1], TX_TYPE, 0, s->n_fft, &scale, 0);
+        ret = av_tx_init(&s->tx_ctx[1], &s->tx_fn[1], TX_TYPE, 0, s->n_tx, &scale, 0);
         if (ret < 0)
             goto fail;
-        ret = av_tx_init(&s->ifft[0], &s->itx_fn[0], TX_TYPE, 1, s->n_fft, &scale, 0);
+        ret = av_tx_init(&s->itx_ctx[0], &s->itx_fn[0], TX_TYPE, 1, s->n_tx, &iscale, 0);
         if (ret < 0)
             goto fail;
-        ret = av_tx_init(&s->ifft[1], &s->itx_fn[1], TX_TYPE, 1, s->n_fft, &scale, 0);
+        ret = av_tx_init(&s->itx_ctx[1], &s->itx_fn[1], TX_TYPE, 1, s->n_tx, &iscale, 0);
         if (ret < 0)
             goto fail;
 
-        if (!s->fft[0] || !s->fft[1] || !s->ifft[0] || !s->ifft[1]) {
-            av_log(ctx, AV_LOG_ERROR, "Unable to create FFT contexts of size %d.\n", s->n_fft);
+        if (!s->tx_ctx[0] || !s->tx_ctx[1] || !s->itx_ctx[0] || !s->itx_ctx[1]) {
+            av_log(ctx, AV_LOG_ERROR, "Unable to create TX contexts of size %d.\n", s->n_tx);
             ret = AVERROR(ENOMEM);
             goto fail;
         }
@@ -261,14 +263,14 @@ static int fn(convert_coeffs)(AVFilterContext *ctx, AVFilterLink *inlink)
     } else {
         s->ringbuffer[0] = av_calloc(s->buffer_length, sizeof(ftype));
         s->ringbuffer[1] = av_calloc(s->buffer_length, sizeof(ftype));
-        s->out_fft[0] = av_calloc(s->n_fft, sizeof(ctype));
-        s->out_fft[1] = av_calloc(s->n_fft, sizeof(ctype));
-        s->in_fft[0] = av_calloc(s->n_fft, sizeof(ctype));
-        s->in_fft[1] = av_calloc(s->n_fft, sizeof(ctype));
-        s->temp_afft[0] = av_calloc(s->n_fft, sizeof(ctype));
-        s->temp_afft[1] = av_calloc(s->n_fft, sizeof(ctype));
-        if (!s->in_fft[0] || !s->in_fft[1] ||
-            !s->out_fft[0] || !s->out_fft[1] ||
+        s->out_tx[0] = av_calloc(s->n_tx/2+1, sizeof(ctype));
+        s->out_tx[1] = av_calloc(s->n_tx/2+1, sizeof(ctype));
+        s->in_tx[0] = av_calloc(s->n_tx, sizeof(ftype));
+        s->in_tx[1] = av_calloc(s->n_tx, sizeof(ftype));
+        s->temp_afft[0] = av_calloc(s->n_tx/2+1, sizeof(ctype));
+        s->temp_afft[1] = av_calloc(s->n_tx/2+1, sizeof(ctype));
+        if (!s->in_tx[0] || !s->in_tx[1] ||
+            !s->out_tx[0] || !s->out_tx[1] ||
             !s->temp_afft[0] || !s->temp_afft[1]) {
             ret = AVERROR(ENOMEM);
             goto fail;
@@ -291,8 +293,8 @@ static int fn(convert_coeffs)(AVFilterContext *ctx, AVFilterLink *inlink)
             goto fail;
         }
     } else {
-        s->data_hrtf[0] = av_calloc(n_fft, sizeof(ctype) * nb_hrir_channels);
-        s->data_hrtf[1] = av_calloc(n_fft, sizeof(ctype) * nb_hrir_channels);
+        s->data_hrtf[0] = av_calloc(s->atx_len, sizeof(ctype) * nb_hrir_channels);
+        s->data_hrtf[1] = av_calloc(s->atx_len, sizeof(ctype) * nb_hrir_channels);
         if (!s->data_hrtf[0] || !s->data_hrtf[1]) {
             ret = AVERROR(ENOMEM);
             goto fail;
@@ -326,18 +328,18 @@ static int fn(convert_coeffs)(AVFilterContext *ctx, AVFilterLink *inlink)
                     data_ir_r[j] = ptr[len * 2 - j * 2 - 1] * gain_lin;
                 }
             } else {
-                ctype *fft_out_l = data_hrtf[0] + idx * n_fft;
-                ctype *fft_out_r = data_hrtf[1] + idx * n_fft;
-                ctype *fft_in_l = s->in_fft[0];
-                ctype *fft_in_r = s->in_fft[1];
+                ctype *tx_out_l = data_hrtf[0] + idx * s->atx_len;
+                ctype *tx_out_r = data_hrtf[1] + idx * s->atx_len;
+                ftype *tx_in_l = s->in_tx[0];
+                ftype *tx_in_r = s->in_tx[1];
 
                 for (j = 0; j < len; j++) {
-                    fft_in_l[j].re = ptr[j * 2    ] * gain_lin;
-                    fft_in_r[j].re = ptr[j * 2 + 1] * gain_lin;
+                    tx_in_l[j] = ptr[j * 2    ] * gain_lin;
+                    tx_in_r[j] = ptr[j * 2 + 1] * gain_lin;
                 }
 
-                s->tx_fn[0](s->fft[0], fft_out_l, fft_in_l, sizeof(*fft_in_l));
-                s->tx_fn[0](s->fft[0], fft_out_r, fft_in_r, sizeof(*fft_in_r));
+                s->tx_fn[0](s->tx_ctx[0], tx_out_l, tx_in_l, sizeof(*tx_in_l));
+                s->tx_fn[0](s->tx_ctx[0], tx_out_r, tx_in_r, sizeof(*tx_in_r));
             }
         } else {
             int I, N = ctx->inputs[1]->ch_layout.nb_channels;
@@ -359,18 +361,18 @@ static int fn(convert_coeffs)(AVFilterContext *ctx, AVFilterLink *inlink)
                         data_ir_r[j] = ptr[len * N - j * N - N + I + 1] * gain_lin;
                     }
                 } else {
-                    ctype *fft_out_l = data_hrtf[0] + idx * n_fft;
-                    ctype *fft_out_r = data_hrtf[1] + idx * n_fft;
-                    ctype *fft_in_l = s->in_fft[0];
-                    ctype *fft_in_r = s->in_fft[1];
+                    ctype *tx_out_l = data_hrtf[0] + idx * s->atx_len;
+                    ctype *tx_out_r = data_hrtf[1] + idx * s->atx_len;
+                    ftype *tx_in_l = s->in_tx[0];
+                    ftype *tx_in_r = s->in_tx[1];
 
                     for (j = 0; j < len; j++) {
-                        fft_in_l[j].re = ptr[j * N + I    ] * gain_lin;
-                        fft_in_r[j].re = ptr[j * N + I + 1] * gain_lin;
+                        tx_in_l[j] = ptr[j * N + I    ] * gain_lin;
+                        tx_in_r[j] = ptr[j * N + I + 1] * gain_lin;
                     }
 
-                    s->tx_fn[0](s->fft[0], fft_out_l, fft_in_l, sizeof(*fft_in_l));
-                    s->tx_fn[0](s->fft[0], fft_out_r, fft_in_r, sizeof(*fft_in_r));
+                    s->tx_fn[0](s->tx_ctx[0], tx_out_l, tx_in_l, sizeof(*tx_in_l));
+                    s->tx_fn[0](s->tx_ctx[0], tx_out_r, tx_in_r, sizeof(*tx_in_r));
                 }
             }
         }

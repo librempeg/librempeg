@@ -21,6 +21,7 @@
 #include <math.h>
 
 #include "libavutil/channel_layout.h"
+#include "libavutil/cpu.h"
 #include "libavutil/float_dsp.h"
 #include "libavutil/intmath.h"
 #include "libavutil/mem.h"
@@ -52,6 +53,7 @@ typedef struct HeadphoneContext {
 
     int ir_len;
     int air_len;
+    int atx_len;
 
     int nb_hrir_inputs;
 
@@ -64,17 +66,17 @@ typedef struct HeadphoneContext {
     int write[2];
 
     int buffer_length;
-    int n_fft;
+    int n_tx;
     int size;
     int hrir_fmt;
 
     void *data_ir[2];
     void *temp_src[2];
-    void *out_fft[2];
-    void *in_fft[2];
+    void *out_tx[2];
+    void *in_tx[2];
     void *temp_afft[2];
 
-    AVTXContext *fft[2], *ifft[2];
+    AVTXContext *tx_ctx[2], *itx_ctx[2];
     av_tx_fn tx_fn[2], itx_fn[2];
     void *data_hrtf[2];
 
@@ -401,20 +403,20 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     HeadphoneContext *s = ctx->priv;
 
-    av_tx_uninit(&s->ifft[0]);
-    av_tx_uninit(&s->ifft[1]);
-    av_tx_uninit(&s->fft[0]);
-    av_tx_uninit(&s->fft[1]);
+    av_tx_uninit(&s->itx_ctx[0]);
+    av_tx_uninit(&s->itx_ctx[1]);
+    av_tx_uninit(&s->tx_ctx[0]);
+    av_tx_uninit(&s->tx_ctx[1]);
     av_freep(&s->data_ir[0]);
     av_freep(&s->data_ir[1]);
     av_freep(&s->ringbuffer[0]);
     av_freep(&s->ringbuffer[1]);
     av_freep(&s->temp_src[0]);
     av_freep(&s->temp_src[1]);
-    av_freep(&s->out_fft[0]);
-    av_freep(&s->out_fft[1]);
-    av_freep(&s->in_fft[0]);
-    av_freep(&s->in_fft[1]);
+    av_freep(&s->out_tx[0]);
+    av_freep(&s->out_tx[1]);
+    av_freep(&s->in_tx[0]);
+    av_freep(&s->in_tx[1]);
     av_freep(&s->temp_afft[0]);
     av_freep(&s->temp_afft[1]);
     av_freep(&s->data_hrtf[0]);
