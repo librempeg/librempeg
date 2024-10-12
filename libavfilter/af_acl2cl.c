@@ -1,0 +1,251 @@
+/*
+ * This file is part of FFmpeg.
+ *
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * FFmpeg is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
+#include "libavutil/opt.h"
+#include "libavutil/samplefmt.h"
+#include "avfilter.h"
+#include "audio.h"
+#include "filters.h"
+#include "formats.h"
+
+typedef struct AudioCL2CLContext {
+    const AVClass *class;
+
+    AVChannelLayout ch_layout;
+    int pass;
+
+    int (*do_cl2cl)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+} AudioCL2CLContext;
+
+#define OFFSET(x) offsetof(AudioCL2CLContext, x)
+#define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+
+static const AVOption acl2cl_options[] = {
+    { "channel_layout", "set the channel layout", OFFSET(ch_layout), AV_OPT_TYPE_CHLAYOUT, {.str="none"}, 0, 0, FLAGS },
+    {NULL}
+};
+
+AVFILTER_DEFINE_CLASS(acl2cl);
+
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
+{
+    const AudioCL2CLContext *s = ctx->priv;
+    AVFilterChannelLayouts *layouts;
+    AVFilterFormats *formats;
+    int ret;
+
+    formats = ff_planar_sample_fmts();
+    if (!formats)
+        return AVERROR(ENOMEM);
+
+    ret = ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
+    if (ret < 0)
+        return ret;
+
+    layouts = ff_all_channel_counts();
+    if (!layouts)
+        return AVERROR(ENOMEM);
+
+    if ((ret = ff_channel_layouts_ref(layouts, &cfg_in[0]->channel_layouts)) < 0)
+        return ret;
+
+    if (s->ch_layout.nb_channels > 0) {
+        layouts = NULL;
+
+        ret = ff_add_channel_layout(&layouts, &s->ch_layout);
+        if (ret)
+            return ret;
+
+        return ff_channel_layouts_ref(layouts, &cfg_out[0]->channel_layouts);
+    }
+
+    layouts = ff_all_channel_counts();
+    if (!layouts)
+        return AVERROR(ENOMEM);
+
+    return ff_channel_layouts_ref(layouts, &cfg_out[0]->channel_layouts);
+}
+
+typedef struct ThreadData {
+    AVFrame *in, *out;
+} ThreadData;
+
+#define DEPTH 8
+#include "acl2cl_template.c"
+
+#undef DEPTH
+#define DEPTH 16
+#include "acl2cl_template.c"
+
+#undef DEPTH
+#define DEPTH 31
+#include "acl2cl_template.c"
+
+#undef DEPTH
+#define DEPTH 32
+#include "acl2cl_template.c"
+
+#undef DEPTH
+#define DEPTH 63
+#include "acl2cl_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "acl2cl_template.c"
+
+static int config_output(AVFilterLink *outlink)
+{
+    AVFilterContext *ctx = outlink->src;
+    AVFilterLink *inlink = ctx->inputs[0];
+    AudioCL2CLContext *s = ctx->priv;
+
+    if (!av_channel_layout_compare(&outlink->ch_layout,
+                                   &inlink->ch_layout)) {
+        s->pass = 1;
+        return 0;
+    }
+
+    switch (outlink->format) {
+    case AV_SAMPLE_FMT_U8P:
+        s->do_cl2cl = do_cl2cl_u8p;
+        break;
+    case AV_SAMPLE_FMT_S16P:
+        s->do_cl2cl = do_cl2cl_s16p;
+        break;
+    case AV_SAMPLE_FMT_S32P:
+        s->do_cl2cl = do_cl2cl_s32p;
+        break;
+    case AV_SAMPLE_FMT_S64P:
+        s->do_cl2cl = do_cl2cl_s64p;
+        break;
+    case AV_SAMPLE_FMT_FLTP:
+        s->do_cl2cl = do_cl2cl_fltp;
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        s->do_cl2cl = do_cl2cl_dblp;
+        break;
+    default:
+        return AVERROR_BUG;
+    }
+
+    return 0;
+}
+
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
+{
+    AVFilterContext *ctx = inlink->dst;
+    AVFilterLink *outlink = ctx->outputs[0];
+    AudioCL2CLContext *s = ctx->priv;
+    AVFrame *out;
+
+    if (s->pass) {
+        out = in;
+    } else {
+        ThreadData td;
+
+        out = ff_get_audio_buffer(outlink, in->nb_samples);
+        if (!out) {
+            av_frame_free(&in);
+            return AVERROR(ENOMEM);
+        }
+
+        td.in = in;
+        td.out = out;
+
+        ff_filter_execute(ctx, s->do_cl2cl, &td, NULL,
+                          FFMIN(outlink->ch_layout.nb_channels,
+                                ff_filter_get_nb_threads(ctx)));
+
+        av_frame_copy_props(out, in);
+        av_frame_free(&in);
+    }
+
+    return ff_filter_frame(outlink, out);
+}
+
+static int activate(AVFilterContext *ctx)
+{
+    AVFilterLink *inlink = ctx->inputs[0];
+    AVFilterLink *outlink = ctx->outputs[0];
+    AVFrame *in;
+    int ret;
+
+    FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
+
+    ret = ff_inlink_consume_frame(inlink, &in);
+    if (ret < 0)
+        return ret;
+    if (ret > 0)
+        return filter_frame(inlink, in);
+
+    FF_FILTER_FORWARD_STATUS(inlink, outlink);
+    FF_FILTER_FORWARD_WANTED(outlink, inlink);
+
+    return FFERROR_NOT_READY;
+}
+
+static AVFrame *get_in_audio_buffer(AVFilterLink *inlink, int nb_samples)
+{
+    AVFilterContext *ctx = inlink->dst;
+    AudioCL2CLContext *s = ctx->priv;
+
+    return s->pass ?
+        ff_null_get_audio_buffer   (inlink, nb_samples) :
+        ff_default_get_audio_buffer(inlink, nb_samples);
+}
+
+static AVFrame *get_out_audio_buffer(AVFilterLink *outlink, int nb_samples)
+{
+    AVFilterContext *ctx = outlink->src;
+    AudioCL2CLContext *s = ctx->priv;
+
+    return s->pass ?
+        ff_null_get_audio_buffer   (outlink, nb_samples) :
+        ff_default_get_audio_buffer(outlink, nb_samples);
+}
+
+static const AVFilterPad inputs[] = {
+    {
+        .name          = "default",
+        .type          = AVMEDIA_TYPE_AUDIO,
+        .get_buffer.audio = get_in_audio_buffer,
+    },
+};
+
+static const AVFilterPad outputs[] = {
+    {
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_AUDIO,
+        .config_props = config_output,
+        .get_buffer.audio = get_out_audio_buffer,
+    },
+};
+
+const AVFilter ff_af_acl2cl = {
+    .name          = "acl2cl",
+    .description   = NULL_IF_CONFIG_SMALL("Switch audio channel layout."),
+    .priv_size     = sizeof(AudioCL2CLContext),
+    .priv_class    = &acl2cl_class,
+    .activate      = activate,
+    FILTER_QUERY_FUNC2(query_formats),
+    FILTER_INPUTS(inputs),
+    FILTER_OUTPUTS(outputs),
+    .flags         = AVFILTER_FLAG_SLICE_THREADS,
+};

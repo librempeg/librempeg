@@ -25,6 +25,7 @@ extern const AVFilter ff_af_aap;
 extern const AVFilter ff_af_aasrc;
 extern const AVFilter ff_af_abench;
 extern const AVFilter ff_af_acentercut;
+extern const AVFilter ff_af_acl2cl;
 extern const AVFilter ff_af_acompressor;
 extern const AVFilter ff_af_acontrast;
 extern const AVFilter ff_af_acopy;

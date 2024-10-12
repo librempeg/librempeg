@@ -39,6 +39,7 @@ OBJS-$(CONFIG_AAP_FILTER)                    += af_aap.o
 OBJS-$(CONFIG_AASRC_FILTER)                  += af_aasrc.o
 OBJS-$(CONFIG_ABENCH_FILTER)                 += f_bench.o
 OBJS-$(CONFIG_ACENTERCUT_FILTER)             += af_acentercut.o
+OBJS-$(CONFIG_ACL2CL_FILTER)                 += af_acl2cl.o
 OBJS-$(CONFIG_ACOMPRESSOR_FILTER)            += af_acompressor.o
 OBJS-$(CONFIG_ACONTRAST_FILTER)              += af_acontrast.o
 OBJS-$(CONFIG_ACOPY_FILTER)                  += af_acopy.o
