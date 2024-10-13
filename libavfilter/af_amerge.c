@@ -68,11 +68,6 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_in,
                          AVFilterFormatsConfig **cfg_out)
 {
-    static const enum AVSampleFormat packed_sample_fmts[] = {
-        AV_SAMPLE_FMT_U8, AV_SAMPLE_FMT_S16,
-        AV_SAMPLE_FMT_S32, AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_DBL,
-        AV_SAMPLE_FMT_NONE
-    };
     const AMergeContext *s = ctx->priv;
     AVChannelLayout outlayout = { 0 };
     AVFilterChannelLayouts *layouts;
@@ -81,7 +76,7 @@ static int query_formats(const AVFilterContext *ctx,
     if ((ret = ff_set_common_all_samplerates2(ctx, cfg_in, cfg_out)) < 0)
         return ret;
 
-    if ((ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, packed_sample_fmts)) < 0)
+    if ((ret = ff_set_common_formats2(ctx, cfg_in, cfg_out, ff_all_formats(AVMEDIA_TYPE_AUDIO))) < 0)
         return ret;
 
     for (int i = 0; i < s->nb_inputs; i++) {
@@ -227,6 +222,16 @@ static int try_push_frame(AVFilterContext *ctx, int nb_samples)
     }
 
     while (nb_samples) {
+        if (av_sample_fmt_is_planar(outlink->format)) {
+            for (int i = 0, j = 0; i < s->nb_inputs; i++) {
+                for (int c = 0; c < s->in[i]; c++, j++)
+                    memcpy(outbuf->extended_data[s->route[j]],
+                           inbuf[i]->extended_data[c], s->bps * nb_samples);
+            }
+
+            break;
+        }
+
         /* Unroll the most common sample formats: speed +~350% for the loop,
            +~13% overall (including two common decoders) */
         switch (s->bps) {
