@@ -486,7 +486,7 @@ static int sofalizer_fast_convolute(AVFilterContext *ctx, void *arg, int jobnr, 
         const float *src = (const float *)in->extended_data[i * planar]; /* get pointer to audio input buffer */
 
         if (i == s->lfe_channel) { /* LFE */
-            if (in->format == AV_SAMPLE_FMT_FLT) {
+            if (!planar) {
                 for (j = 0; j < nb_samples; j++) {
                     /* apply gain to LFE signal and add to output buffer */
                     dst[2 * j] += src[i + j * in_channels] * gain_lfe;
@@ -507,7 +507,7 @@ static int sofalizer_fast_convolute(AVFilterContext *ctx, void *arg, int jobnr, 
         /* fill TX input with 0 (we want to zero-pad) */
         memset(tx_in, 0, sizeof(*tx_in) * n_tx);
 
-        if (in->format == AV_SAMPLE_FMT_FLT) {
+        if (!planar) {
             for (j = 0; j < nb_samples; j++) {
                 /* prepare input for TX */
                 /* write all samples of current input channel to TX input array */
