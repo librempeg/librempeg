@@ -235,18 +235,18 @@ static int try_push_frame(AVFilterContext *ctx, int nb_samples)
         /* Unroll the most common sample formats: speed +~350% for the loop,
            +~13% overall (including two common decoders) */
         switch (s->bps) {
-            case 1:
-                copy_samples(s->nb_inputs, s->in, s->route, ins, &outs, nb_samples, 1, nb_ch);
-                break;
-            case 2:
-                copy_samples(s->nb_inputs, s->in, s->route, ins, &outs, nb_samples, 2, nb_ch);
-                break;
-            case 4:
-                copy_samples(s->nb_inputs, s->in, s->route, ins, &outs, nb_samples, 4, nb_ch);
-                break;
-            default:
-                copy_samples(s->nb_inputs, s->in, s->route, ins, &outs, nb_samples, s->bps, nb_ch);
-                break;
+        case 1:
+            copy_samples(s->nb_inputs, s->in, s->route, ins, &outs, nb_samples, 1, nb_ch);
+            break;
+        case 2:
+            copy_samples(s->nb_inputs, s->in, s->route, ins, &outs, nb_samples, 2, nb_ch);
+            break;
+        case 4:
+            copy_samples(s->nb_inputs, s->in, s->route, ins, &outs, nb_samples, 4, nb_ch);
+            break;
+        default:
+            copy_samples(s->nb_inputs, s->in, s->route, ins, &outs, nb_samples, s->bps, nb_ch);
+            break;
         }
 
         nb_samples = 0;
