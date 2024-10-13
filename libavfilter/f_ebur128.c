@@ -598,7 +598,7 @@ static av_cold int init_ebur128(AVFilterContext *ctx, EBUR128Context *ebur128)
     /* insert output pads */
     if (ebur128->do_video) {
         pad = (AVFilterPad){
-            .name         = "out0",
+            .name         = "video",
             .type         = AVMEDIA_TYPE_VIDEO,
             .config_props = config_video_output,
         };
@@ -606,14 +606,6 @@ static av_cold int init_ebur128(AVFilterContext *ctx, EBUR128Context *ebur128)
         if (ret < 0)
             return ret;
     }
-    pad = (AVFilterPad){
-        .name         = ebur128->do_video ? "out1" : "out0",
-        .type         = AVMEDIA_TYPE_AUDIO,
-        .config_props = config_audio_output,
-    };
-    ret = ff_append_outpad(ctx, &pad);
-    if (ret < 0)
-        return ret;
 
     /* summary */
     av_log(ctx, AV_LOG_VERBOSE, "EBU +%d scale\n", ebur128->meter);
@@ -874,6 +866,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     int idx_insample, ret;
     AVFilterContext *ctx = inlink->dst;
     EBUR128Context *ebur128 = ctx->priv;
+    AVFilterLink *outlink = ctx->outputs[0];
     const int nb_channels = ebur128->nb_channels;
     const int nb_samples  = insamples->nb_samples;
     const double *samples = (const double *)insamples->data[0];
@@ -891,10 +884,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
          * (4800 samples at 48kHz). */
         if (++ebur128->sample_count == inlink->sample_rate / 10) {
             double loudness_400, loudness_3000, loudness_integrated, peak;
-            AVFilterLink *outlink = ctx->outputs[0];
             const int64_t pts = insamples->pts +
                 av_rescale_q(idx_insample, (AVRational){ 1, inlink->sample_rate },
-                             ctx->outputs[ebur128->do_video]->time_base);
+                             outlink->time_base);
 
             ebur128_loudness(inlink, ebur128, &loudness_400, &loudness_3000, &loudness_integrated, &peak);
 
@@ -902,6 +894,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 
             /* push one video frame */
             if (ebur128->do_video) {
+                AVFilterLink *voutlink = ctx->outputs[1];
                 AVFrame *clone;
                 int x, y;
                 uint8_t *p;
@@ -917,7 +910,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
                 y_loudness_lu_graph = lu_to_y(ebur128, loudness_3000 - ebur128->target);
                 y_loudness_lu_gauge = lu_to_y(ebur128, gauge_value);
 
-                ret = ff_inlink_make_frame_writable(outlink, &ebur128->outpicref);
+                ret = ff_inlink_make_frame_writable(voutlink, &ebur128->outpicref);
                 if (ret < 0) {
                     av_frame_free(&insamples);
                     ebur128->insamples = NULL;
@@ -958,14 +951,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
                 }
 
                 /* set pts and push frame */
-                pic->pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
+                pic->pts = av_rescale_q(pts, inlink->time_base, voutlink->time_base);
                 pic->duration = 1;
                 clone = av_frame_clone(pic);
                 if (!clone)
                     return AVERROR(ENOMEM);
                 ebur128->idx_insample = idx_insample + 1;
                 ff_filter_set_ready(ctx, 100);
-                return ff_filter_frame(outlink, clone);
+                return ff_filter_frame(voutlink, clone);
             }
 
             if (ebur128->metadata) { /* happens only once per filter_frame call */
@@ -1037,20 +1030,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     ebur128->idx_insample = 0;
     ebur128->insamples = NULL;
 
-    return ff_filter_frame(ctx->outputs[ebur128->do_video], insamples);
+    return ff_filter_frame(outlink, insamples);
 }
 
 static int activate(AVFilterContext *ctx)
 {
     AVFilterLink *inlink = ctx->inputs[0];
     EBUR128Context *ebur128 = ctx->priv;
-    AVFilterLink *voutlink = ctx->outputs[0];
-    AVFilterLink *outlink = ctx->outputs[ebur128->do_video];
+    AVFilterLink *outlink = ctx->outputs[0];
     int ret;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
     if (ebur128->do_video)
-        FF_FILTER_FORWARD_STATUS_BACK(voutlink, inlink);
+        FF_FILTER_FORWARD_STATUS_BACK(ctx->outputs[1], inlink);
 
     if (!ebur128->insamples) {
         AVFrame *in;
@@ -1072,7 +1064,7 @@ static int activate(AVFilterContext *ctx)
     FF_FILTER_FORWARD_STATUS_ALL(inlink, ctx);
     FF_FILTER_FORWARD_WANTED(outlink, inlink);
     if (ebur128->do_video)
-        FF_FILTER_FORWARD_WANTED(voutlink, inlink);
+        FF_FILTER_FORWARD_WANTED(ctx->outputs[1], inlink);
 
     return ret;
 }
@@ -1083,7 +1075,6 @@ static int query_formats(const AVFilterContext *ctx,
 {
     const EBUR128Context *ebur128 = ctx->priv;
     AVFilterFormats *formats;
-    int out_idx = 0;
     int ret;
 
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_DBL, AV_SAMPLE_FMT_NONE };
@@ -1092,9 +1083,8 @@ static int query_formats(const AVFilterContext *ctx,
     /* set optional output video format */
     if (ebur128->do_video) {
         formats = ff_make_format_list(pix_fmts);
-        if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
+        if ((ret = ff_formats_ref(formats, &cfg_out[1]->formats)) < 0)
             return ret;
-        out_idx = 1;
     }
 
     /* set input and output audio formats
@@ -1102,7 +1092,7 @@ static int query_formats(const AVFilterContext *ctx,
      * links, and thus break the video format negotiation */
     formats = ff_make_format_list(sample_fmts);
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0 ||
-        (ret = ff_formats_ref(formats, &cfg_out[out_idx]->formats)) < 0)
+        (ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
     return 0;
@@ -1187,6 +1177,14 @@ static const AVFilterPad ebur128_inputs[] = {
     },
 };
 
+static const AVFilterPad ebur128_outputs[] = {
+    {
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_AUDIO,
+        .config_props = config_audio_output,
+    },
+};
+
 const AVFilter ff_af_ebur128 = {
     .name          = "ebur128",
     .description   = NULL_IF_CONFIG_SMALL("EBU R128 scanner."),
@@ -1195,7 +1193,7 @@ const AVFilter ff_af_ebur128 = {
     .uninit        = uninit,
     .activate      = activate,
     FILTER_INPUTS(ebur128_inputs),
-    .outputs       = NULL,
+    FILTER_OUTPUTS(ebur128_outputs),
     FILTER_QUERY_FUNC2(query_formats),
     .priv_class    = &ebur128_class,
     .flags         = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
