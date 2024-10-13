@@ -29,6 +29,7 @@
 typedef struct AASRCContext {
     const AVClass *class;
 
+    int pass;
     int sample_rate;
     int channels;
     double t_inc;
@@ -128,8 +129,10 @@ static int config_input(AVFilterLink *inlink)
     AASRCContext *s = ctx->priv;
     int ret;
 
-    if (inlink->sample_rate == outlink->sample_rate)
+    if (inlink->sample_rate == outlink->sample_rate) {
+        s->pass = 1;
         return 0;
+    }
 
     outlink->time_base = (AVRational) {1, outlink->sample_rate};
     s->channels = inlink->ch_layout.nb_channels;
@@ -183,9 +186,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFrame *out;
     int ret;
 
-    if (inlink->sample_rate == outlink->sample_rate)
-        return ff_filter_frame(outlink, in);
-
     nb_out_samples = lrint(ceil(in->nb_samples / s->t_inc));
 
     out = ff_get_audio_buffer(outlink, nb_out_samples);
@@ -216,6 +216,7 @@ static int activate(AVFilterContext *ctx)
 {
     AVFilterLink *outlink = ctx->outputs[0];
     AVFilterLink *inlink = ctx->inputs[0];
+    AASRCContext *s = ctx->priv;
     int ret, status;
     AVFrame *in;
     int64_t pts;
@@ -226,7 +227,7 @@ static int activate(AVFilterContext *ctx)
     if (ret < 0)
         return ret;
     if (ret > 0) {
-        if (inlink->sample_rate == outlink->sample_rate)
+        if (s->pass)
             return ff_filter_frame(outlink, in);
         else
             return filter_frame(inlink, in);
@@ -251,11 +252,40 @@ static av_cold void uninit(AVFilterContext *ctx)
         s->aasrc_uninit(ctx);
 }
 
+static AVFrame *get_in_audio_buffer(AVFilterLink *inlink, int nb_samples)
+{
+    AVFilterContext *ctx = inlink->dst;
+    const AASRCContext *s = ctx->priv;
+
+    return s->pass ?
+        ff_null_get_audio_buffer   (inlink, nb_samples) :
+        ff_default_get_audio_buffer(inlink, nb_samples);
+}
+
 static const AVFilterPad inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
         .config_props = config_input,
+        .get_buffer.audio = get_in_audio_buffer,
+    },
+};
+
+static AVFrame *get_out_audio_buffer(AVFilterLink *outlink, int nb_samples)
+{
+    AVFilterContext *ctx = outlink->src;
+    const AASRCContext *s = ctx->priv;
+
+    return s->pass ?
+        ff_null_get_audio_buffer   (outlink, nb_samples) :
+        ff_default_get_audio_buffer(outlink, nb_samples);
+}
+
+static const AVFilterPad outputs[] = {
+    {
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_AUDIO,
+        .get_buffer.audio = get_out_audio_buffer,
     },
 };
 
@@ -267,7 +297,7 @@ const AVFilter ff_af_aasrc = {
     .activate        = activate,
     .uninit          = uninit,
     FILTER_INPUTS(inputs),
-    FILTER_OUTPUTS(ff_audio_default_filterpad),
+    FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
     .flags           = AVFILTER_FLAG_SLICE_THREADS,
 };
