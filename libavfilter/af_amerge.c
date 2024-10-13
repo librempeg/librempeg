@@ -77,9 +77,9 @@ static int query_formats(AVFilterContext *ctx)
     AVChannelLayout *inlayout[SWR_CH_MAX] = { NULL }, outlayout = { 0 };
     uint64_t outmask = 0;
     AVFilterChannelLayouts *layouts;
-    int i, ret, overlap = 0, nb_ch = 0;
+    int ret, overlap = 0, nb_ch = 0;
 
-    for (i = 0; i < s->nb_inputs; i++) {
+    for (int i = 0; i < s->nb_inputs; i++) {
         if (!ctx->inputs[i]->incfg.channel_layouts ||
             !ctx->inputs[i]->incfg.channel_layouts->nb_channel_layouts) {
             av_log(ctx, AV_LOG_WARNING,
@@ -112,33 +112,37 @@ static int query_formats(AVFilterContext *ctx)
         av_log(ctx, AV_LOG_WARNING,
                "Input channel layouts overlap: "
                "output layout will be determined by the number of distinct input channels\n");
-        for (i = 0; i < nb_ch; i++)
+        for (int i = 0; i < nb_ch; i++)
             s->route[i] = i;
         av_channel_layout_default(&outlayout, nb_ch);
         if (!KNOWN(&outlayout) && nb_ch)
             av_channel_layout_from_mask(&outlayout, 0xFFFFFFFFFFFFFFFFULL >> (64 - nb_ch));
     } else {
         int *route[SWR_CH_MAX];
-        int c, out_ch_number = 0;
+        int out_ch_number = 0;
 
         av_channel_layout_from_mask(&outlayout, outmask);
         route[0] = s->route;
-        for (i = 1; i < s->nb_inputs; i++)
+        for (int i = 1; i < s->nb_inputs; i++)
             route[i] = route[i - 1] + s->in[i - 1].nb_ch;
-        for (c = 0; c < 64; c++)
-            for (i = 0; i < s->nb_inputs; i++)
+        for (int c = 0; c < 64; c++) {
+            for (int i = 0; i < s->nb_inputs; i++)
                 if (av_channel_layout_index_from_channel(inlayout[i], c) >= 0)
                     *(route[i]++) = out_ch_number++;
+        }
     }
+
     if ((ret = ff_set_common_formats_from_list(ctx, packed_sample_fmts)) < 0)
         return ret;
-    for (i = 0; i < s->nb_inputs; i++) {
+
+    for (int i = 0; i < s->nb_inputs; i++) {
         layouts = NULL;
         if ((ret = ff_add_channel_layout(&layouts, inlayout[i])) < 0)
             return ret;
         if ((ret = ff_channel_layouts_ref(layouts, &ctx->inputs[i]->outcfg.channel_layouts)) < 0)
             return ret;
     }
+
     layouts = NULL;
     if ((ret = ff_add_channel_layout(&layouts, &outlayout)) < 0)
         return ret;
@@ -209,8 +213,7 @@ static inline void copy_samples(int nb_inputs, struct amerge_input in[],
 
 static void free_frames(int nb_inputs, AVFrame **input_frames)
 {
-    int i;
-    for (i = 0; i < nb_inputs; i++)
+    for (int i = 0; i < nb_inputs; i++)
         av_frame_free(&input_frames[i]);
 }
 
@@ -218,11 +221,11 @@ static int try_push_frame(AVFilterContext *ctx, int nb_samples)
 {
     AMergeContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
-    int i, ret;
+    int ret;
     AVFrame *outbuf, *inbuf[SWR_CH_MAX] = { NULL };
     uint8_t *outs, *ins[SWR_CH_MAX];
 
-    for (i = 0; i < ctx->nb_inputs; i++) {
+    for (int i = 0; i < ctx->nb_inputs; i++) {
         ret = ff_inlink_consume_samples(ctx->inputs[i], nb_samples, nb_samples, &inbuf[i]);
         if (ret < 0) {
             free_frames(i, inbuf);
@@ -278,16 +281,14 @@ static int try_push_frame(AVFilterContext *ctx, int nb_samples)
 
 static int activate(AVFilterContext *ctx)
 {
-    int i, status;
-    int ret, nb_samples;
+    int ret, nb_samples, status;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK_ALL(ctx->outputs[0], ctx);
 
     nb_samples = ff_inlink_queued_samples(ctx->inputs[0]);
-    for (i = 1; i < ctx->nb_inputs && nb_samples > 0; i++) {
+    for (int i = 1; i < ctx->nb_inputs && nb_samples > 0; i++)
         nb_samples = FFMIN(ff_inlink_queued_samples(ctx->inputs[i]), nb_samples);
-    }
 
     if (nb_samples) {
         ret = try_push_frame(ctx, nb_samples);
@@ -295,7 +296,7 @@ static int activate(AVFilterContext *ctx)
             return ret;
     }
 
-    for (i = 0; i < ctx->nb_inputs; i++) {
+    for (int i = 0; i < ctx->nb_inputs; i++) {
         if (ff_inlink_queued_samples(ctx->inputs[i]))
             continue;
 
@@ -314,17 +315,18 @@ static int activate(AVFilterContext *ctx)
 static av_cold int init(AVFilterContext *ctx)
 {
     AMergeContext *s = ctx->priv;
-    int i, ret;
 
     s->in = av_calloc(s->nb_inputs, sizeof(*s->in));
     if (!s->in)
         return AVERROR(ENOMEM);
-    for (i = 0; i < s->nb_inputs; i++) {
+    for (int i = 0; i < s->nb_inputs; i++) {
         char *name = av_asprintf("in%d", i);
         AVFilterPad pad = {
-            .name             = name,
-            .type             = AVMEDIA_TYPE_AUDIO,
+            .name = name,
+            .type = AVMEDIA_TYPE_AUDIO,
         };
+        int ret;
+
         if (!name)
             return AVERROR(ENOMEM);
         if ((ret = ff_append_inpad_free_name(ctx, &pad)) < 0)
