@@ -16,7 +16,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/mem.h"
+#include "libavutil/opt.h"
 #include "libavutil/samplefmt.h"
 #include "avfilter.h"
 #include "audio.h"
@@ -25,15 +25,28 @@
 
 typedef struct AudioSF2SFContext {
     const AVClass *class;
+
+    int format;
     int pass;
 
     int (*do_sf2sf)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } AudioSF2SFContext;
 
+#define OFFSET(x) offsetof(AudioSF2SFContext, x)
+#define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+
+static const AVOption asf2sf_options[] = {
+    { "format", "set the sample format", OFFSET(format), AV_OPT_TYPE_SAMPLE_FMT, {.i64=AV_SAMPLE_FMT_NONE}, AV_SAMPLE_FMT_NONE, AV_SAMPLE_FMT_NB-1, FLAGS },
+    {NULL}
+};
+
+AVFILTER_DEFINE_CLASS(asf2sf);
+
 static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_in,
                          AVFilterFormatsConfig **cfg_out)
 {
+    const AudioSF2SFContext *s = ctx->priv;
     AVFilterFormats *formats;
     int ret;
 
@@ -44,14 +57,21 @@ static int query_formats(const AVFilterContext *ctx,
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
+    if (s->format != AV_SAMPLE_FMT_NONE) {
+        formats = NULL;
+
+        ret = ff_add_format(&formats, s->format);
+        if (ret)
+            return ret;
+
+        return ff_formats_ref(formats, &cfg_out[0]->formats);
+    }
+
     formats = ff_all_formats(AVMEDIA_TYPE_AUDIO);
     if (!formats)
         return AVERROR(ENOMEM);
 
-    if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
-        return ret;
-
-    return 0;
+    return ff_formats_ref(formats, &cfg_out[0]->formats);
 }
 
 typedef struct ThreadData {
@@ -374,6 +394,7 @@ const AVFilter ff_af_asf2sf = {
     .name          = "asf2sf",
     .description   = NULL_IF_CONFIG_SMALL("Switch audio sample format."),
     .priv_size     = sizeof(AudioSF2SFContext),
+    .priv_class    = &asf2sf_class,
     .activate      = activate,
     FILTER_QUERY_FUNC2(query_formats),
     FILTER_INPUTS(inputs),
