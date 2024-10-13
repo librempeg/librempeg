@@ -261,6 +261,7 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_out)
 {
     static const enum AVSampleFormat formats[] = {
+        AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP,
         AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_DBL,
         AV_SAMPLE_FMT_NONE,
     };
@@ -329,10 +330,12 @@ static int config_input(AVFilterLink *inlink)
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_FLT:
+    case AV_SAMPLE_FMT_FLTP:
         s->convert_coeffs = convert_coeffs_flt;
         s->convolute = s->type ? headphone_fast_convolute_flt : headphone_convolute_flt;
         break;
     case AV_SAMPLE_FMT_DBL:
+    case AV_SAMPLE_FMT_DBLP:
         s->convert_coeffs = convert_coeffs_dbl;
         s->convolute = s->type ? headphone_fast_convolute_dbl : headphone_convolute_dbl;
         break;
