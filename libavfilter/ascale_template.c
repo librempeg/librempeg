@@ -167,7 +167,8 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
         int ns;
 
         memset(rptrx+max_period, 0, (max_size+2-max_period) * sizeof(*rptrx));
-        memcpy(rptrx, dptrx, max_period * sizeof(*rptrx));
+        for (int n = 0; n < max_period; n++)
+            rptrx[n] = dptrx[max_period-n-1];
 
         memset(rptry+max_period, 0, (max_size+2-max_period) * sizeof(*rptry));
         memcpy(rptry, dptry, max_period * sizeof(*rptry));
@@ -181,8 +182,8 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
             const ftype re1 = cptry[n].re;
             const ftype im1 = cptry[n].im;
 
-            cptrx[n].re = re0*re1 + im1*im0;
-            cptrx[n].im = im0*re1 - im1*re0;
+            cptrx[n].re = re0*re1 - im1*im0;
+            cptrx[n].im = im0*re1 + im1*re0;
         }
 
         c->c2r_fn(c->c2r, rptrx, cptrx, sizeof(*cptrx));
@@ -197,11 +198,11 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
             if (rptrx[n] >= rptrx[n-1] &&
                 rptrx[n] >= rptrx[n+1]) {
                 const ftype xcorr = rptrx[n];
-                const ftype score = fn(get_score)(xcorr, n);
+                const ftype score = fn(get_score)(xcorr, max_period-n);
 
                 if (score > best_score) {
                     best_score = score;
-                    best_period = max_period-n;
+                    best_period = n+1;
                 }
             }
         }
@@ -210,7 +211,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
             const int n = max_period-best_period;
             const ftype xx = fn(l2norm)(dptrx+n, best_period);
             const ftype yy = fn(l2norm)(dptry, best_period);
-            const ftype xy = rptrx[n];
+            const ftype xy = rptrx[best_period-1];
             const ftype num = xy;
             const ftype den = xx * yy + EPS;
 
