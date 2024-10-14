@@ -24,8 +24,6 @@
 
 #undef ctype
 #undef ftype
-#undef SQRT
-#undef HYPOT
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
 #undef VECTOR_MAC_SCALAR
@@ -36,8 +34,6 @@
 #undef EPS
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
-#define SQRT sqrtf
-#define HYPOT hypotf
 #define ctype AVComplexFloat
 #define ftype float
 #define TX_TYPE AV_TX_FLOAT_RDFT
@@ -49,8 +45,6 @@
 #define EPS FLT_EPSILON
 #else
 #define SAMPLE_FORMAT double
-#define SQRT sqrt
-#define HYPOT hypot
 #define ctype AVComplexDouble
 #define ftype double
 #define TX_TYPE AV_TX_DOUBLE_RDFT
