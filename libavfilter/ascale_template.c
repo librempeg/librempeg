@@ -207,6 +207,9 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
             }
         }
 
+        if (best_period <= 0)
+            best_period = max_period/2;
+
         if (best_period > 0) {
             const int n = max_period-best_period;
             const ftype xx = fn(l2norm)(dptrx+n, best_period);
@@ -218,11 +221,6 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
             best_xcorr = num/den;
             best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
         }
-    }
-
-    if (best_period <= 0) {
-        best_period = max_period/2;
-        best_xcorr = F(0.0);
     }
 
     if (best_xcorr < F(-0.95))
@@ -317,15 +315,13 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
             }
         }
 
+        if (best_period <= 0)
+            best_period = max_period/2;
+
         if (best_period > 0) {
             best_xcorr = (F(2.0)*rptr[best_period]-rptr[2*best_period])/rptr[0];
             best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
         }
-    }
-
-    if (best_period <= 0) {
-        best_period = max_period/2;
-        best_xcorr = F(0.0);
     }
 
     if (best_xcorr < F(-0.95))
