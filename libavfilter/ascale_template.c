@@ -94,6 +94,16 @@ static ftype fn(get_score)(const ftype xcorr,
     return n * xcorr;
 }
 
+static ftype fn(l2norm)(const ftype *x, const int N)
+{
+    ftype y = F(0.0);
+
+    for (int n = 0; n < N; n++)
+        y += x[n]*x[n];
+
+    return SQRT(y);
+}
+
 static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
 {
     AScaleContext *s = ctx->priv;
@@ -105,8 +115,6 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     void *datay[1] = { (void *)c->data[1] };
     ctype *cptrx = c->c_data[0];
     ctype *cptry = c->c_data[1];
-    ftype *dptr2x = c->data2[0];
-    ftype *dptr2y = c->data2[1];
     ftype *rptrx = c->r_data[0];
     ftype *rptry = c->r_data[1];
     ftype *dptrx = c->data[0];
@@ -155,14 +163,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     if (size < max_period)
         memset(dptry+size, 0, (max_period-size)*sizeof(*dptry));
 
-    dptr2x[0] = F(0.0);
-    dptr2y[0] = F(0.0);
-    for (int n = 0; n < max_period; n++) {
-        dptr2x[n+1] = dptr2x[n] + dptrx[max_period-n-1] * dptrx[max_period-n-1];
-        dptr2y[n+1] = dptr2y[n] + dptry[n] * dptry[n];
-    }
-
-    if (dptr2y[max_period] > F(0.0) && dptr2x[max_period] > F(0.0)) {
+    {
         int ns;
 
         memset(rptrx+max_period, 0, (max_size+2-max_period) * sizeof(*rptrx));
@@ -207,11 +208,11 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
 
         if (best_period > 0) {
             const int n = max_period-best_period;
-            const ftype xx = dptr2x[n];
-            const ftype yy = dptr2y[n];
+            const ftype xx = fn(l2norm)(dptrx+n, best_period);
+            const ftype yy = fn(l2norm)(dptry, best_period);
             const ftype xy = rptrx[n];
             const ftype num = xy;
-            const ftype den = SQRT(xx) * SQRT(yy) + EPS;
+            const ftype den = xx * yy + EPS;
 
             best_xcorr = num/den;
             best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
@@ -415,14 +416,6 @@ static int fn(init_state)(AVFilterContext *ctx)
         if (!c->data[1])
             return AVERROR(ENOMEM);
 
-        c->data2[0] = av_calloc(s->max_period+1, sizeof(ftype));
-        if (!c->data2[0])
-            return AVERROR(ENOMEM);
-
-        c->data2[1] = av_calloc(s->max_period+1, sizeof(ftype));
-        if (!c->data2[1])
-            return AVERROR(ENOMEM);
-
         c->in_fifo = av_audio_fifo_alloc(inlink->format, 1, s->max_period);
         if (!c->in_fifo)
             return AVERROR(ENOMEM);
@@ -454,8 +447,6 @@ static void fn(uninit_state)(AVFilterContext *ctx)
 
         av_freep(&c->data[0]);
         av_freep(&c->data[1]);
-        av_freep(&c->data2[0]);
-        av_freep(&c->data2[1]);
         av_freep(&c->c_data[0]);
         av_freep(&c->c_data[1]);
         av_freep(&c->r_data[0]);
