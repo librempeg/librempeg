@@ -72,6 +72,7 @@ OBJS-$(CONFIG_AFREQSHIFT_FILTER)             += af_afreqshift.o
 OBJS-$(CONFIG_AFWTDN_FILTER)                 += af_afwtdn.o
 OBJS-$(CONFIG_AGATE_FILTER)                  += af_agate.o
 OBJS-$(CONFIG_AIDENTITY_FILTER)              += af_asdr.o
+OBJS-$(CONFIG_AINVERT_FILTER)                += af_ainvert.o
 OBJS-$(CONFIG_AIIR_FILTER)                   += af_aiir.o
 OBJS-$(CONFIG_AIIREQ_FILTER)                 += af_aiireq.o
 OBJS-$(CONFIG_AINTEGRAL_FILTER)              += af_aderivative.o
