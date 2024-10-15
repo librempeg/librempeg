@@ -46,9 +46,9 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     AVFrame *out = td->out;
     AVFrame *in = td->in;
     const int nb_channels = out->ch_layout.nb_channels;
-    const int nb_samples = FFALIGN(in->nb_samples, 16);
     const int start = (nb_channels * jobnr) / nb_jobs;
     const int end = (nb_channels * (jobnr+1)) / nb_jobs;
+    const int nb_samples = in->nb_samples;
     AudioInvertContext *s = ctx->priv;
 
     for (int ch = start; ch < end; ch++) {
