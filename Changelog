@@ -5,6 +5,8 @@ version <next>:
 - yasm support dropped, users need to use nasm
 - aasrc audio filter
 - peakpass audio filter
+- audio invert filter
+- RV60 video decoder
 
 version 7.1:
 - CLAP wrapper audio filter
