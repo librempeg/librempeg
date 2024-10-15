@@ -77,6 +77,7 @@ static void fn(do_filter)(AVFilterContext *ctx, AVFrame *out, AVFrame *in)
     const int phase_l = s->phase_l;
     const int phase_r = s->phase_r;
     const int length = s->length;
+    const int mask = length - 1;
     const int mute_l = s->mute_l;
     const int mute_r = s->mute_r;
     ftype *buffer = s->buffer;
@@ -190,9 +191,9 @@ static void fn(do_filter)(AVFilterContext *ctx, AVFrame *out, AVFrame *in)
         buffer[pos+1] = R;
 
         if (delay > F(0.0)) {
-            R = buffer[(pos - nbuf + 1 + length) % length];
+            R = buffer[(pos - nbuf + 1 + length) & mask];
         } else if (delay < F(0.0)) {
-            L = buffer[(pos - nbuf + length)     % length];
+            L = buffer[(pos - nbuf + length)     & mask];
         }
 
         l = L + sb * L - sb * R;
@@ -207,7 +208,7 @@ static void fn(do_filter)(AVFilterContext *ctx, AVFrame *out, AVFrame *in)
         L = l;
         R = r;
 
-        pos = (pos + 2) % length;
+        pos = (pos + 2) & mask;
 
         gl = F(1.0) - FMAX(F(0.0), balance_out);
         gr = F(1.0) + FMIN(F(0.0), balance_out);

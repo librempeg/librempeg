@@ -137,7 +137,7 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     StereoToolsContext *s = ctx->priv;
 
-    s->length = FFALIGN((inlink->sample_rate + 9) / 10, 2);
+    s->length = 1 << av_ceil_log2((inlink->sample_rate + 9) / 10);
     if (!s->buffer)
         s->buffer = av_calloc(s->length, av_get_bytes_per_sample(inlink->format));
     if (!s->buffer)
