@@ -230,15 +230,8 @@ static av_cold int rv60_decode_init(AVCodecContext * avctx)
 {
     static AVOnce init_static_once = AV_ONCE_INIT;
     RV60Context *s = avctx->priv_data;
-    int ret;
 
     s->avctx = avctx;
-
-    if (avctx->active_thread_type & FF_THREAD_SLICE) {
-        ret = ff_slice_thread_init_progress(avctx);
-        if (ret < 0)
-            return ret;
-    }
 
     ff_videodsp_init(&s->vdsp, 8);
 
@@ -2238,7 +2231,6 @@ static int decode_slice(AVCodecContext *avctx, void *tdata, int cu_y, int thread
     ThreadContext thread;
     GetBitContext gb;
     int qp, sel_qp, ret;
-    int thread_idx = cu_y % avctx->thread_count;
 
     thread.avg_data[0] = thread.avg_buffer;
     thread.avg_data[1] = thread.avg_buffer + 64*64;
@@ -2250,9 +2242,6 @@ static int decode_slice(AVCodecContext *avctx, void *tdata, int cu_y, int thread
     init_get_bits8(&gb, s->slice[cu_y].data, s->slice[cu_y].size);
 
     for (int cu_x = 0; cu_x < s->cu_width; cu_x++) {
-        if ((s->avctx->active_thread_type & FF_THREAD_SLICE) && cu_y)
-            ff_thread_await_progress2(s->avctx, cu_y, thread_idx, 2);
-
         qp = s->qp + read_qp_offset(&gb, s->qp_off_type);
         sel_qp = calc_sel_qp(s->osvquant, qp);
 
@@ -2266,13 +2255,7 @@ static int decode_slice(AVCodecContext *avctx, void *tdata, int cu_y, int thread
             thread.cu_split_pos = 0;
             deblock_cu_r(s, frame, &thread, cu_x << 6, cu_y << 6, 6, qp);
         }
-
-        if (s->avctx->active_thread_type & FF_THREAD_SLICE)
-            ff_thread_report_progress2(s->avctx, cu_y, thread_idx, 1);
     }
-
-    if (s->avctx->active_thread_type & FF_THREAD_SLICE)
-        ff_thread_report_progress2(s->avctx, cu_y, thread_idx, 2);
 
     return 0;
 }
@@ -2340,10 +2323,6 @@ static int rv60_decode_frame(AVCodecContext *avctx, AVFrame * frame,
         ofs += s->slice[i].size;
     }
 
-    ret = ff_slice_thread_allocz_entries(s->avctx, s->cu_height);
-    if (ret < 0)
-        return ret;
-
     s->avctx->execute2(s->avctx, decode_slice, s->last_frame[CUR_PIC], NULL, s->cu_height);
 
     ret = 0;
@@ -2410,6 +2389,6 @@ const FFCodec ff_rv60_decoder = {
     .close          = rv60_decode_end,
     FF_CODEC_DECODE_CB(rv60_decode_frame),
     .flush          = rv60_flush,
-    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY | AV_CODEC_CAP_SLICE_THREADS,
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY/* | AV_CODEC_CAP_SLICE_THREADS*/,
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
 };
