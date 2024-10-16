@@ -1209,6 +1209,7 @@ static int mp_decode_layer3(MPADecodeContext *s)
 {
     int nb_granules, main_data_begin;
     int gr, ch, blocksplit_flag, i, j, k, n, bits_pos;
+    GetBitContext *gb = &s->gb;
     GranuleDef *g;
     int16_t exponents[576]; //FIXME try INTFLOAT
     int ret;
@@ -1216,20 +1217,20 @@ static int mp_decode_layer3(MPADecodeContext *s)
     /* read side info */
     if (s->lsf) {
         ret = handle_crc(s, ((s->nb_channels == 1) ? 8*9  : 8*17));
-        main_data_begin = get_bits(&s->gb, 8);
-        skip_bits(&s->gb, s->nb_channels);
+        main_data_begin = get_bits(gb, 8);
+        skip_bits(gb, s->nb_channels);
         nb_granules = 1;
     } else {
         ret = handle_crc(s, ((s->nb_channels == 1) ? 8*17 : 8*32));
-        main_data_begin = get_bits(&s->gb, 9);
+        main_data_begin = get_bits(gb, 9);
         if (s->nb_channels == 2)
-            skip_bits(&s->gb, 3);
+            skip_bits(gb, 3);
         else
-            skip_bits(&s->gb, 5);
+            skip_bits(gb, 5);
         nb_granules = 2;
         for (ch = 0; ch < s->nb_channels; ch++) {
             s->granules[ch][0].scfsi = 0;/* all scale factors are transmitted */
-            s->granules[ch][1].scfsi = get_bits(&s->gb, 4);
+            s->granules[ch][1].scfsi = get_bits(gb, 4);
         }
     }
     if (ret < 0)
@@ -1239,45 +1240,45 @@ static int mp_decode_layer3(MPADecodeContext *s)
         for (ch = 0; ch < s->nb_channels; ch++) {
             ff_dlog(s->avctx, "gr=%d ch=%d: side_info\n", gr, ch);
             g = &s->granules[ch][gr];
-            g->part2_3_length = get_bits(&s->gb, 12);
-            g->big_values     = get_bits(&s->gb,  9);
+            g->part2_3_length = get_bits(gb, 12);
+            g->big_values     = get_bits(gb,  9);
             if (g->big_values > 288) {
                 av_log(s->avctx, AV_LOG_ERROR, "big_values too big\n");
                 return AVERROR_INVALIDDATA;
             }
 
-            g->global_gain = get_bits(&s->gb, 8);
+            g->global_gain = get_bits(gb, 8);
             /* if MS stereo only is selected, we precompute the
                1/sqrt(2) renormalization factor */
             if ((s->mode_ext & (MODE_EXT_MS_STEREO | MODE_EXT_I_STEREO)) ==
                 MODE_EXT_MS_STEREO)
                 g->global_gain -= 2;
             if (s->lsf)
-                g->scalefac_compress = get_bits(&s->gb, 9);
+                g->scalefac_compress = get_bits(gb, 9);
             else
-                g->scalefac_compress = get_bits(&s->gb, 4);
-            blocksplit_flag = get_bits1(&s->gb);
+                g->scalefac_compress = get_bits(gb, 4);
+            blocksplit_flag = get_bits1(gb);
             if (blocksplit_flag) {
-                g->block_type = get_bits(&s->gb, 2);
+                g->block_type = get_bits(gb, 2);
                 if (g->block_type == 0) {
                     av_log(s->avctx, AV_LOG_ERROR, "invalid block type\n");
                     return AVERROR_INVALIDDATA;
                 }
-                g->switch_point = get_bits1(&s->gb);
+                g->switch_point = get_bits1(gb);
                 for (i = 0; i < 2; i++)
-                    g->table_select[i] = get_bits(&s->gb, 5);
+                    g->table_select[i] = get_bits(gb, 5);
                 for (i = 0; i < 3; i++)
-                    g->subblock_gain[i] = get_bits(&s->gb, 3);
+                    g->subblock_gain[i] = get_bits(gb, 3);
                 init_short_region(s, g);
             } else {
                 int region_address1, region_address2;
                 g->block_type = 0;
                 g->switch_point = 0;
                 for (i = 0; i < 3; i++)
-                    g->table_select[i] = get_bits(&s->gb, 5);
+                    g->table_select[i] = get_bits(gb, 5);
                 /* compute huffman coded region sizes */
-                region_address1 = get_bits(&s->gb, 4);
-                region_address2 = get_bits(&s->gb, 3);
+                region_address1 = get_bits(gb, 4);
+                region_address2 = get_bits(gb, 3);
                 ff_dlog(s->avctx, "region1=%d region2=%d\n",
                         region_address1, region_address2);
                 init_long_region(s, g, region_address1, region_address2);
@@ -1287,9 +1288,9 @@ static int mp_decode_layer3(MPADecodeContext *s)
 
             g->preflag = 0;
             if (!s->lsf)
-                g->preflag = get_bits1(&s->gb);
-            g->scalefac_scale     = get_bits1(&s->gb);
-            g->count1table_select = get_bits1(&s->gb);
+                g->preflag = get_bits1(gb);
+            g->scalefac_scale     = get_bits1(gb);
+            g->count1table_select = get_bits1(gb);
             ff_dlog(s->avctx, "block_type=%d switch_point=%d\n",
                     g->block_type, g->switch_point);
         }
@@ -1297,17 +1298,17 @@ static int mp_decode_layer3(MPADecodeContext *s)
 
     if (!s->adu_mode) {
         int skip;
-        const uint8_t *ptr = s->gb.buffer + (get_bits_count(&s->gb) >> 3);
-        s->extrasize = av_clip((get_bits_left(&s->gb) >> 3) - s->extrasize, 0,
+        const uint8_t *ptr = s->gb.buffer + (get_bits_count(gb) >> 3);
+        s->extrasize = av_clip((get_bits_left(gb) >> 3) - s->extrasize, 0,
                                FFMAX(0, LAST_BUF_SIZE - s->last_buf_size));
-        av_assert1((get_bits_count(&s->gb) & 7) == 0);
+        av_assert1((get_bits_count(gb) & 7) == 0);
         /* now we get bits from the main_data_begin offset */
         ff_dlog(s->avctx, "seekback:%d, lastbuf:%d\n",
                 main_data_begin, s->last_buf_size);
 
         memcpy(s->last_buf + s->last_buf_size, ptr, s->extrasize);
         s->in_gb = s->gb;
-        init_get_bits(&s->gb, s->last_buf, (s->last_buf_size + s->extrasize) * 8);
+        init_get_bits(gb, s->last_buf, (s->last_buf_size + s->extrasize) * 8);
         s->last_buf_size <<= 3;
         for (gr = 0; gr < nb_granules && (s->last_buf_size >> 3) < main_data_begin; gr++) {
             for (ch = 0; ch < s->nb_channels; ch++) {
@@ -1324,7 +1325,7 @@ static int mp_decode_layer3(MPADecodeContext *s)
             s->in_gb.buffer = NULL;
             s->extrasize    = 0;
         } else {
-            skip_bits_long(&s->gb, skip);
+            skip_bits_long(gb, skip);
         }
     } else {
         gr = 0;
@@ -1334,7 +1335,7 @@ static int mp_decode_layer3(MPADecodeContext *s)
     for (; gr < nb_granules; gr++) {
         for (ch = 0; ch < s->nb_channels; ch++) {
             g = &s->granules[ch][gr];
-            bits_pos = get_bits_count(&s->gb);
+            bits_pos = get_bits_count(gb);
 
             if (!s->lsf) {
                 uint8_t *sc;
@@ -1349,14 +1350,14 @@ static int mp_decode_layer3(MPADecodeContext *s)
                     j = 0;
                     if (slen1) {
                         for (i = 0; i < n; i++)
-                            g->scale_factors[j++] = get_bits(&s->gb, slen1);
+                            g->scale_factors[j++] = get_bits(gb, slen1);
                     } else {
                         for (i = 0; i < n; i++)
                             g->scale_factors[j++] = 0;
                     }
                     if (slen2) {
                         for (i = 0; i < 18; i++)
-                            g->scale_factors[j++] = get_bits(&s->gb, slen2);
+                            g->scale_factors[j++] = get_bits(gb, slen2);
                         for (i = 0; i < 3; i++)
                             g->scale_factors[j++] = 0;
                     } else {
@@ -1372,7 +1373,7 @@ static int mp_decode_layer3(MPADecodeContext *s)
                             slen = (k < 2) ? slen1 : slen2;
                             if (slen) {
                                 for (i = 0; i < n; i++)
-                                    g->scale_factors[j++] = get_bits(&s->gb, slen);
+                                    g->scale_factors[j++] = get_bits(gb, slen);
                             } else {
                                 for (i = 0; i < n; i++)
                                     g->scale_factors[j++] = 0;
@@ -1431,7 +1432,7 @@ static int mp_decode_layer3(MPADecodeContext *s)
                     sl = slen[k];
                     if (sl) {
                         for (i = 0; i < n; i++)
-                            g->scale_factors[j++] = get_bits(&s->gb, sl);
+                            g->scale_factors[j++] = get_bits(gb, sl);
                     } else {
                         for (i = 0; i < n; i++)
                             g->scale_factors[j++] = 0;
@@ -1459,8 +1460,8 @@ static int mp_decode_layer3(MPADecodeContext *s)
             compute_imdct(s, g, &s->sb_samples[ch][18 * gr][0], s->mdct_buf[ch]);
         }
     } /* gr */
-    if (get_bits_count(&s->gb) < 0)
-        skip_bits_long(&s->gb, -get_bits_count(&s->gb));
+    if (get_bits_count(gb) < 0)
+        skip_bits_long(gb, -get_bits_count(gb));
     return nb_granules * 18;
 }
 
