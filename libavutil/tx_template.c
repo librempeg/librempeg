@@ -2602,7 +2602,7 @@ static void TX_NAME(ff_tx_dctII)(AVTXContext *s, void *_dst,
 
         tmp2 = (tmp2 + 0x40000000) >> 31;
 #else
-        tmp1 = (in1 + in2)*0.5;
+        tmp1 = (in1 + in2)*((TXSample)0.5);
         tmp2 = (in1 - in2)*s;
 #endif
 
