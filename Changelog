@@ -21,6 +21,7 @@ version 7.1:
 - stereofield audio filter
 - ascale audio filter
 - aquant audio filter
+- fractional delay audio filter
 - aiireq equalizer audio filter
 - ADPCM IMA PDA decoder
 - Playdate PDA demuxer
