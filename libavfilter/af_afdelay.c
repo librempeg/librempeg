@@ -16,7 +16,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/avassert.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/samplefmt.h"
@@ -93,6 +92,8 @@ static int config_input(AVFilterLink *inlink)
         s->update_state = update_state_fltp;
         s->uninit_state = uninit_state_fltp;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return s->init_state(ctx);

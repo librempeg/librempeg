@@ -60,9 +60,6 @@ static int fn(update_state)(AVFilterContext *ctx, const int reset)
         fn(StateContext) *st = &stc[ch];
         const ftype D = s->delays_opt[idx];
         const unsigned N = FFMAX(LRINT(ROUND(D)),1);
-        const unsigned L = N-1;
-
-        av_assert0(D > L);
 
         st->N = N;
         for (int n = 0; n < N+1; n++) {
