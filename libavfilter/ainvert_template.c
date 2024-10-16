@@ -18,7 +18,6 @@
 
 #undef ftype
 #undef SAMPLE_FORMAT
-#undef VECTOR_MUL
 #if DEPTH == 16
 #define SAMPLE_FORMAT s16p
 #define ftype int16_t
