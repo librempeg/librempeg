@@ -396,10 +396,10 @@ static av_cold void uninit(AVFilterContext *ctx)
 #define OFFSET(x) offsetof(PanContext, x)
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
-static const AVOptionArrayDef def_mix = {.def=NULL,.size_min=1,.sep='|'};
+static const AVOptionArrayDef def_mix = {.def="FC=FC",.size_min=1,.sep='|'};
 
 static const AVOption pan_options[] = {
-    { "layout", "set the output channel layout", OFFSET(layout), AV_OPT_TYPE_CHLAYOUT,  { .str = NULL }, 0, 0, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
+    { "layout", "set the output channel layout", OFFSET(layout), AV_OPT_TYPE_CHLAYOUT,  { .str = "mono" },   0, 0, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { "mix", "set the output channel mix gains", OFFSET(args),   AV_OPT_TYPE_STRING|AR, { .arr = &def_mix }, 0, 0, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { NULL }
 };
