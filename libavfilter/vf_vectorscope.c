@@ -140,42 +140,14 @@ static const AVOption vectorscope_options[] = {
 
 AVFILTER_DEFINE_CLASS(vectorscope);
 
-static const enum AVPixelFormat out_yuv8_pix_fmts[] = {
+static const enum AVPixelFormat out_pix_fmts[] = {
     AV_PIX_FMT_YUVA444P, AV_PIX_FMT_YUV444P,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_yuv9_pix_fmts[] = {
     AV_PIX_FMT_YUVA444P9, AV_PIX_FMT_YUV444P9,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_yuv10_pix_fmts[] = {
     AV_PIX_FMT_YUVA444P10, AV_PIX_FMT_YUV444P10,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_yuv12_pix_fmts[] = {
     AV_PIX_FMT_YUVA444P12, AV_PIX_FMT_YUV444P12,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_rgb8_pix_fmts[] = {
     AV_PIX_FMT_GBRAP, AV_PIX_FMT_GBRP,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_rgb9_pix_fmts[] = {
     AV_PIX_FMT_GBRP9,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_rgb10_pix_fmts[] = {
     AV_PIX_FMT_GBRP10, AV_PIX_FMT_GBRAP10,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_rgb12_pix_fmts[] = {
     AV_PIX_FMT_GBRP12, AV_PIX_FMT_GBRAP12,
     AV_PIX_FMT_NONE
 };
@@ -209,63 +181,31 @@ static const enum AVPixelFormat in2_pix_fmts[] = {
     AV_PIX_FMT_NONE
 };
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    VectorscopeContext *s = ctx->priv;
-    const enum AVPixelFormat *out_pix_fmts;
-    const AVPixFmtDescriptor *desc;
-    AVFilterFormats *avff;
-    int depth, rgb, i, ret;
+    const VectorscopeContext *s = ctx->priv;
+    AVFilterFormats *formats;
+    int ret;
 
-    if (!ctx->inputs[0]->incfg.formats ||
-        !ctx->inputs[0]->incfg.formats->nb_formats) {
-        return AVERROR(EAGAIN);
-    }
-
-    if (!ctx->inputs[0]->outcfg.formats) {
-        const enum AVPixelFormat *in_pix_fmts;
-
-        if ((s->x == 1 && s->y == 2) || (s->x == 2 && s->y == 1))
-            in_pix_fmts = in2_pix_fmts;
-        else
-            in_pix_fmts = in1_pix_fmts;
-        if ((ret = ff_formats_ref(ff_make_format_list(in_pix_fmts), &ctx->inputs[0]->outcfg.formats)) < 0)
-            return ret;
-    }
-
-    avff = ctx->inputs[0]->incfg.formats;
-    desc = av_pix_fmt_desc_get(avff->formats[0]);
-    rgb = desc->flags & AV_PIX_FMT_FLAG_RGB;
-    depth = desc->comp[0].depth;
-    for (i = 1; i < avff->nb_formats; i++) {
-        desc = av_pix_fmt_desc_get(avff->formats[i]);
-        if (rgb != (desc->flags & AV_PIX_FMT_FLAG_RGB) ||
-            depth != desc->comp[0].depth)
-            return AVERROR(EAGAIN);
-    }
-
-    if (rgb && depth == 8)
-        out_pix_fmts = out_rgb8_pix_fmts;
-    else if (rgb && depth == 9)
-        out_pix_fmts = out_rgb9_pix_fmts;
-    else if (rgb && depth == 10)
-        out_pix_fmts = out_rgb10_pix_fmts;
-    else if (rgb && depth == 12)
-        out_pix_fmts = out_rgb12_pix_fmts;
-    else if (depth == 8)
-        out_pix_fmts = out_yuv8_pix_fmts;
-    else if (depth == 9)
-        out_pix_fmts = out_yuv9_pix_fmts;
-    else if (depth == 10)
-        out_pix_fmts = out_yuv10_pix_fmts;
-    else if (depth == 12)
-        out_pix_fmts = out_yuv12_pix_fmts;
+    if ((s->x == 1 && s->y == 2) || (s->x == 2 && s->y == 1))
+        formats = ff_make_format_list(in2_pix_fmts);
     else
-        return AVERROR(EAGAIN);
-    if ((ret = ff_formats_ref(ff_make_format_list(out_pix_fmts), &ctx->outputs[0]->incfg.formats)) < 0)
+        formats = ff_make_format_list(in1_pix_fmts);
+    if (!formats)
+        return AVERROR(ENOMEM);
+
+    formats->same_bitdepth = formats->same_endianness = formats->same_color_type = 1;
+    if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
-    return 0;
+    formats = ff_make_format_list(in1_pix_fmts);
+    if (!formats)
+        return AVERROR(ENOMEM);
+
+    formats->same_bitdepth = formats->same_endianness = formats->same_color_type = 1;
+    return ff_formats_ref(formats, &cfg_out[0]->formats);
 }
 
 static int config_output(AVFilterLink *outlink)
@@ -1615,6 +1555,6 @@ const AVFilter ff_vf_vectorscope = {
     .uninit        = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .process_command = ff_filter_process_command,
 };

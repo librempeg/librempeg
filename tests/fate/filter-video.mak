@@ -192,20 +192,20 @@ fate-filter-waveform_envelope: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf waveform
 FATE_FILTER_VSYNTH_PGMYUV-$(CONFIG_WAVEFORM_FILTER) += fate-filter-waveform_uv
 fate-filter-waveform_uv: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf waveform=c=6 -flags +bitexact -sws_flags +accurate_rnd+bitexact
 
-FATE_FILTER_VSYNTH_PGMYUV-$(CONFIG_VECTORSCOPE_FILTER) += fate-filter-vectorscope_gray
-fate-filter-vectorscope_gray: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf vectorscope=gray -sws_flags +accurate_rnd+bitexact -frames:v 3
+FATE_FILTER_VSYNTH_PGMYUV-$(call ALLYES, VECTORSCOPE_FILTER SCALE_FILTER) += fate-filter-vectorscope_gray
+fate-filter-vectorscope_gray: CMD = framecrc -auto_conversion_filters -c:v pgmyuv -i $(SRC) -vf vectorscope=gray -sws_flags +accurate_rnd+bitexact -frames:v 3
 
-FATE_FILTER_VSYNTH_PGMYUV-$(CONFIG_VECTORSCOPE_FILTER) += fate-filter-vectorscope_color
-fate-filter-vectorscope_color: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf vectorscope=color -sws_flags +accurate_rnd+bitexact -frames:v 3
+FATE_FILTER_VSYNTH_PGMYUV-$(call ALLYES, VECTORSCOPE_FILTER SCALE_FILTER) += fate-filter-vectorscope_color
+fate-filter-vectorscope_color: CMD = framecrc -auto_conversion_filters -c:v pgmyuv -i $(SRC) -vf vectorscope=color -sws_flags +accurate_rnd+bitexact -frames:v 3
 
-FATE_FILTER_VSYNTH_PGMYUV-$(CONFIG_VECTORSCOPE_FILTER) += fate-filter-vectorscope_color2
-fate-filter-vectorscope_color2: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf vectorscope=color2 -sws_flags +accurate_rnd+bitexact -frames:v 3
+FATE_FILTER_VSYNTH_PGMYUV-$(call ALLYES, VECTORSCOPE_FILTER SCALE_FILTER) += fate-filter-vectorscope_color2
+fate-filter-vectorscope_color2: CMD = framecrc -auto_conversion_filters -c:v pgmyuv -i $(SRC) -vf vectorscope=color2 -sws_flags +accurate_rnd+bitexact -frames:v 3
 
-FATE_FILTER_VSYNTH_PGMYUV-$(CONFIG_VECTORSCOPE_FILTER) += fate-filter-vectorscope_color3
-fate-filter-vectorscope_color3: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf vectorscope=color3 -sws_flags +accurate_rnd+bitexact -frames:v 3
+FATE_FILTER_VSYNTH_PGMYUV-$(call ALLYES, VECTORSCOPE_FILTER SCALE_FILTER) += fate-filter-vectorscope_color3
+fate-filter-vectorscope_color3: CMD = framecrc -auto_conversion_filters -c:v pgmyuv -i $(SRC) -vf vectorscope=color3 -sws_flags +accurate_rnd+bitexact -frames:v 3
 
-FATE_FILTER_VSYNTH_PGMYUV-$(CONFIG_VECTORSCOPE_FILTER) += fate-filter-vectorscope_color4
-fate-filter-vectorscope_color4: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf vectorscope=color4 -sws_flags +accurate_rnd+bitexact -frames:v 3
+FATE_FILTER_VSYNTH_PGMYUV-$(call ALLYES, VECTORSCOPE_FILTER SCALE_FILTER) += fate-filter-vectorscope_color4
+fate-filter-vectorscope_color4: CMD = framecrc -auto_conversion_filters -c:v pgmyuv -i $(SRC) -vf vectorscope=color4 -sws_flags +accurate_rnd+bitexact -frames:v 3
 
 FATE_FILTER_VSYNTH_PGMYUV-$(call ALLYES, VECTORSCOPE_FILTER SCALE_FILTER) += fate-filter-vectorscope_xy
 fate-filter-vectorscope_xy: CMD = framecrc -auto_conversion_filters -c:v pgmyuv -i $(SRC) -vf vectorscope=x=0:y=1 -sws_flags +accurate_rnd+bitexact -frames:v 3
