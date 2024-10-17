@@ -258,145 +258,59 @@ static const enum AVPixelFormat in_flat_pix_fmts[] = {
     AV_PIX_FMT_NONE
 };
 
-static const enum AVPixelFormat out_rgb8_lowpass_pix_fmts[] = {
+static const enum AVPixelFormat out_pix_fmts[] = {
     AV_PIX_FMT_GBRP, AV_PIX_FMT_GBRAP,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_rgb9_lowpass_pix_fmts[] = {
     AV_PIX_FMT_GBRP9,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_rgb10_lowpass_pix_fmts[] = {
     AV_PIX_FMT_GBRP10, AV_PIX_FMT_GBRAP10,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_rgb12_lowpass_pix_fmts[] = {
     AV_PIX_FMT_GBRP12, AV_PIX_FMT_GBRAP12,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_yuv8_lowpass_pix_fmts[] = {
     AV_PIX_FMT_YUV444P,  AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVA444P,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_yuv9_lowpass_pix_fmts[] = {
     AV_PIX_FMT_YUV444P9, AV_PIX_FMT_YUVA444P9,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_yuv10_lowpass_pix_fmts[] = {
     AV_PIX_FMT_YUV444P10, AV_PIX_FMT_YUVA444P10,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_yuv12_lowpass_pix_fmts[] = {
     AV_PIX_FMT_YUV444P12, AV_PIX_FMT_YUVA444P12,
     AV_PIX_FMT_NONE
 };
 
-static const enum AVPixelFormat out_gray8_lowpass_pix_fmts[] = {
-    AV_PIX_FMT_GRAY8,
+static const enum AVPixelFormat out_gray_pix_fmts[] = {
+    AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY9, AV_PIX_FMT_GRAY10, AV_PIX_FMT_GRAY12,
     AV_PIX_FMT_NONE
 };
 
-static const enum AVPixelFormat out_gray9_lowpass_pix_fmts[] = {
-    AV_PIX_FMT_GRAY9,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_gray10_lowpass_pix_fmts[] = {
-    AV_PIX_FMT_GRAY10,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat out_gray12_lowpass_pix_fmts[] = {
-    AV_PIX_FMT_GRAY12,
-    AV_PIX_FMT_NONE
-};
-
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    WaveformContext *s = ctx->priv;
-    const enum AVPixelFormat *out_pix_fmts;
-    const enum AVPixelFormat *in_pix_fmts;
-    const AVPixFmtDescriptor *desc, *desc2;
-    AVFilterFormats *avff, *avff2;
-    int depth, depth2, rgb, i, ret, ncomp, ncomp2;
-
-    if (!ctx->inputs[0]->incfg.formats ||
-        !ctx->inputs[0]->incfg.formats->nb_formats) {
-        return AVERROR(EAGAIN);
-    }
+    const WaveformContext *s = ctx->priv;
+    AVFilterFormats *formats;
+    int ret;
 
     switch (s->filter) {
-    case LOWPASS: in_pix_fmts = in_lowpass_pix_fmts; break;
+    case LOWPASS: formats = ff_make_format_list(in_lowpass_pix_fmts); break;
     case CHROMA:
     case XFLAT:
     case YFLAT:
     case AFLAT:
-    case FLAT:    in_pix_fmts = in_flat_pix_fmts;    break;
+    case FLAT:    formats = ff_make_format_list(in_flat_pix_fmts);    break;
     case ACOLOR:
-    case COLOR:   in_pix_fmts = in_color_pix_fmts;   break;
+    case COLOR:   formats = ff_make_format_list(in_color_pix_fmts);   break;
     default: return AVERROR_BUG;
     }
 
-    if (!ctx->inputs[0]->outcfg.formats) {
-        if ((ret = ff_formats_ref(ff_make_format_list(in_pix_fmts), &ctx->inputs[0]->outcfg.formats)) < 0)
-            return ret;
-    }
+    if (!formats)
+        return AVERROR(ENOMEM);
 
-    avff = ctx->inputs[0]->incfg.formats;
-    avff2 = ctx->inputs[0]->outcfg.formats;
-    desc = av_pix_fmt_desc_get(avff->formats[0]);
-    desc2 = av_pix_fmt_desc_get(avff2->formats[0]);
-    ncomp = desc->nb_components;
-    ncomp2 = desc2->nb_components;
-    rgb = desc->flags & AV_PIX_FMT_FLAG_RGB;
-    depth = desc->comp[0].depth;
-    depth2 = desc2->comp[0].depth;
-    if (ncomp != ncomp2 || depth != depth2)
-        return AVERROR(EAGAIN);
-    for (i = 1; i < avff->nb_formats && !s->input; i++) {
-        desc = av_pix_fmt_desc_get(avff->formats[i]);
-        if (rgb != (desc->flags & AV_PIX_FMT_FLAG_RGB) ||
-            depth != desc->comp[0].depth)
-            return AVERROR(EAGAIN);
-    }
-
-    if (s->filter == LOWPASS && ncomp == 1 && depth == 8)
-        out_pix_fmts = out_gray8_lowpass_pix_fmts;
-    else if (s->filter == LOWPASS && ncomp == 1 && depth == 9)
-        out_pix_fmts = out_gray9_lowpass_pix_fmts;
-    else if (s->filter == LOWPASS && ncomp == 1 && depth == 10)
-        out_pix_fmts = out_gray10_lowpass_pix_fmts;
-    else if (s->filter == LOWPASS && ncomp == 1 && depth == 12)
-        out_pix_fmts = out_gray12_lowpass_pix_fmts;
-    else if (rgb && depth == 8 && ncomp > 2)
-        out_pix_fmts = out_rgb8_lowpass_pix_fmts;
-    else if (rgb && depth == 9 && ncomp > 2)
-        out_pix_fmts = out_rgb9_lowpass_pix_fmts;
-    else if (rgb && depth == 10 && ncomp > 2)
-        out_pix_fmts = out_rgb10_lowpass_pix_fmts;
-    else if (rgb && depth == 12 && ncomp > 2)
-        out_pix_fmts = out_rgb12_lowpass_pix_fmts;
-    else if (depth == 8 && ncomp > 2)
-        out_pix_fmts = out_yuv8_lowpass_pix_fmts;
-    else if (depth == 9 && ncomp > 2)
-        out_pix_fmts = out_yuv9_lowpass_pix_fmts;
-    else if (depth == 10 && ncomp > 2)
-        out_pix_fmts = out_yuv10_lowpass_pix_fmts;
-    else if (depth == 12 && ncomp > 2)
-        out_pix_fmts = out_yuv12_lowpass_pix_fmts;
-    else
-        return AVERROR(EAGAIN);
-    if ((ret = ff_formats_ref(ff_make_format_list(out_pix_fmts), &ctx->outputs[0]->incfg.formats)) < 0)
+    formats->same_bitdepth = formats->same_endianness = formats->same_color_type = 1;
+    if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
-    return 0;
+    if (s->filter == LOWPASS)
+        formats = ff_make_format_list(out_gray_pix_fmts);
+    else
+        formats = ff_make_format_list(out_pix_fmts);
+    if (!formats)
+        return AVERROR(ENOMEM);
+
+    formats->same_bitdepth = formats->same_endianness = formats->same_color_type = 1;
+    return ff_formats_ref(formats, &cfg_out[0]->formats);
 }
 
 static void envelope_instant16(WaveformContext *s, AVFrame *out, int plane, int component, int offset)
@@ -3525,7 +3439,7 @@ const AVFilter ff_vf_waveform = {
     .uninit        = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .flags         = AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };
