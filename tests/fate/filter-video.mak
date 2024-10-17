@@ -177,8 +177,8 @@ fate-filter-interlace-complex: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf interlac
 FATE_FILTER_VSYNTH_PGMYUV-$(call ALLYES, NEGATE_FILTER PERMS_FILTER) += fate-filter-negate
 fate-filter-negate: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf perms=random,negate
 
-FATE_FILTER_VSYNTH_PGMYUV-$(CONFIG_HISTOGRAM_FILTER) += fate-filter-histogram-levels
-fate-filter-histogram-levels: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf histogram -flags +bitexact -sws_flags +accurate_rnd+bitexact
+FATE_FILTER_VSYNTH_PGMYUV-$(call ALLYES, HISTOGRAM_FILTER SCALE_FILTER) += fate-filter-histogram-levels
+fate-filter-histogram-levels: CMD = framecrc -auto_conversion_filters -c:v pgmyuv -i $(SRC) -vf histogram -flags +bitexact -sws_flags +accurate_rnd+bitexact
 
 FATE_FILTER_VSYNTH_PGMYUV-$(CONFIG_WAVEFORM_FILTER) += fate-filter-waveform_column
 fate-filter-waveform_column: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf waveform -flags +bitexact -sws_flags +accurate_rnd+bitexact

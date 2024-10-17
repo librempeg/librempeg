@@ -119,99 +119,44 @@ static const enum AVPixelFormat levels_in_pix_fmts[] = {
     AV_PIX_FMT_GBRAP,    AV_PIX_FMT_GBRP,
     AV_PIX_FMT_GBRP9,    AV_PIX_FMT_GBRP10,  AV_PIX_FMT_GBRAP10,
     AV_PIX_FMT_GBRP12,   AV_PIX_FMT_GBRAP12,
-    AV_PIX_FMT_GRAY8,
+    AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY9, AV_PIX_FMT_GRAY10, AV_PIX_FMT_GRAY12,
     AV_PIX_FMT_NONE
 };
 
-static const enum AVPixelFormat levels_out_yuv8_pix_fmts[] = {
+static const enum AVPixelFormat levels_out_pix_fmts[] = {
     AV_PIX_FMT_YUVA444P, AV_PIX_FMT_YUV444P,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat levels_out_yuv9_pix_fmts[] = {
     AV_PIX_FMT_YUVA444P9, AV_PIX_FMT_YUV444P9,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat levels_out_yuv10_pix_fmts[] = {
     AV_PIX_FMT_YUVA444P10, AV_PIX_FMT_YUV444P10,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat levels_out_yuv12_pix_fmts[] = {
     AV_PIX_FMT_YUVA444P12, AV_PIX_FMT_YUV444P12,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat levels_out_rgb8_pix_fmts[] = {
-    AV_PIX_FMT_GBRAP,    AV_PIX_FMT_GBRP,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat levels_out_rgb9_pix_fmts[] = {
+    AV_PIX_FMT_GBRAP, AV_PIX_FMT_GBRP,
     AV_PIX_FMT_GBRP9,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat levels_out_rgb10_pix_fmts[] = {
     AV_PIX_FMT_GBRP10, AV_PIX_FMT_GBRAP10,
-    AV_PIX_FMT_NONE
-};
-
-static const enum AVPixelFormat levels_out_rgb12_pix_fmts[] = {
     AV_PIX_FMT_GBRP12, AV_PIX_FMT_GBRAP12,
+    AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY9, AV_PIX_FMT_GRAY10, AV_PIX_FMT_GRAY12,
     AV_PIX_FMT_NONE
 };
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    AVFilterFormats *avff;
-    const AVPixFmtDescriptor *desc;
-    const enum AVPixelFormat *out_pix_fmts;
-    int rgb, i, bits;
+    AVFilterFormats *formats;
     int ret;
 
-    if (!ctx->inputs[0]->incfg.formats ||
-        !ctx->inputs[0]->incfg.formats->nb_formats) {
-        return AVERROR(EAGAIN);
-    }
+    formats = ff_make_format_list(levels_in_pix_fmts);
+    if (!formats)
+        return AVERROR(ENOMEM);
 
-    if (!ctx->inputs[0]->outcfg.formats)
-        if ((ret = ff_formats_ref(ff_make_format_list(levels_in_pix_fmts), &ctx->inputs[0]->outcfg.formats)) < 0)
-            return ret;
-    avff = ctx->inputs[0]->incfg.formats;
-    desc = av_pix_fmt_desc_get(avff->formats[0]);
-    rgb = desc->flags & AV_PIX_FMT_FLAG_RGB;
-    bits = desc->comp[0].depth;
-    for (i = 1; i < avff->nb_formats; i++) {
-        desc = av_pix_fmt_desc_get(avff->formats[i]);
-        if ((rgb != (desc->flags & AV_PIX_FMT_FLAG_RGB)) ||
-            (bits != desc->comp[0].depth))
-            return AVERROR(EAGAIN);
-    }
-
-    if (rgb && bits == 8)
-        out_pix_fmts = levels_out_rgb8_pix_fmts;
-    else if (rgb && bits == 9)
-        out_pix_fmts = levels_out_rgb9_pix_fmts;
-    else if (rgb && bits == 10)
-        out_pix_fmts = levels_out_rgb10_pix_fmts;
-    else if (rgb && bits == 12)
-        out_pix_fmts = levels_out_rgb12_pix_fmts;
-    else if (bits == 8)
-        out_pix_fmts = levels_out_yuv8_pix_fmts;
-    else if (bits == 9)
-        out_pix_fmts = levels_out_yuv9_pix_fmts;
-    else if (bits == 10)
-        out_pix_fmts = levels_out_yuv10_pix_fmts;
-    else if (bits == 12)
-        out_pix_fmts = levels_out_yuv12_pix_fmts;
-    else
-        return AVERROR(EAGAIN);
-    if ((ret = ff_formats_ref(ff_make_format_list(out_pix_fmts), &ctx->outputs[0]->incfg.formats)) < 0)
+    formats->same_bitdepth = formats->same_endianness = formats->same_color_type = 1;
+    if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
-    return 0;
+    formats = ff_make_format_list(levels_out_pix_fmts);
+    if (!formats)
+        return AVERROR(ENOMEM);
+
+    formats->same_bitdepth = formats->same_endianness = formats->same_color_type = 1;
+    return ff_formats_ref(formats, &cfg_out[0]->formats);
 }
 
 static const uint8_t black_yuva_color[4] = { 0, 127, 127, 255 };
@@ -642,7 +587,7 @@ const AVFilter ff_vf_histogram = {
     .priv_size     = sizeof(HistogramContext),
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .priv_class    = &histogram_class,
 };
 
@@ -684,7 +629,7 @@ const AVFilter ff_vf_thistogram = {
     .priv_size     = sizeof(HistogramContext),
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .uninit        = uninit,
     .priv_class    = &thistogram_class,
 };
