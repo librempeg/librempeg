@@ -1508,7 +1508,7 @@ static int insert_filter(AVFilterContext **last_filter, int *pad_idx,
     return 0;
 }
 
-static int configure_output_video_filter(FilterGraph *fgp, AVFilterGraph *graph,
+static int configure_output_video_filter(FilterGraphPriv *fgp, AVFilterGraph *graph,
                                          OutputFilter *ofilter, AVFilterInOut *out)
 {
     OutputFilterPriv *ofp = ofp_from_ofilter(ofilter);
@@ -1587,7 +1587,7 @@ static int configure_output_video_filter(FilterGraph *fgp, AVFilterGraph *graph,
     return 0;
 }
 
-static int configure_output_audio_filter(FilterGraph *fgp, AVFilterGraph *graph,
+static int configure_output_audio_filter(FilterGraphPriv *fgp, AVFilterGraph *graph,
                                          OutputFilter *ofilter, AVFilterInOut *out)
 {
     OutputFilterPriv *ofp = ofp_from_ofilter(ofilter);
@@ -1667,12 +1667,12 @@ fail:
     return ret;
 }
 
-static int configure_output_filter(FilterGraph *fg, AVFilterGraph *graph,
+static int configure_output_filter(FilterGraphPriv *fgp, AVFilterGraph *graph,
                                    OutputFilter *ofilter, AVFilterInOut *out)
 {
     switch (ofilter->type) {
-    case AVMEDIA_TYPE_VIDEO: return configure_output_video_filter(fg, graph, ofilter, out);
-    case AVMEDIA_TYPE_AUDIO: return configure_output_audio_filter(fg, graph, ofilter, out);
+    case AVMEDIA_TYPE_VIDEO: return configure_output_video_filter(fgp, graph, ofilter, out);
+    case AVMEDIA_TYPE_AUDIO: return configure_output_audio_filter(fgp, graph, ofilter, out);
     default: av_assert0(0); return 0;
     }
 }
@@ -1951,7 +1951,7 @@ static int configure_filtergraph(FilterGraph *fg, FilterGraphThread *fgt)
     avfilter_inout_free(&inputs);
 
     for (cur = outputs, i = 0; cur; cur = cur->next, i++) {
-        ret = configure_output_filter(fg, fgt->graph, fg->outputs[i], cur);
+        ret = configure_output_filter(fgp, fgt->graph, fg->outputs[i], cur);
         if (ret < 0) {
             avfilter_inout_free(&outputs);
             goto fail;
