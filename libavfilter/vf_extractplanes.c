@@ -128,7 +128,9 @@ AVFILTER_DEFINE_CLASS(extractplanes);
         AV_PIX_FMT_RGBF32##suf, AV_PIX_FMT_RGBAF32##suf,       \
         AV_PIX_FMT_GBRPF32##suf, AV_PIX_FMT_GBRAPF32##suf      \
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
     static const enum AVPixelFormat in_pixfmts[] = {
         EIGHTBIT_FORMATS,
@@ -154,7 +156,7 @@ static int query_formats(AVFilterContext *ctx)
     if (!formats)
         return AVERROR(ENOMEM);
     formats->same_bitdepth = formats->same_endianness = 1;
-    if ((ret = ff_formats_ref(formats, &ctx->inputs[0]->outcfg.formats)) < 0)
+    if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
     formats = ff_make_format_list(out_pixfmts);
@@ -162,7 +164,7 @@ static int query_formats(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
     formats->same_bitdepth = formats->same_endianness = 1;
     for (int i = 0; i < ctx->nb_outputs; i++)
-        if ((ret = ff_formats_ref(formats, &ctx->outputs[i]->incfg.formats)) < 0)
+        if ((ret = ff_formats_ref(formats, &cfg_out[i]->formats)) < 0)
             return ret;
     return 0;
 }
@@ -373,7 +375,7 @@ const AVFilter ff_vf_extractplanes = {
     .activate      = activate,
     FILTER_INPUTS(extractplanes_inputs),
     .outputs       = NULL,
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .flags         = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
 };
 
@@ -406,6 +408,6 @@ const AVFilter ff_vf_alphaextract = {
     .activate       = activate,
     FILTER_INPUTS(extractplanes_inputs),
     FILTER_OUTPUTS(alphaextract_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
 };
 #endif  /* CONFIG_ALPHAEXTRACT_FILTER */
