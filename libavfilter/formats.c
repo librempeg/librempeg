@@ -121,7 +121,7 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
                     alpha1 |= adesc->flags & AV_PIX_FMT_FLAG_ALPHA;
                     chroma1|= adesc->nb_components > 1;
                 }
-                if (check && (a->same_bitdepth || a->same_endianness)) {
+                if (check && (a->same_bitdepth || a->same_endianness || a->same_color_type)) {
                     if (a->same_bitdepth) {
                         const int abits = adesc->comp[0].depth;
                         const int bbits = bdesc->comp[0].depth;
@@ -131,6 +131,12 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
                     if (a->same_endianness) {
                         const int abe = !!(adesc->flags & AV_PIX_FMT_FLAG_BE);
                         const int bbe = !!(bdesc->flags & AV_PIX_FMT_FLAG_BE);
+                        if (abe != bbe)
+                            return 0;
+                    }
+                    if (a->same_color_type) {
+                        const int abe = !!(adesc->flags & AV_PIX_FMT_FLAG_RGB);
+                        const int bbe = !!(bdesc->flags & AV_PIX_FMT_FLAG_RGB);
                         if (abe != bbe)
                             return 0;
                     }

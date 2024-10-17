@@ -66,6 +66,7 @@ struct AVFilterFormats {
     int *formats;               ///< list of media formats
     uint8_t same_bitdepth;      ///< accept only formats pairs with same bitdepth
     uint8_t same_endianness;    ///< accept only formats pairs with same endianness
+    uint8_t same_color_type;    ///< accept only formats pairs with same color type (RGB vs YUV)
 
     unsigned refcount;          ///< number of references to this list
     struct AVFilterFormats ***refs; ///< references to this list
