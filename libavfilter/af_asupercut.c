@@ -242,13 +242,15 @@ static int config_input(AVFilterLink *inlink)
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_FLTP:
-        s->filter = biquad_tdii_flt;
-        s->init_state = init_state_flt;
+        s->filter = biquad_tdii_fltp;
+        s->init_state = init_biquad_fltp;
         break;
     case AV_SAMPLE_FMT_DBLP:
-        s->filter = biquad_tdii_dbl;
-        s->init_state = init_state_dbl;
+        s->filter = biquad_tdii_dblp;
+        s->init_state = init_biquad_dblp;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return get_coeffs(ctx);

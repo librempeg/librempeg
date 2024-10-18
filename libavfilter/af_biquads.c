@@ -688,19 +688,19 @@ static int config_filter(AVFilterLink *outlink, int reset)
     case DI:
         switch (inlink->format) {
         case AV_SAMPLE_FMT_U8P:
-            s->filter = biquad_di_u8;
+            s->filter = biquad_di_u8p;
             break;
         case AV_SAMPLE_FMT_S16P:
-            s->filter = biquad_di_s16;
+            s->filter = biquad_di_s16p;
             break;
         case AV_SAMPLE_FMT_S32P:
-            s->filter = biquad_di_s32;
+            s->filter = biquad_di_s32p;
             break;
         case AV_SAMPLE_FMT_FLTP:
-            s->filter = biquad_di_flt;
+            s->filter = biquad_di_fltp;
             break;
         case AV_SAMPLE_FMT_DBLP:
-            s->filter = biquad_di_dbl;
+            s->filter = biquad_di_dblp;
             break;
         default: av_assert0(0);
         }
@@ -708,19 +708,19 @@ static int config_filter(AVFilterLink *outlink, int reset)
     case DII:
         switch (inlink->format) {
         case AV_SAMPLE_FMT_U8P:
-            s->filter = biquad_dii_u8;
+            s->filter = biquad_dii_u8p;
             break;
         case AV_SAMPLE_FMT_S16P:
-            s->filter = biquad_dii_s16;
+            s->filter = biquad_dii_s16p;
             break;
         case AV_SAMPLE_FMT_S32P:
-            s->filter = biquad_dii_s32;
+            s->filter = biquad_dii_s32p;
             break;
         case AV_SAMPLE_FMT_FLTP:
-            s->filter = biquad_dii_flt;
+            s->filter = biquad_dii_fltp;
             break;
         case AV_SAMPLE_FMT_DBLP:
-            s->filter = biquad_dii_dbl;
+            s->filter = biquad_dii_dblp;
             break;
         default: av_assert0(0);
         }
@@ -728,19 +728,19 @@ static int config_filter(AVFilterLink *outlink, int reset)
     case TDI:
         switch (inlink->format) {
         case AV_SAMPLE_FMT_U8P:
-            s->filter = biquad_tdi_u8;
+            s->filter = biquad_tdi_u8p;
             break;
         case AV_SAMPLE_FMT_S16P:
-            s->filter = biquad_tdi_s16;
+            s->filter = biquad_tdi_s16p;
             break;
         case AV_SAMPLE_FMT_S32P:
-            s->filter = biquad_tdi_s32;
+            s->filter = biquad_tdi_s32p;
             break;
         case AV_SAMPLE_FMT_FLTP:
-            s->filter = biquad_tdi_flt;
+            s->filter = biquad_tdi_fltp;
             break;
         case AV_SAMPLE_FMT_DBLP:
-            s->filter = biquad_tdi_dbl;
+            s->filter = biquad_tdi_dblp;
             break;
         default: av_assert0(0);
         }
@@ -748,19 +748,19 @@ static int config_filter(AVFilterLink *outlink, int reset)
     case TDII:
         switch (inlink->format) {
         case AV_SAMPLE_FMT_U8P:
-            s->filter = biquad_tdii_u8;
+            s->filter = biquad_tdii_u8p;
             break;
         case AV_SAMPLE_FMT_S16P:
-            s->filter = biquad_tdii_s16;
+            s->filter = biquad_tdii_s16p;
             break;
         case AV_SAMPLE_FMT_S32P:
-            s->filter = biquad_tdii_s32;
+            s->filter = biquad_tdii_s32p;
             break;
         case AV_SAMPLE_FMT_FLTP:
-            s->filter = biquad_tdii_flt;
+            s->filter = biquad_tdii_fltp;
             break;
         case AV_SAMPLE_FMT_DBLP:
-            s->filter = biquad_tdii_dbl;
+            s->filter = biquad_tdii_dblp;
             break;
         default: av_assert0(0);
         }
@@ -768,19 +768,19 @@ static int config_filter(AVFilterLink *outlink, int reset)
     case LATT:
         switch (inlink->format) {
         case AV_SAMPLE_FMT_U8P:
-            s->filter = biquad_latt_u8;
+            s->filter = biquad_latt_u8p;
             break;
         case AV_SAMPLE_FMT_S16P:
-            s->filter = biquad_latt_s16;
+            s->filter = biquad_latt_s16p;
             break;
         case AV_SAMPLE_FMT_S32P:
-            s->filter = biquad_latt_s32;
+            s->filter = biquad_latt_s32p;
             break;
         case AV_SAMPLE_FMT_FLTP:
-            s->filter = biquad_latt_flt;
+            s->filter = biquad_latt_fltp;
             break;
         case AV_SAMPLE_FMT_DBLP:
-            s->filter = biquad_latt_dbl;
+            s->filter = biquad_latt_dblp;
             break;
         default: av_assert0(0);
         }
@@ -788,19 +788,19 @@ static int config_filter(AVFilterLink *outlink, int reset)
     case SVF:
         switch (inlink->format) {
         case AV_SAMPLE_FMT_U8P:
-            s->filter = biquad_svf_u8;
+            s->filter = biquad_svf_u8p;
             break;
         case AV_SAMPLE_FMT_S16P:
-            s->filter = biquad_svf_s16;
+            s->filter = biquad_svf_s16p;
             break;
         case AV_SAMPLE_FMT_S32P:
-            s->filter = biquad_svf_s32;
+            s->filter = biquad_svf_s32p;
             break;
         case AV_SAMPLE_FMT_FLTP:
-            s->filter = biquad_svf_flt;
+            s->filter = biquad_svf_fltp;
             break;
         case AV_SAMPLE_FMT_DBLP:
-            s->filter = biquad_svf_dbl;
+            s->filter = biquad_svf_dblp;
             break;
         default: av_assert0(0);
         }
@@ -808,19 +808,19 @@ static int config_filter(AVFilterLink *outlink, int reset)
     case WDF:
         switch (inlink->format) {
         case AV_SAMPLE_FMT_U8P:
-            s->filter = biquad_wdf_u8;
+            s->filter = biquad_wdf_u8p;
             break;
         case AV_SAMPLE_FMT_S16P:
-            s->filter = biquad_wdf_s16;
+            s->filter = biquad_wdf_s16p;
             break;
         case AV_SAMPLE_FMT_S32P:
-            s->filter = biquad_wdf_s32;
+            s->filter = biquad_wdf_s32p;
             break;
         case AV_SAMPLE_FMT_FLTP:
-            s->filter = biquad_wdf_flt;
+            s->filter = biquad_wdf_fltp;
             break;
         case AV_SAMPLE_FMT_DBLP:
-            s->filter = biquad_wdf_dbl;
+            s->filter = biquad_wdf_dblp;
             break;
         default: av_assert0(0);
         }
@@ -828,19 +828,19 @@ static int config_filter(AVFilterLink *outlink, int reset)
     case ZDF:
         switch (inlink->format) {
         case AV_SAMPLE_FMT_U8P:
-            s->filter = biquad_zdf_u8;
+            s->filter = biquad_zdf_u8p;
             break;
         case AV_SAMPLE_FMT_S16P:
-            s->filter = biquad_zdf_s16;
+            s->filter = biquad_zdf_s16p;
             break;
         case AV_SAMPLE_FMT_S32P:
-            s->filter = biquad_zdf_s32;
+            s->filter = biquad_zdf_s32p;
             break;
         case AV_SAMPLE_FMT_FLTP:
-            s->filter = biquad_zdf_flt;
+            s->filter = biquad_zdf_fltp;
             break;
         case AV_SAMPLE_FMT_DBLP:
-            s->filter = biquad_zdf_dbl;
+            s->filter = biquad_zdf_dblp;
             break;
         default: av_assert0(0);
         }
@@ -873,24 +873,24 @@ static int config_output(AVFilterLink *outlink)
 
     switch (outlink->format) {
     case AV_SAMPLE_FMT_U8P:
-        s->init_state = init_state_u8;
-        s->clip_reset = clip_reset_u8;
+        s->init_state = init_biquad_u8p;
+        s->clip_reset = clip_reset_u8p;
         break;
     case AV_SAMPLE_FMT_S16P:
-        s->init_state = init_state_s16;
-        s->clip_reset = clip_reset_s16;
+        s->init_state = init_biquad_s16p;
+        s->clip_reset = clip_reset_s16p;
         break;
     case AV_SAMPLE_FMT_S32P:
-        s->init_state = init_state_s32;
-        s->clip_reset = clip_reset_s32;
+        s->init_state = init_biquad_s32p;
+        s->clip_reset = clip_reset_s32p;
         break;
     case AV_SAMPLE_FMT_FLTP:
-        s->init_state = init_state_flt;
-        s->clip_reset = clip_reset_flt;
+        s->init_state = init_biquad_fltp;
+        s->clip_reset = clip_reset_fltp;
         break;
     case AV_SAMPLE_FMT_DBLP:
-        s->init_state = init_state_dbl;
-        s->clip_reset = clip_reset_dbl;
+        s->init_state = init_biquad_dblp;
+        s->clip_reset = clip_reset_dblp;
         break;
     default:
         av_assert0(0);

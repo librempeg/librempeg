@@ -48,7 +48,7 @@
 #define max INT8_MAX
 #define uhalf 0x80
 #define ISNORMAL(x) ((x)==(x))
-#define SAMPLE_FORMAT u8
+#define SAMPLE_FORMAT u8p
 #elif DEPTH == 16
 #define IDEPTH 14
 #define FRACT(x) ((x) & ((1L << IDEPTH)-1))
@@ -65,7 +65,7 @@
 #define max INT16_MAX
 #define uhalf 0
 #define ISNORMAL(x) ((x)==(x))
-#define SAMPLE_FORMAT s16
+#define SAMPLE_FORMAT s16p
 #elif DEPTH == 31
 #define IDEPTH 30
 #define FRACT(x) ((x) & ((1LL << IDEPTH)-1))
@@ -82,7 +82,7 @@
 #define max INT32_MAX
 #define uhalf 0
 #define ISNORMAL(x) ((x)==(x))
-#define SAMPLE_FORMAT s32
+#define SAMPLE_FORMAT s32p
 #elif DEPTH == 32
 #define IDEPTH 0
 #define FRACT(x) ((x)!=(x))
@@ -99,7 +99,7 @@
 #define max  1.f
 #define uhalf 0
 #define ISNORMAL isnormal
-#define SAMPLE_FORMAT flt
+#define SAMPLE_FORMAT fltp
 #else
 #define IDEPTH 0
 #define FRACT(x) ((x)!=(x))
@@ -116,7 +116,7 @@
 #define max  1.0
 #define uhalf 0
 #define ISNORMAL isnormal
-#define SAMPLE_FORMAT dbl
+#define SAMPLE_FORMAT dblp
 #endif
 
 #define F(x) ((ftype)(x))
@@ -125,7 +125,7 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
-typedef struct fn(StateContext) {
+typedef struct fn(BiquadContext) {
     ftype a[3];
     ftype b[3];
     ftype c[4];
@@ -135,15 +135,15 @@ typedef struct fn(StateContext) {
     ftype mix;
     itype fraction;
     unsigned clip;
-} fn(StateContext);
+} fn(BiquadContext);
 
-static int fn(init_state)(AVFilterContext *ctx, void **st,
+static int fn(init_biquad)(AVFilterContext *ctx, void **st,
                           const int nb_channels,
                           const int block_samples, const int reset,
                           const double a[3], const double b[3],
                           const double mix)
 {
-    fn(StateContext) *stc;
+    fn(BiquadContext) *stc;
 
     if (!st[0])
         st[0] = av_calloc(nb_channels * (1+(block_samples>0)), sizeof(*stc));
@@ -152,7 +152,7 @@ static int fn(init_state)(AVFilterContext *ctx, void **st,
 
     stc = st[0];
     for (int ch = 0; ch < nb_channels * (1+(block_samples>0)); ch++) {
-        fn(StateContext) *st = &stc[ch];
+        fn(BiquadContext) *st = &stc[ch];
 
         if (reset)
             memset(st->c, 0, sizeof(st->c));
@@ -180,10 +180,10 @@ static int fn(init_state)(AVFilterContext *ctx, void **st,
 static void fn(clip_reset)(AVFilterContext *ctx,
                            void *st, const int nb_channels)
 {
-    fn(StateContext) *state = st;
+    fn(BiquadContext) *state = st;
 
     for (int ch = 0; ch < nb_channels; ch++) {
-        fn(StateContext) *stc = &state[ch];
+        fn(BiquadContext) *stc = &state[ch];
 
         if (stc->clip > 0) {
             av_log(ctx, AV_LOG_WARNING, "Channel %d clipping %d times. Please reduce gain.\n",
@@ -201,8 +201,8 @@ static void fn(biquad_di)(void *st,
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = st;
-    fn(StateContext) *stc = &state[ch];
+    fn(BiquadContext) *state = st;
+    fn(BiquadContext) *stc = &state[ch];
     itype *fcache = stc->ic;
     itype i1 = fcache[0], i2 = fcache[1], o1 = fcache[2], o2 = fcache[3];
     itype fraction = stc->fraction;
@@ -265,8 +265,8 @@ static void fn(biquad_dii)(void *st,
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = st;
-    fn(StateContext) *stc = &state[ch];
+    fn(BiquadContext) *state = st;
+    fn(BiquadContext) *stc = &state[ch];
     ftype *fcache = stc->c;
     const ftype *a = stc->a;
     const ftype *b = stc->b;
@@ -311,8 +311,8 @@ static void fn(biquad_tdi)(void *st,
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = st;
-    fn(StateContext) *stc = &state[ch];
+    fn(BiquadContext) *state = st;
+    fn(BiquadContext) *stc = &state[ch];
     ftype *fcache = stc->c;
     const ftype *a = (const ftype *)stc->a;
     const ftype *b = (const ftype *)stc->b;
@@ -367,8 +367,8 @@ static void fn(biquad_tdii)(void *st,
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = st;
-    fn(StateContext) *stc = &state[ch];
+    fn(BiquadContext) *state = st;
+    fn(BiquadContext) *stc = &state[ch];
     ftype *fcache = stc->c;
     const ftype *a = stc->a;
     const ftype *b = stc->b;
@@ -412,8 +412,8 @@ static void fn(biquad_latt)(void *st,
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = st;
-    fn(StateContext) *stc = &state[ch];
+    fn(BiquadContext) *state = st;
+    fn(BiquadContext) *stc = &state[ch];
     ftype *fcache = stc->c;
     const ftype *a = (const ftype *)stc->a;
     const ftype *b = (const ftype *)stc->b;
@@ -468,8 +468,8 @@ static void fn(biquad_svf)(void *st,
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = st;
-    fn(StateContext) *stc = &state[ch];
+    fn(BiquadContext) *state = st;
+    fn(BiquadContext) *stc = &state[ch];
     ftype *fcache = stc->c;
     const ftype *a = stc->a;
     const ftype *b = stc->b;
@@ -517,8 +517,8 @@ static void fn(biquad_wdf)(void *st,
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = st;
-    fn(StateContext) *stc = &state[ch];
+    fn(BiquadContext) *state = st;
+    fn(BiquadContext) *stc = &state[ch];
     ftype *fcache = stc->c;
     const ftype *a = (const ftype *)stc->a;
     const ftype *b = (const ftype *)stc->b;
@@ -569,8 +569,8 @@ static void fn(biquad_zdf)(void *st,
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
-    fn(StateContext) *state = st;
-    fn(StateContext) *stc = &state[ch];
+    fn(BiquadContext) *state = st;
+    fn(BiquadContext) *stc = &state[ch];
     const ftype *a = stc->a;
     const ftype *b = stc->b;
     const ftype m0 = b[0];
