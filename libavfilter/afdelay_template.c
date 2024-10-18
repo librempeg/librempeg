@@ -38,36 +38,48 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
-typedef struct fn(StateContext) {
+typedef struct fn(FDelayContext) {
     unsigned N;
-    ftype a[MAX_DELAY+1];
-    ftype b[MAX_DELAY+1];
-    ftype c[MAX_DELAY+1];
-    ftype t[MAX_DELAY+1];
-    ftype y[MAX_DELAY+1];
-} fn(StateContext);
+    ftype *a;
+    ftype *b;
+    ftype *c;
+    ftype *t;
+    ftype *y;
+} fn(FDelayContext);
 
-static int fn(update_state)(AVFilterContext *ctx, const int reset)
+static int fn(update_afdelay)(AVFilterContext *ctx, void *st,
+                              const double *delays, const int nb_delays,
+                              const int max_delay, const int nb_channels, const int reset)
 {
-    AudioFDelayContext *s = ctx->priv;
-    fn(StateContext) *stc = s->st;
+    fn(FDelayContext) *stc = st;
 
-    if (s->nb_delays == 0)
+    if (nb_delays == 0)
         return 0;
 
-    for (int ch = 0; ch < s->nb_channels; ch++) {
-        const int idx = FFMIN(ch, s->nb_delays-1);
-        fn(StateContext) *st = &stc[ch];
-        const ftype D = s->delays_opt[idx];
+    for (int ch = 0; ch < nb_channels; ch++) {
+        const int idx = FFMIN(ch, nb_delays-1);
+        fn(FDelayContext) *st = &stc[ch];
+        const ftype D = delays[idx];
         const unsigned N = FFMAX(LRINT(ROUND(D)),1);
 
         st->N = N;
+
+        st->a = av_realloc_f(st->a, max_delay+1, sizeof(*st->a));
+        st->b = av_realloc_f(st->b, max_delay+1, sizeof(*st->b));
+        st->c = av_realloc_f(st->c, max_delay+1, sizeof(*st->c));
+        st->t = av_realloc_f(st->t, max_delay+1, sizeof(*st->t));
+        st->y = av_realloc_f(st->y, max_delay+1, sizeof(*st->y));
+        if (!st->a || !st->b || !st->c || !st->t || !st->y)
+            return AVERROR(ENOMEM);
+
         for (int n = 0; n < N+1; n++) {
             st->a[n] = D-F(n+1)+F(1.0);
             st->b[n] = -F(1.0)/(D+F(n+1));
             st->c[n] = F(2.0)*F(n+1)-F(1.0);
-            if (reset)
+            if (reset) {
                 st->t[n] = F(0.0);
+                st->y[n] = F(0.0);
+            }
             av_log(ctx, AV_LOG_DEBUG, "[%d]: %g %g %g\n",
                    n, st->a[n], st->b[n], st->c[n]);
         }
@@ -76,31 +88,41 @@ static int fn(update_state)(AVFilterContext *ctx, const int reset)
     return 0;
 }
 
-static int fn(init_state)(AVFilterContext *ctx)
+static void fn(uninit_afdelay)(AVFilterContext *ctx, void **state,
+                               const int nb_channels)
 {
-    AudioFDelayContext *s = ctx->priv;
-    fn(StateContext) *stc;
+    fn(FDelayContext) *stc = *state;
 
-    s->st = av_calloc(s->nb_channels, sizeof(*stc));
-    if (!s->st)
+    for (int ch = 0; ch < nb_channels && stc; ch++) {
+        fn(FDelayContext) *st = &stc[ch];
+
+        av_freep(&st->a);
+        av_freep(&st->b);
+        av_freep(&st->c);
+        av_freep(&st->t);
+        av_freep(&st->y);
+    }
+
+    av_freep(state);
+}
+
+static int fn(init_afdelay)(AVFilterContext *ctx, void **state,
+                            const double *delays, const int nb_delays,
+                            const int max_delay, const int nb_channels)
+{
+    *state = av_calloc(nb_channels, sizeof(fn(FDelayContext)));
+    if (!*state)
         return AVERROR(ENOMEM);
 
-    return fn(update_state)(ctx, 1);
+    return fn(update_afdelay)(ctx, *state, delays, nb_delays, max_delay,
+                              nb_channels, 1);
 }
 
-static void fn(uninit_state)(AVFilterContext *ctx)
+static void fn(afdelay_channel)(AVFilterContext *ctx, void *state, const int nb_samples,
+                                const uint8_t *ssrc, uint8_t *ddst, const int ch)
 {
-    AudioFDelayContext *s = ctx->priv;
-
-    av_freep(&s->st);
-}
-
-static void fn(filter_channel)(AVFilterContext *ctx, const int nb_samples,
-                               const uint8_t *ssrc, uint8_t *ddst, const int ch)
-{
-    AudioFDelayContext *s = ctx->priv;
-    fn(StateContext) *stc = s->st;
-    fn(StateContext) *st = &stc[ch];
+    fn(FDelayContext) *stc = state;
+    fn(FDelayContext) *st = &stc[ch];
     const ftype *restrict src = (const ftype *restrict)ssrc;
     ftype *restrict dst = (ftype *restrict)ddst;
     const ftype *restrict a = st->a;

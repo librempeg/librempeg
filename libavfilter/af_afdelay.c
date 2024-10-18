@@ -36,11 +36,16 @@ typedef struct AudioFDelayContext {
 
     void *st;
 
-    int (*init_state)(AVFilterContext *ctx);
-    int (*update_state)(AVFilterContext *ctx, const int reset);
-    void (*uninit_state)(AVFilterContext *ctx);
+    int (*init_state)(AVFilterContext *ctx, void **state,
+                      const double *delays, const int nb_delays,
+                      const int max_delay, const int nb_channels);
+    int (*update_state)(AVFilterContext *ctx, void *state,
+                        const double *delays, const int nb_delays,
+                        const int max_delay,
+                        const int nb_channels, const int reset);
+    void (*uninit_state)(AVFilterContext *ctx, void **state, const int nb_channels);
 
-    void (*filter_channel)(AVFilterContext *ctx, const int nb_samples,
+    void (*filter_channel)(AVFilterContext *ctx, void *state, const int nb_samples,
                            const uint8_t *src, uint8_t *dst, const int ch);
 } AudioFDelayContext;
 
@@ -81,22 +86,23 @@ static int config_input(AVFilterLink *inlink)
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_DBLP:
-        s->filter_channel = filter_channel_dblp;
-        s->init_state = init_state_dblp;
-        s->update_state = update_state_dblp;
-        s->uninit_state = uninit_state_dblp;
+        s->filter_channel = afdelay_channel_dblp;
+        s->init_state = init_afdelay_dblp;
+        s->update_state = update_afdelay_dblp;
+        s->uninit_state = uninit_afdelay_dblp;
         break;
     case AV_SAMPLE_FMT_FLTP:
-        s->filter_channel = filter_channel_fltp;
-        s->init_state = init_state_fltp;
-        s->update_state = update_state_fltp;
-        s->uninit_state = uninit_state_fltp;
+        s->filter_channel = afdelay_channel_fltp;
+        s->init_state = init_afdelay_fltp;
+        s->update_state = update_afdelay_fltp;
+        s->uninit_state = uninit_afdelay_fltp;
         break;
     default:
         return AVERROR_BUG;
     }
 
-    return s->init_state(ctx);
+    return s->init_state(ctx, &s->st, s->delays_opt, s->nb_delays,
+                         s->max_delay, s->nb_channels);
 }
 
 typedef struct ThreadData {
@@ -116,7 +122,7 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
         const uint8_t *src = in->extended_data[ch];
         uint8_t *dst = out->extended_data[ch];
 
-        s->filter_channel(ctx, in->nb_samples, src, dst, ch);
+        s->filter_channel(ctx, s->st, in->nb_samples, src, dst, ch);
     }
 
     return 0;
@@ -225,7 +231,8 @@ static int process_command(AVFilterContext *ctx,
     if (ret < 0)
         return ret;
 
-    s->update_state(ctx, 0);
+    s->update_state(ctx, s->st, s->delays_opt, s->nb_delays,
+                    s->max_delay, s->nb_channels, 0);
 
     return 0;
 }
@@ -235,7 +242,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     AudioFDelayContext *s = ctx->priv;
 
     if (s->uninit_state)
-        s->uninit_state(ctx);
+        s->uninit_state(ctx, &s->st, s->nb_channels);
 }
 
 static const AVFilterPad afdelay_inputs[] = {
