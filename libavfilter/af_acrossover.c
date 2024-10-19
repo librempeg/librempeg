@@ -40,22 +40,23 @@
 typedef struct AudioCrossoverContext {
     const AVClass *class;
 
-    float *splits_opt;
+    double *splits_opt;
     unsigned nb_splits_opt;
-    float *gains_opt;
+    double *gains_opt;
     unsigned nb_gains_opt;
-    float *resonance_opt;
+    double *resonance_opt;
     unsigned nb_resonance_opt;
     int *active_opt;
     unsigned nb_active_opt;
     int order_opt;
-    float level_in;
+    double level_in;
     int precision;
 
     int nb_splits;
-    float splits[MAX_SPLITS];
-    float resonance[MAX_BANDS];
-    float gains[MAX_BANDS];
+    int nb_channels;
+    double splits[MAX_SPLITS];
+    double resonance[MAX_BANDS];
+    double gains[MAX_BANDS];
     int active[MAX_BANDS];
 
     void *svf_cf;
@@ -63,8 +64,14 @@ typedef struct AudioCrossoverContext {
 
     AVFrame *frames[MAX_BANDS];
 
-    int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
-    int (*set_params)(AVFilterContext *ctx);
+    void (*filter_channel)(AVFilterContext *ctx, void *st, void *stc, const int ch,
+                           const int nb_outputs, const int nb_samples,
+                           const double level_in, const uint8_t *srcp, uint8_t **dstp,
+                           const double *gains, const int *active);
+    int (*init_filter)(AVFilterContext *ctx, void **st, void **stc,
+                       const double *splits, const double *resonance,
+                       const int nb_splits, const int nb_channels,
+                       const int sample_rate);
 } AudioCrossoverContext;
 
 #define OFFSET(x) offsetof(AudioCrossoverContext, x)
@@ -78,12 +85,12 @@ static const AVOptionArrayDef def_active = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_res = {.def="0.25",.size_min=1,.sep=' '};
 
 static const AVOption acrossover_options[] = {
-    { "split", "set the split frequencies", OFFSET(splits_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_splits}, .min=0, .max=INT_MAX, .flags=AF },
-    { "resonance", "set the bands resonance", OFFSET(resonance_opt),  AV_OPT_TYPE_FLOAT|AR, {.arr=&def_res}, .min=0, .max=1.0, .flags=AFR },
-    { "level", "set the input gain",        OFFSET(level_in),   AV_OPT_TYPE_FLOAT,  {.dbl=1}, 0, 1, AFR },
-    { "gain",  "set the output bands gain", OFFSET(gains_opt),  AV_OPT_TYPE_FLOAT|AR, {.arr=&def_gains}, .min=-9.0, .max=9.0, .flags=AFR },
+    { "split", "set the split frequencies", OFFSET(splits_opt), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_splits}, .min=0, .max=INT_MAX, .flags=AF },
+    { "resonance", "set the bands resonance", OFFSET(resonance_opt),  AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_res}, .min=0, .max=1.0, .flags=AFR },
+    { "level", "set the input gain",        OFFSET(level_in),   AV_OPT_TYPE_DOUBLE,  {.dbl=1}, 0, 1, AFR },
+    { "gain",  "set the output bands gain", OFFSET(gains_opt),  AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_gains}, .min=-9.0, .max=9.0, .flags=AFR },
     { "active", "set the active bands", OFFSET(active_opt), AV_OPT_TYPE_BOOL|AR, {.arr=&def_active}, .min=0, .max=1, .flags=AFR },
-    { "precision",  "set the processing precision", OFFSET(precision),   AV_OPT_TYPE_INT,   {.i64=0}, 0, 2, AF, .unit = "precision" },
+    { "precision",  "set the processing precision", OFFSET(precision), AV_OPT_TYPE_INT, {.i64=0}, 0, 2, AF, .unit = "precision" },
     {  "auto",  "set auto processing precision",                  0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, AF, .unit = "precision" },
     {  "float", "set single-floating point processing precision", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, AF, .unit = "precision" },
     {  "double","set double-floating point processing precision", 0, AV_OPT_TYPE_CONST, {.i64=2}, 0, 0, AF, .unit = "precision" },
@@ -131,7 +138,7 @@ static int parse_splits(AVFilterContext *ctx)
     int i;
 
     for (i = 0; i < s->nb_splits_opt; i++) {
-        float freq = s->splits_opt[i];
+        double freq = s->splits_opt[i];
 
         if (i >= MAX_SPLITS)
             break;
@@ -251,20 +258,46 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     AudioCrossoverContext *s = ctx->priv;
 
+    s->nb_channels = inlink->ch_layout.nb_channels;
+
     switch (inlink->format) {
     case AV_SAMPLE_FMT_FLTP:
-        s->set_params = set_params_fltp;
-        s->filter_channels = filter_channels_fltp;
+        s->init_filter = init_xover_fltp;
+        s->filter_channel = xover_channel_fltp;
         break;
     case AV_SAMPLE_FMT_DBLP:
-        s->set_params = set_params_dblp;
-        s->filter_channels = filter_channels_dblp;
+        s->init_filter = init_xover_dblp;
+        s->filter_channel = xover_channel_dblp;
         break;
     default:
         return AVERROR_BUG;
     }
 
-    return s->set_params(ctx);
+    return s->init_filter(ctx, &s->svf, &s->svf_cf, s->splits, s->resonance,
+                          s->nb_splits, s->nb_channels, inlink->sample_rate);
+}
+
+static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    AudioCrossoverContext *s = ctx->priv;
+    const double level_in = s->level_in;
+    AVFrame *in = arg;
+    const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
+    const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int nb_outs = ctx->nb_outputs;
+    uint8_t *dstp[MAX_BANDS];
+
+    for (int ch = start; ch < end; ch++) {
+        const uint8_t *src = in->extended_data[ch];
+
+        for (int i = 0; i < nb_outs; i++)
+            dstp[i] = s->frames[i]->extended_data[ch];
+
+        s->filter_channel(ctx, s->svf, s->svf_cf, ch, nb_outs, in->nb_samples,
+                          level_in, src, dstp, s->gains, s->active);
+    }
+
+    return 0;
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
@@ -287,7 +320,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (ret < 0)
         goto fail;
 
-    ff_filter_execute(ctx, s->filter_channels, in, NULL,
+    ff_filter_execute(ctx, filter_channels, in, NULL,
                       FFMIN(inlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     for (int i = 0; i < ctx->nb_outputs; i++) {
@@ -356,6 +389,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     AudioCrossoverContext *s = ctx->priv;
 
+    av_freep(&s->svf_cf);
     av_freep(&s->svf);
 }
 
@@ -373,7 +407,8 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     parse_gains(ctx);
     parse_resonance(ctx);
 
-    return s->set_params(ctx);
+    return s->init_filter(ctx, &s->svf, &s->svf_cf, s->splits, s->resonance,
+                          s->nb_splits, s->nb_channels, ctx->inputs[0]->sample_rate);
 }
 
 static const AVFilterPad inputs[] = {

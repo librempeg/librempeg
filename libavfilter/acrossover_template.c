@@ -45,36 +45,37 @@ typedef struct fn(SVFCache) {
     ftype sc[MAX_BANDS][2][2];
 } fn(SVFCache);
 
-static int fn(set_params)(AVFilterContext *ctx)
+static int fn(init_xover)(AVFilterContext *ctx, void **st, void **stc,
+                          const double *splits, const double *resonance,
+                          const int nb_splits, const int nb_channels,
+                          const int sample_rate)
 {
-    AudioCrossoverContext *s = ctx->priv;
-    const ftype sample_rate = ctx->inputs[0]->sample_rate;
     fn(SVFCoeffs) *svf_cf;
 
-    if (!s->svf) {
-        s->svf = av_calloc(ctx->inputs[0]->ch_layout.nb_channels, sizeof(fn(SVFCache)));
-        if (!s->svf)
+    if (!*st) {
+        *st = av_calloc(nb_channels, sizeof(fn(SVFCache)));
+        if (!*st)
             return AVERROR(ENOMEM);
     }
 
-    if (!s->svf_cf) {
-        s->svf_cf = av_calloc(s->nb_splits+1, sizeof(fn(SVFCoeffs)));
-        if (!s->svf_cf)
+    if (!*stc) {
+        *stc = av_calloc(nb_splits+1, sizeof(fn(SVFCoeffs)));
+        if (!*stc)
             return AVERROR(ENOMEM);
     }
 
-    svf_cf = s->svf_cf;
+    svf_cf = *stc;
 
-    for (int band = 0; band < s->nb_splits; band++) {
+    for (int band = 0; band < nb_splits; band++) {
         fn(SVFCoeffs) *sf = &svf_cf[band];
 
-        sf->valid = s->splits[band] < sample_rate * F(0.5);
-        sf->g = FTAN(F(M_PI)*s->splits[band]/sample_rate);
-        sf->k = F(2.0) - F(2.0) * s->resonance[band];
+        sf->valid = splits[band] < sample_rate * F(0.5);
+        sf->g = FTAN(F(M_PI)*splits[band]/sample_rate);
+        sf->k = F(2.0) - F(2.0) * resonance[band];
         sf->g2 = sf->g*sf->g;
         sf->g2k = sf->g2*sf->k;
         sf->gk = sf->g*sf->k;
-        sf->r = F(1.0) - s->resonance[band];
+        sf->r = F(1.0) - resonance[band];
         sf->f = F(-1.0) / (F(1.0)+sf->g2+sf->gk);
         sf->f2 = sf->f * F(2.0);
     }
@@ -143,88 +144,77 @@ static void fn(run_lh)(const fn(SVFCoeffs) *svf,
     *outhi = fn(svf_xover_hi)(svf, sch, in);
 }
 
-static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs) \
+static void fn(xover_channel)(AVFilterContext *ctx, void *st, void *stc, const int ch,
+                              const int nb_outs, const int nb_samples,
+                              const double in_level,
+                              const uint8_t *srcp, uint8_t **dstp,
+                              const double *gains, const int *active)
 {
-    AudioCrossoverContext *s = ctx->priv;
-    AVFrame *in = arg;
-    AVFrame **frames = s->frames;
-    const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
-    const int nb_samples = in->nb_samples;
-    const int nb_outs = ctx->nb_outputs;
-    const ftype level_in = s->level_in;
-    const fn(SVFCoeffs) *svfcf = s->svf_cf;
-    const float *gains = s->gains;
-    const int *active = s->active;
-    fn(SVFCache) *svf = s->svf;
+    const fn(SVFCoeffs) *svfcf = stc;
+    ftype in_gain = in_level;
+    fn(SVFCache) *svf = st;
+    const ftype *src = (const ftype *)srcp;
+    int last_next_band = 0;
+    int last_band = -1;
 
-    for (int ch = start; ch < end; ch++) {
-        const ftype *src = (const ftype *)in->extended_data[ch];
-        ftype in_gain = level_in;
-        int last_next_band = 0;
-        int last_band = -1;
+    for (int band = 0; band < nb_outs-1; band++) {
+        const fn(SVFCoeffs) *svf_cf = &svfcf[band];
+        const int next_band = next_active_band(active, band, nb_outs);
 
-        for (int band = 0; band < nb_outs-1; band++) {
-            const fn(SVFCoeffs) *svf_cf = &svfcf[band];
-            const int next_band = next_active_band(active, band, nb_outs);
-
-            last_band = active[band] ? band : last_band;
-            if (svf_cf->valid && active[band] && next_band) {
-                ftype *svf_lo = svf[ch].sc[band][0];
-                ftype *svf_hi = svf[ch].sc[band][1];
-                ftype *dst = (ftype *)frames[band]->extended_data[ch];
-                ftype *next_dst = (ftype *)frames[next_band]->extended_data[ch];
-                const ftype out_gain = gains[band];
-
-                for (int n = 0; n < nb_samples; n++) {
-                    ftype high = F(0.0), low = F(0.0);
-
-                    fn(run_lh)(svf_cf, svf_lo, svf_hi,
-                               src[n] * in_gain, &low, &high);
-                    dst[n] = low * out_gain;
-                    next_dst[n] = high;
-                }
-
-                fn(update_state)(svf_lo, svf_hi);
-
-                src = next_dst;
-                in_gain = F(1.0);
-                last_next_band = next_band;
-            }
-        }
-
-        last_band = active[nb_outs-1] ? (nb_outs-1) : last_band;
-        if (last_next_band) {
-            ftype *dst = (ftype *)frames[last_next_band]->extended_data[ch];
-            const ftype out_gain = gains[last_next_band];
-
-            for (int n = 0; n < nb_samples; n++)
-                dst[n] *= out_gain;
-        } else if (last_band >= 0) {
-            const int band = (last_band < (nb_outs-1)) ? last_band : last_band-1;
-            const fn(SVFCoeffs) *svf_cf = &svfcf[band];
+        last_band = active[band] ? band : last_band;
+        if (svf_cf->valid && active[band] && next_band) {
             ftype *svf_lo = svf[ch].sc[band][0];
             ftype *svf_hi = svf[ch].sc[band][1];
-            ftype *dst = (ftype *)frames[band]->extended_data[ch];
+            ftype *dst = (ftype *)dstp[band];
+            ftype *next_dst = (ftype *)dstp[next_band];
             const ftype out_gain = gains[band];
-
-            if (!svf_cf->valid)
-                continue;
 
             for (int n = 0; n < nb_samples; n++) {
                 ftype high = F(0.0), low = F(0.0);
 
                 fn(run_lh)(svf_cf, svf_lo, svf_hi,
                            src[n] * in_gain, &low, &high);
-                if (last_band == (nb_outs-1))
-                    dst[n] = high * out_gain;
-                else
-                    dst[n] = low * out_gain;
+                dst[n] = low * out_gain;
+                next_dst[n] = high;
             }
 
             fn(update_state)(svf_lo, svf_hi);
+
+            src = next_dst;
+            in_gain = F(1.0);
+            last_next_band = next_band;
         }
     }
 
-    return 0;
+    last_band = active[nb_outs-1] ? (nb_outs-1) : last_band;
+    if (last_next_band) {
+        ftype *dst = (ftype *)dstp[last_next_band];
+        const ftype out_gain = gains[last_next_band];
+
+        for (int n = 0; n < nb_samples; n++)
+            dst[n] *= out_gain;
+    } else if (last_band >= 0) {
+        const int band = (last_band < (nb_outs-1)) ? last_band : last_band-1;
+        const fn(SVFCoeffs) *svf_cf = &svfcf[band];
+        ftype *svf_lo = svf[ch].sc[band][0];
+        ftype *svf_hi = svf[ch].sc[band][1];
+        ftype *dst = (ftype *)dstp[band];
+        const ftype out_gain = gains[band];
+
+        if (!svf_cf->valid)
+            return;
+
+        for (int n = 0; n < nb_samples; n++) {
+            ftype high = F(0.0), low = F(0.0);
+
+            fn(run_lh)(svf_cf, svf_lo, svf_hi,
+                       src[n] * in_gain, &low, &high);
+            if (last_band == (nb_outs-1))
+                dst[n] = high * out_gain;
+            else
+                dst[n] = low * out_gain;
+        }
+
+        fn(update_state)(svf_lo, svf_hi);
+    }
 }
