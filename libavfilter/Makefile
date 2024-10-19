@@ -95,6 +95,7 @@ OBJS-$(CONFIG_ANLMDN_FILTER)                 += af_anlmdn.o
 OBJS-$(CONFIG_ANLMF_FILTER)                  += af_anlms.o
 OBJS-$(CONFIG_ANLMS_FILTER)                  += af_anlms.o
 OBJS-$(CONFIG_ANOFORMAT_FILTER)              += af_aformat.o
+OBJS-$(CONFIG_ANOTCH_FILTER)                 += af_anotch.o
 OBJS-$(CONFIG_ANRMSE_FILTER)                 += af_asdr.o
 OBJS-$(CONFIG_ANULL_FILTER)                  += af_anull.o
 OBJS-$(CONFIG_APAD_FILTER)                   += af_apad.o
