@@ -606,9 +606,18 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     const int nb_channels = s->nb_channels;
     const int start = (nb_channels * jobnr) / nb_jobs;
     const int end = (nb_channels * (jobnr+1)) / nb_jobs;
+    const int max_band_idx = s->nb_active-1;
+    const int nb_bands = s->nb_bands;
+    const int *active = s->active;
 
-    for (int band = 0; band < s->nb_bands; band++)
+    for (int band = 0; band < nb_bands; band++) {
+        const int bidx = FFMIN(band, max_band_idx);
+
+        if (!active[bidx])
+            continue;
+
         fn(filter_channels_band)(ctx, arg, start, end, band);
+    }
 
     return 0;
 }
