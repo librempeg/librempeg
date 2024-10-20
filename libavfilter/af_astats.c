@@ -378,7 +378,7 @@ static int config_output(AVFilterLink *outlink)
         s->is_float = 1;
         break;
     default:
-        AVERROR_BUG;
+        return AVERROR_BUG;
     }
 
     reset_stats(s);
