@@ -60,26 +60,37 @@ static void fn(anotch_channel)(void *state, const void *ibuf, void *obuf,
     const ftype f = factor;
     const ftype *src = ibuf;
     ftype *dst = obuf;
+    ftype x0 = stc->x[0];
+    ftype x1 = stc->x[1];
+    ftype k0 = stc->k0;
+    ftype c = stc->c;
+    ftype d = stc->d;
 
     for (int n = 0; n < nb_samples; n++) {
-        ftype A, B, C, D, k0, x = src[n];
+        ftype A, B, C, D, K0, x = src[n];
 
-        B = x + stc->x[1];
-        A = F(2.0) * stc->x[0];
-        D = f * stc->d + A*A;
-        C = f * stc->c + A*B;
-        k0 = -C/(D + EPS);
+        B = x + x1;
+        A = F(2.0) * x0;
+        D = f * d + A*A;
+        C = f * c + A*B;
+        K0 = -C/(D + EPS);
 
         if (!disabled) {
-            dst[n] = stc->k0 * stc->x[0] + k0 * stc->x[0] + stc->x[1] + x;
+            dst[n] = (k0 + K0) * x0 + x1 + x;
         } else {
             dst[n] = x;
         }
 
-        stc->x[1] = stc->x[0];
-        stc->x[0] = x;
-        stc->c = C;
-        stc->d = D;
-        stc->k0 = k0;
+        x1 = x0;
+        x0 = x;
+        c = C;
+        d = D;
+        k0 = K0;
     }
+
+    stc->c = c;
+    stc->d = d;
+    stc->k0 = k0;
+    stc->x[0] = x0;
+    stc->x[1] = x1;
 }
