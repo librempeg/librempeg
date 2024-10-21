@@ -751,7 +751,7 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
                     if (link->incfg.formats->same_bitdepth) {
                         const int abits = a->comp[0].depth;
                         const int bbits = b->comp[0].depth;
-                        if (abits != bbits)
+                        if (abits != bbits && (abits > 8 || bbits > 8))
                             continue;
                     }
 
@@ -764,6 +764,8 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
                 }
                 best= av_find_best_pix_fmt_of_2(best, p, ref->format, has_alpha, NULL);
             }
+            if (best == AV_PIX_FMT_NONE)
+                return AVERROR(EINVAL);
             av_log(link->src,AV_LOG_DEBUG, "picking %s out of %d ref:%s alpha:%d\n",
                    av_get_pix_fmt_name(best), link->incfg.formats->nb_formats,
                    av_get_pix_fmt_name(ref->format), has_alpha);
