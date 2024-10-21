@@ -330,7 +330,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
     }
 
-    if (!ctx->is_disabled) {
+    if (!ff_filter_disabled(ctx)) {
         const int cw = AV_CEIL_RSHIFT(inlink->w, pp7->hsub);
         const int ch = AV_CEIL_RSHIFT(inlink->h, pp7->vsub);
 

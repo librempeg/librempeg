@@ -552,7 +552,7 @@ static int denoise(AVFilterContext *ctx, void *arg,
         const int slice_start = (noy * jobnr) / nb_jobs;
         const int slice_end = (noy * (jobnr+1)) / nb_jobs;
 
-        if (!((1 << plane) & s->planesf) || ctx->is_disabled)
+        if (!((1 << plane) & s->planesf) || ff_filter_disabled(ctx))
             continue;
 
         for (int y = slice_start; y < slice_end; y++) {
@@ -651,7 +651,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     for (plane = 0; plane < s->nb_planes; plane++) {
         PlaneContext *p = &s->planes[plane];
 
-        if (!((1 << plane) & s->planesf) || ctx->is_disabled) {
+        if (!((1 << plane) & s->planesf) || ff_filter_disabled(ctx)) {
             if (!direct)
                 av_image_copy_plane(out->data[plane], out->linesize[plane],
                                     s->cur->data[plane], s->cur->linesize[plane],

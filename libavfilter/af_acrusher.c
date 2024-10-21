@@ -249,7 +249,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             double sample = src[c] * level_in;
 
             sample = mix * samplereduction(s, &s->sr[c], sample) + src[c] * (1. - mix) * level_in;
-            dst[c] = ctx->is_disabled ? src[c] : bitreduction(s, sample) * level_out;
+            dst[c] = ff_filter_disabled(ctx) ? src[c] : bitreduction(s, sample) * level_out;
         }
         src += c;
         dst += c;

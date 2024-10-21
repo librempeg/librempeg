@@ -180,7 +180,7 @@ static void mix(AVFilterContext *ctx, AVFrame *out, AVFrame *in,
     int16_t *dst = (int16_t *)out->data[output_ch];
     const int nb_samples = out->nb_samples;
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         memcpy(dst, src, nb_samples * sizeof(*dst));
         return;
     }

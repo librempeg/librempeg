@@ -78,7 +78,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = ctx->outputs[0];
     AudioRateContext *s = ctx->priv;
 
-    if (ctx->is_disabled)
+    if (ff_filter_disabled(ctx))
         return ff_filter_frame(outlink, in);
 
     if (s->last_in_pts == AV_NOPTS_VALUE) {

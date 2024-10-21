@@ -97,7 +97,7 @@ static void fn(compress)(AVFilterContext *ctx, AVFrame *out, const int nb_sample
     const ftype makeup = s->makeup;
     const ftype attack_coeff = s->attack_coeff;
     const ftype release_coeff = s->release_coeff;
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     const int detection = s->detection;
     ftype *lin_slopep = s->lin_slope;
     const ftype ratio = s->ratio;

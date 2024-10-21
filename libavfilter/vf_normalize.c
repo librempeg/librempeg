@@ -473,7 +473,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFrame *out;
     // Set 'direct' if we can modify the input frame in-place.  Otherwise we
     // need to retrieve a new frame from the output link.
-    int direct = av_frame_is_writable(in) && !ctx->is_disabled;
+    int direct = av_frame_is_writable(in) && !ff_filter_disabled(ctx);
 
     if (direct) {
         out = in;
@@ -490,7 +490,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     // perform the filtering with our custom function.
     normalize(s, in, out);
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         av_frame_free(&out);
         return ff_filter_frame(outlink, in);
     }

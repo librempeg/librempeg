@@ -295,7 +295,7 @@ static int fn(compand_nodelay_channels)(AVFilterContext *ctx, void *arg, int job
     fn(ChanParam) *cps = s->channels;
     const int nb_samples = s->in->nb_samples;
     const int channels = in->ch_layout.nb_channels;
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     const int start = (channels * jobnr) / nb_jobs;
     const int end = (channels * (jobnr+1)) / nb_jobs;
 
@@ -328,7 +328,7 @@ static int fn(compand_delay_channels)(AVFilterContext *ctx, void *arg, int jobnr
     CompandContext *s = ctx->priv;
     const int channels = s->in->ch_layout.nb_channels;
     const int delay_samples = s->delay_samples;
-    const int is_enabled = !ctx->is_disabled;
+    const int is_enabled = !ff_filter_disabled(ctx);
     const int start = (channels * jobnr) / nb_jobs;
     const int end = (channels * (jobnr+1)) / nb_jobs;
     const int nb_samples = s->in->nb_samples;

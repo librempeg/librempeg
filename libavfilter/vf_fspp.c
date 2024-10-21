@@ -587,7 +587,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
     }
 
-    if (fspp->log2_count && !ctx->is_disabled) {
+    if (fspp->log2_count && !ff_filter_disabled(ctx)) {
         if (!fspp->use_bframe_qp && fspp->non_b_qp_table) {
             qp_table = fspp->non_b_qp_table;
             qp_stride = fspp->non_b_qp_stride;

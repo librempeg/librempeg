@@ -243,7 +243,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             s->del_frame = 0;
     }
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         const int idx = s->cur_frame;
 
         out = av_frame_clone(s->frames[idx]);

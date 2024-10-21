@@ -320,7 +320,7 @@ static int process_frame(FFFrameSync *fs)
     if (ret < 0)
         return ret;
 
-    if (ctx->is_disabled)
+    if (ff_filter_disabled(ctx))
         return ff_filter_frame(outlink, main_frame);
 
     ret = filter_frame(ctx, &out_frame, main_frame, ref_frame);
@@ -411,7 +411,7 @@ static int activate(AVFilterContext *ctx)
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
     if ((ret = ff_inlink_consume_frame(inlink, &frame)) > 0) {
-        if (ctx->is_disabled)
+        if (ff_filter_disabled(ctx))
             return ff_filter_frame(outlink, frame);
 
         ret = filter_frame(ctx, &out, frame, frame);

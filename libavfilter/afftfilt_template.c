@@ -131,7 +131,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
 
         values[VAR_CHANNEL] = ch;
 
-        if (ctx->is_disabled) {
+        if (ff_filter_disabled(ctx)) {
             for (int n = 0; n <= win_size/2; n++) {
                 tx_temp[n].re = tx_out[n].re;
                 tx_temp[n].im = tx_out[n].im;

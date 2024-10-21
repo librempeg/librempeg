@@ -461,7 +461,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
 
     in = ff_bufqueue_peek(&s->q, s->mid);
 
-    if (!ctx->is_disabled) {
+    if (!ff_filter_disabled(ctx)) {
         ThreadData td;
 
         out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
@@ -510,7 +510,7 @@ static int request_frame(AVFilterLink *outlink)
 
     ret = ff_request_frame(ctx->inputs[0]);
 
-    if (ret == AVERROR_EOF && !ctx->is_disabled && s->available) {
+    if (ret == AVERROR_EOF && !ff_filter_disabled(ctx) && s->available) {
         AVFrame *buf = av_frame_clone(ff_bufqueue_peek(&s->q, s->available));
         if (!buf)
             return AVERROR(ENOMEM);

@@ -187,14 +187,14 @@ static int activate(AVFilterContext *ctx)
         return ret;
     }
 
-    if (!s->feed || ctx->is_disabled) {
+    if (!s->feed || ff_filter_disabled(ctx)) {
         AVFrame *in = NULL;
 
         ret = ff_inlink_consume_frame(ctx->inputs[0], &in);
         if (ret < 0)
             return ret;
 
-        if (ret > 0 && ctx->is_disabled)
+        if (ret > 0 && ff_filter_disabled(ctx))
             return ff_filter_frame(ctx->outputs[0], in);
 
         if (ret > 0) {
@@ -244,10 +244,10 @@ static int activate(AVFilterContext *ctx)
         return 0;
     }
 
-    if (!s->feed || ctx->is_disabled) {
+    if (!s->feed || ff_filter_disabled(ctx)) {
         if (ff_outlink_frame_wanted(ctx->outputs[0])) {
             ff_inlink_request_frame(ctx->inputs[0]);
-            if (!ctx->is_disabled)
+            if (!ff_filter_disabled(ctx))
                 ff_inlink_request_frame(ctx->inputs[1]);
             return 0;
         }

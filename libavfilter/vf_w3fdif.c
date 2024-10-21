@@ -535,7 +535,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     if (!s->prev)
         return 0;
 
-    if ((s->deint && !(s->cur->flags & AV_FRAME_FLAG_INTERLACED)) || ctx->is_disabled) {
+    if ((s->deint && !(s->cur->flags & AV_FRAME_FLAG_INTERLACED)) || ff_filter_disabled(ctx)) {
         AVFrame *out = av_frame_clone(s->cur);
         if (!out)
             return AVERROR(ENOMEM);

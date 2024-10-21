@@ -55,7 +55,7 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     AVFrame *in = td->in;
     const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     const double sensitivity = s->sensitivity;
     const double wc = s->basefreq / in->sample_rate;
     const int nb_samples = out->nb_samples;

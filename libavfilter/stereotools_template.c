@@ -49,7 +49,7 @@
 
 static void fn(do_filter)(AVFilterContext *ctx, AVFrame *out, AVFrame *in)
 {
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     AVFilterLink *inlink = ctx->inputs[0];
     ftype *dst = (ftype *)out->data[0];
     StereoToolsContext *s = ctx->priv;

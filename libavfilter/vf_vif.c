@@ -533,7 +533,7 @@ static int process_frame(FFFrameSync *fs)
     if (ret < 0)
         return ret;
 
-    if (ctx->is_disabled || !ref_frame) {
+    if (ff_filter_disabled(ctx) || !ref_frame) {
         out_frame = main_frame;
     } else {
         out_frame = do_vif(ctx, main_frame, ref_frame);

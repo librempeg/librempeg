@@ -266,7 +266,7 @@ static int filter_channels(AVFilterContext *ctx, void *arg,
     const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
     const int filter_count = s->filter_count;
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
 
     for (int ch = start; ch < end; ch++) {
         s->filter(s->st[0], in->extended_data[ch],

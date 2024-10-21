@@ -294,7 +294,7 @@ static int process_frame(FFFrameSync *fs)
             return ret;
     }
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         out = av_frame_clone(s->frames[0]);
         if (!out)
             return AVERROR(ENOMEM);
@@ -505,7 +505,7 @@ static int tmix_filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->frames[s->nb_inputs - 1] = in;
     }
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         out = av_frame_clone(s->frames[0]);
         if (!out)
             return AVERROR(ENOMEM);

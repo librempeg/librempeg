@@ -969,6 +969,7 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     BiquadsContext *s = ctx->priv;
     const int start = (buf->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (buf->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int disabled = ff_filter_disabled(ctx);
 
     for (int ch = start; ch < end; ch++) {
         enum AVChannel channel = av_channel_layout_channel_from_index(&inlink->ch_layout, ch);
@@ -982,15 +983,15 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
 
         if (!s->block_samples) {
             s->filter(s->st, buf->extended_data[ch], out_buf->extended_data[ch], buf->nb_samples,
-                      ch, ctx->is_disabled);
+                      ch, disabled);
         } else {
             s->filter(s->st, buf->extended_data[ch], s->block[0]->extended_data[ch] + s->block_align * s->block_samples,
-                      buf->nb_samples, ch, ctx->is_disabled);
+                      buf->nb_samples, ch, disabled);
             memset(s->block[0]->extended_data[ch] + s->block_align * (s->block_samples + buf->nb_samples),
                    0, (s->block_samples - buf->nb_samples) * s->block_align);
             reverse_samples(s->block[1], s->block[0], ch, 0, 0, 2 * s->block_samples);
             s->filter(s->st, s->block[1]->extended_data[ch], s->block[1]->extended_data[ch], 2 * s->block_samples,
-                      s->nb_channels+ch, ctx->is_disabled);
+                      s->nb_channels+ch, disabled);
             reverse_samples(s->block[2], s->block[1], ch, 0, 0, 2 * s->block_samples);
             memcpy(out_buf->extended_data[ch], s->block[2]->extended_data[ch],
                    s->block_samples * s->block_align);

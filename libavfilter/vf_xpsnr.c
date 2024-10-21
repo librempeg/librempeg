@@ -412,7 +412,7 @@ static int do_xpsnr(FFFrameSync *fs)
 
     if ((ret_value = ff_framesync_dualinput_get(fs, &master, &ref)) < 0)
         return ret_value;
-    if (ctx->is_disabled || !ref)
+    if (ff_filter_disabled(ctx) || !ref)
         return ff_filter_frame(ctx->outputs[0], master);
     metadata = &master->metadata;
 

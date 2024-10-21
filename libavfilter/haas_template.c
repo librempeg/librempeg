@@ -44,7 +44,7 @@ static void fn(do_haas)(AVFilterContext *ctx, AVFrame *out, AVFrame *in)
     ftype *dstr = (ftype *)out->extended_data[1];
     const ftype par_side_gain = s->par_side_gain;
     const size_t buffer_size = s->buffer_size;
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     const int par_m_source = s->par_m_source;
     const int nb_samples = in->nb_samples;
     const ftype level_out = s->level_out;

@@ -270,7 +270,7 @@ static int request_frame(AVFilterLink *outlink)
 
     ret = ff_request_frame(ctx->inputs[0]);
 
-    if (ret == AVERROR_EOF && !ctx->is_disabled && s->fade_out) {
+    if (ret == AVERROR_EOF && !ff_filter_disabled(ctx) && s->fade_out) {
         int nb_samples = FFMIN(s->fade_out, 2048);
         AVFrame *frame;
 

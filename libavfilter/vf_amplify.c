@@ -218,7 +218,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->frames[s->nb_inputs - 1] = in;
     }
 
-    if (!ctx->is_disabled) {
+    if (!ff_filter_disabled(ctx)) {
         out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
         if (!out)
             return AVERROR(ENOMEM);

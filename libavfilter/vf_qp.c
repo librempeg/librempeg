@@ -98,7 +98,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     AVVideoEncParams *par_out;
 
-    if (!s->qp_expr_str || ctx->is_disabled)
+    if (!s->qp_expr_str || ff_filter_disabled(ctx))
         return ff_filter_frame(outlink, in);
 
     sd_in = av_frame_get_side_data(in, AV_FRAME_DATA_VIDEO_ENC_PARAMS);

@@ -546,7 +546,7 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
     const ftype tqfactor = s->tqfactor[FFMIN(band, s->nb_tqfactor-1)];
     const ftype itqfactor = b->scale_tqfactor / tqfactor;
     const ftype fg = FTAN(F(M_PI) * tfrequency / sample_rate);
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     const int nb_samples = out->nb_samples;
     const int band_detection = s->detection[FFMIN(band, s->nb_detection-1)];
     fn(ChannelContext) *cs = b->cc;

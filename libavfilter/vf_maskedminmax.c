@@ -188,7 +188,7 @@ static int process_frame(FFFrameSync *fs)
         (ret = ff_framesync_get_frame(&s->fs, 2, &f2,  0)) < 0)
         return ret;
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         out = av_frame_clone(src);
         if (!out)
             return AVERROR(ENOMEM);

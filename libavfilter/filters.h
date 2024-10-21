@@ -806,4 +806,6 @@ int ff_fmt_is_in(int fmt, const int *fmts);
 int ff_filter_execute(AVFilterContext *ctx, avfilter_action_func *func,
                       void *arg, int *ret, int nb_jobs);
 
+int ff_filter_disabled(const AVFilterContext *ctx);
+
 #endif /* AVFILTER_FILTERS_H */

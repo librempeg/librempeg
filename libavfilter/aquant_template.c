@@ -37,7 +37,7 @@
 
 static int fn(shaper_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     AudioQuantContext *s = ctx->priv;
     AVFrame **frames = s->frame;
     AVFrame **outs = arg;
@@ -80,7 +80,7 @@ static int fn(shaper_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
 
 static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     AudioQuantContext *s = ctx->priv;
     AVFrame **frames = s->frame;
     AVFrame *out = arg;

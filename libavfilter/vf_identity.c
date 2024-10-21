@@ -182,7 +182,7 @@ static int do_identity(FFFrameSync *fs)
     ret = ff_framesync_dualinput_get(fs, &master, &ref);
     if (ret < 0)
         return ret;
-    if (ctx->is_disabled || !ref)
+    if (ff_filter_disabled(ctx) || !ref)
         return ff_filter_frame(ctx->outputs[0], master);
     metadata = &master->metadata;
 

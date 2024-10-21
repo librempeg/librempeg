@@ -212,7 +212,7 @@ static int process_frame(FFFrameSync *fs)
             return ret;
     }
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         out = av_frame_clone(filtered);
         if (!out)
             return AVERROR(ENOMEM);

@@ -236,7 +236,7 @@ static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out)
     fn(apply_window)(s, windowed_left,  left_out,  1);
     fn(apply_window)(s, windowed_right, right_out, 1);
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         memcpy(left_osamples, left_in, out->nb_samples * sizeof(*left_osamples));
         memcpy(right_osamples, right_in, out->nb_samples * sizeof(*right_osamples));
     } else {
@@ -294,7 +294,7 @@ static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out)
     fn(apply_window)(s, windowed_left,  left_out,  1);
     fn(apply_window)(s, windowed_right, right_out, 1);
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         memcpy(left_osamples, left_in, out->nb_samples * sizeof(*left_osamples));
         memcpy(right_osamples, right_in, out->nb_samples * sizeof(*right_osamples));
     } else {

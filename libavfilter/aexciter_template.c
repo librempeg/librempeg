@@ -177,7 +177,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     const ftype level_out = s->level_out;
     const ftype amount = s->amount;
     const ftype listen = F(1.0) - s->listen;
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     const int nb_samples = in->nb_samples;
     const int nb_channels = in->ch_layout.nb_channels;
     const int start = (nb_channels * jobnr) / nb_jobs;

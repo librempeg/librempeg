@@ -59,7 +59,7 @@ static int activate(AVFilterContext *ctx)
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    if (ctx->is_disabled)
+    if (ff_filter_disabled(ctx))
         ret = ff_inlink_consume_frame(inlink, &frame);
     else
         ret = ff_inlink_consume_samples(inlink, s->nb_out_samples, s->nb_out_samples, &frame);
@@ -67,7 +67,7 @@ static int activate(AVFilterContext *ctx)
         return ret;
 
     if (ret > 0) {
-        if (!s->pad || ctx->is_disabled || frame->nb_samples == s->nb_out_samples)
+        if (!s->pad || ff_filter_disabled(ctx) || frame->nb_samples == s->nb_out_samples)
             return ff_filter_frame(outlink, frame);
 
         pad_frame = ff_get_audio_buffer(outlink, s->nb_out_samples);

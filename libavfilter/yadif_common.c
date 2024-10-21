@@ -138,7 +138,7 @@ int ff_yadif_filter_frame(AVFilterLink *link, AVFrame *frame)
         return 0;
 
     if ((yadif->deint && !(yadif->cur->flags & AV_FRAME_FLAG_INTERLACED)) ||
-        ctx->is_disabled ||
+        ff_filter_disabled(ctx) ||
         (yadif->deint && !(yadif->prev->flags & AV_FRAME_FLAG_INTERLACED) && yadif->prev->repeat_pict) ||
         (yadif->deint && !(yadif->next->flags & AV_FRAME_FLAG_INTERLACED) && yadif->next->repeat_pict)
     ) {

@@ -59,7 +59,7 @@ static int activate(AVFilterContext *ctx)
         int plane_samples;
         AVFrame *out;
 
-        if (ctx->is_disabled) {
+        if (ff_filter_disabled(ctx)) {
             out = s->frames[0];
 
             s->frames[0] = NULL;

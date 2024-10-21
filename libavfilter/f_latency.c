@@ -50,7 +50,7 @@ static int activate(AVFilterContext *ctx)
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    if (!ctx->is_disabled && ctx->inputs[0]->src &&
+    if (!ff_filter_disabled(ctx) && ctx->inputs[0]->src &&
         ctx->inputs[0]->src->nb_inputs > 0) {
         AVFilterLink *prevlink = ctx->inputs[0]->src->inputs[0];
         FilterLink *prevl = ff_filter_link(prevlink);

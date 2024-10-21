@@ -285,7 +285,7 @@ static int activate(AVFilterContext *ctx)
             s->frames[3] &&
             s->frames[4]) {
             out = av_frame_clone(s->frames[2]);
-            if (out && !ctx->is_disabled) {
+            if (out && !ff_filter_disabled(ctx)) {
                 ret = ff_inlink_make_frame_writable(inlink, &out);
                 if (ret >= 0) {
                     if (s->m & 1)

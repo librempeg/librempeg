@@ -115,12 +115,22 @@ typedef struct FFFilterContext {
     /// variable values for the enable expression
     double *var_values;
 
+    /**
+     * the enabled state from the last expression evaluation
+     */
+    int is_disabled;
+
     struct AVFilterCommand *command_queue;
 } FFFilterContext;
 
 static inline FFFilterContext *fffilterctx(AVFilterContext *ctx)
 {
     return (FFFilterContext*)ctx;
+}
+
+static inline const FFFilterContext *cfffilterctx(const AVFilterContext *ctx)
+{
+    return (const FFFilterContext*)ctx;
 }
 
 typedef struct AVFilterCommand {

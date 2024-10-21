@@ -1108,7 +1108,7 @@ static int output_subframe(AVFilterLink *inlink,
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioFFTDeNoiseContext *s = ctx->priv;
-    const int output_mode = ctx->is_disabled ? IN_MODE : s->output_mode;
+    const int output_mode = ff_filter_disabled(ctx) ? IN_MODE : s->output_mode;
     const int offset = s->window_length - s->sample_advance;
     const int in_nb_samples = FFMIN(in->nb_samples, s->sample_advance);
 

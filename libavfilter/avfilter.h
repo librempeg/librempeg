@@ -318,13 +318,11 @@ typedef struct AVFilterContext {
      * @deprecated unused
      */
     double *var_values;
-#endif
     /**
-     * MUST NOT be accessed from outside avfilter.
-     *
-     * the enabled state from the last expression evaluation
+     * @deprecated unused
      */
     int is_disabled;
+#endif
 
     /**
      * For filters which will create hardware frames, sets the device the

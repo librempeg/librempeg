@@ -110,7 +110,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     ThreadData td;
     AVFrame *out;
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         out = in;
     } else {
         out = ff_get_audio_buffer(outlink, in->nb_samples);

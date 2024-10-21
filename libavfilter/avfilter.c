@@ -1023,6 +1023,7 @@ static int filter_frame_framed(AVFilterLink *link, AVFrame *frame)
     FilterLink *l = ff_filter_link(link);
     int (*filter_frame)(AVFilterLink *, AVFrame *);
     AVFilterContext *dstctx = link->dst;
+    FFFilterContext   *dsti = fffilterctx(dstctx);
     AVFilterPad *dst = link->dstpad;
     int ret;
 
@@ -1036,9 +1037,9 @@ static int filter_frame_framed(AVFilterLink *link, AVFrame *frame)
     }
 
     ff_inlink_process_commands(link, frame);
-    dstctx->is_disabled = !evaluate_timeline_at_frame(link, frame);
+    dsti->is_disabled = !evaluate_timeline_at_frame(link, frame);
 
-    if (dstctx->is_disabled &&
+    if (dsti->is_disabled &&
         (dstctx->filter->flags & AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC))
         filter_frame = default_filter_frame;
     ret = filter_frame(link, frame);
@@ -1474,7 +1475,7 @@ static void consume_update(FilterLinkInternal *li, const AVFrame *frame)
     update_link_current_pts(li, frame->pts);
     ff_inlink_process_commands(link, frame);
     if (link == link->dst->inputs[0])
-        link->dst->is_disabled = !evaluate_timeline_at_frame(link, frame);
+        fffilterctx(link->dst)->is_disabled = !evaluate_timeline_at_frame(link, frame);
     li->l.frame_count_out++;
     li->l.sample_count_out += frame->nb_samples;
 }
@@ -1659,4 +1660,9 @@ int ff_filter_execute(AVFilterContext *ctx, avfilter_action_func *func,
                       void *arg, int *ret, int nb_jobs)
 {
     return fffilterctx(ctx)->execute(ctx, func, arg, ret, nb_jobs);
+}
+
+int ff_filter_disabled(const AVFilterContext *ctx)
+{
+    return cfffilterctx(ctx)->is_disabled;
 }

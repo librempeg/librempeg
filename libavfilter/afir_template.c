@@ -399,7 +399,7 @@ static void fn(fir_quantums)(AVFilterContext *ctx, AudioFIRContext *s, AVFrame *
                              int min_part_size, int ch, int offset,
                              int prev_selir, const int selir)
 {
-    if (ctx->is_disabled || s->prev_is_disabled) {
+    if (ff_filter_disabled(ctx) || s->prev_is_disabled) {
         const ftype *in = (const ftype *)s->in->extended_data[ch] + offset;
         const ftype *xfade0 = (const ftype *)s->xfade[0]->extended_data[ch];
         const ftype *xfade1 = (const ftype *)s->xfade[1]->extended_data[ch];
@@ -407,12 +407,12 @@ static void fn(fir_quantums)(AVFilterContext *ctx, AudioFIRContext *s, AVFrame *
         ftype *src1 = (ftype *)s->fadein[1]->extended_data[ch];
         ftype *dst = ((ftype *)out->extended_data[ch]) + offset;
 
-        if (ctx->is_disabled && !s->prev_is_disabled) {
+        if (ff_filter_disabled(ctx) && !s->prev_is_disabled) {
             memset(src0, 0, min_part_size * sizeof(ftype));
             fn(fir_quantum)(ctx, s->fadein[0], ch, offset, 0, selir);
             for (int n = 0; n < min_part_size; n++)
                 dst[n] = xfade1[n] * src0[n] + xfade0[n] * in[n];
-        } else if (!ctx->is_disabled && s->prev_is_disabled) {
+        } else if (!ff_filter_disabled(ctx) && s->prev_is_disabled) {
             memset(src1, 0, min_part_size * sizeof(ftype));
             fn(fir_quantum)(ctx, s->fadein[1], ch, offset, 0, selir);
             for (int n = 0; n < min_part_size; n++)

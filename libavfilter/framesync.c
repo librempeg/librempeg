@@ -400,7 +400,7 @@ int ff_framesync_dualinput_get(FFFrameSync *fs, AVFrame **f0, AVFrame **f1)
     }
     av_assert0(mainpic);
     mainpic->pts = av_rescale_q(fs->pts, fs->time_base, ctx->outputs[0]->time_base);
-    if (ctx->is_disabled)
+    if (ff_filter_disabled(ctx))
         secondpic = NULL;
     *f0 = mainpic;
     *f1 = secondpic;

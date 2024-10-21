@@ -160,7 +160,7 @@ static void fn(filter_link_channels)(AVFilterContext *ctx,
             ftype *dst = (ftype *)out->extended_data[ch];
 
             consume_pi(cc, min_size);
-            if (cc->bypass || ctx->is_disabled) {
+            if (cc->bypass || ff_filter_disabled(ctx)) {
                 memcpy(dst + n, src + n, min_size * sizeof(*dst));
             } else {
                 for (int i = n; i < n + min_size; i++) {
@@ -198,7 +198,7 @@ static void fn(filter_channels)(AVFilterContext *ctx,
             av_assert1(size > 0);
             gain = cc->gain_state;
             consume_pi(cc, size);
-            if (ctx->is_disabled) {
+            if (ff_filter_disabled(ctx)) {
                 memcpy(dst + n, src + n, size * sizeof(*dst));
             } else {
                 for (int i = n; i < n + size; i++)

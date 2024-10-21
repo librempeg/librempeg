@@ -316,7 +316,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     AVFrame *out_frame;
     int i;
 
-    if (ctx->is_disabled || !s->delays) {
+    if (ff_filter_disabled(ctx) || !s->delays) {
         s->input = NULL;
         return ff_filter_frame(outlink, frame);
     }

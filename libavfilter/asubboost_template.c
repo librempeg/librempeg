@@ -41,7 +41,7 @@
 static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     ASubBoostContext *s = ctx->priv;
-    const int disabled = ctx->is_disabled;
+    const int disabled = ff_filter_disabled(ctx);
     ThreadData *td = arg;
     AVFrame *out = td->out;
     AVFrame *in = td->in;

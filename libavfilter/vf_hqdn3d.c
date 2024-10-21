@@ -316,7 +316,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = ctx->outputs[0];
 
     AVFrame *out;
-    int direct = av_frame_is_writable(in) && !ctx->is_disabled;
+    int direct = av_frame_is_writable(in) && !ff_filter_disabled(ctx);
     ThreadData td;
 
     if (direct) {
@@ -337,7 +337,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     /* one thread per plane */
     ff_filter_execute(ctx, do_denoise, &td, NULL, 3);
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         av_frame_free(&out);
         return ff_filter_frame(outlink, in);
     }

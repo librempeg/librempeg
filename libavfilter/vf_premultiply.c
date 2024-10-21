@@ -513,7 +513,7 @@ static int filter_frame(AVFilterContext *ctx,
     PreMultiplyContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         *out = av_frame_clone(base);
         if (!*out)
             return AVERROR(ENOMEM);

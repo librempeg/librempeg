@@ -981,7 +981,7 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int ch, int nb_jobs)
     is_noise *= in->sample_rate;
     is_noise /= s->nb_samples;
     for (int level = 0; level <= s->levels; level++) {
-        const double percent = ctx->is_disabled ? 0. : s->percent;
+        const double percent = ff_filter_disabled(ctx) ? 0. : s->percent;
         const int length = cp->output_length[level];
         const double scale = sqrt(2.0 * log(length));
 

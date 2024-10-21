@@ -452,7 +452,7 @@ static int process_frame(FFFrameSync *fs)
         s->changed[0] = s->changed[1] = 0;
     }
 
-    if (!ctx->is_disabled) {
+    if (!ff_filter_disabled(ctx)) {
         if (av_frame_is_writable(in)) {
             out = in;
         } else {

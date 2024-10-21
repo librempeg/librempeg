@@ -136,7 +136,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     ThreadData td;
     AVFrame *out;
 
-    if (ctx->is_disabled || !s->nb_delays)
+    if (ff_filter_disabled(ctx) || !s->nb_delays)
         return ff_filter_frame(outlink, in);
 
     if (av_frame_is_writable(in)) {

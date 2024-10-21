@@ -381,7 +381,7 @@ static int fn(filter_samples)(AVFilterContext *ctx, const int ch)
 
     c->mode = COPY;
 
-    if (s->tempo == 1.0 || ctx->is_disabled)
+    if (s->tempo == 1.0 || ff_filter_disabled(ctx))
         return fn(copy_samples)(ctx, ch, s->max_period);
     else if (state < 0.0 && s->tempo < 1.0)
         return fn(expand_samples)(ctx, ch);

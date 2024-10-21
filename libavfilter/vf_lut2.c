@@ -304,7 +304,7 @@ static int process_frame(FFFrameSync *fs)
         (ret = ff_framesync_get_frame(&s->fs, 1, &srcy, 0)) < 0)
         return ret;
 
-    if (ctx->is_disabled || !srcy) {
+    if (ff_filter_disabled(ctx) || !srcy) {
         out = av_frame_clone(srcx);
         if (!out)
             return AVERROR(ENOMEM);
@@ -606,7 +606,7 @@ static int tlut2_filter_frame(AVFilterLink *inlink, AVFrame *frame)
     if (s->prev_frame) {
         AVFrame *out;
 
-        if (ctx->is_disabled) {
+        if (ff_filter_disabled(ctx)) {
             out = av_frame_clone(frame);
         } else {
             ThreadData td;
