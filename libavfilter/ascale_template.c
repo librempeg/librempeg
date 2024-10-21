@@ -121,7 +121,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     ftype *dptry = c->data[1];
     ftype best_score = -MAXF;
     ftype best_xcorr = F(-1.0);
-    int best_period = -1;
+    int best_period = -1, ns;
     ftype scale;
     int size;
 
@@ -163,64 +163,60 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     if (size < max_period)
         memset(dptry+size, 0, (max_period-size)*sizeof(*dptry));
 
-    {
-        int ns;
+    memset(rptrx+max_period, 0, (max_size+2-max_period) * sizeof(*rptrx));
+    for (int n = 0; n < max_period; n++)
+        rptrx[n] = dptrx[max_period-n-1];
 
-        memset(rptrx+max_period, 0, (max_size+2-max_period) * sizeof(*rptrx));
-        for (int n = 0; n < max_period; n++)
-            rptrx[n] = dptrx[max_period-n-1];
+    memset(rptry+max_period, 0, (max_size+2-max_period) * sizeof(*rptry));
+    memcpy(rptry, dptry, max_period * sizeof(*rptry));
 
-        memset(rptry+max_period, 0, (max_size+2-max_period) * sizeof(*rptry));
-        memcpy(rptry, dptry, max_period * sizeof(*rptry));
+    c->r2c_fn(c->r2c, cptrx, rptrx, sizeof(*rptrx));
+    c->r2c_fn(c->r2c, cptry, rptry, sizeof(*rptry));
 
-        c->r2c_fn(c->r2c, cptrx, rptrx, sizeof(*rptrx));
-        c->r2c_fn(c->r2c, cptry, rptry, sizeof(*rptry));
+    for (int n = 0; n < max_size/2+1; n++) {
+        const ftype re0 = cptrx[n].re;
+        const ftype im0 = cptrx[n].im;
+        const ftype re1 = cptry[n].re;
+        const ftype im1 = cptry[n].im;
 
-        for (int n = 0; n < max_size/2+1; n++) {
-            const ftype re0 = cptrx[n].re;
-            const ftype im0 = cptrx[n].im;
-            const ftype re1 = cptry[n].re;
-            const ftype im1 = cptry[n].im;
+        cptrx[n].re = re0*re1 - im1*im0;
+        cptrx[n].im = im0*re1 + im1*re0;
+    }
 
-            cptrx[n].re = re0*re1 - im1*im0;
-            cptrx[n].im = im0*re1 + im1*re0;
-        }
+    c->c2r_fn(c->c2r, rptrx, cptrx, sizeof(*cptrx));
 
-        c->c2r_fn(c->c2r, rptrx, cptrx, sizeof(*cptrx));
+    for (int n = 1; n < max_period; n++) {
+        ns = n;
+        if (rptrx[n] < F(0.0) && rptrx[n-1] > F(0.0))
+            break;
+    }
 
-        for (int n = 1; n < max_period; n++) {
-            ns = n;
-            if (rptrx[n] < F(0.0) && rptrx[n-1] > F(0.0))
-                break;
-        }
+    for (int n = ns; n < max_period-1; n++) {
+        if (rptrx[n] >= rptrx[n-1] &&
+            rptrx[n] >= rptrx[n+1]) {
+            const ftype xcorr = rptrx[n];
+            const ftype score = fn(get_score)(xcorr, max_period-n);
 
-        for (int n = ns; n < max_period-1; n++) {
-            if (rptrx[n] >= rptrx[n-1] &&
-                rptrx[n] >= rptrx[n+1]) {
-                const ftype xcorr = rptrx[n];
-                const ftype score = fn(get_score)(xcorr, max_period-n);
-
-                if (score > best_score) {
-                    best_score = score;
-                    best_period = n+1;
-                }
+            if (score > best_score) {
+                best_score = score;
+                best_period = n+1;
             }
         }
+    }
 
-        if (best_period <= 0)
-            best_period = max_period/2;
+    if (best_period <= 0)
+        best_period = max_period/2;
 
-        if (best_period > 0) {
-            const int n = max_period-best_period;
-            const ftype xx = fn(l2norm)(dptrx+n, best_period);
-            const ftype yy = fn(l2norm)(dptry, best_period);
-            const ftype xy = rptrx[best_period-1];
-            const ftype num = xy;
-            const ftype den = xx * yy + EPS;
+    if (best_period > 0) {
+        const int n = max_period-best_period;
+        const ftype xx = fn(l2norm)(dptrx+n, best_period);
+        const ftype yy = fn(l2norm)(dptry, best_period);
+        const ftype xy = rptrx[best_period-1];
+        const ftype num = xy;
+        const ftype den = xx * yy + EPS;
 
-            best_xcorr = num/den;
-            best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
-        }
+        best_xcorr = num/den;
+        best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
     }
 
     if (best_xcorr < F(-0.95))
@@ -262,7 +258,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     ftype *dptr = c->data[0];
     ftype best_score = -MAXF;
     ftype best_xcorr = F(-1.0);
-    int best_period = -1;
+    int best_period = -1, ns;
     ftype scale;
     int size;
 
@@ -278,50 +274,46 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     if (size < max_period*2)
         memset(dptr+size, 0, (max_period*2-size)*sizeof(*dptr));
 
-    {
-        int ns;
+    memset(rptr+max_period*2, 0, (max_size+2-max_period*2) * sizeof(*rptr));
+    memcpy(rptr, dptr, max_period*2 * sizeof(*rptr));
 
-        memset(rptr+max_period*2, 0, (max_size+2-max_period*2) * sizeof(*rptr));
-        memcpy(rptr, dptr, max_period*2 * sizeof(*rptr));
+    c->r2c_fn(c->r2c, cptr, rptr, sizeof(*rptr));
 
-        c->r2c_fn(c->r2c, cptr, rptr, sizeof(*rptr));
+    for (int n = 0; n < max_size/2+1; n++) {
+        const ftype re = cptr[n].re;
+        const ftype im = cptr[n].im;
 
-        for (int n = 0; n < max_size/2+1; n++) {
-            const ftype re = cptr[n].re;
-            const ftype im = cptr[n].im;
+        cptr[n].re = re*re + im*im;
+        cptr[n].im = F(0.0);
+    }
 
-            cptr[n].re = re*re + im*im;
-            cptr[n].im = F(0.0);
-        }
+    c->c2r_fn(c->c2r, rptr, cptr, sizeof(*cptr));
 
-        c->c2r_fn(c->c2r, rptr, cptr, sizeof(*cptr));
+    for (int n = 1; n < max_period; n++) {
+        ns = n;
+        if (rptr[n] < F(0.0) && rptr[n-1] > F(0.0))
+            break;
+    }
 
-        for (int n = 1; n < max_period; n++) {
-            ns = n;
-            if (rptr[n] < F(0.0) && rptr[n-1] > F(0.0))
-                break;
-        }
+    for (int n = ns; n < max_period-1; n++) {
+        if (rptr[n] >= rptr[n-1] &&
+            rptr[n] >= rptr[n+1]) {
+            const ftype xcorr = F(2.0)*rptr[n]-rptr[2*n];
+            const ftype score = fn(get_score)(xcorr, n);
 
-        for (int n = ns; n < max_period-1; n++) {
-            if (rptr[n] >= rptr[n-1] &&
-                rptr[n] >= rptr[n+1]) {
-                const ftype xcorr = F(2.0)*rptr[n]-rptr[2*n];
-                const ftype score = fn(get_score)(xcorr, n);
-
-                if (score > best_score) {
-                    best_score = score;
-                    best_period = n;
-                }
+            if (score > best_score) {
+                best_score = score;
+                best_period = n;
             }
         }
+    }
 
-        if (best_period <= 0)
-            best_period = max_period/2;
+    if (best_period <= 0)
+        best_period = max_period/2;
 
-        if (best_period > 0) {
-            best_xcorr = (F(2.0)*rptr[best_period]-rptr[2*best_period])/rptr[0];
-            best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
-        }
+    if (best_period > 0) {
+        best_xcorr = (F(2.0)*rptr[best_period]-rptr[2*best_period])/rptr[0];
+        best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
     }
 
     if (best_xcorr < F(-0.95))
