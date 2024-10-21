@@ -457,7 +457,7 @@ static int tblend_filter_frame(AVFilterLink *inlink, AVFrame *frame)
     if (s->prev_frame) {
         AVFrame *out;
 
-        if (ctx->is_disabled)
+        if (ff_filter_disabled(ctx))
             out = av_frame_clone(frame);
         else
             out = blend_frame(ctx, frame, s->prev_frame);

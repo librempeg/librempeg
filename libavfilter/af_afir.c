@@ -275,7 +275,7 @@ static int fir_frame(AudioFIRContext *s, AVFrame *in, AVFilterLink *outlink)
     s->in = in;
     ff_filter_execute(ctx, fir_channels, out, NULL,
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
-    s->prev_is_disabled = ctx->is_disabled;
+    s->prev_is_disabled = ff_filter_disabled(ctx);
 
     av_frame_free(&in);
     s->in = NULL;

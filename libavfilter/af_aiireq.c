@@ -132,7 +132,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     ThreadData td;
     AVFrame *out;
 
-    if (av_frame_is_writable(in) && !ctx->is_disabled) {
+    if (av_frame_is_writable(in) && !ff_filter_disabled(ctx)) {
         out = in;
     } else {
         out = ff_get_audio_buffer(outlink, in->nb_samples);

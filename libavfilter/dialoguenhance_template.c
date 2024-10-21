@@ -260,7 +260,7 @@ static int fn(de_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     memcpy(left_osamples, left_in, out_nb_samples * sizeof(ftype));
     memcpy(right_osamples, right_in, out_nb_samples * sizeof(ftype));
 
-    if (ctx->is_disabled)
+    if (ff_filter_disabled(ctx))
         memset(center_osamples, 0, out_nb_samples * sizeof(ftype));
     else
         memcpy(center_osamples, left_out, out_nb_samples * sizeof(ftype));
@@ -331,7 +331,7 @@ static int fn(de_flush)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     memcpy(left_osamples, left_in, out->nb_samples * sizeof(ftype));
     memcpy(right_osamples, right_in, out->nb_samples * sizeof(ftype));
 
-    if (ctx->is_disabled)
+    if (ff_filter_disabled(ctx))
         memset(center_osamples, 0, out->nb_samples * sizeof(ftype));
     else
         memcpy(center_osamples, left_out, out->nb_samples * sizeof(ftype));

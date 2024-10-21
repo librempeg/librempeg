@@ -61,7 +61,7 @@ static int fn(echo_samples)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     const int start = (td->in->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (td->in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
     const int nb_samples = td->out->nb_samples;
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     const int max_samples = s->max_samples;
     uint8_t **delayptrs = s->delayptrs;
     const float *decays = s->decays;

@@ -94,7 +94,7 @@ static int push_frame(AVFilterLink *outlink)
     AVFrame *outsamplesref;
     int n_out;
 
-    if (ctx->is_disabled)
+    if (ff_filter_disabled(ctx))
         return 0;
     n_out = s->packet_size;
 

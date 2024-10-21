@@ -806,7 +806,7 @@ static int morpho_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
         const int y1 = (height * (jobnr+1)) / nb_jobs;
         const int depth = s->depth;
 
-        if (ctx->is_disabled || !(s->planes & (1 << p))) {
+        if (ff_filter_disabled(ctx) || !(s->planes & (1 << p))) {
 copy:
             av_image_copy_plane(out->data[p] + y0 * out->linesize[p],
                 out->linesize[p],
@@ -860,7 +860,7 @@ static int morpho_sliceX(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
         const int y0 = (height *  jobnr   ) / nb_jobs;
         const int y1 = (height * (jobnr+1)) / nb_jobs;
 
-        if (ctx->is_disabled || !(s->planes & (1 << p))) {
+        if (ff_filter_disabled(ctx) || !(s->planes & (1 << p))) {
 copy:
             continue;
         }

@@ -363,7 +363,7 @@ static int draw_items(AVFilterContext *ctx,
         drawtext(out, xpos, ypos, buffer, len, s->blue);
         xpos += len * 8;
     }
-    if ((flags & FLAG_DISABLED) && filter->is_disabled) {
+    if ((flags & FLAG_DISABLED) && ff_filter_disabled(filter)) {
         len = snprintf(buffer, sizeof(buffer)-1, " | off");
         drawtext(out, xpos, ypos, buffer, len, s->gray);
         xpos += len * 8;
@@ -409,7 +409,7 @@ static int create_frame(AVFilterContext *ctx, int64_t pts)
         if ((s->mode & MODE_NOEOF) && filter_have_eof(filter))
             continue;
 
-        if ((s->mode & MODE_NODISABLED) && filter->is_disabled)
+        if ((s->mode & MODE_NODISABLED) && ff_filter_disabled(filter))
             continue;
 
         xpos = 0;

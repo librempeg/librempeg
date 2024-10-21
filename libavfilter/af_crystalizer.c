@@ -220,7 +220,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     td.p = (void **)s->prev->extended_data;
     td.nb_samples = in->nb_samples;
     td.channels = in->ch_layout.nb_channels;
-    td.mult = ctx->is_disabled ? 0.f : s->mult;
+    td.mult = ff_filter_disabled(ctx) ? 0.f : s->mult;
     ff_filter_execute(ctx, s->filter[td.mult >= 0.f][s->clip], &td, NULL,
                       FFMIN(inlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 

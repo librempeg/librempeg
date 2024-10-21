@@ -101,7 +101,7 @@ static int request_frame(AVFilterLink *outlink)
     ret = ff_request_frame(ctx->inputs[0]);
 
 next:
-    if (ret == AVERROR_EOF && !ctx->is_disabled && s->nb_frames > 0) {
+    if (ret == AVERROR_EOF && !ff_filter_disabled(ctx) && s->nb_frames > 0) {
         AVFrame *out = s->frames[s->nb_frames - 1];
         if (!out) {
             s->nb_frames--;

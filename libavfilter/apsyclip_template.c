@@ -456,7 +456,7 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
     // do overlap & add
     fn(apply_window)(s, clipping_delta, out_dist_frame, 1);
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         memcpy(out_samples, in_frame, overlap * sizeof(*out_samples));
     } else {
         memcpy(out_samples, out_dist_frame, overlap * sizeof(*out_samples));

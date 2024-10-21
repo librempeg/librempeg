@@ -146,7 +146,7 @@ static int fn(xfeed_frame)(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = ctx->outputs[0];
     CrossfeedContext *s = ctx->priv;
     const ftype *src = (const ftype *)in->data[0];
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     fn(StateContext) *stc = s->st;
     const ftype level_in = s->level_in;
     const ftype level_out = s->level_out;

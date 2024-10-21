@@ -161,7 +161,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
             dec->flip = !dec->flip;
 
-            if (ctx->is_disabled)
+            if (ff_filter_disabled(ctx))
                 sample = src[i];
 
             switch (s->mode) {

@@ -36,7 +36,7 @@ static void fn(stereowiden)(AVFilterContext *ctx, AVFrame *in, AVFrame *out)
 {
     StereoWidenContext *s = ctx->priv;
     const ftype *src = (const ftype *)in->data[0];
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     const ftype crossfeed = s->crossfeed;
     const ftype feedback = s->feedback;
     const ftype drymix = s->drymix;

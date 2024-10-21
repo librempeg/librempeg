@@ -137,7 +137,7 @@ static int do_vmaf(FFFrameSync *fs)
     int ret = ff_framesync_dualinput_get(fs, &dist, &ref);
     if (ret < 0)
         return ret;
-    if (ctx->is_disabled || !ref)
+    if (ff_filter_disabled(ctx) || !ref)
         return ff_filter_frame(ctx->outputs[0], dist);
 
     if (dist->color_range != ref->color_range) {
@@ -770,7 +770,7 @@ static int do_vmaf_cuda(FFFrameSync* fs)
     err = ff_framesync_dualinput_get(fs, &dist, &ref);
     if (err < 0)
         return err;
-    if (ctx->is_disabled || !ref)
+    if (ff_filter_disabled(ctx) || !ref)
         return ff_filter_frame(ctx->outputs[0], dist);
 
     err = copy_picture_data_cuda(s->vmaf, device_hwctx, ref, &pic_ref,

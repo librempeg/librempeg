@@ -167,7 +167,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
 
         for (int n = 0; n < out->nb_samples; n++) {
             output[n] = fn(process_sample)(s, input[n], desired[n], c);
-            if (ctx->is_disabled)
+            if (ff_filter_disabled(ctx))
                 output[n] = input[n];
         }
     }

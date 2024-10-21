@@ -191,7 +191,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     const int start = (s->nb_channels * jobnr) / nb_jobs;
     const int end = (s->nb_channels * (jobnr+1)) / nb_jobs;
     const int nb_samples = in->nb_samples;
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     fn(StateContext) *st = s->state;
 
     for (int chan = start; chan < end; chan++) {
@@ -281,7 +281,7 @@ static int fn(filter_block_channels)(AVFilterContext *ctx, void *arg, int jobnr,
     const int start = (s->nb_channels * jobnr) / nb_jobs;
     const int end = (s->nb_channels * (jobnr+1)) / nb_jobs;
     const int nb_samples = in->nb_samples;
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     const int blocksize = s->blocksize;
     fn(StateContext) *st = s->state;
 

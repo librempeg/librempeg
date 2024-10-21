@@ -691,7 +691,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         return 0;
     }
 
-    if ((s->deint && !(s->prev->flags & AV_FRAME_FLAG_INTERLACED)) || ctx->is_disabled) {
+    if ((s->deint && !(s->prev->flags & AV_FRAME_FLAG_INTERLACED)) || ff_filter_disabled(ctx)) {
         s->prev->pts *= 2;
         ret = ff_filter_frame(ctx->outputs[0], s->prev);
         s->prev = in;

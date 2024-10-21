@@ -128,7 +128,7 @@ static int fn(filter_channels_link)(AVFilterContext *ctx, AVFrame *out)
     AVFrame *sc = s->sc ? s->sc : s->in;
     AVFrame *in = s->in;
     const int nb_channels = in->ch_layout.nb_channels;
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     const int nb_samples = in->nb_samples;
     const ftype release = s->release;
     const ftype attack = s->attack;
@@ -246,7 +246,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     AVFrame *out = arg;
     const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     const int nb_samples = in->nb_samples;
     const ftype limit = s->limit;
     const ftype llimit = LIN2LOG(limit);

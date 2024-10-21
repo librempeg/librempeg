@@ -176,7 +176,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     td.out = out;
     td.in = in;
-    ff_filter_execute(ctx, s->lagfun[!!ctx->is_disabled], &td, NULL,
+    ff_filter_execute(ctx, s->lagfun[!!ff_filter_disabled(ctx)], &td, NULL,
                       FFMIN(s->planeheight[1], ff_filter_get_nb_threads(ctx)));
 
     av_frame_free(&in);

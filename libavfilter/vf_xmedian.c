@@ -216,7 +216,7 @@ static int process_frame(FFFrameSync *fs)
             return ret;
     }
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         out = av_frame_clone(in[0]);
     } else {
         out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
@@ -225,7 +225,7 @@ static int process_frame(FFFrameSync *fs)
         return AVERROR(ENOMEM);
     out->pts = av_rescale_q(s->fs.pts, s->fs.time_base, outlink->time_base);
 
-    if (!ctx->is_disabled) {
+    if (!ff_filter_disabled(ctx)) {
         td.in = in;
         td.out = out;
         ff_filter_execute(ctx, s->median_frames, &td, NULL,
@@ -414,7 +414,7 @@ static int tmedian_filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->frames[s->nb_inputs - 1] = in;
     }
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         out = av_frame_clone(s->frames[0]);
         if (!out)
             return AVERROR(ENOMEM);

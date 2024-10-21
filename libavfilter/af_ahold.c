@@ -97,7 +97,7 @@ static int filter_channels(AVFilterContext *ctx, void *arg,
     AVFrame *in = td->in;
     const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
 
     for (int ch = start; ch < end; ch++) {
         enum AVChannel channel = av_channel_layout_channel_from_index(&in->ch_layout, ch);

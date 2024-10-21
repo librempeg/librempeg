@@ -249,7 +249,7 @@ static int activate(AVFilterContext *ctx)
                     active_inputs--;
             }
 
-            if (ctx->is_disabled && (available_inputs == active_inputs)) {
+            if (ff_filter_disabled(ctx) && (available_inputs == active_inputs)) {
                 AVFrame *out = s->frames[0];
 
                 s->frames[0] = NULL;

@@ -91,7 +91,7 @@ static void fn(filter_channel)(AVFilterContext *ctx, AVFrame *out, AVFrame *in, 
     const ftype overall_gain = s->overall_gain;
     const ftype *src = (const ftype *)in->extended_data[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
-    const int is_disabled = ctx->is_disabled;
+    const int is_disabled = ff_filter_disabled(ctx);
     const int nb_samples = in->nb_samples;
     const int start = ch * s->nb_bands;
     fn(ChState) *state = s->chs;

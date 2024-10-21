@@ -208,7 +208,7 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
 
     fn(apply_window)(s, wiener_frame, out_dist_frame, 1);
 
-    if (ctx->is_disabled || bypass)
+    if (ff_filter_disabled(ctx) || bypass)
         memcpy(out_samples, in_frame, sizeof(*out_samples) * overlap);
     else
         memcpy(out_samples, out_dist_frame, sizeof(*out_samples) * overlap);

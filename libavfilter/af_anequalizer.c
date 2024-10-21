@@ -537,7 +537,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
 
-    if (!ctx->is_disabled)
+    if (!ff_filter_disabled(ctx))
         ff_filter_execute(ctx, filter_channels, buf, NULL,
                           FFMIN(inlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 

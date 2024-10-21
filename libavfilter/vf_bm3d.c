@@ -737,7 +737,7 @@ static int filter_frame(AVFilterContext *ctx, AVFrame **out, AVFrame *in, AVFram
         const int nb_jobs = FFMAX(1, FFMIN(s->nb_threads, s->planeheight[p] / s->block_size));
         ThreadData td;
 
-        if (!((1 << p) & s->planes) || ctx->is_disabled) {
+        if (!((1 << p) & s->planes) || ff_filter_disabled(ctx)) {
             av_image_copy_plane((*out)->data[p], (*out)->linesize[p],
                                 in->data[p], in->linesize[p],
                                 s->planewidth[p] * (1 + (s->depth > 8)), s->planeheight[p]);

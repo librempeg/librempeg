@@ -472,7 +472,7 @@ static int fn(ifft_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
     const int win_size = s->win_size;
     ftype *dst, *ptr;
 
-    if (ctx->is_disabled)
+    if (ff_filter_disabled(ctx))
         return fn(bypass_channel)(ctx, out, ch);
 
     dst = (ftype *)s->output_out->extended_data[ch];

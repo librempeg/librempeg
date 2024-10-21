@@ -126,7 +126,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     ThreadData td;
     AVFrame *out;
 
-    if (ctx->is_disabled) {
+    if (ff_filter_disabled(ctx)) {
         if (s->prev)
             av_samples_set_silence(s->prev->extended_data, 0, 1,
                                    s->prev->ch_layout.nb_channels,

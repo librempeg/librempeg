@@ -98,7 +98,7 @@ static int fn(do_awiener)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const
     ftype *dst = (ftype *)out->extended_data[ch];
     enum AVChannel channel = av_channel_layout_channel_from_index(&ctx->inputs[0]->ch_layout, ch);
     const int bypass = av_channel_layout_index_from_channel(&s->ch_layout, channel) < 0;
-    const int disabled = ctx->is_disabled | bypass;
+    const int disabled = ff_filter_disabled(ctx) | bypass;
     const int nb_samples = in->nb_samples;
     const ftype noise_var = s->noise_var;
     fn(StateContext) *st = s->st;

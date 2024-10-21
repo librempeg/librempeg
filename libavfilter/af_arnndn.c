@@ -1418,7 +1418,7 @@ static int rnnoise_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
         rnnoise_channel(s, &s->st[ch],
                         (float *)out->extended_data[ch],
                         (const float *)in->extended_data[ch],
-                        ctx->is_disabled);
+                        ff_filter_disabled(ctx));
     }
 
     return 0;

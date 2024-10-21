@@ -133,7 +133,7 @@ static int activate(AVFilterContext *ctx)
     if (s->cache[0] && s->cache[1]) {
         AVFrame *out;
 
-        if (!ctx->is_disabled)
+        if (!ff_filter_disabled(ctx))
             ff_filter_execute(ctx, s->filter, NULL, NULL,
                               FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 

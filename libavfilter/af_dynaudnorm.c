@@ -810,7 +810,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         return ret;
     if (!s->eof) {
         ff_bufqueue_add(ctx, &s->queue, in);
-        cqueue_enqueue(s->is_enabled, !ctx->is_disabled);
+        cqueue_enqueue(s->is_enabled, !ff_filter_disabled(ctx));
     } else {
         av_frame_free(&in);
     }

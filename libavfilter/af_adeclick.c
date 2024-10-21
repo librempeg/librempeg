@@ -717,7 +717,7 @@ static int activate(AVFilterContext *ctx)
         ret = av_audio_fifo_write(s->fifo, (void **)in->extended_data,
                                   in->nb_samples);
         for (int i = 0; i < in->nb_samples; i++)
-            e[i] = !ctx->is_disabled;
+            e[i] = !ff_filter_disabled(ctx);
 
         av_audio_fifo_write(s->efifo, (void**)s->enabled->extended_data, in->nb_samples);
         av_frame_free(&in);

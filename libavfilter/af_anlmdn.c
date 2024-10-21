@@ -234,7 +234,7 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int ch, int nb_jobs)
             s->dsp.compute_cache(cache + S, f, S, K, i, i + 1);
         }
 
-        for (int j = 0; j < 2 * S && !ctx->is_disabled; j++) {
+        for (int j = 0; j < 2 * S && !ff_filter_disabled(ctx); j++) {
             float distance = cache[j];
             unsigned weight_lut_idx;
             float w;
