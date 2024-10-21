@@ -1998,6 +1998,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
 {
     AmbisonicContext *s = ctx->priv;
     int matrix_norm = s->matrix_norm;
+    double asymmetry = s->asymmetry;
     int level = s->level;
     double gain[2][NB_DTYPES];
     int invert[NB_DTYPES];
@@ -2030,6 +2031,9 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     if (memcmp(gain, s->gain, sizeof(gain)) ||
         memcmp(invert, s->invert, sizeof(invert)))
         calc_mirror_mat(s);
+
+    if (asymmetry != s->asymmetry)
+        calc_asymmetry_mat(ctx, s);
 
     if (memcmp(dominance, s->dominance, sizeof(dominance)))
         calc_dominance_mat(ctx, s);
