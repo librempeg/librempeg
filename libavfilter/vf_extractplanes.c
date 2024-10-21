@@ -22,6 +22,7 @@
 
 #include "libavutil/avstring.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/intreadwrite.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 
@@ -45,8 +46,12 @@ typedef struct ExtractPlanesContext {
     int map[4];
     int linesize[4];
     int is_packed;
-    int depth;
-    int step;
+
+    int plane[4];
+    int step[4];
+    int shift[4];
+    int depth[4];
+    int offset[4];
 } ExtractPlanesContext;
 
 #define OFFSET(x) offsetof(ExtractPlanesContext, x)
@@ -65,103 +70,39 @@ static const AVOption extractplanes_options[] = {
 
 AVFILTER_DEFINE_CLASS(extractplanes);
 
-#define EIGHTBIT_FORMATS                           \
-        AV_PIX_FMT_YUV410P,                        \
-        AV_PIX_FMT_YUV411P,                        \
-        AV_PIX_FMT_YUV440P,                        \
-        AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUVA420P,   \
-        AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUVA422P,   \
-        AV_PIX_FMT_YUVJ420P, AV_PIX_FMT_YUVJ422P,  \
-        AV_PIX_FMT_YUVJ440P, AV_PIX_FMT_YUVJ444P,  \
-        AV_PIX_FMT_YUVJ411P,                       \
-        AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUVA444P,   \
-        AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY8A,       \
-        AV_PIX_FMT_RGB24, AV_PIX_FMT_BGR24,        \
-        AV_PIX_FMT_RGBA, AV_PIX_FMT_BGRA,          \
-        AV_PIX_FMT_ARGB, AV_PIX_FMT_ABGR,          \
-        AV_PIX_FMT_RGB0, AV_PIX_FMT_BGR0,          \
-        AV_PIX_FMT_0RGB, AV_PIX_FMT_0BGR,          \
-        AV_PIX_FMT_GBRP, AV_PIX_FMT_GBRAP
-
-#define HIGHDEPTH_FORMATS(suf)                                 \
-        AV_PIX_FMT_YA16##suf,                                  \
-        AV_PIX_FMT_GRAY9##suf,                                 \
-        AV_PIX_FMT_GRAY10##suf,                                \
-        AV_PIX_FMT_GRAY12##suf,                                \
-        AV_PIX_FMT_GRAY14##suf,                                \
-        AV_PIX_FMT_GRAY16##suf,                                \
-        AV_PIX_FMT_YUV420P16##suf, AV_PIX_FMT_YUVA420P16##suf, \
-        AV_PIX_FMT_YUV422P16##suf, AV_PIX_FMT_YUVA422P16##suf, \
-        AV_PIX_FMT_YUV444P16##suf, AV_PIX_FMT_YUVA444P16##suf, \
-        AV_PIX_FMT_RGB48##suf, AV_PIX_FMT_BGR48##suf,          \
-        AV_PIX_FMT_RGBA64##suf, AV_PIX_FMT_BGRA64##suf,        \
-        AV_PIX_FMT_GBRP16##suf, AV_PIX_FMT_GBRAP16##suf,       \
-        AV_PIX_FMT_YUV420P10##suf,                             \
-        AV_PIX_FMT_YUV422P10##suf,                             \
-        AV_PIX_FMT_YUV444P10##suf,                             \
-        AV_PIX_FMT_YUV440P10##suf,                             \
-        AV_PIX_FMT_YUVA420P10##suf,                            \
-        AV_PIX_FMT_YUVA422P10##suf,                            \
-        AV_PIX_FMT_YUVA444P10##suf,                            \
-        AV_PIX_FMT_YUV420P12##suf,                             \
-        AV_PIX_FMT_YUV422P12##suf,                             \
-        AV_PIX_FMT_YUV444P12##suf,                             \
-        AV_PIX_FMT_YUV440P12##suf,                             \
-        AV_PIX_FMT_YUVA422P12##suf,                            \
-        AV_PIX_FMT_YUVA444P12##suf,                            \
-        AV_PIX_FMT_GBRP10##suf, AV_PIX_FMT_GBRAP10##suf,       \
-        AV_PIX_FMT_GBRP12##suf, AV_PIX_FMT_GBRAP12##suf,       \
-        AV_PIX_FMT_YUV420P9##suf,                              \
-        AV_PIX_FMT_YUV422P9##suf,                              \
-        AV_PIX_FMT_YUV444P9##suf,                              \
-        AV_PIX_FMT_YUVA420P9##suf,                             \
-        AV_PIX_FMT_YUVA422P9##suf,                             \
-        AV_PIX_FMT_YUVA444P9##suf,                             \
-        AV_PIX_FMT_GBRP9##suf,                                 \
-        AV_PIX_FMT_GBRP14##suf, AV_PIX_FMT_GBRAP14##suf,       \
-        AV_PIX_FMT_YUV420P14##suf,                             \
-        AV_PIX_FMT_YUV422P14##suf,                             \
-        AV_PIX_FMT_YUV444P14##suf
-
-#define FLOAT_FORMATS(suf)                                     \
-        AV_PIX_FMT_GRAYF32##suf,                               \
-        AV_PIX_FMT_RGBF32##suf, AV_PIX_FMT_RGBAF32##suf,       \
-        AV_PIX_FMT_GBRPF32##suf, AV_PIX_FMT_GBRAPF32##suf      \
-
 static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_in,
                          AVFilterFormatsConfig **cfg_out)
 {
-    static const enum AVPixelFormat in_pixfmts[] = {
-        EIGHTBIT_FORMATS,
-        HIGHDEPTH_FORMATS(LE),
-        FLOAT_FORMATS(LE),
-        HIGHDEPTH_FORMATS(BE),
-        FLOAT_FORMATS(BE),
-        AV_PIX_FMT_NONE,
-    };
-    static const enum AVPixelFormat out_pixfmts[] = {
-        AV_PIX_FMT_GRAY8,
-        AV_PIX_FMT_GRAY9LE,   AV_PIX_FMT_GRAY9BE,
-        AV_PIX_FMT_GRAY10LE,  AV_PIX_FMT_GRAY10BE,
-        AV_PIX_FMT_GRAY12LE,  AV_PIX_FMT_GRAY12BE,
-        AV_PIX_FMT_GRAY14LE,  AV_PIX_FMT_GRAY14BE,
-        AV_PIX_FMT_GRAY16LE,  AV_PIX_FMT_GRAY16BE,
-        AV_PIX_FMT_GRAYF32LE, AV_PIX_FMT_GRAYF32BE,
-        AV_PIX_FMT_NONE
-    };
-    AVFilterFormats *formats = ff_make_format_list(in_pixfmts);
+    AVFilterFormats *formats = NULL;
+    const AVPixFmtDescriptor *desc;
     int ret;
 
-    if (!formats)
-        return AVERROR(ENOMEM);
+    for (int fmt = 0; desc = av_pix_fmt_desc_get(fmt); fmt++) {
+        if (!(desc->flags & AV_PIX_FMT_FLAG_HWACCEL ||
+              desc->flags & AV_PIX_FMT_FLAG_BITSTREAM ||
+              desc->flags & AV_PIX_FMT_FLAG_PAL)) {
+            ret = ff_add_format(&formats, fmt);
+            if (ret < 0)
+                return ret;
+        }
+    }
+
     formats->same_bitdepth = formats->same_endianness = 1;
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
-    formats = ff_make_format_list(out_pixfmts);
-    if (!formats)
-        return AVERROR(ENOMEM);
+    formats = NULL;
+    for (int fmt = 0; desc = av_pix_fmt_desc_get(fmt); fmt++) {
+        if (!(desc->flags & AV_PIX_FMT_FLAG_HWACCEL ||
+              desc->flags & AV_PIX_FMT_FLAG_BITSTREAM ||
+              desc->flags & AV_PIX_FMT_FLAG_PAL) && desc->nb_components == 1) {
+            ret = ff_add_format(&formats, fmt);
+            if (ret < 0)
+                return ret;
+        }
+    }
+
     formats->same_bitdepth = formats->same_endianness = 1;
     for (int i = 0; i < ctx->nb_outputs; i++)
         if ((ret = ff_formats_ref(formats, &cfg_out[i]->formats)) < 0)
@@ -174,8 +115,7 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     ExtractPlanesContext *s = ctx->priv;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
-    int plane_avail, ret, i;
-    uint8_t rgba_map[4];
+    int plane_avail, ret;
 
     plane_avail = ((desc->flags & AV_PIX_FMT_FLAG_RGB) ? PLANE_R|PLANE_G|PLANE_B :
                                                  PLANE_Y |
@@ -188,15 +128,33 @@ static int config_input(AVFilterLink *inlink)
     if ((ret = av_image_fill_linesizes(s->linesize, inlink->format, inlink->w)) < 0)
         return ret;
 
-    s->depth = desc->comp[0].depth >> 3;
-    s->step = av_get_padded_bits_per_pixel(desc) >> 3;
+    s->plane[0] = desc->comp[0].plane;
+    s->plane[1] = desc->comp[1].plane;
+    s->plane[2] = desc->comp[2].plane;
+    s->plane[3] = desc->comp[3].plane;
+
+    s->step[0] = desc->comp[0].step;
+    s->step[1] = desc->comp[1].step;
+    s->step[2] = desc->comp[2].step;
+    s->step[3] = desc->comp[3].step;
+
+    s->shift[0] = desc->comp[0].shift;
+    s->shift[1] = desc->comp[1].shift;
+    s->shift[2] = desc->comp[2].shift;
+    s->shift[3] = desc->comp[3].shift;
+
+    s->depth[0] = desc->comp[0].depth;
+    s->depth[1] = desc->comp[1].depth;
+    s->depth[2] = desc->comp[2].depth;
+    s->depth[3] = desc->comp[3].depth;
+
+    s->offset[0] = desc->comp[0].offset;
+    s->offset[1] = desc->comp[1].offset;
+    s->offset[2] = desc->comp[2].offset;
+    s->offset[3] = desc->comp[3].offset;
+
     s->is_packed = !(desc->flags & AV_PIX_FMT_FLAG_PLANAR) &&
                     (desc->nb_components > 1);
-    if (desc->flags & AV_PIX_FMT_FLAG_RGB) {
-        ff_fill_rgba_map(rgba_map, inlink->format);
-        for (i = 0; i < 4; i++)
-            s->map[i] = rgba_map[s->map[i]];
-    }
 
     return 0;
 }
@@ -220,33 +178,122 @@ static int config_output(AVFilterLink *outlink)
 static void extract_from_packed(uint8_t *dst, int dst_linesize,
                                 const uint8_t *src, int src_linesize,
                                 int width, int height,
-                                int depth, int step, int comp)
+                                int depth, int shift, int step, int offset)
 {
-    int x, y;
-
-    for (y = 0; y < height; y++) {
-        switch (depth) {
+    for (int y = 0; y < height; y++) {
+        switch (step) {
         case 1:
-            for (x = 0; x < width; x++)
-                dst[x] = src[x * step + comp];
+            for (int x = 0; x < width; x++)
+                dst[x] = (src[x + offset] >> shift) << (8 - depth);
             break;
         case 2:
-            for (x = 0; x < width; x++) {
-                dst[x * 2    ] = src[x * step + comp * 2    ];
-                dst[x * 2 + 1] = src[x * step + comp * 2 + 1];
+            switch (depth) {
+            case 4:
+            case 5:
+            case 6:
+            case 8:
+                for (int x = 0; x < width; x++)
+                    dst[x] = (src[x * 2 + offset] >> shift) << (8 - depth);
+                break;
+            case 10:
+            case 12:
+            case 16:
+                for (int x = 0; x < width; x++)
+                    AV_WN16(dst + x * 2, (AV_RN16(src + x * 2 + offset) >> shift)&((1<<depth)-1));
+                break;
+            }
+            break;
+        case 3:
+            switch (depth) {
+            case 8:
+                for (int x = 0; x < width; x++)
+                    dst[x] = (src[x * 3 + offset] >> shift) << (8 - depth);
+                break;
             }
             break;
         case 4:
-            for (x = 0; x < width; x++) {
-                dst[x * 4    ] = src[x * step + comp * 4    ];
-                dst[x * 4 + 1] = src[x * step + comp * 4 + 1];
-                dst[x * 4 + 2] = src[x * step + comp * 4 + 2];
-                dst[x * 4 + 3] = src[x * step + comp * 4 + 3];
+            switch (depth) {
+            case 8:
+                for (int x = 0; x < width; x++)
+                    dst[x] = (src[x * 4 + offset] >> shift) << (8 - depth);
+                break;
+            case 10:
+            case 12:
+            case 16:
+                for (int x = 0; x < width; x++)
+                    AV_WN16(dst + x * 2, (AV_RN16(src + x * 4 + offset) >> shift)&((1<<depth)-1));
+                break;
+            }
+            break;
+        case 6:
+            switch (depth) {
+            case 8:
+                for (int x = 0; x < width; x++)
+                    dst[x] = (src[x * 6 + offset] >> shift) << (8 - depth);
+                break;
+            case 10:
+            case 12:
+            case 16:
+                for (int x = 0; x < width; x++)
+                    AV_WN16(dst + x * 2, (AV_RL16(src + x * 6 + offset) >> shift)&((1<<depth)-1));
+                break;
+            }
+            break;
+        case 8:
+            switch (depth) {
+            case 10:
+            case 12:
+            case 16:
+                for (int x = 0; x < width; x++)
+                    AV_WN16(dst + x * 2, (AV_RN16(src + x * 8 + offset) >> shift)&((1<<depth)-1));
+                break;
             }
             break;
         }
         dst += dst_linesize;
         src += src_linesize;
+    }
+}
+
+static void extract_from_planar(uint8_t *dst, int dst_linesize,
+                                const uint8_t *src, int src_linesize,
+                                int linesize, int height,
+                                int step, int shift, int offset, int depth)
+{
+    if (step != ((depth + 7) >> 3) || shift != 0) {
+        for (int y = 0; y < height; y++) {
+            switch (step) {
+            case 2:
+                switch (depth) {
+                case 8:
+                    for (int x = 0; x < linesize; x += 2)
+                        dst[x>>1] = src[x + offset] >> shift;
+                    break;
+                case 10:
+                case 12:
+                case 16:
+                    for (int x = 0; x < linesize; x += 2)
+                        AV_WN16(dst + (x>>1) * 2, AV_RN16(src + x + offset) >> shift);
+                    break;
+                }
+                break;
+            case 4:
+                switch (depth) {
+                case 10:
+                case 12:
+                case 16:
+                    for (int x = 0; x < linesize; x += 4)
+                        AV_WN16(dst + (x>>2) * 2, AV_RN16(src + x + offset) >> shift);
+                    break;
+                }
+                break;
+            }
+            dst += dst_linesize;
+            src += src_linesize;
+        }
+    } else {
+        av_image_copy_plane(dst, dst_linesize, src, src_linesize,
+                            linesize, height);
     }
 }
 
@@ -268,12 +315,15 @@ static int extract_plane(AVFilterLink *outlink, AVFrame *frame)
         extract_from_packed(out->data[0], out->linesize[0],
                             frame->data[0], frame->linesize[0],
                             outlink->w, outlink->h,
-                            s->depth,
-                            s->step, idx);
+                            s->depth[idx], s->shift[idx],
+                            s->step[idx], s->offset[idx]);
     } else {
-        av_image_copy_plane(out->data[0], out->linesize[0],
-                            frame->data[idx], frame->linesize[idx],
-                            s->linesize[idx], outlink->h);
+        extract_from_planar(out->data[0], out->linesize[0],
+                            frame->data[s->plane[idx]],
+                            frame->linesize[s->plane[idx]],
+                            s->linesize[s->plane[idx]],
+                            outlink->h, s->step[idx], s->shift[idx],
+                            s->offset[idx], s->depth[idx]);
     }
 
     return ff_filter_frame(outlink, out);
