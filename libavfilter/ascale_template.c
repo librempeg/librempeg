@@ -104,6 +104,56 @@ static ftype fn(l2norm)(const ftype *x, const int N)
     return SQRT(y);
 }
 
+static int fn(expand_write)(AVFilterContext *ctx, const int ch)
+{
+    AScaleContext *s = ctx->priv;
+    const ftype fs = F(1.0)/ctx->inputs[0]->sample_rate;
+    ChannelContext *c = &s->c[ch];
+    const int best_period = c->best_period;
+    const ftype best_score = c->best_score;
+    const int max_period = s->max_period;
+    const int n = max_period-best_period;
+    ftype *dptrx = c->data[0];
+    ftype *dptry = c->data[1];
+    const ftype *rptrx = c->r_data[0];
+    void *datax[1] = { (void *)c->data[0] };
+    void *datay[1] = { (void *)c->data[1] };
+    const ftype xx = fn(l2norm)(dptrx+n, best_period);
+    const ftype yy = fn(l2norm)(dptry, best_period);
+    const ftype xy = rptrx[best_period-1];
+    ftype best_xcorr = F(-1.0), scale;
+    const ftype num = xy;
+    const ftype den = xx * yy + EPS;
+
+    best_xcorr = num/den;
+    best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
+
+    if (best_xcorr < F(-0.95))
+        best_xcorr = F(0.0);
+    av_log(ctx, AV_LOG_DEBUG, "E: %g/%g %d/%d\n", best_xcorr, best_score, best_period, max_period);
+
+    dptrx += max_period-best_period;
+    datax[0] = dptrx;
+
+    scale = F(1.0) / best_period;
+    for (int n = 0; n < best_period; n++) {
+        const ftype xf = (n+F(0.5))*scale;
+        const ftype yf = F(1.0)-xf;
+        const ftype axf = fn(get_gain)(xf, best_xcorr);
+        const ftype ayf = fn(get_gain)(yf, best_xcorr);
+        const ftype x = dptrx[n];
+        const ftype y = dptry[n];
+
+        dptrx[n] = x * axf + y * ayf;
+    }
+
+    av_audio_fifo_write(c->out_fifo, datax, best_period);
+    av_audio_fifo_write(c->out_fifo, datay, best_period);
+    c->state[OUT] += best_period*2*fs;
+    av_audio_fifo_drain(c->in_fifo, best_period);
+    return av_audio_fifo_size(c->in_fifo) >= max_period*2;
+}
+
 static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
 {
     AScaleContext *s = ctx->priv;
@@ -120,9 +170,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     ftype *dptrx = c->data[0];
     ftype *dptry = c->data[1];
     ftype best_score = -MAXF;
-    ftype best_xcorr = F(-1.0);
     int best_period = -1, ns;
-    ftype scale;
     int size;
 
     if (av_audio_fifo_size(c->in_fifo) <= 0)
@@ -206,49 +254,56 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
 
     if (best_period <= 0)
         best_period = max_period/2;
+    c->best_period = best_period;
+    c->best_score = best_score;
+    c->mode = EXPAND;
 
-    if (best_period > 0) {
-        const int n = max_period-best_period;
-        const ftype xx = fn(l2norm)(dptrx+n, best_period);
-        const ftype yy = fn(l2norm)(dptry, best_period);
-        const ftype xy = rptrx[best_period-1];
-        const ftype num = xy;
-        const ftype den = xx * yy + EPS;
+    if (s->link == 0)
+        return fn(expand_write)(ctx, ch);
+    return 0;
+}
 
-        best_xcorr = num/den;
-        best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
-    }
+static int fn(compress_write)(AVFilterContext *ctx, const int ch)
+{
+    AScaleContext *s = ctx->priv;
+    const ftype fs = F(1.0)/ctx->inputs[0]->sample_rate;
+    const int max_period = s->max_period;
+    ChannelContext *c = &s->c[ch];
+    const int best_period = c->best_period;
+    void *data[1] = { (void *)c->data[0] };
+    const ftype best_score = c->best_score;
+    const ftype *rptr = c->r_data[0];
+    ftype *dptr = c->data[0];
+    ftype best_xcorr, scale;
+
+    best_xcorr = (F(2.0)*rptr[best_period]-rptr[2*best_period])/rptr[0];
+    best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
 
     if (best_xcorr < F(-0.95))
         best_xcorr = F(0.0);
-    av_log(ctx, AV_LOG_DEBUG, "E: %g/%g %d/%d\n", best_xcorr, best_score, best_period, max_period);
-
-    dptrx += max_period-best_period;
-    datax[0] = dptrx;
+    av_log(ctx, AV_LOG_DEBUG, "C: %g/%g %d/%d\n", best_xcorr, best_score, best_period, max_period);
 
     scale = F(1.0) / best_period;
     for (int n = 0; n < best_period; n++) {
-        const ftype xf = (n+F(0.5))*scale;
-        const ftype yf = F(1.0)-xf;
+        const ftype yf = (n+F(0.5))*scale;
+        const ftype xf = F(1.0)-yf;
         const ftype axf = fn(get_gain)(xf, best_xcorr);
         const ftype ayf = fn(get_gain)(yf, best_xcorr);
-        const ftype x = dptrx[n];
-        const ftype y = dptry[n];
+        const ftype x = dptr[n];
+        const ftype y = dptr[n+best_period];
 
-        dptrx[n] = x * axf + y * ayf;
+        dptr[n] = x * axf + y * ayf;
     }
 
-    av_audio_fifo_write(c->out_fifo, datax, best_period);
-    av_audio_fifo_write(c->out_fifo, datay, best_period);
-    c->state[OUT] += best_period*2*fs;
-    av_audio_fifo_drain(c->in_fifo, best_period);
+    av_audio_fifo_write(c->out_fifo, data, best_period);
+    c->state[OUT] += best_period*fs;
+    av_audio_fifo_drain(c->in_fifo, best_period*2);
     return av_audio_fifo_size(c->in_fifo) >= max_period*2;
 }
 
 static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
 {
     AScaleContext *s = ctx->priv;
-    const ftype fs = F(1.0)/ctx->inputs[0]->sample_rate;
     const int max_period = s->max_period;
     const int max_size = s->max_size;
     ChannelContext *c = &s->c[ch];
@@ -257,9 +312,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     ftype *rptr = c->r_data[0];
     ftype *dptr = c->data[0];
     ftype best_score = -MAXF;
-    ftype best_xcorr = F(-1.0);
     int best_period = -1, ns;
-    ftype scale;
     int size;
 
     if (av_audio_fifo_size(c->in_fifo) <= 0)
@@ -311,31 +364,13 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     if (best_period <= 0)
         best_period = max_period/2;
 
-    if (best_period > 0) {
-        best_xcorr = (F(2.0)*rptr[best_period]-rptr[2*best_period])/rptr[0];
-        best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
-    }
+    c->best_period = best_period;
+    c->best_score = best_score;
+    c->mode = COMPRESS;
 
-    if (best_xcorr < F(-0.95))
-        best_xcorr = F(0.0);
-    av_log(ctx, AV_LOG_DEBUG, "C: %g/%g %d/%d\n", best_xcorr, best_score, best_period, max_period);
-
-    scale = F(1.0) / best_period;
-    for (int n = 0; n < best_period; n++) {
-        const ftype yf = (n+F(0.5))*scale;
-        const ftype xf = F(1.0)-yf;
-        const ftype axf = fn(get_gain)(xf, best_xcorr);
-        const ftype ayf = fn(get_gain)(yf, best_xcorr);
-        const ftype x = dptr[n];
-        const ftype y = dptr[n+best_period];
-
-        dptr[n] = x * axf + y * ayf;
-    }
-
-    av_audio_fifo_write(c->out_fifo, data, best_period);
-    c->state[OUT] += best_period*fs;
-    av_audio_fifo_drain(c->in_fifo, best_period*2);
-    return av_audio_fifo_size(c->in_fifo) >= max_period*2;
+    if (s->link == 0)
+        return fn(compress_write)(ctx, ch);
+    return 0;
 }
 
 static int fn(filter_samples)(AVFilterContext *ctx, const int ch)
@@ -345,6 +380,8 @@ static int fn(filter_samples)(AVFilterContext *ctx, const int ch)
     ChannelContext *c = &s->c[ch];
     double state = c->state[OUT] * s->tempo - c->state[IN];
 
+    c->mode = COPY;
+
     if (s->tempo == 1.0 || ctx->is_disabled)
         return fn(copy_samples)(ctx, ch, s->max_period);
     else if (state < 0.0 && s->tempo < 1.0)
@@ -352,6 +389,26 @@ static int fn(filter_samples)(AVFilterContext *ctx, const int ch)
     else if (state > 0.0 && s->tempo > 1.0)
         return fn(compress_samples)(ctx, ch);
     return fn(copy_samples)(ctx, ch, lrint(fabs(state*fs)));
+}
+
+static int fn(write_samples)(AVFilterContext *ctx, const int ch)
+{
+    AScaleContext *s = ctx->priv;
+    ChannelContext *c = &s->c[ch];
+
+    switch (c->mode) {
+    case EXPAND:
+        return fn(expand_write)(ctx, ch);
+    case COMPRESS:
+        return fn(compress_write)(ctx, ch);
+    }
+
+    return 0;
+}
+
+static void fn(write_channel)(AVFilterContext *ctx, const int ch)
+{
+    fn(write_samples)(ctx, ch);
 }
 
 static void fn(filter_channel)(AVFilterContext *ctx, const int ch)

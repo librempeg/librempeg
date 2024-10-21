@@ -39,7 +39,10 @@ typedef struct ChannelContext {
 
     double state[2];
 
+    int mode;
     int keep[2];
+    int best_period;
+    double best_score;
 
     void *r_data[2];
     void *c_data[2];
@@ -54,6 +57,7 @@ typedef struct AScaleContext {
     const AVClass *class;
 
     double tempo;
+    int link;
     int max_period;
     int max_size;
 
@@ -65,14 +69,23 @@ typedef struct AScaleContext {
     int (*init_state)(AVFilterContext *ctx);
     void (*uninit_state)(AVFilterContext *ctx);
     void (*filter_channel)(AVFilterContext *ctx, const int ch);
+    void (*write_channel)(AVFilterContext *ctx, const int ch);
 } AScaleContext;
 
 #define OFFSET(x) offsetof(AScaleContext, x)
-#define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
+#define TFLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
+#define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 
 static const AVOption ascale_options[] = {
-    { "tempo", "set the tempo", OFFSET(tempo), AV_OPT_TYPE_DOUBLE, {.dbl=1.0}, 0.01, 100.0, FLAGS },
+    { "tempo", "set the tempo", OFFSET(tempo), AV_OPT_TYPE_DOUBLE, {.dbl=1.0}, 0.01, 100.0, TFLAGS },
+    { "link",  "set the channels link", OFFSET(link), AV_OPT_TYPE_BOOL, {.i64=1}, 0, 1, FLAGS },
     { NULL }
+};
+
+enum ScaleMode {
+    COPY,
+    EXPAND,
+    COMPRESS,
 };
 
 AVFILTER_DEFINE_CLASS(ascale);
@@ -159,12 +172,44 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     return 0;
 }
 
+static int write_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    AScaleContext *s = ctx->priv;
+    const int nb_channels = s->nb_channels;
+    const int start = (nb_channels * jobnr) / nb_jobs;
+    const int stop = (nb_channels * (jobnr+1)) / nb_jobs;
+
+    for (int ch = start; ch < stop; ch++)
+        s->write_channel(ctx, ch);
+
+    return 0;
+}
+
 static void filter_frame(AVFilterContext *ctx)
 {
     AScaleContext *s = ctx->priv;
 
     ff_filter_execute(ctx, filter_channels, NULL, NULL,
                       FFMIN(s->nb_channels, ff_filter_get_nb_threads(ctx)));
+
+    if (s->link) {
+        int min_best_period = INT_MAX;
+
+        for (int ch = 0; ch < s->nb_channels; ch++) {
+            ChannelContext *c = &s->c[ch];
+
+            min_best_period = FFMIN(min_best_period, c->best_period);
+        }
+
+        for (int ch = 0; ch < s->nb_channels; ch++) {
+            ChannelContext *c = &s->c[ch];
+
+            c->best_period = min_best_period;
+        }
+
+        ff_filter_execute(ctx, write_channels, NULL, NULL,
+                          FFMIN(s->nb_channels, ff_filter_get_nb_threads(ctx)));
+    }
 }
 
 static void write_input_samples(AVFilterContext *ctx, AVFrame *in)
@@ -276,11 +321,13 @@ static int config_input(AVFilterLink *inlink)
     switch (inlink->format) {
     case AV_SAMPLE_FMT_DBLP:
         s->filter_channel = filter_channel_dblp;
+        s->write_channel = write_channel_dblp;
         s->init_state = init_state_dblp;
         s->uninit_state = uninit_state_dblp;
         break;
     case AV_SAMPLE_FMT_FLTP:
         s->filter_channel = filter_channel_fltp;
+        s->write_channel = write_channel_fltp;
         s->init_state = init_state_fltp;
         s->uninit_state = uninit_state_fltp;
         break;
