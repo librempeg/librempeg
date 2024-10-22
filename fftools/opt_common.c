@@ -805,6 +805,21 @@ int show_bsfs(void *optctx, const char *opt, const char *arg)
     return 0;
 }
 
+#if CONFIG_AVFILTER
+static int filter_have_commands(const AVFilter *filter)
+{
+    const void *obj = &filter->priv_class;
+    const AVOption *opt = NULL;
+
+    while ((opt = av_opt_next(obj, opt))) {
+        if (opt->flags & AV_OPT_FLAG_RUNTIME_PARAM)
+            return 1;
+    }
+
+    return 0;
+}
+#endif
+
 int show_filters(void *optctx, const char *opt, const char *arg)
 {
 #if CONFIG_AVFILTER
@@ -817,6 +832,7 @@ int show_filters(void *optctx, const char *opt, const char *arg)
     printf("Filters:\n"
            "  T.. = Timeline support\n"
            "  .S. = Slice threading\n"
+           "  ..C = Command support\n"
            "  A = Audio input/output\n"
            "  V = Video input/output\n"
            "  N = Dynamic number and/or type of input/output\n"
@@ -841,9 +857,10 @@ int show_filters(void *optctx, const char *opt, const char *arg)
                                   ( i && (filter->flags & AVFILTER_FLAG_DYNAMIC_OUTPUTS))) ? 'N' : '|';
         }
         *descr_cur = 0;
-        printf(" %c%c %-17s %-10s %s\n",
+        printf(" %c%c%c %-17s %-10s %s\n",
                filter->flags & AVFILTER_FLAG_SUPPORT_TIMELINE ? 'T' : '.',
                filter->flags & AVFILTER_FLAG_SLICE_THREADS    ? 'S' : '.',
+               filter_have_commands(filter)                   ? 'C' : '.',
                filter->name, descr, filter->description);
     }
 #else
