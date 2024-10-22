@@ -85,6 +85,7 @@ OBJS-$(CONFIG_ALIMITER_FILTER)               += af_alimiter.o
 OBJS-$(CONFIG_ALLPASS_FILTER)                += af_biquads.o
 OBJS-$(CONFIG_ALOOP_FILTER)                  += f_loop.o
 OBJS-$(CONFIG_AMAE_FILTER)                   += af_asdr.o
+OBJS-$(CONFIG_AMDA_FILTER)                   += af_asdr.o
 OBJS-$(CONFIG_AMBISONIC_FILTER)              += af_ambisonic.o
 OBJS-$(CONFIG_AMERGE_FILTER)                 += af_amerge.o
 OBJS-$(CONFIG_AMETADATA_FILTER)              += f_metadata.o

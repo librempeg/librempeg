@@ -32,6 +32,8 @@
 #define FEPS DBL_EPSILON
 #endif
 
+#define F(x) ((ftype)(x))
+
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
@@ -180,6 +182,39 @@ static int fn(mae)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
             uv += FABS(us[n] - vs[n]);
 
         chs->uv += uv;
+    }
+
+    return 0;
+}
+
+static int fn(mda)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    AudioSDRContext *s = ctx->priv;
+    AVFrame *u = s->cache[0];
+    AVFrame *v = s->cache[1];
+    const int channels = u->ch_layout.nb_channels;
+    const int start = (channels * jobnr) / nb_jobs;
+    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);
+
+    for (int ch = start; ch < end; ch++) {
+        ChanStats *chs = &s->chs[ch];
+        const ftype *const us = (ftype *)u->extended_data[ch];
+        const ftype *const vs = (ftype *)v->extended_data[ch];
+        ftype u = chs->u;
+        ftype v = chs->u;
+        double uv = 0.;
+
+        for (int n = 0; n < nb_samples; n++) {
+            uv += FFDIFFSIGN(us[n] - u, F(0.0)) == FFDIFFSIGN(vs[n] - v, F(0.0));
+
+            u = us[n];
+            v = vs[n];
+        }
+
+        chs->uv += uv;
+        chs->u = u;
+        chs->v = v;
     }
 
     return 0;

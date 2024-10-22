@@ -22,6 +22,7 @@
 
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
+#include "libavutil/macros.h"
 #include "libavutil/mem.h"
 
 #include "avfilter.h"
@@ -130,6 +131,8 @@ static int config_output(AVFilterLink *outlink)
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? nrmse_fltp : nrmse_dblp;
     else if (!strcmp(ctx->filter->name, "amae"))
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? mae_fltp : mae_dblp;
+    else if (!strcmp(ctx->filter->name, "amda"))
+        s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? mda_fltp : mda_dblp;
     else if (!strcmp(ctx->filter->name, "aidentity"))
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? identity_fltp : identity_dblp;
     else
@@ -167,6 +170,12 @@ static av_cold void uninit(AVFilterContext *ctx)
             double mae = s->chs[ch].uv / s->nb_samples;
 
             av_log(ctx, AV_LOG_INFO, "MAE ch%d: %g dB\n", ch, -10. * log10(mae));
+        }
+    } else if (!strcmp(ctx->filter->name, "amda")) {
+        for (int ch = 0; ch < s->channels; ch++) {
+            double mda = s->chs[ch].uv / s->nb_samples;
+
+            av_log(ctx, AV_LOG_INFO, "MDA ch%d: %g dB\n", ch, 10. * log10(mda));
         }
     } else if (!strcmp(ctx->filter->name, "aidentity")) {
         for (int ch = 0; ch < s->channels; ch++) {
@@ -266,6 +275,20 @@ const AVFilter ff_af_anrmse = {
 const AVFilter ff_af_amae = {
     .name           = "amae",
     .description    = NULL_IF_CONFIG_SMALL("Measure Audio Mean Absolute Error."),
+    .priv_size      = sizeof(AudioSDRContext),
+    .activate       = activate,
+    .uninit         = uninit,
+    .flags          = AVFILTER_FLAG_METADATA_ONLY |
+                      AVFILTER_FLAG_SLICE_THREADS |
+                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    FILTER_INPUTS(inputs),
+    FILTER_OUTPUTS(outputs),
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
+};
+
+const AVFilter ff_af_amda = {
+    .name           = "amda",
+    .description    = NULL_IF_CONFIG_SMALL("Measure Audio Mean Directional Accuracy."),
     .priv_size      = sizeof(AudioSDRContext),
     .activate       = activate,
     .uninit         = uninit,
