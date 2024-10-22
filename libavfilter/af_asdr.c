@@ -173,13 +173,13 @@ static av_cold void uninit(AVFilterContext *ctx)
         }
     } else if (!strcmp(ctx->filter->name, "amda")) {
         for (int ch = 0; ch < s->channels; ch++) {
-            double mda = s->chs[ch].uv / s->nb_samples;
+            double mda = (double)s->nb_samples / (s->nb_samples - s->chs[ch].cnt);
 
             av_log(ctx, AV_LOG_INFO, "MDA ch%d: %g dB\n", ch, 10. * log10(mda));
         }
     } else if (!strcmp(ctx->filter->name, "aidentity")) {
         for (int ch = 0; ch < s->channels; ch++) {
-            double identity = s->chs[ch].cnt / (double)s->nb_samples;
+            double identity = (double)s->nb_samples / (s->nb_samples - s->chs[ch].cnt);
 
             av_log(ctx, AV_LOG_INFO, "Identity ch%d: %g dB\n", ch, 10. * log10(identity));
         }
