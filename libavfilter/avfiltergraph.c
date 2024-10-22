@@ -785,6 +785,8 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
                 }
                 best = find_best_sample_fmt_of_2(best, p, ref->format);
             }
+            if (best == AV_SAMPLE_FMT_NONE)
+                return AVERROR(EINVAL);
             av_log(link->src,AV_LOG_DEBUG, "picking %s out of %d ref:%s\n",
                    av_get_sample_fmt_name(best), link->incfg.formats->nb_formats,
                    av_get_sample_fmt_name(ref->format));
