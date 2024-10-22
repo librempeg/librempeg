@@ -50,34 +50,38 @@
 
 #define MOD(a, b) (((a) >= (b)) ? (a) - (b) : (a))
 
-static void fn(echo_samples)(AudioEchoContext *ctx, uint8_t **delayptrs,
-                             uint8_t * const *src, uint8_t **dst,
-                             int nb_samples, int channels)
+static int fn(echo_samples)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    const ftype out_gain = ctx->out_gain;
-    const ftype in_gain = ctx->in_gain;
-    const unsigned nb_decays = ctx->nb_decays;
-    const unsigned nb_echoes = ctx->nb_echoes;
-    const int max_samples = ctx->max_samples;
-    const float *decays = ctx->decays;
+    AudioEchoContext *s = ctx->priv;
+    ThreadData *td = arg;
+    const ftype out_gain = s->out_gain;
+    const ftype in_gain = s->in_gain;
+    const unsigned nb_decays = s->nb_decays;
+    const unsigned nb_echoes = s->nb_echoes;
+    const int start = (td->in->ch_layout.nb_channels * jobnr) / nb_jobs;
+    const int end = (td->in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int max_samples = s->max_samples;
+    uint8_t **delayptrs = s->delayptrs;
+    const int nb_samples = td->out->nb_samples;
+    const float *decays = s->decays;
     int av_uninit(index);
 
     av_assert1(channels > 0); /* would corrupt delay_index */
 
-    for (int chan = 0; chan < channels; chan++) {
-        const stype *s = (stype *)src[chan];
-        stype *d = (stype *)dst[chan];
-        stype *dbuf = (stype *)delayptrs[chan];
+    for (int ch = start; ch < end; ch++) {
+        const stype *sample = (stype *)td->in->extended_data[ch];
+        stype *d = (stype *)td->out->extended_data[ch];
+        stype *dbuf = (stype *)delayptrs[ch];
 
-        index = ctx->delay_index;
-        for (int i = 0; i < nb_samples; i++, s++, d++) {
+        index = s->delay_index[ch];
+        for (int i = 0; i < nb_samples; i++, sample++, d++) {
             ftype out, in;
 
-            in = *s;
+            in = *sample;
             out = in * in_gain;
             for (unsigned j = 0; j < nb_echoes; j++) {
                 const int jidx = FFMIN(j, nb_decays-1);
-                int ix = index + max_samples - ctx->samples[j];
+                int ix = index + max_samples - s->samples[j];
 
                 ix = MOD(ix, max_samples);
                 out += dbuf[ix] * decays[jidx];
@@ -89,7 +93,9 @@ static void fn(echo_samples)(AudioEchoContext *ctx, uint8_t **delayptrs,
 
             index = MOD(index + 1, max_samples);
         }
+
+        s->delay_index[ch] = index;
     }
 
-    ctx->delay_index = index;
+    return 0;
 }

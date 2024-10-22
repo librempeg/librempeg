@@ -35,16 +35,14 @@ typedef struct AudioEchoContext {
     float *decays;
     unsigned nb_decays;
     unsigned nb_echoes;
-    int delay_index;
+    int *delay_index;
     uint8_t **delayptrs;
     int max_samples, fade_out;
     int *samples;
     int eof;
     int64_t next_pts;
 
-    void (*echo_samples)(struct AudioEchoContext *ctx, uint8_t **delayptrs,
-                         uint8_t * const *src, uint8_t **dst,
-                         int nb_samples, int channels);
+    int (*echo_samples)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } AudioEchoContext;
 
 #define OFFSET(x) offsetof(AudioEchoContext, x)
@@ -67,6 +65,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     AudioEchoContext *s = ctx->priv;
 
+    av_freep(&s->delay_index);
     av_freep(&s->samples);
 
     if (s->delayptrs)
@@ -87,6 +86,10 @@ static av_cold int init(AVFilterContext *ctx)
     av_log(ctx, AV_LOG_DEBUG, "nb_echoes:%d\n", s->nb_echoes);
     return 0;
 }
+
+typedef struct ThreadData {
+    AVFrame *in, *out;
+} ThreadData;
 
 #define DEPTH 16
 #include "aecho_template.c"
@@ -139,38 +142,46 @@ static int config_output(AVFilterLink *outlink)
         av_freep(&s->delayptrs[0]);
     av_freep(&s->delayptrs);
 
+    s->delay_index = av_calloc(outlink->ch_layout.nb_channels, sizeof(*s->delay_index));
+    if (!s->delay_index)
+        return AVERROR(ENOMEM);
+
     return av_samples_alloc_array_and_samples(&s->delayptrs, NULL,
                                               outlink->ch_layout.nb_channels,
                                               s->max_samples,
                                               outlink->format, 0);
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
+    AVFilterLink *outlink = ctx->outputs[0];
     AudioEchoContext *s = ctx->priv;
-    AVFrame *out_frame;
+    ThreadData td;
+    AVFrame *out;
 
-    if (av_frame_is_writable(frame)) {
-        out_frame = frame;
+    if (av_frame_is_writable(in)) {
+        out = in;
     } else {
-        out_frame = ff_get_audio_buffer(ctx->outputs[0], frame->nb_samples);
-        if (!out_frame) {
-            av_frame_free(&frame);
+        out = ff_get_audio_buffer(outlink, in->nb_samples);
+        if (!out) {
+            av_frame_free(&in);
             return AVERROR(ENOMEM);
         }
-        av_frame_copy_props(out_frame, frame);
+        av_frame_copy_props(out, in);
     }
 
-    s->echo_samples(s, s->delayptrs, frame->extended_data, out_frame->extended_data,
-                    frame->nb_samples, inlink->ch_layout.nb_channels);
+    td.in = in;
+    td.out = out;
+    ff_filter_execute(ctx, s->echo_samples, &td, NULL,
+                      FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
-    s->next_pts = frame->pts + av_rescale_q(frame->nb_samples, (AVRational){1, inlink->sample_rate}, inlink->time_base);
+    s->next_pts = in->pts + av_rescale_q(in->nb_samples, (AVRational){1, inlink->sample_rate}, inlink->time_base);
 
-    if (frame != out_frame)
-        av_frame_free(&frame);
+    if (in != out)
+        av_frame_free(&in);
 
-    return ff_filter_frame(ctx->outputs[0], out_frame);
+    return ff_filter_frame(outlink, out);
 }
 
 static int request_frame(AVFilterLink *outlink)
@@ -179,6 +190,7 @@ static int request_frame(AVFilterLink *outlink)
     AudioEchoContext *s = ctx->priv;
     int nb_samples = FFMIN(s->fade_out, 2048);
     AVFrame *frame = ff_get_audio_buffer(outlink, nb_samples);
+    ThreadData td;
 
     if (!frame)
         return AVERROR(ENOMEM);
@@ -189,8 +201,9 @@ static int request_frame(AVFilterLink *outlink)
                            outlink->ch_layout.nb_channels,
                            frame->format);
 
-    s->echo_samples(s, s->delayptrs, frame->extended_data, frame->extended_data,
-                    frame->nb_samples, outlink->ch_layout.nb_channels);
+    td.out = td.in = frame;
+    ff_filter_execute(ctx, s->echo_samples, &td, NULL,
+                      FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     frame->pts = s->next_pts;
     if (s->next_pts != AV_NOPTS_VALUE)
@@ -248,6 +261,7 @@ const AVFilter ff_af_aecho = {
     .init          = init,
     .activate      = activate,
     .uninit        = uninit,
+    .flags         = AVFILTER_FLAG_SLICE_THREADS,
     FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(aecho_outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P,
