@@ -19,6 +19,7 @@
  */
 
 #include "libavutil/avassert.h"
+#include "libavutil/intmath.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/samplefmt.h"
@@ -87,55 +88,20 @@ static av_cold int init(AVFilterContext *ctx)
     return 0;
 }
 
-#define MOD(a, b) (((a) >= (b)) ? (a) - (b) : (a))
+#define DEPTH 16
+#include "aecho_template.c"
 
-#define ECHO(name, type, min, max)                                          \
-static void echo_samples_## name ##p(AudioEchoContext *ctx,                 \
-                                     uint8_t **delayptrs,                   \
-                                     uint8_t * const *src, uint8_t **dst,   \
-                                     int nb_samples, int channels)          \
-{                                                                           \
-    const double out_gain = ctx->out_gain;                                  \
-    const double in_gain = ctx->in_gain;                                    \
-    const unsigned nb_decays = ctx->nb_decays;                              \
-    const unsigned nb_echoes = ctx->nb_echoes;                              \
-    const int max_samples = ctx->max_samples;                               \
-    int av_uninit(index);                                                   \
-                                                                            \
-    av_assert1(channels > 0); /* would corrupt delay_index */               \
-                                                                            \
-    for (int chan = 0; chan < channels; chan++) {                           \
-        const type *s = (type *)src[chan];                                  \
-        type *d = (type *)dst[chan];                                        \
-        type *dbuf = (type *)delayptrs[chan];                               \
-                                                                            \
-        index = ctx->delay_index;                                           \
-        for (int i = 0; i < nb_samples; i++, s++, d++) {                    \
-            double out, in;                                                 \
-                                                                            \
-            in = *s;                                                        \
-            out = in * in_gain;                                             \
-            for (unsigned j = 0; j < nb_echoes; j++) {                      \
-                int jidx = FFMIN(j, nb_decays-1);                           \
-                int ix = index + max_samples - ctx->samples[j];             \
-                ix = MOD(ix, max_samples);                                  \
-                out += dbuf[ix] * ctx->decays[jidx];                        \
-            }                                                               \
-            out *= out_gain;                                                \
-                                                                            \
-            *d = av_clipd(out, min, max);                                   \
-            dbuf[index] = in;                                               \
-                                                                            \
-            index = MOD(index + 1, max_samples);                            \
-        }                                                                   \
-    }                                                                       \
-    ctx->delay_index = index;                                               \
-}
+#undef DEPTH
+#define DEPTH 31
+#include "aecho_template.c"
 
-ECHO(dbl, double,  -1.0,      1.0      )
-ECHO(flt, float,   -1.0,      1.0      )
-ECHO(s16, int16_t, INT16_MIN, INT16_MAX)
-ECHO(s32, int32_t, INT32_MIN, INT32_MAX)
+#undef DEPTH
+#define DEPTH 32
+#include "aecho_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "aecho_template.c"
 
 static int config_output(AVFilterLink *outlink)
 {
