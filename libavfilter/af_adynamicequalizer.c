@@ -35,12 +35,15 @@ enum DetectionModes {
     NB_DMODES,
 };
 
+enum DirectionModes {
+    BELOW,
+    ABOVE,
+};
+
 enum FilterModes {
     LISTEN = -1,
-    CUT_BELOW,
-    CUT_ABOVE,
-    BOOST_BELOW,
-    BOOST_ABOVE,
+    CUT,
+    BOOST,
     NB_FMODES,
 };
 
@@ -95,17 +98,22 @@ typedef struct AudioDynamicEqualizerContext {
     double *range;
     unsigned nb_range;
 
+    int *direction;
+    unsigned nb_direction;
+
     double *makeup;
     unsigned nb_makeup;
 
     int *detection;
     unsigned nb_detection;
 
+    int *mode;
+    unsigned nb_mode;
+
     int *active;
     unsigned nb_active;
 
     int sidechain;
-    int mode;
     int precision;
     int format;
     int nb_bands;
@@ -296,6 +304,8 @@ static const AVOptionArrayDef def_tftype     = {.def="bell",.size_min=1,.sep=' '
 static const AVOptionArrayDef def_ratio      = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_makeup     = {.def="0",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_range      = {.def="50",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_direction  = {.def="below",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_mode       = {.def="cut",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_auto       = {.def="off",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_active     = {.def="true",.size_min=1,.sep=' '};
 
@@ -319,12 +329,13 @@ static const AVOption adynamicequalizer_options[] = {
     { "ratio",      "set ratio factor",        OFFSET(ratio),      AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_ratio},     0, 30,      FLAGS },
     { "makeup",     "set makeup gain",         OFFSET(makeup),     AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_makeup},    0, 1000,    FLAGS },
     { "range",      "set max gain",            OFFSET(range),      AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_range},     0, 2000,    FLAGS },
-    { "mode",       "set mode",                OFFSET(mode),       AV_OPT_TYPE_INT,    {.i64=0}, LISTEN,NB_FMODES-1,FLAGS, .unit = "mode" },
-    {   "listen",   0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=LISTEN},   0, 0,       FLAGS, .unit = "mode" },
-    {   "cutbelow", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=CUT_BELOW},0, 0,       FLAGS, .unit = "mode" },
-    {   "cutabove", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=CUT_ABOVE},0, 0,       FLAGS, .unit = "mode" },
-    { "boostbelow", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=BOOST_BELOW},0, 0,     FLAGS, .unit = "mode" },
-    { "boostabove", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=BOOST_ABOVE},0, 0,     FLAGS, .unit = "mode" },
+    { "direction",  "set filtering direction", OFFSET(direction),  AV_OPT_TYPE_INT|AR, {.arr=&def_direction}, BELOW, ABOVE,  FLAGS, .unit = "direction" },
+    {   "below",    "filter below threshold",  0,                  AV_OPT_TYPE_CONST,  {.i64=BELOW},             0, 0,       FLAGS, .unit = "direction" },
+    {   "above",    "filter above threshold",  0,                  AV_OPT_TYPE_CONST,  {.i64=ABOVE},             0, 0,       FLAGS, .unit = "direction" },
+    { "mode",       "set filtering mode",      OFFSET(mode),       AV_OPT_TYPE_INT|AR, {.arr=&def_mode}, LISTEN,NB_FMODES-1,FLAGS, .unit = "mode" },
+    {     "listen", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=LISTEN},            0, 0,       FLAGS, .unit = "mode" },
+    {        "cut", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=CUT},               0, 0,       FLAGS, .unit = "mode" },
+    {      "boost", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=BOOST},             0, 0,       FLAGS, .unit = "mode" },
     { "auto",       "set auto threshold",      OFFSET(detection),  AV_OPT_TYPE_INT|AR, {.arr=&def_auto},DET_DISABLED,NB_DMODES-1,FLAGS, .unit = "auto" },
     {   "disabled", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_DISABLED}, 0, 0,   FLAGS, .unit = "auto" },
     {   "off",      0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_OFF},      0, 0,   FLAGS, .unit = "auto" },

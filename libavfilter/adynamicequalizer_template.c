@@ -116,7 +116,7 @@ typedef struct fn(BandContext) {
     void (*target_update)(ftype iQ, ftype A, ftype g, ftype a[3], ftype m[3]);
     ftype (*target_gain)(const ftype detect, const ftype threshold, const ftype threshold_log,
                          const ftype makeup, const ftype ratio, const ftype range,
-                         const ftype power, const int mode);
+                         const ftype power, const int direction);
 } fn(BandContext);
 
 static int fn(init_state)(AVFilterContext *ctx, const int nb_channels,
@@ -280,19 +280,17 @@ static ftype fn(target_gain)(const ftype detect, const ftype threshold,
                              const ftype threshold_log,
                              const ftype makeup, const ftype ratio,
                              const ftype range,  const ftype power,
-                             const int mode)
+                             const int direction)
 {
-    switch (mode) {
-    case CUT_BELOW:
-    case BOOST_BELOW:
+    switch (direction) {
+    case BELOW:
         if (detect < threshold) {
             ftype ld = LIN2LOG(detect);
             ftype new_log_gain = CLIP(makeup + (threshold_log - ld) * ratio, F(0.0), range) * power;
             return LOG2LIN(new_log_gain);
         }
         break;
-    case CUT_ABOVE:
-    case BOOST_ABOVE:
+    case ABOVE:
         if (detect > threshold) {
             ftype ld = LIN2LOG(detect);
             ftype new_log_gain = CLIP(makeup + (ld - threshold_log) * ratio, F(0.0), range) * power;
@@ -308,18 +306,16 @@ static ftype fn(target_gain_noratio)(const ftype detect, const ftype threshold,
                                      const ftype unused2,
                                      const ftype makeup, const ftype unused3,
                                      const ftype range,  const ftype power,
-                                     const int mode)
+                                     const int direction)
 {
-    switch (mode) {
-    case CUT_BELOW:
-    case BOOST_BELOW:
+    switch (direction) {
+    case BELOW:
         if (detect < threshold) {
             ftype new_log_gain = FMIN(makeup, range) * power;
             return LOG2LIN(new_log_gain);
         }
         break;
-    case CUT_ABOVE:
-    case BOOST_ABOVE:
+    case ABOVE:
         if (detect > threshold) {
             ftype new_log_gain = FMIN(makeup, range) * power;
             return LOG2LIN(new_log_gain);
@@ -468,8 +464,9 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
     const ftype ratio = s->ratio[FFMIN(band, s->nb_ratio-1)];
     const ftype range = s->range[FFMIN(band, s->nb_range-1)];
     const ftype tfrequency = FMIN(s->tfrequency[FFMIN(band, s->nb_tfrequency-1)], sample_rate * F(0.5));
-    const int mode = s->mode;
-    const ftype power = (mode == CUT_BELOW || mode == CUT_ABOVE) ? F(-1.0) : F(1.0);
+    const int direction = s->direction[FFMIN(band, s->nb_direction-1)];
+    const int mode = s->mode[FFMIN(band, s->nb_mode-1)];
+    const ftype power = (mode == CUT) ? F(-1.0) : F(1.0);
     const ftype band_threshold_log = b->threshold_log;
     const ftype band_threshold = b->threshold;
     const ftype trelease = b->trelease_coef;
@@ -567,7 +564,7 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
             }
 
             new_lin_gain = b->target_gain(detect, threshold, threshold_log,
-                                          makeup, ratio, range, power, mode);
+                                          makeup, ratio, range, power, direction);
 
             if (FABS(lin_gain - new_lin_gain) > EPSILON) {
                 ftype f = (new_lin_gain > lin_gain) * tattack + (new_lin_gain < lin_gain) * trelease;
@@ -581,7 +578,7 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
             }
 
             v = target_fn(src[n], fm, fa, fstate);
-            v = mode == LISTEN ? listen : v;
+            v = mode == LISTEN ? (band ? dst[n]+listen : listen) : v;
             dst[n] = is_disabled ? src[n] : v;
         }
 
