@@ -60,9 +60,10 @@ static int fn(echo_samples)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     const unsigned nb_echoes = s->nb_echoes;
     const int start = (td->in->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (td->in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int nb_samples = td->out->nb_samples;
+    const int is_disabled = ctx->is_disabled;
     const int max_samples = s->max_samples;
     uint8_t **delayptrs = s->delayptrs;
-    const int nb_samples = td->out->nb_samples;
     const float *decays = s->decays;
     int av_uninit(index);
 
@@ -74,10 +75,10 @@ static int fn(echo_samples)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
         stype *dbuf = (stype *)delayptrs[ch];
 
         index = s->delay_index[ch];
-        for (int i = 0; i < nb_samples; i++, sample++, d++) {
+        for (int n = 0; n < nb_samples; n++) {
             ftype out, in;
 
-            in = *sample;
+            in = sample[n];
             out = in * in_gain;
             for (unsigned j = 0; j < nb_echoes; j++) {
                 const int jidx = FFMIN(j, nb_decays-1);
@@ -88,7 +89,7 @@ static int fn(echo_samples)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
             }
             out *= out_gain;
 
-            *d = CLIP(out);
+            d[n] = is_disabled ? in : CLIP(out);
             dbuf[index] = in;
 
             index = MOD(index + 1, max_samples);

@@ -261,7 +261,8 @@ const AVFilter ff_af_aecho = {
     .init          = init,
     .activate      = activate,
     .uninit        = uninit,
-    .flags         = AVFILTER_FLAG_SLICE_THREADS,
+    .flags         = AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(aecho_outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P,
