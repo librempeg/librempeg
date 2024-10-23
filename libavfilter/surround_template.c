@@ -19,7 +19,6 @@
 #undef MPI
 #undef MPI2
 #undef MPI4
-#undef MSQRT1_2
 #undef ftype
 #undef ctype
 #undef COPYSIGN
@@ -45,7 +44,6 @@
 #define MPI M_PIf
 #define MPI2 M_PI_2f
 #define MPI4 M_PI_4f
-#define MSQRT1_2 M_SQRT1_2f
 #define ftype float
 #define ctype AVComplexFloat
 #define COPYSIGN copysignf
@@ -70,7 +68,6 @@
 #define MPI M_PI
 #define MPI2 M_PI_2
 #define MPI4 M_PI_4
-#define MSQRT1_2 M_SQRT1_2
 #define ftype double
 #define ctype AVComplexDouble
 #define COPYSIGN copysign
@@ -156,8 +153,8 @@ static void fn(stereo_position)(const ftype l, const ftype r,
     const ftype h1h2 = h1*h2 + EPSILON;
     const ftype rel = re * l;
     const ftype rer = re * r;
-    ftype x0 = MSQRT1_2 * (rer - rel) / h1h2;
-    ftype y0 = MSQRT1_2 * (rer + rel) / h1h2;
+    ftype x0 = (rer - rel) / h1h2;
+    ftype y0 = (rer + rel) / h1h2;
     ftype z0 = im / (h1 + EPSILON);
 
     x0 = isnormal(x0) ? x0 : F(0.0);
