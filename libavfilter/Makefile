@@ -29,7 +29,7 @@ include $(SRC_PATH)/libavfilter/dnn/Makefile
 include $(SRC_PATH)/libavfilter/vulkan/Makefile
 
 OBJS-$(HAVE_LIBC_MSVCRT)                     += file_open.o
-OBJS-$(HAVE_THREADS)                         += pthread.o
+OBJS-$(HAVE_THREADS)                         += pthread_slice.o
 
 # subsystems
 OBJS-$(CONFIG_QSVVPP)                        += qsvvpp.o
