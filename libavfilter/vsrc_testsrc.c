@@ -1006,12 +1006,12 @@ static void rgbtest_put_pixel(uint8_t *dstp[4], int dst_linesizep[4],
     uint16_t *p16;
 
     switch (fmt) {
-    case AV_PIX_FMT_BGR444: ((uint16_t*)(dst + y*dst_linesize))[x] = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4); break;
-    case AV_PIX_FMT_RGB444: ((uint16_t*)(dst + y*dst_linesize))[x] = ((b >> 4) << 8) | ((g >> 4) << 4) | (r >> 4); break;
-    case AV_PIX_FMT_BGR555: ((uint16_t*)(dst + y*dst_linesize))[x] = ((r>>3)<<10) | ((g>>3)<<5) | (b>>3); break;
-    case AV_PIX_FMT_RGB555: ((uint16_t*)(dst + y*dst_linesize))[x] = ((b>>3)<<10) | ((g>>3)<<5) | (r>>3); break;
-    case AV_PIX_FMT_BGR565: ((uint16_t*)(dst + y*dst_linesize))[x] = ((r>>3)<<11) | ((g>>2)<<5) | (b>>3); break;
-    case AV_PIX_FMT_RGB565: ((uint16_t*)(dst + y*dst_linesize))[x] = ((b>>3)<<11) | ((g>>2)<<5) | (r>>3); break;
+    case AV_PIX_FMT_RGB444: AV_WN16(dst + y*dst_linesize + x*2, ((r>>4)<< 8) | ((g>>4)<<4) | (b>>4)); break;
+    case AV_PIX_FMT_BGR444: AV_WN16(dst + y*dst_linesize + x*2, ((b>>4)<< 8) | ((g>>4)<<4) | (r>>4)); break;
+    case AV_PIX_FMT_RGB555: AV_WN16(dst + y*dst_linesize + x*2, ((r>>3)<<10) | ((g>>3)<<5) | (b>>3)); break;
+    case AV_PIX_FMT_BGR555: AV_WN16(dst + y*dst_linesize + x*2, ((b>>3)<<10) | ((g>>3)<<5) | (r>>3)); break;
+    case AV_PIX_FMT_RGB565: AV_WN16(dst + y*dst_linesize + x*2, ((r>>3)<<11) | ((g>>2)<<5) | (b>>3)); break;
+    case AV_PIX_FMT_BGR565: AV_WN16(dst + y*dst_linesize + x*2, ((b>>3)<<11) | ((g>>2)<<5) | (r>>3)); break;
     case AV_PIX_FMT_RGB24:
     case AV_PIX_FMT_BGR24:
         v = (r << (rgba_map[R]*8)) + (g << (rgba_map[G]*8)) + (b << (rgba_map[B]*8));
