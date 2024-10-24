@@ -84,6 +84,7 @@ typedef struct BiquadsContext {
     int transform_type;
     int precision;
     int block_samples;
+    int decramp;
 
     int bypass;
 
@@ -294,6 +295,9 @@ static void convert_dir2zdf(BiquadsContext *s, int sample_rate)
     double a[3];
     double m[3];
 
+    if (s->decramp)
+        Q /= tan(s->frequency*M_PI/sample_rate)+1.0;
+
     switch (s->filter_type) {
     case biquad:
         a[0] = s->oa[0];
@@ -443,7 +447,7 @@ static int config_filter(AVFilterLink *outlink, int reset)
     const double w0 = 2.0 * M_PI * s->frequency / inlink->sample_rate;
     const double cos_w0 = cos(w0);
     const double sin_w0 = sin(w0);
-    double alpha, beta;
+    double alpha, beta, width;
 
     s->bypass = (((w0 > M_PI || w0 <= 0.) && reset) || (s->width <= 0.)) && (s->filter_type != biquad && s->filter_type != transform);
     if (s->bypass) {
@@ -454,24 +458,35 @@ static int config_filter(AVFilterLink *outlink, int reset)
     if ((w0 > M_PI || w0 <= 0.) && (s->filter_type != biquad && s->filter_type != transform))
         return AVERROR(EINVAL);
 
+    width = s->width;
+    if (s->decramp) {
+        double scale = tan(w0*0.5)+1.0;
+
+        if (s->width_type == HERTZ ||
+            s->width_type == KHERTZ)
+            width *= scale;
+        else
+            width /= scale;
+    }
+
     switch (s->width_type) {
     case NONE:
         alpha = 0.0;
         break;
     case HERTZ:
-        alpha = sin_w0 / (2.0 * s->frequency / s->width);
+        alpha = sin_w0 / (2.0 * s->frequency / width);
         break;
     case KHERTZ:
-        alpha = sin_w0 / (2.0 * s->frequency / (s->width * 1000.0));
+        alpha = sin_w0 / (2.0 * s->frequency / (width * 1000.0));
         break;
     case OCTAVE:
-        alpha = sin_w0 * sinh(log(2.) / 2.0 * s->width * w0 / sin_w0);
+        alpha = sin_w0 * sinh(log(2.) / 2.0 * width * w0 / sin_w0);
         break;
     case QFACTOR:
-        alpha = sin_w0 / (2.0 * s->width);
+        alpha = sin_w0 / (2.0 * width);
         break;
     case SLOPE:
-        alpha = sin_w0 / 2.0 * sqrt((A + 1.0 / A) * (1.0 / s->width - 1.0) + 2.0);
+        alpha = sin_w0 / 2.0 * sqrt((A + 1.0 / A) * (1.0 / width - 1.0) + 2.0);
         break;
     default:
         av_assert0(0);
@@ -1149,9 +1164,13 @@ const AVFilter ff_af_##name_ = {                         \
     AVFILTER_DEFINE_CLASS(name);                                        \
     DEFINE_BIQUAD_FILTER_2(name, description, name)
 
-#define WIDTH_OPTION(x)                                                                       \
+#define WIDTH_OPTION(x)                                                                   \
     {"width", "set width", OFFSET(width), AV_OPT_TYPE_DOUBLE, {.dbl=x}, 0, 99999, FLAGS}, \
     {"w",     "set width", OFFSET(width), AV_OPT_TYPE_DOUBLE, {.dbl=x}, 0, 99999, FLAGS}
+
+#define DECRAMP_OPTION(x)                                                                 \
+    {"decramp","enable decramping", OFFSET(decramp), AV_OPT_TYPE_BOOL, {.i64=x}, 0, 1, FLAGS},  \
+    {"d",      "enable decramping", OFFSET(decramp), AV_OPT_TYPE_BOOL, {.i64=x}, 0, 1, FLAGS}
 
 #define ORDER_OPTION(x)                                                                   \
     {"order", "set filter order", OFFSET(order), AV_OPT_TYPE_INT, {.i64=x}, 1, 2, AF}, \
@@ -1206,6 +1225,7 @@ static const AVOption equalizer_options[] = {
     {"f",         "set central frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=0}, 0, 999999, FLAGS},
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(1.0),
+    DECRAMP_OPTION(0),
     {"gain", "set gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, -900, 900, FLAGS},
     {"g",    "set gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, -900, 900, FLAGS},
     MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
@@ -1280,6 +1300,7 @@ static const AVOption bandpass_options[] = {
     {"f",         "set central frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=3000}, 0, 999999, FLAGS},
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(0.5),
+    DECRAMP_OPTION(0),
     {"csg",   "use constant skirt gain", OFFSET(csg), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS},
     MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
@@ -1296,6 +1317,7 @@ static const AVOption bandreject_options[] = {
     {"f",         "set central frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=3000}, 0, 999999, FLAGS},
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(0.5),
+    DECRAMP_OPTION(0),
     MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
