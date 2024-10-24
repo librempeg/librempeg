@@ -47,13 +47,14 @@ typedef struct AudioEchoContext {
 
 #define OFFSET(x) offsetof(AudioEchoContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define AT AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 static const AVOptionArrayDef def_delays = {.def="1000",.size_min=1,.sep='|'};
 static const AVOptionArrayDef def_decays = {.def="0.5",.size_min=1,.sep='|'};
 
 static const AVOption aecho_options[] = {
-    { "in_gain",  "set signal input gain",  OFFSET(in_gain),  AV_OPT_TYPE_FLOAT,  {.dbl=0.6}, 0, 1, A },
-    { "out_gain", "set signal output gain", OFFSET(out_gain), AV_OPT_TYPE_FLOAT,  {.dbl=0.3}, 0, 1, A },
+    { "in_gain",  "set signal input gain",  OFFSET(in_gain),  AV_OPT_TYPE_FLOAT,  {.dbl=0.6}, 0, 1, AT },
+    { "out_gain", "set signal output gain", OFFSET(out_gain), AV_OPT_TYPE_FLOAT,  {.dbl=0.3}, 0, 1, AT },
     { "delays",   "set list of signal delays", OFFSET(delays), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_delays}, 0, 90000, A },
     { "decays",   "set list of signal decays", OFFSET(decays), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_decays}, 0, 1, A },
     { NULL }
@@ -263,6 +264,7 @@ const AVFilter ff_af_aecho = {
     .uninit        = uninit,
     .flags         = AVFILTER_FLAG_SLICE_THREADS |
                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    .process_command = ff_filter_process_command,
     FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(aecho_outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P,
