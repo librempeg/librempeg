@@ -766,13 +766,13 @@ static int fn(transform_xy)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     const int start = (rdft_size * jobnr) / nb_jobs;
     const int end = (rdft_size * (jobnr+1)) / nb_jobs;
     const ftype angle = s->angle;
-    const ftype focus_x = s->focus[FFMIN(0, s->nb_focus-1)];
+    const ftype focus_x = s->focus[0];
     const ftype focus_y = s->focus[FFMIN(1, s->nb_focus-1)];
     const ftype focus_z = s->focus[FFMIN(2, s->nb_focus-1)];
-    const ftype shift_x = s->shift[FFMIN(0, s->nb_shift-1)];
+    const ftype shift_x = s->shift[0];
     const ftype shift_y = s->shift[FFMIN(1, s->nb_shift-1)];
     const ftype shift_z = s->shift[FFMIN(2, s->nb_shift-1)];
-    const ftype depth_x = s->depth[FFMIN(0, s->nb_depth-1)];
+    const ftype depth_x = s->depth[0];
     const ftype depth_y = s->depth[FFMIN(1, s->nb_depth-1)];
     const ftype depth_z = s->depth[FFMIN(2, s->nb_depth-1)];
     ftype *x = s->x_pos;
