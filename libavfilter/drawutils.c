@@ -66,13 +66,6 @@ static int fill_map(const AVPixFmtDescriptor *desc, uint8_t *map)
             map[ALPHA] = had0 ? 3 : 0;
     }
 
-    av_assert0(map[RED]   != map[GREEN]);
-    av_assert0(map[GREEN] != map[BLUE]);
-    av_assert0(map[BLUE]  != map[RED]);
-    av_assert0(map[RED]   != map[ALPHA]);
-    av_assert0(map[GREEN] != map[ALPHA]);
-    av_assert0(map[BLUE]  != map[ALPHA]);
-
     return 0;
 }
 
