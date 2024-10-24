@@ -173,13 +173,9 @@ static int config_output(AVFilterLink *outlink)
     AudioPhaserContext *s = outlink->src->priv;
     AVFilterLink *inlink = outlink->src->inputs[0];
 
-    s->delay_buffer_length = s->delay * 0.001 * inlink->sample_rate + 0.5;
-    if (s->delay_buffer_length <= 0) {
-        av_log(outlink->src, AV_LOG_ERROR, "delay is too small\n");
-        return AVERROR(EINVAL);
-    }
+    s->delay_buffer_length = FFMAX(1, lrint(s->delay * 0.001 * inlink->sample_rate));
     s->delay_buffer = av_calloc(s->delay_buffer_length, sizeof(*s->delay_buffer) * inlink->ch_layout.nb_channels);
-    s->modulation_buffer_length = inlink->sample_rate / s->speed + 0.5;
+    s->modulation_buffer_length = FFMAX(1, lrint(inlink->sample_rate / s->speed));
     s->modulation_buffer = av_malloc_array(s->modulation_buffer_length, sizeof(*s->modulation_buffer));
 
     if (!s->modulation_buffer || !s->delay_buffer)
