@@ -193,7 +193,7 @@ static void extract_from_packed(uint8_t *dst, int dst_linesize,
             case 6:
             case 8:
                 for (int x = 0; x < width; x++)
-                    dst[x] = (src[x * 2 + offset] >> shift) << (8 - depth);
+                    dst[x] = (AV_RN16(src + x * 2 + offset) >> shift) << (8 - depth);
                 break;
             case 10:
             case 12:
