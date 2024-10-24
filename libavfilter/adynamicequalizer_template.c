@@ -107,6 +107,8 @@ typedef struct fn(BandContext) {
     ftype trelease_coef;
     ftype threshold_log;
 
+    ftype scale_tqfactor;
+
     fn(ChannelContext) *cc;
 
     fn(filter_svf) target_fn;
@@ -337,15 +339,20 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
         const ftype dfrequency = FMIN(s->dfrequency[FFMIN(band, s->nb_dfrequency-1)], sample_rate * F(0.5));
         const ftype ratio = s->ratio[FFMIN(band, s->nb_ratio-1)];
         const ftype dg = FTAN(F(M_PI) * dfrequency / sample_rate);
-        const ftype dqfactor = s->dqfactor[FFMIN(band, s->nb_dqfactor-1)];
         const int tftype = s->tftype[FFMIN(band, s->nb_tftype-1)];
         const int dftype = s->dftype[FFMIN(band, s->nb_dftype-1)];
-        const ftype k = F(1.0) / dqfactor;
+        const ftype tfrequency = FMIN(s->tfrequency[FFMIN(band, s->nb_tfrequency-1)], sample_rate * F(0.5));
+        const ftype tqfactor = s->tqfactor[FFMIN(band, s->nb_tqfactor-1)];
+        const ftype fg = FTAN(F(M_PI) * tfrequency / sample_rate);
+        const ftype itqfactor = F(1.0) / tqfactor;
         fn(ChannelContext) *cs = b->cc;
+        ftype scale_dqfactor;
+        ftype scale_tqfactor;
         ftype *aa = b->aa;
         ftype *am = b->am;
         ftype *da = b->da;
         ftype *dm = b->dm;
+        ftype k, dqfactor;
 
         b->threshold = s->threshold[FFMIN(band, s->nb_threshold-1)];
         b->threshold_log = LIN2LOG(b->threshold);
@@ -354,6 +361,9 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
 
         switch (dftype) {
         case DBANDPASS:
+            scale_dqfactor = F(1.0)/(dg+F(1.0));
+            dqfactor = s->dqfactor[FFMIN(band, s->nb_dqfactor-1)] * scale_dqfactor;
+            k = F(1.0) / dqfactor;
             da[0] = F(1.0) / (F(1.0) + dg * (dg + k));
             da[1] = dg * da[0];
             da[2] = dg * da[1];
@@ -365,6 +375,8 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
             b->detect_fn = fn(get_svf_band);
             break;
         case DLOWPASS:
+            dqfactor = s->dqfactor[FFMIN(band, s->nb_dqfactor-1)];
+            k = F(1.0) / dqfactor;
             da[0] = F(1.0) / (F(1.0) + dg * (dg + k));
             da[1] = dg * da[0];
             da[2] = dg * da[1];
@@ -376,6 +388,8 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
             b->detect_fn = fn(get_svf_low);
             break;
         case DHIGHPASS:
+            dqfactor = s->dqfactor[FFMIN(band, s->nb_dqfactor-1)];
+            k = F(1.0) / dqfactor;
             da[0] = F(1.0) / (F(1.0) + dg * (dg + k));
             da[1] = dg * da[0];
             da[2] = dg * da[1];
@@ -387,6 +401,9 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
             b->detect_fn = fn(get_svf);
             break;
         case DPEAK:
+            scale_dqfactor = F(1.0)/(dg+F(1.0));
+            dqfactor = s->dqfactor[FFMIN(band, s->nb_dqfactor-1)] * scale_dqfactor;
+            k = F(1.0) / dqfactor;
             da[0] = F(1.0) / (F(1.0) + dg * (dg + k));
             da[1] = dg * da[0];
             da[2] = dg * da[1];
@@ -401,14 +418,17 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
 
         switch (tftype) {
         case TBELL:
+            scale_tqfactor = fg + F(1.0);
             b->target_update = fn(update_bell);
             b->target_fn = fn(get_svf_bell);
             break;
         case TLOWSHELF:
+            scale_tqfactor = F(1.0);
             b->target_update = fn(update_low);
             b->target_fn = fn(get_svf);
             break;
         case THIGHSHELF:
+            scale_tqfactor = F(1.0);
             b->target_update = fn(update_high);
             b->target_fn = fn(get_svf);
             break;
@@ -429,20 +449,18 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
             am[2] = F(1.0);
         }
 
+        b->scale_tqfactor = scale_tqfactor;
         b->lowpass_fn = fn(get_svf_low);
+
         if (ratio > F(0.0))
             b->target_gain = fn(target_gain);
         else
             b->target_gain = fn(target_gain_noratio);
 
         for (int ch = 0; ch < s->nb_channels; ch++) {
-            const ftype tfrequency = FMIN(s->tfrequency[FFMIN(band, s->nb_tfrequency-1)], sample_rate * F(0.5));
-            const ftype tqfactor = s->tqfactor[FFMIN(band, s->nb_tqfactor-1)];
-            const ftype fg = FTAN(F(M_PI) * tfrequency / sample_rate);
-            const ftype itqfactor = F(1.0) / tqfactor;
             fn(ChannelContext) *cc = &cs[ch];
 
-            b->target_update(itqfactor, cc->lin_gain, fg, cc->fa, cc->fm);
+            b->target_update(scale_tqfactor * itqfactor, cc->lin_gain, fg, cc->fa, cc->fm);
         }
     }
 
@@ -472,7 +490,7 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
     const ftype trelease = b->trelease_coef;
     const ftype tattack = b->tattack_coef;
     const ftype tqfactor = s->tqfactor[FFMIN(band, s->nb_tqfactor-1)];
-    const ftype itqfactor = F(1.0) / tqfactor;
+    const ftype itqfactor = b->scale_tqfactor / tqfactor;
     const ftype fg = FTAN(F(M_PI) * tfrequency / sample_rate);
     const int is_disabled = ctx->is_disabled;
     const int nb_samples = out->nb_samples;
