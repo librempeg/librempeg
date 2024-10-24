@@ -170,6 +170,13 @@ typedef struct AVFilterFormatsConfig {
  * The filter can create hardware frames using AVFilterContext.hw_device_ctx.
  */
 #define AVFILTER_FLAG_HWDEVICE              (1 << 4)
+
+/**
+ * The filter supports multithreading by processing multiple frames
+ * concurrently.
+ */
+#define AVFILTER_FLAG_FRAME_THREADS         (1 << 5)
+
 /**
  * Some filters support a generic "enable" expression option that can be used
  * to enable or disable a filter in the timeline. Filters supporting this
@@ -253,6 +260,11 @@ unsigned avfilter_filter_pad_count(const AVFilter *filter, int is_output);
  * Process multiple parts of the frame concurrently.
  */
 #define AVFILTER_THREAD_SLICE (1 << 0)
+
+/**
+ * A given filter instance may process multiple frames concurrently.
+ */
+#define AVFILTER_THREAD_FRAME_FILTER (1 << 1)
 
 /** An instance of a filter */
 typedef struct AVFilterContext {

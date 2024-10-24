@@ -47,8 +47,9 @@
 #define A AV_OPT_FLAG_AUDIO_PARAM
 static const AVOption filtergraph_options[] = {
     { "thread_type", "Allowed thread types", OFFSET(thread_type), AV_OPT_TYPE_FLAGS,
-        { .i64 = AVFILTER_THREAD_SLICE }, 0, INT_MAX, F|V|A, .unit = "thread_type" },
+        { .i64 = AVFILTER_THREAD_SLICE | AVFILTER_THREAD_FRAME_FILTER }, 0, INT_MAX, F|V|A, .unit = "thread_type" },
         { "slice", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVFILTER_THREAD_SLICE }, .flags = F|V|A, .unit = "thread_type" },
+        { "frame_filter", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVFILTER_THREAD_FRAME_FILTER }, .flags = F|V|A, .unit = "thread_type" },
     { "threads",     "Maximum number of threads", OFFSET(nb_threads), AV_OPT_TYPE_INT,
         { .i64 = 0 }, 0, INT_MAX, F|V|A, .unit = "threads"},
         {"auto", "autodetect a suitable number of threads to use", 0, AV_OPT_TYPE_CONST, {.i64 = 0 }, .flags = F|V|A, .unit = "threads"},
@@ -79,13 +80,26 @@ int ff_graph_thread_init(FFFilterGraph *graph)
 }
 #endif
 
+#if !CONFIG_AVFILTER_THREAD_FRAME
+void ff_filter_frame_thread_suspend(FFFilterContext *ctxi)
+{
+}
+#endif
+
 AVFilterGraph *avfilter_graph_alloc(void)
 {
     FFFilterGraph *graph = av_mallocz(sizeof(*graph));
     AVFilterGraph *ret;
+    int err;
 
     if (!graph)
         return NULL;
+
+    err = ff_mutex_init(&graph->get_buffer_lock, NULL);
+    if (err) {
+        av_freep(&graph);
+        return NULL;
+    }
 
     ret = &graph->p;
     ret->av_class = &filtergraph_class;
@@ -121,6 +135,12 @@ void avfilter_graph_free(AVFilterGraph **graphp)
     if (!graph)
         return;
 
+    for (unsigned i = 0; i < graph->nb_filters; i++) {
+        AVFilterContext *filter = graph->filters[i];
+        if (filter->thread_type & AVFILTER_THREAD_FRAME_FILTER)
+            ff_filter_frame_thread_suspend(fffilterctx(filter));
+    }
+
     while (graph->nb_filters)
         avfilter_free(graph->filters[0]);
 
@@ -129,6 +149,8 @@ void avfilter_graph_free(AVFilterGraph **graphp)
     av_freep(&graphi->sink_links);
 
     av_opt_free(graph);
+
+    ff_mutex_destroy(&graphi->get_buffer_lock);
 
     av_freep(&graph->filters);
     av_freep(graphp);
@@ -255,6 +277,18 @@ static int graph_config_links(AVFilterGraph *graph, void *log_ctx)
                 return ret;
         }
     }
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+    for (int i = 0; i < graph->nb_filters; i++) {
+        filt = graph->filters[i];
+
+        if (filt->thread_type & AVFILTER_THREAD_FRAME_FILTER) {
+            ret = ff_filter_frame_thread_config_links(fffilterctx(filt));
+            if (ret < 0)
+                return ret;
+        }
+    }
+#endif
 
     return 0;
 }

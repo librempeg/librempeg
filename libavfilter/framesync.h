@@ -287,6 +287,8 @@ int ff_framesync_get_frame(FFFrameSync *fs, unsigned in, AVFrame **rframe,
  */
 int ff_framesync_activate(FFFrameSync *fs);
 
+int ff_framesync_activate_frames(FFFrameSync *fs);
+
 /**
  * Initialize a frame sync structure for dualinput.
  *
@@ -314,6 +316,8 @@ int ff_framesync_dualinput_get(FFFrameSync *fs, AVFrame **f0, AVFrame **f1);
  * Same as ff_framesync_dualinput_get(), but make sure that f0 is writable.
  */
 int ff_framesync_dualinput_get_writable(FFFrameSync *fs, AVFrame **f0, AVFrame **f1);
+
+int ff_framesync_filter_prepare(FFFrameSync *fs);
 
 const AVClass *ff_framesync_child_class_iterate(void **iter);
 extern const AVClass ff_framesync_class;

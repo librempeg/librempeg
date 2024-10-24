@@ -457,6 +457,61 @@ typedef struct FFFilter {
      * activation.
      */
     int (*activate)(AVFilterContext *ctx);
+
+    /**
+     * Perform per-output-frame setup prior to actual filtering
+     *
+     * Must be set by frame-threaded filters with nontrivial input requirements,
+     * i.e. those for which at least one of the following does NOT hold:
+     * - exactly one input link
+     * - exactly one input frame needed to perform filtering and produce one or
+     *   more output frames
+     *
+     * When set, this callback will be invoked from the main thread (whether
+     * frame threading is used or not). It should
+     * - gather the frames needed to produce an output frame
+     * - perform any other setup that needs to persist across frames
+     *
+     * @retval 0 All required input has been gathered and can be transferred to
+     *           a worker thread for filtering.
+     *
+     *           If frame threading is in use, the transfer_state() callback
+     *           will be called next, with the main thread's context as src and
+     *           a child context as dst, in order to transfer the frames (and
+     *           any other state needed) to the per-thread context.
+     *
+     *           Next, the activate() or filter_frame() callback (whichever is
+     *           set) is called either in the worker thread (when frame
+     *           threading is in use) or in the main thread (otherwise).
+     *
+     *           After that this callback may be called again to prepare input
+     *           for the next output frame.
+     *
+     * @retval AVERROR(EAGAIN) Not enough input is available. This callback will
+     *                         be called again when more input arrives.
+     *
+     * @retval AVERROR(EOF) The filter will produce no more frames on any of its
+     *                      outputs.
+     *
+     * @retval <0 other error codes will terminate filtering and be propagated
+     *            to the caller
+     */
+    int (*filter_prepare)(AVFilterContext *ctx);
+
+    /**
+     * Transfer filter state between per-thread contexts.
+     *
+     * Only invoked for filters flagged with AVFILTER_FLAG_FRAME_THREADS when
+     * frame threading is active. Called after filter_prepare() returns success.
+     *
+     * @param src user-facing filtering context (the one filter_prepare() was
+     *            called on)
+     * @param dst per-thread filtering context
+     *
+     * @retval 0 success
+     * @retval <0 error code
+     */
+    int (*transfer_state)(AVFilterContext *dst, const AVFilterContext *src);
 } FFFilter;
 
 static inline const FFFilter *fffilter(const AVFilter *f)
@@ -840,5 +895,10 @@ static inline int ff_filter_get_buffer(AVFilterContext *ctx, AVFrame *frame)
 {
     return ff_filter_get_buffer_ext(ctx, frame, 0, 0, 0);
 }
+
+/**
+ * @return non-zero if the caller is a frame-threading worker
+ */
+int ff_filter_is_frame_thread(const AVFilterContext *ctx);
 
 #endif /* AVFILTER_FILTERS_H */

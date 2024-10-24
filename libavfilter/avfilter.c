@@ -19,6 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "config.h"
+
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/bprint.h"
@@ -555,8 +557,17 @@ static int request_frame_to_filter(AVFilterLink *link)
     if (ret < 0) {
         if (ret != AVERROR(EAGAIN) && ret != li->status_in)
             ff_avfilter_link_set_in_status(link, ret, guess_status_pts(link->src, ret, link->time_base));
-        if (ret == AVERROR_EOF)
+        if (ret == AVERROR_EOF) {
+#if CONFIG_AVFILTER_THREAD_FRAME
+            if (link->src->thread_type & AVFILTER_THREAD_FRAME_FILTER) {
+                ret = ff_filter_frame_thread_flush(link->src);
+                if (ret < 0)
+                    return ret;
+            }
+#endif
+
             ret = 0;
+        }
     }
     return ret;
 }
@@ -676,6 +687,7 @@ static const AVOption avfilter_options[] = {
     { "thread_type", "Allowed thread types", OFFSET(thread_type), AV_OPT_TYPE_FLAGS,
         { .i64 = AVFILTER_THREAD_SLICE }, 0, INT_MAX, FLAGS, .unit = "thread_type" },
         { "slice", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVFILTER_THREAD_SLICE }, .flags = FLAGS, .unit = "thread_type" },
+        { "frame", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVFILTER_THREAD_FRAME_FILTER }, .flags = FLAGS, .unit = "thread_type" },
     { "enable", "set enable expression", OFFSET(enable_str), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = TFLAGS },
     { "threads", "Allowed number of threads", OFFSET(nb_threads), AV_OPT_TYPE_INT,
         { .i64 = 0 }, 0, INT_MAX, FLAGS, .unit = "threads" },
@@ -814,6 +826,12 @@ void avfilter_free(AVFilterContext *filter)
         return;
     ctxi = fffilterctx(filter);
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+    if ((filter->thread_type & AVFILTER_THREAD_FRAME_FILTER) &&
+        !ctxi->is_frame_thread)
+        ff_filter_frame_thread_free(ctxi);
+#endif
+
     if (filter->graph)
         ff_filter_graph_remove_filter(filter->graph, filter);
 
@@ -924,6 +942,39 @@ int ff_filter_process_command(AVFilterContext *ctx, const char *cmd,
     return av_opt_set(ctx->priv, cmd, arg, 0);
 }
 
+static int threading_init(FFFilterContext *ctxi)
+{
+    AVFilterContext *const     ctx = &ctxi->p;
+    const int thread_types_allowed = ctx->thread_type & ctx->graph->thread_type;
+    int ret = 0;
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+    if (ctxi->is_frame_thread)
+        return 0;
+
+    if ((ctx->filter->flags & AVFILTER_FLAG_FRAME_THREADS) &&
+        (thread_types_allowed & AVFILTER_THREAD_FRAME_FILTER)) {
+        ret = ff_filter_frame_thread_init(ctxi);
+        if (ret < 0) {
+            av_log(ctx, AV_LOG_ERROR, "Error initializing frame threading\n");
+            return ret;
+        }
+    } else
+#endif
+    if (ctx->filter->flags & AVFILTER_FLAG_SLICE_THREADS &&
+               (thread_types_allowed & AVFILTER_THREAD_SLICE)   &&
+               fffiltergraph(ctx->graph)->thread_execute) {
+        ctxi->execute    = fffiltergraph(ctx->graph)->thread_execute;
+        ctx->thread_type = AVFILTER_THREAD_SLICE;
+    } else {
+        ctx->thread_type = 0;
+        ctx->nb_threads  = 0;
+    }
+
+
+    return 0;
+}
+
 int avfilter_init_dict(AVFilterContext *ctx, AVDictionary **options)
 {
     FFFilterContext *ctxi = fffilterctx(ctx);
@@ -940,15 +991,6 @@ int avfilter_init_dict(AVFilterContext *ctx, AVDictionary **options)
         return ret;
     }
 
-    if (ctx->filter->flags & AVFILTER_FLAG_SLICE_THREADS &&
-        ctx->thread_type & ctx->graph->thread_type & AVFILTER_THREAD_SLICE &&
-        fffiltergraph(ctx->graph)->thread_execute) {
-        ctx->thread_type       = AVFILTER_THREAD_SLICE;
-        ctxi->execute    = fffiltergraph(ctx->graph)->thread_execute;
-    } else {
-        ctx->thread_type = 0;
-    }
-
     if (fffilter(ctx->filter)->init)
         ret = fffilter(ctx->filter)->init(ctx);
     if (ret < 0)
@@ -958,6 +1000,12 @@ int avfilter_init_dict(AVFilterContext *ctx, AVDictionary **options)
         ret = set_enable_expr(ctxi, ctx->enable_str);
         if (ret < 0)
             return ret;
+    }
+
+    ret = threading_init(ctxi);
+    if (ret < 0) {
+        av_log(ctx, AV_LOG_ERROR, "Error initializing threading.\n");
+        return ret;
     }
 
     ctxi->state_flags |= AV_CLASS_STATE_INITIALIZED;
@@ -1056,7 +1104,15 @@ static int filter_frame_framed(AVFilterLink *link, AVFrame *frame)
     if (dsti->is_disabled &&
         (dstctx->filter->flags & AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC))
         filter_frame = default_filter_frame;
-    ret = filter_frame(link, frame);
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+    if ((dstctx->thread_type & AVFILTER_THREAD_FRAME_FILTER) &&
+        !dsti->is_frame_thread)
+        ret = ff_filter_frame_thread_submit(link, frame);
+    else
+#endif
+        ret = filter_frame(link, frame);
+
     l->frame_count_out++;
     return ret;
 
@@ -1070,6 +1126,11 @@ int ff_filter_frame(AVFilterLink *link, AVFrame *frame)
     FilterLinkInternal * const li = ff_link_internal(link);
     int ret;
     FF_TPRINTF_START(NULL, filter_frame); ff_tlog_link(NULL, link, 1); ff_tlog(NULL, " "); tlog_ref(NULL, frame, 1);
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+    if (fffilterctx(link->src)->is_frame_thread)
+        return ff_filter_frame_thread_frame_out(link, frame);
+#endif
 
     /* Consistency checks */
     if (link->type == AVMEDIA_TYPE_VIDEO) {
@@ -1429,12 +1490,33 @@ int ff_filter_activate(AVFilterContext *filter)
 {
     FFFilterContext *ctxi = fffilterctx(filter);
     const FFFilter *const fi = fffilter(filter->filter);
+
     int ret;
 
     /* Generic timeline support is not yet implemented but should be easy */
     av_assert1(!(fi->p.flags & AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC &&
                  fi->activate));
     ctxi->ready = 0;
+
+    if (fi->filter_prepare) {
+        ret = fi->filter_prepare(filter);
+#if CONFIG_AVFILTER_THREAD_FRAME
+        if (ret == AVERROR_EOF &&
+            (filter->thread_type & AVFILTER_THREAD_FRAME_FILTER)) {
+            ret = ff_filter_frame_thread_flush(filter);
+            ret = (ret >= 0) ? AVERROR_EOF : ret;
+        }
+#endif
+        if (ret < 0)
+            return (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) ? 0 : ret;
+    }
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+    // XXX: use the same path independently of the callback being used?
+    if (filter->thread_type & AVFILTER_THREAD_FRAME_FILTER && fi->activate)
+        return ff_filter_frame_thread_activate(filter);
+#endif
+
     ret = fi->activate ? fi->activate(filter) : filter_activate_default(filter);
     if (ret == FFERROR_NOT_READY)
         ret = 0;
@@ -1687,6 +1769,12 @@ int ff_filter_get_buffer_ext(AVFilterContext *ctx, AVFrame *frame,
     AVFilterLink *outlink;
     AVFrame *tmp;
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+    if (fffilterctx(ctx)->is_frame_thread)
+        return ff_filter_frame_thread_get_buffer(ctx, frame, out_idx,
+                                                 align, flags);
+#endif
+
     if (align)
         return AVERROR(ENOSYS);
 
@@ -1744,4 +1832,9 @@ int ff_filter_get_buffer_ext(AVFilterContext *ctx, AVFrame *frame,
     av_frame_free(&tmp);
 
     return 0;
+}
+
+int ff_filter_is_frame_thread(const AVFilterContext *ctx)
+{
+    return cfffilterctx(ctx)->is_frame_thread;
 }

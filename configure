@@ -2059,6 +2059,7 @@ FEATURE_LIST="
 "
 
 FEATURE_AGPL_LIST="
+    avfilter_thread_frame
 "
 
 # this list should be kept in linking order
@@ -2105,6 +2106,7 @@ CONFIG_LIST="
     $HWACCEL_LIBRARY_LIST
     $HWACCEL_AUTODETECT_LIBRARY_LIST
     $FEATURE_LIST
+    $FEATURE_AGPL_LIST
     $LICENSE_LIST
     $LIBRARY_LIST
     $PROGRAM_LIST
@@ -4474,6 +4476,8 @@ done
 #TODO: switch to $AUTODETECT_LIBS when $THREADS_LIST is supported the same way
 enable_weak $EXTERNAL_AUTODETECT_LIBRARY_LIST
 enable_weak $HWACCEL_AUTODETECT_LIBRARY_LIST
+
+enabled agpl && enable avfilter_thread_frame
 
 disabled logging && logfile=/dev/null
 

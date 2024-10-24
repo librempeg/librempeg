@@ -30,6 +30,7 @@ include $(SRC_PATH)/libavfilter/vulkan/Makefile
 
 OBJS-$(HAVE_LIBC_MSVCRT)                     += file_open.o
 OBJS-$(HAVE_THREADS)                         += pthread_slice.o
+OBJS-$(CONFIG_AVFILTER_THREAD_FRAME)         += pthread_frame.o
 
 # subsystems
 OBJS-$(CONFIG_QSVVPP)                        += qsvvpp.o
@@ -700,6 +701,8 @@ OBJS-$(CONFIG_LIBSHADERC)                    += vulkan_shaderc.o
 
 # Objects duplicated from other libraries for shared builds
 SHLIBOBJS                                    += log2_tab.o
+
+SHLIBOBJS-$(CONFIG_AVFILTER_THREAD_FRAME)    += thread.o threadprogress.o
 
 # Windows resource file
 SHLIBOBJS-$(HAVE_GNU_WINDRES)                += avfilterres.o
