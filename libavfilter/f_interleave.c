@@ -27,6 +27,7 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 
 #include "avfilter.h"
@@ -39,6 +40,7 @@ typedef struct InterleaveContext {
     int nb_inputs;
     int duration_mode;
     int64_t pts;
+    int *eofs;
 } InterleaveContext;
 
 #define DURATION_LONGEST  0
@@ -64,7 +66,7 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *outlink = ctx->outputs[0];
     InterleaveContext *s = ctx->priv;
     int64_t q_pts, pts = INT64_MAX;
-    int i, nb_eofs = 0, input_idx = -1;
+    int nb_eofs = 0, input_idx = -1;
     int first_eof = 0;
     int64_t rpts;
     int status;
@@ -72,29 +74,35 @@ static int activate(AVFilterContext *ctx)
 
     FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
 
-    for (i = 0; i < ctx->nb_inputs; i++) {
-        int is_eof = !!ff_inlink_acknowledge_status(ctx->inputs[i], &status, &rpts);
+    for (int i = 0; i < ctx->nb_inputs; i++) {
+        if (s->eofs[i]) {
+            nb_eofs++;
+        } else if (ff_inlink_acknowledge_status(ctx->inputs[i], &status, &rpts)) {
+            int is_eof;
 
-        nb_eofs += is_eof;
-        if (i == 0)
-            first_eof = is_eof;
+            s->eofs[i] = is_eof = (status == AVERROR_EOF);
+
+            nb_eofs += is_eof;
+            if (i == 0)
+                first_eof = is_eof;
+        }
     }
 
-    if ((nb_eofs > 0 && s->duration_mode == DURATION_SHORTEST) ||
-        (nb_eofs == ctx->nb_inputs && s->duration_mode == DURATION_LONGEST) ||
+    if (((nb_eofs > 0) && (s->duration_mode == DURATION_SHORTEST)) ||
+        ((nb_eofs == ctx->nb_inputs) && s->duration_mode == DURATION_LONGEST) ||
         (first_eof && s->duration_mode == DURATION_FIRST)) {
         ff_outlink_set_status(outlink, AVERROR_EOF, s->pts);
         return 0;
     }
 
-    for (i = 0; i < ctx->nb_inputs; i++) {
+    for (int i = 0; i < ctx->nb_inputs; i++) {
         if (!ff_inlink_queued_frames(ctx->inputs[i]))
             continue;
         nb_inputs_with_frames++;
     }
 
     if (nb_inputs_with_frames >= ctx->nb_inputs - nb_eofs) {
-        for (i = 0; i < ctx->nb_inputs; i++) {
+        for (int i = 0; i < ctx->nb_inputs; i++) {
             AVFrame *frame;
 
             if (ff_inlink_queued_frames(ctx->inputs[i]) == 0)
@@ -133,17 +141,17 @@ static int activate(AVFilterContext *ctx)
         }
     }
 
-    for (i = 0; i < ctx->nb_inputs; i++) {
+    for (int i = 0; i < ctx->nb_inputs; i++) {
         if (ff_inlink_queued_frames(ctx->inputs[i]))
             continue;
-        if (ff_outlink_frame_wanted(outlink) &&
-            !ff_outlink_get_status(ctx->inputs[i])) {
+
+        if (ff_outlink_frame_wanted(outlink) && !s->eofs[i]) {
             ff_inlink_request_frame(ctx->inputs[i]);
             return 0;
         }
     }
 
-    if (i == ctx->nb_inputs - nb_eofs && ff_outlink_frame_wanted(outlink)) {
+    if (ff_outlink_frame_wanted(outlink)) {
         ff_filter_set_ready(ctx, 100);
         return 0;
     }
@@ -153,11 +161,11 @@ static int activate(AVFilterContext *ctx)
 
 static av_cold int init(AVFilterContext *ctx)
 {
-    InterleaveContext *s = ctx->priv;
     const AVFilterPad *outpad = &ctx->filter->outputs[0];
-    int i, ret;
+    InterleaveContext *s = ctx->priv;
+    int ret;
 
-    for (i = 0; i < s->nb_inputs; i++) {
+    for (int i = 0; i < s->nb_inputs; i++) {
         AVFilterPad inpad = { 0 };
 
         inpad.name = av_asprintf("input%d", i);
@@ -177,7 +185,18 @@ static av_cold int init(AVFilterContext *ctx)
             return ret;
     }
 
+    s->eofs = av_calloc(ctx->nb_inputs, sizeof(*s->eofs));
+    if (!s->eofs)
+        return AVERROR(ENOMEM);
+
     return 0;
+}
+
+static av_cold void uninit(AVFilterContext *ctx)
+{
+    InterleaveContext *s = ctx->priv;
+
+    av_freep(&s->eofs);
 }
 
 static int config_output(AVFilterLink *outlink)
@@ -185,7 +204,6 @@ static int config_output(AVFilterLink *outlink)
     FilterLink *l = ff_filter_link(outlink);
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink0 = ctx->inputs[0];
-    int i;
 
     if (outlink->type == AVMEDIA_TYPE_VIDEO) {
         outlink->time_base           = AV_TIME_BASE_Q;
@@ -194,7 +212,7 @@ static int config_output(AVFilterLink *outlink)
         outlink->sample_aspect_ratio = inlink0->sample_aspect_ratio;
         outlink->format              = inlink0->format;
         l->frame_rate = (AVRational) {1, 0};
-        for (i = 1; i < ctx->nb_inputs; i++) {
+        for (int i = 1; i < ctx->nb_inputs; i++) {
             AVFilterLink *inlink = ctx->inputs[i];
 
             if (outlink->w                       != inlink->w                       ||
@@ -236,6 +254,7 @@ const AVFilter ff_vf_interleave = {
     .priv_size   = sizeof(InterleaveContext),
     .init        = init,
     .activate    = activate,
+    .uninit      = uninit,
     FILTER_OUTPUTS(interleave_outputs),
     .priv_class  = &interleave_class,
     .flags       = AVFILTER_FLAG_DYNAMIC_INPUTS,
@@ -262,6 +281,7 @@ const AVFilter ff_af_ainterleave = {
     .priv_size   = sizeof(InterleaveContext),
     .init        = init,
     .activate    = activate,
+    .uninit      = uninit,
     FILTER_OUTPUTS(ainterleave_outputs),
     .priv_class  = &ainterleave_class,
     .flags       = AVFILTER_FLAG_DYNAMIC_INPUTS,
