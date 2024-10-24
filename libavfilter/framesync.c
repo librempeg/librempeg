@@ -349,24 +349,49 @@ static int consume_from_fifos(FFFrameSync *fs)
     return 1;
 }
 
-int ff_framesync_activate(FFFrameSync *fs)
+int ff_framesync_filter_prepare(FFFrameSync *fs)
 {
     AVFilterContext *ctx = fs->parent;
     int ret;
 
-    FF_FILTER_FORWARD_STATUS_BACK_ALL(ctx->outputs[0], ctx);
+    ret = ff_outlink_get_status(ctx->outputs[0]);
+    if (ret) {
+        for (unsigned i = 0; i < ctx->nb_inputs; i++)
+            ff_inlink_set_status(ctx->inputs[i], ret);
+        goto finish;
+    }
 
     ret = framesync_advance(fs);
     if (ret < 0)
-        return ret;
-    if (fs->eof || !fs->frame_ready)
-        return 0;
+        return (ret == FFERROR_NOT_READY) ? AVERROR(EAGAIN) : ret;
+
+finish:
+    return fs->eof         ? AVERROR_EOF :
+           fs->frame_ready ? ret : AVERROR(EAGAIN);
+}
+
+
+int ff_framesync_activate_frames(FFFrameSync *fs)
+{
+    int ret;
+
     ret = fs->on_event(fs);
     if (ret < 0)
         return ret;
     fs->frame_ready = 0;
 
     return 0;
+}
+
+int ff_framesync_activate(FFFrameSync *fs)
+{
+    int ret;
+
+    ret = ff_framesync_filter_prepare(fs);
+    if (ret < 0)
+        return (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) ? 0 : ret;
+
+    return ff_framesync_activate_frames(fs);
 }
 
 int ff_framesync_init_dualinput(FFFrameSync *fs, AVFilterContext *parent)

@@ -1,6 +1,7 @@
 # Librempeg License
 
-All Librempeg modifications, and any new files not available in FFmpeg, are licensed under GPL v2.
+All Librempeg modifications, and any new files not available in FFmpeg, are licensed under GPL v2,
+unless stated otherwise.
 
 # License
 
@@ -67,6 +68,17 @@ Should you, for whatever reason, prefer to use version 3 of the (L)GPL, then
 the configure parameter `--enable-version3` will activate this licensing option
 for you. Read the file `COPYING.LGPLv3` or, if you have enabled GPL parts,
 `COPYING.GPLv3` to learn the exact legal terms that apply in this case.
+
+Some optional parts of Librempeg are also licensed under the GNU Affero General
+Public License version 3 or later (AGPL v3+). See the file `COPYING.AGPLv3` for
+ details. None of these parts are used by default, you have to explicitly pass
+`--enable-agpl` to configure to activate them. In this case, Librempeg's license
+changes to AGPL v3+.
+
+Specifically, the AGPL parts of Librempeg are:
+
+- avfilter frame threading
+
 
 There are a handful of files under other licensing terms, namely:
 

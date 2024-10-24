@@ -27,6 +27,8 @@
 
 #include <stdint.h>
 
+#include "libavutil/thread.h"
+
 #include "avfilter.h"
 #include "filters.h"
 #include "framequeue.h"
@@ -92,6 +94,9 @@ static inline FilterLinkInternal *ff_link_internal(AVFilterLink *link)
     return (FilterLinkInternal*)link;
 }
 
+typedef struct FrameThreadingContext FrameThreadingContext;
+typedef struct WorkerThreadContext   WorkerThreadContext;
+
 typedef struct FFFilterContext {
     /**
      * The public AVFilterContext. See avfilter.h for it.
@@ -121,6 +126,13 @@ typedef struct FFFilterContext {
     int is_disabled;
 
     struct AVFilterCommand *command_queue;
+
+    // Frame threading state
+    union {
+        FrameThreadingContext *ft;
+        WorkerThreadContext   *wt;
+    };
+    int is_frame_thread;
 } FFFilterContext;
 
 static inline FFFilterContext *fffilterctx(AVFilterContext *ctx)
@@ -155,6 +167,9 @@ typedef struct FFFilterGraph {
     void *thread;
     avfilter_execute_func *thread_execute;
     FFFrameQueueGlobal frame_queues;
+
+    // used by frame threads to avoid concurrent get_buffer() calls
+    AVMutex get_buffer_lock;
 } FFFilterGraph;
 
 static inline FFFilterGraph *fffiltergraph(AVFilterGraph *graph)
@@ -203,6 +218,17 @@ int ff_filter_opt_parse(void *logctx, const AVClass *priv_class,
 int ff_graph_thread_init(FFFilterGraph *graph);
 
 void ff_graph_thread_free(FFFilterGraph *graph);
+
+int ff_filter_frame_thread_init(FFFilterContext *ctxi);
+void ff_filter_frame_thread_free(FFFilterContext *ctxi);
+void ff_filter_frame_thread_suspend(FFFilterContext *ctxi);
+int ff_filter_frame_thread_config_links(FFFilterContext *ctxi);
+int ff_filter_frame_thread_frame_out(AVFilterLink *outlink, AVFrame *frame);
+int ff_filter_frame_thread_activate(AVFilterContext *filter);
+int ff_filter_frame_thread_submit(AVFilterLink *inlink, AVFrame *frame);
+int ff_filter_frame_thread_flush(AVFilterContext *filter);
+int ff_filter_frame_thread_get_buffer(AVFilterContext *ctx, AVFrame *frame,
+                                      int out_idx, int align, unsigned flags);
 
 /**
  * Negotiate the media format, dimensions, etc of all inputs to a filter.
