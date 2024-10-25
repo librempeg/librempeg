@@ -122,7 +122,8 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioRDFTSRCContext *s = ctx->priv;
-    int ret, factor;
+    int max_nb_samples, ret;
+    int64_t factor;
 
     if (inlink->sample_rate == outlink->sample_rate)
         return 0;
@@ -133,6 +134,8 @@ static int config_input(AVFilterLink *inlink)
               inlink->sample_rate, outlink->sample_rate, INT_MAX);
 
     factor = lrint(2.0*ceil(s->quality/(2.0*s->out_nb_samples)));
+    max_nb_samples = 2*FFMAX(s->in_nb_samples, s->out_nb_samples);
+    factor = FFMIN(factor, INT32_MAX/max_nb_samples);
     s->in_nb_samples *= factor;
     s->out_nb_samples *= factor;
 
@@ -143,7 +146,7 @@ static int config_input(AVFilterLink *inlink)
     s->delay = av_rescale_q(s->in_offset, (AVRational){ 1, inlink->sample_rate }, inlink->time_base);
     s->tr_nb_samples = FFMIN(s->in_nb_samples, s->out_nb_samples);
     s->taper_samples = lrint(s->tr_nb_samples * (1.0-s->bandwidth));
-    av_log(ctx, AV_LOG_DEBUG, "factor: %d | %d => %d | delay: %"PRId64"\n", factor, s->in_rdft_size, s->out_rdft_size, s->delay);
+    av_log(ctx, AV_LOG_DEBUG, "factor: %"PRId64" | %d => %d | delay: %"PRId64"\n", factor, s->in_rdft_size, s->out_rdft_size, s->delay);
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_S16P:
@@ -164,6 +167,8 @@ static int config_input(AVFilterLink *inlink)
         s->src_uninit = src_uninit_dblp;
         ret = src_init_dblp(ctx);
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return ret;
