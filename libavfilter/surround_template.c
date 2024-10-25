@@ -594,6 +594,14 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
         for (int n = 0; n < rdft_size; n++)
             x_out[n] = FMA(x[n], F(0.5), F(0.5));
         break;
+    case AV_CHAN_FRONT_LEFT_OF_CENTER:
+        for (int n = 0; n < rdft_size; n++)
+            x_out[n] = F(1.0) - FMIN(FABS(x[n]+F(0.5)), F(1.0));
+        break;
+    case AV_CHAN_FRONT_RIGHT_OF_CENTER:
+        for (int n = 0; n < rdft_size; n++)
+            x_out[n] = F(1.0) - FMIN(FABS(x[n]-F(0.5)), F(1.0));
+        break;
     default:
         for (int n = 0; n < rdft_size; n++)
             x_out[n] = x[n];
@@ -610,6 +618,8 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_BOTTOM_FRONT_CENTER:
     case AV_CHAN_BOTTOM_FRONT_LEFT:
     case AV_CHAN_BOTTOM_FRONT_RIGHT:
+    case AV_CHAN_FRONT_LEFT_OF_CENTER:
+    case AV_CHAN_FRONT_RIGHT_OF_CENTER:
         for (int n = 0; n < rdft_size; n++)
             y_out[n] = FMA(y[n], F(0.5), F(0.5));
         break;
