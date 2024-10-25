@@ -539,11 +539,11 @@ static void fn(power_factors)(AVFilterContext *ctx, const int ch)
         ftype y = yin[n];
         ftype z = zin[n];
 
-        x = F(1.0) / (F(1.0) + FEXP(f_x * (x - F(0.5))));
-        y = F(1.0) / (F(1.0) + FEXP(f_y * (y - F(0.5))));
-        z = F(1.0) / (F(1.0) + FEXP(f_z * (z - F(0.5))));
+        x = F(1.0) + FEXP(f_x * (x - F(0.5)));
+        y = F(1.0) + FEXP(f_y * (y - F(0.5)));
+        z = F(1.0) + FEXP(f_z * (z - F(0.5)));
 
-        factor[n] = x*y*z;
+        factor[n] = F(1.0) / (x*y*z);
         factor[n] = isnormal(factor[n]) ? factor[n] : F(0.0);
     }
 }
