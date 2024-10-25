@@ -39,27 +39,27 @@ enum SurroundChannel {
 };
 
 static const int8_t ch_dif[SC_NB] = {
-    [SC_FL]  =  1,
-    [SC_FR]  = -1,
     [SC_FC]  =  0,
     [SC_LF]  =  0,
-    [SC_BL]  =  1,
-    [SC_BR]  = -1,
     [SC_BC]  =  0,
-    [SC_SL]  =  1,
-    [SC_SR]  = -1,
+    [SC_LF2] =  0,
     [SC_TC]  =  0,
     [SC_TFC] =  0,
-    [SC_TFL] =  1,
-    [SC_TFR] = -1,
     [SC_TBC] =  0,
-    [SC_TBL] =  1,
-    [SC_TBR] = -1,
-    [SC_LF2] =  0,
-    [SC_TSL] =  1,
-    [SC_TSR] = -1,
     [SC_BFC] =  0,
+    [SC_FL]  =  1,
+    [SC_BL]  =  1,
+    [SC_SL]  =  1,
+    [SC_TFL] =  1,
+    [SC_TBL] =  1,
+    [SC_TSL] =  1,
     [SC_BFL] =  1,
+    [SC_FR]  = -1,
+    [SC_BR]  = -1,
+    [SC_SR]  = -1,
+    [SC_TFR] = -1,
+    [SC_TBR] = -1,
+    [SC_TSR] = -1,
     [SC_BFR] = -1,
 };
 
@@ -609,9 +609,9 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
 static const AVOptionArrayDef def_smooth = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_o  = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_i  = {.def="1",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_f_x  = {.def="2",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_f_y  = {.def="2",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_f_z  = {.def="2",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_f_x  = {.def="8",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_f_y  = {.def="8",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_f_z  = {.def="8",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_shift= {.def="0 0 0",.size_min=1,.size_max=3,.sep=' '};
 static const AVOptionArrayDef def_depth= {.def="0 0 0",.size_min=1,.size_max=3,.sep=' '};
 static const AVOptionArrayDef def_focus= {.def="0 0 0",.size_min=1,.size_max=3,.sep=' '};

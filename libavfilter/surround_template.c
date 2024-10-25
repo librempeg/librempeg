@@ -216,10 +216,10 @@ static void fn(filter_stereo)(AVFilterContext *ctx)
         ctype sum, dif, lfe;
         ftype x, y, z;
 
-        sum.re = l_re + r_re;
-        sum.im = l_im + r_im;
-        dif.re = l_re - r_re;
-        dif.im = l_im - r_im;
+        sum.re = (l_re + r_re) * F(0.5);
+        sum.im = (l_im + r_im) * F(0.5);
+        dif.re = (l_re - r_re) * F(0.5);
+        dif.im = (l_im - r_im) * F(0.5);
 
         fn(stereo_position)(l_mag, r_mag, im, re, &x, &y, &z);
         fn(get_lfe)(output_lfe, n, lowcut, highcut, &lfe, sum, &sum, lfe_mode);
@@ -250,20 +250,17 @@ static void fn(filter_2_1)(AVFilterContext *ctx)
     for (int n = 0; n < rdft_size; n++) {
         ftype l_re = srcl[n].re, r_re = srcr[n].re;
         ftype l_im = srcl[n].im, r_im = srcr[n].im;
-        ftype lfe_re = srclfe[n].re, lfe_im = srclfe[n].im;
         ftype l_mag = HYPOT(l_re, l_im);
         ftype r_mag = HYPOT(r_re, r_im);
         ftype re = l_re * r_re + l_im * r_im;
         ftype im = r_re * l_im - r_im * l_re;
-        ctype sum, dif, lfe;
+        ctype sum, dif;
         ftype x, y, z;
 
-        sum.re = l_re + r_re;
-        sum.im = l_im + r_im;
-        dif.re = l_re - r_re;
-        dif.im = l_im - r_im;
-        lfe.re = lfe_re;
-        lfe.im = lfe_im;
+        sum.re = (l_re + r_re) * F(0.5);
+        sum.im = (l_im + r_im) * F(0.5);
+        dif.re = (l_re - r_re) * F(0.5);
+        dif.im = (l_im - r_im) * F(0.5);
 
         fn(stereo_position)(l_mag, r_mag, im, re, &x, &y, &z);
 
@@ -272,7 +269,7 @@ static void fn(filter_2_1)(AVFilterContext *ctx)
         zpos[n] = z;
         osum[n] = sum;
         odif[n] = dif;
-        olfe[n] = lfe;
+        olfe[n] = srclfe[n];
     }
 }
 
@@ -306,10 +303,11 @@ static void fn(filter_surround)(AVFilterContext *ctx)
         ctype sum, dif, cnt, lfe;
         ftype x, y, z;
 
-        sum.re = l_re + r_re;
-        sum.im = l_im + r_im;
-        dif.re = l_re - r_re;
-        dif.im = l_im - r_im;
+        sum.re = (l_re + r_re) * F(0.5);
+        sum.im = (l_im + r_im) * F(0.5);
+        dif.re = (l_re - r_re) * F(0.5);
+        dif.im = (l_im - r_im) * F(0.5);
+
         cnt.re = c_re;
         cnt.im = c_im;
 
@@ -345,23 +343,17 @@ static void fn(filter_3_1)(AVFilterContext *ctx)
     for (int n = 0; n < rdft_size; n++) {
         ftype l_re = srcl[n].re, r_re = srcr[n].re;
         ftype l_im = srcl[n].im, r_im = srcr[n].im;
-        ftype lfe_re = srclfe[n].re, lfe_im = srclfe[n].im;
-        ftype c_re = srcc[n].re, c_im = srcc[n].im;
         ftype l_mag = HYPOT(l_re, l_im);
         ftype r_mag = HYPOT(r_re, r_im);
         ftype re = l_re * r_re + l_im * r_im;
         ftype im = r_re * l_im - r_im * l_re;
-        ctype sum, dif, cnt, lfe;
+        ctype sum, dif;
         ftype x, y, z;
 
-        sum.re = l_re + r_re;
-        sum.im = l_im + r_im;
-        dif.re = l_re - r_re;
-        dif.im = l_im - r_im;
-        cnt.re = c_re;
-        cnt.im = c_im;
-        lfe.re = lfe_re;
-        lfe.im = lfe_im;
+        sum.re = (l_re + r_re) * F(0.5);
+        sum.im = (l_im + r_im) * F(0.5);
+        dif.re = (l_re - r_re) * F(0.5);
+        dif.im = (l_im - r_im) * F(0.5);
 
         fn(stereo_position)(l_mag, r_mag, im, re, &x, &y, &z);
 
@@ -370,8 +362,8 @@ static void fn(filter_3_1)(AVFilterContext *ctx)
         zpos[n] = z;
         osum[n] = sum;
         odif[n] = dif;
-        ocnt[n] = cnt;
-        olfe[n] = lfe;
+        ocnt[n] = srcc[n];
+        olfe[n] = srclfe[n];
     }
 }
 
@@ -490,8 +482,9 @@ static void fn(angle_transform)(ftype *x, ftype *y, ftype a)
         return;
 
     a /= F(90.0);
+    a -= F(1.0);
 
-    y[0] = CLIP(y[0] - (FABS(x[0]) * (F(1.0)+y[0])) * (a - F(1.0)), F(-1.0), F(1.0));
+    y[0] = CLIP(y[0] + FABS(x[0]) * a, F(-1.0), F(1.0));
 }
 
 static void fn(shift_transform)(ftype *y, const ftype shift)
@@ -529,31 +522,12 @@ static void fn(focus_transform)(ftype *x, ftype focus)
     x[0] = CLIP(COPYSIGN(POW(FABS(x[0]), focus), x[0]), F(-1.0), F(1.0));
 }
 
-static void fn(powerXYZ_factors)(AVFilterContext *ctx, const int ch,
-                                 const int chan)
+static void fn(power_factors)(AVFilterContext *ctx, const int ch)
 {
     AudioSurroundContext *s = ctx->priv;
-    const ftype f_x = s->f_x[FFMIN(ch, s->nb_f_x-1)];
-    const ftype f_y = s->f_y[FFMIN(ch, s->nb_f_y-1)];
-    const ftype f_z = s->f_z[FFMIN(ch, s->nb_f_z-1)];
-    const ftype *xin = (const ftype *)s->x_out->extended_data[ch];
-    const ftype *yin = (const ftype *)s->y_out->extended_data[ch];
-    const ftype *zin = (const ftype *)s->z_out->extended_data[ch];
-    ftype *factor = (ftype *)s->factors->extended_data[ch];
-    const int rdft_size = s->rdft_size;
-
-    for (int n = 0; n < rdft_size; n++) {
-        factor[n] = POW(xin[n], f_x) *
-                    POW(yin[n], f_y) *
-                    POW(zin[n], f_z);
-        factor[n] = isnormal(factor[n]) ? factor[n] : F(0.0);
-    }
-}
-
-static void fn(power2_factors)(AVFilterContext *ctx, const int ch,
-                               const int chan)
-{
-    AudioSurroundContext *s = ctx->priv;
+    const ftype f_x = -s->f_x[FFMIN(ch, s->nb_f_x-1)];
+    const ftype f_y = -s->f_y[FFMIN(ch, s->nb_f_y-1)];
+    const ftype f_z = -s->f_z[FFMIN(ch, s->nb_f_z-1)];
     const ftype *xin = (const ftype *)s->x_out->extended_data[ch];
     const ftype *yin = (const ftype *)s->y_out->extended_data[ch];
     const ftype *zin = (const ftype *)s->z_out->extended_data[ch];
@@ -565,14 +539,11 @@ static void fn(power2_factors)(AVFilterContext *ctx, const int ch,
         ftype y = yin[n];
         ftype z = zin[n];
 
-        if (x > z)
-            FFSWAP(ftype, x, z);
-        if (x > y)
-            FFSWAP(ftype, x, y);
-        if (y > z)
-            FFSWAP(ftype, y, z);
+        x = F(1.0) / (F(1.0) + FEXP(f_x * (x - F(0.5))));
+        y = F(1.0) / (F(1.0) + FEXP(f_y * (y - F(0.5))));
+        z = F(1.0) / (F(1.0) + FEXP(f_z * (z - F(0.5))));
 
-        factor[n] = (y*x)*(y*((x*z)*z));
+        factor[n] = x*y*z;
         factor[n] = isnormal(factor[n]) ? factor[n] : F(0.0);
     }
 }
@@ -580,9 +551,6 @@ static void fn(power2_factors)(AVFilterContext *ctx, const int ch,
 static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
 {
     AudioSurroundContext *s = ctx->priv;
-    const ftype f_x = s->f_x[FFMIN(ch, s->nb_f_x-1)];
-    const ftype f_y = s->f_y[FFMIN(ch, s->nb_f_y-1)];
-    const ftype f_z = s->f_z[FFMIN(ch, s->nb_f_z-1)];
     ftype *x_out = (ftype *)s->x_out->extended_data[ch];
     ftype *y_out = (ftype *)s->y_out->extended_data[ch];
     ftype *z_out = (ftype *)s->z_out->extended_data[ch];
@@ -614,7 +582,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_SIDE_LEFT:
     case AV_CHAN_BACK_LEFT:
         for (int n = 0; n < rdft_size; n++)
-            x_out[n] = FMA(x[n], F(0.5), F(0.5));
+            x_out[n] = FMA(x[n], F(-0.5), F(0.5));
         break;
     case AV_CHAN_BOTTOM_FRONT_RIGHT:
     case AV_CHAN_TOP_FRONT_RIGHT:
@@ -624,7 +592,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_SIDE_RIGHT:
     case AV_CHAN_BACK_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            x_out[n] = FMA(x[n], F(-0.5), F(0.5));
+            x_out[n] = FMA(x[n], F(0.5), F(0.5));
         break;
     default:
         for (int n = 0; n < rdft_size; n++)
@@ -695,10 +663,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
         break;
     }
 
-    if (f_x == F(2.0) && f_x == f_y && f_x == f_z)
-        fn(power2_factors)(ctx, ch, chan);
-    else
-        fn(powerXYZ_factors)(ctx, ch, chan);
+    fn(power_factors)(ctx, ch);
 }
 
 static void fn(bypass_transform)(AVFilterContext *ctx, int ch, int is_lfe)
