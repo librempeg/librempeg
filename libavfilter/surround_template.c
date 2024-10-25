@@ -580,9 +580,9 @@ static void fn(power2_factors)(AVFilterContext *ctx, const int ch,
 static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
 {
     AudioSurroundContext *s = ctx->priv;
-    const ftype f_x = s->f_x[FFMIN(sc_map[chan >= 0 ? chan : 0], s->nb_f_x-1)];
-    const ftype f_y = s->f_y[FFMIN(sc_map[chan >= 0 ? chan : 0], s->nb_f_y-1)];
-    const ftype f_z = s->f_z[FFMIN(sc_map[chan >= 0 ? chan : 0], s->nb_f_z-1)];
+    const ftype f_x = s->f_x[FFMIN(ch, s->nb_f_x-1)];
+    const ftype f_y = s->f_y[FFMIN(ch, s->nb_f_y-1)];
+    const ftype f_z = s->f_z[FFMIN(ch, s->nb_f_z-1)];
     ftype *x_out = (ftype *)s->x_out->extended_data[ch];
     ftype *y_out = (ftype *)s->y_out->extended_data[ch];
     ftype *z_out = (ftype *)s->z_out->extended_data[ch];
