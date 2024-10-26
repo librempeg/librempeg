@@ -532,6 +532,10 @@ static void fn(power_factors)(AVFilterContext *ctx, const int ch)
     const ftype *yin = (const ftype *)s->y_out->extended_data[ch];
     const ftype *zin = (const ftype *)s->z_out->extended_data[ch];
     ftype *factor = (ftype *)s->factors->extended_data[ch];
+    const ftype num_x = F(1.0) + FEXP(f_x * F(0.5));
+    const ftype num_y = F(1.0) + FEXP(f_y * F(0.5));
+    const ftype num_z = F(1.0) + FEXP(f_z * F(0.5));
+    const ftype num = num_x * num_y * num_z;
     const int rdft_size = s->rdft_size;
 
     for (int n = 0; n < rdft_size; n++) {
@@ -543,7 +547,7 @@ static void fn(power_factors)(AVFilterContext *ctx, const int ch)
         y = F(1.0) + FEXP(f_y * (y - F(0.5)));
         z = F(1.0) + FEXP(f_z * (z - F(0.5)));
 
-        factor[n] = F(1.0) / (x*y*z);
+        factor[n] = num / (x*y*z);
         factor[n] = isnormal(factor[n]) ? factor[n] : F(0.0);
     }
 }
