@@ -144,21 +144,13 @@ static void fn(set_smooth_levels)(AVFilterContext *ctx)
 }
 
 static void fn(stereo_position)(const ftype l, const ftype r,
-                                const ftype im, const ftype re,
+                                const ctype cor,
                                 ftype *x, ftype *y, ftype *z)
 {
-    const ftype im2 = im*im;
-    const ftype re2 = re*re;
-    const ftype l2 = l*l;
-    const ftype r2 = r*r;
-    const ftype h2 = SQRT(l2 + r2);
-    const ftype h1 = SQRT(im2 + re2);
-    const ftype h1h2 = h1*h2 + EPSILON;
-    const ftype rel = re * l;
-    const ftype rer = re * r;
-    ftype x0 = (rer - rel) / h1h2;
-    ftype y0 = MSQRT1_2 * (rer + rel) / h1h2;
-    ftype z0 = im / (h1 + EPSILON);
+    ftype x0 = (r-l)/(r+l+EPSILON);
+    ftype a0 = ATAN2(cor.im, cor.re);
+    ftype y0 = F(1.0)-FABS(a0 / MPI2);
+    ftype z0 = COPYSIGN(F(1.0)-F(2.0)*FABS(FABS(y0)-F(0.5)), a0);
 
     x0 = isnormal(x0) ? x0 : F(0.0);
     y0 = isnormal(y0) ? y0 : F(0.0);
@@ -211,17 +203,18 @@ static void fn(filter_stereo)(AVFilterContext *ctx)
         ftype l_im = srcl[n].im, r_im = srcr[n].im;
         ftype l_mag = HYPOT(l_re, l_im);
         ftype r_mag = HYPOT(r_re, r_im);
-        ftype re = l_re * r_re + l_im * r_im;
-        ftype im = r_re * l_im - r_im * l_re;
-        ctype sum, dif, lfe;
+        ctype sum, dif, lfe, cor;
         ftype x, y, z;
+
+        cor.re = l_re * r_re + l_im * r_im;
+        cor.im = r_re * l_im - r_im * l_re;
 
         sum.re = (l_re + r_re) * F(0.5);
         sum.im = (l_im + r_im) * F(0.5);
         dif.re = (l_re - r_re) * F(0.5);
         dif.im = (l_im - r_im) * F(0.5);
 
-        fn(stereo_position)(l_mag, r_mag, im, re, &x, &y, &z);
+        fn(stereo_position)(l_mag, r_mag, cor, &x, &y, &z);
         fn(get_lfe)(output_lfe, n, lowcut, highcut, &lfe, sum, &sum, lfe_mode);
 
         xpos[n] = x;
@@ -252,17 +245,18 @@ static void fn(filter_2_1)(AVFilterContext *ctx)
         ftype l_im = srcl[n].im, r_im = srcr[n].im;
         ftype l_mag = HYPOT(l_re, l_im);
         ftype r_mag = HYPOT(r_re, r_im);
-        ftype re = l_re * r_re + l_im * r_im;
-        ftype im = r_re * l_im - r_im * l_re;
-        ctype sum, dif;
+        ctype sum, dif, cor;
         ftype x, y, z;
+
+        cor.re = l_re * r_re + l_im * r_im;
+        cor.im = r_re * l_im - r_im * l_re;
 
         sum.re = (l_re + r_re) * F(0.5);
         sum.im = (l_im + r_im) * F(0.5);
         dif.re = (l_re - r_re) * F(0.5);
         dif.im = (l_im - r_im) * F(0.5);
 
-        fn(stereo_position)(l_mag, r_mag, im, re, &x, &y, &z);
+        fn(stereo_position)(l_mag, r_mag, cor, &x, &y, &z);
 
         xpos[n] = x;
         ypos[n] = y;
@@ -298,10 +292,11 @@ static void fn(filter_surround)(AVFilterContext *ctx)
         ftype c_re = srcc[n].re, c_im = srcc[n].im;
         ftype l_mag = HYPOT(l_re, l_im);
         ftype r_mag = HYPOT(r_re, r_im);
-        ftype re = l_re * r_re + l_im * r_im;
-        ftype im = r_re * l_im - r_im * l_re;
-        ctype sum, dif, cnt, lfe;
+        ctype sum, dif, cnt, lfe, cor;
         ftype x, y, z;
+
+        cor.re = l_re * r_re + l_im * r_im;
+        cor.im = r_re * l_im - r_im * l_re;
 
         sum.re = (l_re + r_re) * F(0.5);
         sum.im = (l_im + r_im) * F(0.5);
@@ -311,7 +306,7 @@ static void fn(filter_surround)(AVFilterContext *ctx)
         cnt.re = c_re;
         cnt.im = c_im;
 
-        fn(stereo_position)(l_mag, r_mag, im, re, &x, &y, &z);
+        fn(stereo_position)(l_mag, r_mag, cor, &x, &y, &z);
         fn(get_lfe)(output_lfe, n, lowcut, highcut, &lfe, cnt, &sum, lfe_mode);
 
         xpos[n] = x;
@@ -345,17 +340,18 @@ static void fn(filter_3_1)(AVFilterContext *ctx)
         ftype l_im = srcl[n].im, r_im = srcr[n].im;
         ftype l_mag = HYPOT(l_re, l_im);
         ftype r_mag = HYPOT(r_re, r_im);
-        ftype re = l_re * r_re + l_im * r_im;
-        ftype im = r_re * l_im - r_im * l_re;
-        ctype sum, dif;
+        ctype sum, dif, cor;
         ftype x, y, z;
+
+        cor.re = l_re * r_re + l_im * r_im;
+        cor.im = r_re * l_im - r_im * l_re;
 
         sum.re = (l_re + r_re) * F(0.5);
         sum.im = (l_im + r_im) * F(0.5);
         dif.re = (l_re - r_re) * F(0.5);
         dif.im = (l_im - r_im) * F(0.5);
 
-        fn(stereo_position)(l_mag, r_mag, im, re, &x, &y, &z);
+        fn(stereo_position)(l_mag, r_mag, cor, &x, &y, &z);
 
         xpos[n] = x;
         ypos[n] = y;
@@ -586,7 +582,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_SIDE_LEFT:
     case AV_CHAN_BACK_LEFT:
         for (int n = 0; n < rdft_size; n++)
-            x_out[n] = FMA(x[n], F(-0.5), F(0.5));
+            x_out[n] = FMAX(-x[n], F(0.0));
         break;
     case AV_CHAN_BOTTOM_FRONT_RIGHT:
     case AV_CHAN_TOP_FRONT_RIGHT:
@@ -596,7 +592,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_SIDE_RIGHT:
     case AV_CHAN_BACK_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            x_out[n] = FMA(x[n], F(0.5), F(0.5));
+            x_out[n] = FMAX(x[n], F(0.0));
         break;
     case AV_CHAN_FRONT_LEFT_OF_CENTER:
         for (int n = 0; n < rdft_size; n++)
@@ -625,7 +621,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_FRONT_LEFT_OF_CENTER:
     case AV_CHAN_FRONT_RIGHT_OF_CENTER:
         for (int n = 0; n < rdft_size; n++)
-            y_out[n] = FMA(y[n], F(0.5), F(0.5));
+            y_out[n] = FMAX(y[n], F(0.0));
         break;
     case AV_CHAN_TOP_CENTER:
     case AV_CHAN_SIDE_LEFT:
@@ -644,7 +640,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_BACK_LEFT:
     case AV_CHAN_TOP_BACK_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            y_out[n] = FMA(y[n], F(-0.5), F(0.5));
+            y_out[n] = FMAX(-y[n], F(0.0));
         break;
     default:
         for (int n = 0; n < rdft_size; n++)
@@ -663,13 +659,13 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_TOP_SIDE_LEFT:
     case AV_CHAN_TOP_SIDE_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            z_out[n] = FMA(z[n], F(0.5), F(0.5));
+            z_out[n] = FMAX(z[n], F(0.0));
         break;
     case AV_CHAN_BOTTOM_FRONT_LEFT:
     case AV_CHAN_BOTTOM_FRONT_CENTER:
     case AV_CHAN_BOTTOM_FRONT_RIGHT:
         for (int n = 0; n < rdft_size; n++)
-            z_out[n] = FMA(z[n], F(-0.5), F(0.5));
+            z_out[n] = FMAX(-z[n], F(0.0));
         break;
     default:
         for (int n = 0; n < rdft_size; n++)
