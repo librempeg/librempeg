@@ -143,12 +143,21 @@ static void fn(set_smooth_levels)(AVFilterContext *ctx)
     }
 }
 
+static ftype fn(get_angle)(const ctype cor)
+{
+    if (FABS(cor.re) <= EPSILON &&
+        FABS(cor.im) <= EPSILON)
+        return F(0.0);
+
+    return ATAN2(cor.im, cor.re);
+}
+
 static void fn(stereo_position)(const ftype l, const ftype r,
                                 const ctype cor,
                                 ftype *x, ftype *y, ftype *z)
 {
     ftype x0 = (r-l)/(r+l+EPSILON);
-    ftype a0 = ATAN2(cor.im, cor.re);
+    ftype a0 = fn(get_angle)(cor);
     ftype y0 = F(1.0)-FABS(a0 / MPI2);
     ftype z0 = COPYSIGN(F(1.0)-F(2.0)*FABS(FABS(y0)-F(0.5)), a0);
 
@@ -480,7 +489,7 @@ static void fn(angle_transform)(ftype *x, ftype *y, ftype a)
     a /= F(90.0);
     a -= F(1.0);
 
-    y[0] = CLIP(y[0] + FABS(x[0]) * a, F(-1.0), F(1.0));
+    y[0] = CLIP(y[0] + FABS(x[0]) * (y[0]+F(1.0)) * a, F(-1.0), F(1.0));
 }
 
 static void fn(shift_transform)(ftype *y, const ftype shift)
