@@ -383,7 +383,7 @@ static int fn(config_output)(AVFilterContext *ctx)
     s->nb_out_channels = outlink->ch_layout.nb_channels;
 
     for (int ch = 0; ch < outlink->ch_layout.nb_channels; ch++) {
-        ftype iscale = F(1.0) / SQRT(s->win_size);
+        ftype iscale = F(1.0) / s->win_size;
         int ret;
 
         ret = av_tx_init(&s->irdft[ch], &s->itx_fn, TX_TYPE,
@@ -881,7 +881,7 @@ static int fn(config_input)(AVFilterContext *ctx)
     s->nb_in_channels = inlink->ch_layout.nb_channels;
 
     for (int ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
-        ftype scale = F(1.0) / SQRT(s->win_size);
+        ftype scale = F(1.0);
         int ret;
 
         ret = av_tx_init(&s->rdft[ch], &s->tx_fn, TX_TYPE,
