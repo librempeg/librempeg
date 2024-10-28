@@ -76,7 +76,7 @@ static const AVOption showspatial_options[] = {
     WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_HANNING),
     { "rate", "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
     { "r",    "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
-    { "contrast", "set the contrast", OFFSET(contrast), AV_OPT_TYPE_FLOAT, {.dbl=7000}, 0, INT_MAX, TFLAGS },
+    { "contrast", "set the contrast", OFFSET(contrast), AV_OPT_TYPE_FLOAT, {.dbl=1000}, 0, INT_MAX, TFLAGS },
     { "fade", "set the fade", OFFSET(fade), AV_OPT_TYPE_FLOAT, {.dbl=0.7}, 0, 1, TFLAGS },
     { "color", "set the color mode", OFFSET(color), AV_OPT_TYPE_INT, {.i64=0}, 0, NB_CMODE-1, TFLAGS, "color" },
     {  "lr", "left-right", 0, AV_OPT_TYPE_CONST,{.i64=CM_LR},   0, 0, TFLAGS, "color" },
@@ -205,7 +205,7 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR(ENOMEM);
 
     for (int i = 0; i < s->nb_channels; i++) {
-        float scale = 0.5f / s->win_size;
+        float scale = 1.f;
         ret = av_tx_init(&s->fft[i], &s->tx_fn[i], AV_TX_FLOAT_RDFT,
                          0, s->win_size*2, &scale, 0);
         if (ret < 0)
