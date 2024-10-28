@@ -105,7 +105,7 @@ static void fn(set_input_levels)(AVFilterContext *ctx)
     ftype *input_levels = s->input_levels;
 
     for (int ch = 0; ch < s->nb_in_channels; ch++) {
-        const int fch = FFMIN3(ch, s->nb_f_i-1, SC_NB-1);
+        const int fch = FFMIN(ch, s->nb_f_i-1);
 
         input_levels[ch] = s->f_i[fch];
     }
@@ -117,7 +117,7 @@ static void fn(set_output_levels)(AVFilterContext *ctx)
     ftype *output_levels = s->output_levels;
 
     for (int ch = 0; ch < s->nb_out_channels; ch++) {
-        const int fch = FFMIN3(ch, s->nb_f_o-1, SC_NB-1);
+        const int fch = FFMIN(ch, s->nb_f_o-1);
 
         output_levels[ch] = s->f_o[fch];
     }
