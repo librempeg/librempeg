@@ -76,7 +76,7 @@ static const AVOption showspatial_options[] = {
     WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_HANNING),
     { "rate", "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
     { "r",    "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
-    { "contrast", "set the contrast", OFFSET(contrast), AV_OPT_TYPE_FLOAT, {.dbl=1000}, 0, INT_MAX, TFLAGS },
+    { "contrast", "set the contrast", OFFSET(contrast), AV_OPT_TYPE_FLOAT, {.dbl=700}, 0, INT_MAX, TFLAGS },
     { "fade", "set the fade", OFFSET(fade), AV_OPT_TYPE_FLOAT, {.dbl=0.7}, 0, 1, TFLAGS },
     { "color", "set the color mode", OFFSET(color), AV_OPT_TYPE_INT, {.i64=0}, 0, NB_CMODE-1, TFLAGS, "color" },
     {  "lr", "left-right", 0, AV_OPT_TYPE_CONST,{.i64=CM_LR},   0, 0, TFLAGS, "color" },
@@ -383,7 +383,8 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
             const float im = IM(idx, i);
 
             power[i] = hypotf(re, im);
-            pwr += power[i];
+            if (isnormal(power[i]))
+                pwr += power[i];
         }
 
         pwr = isnormal(pwr) ? pwr : 0.f;
@@ -400,7 +401,7 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
                 const float dn = direction[k].re;
                 const float n = power[k];
 
-                if (fminf(n, m) > FLT_MIN) {
+                if (fmaxf(n, m) > FLT_MIN) {
                     const float nre = RE(idx, k);
                     const float nim = IM(idx, k);
                     const float re = nre * mre + nim * mim;
