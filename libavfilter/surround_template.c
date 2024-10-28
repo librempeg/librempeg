@@ -581,7 +581,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_LOW_FREQUENCY_2:
     case AV_CHAN_BOTTOM_FRONT_CENTER:
         for (int n = 0; n < rdft_size; n++)
-            x_out[n] = F(1.0) - FABS(x[n]);
+            x_out[n] = F(1.0) - FMIN(FABS(x[n]*F(2.0)), F(1.0));
         break;
     case AV_CHAN_BOTTOM_FRONT_LEFT:
     case AV_CHAN_TOP_FRONT_LEFT:
@@ -640,7 +640,7 @@ static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
     case AV_CHAN_LOW_FREQUENCY:
     case AV_CHAN_LOW_FREQUENCY_2:
         for (int n = 0; n < rdft_size; n++)
-            y_out[n] = F(1.0) - FABS(y[n]);
+            y_out[n] = F(1.0) - FMIN(FABS(y[n]*F(2.0)), F(1.0));
         break;
     case AV_CHAN_BACK_CENTER:
     case AV_CHAN_BACK_RIGHT:
