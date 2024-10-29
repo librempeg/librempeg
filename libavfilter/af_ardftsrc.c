@@ -291,7 +291,8 @@ static int activate(AVFilterContext *ctx)
         ret = ff_inlink_consume_frame(inlink, &in);
     } else {
         const int available = ff_inlink_queued_samples(inlink);
-        const int wanted = FFMAX(s->in_nb_samples, (available / s->in_nb_samples) * s->in_nb_samples);
+        const int is_eof = ff_inlink_check_available_samples(inlink, available + 1) == 1;
+        const int wanted = is_eof ? available : FFMAX(s->in_nb_samples, (available / s->in_nb_samples) * s->in_nb_samples);
 
         ret = ff_inlink_consume_samples(inlink, wanted, wanted, &in);
     }
