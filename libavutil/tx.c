@@ -76,8 +76,8 @@ int ff_tx_gen_compound_mapping(AVTXContext *s, FFTXCodeletOptions *opts,
                                int inv, int n, int m)
 {
     int *in_map, *out_map;
-    const int len = n*m;    /* Will not be equal to s->len for MDCTs */
-    int m_inv, n_inv;
+    const int64_t len = n*m;    /* Will not be equal to s->len for MDCTs */
+    int64_t m_inv, n_inv;
 
     /* Make sure the numbers are coprime */
     if (av_gcd(n, m) != 1)
