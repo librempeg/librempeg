@@ -968,10 +968,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
                                                  int len, int inv,
                                                  const void *scale)
 {
-    int gen, igen, ret, is_inplace = !!(flags & AV_TX_INPLACE);
-    FFTXCodeletOptions sub_opts = {
-        .map_dir = is_inplace ? FF_TX_MAP_SCATTER : FF_TX_MAP_GATHER,
-    };
+    int gen, igen, ret;
     const int plen = FFALIGN(len, av_cpu_max_align());
     const int len2 = len-1;
     const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
@@ -979,15 +976,13 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
     TXComplex *exp;
     int *imap, *map;
 
+    flags &= ~FF_TX_PRESHUFFLE;
     flags &= ~AV_TX_INPLACE;
 
-    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, &sub_opts, len2, 0, scale)))
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, len2, 0, scale)))
         return ret;
 
-    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, &sub_opts, len2, 1, scale)))
-        return ret;
-
-    if (is_inplace && (ret = ff_tx_gen_inplace_map(s, len2)))
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, len2, 1, scale)))
         return ret;
 
     if (!(s->tmp = av_mallocz(len*2*sizeof(*map))))
@@ -1047,10 +1042,6 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey)(AVTXContext *s,
                                                   const void *scale)
 {
     const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
-    int is_inplace = !!(flags & AV_TX_INPLACE);
-    FFTXCodeletOptions sub_opts = {
-        .map_dir = is_inplace ? FF_TX_MAP_SCATTER : FF_TX_MAP_GATHER,
-    };
     TXComplex *exp;
     int ret, m, n;
 
@@ -1058,12 +1049,13 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey)(AVTXContext *s,
     if ((m * n) != len || m <= 1 || n <= 1)
         return AVERROR(EINVAL);
 
+    flags &= ~FF_TX_PRESHUFFLE;
     flags &= ~AV_TX_INPLACE;
 
-    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, &sub_opts, m, s->inv, scale)))
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, m, s->inv, scale)))
         return ret;
 
-    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, &sub_opts, n, s->inv, scale)))
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, n, s->inv, scale)))
         return ret;
 
     if (!(s->exp = av_mallocz(len*3*sizeof(*s->exp))))
@@ -1093,23 +1085,17 @@ static av_cold int TX_NAME(ff_tx_fft_init_bluestein)(AVTXContext *s,
                                                      const void *scale)
 {
     const double phase = s->inv ? M_PI/len : -M_PI/len;
-    int is_inplace = !!(flags & AV_TX_INPLACE);
-    FFTXCodeletOptions sub_opts = {
-        .map_dir = is_inplace ? FF_TX_MAP_SCATTER : FF_TX_MAP_GATHER,
-    };
     const int len2 = 1 << av_ceil_log2(2*len-1);
     TXComplex *w;
     int ret;
 
+    flags &= ~FF_TX_PRESHUFFLE;
     flags &= ~AV_TX_INPLACE;
 
-    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, &sub_opts, len2, 0, scale)))
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, len2, 0, scale)))
         return ret;
 
-    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, &sub_opts, len2, 1, scale)))
-        return ret;
-
-    if (is_inplace && (ret = ff_tx_gen_inplace_map(s, len2)))
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, len2, 1, scale)))
         return ret;
 
     if (!(s->exp = av_mallocz(len2*4*sizeof(*s->exp))))
@@ -1608,7 +1594,7 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_bailey_def) = {
     .flags      = AV_TX_UNALIGNED | AV_TX_INPLACE | FF_TX_OUT_OF_PLACE,
     .factors[0] = TX_FACTOR_ANY,
     .nb_factors = 1,
-    .min_len    = 2,
+    .min_len    = 6,
     .max_len    = TX_LEN_UNLIMITED,
     .init       = TX_NAME(ff_tx_fft_init_bailey),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
