@@ -270,11 +270,6 @@ static const enum AVPixelFormat out_pix_fmts[] = {
     AV_PIX_FMT_NONE
 };
 
-static const enum AVPixelFormat out_gray_pix_fmts[] = {
-    AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY9, AV_PIX_FMT_GRAY10, AV_PIX_FMT_GRAY12,
-    AV_PIX_FMT_NONE
-};
-
 static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_in,
                          AVFilterFormatsConfig **cfg_out)
@@ -302,10 +297,7 @@ static int query_formats(const AVFilterContext *ctx,
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
-    if (s->filter == LOWPASS)
-        formats = ff_make_format_list(out_gray_pix_fmts);
-    else
-        formats = ff_make_format_list(out_pix_fmts);
+    formats = ff_make_format_list(out_pix_fmts);
     if (!formats)
         return AVERROR(ENOMEM);
 
