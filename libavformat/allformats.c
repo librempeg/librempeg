@@ -492,6 +492,7 @@ extern const FFInputFormat  ff_tty_demuxer;
 extern const FFInputFormat  ff_ty_demuxer;
 extern const FFOutputFormat ff_uncodedframecrc_muxer;
 extern const FFInputFormat  ff_usm_demuxer;
+extern const FFInputFormat  ff_utk_demuxer;
 extern const FFInputFormat  ff_v210_demuxer;
 extern const FFInputFormat  ff_v210x_demuxer;
 extern const FFInputFormat  ff_vag_demuxer;
