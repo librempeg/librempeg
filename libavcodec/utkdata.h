@@ -1,0 +1,103 @@
+/*
+ * Electronic Arts MicroTalk decoder
+ *
+ * This file is part of FFmpeg.
+ *
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * FFmpeg is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
+#ifndef AVCODEC_UTKDATA_H
+#define AVCODEC_UTKDATA_H
+
+#include <stdint.h>
+
+enum {
+    MDL_NORMAL = 0,
+    MDL_LARGEPULSE = 1,
+    NB_MODELS
+};
+
+static const float utk_rc_table[64] = {
+    +0.0f,
+    -.99677598476409912109375f, -.99032700061798095703125f, -.983879029750823974609375f, -.977430999279022216796875f,
+    -.970982015132904052734375f, -.964533984661102294921875f, -.958085000514984130859375f, -.9516370296478271484375f,
+    -.930754005908966064453125f, -.904959976673126220703125f, -.879167020320892333984375f, -.853372991085052490234375f,
+    -.827579021453857421875f, -.801786005496978759765625f, -.775991976261138916015625f, -.75019800662994384765625f,
+    -.724404990673065185546875f, -.6986110210418701171875f, -.6706349849700927734375f, -.61904799938201904296875f,
+    -.567460000514984130859375f, -.515873014926910400390625f, -.4642859995365142822265625f, -.4126980006694793701171875f,
+    -.361110985279083251953125f, -.309523999691009521484375f, -.257937014102935791015625f, -.20634900033473968505859375f,
+    -.1547619998455047607421875f, -.10317499935626983642578125f, -.05158700048923492431640625f,
+    +0.0f,
+    +.05158700048923492431640625f, +.10317499935626983642578125f, +.1547619998455047607421875f, +.20634900033473968505859375f,
+    +.257937014102935791015625f, +.309523999691009521484375f, +.361110985279083251953125f, +.4126980006694793701171875f,
+    +.4642859995365142822265625f, +.515873014926910400390625f, +.567460000514984130859375f, +.61904799938201904296875f,
+    +.6706349849700927734375f, +.6986110210418701171875f, +.724404990673065185546875f, +.75019800662994384765625f,
+    +.775991976261138916015625f, +.801786005496978759765625f, +.827579021453857421875f, +.853372991085052490234375f,
+    +.879167020320892333984375f, +.904959976673126220703125f, +.930754005908966064453125f, +.9516370296478271484375f,
+    +.958085000514984130859375f, +.964533984661102294921875f, +.970982015132904052734375f, +.977430999279022216796875f,
+    +.983879029750823974609375f, +.99032700061798095703125f, +.99677598476409912109375f
+};
+
+static const int8_t utk_vlc_bits[NB_MODELS][15] = {
+    { 2,  2,  2,  4,  4,  5,  5,  6,  6,  7,  7,  8,  8,  8,  8, },
+    { 2,  3,  3,  3,  3,  4,  4,  5,  5,  6,  6,  7,  7,  7,  7, },
+};
+
+static const int8_t utk_vlc_codes[NB_MODELS][15] = {
+    { 0x0,  0x1,  0x2,  0x3,  0xb,  0x7,  0x17,  0xf,  0x2f,  0x1f,  0x5f,  0x3f,  0x7f,  0xbf,  0xff, },
+    { 0x0,  0x1,  0x2,  0x5,  0x6,  0x3,  0xb,  0x7,  0x17,  0xf,  0x2f,  0x1f,  0x3f,  0x5f,  0x7f, },
+};
+
+static const int8_t utk_vlc_cmds[NB_MODELS][15] = {
+    { 4,  6,  5,  9,  10,  13,  14,  17,  18,  21,  22,  25,  0,  26,  2, },
+    { 4,  11,  7,  12,  8,  15,  16,  19,  20,  23,  24,  27,  1,  28,  3, },
+};
+
+static const struct {
+    int8_t next_model;
+    int8_t pulse_value;
+} utk_commands[29] = {
+    {MDL_LARGEPULSE,  0},
+    {MDL_LARGEPULSE,  0},
+    {MDL_NORMAL,      0},
+    {MDL_NORMAL,      0},
+    {MDL_NORMAL,      0},
+    {MDL_NORMAL,     -1},
+    {MDL_NORMAL,     +1},
+    {MDL_NORMAL,     -1},
+    {MDL_NORMAL,     +1},
+    {MDL_LARGEPULSE, -2},
+    {MDL_LARGEPULSE, +2},
+    {MDL_LARGEPULSE, -2},
+    {MDL_LARGEPULSE, +2},
+    {MDL_LARGEPULSE, -3},
+    {MDL_LARGEPULSE, +3},
+    {MDL_LARGEPULSE, -3},
+    {MDL_LARGEPULSE, +3},
+    {MDL_LARGEPULSE, -4},
+    {MDL_LARGEPULSE, +4},
+    {MDL_LARGEPULSE, -4},
+    {MDL_LARGEPULSE, +4},
+    {MDL_LARGEPULSE, -5},
+    {MDL_LARGEPULSE, +5},
+    {MDL_LARGEPULSE, -5},
+    {MDL_LARGEPULSE, +5},
+    {MDL_LARGEPULSE, -6},
+    {MDL_LARGEPULSE, +6},
+    {MDL_LARGEPULSE, -6},
+    {MDL_LARGEPULSE, +6}
+};
+
+#endif /* AVCODEC_UTKDATA_H */

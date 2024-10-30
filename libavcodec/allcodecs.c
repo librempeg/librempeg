@@ -545,6 +545,8 @@ extern const FFCodec ff_truespeech_decoder;
 extern const FFCodec ff_tta_encoder;
 extern const FFCodec ff_tta_decoder;
 extern const FFCodec ff_twinvq_decoder;
+extern const FFCodec ff_utk_decoder;
+extern const FFCodec ff_utk_r3_decoder;
 extern const FFCodec ff_vmdaudio_decoder;
 extern const FFCodec ff_vorbis_encoder;
 extern const FFCodec ff_vorbis_decoder;

@@ -93,6 +93,8 @@ typedef struct EaDemuxContext {
 
     int platform;
     int merge_alpha;
+
+    int first_audio_packet;
 } EaDemuxContext;
 
 static uint32_t read_arbitrary(AVIOContext *pb)
@@ -235,6 +237,22 @@ static int process_audio_header_elements(AVFormatContext *s)
             return 0;
         }
         switch (revision2) {
+        case  4:
+        case 22:
+            switch(revision) {
+            case 1:
+            case 2:
+                ea->audio_codec = AV_CODEC_ID_UTK;
+                ea->sample_rate = 22050;
+                break;
+            case 3: ea->audio_codec = AV_CODEC_ID_UTK_R3;
+                ea->sample_rate = 22050;
+                break;
+            default:
+                avpriv_request_sample(s, "stream type; revision=%i, revision2=%i", revision, revision2);
+                return 0;
+            }
+            break;
         case  8:
             ea->audio_codec = AV_CODEC_ID_PCM_S16LE_PLANAR;
             break;
@@ -621,6 +639,13 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
             if (!ea->audio_codec) {
                 avio_skip(pb, chunk_size);
                 break;
+            } else if (ea->audio_codec == AV_CODEC_ID_UTK ||
+                       ea->audio_codec == AV_CODEC_ID_UTK_R3) {
+                if (chunk_size < 9)
+                    return AVERROR_INVALIDDATA;
+                num_samples = avio_rl32(pb);
+                avio_skip(pb, 5);
+                chunk_size -= 9;
             } else if (ea->audio_codec == AV_CODEC_ID_PCM_S16LE_PLANAR ||
                        ea->audio_codec == AV_CODEC_ID_MP3) {
                 if (chunk_size < 12)
@@ -649,6 +674,11 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
                 return ret;
             pkt->stream_index = ea->audio_stream_index;
 
+            if ((ea->audio_codec == AV_CODEC_ID_UTK || AV_CODEC_ID_UTK_R3) && !ea->first_audio_packet) {
+                pkt->flags |= AV_PKT_FLAG_KEY;
+                ea->first_audio_packet = 1;
+            }
+
             switch (ea->audio_codec) {
             case AV_CODEC_ID_ADPCM_EA:
             case AV_CODEC_ID_ADPCM_EA_R1:
@@ -669,6 +699,8 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
                 break;
             case AV_CODEC_ID_PCM_S16LE_PLANAR:
             case AV_CODEC_ID_MP3:
+            case AV_CODEC_ID_UTK:
+            case AV_CODEC_ID_UTK_R3:
                 pkt->duration = num_samples;
                 break;
             case AV_CODEC_ID_ADPCM_PSX:

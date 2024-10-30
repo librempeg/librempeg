@@ -3542,6 +3542,20 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("DWVW (Delta Word Variable Width)"),
         .props     = AV_CODEC_PROP_LOSSLESS,
     },
+    {
+        .id        = AV_CODEC_ID_UTK,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "utk",
+        .long_name = NULL_IF_CONFIG_SMALL("Electronic Arts MicroTalk"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_UTK_R3,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "utk_r3",
+        .long_name = NULL_IF_CONFIG_SMALL("Electronic Arts MicroTalk Revision 3"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
 
     /* subtitle codecs */
     {
