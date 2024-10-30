@@ -24,11 +24,11 @@
 #undef itype
 #undef ftype
 #undef ttype
-#undef COS
+#undef FEXP
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
 #if DEPTH == 16
-#define COS cosf
+#define FEXP expf
 #define ctype AVComplexFloat
 #define ftype float
 #define itype int16_t
@@ -36,7 +36,7 @@
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #elif DEPTH == 32
-#define COS cosf
+#define FEXP expf
 #define ctype AVComplexFloat
 #define ftype float
 #define itype float
@@ -44,7 +44,7 @@
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #else
-#define COS cos
+#define FEXP exp
 #define ctype AVComplexDouble
 #define ftype double
 #define itype double
@@ -157,8 +157,14 @@ static int fn(src_init)(AVFilterContext *ctx)
     if (!s->taper)
         return AVERROR(ENOMEM);
     taper = s->taper;
-    for (int n = 0; n < taper_samples; n++)
-        taper[n].re = taper[n].im = (F(1.0) + COS(F(M_PI) * (n + F(0.0)) / taper_samples)) * F(0.5);
+    for (int n = 0; n < taper_samples-1; n++) {
+        const ftype e = F(1.0)-s->bandwidth;
+        const ftype N = s->tr_nb_samples;
+        const ftype k = n+(F(1.0)-e)*(N-F(1.0))+F(1.0);
+        const ftype zbk = e*(N-F(1.0))*(F(1.0)/(N-F(1.0)-k)+F(1.0)/((F(1.0)-e)*(N-F(1.0))-k));
+
+        taper[n].re = taper[n].im = F(1.0)/(FEXP(zbk)+F(1.0));
+    }
 
     return 0;
 }
