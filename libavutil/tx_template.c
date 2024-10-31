@@ -1196,11 +1196,12 @@ static void transpose_matrix(TXComplex *out, const TXComplex *in,
         }
     } else {
         const TXComplex *src = in + row * sn;
+        TXComplex *dst0 = out + col * sm;
         const int rlimit = row + m;
         const int climit = col + n;
 
         for (int i = row; i < rlimit; i++) {
-            TXComplex *dst = out + col * sm;
+            TXComplex *dst = dst0;
 
             for (int j = col; j < climit; j++) {
                 dst[i] = src[j];
