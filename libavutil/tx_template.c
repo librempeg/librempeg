@@ -1518,8 +1518,10 @@ static void TX_NAME(ff_tx_fft##n##_butterfly)(AVTXContext *s,\
     } else {                                                \
     }                                                       \
                                                             \
-    for (int i = 0; i < n; i++)                             \
-        out[i*stride] = tmp_out[i];                         \
+    for (int i = 0; i < n; i++) {                           \
+        out[0] = tmp_out[i];                                \
+        out += stride;                                      \
+    }                                                       \
 }                                                           \
                                                             \
 static const FFTXCodelet TX_NAME(ff_tx_fft##n##_butterfly_def) = { \
@@ -1534,9 +1536,12 @@ static const FFTXCodelet TX_NAME(ff_tx_fft##n##_butterfly_def) = { \
     .max_len    = n,                                        \
     .init       = TX_NAME(ff_tx_fft_auto_init),             \
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,                      \
-    .prio       = FF_TX_PRIO_MIN/5,                         \
+    .prio       = FF_TX_PRIO_BASE+512,                      \
 };
 
+DECL_BUTTERFLY_CODELET(3)
+DECL_BUTTERFLY_CODELET(5)
+DECL_BUTTERFLY_CODELET(7)
 DECL_BUTTERFLY_CODELET(11)
 DECL_BUTTERFLY_CODELET(13)
 DECL_BUTTERFLY_CODELET(17)
@@ -2858,6 +2863,9 @@ const FFTXCodelet * const TX_NAME(ff_tx_codelet_list)[] = {
     &TX_NAME(ff_tx_fft9_fwd_def),
 
     /* Butterfly prime transforms */
+    &TX_NAME(ff_tx_fft3_butterfly_def),
+    &TX_NAME(ff_tx_fft5_butterfly_def),
+    &TX_NAME(ff_tx_fft7_butterfly_def),
     &TX_NAME(ff_tx_fft11_butterfly_def),
     &TX_NAME(ff_tx_fft13_butterfly_def),
     &TX_NAME(ff_tx_fft17_butterfly_def),
