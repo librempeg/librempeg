@@ -1746,7 +1746,8 @@ static void TX_NAME(ff_tx_fft_pfa)(AVTXContext *s, void *_out,
 
     for (int i = 0; i < m; i++) {
         for (int j = 0; j < n; j++)
-            exp[j] = in[in_map[i*n + j]];
+            exp[j] = in[in_map[j]];
+        in_map += n;
         s->fn[0](&s->sub[0], &tmp2[sub_map[i]], exp, m*sizeof(TXComplex));
     }
 
