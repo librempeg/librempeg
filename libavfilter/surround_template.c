@@ -446,7 +446,7 @@ static int fn(ifft_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
     memmove(ptr, ptr + s->hop_size, win_size * sizeof(ftype));
 
     for (int n = 0; n < win_size; n++)
-        ptr[n] += dst[n] * window_func_lut[n] * level_out;
+        ptr[n] = FMA(dst[n], window_func_lut[n] * level_out, ptr[n]);
 
     dst = (ftype *)out->extended_data[ch];
     memcpy(dst, ptr, s->hop_size * sizeof(ftype));
