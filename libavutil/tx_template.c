@@ -1742,6 +1742,10 @@ static void TX_NAME(ff_tx_fft_pfa)(AVTXContext *s, void *_out,
     TXComplex *tmp2 = s->tmp;
     TXComplex *exp = s->exp;
     TXComplex *in = _in, *out = _out;
+    AVTXContext *sub0 = &s->sub[0];
+    AVTXContext *sub1 = &s->sub[1];
+    const av_tx_fn fn0 = s->fn[0];
+    const av_tx_fn fn1 = s->fn[1];
 
     stride /= sizeof(*out);
 
@@ -1749,11 +1753,11 @@ static void TX_NAME(ff_tx_fft_pfa)(AVTXContext *s, void *_out,
         for (int j = 0; j < n; j++)
             exp[j] = in[in_map[j]];
         in_map += n;
-        s->fn[0](&s->sub[0], &tmp2[sub_map[i]], exp, m*sizeof(TXComplex));
+        fn0(sub0, &tmp2[sub_map[i]], exp, m*sizeof(TXComplex));
     }
 
     for (int i = 0; i < n; i++) {
-        s->fn[1](&s->sub[1], tmp1, tmp2, sizeof(TXComplex));
+        fn1(sub1, tmp1, tmp2, sizeof(TXComplex));
         tmp1 += m;
         tmp2 += m;
     }
@@ -1775,16 +1779,20 @@ static void TX_NAME(ff_tx_fft_pfa_ns)(AVTXContext *s, void *_out,
     TXComplex *tmp2 = s->tmp;
     TXComplex *in = _in, *out = _out;
     const ptrdiff_t tstride = m*sizeof(TXComplex);
+    AVTXContext *sub0 = &s->sub[0];
+    AVTXContext *sub1 = &s->sub[1];
+    const av_tx_fn fn0 = s->fn[0];
+    const av_tx_fn fn1 = s->fn[1];
 
     stride /= sizeof(*out);
 
     for (int i = 0; i < m; i++) {
-        s->fn[0](&s->sub[0], &tmp2[sub_map[i]], in, tstride);
+        fn0(sub0, &tmp2[sub_map[i]], in, tstride);
         in += n;
     }
 
     for (int i = 0; i < n; i++) {
-        s->fn[1](&s->sub[1], tmp1, tmp2, sizeof(TXComplex));
+        fn1(sub1, tmp1, tmp2, sizeof(TXComplex));
         tmp1 += m;
         tmp2 += m;
     }
