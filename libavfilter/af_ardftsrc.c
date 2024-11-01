@@ -296,27 +296,37 @@ static int activate(AVFilterContext *ctx)
 
         ret = ff_inlink_consume_samples(inlink, wanted, wanted, &in);
     }
+
     if (ret < 0)
         return ret;
 
-    if (ret > 0) {
+    if (ret > 0)
         return filter_frame(inlink, in);
-    } else if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+
+    if (inlink->sample_rate != outlink->sample_rate) {
+        if (ff_inlink_queued_samples(inlink) >= s->in_nb_samples) {
+            ff_filter_set_ready(ctx, 10);
+            return 0;
+        }
+    } else {
+        if (ff_inlink_queued_frames(inlink) >= 1) {
+            ff_filter_set_ready(ctx, 10);
+            return 0;
+        }
+    }
+
+    if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
         if (s->out_offset > 0 && s->flush_size > 0)
             ret = flush_frame(outlink);
 
         pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
         ff_outlink_set_status(outlink, status, pts);
         return ret;
-    } else {
-        if (inlink->sample_rate != outlink->sample_rate &&
-            ff_inlink_queued_samples(inlink) >= s->in_nb_samples) {
-            ff_filter_set_ready(ctx, 10);
-        } else if (ff_outlink_frame_wanted(outlink)) {
-            ff_inlink_request_frame(inlink);
-        }
-        return 0;
     }
+
+    FF_FILTER_FORWARD_WANTED(outlink, inlink);
+
+    return FFERROR_NOT_READY;
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
