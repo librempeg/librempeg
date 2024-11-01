@@ -527,8 +527,6 @@ static int activate(AVFilterContext *ctx)
 
     if (ret > 0)
         return filter_frame(inlink, in);
-    if (ret < 0)
-        return ret;
 
     if (ff_inlink_queued_samples(inlink) >= s->hop_size) {
         ff_filter_set_ready(ctx, 10);
