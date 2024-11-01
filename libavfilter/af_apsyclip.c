@@ -587,19 +587,22 @@ static int activate(AVFilterContext *ctx)
     if (ret < 0)
         return ret;
 
-    if (ret > 0) {
+    if (ret > 0)
         return filter_frame(inlink, in);
-    } else if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
-        ff_outlink_set_status(outlink, status, pts);
-        return 0;
-    } else {
-        if (ff_inlink_queued_samples(inlink) >= s->overlap) {
-            ff_filter_set_ready(ctx, 10);
-        } else if (ff_outlink_frame_wanted(outlink)) {
-            ff_inlink_request_frame(inlink);
-        }
+
+    if (ff_inlink_queued_samples(inlink) >= s->overlap) {
+        ff_filter_set_ready(ctx, 10);
         return 0;
     }
+
+    if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+        ff_outlink_set_status(outlink, status, pts);
+        return 0;
+    }
+
+    FF_FILTER_FORWARD_WANTED(outlink, inlink);
+
+    return FFERROR_NOT_READY;
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
