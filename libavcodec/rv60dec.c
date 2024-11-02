@@ -25,12 +25,11 @@
 #include "decode.h"
 #include "get_bits.h"
 #include "golomb.h"
-#include "libavutil/thread.h"
 #include "libavutil/mem.h"
 #include "rv60data.h"
 #include "rv60dsp.h"
 #include "rv60vlcs.h"
-#include "thread.h"
+#include "threadprogress.h"
 #include "unary.h"
 #include "videodsp.h"
 
@@ -224,7 +223,32 @@ typedef struct RV60Context {
 
     uint64_t ref_pts[2], ts_scale;
     uint32_t ref_ts[2];
+
+    struct ThreadProgress *progress;
+    unsigned nb_progress;
 } RV60Context;
+
+static int progress_init(RV60Context *s, unsigned count)
+{
+    if (s->nb_progress < count) {
+        void *tmp = av_realloc_array(s->progress, count, sizeof(*s->progress));
+        if (!tmp)
+            return AVERROR(ENOMEM);
+        s->progress = tmp;
+        memset(s->progress + s->nb_progress, 0, (count - s->nb_progress) * sizeof(*s->progress));
+        for (int i = s->nb_progress; i < count; i++) {
+            int ret = ff_thread_progress_init(&s->progress[i], 1);
+            if (ret < 0)
+                return ret;
+            s->nb_progress = i + 1;
+        }
+    }
+
+    for (int i = 0; i < count; i++)
+        ff_thread_progress_reset(&s->progress[i]);
+
+    return 0;
+}
 
 static av_cold int rv60_decode_init(AVCodecContext * avctx)
 {
@@ -2242,6 +2266,9 @@ static int decode_slice(AVCodecContext *avctx, void *tdata, int cu_y, int thread
     init_get_bits8(&gb, s->slice[cu_y].data, s->slice[cu_y].size);
 
     for (int cu_x = 0; cu_x < s->cu_width; cu_x++) {
+        if ((s->avctx->active_thread_type & FF_THREAD_SLICE) && cu_y)
+            ff_thread_progress_await(&s->progress[cu_y - 1], cu_x + 2);
+
         qp = s->qp + read_qp_offset(&gb, s->qp_off_type);
         sel_qp = calc_sel_qp(s->osvquant, qp);
 
@@ -2255,7 +2282,13 @@ static int decode_slice(AVCodecContext *avctx, void *tdata, int cu_y, int thread
             thread.cu_split_pos = 0;
             deblock_cu_r(s, frame, &thread, cu_x << 6, cu_y << 6, 6, qp);
         }
+
+        if (s->avctx->active_thread_type & FF_THREAD_SLICE)
+            ff_thread_progress_report(&s->progress[cu_y], cu_x + 1);
     }
+
+    if (s->avctx->active_thread_type & FF_THREAD_SLICE)
+        ff_thread_progress_report(&s->progress[cu_y], INT_MAX);
 
     return 0;
 }
@@ -2323,6 +2356,10 @@ static int rv60_decode_frame(AVCodecContext *avctx, AVFrame * frame,
         ofs += s->slice[i].size;
     }
 
+    ret = progress_init(s, s->cu_height);
+    if (ret < 0)
+        return ret;
+
     s->avctx->execute2(s->avctx, decode_slice, s->last_frame[CUR_PIC], NULL, s->cu_height);
 
     ret = 0;
@@ -2336,8 +2373,10 @@ static int rv60_decode_frame(AVCodecContext *avctx, AVFrame * frame,
     if (frame->data[0])
         *got_frame = 1;
 
-    if (s->pict_type != AV_PICTURE_TYPE_B)
+    if (s->pict_type != AV_PICTURE_TYPE_B) {
+        av_frame_unref(s->last_frame[NEXT_PIC]);
         FFSWAP(AVFrame *, s->last_frame[CUR_PIC], s->last_frame[NEXT_PIC]);
+    }
 
     if (s->pict_type != AV_PICTURE_TYPE_B) {
         s->ref_pts[0] = s->ref_pts[1];
@@ -2376,6 +2415,10 @@ static av_cold int rv60_decode_end(AVCodecContext * avctx)
     av_freep(&s->top_str);
     av_freep(&s->left_str);
 
+    for (int i = 0; i < s->nb_progress; i++)
+        ff_thread_progress_destroy(&s->progress[i]);
+    av_freep(&s->progress);
+
     return 0;
 }
 
@@ -2389,6 +2432,6 @@ const FFCodec ff_rv60_decoder = {
     .close          = rv60_decode_end,
     FF_CODEC_DECODE_CB(rv60_decode_frame),
     .flush          = rv60_flush,
-    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY/* | AV_CODEC_CAP_SLICE_THREADS*/,
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY | AV_CODEC_CAP_SLICE_THREADS,
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
 };
