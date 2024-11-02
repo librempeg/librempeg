@@ -430,6 +430,36 @@ static int fn(config_output)(AVFilterContext *ctx)
     return 0;
 }
 
+static int fn(bypass_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
+{
+    AudioSurroundContext *s = ctx->priv;
+    const int chan = av_channel_layout_channel_from_index(&s->out_ch_layout, ch);
+    const int idx = av_channel_layout_index_from_channel(&s->in_ch_layout, chan);
+    const float *window_func_lut = s->window_func_lut;
+    const ftype *output_levels = s->output_levels;
+    const ftype level_out = output_levels[ch] * s->win_gain;
+    const int win_size = s->win_size;
+    ftype *dst, *ptr;
+
+
+    dst = (ftype *)s->output_out->extended_data[ch];
+    ptr = (ftype *)s->overlap_buffer->extended_data[ch];
+    if (idx < 0)
+        memset(dst, 0, win_size * sizeof(ftype));
+    else
+        s->itx_fn(s->irdft[ch], dst, (ftype *)s->input->extended_data[ch], sizeof(ctype));
+
+    memmove(ptr, ptr + s->hop_size, win_size * sizeof(ftype));
+
+    for (int n = 0; n < win_size; n++)
+        ptr[n] = FMA(dst[n], window_func_lut[n] * level_out, ptr[n]);
+
+    dst = (ftype *)out->extended_data[ch];
+    memcpy(dst, ptr, s->hop_size * sizeof(ftype));
+
+    return 0;
+}
+
 static int fn(ifft_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
 {
     AudioSurroundContext *s = ctx->priv;
@@ -438,6 +468,9 @@ static int fn(ifft_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
     const ftype level_out = output_levels[ch] * s->win_gain;
     const int win_size = s->win_size;
     ftype *dst, *ptr;
+
+    if (ctx->is_disabled)
+        return fn(bypass_channel)(ctx, out, ch);
 
     dst = (ftype *)s->output_out->extended_data[ch];
     ptr = (ftype *)s->overlap_buffer->extended_data[ch];

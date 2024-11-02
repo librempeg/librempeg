@@ -671,6 +671,7 @@ const AVFilter ff_af_surround = {
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
-    .flags          = AVFILTER_FLAG_SLICE_THREADS,
+    .flags          = AVFILTER_FLAG_SLICE_THREADS |
+                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     .process_command = process_command,
 };
