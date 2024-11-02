@@ -167,7 +167,7 @@ static int afilter_frame(AVFilterLink *inlink, AVFrame *frame)
                 drain = FFMAX(0, s->start - s->ignored_samples);
                 s->pts = frame->pts;
                 av_audio_fifo_drain(s->fifo, drain);
-                s->pts += av_rescale_q(s->start - s->ignored_samples, (AVRational){1, outlink->sample_rate}, outlink->time_base);
+                s->pts += av_rescale_q(drain, (AVRational){1, outlink->sample_rate}, outlink->time_base);
             }
             s->nb_samples += ret - drain;
             drain = frame->nb_samples - written;
@@ -180,6 +180,7 @@ static int afilter_frame(AVFilterLink *inlink, AVFrame *frame)
                 av_audio_fifo_drain(s->left, drain);
             }
             frame->nb_samples = ret;
+            frame->pts = s->pts;
             s->pts += av_rescale_q(ret, (AVRational){1, outlink->sample_rate}, outlink->time_base);
             ret = ff_filter_frame(outlink, frame);
         } else {
