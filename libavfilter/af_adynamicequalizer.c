@@ -55,6 +55,12 @@ enum DetectFilter {
     NB_DFILTERS
 };
 
+enum DetectThresholdFilter {
+    DTABSOLUTE,
+    DTRELATIVE,
+    NB_DTFILTERS
+};
+
 enum TargetFilter {
     TBELL,
     TLOWSHELF,
@@ -76,6 +82,9 @@ typedef struct AudioDynamicEqualizerContext {
 
     int *dftype;
     unsigned nb_dftype;
+
+    int *dttype;
+    unsigned nb_dttype;
 
     double *tfrequency;
     unsigned nb_tfrequency;
@@ -298,6 +307,7 @@ static const AVOptionArrayDef def_dqfactor   = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_tfrequency = {.def="1000",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_tqfactor   = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_dftype     = {.def="bandpass",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_dttype     = {.def="absolute",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_tattack    = {.def="20",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_trelease   = {.def="200",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_tftype     = {.def="bell",.size_min=1,.sep=' '};
@@ -318,6 +328,9 @@ static const AVOption adynamicequalizer_options[] = {
     {   "lowpass",  0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DLOWPASS}, 0, 0,       FLAGS, .unit = "dftype" },
     {   "highpass", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DHIGHPASS},0, 0,       FLAGS, .unit = "dftype" },
     {   "peak",     0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DPEAK},    0, 0,       FLAGS, .unit = "dftype" },
+    { "dttype",     "set detection threshold type",OFFSET(dttype), AV_OPT_TYPE_INT|AR, {.arr=&def_dttype}, 0,NB_DTFILTERS-1,FLAGS, .unit = "dttype" },
+    {   "absolute", "set the absolute threshold", 0,               AV_OPT_TYPE_CONST,  {.i64=DTABSOLUTE},0, 0,      FLAGS, .unit = "dttype" },
+    {   "relative", "set the relative threshold", 0,               AV_OPT_TYPE_CONST,  {.i64=DTRELATIVE},0, 0,      FLAGS, .unit = "dttype" },
     { "tfrequency", "set target frequency",    OFFSET(tfrequency), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_tfrequency},2, 1000000, FLAGS },
     { "tqfactor",   "set target Q factor",     OFFSET(tqfactor),   AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_tqfactor},  0.001, 1000,FLAGS },
     { "attack", "set target attack duration",  OFFSET(tattack),    AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_tattack},   0.01, 2000, FLAGS },

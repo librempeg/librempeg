@@ -79,6 +79,12 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
+typedef struct fn(RMSContext) {
+    ftype history[10];
+    ftype sum;
+    int history_idx;
+} fn(RMSContext);
+
 typedef struct fn(ChannelContext) {
     ftype fa[3], fm[3];
     ftype astate[2];
@@ -90,6 +96,9 @@ typedef struct fn(ChannelContext) {
     ftype threshold;
     ftype new_threshold;
     ftype threshold_log;
+
+    fn(RMSContext) drms;
+    fn(RMSContext) brms;
 
     int size;
     int detection;
@@ -467,6 +476,46 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
     return 0;
 }
 
+static ftype fn(get_rms)(fn(RMSContext) *rms, const ftype in)
+{
+    const int history_size = FF_ARRAY_ELEMS(rms->history);
+    int idx = rms->history_idx;
+    const ftype out = rms->history[idx];
+    ftype ret;
+
+    rms->sum += in*in;
+    ret = SQRT(rms->sum/history_size);
+    rms->sum -= out*out;
+    rms->sum  = FMAX(F(0.0), rms->sum);
+
+    rms->history[idx] = in;
+    idx++;
+    if (idx >= history_size)
+        idx = 0;
+    rms->history_idx = idx;
+
+    return ret;
+}
+
+static ftype fn(get_detect)(const int dttype, const ftype band, const ftype broad,
+                            fn(RMSContext) *drms, fn(RMSContext) *brms)
+{
+    ftype ret, detect, ref;
+
+    switch (dttype) {
+    case DTABSOLUTE:
+        ret = fn(get_rms)(drms, band);
+        break;
+    case DTRELATIVE:
+        detect = fn(get_rms)(drms, band);
+        ref = fn(get_rms)(brms, broad);
+        ret = detect / (F(0.1) + ref);
+        break;
+    }
+
+    return ret;
+}
+
 static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
                                     const int start, const int end, const int band)
 {
@@ -483,6 +532,7 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
     const ftype range = s->range[FFMIN(band, s->nb_range-1)];
     const ftype tfrequency = FMIN(s->tfrequency[FFMIN(band, s->nb_tfrequency-1)], sample_rate * F(0.5));
     const int direction = s->direction[FFMIN(band, s->nb_direction-1)];
+    const int dttype = s->dttype[FFMIN(band, s->nb_dttype-1)];
     const int mode = s->mode[FFMIN(band, s->nb_mode-1)];
     const ftype power = (mode == CUT) ? F(-1.0) : F(1.0);
     const ftype band_threshold_log = b->threshold_log;
@@ -511,8 +561,10 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
         fn(ChannelContext) *cc = &cs[ch];
         ftype threshold_log = cc->threshold_log;
         ftype new_threshold = cc->new_threshold;
-        ftype threshold = cc->threshold;
         ftype *fa = cc->fa, *fm = cc->fm;
+        fn(RMSContext) *drms = &cc->drms;
+        fn(RMSContext) *brms = &cc->brms;
+        ftype threshold = cc->threshold;
         ftype lin_gain = cc->lin_gain;
         int detection = cc->detection;
         ftype *astate = cc->astate;
@@ -529,7 +581,7 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
             ftype v, listen;
 
             listen = detect_fn(scsrc[n], dm, da, dstate);
-            detect = FABS(listen);
+            detect = fn(get_detect)(dttype, listen, scsrc[n], drms, brms);
 
             if (band_detection == DET_ON) {
                 new_threshold = FMAX(new_threshold, detect);
