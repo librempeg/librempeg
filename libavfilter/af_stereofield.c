@@ -39,7 +39,7 @@ enum operation {
 typedef struct StereoFieldContext {
     const AVClass *class;
 
-    double D;
+    double D, P;
     int mode;
 
     int fft_size;
@@ -69,6 +69,7 @@ typedef struct StereoFieldContext {
 
 static const AVOption stereofield_options[] = {
     { "d", "set the depth", OFFSET(D), AV_OPT_TYPE_DOUBLE, {.dbl=0.}, -1, 1, FLAGS },
+    { "p", "set the panning", OFFSET(P), AV_OPT_TYPE_DOUBLE, {.dbl=0.}, -1, 1, FLAGS },
     { "o", "set the operating mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=OP_STEREO}, 0, NB_OPERATION-1, FLAGS, "mode" },
     {  "l", "left",   0, AV_OPT_TYPE_CONST, {.i64=OP_LEFT},   0, 0, FLAGS, .unit = "mode"},
     {  "r", "right",  0, AV_OPT_TYPE_CONST, {.i64=OP_RIGHT},  0, 0, FLAGS, .unit = "mode"},
@@ -83,8 +84,7 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_out)
 {
     static const enum AVSampleFormat formats[] = {
-        AV_SAMPLE_FMT_FLTP,
-        AV_SAMPLE_FMT_DBLP,
+        AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP,
         AV_SAMPLE_FMT_NONE,
     };
     static const AVChannelLayout layouts[] = {
@@ -136,6 +136,8 @@ static int config_input(AVFilterLink *inlink)
         s->sf_flush = sf_flush_double;
         ret = sf_tx_init_double(ctx);
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return ret;

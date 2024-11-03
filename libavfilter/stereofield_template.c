@@ -98,8 +98,10 @@ static void fn(apply_window)(StereoFieldContext *s,
 }
 
 static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
-                            const ftype d, const int M)
+                            const ftype d, const ftype p, const int M)
 {
+    const ftype lx = (p > F(0.0)) ? F(1.0)-p : F(1.0);
+    const ftype rx = (p < F(0.0)) ? F(1.0)+p : F(1.0);
     const ftype m = (d < F(0.0)) ? d : F(0.0);
     const ftype s = (d > F(0.0)) ? d : F(0.0);
 
@@ -121,6 +123,11 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
             fl[i].im = l_re * ls + l_im * lc;
             fr[i].re = r_re;
             fr[i].im = r_im;
+
+            fl[i].re *= lx;
+            fl[i].im *= lx;
+            fr[i].re *= rx;
+            fr[i].im *= rx;
         }
         break;
     case OP_RIGHT:
@@ -140,6 +147,11 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
             fl[i].im = l_im;
             fr[i].re = r_re * lc - r_im * ls;
             fr[i].im = r_re * ls + r_im * lc;
+
+            fl[i].re *= lx;
+            fl[i].im *= lx;
+            fr[i].re *= rx;
+            fr[i].im *= rx;
         }
         break;
     case OP_STEREO:
@@ -163,6 +175,11 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
             fl[i].im = l_re * lsl + l_im * lcl;
             fr[i].re = r_re * lcr - r_im * lsr;
             fr[i].im = r_re * lsr + r_im * lcr;
+
+            fl[i].re *= lx;
+            fl[i].im *= lx;
+            fr[i].re *= rx;
+            fr[i].im *= rx;
         }
         break;
     }
@@ -188,6 +205,7 @@ static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out)
     const int nb_samples = FFMIN(overlap, s->in->nb_samples);
     const int M = s->mode;
     const ftype D = s->D;
+    const ftype P = s->P;
 
     // shift in/out buffers
     memmove(left_in, &left_in[overlap], offset * sizeof(*left_in));
@@ -205,7 +223,7 @@ static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out)
     s->tx_fn(s->tx_ctx, windowed_oright, windowed_right, sizeof(ftype));
 
     fn(stereofield)(windowed_oleft, windowed_oright,
-                    s->fft_size/2 + 1, D, M);
+                    s->fft_size/2 + 1, D, P, M);
 
     s->itx_fn(s->itx_ctx, windowed_left, windowed_oleft, sizeof(ctype));
     s->itx_fn(s->itx_ctx, windowed_right, windowed_oright, sizeof(ctype));
@@ -247,6 +265,7 @@ static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out)
     const int nb_samples = 0;
     const int M = s->mode;
     const ftype D = s->D;
+    const ftype P = s->P;
 
     // shift in/out buffers
     memmove(left_in, &left_in[overlap], offset * sizeof(*left_in));
@@ -262,7 +281,7 @@ static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out)
     s->tx_fn(s->tx_ctx, windowed_oright, windowed_right, sizeof(ftype));
 
     fn(stereofield)(windowed_oleft, windowed_oright,
-                    s->fft_size/2 + 1, D, M);
+                    s->fft_size/2 + 1, D, P, M);
 
     s->itx_fn(s->itx_ctx, windowed_left, windowed_oleft, sizeof(ctype));
     s->itx_fn(s->itx_ctx, windowed_right, windowed_oright, sizeof(ctype));
