@@ -160,7 +160,7 @@ static int afilter_frame(AVFilterLink *inlink, AVFrame *frame)
             if (s->start < 0)
                 s->start = inl->sample_count_out - written;
 
-            ret = av_audio_fifo_write(s->fifo, (void **)frame->extended_data, written);
+            ret = av_audio_fifo_write(s->fifo, (void **)frame->extended_data, frame->nb_samples);
             if (ret < 0)
                 return ret;
             if (!s->nb_samples) {
@@ -169,6 +169,7 @@ static int afilter_frame(AVFilterLink *inlink, AVFrame *frame)
                 av_audio_fifo_drain(s->fifo, drain);
                 s->pts += av_rescale_q(drain, (AVRational){1, outlink->sample_rate}, outlink->time_base);
             }
+            s->ignored_samples = s->start;
             s->nb_samples += ret - drain;
             drain = frame->nb_samples - written;
             if (s->nb_samples == s->size && drain > 0) {
