@@ -74,6 +74,7 @@ typedef struct CompandContext {
 
 #define OFFSET(x) offsetof(CompandContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define AT AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
 static const AVOptionArrayDef def_attacks = {.def="0.01",.size_min=1,.sep='|'};
@@ -82,12 +83,12 @@ static const AVOptionArrayDef def_in_points  = {.def="-70|-60|1",.size_min=1,.se
 static const AVOptionArrayDef def_out_points = {.def="-70|-20|0",.size_min=1,.sep='|'};
 
 static const AVOption compand_options[] = {
-    { "attacks", "set time over which increase of volume is determined", OFFSET(attacks), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_attacks }, 0, 10, A },
-    { "decays", "set time over which decrease of volume is determined", OFFSET(decays), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_decays }, 0, 10, A },
-    { "ipoints", "set input points of transfer function", OFFSET(in_points), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_in_points }, -900, 900, A },
-    { "opoints", "set output points of transfer function", OFFSET(out_points), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_out_points }, -900, 900, A },
-    { "soft-knee", "set soft-knee", OFFSET(curve_dB), AV_OPT_TYPE_DOUBLE, { .dbl = 0.01 }, 0.01, 900, A },
-    { "gain", "set output gain", OFFSET(gain_dB), AV_OPT_TYPE_DOUBLE, { .dbl = 0 }, -900, 900, A },
+    { "attacks", "set time over which increase of volume is determined", OFFSET(attacks), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_attacks }, 0, 10, AT },
+    { "decays", "set time over which decrease of volume is determined", OFFSET(decays), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_decays }, 0, 10, AT },
+    { "ipoints", "set input points of transfer function", OFFSET(in_points), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_in_points }, -900, 900, AT },
+    { "opoints", "set output points of transfer function", OFFSET(out_points), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_out_points }, -900, 900, AT },
+    { "soft-knee", "set soft-knee", OFFSET(curve_dB), AV_OPT_TYPE_DOUBLE, { .dbl = 0.01 }, 0.01, 900, AT },
+    { "gain", "set output gain", OFFSET(gain_dB), AV_OPT_TYPE_DOUBLE, { .dbl = 0 }, -900, 900, AT },
     { "volume", "set initial volume", OFFSET(initial_volume), AV_OPT_TYPE_DOUBLE, { .dbl = 0 }, -900, 0, A },
     { "delay", "set delay for samples before sending them to volume adjuster", OFFSET(delay), AV_OPT_TYPE_DOUBLE, { .dbl = 0 }, 0, 20, A },
     { "sidechain", "enable sidechain input", OFFSET(sidechain), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, A },
@@ -257,8 +258,6 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR_BUG;
     }
 
-    s->nb_segments = (FFMAX(s->nb_in_points, s->nb_out_points) + 4) * 2;
-
     ret = s->prepare(ctx, outlink);
     if (ret < 0)
         return ret;
@@ -348,6 +347,19 @@ static int activate(AVFilterContext *ctx)
     return FFERROR_NOT_READY;
 }
 
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
+                           char *res, int res_len, int flags)
+{
+    CompandContext *s = ctx->priv;
+    int ret;
+
+    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    if (ret < 0)
+        return ret;
+
+    return s->prepare(ctx, ctx->outputs[0]);
+}
+
 static const AVFilterPad compand_outputs[] = {
     {
         .name         = "default",
@@ -371,4 +383,5 @@ const AVFilter ff_af_compand = {
     .flags          = AVFILTER_FLAG_DYNAMIC_INPUTS |
                       AVFILTER_FLAG_SLICE_THREADS |
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    .process_command = process_command,
 };

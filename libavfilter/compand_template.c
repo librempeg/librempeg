@@ -88,8 +88,10 @@ static int fn(prepare)(AVFilterContext *ctx, AVFilterLink *outlink)
     fn(ChanParam) *channels;
     int num;
 
-    s->channels = av_calloc(nb_channels, sizeof(fn(ChanParam)));
-    s->segments = av_calloc(s->nb_segments, sizeof(fn(CompandSegment)));
+    s->nb_segments = (FFMAX(s->nb_in_points, s->nb_out_points) + 4) * 2;
+
+    s->channels = av_realloc_f(s->channels, nb_channels, sizeof(fn(ChanParam)));
+    s->segments = av_realloc_f(s->segments, s->nb_segments, sizeof(fn(CompandSegment)));
     if (!s->channels || !s->segments)
         return AVERROR(ENOMEM);
     channels = s->channels;
