@@ -1,0 +1,230 @@
+/*
+ * This file is part of FFmpeg.
+ *
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * FFmpeg is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
+#undef ftype
+#undef FABS
+#undef FMIN
+#undef SAMPLE_FORMAT
+#if DEPTH == 32
+#define SAMPLE_FORMAT fltp
+#define FABS fabsf
+#define FMIN fminf
+#define ftype float
+#else
+#define SAMPLE_FORMAT dblp
+#define FABS fabs
+#define FMIN fmin
+#define ftype double
+#endif
+
+#define fn3(a,b)   a##_##b
+#define fn2(a,b)   fn3(a,b)
+#define fn(a)      fn2(a, SAMPLE_FORMAT)
+
+#define F(x) ((ftype)(x))
+
+typedef struct fn(StateContext) {
+    ftype *sorted, *cache;
+
+    unsigned filled, idx, size, front, back;
+
+    ftype attack, release, current;
+} fn(StateContext);
+
+static void fn(envelope_uninit)(AVFilterContext *ctx)
+{
+    AudioEnvelopeContext *s = ctx->priv;
+    fn(StateContext) *st = s->st;
+
+    for (int ch = 0; ch < s->nb_channels && st; ch++) {
+        fn(StateContext) *stc = &st[ch];
+
+        av_freep(&stc->cache);
+        av_freep(&stc->sorted);
+    }
+
+    av_freep(&s->st);
+}
+
+static int fn(envelope_init)(AVFilterContext *ctx)
+{
+    AVFilterLink *outlink = ctx->outputs[0];
+    AudioEnvelopeContext *s = ctx->priv;
+    const int nb_channels = outlink->ch_layout.nb_channels;
+    const int sample_rate = outlink->sample_rate;
+    fn(StateContext) *st;
+    int look;
+
+    look = FFMAX(lrint(s->look * 2.0 * sample_rate), 1);
+
+    if (!s->st)
+        s->st = av_calloc(nb_channels, sizeof(*st));
+    if (!s->st)
+        return AVERROR(ENOMEM);
+
+    st = s->st;
+    for (int ch = 0; ch < nb_channels; ch++) {
+        fn(StateContext) *stc = &st[ch];
+        const ftype attack = s->attack[FFMIN(ch, s->nb_attack-1)];
+        const ftype release = s->release[FFMIN(ch, s->nb_release-1)];
+
+        if (attack > F(1.0) / sample_rate)
+            stc->attack = FMIN(F(1.0), F(2.0) * look / (attack * sample_rate));
+        else
+            stc->attack = F(1.0);
+
+        if (release > F(1.0) / sample_rate)
+            stc->release = FMIN(F(1.0), F(2.0) * look / (release * sample_rate));
+        else
+            stc->release = F(1.0);
+
+        stc->size = look;
+        if (!stc->sorted) {
+            stc->sorted = av_calloc(look, sizeof(*stc->sorted));
+
+            for (int n = 0; n < look; n++)
+                stc->sorted[n] = F(-1.0);
+        }
+        if (!stc->cache)
+            stc->cache = av_calloc(look, sizeof(*stc->cache));
+        if (!stc->sorted || !stc->cache)
+            return AVERROR(ENOMEM);
+    }
+
+    return 0;
+}
+
+#define PEAKS(empty_value,op,sample, psample)\
+    if (!empty && psample == ss[front]) {    \
+        ss[front] = empty_value;             \
+        if (back != front) {                 \
+            front--;                         \
+            if (front < 0)                   \
+                front = n - 1;               \
+        }                                    \
+        empty = (front == back) &&           \
+                (ss[front] == empty_value);  \
+    }                                        \
+                                             \
+    while (!empty && sample op ss[front]) {  \
+        ss[front] = empty_value;             \
+        if (back == front) {                 \
+            empty = 1;                       \
+            break;                           \
+        }                                    \
+        front--;                             \
+        if (front < 0)                       \
+            front = n - 1;                   \
+    }                                        \
+                                             \
+    while (!empty && sample op ss[back]) {   \
+        ss[back] = empty_value;              \
+        if (back == front) {                 \
+            empty = 1;                       \
+            break;                           \
+        }                                    \
+        back++;                              \
+        if (back >= n)                       \
+            back = 0;                        \
+    }                                        \
+                                             \
+    if (!empty) {                            \
+        back--;                              \
+        if (back < 0)                        \
+            back = n - 1;                    \
+    }
+
+static ftype fn(compute_peak)(ftype *ss, ftype ax, ftype px,
+                              int n, int *ffront, int *bback)
+{
+    ftype empty_value = F(-1.0);
+    int front = *ffront;
+    int back = *bback;
+    int empty = front == back && ss[front] == empty_value;
+    ftype r;
+
+    PEAKS(empty_value, >, ax, px)
+
+    ss[back] = ax;
+    r = ss[front];
+
+    *ffront = front;
+    *bback = back;
+
+    return r;
+}
+
+static int fn(do_envelope)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int ch)
+{
+    AudioEnvelopeContext *s = ctx->priv;
+    const ftype *src = (const ftype *)in->extended_data[ch];
+    ftype *dst = (ftype *)out->extended_data[ch];
+    const int nb_samples = in->nb_samples;
+    fn(StateContext) *st = s->st;
+    fn(StateContext) *stc = &st[ch];
+    const unsigned size = stc->size;
+    ftype *sorted = stc->sorted;
+    ftype *cache = stc->cache;
+    const ftype release = stc->release;
+    const ftype attack = stc->attack;
+    unsigned filled = stc->filled;
+    ftype current = stc->current;
+    unsigned front = stc->front;
+    unsigned back = stc->back;
+    unsigned idx = stc->idx;
+    ftype prev;
+
+    for (int n = 0; n < nb_samples; n++) {
+        const ftype r = FABS(src[n]);
+        ftype p;
+
+        if (filled < size) {
+            if (filled == 0)
+                current = r;
+            prev = cache[idx];
+            cache[idx] = r;
+            filled++;
+            idx++;
+            if (idx >= size)
+                idx = 0;
+        } else {
+            prev = cache[idx];
+            cache[idx] = r;
+            idx++;
+            if (idx >= size)
+                idx = 0;
+        }
+
+        p = fn(compute_peak)(sorted, r, prev, size, &front, &back);
+
+        if (p > current)
+            current += (p-current) * attack;
+        else if (p < current)
+            current -= (current-p) * release;
+
+        dst[n] = current;
+    }
+
+    stc->current = current;
+    stc->filled = filled;
+    stc->front = front;
+    stc->back = back;
+    stc->idx = idx;
+
+    return 0;
+}

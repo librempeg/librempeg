@@ -62,6 +62,7 @@ OBJS-$(CONFIG_ADYNAMICEQUALIZER_FILTER)      += af_adynamicequalizer.o
 OBJS-$(CONFIG_ADYNAMICSMOOTH_FILTER)         += af_adynamicsmooth.o
 OBJS-$(CONFIG_AECHO_FILTER)                  += af_aecho.o
 OBJS-$(CONFIG_AEMPHASIS_FILTER)              += af_aemphasis.o
+OBJS-$(CONFIG_AENVELOPE_FILTER)              += af_aenvelope.o
 OBJS-$(CONFIG_AEVAL_FILTER)                  += aeval.o
 OBJS-$(CONFIG_AEXCITER_FILTER)               += af_aexciter.o
 OBJS-$(CONFIG_AFADE_FILTER)                  += af_afade.o
