@@ -101,7 +101,8 @@ static int resync(AVIOContext *pb)
 
 static int gif_skip_subblocks(AVIOContext *pb)
 {
-    int sb_size, ret = 0;
+    int64_t ret = 0;
+    int sb_size;
 
     while (0x00 != (sb_size = avio_r8(pb))) {
         if ((ret = avio_skip(pb, sb_size)) < 0)
