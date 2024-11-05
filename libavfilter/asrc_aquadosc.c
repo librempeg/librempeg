@@ -20,6 +20,7 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/channel_layout.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "audio.h"
 #include "avfilter.h"
@@ -35,14 +36,17 @@ typedef struct AQuadOscContext {
     double phase;
     double old_phase;
     double offset;
-    double u, v;
-    double k1, k2;
 
     int samples_per_frame;
     int sample_rate;
     int64_t duration;
 
     int64_t pts;
+
+    void *st;
+
+    int (*init_state)(AVFilterContext *ctx);
+    void (*output_samples)(AVFilterContext *ctx, void *st, AVFrame *frame);
 } AQuadOscContext;
 
 #define OFFSET(x) offsetof(AQuadOscContext,x)
@@ -69,9 +73,9 @@ static av_cold int query_formats(const AVFilterContext *ctx,
     const AQuadOscContext *s = ctx->priv;
     static const AVChannelLayout chlayouts[] = { AV_CHANNEL_LAYOUT_STEREO, { 0 } };
     int sample_rates[] = { s->sample_rate, -1 };
-    static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP,
-                                                       AV_SAMPLE_FMT_DBLP,
-                                                       AV_SAMPLE_FMT_NONE };
+    static const enum AVSampleFormat sample_fmts[] = {
+        AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P,
+        AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_NONE };
     int ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
     if (ret < 0)
         return ret;
@@ -83,36 +87,50 @@ static av_cold int query_formats(const AVFilterContext *ctx,
     return ff_set_common_samplerates_from_list2(ctx, cfg_in, cfg_out, sample_rates);
 }
 
-static av_cold void init_state(AQuadOscContext *s)
-{
-    if (s->frequency != s->old_frequency) {
-        double w0 = fmin(s->frequency, 0.49999) * 2.0*M_PI;
+#define DEPTH 16
+#include "aquadosc_template.c"
 
-        s->k1 = tan(w0*0.5);
-        s->k2 = sin(w0);
-        s->old_frequency = s->frequency;
-    }
+#undef DEPTH
+#define DEPTH 31
+#include "aquadosc_template.c"
 
-    if (s->phase != s->old_phase) {
-        double p0 = M_PI*s->phase;
-        s->u = cos(p0);
-        s->v = sin(p0);
-        s->old_phase = s->phase;
-    }
-}
+#undef DEPTH
+#define DEPTH 32
+#include "aquadosc_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "aquadosc_template.c"
 
 static av_cold int config_props(AVFilterLink *outlink)
 {
-    AQuadOscContext *s = outlink->src->priv;
+    AVFilterContext *ctx = outlink->src;
+    AQuadOscContext *s = ctx->priv;
 
     s->old_frequency = -1.0;
     s->old_phase = -2.0;
-
-    init_state(s);
-
     s->duration = av_rescale(s->duration, s->sample_rate, AV_TIME_BASE);
 
-    return 0;
+    switch (outlink->format) {
+    case AV_SAMPLE_FMT_S16P:
+        s->init_state = init_state_s16p;
+        s->output_samples = output_samples_s16p;
+        break;
+    case AV_SAMPLE_FMT_S32P:
+        s->init_state = init_state_s32p;
+        s->output_samples = output_samples_s32p;
+        break;
+    case AV_SAMPLE_FMT_FLTP:
+        s->init_state = init_state_fltp;
+        s->output_samples = output_samples_fltp;
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        s->init_state = init_state_dblp;
+        s->output_samples = output_samples_dblp;
+        break;
+    }
+
+    return s->init_state(ctx);
 }
 
 static int activate(AVFilterContext *ctx)
@@ -137,62 +155,20 @@ static int activate(AVFilterContext *ctx)
     if (!(frame = ff_get_audio_buffer(outlink, nb_samples)))
         return AVERROR(ENOMEM);
 
-    switch (frame->format) {
-    case AV_SAMPLE_FMT_DBLP:
-        {
-            double *real = (double *)frame->extended_data[0];
-            double *imag = (double *)frame->extended_data[1];
-            const double offset = s->offset;
-            const double a = s->amplitude;
-            const double k1 = s->k1;
-            const double k2 = s->k2;
-            double u = s->u;
-            double v = s->v;
-            double w;
-
-            for (int i = 0; i < nb_samples; i++) {
-                real[i] = u * a + offset;
-                imag[i] = v * a + offset;
-                w = u - k1 * v;
-                v += k2 * w;
-                u = w - k1 * v;
-            }
-
-            s->u = u;
-            s->v = v;
-        }
-        break;
-    case AV_SAMPLE_FMT_FLTP:
-        {
-            float *real = (float *)frame->extended_data[0];
-            float *imag = (float *)frame->extended_data[1];
-            const float offset = s->offset;
-            const float a = s->amplitude;
-            const float k1 = s->k1;
-            const float k2 = s->k2;
-            float u = s->u;
-            float v = s->v;
-            float w;
-
-            for (int i = 0; i < nb_samples; i++) {
-                real[i] = u * a + offset;
-                imag[i] = v * a + offset;
-                w = u - k1 * v;
-                v += k2 * w;
-                u = w - k1 * v;
-            }
-
-            s->u = u;
-            s->v = v;
-        }
-        break;
-    }
+    s->output_samples(ctx, s->st, frame);
 
     frame->pts = s->pts;
     frame->duration = nb_samples;
     s->pts += nb_samples;
 
     return ff_filter_frame(outlink, frame);
+}
+
+static av_cold void uninit(AVFilterContext *ctx)
+{
+    AQuadOscContext *s = ctx->priv;
+
+    av_freep(&s->st);
 }
 
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
@@ -205,9 +181,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     if (ret < 0)
         return ret;
 
-    init_state(s);
-
-    return 0;
+    return s->init_state(ctx);
 }
 
 static const AVFilterPad outputs[] = {
@@ -222,6 +196,7 @@ const AVFilter ff_asrc_aquadosc = {
     .name            = "aquadosc",
     .description     = NULL_IF_CONFIG_SMALL("Generate Quadrature Oscillator samples."),
     .activate        = activate,
+    .uninit          = uninit,
     .priv_size       = sizeof(AQuadOscContext),
     .inputs          = NULL,
     FILTER_OUTPUTS(outputs),
