@@ -30,6 +30,11 @@
 #include "filters.h"
 #include "formats.h"
 
+typedef struct OscContext {
+    int32_t u, v;
+    int32_t k1, k2;
+} OscContext;
+
 typedef struct SineContext {
     const AVClass *class;
     double frequency;
@@ -38,15 +43,12 @@ typedef struct SineContext {
     AVExpr *samples_per_frame_expr;
     int sample_rate;
     int64_t duration;
-    int16_t *sin;
     int64_t pts;
-    uint32_t phi;  ///< current phase of the sine (2pi = 1<<32)
-    uint32_t dphi; ///< phase increment between two samples
+    OscContext osc;
     unsigned beep_period;
     unsigned beep_index;
     unsigned beep_length;
-    uint32_t phi_beep;  ///< current phase of the beep
-    uint32_t dphi_beep; ///< phase increment of the beep
+    OscContext beep_osc;
 } SineContext;
 
 #define CONTEXT SineContext
@@ -83,50 +85,6 @@ static const AVOption sine_options[] = {
 
 AVFILTER_DEFINE_CLASS(sine);
 
-#define LOG_PERIOD 15
-#define AMPLITUDE 4095
-#define AMPLITUDE_SHIFT 3
-
-static void make_sin_table(int16_t *sin)
-{
-    unsigned half_pi = 1 << (LOG_PERIOD - 2);
-    unsigned ampls = AMPLITUDE << AMPLITUDE_SHIFT;
-    uint64_t unit2 = (uint64_t)(ampls * ampls) << 32;
-    unsigned step, i, c, s, k, new_k, n2;
-
-    /* Principle: if u = exp(i*a1) and v = exp(i*a2), then
-       exp(i*(a1+a2)/2) = (u+v) / length(u+v) */
-    sin[0] = 0;
-    sin[half_pi] = ampls;
-    for (step = half_pi; step > 1; step /= 2) {
-        /* k = (1 << 16) * amplitude / length(u+v)
-           In exact values, k is constant at a given step */
-        k = 0x10000;
-        for (i = 0; i < half_pi / 2; i += step) {
-            s = sin[i] + sin[i + step];
-            c = sin[half_pi - i] + sin[half_pi - i - step];
-            n2 = s * s + c * c;
-            /* Newton's method to solve n² * k² = unit² */
-            while (1) {
-                new_k = (k + unit2 / ((uint64_t)k * n2) + 1) >> 1;
-                if (k == new_k)
-                    break;
-                k = new_k;
-            }
-            sin[i + step / 2] = (k * s + 0x7FFF) >> 16;
-            sin[half_pi - i - step / 2] = (k * c + 0x8000) >> 16;
-        }
-    }
-    /* Unshift amplitude */
-    for (i = 0; i <= half_pi; i++)
-        sin[i] = (sin[i] + (1 << (AMPLITUDE_SHIFT - 1))) >> AMPLITUDE_SHIFT;
-    /* Use symmetries to fill the other three quarters */
-    for (i = 0; i < half_pi; i++)
-        sin[half_pi * 2 - i] = sin[i];
-    for (i = 0; i < 2 * half_pi; i++)
-        sin[i + 2 * half_pi] = -sin[i];
-}
-
 static const char *const var_names[] = {
     "n",
     "pts",
@@ -143,21 +101,33 @@ enum {
     VAR_VARS_NB
 };
 
+#define DEPTH 16
+#define FIXED(x) (lrint((x) * (1 << (DEPTH-1))))
+#define MULT(x, y) (((x) * (y)) >> (DEPTH-1))
+
 static av_cold int init(AVFilterContext *ctx)
 {
-    int ret;
     SineContext *sine = ctx->priv;
+    double w0 = fmin(sine->frequency / (double)sine->sample_rate, 0.49999) * 2.0*M_PI;
+    OscContext *osc = &sine->osc;
+    int ret;
 
-    if (!(sine->sin = av_malloc(sizeof(*sine->sin) << LOG_PERIOD)))
-        return AVERROR(ENOMEM);
-    sine->dphi = ldexp(sine->frequency, 32) / sine->sample_rate + 0.5;
-    make_sin_table(sine->sin);
+    osc->k1 = FIXED(tan(w0*0.5));
+    osc->k2 = FIXED(sin(w0));
+    osc->u  = FIXED(cos(0));
+    osc->v  = FIXED(sin(0));
 
     if (sine->beep_factor) {
+        OscContext *beep_osc = &sine->beep_osc;
+
+        w0 = fmin(sine->frequency * sine->beep_factor / (double)sine->sample_rate, 0.49999) * 2.0*M_PI;
+        beep_osc->k1 = FIXED(tan(w0*0.5));
+        beep_osc->k2 = FIXED(sin(w0));
+        beep_osc->u  = FIXED(cos(0));
+        beep_osc->v  = FIXED(sin(0));
+
         sine->beep_period = sine->sample_rate;
         sine->beep_length = sine->beep_period / 25;
-        sine->dphi_beep = ldexp(sine->beep_factor * sine->frequency, 32) /
-                          sine->sample_rate + 0.5;
     }
 
     ret = av_expr_parse(&sine->samples_per_frame_expr,
@@ -175,7 +145,6 @@ static av_cold void uninit(AVFilterContext *ctx)
 
     av_expr_free(sine->samples_per_frame_expr);
     sine->samples_per_frame_expr = NULL;
-    av_freep(&sine->sin);
 }
 
 static av_cold int query_formats(const AVFilterContext *ctx,
@@ -217,7 +186,7 @@ static int activate(AVFilterContext *ctx)
         [VAR_T]   = sine->pts * av_q2d(outlink->time_base),
         [VAR_TB]  = av_q2d(outlink->time_base),
     };
-    int i, nb_samples = lrint(av_expr_eval(sine->samples_per_frame_expr, values, sine));
+    int nb_samples = lrint(av_expr_eval(sine->samples_per_frame_expr, values, sine));
     int16_t *samples;
 
     if (!ff_outlink_frame_wanted(outlink))
@@ -240,15 +209,45 @@ static int activate(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
     samples = (int16_t *)frame->data[0];
 
-    for (i = 0; i < nb_samples; i++) {
-        samples[i] = sine->sin[sine->phi >> (32 - LOG_PERIOD)];
-        sine->phi += sine->dphi;
-        if (sine->beep_index < sine->beep_length) {
-            samples[i] += sine->sin[sine->phi_beep >> (32 - LOG_PERIOD)] * 2;
-            sine->phi_beep += sine->dphi_beep;
+    {
+        const int32_t k1 = sine->osc.k1;
+        const int32_t k2 = sine->osc.k2;
+        int32_t u = sine->osc.u;
+        int32_t v = sine->osc.v;
+        int32_t w;
+
+        for (int i = 0; i < nb_samples; i++) {
+            samples[i] = u >> 3;
+            w = u - MULT(k1, v);
+            v += MULT(k2, w);
+            u = w - MULT(k1, v);
         }
-        if (++sine->beep_index == sine->beep_period)
-            sine->beep_index = 0;
+
+        sine->osc.u = u;
+        sine->osc.v = v;
+
+        if (sine->beep_length > 0) {
+            OscContext *beep_osc = &sine->beep_osc;
+            const int32_t k1 = beep_osc->k1;
+            const int32_t k2 = beep_osc->k2;
+            int32_t u = beep_osc->u;
+            int32_t v = beep_osc->v;
+
+            for (int i = 0; i < nb_samples; i++) {
+                if (sine->beep_index < sine->beep_length) {
+                    samples[i] += u >> 2;
+                    w = u - MULT(k1, v);
+                    v += MULT(k2, w);
+                    u = w - MULT(k1, v);
+                }
+
+                if (++sine->beep_index == sine->beep_period)
+                    sine->beep_index = 0;
+            }
+
+            beep_osc->u = u;
+            beep_osc->v = v;
+        }
     }
 
     frame->pts = sine->pts;
