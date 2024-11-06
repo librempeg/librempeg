@@ -129,17 +129,15 @@ static ftype fn(compute_avg)(ftype *cache, ftype x, ftype px,
                 (ss[front] == empty_value);  \
     }                                        \
                                              \
-    if (!empty && sample op ss[front]) {     \
-        while (1) {                          \
-            ss[front] = empty_value;         \
-            if (back == front) {             \
-                empty = 1;                   \
-                break;                       \
-            }                                \
-            front--;                         \
-            if (front < 0)                   \
-                front = n - 1;               \
+    while (!empty && sample op ss[front]) {  \
+        ss[front] = empty_value;             \
+        if (back == front) {                 \
+            empty = 1;                       \
+            break;                           \
         }                                    \
+        front--;                             \
+        if (front < 0)                       \
+            front = n - 1;                   \
     }                                        \
                                              \
     while (!empty && sample op ss[back]) {   \

@@ -62,17 +62,15 @@
                 (dd[front] == empty_value);  \
     }                                        \
                                              \
-    if (!empty && sample op dd[front]) {     \
-        while (1) {                          \
-            dd[front] = empty_value;         \
-            if (back == front) {             \
-                empty = 1;                   \
-                break;                       \
-            }                                \
-            front--;                         \
-            if (front < 0)                   \
-                front = n - 1;               \
+    while (!empty && sample op dd[front]) {  \
+        dd[front] = empty_value;             \
+        if (back == front) {                 \
+            empty = 1;                       \
+            break;                           \
         }                                    \
+        front--;                             \
+        if (front < 0)                       \
+            front = n - 1;                   \
     }                                        \
                                              \
     while (!empty && sample op dd[back]) {   \
