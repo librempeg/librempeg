@@ -82,7 +82,7 @@ typedef struct ShowWavesContext {
     AVRational rate;
     uint32_t *colors;
     unsigned nb_colors;
-    int16_t *buf_idy;    /* y coordinate of previous sample for each channel */
+    int *buf_idy;    /* y coordinate of previous sample for each channel */
     int16_t *history;
     int history_filled;
     int history_nb_samples;
@@ -103,9 +103,9 @@ typedef struct ShowWavesContext {
 
     int (*get_size)(int16_t sample, int size);
     void (*draw_sample)(uint8_t *buf, int height, ptrdiff_t linesize,
-                        int16_t *prev_y, const uint8_t color[4], int h);
+                        int *prev_y, const uint8_t color[4], int h);
     void (*draw_sampleh)(uint8_t *buf, int width,
-                        int16_t *prev_x, const uint8_t color[4], int w);
+                        int *prev_x, const uint8_t color[4], int w);
 
     /* single picture */
     int single_pic;
@@ -197,7 +197,7 @@ static int query_formats(const AVFilterContext *ctx,
 
 static int get_linear_size(int16_t sample, int size)
 {
-    return size/2 - ((sample * (size/2)) / INT16_MAX);
+    return size/2 - ((sample * (size/2)) / INT16_MAX) - (sample == INT16_MIN);
 }
 
 static int get_linear_size2(int16_t sample, int size)
@@ -236,7 +236,7 @@ static int get_cbrt_size2(int16_t sample, int size)
 }
 
 static void draw_sample_point_rgba_scale(uint8_t *buf, int height, ptrdiff_t linesize,
-                                         int16_t *prev_y,
+                                         int *prev_y,
                                          const uint8_t color[4], int h)
 {
     if (h >= 0 && h < height) {
@@ -248,7 +248,7 @@ static void draw_sample_point_rgba_scale(uint8_t *buf, int height, ptrdiff_t lin
 }
 
 static void draw_sample_point_rgba_scaleh(uint8_t *buf, int width,
-                                         int16_t *prev_x,
+                                         int *prev_x,
                                          const uint8_t color[4], int w)
 {
     if (w >= 0 && w < width) {
@@ -260,7 +260,7 @@ static void draw_sample_point_rgba_scaleh(uint8_t *buf, int width,
 }
 
 static void draw_sample_point_rgba_full(uint8_t *buf, int height, ptrdiff_t linesize,
-                                        int16_t *prev_y,
+                                        int *prev_y,
                                         const uint8_t color[4], int h)
 {
     uint32_t clr = AV_RN32(color);
@@ -269,7 +269,7 @@ static void draw_sample_point_rgba_full(uint8_t *buf, int height, ptrdiff_t line
 }
 
 static void draw_sample_point_rgba_fullh(uint8_t *buf, int width,
-                                         int16_t *prev_x,
+                                         int *prev_x,
                                          const uint8_t color[4], int w)
 {
     uint32_t clr = AV_RN32(color);
@@ -278,7 +278,7 @@ static void draw_sample_point_rgba_fullh(uint8_t *buf, int width,
 }
 
 static void draw_sample_line_rgba_scale(uint8_t *buf, int height, ptrdiff_t linesize,
-                                        int16_t *prev_y,
+                                        int *prev_y,
                                         const uint8_t color[4], int h)
 {
     int start = height/2;
@@ -297,7 +297,7 @@ static void draw_sample_line_rgba_scale(uint8_t *buf, int height, ptrdiff_t line
 }
 
 static void draw_sample_line_rgba_scaleh(uint8_t *buf, int width,
-                                         int16_t *prev_x,
+                                         int *prev_x,
                                          const uint8_t color[4], int w)
 {
     int start = width/2;
@@ -316,7 +316,7 @@ static void draw_sample_line_rgba_scaleh(uint8_t *buf, int width,
 }
 
 static void draw_sample_line_rgba_full(uint8_t *buf, int height, ptrdiff_t linesize,
-                                       int16_t *prev_y,
+                                       int *prev_y,
                                        const uint8_t color[4], int h)
 {
     int start = height/2;
@@ -332,7 +332,7 @@ static void draw_sample_line_rgba_full(uint8_t *buf, int height, ptrdiff_t lines
 }
 
 static void draw_sample_line_rgba_fullh(uint8_t *buf, int width,
-                                        int16_t *prev_x,
+                                        int *prev_x,
                                         const uint8_t color[4], int w)
 {
     int start = width/2;
@@ -348,12 +348,13 @@ static void draw_sample_line_rgba_fullh(uint8_t *buf, int width,
 }
 
 static void draw_sample_p2p_rgba_scale(uint8_t *buf, int height, ptrdiff_t linesize,
-                                       int16_t *prev_y,
+                                       int *prev_y,
                                        const uint8_t color[4], int h)
 {
-    if (*prev_y < 0)
-        *prev_y = h;
     if (h >= 0 && h < height) {
+        if (*prev_y < 0)
+            *prev_y = h;
+
         buf[h * linesize + 0] += color[0];
         buf[h * linesize + 1] += color[1];
         buf[h * linesize + 2] += color[2];
@@ -377,12 +378,13 @@ static void draw_sample_p2p_rgba_scale(uint8_t *buf, int height, ptrdiff_t lines
 }
 
 static void draw_sample_p2p_rgba_scaleh(uint8_t *buf, int width,
-                                        int16_t *prev_x,
+                                        int *prev_x,
                                         const uint8_t color[4], int w)
 {
-    if (*prev_x < 0)
-        *prev_x = w;
     if (w >= 0 && w < width) {
+        if (*prev_x < 0)
+            *prev_x = w;
+
         buf[w * 4 + 0] += color[0];
         buf[w * 4 + 1] += color[1];
         buf[w * 4 + 2] += color[2];
@@ -406,13 +408,15 @@ static void draw_sample_p2p_rgba_scaleh(uint8_t *buf, int width,
 }
 
 static void draw_sample_p2p_rgba_full(uint8_t *buf, int height, ptrdiff_t linesize,
-                                      int16_t *prev_y,
+                                      int *prev_y,
                                       const uint8_t color[4], int h)
 {
-    uint32_t clr = AV_RN32(color);
-    if (*prev_y < 0)
-        *prev_y = h;
     if (h >= 0 && h < height) {
+        uint32_t clr = AV_RN32(color);
+
+        if (*prev_y < 0)
+            *prev_y = h;
+
         AV_WN32(buf + h * linesize, clr);
         if (h != *prev_y) {
             int start = *prev_y, end = h;
@@ -429,13 +433,15 @@ static void draw_sample_p2p_rgba_full(uint8_t *buf, int height, ptrdiff_t linesi
 }
 
 static void draw_sample_p2p_rgba_fullh(uint8_t *buf, int width,
-                                       int16_t *prev_x,
+                                       int *prev_x,
                                        const uint8_t color[4], int w)
 {
-    uint32_t clr = AV_RN32(color);
-    if (*prev_x < 0)
-        *prev_x = w;
     if (w >= 0 && w < width) {
+        uint32_t clr = AV_RN32(color);
+
+        if (*prev_x < 0)
+            *prev_x = w;
+
         AV_WN32(buf + w * 4, clr);
         if (w != *prev_x) {
             int start = *prev_x, end = w;
@@ -452,7 +458,7 @@ static void draw_sample_p2p_rgba_fullh(uint8_t *buf, int width,
 }
 
 static void draw_sample_cline_rgba_scale(uint8_t *buf, int height, ptrdiff_t linesize,
-                                         int16_t *prev_y,
+                                         int *prev_y,
                                          const uint8_t color[4], int h)
 {
     const int start = (height - h) / 2;
@@ -467,7 +473,7 @@ static void draw_sample_cline_rgba_scale(uint8_t *buf, int height, ptrdiff_t lin
 }
 
 static void draw_sample_cline_rgba_scaleh(uint8_t *buf, int width,
-                                          int16_t *prev_x,
+                                          int *prev_x,
                                           const uint8_t color[4], int w)
 {
     const int start = (width - w) / 2;
@@ -482,7 +488,7 @@ static void draw_sample_cline_rgba_scaleh(uint8_t *buf, int width,
 }
 
 static void draw_sample_cline_rgba_full(uint8_t *buf, int height, ptrdiff_t linesize,
-                                        int16_t *prev_y,
+                                        int *prev_y,
                                         const uint8_t color[4], int h)
 {
     uint32_t clr = AV_RN32(color);
@@ -494,7 +500,7 @@ static void draw_sample_cline_rgba_full(uint8_t *buf, int height, ptrdiff_t line
 }
 
 static void draw_sample_cline_rgba_fullh(uint8_t *buf, int width,
-                                         int16_t *prev_x,
+                                         int *prev_x,
                                          const uint8_t color[4], int w)
 {
     uint32_t clr = AV_RN32(color);
@@ -506,7 +512,7 @@ static void draw_sample_cline_rgba_fullh(uint8_t *buf, int width,
 }
 
 static void draw_sample_point_gray(uint8_t *buf, int height, ptrdiff_t linesize,
-                                   int16_t *prev_y,
+                                   int *prev_y,
                                    const uint8_t color[4], int h)
 {
     if (h >= 0 && h < height)
@@ -514,7 +520,7 @@ static void draw_sample_point_gray(uint8_t *buf, int height, ptrdiff_t linesize,
 }
 
 static void draw_sample_line_gray(uint8_t *buf, int height, ptrdiff_t linesize,
-                                  int16_t *prev_y,
+                                  int *prev_y,
                                   const uint8_t color[4], int h)
 {
     int start = height/2;
@@ -527,7 +533,7 @@ static void draw_sample_line_gray(uint8_t *buf, int height, ptrdiff_t linesize,
 }
 
 static void draw_sample_p2p_gray(uint8_t *buf, int height, ptrdiff_t linesize,
-                                 int16_t *prev_y,
+                                 int *prev_y,
                                  const uint8_t color[4], int h)
 {
     if (*prev_y < 0)
@@ -547,7 +553,7 @@ static void draw_sample_p2p_gray(uint8_t *buf, int height, ptrdiff_t linesize,
 }
 
 static void draw_sample_cline_gray(uint8_t *buf, int height, ptrdiff_t linesize,
-                                   int16_t *prev_y,
+                                   int *prev_y,
                                    const uint8_t color[4], int h)
 {
     int k;
@@ -558,7 +564,7 @@ static void draw_sample_cline_gray(uint8_t *buf, int height, ptrdiff_t linesize,
 }
 
 static void draw_sample_point_grayh(uint8_t *buf, int height,
-                                    int16_t *prev_x,
+                                    int *prev_x,
                                     const uint8_t color[4], int w)
 {
     if (w >= 0 && w < height)
@@ -566,7 +572,7 @@ static void draw_sample_point_grayh(uint8_t *buf, int height,
 }
 
 static void draw_sample_line_grayh(uint8_t *buf, int width,
-                                  int16_t *prev_x,
+                                  int *prev_x,
                                   const uint8_t color[4], int w)
 {
     int start = width/2;
@@ -579,7 +585,7 @@ static void draw_sample_line_grayh(uint8_t *buf, int width,
 }
 
 static void draw_sample_p2p_grayh(uint8_t *buf, int width,
-                                 int16_t *prev_x,
+                                 int *prev_x,
                                  const uint8_t color[4], int w)
 {
     if (*prev_x < 0)
@@ -599,7 +605,7 @@ static void draw_sample_p2p_grayh(uint8_t *buf, int width,
 }
 
 static void draw_sample_cline_grayh(uint8_t *buf, int width,
-                                   int16_t *prev_x,
+                                   int *prev_x,
                                    const uint8_t color[4], int w)
 {
     const int start = (width - w) / 2;
@@ -931,7 +937,7 @@ static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *in)
     const int split_channels = s->split_channels;
     const AVRational in_q = av_inv_q(s->n);
     const AVRational u_q = av_make_q(1, 1);
-    int16_t *buf_idy = s->buf_idy;
+    int *buf_idy = s->buf_idy;
     const uint8_t *fg = s->fg;
     const int w = s->w;
     const int h = s->h;
