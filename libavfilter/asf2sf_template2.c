@@ -75,19 +75,19 @@ static dtype fnc(convert)(stype src)
 #elif (SRC_DEPTH == 32) && (DST_DEPTH ==  8)
     dst = lrintf(fminf(fmaxf(src,-1.f),1.f)*(1<<7))+0x80;
 #elif (SRC_DEPTH == 32) && (DST_DEPTH == 16)
-    dst = lrintf(fminf(fmaxf(src,-1.f),1.f)*(1<<15));
+    dst = lrintf(fminf(fmaxf(src,-1.f),1.f)*((1<<15)-1));
 #elif (SRC_DEPTH == 32) && (DST_DEPTH == 31)
-    dst = lrintf(fminf(fmaxf(src,-1.f),1.f)*(1U<<31));
+    dst = lrintf(fminf(fmaxf(src,-1.f),1.f)*((1U<<31)-1));
 #elif (SRC_DEPTH == 32) && (DST_DEPTH == 63)
-    dst = lrintf(fminf(fmaxf(src,-1.f),1.f)*(1ULL<<63));
+    dst = lrintf(fminf(fmaxf(src,-1.f),1.f)*((1ULL<<63)-1));
 #elif (SRC_DEPTH == 64) && (DST_DEPTH ==  8)
     dst = lrint(fmin(fmax(src,-1.0),1.0)*(1<<7))+0x80;
 #elif (SRC_DEPTH == 64) && (DST_DEPTH == 16)
-    dst = lrint(fmin(fmax(src,-1.0),1.0)*(1<<15));
+    dst = lrint(fmin(fmax(src,-1.0),1.0)*((1<<15)-1));
 #elif (SRC_DEPTH == 64) && (DST_DEPTH == 31)
-    dst = lrint(fmin(fmax(src,-1.0),1.0)*(1U<<31));
+    dst = lrint(fmin(fmax(src,-1.0),1.0)*((1U<<31)-1));
 #elif (SRC_DEPTH == 64) && (DST_DEPTH == 63)
-    dst = lrint(fmin(fmax(src,-1.0),1.0)*(1ULL<<63));
+    dst = lrint(fmin(fmax(src,-1.0),1.0)*((1ULL<<63)-1));
 #elif (SRC_DEPTH == 63) && (DST_DEPTH ==  8)
     dst = (src>>56) + 0x80;
 #elif (SRC_DEPTH == 63) && (DST_DEPTH == 16)
