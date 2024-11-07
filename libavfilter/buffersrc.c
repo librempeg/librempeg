@@ -533,15 +533,14 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *outlink = ctx->outputs[0];
     BufferSourceContext *c = ctx->priv;
 
-    if (!c->eof && ff_outlink_get_status(outlink)) {
-        c->eof = 1;
+    if (c->eof || ff_outlink_get_status(outlink)) {
+        if (!c->eof) {
+            ff_outlink_set_status(outlink, AVERROR_EOF, c->last_pts);
+            c->eof = 1;
+        }
         return 0;
     }
 
-    if (c->eof) {
-        ff_outlink_set_status(outlink, AVERROR_EOF, c->last_pts);
-        return 0;
-    }
     c->nb_failed_requests++;
     return FFERROR_NOT_READY;
 }
