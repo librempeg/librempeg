@@ -46,7 +46,7 @@
 static int check_frame_length(void *avcl, int srate_hz, int frame_us)
 {
     if (srate_hz !=  8000 && srate_hz != 16000 && srate_hz != 24000 &&
-        srate_hz != 32000 && srate_hz != 48000 && srate_hz != 96000) {
+        srate_hz != 32000 && srate_hz != 44100 && srate_hz != 48000 && srate_hz != 96000) {
         if (avcl)
             av_log(avcl, AV_LOG_ERROR,
                    "Invalid LC3 sample rate: %d Hz.\n", srate_hz);
@@ -141,7 +141,7 @@ static int lc3_read_header(AVFormatContext *s)
     AV_WL16(st->codecpar->extradata + 2, ep_mode);
     AV_WL16(st->codecpar->extradata + 4, hr_mode);
 
-    lc3->frame_samples = av_rescale(frame_us, srate_hz, 1000*1000);
+    lc3->frame_samples = av_rescale(frame_us, (srate_hz == 44100) ? 48000 : srate_hz, 1000*1000);
 
     delay = av_rescale(frame_us == 7500 ? 4000 : 2500, srate_hz, 1000*1000);
     lc3->end_dts = length ? length + delay : -1;
