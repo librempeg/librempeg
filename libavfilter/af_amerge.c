@@ -73,6 +73,12 @@ static int query_formats(const AVFilterContext *ctx,
     AVFilterChannelLayouts *layouts;
     int ret, nb_ch = 0;
 
+    for (int i = 0; i < s->nb_inputs; i++) {
+        if (!ctx->inputs[i]->incfg.channel_layouts ||
+            ctx->inputs[i]->incfg.channel_layouts->nb_channel_layouts < 1)
+            return AVERROR(EAGAIN);
+    }
+
     if ((ret = ff_set_common_all_samplerates2(ctx, cfg_in, cfg_out)) < 0)
         return ret;
 
@@ -81,10 +87,6 @@ static int query_formats(const AVFilterContext *ctx,
 
     for (int i = 0; i < s->nb_inputs; i++) {
         AVChannelLayout *in_layout;
-
-        if (!ctx->inputs[i]->incfg.channel_layouts ||
-            ctx->inputs[i]->incfg.channel_layouts->nb_channel_layouts < 1)
-            return AVERROR(EAGAIN);
 
         layouts = NULL;
         in_layout = &ctx->inputs[i]->incfg.channel_layouts->channel_layouts[0];
