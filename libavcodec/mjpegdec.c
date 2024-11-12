@@ -753,8 +753,9 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
         }
 
         av_frame_unref(s->picture_ptr);
-        if (ff_get_buffer(s->avctx, s->picture_ptr, AV_GET_BUFFER_FLAG_REF) < 0)
-            return -1;
+        ret = ff_get_buffer(s->avctx, s->picture_ptr, AV_GET_BUFFER_FLAG_REF);
+        if (ret < 0)
+            return ret;
         s->picture_ptr->pict_type = AV_PICTURE_TYPE_I;
         s->picture_ptr->flags |= AV_FRAME_FLAG_KEY;
         s->got_picture            = 1;
