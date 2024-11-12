@@ -53,10 +53,10 @@
 #include "jpeglsdec.h"
 #include "profiles.h"
 #include "put_bits.h"
+#include "thread.h"
 #include "exif.h"
 #include "bytestream.h"
 #include "tiff_common.h"
-
 
 static int init_default_huffman_tables(MJpegDecodeContext *s)
 {
@@ -336,10 +336,6 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
     height = get_bits(&s->gb, 16);
     width  = get_bits(&s->gb, 16);
 
-    // HACK for odd_height.mov
-    if (s->interlaced && s->width == width && s->height == height + 1)
-        height= s->height;
-
     av_log(s->avctx, AV_LOG_DEBUG, "sof0: picture: %dx%d\n", width, height);
     if (av_image_check_size(width, height, 0, s->avctx) < 0)
         return AVERROR_INVALIDDATA;
@@ -350,13 +346,6 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
     if (nb_components <= 0 ||
         nb_components > MAX_COMPONENTS)
         return -1;
-    if (s->interlaced && (s->bottom_field == !s->interlace_polarity)) {
-        if (nb_components != s->nb_components) {
-            av_log(s->avctx, AV_LOG_ERROR,
-                   "nb_components changing in interlaced picture\n");
-            return AVERROR_INVALIDDATA;
-        }
-    }
     if (s->ls && !(bits <= 8 || nb_components == 1)) {
         avpriv_report_missing_feature(s->avctx,
                                       "JPEG-LS that is not <= 8 "
@@ -433,20 +422,7 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
         s->bits       = bits;
         memcpy(s->h_count, h_count, sizeof(h_count));
         memcpy(s->v_count, v_count, sizeof(v_count));
-        s->interlaced = 0;
         s->got_picture = 0;
-
-        /* test interlaced mode */
-        if (s->first_picture   &&
-            (s->multiscope != 2 || s->avctx->pkt_timebase.den >= 25 * s->avctx->pkt_timebase.num) &&
-            s->orig_height != 0 &&
-            s->height < ((s->orig_height * 3) / 4)) {
-            s->interlaced                    = 1;
-            s->bottom_field                  = s->interlace_polarity;
-            s->picture_ptr->flags |= AV_FRAME_FLAG_INTERLACED;
-            s->picture_ptr->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST * !s->interlace_polarity;
-            height *= 2;
-        }
 
         ret = ff_set_dimensions(s->avctx, width, height);
         if (ret < 0)
@@ -469,12 +445,7 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
             return AVERROR_INVALIDDATA;
     }
 
-    if (s->got_picture && s->interlaced && (s->bottom_field == !s->interlace_polarity)) {
-        if (s->progressive) {
-            avpriv_request_sample(s->avctx, "progressively coded interlaced picture");
-            return AVERROR_INVALIDDATA;
-        }
-    } else {
+    {
         if (s->v_max == 1 && s->h_max == 1 && s->lossless==1 && (nb_components==3 || nb_components==4))
             s->rgb = 1;
         else if (!s->lossless)
@@ -745,32 +716,26 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
             s->avctx->pix_fmt     = s->hwaccel_pix_fmt;
         }
 
-        if (s->avctx->skip_frame == AVDISCARD_ALL) {
-            s->picture_ptr->pict_type = AV_PICTURE_TYPE_I;
-            s->picture_ptr->flags |= AV_FRAME_FLAG_KEY;
-            s->got_picture            = 1;
-            return 0;
-        }
-
-        av_frame_unref(s->picture_ptr);
-        ret = ff_get_buffer(s->avctx, s->picture_ptr, AV_GET_BUFFER_FLAG_REF);
+        ret = ff_thread_get_buffer(s->avctx, s->picture_ptr, 0);
         if (ret < 0)
             return ret;
         s->picture_ptr->pict_type = AV_PICTURE_TYPE_I;
         s->picture_ptr->flags |= AV_FRAME_FLAG_KEY;
         s->got_picture            = 1;
 
+        if (s->avctx->skip_frame == AVDISCARD_ALL)
+            return 0;
+
         // Lets clear the palette to avoid leaving uninitialized values in it
         if (s->avctx->pix_fmt == AV_PIX_FMT_PAL8)
             memset(s->picture_ptr->data[1], 0, 1024);
 
         for (i = 0; i < 4; i++)
-            s->linesize[i] = s->picture_ptr->linesize[i] << s->interlaced;
+            s->linesize[i] = s->picture_ptr->linesize[i];
 
-        ff_dlog(s->avctx, "%d %d %d %d %d %d\n",
+        ff_dlog(s->avctx, "%d %d %d %d %d\n",
                 s->width, s->height, s->linesize[0], s->linesize[1],
-                s->interlaced, s->avctx->height);
-
+                s->avctx->height);
     }
 
     if ((s->rgb && !s->lossless && !s->ls) ||
@@ -1145,9 +1110,6 @@ static int ljpeg_decode_rgb_scan(MJpegDecodeContext *s, int nb_components, int p
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
         uint8_t *ptr = s->picture_ptr->data[0] + (linesize * mb_y);
 
-        if (s->interlaced && s->bottom_field)
-            ptr += linesize >> 1;
-
         for (i = 0; i < 4; i++)
             top[i] = left[i] = topleft[i] = buffer[0][i];
 
@@ -1294,7 +1256,7 @@ static int ljpeg_decode_yuv_scan(MJpegDecodeContext *s, int predictor,
                 resync_mb_y = mb_y;
             }
 
-            if(!mb_x || mb_y == resync_mb_y || mb_y == resync_mb_y+1 && mb_x < resync_mb_x || s->interlaced){
+            if(!mb_x || mb_y == resync_mb_y || mb_y == resync_mb_y+1 && mb_x < resync_mb_x){
                 int toprow  = mb_y == resync_mb_y || mb_y == resync_mb_y+1 && mb_x < resync_mb_x;
                 int leftcol = !mb_x || mb_y == resync_mb_y && mb_x == resync_mb_x;
                 for (i = 0; i < nb_components; i++) {
@@ -1336,8 +1298,6 @@ static int ljpeg_decode_yuv_scan(MJpegDecodeContext *s, int predictor,
                                 }
                             }
 
-                            if (s->interlaced && s->bottom_field)
-                                ptr += linesize >> 1;
                             pred &= mask;
                             *ptr= pred + ((unsigned)dc << point_transform);
                         }else{
@@ -1356,8 +1316,6 @@ static int ljpeg_decode_yuv_scan(MJpegDecodeContext *s, int predictor,
                                 }
                             }
 
-                            if (s->interlaced && s->bottom_field)
-                                ptr16 += linesize >> 1;
                             pred &= mask;
                             *ptr16= pred + ((unsigned)dc << point_transform);
                         }
@@ -1515,8 +1473,6 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
                     block_offset = (((linesize[c] * (v * mb_y + y) * 8) +
                                      (h * mb_x + x) * 8 * bytes_per_pixel) >> s->avctx->lowres);
 
-                    if (s->interlaced && s->bottom_field)
-                        block_offset += linesize[c] >> 1;
                     if (   8*(h * mb_x + x) < ((c == 1) || (c == 2) ? chroma_width  : s->width)
                         && 8*(v * mb_y + y) < ((c == 1) || (c == 2) ? chroma_height : s->height)) {
                         ptr = data[c] + block_offset;
@@ -1559,8 +1515,8 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
                         }
                     }
                     ff_dlog(s->avctx, "mb: %d %d processed\n", mb_y, mb_x);
-                    ff_dlog(s->avctx, "%d %d %d %d %d %d %d %d \n",
-                            mb_x, mb_y, x, y, c, s->bottom_field,
+                    ff_dlog(s->avctx, "%d %d %d %d %d %d %d \n",
+                            mb_x, mb_y, x, y, c,
                             (v * mb_y + y) * 8, (h * mb_x + x) * 8);
                     if (++x == h) {
                         x = 0;
@@ -1647,9 +1603,6 @@ static void mjpeg_idct_scan_progressive_ac(MJpegDecodeContext *s)
 
         if (~s->coefs_finished[c])
             av_log(s->avctx, AV_LOG_WARNING, "component %d is incomplete\n", c);
-
-        if (s->interlaced && s->bottom_field)
-            data += linesize >> 1;
 
         for (mb_y = 0; mb_y < mb_height; mb_y++) {
             uint8_t *ptr     = data + (mb_y * linesize * 8 >> s->avctx->lowres);
@@ -1815,21 +1768,6 @@ next_field:
                                          prev_shift, point_transform,
                                          mb_bitmask, mb_bitmask_size, reference)) < 0)
                 return ret;
-        }
-    }
-
-    if (s->interlaced &&
-        get_bits_left(&s->gb) > 32 &&
-        show_bits(&s->gb, 8) == 0xFF) {
-        GetBitContext bak = s->gb;
-        align_get_bits(&bak);
-        if (show_bits(&bak, 16) == 0xFFD1) {
-            av_log(s->avctx, AV_LOG_DEBUG, "AVRn interlaced picture marker found\n");
-            s->gb = bak;
-            skip_bits(&s->gb, 16);
-            s->bottom_field ^= 1;
-
-            goto next_field;
         }
     }
 
@@ -2539,12 +2477,7 @@ eoi_parser:
                        "Found EOI before any SOF, ignoring\n");
                 break;
             }
-            if (s->interlaced) {
-                s->bottom_field ^= 1;
-                /* if not bottom field, do not output image yet */
-                if (s->bottom_field == !s->interlace_polarity)
-                    break;
-            }
+
             if (avctx->skip_frame == AVDISCARD_ALL) {
                 s->got_picture = 0;
                 goto the_end_no_picture;
@@ -2556,8 +2489,9 @@ eoi_parser:
 
                 av_freep(&s->hwaccel_picture_private);
             }
-            if ((ret = av_frame_ref(frame, s->picture_ptr)) < 0)
-                return ret;
+
+            av_frame_move_ref(frame, s->picture_ptr);
+
             *got_frame = 1;
             s->got_picture = 0;
 
@@ -2937,10 +2871,6 @@ av_cold int ff_mjpeg_decode_end(AVCodecContext *avctx)
     MJpegDecodeContext *s = avctx->priv_data;
     int i, j;
 
-    if (s->interlaced && s->bottom_field == !s->interlace_polarity && s->got_picture && !avctx->frame_num) {
-        av_log(avctx, AV_LOG_INFO, "Single field\n");
-    }
-
     if (s->picture) {
         av_frame_free(&s->picture);
         s->picture_ptr = NULL;
@@ -3006,7 +2936,7 @@ const FFCodec ff_mjpeg_decoder = {
     .close          = ff_mjpeg_decode_end,
     FF_CODEC_DECODE_CB(ff_mjpeg_decode_frame),
     .flush          = decode_flush,
-    .p.capabilities = AV_CODEC_CAP_DR1,
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS,
     .p.max_lowres   = 3,
     .p.priv_class   = &mjpegdec_class,
     .p.profiles     = NULL_IF_CONFIG_SMALL(ff_mjpeg_profiles),

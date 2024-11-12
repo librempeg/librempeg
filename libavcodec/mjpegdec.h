@@ -67,8 +67,6 @@ typedef struct MJpegDecodeContext {
 
     int orig_height;  /* size given at codec init */
     int first_picture;    /* true if decoding first picture */
-    int interlaced;     /* true if interlaced */
-    int bottom_field;   /* true if bottom field */
     int lossless;
     int ls;
     int progressive;

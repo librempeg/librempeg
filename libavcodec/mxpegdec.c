@@ -256,12 +256,6 @@ static int mxpeg_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
                     s->got_sof_data = 0;
                     return ret;
                 }
-                if (jpg->interlaced) {
-                    av_log(avctx, AV_LOG_ERROR,
-                           "Interlaced mode not supported in MxPEG\n");
-                    s->got_sof_data = 0;
-                    return AVERROR(EINVAL);
-                }
                 s->got_sof_data ++;
                 break;
             case SOS:
