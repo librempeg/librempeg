@@ -61,8 +61,10 @@ static int read_probe(const AVProbeData *p)
         const int ret = valid_frame(&p->buf[i * DAT_PACKET_SIZE]);
 
         score += ret;
-        if (ret == 0)
+        if (ret == 0) {
+            score = 0;
             break;
+        }
     }
 
     return FFMIN(score, AVPROBE_SCORE_MAX);
