@@ -185,7 +185,7 @@ static av_cold void uninit(AVFilterContext *ctx)
         }
     } else {
         for (int ch = 0; ch < s->channels; ch++) {
-            double psnr = s->chs[ch].uv > 0.0 ? 10. * log10(s->chs[ch].u * s->nb_samples / s->chs[ch].uv) : INFINITY;
+            double psnr = s->chs[ch].uv > 0.0 ? 10. * log10(s->chs[ch].u / sqrt(s->chs[ch].uv / s->nb_samples)) : INFINITY;
 
             av_log(ctx, AV_LOG_INFO, "PSNR ch%d: %g dB\n", ch, psnr);
         }
