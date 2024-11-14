@@ -469,6 +469,7 @@ extern const FFInputFormat  ff_svag_demuxer;
 extern const FFInputFormat  ff_svs_demuxer;
 extern const FFInputFormat  ff_swf_demuxer;
 extern const FFOutputFormat ff_swf_muxer;
+extern const FFInputFormat  ff_tac_demuxer;
 extern const FFInputFormat  ff_tak_demuxer;
 extern const FFOutputFormat ff_tee_muxer;
 extern const FFInputFormat  ff_tedcaptions_demuxer;

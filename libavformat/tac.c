@@ -1,0 +1,124 @@
+/*
+ * TAC demuxer
+ * Copyright (c) 2024 Paul B Mahol
+ *
+ * This file is part of FFmpeg.
+ *
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * FFmpeg is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
+#include "libavutil/avassert.h"
+#include "libavutil/intreadwrite.h"
+#include "avformat.h"
+#include "demux.h"
+#include "internal.h"
+
+static int tac_probe(const AVProbeData *p)
+{
+    int score = 0;
+
+    if (AV_RL16(p->buf+0xc) < 1)
+        return 0;
+
+    if (AV_RL32(p->buf) > 0x4E000 ||
+        AV_RL32(p->buf) < 32)
+        return 0;
+
+    for (int i = 0x4E000-4; i + 4 < p->buf_size; i += 0x4E000) {
+        if (AV_RL32(p->buf+i) != 0xFFFFFFFF)
+            return 0;
+        score++;
+    }
+
+    score *= 10;
+    score += 46;
+
+    return FFMIN(AVPROBE_SCORE_MAX, score);
+}
+
+static int tac_read_header(AVFormatContext *s)
+{
+    AVIOContext *pb = s->pb;
+    AVStream *st;
+    int ret;
+
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
+
+    if ((ret = ff_get_extradata(s, st->codecpar, pb, 32)) < 0)
+        return ret;
+
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id = AV_CODEC_ID_TAC;
+    st->codecpar->ch_layout.nb_channels = 2;
+    st->duration = (AV_RL16(st->codecpar->extradata+0xC)- 1) * 1024 + (AV_RL16(st->codecpar->extradata+0xE) + 1);
+    st->codecpar->sample_rate = 48000;
+    st->codecpar->block_align = 0x4E000;
+
+    avio_seek(pb, 0, SEEK_SET);
+
+    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+
+    return 0;
+}
+
+static int tac_read_packet(AVFormatContext *s, AVPacket *pkt)
+{
+    AVCodecParameters *par = s->streams[0]->codecpar;
+    int64_t duration = 0;
+    uint32_t start = 0;
+    int ret;
+
+    ret = av_get_packet(s->pb, pkt, par->block_align);
+    if (ret < 0)
+        return ret;
+
+    if (pkt->pos == 0 && ret > 4) {
+        const uint32_t offset = start = AV_RL32(pkt->data);
+
+        if (start > 0x4E000-256)
+            return AVERROR_INVALIDDATA;
+
+        start += 256;
+        for (uint32_t i = offset; i < offset+256 && i < ret; i++) {
+            if (pkt->data[i] & 0x80)
+                start++;
+        }
+    }
+
+    for (uint32_t i = start; i + 8 < ret;) {
+        if (i > 4 && AV_RL32(pkt->data+i-4) == 0xffffffff)
+            break;
+        i += (AV_RL16(pkt->data+i+2)&0x7fff) + 8;
+        duration += 1024;
+    }
+
+    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
+    pkt->flags |= AV_PKT_FLAG_KEY;
+    pkt->stream_index = 0;
+    pkt->duration = duration;
+
+    return ret;
+}
+
+const FFInputFormat ff_tac_demuxer = {
+    .p.name         = "tac",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("tri-Ace PS2"),
+    .p.flags        = AVFMT_GENERIC_INDEX | AVFMT_NO_BYTE_SEEK | AVFMT_NOBINSEARCH,
+    .read_probe     = tac_probe,
+    .read_header    = tac_read_header,
+    .read_packet    = tac_read_packet,
+};

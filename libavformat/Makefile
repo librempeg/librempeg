@@ -588,6 +588,7 @@ OBJS-$(CONFIG_SVAG_DEMUXER)              += svag.o
 OBJS-$(CONFIG_SVS_DEMUXER)               += svs.o
 OBJS-$(CONFIG_SWF_DEMUXER)               += swfdec.o swf.o
 OBJS-$(CONFIG_SWF_MUXER)                 += swfenc.o swf.o
+OBJS-$(CONFIG_TAC_DEMUXER)               += tac.o
 OBJS-$(CONFIG_TAK_DEMUXER)               += takdec.o apetag.o img2.o rawdec.o
 OBJS-$(CONFIG_TEDCAPTIONS_DEMUXER)       += tedcaptionsdec.o subtitles.o
 OBJS-$(CONFIG_TEE_MUXER)                 += tee.o tee_common.o
