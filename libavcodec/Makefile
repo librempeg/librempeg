@@ -719,6 +719,7 @@ OBJS-$(CONFIG_SVQ1_ENCODER)            += svq1enc.o svq1.o  h263data.o  \
 OBJS-$(CONFIG_SVQ3_DECODER)            += svq3.o mpegutils.o h264data.o
 OBJS-$(CONFIG_TEXT_DECODER)            += textdec.o ass.o
 OBJS-$(CONFIG_TEXT_ENCODER)            += srtenc.o ass_split.o
+OBJS-$(CONFIG_TAC_DECODER)             += tac.o
 OBJS-$(CONFIG_TAK_DECODER)             += takdec.o tak.o takdsp.o
 OBJS-$(CONFIG_TARGA_DECODER)           += targa.o
 OBJS-$(CONFIG_TARGA_ENCODER)           += targaenc.o rle.o
