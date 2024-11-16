@@ -1495,7 +1495,10 @@ static void log_type(void *av_log_obj, const AVOption *o,
     else if (type < FF_ARRAY_ELEMS(opt_type_desc) && opt_type_desc[type].name) {
         if (o->type & AV_OPT_TYPE_FLAG_ARRAY && o->default_val.arr) {
             const char sep = o->default_val.arr->sep;
-            av_log(av_log_obj, AV_LOG_INFO, "[%-9s %c]", opt_type_desc[type].name, sep ? sep : ',');
+            char tmp[256];
+
+            snprintf(tmp, sizeof(tmp), "[%s %c]", opt_type_desc[type].name, sep ? sep : ',');
+            av_log(av_log_obj, AV_LOG_INFO, "%-12s ", tmp);
         } else
             av_log(av_log_obj, AV_LOG_INFO, "%-12s ", opt_type_desc[type].name);
     }
