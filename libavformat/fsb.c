@@ -118,6 +118,7 @@ static int fsb_read_header(AVFormatContext *s)
         case 0x40000802:
             par->codec_id = AV_CODEC_ID_ADPCM_THP;
             break;
+        case 0x40220010:
         case 0x20010:
             par->codec_id = AV_CODEC_ID_MP3;
             break;
