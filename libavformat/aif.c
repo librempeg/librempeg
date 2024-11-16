@@ -30,11 +30,12 @@ static int aif_probe(const AVProbeData *p)
     if (AV_RL16(p->buf+0x00) != 0x69 ||
         AV_RL16(p->buf+0x02) != 0x02 ||
         AV_RL16(p->buf+0x0e) != 0x04 ||
+        AV_RL16(p->buf+0x0c) != 0x48 ||
         AV_RL32(p->buf+0x04) < 8000  ||
         AV_RL32(p->buf+0x04) > 192000)
         return 0;
 
-    return AVPROBE_SCORE_MAX / 3;
+    return AVPROBE_SCORE_MAX / 2;
 }
 
 static int aif_read_header(AVFormatContext *s)
