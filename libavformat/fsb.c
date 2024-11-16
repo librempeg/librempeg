@@ -42,6 +42,7 @@ static int fsb_read_header(AVFormatContext *s)
     int64_t offset;
     AVCodecParameters *par;
     AVStream *st = avformat_new_stream(s, NULL);
+    FFStream *sti;
     int ret;
 
     avio_skip(pb, 3); // "FSB"
@@ -55,6 +56,7 @@ static int fsb_read_header(AVFormatContext *s)
 
     if (!st)
         return AVERROR(ENOMEM);
+    sti = ffstream(st);
     par = st->codecpar;
     par->codec_type  = AVMEDIA_TYPE_AUDIO;
     par->codec_tag   = 0;
@@ -116,6 +118,9 @@ static int fsb_read_header(AVFormatContext *s)
         case 0x40000802:
             par->codec_id = AV_CODEC_ID_ADPCM_THP;
             break;
+        case 0x20010:
+            par->codec_id = AV_CODEC_ID_MP3;
+            break;
         default:
             avpriv_request_sample(s, "format 0x%X", format);
             return AVERROR_PATCHWELCOME;
@@ -150,6 +155,10 @@ static int fsb_read_header(AVFormatContext *s)
                 avio_skip(pb, 14);
             }
             par->block_align = 8 * par->ch_layout.nb_channels;
+            break;
+        case AV_CODEC_ID_MP3:
+            par->block_align = 1024;
+            sti->need_parsing = AVSTREAM_PARSE_FULL;
             break;
         }
     } else {
