@@ -27,23 +27,35 @@
 
 static int tac_probe(const AVProbeData *p)
 {
+    uint32_t offset = AV_RL32(p->buf), start = 256;
     int score = 0;
 
     if (AV_RL16(p->buf+0xc) < 1)
         return 0;
 
-    if (AV_RL32(p->buf) > 0x4E000 ||
-        AV_RL32(p->buf) < 32)
+    if (offset > (0x4E000-256) ||
+        offset < 32)
         return 0;
 
-    for (int i = 0x4E000-4; i + 4 < p->buf_size; i += 0x4E000) {
-        if (AV_RL32(p->buf+i) != 0xFFFFFFFF)
-            return 0;
-        score++;
+    for (int i = offset; i < offset + 256 && i < p->buf_size; i++) {
+        if (p->buf[i] & 0x80)
+            start++;
     }
 
-    score *= 10;
-    score += 46;
+    offset += start;
+    for (int i = offset; i + 4 < p->buf_size;) {
+        if (AV_RL32(p->buf+i) == 0xFFFFFFFF) {
+            score += 30;
+            i += 0x4E000 - (i % 0x4E000);
+        } else {
+            if ((AV_RL16(p->buf+i+2) & 0x7FFF) <= 8) {
+                score = 0;
+                break;
+            }
+            i += (AV_RL16(p->buf+i+2) & 0x7FFF) + 8;
+            score++;
+        }
+    }
 
     return FFMIN(AVPROBE_SCORE_MAX, score);
 }
