@@ -128,6 +128,7 @@ extern const AVFilter ff_af_atilt;
 extern const AVFilter ff_af_atransient;
 extern const AVFilter ff_af_atrim;
 extern const AVFilter ff_af_axcorrelate;
+extern const AVFilter ff_af_awiener;
 extern const AVFilter ff_af_azmq;
 extern const AVFilter ff_af_bandpass;
 extern const AVFilter ff_af_bandreject;

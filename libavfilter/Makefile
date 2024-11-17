@@ -144,6 +144,7 @@ OBJS-$(CONFIG_ATILT_FILTER)                  += af_atilt.o
 OBJS-$(CONFIG_ATRANSIENT_FILTER)             += af_atransient.o
 OBJS-$(CONFIG_ATRIM_FILTER)                  += trim.o
 OBJS-$(CONFIG_AXCORRELATE_FILTER)            += af_axcorrelate.o
+OBJS-$(CONFIG_AWIENER_FILTER)                += af_awiener.o
 OBJS-$(CONFIG_AZMQ_FILTER)                   += f_zmq.o
 OBJS-$(CONFIG_BANDPASS_FILTER)               += af_biquads.o
 OBJS-$(CONFIG_BANDREJECT_FILTER)             += af_biquads.o
