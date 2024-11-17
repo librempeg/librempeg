@@ -67,6 +67,8 @@ static int read_probe(const AVProbeData *p)
         }
     }
 
+    score /= 4;
+
     return FFMIN(score, AVPROBE_SCORE_MAX);
 }
 
