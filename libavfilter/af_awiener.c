@@ -36,13 +36,13 @@ typedef struct AudioWienerContext {
     int rdft_size;
     int overlap;
     int channels;
-    int noise_frame;
-    int prev_capture;
 
     void *window;
+    void *st;
 
     AVFrame *wiener_frame;
     AVFrame *sbb;
+    AVFrame *ss[2];
     AVFrame *in;
     AVFrame *in_buffer;
     AVFrame *in_frame;
@@ -58,6 +58,7 @@ typedef struct AudioWienerContext {
     av_tx_fn itx_fn;
 
     void (*generate_window)(void *window, int size);
+    int (*init)(AVFilterContext *ctx);
     int (*wiener_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int ch);
 } AudioWienerContext;
 
@@ -66,7 +67,7 @@ typedef struct AudioWienerContext {
 
 static const AVOption awiener_options[] = {
     { "reduction", "set percentage of noise reduction", OFFSET(reduction), AV_OPT_TYPE_DOUBLE,   {.dbl=95},    0, 100, FLAGS },
-    { "noise",     "enable noise capture",              OFFSET(capture),   AV_OPT_TYPE_BOOL,     {.i64=0},     0,   1, FLAGS },
+    { "noise",     "enable noise capture",              OFFSET(capture),   AV_OPT_TYPE_BOOL,     {.i64=0},    -1,   1, FLAGS },
     { "channels",  "set channels to filter",            OFFSET(ch_layout), AV_OPT_TYPE_CHLAYOUT, {.str="24c"}, 0,   0, FLAGS },
     {NULL}
 };
@@ -89,9 +90,8 @@ static int config_output(AVFilterLink *outlink)
     size_t sample_size;
     int ret;
 
-    s->rdft_size = 1 << av_ceil_log2((outlink->sample_rate + 19) / 20);
+    s->rdft_size = 1 << av_ceil_log2(outlink->sample_rate * 80 / 1000);
     s->overlap = s->rdft_size / 4;
-    s->prev_capture = -1;
 
     switch (outlink->format) {
     case AV_SAMPLE_FMT_FLTP:
@@ -101,6 +101,7 @@ static int config_output(AVFilterLink *outlink)
         sample_size = sizeof(float);
         s->generate_window = generate_hann_window_fltp;
         s->wiener_channel = wiener_channel_fltp;
+        s->init = init_fltp;
         break;
     case AV_SAMPLE_FMT_DBLP:
         scale.d  = 1.0 / s->rdft_size;
@@ -109,6 +110,7 @@ static int config_output(AVFilterLink *outlink)
         sample_size = sizeof(double);
         s->generate_window = generate_hann_window_dblp;
         s->wiener_channel = wiener_channel_dblp;
+        s->init = init_dblp;
         break;
     default:
         return AVERROR_BUG;
@@ -120,12 +122,14 @@ static int config_output(AVFilterLink *outlink)
 
     s->wiener_frame   = ff_get_audio_buffer(outlink, s->rdft_size);
     s->sbb            = ff_get_audio_buffer(outlink, s->rdft_size + 2);
+    s->ss[0]          = ff_get_audio_buffer(outlink, s->rdft_size + 2);
+    s->ss[1]          = ff_get_audio_buffer(outlink, s->rdft_size + 2);
     s->in_buffer      = ff_get_audio_buffer(outlink, s->rdft_size);
     s->in_frame       = ff_get_audio_buffer(outlink, s->rdft_size);
     s->out_dist_frame = ff_get_audio_buffer(outlink, s->rdft_size);
     s->spectrum_buf   = ff_get_audio_buffer(outlink, s->rdft_size + 2);
     s->windowed_frame = ff_get_audio_buffer(outlink, s->rdft_size);
-    if (!s->in_buffer || !s->in_frame ||
+    if (!s->in_buffer || !s->in_frame || !s->ss[0] || !s->ss[1] ||
         !s->out_dist_frame || !s->windowed_frame ||
         !s->wiener_frame || !s->spectrum_buf || !s->sbb)
         return AVERROR(ENOMEM);
@@ -149,7 +153,7 @@ static int config_output(AVFilterLink *outlink)
             return ret;
     }
 
-    return 0;
+    return s->init(ctx);
 }
 
 static int wiener_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
@@ -178,13 +182,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (!out) {
         ret = AVERROR(ENOMEM);
         goto fail;
-    }
-
-    if (s->prev_capture != s->capture) {
-        s->prev_capture = s->capture;
-        s->noise_frame = 0;
-    } else {
-        s->noise_frame++;
     }
 
     s->in = in;
@@ -237,9 +234,12 @@ static av_cold void uninit(AVFilterContext *ctx)
     AudioWienerContext *s = ctx->priv;
 
     av_freep(&s->window);
+    av_freep(&s->st);
 
     av_frame_free(&s->wiener_frame);
     av_frame_free(&s->sbb);
+    av_frame_free(&s->ss[0]);
+    av_frame_free(&s->ss[1]);
     av_frame_free(&s->in_buffer);
     av_frame_free(&s->in_frame);
     av_frame_free(&s->out_dist_frame);
