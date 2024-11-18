@@ -444,6 +444,8 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
         if (s->avctx->height <= 0)
             return AVERROR_INVALIDDATA;
     }
+    if (s->bayer && s->progressive)
+        return AVERROR_INVALIDDATA;
 
     {
         if (s->v_max == 1 && s->h_max == 1 && s->lossless==1 && (nb_components==3 || nb_components==4))
