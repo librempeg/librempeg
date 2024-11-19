@@ -174,6 +174,9 @@ static int get_aiff_header(AVFormatContext *s, int64_t size,
         case AV_CODEC_ID_GSM:
             par->block_align = 33;
             break;
+        case AV_CODEC_ID_DWVW:
+            par->block_align = 256;
+            break;
         default:
             aiff->block_duration = 1;
             break;

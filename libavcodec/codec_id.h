@@ -559,6 +559,7 @@ enum AVCodecID {
     AV_CODEC_ID_G719,
     AV_CODEC_ID_TAC,
     AV_CODEC_ID_AHX,
+    AV_CODEC_ID_DWVW,
 
     /* subtitle codecs */
     AV_CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.
