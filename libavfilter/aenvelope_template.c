@@ -71,6 +71,7 @@ static int fn(envelope_init)(AVFilterContext *ctx)
     int look;
 
     look = FFMAX(lrint(s->look * 2.0 * sample_rate), 1);
+    s->trim_size = s->flush_size = s->hlook = look / 2;
 
     if (!s->st)
         s->st = av_calloc(nb_channels, sizeof(*st));
