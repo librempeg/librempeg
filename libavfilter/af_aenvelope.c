@@ -158,7 +158,9 @@ static int filter_frame(AVFilterLink *outlink, AVFrame *in)
 
     av_frame_free(&in);
     s->in = NULL;
-    return ff_filter_frame(outlink, out);
+    if (out)
+        return ff_filter_frame(outlink, out);
+    return 0;
 }
 
 static int flush_frame(AVFilterLink *outlink)
