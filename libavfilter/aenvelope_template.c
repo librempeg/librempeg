@@ -89,12 +89,12 @@ static int fn(envelope_init)(AVFilterContext *ctx)
         const ftype release = s->release[FFMIN(ch, s->nb_release-1)];
 
         if (attack > F(1.0) / sample_rate)
-            stc->attack = FMIN(F(1.0), F(2.0) * look / (attack * sample_rate));
+            stc->attack = F(1.0) / (attack * sample_rate);
         else
             stc->attack = F(1.0);
 
         if (release > F(1.0) / sample_rate)
-            stc->release = FMIN(F(1.0), F(2.0) * look / (release * sample_rate));
+            stc->release = F(1.0) / (release * sample_rate);
         else
             stc->release = F(1.0);
 
