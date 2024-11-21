@@ -587,7 +587,7 @@ static int update_gain_histories(AVFilterContext *ctx, void *arg, int jobnr, int
 
 static inline double update_value(double new, double old, double aggressiveness)
 {
-    av_assert0((aggressiveness >= 0.0) && (aggressiveness <= 1.0));
+    av_assert2((aggressiveness >= 0.0) && (aggressiveness <= 1.0));
     return aggressiveness * new + (1.0 - aggressiveness) * old;
 }
 
