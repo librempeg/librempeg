@@ -2577,9 +2577,9 @@ the_end:
         if (ret)
             return ret;
 
-        av_assert0(s->nb_components == av_pix_fmt_count_planes(s->picture_ptr->format));
+        av_assert0(s->nb_components == av_pix_fmt_count_planes(frame->format));
         for (p = 0; p<s->nb_components; p++) {
-            uint8_t *line = s->picture_ptr->data[p];
+            uint8_t *line = frame->data[p];
             int w = s->width;
             int h = s->height;
             if (!s->upscale_h[p])
@@ -2657,7 +2657,7 @@ the_end:
         if (ret)
             return ret;
 
-        av_assert0(s->nb_components == av_pix_fmt_count_planes(s->picture_ptr->format));
+        av_assert0(s->nb_components == av_pix_fmt_count_planes(frame->format));
         for (p = 0; p < s->nb_components; p++) {
             uint8_t *dst;
             int w = s->width;
@@ -2668,10 +2668,10 @@ the_end:
                 w = AV_CEIL_RSHIFT(w, hshift);
                 h = AV_CEIL_RSHIFT(h, vshift);
             }
-            dst = &((uint8_t *)s->picture_ptr->data[p])[(h - 1) * s->linesize[p]];
+            dst = &((uint8_t *)frame->data[p])[(h - 1) * s->linesize[p]];
             for (int i = h - 1; i; i--) {
-                uint8_t *src1 = &((uint8_t *)s->picture_ptr->data[p])[i * s->upscale_v[p] / (s->upscale_v[p] + 1) * s->linesize[p]];
-                uint8_t *src2 = &((uint8_t *)s->picture_ptr->data[p])[(i + 1) * s->upscale_v[p] / (s->upscale_v[p] + 1) * s->linesize[p]];
+                uint8_t *src1 = &((uint8_t *)frame->data[p])[i * s->upscale_v[p] / (s->upscale_v[p] + 1) * s->linesize[p]];
+                uint8_t *src2 = &((uint8_t *)frame->data[p])[(i + 1) * s->upscale_v[p] / (s->upscale_v[p] + 1) * s->linesize[p]];
                 if (s->upscale_v[p] != 2 && (src1 == src2 || i == h - 1)) {
                     memcpy(dst, src1, w);
                 } else {
@@ -2708,15 +2708,15 @@ the_end:
     }
 
     if (s->adobe_transform == 0 && avctx->pix_fmt == AV_PIX_FMT_GBRAP) {
-        int w = s->picture_ptr->width;
-        int h = s->picture_ptr->height;
+        int w = frame->width;
+        int h = frame->height;
         av_assert0(s->nb_components == 4);
         for (int i = 0; i < h; i++) {
             int j;
             uint8_t *dst[4];
             for (index=0; index<4; index++) {
-                dst[index] =   s->picture_ptr->data[index]
-                             + s->picture_ptr->linesize[index]*i;
+                dst[index] =   frame->data[index]
+                             + frame->linesize[index]*i;
             }
             for (j=0; j<w; j++) {
                 int k = dst[3][j];
@@ -2731,15 +2731,15 @@ the_end:
         }
     }
     if (s->adobe_transform == 2 && avctx->pix_fmt == AV_PIX_FMT_YUVA444P) {
-        int w = s->picture_ptr->width;
-        int h = s->picture_ptr->height;
+        int w = frame->width;
+        int h = frame->height;
         av_assert0(s->nb_components == 4);
         for (int i = 0; i < h; i++) {
             int j;
             uint8_t *dst[4];
             for (index=0; index<4; index++) {
-                dst[index] =   s->picture_ptr->data[index]
-                             + s->picture_ptr->linesize[index]*i;
+                dst[index] =   frame->data[index]
+                             + frame->linesize[index]*i;
             }
             for (j=0; j<w; j++) {
                 int k = dst[3][j];
