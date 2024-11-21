@@ -37,6 +37,7 @@ typedef struct AudioEnvelopeContext {
     unsigned nb_release;
 
     double look;
+    int link;
     int hlook;
     int trim_size;
     int flush_size;
@@ -64,6 +65,7 @@ static const AVOption aenvelope_options[] = {
     { "attack", "set the attack time", OFFSET(attack), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_attack}, 0, 10, AFR },
     { "release", "set the release time", OFFSET(release), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_release}, 0, 10, AFR },
     { "look", "set the look-ahead time", OFFSET(look), AV_OPT_TYPE_DOUBLE, {.dbl=0.01}, 0.0005, 0.5, AF },
+    { "link", "enable channels linking", OFFSET(link), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, AF },
     { NULL }
 };
 
@@ -83,12 +85,12 @@ static int config_output(AVFilterLink *outlink)
 
     switch (outlink->format) {
     case AV_SAMPLE_FMT_FLTP:
-        s->do_envelope = do_envelope_fltp;
+        s->do_envelope = s->link ? do_envelope_link_fltp : do_envelope_fltp;
         s->envelope_uninit = envelope_uninit_fltp;
         s->envelope_init = envelope_init_fltp;
         break;
     case AV_SAMPLE_FMT_DBLP:
-        s->do_envelope = do_envelope_dblp;
+        s->do_envelope = s->link ? do_envelope_link_dblp :  do_envelope_dblp;
         s->envelope_uninit = envelope_uninit_dblp;
         s->envelope_init = envelope_init_dblp;
         break;

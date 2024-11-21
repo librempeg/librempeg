@@ -19,16 +19,19 @@
 #undef ftype
 #undef FABS
 #undef FMIN
+#undef FMAX
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
 #define SAMPLE_FORMAT fltp
 #define FABS fabsf
 #define FMIN fminf
+#define FMAX fmaxf
 #define ftype float
 #else
 #define SAMPLE_FORMAT dblp
 #define FABS fabs
 #define FMIN fmin
+#define FMAX fmax
 #define ftype double
 #endif
 
@@ -72,6 +75,7 @@ static int fn(envelope_init)(AVFilterContext *ctx)
 
     look = FFMAX(lrint(s->look * 2.0 * sample_rate), 1);
     s->trim_size = s->flush_size = s->hlook = look / 2;
+    s->nb_channels = nb_channels;
 
     if (!s->st)
         s->st = av_calloc(nb_channels, sizeof(*st));
@@ -201,6 +205,73 @@ static int fn(do_envelope)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, cons
     for (int n = 0; n < nb_samples; n++) {
         const ftype r = FABS(src[n]);
         ftype p;
+
+        if (filled < size) {
+            if (filled == 0)
+                current = r;
+            prev = cache[idx];
+            cache[idx] = r;
+            filled++;
+            idx++;
+            if (idx >= size)
+                idx = 0;
+        } else {
+            prev = cache[idx];
+            cache[idx] = r;
+            idx++;
+            if (idx >= size)
+                idx = 0;
+        }
+
+        p = fn(compute_peak)(sorted, r, prev, size, &front, &back);
+
+        if (p > current)
+            current += (p-current) * attack;
+        else if (p < current)
+            current -= (current-p) * release;
+
+        dst[n] = current;
+    }
+
+    stc->current = current;
+    stc->filled = filled;
+    stc->front = front;
+    stc->back = back;
+    stc->idx = idx;
+
+    return 0;
+}
+
+static int fn(do_envelope_link)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int ch)
+{
+    AudioEnvelopeContext *s = ctx->priv;
+    const int nb_channels = s->nb_channels;
+    const uint8_t **srce = (const uint8_t **)in->extended_data;
+    ftype *dst = (ftype *)out->extended_data[ch];
+    const int nb_samples = in->nb_samples;
+    fn(StateContext) *st = s->st;
+    fn(StateContext) *stc = &st[ch];
+    const unsigned size = stc->size;
+    ftype *sorted = stc->sorted;
+    ftype *cache = stc->cache;
+    const ftype release = stc->release;
+    const ftype attack = stc->attack;
+    unsigned filled = stc->filled;
+    ftype current = stc->current;
+    unsigned front = stc->front;
+    unsigned back = stc->back;
+    unsigned idx = stc->idx;
+    ftype prev;
+
+    for (int n = 0; n < nb_samples; n++) {
+        ftype r = F(0.0), p;
+
+        for (int chi = 0; chi < nb_channels; chi++) {
+            const ftype *src = (const ftype *)srce[chi];
+            const ftype cr = FABS(src[n]);
+
+            r = FMAX(cr, r);
+        }
 
         if (filled < size) {
             if (filled == 0)
