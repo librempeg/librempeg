@@ -624,20 +624,7 @@ static void perform_dc_correction(DynamicAudioNormalizerContext *s, AVFrame *fra
 static double setup_compress_thresh(double threshold)
 {
     if ((threshold > DBL_EPSILON) && (threshold < (1.0 - DBL_EPSILON))) {
-        double current_threshold = threshold;
-        double step_size = 1.0;
-
-        while (step_size > DBL_EPSILON) {
-            while ((llrint((current_threshold + step_size) * (UINT64_C(1) << 63)) >
-                    llrint(current_threshold * (UINT64_C(1) << 63))) &&
-                   (bound(current_threshold + step_size, 1.0) <= threshold)) {
-                current_threshold += step_size;
-            }
-
-            step_size /= 2.0;
-        }
-
-        return current_threshold;
+        return sin(M_PI_2 * threshold);
     } else {
         return threshold;
     }
