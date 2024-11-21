@@ -69,7 +69,7 @@ static const AVOption alimiter_options[] = {
     { "look",      "set the look-ahead time", OFFSET(look),      AV_OPT_TYPE_DOUBLE, {.dbl=0.001}, 0.001,  0.01, AF },
     { "release",   "set the release time",    OFFSET(releaset),  AV_OPT_TYPE_DOUBLE, {.dbl=0.1},   0.01,   1,    AFR},
     { "level",     "enable leveling",         OFFSET(level),     AV_OPT_TYPE_BOOL,   {.i64=1},     0,      1,    AFR},
-    { "link",      "enable linking",          OFFSET(link),      AV_OPT_TYPE_BOOL,   {.i64=1},     0,      1,    AFR},
+    { "link",      "enable channels linking", OFFSET(link),      AV_OPT_TYPE_BOOL,   {.i64=1},     0,      1,    AFR},
     { "sidechain", "enable sidechain input",  OFFSET(sidechain), AV_OPT_TYPE_BOOL,   {.i64=0},     0,      1,    AF },
     { NULL }
 };
