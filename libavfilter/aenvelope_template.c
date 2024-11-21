@@ -101,8 +101,12 @@ static int fn(envelope_init)(AVFilterContext *ctx)
             for (int n = 0; n < look; n++)
                 stc->sorted[n] = F(-1.0);
         }
-        if (!stc->cache)
+        if (!stc->cache) {
             stc->cache = av_calloc(look, sizeof(*stc->cache));
+
+            for (int n = 0; n < look; n++)
+                stc->cache[n] = F(-1.0);
+        }
         if (!stc->sorted || !stc->cache)
             return AVERROR(ENOMEM);
     }
