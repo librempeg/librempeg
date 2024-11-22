@@ -17,7 +17,7 @@
  */
 
 #undef MPI
-#undef MPI2
+#undef M_2PI
 #undef MPI4
 #undef MSQRT1_2
 #undef ftype
@@ -43,7 +43,7 @@
 
 #if DEPTH == 32
 #define MPI M_PIf
-#define MPI2 M_PI_2f
+#define M_2PI M_2_PIf
 #define MPI4 M_PI_4f
 #define MSQRT1_2 M_SQRT1_2f
 #define ftype float
@@ -68,7 +68,7 @@
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #else
 #define MPI M_PI
-#define MPI2 M_PI_2
+#define M_2PI M_2_PI
 #define MPI4 M_PI_4
 #define MSQRT1_2 M_SQRT1_2
 #define ftype double
@@ -158,7 +158,7 @@ static void fn(stereo_position)(const ftype l, const ftype r,
 {
     ftype x0 = (r-l)/(r+l+EPSILON);
     ftype a0 = fn(get_angle)(cor);
-    ftype y0 = F(1.0)-FABS(a0 / MPI2);
+    ftype y0 = F(1.0)-FABS(a0 * M_2PI);
     ftype z0 = COPYSIGN(F(1.0)-F(2.0)*FABS(FABS(y0)-F(0.5)), a0);
 
     x0 = isnormal(x0) ? x0 : F(0.0);
