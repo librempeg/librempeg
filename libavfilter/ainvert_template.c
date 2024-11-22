@@ -17,20 +17,30 @@
  */
 
 #undef ftype
+#undef MIN
+#undef INVERT
 #undef SAMPLE_FORMAT
 #if DEPTH == 16
+#define MIN INT16_MIN
+#define INVERT(x) (-(x+(x==MIN)))
 #define SAMPLE_FORMAT s16p
 #define ftype int16_t
 #elif DEPTH == 31
+#define MIN INT32_MIN
+#define INVERT(x) (-(x+(x==MIN)))
 #define SAMPLE_FORMAT s32p
 #define ftype int32_t
 #elif DEPTH == 32
+#define INVERT(x) (-(x))
 #define SAMPLE_FORMAT fltp
 #define ftype float
 #elif DEPTH == 63
+#define MIN INT64_MIN
+#define INVERT(x) (-(x+(x==MIN)))
 #define SAMPLE_FORMAT s64p
 #define ftype int64_t
 #else
+#define INVERT(x) (-(x))
 #define SAMPLE_FORMAT dblp
 #define ftype double
 #endif
@@ -63,7 +73,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
         }
 
         for (int n = 0; n < nb_samples; n++)
-            dst[n] = -src[n];
+            dst[n] = INVERT(src[n]);
     }
 
     return 0;
