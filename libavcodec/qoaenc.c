@@ -27,7 +27,6 @@
 typedef struct QOAChannel {
     int16_t history[QOA_LMS_LEN];
     int weights[QOA_LMS_LEN];
-    int error;
 } QOAChannel;
 
 typedef struct QOAContext {
@@ -184,14 +183,14 @@ static int qoa_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                 QOAChannel new_lms = *lms;
 
                 for (int si = slice_start; si < slice_end; si += nb_channels) {
-                    int sample = av_clip_int16(samples[si] - new_lms.error);
+                    int sample = samples[si];
                     int predicted = qoa_lms_predict(&new_lms);
                     int residual = sample - predicted;
                     int scaled = qoa_div(residual, scalefactor);
                     int clamped = av_clip(scaled, -8, 8);
                     int quantized = qoa_quant_tab[clamped + 8];
                     int dequantized = qoa_dequant_tab[scalefactor][quantized];
-                    int reconstructed = av_clip_int16(predicted + dequantized);
+                    int reconstructed = predicted + dequantized;
                     int error = sample - reconstructed;
 
                     current_error += (int64_t)error * error;
@@ -199,7 +198,6 @@ static int qoa_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                         break;
 
                     qoa_lms_update(&new_lms, reconstructed, dequantized);
-                    new_lms.error = error;
                     slice = (slice << 3) | quantized;
                 }
 
