@@ -44,10 +44,8 @@ static int qoa_write_packet(AVFormatContext *ctx, AVPacket *pkt)
 {
     QOAContext *s = ctx->priv_data;
 
-    if (pkt->size < 8) {
-        av_log(ctx, AV_LOG_ERROR, "Invalid QOA packet.\n");
+    if (pkt->size < 8)
         return AVERROR(EINVAL);
-    }
     s->samples += AV_RB16(pkt->data + 4);
 
     avio_write(ctx->pb, pkt->data, pkt->size);
