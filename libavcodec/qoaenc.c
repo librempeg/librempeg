@@ -116,7 +116,7 @@ static void qoa_lms_update(QOAChannel *lms, int sample, int residual)
         av_assert2(lms->weights[i] >= INT16_MIN);
     }
     memmove(lms->history, lms->history+1, (QOA_LMS_LEN-1) * sizeof(*lms->history));
-    lms->history[QOA_LMS_LEN-1] = sample;
+    lms->history[QOA_LMS_LEN-1] = av_clip_int16(sample);
 }
 
 static inline int qoa_div(int v, int scalefactor)
