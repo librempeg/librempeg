@@ -176,7 +176,7 @@ static int qoa_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
             int best_scalefactor = 0;
 
             for (int sfi = 0; sfi < 16; sfi++) {
-                int scalefactor = (sfi + prev_scalefactor[ch]) % 16;
+                int scalefactor = (sfi + prev_scalefactor[ch]) & 15;
                 uint64_t slice = scalefactor;
                 uint64_t current_error = 0;
                 QOAChannel new_lms = *lms;
