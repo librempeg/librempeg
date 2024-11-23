@@ -132,7 +132,6 @@ static int qoa_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 {
     QOAContext *s = avctx->priv_data;
     const int nb_channels = avctx->ch_layout.nb_channels;
-    const int16_t *samples = (const int16_t *)frame->data[0];
     int prev_scalefactor[255] = {0};
     int64_t out_size;
     uint8_t *dst;
@@ -149,10 +148,11 @@ static int qoa_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 
     if (!s->init_history) {
         for (int ch = 0; ch < nb_channels; ch++) {
+            const int16_t *samples = (const int16_t *)frame->extended_data[ch];
             QOAChannel *qch = &s->ch[ch];
 
             for (int n = 0; n < QOA_LMS_LEN; n++) {
-                qch->history[QOA_LMS_LEN-1-n] = samples[n * nb_channels + ch];
+                qch->history[QOA_LMS_LEN-1-n] = samples[n];
                 qch->weights[0] = qch->weights[1] = 0;
                 qch->weights[2] = -(1<<13);
                 qch->weights[3] =  (1<<14);
@@ -167,10 +167,11 @@ static int qoa_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     for (int sample_index = 0; sample_index < frame->nb_samples;
          sample_index += QOA_SLICE_LEN) {
         for (int ch = 0; ch < nb_channels; ch++) {
+            const int16_t *samples = (const int16_t *)frame->extended_data[ch];
             QOAChannel *lms = &s->ch[ch];
             int slice_len = FFMIN(QOA_SLICE_LEN, frame->nb_samples - sample_index);
-            int slice_start = sample_index * nb_channels + ch;
-            int slice_end = (sample_index + slice_len) * nb_channels + ch;
+            int slice_start = sample_index;
+            int slice_end = sample_index + slice_len;
             uint64_t best_error = UINT64_MAX, best_slice = 0;
             QOAChannel best_lms = {0};
             int best_scalefactor = 0;
@@ -181,7 +182,7 @@ static int qoa_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                 uint64_t current_error = 0;
                 QOAChannel new_lms = *lms;
 
-                for (int si = slice_start; si < slice_end; si += nb_channels) {
+                for (int si = slice_start; si < slice_end; si++) {
                     int sample = samples[si];
                     int predicted = qoa_lms_predict(&new_lms);
                     int residual = sample - predicted;
@@ -232,6 +233,6 @@ const FFCodec ff_qoa_encoder = {
     .priv_data_size = sizeof(QOAContext),
     .init           = qoa_encode_init,
     FF_CODEC_ENCODE_CB(qoa_encode_frame),
-    .p.sample_fmts  = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_S16,
+    .p.sample_fmts  = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_S16P,
                                                       AV_SAMPLE_FMT_NONE },
 };
