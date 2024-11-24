@@ -61,8 +61,8 @@ typedef struct TACContext {
     TACHeader header;
     TACFrameHeader frame_header;
     AVCodecContext *avctx;
-
     int got_keyframe;
+
     int16_t huff_table_1[257];
     int16_t huff_table_2[TAC_CHANNELS][32]; /* saved between (some) frames */
     int16_t huff_table_3[258];
@@ -81,61 +81,27 @@ typedef struct TACContext {
     av_tx_fn tx_fn[TAC_CHANNELS];
 } TACContext;
 
-static int parse_extradata(AVCodecContext *avctx)
-{
-    const uint8_t *buf = avctx->extradata;
-    TACContext *s = avctx->priv_data;
-    TACHeader *h = &s->header;
-
-    if (avctx->extradata_size < 32)
-        return AVERROR_INVALIDDATA;
-
-    h->huffman_offset  = AV_RL32(buf+0x00);
-    h->loop_frame      = AV_RL16(buf+0x08);
-    h->loop_discard    = AV_RL16(buf+0x0A);
-    h->frame_count     = AV_RL16(buf+0x0C);
-    h->frame_last      = AV_RL16(buf+0x0E);
-    h->loop_offset     = AV_RL32(buf+0x10);
-    h->file_size       = AV_RL32(buf+0x14);
-    h->joint_stereo    = AV_RL32(buf+0x18);
-
-    if (h->huffman_offset < 0x20 || h->huffman_offset > TAC_BLOCK_SIZE)
-        return AVERROR_INVALIDDATA;
-
-    return 0;
-}
-
-static av_cold int decode_init(AVCodecContext *avctx)
+static int init_huffman(AVCodecContext *avctx)
 {
     TACContext *s = avctx->priv_data;
-    int ret;
-
-    av_channel_layout_uninit(&avctx->ch_layout);
-    av_channel_layout_default(&avctx->ch_layout, TAC_CHANNELS);
-    avctx->sample_fmt = AV_SAMPLE_FMT_FLTP;
-    avctx->sample_rate = 48000;
-
-    for (int ch = 0; ch < TAC_CHANNELS; ch++) {
-        float scale = 1.f;
-
-        ret = av_tx_init(&s->tx[ch], &s->tx_fn[ch], AV_TX_FLOAT_MDCT, 1, 32, &scale, AV_TX_FULL_IMDCT);
-        if (ret < 0)
-            return ret;
-    }
-
-    return parse_extradata(avctx);
-}
-
-static int init_huffman(TACContext *s, GetByteContext *gb)
-{
+    const uint8_t *src = avctx->extradata+32;
+    int left = avctx->extradata_size-32;
     unsigned idx;
 
+    left -= 256;
+    if (left <= 0)
+        return AVERROR_INVALIDDATA;
+
     for (int i = 0; i < 256; i++) {
-        int16_t n = bytestream2_get_byte(gb);
+        int16_t n = *src++;
 
         if (n & 0x80) {
             n &= 0x7F;
-            n |= bytestream2_get_byte(gb) << 7;
+            if (left <= 0)
+                return AVERROR_INVALIDDATA;
+
+            left--;
+            n |= *src++ << 7;
         }
 
         s->huff_table_1[i] = n;
@@ -167,10 +133,64 @@ static int init_huffman(TACContext *s, GetByteContext *gb)
     return 0;
 }
 
+static int parse_extradata(AVCodecContext *avctx)
+{
+    const uint8_t *buf = avctx->extradata;
+    TACContext *s = avctx->priv_data;
+    TACHeader *h = &s->header;
+
+    if (avctx->extradata_size < 32)
+        return AVERROR_INVALIDDATA;
+
+    h->huffman_offset  = AV_RL32(buf+0x00);
+    h->loop_frame      = AV_RL16(buf+0x08);
+    h->loop_discard    = AV_RL16(buf+0x0A);
+    h->frame_count     = AV_RL16(buf+0x0C);
+    h->frame_last      = AV_RL16(buf+0x0E);
+    h->loop_offset     = AV_RL32(buf+0x10);
+    h->file_size       = AV_RL32(buf+0x14);
+    h->joint_stereo    = AV_RL32(buf+0x18);
+
+    if (h->huffman_offset < 0x20 || h->huffman_offset > TAC_BLOCK_SIZE-256)
+        return AVERROR_INVALIDDATA;
+
+    return init_huffman(avctx);
+}
+
+static av_cold int decode_init(AVCodecContext *avctx)
+{
+    TACContext *s = avctx->priv_data;
+    int ret;
+
+    av_channel_layout_uninit(&avctx->ch_layout);
+    av_channel_layout_default(&avctx->ch_layout, TAC_CHANNELS);
+    avctx->sample_fmt = AV_SAMPLE_FMT_FLTP;
+    avctx->sample_rate = 48000;
+
+    for (int ch = 0; ch < TAC_CHANNELS; ch++) {
+        float scale = 1.f;
+
+        ret = av_tx_init(&s->tx[ch], &s->tx_fn[ch], AV_TX_FLOAT_MDCT, 1, 32, &scale, AV_TX_FULL_IMDCT);
+        if (ret < 0)
+            return ret;
+    }
+
+    return parse_extradata(avctx);
+}
+
 static int parse_frame_header(AVCodecContext *avctx, GetByteContext *gb)
 {
     TACContext *s = avctx->priv_data;
     TACFrameHeader *h = &s->frame_header;
+
+    if (bytestream2_peek_le32(gb) == 0xFFFFFFFFu) {
+        bytestream2_skip(gb, 4);
+        while (!bytestream2_peek_byte(gb)) {
+            bytestream2_skip(gb, 1);
+            if (bytestream2_get_bytes_left(gb) <= 0)
+                break;
+        }
+    }
 
     h->frame_crc = bytestream2_get_le16(gb);
     h->huff_flag = bytestream2_peek_le16(gb) >> 15;
@@ -178,9 +198,6 @@ static int parse_frame_header(AVCodecContext *avctx, GetByteContext *gb)
     h->frame_id = bytestream2_get_le16(gb);
     h->huff_count = bytestream2_get_le16(gb);
     h->huff_cfg = bytestream2_get_be32(gb);
-
-    if (h->huff_flag == 0)
-        s->got_keyframe = 1;
 
     if (bytestream2_tell(gb) + 8 + h->frame_size > TAC_BLOCK_SIZE)
         return AVERROR_INVALIDDATA;
@@ -920,26 +937,14 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     int ret, huff_read;
 
     bytestream2_init(gb, avpkt->data, avpkt->size);
-    if (bytestream2_peek_le32(gb) == s->header.huffman_offset) {
-        if (avpkt->size < s->header.huffman_offset + 256)
-            return AVERROR_INVALIDDATA;
-
-        bytestream2_skip(gb, s->header.huffman_offset);
-        ret = init_huffman(s, gb);
-        if (ret < 0)
-            return ret;
-        s->got_keyframe = 1;
-    }
-
-    if (bytestream2_peek_le32(gb) == 0xffffffff)
-        return avpkt->size;
-
     ret = parse_frame_header(avctx, gb);
     if (ret < 0)
         return ret;
 
     if (!s->got_keyframe)
-        return s->frame_header.frame_size + 8;
+        s->got_keyframe = !s->frame_header.huff_flag;
+    if (!s->got_keyframe)
+        return avpkt->size;
 
     if (avctx->err_recognition & AV_EF_CRCCHECK) {
         if (crc16(avpkt->data + bytestream2_tell(gb) - 8, s->frame_header.frame_size + 4) != s->frame_header.frame_crc) {
@@ -968,7 +973,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     *got_frame_ptr = 1;
 
-    return bytestream2_tell(gb);
+    return avpkt->size;
 }
 
 static av_cold void decode_flush(AVCodecContext *avctx)
@@ -976,7 +981,6 @@ static av_cold void decode_flush(AVCodecContext *avctx)
     TACContext *s = avctx->priv_data;
 
     s->got_keyframe = 0;
-
     for (int ch = 0; ch < TAC_CHANNELS; ch++) {
         memset(s->huff_table_2[ch], 0, sizeof(s->huff_table_2[ch]));
         memset(s->hist[ch], 0, sizeof(s->hist[ch]));

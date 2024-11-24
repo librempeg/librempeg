@@ -21,9 +21,13 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/intreadwrite.h"
+#include "avio_internal.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "rawdec.h"
+
+#define BLOCK_SIZE 0x4E000
 
 static int tac_probe(const AVProbeData *p)
 {
@@ -33,7 +37,7 @@ static int tac_probe(const AVProbeData *p)
     if (AV_RL16(p->buf+0xc) < 1)
         return 0;
 
-    if (offset > (0x4E000-256) ||
+    if (offset > (BLOCK_SIZE-256) ||
         offset < 32)
         return 0;
 
@@ -46,7 +50,7 @@ static int tac_probe(const AVProbeData *p)
     for (int i = offset; i + 4 < p->buf_size;) {
         if (AV_RL32(p->buf+i) == 0xFFFFFFFF) {
             score += 30;
-            i += 0x4E000 - (i % 0x4E000);
+            i += BLOCK_SIZE - (i % BLOCK_SIZE);
         } else {
             if ((AV_RL16(p->buf+i+2) & 0x7FFF) <= 8) {
                 score = 0;
@@ -63,74 +67,58 @@ static int tac_probe(const AVProbeData *p)
 static int tac_read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
+    AVCodecParameters *par;
+    int ret, extra = 0;
+    uint32_t offset;
     AVStream *st;
-    int ret;
+
+    if ((ret = ffio_ensure_seekback(pb, BLOCK_SIZE)) < 0)
+        return ret;
+
+    offset = avio_rl32(pb);
+    if (offset > BLOCK_SIZE-256)
+        return AVERROR_INVALIDDATA;
+    avio_seek(pb, offset, SEEK_SET);
+
+    for (int i = 0; i < 256; i++)
+        extra += !!(avio_r8(pb) & 0x80);
+
+    if (offset + 256+extra > BLOCK_SIZE)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
+    par = st->codecpar;
 
-    if ((ret = ff_get_extradata(s, st->codecpar, pb, 32)) < 0)
+    if ((ret = ff_alloc_extradata(par, 32+256+extra)) < 0)
         return ret;
 
-    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id = AV_CODEC_ID_TAC;
-    st->codecpar->ch_layout.nb_channels = 2;
-    st->duration = (AV_RL16(st->codecpar->extradata+0xC)- 1) * 1024 + (AV_RL16(st->codecpar->extradata+0xE) + 1);
-    st->codecpar->sample_rate = 48000;
-    st->codecpar->block_align = 0x4E000;
-
     avio_seek(pb, 0, SEEK_SET);
+    avio_read(pb, par->extradata, 32);
+    avio_seek(pb, offset, SEEK_SET);
+    avio_read(pb, par->extradata+32, 256+extra);
+
+    par->codec_type = AVMEDIA_TYPE_AUDIO;
+    par->codec_id = AV_CODEC_ID_TAC;
+    par->ch_layout.nb_channels = 2;
+    st->duration = (AV_RL16(par->extradata+0xC)- 1) * 1024 + (AV_RL16(par->extradata+0xE) + 1);
+    par->sample_rate = 48000;
+    ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
 }
 
-static int tac_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVCodecParameters *par = s->streams[0]->codecpar;
-    int64_t duration = 0;
-    uint32_t start = 0;
-    int ret;
-
-    ret = av_get_packet(s->pb, pkt, par->block_align);
-    if (ret < 0)
-        return ret;
-
-    if (pkt->pos == 0 && ret > 4) {
-        const uint32_t offset = start = AV_RL32(pkt->data);
-
-        if (start > 0x4E000-256)
-            return AVERROR_INVALIDDATA;
-
-        start += 256;
-        for (uint32_t i = offset; i < offset+256 && i < ret; i++) {
-            if (pkt->data[i] & 0x80)
-                start++;
-        }
-    }
-
-    for (uint32_t i = start; i + 8 < ret;) {
-        if (i > 4 && AV_RL32(pkt->data+i-4) == 0xffffffff)
-            break;
-        i += (AV_RL16(pkt->data+i+2)&0x7fff) + 8;
-        duration += 1024;
-    }
-
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->flags |= AV_PKT_FLAG_KEY;
-    pkt->stream_index = 0;
-    pkt->duration = duration;
-
-    return ret;
-}
-
 const FFInputFormat ff_tac_demuxer = {
     .p.name         = "tac",
     .p.long_name    = NULL_IF_CONFIG_SMALL("tri-Ace PS2"),
-    .p.flags        = AVFMT_GENERIC_INDEX | AVFMT_NO_BYTE_SEEK | AVFMT_NOBINSEARCH,
+    .p.flags        = AVFMT_GENERIC_INDEX,
+    .p.priv_class   = &ff_raw_demuxer_class,
+    .priv_data_size = sizeof(FFRawDemuxerContext),
     .read_probe     = tac_probe,
     .read_header    = tac_read_header,
-    .read_packet    = tac_read_packet,
+    .read_packet    = ff_raw_read_partial_packet,
+    .raw_codec_id   = AV_CODEC_ID_TAC,
 };
