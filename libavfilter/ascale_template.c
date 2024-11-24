@@ -151,7 +151,7 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
     av_audio_fifo_write(c->out_fifo, datay, best_period);
     c->state[OUT] += best_period*2*fs;
     av_audio_fifo_drain(c->in_fifo, best_period);
-    return av_audio_fifo_size(c->in_fifo) >= max_period*2;
+    return av_audio_fifo_size(c->in_fifo) >= max_period;
 }
 
 static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
