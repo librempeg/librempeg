@@ -51,6 +51,7 @@ const AVCodecTag ff_codec_aiff_tags[] = {
     { AV_CODEC_ID_SDX2_DPCM,    MKTAG('S','D','X','2') },
     { AV_CODEC_ID_ADPCM_IMA_WS, MKTAG('A','D','P','4') },
     { AV_CODEC_ID_DWVW,         MKTAG('D','W','V','W') },
+    { AV_CODEC_ID_ADPCM_N64,    MKTAG('V','A','P','C') },
     { AV_CODEC_ID_NONE,         0 },
 };
 
