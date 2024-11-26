@@ -62,7 +62,7 @@ static int hvqm2_read_header(AVFormatContext *s)
     avio_skip(pb, 4);
 
     vst->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
-    vst->codecpar->codec_id   = AV_CODEC_ID_HVQM4;
+    vst->codecpar->codec_id   = AV_CODEC_ID_HVQM2;
     vst->codecpar->width      = avio_rb16(pb);
     vst->codecpar->height     = avio_rb16(pb);
 

@@ -165,6 +165,7 @@ extern const FFCodec ff_hq_hqa_decoder;
 extern const FFCodec ff_hqx_decoder;
 extern const FFCodec ff_huffyuv_encoder;
 extern const FFCodec ff_huffyuv_decoder;
+extern const FFCodec ff_hvqm2_decoder;
 extern const FFCodec ff_hvqm4_decoder;
 extern const FFCodec ff_hymt_decoder;
 extern const FFCodec ff_idcin_decoder;
