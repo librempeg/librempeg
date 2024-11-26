@@ -41,6 +41,7 @@ static int adpcm_hvqm4_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
             skip += 3 * channels;
 
         s1->duration = (buf_size - skip) * 2 / channels;
+        s1->key_frame = (frame_format == 1) || (frame_format == 3);
     }
 
     /* always return the full packet. this parser isn't doing any splitting or
