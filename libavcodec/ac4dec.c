@@ -1164,6 +1164,13 @@ static int ac4_substream_info_chan(AC4DecodeContext *s, SubstreamGroupInfo *g,
     if (ssi->channel_mode == 16)
         ssi->channel_mode += variable_bits(gb, 2);
 
+    if (ssi->channel_mode >= 5 && ssi->channel_mode <= 10)
+        for (int i = 0; i < s->nb_presentations; i++)
+            if (s->pinfo[i].presentation_version == 2) {
+                ssi->channel_mode = 1; /* immersive stereo */
+                break;
+            }
+
     if (ssi->channel_mode == 11 ||
         ssi->channel_mode == 12 ||
         ssi->channel_mode == 13 ||
