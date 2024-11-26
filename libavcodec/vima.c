@@ -34,7 +34,7 @@
 #include "decode.h"
 #include "get_bits.h"
 
-static uint16_t predict_table[5786 * 2];
+static uint16_t predict_table[5786];
 
 static const uint8_t size_table[] = {
     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
