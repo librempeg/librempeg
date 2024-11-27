@@ -109,7 +109,7 @@ static int hvqm2_read_packet(AVFormatContext *s, AVPacket *pkt)
     HVQM2Context *hvqm2 = s->priv_data;
     AVIOContext *pb = s->pb;
     int record_type, frame_type, ret, new_block = 1;
-    int64_t pos, ppos;
+    int64_t pos;
     int32_t size;
 
     if (avio_feof(pb))
@@ -147,13 +147,12 @@ static int hvqm2_read_packet(AVFormatContext *s, AVPacket *pkt)
             record_type = hvqm2->block[hvqm2->current_block].type;
             frame_type = hvqm2->block[hvqm2->current_block].format;
             size = hvqm2->block[hvqm2->current_block].stop -
-                   hvqm2->block[hvqm2->current_block].start;
+                   hvqm2->block[hvqm2->current_block].start - 8LL;
         } else {
             return AVERROR(EIO);
         }
     }
 
-    ppos = avio_tell(pb);
     ret = av_new_packet(pkt, size + 2);
     if (ret < 0)
         return ret;
@@ -163,7 +162,7 @@ static int hvqm2_read_packet(AVFormatContext *s, AVPacket *pkt)
     if (ret < 0)
         return ret;
 
-    pkt->pos = ppos;
+    pkt->pos = pos;
     pkt->stream_index = record_type ? 0 : 1;
     if (frame_type == 0)
         pkt->flags |= AV_PKT_FLAG_KEY;
