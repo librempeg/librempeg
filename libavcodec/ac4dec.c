@@ -1206,6 +1206,154 @@ static int ac4_substream_info_chan(AC4DecodeContext *s, SubstreamGroupInfo *g,
     return 0;
 }
 
+static void ac4_bed_dyn_obj_assignment(AC4DecodeContext *s, int n_signals)
+{
+    GetBitContext *gb = &s->gbc;
+    if (!get_bits1(gb)) { //b_dyn_objects_only
+        if (get_bits1(gb)) { //b_isf
+            skip_bits(gb, 3); //isf_config
+        } else {
+            if (get_bits1(gb)) { //b_ch_assign_code
+                skip_bits(gb, 3); //bed_chan_assign_code
+            } else {
+                if (get_bits1(gb)) { //b_chan_assign_mask;
+                    if (get_bits1(gb)) { //b_nonstd_bed_channel_assignment
+                        skip_bits(gb, 17); //nonstd_bed_channel_assignment_mask
+                    } else {
+                        skip_bits(gb, 10); //std_bed_channel_assignment_mask
+                    }
+                } else {
+                    int n_bed_signals;
+                    if (n_signals > 1) {
+                        n_bed_signals = get_bits_long(gb, ff_log2(n_signals)) + 1;
+                    } else {
+                        n_bed_signals = 1;
+                    }
+                    for (int i = 0; i < n_bed_signals; i++)
+                        skip_bits(gb, 4);
+                }
+            }
+        }
+    }
+}
+
+static void ac4_oamd_common_data(AC4DecodeContext *s)
+{
+    GetBitContext *gb = &s->gbc;
+
+    if (get_bits1(gb) == 0) { //b_default_screen_size_ratio;
+        skip_bits(gb, 5); //master_screen_size_ratio_code
+    }
+
+    skip_bits(gb, 1); //b_bed_object_chan_distribute
+
+    if (get_bits1(gb)) { //b_additional_data
+        int add_data_bytes = get_bits(gb, 1) + 1;
+        if (add_data_bytes == 2)
+            add_data_bytes += variable_bits(gb, 2);
+        skip_bits_long(gb, add_data_bytes * 8);
+    }
+}
+
+static int ac4_substream_info_ajoc(AC4DecodeContext *s, SubstreamInfo *ssi, int substreams_present)
+{
+    GetBitContext *gb = &s->gbc;
+    int n_fullband_dmx_signals;
+    int n_fullband_upmix_signals;
+
+    skip_bits1(gb); //b_lfe
+
+    if (get_bits1(gb)) { // b_static_dmx
+        n_fullband_dmx_signals = 5;
+    } else {
+        n_fullband_dmx_signals = get_bits(gb, 4) + 1;
+        ac4_bed_dyn_obj_assignment(s, n_fullband_dmx_signals);
+    }
+
+    if (get_bits1(gb)) //b_oamd_common_data_present
+        ac4_oamd_common_data(s);
+
+    n_fullband_upmix_signals = get_bits(gb, 4) + 1;
+    if (n_fullband_upmix_signals == 16)
+        n_fullband_upmix_signals += variable_bits(gb, 3);
+    if (n_fullband_upmix_signals > 4096) /* arbitary value to prevent slowdowns */
+        return AVERROR_INVALIDDATA;
+
+    ac4_bed_dyn_obj_assignment(s, n_fullband_upmix_signals);
+
+    if (s->fs_index == 1) {
+        if (get_bits1(gb)) //b_sf_multiplier;
+            ssi->sf_multiplier = get_bits1(gb);
+    }
+
+    if (get_bits1(gb)) //b_bitrate_info;
+        ssi->bitrate_indicator = get_vlc2(gb, bitrate_indicator_vlc.table, bitrate_indicator_vlc.bits, 1);
+
+    for (int i = 0; i < s->pinfo[0].frame_rate_factor; i++) {
+        skip_bits1(gb); //b_audio_ndot
+    }
+
+    if (substreams_present) {
+       ssi->substream_index = get_bits(gb, 2);
+       if (ssi->substream_index == 3)
+           ssi->substream_index += variable_bits(gb, 2);
+    }
+
+    return 0;
+}
+
+static void ac4_substream_info_obj(AC4DecodeContext *s, SubstreamInfo *ssi, int substreams_present)
+{
+    GetBitContext *gb = &s->gbc;
+
+    skip_bits(gb, 3); //n_objects_code
+
+    if (get_bits1(gb)) { //b_dynamic_objects;
+        skip_bits1(gb); //b_lfe
+    } else {
+        if (get_bits1(gb)) { //b_bed_objects
+            if (get_bits1(gb)) { //b_bed_start
+                if (get_bits1(gb)) { //b_ch_assign_code
+                    skip_bits(gb, 3); //bed_chan_assign_code
+                } else {
+                    if (get_bits1(gb)) { //b_nonstd_bed_channel_assignment
+                        skip_bits(gb, 17); //nonstd_bed_channel_assignment_mask
+                    } else {
+                        skip_bits(gb, 10); //std_bed_channel_assignment_mask
+                    }
+                }
+            }
+        } else {
+            if (get_bits1(gb)) { //b_isf
+                if (get_bits1(gb)) { //b_isf_start
+                    skip_bits(gb, 3); //isf_config
+                }
+            } else {
+                int res_bytes = get_bits(gb, 4);
+                skip_bits_long(gb, 8*res_bytes); //reserved_data
+            }
+        }
+    }
+
+    if (s->fs_index == 1) {
+        if (get_bits1(gb)) //b_sf_multiplier;
+            ssi->sf_multiplier = get_bits1(gb);
+    }
+
+    if (get_bits1(gb)) //b_bitrate_info;
+        ssi->bitrate_indicator = get_vlc2(gb, bitrate_indicator_vlc.table, bitrate_indicator_vlc.bits, 1);
+
+    for (int i = 0; i < s->pinfo[0].frame_rate_factor; i++) {
+        skip_bits1(gb); //b_audio_ndot
+    }
+
+    if (substreams_present) {
+       ssi->substream_index = get_bits(gb, 2);
+       if (ssi->substream_index == 3)
+           ssi->substream_index += variable_bits(gb, 2);
+    }
+}
+
 static int ac4_substream_group_info(AC4DecodeContext *s,
                                     SubstreamGroupInfo *g)
 {
@@ -1243,18 +1391,16 @@ static int ac4_substream_group_info(AC4DecodeContext *s,
     } else {
         if (get_bits1(gb))
             oamd_substream_info(s, g, substreams_present);
-        av_assert0(0);
-      /*for (int sus = 0; sus < n_lf_substreams; sus++) {
+        for (int sus = 0; sus < n_lf_substreams; sus++) {
             if (get_bits1(gb)) {
-                ac4_substream_info_ajoc(substreams_present);
-                if (hsf_ext)
-                    ac4_hsf_ext_substream_info(substreams_present);
+                if ((ret = ac4_substream_info_ajoc(s, &g->ssinfo, substreams_present)) < 0)
+                    return ret;
             } else {
-                ac4_substream_info_obj(substreams_present);
-                if (hsf_ext)
-                    ac4_hsf_ext_substream_info(substreams_present);
+                ac4_substream_info_obj(s, &g->ssinfo, substreams_present);
             }
-        }*/
+            if (hsf_ext)
+                ac4_hsf_ext_substream_info(s, &g->ssinfo, substreams_present);
+        }
     }
 
     if (get_bits1(gb))
@@ -5759,6 +5905,11 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     if (!s->have_iframe)
         return avpkt->size;
+
+    if (s->version == 2 && !s->ssgroup[0].channel_coded) {
+        avpriv_report_missing_feature(s->avctx, "object coding");
+        return AVERROR_PATCHWELCOME;
+    }
 
     presentation = FFMIN(s->target_presentation, FFMAX(0, s->nb_presentations - 1));
     ssinfo = s->version == 2 ? &s->ssgroup[0].ssinfo : &s->pinfo[presentation].ssinfo;
