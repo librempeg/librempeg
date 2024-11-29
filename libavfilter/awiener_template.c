@@ -175,10 +175,9 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
 
         for (int n = 0; n < nb_coeffs; n++)
             sbb[n] = frame * sbb[n] * scale + (fn(sqr)(spectrum_buf[n].re) + fn(sqr)(spectrum_buf[n].im)) * scale;
-    }
 
-    if (st->capture > 0)
         st->noise_frame++;
+    }
 
     for (int n = 0; n < nb_coeffs; n++) {
         ftype snr_dd_prio, g_tsnr, snr_tsnr_prio, g_dd;
