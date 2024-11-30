@@ -90,7 +90,7 @@ static const AVOption agate_options[] = {
     { "detection", "set detection",          OFFSET(detection), AV_OPT_TYPE_INT,    {.i64=1},           0,    1, A, .unit = "detection" },
     {   "peak",    0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=0},           0,    0, A, .unit = "detection" },
     {   "rms",     0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=1},           0,    0, A, .unit = "detection" },
-    { "link",      "set link",               OFFSET(link),      AV_OPT_TYPE_INT,    {.i64=LINK_NONE}, 0,NB_LINK-1, A, .unit = "link" },
+    { "link",   "set channels linking type", OFFSET(link),      AV_OPT_TYPE_INT,    {.i64=LINK_NONE}, 0,NB_LINK-1, A, .unit = "link" },
     {   "none",    0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=LINK_NONE},   0,    0, A, .unit = "link" },
     {   "average", 0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=LINK_AVG},    0,    0, A, .unit = "link" },
     {   "maximum", 0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=LINK_MAX},    0,    0, A, .unit = "link" },
