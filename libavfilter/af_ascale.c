@@ -29,7 +29,8 @@
 #include "avfilter.h"
 #include "filters.h"
 
-#define MIN_HZ 20
+#define MIN_HZ 10
+#define MAX_HZ 25
 #define IN 0
 #define OUT 1
 
@@ -58,6 +59,7 @@ typedef struct AScaleContext {
 
     double tempo;
     int link;
+    int hz;
     int max_period;
     int max_size;
 
@@ -79,6 +81,7 @@ typedef struct AScaleContext {
 static const AVOption ascale_options[] = {
     { "tempo", "set the tempo", OFFSET(tempo), AV_OPT_TYPE_DOUBLE, {.dbl=1.0}, 0.01, 100.0, TFLAGS },
     { "link",  "set the channels link", OFFSET(link), AV_OPT_TYPE_BOOL, {.i64=1}, 0, 1, FLAGS },
+    { "period", "set the period", OFFSET(hz), AV_OPT_TYPE_INT, {.i64=24}, MIN_HZ, MAX_HZ, FLAGS },
     { NULL }
 };
 
@@ -314,7 +317,7 @@ static int config_input(AVFilterLink *inlink)
     AScaleContext *s = ctx->priv;
 
     s->pts[IN] = AV_NOPTS_VALUE;
-    s->max_period = (inlink->sample_rate + MIN_HZ-1) / MIN_HZ;
+    s->max_period = (inlink->sample_rate + s->hz-1) / s->hz;
     s->max_size = 1 << av_ceil_log2(s->max_period*4);
     s->nb_channels = inlink->ch_layout.nb_channels;
 
