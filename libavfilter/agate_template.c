@@ -51,7 +51,7 @@
 
 static ftype fn(output_gain)(ftype lin_slope, ftype ratio, ftype thres,
                              ftype knee, ftype knee_start, ftype knee_stop,
-                             ftype range, int mode)
+                             ftype range, int direction)
 {
     ftype slope = FLOG(lin_slope);
     ftype gain;
@@ -60,7 +60,7 @@ static ftype fn(output_gain)(ftype lin_slope, ftype ratio, ftype thres,
     gain = (slope - thres) * ratio + thres;
     delta = ratio;
 
-    if (mode) {
+    if (direction) {
         if (knee > F(1.0) && slope < knee_stop)
             gain = hermite_interpolation(slope, knee_stop, knee_start, ((knee_stop - thres) * ratio  + thres), knee_start, delta, F(1.0));
     } else {
@@ -98,7 +98,7 @@ static void fn(gate)(AVFilterContext *ctx, AVFrame *out, const int nb_samples,
     const ftype thres = s->thres;
     const ftype knee = s->knee;
     const int link = s->link;
-    const int mode = s->mode;
+    const int direction = s->direction;
 
     for (int n = 0; n < nb_samples; n++, src += nb_channels, dst += nb_channels, scsrc += sc_nb_channels) {
         ftype abs_sample, factor, lin_slope;
@@ -123,7 +123,7 @@ static void fn(gate)(AVFilterContext *ctx, AVFrame *out, const int nb_samples,
                 abs_sample *= abs_sample;
             lin_slope += (abs_sample - lin_slope) * (abs_sample > lin_slope ? attack_coeff : release_coeff);
 
-            if (mode)
+            if (direction)
                 detected = lin_slope > lin_knee_start;
             else
                 detected = lin_slope < lin_knee_stop;
@@ -131,7 +131,7 @@ static void fn(gate)(AVFilterContext *ctx, AVFrame *out, const int nb_samples,
             if (lin_slope > F(0.0) && detected)
                 gain = fn(output_gain)(lin_slope, ratio, thres,
                                        knee, knee_start, knee_stop,
-                                       range, mode);
+                                       range, direction);
 
             factor = is_disabled ? F(1.0) : level_in * gain * makeup;
             for (int c = 0; c < nb_channels; c++)
@@ -148,7 +148,7 @@ static void fn(gate)(AVFilterContext *ctx, AVFrame *out, const int nb_samples,
                     abs_sample *= abs_sample;
                 lin_slope += (abs_sample - lin_slope) * (abs_sample > lin_slope ? attack_coeff : release_coeff);
 
-                if (mode)
+                if (direction)
                     detected = lin_slope > lin_knee_start;
                 else
                     detected = lin_slope < lin_knee_stop;
@@ -156,7 +156,7 @@ static void fn(gate)(AVFilterContext *ctx, AVFrame *out, const int nb_samples,
                 if (lin_slope > F(0.0) && detected)
                     gain = fn(output_gain)(lin_slope, ratio, thres,
                                            knee, knee_start, knee_stop,
-                                           range, mode);
+                                           range, direction);
 
                 factor = is_disabled ? F(1.0) : level_in * gain * makeup;
                 dst[c] = src[c] * factor;

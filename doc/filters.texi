@@ -521,8 +521,8 @@ The filter accepts the following options:
 @item level_in
 Set input gain. Default is 1. Range is between 0.015625 and 64.
 
-@item mode
-Set mode of compressor operation. Can be @code{upward} or @code{downward}.
+@item direction
+Set direction of compressor operation. Can be @code{upward} or @code{downward}.
 Default is @code{downward}.
 
 @item threshold
@@ -2162,9 +2162,9 @@ guitar.
 Set input level before filtering.
 Default is 1. Allowed range is from 0.015625 to 64.
 
-@item mode
-Set the mode of operation. Can be @code{upward} or @code{downward}.
-Default is @code{downward}. If set to @code{upward} mode, higher parts of signal
+@item direction
+Set the direction of operation. Can be @code{upward} or @code{downward}.
+Default is @code{downward}. If set to @code{upward} direction, higher parts of signal
 will be amplified, expanding dynamic range in upward direction.
 Otherwise, in case of @code{downward} lower parts of signal will be reduced.
 

@@ -64,7 +64,7 @@ typedef struct AudioCompressorContext {
     double compressed_knee_stop;
     int link;
     int detection;
-    int mode;
+    int direction;
     int sidechain;
 
     void *lin_slope;
@@ -81,9 +81,9 @@ typedef struct AudioCompressorContext {
 
 static const AVOption acompressor_options[] = {
     { "level_in",  "set input gain",     OFFSET(level_in),  AV_OPT_TYPE_DOUBLE, {.dbl=1},        0.015625,   64, AFR },
-    { "mode",      "set mode",           OFFSET(mode),      AV_OPT_TYPE_INT,    {.i64=0},               0,    1, AFR, .unit = "mode" },
-    {   "downward",0,                    0,                 AV_OPT_TYPE_CONST,  {.i64=0},               0,    0, AFR, .unit = "mode" },
-    {   "upward",  0,                    0,                 AV_OPT_TYPE_CONST,  {.i64=1},               0,    0, AFR, .unit = "mode" },
+    { "direction","set filtering direction",OFFSET(direction),AV_OPT_TYPE_INT,  {.i64=0},               0,    1, AFR, .unit = "direction" },
+    {   "downward",0,                    0,                 AV_OPT_TYPE_CONST,  {.i64=0},               0,    0, AFR, .unit = "direction" },
+    {   "upward",  0,                    0,                 AV_OPT_TYPE_CONST,  {.i64=1},               0,    0, AFR, .unit = "direction" },
     { "threshold", "set threshold",      OFFSET(threshold), AV_OPT_TYPE_DOUBLE, {.dbl=0.125}, 0.000976563,    1, AFR },
     { "ratio",     "set ratio",          OFFSET(ratio),     AV_OPT_TYPE_DOUBLE, {.dbl=2},               1,   20, AFR },
     { "attack",    "set attack",         OFFSET(attack),    AV_OPT_TYPE_DOUBLE, {.dbl=20},           0.01, 2000, AFR },

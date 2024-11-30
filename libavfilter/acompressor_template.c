@@ -53,7 +53,7 @@ static ftype fn(output_gain)(ftype lin_slope, ftype ratio, ftype thres,
                              ftype knee, ftype knee_start, ftype knee_stop,
                              ftype compressed_knee_start,
                              ftype compressed_knee_stop,
-                             int detection, int mode)
+                             int detection, int direction)
 {
     ftype slope = FLOG(lin_slope);
     ftype gain = F(0.0);
@@ -65,7 +65,7 @@ static ftype fn(output_gain)(ftype lin_slope, ftype ratio, ftype thres,
     gain = (slope - thres) / ratio + thres;
     delta = F(1.0) / ratio;
 
-    if (mode) {
+    if (direction) {
         if (knee > F(1.0) && slope > knee_start)
             gain = hermite_interpolation(slope, knee_stop, knee_start,
                                          knee_stop, compressed_knee_start,
@@ -112,7 +112,7 @@ static void fn(compress)(AVFilterContext *ctx, AVFrame *out, const int nb_sample
     const ftype thres = s->thres;
     const ftype knee = s->knee;
     const int link = s->link;
-    const int mode = s->mode;
+    const int direction = s->direction;
 
     for (int n = 0; n < nb_samples; n++, src += nb_channels, dst += nb_channels, scsrc += sc_nb_channels) {
         ftype abs_sample, factor, lin_slope, detector;
@@ -137,7 +137,7 @@ static void fn(compress)(AVFilterContext *ctx, AVFrame *out, const int nb_sample
                 abs_sample *= abs_sample;
             lin_slope += (abs_sample - lin_slope) * (abs_sample > lin_slope ? attack_coeff : release_coeff);
 
-            if (mode) {
+            if (direction) {
                 detector = (detection ? adj_knee_stop : lin_knee_stop);
                 detected = lin_slope < detector;
             } else {
@@ -150,7 +150,7 @@ static void fn(compress)(AVFilterContext *ctx, AVFrame *out, const int nb_sample
                                        knee, knee_start, knee_stop,
                                        compressed_knee_start,
                                        compressed_knee_stop,
-                                       detection, mode);
+                                       detection, direction);
 
             factor = is_disabled ? F(1.0) : level_in * (gain * makeup * mix + (F(1.0) - mix));
             for (int c = 0; c < nb_channels; c++)
@@ -167,7 +167,7 @@ static void fn(compress)(AVFilterContext *ctx, AVFrame *out, const int nb_sample
                     abs_sample *= abs_sample;
                 lin_slope += (abs_sample - lin_slope) * (abs_sample > lin_slope ? attack_coeff : release_coeff);
 
-                if (mode) {
+                if (direction) {
                     detector = (detection ? adj_knee_stop : lin_knee_stop);
                     detected = lin_slope < detector;
                 } else {
@@ -180,7 +180,7 @@ static void fn(compress)(AVFilterContext *ctx, AVFrame *out, const int nb_sample
                                            knee, knee_start, knee_stop,
                                            compressed_knee_start,
                                            compressed_knee_stop,
-                                           detection, mode);
+                                           detection, direction);
 
                 factor = is_disabled ? F(1.0) : level_in * (gain * makeup * mix + (F(1.0) - mix));
                 dst[c] = src[c] * factor;
