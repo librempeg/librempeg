@@ -956,6 +956,9 @@ static int decode_pframe(AVCodecContext *avctx, const HVQM2PredictFrame *predict
                 src_y = y + mv_y;
                 src_x = x + mv_x;
 
+                if (src_x > frame->width-8 || src_y > frame->height-8)
+                    return AVERROR_INVALIDDATA;
+
                 src = prev_frame->data[0] + src_x + src_y * prev_frame->linesize[0];
                 dst = frame->data[0] + x + y * frame->linesize[0];
                 for (int i = 0; i < 8; i++) {
