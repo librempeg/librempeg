@@ -90,7 +90,7 @@ static const AVOption acompressor_options[] = {
     { "release",   "set release",        OFFSET(release),   AV_OPT_TYPE_DOUBLE, {.dbl=250},          0.01, 9000, AFR },
     { "makeup",    "set make up gain",   OFFSET(makeup),    AV_OPT_TYPE_DOUBLE, {.dbl=1},               1,   64, AFR },
     { "knee",      "set knee",           OFFSET(knee),      AV_OPT_TYPE_DOUBLE, {.dbl=2.82843},         1,    8, AFR },
-    { "link",      "set link type",      OFFSET(link),      AV_OPT_TYPE_INT,    {.i64=0},               0, NB_LINK-1, AFR, .unit = "link" },
+    { "link","set channels linking type",OFFSET(link),      AV_OPT_TYPE_INT,    {.i64=0},               0, NB_LINK-1, AFR, .unit = "link" },
     {   "none",    0,                    0,                 AV_OPT_TYPE_CONST,  {.i64=LINK_NONE},       0,    0, AFR, .unit = "link" },
     {   "average", 0,                    0,                 AV_OPT_TYPE_CONST,  {.i64=LINK_AVG},        0,    0, AFR, .unit = "link" },
     {   "maximum", 0,                    0,                 AV_OPT_TYPE_CONST,  {.i64=LINK_MAX},        0,    0, AFR, .unit = "link" },
