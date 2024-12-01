@@ -402,7 +402,7 @@ static inline double fade(double prev, double next, int pos, int length)
     return f0 * prev + f1 * next;
 }
 
-static inline double pow_2(const double value)
+static av_always_inline double pow_2(const double value)
 {
     return value * value;
 }
@@ -415,19 +415,20 @@ static inline double bound(const double threshold, const double val)
 
 static double find_peak_magnitude(AVFrame *frame, int channel)
 {
+    const int nb_samples = frame->nb_samples;
     double max = DBL_EPSILON;
 
     if (channel == -1) {
         for (int c = 0; c < frame->ch_layout.nb_channels; c++) {
             double *data_ptr = (double *)frame->extended_data[c];
 
-            for (int i = 0; i < frame->nb_samples; i++)
+            for (int i = 0; i < nb_samples; i++)
                 max = fmax(max, fabs(data_ptr[i]));
         }
     } else {
         double *data_ptr = (double *)frame->extended_data[channel];
 
-        for (int i = 0; i < frame->nb_samples; i++)
+        for (int i = 0; i < nb_samples; i++)
             max = fmax(max, fabs(data_ptr[i]));
     }
 
@@ -436,25 +437,27 @@ static double find_peak_magnitude(AVFrame *frame, int channel)
 
 static double compute_frame_rms(AVFrame *frame, int channel)
 {
+    const int nb_samples = frame->nb_samples;
     double rms_value = 0.0;
 
     if (channel == -1) {
         for (int c = 0; c < frame->ch_layout.nb_channels; c++) {
             const double *data_ptr = (double *)frame->extended_data[c];
 
-            for (int i = 0; i < frame->nb_samples; i++) {
+            for (int i = 0; i < nb_samples; i++) {
                 rms_value += pow_2(data_ptr[i]);
             }
         }
 
-        rms_value /= frame->nb_samples * frame->ch_layout.nb_channels;
+        rms_value /= nb_samples * frame->ch_layout.nb_channels;
     } else {
         const double *data_ptr = (double *)frame->extended_data[channel];
-        for (int i = 0; i < frame->nb_samples; i++) {
+
+        for (int i = 0; i < nb_samples; i++) {
             rms_value += pow_2(data_ptr[i]);
         }
 
-        rms_value /= frame->nb_samples;
+        rms_value /= nb_samples;
     }
 
     return fmax(sqrt(rms_value), DBL_EPSILON);
@@ -600,7 +603,8 @@ static inline int bypass_channel(DynamicAudioNormalizerContext *s, AVFrame *fram
 
 static void perform_dc_correction(DynamicAudioNormalizerContext *s, AVFrame *frame)
 {
-    const double diff = 1.0 / frame->nb_samples;
+    const int nb_samples = frame->nb_samples;
+    const double diff = 1.0 / nb_samples;
     int is_first_frame = cqueue_empty(s->gain_history_original[0]);
 
     for (int c = 0; c < s->channels; c++) {
@@ -609,14 +613,14 @@ static void perform_dc_correction(DynamicAudioNormalizerContext *s, AVFrame *fra
         double current_average_value = 0.0;
         double prev_value;
 
-        for (int i = 0; i < frame->nb_samples; i++)
+        for (int i = 0; i < nb_samples; i++)
             current_average_value += dst_ptr[i] * diff;
 
         prev_value = is_first_frame ? current_average_value : s->dc_correction_value[c];
         s->dc_correction_value[c] = is_first_frame ? current_average_value : update_value(current_average_value, s->dc_correction_value[c], 0.1);
 
-        for (int i = 0; i < frame->nb_samples && !bypass; i++) {
-            dst_ptr[i] -= fade(prev_value, s->dc_correction_value[c], i, frame->nb_samples);
+        for (int i = 0; i < nb_samples && !bypass; i++) {
+            dst_ptr[i] -= fade(prev_value, s->dc_correction_value[c], i, nb_samples);
         }
     }
 }
@@ -633,24 +637,25 @@ static double setup_compress_thresh(double threshold)
 static double compute_frame_std_dev(DynamicAudioNormalizerContext *s,
                                     AVFrame *frame, int channel)
 {
+    const int nb_samples = frame->nb_samples;
     double variance = 0.0;
 
     if (channel == -1) {
         for (int c = 0; c < s->channels; c++) {
             const double *data_ptr = (double *)frame->extended_data[c];
 
-            for (int i = 0; i < frame->nb_samples; i++) {
+            for (int i = 0; i < nb_samples; i++) {
                 variance += pow_2(data_ptr[i]);  // Assume that MEAN is *zero*
             }
         }
-        variance /= (s->channels * frame->nb_samples) - 1;
+        variance /= (s->channels * nb_samples) - 1;
     } else {
         const double *data_ptr = (double *)frame->extended_data[channel];
 
-        for (int i = 0; i < frame->nb_samples; i++) {
+        for (int i = 0; i < nb_samples; i++) {
             variance += pow_2(data_ptr[i]);      // Assume that MEAN is *zero*
         }
-        variance /= frame->nb_samples - 1;
+        variance /= nb_samples - 1;
     }
 
     return fmax(sqrt(variance), DBL_EPSILON);
@@ -659,6 +664,7 @@ static double compute_frame_std_dev(DynamicAudioNormalizerContext *s,
 static void perform_compression(DynamicAudioNormalizerContext *s, AVFrame *frame)
 {
     int is_first_frame = cqueue_empty(s->gain_history_original[0]);
+    const int nb_samples = frame->nb_samples;
 
     if (s->channels_coupled) {
         const double standard_deviation = compute_frame_std_dev(s, frame, -1);
@@ -678,8 +684,8 @@ static void perform_compression(DynamicAudioNormalizerContext *s, AVFrame *frame
             if (bypass)
                 continue;
 
-            for (int i = 0; i < frame->nb_samples; i++) {
-                const double localThresh = fade(prev_actual_thresh, curr_actual_thresh, i, frame->nb_samples);
+            for (int i = 0; i < nb_samples; i++) {
+                const double localThresh = fade(prev_actual_thresh, curr_actual_thresh, i, nb_samples);
                 dst_ptr[i] = copysign(bound(localThresh, fabs(dst_ptr[i])), dst_ptr[i]);
             }
         }
@@ -698,8 +704,8 @@ static void perform_compression(DynamicAudioNormalizerContext *s, AVFrame *frame
             curr_actual_thresh = setup_compress_thresh(s->compress_threshold[c]);
 
             dst_ptr = (double *)frame->extended_data[c];
-            for (int i = 0; i < frame->nb_samples && !bypass; i++) {
-                const double localThresh = fade(prev_actual_thresh, curr_actual_thresh, i, frame->nb_samples);
+            for (int i = 0; i < nb_samples && !bypass; i++) {
+                const double localThresh = fade(prev_actual_thresh, curr_actual_thresh, i, nb_samples);
                 dst_ptr[i] = copysign(bound(localThresh, fabs(dst_ptr[i])), dst_ptr[i]);
             }
         }
@@ -782,17 +788,19 @@ static int analyze_frame(AVFilterContext *ctx, AVFilterLink *outlink, AVFrame **
 static void amplify_channel(DynamicAudioNormalizerContext *s, AVFrame *in,
                             AVFrame *frame, int enabled, int c)
 {
+    double prev_amplification_factor = s->prev_amplification_factor[c];
     const int bypass = bypass_channel(s, frame, c);
     const double *src_ptr = (const double *)in->extended_data[c];
     double *dst_ptr = (double *)frame->extended_data[c];
+    const int nb_samples = frame->nb_samples;
     double current_amplification_factor;
 
     cqueue_dequeue(s->gain_history_smoothed[c], &current_amplification_factor);
 
-    for (int i = 0; i < frame->nb_samples && enabled && !bypass; i++) {
-        const double amplification_factor = fade(s->prev_amplification_factor[c],
+    for (int i = 0; i < nb_samples && enabled && !bypass; i++) {
+        const double amplification_factor = fade(prev_amplification_factor,
                                                  current_amplification_factor, i,
-                                                 frame->nb_samples);
+                                                 nb_samples);
 
         dst_ptr[i] = src_ptr[i] * amplification_factor;
     }
