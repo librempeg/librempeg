@@ -208,6 +208,7 @@ extern const FFInputFormat  ff_h263_demuxer;
 extern const FFOutputFormat ff_h263_muxer;
 extern const FFInputFormat  ff_h264_demuxer;
 extern const FFOutputFormat ff_h264_muxer;
+extern const FFInputFormat  ff_halpst_demuxer;
 extern const FFOutputFormat ff_hash_muxer;
 extern const FFInputFormat  ff_hca_demuxer;
 extern const FFInputFormat  ff_hcom_demuxer;
