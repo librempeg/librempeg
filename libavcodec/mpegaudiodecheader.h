@@ -78,4 +78,6 @@ static inline int ff_mpa_check_header(uint32_t header){
     return 0;
 }
 
+int avpriv_ealayer3_decode_header(MPADecodeHeader *s, int header);
+
 #endif /* AVCODEC_MPEGAUDIODECHEADER_H */
