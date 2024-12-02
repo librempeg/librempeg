@@ -177,3 +177,39 @@ const FFCodec ff_mp3on4float_decoder = {
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
 };
 #endif
+#if CONFIG_EALAYER3_DECODER
+const FFCodec ff_ealayer3float_decoder = {
+    .p.name         = "ealayer3float",
+    CODEC_LONG_NAME("Electronic Arts Layer 3"),
+    .p.type         = AVMEDIA_TYPE_AUDIO,
+    .p.id           = AV_CODEC_ID_EALAYER3,
+    .priv_data_size = sizeof(EALayer3DecodeContext),
+    .init           = decode_init_ealayer3,
+    .close          = decode_close_ealayer3,
+    FF_CODEC_DECODE_CB(decode_frame_ealayer3),
+    .p.capabilities = AV_CODEC_CAP_CHANNEL_CONF |
+                      AV_CODEC_CAP_DR1,
+    .flush          = flush_ealayer3,
+    .p.sample_fmts  = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
+                                                      AV_SAMPLE_FMT_NONE },
+    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
+};
+#endif
+#if CONFIG_EALAYER3MULTI_DECODER
+const FFCodec ff_ealayer3multifloat_decoder = {
+    .p.name         = "ealayer3multifloat",
+    CODEC_LONG_NAME("Electronic Arts Layer 3 multichannel"),
+    .p.type         = AVMEDIA_TYPE_AUDIO,
+    .p.id           = AV_CODEC_ID_EALAYER3MULTI,
+    .priv_data_size = sizeof(EALayer3DecodeContext),
+    .init           = decode_init_ealayer3,
+    .close          = decode_close_ealayer3,
+    FF_CODEC_DECODE_CB(decode_frame_ealayer3multi),
+    .p.capabilities = AV_CODEC_CAP_CHANNEL_CONF |
+                      AV_CODEC_CAP_DR1,
+    .flush          = flush_ealayer3,
+    .p.sample_fmts  = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
+                                                      AV_SAMPLE_FMT_NONE },
+    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
+};
+#endif

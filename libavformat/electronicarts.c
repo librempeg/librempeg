@@ -270,6 +270,9 @@ static int process_audio_header_elements(AVFormatContext *s)
         case 16:
             ea->audio_codec = AV_CODEC_ID_MP3;
             break;
+        case 23:
+            ea->audio_codec = AV_CODEC_ID_EALAYER3MULTI;
+            break;
         case -1:
             break;
         default:
@@ -561,7 +564,7 @@ static int ea_read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     if (ea->audio_codec) {
-        if (ea->num_channels <= 0 || ea->num_channels > 2) {
+        if (ea->num_channels <= 0 || ea->num_channels > 6) {
             av_log(s, AV_LOG_WARNING,
                    "Unsupported number of channels: %d\n", ea->num_channels);
             goto no_audio;
@@ -659,6 +662,15 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
                     return AVERROR_INVALIDDATA;
                 avio_skip(pb, 8);
                 chunk_size -= 8;
+            } else if (ea->audio_codec == AV_CODEC_ID_EALAYER3MULTI) {
+                uint32_t v;
+                if (chunk_size < 4)
+                    return AVERROR_INVALIDDATA;
+                v = avio_rl32(pb);
+                if (av_bswap32(v) < v) /* endian of this field can be different to ea container */
+                    v = av_bswap32(v);
+                num_samples = v;
+                avio_seek(pb, -4, SEEK_CUR);
             }
 
             if (partial_packet) {
@@ -705,6 +717,7 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
             case AV_CODEC_ID_MP3:
             case AV_CODEC_ID_UTK:
             case AV_CODEC_ID_UTK_R3:
+            case AV_CODEC_ID_EALAYER3MULTI:
                 pkt->duration = num_samples;
                 break;
             case AV_CODEC_ID_ADPCM_PSX:
