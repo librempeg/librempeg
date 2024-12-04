@@ -178,6 +178,8 @@ void ff_avfilter_graph_update_heap(AVFilterGraph *graph,
  */
 AVFilterContext *ff_filter_alloc(const AVFilter *filter, const char *inst_name);
 
+FilterLinkInternal *ff_link_alloc(AVFilterGraph *graph, enum AVMediaType type);
+
 /**
  * Remove a filter from a graph;
  */
