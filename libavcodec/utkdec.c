@@ -72,7 +72,7 @@ typedef struct UTKContext {
     int parse_header;
 } UTKContext;
 
-static av_cold int utk_init(AVCodecContext *avctx)
+static av_cold int decode_init(AVCodecContext *avctx)
 {
     static AVOnce init_static_once = AV_ONCE_INIT;
 
@@ -321,8 +321,8 @@ static int utk_r3_decode_frame(UTKContext *ctx, GetBitContext *gb, int *parse_he
     return 0;
 }
 
-static int utk_decode(AVCodecContext *avctx, AVFrame *frame,
-                      int *got_frame_ptr, AVPacket *avpkt)
+static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
+                        int *got_frame_ptr, AVPacket *avpkt)
 {
     int ret, n, input_buf_size, buf_size;
     UTKContext *s = avctx->priv_data;
@@ -402,14 +402,28 @@ fail:
     return n;
 }
 
+static av_cold void decode_flush(AVCodecContext *avctx)
+{
+    UTKContext *s = avctx->priv_data;
+
+    s->parse_header = 0;
+    s->bitstream_size = 0;
+    s->bitstream_index = 0;
+    memset(s->rc, 0, sizeof(s->rc));
+    memset(s->bitstream, 0, sizeof(s->bitstream));
+    memset(s->synth_history, 0, sizeof(s->synth_history));
+    memset(s->buffer, 0, sizeof(s->buffer));
+}
+
 const FFCodec ff_utk_decoder = {
     .p.name         = "utk",
     CODEC_LONG_NAME("Electronic Arts MicroTalk"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_UTK,
     .priv_data_size = sizeof(UTKContext),
-    .init           = utk_init,
-    FF_CODEC_DECODE_CB(utk_decode),
+    .init           = decode_init,
+    .flush          = decode_flush,
+    FF_CODEC_DECODE_CB(decode_frame),
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY,
     .p.sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                         AV_SAMPLE_FMT_NONE },
@@ -421,8 +435,9 @@ const FFCodec ff_utk_r3_decoder = {
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_UTK_R3,
     .priv_data_size = sizeof(UTKContext),
-    .init           = utk_init,
-    FF_CODEC_DECODE_CB(utk_decode),
+    .init           = decode_init,
+    .flush          = decode_flush,
+    FF_CODEC_DECODE_CB(decode_frame),
     .p.capabilities = AV_CODEC_CAP_DR1,
     .p.sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                         AV_SAMPLE_FMT_NONE },
