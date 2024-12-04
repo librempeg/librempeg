@@ -146,6 +146,24 @@ int ff_append_outpad_free_name(AVFilterContext *f, AVFilterPad *p)
     return ff_append_outpad(f, p);
 }
 
+FilterLinkInternal *ff_link_alloc(AVFilterGraph *graph, enum AVMediaType type)
+{
+    FilterLinkInternal *li;
+
+    li = av_mallocz(sizeof(*li));
+    if (!li)
+        return NULL;
+
+    li->l.pub.type = type;
+    li->l.graph    = graph;
+
+    av_assert0(AV_PIX_FMT_NONE == -1 && AV_SAMPLE_FMT_NONE == -1);
+    li->l.pub.format     = -1;
+    li->l.pub.colorspace = AVCOL_SPC_UNSPECIFIED;
+
+    return li;
+}
+
 int avfilter_link(AVFilterContext *src, unsigned srcpad,
                   AVFilterContext *dst, unsigned dstpad)
 {
@@ -174,22 +192,18 @@ int avfilter_link(AVFilterContext *src, unsigned srcpad,
         return AVERROR(EINVAL);
     }
 
-    li = av_mallocz(sizeof(*li));
+    li = ff_link_alloc(src->graph, src->output_pads[srcpad].type);
     if (!li)
         return AVERROR(ENOMEM);
     link = &li->l.pub;
-
-    src->outputs[srcpad] = dst->inputs[dstpad] = link;
 
     link->src     = src;
     link->dst     = dst;
     link->srcpad  = &src->output_pads[srcpad];
     link->dstpad  = &dst->input_pads[dstpad];
-    link->type    = src->output_pads[srcpad].type;
-    li->l.graph   = src->graph;
-    av_assert0(AV_PIX_FMT_NONE == -1 && AV_SAMPLE_FMT_NONE == -1);
-    link->format  = -1;
-    link->colorspace = AVCOL_SPC_UNSPECIFIED;
+
+    src->outputs[srcpad] = dst->inputs[dstpad] = &li->l.pub;
+
     ff_framequeue_init(&li->fifo, &fffiltergraph(src->graph)->frame_queues);
 
     return 0;
