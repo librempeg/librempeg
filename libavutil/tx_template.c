@@ -1241,7 +1241,7 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
 
     tmp2 = ((TXComplex *)s->exp) + len;
     tmp = tmp2 + len;
-    for (int i = 0; i < len; i++) {
+    for (int i = m+1; i < len; i++) {
         const TXComplex x = tmp[i];
 
         CMUL3(tmp[i], x, exp[i]);
