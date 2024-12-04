@@ -54,6 +54,9 @@ static void utk_init_static_data(void)
                  utk_vlc_cmds[i], 1, 1, VLC_INIT_LE);
 }
 
+#define MAX_FRAME_SIZE 8192
+#define FRAME_SAMPLES 432
+
 typedef struct UTKContext {
     int reduced_bw;
     int multipulse_thresh;
@@ -62,6 +65,11 @@ typedef struct UTKContext {
     float synth_history[12];
 #define ADAPT_CB_SAMPLES 324
     float buffer[ADAPT_CB_SAMPLES + 432];
+    uint8_t bitstream[MAX_FRAME_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];
+    int bitstream_index;
+    int bitstream_size;
+    int skip;
+    int parse_header;
 } UTKContext;
 
 static av_cold int utk_init(AVCodecContext *avctx)
@@ -199,14 +207,16 @@ static void utk_lp_synthesis_filter(UTKContext *ctx, int offset, int num_blocks)
     }
 }
 
-static void utk_decode_frame(UTKContext *ctx, GetBitContext *gb, int parse_header)
+static void utk_decode_frame(UTKContext *ctx, GetBitContext *gb, int *parse_header)
 {
     int use_multipulse = 0;
     float excitation[5+108+5];
     float rc_delta[12];
 
-    if (parse_header)
+    if (!parse_header[0]) {
         utk_parse_header(ctx, gb);
+        parse_header[0] = 1;
+    }
 
     memset(&excitation[0], 0, 5*sizeof(float));
     memset(&excitation[5+108], 0, 5*sizeof(float));
@@ -280,7 +290,7 @@ static void utk_decode_frame(UTKContext *ctx, GetBitContext *gb, int parse_heade
     }
 }
 
-static int utk_r3_decode_frame(UTKContext *ctx, GetBitContext *gb, int parse_header, const uint8_t *start)
+static int utk_r3_decode_frame(UTKContext *ctx, GetBitContext *gb, int *parse_header, const uint8_t *start)
 {
     int pcm_data_present = (get_bits(gb, 8) == 0xee);
     const uint8_t *ptr;
@@ -314,34 +324,82 @@ static int utk_r3_decode_frame(UTKContext *ctx, GetBitContext *gb, int parse_hea
 static int utk_decode(AVCodecContext *avctx, AVFrame *frame,
                       int *got_frame_ptr, AVPacket *avpkt)
 {
-    UTKContext *ctx = avctx->priv_data;
-    GetBitContext gb;
+    int ret, n, input_buf_size, buf_size;
+    UTKContext *s = avctx->priv_data;
+    GetBitContext gbc, *gb = &gbc;
+    const uint8_t *buf;
     float *dst;
-    int ret;
 
-    if (avpkt->size <= 1)
-        return AVERROR_INVALIDDATA;
+    if (!avpkt->size && !s->bitstream_size) {
+        *got_frame_ptr = 0;
+        return avpkt->size;
+    }
 
-    frame->nb_samples = avpkt->duration;
+    if (avctx->extradata_size > 0 && avctx->extradata[0] == 0) {
+        buf_size = input_buf_size = FFMIN(avpkt->size, MAX_FRAME_SIZE - s->bitstream_size);
+        if (s->bitstream_index + s->bitstream_size + buf_size + AV_INPUT_BUFFER_PADDING_SIZE > MAX_FRAME_SIZE) {
+            memmove(s->bitstream, &s->bitstream[s->bitstream_index], s->bitstream_size);
+            s->bitstream_index = 0;
+        }
+        if (avpkt->data)
+            memcpy(&s->bitstream[s->bitstream_index + s->bitstream_size], avpkt->data, buf_size);
+        buf      = &s->bitstream[s->bitstream_index];
+        buf_size += s->bitstream_size;
+        s->bitstream_size  = buf_size;
+        if (buf_size < MAX_FRAME_SIZE && avpkt->data) {
+            *got_frame_ptr = 0;
+            return input_buf_size;
+        }
+    } else {
+        buf = avpkt->data;
+        buf_size = avpkt->size;
+    }
+
+    frame->nb_samples = avpkt->duration ? avpkt->duration : FRAME_SAMPLES;
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
-        return ret;
-
-    if ((ret = init_get_bits8(&gb, avpkt->data, avpkt->size)) < 0)
-        return ret;
-
+        goto fail;
     dst = (float *)frame->data[0];
-    for (int i = 0; i < frame->nb_samples; i += 432) {
-        int parse_header = avpkt->flags & AV_PKT_FLAG_KEY && i == 0;
+
+    if ((ret = init_get_bits8(gb, buf, buf_size)) < 0)
+        goto fail;
+    skip_bits(gb, s->skip);
+
+    for (int i = 0; i < frame->nb_samples; i += FRAME_SAMPLES) {
+        const int nb_samples = FFMIN(FRAME_SAMPLES, frame->nb_samples - i);
+
         if (avctx->codec_id == AV_CODEC_ID_UTK)
-            utk_decode_frame(ctx, &gb, parse_header);
-        else if ((ret = utk_r3_decode_frame(ctx, &gb, parse_header, avpkt->data)) < 0)
-            return ret;
-        for (int j = 0; j < FFMIN(frame->nb_samples - i, 432); j++)
-            *dst++ = ctx->buffer[ADAPT_CB_SAMPLES + j] / 32768;
+            utk_decode_frame(s, gb, &s->parse_header);
+        else if ((ret = utk_r3_decode_frame(s, gb, &s->parse_header, avpkt->data)) < 0)
+            goto fail;
+
+        for (int j = 0; j < nb_samples; j++)
+            dst[i+j] = s->buffer[ADAPT_CB_SAMPLES+j] / 32768;
+    }
+
+    if (avctx->extradata_size > 0 && avctx->extradata[0] == 0) {
+        s->skip = get_bits_count(gb) - 8 * (get_bits_count(gb) / 8);
+        n = get_bits_count(gb) / 8;
+    } else {
+        s->skip = 0;
+        n = avpkt->size;
+    }
+
+    if (n > buf_size) {
+fail:
+        s->bitstream_size = 0;
+        s->bitstream_index = 0;
+        return AVERROR_INVALIDDATA;
     }
 
     *got_frame_ptr = 1;
-    return avpkt->size;
+
+    if (s->bitstream_size) {
+        s->bitstream_index += n;
+        s->bitstream_size  -= n;
+        return input_buf_size;
+    }
+
+    return n;
 }
 
 const FFCodec ff_utk_decoder = {
@@ -352,7 +410,7 @@ const FFCodec ff_utk_decoder = {
     .priv_data_size = sizeof(UTKContext),
     .init           = utk_init,
     FF_CODEC_DECODE_CB(utk_decode),
-    .p.capabilities = AV_CODEC_CAP_DR1,
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY,
     .p.sample_fmts    = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                         AV_SAMPLE_FMT_NONE },
 };

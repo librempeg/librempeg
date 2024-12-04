@@ -26,11 +26,6 @@
 #include "internal.h"
 #include "riff.h"
 
-typedef struct UtkContext {
-    unsigned int dwOutSize;
-    int64_t start_pos;
-} UtkContext;
-
 static int utk_probe(const AVProbeData *p)
 {
     if (p->buf_size < 32
@@ -44,7 +39,6 @@ static int utk_probe(const AVProbeData *p)
 
 static int utk_read_header(AVFormatContext *s)
 {
-    UtkContext *utk = s->priv_data;
     AVIOContext *pb = s->pb;
     AVStream *st;
     unsigned int size;
@@ -55,32 +49,33 @@ static int utk_read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     avio_skip(pb, 4);
-    utk->dwOutSize = avio_rl32(pb);
+    st->duration = avio_rl32(pb) * 2LL;
     size = avio_rl32(pb);
+    if ((ret = ff_alloc_extradata(st->codecpar, 1)) < 0)
+        return ret;
+    st->codecpar->extradata[0] = 0;
+
     if ((ret = ff_get_wav_header(s, pb, st->codecpar, size, 0)) < 0)
         return ret;
     st->codecpar->codec_id = AV_CODEC_ID_UTK;
-    utk->start_pos = avio_tell(pb);
     return 0;
 }
 
 static int utk_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    UtkContext *utk = s->priv_data;
-    int64_t size = avio_size(s->pb);
-    int64_t pos  = avio_tell(s->pb);
+    int64_t pos = avio_tell(s->pb);
     int ret;
 
-    if (pos >= size || avio_feof(s->pb))
+    if (avio_feof(s->pb))
         return AVERROR_EOF;
 
-    if ((ret = av_get_packet(s->pb, pkt, size - pos)) < 0)
+    if ((ret = av_get_packet(s->pb, pkt, 256)) < 0)
         return ret;
 
     pkt->stream_index = 0;
-    pkt->duration = utk->dwOutSize / 2;
-    if (pos == utk->start_pos)
+    if (pos == 32)
         pkt->flags |= AV_PKT_FLAG_KEY;
+
     return 0;
 }
 
@@ -88,8 +83,7 @@ const FFInputFormat ff_utk_demuxer = {
     .p.name         = "utk",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Maxis UTK"),
     .p.extensions   = "utk",
-    .p.flags        = AVFMT_GENERIC_INDEX | AVFMT_NO_BYTE_SEEK | AVFMT_NOBINSEARCH,
-    .priv_data_size = sizeof(UtkContext),
+    .p.flags        = AVFMT_GENERIC_INDEX | AVFMT_NO_BYTE_SEEK | AVFMT_NOBINSEARCH | AVFMT_NOTIMESTAMPS,
     .read_probe     = utk_probe,
     .read_header    = utk_read_header,
     .read_packet    = utk_read_packet,
