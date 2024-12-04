@@ -93,8 +93,6 @@ typedef struct EaDemuxContext {
 
     int platform;
     int merge_alpha;
-
-    int first_audio_packet;
 } EaDemuxContext;
 
 static uint32_t read_arbitrary(AVIOContext *pb)
@@ -614,6 +612,7 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
     unsigned int chunk_type, chunk_size;
     int ret = 0, packet_read = 0, key = 0, vp6a;
     int av_uninit(num_samples);
+    int64_t pos = avio_tell(pb);
 
     while ((!packet_read && !hit_end) || partial_packet) {
         chunk_type = avio_rl32(pb);
@@ -674,10 +673,8 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
                 return ret;
             pkt->stream_index = ea->audio_stream_index;
 
-            if ((ea->audio_codec == AV_CODEC_ID_UTK || AV_CODEC_ID_UTK_R3) && !ea->first_audio_packet) {
+            if ((ea->audio_codec == AV_CODEC_ID_UTK || ea->audio_codec == AV_CODEC_ID_UTK_R3) && pos == 0)
                 pkt->flags |= AV_PKT_FLAG_KEY;
-                ea->first_audio_packet = 1;
-            }
 
             switch (ea->audio_codec) {
             case AV_CODEC_ID_ADPCM_EA:
