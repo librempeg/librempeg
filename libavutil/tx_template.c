@@ -1409,13 +1409,8 @@ static av_always_inline void like_terms(TXComplex *add,
 {
     const int m = (r-1)/2;
 
-    if (r&1) {
+    if (r&1)
         add[0] = in[0];
-        cpx_neg(&sub[0], &in[0]);
-    } else {
-        cpx_add(&add[0], &in[0], &in[r/2]);
-        cpx_sub(&sub[0], &in[0], &in[r/2]);
-    }
 
     for (int h = 1, t = r-1; h <= m; h++, t--) {
         cpx_add(&add[h], &in[h], &in[t]);
@@ -1513,11 +1508,8 @@ static void TX_NAME(ff_tx_fft##n##_butterfly)(AVTXContext *s,\
     like_terms(add, sub, tmp_in, n);                        \
     out_special(tmp_out, add, sub, n);                      \
                                                             \
-    if (1) {                                                \
-        for (int i = 1; i <= n/2; i++)                      \
-            out_pair(tmp_out, add, sub, W, i, n);           \
-    } else {                                                \
-    }                                                       \
+    for (int i = 1; i <= n/2; i++)                          \
+        out_pair(tmp_out, add, sub, W, i, n);               \
                                                             \
     for (int i = 0; i < n; i++) {                           \
         out[0] = tmp_out[i];                                \
