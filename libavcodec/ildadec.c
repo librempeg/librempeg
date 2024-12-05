@@ -36,7 +36,7 @@
 #include "internal.h"
 #include "mathops.h"
 
-static const uint8_t default_palette[64][3]={
+static const uint8_t default_palette[64][3] = {
     {255,0,0},
     {255,16,0},
     {255,32,0},
@@ -266,6 +266,8 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     if (ret < 0)
         return ret;
+
+    frame->pict_type = AV_PICTURE_TYPE_I;
 
     *got_frame = 1;
 
