@@ -130,6 +130,7 @@ const FFInputFormat ff_ilda_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("ILDA Image Data Transfer Format"),
     .p.priv_class   = &ilda_demuxer_class,
     .p.flags        = AVFMT_GENERIC_INDEX,
+    .p.extensions   = "ild",
     .priv_data_size = sizeof(ILDAContext),
     .read_probe     = read_probe,
     .read_header    = read_header,
