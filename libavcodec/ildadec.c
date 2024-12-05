@@ -231,7 +231,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     int ret, format, nb_entries;
 
     if (buf_size < 32)
-        return -1;
+        return AVERROR_INVALIDDATA;
 
     format = buf[7];
     nb_entries = AV_RB16(buf + 24);
