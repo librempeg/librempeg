@@ -1031,6 +1031,9 @@ static int decode_frame(AVCodecContext *avctx, AVPacket *avpkt, int format,
 
     if (format == HVQM2_VIDEO_HOLD) {
         av_frame_copy(frame, prev_frame);
+
+        frame->pict_type = AV_PICTURE_TYPE_P;
+
         return 0;
     }
 
@@ -1107,6 +1110,9 @@ static int decode_frame(AVCodecContext *avctx, AVPacket *avpkt, int format,
             return ret;
 
         decode(avctx, frame);
+
+        frame->pict_type = AV_PICTURE_TYPE_I;
+        frame->flags |= AV_FRAME_FLAG_KEY;
     } else {
         HVQM2PredictFrame predict;
 
@@ -1118,6 +1124,8 @@ static int decode_frame(AVCodecContext *avctx, AVPacket *avpkt, int format,
             return ret;
 
         decode(avctx, frame);
+
+        frame->pict_type = AV_PICTURE_TYPE_P;
     }
 
     return 0;
