@@ -103,7 +103,7 @@ static const uint8_t default_palette[64][3]={
     {255,32,32},
 };
 
-typedef struct {
+typedef struct ILDAContext {
     uint8_t palette[256][3];
 } ILDAContext;
 
