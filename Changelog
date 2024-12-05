@@ -23,6 +23,7 @@ version <next>:
 - UTK and UTK R3 audio decoder and demuxer
 - EALAYER3 and EALAYER3MULTI audio decoder
 - EALAYER3 demuxer
+- libx265 alpha layer encoding
 
 
 version 7.1:
