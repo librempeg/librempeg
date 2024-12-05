@@ -25,13 +25,13 @@
  */
 
 #include "libavutil/intreadwrite.h"
-#include "libavcodec/bytestream.h"
+#include "libavutil/opt.h"
+
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
-#include "libavutil/opt.h"
 
-typedef struct {
+typedef struct ILDAContext {
     AVClass *class;
     int width, height;
     AVRational framerate;
@@ -78,20 +78,16 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     if (avio_read(pb, buf, sizeof(buf)) != sizeof(buf))
         return AVERROR(EIO);
 
-    if (AV_RB32(buf) != MKBETAG('I', 'L', 'D', 'A')) {
-        av_log(s, AV_LOG_ERROR, "unexpected tag\n");
-        return AVERROR(EIO);
-    }
+    if (AV_RB32(buf) != MKBETAG('I', 'L', 'D', 'A'))
+        return AVERROR_INVALIDDATA;
 
     type = buf[7];
     if (type >= FF_ARRAY_ELEMS(record_size))
-        return AVERROR(EIO);
+        return AVERROR_INVALIDDATA;
 
     nb_entries = AV_RB16(buf + 24);
-    if (!nb_entries) {
-        avio_seek(pb, -sizeof(buf), SEEK_CUR);
-        return AVERROR(EOF);
-    }
+    if (!nb_entries)
+        return AVERROR_EOF;
 
     ret = av_new_packet(pkt, sizeof(buf) + nb_entries * record_size[type]);
     if (ret < 0)
@@ -105,6 +101,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
     pkt->pos = pos;
     pkt->pts = AV_RB16(buf + 26);
+    pkt->duration = 1;
     pkt->flags |= AV_PKT_FLAG_KEY;
 
     return 0;
