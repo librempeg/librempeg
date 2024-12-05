@@ -612,9 +612,9 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
     unsigned int chunk_type, chunk_size;
     int ret = 0, packet_read = 0, key = 0, vp6a;
     int av_uninit(num_samples);
-    int64_t pos = avio_tell(pb);
 
     while ((!packet_read && !hit_end) || partial_packet) {
+        int64_t pos = avio_tell(pb);
         chunk_type = avio_rl32(pb);
         if (avio_feof(pb))
             return AVERROR_EOF;
@@ -671,6 +671,7 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
             ret = av_get_packet(pb, pkt, chunk_size);
             if (ret < 0)
                 return ret;
+            pkt->pos = pos;
             pkt->stream_index = ea->audio_stream_index;
 
             if ((ea->audio_codec == AV_CODEC_ID_UTK || ea->audio_codec == AV_CODEC_ID_UTK_R3) && pos == 0)
@@ -779,6 +780,7 @@ get_video_packet:
                 ret = av_get_packet(pb, pkt, chunk_size + (vp6a ? 3 : 0));
                 if (ret >= 0 && vp6a)
                    AV_WB24(pkt->data, chunk_size);
+                pkt->pos = pos;
             }
             packet_read = 1;
 
@@ -824,6 +826,7 @@ const FFInputFormat ff_ea_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Electronic Arts Multimedia"),
     .p.priv_class   = &ea_class,
     .priv_data_size = sizeof(EaDemuxContext),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = ea_probe,
     .read_header    = ea_read_header,
     .read_packet    = ea_read_packet,
