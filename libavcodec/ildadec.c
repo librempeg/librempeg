@@ -125,14 +125,18 @@ static av_cold int decode_init(AVCodecContext *avctx)
 };
 
 static void draw_point(uint8_t *const pixels, int linesize, int width, int height,
-                      int x, int y, const uint8_t *const rgbcolor)
+                       int x, int y, const uint8_t *const rgbcolor)
 {
-    for (int j = FFMAX(y - 1, 0); j < FFMIN(y + 1, height); j++) {
-        for (int i = FFMAX(x - 1, 0); i < FFMIN(x + 1, width); i++) {
-            pixels[j * linesize + i * 3 + 0] = rgbcolor[0];
-            pixels[j * linesize + i * 3 + 1] = rgbcolor[1];
-            pixels[j * linesize + i * 3 + 2] = rgbcolor[2];
-        }
+    const int stop_y = FFMIN(y + 1, height);
+    const int stop_x = FFMIN(x + 1, width);
+    const int start_x = FFMAX(x - 1, 0);
+    const int start_y = FFMAX(y - 1, 0);
+    uint8_t *dst = pixels + start_y * linesize;
+
+    for (int y = start_y; y < stop_y; y++) {
+        for (int x = start_x; x < stop_x; x++)
+            memcpy(dst + x * 3, rgbcolor, 3);
+        dst += linesize;
     }
 }
 
@@ -144,9 +148,7 @@ static void draw_line(uint8_t *const pixels, int linesize,
     int err = (dx > dy ? dx : -dy) / 2, e2;
 
     for (;;) {
-        pixels[y0 * linesize + x0 * 3 + 0] = rgbcolor[0];
-        pixels[y0 * linesize + x0 * 3 + 1] = rgbcolor[1];
-        pixels[y0 * linesize + x0 * 3 + 2] = rgbcolor[2];
+        memcpy(&pixels[y0 * linesize + x0 * 3], rgbcolor, 3);
 
         if (x0 == x1 && y0 == y1)
             break;
