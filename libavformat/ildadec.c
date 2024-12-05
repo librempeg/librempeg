@@ -37,13 +37,28 @@ typedef struct ILDAContext {
     AVRational framerate;
 } ILDAContext;
 
-static const uint8_t record_size[] = {8, 6, 3, 3, 10, 8};
+static const uint8_t record_size[] = { 8, 6, 3, 3, 10, 8 };
 
 static int read_probe(const AVProbeData *p)
 {
-    if (p->buf_size < 8 || memcmp(p->buf, "ILDA", 4) || p->buf[4] || p->buf[5] || p->buf[6] || p->buf[7] >= FF_ARRAY_ELEMS(record_size))
-        return 0;
-    return AVPROBE_SCORE_MAX / 4 + 1;
+    int score = 0;
+
+    for (int i = 0; i+32 < p->buf_size;) {
+        int nb_entries, type;
+
+        type = p->buf[i+7];
+        if (memcmp(p->buf+i, "ILDA", 4) ||
+            p->buf[i+4] || p->buf[i+5] || p->buf[i+6] ||
+            type >= FF_ARRAY_ELEMS(record_size))
+            break;
+        nb_entries = AV_RB16(p->buf + i+24);
+        score += 3;
+        if (score >= AVPROBE_SCORE_MAX)
+            break;
+        i += 32 + record_size[type] * nb_entries;
+    }
+
+    return FFMIN(AVPROBE_SCORE_MAX, score);
 }
 
 static int read_header(AVFormatContext *avctx)
