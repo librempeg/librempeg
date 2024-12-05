@@ -127,13 +127,13 @@ static av_cold int decode_init(AVCodecContext *avctx)
 static void draw_point(uint8_t *const pixels, int linesize, int width, int height,
                       int x, int y, const uint8_t *const rgbcolor)
 {
-    for (int j = FFMAX(y - 1, 0); j < FFMIN(y + 1, height); j++)
+    for (int j = FFMAX(y - 1, 0); j < FFMIN(y + 1, height); j++) {
         for (int i = FFMAX(x - 1, 0); i < FFMIN(x + 1, width); i++) {
             pixels[j * linesize + i * 3 + 0] = rgbcolor[0];
             pixels[j * linesize + i * 3 + 1] = rgbcolor[1];
             pixels[j * linesize + i * 3 + 2] = rgbcolor[2];
-         }
-
+        }
+    }
 }
 
 static void draw_line(uint8_t *const pixels, int linesize,
@@ -203,14 +203,16 @@ static int decode_indexed(AVCodecContext *avctx, AVFrame *frame, const uint8_t *
             rgb[1] = buf[6 + zaxis];
             rgb[2] = buf[5 + zaxis];
             color = rgb;
-        } else
+        } else {
             color = s->palette[buf[5 + zaxis]];
+        }
 
         if (!(buf[4 + zaxis] & 0x40)) {
-            if (x0 != x1 || y0 != y1)
+            if (x0 != x1 || y0 != y1) {
                 draw_line(frame->data[0], frame->linesize[0], x0, y0, x1, y1, color);
-            else
+            } else {
                 draw_point(frame->data[0], frame->linesize[0], avctx->width, avctx->height, x0, y0, color);
+            }
         }
 
         x0 = x1;
@@ -218,6 +220,7 @@ static int decode_indexed(AVCodecContext *avctx, AVFrame *frame, const uint8_t *
 
         buf += 6 + zaxis + truecolor;
     }
+
     return 0;
 }
 
