@@ -42,8 +42,6 @@ typedef struct AudioPsyClipContext {
     int max_iterations;
     int min_iterations;
     int diff_only;
-    char *protections_str;
-    double *protections;
 
     int num_psy_bins;
     int nb_bins;
