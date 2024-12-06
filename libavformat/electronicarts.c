@@ -94,7 +94,7 @@ typedef struct EaDemuxContext {
     int platform;
     int merge_alpha;
 
-    int first_audio_pkt_pos;
+    int64_t first_audio_pkt_pos;
 } EaDemuxContext;
 
 static uint32_t read_arbitrary(AVIOContext *pb)
