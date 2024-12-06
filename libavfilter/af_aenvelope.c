@@ -127,8 +127,7 @@ static int filter_frame(AVFilterLink *outlink, AVFrame *in)
         return AVERROR(ENOMEM);
     }
     av_frame_copy_props(out, in);
-    if (s->trim_size == 0)
-        out->pts -= av_rescale_q(s->hlook, av_make_q(1, outlink->sample_rate), outlink->time_base);
+    out->pts -= av_rescale_q(s->hlook - s->trim_size, av_make_q(1, outlink->sample_rate), outlink->time_base);
     out->nb_samples -= s->trim_size;
     out->duration = av_rescale_q(out->nb_samples,
                                  (AVRational){1, outlink->sample_rate},
