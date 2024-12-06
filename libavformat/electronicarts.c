@@ -93,6 +93,8 @@ typedef struct EaDemuxContext {
 
     int platform;
     int merge_alpha;
+
+    int first_audio_pkt_pos;
 } EaDemuxContext;
 
 static uint32_t read_arbitrary(AVIOContext *pb)
@@ -674,8 +676,12 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
             pkt->pos = pos;
             pkt->stream_index = ea->audio_stream_index;
 
-            if ((ea->audio_codec == AV_CODEC_ID_UTK || ea->audio_codec == AV_CODEC_ID_UTK_R3) && pos == 0)
-                pkt->flags |= AV_PKT_FLAG_KEY;
+            if ((ea->audio_codec == AV_CODEC_ID_UTK || ea->audio_codec == AV_CODEC_ID_UTK_R3)) {
+                if (!ea->first_audio_pkt_pos)
+                    ea->first_audio_pkt_pos = pos;
+                if (pos == ea->first_audio_pkt_pos)
+                    pkt->flags |= AV_PKT_FLAG_KEY;
+            }
 
             switch (ea->audio_codec) {
             case AV_CODEC_ID_ADPCM_EA:
