@@ -19,38 +19,43 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/channel_layout.h"
+#include "libavutil/intreadwrite.h"
+#include "libavcodec/mpegaudiodecheader.h"
+
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
-#include "libavcodec/mpegaudiodecheader.h"
-#include "libavutil/channel_layout.h"
-#include "libavutil/intreadwrite.h"
 
 static int ealayer3_probe(const AVProbeData *p)
 {
     int score = 0, i = 0;
-    MPADecodeHeader c;
 
     while (i + 10 < p->buf_size) {
+        unsigned int nb_samples = AV_RB32(p->buf + i + 4);
         unsigned int size = AV_RB32(p->buf + i);
-	unsigned int nb_samples = AV_RB32(p->buf + i + 4);
+        MPADecodeHeader c;
+
         if (size < 10 || size > 0x10000 ||
             !nb_samples || nb_samples > 0x10000 ||
             (p->buf[i + 8] && p->buf[i + 8] != 0xEE) ||
             avpriv_ealayer3_decode_header(&c, p->buf[i + 9]) < 0)
             break;
+
         score += 3;
         if (score >= AVPROBE_SCORE_MAX)
             break;
+
         i += size;
     }
+
     return FFMIN(AVPROBE_SCORE_MAX, score);
 }
 
 static int ealayer3_read_header(AVFormatContext *s)
 {
-    AVStream * st;
     MPADecodeHeader c;
+    AVStream *st;
 
     avio_skip(s->pb, 9);
     avpriv_ealayer3_decode_header(&c, avio_r8(s->pb));
@@ -59,11 +64,14 @@ static int ealayer3_read_header(AVFormatContext *s)
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
+
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_EALAYER3;
     st->codecpar->ch_layout.nb_channels = c.nb_channels;
     st->codecpar->sample_rate = c.sample_rate;
+
     avpriv_set_pts_info(st, 64, 1, c.sample_rate);
+
     return 0;
 }
 
@@ -82,6 +90,7 @@ static int ealayer3_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     pkt->pos = pos;
     pkt->stream_index = 0;
+
     return 0;
 }
 
