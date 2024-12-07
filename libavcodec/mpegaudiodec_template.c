@@ -1924,8 +1924,8 @@ static int decode_frame_mp3on4(AVCodecContext *avctx, AVFrame *frame,
 #if CONFIG_EALAYER3_DECODER || CONFIG_EALAYER3MULTI_DECODER
 
 #define EALAYER3MULTI_MAX_CHANNELS 6
-typedef struct {
-    MPADecodeContext *mp3decctx[EALAYER3MULTI_MAX_CHANNELS];
+typedef struct EALayer3DecodeContext {
+    MPADecodeContext mp3decctx[EALAYER3MULTI_MAX_CHANNELS];
 } EALayer3DecodeContext;
 
 static av_cold int decode_init_ealayer3(AVCodecContext *avctx)
@@ -1933,43 +1933,29 @@ static av_cold int decode_init_ealayer3(AVCodecContext *avctx)
     EALayer3DecodeContext *s = avctx->priv_data;
 
     if (avctx->ch_layout.nb_channels > EALAYER3MULTI_MAX_CHANNELS) {
-        avpriv_request_sample(avctx, "channels=%d", avctx->ch_layout.nb_channels);
+        avpriv_request_sample(avctx, "channels = %d", avctx->ch_layout.nb_channels);
         return AVERROR_PATCHWELCOME;
     }
 
-    s->mp3decctx[0] = av_mallocz(sizeof(MPADecodeContext));
-    avctx->priv_data = s->mp3decctx[0];
-    decode_init(avctx);
+    for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++) {
+        avctx->priv_data = &s->mp3decctx[ch];
 
-    avctx->priv_data = s;
-    s->mp3decctx[0]->adu_mode = 1;
+        decode_init(avctx);
 
-    for (int i = 1; i < avctx->ch_layout.nb_channels; i++) {
-        s->mp3decctx[i] = av_mallocz(sizeof(MPADecodeContext));
-        if (!s->mp3decctx[i])
-            return AVERROR(ENOMEM);
-        s->mp3decctx[i]->adu_mode = 1;
-        s->mp3decctx[i]->avctx = avctx;
-        s->mp3decctx[i]->mpadsp = s->mp3decctx[0]->mpadsp;
-        s->mp3decctx[i]->butterflies_float = s->mp3decctx[0]->butterflies_float;
+        s->mp3decctx[ch].adu_mode = 1;
     }
 
-    return 0;
-}
+    avctx->priv_data = s;
 
-static av_cold int decode_close_ealayer3(AVCodecContext *avctx)
-{
-    EALayer3DecodeContext *s = avctx->priv_data;
-    for (int i = 0; i < avctx->ch_layout.nb_channels; i++)
-        av_freep(&s->mp3decctx[i]);
     return 0;
 }
 
 static void flush_ealayer3(AVCodecContext *avctx)
 {
     EALayer3DecodeContext *s = avctx->priv_data;
-    for (int i = 0; i < avctx->ch_layout.nb_channels; i++)
-        mp_flush(s->mp3decctx[i]);
+
+    for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++)
+        mp_flush(&s->mp3decctx[ch]);
 }
 
 #define EA_FRAME_SIZE 576
@@ -2049,7 +2035,7 @@ static int decode_frame_ealayer3(AVCodecContext *avctx, AVFrame *frame,
                                  int *got_frame_ptr, AVPacket *avpkt)
 {
     EALayer3DecodeContext *s = avctx->priv_data;
-    MPADecodeContext *m = s->mp3decctx[0];
+    MPADecodeContext *m = &s->mp3decctx[0];
     int ret;
 
     frame->nb_samples = EA_FRAME_SIZE;
@@ -2100,7 +2086,7 @@ static int decode_frame_ealayer3multi(AVCodecContext *avctx, AVFrame *frame,
     }
 
     for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch += ch_step) {
-        MPADecodeContext *m = s->mp3decctx[ch];
+        MPADecodeContext *m = &s->mp3decctx[ch];
         int next_offset = buf_size, offset = offsets[ch];
         const uint8_t *fbuf;
         int fsize;

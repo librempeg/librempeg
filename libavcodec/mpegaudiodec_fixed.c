@@ -154,7 +154,6 @@ const FFCodec ff_ealayer3_decoder = {
     .p.id           = AV_CODEC_ID_EALAYER3,
     .priv_data_size = sizeof(EALayer3DecodeContext),
     .init           = decode_init_ealayer3,
-    .close          = decode_close_ealayer3,
     FF_CODEC_DECODE_CB(decode_frame_ealayer3),
     .p.capabilities = AV_CODEC_CAP_CHANNEL_CONF |
                       AV_CODEC_CAP_DR1,
@@ -172,7 +171,6 @@ const FFCodec ff_ealayer3multi_decoder = {
     .p.id           = AV_CODEC_ID_EALAYER3MULTI,
     .priv_data_size = sizeof(EALayer3DecodeContext),
     .init           = decode_init_ealayer3,
-    .close          = decode_close_ealayer3,
     FF_CODEC_DECODE_CB(decode_frame_ealayer3multi),
     .p.capabilities = AV_CODEC_CAP_CHANNEL_CONF |
                       AV_CODEC_CAP_DR1,
