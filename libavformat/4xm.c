@@ -80,7 +80,6 @@ typedef struct FourxmDemuxContext {
     int track_count;
     AudioTrack *tracks;
 
-    int64_t video_pts;
     AVRational fps;
 } FourxmDemuxContext;
 
@@ -108,7 +107,7 @@ static int parse_vtrk(AVFormatContext *s,
     if (!st)
         return AVERROR(ENOMEM);
 
-    avpriv_set_pts_info(st, 60, fourxm->fps.den, fourxm->fps.num);
+    avpriv_set_pts_info(st, 64, fourxm->fps.den, fourxm->fps.num*2);
 
     fourxm->video_stream_index = st->index;
 
@@ -184,7 +183,7 @@ static int parse_strk(AVFormatContext *s,
         return AVERROR(ENOMEM);
 
     st->id = track;
-    avpriv_set_pts_info(st, 60, 1, fourxm->tracks[track].sample_rate);
+    avpriv_set_pts_info(st, 64, 1, fourxm->tracks[track].sample_rate);
 
     fourxm->tracks[track].stream_index = st->index;
 
@@ -282,8 +281,6 @@ static int fourxm_read_header(AVFormatContext *s)
     }
 
     av_free(header);
-    /* initialize context members */
-    fourxm->video_pts = -1;  /* first frame will push to 0 */
 
     return 0;
 fail:
@@ -313,9 +310,6 @@ static int fourxm_read_packet(AVFormatContext *s,
             return AVERROR(EIO);
         switch (fourcc_tag) {
         case LIST_TAG:
-            /* this is a good time to bump the video pts */
-            fourxm->video_pts++;
-
             /* skip the LIST-* tag and move on to the next fourcc */
             avio_rl32(pb);
             break;
@@ -335,7 +329,7 @@ static int fourxm_read_packet(AVFormatContext *s,
             if ((ret = av_new_packet(pkt, size + 8)) < 0)
                 return ret;
             pkt->stream_index = fourxm->video_stream_index;
-            pkt->pts          = fourxm->video_pts;
+            pkt->duration     = 1;
             pkt->pos          = avio_tell(s->pb);
             memcpy(pkt->data, header, 8);
             ret = avio_read(s->pb, &pkt->data[8], size);
