@@ -301,11 +301,7 @@ static av_cold int decode_init(AVCodecContext * avctx)
 
     ff_mpadsp_init(&s->mpadsp);
 
-    if (avctx->request_sample_fmt == OUT_FMT &&
-        avctx->codec_id != AV_CODEC_ID_MP3ON4 && avctx->codec_id != AV_CODEC_ID_EALAYER3MULTI)
-        avctx->sample_fmt = OUT_FMT;
-    else
-        avctx->sample_fmt = OUT_FMT_P;
+    avctx->sample_fmt = OUT_FMT_P;
     s->err_recognition = avctx->err_recognition;
 
     if (avctx->codec_id == AV_CODEC_ID_MP3ADU)
@@ -1560,21 +1556,14 @@ static int mp_decode_frame(MPADecodeContext *s, OUT_INT **samples,
 
     /* apply the synthesis filter */
     for (ch = 0; ch < s->nb_channels; ch++) {
-        int sample_stride;
-        if (s->avctx->sample_fmt == OUT_FMT_P) {
-            samples_ptr   = samples[ch];
-            sample_stride = 1;
-        } else {
-            samples_ptr   = samples[0] + ch;
-            sample_stride = s->nb_channels;
-        }
+        samples_ptr = samples[ch];
         for (i = 0; i < nb_frames; i++) {
             RENAME(ff_mpa_synth_filter)(&s->mpadsp, s->synth_buf[ch],
                                         &(s->synth_buf_offset[ch]),
                                         RENAME(ff_mpa_synth_window),
                                         &s->dither_state, samples_ptr,
-                                        sample_stride, s->sb_samples[ch][i]);
-            samples_ptr += 32 * sample_stride;
+                                        1, s->sb_samples[ch][i]);
+            samples_ptr += 32;
         }
     }
 
@@ -1985,10 +1974,10 @@ static void flush_ealayer3(AVCodecContext *avctx)
 
 #define EA_FRAME_SIZE 576
 
-static int ealayer3_dec_frame(MPADecodeContext *s, OUT_INT *samples, const uint8_t *buf, int buf_size, int version2)
+static int ealayer3_dec_frame(MPADecodeContext *s, OUT_INT **samples, const uint8_t *buf, int buf_size, int version2)
 {
-    GetBitContext *gb = &s->gb;
     int pcm_flag, ret, nb_frames, consumed;
+    GetBitContext *gb = &s->gb;
 
     if (buf_size < 2)
         return AVERROR_INVALIDDATA;
@@ -2006,15 +1995,14 @@ static int ealayer3_dec_frame(MPADecodeContext *s, OUT_INT *samples, const uint8
             return nb_frames;
 
         for (int ch = 0; ch < s->nb_channels; ch++) {
-            OUT_INT *samples_ptr   = samples + ch;
-            int sample_stride = s->nb_channels;
+            OUT_INT *samples_ptr = samples[ch];
             for (int i = 0; i < nb_frames; i++) {
                 RENAME(ff_mpa_synth_filter)(&s->mpadsp, s->synth_buf[ch],
                                             &(s->synth_buf_offset[ch]),
                                             RENAME(ff_mpa_synth_window),
                                             &s->dither_state, samples_ptr,
-                                            sample_stride, s->sb_samples[ch][i]);
-                samples_ptr += 32 * sample_stride;
+                                            1, s->sb_samples[ch][i]);
+                samples_ptr += 32;
             }
         }
 
@@ -2038,20 +2026,18 @@ static int ealayer3_dec_frame(MPADecodeContext *s, OUT_INT *samples, const uint8
 
         buf += header_size;
         buf_size -= header_size;
-
-        if (buf_size < s->nb_channels*count*2)
-            count = FFMIN(buf_size / s->nb_channels / 2, count);
+        consumed += header_size;
 
         if (offset < EA_FRAME_SIZE && offset + count <= EA_FRAME_SIZE) {
             for (int i = 0; i < count; i++) {
                 for (int ch = 0; ch < s->nb_channels; ch++) {
-                    samples[(EA_FRAME_SIZE - offset + i)*s->nb_channels + ch] = AV_RX16(buf);
-                    buf++;
+                    OUT_INT *samples_ptr = samples[ch];
+                    samples_ptr[offset + i] = AV_RX16(buf);
+                    consumed += 2;
+                    buf += 2;
                 }
             }
         }
-
-        consumed += header_size + s->nb_channels*count*2;
     }
 
     return consumed;
@@ -2064,43 +2050,19 @@ static int decode_frame_ealayer3(AVCodecContext *avctx, AVFrame *frame,
 {
     EALayer3DecodeContext *s = avctx->priv_data;
     MPADecodeContext *m = s->mp3decctx[0];
-    OUT_INT *out_samples;
-    const uint8_t *buf = avpkt->data;
-    int buf_size = avpkt->size;
-    int ret, pkt_nb_samples, frame_nr, consumed;
+    int ret;
 
-    if (buf_size < 4)
-        return AVERROR_INVALIDDATA;
-
-    pkt_nb_samples = AV_RB32(buf);
-    buf += 4;
-    buf_size -= 4;
-
-    frame->nb_samples = ((pkt_nb_samples + EA_FRAME_SIZE - 1)/EA_FRAME_SIZE)*EA_FRAME_SIZE;
-    frame->nb_samples *= 2; // pkt_nb_samples is sometimes unreliable
+    frame->nb_samples = EA_FRAME_SIZE;
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
-    out_samples = (OUT_INT *)frame->data[0];
 
-    for (frame_nr = 0; buf_size > 4; frame_nr++) {
-        if ((frame_nr + 1)*EA_FRAME_SIZE*avctx->ch_layout.nb_channels > frame->nb_samples)
-            return AVERROR_INVALIDDATA;
-
-        consumed = ealayer3_dec_frame(m, out_samples + frame_nr*EA_FRAME_SIZE*avctx->ch_layout.nb_channels, buf, buf_size, 1);
-        if (consumed < 0)
-            return AVERROR_INVALIDDATA;
-
-        buf += consumed;
-        buf_size -= consumed;
-    }
-
-    frame->nb_samples = frame_nr*EA_FRAME_SIZE*avctx->ch_layout.nb_channels;
-
-    if (pkt_nb_samples != frame->nb_samples)
-        av_log(avctx, AV_LOG_WARNING, "pkt_nb_samples:%d, actually decoded:%d\n", pkt_nb_samples, frame->nb_samples);
+    ret = ealayer3_dec_frame(m, (OUT_INT **)frame->extended_data, avpkt->data, avpkt->size, 1);
+    if (ret < 0)
+        return ret;
 
     *got_frame_ptr = 1;
-    return avpkt->size;
+
+    return ret;
 }
 #endif /* CONFIG_EALAYER3_DECODER */
 
@@ -2108,111 +2070,82 @@ static int decode_frame_ealayer3(AVCodecContext *avctx, AVFrame *frame,
 static int decode_frame_ealayer3multi(AVCodecContext *avctx, AVFrame *frame,
                                      int *got_frame_ptr, AVPacket *avpkt)
 {
+    OUT_INT *out_samples[EALAYER3MULTI_MAX_CHANNELS];
+    int left_samples[EALAYER3MULTI_MAX_CHANNELS];
     EALayer3DecodeContext *s = avctx->priv_data;
-    OUT_INT **out_samples;
+    int offsets[EALAYER3MULTI_MAX_CHANNELS];
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
-    int big_endian;
-    unsigned int pkt_nb_samples;
-    int nb_samples[EALAYER3MULTI_MAX_CHANNELS] = {0};
-    OUT_INT decoded_buf[EA_FRAME_SIZE * MPA_MAX_CHANNELS];
-    int ret;
+    int big_endian, ret;
+    int ch_step = 1;
 
-    if (buf_size <  4 + avctx->ch_layout.nb_channels*4)
+    if (buf_size < 4 + avctx->ch_layout.nb_channels*4)
         return AVERROR_INVALIDDATA;
 
     big_endian = AV_RL32(buf) > AV_RB32(buf);
 #define AV_RX32(x) big_endian ? AV_RB32(x) : AV_RL32(x)
-    pkt_nb_samples = AV_RX32(buf);
 
-    frame->nb_samples = ((pkt_nb_samples + EA_FRAME_SIZE - 1)/EA_FRAME_SIZE)*EA_FRAME_SIZE;
-    frame->nb_samples *= 2; // pkt_nb_samples is sometimes unreliable
+    frame->nb_samples = ((AV_RX32(buf) + EA_FRAME_SIZE - 1)/EA_FRAME_SIZE)*EA_FRAME_SIZE;
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
-    out_samples = (OUT_INT **)frame->extended_data;
+    buf += 4;
+    buf_size -= 4;
 
-    for (int ch = 0, nb_channels; ch < avctx->ch_layout.nb_channels; ch += nb_channels) {
+    for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++) {
+        out_samples[ch] = (OUT_INT *)frame->extended_data[ch];
+        left_samples[ch] = frame->nb_samples;
+        offsets[ch] = AV_RX32(buf);
+        buf += 4;
+        buf_size -= 4;
+    }
+
+    for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch += ch_step) {
         MPADecodeContext *m = s->mp3decctx[ch];
-        unsigned int offset, next_offset;
+        int next_offset = buf_size, offset = offsets[ch];
         const uint8_t *fbuf;
         int fsize;
 
 #define IS_VIRTUAL_OFFSET(x) ((x) == 0x1 || (x) == 0x1000000)
 
-        offset = AV_RX32(&buf[4 + ch*4]);
         if (IS_VIRTUAL_OFFSET(offset))
-            return AVERROR_INVALIDDATA;
+            continue;
 
-        nb_channels = 1;
-        if (ch + 1 < avctx->ch_layout.nb_channels) {
-            next_offset = AV_RX32(&buf[4 + (ch + 1)*4]);
-            if (IS_VIRTUAL_OFFSET(next_offset)) {
-                nb_channels = 2;
-                if (ch + 2 < avctx->ch_layout.nb_channels) {
-                    next_offset = AV_RX32(&buf[4 + (ch + 2)*4]);
-                    if (IS_VIRTUAL_OFFSET(next_offset))
-                        return AVERROR_INVALIDDATA;
-                } else {
-                    next_offset = buf_size - 4 - 4*avctx->ch_layout.nb_channels;
-                }
+        ch_step = 1;
+        for (int i = ch+1; i < avctx->ch_layout.nb_channels; i++) {
+            if (IS_VIRTUAL_OFFSET(offsets[i])) {
+                ch_step = 2;
+                continue;
             }
-        } else {
-            next_offset = buf_size - 4 - 4*avctx->ch_layout.nb_channels;
+
+            next_offset = offsets[i];
+            break;
         }
 
-        if (next_offset <= offset ||
-            offset > buf_size - 4 - 4*avctx->ch_layout.nb_channels ||
-            next_offset > buf_size - 4 - 4*avctx->ch_layout.nb_channels)
-            return AVERROR_INVALIDDATA;
-
-        fbuf = buf + 4 + 4*avctx->ch_layout.nb_channels + offset;
+        fbuf = buf + offset;
         fsize = next_offset - offset;
-
-        for (int frame_nr = 0; fsize > 3; frame_nr++) {
-            int consumed;
-
-            if ((frame_nr + 1) * EA_FRAME_SIZE > frame->nb_samples)
-                return AVERROR_INVALIDDATA;
-
-            consumed = ealayer3_dec_frame(m, decoded_buf, fbuf, fsize, 0);
-            if (consumed < 0)
-                return AVERROR_INVALIDDATA;
-
-            fbuf += consumed;
-            fsize -= consumed;
-
-            if (m->nb_channels != nb_channels)
-                return AVERROR_INVALIDDATA;
-
-            if (m->nb_channels == 1) {
-                OUT_INT *out = out_samples[ch] + frame_nr*EA_FRAME_SIZE;
-                for(int j = 0; j < EA_FRAME_SIZE; j++)
-                    *out++ = decoded_buf[j];
-            } else {
-                OUT_INT *out0, *out1;
-                out0 = out_samples[ch    ] + frame_nr*EA_FRAME_SIZE;
-                out1 = out_samples[ch + 1] + frame_nr*EA_FRAME_SIZE;
-                for(int j = 0; j < EA_FRAME_SIZE; j++) {
-                    *out0++ = decoded_buf[j*2];
-                    *out1++ = decoded_buf[j*2 + 1];
-                }
-                nb_samples[ch + 1] += EA_FRAME_SIZE;
-            }
-            nb_samples[ch] += EA_FRAME_SIZE;
-        }
-    }
-
-    for (int i = 1; i < avctx->ch_layout.nb_channels; i++) {
-        if (nb_samples[i] != nb_samples[0]) {
-            av_log(avctx, AV_LOG_ERROR, "unbalanced nb_samples\n");
+        if (fsize < 2)
             return AVERROR_INVALIDDATA;
-        }
+
+        do {
+            OUT_INT *out_samples2[2];
+
+            for (int i = ch; i < ch + ch_step && i < avctx->ch_layout.nb_channels; i++)
+                out_samples2[i] = out_samples[i];
+
+            ret = ealayer3_dec_frame(m, out_samples2, fbuf, fsize, 0);
+            if (ret < 0)
+                return ret;
+
+            for (int i = ch; i < ch + ch_step && i < avctx->ch_layout.nb_channels; i++) {
+                out_samples[i] += EA_FRAME_SIZE;
+                left_samples[i] -= EA_FRAME_SIZE;
+            }
+
+            fbuf += ret;
+            fsize -= ret;
+        } while (fsize > 0 && left_samples[ch] >= EA_FRAME_SIZE);
     }
 
-    if (pkt_nb_samples != nb_samples[0])
-        av_log(avctx, AV_LOG_WARNING, "pkt_nb_samples:%d, actually decoded:%d\n", pkt_nb_samples, nb_samples[0]);
-
-    frame->nb_samples = nb_samples[0];
     *got_frame_ptr = 1;
 
     return avpkt->size;

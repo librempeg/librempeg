@@ -78,18 +78,20 @@ static int ealayer3_read_header(AVFormatContext *s)
 static int ealayer3_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     int64_t pos = avio_tell(s->pb);
-    int size, ret;
+    int size, duration, ret;
 
     size = avio_rb32(s->pb);
     if (size < 10)
         return AVERROR_INVALIDDATA;
+    duration = avio_rb32(s->pb);
 
-    ret = av_get_packet(s->pb, pkt, size - 4);
+    ret = av_get_packet(s->pb, pkt, size - 8);
     if (ret < 0)
         return ret;
 
     pkt->pos = pos;
     pkt->stream_index = 0;
+    pkt->duration = duration;
 
     return 0;
 }
