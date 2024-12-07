@@ -470,7 +470,9 @@ static int decode_p_frame(FourXContext *f, const uint8_t *buf, int length)
         return AVERROR(ENOMEM);
     f->bbdsp.bswap_buf(f->bitstream_buffer, (const uint32_t *) (buf + extra),
                        bitstream_size / 4);
-    init_get_bits(&f->gb, f->bitstream_buffer, 8 * bitstream_size);
+    ret = init_get_bits8(&f->gb, f->bitstream_buffer, bitstream_size);
+    if (ret < 0)
+        return ret;
 
     wordstream_offset = extra + bitstream_size;
     bytestream_offset = extra + bitstream_size + wordstream_size;
@@ -804,7 +806,9 @@ static int decode_i_frame(FourXContext *f, const uint8_t *buf, int length)
 
     av_assert0(prestream <= buf + length);
 
-    init_get_bits(&f->gb, buf + 4, 8 * bitstream_size);
+    ret = init_get_bits8(&f->gb, buf + 4, bitstream_size);
+    if (ret < 0)
+        return ret;
 
     prestream_size = length + buf - prestream;
 
@@ -814,7 +818,9 @@ static int decode_i_frame(FourXContext *f, const uint8_t *buf, int length)
         return AVERROR(ENOMEM);
     f->bbdsp.bswap_buf(f->bitstream_buffer, (const uint32_t *) prestream,
                        prestream_size / 4);
-    init_get_bits(&f->pre_gb, f->bitstream_buffer, 8 * prestream_size);
+    ret = init_get_bits8(&f->pre_gb, f->bitstream_buffer, prestream_size);
+    if (ret < 0)
+        return ret;
 
     f->last_dc = 0 * 128 * 8 * 8;
 
@@ -1030,6 +1036,14 @@ static av_cold int decode_init(AVCodecContext *avctx)
     return 0;
 }
 
+static av_cold void decode_flush(AVCodecContext *avctx)
+{
+    FourXContext *s = avctx->priv_data;
+
+    for (int i = 0; i < CFRAME_BUFFER_COUNT; i++)
+        s->cfrm[i].id = 0;
+}
+
 const FFCodec ff_fourxm_decoder = {
     .p.name         = "4xm",
     CODEC_LONG_NAME("4X Movie"),
@@ -1039,6 +1053,7 @@ const FFCodec ff_fourxm_decoder = {
     .init           = decode_init,
     .close          = decode_end,
     FF_CODEC_DECODE_CB(decode_frame),
+    .flush          = decode_flush,
     .p.capabilities = AV_CODEC_CAP_DR1,
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
 };
