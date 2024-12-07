@@ -339,6 +339,14 @@ static int fourxm_read_packet(AVFormatContext *s,
             } else {
                 packet_read = 1;
                 av_shrink_packet(pkt, ret + 8);
+                switch (fourcc_tag) {
+                case ifrm_TAG:
+                case ifr2_TAG:
+                    pkt->flags |= AV_PKT_FLAG_KEY;
+                    break;
+                default:
+                    break;
+                }
             }
             break;
 
