@@ -375,6 +375,7 @@ static int fourxm_read_packet(AVFormatContext *s,
                     audio_frame_count /=
                         (fourxm->tracks[track_number].bits / 8);
                 pkt->duration = audio_frame_count;
+                pkt->flags   |= AV_PKT_FLAG_KEY;
             } else {
                 avio_skip(pb, size);
             }
