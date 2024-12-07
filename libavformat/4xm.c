@@ -73,7 +73,6 @@ typedef struct AudioTrack {
     int channels;
     int stream_index;
     int adpcm;
-    int64_t audio_pts;
 } AudioTrack;
 
 typedef struct FourxmDemuxContext {
@@ -159,7 +158,6 @@ static int parse_strk(AVFormatContext *s,
     fourxm->tracks[track].channels    = AV_RL32(buf + 36);
     fourxm->tracks[track].sample_rate = AV_RL32(buf + 40);
     fourxm->tracks[track].bits        = AV_RL32(buf + 44);
-    fourxm->tracks[track].audio_pts   = 0;
 
     if (fourxm->tracks[track].channels    <= 0 ||
         fourxm->tracks[track].channels     > FF_SANE_NB_CHANNELS ||
@@ -362,7 +360,6 @@ static int fourxm_read_packet(AVFormatContext *s,
                     return ret;
                 pkt->stream_index =
                     fourxm->tracks[track_number].stream_index;
-                pkt->pts    = fourxm->tracks[track_number].audio_pts;
                 packet_read = 1;
 
                 /* pts accounting */
@@ -375,7 +372,7 @@ static int fourxm_read_packet(AVFormatContext *s,
                 } else
                     audio_frame_count /=
                         (fourxm->tracks[track_number].bits / 8);
-                fourxm->tracks[track_number].audio_pts += audio_frame_count;
+                pkt->duration = audio_frame_count;
             } else {
                 avio_skip(pb, size);
             }
