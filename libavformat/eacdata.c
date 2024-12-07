@@ -53,19 +53,19 @@ static int cdata_read_header(AVFormatContext *s)
 
     header = avio_rb16(pb);
     switch (header) {
-        case 0x0400:
-            channel_layout = (AVChannelLayout){ .nb_channels = 1, .order = AV_CHANNEL_ORDER_UNSPEC };
-            break;
-        case 0x0404:
-            channel_layout  = (AVChannelLayout){ .nb_channels = 2, .order = AV_CHANNEL_ORDER_UNSPEC };
-            break;
-        case 0x040C:
-            channel_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_QUAD;         break;
-        case 0x0414:
-            channel_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT1_BACK; break;
-        default:
-            av_log(s, AV_LOG_INFO, "unknown header 0x%04x\n", header);
-            return -1;
+    case 0x0400:
+        channel_layout = (AVChannelLayout){ .nb_channels = 1, .order = AV_CHANNEL_ORDER_UNSPEC };
+        break;
+    case 0x0404:
+        channel_layout  = (AVChannelLayout){ .nb_channels = 2, .order = AV_CHANNEL_ORDER_UNSPEC };
+        break;
+    case 0x040C:
+        channel_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_QUAD;         break;
+    case 0x0414:
+        channel_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT1_BACK; break;
+    default:
+        av_log(s, AV_LOG_INFO, "unknown header 0x%04x\n", header);
+        return AVERROR_INVALIDDATA;
     };
 
     sample_rate = avio_rb16(pb);
