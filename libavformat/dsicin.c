@@ -54,8 +54,6 @@ typedef struct CinDemuxContext {
     int audio_stream_index;
     int video_stream_index;
     CinFileHeader file_header;
-    int64_t audio_stream_pts;
-    int64_t video_stream_pts;
     CinFrameHeader frame_header;
     int audio_buffer_size;
 } CinDemuxContext;
@@ -106,8 +104,6 @@ static int cin_read_header(AVFormatContext *s)
     if (rc)
         return rc;
 
-    cin->video_stream_pts = 0;
-    cin->audio_stream_pts = 0;
     cin->audio_buffer_size = 0;
 
     /* initialize the video decoder stream */
@@ -196,7 +192,7 @@ static int cin_read_packet(AVFormatContext *s, AVPacket *pkt)
             return ret;
 
         pkt->stream_index = cin->video_stream_index;
-        pkt->pts = cin->video_stream_pts++;
+        pkt->duration = 1;
 
         pkt->data[0] = palette_type;
         pkt->data[1] = hdr->pal_colors_count & 0xFF;
@@ -221,9 +217,7 @@ static int cin_read_packet(AVFormatContext *s, AVPacket *pkt)
         return ret;
 
     pkt->stream_index = cin->audio_stream_index;
-    pkt->pts = cin->audio_stream_pts;
     pkt->duration = cin->audio_buffer_size - (pkt->pts == 0);
-    cin->audio_stream_pts += pkt->duration;
     cin->audio_buffer_size = 0;
     return 0;
 }
