@@ -150,3 +150,13 @@ int ff_mpa_decode_header(uint32_t head, int *sample_rate, int *channels, int *fr
     *bit_rate = s->bit_rate;
     return s->frame_size;
 }
+
+int avpriv_ealayer3_decode_header(MPADecodeHeader *s, int header)
+{
+    int mode_ext = header & 3;
+    int mode = (header >> 2) & 3;
+    int sfreq_idx = (header >> 4) & 3;
+    int version = (header >> 6) & 3;
+    uint32_t mpeg = (0x7FF << 21) | (version << 19) | (1 << 17) | (sfreq_idx << 10) | (mode << 6) | (mode_ext << 4);
+    return avpriv_mpegaudio_decode_header(s, mpeg);
+}

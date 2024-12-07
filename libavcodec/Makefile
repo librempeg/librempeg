@@ -354,6 +354,10 @@ OBJS-$(CONFIG_DWVW_DECODER)            += dwvwdec.o
 OBJS-$(CONFIG_EAC3_DECODER)            += eac3_data.o
 OBJS-$(CONFIG_EAC3_ENCODER)            += eac3enc.o eac3_data.o
 OBJS-$(CONFIG_EACMV_DECODER)           += eacmv.o
+OBJS-$(CONFIG_EALAYER3_DECODER)        += mpegaudiodec_fixed.o
+OBJS-$(CONFIG_EALAYER3FLOAT_DECODER)   += mpegaudiodec_float.o
+OBJS-$(CONFIG_EALAYER3MULTI_DECODER)   += mpegaudiodec_fixed.o
+OBJS-$(CONFIG_EALAYER3MULTIFLOAT_DECODER) += mpegaudiodec_float.o
 OBJS-$(CONFIG_EAMAD_DECODER)           += eamad.o eaidct.o mpeg12.o \
                                           mpeg12data.o
 OBJS-$(CONFIG_EATGQ_DECODER)           += eatgq.o eaidct.o
