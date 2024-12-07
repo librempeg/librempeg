@@ -35,11 +35,6 @@
 
 #include "libavutil/channel_layout.h"
 
-typedef struct CdataDemuxContext {
-  unsigned int channels;
-  unsigned int audio_pts;
-} CdataDemuxContext;
-
 static int cdata_probe(const AVProbeData *p)
 {
     const uint8_t *b = p->buf;
@@ -51,7 +46,6 @@ static int cdata_probe(const AVProbeData *p)
 
 static int cdata_read_header(AVFormatContext *s)
 {
-    CdataDemuxContext *cdata = s->priv_data;
     AVIOContext *pb = s->pb;
     unsigned int sample_rate, header;
     AVStream *st;
@@ -73,7 +67,6 @@ static int cdata_read_header(AVFormatContext *s)
             av_log(s, AV_LOG_INFO, "unknown header 0x%04x\n", header);
             return -1;
     };
-    cdata->channels = channel_layout.nb_channels;
 
     sample_rate = avio_rb16(pb);
     avio_skip(pb, (avio_r8(pb) & 0x20) ? 15 : 11);
@@ -88,19 +81,19 @@ static int cdata_read_header(AVFormatContext *s)
     st->codecpar->sample_rate = sample_rate;
     avpriv_set_pts_info(st, 64, 1, sample_rate);
 
-    cdata->audio_pts = 0;
     return 0;
 }
 
 static int cdata_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    CdataDemuxContext *cdata = s->priv_data;
-    int packet_size = 76*cdata->channels;
-
+    AVCodecParameters *par = s->streams[0]->codecpar;
+    const int packet_size = 76 * par->ch_layout.nb_channels;
     int ret = av_get_packet(s->pb, pkt, packet_size);
+
     if (ret < 0)
         return ret;
-    pkt->pts = cdata->audio_pts++;
+    pkt->duration = 128;
+
     return 0;
 }
 
@@ -108,7 +101,7 @@ const FFInputFormat ff_ea_cdata_demuxer = {
     .p.name         = "ea_cdata",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Electronic Arts cdata"),
     .p.extensions   = "cdata",
-    .priv_data_size = sizeof(CdataDemuxContext),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = cdata_probe,
     .read_header    = cdata_read_header,
     .read_packet    = cdata_read_packet,
