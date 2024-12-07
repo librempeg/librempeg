@@ -300,6 +300,7 @@ static int fourxm_read_packet(AVFormatContext *s,
     int packet_read = 0;
     unsigned char header[8];
     int64_t audio_frame_count;
+    int64_t pos = avio_tell(pb);
 
     while (!packet_read) {
         if ((ret = avio_read(s->pb, header, 8)) < 0)
@@ -330,7 +331,7 @@ static int fourxm_read_packet(AVFormatContext *s,
                 return ret;
             pkt->stream_index = fourxm->video_stream_index;
             pkt->duration     = 1;
-            pkt->pos          = avio_tell(s->pb);
+            pkt->pos          = pos;
             memcpy(pkt->data, header, 8);
             ret = avio_read(s->pb, &pkt->data[8], size);
 
@@ -376,6 +377,7 @@ static int fourxm_read_packet(AVFormatContext *s,
                         (fourxm->tracks[track_number].bits / 8);
                 pkt->duration = audio_frame_count;
                 pkt->flags   |= AV_PKT_FLAG_KEY;
+                pkt->pos      = pos;
             } else {
                 avio_skip(pb, size);
             }
@@ -402,6 +404,7 @@ const FFInputFormat ff_fourxm_demuxer = {
     .p.name         = "4xm",
     .p.long_name    = NULL_IF_CONFIG_SMALL("4X Technologies"),
     .priv_data_size = sizeof(FourxmDemuxContext),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
     .read_probe     = fourxm_probe,
     .read_header    = fourxm_read_header,
