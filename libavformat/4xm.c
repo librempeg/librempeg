@@ -365,7 +365,7 @@ static int fourxm_read_packet(AVFormatContext *s,
                 /* pts accounting */
                 audio_frame_count = size;
                 if (fourxm->tracks[track_number].adpcm)
-                    audio_frame_count -= 2 * (fourxm->tracks[track_number].channels);
+                    audio_frame_count -= 4 * (fourxm->tracks[track_number].channels);
                 audio_frame_count /= fourxm->tracks[track_number].channels;
                 if (fourxm->tracks[track_number].adpcm) {
                     audio_frame_count *= 2;
