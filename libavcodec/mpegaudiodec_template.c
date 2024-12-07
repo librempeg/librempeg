@@ -2116,7 +2116,7 @@ static int decode_frame_ealayer3multi(AVCodecContext *avctx, AVFrame *frame,
             OUT_INT *out_samples2[2];
 
             for (int i = ch; i < ch + ch_step && i < avctx->ch_layout.nb_channels; i++)
-                out_samples2[i] = out_samples[i];
+                out_samples2[i - ch] = out_samples[i];
 
             ret = ealayer3_dec_frame(m, out_samples2, fbuf, fsize, 0);
             if (ret < 0)
