@@ -2493,6 +2493,8 @@ eoi_parser:
 
             av_frame_move_ref(frame, s->picture_ptr);
 
+            if (s->lossless)
+                frame->flags |= AV_FRAME_FLAG_LOSSLESS;
             *got_frame = 1;
             s->got_picture = 0;
 
