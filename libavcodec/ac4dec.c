@@ -1441,6 +1441,8 @@ static int ac4_presentation_v1_info(AC4DecodeContext *s, PresentationInfo *p)
     if (s->version != 1)
         p->presentation_version = get_unary(gb, 0, 31);
 
+    s->total_groups = 0;
+
     if (single_substream_group != 1 && p->presentation_config == 6) {
         p->add_emdf_substreams = 1;
     } else {
