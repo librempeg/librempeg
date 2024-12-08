@@ -167,7 +167,7 @@ static int str_read_packet(AVFormatContext *s,
     AVPacket *pkt;
     AVStream *st;
 
-    while (1) {
+    while (!avio_feof(pb)) {
         int read = avio_read(pb, sector, RAW_CD_SECTOR_SIZE);
 
         if (read == AVERROR_EOF)
@@ -282,10 +282,9 @@ static int str_read_packet(AVFormatContext *s,
             /* drop the sector and move on */
             break;
         }
-
-        if (avio_feof(pb))
-            return AVERROR(EIO);
     }
+
+    return AVERROR_EOF;
 }
 
 static int str_read_close(AVFormatContext *s)
