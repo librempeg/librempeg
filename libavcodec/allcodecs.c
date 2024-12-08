@@ -288,6 +288,7 @@ extern const FFCodec ff_r210_decoder;
 extern const FFCodec ff_rasc_decoder;
 extern const FFCodec ff_rawvideo_encoder;
 extern const FFCodec ff_rawvideo_decoder;
+extern const FFCodec ff_rfb_decoder;
 extern const FFCodec ff_rfbw_decoder;
 extern const FFCodec ff_rka_decoder;
 extern const FFCodec ff_rl2_decoder;
