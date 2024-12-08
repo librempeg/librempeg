@@ -6,8 +6,24 @@ version <next>:
 - aasrc audio filter
 - peakpass audio filter
 - audio invert filter
+- audio envelope filter
+- audio wiener filter
 - RV60 video decoder
 - OpenMAX encoders deprecated
+- HVQM2 video decoder
+- ADPCM IMA HVQM2 audio decoder
+- HVQM2 demuxer
+- ILDA video decoder and ILDA demuxer
+- ADPCM IMA XBOX audio decoder
+- native LC3 audio decoder
+- ADPCM N64 audio decoder
+- TAC audio decoder and demuxer
+- AHX audio decoder
+- DWVW audio decoder
+- UTK and UTK R3 audio decoder and demuxer
+- EALAYER3 and EALAYER3MULTI audio decoder
+- EALAYER3 demuxer
+
 
 version 7.1:
 - CLAP wrapper audio filter
