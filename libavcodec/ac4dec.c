@@ -913,7 +913,7 @@ static int content_type(AC4DecodeContext *s, PresentationInfo *p)
 {
     GetBitContext *gb = &s->gbc;
 
-    skip_bits(gb, 3);
+    s->avctx->audio_service_type = get_bits(gb, 3);
     if (get_bits1(gb)) {
         if (get_bits1(gb)) {
             skip_bits(gb, 1);
