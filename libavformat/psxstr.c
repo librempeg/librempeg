@@ -261,8 +261,7 @@ static int str_read_packet(AVFormatContext *s,
             //    st->codecpar->bit_rate = 0; //FIXME;
                 st->codecpar->block_align = 128;
 
-                avpriv_set_pts_info(st, 64, 18 * 224 / st->codecpar->ch_layout.nb_channels,
-                                    st->codecpar->sample_rate);
+                avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
                 st->start_time = 0;
             }
             pkt = ret_pkt;
@@ -272,7 +271,7 @@ static int str_read_packet(AVFormatContext *s,
 
             pkt->stream_index =
                 str->channels[channel].audio_stream_index;
-            pkt->duration = 1;
+            pkt->duration = 18 * 224 / s->streams[pkt->stream_index]->codecpar->ch_layout.nb_channels;
             return 0;
         case CDXA_TYPE_EMPTY: /* CD-ROM XA, May 1991, 4.3.2.3 */
             /* NOTE this also catches 0x80 (EOF bit) because of CDXA_TYPE_MASK */
