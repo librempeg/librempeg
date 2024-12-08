@@ -8,6 +8,13 @@ fate-filter-owdenoise-sample: CMP_TARGET = 1
 fate-filter-owdenoise-sample: FUZZ = 3539
 fate-filter-owdenoise-sample: CMP = oneoff
 
+FATE_FILTER_SAMPLES-$(call ENCMUX, RAWVIDEO, RAWVIDEO, EQ_FILTER PIPE_PROTOCOL) += fate-filter-eq
+fate-filter-eq: CMD = ffmpeg -filter_complex 'testsrc2=size=160x60:rate=1:duration=10,eq=contrast=5:brightness=1:saturation=5:gamma=2' -f rawvideo -
+fate-filter-eq: REF = $(SAMPLES)/filter-reference/eq.raw
+fate-filter-eq: CMP = oneoff
+fate-filter-eq: CMP_UNIT = 1
+fate-filter-eq: CMP_TARGET = 1
+
 FATE_FILTER_SAMPLES-$(call FILTERDEMDEC, PERMS DELOGO, RM, RV30) += fate-filter-delogo
 fate-filter-delogo: CMD = framecrc -i $(TARGET_SAMPLES)/real/rv30.rm -vf perms=random,delogo=show=0:x=290:y=25:w=26:h=16 -an
 
