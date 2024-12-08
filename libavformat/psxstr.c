@@ -135,6 +135,8 @@ static int str_read_header(AVFormatContext *s)
     unsigned char sector[RAW_CD_SECTOR_SIZE];
     int start;
 
+    s->bit_rate = 355000 * 8LL;
+
     /* skip over any RIFF header */
     if (avio_read(pb, sector, RIFF_HEADER_SIZE) != RIFF_HEADER_SIZE)
         return AVERROR(EIO);
@@ -183,7 +185,6 @@ static int str_read_packet(AVFormatContext *s,
         case CDXA_TYPE_DATA:
         case CDXA_TYPE_VIDEO:
             {
-
                 int current_sector = AV_RL16(&sector[0x1C]);
                 int sector_count   = AV_RL16(&sector[0x1E]);
                 int frame_size = AV_RL32(&sector[0x24]);
@@ -258,7 +259,6 @@ static int str_read_packet(AVFormatContext *s,
                 st->codecpar->codec_tag   = 0;  /* no fourcc */
                 av_channel_layout_default(&st->codecpar->ch_layout, (fmt & 1) + 1);
                 st->codecpar->sample_rate = (fmt&4)?18900:37800;
-            //    st->codecpar->bit_rate = 0; //FIXME;
                 st->codecpar->block_align = 128;
 
                 avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
