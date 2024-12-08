@@ -516,7 +516,9 @@ static void show_help_filter(const char *name)
         av_bprintf(&bp, "  %s\n", f->description);
 
     if (f->flags & AVFILTER_FLAG_SLICE_THREADS)
-        av_bprintf(&bp, "    slice threading supported\n");
+        printf("    slice threading supported\n");
+    if (f->flags & AVFILTER_FLAG_FRAME_THREADS)
+        av_bprintf(&bp, "    frame threading supported\n");
 
     av_bprintf(&bp, "    Inputs:\n");
     count = avfilter_filter_pad_count(f, 0);
@@ -830,9 +832,10 @@ int show_filters(void *optctx, const char *opt, const char *arg)
     const AVFilterPad *pad;
 
     printf("Filters:\n"
-           "  T.. = Timeline support\n"
-           "  .S. = Slice threading\n"
-           "  ..C = Command support\n"
+           "  T... = Timeline support\n"
+           "  .S.. = Slice threading\n"
+           "  ..C. = Command support\n"
+           "  ...F = Frame threading\n"
            "  A = Audio input/output\n"
            "  V = Video input/output\n"
            "  N = Dynamic number and/or type of input/output\n"
@@ -857,10 +860,11 @@ int show_filters(void *optctx, const char *opt, const char *arg)
                                   ( i && (filter->flags & AVFILTER_FLAG_DYNAMIC_OUTPUTS))) ? 'N' : '|';
         }
         *descr_cur = 0;
-        printf(" %c%c%c %-17s %-10s %s\n",
+        printf(" %c%c%c%c %-17s %-10s %s\n",
                filter->flags & AVFILTER_FLAG_SUPPORT_TIMELINE ? 'T' : '.',
                filter->flags & AVFILTER_FLAG_SLICE_THREADS    ? 'S' : '.',
                filter_have_commands(filter)                   ? 'C' : '.',
+               filter->flags & AVFILTER_FLAG_FRAME_THREADS    ? 'F' : '.',
                filter->name, descr, filter->description);
     }
 #else
