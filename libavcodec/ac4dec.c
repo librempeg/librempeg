@@ -1378,9 +1378,13 @@ static int ac4_substream_group_info(AC4DecodeContext *s,
         n_lf_substreams = 1;
     } else {
         n_lf_substreams = get_bits(gb, 2) + 2;
-        if (n_lf_substreams == 5)
+        if (n_lf_substreams == 5) {
             n_lf_substreams += variable_bits(gb, 2);
+            if (n_lf_substreams > 16) /* arbitary limit to prevent slowdowns */
+                 return AVERROR_INVALIDDATA;
+        }
     }
+
     g->channel_coded = get_bits1(gb);
     if (g->channel_coded) {
         for (int sus = 0; sus < n_lf_substreams; sus++) {
