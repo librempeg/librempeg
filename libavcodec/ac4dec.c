@@ -2153,7 +2153,7 @@ static int asf_psy_elements(AC4DecodeContext *s, Substream *ss,
         }
 
         max_sfb = get_max_sfb(s, ssch, g);
-        if (max_sfb > sfb_max_size) {
+        if (max_sfb >= sfb_max_size) {
             av_log(s->avctx, AV_LOG_ERROR, "max_sfb=%d > sfb_max_size=%d\n", max_sfb, sfb_max_size);
             return AVERROR_INVALIDDATA;
         }
