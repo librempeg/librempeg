@@ -2969,6 +2969,11 @@ static int aspx_atsg(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch,
             break;
         }
 
+        if (ssch->atsg_sig[0] < 0) {
+            av_log(s->avctx, AV_LOG_ERROR, "atsg_sig[0] < 0\n");
+            return AVERROR_INVALIDDATA;
+        }
+
         ssch->atsg_noise[0] = ssch->atsg_sig[0];
         ssch->atsg_noise[num_atsg_noise] = ssch->atsg_sig[num_atsg_sig];
         if (num_atsg_noise > 1)
