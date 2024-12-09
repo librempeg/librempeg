@@ -978,6 +978,8 @@ static int ac4_substream_info(AC4DecodeContext *s, PresentationInfo *p,
     ssi->substream_index = get_bits(gb, 2);
     if (ssi->substream_index == 3)
         ssi->substream_index += variable_bits(gb, 2);
+    if (ssi->substream_index >= FF_ARRAY_ELEMS(s->substream_type))
+        return AVERROR_INVALIDDATA;
     s->substream_type[ssi->substream_index] = ST_SUBSTREAM;
     av_log(s->avctx, AV_LOG_DEBUG, "substream index: %d\n", ssi->substream_index);
 
@@ -1106,6 +1108,8 @@ static int presentation_substream_info(AC4DecodeContext *s, PresentationSubstrea
     psi->substream_index = get_bits(gb, 2);
     if (psi->substream_index == 3)
         psi->substream_index += variable_bits(gb, 2);
+    if (psi->substream_index >= FF_ARRAY_ELEMS(s->substream_type))
+        return AVERROR_INVALIDDATA;
     s->substream_type[psi->substream_index] = ST_PRESENTATION;
     av_log(s->avctx, AV_LOG_DEBUG, "presentation substream index: %d\n", psi->substream_index);
 
@@ -1432,7 +1436,7 @@ static int ac4_sgi_specifier(AC4DecodeContext *s, SubstreamGroupInfo *g)
 static int ac4_presentation_v1_info(AC4DecodeContext *s, PresentationInfo *p)
 {
     GetBitContext *gb = &s->gbc;
-    int single_substream_group;
+    int single_substream_group, ret;
 
     single_substream_group = get_bits1(gb);
     if (single_substream_group != 1) {
@@ -1516,7 +1520,8 @@ static int ac4_presentation_v1_info(AC4DecodeContext *s, PresentationInfo *p)
         }
         p->pre_virtualized = get_bits1(gb);
         p->add_emdf_substreams = get_bits1(gb);
-        presentation_substream_info(s, &p->psinfo);
+        if ((ret = presentation_substream_info(s, &p->psinfo)) < 0)
+            return ret;
     }
 
     if (p->add_emdf_substreams) {
