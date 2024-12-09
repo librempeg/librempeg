@@ -2574,7 +2574,7 @@ static int ext_decode(AC4DecodeContext *s)
     int b, ext_val, N_ext = 0;
 
     b = get_bits1(gb);
-    while (b) {
+    while (b && N_ext + 4 < 21) {
         N_ext++;
         b = get_bits1(gb);
     }
