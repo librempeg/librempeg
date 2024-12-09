@@ -5780,7 +5780,7 @@ static void generate_noise(AC4DecodeContext *s, SubstreamChannel *ssch)
     }
 }
 
-static void generate_tones(AC4DecodeContext *s, SubstreamChannel *ssch)
+static int generate_tones(AC4DecodeContext *s, SubstreamChannel *ssch)
 {
     int atsg = 0;
 
@@ -5794,12 +5794,18 @@ static void generate_tones(AC4DecodeContext *s, SubstreamChannel *ssch)
             int idx;
 
             ssch->sine_idx_prev[ts][sb] = idx = sine_idx(sb, ts, s, ssch);
+            if (idx < 0) {
+                av_log(s->avctx, AV_LOG_ERROR, "negative sine_idx\n");
+                return AVERROR_INVALIDDATA;
+            }
             ssch->qmf_sine[0][ts][sb]  = ssch->sine_lev_sb_adj[atsg][sb];
             ssch->qmf_sine[0][ts][sb] *= aspx_sine[0][idx];
             ssch->qmf_sine[1][ts][sb]  = ssch->sine_lev_sb_adj[atsg][sb] * powf(-1, sb + ssch->sbx);
             ssch->qmf_sine[1][ts][sb] *= aspx_sine[1][idx];
         }
     }
+
+    return 0;
 }
 
 static void assemble_hf_signal(AC4DecodeContext *s, SubstreamChannel *ssch)
