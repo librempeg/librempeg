@@ -4666,7 +4666,10 @@ static int compute_window(AC4DecodeContext *s, float *w, int N,
         }
     }
 
-    av_assert0(i < 5);
+    if (i >= 5) {
+        av_log(s->avctx, AV_LOG_ERROR, "compute_window\n");
+        return AVERROR_INVALIDDATA;
+    }
 
     N_skip = (N - N_w) / 2;
     kernel = s->kbd_window[s->frame_len_base_idx][idx];
@@ -4900,7 +4903,7 @@ static void qmf_synthesis(AC4DecodeContext *s, SubstreamChannel *ssch, float *pc
     }
 }
 
-static void spectral_synthesis(AC4DecodeContext *s, SubstreamChannel *ssch)
+static int spectral_synthesis(AC4DecodeContext *s, SubstreamChannel *ssch)
 {
     LOCAL_ALIGNED_32(float, in, [2048]);
     LOCAL_ALIGNED_32(float, x, [4096]);
@@ -4912,6 +4915,7 @@ static void spectral_synthesis(AC4DecodeContext *s, SubstreamChannel *ssch)
     int Nfull = s->frame_len_base;
     int nskip, nskip_prev;
     int win = 0;
+    int ret;
 
     for (int g = 0; g < ssch->scp.num_window_groups; g++) {
         int midx = s->frame_len_base_idx;
@@ -4921,8 +4925,10 @@ static void spectral_synthesis(AC4DecodeContext *s, SubstreamChannel *ssch)
         if (!ssch->N_prev)
             ssch->N_prev = Nfull;
 
-        compute_window(s, winl, N, ssch->N_prev, Nfull, 0);
-        compute_window(s, winr, ssch->N_prev, N, Nfull, 1);
+        if ((ret = compute_window(s, winl, N, ssch->N_prev, Nfull, 0)) < 0)
+            return ret;
+        if ((ret = compute_window(s, winr, ssch->N_prev, N, Nfull, 1)) < 0)
+            return ret;
 
         for (int w = 0; w < ssch->scp.num_win_in_group[g]; w++) {
             nskip = (Nfull - N) / 2;
@@ -4976,6 +4982,8 @@ static void spectral_synthesis(AC4DecodeContext *s, SubstreamChannel *ssch)
 
         win += ssch->scp.num_win_in_group[g];
     }
+
+    return 0;
 }
 
 static int polyfit(int order,
@@ -5162,15 +5170,19 @@ static int get_qnoise_scale_factors(AC4DecodeContext *s, SubstreamChannel *ssch,
     return 0;
 }
 
-static void prepare_channel(AC4DecodeContext *s, int ch)
+static int prepare_channel(AC4DecodeContext *s, int ch)
 {
     Substream *ss = &s->substream;
     SubstreamChannel *ssch = &ss->ssch[ch];
+    int ret;
 
     spectral_reordering(s, ssch);
-    spectral_synthesis(s, ssch);
+    if ((ret = spectral_synthesis(s, ssch)) < 0)
+        return ret;
 
     qmf_analysis(s, ssch);
+
+    return 0;
 }
 
 static void aspx_processing(AC4DecodeContext *s, SubstreamChannel *ssch)
@@ -5993,8 +6005,10 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         break;
     }
 
-    for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++)
-        prepare_channel(s, ch);
+    for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++) {
+        if ((ret = prepare_channel(s, ch)) < 0)
+            return ret;
+    }
 
     switch (ssinfo->channel_mode) {
     case 0:
