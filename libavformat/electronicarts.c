@@ -270,6 +270,9 @@ static int process_audio_header_elements(AVFormatContext *s)
         case 16:
             ea->audio_codec = AV_CODEC_ID_MP3;
             break;
+        case 20:
+            ea->audio_codec = AV_CODEC_ID_ADPCM_IMA_XBOX;
+            break;
         case 23:
             ea->audio_codec = AV_CODEC_ID_EALAYER3MULTI;
             break;
@@ -593,12 +596,22 @@ static int ea_read_header(AVFormatContext *s)
         st->codecpar->codec_tag             = 0;   /* no tag */
         st->codecpar->ch_layout.nb_channels = ea->num_channels;
         st->codecpar->sample_rate           = ea->sample_rate;
-        st->codecpar->bits_per_coded_sample = ea->bytes * 8;
+        if (ea->audio_codec == AV_CODEC_ID_ADPCM_IMA_XBOX)
+            st->codecpar->bits_per_coded_sample = 4;
+        else
+            st->codecpar->bits_per_coded_sample = ea->bytes * 8;
         st->codecpar->bit_rate              = (int64_t)ea->num_channels *
                                               st->codecpar->sample_rate *
                                               st->codecpar->bits_per_coded_sample / 4;
-        st->codecpar->block_align           = ea->num_channels *
-                                              st->codecpar->bits_per_coded_sample;
+        if (ea->audio_codec == AV_CODEC_ID_ADPCM_IMA_XBOX) {
+            st->codecpar->block_align = 0x24;
+            if (ea->num_channels != 1) {
+                avpriv_report_missing_feature(s, "multichannel ADPCM IMA XBOX");
+                return AVERROR_PATCHWELCOME;
+            }
+        } else
+            st->codecpar->block_align = ea->num_channels *
+                                        st->codecpar->bits_per_coded_sample;
         ea->audio_stream_index           = st->index;
         st->start_time                   = 0;
         return 0;
@@ -674,6 +687,10 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
                     v = av_bswap32(v);
                 num_samples = v;
                 avio_seek(pb, -4, SEEK_CUR);
+            } else if (ea->audio_codec == AV_CODEC_ID_ADPCM_IMA_XBOX) {
+                num_samples = avio_rl32(pb);
+                avio_skip(pb, 4);
+                chunk_size -= 8;
             }
 
             if (partial_packet) {
@@ -721,6 +738,7 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
             case AV_CODEC_ID_UTK:
             case AV_CODEC_ID_UTK_R3:
             case AV_CODEC_ID_EALAYER3MULTI:
+            case AV_CODEC_ID_ADPCM_IMA_XBOX:
                 pkt->duration = num_samples;
                 break;
             case AV_CODEC_ID_ADPCM_PSX:
