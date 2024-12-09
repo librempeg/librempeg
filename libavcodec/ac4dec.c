@@ -1805,11 +1805,21 @@ static int get_grp_bits(AC4DecodeContext *s, SubstreamChannel *ssch)
     if (s->frame_len_base >= 1536 && ssch->scp.long_frame == 0)
         return n_grp_bits_a[ssch->scp.transf_length_idx[0]][ssch->scp.transf_length_idx[1]];
 
-    if (s->frame_len_base < 1536 && s->frame_len_base > 512)
+    if (s->frame_len_base < 1536 && s->frame_len_base > 512) {
+        if (ssch->scp.transf_length_idx[0] >= FF_ARRAY_ELEMS(n_grp_bits_b)) {
+            av_log(s->avctx, AV_LOG_ERROR, "transf_length_idx[0] overflow\n");
+            return 0;
+        }
         return n_grp_bits_b[ssch->scp.transf_length_idx[0]];
+    }
 
-    if (s->frame_len_base <= 512)
+    if (s->frame_len_base <= 512) {
+        if (ssch->scp.transf_length_idx[0] >= FF_ARRAY_ELEMS(n_grp_bits_c)) {
+            av_log(s->avctx, AV_LOG_ERROR, "transf_length_idx[0] overflow\n");
+            return 0;
+        }
         return n_grp_bits_c[ssch->scp.transf_length_idx[0]];
+    }
 
     return 0;
 }
