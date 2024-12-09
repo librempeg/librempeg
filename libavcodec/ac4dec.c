@@ -1619,6 +1619,9 @@ static int ac4_toc(AC4DecodeContext *s)
                 return ret;
         }
 
+        if (s->total_groups > FF_ARRAY_ELEMS(s->ssgroup))
+            return AVERROR_INVALIDDATA;
+
         av_log(s->avctx, AV_LOG_DEBUG, "total_groups: %d\n", s->total_groups + 1);
         for (int i = 0; i <= s->total_groups; i++) {
             ret = ac4_substream_group_info(s, &s->ssgroup[i]);
