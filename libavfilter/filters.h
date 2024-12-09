@@ -808,4 +808,37 @@ int ff_filter_execute(AVFilterContext *ctx, avfilter_action_func *func,
 
 int ff_filter_disabled(const AVFilterContext *ctx);
 
+/**
+ * Allocate buffers for a frame that will be output by a filter.
+ * Frame parameters will be derived from the corresponding link properties.
+ *
+ * For video, frame.width and frame.height may be optionally set on entry to
+ * this function to values not smaller than the link ones - that will cause a
+ * larger frame to be allocated.
+ *
+ * For audio, frame.nb_samples MUST be set on entry to this function.
+ *
+ * @param out_idx Index of the output on which the frame will be produced. When
+ *                a reference to the same frame will be sent to multiple
+ *                outputs, the index of the first of them should be used here.
+ * @param align Minimum data buffer and linesize alignment; set to 0 to choose
+ *              automatically.
+ *              For video, set to 1 to request contiguous lines with no padding
+ *              between them.
+ * @param flags currently unused
+ *
+ * @retval >=0 success
+ * @retval <0 negative error code
+ */
+int ff_filter_get_buffer_ext(AVFilterContext *ctx, AVFrame *frame,
+                             int out_idx, int align, unsigned flags);
+/**
+ * A simple version of ff_filter_get_buffer_ext() using trivial values for the
+ * extended parameters.
+ */
+static inline int ff_filter_get_buffer(AVFilterContext *ctx, AVFrame *frame)
+{
+    return ff_filter_get_buffer_ext(ctx, frame, 0, 0, 0);
+}
+
 #endif /* AVFILTER_FILTERS_H */

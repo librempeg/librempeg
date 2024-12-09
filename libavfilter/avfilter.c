@@ -1680,3 +1680,68 @@ int ff_filter_disabled(const AVFilterContext *ctx)
 {
     return cfffilterctx(ctx)->is_disabled;
 }
+
+int ff_filter_get_buffer_ext(AVFilterContext *ctx, AVFrame *frame,
+                             int out_idx, int align, unsigned flags)
+{
+    AVFilterLink *outlink;
+    AVFrame *tmp;
+
+    if (align)
+        return AVERROR(ENOSYS);
+
+    if (out_idx < 0 || out_idx >= ctx->nb_outputs) {
+        av_log(ctx, AV_LOG_ERROR, "Invalid output index: %d\n", out_idx);
+        return AVERROR_BUG;
+    }
+    outlink = ctx->outputs[out_idx];
+
+    switch (outlink->type) {
+    case AVMEDIA_TYPE_VIDEO: {
+        int w = frame->width  ? frame->width  : outlink->w;
+        int h = frame->height ? frame->height : outlink->h;
+        AVFrame *(*get_buffer)(AVFilterLink *, int, int) = outlink->dstpad->get_buffer.video;
+
+        if (!get_buffer)
+            get_buffer = ff_default_get_video_buffer;
+
+        if (w < outlink->w || h < outlink->h) {
+            av_log(ctx, AV_LOG_ERROR,
+                   "Allocating video frame with invalid dimensions: %dx%d<%dx%d\n",
+                   w, h, outlink->w, outlink->h);
+            return AVERROR_BUG;
+        }
+
+        tmp = get_buffer(outlink, w, h);
+        if (!tmp)
+            return AVERROR(ENOMEM);
+
+        break;
+        }
+    case AVMEDIA_TYPE_AUDIO: {
+        AVFrame *(*get_buffer)(AVFilterLink *, int) = outlink->dstpad->get_buffer.audio;
+        int nb_samples = frame->nb_samples;
+
+        if (!get_buffer)
+            get_buffer = ff_default_get_audio_buffer;
+
+        if (nb_samples <= 0) {
+            av_log(ctx, AV_LOG_ERROR, "Allocating frame with invalid sample count\n");
+            return AVERROR_BUG;
+        }
+
+        tmp = get_buffer(outlink, nb_samples);
+        if (!tmp)
+            return AVERROR(ENOMEM);
+
+        break;
+        }
+    default: av_assert0(0);
+    }
+
+    av_frame_unref(frame);
+    av_frame_move_ref(frame, tmp);
+    av_frame_free(&tmp);
+
+    return 0;
+}
