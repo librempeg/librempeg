@@ -1426,8 +1426,8 @@ static int ac4_sgi_specifier(AC4DecodeContext *s, SubstreamGroupInfo *g)
     GetBitContext *gb = &s->gbc;
 
     if (s->version == 1) {
-        av_assert0(0);
-        //ac4_substream_group_info(s);
+        ac4_substream_group_info(s, g);
+        //FIXME: g->group_index = ?
     } else {
         g->group_index = get_bits(gb, 3);
         if (g->group_index == 7)
