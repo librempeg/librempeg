@@ -4353,8 +4353,8 @@ static int audio_data(AC4DecodeContext *s, int channel_mode, int iframe)
         ret = channel_element_7x(s, channel_mode, iframe);
         break;
     default:
-        av_assert0(0);
-        break;
+        avpriv_report_missing_feature(s->avctx, "channel_mode=%d", channel_mode);
+        return AVERROR_PATCHWELCOME;
     }
 
     return ret;
