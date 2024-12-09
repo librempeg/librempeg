@@ -4631,7 +4631,7 @@ static int ac4_substream(AC4DecodeContext *s, SubstreamInfo *ssinfo)
     return 0;
 }
 
-static void spectral_reordering(AC4DecodeContext *s, SubstreamChannel *ssch)
+static int spectral_reordering(AC4DecodeContext *s, SubstreamChannel *ssch)
 {
     float *scaled_spec = ssch->scaled_spec;
     float *spec_reord = ssch->spec_reord;
@@ -4646,6 +4646,10 @@ static void spectral_reordering(AC4DecodeContext *s, SubstreamChannel *ssch)
         int transf_length_g = get_transf_length(s, ssch, g, NULL);
         const uint16_t *sfb_offset = get_sfb_offset(transf_length_g);
         int max_sfb = get_max_sfb(s, ssch, g);
+        if (max_sfb + 1 >= get_sfb_size(transf_length_g)) {
+            av_log(s->avctx, AV_LOG_ERROR, "max_sfb + 1 > get_sfb_size()\n");
+            return AVERROR_INVALIDDATA;
+        }
 
         for (int sfb = 0; sfb < max_sfb; sfb++) {
             for (int w = 0; w < ssch->scp.num_win_in_group[g]; w++) {
@@ -4655,6 +4659,8 @@ static void spectral_reordering(AC4DecodeContext *s, SubstreamChannel *ssch)
         }
         win += ssch->scp.num_win_in_group[g];
     }
+
+    return 0;
 }
 
 static int compute_window(AC4DecodeContext *s, float *w, int N,
@@ -5186,7 +5192,8 @@ static int prepare_channel(AC4DecodeContext *s, int ch)
     SubstreamChannel *ssch = &ss->ssch[ch];
     int ret;
 
-    spectral_reordering(s, ssch);
+    if ((ret = spectral_reordering(s, ssch)) < 0)
+        return ret;
     if ((ret = spectral_synthesis(s, ssch)) < 0)
         return ret;
 
