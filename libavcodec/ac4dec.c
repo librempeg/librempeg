@@ -1510,6 +1510,8 @@ static int ac4_presentation_v1_info(AC4DecodeContext *s, PresentationInfo *p)
                 p->n_substream_groups = get_bits(gb, 2) + 2;
                 if (p->n_substream_groups == 5)
                     p->n_substream_groups += variable_bits(gb, 2);
+                if (p->n_substream_groups > FF_ARRAY_ELEMS(s->ssgroup))
+                    return AVERROR_INVALIDDATA;
 
                 for (int sg = 0; sg < p->n_substream_groups; sg++)
                     ac4_sgi_specifier(s, &s->ssgroup[sg]);
