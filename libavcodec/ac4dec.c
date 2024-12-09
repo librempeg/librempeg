@@ -2163,6 +2163,10 @@ static int asf_psy_elements(AC4DecodeContext *s, Substream *ss,
         ssch->sect_sfb_offset[g][max_sfb] = group_offset;
         for (int sfb = 0; sfb < max_sfb; sfb++) {
             for (int j = ssch->sect_sfb_offset[g][sfb]; j < ssch->sect_sfb_offset[g][sfb+1]; j++) {
+                if (j >= FF_ARRAY_ELEMS(ssch->offset2g)) {
+                    av_log(s->avctx, AV_LOG_ERROR, "offset2g overflow\n");
+                    return AVERROR_INVALIDDATA;
+                }
                 ssch->offset2sfb[j] = sfb;
                 ssch->offset2g[j] = g;
             }
