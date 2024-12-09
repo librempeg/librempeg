@@ -1582,6 +1582,8 @@ static int ac4_toc(AC4DecodeContext *s)
     } else {
         if (get_bits1(gb)) {
             s->nb_presentations = 2 + variable_bits(gb, 2);
+            if (s->nb_presentations > FF_ARRAY_ELEMS(s->pinfo))
+                return AVERROR_INVALIDDATA;
         } else {
             s->nb_presentations = 0;
         }
