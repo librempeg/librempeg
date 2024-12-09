@@ -1058,6 +1058,8 @@ static int ac4_presentation_info(AC4DecodeContext *s, PresentationInfo *p)
         p->n_add_emdf_substreams = get_bits(gb, 2);
         if (p->n_add_emdf_substreams == 0)
             p->n_add_emdf_substreams = variable_bits(gb, 2) + 4;
+        if (p->n_add_emdf_substreams > FF_ARRAY_ELEMS(p->emdf))
+            return AVERROR_INVALIDDATA;
 
         for (int i = 0; i < p->n_add_emdf_substreams; i++)
             emdf_info(s, &p->emdf[i]);
@@ -1528,6 +1530,8 @@ static int ac4_presentation_v1_info(AC4DecodeContext *s, PresentationInfo *p)
         p->n_add_emdf_substreams = get_bits(gb, 2);
         if (p->n_add_emdf_substreams == 0)
             p->n_add_emdf_substreams = variable_bits(gb, 2) + 4;
+        if (p->n_add_emdf_substreams > FF_ARRAY_ELEMS(p->emdf))
+            return AVERROR_INVALIDDATA;
         for (int i = 0; i < p->n_add_emdf_substreams; i++)
             emdf_info(s, &p->emdf[i]);
     }
