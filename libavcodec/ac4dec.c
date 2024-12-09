@@ -5758,7 +5758,7 @@ static int noise_idx(int sb, int ts, AC4DecodeContext *s, SubstreamChannel *ssch
     return index % 512;
 }
 
-static void generate_noise(AC4DecodeContext *s, SubstreamChannel *ssch)
+static int generate_noise(AC4DecodeContext *s, SubstreamChannel *ssch)
 {
     int atsg = 0;
 
@@ -5774,10 +5774,16 @@ static void generate_noise(AC4DecodeContext *s, SubstreamChannel *ssch)
             int idx;
 
             ssch->noise_idx_prev[ts][sb] = idx = noise_idx(sb, ts, s, ssch);
+            if (idx < 0) {
+                av_log(s->avctx, AV_LOG_ERROR, "negative noise_idx\n");
+                return AVERROR_INVALIDDATA;
+            }
             ssch->qmf_noise[0][ts][sb] = ssch->noise_lev_sb_adj[atsg][sb] * aspx_noise[idx][0];
             ssch->qmf_noise[1][ts][sb] = ssch->noise_lev_sb_adj[atsg][sb] * aspx_noise[idx][1];
         }
     }
+
+    return 0;
 }
 
 static int generate_tones(AC4DecodeContext *s, SubstreamChannel *ssch)
