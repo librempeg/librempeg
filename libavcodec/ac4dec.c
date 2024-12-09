@@ -1072,6 +1072,8 @@ static int substream_index_table(AC4DecodeContext *s)
     s->nb_substreams = get_bits(gb, 2);
     if (s->nb_substreams == 0)
         s->nb_substreams = variable_bits(gb, 2) + 4;
+    if (s->nb_substreams > FF_ARRAY_ELEMS(s->substream_type))
+        return AVERROR_INVALIDDATA;
 
     av_log(s->avctx, AV_LOG_DEBUG, "nb_substreams: %d\n", s->nb_substreams);
 
