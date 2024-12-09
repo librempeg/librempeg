@@ -5938,6 +5938,12 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     presentation = FFMIN(s->target_presentation, FFMAX(0, s->nb_presentations - 1));
     ssinfo = s->version == 2 ? &s->ssgroup[0].ssinfo : &s->pinfo[presentation].ssinfo;
     avctx->sample_rate = s->fs_index ? 48000 : 44100;
+
+    if (ssinfo->channel_mode >= FF_ARRAY_ELEMS(ff_ac4_ch_layouts)) {
+        av_log(s->avctx, AV_LOG_ERROR, "invalid channel mode: %d\n", ssinfo->channel_mode);
+        return AVERROR_INVALIDDATA;
+    }
+
     avctx->ch_layout = ff_ac4_ch_layouts[ssinfo->channel_mode];
     //    avctx->sample_rate = av_rescale(s->frame_len_base,
     //				    s->resampling_ratio.num,
