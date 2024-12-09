@@ -2558,6 +2558,11 @@ static int asf_section_data(AC4DecodeContext *s, Substream *ss, SubstreamChannel
                 }
             }
 
+            if (k + sect_len >= FF_ARRAY_ELEMS(ssch->sfb_cb[0])) {
+                av_log(s->avctx, AV_LOG_ERROR, "k + sect_len overflow\n");
+                return AVERROR_INVALIDDATA;
+            }
+
             for (int sfb = k; sfb < k + sect_len; sfb++)
                 ssch->sfb_cb[g][sfb] = ssch->sect_cb[g][i];
             k += sect_len;
