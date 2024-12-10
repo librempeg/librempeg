@@ -150,6 +150,7 @@ OBJS-$(CONFIG_BETHSOFTVID_DEMUXER)       += bethsoftvid.o
 OBJS-$(CONFIG_BFI_DEMUXER)               += bfi.o
 OBJS-$(CONFIG_BINK_DEMUXER)              += bink.o
 OBJS-$(CONFIG_BINKA_DEMUXER)             += binka.o
+OBJS-$(CONFIG_BINKA_UE_DEMUXER)          += binka_ue.o
 OBJS-$(CONFIG_BINTEXT_DEMUXER)           += bintext.o sauce.o
 OBJS-$(CONFIG_BIT_DEMUXER)               += bit.o
 OBJS-$(CONFIG_BIT_MUXER)                 += bit.o
