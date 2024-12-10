@@ -63,6 +63,15 @@ static int activate(AVFilterContext *ctx)
         int plane_samples;
         AVFrame *out;
 
+        if (ctx->is_disabled) {
+            out = s->frames[0];
+
+            s->frames[0] = NULL;
+            av_frame_free(&s->frames[1]);
+
+            return ff_filter_frame(ctx->outputs[0], out);
+        }
+
         if (av_sample_fmt_is_planar(ctx->inputs[0]->format))
             plane_samples = FFALIGN(s->frames[0]->nb_samples, s->samples_align);
         else
@@ -183,4 +192,5 @@ const AVFilter ff_af_amultiply = {
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_FLTP,
                       AV_SAMPLE_FMT_DBL, AV_SAMPLE_FMT_DBLP),
+    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
 };
