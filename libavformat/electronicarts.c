@@ -404,6 +404,9 @@ static int process_ea_header(AVFormatContext *s)
         if (ea->big_endian)
             size = av_bswap32(size);
 
+        if (avio_feof(pb))
+            break;
+
         if (size < 8) {
             av_log(s, AV_LOG_ERROR, "chunk size too small\n");
             return AVERROR_INVALIDDATA;
