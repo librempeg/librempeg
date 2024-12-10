@@ -561,7 +561,7 @@ static int decode_static1(PixelModel3 *m, uint32_t val)
     return 0;
 }
 
-static int update_model2_to_6(PixelModel3 *m, uint8_t value, int a4)
+static int update_model2_to_6(PixelModel3 *m, uint8_t value, int a4, unsigned f0)
 {
     PixelModel3 n = {0};
     int c, d, e, f, g, q;
@@ -572,7 +572,7 @@ static int update_model2_to_6(PixelModel3 *m, uint8_t value, int a4)
     memset(n.symbols, 1u, a4);
 
     c = m->size;
-    d = 256 - c + (64 * c + 64);
+    d = 256 - c + (f0 * c + f0);
     for (e = 0; d <= 2048; e++) {
         d <<= 1;
     }
@@ -587,9 +587,9 @@ static int update_model2_to_6(PixelModel3 *m, uint8_t value, int a4)
 
         if (k == value) {
             d = p;
-            q = 128;
+            q = f0*2;
         } else {
-            q = 64;
+            q = f0;
         }
         l = q << e;
         n.freqs[2 * p] = l;
@@ -638,7 +638,7 @@ static int update_model2_to_3(PixelModel3 *m, uint32_t val)
     return 0;
 }
 
-static int decode_static2(PixelModel3 *m, uint32_t val)
+static int decode_static2(PixelModel3 *m, uint32_t val, unsigned f0)
 {
     uint32_t size;
 
@@ -651,7 +651,7 @@ static int decode_static2(PixelModel3 *m, uint32_t val)
                 a = 32;
             else
                 a = 64;
-            return update_model2_to_6(m, val, a);
+            return update_model2_to_6(m, val, a, f0);
         }
     }
 
@@ -823,6 +823,7 @@ static int update_model4_to_5(PixelModel3 *m, uint32_t value)
 
 static int decode_unit3(SCPRContext *s, PixelModel3 *m, uint32_t code, uint32_t *value)
 {
+    const unsigned max_length = (s->version == 4) ? 32 : 64;
     GetByteContext *gb = &s->gb;
     RangeCoder *rc = &s->rc;
     uint16_t a = 0, b = 0;
@@ -846,7 +847,7 @@ static int decode_unit3(SCPRContext *s, PixelModel3 *m, uint32_t code, uint32_t 
         break;
     case 2:
         *value = bytestream2_get_byte(&s->gb);
-        decode_static2(m, *value);
+        decode_static2(m, *value, max_length);
         sync_code3(gb, rc);
         break;
     case 3:

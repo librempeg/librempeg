@@ -499,7 +499,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
 {
     SCPRContext *s = avctx->priv_data;
     GetByteContext *gb = &s->gb;
-    int ret, type;
+    int ret, type, version;
 
     if (avctx->bits_per_coded_sample == 16) {
         if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
@@ -512,27 +512,34 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     bytestream2_init(gb, avpkt->data, avpkt->size);
 
     type = bytestream2_peek_byte(gb);
+    version = (type >> 4) + 1;
+    type &= 0xF;
 
-    if (type == 2) {
+    if (version == 1 && type == 2) {
         s->version = 1;
         s->get_freq = get_freq0;
         s->decode = decode0;
         frame->flags |= AV_FRAME_FLAG_KEY;
         ret = decompress_i(avctx, (uint32_t *)s->current_frame->data[0],
                            s->current_frame->linesize[0] / 4);
-    } else if (type == 18) {
+    } else if (version == 2 && type == 2) {
         s->version = 2;
         s->get_freq = get_freq;
         s->decode = decode;
         frame->flags |= AV_FRAME_FLAG_KEY;
         ret = decompress_i(avctx, (uint32_t *)s->current_frame->data[0],
                            s->current_frame->linesize[0] / 4);
-    } else if (type == 34) {
+    } else if (version == 3 && type == 2) {
         frame->flags |= AV_FRAME_FLAG_KEY;
         s->version = 3;
         ret = decompress_i3(avctx, (uint32_t *)s->current_frame->data[0],
                             s->current_frame->linesize[0] / 4);
-    } else if (type == 17 || type == 33) {
+    } else if (version == 4 && type == 2) {
+        frame->flags |= AV_FRAME_FLAG_KEY;
+        s->version = 4;
+        ret = decompress_i3(avctx, (uint32_t *)s->current_frame->data[0],
+                            s->current_frame->linesize[0] / 4);
+    } else if (type == 1 && version > 1) {
         uint32_t clr, *dst = (uint32_t *)s->current_frame->data[0];
         int y;
 
