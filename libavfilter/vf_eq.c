@@ -226,13 +226,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     EQContext *eq = ctx->priv;
     AVFrame *out;
     const AVPixFmtDescriptor *desc;
-    int i;
+    int i, ret;
 
-    out = ff_get_video_buffer(outlink, inlink->w, inlink->h);
-    if (!out) {
-        av_frame_free(&in);
+    out = av_frame_alloc();
+    if (!out)
         return AVERROR(ENOMEM);
-    }
+
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0)
+        return ret;
 
     av_frame_copy_props(out, in);
     desc = av_pix_fmt_desc_get(inlink->format);
@@ -341,7 +343,8 @@ const FFFilter ff_vf_eq = {
     .p.name          = "eq",
     .p.description   = NULL_IF_CONFIG_SMALL("Adjust brightness, contrast, gamma, and saturation."),
     .p.priv_class    = &eq_class,
-    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+                       AVFILTER_FLAG_FRAME_THREADS,
     .priv_size       = sizeof(EQContext),
     FILTER_INPUTS(eq_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
