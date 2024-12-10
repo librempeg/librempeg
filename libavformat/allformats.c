@@ -493,6 +493,7 @@ extern const FFOutputFormat ff_ttml_muxer;
 extern const FFInputFormat  ff_txd_demuxer;
 extern const FFInputFormat  ff_tty_demuxer;
 extern const FFInputFormat  ff_ty_demuxer;
+extern const FFInputFormat  ff_ueba_demuxer;
 extern const FFOutputFormat ff_uncodedframecrc_muxer;
 extern const FFInputFormat  ff_usm_demuxer;
 extern const FFInputFormat  ff_utk_demuxer;
