@@ -1098,7 +1098,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
             buf_size = FFMIN(buf_size, avctx->block_align);
         if (buf_size < 4 * ch)
             return AVERROR_INVALIDDATA;
-        nb_samples = (buf_size - 4 * ch) / (bsize * ch) * bsamples;
+        nb_samples = (buf_size - 4 * ch) / (bsize * ch) * bsamples + 1;
         ) /* End of CASE */
     case AV_CODEC_ID_ADPCM_MS:
         if (avctx->block_align > 0)
@@ -1331,7 +1331,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
         }
 
-        for (int n = 0; n < nb_samples / 8; n++) {
+        for (int n = 0; n < (nb_samples-1) / 8; n++) {
             for (int i = 0; i < channels; i++) {
                 ADPCMChannelStatus *cs = &c->status[i];
                 samples = &samples_p[i][1 + n * 8];
@@ -1342,6 +1342,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 }
             }
         }
+        frame->nb_samples--;
         ) /* End of CASE */
     CASE(ADPCM_4XM,
         for (int i = 0; i < channels; i++)
