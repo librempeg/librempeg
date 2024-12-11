@@ -10246,10 +10246,11 @@ static int mov_parse_tiles(AVFormatContext *s)
 
             for (k = 0; k < mov->nb_heif_item; k++) {
                 HEIFItem *item = &mov->heif_item[k];
-                AVStream *st = item->st;
+                AVStream *st;
 
-                if (item->item_id != tile_id)
+                if (!item || item->item_id != tile_id)
                     continue;
+                st = item->st;
                 if (!st) {
                     av_log(s, AV_LOG_WARNING, "HEIF item id %d from grid id %d doesn't "
                                               "reference a stream\n",
