@@ -500,6 +500,7 @@ extern const FFCodec ff_iac_decoder;
 extern const FFCodec ff_ilbc_decoder;
 extern const FFCodec ff_imc_decoder;
 extern const FFCodec ff_interplay_acm_decoder;
+extern const FFCodec ff_lhcelp_decoder;
 extern const FFCodec ff_mace3_decoder;
 extern const FFCodec ff_mace6_decoder;
 extern const FFCodec ff_metasound_decoder;
