@@ -1260,6 +1260,7 @@ OBJS-$(CONFIG_VP8_PARSER)              += vp8_parser.o
 OBJS-$(CONFIG_VP9_PARSER)              += vp9_parser.o
 OBJS-$(CONFIG_VVC_PARSER)              += vvc_parser.o
 OBJS-$(CONFIG_WEBP_PARSER)             += webp_parser.o
+OBJS-$(CONFIG_WWVORBIS_PARSER)         += wwvorbis_parser.o
 OBJS-$(CONFIG_XBM_PARSER)              += xbm_parser.o
 OBJS-$(CONFIG_XMA_PARSER)              += xma_parser.o
 OBJS-$(CONFIG_XWD_PARSER)              += xwd_parser.o
