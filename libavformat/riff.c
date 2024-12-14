@@ -618,6 +618,7 @@ const AVCodecTag ff_codec_wav_tags[] = {
     { AV_CODEC_ID_ADPCM_SWF,       ('S' << 8) + 'F' },
     /* HACK/FIXME: Does Vorbis in WAV/AVI have an (in)official ID? */
     { AV_CODEC_ID_VORBIS,          ('V' << 8) + 'o' },
+    { AV_CODEC_ID_WWVORBIS,        0xFFFF },
     { AV_CODEC_ID_NONE,      0 },
 };
 
