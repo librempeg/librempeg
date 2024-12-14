@@ -1898,3 +1898,71 @@ const FFCodec ff_vorbis_decoder = {
     .p.sample_fmts   = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                        AV_SAMPLE_FMT_NONE },
 };
+
+static av_cold int wwvorbis_decode_init(AVCodecContext *avctx)
+{
+    vorbis_context *vc = avctx->priv_data;
+    float scale = -1.0;
+    int bl0, bl1, ret;
+
+    if (!avctx->extradata || avctx->extradata_size < 48)
+        return AVERROR(EINVAL);
+
+    vc->avctx = avctx;
+    vc->audio_samplerate = avctx->sample_rate;
+    vc->audio_channels = avctx->ch_layout.nb_channels;
+    bl0 = avctx->extradata[46];
+    bl1 = avctx->extradata[47];
+    if (bl0 > 13 || bl0 < 6 || bl1 > 13 || bl1 < 6 || bl1 < bl0) {
+        av_log(vc->avctx, AV_LOG_ERROR, " Vorbis id header packet corrupt (illegal blocksize). \n");
+        return AVERROR_INVALIDDATA;
+    }
+    vc->blocksize[0] = 1 << bl0;
+    vc->blocksize[1] = 1 << bl1;
+    vc->win[0] = ff_vorbis_vwin[bl0 - 6];
+    vc->win[1] = ff_vorbis_vwin[bl1 - 6];
+
+    vc->channel_residues =  av_malloc_array(vc->blocksize[1]  / 2, vc->audio_channels * sizeof(*vc->channel_residues));
+    vc->saved            =  av_calloc(vc->blocksize[1] / 4, vc->audio_channels * sizeof(*vc->saved));
+    if (!vc->channel_residues || !vc->saved)
+        return AVERROR(ENOMEM);
+
+    vc->previous_window  = -1;
+
+    ret = av_tx_init(&vc->mdct[0], &vc->mdct_fn[0], AV_TX_FLOAT_MDCT, 1,
+                     vc->blocksize[0] >> 1, &scale, 0);
+    if (ret < 0)
+        return ret;
+
+    ret = av_tx_init(&vc->mdct[1], &vc->mdct_fn[1], AV_TX_FLOAT_MDCT, 1,
+                     vc->blocksize[1] >> 1, &scale, 0);
+    if (ret < 0)
+        return ret;
+
+    vc->fdsp = avpriv_float_dsp_alloc(vc->avctx->flags & AV_CODEC_FLAG_BITEXACT);
+    if (!vc->fdsp)
+        return AVERROR(ENOMEM);
+
+    ff_vorbisdsp_init(&vc->dsp);
+
+    avctx->sample_fmt = AV_SAMPLE_FMT_FLTP;
+
+    return 0;
+}
+
+const FFCodec ff_wwvorbis_decoder = {
+    .p.name          = "wwvorbis",
+    CODEC_LONG_NAME("Wwise Vorbis"),
+    .p.type          = AVMEDIA_TYPE_AUDIO,
+    .p.id            = AV_CODEC_ID_WWVORBIS,
+    .priv_data_size  = sizeof(vorbis_context),
+    .init            = wwvorbis_decode_init,
+    .close           = vorbis_decode_close,
+    FF_CODEC_DECODE_CB(vorbis_decode_frame),
+    .flush           = vorbis_decode_flush,
+    .p.capabilities  = AV_CODEC_CAP_DR1,
+    .caps_internal   = FF_CODEC_CAP_INIT_CLEANUP,
+    .p.ch_layouts    = ff_vorbis_ch_layouts,
+    .p.sample_fmts   = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
+                                                       AV_SAMPLE_FMT_NONE },
+};

@@ -569,6 +569,7 @@ enum AVCodecID {
     AV_CODEC_ID_UTK_R3,
     AV_CODEC_ID_EALAYER3,
     AV_CODEC_ID_EALAYER3MULTI,
+    AV_CODEC_ID_WWVORBIS,
 
     /* subtitle codecs */
     AV_CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.

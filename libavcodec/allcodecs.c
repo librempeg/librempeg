@@ -567,6 +567,7 @@ extern const FFCodec ff_wmav2_encoder;
 extern const FFCodec ff_wmav2_decoder;
 extern const FFCodec ff_wmavoice_decoder;
 extern const FFCodec ff_ws_snd1_decoder;
+extern const FFCodec ff_wwvorbis_decoder;
 extern const FFCodec ff_xma1_decoder;
 extern const FFCodec ff_xma2_decoder;
 
