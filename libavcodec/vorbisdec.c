@@ -1965,4 +1965,5 @@ const FFCodec ff_wwvorbis_decoder = {
     .p.ch_layouts    = ff_vorbis_ch_layouts,
     .p.sample_fmts   = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
                                                        AV_SAMPLE_FMT_NONE },
+    .bsfs            = "wwvorbis_to_vorbis",
 };
