@@ -876,6 +876,7 @@ OBJS-$(CONFIG_PCM_ALAW_DECODER)           += pcm.o
 OBJS-$(CONFIG_PCM_ALAW_ENCODER)           += pcm.o
 OBJS-$(CONFIG_PCM_BLURAY_ENCODER)         += pcm-blurayenc.o
 OBJS-$(CONFIG_PCM_BLURAY_DECODER)         += pcm-bluray.o
+OBJS-$(CONFIG_PCM_DAT_DECODER)            += pcm.o
 OBJS-$(CONFIG_PCM_DVD_DECODER)            += pcm-dvd.o
 OBJS-$(CONFIG_PCM_DVD_ENCODER)            += pcm-dvdenc.o
 OBJS-$(CONFIG_PCM_F16LE_DECODER)          += pcm.o

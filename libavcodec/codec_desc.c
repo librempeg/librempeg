@@ -2273,6 +2273,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("PCM SGA"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
     },
+    {
+        .id        = AV_CODEC_ID_PCM_DAT,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "pcm_dat",
+        .long_name = NULL_IF_CONFIG_SMALL("PCM DAT (NonLinear 12bit PCM)"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
+    },
 
     /* various ADPCM codecs */
     {

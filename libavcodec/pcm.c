@@ -243,7 +243,8 @@ static int pcm_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 }
 
 typedef struct PCMDecode {
-    short   table[256];
+    int16_t table[4096];
+    uint16_t perm[5760];
     void (*vector_fmul_scalar)(float *dst, const float *src, float mul,
                                int len);
     float   scale;
@@ -267,6 +268,11 @@ static av_cold int pcm_decode_init(AVCodecContext *avctx)
     case AV_CODEC_ID_PCM_VIDC:
         for (i = 0; i < 256; i++)
             s->table[i] = vidc2linear(i);
+        break;
+    case AV_CODEC_ID_PCM_DAT:
+        for (i = 0; i < 4096; i++)
+            s->table[i] = dat2linear(i);
+        dat_permute(s->perm);
         break;
     case AV_CODEC_ID_PCM_F16LE:
     case AV_CODEC_ID_PCM_F24LE:
@@ -373,6 +379,15 @@ static int pcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     /* get output buffer */
     frame->nb_samples = n * samples_per_block / channels;
+
+    if (avctx->codec_id == AV_CODEC_ID_PCM_DAT) {
+        /* we process 12-bit blocks per channel for DAT */
+        if (buf_size != 5760)
+            return AVERROR_INVALIDDATA;
+        n = buf_size;
+        frame->nb_samples = (n * 8 / 12) / channels;
+    }
+
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
     samples = frame->data[0];
@@ -424,6 +439,16 @@ static int pcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             int magn = *src & 0x7f;
             *samples++ = sign ? 128 - magn : 128 + magn;
             src++;
+        }
+        break;
+    case AV_CODEC_ID_PCM_DAT:
+        for (int i = 0; i < n; i += 3) {
+            int l = s->table[(src[s->perm[i]]<<4)+((src[s->perm[i+1]]&0xf0)>>4)];
+            int r = s->table[(src[s->perm[i+2]]<<4)+(src[s->perm[i+1]]&0xf)];
+
+            AV_WN16A(samples+0, l);
+            AV_WN16A(samples+2, r);
+            samples += 4;
         }
         break;
     case AV_CODEC_ID_PCM_S8_PLANAR:
@@ -627,4 +652,5 @@ PCM_CODEC  (PCM_U32LE,        AV_SAMPLE_FMT_S32, pcm_u32le,        "PCM unsigned
 PCM_CODEC  (PCM_S64BE,        AV_SAMPLE_FMT_S64, pcm_s64be,        "PCM signed 64-bit big-endian");
 PCM_CODEC  (PCM_S64LE,        AV_SAMPLE_FMT_S64, pcm_s64le,        "PCM signed 64-bit little-endian");
 PCM_CODEC  (PCM_VIDC,         AV_SAMPLE_FMT_S16, pcm_vidc,         "PCM Archimedes VIDC");
+PCM_DECODER(PCM_DAT,          AV_SAMPLE_FMT_S16, pcm_dat,          "PCM DAT (NonLinear 12bit PCM)");
 PCM_DECODER(PCM_SGA,          AV_SAMPLE_FMT_U8,  pcm_sga,          "PCM SGA");

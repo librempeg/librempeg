@@ -89,6 +89,71 @@ static av_cold int vidc2linear(unsigned char u_val)
     return (u_val & VIDC_SIGN_BIT) ? (BIAS - t) : (t - BIAS);
 }
 
+static av_cold void dat_permute(uint16_t *tab)
+{
+    int16_t datbuf[2][128][32] = { 0 };
+    int xx[5760] = { 0 };
+
+    for (int i = 0; i < 5760; i++)
+        xx[i] = i;
+
+    for (int i = 0; i < 2880; i++) {
+        if ((i % 6) >= 3)
+            FFSWAP(int, xx[i], xx[2880 + i]);
+    }
+
+    for (int i = 0; i < 1440 * 4; i++) {
+        int I, A, U, X, Y, Z;
+
+        I = i / 4;
+        U = 1 - (i % 2);
+        A = ((i & 2) / 2);
+        X = A % 2;
+        Y = (I % 52) + 75 * (I % 2) + (I / 832);
+        Z = 2 * (U + (I / 52)) - ((I / 52) % 2) - 32 * (I / 832);
+
+        datbuf[X][Y][Z] = i;
+    }
+
+    for (int i = 0; i < 5760; i++) {
+        int A, U, I, J, S, X, Y, Z;
+
+        S = i % 3;
+        I = i / 3;
+        A = I / 960;
+        U = (3 * (I / 2) + S) % 2;
+        J = 2 * ((3 * (I / 2) + S) / 2)+(I % 2) - (1440 * A);
+        X = (A + J) % 2;
+        Y = (J % 52) + 75 * (J % 2) + J / 832;
+        Z = 2 * (U + (J / 52)) - ((J / 52) % 2) - 32 * (J / 832);
+
+        tab[xx[i]] = datbuf[X][Y][Z];
+    }
+}
+
+static av_cold int dat2linear(const int16_t val)
+{
+    int t;
+
+    t = val;
+    if (t >= 0x800)
+        t = val - 0x1000;
+    if (t >= 1792)  return (t - 1536) * 64;
+    if (t >= 1536)  return (t - 1280) * 32;
+    if (t >= 1280)  return (t - 1024) * 16;
+    if (t >= 1024)  return (t -  768) *  8;
+    if (t >= 768)   return (t -  512) *  4;
+    if (t >= 512)   return (t -  256) *  2;
+    if (t >= 0)     return t;
+    if (t >= -512)  return t;
+    if (t >= -768)  return (t +  256) *  2;
+    if (t >= -1024) return (t +  512) *  4;
+    if (t >= -1280) return (t +  768) *  8;
+    if (t >= -1536) return (t + 1024) * 16;
+    if (t >= -1792) return (t + 1280) * 32;
+    return (t + 1536) * 64;
+}
+
 #if CONFIG_HARDCODED_TABLES
 #define pcm_alaw_tableinit()
 #define pcm_ulaw_tableinit()

@@ -374,6 +374,7 @@ enum AVCodecID {
     AV_CODEC_ID_PCM_F24LE,
     AV_CODEC_ID_PCM_VIDC,
     AV_CODEC_ID_PCM_SGA,
+    AV_CODEC_ID_PCM_DAT,
 
     /* various ADPCM codecs */
     AV_CODEC_ID_ADPCM_IMA_QT = 0x11000,

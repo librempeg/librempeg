@@ -576,6 +576,7 @@ extern const FFCodec ff_pcm_alaw_encoder;
 extern const FFCodec ff_pcm_alaw_decoder;
 extern const FFCodec ff_pcm_bluray_encoder;
 extern const FFCodec ff_pcm_bluray_decoder;
+extern const FFCodec ff_pcm_dat_decoder;
 extern const FFCodec ff_pcm_dvd_encoder;
 extern const FFCodec ff_pcm_dvd_decoder;
 extern const FFCodec ff_pcm_f16le_decoder;
