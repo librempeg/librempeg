@@ -42,6 +42,7 @@
 
 #define RAW_CD_SECTOR_SIZE      2352
 #define RAW_CD_SECTOR_DATA_SIZE 2304
+#define RAW_DATA_SIZE           2048
 #define VIDEO_DATA_CHUNK_SIZE   0x7E0
 #define VIDEO_DATA_HEADER_SIZE  0x38
 #define RIFF_HEADER_SIZE        0x2C
@@ -172,13 +173,28 @@ static int str_read_packet(AVFormatContext *s,
     AVStream *st;
 
     while (!avio_feof(pb)) {
-        int read = avio_read(pb, sector, RAW_CD_SECTOR_SIZE);
+        int read = avio_read(pb, sector, RAW_DATA_SIZE);
 
         if (read == AVERROR_EOF)
             return AVERROR_EOF;
 
-        if (read != RAW_CD_SECTOR_SIZE)
+        if (read != RAW_DATA_SIZE)
             return AVERROR(EIO);
+
+        if (!memcmp(sector, sync_header, sizeof(sync_header))) {
+            int read = avio_read(pb, sector + RAW_DATA_SIZE, sizeof(sector) - RAW_DATA_SIZE);
+
+            if (read == AVERROR_EOF)
+                return AVERROR_EOF;
+
+            if (read != sizeof(sector)-RAW_DATA_SIZE)
+                return AVERROR(EIO);
+        } else {
+            memmove(sector + 0x18, sector, RAW_DATA_SIZE);
+            memset(sector, 0, 0x18);
+            sector[0x12] = 0x02;
+            memset(sector + 0x18 + RAW_DATA_SIZE, 0, sizeof(sector) - 0x18 - RAW_DATA_SIZE);
+        }
 
         channel = sector[0x11];
         if (channel >= 32)
