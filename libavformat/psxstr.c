@@ -74,9 +74,9 @@ static const uint8_t sync_header[12] = {0x00,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
 
 static int str_probe(const AVProbeData *p)
 {
-    const uint8_t *sector= p->buf;
-    const uint8_t *end= sector + p->buf_size;
-    int aud=0, vid=0;
+    const uint8_t *sector = p->buf;
+    const uint8_t *end = sector + p->buf_size;
+    int aud = 0, vid = 0;
 
     if (p->buf_size < RAW_CD_SECTOR_SIZE)
         return 0;
@@ -90,7 +90,7 @@ static int str_probe(const AVProbeData *p)
 
     while (end - sector >= RAW_CD_SECTOR_SIZE) {
         /* look for CD sync header (00, 0xFF x 10, 00) */
-        if (memcmp(sector,sync_header,sizeof(sync_header)))
+        if (memcmp(sector, sync_header, sizeof(sync_header)))
             return 0;
 
         if (sector[0x11] >= 32)
@@ -244,7 +244,7 @@ static int str_read_packet(AVFormatContext *s,
                         return ret;
                     memset(pkt->data, 0, sector_count*VIDEO_DATA_CHUNK_SIZE);
 
-                    pkt->pos= avio_tell(pb) - RAW_CD_SECTOR_SIZE;
+                    pkt->pos = avio_tell(pb) - RAW_CD_SECTOR_SIZE;
                     pkt->stream_index =
                         str->channels[channel].video_stream_index;
                 }
@@ -256,8 +256,8 @@ static int str_read_packet(AVFormatContext *s,
                 if (current_sector == sector_count-1) {
                     pkt->size = frame_size;
                     *ret_pkt = *pkt;
-                    pkt->data= NULL;
-                    pkt->size= -1;
+                    pkt->data = NULL;
+                    pkt->size = -1;
                     pkt->buf = NULL;
                     return 0;
                 }
@@ -287,7 +287,7 @@ static int str_read_packet(AVFormatContext *s,
             pkt = ret_pkt;
             if ((ret = av_new_packet(pkt, 2304)) < 0)
                 return ret;
-            memcpy(pkt->data,sector+24,2304);
+            memcpy(pkt->data, sector + 24, 2304);
 
             pkt->stream_index =
                 str->channels[channel].audio_stream_index;
