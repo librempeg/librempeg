@@ -2471,7 +2471,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                             scale = sign_extend(byte >> 4, 4);
                         } else {
                             byte  = bytestream2_get_byteu(&gb);
-                            scale = sign_extend(byte, 4);
+                            scale = sign_extend(byte & 0xF, 4);
                         }
 
                         if (flag < 0x07) {
