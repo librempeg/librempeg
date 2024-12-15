@@ -171,6 +171,9 @@ static int str_read_packet(AVFormatContext *s,
     int channel, ret;
     AVPacket *pkt;
     AVStream *st;
+    int64_t pos;
+
+    pos = avio_tell(pb);
 
     while (!avio_feof(pb)) {
         int read = avio_read(pb, sector, RAW_DATA_SIZE);
@@ -244,7 +247,7 @@ static int str_read_packet(AVFormatContext *s,
                         return ret;
                     memset(pkt->data, 0, sector_count*VIDEO_DATA_CHUNK_SIZE);
 
-                    pkt->pos = avio_tell(pb) - RAW_CD_SECTOR_SIZE;
+                    pkt->pos = pos;
                     pkt->stream_index =
                         str->channels[channel].video_stream_index;
                 }
@@ -289,6 +292,7 @@ static int str_read_packet(AVFormatContext *s,
                 return ret;
             memcpy(pkt->data, sector + 24, 2304);
 
+            pkt->pos = pos;
             pkt->stream_index =
                 str->channels[channel].audio_stream_index;
             pkt->duration = 18 * 224 / s->streams[pkt->stream_index]->codecpar->ch_layout.nb_channels;
@@ -322,7 +326,7 @@ static int str_read_close(AVFormatContext *s)
 const FFInputFormat ff_str_demuxer = {
     .p.name         = "psxstr",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sony Playstation STR"),
-    .p.flags        = AVFMT_NO_BYTE_SEEK,
+    .p.flags        = AVFMT_NO_BYTE_SEEK | AVFMT_GENERIC_INDEX,
     .priv_data_size = sizeof(StrDemuxContext),
     .read_probe     = str_probe,
     .read_header    = str_read_header,
