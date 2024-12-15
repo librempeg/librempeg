@@ -30,8 +30,8 @@ static const uint32_t encoded_rate[] = { 48000, 44100, 32000, 0 };
 static const uint16_t encoded_size[] = { 5760, 5292, 5760, 0 };
 static const uint8_t encoded_chans[] = { 2, 4, 0, 0 };
 static const enum AVCodecID encoded_codec[] = {
-    AV_CODEC_ID_PCM_S16LE,
-    AV_CODEC_ID_NONE, AV_CODEC_ID_NONE, AV_CODEC_ID_NONE,
+    AV_CODEC_ID_PCM_S16LE, AV_CODEC_ID_PCM_DAT,
+    AV_CODEC_ID_NONE, AV_CODEC_ID_NONE,
 };
 
 static int valid_frame(uint8_t *frame)
