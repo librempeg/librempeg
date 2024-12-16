@@ -2278,7 +2278,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "pcm_dat",
         .long_name = NULL_IF_CONFIG_SMALL("PCM DAT (NonLinear 12bit PCM)"),
-        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 
     /* various ADPCM codecs */
