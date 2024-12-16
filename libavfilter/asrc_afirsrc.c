@@ -31,6 +31,13 @@
 #include "formats.h"
 #include "window_func.h"
 
+enum {
+    INTERP_LINEAR,
+    INTERP_CUBIC,
+    INTERP_SPLINE,
+    NB_INTERP
+};
+
 typedef struct AudioFIRSourceContext {
     const AVClass *class;
 
@@ -337,10 +344,11 @@ static const AVOption afireqsrc_options[] = {
     { "r",           "set sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=44100},  1, INT_MAX,    FLAGS },
     { "nb_samples", "set the number of samples per requested frame", OFFSET(nb_samples), AV_OPT_TYPE_INT, {.i64 = 1024}, 1, INT_MAX, FLAGS },
     { "n",          "set the number of samples per requested frame", OFFSET(nb_samples), AV_OPT_TYPE_INT, {.i64 = 1024}, 1, INT_MAX, FLAGS },
-    { "interp","set the interpolation", OFFSET(interp), AV_OPT_TYPE_INT, {.i64=0}, 0, 1, FLAGS, .unit = "interp" },
-    { "i",     "set the interpolation", OFFSET(interp), AV_OPT_TYPE_INT, {.i64=0}, 0, 1, FLAGS, .unit = "interp" },
-    { "linear", NULL, 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, FLAGS, .unit = "interp" },
-    { "cubic",  NULL, 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, FLAGS, .unit = "interp" },
+    { "interp","set the interpolation", OFFSET(interp), AV_OPT_TYPE_INT, {.i64=0}, 0, NB_INTERP-1, FLAGS, .unit = "interp" },
+    { "i",     "set the interpolation", OFFSET(interp), AV_OPT_TYPE_INT, {.i64=0}, 0, NB_INTERP-1, FLAGS, .unit = "interp" },
+    { "linear", NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_LINEAR}, 0, 0, FLAGS, .unit = "interp" },
+    { "cubic",  NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_CUBIC},  0, 0, FLAGS, .unit = "interp" },
+    { "spline", NULL, 0, AV_OPT_TYPE_CONST, {.i64=INTERP_SPLINE}, 0, 0, FLAGS, .unit = "interp" },
     { "phase","set the phase", OFFSET(phaset), AV_OPT_TYPE_INT, {.i64=1}, 0, 1, FLAGS, .unit = "phase" },
     { "h",    "set the phase", OFFSET(phaset), AV_OPT_TYPE_INT, {.i64=1}, 0, 1, FLAGS, .unit = "phase" },
     { "linear", "linear phase",  0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, FLAGS, .unit = "phase" },
@@ -361,9 +369,9 @@ static void eq_interp(AVComplexFloat *complexf,
             const float x = factor * i;
 
             if (x <= freq[j+1]) {
-                float g;
+                float g = 1.f;
 
-                if (interp == 0) {
+                if (interp == INTERP_LINEAR) {
                     const float d  = freq[j+1] - freq[j];
                     const float d0 = x - freq[j];
                     const float d1 = freq[j+1] - x;
@@ -377,7 +385,7 @@ static void eq_interp(AVComplexFloat *complexf,
                     } else {
                         g = g0;
                     }
-                } else {
+                } else if (interp == INTERP_CUBIC) {
                     if (x <= freq[j]) {
                         g = magnitude[j];
                     } else {
@@ -406,6 +414,15 @@ static void eq_interp(AVComplexFloat *complexf,
 
                         g = a * x3 + b * x2 + c * x1 + d;
                     }
+                } else if (interp == INTERP_SPLINE) {
+                    const float d = freq[j+1] - freq[j];
+                    const float u = (x - freq[j]) / d;
+                    const float c0 = magnitude[j];
+                    const float c1 = 1/2.f*(magnitude[j+1]-magnitude[j-1]);
+                    const float c2 = magnitude[j-1] - 5/2.f*magnitude[j] + 2*magnitude[j+1] - 1/2.f*magnitude[j+2];
+                    const float c3 = 1/2.f*(magnitude[j+2]-magnitude[j-1]) + 3/2.f*(magnitude[j]-magnitude[j+1]);
+
+                    g = ((c3 * u + c2) * u + c1) * u + c0;
                 }
 
                 complexf[i].re = g;
