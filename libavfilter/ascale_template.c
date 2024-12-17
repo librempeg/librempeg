@@ -345,9 +345,12 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
 
     c->c2r_fn(c->c2r, rptr, cptr, sizeof(*cptr));
 
-    for (int n = 1; n < max_period; n++) {
+    for (int n = 1; n < max_period-1; n++) {
         ns = n;
-        if (rptr[n] < F(0.0) && rptr[n-1] > F(0.0))
+        if (rptr[n] <= rptr[n-1] &&
+            rptr[n] <= rptr[n+1])
+            break;
+        if (rptr[n-1] <= F(0.0) && rptr[n] > F(0.0))
             break;
     }
 
