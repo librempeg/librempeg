@@ -234,9 +234,10 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
 
     c->c2r_fn(c->c2r, rptrx, cptrx, sizeof(*cptrx));
 
-    for (int n = 1; n < max_period; n++) {
+    for (int n = 1; n < max_period-1; n++) {
         ns = n;
-        if (rptrx[n] < F(0.0) && rptrx[n-1] > F(0.0))
+        if (rptrx[n] <= rptrx[n-1] &&
+            rptrx[n] <= rptrx[n+1])
             break;
     }
 
@@ -244,11 +245,11 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
         if (rptrx[n] >= rptrx[n-1] &&
             rptrx[n] >= rptrx[n+1]) {
             const ftype xcorr = rptrx[n];
-            const ftype score = fn(get_score)(xcorr, max_period-n);
+            const ftype score = fn(get_score)(xcorr, 1);
 
             if (score > best_score) {
                 best_score = score;
-                best_period = n+1;
+                best_period = n;
             }
         }
     }
