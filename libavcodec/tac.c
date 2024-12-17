@@ -192,6 +192,9 @@ static int parse_frame_header(AVCodecContext *avctx, GetByteContext *gb)
         }
     }
 
+    if (bytestream2_get_bytes_left(gb) <= 0)
+        return 1;
+
     h->frame_crc = bytestream2_get_le16(gb);
     h->huff_flag = bytestream2_peek_le16(gb) >> 15;
     h->frame_size = bytestream2_get_le16(gb) & 0x7FFF;
@@ -940,6 +943,8 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     ret = parse_frame_header(avctx, gb);
     if (ret < 0)
         return ret;
+    if (ret == 1)
+        return avpkt->size;
 
     if (!s->got_keyframe)
         s->got_keyframe = !s->frame_header.huff_flag;
