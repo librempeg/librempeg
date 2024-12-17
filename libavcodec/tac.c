@@ -934,7 +934,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     TACContext *s = avctx->priv_data;
     GetByteContext gbc;
     GetByteContext *gb = &gbc;
-    int ret, huff_read;
+    int ret;
 
     bytestream2_init(gb, avpkt->data, avpkt->size);
     ret = parse_frame_header(avctx, gb);
@@ -953,10 +953,10 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
     }
 
-    huff_read = read_codes(avctx, gb,
-                           s->frame_header.huff_flag,
-                           s->frame_header.huff_cfg);
-    if (huff_read != s->frame_header.huff_count)
+    ret = read_codes(avctx, gb,
+                     s->frame_header.huff_flag,
+                     s->frame_header.huff_cfg);
+    if (ret != s->frame_header.huff_count)
         return AVERROR_INVALIDDATA;
 
     frame->nb_samples = TAC_FRAME_SAMPLES;
