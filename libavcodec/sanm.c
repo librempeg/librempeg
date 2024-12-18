@@ -996,7 +996,7 @@ static int old_codec47(SANMVideoContext *ctx, int top,
 }
 
 // scale 4x4 input block to an 8x8 output block
-static void c48_4to8(uint8_t *dst, const uint8_t *src, const uint16_t w)
+static void c48_4to8(uint8_t *dst, const uint8_t *src, const ptrdiff_t w)
 {
     uint16_t p;
     // dst is always at least 16bit aligned
@@ -1012,7 +1012,7 @@ static void c48_4to8(uint8_t *dst, const uint8_t *src, const uint16_t w)
 }
 
 static int codec48_block(SANMVideoContext *ctx, uint8_t *dst, uint8_t *db,
-                         const uint16_t w)
+                         const ptrdiff_t w)
 {
     uint8_t opc, sb[16];
     int i, j, k, l;
@@ -1149,7 +1149,8 @@ static int old_codec48(SANMVideoContext *ctx, int width, int height)
     int mvidx = bytestream2_get_byte(&ctx->gb);
     int seq   = bytestream2_get_le16(&ctx->gb);
     uint32_t decoded_size = bytestream2_get_le32(&ctx->gb);
-    int i, j, flags;
+    ptrdiff_t pitch = ctx->pitch;
+    int flags;
 
     // all codec48 videos use 1, but just to be safe...
     if (mvidx != 1) {
@@ -1171,17 +1172,22 @@ static int old_codec48(SANMVideoContext *ctx, int width, int height)
     prev = (uint8_t*)ctx->frm2;
 
     if (!seq) {
+        uint8_t *ptr = prev;
         ctx->prev_seq = -1;
-        memset(prev, 0, ctx->aligned_height * width);
+
+        for (int i = 0; i < ctx->aligned_height; i++) {
+            memset(ptr, 0, width);
+            ptr += pitch;
+        }
     }
 
     switch (compr) {
     case 0:
         if (bytestream2_get_bytes_left(&ctx->gb) < width * height)
             return AVERROR_INVALIDDATA;
-        for (j = 0; j < height; j++) {
+        for (int j = 0; j < height; j++) {
             bytestream2_get_bufferu(&ctx->gb, dst, width);
-            dst += width;
+            dst += pitch;
         }
         break;
     case 2:
@@ -1190,20 +1196,20 @@ static int old_codec48(SANMVideoContext *ctx, int width, int height)
         break;
     case 3:
         if (seq == ctx->prev_seq + 1) {
-            for (j = 0; j < height; j += 8) {
-                for (i = 0; i < width; i += 8) {
-                    if (codec48_block(ctx, dst + i, prev + i, width))
+            for (int j = 0; j < height; j += 8) {
+                for (int i = 0; i < width; i += 8) {
+                    if (codec48_block(ctx, dst + i, prev + i, pitch))
                         return AVERROR_INVALIDDATA;
                 }
-                dst += width * 8;
-                prev += width * 8;
+                dst += pitch * 8;
+                prev += pitch * 8;
             }
         }
         break;
     case 5:
         if (bytestream2_get_bytes_left(&ctx->gb) < ((width + 1) >> 1) * ((height + 1) >> 1))
             return AVERROR_INVALIDDATA;
-        codec47_comp1(ctx, dst, width, height, width);
+        codec47_comp1(ctx, dst, width, height, pitch);
         break;
 
     default:
