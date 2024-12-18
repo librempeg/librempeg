@@ -503,6 +503,7 @@ OBJS-$(CONFIG_LAGARITH_DECODER)        += lagarith.o lagarithrac.o
 OBJS-$(CONFIG_LC3_DECODER)             += lc3dec.o
 OBJS-$(CONFIG_LEAD_DECODER)            += leaddec.o jpegquanttables.o
 OBJS-$(CONFIG_LJPEG_ENCODER)           += ljpegenc.o mjpegenc_common.o
+OBJS-$(CONFIG_LHCELP_DECODER)          += lhcelpdec.o
 OBJS-$(CONFIG_LOCO_DECODER)            += loco.o
 OBJS-$(CONFIG_LSCR_DECODER)            += lscrdec.o png.o pngdec.o pngdsp.o
 OBJS-$(CONFIG_M101_DECODER)            += m101.o
