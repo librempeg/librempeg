@@ -30,9 +30,7 @@
 #include "bytestream.h"
 #include "codec_internal.h"
 #include "decode.h"
-#include "zlib_wrapper.h"
-
-#include <zlib.h>
+#include "inflate.h"
 
 #define KBND MKTAG('K', 'B', 'N', 'D')
 #define FINT MKTAG('F', 'I', 'N', 'T')
@@ -60,9 +58,8 @@ typedef struct RASCContext {
     int             stride;
     int             bpp;
     AVFrame        *frame;
-    AVFrame        *frame1;
     AVFrame        *frame2;
-    FFZStream       zstream;
+    InflateContext  ic;
 } RASCContext;
 
 static void clear_plane(AVCodecContext *avctx, AVFrame *frame)
@@ -73,8 +70,8 @@ static void clear_plane(AVCodecContext *avctx, AVFrame *frame)
     if (!dst)
         return;
 
-    for (int y = 0; y < avctx->height; y++) {
-        memset(dst, 0, avctx->width * s->bpp);
+    for (int y = 0; y < frame->height; y++) {
+        memset(dst, 0, frame->width * s->bpp);
         dst += frame->linesize[0];
     }
 }
@@ -82,7 +79,7 @@ static void clear_plane(AVCodecContext *avctx, AVFrame *frame)
 static void copy_plane(AVCodecContext *avctx, AVFrame *src, AVFrame *dst)
 {
     RASCContext *s = avctx->priv_data;
-    uint8_t *srcp = src->data[0];
+    uint8_t *srcp = src->data[0] + dst->height * src->linesize[0];
     uint8_t *dstp = dst->data[0];
 
     for (int y = 0; y < avctx->height; y++) {
@@ -97,16 +94,14 @@ static int init_frames(AVCodecContext *avctx)
     RASCContext *s = avctx->priv_data;
     int ret;
 
-    av_frame_unref(s->frame1);
     av_frame_unref(s->frame2);
-    if ((ret = ff_get_buffer(avctx, s->frame1, 0)) < 0)
-        return ret;
-
+    s->frame2->height = avctx->height * 2;
+    s->frame2->width = avctx->width;
+    s->frame2->format = avctx->pix_fmt;
     if ((ret = ff_get_buffer(avctx, s->frame2, 0)) < 0)
         return ret;
 
     clear_plane(avctx, s->frame2);
-    clear_plane(avctx, s->frame1);
 
     return 0;
 }
@@ -120,11 +115,10 @@ static int decode_fint(AVCodecContext *avctx,
     int ret;
 
     if (bytestream2_peek_le32(gb) != 0x65) {
-        if (!s->frame2->data[0] || !s->frame1->data[0])
+        if (!s->frame2->data[0])
             return AVERROR_INVALIDDATA;
 
         clear_plane(avctx, s->frame2);
-        clear_plane(avctx, s->frame1);
         return 0;
     }
     if (bytestream2_get_bytes_left(gb) < 72)
@@ -175,32 +169,21 @@ static int decode_zlib(AVCodecContext *avctx, const AVPacket *avpkt,
                        unsigned size, unsigned uncompressed_size)
 {
     RASCContext *s = avctx->priv_data;
-    z_stream *const zstream = &s->zstream.zstream;
+    InflateContext *ic = &s->ic;
     GetByteContext *gb = &s->gb;
-    int zret;
-
-    zret = inflateReset(zstream);
-    if (zret != Z_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Inflate reset error: %d\n", zret);
-        return AVERROR_EXTERNAL;
-    }
+    int ret;
 
     av_fast_padded_malloc(&s->delta, &s->delta_size, uncompressed_size);
     if (!s->delta)
         return AVERROR(ENOMEM);
 
-    zstream->next_in  = avpkt->data + bytestream2_tell(gb);
-    zstream->avail_in = FFMIN(size, bytestream2_get_bytes_left(gb));
+    ret = ff_inflate(ic, avpkt->data + bytestream2_tell(gb),
+                     FFMIN(size, bytestream2_get_bytes_left(gb)),
+                     s->delta, 1, s->delta_size, s->delta_size);
+    if (ret < 0)
+        return ret;
 
-    zstream->next_out  = s->delta;
-    zstream->avail_out = s->delta_size;
-
-    zret = inflate(zstream, Z_FINISH);
-    if (zret != Z_STREAM_END) {
-        av_log(avctx, AV_LOG_ERROR,
-               "Inflate failed with return code: %d.\n", zret);
-        return AVERROR_INVALIDDATA;
-    }
+    bytestream2_skip(gb, ret);
 
     return 0;
 }
@@ -275,17 +258,17 @@ static int decode_move(AVCodecContext *avctx,
         if (mov_x + w > avctx->width || mov_y + h > avctx->height)
             continue;
 
-        if (!s->frame2->data[0] || !s->frame1->data[0])
+        if (!s->frame2->data[0])
             return AVERROR_INVALIDDATA;
 
-        b1 = s->frame1->data[0] + s->frame1->linesize[0] * (start_y + h - 1) + start_x * s->bpp;
-        b2 = s->frame2->data[0] + s->frame2->linesize[0] * (start_y + h - 1) + start_x * s->bpp;
-        e2 = s->frame2->data[0] + s->frame2->linesize[0] * (mov_y + h - 1) + mov_x * s->bpp;
+        b2 = s->frame2->data[0] + s->frame2->linesize[0] * (start_y + h - 1 + avctx->height) + start_x * s->bpp;
+        b1 = s->frame2->data[0] + s->frame2->linesize[0] * (start_y + h - 1) + start_x * s->bpp;
+        e2 = s->frame2->data[0] + s->frame2->linesize[0] * (mov_y + h - 1 + avctx->height) + mov_x * s->bpp;
 
         if (type == 2) {
             for (int j = 0; j < h; j++) {
                 memcpy(b1, b2, w * s->bpp);
-                b1 -= s->frame1->linesize[0];
+                b1 -= s->frame2->linesize[0];
                 b2 -= s->frame2->linesize[0];
             }
         } else if (type == 1) {
@@ -324,7 +307,7 @@ static int decode_move(AVCodecContext *avctx,
     if (cx >= w * s->bpp) {              \
         cx = 0;                          \
         cy--;                            \
-        b1 -= s->frame1->linesize[0];    \
+        b1 -= s->frame2->linesize[0];    \
         b2 -= s->frame2->linesize[0];    \
     }                                    \
     len--;
@@ -377,11 +360,11 @@ static int decode_dlta(AVCodecContext *avctx,
         return AVERROR_INVALIDDATA;
     }
 
-    if (!s->frame2->data[0] || !s->frame1->data[0])
+    if (!s->frame2->data[0])
         return AVERROR_INVALIDDATA;
 
-    b1  = s->frame1->data[0] + s->frame1->linesize[0] * (int)(y + h - 1) + ((int)x) * s->bpp;
-    b2  = s->frame2->data[0] + s->frame2->linesize[0] * (int)(y + h - 1) + ((int)x) * s->bpp;
+    b2  = s->frame2->data[0] + s->frame2->linesize[0] * (int)(y + h - 1 + avctx->height) + ((int)x) * s->bpp;
+    b1  = s->frame2->data[0] + s->frame2->linesize[0] * (int)(y + h - 1) + ((int)x) * s->bpp;
     cx = 0, cy = h;
     while (bytestream2_get_bytes_left(&dc) > 0) {
         int type = bytestream2_get_byte(&dc);
@@ -475,11 +458,11 @@ static int decode_kfrm(AVCodecContext *avctx,
                        const AVPacket *avpkt, unsigned size)
 {
     RASCContext *s = avctx->priv_data;
-    z_stream *const zstream = &s->zstream.zstream;
+    InflateContext *ic = &s->ic;
     GetByteContext *gb = &s->gb;
     uint8_t *dst;
     unsigned pos;
-    int zret, ret;
+    int ret;
 
     pos = bytestream2_tell(gb);
     if (bytestream2_peek_le32(gb) == 0x65) {
@@ -491,44 +474,12 @@ static int decode_kfrm(AVCodecContext *avctx,
     if (!s->frame2->data[0])
         return AVERROR_INVALIDDATA;
 
-    zret = inflateReset(zstream);
-    if (zret != Z_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Inflate reset error: %d\n", zret);
-        return AVERROR_EXTERNAL;
-    }
-
-    zstream->next_in  = avpkt->data + bytestream2_tell(gb);
-    zstream->avail_in = bytestream2_get_bytes_left(gb);
-
-    dst = s->frame2->data[0] + (avctx->height - 1) * s->frame2->linesize[0];
-    for (int i = 0; i < avctx->height; i++) {
-        zstream->next_out  = dst;
-        zstream->avail_out = s->stride;
-
-        zret = inflate(zstream, Z_SYNC_FLUSH);
-        if (zret != Z_OK && zret != Z_STREAM_END) {
-            av_log(avctx, AV_LOG_ERROR,
-                   "Inflate failed with return code: %d.\n", zret);
-            return AVERROR_INVALIDDATA;
-        }
-
-        dst -= s->frame2->linesize[0];
-    }
-
-    dst = s->frame1->data[0] + (avctx->height - 1) * s->frame1->linesize[0];
-    for (int i = 0; i < avctx->height; i++) {
-        zstream->next_out  = dst;
-        zstream->avail_out = s->stride;
-
-        zret = inflate(zstream, Z_SYNC_FLUSH);
-        if (zret != Z_OK && zret != Z_STREAM_END) {
-            av_log(avctx, AV_LOG_ERROR,
-                   "Inflate failed with return code: %d.\n", zret);
-            return AVERROR_INVALIDDATA;
-        }
-
-        dst -= s->frame1->linesize[0];
-    }
+    dst = s->frame2->data[0] + (s->frame2->height - 1) * s->frame2->linesize[0];
+    ret = ff_inflate(ic, avpkt->data + bytestream2_tell(gb),
+                     bytestream2_get_bytes_left(gb), dst, s->frame2->height, s->stride, -s->frame2->linesize[0]);
+    if (ret < 0)
+        return ret;
+    bytestream2_skip(gb, ret);
 
     bytestream2_skip(gb, size - (bytestream2_tell(gb) - pos));
 
@@ -729,7 +680,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
             return ret;
     }
 
-    if (!s->frame2->data[0] || !s->frame1->data[0])
+    if (!s->frame2->data[0])
         return AVERROR_INVALIDDATA;
 
     if ((ret = ff_get_buffer(avctx, s->frame, 0)) < 0)
@@ -756,12 +707,11 @@ static av_cold int decode_init(AVCodecContext *avctx)
 {
     RASCContext *s = avctx->priv_data;
 
-    s->frame1 = av_frame_alloc();
     s->frame2 = av_frame_alloc();
-    if (!s->frame1 || !s->frame2)
+    if (!s->frame2)
         return AVERROR(ENOMEM);
 
-    return ff_inflate_init(&s->zstream, avctx);
+    return 0;
 }
 
 static av_cold int decode_close(AVCodecContext *avctx)
@@ -772,9 +722,7 @@ static av_cold int decode_close(AVCodecContext *avctx)
     s->cursor_size = 0;
     av_freep(&s->delta);
     s->delta_size = 0;
-    av_frame_free(&s->frame1);
     av_frame_free(&s->frame2);
-    ff_inflate_end(&s->zstream);
 
     return 0;
 }
@@ -783,7 +731,6 @@ static void decode_flush(AVCodecContext *avctx)
 {
     RASCContext *s = avctx->priv_data;
 
-    clear_plane(avctx, s->frame1);
     clear_plane(avctx, s->frame2);
 }
 
