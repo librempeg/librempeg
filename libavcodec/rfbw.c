@@ -29,9 +29,7 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
 #include "thread.h"
-#include "zlib_wrapper.h"
-
-#include <zlib.h>
+#include "inflate.h"
 
 typedef struct RFBWSprite {
     uint16_t index;
@@ -65,7 +63,7 @@ typedef struct RFBWContext {
 
     uint32_t palette[256];
 
-    FFZStream zstream;
+    InflateContext ic;
 } RFBWContext;
 
 static av_cold int decode_init(AVCodecContext *avctx)
@@ -82,7 +80,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
             s->palette[n] = AV_RL32(avctx->extradata + n * 4) | (0xffu << 24);
     }
 
-    return ff_inflate_init(&s->zstream, avctx);
+    return 0;
 }
 
 static void xset(uint8_t *dst, ptrdiff_t linesize, int x, int y, int w, int h,
@@ -134,7 +132,7 @@ static int decode_rfbw(AVCodecContext *avctx, GetByteContext *gb,
                        AVFrame *frame, AVPacket *avpkt)
 {
     RFBWContext *s = avctx->priv_data;
-    z_stream *const zstream = &s->zstream.zstream;
+    InflateContext *const ic = &s->ic;
     unsigned raw_pixels, width, height, raw_index, raw_offset = 0;
     unsigned rect_index = 0, compression, decompressed_size;
     unsigned version, payload_size, command, bpp, size, size1;
@@ -146,8 +144,8 @@ static int decode_rfbw(AVCodecContext *avctx, GetByteContext *gb,
     int rect_offset, last_offset, offset;
     GetByteContext dgb, sgb1, sgb2;
     ptrdiff_t linesize;
-    int ret, zret;
-    uint8_t *dst;
+    uint8_t *dst, *src;
+    int src_len, ret;
 
     version = bytestream2_get_le32(gb);
     payload_size = bytestream2_get_le32(gb);
@@ -199,32 +197,20 @@ static int decode_rfbw(AVCodecContext *avctx, GetByteContext *gb,
     if (compression == 13)
         bytestream2_skip(gb, 11);
 
-    zret = inflateReset(zstream);
-    if (zret != Z_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Inflate reset error: %d\n", zret);
-        return AVERROR_EXTERNAL;
-    }
-
     av_fast_padded_malloc(&s->data, &s->data_size, decompressed_size);
     if (!s->data)
         return AVERROR(ENOMEM);
 
-    zstream->next_in  = avpkt->data + bytestream2_tell(gb);
-    zstream->avail_in = FFMIN(compressed_size, avpkt->size - bytestream2_tell(gb));
+    src  = avpkt->data + bytestream2_tell(gb);
+    src_len = FFMIN(compressed_size, avpkt->size - bytestream2_tell(gb));
 
-    zstream->next_out  = s->data;
-    zstream->avail_out = s->data_size;
+    ret = ff_inflate(ic, src, src_len, s->data, 1, s->data_size, s->data_size);
+    if (ret < 0)
+        return ret;
 
-    zret = inflate(zstream, Z_FINISH);
-    if (zret != Z_STREAM_END) {
-        av_log(avctx, AV_LOG_ERROR,
-               "Inflate failed with return code: %d.\n", zret);
-        return AVERROR_INVALIDDATA;
-    }
+    bytestream2_skip(gb, avpkt->size);
 
-    bytestream2_skip(gb, avpkt->size - zstream->avail_in);
-
-    bytestream2_init(&dgb, s->data, s->data_size - zstream->avail_out);
+    bytestream2_init(&dgb, s->data, s->data_size);
     bytestream2_skip(&dgb, 4);
 
     width = xread(&dgb);
@@ -486,7 +472,6 @@ static av_cold int decode_close(AVCodecContext *avctx)
 {
     RFBWContext *s = avctx->priv_data;
 
-    ff_inflate_end(&s->zstream);
     av_freep(&s->sprite_data);
     av_freep(&s->sprites);
     av_freep(&s->rects);
