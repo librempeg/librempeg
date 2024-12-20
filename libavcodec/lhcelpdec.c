@@ -59,21 +59,22 @@ static av_cold int lhcelp_decode_init(AVCodecContext *avctx)
 static void parse_bitstream(LHCELPContext *s, Subframe *subframe, int16_t *coeffs, const uint8_t *data)
 {
     GetBitContext gb;
+    uint8_t idx[10];
 
     init_get_bits8(&gb, data, 12);
     subframe[1].sf2_idx  = get_bits(&gb, 5);
-    coeffs[2] = get_bits(&gb, 4);
-    coeffs[1] = get_bits(&gb, 4);
-    coeffs[0] = get_bits(&gb, 3);
+    idx[2] = get_bits(&gb, 4);
+    idx[1] = get_bits(&gb, 4);
+    idx[0] = get_bits(&gb, 3);
     subframe[0].opcode   = get_bits(&gb, 8);
     subframe[2].sf2_idx  = get_bits(&gb, 5);
-    coeffs[3] = get_bits(&gb, 3);
-    coeffs[9] = get_bits1(&gb);
-    coeffs[8] = get_bits(&gb, 3);
-    coeffs[7] = get_bits(&gb, 2);
-    coeffs[6] = get_bits(&gb, 3);
-    coeffs[5] = get_bits(&gb, 3);
-    coeffs[4] = get_bits(&gb, 4);
+    idx[3] = get_bits(&gb, 3);
+    idx[9] = get_bits1(&gb);
+    idx[8] = get_bits(&gb, 3);
+    idx[7] = get_bits(&gb, 2);
+    idx[6] = get_bits(&gb, 3);
+    idx[5] = get_bits(&gb, 3);
+    idx[4] = get_bits(&gb, 4);
     subframe[0].sf2_idx  = get_bits(&gb, 5);
     subframe[0].sf1_idx  = get_bits(&gb, 4);
     subframe[0].position = get_bits(&gb, 7) + 20;
@@ -83,30 +84,24 @@ static void parse_bitstream(LHCELPContext *s, Subframe *subframe, int16_t *coeff
     subframe[2].opcode   = get_bits(&gb, 8);
     subframe[2].sf1_idx  = get_bits(&gb, 4);
     subframe[2].position = get_bits(&gb, 4) + subframe[1].position - 7;
-}
 
-static void process_coeffs1(int16_t *coeffs)
-{
-    coeffs[0] = lhcelp_cb0[coeffs[0]];
-    for (int i = 0; i < 4; i++)
-        coeffs[(i + 1)*2] = lhcelp_cbs[i][coeffs[(i + 1)*2]];
+    for (int i = 0; i < 5; i++)
+        coeffs[i*2] = lhcelp_cbs[i][idx[i*2]];
 
-    for (int j = 0; j < 5; j++) {
-        int delta = coeffs[j*2 + 2] - coeffs[j*2];
-        int16_t stack[16];
-        int k = 0;
+    /* for odd coeffs, build cb using delta of the adjacent even ceoffs */
+    coeffs[10] = 0x7fff;
+    for (int i = 0; i < 5; i++) {
+        int16_t cb[16];
+        int16_t *ptr = cb;
+        int delta = coeffs[i*2 + 2] - coeffs[i*2];
 
-        for (int i = 0; i < lhcelp_scale_length[j]; i++, k++) {
-            int a = lhcelp_scale_a[j][i] * delta;
-            stack[k] = ((a + 0x8000) >> 16) + coeffs[j*2];
-        }
+        for (int j = 0; j < lhcelp_scale_length[i]; j++)
+            *ptr++ = ((lhcelp_scale_a[i][j] * delta + 0x8000) >> 16) + coeffs[i*2];
 
-        for (int i = 0; i < lhcelp_scale_length[j] - 2; i++, k++) {
-            int a = lhcelp_scale_b[j][i] * -delta;
-            stack[k] = (a >> 16) + coeffs[j*2 + 2];
-        }
+        for (int j = 0; j < lhcelp_scale_length[i] - 2; j++)
+            *ptr++ = ((lhcelp_scale_b[i][j] * -delta) >> 16) + coeffs[i*2 + 2];
 
-        coeffs[j*2 + 1] = stack[coeffs[j*2 + 1]];
+        coeffs[i*2 + 1] = cb[idx[i*2 + 1]];
     }
 }
 
@@ -212,9 +207,6 @@ static void mix(const int16_t *src1, const int16_t *src2, int16_t *dst, int coun
 
 static void process_coeffs(LHCELPContext *s, int16_t *initial_coeffs, int16_t final_coeffs[3][11])
 {
-    initial_coeffs[10] = 0x7FFF;
-    process_coeffs1(initial_coeffs);
-
     mix(s->previous, initial_coeffs, final_coeffs[0], 10);
     process_coeffs2(final_coeffs[0]);
     process_coeffs3(final_coeffs[0]);

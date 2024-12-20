@@ -102,8 +102,8 @@ static const int16_t lhcelp_cb4[16] = {
     22609, 23592, 24576, 25395, 26214, 27115, 28098, 29081
 };
 
-static const int16_t *lhcelp_cbs[4] = {
-    lhcelp_cb1, lhcelp_cb2, lhcelp_cb3, lhcelp_cb4
+static const int16_t *lhcelp_cbs[5] = {
+    lhcelp_cb0, lhcelp_cb1, lhcelp_cb2, lhcelp_cb3, lhcelp_cb4
 };
 
 static const int16_t lhcelp_scale_a0[9] = {
