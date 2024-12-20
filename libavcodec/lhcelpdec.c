@@ -146,55 +146,35 @@ static void process_coeffs2(int16_t *coeffs)
     }
 }
 
+static void process(int32_t *p, const int16_t *coeffs)
+{
+    p[0] = 0x400000;
+    p[1] = coeffs[0] * -0x100;
+    p[2] = 0x400000;
+
+    for (int i = 0; i < 8; i += 2) {
+        p[i + 3] = p[i + 1] - coeffs[i + 2] * 0x100;
+        p[i + 4] = 0x400000;
+
+        for (int j = 0; j < i + 1; j++) {
+            p[i - j + 2] -= (p[i - j + 1] * (int64_t)coeffs[i + 2] + 0x2000) >> 14;
+            p[i - j + 2] += p[i - j];
+        }
+
+        p[1] -= (0x400000 * (int64_t)coeffs[i + 2] + 0x2000) >> 14;
+    }
+}
+
 static void process_coeffs3(int16_t *coeffs)
 {
-    int coeff, width, ap, bp;
-    int32_t stack[22];
+    int32_t even[11], odd[11];
 
-    stack[0]  = 0x400000;
-    stack[2]  = 0x400000;
-    stack[11] = 0x400000;
-    stack[13] = 0x400000;
-    stack[1]  = coeffs[0] * -0x100;
-    stack[12] = coeffs[1] * -0x100;
-
-    width = 1;
-    ap = 2;
-    bp = 13;
-
-    for (int i = 0; i < 10 - 2; i += 2) {
-        stack[ap + 2] = 0x400000;
-        coeff = coeffs[i + 2];
-        stack[ap + 1] = stack[ap - 1] - coeff * 0x100;
-
-        for (int j = 0; j < width; j++) {
-            stack[ap] -= (stack[ap - 1] * (int64_t)coeff + 0x2000) >> 14;
-            stack[ap] += stack[ap - 2];
-            ap--;
-        }
-
-        stack[ap] -= (stack[ap - 1] * (int64_t)coeff + 0x2000) >> 14;
-
-        stack[bp + 2] = 0x400000;
-        coeff = coeffs[i + 3];
-        stack[bp + 1] = stack[bp - 1] - coeff * 0x100;
-
-        for (int j = 0; j < width; j++) {
-            stack[bp] -= (stack[bp - 1] * (int64_t)coeff + 0x2000) >> 14;
-            stack[bp] += stack[bp - 2];
-            bp--;
-        }
-
-        stack[bp] -= (stack[ap - 1] * (int64_t)coeff + 0x2000) >> 14;
-
-        width += 2;
-        bp += width;
-        ap += width;
-    }
+    process(even, coeffs);
+    process(odd, coeffs + 1);
 
     coeffs[0] = 0x400;
     for (int i = 0; i < 10; i++)
-        coeffs[i + 1] = (stack[i] + stack[i + 1] + stack[i + 12] - stack[i + 11] + 0x1000) >> 13;
+        coeffs[i + 1] = (even[i] + even[i + 1] + odd[i + 1] - odd[i] + 0x1000) >> 13;
 }
 
 static void mix(const int16_t *src1, const int16_t *src2, int16_t *dst, int count)
