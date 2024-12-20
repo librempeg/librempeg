@@ -590,6 +590,7 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
     case AV_CODEC_ID_AMR_NB:
     case AV_CODEC_ID_EVRC:
     case AV_CODEC_ID_GSM:
+    case AV_CODEC_ID_LHCELP:
     case AV_CODEC_ID_QCELP:
     case AV_CODEC_ID_RA_288:       return  160;
     case AV_CODEC_ID_AMR_WB:
