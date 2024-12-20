@@ -25,8 +25,7 @@
 #include "get_bits.h"
 
 typedef struct InflateTree {
-    uint16_t counts[16];
-    uint16_t symbols[288];
+    VLC vlc;
     int max_sym;
 } InflateTree;
 

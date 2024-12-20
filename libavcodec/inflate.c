@@ -23,53 +23,58 @@
 
 #include "inflate.h"
 
-static void build_fixed_trees(InflateTree *lt, InflateTree *dt)
+static int build_vlc(InflateTree *t, const int nb,
+                     const uint8_t *lens, const uint16_t *symbols)
 {
-    for (int i = 0; i < 16; i++)
-        lt->counts[i] = 0;
+    return ff_vlc_init_from_lengths(&t->vlc, 10, nb, lens, 1,
+                                    symbols, 2, 2, 0, VLC_INIT_OUTPUT_LE, NULL);
+}
 
-    lt->counts[7] = 24;
-    lt->counts[8] = 152;
-    lt->counts[9] = 112;
+static int build_fixed_trees(InflateTree *lt, InflateTree *dt)
+{
+    uint16_t symbols[288] = { 0 };
+    uint8_t lens[288] = { 0 };
+    int ret;
 
-    for (int i = 0; i < 24; i++)
-        lt->symbols[i] = 256 + i;
-    for (int i = 0; i < 144; i++)
-        lt->symbols[24 + i] = i;
-    for (int i = 0; i < 8; i++)
-        lt->symbols[24 + 144 + i] = 280 + i;
-    for (int i = 0; i < 112; i++)
-        lt->symbols[24 + 144 + 8 + i] = 144 + i;
+    ff_vlc_free(&lt->vlc);
+    ff_vlc_free(&dt->vlc);
+
+    for (int i = 0; i < 24; i++) {
+        symbols[i] = 256 + i;
+        lens[i] = 7;
+    }
+    for (int i = 0; i < 144; i++) {
+        symbols[24 + i] = i;
+        lens[24 + i] = 8;
+    }
+    for (int i = 0; i < 8; i++) {
+        symbols[24 + 144 + i] = 280 + i;
+        lens[24 + 144 + i] = 8;
+    }
+    for (int i = 0; i < 112; i++) {
+        symbols[24 + 144 + 8 + i] = 144 + i;
+        lens[24 + 144 + 8 + i] = 9;
+    }
 
     lt->max_sym = 285;
 
-    for (int i = 0; i < 16; i++)
-        dt->counts[i] = 0;
+    ret = build_vlc(lt, 288, lens, symbols);
+    if (ret < 0)
+        return ret;
 
-    dt->counts[5] = 32;
-
-    for (int i = 0; i < 32; i++)
-        dt->symbols[i] = i;
-
-    dt->max_sym = 29;
-}
-
-static int decode_symbol(InflateContext *s, const InflateTree *t)
-{
-    GetBitContext *gb = &s->gb;
-    int base = 0, offs = 0;
-
-    for (int len = 1; ; len++) {
-        offs = 2 * offs + get_bits1(gb);
-
-        if (offs < t->counts[len])
-            break;
-
-        base += t->counts[len];
-        offs -= t->counts[len];
+    for (int i = 0; i < 32; i++) {
+        symbols[i] = i;
+        lens[i] = 5;
     }
 
-    return t->symbols[base + offs];
+    dt->max_sym = 29;
+
+    return build_vlc(dt, 32, lens, symbols);
+}
+
+static int decode_symbol(GetBitContext *gb, const InflateTree *t)
+{
+    return get_vlc2(gb, t->vlc.table, t->vlc.bits, 2);
 }
 
 static uint32_t get_bits_base(GetBitContext *gb, int bits, int base)
@@ -103,10 +108,10 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
     GetBitContext *gb = &s->gb;
     const int height = s->height;
     const int width = s->width;
-    int ret, x = s->x, y = s->y;
+    int ret = 0, x = s->x, y = s->y;
 
     for (;;) {
-        int sym = decode_symbol(s, lt);
+        int sym = decode_symbol(gb, lt);
 
         if (get_bits_left(gb) < 0) {
             ret = AVERROR_INVALIDDATA;
@@ -114,17 +119,14 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
         }
 
         if (sym < 256) {
-            if (y >= height) {
-                ret = AVERROR_INVALIDDATA;
-                goto fail;
-            }
-
             s->dst[linesize * y + x] = sym;
 
             x++;
             if (x >= width) {
                 x = 0;
                 y++;
+                if (y >= height)
+                    break;
             }
         } else {
             int len, dist, offs, offs_y, offs_x;
@@ -146,7 +148,7 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
             len = get_bits_base(gb, length_bits[sym],
                                 length_base[sym]);
 
-            dist = decode_symbol(s, dt);
+            dist = decode_symbol(gb, dt);
 
             if (dist > dt->max_sym || dist > 29) {
                 ret = AVERROR_INVALIDDATA;
@@ -166,17 +168,14 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
             while (len > 0) {
                 const int ilen = FFMIN(FFMIN3(width - x, width - offs_x, len), FFABS(offs_x - x) + FFABS(offs_y - y) * width);
 
-                if (y >= height) {
-                    ret = AVERROR_INVALIDDATA;
-                    goto fail;
-                }
-
                 memmove(s->dst + linesize * y + x, s->dst + linesize * offs_y + offs_x, ilen);
 
                 x += ilen;
                 if (x >= width) {
                     x = 0;
                     y++;
+                    if (y >= height)
+                        break;
                 }
 
                 offs_x += ilen;
@@ -198,25 +197,25 @@ fail:
 
 static int build_tree(InflateTree *t, const uint8_t *lengths, unsigned num)
 {
+    uint16_t symbols[288] = { 0 }, counts[16] = { 0 }, offs[16] = { 0 };
     unsigned num_codes, available;
-    uint16_t offs[16];
+    uint8_t lens[288] = { 0 };
 
-    for (int i = 0; i < 16; i++)
-        t->counts[i] = 0;
+    ff_vlc_free(&t->vlc);
 
     t->max_sym = -1;
 
     for (int i = 0; i < num; i++) {
         if (lengths[i]) {
             t->max_sym = i;
-            t->counts[lengths[i]]++;
+            counts[lengths[i]]++;
         }
     }
 
     available = 1;
     num_codes = 0;
     for (int i = 0; i < 16; i++) {
-        unsigned int used = t->counts[i];
+        unsigned used = counts[i];
 
         if (used > available)
             return AVERROR_INVALIDDATA;
@@ -228,20 +227,23 @@ static int build_tree(InflateTree *t, const uint8_t *lengths, unsigned num)
     }
 
     if ((num_codes > 1 && available > 0) ||
-        (num_codes == 1 && t->counts[1] != 1))
+        (num_codes == 1 && counts[1] != 1))
         return AVERROR_INVALIDDATA;
 
     for (int i = 0; i < num; i++) {
-        if (lengths[i])
-            t->symbols[offs[lengths[i]]++] = i;
+        if (lengths[i]) {
+            unsigned idx = offs[lengths[i]];
+
+            symbols[idx] = i;
+            lens[idx] = lengths[i];
+            offs[lengths[i]]++;
+        }
     }
 
-    if (num_codes == 1) {
-        t->counts[1] = 2;
-        t->symbols[1] = t->max_sym + 1;
-    }
+    if (num_codes == 1)
+        symbols[1] = t->max_sym + 1;
 
-    return 0;
+    return build_vlc(t, num_codes, lens, symbols);
 }
 
 static int decode_trees(InflateContext *s, InflateTree *lt, InflateTree *dt)
@@ -255,17 +257,14 @@ static int decode_trees(InflateContext *s, InflateTree *lt, InflateTree *dt)
     unsigned hlit, hdist, hclen;
     int ret;
 
-    memset(lt, 0, sizeof(*lt));
-    memset(dt, 0, sizeof(*dt));
+    ff_vlc_free(&lt->vlc);
+    ff_vlc_free(&dt->vlc);
 
     hlit = get_bits_base(gb, 5, 257);
     hdist = get_bits_base(gb, 5, 1);
     hclen = get_bits_base(gb, 4, 4);
     if (hlit > 286 || hdist > 30)
         return AVERROR_INVALIDDATA;
-
-    for (int i = 0; i < 19; i++)
-        lengths[i] = 0;
 
     for (int i = 0; i < hclen; i++) {
         unsigned clen = get_bits(gb, 3);
@@ -281,7 +280,7 @@ static int decode_trees(InflateContext *s, InflateTree *lt, InflateTree *dt)
         return AVERROR_INVALIDDATA;
 
     for (int num = 0; num < hlit + hdist;) {
-        int len, sym = decode_symbol(s, lt);
+        int len, sym = decode_symbol(gb, lt);
 
         if (sym > lt->max_sym)
             return AVERROR_INVALIDDATA;
@@ -313,22 +312,26 @@ static int decode_trees(InflateContext *s, InflateTree *lt, InflateTree *dt)
         num += len;
     }
 
+    ff_vlc_free(&lt->vlc);
+
     if (lengths[256] == 0)
         return AVERROR_INVALIDDATA;
 
-    memset(lt, 0, sizeof(*lt));
     ret = build_tree(lt, lengths, hlit);
     if (ret < 0)
         return ret;
 
-    memset(dt, 0, sizeof(*dt));
     return build_tree(dt, lengths + hlit, hdist);
 }
 
 static int inflate_fixed_block(InflateContext *s)
 {
     if (!s->fixed_cb_initialized) {
-        build_fixed_trees(&s->fixed_ltree, &s->fixed_dtree);
+        int ret = build_fixed_trees(&s->fixed_ltree, &s->fixed_dtree);
+
+        if (ret < 0)
+            return ret;
+
         s->fixed_cb_initialized = 1;
     }
 
