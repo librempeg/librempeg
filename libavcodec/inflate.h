@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 
+#define CACHED_BITSTREAM_READER !ARCH_X86_32
 #define BITSTREAM_READER_LE
 #include "get_bits.h"
 
