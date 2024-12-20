@@ -198,7 +198,7 @@ fail:
 
 static int build_tree(InflateTree *t, const uint8_t *lengths, unsigned num)
 {
-    unsigned num_codes, available, i;
+    unsigned num_codes, available;
     uint16_t offs[16];
 
     for (int i = 0; i < 16; i++)
@@ -213,7 +213,9 @@ static int build_tree(InflateTree *t, const uint8_t *lengths, unsigned num)
         }
     }
 
-    for (available = 1, num_codes = 0, i = 0; i < 16; i++) {
+    available = 1;
+    num_codes = 0;
+    for (int i = 0; i < 16; i++) {
         unsigned int used = t->counts[i];
 
         if (used > available)
