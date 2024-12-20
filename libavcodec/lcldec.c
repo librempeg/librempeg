@@ -51,8 +51,7 @@
 #include "thread.h"
 
 #if CONFIG_ZLIB_DECODER
-#include "zlib_wrapper.h"
-#include <zlib.h>
+#include "inflate.h"
 #endif
 
 typedef struct LclDecContext {
@@ -67,7 +66,7 @@ typedef struct LclDecContext {
     // Decompression buffer
     unsigned char* decomp_buf;
 #if CONFIG_ZLIB_DECODER
-    FFZStream zstream;
+    InflateContext ic;
 #endif
 } LclDecContext;
 
@@ -134,29 +133,20 @@ static unsigned int mszh_decomp(const unsigned char * srcptr, int srclen, unsign
 static int zlib_decomp(AVCodecContext *avctx, const uint8_t *src, int src_len, int offset, int expected)
 {
     LclDecContext *c = avctx->priv_data;
-    z_stream *const zstream = &c->zstream.zstream;
-    int zret = inflateReset(zstream);
-    if (zret != Z_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Inflate reset error: %d\n", zret);
+    InflateContext *ic = &c->ic;
+    int ret;
+
+    ret = ff_inflate(ic, src, src_len, c->decomp_buf + offset, 1, c->decomp_size - offset,  c->decomp_size - offset);
+    if (ret < 0)
+        return ret;
+    if (expected != (ic->x + ic->y * (c->decomp_size - offset))) {
+        av_log(avctx, AV_LOG_ERROR, "Decoded size differs (%d != %u)\n",
+               expected, ic->x + ic->y * (c->decomp_size - offset));
+        if (expected > ic->x)
+            return ic->x;
         return AVERROR_UNKNOWN;
     }
-    zstream->next_in   = src;
-    zstream->avail_in  = src_len;
-    zstream->next_out  = c->decomp_buf + offset;
-    zstream->avail_out = c->decomp_size - offset;
-    zret = inflate(zstream, Z_FINISH);
-    if (zret != Z_OK && zret != Z_STREAM_END) {
-        av_log(avctx, AV_LOG_ERROR, "Inflate error: %d\n", zret);
-        return AVERROR_UNKNOWN;
-    }
-    if (expected != (unsigned int)zstream->total_out) {
-        av_log(avctx, AV_LOG_ERROR, "Decoded size differs (%d != %lu)\n",
-               expected, zstream->total_out);
-        if (expected > (unsigned int)zstream->total_out)
-            return (unsigned int)zstream->total_out;
-        return AVERROR_UNKNOWN;
-    }
-    return zstream->total_out;
+    return ic->x;
 }
 #endif
 
@@ -589,7 +579,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
             av_log(avctx, AV_LOG_DEBUG, "Normal compression.\n");
             break;
         default:
-            if (c->compression < Z_NO_COMPRESSION || c->compression > Z_BEST_COMPRESSION) {
+            if (c->compression < 0 || c->compression > 9) {
                 av_log(avctx, AV_LOG_ERROR, "Unsupported compression level for ZLIB: (%d).\n", c->compression);
                 return AVERROR_INVALIDDATA;
             }
@@ -621,12 +611,6 @@ static av_cold int decode_init(AVCodecContext *avctx)
     if (c->flags & FLAGMASK_UNUSED)
         av_log(avctx, AV_LOG_ERROR, "Unknown flag set (%d).\n", c->flags);
 
-    /* If needed init zlib */
-#if CONFIG_ZLIB_DECODER
-    if (avctx->codec_id == AV_CODEC_ID_ZLIB)
-        return ff_inflate_init(&c->zstream, avctx);
-#endif
-
     return 0;
 }
 
@@ -635,9 +619,6 @@ static av_cold int decode_end(AVCodecContext *avctx)
     LclDecContext * const c = avctx->priv_data;
 
     av_freep(&c->decomp_buf);
-#if CONFIG_ZLIB_DECODER
-    ff_inflate_end(&c->zstream);
-#endif
 
     return 0;
 }
