@@ -87,24 +87,23 @@ static void parse_bitstream(LHCELPContext *s, Subframe *subframe, int16_t *coeff
 
 static void process_coeffs1(int16_t *coeffs)
 {
-    int16_t stack[16];
-
     coeffs[0] = lhcelp_cb0[coeffs[0]];
     for (int i = 0; i < 4; i++)
         coeffs[(i + 1)*2] = lhcelp_cbs[i][coeffs[(i + 1)*2]];
 
     for (int j = 0; j < 5; j++) {
         int delta = coeffs[j*2 + 2] - coeffs[j*2];
-        int16_t *ap = stack;
+        int16_t stack[16];
+        int k = 0;
 
-        for (int i = 0; i < lhcelp_scale_length[j]; i++) {
+        for (int i = 0; i < lhcelp_scale_length[j]; i++, k++) {
             int a = lhcelp_scale_a[j][i] * delta;
-            *ap++ = ((a + 0x8000) >> 16) + coeffs[j*2];
+            stack[k] = ((a + 0x8000) >> 16) + coeffs[j*2];
         }
 
-        for (int i = 0; i < lhcelp_scale_length[j] - 2; i++) {
+        for (int i = 0; i < lhcelp_scale_length[j] - 2; i++, k++) {
             int a = lhcelp_scale_b[j][i] * -delta;
-            *ap++ = (a >> 16) + coeffs[j*2 + 2];
+            stack[k] = (a >> 16) + coeffs[j*2 + 2];
         }
 
         coeffs[j*2 + 1] = stack[coeffs[j*2 + 1]];
@@ -154,8 +153,8 @@ static void process_coeffs2(int16_t *coeffs)
 
 static void process_coeffs3(int16_t *coeffs)
 {
-    int32_t stack[22], *ap, *bp;
-    int coeff, width;
+    int coeff, width, ap, bp;
+    int32_t stack[22];
 
     stack[0]  = 0x400000;
     stack[2]  = 0x400000;
@@ -165,33 +164,33 @@ static void process_coeffs3(int16_t *coeffs)
     stack[12] = coeffs[1] * -0x100;
 
     width = 1;
-    ap = stack + 2;
-    bp = stack + 13;
+    ap = 2;
+    bp = 13;
 
     for (int i = 0; i < 10 - 2; i += 2) {
-        ap[2] = 0x400000;
+        stack[ap + 2] = 0x400000;
         coeff = coeffs[i + 2];
-        ap[1] = ap[-1] - coeff * 0x100;
+        stack[ap + 1] = stack[ap - 1] - coeff * 0x100;
 
         for (int j = 0; j < width; j++) {
-            *ap -= (ap[-1] * (int64_t)coeff + 0x2000) >> 14;
-            *ap += ap[-2];
+            stack[ap] -= (stack[ap - 1] * (int64_t)coeff + 0x2000) >> 14;
+            stack[ap] += stack[ap - 2];
             ap--;
         }
 
-        *ap -= (ap[-1] * (int64_t)coeff + 0x2000) >> 14;
+        stack[ap] -= (stack[ap - 1] * (int64_t)coeff + 0x2000) >> 14;
 
-        bp[2] = 0x400000;
+        stack[bp + 2] = 0x400000;
         coeff = coeffs[i + 3];
-        bp[1] = bp[-1] - coeff * 0x100;
+        stack[bp + 1] = stack[bp - 1] - coeff * 0x100;
 
         for (int j = 0; j < width; j++) {
-            *bp -= (bp[-1] * (int64_t)coeff + 0x2000) >> 14;
-            *bp += bp[-2];
+            stack[bp] -= (stack[bp - 1] * (int64_t)coeff + 0x2000) >> 14;
+            stack[bp] += stack[bp - 2];
             bp--;
         }
 
-        bp[0] -= (ap[-1] * (int64_t)coeff + 0x2000) >> 14;
+        stack[bp] -= (stack[ap - 1] * (int64_t)coeff + 0x2000) >> 14;
 
         width += 2;
         bp += width;
@@ -375,9 +374,9 @@ static void filter_output(int *filter, const int16_t *src, int16_t *dst, int sub
         filter[6] = (v + 0x2000) >> 14;
         sample = filter[6] >> 14;
 #if 1
-        *dst++ = FFMIN(FFMAX(-32767, sample), 32767); //bit identical to reference decoder
+        dst[j] = FFMIN(FFMAX(-32767, sample), 32767); //bit identical to reference decoder
 #else
-        *dst++ = av_clip_int16(sample);
+        dst[j] = av_clip_int16(sample);
 #endif
     }
 }
