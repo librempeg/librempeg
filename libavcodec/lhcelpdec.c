@@ -138,7 +138,7 @@ static void process_coeffs2(int16_t *coeffs)
         if (coeff <= table[0])
             table--;
 
-        num = (int16_t)(coeff - table[0]) << 16;
+        num = (coeff - table[0]) << 16;
         den = (table[1] - table[0]) << 1;
         new_coeff = table[-jump - 1] - ((int16_t)(num / den + offset) >> shift);
 
