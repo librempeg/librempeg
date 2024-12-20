@@ -26,7 +26,7 @@
 #include "get_bits.h"
 #include "lhcelpdata.h"
 
-typedef struct {
+typedef struct LHCELPContext {
     int16_t previous[10];
     int16_t interim[148];
     int16_t filter1[11];
@@ -34,7 +34,7 @@ typedef struct {
     int16_t output[202];
 } LHCELPContext;
 
-typedef struct {
+typedef struct Subframe {
     int position;
     int sf1_idx;
     int opcode;
@@ -45,8 +45,8 @@ static av_cold int lhcelp_decode_init(AVCodecContext *avctx)
 {
     LHCELPContext *s = avctx->priv_data;
 
-    if (avctx->ch_layout.nb_channels != 1 || avctx->sample_rate != 8000)
-        return AVERROR_INVALIDDATA;
+    avctx->ch_layout.nb_channels = 1;
+    avctx->sample_rate = 8000;
 
     for (int i = 0; i < 10; i++)
         s->previous[i] = lhcelp_init[i];
@@ -425,6 +425,6 @@ const FFCodec ff_lhcelp_decoder = {
     .priv_data_size = sizeof(LHCELPContext),
     .init           = lhcelp_decode_init,
     FF_CODEC_DECODE_CB(lhcelp_decode_frame),
-    .p.capabilities = AV_CODEC_CAP_DR1,
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_CHANNEL_CONF,
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
 };
