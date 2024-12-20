@@ -101,33 +101,45 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
     };
     const ptrdiff_t linesize = s->linesize;
     GetBitContext *gb = &s->gb;
+    const int height = s->height;
     const int width = s->width;
+    int ret, x = s->x, y = s->y;
 
     for (;;) {
         int sym = decode_symbol(s, lt);
 
-        if (get_bits_left(gb) < 0)
-            return AVERROR_INVALIDDATA;
+        if (get_bits_left(gb) < 0) {
+            ret = AVERROR_INVALIDDATA;
+            goto fail;
+        }
 
         if (sym < 256) {
-            if (s->y >= s->height)
-                return AVERROR_INVALIDDATA;
+            if (y >= height) {
+                ret = AVERROR_INVALIDDATA;
+                goto fail;
+            }
 
-            s->dst[linesize * s->y + s->x] = sym;
+            s->dst[linesize * y + x] = sym;
 
-            s->x++;
-            if (s->x >= width) {
-                s->x = 0;
-                s->y++;
+            x++;
+            if (x >= width) {
+                x = 0;
+                y++;
             }
         } else {
             int len, dist, offs, offs_y, offs_x;
 
-            if (sym == 256)
-                return 0;
+            if (sym == 256) {
+                s->x = x;
+                s->y = y;
 
-            if (sym > lt->max_sym || sym - 257 > 28 || dt->max_sym == -1)
-                return AVERROR_INVALIDDATA;
+                return 0;
+            }
+
+            if (sym > lt->max_sym || sym - 257 > 28 || dt->max_sym == -1) {
+                ret = AVERROR_INVALIDDATA;
+                goto fail;
+            }
 
             sym -= 257;
 
@@ -136,29 +148,35 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
 
             dist = decode_symbol(s, dt);
 
-            if (dist > dt->max_sym || dist > 29)
-                return AVERROR_INVALIDDATA;
+            if (dist > dt->max_sym || dist > 29) {
+                ret = AVERROR_INVALIDDATA;
+                goto fail;
+            }
 
             offs = get_bits_base(gb, dist_bits[dist], dist_base[dist]);
-            offs = s->y * width + s->x - offs;
-            if (offs < 0)
-                return AVERROR_INVALIDDATA;
+            offs = y * width + x - offs;
+            if (offs < 0) {
+                ret = AVERROR_INVALIDDATA;
+                goto fail;
+            }
 
             offs_y = offs / width;
             offs_x = offs % width;
 
             while (len > 0) {
-                const int ilen = FFMIN(FFMIN3(width - s->x, width - offs_x, len), FFABS(offs_x - s->x) + FFABS(offs_y - s->y) * width);
+                const int ilen = FFMIN(FFMIN3(width - x, width - offs_x, len), FFABS(offs_x - x) + FFABS(offs_y - y) * width);
 
-                if (s->y >= s->height)
-                    return AVERROR_INVALIDDATA;
+                if (y >= height) {
+                    ret = AVERROR_INVALIDDATA;
+                    goto fail;
+                }
 
-                memmove(s->dst + linesize * s->y + s->x, s->dst + linesize * offs_y + offs_x, ilen);
+                memmove(s->dst + linesize * y + x, s->dst + linesize * offs_y + offs_x, ilen);
 
-                s->x += ilen;
-                if (s->x >= width) {
-                    s->x = 0;
-                    s->y++;
+                x += ilen;
+                if (x >= width) {
+                    x = 0;
+                    y++;
                 }
 
                 offs_x += ilen;
@@ -171,6 +189,11 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
             }
         }
     }
+fail:
+    s->x = x;
+    s->y = y;
+
+    return ret;
 }
 
 static int build_tree(InflateTree *t, const uint8_t *lengths, unsigned num)
@@ -202,8 +225,8 @@ static int build_tree(InflateTree *t, const uint8_t *lengths, unsigned num)
         num_codes += used;
     }
 
-    if ((num_codes > 1 && available > 0)
-        || (num_codes == 1 && t->counts[1] != 1))
+    if ((num_codes > 1 && available > 0) ||
+        (num_codes == 1 && t->counts[1] != 1))
         return AVERROR_INVALIDDATA;
 
     for (int i = 0; i < num; i++) {
