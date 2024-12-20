@@ -281,6 +281,7 @@ typedef struct MOVStreamContext {
     } cenc;
 
     struct IAMFDemuxContext *iamf;
+    int iamf_stream_offset;
 } MOVStreamContext;
 
 typedef struct HEIFItem {
