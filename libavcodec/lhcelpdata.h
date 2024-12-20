@@ -142,7 +142,7 @@ static const int16_t *lhcelp_scale_b[4] = { /* use lhcelp_scale_length[] - 2 for
     lhcelp_scale_b0, lhcelp_scale_b12, lhcelp_scale_b12, lhcelp_scale_b3
 };
 
-static const int16_t lhcelp_scale_length[5] = {
+static const uint8_t lhcelp_scale_length[5] = {
     9, 5, 5, 3, 2
 };
 
