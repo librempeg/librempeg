@@ -39,9 +39,7 @@
 #include "codec_internal.h"
 #include "decode.h"
 #include "msrledec.h"
-#include "zlib_wrapper.h"
-
-#include <zlib.h>
+#include "inflate.h"
 
 typedef struct TsccContext {
 
@@ -53,10 +51,10 @@ typedef struct TsccContext {
     // Decompressed data size
     unsigned int decomp_size;
     // Decompression buffer
-    unsigned char* decomp_buf;
+    uint8_t *decomp_buf;
     GetByteContext gb;
     int height;
-    FFZStream zstream;
+    InflateContext ic;
 
     uint32_t pal[256];
 } CamtasiaContext;
@@ -67,41 +65,29 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *rframe,
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
     CamtasiaContext * const c = avctx->priv_data;
-    z_stream *const zstream = &c->zstream.zstream;
+    InflateContext *ic = &c->ic;
     AVFrame *frame = c->frame;
-    int ret;
     int palette_has_changed = 0;
+    int ret;
 
-    if (c->avctx->pix_fmt == AV_PIX_FMT_PAL8) {
+    if (c->avctx->pix_fmt == AV_PIX_FMT_PAL8)
         palette_has_changed = ff_copy_palette(c->pal, avpkt, avctx);
-    }
 
-    ret = inflateReset(zstream);
-    if (ret != Z_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Inflate reset error: %d\n", ret);
-        return AVERROR_UNKNOWN;
-    }
-    zstream->next_in   = buf;
-    zstream->avail_in  = buf_size;
-    zstream->next_out  = c->decomp_buf;
-    zstream->avail_out = c->decomp_size;
-    ret = inflate(zstream, Z_FINISH);
-    // Z_DATA_ERROR means empty picture
-    if (ret == Z_DATA_ERROR && !palette_has_changed) {
+    if (buf_size > 2) {
+        ret = ff_inflate(ic, buf, buf_size, c->decomp_buf, 1, c->decomp_size, c->decomp_size);
+        if (ret < 0 && !palette_has_changed)
+            return buf_size;
+        if (ret < 0)
+            return ret;
+    } else {
         return buf_size;
-    }
-
-    if ((ret != Z_OK) && (ret != Z_STREAM_END) && (ret != Z_DATA_ERROR)) {
-        av_log(avctx, AV_LOG_ERROR, "Inflate error: %d\n", ret);
-        return AVERROR_UNKNOWN;
     }
 
     if ((ret = ff_reget_buffer(avctx, frame, 0)) < 0)
         return ret;
 
-    if (ret != Z_DATA_ERROR) {
-        bytestream2_init(&c->gb, c->decomp_buf,
-                         c->decomp_size - zstream->avail_out);
+    if (ic->x > 0) {
+        bytestream2_init(&c->gb, c->decomp_buf, ic->x);
         ff_msrle_decode(avctx, frame, c->bpp, &c->gb);
     }
 
@@ -157,7 +143,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     if (!c->frame)
         return AVERROR(ENOMEM);
 
-    return ff_inflate_init(&c->zstream, avctx);
+    return 0;
 }
 
 static av_cold int decode_end(AVCodecContext *avctx)
@@ -166,7 +152,6 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
     av_freep(&c->decomp_buf);
     av_frame_free(&c->frame);
-    ff_inflate_end(&c->zstream);
 
     return 0;
 }
