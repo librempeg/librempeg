@@ -185,19 +185,19 @@ static void mix(const int16_t *src1, const int16_t *src2, int16_t *dst, int coun
     }
 }
 
-static void process_coeffs(LHCELPContext *s, int16_t *initial_coeffs, int16_t final_coeffs[3][11])
+static void process_coeffs(LHCELPContext *s, int16_t *initial_coeffs, int16_t subframe_coeffs[3][11])
 {
-    mix(s->previous, initial_coeffs, final_coeffs[0], 10);
-    process_coeffs2(final_coeffs[0]);
-    process_coeffs3(final_coeffs[0]);
+    mix(s->previous, initial_coeffs, subframe_coeffs[0], 10);
+    process_coeffs2(subframe_coeffs[0]);
+    process_coeffs3(subframe_coeffs[0]);
 
-    mix(initial_coeffs, s->previous, final_coeffs[1], 10);
-    process_coeffs2(final_coeffs[1]);
-    process_coeffs3(final_coeffs[1]);
+    mix(initial_coeffs, s->previous, subframe_coeffs[1], 10);
+    process_coeffs2(subframe_coeffs[1]);
+    process_coeffs3(subframe_coeffs[1]);
 
-    memcpy(final_coeffs[2], initial_coeffs, 2*10);
-    process_coeffs2(final_coeffs[2]);
-    process_coeffs3(final_coeffs[2]);
+    memcpy(subframe_coeffs[2], initial_coeffs, 2*10);
+    process_coeffs2(subframe_coeffs[2]);
+    process_coeffs3(subframe_coeffs[2]);
 
     memcpy(s->previous, initial_coeffs, 2*10);
 }
@@ -357,7 +357,7 @@ static int lhcelp_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                                int *got_frame_ptr, AVPacket *avpkt)
 {
     LHCELPContext *s = avctx->priv_data;
-    int16_t initial_coeffs[11], final_coeffs[3][11], *dst;
+    int16_t initial_coeffs[11], subframe_coeffs[3][11], *dst;
     Subframe subframe[3];
     int ret;
 
@@ -369,7 +369,7 @@ static int lhcelp_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         return ret;
 
     parse_bitstream(s, subframe, initial_coeffs, avpkt->data);
-    process_coeffs(s, initial_coeffs, final_coeffs);
+    process_coeffs(s, initial_coeffs, subframe_coeffs);
 
     dst = (int16_t *)frame->data[0];
     for (int i = 0; i < 3; i++) {
@@ -378,7 +378,7 @@ static int lhcelp_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         int sf1 = sf1_idx < 10 ? lhcelp_sf1[sf1_idx] : -lhcelp_sf1[sf1_idx - 10];
         apply_sf1(s, subframe + i, subframe_size, sf1);
         exciter(s, subframe + i, subframe_size);
-        synthesis(s, subframe + i, subframe_size, sf1, final_coeffs[i]);
+        synthesis(s, subframe + i, subframe_size, sf1, subframe_coeffs[i]);
         filter_output(s->filter2, s->output, dst, subframe_size, 4);
         dst += subframe_size;
     }
