@@ -27,15 +27,13 @@
 #include "bytestream.h"
 #include "codec_internal.h"
 #include "decode.h"
-#include "zlib_wrapper.h"
-
-#include <zlib.h>
+#include "inflate.h"
 
 typedef struct MWSCContext {
     unsigned int      decomp_size;
     uint8_t          *decomp_buf;
     AVFrame          *prev_frame;
-    FFZStream         zstream;
+    InflateContext    ic;
 } MWSCContext;
 
 static int rle_uncompress(GetByteContext *gb, PutByteContext *pb, GetByteContext *gbp,
@@ -101,33 +99,21 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
                         int *got_frame, AVPacket *avpkt)
 {
     MWSCContext *s = avctx->priv_data;
-    z_stream *const zstream = &s->zstream.zstream;
     const uint8_t *buf = avpkt->data;
+    InflateContext *ic = &s->ic;
     int buf_size = avpkt->size;
-    GetByteContext gb;
-    GetByteContext gbp;
+    GetByteContext gb, gbp;
     PutByteContext pb;
     int ret;
 
-    ret = inflateReset(zstream);
-    if (ret != Z_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Inflate reset error: %d\n", ret);
-        return AVERROR_EXTERNAL;
-    }
-    zstream->next_in   = buf;
-    zstream->avail_in  = buf_size;
-    zstream->next_out  = s->decomp_buf;
-    zstream->avail_out = s->decomp_size;
-    ret = inflate(zstream, Z_FINISH);
-    if (ret != Z_STREAM_END) {
-        av_log(avctx, AV_LOG_ERROR, "Inflate error: %d\n", ret);
-        return AVERROR_EXTERNAL;
-    }
+    ret = ff_inflate(ic, buf, buf_size, s->decomp_buf, 1, s->decomp_size, s->decomp_size);
+    if (ret < 0)
+        return ret;
 
     if ((ret = ff_get_buffer(avctx, frame, AV_GET_BUFFER_FLAG_REF)) < 0)
         return ret;
 
-    bytestream2_init(&gb, s->decomp_buf, zstream->total_out);
+    bytestream2_init(&gb, s->decomp_buf, ic->x);
     bytestream2_init(&gbp, s->prev_frame->data[0], avctx->height * s->prev_frame->linesize[0]);
     bytestream2_init_writer(&pb, frame->data[0], avctx->height * frame->linesize[0]);
 
@@ -165,7 +151,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     if (!s->prev_frame)
         return AVERROR(ENOMEM);
 
-    return ff_inflate_init(&s->zstream, avctx);
+    return 0;
 }
 
 static av_cold int decode_close(AVCodecContext *avctx)
@@ -175,7 +161,6 @@ static av_cold int decode_close(AVCodecContext *avctx)
     av_frame_free(&s->prev_frame);
     av_freep(&s->decomp_buf);
     s->decomp_size = 0;
-    ff_inflate_end(&s->zstream);
 
     return 0;
 }
