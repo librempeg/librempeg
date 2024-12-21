@@ -164,9 +164,15 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
             odst = s->dst + offs_y * linesize;
 
             while (len > 0) {
-                const int ilen = FFMIN(FFMIN3(width - x, width - offs_x, len), FFABS(offs_x - x) + (y - offs_y) * width);
+                const unsigned ix = width - FFMAX(x, offs_x);
+                const unsigned ilen = FFMIN(ix, len);
 
-                memmove(dst + x, odst + offs_x, ilen);
+                if (dst + x >= odst + offs_x + ilen) {
+                    memcpy(dst + x, odst + offs_x, ilen);
+                } else {
+                    for (int i = 0; i < ilen; i++)
+                        dst[i+x] = odst[i+offs_x];
+                }
 
                 x += ilen;
                 if (x >= width) {
