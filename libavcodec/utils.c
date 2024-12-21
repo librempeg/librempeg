@@ -590,7 +590,6 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
     case AV_CODEC_ID_AMR_NB:
     case AV_CODEC_ID_EVRC:
     case AV_CODEC_ID_GSM:
-    case AV_CODEC_ID_LHCELP:
     case AV_CODEC_ID_QCELP:
     case AV_CODEC_ID_RA_288:       return  160;
     case AV_CODEC_ID_AMR_WB:
@@ -654,6 +653,8 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
             return 4 * (frame_bytes / 4);
         if (id == AV_CODEC_ID_APTX_HD)
             return 4 * (frame_bytes / 6);
+        if (id == AV_CODEC_ID_LHCELP)
+            return 160 * (frame_bytes / 12);
 
         if (bps > 0) {
             /* calc from frame_bytes and bits_per_coded_sample */
