@@ -110,20 +110,17 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
     const int height = s->height;
     const int width = s->width;
     int ret = 0, x = s->x, y = s->y;
+    uint8_t *dst = s->dst + y * linesize;
 
     for (;;) {
         int sym = decode_symbol(gb, lt);
 
-        if (get_bits_left(gb) < 0) {
-            ret = AVERROR_INVALIDDATA;
-            goto fail;
-        }
-
         if (sym < 256) {
-            s->dst[linesize * y + x] = sym;
+            dst[x] = sym;
 
             x++;
             if (x >= width) {
+                dst += linesize;
                 x = 0;
                 y++;
                 if (y >= height)
@@ -131,6 +128,7 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
             }
         } else {
             int len, dist, offs, offs_y, offs_x;
+            uint8_t *odst;
 
             if (sym == 256) {
                 s->x = x;
@@ -165,14 +163,16 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
 
             offs_y = offs / width;
             offs_x = offs % width;
+            odst = s->dst + offs_y * linesize;
 
             while (len > 0) {
-                const int ilen = FFMIN(FFMIN3(width - x, width - offs_x, len), FFABS(offs_x - x) + FFABS(offs_y - y) * width);
+                const int ilen = FFMIN(FFMIN3(width - x, width - offs_x, len), FFABS(offs_x - x) + (y - offs_y) * width);
 
-                memmove(s->dst + linesize * y + x, s->dst + linesize * offs_y + offs_x, ilen);
+                memmove(dst + x, odst + offs_x, ilen);
 
                 x += ilen;
                 if (x >= width) {
+                    dst += linesize;
                     x = 0;
                     y++;
                     if (y >= height)
@@ -181,6 +181,7 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
 
                 offs_x += ilen;
                 if (offs_x >= width) {
+                    odst += linesize;
                     offs_x = 0;
                     offs_y++;
                 }
@@ -418,6 +419,11 @@ int ff_inflate(InflateContext *s,
 
         if (ret < 0)
             break;
+
+        if (get_bits_left(gb) < 0) {
+            ret = AVERROR_INVALIDDATA;
+            break;
+        }
     } while (!bfinal);
 
     if (ret < 0)
