@@ -19,7 +19,6 @@
  */
 
 #include <stdint.h>
-#include <zlib.h>
 
 #include "libavutil/frame.h"
 #include "libavutil/error.h"
@@ -34,19 +33,18 @@
 #include "packet.h"
 #include "png.h"
 #include "pngdsp.h"
-#include "zlib_wrapper.h"
+#include "inflate.h"
 
 typedef struct LSCRContext {
     PNGDSPContext   dsp;
     AVCodecContext *avctx;
 
     AVFrame        *last_picture;
-    uint8_t        *buffer;
-    int             buffer_size;
-    uint8_t        *crow_buf;
-    int             crow_size;
+    AVFrame        *filter_frame;
     uint8_t        *last_row;
     unsigned int    last_row_size;
+    uint8_t        *comp_buf;
+    unsigned int    comp_buf_size;
 
     GetByteContext  gb;
     uint8_t        *image_buf;
@@ -55,56 +53,40 @@ typedef struct LSCRContext {
     int             cur_h;
     int             y;
 
-    FFZStream       zstream;
+    InflateContext  ic;
 } LSCRContext;
 
 static void handle_row(LSCRContext *s)
 {
-    uint8_t *ptr, *last_row;
+    uint8_t *ptr, *last_row, *filter_row;
 
+    filter_row = s->filter_frame->data[0] + s->filter_frame->linesize[0] * s->y;
     ptr = s->image_buf + s->image_linesize * s->y;
     if (s->y == 0)
         last_row = s->last_row;
     else
         last_row = ptr - s->image_linesize;
 
-    ff_png_filter_row(&s->dsp, ptr, s->crow_buf[0], s->crow_buf + 1,
+    ff_png_filter_row(&s->dsp, ptr, filter_row[15], filter_row + 16,
                       last_row, s->row_size, 3);
 
     s->y++;
 }
 
-static int decode_idat(LSCRContext *s, z_stream *zstream, int length)
+static int decode_idat(LSCRContext *s, int length)
 {
+    InflateContext *ic = &s->ic;
+    uint8_t *filter = s->filter_frame->data[0] + 15;
     int ret;
-    zstream->avail_in = FFMIN(length, bytestream2_get_bytes_left(&s->gb));
-    zstream->next_in  = s->gb.buffer;
 
-    if (length <= 0)
-        return AVERROR_INVALIDDATA;
+    ret = ff_inflate(ic, s->comp_buf, length, filter, s->cur_h, s->row_size + 1,
+                     s->filter_frame->linesize[0]);
+    if (ret < 0)
+        return ret;
 
-    bytestream2_skip(&s->gb, length);
+    for (int y = 0; y < s->cur_h; y++)
+        handle_row(s);
 
-    /* decode one line if possible */
-    while (zstream->avail_in > 0) {
-        ret = inflate(zstream, Z_PARTIAL_FLUSH);
-        if (ret != Z_OK && ret != Z_STREAM_END) {
-            av_log(s->avctx, AV_LOG_ERROR, "inflate returned error %d\n", ret);
-            return AVERROR_EXTERNAL;
-        }
-        if (zstream->avail_out == 0) {
-            if (s->y < s->cur_h) {
-                handle_row(s);
-            }
-            zstream->avail_out = s->crow_size;
-            zstream->next_out  = s->crow_buf;
-        }
-        if (ret == Z_STREAM_END && zstream->avail_in > 0) {
-            av_log(s->avctx, AV_LOG_WARNING,
-                   "%d undecompressed bytes left in buffer\n", zstream->avail_in);
-            return 0;
-        }
-    }
     return 0;
 }
 
@@ -133,12 +115,8 @@ static int decode_frame_lscr(AVCodecContext *avctx, AVFrame *rframe,
         return ret;
 
     for (int b = 0; b < nb_blocks; b++) {
-        z_stream *const zstream = &s->zstream.zstream;
         int x, y, x2, y2, w, h, left;
-        uint32_t csize, size;
-
-        if (inflateReset(zstream) != Z_OK)
-            return AVERROR_EXTERNAL;
+        uint32_t csize, size, comp_size = 0;
 
         bytestream2_seek(gb, 2 + b * 12, SEEK_SET);
 
@@ -174,33 +152,33 @@ static int decode_frame_lscr(AVCodecContext *avctx, AVFrame *rframe,
         s->y                 = 0;
         s->row_size          = w * 3;
 
-        av_fast_padded_malloc(&s->buffer, &s->buffer_size, s->row_size + 16);
-        if (!s->buffer)
-            return AVERROR(ENOMEM);
-
         av_fast_padded_malloc(&s->last_row, &s->last_row_size, s->row_size);
         if (!s->last_row)
             return AVERROR(ENOMEM);
 
-        s->crow_size         = w * 3 + 1;
-        s->crow_buf          = s->buffer + 15;
-        zstream->avail_out   = s->crow_size;
-        zstream->next_out    = s->crow_buf;
+        av_fast_padded_malloc(&s->comp_buf, &s->comp_buf_size, size);
+        if (!s->last_row)
+            return AVERROR(ENOMEM);
+
         s->image_buf         = frame->data[0] + (avctx->height - y - 1) * frame->linesize[0] + x * 3;
         s->image_linesize    =-frame->linesize[0];
 
-        while (left > 16) {
-            ret = decode_idat(s, zstream, csize);
-            if (ret < 0)
-                return ret;
-            left -= csize + 16;
-            if (left > 16) {
+        while (left > 12) {
+            memcpy(s->comp_buf + comp_size, gb->buffer, csize);
+            bytestream2_skip(gb, csize);
+            comp_size += csize;
+            left -= csize + 12;
+            if (left > 12) {
                 bytestream2_skip(gb, 4);
                 csize = bytestream2_get_be32(gb);
                 if (bytestream2_get_le32(gb) != MKTAG('I', 'D', 'A', 'T'))
                     return AVERROR_INVALIDDATA;
             }
         }
+
+        ret = decode_idat(s, comp_size);
+        if (ret < 0)
+            return ret;
     }
 
     frame->pict_type = (frame->flags & AV_FRAME_FLAG_KEY) ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_P;
@@ -218,9 +196,9 @@ static int lscr_decode_close(AVCodecContext *avctx)
     LSCRContext *s = avctx->priv_data;
 
     av_frame_free(&s->last_picture);
-    av_freep(&s->buffer);
+    av_frame_free(&s->filter_frame);
     av_freep(&s->last_row);
-    ff_inflate_end(&s->zstream);
+    av_freep(&s->comp_buf);
 
     return 0;
 }
@@ -228,6 +206,7 @@ static int lscr_decode_close(AVCodecContext *avctx)
 static int lscr_decode_init(AVCodecContext *avctx)
 {
     LSCRContext *s = avctx->priv_data;
+    int ret;
 
     avctx->color_range = AVCOL_RANGE_JPEG;
     avctx->pix_fmt     = AV_PIX_FMT_BGR24;
@@ -237,9 +216,19 @@ static int lscr_decode_init(AVCodecContext *avctx)
     if (!s->last_picture)
         return AVERROR(ENOMEM);
 
+    s->filter_frame = av_frame_alloc();
+    if (!s->filter_frame)
+        return AVERROR(ENOMEM);
+
+    s->filter_frame->height = avctx->height;
+    s->filter_frame->width = avctx->width*3 + 16;
+    s->filter_frame->format = AV_PIX_FMT_GRAY8;
+    if ((ret = ff_get_buffer(avctx, s->filter_frame, 0)) < 0)
+        return ret;
+
     ff_pngdsp_init(&s->dsp);
 
-    return ff_inflate_init(&s->zstream, avctx);
+    return 0;
 }
 
 static void lscr_decode_flush(AVCodecContext *avctx)
