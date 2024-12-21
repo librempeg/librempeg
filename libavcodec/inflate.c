@@ -126,18 +126,16 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
                 if (y >= height)
                     break;
             }
+        } else if (sym == 256) {
+            s->x = x;
+            s->y = y;
+
+            return 0;
         } else {
             int len, dist, offs, offs_y, offs_x;
             uint8_t *odst;
 
-            if (sym == 256) {
-                s->x = x;
-                s->y = y;
-
-                return 0;
-            }
-
-            if (sym > lt->max_sym || sym - 257 > 28 || dt->max_sym == -1) {
+            if (sym > lt->max_sym || sym > 285) {
                 ret = AVERROR_INVALIDDATA;
                 goto fail;
             }
@@ -206,13 +204,15 @@ static int build_tree(InflateTree *t, const uint8_t *lengths, unsigned num)
     ff_vlc_free(&t->vlc);
 
     t->max_sym = -1;
-
     for (int i = 0; i < num; i++) {
         if (lengths[i]) {
             t->max_sym = i;
             counts[lengths[i]]++;
         }
     }
+
+    if (t->max_sym < 0)
+        return AVERROR_INVALIDDATA;
 
     available = 1;
     num_codes = 0;
@@ -277,9 +277,6 @@ static int decode_trees(InflateContext *s, InflateTree *lt, InflateTree *dt)
     ret = build_tree(lt, lengths, 19);
     if (ret < 0)
         return ret;
-
-    if (lt->max_sym == -1)
-        return AVERROR_INVALIDDATA;
 
     for (int num = 0; num < hlit + hdist;) {
         int len, sym = decode_symbol(gb, lt);
