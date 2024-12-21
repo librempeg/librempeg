@@ -404,6 +404,8 @@ int ff_inflate(InflateContext *s,
                 if (s->x >= width) {
                     s->x = 0;
                     s->y++;
+                    if (s->y >= height)
+                        break;
                 }
 
                 len -= ilen;
