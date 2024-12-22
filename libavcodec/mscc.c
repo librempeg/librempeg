@@ -28,9 +28,7 @@
 #include "bytestream.h"
 #include "codec_internal.h"
 #include "decode.h"
-#include "zlib_wrapper.h"
-
-#include <zlib.h>
+#include "inflate.h"
 
 typedef struct MSCCContext {
     unsigned          bpp;
@@ -38,7 +36,7 @@ typedef struct MSCCContext {
     uint8_t          *decomp_buf;
     unsigned int      uncomp_size;
     uint8_t          *uncomp_buf;
-    FFZStream         zstream;
+    InflateContext    ic;
 
     uint32_t          pal[256];
 } MSCCContext;
@@ -139,43 +137,30 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
                         int *got_frame, AVPacket *avpkt)
 {
     MSCCContext *s = avctx->priv_data;
-    z_stream *const zstream = &s->zstream.zstream;
+    InflateContext *ic = &s->ic;
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
     GetByteContext gb;
     PutByteContext pb;
-    int ret, j;
+    int ret;
 
     if (avpkt->size < 3)
         return buf_size;
 
-    ret = inflateReset(zstream);
-    if (ret != Z_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Inflate reset error: %d\n", ret);
-        return AVERROR_UNKNOWN;
-    }
-    zstream->next_out  = s->decomp_buf;
-    zstream->avail_out = s->decomp_size;
     if (avctx->codec_id == AV_CODEC_ID_MSCC) {
         const uint8_t start = avpkt->data[2] ^ avpkt->data[0];
 
-        zstream->next_in  = &start;
-        zstream->avail_in = 1;
-        ret = inflate(zstream, Z_NO_FLUSH);
-        if (ret != Z_OK || zstream->avail_in != 0)
-            goto inflate_error;
+        if ((ret = av_packet_make_writable(avpkt)) < 0)
+            return ret;
 
-        buf      += 3;
-        buf_size -= 3;
+        avpkt->data[2] = start;
+        buf += 2;
+        buf_size -= 2;
     }
-    zstream->next_in   = buf;
-    zstream->avail_in  = buf_size;
-    ret = inflate(zstream, Z_FINISH);
-    if (ret != Z_STREAM_END) {
-inflate_error:
-        av_log(avctx, AV_LOG_ERROR, "Inflate error: %d\n", ret);
-        return AVERROR_UNKNOWN;
-    }
+    ret = ff_inflate(ic, buf, buf_size, s->decomp_buf, 1, s->decomp_size, s->decomp_size);
+    if (ret < 0)
+        return ret;
+
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
 
@@ -189,7 +174,7 @@ FF_DISABLE_DEPRECATION_WARNINGS
             frame->palette_has_changed = 1;
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
-            for (j = 0; j < 256; j++)
+            for (int j = 0; j < 256; j++)
                 s->pal[j] = 0xFF000000 | AV_RL32(pal + j * 4);
         } else if (pal) {
             av_log(avctx, AV_LOG_ERROR,
@@ -198,14 +183,14 @@ FF_ENABLE_DEPRECATION_WARNINGS
         memcpy(frame->data[1], s->pal, AVPALETTE_SIZE);
     }
 
-    bytestream2_init(&gb, s->decomp_buf, zstream->total_out);
+    bytestream2_init(&gb, s->decomp_buf, ic->x);
     bytestream2_init_writer(&pb, s->uncomp_buf, s->uncomp_size);
 
     ret = rle_uncompress(avctx, &gb, &pb);
     if (ret)
         return ret;
 
-    for (j = 0; j < avctx->height; j++) {
+    for (int j = 0; j < avctx->height; j++) {
         memcpy(frame->data[0] + (avctx->height - j - 1) * frame->linesize[0],
                s->uncomp_buf + s->bpp * j * avctx->width, s->bpp * avctx->width);
     }
@@ -241,7 +226,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     if (!(s->uncomp_buf = av_malloc(s->uncomp_size)))
         return AVERROR(ENOMEM);
 
-    return ff_inflate_init(&s->zstream, avctx);
+    return 0;
 }
 
 static av_cold int decode_close(AVCodecContext *avctx)
@@ -252,7 +237,6 @@ static av_cold int decode_close(AVCodecContext *avctx)
     s->decomp_size = 0;
     av_freep(&s->uncomp_buf);
     s->uncomp_size = 0;
-    ff_inflate_end(&s->zstream);
 
     return 0;
 }
