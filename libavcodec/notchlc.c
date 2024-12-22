@@ -86,7 +86,7 @@ static int lz4_decompress(AVCodecContext *avctx,
         int num_literals = token >> 4;
 
         if (num_literals == 15) {
-            unsigned char current;
+            uint8_t current;
             do {
                 current = bytestream2_get_byte(gb);
                 num_literals += current;
