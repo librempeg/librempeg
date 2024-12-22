@@ -36,8 +36,8 @@
 static int expand_rle_row8(void *logctx, uint8_t *out_buf,
                            GetByteContext *g, unsigned width)
 {
-    unsigned char pixel, count;
-    unsigned char *orig = out_buf;
+    uint8_t pixel, count;
+    uint8_t *orig = out_buf;
     uint8_t *out_end = out_buf + width;
 
     while (out_buf < out_end) {
@@ -70,9 +70,9 @@ static int expand_rle_row8(void *logctx, uint8_t *out_buf,
 static int expand_rle_row16(void *logctx, uint16_t *out_buf,
                             GetByteContext *g, unsigned width)
 {
-    unsigned short pixel;
-    unsigned char count;
-    unsigned short *orig = out_buf;
+    uint16_t pixel;
+    uint8_t count;
+    uint16_t *orig = out_buf;
     uint16_t *out_end = out_buf + width;
 
     while (out_buf < out_end) {
