@@ -99,7 +99,7 @@ static int mlp_probe(const AVProbeData *p)
 const FFInputFormat ff_mlp_demuxer = {
     .p.name         = "mlp",
     .p.long_name    = NULL_IF_CONFIG_SMALL("raw MLP"),
-    .p.flags        = AVFMT_GENERIC_INDEX | AVFMT_NOTIMESTAMPS,
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "mlp",
     .p.priv_class   = &ff_raw_demuxer_class,
     .read_probe     = mlp_probe,
@@ -119,7 +119,7 @@ static int thd_probe(const AVProbeData *p)
 const FFInputFormat ff_truehd_demuxer = {
     .p.name         = "truehd",
     .p.long_name    = NULL_IF_CONFIG_SMALL("raw TrueHD"),
-    .p.flags        = AVFMT_GENERIC_INDEX | AVFMT_NOTIMESTAMPS,
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "thd",
     .p.priv_class   = &ff_raw_demuxer_class,
     .read_probe     = thd_probe,
