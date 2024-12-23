@@ -610,6 +610,7 @@ const AVCodecTag ff_codec_wav_tags[] = {
     { AV_CODEC_ID_XAN_DPCM,        0x594a },
     { AV_CODEC_ID_G729,            0x729A },
     { AV_CODEC_ID_FTR,             0x8180 },
+    { AV_CODEC_ID_ADPCM_PT,        0x8311 },
     { AV_CODEC_ID_G723_1,          0xA100 }, /* Comverse Infosys Ltd. G723 1 */
     { AV_CODEC_ID_AAC,             0xA106 },
     { AV_CODEC_ID_SPEEX,           0xA109 },
