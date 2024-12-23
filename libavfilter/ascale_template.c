@@ -120,7 +120,7 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
     void *datay[1] = { (void *)c->data[1] };
     const ftype xx = fn(l2norm)(dptrx+n, best_period);
     const ftype yy = fn(l2norm)(dptry, best_period);
-    const ftype xy = rptrx[best_period-1];
+    const ftype xy = rptrx[best_period];
     ftype best_xcorr = F(-1.0), scale;
     const ftype num = xy;
     const ftype den = xx * yy + EPS;
@@ -132,12 +132,12 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
         best_xcorr = F(0.0);
     av_log(ctx, AV_LOG_DEBUG, "E: %g/%g %d/%d\n", best_xcorr, best_score, best_period, max_period);
 
-    dptrx += max_period-best_period;
+    dptrx += n;
     datax[0] = dptrx;
 
     scale = F(1.0) / best_period;
     for (int n = 0; n < best_period; n++) {
-        const ftype xf = (n+F(0.5))*scale;
+        const ftype xf = n*scale;
         const ftype yf = F(1.0)-xf;
         const ftype axf = fn(get_gain)(xf, best_xcorr);
         const ftype ayf = fn(get_gain)(yf, best_xcorr);
