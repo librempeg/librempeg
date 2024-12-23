@@ -19,6 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/mem.h"
+
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "decode.h"
@@ -202,12 +204,6 @@ static void process_coeffs(LHCELPContext *s, int16_t *initial_coeffs, int16_t su
     memcpy(s->previous, initial_coeffs, 2*10);
 }
 
-static void memcpy_word_naive(int16_t *dst, const int16_t *src, int count)
-{
-    for (int i = 0; i < count; i++)
-        dst[i] = src[i];
-}
-
 static void scale(const int16_t *src, int16_t *dst, int scale, int count)
 {
     for (int i = 0; i < count; i++)
@@ -219,7 +215,7 @@ static void apply_sf1(LHCELPContext *s, const Subframe *subframe, int subframe_s
     int position = subframe->position;
     if (position < subframe_size) {
         memcpy(s->output, s->output + 201 - position, 2*position);
-        memcpy_word_naive(s->output + position, s->output, subframe_size - position);  //must use naive copy
+        av_memcpy_backptr((uint8_t *)(s->output + position), 2*position, 2*(subframe_size - position));
         scale(s->output, s->output, sf1, subframe_size);
     } else {
         scale(s->output + 201 - position, s->output, sf1, subframe_size);
