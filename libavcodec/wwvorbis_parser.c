@@ -47,10 +47,10 @@ static int wwvorbis_parse(AVCodecParserContext *pc, AVCodecContext *avctx,
     if (pc->flags & PARSER_FLAG_COMPLETE_FRAMES) {
         next = buf_size;
     } else {
-        if (pc->cur_offset == (8+16+16+avctx->extradata_size+6) &&
-            avctx->extradata &&
+        if (avctx->extradata &&
             avctx->extradata_size >= 26) {
-            s->left = AV_RL32(avctx->extradata+22);
+            if (pc->cur_offset == AV_RL64(avctx->extradata))
+                s->left = AV_RL32(avctx->extradata+22);
         }
 
         for (int i = 0; i < buf_size; i++) {

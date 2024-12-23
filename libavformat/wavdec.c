@@ -617,6 +617,11 @@ break_loop:
 
     avio_seek(pb, data_ofs, SEEK_SET);
 
+    if (st->codecpar->codec_id == AV_CODEC_ID_WWVORBIS &&
+        st->codecpar->extradata && st->codecpar->extradata_size >= 8) {
+        AV_WL64(st->codecpar->extradata, avio_tell(pb));
+    }
+
     if (data_size > (INT64_MAX>>3)) {
         av_log(s, AV_LOG_WARNING, "Data size %"PRId64" is too large\n", data_size);
         data_size = 0;
