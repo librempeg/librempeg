@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 
+#include "libavutil/mem.h"
 #define CACHED_BITSTREAM_READER !ARCH_X86_32
 #define BITSTREAM_READER_LE
 #include "get_bits.h"
@@ -167,11 +168,12 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
                 const unsigned ix = width - FFMAX(x, offs_x);
                 const unsigned ilen = FFMIN(ix, len);
 
-                if (dst + x >= odst + offs_x + ilen) {
+                if ((offs_y != y) || (x >= offs_x + ilen)) {
                     memcpy(dst + x, odst + offs_x, ilen);
                 } else {
-                    for (int i = 0; i < ilen; i++)
-                        dst[i+x] = odst[i+offs_x];
+                    const int overlap = x - offs_x;
+
+                    av_memcpy_backptr(dst + x, overlap, ilen);
                 }
 
                 x += ilen;
