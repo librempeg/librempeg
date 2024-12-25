@@ -40,6 +40,7 @@ OBJS = ac3_parser.o                                                     \
        codec_par.o                                                      \
        d3d11va.o                                                        \
        decode.o                                                         \
+       deflate.o                                                        \
        dirac.o                                                          \
        dv_profile.o                                                     \
        encode.o                                                         \
