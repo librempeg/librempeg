@@ -74,12 +74,12 @@ static int build_fixed_trees(InflateTree *lt, InflateTree *dt)
     return build_vlc(dt, 32, lens, symbols);
 }
 
-static int decode_symbol(GetBitContext *gb, const InflateTree *t)
+static int decode_symbol(GetBitContext *gb, const VLCElem *tab)
 {
-    return get_vlc2(gb, t->vlc.table, t->vlc.bits, 2);
+    return get_vlc2(gb, tab, 10, 2);
 }
 
-static uint32_t get_bits_base(GetBitContext *gb, int bits, int base)
+static av_always_inline uint32_t get_bits_base(GetBitContext *gb, int bits, int base)
 {
     return base + get_bitsz(gb, bits);
 }
@@ -112,9 +112,13 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
     const int width = s->width;
     int ret = 0, x = s->x, y = s->y;
     uint8_t *dst = s->dst + y * linesize;
+    const int dt_max_sym = dt->max_sym;
+    const int lt_max_sym = lt->max_sym;
+    const VLCElem *dt_tab = dt->vlc.table;
+    const VLCElem *lt_tab = lt->vlc.table;
 
     for (;;) {
-        int sym = decode_symbol(gb, lt);
+        int sym = decode_symbol(gb, lt_tab);
 
         if (sym < 256) {
             dst[x] = sym;
@@ -136,7 +140,7 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
             int len, dist, offs, offs_y, offs_x;
             uint8_t *odst;
 
-            if (sym > lt->max_sym || sym > 285) {
+            if (sym > lt_max_sym || sym > 285) {
                 ret = AVERROR_INVALIDDATA;
                 goto fail;
             }
@@ -146,9 +150,14 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
             len = get_bits_base(gb, length_bits[sym],
                                 length_base[sym]);
 
-            dist = decode_symbol(gb, dt);
+            if (len > ((height - y) * width - x)) {
+                ret = AVERROR_INVALIDDATA;
+                goto fail;
+            }
 
-            if (dist > dt->max_sym || dist > 29) {
+            dist = decode_symbol(gb, dt_tab);
+
+            if (dist > dt_max_sym || dist > 29) {
                 ret = AVERROR_INVALIDDATA;
                 goto fail;
             }
@@ -161,7 +170,7 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
             }
 
             offs_y = offs / width;
-            offs_x = offs % width;
+            offs_x = offs - offs_y * width;
             odst = s->dst + offs_y * linesize;
 
             while (len > 0) {
@@ -181,8 +190,6 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
                     dst += linesize;
                     x = 0;
                     y++;
-                    if (y >= height)
-                        break;
                 }
 
                 offs_x += ilen;
@@ -287,7 +294,7 @@ static int decode_trees(InflateContext *s, InflateTree *lt, InflateTree *dt)
         return ret;
 
     for (int num = 0; num < hlit + hdist;) {
-        int len, sym = decode_symbol(gb, lt);
+        int len, sym = decode_symbol(gb, lt->vlc.table);
 
         if (sym > lt->max_sym)
             return AVERROR_INVALIDDATA;
