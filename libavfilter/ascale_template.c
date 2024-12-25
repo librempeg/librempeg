@@ -88,12 +88,6 @@ static ftype fn(get_gain)(const ftype w, const ftype c)
     return SQRT(F(0.5)/b-(F(1.0)-c)*a*a/b)+a;
 }
 
-static ftype fn(get_score)(const ftype xcorr,
-                           const ftype n)
-{
-    return n * xcorr;
-}
-
 static ftype fn(l2norm)(const ftype *x, const int N)
 {
     ftype y = F(0.0);
@@ -244,8 +238,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     for (int n = ns; n < max_period-1; n++) {
         if (rptrx[n] >= rptrx[n-1] &&
             rptrx[n] >= rptrx[n+1]) {
-            const ftype xcorr = rptrx[n];
-            const ftype score = fn(get_score)(xcorr, 1);
+            const ftype score = rptrx[n];
 
             if (score > best_score) {
                 best_score = score;
@@ -269,16 +262,22 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
 {
     AScaleContext *s = ctx->priv;
     const ftype fs = F(1.0)/ctx->inputs[0]->sample_rate;
-    const int max_period = s->max_period;
     ChannelContext *c = &s->c[ch];
     const int best_period = c->best_period;
-    void *data[1] = { (void *)c->data[0] };
     const ftype best_score = c->best_score;
-    const ftype *rptr = c->r_data[0];
-    ftype *dptr = c->data[0];
-    ftype best_xcorr, scale;
+    const int max_period = s->max_period;
+    const int n = best_period;
+    ftype *dptrx = c->data[0];
+    ftype *dptry = c->data[0];
+    void *datax[1] = { (void *)c->data[0] };
+    const ftype xx = fn(l2norm)(dptrx, best_period);
+    const ftype yy = fn(l2norm)(dptry+n, best_period);
+    const ftype xy = best_score;
+    ftype best_xcorr = F(-1.0), scale;
+    const ftype num = xy;
+    const ftype den = xx * yy + EPS;
 
-    best_xcorr = (F(2.0)*rptr[best_period]-rptr[2*best_period])/rptr[0];
+    best_xcorr = num/den;
     best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
 
     if (best_xcorr < F(-0.95))
@@ -287,17 +286,17 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
 
     scale = F(1.0) / best_period;
     for (int n = 0; n < best_period; n++) {
-        const ftype yf = (n+F(0.5))*scale;
+        const ftype yf = n*scale;
         const ftype xf = F(1.0)-yf;
         const ftype axf = fn(get_gain)(xf, best_xcorr);
         const ftype ayf = fn(get_gain)(yf, best_xcorr);
-        const ftype x = dptr[n];
-        const ftype y = dptr[n+best_period];
+        const ftype x = dptrx[n];
+        const ftype y = dptry[n+best_period];
 
-        dptr[n] = x * axf + y * ayf;
+        dptrx[n] = x * axf + y * ayf;
     }
 
-    av_audio_fifo_write(c->out_fifo, data, best_period);
+    av_audio_fifo_write(c->out_fifo, datax, best_period);
     c->state[OUT] += best_period*fs;
     av_audio_fifo_drain(c->in_fifo, best_period*2);
     return av_audio_fifo_size(c->in_fifo) >= max_period*2;
@@ -309,10 +308,13 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     const int max_period = s->max_period;
     const int max_size = s->max_size;
     ChannelContext *c = &s->c[ch];
-    void *data[1] = { (void *)c->data[0] };
-    ctype *cptr = c->c_data[0];
-    ftype *rptr = c->r_data[0];
-    ftype *dptr = c->data[0];
+    void *datax[1] = { (void *)c->data[0] };
+    ctype *cptrx = c->c_data[0];
+    ctype *cptry = c->c_data[1];
+    ftype *rptrx = c->r_data[0];
+    ftype *rptry = c->r_data[1];
+    ftype *dptrx = c->data[0];
+    ftype *dptry = c->data[0];
     ftype best_score = -MAXF;
     int best_period = -1, ns;
     int size;
@@ -323,42 +325,46 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     if (!s->eof && av_audio_fifo_size(c->in_fifo) < max_period*2)
         return 0;
 
-    size = av_audio_fifo_peek(c->in_fifo, data, max_period*2);
+    size = av_audio_fifo_peek(c->in_fifo, datax, max_period*2);
     if (size < 0)
         size = 0;
-    if (size < max_period*2)
-        memset(dptr+size, 0, (max_period*2-size)*sizeof(*dptr));
+    if (size < max_period)
+        memset(dptrx+size, 0, (max_period-size)*sizeof(*dptrx));
 
-    memset(rptr+max_period*2, 0, (max_size+2-max_period*2) * sizeof(*rptr));
-    memcpy(rptr, dptr, max_period*2 * sizeof(*rptr));
+    memset(rptrx+max_period, 0, (max_size+2-max_period) * sizeof(*rptrx));
+    for (int n = 0; n < max_period; n++)
+        rptrx[n] = dptrx[max_period-n-1];
 
-    c->r2c_fn(c->r2c, cptr, rptr, sizeof(*rptr));
+    memset(rptry+max_period, 0, (max_size+2-max_period) * sizeof(*rptry));
+    memcpy(rptry, dptry + max_period, max_period * sizeof(*rptry));
 
-    cptr[0].re = cptr[0].im = F(0.0);
+    c->r2c_fn(c->r2c, cptrx, rptrx, sizeof(*rptrx));
+    c->r2c_fn(c->r2c, cptry, rptry, sizeof(*rptry));
+
+    cptrx[0].re = cptrx[0].im = cptry[0].re = cptry[0].im = F(0.0);
     for (int n = 0; n < max_size/2+1; n++) {
-        const ftype re = cptr[n].re;
-        const ftype im = cptr[n].im;
+        const ftype re0 = cptrx[n].re;
+        const ftype im0 = cptrx[n].im;
+        const ftype re1 = cptry[n].re;
+        const ftype im1 = cptry[n].im;
 
-        cptr[n].re = re*re + im*im;
-        cptr[n].im = F(0.0);
+        cptrx[n].re = re0*re1 - im1*im0;
+        cptrx[n].im = im0*re1 + im1*re0;
     }
 
-    c->c2r_fn(c->c2r, rptr, cptr, sizeof(*cptr));
+    c->c2r_fn(c->c2r, rptrx, cptrx, sizeof(*cptrx));
 
     for (int n = 1; n < max_period-1; n++) {
         ns = n;
-        if (rptr[n] <= rptr[n-1] &&
-            rptr[n] <= rptr[n+1])
-            break;
-        if (rptr[n-1] <= F(0.0) && rptr[n] > F(0.0))
+        if (rptrx[n] <= rptrx[n-1] &&
+            rptrx[n] <= rptrx[n+1])
             break;
     }
 
     for (int n = ns; n < max_period-1; n++) {
-        if (rptr[n] >= rptr[n-1] &&
-            rptr[n] >= rptr[n+1]) {
-            const ftype xcorr = F(2.0)*rptr[n]-rptr[2*n];
-            const ftype score = fn(get_score)(xcorr, n);
+        if (rptrx[n] >= rptrx[n-1] &&
+            rptrx[n] >= rptrx[n+1]) {
+            const ftype score = rptrx[n];
 
             if (score > best_score) {
                 best_score = score;
@@ -368,7 +374,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     }
 
     if (best_period <= 0)
-        best_period = max_period/2;
+        best_period = max_period;
 
     c->best_period = best_period;
     c->best_score = best_score;
