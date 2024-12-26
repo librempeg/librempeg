@@ -369,7 +369,7 @@ static int inflate_raw_block(InflateContext *s)
     const int height = s->height;
     const int width = s->width;
     int x = s->x, y = s->y, len, inv_len;
-    uint8_t *dst = s->dst + y * linesize;
+    uint8_t *dst = s->dst;
 
     align_get_bits(gb);
     len = get_bits(gb, 16);
