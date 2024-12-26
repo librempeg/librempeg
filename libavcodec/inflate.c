@@ -362,6 +362,45 @@ static int inflate_dynamic_block(InflateContext *s)
     return inflate_block_data(s, &s->dynamic_ltree, &s->dynamic_dtree);
 }
 
+static int inflate_raw_block(InflateContext *s)
+{
+    const ptrdiff_t linesize = s->linesize;
+    GetBitContext *gb = &s->gb;
+    const int height = s->height;
+    const int width = s->width;
+    int x = s->x, y = s->y, len, inv_len;
+    uint8_t *dst = s->dst + y * linesize;
+
+    align_get_bits(gb);
+    len = get_bits(gb, 16);
+    inv_len = get_bits(gb, 16);
+    if ((len ^ inv_len) != 0xFFFF)
+        return AVERROR_INVALIDDATA;
+
+    if (len > ((height - y) * width - x))
+        return AVERROR_INVALIDDATA;
+
+    while (len > 0) {
+        const int ilen = FFMIN(width - x, len);
+
+        memcpy(dst + linesize * y + x, gb->buffer + (get_bits_count(gb) >> 3), ilen);
+
+        x += ilen;
+        if (x >= width) {
+            x = 0;
+            y++;
+        }
+
+        len -= ilen;
+        skip_bits_long(gb, ilen * 8);
+    }
+
+    s->x = x;
+    s->y = y;
+
+    return 0;
+}
+
 int ff_inflate(InflateContext *s,
                const uint8_t *src, int src_len,
                uint8_t *dst, int height,
@@ -391,35 +430,12 @@ int ff_inflate(InflateContext *s,
         skip_bits(gb, 16);
 
     do {
-        int len, inv_len;
-
         bfinal = get_bits1(gb);
         bmode = get_bits(gb, 2);
 
         switch (bmode) {
         case 0:
-            align_get_bits(gb);
-            len = get_bits(gb, 16);
-            inv_len = get_bits(gb, 16);
-            if ((len ^ inv_len) != 0xFFFF)
-                return AVERROR_INVALIDDATA;
-
-            while (len > 0) {
-                const int ilen = FFMIN(width - s->x, len);
-
-                memcpy(dst + linesize * s->y + s->x, src + (get_bits_count(gb) >> 3), ilen);
-
-                s->x += ilen;
-                if (s->x >= width) {
-                    s->x = 0;
-                    s->y++;
-                    if (s->y >= height)
-                        break;
-                }
-
-                len -= ilen;
-                skip_bits_long(gb, ilen * 8);
-            }
+            ret = inflate_raw_block(s);
             break;
         case 1:
             ret = inflate_fixed_block(s);
