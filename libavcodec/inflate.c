@@ -377,6 +377,9 @@ static int inflate_raw_block(InflateContext *s)
     if ((len ^ inv_len) != 0xFFFF)
         return AVERROR_INVALIDDATA;
 
+    if (get_bits_left(gb) < len * 8)
+        return AVERROR_INVALIDDATA;
+
     if (len > ((height - y) * width - x))
         return AVERROR_INVALIDDATA;
 
