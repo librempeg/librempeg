@@ -58,6 +58,7 @@ static void fn(vb_stereo)(AVFilterContext *ctx, AVFrame *out, AVFrame *in)
     ftype *ldst = (ftype *)out->extended_data[0];
     ftype *rdst = (ftype *)out->extended_data[1];
     ftype *lfe = (ftype *)out->extended_data[2];
+    const int nb_samples = in->nb_samples;
     const ftype st = M_PI / s->strength;
     const ftype a0 = s->a[0];
     const ftype a1 = s->a[1];
@@ -66,10 +67,10 @@ static void fn(vb_stereo)(AVFilterContext *ctx, AVFrame *out, AVFrame *in)
     ftype b0 = s->cf[0];
     ftype b1 = s->cf[1];
 
-    memcpy(ldst, lsrc, in->nb_samples * sizeof(*ldst));
-    memcpy(rdst, rsrc, in->nb_samples * sizeof(*rdst));
+    memcpy(ldst, lsrc, nb_samples * sizeof(*ldst));
+    memcpy(rdst, rsrc, nb_samples * sizeof(*rdst));
 
-    for (int n = 0; n < in->nb_samples; n++) {
+    for (int n = 0; n < nb_samples; n++) {
         const ftype center = (lsrc[n] + rsrc[n]) * F(0.5);
         const ftype v0 = center;
         const ftype v3 = v0 - b1;

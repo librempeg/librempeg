@@ -350,6 +350,7 @@ static int sofalizer_convolute(AVFilterContext *ctx, void *arg, int jobnr, int n
     /* -1 for AND instead of MODULO (applied to powers of 2): */
     const uint32_t modulo = (uint32_t)buffer_length - 1;
     float *buffer[64]; /* holds ringbuffer for each input channel */
+    const int nb_samples = in->nb_samples;
     int wr = *write;
     int read;
     int i, l;
@@ -362,7 +363,7 @@ static int sofalizer_convolute(AVFilterContext *ctx, void *arg, int jobnr, int n
         buffer[l] = ringbuffer + l * buffer_length;
     }
 
-    for (i = 0; i < in->nb_samples; i++) {
+    for (i = 0; i < nb_samples; i++) {
         const float *temp_ir = ir; /* using same set of IRs for each sample */
 
         dst[0] = 0;
@@ -452,6 +453,7 @@ static int sofalizer_fast_convolute(AVFilterContext *ctx, void *arg, int jobnr, 
     av_tx_fn itx_fn = s->itx_fn[jobnr];
     AVTXContext *tx_ctx = s->tx_ctx[jobnr];
     av_tx_fn tx_fn = s->tx_fn[jobnr];
+    const int out_nb_samples = out->nb_samples;
     const int nb_samples = in->nb_samples;
     const float gain_lfe = s->gain_lfe;
     const int n_conv = s->n_conv;
@@ -553,7 +555,7 @@ static int sofalizer_fast_convolute(AVFilterContext *ctx, void *arg, int jobnr, 
     }
 
     /* go through all samples of current output buffer: count clippings */
-    for (i = 0; i < out->nb_samples; i++) {
+    for (int i = 0; i < out_nb_samples; i++) {
         /* clippings counter */
         if (fabsf(dst[i * mult]) > 1) { /* if current output sample > 1 */
             n_clippings[0]++;

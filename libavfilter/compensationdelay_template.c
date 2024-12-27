@@ -52,6 +52,7 @@ static int fn(delay_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb
     const int nb_channels = in->ch_layout.nb_channels;
     const int start = (nb_channels * jobnr) / nb_jobs;
     const int end = (nb_channels * (jobnr+1)) / nb_jobs;
+    const int nb_samples = in->nb_samples;
     const ftype dry = s->dry;
     const ftype wet = s->wet;
 
@@ -72,7 +73,7 @@ static int fn(delay_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb
         w_ptr =  s->w_ptr[ch];
         r_ptr = (w_ptr + buf_size - delay) & b_mask;
 
-        for (int n = 0; n < in->nb_samples; n++) {
+        for (int n = 0; n < nb_samples; n++) {
             const ftype sample = src[n];
 
             buffer[w_ptr] = sample;

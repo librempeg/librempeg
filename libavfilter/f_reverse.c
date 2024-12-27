@@ -163,41 +163,43 @@ const AVFilter ff_vf_reverse = {
 
 static void reverse_samples_planar(AVFrame *out)
 {
+    const int nb_samples = out->nb_samples;
+
     for (int p = 0; p < out->ch_layout.nb_channels; p++) {
         switch (out->format) {
         case AV_SAMPLE_FMT_U8P: {
             uint8_t *dst = (uint8_t *)out->extended_data[p];
-            for (int i = 0, j = out->nb_samples - 1; i < j; i++, j--)
+            for (int i = 0, j = nb_samples - 1; i < j; i++, j--)
                 FFSWAP(uint8_t, dst[i], dst[j]);
         }
             break;
         case AV_SAMPLE_FMT_S16P: {
             int16_t *dst = (int16_t *)out->extended_data[p];
-            for (int i = 0, j = out->nb_samples - 1; i < j; i++, j--)
+            for (int i = 0, j = nb_samples - 1; i < j; i++, j--)
                 FFSWAP(int16_t, dst[i], dst[j]);
         }
             break;
         case AV_SAMPLE_FMT_S32P: {
             int32_t *dst = (int32_t *)out->extended_data[p];
-            for (int i = 0, j = out->nb_samples - 1; i < j; i++, j--)
+            for (int i = 0, j = nb_samples - 1; i < j; i++, j--)
                 FFSWAP(int32_t, dst[i], dst[j]);
         }
             break;
         case AV_SAMPLE_FMT_S64P: {
             int64_t *dst = (int64_t *)out->extended_data[p];
-            for (int i = 0, j = out->nb_samples - 1; i < j; i++, j--)
+            for (int i = 0, j = nb_samples - 1; i < j; i++, j--)
                 FFSWAP(int64_t, dst[i], dst[j]);
         }
             break;
         case AV_SAMPLE_FMT_FLTP: {
             float *dst = (float *)out->extended_data[p];
-            for (int i = 0, j = out->nb_samples - 1; i < j; i++, j--)
+            for (int i = 0, j = nb_samples - 1; i < j; i++, j--)
                 FFSWAP(float, dst[i], dst[j]);
         }
             break;
         case AV_SAMPLE_FMT_DBLP: {
             double *dst = (double *)out->extended_data[p];
-            for (int i = 0, j = out->nb_samples - 1; i < j; i++, j--)
+            for (int i = 0, j = nb_samples - 1; i < j; i++, j--)
                 FFSWAP(double, dst[i], dst[j]);
         }
             break;
@@ -208,46 +210,47 @@ static void reverse_samples_planar(AVFrame *out)
 static void reverse_samples_packed(AVFrame *out)
 {
     const int channels = out->ch_layout.nb_channels;
+    const int nb_samples = out->nb_samples;
 
     switch (out->format) {
     case AV_SAMPLE_FMT_U8: {
         uint8_t *dst = (uint8_t *)out->extended_data[0];
-        for (int i = 0, j = out->nb_samples - 1; i < j; i++, j--)
+        for (int i = 0, j = nb_samples - 1; i < j; i++, j--)
             for (int p = 0; p < channels; p++)
                 FFSWAP(uint8_t, dst[i * channels + p], dst[j * channels + p]);
     }
         break;
     case AV_SAMPLE_FMT_S16: {
         int16_t *dst = (int16_t *)out->extended_data[0];
-        for (int i = 0, j = out->nb_samples - 1; i < j; i++, j--)
+        for (int i = 0, j = nb_samples - 1; i < j; i++, j--)
             for (int p = 0; p < channels; p++)
                 FFSWAP(int16_t, dst[i * channels + p], dst[j * channels + p]);
     }
         break;
     case AV_SAMPLE_FMT_S32: {
         int32_t *dst = (int32_t *)out->extended_data[0];
-        for (int i = 0, j = out->nb_samples - 1; i < j; i++, j--)
+        for (int i = 0, j = nb_samples - 1; i < j; i++, j--)
             for (int p = 0; p < channels; p++)
                 FFSWAP(int32_t, dst[i * channels + p], dst[j * channels + p]);
     }
         break;
     case AV_SAMPLE_FMT_S64: {
         int64_t *dst = (int64_t *)out->extended_data[0];
-        for (int i = 0, j = out->nb_samples - 1; i < j; i++, j--)
+        for (int i = 0, j = nb_samples - 1; i < j; i++, j--)
             for (int p = 0; p < channels; p++)
                 FFSWAP(int64_t, dst[i * channels + p], dst[j * channels + p]);
     }
         break;
     case AV_SAMPLE_FMT_FLT: {
         float *dst = (float *)out->extended_data[0];
-        for (int i = 0, j = out->nb_samples - 1; i < j; i++, j--)
+        for (int i = 0, j = nb_samples - 1; i < j; i++, j--)
             for (int p = 0; p < channels; p++)
                 FFSWAP(float, dst[i * channels + p], dst[j * channels + p]);
     }
         break;
     case AV_SAMPLE_FMT_DBL: {
         double *dst = (double *)out->extended_data[0];
-        for (int i = 0, j = out->nb_samples - 1; i < j; i++, j--)
+        for (int i = 0, j = nb_samples - 1; i < j; i++, j--)
             for (int p = 0; p < channels; p++)
                 FFSWAP(double, dst[i * channels + p], dst[j * channels + p]);
     }

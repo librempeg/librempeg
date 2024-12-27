@@ -282,20 +282,21 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AudioSpaceContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     const int nb_speakers = outlink->ch_layout.nb_channels;
+    int nb_samples = in->nb_samples;
     ThreadData td;
     double scale;
     AVFrame *out;
 
-    if (!s->w || s->w->nb_samples < in->nb_samples) {
+    if (!s->w || s->w->nb_samples < nb_samples) {
         av_frame_free(&s->w);
-        s->w = ff_get_audio_buffer(outlink, in->nb_samples);
+        s->w = ff_get_audio_buffer(outlink, nb_samples);
         if (!s->w) {
             av_frame_free(&in);
             return AVERROR(ENOMEM);
         }
     }
 
-    out = ff_get_audio_buffer(outlink, in->nb_samples);
+    out = ff_get_audio_buffer(outlink, nb_samples);
     if (!out) {
         av_frame_free(&in);
         return AVERROR(ENOMEM);
@@ -306,9 +307,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     s->source[1] = s->polar[2] * sin(s->polar[0] * M_PI / 180.0) * cos(s->polar[1] * M_PI / 180.0);
     s->source[2] = s->polar[2] * sin(s->polar[1] * M_PI / 180.0);
 
-    scale = 1.0 / out->nb_samples;
+    scale = 1.0 / nb_samples;
     s->a = s->rolloff / (20.0 * log10(2.0));
-    for (int n = 0; n < out->nb_samples; n++) {
+    for (int n = 0; n < nb_samples; n++) {
         double p, mediand, drs, maxd, um, source[3];
 
         if (s->set && !memcmp(s->prev_source, s->source, sizeof(s->source))) {
@@ -318,7 +319,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                     Speaker *speaker = &s->speakers[ch];
                     const float gain = speaker->gain;
 
-                    for (int m = 0; m < out->nb_samples; m++) {
+                    for (int m = 0; m < nb_samples; m++) {
                         float *w = (float *)s->w->extended_data[ch];
 
                         w[m] = gain;
@@ -330,7 +331,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                     Speaker *speaker = &s->speakers[ch];
                     const double gain = speaker->gain;
 
-                    for (int m = 0; m < out->nb_samples; m++) {
+                    for (int m = 0; m < nb_samples; m++) {
                         double *w = (double *)s->w->extended_data[ch];
 
                         w[m] = gain;

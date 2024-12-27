@@ -94,6 +94,7 @@ static void fn(xcorrelate_slow)(AVFilterContext *ctx,
     fn(ChannelState) *ch_state = s->ch_state;
     fn(ChannelState) *state = &ch_state[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
+    const int nb_samples = out->nb_samples;
     const int size = s->size;
     int used = state->used;
     ftype sumx, sumy;
@@ -101,7 +102,7 @@ static void fn(xcorrelate_slow)(AVFilterContext *ctx,
     sumx = state->mean_sumx;
     sumy = state->mean_sumy;
 
-    for (int n = 0; n < out->nb_samples; n++) {
+    for (int n = 0; n < nb_samples; n++) {
         const int idx = n + size;
 
         sumx += x[idx];
@@ -131,6 +132,7 @@ static void fn(xcorrelate_fast)(AVFilterContext *ctx,
     fn(ChannelState) *ch_state = s->ch_state;
     fn(ChannelState) *state = &ch_state[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
+    const int nb_samples = out->nb_samples;
     ftype num_sum, den_sumx, den_sumy;
     const int size = s->size;
     int used = state->used;
@@ -139,7 +141,7 @@ static void fn(xcorrelate_fast)(AVFilterContext *ctx,
     den_sumx = state->den_sumx;
     den_sumy = state->den_sumy;
 
-    for (int n = 0; n < out->nb_samples; n++) {
+    for (int n = 0; n < nb_samples; n++) {
         const int idx = n + size;
         const ftype xidx = x[idx];
         const ftype yidx = y[idx];
@@ -184,6 +186,7 @@ static void fn(xcorrelate_best)(AVFilterContext *ctx, AVFrame *out,
     fn(ChannelState) *state = &ch_state[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
     ftype mean_sumx, mean_sumy, num_sum, den_sumx, den_sumy;
+    const int nb_samples = out->nb_samples;
     const int size = s->size;
     int used = state->used;
 
@@ -193,7 +196,7 @@ static void fn(xcorrelate_best)(AVFilterContext *ctx, AVFrame *out,
     mean_sumx = state->mean_sumx;
     mean_sumy = state->mean_sumy;
 
-    for (int n = 0; n < out->nb_samples; n++) {
+    for (int n = 0; n < nb_samples; n++) {
         const int idx = n + size;
         const ftype xidx = x[idx];
         const ftype yidx = y[idx];
