@@ -24,6 +24,7 @@ version <next>:
 - EALAYER3 and EALAYER3MULTI audio decoder
 - EALAYER3 demuxer
 - libx265 alpha layer encoding
+- Enhanced FLV v2: Multitrack audio/video, modern codec support
 
 
 version 7.1:
