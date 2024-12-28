@@ -23,8 +23,14 @@ version <next>:
 - UTK and UTK R3 audio decoder and demuxer
 - EALAYER3 and EALAYER3MULTI audio decoder
 - EALAYER3 demuxer
+- Sample Vision demuxer
+- RFB demuxer and video decoder
+- UEBA demuxer
+- L&H CELP decoder
 - libx265 alpha layer encoding
 - Enhanced FLV v2: Multitrack audio/video, modern codec support
+- Wwise Vorbis audio decoder
+- Wwise ADPCM Platinum audio decoder
 
 
 version 7.1:
