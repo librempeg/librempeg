@@ -157,7 +157,7 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
 
             dist = decode_symbol(gb, dt_tab);
 
-            if (dist > dt_max_sym || dist > 29) {
+            if (dist < 0 || dist > dt_max_sym || dist > 29) {
                 ret = AVERROR_INVALIDDATA;
                 goto fail;
             }
