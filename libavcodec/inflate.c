@@ -179,10 +179,13 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
 
                 if ((offs_y != y) || (x >= offs_x + ilen)) {
                     memcpy(dst + x, odst + offs_x, ilen);
-                } else {
+                } else if (x > offs_x) {
                     const int overlap = x - offs_x;
 
                     av_memcpy_backptr(dst + x, overlap, ilen);
+                } else {
+                    ret = AVERROR_INVALIDDATA;
+                    goto fail;
                 }
 
                 x += ilen;
