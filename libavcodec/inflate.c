@@ -426,7 +426,7 @@ int ff_inflate(InflateContext *s,
 
     ret = init_get_bits8(gb, src, src_len);
     if (ret < 0)
-        return ret;
+        goto end;
 
     hdr = show_bits(gb, 16);
     cm = hdr & 0xF;
@@ -450,7 +450,8 @@ int ff_inflate(InflateContext *s,
             ret = inflate_dynamic_block(s);
             break;
         case 3:
-            return AVERROR_INVALIDDATA;
+            ret = AVERROR_INVALIDDATA;
+            break;
         }
 
         if (ret < 0)
@@ -461,6 +462,10 @@ int ff_inflate(InflateContext *s,
             break;
         }
     } while (!bfinal);
+
+end:
+    ff_vlc_free(&s->dynamic_ltree.vlc);
+    ff_vlc_free(&s->dynamic_dtree.vlc);
 
     if (ret < 0)
         return ret;
