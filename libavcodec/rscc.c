@@ -36,7 +36,6 @@
 
 #include <stdint.h>
 #include <string.h>
-#include <zlib.h>
 
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
@@ -46,6 +45,7 @@
 #include "bytestream.h"
 #include "codec_internal.h"
 #include "decode.h"
+#include "inflate.h"
 
 #define TILE_SIZE 8
 
@@ -63,9 +63,9 @@ typedef struct RsccContext {
 
     uint8_t palette[AVPALETTE_SIZE];
 
-    /* zlib interaction */
+    InflateContext ic;
     uint8_t *inflated_buf;
-    uLongf inflated_size;
+    int inflated_size;
     int valid_pixels;
 } RsccContext;
 
@@ -188,18 +188,18 @@ static int rscc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
      * a size header. When that size does not match the number of tiles
      * times the tile size, it means it needs to be inflated as well */
     if (tiles_nb > 5) {
-        uLongf packed_tiles_size;
+        int packed_tiles_size;
 
         if (tiles_nb < 32)
             packed_tiles_size = bytestream2_get_byte(gbc);
         else
             packed_tiles_size = bytestream2_get_le16(gbc);
 
-        ff_dlog(avctx, "packed tiles of size %lu.\n", packed_tiles_size);
+        ff_dlog(avctx, "packed tiles of size %d.\n", packed_tiles_size);
 
         /* If necessary, uncompress tiles, and hijack the bytestream reader */
         if (packed_tiles_size != tiles_nb * TILE_SIZE) {
-            uLongf length = tiles_nb * TILE_SIZE;
+            int length = tiles_nb * TILE_SIZE;
 
             if (bytestream2_get_bytes_left(gbc) < packed_tiles_size) {
                 ret = AVERROR_INVALIDDATA;
@@ -212,13 +212,9 @@ static int rscc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 goto end;
             }
 
-            ret = uncompress(inflated_tiles, &length,
-                             gbc->buffer, packed_tiles_size);
-            if (ret) {
-                av_log(avctx, AV_LOG_ERROR, "Tile deflate error %d.\n", ret);
-                ret = AVERROR_UNKNOWN;
+            ret = ff_inflate(&ctx->ic, gbc->buffer, packed_tiles_size, inflated_tiles, 1, length, length);
+            if (ret)
                 goto end;
-            }
 
             /* Skip the compressed tile section in the main byte reader,
              * and point it to read the newly uncompressed data */
@@ -295,7 +291,7 @@ static int rscc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         pixels = gbc->buffer;
     } else {
-        uLongf len = ctx->inflated_size;
+        int len = ctx->inflated_size;
         if (bytestream2_get_bytes_left(gbc) < packed_size) {
             av_log(avctx, AV_LOG_ERROR, "Insufficient input for %d\n", packed_size);
             ret = AVERROR_INVALIDDATA;
@@ -305,12 +301,11 @@ static int rscc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             ret = AVERROR_INVALIDDATA;
             goto end;
         }
-        ret = uncompress(ctx->inflated_buf, &len, gbc->buffer, packed_size);
-        if (ret) {
-            av_log(avctx, AV_LOG_ERROR, "Pixel deflate error %d.\n", ret);
-            ret = AVERROR_UNKNOWN;
+        ret = ff_inflate(&ctx->ic, gbc->buffer, bytestream2_get_bytes_left(gbc),
+                         ctx->inflated_buf, 1, len, len);
+        if (ret < 0)
             goto end;
-        }
+        len = ret;
         pixels = ctx->inflated_buf;
     }
 
