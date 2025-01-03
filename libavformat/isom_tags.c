@@ -295,6 +295,9 @@ const AVCodecTag ff_codec_movvideo_tags[] = {
 
     { AV_CODEC_ID_CFHD, MKTAG('C', 'F', 'H', 'D') },
 
+    { AV_CODEC_ID_PRORESRAW, MKTAG('a', 'p', 'r', 'h') }, /* Apple ProRes RAW High Quality */
+    { AV_CODEC_ID_PRORESRAW, MKTAG('a', 'p', 'r', 'n') }, /* Apple ProRes RAW Standard Quality */
+
     { AV_CODEC_ID_NONE, 0 },
 };
 

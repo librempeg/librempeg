@@ -32,6 +32,7 @@ version <next>:
 - Wwise Vorbis audio decoder
 - Wwise ADPCM Platinum audio decoder
 - Animated JPEG XL encoding (via libjxl)
+- ProRes RAW video decoder
 
 
 version 7.1:

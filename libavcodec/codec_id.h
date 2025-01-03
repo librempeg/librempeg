@@ -335,6 +335,7 @@ enum AVCodecID {
     AV_CODEC_ID_ILDA,
     AV_CODEC_ID_RFB,
     AV_CODEC_ID_JPEGXL_ANIM,
+    AV_CODEC_ID_PRORESRAW,
 
     /* various PCM "codecs" */
     AV_CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
