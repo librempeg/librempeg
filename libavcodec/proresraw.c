@@ -222,7 +222,7 @@ static int decode_tilec(AVCodecContext *avctx, TileContext *tile,
 
             ac = get_value(&gbit, ac_codebook);
             ac_codebook = ac_cb[FFMIN(ac, FF_ARRAY_ELEMS(ac_cb)-1)];
-            sign = sign_extend(get_bits1(&gbit), 1);
+            sign = -get_bits1(&gbit);
             block[scan[(n+i)>>log2_nb_blocks] + (((n+i)&block_mask)<<6)] = (((int)ac + 1) ^ sign) - sign;
         }
 
@@ -241,7 +241,7 @@ static int decode_tilec(AVCodecContext *avctx, TileContext *tile,
             break;
 
         ac = get_value(&gbit, ac_codebook);
-        sign = sign_extend(get_bits1(&gbit), 1);
+        sign = -get_bits1(&gbit);
         block[scan[n>>log2_nb_blocks] + ((n&block_mask)<<6)] = (((int)ac + 1) ^ sign) - sign;
 
         ac_codebook = ac_cb[FFMIN(ac, FF_ARRAY_ELEMS(ac_cb)-1)];
