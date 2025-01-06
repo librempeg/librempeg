@@ -65,7 +65,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     int ret;
 
     avctx->bits_per_raw_sample = 12;
-    avctx->pix_fmt = AV_PIX_FMT_BAYER_GRBG16;
+    avctx->pix_fmt = AV_PIX_FMT_BAYER_RGGB16;
     avctx->color_trc = AVCOL_TRC_LINEAR;
 
     ff_blockdsp_init(&s->bdsp);
@@ -293,16 +293,16 @@ static int decode_tile(AVCodecContext *avctx, TileContext *tile,
     size[2] = bytestream2_get_be16(gb);
     size[3] = bytestream2_size(gb) - size[0] - size[1] - size[2] - 8;
 
-    ret = decode_tilec(avctx, tile, frame, size[0], 0, qscale);
+    ret = decode_tilec(avctx, tile, frame, size[0], 2, qscale);
     if (ret < 0)
         goto fail;
-    ret = decode_tilec(avctx, tile, frame, size[1], 3, qscale);
+    ret = decode_tilec(avctx, tile, frame, size[1], 1, qscale);
     if (ret < 0)
         goto fail;
-    ret = decode_tilec(avctx, tile, frame, size[2], 2, qscale);
+    ret = decode_tilec(avctx, tile, frame, size[2], 3, qscale);
     if (ret < 0)
         goto fail;
-    ret = decode_tilec(avctx, tile, frame, size[3], 1, qscale);
+    ret = decode_tilec(avctx, tile, frame, size[3], 0, qscale);
     if (ret < 0)
         goto fail;
 
