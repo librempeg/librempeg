@@ -697,8 +697,8 @@ static int dng_decode_jpeg(AVCodecContext *avctx, AVFrame *frame,
         return AVERROR_INVALIDDATA;
 
     /* See dng_blit for explanation */
-    if (s->avctx_mjpeg->width  == w * 2 &&
-        s->avctx_mjpeg->height == h / 2 &&
+    if (s->avctx_mjpeg->width  >= w * 2 &&
+        s->avctx_mjpeg->height >= h / 2 &&
         s->avctx_mjpeg->pix_fmt == AV_PIX_FMT_GRAY16LE) {
         is_single_comp = 1;
     } else if (s->avctx_mjpeg->width  >= w &&
