@@ -69,6 +69,7 @@ extern const FFCodec ff_bmp_encoder;
 extern const FFCodec ff_bmp_decoder;
 extern const FFCodec ff_bmv_video_decoder;
 extern const FFCodec ff_brender_pix_decoder;
+extern const FFCodec ff_braw_decoder;
 extern const FFCodec ff_c93_decoder;
 extern const FFCodec ff_cavs_decoder;
 extern const FFCodec ff_cdgraphics_decoder;

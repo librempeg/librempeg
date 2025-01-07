@@ -298,6 +298,13 @@ const AVCodecTag ff_codec_movvideo_tags[] = {
     { AV_CODEC_ID_PRORESRAW, MKTAG('a', 'p', 'r', 'h') }, /* Apple ProRes RAW High Quality */
     { AV_CODEC_ID_PRORESRAW, MKTAG('a', 'p', 'r', 'n') }, /* Apple ProRes RAW Standard Quality */
 
+    { AV_CODEC_ID_BRAW, MKTAG('b', 'r', 'x', 'q') },
+    { AV_CODEC_ID_BRAW, MKTAG('b', 'r', 'h', 'q') },
+    { AV_CODEC_ID_BRAW, MKTAG('b', 'r', 's', 't') },
+    { AV_CODEC_ID_BRAW, MKTAG('b', 'r', 'l', 't') },
+    { AV_CODEC_ID_BRAW, MKTAG('b', 'r', 'v', 'l') },
+    { AV_CODEC_ID_BRAW, MKTAG('b', 'r', 'v', 'm') },
+
     { AV_CODEC_ID_NONE, 0 },
 };
 

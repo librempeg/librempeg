@@ -290,6 +290,7 @@ OBJS-$(CONFIG_BMP_ENCODER)             += bmpenc.o
 OBJS-$(CONFIG_BMV_AUDIO_DECODER)       += bmvaudio.o
 OBJS-$(CONFIG_BMV_VIDEO_DECODER)       += bmvvideo.o
 OBJS-$(CONFIG_BONK_DECODER)            += bonk.o
+OBJS-$(CONFIG_BRAW_DECODER)            += braw.o
 OBJS-$(CONFIG_BRENDER_PIX_DECODER)     += brenderpix.o
 OBJS-$(CONFIG_C93_DECODER)             += c93.o
 OBJS-$(CONFIG_CAVS_DECODER)            += cavs.o cavsdec.o cavsdsp.o \
