@@ -342,7 +342,7 @@ static const AVOption buffersink_options[] = {
 static const AVOption abuffersink_options[] = {
     { "sample_formats",  "array of supported sample formats", OFFSET(sample_formats),
         AV_OPT_TYPE_SAMPLE_FMT | AV_OPT_TYPE_FLAG_ARRAY, .max = INT_MAX, .flags = FLAGS },
-    { "samplerates",    "array of supported sample formats", OFFSET(samplerates),
+    { "samplerates",    "array of supported sample rates", OFFSET(samplerates),
         AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, .max = INT_MAX, .flags = FLAGS },
     { "channel_layouts", "array of supported channel layouts", OFFSET(channel_layouts),
         AV_OPT_TYPE_CHLAYOUT | AV_OPT_TYPE_FLAG_ARRAY, .flags = FLAGS },
