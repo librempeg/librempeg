@@ -76,6 +76,8 @@ static int config_input(AVFilterLink *inlink)
         s->uninit_state = uninit_state_dblp;
         s->filter_channels = (s->blocksize > 0) ? filter_block_channels_dblp : filter_channels_dblp;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return s->init_state(ctx);
