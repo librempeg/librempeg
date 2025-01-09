@@ -94,7 +94,7 @@ static int query_formats(const AVFilterContext *ctx,
     if ((ret = ff_channel_layouts_ref(in_layouts, &cfg_in[0]->channel_layouts)) < 0)
         return ret;
 
-    if(out_rate > 0) {
+    if (out_rate > 0) {
         int ratelist[] = { out_rate, -1 };
         out_samplerates = ff_make_format_list(ratelist);
     } else {
@@ -104,7 +104,7 @@ static int query_formats(const AVFilterContext *ctx,
     if ((ret = ff_formats_ref(out_samplerates, &cfg_out[0]->samplerates)) < 0)
         return ret;
 
-    if(out_format != AV_SAMPLE_FMT_NONE) {
+    if (out_format != AV_SAMPLE_FMT_NONE) {
         int formatlist[] = { out_format, -1 };
         out_formats = ff_make_format_list(formatlist);
     } else
@@ -185,7 +185,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamplesref)
 
     outsamplesref = ff_get_audio_buffer(outlink, n_out);
 
-    if(!outsamplesref) {
+    if (!outsamplesref) {
         av_frame_free(&insamplesref);
         return AVERROR(ENOMEM);
     }
@@ -200,7 +200,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamplesref)
     }
     outsamplesref->sample_rate           = outlink->sample_rate;
 
-    if(insamplesref->pts != AV_NOPTS_VALUE) {
+    if (insamplesref->pts != AV_NOPTS_VALUE) {
         int64_t inpts = av_rescale(insamplesref->pts, inlink->time_base.num * (int64_t)outlink->sample_rate * inlink->sample_rate, inlink->time_base.den);
         int64_t outpts= swr_next_pts(aresample->swr, inpts);
         aresample->next_pts =
