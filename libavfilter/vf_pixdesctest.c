@@ -116,9 +116,9 @@ static const AVFilterPad pixdesctest_inputs[] = {
     },
 };
 
-const AVFilter ff_vf_pixdesctest = {
-    .name        = "pixdesctest",
-    .description = NULL_IF_CONFIG_SMALL("Test pixel format definitions."),
+const FFFilter ff_vf_pixdesctest = {
+    .p.name      = "pixdesctest",
+    .p.description = NULL_IF_CONFIG_SMALL("Test pixel format definitions."),
     .priv_size   = sizeof(PixdescTestContext),
     .uninit      = uninit,
     FILTER_INPUTS(pixdesctest_inputs),

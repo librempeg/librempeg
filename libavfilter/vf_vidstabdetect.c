@@ -201,17 +201,17 @@ static const AVFilterPad vidstabdetect_inputs[] = {
     },
 };
 
-const AVFilter ff_vf_vidstabdetect = {
-    .name          = "vidstabdetect",
-    .description   = NULL_IF_CONFIG_SMALL("Extract relative transformations, "
+const FFFilter ff_vf_vidstabdetect = {
+    .p.name        = "vidstabdetect",
+    .p.description = NULL_IF_CONFIG_SMALL("Extract relative transformations, "
                                           "pass 1 of 2 for stabilization "
                                           "(see vidstabtransform for pass 2)."),
+    .p.priv_class  = &vidstabdetect_class,
+    .p.flags       = AVFILTER_FLAG_METADATA_ONLY,
     .priv_size     = sizeof(StabData),
     .init          = init,
     .uninit        = uninit,
-    .flags         = AVFILTER_FLAG_METADATA_ONLY,
     FILTER_INPUTS(vidstabdetect_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(ff_vidstab_pix_fmts),
-    .priv_class    = &vidstabdetect_class,
 };

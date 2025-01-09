@@ -260,17 +260,17 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_af_aenvelope = {
-    .name          = "aenvelope",
-    .description   = NULL_IF_CONFIG_SMALL("Audio envelope."),
+const FFFilter ff_af_aenvelope = {
+    .p.name        = "aenvelope",
+    .p.description = NULL_IF_CONFIG_SMALL("Audio envelope."),
+    .p.priv_class  = &aenvelope_class,
     .priv_size     = sizeof(AudioEnvelopeContext),
-    .priv_class    = &aenvelope_class,
     .activate      = activate,
     .uninit        = uninit,
     FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
     .process_command = process_command,
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
-                       AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS,
 };

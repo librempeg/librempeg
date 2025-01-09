@@ -192,15 +192,15 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_asrc_aquadosc = {
-    .name            = "aquadosc",
-    .description     = NULL_IF_CONFIG_SMALL("Generate Quadrature Oscillator samples."),
+const FFFilter ff_asrc_aquadosc = {
+    .p.name          = "aquadosc",
+    .p.description   = NULL_IF_CONFIG_SMALL("Generate Quadrature Oscillator samples."),
+    .p.priv_class    = &aquadosc_class,
+    .p.inputs        = NULL,
     .activate        = activate,
     .uninit          = uninit,
     .priv_size       = sizeof(AQuadOscContext),
-    .inputs          = NULL,
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
-    .priv_class      = &aquadosc_class,
     .process_command = process_command,
 };

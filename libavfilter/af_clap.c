@@ -859,18 +859,18 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     return ret;
 }
 
-const AVFilter ff_af_clap = {
-    .name          = "clap",
-    .description   = NULL_IF_CONFIG_SMALL("Apply CLAP effect."),
+const FFFilter ff_af_clap = {
+    .p.name        = "clap",
+    .p.description = NULL_IF_CONFIG_SMALL("Apply CLAP effect."),
+    .p.priv_class  = &clap_class,
     .priv_size     = sizeof(CLAPContext),
-    .priv_class    = &clap_class,
     .init          = init,
     .activate      = activate,
     .uninit        = uninit,
     .process_command = process_command,
-    .inputs        = NULL,
-    .outputs       = NULL,
+    .p.inputs      = NULL,
+    .p.outputs     = NULL,
     FILTER_QUERY_FUNC2(query_formats),
-    .flags         = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
+    .p.flags       = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
                      AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

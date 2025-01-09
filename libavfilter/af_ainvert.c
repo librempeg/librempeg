@@ -142,16 +142,16 @@ static const AVFilterPad outputs[] = {
 
 AVFILTER_DEFINE_CLASS(ainvert);
 
-const AVFilter ff_af_ainvert = {
-    .name            = "ainvert",
-    .description     = NULL_IF_CONFIG_SMALL("Invert Audio Polarity."),
+const FFFilter ff_af_ainvert = {
+    .p.name          = "ainvert",
+    .p.description   = NULL_IF_CONFIG_SMALL("Invert Audio Polarity."),
+    .p.priv_class    = &ainvert_class,
     .priv_size       = sizeof(AudioInvertContext),
-    .priv_class      = &ainvert_class,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P, AV_SAMPLE_FMT_S64P,
                       AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
     .process_command = ff_filter_process_command,
-    .flags           = AVFILTER_FLAG_SLICE_THREADS |
+    .p.flags         = AVFILTER_FLAG_SLICE_THREADS |
                        AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };

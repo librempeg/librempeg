@@ -238,14 +238,14 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_af_acl2cl = {
-    .name          = "acl2cl",
-    .description   = NULL_IF_CONFIG_SMALL("Switch audio channel layout."),
+const FFFilter ff_af_acl2cl = {
+    .p.name        = "acl2cl",
+    .p.description = NULL_IF_CONFIG_SMALL("Switch audio channel layout."),
+    .p.priv_class  = &acl2cl_class,
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(AudioCL2CLContext),
-    .priv_class    = &acl2cl_class,
     .activate      = activate,
     FILTER_QUERY_FUNC2(query_formats),
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    .flags         = AVFILTER_FLAG_SLICE_THREADS,
 };

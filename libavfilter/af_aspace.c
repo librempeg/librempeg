@@ -462,16 +462,16 @@ static const AVFilterPad outputs[] = {
 
 AVFILTER_DEFINE_CLASS(aspace);
 
-const AVFilter ff_af_aspace = {
-    .name            = "aspace",
-    .description     = NULL_IF_CONFIG_SMALL("Arbitrary Distance Amplitude Panning."),
+const FFFilter ff_af_aspace = {
+    .p.name          = "aspace",
+    .p.description   = NULL_IF_CONFIG_SMALL("Arbitrary Distance Amplitude Panning."),
+    .p.priv_class    = &aspace_class,
     .priv_size       = sizeof(AudioSpaceContext),
-    .priv_class      = &aspace_class,
     .init            = init,
     .uninit          = uninit,
     FILTER_QUERY_FUNC2(query_formats),
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     .process_command = ff_filter_process_command,
-    .flags           = AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags         = AVFILTER_FLAG_SLICE_THREADS,
 };

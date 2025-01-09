@@ -120,13 +120,13 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_asrc_anullsrc = {
-    .name          = "anullsrc",
-    .description   = NULL_IF_CONFIG_SMALL("Null audio source, return empty audio frames."),
+const FFFilter ff_asrc_anullsrc = {
+    .p.name          = "anullsrc",
+    .p.description   = NULL_IF_CONFIG_SMALL("Null audio source, return empty audio frames."),
+    .p.priv_class    = &anullsrc_class,
+    .p.inputs        = NULL,
     .priv_size     = sizeof(ANullContext),
-    .inputs        = NULL,
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
     .activate      = activate,
-    .priv_class    = &anullsrc_class,
 };

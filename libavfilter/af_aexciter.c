@@ -151,16 +151,16 @@ static const AVFilterPad aexciter_inputs[] = {
     },
 };
 
-const AVFilter ff_af_aexciter = {
-    .name          = "aexciter",
-    .description   = NULL_IF_CONFIG_SMALL("Enhance high frequency part of audio."),
+const FFFilter ff_af_aexciter = {
+    .p.name        = "aexciter",
+    .p.description = NULL_IF_CONFIG_SMALL("Enhance high frequency part of audio."),
+    .p.priv_class  = &aexciter_class,
     .priv_size     = sizeof(AExciterContext),
-    .priv_class    = &aexciter_class,
     .uninit        = uninit,
     FILTER_INPUTS(aexciter_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
     .process_command = process_command,
-    .flags         = AVFILTER_FLAG_SLICE_THREADS |
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS |
                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
 };

@@ -368,19 +368,19 @@ static const AVFilterPad compand_outputs[] = {
     },
 };
 
-const AVFilter ff_af_compand = {
-    .name           = "compand",
-    .description    = NULL_IF_CONFIG_SMALL(
+const FFFilter ff_af_compand = {
+    .p.name         = "compand",
+    .p.description  = NULL_IF_CONFIG_SMALL(
             "Compress or expand audio dynamic range."),
+    .p.priv_class   = &compand_class,
     .priv_size      = sizeof(CompandContext),
-    .priv_class     = &compand_class,
     .init           = init,
     .activate       = activate,
     .uninit         = uninit,
     FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(compand_outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
-    .flags          = AVFILTER_FLAG_DYNAMIC_INPUTS |
+    .p.flags        = AVFILTER_FLAG_DYNAMIC_INPUTS |
                       AVFILTER_FLAG_SLICE_THREADS |
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     .process_command = process_command,

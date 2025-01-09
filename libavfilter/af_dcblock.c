@@ -136,16 +136,16 @@ static const AVFilterPad dcblock_inputs[] = {
     },
 };
 
-const AVFilter ff_af_dcblock = {
-    .name           = "dcblock",
-    .description    = NULL_IF_CONFIG_SMALL("Apply a DC blocking to the audio."),
+const FFFilter ff_af_dcblock = {
+    .p.name         = "dcblock",
+    .p.description  = NULL_IF_CONFIG_SMALL("Apply a DC blocking to the audio."),
+    .p.priv_class   = &dcblock_class,
     .priv_size      = sizeof(DCBlockContext),
-    .priv_class     = &dcblock_class,
     .uninit         = uninit,
     FILTER_INPUTS(dcblock_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P),
     .process_command = process_command,
-    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+    .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
                       AVFILTER_FLAG_SLICE_THREADS,
 };

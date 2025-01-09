@@ -1209,9 +1209,11 @@ static const AVFilterPad ebur128_outputs[] = {
     },
 };
 
-const AVFilter ff_af_ebur128 = {
-    .name          = "ebur128",
-    .description   = NULL_IF_CONFIG_SMALL("EBU R128 scanner."),
+const FFFilter ff_af_ebur128 = {
+    .p.name        = "ebur128",
+    .p.description = NULL_IF_CONFIG_SMALL("EBU R128 scanner."),
+    .p.priv_class  = &ebur128_class,
+    .p.flags       = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
     .priv_size     = sizeof(EBUR128Context),
     .init          = init,
     .uninit        = uninit,
@@ -1219,8 +1221,6 @@ const AVFilter ff_af_ebur128 = {
     FILTER_INPUTS(ebur128_inputs),
     FILTER_OUTPUTS(ebur128_outputs),
     FILTER_QUERY_FUNC2(query_formats),
-    .priv_class    = &ebur128_class,
-    .flags         = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
 };
 
 #define FIFO_SIZE 30
@@ -1712,11 +1712,11 @@ static const AVFilterPad loudnorm_outputs[] = {
     },
 };
 
-const AVFilter ff_af_loudnorm = {
-    .name          = "loudnorm",
-    .description   = NULL_IF_CONFIG_SMALL("EBU R128 loudness normalization"),
+const FFFilter ff_af_loudnorm = {
+    .p.name        = "loudnorm",
+    .p.description = NULL_IF_CONFIG_SMALL("EBU R128 loudness normalization"),
+    .p.priv_class  = &loudnorm_class,
     .priv_size     = sizeof(LoudNormContext),
-    .priv_class    = &loudnorm_class,
     .init          = loudnorm_init,
     .activate      = loudnorm_activate,
     .uninit        = loudnorm_uninit,

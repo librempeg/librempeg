@@ -123,17 +123,17 @@ static const AVFilterPad bench_inputs[] = {
     },
 };
 
-const AVFilter ff_vf_bench = {
-    .name          = "bench",
-    .description   = NULL_IF_CONFIG_SMALL("Benchmark part of a filtergraph."),
+const FFFilter ff_vf_bench = {
+    .p.name        = "bench",
+    .p.description = NULL_IF_CONFIG_SMALL("Benchmark part of a filtergraph."),
+    .p.priv_class  = &bench_class,
+    .p.flags       = AVFILTER_FLAG_METADATA_ONLY,
     .priv_size     = sizeof(BenchContext),
     .init          = init,
     .uninit        = uninit,
     FILTER_INPUTS(bench_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     .process_command = ff_filter_process_command,
-    .priv_class    = &bench_class,
-    .flags         = AVFILTER_FLAG_METADATA_ONLY,
 };
 #endif /* CONFIG_BENCH_FILTER */
 
@@ -149,16 +149,16 @@ static const AVFilterPad abench_inputs[] = {
     },
 };
 
-const AVFilter ff_af_abench = {
-    .name          = "abench",
-    .description   = NULL_IF_CONFIG_SMALL("Benchmark part of a filtergraph."),
+const FFFilter ff_af_abench = {
+    .p.name        = "abench",
+    .p.description = NULL_IF_CONFIG_SMALL("Benchmark part of a filtergraph."),
+    .p.priv_class  = &abench_class,
+    .p.flags       = AVFILTER_FLAG_METADATA_ONLY,
     .priv_size     = sizeof(BenchContext),
     .init          = init,
     .uninit        = uninit,
     FILTER_INPUTS(abench_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     .process_command = ff_filter_process_command,
-    .priv_class    = &abench_class,
-    .flags         = AVFILTER_FLAG_METADATA_ONLY,
 };
 #endif /* CONFIG_ABENCH_FILTER */

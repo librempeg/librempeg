@@ -262,10 +262,10 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_af_agate = {
-    .name           = "agate",
-    .description    = NULL_IF_CONFIG_SMALL("Audio gate."),
-    .priv_class     = &agate_class,
+const FFFilter ff_af_agate = {
+    .p.name         = "agate",
+    .p.description  = NULL_IF_CONFIG_SMALL("Audio gate."),
+    .p.priv_class   = &agate_class,
     .priv_size      = sizeof(AudioGateContext),
     .activate       = activate,
     .init           = init,
@@ -274,6 +274,6 @@ const AVFilter ff_af_agate = {
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_DBL),
     .process_command = process_command,
-    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+    .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                       AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

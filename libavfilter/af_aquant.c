@@ -254,17 +254,17 @@ static const AVFilterPad outputs[] = {
     }
 };
 
-const AVFilter ff_af_aquant = {
-    .name           = "aquant",
-    .description    = NULL_IF_CONFIG_SMALL("Apply Quantization with optional Noise-Shaping to audio stream."),
+const FFFilter ff_af_aquant = {
+    .p.name         = "aquant",
+    .p.description  = NULL_IF_CONFIG_SMALL("Apply Quantization with optional Noise-Shaping to audio stream."),
+    .p.priv_class   = &aquant_class,
     .priv_size      = sizeof(AudioQuantContext),
-    .priv_class     = &aquant_class,
     .init           = init,
     .activate       = activate,
     FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
-    .flags          = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
+    .p.flags        = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
                       AVFILTER_FLAG_DYNAMIC_INPUTS |
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                       AVFILTER_FLAG_SLICE_THREADS,

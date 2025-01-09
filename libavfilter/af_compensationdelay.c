@@ -149,16 +149,16 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_af_compensationdelay = {
-    .name          = "compensationdelay",
-    .description   = NULL_IF_CONFIG_SMALL("Audio Compensation Delay Line."),
+const FFFilter ff_af_compensationdelay = {
+    .p.name        = "compensationdelay",
+    .p.description = NULL_IF_CONFIG_SMALL("Audio Compensation Delay Line."),
+    .p.priv_class  = &compensationdelay_class,
     .priv_size     = sizeof(CompensationDelayContext),
-    .priv_class    = &compensationdelay_class,
     .uninit        = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
     .process_command = ff_filter_process_command,
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                      AVFILTER_FLAG_SLICE_THREADS,
 };

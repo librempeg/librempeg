@@ -243,13 +243,13 @@ static const AVFilterPad earwax_inputs[] = {
     },
 };
 
-const AVFilter ff_af_earwax = {
-    .name           = "earwax",
-    .description    = NULL_IF_CONFIG_SMALL("Widen the stereo image."),
+const FFFilter ff_af_earwax = {
+    .p.name         = "earwax",
+    .p.description  = NULL_IF_CONFIG_SMALL("Widen the stereo image."),
     .priv_size      = sizeof(EarwaxContext),
     .uninit         = uninit,
     FILTER_INPUTS(earwax_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC2(query_formats),
-    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
 };

@@ -181,9 +181,9 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_af_amultiply = {
-    .name           = "amultiply",
-    .description    = NULL_IF_CONFIG_SMALL("Multiply two audio streams."),
+const FFFilter ff_af_amultiply = {
+    .p.name         = "amultiply",
+    .p.description  = NULL_IF_CONFIG_SMALL("Multiply two audio streams."),
     .priv_size      = sizeof(AudioMultiplyContext),
     .init           = init,
     .uninit         = uninit,
@@ -192,5 +192,5 @@ const AVFilter ff_af_amultiply = {
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_FLTP,
                       AV_SAMPLE_FMT_DBL, AV_SAMPLE_FMT_DBLP),
-    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
 };

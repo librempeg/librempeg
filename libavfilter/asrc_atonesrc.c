@@ -168,14 +168,14 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_asrc_atonesrc = {
-    .name            = "atonesrc",
-    .description     = NULL_IF_CONFIG_SMALL("Generate a tone audio signal."),
+const FFFilter ff_asrc_atonesrc = {
+    .p.name          = "atonesrc",
+    .p.description   = NULL_IF_CONFIG_SMALL("Generate a tone audio signal."),
+    .p.priv_class    = &atonesrc_class,
+    .p.inputs        = NULL,
     .activate        = activate,
     .priv_size       = sizeof(AudioToneContext),
-    .inputs          = NULL,
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
-    .priv_class      = &atonesrc_class,
     .process_command = ff_filter_process_command,
 };

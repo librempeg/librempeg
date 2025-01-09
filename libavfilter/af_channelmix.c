@@ -333,18 +333,18 @@ static const AVOption channelmix_options[] = {
 
 AVFILTER_DEFINE_CLASS(channelmix);
 
-const AVFilter ff_af_channelmix = {
-    .name          = "channelmix",
-    .description   = NULL_IF_CONFIG_SMALL("Audio channels mixing."),
+const FFFilter ff_af_channelmix = {
+    .p.name        = "channelmix",
+    .p.description = NULL_IF_CONFIG_SMALL("Audio channels mixing."),
+    .p.priv_class  = &channelmix_class,
     .priv_size     = sizeof(ChannelMixContext),
-    .priv_class    = &channelmix_class,
     .init          = init,
     .uninit        = uninit,
     .activate      = activate,
     FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
-    .flags         = AVFILTER_FLAG_DYNAMIC_INPUTS |
+    .p.flags       = AVFILTER_FLAG_DYNAMIC_INPUTS |
                      AVFILTER_FLAG_SLICE_THREADS |
                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
 };

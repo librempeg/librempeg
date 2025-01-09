@@ -607,17 +607,17 @@ static const AVFilterPad join_outputs[] = {
     },
 };
 
-const AVFilter ff_af_join = {
-    .name           = "join",
-    .description    = NULL_IF_CONFIG_SMALL("Join multiple audio streams into "
+const FFFilter ff_af_join = {
+    .p.name         = "join",
+    .p.description  = NULL_IF_CONFIG_SMALL("Join multiple audio streams into "
                                            "multi-channel output."),
+    .p.priv_class   = &join_class,
     .priv_size      = sizeof(JoinContext),
-    .priv_class     = &join_class,
+    .p.inputs       = NULL,
     .init           = join_init,
     .uninit         = join_uninit,
     .activate       = activate,
-    .inputs         = NULL,
     FILTER_OUTPUTS(join_outputs),
     FILTER_QUERY_FUNC2(join_query_formats),
-    .flags          = AVFILTER_FLAG_DYNAMIC_INPUTS,
+    .p.flags        = AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

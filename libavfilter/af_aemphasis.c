@@ -256,16 +256,16 @@ static const AVFilterPad aemphasis_inputs[] = {
     },
 };
 
-const AVFilter ff_af_aemphasis = {
-    .name          = "aemphasis",
-    .description   = NULL_IF_CONFIG_SMALL("Audio emphasis."),
+const FFFilter ff_af_aemphasis = {
+    .p.name        = "aemphasis",
+    .p.description = NULL_IF_CONFIG_SMALL("Audio emphasis."),
+    .p.priv_class  = &aemphasis_class,
     .priv_size     = sizeof(AudioEmphasisContext),
-    .priv_class    = &aemphasis_class,
     .uninit        = uninit,
     FILTER_INPUTS(aemphasis_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_FLTP),
     .process_command = process_command,
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
                      AVFILTER_FLAG_SLICE_THREADS,
 };

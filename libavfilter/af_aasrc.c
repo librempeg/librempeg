@@ -289,15 +289,15 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_af_aasrc = {
-    .name            = "aasrc",
-    .description     = NULL_IF_CONFIG_SMALL("Arbitrary Audio Sample Rate Conversion."),
+const FFFilter ff_af_aasrc = {
+    .p.name          = "aasrc",
+    .p.description   = NULL_IF_CONFIG_SMALL("Arbitrary Audio Sample Rate Conversion."),
+    .p.priv_class    = &aasrc_class,
+    .p.flags         = AVFILTER_FLAG_SLICE_THREADS,
     .priv_size       = sizeof(AASRCContext),
-    .priv_class      = &aasrc_class,
     .activate        = activate,
     .uninit          = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
-    .flags           = AVFILTER_FLAG_SLICE_THREADS,
 };

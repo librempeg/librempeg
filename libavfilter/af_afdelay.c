@@ -253,17 +253,17 @@ static const AVFilterPad afdelay_inputs[] = {
     },
 };
 
-const AVFilter ff_af_afdelay = {
-    .name          = "afdelay",
-    .description   = NULL_IF_CONFIG_SMALL("Fractional delay one or more audio channels."),
+const FFFilter ff_af_afdelay = {
+    .p.name        = "afdelay",
+    .p.description = NULL_IF_CONFIG_SMALL("Fractional delay one or more audio channels."),
+    .p.priv_class  = &afdelay_class,
     .priv_size     = sizeof(AudioFDelayContext),
-    .priv_class    = &afdelay_class,
     .activate      = activate,
     .uninit        = uninit,
     FILTER_INPUTS(afdelay_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                      AVFILTER_FLAG_SLICE_THREADS,
     .process_command = process_command,
 };

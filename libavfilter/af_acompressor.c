@@ -267,10 +267,10 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_af_acompressor = {
-    .name           = "acompressor",
-    .description    = NULL_IF_CONFIG_SMALL("Audio compressor."),
-    .priv_class     = &acompressor_class,
+const FFFilter ff_af_acompressor = {
+    .p.name           = "acompressor",
+    .p.description    = NULL_IF_CONFIG_SMALL("Audio compressor."),
+    .p.priv_class     = &acompressor_class,
     .priv_size      = sizeof(AudioCompressorContext),
     .activate       = activate,
     .init           = init,
@@ -279,6 +279,6 @@ const AVFilter ff_af_acompressor = {
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_DBL),
     .process_command = process_command,
-    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+    .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                       AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

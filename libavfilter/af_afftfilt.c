@@ -322,16 +322,16 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_af_afftfilt = {
-    .name            = "afftfilt",
-    .description     = NULL_IF_CONFIG_SMALL("Apply arbitrary expressions to samples in frequency domain."),
+const FFFilter ff_af_afftfilt = {
+    .p.name          = "afftfilt",
+    .p.description   = NULL_IF_CONFIG_SMALL("Apply arbitrary expressions to samples in frequency domain."),
+    .p.priv_class    = &afftfilt_class,
     .priv_size       = sizeof(AFFTFiltContext),
-    .priv_class      = &afftfilt_class,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
     .activate        = activate,
     .uninit          = uninit,
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                        AVFILTER_FLAG_SLICE_THREADS,
 };

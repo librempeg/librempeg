@@ -2066,16 +2066,16 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
 
 AVFILTER_DEFINE_CLASS(ambisonic);
 
-const AVFilter ff_af_ambisonic = {
-    .name            = "ambisonic",
-    .description     = NULL_IF_CONFIG_SMALL("Ambisonic decoder"),
+const FFFilter ff_af_ambisonic = {
+    .p.name          = "ambisonic",
+    .p.description   = NULL_IF_CONFIG_SMALL("Ambisonic decoder"),
+    .p.priv_class    = &ambisonic_class,
     .priv_size       = sizeof(AmbisonicContext),
-    .priv_class      = &ambisonic_class,
     .init            = init,
     .uninit          = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
-    .flags           = AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags         = AVFILTER_FLAG_SLICE_THREADS,
     .process_command = process_command,
 };

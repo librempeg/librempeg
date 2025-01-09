@@ -206,17 +206,17 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_af_adequant = {
-    .name            = "adequant",
-    .description     = NULL_IF_CONFIG_SMALL("Apply Dynamic Dequantization of input audio."),
+const FFFilter ff_af_adequant = {
+    .p.name          = "adequant",
+    .p.description   = NULL_IF_CONFIG_SMALL("Apply Dynamic Dequantization of input audio."),
+    .p.priv_class    = &adequant_class,
     .priv_size       = sizeof(ADequantContext),
-    .priv_class      = &adequant_class,
     .activate        = activate,
     .uninit          = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_FLTP),
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                        AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

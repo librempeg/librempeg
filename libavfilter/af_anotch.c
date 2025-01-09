@@ -151,16 +151,16 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_af_anotch = {
-    .name            = "anotch",
-    .description     = NULL_IF_CONFIG_SMALL("Apply adaptive notch audio filter."),
+const FFFilter ff_af_anotch = {
+    .p.name          = "anotch",
+    .p.description   = NULL_IF_CONFIG_SMALL("Apply adaptive notch audio filter."),
+    .p.priv_class    = &anotch_class,
     .priv_size       = sizeof(ANotchContext),
-    .priv_class      = &anotch_class,
     .uninit          = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
     .process_command = ff_filter_process_command,
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                        AVFILTER_FLAG_SLICE_THREADS,
 };

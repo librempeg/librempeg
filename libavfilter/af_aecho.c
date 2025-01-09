@@ -254,15 +254,15 @@ static const AVFilterPad aecho_outputs[] = {
     },
 };
 
-const AVFilter ff_af_aecho = {
-    .name          = "aecho",
-    .description   = NULL_IF_CONFIG_SMALL("Add echoing to the audio."),
+const FFFilter ff_af_aecho = {
+    .p.name        = "aecho",
+    .p.description = NULL_IF_CONFIG_SMALL("Add echoing to the audio."),
+    .p.priv_class  = &aecho_class,
     .priv_size     = sizeof(AudioEchoContext),
-    .priv_class    = &aecho_class,
     .init          = init,
     .activate      = activate,
     .uninit        = uninit,
-    .flags         = AVFILTER_FLAG_SLICE_THREADS |
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS |
                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     .process_command = ff_filter_process_command,
     FILTER_INPUTS(ff_audio_default_filterpad),

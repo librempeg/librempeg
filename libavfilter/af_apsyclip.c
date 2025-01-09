@@ -247,16 +247,16 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_af_apsyclip = {
-    .name            = "apsyclip",
-    .description     = NULL_IF_CONFIG_SMALL("Audio Psychoacoustic Clipper."),
+const FFFilter ff_af_apsyclip = {
+    .p.name          = "apsyclip",
+    .p.description   = NULL_IF_CONFIG_SMALL("Audio Psychoacoustic Clipper."),
+    .p.priv_class    = &apsyclip_class,
     .priv_size       = sizeof(AudioPsyClipContext),
-    .priv_class      = &apsyclip_class,
     .uninit          = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                        AVFILTER_FLAG_SLICE_THREADS,
     .activate        = activate,
     .process_command = ff_filter_process_command,

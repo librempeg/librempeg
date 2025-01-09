@@ -277,18 +277,18 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_af_akalman = {
-    .name           = "akalman",
-    .description    = NULL_IF_CONFIG_SMALL("Apply Kalman adaptive algorithm to first audio stream."),
+const FFFilter ff_af_akalman = {
+    .p.name         = "akalman",
+    .p.description  = NULL_IF_CONFIG_SMALL("Apply Kalman adaptive algorithm to first audio stream."),
+    .p.priv_class   = &akalman_class,
     .priv_size      = sizeof(AudioKalmanContext),
-    .priv_class     = &akalman_class,
     .init           = init,
     .uninit         = uninit,
     .activate       = activate,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
-    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+    .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                       AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

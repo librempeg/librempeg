@@ -188,16 +188,16 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_af_apulsator = {
-    .name          = "apulsator",
-    .description   = NULL_IF_CONFIG_SMALL("Audio pulsator."),
+const FFFilter ff_af_apulsator = {
+    .p.name        = "apulsator",
+    .p.description = NULL_IF_CONFIG_SMALL("Audio pulsator."),
+    .p.priv_class  = &apulsator_class,
     .priv_size     = sizeof(AudioPulsatorContext),
-    .priv_class    = &apulsator_class,
     .uninit        = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
                      AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

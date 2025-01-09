@@ -265,16 +265,16 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_af_awiener = {
-    .name            = "awiener",
-    .description     = NULL_IF_CONFIG_SMALL("Audio Noise Reduction with Wiener filter."),
+const FFFilter ff_af_awiener = {
+    .p.name          = "awiener",
+    .p.description   = NULL_IF_CONFIG_SMALL("Audio Noise Reduction with Wiener filter."),
+    .p.priv_class    = &awiener_class,
     .priv_size       = sizeof(AudioWienerContext),
-    .priv_class      = &awiener_class,
     .uninit          = uninit,
     FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_FLTP),
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                        AVFILTER_FLAG_SLICE_THREADS,
     .activate        = activate,
     .process_command = ff_filter_process_command,

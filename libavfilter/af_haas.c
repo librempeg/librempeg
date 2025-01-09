@@ -214,15 +214,15 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_af_haas = {
-    .name           = "haas",
-    .description    = NULL_IF_CONFIG_SMALL("Apply Haas Stereo Enhancer."),
+const FFFilter ff_af_haas = {
+    .p.name         = "haas",
+    .p.description  = NULL_IF_CONFIG_SMALL("Apply Haas Stereo Enhancer."),
+    .p.priv_class   = &haas_class,
     .priv_size      = sizeof(HaasContext),
-    .priv_class     = &haas_class,
     .uninit         = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC2(query_formats),
-    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     .process_command = process_command,
 };

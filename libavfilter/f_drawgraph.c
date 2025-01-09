@@ -510,11 +510,11 @@ static const AVFilterPad drawgraph_outputs[] = {
 
 #if CONFIG_DRAWGRAPH_FILTER
 
-const AVFilter ff_vf_drawgraph = {
-    .name          = "drawgraph",
-    .description   = NULL_IF_CONFIG_SMALL("Draw a graph using input video metadata."),
+const FFFilter ff_vf_drawgraph = {
+    .p.name        = "drawgraph",
+    .p.description = NULL_IF_CONFIG_SMALL("Draw a graph using input video metadata."),
+    .p.priv_class  = &drawgraph_class,
     .priv_size     = sizeof(DrawGraphContext),
-    .priv_class    = &drawgraph_class,
     .init          = init,
     .activate      = activate,
     .uninit        = uninit,
@@ -527,10 +527,10 @@ const AVFilter ff_vf_drawgraph = {
 
 #if CONFIG_ADRAWGRAPH_FILTER
 
-const AVFilter ff_avf_adrawgraph = {
-    .name          = "adrawgraph",
-    .description   = NULL_IF_CONFIG_SMALL("Draw a graph using input audio metadata."),
-    .priv_class    = &drawgraph_class,
+const FFFilter ff_avf_adrawgraph = {
+    .p.name        = "adrawgraph",
+    .p.description = NULL_IF_CONFIG_SMALL("Draw a graph using input audio metadata."),
+    .p.priv_class  = &drawgraph_class,
     .priv_size     = sizeof(DrawGraphContext),
     .init          = init,
     .activate      = activate,

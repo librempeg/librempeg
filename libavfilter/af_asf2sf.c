@@ -390,14 +390,14 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_af_asf2sf = {
-    .name          = "asf2sf",
-    .description   = NULL_IF_CONFIG_SMALL("Switch audio sample format."),
+const FFFilter ff_af_asf2sf = {
+    .p.name        = "asf2sf",
+    .p.description = NULL_IF_CONFIG_SMALL("Switch audio sample format."),
+    .p.priv_class  = &asf2sf_class,
     .priv_size     = sizeof(AudioSF2SFContext),
-    .priv_class    = &asf2sf_class,
     .activate      = activate,
     FILTER_QUERY_FUNC2(query_formats),
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    .flags         = AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
 };

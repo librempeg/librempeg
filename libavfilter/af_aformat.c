@@ -138,13 +138,13 @@ static const AVFilterPad inputs[] = {
 };
 
 #if CONFIG_AFORMAT_FILTER
-const AVFilter ff_af_aformat = {
-    .name          = "aformat",
-    .description   = NULL_IF_CONFIG_SMALL("Convert the input audio to one of the specified formats."),
+const FFFilter ff_af_aformat = {
+    .p.name        = "aformat",
+    .p.description = NULL_IF_CONFIG_SMALL("Convert the input audio to one of the specified formats."),
+    .p.priv_class  = &aformat_class,
     .priv_size     = sizeof(AFormatContext),
-    .priv_class    = &aformat_class,
     .init          = init,
-    .flags         = AVFILTER_FLAG_METADATA_ONLY,
+    .p.flags       = AVFILTER_FLAG_METADATA_ONLY,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC2(query_formats),
@@ -160,13 +160,13 @@ static const AVOption anoformat_options[] = {
 
 AVFILTER_DEFINE_CLASS(anoformat);
 
-const AVFilter ff_af_anoformat = {
-    .name          = "anoformat",
-    .description   = NULL_IF_CONFIG_SMALL("Force libavfilter not to use any of the specified sample formats for the input to the next filter."),
+const FFFilter ff_af_anoformat = {
+    .p.name        = "anoformat",
+    .p.description = NULL_IF_CONFIG_SMALL("Force libavfilter not to use any of the specified sample formats for the input to the next filter."),
+    .p.priv_class  = &anoformat_class,
     .priv_size     = sizeof(AFormatContext),
-    .priv_class    = &anoformat_class,
     .init          = init,
-    .flags         = AVFILTER_FLAG_METADATA_ONLY,
+    .p.flags       = AVFILTER_FLAG_METADATA_ONLY,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC2(query_formats),

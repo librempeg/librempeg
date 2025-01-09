@@ -290,16 +290,16 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_af_stereofield = {
-    .name            = "stereofield",
-    .description     = NULL_IF_CONFIG_SMALL("Apply Stereo Field effect."),
+const FFFilter ff_af_stereofield = {
+    .p.name          = "stereofield",
+    .p.description   = NULL_IF_CONFIG_SMALL("Apply Stereo Field effect."),
+    .p.priv_class    = &stereofield_class,
     .priv_size       = sizeof(StereoFieldContext),
-    .priv_class      = &stereofield_class,
     .uninit          = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC2(query_formats),
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     .activate        = activate,
     .process_command = ff_filter_process_command,
 };

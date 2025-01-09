@@ -216,13 +216,13 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_af_asdr = {
-    .name           = "asdr",
-    .description    = NULL_IF_CONFIG_SMALL("Measure Audio Signal-to-Distortion Ratio."),
+const FFFilter ff_af_asdr = {
+    .p.name         = "asdr",
+    .p.description  = NULL_IF_CONFIG_SMALL("Measure Audio Signal-to-Distortion Ratio."),
     .priv_size      = sizeof(AudioSDRContext),
     .activate       = activate,
     .uninit         = uninit,
-    .flags          = AVFILTER_FLAG_METADATA_ONLY |
+    .p.flags        = AVFILTER_FLAG_METADATA_ONLY |
                       AVFILTER_FLAG_SLICE_THREADS |
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     FILTER_INPUTS(inputs),
@@ -230,13 +230,13 @@ const AVFilter ff_af_asdr = {
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
 };
 
-const AVFilter ff_af_apsnr = {
-    .name           = "apsnr",
-    .description    = NULL_IF_CONFIG_SMALL("Measure Audio Peak Signal-to-Noise Ratio."),
+const FFFilter ff_af_apsnr = {
+    .p.name         = "apsnr",
+    .p.description  = NULL_IF_CONFIG_SMALL("Measure Audio Peak Signal-to-Noise Ratio."),
     .priv_size      = sizeof(AudioSDRContext),
     .activate       = activate,
     .uninit         = uninit,
-    .flags          = AVFILTER_FLAG_METADATA_ONLY |
+    .p.flags        = AVFILTER_FLAG_METADATA_ONLY |
                       AVFILTER_FLAG_SLICE_THREADS |
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     FILTER_INPUTS(inputs),
@@ -244,13 +244,13 @@ const AVFilter ff_af_apsnr = {
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
 };
 
-const AVFilter ff_af_asisdr = {
-    .name           = "asisdr",
-    .description    = NULL_IF_CONFIG_SMALL("Measure Audio Scale-Invariant Signal-to-Distortion Ratio."),
+const FFFilter ff_af_asisdr = {
+    .p.name           = "asisdr",
+    .p.description    = NULL_IF_CONFIG_SMALL("Measure Audio Scale-Invariant Signal-to-Distortion Ratio."),
     .priv_size      = sizeof(AudioSDRContext),
     .activate       = activate,
     .uninit         = uninit,
-    .flags          = AVFILTER_FLAG_METADATA_ONLY |
+    .p.flags          = AVFILTER_FLAG_METADATA_ONLY |
                       AVFILTER_FLAG_SLICE_THREADS |
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     FILTER_INPUTS(inputs),
@@ -258,13 +258,13 @@ const AVFilter ff_af_asisdr = {
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
 };
 
-const AVFilter ff_af_anrmse = {
-    .name           = "anrmse",
-    .description    = NULL_IF_CONFIG_SMALL("Measure Audio Normalized Root Mean Square Error."),
+const FFFilter ff_af_anrmse = {
+    .p.name         = "anrmse",
+    .p.description  = NULL_IF_CONFIG_SMALL("Measure Audio Normalized Root Mean Square Error."),
     .priv_size      = sizeof(AudioSDRContext),
     .activate       = activate,
     .uninit         = uninit,
-    .flags          = AVFILTER_FLAG_METADATA_ONLY |
+    .p.flags        = AVFILTER_FLAG_METADATA_ONLY |
                       AVFILTER_FLAG_SLICE_THREADS |
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     FILTER_INPUTS(inputs),
@@ -272,13 +272,13 @@ const AVFilter ff_af_anrmse = {
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
 };
 
-const AVFilter ff_af_amae = {
-    .name           = "amae",
-    .description    = NULL_IF_CONFIG_SMALL("Measure Audio Mean Absolute Error."),
+const FFFilter ff_af_amae = {
+    .p.name         = "amae",
+    .p.description  = NULL_IF_CONFIG_SMALL("Measure Audio Mean Absolute Error."),
     .priv_size      = sizeof(AudioSDRContext),
     .activate       = activate,
     .uninit         = uninit,
-    .flags          = AVFILTER_FLAG_METADATA_ONLY |
+    .p.flags        = AVFILTER_FLAG_METADATA_ONLY |
                       AVFILTER_FLAG_SLICE_THREADS |
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     FILTER_INPUTS(inputs),
@@ -286,13 +286,13 @@ const AVFilter ff_af_amae = {
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
 };
 
-const AVFilter ff_af_amda = {
-    .name           = "amda",
-    .description    = NULL_IF_CONFIG_SMALL("Measure Audio Mean Directional Accuracy."),
+const FFFilter ff_af_amda = {
+    .p.name         = "amda",
+    .p.description  = NULL_IF_CONFIG_SMALL("Measure Audio Mean Directional Accuracy."),
     .priv_size      = sizeof(AudioSDRContext),
     .activate       = activate,
     .uninit         = uninit,
-    .flags          = AVFILTER_FLAG_METADATA_ONLY |
+    .p.flags        = AVFILTER_FLAG_METADATA_ONLY |
                       AVFILTER_FLAG_SLICE_THREADS |
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     FILTER_INPUTS(inputs),
@@ -300,13 +300,13 @@ const AVFilter ff_af_amda = {
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
 };
 
-const AVFilter ff_af_aidentity = {
-    .name           = "aidentity",
-    .description    = NULL_IF_CONFIG_SMALL("Measure Identity between two audio streams."),
+const FFFilter ff_af_aidentity = {
+    .p.name         = "aidentity",
+    .p.description  = NULL_IF_CONFIG_SMALL("Measure Identity between two audio streams."),
     .priv_size      = sizeof(AudioSDRContext),
     .activate       = activate,
     .uninit         = uninit,
-    .flags          = AVFILTER_FLAG_METADATA_ONLY |
+    .p.flags        = AVFILTER_FLAG_METADATA_ONLY |
                       AVFILTER_FLAG_SLICE_THREADS |
                       AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     FILTER_INPUTS(inputs),

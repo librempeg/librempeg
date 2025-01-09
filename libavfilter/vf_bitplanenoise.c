@@ -257,15 +257,15 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_vf_bitplanenoise = {
-    .name           = "bitplanenoise",
-    .description    = NULL_IF_CONFIG_SMALL("Measure bit plane noise."),
+const FFFilter ff_vf_bitplanenoise = {
+    .p.name         = "bitplanenoise",
+    .p.description  = NULL_IF_CONFIG_SMALL("Measure bit plane noise."),
+    .p.priv_class   = &bitplanenoise_class,
+    .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size      = sizeof(BPNContext),
     .uninit         = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pixfmts),
-    .priv_class     = &bitplanenoise_class,
     .process_command = ff_filter_process_command,
-    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
 };

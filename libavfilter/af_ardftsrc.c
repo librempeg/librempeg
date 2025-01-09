@@ -345,15 +345,15 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_af_ardftsrc = {
-    .name            = "ardftsrc",
-    .description     = NULL_IF_CONFIG_SMALL("Audio Real Discrete Fourier Transform Sample Rate Conversion."),
+const FFFilter ff_af_ardftsrc = {
+    .p.name          = "ardftsrc",
+    .p.description   = NULL_IF_CONFIG_SMALL("Audio Real Discrete Fourier Transform Sample Rate Conversion."),
+    .p.priv_class    = &ardftsrc_class,
     .priv_size       = sizeof(AudioRDFTSRCContext),
-    .priv_class      = &ardftsrc_class,
     .uninit          = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC2(query_formats),
-    .flags           = AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags         = AVFILTER_FLAG_SLICE_THREADS,
     .activate        = activate,
 };

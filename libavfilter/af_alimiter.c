@@ -240,11 +240,11 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_af_alimiter = {
-    .name           = "alimiter",
-    .description    = NULL_IF_CONFIG_SMALL("Audio lookahead limiter."),
+const FFFilter ff_af_alimiter = {
+    .p.name         = "alimiter",
+    .p.description  = NULL_IF_CONFIG_SMALL("Audio lookahead limiter."),
+    .p.priv_class   = &alimiter_class,
     .priv_size      = sizeof(AudioLimiterContext),
-    .priv_class     = &alimiter_class,
     .init           = init,
     .activate       = activate,
     .uninit         = uninit,
@@ -252,7 +252,7 @@ const AVFilter ff_af_alimiter = {
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
     .process_command = ff_filter_process_command,
-    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+    .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                       AVFILTER_FLAG_SLICE_THREADS |
                       AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

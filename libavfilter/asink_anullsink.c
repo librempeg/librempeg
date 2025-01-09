@@ -49,11 +49,11 @@ static int activate(AVFilterContext *ctx)
     return 0;
 }
 
-const AVFilter ff_asink_anullsink = {
-    .name        = "anullsink",
-    .description = NULL_IF_CONFIG_SMALL("Do absolutely nothing with the input audio."),
+const FFFilter ff_asink_anullsink = {
+    .p.name      = "anullsink",
+    .p.description = NULL_IF_CONFIG_SMALL("Do absolutely nothing with the input audio."),
     .priv_size   = sizeof(ANullSinkContext),
     .activate    = activate,
     FILTER_INPUTS(ff_audio_default_filterpad),
-    .outputs     = NULL,
+    .p.outputs   = NULL,
 };

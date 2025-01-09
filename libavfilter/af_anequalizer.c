@@ -559,16 +559,16 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_af_anequalizer = {
-    .name          = "anequalizer",
-    .description   = NULL_IF_CONFIG_SMALL("Apply high-order audio parametric multi band equalizer."),
+const FFFilter ff_af_anequalizer = {
+    .p.name        = "anequalizer",
+    .p.description = NULL_IF_CONFIG_SMALL("Apply high-order audio parametric multi band equalizer."),
+    .p.priv_class  = &anequalizer_class,
     .priv_size     = sizeof(AudioNEqualizerContext),
-    .priv_class    = &anequalizer_class,
     .uninit        = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
     .process_command = process_command,
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                      AVFILTER_FLAG_SLICE_THREADS,
 };

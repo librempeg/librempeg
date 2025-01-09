@@ -325,17 +325,17 @@ static const AVFilterPad amerge_outputs[] = {
     },
 };
 
-const AVFilter ff_af_amerge = {
-    .name          = "amerge",
-    .description   = NULL_IF_CONFIG_SMALL("Merge two or more audio streams into "
+const FFFilter ff_af_amerge = {
+    .p.name        = "amerge",
+    .p.description = NULL_IF_CONFIG_SMALL("Merge two or more audio streams into "
                                           "a single multi-channel stream."),
+    .p.priv_class  = &amerge_class,
+    .p.inputs      = NULL,
     .priv_size     = sizeof(AMergeContext),
-    .priv_class    = &amerge_class,
     .init          = init,
     .uninit        = uninit,
     .activate      = activate,
-    .inputs        = NULL,
     FILTER_OUTPUTS(amerge_outputs),
     FILTER_QUERY_FUNC2(query_formats),
-    .flags         = AVFILTER_FLAG_DYNAMIC_INPUTS,
+    .p.flags       = AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

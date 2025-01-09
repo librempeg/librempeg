@@ -560,15 +560,15 @@ static const AVFilterPad fade_inputs[] = {
     },
 };
 
-const AVFilter ff_vf_fade = {
-    .name          = "fade",
-    .description   = NULL_IF_CONFIG_SMALL("Fade in/out input video."),
+const FFFilter ff_vf_fade = {
+    .p.name        = "fade",
+    .p.description = NULL_IF_CONFIG_SMALL("Fade in/out input video."),
+    .p.priv_class  = &fade_class,
     .init          = init,
     .priv_size     = sizeof(FadeContext),
-    .priv_class    = &fade_class,
     FILTER_INPUTS(fade_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_QUERY_FUNC2(query_formats),
-    .flags         = AVFILTER_FLAG_SLICE_THREADS |
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS |
                      AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };
