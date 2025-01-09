@@ -98,7 +98,6 @@ typedef struct EBUR128Context {
 #if CONFIG_SWRESAMPLE
     SwrContext *swr_ctx;            ///< over-sampling context for true peak metering
     AVFrame *swr_buf;               ///< resampled audio data for true peak metering
-    int swr_linesize;
 #endif
 
     /* video  */
