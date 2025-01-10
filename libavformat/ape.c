@@ -360,7 +360,13 @@ static int ape_read_header(AVFormatContext * s)
 
     /* try to read APE tags */
     if (pb->seekable & AVIO_SEEKABLE_NORMAL) {
-        ff_ape_parse_tag(s);
+        int64_t end_pos, last_packet_size;
+
+        end_pos = ff_ape_parse_tag(s);
+        if (end_pos > ape->frames[ape->totalframes-1].pos) {
+            last_packet_size = end_pos - ape->frames[ape->totalframes-1].pos;
+            ape->frames[ape->totalframes-1].size = last_packet_size;
+        }
         avio_seek(pb, 0, SEEK_SET);
     }
 
