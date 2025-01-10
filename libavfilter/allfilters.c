@@ -63,6 +63,7 @@ extern const AVFilter ff_af_aiir;
 extern const AVFilter ff_af_aiireq;
 extern const AVFilter ff_af_aintegral;
 extern const AVFilter ff_af_ainterleave;
+extern const AVFilter ff_af_ainversion;
 extern const AVFilter ff_af_ainvert;
 extern const AVFilter ff_af_akalman;
 extern const AVFilter ff_af_alatency;

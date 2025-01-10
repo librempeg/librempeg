@@ -33,6 +33,7 @@ version <next>:
 - Wwise ADPCM Platinum audio decoder
 - Animated JPEG XL encoding (via libjxl)
 - ProRes RAW video decoder
+- ainversion filter
 
 
 version 7.1:

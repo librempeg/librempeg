@@ -79,6 +79,7 @@ OBJS-$(CONFIG_AIIREQ_FILTER)                 += af_aiireq.o
 OBJS-$(CONFIG_AIIR_FILTER)                   += af_aiir.o
 OBJS-$(CONFIG_AINTEGRAL_FILTER)              += af_aderivative.o
 OBJS-$(CONFIG_AINTERLEAVE_FILTER)            += f_interleave.o
+OBJS-$(CONFIG_AINVERSION_FILTER)             += af_ainversion.o
 OBJS-$(CONFIG_AINVERT_FILTER)                += af_ainvert.o
 OBJS-$(CONFIG_AKALMAN_FILTER)                += af_akalman.o
 OBJS-$(CONFIG_ALATENCY_FILTER)               += f_latency.o
