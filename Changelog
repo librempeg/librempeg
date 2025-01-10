@@ -34,6 +34,7 @@ version <next>:
 - Animated JPEG XL encoding (via libjxl)
 - ProRes RAW video decoder
 - ainversion filter
+- Blackmagic RAW video decoder
 
 
 version 7.1:
