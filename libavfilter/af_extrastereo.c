@@ -88,6 +88,8 @@ static int config_input(AVFilterLink *inlink)
     case AV_SAMPLE_FMT_DBL:
         s->do_extrastereo = extrastereo_dbl;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return 0;
