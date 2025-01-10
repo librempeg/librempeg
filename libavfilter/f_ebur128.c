@@ -643,8 +643,8 @@ static int gate_update(struct integrator *integ, double power,
     return gate_hist_pos;
 }
 
-static int true_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csamples,
-                              int nb_samples)
+static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csamples,
+                                 int nb_samples)
 {
 #if CONFIG_SWRESAMPLE
     if (ebur128->peak_mode & PEAK_MODE_TRUE_PEAKS && ebur128->idx_insample == 0) {
@@ -680,6 +680,29 @@ static int true_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csamples,
         }
     }
 #endif
+    if (ebur128->peak_mode & PEAK_MODE_SAMPLES_PEAKS && ebur128->idx_insample == 0) {
+        const int nb_channels = ebur128->nb_channels;
+
+        for (int ch = 0; ch < nb_channels; ch++)
+            ebur128->sample_peaks_per_frame[ch] = 0.0;
+
+        for (int ch = 0; ch < nb_channels; ch++) {
+            double sample_peak_per_frame = ebur128->sample_peaks_per_frame[ch];
+            const double *src = (const double *)csamples[ch];
+            double sample_peak = ebur128->sample_peaks[ch];
+
+            for (int idx = 0; idx < nb_samples; idx++) {
+                const double asample = fabs(src[idx]);
+
+                sample_peak = FFMAX(sample_peak, asample);
+                sample_peak_per_frame = FFMAX(sample_peak_per_frame, asample);
+            }
+
+            ebur128->sample_peaks[ch] = sample_peak;
+            ebur128->sample_peaks_per_frame[ch] = sample_peak_per_frame;
+        }
+    }
+
     return 0;
 }
 
@@ -704,23 +727,20 @@ static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, c
     for (int ch = 0; ch < nb_channels; ch++) {
         const double *samples = (const double *)csamples[ch];
         const double sample = samples[idx];
+        double *xx = ebur128->x + ch * 3;
+        double *yy = ebur128->y + ch * 3;
+        double *zz = ebur128->z + ch * 3;
         double bin;
 
-        if (ebur128->peak_mode & PEAK_MODE_SAMPLES_PEAKS) {
-            const double asample = fabs(sample);
-            ebur128->sample_peaks[ch] = FFMAX(ebur128->sample_peaks[ch], asample);
-            ebur128->sample_peaks_per_frame[ch] = FFMAX(ebur128->sample_peaks_per_frame[ch], asample);
-        }
-
-        ebur128->x[ch * 3] = sample; // set X[i]
+        xx[0] = sample; // set X[i]
 
         if (!ebur128->ch_weighting[ch])
             continue;
 
         /* Y[i] = X[i]*b0 + X[i-1]*b1 + X[i-2]*b2 - Y[i-1]*a1 - Y[i-2]*a2 */
-#define FILTER(Y, X, NUM, DEN) do {                                         \
-        double *dst = ebur128->Y + ch*3;                                    \
-        double *src = ebur128->X + ch*3;                                    \
+#define FILTER(y, x, NUM, DEN) do {                                         \
+        double *dst = y;                                                    \
+        double *src = x;                                                    \
         dst[2] = dst[1];                                                    \
         dst[1] = dst[0];                                                    \
         dst[0] = src[0]*NUM[0] + src[1]*NUM[1] + src[2]*NUM[2]              \
@@ -728,12 +748,12 @@ static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, c
 } while (0)
 
         // TODO: merge both filters in one?
-        FILTER(y, x, ebur128->pre_b, ebur128->pre_a);  // apply pre-filter
-        ebur128->x[ch * 3 + 2] = ebur128->x[ch * 3 + 1];
-        ebur128->x[ch * 3 + 1] = ebur128->x[ch * 3    ];
-        FILTER(z, y, ebur128->rlb_b, ebur128->rlb_a);  // apply RLB-filter
+        FILTER(yy, xx, ebur128->pre_b, ebur128->pre_a);  // apply pre-filter
+        xx[2] = xx[1];
+        xx[1] = xx[0];
+        FILTER(zz, yy, ebur128->rlb_b, ebur128->rlb_a);  // apply RLB-filter
 
-        bin = ebur128->z[ch * 3] * ebur128->z[ch * 3];
+        bin = zz[0] * zz[0];
 
         /* add the new value, and limit the sum to the cache size (400ms or 3s)
          * by removing the oldest one */
@@ -859,11 +879,6 @@ static void ebur128_loudness(AVFilterLink *inlink,
         loudness_3000 -= ebur128->pan_law;
     }
 
-    if (ebur128->peak_mode & PEAK_MODE_SAMPLES_PEAKS) {
-        for (int ch = 0; ch < nb_channels; ch++)
-            ebur128->sample_peaks_per_frame[ch] = 0.0;
-    }
-
     *l400  = loudness_400;
     *l3000 = loudness_3000;
     *integrated = ebur128->integrated_loudness;
@@ -881,7 +896,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     const uint8_t **samples = (const uint8_t **)insamples->extended_data;
     AVFrame *pic;
 
-    ret = true_peaks_ebur128(ebur128, samples, nb_samples);
+    ret = process_peaks_ebur128(ebur128, samples, nb_samples);
     if (ret < 0)
         return ret;
 
@@ -1497,7 +1512,7 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
     int ret;
 
     if (in) {
-        ret = true_peaks_ebur128(r128_in, samples, nb_samples);
+        ret = process_peaks_ebur128(r128_in, samples, nb_samples);
         if (ret < 0)
             return ret;
     }
@@ -1576,7 +1591,7 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
     }
 
-    ret = true_peaks_ebur128(r128_out, (const uint8_t **)out->extended_data, out->nb_samples);
+    ret = process_peaks_ebur128(r128_out, (const uint8_t **)out->extended_data, out->nb_samples);
     if (ret < 0)
         return ret;
 
