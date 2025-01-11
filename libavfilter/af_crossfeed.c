@@ -66,11 +66,7 @@ static int query_formats(const AVFilterContext *ctx,
     if (ret < 0)
         return ret;
 
-    ret = ff_set_common_channel_layouts_from_list2(ctx, cfg_in, cfg_out, layouts);
-    if (ret < 0)
-        return ret;
-
-    return 0;
+    return ff_set_common_channel_layouts_from_list2(ctx, cfg_in, cfg_out, layouts);
 }
 
 #define DEPTH 32
