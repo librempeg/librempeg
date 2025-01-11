@@ -35,6 +35,7 @@ version <next>:
 - ProRes RAW video decoder
 - ainversion filter
 - Blackmagic RAW video decoder
+- VVC in Matroska
 
 
 version 7.1:
