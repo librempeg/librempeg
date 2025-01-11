@@ -96,6 +96,8 @@ static int config_input(AVFilterLink *inlink)
         s->init_state = init_state_flt;
         s->uninit_state = uninit_state_flt;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return s->init_state(ctx);
