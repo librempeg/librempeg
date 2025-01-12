@@ -675,7 +675,7 @@ static int old_codec37(SANMVideoContext *ctx, int top,
                 if (len < 0) {
                     if (bytestream2_get_bytes_left(&ctx->gb) < 1)
                         return AVERROR_INVALIDDATA;
-                    code = bytestream2_get_byte(&ctx->gb);
+                    code = bytestream2_get_byteu(&ctx->gb);
                     len = code >> 1;
                     run = code & 1;
                     skip = 0;
@@ -686,7 +686,7 @@ static int old_codec37(SANMVideoContext *ctx, int top,
                 if (!skip) {
                     if (bytestream2_get_bytes_left(&ctx->gb) < 1)
                         return AVERROR_INVALIDDATA;
-                    code = bytestream2_get_byte(&ctx->gb);
+                    code = bytestream2_get_byteu(&ctx->gb);
                     if (code == 0xff) {
                         len--;
                         for (k = 0; k < 4; k++) {
@@ -694,19 +694,19 @@ static int old_codec37(SANMVideoContext *ctx, int top,
                                 if (len < 0) {
                                     if (bytestream2_get_bytes_left(&ctx->gb) < 1)
                                         return AVERROR_INVALIDDATA;
-                                    code = bytestream2_get_byte(&ctx->gb);
+                                    code = bytestream2_get_byteu(&ctx->gb);
                                     len = code >> 1;
                                     run = code & 1;
                                     if (run) {
                                         if (bytestream2_get_bytes_left(&ctx->gb) < 1)
                                             return AVERROR_INVALIDDATA;
-                                        code = bytestream2_get_byte(&ctx->gb);
+                                        code = bytestream2_get_byteu(&ctx->gb);
                                     }
                                 }
                                 if (!run) {
                                     if (bytestream2_get_bytes_left(&ctx->gb) < 1)
                                             return AVERROR_INVALIDDATA;
-                                        code = bytestream2_get_byte(&ctx->gb);
+                                        code = bytestream2_get_byteu(&ctx->gb);
                                 }
                                 *(dst + i + (k * stride) + l) = code;
                                 len--;
