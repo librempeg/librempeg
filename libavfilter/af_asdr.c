@@ -24,9 +24,20 @@
 #include "libavutil/common.h"
 #include "libavutil/macros.h"
 #include "libavutil/mem.h"
+#include "libavutil/opt.h"
 
 #include "avfilter.h"
 #include "filters.h"
+
+enum FilterType {
+    ASDR,
+    APSNR,
+    ASISDR,
+    ANRMSE,
+    AMAE,
+    AMDA,
+    AIDENTITY,
+};
 
 typedef struct ChanStats {
     double u;
@@ -36,6 +47,12 @@ typedef struct ChanStats {
 } ChanStats;
 
 typedef struct AudioSDRContext {
+    const AVClass *class;
+
+    double *export;
+    unsigned nb_export;
+
+    int filter_type;
     int channels;
     uint64_t nb_samples;
 
@@ -52,6 +69,44 @@ typedef struct AudioSDRContext {
 #undef DEPTH
 #define DEPTH 64
 #include "asdr_template.c"
+
+static void get_score(AVFilterContext *ctx)
+{
+    AudioSDRContext *s = ctx->priv;
+
+    for (int ch = 0; ch < s->channels; ch++) {
+        switch (s->filter_type) {
+        case ASDR:
+            s->export[ch] = 10. * log10(s->chs[ch].u / s->chs[ch].uv);
+            break;
+        case ASISDR:
+            {
+                double scale = s->chs[ch].uv / s->chs[ch].v;
+                double sisdr = scale * scale * s->chs[ch].v / fmax(0., s->chs[ch].u + scale*scale*s->chs[ch].v - 2.0*scale*s->chs[ch].uv);
+
+                s->export[ch] = 10. * log10(sisdr);
+            }
+            break;
+        case ANRMSE:
+            s->export[ch] = -10. * log10(sqrt(s->chs[ch].uv / s->chs[ch].u));
+            break;
+        case AMAE:
+            s->export[ch] = -10. * log10(s->chs[ch].uv / s->nb_samples);
+            break;
+        case AMDA:
+            s->export[ch] = 10. * log10((double)s->nb_samples / (s->nb_samples - s->chs[ch].cnt));
+            break;
+        case AIDENTITY:
+            s->export[ch] = 10. * log10((double)s->nb_samples / (s->nb_samples - s->chs[ch].cnt));
+            break;
+        case APSNR:
+            s->export[ch] = s->chs[ch].uv > 0.0 ? 10. * log10(s->chs[ch].u / sqrt(s->chs[ch].uv / s->nb_samples)) : INFINITY;
+            break;
+        default:
+            break;
+        }
+    }
+}
 
 static int activate(AVFilterContext *ctx)
 {
@@ -87,6 +142,9 @@ static int activate(AVFilterContext *ctx)
 
         s->nb_samples += s->cache[0]->nb_samples;
         s->cache[0] = NULL;
+
+        get_score(ctx);
+
         return ff_filter_frame(outlink, out);
     }
 
@@ -123,24 +181,40 @@ static int config_output(AVFilterLink *outlink)
 
     s->channels = inlink->ch_layout.nb_channels;
 
-    if (!strcmp(ctx->filter->name, "asdr"))
+    switch (s->filter_type) {
+    case ASDR:
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? sdr_fltp : sdr_dblp;
-    else if (!strcmp(ctx->filter->name, "asisdr"))
+        break;
+    case ASISDR:
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? sisdr_fltp : sisdr_dblp;
-    else if (!strcmp(ctx->filter->name, "anrmse"))
+        break;
+    case ANRMSE:
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? nrmse_fltp : nrmse_dblp;
-    else if (!strcmp(ctx->filter->name, "amae"))
+        break;
+    case AMAE:
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? mae_fltp : mae_dblp;
-    else if (!strcmp(ctx->filter->name, "amda"))
+        break;
+    case AMDA:
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? mda_fltp : mda_dblp;
-    else if (!strcmp(ctx->filter->name, "aidentity"))
+        break;
+    case AIDENTITY:
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? identity_fltp : identity_dblp;
-    else
+        break;
+    case APSNR:
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? psnr_fltp : psnr_dblp;
+        break;
+    default:
+        return AVERROR_BUG;
+    }
 
     s->chs  = av_calloc(outlink->ch_layout.nb_channels, sizeof(*s->chs));
     if (!s->chs)
         return AVERROR(ENOMEM);
+
+    s->export = av_calloc(s->channels, sizeof(*s->export));
+    if (!s->export)
+        return AVERROR(ENOMEM);
+    s->nb_export = s->channels;
 
     return 0;
 }
@@ -149,51 +223,13 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     AudioSDRContext *s = ctx->priv;
 
-    if (!strcmp(ctx->filter->name, "asdr")) {
-        for (int ch = 0; ch < s->channels; ch++)
-            av_log(ctx, AV_LOG_INFO, "SDR ch%d: %g dB\n", ch, 10. * log10(s->chs[ch].u / s->chs[ch].uv));
-    } else if (!strcmp(ctx->filter->name, "asisdr")) {
-        for (int ch = 0; ch < s->channels; ch++) {
-            double scale = s->chs[ch].uv / s->chs[ch].v;
-            double sisdr = scale * scale * s->chs[ch].v / fmax(0., s->chs[ch].u + scale*scale*s->chs[ch].v - 2.0*scale*s->chs[ch].uv);
-
-            av_log(ctx, AV_LOG_INFO, "SI-SDR ch%d: %g dB\n", ch, 10. * log10(sisdr));
-        }
-    } else if (!strcmp(ctx->filter->name, "anrmse")) {
-        for (int ch = 0; ch < s->channels; ch++) {
-            double nrmse = s->chs[ch].uv / s->chs[ch].u;
-
-            av_log(ctx, AV_LOG_INFO, "NRMSE ch%d: %g dB\n", ch, -10. * log10(sqrt(nrmse)));
-        }
-    } else if (!strcmp(ctx->filter->name, "amae")) {
-        for (int ch = 0; ch < s->channels; ch++) {
-            double mae = s->chs[ch].uv / s->nb_samples;
-
-            av_log(ctx, AV_LOG_INFO, "MAE ch%d: %g dB\n", ch, -10. * log10(mae));
-        }
-    } else if (!strcmp(ctx->filter->name, "amda")) {
-        for (int ch = 0; ch < s->channels; ch++) {
-            double mda = (double)s->nb_samples / (s->nb_samples - s->chs[ch].cnt);
-
-            av_log(ctx, AV_LOG_INFO, "MDA ch%d: %g dB\n", ch, 10. * log10(mda));
-        }
-    } else if (!strcmp(ctx->filter->name, "aidentity")) {
-        for (int ch = 0; ch < s->channels; ch++) {
-            double identity = (double)s->nb_samples / (s->nb_samples - s->chs[ch].cnt);
-
-            av_log(ctx, AV_LOG_INFO, "Identity ch%d: %g dB\n", ch, 10. * log10(identity));
-        }
-    } else {
-        for (int ch = 0; ch < s->channels; ch++) {
-            double psnr = s->chs[ch].uv > 0.0 ? 10. * log10(s->chs[ch].u / sqrt(s->chs[ch].uv / s->nb_samples)) : INFINITY;
-
-            av_log(ctx, AV_LOG_INFO, "PSNR ch%d: %g dB\n", ch, psnr);
-        }
-    }
+    for (int ch = 0; ch < s->channels; ch++)
+        av_log(ctx, AV_LOG_INFO, "%s ch%d: %g dB\n", ctx->filter->name, ch, s->export[ch]);
 
     av_frame_free(&s->cache[0]);
     av_frame_free(&s->cache[1]);
 
+    av_freep(&s->export);
     av_freep(&s->chs);
 }
 
@@ -216,100 +252,48 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const FFFilter ff_af_asdr = {
-    .p.name         = "asdr",
-    .p.description  = NULL_IF_CONFIG_SMALL("Measure Audio Signal-to-Distortion Ratio."),
-    .priv_size      = sizeof(AudioSDRContext),
-    .activate       = activate,
-    .uninit         = uninit,
-    .p.flags        = AVFILTER_FLAG_METADATA_ONLY |
-                      AVFILTER_FLAG_SLICE_THREADS |
-                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
-    FILTER_INPUTS(inputs),
-    FILTER_OUTPUTS(outputs),
-    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
-};
+#define OFFSET(x) offsetof(AudioSDRContext, x)
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+#define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_EXPORT|AV_OPT_FLAG_READONLY
+static const AVOptionArrayDef def_export  = {.def="0",.size_min=1,.sep=' '};
 
-const FFFilter ff_af_apsnr = {
-    .p.name         = "apsnr",
-    .p.description  = NULL_IF_CONFIG_SMALL("Measure Audio Peak Signal-to-Noise Ratio."),
-    .priv_size      = sizeof(AudioSDRContext),
-    .activate       = activate,
-    .uninit         = uninit,
-    .p.flags        = AVFILTER_FLAG_METADATA_ONLY |
-                      AVFILTER_FLAG_SLICE_THREADS |
-                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
-    FILTER_INPUTS(inputs),
-    FILTER_OUTPUTS(outputs),
-    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
-};
+#define DEFINE_AAA_FILTER_2(name_, short_name_, description_, priv_class_) \
+static const AVOption short_name_##_options[] = {               \
+    {""#short_name_"", NULL, OFFSET(export), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_export}, -INFINITY, INFINITY, FLAGS},\
+    {NULL}                                                      \
+};                                                              \
+                                                                \
+AVFILTER_DEFINE_CLASS(short_name_);                             \
+static av_cold int short_name_##_init(AVFilterContext *ctx)     \
+{                                                               \
+    AudioSDRContext *s = ctx->priv;                             \
+    s->filter_type = name_;                                     \
+    return 0;                                                   \
+}                                                               \
+                                                         \
+const FFFilter ff_af_##short_name_ = {                   \
+    .p.name        = ""#short_name_"",                   \
+    .p.description = NULL_IF_CONFIG_SMALL(description_), \
+    .p.priv_class  = &priv_class_##_class,               \
+    .p.flags       = AVFILTER_FLAG_METADATA_ONLY |       \
+                     AVFILTER_FLAG_SLICE_THREADS |       \
+                     AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL, \
+    .priv_size     = sizeof(AudioSDRContext),            \
+    .init          = short_name_##_init,                 \
+    .activate      = activate,                           \
+    .uninit        = uninit,                             \
+    FILTER_INPUTS(inputs),                               \
+    FILTER_OUTPUTS(outputs),                             \
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP), \
+}
 
-const FFFilter ff_af_asisdr = {
-    .p.name           = "asisdr",
-    .p.description    = NULL_IF_CONFIG_SMALL("Measure Audio Scale-Invariant Signal-to-Distortion Ratio."),
-    .priv_size      = sizeof(AudioSDRContext),
-    .activate       = activate,
-    .uninit         = uninit,
-    .p.flags          = AVFILTER_FLAG_METADATA_ONLY |
-                      AVFILTER_FLAG_SLICE_THREADS |
-                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
-    FILTER_INPUTS(inputs),
-    FILTER_OUTPUTS(outputs),
-    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
-};
+#define DEFINE_AAA_FILTER(name, short_name, description) \
+    DEFINE_AAA_FILTER_2(name, short_name, description, short_name)
 
-const FFFilter ff_af_anrmse = {
-    .p.name         = "anrmse",
-    .p.description  = NULL_IF_CONFIG_SMALL("Measure Audio Normalized Root Mean Square Error."),
-    .priv_size      = sizeof(AudioSDRContext),
-    .activate       = activate,
-    .uninit         = uninit,
-    .p.flags        = AVFILTER_FLAG_METADATA_ONLY |
-                      AVFILTER_FLAG_SLICE_THREADS |
-                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
-    FILTER_INPUTS(inputs),
-    FILTER_OUTPUTS(outputs),
-    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
-};
-
-const FFFilter ff_af_amae = {
-    .p.name         = "amae",
-    .p.description  = NULL_IF_CONFIG_SMALL("Measure Audio Mean Absolute Error."),
-    .priv_size      = sizeof(AudioSDRContext),
-    .activate       = activate,
-    .uninit         = uninit,
-    .p.flags        = AVFILTER_FLAG_METADATA_ONLY |
-                      AVFILTER_FLAG_SLICE_THREADS |
-                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
-    FILTER_INPUTS(inputs),
-    FILTER_OUTPUTS(outputs),
-    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
-};
-
-const FFFilter ff_af_amda = {
-    .p.name         = "amda",
-    .p.description  = NULL_IF_CONFIG_SMALL("Measure Audio Mean Directional Accuracy."),
-    .priv_size      = sizeof(AudioSDRContext),
-    .activate       = activate,
-    .uninit         = uninit,
-    .p.flags        = AVFILTER_FLAG_METADATA_ONLY |
-                      AVFILTER_FLAG_SLICE_THREADS |
-                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
-    FILTER_INPUTS(inputs),
-    FILTER_OUTPUTS(outputs),
-    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
-};
-
-const FFFilter ff_af_aidentity = {
-    .p.name         = "aidentity",
-    .p.description  = NULL_IF_CONFIG_SMALL("Measure Identity between two audio streams."),
-    .priv_size      = sizeof(AudioSDRContext),
-    .activate       = activate,
-    .uninit         = uninit,
-    .p.flags        = AVFILTER_FLAG_METADATA_ONLY |
-                      AVFILTER_FLAG_SLICE_THREADS |
-                      AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
-    FILTER_INPUTS(inputs),
-    FILTER_OUTPUTS(outputs),
-    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
-};
+DEFINE_AAA_FILTER(ASDR,      asdr,      "Measure Audio Signal-to-Distortion Ratio.");
+DEFINE_AAA_FILTER(APSNR,     apsnr,     "Measure Audio Peak Signal-to-Noise Ratio.");
+DEFINE_AAA_FILTER(ASISDR,    asisdr,    "Measure Audio Scale-Invariant Signal-to-Distortion Ratio.");
+DEFINE_AAA_FILTER(ANRMSE,    anrmse,    "Measure Audio Normalized Root Mean Square Error.");
+DEFINE_AAA_FILTER(AMAE,      amae,      "Measure Audio Mean Absolute Error.");
+DEFINE_AAA_FILTER(AMDA,      amda,      "Measure Audio Mean Directional Accuracy.");
+DEFINE_AAA_FILTER(AIDENTITY, aidentity, "Measure Identity between two audio streams.");
