@@ -161,7 +161,7 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
     } else {
         const ftype flatness = fn(spectral_flatness)(spectrum_buf, nb_coeffs);
 
-        capture = flatness >= F(0.98);
+        capture = flatness >= F(0.985);
     }
 
     if (st->capture != capture) {
@@ -170,11 +170,11 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
     }
 
     if (st->capture > 0) {
-        const ftype frame = F(st->noise_frame);
+        const ftype frame = (st->noise_frame > 0) ? F(0.5) : F(0.0);
         const ftype scale = F(1.0) / (frame + F(1.0));
 
         for (int n = 0; n < nb_coeffs; n++)
-            sbb[n] = frame * sbb[n] * scale + (fn(sqr)(spectrum_buf[n].re) + fn(sqr)(spectrum_buf[n].im)) * scale;
+            sbb[n] = sbb[n] * (F(1.0) - scale) + (fn(sqr)(spectrum_buf[n].re) + fn(sqr)(spectrum_buf[n].im)) * scale;
 
         st->noise_frame++;
     }
