@@ -829,7 +829,7 @@ static const AVFilterPad signalstats_outputs[] = {
 
 const FFFilter ff_vf_signalstats = {
     .p.name        = "signalstats",
-    .p.description = "Generate statistics from video analysis.",
+    .p.description = NULL_IF_CONFIG_SMALL("Generate statistics from video analysis."),
     .p.priv_class  = &signalstats_class,
     .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
     .init          = init,
