@@ -133,25 +133,18 @@ static av_cold void dat_permute(uint16_t *tab)
 
 static av_cold int dat2linear(const int16_t val)
 {
-    int t;
+    int t, m;
 
     t = val;
     if (t >= 0x800)
         t = val - 0x1000;
-    if (t >= 1792)  return (t - 1536) * 64;
-    if (t >= 1536)  return (t - 1280) * 32;
-    if (t >= 1280)  return (t - 1024) * 16;
-    if (t >= 1024)  return (t -  768) *  8;
-    if (t >= 768)   return (t -  512) *  4;
-    if (t >= 512)   return (t -  256) *  2;
-    if (t >= 0)     return t;
-    if (t >= -512)  return t;
-    if (t >= -768)  return (t +  256) *  2;
-    if (t >= -1024) return (t +  512) *  4;
-    if (t >= -1280) return (t +  768) *  8;
-    if (t >= -1536) return (t + 1024) * 16;
-    if (t >= -1792) return (t + 1280) * 32;
-    return (t + 1536) * 64;
+    if (t >= 0) {
+        m = (t - 256) / 256;
+        return (t - m * 256) * (1 << m);
+    } else {
+        m = -(t + 256) / 256;
+        return (t + m * 256) * (1 << m);
+    }
 }
 
 #if CONFIG_HARDCODED_TABLES
