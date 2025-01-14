@@ -159,6 +159,7 @@ extern const FFFilter ff_af_extrastereo;
 extern const FFFilter ff_af_firequalizer;
 extern const FFFilter ff_af_flanger;
 extern const FFFilter ff_af_haas;
+extern const FFFilter ff_af_harmonicbass;
 extern const FFFilter ff_af_hdcd;
 extern const FFFilter ff_af_headphone;
 extern const FFFilter ff_af_highpass;

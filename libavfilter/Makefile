@@ -174,6 +174,7 @@ OBJS-$(CONFIG_EXTRASTEREO_FILTER)            += af_extrastereo.o
 OBJS-$(CONFIG_FIREQUALIZER_FILTER)           += af_firequalizer.o
 OBJS-$(CONFIG_FLANGER_FILTER)                += af_flanger.o generate_wave_table.o
 OBJS-$(CONFIG_HAAS_FILTER)                   += af_haas.o
+OBJS-$(CONFIG_HARMONICBASS_FILTER)           += af_harmonicbass.o
 OBJS-$(CONFIG_HDCD_FILTER)                   += af_hdcd.o
 OBJS-$(CONFIG_HEADPHONE_FILTER)              += af_headphone.o
 OBJS-$(CONFIG_HIGHPASS_FILTER)               += af_biquads.o
