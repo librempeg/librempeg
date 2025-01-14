@@ -105,6 +105,8 @@ static int config_input(AVFilterLink *inlink)
     case AV_SAMPLE_FMT_DBLP:
         s->vb_stereo = vb_stereo_dblp;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return 0;
