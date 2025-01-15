@@ -96,8 +96,6 @@ static void get_score(AVFilterContext *ctx)
             s->export[ch] = -10. * log10(s->chs[ch].uv / s->nb_samples);
             break;
         case AMDA:
-            s->export[ch] = 10. * log10((double)s->nb_samples / (s->nb_samples - s->chs[ch].cnt));
-            break;
         case AIDENTITY:
             s->export[ch] = 10. * log10((double)s->nb_samples / (s->nb_samples - s->chs[ch].cnt));
             break;
