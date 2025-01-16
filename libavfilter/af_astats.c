@@ -516,11 +516,11 @@ static void set_metadata(AudioStatsContext *s, AVDictionary **metadata)
         if (s->measure_perchannel & MEASURE_ZERO_CROSSINGS_RATE)
             set_meta(metadata, c + 1, "Zero_crossings_rate", "%f", p->zero_runs/(double)p->nb_samples);
         if (s->is_float && s->measure_perchannel & MEASURE_NUMBER_OF_NANS)
-            set_meta(metadata, c + 1, "Number of NaNs", "%f", p->nb_nans);
+            set_meta(metadata, c + 1, "Number_of_NaNs", "%f", p->nb_nans);
         if (s->is_float && s->measure_perchannel & MEASURE_NUMBER_OF_INFS)
-            set_meta(metadata, c + 1, "Number of Infs", "%f", p->nb_infs);
+            set_meta(metadata, c + 1, "Number_of_Infs", "%f", p->nb_infs);
         if (s->is_float && s->measure_perchannel & MEASURE_NUMBER_OF_DENORMALS)
-            set_meta(metadata, c + 1, "Number of denormals", "%f", p->nb_denormals);
+            set_meta(metadata, c + 1, "Number_of_denormals", "%f", p->nb_denormals);
     }
 
     if (s->measure_overall & MEASURE_DC_OFFSET)
@@ -569,11 +569,11 @@ static void set_metadata(AudioStatsContext *s, AVDictionary **metadata)
     if (s->measure_overall & MEASURE_NUMBER_OF_SAMPLES)
         set_meta(metadata, 0, "Overall.Number_of_samples", "%f", nb_samples / s->nb_channels);
     if (s->is_float && s->measure_overall & MEASURE_NUMBER_OF_NANS)
-        set_meta(metadata, 0, "Number of NaNs", "%f", nb_nans / (float)s->nb_channels);
+        set_meta(metadata, 0, "Overall.Number_of_NaNs", "%f", nb_nans / (float)s->nb_channels);
     if (s->is_float && s->measure_overall & MEASURE_NUMBER_OF_INFS)
-        set_meta(metadata, 0, "Number of Infs", "%f", nb_infs / (float)s->nb_channels);
+        set_meta(metadata, 0, "Overall.Number_of_Infs", "%f", nb_infs / (float)s->nb_channels);
     if (s->is_float && s->measure_overall & MEASURE_NUMBER_OF_DENORMALS)
-        set_meta(metadata, 0, "Number of denormals", "%f", nb_denormals / (float)s->nb_channels);
+        set_meta(metadata, 0, "Overall.Number_of_denormals", "%f", nb_denormals / (float)s->nb_channels);
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
