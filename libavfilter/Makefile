@@ -132,6 +132,7 @@ OBJS-$(CONFIG_ASISDR_FILTER)                 += af_asdr.o
 OBJS-$(CONFIG_ASOFTCLIP_FILTER)              += af_asoftclip.o
 OBJS-$(CONFIG_ASPACE_FILTER)                 += af_aspace.o
 OBJS-$(CONFIG_ASPECTRALSTATS_FILTER)         += af_aspectralstats.o
+OBJS-$(CONFIG_ASPECTRALSUB_FILTER)           += af_aspectralsub.o
 OBJS-$(CONFIG_ASPLIT_FILTER)                 += split.o
 OBJS-$(CONFIG_ASR_FILTER)                    += af_asr.o
 OBJS-$(CONFIG_ASTATS_FILTER)                 += af_astats.o
