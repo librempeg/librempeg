@@ -164,6 +164,7 @@ typedef struct ShowCWTContext {
 
 #define OFFSET(x) offsetof(ShowCWTContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
+#define TFLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 
 static const AVOption showcwt_options[] = {
     { "size", "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "640x512"}, 0, 0, FLAGS },
@@ -189,23 +190,23 @@ static const AVOption showcwt_options[] = {
     {  "qdrt",    "qdrt",             0,                       AV_OPT_TYPE_CONST,{.i64=ISCALE_QDRT},   0, 0, FLAGS, .unit="iscale" },
     { "min",  "set minimum frequency", OFFSET(minimum_frequency), AV_OPT_TYPE_FLOAT, {.dbl = 20.},    1, 192000, FLAGS },
     { "max",  "set maximum frequency", OFFSET(maximum_frequency), AV_OPT_TYPE_FLOAT, {.dbl = 20000.}, 1, 192000, FLAGS },
-    { "imin", "set minimum intensity", OFFSET(minimum_intensity), AV_OPT_TYPE_FLOAT, {.dbl = 0.}, 0, 1, FLAGS },
-    { "imax", "set maximum intensity", OFFSET(maximum_intensity), AV_OPT_TYPE_FLOAT, {.dbl = 1.}, 0, 1, FLAGS },
-    { "logb", "set logarithmic basis", OFFSET(logarithmic_basis), AV_OPT_TYPE_FLOAT, {.dbl = 0.0001}, 0, 1, FLAGS },
+    { "imin", "set minimum intensity", OFFSET(minimum_intensity), AV_OPT_TYPE_FLOAT, {.dbl = 0.}, 0, 1, TFLAGS },
+    { "imax", "set maximum intensity", OFFSET(maximum_intensity), AV_OPT_TYPE_FLOAT, {.dbl = 1.}, 0, 1, TFLAGS },
+    { "logb", "set logarithmic basis", OFFSET(logarithmic_basis), AV_OPT_TYPE_FLOAT, {.dbl = 0.0001}, 0, 1, TFLAGS },
     { "deviation", "set frequency deviation", OFFSET(deviation), AV_OPT_TYPE_FLOAT, {.dbl = 1.}, 0, 100, FLAGS },
     { "pps",  "set pixels per second", OFFSET(pps), AV_OPT_TYPE_INT, {.i64 = 64}, 1, 1024, FLAGS },
-    { "mode", "set output mode", OFFSET(mode), AV_OPT_TYPE_INT,  {.i64=0}, 0, NB_MODE-1, FLAGS, .unit="mode" },
-    {  "magnitude", "magnitude",         0, AV_OPT_TYPE_CONST,{.i64=MAGNITUDE}, 0, 0, FLAGS, .unit="mode" },
-    {  "phase",     "phase",             0, AV_OPT_TYPE_CONST,{.i64=PHASE},     0, 0, FLAGS, .unit="mode" },
-    {  "magphase",  "magnitude+phase",   0, AV_OPT_TYPE_CONST,{.i64=MAGPHASE},  0, 0, FLAGS, .unit="mode" },
-    {  "channel",   "color per channel", 0, AV_OPT_TYPE_CONST,{.i64=CHANNEL},   0, 0, FLAGS, .unit="mode" },
-    {  "stereo",    "stereo difference", 0, AV_OPT_TYPE_CONST,{.i64=STEREO},    0, 0, FLAGS, .unit="mode" },
-    {  "monohue",   "mono hue",          0, AV_OPT_TYPE_CONST,{.i64=MONOHUE},   0, 0, FLAGS, .unit="mode" },
-    {  "stereohue", "stereo hue",        0, AV_OPT_TYPE_CONST,{.i64=STEREOHUE}, 0, 0, FLAGS, .unit="mode" },
-    {  "monocool",  "mono cool intensity",0,AV_OPT_TYPE_CONST,{.i64=MONOCOOL},  0, 0, FLAGS, .unit="mode" },
-    {  "stereocool","stereo cool intensity",0,AV_OPT_TYPE_CONST,{.i64=STEREOCOOL},0,0,FLAGS, .unit="mode" },
-    {  "monocorr",  "mono corr intensity",0,AV_OPT_TYPE_CONST,{.i64=MONOCORR},  0, 0, FLAGS, .unit="mode" },
-    {  "stereocorr","stereo corr intensity",0,AV_OPT_TYPE_CONST,{.i64=STEREOCORR},0,0,FLAGS, .unit="mode" },
+    { "mode", "set output mode", OFFSET(mode), AV_OPT_TYPE_INT,  {.i64=0}, 0, NB_MODE-1, TFLAGS, .unit="mode" },
+    {  "magnitude", "magnitude",         0, AV_OPT_TYPE_CONST,{.i64=MAGNITUDE}, 0, 0, TFLAGS, .unit="mode" },
+    {  "phase",     "phase",             0, AV_OPT_TYPE_CONST,{.i64=PHASE},     0, 0, TFLAGS, .unit="mode" },
+    {  "magphase",  "magnitude+phase",   0, AV_OPT_TYPE_CONST,{.i64=MAGPHASE},  0, 0, TFLAGS, .unit="mode" },
+    {  "channel",   "color per channel", 0, AV_OPT_TYPE_CONST,{.i64=CHANNEL},   0, 0, TFLAGS, .unit="mode" },
+    {  "stereo",    "stereo difference", 0, AV_OPT_TYPE_CONST,{.i64=STEREO},    0, 0, TFLAGS, .unit="mode" },
+    {  "monohue",   "mono hue",          0, AV_OPT_TYPE_CONST,{.i64=MONOHUE},   0, 0, TFLAGS, .unit="mode" },
+    {  "stereohue", "stereo hue",        0, AV_OPT_TYPE_CONST,{.i64=STEREOHUE}, 0, 0, TFLAGS, .unit="mode" },
+    {  "monocool",  "mono cool intensity",0,AV_OPT_TYPE_CONST,{.i64=MONOCOOL},  0, 0, TFLAGS, .unit="mode" },
+    {  "stereocool","stereo cool intensity",0,AV_OPT_TYPE_CONST,{.i64=STEREOCOOL},0,0,TFLAGS, .unit="mode" },
+    {  "monocorr",  "mono corr intensity",0,AV_OPT_TYPE_CONST,{.i64=MONOCORR},  0, 0, TFLAGS, .unit="mode" },
+    {  "stereocorr","stereo corr intensity",0,AV_OPT_TYPE_CONST,{.i64=STEREOCORR},0,0,TFLAGS, .unit="mode" },
     { "slide", "set slide mode", OFFSET(slide), AV_OPT_TYPE_INT,  {.i64=0}, 0, NB_SLIDE-1, FLAGS, .unit="slide" },
     {  "replace", "replace", 0, AV_OPT_TYPE_CONST,{.i64=SLIDE_REPLACE},0, 0, FLAGS, .unit="slide" },
     {  "scroll",  "scroll",  0, AV_OPT_TYPE_CONST,{.i64=SLIDE_SCROLL}, 0, 0, FLAGS, .unit="slide" },
@@ -1883,4 +1884,5 @@ const FFFilter ff_avf_showcwt = {
     FILTER_OUTPUTS(showcwt_outputs),
     FILTER_QUERY_FUNC2(query_formats),
     .activate      = activate,
+    .process_command = ff_filter_process_command,
 };
