@@ -281,6 +281,7 @@ extern const FFOutputFormat ff_matroska_audio_muxer;
 extern const FFInputFormat  ff_mgsts_demuxer;
 extern const FFInputFormat  ff_microdvd_demuxer;
 extern const FFOutputFormat ff_microdvd_muxer;
+extern const FFInputFormat  ff_mipu_demuxer;
 extern const FFInputFormat  ff_mjpeg_demuxer;
 extern const FFOutputFormat ff_mjpeg_muxer;
 extern const FFInputFormat  ff_mjpeg_2000_demuxer;
