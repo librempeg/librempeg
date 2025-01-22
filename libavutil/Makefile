@@ -268,7 +268,6 @@ TESTPROGS = adler32                                                     \
             md5                                                         \
             murmur3                                                     \
             opt                                                         \
-            pca                                                         \
             parseutils                                                  \
             pixdesc                                                     \
             pixelutils                                                  \
