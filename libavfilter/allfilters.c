@@ -430,6 +430,7 @@ extern const FFFilter ff_vf_palettegen;
 extern const FFFilter ff_vf_paletteuse;
 extern const FFFilter ff_vf_perms;
 extern const FFFilter ff_vf_perspective;
+extern const FFFilter ff_vf_pf2pf;
 extern const FFFilter ff_vf_phase;
 extern const FFFilter ff_vf_photosensitivity;
 extern const FFFilter ff_vf_pixdesctest;
