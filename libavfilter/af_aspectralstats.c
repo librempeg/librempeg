@@ -382,7 +382,7 @@ static float spectral_flux(const float *const spectral, const float *const prev_
 
 static float spectral_slope(const float *const spectral, int size, int max_freq)
 {
-    const float mean_freq = size * 0.5f;
+    const float mean_freq = max_freq * 0.5f;
     float mean_spectral = 0.f, num = 0.f, den = 0.f;
 
     for (int n = 0; n < size; n++)
@@ -390,8 +390,10 @@ static float spectral_slope(const float *const spectral, int size, int max_freq)
     mean_spectral /= size;
 
     for (int n = 0; n < size; n++) {
-        num += ((n - mean_freq) / mean_freq) * (spectral[n] - mean_spectral);
-        den += sqrf((n - mean_freq) / mean_freq);
+        const float freq = max_freq * (n / ((float)size));
+
+        num += (freq - mean_freq) * (spectral[n] - mean_spectral);
+        den += sqrf(freq - mean_freq);
     }
 
     den += FLT_EPSILON;
