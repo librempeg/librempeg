@@ -995,7 +995,7 @@ static int pam_probe(const AVProbeData *p)
 
 static int hdr_probe(const AVProbeData *p)
 {
-    if (!memcmp(p->buf, "#?RADIANCE\n", 11))
+    if (!memcmp(p->buf, "#?RADIANCE\n", 11) || !memcmp(p->buf, "#?RGBE\n", 7))
         return AVPROBE_SCORE_MAX;
     return 0;
 }
