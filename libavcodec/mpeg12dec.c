@@ -2785,7 +2785,7 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     IPUContext *s = avctx->priv_data;
     MpegEncContext *m = &s->m;
     GetBitContext *gb = &m->gb;
-    int ret;
+    int ret, skip = 0;
 
     // Check for minimal intra MB size (considering mb header, luma & chroma dc VLC, ac EOB VLC)
     if (avpkt->size*8LL < (avctx->width+15)/16 * ((avctx->height+15)/16) * (2LL + 3*4 + 2*2 + 2*6))
@@ -2795,7 +2795,13 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     if (ret < 0)
         return ret;
 
-    ret = init_get_bits8(gb, avpkt->data, avpkt->size);
+    for (int i = 0; i < avpkt->size; i++) {
+        if (avpkt->data[i])
+            break;
+        skip++;
+    }
+
+    ret = init_get_bits8(gb, avpkt->data + skip, avpkt->size - skip);
     if (ret < 0)
         return ret;
 
