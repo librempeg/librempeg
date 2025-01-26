@@ -127,101 +127,46 @@ static int fn(pf2pf)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 }
 #endif
 
-#undef SRC_STEP
-#undef SRC_OFFSET
 #undef SRC_OFFSET_NAME
-
-#define SRC_STEP        1
-#define SRC_OFFSET      0
 #define SRC_OFFSET_NAME 0
 #include "pf2pf_step_offset_template.c"
 
-#undef SRC_STEP
-#undef SRC_OFFSET
 #undef SRC_OFFSET_NAME
-
-#define SRC_STEP         2
-#define SRC_OFFSET      -1
-#define SRC_OFFSET_NAME  1
+#define SRC_OFFSET_NAME 1
 #include "pf2pf_step_offset_template.c"
 
-#undef SRC_STEP
-#undef SRC_OFFSET
 #undef SRC_OFFSET_NAME
-
-#define SRC_STEP        2
-#define SRC_OFFSET      0
 #define SRC_OFFSET_NAME 2
 #include "pf2pf_step_offset_template.c"
 
-#undef SRC_STEP
-#undef SRC_OFFSET
 #undef SRC_OFFSET_NAME
-
-#define SRC_STEP        2
-#define SRC_OFFSET      1
 #define SRC_OFFSET_NAME 3
 #include "pf2pf_step_offset_template.c"
 
-#undef SRC_STEP
-#undef SRC_OFFSET
 #undef SRC_OFFSET_NAME
-
-#define SRC_STEP        3
-#define SRC_OFFSET      0
 #define SRC_OFFSET_NAME 4
 #include "pf2pf_step_offset_template.c"
 
-#undef SRC_STEP
-#undef SRC_OFFSET
 #undef SRC_OFFSET_NAME
-
-#define SRC_STEP        3
-#define SRC_OFFSET      1
 #define SRC_OFFSET_NAME 5
 #include "pf2pf_step_offset_template.c"
 
-#undef SRC_STEP
-#undef SRC_OFFSET
 #undef SRC_OFFSET_NAME
-
-#define SRC_STEP        3
-#define SRC_OFFSET      2
 #define SRC_OFFSET_NAME 6
 #include "pf2pf_step_offset_template.c"
 
-#undef SRC_STEP
-#undef SRC_OFFSET
 #undef SRC_OFFSET_NAME
-
-#define SRC_STEP        4
-#define SRC_OFFSET      0
 #define SRC_OFFSET_NAME 7
 #include "pf2pf_step_offset_template.c"
 
-#undef SRC_STEP
-#undef SRC_OFFSET
 #undef SRC_OFFSET_NAME
-
-#define SRC_STEP        4
-#define SRC_OFFSET      1
 #define SRC_OFFSET_NAME 8
 #include "pf2pf_step_offset_template.c"
 
-#undef SRC_STEP
-#undef SRC_OFFSET
 #undef SRC_OFFSET_NAME
-
-#define SRC_STEP        4
-#define SRC_OFFSET      2
 #define SRC_OFFSET_NAME 9
 #include "pf2pf_step_offset_template.c"
 
-#undef SRC_STEP
-#undef SRC_OFFSET
 #undef SRC_OFFSET_NAME
-
-#define SRC_STEP         4
-#define SRC_OFFSET       3
 #define SRC_OFFSET_NAME 10
 #include "pf2pf_step_offset_template.c"

@@ -20,6 +20,12 @@
 #include "video.h"
 
 #if (SRC_DEPTH > 8 || SRC_E == 0) && (DST_DEPTH > 8 || DST_E == 0)
+
+#define SRC_STEP        step_offset_tab[SRC_OFFSET_NAME][0]
+#define SRC_OFFSET      step_offset_tab[SRC_OFFSET_NAME][1]
+#define DST_STEP        step_offset_tab[DST_OFFSET_NAME][0]
+#define DST_OFFSET      step_offset_tab[DST_OFFSET_NAME][1]
+
 #define fns3(a,b,c,d,e,f,g) a##_##b##_##c##_##d##_to_##e##_##f##_##g
 #define fns2(a,b,c,d,e,f,g) fns3(a,b,c,d,e,f,g)
 #define fns(a)              fns2(a, SRC_F, SRC_E, SRC_OFFSET_NAME, DST_F, DST_E, DST_OFFSET_NAME)
