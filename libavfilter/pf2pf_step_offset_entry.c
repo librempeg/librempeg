@@ -46,3 +46,19 @@
 #undef DST_OFFSET_NAME
 #define DST_OFFSET_NAME 6
 #include "pf2pf_special_entry.c"
+
+#undef DST_OFFSET_NAME
+#define DST_OFFSET_NAME 7
+#include "pf2pf_special_entry.c"
+
+#undef DST_OFFSET_NAME
+#define DST_OFFSET_NAME 8
+#include "pf2pf_special_entry.c"
+
+#undef DST_OFFSET_NAME
+#define DST_OFFSET_NAME 9
+#include "pf2pf_special_entry.c"
+
+#undef DST_OFFSET_NAME
+#define DST_OFFSET_NAME 10
+#include "pf2pf_special_entry.c"

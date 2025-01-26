@@ -46,3 +46,19 @@
 #undef SRC_OFFSET_NAME
 #define SRC_OFFSET_NAME 6
 #include "pf2pf_step_offset_entry.c"
+
+#undef SRC_OFFSET_NAME
+#define SRC_OFFSET_NAME 7
+#include "pf2pf_step_offset_entry.c"
+
+#undef SRC_OFFSET_NAME
+#define SRC_OFFSET_NAME 8
+#include "pf2pf_step_offset_entry.c"
+
+#undef SRC_OFFSET_NAME
+#define SRC_OFFSET_NAME 9
+#include "pf2pf_step_offset_entry.c"
+
+#undef SRC_OFFSET_NAME
+#define SRC_OFFSET_NAME 10
+#include "pf2pf_step_offset_entry.c"

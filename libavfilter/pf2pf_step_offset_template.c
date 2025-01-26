@@ -81,3 +81,39 @@
 #define DST_OFFSET      2
 #define DST_OFFSET_NAME 6
 #include "pf2pf_special_template.c"
+
+#undef DST_STEP
+#undef DST_OFFSET
+#undef DST_OFFSET_NAME
+
+#define DST_STEP        4
+#define DST_OFFSET      0
+#define DST_OFFSET_NAME 7
+#include "pf2pf_special_template.c"
+
+#undef DST_STEP
+#undef DST_OFFSET
+#undef DST_OFFSET_NAME
+
+#define DST_STEP        4
+#define DST_OFFSET      1
+#define DST_OFFSET_NAME 8
+#include "pf2pf_special_template.c"
+
+#undef DST_STEP
+#undef DST_OFFSET
+#undef DST_OFFSET_NAME
+
+#define DST_STEP        4
+#define DST_OFFSET      2
+#define DST_OFFSET_NAME 9
+#include "pf2pf_special_template.c"
+
+#undef DST_STEP
+#undef DST_OFFSET
+#undef DST_OFFSET_NAME
+
+#define DST_STEP        4
+#define DST_OFFSET      3
+#define DST_OFFSET_NAME 10
+#include "pf2pf_special_template.c"
