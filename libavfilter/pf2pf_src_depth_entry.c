@@ -20,7 +20,6 @@
 #include "video.h"
 
 #undef SRC_F
-#undef SRP
 #if SRC_DEPTH == 8
 #define SRC_F 0
 #elif SRC_DEPTH == 16

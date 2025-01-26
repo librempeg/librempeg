@@ -20,8 +20,6 @@
 #include "video.h"
 
 #undef DST_F
-#undef DWP
-#undef DRP
 #if DST_DEPTH == 8
 #define DST_F 0
 #elif DST_DEPTH == 16
