@@ -144,11 +144,19 @@ static int query_formats(const AVFilterContext *ctx,
                 return ret;
         }
     } else {
-        formats = ff_all_formats(AVMEDIA_TYPE_VIDEO);
-        if (!formats)
-            return AVERROR(ENOMEM);
+        const AVPixFmtDescriptor *desc;
+
+        formats = NULL;
+        for (int fmt = 0; desc = av_pix_fmt_desc_get(fmt); fmt++) {
+            if (!(desc->flags & AV_PIX_FMT_FLAG_PAL ||
+                  desc->flags & AV_PIX_FMT_FLAG_HWACCEL ||
+                  desc->flags & AV_PIX_FMT_FLAG_BITSTREAM) &&
+                (ret = ff_add_format(&formats, fmt)) < 0)
+                return ret;
+        }
     }
 
+    formats->same_color_type = 1;
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
@@ -159,12 +167,24 @@ static int query_formats(const AVFilterContext *ctx,
         if (ret)
             return ret;
 
+        formats->same_color_type = 1;
         return ff_formats_ref(formats, &cfg_out[0]->formats);
     }
 
-    formats = ff_all_formats(AVMEDIA_TYPE_VIDEO);
-    if (!formats)
-        return AVERROR(ENOMEM);
+    {
+        const AVPixFmtDescriptor *desc;
+
+        formats = NULL;
+        for (int fmt = 0; desc = av_pix_fmt_desc_get(fmt); fmt++) {
+            if (!(desc->flags & AV_PIX_FMT_FLAG_PAL ||
+                  desc->flags & AV_PIX_FMT_FLAG_HWACCEL ||
+                  desc->flags & AV_PIX_FMT_FLAG_BITSTREAM) &&
+                (ret = ff_add_format(&formats, fmt)) < 0)
+                return ret;
+        }
+
+        formats->same_color_type = 1;
+    }
 
     return ff_formats_ref(formats, &cfg_out[0]->formats);
 }
