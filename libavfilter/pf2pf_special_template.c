@@ -63,5 +63,4 @@ static void fns(pf2pf_special_loop)(uint8_t **dstp,
         src += src_linesize;
     }
 }
-
 #endif

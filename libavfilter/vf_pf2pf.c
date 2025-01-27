@@ -42,17 +42,33 @@ static const int8_t step_offset_tab[][2] = {
     { 16, 8 }, { 16, 12 },
 };
 
-typedef void (*pf2pf_fun)(uint8_t **dstp,
-                          const uint8_t **srcp,
-                          const int *dst_linesizep,
-                          const int *src_linesizep,
-                          const int w, const int h,
-                          const int dst_plane,
-                          const int dst_shift,
-                          const int dst_depth,
-                          const int src_plane,
-                          const int src_shift,
-                          const int src_depth);
+typedef void (*pf2pf_generic_fun)(uint8_t **dstp,
+                                  const uint8_t **srcp,
+                                  const int *dst_linesizep,
+                                  const int *src_linesizep,
+                                  const int w, const int h,
+                                  const int dst_plane,
+                                  const int dst_step,
+                                  const int dst_shift,
+                                  const int dst_offset,
+                                  const int dst_depth,
+                                  const int src_plane,
+                                  const int src_step,
+                                  const int src_shift,
+                                  const int src_offset,
+                                  const int src_depth);
+
+typedef void (*pf2pf_special_fun)(uint8_t **dstp,
+                                  const uint8_t **srcp,
+                                  const int *dst_linesizep,
+                                  const int *src_linesizep,
+                                  const int w, const int h,
+                                  const int dst_plane,
+                                  const int dst_shift,
+                                  const int dst_depth,
+                                  const int src_plane,
+                                  const int src_shift,
+                                  const int src_depth);
 
 typedef struct PF2PFContext {
     const AVClass *class;
@@ -63,19 +79,33 @@ typedef struct PF2PFContext {
     int format;
     int pass;
 
-    void (*fun[4])(uint8_t **dstp,
-                   const uint8_t **srcp,
-                   const int *dst_linesizep,
-                   const int *src_linesizep,
-                   const int w, const int h,
-                   const int dst_plane,
-                   const int dst_shift,
-                   const int dst_depth,
-                   const int src_plane,
-                   const int src_shift,
-                   const int src_depth);
+    void (*special[4])(uint8_t **dstp,
+                       const uint8_t **srcp,
+                       const int *dst_linesizep,
+                       const int *src_linesizep,
+                       const int w, const int h,
+                       const int dst_plane,
+                       const int dst_shift,
+                       const int dst_depth,
+                       const int src_plane,
+                       const int src_shift,
+                       const int src_depth);
 
-    int (*do_pf2pf)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+    void (*generic[4])(uint8_t **dstp,
+                       const uint8_t **srcp,
+                       const int *dst_linesizep,
+                       const int *src_linesizep,
+                       const int w, const int h,
+                       const int dst_plane,
+                       const int dst_step,
+                       const int dst_shift,
+                       const int dst_offset,
+                       const int dst_depth,
+                       const int src_plane,
+                       const int src_step,
+                       const int src_shift,
+                       const int src_offset,
+                       const int src_depth);
 } PF2PFContext;
 
 #define OFFSET(x) offsetof(PF2PFContext, x)
@@ -150,7 +180,7 @@ typedef struct ThreadData {
 #define DST_DEPTH 16
 #include "pf2pf_dst_endian_template.c"
 
-static pf2pf_fun special[2][2][26][2][2][26] = {
+static pf2pf_special_fun special[2][2][26][2][2][26] = {
 #undef DST_DEPTH
 #define DST_DEPTH 8
 #include "pf2pf_dst_endian_entry.c"
@@ -158,6 +188,16 @@ static pf2pf_fun special[2][2][26][2][2][26] = {
 #undef DST_DEPTH
 #define DST_DEPTH 16
 #include "pf2pf_dst_endian_entry.c"
+};
+
+static pf2pf_generic_fun generic[2][2][2][2] = {
+#undef DST_DEPTH
+#define DST_DEPTH 8
+#include "pf2pf_dst_endian_entry_generic.c"
+
+#undef DST_DEPTH
+#define DST_DEPTH 16
+#include "pf2pf_dst_endian_entry_generic.c"
 };
 
 static int config_output(AVFilterLink *outlink)
@@ -198,46 +238,85 @@ static int config_output(AVFilterLink *outlink)
             }
         }
 
+        if (src_by > 1)
+            continue;
+
+        s->generic[i] = generic[src_by][src_be][dst_by][dst_be];
+
         if (src_so == UINT_MAX || dst_so == UINT_MAX)
             continue;
 
-        s->fun[i] = special[src_by][src_be][src_so][dst_by][dst_be][dst_so];
+        s->special[i] = special[src_by][src_be][src_so][dst_by][dst_be][dst_so];
     }
 
     if ((ret = av_image_fill_linesizes(s->linesize, outlink->format, inlink->w)) < 0)
         return ret;
 
-    if (s->dst_desc->comp[0].depth > 8) {
-        if (s->src_desc->comp[0].depth > 8) {
-            if (s->dst_desc->flags & AV_PIX_FMT_FLAG_BE) {
-                if (s->src_desc->flags & AV_PIX_FMT_FLAG_BE) {
-                    s->do_pf2pf = pf2pf_1_1_to_1_1;
-                } else {
-                    s->do_pf2pf = pf2pf_1_0_to_1_1;
-                }
-            } else {
-                if (s->src_desc->flags & AV_PIX_FMT_FLAG_BE) {
-                    s->do_pf2pf = pf2pf_1_1_to_1_0;
-                } else {
-                    s->do_pf2pf = pf2pf_1_0_to_1_0;
-                }
-            }
-        } else {
-            if (s->dst_desc->flags & AV_PIX_FMT_FLAG_BE) {
-                s->do_pf2pf = pf2pf_0_0_to_1_1;
-            } else {
-                s->do_pf2pf = pf2pf_0_0_to_1_0;
+    return 0;
+}
+
+static int do_pf2pf(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    PF2PFContext *s = ctx->priv;
+    const int nb_components = s->dst_desc->nb_components;
+    const int *linesize = s->linesize;
+    ThreadData *td = arg;
+    AVFrame *restrict out = td->out;
+    AVFrame *restrict in = td->in;
+    const int w = in->width;
+    const int h = in->height;
+    const int start = (h * jobnr) / nb_jobs;
+    const int end = (h * (jobnr+1)) / nb_jobs;
+
+    for (int comp = 0; comp < nb_components; comp++) {
+        if (out->data[comp]) {
+            const int dst_sh = (comp > 0) ? s->dst_desc->log2_chroma_h : 0;
+            const int cstart = start >> dst_sh;
+            const int cend = end >> dst_sh;
+            uint8_t *dst_data = out->data[comp] + cstart * out->linesize[comp];
+
+            for (int y = cstart; y < cend; y++) {
+                memset(dst_data, 0, linesize[comp]);
+                dst_data += out->linesize[comp];
             }
         }
-    } else {
-        if (s->src_desc->comp[0].depth > 8) {
-            if (s->src_desc->flags & AV_PIX_FMT_FLAG_BE) {
-                s->do_pf2pf = pf2pf_1_1_to_0_0;
-            } else {
-                s->do_pf2pf = pf2pf_1_0_to_0_0;
-            }
-        } else {
-            s->do_pf2pf = pf2pf_0_0_to_0_0;
+    }
+
+    for (int comp = 0; comp < nb_components; comp++) {
+        const int dst_plane = s->dst_desc->comp[comp].plane;
+        const int dst_step  = s->dst_desc->comp[comp].step;
+        const int dst_shift = s->dst_desc->comp[comp].shift;
+        const int dst_offset= s->dst_desc->comp[comp].offset;
+        const int dst_depth = s->dst_desc->comp[comp].depth;
+        const int src_plane = s->src_desc->comp[comp].plane;
+        const int src_step  = s->src_desc->comp[comp].step;
+        const int src_shift = s->src_desc->comp[comp].shift;
+        const int src_offset= s->src_desc->comp[comp].offset;
+        const int src_depth = s->src_desc->comp[comp].depth;
+        const int dst_sw = (comp > 0) ? s->dst_desc->log2_chroma_w : 0;
+        const int dst_sh = (comp > 0) ? s->dst_desc->log2_chroma_h : 0;
+        uint8_t *dst_data[4] = {NULL}, *src_data[4] = {NULL};
+        const int cstart = start >> dst_sh;
+        const int cend = end >> dst_sh;
+        const int cw = w >> dst_sw;
+
+        for (int i = 0; i < 4; i++) {
+            if (out->data[i])
+                dst_data[i] = out->data[i] + cstart * out->linesize[i];
+            if (in->data[i])
+                src_data[i] = in->data[i] + cstart * in->linesize[i];
+        }
+
+        if (s->special[comp]) {
+            s->special[comp]((uint8_t **)dst_data, (const uint8_t **)src_data, out->linesize, in->linesize,
+                             cw, cend - cstart,
+                             dst_plane, dst_shift, dst_depth,
+                             src_plane, src_shift, src_depth);
+        } else if (s->generic[comp]) {
+            s->generic[comp]((uint8_t **)dst_data, (const uint8_t **)src_data, out->linesize, in->linesize,
+                             cw, cend - cstart,
+                             dst_plane, dst_step, dst_shift, dst_offset, dst_depth,
+                             src_plane, src_step, src_shift, src_offset, src_depth);
         }
     }
 
@@ -268,7 +347,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
         nb_jobs = in->height;
 
-        ff_filter_execute(ctx, s->do_pf2pf, &td, NULL,
+        ff_filter_execute(ctx, do_pf2pf, &td, NULL,
                           FFMIN(nb_jobs, ff_filter_get_nb_threads(ctx)));
 
         av_frame_copy_props(out, in);
