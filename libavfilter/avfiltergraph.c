@@ -746,6 +746,8 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
             for (i = 0; i < link->incfg.formats->nb_formats; i++) {
                 enum AVPixelFormat p = link->incfg.formats->formats[i];
                 if (link->incfg.formats->same_bitdepth ||
+                    link->incfg.formats->same_color_type ||
+                    link->incfg.formats->same_subsampling ||
                     link->incfg.formats->same_endianness) {
                     const AVPixFmtDescriptor *a = av_pix_fmt_desc_get(p);
                     const AVPixFmtDescriptor *b = av_pix_fmt_desc_get(ref->format);
@@ -753,6 +755,20 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
                         const int abits = a->comp[0].depth;
                         const int bbits = b->comp[0].depth;
                         if (abits != bbits && (abits > 8 || bbits > 8))
+                            continue;
+                    }
+
+                    if (link->incfg.formats->same_color_type) {
+                        const int argb = !!(a->flags & AV_PIX_FMT_FLAG_RGB);
+                        const int brgb = !!(b->flags & AV_PIX_FMT_FLAG_RGB);
+                        if (argb != brgb)
+                            continue;
+                    }
+
+                    if (link->incfg.formats->same_subsampling) {
+                        if (a->log2_chroma_w != b->log2_chroma_w)
+                            continue;
+                        if (a->log2_chroma_h != b->log2_chroma_h)
                             continue;
                     }
 

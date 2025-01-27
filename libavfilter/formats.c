@@ -94,9 +94,10 @@ do {                                                                       \
 static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
                                   enum AVMediaType type, int check)
 {
-    int i, j;
+    int i, j, k = 0;
     int alpha1=0, alpha2=0;
     int chroma1=0, chroma2=0;
+    int same_params = 0;
 
     av_assert2(check || (a->refcount && b->refcount));
 
@@ -110,7 +111,7 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
        possibly causing a lossy conversion elsewhere in the graph.
        To avoid that, pretend that there are no common formats to force the
        insertion of a conversion filter. */
-    if (type == AVMEDIA_TYPE_VIDEO)
+    if (type == AVMEDIA_TYPE_VIDEO) {
         for (i = 0; i < a->nb_formats; i++) {
             const AVPixFmtDescriptor *const adesc = av_pix_fmt_desc_get(a->formats[i]);
             for (j = 0; j < b->nb_formats; j++) {
@@ -121,46 +122,144 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
                     alpha1 |= adesc->flags & AV_PIX_FMT_FLAG_ALPHA;
                     chroma1|= adesc->nb_components > 1;
                 }
-                if (check && (a->same_bitdepth || a->same_endianness || a->same_color_type)) {
-                    if (a->same_bitdepth) {
+                if (check && (a->same_bitdepth || a->same_endianness || a->same_color_type || a->same_subsampling ||
+                              b->same_bitdepth || b->same_endianness || b->same_color_type || b->same_subsampling)) {
+                    int add_param = 1;
+
+                    if (a->same_bitdepth || b->same_bitdepth) {
                         const int abits = adesc->comp[0].depth;
                         const int bbits = bdesc->comp[0].depth;
-                        if (abits != bbits)
-                            return 0;
+                        add_param &= (abits == bbits);
                     }
-                    if (a->same_endianness) {
+                    if (a->same_endianness || b->same_endianness) {
                         const int abe = !!(adesc->flags & AV_PIX_FMT_FLAG_BE);
                         const int bbe = !!(bdesc->flags & AV_PIX_FMT_FLAG_BE);
-                        if (abe != bbe)
-                            return 0;
+                        add_param &= (abe == bbe);
                     }
-                    if (a->same_color_type) {
-                        const int abe = !!(adesc->flags & AV_PIX_FMT_FLAG_RGB);
-                        const int bbe = !!(bdesc->flags & AV_PIX_FMT_FLAG_RGB);
-                        if (abe != bbe)
-                            return 0;
+                    if (a->same_color_type || b->same_color_type) {
+                        const int argb = !!(adesc->flags & AV_PIX_FMT_FLAG_RGB);
+                        const int brgb = !!(bdesc->flags & AV_PIX_FMT_FLAG_RGB);
+                        add_param &= (argb == brgb);
                     }
+                    if (a->same_subsampling || b->same_subsampling) {
+                        const int wsubs = adesc->log2_chroma_w == bdesc->log2_chroma_w;
+                        const int hsubs = adesc->log2_chroma_h == bdesc->log2_chroma_h;
+                        add_param &= (wsubs && hsubs);
+                    }
+
+                    same_params += add_param;
                 }
             }
         }
 
+        if (check) {
+            if (a->same_bitdepth || a->same_endianness || a->same_color_type || a->same_subsampling ||
+                b->same_bitdepth || b->same_endianness || b->same_color_type || b->same_subsampling) {
+                if (same_params == 0)
+                    return 0;
+            }
+        }
+    }
+
     if (type == AVMEDIA_TYPE_AUDIO) {
         for (i = 0; i < a->nb_formats; i++) {
             for (j = 0; j < b->nb_formats; j++) {
-                if (check && a->same_bitdepth) {
-                    if (av_get_bytes_per_sample(a->formats[i]) !=
-                        av_get_bytes_per_sample(b->formats[j]))
-                        return 0;
+                if (check && (a->same_bitdepth || b->same_bitdepth)) {
+                    same_params += av_get_bytes_per_sample(a->formats[i]) == av_get_bytes_per_sample(b->formats[j]);
                 }
             }
         }
+
+        if (check && (a->same_bitdepth || b->same_bitdepth) && same_params == 0)
+            return 0;
     }
 
     // If chroma or alpha can be lost through merging then do not merge
     if (alpha2 > alpha1 || chroma2 > chroma1)
         return 0;
 
-    MERGE_FORMATS(a, b, formats, nb_formats, AVFilterFormats, check, 0);
+    if (type == AVMEDIA_TYPE_VIDEO) {
+        for (i = 0; i < a->nb_formats; i++) {
+            const AVPixFmtDescriptor *const adesc = av_pix_fmt_desc_get(a->formats[i]);
+            for (j = 0; j < b->nb_formats; j++) {
+                const AVPixFmtDescriptor *bdesc = av_pix_fmt_desc_get(b->formats[j]);
+                if (a->same_bitdepth || a->same_endianness || a->same_color_type || a->same_subsampling ||
+                    b->same_bitdepth || b->same_endianness || b->same_color_type || b->same_subsampling) {
+                    int add_format = 1;
+
+                    if (a->same_bitdepth || b->same_bitdepth) {
+                        const int abits = adesc->comp[0].depth;
+                        const int bbits = bdesc->comp[0].depth;
+
+                        add_format &= (abits == bbits);
+                    }
+                    if (a->same_endianness || b->same_endianness) {
+                        const int abe = !!(adesc->flags & AV_PIX_FMT_FLAG_BE);
+                        const int bbe = !!(bdesc->flags & AV_PIX_FMT_FLAG_BE);
+
+                        add_format &= (abe == bbe);
+                    }
+                    if (a->same_color_type || b->same_color_type) {
+                        const int argb = !!(adesc->flags & AV_PIX_FMT_FLAG_RGB);
+                        const int brgb = !!(bdesc->flags & AV_PIX_FMT_FLAG_RGB);
+
+                        add_format &= (argb == brgb);
+                    }
+                    if (a->same_subsampling || b->same_subsampling) {
+                        const int wsubs = adesc->log2_chroma_w == bdesc->log2_chroma_w;
+                        const int hsubs = adesc->log2_chroma_h == bdesc->log2_chroma_h;
+
+                        add_format &= (wsubs && hsubs);
+                    }
+
+                    if (add_format) {
+                        if (check)
+                            return 1;
+
+                        a->formats[k++] = a->formats[i];
+                        break;
+                    }
+                } else if (a->formats[i] == b->formats[j]) {
+                    if (check)
+                        return 1;
+
+                    a->formats[k++] = a->formats[i];
+                    break;
+                }
+            }
+        }
+    }
+
+    if (type == AVMEDIA_TYPE_AUDIO) {
+        for (i = 0; i < a->nb_formats; i++) {
+            for (j = 0; j < b->nb_formats; j++) {
+                if (a->same_bitdepth || b->same_bitdepth) {
+                    if (av_get_bytes_per_sample(a->formats[i]) == av_get_bytes_per_sample(b->formats[j])) {
+                        if (check)
+                            return 1;
+
+                        a->formats[k++] = a->formats[i];
+                        break;
+                    }
+                } else if (a->formats[i] == b->formats[j]) {
+                    if (check)
+                        return 1;
+
+                    a->formats[k++] = a->formats[i];
+                    break;
+                }
+            }
+        }
+    }
+
+    /* Check that there was at least one common format.
+     * Notice that both a and b are unchanged if not. */
+    if (!k)
+        return 0;
+    av_assert2(!check);
+    a->nb_formats = k;
+
+    MERGE_REF(a, b, formats, AVFilterFormats, return AVERROR(ENOMEM););
 
     return 1;
 }
