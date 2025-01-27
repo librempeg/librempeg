@@ -31,6 +31,13 @@
 #elif SRC_E == 1
 #define SRP(x) AV_RB16((x))
 #endif
+#elif SRC_DEPTH == 32
+#define SRC_F 3
+#if SRC_E == 0
+#define SRP(x) AV_RL32((x))
+#elif SRC_E == 1
+#define SRP(x) AV_RB32((x))
+#endif
 #endif
 
 #include "pf2pf_template.c"

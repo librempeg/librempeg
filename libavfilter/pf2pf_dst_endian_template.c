@@ -28,3 +28,9 @@
 #define DST_E 1
 #include "pf2pf_src_endian_template.c"
 #endif
+
+#if DST_DEPTH == 32
+#undef DST_E
+#define DST_E 1
+#include "pf2pf_src_endian_template.c"
+#endif

@@ -24,6 +24,8 @@
 #define DST_F 0
 #elif DST_DEPTH == 16
 #define DST_F 1
+#elif DST_DEPTH == 32
+#define DST_F 3
 #endif
 
 #undef SRC_DEPTH
@@ -32,4 +34,8 @@
 
 #undef SRC_DEPTH
 #define SRC_DEPTH 16
+#include "pf2pf_src_depth_entry_generic.c"
+
+#undef SRC_DEPTH
+#define SRC_DEPTH 32
 #include "pf2pf_src_depth_entry_generic.c"

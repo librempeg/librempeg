@@ -28,3 +28,9 @@
 #define SRC_E 1
 #include "pf2pf_dst_depth_template.c"
 #endif
+
+#if SRC_DEPTH == 32
+#undef SRC_E
+#define SRC_E 1
+#include "pf2pf_dst_depth_template.c"
+#endif

@@ -24,6 +24,8 @@
 #define SRC_F 0
 #elif SRC_DEPTH == 16
 #define SRC_F 1
+#elif SRC_DEPTH == 32
+#define SRC_F 3
 #endif
 
 #include "pf2pf_entry_generic.c"

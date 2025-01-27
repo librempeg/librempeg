@@ -180,6 +180,10 @@ typedef struct ThreadData {
 #define DST_DEPTH 16
 #include "pf2pf_dst_endian_template.c"
 
+#undef DST_DEPTH
+#define DST_DEPTH 32
+#include "pf2pf_dst_endian_template.c"
+
 static pf2pf_special_fun special[2][2][26][2][2][26] = {
 #undef DST_DEPTH
 #define DST_DEPTH 8
@@ -190,13 +194,17 @@ static pf2pf_special_fun special[2][2][26][2][2][26] = {
 #include "pf2pf_dst_endian_entry.c"
 };
 
-static pf2pf_generic_fun generic[2][2][2][2] = {
+static pf2pf_generic_fun generic[4][2][4][2] = {
 #undef DST_DEPTH
 #define DST_DEPTH 8
 #include "pf2pf_dst_endian_entry_generic.c"
 
 #undef DST_DEPTH
 #define DST_DEPTH 16
+#include "pf2pf_dst_endian_entry_generic.c"
+
+#undef DST_DEPTH
+#define DST_DEPTH 32
 #include "pf2pf_dst_endian_entry_generic.c"
 };
 
@@ -238,12 +246,15 @@ static int config_output(AVFilterLink *outlink)
             }
         }
 
-        if (src_by > 1)
+        if (src_by > 3)
             continue;
 
         s->generic[i] = generic[src_by][src_be][dst_by][dst_be];
 
         if (src_so == UINT_MAX || dst_so == UINT_MAX)
+            continue;
+
+        if (src_by > 1)
             continue;
 
         s->special[i] = special[src_by][src_be][src_so][dst_by][dst_be][dst_so];

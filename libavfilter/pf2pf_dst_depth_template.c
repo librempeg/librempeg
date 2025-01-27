@@ -35,6 +35,15 @@
 #define DWP(x, y) AV_WB16((x), (y))
 #define DRP(x) AV_RB16(x)
 #endif
+#elif DST_DEPTH == 32
+#define DST_F 3
+#if DST_E == 0
+#define DWP(x, y) AV_WL32((x), (y))
+#define DRP(x) AV_RL32(x)
+#elif DST_E == 1
+#define DWP(x, y) AV_WB32((x), (y))
+#define DRP(x) AV_RB32(x)
+#endif
 #endif
 
 #undef SRC_DEPTH
@@ -43,4 +52,8 @@
 
 #undef SRC_DEPTH
 #define SRC_DEPTH 16
+#include "pf2pf_src_depth_template.c"
+
+#undef SRC_DEPTH
+#define SRC_DEPTH 32
 #include "pf2pf_src_depth_template.c"

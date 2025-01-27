@@ -38,8 +38,8 @@ static void fn(pf2pf_generic_loop)(uint8_t **dstp,
 {
     const ptrdiff_t dst_linesize = dst_linesizep[dst_plane];
     const ptrdiff_t src_linesize = src_linesizep[src_plane];
-    const unsigned dst_mask = (1U << dst_depth) - 1;
-    const unsigned src_mask = (1U << src_depth) - 1;
+    const unsigned dst_mask = (1ULL << dst_depth) - 1;
+    const unsigned src_mask = (1ULL << src_depth) - 1;
     const unsigned dst_rshift = FFMAX(src_depth - dst_depth, 0);
     const unsigned dst_lshift = dst_shift + FFMAX(dst_depth-src_depth, 0);
     const uint8_t *src = srcp[src_plane];
@@ -58,6 +58,8 @@ static void fn(pf2pf_generic_loop)(uint8_t **dstp,
     }
 }
 #endif
+
+#if SRC_DEPTH < 32 && DST_DEPTH < 32
 
 #undef SRC_OFFSET_NAME
 #define SRC_OFFSET_NAME 0
@@ -102,3 +104,5 @@ static void fn(pf2pf_generic_loop)(uint8_t **dstp,
 #undef SRC_OFFSET_NAME
 #define SRC_OFFSET_NAME 10
 #include "pf2pf_step_offset_template.c"
+
+#endif
