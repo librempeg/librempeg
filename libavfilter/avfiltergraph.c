@@ -762,6 +762,13 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
                             continue;
                     }
 
+                    if (link->incfg.formats->flags & FILTER_SAME_PLANAR_FLAG) {
+                        const int aplanar = !!(a->flags & AV_PIX_FMT_FLAG_PLANAR);
+                        const int bplanar = !!(b->flags & AV_PIX_FMT_FLAG_PLANAR);
+                        if (aplanar != bplanar)
+                            continue;
+                    }
+
                     if (link->incfg.formats->flags & FILTER_SAME_SUBSAMPLING) {
                         if (a->log2_chroma_w != b->log2_chroma_w)
                             continue;

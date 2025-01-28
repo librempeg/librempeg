@@ -140,6 +140,11 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
                         const int brgb = !!(bdesc->flags & AV_PIX_FMT_FLAG_RGB);
                         add_param &= (argb == brgb);
                     }
+                    if ((a->flags & FILTER_SAME_PLANAR_FLAG) || (b->flags & FILTER_SAME_PLANAR_FLAG)) {
+                        const int aplanar = !!(adesc->flags & AV_PIX_FMT_FLAG_PLANAR);
+                        const int bplanar = !!(bdesc->flags & AV_PIX_FMT_FLAG_PLANAR);
+                        add_param &= (aplanar == bplanar);
+                    }
                     if ((a->flags & FILTER_SAME_SUBSAMPLING) || (b->flags & FILTER_SAME_SUBSAMPLING)) {
                         const int wsubs = adesc->log2_chroma_w == bdesc->log2_chroma_w;
                         const int hsubs = adesc->log2_chroma_h == bdesc->log2_chroma_h;
@@ -201,6 +206,12 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
                         const int brgb = !!(bdesc->flags & AV_PIX_FMT_FLAG_RGB);
 
                         add_format &= (argb == brgb);
+                    }
+                    if ((a->flags & FILTER_SAME_PLANAR_FLAG) || (b->flags & FILTER_SAME_PLANAR_FLAG)) {
+                        const int aplanar = !!(adesc->flags & AV_PIX_FMT_FLAG_PLANAR);
+                        const int bplanar = !!(bdesc->flags & AV_PIX_FMT_FLAG_PLANAR);
+
+                        add_format &= (aplanar == bplanar);
                     }
                     if ((a->flags & FILTER_SAME_SUBSAMPLING) || (b->flags & FILTER_SAME_SUBSAMPLING)) {
                         const int wsubs = adesc->log2_chroma_w == bdesc->log2_chroma_w;

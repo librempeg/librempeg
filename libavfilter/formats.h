@@ -25,6 +25,7 @@
 #define FILTER_SAME_ENDIANNESS  (1U << 1)
 #define FILTER_SAME_SUBSAMPLING (1U << 2)
 #define FILTER_SAME_RGB_FLAG    (1U << 3)
+#define FILTER_SAME_PLANAR_FLAG (1U << 4)
 
 /**
  * A list of supported formats for one end of a filter link. This is used
