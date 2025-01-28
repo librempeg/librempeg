@@ -49,6 +49,8 @@ static int fn(rescale_slice)(AVFilterContext *ctx, void *arg, int jobnr, int nb_
     const int end = (dst_h * (jobnr+1)) / nb_jobs;
 
     for (int comp = 0; comp < nb_components; comp++) {
+        const ptrdiff_t out_linesize = out->linesize[comp];
+        const ptrdiff_t in_linesize = in->linesize[comp];
         const int dst_sw = (comp > 0) ? s->dst_desc->log2_chroma_w : 0;
         const int dst_sh = (comp > 0) ? s->dst_desc->log2_chroma_h : 0;
         const int src_sw = (comp > 0) ? s->src_desc->log2_chroma_w : 0;
@@ -63,16 +65,16 @@ static int fn(rescale_slice)(AVFilterContext *ctx, void *arg, int jobnr, int nb_
         int psy = -1;
 
         for (int y = cstart; y < cend; y++) {
-            pixel_type *dst_data = (pixel_type *)(out->data[comp] + y * out->linesize[comp]);
+            pixel_type *dst_data = (pixel_type *)(out->data[comp] + y * out_linesize);
             const int sy = FFMIN(lrintf(y * (src_ch  / ((float)dst_ch))), src_ch-1);
-            const pixel_type *src_data = (const pixel_type *)(in->data[comp] + sy * in->linesize[comp]);
+            const pixel_type *src_data = (const pixel_type *)(in->data[comp] + sy * in_linesize);
             int isx = 0;
 
             if (sy == psy) {
-                memcpy(dst_data, dst_data - out->linesize[comp], dst_cw * (DEPTH/8));
+                memcpy(dst_data, dst_data - out_linesize, dst_cw * (DEPTH/8));
             } else {
                 for (int x = 0; x < dst_cw; x++) {
-                    const int sx = FFMIN(isx >> 16, src_cw-1);
+                    const int sx = isx >> 16;
 
                     dst_data[x] = src_data[sx];
                     isx += inc;
