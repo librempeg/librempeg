@@ -88,7 +88,7 @@ static int query_formats(const AVFilterContext *ctx,
         }
     }
 
-    formats->same_bitdepth = formats->same_endianness = 1;
+    formats->flags = FILTER_SAME_BITDEPTH | FILTER_SAME_ENDIANNESS;
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
@@ -103,7 +103,7 @@ static int query_formats(const AVFilterContext *ctx,
         }
     }
 
-    formats->same_bitdepth = formats->same_endianness = 1;
+    formats->flags = FILTER_SAME_BITDEPTH | FILTER_SAME_ENDIANNESS;
     for (int i = 0; i < ctx->nb_outputs; i++)
         if ((ret = ff_formats_ref(formats, &cfg_out[i]->formats)) < 0)
             return ret;

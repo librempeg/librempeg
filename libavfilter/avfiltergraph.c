@@ -738,64 +738,61 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
         return 0;
 
     if (link->type == AVMEDIA_TYPE_VIDEO) {
-        if(ref && ref->type == AVMEDIA_TYPE_VIDEO){
+        if(ref && ref->type == AVMEDIA_TYPE_VIDEO) {
             //FIXME: This should check for AV_PIX_FMT_FLAG_ALPHA after PAL8 pixel format without alpha is implemented
             int has_alpha= av_pix_fmt_desc_get(ref->format)->nb_components % 2 == 0;
             enum AVPixelFormat best= AV_PIX_FMT_NONE;
             int i;
             for (i = 0; i < link->incfg.formats->nb_formats; i++) {
                 enum AVPixelFormat p = link->incfg.formats->formats[i];
-                if (link->incfg.formats->same_bitdepth ||
-                    link->incfg.formats->same_color_type ||
-                    link->incfg.formats->same_subsampling ||
-                    link->incfg.formats->same_endianness) {
+                if (link->incfg.formats->flags != 0) {
                     const AVPixFmtDescriptor *a = av_pix_fmt_desc_get(p);
                     const AVPixFmtDescriptor *b = av_pix_fmt_desc_get(ref->format);
-                    if (link->incfg.formats->same_bitdepth) {
+                    if (link->incfg.formats->flags & FILTER_SAME_BITDEPTH) {
                         const int abits = a->comp[0].depth;
                         const int bbits = b->comp[0].depth;
                         if (abits != bbits && (abits > 8 || bbits > 8))
                             continue;
                     }
 
-                    if (link->incfg.formats->same_color_type) {
+                    if (link->incfg.formats->flags & FILTER_SAME_RGB_FLAG) {
                         const int argb = !!(a->flags & AV_PIX_FMT_FLAG_RGB);
                         const int brgb = !!(b->flags & AV_PIX_FMT_FLAG_RGB);
                         if (argb != brgb)
                             continue;
                     }
 
-                    if (link->incfg.formats->same_subsampling) {
+                    if (link->incfg.formats->flags & FILTER_SAME_SUBSAMPLING) {
                         if (a->log2_chroma_w != b->log2_chroma_w)
                             continue;
                         if (a->log2_chroma_h != b->log2_chroma_h)
                             continue;
                     }
 
-                    if (link->incfg.formats->same_endianness) {
+                    if (link->incfg.formats->flags & FILTER_SAME_ENDIANNESS) {
                         const int abe = !!(a->flags & AV_PIX_FMT_FLAG_BE);
                         const int bbe = !!(b->flags & AV_PIX_FMT_FLAG_BE);
                         if (abe != bbe)
                             continue;
                     }
                 }
-                best= av_find_best_pix_fmt_of_2(best, p, ref->format, has_alpha, NULL);
+                best = av_find_best_pix_fmt_of_2(best, p, ref->format, has_alpha, NULL);
             }
             if (best == AV_PIX_FMT_NONE)
                 return AVERROR(EINVAL);
-            av_log(link->src,AV_LOG_DEBUG, "picking %s out of %d ref:%s alpha:%d\n",
+            av_log(link->src, AV_LOG_DEBUG, "picking %s out of %d ref:%s alpha:%d\n",
                    av_get_pix_fmt_name(best), link->incfg.formats->nb_formats,
                    av_get_pix_fmt_name(ref->format), has_alpha);
             link->incfg.formats->formats[0] = best;
             link->incfg.formats->nb_formats = 1;
         }
     } else if (link->type == AVMEDIA_TYPE_AUDIO) {
-        if(ref && ref->type == AVMEDIA_TYPE_AUDIO){
+        if(ref && ref->type == AVMEDIA_TYPE_AUDIO) {
             enum AVSampleFormat best= AV_SAMPLE_FMT_NONE;
             int i;
             for (i = 0; i < link->incfg.formats->nb_formats; i++) {
                 enum AVSampleFormat p = link->incfg.formats->formats[i];
-                if (link->incfg.formats->same_bitdepth) {
+                if (link->incfg.formats->flags & FILTER_SAME_BITDEPTH) {
                     if (av_get_bytes_per_sample(p) !=
                         av_get_bytes_per_sample(ref->format))
                         continue;
@@ -1277,8 +1274,8 @@ static int pick_formats(AVFilterGraph *graph)
         change = 0;
         for (int i = 0; i < graph->nb_filters; i++) {
             AVFilterContext *filter = graph->filters[i];
-            if (filter->nb_inputs){
-                for (int j = 0; j < filter->nb_inputs; j++){
+            if (filter->nb_inputs) {
+                for (int j = 0; j < filter->nb_inputs; j++) {
                     if (filter->inputs[j]->incfg.formats && filter->inputs[j]->incfg.formats->nb_formats == 1) {
                         if ((ret = pick_format(filter->inputs[j], NULL)) < 0)
                             return ret;
@@ -1291,8 +1288,8 @@ static int pick_formats(AVFilterGraph *graph)
                     }
                 }
             }
-            if (filter->nb_outputs){
-                for (int j = 0; j < filter->nb_outputs; j++){
+            if (filter->nb_outputs) {
+                for (int j = 0; j < filter->nb_outputs; j++) {
                     if (filter->outputs[j]->incfg.formats && filter->outputs[j]->incfg.formats->nb_formats == 1) {
                         if ((ret = pick_format(filter->outputs[j], NULL)) < 0)
                             return ret;
@@ -1474,7 +1471,7 @@ int avfilter_graph_queue_command(AVFilterGraph *graph, const char *target, const
     for (i = 0; i < graph->nb_filters; i++) {
         AVFilterContext *filter = graph->filters[i];
         FFFilterContext *ctxi   = fffilterctx(filter);
-        if(filter && (!strcmp(target, "all") || !strcmp(target, filter->name) || !strcmp(target, filter->filter->name))){
+        if(filter && (!strcmp(target, "all") || !strcmp(target, filter->name) || !strcmp(target, filter->filter->name))) {
             AVFilterCommand **queue = &ctxi->command_queue, *next;
             while (*queue && (*queue)->time <= ts)
                 queue = &(*queue)->next;

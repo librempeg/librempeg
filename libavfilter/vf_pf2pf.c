@@ -156,8 +156,7 @@ static int query_formats(const AVFilterContext *ctx,
         }
     }
 
-    formats->same_color_type = 1;
-    formats->same_subsampling = 1;
+    formats->flags = FILTER_SAME_RGB_FLAG | FILTER_SAME_SUBSAMPLING;
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
@@ -168,8 +167,7 @@ static int query_formats(const AVFilterContext *ctx,
         if (ret)
             return ret;
 
-        formats->same_color_type = 1;
-        formats->same_subsampling = 1;
+        formats->flags = FILTER_SAME_RGB_FLAG | FILTER_SAME_SUBSAMPLING;
         return ff_formats_ref(formats, &cfg_out[0]->formats);
     }
 
@@ -185,8 +183,7 @@ static int query_formats(const AVFilterContext *ctx,
                 return ret;
         }
 
-        formats->same_color_type = 1;
-        formats->same_subsampling = 1;
+        formats->flags = FILTER_SAME_RGB_FLAG | FILTER_SAME_SUBSAMPLING;
     }
 
     return ff_formats_ref(formats, &cfg_out[0]->formats);

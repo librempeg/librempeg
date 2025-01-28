@@ -122,26 +122,25 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
                     alpha1 |= adesc->flags & AV_PIX_FMT_FLAG_ALPHA;
                     chroma1|= adesc->nb_components > 1;
                 }
-                if (check && (a->same_bitdepth || a->same_endianness || a->same_color_type || a->same_subsampling ||
-                              b->same_bitdepth || b->same_endianness || b->same_color_type || b->same_subsampling)) {
+                if (check && (a->flags || b->flags)) {
                     int add_param = 1;
 
-                    if (a->same_bitdepth || b->same_bitdepth) {
+                    if ((a->flags & FILTER_SAME_BITDEPTH) || (b->flags & FILTER_SAME_BITDEPTH)) {
                         const int abits = adesc->comp[0].depth;
                         const int bbits = bdesc->comp[0].depth;
                         add_param &= (abits == bbits);
                     }
-                    if (a->same_endianness || b->same_endianness) {
+                    if ((a->flags & FILTER_SAME_ENDIANNESS) || (b->flags & FILTER_SAME_ENDIANNESS)) {
                         const int abe = !!(adesc->flags & AV_PIX_FMT_FLAG_BE);
                         const int bbe = !!(bdesc->flags & AV_PIX_FMT_FLAG_BE);
                         add_param &= (abe == bbe);
                     }
-                    if (a->same_color_type || b->same_color_type) {
+                    if ((a->flags & FILTER_SAME_RGB_FLAG) || (b->flags & FILTER_SAME_RGB_FLAG)) {
                         const int argb = !!(adesc->flags & AV_PIX_FMT_FLAG_RGB);
                         const int brgb = !!(bdesc->flags & AV_PIX_FMT_FLAG_RGB);
                         add_param &= (argb == brgb);
                     }
-                    if (a->same_subsampling || b->same_subsampling) {
+                    if ((a->flags & FILTER_SAME_SUBSAMPLING) || (b->flags & FILTER_SAME_SUBSAMPLING)) {
                         const int wsubs = adesc->log2_chroma_w == bdesc->log2_chroma_w;
                         const int hsubs = adesc->log2_chroma_h == bdesc->log2_chroma_h;
                         add_param &= (wsubs && hsubs);
@@ -153,8 +152,7 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
         }
 
         if (check) {
-            if (a->same_bitdepth || a->same_endianness || a->same_color_type || a->same_subsampling ||
-                b->same_bitdepth || b->same_endianness || b->same_color_type || b->same_subsampling) {
+            if (a->flags || b->flags) {
                 if (same_params == 0)
                     return 0;
             }
@@ -164,13 +162,13 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
     if (type == AVMEDIA_TYPE_AUDIO) {
         for (i = 0; i < a->nb_formats; i++) {
             for (j = 0; j < b->nb_formats; j++) {
-                if (check && (a->same_bitdepth || b->same_bitdepth)) {
+                if (check && ((a->flags & FILTER_SAME_BITDEPTH) || (b->flags & FILTER_SAME_BITDEPTH))) {
                     same_params += av_get_bytes_per_sample(a->formats[i]) == av_get_bytes_per_sample(b->formats[j]);
                 }
             }
         }
 
-        if (check && (a->same_bitdepth || b->same_bitdepth) && same_params == 0)
+        if (check && (a->flags || b->flags) && same_params == 0)
             return 0;
     }
 
@@ -183,29 +181,28 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
             const AVPixFmtDescriptor *const adesc = av_pix_fmt_desc_get(a->formats[i]);
             for (j = 0; j < b->nb_formats; j++) {
                 const AVPixFmtDescriptor *bdesc = av_pix_fmt_desc_get(b->formats[j]);
-                if (a->same_bitdepth || a->same_endianness || a->same_color_type || a->same_subsampling ||
-                    b->same_bitdepth || b->same_endianness || b->same_color_type || b->same_subsampling) {
+                if (a->flags || b->flags) {
                     int add_format = 1;
 
-                    if (a->same_bitdepth || b->same_bitdepth) {
+                    if ((a->flags & FILTER_SAME_BITDEPTH) || (b->flags & FILTER_SAME_BITDEPTH)) {
                         const int abits = adesc->comp[0].depth;
                         const int bbits = bdesc->comp[0].depth;
 
                         add_format &= (abits == bbits);
                     }
-                    if (a->same_endianness || b->same_endianness) {
+                    if ((a->flags & FILTER_SAME_ENDIANNESS) || (b->flags & FILTER_SAME_ENDIANNESS)) {
                         const int abe = !!(adesc->flags & AV_PIX_FMT_FLAG_BE);
                         const int bbe = !!(bdesc->flags & AV_PIX_FMT_FLAG_BE);
 
                         add_format &= (abe == bbe);
                     }
-                    if (a->same_color_type || b->same_color_type) {
+                    if ((a->flags & FILTER_SAME_RGB_FLAG) || (b->flags & FILTER_SAME_RGB_FLAG)) {
                         const int argb = !!(adesc->flags & AV_PIX_FMT_FLAG_RGB);
                         const int brgb = !!(bdesc->flags & AV_PIX_FMT_FLAG_RGB);
 
                         add_format &= (argb == brgb);
                     }
-                    if (a->same_subsampling || b->same_subsampling) {
+                    if ((a->flags & FILTER_SAME_SUBSAMPLING) || (b->flags & FILTER_SAME_SUBSAMPLING)) {
                         const int wsubs = adesc->log2_chroma_w == bdesc->log2_chroma_w;
                         const int hsubs = adesc->log2_chroma_h == bdesc->log2_chroma_h;
 
@@ -233,7 +230,7 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
     if (type == AVMEDIA_TYPE_AUDIO) {
         for (i = 0; i < a->nb_formats; i++) {
             for (j = 0; j < b->nb_formats; j++) {
-                if (a->same_bitdepth || b->same_bitdepth) {
+                if ((a->flags & FILTER_SAME_BITDEPTH) || (b->flags & FILTER_SAME_BITDEPTH)) {
                     if (av_get_bytes_per_sample(a->formats[i]) == av_get_bytes_per_sample(b->formats[j])) {
                         if (check)
                             return 1;

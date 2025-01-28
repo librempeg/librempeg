@@ -65,9 +65,7 @@ static int query_formats(const AVFilterContext *ctx,
             return ret;
     }
 
-    formats->same_bitdepth = 1;
-    formats->same_endianness = 1;
-    formats->same_color_type = 1;
+    formats->flags = FILTER_SAME_BITDEPTH | FILTER_SAME_ENDIANNESS | FILTER_SAME_RGB_FLAG;
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
@@ -81,9 +79,7 @@ static int query_formats(const AVFilterContext *ctx,
             return ret;
     }
 
-    formats->same_bitdepth = 1;
-    formats->same_endianness = 1;
-    formats->same_color_type = 1;
+    formats->flags = FILTER_SAME_BITDEPTH | FILTER_SAME_ENDIANNESS | FILTER_SAME_RGB_FLAG;
     return ff_formats_ref(formats, &cfg_out[0]->formats);
 }
 

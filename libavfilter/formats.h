@@ -21,6 +21,11 @@
 
 #include "avfilter.h"
 
+#define FILTER_SAME_BITDEPTH    (1U << 0)
+#define FILTER_SAME_ENDIANNESS  (1U << 1)
+#define FILTER_SAME_SUBSAMPLING (1U << 2)
+#define FILTER_SAME_RGB_FLAG    (1U << 3)
+
 /**
  * A list of supported formats for one end of a filter link. This is used
  * during the format negotiation process to try to pick the best format to
@@ -64,10 +69,7 @@
 struct AVFilterFormats {
     unsigned nb_formats;        ///< number of formats
     int *formats;               ///< list of media formats
-    uint8_t same_bitdepth;      ///< accept only formats pairs with same bitdepth
-    uint8_t same_endianness;    ///< accept only formats pairs with same endianness
-    uint8_t same_color_type;    ///< accept only formats pairs with same color type (RGB vs YUV)
-    uint8_t same_subsampling;   ///< accept only formats pairs with same subsampling
+    unsigned flags;             ///< FILTER_SAME_* flags
 
     unsigned refcount;          ///< number of references to this list
     struct AVFilterFormats ***refs; ///< references to this list

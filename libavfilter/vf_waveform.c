@@ -293,7 +293,7 @@ static int query_formats(const AVFilterContext *ctx,
     if (!formats)
         return AVERROR(ENOMEM);
 
-    formats->same_bitdepth = formats->same_endianness = formats->same_color_type = 1;
+    formats->flags = FILTER_SAME_BITDEPTH | FILTER_SAME_ENDIANNESS | FILTER_SAME_RGB_FLAG;
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
@@ -301,7 +301,7 @@ static int query_formats(const AVFilterContext *ctx,
     if (!formats)
         return AVERROR(ENOMEM);
 
-    formats->same_bitdepth = formats->same_endianness = formats->same_color_type = 1;
+    formats->flags = FILTER_SAME_BITDEPTH | FILTER_SAME_ENDIANNESS | FILTER_SAME_RGB_FLAG;
     return ff_formats_ref(formats, &cfg_out[0]->formats);
 }
 
