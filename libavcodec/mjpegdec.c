@@ -718,6 +718,7 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
             s->avctx->pix_fmt     = s->hwaccel_pix_fmt;
         }
 
+        av_frame_unref(s->picture_ptr);
         ret = ff_thread_get_buffer(s->avctx, s->picture_ptr, 0);
         if (ret < 0)
             return ret;
