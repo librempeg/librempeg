@@ -432,6 +432,7 @@ OBJS-$(CONFIG_MPDECIMATE_FILTER)             += vf_mpdecimate.o
 OBJS-$(CONFIG_MSAD_FILTER)                   += vf_identity.o framesync.o
 OBJS-$(CONFIG_MULTIPLY_FILTER)               += vf_multiply.o framesync.o
 OBJS-$(CONFIG_NEGATE_FILTER)                 += vf_negate.o
+OBJS-$(CONFIG_NEGATIVE_FILTER)               += vf_negative.o
 OBJS-$(CONFIG_NLMEANS_FILTER)                += vf_nlmeans.o
 OBJS-$(CONFIG_NLMEANS_OPENCL_FILTER)         += vf_nlmeans_opencl.o opencl.o opencl/nlmeans.o
 OBJS-$(CONFIG_NLMEANS_VULKAN_FILTER)         += vf_nlmeans_vulkan.o vulkan.o vulkan_filter.o

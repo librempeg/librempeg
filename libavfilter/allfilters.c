@@ -407,6 +407,7 @@ extern const FFFilter ff_vf_mpdecimate;
 extern const FFFilter ff_vf_msad;
 extern const FFFilter ff_vf_multiply;
 extern const FFFilter ff_vf_negate;
+extern const FFFilter ff_vf_negative;
 extern const FFFilter ff_vf_nlmeans;
 extern const FFFilter ff_vf_nlmeans_opencl;
 extern const FFFilter ff_vf_nlmeans_vulkan;
