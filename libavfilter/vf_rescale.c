@@ -26,9 +26,16 @@
 #include "filters.h"
 #include "formats.h"
 
+enum Interpolation {
+    NEAREST,
+    LINEAR,
+    NB_INTERP
+};
+
 typedef struct ReScaleContext {
     const AVClass *class;
     int w, h;
+    int interpolation;
 
     const AVPixFmtDescriptor *dst_desc, *src_desc;
 
@@ -42,6 +49,9 @@ typedef struct ReScaleContext {
 
 static const AVOption rescale_options[] = {
     { "size", "output video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, .flags = FLAGS },
+    { "interpolation", "set interpolation", OFFSET(interpolation), AV_OPT_TYPE_INT, {.i64=LINEAR}, 0, NB_INTERP-1, .flags=FLAGS, .unit="interp" },
+    { "nearest", 0, 0, AV_OPT_TYPE_CONST, {.i64=NEAREST}, 0, 0, FLAGS, .unit = "interp" },
+    { "linear",  0, 0, AV_OPT_TYPE_CONST, {.i64=LINEAR},  0, 0, FLAGS, .unit = "interp" },
     {NULL}
 };
 
@@ -127,12 +137,20 @@ static int config_output(AVFilterLink *outlink)
 
     if (s->dst_desc->comp[0].depth <= 8) {
         s->rescale_slice = rescale_slice_8;
+        if (s->interpolation == LINEAR)
+            s->rescale_slice = rescale_slice_linear_8;
     } else if (s->dst_desc->comp[0].depth <= 16) {
         s->rescale_slice = rescale_slice_16;
+        if (s->interpolation == LINEAR)
+            s->rescale_slice = rescale_slice_linear_16;
     } else if (s->dst_desc->comp[0].depth <= 32 && !(s->dst_desc->flags & AV_PIX_FMT_FLAG_FLOAT)) {
         s->rescale_slice = rescale_slice_32;
+        if (s->interpolation == LINEAR)
+            s->rescale_slice = rescale_slice_linear_32;
     } else if (s->dst_desc->comp[0].depth <= 32 && (s->dst_desc->flags & AV_PIX_FMT_FLAG_FLOAT)) {
         s->rescale_slice = rescale_slice_33;
+        if (s->interpolation == LINEAR)
+            s->rescale_slice = rescale_slice_linear_33;
     } else {
         return AVERROR_BUG;
     }
