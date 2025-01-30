@@ -24,6 +24,7 @@
 
 extern const FFFilter ff_af_aap;
 extern const FFFilter ff_af_aasrc;
+extern const FFFilter ff_af_aawiener;
 extern const FFFilter ff_af_abench;
 extern const FFFilter ff_af_acentercut;
 extern const FFFilter ff_af_acl2cl;

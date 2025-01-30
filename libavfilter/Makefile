@@ -39,6 +39,7 @@ OBJS-$(CONFIG_DNN)                           += dnn_filter_common.o
 # audio filters
 OBJS-$(CONFIG_AAP_FILTER)                    += af_aap.o
 OBJS-$(CONFIG_AASRC_FILTER)                  += af_aasrc.o
+OBJS-$(CONFIG_AAWIENER_FILTER)               += af_aawiener.o
 OBJS-$(CONFIG_ABENCH_FILTER)                 += f_bench.o
 OBJS-$(CONFIG_ACENTERCUT_FILTER)             += af_acentercut.o
 OBJS-$(CONFIG_ACL2CL_FILTER)                 += af_acl2cl.o
