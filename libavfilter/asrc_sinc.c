@@ -120,6 +120,8 @@ static int config_output(AVFilterLink *outlink)
     case AV_SAMPLE_FMT_DBL:
         s->sample_size = sizeof(double);
         return generate_dbl(ctx);
+    default:
+        return AVERROR_BUG;
     }
 
     return 0;
