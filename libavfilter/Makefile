@@ -658,6 +658,7 @@ OBJS-$(CONFIG_NULLSINK_FILTER)               += vsink_nullsink.o
 # multimedia filters
 OBJS-$(CONFIG_A3DSCOPE_FILTER)               += avf_a3dscope.o
 OBJS-$(CONFIG_ABITSCOPE_FILTER)              += avf_abitscope.o
+OBJS-$(CONFIG_ACORRMETER_FILTER)             += avf_acorrmeter.o
 OBJS-$(CONFIG_ADRAWGRAPH_FILTER)             += f_drawgraph.o
 OBJS-$(CONFIG_AGRAPHMONITOR_FILTER)          += f_graphmonitor.o
 OBJS-$(CONFIG_AHISTOGRAM_FILTER)             += avf_ahistogram.o
