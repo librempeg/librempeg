@@ -558,6 +558,7 @@ extern const FFFilter ff_vf_vmafmotion;
 extern const FFFilter ff_vf_vpp_qsv;
 extern const FFFilter ff_vf_vstack;
 extern const FFFilter ff_vf_w3fdif;
+extern const FFFilter ff_vf_warp;
 extern const FFFilter ff_vf_waveform;
 extern const FFFilter ff_vf_weave;
 extern const FFFilter ff_vf_xbr;
