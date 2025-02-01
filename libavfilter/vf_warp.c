@@ -87,7 +87,7 @@ static const AVOptionArrayDef def_points  = {.def="0 0 0 0 1 0 0 0 0 1 0 0 1 1 0
 
 static const AVOption warp_options[] = {
     { "points", "set warp points", OFFSET(points), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_points}, INT_MIN, INT_MAX, FLAGS },
-    { "mode", "set warp mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=2}, 0, 2, FLAGS, "mode" },
+    { "mode", "set mode for warp points", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=2}, 0, 2, FLAGS, "mode" },
     { "abs", "absolute", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, FLAGS, "mode" },
     { "absrel", "absolute + relative", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, FLAGS, "mode" },
     { "rel", "relative", 0, AV_OPT_TYPE_CONST, {.i64=2}, 0, 0, FLAGS, "mode" },
