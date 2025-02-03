@@ -8828,10 +8828,10 @@ static int mov_read_iinf(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     for (i = 0; i < entry_count; i++) {
         MOVAtom infe;
 
-        if (avio_feof(pb))
-            return AVERROR_INVALIDDATA;
         infe.size = avio_rb32(pb) - 8;
         infe.type = avio_rl32(pb);
+        if (avio_feof(pb))
+            return AVERROR_INVALIDDATA;
         ret = mov_read_infe(c, pb, infe, i);
         if (ret < 0)
             goto fail;
