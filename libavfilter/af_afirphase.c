@@ -32,11 +32,12 @@
 typedef struct AudioFIRPhaseContext {
     const AVClass *class;
 
+    double phase;
     int nb_taps;
 
     AVFrame *in;
 
-    int (*phase)(AVFilterContext *ctx, AVFrame *out, const int ch);
+    int (*rephase)(AVFilterContext *ctx, AVFrame *out, const int ch);
 } AudioFIRPhaseContext;
 
 #define OFFSET(x) offsetof(AudioFIRPhaseContext, x)
@@ -63,10 +64,10 @@ static int config_input(AVFilterLink *inlink)
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_FLTP:
-        s->phase = phase_float;
+        s->rephase = rephase_float;
         break;
     case AV_SAMPLE_FMT_DBLP:
-        s->phase = phase_double;
+        s->rephase = rephase_double;
         break;
     default:
         return AVERROR_BUG;
@@ -83,7 +84,7 @@ static int phase_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
 
     for (int ch = start; ch < end; ch++)
-        s->phase(ctx, out, ch);
+        s->rephase(ctx, out, ch);
 
     return 0;
 }
