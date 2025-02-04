@@ -162,7 +162,7 @@ const FFFilter ff_af_afirphase = {
     .p.name          = "afirphase",
     .p.description   = NULL_IF_CONFIG_SMALL("Adjust FIR filter phase."),
     .p.priv_class    = &afirphase_class,
-    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    .p.flags         = AVFILTER_FLAG_SLICE_THREADS,
     .priv_size       = sizeof(AudioFIRPhaseContext),
     .activate        = activate,
     FILTER_INPUTS(inputs),
