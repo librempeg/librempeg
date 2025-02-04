@@ -27,6 +27,7 @@ typedef struct AudioSF2SFContext {
     const AVClass *class;
 
     int format;
+    int output_sample_bits;
     int pass;
 
     int (*do_sf2sf)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
@@ -37,6 +38,7 @@ typedef struct AudioSF2SFContext {
 
 static const AVOption asf2sf_options[] = {
     { "format", "set the sample format", OFFSET(format), AV_OPT_TYPE_SAMPLE_FMT, {.i64=AV_SAMPLE_FMT_NONE}, AV_SAMPLE_FMT_NONE, AV_SAMPLE_FMT_NB-1, FLAGS },
+    { "output_sample_bits", "set the number of output sample bits", OFFSET(output_sample_bits), AV_OPT_TYPE_INT, {.i64=0 }, 0, 64, FLAGS },
     {NULL}
 };
 
