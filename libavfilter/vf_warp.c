@@ -55,8 +55,17 @@ typedef struct WarpContext {
     int edge;
     int nb_planes;
 
-    double *points;
-    unsigned nb_points;
+    double *src_x;
+    unsigned nb_src_x;
+
+    double *src_y;
+    unsigned nb_src_y;
+
+    double *dst_x;
+    unsigned nb_dst_x;
+
+    double *dst_y;
+    unsigned nb_dst_y;
 
     int nb_warp_points;
     WarpPoints *warp_points;
@@ -83,10 +92,16 @@ typedef struct WarpContext {
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
-static const AVOptionArrayDef def_points  = {.def="0 0 0 0 1 0 0 0 0 1 0 0 1 1 0 0",.size_min=16,.sep=' '};
+static const AVOptionArrayDef def_src_x  = {.def="0 1 0 1",.size_min=4,.sep=' '};
+static const AVOptionArrayDef def_src_y  = {.def="0 0 1 1",.size_min=4,.sep=' '};
+static const AVOptionArrayDef def_dst_x  = {.def="0 0 0 0",.size_min=4,.sep=' '};
+static const AVOptionArrayDef def_dst_y  = {.def="0 0 0 0",.size_min=4,.sep=' '};
 
 static const AVOption warp_options[] = {
-    { "points", "set warp points", OFFSET(points), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_points}, INT_MIN, INT_MAX, FLAGS },
+    { "src_x", "set source X-axis warp points", OFFSET(src_x), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_src_x}, INT_MIN, INT_MAX, FLAGS },
+    { "src_y", "set source Y-axis warp points", OFFSET(src_y), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_src_y}, INT_MIN, INT_MAX, FLAGS },
+    { "dst_x", "set destination X-axis warp points", OFFSET(dst_x), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_dst_x}, INT_MIN, INT_MAX, FLAGS },
+    { "dst_y", "set destination Y-axis warp points", OFFSET(dst_y), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_dst_y}, INT_MIN, INT_MAX, FLAGS },
     { "mode", "set mode for warp points", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=2}, 0, 2, FLAGS, "mode" },
     { "abs", "absolute", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, FLAGS, "mode" },
     { "absrel", "absolute + relative", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, FLAGS, "mode" },
@@ -463,20 +478,17 @@ static int config_output(AVFilterLink *outlink)
     s->black[0] = s->black[3] = 0;
     s->black[1] = s->black[2] = rgb ? 0 : (1 << (depth - 1));
 
-    if (s->nb_points & 3)
-        return AVERROR(EINVAL);
-
-    s->nb_warp_points = s->nb_points / 4;
+    s->nb_warp_points = FFMIN(FFMIN(s->nb_src_x, s->nb_src_y), FFMIN(s->nb_dst_x, s->nb_dst_y));
     s->warp_points = av_calloc(s->nb_warp_points, sizeof(*s->warp_points));
     if (!s->warp_points)
         return AVERROR(ENOMEM);
 
     for (int n = 0; n < s->nb_warp_points; n++) {
         if (s->mode > 0) {
-            s->warp_points[n].x0 = s->points[n * 4 + 0] + s->points[n * 4 + 2];
-            s->warp_points[n].y0 = s->points[n * 4 + 1] + s->points[n * 4 + 3];
-            s->warp_points[n].x1 = -s->points[n * 4 + 2];
-            s->warp_points[n].y1 = -s->points[n * 4 + 3];
+            s->warp_points[n].x0 = s->src_x[n] + s->dst_x[n];
+            s->warp_points[n].y0 = s->src_y[n] + s->dst_y[n];
+            s->warp_points[n].x1 = -s->dst_x[n];
+            s->warp_points[n].y1 = -s->dst_y[n];
             if (s->mode == 2) {
                 s->warp_points[n].x0 *= inlink->w;
                 s->warp_points[n].y0 *= inlink->h;
@@ -484,10 +496,10 @@ static int config_output(AVFilterLink *outlink)
                 s->warp_points[n].y1 *= inlink->h;
             }
         } else {
-            s->warp_points[n].x0 = s->points[n * 4 + 2];
-            s->warp_points[n].y0 = s->points[n * 4 + 3];
-            s->warp_points[n].x1 = s->points[n * 4 + 0] - s->points[n * 4 + 2];
-            s->warp_points[n].y1 = s->points[n * 4 + 1] - s->points[n * 4 + 3];
+            s->warp_points[n].x0 = s->dst_x[n];
+            s->warp_points[n].y0 = s->dst_y[n];
+            s->warp_points[n].x1 = s->src_x[n] - s->dst_x[n];
+            s->warp_points[n].y1 = s->src_y[n] - s->dst_y[n];
         }
     }
 
