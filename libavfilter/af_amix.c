@@ -260,12 +260,17 @@ static int output_frame(AVFilterLink *outlink)
 
     calculate_scales(s);
 
-    out = ff_get_audio_buffer(outlink, nb_samples);
+    out = ff_get_audio_buffer(outlink, FFALIGN(nb_samples, 16));
     if (!out) {
         free_frames(ctx);
         return AVERROR(ENOMEM);
     }
 
+    av_samples_set_silence(out->extended_data, 0, out->nb_samples,
+                           out->ch_layout.nb_channels,
+                           out->format);
+
+    out->nb_samples = nb_samples;
     for (int i = 0; i < s->nb_inputs; i++) {
         InputContext *ic = &s->inputs[i];
 
