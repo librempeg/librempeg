@@ -42,7 +42,14 @@ static float sincf(float x)
 {
     if (x == 0.f)
         return 1.f;
-    return sinf(M_PI * x) / (M_PI * x);
+    return sinf(M_PIf * x) / (M_PIf * x);
+}
+
+static double sinc(double x)
+{
+    if (x == 0.0)
+        return 1.0;
+    return sin(M_PI * x) / (M_PI * x);
 }
 
 static int activate(AVFilterContext *ctx)
@@ -51,7 +58,6 @@ static int activate(AVFilterContext *ctx)
     AFDelaySrcContext *s = ctx->priv;
     AVFrame *frame = NULL;
     int nb_samples;
-    float *dst;
 
     if (!ff_outlink_frame_wanted(outlink))
         return FFERROR_NOT_READY;
@@ -65,14 +71,29 @@ static int activate(AVFilterContext *ctx)
     if (!(frame = ff_get_audio_buffer(outlink, nb_samples)))
         return AVERROR(ENOMEM);
 
-    dst = (float *)frame->extended_data[0];
-    for (int n = 0; n < nb_samples; n++) {
-        float x = s->pts + n;
-        dst[n] = sincf(x - s->delay) * cosf(M_PI * (x - s->delay) / s->nb_taps) / sincf((x - s->delay) / s->nb_taps);
-    }
+    if (outlink->format == AV_SAMPLE_FMT_FLTP) {
+        float *dst = (float *)frame->extended_data[0];
 
-    for (int ch = 1; ch < frame->ch_layout.nb_channels; ch++)
-        memcpy(frame->extended_data[ch], dst, sizeof(*dst) * nb_samples);
+        for (int n = 0; n < nb_samples; n++) {
+            float x = s->pts + n;
+            dst[n] = sincf(x - s->delay) * cosf(M_PIf * (x - s->delay) / s->nb_taps) / sincf((x - s->delay) / s->nb_taps);
+        }
+
+        for (int ch = 1; ch < frame->ch_layout.nb_channels; ch++)
+            memcpy(frame->extended_data[ch], dst, sizeof(*dst) * nb_samples);
+    } else if (outlink->format == AV_SAMPLE_FMT_DBLP) {
+        double *dst = (double *)frame->extended_data[0];
+
+        for (int n = 0; n < nb_samples; n++) {
+            double x = s->pts + n;
+            dst[n] = sinc(x - s->delay) * cos(M_PI * (x - s->delay) / s->nb_taps) / sinc((x - s->delay) / s->nb_taps);
+        }
+
+        for (int ch = 1; ch < frame->ch_layout.nb_channels; ch++)
+            memcpy(frame->extended_data[ch], dst, sizeof(*dst) * nb_samples);
+    } else {
+        return AVERROR_BUG;
+    }
 
     frame->pts = s->pts;
     s->pts    += nb_samples;
@@ -88,6 +109,7 @@ static int query_formats(const AVFilterContext *ctx,
     AVChannelLayout chlayouts[] = { s->chlayout, { 0 } };
     int sample_rates[] = { s->sample_rate, -1 };
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP,
+                                                       AV_SAMPLE_FMT_DBLP,
                                                        AV_SAMPLE_FMT_NONE };
     int ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
     if (ret < 0)
