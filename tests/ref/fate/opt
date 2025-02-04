@@ -53,9 +53,9 @@ TestContext AVOptions:
   -bool3             <boolean>    E.......... set boolean value (default false)
   -dict1             <dictionary> E.......... set dictionary value
   -dict2             <dictionary> E.......... set dictionary value (default "happy=':-)'")
-  -array_int         [<int>     ].........T. array of ints
-  -array_str         [<string>  ].........T. array of strings (default str0|str\|1|str\\2)
-  -array_dict        [<dictionary>].........T. array of dicts (default k00=v\\\\00:k01=v\,01,k10=v\\=1\\:0)
+  -array_int         [<int> ,]    .........T. array of ints (from 0 to INT_MAX)
+  -array_str         [<string> |] .........T. array of strings (default str0|str\|1|str\\2)
+  -array_dict        [<dictionary> ,] .........T. array of dicts (default k00=v\\\\00:k01=v\,01,k10=v\\=1\\:0)
 
 Testing av_opt_is_set_to_default()
 name:       num default:1 error:

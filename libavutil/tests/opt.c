@@ -76,6 +76,10 @@ typedef struct TestContext {
 #define TEST_FLAG_LAME 02
 #define TEST_FLAG_MU   04
 
+static const AVOptionArrayDef array_int = {
+    .sep         = ',',
+};
+
 static const AVOptionArrayDef array_str = {
     .sep         = '|',
     .def         = "str0|str\\|1|str\\\\2",
@@ -115,7 +119,7 @@ static const AVOption test_options[]= {
     {"bool3",      "set boolean value",  OFFSET(bool3),          AV_OPT_TYPE_BOOL,           { .i64 = 0 },                      0,         1, 1 },
     {"dict1",      "set dictionary value", OFFSET(dict1),        AV_OPT_TYPE_DICT,           { .str = NULL},                    0,         0, 1 },
     {"dict2",      "set dictionary value", OFFSET(dict2),        AV_OPT_TYPE_DICT,           { .str = "happy=':-)'"},           0,         0, 1 },
-    {"array_int",  "array of ints",        OFFSET(array_int),    AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, .max = INT_MAX,           .flags = AV_OPT_FLAG_RUNTIME_PARAM },
+    {"array_int",  "array of ints",        OFFSET(array_int),    AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, { .arr = &array_int }, .max = INT_MAX, .flags = AV_OPT_FLAG_RUNTIME_PARAM },
     {"array_str",  "array of strings",     OFFSET(array_str),    AV_OPT_TYPE_STRING | AV_OPT_TYPE_FLAG_ARRAY, { .arr = &array_str }, .flags = AV_OPT_FLAG_RUNTIME_PARAM },
     {"array_dict", "array of dicts",       OFFSET(array_dict),   AV_OPT_TYPE_DICT | AV_OPT_TYPE_FLAG_ARRAY, { .arr = &array_dict },  .flags = AV_OPT_FLAG_RUNTIME_PARAM },
     { NULL },
