@@ -126,6 +126,11 @@ static int activate(AVFilterContext *ctx)
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
     available = ff_inlink_queued_samples(inlink);
+    if (available > 0) {
+        if ((16ULL << av_ceil_log2(available)) > INT_MAX)
+            return AVERROR_INVALIDDATA;
+    }
+
     if (ff_inlink_check_available_samples(inlink, available + 1) == 1) {
         ret = ff_inlink_consume_samples(inlink, available, available, &in);
         if (ret < 0)
