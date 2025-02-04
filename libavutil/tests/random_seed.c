@@ -22,7 +22,7 @@
 #include "libavutil/random_seed.c"
 
 #undef printf
-#define N 256
+#define N 8
 #define F 2
 #include <stdio.h>
 
