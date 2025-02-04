@@ -108,7 +108,7 @@ static int config_output(AVFilterLink *outlink)
     outlink->sample_rate = s->sample_rate;
     s->pts = 0;
     if (s->nb_taps <= 0)
-        s->nb_taps = s->delay * 8 + 1;
+        s->nb_taps = lrint(s->delay * 8.0) | 1;
 
     return 0;
 }
