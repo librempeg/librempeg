@@ -1,5 +1,5 @@
-0316d0a483480ccd582fd20f06c77420 *tests/data/fate/mov-mp4-iamf-5_1_4.mp4
-86340 tests/data/fate/mov-mp4-iamf-5_1_4.mp4
+7749af0b8f37c91e4cc0dbc6f31d7f67 *tests/data/fate/iamf-5_1_4.iamf
+85603 tests/data/fate/iamf-5_1_4.iamf
 #extradata 0:       34, 0xafa70d5e
 #extradata 1:       34, 0xafa70d5e
 #extradata 2:       34, 0xaf7b0d5c
@@ -90,12 +90,12 @@
 3,      36864,      36864,     4608,     1531, 0x996458aa
 4,      36864,      36864,     4608,     1534, 0xb0b35a3f
 5,      36864,      36864,     4608,     1534, 0xb0b35a3f
-0,      41472,      41472,     2628,      926, 0xc26a5eae
-1,      41472,      41472,     2628,      926, 0xc26a5eae
-2,      41472,      41472,     2628,      923, 0xa7225edf
-3,      41472,      41472,     2628,      923, 0xa7225edf
-4,      41472,      41472,     2628,      926, 0xc26a5eae
-5,      41472,      41472,     2628,      926, 0xc26a5eae
+0,      41472,      41472,     4608,      926, 0xc26a5eae
+1,      41472,      41472,     4608,      926, 0xc26a5eae
+2,      41472,      41472,     4608,      923, 0xa7225edf
+3,      41472,      41472,     4608,      923, 0xa7225edf
+4,      41472,      41472,     4608,      926, 0xc26a5eae
+5,      41472,      41472,     4608,      926, 0xc26a5eae
 [STREAM_GROUP]
 index=0
 id=0x1
@@ -139,28 +139,6 @@ dmixp_mode=1
 [/PIECE]
 [/SUBCOMPONENT]
 [/COMPONENT]
-DISPOSITION:default=0
-DISPOSITION:dub=0
-DISPOSITION:original=0
-DISPOSITION:comment=0
-DISPOSITION:lyrics=0
-DISPOSITION:karaoke=0
-DISPOSITION:forced=0
-DISPOSITION:hearing_impaired=0
-DISPOSITION:visual_impaired=0
-DISPOSITION:clean_effects=0
-DISPOSITION:attached_pic=0
-DISPOSITION:timed_thumbnails=0
-DISPOSITION:non_diegetic=0
-DISPOSITION:captions=0
-DISPOSITION:descriptions=0
-DISPOSITION:metadata=0
-DISPOSITION:dependent=0
-DISPOSITION:still_image=0
-DISPOSITION:multilayer=0
-TAG:language=und
-TAG:handler_name=SoundHandler
-TAG:vendor_id=[0][0][0][0]
 [STREAM]
 index=0
 id=0x0
@@ -374,28 +352,6 @@ album_anchored_loudness=0/1
 [/PIECE]
 [/SUBCOMPONENT]
 [/COMPONENT]
-DISPOSITION:default=0
-DISPOSITION:dub=0
-DISPOSITION:original=0
-DISPOSITION:comment=0
-DISPOSITION:lyrics=0
-DISPOSITION:karaoke=0
-DISPOSITION:forced=0
-DISPOSITION:hearing_impaired=0
-DISPOSITION:visual_impaired=0
-DISPOSITION:clean_effects=0
-DISPOSITION:attached_pic=0
-DISPOSITION:timed_thumbnails=0
-DISPOSITION:non_diegetic=0
-DISPOSITION:captions=0
-DISPOSITION:descriptions=0
-DISPOSITION:metadata=0
-DISPOSITION:dependent=0
-DISPOSITION:still_image=0
-DISPOSITION:multilayer=0
-TAG:language=und
-TAG:handler_name=SoundHandler
-TAG:vendor_id=[0][0][0][0]
 [STREAM]
 index=0
 id=0x0
