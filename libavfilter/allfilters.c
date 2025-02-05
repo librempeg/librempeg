@@ -402,6 +402,7 @@ extern const FFFilter ff_vf_mestimate;
 extern const FFFilter ff_vf_metadata;
 extern const FFFilter ff_vf_midequalizer;
 extern const FFFilter ff_vf_minterpolate;
+extern const FFFilter ff_vf_minvar;
 extern const FFFilter ff_vf_mix;
 extern const FFFilter ff_vf_monochrome;
 extern const FFFilter ff_vf_morpho;
