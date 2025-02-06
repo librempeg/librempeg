@@ -102,7 +102,9 @@ static int fn(do_awiener)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const
     AudioAWienerContext *s = ctx->priv;
     const ftype *src = (const ftype *)in->extended_data[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
-    const int disabled = ctx->is_disabled;
+    enum AVChannel channel = av_channel_layout_channel_from_index(&ctx->inputs[0]->ch_layout, ch);
+    const int bypass = av_channel_layout_index_from_channel(&s->ch_layout, channel) < 0;
+    const int disabled = ctx->is_disabled | bypass;
     const int nb_samples = in->nb_samples;
     const ftype noise_var = s->noise_var;
     fn(StateContext) *st = s->st;

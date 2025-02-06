@@ -31,6 +31,7 @@ typedef struct AudioAWienerContext {
     const AVClass *class;
 
     int look, hlook;
+    AVChannelLayout ch_layout;
     double noise_var;
     int trim_size;
     int flush_size;
@@ -53,6 +54,7 @@ typedef struct AudioAWienerContext {
 static const AVOption aawiener_options[] = {
     { "look", "set the look-ahead samples", OFFSET(look), AV_OPT_TYPE_INT, {.i64=1025}, 1, 1 << 20, AF },
     { "noise","set the noise variance",     OFFSET(noise_var), AV_OPT_TYPE_DOUBLE, {.dbl=0.0001}, 0, 100, AFR },
+    { "channels", "set channels to filter", OFFSET(ch_layout), AV_OPT_TYPE_CHLAYOUT, {.str="24c"}, 0, 0, AFR },
     { NULL }
 };
 
