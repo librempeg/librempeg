@@ -38,17 +38,19 @@ enum FilterType {
     NB_TYPES
 };
 
+typedef struct FoHist {
+    double num[4];
+    double denum[4];
+} FoHist;
+
 typedef struct FoSection {
     double a0, a1, a2, a3, a4;
     double b0, b1, b2, b3, b4;
-
-    double num[4];
-    double denum[4];
 } FoSection;
 
 typedef struct EqualizatorFilter {
+    AVChannelLayout *channel;
     int ignore;
-    int channel;
     int type;
 
     double freq;
@@ -60,23 +62,49 @@ typedef struct EqualizatorFilter {
 
 typedef struct AudioNEqualizerContext {
     const AVClass *class;
-    char **args;
-    unsigned nb_args;
+
+    double *freq;
+    unsigned nb_freq;
+
+    double *width;
+    unsigned nb_width;
+
+    double *gain;
+    unsigned nb_gain;
+
+    int *type;
+    unsigned nb_type;
+
+    AVChannelLayout *channel;
+    unsigned nb_channel;
 
     int nb_filters;
     int nb_allocated;
     EqualizatorFilter *filters;
+    FoHist *history;
 } AudioNEqualizerContext;
 
 #define OFFSET(x) offsetof(AudioNEqualizerContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM
 #define F AV_OPT_FLAG_FILTERING_PARAM
+#define R AV_OPT_FLAG_RUNTIME_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
-static const AVOptionArrayDef def_args = {.def=NULL,.size_min=1,.sep='|'};
+static const AVOptionArrayDef def_freq = {.def="500",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_width = {.def="10",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_gain = {.def="1",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_type = {.def="0",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_channel = {.def="24c",.size_min=1,.sep=' '};
 
 static const AVOption anequalizer_options[] = {
-    { "params", NULL, OFFSET(args), AV_OPT_TYPE_STRING|AR, {.arr=&def_args}, 0, 0, A|F },
+    { "freq",  "set the freq values per filter",  OFFSET(freq),  AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_freq},  0,   INT_MAX, (A|F|R) },
+    { "width", "set the width values per filter", OFFSET(width), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_width}, 0,   INT_MAX, (A|F|R) },
+    { "gain",  "set the gain values per filter",  OFFSET(gain),  AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_gain},  0,        10, (A|F|R) },
+    { "type",  "set the type values per filter",  OFFSET(type),  AV_OPT_TYPE_INT|AR,    {.arr=&def_type},  0,NB_TYPES-1, (A|F|R), "type" },
+    {   "butterworth",  NULL,  0, AV_OPT_TYPE_CONST, {.i64=BUTTERWORTH}, 0, 0, (A|F|R), "type"},
+    {   "chebyshev1",   NULL,  0, AV_OPT_TYPE_CONST, {.i64=CHEBYSHEV1},  0, 0, (A|F|R), "type"},
+    {   "chebyshev2",   NULL,  0, AV_OPT_TYPE_CONST, {.i64=CHEBYSHEV2},  0, 0, (A|F|R), "type"},
+    { "channel", "set the channels values per filter",  OFFSET(channel),  AV_OPT_TYPE_CHLAYOUT|AR, {.arr=&def_channel}, 0, 0, (A|F|R) },
     { NULL }
 };
 
@@ -86,6 +114,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     AudioNEqualizerContext *s = ctx->priv;
 
+    av_freep(&s->history);
     av_freep(&s->filters);
     s->nb_filters = 0;
     s->nb_allocated = 0;
@@ -372,7 +401,6 @@ static void equalizer(EqualizatorFilter *f, double sample_rate)
         chebyshev2_bp_filter(f, FILTER_ORDER, w0, wb, f->gain, bw_gain, 0);
         break;
     }
-
 }
 
 static int add_filter(AudioNEqualizerContext *s, AVFilterLink *inlink)
@@ -398,40 +426,28 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     AudioNEqualizerContext *s = ctx->priv;
-    int ret = 0;
+    int ret = 0, nb_args;
 
-    s->nb_allocated = s->nb_args * inlink->ch_layout.nb_channels;
-    s->filters = av_calloc(inlink->ch_layout.nb_channels, s->nb_args * sizeof(*s->filters));
-    if (!s->filters) {
+    nb_args = FFMIN3(FFMIN(s->nb_freq, s->nb_width), FFMIN(s->nb_gain, s->nb_type), s->nb_channel);
+    s->nb_allocated = nb_args;
+    s->history = av_calloc(nb_args * inlink->ch_layout.nb_channels * 2, sizeof(*s->history));
+    s->filters = av_calloc(nb_args, sizeof(*s->filters));
+    if (!s->filters || !s->history) {
         s->nb_allocated = 0;
         return AVERROR(ENOMEM);
     }
 
-    for (int n = 0; n < s->nb_args; n++) {
-        const char *arg = s->args[n];
-
-        s->filters[s->nb_filters].type = 0;
-        if (sscanf(arg, "c%d f=%lf w=%lf g=%lf t=%d", &s->filters[s->nb_filters].channel,
-                                                     &s->filters[s->nb_filters].freq,
-                                                     &s->filters[s->nb_filters].width,
-                                                     &s->filters[s->nb_filters].gain,
-                                                     &s->filters[s->nb_filters].type) != 5 &&
-            sscanf(arg, "c%d f=%lf w=%lf g=%lf", &s->filters[s->nb_filters].channel,
-                                                &s->filters[s->nb_filters].freq,
-                                                &s->filters[s->nb_filters].width,
-                                                &s->filters[s->nb_filters].gain) != 4 ) {
-            return AVERROR(EINVAL);
-        }
+    for (int n = 0; n < nb_args; n++) {
+        s->filters[s->nb_filters].freq = s->freq[n];
+        s->filters[s->nb_filters].gain = 20.*log10(s->gain[n]);
+        s->filters[s->nb_filters].width = s->width[n];
+        s->filters[s->nb_filters].type = s->type[n];
+        s->filters[s->nb_filters].channel = &s->channel[n];
 
         if (s->filters[s->nb_filters].freq < 0 ||
             s->filters[s->nb_filters].freq > inlink->sample_rate / 2.0)
             s->filters[s->nb_filters].ignore = 1;
 
-        if (s->filters[s->nb_filters].channel < 0 ||
-            s->filters[s->nb_filters].channel >= inlink->ch_layout.nb_channels)
-            s->filters[s->nb_filters].ignore = 1;
-
-        s->filters[s->nb_filters].type = av_clip(s->filters[s->nb_filters].type, 0, NB_TYPES - 1);
         ret = add_filter(s, inlink);
         if (ret < 0)
             break;
@@ -443,64 +459,40 @@ static int config_input(AVFilterLink *inlink)
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
                            char *res, int res_len, int flags)
 {
-    AudioNEqualizerContext *s = ctx->priv;
-    AVFilterLink *inlink = ctx->inputs[0];
     int ret = AVERROR(ENOSYS);
-
-    if (!strcmp(cmd, "change")) {
-        double freq, width, gain;
-        int filter;
-
-        if (sscanf(args, "%d|f=%lf|w=%lf|g=%lf", &filter, &freq, &width, &gain) != 4)
-            return AVERROR(EINVAL);
-
-        if (filter < 0 || filter >= s->nb_filters)
-            return AVERROR(EINVAL);
-
-        if (freq < 0 || freq > inlink->sample_rate / 2.0)
-            return AVERROR(EINVAL);
-
-        s->filters[filter].freq  = freq;
-        s->filters[filter].width = width;
-        s->filters[filter].gain  = gain;
-        equalizer(&s->filters[filter], inlink->sample_rate);
-
-        ret = 0;
-    }
 
     return ret;
 }
 
-static inline double section_process(FoSection *S, double in)
+static inline double section_process(const FoSection *S, FoHist *H, double in)
 {
     double out;
 
     out = S->b0 * in;
-    out+= S->b1 * S->num[0] - S->denum[0] * S->a1;
-    out+= S->b2 * S->num[1] - S->denum[1] * S->a2;
-    out+= S->b3 * S->num[2] - S->denum[2] * S->a3;
-    out+= S->b4 * S->num[3] - S->denum[3] * S->a4;
+    out+= S->b1 * H->num[0] - H->denum[0] * S->a1;
+    out+= S->b2 * H->num[1] - H->denum[1] * S->a2;
+    out+= S->b3 * H->num[2] - H->denum[2] * S->a3;
+    out+= S->b4 * H->num[3] - H->denum[3] * S->a4;
 
-    S->num[3] = S->num[2];
-    S->num[2] = S->num[1];
-    S->num[1] = S->num[0];
-    S->num[0] = in;
+    H->num[3] = H->num[2];
+    H->num[2] = H->num[1];
+    H->num[1] = H->num[0];
+    H->num[0] = in;
 
-    S->denum[3] = S->denum[2];
-    S->denum[2] = S->denum[1];
-    S->denum[1] = S->denum[0];
-    S->denum[0] = out;
+    H->denum[3] = H->denum[2];
+    H->denum[2] = H->denum[1];
+    H->denum[1] = H->denum[0];
+    H->denum[0] = out;
 
     return out;
 }
 
-static double process_sample(FoSection *s1, double in)
+static double process_sample(const FoSection *s1, FoHist *h, double in)
 {
     double p0 = in, p1;
-    int i;
 
-    for (i = 0; i < FILTER_ORDER / 2; i++) {
-        p1 = section_process(&s1[i], p0);
+    for (int i = 0; i < FILTER_ORDER / 2; i++) {
+        p1 = section_process(&s1[i], &h[i], p0);
         p0 = p1;
     }
 
@@ -515,22 +507,25 @@ static int filter_channels(AVFilterContext *ctx, void *arg,
     const int start = (buf->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (buf->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
 
-    for (int i = 0; i < s->nb_filters; i++) {
-        EqualizatorFilter *f = &s->filters[i];
-        double *bptr;
+    for (int ch = start; ch < end; ch++) {
+        enum AVChannel channel = av_channel_layout_channel_from_index(&buf->ch_layout, ch);
 
-        if (f->gain == 0. || f->ignore)
-            continue;
-        if (f->channel < start ||
-            f->channel >= end)
-            continue;
+        for (int i = 0; i < s->nb_filters; i++) {
+            EqualizatorFilter *f = &s->filters[i];
+            const int bypass = av_channel_layout_index_from_channel(f->channel, channel) < 0;
+            FoHist *h = &s->history[i + s->nb_filters * ch * 2];
+            double *bptr;
 
-        bptr = (double *)buf->extended_data[f->channel];
-        for (int n = 0; n < buf->nb_samples; n++) {
-            double sample = bptr[n];
+            if (f->gain == 0.0 || f->ignore || bypass)
+                continue;
 
-            sample  = process_sample(f->section, sample);
-            bptr[n] = sample;
+            bptr = (double *)buf->extended_data[ch];
+            for (int n = 0; n < buf->nb_samples; n++) {
+                double sample = bptr[n];
+
+                sample  = process_sample(f->section, h, sample);
+                bptr[n] = sample;
+            }
         }
     }
 
