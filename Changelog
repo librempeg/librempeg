@@ -57,6 +57,7 @@ version <next>:
 - msnd demuxer
 - mipu demuxer
 - Perfect Clarity Audio decoder and parser
+- pngenc: set default prediction method to PAETH
 
 
 version 7.1:
