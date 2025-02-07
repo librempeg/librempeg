@@ -85,6 +85,20 @@ static int fn(do_cl2cl)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
                     }
                 }
                 break;
+            case AV_CHAN_FRONT_LEFT:
+            case AV_CHAN_FRONT_RIGHT:
+                {
+                    const int fc_idx = av_channel_layout_index_from_channel(in_ch_layout, AV_CHAN_FRONT_CENTER);
+
+                    if (fc_idx >= 0) {
+                        const ftype *fc_src = (const ftype *)in->extended_data[fc_idx];
+                        ftype *dst = (ftype *)out->extended_data[ch];
+
+                        for (int n = 0; n < nb_samples; n++)
+                            dst[n] = MIX2(fc_src[n], F(0.0));
+                    }
+                }
+                break;
             default:
                 break;
             }
