@@ -46,7 +46,7 @@
 typedef struct fn(StateContext) {
     ftype *cache;
 
-    unsigned filled, idx, size;
+    unsigned filled, idx, size, hidx;
 
     ftype mean_sum, var_sum;
 } fn(StateContext);
@@ -112,14 +112,15 @@ static int fn(do_awiener)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const
     const unsigned size = stc->size;
     ftype *cache = stc->cache;
     unsigned filled = stc->filled;
+    unsigned hidx = stc->hidx;
     unsigned idx = stc->idx;
     ftype mean_sum = stc->mean_sum;
     ftype var_sum = stc->var_sum;
     ftype prev;
 
     for (int n = 0; n < nb_samples; n++) {
+        ftype mean, new_mean, mid;
         const ftype r = src[n];
-        ftype mean, new_mean;
 
         mean = mean_sum / size;
 
@@ -129,6 +130,8 @@ static int fn(do_awiener)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const
             cache[idx] = r;
             filled++;
             idx++;
+            if (idx >= size/2)
+                hidx++;
             if (idx >= size)
                 idx = 0;
         } else {
@@ -136,19 +139,24 @@ static int fn(do_awiener)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const
             mean_sum -= prev;
             cache[idx] = r;
             idx++;
+            hidx++;
             if (idx >= size)
                 idx = 0;
+            if (hidx >= size)
+                hidx = 0;
         }
 
         new_mean = mean_sum / filled;
         var_sum += (r - mean) * (r - new_mean) - (prev - mean) * (prev - new_mean);
+        mid = cache[hidx];
 
-        dst[n] = disabled ? r : (new_mean + (r - new_mean) / (F(1.0) + (noise_var * size) / var_sum));
+        dst[n] = disabled ? mid : (new_mean + (mid - new_mean) * FMAX(var_sum - noise_var * size, F(0.0)) / (FMAX(var_sum + noise_var*size, F(0.0)) + EPS));
     }
 
     stc->mean_sum = mean_sum;
     stc->var_sum = var_sum;
     stc->filled = filled;
+    stc->hidx = hidx;
     stc->idx = idx;
 
     return 0;
