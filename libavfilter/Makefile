@@ -222,6 +222,7 @@ OBJS-$(CONFIG_AQUADOSC_FILTER)               += asrc_aquadosc.o
 OBJS-$(CONFIG_ATONESRC_FILTER)               += asrc_atonesrc.o
 OBJS-$(CONFIG_FLITE_FILTER)                  += asrc_flite.o
 OBJS-$(CONFIG_HILBERT_FILTER)                += asrc_hilbert.o
+OBJS-$(CONFIG_LOUDEQUAL_FILTER)              += asrc_loudequal.o
 OBJS-$(CONFIG_SINC_FILTER)                   += asrc_sinc.o
 OBJS-$(CONFIG_SINE_FILTER)                   += asrc_sine.o
 

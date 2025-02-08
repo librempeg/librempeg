@@ -208,6 +208,7 @@ extern const FFFilter ff_asrc_aquadosc;
 extern const FFFilter ff_asrc_atonesrc;
 extern const FFFilter ff_asrc_flite;
 extern const FFFilter ff_asrc_hilbert;
+extern const FFFilter ff_asrc_loudequal;
 extern const FFFilter ff_asrc_sinc;
 extern const FFFilter ff_asrc_sine;
 
