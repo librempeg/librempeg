@@ -625,6 +625,7 @@ extern const FFFilter ff_vsink_nullsink;
 extern const FFFilter ff_avf_a3dscope;
 extern const FFFilter ff_avf_abitscope;
 extern const FFFilter ff_avf_acorrmeter;
+extern const FFFilter ff_avf_acorrscope;
 extern const FFFilter ff_avf_adrawgraph;
 extern const FFFilter ff_avf_agraphmonitor;
 extern const FFFilter ff_avf_ahistogram;
