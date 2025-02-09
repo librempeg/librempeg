@@ -31875,9 +31875,6 @@ Default value is @code{hann}.
 @item rate, r
 Set output framerate.
 
-@item contrast
-Set output contrast step.
-
 @item fade
 Set output fade step.
 

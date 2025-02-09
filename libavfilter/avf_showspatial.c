@@ -59,7 +59,6 @@ typedef struct ShowSpatialContext {
     int hop_size;
     int frame;
     int color;
-    float contrast;
     float fade;
     int64_t pts;
     AVFrame *outpicref;
@@ -76,7 +75,6 @@ static const AVOption showspatial_options[] = {
     WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_HANNING),
     { "rate", "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
     { "r",    "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
-    { "contrast", "set the contrast", OFFSET(contrast), AV_OPT_TYPE_FLOAT, {.dbl=700}, 0, INT_MAX, TFLAGS },
     { "fade", "set the fade", OFFSET(fade), AV_OPT_TYPE_FLOAT, {.dbl=0.7}, 0, 1, TFLAGS },
     { "color", "set the color mode", OFFSET(color), AV_OPT_TYPE_INT, {.i64=0}, 0, NB_CMODE-1, TFLAGS, "color" },
     {  "lr", "left-right", 0, AV_OPT_TYPE_CONST,{.i64=CM_LR},   0, 0, TFLAGS, "color" },
@@ -205,7 +203,7 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR(ENOMEM);
 
     for (int i = 0; i < s->nb_channels; i++) {
-        float scale = 1.f;
+        float scale = 1.f / (s->win_size * 2);
         ret = av_tx_init(&s->fft[i], &s->tx_fn[i], AV_TX_FLOAT_RDFT,
                          0, s->win_size*2, &scale, 0);
         if (ret < 0)
@@ -334,7 +332,6 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
     const int h1 = h-1;
     const int w1 = w-1;
     const int z = s->win_size + 1;
-    const float contrast = s->contrast;
     float *power = s->power;
     AVFrame *clone;
     int ret;
@@ -374,7 +371,7 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
 
     for (int j = 0; j < z; j++) {
         const int idx = z - 1 - j;
-        float g, b, r, t, co, cg, cy = contrast, pwr = 0.f;
+        float g, b, r, t, co, cg, cy, pwr = 0.f;
         float Hsum = 0.f, Vsum = 0.f, hsum = 0.f, vsum = 0.f;
         int x, y;
 
@@ -388,8 +385,6 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
         }
 
         pwr = isnormal(pwr) ? pwr : 0.f;
-
-        cy *= pwr;
 
         for (int i = 0; i < nb_channels; i++) {
             const float mre = RE(idx, i);
@@ -431,30 +426,30 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
 
         switch (color) {
         case CM_LR:
-            co = sinf(2.f * Hsum * M_PIf);
-            cg = cosf(2.f * Hsum * M_PIf);
+            co = cosf(2.f * Hsum * M_PIf);
+            cg = sinf(2.f * Hsum * M_PIf);
             break;
         case CM_COR:
-            co = sinf(2.f * Vsum * M_PIf);
-            cg = cosf(2.f * Vsum * M_PIf);
+            co = cosf(2.f * Vsum * M_PIf);
+            cg = sinf(2.f * Vsum * M_PIf);
             break;
         case CM_FREQ:
-            co = sinf(idx * 2.f * M_PIf / z);
-            cg = cosf(idx * 2.f * M_PIf / z);
+            co = cosf(idx * 2.f * M_PIf / z);
+            cg = sinf(idx * 2.f * M_PIf / z);
             break;
         }
 
+        cy = av_clipf(-10.f*logf(pwr + FLT_EPSILON), 0.f, 1.f);
         x = av_clip(w * Hsum, 0, w1);
         y = av_clip(h * Vsum, 0, h1);
 
-        t = 1.f - cg;
-        r = t + co;
-        g = 1.f + cg;
-        b = t - co;
+        co *= cy * 0.5f;
+        cg *= cy * 0.5f;
 
-        r *= cy;
-        g *= cy;
-        b *= cy;
+        t = cy - cg;
+        r = t + co;
+        g = cy + cg;
+        b = t - co;
 
         draw_dot(dst_g + linesize_g * y + x*4, g);
         draw_dot(dst_b + linesize_b * y + x*4, b);
