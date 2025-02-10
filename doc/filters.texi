@@ -31597,6 +31597,7 @@ Set the frequency scale used. Allowed values are:
 @item qdrt
 @item fm
 @item gwood
+@item period
 @end table
 Default value is @code{linear}.
 

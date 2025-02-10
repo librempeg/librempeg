@@ -45,6 +45,7 @@ enum FrequencyScale {
     FSCALE_QDRT,
     FSCALE_FM,
     FSCALE_GREENWOOD,
+    FSCALE_PERIOD,
     NB_FSCALE
 };
 
@@ -182,6 +183,7 @@ static const AVOption showcwt_options[] = {
     {  "qdrt",    "qdrt",             0,                       AV_OPT_TYPE_CONST,{.i64=FSCALE_QDRT},   0, 0, FLAGS, .unit="scale" },
     {  "fm",      "fm",               0,                       AV_OPT_TYPE_CONST,{.i64=FSCALE_FM},     0, 0, FLAGS, .unit="scale" },
     {  "gwood",   "greenwood",        0,                       AV_OPT_TYPE_CONST,{.i64=FSCALE_GREENWOOD},0,0,FLAGS, .unit="scale" },
+    {  "period",  "period",           0,                       AV_OPT_TYPE_CONST,{.i64=FSCALE_PERIOD}, 0,0,  FLAGS, .unit="scale" },
     { "iscale", "set intensity scale", OFFSET(intensity_scale),AV_OPT_TYPE_INT,  {.i64=0},   0, NB_ISCALE-1, FLAGS, .unit="iscale" },
     {  "linear",  "linear",           0,                       AV_OPT_TYPE_CONST,{.i64=ISCALE_LINEAR}, 0, 0, FLAGS, .unit="iscale" },
     {  "log",     "logarithmic",      0,                       AV_OPT_TYPE_CONST,{.i64=ISCALE_LOG},    0, 0, FLAGS, .unit="iscale" },
@@ -413,6 +415,10 @@ static float frequency_band(float *frequency_band,
         case FSCALE_GREENWOOD:
             frequency = 165.4f * (expf(frequency / 512.18f) - 1.f);
             frequency_derivative *= (frequency / 165.4f + 1.f) / 3.09661f;
+            break;
+        case FSCALE_PERIOD:
+            frequency = fs / frequency;
+            frequency_derivative *= -(frequency * frequency) / fs;
             break;
         }
 
@@ -1355,6 +1361,10 @@ static int config_output(AVFilterLink *outlink)
     case FSCALE_GREENWOOD:
         minimum_frequency = 512.18f * logf(1.f + minimum_frequency / 165.4f);
         maximum_frequency = 512.18f * logf(1.f + maximum_frequency / 165.4f);
+        break;
+    case FSCALE_PERIOD:
+        minimum_frequency = inlink->sample_rate / minimum_frequency;
+        maximum_frequency = inlink->sample_rate / maximum_frequency;
         break;
     }
 
