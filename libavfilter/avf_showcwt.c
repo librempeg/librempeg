@@ -34,6 +34,13 @@
 #include "avfilter.h"
 #include "filters.h"
 
+enum TransformType {
+    TRANSFORM_NONE,
+    TRANSFORM_SSQ,
+    TRANSFORM_CEPSTRUM,
+    NB_TRANSFORM
+};
+
 enum FrequencyScale {
     FSCALE_LINEAR,
     FSCALE_LOG,
@@ -104,8 +111,8 @@ typedef struct ShowCWTContext {
     char *rate_str;
     AVRational auto_frame_rate;
     AVRational frame_rate;
-    AVTXContext **fft, **ifft;
-    av_tx_fn tx_fn, itx_fn;
+    AVTXContext **fft, **ifft, **tifft;
+    av_tx_fn tx_fn, itx_fn, titx_fn;
     int fft_size, ifft_size;
     int pos;
     int64_t in_pts;
@@ -141,7 +148,7 @@ typedef struct ShowCWTContext {
     int pps;
     int eof;
     int slide;
-    int ssq;
+    int transform;
     int new_frame;
     int direction;
     int hop_size, ihop_size;
@@ -226,7 +233,10 @@ static const AVOption showcwt_options[] = {
     {  "B", "B-weighting", 0, AV_OPT_TYPE_CONST,{.i64=WEIGHTING_B}, 0, 0, FLAGS, .unit="weight" },
     {  "C", "C-weighting", 0, AV_OPT_TYPE_CONST,{.i64=WEIGHTING_C}, 0, 0, FLAGS, .unit="weight" },
     {  "D", "D-weighting", 0, AV_OPT_TYPE_CONST,{.i64=WEIGHTING_D}, 0, 0, FLAGS, .unit="weight" },
-    { "ssq", "enable SSQ transform", OFFSET(ssq), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS },
+    { "transform", "enable specific transform", OFFSET(transform), AV_OPT_TYPE_INT, {.i64=0}, 0, NB_TRANSFORM-1, FLAGS, "transform" },
+    {  "none", "none", 0, AV_OPT_TYPE_CONST,{.i64=TRANSFORM_NONE}, 0, 0, FLAGS, .unit="transform" },
+    {  "ssq",  "SSQ", 0, AV_OPT_TYPE_CONST,{.i64=TRANSFORM_SSQ},  0, 0, FLAGS, .unit="transform" },
+    {  "cepstrum", "Cepstrum", 0, AV_OPT_TYPE_CONST,{.i64=TRANSFORM_CEPSTRUM}, 0, 0, FLAGS, .unit="transform" },
     { NULL }
 };
 
@@ -270,6 +280,12 @@ static av_cold void uninit(AVFilterContext *ctx)
         for (int n = 0; n < s->nb_threads; n++)
             av_tx_uninit(&s->ifft[n]);
         av_freep(&s->ifft);
+    }
+
+    if (s->tifft) {
+        for (int n = 0; n < s->nb_threads; n++)
+            av_tx_uninit(&s->tifft[n]);
+        av_freep(&s->tifft);
     }
 
     if (s->kernel) {
@@ -593,7 +609,7 @@ static int draw(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const int bar_size = s->bar_size;
     const int mode = s->mode;
     const int w_1 = s->w - 1;
-    const int ssq = s->ssq;
+    const int transform = s->transform;
     const int x = s->pos;
     float Y, U, V;
 
@@ -605,7 +621,7 @@ static int draw(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
                                                     0 * ihop_size + ihop_index;
         const AVComplexFloat *sync = ((const AVComplexFloat *)s->sync->extended_data[y]) +
                                                     0 * ihop_size + ihop_index;
-        const AVComplexFloat *src = ssq ? sync : chout;
+        const AVComplexFloat *src = (transform != TRANSFORM_NONE) ? sync : chout;
 
         if (sono_size <= 0)
             goto skip;
@@ -1015,42 +1031,41 @@ static int run_channel_cwt(AVFilterContext *ctx, int ch, int jobnr, int nb_jobs)
         }
         memcpy(over, idst + ihop_size, sizeof(*over) * ihop_size);
 
-        if (!s->ssq)
-            continue;
+        if (s->transform == TRANSFORM_SSQ) {
+            s->fdsp->vector_fmul((float *)dstx, (const float *)srcx,
+                                 (const float *)dkernel, FFALIGN(kernel_range * 2, 16));
 
-        s->fdsp->vector_fmul((float *)dstx, (const float *)srcx,
-                             (const float *)dkernel, FFALIGN(kernel_range * 2, 16));
+            memset(isrc, 0, sizeof(*isrc) * output_padding_size);
+            if (offset == 0) {
+                const unsigned *kindex = index + kernel_start;
+                for (int i = 0; i < kernel_range; i++) {
+                    const unsigned n = kindex[i];
 
-        memset(isrc, 0, sizeof(*isrc) * output_padding_size);
-        if (offset == 0) {
-            const unsigned *kindex = index + kernel_start;
-            for (int i = 0; i < kernel_range; i++) {
-                const unsigned n = kindex[i];
+                    isrc[n].re += dstx[i].re;
+                    isrc[n].im += dstx[i].im;
+                }
+            } else {
+                for (int i = 0; i < kernel_range; i++) {
+                    const unsigned n = (i-kernel_start) & (output_padding_size-1);
 
-                isrc[n].re += dstx[i].re;
-                isrc[n].im += dstx[i].im;
+                    isrc[n].re += dstx[i].re;
+                    isrc[n].im += dstx[i].im;
+                }
             }
-        } else {
-            for (int i = 0; i < kernel_range; i++) {
-                const unsigned n = (i-kernel_start) & (output_padding_size-1);
 
-                isrc[n].re += dstx[i].re;
-                isrc[n].im += dstx[i].im;
+            s->itx_fn(s->ifft[jobnr], idst, isrc, sizeof(*isrc));
+
+            memcpy(chdout, idst, sizeof(*chdout) * ihop_size);
+            for (int n = 0; n < ihop_size; n++) {
+                chdout[n].re += dover[n].re;
+                chdout[n].im += dover[n].im;
             }
-        }
+            memcpy(dover, idst + ihop_size, sizeof(*dover) * ihop_size);
 
-        s->itx_fn(s->ifft[jobnr], idst, isrc, sizeof(*isrc));
-
-        memcpy(chdout, idst, sizeof(*chdout) * ihop_size);
-        for (int n = 0; n < ihop_size; n++) {
-            chdout[n].re += dover[n].re;
-            chdout[n].im += dover[n].im;
-        }
-        memcpy(dover, idst + ihop_size, sizeof(*dover) * ihop_size);
-
-        for (int n = 0; n < ihop_size; n++) {
-            power[n].re = chout[n].re * chout[n].re + chout[n].im * chout[n].im;
-            power[n].im = chdout[n].re * chdout[n].re + chdout[n].im * chdout[n].im;
+            for (int n = 0; n < ihop_size; n++) {
+                power[n].re = chout[n].re * chout[n].re + chout[n].im * chout[n].im;
+                power[n].im = chdout[n].re * chdout[n].re + chdout[n].im * chdout[n].im;
+            }
         }
     }
 
@@ -1170,6 +1185,56 @@ static int run_channels_sync(AVFilterContext *ctx, void *arg, int jobnr, int nb_
 
     for (int ch = 0; ch < s->nb_channels; ch++)
         run_channel_sync(ctx, ch, jobnr, nb_jobs);
+
+    return 0;
+}
+
+static int run_channel_cepstrum(AVFilterContext *ctx, int ch, int jobnr)
+{
+    ShowCWTContext *s = ctx->priv;
+    AVComplexFloat *isrc = (AVComplexFloat *)s->fft_in->extended_data[ch];
+    AVComplexFloat *idst = (AVComplexFloat *)s->fft_out->extended_data[ch];
+    const int count = s->frequency_band_count;
+    const int ihop_size = s->ihop_size;
+
+    for (int i = 0; i < ihop_size; i++) {
+        const int offset = ch * ihop_size + i;
+
+        memset(isrc, 0, sizeof(*isrc) * s->fft_size);
+
+        for (int y = 0; y < count; y++) {
+            const AVComplexFloat *chin = ((const AVComplexFloat *)s->ch_out->extended_data[y]) + offset;
+            float re, im;
+
+            re = logf(hypotf(chin[0].re, chin[0].im) + 0.00001f);
+            im = atan2f(chin[0].im, chin[0].re);
+
+            isrc[y].re = re;
+            isrc[y].im = im;
+        }
+
+        s->titx_fn(s->tifft[jobnr], idst, isrc, sizeof(*isrc));
+
+        for (int y = 0; y < count; y++) {
+            AVComplexFloat *sync = ((AVComplexFloat *)s->sync->extended_data[count-y-1]) + offset;
+
+            sync[0].re = idst[y].re / count;
+            sync[0].im = idst[y].im / count;
+        }
+    }
+
+    return 0;
+}
+
+static int run_channels_cepstrum(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    ShowCWTContext *s = ctx->priv;
+    const int nb_channels = s->nb_channels;
+    const int start = (nb_channels * jobnr) / nb_jobs;
+    const int end = (nb_channels * (jobnr+1)) / nb_jobs;
+
+    for (int ch = start; ch < end; ch++)
+        run_channel_cepstrum(ctx, ch, jobnr);
 
     return 0;
 }
@@ -1421,6 +1486,16 @@ static int config_output(AVFilterLink *outlink)
 
     for (int n = 0; n < s->nb_threads; n++) {
         ret = av_tx_init(&s->ifft[n], &s->itx_fn, AV_TX_FLOAT_FFT, 1, s->output_padding_size, &scale, 0);
+        if (ret < 0)
+            return ret;
+    }
+
+    s->tifft = av_calloc(s->nb_threads, sizeof(*s->tifft));
+    if (!s->tifft)
+        return AVERROR(ENOMEM);
+
+    for (int n = 0; n < s->nb_threads; n++) {
+        ret = av_tx_init(&s->tifft[n], &s->titx_fn, AV_TX_FLOAT_FFT, 1, s->frequency_band_count * 2, &scale, 0);
         if (ret < 0)
             return ret;
     }
@@ -1817,7 +1892,7 @@ static int activate(AVFilterContext *ctx)
                 ff_filter_execute(ctx, run_channels_cwt, NULL, NULL,
                                   s->nb_threads);
 
-                if (s->ssq) {
+                if (s->transform == TRANSFORM_SSQ) {
                     av_samples_set_silence(s->sync->extended_data, 0,
                                            s->sync->nb_samples,
                                            s->sync->ch_layout.nb_channels,
@@ -1835,6 +1910,9 @@ static int activate(AVFilterContext *ctx)
                     ff_filter_execute(ctx, run_channels_ssq, NULL, NULL,
                                       s->nb_threads);
                     ff_filter_execute(ctx, run_channels_sync, NULL, NULL,
+                                      s->nb_threads);
+                } else if (s->transform == TRANSFORM_CEPSTRUM) {
+                    ff_filter_execute(ctx, run_channels_cepstrum, NULL, NULL,
                                       s->nb_threads);
                 }
             }
