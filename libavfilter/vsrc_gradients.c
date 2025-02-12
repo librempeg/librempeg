@@ -22,11 +22,17 @@
 #include "filters.h"
 #include "video.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/intreadwrite.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/lfg.h"
 #include "libavutil/random_seed.h"
 #include <float.h>
 #include <math.h>
+
+typedef struct FloatColor {
+    float c[4];
+} FloatColor;
 
 typedef struct GradientsContext {
     const AVClass *class;
@@ -38,9 +44,11 @@ typedef struct GradientsContext {
     float speed;
     float angle;
 
-    uint8_t color_rgba[8][4];
-    float  color_rgbaf[8][4];
-    int nb_colors;
+    uint32_t *color_rgba;
+    unsigned nb_colors;
+
+    FloatColor *color_rgbaf;
+
     int x0, y0, x1, y1;
     float fx0, fy0, fx1, fy1;
 
@@ -53,26 +61,21 @@ typedef struct GradientsContext {
 #define OFFSET(x) offsetof(GradientsContext, x)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 #define VFT AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_colors = {.def="random random",.size_min=2,.sep=' '};
 
 static const AVOption gradients_options[] = {
     {"size",      "set frame size", OFFSET(w),             AV_OPT_TYPE_IMAGE_SIZE, {.str="640x480"},  0, 0, FLAGS },
     {"s",         "set frame size", OFFSET(w),             AV_OPT_TYPE_IMAGE_SIZE, {.str="640x480"},  0, 0, FLAGS },
     {"rate",      "set frame rate", OFFSET(frame_rate),    AV_OPT_TYPE_VIDEO_RATE, {.str="25"},       0, INT_MAX, FLAGS },
     {"r",         "set frame rate", OFFSET(frame_rate),    AV_OPT_TYPE_VIDEO_RATE, {.str="25"},       0, INT_MAX, FLAGS },
-    {"c0",        "set 1st color",  OFFSET(color_rgba[0]), AV_OPT_TYPE_COLOR,      {.str = "random"}, 0, 0, FLAGS },
-    {"c1",        "set 2nd color",  OFFSET(color_rgba[1]), AV_OPT_TYPE_COLOR,      {.str = "random"}, 0, 0, FLAGS },
-    {"c2",        "set 3rd color",  OFFSET(color_rgba[2]), AV_OPT_TYPE_COLOR,      {.str = "random"}, 0, 0, FLAGS },
-    {"c3",        "set 4th color",  OFFSET(color_rgba[3]), AV_OPT_TYPE_COLOR,      {.str = "random"}, 0, 0, FLAGS },
-    {"c4",        "set 5th color",  OFFSET(color_rgba[4]), AV_OPT_TYPE_COLOR,      {.str = "random"}, 0, 0, FLAGS },
-    {"c5",        "set 6th color",  OFFSET(color_rgba[5]), AV_OPT_TYPE_COLOR,      {.str = "random"}, 0, 0, FLAGS },
-    {"c6",        "set 7th color",  OFFSET(color_rgba[6]), AV_OPT_TYPE_COLOR,      {.str = "random"}, 0, 0, FLAGS },
-    {"c7",        "set 8th color",  OFFSET(color_rgba[7]), AV_OPT_TYPE_COLOR,      {.str = "random"}, 0, 0, FLAGS },
+    {"colors",    "set the gradient colors",  OFFSET(color_rgba), AV_OPT_TYPE_COLOR|AR, {.arr=&def_colors}, 0, 0, FLAGS },
+    {"c"     ,    "set the gradient colors",  OFFSET(color_rgba), AV_OPT_TYPE_COLOR|AR, {.arr=&def_colors}, 0, 0, FLAGS },
     {"x0",        "set gradient line source x0",      OFFSET(x0), AV_OPT_TYPE_INT, {.i64=-1},        -1, INT_MAX, FLAGS },
     {"y0",        "set gradient line source y0",      OFFSET(y0), AV_OPT_TYPE_INT, {.i64=-1},        -1, INT_MAX, FLAGS },
     {"x1",        "set gradient line destination x1", OFFSET(x1), AV_OPT_TYPE_INT, {.i64=-1},        -1, INT_MAX, FLAGS },
     {"y1",        "set gradient line destination y1", OFFSET(y1), AV_OPT_TYPE_INT, {.i64=-1},        -1, INT_MAX, FLAGS },
-    {"nb_colors", "set the number of colors", OFFSET(nb_colors), AV_OPT_TYPE_INT,  {.i64=2},          2, 8, FLAGS },
-    {"n",         "set the number of colors", OFFSET(nb_colors), AV_OPT_TYPE_INT,  {.i64=2},          2, 8, FLAGS },
     {"seed",      "set the seed",   OFFSET(seed),          AV_OPT_TYPE_INT64,      {.i64=-1},        -1, UINT32_MAX, FLAGS },
     {"duration",  "set video duration", OFFSET(duration),  AV_OPT_TYPE_DURATION,   {.i64=-1},        -1, INT64_MAX, FLAGS },
     {"d",         "set video duration", OFFSET(duration),  AV_OPT_TYPE_DURATION,   {.i64=-1},        -1, INT64_MAX, FLAGS },
@@ -96,9 +99,14 @@ static float lerpf(float a, float b, float x)
     return a * y + b * x;
 }
 
-static uint32_t lerp_color(uint8_t c0[4], uint8_t c1[4], float x)
+static uint32_t lerp_color(uint32_t ac0, uint32_t ac1, float x)
 {
+    uint8_t c0[4] = { 0xff, 0xff, 0xff, 0xff };
+    uint8_t c1[4] = { 0xff, 0xff, 0xff, 0xff };
     const float y = 1.f - x;
+
+    AV_WN32(c0, ac0);
+    AV_WN32(c1, ac1);
 
     return (lrintf(c0[0] * y + c1[0] * x)) << 0  |
            (lrintf(c0[1] * y + c1[1] * x)) << 8  |
@@ -106,9 +114,14 @@ static uint32_t lerp_color(uint8_t c0[4], uint8_t c1[4], float x)
            (lrintf(c0[3] * y + c1[3] * x)) << 24;
 }
 
-static uint64_t lerp_color16(uint8_t c0[4], uint8_t c1[4], float x)
+static uint64_t lerp_color16(uint32_t ac0, uint32_t ac1, float x)
 {
+    uint8_t c0[4] = { 0xff, 0xff, 0xff, 0xff };
+    uint8_t c1[4] = { 0xff, 0xff, 0xff, 0xff };
     const float y = 1.f - x;
+
+    AV_WN32(c0, ac0);
+    AV_WN32(c1, ac1);
 
     return ((uint64_t)llrintf((c0[0] * y + c1[0] * x) * 256)) << 0  |
            ((uint64_t)llrintf((c0[1] * y + c1[1] * x) * 256)) << 16 |
@@ -116,16 +129,16 @@ static uint64_t lerp_color16(uint8_t c0[4], uint8_t c1[4], float x)
            ((uint64_t)llrintf((c0[3] * y + c1[3] * x) * 256)) << 48;
 }
 
-static uint32_t lerp_colors(uint8_t arr[8][4], int nb_colors, int nb_wrap_colors, float step)
+static uint32_t lerp_colors(uint32_t *arr, int nb_colors, int nb_wrap_colors, float step)
 {
     float scl;
     int i, j;
 
     if (nb_colors == 1 || step <= 0.0) {
-        return arr[0][0] | (arr[0][1] << 8) | (arr[0][2] << 16) | (arr[0][3] << 24);
+        return arr[0];
     } else if (step >= 1.0) {
         i = nb_colors - 1;
-        return arr[i][0] | (arr[i][1] << 8) | (arr[i][2] << 16) | (arr[i][3] << 24);
+        return arr[i];
     }
 
     scl = step * (nb_wrap_colors - 1);
@@ -139,16 +152,22 @@ static uint32_t lerp_colors(uint8_t arr[8][4], int nb_colors, int nb_wrap_colors
     return lerp_color(arr[i], arr[j], scl - i);
 }
 
-static uint64_t lerp_colors16(uint8_t arr[8][4], int nb_colors, int nb_wrap_colors, float step)
+static uint64_t lerp_colors16(uint32_t *arr, int nb_colors, int nb_wrap_colors, float step)
 {
     float scl;
     int i, j;
 
     if (nb_colors == 1 || step <= 0.0) {
-        return ((uint64_t)arr[0][0] << 8) | ((uint64_t)arr[0][1] << 24) | ((uint64_t)arr[0][2] << 40) | ((uint64_t)arr[0][3] << 56);
+        uint8_t clr[4] = { 0xff, 0xff, 0xff, 0xff };
+
+        AV_WN32(clr, arr[0]);
+        return ((uint64_t)clr[0] << 8) | ((uint64_t)clr[1] << 24) | ((uint64_t)clr[2] << 40) | ((uint64_t)clr[3] << 56);
     } else if (step >= 1.0) {
+        uint8_t clr[4] = { 0xff, 0xff, 0xff, 0xff };
+
         i = nb_colors - 1;
-        return ((uint64_t)arr[i][0] << 8) | ((uint64_t)arr[i][1] << 24) | ((uint64_t)arr[i][2] << 40) | ((uint64_t)arr[i][3] << 56);
+        AV_WN32(clr, arr[i]);
+        return ((uint64_t)clr[0] << 8) | ((uint64_t)clr[1] << 24) | ((uint64_t)clr[2] << 40) | ((uint64_t)clr[3] << 56);
     }
 
     scl = step * (nb_wrap_colors - 1);
@@ -162,7 +181,7 @@ static uint64_t lerp_colors16(uint8_t arr[8][4], int nb_colors, int nb_wrap_colo
     return lerp_color16(arr[i], arr[j], scl - i);
 }
 
-static void lerp_colors32(float arr[8][4], int nb_colors,
+static void lerp_colors32(FloatColor *arr, int nb_colors,
                           int nb_wrap_colors, float step,
                           float *r, float *g, float *b, float *a)
 {
@@ -170,17 +189,17 @@ static void lerp_colors32(float arr[8][4], int nb_colors,
     int i, j;
 
     if (nb_colors == 1 || step <= 0.0) {
-        *r = arr[0][0];
-        *g = arr[0][1];
-        *b = arr[0][2];
-        *a = arr[0][3];
+        *r = arr[0].c[0];
+        *g = arr[0].c[1];
+        *b = arr[0].c[2];
+        *a = arr[0].c[3];
         return;
     } else if (step >= 1.0) {
         i = nb_colors - 1;
-        *r = arr[i][0];
-        *g = arr[i][1];
-        *b = arr[i][2];
-        *a = arr[i][3];
+        *r = arr[i].c[0];
+        *g = arr[i].c[1];
+        *b = arr[i].c[2];
+        *a = arr[i].c[3];
         return;
     }
 
@@ -193,10 +212,10 @@ static void lerp_colors32(float arr[8][4], int nb_colors,
     }
     x = scl - i;
 
-    *r = lerpf(arr[i][0], arr[j][0], x);
-    *g = lerpf(arr[i][1], arr[j][1], x);
-    *b = lerpf(arr[i][2], arr[j][2], x);
-    *a = lerpf(arr[i][3], arr[j][3], x);
+    *r = lerpf(arr[i].c[0], arr[j].c[0], x);
+    *g = lerpf(arr[i].c[1], arr[j].c[1], x);
+    *b = lerpf(arr[i].c[2], arr[j].c[2], x);
+    *a = lerpf(arr[i].c[3], arr[j].c[3], x);
 }
 
 static float project(float origin_x, float origin_y,
@@ -372,9 +391,17 @@ static int config_output(AVFilterLink *outlink)
     if (s->y1 < 0 || s->y1 >= s->h)
         s->y1 = av_lfg_get(&s->lfg) % s->h;
 
-    for (int n = 0; n < 8; n++) {
-        for (int c = 0; c < 4; c++)
-            s->color_rgbaf[n][c] = s->color_rgba[n][c] / 255.f;
+    s->color_rgbaf = av_calloc(s->nb_colors, sizeof(*s->color_rgbaf));
+    if (!s->color_rgbaf)
+        return AVERROR(ENOMEM);
+
+    for (int n = 0; n < s->nb_colors; n++) {
+        uint8_t color[4] = { 0xff, 0xff, 0xff, 0xff };
+
+        AV_WN32(color, s->color_rgba[n]);
+        for (int c = 0; c < 4; c++) {
+            s->color_rgbaf[n].c[c] = color[c] / 255.f;
+        }
     }
 
     return 0;
@@ -435,6 +462,13 @@ FF_ENABLE_DEPRECATION_WARNINGS
     return FFERROR_NOT_READY;
 }
 
+static av_cold void uninit(AVFilterContext *ctx)
+{
+    GradientsContext *s = ctx->priv;
+
+    av_freep(&s->color_rgbaf);
+}
+
 static const AVFilterPad gradients_outputs[] = {
     {
         .name          = "default",
@@ -453,5 +487,6 @@ const FFFilter ff_vsrc_gradients = {
     FILTER_OUTPUTS(gradients_outputs),
     FILTER_PIXFMTS(AV_PIX_FMT_RGBA, AV_PIX_FMT_RGBA64, AV_PIX_FMT_GBRAPF32),
     .activate      = activate,
+    .uninit        = uninit,
     .process_command = ff_filter_process_command,
 };
