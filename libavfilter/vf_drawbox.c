@@ -80,7 +80,6 @@ typedef struct DrawBoxContext {
     const AVClass *class;
     int x, y, w, h;
     int thickness;
-    char *color_str;
     uint8_t rgba_map[4];
     uint8_t rgba_color[4];
     unsigned char yuv_color[4];
@@ -238,11 +237,6 @@ static av_cold int init(AVFilterContext *ctx)
             return AVERROR(EINVAL);
         }
     }
-
-    if (!strcmp(s->color_str, "invert"))
-        s->invert_color = 1;
-    else if (av_parse_color(s->rgba_color, s->color_str, -1, ctx) < 0)
-        return AVERROR(EINVAL);
 
     if (!s->invert_color) {
         s->yuv_color[Y] = RGB_TO_Y_CCIR(s->rgba_color[0], s->rgba_color[1], s->rgba_color[2]);
@@ -449,11 +443,12 @@ static const AVOption drawbox_options[] = {
     { "w",         "set width of the box",                         OFFSET(w_expr),    AV_OPT_TYPE_STRING, { .str="0" },       0, 0, FLAGS },
     { "height",    "set height of the box",                        OFFSET(h_expr),    AV_OPT_TYPE_STRING, { .str="0" },       0, 0, FLAGS },
     { "h",         "set height of the box",                        OFFSET(h_expr),    AV_OPT_TYPE_STRING, { .str="0" },       0, 0, FLAGS },
-    { "color",     "set color of the box",                         OFFSET(color_str), AV_OPT_TYPE_STRING, { .str = "black" }, 0, 0, FLAGS },
-    { "c",         "set color of the box",                         OFFSET(color_str), AV_OPT_TYPE_STRING, { .str = "black" }, 0, 0, FLAGS },
+    { "color",     "set color of the box",                         OFFSET(rgba_color),AV_OPT_TYPE_COLOR,  { .str="black" },   0, 0, FLAGS },
+    { "c",         "set color of the box",                         OFFSET(rgba_color),AV_OPT_TYPE_COLOR,  { .str="black" },   0, 0, FLAGS },
     { "thickness", "set the box thickness",                        OFFSET(t_expr),    AV_OPT_TYPE_STRING, { .str="3" },       0, 0, FLAGS },
     { "t",         "set the box thickness",                        OFFSET(t_expr),    AV_OPT_TYPE_STRING, { .str="3" },       0, 0, FLAGS },
     { "replace",   "replace color & alpha",                        OFFSET(replace),   AV_OPT_TYPE_BOOL,   { .i64=0   },       0, 1, FLAGS },
+    { "invert",    "invert color",                                 OFFSET(invert_color),AV_OPT_TYPE_BOOL, { .i64=0   },       0, 1, FLAGS },
     { "box_source", "use datas from bounding box in side data",    OFFSET(box_source_string), AV_OPT_TYPE_STRING, { .str=NULL }, 0, 1, FLAGS },
     { NULL }
 };
@@ -525,11 +520,12 @@ static const AVOption drawgrid_options[] = {
     { "w",         "set width of grid cell",  OFFSET(w_expr),    AV_OPT_TYPE_STRING, { .str="0" },       0, 0, FLAGS },
     { "height",    "set height of grid cell", OFFSET(h_expr),    AV_OPT_TYPE_STRING, { .str="0" },       0, 0, FLAGS },
     { "h",         "set height of grid cell", OFFSET(h_expr),    AV_OPT_TYPE_STRING, { .str="0" },       0, 0, FLAGS },
-    { "color",     "set color of the grid",   OFFSET(color_str), AV_OPT_TYPE_STRING, { .str = "black" }, 0, 0, FLAGS },
-    { "c",         "set color of the grid",   OFFSET(color_str), AV_OPT_TYPE_STRING, { .str = "black" }, 0, 0, FLAGS },
+    { "color",     "set color of the grid",   OFFSET(rgba_color),AV_OPT_TYPE_COLOR,  { .str="black" },   0, 0, FLAGS },
+    { "c",         "set color of the grid",   OFFSET(rgba_color),AV_OPT_TYPE_COLOR,  { .str="black" },   0, 0, FLAGS },
     { "thickness", "set grid line thickness", OFFSET(t_expr),    AV_OPT_TYPE_STRING, {.str="1"},         0, 0, FLAGS },
     { "t",         "set grid line thickness", OFFSET(t_expr),    AV_OPT_TYPE_STRING, {.str="1"},         0, 0, FLAGS },
-    { "replace",   "replace color & alpha",   OFFSET(replace),   AV_OPT_TYPE_BOOL,   { .i64=0 },         0,        1,        FLAGS },
+    { "replace",   "replace color & alpha",   OFFSET(replace),   AV_OPT_TYPE_BOOL,   { .i64=0 },         0, 1, FLAGS },
+    { "invert",    "invert color",            OFFSET(invert_color),AV_OPT_TYPE_BOOL, { .i64=0 },         0, 1, FLAGS },
     { NULL }
 };
 
