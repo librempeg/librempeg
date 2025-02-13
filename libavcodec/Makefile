@@ -711,6 +711,7 @@ OBJS-$(CONFIG_SNOW_DECODER)            += snowdec.o snow.o snow_dwt.o
 OBJS-$(CONFIG_SNOW_ENCODER)            += snowenc.o snow.o snow_dwt.o             \
                                           h263.o h263data.o ituh263enc.o
 OBJS-$(CONFIG_SOL_DPCM_DECODER)        += dpcm.o
+OBJS-$(CONFIG_SONARC_DECODER)          += sonarc.o
 OBJS-$(CONFIG_SPEEDHQ_DECODER)         += speedhqdec.o speedhq.o mpeg12.o \
                                           mpeg12data.o
 OBJS-$(CONFIG_SPEEDHQ_ENCODER)         += speedhq.o mpeg12data.o mpeg12enc.o speedhqenc.o

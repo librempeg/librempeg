@@ -546,6 +546,7 @@ extern const FFCodec ff_shorten_decoder;
 extern const FFCodec ff_sipr_decoder;
 extern const FFCodec ff_siren_decoder;
 extern const FFCodec ff_smackaud_decoder;
+extern const FFCodec ff_sonarc_decoder;
 extern const FFCodec ff_tac_decoder;
 extern const FFCodec ff_tak_decoder;
 extern const FFCodec ff_truehd_encoder;

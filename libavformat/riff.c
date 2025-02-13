@@ -548,6 +548,7 @@ const AVCodecTag ff_codec_wav_tags[] = {
     { AV_CODEC_ID_ADPCM_ZORK,      0x0011 },
     { AV_CODEC_ID_ADPCM_IMA_OKI,   0x0017 },
     { AV_CODEC_ID_ADPCM_YAMAHA,    0x0020 },
+    { AV_CODEC_ID_SONARC,          0x0021 },
     { AV_CODEC_ID_TRUESPEECH,      0x0022 },
     { AV_CODEC_ID_GSM_MS,          0x0031 },
     { AV_CODEC_ID_GSM_MS,          0x0032 },  /* msn audio */
