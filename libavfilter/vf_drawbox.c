@@ -82,7 +82,7 @@ typedef struct DrawBoxContext {
     int thickness;
     uint8_t rgba_map[4];
     uint8_t rgba_color[4];
-    unsigned char yuv_color[4];
+    uint8_t yuv_color[4];
     int invert_color; ///< invert luma color
     int vsub, hsub;   ///< chroma subsampling
     char *x_expr, *y_expr; ///< expression for x and y
@@ -112,7 +112,7 @@ static const int NUM_EXPR_EVALS = 5;
 static void draw_region(AVFrame *frame, DrawBoxContext *ctx, int left, int top, int right, int down,
                         PixelBelongsToRegion pixel_belongs_to_region)
 {
-    unsigned char *row[4];
+    uint8_t *row[4];
     int x, y;
     if (ctx->have_alpha && ctx->replace) {
         for (y = top; y < down; y++) {
