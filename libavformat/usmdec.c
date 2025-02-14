@@ -289,7 +289,7 @@ static int64_t parse_chunk(AVFormatContext *s, AVIOContext *pb,
     } else if (payload_type == 0) {
         if (usm->ch[ch_type][stream_index].used == 1) {
             USMChannel *ch = &usm->ch[ch_type][stream_index];
-            int get_extradata = 0;
+            int get_extradata = 0, trim_size = 0;
             uint32_t pkt_size;
             AVStream *st;
 
@@ -323,7 +323,10 @@ static int64_t parse_chunk(AVFormatContext *s, AVIOContext *pb,
 
                 ffstream(st)->need_parsing = AVSTREAM_PARSE_TIMESTAMPS;
                 get_extradata = ch->codec_id == AV_CODEC_ID_ADPCM_ADX;
+                trim_size = (ch->codec_id == AV_CODEC_ID_VP9) * 44;
                 ch->extradata_pos = avio_tell(pb);
+            } else {
+                trim_size = (ch->codec_id == AV_CODEC_ID_VP9) * 12;
             }
 
             ret = avio_tell(pb);
@@ -339,11 +342,18 @@ static int64_t parse_chunk(AVFormatContext *s, AVIOContext *pb,
                     avio_skip(pb, pkt_size);
                     ret = 0;
                 } else {
-                    ret = av_get_packet(pb, pkt, pkt_size);
-                    if (ret < 0)
-                        return ret;
+                    if (trim_size > 0) {
+                        avio_skip(pb, trim_size);
+                        pkt_size -= trim_size;
+                    }
 
-                    pkt->stream_index = ch->index;
+                    if (pkt_size > 0) {
+                        ret = av_get_packet(pb, pkt, pkt_size);
+                        if (ret < 0)
+                            return ret;
+
+                        pkt->stream_index = ch->index;
+                    }
                 }
             }
 
