@@ -390,6 +390,9 @@ static int usm_read_packet(AVFormatContext *s, AVPacket *pkt)
             return pos;
         chunk_type = avio_rb32(pb);
         chunk_size = avio_rb32(pb);
+        if (!chunk_type && !chunk_size)
+            return AVERROR_EOF;
+
         if (!chunk_size)
             return AVERROR_INVALIDDATA;
 
