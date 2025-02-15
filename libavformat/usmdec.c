@@ -238,6 +238,7 @@ static int64_t parse_chunk(AVFormatContext *s, AVIOContext *pb,
     const int ch_type = is_subtt ? SUBTTI : is_audio ? AUDIOI : is_alpha ? ALPHAI : VIDEOI;
     int stream_index, frame_rate;
     int64_t chunk_start, ret;
+    uint32_t frame_time;
 
     ret = avio_tell(pb);
     if (ret < 0)
@@ -249,7 +250,7 @@ static int64_t parse_chunk(AVFormatContext *s, AVIOContext *pb,
     stream_index = avio_r8(pb);
     avio_skip(pb, 2);
     payload_type = avio_r8(pb);
-    /*frame_time =*/ avio_rb32(pb);
+    frame_time = avio_rb32(pb);
     frame_rate = avio_rb32(pb);
     avio_skip(pb, 8);
     ret = avio_tell(pb);
@@ -348,11 +349,15 @@ static int64_t parse_chunk(AVFormatContext *s, AVIOContext *pb,
                     }
 
                     if (pkt_size > 0) {
+                        AVStream *st;
+
                         ret = av_get_packet(pb, pkt, pkt_size);
                         if (ret < 0)
                             return ret;
 
+                        st = s->streams[ch->index];
                         pkt->stream_index = ch->index;
+                        pkt->pts = av_rescale_q(frame_time, av_inv_q(st->time_base), av_make_q(3000, 1));
                     }
                 }
             }
