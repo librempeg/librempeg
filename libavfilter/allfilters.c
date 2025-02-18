@@ -66,6 +66,7 @@ extern const FFFilter ff_af_ahold;
 extern const FFFilter ff_af_aidentity;
 extern const FFFilter ff_af_aiir;
 extern const FFFilter ff_af_aiireq;
+extern const FFFilter ff_af_aiirsrc;
 extern const FFFilter ff_af_aintegral;
 extern const FFFilter ff_af_ainterleave;
 extern const FFFilter ff_af_ainversion;

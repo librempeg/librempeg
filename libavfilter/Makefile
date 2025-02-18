@@ -81,6 +81,7 @@ OBJS-$(CONFIG_AGATE_FILTER)                  += af_agate.o
 OBJS-$(CONFIG_AHOLD_FILTER)                  += af_ahold.o
 OBJS-$(CONFIG_AIDENTITY_FILTER)              += af_asdr.o
 OBJS-$(CONFIG_AIIREQ_FILTER)                 += af_aiireq.o
+OBJS-$(CONFIG_AIIRSRC_FILTER)                += af_aiirsrc.o
 OBJS-$(CONFIG_AIIR_FILTER)                   += af_aiir.o
 OBJS-$(CONFIG_AINTEGRAL_FILTER)              += af_aderivative.o
 OBJS-$(CONFIG_AINTERLEAVE_FILTER)            += f_interleave.o
