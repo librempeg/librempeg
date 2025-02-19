@@ -407,12 +407,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
             return AVERROR(ENOMEM);
         av_frame_copy_props(out, cur);
         out->height = outlink->h;
-#if FF_API_INTERLACED_FRAME
-FF_DISABLE_DEPRECATION_WARNINGS
-        out->interlaced_frame = 1;
-        out->top_field_first = 1;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
         out->flags |= AV_FRAME_FLAG_INTERLACED | AV_FRAME_FLAG_TOP_FIELD_FIRST;
         out->sample_aspect_ratio = av_mul_q(cur->sample_aspect_ratio, av_make_q(2, 1));
 
@@ -481,12 +475,6 @@ FF_ENABLE_DEPRECATION_WARNINGS
         if (!out)
             return AVERROR(ENOMEM);
         av_frame_copy_props(out, cur);
-#if FF_API_INTERLACED_FRAME
-FF_DISABLE_DEPRECATION_WARNINGS
-        out->interlaced_frame = 1;
-        out->top_field_first = tff;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
         out->flags |= AV_FRAME_FLAG_INTERLACED;
         if (tff)
             out->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
@@ -512,11 +500,6 @@ FF_ENABLE_DEPRECATION_WARNINGS
         out = av_frame_clone(cur);
         if (!out)
             return AVERROR(ENOMEM);
-#if FF_API_INTERLACED_FRAME
-FF_DISABLE_DEPRECATION_WARNINGS
-        out->interlaced_frame = 1;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
         out->flags |= AV_FRAME_FLAG_INTERLACED;
         if (cur->pts != AV_NOPTS_VALUE)
             out->pts = cur->pts*2;
@@ -532,12 +515,6 @@ FF_ENABLE_DEPRECATION_WARNINGS
         if (!out)
             return AVERROR(ENOMEM);
         av_frame_copy_props(out, next);
-#if FF_API_INTERLACED_FRAME
-FF_DISABLE_DEPRECATION_WARNINGS
-        out->interlaced_frame = 1;
-        out->top_field_first = !tff;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
         out->flags |= AV_FRAME_FLAG_INTERLACED;
         if (tff)
             out->flags &= ~AV_FRAME_FLAG_TOP_FIELD_FIRST;
