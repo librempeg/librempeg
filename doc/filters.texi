@@ -21854,6 +21854,19 @@ Keep the same chroma location (default).
 @item bottomleft
 @item bottom
 @end table
+
+@item alpha_mode
+Set the alpha moda.
+Available values are:
+
+@table @samp
+@item auto
+Keep the same alpha mode (default).
+
+@item unspecified, unknown
+@item premultiplied
+@item straight
+@end table
 @end table
 
 @section sharpen_npp
