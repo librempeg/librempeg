@@ -792,11 +792,6 @@ int avformat_transfer_internal_stream_timing_info(const AVOutputFormat *ofmt,
                                                    : (ist->codecpar->codec_type == AVMEDIA_TYPE_AUDIO ? (AVRational){0, 1}
                                                                                                       : ist->time_base);
     AVRational enc_tb = ist->time_base;
-#if FF_API_TICKS_PER_FRAME
-FF_DISABLE_DEPRECATION_WARNINGS
-    int ticks_per_frame = dec_ctx ? dec_ctx->ticks_per_frame : 1;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
 
     /*
      * Avi is a special case here because it supports variable fps but
@@ -822,9 +817,6 @@ FF_ENABLE_DEPRECATION_WARNINGS
                        (dec_ctx_framerate.num || ist->codecpar->codec_type == AVMEDIA_TYPE_AUDIO))) {
             enc_tb = dec_ctx_tb;
             enc_tb.den *= 2;
-#if FF_API_TICKS_PER_FRAME
-            enc_tb.num *= ticks_per_frame;
-#endif
         }
     } else if (!(ofmt->flags & AVFMT_VARIABLE_FPS)
                && !av_match_name(ofmt->name, "mov,mp4,3gp,3g2,psp,ipod,ismv,f4v")) {
@@ -834,9 +826,6 @@ FF_ENABLE_DEPRECATION_WARNINGS
             || (copy_tb == AVFMT_TBCF_DECODER &&
                 (dec_ctx_framerate.num || ist->codecpar->codec_type == AVMEDIA_TYPE_AUDIO))) {
             enc_tb = dec_ctx_tb;
-#if FF_API_TICKS_PER_FRAME
-            enc_tb.num *= ticks_per_frame;
-#endif
         }
     }
 
