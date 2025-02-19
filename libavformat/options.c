@@ -249,7 +249,6 @@ const AVClass *av_stream_get_class(void)
 
 AVStream *avformat_new_stream(AVFormatContext *s, const AVCodec *c)
 {
-    FFFormatContext *const si = ffformatcontext(s);
     FFStream *sti;
     AVStream *st;
     AVStream **streams;
@@ -319,10 +318,6 @@ AVStream *avformat_new_stream(AVFormatContext *s, const AVCodec *c)
     st->sample_aspect_ratio = (AVRational) { 0, 1 };
 #if FF_API_INTERNAL_TIMING
     sti->transferred_mux_tb = (AVRational) { 0, 1 };;
-#endif
-
-#if FF_API_AVSTREAM_SIDE_DATA
-    sti->inject_global_side_data = si->inject_global_side_data;
 #endif
 
     sti->need_context_update = 1;
