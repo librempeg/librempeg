@@ -8747,11 +8747,7 @@ const FFOutputFormat ff_mov_muxer = {
     .write_packet      = mov_write_packet,
     .write_trailer     = mov_write_trailer,
     .deinit            = mov_free,
-    .p.flags           = AVFMT_GLOBALHEADER | AVFMT_TS_NEGATIVE | AVFMT_VARIABLE_FPS
-#if FF_API_ALLOW_FLUSH
-                       | AVFMT_ALLOW_FLUSH
-#endif
-                         ,
+    .p.flags           = AVFMT_GLOBALHEADER | AVFMT_TS_NEGATIVE | AVFMT_VARIABLE_FPS,
     .p.codec_tag       = (const AVCodecTag* const []){
         ff_codec_movvideo_tags, ff_codec_movaudio_tags, ff_codec_movsubtitle_tags, 0
     },
@@ -8773,11 +8769,7 @@ const FFOutputFormat ff_tgp_muxer = {
     .write_packet      = mov_write_packet,
     .write_trailer     = mov_write_trailer,
     .deinit            = mov_free,
-#if FF_API_ALLOW_FLUSH
-    .p.flags           = AVFMT_GLOBALHEADER | AVFMT_ALLOW_FLUSH | AVFMT_TS_NEGATIVE,
-#else
     .p.flags           = AVFMT_GLOBALHEADER | AVFMT_TS_NEGATIVE,
-#endif
     .p.codec_tag       = codec_3gp_tags_list,
     .check_bitstream   = mov_check_bitstream,
     .p.priv_class      = &mov_isobmff_muxer_class,
@@ -8799,11 +8791,7 @@ const FFOutputFormat ff_mp4_muxer = {
     .write_packet      = mov_write_packet,
     .write_trailer     = mov_write_trailer,
     .deinit            = mov_free,
-    .p.flags           = AVFMT_GLOBALHEADER | AVFMT_TS_NEGATIVE | AVFMT_VARIABLE_FPS
-#if FF_API_ALLOW_FLUSH
-                       | AVFMT_ALLOW_FLUSH
-#endif
-                         ,
+    .p.flags           = AVFMT_GLOBALHEADER | AVFMT_TS_NEGATIVE | AVFMT_VARIABLE_FPS,
     .p.codec_tag       = mp4_codec_tags_list,
     .check_bitstream   = mov_check_bitstream,
     .p.priv_class      = &mov_isobmff_muxer_class,
@@ -8824,11 +8812,7 @@ const FFOutputFormat ff_psp_muxer = {
     .write_packet      = mov_write_packet,
     .write_trailer     = mov_write_trailer,
     .deinit            = mov_free,
-#if FF_API_ALLOW_FLUSH
-    .p.flags           = AVFMT_GLOBALHEADER | AVFMT_ALLOW_FLUSH | AVFMT_TS_NEGATIVE,
-#else
     .p.flags           = AVFMT_GLOBALHEADER | AVFMT_TS_NEGATIVE,
-#endif
     .p.codec_tag       = mp4_codec_tags_list,
     .check_bitstream   = mov_check_bitstream,
     .p.priv_class      = &mov_isobmff_muxer_class,
@@ -8848,11 +8832,7 @@ const FFOutputFormat ff_tg2_muxer = {
     .write_packet      = mov_write_packet,
     .write_trailer     = mov_write_trailer,
     .deinit            = mov_free,
-#if FF_API_ALLOW_FLUSH
-    .p.flags           = AVFMT_GLOBALHEADER | AVFMT_ALLOW_FLUSH | AVFMT_TS_NEGATIVE,
-#else
     .p.flags           = AVFMT_GLOBALHEADER | AVFMT_TS_NEGATIVE,
-#endif
     .p.codec_tag       = codec_3gp_tags_list,
     .check_bitstream   = mov_check_bitstream,
     .p.priv_class      = &mov_isobmff_muxer_class,
@@ -8873,11 +8853,7 @@ const FFOutputFormat ff_ipod_muxer = {
     .write_packet      = mov_write_packet,
     .write_trailer     = mov_write_trailer,
     .deinit            = mov_free,
-#if FF_API_ALLOW_FLUSH
-    .p.flags           = AVFMT_GLOBALHEADER | AVFMT_ALLOW_FLUSH | AVFMT_TS_NEGATIVE,
-#else
     .p.flags           = AVFMT_GLOBALHEADER | AVFMT_TS_NEGATIVE,
-#endif
     .p.codec_tag       = (const AVCodecTag* const []){ codec_ipod_tags, 0 },
     .check_bitstream   = mov_check_bitstream,
     .p.priv_class      = &mov_isobmff_muxer_class,
@@ -8898,11 +8874,7 @@ const FFOutputFormat ff_ismv_muxer = {
     .write_packet      = mov_write_packet,
     .write_trailer     = mov_write_trailer,
     .deinit            = mov_free,
-#if FF_API_ALLOW_FLUSH
-    .p.flags           = AVFMT_GLOBALHEADER | AVFMT_ALLOW_FLUSH | AVFMT_TS_NEGATIVE,
-#else
     .p.flags           = AVFMT_GLOBALHEADER | AVFMT_TS_NEGATIVE,
-#endif
     .p.codec_tag       = (const AVCodecTag* const []){
         codec_mp4_tags, codec_ism_tags, 0 },
     .check_bitstream   = mov_check_bitstream,
@@ -8924,11 +8896,7 @@ const FFOutputFormat ff_f4v_muxer = {
     .write_packet      = mov_write_packet,
     .write_trailer     = mov_write_trailer,
     .deinit            = mov_free,
-#if FF_API_ALLOW_FLUSH
-    .p.flags           = AVFMT_GLOBALHEADER | AVFMT_ALLOW_FLUSH,
-#else
     .p.flags           = AVFMT_GLOBALHEADER,
-#endif
     .p.codec_tag       = (const AVCodecTag* const []){ codec_f4v_tags, 0 },
     .check_bitstream   = mov_check_bitstream,
     .p.priv_class      = &mov_isobmff_muxer_class,
@@ -8948,11 +8916,7 @@ const FFOutputFormat ff_avif_muxer = {
     .write_packet      = mov_write_packet,
     .write_trailer     = avif_write_trailer,
     .deinit            = mov_free,
-#if FF_API_ALLOW_FLUSH
-    .p.flags           = AVFMT_GLOBALHEADER | AVFMT_ALLOW_FLUSH,
-#else
     .p.flags           = AVFMT_GLOBALHEADER,
-#endif
     .p.codec_tag       = codec_avif_tags_list,
     .p.priv_class      = &mov_avif_muxer_class,
     .flags_internal    = FF_OFMT_FLAG_ALLOW_FLUSH,
