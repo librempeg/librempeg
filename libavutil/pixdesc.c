@@ -3341,6 +3341,12 @@ static const char * const chroma_location_names[] = {
     [AVCHROMA_LOC_BOTTOM] = "bottom",
 };
 
+static const char * const alpha_mode_names[] = {
+    [AVALPHA_MODE_UNSPECIFIED] = "unspecified",
+    [AVALPHA_MODE_PREMULTIPLIED] = "premultiplied",
+    [AVALPHA_MODE_STRAIGHT] = "straight",
+};
+
 static enum AVPixelFormat get_pix_fmt_internal(const char *name)
 {
     enum AVPixelFormat pix_fmt;
@@ -3873,4 +3879,23 @@ enum AVChromaLocation av_chroma_location_pos_to_enum(int xpos, int ypos)
             return pos;
     }
     return AVCHROMA_LOC_UNSPECIFIED;
+}
+
+const char *av_alpha_mode_name(enum AVAlphaMode mode)
+{
+    return (unsigned) mode < AVALPHA_MODE_NB ?
+        alpha_mode_names[mode] : NULL;
+}
+
+enum AVAlphaMode av_alpha_mode_from_name(const char *name)
+{
+    for (int i = 0; i < FF_ARRAY_ELEMS(alpha_mode_names); i++) {
+        if (!alpha_mode_names[i])
+            continue;
+
+        if (av_strstart(name, alpha_mode_names[i], NULL))
+            return i;
+    }
+
+    return AVERROR(EINVAL);
 }
