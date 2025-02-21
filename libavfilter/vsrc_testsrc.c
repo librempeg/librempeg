@@ -1819,18 +1819,7 @@ const FFFilter ff_vsrc_allrgb = {
 
 #endif /* CONFIG_ALLRGB_FILTER */
 
-#if CONFIG_COLORSPECTRUM_FILTER
-
-static const AVOption colorspectrum_options[] = {
-    COMMON_OPTIONS
-    { "type", "set the color spectrum type", OFFSET(type), AV_OPT_TYPE_INT, {.i64=0}, 0, 2, FLAGS, .unit = "type" },
-    { "black","fade to black",               0,            AV_OPT_TYPE_CONST,{.i64=0},0, 0, FLAGS, .unit = "type" },
-    { "white","fade to white",               0,            AV_OPT_TYPE_CONST,{.i64=1},0, 0, FLAGS, .unit = "type" },
-    { "all",  "white to black",              0,            AV_OPT_TYPE_CONST,{.i64=2},0, 0, FLAGS, .unit = "type" },
-    { NULL }
-};
-
-AVFILTER_DEFINE_CLASS(colorspectrum);
+#if CONFIG_COLORSPECTRUM_FILTER || CONFIG_COLORWHEEL_FILTER
 
 static inline float mix(float a, float b, float mix)
 {
@@ -1846,6 +1835,21 @@ static void hsb2rgb(const float *c, float *rgb)
     rgb[1] = mix(c[3], (rgb[1] * rgb[1] * (3.f - 2.f * rgb[1])), c[1]) * c[2];
     rgb[2] = mix(c[3], (rgb[2] * rgb[2] * (3.f - 2.f * rgb[2])), c[1]) * c[2];
 }
+
+#endif
+
+#if CONFIG_COLORSPECTRUM_FILTER
+
+static const AVOption colorspectrum_options[] = {
+    COMMON_OPTIONS
+    { "type", "set the color spectrum type", OFFSET(type), AV_OPT_TYPE_INT, {.i64=0}, 0, 2, FLAGS, .unit = "type" },
+    { "black","fade to black",               0,            AV_OPT_TYPE_CONST,{.i64=0},0, 0, FLAGS, .unit = "type" },
+    { "white","fade to white",               0,            AV_OPT_TYPE_CONST,{.i64=1},0, 0, FLAGS, .unit = "type" },
+    { "all",  "white to black",              0,            AV_OPT_TYPE_CONST,{.i64=2},0, 0, FLAGS, .unit = "type" },
+    { NULL }
+};
+
+AVFILTER_DEFINE_CLASS(colorspectrum);
 
 static void colorspectrum_fill_picture(AVFilterContext *ctx, AVFrame *frame)
 {
@@ -2251,16 +2255,6 @@ static const AVOption colorwheel_options[] = {
 
 AVFILTER_DEFINE_CLASS(colorwheel);
 
-static void hsb2rgb2(const float *c, float *rgb)
-{
-    rgb[0] = av_clipf(fabsf(fmodf(c[0] * 6.f + 0.f, 6.f) - 3.f) - 1.f, 0.f, 1.f);
-    rgb[1] = av_clipf(fabsf(fmodf(c[0] * 6.f + 4.f, 6.f) - 3.f) - 1.f, 0.f, 1.f);
-    rgb[2] = av_clipf(fabsf(fmodf(c[0] * 6.f + 2.f, 6.f) - 3.f) - 1.f, 0.f, 1.f);
-    rgb[0] = mix(c[3], (rgb[0] * rgb[0] * (3.f - 2.f * rgb[0])), c[1]) * c[2];
-    rgb[1] = mix(c[3], (rgb[1] * rgb[1] * (3.f - 2.f * rgb[1])), c[1]) * c[2];
-    rgb[2] = mix(c[3], (rgb[2] * rgb[2] * (3.f - 2.f * rgb[2])), c[1]) * c[2];
-}
-
 static void colorwheel_fill_picture(AVFilterContext *ctx, AVFrame *frame)
 {
     TestSourceContext *test = ctx->priv;
@@ -2294,7 +2288,7 @@ static void colorwheel_fill_picture(AVFilterContext *ctx, AVFrame *frame)
                 rgb[1] = 0.5f;
                 rgb[2] = 0.5f;
             } else {
-                hsb2rgb2(c, rgb);
+                hsb2rgb(c, rgb);
             }
 
             r[x] = rgb[0];
