@@ -77,6 +77,10 @@ typedef struct TestSourceContext {
     /* only used by colorspectrum */
     int type;
 
+    /* only used by colorwheel */
+    float value;
+    float center;
+
     /* only used by color */
     FFDrawContext draw;
     FFDrawColor color;
@@ -2235,3 +2239,90 @@ const FFFilter ff_vsrc_zoneplate = {
 };
 
 #endif /* CONFIG_ZONEPLATE_FILTER */
+
+#if CONFIG_COLORWHEEL_FILTER
+
+static const AVOption colorwheel_options[] = {
+    COMMON_OPTIONS
+    { "value", "set the colorwheel value", OFFSET(value), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 1, FLAGS },
+    { "center", "set the colorwheel center brightness", OFFSET(center), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 1, FLAGS },
+    { NULL }
+};
+
+AVFILTER_DEFINE_CLASS(colorwheel);
+
+static void hsb2rgb2(const float *c, float *rgb)
+{
+    rgb[0] = av_clipf(fabsf(fmodf(c[0] * 6.f + 0.f, 6.f) - 3.f) - 1.f, 0.f, 1.f);
+    rgb[1] = av_clipf(fabsf(fmodf(c[0] * 6.f + 4.f, 6.f) - 3.f) - 1.f, 0.f, 1.f);
+    rgb[2] = av_clipf(fabsf(fmodf(c[0] * 6.f + 2.f, 6.f) - 3.f) - 1.f, 0.f, 1.f);
+    rgb[0] = mix(c[3], (rgb[0] * rgb[0] * (3.f - 2.f * rgb[0])), c[1]) * c[2];
+    rgb[1] = mix(c[3], (rgb[1] * rgb[1] * (3.f - 2.f * rgb[1])), c[1]) * c[2];
+    rgb[2] = mix(c[3], (rgb[2] * rgb[2] * (3.f - 2.f * rgb[2])), c[1]) * c[2];
+}
+
+static void colorwheel_fill_picture(AVFilterContext *ctx, AVFrame *frame)
+{
+    TestSourceContext *test = ctx->priv;
+    const float bright = test->center;
+    const float value = test->value;
+    const float w = frame->width - 1.f;
+    const float h = frame->height - 1.f;
+    float screen_center[2] = { 0.5f, 0.5f };
+
+    for (int y = 0; y < frame->height; y++) {
+        float *r = (float *)(frame->data[2] + y * frame->linesize[2]);
+        float *g = (float *)(frame->data[0] + y * frame->linesize[0]);
+        float *b = (float *)(frame->data[1] + y * frame->linesize[1]);
+        const float yh = y / h;
+
+        for (int x = 0; x < frame->width; x++) {
+            const float xw = x / w;
+            float c[4];
+            float vec_to_center[2] = { screen_center[0] - xw, screen_center[1] - yh };
+            float hue = 0.5f*(atan2f(vec_to_center[1], vec_to_center[0]) / M_PIf + 1.f);
+            float saturation = hypotf(vec_to_center[0]*2.f, vec_to_center[1]*2.f);
+            float rgb[3];
+
+            c[0] = hue;
+            c[1] = 1.f - saturation;
+            c[2] = value;
+            c[3] = bright;
+
+            if (saturation > 1.f) {
+                rgb[0] = 0.5f;
+                rgb[1] = 0.5f;
+                rgb[2] = 0.5f;
+            } else {
+                hsb2rgb2(c, rgb);
+            }
+
+            r[x] = rgb[0];
+            g[x] = rgb[1];
+            b[x] = rgb[2];
+        }
+    }
+}
+
+static av_cold int colorwheel_init(AVFilterContext *ctx)
+{
+    TestSourceContext *test = ctx->priv;
+
+    test->draw_once = 1;
+    test->fill_picture_fn = colorwheel_fill_picture;
+    return init(ctx);
+}
+
+const FFFilter ff_vsrc_colorwheel = {
+    .p.name        = "colorwheel",
+    .p.description = NULL_IF_CONFIG_SMALL("Generate color wheel."),
+    .p.priv_class  = &colorwheel_class,
+    .priv_size     = sizeof(TestSourceContext),
+    .init          = colorwheel_init,
+    .uninit        = uninit,
+    .activate      = activate,
+    FILTER_OUTPUTS(outputs),
+    FILTER_SINGLE_PIXFMT(AV_PIX_FMT_GBRPF32),
+};
+
+#endif /* CONFIG_COLORWHEEL_FILTER */

@@ -637,6 +637,7 @@ OBJS-$(CONFIG_CELLAUTO_FILTER)               += vsrc_cellauto.o
 OBJS-$(CONFIG_COLOR_FILTER)                  += vsrc_testsrc.o
 OBJS-$(CONFIG_COLORCHART_FILTER)             += vsrc_testsrc.o
 OBJS-$(CONFIG_COLORSPECTRUM_FILTER)          += vsrc_testsrc.o
+OBJS-$(CONFIG_COLORWHEEL_FILTER)             += vsrc_testsrc.o
 OBJS-$(CONFIG_COREIMAGESRC_FILTER)           += vf_coreimage.o
 OBJS-$(CONFIG_DDAGRAB_FILTER)                += vsrc_ddagrab.o
 OBJS-$(CONFIG_FREI0R_SRC_FILTER)             += vf_frei0r.o

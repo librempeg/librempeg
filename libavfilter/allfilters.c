@@ -599,6 +599,7 @@ extern const FFFilter ff_vsrc_color;
 extern const FFFilter ff_vsrc_color_vulkan;
 extern const FFFilter ff_vsrc_colorchart;
 extern const FFFilter ff_vsrc_colorspectrum;
+extern const FFFilter ff_vsrc_colorwheel;
 extern const FFFilter ff_vsrc_coreimagesrc;
 extern const FFFilter ff_vsrc_ddagrab;
 extern const FFFilter ff_vsrc_frei0r_src;
