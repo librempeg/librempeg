@@ -22,6 +22,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 #define DAT_PACKET_SIZE 5822
 #define DAT_OFFSET 5760
@@ -90,10 +91,11 @@ static int parse_frame(uint8_t *frame, AVCodecParameters *par)
     int dataid     = (subid[0] >> 0) & 0xf;
 
     par->codec_type = AVMEDIA_TYPE_AUDIO;
+    par->block_align = DAT_PACKET_SIZE;
     par->codec_id = encoded_codec[enc_index];
     av_channel_layout_default(&par->ch_layout, encoded_chans[chan_index]);
     par->sample_rate = encoded_rate[rate_index];
-    par->bit_rate = (8LL * DAT_PACKET_SIZE * par->sample_rate) / FFMAX(1, av_get_audio_frame_duration2(par, encoded_size[rate_index]));
+    par->bit_rate = (8LL * par->block_align * par->sample_rate) / FFMAX(1, av_get_audio_frame_duration2(par, encoded_size[rate_index]));
 
     if (dataid != 0 || par->codec_id == AV_CODEC_ID_NONE ||
         par->ch_layout.nb_channels <= 0 ||
@@ -160,4 +162,5 @@ const FFInputFormat ff_dat_demuxer = {
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
+    .read_seek      = ff_pcm_read_seek,
 };
