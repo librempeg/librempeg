@@ -305,6 +305,8 @@ const AVCodecTag ff_codec_movvideo_tags[] = {
     { AV_CODEC_ID_BRAW, MKTAG('b', 'r', 'v', 'l') },
     { AV_CODEC_ID_BRAW, MKTAG('b', 'r', 'v', 'm') },
 
+    { AV_CODEC_ID_AVS3, MKTAG('a', 'v', 's', '3') },
+
     { AV_CODEC_ID_NONE, 0 },
 };
 
