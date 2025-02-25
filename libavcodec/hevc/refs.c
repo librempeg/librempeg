@@ -116,6 +116,10 @@ static HEVCFrame *alloc_frame(HEVCContext *s, HEVCLayerContext *l)
         if (frame->f)
             continue;
 
+        ret = ff_progress_frame_alloc(s->avctx, &frame->tf);
+        if (ret < 0)
+            return NULL;
+
         // add view ID side data if it's nontrivial
         if (!ff_hevc_is_alpha_video(s) && (vps->nb_layers > 1 || view_id)) {
             HEVCSEITDRDI *tdrdi = &s->sei.tdrdi;
