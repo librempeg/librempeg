@@ -21,7 +21,6 @@
 #include <limits.h>
 #include <stdatomic.h>
 
-#include "pthread_internal.h"
 #include "threadprogress.h"
 #include "libavutil/attributes.h"
 #include "libavutil/thread.h"

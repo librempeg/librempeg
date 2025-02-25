@@ -33,7 +33,6 @@
 #include "progressframe.h"
 #include "libavutil/refstruct.h"
 #include "thread.h"
-#include "pthread_internal.h"
 
 #include "videodsp.h"
 #include "vp89_rac.h"
@@ -44,6 +43,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/mem.h"
 #include "libavutil/pixdesc.h"
+#include "libavutil/thread.h"
 #include "libavutil/video_enc_params.h"
 
 #define VP9_SYNCCODE 0x498342

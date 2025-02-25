@@ -32,7 +32,6 @@
 #include "codec_par.h"
 #include "encode.h"
 #include "internal.h"
-#include "pthread_internal.h"
 
 #define MAX_THREADS 64
 /* There can be as many as MAX_THREADS + 1 outstanding tasks.

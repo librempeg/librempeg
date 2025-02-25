@@ -40,11 +40,11 @@
 #include "libavutil/log.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
+#include "libavutil/thread.h"
 
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "h264.h"
-#include "pthread_internal.h"
 
 #ifdef OMX_SKIP64BIT
 static OMX_TICKS to_omx_ticks(int64_t value)
