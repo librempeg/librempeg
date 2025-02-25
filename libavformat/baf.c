@@ -19,11 +19,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/bswap.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+
+typedef unsigned int (*avio_r32)(AVIOContext *s);
 
 static int read_probe(const AVProbeData *p)
 {
@@ -35,7 +38,12 @@ static int read_probe(const AVProbeData *p)
     if (AV_RB32(p->buf+4) == 0)
         return 0;
 
-    version = AV_RB32(p->buf+8);
+    if (AV_RL32(p->buf+4) > AV_RB32(p->buf+4)) {
+        version = AV_RB32(p->buf+8);
+    } else {
+        version = AV_RL32(p->buf+8);
+    }
+
     if (version < 3 || version > 5)
         return 0;
 
@@ -56,13 +64,21 @@ static int read_header(AVFormatContext *s)
     uint32_t first_start_offset;
     uint8_t stream_name[33] = { 0 };
     AVIOContext *pb = s->pb;
+    avio_r32 avio_r32;
     AVStream *st;
     int ret;
 
     avio_skip(pb, 4);
     offset = avio_rb32(pb);
-    version = avio_rb32(pb);
-    nb_tracks = avio_rb32(pb);
+    if (offset > av_bswap32(offset)) {
+        avio_r32 = avio_rl32;
+        offset = av_bswap32(offset);
+    } else {
+        avio_r32 = avio_rb32;
+    }
+
+    version = avio_r32(pb);
+    nb_tracks = avio_r32(pb);
 
     if (version < 3 || version > 5)
         return AVERROR_INVALIDDATA;
@@ -81,21 +97,21 @@ static int read_header(AVFormatContext *s)
             tag != MKBETAG('C','U','E',' '))
             return AVERROR_INVALIDDATA;
 
-        metadata_end += avio_rb32(pb);
+        metadata_end += avio_r32(pb);
 
         if (tag == MKBETAG('C','U','E',' '))
             goto next;
 
-        codec = avio_rb32(pb);
+        codec = avio_r32(pb);
         ret = avio_get_str(pb, sizeof(stream_name)-1, stream_name, sizeof(stream_name));
         if (ret < 0)
             return ret;
         if (ret < sizeof(stream_name)-1)
             avio_skip(pb, sizeof(stream_name) - ret - 1);
-        start_offset = avio_rb32(pb);
+        start_offset = avio_r32(pb);
         if (n == 0)
             first_start_offset = start_offset;
-        stream_size = avio_rb32(pb);
+        stream_size = avio_r32(pb);
 
         bst = av_mallocz(sizeof(BAFStream));
         if (!bst)
@@ -113,47 +129,48 @@ static int read_header(AVFormatContext *s)
 
         switch (codec) {
         case 3:
-            st->codecpar->codec_id = AV_CODEC_ID_PCM_S16BE;
+            st->codecpar->codec_id = (avio_r32 == avio_rb32) ? AV_CODEC_ID_PCM_S16BE : AV_CODEC_ID_PCM_S16LE;
             switch (version) {
             case 3:
                 avio_skip(pb, 4);
-                st->codecpar->sample_rate = avio_rb32(pb);
+                st->codecpar->sample_rate = avio_r32(pb);
                 if (st->codecpar->sample_rate <= 0)
                     return AVERROR_INVALIDDATA;
 
                 avio_skip(pb, 4);
-                st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
+                st->codecpar->ch_layout.nb_channels = avio_r32(pb);
                 if (st->codecpar->ch_layout.nb_channels == 0)
                     return AVERROR_INVALIDDATA;
                 break;
             case 4:
                 avio_skip(pb, 8);
-                st->codecpar->sample_rate = avio_rb32(pb);
+                st->codecpar->sample_rate = avio_r32(pb);
                 if (st->codecpar->sample_rate <= 0)
                     return AVERROR_INVALIDDATA;
 
                 avio_skip(pb, 4);
-                st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
+                st->codecpar->ch_layout.nb_channels = avio_r32(pb);
                 if (st->codecpar->ch_layout.nb_channels == 0)
                     return AVERROR_INVALIDDATA;
                 break;
             case 5:
                 avio_skip(pb, 12);
-                st->codecpar->sample_rate = avio_rb32(pb);
+                st->codecpar->sample_rate = avio_r32(pb);
                 if (st->codecpar->sample_rate <= 0)
                     return AVERROR_INVALIDDATA;
                 break;
             }
+            st->codecpar->block_align = 1024 * st->codecpar->ch_layout.nb_channels;
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
             break;
         case 7:
             st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSXC;
             avio_skip(pb, 12);
-            st->codecpar->sample_rate = avio_rb32(pb);
+            st->codecpar->sample_rate = avio_r32(pb);
             if (st->codecpar->sample_rate <= 0)
                 return AVERROR_INVALIDDATA;
 
-            st->duration = avio_rb32(pb);
+            st->duration = avio_r32(pb);
             avio_skip(pb, 1);
             sub_tracks = avio_r8(pb);
             sub_tracks = FFMAX(1, sub_tracks);
@@ -178,12 +195,12 @@ static int read_header(AVFormatContext *s)
             default:
                 return AVERROR_INVALIDDATA;
             }
-            st->codecpar->sample_rate = avio_rb32(pb);
+            st->codecpar->sample_rate = avio_r32(pb);
             if (st->codecpar->sample_rate <= 0)
                 return AVERROR_INVALIDDATA;
 
-            st->duration = avio_rb32(pb);
-            st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
+            st->duration = avio_r32(pb);
+            st->codecpar->ch_layout.nb_channels = avio_r32(pb);
             if (st->codecpar->ch_layout.nb_channels == 0)
                 return AVERROR_INVALIDDATA;
 
