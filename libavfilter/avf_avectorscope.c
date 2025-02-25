@@ -113,6 +113,7 @@ AVFILTER_DEFINE_CLASS(avectorscope);
 static void draw_dot(AudioVectorScopeContext *s, unsigned x, unsigned y, int value)
 {
     const ptrdiff_t linesize = s->outpicref->linesize[0];
+    const uint8_t *contrast = s->contrast;
     uint8_t *dst;
 
     if (s->zoom > 1) {
@@ -124,10 +125,10 @@ static void draw_dot(AudioVectorScopeContext *s, unsigned x, unsigned y, int val
     }
 
     dst = s->outpicref->data[0] + y * linesize + x * 4;
-    dst[0] = FFMIN(dst[0] + s->contrast[0], value);
-    dst[1] = FFMIN(dst[1] + s->contrast[1], value);
-    dst[2] = FFMIN(dst[2] + s->contrast[2], value);
-    dst[3] = FFMIN(dst[3] + s->contrast[3], value);
+    dst[0] = FFMIN(dst[0] + contrast[0], value);
+    dst[1] = FFMIN(dst[1] + contrast[1], value);
+    dst[2] = FFMIN(dst[2] + contrast[2], value);
+    dst[3] = FFMIN(dst[3] + contrast[3], value);
 }
 
 static void draw_line(AudioVectorScopeContext *s, int x0, int y0, int x1, int y1)
