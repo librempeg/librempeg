@@ -468,7 +468,6 @@ int av_get_exact_bits_per_sample(enum AVCodecID codec_id)
     case AV_CODEC_ID_ADPCM_IMA_APC:
     case AV_CODEC_ID_ADPCM_IMA_APM:
     case AV_CODEC_ID_ADPCM_IMA_EA_SEAD:
-    case AV_CODEC_ID_ADPCM_IMA_MAGIX:
     case AV_CODEC_ID_ADPCM_IMA_OKI:
     case AV_CODEC_ID_ADPCM_IMA_WS:
     case AV_CODEC_ID_ADPCM_IMA_SSI:
@@ -693,6 +692,7 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
             case AV_CODEC_ID_ADPCM_IMA_ACORN:
             case AV_CODEC_ID_ADPCM_IMA_DAT4:
             case AV_CODEC_ID_ADPCM_IMA_ISS:
+            case AV_CODEC_ID_ADPCM_IMA_MAGIX:
             case AV_CODEC_ID_ADPCM_IMA_PDA:
                 return (frame_bytes - 4 * ch) * 2 / ch;
             case AV_CODEC_ID_ADPCM_IMA_SMJPEG:
