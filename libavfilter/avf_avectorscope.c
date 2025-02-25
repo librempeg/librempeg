@@ -63,8 +63,8 @@ typedef struct AudioVectorScopeContext {
     int mode;
     int draw;
     int scale;
-    int contrast[4];
-    int fade[4];
+    uint8_t contrast[4];
+    uint8_t fade[4];
     double zoom;
     int swap;
     int mirror;
@@ -87,14 +87,8 @@ static const AVOption avectorscope_options[] = {
     { "r",    "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
     { "size", "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str="400x400"}, 0, 0, FLAGS },
     { "s",    "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str="400x400"}, 0, 0, FLAGS },
-    { "rc", "set red contrast",   OFFSET(contrast[0]), AV_OPT_TYPE_INT, {.i64=40},  0, 255, TFLAGS },
-    { "gc", "set green contrast", OFFSET(contrast[1]), AV_OPT_TYPE_INT, {.i64=160}, 0, 255, TFLAGS },
-    { "bc", "set blue contrast",  OFFSET(contrast[2]), AV_OPT_TYPE_INT, {.i64=80},  0, 255, TFLAGS },
-    { "ac", "set alpha contrast", OFFSET(contrast[3]), AV_OPT_TYPE_INT, {.i64=255}, 0, 255, TFLAGS },
-    { "rf", "set red fade",       OFFSET(fade[0]), AV_OPT_TYPE_INT, {.i64=15}, 0, 255, TFLAGS },
-    { "gf", "set green fade",     OFFSET(fade[1]), AV_OPT_TYPE_INT, {.i64=10}, 0, 255, TFLAGS },
-    { "bf", "set blue fade",      OFFSET(fade[2]), AV_OPT_TYPE_INT, {.i64=5},  0, 255, TFLAGS },
-    { "af", "set alpha fade",     OFFSET(fade[3]), AV_OPT_TYPE_INT, {.i64=5},  0, 255, TFLAGS },
+    { "contrast", "set contrast color", OFFSET(contrast), AV_OPT_TYPE_COLOR, {.str="0x28a050ff"}, 0, 0, TFLAGS },
+    { "fade", "set fade color",   OFFSET(fade), AV_OPT_TYPE_COLOR, {.str="0x0f0a0505"}, 0, 0, TFLAGS },
     { "zoom", "set zoom factor",  OFFSET(zoom), AV_OPT_TYPE_DOUBLE, {.dbl=1},  0, 10, TFLAGS },
     { "draw", "set draw mode", OFFSET(draw), AV_OPT_TYPE_INT, {.i64=DOT}, 0, DRAW_NB-1, TFLAGS, .unit = "draw" },
     { "dot",   "draw dots",               0, AV_OPT_TYPE_CONST, {.i64=DOT} , 0, 0, TFLAGS, .unit = "draw" },
@@ -203,7 +197,7 @@ static int fade(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const int height = s->outpicref->height;
     const int slice_start = (height *  jobnr   ) / nb_jobs;
     const int slice_end   = (height * (jobnr+1)) / nb_jobs;
-    const int *fade = s->fade;
+    const uint8_t *fade = s->fade;
 
     if (fade[0] == 255 && fade[1] == 255 && fade[2] == 255) {
         for (int i = slice_start; i < slice_end; i++)

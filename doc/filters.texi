@@ -29984,21 +29984,11 @@ Default value is @code{400x400}.
 @item rate, r
 Set the output frame rate. Default value is @code{25}.
 
-@item rc
-@item gc
-@item bc
-@item ac
-Specify the red, green, blue and alpha contrast. Default values are @code{40},
-@code{160}, @code{80} and @code{255}.
-Allowed range is @code{[0, 255]}.
+@item contrast
+Specify the contrast color. Defauls value is @code{0x28a050ff}.
 
-@item rf
-@item gf
-@item bf
-@item af
-Specify the red, green, blue and alpha fade. Default values are @code{15},
-@code{10}, @code{5} and @code{5}.
-Allowed range is @code{[0, 255]}.
+@item fade
+Specify the fade color. Default values is @code{0x0f0a0505},
 
 @item zoom
 Set the zoom factor. Default value is @code{1}. Allowed range is @code{[0, 10]}.
