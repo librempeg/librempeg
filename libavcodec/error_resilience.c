@@ -28,13 +28,14 @@
 #include <limits.h>
 
 #include "libavutil/mem.h"
+#include "libavutil/threadprogress.h"
+
 #include "avcodec.h"
 #include "error_resilience.h"
 #include "me_cmp.h"
 #include "mpegutils.h"
 #include "mpegvideo.h"
 #include "threadframe.h"
-#include "threadprogress.h"
 
 /**
  * @param stride the number of MVs to get to the next row

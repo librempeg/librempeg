@@ -36,6 +36,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/stereo3d.h"
+#include "libavutil/threadprogress.h"
 #include "libavutil/timecode.h"
 
 #include "aom_film_grain.h"
@@ -54,7 +55,6 @@
 #include "progressframe.h"
 #include "libavutil/refstruct.h"
 #include "thread.h"
-#include "threadprogress.h"
 
 static const uint8_t hevc_pel_weight[65] = { [2] = 0, [4] = 1, [6] = 2, [8] = 3, [12] = 4, [16] = 5, [24] = 6, [32] = 7, [48] = 8, [64] = 9 };
 

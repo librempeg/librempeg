@@ -190,6 +190,7 @@ OBJS = adler32.o                                                        \
        xga_font_data.o                                                  \
        xtea.o                                                           \
        tea.o                                                            \
+       threadprogress.o                                                 \
        tx.o                                                             \
        tx_float.o                                                       \
        tx_double.o                                                      \

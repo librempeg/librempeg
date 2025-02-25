@@ -30,6 +30,7 @@
 #include "libavutil/mem.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/thread.h"
+#include "libavutil/threadprogress.h"
 
 #include "avcodec.h"
 #include "decode.h"
@@ -43,7 +44,6 @@
 #include "qpeldsp.h"
 #include "rectangle.h"
 #include "thread.h"
-#include "threadprogress.h"
 
 #include "rv34vlc.h"
 #include "rv34data.h"
