@@ -26,7 +26,8 @@
 #include <stdint.h>
 
 #include "avcodec.h"
-#include "threadprogress.h"
+
+#include "libavutil/threadprogress.h"
 
 #define MPV_MAX_PLANES 3
 #define EDGE_WIDTH 16

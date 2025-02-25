@@ -4,6 +4,7 @@ libavcodec/interplayacm.c
 libavcodec/log2_tab.c
 libavcodec/reverse.c
 libavcodec/riscv/cpu_common.c
+libavcodec/threadprogress.c
 libavdevice/file_open.c
 libavdevice/reverse.c
 libavdevice/riscv/cpu_common.c

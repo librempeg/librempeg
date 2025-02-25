@@ -26,10 +26,10 @@
 #include "get_bits.h"
 #include "golomb.h"
 #include "libavutil/mem.h"
+#include "libavutil/threadprogress.h"
 #include "rv60data.h"
 #include "rv60dsp.h"
 #include "rv60vlcs.h"
-#include "threadprogress.h"
 #include "unary.h"
 #include "videodsp.h"
 

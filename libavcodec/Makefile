@@ -55,7 +55,6 @@ OBJS = ac3_parser.o                                                     \
        profiles.o                                                       \
        qsv_api.o                                                        \
        raw.o                                                            \
-       threadprogress.o                                                 \
        utils.o                                                          \
        version.o                                                        \
        vlc.o                                                            \
@@ -1102,7 +1101,8 @@ OBJS-$(CONFIG_VP9_VIDEOTOOLBOX_HWACCEL)   += videotoolbox_vp9.o
 OBJS-$(CONFIG_VP8_QSV_HWACCEL)            += qsvdec.o
 
 # Objects duplicated from other libraries for shared builds
-SHLIBOBJS                              += log2_tab.o reverse.o
+SHLIBOBJS                              += log2_tab.o reverse.o \
+                                          threadprogress.o
 
 SHLIBOBJS-$(CONFIG_EXR_DECODER)        += half2float.o float2half.o
 SHLIBOBJS-$(CONFIG_EXR_ENCODER)        += float2half.o

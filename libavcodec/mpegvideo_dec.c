@@ -28,6 +28,7 @@
 #include "libavutil/emms.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
+#include "libavutil/threadprogress.h"
 #include "libavutil/video_enc_params.h"
 
 #include "avcodec.h"
@@ -41,7 +42,6 @@
 #include "mpeg4videodec.h"
 #include "libavutil/refstruct.h"
 #include "thread.h"
-#include "threadprogress.h"
 #include "wmv2dec.h"
 
 av_cold int ff_mpv_decode_init(MpegEncContext *s, AVCodecContext *avctx)

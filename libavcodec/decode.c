@@ -39,6 +39,7 @@
 #include "libavutil/mastering_display_metadata.h"
 #include "libavutil/mem.h"
 #include "libavutil/stereo3d.h"
+#include "libavutil/threadprogress.h"
 
 #include "avcodec.h"
 #include "avcodec_internal.h"
@@ -54,7 +55,6 @@
 #include "progressframe.h"
 #include "libavutil/refstruct.h"
 #include "thread.h"
-#include "threadprogress.h"
 
 typedef struct DecodeContext {
     AVCodecInternal avci;

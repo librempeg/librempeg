@@ -27,6 +27,8 @@
 #include "libavutil/internal.h"
 #include "libavutil/opt.h"
 #include "libavutil/thread.h"
+#include "libavutil/threadprogress.h"
+
 #include "codec_internal.h"
 #include "error_resilience.h"
 #include "hwconfig.h"
@@ -46,7 +48,6 @@
 #include "internal.h"
 #include "profiles.h"
 #include "qpeldsp.h"
-#include "threadprogress.h"
 #include "xvididct.h"
 #include "unary.h"
 

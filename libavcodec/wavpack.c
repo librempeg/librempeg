@@ -22,6 +22,7 @@
 
 #include "libavutil/channel_layout.h"
 #include "libavutil/mem.h"
+#include "libavutil/threadprogress.h"
 
 #define BITSTREAM_READER_LE
 #include "avcodec.h"
@@ -30,7 +31,6 @@
 #include "get_bits.h"
 #include "libavutil/refstruct.h"
 #include "thread.h"
-#include "threadprogress.h"
 #include "unary.h"
 #include "wavpack.h"
 #include "dsd.h"
