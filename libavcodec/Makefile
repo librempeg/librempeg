@@ -1108,6 +1108,7 @@ SHLIBOBJS-$(CONFIG_EXR_DECODER)        += half2float.o float2half.o
 SHLIBOBJS-$(CONFIG_EXR_ENCODER)        += float2half.o
 SHLIBOBJS-$(CONFIG_PHM_DECODER)        += half2float.o
 SHLIBOBJS-$(CONFIG_PHM_ENCODER)        += float2half.o
+SHLIBOBJS-$(HAVE_THREADS)              += thread.o
 
 # General libavformat dependencies
 OBJS-$(CONFIG_FITS_DEMUXER)            += fits.o
