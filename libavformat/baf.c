@@ -118,6 +118,9 @@ static int read_header(AVFormatContext *s)
             case 3:
                 avio_skip(pb, 4);
                 st->codecpar->sample_rate = avio_rb32(pb);
+                if (st->codecpar->sample_rate <= 0)
+                    return AVERROR_INVALIDDATA;
+
                 avio_skip(pb, 4);
                 st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
                 if (st->codecpar->ch_layout.nb_channels == 0)
@@ -126,6 +129,9 @@ static int read_header(AVFormatContext *s)
             case 4:
                 avio_skip(pb, 8);
                 st->codecpar->sample_rate = avio_rb32(pb);
+                if (st->codecpar->sample_rate <= 0)
+                    return AVERROR_INVALIDDATA;
+
                 avio_skip(pb, 4);
                 st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
                 if (st->codecpar->ch_layout.nb_channels == 0)
@@ -134,6 +140,8 @@ static int read_header(AVFormatContext *s)
             case 5:
                 avio_skip(pb, 12);
                 st->codecpar->sample_rate = avio_rb32(pb);
+                if (st->codecpar->sample_rate <= 0)
+                    return AVERROR_INVALIDDATA;
                 break;
             }
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
@@ -142,6 +150,9 @@ static int read_header(AVFormatContext *s)
             st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSXC;
             avio_skip(pb, 12);
             st->codecpar->sample_rate = avio_rb32(pb);
+            if (st->codecpar->sample_rate <= 0)
+                return AVERROR_INVALIDDATA;
+
             st->duration = avio_rb32(pb);
             avio_skip(pb, 1);
             sub_tracks = avio_r8(pb);
@@ -154,8 +165,39 @@ static int read_header(AVFormatContext *s)
             st->codecpar->block_align = 33 * st->codecpar->ch_layout.nb_channels;
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
             break;
-        default:
+        case 8:
+        case 9:
+            st->codecpar->codec_id = (codec == 8) ? AV_CODEC_ID_XMA1 : AV_CODEC_ID_XMA2;
+            switch (version) {
+            case 4:
+                avio_skip(pb, 8);
+                break;
+            case 5:
+                avio_skip(pb, 12);
+                break;
+            default:
+                return AVERROR_INVALIDDATA;
+            }
+            st->codecpar->sample_rate = avio_rb32(pb);
+            if (st->codecpar->sample_rate <= 0)
+                return AVERROR_INVALIDDATA;
+
+            st->duration = avio_rb32(pb);
+            st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
+            if (st->codecpar->ch_layout.nb_channels == 0)
+                return AVERROR_INVALIDDATA;
+
+            if ((ret = ff_alloc_extradata(st->codecpar, 8 + 20 * ((st->codecpar->ch_layout.nb_channels + 1) / 2))) < 0)
+                return ret;
+            memset(st->codecpar->extradata, 0, 28);
+            st->codecpar->extradata[4] = (st->codecpar->ch_layout.nb_channels + 1) / 2;
+            for (int i = 0; i < st->codecpar->extradata[4]; i++)
+                st->codecpar->extradata[8 + 20 * i + 17] = FFMIN(2, st->codecpar->ch_layout.nb_channels - i * 2);
+            st->codecpar->block_align = 2048;
+            avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
             break;
+        default:
+            return AVERROR_INVALIDDATA;
         }
 
 next:
