@@ -25,7 +25,7 @@
 #include "avfilter.h"
 #include "formats.h"
 #include "filters.h"
-#include "window_func.h"
+#include "window_func_opt.h"
 
 typedef struct HilbertContext {
     const AVClass *class;
@@ -36,7 +36,9 @@ typedef struct HilbertContext {
     int win_func;
     float angle;
 
-    float *taps;
+    size_t sample_size;
+    void *taps;
+
     int64_t pts;
 } HilbertContext;
 
@@ -86,7 +88,7 @@ static av_cold int query_formats(const AVFilterContext *ctx,
     static const AVChannelLayout chlayouts[] = { AV_CHANNEL_LAYOUT_MONO, { 0 } };
     int sample_rates[] = { s->sample_rate, -1 };
     static const enum AVSampleFormat sample_fmts[] = {
-        AV_SAMPLE_FMT_FLT,
+        AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_DBL,
         AV_SAMPLE_FMT_NONE
     };
     int ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
@@ -100,41 +102,35 @@ static av_cold int query_formats(const AVFilterContext *ctx,
     return ff_set_common_samplerates_from_list2(ctx, cfg_in, cfg_out, sample_rates);
 }
 
+#define DEPTH 32
+#include "hilbert_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "hilbert_template.c"
+
 static av_cold int config_props(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     HilbertContext *s = ctx->priv;
-    const float angle = s->angle;
-    const float factor = sinf(M_PIf*angle/180.f);
-    const float first = cosf(M_PIf*angle/180.f);
-    const int nb_taps = s->nb_taps;
-    float overlap, *taps;
+    int ret;
 
-    s->taps = av_malloc_array(nb_taps, sizeof(*s->taps));
-    if (!s->taps)
-        return AVERROR(ENOMEM);
-    taps = s->taps;
-
-    generate_window_func(taps, nb_taps, s->win_func, &overlap);
-
-    for (int i = 0; i < nb_taps; i++) {
-        int k = -(nb_taps / 2) + i;
-
-        if (k & 1) {
-            float pk = M_PI * k;
-
-            taps[i] *= (1.f - cosf(pk)) / pk;
-            taps[i] *= factor;
-        } else {
-            taps[i] = 0.f;
-            if (k == 0)
-                taps[i] += first;
-        }
+    switch (outlink->format) {
+    case AV_SAMPLE_FMT_FLT:
+        s->sample_size = sizeof(float);
+        ret = generate_flt(ctx);
+        break;
+    case AV_SAMPLE_FMT_DBL:
+        s->sample_size = sizeof(double);
+        ret = generate_dbl(ctx);
+        break;
+    default:
+        ret = AVERROR_BUG;
     }
 
     s->pts = 0;
 
-    return 0;
+    return ret;
 }
 
 static int activate(AVFilterContext *ctx)
@@ -156,7 +152,7 @@ static int activate(AVFilterContext *ctx)
     if (!(frame = ff_get_audio_buffer(outlink, nb_samples)))
         return AVERROR(ENOMEM);
 
-    memcpy(frame->data[0], s->taps + s->pts, nb_samples * sizeof(*s->taps));
+    memcpy(frame->data[0], (uint8_t *)s->taps + s->pts * s->sample_size, nb_samples * s->sample_size);
 
     frame->pts = s->pts;
     s->pts    += nb_samples;
