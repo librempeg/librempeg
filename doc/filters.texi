@@ -8253,6 +8253,9 @@ Set length of FIR filter, default is 22051.
 @item nb_samples, n
 Set number of samples per each frame.
 
+@item angle, a
+Set the phase shift angle. Default is @code{90}.
+
 @item win_func, w
 Set window function to be used when generating FIR coefficients.
 @end table

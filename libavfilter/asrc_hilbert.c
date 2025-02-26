@@ -34,6 +34,7 @@ typedef struct HilbertContext {
     int nb_taps;
     int nb_samples;
     int win_func;
+    float angle;
 
     float *taps;
     int64_t pts;
@@ -49,6 +50,8 @@ static const AVOption hilbert_options[] = {
     { "t",           "set number of taps", OFFSET(nb_taps),     AV_OPT_TYPE_INT, {.i64=22051}, 11, UINT16_MAX, FLAGS },
     { "nb_samples",  "set the number of samples per requested frame", OFFSET(nb_samples), AV_OPT_TYPE_INT, {.i64 = 1024}, 1, INT_MAX, FLAGS },
     { "n",           "set the number of samples per requested frame", OFFSET(nb_samples), AV_OPT_TYPE_INT, {.i64 = 1024}, 1, INT_MAX, FLAGS },
+    { "angle",       "set the angle of phase shift", OFFSET(angle), AV_OPT_TYPE_FLOAT, {.dbl=90}, -180, 180, FLAGS },
+    { "a",           "set the angle of phase shift", OFFSET(angle), AV_OPT_TYPE_FLOAT, {.dbl=90}, -180, 180, FLAGS },
     WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_BLACKMAN),
     WIN_FUNC_OPTION("w",        OFFSET(win_func), FLAGS, WFUNC_BLACKMAN),
     {NULL}
@@ -101,24 +104,31 @@ static av_cold int config_props(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     HilbertContext *s = ctx->priv;
-    float overlap;
-    int i;
+    const float angle = s->angle;
+    const float factor = sinf(M_PIf*angle/180.f);
+    const float first = cosf(M_PIf*angle/180.f);
+    const int nb_taps = s->nb_taps;
+    float overlap, *taps;
 
-    s->taps = av_malloc_array(s->nb_taps, sizeof(*s->taps));
+    s->taps = av_malloc_array(nb_taps, sizeof(*s->taps));
     if (!s->taps)
         return AVERROR(ENOMEM);
+    taps = s->taps;
 
-    generate_window_func(s->taps, s->nb_taps, s->win_func, &overlap);
+    generate_window_func(taps, nb_taps, s->win_func, &overlap);
 
-    for (i = 0; i < s->nb_taps; i++) {
-        int k = -(s->nb_taps / 2) + i;
+    for (int i = 0; i < nb_taps; i++) {
+        int k = -(nb_taps / 2) + i;
 
         if (k & 1) {
             float pk = M_PI * k;
 
-            s->taps[i] *= (1.f - cosf(pk)) / pk;
+            taps[i] *= (1.f - cosf(pk)) / pk;
+            taps[i] *= factor;
         } else {
-            s->taps[i] = 0.f;
+            taps[i] = 0.f;
+            if (k == 0)
+                taps[i] += first;
         }
     }
 
@@ -146,7 +156,7 @@ static int activate(AVFilterContext *ctx)
     if (!(frame = ff_get_audio_buffer(outlink, nb_samples)))
         return AVERROR(ENOMEM);
 
-    memcpy(frame->data[0], s->taps + s->pts, nb_samples * sizeof(float));
+    memcpy(frame->data[0], s->taps + s->pts, nb_samples * sizeof(*s->taps));
 
     frame->pts = s->pts;
     s->pts    += nb_samples;
