@@ -23,7 +23,6 @@
 #include "libavutil/mem_internal.h"
 #include "libavutil/mem.h"
 
-#define LONG_BITSTREAM_READER
 #define CACHED_BITSTREAM_READER !ARCH_X86_32
 
 #include "avcodec.h"
@@ -62,16 +61,13 @@ static av_cold int decode_init(AVCodecContext *avctx)
 {
     ProResRAWContext *s = avctx->priv_data;
     uint8_t idct_permutation[64];
-    int ret;
 
     avctx->bits_per_raw_sample = 12;
     avctx->pix_fmt = AV_PIX_FMT_BAYER_RGGB16;
     avctx->color_trc = AVCOL_TRC_LINEAR;
 
     ff_blockdsp_init(&s->bdsp);
-    ret = ff_proresdsp_init(&s->prodsp, avctx->bits_per_raw_sample);
-    if (ret < 0)
-        return ret;
+    ff_proresdsp_init(&s->prodsp, avctx->bits_per_raw_sample);
 
     ff_init_scantable_permutation(idct_permutation,
                                   s->prodsp.idct_permutation_type);
