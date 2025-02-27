@@ -29,7 +29,7 @@
 #include "audio.h"
 #include "filters.h"
 #include "formats.h"
-#include "window_func.h"
+#include "window_func_opt.h"
 
 enum SurroundChannel {
     SC_FL = 1, SC_FR, SC_FC, SC_LF, SC_BL, SC_BR, SC_BC, SC_SL, SC_SR,
@@ -172,7 +172,7 @@ typedef struct AudioSurroundContext {
     int hop_size;
     AVTXContext **rdft, **irdft;
     av_tx_fn tx_fn, itx_fn;
-    float *window_func_lut;
+    void *window_func_lut;
 
     void (*filter)(AVFilterContext *ctx);
     void (*set_input_levels)(AVFilterContext *ctx);

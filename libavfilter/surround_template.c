@@ -99,6 +99,9 @@
 
 #define F(x) ((ftype)(x))
 
+#undef AVFILTER_WINDOW_FUNC_H
+#include "window_func.h"
+
 static void fn(set_input_levels)(AVFilterContext *ctx)
 {
     AudioSurroundContext *s = ctx->priv;
@@ -435,7 +438,7 @@ static int fn(bypass_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
     AudioSurroundContext *s = ctx->priv;
     const int chan = av_channel_layout_channel_from_index(&s->out_ch_layout, ch);
     const int idx = av_channel_layout_index_from_channel(&s->in_ch_layout, chan);
-    const float *window_func_lut = s->window_func_lut;
+    const ftype *window_func_lut = s->window_func_lut;
     const ftype *output_levels = s->output_levels;
     const ftype level_out = output_levels[ch] * s->win_gain;
     const int win_size = s->win_size;
@@ -463,7 +466,7 @@ static int fn(bypass_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
 static int fn(ifft_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
 {
     AudioSurroundContext *s = ctx->priv;
-    const float *window_func_lut = s->window_func_lut;
+    const ftype *window_func_lut = s->window_func_lut;
     const ftype *output_levels = s->output_levels;
     const ftype level_out = output_levels[ch] * s->win_gain;
     const int win_size = s->win_size;
@@ -492,7 +495,7 @@ static int fn(fft_channel)(AVFilterContext *ctx, AVFrame *in, int ch)
     AudioSurroundContext *s = ctx->priv;
     ftype *src = (ftype *)s->input_in->extended_data[ch];
     ftype *win = (ftype *)s->window->extended_data[ch];
-    const float *window_func_lut = s->window_func_lut;
+    const ftype *window_func_lut = s->window_func_lut;
     const int offset = s->input_in->nb_samples - s->hop_size;
     const ftype *input_levels = s->input_levels;
     const ftype level_in = input_levels[ch];
@@ -842,17 +845,19 @@ static int fn(config_input)(AVFilterContext *ctx)
 {
     AudioSurroundContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
-    float overlap;
+    const ftype *window_func_lut;
+    ftype overlap;
 
     s->win_size = 1 << av_ceil_log2((inlink->sample_rate + 19) / 20);
     s->rdft_size = s->win_size / 2 + 1;
 
-    s->window_func_lut = av_calloc(s->win_size, sizeof(*s->window_func_lut));
+    s->window_func_lut = av_calloc(s->win_size, sizeof(ftype));
     if (!s->window_func_lut)
         return AVERROR(ENOMEM);
+    window_func_lut = s->window_func_lut;
 
-    generate_window_func(s->window_func_lut, s->win_size, s->win_func, &overlap);
-    if (s->overlap == 1)
+    fun(generate_window_func)(s->window_func_lut, s->win_size, s->win_func, &overlap);
+    if (s->overlap == F(1.0))
         s->overlap = overlap;
 
     s->hop_size = FFMAX(1, LRINT(s->win_size * (F(1.0) - s->overlap)));
@@ -866,7 +871,7 @@ static int fn(config_input)(AVFilterContext *ctx)
 
         for (int j = 0; j < s->win_size; j += s->hop_size) {
             for (int i = 0; i < s->win_size; i++)
-                temp_lut[(i + j) % s->win_size] += s->window_func_lut[i];
+                temp_lut[(i + j) % s->win_size] += window_func_lut[i];
         }
 
         for (int i = 0; i < s->win_size; i++)
