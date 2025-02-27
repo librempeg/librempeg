@@ -98,15 +98,20 @@ static int activate(AVFilterContext *ctx)
     }
 
     if (ff_outlink_frame_wanted(outlink)) {
-        AVFrame *samplesref = ff_get_audio_buffer(outlink, null->duration >= 0 ? FFMIN(null->nb_samples, null->duration - null->pts) : null->nb_samples);
+        AVFrame *frame = ff_get_audio_buffer(outlink, null->duration >= 0 ? FFMIN(null->nb_samples, null->duration - null->pts) : null->nb_samples);
 
-        if (!samplesref)
+        if (!frame)
             return AVERROR(ENOMEM);
 
-        samplesref->pts = null->pts;
-        null->pts += samplesref->nb_samples;
+        av_samples_set_silence(frame->extended_data, 0,
+                               frame->nb_samples,
+                               outlink->ch_layout.nb_channels,
+                               frame->format);
 
-        return ff_filter_frame(outlink, samplesref);
+        frame->pts = null->pts;
+        null->pts += frame->nb_samples;
+
+        return ff_filter_frame(outlink, frame);
     }
 
     return FFERROR_NOT_READY;
