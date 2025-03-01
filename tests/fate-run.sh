@@ -453,8 +453,13 @@ refcmp_metadata(){
     refcmp=$1
     pixfmt=$2
     fuzz=${3:-0.001}
+    filtergraph="\
+testsrc2=size=300x200:rate=1:duration=5,format=${pixfmt},split[ref][tmp];\
+[tmp]avgblur=4[enc];\
+[enc][ref]${refcmp}=thread_type=$thread_type:threads=$threads,metadata=print:file=-\
+"
     ffmpeg -auto_conversion_filters $FLAGS $ENC_OPTS \
-        -lavfi "testsrc2=size=300x200:rate=1:duration=5,format=${pixfmt},split[ref][tmp];[tmp]avgblur=4[enc];[enc][ref]${refcmp},metadata=print:file=-" \
+        -lavfi "$filtergraph" \
         -f null /dev/null | awk -v ref=${ref} -v fuzz=${fuzz} -f ${base}/refcmp-metadata.awk -
 }
 
