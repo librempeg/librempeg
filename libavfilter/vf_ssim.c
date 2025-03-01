@@ -34,16 +34,27 @@
  * Calculate the SSIM between two input videos.
  */
 
+#include "config.h"
+
 #include "libavutil/avstring.h"
 #include "libavutil/file_open.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
+#include "libavutil/refstruct.h"
+#include "libavutil/thread.h"
+#include "libavutil/threadprogress.h"
+
 #include "avfilter.h"
 #include "drawutils.h"
 #include "filters.h"
 #include "framesync.h"
 #include "ssim.h"
+
+// data shared between frame threads
+typedef struct SSIMShared {
+    double ssim[4], ssim_total;
+} SSIMShared;
 
 typedef struct SSIMContext {
     const AVClass *class;
@@ -51,10 +62,9 @@ typedef struct SSIMContext {
     FILE *stats_file;
     char *stats_file_str;
     int nb_components;
-    int nb_threads;
+    int nb_slice_threads;
     int max;
     uint64_t nb_frames;
-    double ssim[4], ssim_total;
     char comps[4];
     double coefs[4];
     uint8_t rgba_map[4];
@@ -66,6 +76,15 @@ typedef struct SSIMContext {
     int (*ssim_plane)(AVFilterContext *ctx, void *arg,
                       int jobnr, int nb_jobs);
     SSIMDSPContext dsp;
+
+    // RefStruct references
+    SSIMShared      *shared;
+    AVRefStructPool *progress_pool;
+    ThreadProgress  *prev_progress;
+    ThreadProgress  *progress;
+
+    AVFrame        *frame_master;
+    AVFrame        *frame_ref;
 } SSIMContext;
 
 #define OFFSET(x) offsetof(SSIMContext, x)
@@ -327,20 +346,16 @@ static int do_ssim(FFFrameSync *fs)
 {
     AVFilterContext *ctx = fs->parent;
     SSIMContext *s = ctx->priv;
-    AVFrame *master, *ref;
+    AVFrame *master = s->frame_master;
+    AVFrame    *ref = s->frame_ref;
     AVDictionary **metadata;
     double c[4] = {0}, ssimv = 0.0;
     ThreadData td;
-    int ret, i;
+    int ret = 0, i;
 
-    ret = ff_framesync_dualinput_get(fs, &master, &ref);
-    if (ret < 0)
-        return ret;
     if (ff_filter_disabled(ctx) || !ref)
-        return ff_filter_frame(ctx->outputs[0], master);
+        goto finish;
     metadata = &master->metadata;
-
-    s->nb_frames++;
 
     td.nb_components = s->nb_components;
     td.dsp = &s->dsp;
@@ -365,24 +380,27 @@ static int do_ssim(FFFrameSync *fs)
     }
 
     ff_filter_execute(ctx, s->ssim_plane, &td, NULL,
-                      FFMIN((s->planeheight[1] + 3) >> 2, s->nb_threads));
+                      FFMIN((s->planeheight[1] + 3) >> 2, s->nb_slice_threads));
+
+    if (s->prev_progress)
+        ff_thread_progress_await(s->prev_progress, INT_MAX);
 
     for (i = 0; i < s->nb_components; i++) {
-        for (int j = 0; j < s->nb_threads; j++)
+        for (int j = 0; j < s->nb_slice_threads; j++)
             c[i] += s->score[j][i];
         c[i] = c[i] / (((s->planewidth[i] >> 2) - 1) * ((s->planeheight[i] >> 2) - 1));
     }
 
     for (i = 0; i < s->nb_components; i++) {
         ssimv += s->coefs[i] * c[i];
-        s->ssim[i] += c[i];
+        s->shared->ssim[i] += c[i];
     }
 
     for (i = 0; i < s->nb_components; i++) {
         int cidx = s->is_rgb ? s->rgba_map[i] : i;
         set_meta(metadata, "lavfi.ssim.", s->comps[i], c[cidx]);
     }
-    s->ssim_total += ssimv;
+    s->shared->ssim_total += ssimv;
 
     set_meta(metadata, "lavfi.ssim.All", 0, ssimv);
     set_meta(metadata, "lavfi.ssim.dB", 0, ssim_db(ssimv, 1.0));
@@ -398,6 +416,15 @@ static int do_ssim(FFFrameSync *fs)
         fprintf(s->stats_file, "All:%f (%f)\n", ssimv, ssim_db(ssimv, 1.0));
     }
 
+finish:
+    if (s->progress)
+        ff_thread_progress_report(s->progress, INT_MAX);
+
+    if (ret < 0)
+        return ret;
+
+    s->frame_master = NULL;
+
     return ff_filter_frame(ctx->outputs[0], master);
 }
 
@@ -405,7 +432,13 @@ static av_cold int init(AVFilterContext *ctx)
 {
     SSIMContext *s = ctx->priv;
 
-    if (s->stats_file_str) {
+    if (!ff_filter_is_frame_thread(ctx)) {
+        s->shared = av_refstruct_allocz(sizeof(SSIMShared));
+        if (!s->shared)
+            return AVERROR(ENOMEM);
+    }
+
+    if (s->stats_file_str && !ff_filter_is_frame_thread(ctx)) {
         if (!strcmp(s->stats_file_str, "-")) {
             s->stats_file = stdout;
         } else {
@@ -443,7 +476,8 @@ static int config_input_ref(AVFilterLink *inlink)
     SSIMContext *s = ctx->priv;
     int sum = 0;
 
-    s->nb_threads = ff_filter_get_nb_threads(ctx);
+    s->nb_slice_threads = (ctx->thread_type & AVFILTER_THREAD_SLICE) ?
+                          ff_filter_get_nb_threads(ctx) : 1;
     s->nb_components = desc->nb_components;
 
     if (ctx->inputs[0]->w != ctx->inputs[1]->w ||
@@ -467,11 +501,11 @@ static int config_input_ref(AVFilterLink *inlink)
     for (int i = 0; i < s->nb_components; i++)
         s->coefs[i] = (double) s->planeheight[i] * s->planewidth[i] / sum;
 
-    s->temp = av_calloc(s->nb_threads, sizeof(*s->temp));
+    s->temp = av_calloc(s->nb_slice_threads, sizeof(*s->temp));
     if (!s->temp)
         return AVERROR(ENOMEM);
 
-    for (int t = 0; t < s->nb_threads; t++) {
+    for (int t = 0; t < s->nb_slice_threads; t++) {
         s->temp[t] = av_calloc(2 * SUM_LEN(inlink->w), (desc->comp[0].depth > 8) ? sizeof(int64_t[4]) : sizeof(int[4]));
         if (!s->temp[t])
             return AVERROR(ENOMEM);
@@ -485,11 +519,11 @@ static int config_input_ref(AVFilterLink *inlink)
     ff_ssim_init_x86(&s->dsp);
 #endif
 
-    s->score = av_calloc(s->nb_threads, sizeof(*s->score));
+    s->score = av_calloc(s->nb_slice_threads, sizeof(*s->score));
     if (!s->score)
         return AVERROR(ENOMEM);
 
-    for (int t = 0; t < s->nb_threads; t++) {
+    for (int t = 0; t < s->nb_slice_threads; t++) {
         s->score[t] = av_calloc(s->nb_components, sizeof(*s->score[0]));
         if (!s->score[t])
             return AVERROR(ENOMEM);
@@ -533,37 +567,140 @@ static int config_output(AVFilterLink *outlink)
 static int activate(AVFilterContext *ctx)
 {
     SSIMContext *s = ctx->priv;
-    return ff_framesync_activate(&s->fs);
+    return ff_framesync_activate_frames(&s->fs);
+}
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int ssim_transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    SSIMContext       *s_dst = dst->priv;
+    const SSIMContext *s_src = src->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->stats_file = s_src->stats_file;
+
+    s_dst->nb_frames = s_src->nb_frames;
+
+    av_refstruct_replace(&s_dst->shared,        s_src->shared);
+    av_refstruct_replace(&s_dst->prev_progress, s_src->prev_progress);
+    av_refstruct_replace(&s_dst->progress,      s_src->progress);
+
+    av_frame_free(&s_dst->frame_master);
+    av_frame_free(&s_dst->frame_ref);
+
+    s_dst->frame_master = av_frame_clone(s_src->frame_master);
+    s_dst->frame_ref    = av_frame_clone(s_src->frame_ref);
+    if (!s_dst->frame_master || !s_dst->frame_ref)
+        return AVERROR(ENOMEM);
+
+    return 0;
+}
+
+static int progress_init(AVRefStructOpaque opaque, void *obj)
+{
+    return ff_thread_progress_init(obj, 1);
+}
+
+static void progress_reset(AVRefStructOpaque opaque, void *obj)
+{
+    ff_thread_progress_reset(obj);
+}
+
+static void progress_free(AVRefStructOpaque opaque, void *obj)
+{
+    ff_thread_progress_destroy(obj);
+}
+#endif
+
+static int ssim_filter_prepare(AVFilterContext *ctx)
+{
+    SSIMContext *s = ctx->priv;
+    AVFrame *ref;
+    int ret;
+
+    ret = ff_framesync_filter_prepare(&s->fs);
+    if (ret < 0)
+        return ret;
+
+    av_frame_free(&s->frame_master);
+    av_frame_free(&s->frame_ref);
+
+    ret = ff_framesync_dualinput_get(&s->fs, &s->frame_master, &ref);
+    if (ret < 0)
+        return ret;
+
+    if (ref) {
+        s->frame_ref = av_frame_clone(ref);
+        if (!s->frame_ref)
+            return AVERROR(ENOMEM);
+    }
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+    if (ctx->thread_type & AVFILTER_THREAD_FRAME_FILTER) {
+        if (!s->progress_pool) {
+            s->progress_pool = av_refstruct_pool_alloc_ext(sizeof(ThreadProgress), 0, NULL,
+                                                           progress_init, progress_reset,
+                                                           progress_free, NULL);
+            if (!s->progress_pool)
+                return AVERROR(ENOMEM);
+        }
+
+        av_refstruct_unref(&s->prev_progress);
+        s->prev_progress = s->progress;
+
+        s->progress = av_refstruct_pool_get(s->progress_pool);
+        if (!s->progress)
+            return AVERROR(ENOMEM);
+    }
+#endif
+
+    s->nb_frames++;
+
+    return 0;
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
     SSIMContext *s = ctx->priv;
+    SSIMShared *ss = s->shared;
 
-    if (s->nb_frames > 0) {
+    if (s->nb_frames > 0 && !ff_filter_is_frame_thread(ctx)) {
         char buf[256];
         buf[0] = 0;
         for (int i = 0; i < s->nb_components; i++) {
             int c = s->is_rgb ? s->rgba_map[i] : i;
-            av_strlcatf(buf, sizeof(buf), " %c:%f (%f)", s->comps[i], s->ssim[c] / s->nb_frames,
-                        ssim_db(s->ssim[c], s->nb_frames));
+            av_strlcatf(buf, sizeof(buf), " %c:%f (%f)", s->comps[i],
+                        ss->ssim[c] / s->nb_frames,
+                        ssim_db(ss->ssim[c], s->nb_frames));
         }
         av_log(ctx, AV_LOG_INFO, "SSIM%s All:%f (%f)\n", buf,
-               s->ssim_total / s->nb_frames, ssim_db(s->ssim_total, s->nb_frames));
+               ss->ssim_total / s->nb_frames,
+               ssim_db(ss->ssim_total, s->nb_frames));
     }
 
     ff_framesync_uninit(&s->fs);
 
-    if (s->stats_file && s->stats_file != stdout)
+    if (s->stats_file && s->stats_file != stdout && !ff_filter_is_frame_thread(ctx))
         fclose(s->stats_file);
 
-    for (int t = 0; t < s->nb_threads && s->score; t++)
+    for (int t = 0; t < s->nb_slice_threads && s->score; t++)
         av_freep(&s->score[t]);
     av_freep(&s->score);
 
-    for (int t = 0; t < s->nb_threads && s->temp; t++)
+    for (int t = 0; t < s->nb_slice_threads && s->temp; t++)
         av_freep(&s->temp[t]);
     av_freep(&s->temp);
+
+    av_refstruct_unref(&s->shared);
+    av_refstruct_unref(&s->progress_pool);
+    av_refstruct_unref(&s->prev_progress);
+    av_refstruct_unref(&s->progress);
+
+    av_frame_free(&s->frame_master);
+    av_frame_free(&s->frame_ref);
 }
 
 static const AVFilterPad ssim_inputs[] = {
@@ -591,11 +728,16 @@ const FFFilter ff_vf_ssim = {
     .p.priv_class  = &ssim_class,
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                      AVFILTER_FLAG_SLICE_THREADS             |
+                     AVFILTER_FLAG_FRAME_THREADS             |
                      AVFILTER_FLAG_METADATA_ONLY,
     .preinit       = ssim_framesync_preinit,
     .init          = init,
     .uninit        = uninit,
     .activate      = activate,
+    .filter_prepare = ssim_filter_prepare,
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state       = ssim_transfer_state,
+#endif
     .priv_size     = sizeof(SSIMContext),
     FILTER_INPUTS(ssim_inputs),
     FILTER_OUTPUTS(ssim_outputs),
