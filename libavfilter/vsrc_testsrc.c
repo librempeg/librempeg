@@ -1908,9 +1908,10 @@ const FFFilter ff_vsrc_colorspectrum = {
 static const AVOption colorchart_options[] = {
     COMMON_OPTIONS_NOSIZE
     { "patch_size", "set the single patch size", OFFSET(pw), AV_OPT_TYPE_IMAGE_SIZE, {.str="64x64"}, 0, 0, FLAGS },
-    { "preset", "set the color checker chart preset", OFFSET(type), AV_OPT_TYPE_INT,  {.i64=0}, 0, 1, FLAGS, .unit = "preset" },
+    { "preset", "set the color checker chart preset", OFFSET(type), AV_OPT_TYPE_INT,  {.i64=0}, 0, 2, FLAGS, .unit = "preset" },
     { "reference",  "reference", 0, AV_OPT_TYPE_CONST,{.i64=0}, 0, 0, FLAGS, .unit = "preset" },
     { "skintones",  "skintones", 0, AV_OPT_TYPE_CONST,{.i64=1}, 0, 0, FLAGS, .unit = "preset" },
+    { "classic",    "classic",   0, AV_OPT_TYPE_CONST,{.i64=2}, 0, 0, FLAGS, .unit = "preset" },
     { NULL }
 };
 
@@ -1976,6 +1977,33 @@ static const uint8_t skintones_colors[][3] = {
     { 196, 184, 105 },
 };
 
+static const uint8_t classic_colors[][3] = {
+    { 116,  79,  65 },
+    { 197, 144, 127 },
+    {  91, 120, 155 },
+    {  91, 108,  64 },
+    { 131, 127, 175 },
+    {  95, 189, 172 },
+    { 224, 124,  48 },
+    {  69,  90, 167 },
+    { 197,  80,  95 },
+    {  93,  58, 104 },
+    { 156, 187,  58 },
+    { 227, 161,  39 },
+    {  40,  62, 145 },
+    {  64, 147,  70 },
+    { 178,  54,  57 },
+    { 236, 199,  15 },
+    { 191,  79, 146 },
+    {   0, 133, 165 },
+    { 241, 242, 235 },
+    { 201, 202, 201 },
+    { 161, 163, 163 },
+    { 121, 121, 121 },
+    {  83,  84,  85},
+    {  50,  50,  50 },
+};
+
 typedef struct ColorChartPreset {
     int w, h;
     const uint8_t (*colors)[3];
@@ -1984,6 +2012,7 @@ typedef struct ColorChartPreset {
 static const ColorChartPreset colorchart_presets[] = {
     { 6, 4, reference_colors, },
     { 6, 4, skintones_colors, },
+    { 6, 4, classic_colors, },
 };
 
 static int colorchart_config_props(AVFilterLink *inlink)
