@@ -128,6 +128,8 @@ static av_cold int config_props(AVFilterLink *outlink)
         s->init_state = init_state_dblp;
         s->output_samples = output_samples_dblp;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return s->init_state(ctx);
