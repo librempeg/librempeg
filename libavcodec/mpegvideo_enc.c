@@ -194,8 +194,10 @@ void ff_convert_matrix(MpegEncContext *s, int (*qmat)[64],
     }
 }
 
-static inline void update_qscale(MpegEncContext *s)
+static inline void update_qscale(MPVMainEncContext *const m)
 {
+    MpegEncContext *const s = &m->s;
+
     if (s->q_scale_type == 1 && 0) {
         int i;
         int bestdiff=INT_MAX;
@@ -204,7 +206,7 @@ static inline void update_qscale(MpegEncContext *s)
         for (i = 0 ; i<FF_ARRAY_ELEMS(ff_mpeg2_non_linear_qscale); i++) {
             int diff = FFABS((ff_mpeg2_non_linear_qscale[i]<<(FF_LAMBDA_SHIFT + 6)) - (int)s->lambda * 139);
             if (ff_mpeg2_non_linear_qscale[i] < s->avctx->qmin ||
-                (ff_mpeg2_non_linear_qscale[i] > s->avctx->qmax && !s->vbv_ignore_qmax))
+                (ff_mpeg2_non_linear_qscale[i] > s->avctx->qmax && !m->vbv_ignore_qmax))
                 continue;
             if (diff < bestdiff) {
                 bestdiff = diff;
@@ -215,7 +217,7 @@ static inline void update_qscale(MpegEncContext *s)
     } else {
         s->qscale = (s->lambda * 139 + FF_LAMBDA_SCALE * 64) >>
                     (FF_LAMBDA_SHIFT + 7);
-        s->qscale = av_clip(s->qscale, s->avctx->qmin, s->vbv_ignore_qmax ? 31 : s->avctx->qmax);
+        s->qscale = av_clip(s->qscale, s->avctx->qmin, m->vbv_ignore_qmax ? 31 : s->avctx->qmax);
     }
 
     s->lambda2 = (s->lambda * s->lambda + FF_LAMBDA_SCALE / 2) >>
@@ -506,16 +508,16 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
     }
 
     /* Fixed QSCALE */
-    s->fixed_qscale = !!(avctx->flags & AV_CODEC_FLAG_QSCALE);
+    m->fixed_qscale = !!(avctx->flags & AV_CODEC_FLAG_QSCALE);
 
     s->adaptive_quant = (avctx->lumi_masking ||
                          avctx->dark_masking ||
                          avctx->temporal_cplx_masking ||
                          avctx->spatial_cplx_masking  ||
                          avctx->p_masking      ||
-                         s->border_masking ||
+                         m->border_masking ||
                          (s->mpv_flags & FF_MPV_FLAG_QP_RD)) &&
-                        !s->fixed_qscale;
+                        !m->fixed_qscale;
 
     s->loop_filter = !!(avctx->flags & AV_CODEC_FLAG_LOOP_FILTER);
 
@@ -579,7 +581,7 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     }
 
-    if (!s->fixed_qscale &&
+    if (!m->fixed_qscale &&
         avctx->bit_rate * av_q2d(avctx->time_base) >
             avctx->bit_rate_tolerance) {
         double nbt = avctx->bit_rate * av_q2d(avctx->time_base) * 5;
@@ -674,7 +676,7 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     }
 
-    if (s->scenechange_threshold < 1000000000 &&
+    if (m->scenechange_threshold < 1000000000 &&
         (avctx->flags & AV_CODEC_FLAG_CLOSED_GOP)) {
         av_log(avctx, AV_LOG_ERROR,
                "closed gop with scene change detection are not supported yet, "
@@ -889,9 +891,9 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
         s->frame_reconstruction_bitfield = 0;
     }
 
-    if (s->lmin > s->lmax) {
-        av_log(avctx, AV_LOG_WARNING, "Clipping lmin value to %d\n", s->lmax);
-        s->lmin = s->lmax;
+    if (m->lmin > m->lmax) {
+        av_log(avctx, AV_LOG_WARNING, "Clipping lmin value to %d\n", m->lmax);
+        m->lmin = m->lmax;
     }
 
     /* init */
@@ -1875,7 +1877,7 @@ int ff_mpv_encode_picture(AVCodecContext *avctx, AVPacket *pkt,
 
     ff_mpv_unref_picture(&s->cur_pic);
 
-    s->vbv_ignore_qmax = 0;
+    m->vbv_ignore_qmax = 0;
 
     m->picture_in_gop_number++;
 
@@ -1934,7 +1936,7 @@ vbv_retry:
             int min_step = hq ? 1 : (1<<(FF_LAMBDA_SHIFT + 7))/139;
 
             if (put_bits_count(&s->pb) > max_size &&
-                s->lambda < s->lmax) {
+                s->lambda < m->lmax) {
                 m->next_lambda = FFMAX(s->lambda + min_step, s->lambda *
                                        (s->qscale + 1) / s->qscale);
                 if (s->adaptive_quant) {
@@ -1954,7 +1956,7 @@ vbv_retry:
                     s->time_base       = s->last_time_base;
                     s->last_non_b_time = s->time - s->pp_time;
                 }
-                s->vbv_ignore_qmax = 1;
+                m->vbv_ignore_qmax = 1;
                 av_log(avctx, AV_LOG_VERBOSE, "reencoding frame due to VBV\n");
                 goto vbv_retry;
             }
@@ -3615,7 +3617,7 @@ static int estimate_qp(MPVMainEncContext *const m, int dry_run)
     if (m->next_lambda){
         s->cur_pic.ptr->f->quality = m->next_lambda;
         if(!dry_run) m->next_lambda= 0;
-    } else if (!s->fixed_qscale) {
+    } else if (!m->fixed_qscale) {
         int quality = ff_rate_estimate_qscale(m, dry_run);
         s->cur_pic.ptr->f->quality = quality;
         if (s->cur_pic.ptr->f->quality < 0)
@@ -3642,7 +3644,7 @@ static int estimate_qp(MPVMainEncContext *const m, int dry_run)
         //FIXME broken
     }else
         s->lambda = s->cur_pic.ptr->f->quality;
-    update_qscale(s);
+    update_qscale(m);
     return 0;
 }
 
@@ -3699,7 +3701,7 @@ static int encode_picture(MPVMainEncContext *const m, const AVPacket *pkt)
             s->lambda= s->last_lambda_for[s->pict_type];
         else
             s->lambda= s->last_lambda_for[s->last_non_b_pict_type];
-        update_qscale(s);
+        update_qscale(m);
     }
 
     ff_me_init_pic(s);
@@ -3741,7 +3743,7 @@ static int encode_picture(MPVMainEncContext *const m, const AVPacket *pkt)
         for(i=0; i<s->mb_stride*s->mb_height; i++)
             s->mb_type[i]= CANDIDATE_MB_TYPE_INTRA;
 
-        if(!s->fixed_qscale){
+        if (!m->fixed_qscale) {
             /* finding spatial complexity for I-frame rate control */
             s->avctx->execute(s->avctx, mb_var_thread, &s->thread_context[0], NULL, context_count, sizeof(void*));
         }
@@ -3753,7 +3755,7 @@ static int encode_picture(MPVMainEncContext *const m, const AVPacket *pkt)
     s->mb_var_sum    = s->me.   mb_var_sum_temp;
     emms_c();
 
-    if (s->me.scene_change_score > s->scenechange_threshold &&
+    if (s->me.scene_change_score > m->scenechange_threshold &&
         s->pict_type == AV_PICTURE_TYPE_P) {
         s->pict_type= AV_PICTURE_TYPE_I;
         for(i=0; i<s->mb_stride*s->mb_height; i++)
