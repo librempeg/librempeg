@@ -32,7 +32,7 @@
 #include "framesync.h"
 #include "video.h"
 
-#define MAX_SIZE 64
+#define MAX_SIZE 140
 
 enum KernelType {
     EUCLIDEAN,
