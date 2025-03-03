@@ -617,6 +617,7 @@ extern const FFFilter ff_vsrc_openclsrc;
 extern const FFFilter ff_vsrc_pal75bars;
 extern const FFFilter ff_vsrc_pal100bars;
 extern const FFFilter ff_vsrc_perlin;
+extern const FFFilter ff_vsrc_plasma;
 extern const FFFilter ff_vsrc_rgbtestsrc;
 extern const FFFilter ff_vsrc_sierpinski;
 extern const FFFilter ff_vsrc_smptebars;

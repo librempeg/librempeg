@@ -61,6 +61,7 @@ version <next>:
 - APV decoder and APV raw bitstream muxing and demuxing
 - APV parser
 - APV encoding support through a libopenapv wrapper
+- plasma video source filter
 
 
 version 7.1:
