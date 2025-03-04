@@ -460,6 +460,7 @@ extern const FFOutputFormat ff_smjpeg_muxer;
 extern const FFOutputFormat ff_smoothstreaming_muxer;
 extern const FFInputFormat  ff_smp_demuxer;
 extern const FFInputFormat  ff_smush_demuxer;
+extern const FFInputFormat  ff_sndb_demuxer;
 extern const FFInputFormat  ff_sol_demuxer;
 extern const FFInputFormat  ff_sox_demuxer;
 extern const FFOutputFormat ff_sox_muxer;
