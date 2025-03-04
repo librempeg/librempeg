@@ -261,7 +261,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
 const FFInputFormat ff_baf_demuxer = {
     .p.name         = "baf",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("BAF (Bizarre Creations Bank File"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("BAF (Bizarre Creations Bank File)"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "baf",
     .read_probe     = read_probe,
