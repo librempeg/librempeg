@@ -63,6 +63,12 @@ static int astb_read_header(AVFormatContext *s)
     st->codecpar->block_align = 2048;
 
     streams = AV_RB16(st->codecpar->extradata + 4);
+    if (streams <= 0)
+        return AVERROR_INVALIDDATA;
+
+    if (st->codecpar->extradata_size < (streams - 1) * 20 + 25)
+        return AVERROR_INVALIDDATA;
+
     for (int i = 0; i < streams; i++)
         channels += st->codecpar->extradata[20 * i + 25];
     st->codecpar->extradata_size = 8 + 20 * streams;
