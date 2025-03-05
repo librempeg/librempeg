@@ -1416,7 +1416,7 @@ static int decode_block(AVCodecContext *avctx, void *tdata,
                     s->compression == EXR_DWAA ||
                     s->compression == EXR_DWAB) {
                     // 32-bit
-                    union av_intfloat32 *ptr_x;
+                    union av_intfloat32 *ptr_x, t;
 
                     src = channel_buffer[c];
                     ptr_x = (union av_intfloat32 *)ptr;
@@ -1425,7 +1425,6 @@ static int decode_block(AVCodecContext *avctx, void *tdata,
                     memset(ptr_x, 0, bxmin);
                     ptr_x += window_xoffset;
 
-                    union av_intfloat32 t;
                     if (trc_func && c < 3) {
                         for (x = 0; x < xsize; x++) {
                             t.i = bytestream_get_le32(&src);
