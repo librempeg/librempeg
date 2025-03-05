@@ -158,6 +158,7 @@ OBJS-$(CONFIG_BIT_DEMUXER)               += bit.o
 OBJS-$(CONFIG_BIT_MUXER)                 += bit.o
 OBJS-$(CONFIG_BITPACKED_DEMUXER)         += rawvideodec.o
 OBJS-$(CONFIG_BMV_DEMUXER)               += bmv.o
+OBJS-$(CONFIG_BNSF_DEMUXER)              += bnsf.o
 OBJS-$(CONFIG_BOA_DEMUXER)               += boadec.o
 OBJS-$(CONFIG_BONK_DEMUXER)              += bonk.o rawdec.o
 OBJS-$(CONFIG_BFSTM_DEMUXER)             += brstm.o
