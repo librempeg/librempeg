@@ -37,16 +37,11 @@ static int read_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX*2/3;
 }
 
-typedef struct SNDBStream {
-    int64_t start_offset;
-    int64_t stop_offset;
-} SNDBStream;
-
 static int read_header(AVFormatContext *s)
 {
-    uint32_t nb_tracks = 0, size;
+    int64_t start_offset, header_offset;
+    uint32_t nb_tracks, size;
     AVIOContext *pb = s->pb;
-    int64_t start_offset;
     int ret;
 
     avio_skip(pb, 32);
@@ -56,6 +51,7 @@ static int read_header(AVFormatContext *s)
     if (size <= 8)
         return AVERROR_INVALIDDATA;
     avio_skip(pb, size - 8);
+    header_offset = avio_tell(pb);
     if (avio_rb32(pb) != MKBETAG('C','S','H',' '))
         return AVERROR_INVALIDDATA;
     size = avio_rb32(pb);
@@ -65,24 +61,21 @@ static int read_header(AVFormatContext *s)
 
     avio_skip(pb, 4);
     nb_tracks = avio_rb32(pb);
-    avio_skip(pb, 16);
+    if (nb_tracks == 0)
+        return AVERROR_INVALIDDATA;
+    avio_skip(pb, 4);
+    size = avio_rb32(pb);
+    avio_skip(pb, header_offset + size - avio_tell(pb));
 
-    for (int n = 0; n < nb_tracks; n++) {
-        SNDBStream *sst;
+    {
         AVStream *st;
-
-        sst = av_mallocz(sizeof(SNDBStream));
-        if (!sst)
-            return AVERROR(ENOMEM);
-        sst->start_offset = avio_rb32(pb);
 
         st = avformat_new_stream(s, NULL);
         if (!st)
             return AVERROR(ENOMEM);
 
-        st->id = n;
+        st->id = 0;
         st->start_time = 0;
-        st->priv_data = sst;
         st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
         st->codecpar->codec_id = AV_CODEC_ID_XMA1;
         st->codecpar->block_align = 2048;
@@ -102,9 +95,8 @@ static int read_header(AVFormatContext *s)
     start_offset = avio_tell(pb) + size - 20;
     avio_skip(pb, 44);
 
-    for (int n = 0; n < nb_tracks; n++) {
-        AVStream *st = s->streams[n];
-        SNDBStream *sst = st->priv_data;
+    {
+        AVStream *st = s->streams[0];
         int streams, channels = 0;
 
         if (avio_rb16(pb) != 0x165)
@@ -113,17 +105,6 @@ static int read_header(AVFormatContext *s)
 
         if ((ret = ff_get_extradata(s, st->codecpar, pb, 108)) < 0)
             return ret;
-
-        sst->start_offset += start_offset;
-
-        if (n == nb_tracks - 1) {
-            sst->stop_offset = avio_size(pb);
-        } else if (n > 0) {
-            AVStream *prev_st = s->streams[n-1];
-            SNDBStream *prev_sst = prev_st->priv_data;
-
-            prev_sst->stop_offset = sst->start_offset;
-        }
 
         streams = AV_RB16(st->codecpar->extradata + 4);
         AV_WL16(st->codecpar->extradata + 4, streams);
@@ -158,30 +139,16 @@ static int read_header(AVFormatContext *s)
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *pb = s->pb;
-    int ret = AVERROR_EOF;
+    AVStream *st = s->streams[0];
+    AVCodecParameters *par = st->codecpar;
+    int ret;
 
-    for (int n = 0; n < s->nb_streams; n++) {
-        AVStream *st = s->streams[n];
-        AVCodecParameters *par = st->codecpar;
-        SNDBStream *sst = st->priv_data;
-        int64_t pos;
+    if (avio_feof(pb))
+        return AVERROR_EOF;
 
-        if (avio_feof(pb))
-            return AVERROR_EOF;
+    ret = av_get_packet(pb, pkt, par->block_align);
+    pkt->stream_index = 0;
 
-        pos = avio_tell(pb);
-        if (pos >= sst->start_offset && pos < sst->stop_offset) {
-            ret = av_get_packet(pb, pkt, par->block_align);
-            pkt->stream_index = st->id;
-            break;
-        } else if (pos >= sst->stop_offset && n+1 < s->nb_streams) {
-            AVStream *st_next = s->streams[n+1];
-            SNDBStream *sst_next = st_next->priv_data;
-
-            if (sst_next->start_offset > pos)
-                avio_skip(pb, sst_next->start_offset - pos);
-        }
-    }
     return ret;
 }
 
