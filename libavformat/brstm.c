@@ -39,7 +39,7 @@ typedef struct BRSTMDemuxContext {
     uint32_t    last_block_used_bytes;
     uint32_t    last_block_size;
     uint32_t    last_block_samples;
-    uint32_t    data_start;
+    int64_t     data_start;
     uint8_t     table[256 * 32];
     uint8_t     *adpc;
     BRSTMCoeffOffset offsets[256];
