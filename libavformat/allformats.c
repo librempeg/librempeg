@@ -103,6 +103,7 @@ extern const FFOutputFormat ff_avs2_muxer;
 extern const FFInputFormat  ff_avs3_demuxer;
 extern const FFOutputFormat ff_avs3_muxer;
 extern const FFInputFormat  ff_baf_demuxer;
+extern const FFInputFormat  ff_bcwav_demuxer;
 extern const FFInputFormat  ff_bethsoftvid_demuxer;
 extern const FFInputFormat  ff_bfi_demuxer;
 extern const FFInputFormat  ff_bintext_demuxer;

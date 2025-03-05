@@ -149,6 +149,7 @@ OBJS-$(CONFIG_AVS2_MUXER)                += rawenc.o
 OBJS-$(CONFIG_AVS3_DEMUXER)              += avs3dec.o rawdec.o
 OBJS-$(CONFIG_AVS3_MUXER)                += rawenc.o
 OBJS-$(CONFIG_BAF_DEMUXER)               += baf.o
+OBJS-$(CONFIG_BCWAV_DEMUXER)             += bcwav.o
 OBJS-$(CONFIG_BETHSOFTVID_DEMUXER)       += bethsoftvid.o
 OBJS-$(CONFIG_BFI_DEMUXER)               += bfi.o
 OBJS-$(CONFIG_BINK_DEMUXER)              += bink.o
