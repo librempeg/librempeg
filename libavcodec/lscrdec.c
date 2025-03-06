@@ -231,7 +231,7 @@ static av_cold int lscr_decode_init(AVCodecContext *avctx)
     return 0;
 }
 
-static void lscr_decode_flush(AVCodecContext *avctx)
+static av_cold void lscr_decode_flush(AVCodecContext *avctx)
 {
     LSCRContext *s = avctx->priv_data;
     av_frame_unref(s->last_picture);
