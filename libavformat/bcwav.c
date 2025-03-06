@@ -161,6 +161,7 @@ static int read_header(AVFormatContext *s)
         st->id = ch;
         st->priv_data = bc;
         st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+        st->start_time = 0;
         st->duration = duration;
         st->codecpar->sample_rate = sample_rate;
         st->codecpar->ch_layout.nb_channels = 1;
