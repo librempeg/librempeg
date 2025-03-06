@@ -49,6 +49,7 @@ static int smp_read_header(AVFormatContext *s)
     avio_skip(pb, 60);
 
     par = st->codecpar;
+    st->start_time = 0;
     st->duration = avio_rl32(pb);
     par->codec_type = AVMEDIA_TYPE_AUDIO;
     par->ch_layout.nb_channels = 1;
