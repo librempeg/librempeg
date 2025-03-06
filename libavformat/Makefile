@@ -281,6 +281,7 @@ OBJS-$(CONFIG_ICO_DEMUXER)               += icodec.o
 OBJS-$(CONFIG_ICO_MUXER)                 += icoenc.o
 OBJS-$(CONFIG_IDCIN_DEMUXER)             += idcin.o
 OBJS-$(CONFIG_IDF_DEMUXER)               += bintext.o sauce.o
+OBJS-$(CONFIG_IDSP_DEMUXER)              += idsp.o
 OBJS-$(CONFIG_IFF_DEMUXER)               += iff.o
 OBJS-$(CONFIG_IFV_DEMUXER)               += ifv.o
 OBJS-$(CONFIG_ILBC_DEMUXER)              += ilbc.o
