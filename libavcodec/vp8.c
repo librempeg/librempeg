@@ -2981,4 +2981,4 @@ const FFCodec ff_vp8_decoder = {
                                NULL
                            },
 };
-#endif /* CONFIG_VP7_DECODER */
+#endif /* CONFIG_VP8_DECODER */
