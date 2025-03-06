@@ -66,6 +66,7 @@ static int bnsf_read_header(AVFormatContext *s)
             par->codec_tag   = 0;
             par->ch_layout.nb_channels = avio_rb16(pb);
             par->sample_rate = avio_rb32(pb);
+            st->start_time = 0;
             st->duration     = avio_rb32(pb);
             avio_skip(pb, 4);
             par->block_align = avio_rb16(pb);
