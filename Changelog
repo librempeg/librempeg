@@ -144,6 +144,7 @@ version 8.0:
 - ADPCM THP/ADPCM NDSP encoders
 - colordetect filter
 - ffprobe -codec option
+- EXIF Metadata Parsing
 
 
 version 7.1:

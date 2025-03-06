@@ -54,7 +54,7 @@
 #include "profiles.h"
 #include "put_bits.h"
 #include "thread.h"
-#include "exif.h"
+#include "exif_internal.h"
 #include "bytestream.h"
 #include "tiff_common.h"
 
