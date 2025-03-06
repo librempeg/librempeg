@@ -65,6 +65,7 @@ static int read_header(AVFormatContext *s)
     if (st->codecpar->ch_layout.nb_channels == 0)
         return AVERROR_INVALIDDATA;
 
+    st->start_time = 0;
     st->codecpar->sample_rate = avio_rl32(pb);
     if (st->codecpar->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
