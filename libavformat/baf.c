@@ -126,6 +126,7 @@ static int read_header(AVFormatContext *s)
         st->id = nb_streams++;
         st->priv_data = bst;
         st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+        st->start_time = 0;
 
         switch (codec) {
         case 3:
