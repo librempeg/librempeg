@@ -106,6 +106,7 @@ extern const FFInputFormat  ff_baf_demuxer;
 extern const FFInputFormat  ff_bcwav_demuxer;
 extern const FFInputFormat  ff_bethsoftvid_demuxer;
 extern const FFInputFormat  ff_bfi_demuxer;
+extern const FFInputFormat  ff_bfwav_demuxer;
 extern const FFInputFormat  ff_bintext_demuxer;
 extern const FFInputFormat  ff_bink_demuxer;
 extern const FFInputFormat  ff_binka_demuxer;

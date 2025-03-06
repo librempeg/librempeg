@@ -45,6 +45,15 @@ static int probe(const AVProbeData *p)
     return 0;
 }
 
+static int fwav_probe(const AVProbeData *p)
+{
+    if (AV_RL32(p->buf) == MKTAG('F','W','A','V') &&
+        (AV_RL16(p->buf + 4) == 0xFFFE ||
+         AV_RL16(p->buf + 4) == 0xFEFF))
+        return AVPROBE_SCORE_MAX / 3 * 2;
+    return 0;
+}
+
 static av_always_inline unsigned int read16(AVFormatContext *s)
 {
     BCWAVDemuxContext *b = s->priv_data;
@@ -266,12 +275,24 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
 const FFInputFormat ff_bcwav_demuxer = {
     .p.name         = "bcwav",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("BCWAV (Nintendo CWAV)"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("BCWAV (NintendoWare CWAV)"),
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .p.extensions   = "bcwav",
+    .p.extensions   = "bcwav,adpcm,bms,sfx,str,zic",
     .priv_data_size = sizeof(BCWAVDemuxContext),
     .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
     .read_probe     = probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
+};
+
+const FFInputFormat ff_bfwav_demuxer = {
+    .p.name         = "bfwav",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("BFWAV (NintendoWare FWAV)"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
+    .p.extensions   = "bfwav,fwav",
+    .priv_data_size = sizeof(BCWAVDemuxContext),
+    .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
+    .read_probe     = fwav_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
 };
