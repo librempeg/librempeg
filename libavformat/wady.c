@@ -66,6 +66,7 @@ static int wady_read_header(AVFormatContext *s)
     if (par->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
     avio_skip(pb, 4);
+    st->start_time = 0;
     st->duration = avio_rl32(pb);
     par->block_align = channels;
     avpriv_set_pts_info(st, 64, 1, par->sample_rate);
