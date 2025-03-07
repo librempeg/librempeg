@@ -64,7 +64,9 @@ static int do_backgroundkey_slice(AVFilterContext *avctx, void *arg, int jobnr, 
         const uint8_t *bsrcu = s->background->data[1] + s->background->linesize[1] * (y >> vsub);
         const uint8_t *bsrcv = s->background->data[2] + s->background->linesize[2] * (y >> vsub);
         uint8_t *dst = frame->data[3] + frame->linesize[3] * y;
-        for (int x = 0; x < frame->width; x++) {
+        const int width = frame->width;
+
+        for (int x = 0; x < width; x++) {
             const int xx = x >> hsub;
             const int diff = FFABS(srcy[x]  - bsrcy[x])  +
                              FFABS(srcu[xx] - bsrcu[xx]) +
@@ -108,7 +110,9 @@ static int do_backgroundkey16_slice(AVFilterContext *avctx, void *arg, int jobnr
         const uint16_t *bsrcu = (const uint16_t *)(s->background->data[1] + s->background->linesize[1] * (y >> vsub));
         const uint16_t *bsrcv = (const uint16_t *)(s->background->data[2] + s->background->linesize[2] * (y >> vsub));
         uint16_t *dst = (uint16_t *)(frame->data[3] + frame->linesize[3] * y);
-        for (int x = 0; x < frame->width; x++) {
+        const int width = frame->width;
+
+        for (int x = 0; x < width; x++) {
             const int xx = x >> hsub;
             const int diff = FFABS(srcy[x]  - bsrcy[x] ) +
                              FFABS(srcu[xx] - bsrcu[xx]) +
