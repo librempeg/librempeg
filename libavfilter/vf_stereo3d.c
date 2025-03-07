@@ -633,35 +633,34 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 
 static void interleave_cols_to_any(Stereo3DContext *s, int *out_off, int p, AVFrame *in, AVFrame *out, int d)
 {
-    int y, x;
-
-    for (y = 0; y < s->pheight[p]; y++) {
+    for (int y = 0; y < s->pheight[p]; y++) {
         const uint8_t *src = (const uint8_t*)in->data[p] + y * in->linesize[p] + d * s->pixstep[p];
         uint8_t *dst = out->data[p] + out_off[p] + y * out->linesize[p] * s->out.row_step;
+        const int linesize = s->linesize[p];
 
         switch (s->pixstep[p]) {
         case 1:
-            for (x = 0; x < s->linesize[p]; x++)
+            for (int x = 0; x < linesize; x++)
                 dst[x] = src[x * 2];
             break;
         case 2:
-            for (x = 0; x < s->linesize[p]; x+=2)
+            for (int x = 0; x < linesize; x+=2)
                 AV_WN16(&dst[x], AV_RN16(&src[x * 2]));
             break;
         case 3:
-            for (x = 0; x < s->linesize[p]; x+=3)
+            for (int x = 0; x < linesize; x+=3)
                 AV_WB24(&dst[x], AV_RB24(&src[x * 2]));
             break;
         case 4:
-            for (x = 0; x < s->linesize[p]; x+=4)
+            for (int x = 0; x < linesize; x+=4)
                 AV_WN32(&dst[x], AV_RN32(&src[x * 2]));
             break;
         case 6:
-            for (x = 0; x < s->linesize[p]; x+=6)
+            for (int x = 0; x < linesize; x+=6)
                 AV_WB48(&dst[x], AV_RB48(&src[x * 2]));
             break;
         case 8:
-            for (x = 0; x < s->linesize[p]; x+=8)
+            for (int x = 0; x < linesize; x+=8)
                 AV_WN64(&dst[x], AV_RN64(&src[x * 2]));
             break;
         }
@@ -674,8 +673,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
     Stereo3DContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out = NULL, *oleft, *oright, *ileft, *iright;
-    int out_off_left[4], out_off_right[4];
-    int i, ret;
+    int out_off_left[4], out_off_right[4], ret;
 
     if (s->in.format == s->out.format)
         return ff_filter_frame(outlink, inpicref);
@@ -786,7 +784,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
         }
     }
 
-    for (i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) {
         int hsub = i == 1 || i == 2 ? s->hsub : 0;
         int vsub = i == 1 || i == 2 ? s->vsub : 0;
         s->in_off_left[i]   = (AV_CEIL_RSHIFT(s->in.row_left,   vsub) + s->in.off_lstep)  * ileft->linesize[i]  + AV_CEIL_RSHIFT(s->in.off_left   * s->pixstep[i], hsub);
@@ -801,7 +799,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
         switch (s->in.format) {
         case INTERLEAVE_ROWS_LR:
         case INTERLEAVE_ROWS_RL:
-            for (i = 0; i < s->nb_planes; i++) {
+            for (int i = 0; i < s->nb_planes; i++) {
                 oleft->linesize[i]  *= 2;
                 oright->linesize[i] *= 2;
             }
@@ -818,7 +816,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
             oleft->height  = outlink->h;
             oright->height = outlink->h;
 
-            for (i = 0; i < s->nb_planes; i++) {
+            for (int i = 0; i < s->nb_planes; i++) {
                 oleft->data[i]  += s->in_off_left[i];
                 oright->data[i] += s->in_off_right[i];
             }
@@ -829,11 +827,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
         }
         break;
     case HDMI:
-        for (i = 0; i < s->nb_planes; i++) {
-            int j, h = s->height >> ((i == 1 || i == 2) ? s->vsub : 0);
+        for (int i = 0; i < s->nb_planes; i++) {
+            int h = s->height >> ((i == 1 || i == 2) ? s->vsub : 0);
             int b = (s->blanks) >> ((i == 1 || i == 2) ? s->vsub : 0);
 
-            for (j = h; j < h + b; j++)
+            for (int j = h; j < h + b; j++)
                 memset(oleft->data[i] + j * s->linesize[i], 0, s->linesize[i]);
         }
     case SIDE_BY_SIDE_LR:
@@ -849,14 +847,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
 copy:
         if (s->in.format == INTERLEAVE_COLS_LR ||
             s->in.format == INTERLEAVE_COLS_RL) {
-            for (i = 0; i < s->nb_planes; i++) {
+            for (int i = 0; i < s->nb_planes; i++) {
                 int d = (s->in.format & 1) != (s->out.format & 1);
 
                 interleave_cols_to_any(s, out_off_left,  i, ileft,  oleft,   d);
                 interleave_cols_to_any(s, out_off_right, i, iright, oright, !d);
             }
         } else {
-            for (i = 0; i < s->nb_planes; i++) {
+            for (int i = 0; i < s->nb_planes; i++) {
                 av_image_copy_plane(oleft->data[i] + out_off_left[i],
                                     oleft->linesize[i] * s->out.row_step,
                                     ileft->data[i] + s->in_off_left[i],
@@ -876,9 +874,8 @@ copy:
         switch (s->in.format) {
         case INTERLEAVE_ROWS_LR:
         case INTERLEAVE_ROWS_RL:
-            for (i = 0; i < s->nb_planes; i++) {
+            for (int i = 0; i < s->nb_planes; i++)
                 out->linesize[i] *= 2;
-            }
         case ABOVE_BELOW_LR:
         case ABOVE_BELOW_RL:
         case ABOVE_BELOW_2_LR:
@@ -890,20 +887,19 @@ copy:
             out->width  = outlink->w;
             out->height = outlink->h;
 
-            for (i = 0; i < s->nb_planes; i++) {
+            for (int i = 0; i < s->nb_planes; i++)
                 out->data[i] += s->in_off_left[i];
-            }
             break;
         case INTERLEAVE_COLS_LR:
         case INTERLEAVE_COLS_RL:
-            for (i = 0; i < s->nb_planes; i++) {
+            for (int i = 0; i < s->nb_planes; i++) {
                 const int d = (s->in.format & 1) != (s->out.format & 1);
 
                 interleave_cols_to_any(s, out_off_right, i, iright, out, d);
             }
             break;
         default:
-            for (i = 0; i < s->nb_planes; i++) {
+            for (int i = 0; i < s->nb_planes; i++) {
                 av_image_copy_plane(out->data[i], out->linesize[i],
                                     iright->data[i] + s->in_off_left[i],
                                     iright->linesize[i] * s->in.row_step,
@@ -949,53 +945,51 @@ copy:
     }
     case CHECKERBOARD_RL:
     case CHECKERBOARD_LR:
-        for (i = 0; i < s->nb_planes; i++) {
-            int x, y;
-
-            for (y = 0; y < s->pheight[i]; y++) {
+        for (int i = 0; i < s->nb_planes; i++) {
+            for (int y = 0; y < s->pheight[i]; y++) {
                 uint8_t *dst = out->data[i] + out->linesize[i] * y;
                 const int d1 = (s->in.format == INTERLEAVE_COLS_LR || s->in.format == INTERLEAVE_COLS_RL) && (s->in.format & 1) != (s->out.format & 1);
                 const int d2 = (s->in.format == INTERLEAVE_COLS_LR || s->in.format == INTERLEAVE_COLS_RL) ? !d1 : 0;
                 const int m = 1 + (s->in.format == INTERLEAVE_COLS_LR || s->in.format == INTERLEAVE_COLS_RL);
                 uint8_t *left  = ileft->data[i]  + ileft->linesize[i]  * y + s->in_off_left[i]  + d1 * s->pixstep[i];
                 uint8_t *right = iright->data[i] + iright->linesize[i] * y + s->in_off_right[i] + d2 * s->pixstep[i];
-                int p, b;
+                const int linesize = s->linesize[i] * 2;
 
                 if (s->out.format == CHECKERBOARD_RL && s->in.format != INTERLEAVE_COLS_LR && s->in.format != INTERLEAVE_COLS_RL)
                     FFSWAP(uint8_t*, left, right);
                 switch (s->pixstep[i]) {
                 case 1:
-                    for (x = 0, b = 0, p = 0; x < s->linesize[i] * 2; x+=2, p++, b+=2) {
+                    for (int x = 0, b = 0, p = 0; x < linesize; x+=2, p++, b+=2) {
                         dst[x  ] = (b&1) == (y&1) ? left[p*m] : right[p*m];
                         dst[x+1] = (b&1) != (y&1) ? left[p*m] : right[p*m];
                     }
                     break;
                 case 2:
-                    for (x = 0, b = 0, p = 0; x < s->linesize[i] * 2; x+=4, p+=2, b+=2) {
+                    for (int x = 0, b = 0, p = 0; x < linesize; x+=4, p+=2, b+=2) {
                         AV_WN16(&dst[x  ], (b&1) == (y&1) ? AV_RN16(&left[p*m]) : AV_RN16(&right[p*m]));
                         AV_WN16(&dst[x+2], (b&1) != (y&1) ? AV_RN16(&left[p*m]) : AV_RN16(&right[p*m]));
                     }
                     break;
                 case 3:
-                    for (x = 0, b = 0, p = 0; x < s->linesize[i] * 2; x+=6, p+=3, b+=2) {
+                    for (int x = 0, b = 0, p = 0; x < linesize; x+=6, p+=3, b+=2) {
                         AV_WB24(&dst[x  ], (b&1) == (y&1) ? AV_RB24(&left[p*m]) : AV_RB24(&right[p*m]));
                         AV_WB24(&dst[x+3], (b&1) != (y&1) ? AV_RB24(&left[p*m]) : AV_RB24(&right[p*m]));
                     }
                     break;
                 case 4:
-                    for (x = 0, b = 0, p = 0; x < s->linesize[i] * 2; x+=8, p+=4, b+=2) {
+                    for (int x = 0, b = 0, p = 0; x < linesize; x+=8, p+=4, b+=2) {
                         AV_WN32(&dst[x  ], (b&1) == (y&1) ? AV_RN32(&left[p*m]) : AV_RN32(&right[p*m]));
                         AV_WN32(&dst[x+4], (b&1) != (y&1) ? AV_RN32(&left[p*m]) : AV_RN32(&right[p*m]));
                     }
                     break;
                 case 6:
-                    for (x = 0, b = 0, p = 0; x < s->linesize[i] * 2; x+=12, p+=6, b+=2) {
+                    for (int x = 0, b = 0, p = 0; x < linesize; x+=12, p+=6, b+=2) {
                         AV_WB48(&dst[x  ], (b&1) == (y&1) ? AV_RB48(&left[p*m]) : AV_RB48(&right[p*m]));
                         AV_WB48(&dst[x+6], (b&1) != (y&1) ? AV_RB48(&left[p*m]) : AV_RB48(&right[p*m]));
                     }
                     break;
                 case 8:
-                    for (x = 0, b = 0, p = 0; x < s->linesize[i] * 2; x+=16, p+=8, b+=2) {
+                    for (int x = 0, b = 0, p = 0; x < linesize; x+=16, p+=8, b+=2) {
                         AV_WN64(&dst[x  ], (b&1) == (y&1) ? AV_RN64(&left[p*m]) : AV_RN64(&right[p*m]));
                         AV_WN64(&dst[x+8], (b&1) != (y&1) ? AV_RN64(&left[p*m]) : AV_RN64(&right[p*m]));
                     }
@@ -1006,53 +1000,52 @@ copy:
         break;
     case INTERLEAVE_COLS_LR:
     case INTERLEAVE_COLS_RL:
-        for (i = 0; i < s->nb_planes; i++) {
+        for (int i = 0; i < s->nb_planes; i++) {
             const int d = (s->in.format == INTERLEAVE_COLS_LR || s->in.format == INTERLEAVE_COLS_RL);
             const int m = 1 + d;
-            int x, y;
 
-            for (y = 0; y < s->pheight[i]; y++) {
+            for (int y = 0; y < s->pheight[i]; y++) {
                 uint8_t *dst = out->data[i] + out->linesize[i] * y;
                 uint8_t *left = ileft->data[i] + ileft->linesize[i] * y * s->in.row_step + s->in_off_left[i] + d * s->pixstep[i];
                 uint8_t *right = iright->data[i] + iright->linesize[i] * y * s->in.row_step + s->in_off_right[i];
-                int p, b;
+                const int linesize = s->linesize[i] * 2;
 
                 if (s->out.format == INTERLEAVE_COLS_LR)
                     FFSWAP(uint8_t*, left, right);
 
                 switch (s->pixstep[i]) {
                 case 1:
-                    for (x = 0, b = 0, p = 0; x < s->linesize[i] * 2; x+=2, p++, b+=2) {
+                    for (int x = 0, b = 0, p = 0; x < linesize; x+=2, p++, b+=2) {
                         dst[x  ] =   b&1  ? left[p*m] : right[p*m];
                         dst[x+1] = !(b&1) ? left[p*m] : right[p*m];
                     }
                     break;
                 case 2:
-                    for (x = 0, b = 0, p = 0; x < s->linesize[i] * 2; x+=4, p+=2, b+=2) {
+                    for (int x = 0, b = 0, p = 0; x < linesize; x+=4, p+=2, b+=2) {
                         AV_WN16(&dst[x  ],   b&1  ? AV_RN16(&left[p*m]) : AV_RN16(&right[p*m]));
                         AV_WN16(&dst[x+2], !(b&1) ? AV_RN16(&left[p*m]) : AV_RN16(&right[p*m]));
                     }
                     break;
                 case 3:
-                    for (x = 0, b = 0, p = 0; x < s->linesize[i] * 2; x+=6, p+=3, b+=2) {
+                    for (int x = 0, b = 0, p = 0; x < linesize; x+=6, p+=3, b+=2) {
                         AV_WB24(&dst[x  ],   b&1  ? AV_RB24(&left[p*m]) : AV_RB24(&right[p*m]));
                         AV_WB24(&dst[x+3], !(b&1) ? AV_RB24(&left[p*m]) : AV_RB24(&right[p*m]));
                     }
                     break;
                 case 4:
-                    for (x = 0, b = 0, p = 0; x < s->linesize[i] * 2; x+=8, p+=4, b+=2) {
+                    for (int x = 0, b = 0, p = 0; x < linesize; x+=8, p+=4, b+=2) {
                         AV_WN32(&dst[x  ],   b&1  ? AV_RN32(&left[p*m]) : AV_RN32(&right[p*m]));
                         AV_WN32(&dst[x+4], !(b&1) ? AV_RN32(&left[p*m]) : AV_RN32(&right[p*m]));
                     }
                     break;
                 case 6:
-                    for (x = 0, b = 0, p = 0; x < s->linesize[i] * 2; x+=12, p+=6, b+=2) {
+                    for (int x = 0, b = 0, p = 0; x < linesize; x+=12, p+=6, b+=2) {
                         AV_WB48(&dst[x  ],   b&1  ? AV_RB48(&left[p*m]) : AV_RB48(&right[p*m]));
                         AV_WB48(&dst[x+6], !(b&1) ? AV_RB48(&left[p*m]) : AV_RB48(&right[p*m]));
                     }
                     break;
                 case 8:
-                    for (x = 0, b = 0, p = 0; x < s->linesize[i] * 2; x+=16, p+=8, b+=2) {
+                    for (int x = 0, b = 0, p = 0; x < linesize; x+=16, p+=8, b+=2) {
                         AV_WN64(&dst[x  ],   b&1 ?  AV_RN64(&left[p*m]) : AV_RN64(&right[p*m]));
                         AV_WN64(&dst[x+8], !(b&1) ? AV_RN64(&left[p*m]) : AV_RN64(&right[p*m]));
                     }
