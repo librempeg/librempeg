@@ -102,6 +102,7 @@ static int tac_read_header(AVFormatContext *s)
     par->codec_type = AVMEDIA_TYPE_AUDIO;
     par->codec_id = AV_CODEC_ID_TAC;
     par->ch_layout.nb_channels = 2;
+    st->start_time = 0;
     st->duration = (AV_RL16(par->extradata+0xC)- 1) * 1024 + (AV_RL16(par->extradata+0xE) + 1);
     par->sample_rate = 48000;
     ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
