@@ -111,6 +111,7 @@ static int nist_read_header(AVFormatContext *s)
             sscanf(buffer, "%*s %*s %31s", coding);
         } else if (!memcmp(buffer, "sample_count", 12)) {
             sscanf(buffer, "%*s %*s %"SCNd64, &st->duration);
+            st->start_time = 0;
         } else if (!memcmp(buffer, "sample_n_bytes", 14)) {
             sscanf(buffer, "%*s %*s %d", &bps);
             if (bps > INT16_MAX/8U)
