@@ -281,6 +281,7 @@ extern const FFInputFormat  ff_mca_demuxer;
 extern const FFInputFormat  ff_mcc_demuxer;
 extern const FFInputFormat  ff_mcraw_demuxer;
 extern const FFOutputFormat ff_md5_muxer;
+extern const FFInputFormat  ff_macbinary_demuxer;
 extern const FFInputFormat  ff_matroska_demuxer;
 extern const FFOutputFormat ff_matroska_muxer;
 extern const FFOutputFormat ff_matroska_audio_muxer;

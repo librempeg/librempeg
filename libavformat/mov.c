@@ -4594,6 +4594,7 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
 {
     MOVStreamContext *sc = st->priv_data;
     FFStream *const sti = ffstream(st);
+    const int is_macbinary = !strcmp(mov->fc->iformat->name, "macbinary");
     int64_t current_offset;
     int64_t current_dts = 0;
     unsigned int stts_index = 0;
@@ -4749,7 +4750,7 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
                         return;
                     }
                     e = &sti->index_entries[sti->nb_index_entries++];
-                    e->pos = current_offset;
+                    e->pos = current_offset + 0x80 * is_macbinary;
                     e->timestamp = current_dts;
                     e->size = sample_size;
                     e->min_distance = distance;
@@ -11220,6 +11221,185 @@ const FFInputFormat ff_mov_demuxer = {
     .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
     .read_probe     = mov_probe,
     .read_header    = mov_read_header,
+    .read_packet    = mov_read_packet,
+    .read_close     = mov_read_close,
+    .read_seek      = mov_read_seek,
+};
+
+static int macbinary_probe(const AVProbeData *p)
+{
+    if (p->buf_size >= 0x88) {
+        if (p->buf[0])
+            return 0;
+
+        if (AV_RB32(p->buf+0x41) != MKBETAG('M','o','o','V'))
+            return 0;
+
+        if (AV_RB16(p->buf+0x7A) != 0x8181)
+            return 0;
+
+        if (AV_RB32(p->buf+0x84) != MKBETAG('m','d','a','t'))
+            return 0;
+
+        return AVPROBE_SCORE_MAX;
+    }
+
+    return 0;
+}
+
+static int macbinary_read_header(AVFormatContext *s)
+{
+    MOVContext *mov = s->priv_data;
+    AVIOContext *pb = s->pb;
+    MOVAtom atom = { AV_RL32("root") };
+    int err;
+
+    mov->fc = s;
+    mov->trak_index = -1;
+    mov->thmb_item_id = -1;
+    mov->primary_item_id = -1;
+    mov->cur_item_id = -1;
+
+    if (pb->seekable & AVIO_SEEKABLE_NORMAL)
+        atom.size = avio_size(pb);
+    else
+        atom.size = INT64_MAX;
+
+    do {
+        uint32_t data_length, rsrc_off, rsrc_map_off, rsrc_size, rsrc_map_size;
+        int64_t rsrc_start, end_pos;
+
+        avio_seek(pb, 0x53, SEEK_SET);
+        data_length = avio_rb32(pb);
+        rsrc_start = 0x80 + ((data_length + 0x7F) & ~0x7F);
+        avio_seek(pb, rsrc_start, SEEK_SET);
+
+        rsrc_off      = avio_rb32(pb);
+        rsrc_map_off  = avio_rb32(pb);
+        rsrc_size     = avio_rb32(pb);
+        rsrc_map_size = avio_rb32(pb);
+
+        if (rsrc_map_size == 0)
+            return AVERROR_INVALIDDATA;
+
+        if (rsrc_map_off < rsrc_off + rsrc_size)
+            return AVERROR_INVALIDDATA;
+
+        avio_seek(pb, rsrc_off-16, SEEK_CUR);
+        end_pos = rsrc_start*1LL + rsrc_off*1LL + rsrc_size*1LL;
+
+        do {
+            uint32_t type;
+
+            type = avio_rl32(pb);
+            if (type == MKTAG('m','o','o','v')) {
+                avio_seek(pb, -8, SEEK_CUR);
+                break;
+            }
+        } while (avio_tell(pb) < end_pos);
+
+        if ((err = mov_read_default(mov, pb, atom)) < 0) {
+            av_log(s, AV_LOG_ERROR, "error reading header\n");
+            return err;
+        }
+    } while ((pb->seekable & AVIO_SEEKABLE_NORMAL) &&
+             !mov->found_moov && !mov->moov_retry++);
+    if (!mov->found_moov) {
+        av_log(s, AV_LOG_ERROR, "moov atom not found\n");
+        return AVERROR_INVALIDDATA;
+    }
+
+    mov->found_iloc = mov->found_iinf = 1;
+
+    if (pb->seekable & AVIO_SEEKABLE_NORMAL) {
+        if (mov->nb_chapter_tracks > 0 && !mov->ignore_chapters)
+            mov_read_chapters(s);
+    }
+
+    for (int i = 0; i < s->nb_streams; i++) {
+        AVStream *st = s->streams[i];
+        FFStream *const sti = ffstream(st);
+        MOVStreamContext *sc = st->priv_data;
+        uint32_t dvdsub_clut[FF_DVDCLUT_CLUT_LEN] = {0};
+        fix_timescale(mov, sc);
+        if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
+            st->codecpar->codec_id   == AV_CODEC_ID_AAC) {
+            sti->skip_samples = sc->start_pad;
+        }
+        if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && sc->nb_frames_for_fps > 0 && sc->duration_for_fps > 0)
+            av_reduce(&st->avg_frame_rate.num, &st->avg_frame_rate.den,
+                      sc->time_scale*(int64_t)sc->nb_frames_for_fps, sc->duration_for_fps, INT_MAX);
+        if (st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE) {
+            if (st->codecpar->width <= 0 || st->codecpar->height <= 0) {
+                st->codecpar->width  = sc->width;
+                st->codecpar->height = sc->height;
+            }
+            if (st->codecpar->codec_id == AV_CODEC_ID_DVD_SUBTITLE &&
+                st->codecpar->extradata_size == FF_DVDCLUT_CLUT_SIZE) {
+
+                for (int j = 0; j < FF_DVDCLUT_CLUT_LEN; j++)
+                    dvdsub_clut[j] = AV_RB32(st->codecpar->extradata + j * 4);
+
+                err = ff_dvdclut_yuv_to_rgb(dvdsub_clut, FF_DVDCLUT_CLUT_SIZE);
+                if (err < 0)
+                    return err;
+
+                av_freep(&st->codecpar->extradata);
+                st->codecpar->extradata_size = 0;
+
+                err = ff_dvdclut_palette_extradata_cat(dvdsub_clut, FF_DVDCLUT_CLUT_SIZE,
+                                                       st->codecpar);
+                if (err < 0)
+                    return err;
+            }
+        }
+    }
+
+    if (mov->trex_data || mov->use_mfra_for > 0) {
+        for (int i = 0; i < s->nb_streams; i++) {
+            AVStream *st = s->streams[i];
+            MOVStreamContext *sc = st->priv_data;
+            if (sc->duration_for_fps > 0) {
+                /* Akin to sc->data_size * 8 * sc->time_scale / sc->duration_for_fps but accounting for overflows. */
+                st->codecpar->bit_rate = av_rescale(sc->data_size, ((int64_t) sc->time_scale) * 8, sc->duration_for_fps);
+                if (st->codecpar->bit_rate == INT64_MIN) {
+                    av_log(s, AV_LOG_WARNING, "Overflow during bit rate calculation %"PRId64" * 8 * %d\n",
+                           sc->data_size, sc->time_scale);
+                    st->codecpar->bit_rate = 0;
+                    if (s->error_recognition & AV_EF_EXPLODE)
+                        return AVERROR_INVALIDDATA;
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < mov->bitrates_count && i < s->nb_streams; i++) {
+        if (mov->bitrates[i]) {
+            s->streams[i]->codecpar->bit_rate = mov->bitrates[i];
+        }
+    }
+
+    ff_rfps_calculate(s);
+
+    fix_stream_ids(s);
+
+    ff_configure_buffers_for_index(s, AV_TIME_BASE);
+
+    for (int i = 0; i < mov->frag_index.nb_items; i++)
+        if (mov->frag_index.item[i].moof_offset <= mov->fragment.moof_offset)
+            mov->frag_index.item[i].headers_read = 1;
+
+    return 0;
+}
+
+const FFInputFormat ff_macbinary_demuxer = {
+    .p.name         = "macbinary",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("QuickTime / MacBinary"),
+    .p.flags        = AVFMT_NO_BYTE_SEEK | AVFMT_SEEK_TO_PTS | AVFMT_SHOW_IDS,
+    .priv_data_size = sizeof(MOVContext),
+    .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
+    .read_probe     = macbinary_probe,
+    .read_header    = macbinary_read_header,
     .read_packet    = mov_read_packet,
     .read_close     = mov_read_close,
     .read_seek      = mov_read_seek,

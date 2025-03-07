@@ -360,6 +360,9 @@ OBJS-$(CONFIG_LVF_DEMUXER)               += lvfdec.o
 OBJS-$(CONFIG_LXF_DEMUXER)               += lxfdec.o
 OBJS-$(CONFIG_M4V_DEMUXER)               += m4vdec.o rawdec.o
 OBJS-$(CONFIG_M4V_MUXER)                 += rawenc.o
+OBJS-$(CONFIG_MACBINARY_DEMUXER)         += mov.o mov_chan.o mov_esds.o \
+                                            qtpalette.o replaygain.o dovi_isom.o \
+                                            dvdclut.o
 OBJS-$(CONFIG_MATROSKA_DEMUXER)          += matroskadec.o matroska.o  \
                                             flac_picture.o rmsipr.o \
                                             oggparsevorbis.o vorbiscomment.o \
