@@ -52,6 +52,7 @@ static int mods_read_header(AVFormatContext *s)
 
     avio_skip(pb, 8);
 
+    st->start_time           = 0;
     st->nb_frames            = avio_rl32(pb);
     st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
     st->codecpar->codec_id   = AV_CODEC_ID_MOBICLIP;
