@@ -127,6 +127,6 @@ const FFCodec ff_zlib_encoder = {
     .priv_data_size = sizeof(LclEncContext),
     .init           = encode_init,
     FF_CODEC_ENCODE_CB(encode_frame),
-    .p.pix_fmts     = (const enum AVPixelFormat[]) { AV_PIX_FMT_BGR24, AV_PIX_FMT_NONE },
+    CODEC_PIXFMTS(AV_PIX_FMT_BGR24),
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
 };
