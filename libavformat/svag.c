@@ -52,6 +52,7 @@ static int svag_read_header(AVFormatContext *s)
     if (st->codecpar->ch_layout.nb_channels <= 0 ||
         st->codecpar->ch_layout.nb_channels > 8)
         return AVERROR_INVALIDDATA;
+    st->start_time = 0;
     st->duration           = size / (16 * st->codecpar->ch_layout.nb_channels) * 28;
     align                  = avio_rl32(s->pb);
     if (align <= 0 || align > INT_MAX / st->codecpar->ch_layout.nb_channels)
