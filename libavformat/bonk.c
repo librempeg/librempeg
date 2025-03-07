@@ -98,6 +98,7 @@ static int bonk_read_header(AVFormatContext *s)
     if (st->codecpar->ch_layout.nb_channels == 0)
         return AVERROR_INVALIDDATA;
     st->duration              = AV_RL32(st->codecpar->extradata + 1) / st->codecpar->ch_layout.nb_channels;
+    st->start_time = 0;
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
