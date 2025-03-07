@@ -127,6 +127,7 @@ static int lc3_read_header(AVFormatContext *s)
     avpriv_set_pts_info(st, 64, 1, srate_hz);
     avpriv_update_cur_dts(s, st, 0);
     st->duration = length;
+    st->start_time = 0;
 
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_LC3;
