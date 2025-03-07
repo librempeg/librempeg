@@ -112,6 +112,7 @@ static int threedostr_read_header(AVFormatContext *s)
                 st->duration       = (avio_rb32(s->pb) - 1) / st->codecpar->ch_layout.nb_channels;
             else
                 st->duration       = avio_rb32(s->pb) * 16 / st->codecpar->ch_layout.nb_channels;
+            st->start_time = 0;
             size -= 56;
             found_shdr = 1;
             break;
