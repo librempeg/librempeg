@@ -48,6 +48,7 @@ static int binka_read_header(AVFormatContext *s)
     st->codecpar->ch_layout.nb_channels = avio_r8(pb);
     st->codecpar->sample_rate = avio_rl16(pb);
     st->duration = avio_rl32(pb);
+    st->start_time = 0;
 
     avio_skip(pb, 8);
     entries = avio_rl16(pb);
