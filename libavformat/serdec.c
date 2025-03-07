@@ -63,6 +63,7 @@ static int ser_read_header(AVFormatContext *s)
     ser->width = avio_rl32(s->pb);
     ser->height = avio_rl32(s->pb);
     depth = avio_rl32(s->pb);
+    st->start_time = 0;
     st->nb_frames = st->duration = avio_rl32(s->pb);
     avio_skip(s->pb, 120);
     avio_skip(s->pb, 8);
