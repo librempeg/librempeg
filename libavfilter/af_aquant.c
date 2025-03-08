@@ -94,7 +94,7 @@ static int activate(AVFilterContext *ctx)
         s->got_input = ret > 0;
     }
 
-    if (!s->noise_shaper) {
+    if (!s->noise_shaper && s->frame[0]) {
         AVFrame *out;
 
         out = ff_get_audio_buffer(ctx->outputs[0], s->frame[0]->nb_samples);
