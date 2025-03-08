@@ -20,7 +20,6 @@
 
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
-#include "libavutil/float_dsp.h"
 #include "libavutil/mem.h"
 
 #include "audio.h"
@@ -33,9 +32,6 @@ typedef struct AudioMultiplyContext {
     AVFrame *frames[2];
     int planes;
     int channels;
-    int samples_align;
-
-    AVFloatDSPContext *fdsp;
 } AudioMultiplyContext;
 
 static int activate(AVFilterContext *ctx)
@@ -72,10 +68,7 @@ static int activate(AVFilterContext *ctx)
             return ff_filter_frame(ctx->outputs[0], out);
         }
 
-        if (av_sample_fmt_is_planar(ctx->inputs[0]->format))
-            plane_samples = FFALIGN(s->frames[0]->nb_samples, s->samples_align);
-        else
-            plane_samples = FFALIGN(s->frames[0]->nb_samples * s->channels, s->samples_align);
+        plane_samples = FFMIN(s->frames[0]->nb_samples, s->frames[1]->nb_samples);
 
         out = ff_get_audio_buffer(ctx->outputs[0], s->frames[0]->nb_samples);
         if (!out) {
@@ -87,17 +80,21 @@ static int activate(AVFilterContext *ctx)
 
         if (av_get_packed_sample_fmt(ctx->inputs[0]->format) == AV_SAMPLE_FMT_FLT) {
             for (int i = 0; i < s->planes; i++) {
-                s->fdsp->vector_fmul((float *)out->extended_data[i],
-                                     (const float *)s->frames[0]->extended_data[i],
-                                     (const float *)s->frames[1]->extended_data[i],
-                                     plane_samples);
+                const float *src0 = (const float *)s->frames[0]->extended_data[i];
+                const float *src1 = (const float *)s->frames[1]->extended_data[i];
+                float *dst = (float *)out->extended_data[i];
+
+                for (int n = 0; n < plane_samples; n++)
+                    dst[n] = src0[n] * src1[n];
             }
         } else {
             for (int i = 0; i < s->planes; i++) {
-                s->fdsp->vector_dmul((double *)out->extended_data[i],
-                                     (const double *)s->frames[0]->extended_data[i],
-                                     (const double *)s->frames[1]->extended_data[i],
-                                     plane_samples);
+                const double *src0 = (const double *)s->frames[0]->extended_data[i];
+                const double *src1 = (const double *)s->frames[1]->extended_data[i];
+                double *dst = (double *)out->extended_data[i];
+
+                for (int n = 0; n < plane_samples; n++)
+                    dst[n] = src0[n] * src1[n];
             }
         }
 
@@ -136,18 +133,6 @@ static int config_output(AVFilterLink *outlink)
 
     s->channels = inlink->ch_layout.nb_channels;
     s->planes = av_sample_fmt_is_planar(inlink->format) ? inlink->ch_layout.nb_channels : 1;
-    s->samples_align = 16;
-
-    return 0;
-}
-
-static av_cold int init(AVFilterContext *ctx)
-{
-    AudioMultiplyContext *s = ctx->priv;
-
-    s->fdsp = avpriv_float_dsp_alloc(0);
-    if (!s->fdsp)
-        return AVERROR(ENOMEM);
 
     return 0;
 }
@@ -158,8 +143,6 @@ static av_cold void uninit(AVFilterContext *ctx)
 
     av_frame_free(&s->frames[0]);
     av_frame_free(&s->frames[1]);
-
-    av_freep(&s->fdsp);
 }
 
 static const AVFilterPad inputs[] = {
@@ -185,7 +168,6 @@ const FFFilter ff_af_amultiply = {
     .p.name         = "amultiply",
     .p.description  = NULL_IF_CONFIG_SMALL("Multiply two audio streams."),
     .priv_size      = sizeof(AudioMultiplyContext),
-    .init           = init,
     .uninit         = uninit,
     .activate       = activate,
     FILTER_INPUTS(inputs),
