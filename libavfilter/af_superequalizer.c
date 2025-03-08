@@ -27,7 +27,6 @@
 #include "avfilter.h"
 #include "filters.h"
 
-#define NBANDS 17
 #define M 15
 
 typedef struct EqParameter {
@@ -37,9 +36,14 @@ typedef struct EqParameter {
 typedef struct SuperEqualizerContext {
     const AVClass *class;
 
-    EqParameter params[NBANDS + 1];
+    unsigned nb_params;
+    EqParameter *params;
 
-    float gains[NBANDS + 1];
+    float *bands;
+    unsigned nb_bands;
+
+    float *gains;
+    unsigned nb_gains;
 
     float fact[M + 1];
     float aa;
@@ -52,11 +56,6 @@ typedef struct SuperEqualizerContext {
     AVTXContext *rdft, *irdft;
     av_tx_fn tx_fn, itx_fn;
 } SuperEqualizerContext;
-
-static const float bands[] = {
-    65.406392, 92.498606, 130.81278, 184.99721, 261.62557, 369.99442, 523.25113, 739.9884, 1046.5023,
-    1479.9768, 2093.0045, 2959.9536, 4186.0091, 5919.9072, 8372.0181, 11839.814, 16744.036
-};
 
 static float izero(SuperEqualizerContext *s, float x)
 {
@@ -88,7 +87,7 @@ static float hn_imp(int n)
     return n == 0 ? 1.f : 0.f;
 }
 
-static float hn(int n, EqParameter *param, float fs)
+static float hn(int n, EqParameter *param, float fs, const int nb_params)
 {
     float ret, lhn;
     int i;
@@ -96,7 +95,7 @@ static float hn(int n, EqParameter *param, float fs)
     lhn = hn_lpf(n, param[0].upper, fs);
     ret = param[0].gain*lhn;
 
-    for (i = 1; i < NBANDS + 1 && param[i].upper < fs / 2; i++) {
+    for (i = 1; i < nb_params && param[i].upper < fs / 2; i++) {
         float lhn2 = hn_lpf(n, param[i].upper, fs);
         ret += param[i].gain * (lhn2 - lhn);
         lhn = lhn2;
@@ -121,13 +120,14 @@ static float win(SuperEqualizerContext *s, float n, int N)
     return izero(s, alpha(s->aa) * sqrtf(1 - 4 * n * n / ((N - 1) * (N - 1)))) / s->iza;
 }
 
-static void process_param(float *bc, EqParameter *param, float fs)
+static void process_param(const float *bc, EqParameter *param, float fs,
+                          const float *bands, const unsigned nb_bands)
 {
     int i;
 
-    for (i = 0; i <= NBANDS; i++) {
+    for (i = 0; i < nb_bands; i++) {
         param[i].lower = i == 0 ? 0 : bands[i - 1];
-        param[i].upper = i == NBANDS ? fs : bands[i];
+        param[i].upper = i == (nb_bands-1) ? fs : bands[i];
         param[i].gain  = bc[i];
     }
 }
@@ -167,7 +167,7 @@ static int equ_init(SuperEqualizerContext *s, int wb)
     return 0;
 }
 
-static void make_fir(SuperEqualizerContext *s, float *lbc, float *rbc, EqParameter *param, float fs)
+static void make_fir(SuperEqualizerContext *s, const float *lbc, EqParameter *param, float fs)
 {
     const int winlen = s->winlen;
     const int tabsize = s->tabsize;
@@ -176,9 +176,10 @@ static void make_fir(SuperEqualizerContext *s, float *lbc, float *rbc, EqParamet
     if (fs <= 0)
         return;
 
-    process_param(lbc, param, fs);
+    process_param(lbc, param, fs, s->bands, s->nb_params);
+
     for (i = 0; i < winlen; i++)
-        s->irest[i] = hn(i - winlen / 2, param, fs) * win(s, i - winlen / 2, winlen);
+        s->irest[i] = hn(i - winlen / 2, param, fs, s->nb_params) * win(s, i - winlen / 2, winlen);
     for (; i < tabsize; i++)
         s->irest[i] = 0;
 
@@ -289,7 +290,13 @@ static int config_output(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     SuperEqualizerContext *s = ctx->priv;
 
-    make_fir(s, s->gains, s->gains, s->params, outlink->sample_rate);
+    s->nb_params = FFMIN(s->nb_bands, s->nb_gains);
+
+    s->params = av_calloc(s->nb_params, sizeof(*s->params));
+    if (!s->params)
+        return AVERROR(ENOMEM);
+
+    make_fir(s, s->gains, s->params, outlink->sample_rate);
 
     return 0;
 }
@@ -299,6 +306,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     SuperEqualizerContext *s = ctx->priv;
 
     av_frame_free(&s->out);
+    av_freep(&s->params);
     av_freep(&s->irest);
     av_freep(&s->ires);
     av_freep(&s->fsamples);
@@ -325,26 +333,14 @@ static const AVFilterPad superequalizer_outputs[] = {
 
 #define AF AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 #define OFFSET(x) offsetof(SuperEqualizerContext, x)
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_gains = {.def="1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0",.size_min=2,.sep=' '};
+static const AVOptionArrayDef def_bands = {.def="65.406392 92.498606 130.81278 184.99721 261.62557 369.99442 523.25113 739.9884 1046.5023 1479.9768 2093.0045 2959.9536 4186.0091 5919.9072 8372.0181 11839.814 16744.036 20000",.size_min=2,.sep=' '};
 
 static const AVOption superequalizer_options[] = {
-    {  "1b", "set 65Hz band gain",    OFFSET(gains [0]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    {  "2b", "set 92Hz band gain",    OFFSET(gains [1]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    {  "3b", "set 131Hz band gain",   OFFSET(gains [2]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    {  "4b", "set 185Hz band gain",   OFFSET(gains [3]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    {  "5b", "set 262Hz band gain",   OFFSET(gains [4]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    {  "6b", "set 370Hz band gain",   OFFSET(gains [5]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    {  "7b", "set 523Hz band gain",   OFFSET(gains [6]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    {  "8b", "set 740Hz band gain",   OFFSET(gains [7]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    {  "9b", "set 1047Hz band gain",  OFFSET(gains [8]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    { "10b", "set 1480Hz band gain",  OFFSET(gains [9]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    { "11b", "set 2093Hz band gain",  OFFSET(gains[10]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    { "12b", "set 2960Hz band gain",  OFFSET(gains[11]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    { "13b", "set 4186Hz band gain",  OFFSET(gains[12]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    { "14b", "set 5920Hz band gain",  OFFSET(gains[13]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    { "15b", "set 8372Hz band gain",  OFFSET(gains[14]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    { "16b", "set 11840Hz band gain", OFFSET(gains[15]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    { "17b", "set 16744Hz band gain", OFFSET(gains[16]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
-    { "18b", "set 20000Hz band gain", OFFSET(gains[17]), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 20, AF },
+    { "gains", "set bands gain", OFFSET(gains), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_gains}, 0, 20, AF },
+    { "bands", "set bands freq", OFFSET(bands), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_bands}, 1, INT_MAX, AF },
     { NULL }
 };
 
@@ -352,7 +348,7 @@ AVFILTER_DEFINE_CLASS(superequalizer);
 
 const FFFilter ff_af_superequalizer = {
     .p.name        = "superequalizer",
-    .p.description = NULL_IF_CONFIG_SMALL("Apply 18 band equalization filter."),
+    .p.description = NULL_IF_CONFIG_SMALL("Apply X band equalization filter."),
     .p.priv_class  = &superequalizer_class,
     .priv_size     = sizeof(SuperEqualizerContext),
     .init          = init,
