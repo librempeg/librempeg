@@ -244,7 +244,11 @@ static av_cold int config_output(AVFilterLink *outlink)
                 D[l+n].re = mag;
             l += ll;
             av_assert0(l <= L);
+            prev = mag;
         }
+
+        for (int n = l; n < L; n++)
+            D[n].re = prev;
 
         for (int n = 0; n < L; n++)
             av_log(ctx, AV_LOG_DEBUG, "mag[%d]=%g\n", n, D[n].re);
