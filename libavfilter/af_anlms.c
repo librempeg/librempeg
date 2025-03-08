@@ -261,7 +261,7 @@ const FFFilter ff_af_anlms = {
     .activate       = activate,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_FLTP),
+    FILTER_QUERY_FUNC2(query_formats),
     .process_command = ff_filter_process_command,
 };
 
