@@ -46,7 +46,7 @@ typedef struct fn(StateContext) {
 
     unsigned filled, idx, size, front, back;
 
-    ftype attack, release, current;
+    ftype attack, release, hold, hold_count, current;
 } fn(StateContext);
 
 static void fn(envelope_uninit)(AVFilterContext *ctx)
@@ -87,6 +87,7 @@ static int fn(envelope_init)(AVFilterContext *ctx)
         fn(StateContext) *stc = &st[ch];
         const ftype attack = s->attack[FFMIN(ch, s->nb_attack-1)];
         const ftype release = s->release[FFMIN(ch, s->nb_release-1)];
+        const ftype hold = s->hold[FFMIN(ch, s->nb_hold-1)];
 
         if (attack > F(1.0) / sample_rate)
             stc->attack = F(1.0) / (attack * sample_rate);
@@ -98,6 +99,12 @@ static int fn(envelope_init)(AVFilterContext *ctx)
         else
             stc->release = F(1.0);
 
+        if (hold > F(1.0) / sample_rate)
+            stc->hold = F(1.0) / (hold * sample_rate);
+        else
+            stc->hold = F(1.0);
+
+        stc->hold_count = F(0.0);
         stc->size = look;
         if (!stc->sorted) {
             stc->sorted = av_calloc(look, sizeof(*stc->sorted));
@@ -194,9 +201,11 @@ static int fn(do_envelope)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, cons
     ftype *sorted = stc->sorted;
     ftype *cache = stc->cache;
     const ftype release = stc->release;
+    ftype hold_count = stc->hold_count;
     const ftype attack = stc->attack;
     unsigned filled = stc->filled;
     ftype current = stc->current;
+    const ftype hold = stc->hold;
     unsigned front = stc->front;
     unsigned back = stc->back;
     unsigned idx = stc->idx;
@@ -225,14 +234,20 @@ static int fn(do_envelope)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, cons
 
         p = fn(compute_peak)(sorted, r, prev, size, &front, &back);
 
-        if (p > current)
+        if (p > current) {
             current += (p-current) * attack;
-        else if (p < current)
-            current -= (current-p) * release;
+            hold_count = F(0.0);
+        } else if (p < current) {
+            if (hold_count >= F(1.0))
+                current -= (current-p) * release;
+            else
+                hold_count += hold;
+        }
 
         dst[n] = current;
     }
 
+    stc->hold_count = hold_count;
     stc->current = current;
     stc->filled = filled;
     stc->front = front;
@@ -255,9 +270,11 @@ static int fn(do_envelope_link)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     ftype *sorted = stc->sorted;
     ftype *cache = stc->cache;
     const ftype release = stc->release;
+    ftype hold_count = stc->hold_count;
     const ftype attack = stc->attack;
     unsigned filled = stc->filled;
     ftype current = stc->current;
+    const ftype hold = stc->hold;
     unsigned front = stc->front;
     unsigned back = stc->back;
     unsigned idx = stc->idx;
@@ -292,14 +309,20 @@ static int fn(do_envelope_link)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 
         p = fn(compute_peak)(sorted, r, prev, size, &front, &back);
 
-        if (p > current)
+        if (p > current) {
             current += (p-current) * attack;
-        else if (p < current)
-            current -= (current-p) * release;
+            hold_count = F(0.0);
+        } else if (p < current) {
+            if (hold_count >= F(1.0))
+                current -= (current-p) * release;
+            else
+                hold_count += hold;
+        }
 
         dst[n] = current;
     }
 
+    stc->hold_count = hold_count;
     stc->current = current;
     stc->filled = filled;
     stc->front = front;

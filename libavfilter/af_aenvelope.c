@@ -36,6 +36,9 @@ typedef struct AudioEnvelopeContext {
     double *release;
     unsigned nb_release;
 
+    double *hold;
+    unsigned nb_hold;
+
     double look;
     int link;
     int hlook;
@@ -60,10 +63,12 @@ typedef struct AudioEnvelopeContext {
 
 static const AVOptionArrayDef def_attack = {.def="0.01",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_release = {.def="0.8",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_hold = {.def="0.0",.size_min=1,.sep=' '};
 
 static const AVOption aenvelope_options[] = {
     { "attack", "set the attack time", OFFSET(attack), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_attack}, 0, 10, AFR },
     { "release", "set the release time", OFFSET(release), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_release}, 0, 10, AFR },
+    { "hold", "set the hold time", OFFSET(hold), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_hold}, 0, 10, AFR },
     { "look", "set the look-ahead time", OFFSET(look), AV_OPT_TYPE_DOUBLE, {.dbl=0.01}, 0.0005, 0.5, AF },
     { "link", "enable channels linking", OFFSET(link), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, AF },
     { NULL }
