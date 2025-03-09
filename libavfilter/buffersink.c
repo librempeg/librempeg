@@ -49,18 +49,18 @@ typedef struct BufferSinkContext {
     enum AVPixelFormat *pixel_formats;
     unsigned         nb_pixel_formats;
 
-    int                *colorspaces;
-    unsigned         nb_colorspaces;
+    int                *color_spaces;
+    unsigned         nb_color_spaces;
 
-    int                *colorranges;
-    unsigned         nb_colorranges;
+    int                *color_ranges;
+    unsigned         nb_color_ranges;
 
     /* only used for audio */
     enum AVSampleFormat *sample_formats;
     unsigned          nb_sample_formats;
 
-    int                 *samplerates;
-    unsigned          nb_samplerates;
+    int                 *sample_rates;
+    unsigned          nb_sample_rates;
 
     AVChannelLayout     *channel_layouts;
     unsigned          nb_channel_layouts;
@@ -154,8 +154,8 @@ static int init_video(AVFilterContext *ctx)
     BufferSinkContext *s = ctx->priv;
 
     TERMINATE_ARRAY(pixel_formats, AV_PIX_FMT_NONE);
-    TERMINATE_ARRAY(colorranges, -1);
-    TERMINATE_ARRAY(colorspaces, -1);
+    TERMINATE_ARRAY(color_ranges, -1);
+    TERMINATE_ARRAY(color_spaces, -1);
 
     return common_init(ctx);
 }
@@ -165,7 +165,7 @@ static int init_audio(AVFilterContext *ctx)
     BufferSinkContext *s = ctx->priv;
 
     TERMINATE_ARRAY(sample_formats, AV_SAMPLE_FMT_NONE);
-    TERMINATE_ARRAY(samplerates, -1);
+    TERMINATE_ARRAY(sample_rates, -1);
     TERMINATE_ARRAY(channel_layouts, (AVChannelLayout){ .nb_channels = 0 });
 
     return common_init(ctx);
@@ -289,13 +289,13 @@ static int vsink_query_formats(const AVFilterContext *ctx,
         if (ret < 0)
             return ret;
     }
-    if (buf->nb_colorspaces) {
-        int ret = ff_set_common_color_spaces_from_list2(ctx, cfg_in, cfg_out, buf->colorspaces);
+    if (buf->nb_color_spaces) {
+        int ret = ff_set_common_color_spaces_from_list2(ctx, cfg_in, cfg_out, buf->color_spaces);
         if (ret < 0)
             return ret;
     }
-    if (buf->nb_colorranges) {
-        int ret = ff_set_common_color_ranges_from_list2(ctx, cfg_in, cfg_out, buf->colorranges);
+    if (buf->nb_color_ranges) {
+        int ret = ff_set_common_color_ranges_from_list2(ctx, cfg_in, cfg_out, buf->color_ranges);
         if (ret < 0)
             return ret;
     }
@@ -314,8 +314,8 @@ static int asink_query_formats(const AVFilterContext *ctx,
         if (ret < 0)
             return ret;
     }
-    if (buf->nb_samplerates) {
-        int ret = ff_set_common_samplerates_from_list2(ctx, cfg_in, cfg_out, buf->samplerates);
+    if (buf->nb_sample_rates) {
+        int ret = ff_set_common_samplerates_from_list2(ctx, cfg_in, cfg_out, buf->sample_rates);
         if (ret < 0)
             return ret;
     }
@@ -335,25 +335,26 @@ void av_buffersink_close(AVFilterContext *ctx)
 
 #define OFFSET(x) offsetof(BufferSinkContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
+static const AVOptionArrayDef def_array = {.def=NULL,.size_min=0,.sep='|'};
 static const AVOption buffersink_options[] = {
-    { "pixel_formats",  "array of supported pixel formats", OFFSET(pixel_formats),
-        AV_OPT_TYPE_PIXEL_FMT | AV_OPT_TYPE_FLAG_ARRAY, .max = INT_MAX, .flags = FLAGS },
-    { "colorspaces",    "array of supported color spaces",  OFFSET(colorspaces),
-        AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, .max = INT_MAX, .flags = FLAGS },
-    { "colorranges",    "array of supported color ranges",  OFFSET(colorranges),
-        AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, .max = INT_MAX, .flags = FLAGS },
+    { "pixel_formats", "array of supported pixel formats", OFFSET(pixel_formats),
+        AV_OPT_TYPE_PIXEL_FMT | AV_OPT_TYPE_FLAG_ARRAY, {.arr=&def_array}, .max = INT_MAX, .flags = FLAGS },
+    { "color_spaces", "array of supported color spaces",  OFFSET(color_spaces),
+        AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, {.arr=&def_array}, .max = INT_MAX, .flags = FLAGS },
+    { "color_ranges", "array of supported color ranges",  OFFSET(color_ranges),
+        AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, {.arr=&def_array}, .max = INT_MAX, .flags = FLAGS },
 
     { NULL },
 };
 #undef FLAGS
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_AUDIO_PARAM
 static const AVOption abuffersink_options[] = {
-    { "sample_formats",  "array of supported sample formats", OFFSET(sample_formats),
-        AV_OPT_TYPE_SAMPLE_FMT | AV_OPT_TYPE_FLAG_ARRAY, .max = INT_MAX, .flags = FLAGS },
-    { "samplerates",    "array of supported sample rates", OFFSET(samplerates),
-        AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, .max = INT_MAX, .flags = FLAGS },
+    { "sample_formats", "array of supported sample formats", OFFSET(sample_formats),
+        AV_OPT_TYPE_SAMPLE_FMT | AV_OPT_TYPE_FLAG_ARRAY, {.arr=&def_array}, .max = INT_MAX, .flags = FLAGS },
+    { "sample_rates", "array of supported sample rates", OFFSET(sample_rates),
+        AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY, {.arr=&def_array}, .max = INT_MAX, .flags = FLAGS },
     { "channel_layouts", "array of supported channel layouts", OFFSET(channel_layouts),
-        AV_OPT_TYPE_CHLAYOUT | AV_OPT_TYPE_FLAG_ARRAY, .flags = FLAGS },
+        AV_OPT_TYPE_CHLAYOUT | AV_OPT_TYPE_FLAG_ARRAY, {.arr=&def_array}, .flags = FLAGS },
     { NULL },
 };
 #undef FLAGS

@@ -52,7 +52,7 @@ typedef struct AFormatContext {
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 static const AVOptionArrayDef def_array = {.def=NULL,.size_min=0,.sep='|'};
 static const AVOption aformat_options[] = {
-    { "sample_fmts",     "set the list of sample formats",  OFFSET(formats),     AV_OPT_TYPE_SAMPLE_FMT|AR, {.arr=&def_array}, .flags = A|F, .min = AV_SAMPLE_FMT_NONE+1, .max = AV_SAMPLE_FMT_NB-1 },
+    { "sample_formats",  "set the list of sample formats",  OFFSET(formats),     AV_OPT_TYPE_SAMPLE_FMT|AR, {.arr=&def_array}, .flags = A|F, .min = AV_SAMPLE_FMT_NONE+1, .max = AV_SAMPLE_FMT_NB-1 },
     { "f",               "set the list of sample formats",  OFFSET(formats),     AV_OPT_TYPE_SAMPLE_FMT|AR, {.arr=&def_array}, .flags = A|F, .min = AV_SAMPLE_FMT_NONE+1, .max = AV_SAMPLE_FMT_NB-1 },
     { "sample_rates",    "set the list of sample rates",    OFFSET(sample_rates),    AV_OPT_TYPE_INT|AR,    {.arr=&def_array}, .flags = A|F, .min = 1, .max = INT_MAX },
     { "r",               "set the list of sample rates",    OFFSET(sample_rates),    AV_OPT_TYPE_INT|AR,    {.arr=&def_array}, .flags = A|F, .min = 1, .max = INT_MAX },
@@ -153,7 +153,7 @@ const FFFilter ff_af_aformat = {
 
 #if CONFIG_ANOFORMAT_FILTER
 static const AVOption anoformat_options[] = {
-    { "sample_fmts", "set the list of sample formats", OFFSET(formats), AV_OPT_TYPE_SAMPLE_FMT|AR, {.arr=&def_array}, .flags = A|F, .min = AV_SAMPLE_FMT_NONE+1, .max = AV_SAMPLE_FMT_NB-1 },
+    { "sample_formats", "set the list of sample formats", OFFSET(formats), AV_OPT_TYPE_SAMPLE_FMT|AR, {.arr=&def_array}, .flags = A|F, .min = AV_SAMPLE_FMT_NONE+1, .max = AV_SAMPLE_FMT_NB-1 },
     { "f",           "set the list of sample formats", OFFSET(formats), AV_OPT_TYPE_SAMPLE_FMT|AR, {.arr=&def_array}, .flags = A|F, .min = AV_SAMPLE_FMT_NONE+1, .max = AV_SAMPLE_FMT_NB-1 },
     { NULL }
 };

@@ -1927,7 +1927,7 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
                                 0, nb_pix_fmts, AV_OPT_TYPE_PIXEL_FMT, pix_fmts)) < 0)
         goto fail;
     if (!vk_renderer &&
-        (ret = av_opt_set_array(filt_out, "colorspaces", AV_OPT_SEARCH_CHILDREN,
+        (ret = av_opt_set_array(filt_out, "color_spaces", AV_OPT_SEARCH_CHILDREN,
                                 0, FF_ARRAY_ELEMS(sdl_supported_color_spaces),
                                 AV_OPT_TYPE_INT, sdl_supported_color_spaces)) < 0)
         goto fail;
@@ -2050,7 +2050,7 @@ static int configure_audio_filters(VideoState *is, const char *afilters, int for
         if ((ret = av_opt_set_array(filt_asink, "channel_layouts", AV_OPT_SEARCH_CHILDREN,
                                     0, 1, AV_OPT_TYPE_CHLAYOUT, &is->audio_tgt.ch_layout)) < 0)
             goto end;
-        if ((ret = av_opt_set_array(filt_asink, "samplerates", AV_OPT_SEARCH_CHILDREN,
+        if ((ret = av_opt_set_array(filt_asink, "sample_rates", AV_OPT_SEARCH_CHILDREN,
                                     0, 1, AV_OPT_TYPE_INT, &is->audio_tgt.freq)) < 0)
             goto end;
     }

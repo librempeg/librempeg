@@ -157,8 +157,8 @@ fate-filter-framerate-up: CMD = framecrc -lavfi testsrc2=r=2:d=10,framerate=fps=
 fate-filter-framerate-down: CMD = framecrc -lavfi testsrc2=r=2:d=10,framerate=fps=1 -t 1
 
 FATE_FILTER-$(call FILTERFRAMECRC, FRAMERATE TESTSRC2 FORMAT SCALE) += fate-filter-framerate-12bit-up fate-filter-framerate-12bit-down
-fate-filter-framerate-12bit-up: CMD = framecrc -lavfi testsrc2=r=50:d=1,format=pix_fmts=yuv422p12le,scale,framerate=fps=60,scale -t 1 -pix_fmt yuv422p12le
-fate-filter-framerate-12bit-down: CMD = framecrc -lavfi testsrc2=r=60:d=1,format=pix_fmts=yuv422p12le,scale,framerate=fps=50,scale -t 1 -pix_fmt yuv422p12le
+fate-filter-framerate-12bit-up: CMD = framecrc -lavfi testsrc2=r=50:d=1,format=pixel_formats=yuv422p12le,scale,framerate=fps=60,scale -t 1 -pix_fmt yuv422p12le
+fate-filter-framerate-12bit-down: CMD = framecrc -lavfi testsrc2=r=60:d=1,format=pixel_formats=yuv422p12le,scale,framerate=fps=50,scale -t 1 -pix_fmt yuv422p12le
 
 FATE_FILTER-$(call FILTERFRAMECRC, MINTERPOLATE TESTSRC2) += fate-filter-minterpolate-up fate-filter-minterpolate-down
 fate-filter-minterpolate-up: CMD = framecrc -lavfi testsrc2=r=2:d=10,minterpolate=fps=10 -t 1

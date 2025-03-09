@@ -401,10 +401,10 @@ static void choose_ ## name (OutputFilterPriv *ofp, AVBPrint *bprint)          \
     av_bprint_chars(bprint, ':', 1);                                           \
 }
 
-DEF_CHOOSE_FORMAT(pix_fmts, enum AVPixelFormat, format, formats,
+DEF_CHOOSE_FORMAT(pixel_formats, enum AVPixelFormat, format, formats,
                   AV_PIX_FMT_NONE, "%s", av_get_pix_fmt_name)
 
-DEF_CHOOSE_FORMAT(sample_fmts, enum AVSampleFormat, format, formats,
+DEF_CHOOSE_FORMAT(sample_formats, enum AVSampleFormat, format, formats,
                   AV_SAMPLE_FMT_NONE, "%s", av_get_sample_fmt_name)
 
 DEF_CHOOSE_FORMAT(sample_rates, int, sample_rate, sample_rates, 0,
@@ -1560,7 +1560,7 @@ static int configure_output_video_filter(FilterGraphPriv *fgp, AVFilterGraph *gr
     av_assert0(!(ofp->flags & OFILTER_FLAG_DISABLE_CONVERT) ||
                ofp->format != AV_PIX_FMT_NONE || !ofp->formats);
     av_bprint_init(&bprint, 0, AV_BPRINT_SIZE_UNLIMITED);
-    choose_pix_fmts(ofp, &bprint);
+    choose_pixel_formats(ofp, &bprint);
     choose_color_spaces(ofp, &bprint);
     choose_color_ranges(ofp, &bprint);
     if (!av_bprint_is_complete(&bprint))
@@ -1606,11 +1606,20 @@ static int configure_output_audio_filter(FilterGraphPriv *fgp, AVFilterGraph *gr
     int ret;
 
     snprintf(name, sizeof(name), "out_%s", ofp->name);
+    av_bprint_init(&args, 0, AV_BPRINT_SIZE_UNLIMITED);
+
+    choose_sample_formats(ofp,  &args);
+    choose_sample_rates(ofp,    &args);
+    choose_channel_layouts(ofp, &args);
+    if (!av_bprint_is_complete(&args)) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
     ret = avfilter_graph_create_filter(&ofp->filter,
                                        avfilter_get_by_name("abuffersink"),
-                                       name, NULL, NULL, graph);
+                                       name, args.str, NULL, graph);
     if (ret < 0)
-        return ret;
+        goto fail;
 
 #define AUTO_INSERT_FILTER(opt_name, filter_name, arg) do {                 \
     AVFilterContext *filt_ctx;                                              \
@@ -1631,32 +1640,6 @@ static int configure_output_audio_filter(FilterGraphPriv *fgp, AVFilterGraph *gr
     last_filter = filt_ctx;                                                 \
     pad_idx = 0;                                                            \
 } while (0)
-    av_bprint_init(&args, 0, AV_BPRINT_SIZE_UNLIMITED);
-
-    choose_sample_fmts(ofp,     &args);
-    choose_sample_rates(ofp,    &args);
-    choose_channel_layouts(ofp, &args);
-    if (!av_bprint_is_complete(&args)) {
-        ret = AVERROR(ENOMEM);
-        goto fail;
-    }
-    if (args.len) {
-        AVFilterContext *format;
-
-        snprintf(name, sizeof(name), "format_out_%s", ofp->name);
-        ret = avfilter_graph_create_filter(&format,
-                                           avfilter_get_by_name("aformat"),
-                                           name, args.str, NULL, graph);
-        if (ret < 0)
-            goto fail;
-
-        ret = avfilter_link(last_filter, pad_idx, format, 0);
-        if (ret < 0)
-            goto fail;
-
-        last_filter = format;
-        pad_idx = 0;
-    }
 
     if (ofilter->apad)
         AUTO_INSERT_FILTER("-apad", "apad", ofilter->apad);
