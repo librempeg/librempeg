@@ -1,1 +1,1 @@
-anequalizer='c0 f=200 w=200 g=-80 t=1'
+anequalizer=freq=200:width=200:gain=-80dB:type=1
