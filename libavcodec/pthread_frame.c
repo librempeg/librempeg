@@ -717,7 +717,7 @@ void ff_thread_finish_setup(AVCodecContext *avctx) {
 }
 
 /// Waits for all threads to finish.
-static void park_frame_worker_threads(FrameThreadContext *fctx, int thread_count)
+static av_cold void park_frame_worker_threads(FrameThreadContext *fctx, int thread_count)
 {
     int i;
 
@@ -749,7 +749,7 @@ DEFINE_OFFSET_ARRAY(PerThreadContext, per_thread, pthread_init_cnt,
                     (OFF(input_cond), OFF(progress_cond), OFF(output_cond)));
 #undef OFF
 
-void ff_frame_thread_free(AVCodecContext *avctx, int thread_count)
+av_cold void ff_frame_thread_free(AVCodecContext *avctx, int thread_count)
 {
     FrameThreadContext *fctx = avctx->internal->thread_ctx;
     const FFCodec *codec = ffcodec(avctx->codec);
@@ -919,7 +919,7 @@ static av_cold int init_thread(PerThreadContext *p, int *threads_to_free,
     return 0;
 }
 
-int ff_frame_thread_init(AVCodecContext *avctx)
+av_cold int ff_frame_thread_init(AVCodecContext *avctx)
 {
     int thread_count = avctx->thread_count;
     const FFCodec *codec = ffcodec(avctx->codec);
@@ -982,7 +982,7 @@ error:
     return err;
 }
 
-void ff_thread_flush(AVCodecContext *avctx)
+av_cold void ff_thread_flush(AVCodecContext *avctx)
 {
     int i;
     FrameThreadContext *fctx = avctx->internal->thread_ctx;
@@ -1084,7 +1084,7 @@ void ff_thread_release_ext_buffer(ThreadFrame *f)
         av_frame_unref(f->f);
 }
 
-enum ThreadingStatus ff_thread_sync_ref(AVCodecContext *avctx, size_t offset)
+av_cold enum ThreadingStatus ff_thread_sync_ref(AVCodecContext *avctx, size_t offset)
 {
     PerThreadContext *p;
     const void *ref;
