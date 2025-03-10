@@ -23,7 +23,6 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
-#include "pcm.h"
 
 static int smp_probe(const AVProbeData *p)
 {
@@ -85,6 +84,23 @@ static int smp_read_header(AVFormatContext *s)
     return 0;
 }
 
+static int smp_read_packet(AVFormatContext *s, AVPacket *pkt)
+{
+    AVStream *st = s->streams[0];
+    AVIOContext *pb = s->pb;
+    int size;
+
+    if (avio_feof(pb))
+        return AVERROR_EOF;
+
+    if (avio_tell(pb) >= st->duration*2LL)
+        return AVERROR_EOF;
+
+    size = FFMIN(st->duration*2LL - avio_tell(pb), 2 * 512);
+
+    return av_get_packet(pb, pkt, size);
+}
+
 const FFInputFormat ff_smp_demuxer = {
     .p.name         = "smp",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sample Vision Audio"),
@@ -92,6 +108,5 @@ const FFInputFormat ff_smp_demuxer = {
     .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = smp_probe,
     .read_header    = smp_read_header,
-    .read_packet    = ff_pcm_read_packet,
-    .read_seek      = ff_pcm_read_seek,
+    .read_packet    = smp_read_packet,
 };
