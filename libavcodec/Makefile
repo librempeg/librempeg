@@ -402,6 +402,7 @@ OBJS-$(CONFIG_G723_1_DECODER)          += g723_1dec.o g723_1.o \
                                           acelp_vectors.o celp_filters.o celp_math.o
 OBJS-$(CONFIG_G723_1_ENCODER)          += g723_1enc.o g723_1.o \
                                           acelp_vectors.o celp_filters.o celp_math.o
+OBJS-$(CONFIG_G728_DECODER)            += g728dec.o
 OBJS-$(CONFIG_G729_DECODER)            += g729dec.o lsp.o celp_math.o celp_filters.o acelp_filters.o acelp_pitch_delay.o acelp_vectors.o g729postfilter.o
 OBJS-$(CONFIG_GDV_DECODER)             += gdv.o
 OBJS-$(CONFIG_GEM_DECODER)             += gemdec.o
