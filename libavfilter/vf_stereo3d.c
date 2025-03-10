@@ -532,13 +532,11 @@ static int config_output(AVFilterLink *outlink)
         }
         break;
     case MONO:
-        if (s->in.format != INTERLEAVE_COLS && s->in.eyes != LEFT && s->out.eyes == RIGHT) {
+        if (s->in.format != INTERLEAVE_COLS && s->in.eyes != s->out.eyes) {
             s->in.off_left = s->in.off_right;
             s->in.row_left = s->in.row_right;
         }
-        if (s->in.format == INTERLEAVE_ROWS && s->in.eyes == LEFT && s->out.eyes == RIGHT)
-            FFSWAP(int, s->in.off_lstep, s->in.off_rstep);
-        if (s->in.format == INTERLEAVE_ROWS && s->in.eyes == RIGHT && s->out.eyes == LEFT)
+        if (s->in.format == INTERLEAVE_ROWS && s->in.eyes != s->out.eyes)
             FFSWAP(int, s->in.off_lstep, s->in.off_rstep);
         break;
     case ALTERNATING:
@@ -555,7 +553,7 @@ static int config_output(AVFilterLink *outlink)
     }
 
     if (s->in.format == INTERLEAVE_COLS) {
-        if ((s->in.format & 1) != (s->out.format & 1)) {
+        if (s->in.eyes != s->out.eyes) {
             FFSWAP(int, s->in.row_left,   s->in.row_right);
             FFSWAP(int, s->in.off_lstep,  s->in.off_rstep);
             FFSWAP(int, s->in.off_left,   s->in.off_right);
@@ -808,7 +806,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
 copy:
         if (s->in.format == INTERLEAVE_COLS) {
             for (int i = 0; i < s->nb_planes; i++) {
-                int d = (s->in.format & 1) != (s->out.format & 1);
+                int d = s->in.eyes != s->out.eyes;
 
                 interleave_cols_to_any(s, out_off_left,  i, ileft,  oleft,   d);
                 interleave_cols_to_any(s, out_off_right, i, iright, oright, !d);
@@ -829,39 +827,43 @@ copy:
         }
         break;
     case MONO:
-        if (s->out.eyes == LEFT) {
+        if (s->out.eyes == LEFT)
             iright = ileft;
-        } else {
-            switch (s->in.format) {
-            case INTERLEAVE_ROWS:
-                for (int i = 0; i < s->nb_planes; i++)
-                    out->linesize[i] *= 2;
-            case ABOVE_BELOW:
-            case ABOVE_BELOW_2:
-            case SIDE_BY_SIDE:
-            case SIDE_BY_SIDE_2:
-                out->width  = outlink->w;
-                out->height = outlink->h;
 
+        switch (s->in.format) {
+        case INTERLEAVE_ROWS:
+            for (int i = 0; i < s->nb_planes; i++)
+                out->linesize[i] *= 2;
+        case ABOVE_BELOW:
+        case ABOVE_BELOW_2:
+        case SIDE_BY_SIDE:
+        case SIDE_BY_SIDE_2:
+            out->width  = outlink->w;
+            out->height = outlink->h;
+
+            if (s->in.eyes == s->out.eyes) {
                 for (int i = 0; i < s->nb_planes; i++)
                     out->data[i] += s->in_off_left[i];
-                break;
-            case INTERLEAVE_COLS:
-                for (int i = 0; i < s->nb_planes; i++) {
-                    const int d = (s->in.format & 1) != (s->out.format & 1);
-
-                    interleave_cols_to_any(s, out_off_right, i, iright, out, d);
-                }
-                break;
-            default:
-                for (int i = 0; i < s->nb_planes; i++) {
-                    av_image_copy_plane(out->data[i], out->linesize[i],
-                                        iright->data[i] + s->in_off_left[i],
-                                        iright->linesize[i] * s->in.row_step,
-                                        s->linesize[i], s->pheight[i]);
-                }
-                break;
+            } else if (s->in.eyes != s->out.eyes) {
+                for (int i = 0; i < s->nb_planes; i++)
+                    out->data[i] += s->in_off_right[i];
             }
+            break;
+        case INTERLEAVE_COLS:
+            for (int i = 0; i < s->nb_planes; i++) {
+                const int d = s->in.eyes != s->out.eyes;
+
+                interleave_cols_to_any(s, out_off_right, i, iright, out, d);
+            }
+            break;
+        default:
+            for (int i = 0; i < s->nb_planes; i++) {
+                av_image_copy_plane(out->data[i], out->linesize[i],
+                                    iright->data[i] + s->in_off_left[i],
+                                    iright->linesize[i] * s->in.row_step,
+                                    s->linesize[i], s->pheight[i]);
+            }
+            break;
         }
         break;
     case ANAGLYPH_RB_GRAY:
@@ -877,9 +879,9 @@ copy:
     case ANAGLYPH_YB_GRAY:
     case ANAGLYPH_YB_HALF:
     case ANAGLYPH_YB_COLOR:
-    case ANAGLYPH_YB_DUBOIS: {
+    case ANAGLYPH_YB_DUBOIS:
         if (s->in.format == INTERLEAVE_COLS) {
-            const int d = (s->in.format & 1);
+            const int d = s->in.eyes != s->out.eyes;
 
             anaglyph_ic(out->data[0],
                 ileft ->data[0] + s->in_off_left [0] +   d  * 3,
@@ -897,12 +899,11 @@ copy:
                               FFMIN(s->out.height, ff_filter_get_nb_threads(ctx)));
         }
         break;
-    }
     case CHECKERBOARD:
         for (int i = 0; i < s->nb_planes; i++) {
             for (int y = 0; y < s->pheight[i]; y++) {
                 uint8_t *dst = out->data[i] + out->linesize[i] * y;
-                const int d1 = (s->in.format == INTERLEAVE_COLS) && (s->in.format & 1) != (s->out.format & 1);
+                const int d1 = (s->in.format == INTERLEAVE_COLS) && (s->in.eyes != s->out.eyes);
                 const int d2 = (s->in.format == INTERLEAVE_COLS) ? !d1 : 0;
                 const int m = 1 + (s->in.format == INTERLEAVE_COLS);
                 uint8_t *left  = ileft->data[i]  + ileft->linesize[i]  * y + s->in_off_left[i]  + d1 * s->pixstep[i];
