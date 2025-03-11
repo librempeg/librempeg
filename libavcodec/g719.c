@@ -1063,7 +1063,8 @@ static void dqcoefs(int16_t *y, int16_t *idxnrm, int16_t *R, int16_t N1,
     pcoefs_norm = coefs_norm;
     nb_vecs = L >> 3;
     for (int n = N1; n < N2; n++) {
-        av_assert0(idxnrm[n] < 40 && idxnrm[n] >= 0);
+        if (!(idxnrm[n] < 40 && idxnrm[n] >= 0))
+            return;
         normq = dicn[idxnrm[n]];
         v = R[n];
         if (v > 1) {
@@ -1208,18 +1209,22 @@ static int flvqdec(AVCodecContext *avctx, ChannelState *c,
 
     bits2idxn(avctx, NORM0_BITS, ynrm);
 
-    av_assert0(ynrm[0] >= 0 && ynrm[0] < 40);
+    if (!(ynrm[0] >= 0 && ynrm[0] < 40))
+        return AVERROR_INVALIDDATA;
+
     if (FlagN == HUFCODE) {
         hdecnrm(avctx, NB_SFM, &ynrm[1]);
         hcode_l = 0;
         for (int i = 1; i < NB_SFM; i++) {
-            av_assert0(ynrm[i] >= 0 && ynrm[i] < 32);
+            if (!(ynrm[i] >= 0 && ynrm[i] < 32))
+                return AVERROR_INVALIDDATA;
             hcode_l += huffsizn[ynrm[i]];
         }
     } else {
         for (int i = 1; i < NB_SFM; i++) {
             bits2idxn(avctx, NORMI_BITS, &ynrm[i]);
-            av_assert0(ynrm[i] >= 0 && ynrm[i] < 40);
+            if (!(ynrm[i] >= 0 && ynrm[i] < 40))
+                return AVERROR_INVALIDDATA;
         }
         hcode_l = NUMNRMIBITS;
     }
@@ -1231,12 +1236,14 @@ static int flvqdec(AVCodecContext *avctx, ChannelState *c,
             idxbuf[i] = ynrm[i] + idxbuf[i-1] - 15;
         recovernorm(idxbuf, ynrm, normqlg2);
         for (int i = 0; i < NB_SFM; i++)
-            av_assert0(ynrm[i] >= 0 && ynrm[i] < 40);
+            if (!(ynrm[i] >= 0 && ynrm[i] < 40))
+                return AVERROR_INVALIDDATA;
     } else {
         for (int i = 1; i < NB_SFM; i++) {
             k = ynrm[i - 1] - 15;
             ynrm[i] += k;
-            av_assert0(ynrm[i] >= 0 && ynrm[i] < 40);
+            if (!(ynrm[i] >= 0 && ynrm[i] < 40))
+                return AVERROR_INVALIDDATA;
             normqlg2[i] = dicnlg2[ynrm[i]];
         }
     }
