@@ -948,6 +948,7 @@ int ff_exif_decode_ifd(void *logctx, GetByteContext *gb, int le, int depth, AVDi
     return ret;
 }
 
+#if FF_API_OLD_EXIF
 int avpriv_exif_decode_ifd(void *logctx, const uint8_t *buf, int size,
                            int le, int depth, AVDictionary **metadata)
 {
@@ -955,6 +956,7 @@ int avpriv_exif_decode_ifd(void *logctx, const uint8_t *buf, int size,
     bytestream2_init(&gb, buf, size);
     return ff_exif_decode_ifd(logctx, &gb, le, depth, metadata);
 }
+#endif /* FF_API_OLD_EXIF */
 
 static int exif_attach_ifd(void *logctx, AVFrame *frame, const AVExifMetadata *ifd, AVBufferRef *og)
 {
