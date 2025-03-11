@@ -56,6 +56,7 @@ enum DetectFilter {
 };
 
 enum DetectThresholdFilter {
+    DTDISABLED,
     DTABSOLUTE,
     DTRELATIVE,
     NB_DTFILTERS
@@ -329,6 +330,7 @@ static const AVOption adynamicequalizer_options[] = {
     {   "highpass", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DHIGHPASS},0, 0,       FLAGS, .unit = "dftype" },
     {   "peak",     0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DPEAK},    0, 0,       FLAGS, .unit = "dftype" },
     { "dttype",     "set detection threshold type",OFFSET(dttype), AV_OPT_TYPE_INT|AR, {.arr=&def_dttype}, 0,NB_DTFILTERS-1,FLAGS, .unit = "dttype" },
+    {   "disabled", "disable detection threshold",0,               AV_OPT_TYPE_CONST,  {.i64=DTDISABLED},0, 0,      FLAGS, .unit = "dttype" },
     {   "absolute", "set the absolute threshold", 0,               AV_OPT_TYPE_CONST,  {.i64=DTABSOLUTE},0, 0,      FLAGS, .unit = "dttype" },
     {   "relative", "set the relative threshold", 0,               AV_OPT_TYPE_CONST,  {.i64=DTRELATIVE},0, 0,      FLAGS, .unit = "dttype" },
     { "tfrequency", "set target frequency",    OFFSET(tfrequency), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_tfrequency},2, 1000000, FLAGS },

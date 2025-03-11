@@ -503,6 +503,9 @@ static ftype fn(get_detect)(const int dttype, const ftype band, const ftype broa
     ftype ret, detect, ref;
 
     switch (dttype) {
+    case DTDISABLED:
+        ret = FABS(band);
+        break;
     case DTABSOLUTE:
         ret = fn(get_rms)(drms, band);
         break;
