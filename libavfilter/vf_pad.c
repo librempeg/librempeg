@@ -115,10 +115,8 @@ static int config_input(AVFilterLink *inlink)
     char *expr;
 
     ret = ff_draw_init2(&s->draw, inlink->format, inlink->colorspace, inlink->color_range, 0);
-    if (ret < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to initialize FFDrawContext\n");
+    if (ret < 0)
         return ret;
-    }
     ff_draw_color(&s->draw, &s->color, s->rgba_color);
 
     var_values[VAR_IN_W]  = var_values[VAR_IW] = inlink->w;

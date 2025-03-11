@@ -162,10 +162,8 @@ static av_cold int config_props(AVFilterLink *outlink)
     s->prev_intpart = INT64_MIN;
 
     ret = ff_draw_init2(&s->draw, outlink->format, outlink->colorspace, outlink->color_range, 0);
-    if (ret < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to initialize FFDrawContext\n");
+    if (ret < 0)
         return ret;
-    }
 
     ff_draw_color(&s->draw, &s->fg, s->rgba[0]);
     ff_draw_color(&s->draw, &s->bg, s->rgba[1]);

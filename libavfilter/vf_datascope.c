@@ -390,10 +390,8 @@ static int config_input(AVFilterLink *inlink)
 
     s->nb_planes = av_pix_fmt_count_planes(inlink->format);
     ret = ff_draw_init2(&s->draw, inlink->format, inlink->colorspace, inlink->color_range, 0);
-    if (ret < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to initialize FFDrawContext\n");
+    if (ret < 0)
         return ret;
-    }
     ff_draw_color(&s->draw, &s->white,  (uint8_t[]){ 255, 255, 255, 255} );
     ff_draw_color(&s->draw, &s->black,  (uint8_t[]){ 0, 0, 0, alpha} );
     ff_draw_color(&s->draw, &s->yellow, (uint8_t[]){ 255, 255, 0, 255} );
@@ -522,10 +520,8 @@ static int pixscope_config_input(AVFilterLink *inlink)
 
     s->nb_planes = av_pix_fmt_count_planes(inlink->format);
     ret = ff_draw_init(&s->draw, inlink->format, 0);
-    if (ret < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to initialize FFDrawContext\n");
+    if (ret < 0)
         return ret;
-    }
     ff_draw_color(&s->draw, &s->dark,  (uint8_t[]){ 0, 0, 0, s->o * 255} );
     ff_draw_color(&s->draw, &s->black, (uint8_t[]){ 0, 0, 0, 255} );
     ff_draw_color(&s->draw, &s->white, (uint8_t[]){ 255, 255, 255, 255} );
@@ -947,10 +943,8 @@ static int oscilloscope_config_input(AVFilterLink *inlink)
 
     s->nb_planes = av_pix_fmt_count_planes(inlink->format);
     ret = ff_draw_init(&s->draw, inlink->format, 0);
-    if (ret < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to initialize FFDrawContext\n");
+    if (ret < 0)
         return ret;
-    }
     ff_draw_color(&s->draw, &s->black,   (uint8_t[]){   0,   0,   0, 255} );
     ff_draw_color(&s->draw, &s->white,   (uint8_t[]){ 255, 255, 255, 255} );
     ff_draw_color(&s->draw, &s->green,   (uint8_t[]){   0, 255,   0, 255} );

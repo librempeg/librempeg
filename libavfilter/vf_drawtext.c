@@ -1158,10 +1158,8 @@ static int config_input(AVFilterLink *inlink)
     int ret;
 
     ret = ff_draw_init2(&s->dc, inlink->format, inlink->colorspace, inlink->color_range, FF_DRAW_PROCESS_ALPHA);
-    if (ret < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to initialize FFDrawContext\n");
+    if (ret < 0)
         return ret;
-    }
     ff_draw_color(&s->dc, &s->fontcolor,   s->fontcolor.rgba);
     ff_draw_color(&s->dc, &s->shadowcolor, s->shadowcolor.rgba);
     ff_draw_color(&s->dc, &s->bordercolor, s->bordercolor.rgba);

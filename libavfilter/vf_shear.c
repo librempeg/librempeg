@@ -262,10 +262,8 @@ static int config_output(AVFilterLink *outlink)
     s->planeheight[0] = s->planeheight[3] = ctx->inputs[0]->h;
 
     ret = ff_draw_init2(&s->draw, outlink->format, outlink->colorspace, outlink->color_range, 0);
-    if (ret < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to initialize FFDrawContext\n");
+    if (ret < 0)
         return ret;
-    }
     ff_draw_color(&s->draw, &s->color, s->fillcolor);
 
     s->filter_slice[0] = s->depth <= 8 ? filter_slice_nn8 : filter_slice_nn16;
