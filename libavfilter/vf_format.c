@@ -37,7 +37,7 @@
 
 typedef struct FormatContext {
     const AVClass *class;
-    char **pix_fmts;
+    int *pix_fmts;
     unsigned nb_pix_fmts;
     char **csps;
     unsigned nb_csps;
@@ -86,32 +86,15 @@ static av_cold int invert_formats(AVFilterFormats **fmts,
     return 0;
 }
 
-static int parse_pixel_format(enum AVPixelFormat *ret, const char *arg, void *log_ctx)
-{
-    char *tail;
-    int pix_fmt = av_get_pix_fmt(arg);
-    if (pix_fmt == AV_PIX_FMT_NONE) {
-        pix_fmt = strtol(arg, &tail, 0);
-        if (*tail || !av_pix_fmt_desc_get(pix_fmt)) {
-            av_log(log_ctx, AV_LOG_ERROR, "Invalid pixel format '%s'\n", arg);
-            return AVERROR(EINVAL);
-        }
-    }
-    *ret = pix_fmt;
-    return 0;
-}
-
 static av_cold int init(AVFilterContext *ctx)
 {
     FormatContext *s = ctx->priv;
-    enum AVPixelFormat pix_fmt;
     int ret;
 
     for (unsigned n = 0; n < s->nb_pix_fmts; n++) {
-        const char *cur = s->pix_fmts[n];
+        enum AVPixelFormat pix_fmt = s->pix_fmts[n];
 
-        if ((ret = parse_pixel_format(&pix_fmt, cur, ctx)) < 0 ||
-            (ret = ff_add_format(&s->formats, pix_fmt)) < 0)
+        if ((ret = ff_add_format(&s->formats, pix_fmt)) < 0)
             return ret;
     }
 
@@ -167,7 +150,7 @@ static int query_formats(const AVFilterContext *ctx,
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 static const AVOptionArrayDef def_array = {.def=NULL,.size_min=0,.sep='|'};
 static const AVOption options[] = {
-    { "pixel_formats", "set the list of pixel formats", OFFSET(pix_fmts), AV_OPT_TYPE_STRING|AR, {.arr=&def_array}, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
+    { "pixel_formats", "set the list of pixel formats", OFFSET(pix_fmts), AV_OPT_TYPE_PIXEL_FMT|AR, {.arr=&def_array}, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { "color_spaces", "set the list of color spaces", OFFSET(csps), AV_OPT_TYPE_STRING|AR, {.arr=&def_array}, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { "color_ranges", "set the list of color ranges", OFFSET(ranges), AV_OPT_TYPE_STRING|AR, {.arr=&def_array}, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { NULL }
