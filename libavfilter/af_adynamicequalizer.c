@@ -123,6 +123,9 @@ typedef struct AudioDynamicEqualizerContext {
     int *active;
     unsigned nb_active;
 
+    AVChannelLayout *channel;
+    unsigned nb_channel;
+
     int sidechain;
     int precision;
     int format;
@@ -319,6 +322,7 @@ static const AVOptionArrayDef def_direction  = {.def="below",.size_min=1,.sep=' 
 static const AVOptionArrayDef def_mode       = {.def="cut",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_auto       = {.def="off",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_active     = {.def="true",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_channel    = {.def="24c",.size_min=1,.sep=' '};
 
 static const AVOption adynamicequalizer_options[] = {
     { "threshold",  "set detection threshold", OFFSET(threshold),  AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_threshold}, 0, 100,     FLAGS },
@@ -357,6 +361,7 @@ static const AVOption adynamicequalizer_options[] = {
     {   "on",       0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_ON},       0, 0,   FLAGS, .unit = "auto" },
     {   "adaptive", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_ADAPTIVE}, 0, 0,   FLAGS, .unit = "auto" },
     { "active",     "set the band activity",   OFFSET(active),     AV_OPT_TYPE_BOOL|AR,{.arr=&def_active},  0, 1,   FLAGS },
+    { "channel",    "set the channels values per band", OFFSET(channel), AV_OPT_TYPE_CHLAYOUT|AR, {.arr=&def_channel}, 0, 0, FLAGS },
     { "precision", "set processing precision", OFFSET(precision),  AV_OPT_TYPE_INT,    {.i64=0},            0, 2,   AF, .unit = "precision" },
     {   "auto",  "set auto processing precision",                  0, AV_OPT_TYPE_CONST, {.i64=0},          0, 0,   AF, .unit = "precision" },
     {   "float", "set single-floating point processing precision", 0, AV_OPT_TYPE_CONST, {.i64=1},          0, 0,   AF, .unit = "precision" },

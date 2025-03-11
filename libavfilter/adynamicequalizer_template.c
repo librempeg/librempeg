@@ -534,6 +534,7 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
     const ftype ratio = s->ratio[FFMIN(band, s->nb_ratio-1)];
     const ftype range = s->range[FFMIN(band, s->nb_range-1)];
     const ftype tfrequency = FMIN(s->tfrequency[FFMIN(band, s->nb_tfrequency-1)], sample_rate * F(0.5));
+    const AVChannelLayout ch_layout = s->channel[FFMIN(band, s->nb_channel-1)];
     const int direction = s->direction[FFMIN(band, s->nb_direction-1)];
     const int dttype = s->dttype[FFMIN(band, s->nb_dttype-1)];
     const int mode = s->mode[FFMIN(band, s->nb_mode-1)];
@@ -558,6 +559,8 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
     const ftype *dm = b->dm;
 
     for (int ch = start; ch < end; ch++) {
+        enum AVChannel channel = av_channel_layout_channel_from_index(&out->ch_layout, ch);
+        const int bypass = av_channel_layout_index_from_channel(&ch_layout, channel) < 0;
         ftype *dst = (ftype *)out->extended_data[ch];
         const ftype *scsrc = band ? dst : (const ftype *)sc->extended_data[ch];
         const ftype *src = band ? dst : (const ftype *)in->extended_data[ch];
@@ -652,7 +655,7 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
 
             v = target_fn(src[n], fm, fa, fstate);
             v = mode == LISTEN ? (band ? dst[n]+listen : listen) : v;
-            dst[n] = is_disabled ? src[n] : v;
+            dst[n] = (is_disabled|bypass) ? src[n] : v;
         }
 
         fn(update_state)(dstate);
