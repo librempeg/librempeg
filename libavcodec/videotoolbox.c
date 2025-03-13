@@ -391,6 +391,7 @@ CFDataRef ff_videotoolbox_hvcc_extradata_create(AVCodecContext *avctx)
 }
 
 int ff_videotoolbox_h264_start_frame(AVCodecContext *avctx,
+                                     const AVBufferRef *buffer_ref,
                                      const uint8_t *buffer,
                                      uint32_t size)
 {
@@ -1050,6 +1051,7 @@ static int videotoolbox_h264_end_frame(AVCodecContext *avctx)
 }
 
 static int videotoolbox_hevc_start_frame(AVCodecContext *avctx,
+                                         const AVBufferRef *buffer_ref,
                                          const uint8_t *buffer,
                                          uint32_t size)
 {
@@ -1093,6 +1095,7 @@ static int videotoolbox_hevc_end_frame(AVCodecContext *avctx)
 }
 
 static int videotoolbox_mpeg_start_frame(AVCodecContext *avctx,
+                                         const AVBufferRef *buffer_ref,
                                          const uint8_t *buffer,
                                          uint32_t size)
 {
@@ -1117,8 +1120,9 @@ static int videotoolbox_mpeg_end_frame(AVCodecContext *avctx)
 }
 
 static int videotoolbox_prores_start_frame(AVCodecContext *avctx,
-                                         const uint8_t *buffer,
-                                         uint32_t size)
+                                           const AVBufferRef *buffer_ref,
+                                           const uint8_t *buffer,
+                                           uint32_t size)
 {
     return 0;
 }
