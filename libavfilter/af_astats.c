@@ -820,7 +820,7 @@ const FFFilter ff_af_astats = {
     .p.name        = "astats",
     .p.description = NULL_IF_CONFIG_SMALL("Show time domain statistics about audio frames."),
     .p.priv_class  = &astats_class,
-    .p.flags       = AVFILTER_FLAG_SLICE_THREADS | AVFILTER_FLAG_METADATA_ONLY,
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS | AVFILTER_FLAG_METADATA_ONLY | AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
     .priv_size     = sizeof(AudioStatsContext),
     .uninit        = uninit,
     FILTER_INPUTS(astats_inputs),
