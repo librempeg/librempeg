@@ -25,27 +25,26 @@ typedef struct ADerivativeContext {
     const AVClass *class;
     AVFrame *prev;
     void (*filter)(void **dst, void **prv, const void **src,
-                   int nb_samples, int channels);
+                   const int nb_samples, const int ch);
 } ADerivativeContext;
 
 #define DERIVATIVE(name, type)                                          \
 static void aderivative_## name ##p(void **d, void **p, const void **s, \
-                                    int nb_samples, int channels)       \
+                                    const int nb_samples, const int ch) \
 {                                                                       \
-    int n, c;                                                           \
+    const type *src = s[ch];                                            \
+    type *dst = d[ch];                                                  \
+    type *prvptr = p[ch];                                               \
+    type prv = prvptr[0];                                               \
                                                                         \
-    for (c = 0; c < channels; c++) {                                    \
-        const type *src = s[c];                                         \
-        type *dst = d[c];                                               \
-        type *prv = p[c];                                               \
+    for (int n = 0; n < nb_samples; n++) {                              \
+        const type current = src[n];                                    \
                                                                         \
-        for (n = 0; n < nb_samples; n++) {                              \
-            const type current = src[n];                                \
-                                                                        \
-            dst[n] = current - prv[0];                                  \
-            prv[0] = current;                                           \
-        }                                                               \
+        dst[n] = current - prv;                                         \
+        prv = current;                                                  \
     }                                                                   \
+                                                                        \
+    prvptr[0] = prv;                                                    \
 }
 
 DERIVATIVE(flt, float)
@@ -55,22 +54,21 @@ DERIVATIVE(s32, int32_t)
 
 #define INTEGRAL(name, type)                                          \
 static void aintegral_## name ##p(void **d, void **p, const void **s, \
-                                  int nb_samples, int channels)       \
+                                  const int nb_samples, const int ch) \
 {                                                                     \
-    int n, c;                                                         \
+    const type *src = s[ch];                                          \
+    type *dst = d[ch];                                                \
+    type *prvptr = p[ch];                                             \
+    type prv = prvptr[0];                                             \
                                                                       \
-    for (c = 0; c < channels; c++) {                                  \
-        const type *src = s[c];                                       \
-        type *dst = d[c];                                             \
-        type *prv = p[c];                                             \
+    for (int n = 0; n < nb_samples; n++) {                            \
+        const type current = src[n];                                  \
                                                                       \
-        for (n = 0; n < nb_samples; n++) {                            \
-            const type current = src[n];                              \
-                                                                      \
-            dst[n] = current + prv[0];                                \
-            prv[0] = dst[n];                                          \
-        }                                                             \
+        dst[n] = current + prv;                                       \
+        prv = dst[n];                                                 \
     }                                                                 \
+                                                                      \
+    prvptr[0] = prv;                                                  \
 }
 
 INTEGRAL(flt, float)
@@ -99,11 +97,32 @@ static int config_input(AVFilterLink *inlink)
     return 0;
 }
 
+typedef struct ThreadData {
+    AVFrame *out, *in;
+} ThreadData;
+
+static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    ADerivativeContext *s = ctx->priv;
+    ThreadData *td = arg;
+    AVFrame *out = td->out;
+    AVFrame *in = td->in;
+    const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
+    const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+
+    for (int ch = start; ch < end; ch++)
+        s->filter((void **)out->extended_data, (void **)s->prev->extended_data, (const void **)in->extended_data,
+                  in->nb_samples, ch);
+
+    return 0;
+}
+
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     ADerivativeContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
+    ThreadData td;
     AVFrame *out;
 
     if (ctx->is_disabled) {
@@ -131,8 +150,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
     }
 
-    s->filter((void **)out->extended_data, (void **)s->prev->extended_data, (const void **)in->extended_data,
-              in->nb_samples, in->ch_layout.nb_channels);
+    td.in = in;
+    td.out = out;
+    ff_filter_execute(ctx, filter_channels, &td, NULL,
+                      FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     av_frame_free(&in);
     return ff_filter_frame(outlink, out);
@@ -164,23 +185,25 @@ const FFFilter ff_af_aderivative = {
     .p.name        = "aderivative",
     .p.description = NULL_IF_CONFIG_SMALL("Compute derivative of input audio."),
     .p.priv_class  = &aderivative_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     .priv_size     = sizeof(ADerivativeContext),
     .uninit        = uninit,
     FILTER_INPUTS(aderivative_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_FLTP,
                       AV_SAMPLE_FMT_S32P, AV_SAMPLE_FMT_DBLP),
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS,
 };
 
 const FFFilter ff_af_aintegral = {
     .p.name        = "aintegral",
     .p.description = NULL_IF_CONFIG_SMALL("Compute integral of input audio."),
     .p.priv_class  = &aderivative_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     .priv_size     = sizeof(ADerivativeContext),
     .uninit        = uninit,
     FILTER_INPUTS(aderivative_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS,
 };
