@@ -174,6 +174,8 @@ typedef struct ScaleContext {
 
     int eval_mode;              ///< expression evaluation mode
 
+    AVFrame *frame;
+    AVFrame *frame_ref;
 } ScaleContext;
 
 const FFFilter ff_vf_scale2ref;
@@ -328,7 +330,7 @@ static int do_scale(FFFrameSync *fs);
 static av_cold int init(AVFilterContext *ctx)
 {
     ScaleContext *scale = ctx->priv;
-    int ret;
+    int ret, threads;
 
     if (IS_SCALE2REF(ctx))
         av_log(ctx, AV_LOG_WARNING, "scale2ref is deprecated, use scale=rw:rh instead\n");
@@ -353,6 +355,8 @@ static av_cold int init(AVFilterContext *ctx)
         av_opt_set(scale, "w", buf, 0);
         snprintf(buf, sizeof(buf)-1, "%d", scale->h);
         av_opt_set(scale, "h", buf, 0);
+
+        av_freep(&scale->size_str);
     }
     if (!scale->w_expr)
         av_opt_set(scale, "w", "iw", 0);
@@ -421,9 +425,18 @@ static av_cold int init(AVFilterContext *ctx)
     scale->sws->dst_h_chr_pos = scale->out_h_chr_pos;
     scale->sws->dst_v_chr_pos = scale->out_v_chr_pos;
 
-    // use generic thread-count if the user did not set it explicitly
-    if (!scale->sws->threads)
-        scale->sws->threads = ff_filter_get_nb_threads(ctx);
+    // The sws 'threads' option supersedes the avfilter one, so we get thread
+    // count from there.
+    threads = scale->sws->threads ? scale->sws->threads :
+                                    ff_filter_get_nb_threads(ctx);
+    if ((ctx->thread_type & AVFILTER_THREAD_FRAME_FILTER)) {
+        scale->sws->threads = 1;
+
+        // we are the main context - export thread count to generic code
+        if (!ff_filter_is_frame_thread(ctx))
+            ctx->nb_threads = threads;
+    } else
+        scale->sws->threads = threads;
 
     if (!IS_SCALE2REF(ctx) && scale->uses_ref) {
         AVFilterPad pad = {
@@ -444,6 +457,10 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_expr_free(scale->w_pexpr);
     av_expr_free(scale->h_pexpr);
     scale->w_pexpr = scale->h_pexpr = NULL;
+
+    av_frame_free(&scale->frame);
+    av_frame_free(&scale->frame_ref);
+
     ff_framesync_uninit(&scale->fs);
     sws_free_context(&scale->sws);
 }
@@ -706,6 +723,55 @@ fail:
     return ret;
 }
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int scale_transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    ScaleContext       *s_dst = dst->priv;
+    const ScaleContext *s_src = src->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    av_frame_free(&s_dst->frame);
+    av_frame_free(&s_dst->frame_ref);
+
+    s_dst->frame = av_frame_clone(s_src->frame);
+    if (s_src->frame_ref)
+        s_dst->frame_ref = av_frame_clone(s_src->frame_ref);
+    if (!s_dst->frame ||
+        (!!s_dst->frame_ref != !!s_src->frame_ref))
+        return AVERROR(ENOMEM);
+
+    return 0;
+}
+#endif
+
+static int scale_filter_prepare(AVFilterContext *ctx)
+{
+    ScaleContext *s = ctx->priv;
+    int ret;
+
+    ret = ff_framesync_filter_prepare(&s->fs);
+    if (ret < 0)
+        return ret;
+
+    av_frame_free(&s->frame);
+    av_frame_free(&s->frame_ref);
+
+    ret = ff_framesync_get_frame(&s->fs, 0, &s->frame, 1);
+    if (ret < 0)
+        return ret;
+
+    if (s->uses_ref) {
+        ret = ff_framesync_get_frame(&s->fs, 1, &s->frame_ref, 1);
+        if (ret < 0)
+            return ret;
+    }
+
+    return 0;
+}
+
 static int config_props_ref(AVFilterLink *outlink)
 {
     AVFilterLink *inlink = outlink->src->inputs[1];
@@ -810,11 +876,15 @@ scale:
     scale->hsub = desc->log2_chroma_w;
     scale->vsub = desc->log2_chroma_h;
 
-    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    out = av_frame_alloc();
     if (!out) {
         ret = AVERROR(ENOMEM);
         goto err;
     }
+
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0)
+        goto err;
 
     if (scale->in_color_matrix != -1)
         in->colorspace = scale->in_color_matrix;
@@ -890,18 +960,9 @@ static int do_scale(FFFrameSync *fs)
     AVFilterContext *ctx = fs->parent;
     ScaleContext *scale = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
-    AVFrame *out, *in = NULL, *ref = NULL;
+    AVFrame *ref = scale->frame_ref;
+    AVFrame *out;
     int ret = 0, frame_changed;
-
-    ret = ff_framesync_get_frame(fs, 0, &in, 1);
-    if (ret < 0)
-        goto err;
-
-    if (scale->uses_ref) {
-        ret = ff_framesync_get_frame(fs, 1, &ref, 0);
-        if (ret < 0)
-            goto err;
-    }
 
     if (ref) {
         AVFilterLink *reflink = ctx->inputs[1];
@@ -935,7 +996,7 @@ static int do_scale(FFFrameSync *fs)
         }
     }
 
-    ret = scale_frame(ctx->inputs[0], &in, &out);
+    ret = scale_frame(ctx->inputs[0], &scale->frame, &out);
     if (ret < 0)
         goto err;
 
@@ -944,7 +1005,6 @@ static int do_scale(FFFrameSync *fs)
     return ff_filter_frame(outlink, out);
 
 err:
-    av_frame_free(&in);
     return ret;
 }
 
@@ -1025,7 +1085,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
 static int activate(AVFilterContext *ctx)
 {
     ScaleContext *scale = ctx->priv;
-    return ff_framesync_activate(&scale->fs);
+    return ff_framesync_activate_frames(&scale->fs);
 }
 
 static const AVClass *child_class_iterate(void **iter)
@@ -1177,10 +1237,15 @@ const FFFilter ff_vf_scale = {
     .p.name          = "scale",
     .p.description   = NULL_IF_CONFIG_SMALL("Scale the input video size and/or convert the image format."),
     .p.priv_class    = &scale_class,
-    .p.flags         = AVFILTER_FLAG_DYNAMIC_INPUTS,
+    .p.flags         = AVFILTER_FLAG_DYNAMIC_INPUTS |
+                       AVFILTER_FLAG_FRAME_THREADS,
     .preinit         = preinit,
     .init            = init,
     .uninit          = uninit,
+    .filter_prepare  = scale_filter_prepare,
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state  = scale_transfer_state,
+#endif
     .priv_size       = sizeof(ScaleContext),
     FILTER_INPUTS(scale_inputs),
     FILTER_OUTPUTS(scale_outputs),
