@@ -33,6 +33,8 @@
 #define MAX_HZ 25
 #define IN 0
 #define OUT 1
+#define FIRST 0
+#define LAST 1
 
 typedef struct ChannelContext {
     AVTXContext *r2c, *c2r;
@@ -65,6 +67,7 @@ typedef struct AScaleContext {
 
     int eof;
     int64_t pts[2];
+    int flush[2];
     int nb_channels;
     ChannelContext *c;
 
@@ -215,6 +218,23 @@ static void filter_frame(AVFilterContext *ctx)
     }
 }
 
+static void peek_input_samples(AVFilterContext *ctx, AVFrame *in)
+{
+    AScaleContext *s = ctx->priv;
+    const int nb_samples = in->nb_samples;
+
+    if (s->pts[IN] == AV_NOPTS_VALUE)
+        s->pts[IN] = s->pts[OUT] = in->pts;
+
+    for (int ch = 0; ch < s->nb_channels; ch++) {
+        ChannelContext *c = &s->c[ch];
+        const float *dptr = (const float *)in->extended_data[ch];
+        void *data[1] = { (void *)dptr };
+
+        av_audio_fifo_peek_at(c->in_fifo, data, nb_samples, 0);
+    }
+}
+
 static void write_input_samples(AVFilterContext *ctx, AVFrame *in)
 {
     AScaleContext *s = ctx->priv;
@@ -277,6 +297,18 @@ static int activate(AVFilterContext *ctx)
             write_input_samples(ctx, in);
             av_frame_free(&in);
         }
+    }
+
+    if (min_input_fifo_samples(ctx) >= s->max_period && !s->flush[FIRST]) {
+        AVFrame *out = ff_get_audio_buffer(outlink, s->max_period);
+        if (!out)
+            return AVERROR(ENOMEM);
+
+        out->pts = s->pts[OUT];
+        s->pts[OUT] += out->nb_samples;
+        peek_input_samples(ctx, out);
+        s->flush[FIRST] = 1;
+        return ff_filter_frame(outlink, out);
     }
 
     if (min_output_fifo_samples(ctx) > 0)
