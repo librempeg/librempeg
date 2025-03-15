@@ -23,7 +23,7 @@ version <next>:
 - UTK and UTK R3 audio decoder and demuxer
 - EALAYER3 and EALAYER3MULTI audio decoder
 - EALAYER3 demuxer
-- Sample Vision demuxer
+- Sample Vision demuxer (smp)
 - RFB demuxer and video decoder
 - UEBA demuxer
 - L&H CELP decoder
@@ -56,7 +56,6 @@ version <next>:
 - baf demuxer
 - msnd demuxer
 - mipu demuxer
-- smp demuxer
 
 
 version 7.1:
