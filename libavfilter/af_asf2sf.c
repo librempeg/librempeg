@@ -128,6 +128,7 @@ static int config_output(AVFilterLink *outlink)
         case AV_SAMPLE_FMT_S64P: s->do_sf2sf = sf2sf_planar_u8_to_planar_s64; break;
         case AV_SAMPLE_FMT_FLTP: s->do_sf2sf = sf2sf_planar_u8_to_planar_flt; break;
         case AV_SAMPLE_FMT_DBLP: s->do_sf2sf = sf2sf_planar_u8_to_planar_dbl; break;
+        default: return AVERROR_BUG;
         }
         break;
     case AV_SAMPLE_FMT_S16P:
@@ -143,6 +144,7 @@ static int config_output(AVFilterLink *outlink)
         case AV_SAMPLE_FMT_S64P: s->do_sf2sf = sf2sf_planar_s16_to_planar_s64; break;
         case AV_SAMPLE_FMT_FLTP: s->do_sf2sf = sf2sf_planar_s16_to_planar_flt; break;
         case AV_SAMPLE_FMT_DBLP: s->do_sf2sf = sf2sf_planar_s16_to_planar_dbl; break;
+        default: return AVERROR_BUG;
         }
         break;
     case AV_SAMPLE_FMT_S32P:
@@ -158,6 +160,7 @@ static int config_output(AVFilterLink *outlink)
         case AV_SAMPLE_FMT_S64P: s->do_sf2sf = sf2sf_planar_s32_to_planar_s64; break;
         case AV_SAMPLE_FMT_FLTP: s->do_sf2sf = sf2sf_planar_s32_to_planar_flt; break;
         case AV_SAMPLE_FMT_DBLP: s->do_sf2sf = sf2sf_planar_s32_to_planar_dbl; break;
+        default: return AVERROR_BUG;
         }
         break;
     case AV_SAMPLE_FMT_FLTP:
@@ -173,6 +176,7 @@ static int config_output(AVFilterLink *outlink)
         case AV_SAMPLE_FMT_S32P: s->do_sf2sf = sf2sf_planar_flt_to_planar_s32; break;
         case AV_SAMPLE_FMT_S64P: s->do_sf2sf = sf2sf_planar_flt_to_planar_s64; break;
         case AV_SAMPLE_FMT_DBLP: s->do_sf2sf = sf2sf_planar_flt_to_planar_dbl; break;
+        default: return AVERROR_BUG;
         }
         break;
     case AV_SAMPLE_FMT_S64P:
@@ -188,6 +192,7 @@ static int config_output(AVFilterLink *outlink)
         case AV_SAMPLE_FMT_S32P: s->do_sf2sf = sf2sf_planar_s64_to_planar_s32; break;
         case AV_SAMPLE_FMT_FLTP: s->do_sf2sf = sf2sf_planar_s64_to_planar_flt; break;
         case AV_SAMPLE_FMT_DBLP: s->do_sf2sf = sf2sf_planar_s64_to_planar_dbl; break;
+        default: return AVERROR_BUG;
         }
         break;
     case AV_SAMPLE_FMT_DBLP:
@@ -203,6 +208,7 @@ static int config_output(AVFilterLink *outlink)
         case AV_SAMPLE_FMT_S32P: s->do_sf2sf = sf2sf_planar_dbl_to_planar_s32; break;
         case AV_SAMPLE_FMT_S64P: s->do_sf2sf = sf2sf_planar_dbl_to_planar_s64; break;
         case AV_SAMPLE_FMT_FLTP: s->do_sf2sf = sf2sf_planar_dbl_to_planar_flt; break;
+        default: return AVERROR_BUG;
         }
         break;
     case AV_SAMPLE_FMT_U8:
@@ -218,6 +224,7 @@ static int config_output(AVFilterLink *outlink)
         case AV_SAMPLE_FMT_S64P: s->do_sf2sf = sf2sf_packed_u8_to_planar_s64; break;
         case AV_SAMPLE_FMT_FLTP: s->do_sf2sf = sf2sf_packed_u8_to_planar_flt; break;
         case AV_SAMPLE_FMT_DBLP: s->do_sf2sf = sf2sf_packed_u8_to_planar_dbl; break;
+        default: return AVERROR_BUG;
         }
         break;
     case AV_SAMPLE_FMT_S16:
@@ -233,6 +240,7 @@ static int config_output(AVFilterLink *outlink)
         case AV_SAMPLE_FMT_S64P: s->do_sf2sf = sf2sf_packed_s16_to_planar_s64; break;
         case AV_SAMPLE_FMT_FLTP: s->do_sf2sf = sf2sf_packed_s16_to_planar_flt; break;
         case AV_SAMPLE_FMT_DBLP: s->do_sf2sf = sf2sf_packed_s16_to_planar_dbl; break;
+        default: return AVERROR_BUG;
         }
         break;
     case AV_SAMPLE_FMT_S32:
@@ -248,6 +256,7 @@ static int config_output(AVFilterLink *outlink)
         case AV_SAMPLE_FMT_S64P: s->do_sf2sf = sf2sf_packed_s32_to_planar_s64; break;
         case AV_SAMPLE_FMT_FLTP: s->do_sf2sf = sf2sf_packed_s32_to_planar_flt; break;
         case AV_SAMPLE_FMT_DBLP: s->do_sf2sf = sf2sf_packed_s32_to_planar_dbl; break;
+        default: return AVERROR_BUG;
         }
         break;
     case AV_SAMPLE_FMT_FLT:
@@ -263,6 +272,7 @@ static int config_output(AVFilterLink *outlink)
         case AV_SAMPLE_FMT_S64P: s->do_sf2sf = sf2sf_packed_flt_to_planar_s64; break;
         case AV_SAMPLE_FMT_FLTP: s->do_sf2sf = sf2sf_packed_flt_to_planar_flt; break;
         case AV_SAMPLE_FMT_DBLP: s->do_sf2sf = sf2sf_packed_flt_to_planar_dbl; break;
+        default: return AVERROR_BUG;
         }
         break;
     case AV_SAMPLE_FMT_DBL:
@@ -278,6 +288,7 @@ static int config_output(AVFilterLink *outlink)
         case AV_SAMPLE_FMT_S64P: s->do_sf2sf = sf2sf_packed_dbl_to_planar_s64; break;
         case AV_SAMPLE_FMT_FLTP: s->do_sf2sf = sf2sf_packed_dbl_to_planar_flt; break;
         case AV_SAMPLE_FMT_DBLP: s->do_sf2sf = sf2sf_packed_dbl_to_planar_dbl; break;
+        default: return AVERROR_BUG;
         }
         break;
     case AV_SAMPLE_FMT_S64:
@@ -293,8 +304,11 @@ static int config_output(AVFilterLink *outlink)
         case AV_SAMPLE_FMT_S64P: s->do_sf2sf = sf2sf_packed_s64_to_planar_s64; break;
         case AV_SAMPLE_FMT_FLTP: s->do_sf2sf = sf2sf_packed_s64_to_planar_flt; break;
         case AV_SAMPLE_FMT_DBLP: s->do_sf2sf = sf2sf_packed_s64_to_planar_dbl; break;
+        default: return AVERROR_BUG;
         }
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return 0;
