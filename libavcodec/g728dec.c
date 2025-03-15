@@ -57,7 +57,7 @@ static av_cold void g728_init_static_data(void)
         float cby[IDIM];
         for (int j = 0; j < IDIM; j++)
             cby[j] = codetable[i][j] * (1.0f/(1<<11));
-        g728_y_db[i] = 10.0f*log10f(avpriv_scalarproduct_float_c(cby, cby, IDIM) / IDIM);
+        g728_y_db[i] = 10.0f*log10f(ff_scalarproduct_float_c(cby, cby, IDIM) / IDIM);
     }
 
     for (int i = 0; i < NSBSZ; i++)

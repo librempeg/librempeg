@@ -114,7 +114,7 @@ static void decode(RA288Context *ractx, float gain, int cb_coef)
     for (i=0; i < 5; i++)
         buffer[i] = codetable[cb_coef][i] * sumsum;
 
-    sum = avpriv_scalarproduct_float_c(buffer, buffer, 5);
+    sum = ff_scalarproduct_float_c(buffer, buffer, 5);
 
     sum = FFMAX(sum, 5.0 / (1<<24));
 
