@@ -36,6 +36,27 @@ version <next>:
 - ainversion filter
 - Blackmagic RAW video decoder
 - VVC in Matroska
+- non-linear 12bit PCM DAT decoder
+- ADPCM IMA Magix audio decoder
+- ADPCM Playstation C audio decoder
+- ADPCM Circus audio decoder
+- ADPCM IMA Escape audio decoder
+- Sonarc audio decoder
+- G.728 audio decoder
+- DWD demuxer
+- raw G.728 demuxer
+- macbinary demuxer
+- idsp demuxer
+- bfwav demuxer
+- bcwav demuxer
+- bnsf demuxer
+- sndb demuxer
+- astb demuxer
+- xpcm demuxer
+- baf demuxer
+- msnd demuxer
+- mipu demuxer
+- smp demuxer
 
 
 version 7.1:
