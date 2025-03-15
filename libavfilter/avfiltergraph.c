@@ -510,6 +510,7 @@ static int query_formats(AVFilterGraph *graph, void *log_ctx)
 
             if (av_popcount(convert_needed) > 0) {
                 AVFilterContext *convert;
+                const char *filter_name;
                 const AVFilter *filter;
                 AVFilterLink *inlink, *outlink;
                 char inst_name[30];
@@ -527,18 +528,19 @@ static int query_formats(AVFilterGraph *graph, void *log_ctx)
                 if (av_popcount(convert_needed) == 1) {
                     const AVFilterFormatsMerger *m = &neg->mergers[av_log2(convert_needed)];
 
-                    filter = avfilter_get_by_name(m->conversion_filter);
+                    filter_name = m->conversion_filter;
                 } else {
-                    filter = avfilter_get_by_name(neg->conversion_filter);
+                    filter_name = neg->conversion_filter;
                 }
+                filter = avfilter_get_by_name(filter_name);
                 if (!filter) {
                     av_log(log_ctx, AV_LOG_ERROR,
                            "'%s' filter not present, cannot convert formats.\n",
-                           neg->conversion_filter);
+                           filter_name);
                     return AVERROR(EINVAL);
                 }
                 snprintf(inst_name, sizeof(inst_name), "auto_%s_%d",
-                         neg->conversion_filter, converter_count++);
+                         filter->name, converter_count++);
                 opts = FF_FIELD_AT(char *, neg->conversion_opts_offset, *graph);
                 ret = avfilter_graph_create_filter(&convert, filter, inst_name, opts, NULL, graph);
                 if (ret < 0)
