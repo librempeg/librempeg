@@ -881,8 +881,8 @@ static int query_formats(const AVFilterContext *ctx,
 
 static int config_props(AVFilterLink *outlink)
 {
-    AVFilterContext *ctx = outlink->dst;
-    AVFilterLink *inlink = outlink->src->inputs[0];
+    AVFilterContext *ctx = outlink->src;
+    AVFilterLink *inlink = ctx->inputs[0];
 
     if (inlink->w % 2 || inlink->h % 2) {
         av_log(ctx, AV_LOG_ERROR, "Invalid odd size (%dx%d)\n",
