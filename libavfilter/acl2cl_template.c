@@ -18,6 +18,7 @@
 
 #undef ftype
 #undef MIX2
+#undef ZERO
 #undef SAMPLE_FORMAT
 #if DEPTH == 8
 #define ftype uint8_t
@@ -43,8 +44,13 @@
 
 #if DEPTH == 32 || DEPTH == 64
 #define MIX2(a, b) (((a)+(b))*F(0.5))
+#define ZERO F(0.0)
+#elif DEPTH == 8
+#define MIX2(a, b) ((((int)(a)-128)+((int)(b)-128))/2 + 128)
+#define ZERO F(128)
 #else
 #define MIX2(a, b) (((a)+(b))/2)
+#define ZERO F(0.0)
 #endif
 
 #define fn3(a,b)   a##_##b
@@ -95,7 +101,7 @@ static int fn(do_cl2cl)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
                         ftype *dst = (ftype *)out->extended_data[ch];
 
                         for (int n = 0; n < nb_samples; n++)
-                            dst[n] = MIX2(fc_src[n], F(0.0));
+                            dst[n] = MIX2(fc_src[n], ZERO);
                     }
                 }
                 break;
