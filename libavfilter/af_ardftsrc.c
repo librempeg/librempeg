@@ -29,6 +29,7 @@
 typedef struct AudioRDFTSRCContext {
     const AVClass *class;
 
+    int pass;
     int quality;
     int sample_rate;
     int in_rdft_size;
@@ -125,8 +126,10 @@ static int config_input(AVFilterLink *inlink)
     int max_nb_samples, ret;
     int64_t factor;
 
-    if (inlink->sample_rate == outlink->sample_rate)
+    if (inlink->sample_rate == outlink->sample_rate) {
+        s->pass = 1;
         return 0;
+    }
 
     outlink->time_base = (AVRational) {1, outlink->sample_rate};
 
@@ -235,7 +238,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     int ret, in_samples;
     AVFrame *out;
 
-    if (inlink->sample_rate == outlink->sample_rate)
+    if (s->pass)
         return ff_filter_frame(outlink, in);
 
     in_samples = (in->nb_samples < s->in_nb_samples) ? FFMIN(in->nb_samples+s->in_offset, s->in_nb_samples) : in->nb_samples;
@@ -337,11 +340,22 @@ static av_cold void uninit(AVFilterContext *ctx)
         s->src_uninit(ctx);
 }
 
+static AVFrame *get_in_audio_buffer(AVFilterLink *inlink, int nb_samples)
+{
+    AVFilterContext *ctx = inlink->dst;
+    AudioRDFTSRCContext *s = ctx->priv;
+
+    return s->pass ?
+        ff_null_get_audio_buffer   (inlink, nb_samples) :
+        ff_default_get_audio_buffer(inlink, nb_samples);
+}
+
 static const AVFilterPad inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
         .config_props = config_input,
+        .get_buffer.audio = get_in_audio_buffer,
     },
 };
 
