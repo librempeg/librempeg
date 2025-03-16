@@ -100,6 +100,8 @@ static int config_input(AVFilterLink *inlink)
     case AV_SAMPLE_FMT_DBLP:
         s->filter_channels = filter_channels_dblp;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     s->attack = exp(-1.0 / (2.0 * inlink->sample_rate));
