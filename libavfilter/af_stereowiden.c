@@ -100,6 +100,8 @@ static int config_input(AVFilterLink *inlink)
         s->do_widen = stereowiden_dbl;
         sample_size = sizeof(double);
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     s->length = (lrintf(s->delay * inlink->sample_rate) + 999) / 1000;
