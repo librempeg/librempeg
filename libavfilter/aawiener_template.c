@@ -17,21 +17,15 @@
  */
 
 #undef ftype
-#undef FABS
-#undef FMIN
 #undef FMAX
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
 #define SAMPLE_FORMAT fltp
-#define FABS fabsf
-#define FMIN fminf
 #define FMAX fmaxf
 #define ftype float
 #define EPS FLT_EPSILON
 #else
 #define SAMPLE_FORMAT dblp
-#define FABS fabs
-#define FMIN fmin
 #define FMAX fmax
 #define ftype double
 #define EPS FLT_EPSILON
