@@ -207,6 +207,8 @@ static int config_output(AVFilterLink *outlink)
         s->filter_prepare  = filter_prepare_float;
         s->filter_channels = filter_channels_float;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     nb_bands = s->nb_tfrequency;
