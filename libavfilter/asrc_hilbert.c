@@ -109,7 +109,7 @@ static av_cold int query_formats(const AVFilterContext *ctx,
 #define DEPTH 64
 #include "hilbert_template.c"
 
-static av_cold int config_props(AVFilterLink *outlink)
+static av_cold int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     HilbertContext *s = ctx->priv;
@@ -163,7 +163,7 @@ static const AVFilterPad hilbert_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_AUDIO,
-        .config_props  = config_props,
+        .config_props  = config_output,
     },
 };
 
