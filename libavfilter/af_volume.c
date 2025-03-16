@@ -302,11 +302,6 @@ static int config_output(AVFilterLink *outlink)
     vol->var_values[VAR_TB]          = av_q2d(inlink->time_base);
     vol->var_values[VAR_SAMPLE_RATE] = inlink->sample_rate;
 
-    av_log(inlink->src, AV_LOG_VERBOSE, "tb:%f sample_rate:%f nb_channels:%f\n",
-           vol->var_values[VAR_TB],
-           vol->var_values[VAR_SAMPLE_RATE],
-           vol->var_values[VAR_NB_CHANNELS]);
-
     return set_volume(ctx);
 }
 
