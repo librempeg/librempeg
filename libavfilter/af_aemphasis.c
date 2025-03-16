@@ -145,6 +145,8 @@ static int config_input(AVFilterLink *inlink)
     case AV_SAMPLE_FMT_FLTP:
         s->filter_channels = filter_channels_fltp;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     if (!s->w)
