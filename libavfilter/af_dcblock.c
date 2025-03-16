@@ -70,6 +70,8 @@ static int config_input(AVFilterLink *inlink)
         s->filter_channels = filter_channels_s16p;
         s->init_state = init_state_s16p;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return s->init_state(ctx);
