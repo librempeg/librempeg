@@ -68,6 +68,8 @@ static int config_input(AVFilterLink *inlink)
     case AV_SAMPLE_FMT_S16P:
         s->filter_channels = filter_channels_s16p;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return 0;
