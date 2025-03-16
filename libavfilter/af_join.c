@@ -159,7 +159,7 @@ static int parse_maps(AVFilterContext *ctx)
 static av_cold int join_init(AVFilterContext *ctx)
 {
     JoinContext *s = ctx->priv;
-    int ret, i;
+    int ret;
 
     s->channels     = av_calloc(s->ch_layout.nb_channels, sizeof(*s->channels));
     s->buffers      = av_calloc(s->ch_layout.nb_channels, sizeof(*s->buffers));
@@ -167,7 +167,7 @@ static av_cold int join_init(AVFilterContext *ctx)
     if (!s->channels || !s->buffers|| !s->input_frames)
         return AVERROR(ENOMEM);
 
-    for (i = 0; i < s->ch_layout.nb_channels; i++) {
+    for (int i = 0; i < s->ch_layout.nb_channels; i++) {
         s->channels[i].out_channel    = av_channel_layout_channel_from_index(&s->ch_layout, i);
         s->channels[i].input          = -1;
         s->channels[i].in_channel_idx = -1;
@@ -177,7 +177,7 @@ static av_cold int join_init(AVFilterContext *ctx)
     if ((ret = parse_maps(ctx)) < 0)
         return ret;
 
-    for (i = 0; i < s->inputs; i++) {
+    for (int i = 0; i < s->inputs; i++) {
         AVFilterPad pad = { 0 };
 
         pad.type = AVMEDIA_TYPE_AUDIO;
@@ -195,11 +195,9 @@ static av_cold int join_init(AVFilterContext *ctx)
 static av_cold void join_uninit(AVFilterContext *ctx)
 {
     JoinContext *s = ctx->priv;
-    int i;
 
-    for (i = 0; i < s->inputs && s->input_frames; i++) {
+    for (int i = 0; i < s->inputs && s->input_frames; i++)
         av_frame_free(&s->input_frames[i]);
-    }
 
     av_freep(&s->channels);
     av_freep(&s->buffers);
@@ -259,9 +257,7 @@ static enum AVChannel channel_list_pop_ch(ChannelList *chl, enum AVChannel ch)
 static void guess_map_matching(AVFilterContext *ctx, ChannelMap *ch,
                                ChannelList *inputs)
 {
-    int i;
-
-    for (i = 0; i < ctx->nb_inputs; i++) {
+    for (int i = 0; i < ctx->nb_inputs; i++) {
         if (channel_list_pop_ch(&inputs[i], ch->out_channel) != AV_CHAN_NONE) {
             ch->input      = i;
             ch->in_channel = ch->out_channel;
@@ -273,9 +269,7 @@ static void guess_map_matching(AVFilterContext *ctx, ChannelMap *ch,
 static void guess_map_any(AVFilterContext *ctx, ChannelMap *ch,
                           ChannelList *inputs)
 {
-    int i;
-
-    for (i = 0; i < ctx->nb_inputs; i++) {
+    for (int i = 0; i < ctx->nb_inputs; i++) {
         if (inputs[i].nb_ch) {
             ch->input      = i;
             ch->in_channel = channel_list_pop(&inputs[i], 0);
@@ -291,13 +285,13 @@ static int join_config_output(AVFilterLink *outlink)
     // unused channels from each input
     ChannelList *inputs_unused;
     char inbuf[64], outbuf[64];
-    int i, ret = 0;
+    int ret = 0;
 
     /* initialize unused channel list for each input */
     inputs_unused = av_calloc(ctx->nb_inputs, sizeof(*inputs_unused));
     if (!inputs_unused)
         return AVERROR(ENOMEM);
-    for (i = 0; i < ctx->nb_inputs; i++) {
+    for (int i = 0; i < ctx->nb_inputs; i++) {
         AVFilterLink *inlink = ctx->inputs[i];
         AVChannelLayout *chl = &inlink->ch_layout;
         ChannelList      *iu = &inputs_unused[i];
@@ -321,7 +315,7 @@ static int join_config_output(AVFilterLink *outlink)
     }
 
     /* process user-specified maps */
-    for (i = 0; i < s->ch_layout.nb_channels; i++) {
+    for (int i = 0; i < s->ch_layout.nb_channels; i++) {
         ChannelMap *ch = &s->channels[i];
         AVFilterLink *inlink;
         AVChannelLayout *ichl;
@@ -360,7 +354,7 @@ static int join_config_output(AVFilterLink *outlink)
 
     /* guess channel maps when not explicitly defined */
     /* first try unused matching channels */
-    for (i = 0; i < s->ch_layout.nb_channels; i++) {
+    for (int i = 0; i < s->ch_layout.nb_channels; i++) {
         ChannelMap *ch = &s->channels[i];
 
         if (ch->input < 0)
@@ -368,7 +362,7 @@ static int join_config_output(AVFilterLink *outlink)
     }
 
     /* if the above failed, try to find _any_ unused input channel */
-    for (i = 0; i < s->ch_layout.nb_channels; i++) {
+    for (int i = 0; i < s->ch_layout.nb_channels; i++) {
         ChannelMap *ch = &s->channels[i];
 
         if (ch->input < 0)
@@ -393,7 +387,7 @@ static int join_config_output(AVFilterLink *outlink)
 
     /* print mappings */
     av_log(ctx, AV_LOG_VERBOSE, "mappings: ");
-    for (i = 0; i < s->ch_layout.nb_channels; i++) {
+    for (int i = 0; i < s->ch_layout.nb_channels; i++) {
         ChannelMap *ch = &s->channels[i];
         AVFilterLink  *inlink = ctx->inputs[ch->input];
         AVChannelLayout *ichl = &inlink->ch_layout;
@@ -408,14 +402,14 @@ static int join_config_output(AVFilterLink *outlink)
     }
     av_log(ctx, AV_LOG_VERBOSE, "\n");
 
-    for (i = 0; i < ctx->nb_inputs; i++) {
+    for (int i = 0; i < ctx->nb_inputs; i++) {
         if (inputs_unused[i].nb_ch == ctx->inputs[i]->ch_layout.nb_channels)
             av_log(ctx, AV_LOG_WARNING, "No channels are used from input "
                    "stream %d.\n", i);
     }
 
 fail:
-    for (i = 0; i < ctx->nb_inputs; i++)
+    for (int i = 0; i < ctx->nb_inputs; i++)
         av_freep(&inputs_unused[i].ch);
     av_freep(&inputs_unused);
     return ret;
@@ -429,9 +423,9 @@ static int try_push_frame(AVFilterContext *ctx)
     int linesize   = INT_MAX;
     int nb_samples = INT_MAX;
     int nb_buffers = 0;
-    int i, j, ret;
+    int ret;
 
-    for (i = 0; i < ctx->nb_inputs; i++) {
+    for (int i = 0; i < ctx->nb_inputs; i++) {
         if (!s->input_frames[i]) {
             nb_samples = 0;
             break;
@@ -456,7 +450,7 @@ static int try_push_frame(AVFilterContext *ctx)
     }
 
     /* copy the data pointers */
-    for (i = 0; i < s->ch_layout.nb_channels; i++) {
+    for (int i = 0, j = 0; i < s->ch_layout.nb_channels; i++) {
         ChannelMap *ch = &s->channels[i];
         AVFrame *cur   = s->input_frames[ch->input];
         AVBufferRef *buf;
@@ -489,14 +483,14 @@ static int try_push_frame(AVFilterContext *ctx)
             goto fail;
         }
     }
-    for (i = 0; i < FFMIN(FF_ARRAY_ELEMS(frame->buf), nb_buffers); i++) {
+    for (int i = 0; i < FFMIN(FF_ARRAY_ELEMS(frame->buf), nb_buffers); i++) {
         frame->buf[i] = av_buffer_ref(s->buffers[i]);
         if (!frame->buf[i]) {
             ret = AVERROR(ENOMEM);
             goto fail;
         }
     }
-    for (i = 0; i < frame->nb_extended_buf; i++) {
+    for (int i = 0; i < frame->nb_extended_buf; i++) {
         frame->extended_buf[i] = av_buffer_ref(s->buffers[i +
                                                FF_ARRAY_ELEMS(frame->buf)]);
         if (!frame->extended_buf[i]) {
@@ -526,7 +520,7 @@ static int try_push_frame(AVFilterContext *ctx)
                                            outlink->time_base);
     ret = ff_filter_frame(outlink, frame);
 
-    for (i = 0; i < ctx->nb_inputs; i++)
+    for (int i = 0; i < ctx->nb_inputs; i++)
         av_frame_free(&s->input_frames[i]);
 
     return ret;
@@ -535,7 +529,7 @@ fail:
     av_frame_free(&frame);
     return ret;
 eof:
-    for (i = 0; i < ctx->nb_inputs; i++) {
+    for (int i = 0; i < ctx->nb_inputs; i++) {
         if (s->eof &&
             ff_inlink_queued_samples(ctx->inputs[i]) <= 0 &&
             !s->input_frames[i]) {
@@ -557,8 +551,8 @@ static int check_input(AVFilterLink *inlink)
 static int activate(AVFilterContext *ctx)
 {
     JoinContext *s = ctx->priv;
-    int i, ret, status;
     int nb_samples = 0;
+    int ret, status;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK_ALL(ctx->outputs[0], ctx);
@@ -580,7 +574,7 @@ static int activate(AVFilterContext *ctx)
     if (s->input_frames[0])
         nb_samples = s->input_frames[0]->nb_samples;
 
-    for (i = 1; i < ctx->nb_inputs && nb_samples > 0; i++) {
+    for (int i = 1; i < ctx->nb_inputs && nb_samples > 0; i++) {
         if (s->input_frames[i])
             continue;
         ret = ff_inlink_consume_samples(ctx->inputs[i], nb_samples, nb_samples, &s->input_frames[i]);
