@@ -124,6 +124,9 @@ static int config_input(AVFilterLink *inlink)
         s->cc_flush = cc_flush_double;
         ret = cc_tx_init_double(ctx);
         break;
+    default:
+        ret = AVERROR_BUG;
+        break;
     }
 
     return ret;
