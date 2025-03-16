@@ -67,8 +67,6 @@ static int fn(echo_samples)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     const float *decays = s->decays;
     int av_uninit(index);
 
-    av_assert1(channels > 0); /* would corrupt delay_index */
-
     for (int ch = start; ch < end; ch++) {
         const stype *sample = (stype *)td->in->extended_data[ch];
         stype *d = (stype *)td->out->extended_data[ch];
