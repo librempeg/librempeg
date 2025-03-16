@@ -146,7 +146,7 @@ static int config_input(AVFilterLink *inlink)
         l->frame_rate.num && l->frame_rate.den ?
         av_q2d(l->frame_rate) : NAN;
 
-    av_log(inlink->src, AV_LOG_VERBOSE, "TB:%f FRAME_RATE:%f SAMPLE_RATE:%f\n",
+    av_log(ctx, AV_LOG_VERBOSE, "TB:%f FRAME_RATE:%f SAMPLE_RATE:%f\n",
            V(TB), V(FRAME_RATE), V(SAMPLE_RATE));
     return 0;
 }
