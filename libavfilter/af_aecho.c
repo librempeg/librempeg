@@ -136,6 +136,7 @@ static int config_output(AVFilterLink *outlink)
     case AV_SAMPLE_FMT_FLTP: s->echo_samples = echo_samples_fltp; break;
     case AV_SAMPLE_FMT_S16P: s->echo_samples = echo_samples_s16p; break;
     case AV_SAMPLE_FMT_S32P: s->echo_samples = echo_samples_s32p; break;
+    default: return AVERROR_BUG;
     }
 
 
