@@ -84,6 +84,8 @@ static int config_output(AVFilterLink *outlink)
         s->update_histogram = update_histogram_s16p;
         s->print_stats = print_stats_s16p;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return 0;
