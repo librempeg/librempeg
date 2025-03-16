@@ -109,6 +109,8 @@ static int config_output(AVFilterLink *outlink)
         s->filter_channels = filter_channels_fltp;
         sample_size = sizeof(float);
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     s->a_size = FFMAX(lrint(s->attack  * inlink->sample_rate / 1000.), 1);
