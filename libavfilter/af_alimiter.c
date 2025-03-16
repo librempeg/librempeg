@@ -141,6 +141,8 @@ static int config_output(AVFilterLink *outlink)
         s->init_state = init_state_fltp;
         s->uninit_state = uninit_state_fltp;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     s->l_size = FFMAX(lrint(s->look * outlink->sample_rate), 1);
