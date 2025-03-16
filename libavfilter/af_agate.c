@@ -193,6 +193,8 @@ static int config_output(AVFilterLink *outlink)
         s->gate = gate_dbl;
         sample_size = sizeof(double);
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     if (!s->lin_slope)
