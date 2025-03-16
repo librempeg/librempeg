@@ -1510,16 +1510,16 @@ static int check_header_variable(EXRContext *s,
     if (bytestream2_get_bytes_left(gb) >= minimum_length &&
         !strcmp(gb->buffer, value_name)) {
         // found value_name, jump to value_type (null terminated strings)
-        gb->buffer += strlen(value_name) + 1;
+        bytestream2_skip(gb, strlen(value_name) + 1);
         if (!strcmp(gb->buffer, value_type)) {
-            gb->buffer += strlen(value_type) + 1;
+            bytestream2_skip(gb, strlen(value_type) + 1);
             var_size = bytestream2_get_le32(gb);
             // don't go read past boundaries
             if (var_size > bytestream2_get_bytes_left(gb))
                 var_size = 0;
         } else {
             // value_type not found, reset the buffer
-            gb->buffer -= strlen(value_name) + 1;
+            bytestream2_seek(gb, -(strlen(value_name) + 1), SEEK_CUR);
             av_log(s->avctx, AV_LOG_WARNING,
                    "Unknown data type %s for header variable %s.\n",
                    value_type, value_name);
@@ -1774,7 +1774,7 @@ static int decode_header(EXRContext *s, AVFrame *frame)
             }
 
             // skip one last byte and update main gb
-            gb->buffer = ch_gb.buffer + 1;
+            bytestream2_skip(gb, bytestream2_tell(&ch_gb) + 1);
             continue;
         } else if ((var_size = check_header_variable(s, "dataWindow", "box2i",
                                                      31)) >= 0) {
