@@ -16,23 +16,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#undef FSIN
-#undef ATAN
-#undef SQRT
 #undef FABS
 #undef ftype
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
-#define FSIN sinf
-#define ATAN atanf
-#define SQRT sqrtf
 #define FABS fabsf
 #define ftype float
 #define SAMPLE_FORMAT fltp
 #else
-#define FSIN sin
-#define ATAN atan
-#define SQRT sqrt
 #define FABS fabs
 #define ftype double
 #define SAMPLE_FORMAT dblp
