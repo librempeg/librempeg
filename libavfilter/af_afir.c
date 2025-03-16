@@ -532,6 +532,8 @@ static int config_output(AVFilterLink *outlink)
             }
         }
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return 0;
