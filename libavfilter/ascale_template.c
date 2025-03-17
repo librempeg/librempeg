@@ -18,38 +18,32 @@
 
 #undef EPS
 #undef SQRT
-#undef FABS
 #undef ctype
 #undef ftype
 #undef CLIP
 #undef FSIN
 #undef TX_TYPE
 #undef MAXF
-#undef FMAX
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
 #define EPS FLT_EPSILON
 #define SQRT sqrtf
-#define FABS fabsf
 #define FSIN sinf
 #define ctype AVComplexFloat
 #define ftype float
 #define MAXF FLT_MAX
 #define CLIP av_clipf
 #define TX_TYPE AV_TX_FLOAT_RDFT
-#define FMAX fmaxf
 #define SAMPLE_FORMAT fltp
 #else
 #define EPS DBL_EPSILON
 #define SQRT sqrt
-#define FABS fabs
 #define FSIN sin
 #define ctype AVComplexDouble
 #define ftype double
 #define MAXF DBL_MAX
 #define CLIP av_clipd
 #define TX_TYPE AV_TX_DOUBLE_RDFT
-#define FMAX fmax
 #define SAMPLE_FORMAT dblp
 #endif
 
@@ -103,7 +97,7 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
     AScaleContext *s = ctx->priv;
     const ftype fs = F(1.0)/ctx->inputs[0]->sample_rate;
     ChannelContext *c = &s->c[ch];
-    const int best_period = c->best_period;
+    const int best_period = c->best_period+1;
     const ftype best_score = c->best_score;
     const int max_period = s->max_period;
     const int n = max_period-best_period;
@@ -120,10 +114,8 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
     const ftype den = xx * yy + EPS;
 
     best_xcorr = num/den;
-    best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
+    best_xcorr = CLIP(best_xcorr, F(-0.999), F(1.0));
 
-    if (best_xcorr < F(-0.95))
-        best_xcorr = F(0.0);
     av_log(ctx, AV_LOG_DEBUG, "E: %g/%g %d/%d\n", best_xcorr, best_score, best_period, max_period);
 
     dptrx += n;
@@ -264,7 +256,7 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
     AScaleContext *s = ctx->priv;
     const ftype fs = F(1.0)/ctx->inputs[0]->sample_rate;
     ChannelContext *c = &s->c[ch];
-    const int best_period = c->best_period;
+    const int best_period = c->best_period+1;
     const ftype best_score = c->best_score;
     const int max_period = s->max_period;
     const int n = best_period;
@@ -279,10 +271,8 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
     const ftype den = xx * yy + EPS;
 
     best_xcorr = num/den;
-    best_xcorr = CLIP(best_xcorr, F(-1.0), F(1.0));
+    best_xcorr = CLIP(best_xcorr, F(-0.999), F(1.0));
 
-    if (best_xcorr < F(-0.95))
-        best_xcorr = F(0.0);
     av_log(ctx, AV_LOG_DEBUG, "C: %g/%g %d/%d\n", best_xcorr, best_score, best_period, max_period);
 
     scale = F(1.0) / best_period;
@@ -375,7 +365,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     }
 
     if (best_period <= 0)
-        best_period = max_period;
+        best_period = max_period/2;
 
     c->best_period = best_period;
     c->best_score = best_score;
