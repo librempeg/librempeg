@@ -204,6 +204,9 @@ static void peek_input_samples(AVFilterContext *ctx, AVFrame *in)
 
         av_audio_fifo_peek_at(c->in_fifo, data, nb_samples, 0);
     }
+
+    if (s->nb_channels == 2)
+        s->decorrelate_stereo(ctx, in);
 }
 
 static int write_input_samples(AVFilterContext *ctx, AVFrame *in)
