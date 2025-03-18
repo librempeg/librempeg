@@ -60,7 +60,6 @@ typedef struct AScaleContext {
     const AVClass *class;
 
     double tempo;
-    int link;
     int hz;
     int max_period;
     int max_size;
@@ -74,7 +73,8 @@ typedef struct AScaleContext {
     int (*init_state)(AVFilterContext *ctx);
     void (*uninit_state)(AVFilterContext *ctx);
     void (*filter_channel)(AVFilterContext *ctx, const int ch);
-    void (*write_channel)(AVFilterContext *ctx, const int ch);
+    void (*correlate_stereo)(AVFilterContext *ctx, AVFrame *out);
+    void (*decorrelate_stereo)(AVFilterContext *ctx, AVFrame *out);
 } AScaleContext;
 
 #define OFFSET(x) offsetof(AScaleContext, x)
@@ -83,7 +83,6 @@ typedef struct AScaleContext {
 
 static const AVOption ascale_options[] = {
     { "tempo", "set the tempo", OFFSET(tempo), AV_OPT_TYPE_DOUBLE, {.dbl=1.0}, 0.01, 100.0, TFLAGS },
-    { "link",  "set the channels link", OFFSET(link), AV_OPT_TYPE_BOOL, {.i64=1}, 0, 1, FLAGS },
     { "period", "set the period", OFFSET(hz), AV_OPT_TYPE_INT, {.i64=24}, MIN_HZ, MAX_HZ, FLAGS },
     { NULL }
 };
@@ -141,6 +140,7 @@ static int min_input_fifo_samples(AVFilterContext *ctx)
 
 static void read_output_samples(AVFilterContext *ctx, AVFrame *out)
 {
+    AVFilterLink *outlink = ctx->outputs[0];
     AScaleContext *s = ctx->priv;
     const int nb_samples = out->nb_samples;
     const int max_period = s->max_period;
@@ -156,6 +156,9 @@ static void read_output_samples(AVFilterContext *ctx, AVFrame *out)
             av_audio_fifo_drain(c->out_fifo, size);
         }
     }
+
+    if (outlink->ch_layout.nb_channels == 2)
+        s->decorrelate_stereo(ctx, out);
 }
 
 #define DEPTH 32
@@ -178,44 +181,12 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     return 0;
 }
 
-static int write_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    AScaleContext *s = ctx->priv;
-    const int nb_channels = s->nb_channels;
-    const int start = (nb_channels * jobnr) / nb_jobs;
-    const int stop = (nb_channels * (jobnr+1)) / nb_jobs;
-
-    for (int ch = start; ch < stop; ch++)
-        s->write_channel(ctx, ch);
-
-    return 0;
-}
-
 static void filter_frame(AVFilterContext *ctx)
 {
     AScaleContext *s = ctx->priv;
 
     ff_filter_execute(ctx, filter_channels, NULL, NULL,
                       FFMIN(s->nb_channels, ff_filter_get_nb_threads(ctx)));
-
-    if (s->link) {
-        int min_best_period = INT_MAX;
-
-        for (int ch = 0; ch < s->nb_channels; ch++) {
-            ChannelContext *c = &s->c[ch];
-
-            min_best_period = FFMIN(min_best_period, c->best_period);
-        }
-
-        for (int ch = 0; ch < s->nb_channels; ch++) {
-            ChannelContext *c = &s->c[ch];
-
-            c->best_period = min_best_period;
-        }
-
-        ff_filter_execute(ctx, write_channels, NULL, NULL,
-                          FFMIN(s->nb_channels, ff_filter_get_nb_threads(ctx)));
-    }
 }
 
 static void peek_input_samples(AVFilterContext *ctx, AVFrame *in)
@@ -235,14 +206,24 @@ static void peek_input_samples(AVFilterContext *ctx, AVFrame *in)
     }
 }
 
-static void write_input_samples(AVFilterContext *ctx, AVFrame *in)
+static int write_input_samples(AVFilterContext *ctx, AVFrame *in)
 {
+    AVFilterLink *outlink = ctx->outputs[0];
     AScaleContext *s = ctx->priv;
     const double fs = F(1.0)/in->sample_rate;
     const int nb_samples = in->nb_samples;
 
     if (s->pts[IN] == AV_NOPTS_VALUE)
         s->pts[IN] = s->pts[OUT] = in->pts;
+
+    if (outlink->ch_layout.nb_channels == 2) {
+        int ret = ff_inlink_make_frame_writable(ctx->inputs[0], &in);
+
+        if (ret < 0)
+            return ret;
+
+        s->correlate_stereo(ctx, in);
+    }
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
         ChannelContext *c = &s->c[ch];
@@ -252,13 +233,15 @@ static void write_input_samples(AVFilterContext *ctx, AVFrame *in)
         av_audio_fifo_write(c->in_fifo, data, nb_samples);
         c->state[IN] += nb_samples * fs;
     }
+
+    return 0;
 }
 
 static int output_frame(AVFilterContext *ctx)
 {
+    AVFilterLink *outlink = ctx->outputs[0];
     AScaleContext *s = ctx->priv;
     const int nb_samples = min_output_fifo_samples(ctx);
-    AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out;
 
     out = ff_get_audio_buffer(outlink, nb_samples);
@@ -294,7 +277,9 @@ static int activate(AVFilterContext *ctx)
         if (ret < 0)
             return ret;
         if (ret > 0) {
-            write_input_samples(ctx, in);
+            ret = write_input_samples(ctx, in);
+            if (ret < 0)
+                return ret;
             av_frame_free(&in);
         }
     }
@@ -356,15 +341,17 @@ static int config_input(AVFilterLink *inlink)
     switch (inlink->format) {
     case AV_SAMPLE_FMT_DBLP:
         s->filter_channel = filter_channel_dblp;
-        s->write_channel = write_channel_dblp;
         s->init_state = init_state_dblp;
         s->uninit_state = uninit_state_dblp;
+        s->correlate_stereo = correlate_stereo_dblp;
+        s->decorrelate_stereo = decorrelate_stereo_dblp;
         break;
     case AV_SAMPLE_FMT_FLTP:
         s->filter_channel = filter_channel_fltp;
-        s->write_channel = write_channel_fltp;
         s->init_state = init_state_fltp;
         s->uninit_state = uninit_state_fltp;
+        s->correlate_stereo = correlate_stereo_fltp;
+        s->decorrelate_stereo = decorrelate_stereo_fltp;
         break;
     default:
         return AVERROR(EINVAL);

@@ -246,9 +246,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     c->best_score = best_score;
     c->mode = EXPAND;
 
-    if (s->link == 0)
-        return fn(expand_write)(ctx, ch);
-    return 0;
+    return fn(expand_write)(ctx, ch);;
 }
 
 static int fn(compress_write)(AVFilterContext *ctx, const int ch)
@@ -371,9 +369,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     c->best_score = best_score;
     c->mode = COMPRESS;
 
-    if (s->link == 0)
-        return fn(compress_write)(ctx, ch);
-    return 0;
+    return fn(compress_write)(ctx, ch);;
 }
 
 static int fn(filter_samples)(AVFilterContext *ctx, const int ch)
@@ -394,26 +390,6 @@ static int fn(filter_samples)(AVFilterContext *ctx, const int ch)
     return fn(copy_samples)(ctx, ch, lrint(fabs(state*fs)));
 }
 
-static int fn(write_samples)(AVFilterContext *ctx, const int ch)
-{
-    AScaleContext *s = ctx->priv;
-    ChannelContext *c = &s->c[ch];
-
-    switch (c->mode) {
-    case EXPAND:
-        return fn(expand_write)(ctx, ch);
-    case COMPRESS:
-        return fn(compress_write)(ctx, ch);
-    }
-
-    return 0;
-}
-
-static void fn(write_channel)(AVFilterContext *ctx, const int ch)
-{
-    fn(write_samples)(ctx, ch);
-}
-
 static void fn(filter_channel)(AVFilterContext *ctx, const int ch)
 {
     int ret;
@@ -422,6 +398,34 @@ static void fn(filter_channel)(AVFilterContext *ctx, const int ch)
         ret = fn(filter_samples)(ctx, ch);
     } while (ret > 0);
     av_assert0(ret >= 0);
+}
+
+static void fn(correlate_stereo)(AVFilterContext *ctx, AVFrame *out)
+{
+    const int nb_samples = out->nb_samples;
+    ftype *src0 = (ftype *)out->extended_data[0];
+    ftype *src1 = (ftype *)out->extended_data[1];
+
+    for (int n = 0; n < nb_samples; n++) {
+        ftype l = src0[n], r = src1[n];
+
+        src0[n] = (l + r) * F(0.5);
+        src1[n] = (l - r) * F(0.5);
+    }
+}
+
+static void fn(decorrelate_stereo)(AVFilterContext *ctx, AVFrame *out)
+{
+    const int nb_samples = out->nb_samples;
+    ftype *src0 = (ftype *)out->extended_data[0];
+    ftype *src1 = (ftype *)out->extended_data[1];
+
+    for (int n = 0; n < nb_samples; n++) {
+        ftype l = src0[n], r = src1[n];
+
+        src0[n] = l + r;
+        src1[n] = l - r;
+    }
 }
 
 static int fn(init_state)(AVFilterContext *ctx)
