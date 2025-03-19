@@ -141,7 +141,12 @@ static int fn(sf2sf)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const int start = (nb_samples * jobnr) / nb_jobs;
     const int end = (nb_samples * (jobnr+1)) / nb_jobs;
 
-    if (nb_channels == 2) {
+    if (nb_channels == 1) {
+        const stype *const restrict src = fn_src_ptr(in, 0, 0);
+        dtype *restrict dst = fn_dst_ptr(out, 0, 0);
+
+        fn(sf2sf_loop)(dst, src, end-start, 1);
+    } else if (nb_channels == 2) {
         const stype *const restrict src0 = fn_src_ptr(in, 0, start);
         const stype *const restrict src1 = fn_src_ptr(in, 1, start);
         dtype *restrict dst0 = fn_dst_ptr(out, 0, start);
