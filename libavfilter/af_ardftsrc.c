@@ -29,6 +29,8 @@
 typedef struct AudioRDFTSRCContext {
     const AVClass *class;
 
+    int in_planar;
+    int out_planar;
     int pass;
     int quality;
     int sample_rate;
@@ -78,20 +80,25 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_out)
 {
     const AudioRDFTSRCContext *s = ctx->priv;
-    AVFilterFormats *formats = NULL;
+    static const enum AVSampleFormat sample_fmts[] = {
+        AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_S16P,
+        AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_FLTP,
+        AV_SAMPLE_FMT_DBL, AV_SAMPLE_FMT_DBLP,
+        AV_SAMPLE_FMT_NONE
+    };
     int ret, sample_rates[] = { s->sample_rate, -1 };
+    AVFilterFormats *formats;
 
-    ret = ff_add_format(&formats, AV_SAMPLE_FMT_S16P);
-    if (ret)
+    formats = ff_make_format_list(sample_fmts);
+    if (formats)
+        formats->flags = FILTER_SAME_BITDEPTH;
+    if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
-    ret = ff_add_format(&formats, AV_SAMPLE_FMT_FLTP);
-    if (ret)
-        return ret;
-    ret = ff_add_format(&formats, AV_SAMPLE_FMT_DBLP);
-    if (ret)
-        return ret;
-    ret = ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
-    if (ret)
+
+    formats = ff_make_format_list(sample_fmts);
+    if (formats)
+        formats->flags = FILTER_SAME_BITDEPTH;
+    if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
     if ((ret = ff_formats_ref(ff_all_samplerates(),
@@ -142,6 +149,8 @@ static int config_input(AVFilterLink *inlink)
     s->in_nb_samples *= factor;
     s->out_nb_samples *= factor;
 
+    s->out_planar = av_sample_fmt_is_planar(ctx->outputs[0]->format);
+    s->in_planar = av_sample_fmt_is_planar(inlink->format);
     s->in_rdft_size = s->in_nb_samples * 2;
     s->out_rdft_size = s->out_nb_samples * 2;
     s->out_offset = s->trim_size = (s->out_rdft_size - s->out_nb_samples) >> 1;
@@ -152,18 +161,21 @@ static int config_input(AVFilterLink *inlink)
     av_log(ctx, AV_LOG_DEBUG, "factor: %"PRId64" | %d => %d | delay: %"PRId64"\n", factor, s->in_rdft_size, s->out_rdft_size, s->delay);
 
     switch (inlink->format) {
+    case AV_SAMPLE_FMT_S16:
     case AV_SAMPLE_FMT_S16P:
         s->flush_src = flush_s16p;
         s->do_src = src_s16p;
         s->src_uninit = src_uninit_s16p;
         ret = src_init_s16p(ctx);
         break;
+    case AV_SAMPLE_FMT_FLT:
     case AV_SAMPLE_FMT_FLTP:
         s->flush_src = flush_fltp;
         s->do_src = src_fltp;
         s->src_uninit = src_uninit_fltp;
         ret = src_init_fltp(ctx);
         break;
+    case AV_SAMPLE_FMT_DBL:
     case AV_SAMPLE_FMT_DBLP:
         s->flush_src = flush_dblp;
         s->do_src = src_dblp;
