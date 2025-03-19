@@ -165,15 +165,17 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
     }
 
     if (type == AVMEDIA_TYPE_AUDIO) {
+        int diff_params = 0;
+
         for (i = 0; i < a->nb_formats; i++) {
             for (j = 0; j < b->nb_formats; j++) {
                 if (check && ((a->flags & FILTER_SAME_BITDEPTH) || (b->flags & FILTER_SAME_BITDEPTH))) {
-                    same_params += av_get_bytes_per_sample(a->formats[i]) == av_get_bytes_per_sample(b->formats[j]);
+                    diff_params += av_get_packed_sample_fmt(a->formats[i]) != av_get_packed_sample_fmt(b->formats[j]);
                 }
             }
         }
 
-        if (check && (a->flags || b->flags) && same_params == 0)
+        if (check && (a->flags || b->flags) && diff_params > 0)
             return 0;
     }
 
@@ -242,7 +244,7 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
         for (i = 0; i < a->nb_formats; i++) {
             for (j = 0; j < b->nb_formats; j++) {
                 if ((a->flags & FILTER_SAME_BITDEPTH) || (b->flags & FILTER_SAME_BITDEPTH)) {
-                    if (av_get_bytes_per_sample(a->formats[i]) == av_get_bytes_per_sample(b->formats[j])) {
+                    if (av_get_packed_sample_fmt(a->formats[i]) == av_get_packed_sample_fmt(b->formats[j])) {
                         if (check)
                             return 1;
 
