@@ -1650,6 +1650,23 @@ static int configure_output_audio_filter(FilterGraphPriv *fgp, AVFilterGraph *gr
     if (ret < 0)
         goto fail;
 
+    {
+        AVFilterContext *filt_ctx;
+
+        ret = avfilter_graph_create_filter(&filt_ctx,
+                                           avfilter_get_by_name("asf2sf"),
+                                           "asf2sf", NULL, NULL, graph);
+        if (ret < 0)
+            goto fail;
+
+        ret = avfilter_link(last_filter, pad_idx, filt_ctx, 0);
+        if (ret < 0)
+            goto fail;
+
+        last_filter = filt_ctx;
+        pad_idx = 0;
+    }
+
     if ((ret = avfilter_link(last_filter, pad_idx, ofp->filter, 0)) < 0)
         goto fail;
 fail:
