@@ -510,13 +510,13 @@ static const AVFilterFormatsMerger mergers_audio[] = {
         .offset     = offsetof(AVFilterFormatsConfig, channel_layouts),
         .merge      = merge_channel_layouts,
         .can_merge  = can_merge_channel_layouts,
-        .conversion_filter = "aresample",
+        .conversion_filter = "acl2cl",
     },
     {
         .offset     = offsetof(AVFilterFormatsConfig, samplerates),
         .merge      = merge_samplerates,
         .can_merge  = can_merge_samplerates,
-        .conversion_filter = "aresample",
+        .conversion_filter = "ardftsrc",
     },
     {
         .offset     = offsetof(AVFilterFormatsConfig, formats),

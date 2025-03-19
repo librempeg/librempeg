@@ -529,8 +529,10 @@ static int query_formats(AVFilterGraph *graph, void *log_ctx)
                     const AVFilterFormatsMerger *m = &neg->mergers[av_log2(convert_needed)];
 
                     filter_name = m->conversion_filter;
+                    opts = NULL;
                 } else {
                     filter_name = neg->conversion_filter;
+                    opts = FF_FIELD_AT(char *, neg->conversion_opts_offset, *graph);
                 }
                 filter = avfilter_get_by_name(filter_name);
                 if (!filter) {
@@ -541,7 +543,6 @@ static int query_formats(AVFilterGraph *graph, void *log_ctx)
                 }
                 snprintf(inst_name, sizeof(inst_name), "auto_%s_%d",
                          filter->name, converter_count++);
-                opts = FF_FIELD_AT(char *, neg->conversion_opts_offset, *graph);
                 ret = avfilter_graph_create_filter(&convert, filter, inst_name, opts, NULL, graph);
                 if (ret < 0)
                     return ret;
@@ -579,8 +580,9 @@ static int query_formats(AVFilterGraph *graph, void *log_ctx)
 #define MERGE(merger, link)                                                  \
     ((merger)->merge(FF_FIELD_AT(void *, (merger)->offset, (link)->incfg),   \
                      FF_FIELD_AT(void *, (merger)->offset, (link)->outcfg)))
-                for (neg_step = 0; neg_step < neg->nb_mergers; neg_step++) {
-                    const AVFilterFormatsMerger *m = &neg->mergers[neg_step];
+                if (av_popcount(convert_needed) == 1) {
+                    const AVFilterFormatsMerger *m = &neg->mergers[av_log2(convert_needed)];
+
                     if ((ret = MERGE(m,  inlink)) <= 0 ||
                         (ret = MERGE(m, outlink)) <= 0) {
                         if (ret < 0)
@@ -589,6 +591,20 @@ static int query_formats(AVFilterGraph *graph, void *log_ctx)
                                "Impossible to convert between the formats supported by the filter "
                                "'%s' and the filter '%s'\n", link->src->name, link->dst->name);
                         return AVERROR(ENOSYS);
+                    }
+                } else {
+                    for (neg_step = 0; neg_step < neg->nb_mergers; neg_step++) {
+                        const AVFilterFormatsMerger *m = &neg->mergers[neg_step];
+
+                        if ((ret = MERGE(m,  inlink)) <= 0 ||
+                            (ret = MERGE(m, outlink)) <= 0) {
+                            if (ret < 0)
+                                return ret;
+                            av_log(log_ctx, AV_LOG_ERROR,
+                                   "Impossible to convert between the formats supported by the filter "
+                                   "'%s' and the filter '%s'\n", link->src->name, link->dst->name);
+                            return AVERROR(ENOSYS);
+                        }
                     }
                 }
             }
