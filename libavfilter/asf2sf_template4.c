@@ -186,7 +186,7 @@ static int fn(sf2sf)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
         fn(sf2sf_loop6)(dst0, dst1, dst2, dst3, dst4, dst5,
                         src0, src1, src2, src3, src4, src5,
                         end-start);
-     } else if (nb_channels == 8) {
+    } else if (nb_channels == 8) {
         const stype *const restrict src0 = fn_src_ptr(in, 0, start);
         const stype *const restrict src1 = fn_src_ptr(in, 1, start);
         const stype *const restrict src2 = fn_src_ptr(in, 2, start);
@@ -207,7 +207,7 @@ static int fn(sf2sf)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
         fn(sf2sf_loop8)(dst0, dst1, dst2, dst3, dst4, dst5, dst6, dst7,
                         src0, src1, src2, src3, src4, src5, src6, src7,
                         end-start);
-     } else {
+    } else {
         for (int ch = 0; ch < nb_channels; ch++) {
             const stype *const restrict src = fn_src_ptr(in, ch, start);
             dtype *restrict dst = fn_dst_ptr(out, ch, start);
