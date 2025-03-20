@@ -110,10 +110,10 @@ typedef struct ThreadData {
 #define DEPTH 64
 #include "acl2cl_template.c"
 
-static int config_output(AVFilterLink *outlink)
+static int config_input(AVFilterLink *inlink)
 {
-    AVFilterContext *ctx = outlink->src;
-    AVFilterLink *inlink = ctx->inputs[0];
+    AVFilterContext *ctx = inlink->dst;
+    AVFilterLink *outlink = ctx->outputs[0];
     AudioCL2CLContext *s = ctx->priv;
 
     if (!av_channel_layout_compare(&outlink->ch_layout,
@@ -211,30 +211,12 @@ static AVFrame *get_in_audio_buffer(AVFilterLink *inlink, int nb_samples)
         ff_default_get_audio_buffer(inlink, nb_samples);
 }
 
-static AVFrame *get_out_audio_buffer(AVFilterLink *outlink, int nb_samples)
-{
-    AVFilterContext *ctx = outlink->src;
-    AudioCL2CLContext *s = ctx->priv;
-
-    return s->pass ?
-        ff_null_get_audio_buffer   (outlink, nb_samples) :
-        ff_default_get_audio_buffer(outlink, nb_samples);
-}
-
 static const AVFilterPad inputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_AUDIO,
+        .config_props  = config_input,
         .get_buffer.audio = get_in_audio_buffer,
-    },
-};
-
-static const AVFilterPad outputs[] = {
-    {
-        .name         = "default",
-        .type         = AVMEDIA_TYPE_AUDIO,
-        .config_props = config_output,
-        .get_buffer.audio = get_out_audio_buffer,
     },
 };
 
@@ -247,5 +229,5 @@ const FFFilter ff_af_acl2cl = {
     .activate      = activate,
     FILTER_QUERY_FUNC2(query_formats),
     FILTER_INPUTS(inputs),
-    FILTER_OUTPUTS(outputs),
+    FILTER_OUTPUTS(ff_audio_default_filterpad),
 };
