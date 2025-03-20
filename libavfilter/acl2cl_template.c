@@ -59,9 +59,11 @@
 
 static int fn(do_cl2cl)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
+    AudioCL2CLContext *s = ctx->priv;
     ThreadData *td = arg;
     AVFrame *out = td->out;
     AVFrame *in = td->in;
+    const int in_channels = in->ch_layout.nb_channels;
     const int nb_channels = out->ch_layout.nb_channels;
     const int nb_samples = in->nb_samples;
     const int start = (nb_channels * jobnr) / nb_jobs;
@@ -82,12 +84,35 @@ static int fn(do_cl2cl)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
                     const int fr_idx = av_channel_layout_index_from_channel(in_ch_layout, AV_CHAN_FRONT_RIGHT);
 
                     if (fl_idx >= 0 && fr_idx >= 0) {
-                        const ftype *fl_src = (const ftype *)in->extended_data[fl_idx];
-                        const ftype *fr_src = (const ftype *)in->extended_data[fr_idx];
-                        ftype *dst = (ftype *)out->extended_data[ch];
+                        if (s->in_planar && s->out_planar) {
+                            const ftype *fl_src = (const ftype *)in->extended_data[fl_idx];
+                            const ftype *fr_src = (const ftype *)in->extended_data[fr_idx];
+                            ftype *dst = (ftype *)out->extended_data[ch];
 
-                        for (int n = 0; n < nb_samples; n++)
-                            dst[n] = MIX2(fl_src[n], fr_src[n]);
+                            for (int n = 0; n < nb_samples; n++)
+                                dst[n] = MIX2(fl_src[n], fr_src[n]);
+                        } else if (s->in_planar && !s->out_planar) {
+                            const ftype *fl_src = (const ftype *)in->extended_data[fl_idx];
+                            const ftype *fr_src = (const ftype *)in->extended_data[fr_idx];
+                            ftype *dst = ((ftype *)out->data[0]) + ch;
+
+                            for (int n = 0, m = 0; n < nb_samples; n++, m += nb_channels)
+                                dst[m] = MIX2(fl_src[n], fr_src[n]);
+                        } else if (!s->in_planar && s->out_planar) {
+                            const ftype *fl_src = ((const ftype *)in->data[0]) + fl_idx;
+                            const ftype *fr_src = ((const ftype *)in->data[0]) + fr_idx;
+                            ftype *dst = (ftype *)out->extended_data[ch];
+
+                            for (int n = 0, m = 0; n < nb_samples; n++, m += in_channels)
+                                dst[n] = MIX2(fl_src[m], fr_src[m]);
+                        } else {
+                            const ftype *fl_src = ((const ftype *)in->data[0]) + fl_idx;
+                            const ftype *fr_src = ((const ftype *)in->data[0]) + fr_idx;
+                            ftype *dst = ((ftype *)out->data[0]) + ch;
+
+                            for (int n = 0, m = 0, l = 0; n < nb_samples; n++, m += nb_channels, l += in_channels)
+                                dst[m] = MIX2(fl_src[l], fr_src[l]);
+                        }
                     }
                 }
                 break;
@@ -97,11 +122,31 @@ static int fn(do_cl2cl)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
                     const int fc_idx = av_channel_layout_index_from_channel(in_ch_layout, AV_CHAN_FRONT_CENTER);
 
                     if (fc_idx >= 0) {
-                        const ftype *fc_src = (const ftype *)in->extended_data[fc_idx];
-                        ftype *dst = (ftype *)out->extended_data[ch];
+                        if (s->in_planar && s->out_planar) {
+                            const ftype *fc_src = (const ftype *)in->extended_data[fc_idx];
+                            ftype *dst = (ftype *)out->extended_data[ch];
 
-                        for (int n = 0; n < nb_samples; n++)
-                            dst[n] = MIX2(fc_src[n], ZERO);
+                            for (int n = 0; n < nb_samples; n++)
+                                dst[n] = MIX2(fc_src[n], ZERO);
+                        } else if (s->in_planar && !s->out_planar) {
+                            const ftype *fc_src = (const ftype *)in->extended_data[fc_idx];
+                            ftype *dst = ((ftype *)out->data[0]) + ch;
+
+                            for (int n = 0, m = 0; n < nb_samples; n++, m += nb_channels)
+                                dst[m] = MIX2(fc_src[n], ZERO);
+                        } else if (!s->in_planar && s->out_planar) {
+                            const ftype *fc_src = ((const ftype *)in->data[0]) + fc_idx;
+                            ftype *dst = (ftype *)out->extended_data[ch];
+
+                            for (int n = 0, m = 0; n < nb_samples; n++, m += in_channels)
+                                dst[n] = MIX2(fc_src[m], ZERO);
+                        } else {
+                            const ftype *fc_src = ((const ftype *)in->data[0]) + fc_idx;
+                            ftype *dst = ((ftype *)out->data[0]) + ch;
+
+                            for (int n = 0, m = 0, l = 0; n < nb_samples; n++, m += nb_channels, l += in_channels)
+                                dst[m] = MIX2(fc_src[l], ZERO);
+                        }
                     }
                 }
                 break;
@@ -112,7 +157,27 @@ static int fn(do_cl2cl)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
             continue;
         }
 
-        memcpy(out->extended_data[ch], in->extended_data[idx], nb_samples * bytes_per_sample);
+        if (s->in_planar && s->out_planar) {
+            memcpy(out->extended_data[ch], in->extended_data[idx], nb_samples * bytes_per_sample);
+        } else if (s->in_planar && !s->out_planar) {
+            const ftype *src = (const ftype *)in->extended_data[idx];
+            ftype *dst = (ftype *)out->data[0];
+
+            for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
+                dst[m] = src[n];
+        } else if (!s->in_planar && s->out_planar) {
+            const ftype *src = ((const ftype *)in->data[0]) + idx;
+            ftype *dst = (ftype *)out->extended_data[ch];
+
+            for (int n = 0, m = 0; n < nb_samples; n++, m += in_channels)
+                dst[n] = src[m];
+        } else {
+            const ftype *src = ((const ftype *)in->data[0]) + idx;
+            ftype *dst = ((ftype *)out->data[0]) + ch;
+
+            for (int n = 0, m = 0, l = 0; n < nb_samples; n++, m += nb_channels, l += in_channels)
+                dst[m] = src[l];
+        }
     }
 
     return 0;
