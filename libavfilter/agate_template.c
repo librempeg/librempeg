@@ -106,11 +106,11 @@ static void fn(gate)(AVFilterContext *ctx, AVFrame *out, const int nb_samples,
         int detected;
 
         switch (link) {
-        case LINK_MAX:
-        case LINK_AVG:
+        case LINKMODE_MAX:
+        case LINKMODE_AVG:
             lin_slope = lin_slopep[0];
             abs_sample = FABS(scsrc[0] * level_sc);
-            if (link == LINK_MAX) {
+            if (link == LINKMODE_MAX) {
                 for (int c = 1; c < sc_nb_channels; c++)
                     abs_sample = FMAX(FABS(scsrc[c] * level_sc), abs_sample);
             } else {
@@ -138,7 +138,7 @@ static void fn(gate)(AVFilterContext *ctx, AVFrame *out, const int nb_samples,
                 dst[c] = src[c] * factor;
             lin_slopep[0] = lin_slope;
             break;
-        case LINK_NONE:
+        case LINKMODE_NONE:
             for (int c = 0; c < sc_nb_channels; c++) {
                 ftype lin_slope = lin_slopep[c];
                 ftype gain = F(1.0);

@@ -32,10 +32,10 @@
 #include "formats.h"
 
 enum LinkMode {
-    LINK_NONE,
-    LINK_AVG,
-    LINK_MAX,
-    NB_LINK
+    LINKMODE_NONE,
+    LINKMODE_AVG,
+    LINKMODE_MAX,
+    NB_LINKMODE
 };
 
 typedef struct AudioGateContext {
@@ -90,11 +90,11 @@ static const AVOption agate_options[] = {
     { "detection", "set detection",          OFFSET(detection), AV_OPT_TYPE_INT,    {.i64=1},           0,    1, A, .unit = "detection" },
     {   "peak",    0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=0},           0,    0, A, .unit = "detection" },
     {   "rms",     0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=1},           0,    0, A, .unit = "detection" },
-    { "link",   "set channels linking type", OFFSET(link),      AV_OPT_TYPE_INT,    {.i64=LINK_NONE}, 0,NB_LINK-1, A, .unit = "link" },
-    {   "none",    0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=LINK_NONE},   0,    0, A, .unit = "link" },
-    {   "average", 0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=LINK_AVG},    0,    0, A, .unit = "link" },
-    {   "maximum", 0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=LINK_MAX},    0,    0, A, .unit = "link" },
-    { "level_sc",  "set sidechain gain",     OFFSET(level_sc),  AV_OPT_TYPE_DOUBLE, {.dbl=1},           0.015625,   64, A },
+    { "link",   "set channels linking type", OFFSET(link),      AV_OPT_TYPE_INT,    {.i64=LINKMODE_NONE},0,NB_LINKMODE-1, A, .unit = "link" },
+    {   "none",    0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=LINKMODE_NONE},0,   0, A, .unit = "link" },
+    {   "average", 0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=LINKMODE_AVG},0,    0, A, .unit = "link" },
+    {   "maximum", 0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=LINKMODE_MAX},0,    0, A, .unit = "link" },
+    { "level_sc",  "set sidechain gain",     OFFSET(level_sc),  AV_OPT_TYPE_DOUBLE, {.dbl=1},    0.015625,   64, A },
     { "sidechain", "enable sidechain input", OFFSET(sidechain),AV_OPT_TYPE_BOOL,    {.i64=0},           0,    1, AF },
     { NULL }
 };
