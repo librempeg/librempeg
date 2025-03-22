@@ -324,15 +324,14 @@ static int filter_link_check_formats(void *log, AVFilterLink *link, AVFilterForm
  */
 static int filter_check_formats(AVFilterContext *ctx)
 {
-    unsigned i;
     int ret;
 
-    for (i = 0; i < ctx->nb_inputs; i++) {
+    for (unsigned i = 0; i < ctx->nb_inputs; i++) {
         ret = filter_link_check_formats(ctx, ctx->inputs[i], &ctx->inputs[i]->outcfg);
         if (ret < 0)
             return ret;
     }
-    for (i = 0; i < ctx->nb_outputs; i++) {
+    for (unsigned i = 0; i < ctx->nb_outputs; i++) {
         ret = filter_link_check_formats(ctx, ctx->outputs[i], &ctx->outputs[i]->incfg);
         if (ret < 0)
             return ret;
