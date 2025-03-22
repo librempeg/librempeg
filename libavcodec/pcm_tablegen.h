@@ -25,6 +25,7 @@
 
 #include <stdint.h>
 #include "libavutil/attributes.h"
+#include "libavutil/macros.h"
 
 /* from g711.c by SUN microsystems (unrestricted use) */
 
