@@ -35,6 +35,7 @@ enum FilterType {
     TELDEC,
     LONDON,
     NARTB,
+    BL300,
     NB_TYPES
 };
 
@@ -79,6 +80,7 @@ static const AVOption aemphasis_options[] = {
     { "teldec",                "TELDEC",            0, AV_OPT_TYPE_CONST, {.i64=TELDEC},0, 0,FLAGS,.unit = "type" },
     { "london",                "LONDON",            0, AV_OPT_TYPE_CONST, {.i64=LONDON},0, 0,FLAGS,.unit = "type" },
     { "nartb",                  "NARTB",            0, AV_OPT_TYPE_CONST, {.i64=NARTB}, 0, 0,FLAGS,.unit = "type" },
+    { "bl300",           "Blumlein 300",            0, AV_OPT_TYPE_CONST, {.i64=BL300}, 0, 0,FLAGS,.unit = "type" },
     { NULL }
 };
 
@@ -199,6 +201,11 @@ static int config_input(AVFilterLink *inlink)
         tau1 = 0.003180;
         tau2 = 0.000318;
         tau3 = 0.000100;
+        break;
+    case BL300: //"Blumlein 300"
+        tau1 = 0.000000;
+        tau2 = 0.000531;
+        tau3 = 0.000000;
         break;
     case RIAA: //"RIAA"
     default:
