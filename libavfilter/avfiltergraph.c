@@ -485,10 +485,8 @@ static int query_formats(AVFilterGraph *graph, void *log_ctx)
                 const AVFilterFormatsMerger *m = &neg->mergers[neg_step];
                 void *a = FF_FIELD_AT(void *, m->offset, link->incfg);
                 void *b = FF_FIELD_AT(void *, m->offset, link->outcfg);
-                if (a && b && a != b && !m->can_merge(a, b)) {
+                if (a && b && a != b && !m->can_merge(a, b))
                     convert_needed |= 1U << neg_step;
-                    break;
-                }
             }
             for (neg_step = 0; neg_step < neg->nb_mergers; neg_step++) {
                 const AVFilterFormatsMerger *m = &neg->mergers[neg_step];
