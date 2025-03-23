@@ -23,9 +23,12 @@
  * Audio (Sidechain) Gate filter
  */
 
+#include <float.h>
+
 #include "libavutil/channel_layout.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
+
 #include "avfilter.h"
 #include "audio.h"
 #include "filters.h"
@@ -76,7 +79,7 @@ typedef struct AudioGateContext {
 #define A AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 
 static const AVOption agate_options[] = {
-    { "level_in",  "set input level",        OFFSET(level_in),  AV_OPT_TYPE_DOUBLE, {.dbl=1},           0.015625,   64, A },
+    { "level_in",  "set input level",        OFFSET(level_in),  AV_OPT_TYPE_DOUBLE, {.dbl=1},           0,   64, A },
     { "direction", "set filtering direction",OFFSET(direction), AV_OPT_TYPE_INT,    {.i64=0},           0, 1, A, .unit = "direction" },
     {   "downward",0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=0},           0, 0, A, .unit = "direction" },
     {   "upward",  0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=1},           0, 0, A, .unit = "direction" },
@@ -94,7 +97,7 @@ static const AVOption agate_options[] = {
     {   "none",    0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=LINKMODE_NONE},0,   0, A, .unit = "link" },
     {   "average", 0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=LINKMODE_AVG},0,    0, A, .unit = "link" },
     {   "maximum", 0,                        0,                 AV_OPT_TYPE_CONST,  {.i64=LINKMODE_MAX},0,    0, A, .unit = "link" },
-    { "level_sc",  "set sidechain gain",     OFFSET(level_sc),  AV_OPT_TYPE_DOUBLE, {.dbl=1},    0.015625,   64, A },
+    { "level_sc",  "set sidechain gain",     OFFSET(level_sc),  AV_OPT_TYPE_DOUBLE, {.dbl=1},           0,   64, A },
     { "sidechain", "enable sidechain input", OFFSET(sidechain),AV_OPT_TYPE_BOOL,    {.i64=0},           0,    1, AF },
     { NULL }
 };
@@ -211,7 +214,7 @@ static int config_output(AVFilterLink *outlink)
     s->release_coeff = FFMIN(1., 1. / (s->release * inlink->sample_rate / 4000.));
     s->lin_knee_stop = lin_threshold * lin_knee_sqrt;
     s->lin_knee_start = lin_threshold / lin_knee_sqrt;
-    s->thres = log(lin_threshold);
+    s->thres = log(lin_threshold + FLT_EPSILON);
     s->knee_start = log(s->lin_knee_start);
     s->knee_stop = log(s->lin_knee_stop);
 
