@@ -1377,10 +1377,14 @@ select Compact Disc (CD).
 select 50µs (FM).
 @item 75fm
 select 75µs (FM).
-@item 50kf
-select 50µs (FM-KF).
-@item 75kf
-select 75µs (FM-KF).
+@item iecn78
+select IEC N78
+@item teldec
+select TELDEC
+@item london
+select LONDON
+@item nartb
+select NARTB
 @end table
 @end table
 

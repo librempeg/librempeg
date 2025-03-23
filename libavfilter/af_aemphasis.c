@@ -31,6 +31,10 @@ enum FilterType {
     CD,
     FM50,
     FM75,
+    IECN78,
+    TELDEC,
+    LONDON,
+    NARTB,
     NB_TYPES
 };
 
@@ -71,6 +75,10 @@ static const AVOption aemphasis_options[] = {
     { "cd",         "Compact Disc (CD)",            0, AV_OPT_TYPE_CONST, {.i64=CD},  0, 0, FLAGS, .unit = "type" },
     { "50fm",               "50µs (FM)",            0, AV_OPT_TYPE_CONST, {.i64=FM50},0, 0, FLAGS, .unit = "type" },
     { "75fm",               "75µs (FM)",            0, AV_OPT_TYPE_CONST, {.i64=FM75},0, 0, FLAGS, .unit = "type" },
+    { "iecn78",               "IEC N78",            0, AV_OPT_TYPE_CONST, {.i64=IECN78},0, 0,FLAGS,.unit = "type" },
+    { "teldec",                "TELDEC",            0, AV_OPT_TYPE_CONST, {.i64=TELDEC},0, 0,FLAGS,.unit = "type" },
+    { "london",                "LONDON",            0, AV_OPT_TYPE_CONST, {.i64=LONDON},0, 0,FLAGS,.unit = "type" },
+    { "nartb",                  "NARTB",            0, AV_OPT_TYPE_CONST, {.i64=NARTB}, 0, 0,FLAGS,.unit = "type" },
     { NULL }
 };
 
@@ -171,6 +179,26 @@ static int config_input(AVFilterLink *inlink)
         tau1 = 0.003180;
         tau2 = 0.000353;
         tau3 = 0.000050;
+        break;
+    case IECN78: //"IEC N78"
+        tau1 = 0.003180;
+        tau2 = 0.000450;
+        tau3 = 0.000050;
+        break;
+    case TELDEC: //"TELDEC"
+        tau1 = 0.003180;
+        tau2 = 0.000318;
+        tau3 = 0.000050;
+        break;
+    case LONDON: //"LONDON"
+        tau1 = 0.001590;
+        tau2 = 0.000318;
+        tau3 = 0.000050;
+        break;
+    case NARTB: //"NARTB"
+        tau1 = 0.003180;
+        tau2 = 0.000318;
+        tau3 = 0.000100;
         break;
     case RIAA: //"RIAA"
     default:
