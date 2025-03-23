@@ -24,6 +24,8 @@
  * Audio (Sidechain) Compressor filter
  */
 
+#include <float.h>
+
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
 #include "libavutil/mem.h"
@@ -80,11 +82,11 @@ typedef struct AudioCompressorContext {
 #define AF AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 
 static const AVOption acompressor_options[] = {
-    { "level_in",  "set input gain",     OFFSET(level_in),  AV_OPT_TYPE_DOUBLE, {.dbl=1},        0.015625,   64, AFR },
+    { "level_in",  "set input gain",     OFFSET(level_in),  AV_OPT_TYPE_DOUBLE, {.dbl=1},               0,   64, AFR },
     { "direction","set filtering direction",OFFSET(direction),AV_OPT_TYPE_INT,  {.i64=0},               0,    1, AFR, .unit = "direction" },
     {   "downward",0,                    0,                 AV_OPT_TYPE_CONST,  {.i64=0},               0,    0, AFR, .unit = "direction" },
     {   "upward",  0,                    0,                 AV_OPT_TYPE_CONST,  {.i64=1},               0,    0, AFR, .unit = "direction" },
-    { "threshold", "set threshold",      OFFSET(threshold), AV_OPT_TYPE_DOUBLE, {.dbl=0.125}, 0.000976563,    1, AFR },
+    { "threshold", "set threshold",      OFFSET(threshold), AV_OPT_TYPE_DOUBLE, {.dbl=0.125},           0,    1, AFR },
     { "ratio",     "set ratio",          OFFSET(ratio),     AV_OPT_TYPE_DOUBLE, {.dbl=2},               1,   20, AFR },
     { "attack",    "set attack",         OFFSET(attack),    AV_OPT_TYPE_DOUBLE, {.dbl=20},           0.01, 2000, AFR },
     { "release",   "set release",        OFFSET(release),   AV_OPT_TYPE_DOUBLE, {.dbl=250},          0.01, 9000, AFR },
@@ -97,7 +99,7 @@ static const AVOption acompressor_options[] = {
     { "detection", "set detection",      OFFSET(detection), AV_OPT_TYPE_INT,    {.i64=1},               0,    1, AFR, .unit = "detection" },
     {   "peak",    0,                    0,                 AV_OPT_TYPE_CONST,  {.i64=0},               0,    0, AFR, .unit = "detection" },
     {   "rms",     0,                    0,                 AV_OPT_TYPE_CONST,  {.i64=1},               0,    0, AFR, .unit = "detection" },
-    { "level_sc",  "set sidechain gain", OFFSET(level_sc),  AV_OPT_TYPE_DOUBLE, {.dbl=1},        0.015625,   64, AFR },
+    { "level_sc",  "set sidechain gain", OFFSET(level_sc),  AV_OPT_TYPE_DOUBLE, {.dbl=1},               0,   64, AFR },
     { "mix",       "set mix",            OFFSET(mix),       AV_OPT_TYPE_DOUBLE, {.dbl=1},               0,    1, AFR },
     { "sidechain", "enable sidechain input",OFFSET(sidechain),AV_OPT_TYPE_BOOL, {.i64=0},               0,    1, AF },
     { NULL }
@@ -121,7 +123,7 @@ static int config_output(AVFilterLink *outlink)
 
     outlink->time_base = inlink->time_base;
 
-    s->thres = log(s->threshold);
+    s->thres = log(s->threshold + FLT_EPSILON);
     s->lin_knee_start = s->threshold / sqrt(s->knee);
     s->lin_knee_stop = s->threshold * sqrt(s->knee);
     s->adj_knee_start = s->lin_knee_start * s->lin_knee_start;
