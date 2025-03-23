@@ -167,7 +167,7 @@ static int config_input(AVFilterLink *inlink)
     switch (s->type) {
     case COL: //"Columbia"
         tau1 = 0.001590;
-        tau2 = 0.000500;
+        tau2 = 0.000318;
         tau3 = 0.000100;
         break;
     case EMI: //"EMI"
