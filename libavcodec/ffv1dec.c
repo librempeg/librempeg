@@ -290,6 +290,7 @@ static int decode_remap(FFV1Context *f, FFV1SliceContext *sc)
     int flip = sc->remap == 2 ? (end>>1) : 0;
 
     for (int p= 0; p < 1 + 2*f->chroma_planes + f->transparency; p++) {
+        int current_mul = 1;
         int j = 0;
         int lu = 0;
         uint8_t state[2][3][32];
@@ -309,7 +310,6 @@ static int decode_remap(FFV1Context *f, FFV1SliceContext *sc)
         mul[mul_count] = 1;
 
         memset(state, 128, sizeof(state));
-        int current_mul = 1;
         for (i=0; i <= end ;) {
             unsigned run = get_symbol_inline(&sc->c, state[lu][0], 0);
             unsigned run0 = lu ? 0   : run;
