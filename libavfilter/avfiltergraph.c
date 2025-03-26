@@ -1455,7 +1455,7 @@ int avfilter_graph_config(AVFilterGraph *graphctx, void *log_ctx)
 
 int avfilter_graph_send_command(AVFilterGraph *graph, const char *target, const char *cmd, const char *arg, char *res, int res_len, int flags)
 {
-    int i, r = AVERROR(ENOSYS);
+    int r = AVERROR(ENOSYS);
 
     if (!graph)
         return r;
@@ -1469,7 +1469,7 @@ int avfilter_graph_send_command(AVFilterGraph *graph, const char *target, const 
     if (res_len && res)
         res[0] = 0;
 
-    for (i = 0; i < graph->nb_filters; i++) {
+    for (unsigned i = 0; i < graph->nb_filters; i++) {
         AVFilterContext *filter = graph->filters[i];
         if (!strcmp(target, "all") || (filter->name && !strcmp(target, filter->name)) || !strcmp(target, filter->filter->name)) {
             r = avfilter_process_command(filter, cmd, arg, res, res_len, flags);
@@ -1485,12 +1485,10 @@ int avfilter_graph_send_command(AVFilterGraph *graph, const char *target, const 
 
 int avfilter_graph_queue_command(AVFilterGraph *graph, const char *target, const char *command, const char *arg, int flags, double ts)
 {
-    int i;
-
     if(!graph)
         return 0;
 
-    for (i = 0; i < graph->nb_filters; i++) {
+    for (unsigned i = 0; i < graph->nb_filters; i++) {
         AVFilterContext *filter = graph->filters[i];
         FFFilterContext *ctxi   = fffilterctx(filter);
         if(filter && (!strcmp(target, "all") || !strcmp(target, filter->name) || !strcmp(target, filter->filter->name))) {
@@ -1616,11 +1614,10 @@ int avfilter_graph_request_oldest(AVFilterGraph *graph)
 int ff_filter_graph_run_once(AVFilterGraph *graph)
 {
     FFFilterContext *ctxi;
-    unsigned i;
 
     av_assert0(graph->nb_filters);
     ctxi = fffilterctx(graph->filters[0]);
-    for (i = 1; i < graph->nb_filters; i++) {
+    for (unsigned i = 1; i < graph->nb_filters; i++) {
         FFFilterContext *ctxi_other = fffilterctx(graph->filters[i]);
 
         if (ctxi_other->ready > ctxi->ready)
@@ -1644,7 +1641,7 @@ int avfilter_print_config_formats(AVBPrint *bp, const struct AVFilter *filter, i
     }
 
     if (fffilter(filter)->formats_state == FF_FILTER_FORMATS_PIXFMT_LIST) {
-        for (int i = 0;; i++) {
+        for (unsigned i = 0;; i++) {
             if (fffilter(filter)->formats.pixels_list[i] == AV_PIX_FMT_NONE)
                 break;
             av_bprintf(bp, "%s ", av_get_pix_fmt_name(fffilter(filter)->formats.pixels_list[i]));
@@ -1652,7 +1649,7 @@ int avfilter_print_config_formats(AVBPrint *bp, const struct AVFilter *filter, i
     }
 
     if (fffilter(filter)->formats_state == FF_FILTER_FORMATS_SAMPLEFMTS_LIST) {
-        for (int i = 0;; i++) {
+        for (unsigned i = 0;; i++) {
             if (fffilter(filter)->formats.samples_list[i] == AV_SAMPLE_FMT_NONE)
                 break;
             av_bprintf(bp, "%s ", av_get_sample_fmt_name(fffilter(filter)->formats.samples_list[i]));
