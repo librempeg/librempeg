@@ -88,9 +88,9 @@ static void fn(anotch_channel)(void *state, const void *ibuf, void *obuf,
         k0 = K0;
     }
 
-    stc->c = c;
-    stc->d = d;
-    stc->k0 = k0;
-    stc->x[0] = x0;
-    stc->x[1] = x1;
+    stc->c = isnormal(c) ? c : F(0.0);
+    stc->d = isnormal(d) ? d : F(0.0);
+    stc->k0 = isnormal(k0) ? k0 : F(0.0);
+    stc->x[0] = isnormal(x0) ? x0 : F(0.0);
+    stc->x[1] = isnormal(x1) ? x1 : F(0.0);
 }
