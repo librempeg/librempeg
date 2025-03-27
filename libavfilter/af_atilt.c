@@ -167,6 +167,7 @@ static int config_input(AVFilterLink *inlink)
     switch (inlink->format) {
     case AV_SAMPLE_FMT_FLTP: s->filter_channels = filter_channels_fltp; break;
     case AV_SAMPLE_FMT_DBLP: s->filter_channels = filter_channels_dblp; break;
+    default: return AVERROR_BUG;
     }
 
     s->w = ff_get_audio_buffer(inlink, 2 * MAX_ORDER);
