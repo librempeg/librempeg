@@ -610,6 +610,7 @@ OBJS-$(CONFIG_PAM_DECODER)             += pnmdec.o pnm.o
 OBJS-$(CONFIG_PAM_ENCODER)             += pamenc.o
 OBJS-$(CONFIG_PBM_DECODER)             += pnmdec.o pnm.o
 OBJS-$(CONFIG_PBM_ENCODER)             += pnmenc.o
+OBJS-$(CONFIG_PCA_DECODER)             += pca.o
 OBJS-$(CONFIG_PCX_DECODER)             += pcx.o
 OBJS-$(CONFIG_PCX_ENCODER)             += pcxenc.o
 OBJS-$(CONFIG_PDV_DECODER)             += pdvdec.o
@@ -1264,6 +1265,7 @@ OBJS-$(CONFIG_MPEGAUDIO_PARSER)        += mpegaudio_parser.o
 OBJS-$(CONFIG_MPEGVIDEO_PARSER)        += mpegvideo_parser.o    \
                                           mpeg12.o mpeg12data.o
 OBJS-$(CONFIG_OPUS_PARSER)             += vorbis_data.o
+OBJS-$(CONFIG_PCA_PARSER)              += pca_parser.o
 OBJS-$(CONFIG_PNG_PARSER)              += png_parser.o
 OBJS-$(CONFIG_PNM_PARSER)              += pnm_parser.o pnm.o
 OBJS-$(CONFIG_QOI_PARSER)              += qoi_parser.o

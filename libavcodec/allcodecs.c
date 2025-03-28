@@ -251,6 +251,7 @@ extern const FFCodec ff_pam_encoder;
 extern const FFCodec ff_pam_decoder;
 extern const FFCodec ff_pbm_encoder;
 extern const FFCodec ff_pbm_decoder;
+extern const FFCodec ff_pca_decoder;
 extern const FFCodec ff_pcx_encoder;
 extern const FFCodec ff_pcx_decoder;
 extern const FFCodec ff_pdv_decoder;
