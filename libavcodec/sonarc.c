@@ -36,7 +36,6 @@ typedef struct SonarcContext {
 
     int flags;
     int channels;
-    int channel;
 
     uint8_t input[65536];
 
@@ -58,7 +57,6 @@ static av_cold int sonarc_init(AVCodecContext *avctx)
     if (avctx->extradata_size < 2)
         return AVERROR_INVALIDDATA;
 
-    s->channel = 0;
     s->channels = avctx->ch_layout.nb_channels;
     if (s->channels < 1 || s->channels > 2)
         return AVERROR_INVALIDDATA;
@@ -310,19 +308,22 @@ static int uncompress_extra(AVCodecContext *avctx, GetByteContext *gb)
 static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
                         int *got_frame_ptr, AVPacket *avpkt)
 {
-    int nb_samples, size, ret, order, mode;
+    int nb_samples, size, ret, order, mode, ch = 0, offset = 0;
     SonarcContext *s = avctx->priv_data;
-    const int ch = s->channel;
     uint16_t csum = 0, *dst16;
     GetBitContext gbit;
     GetByteContext gb;
     uint8_t *dst;
 
     *got_frame_ptr = 0;
-    if (avpkt->size <= 4)
+    frame->nb_samples = 0;
+
+next_channel:
+    if (avpkt->size <= offset + 6)
         return AVERROR_INVALIDDATA;
 
-    bytestream2_init(&gb, avpkt->data, avpkt->size);
+    bytestream2_init(&gb, avpkt->data + offset, FFMIN(AV_RL16(avpkt->data + offset), avpkt->size - offset));
+
     size = bytestream2_peek_le16u(&gb);
     for (int n = 0; n < size / 2; n++) {
         csum ^= bytestream2_get_le16(&gb);
@@ -330,7 +331,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
             break;
     }
 
-    if (csum != 0xACED && !(avpkt->data[6] & 0x80))
+    if (csum != 0xACED && !(avpkt->data[offset+6] & 0x80) && ch == 0)
         return AVERROR_INVALIDDATA;
 
     bytestream2_seek(&gb, 0, SEEK_SET);
@@ -347,9 +348,13 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     mode = bytestream2_get_byte(&gb);
     order = bytestream2_get_byte(&gb);
 
-    frame->nb_samples = nb_samples;
-    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
+    if (frame->nb_samples == 0) {
+        frame->nb_samples = nb_samples;
+        if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
+    } else if (nb_samples != frame->nb_samples) {
+        return AVERROR_INVALIDDATA;
+    }
 
     for (int n = 0; n < order; n++)
         s->factors[n] = sign_extend(bytestream2_get_le16(&gb), 16);
@@ -407,11 +412,12 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
         return AVERROR_BUG;
     }
 
-    s->channel = ch + 1;
-    if (s->channel >= s->channels) {
-        s->channel = 0;
-        *got_frame_ptr = 1;
-    }
+    offset += size;
+    ch++;
+    if (ch < s->channels)
+        goto next_channel;
+
+    *got_frame_ptr = 1;
 
     return avpkt->size;
 }

@@ -34,6 +34,7 @@ enum SonarcParseState {
 
 typedef struct SonarcParseContext {
     ParseContext pc;
+    int channel;
     int size;
     int count;
     unsigned state;
@@ -62,12 +63,18 @@ static int sonarc_parse(AVCodecParserContext *s, AVCodecContext *avctx,
                 spc->size = av_bswap16(state >> 16);
                 spc->size = FFMAX(spc->size, 4) - 3;
                 s->duration = av_bswap16(state & 0xffff);
-            } else if (spc->state == FRAME_OTHER && spc->count == spc->size) {
-                spc->count = 0;
+            } else if (spc->state == FRAME_OTHER && spc->size > 0 && spc->count == spc->size) {
                 spc->state = FRAME_START;
-                spc->size = 0;
-                next = i;
-                break;
+                spc->channel++;
+                if (spc->channel == avctx->ch_layout.nb_channels) {
+                    spc->channel = 0;
+                    spc->size = 0;
+                    spc->count = 0;
+                    next = i;
+                    break;
+                } else {
+                    spc->count = 1;
+                }
             }
         }
 
