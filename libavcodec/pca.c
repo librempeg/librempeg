@@ -96,7 +96,6 @@ static int32_t get_srice(GetBitContext *gb, int k)
     return sign ? -z : z;
 }
 
-
 static int pca_decode_channel(AVCodecContext *avctx, const int ch,
                               const int nb_samples, AVFrame *frame,
                               GetBitContext *gb)
