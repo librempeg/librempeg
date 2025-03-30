@@ -1272,6 +1272,7 @@ OBJS-$(CONFIG_QOI_PARSER)              += qoi_parser.o
 OBJS-$(CONFIG_RV34_PARSER)             += rv34_parser.o
 OBJS-$(CONFIG_SBC_PARSER)              += sbc_parser.o
 OBJS-$(CONFIG_SIPR_PARSER)             += sipr_parser.o
+OBJS-$(CONFIG_SONARC_PARSER)           += sonarc_parser.o
 OBJS-$(CONFIG_TAC_PARSER)              += tac_parser.o
 OBJS-$(CONFIG_TAK_PARSER)              += tak_parser.o tak.o
 OBJS-$(CONFIG_VC1_PARSER)              += vc1_parser.o vc1.o vc1data.o  \

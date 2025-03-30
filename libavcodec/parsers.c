@@ -75,6 +75,7 @@ extern const AVCodecParser ff_qoi_parser;
 extern const AVCodecParser ff_rv34_parser;
 extern const AVCodecParser ff_sbc_parser;
 extern const AVCodecParser ff_sipr_parser;
+extern const AVCodecParser ff_sonarc_parser;
 extern const AVCodecParser ff_tac_parser;
 extern const AVCodecParser ff_tak_parser;
 extern const AVCodecParser ff_vc1_parser;
