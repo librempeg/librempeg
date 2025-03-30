@@ -713,41 +713,12 @@ static int64_t find_guid(AVIOContext *pb, const uint8_t guid1[16])
     return AVERROR_EOF;
 }
 
-static int sonarc_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int64_t pos = avio_tell(pb);
-    unsigned packet_size;
-    int ret;
-
-    packet_size = avio_rl16(pb);
-
-    if (avio_feof(pb))
-        return AVERROR_EOF;
-
-    if (packet_size < 4)
-        return AVERROR_INVALIDDATA;
-    ret = av_new_packet(pkt, packet_size);
-    if (ret)
-        return ret;
-    pkt->pos = pos;
-    pkt->stream_index = 0;
-
-    AV_WL16(pkt->data, packet_size);
-    ret = avio_read(pb, pkt->data+2, packet_size-2);
-    pkt->duration = AV_RL16(pkt->data+2);
-    return ret;
-}
-
 static int wav_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     int ret, size;
     int64_t left;
     WAVDemuxContext *wav = s->priv_data;
     AVStream *st = s->streams[0];
-
-    if (CONFIG_SONARC_DECODER && st->codecpar->codec_id == AV_CODEC_ID_SONARC)
-        return sonarc_read_packet(s, pkt);
 
     if (CONFIG_SPDIF_DEMUXER && wav->spdif == 1)
         return ff_spdif_read_packet(s, pkt);
