@@ -351,6 +351,8 @@ done:
         av_log(avctx, AV_LOG_ERROR, "Could not get %s from format %s\n", key, format); \
         ret = AVERROR_EXTERNAL;                                                        \
         goto fail;                                                                     \
+    } else {                                                                           \
+        (name) = 0;                                                                    \
     }                                                                                  \
 } while (0)                                                                            \
 
