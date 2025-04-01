@@ -113,6 +113,7 @@ OBJS-$(CONFIG_APSNR_FILTER)                  += af_asdr.o
 OBJS-$(CONFIG_APSYCLIP_FILTER)               += af_apsyclip.o
 OBJS-$(CONFIG_APULSATOR_FILTER)              += af_apulsator.o
 OBJS-$(CONFIG_AQUANT_FILTER)                 += af_aquant.o
+OBJS-$(CONFIG_ARATE_FILTER)                  += af_arate.o
 OBJS-$(CONFIG_ARDFTSRC_FILTER)               += af_ardftsrc.o
 OBJS-$(CONFIG_AREALTIME_FILTER)              += f_realtime.o
 OBJS-$(CONFIG_ARESAMPLE_FILTER)              += af_aresample.o

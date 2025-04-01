@@ -98,6 +98,7 @@ extern const FFFilter ff_af_apsnr;
 extern const FFFilter ff_af_apsyclip;
 extern const FFFilter ff_af_apulsator;
 extern const FFFilter ff_af_aquant;
+extern const FFFilter ff_af_arate;
 extern const FFFilter ff_af_ardftsrc;
 extern const FFFilter ff_af_arealtime;
 extern const FFFilter ff_af_aresample;
