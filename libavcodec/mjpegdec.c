@@ -2883,12 +2883,8 @@ av_cold int ff_mjpeg_decode_end(AVCodecContext *avctx)
     MJpegDecodeContext *s = avctx->priv_data;
     int i, j;
 
-    if (s->picture) {
-        av_frame_free(&s->picture);
-        s->picture_ptr = NULL;
-    } else if (s->picture_ptr)
-        av_frame_unref(s->picture_ptr);
-
+    av_frame_free(&s->picture);
+    s->picture_ptr = NULL;
     av_frame_free(&s->smv_frame);
 
     av_freep(&s->buffer);
