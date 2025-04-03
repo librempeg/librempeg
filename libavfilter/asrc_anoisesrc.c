@@ -39,7 +39,7 @@ typedef struct ANoiseSrcContext {
 
     int64_t pts;
     int infinite;
-    double (*filter)(double white, double *buf);
+    double (*filter)(struct ANoiseSrcContext *s, double white, double *buf);
     double buf[7];
     AVLFG c;
 } ANoiseSrcContext;
@@ -105,12 +105,12 @@ static av_cold int query_formats(const AVFilterContext *ctx,
     return ff_set_common_samplerates_from_list2(ctx, cfg_in, cfg_out, sample_rates);
 }
 
-static double white_filter(double white, double *buf)
+static double white_filter(ANoiseSrcContext *s, double white, double *buf)
 {
     return white;
 }
 
-static double pink_filter(double white, double *buf)
+static double pink_filter(ANoiseSrcContext *s, double white, double *buf)
 {
     double pink;
 
@@ -126,7 +126,7 @@ static double pink_filter(double white, double *buf)
     return pink * 0.11;
 }
 
-static double blue_filter(double white, double *buf)
+static double blue_filter(ANoiseSrcContext *s, double white, double *buf)
 {
     double blue;
 
@@ -142,7 +142,7 @@ static double blue_filter(double white, double *buf)
     return blue * 0.11;
 }
 
-static double brown_filter(double white, double *buf)
+static double brown_filter(ANoiseSrcContext *s, double white, double *buf)
 {
     double brown;
 
@@ -151,7 +151,7 @@ static double brown_filter(double white, double *buf)
     return brown * 3.5;
 }
 
-static double violet_filter(double white, double *buf)
+static double violet_filter(ANoiseSrcContext *s, double white, double *buf)
 {
     double violet;
 
@@ -160,10 +160,11 @@ static double violet_filter(double white, double *buf)
     return violet * 3.5;
 }
 
-static double velvet_filter(double white, double *buf)
+static double velvet_filter(ANoiseSrcContext *s, double white, double *buf)
 {
     double awhite = fabs(white);
-    return FFDIFFSIGN(white, 0.0) * buf[1] * (awhite < buf[0]);
+    double amp = buf[1] * ((2 * ((double) av_lfg_get(&s->c) / 0xffffffff)) - 1);
+    return FFDIFFSIGN(white, 0.0) * amp * (awhite < buf[0]);
 }
 
 static av_cold int config_props(AVFilterLink *outlink)
@@ -198,7 +199,7 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *outlink = ctx->outputs[0];
     ANoiseSrcContext *s = ctx->priv;
     AVFrame *frame;
-    int nb_samples, i;
+    int nb_samples;
     double *dst;
 
     if (!ff_outlink_frame_wanted(outlink))
@@ -217,10 +218,10 @@ static int activate(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
 
     dst = (double *)frame->data[0];
-    for (i = 0; i < nb_samples; i++) {
+    for (int i = 0; i < nb_samples; i++) {
         double white;
         white = s->amplitude * ((2 * ((double) av_lfg_get(&s->c) / 0xffffffff)) - 1);
-        dst[i] = s->filter(white, s->buf);
+        dst[i] = s->filter(s, white, s->buf);
     }
 
     if (!s->infinite)
