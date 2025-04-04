@@ -272,7 +272,7 @@ static int64_t get_duration(AVFormatContext *s)
 static int dhav_read_header(AVFormatContext *s)
 {
     DHAVContext *dhav = s->priv_data;
-    uint8_t signature[5];
+    uint8_t signature[5] = {0};
     int ret = ffio_ensure_seekback(s->pb, 5);
 
     if (ret < 0)
