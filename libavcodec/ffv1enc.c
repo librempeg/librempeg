@@ -1422,6 +1422,7 @@ static void encode_float32_remap(FFV1Context *f, FFV1SliceContext *sc,
                     for(int si= 0; si <= max_log2_mul; si += log2_mul_step) {
                         int64_t delta = val - last_val;
                         int mul;
+                        float score;
                         int64_t cost;
 
                         if (last_val < 0) {
@@ -1436,9 +1437,9 @@ static void encode_float32_remap(FFV1Context *f, FFV1SliceContext *sc,
                         }
 
                         cost = FFMAX((delta + mul/2)  / mul, 1);
-                        float score = 1;
+                        score = 1;
                         if (mul > 1) {
-                            score *= (fabs(delta - cost*mul)+1);
+                            score *= (labs(delta - cost*mul)+1);
                             if (mul_count > 1)
                                 score *= score;
                         }
