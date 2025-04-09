@@ -187,10 +187,10 @@ void ff_mjpeg_encode_huffman_close(MJpegEncHuffmanContext *s, uint8_t bits[17],
 {
     PTable val_counts[257];
     HuffTable distincts[256];
+    int nval = 0;
 
     av_assert1(max_nval <= FF_ARRAY_ELEMS(val_counts) - 1);
 
-    int nval = 0;
     for (int i = 0; i < 256; i++) {
         if (s->val_count[i]) {
             val_counts[nval].value = i;
