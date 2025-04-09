@@ -150,7 +150,7 @@ static int query_formats(const AVFilterContext *ctx,
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 static const AVOptionArrayDef def_array = {.def=NULL,.size_min=0,.sep='|'};
 static const AVOption options[] = {
-    { "pixel_formats", "set the list of pixel formats", OFFSET(pix_fmts), AV_OPT_TYPE_PIXEL_FMT|AR, {.arr=&def_array}, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
+    { "pixel_formats", "set the list of pixel formats", OFFSET(pix_fmts), AV_OPT_TYPE_PIXEL_FMT|AR, {.arr=&def_array}, .min = 0, .max = INT_MAX, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { "color_spaces", "set the list of color spaces", OFFSET(csps), AV_OPT_TYPE_STRING|AR, {.arr=&def_array}, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { "color_ranges", "set the list of color ranges", OFFSET(ranges), AV_OPT_TYPE_STRING|AR, {.arr=&def_array}, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { NULL }
