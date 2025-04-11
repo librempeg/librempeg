@@ -20,6 +20,7 @@
 #undef stype
 #undef FABS
 #undef SAMPLE_FORMAT
+#undef EPSILON
 #if DEPTH == 16
 #define ftype unsigned
 #define stype int16_t
@@ -38,10 +39,20 @@
 #else
 #define SAMPLE_FORMAT flt
 #endif
+#define EPSILON (1.f / (1 << 23))
+#elif DEPTH == 64
+#define ftype double
+#define stype double
+#define FABS fabs
+#if PLANAR
+#define SAMPLE_FORMAT dblp
+#else
+#define SAMPLE_FORMAT dbl
+#endif
+#define EPSILON (1.0 / (1LL << 52))
 #endif
 
 #define MAX_IDX (HISTOGRAM_SIZE-1)
-#define EPSILON (1.f / (1 << 23))
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
@@ -51,6 +62,8 @@ static inline float fn(get_db)(unsigned x)
 {
 #if DEPTH == 32
     return x - 16384.f;
+#elif DEPTH == 64
+    return x - 16384.0;
 #else
     return 20.f * log2f(x/(float)MAX_IDX) / log2f(10.f);
 #endif
@@ -59,7 +72,9 @@ static inline float fn(get_db)(unsigned x)
 static inline unsigned fn(get_index)(ftype x)
 {
 #if DEPTH == 32
-    return av_clip(16384+lrintf(ceilf(20.f * log10f(x+EPSILON))), 0, MAX_IDX);
+    return av_clip64(16384+lrintf(ceilf(20.f * log10f(x+EPSILON))), 0, MAX_IDX);
+#elif DEPTH == 64
+    return av_clip64(16384+lrint(ceil(20.0 * log10(x+EPSILON))), 0, MAX_IDX);
 #else
     return x;
 #endif
@@ -108,9 +123,12 @@ static void fn(print_stats)(AVFilterContext *ctx)
             break;
         }
     }
-#else
+#elif DEPTH == 32
     av_log(ctx, AV_LOG_INFO, "mean_volume: %.1f dB\n", 20.f * log10f(sqrt(s->sum2/nb_samples)));
     av_log(ctx, AV_LOG_INFO, "max_volume: %.1f dB\n", 20.f * log10f(s->max));
+#elif DEPTH == 64
+    av_log(ctx, AV_LOG_INFO, "mean_volume: %.1f dB\n", 20.0 * log10(sqrt(s->sum2/nb_samples)));
+    av_log(ctx, AV_LOG_INFO, "max_volume: %.1f dB\n", 20.0 * log10(s->max));
 #endif
     for (int i = MAX_IDX; i >= 0; i--) {
         if (s->histogram[i]) {
@@ -138,6 +156,9 @@ static void fn(update_stats)(VolDetectContext *s, stype sample)
     sample = FABS(sample);
 #if DEPTH == 32
     s->max = fmaxf(s->max, sample);
+    s->sum2 += sample*sample;
+#elif DEPTH == 64
+    s->max = fmax(s->max, sample);
     s->sum2 += sample*sample;
 #endif
     idx = fn(get_index)(sample);
