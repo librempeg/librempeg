@@ -28,13 +28,17 @@ typedef struct TremoloContext {
     const AVClass *class;
     double freq;
     double depth;
-    double *table;
-    int table_size;
-    int index;
+
+    int nb_channels;
+    AVFrame *in;
+    void *st;
+
+    int (*init_state)(AVFilterContext *ctx);
+    int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } TremoloContext;
 
 #define OFFSET(x) offsetof(TremoloContext, x)
-#define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 
 static const AVOption tremolo_options[] = {
     { "f", "set frequency in hertz",    OFFSET(freq),    AV_OPT_TYPE_DOUBLE,   {.dbl = 5.0},   0.1,   20000.0, FLAGS },
@@ -44,17 +48,42 @@ static const AVOption tremolo_options[] = {
 
 AVFILTER_DEFINE_CLASS(tremolo);
 
+#define DEPTH 32
+#include "tremolo_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "tremolo_template.c"
+
+static int config_input(AVFilterLink *inlink)
+{
+    AVFilterContext *ctx = inlink->dst;
+    TremoloContext *s = ctx->priv;
+
+    s->nb_channels = inlink->ch_layout.nb_channels;
+
+    switch (inlink->format) {
+    case AV_SAMPLE_FMT_DBLP:
+        s->filter_channels = filter_channels_dblp;
+        s->init_state = init_state_dblp;
+        break;
+    case AV_SAMPLE_FMT_FLTP:
+        s->filter_channels = filter_channels_fltp;
+        s->init_state = init_state_fltp;
+        break;
+    default:
+        return AVERROR_BUG;
+    }
+
+    return s->init_state(ctx);
+}
+
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     TremoloContext *s = ctx->priv;
-    const double *src = (const double *)in->data[0];
-    const int channels = inlink->ch_layout.nb_channels;
-    const int nb_samples = in->nb_samples;
     AVFrame *out;
-    double *dst;
-    int n, c;
 
     if (av_frame_is_writable(in)) {
         out = in;
@@ -66,18 +95,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
         av_frame_copy_props(out, in);
     }
-    dst = (double *)out->data[0];
 
-    for (n = 0; n < nb_samples; n++) {
-        for (c = 0; c < channels; c++)
-            dst[c] = src[c] * s->table[s->index];
-        dst += channels;
-        src += channels;
-        s->index++;
-        if (s->index >= s->table_size)
-            s->index = 0;
-    }
+    s->in = in;
+    ff_filter_execute(ctx, s->filter_channels, out, NULL,
+                      FFMIN(outlink->ch_layout.nb_channels,
+                            ff_filter_get_nb_threads(ctx)));
 
+    s->in = NULL;
     if (in != out)
         av_frame_free(&in);
 
@@ -87,30 +111,21 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 static av_cold void uninit(AVFilterContext *ctx)
 {
     TremoloContext *s = ctx->priv;
-    av_freep(&s->table);
+
+    av_freep(&s->st);
 }
 
-static int config_input(AVFilterLink *inlink)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
+                           char *res, int res_len, int flags)
 {
-    AVFilterContext *ctx = inlink->dst;
     TremoloContext *s = ctx->priv;
-    const double offset = 1. - s->depth / 2.;
-    int i;
+    int ret;
 
-    s->table_size = lrint(inlink->sample_rate / s->freq + 0.5);
-    s->table = av_malloc_array(s->table_size, sizeof(*s->table));
-    if (!s->table)
-        return AVERROR(ENOMEM);
+    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    if (ret < 0)
+        return ret;
 
-    for (i = 0; i < s->table_size; i++) {
-        double env = s->freq * i / inlink->sample_rate;
-        env = sin(2 * M_PI * fmod(env + 0.25, 1.0));
-        s->table[i] = env * (1 - fabs(offset)) + offset;
-    }
-
-    s->index = 0;
-
-    return 0;
+    return s->init_state(ctx);
 }
 
 static const AVFilterPad tremolo_inputs[] = {
@@ -130,6 +145,8 @@ const FFFilter ff_af_tremolo = {
     .uninit        = uninit,
     FILTER_INPUTS(tremolo_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
-    FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBL),
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
+    FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+                     AVFILTER_FLAG_SLICE_THREADS,
+    .process_command = process_command,
 };
