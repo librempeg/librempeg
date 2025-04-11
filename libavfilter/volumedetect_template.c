@@ -110,7 +110,7 @@ static void fn(print_stats)(AVFilterContext *ctx)
     }
 #else
     av_log(ctx, AV_LOG_INFO, "mean_volume: %.1f dB\n", 20.f * log10f(sqrt(s->sum2/nb_samples)));
-    av_log(ctx, AV_LOG_INFO, "max_volume: %.1f dB\n", 10.f * log10f(s->max));
+    av_log(ctx, AV_LOG_INFO, "max_volume: %.1f dB\n", 20.f * log10f(s->max));
 #endif
     for (int i = MAX_IDX; i >= 0; i--) {
         if (s->histogram[i]) {
