@@ -65,14 +65,13 @@ static int fn(echo_samples)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     const int max_samples = s->max_samples;
     uint8_t **delayptrs = s->delayptrs;
     const float *decays = s->decays;
-    int av_uninit(index);
 
     for (int ch = start; ch < end; ch++) {
         const stype *sample = (stype *)td->in->extended_data[ch];
         stype *d = (stype *)td->out->extended_data[ch];
         stype *dbuf = (stype *)delayptrs[ch];
+        int index = s->delay_index[ch];
 
-        index = s->delay_index[ch];
         for (int n = 0; n < nb_samples; n++) {
             ftype out, in;
 
