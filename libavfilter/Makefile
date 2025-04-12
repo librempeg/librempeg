@@ -208,6 +208,7 @@ OBJS-$(CONFIG_TILTSHELF_FILTER)              += af_biquads.o
 OBJS-$(CONFIG_TRANSFORM_FILTER)              += af_biquads.o
 OBJS-$(CONFIG_TREBLE_FILTER)                 += af_biquads.o
 OBJS-$(CONFIG_TREMOLO_FILTER)                += af_tremolo.o
+OBJS-$(CONFIG_VAD_FILTER)                    += af_vad.o
 OBJS-$(CONFIG_VIBRATO_FILTER)                += af_vibrato.o generate_wave_table.o
 OBJS-$(CONFIG_VIRTUALBASS_FILTER)            += af_virtualbass.o
 OBJS-$(CONFIG_VOLUMEDETECT_FILTER)           += af_volumedetect.o

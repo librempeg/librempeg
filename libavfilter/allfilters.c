@@ -194,6 +194,7 @@ extern const FFFilter ff_af_tiltshelf;
 extern const FFFilter ff_af_transform;
 extern const FFFilter ff_af_treble;
 extern const FFFilter ff_af_tremolo;
+extern const FFFilter ff_af_vad;
 extern const FFFilter ff_af_vibrato;
 extern const FFFilter ff_af_virtualbass;
 extern const FFFilter ff_af_volume;
