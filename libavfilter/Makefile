@@ -221,6 +221,7 @@ OBJS-$(CONFIG_ALSFIRSRC_FILTER)              += asrc_alsfirsrc.o
 OBJS-$(CONFIG_ANOISESRC_FILTER)              += asrc_anoisesrc.o
 OBJS-$(CONFIG_ANULLSRC_FILTER)               += asrc_anullsrc.o
 OBJS-$(CONFIG_AQUADOSC_FILTER)               += asrc_aquadosc.o
+OBJS-$(CONFIG_ARAMPSRC_FILTER)               += asrc_arampsrc.o
 OBJS-$(CONFIG_ATONESRC_FILTER)               += asrc_atonesrc.o
 OBJS-$(CONFIG_FLITE_FILTER)                  += asrc_flite.o
 OBJS-$(CONFIG_HILBERT_FILTER)                += asrc_hilbert.o
