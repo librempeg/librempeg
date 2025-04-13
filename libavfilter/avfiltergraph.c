@@ -756,9 +756,9 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
         if(ref && ref->type == AVMEDIA_TYPE_VIDEO) {
             //FIXME: This should check for AV_PIX_FMT_FLAG_ALPHA after PAL8 pixel format without alpha is implemented
             int has_alpha= av_pix_fmt_desc_get(ref->format)->nb_components % 2 == 0;
-            enum AVPixelFormat best= AV_PIX_FMT_NONE;
-            int i;
-            for (i = 0; i < link->incfg.formats->nb_formats; i++) {
+            enum AVPixelFormat best = AV_PIX_FMT_NONE;
+
+            for (int i = 0; i < link->incfg.formats->nb_formats; i++) {
                 enum AVPixelFormat p = link->incfg.formats->formats[i];
                 if (link->incfg.formats->flags != 0) {
                     const AVPixFmtDescriptor *a = av_pix_fmt_desc_get(p);
@@ -810,13 +810,13 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
         }
     } else if (link->type == AVMEDIA_TYPE_AUDIO) {
         if(ref && ref->type == AVMEDIA_TYPE_AUDIO) {
-            enum AVSampleFormat best= AV_SAMPLE_FMT_NONE;
-            int i;
-            for (i = 0; i < link->incfg.formats->nb_formats; i++) {
+            enum AVSampleFormat best = AV_SAMPLE_FMT_NONE;
+
+            for (int i = 0; i < link->incfg.formats->nb_formats; i++) {
                 enum AVSampleFormat p = link->incfg.formats->formats[i];
                 if (link->incfg.formats->flags & FILTER_SAME_BITDEPTH) {
-                    if (av_get_bytes_per_sample(p) !=
-                        av_get_bytes_per_sample(ref->format))
+                    if (av_get_packed_sample_fmt(p) !=
+                        av_get_packed_sample_fmt(ref->format))
                         continue;
                 }
                 best = find_best_sample_fmt_of_2(best, p, ref->format);

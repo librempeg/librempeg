@@ -99,7 +99,7 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
     int chroma1=0, chroma2=0;
     int same_params = 0;
 
-    av_assert2(check || (a->refcount && b->refcount));
+    av_assert0(check || (a->refcount && b->refcount));
 
     if (a == b)
         return 1;
@@ -164,19 +164,20 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
         }
     }
 
-    if (type == AVMEDIA_TYPE_AUDIO) {
-        int diff_params = 0;
-
+    if (type == AVMEDIA_TYPE_AUDIO && check) {
         for (i = 0; i < a->nb_formats; i++) {
             for (j = 0; j < b->nb_formats; j++) {
-                if (check && ((a->flags & FILTER_SAME_BITDEPTH) || (b->flags & FILTER_SAME_BITDEPTH))) {
-                    diff_params += av_get_packed_sample_fmt(a->formats[i]) != av_get_packed_sample_fmt(b->formats[j]);
+                if ((a->flags & FILTER_SAME_BITDEPTH) || (b->flags & FILTER_SAME_BITDEPTH)) {
+                    if (av_get_packed_sample_fmt(a->formats[i]) == av_get_packed_sample_fmt(b->formats[j]))
+                        return 1;
+                } else {
+                    if (a->formats[i] == b->formats[j])
+                        return 1;
                 }
             }
         }
 
-        if (check && (a->flags || b->flags) && diff_params > 0)
-            return 0;
+        return 0;
     }
 
     // If chroma or alpha can be lost through merging then do not merge
@@ -245,18 +246,14 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
             for (j = 0; j < b->nb_formats; j++) {
                 if ((a->flags & FILTER_SAME_BITDEPTH) || (b->flags & FILTER_SAME_BITDEPTH)) {
                     if (av_get_packed_sample_fmt(a->formats[i]) == av_get_packed_sample_fmt(b->formats[j])) {
-                        if (check)
-                            return 1;
-
                         a->formats[k++] = a->formats[i];
                         break;
                     }
-                } else if (a->formats[i] == b->formats[j]) {
-                    if (check)
-                        return 1;
-
-                    a->formats[k++] = a->formats[i];
-                    break;
+                } else {
+                    if (a->formats[i] == b->formats[j]) {
+                        a->formats[k++] = a->formats[i];
+                        break;
+                    }
                 }
             }
         }
@@ -266,7 +263,7 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
      * Notice that both a and b are unchanged if not. */
     if (!k)
         return 0;
-    av_assert2(!check);
+    av_assert0(!check);
     a->nb_formats = k;
 
     MERGE_REF(a, b, formats, AVFilterFormats, return AVERROR(ENOMEM););
