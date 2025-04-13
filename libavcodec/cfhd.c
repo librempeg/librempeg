@@ -798,9 +798,9 @@ static int cfhd_decode(AVCodecContext *avctx, AVFrame *pic,
             if (ret < 0)
                 goto end;
             {
-                OPEN_READER(re, &gbit);
-
                 const int lossless = s->band_encoding == 5;
+
+                OPEN_READER(re, &gbit);
 
                 if (s->codebook == 0 && s->transform_type == 2 && s->subband_num_actual == 7)
                     s->codebook = 1;
