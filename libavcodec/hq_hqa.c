@@ -202,6 +202,7 @@ static int hqa_decode_mb(HQContext *c, AVFrame *pic, int qgroup,
 {
     int flag = 0;
     int i, ret;
+    int cbp;
 
     if (get_bits_left(gb) < 1)
         return AVERROR_INVALIDDATA;
@@ -210,7 +211,7 @@ static int hqa_decode_mb(HQContext *c, AVFrame *pic, int qgroup,
     for (i = 0; i < 12; i++)
         c->block[i][0] = -128 * (1 << 6);
 
-    int cbp = get_vlc2(gb, ff_hq_cbp_vlc, HQ_CBP_VLC_BITS, 1);
+    cbp = get_vlc2(gb, ff_hq_cbp_vlc, HQ_CBP_VLC_BITS, 1);
     if (cbp) {
         flag = get_bits1(gb);
 
@@ -265,12 +266,13 @@ static int hqa_decode_frame(HQContext *ctx, AVFrame *pic, GetByteContext *gbc, s
     uint32_t slice_off[9];
     int i, slice, ret;
     const uint8_t *src = gbc->buffer;
+    int width, height, quant;
 
     if (bytestream2_get_bytes_left(gbc) < 8 + 4*(num_slices + 1))
         return AVERROR_INVALIDDATA;
 
-    int width  = bytestream2_get_be16u(gbc);
-    int height = bytestream2_get_be16u(gbc);
+    width  = bytestream2_get_be16u(gbc);
+    height = bytestream2_get_be16u(gbc);
 
     ret = ff_set_dimensions(ctx->avctx, width, height);
     if (ret < 0)
@@ -283,7 +285,7 @@ static int hqa_decode_frame(HQContext *ctx, AVFrame *pic, GetByteContext *gbc, s
 
     av_log(ctx->avctx, AV_LOG_VERBOSE, "HQA Profile\n");
 
-    int quant = bytestream2_get_byteu(gbc);
+    quant = bytestream2_get_byteu(gbc);
     bytestream2_skipu(gbc, 3);
     if (quant >= NUM_HQ_QUANTS) {
         av_log(ctx->avctx, AV_LOG_ERROR,
@@ -323,7 +325,8 @@ static int hq_hqa_decode_frame(AVCodecContext *avctx, AVFrame *pic,
 {
     HQContext *ctx = avctx->priv_data;
     GetByteContext gbc0, *const gbc = &gbc0;
-    unsigned int data_size;
+    unsigned int data_size, tag;
+    uint32_t info_tag;
     int ret;
 
     if (avpkt->size < 4 + 4) {
@@ -332,10 +335,12 @@ static int hq_hqa_decode_frame(AVCodecContext *avctx, AVFrame *pic,
     }
     bytestream2_init(gbc, avpkt->data, avpkt->size);
 
-    uint32_t info_tag = bytestream2_peek_le32u(gbc);
+    info_tag = bytestream2_peek_le32u(gbc);
     if (info_tag == MKTAG('I', 'N', 'F', 'O')) {
+        int info_size;
+
         bytestream2_skipu(gbc, 4);
-        int info_size = bytestream2_get_le32u(gbc);
+        info_size = bytestream2_get_le32u(gbc);
         if (info_size < 0 || bytestream2_get_bytes_left(gbc) < info_size) {
             av_log(avctx, AV_LOG_ERROR, "Invalid INFO size (%d).\n", info_size);
             return AVERROR_INVALIDDATA;
@@ -354,7 +359,7 @@ static int hq_hqa_decode_frame(AVCodecContext *avctx, AVFrame *pic,
     /* HQ defines dimensions and number of slices, and thus slice traversal
      * order. HQA has no size constraint and a fixed number of slices, so it
      * needs a separate scheme for it. */
-    unsigned tag = bytestream2_get_le32u(gbc);
+    tag = bytestream2_get_le32u(gbc);
     if ((tag & 0x00FFFFFF) == (MKTAG('U', 'V', 'C', ' ') & 0x00FFFFFF)) {
         ret = hq_decode_frame(ctx, pic, gbc, tag >> 24, data_size);
     } else if (tag == MKTAG('H', 'Q', 'A', '1')) {
