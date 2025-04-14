@@ -616,6 +616,7 @@ static av_always_inline void encode_subbands(MpegAudioContext *const s,
                         /* we encode 3 sub band samples of the same sub band at a time */
                         const int qindex = s->alloc_table[j + b];
                         const int steps  = ff_mpa_quant_steps[qindex];
+                        const int bits = ff_mpa_quant_bits[qindex];
                         int q[3];
 
                         for (int m = 0; m < 3; ++m) {
@@ -645,7 +646,6 @@ static av_always_inline void encode_subbands(MpegAudioContext *const s,
                                 q[m] = steps - 1;
                             av_assert2(q[m] >= 0 && q[m] < steps);
                         }
-                        const int bits = ff_mpa_quant_bits[qindex];
                         if (bits < 0) {
                             /* group the 3 values to save bits */
                             put_bits(p, -bits,
@@ -759,20 +759,18 @@ static int mpa_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     const int16_t *samples = (const int16_t *)frame->data[0];
     short smr[MPA_MAX_CHANNELS][SBLIMIT];
     unsigned char bit_alloc[MPA_MAX_CHANNELS][SBLIMIT];
-    int padding, i, ret;
+    unsigned frame_size;
+    int padding, ret;
 
-    for(i=0;i<s->nb_channels;i++) {
+    for (int i = 0; i < s->nb_channels; i++)
         filter(s, i, samples + i, s->nb_channels);
-    }
 
-    for(i=0;i<s->nb_channels;i++) {
+    for (int i = 0; i < s->nb_channels; i++)
         compute_scale_factors(s, s->scale_code[i], s->scale_factors[i],
                               s->sb_samples[i], s->sblimit);
-    }
-    for(i=0;i<s->nb_channels;i++) {
+    for (int i= 0; i < s->nb_channels; i++)
         psycho_acoustic_model(s, smr[i]);
-    }
-    unsigned frame_size = compute_bit_allocation(s, smr, bit_alloc, &padding);
+    frame_size = compute_bit_allocation(s, smr, bit_alloc, &padding);
 
     ret = ff_get_encode_buffer(avctx, avpkt, frame_size, 0);
     if (ret < 0)
