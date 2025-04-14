@@ -24,6 +24,7 @@
 
 #include "libavutil/mem.h"
 #include "libavutil/thread.h"
+#include "libavutil/qsort.h"
 
 #include "avcodec.h"
 #include "bytestream.h"
@@ -205,9 +206,22 @@ struct RLDecoder {
     uint32_t count;
 };
 
+typedef struct OrderFrame {
+    uint32_t disp_id;
+    AVFrame *frame;
+} OrderFrame;
+
 typedef struct HVQM4Context {
     int version;
+    int eof;
+    AVPacket *pkt;
     AVFrame *frame[3];
+
+    int last_frame_type;
+    int64_t last_i_pts;
+    unsigned queued_frames;
+    unsigned flushed_frames;
+    OrderFrame *frames;
 
     SeqObj seqobj;
     VideoState state;
@@ -375,6 +389,7 @@ static av_cold int hvqm4_init(AVCodecContext *avctx)
     static AVOnce init_static_once = AV_ONCE_INIT;
     HVQM4Context *s = avctx->priv_data;
 
+    s->pkt = avctx->internal->in_pkt;
     avctx->pix_fmt = AV_PIX_FMT_YUV420P;
 
     avctx->coded_width  = FFALIGN(avctx->width , 8) + 32;
@@ -1885,6 +1900,7 @@ static int hvqm4_decode(AVCodecContext *avctx, AVFrame *avframe,
     GetBitContext *gb = &s->gb;
     AVFrame *frame = s->frame[0];
     int frame_type, ret;
+    uint32_t disp_id;
 
     if ((ret = init_get_bits8(gb, pkt->data, pkt->size)) < 0)
         return ret;
@@ -1896,9 +1912,10 @@ static int hvqm4_decode(AVCodecContext *avctx, AVFrame *avframe,
     if ((ret = ff_reget_buffer(avctx, frame, 0)) < 0)
         return ret;
 
-    skip_bits_long(gb, 32);
+    disp_id = get_bits_long(gb, 32);
     switch (frame_type) {
     case I_FRAME:
+        s->last_i_pts = av_rescale_q(pkt->pts, pkt->time_base, avctx->time_base);
         frame->pict_type = AV_PICTURE_TYPE_I;
         frame->flags |= AV_FRAME_FLAG_KEY;
         ret = decode_iframe(&s->seqobj, gb, frame);
@@ -1923,6 +1940,30 @@ static int hvqm4_decode(AVCodecContext *avctx, AVFrame *avframe,
     if (ret < 0)
         return ret;
 
+    if (frame_type != I_FRAME) {
+        s->frames = av_realloc_f(s->frames, sizeof(*s->frames), s->queued_frames+1);
+        if (!s->frames)
+            return AVERROR(ENOMEM);
+
+        frame->pts = s->last_i_pts + disp_id * avctx->time_base.num;
+        frame->duration = avctx->time_base.num;
+        s->frames[s->queued_frames].frame = av_frame_clone(frame);
+        if (ret < 0)
+            return ret;
+
+        s->frames[s->queued_frames].disp_id = disp_id;
+        s->queued_frames++;
+
+        if (frame_type != B_FRAME)
+            FFSWAP(AVFrame *, s->frame[0], s->frame[2]);
+
+        *got_frame = 0;
+
+        return AVERROR(EAGAIN);
+    }
+
+    frame->pts = s->last_i_pts;
+
     ret = av_frame_ref(avframe, frame);
     if (ret < 0)
         return ret;
@@ -1939,6 +1980,84 @@ static int hvqm4_decode(AVCodecContext *avctx, AVFrame *avframe,
     return 0;
 }
 
+static int compare_by_disp_id(const void *a, const void *b)
+{
+    const OrderFrame *a2 = a;
+    const OrderFrame *b2 = b;
+
+    return a2->disp_id - b2->disp_id;
+}
+
+static int flush_item(AVCodecContext *avctx, AVFrame *avframe)
+{
+    HVQM4Context *s = avctx->priv_data;
+    int ret;
+
+    if (s->flushed_frames == 0)
+        AV_QSORT(s->frames, s->queued_frames, OrderFrame, compare_by_disp_id);
+
+    {
+        AVFrame *frame = s->frames[s->flushed_frames].frame;
+
+        s->flushed_frames++;
+        if (s->flushed_frames == s->queued_frames) {
+            s->flushed_frames = 0;
+        }
+
+        ret = av_frame_ref(avframe, frame);
+        if (ret < 0)
+            return ret;
+
+        avframe->data[0] += 32 * avframe->linesize[0] + 32;
+        avframe->data[1] += 16 * avframe->linesize[1] + 16;
+        avframe->data[2] += 16 * avframe->linesize[2] + 16;
+
+        if (s->flushed_frames == 0) {
+            for (int i = 0; i < s->queued_frames; i++)
+                av_frame_free(&s->frames[i].frame);
+            s->queued_frames = 0;
+        }
+
+        return 0;
+    }
+}
+
+static int hvqm4_receive_frame(AVCodecContext *avctx, AVFrame *avframe)
+{
+    HVQM4Context *s = avctx->priv_data;
+    int got_frame = 0, ret;
+
+    if (s->eof && s->queued_frames > 0)
+        return flush_item(avctx, avframe);
+
+    if (s->flushed_frames == 0 && !s->pkt->data) {
+        ret = ff_decode_get_packet(avctx, s->pkt);
+        if (ret < 0) {
+            if (ret == AVERROR_EOF && s->queued_frames > 0) {
+                s->eof = 1;
+                return flush_item(avctx, avframe);
+            }
+            return ret;
+        }
+
+        if (s->pkt->size <= 2) {
+            av_packet_unref(s->pkt);
+            return AVERROR_INVALIDDATA;
+        }
+
+        s->last_frame_type = AV_RB16(s->pkt->data);
+    }
+
+    if (s->last_frame_type == I_FRAME && s->queued_frames > 0)
+        return flush_item(avctx, avframe);
+
+    ret = hvqm4_decode(avctx, avframe, &got_frame, s->pkt);
+
+    av_packet_unref(s->pkt);
+
+    return ret;
+}
+
 static void hvqm4_flush(AVCodecContext *avctx)
 {
     HVQM4Context *s = avctx->priv_data;
@@ -1950,6 +2069,10 @@ static void hvqm4_flush(AVCodecContext *avctx)
 static av_cold int hvqm4_close(AVCodecContext *avctx)
 {
     HVQM4Context *s = avctx->priv_data;
+
+    for (int i = 0; i < s->queued_frames && s->frames; i++)
+        av_frame_free(&s->frames[i].frame);
+    av_freep(&s->frames);
 
     av_freep(&s->buffer);
     for (int i = 0; i < 6; i++)
@@ -1967,7 +2090,7 @@ const FFCodec ff_hvqm4_decoder = {
     .p.id           = AV_CODEC_ID_HVQM4,
     .priv_data_size = sizeof(HVQM4Context),
     .init           = hvqm4_init,
-    FF_CODEC_DECODE_CB(hvqm4_decode),
+    FF_CODEC_RECEIVE_FRAME_CB(hvqm4_receive_frame),
     .flush          = hvqm4_flush,
     .close          = hvqm4_close,
     .p.capabilities = AV_CODEC_CAP_DR1,
