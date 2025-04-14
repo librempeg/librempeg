@@ -94,8 +94,10 @@ static av_cold int mp_decode_init(AVCodecContext *avctx)
         return AVERROR(ENOMEM);
 
 #if !CONFIG_HARDCODED_TABLES
+    {
     static AVOnce init_static_once = AV_ONCE_INIT;
     ff_thread_once(&init_static_once, motionpixels_tableinit);
+    }
 #endif
 
     return 0;
