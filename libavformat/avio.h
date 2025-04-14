@@ -580,6 +580,7 @@ unsigned int avio_rb16(AVIOContext *s);
 unsigned int avio_rb24(AVIOContext *s);
 unsigned int avio_rb32(AVIOContext *s);
 uint64_t     avio_rb64(AVIOContext *s);
+uint64_t     avio_rb8x(AVIOContext *s, int len);
 /**
  * @}
  */

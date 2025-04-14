@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/dict.h"
@@ -35,18 +36,72 @@
 #include "libavcodec/mpegaudio.h"
 #include "libavcodec/mpegaudiodecheader.h"
 
+/*
+ * (TODO) a *lot*:
+ * - Flesh out "Xing"/"Info" tag.
+ *   - "Info" tag seems exclusive to LAME-encoded files;
+ *     Works just the same as the "Xing" tag even.
+ *   - Following that is the so-called "encoded version string";
+ *     Usually you'd see that occupy no more than 9 chars *each*,
+ *     but LAME 3.99 alpha MP3s had them last 8 chars,
+ *     and LAME 3.100 MP3s have them go past 8-9 chars. */
+
 #define XING_FLAG_FRAMES 0x01
 #define XING_FLAG_SIZE   0x02
 #define XING_FLAG_TOC    0x04
-#define XING_FLAC_QSCALE 0x08
+#define XING_FLAG_QSCALE 0x08
 
 #define XING_TOC_COUNT 100
 
 
-typedef struct {
+typedef struct MP3XingContext {
+    //uint32_t tag_id;
+    /*
+     * tag_id means only two things:
+     * "Xing" for VBR MP3 (from both Xing and Lame MP3 files),
+     * "Info" for CBR MP3 (seemingly present in Lame MP3 files)
+     */
+    uint32_t flags;
+    //uint32_t frames;
+    //uint32_t header_filesize;
+    uint32_t vbr_qscale; // VBR quality scale
+    char *version;
+    uint8_t tag_info1;
+    uint8_t lowpass;
+    uint32_t rg_peak;
+    uint16_t rg_radio;
+    uint16_t rg_ap;
+    uint8_t tag_info2;
+    uint8_t bitrate_info;
+    uint32_t delay_info;
+    uint8_t tag_info3;
+    uint8_t mp3_gain;
+    uint16_t tag_info4;
+    uint32_t music_length;
+    uint16_t music_crc;
+    uint16_t info_tag_crc;
+} MP3XingContext;
+
+typedef struct MP3VBRIContext {
+    //uint32_t tag_id // always "VBRI".
+    uint16_t version;
+    uint16_t delay; // encoder delay
+    uint16_t vbr_qscale; // VBR quality scale
+    //uint32_t header_filesize;
+    //uint32_t frames;
+    uint16_t toc_entries;
+    uint16_t toc_scale_factor;
+    uint16_t toc_entry_info_size;
+    uint16_t frames_per_toc;
+    //uint32_t* toc_entry_data;
+} MP3VBRIContext;
+
+typedef struct MP3DecContext {
     AVClass *class;
     int64_t filesize;
-    int xing_toc;
+    MP3XingContext xing_ctx;
+    MP3VBRIContext vbri_ctx;
+    int toc;
     int start_pad;
     int end_pad;
     int usetoc;
@@ -153,7 +208,7 @@ static void read_xing_toc(AVFormatContext *s, int64_t filesize, int64_t duration
                            0, 0, AVINDEX_KEYFRAME);
     }
     if (fill_index)
-        mp3->xing_toc = 1;
+        mp3->toc = 1;
 }
 
 static void mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
@@ -172,6 +227,7 @@ static void mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
     int32_t  r_gain = INT32_MIN, a_gain = INT32_MIN;
 
     MP3DecContext *mp3 = s->priv_data;
+    MP3XingContext ctx = mp3->xing_ctx;
     static const int64_t xing_offtbl[2][2] = {{32, 17}, {17,9}};
     uint64_t fsize = avio_size(s->pb);
     int64_t pos = avio_tell(s->pb);
@@ -184,11 +240,14 @@ static void mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
     if (v != MKBETAG('X', 'i', 'n', 'g') && !mp3->is_cbr)
         return;
 
-    v = avio_rb32(s->pb);
-    if (v & XING_FLAG_FRAMES)
+    /* Xing control flags, four of which can actually be set. */
+    ctx.flags = avio_rb32(s->pb);
+    if (ctx.flags & XING_FLAG_FRAMES)
+    if (ctx.flags & XING_FLAG_FRAMES)
         mp3->frames = avio_rb32(s->pb);
-    if (v & XING_FLAG_SIZE)
+    if (ctx.flags & XING_FLAG_SIZE)
         mp3->header_filesize = avio_rb32(s->pb);
+	
     if (fsize && mp3->header_filesize) {
         uint64_t min, delta;
         min = FFMIN(fsize, mp3->header_filesize);
@@ -202,53 +261,60 @@ static void mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
                    "filesize and duration do not match (growing file?)\n");
         }
     }
-    if (v & XING_FLAG_TOC)
-        read_xing_toc(s, mp3->header_filesize, av_rescale_q(mp3->frames,
-                                       (AVRational){spf, c->sample_rate},
-                                       st->time_base));
-    /* VBR quality */
-    if (v & XING_FLAC_QSCALE)
-        avio_rb32(s->pb);
+
+    if (ctx.flags & XING_FLAG_TOC)
+        read_xing_toc(s, mp3->header_filesize,
+                      av_rescale_q(mp3->frames,
+                      (AVRational) {spf, c->sample_rate},
+                      st->time_base));
+
+    /* VBR quality scale */
+    if (ctx.flags & XING_FLAG_QSCALE)
+        ctx.vbr_qscale = avio_rb32(s->pb);
 
     /* Encoder short version string */
     memset(version, 0, sizeof(version));
     avio_read(s->pb, version, 9);
+    // (todo) LAME 3.100 encoder version string is *a lot longer than that*
+    // (todo) test "GoGo-no-Coda" MP3s too, similar signature as LAME MP3s pre-3.100.
+    // (todo) MP3HD has no encoder version string, it has two separate strings instead:
+    // these are "mp3HD" and "XHD3", respectively.
 
     /* Info Tag revision + VBR method */
-    avio_r8(s->pb);
+    ctx.tag_info1 = avio_r8(s->pb);
 
     /* Lowpass filter value */
-    avio_r8(s->pb);
+    ctx.lowpass = avio_r8(s->pb);
 
     /* ReplayGain peak */
-    v    = avio_rb32(s->pb);
-    peak = av_rescale(v, 100000, 1 << 23);
+    ctx.rg_peak = avio_rb32(s->pb);
+    peak = av_rescale(ctx.rg_peak, 100000, 1 << 23);
 
     /* Radio ReplayGain */
-    v = avio_rb16(s->pb);
+    ctx.rg_radio = avio_rb16(s->pb);
 
-    if (MIDDLE_BITS(v, 13, 15) == 1) {
-        r_gain = MIDDLE_BITS(v, 0, 8) * 10000;
+    if (MIDDLE_BITS(ctx.rg_radio, 13, 15) == 1) {
+        r_gain = MIDDLE_BITS(ctx.rg_radio, 0, 8) * 10000;
 
-        if (v & (1 << 9))
+        if (ctx.rg_radio & (1 << 9))
             r_gain *= -1;
     }
 
     /* Audiophile ReplayGain */
-    v = avio_rb16(s->pb);
+    ctx.rg_ap = avio_rb16(s->pb);
 
-    if (MIDDLE_BITS(v, 13, 15) == 2) {
-        a_gain = MIDDLE_BITS(v, 0, 8) * 10000;
+    if (MIDDLE_BITS(ctx.rg_ap, 13, 15) == 2) {
+        a_gain = MIDDLE_BITS(ctx.rg_ap, 0, 8) * 10000;
 
-        if (v & (1 << 9))
+        if (ctx.rg_ap & (1 << 9))
             a_gain *= -1;
     }
 
     /* Encoding flags + ATH Type */
-    avio_r8(s->pb);
+    ctx.tag_info2 = avio_r8(s->pb);
 
     /* if ABR {specified bitrate} else {minimal bitrate} */
-    avio_r8(s->pb);
+    ctx.delay_info = avio_rb24(s->pb);
 
     /* Encoder delays */
     v = avio_rb24(s->pb);
@@ -257,8 +323,8 @@ static void mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
         || AV_RB32(version) == MKBETAG('L', 'a', 'v', 'c')
     ) {
 
-        mp3->start_pad = v>>12;
-        mp3->  end_pad = v&4095;
+        mp3->start_pad = ctx.delay_info >> 12;
+        mp3->end_pad = ctx.delay_info & 4095;
         sti->start_skip_samples = mp3->start_pad + 528 + 1;
         if (mp3->frames) {
             sti->first_discard_sample = -mp3->end_pad + 528 + 1 + mp3->frames * (int64_t)spf;
@@ -268,49 +334,112 @@ static void mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
             st->start_time = av_rescale_q(sti->start_skip_samples,
                                             (AVRational){1, c->sample_rate},
                                             st->time_base);
-        av_log(s, AV_LOG_DEBUG, "pad %d %d\n", mp3->start_pad, mp3->  end_pad);
+        av_log(s, AV_LOG_DEBUG, "pad %d %d\n", mp3->start_pad, mp3->end_pad);
     }
 
     /* Misc */
-    avio_r8(s->pb);
+    ctx.tag_info3 = avio_r8(s->pb);
 
     /* MP3 gain */
-    avio_r8(s->pb);
+    ctx.mp3_gain = avio_r8(s->pb);
 
-    /* Preset and surround info */
-    avio_rb16(s->pb);
+    /* Preset + surround info */
+    ctx.tag_info4 = avio_rb16(s->pb);
 
     /* Music length */
-    avio_rb32(s->pb);
+    ctx.music_length = avio_rb32(s->pb);
 
     /* Music CRC */
-    avio_rb16(s->pb);
+    ctx.music_crc = avio_rb16(s->pb);
 
     /* Info Tag CRC */
     crc = ffio_get_checksum(s->pb);
-    v   = avio_rb16(s->pb);
+    ctx.info_tag_crc = avio_rb16(s->pb);
 
-    if (v == crc) {
+    if (ctx.info_tag_crc == crc) {
         ff_replaygain_export_raw(st, r_gain, peak, a_gain, 0);
         av_dict_set(&st->metadata, "encoder", version, 0);
     }
 }
 
-static void mp3_parse_vbri_tag(AVFormatContext *s, AVStream *st, int64_t base)
+static void read_vbri_toc(AVFormatContext *s, int64_t filesize, int64_t duration)
+{
+    int i;
+    uint64_t sz, p;
+    MP3DecContext *mp3 = s->priv_data;
+    MP3VBRIContext ctx = mp3->vbri_ctx;
+    int fast_seek = s->flags & AVFMT_FLAG_FAST_SEEK;
+    int fill_index = (mp3->usetoc || fast_seek) && duration > 0;
+
+    if (!filesize && (filesize = avio_size(s->pb)) <= 0) {
+        av_log(s, AV_LOG_WARNING,
+               "Cannot determine file size, skipping TOC table.\n");
+        fill_index = 0;
+        filesize = 0;
+    }
+
+    p = 0;
+    for (i = 0; i < ctx.toc_entries; i++) {
+        sz = avio_rb8x(s->pb, ctx.toc_entry_info_size);
+        sz *= ctx.toc_scale_factor;
+        if (fill_index)
+            av_add_index_entry(s->streams[0], p,
+                               av_rescale(i, duration, ctx.toc_entries), sz, 0,
+                               AVINDEX_KEYFRAME);
+        p += sz;
+    }
+    if (fill_index)
+        mp3->toc = 2;
+}
+
+static void mp3_parse_vbri_tag(AVFormatContext *s, AVStream *st,
+        MPADecodeHeader *c, int64_t base, uint32_t spf)
 {
     uint32_t v;
     MP3DecContext *mp3 = s->priv_data;
+    MP3VBRIContext ctx = mp3->vbri_ctx;
+    uint64_t fsize = avio_size(s->pb);
 
     /* Check for VBRI tag (always 32 bytes after end of mpegaudio header) */
     avio_seek(s->pb, base + 4 + 32, SEEK_SET);
     v = avio_rb32(s->pb);
     if (v == MKBETAG('V', 'B', 'R', 'I')) {
+        ctx.version = avio_rb16(s->pb);
         /* Check tag version */
-        if (avio_rb16(s->pb) == 1) {
-            /* skip delay and quality */
-            avio_skip(s->pb, 4);
+        if (ctx.version == 1) {
+            /* read all there is to read about the VBRI tag. */
+
+            /* Encoder delay, in float */
+            ctx.delay = avio_rb16(s->pb);
+
+            /* VBR quality scale */
+            ctx.vbr_qscale = avio_rb16(s->pb);
+
             mp3->header_filesize = avio_rb32(s->pb);
             mp3->frames = avio_rb32(s->pb);
+            if (fsize && mp3->header_filesize) {
+                uint64_t min, delta;
+                min = FFMIN(fsize, mp3->header_filesize);
+                delta = FFMAX(fsize, mp3->header_filesize) - min;
+                if (fsize > mp3->header_filesize && delta > min >> 4) {
+                    mp3->frames = 0;
+                    av_log(s, AV_LOG_WARNING,
+                           "invalid concatenated file detected - using bitrate for duration\n");
+                } else if (delta > min >> 4) {
+                    av_log(s, AV_LOG_WARNING,
+                           "filesize and duration do not match (growing file?)\n");
+                }
+            }
+
+            ctx.toc_entries = avio_rb16(s->pb);
+            ctx.toc_scale_factor = avio_rb16(s->pb);
+            ctx.toc_entry_info_size = avio_rb16(s->pb);
+            ctx.frames_per_toc = avio_rb16(s->pb);
+
+            read_vbri_toc(s, mp3->header_filesize,
+                          av_rescale_q(mp3->frames,
+                          (AVRational){spf, c->sample_rate},
+                          st->time_base));
         }
     }
 }
@@ -345,7 +474,7 @@ static int mp3_parse_vbr_tags(AVFormatContext *s, AVStream *st, int64_t base)
     mp3->frame_duration = av_rescale_q(spf, (AVRational){1, c.sample_rate}, st->time_base);
 
     mp3_parse_info_tag(s, st, &c, spf);
-    mp3_parse_vbri_tag(s, st, base);
+    mp3_parse_vbri_tag(s, st, &c, base, spf);
 
     if (!mp3->frames && !mp3->header_filesize)
         return -1;
@@ -560,6 +689,8 @@ static int mp3_seek(AVFormatContext *s, int stream_index, int64_t timestamp,
     int64_t best_pos;
     int fast_seek = s->flags & AVFMT_FLAG_FAST_SEEK;
     int64_t filesize = mp3->header_filesize;
+    char toc_fmt_desc[8];
+    int64_t ret;
 
     if (filesize <= 0) {
         int64_t size = avio_size(s->pb);
@@ -567,18 +698,36 @@ static int mp3_seek(AVFormatContext *s, int stream_index, int64_t timestamp,
             filesize = size - si->data_offset;
     }
 
-    if (mp3->xing_toc && (mp3->usetoc || (fast_seek && !mp3->is_cbr))) {
-        int64_t ret = av_index_search_timestamp(st, timestamp, flags);
+    if (mp3->toc && (mp3->usetoc || (fast_seek && !mp3->is_cbr))) {
+        if (mp3->toc > 2) // unknown format, use scaling instead.
+            goto mp3_seek_scaling;
+        ret = av_index_search_timestamp(st, timestamp, flags);
 
-        // NOTE: The MP3 TOC is not a precise lookup table. Accuracy is worse
-        // for bigger files.
-        av_log(s, AV_LOG_WARNING, "Using MP3 TOC to seek; may be imprecise.\n");
+        // NOTE: The MP3 TOC is not a precise lookup table.
+        // Accuracy is worse for bigger files.
+        // "VBRI" does have a TOC with a varied number of entries
+        // instead of being restricted to just 100 entries like Xing TOC.
+        switch (mp3->toc) {
+        case 1: // "Xing"
+            snprintf(toc_fmt_desc, sizeof(toc_fmt_desc), "Xing");
+            break;
+        case 2: // "VBRI"
+            snprintf(toc_fmt_desc, sizeof(toc_fmt_desc), "VBRI");
+            break;
+        default: // unknown format
+            break;
+        }
+
+        av_log(s, AV_LOG_WARNING,
+               "Using MP3 TOC (from %s tag format) to seek; may be imprecise.\n",
+               toc_fmt_desc);
 
         if (ret < 0)
             return ret;
 
         ie = &sti->index_entries[ret];
     } else if (fast_seek && st->duration > 0 && filesize > 0) {
+        mp3_seek_scaling:
         if (!mp3->is_cbr)
             av_log(s, AV_LOG_WARNING, "Using scaling to seek VBR MP3; may be imprecise.\n");
 

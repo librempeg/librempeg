@@ -137,7 +137,9 @@ static int mpegaudio_parse(AVCodecParserContext *s1,
 
 
 const AVCodecParser ff_mpegaudio_parser = {
-    .codec_ids      = { AV_CODEC_ID_MP1, AV_CODEC_ID_MP2, AV_CODEC_ID_MP3, AV_CODEC_ID_MP3ADU },
+    .codec_ids      = { AV_CODEC_ID_MP1, AV_CODEC_ID_MP2,
+                        AV_CODEC_ID_MP3, AV_CODEC_ID_MP3ADU,
+                        AV_CODEC_ID_MP3PRO, AV_CODEC_ID_MP3SURROUND, AV_CODEC_ID_MP3HD },
     .priv_data_size = sizeof(MpegAudioParseContext),
     .parser_parse   = mpegaudio_parse,
     .parser_close   = ff_parse_close,

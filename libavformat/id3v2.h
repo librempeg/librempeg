@@ -38,6 +38,7 @@
 #define ID3v2_FLAG_UNSYNCH     0x0002
 #define ID3v2_FLAG_ENCRYPTION  0x0004
 #define ID3v2_FLAG_COMPRESSION 0x0008
+#define ID3v2_FLAG_READONLY    0x1000
 
 #define ID3v2_PRIV_METADATA_PREFIX "id3v2_priv."
 
@@ -81,6 +82,30 @@ typedef struct ID3v2ExtraMetaCHAP {
     AVDictionary *meta;
 } ID3v2ExtraMetaCHAP;
 
+typedef struct ID3v2ExtraMetaXHD3_hd3 {
+    uint8_t unk1;
+    uint8_t unk2;
+    uint32_t unk3;
+    uint8_t unk4;
+    uint8_t unk5;
+    uint32_t unk6;
+    uint8_t vlv_size;
+    uint32_t num_samples;
+    uint32_t mp3_data_size;
+    uint32_t mp3hd_data_size;
+} ID3v2ExtraMetaXHD3_hd3;
+
+typedef struct ID3v2ExtraMetaXHD3_cd {
+    uint8_t unk1;
+} ID3v2ExtraMetaXHD3_cd;
+
+typedef struct ID3v2ExtraMetaXHD3 {
+    uint64_t hd3_offset;
+    ID3v2ExtraMetaXHD3_hd3 hd3;
+    uint64_t cd_offset;
+    ID3v2ExtraMetaXHD3_cd cd;
+} ID3v2ExtraMetaXHD3;
+
 typedef struct ID3v2ExtraMeta {
     const char *tag;
     struct ID3v2ExtraMeta *next;
@@ -89,6 +114,7 @@ typedef struct ID3v2ExtraMeta {
         ID3v2ExtraMetaCHAP chap;
         ID3v2ExtraMetaGEOB geob;
         ID3v2ExtraMetaPRIV priv;
+        ID3v2ExtraMetaXHD3 xhd3;
     } data;
 } ID3v2ExtraMeta;
 
@@ -186,6 +212,13 @@ int ff_id3v2_parse_priv_dict(AVDictionary **d, ID3v2ExtraMeta *extra_meta);
  * escaped.
  */
 int ff_id3v2_parse_priv(AVFormatContext *s, ID3v2ExtraMeta *extra_meta);
+
+
+/**
+ * Create a stream for at least one XHD3 (mp3HD data)
+ * extracted from the ID3v2 header.
+ */
+int ff_id3v2_parse_xhd3(AVFormatContext *s, ID3v2ExtraMeta *extra_meta);
 
 extern const AVMetadataConv ff_id3v2_34_metadata_conv[];
 extern const AVMetadataConv ff_id3v2_4_metadata_conv[];
