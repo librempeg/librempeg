@@ -328,8 +328,6 @@ int ff_img_read_header(AVFormatContext *s1)
         st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
         st->codecpar->codec_id   = ffifmt(s1->iformat)->raw_codec_id;
     } else {
-        const char *str = strrchr(s->path, '.');
-        s->split_planes       = str && !av_strcasecmp(str + 1, "y");
         st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
         if (s1->pb) {
             int probe_buffer_size = 2048;
@@ -415,10 +413,8 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
     VideoDemuxData *s = s1->priv_data;
     char filename_bytes[1024];
     char *filename = filename_bytes;
-    int i, res;
-    int size[3]           = { 0 }, ret[3] = { 0 };
-    AVIOContext *f[3]     = { NULL };
     AVCodecParameters *par = s1->streams[0]->codecpar;
+    int size, ret;
 
     if (!s->is_pipe) {
         /* loop over input */
@@ -439,38 +435,24 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
                                   s->img_number) < 0 && s->img_number > 1)
             return AVERROR(EIO);
         }
-        for (i = 0; i < 3; i++) {
-            if (s1->pb &&
-                !strcmp(filename_bytes, s->path) &&
-                !s->loop &&
-                !s->split_planes) {
-                f[i] = s1->pb;
-            } else if (s1->io_open(s1, &f[i], filename, AVIO_FLAG_READ, NULL) < 0) {
-                if (i >= 1)
-                    break;
-                av_log(s1, AV_LOG_ERROR, "Could not open file : %s\n",
-                       filename);
-                return AVERROR(EIO);
-            }
-            size[i] = avio_size(f[i]);
 
-            if (!s->split_planes)
-                break;
-            filename[strlen(filename) - 1] = 'U' + i;
-        }
+        ret = s1->io_open(s1, &s1->pb, filename, AVIO_FLAG_READ, NULL);
+        if (ret < 0)
+            goto fail;
+
+        size = avio_size(s1->pb);
 
         if (par->codec_id == AV_CODEC_ID_NONE) {
             AVProbeData pd = { 0 };
             const FFInputFormat *ifmt;
             uint8_t header[PROBE_BUF_MIN + AVPROBE_PADDING_SIZE];
-            int ret;
             int score = 0;
 
-            ret = avio_read(f[0], header, PROBE_BUF_MIN);
+            ret = avio_read(s1->pb, header, PROBE_BUF_MIN);
             if (ret < 0)
                 return ret;
             memset(header + ret, 0, sizeof(header) - ret);
-            avio_skip(f[0], -ret);
+            avio_skip(s1->pb, -ret);
             pd.buf = header;
             pd.buf_size = ret;
             pd.filename = filename;
@@ -481,24 +463,23 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
         }
 
         if (par->codec_id == AV_CODEC_ID_RAWVIDEO && !par->width)
-            infer_size(&par->width, &par->height, size[0]);
+            infer_size(&par->width, &par->height, size);
     } else {
-        f[0] = s1->pb;
-        if (avio_feof(f[0]) && s->loop && s->is_pipe)
-            avio_seek(f[0], 0, SEEK_SET);
-        if (avio_feof(f[0]))
+        if (avio_feof(s1->pb) && s->loop && s->is_pipe)
+            avio_seek(s1->pb, 0, SEEK_SET);
+        if (avio_feof(s1->pb))
             return AVERROR_EOF;
         if (s->frame_size > 0) {
-            size[0] = s->frame_size;
+            size = s->frame_size;
         } else if (!ffstream(s1->streams[0])->parser) {
-            size[0] = avio_size(s1->pb);
+            size = avio_size(s1->pb);
         } else {
-            size[0] = 4096;
+            size = 4096;
         }
     }
 
-    res = av_new_packet(pkt, size[0] + size[1] + size[2]);
-    if (res < 0) {
+    ret = av_new_packet(pkt, size);
+    if (ret < 0) {
         goto fail;
     }
     pkt->stream_index = 0;
@@ -507,7 +488,7 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
         struct stat img_stat;
         av_assert0(!s->is_pipe); // The ts_from_file option is not supported by piped input demuxers
         if (stat(filename, &img_stat)) {
-            res = AVERROR(EIO);
+            ret = AVERROR(EIO);
             goto fail;
         }
         pkt->pts = (int64_t)img_stat.st_mtime;
@@ -521,7 +502,7 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
     }
 
     if (s->is_pipe)
-        pkt->pos = avio_tell(f[0]);
+        pkt->pos = avio_tell(s1->pb);
 
     /*
      * export_path_metadata must be explicitly enabled via
@@ -529,38 +510,27 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
      * as packet side_data.
      */
     if (!s->is_pipe && s->export_path_metadata == 1) {
-        res = add_filename_as_pkt_side_data(filename, pkt);
-        if (res < 0)
+        ret = add_filename_as_pkt_side_data(filename, pkt);
+        if (ret < 0)
             goto fail;
     }
 
     pkt->size = 0;
-    for (i = 0; i < 3; i++) {
-        if (f[i]) {
-            ret[i] = avio_read(f[i], pkt->data + pkt->size, size[i]);
-            if (s->loop && s->is_pipe && ret[i] == AVERROR_EOF) {
-                if (avio_seek(f[i], 0, SEEK_SET) >= 0) {
+    {
+        if (s1->pb) {
+            ret = avio_read(s1->pb, pkt->data + pkt->size, size);
+            if (s->loop && s->is_pipe && ret == AVERROR_EOF) {
+                if (avio_seek(s1->pb, 0, SEEK_SET) >= 0) {
                     pkt->pos = 0;
-                    ret[i] = avio_read(f[i], pkt->data + pkt->size, size[i]);
+                    ret = avio_read(s1->pb, pkt->data + pkt->size, size);
                 }
             }
-            if (!s->is_pipe && f[i] != s1->pb)
-                ff_format_io_close(s1, &f[i]);
-            if (ret[i] > 0)
-                pkt->size += ret[i];
+            if (ret > 0)
+                pkt->size += ret;
         }
     }
 
-    if (ret[0] <= 0 || ret[1] < 0 || ret[2] < 0) {
-        if (ret[0] < 0) {
-            res = ret[0];
-        } else if (ret[1] < 0) {
-            res = ret[1];
-        } else if (ret[2] < 0) {
-            res = ret[2];
-        } else {
-            res = AVERROR_EOF;
-        }
+    if (ret < 0) {
         goto fail;
     } else {
         memset(pkt->data + pkt->size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
@@ -571,13 +541,7 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
     }
 
 fail:
-    if (!s->is_pipe) {
-        for (i = 0; i < 3; i++) {
-            if (f[i] != s1->pb)
-                ff_format_io_close(s1, &f[i]);
-        }
-    }
-    return res;
+    return ret;
 }
 
 static int img_read_close(struct AVFormatContext* s1)
