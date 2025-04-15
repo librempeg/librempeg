@@ -17,12 +17,15 @@
  */
 
 #undef ftype
+#undef FMA
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
 #define ftype float
+#define FMA fmaf
 #define SAMPLE_FORMAT fltp
 #else
 #define ftype double
+#define FMA fma
 #define SAMPLE_FORMAT dblp
 #endif
 
@@ -91,7 +94,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
         const ftype k2 = st->k2;
 
         for (int n = 0; n < nb_samples; n++) {
-            dst[n] = src[n] * (u * a + offset);
+            dst[n] = src[n] * FMA(u, a, offset);
             w = u - k1 * v;
             v += k2 * w;
             u = w - k1 * v;
