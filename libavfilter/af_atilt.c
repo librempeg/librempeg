@@ -127,6 +127,7 @@ static int filter_channels_## name(AVFilterContext *ctx, void *arg, \
     AVFrame *in = td->in;                                           \
     const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs; \
     const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs; \
+    const int nb_samples = in->nb_samples;                          \
     const type level = s->level;                                    \
                                                                     \
     for (int ch = start; ch < end; ch++) {                          \
@@ -141,7 +142,7 @@ static int filter_channels_## name(AVFilterContext *ctx, void *arg, \
             const type b1 = coeffs->b1;                             \
             type *w = ((type *)s->w->extended_data[ch]) + b * 2;    \
                                                                     \
-            for (int n = 0; n < in->nb_samples; n++) {              \
+            for (int n = 0; n < nb_samples; n++) {                  \
                 type sain = b ? dst[n] : src[n] * level;            \
                 type saout = sain * b0 + w[0] * b1 - w[1] * a1;     \
                                                                     \
