@@ -237,7 +237,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     AudioPhaseMeterContext *s = ctx->priv;
-    AVFilterLink *outlink = s->do_video ? ctx->outputs[1] : NULL;
+    const int do_video = s->do_video;
+    AVFilterLink *outlink = do_video ? ctx->outputs[1] : NULL;
     AVFilterLink *aoutlink = ctx->outputs[0];
     AVDictionary **metadata;
     const int rc = s->contrast[0];
@@ -246,14 +247,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     float fphase = 0;
     AVFrame *out;
     uint8_t *dst;
-    int i, ret;
+    int ret;
     int mono_measurement;
     int out_phase_measurement;
     float tolerance = 1.0f - s->tolerance;
     float angle = cosf(s->angle/180.0f*M_PIf);
+    const int nb_samples = in->nb_samples;
     int64_t new_pts;
 
-    if (s->do_video && (!s->out || s->out->width  != outlink->w ||
+    if (do_video && (!s->out || s->out->width  != outlink->w ||
                                    s->out->height != outlink->h)) {
         av_frame_free(&s->out);
         s->out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
@@ -263,28 +265,28 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
 
         out = s->out;
-        for (i = 0; i < outlink->h; i++)
+        for (int i = 0; i < outlink->h; i++)
             memset(out->data[0] + i * out->linesize[0], 0, outlink->w * 4);
-    } else if (s->do_video) {
+    } else if (do_video) {
         ret = ff_inlink_make_frame_writable(outlink, &s->out);
         if (ret < 0)
             goto fail;
         out = s->out;
-        for (i = outlink->h - 1; i >= 10; i--)
+        for (int i = outlink->h - 1; i >= 10; i--)
             memmove(out->data[0] + (i  ) * out->linesize[0],
                     out->data[0] + (i-1) * out->linesize[0],
                     outlink->w * 4);
-        for (i = 0; i < outlink->w; i++)
+        for (int i = 0; i < outlink->w; i++)
             AV_WL32(out->data[0] + i * 4, 0);
     }
 
-    for (i = 0; i < in->nb_samples; i++) {
+    for (int i = 0; i < nb_samples; i++) {
         const float *src = (float *)in->data[0] + i * 2;
         const float f = src[0] * src[1] / (src[0]*src[0] + src[1] * src[1]) * 2;
         const float phase = isnan(f) ? 1 : f;
         const int x = get_x(phase, s->w);
 
-        if (s->do_video) {
+        if (do_video) {
             dst = out->data[0] + x * 4;
             dst[0] = FFMIN(255, dst[0] + rc);
             dst[1] = FFMIN(255, dst[1] + gc);
@@ -302,7 +304,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             AV_WL32(dst, AV_RL32(s->mpc));
         }
 
-        for (i = 1; i < 10 && i < outlink->h; i++)
+        for (int i = 1; i < 10 && i < outlink->h; i++)
             memcpy(out->data[0] + i * out->linesize[0], out->data[0], outlink->w * 4);
     }
 
