@@ -209,7 +209,6 @@ int ff_img_read_header(AVFormatContext *s1)
 
     av_strlcpy(s->path, s1->url, sizeof(s->path));
     s->img_number = 0;
-    s->img_count  = 0;
 
     /* find format */
     if (s1->iformat->flags & AVFMT_NOFILE)
@@ -309,7 +308,6 @@ int ff_img_read_header(AVFormatContext *s1)
             return AVERROR(EINVAL);
         }
         s->img_first  = first_index;
-        s->img_last   = last_index;
         s->img_number = first_index;
         /* compute duration */
         if (!s->ts_from_file) {
@@ -414,15 +412,10 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
     char filename_bytes[1024];
     char *filename = filename_bytes;
     AVCodecParameters *par = s1->streams[0]->codecpar;
+    AVIOContext *f = NULL;
     int size, ret;
 
     if (!s->is_pipe) {
-        /* loop over input */
-        if (s->loop && s->img_number > s->img_last) {
-            s->img_number = s->img_first;
-        }
-        if (s->img_number > s->img_last)
-            return AVERROR_EOF;
         if (s->pattern_type == PT_NONE) {
             av_strlcpy(filename_bytes, s->path, sizeof(filename_bytes));
         } else if (s->use_glob) {
@@ -430,17 +423,20 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
             filename = s->globstate.gl_pathv[s->img_number];
 #endif
         } else {
-        if (av_get_frame_filename(filename_bytes, sizeof(filename_bytes),
-                                  s->path,
-                                  s->img_number) < 0 && s->img_number > 1)
-            return AVERROR(EIO);
+            ret = av_get_frame_filename(filename_bytes, sizeof(filename_bytes),
+                                        s->path,
+                                        s->img_number);
+            if (ret < 0)
+                return ret;
         }
 
-        ret = s1->io_open(s1, &s1->pb, filename, AVIO_FLAG_READ, NULL);
-        if (ret < 0)
+        ret = s1->io_open(s1, &f, filename, AVIO_FLAG_READ, NULL);
+        if (ret < 0) {
+            ret = AVERROR_EOF;
             goto fail;
+        }
 
-        size = avio_size(s1->pb);
+        size = avio_size(f);
 
         if (par->codec_id == AV_CODEC_ID_NONE) {
             AVProbeData pd = { 0 };
@@ -448,11 +444,11 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
             uint8_t header[PROBE_BUF_MIN + AVPROBE_PADDING_SIZE];
             int score = 0;
 
-            ret = avio_read(s1->pb, header, PROBE_BUF_MIN);
+            ret = avio_read(f, header, PROBE_BUF_MIN);
             if (ret < 0)
                 return ret;
             memset(header + ret, 0, sizeof(header) - ret);
-            avio_skip(s1->pb, -ret);
+            avio_skip(f, -ret);
             pd.buf = header;
             pd.buf_size = ret;
             pd.filename = filename;
@@ -465,7 +461,7 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
         if (par->codec_id == AV_CODEC_ID_RAWVIDEO && !par->width)
             infer_size(&par->width, &par->height, size);
     } else {
-        if (avio_feof(s1->pb) && s->loop && s->is_pipe)
+        if (avio_feof(s1->pb) && s->is_pipe)
             avio_seek(s1->pb, 0, SEEK_SET);
         if (avio_feof(s1->pb))
             return AVERROR_EOF;
@@ -498,7 +494,9 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
 #endif
         av_add_index_entry(s1->streams[0], s->img_number, pkt->pts, 0, 0, AVINDEX_KEYFRAME);
     } else if (!s->is_pipe) {
-        pkt->pts      = s->pts;
+        pkt->pts = s->img_number - s->img_first;
+        pkt->pos = 0;
+        av_add_index_entry(s1->streams[0], s->img_number, pkt->pts, 0, 0, AVINDEX_KEYFRAME);
     }
 
     if (s->is_pipe)
@@ -515,28 +513,21 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
             goto fail;
     }
 
-    pkt->size = 0;
-    {
-        if (s1->pb) {
-            ret = avio_read(s1->pb, pkt->data + pkt->size, size);
-            if (s->loop && s->is_pipe && ret == AVERROR_EOF) {
-                if (avio_seek(s1->pb, 0, SEEK_SET) >= 0) {
-                    pkt->pos = 0;
-                    ret = avio_read(s1->pb, pkt->data + pkt->size, size);
-                }
-            }
-            if (ret > 0)
-                pkt->size += ret;
+    ret = avio_read(f ? f : s1->pb, pkt->data, size);
+    if (s->is_pipe && ret == AVERROR_EOF) {
+        if (avio_seek(s1->pb, 0, SEEK_SET) >= 0) {
+            pkt->pos = 0;
+            ret = avio_read(s1->pb, pkt->data, size);
         }
     }
+    if (f)
+        ff_format_io_close(s1, &f);
 
     if (ret < 0) {
         goto fail;
     } else {
         memset(pkt->data + pkt->size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
-        s->img_count++;
         s->img_number++;
-        s->pts++;
         return 0;
     }
 
@@ -559,19 +550,12 @@ static int img_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp
 {
     VideoDemuxData *s1 = s->priv_data;
     AVStream *st = s->streams[0];
+    int index;
 
-    if (s1->ts_from_file) {
-        int index = av_index_search_timestamp(st, timestamp, flags);
-        if(index < 0)
-            return -1;
-        s1->img_number = ffstream(st)->index_entries[index].pos;
-        return 0;
-    }
-
-    if (timestamp < 0 || !s1->loop && timestamp > s1->img_last - s1->img_first)
+    index = av_index_search_timestamp(st, timestamp, flags);
+    if (index < 0)
         return -1;
-    s1->img_number = timestamp%(s1->img_last - s1->img_first + 1) + s1->img_first;
-    s1->pts = timestamp;
+    s1->img_number = ffstream(st)->index_entries[index].pos + s1->img_first;
     return 0;
 }
 
@@ -581,7 +565,6 @@ static int img_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp
     { "framerate",    "set the video framerate", OFFSET(framerate),    AV_OPT_TYPE_VIDEO_RATE, {.str = "25"}, 0, INT_MAX, DEC }, \
     { "pixel_format", "set video pixel format",  OFFSET(pixel_format), AV_OPT_TYPE_STRING,     {.str = NULL}, 0, 0,       DEC }, \
     { "video_size",   "set video size",          OFFSET(width),        AV_OPT_TYPE_IMAGE_SIZE, {.str = NULL}, 0, 0,       DEC }, \
-    { "loop",         "force loop over input file sequence", OFFSET(loop), AV_OPT_TYPE_BOOL,   {.i64 = 0   }, 0, 1,       DEC }, \
     { NULL },
 
 #if CONFIG_IMAGE2_DEMUXER
