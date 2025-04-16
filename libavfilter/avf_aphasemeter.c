@@ -44,7 +44,7 @@ typedef struct AudioPhaseMeterContext {
     int do_phasing_detection;
     int w, h;
     AVRational frame_rate;
-    int contrast[4];
+    uint8_t contrast[4];
     uint8_t *mpc_str;
     uint8_t mpc[4];
     int draw_median_phase;
@@ -73,9 +73,7 @@ static const AVOption aphasemeter_options[] = {
     { "r",    "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
     { "size", "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str="800x400"}, 0, 0, FLAGS },
     { "s",    "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str="800x400"}, 0, 0, FLAGS },
-    { "rc", "set red contrast",   OFFSET(contrast[0]), AV_OPT_TYPE_INT, {.i64=2}, 0, 255, FLAGS },
-    { "gc", "set green contrast", OFFSET(contrast[1]), AV_OPT_TYPE_INT, {.i64=7}, 0, 255, FLAGS },
-    { "bc", "set blue contrast",  OFFSET(contrast[2]), AV_OPT_TYPE_INT, {.i64=1}, 0, 255, FLAGS },
+    { "contrast", "set contrast color", OFFSET(contrast), AV_OPT_TYPE_COLOR, {.str="0x020701ff"}, 0, 0, FLAGS },
     { "mpc", "set median phase color", OFFSET(mpc_str), AV_OPT_TYPE_STRING, {.str = "none"}, 0, 0, FLAGS },
     { "video", "set video output", OFFSET(do_video), AV_OPT_TYPE_BOOL, {.i64 = 1}, 0, 1, FLAGS },
     { "phasing", "set mono and out-of-phase detection output", OFFSET(do_phasing_detection), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, FLAGS },
@@ -244,6 +242,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     const int rc = s->contrast[0];
     const int gc = s->contrast[1];
     const int bc = s->contrast[2];
+    const int ac = s->contrast[3];
     float fphase = 0;
     AVFrame *out;
     uint8_t *dst;
@@ -291,7 +290,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             dst[0] = FFMIN(255, dst[0] + rc);
             dst[1] = FFMIN(255, dst[1] + gc);
             dst[2] = FFMIN(255, dst[2] + bc);
-            dst[3] = 255;
+            dst[3] = FFMIN(255, dst[3] + ac);
         }
         fphase += phase;
     }
