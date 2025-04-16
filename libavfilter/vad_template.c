@@ -101,6 +101,12 @@ static ftype fn(svf_low)(ftype in, const ftype m[3],
     return m[2] * v2;
 }
 
+static void fn(update_state)(ftype *b)
+{
+    b[0] = isnormal(b[0]) ? b[0] : F(0.0);
+    b[1] = isnormal(b[1]) ? b[1] : F(0.0);
+}
+
 static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     VADContext *s = ctx->priv;
@@ -129,6 +135,9 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
 
             dst[n] = is_disabled ? src[n] : (avg > EPS) ? LIN2LOG(FEXP2(log_avg) / (avg + EPS)) : -FLT_MAX;
         }
+
+        fn(update_state)(astate);
+        fn(update_state)(lstate);
     }
 
     return 0;
