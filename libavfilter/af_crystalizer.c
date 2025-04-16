@@ -115,6 +115,19 @@ static int filter_## inverse ##_## fmt ##_## clp(AVFilterContext *ctx, \
         }                                                              \
     }                                                                  \
                                                                        \
+    if (packed) {                                                      \
+        type *prv = p[0];                                              \
+                                                                       \
+        for (int c = start; c < end; c++)                              \
+            prv[c] = isnormal(prv[c]) ? prv[c] : 0;                    \
+    } else {                                                           \
+        for (int c = start; c < end; c++) {                            \
+            type *prv = p[c];                                          \
+                                                                       \
+            prv[0] = isnormal(prv[0]) ? prv[0] : 0;                    \
+        }                                                              \
+    }                                                                  \
+                                                                       \
     return 0;                                                          \
 }
 
