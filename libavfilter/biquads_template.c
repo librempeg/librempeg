@@ -599,14 +599,13 @@ static void fn(biquad_zdf)(void *st,
 
     for (int i = 0; i < len; i++) {
         const ftype in = ibuf[i] - uhalf;
-        const ftype v0 = in;
-        const ftype v3 = v0 - b1;
-        const ftype v1 = a0 * b0 + a1 * v3;
-        const ftype v2 = b1 + a1 * b0 + a2 * v3;
+        const ftype v0 = a2 * (in - b0 * a1 - b1);
+        const ftype v1 = a0 * v0 + b0;
+        const ftype v2 = a0 * v1 + b1;
         ftype out;
 
-        b0 = F(2.0) * v1 - b0;
-        b1 = F(2.0) * v2 - b1;
+        b0 = a0 * v0 + v1;
+        b1 = a0 * v1 + v2;
 
         out = m0 * v0 + m1 * v1 + m2 * v2;
         out = out * wet + in * dry;

@@ -19,9 +19,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-/*
- * 1/2-pole filters designed by Robert Bristow-Johnson <rbj@audioimagination.com>
- */
+#include <float.h>
 
 #include "config_components.h"
 
@@ -84,7 +82,6 @@ typedef struct BiquadsContext {
     int transform_type;
     int precision;
     int block_samples;
-    int decramp;
 
     int bypass;
 
@@ -95,6 +92,7 @@ typedef struct BiquadsContext {
     double frequency;
     double width;
     double mix;
+    double sigma_factor;
     AVChannelLayout ch_layout;
     int normalize;
 
@@ -253,6 +251,32 @@ static void convert_dir2wdf(BiquadsContext *s)
     s->b[2] = b[2];
 }
 
+static void convert_dir2zdf(BiquadsContext *s)
+{
+    double a0 = s->b[0];
+    double a1 = s->b[1];
+    double a2 = s->b[2];
+    double b1 = s->a[1];
+    double b2 = s->a[2];
+
+    double t1 = sqrt(fabs(-1.0 - b1 - b2));
+    double t2 = sqrt(fabs(-1.0 + b1 - b2));
+    double g = t1 / t2;
+    double k = 2.0 * (1.0 - b2) / (t1 * t2);
+    double D = 1.0 + g * (g + k);
+    double g0 = 1.0 / D;
+    double m0 = (a0 - a1 + a2) / (1.0 - b1 + b2);
+    double m1 = 2.0 * (a2 - a0) / (t1 * t2);
+    double m2 = (a0 + a1 + a2) / (1.0 + b1 + b2);
+
+    s->a[0] = g;
+    s->a[1] = g + k;
+    s->a[2] = g0;
+    s->b[0] = m0;
+    s->b[1] = m1;
+    s->b[2] = m2;
+}
+
 static double convert_width2qfactor(double width,
                                     double frequency,
                                     double gain,
@@ -288,153 +312,33 @@ static double convert_width2qfactor(double width,
     return ret;
 }
 
-static void convert_dir2zdf(BiquadsContext *s, int sample_rate)
+static double vxy(double x, double y, double s)
 {
-    double Q = convert_width2qfactor(s->width, s->frequency, s->gain, sample_rate, s->width_type);
-    double g, k, A;
-    double a[3];
-    double m[3];
+    return sqrt(x*x*x*x + 2.0*s*s*x*x*(2.0*y*y-1.0) + s*s*s*s);
+}
 
-    if (s->decramp)
-        Q /= tan(s->frequency*M_PI/sample_rate)+1.0;
+static double kxy(double x, double y, double s)
+{
+    return x*x*(2.0*y*y-1.0) + s*s;
+}
 
-    switch (s->filter_type) {
-    case biquad:
-        a[0] = s->oa[0];
-        a[1] = s->oa[1];
-        a[2] = s->oa[2];
-        m[0] = s->ob[0];
-        m[1] = s->ob[1];
-        m[2] = s->ob[2];
-        break;
-    case equalizer:
-        A = ff_exp10(s->gain / 40.);
-        g = tan(M_PI * s->frequency / sample_rate);
-        k = 1. / (Q * A);
-        a[0] = 1. / (1. + g * (g + k));
-        a[1] = g * a[0];
-        a[2] = g * a[1];
-        m[0] = 1.;
-        m[1] = k * (A * A - 1.);
-        m[2] = 0.;
-        break;
-    case transform:
-        A = s->fz / s->fp;
-        Q = s->qp / s->qz;
-        g = tan(M_PI * s->fp / sample_rate);
-        k = 1. / s->qp;
-        a[0] = 1. / (1. + g * (g + k));
-        a[1] = g * a[0];
-        a[2] = g * a[1];
-        m[0] = 1.;
-        m[1] = k * (A * Q - 1.);
-        m[2] = A * A - 1.;
-        break;
-    case bass:
-    case lowshelf:
-        A = ff_exp10(s->gain / 40.);
-        g = tan(M_PI * s->frequency / sample_rate) / sqrt(A);
-        k = 1. / Q;
-        a[0] = 1. / (1. + g * (g + k));
-        a[1] = g * a[0];
-        a[2] = g * a[1];
-        m[0] = 1.;
-        m[1] = k * (A - 1.);
-        m[2] = A * A - 1.;
-        break;
-    case tiltshelf:
-        A = ff_exp10(s->gain / 20.);
-        g = tan(M_PI * s->frequency / sample_rate) / sqrt(A);
-        k = 1. / Q;
-        a[0] = 1. / (1. + g * (g + k));
-        a[1] = g * a[0];
-        a[2] = g * a[1];
-        m[0] = 1./ A;
-        m[1] = k * (A - 1.) / A;
-        m[2] = (A * A - 1.) / A;
-        break;
-    case treble:
-    case highshelf:
-        A = ff_exp10(s->gain / 40.);
-        g = tan(M_PI * s->frequency / sample_rate) * sqrt(A);
-        k = 1. / Q;
-        a[0] = 1. / (1. + g * (g + k));
-        a[1] = g * a[0];
-        a[2] = g * a[1];
-        m[0] = A * A;
-        m[1] = k * (1. - A) * A;
-        m[2] = 1. - A * A;
-        break;
-    case bandpass:
-        g = tan(M_PI * s->frequency / sample_rate);
-        k = 1. / Q;
-        a[0] = 1. / (1. + g * (g + k));
-        a[1] = g * a[0];
-        a[2] = g * a[1];
-        m[0] = 0.;
-        m[1] = s->csg ? 1. : k;
-        m[2] = 0.;
-        break;
-    case bandreject:
-        g = tan(M_PI * s->frequency / sample_rate);
-        k = 1. / Q;
-        a[0] = 1. / (1. + g * (g + k));
-        a[1] = g * a[0];
-        a[2] = g * a[1];
-        m[0] =  1.;
-        m[1] = -k;
-        m[2] =  0.;
-        break;
-    case lowpass:
-        g = tan(M_PI * s->frequency / sample_rate);
-        k = 1. / Q;
-        a[0] = 1. / (1. + g * (g + k));
-        a[1] = g * a[0];
-        a[2] = g * a[1];
-        m[0] = 0.;
-        m[1] = 0.;
-        m[2] = 1.;
-        break;
-    case highpass:
-        g = tan(M_PI * s->frequency / sample_rate);
-        k = 1. / Q;
-        a[0] = 1. / (1. + g * (g + k));
-        a[1] = g * a[0];
-        a[2] = g * a[1];
-        m[0] =  1.;
-        m[1] = -k;
-        m[2] = -1.;
-        break;
-    case peakpass:
-        g = tan(M_PI * s->frequency / sample_rate);
-        k = 1. / Q;
-        a[0] = 1. / (1. + g * (g + k));
-        a[1] = g * a[0];
-        a[2] = g * a[1];
-        m[0] = -1.;
-        m[1] =  k;
-        m[2] =  2.;
-        break;
-    case allpass:
-        g = tan(M_PI * s->frequency / sample_rate);
-        k = 1. / Q;
-        a[0] = 1. / (1. + g * (g + k));
-        a[1] = g * a[0];
-        a[2] = g * a[1];
-        m[0] =  1.;
-        m[1] = -2. * k;
-        m[2] =  0.;
-        break;
-    default:
-        av_assert0(0);
-    }
+static double rox(double x, double s)
+{
+    return (M_PI - sqrt(x*x+s*s)) / (M_PI + sqrt(x*x + s*s));
+}
 
-    s->a[0] = a[0];
-    s->a[1] = a[1];
-    s->a[2] = a[2];
-    s->b[0] = m[0];
-    s->b[1] = m[1];
-    s->b[2] = m[2];
+static double ro1xy(double x, double y, double s)
+{
+    const double vxy0 = vxy(x, y, s);
+
+    return (2.0*M_PI*M_PI - 2.0*vxy0) / (M_PI*M_PI + vxy0 + M_PI*M_SQRT2*sqrt(fmax(0.0, vxy0 + kxy(x, y, s))));
+}
+
+static double ro2xy(double x, double y, double s)
+{
+    const double vxy0 = vxy(x, y, s);
+
+    return (M_PI*M_PI + vxy0 - M_PI*M_SQRT2*sqrt(fmax(0.0, vxy0 + kxy(x, y, s)))) / (M_PI*M_PI + vxy0 + M_PI*M_SQRT2*sqrt(fmax(0.0, vxy0 + kxy(x, y, s))));
 }
 
 static int config_filter(AVFilterLink *outlink, int reset)
@@ -442,57 +346,25 @@ static int config_filter(AVFilterLink *outlink, int reset)
     AVFilterContext *ctx    = outlink->src;
     BiquadsContext *s       = ctx->priv;
     AVFilterLink *inlink    = ctx->inputs[0];
-    double gain = s->gain * ((s->filter_type == tiltshelf) + 1.);
-    const double A = ff_exp10(gain / 40.0);
-    const double w0 = 2.0 * M_PI * s->frequency / inlink->sample_rate;
-    const double cos_w0 = cos(w0);
-    const double sin_w0 = sin(w0);
-    double alpha, beta, width;
+    const double gain = s->gain * ((s->filter_type == tiltshelf) + 1.);
+    const double g = ff_exp10(gain / 20.0);
+    const int sample_rate = inlink->sample_rate;
+    const double w = sample_rate / (s->frequency + DBL_EPSILON);
+    double qfactor, a1, a2, b1, b2, G, e;
+    const double sigma_factor = s->sigma_factor;
+    const double fclim = fmin(s->frequency,0.75*sample_rate*0.5);
+    const double wlim = sample_rate / fclim;
+    const double warp = cos(2.0*M_PI/wlim);
+    const double sigma = (sigma_factor >= 0.0) ? sigma_factor : sqrt(wlim*wlim-(1.0+warp)/(1.0-warp)*M_PI*M_PI);
 
-    s->bypass = (((w0 > M_PI || w0 <= 0.) && reset) || (s->width <= 0.)) && (s->filter_type != biquad && s->filter_type != transform);
+    s->bypass = (((w < 0.) && reset) || (s->width <= 0.)) && (s->filter_type != biquad && s->filter_type != transform);
     if (s->bypass) {
         av_log(ctx, AV_LOG_WARNING, "Invalid frequency and/or width!\n");
         return 0;
     }
 
-    if ((w0 > M_PI || w0 <= 0.) && (s->filter_type != biquad && s->filter_type != transform))
-        return AVERROR(EINVAL);
-
-    width = s->width;
-    if (s->decramp) {
-        double scale = tan(w0*0.5)+1.0;
-
-        if (s->width_type == HERTZ ||
-            s->width_type == KHERTZ)
-            width *= scale;
-        else
-            width /= scale;
-    }
-
-    switch (s->width_type) {
-    case NONE:
-        alpha = 0.0;
-        break;
-    case HERTZ:
-        alpha = sin_w0 / (2.0 * s->frequency / width);
-        break;
-    case KHERTZ:
-        alpha = sin_w0 / (2.0 * s->frequency / (width * 1000.0));
-        break;
-    case OCTAVE:
-        alpha = sin_w0 * sinh(log(2.) / 2.0 * width * w0 / sin_w0);
-        break;
-    case QFACTOR:
-        alpha = sin_w0 / (2.0 * width);
-        break;
-    case SLOPE:
-        alpha = sin_w0 / 2.0 * sqrt((A + 1.0 / A) * (1.0 / width - 1.0) + 2.0);
-        break;
-    default:
-        av_assert0(0);
-    }
-
-    beta = 2 * sqrt(A);
+    qfactor = convert_width2qfactor(s->width, s->frequency, s->gain, sample_rate, s->width_type);
+    e = 1.0 / (2.0 * qfactor);
 
     switch (s->filter_type) {
     case biquad:
@@ -504,142 +376,114 @@ static int config_filter(AVFilterLink *outlink, int reset)
         s->b[2] = s->ob[2];
         break;
     case equalizer:
-        s->a[0] =   1.0 + alpha / A;
-        s->a[1] =  -2.0 * cos_w0;
-        s->a[2] =   1.0 - alpha / A;
-        s->b[0] =   1.0 + alpha * A;
-        s->b[1] =  -2.0 * cos_w0;
-        s->b[2] =   1.0 - alpha * A;
+        a1 = ro1xy(w, e * sqrt(g), sigma);
+        a2 = ro2xy(w, e * sqrt(g), sigma);
+        b1 = ro1xy(w, e * (1.0/sqrt(g)), sigma);
+        b2 = ro2xy(w, e * (1.0/sqrt(g)), sigma);
+        G = 1.0 / (1.0 + a1 + a2);
         break;
     case bass:
-        beta = sqrt((A * A + 1) - (A - 1) * (A - 1));
     case tiltshelf:
     case lowshelf:
         if (s->order == 1) {
-            s->a[0] = sin_w0 / A + 1.0 + cos_w0;
-            s->a[1] = sin_w0 / A - 1.0 - cos_w0;
-            s->a[2] = 0.0;
-            s->b[0] = sin_w0 * A + 1.0 + cos_w0;
-            s->b[1] = sin_w0 * A - 1.0 - cos_w0;
-            s->b[2] = 0.0;
+            a1 = rox(w/sqrt(g), sigma);
+            a2 = 0.0;
+            b1 = rox(w*sqrt(g), sigma);
+            b2 = 0.0;
+            G = g / (1.0 + a1);
         } else {
-            s->a[0] =          (A + 1) + (A - 1) * cos_w0 + beta * alpha;
-            s->a[1] =    -2 * ((A - 1) + (A + 1) * cos_w0);
-            s->a[2] =          (A + 1) + (A - 1) * cos_w0 - beta * alpha;
-            s->b[0] =     A * ((A + 1) - (A - 1) * cos_w0 + beta * alpha);
-            s->b[1] = 2 * A * ((A - 1) - (A + 1) * cos_w0);
-            s->b[2] =     A * ((A + 1) - (A - 1) * cos_w0 - beta * alpha);
+            a1 = ro1xy(w/sqrt(sqrt(g)), e, sigma);
+            a2 = ro2xy(w/sqrt(sqrt(g)), e, sigma);
+            b1 = ro1xy(w*sqrt(sqrt(g)), e, sigma);
+            b2 = ro2xy(w*sqrt(sqrt(g)), e, sigma);
+            G = g / (1.0 + a1 + a2);
         }
         break;
     case treble:
-        beta = sqrt((A * A + 1) - (A - 1) * (A - 1));
     case highshelf:
         if (s->order == 1) {
-            s->a[0] = sin_w0 + 1.0/A + cos_w0 / A;
-            s->a[1] = sin_w0 - 1.0/A - cos_w0 / A;
-            s->a[2] = 0.0;
-            s->b[0] = sin_w0 + A + A * cos_w0;
-            s->b[1] = sin_w0 - A - A * cos_w0;
-            s->b[2] = 0.0;
+            a1 = rox(w*sqrt(g), sigma);
+            a2 = 0.0;
+            b1 = rox(w/sqrt(g), sigma);
+            b2 = 0.0;
+            G = 1.0 / (1.0 + a1);
         } else {
-            s->a[0] =          (A + 1) - (A - 1) * cos_w0 + beta * alpha;
-            s->a[1] =     2 * ((A - 1) - (A + 1) * cos_w0);
-            s->a[2] =          (A + 1) - (A - 1) * cos_w0 - beta * alpha;
-            s->b[0] =     A * ((A + 1) + (A - 1) * cos_w0 + beta * alpha);
-            s->b[1] =-2 * A * ((A - 1) + (A + 1) * cos_w0);
-            s->b[2] =     A * ((A + 1) + (A - 1) * cos_w0 - beta * alpha);
+            a1 = ro1xy(w*sqrt(sqrt(g)), e, sigma);
+            a2 = ro2xy(w*sqrt(sqrt(g)), e, sigma);
+            b1 = ro1xy(w/sqrt(sqrt(g)), e, sigma);
+            b2 = ro2xy(w/sqrt(sqrt(g)), e, sigma);
+            G = 1.0 / (1.0 + a1 + a2);
         }
         break;
     case bandpass:
-        if (s->csg) {
-            s->a[0] =  1.0 + alpha;
-            s->a[1] = -2.0 * cos_w0;
-            s->a[2] =  1.0 - alpha;
-            s->b[0] =  sin_w0 * 0.5;
-            s->b[1] =  0;
-            s->b[2] = -sin_w0 * 0.5;
-        } else {
-            s->a[0] =  1.0 + alpha;
-            s->a[1] = -2.0 * cos_w0;
-            s->a[2] =  1.0 - alpha;
-            s->b[0] =  alpha;
-            s->b[1] =  0.0;
-            s->b[2] = -alpha;
-        }
+        a1 = rox(0.0, sigma) + -1.0;
+        a2 = rox(0.0, sigma) * -1.0;
+        b1 = ro1xy(w, e, sigma);
+        b2 = ro2xy(w, e, sigma);
+        G = (w/(2.0*M_PI)) * ((2.0-s->csg) * e / (1.0 + rox(0.0, sigma)));
         break;
     case bandreject:
-        s->a[0] =  1.0 + alpha;
-        s->a[1] = -2.0 * cos_w0;
-        s->a[2] =  1.0 - alpha;
-        s->b[0] =  1.0;
-        s->b[1] = -2.0 * cos_w0;
-        s->b[2] =  1.0;
+        a1 = ro1xy(w, 0.0, sigma);
+        a2 = ro2xy(w, 0.0, sigma);
+        b1 = ro1xy(w, e, sigma);
+        b2 = ro2xy(w, e, sigma);
+        G = 1.0 / (1.0 + a1 + a2);
         break;
     case peakpass:
-        s->a[0] =  1.0 + alpha;
-        s->a[1] = -2.0 * cos_w0;
-        s->a[2] =  1.0 - alpha;
-        s->b[0] = -cos_w0;
-        s->b[1] =  2.0;
-        s->b[2] = -cos_w0;
+        a1 = ro1xy(w, 0.0, sigma);
+        a2 = ro2xy(w, 0.0, sigma);
+        b1 = ro1xy(w, e, sigma);
+        b2 = ro2xy(w, e, sigma);
+        G = 1.0 / (1.0 + a1 + a2);
         break;
     case lowpass:
         if (s->order == 1) {
-            s->a[0] = sin_w0 + 1.0 + cos_w0;
-            s->a[1] = sin_w0 - 1.0 - cos_w0;
-            s->a[2] = 0.0;
-            s->b[0] = sin_w0;
-            s->b[1] = sin_w0;
-            s->b[2] = 0.0;
+            a1 = rox(0.0, sigma);
+            a2 = 0.0;
+            b1 = rox(w, sigma);
+            b2 = 0.0;
+            G = 1.0 / (1.0 + a1);
         } else {
-            s->a[0] =  1.0 + alpha;
-            s->a[1] = -2.0 * cos_w0;
-            s->a[2] =  1.0 - alpha;
-            s->b[0] = (1.0 - cos_w0) * 0.5;
-            s->b[1] =  1.0 - cos_w0;
-            s->b[2] = (1.0 - cos_w0) * 0.5;
+            a1 = 2.0 * rox(0.0, sigma);
+            a2 = rox(0.0, sigma) * rox(0.0, sigma);
+            b1 = ro1xy(w, e, sigma);
+            b2 = ro2xy(w, e, sigma);
+            G = 1.0 / (1.0 + a1 + a2);
         }
         break;
     case highpass:
         if (s->order == 1) {
-            s->a[0] = sin_w0 + 1.0 + cos_w0;
-            s->a[1] = sin_w0 - 1.0 - cos_w0;
-            s->a[2] = 0.0;
-            s->b[0] = 1.0 + cos_w0;
-            s->b[1] = -s->b[0];
-            s->b[2] = 0.0;
+            a1 = -1.0;
+            a2 = 0.0;
+            b1 = rox(w, sigma);
+            b2 = 0.0;
+            G = w / (2.0 * M_PI);
         } else {
-            s->a[0] =   1.0 + alpha;
-            s->a[1] =  -2.0 * cos_w0;
-            s->a[2] =   1.0 - alpha;
-            s->b[0] =  (1.0 + cos_w0) * 0.5;
-            s->b[1] = -(1.0 + cos_w0);
-            s->b[2] =  (1.0 + cos_w0) * 0.5;
+            a1 = -2.0;
+            a2 = 1.0;
+            b1 = ro1xy(w, e, sigma);
+            b2 = ro2xy(w, e, sigma);
+            G = w*w/(4.0*M_PI*M_PI);
         }
         break;
     case allpass:
-        switch (s->order) {
-        case 1:
-            s->a[0] = sin_w0 + 1.0 + cos_w0;
-            s->a[1] = sin_w0 - 1.0 - cos_w0;
-            s->a[2] = 0.;
-            s->b[0] = s->a[1];
-            s->b[1] = s->a[0];
-            s->b[2] = 0.;
-            break;
-        case 2:
-            s->a[0] =  1.0 + alpha;
-            s->a[1] = -2.0 * cos_w0;
-            s->a[2] =  1.0 - alpha;
-            s->b[0] =  1.0 - alpha;
-            s->b[1] = -2.0 * cos_w0;
-            s->b[2] =  1.0 + alpha;
-        break;
+        if (s->order == 1) {
+            a1 = 1.0 / rox(w, sigma);
+            a2 = 0.0;
+            b1 = rox(w, sigma);
+            b2 = 0.0;
+            G = 1.0 / (1.0 + a1);
+        } else {
+            a1 = ro1xy(w, e, sigma) / ro2xy(w, e, sigma);
+            a2 = 1.0 / ro2xy(w, e, sigma);
+            b1 = ro1xy(w, e, sigma);
+            b2 = ro2xy(w, e, sigma);
+            G = 1.0 / (1.0 + a1 + a2);
         }
         break;
     case transform:
         {
-            const double fs = inlink->sample_rate;
+            const double fs = sample_rate;
             const double fz = s->fz, qz = s->qz;
             const double fp = s->fp, qp = s->qp;
 
@@ -658,6 +502,16 @@ static int config_filter(AVFilterLink *outlink, int reset)
         break;
     default:
         av_assert0(0);
+    }
+
+    if (s->filter_type != biquad &&
+        s->filter_type != transform) {
+        s->a[0] = 1.0;
+        s->a[1] = b1;
+        s->a[2] = b2;
+        s->b[0] = G * (1.0 + b1 + b2) * 1.0;
+        s->b[1] = G * (1.0 + b1 + b2) * a1;
+        s->b[2] = G * (1.0 + b1 + b2) * a2;
     }
 
     av_log(ctx, AV_LOG_VERBOSE, "a=%f %f %f:b=%f %f %f\n",
@@ -682,9 +536,9 @@ static int config_filter(AVFilterLink *outlink, int reset)
 
     switch (s->filter_type) {
     case tiltshelf:
-        s->b[0] /= A;
-        s->b[1] /= A;
-        s->b[2] /= A;
+        s->b[0] /= g;
+        s->b[1] /= g;
+        s->b[2] /= g;
         break;
     }
 
@@ -873,7 +727,7 @@ static int config_filter(AVFilterLink *outlink, int reset)
     else if (s->transform_type == WDF)
         convert_dir2wdf(s);
     else if (s->transform_type == ZDF)
-        convert_dir2zdf(s, inlink->sample_rate);
+        convert_dir2zdf(s);
 
     return s->init_state(ctx, &s->st, outlink->ch_layout.nb_channels,
                          s->block_samples, reset, s->a, s->b, s->mix);
@@ -1165,19 +1019,19 @@ const FFFilter ff_af_##name_ = {                         \
     AVFILTER_DEFINE_CLASS(name);                                        \
     DEFINE_BIQUAD_FILTER_2(name, description, name)
 
+#define MATCH_FACTOR_OPTION(x)                                                                                   \
+    {"match_factor", "set match factor", OFFSET(sigma_factor), AV_OPT_TYPE_DOUBLE, {.dbl=x}, -1.0, M_PI, FLAGS}, \
+    {"s",            "set match factor", OFFSET(sigma_factor), AV_OPT_TYPE_DOUBLE, {.dbl=x}, -1.0, M_PI, FLAGS}
+
 #define WIDTH_OPTION(x)                                                                   \
     {"width", "set width", OFFSET(width), AV_OPT_TYPE_DOUBLE, {.dbl=x}, 0, 99999, FLAGS}, \
     {"w",     "set width", OFFSET(width), AV_OPT_TYPE_DOUBLE, {.dbl=x}, 0, 99999, FLAGS}
 
-#define DECRAMP_OPTION(x)                                                                 \
-    {"decramp","enable decramping", OFFSET(decramp), AV_OPT_TYPE_BOOL, {.i64=x}, 0, 1, FLAGS},  \
-    {"d",      "enable decramping", OFFSET(decramp), AV_OPT_TYPE_BOOL, {.i64=x}, 0, 1, FLAGS}
-
-#define ORDER_OPTION(x)                                                                   \
+#define ORDER_OPTION(x)                                                                \
     {"order", "set filter order", OFFSET(order), AV_OPT_TYPE_INT, {.i64=x}, 1, 2, AF}, \
     {"o",     "set filter order", OFFSET(order), AV_OPT_TYPE_INT, {.i64=x}, 1, 2, AF}
 
-#define WIDTH_TYPE_OPTION(x)                                                                                                        \
+#define WIDTH_TYPE_OPTION(x)                                                                                                                \
     {"width_type", "set filter-width type", OFFSET(width_type), AV_OPT_TYPE_INT, {.i64=x}, HERTZ, NB_WTYPE-1, FLAGS, .unit = "width_type"}, \
     {"t",          "set filter-width type", OFFSET(width_type), AV_OPT_TYPE_INT, {.i64=x}, HERTZ, NB_WTYPE-1, FLAGS, .unit = "width_type"}, \
     {"h", "Hz", 0, AV_OPT_TYPE_CONST, {.i64=HERTZ}, 0, 0, FLAGS, .unit = "width_type"},                                                     \
@@ -1189,12 +1043,12 @@ const FFFilter ff_af_##name_ = {                         \
 #define MIX_CHANNELS_NORMALIZE_OPTION(x, y, z)                                                                \
     {"mix", "set mix", OFFSET(mix), AV_OPT_TYPE_DOUBLE, {.dbl=x}, 0, 1, FLAGS},                               \
     {"m",   "set mix", OFFSET(mix), AV_OPT_TYPE_DOUBLE, {.dbl=x}, 0, 1, FLAGS},                               \
-    {"channels", "set channels to filter", OFFSET(ch_layout),  AV_OPT_TYPE_CHLAYOUT, {.str=y}, 0, 0, FLAGS}, \
-    {"c",        "set channels to filter", OFFSET(ch_layout),  AV_OPT_TYPE_CHLAYOUT, {.str=y}, 0, 0, FLAGS}, \
+    {"channels", "set channels to filter", OFFSET(ch_layout),  AV_OPT_TYPE_CHLAYOUT, {.str=y}, 0, 0, FLAGS},  \
+    {"c",        "set channels to filter", OFFSET(ch_layout),  AV_OPT_TYPE_CHLAYOUT, {.str=y}, 0, 0, FLAGS},  \
     {"normalize", "normalize coefficients", OFFSET(normalize), AV_OPT_TYPE_BOOL, {.i64=z}, 0, 1, FLAGS},      \
     {"n",         "normalize coefficients", OFFSET(normalize), AV_OPT_TYPE_BOOL, {.i64=z}, 0, 1, FLAGS}
 
-#define TRANSFORM_OPTION(x)                                                                                                      \
+#define TRANSFORM_OPTION(x)                                                                                                              \
     {"transform", "set transform type", OFFSET(transform_type), AV_OPT_TYPE_INT, {.i64=x}, 0, NB_TTYPE-1, AF, .unit = "transform_type"}, \
     {"a",         "set transform type", OFFSET(transform_type), AV_OPT_TYPE_INT, {.i64=x}, 0, NB_TTYPE-1, AF, .unit = "transform_type"}, \
     {"di",   "direct form I",  0, AV_OPT_TYPE_CONST, {.i64=DI}, 0, 0, AF, .unit = "transform_type"},                                     \
@@ -1206,14 +1060,14 @@ const FFFilter ff_af_##name_ = {                         \
     {"zdf",  "zero-delay filter form", 0, AV_OPT_TYPE_CONST, {.i64=ZDF}, 0, 0, AF, .unit = "transform_type"},                            \
     {"wdf",  "wave digital filter form", 0, AV_OPT_TYPE_CONST, {.i64=WDF}, 0, 0, AF, .unit = "transform_type"}
 
-#define PRECISION_OPTION(x)                                                                                           \
-    {"precision", "set filtering precision", OFFSET(precision), AV_OPT_TYPE_INT, {.i64=x}, -1, 4, AF, .unit = "precision"},   \
-    {"r",         "set filtering precision", OFFSET(precision), AV_OPT_TYPE_INT, {.i64=x}, -1, 4, AF, .unit = "precision"},   \
-    {"auto", "automatic",            0, AV_OPT_TYPE_CONST, {.i64=-1}, 0, 0, AF, .unit = "precision"},                         \
-    {"u8",  "unsigned 8-bit",        0, AV_OPT_TYPE_CONST, {.i64=4},  0, 0, AF, .unit = "precision"},                         \
-    {"s16", "signed 16-bit",         0, AV_OPT_TYPE_CONST, {.i64=0},  0, 0, AF, .unit = "precision"},                         \
-    {"s32", "signed 32-bit",         0, AV_OPT_TYPE_CONST, {.i64=1},  0, 0, AF, .unit = "precision"},                         \
-    {"f32", "floating-point single", 0, AV_OPT_TYPE_CONST, {.i64=2},  0, 0, AF, .unit = "precision"},                         \
+#define PRECISION_OPTION(x)                                                                                                 \
+    {"precision", "set filtering precision", OFFSET(precision), AV_OPT_TYPE_INT, {.i64=x}, -1, 4, AF, .unit = "precision"}, \
+    {"r",         "set filtering precision", OFFSET(precision), AV_OPT_TYPE_INT, {.i64=x}, -1, 4, AF, .unit = "precision"}, \
+    {"auto", "automatic",            0, AV_OPT_TYPE_CONST, {.i64=-1}, 0, 0, AF, .unit = "precision"},                       \
+    {"u8",  "unsigned 8-bit",        0, AV_OPT_TYPE_CONST, {.i64=4},  0, 0, AF, .unit = "precision"},                       \
+    {"s16", "signed 16-bit",         0, AV_OPT_TYPE_CONST, {.i64=0},  0, 0, AF, .unit = "precision"},                       \
+    {"s32", "signed 32-bit",         0, AV_OPT_TYPE_CONST, {.i64=1},  0, 0, AF, .unit = "precision"},                       \
+    {"f32", "floating-point single", 0, AV_OPT_TYPE_CONST, {.i64=2},  0, 0, AF, .unit = "precision"},                       \
     {"f64", "floating-point double", 0, AV_OPT_TYPE_CONST, {.i64=3},  0, 0, AF, .unit = "precision"}
 
 #define BLOCKSIZE_OPTION(x)                                                                              \
@@ -1226,13 +1080,13 @@ static const AVOption equalizer_options[] = {
     {"f",         "set central frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=0}, 0, 999999, FLAGS},
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(1.0),
-    DECRAMP_OPTION(0),
     {"gain", "set gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, -900, 900, FLAGS},
     {"g",    "set gain", OFFSET(gain), AV_OPT_TYPE_DOUBLE, {.dbl=0}, -900, 900, FLAGS},
     MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
+    MATCH_FACTOR_OPTION(-1.0),
     {NULL}
 };
 
@@ -1251,6 +1105,7 @@ static const AVOption bass_lowshelf_options[] = {
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
+    MATCH_FACTOR_OPTION(-1.0),
     {NULL}
 };
 
@@ -1276,6 +1131,7 @@ static const AVOption treble_highshelf_options[] = {
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
+    MATCH_FACTOR_OPTION(-1.0),
     {NULL}
 };
 
@@ -1301,12 +1157,12 @@ static const AVOption bandpass_options[] = {
     {"f",         "set central frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=3000}, 0, 999999, FLAGS},
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(0.5),
-    DECRAMP_OPTION(0),
     {"csg",   "use constant skirt gain", OFFSET(csg), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS},
     MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
+    MATCH_FACTOR_OPTION(-1.0),
     {NULL}
 };
 
@@ -1318,11 +1174,11 @@ static const AVOption bandreject_options[] = {
     {"f",         "set central frequency", OFFSET(frequency), AV_OPT_TYPE_DOUBLE, {.dbl=3000}, 0, 999999, FLAGS},
     WIDTH_TYPE_OPTION(QFACTOR),
     WIDTH_OPTION(0.5),
-    DECRAMP_OPTION(0),
     MIX_CHANNELS_NORMALIZE_OPTION(1, "24c", 0),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
+    MATCH_FACTOR_OPTION(-1.0),
     {NULL}
 };
 
@@ -1339,6 +1195,7 @@ static const AVOption lowpass_options[] = {
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
+    MATCH_FACTOR_OPTION(-1.0),
     {NULL}
 };
 
@@ -1355,6 +1212,7 @@ static const AVOption highpass_options[] = {
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
+    MATCH_FACTOR_OPTION(-1.0),
     {NULL}
 };
 
@@ -1370,6 +1228,7 @@ static const AVOption allpass_options[] = {
     ORDER_OPTION(2),
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
+    MATCH_FACTOR_OPTION(-1.0),
     {NULL}
 };
 
@@ -1418,6 +1277,7 @@ static const AVOption peakpass_options[] = {
     TRANSFORM_OPTION(DI),
     PRECISION_OPTION(-1),
     BLOCKSIZE_OPTION(0),
+    MATCH_FACTOR_OPTION(-1.0),
     {NULL}
 };
 
