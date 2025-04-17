@@ -646,8 +646,11 @@ static int gate_update(struct integrator *integ, double power,
 static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csamples,
                                  int nb_samples)
 {
+    if (ebur128->idx_insample)
+        return 0;
+
 #if CONFIG_SWRESAMPLE
-    if (ebur128->peak_mode & PEAK_MODE_TRUE_PEAKS && ebur128->idx_insample == 0) {
+    if (ebur128->peak_mode & PEAK_MODE_TRUE_PEAKS) {
         uint8_t **swr_samples = ebur128->swr_buf->extended_data;
         const int nb_channels = ebur128->nb_channels;
         int nb_out_samples = swr_get_out_samples(ebur128->swr_ctx, nb_samples);
@@ -680,7 +683,7 @@ static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csampl
         }
     }
 #endif
-    if (ebur128->peak_mode & PEAK_MODE_SAMPLES_PEAKS && ebur128->idx_insample == 0) {
+    if (ebur128->peak_mode & PEAK_MODE_SAMPLES_PEAKS) {
         const int nb_channels = ebur128->nb_channels;
 
         for (int ch = 0; ch < nb_channels; ch++)
@@ -904,6 +907,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     AVFilterLink *outlink = ctx->outputs[0];
     const int nb_channels = ebur128->nb_channels;
     const int nb_samples  = insamples->nb_samples;
+    const int block_samples = inlink->sample_rate / 10;
     const uint8_t **samples = (const uint8_t **)insamples->extended_data;
     AVFrame *pic;
 
@@ -917,7 +921,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
         /* For integrated loudness, gating blocks are 400ms long with 75%
          * overlap (see BS.1770-2 p5), so a re-computation is needed each 100ms
          * (4800 samples at 48kHz). */
-        if (++ebur128->sample_count == inlink->sample_rate / 10) {
+        if (++ebur128->sample_count == block_samples) {
             double loudness_400, loudness_3000, loudness_integrated, peak;
             const int64_t pts = insamples->pts +
                 av_rescale_q(idx_insample, (AVRational){ 1, inlink->sample_rate },
@@ -1518,6 +1522,7 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
     EBUR128Context *r128_in = &s->r128_in;
     const int nb_channels = s->nb_channels;
     int nb_samples = in ? in->nb_samples : 0;
+    const int block_samples = inlink->sample_rate / 10;
     const uint8_t **samples = in ? ((const uint8_t **)in->extended_data) : NULL;
     AVFrame *out;
     int ret;
@@ -1530,7 +1535,7 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     for (int idx_insample = r128_in->idx_insample; idx_insample < nb_samples; idx_insample++) {
         process_ebur128(r128_in, samples, idx_insample);
-        if (++r128_in->sample_count == inlink->sample_rate / 10) {
+        if (++r128_in->sample_count == block_samples) {
             double peak;
 
             ebur128_loudness(inlink, r128_in, &s->i400, &s->i3000, &s->integrated, &peak);
