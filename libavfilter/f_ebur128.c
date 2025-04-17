@@ -711,6 +711,16 @@ static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, c
     const int nb_channels = ebur128->nb_channels;
     const int bin_id_400  = ebur128->i400.cache_pos;
     const int bin_id_3000 = ebur128->i3000.cache_pos;
+    const double *ch_weighting = ebur128->ch_weighting;
+    const double *pre_b = ebur128->pre_b;
+    const double *pre_a = ebur128->pre_a;
+    const double *rlb_b = ebur128->rlb_b;
+    const double *rlb_a = ebur128->rlb_a;
+    struct integrator *i3000 = &ebur128->i3000;
+    struct integrator *i400 = &ebur128->i400;
+    double *x = ebur128->x;
+    double *y = ebur128->y;
+    double *z = ebur128->z;
 
 #define MOVE_TO_NEXT_CACHED_ENTRY(time) do {                \
     ebur128->i##time.cache_pos++;                           \
@@ -727,14 +737,15 @@ static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, c
     for (int ch = 0; ch < nb_channels; ch++) {
         const double *samples = (const double *)csamples[ch];
         const double sample = samples[idx];
-        double *xx = ebur128->x + ch * 3;
-        double *yy = ebur128->y + ch * 3;
-        double *zz = ebur128->z + ch * 3;
+        const int ch3 = ch * 3;
+        double *xx = x + ch3;
+        double *yy = y + ch3;
+        double *zz = z + ch3;
         double bin;
 
         xx[0] = sample; // set X[i]
 
-        if (!ebur128->ch_weighting[ch])
+        if (!ch_weighting[ch])
             continue;
 
         /* Y[i] = X[i]*b0 + X[i-1]*b1 + X[i-2]*b2 - Y[i-1]*a1 - Y[i-2]*a2 */
@@ -748,21 +759,21 @@ static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, c
 } while (0)
 
         // TODO: merge both filters in one?
-        FILTER(yy, xx, ebur128->pre_b, ebur128->pre_a);  // apply pre-filter
+        FILTER(yy, xx, pre_b, pre_a);  // apply pre-filter
         xx[2] = xx[1];
         xx[1] = xx[0];
-        FILTER(zz, yy, ebur128->rlb_b, ebur128->rlb_a);  // apply RLB-filter
+        FILTER(zz, yy, rlb_b, rlb_a);  // apply RLB-filter
 
         bin = zz[0] * zz[0];
 
         /* add the new value, and limit the sum to the cache size (400ms or 3s)
          * by removing the oldest one */
-        ebur128->i400.sum [ch] = ebur128->i400.sum [ch] + bin - ebur128->i400.cache [ch][bin_id_400];
-        ebur128->i3000.sum[ch] = ebur128->i3000.sum[ch] + bin - ebur128->i3000.cache[ch][bin_id_3000];
+        i400->sum [ch] += bin - i400->cache [ch][bin_id_400];
+        i3000->sum[ch] += bin - i3000->cache[ch][bin_id_3000];
 
         /* override old cache entry with the new value */
-        ebur128->i400.cache [ch][bin_id_400 ] = bin;
-        ebur128->i3000.cache[ch][bin_id_3000] = bin;
+        i400->cache [ch][bin_id_400 ] = bin;
+        i3000->cache[ch][bin_id_3000] = bin;
     }
 
 #define FIND_PEAK(global, sp, ptype) do {                        \
