@@ -780,11 +780,9 @@ static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, c
     }
 
 #define FIND_PEAK(global, sp, ptype) do {                        \
-    int ch;                                                      \
-    double maxpeak;                                              \
-    maxpeak = 0.0;                                               \
+    double maxpeak = 0.0;                                        \
     if (ebur128->peak_mode & PEAK_MODE_ ## ptype ## _PEAKS) {    \
-        for (ch = 0; ch < nb_channels; ch++)                     \
+        for (int ch = 0; ch < nb_channels; ch++)                 \
             maxpeak = FFMAX(maxpeak, sp[ch]);                    \
         global = DBFS(maxpeak);                                  \
     }                                                            \
