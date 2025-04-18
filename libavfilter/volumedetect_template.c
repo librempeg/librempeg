@@ -151,17 +151,17 @@ static void fn(print_stats)(AVFilterContext *ctx)
 
 static void fn(update_stats)(VolDetectContext *s, stype sample)
 {
-    int idx;
+    ftype asample = FABS(sample);
+    unsigned idx;
 
-    sample = FABS(sample);
 #if DEPTH == 32
-    s->max = fmaxf(s->max, sample);
-    s->sum2 += sample*sample;
+    s->max = fmaxf(s->max, asample);
+    s->sum2 += asample*asample;
 #elif DEPTH == 64
-    s->max = fmax(s->max, sample);
-    s->sum2 += sample*sample;
+    s->max = fmax(s->max, asample);
+    s->sum2 += asample*asample;
 #endif
-    idx = fn(get_index)(sample);
+    idx = fn(get_index)(asample);
     s->histogram[idx]++;
 }
 
