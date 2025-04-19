@@ -210,6 +210,8 @@ static int config_output(AVFilterLink *outlink)
     case AV_SAMPLE_FMT_FLTP:
         s->filter_channels = s->noise_shaper ? shaper_channels_float : filter_channels_float;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return 0;

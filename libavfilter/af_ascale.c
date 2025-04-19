@@ -396,7 +396,7 @@ static int config_input(AVFilterLink *inlink)
         s->decorrelate_stereo = decorrelate_stereo_fltp;
         break;
     default:
-        return AVERROR(EINVAL);
+        return AVERROR_BUG;
     }
 
     return s->init_state(ctx);

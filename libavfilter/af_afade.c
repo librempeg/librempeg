@@ -116,6 +116,7 @@ static int config_output(AVFilterLink *outlink)
     case AV_SAMPLE_FMT_S32P: s->fade_samples = fade_samplesp_s32;
                              s->scale_samples = scale_samplesp_s32;
                              break;
+    default: return AVERROR_BUG;
     }
 
     if (s->duration)
@@ -481,6 +482,7 @@ static int acrossfade_config_output(AVFilterLink *outlink)
     case AV_SAMPLE_FMT_S16P: s->crossfade_samples = crossfade_samplesp_s16; break;
     case AV_SAMPLE_FMT_S32:  s->crossfade_samples = crossfade_samples_s32;  break;
     case AV_SAMPLE_FMT_S32P: s->crossfade_samples = crossfade_samplesp_s32; break;
+    default: return AVERROR_BUG;
     }
 
     config_output(outlink);

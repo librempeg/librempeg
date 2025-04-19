@@ -128,6 +128,7 @@ static int config_input(AVFilterLink *inlink)
     case AV_SAMPLE_FMT_DBL:  s->filter = filter_dbl;  break;
     case AV_SAMPLE_FMT_FLTP: s->filter = filter_fltp; break;
     case AV_SAMPLE_FMT_DBLP: s->filter = filter_dblp; break;
+    default: return AVERROR_BUG;
     }
 
     return 0;
