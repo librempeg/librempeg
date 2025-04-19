@@ -99,29 +99,29 @@ static void bprint_bytes(AVBPrint *bp, const uint8_t *ubuf, size_t ubuf_size)
         av_bprintf(bp, "%02X", ubuf[i]);
 }
 
-int avtext_context_close(AVTextFormatContext **ptctx)
+void avtext_context_close(AVTextFormatContext **ptctx)
 {
     AVTextFormatContext *tctx = *ptctx;
     int i;
-    int ret = 0;
 
     if (!tctx)
-        return EINVAL;
+        return;
 
     av_hash_freep(&tctx->hash);
 
     av_hash_freep(&tctx->hash);
 
-    if (tctx->formatter->uninit)
-        tctx->formatter->uninit(tctx);
+    if (tctx->formatter) {
+        if (tctx->formatter->uninit)
+            tctx->formatter->uninit(tctx);
+        if (tctx->formatter->priv_class)
+            av_opt_free(tctx->priv);
+    }
     for (i = 0; i < SECTION_MAX_NB_LEVELS; i++)
         av_bprint_finalize(&tctx->section_pbuf[i], NULL);
-    if (tctx->formatter->priv_class)
-        av_opt_free(tctx->priv);
     av_freep(&tctx->priv);
     av_opt_free(tctx);
     av_freep(ptctx);
-    return ret;
 }
 
 
@@ -142,6 +142,12 @@ int avtext_context_open(AVTextFormatContext **ptctx, const AVTextFormatter *form
         goto fail;
     }
 
+    for (int i = 0; i < SECTION_MAX_NB_LEVELS; i++)
+        av_bprint_init(&tctx->section_pbuf[i], 1, AV_BPRINT_SIZE_UNLIMITED);
+
+    tctx->class = &textcontext_class;
+    av_opt_set_defaults(tctx);
+
     if (!(tctx->priv = av_mallocz(formatter->priv_size))) {
         ret = AVERROR(ENOMEM);
         goto fail;
@@ -159,14 +165,11 @@ int avtext_context_open(AVTextFormatContext **ptctx, const AVTextFormatter *form
         goto fail;
     }
 
-    tctx->class = &textcontext_class;
     tctx->formatter = formatter;
     tctx->level = -1;
     tctx->sections = sections;
     tctx->nb_sections = nb_sections;
     tctx->writer = writer_context;
-
-    av_opt_set_defaults(tctx);
 
     if (formatter->priv_class) {
         void *priv_ctx = tctx->priv;
@@ -229,9 +232,6 @@ int avtext_context_open(AVTextFormatContext **ptctx, const AVTextFormatter *form
             }
         }
     }
-
-    for (i = 0; i < SECTION_MAX_NB_LEVELS; i++)
-        av_bprint_init(&tctx->section_pbuf[i], 1, AV_BPRINT_SIZE_UNLIMITED);
 
     if (tctx->formatter->init)
         ret = tctx->formatter->init(tctx);
@@ -460,10 +460,9 @@ int avtext_print_string(AVTextFormatContext *tctx, const char *key, const char *
 void avtext_print_rational(AVTextFormatContext *tctx,
                                          const char *key, AVRational q, char sep)
 {
-    AVBPrint buf;
-    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_AUTOMATIC);
-    av_bprintf(&buf, "%d%c%d", q.num, sep, q.den);
-    avtext_print_string(tctx, key, buf.str, 0);
+    char buf[44];
+    snprintf(buf, sizeof(buf), "%d%c%d", q.num, sep, q.den);
+    avtext_print_string(tctx, key, buf, 0);
 }
 
 void avtext_print_time(AVTextFormatContext *tctx, const char *key,
@@ -583,21 +582,21 @@ static const AVClass textwriter_class = {
 };
 
 
-int avtextwriter_context_close(AVTextWriterContext **pwctx)
+void avtextwriter_context_close(AVTextWriterContext **pwctx)
 {
     AVTextWriterContext *wctx = *pwctx;
-    int ret = 0;
 
     if (!wctx)
-        return EINVAL;
+        return;
 
-    if (wctx->writer->uninit)
-        wctx->writer->uninit(wctx);
-    if (wctx->writer->priv_class)
-        av_opt_free(wctx->priv);
+    if (wctx->writer) {
+        if (wctx->writer->uninit)
+            wctx->writer->uninit(wctx);
+        if (wctx->writer->priv_class)
+            av_opt_free(wctx->priv);
+    }
     av_freep(&wctx->priv);
     av_freep(pwctx);
-    return ret;
 }
 
 

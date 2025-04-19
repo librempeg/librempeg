@@ -28,6 +28,7 @@ typedef struct AudioCL2CLContext {
 
     AVChannelLayout ch_layout;
     int pass;
+    int in_planar, out_planar;
 
     int (*do_cl2cl)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } AudioCL2CLContext;
@@ -47,16 +48,27 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_out)
 {
     const AudioCL2CLContext *s = ctx->priv;
+    static const enum AVSampleFormat sample_fmts[] = {
+        AV_SAMPLE_FMT_U8,  AV_SAMPLE_FMT_U8P,
+        AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_S16P,
+        AV_SAMPLE_FMT_S32, AV_SAMPLE_FMT_S32P,
+        AV_SAMPLE_FMT_S64, AV_SAMPLE_FMT_S64P,
+        AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_FLTP,
+        AV_SAMPLE_FMT_DBL, AV_SAMPLE_FMT_DBLP,
+        AV_SAMPLE_FMT_NONE
+    };
     AVFilterChannelLayouts *layouts;
     AVFilterFormats *formats;
     int ret;
 
-    formats = ff_planar_sample_fmts();
-    if (!formats)
-        return AVERROR(ENOMEM);
+    formats = ff_make_format_list(sample_fmts);
+    if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
+        return ret;
 
-    ret = ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
-    if (ret < 0)
+    formats = ff_make_format_list(sample_fmts);
+    if (formats)
+        formats->flags = FILTER_SAME_BITDEPTH;
+    if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
     layouts = ff_all_channel_counts();
@@ -116,6 +128,9 @@ static int config_input(AVFilterLink *inlink)
     AVFilterLink *outlink = ctx->outputs[0];
     AudioCL2CLContext *s = ctx->priv;
 
+    s->out_planar = av_sample_fmt_is_planar(outlink->format);
+    s->in_planar = av_sample_fmt_is_planar(inlink->format);
+
     if (!av_channel_layout_compare(&outlink->ch_layout,
                                    &inlink->ch_layout)) {
         s->pass = 1;
@@ -123,21 +138,27 @@ static int config_input(AVFilterLink *inlink)
     }
 
     switch (outlink->format) {
+    case AV_SAMPLE_FMT_U8:
     case AV_SAMPLE_FMT_U8P:
         s->do_cl2cl = do_cl2cl_u8p;
         break;
+    case AV_SAMPLE_FMT_S16:
     case AV_SAMPLE_FMT_S16P:
         s->do_cl2cl = do_cl2cl_s16p;
         break;
+    case AV_SAMPLE_FMT_S32:
     case AV_SAMPLE_FMT_S32P:
         s->do_cl2cl = do_cl2cl_s32p;
         break;
+    case AV_SAMPLE_FMT_S64:
     case AV_SAMPLE_FMT_S64P:
         s->do_cl2cl = do_cl2cl_s64p;
         break;
+    case AV_SAMPLE_FMT_FLT:
     case AV_SAMPLE_FMT_FLTP:
         s->do_cl2cl = do_cl2cl_fltp;
         break;
+    case AV_SAMPLE_FMT_DBL:
     case AV_SAMPLE_FMT_DBLP:
         s->do_cl2cl = do_cl2cl_dblp;
         break;

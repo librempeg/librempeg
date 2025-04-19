@@ -44,7 +44,7 @@ typedef struct AudioPhaseMeterContext {
     int do_phasing_detection;
     int w, h;
     AVRational frame_rate;
-    int contrast[4];
+    uint8_t contrast[4];
     uint8_t *mpc_str;
     uint8_t mpc[4];
     int draw_median_phase;
@@ -73,9 +73,7 @@ static const AVOption aphasemeter_options[] = {
     { "r",    "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
     { "size", "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str="800x400"}, 0, 0, FLAGS },
     { "s",    "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str="800x400"}, 0, 0, FLAGS },
-    { "rc", "set red contrast",   OFFSET(contrast[0]), AV_OPT_TYPE_INT, {.i64=2}, 0, 255, FLAGS },
-    { "gc", "set green contrast", OFFSET(contrast[1]), AV_OPT_TYPE_INT, {.i64=7}, 0, 255, FLAGS },
-    { "bc", "set blue contrast",  OFFSET(contrast[2]), AV_OPT_TYPE_INT, {.i64=1}, 0, 255, FLAGS },
+    { "contrast", "set contrast color", OFFSET(contrast), AV_OPT_TYPE_COLOR, {.str="0x020701ff"}, 0, 0, FLAGS },
     { "mpc", "set median phase color", OFFSET(mpc_str), AV_OPT_TYPE_STRING, {.str = "none"}, 0, 0, FLAGS },
     { "video", "set video output", OFFSET(do_video), AV_OPT_TYPE_BOOL, {.i64 = 1}, 0, 1, FLAGS },
     { "phasing", "set mono and out-of-phase detection output", OFFSET(do_phasing_detection), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, FLAGS },
@@ -237,23 +235,26 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     AudioPhaseMeterContext *s = ctx->priv;
-    AVFilterLink *outlink = s->do_video ? ctx->outputs[1] : NULL;
+    const int do_video = s->do_video;
+    AVFilterLink *outlink = do_video ? ctx->outputs[1] : NULL;
     AVFilterLink *aoutlink = ctx->outputs[0];
     AVDictionary **metadata;
     const int rc = s->contrast[0];
     const int gc = s->contrast[1];
     const int bc = s->contrast[2];
+    const int ac = s->contrast[3];
     float fphase = 0;
     AVFrame *out;
     uint8_t *dst;
-    int i, ret;
+    int ret;
     int mono_measurement;
     int out_phase_measurement;
     float tolerance = 1.0f - s->tolerance;
     float angle = cosf(s->angle/180.0f*M_PIf);
+    const int nb_samples = in->nb_samples;
     int64_t new_pts;
 
-    if (s->do_video && (!s->out || s->out->width  != outlink->w ||
+    if (do_video && (!s->out || s->out->width  != outlink->w ||
                                    s->out->height != outlink->h)) {
         av_frame_free(&s->out);
         s->out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
@@ -263,33 +264,33 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
 
         out = s->out;
-        for (i = 0; i < outlink->h; i++)
+        for (int i = 0; i < outlink->h; i++)
             memset(out->data[0] + i * out->linesize[0], 0, outlink->w * 4);
-    } else if (s->do_video) {
+    } else if (do_video) {
         ret = ff_inlink_make_frame_writable(outlink, &s->out);
         if (ret < 0)
             goto fail;
         out = s->out;
-        for (i = outlink->h - 1; i >= 10; i--)
+        for (int i = outlink->h - 1; i >= 10; i--)
             memmove(out->data[0] + (i  ) * out->linesize[0],
                     out->data[0] + (i-1) * out->linesize[0],
                     outlink->w * 4);
-        for (i = 0; i < outlink->w; i++)
+        for (int i = 0; i < outlink->w; i++)
             AV_WL32(out->data[0] + i * 4, 0);
     }
 
-    for (i = 0; i < in->nb_samples; i++) {
+    for (int i = 0; i < nb_samples; i++) {
         const float *src = (float *)in->data[0] + i * 2;
         const float f = src[0] * src[1] / (src[0]*src[0] + src[1] * src[1]) * 2;
         const float phase = isnan(f) ? 1 : f;
         const int x = get_x(phase, s->w);
 
-        if (s->do_video) {
+        if (do_video) {
             dst = out->data[0] + x * 4;
             dst[0] = FFMIN(255, dst[0] + rc);
             dst[1] = FFMIN(255, dst[1] + gc);
             dst[2] = FFMIN(255, dst[2] + bc);
-            dst[3] = 255;
+            dst[3] = FFMIN(255, dst[3] + ac);
         }
         fphase += phase;
     }
@@ -302,7 +303,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             AV_WL32(dst, AV_RL32(s->mpc));
         }
 
-        for (i = 1; i < 10 && i < outlink->h; i++)
+        for (int i = 1; i < 10 && i < outlink->h; i++)
             memcpy(out->data[0] + i * out->linesize[0], out->data[0], outlink->w * 4);
     }
 

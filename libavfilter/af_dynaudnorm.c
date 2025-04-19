@@ -827,13 +827,17 @@ static int flush_buffer(DynamicAudioNormalizerContext *s, AVFilterLink *inlink,
         return AVERROR(ENOMEM);
 
     for (int c = 0; c < s->channels; c++) {
+        const double *dc_correction_value = s->dc_correction_value;
         double *dst_ptr = (double *)out->extended_data[c];
+        const int alt_boundary_mode = s->alt_boundary_mode;
+        const int nb_samples = out->nb_samples;
+        const int dc_correction = s->dc_correction;
 
-        for (int i = 0; i < out->nb_samples; i++) {
-            dst_ptr[i] = s->alt_boundary_mode ? DBL_EPSILON : ((s->target_rms > DBL_EPSILON) ? fmin(s->peak_value, s->target_rms) : s->peak_value);
-            if (s->dc_correction) {
-                dst_ptr[i] *= ((i % 2) == 1) ? -1 : 1;
-                dst_ptr[i] += s->dc_correction_value[c];
+        for (int i = 0; i < nb_samples; i++) {
+            dst_ptr[i] = alt_boundary_mode ? DBL_EPSILON : ((s->target_rms > DBL_EPSILON) ? fmin(s->peak_value, s->target_rms) : s->peak_value);
+            if (dc_correction) {
+                dst_ptr[i] *= (i & 1) ? -1 : 1;
+                dst_ptr[i] += dc_correction_value[c];
             }
         }
     }
