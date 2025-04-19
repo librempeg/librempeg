@@ -139,6 +139,7 @@ enum AVHWDeviceType av_hwdevice_iterate_types(enum AVHWDeviceType prev)
 
 static const AVClass hwdevice_ctx_class = {
     .class_name = "AVHWDeviceContext",
+    .category   = AV_CLASS_CATEGORY_HWDEVICE,
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
