@@ -26,6 +26,7 @@
 
 extern const FFBitStreamFilter ff_aac_adtstoasc_bsf;
 extern const FFBitStreamFilter ff_ahx_to_mp2_bsf;
+extern const FFBitStreamFilter ff_apv_metadata_bsf;
 extern const FFBitStreamFilter ff_av1_frame_merge_bsf;
 extern const FFBitStreamFilter ff_av1_frame_split_bsf;
 extern const FFBitStreamFilter ff_av1_metadata_bsf;
