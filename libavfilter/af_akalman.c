@@ -226,6 +226,8 @@ static int config_output(AVFilterLink *outlink)
 
         s->filter_channels = filter_channels_float;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return 0;
