@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/avstring.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/intreadwrite.h"
@@ -220,8 +221,16 @@ static void mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
     FFStream *const sti = ffstream(st);
     uint16_t crc;
     uint32_t v;
-
-    char version[10];
+    
+    int64_t version_pos;
+    int version_size;
+    char version_byte;
+    int valid_version_byte;
+    unsigned char *version_string;
+    int version_padding_hunch, padding;
+    char mp3hd_byte;
+    unsigned char *xhd3_string;
+    int enable_lame_info = 0;
 
     uint32_t peak   = 0;
     int32_t  r_gain = INT32_MIN, a_gain = INT32_MIN;
@@ -242,7 +251,6 @@ static void mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
 
     /* Xing control flags, four of which can actually be set. */
     ctx.flags = avio_rb32(s->pb);
-    if (ctx.flags & XING_FLAG_FRAMES)
     if (ctx.flags & XING_FLAG_FRAMES)
         mp3->frames = avio_rb32(s->pb);
     if (ctx.flags & XING_FLAG_SIZE)
@@ -269,60 +277,156 @@ static void mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
                       st->time_base));
 
     /* VBR quality scale */
-    if (ctx.flags & XING_FLAG_QSCALE)
+    if (ctx.flags & XING_FLAG_QSCALE) {
         ctx.vbr_qscale = avio_rb32(s->pb);
-
-    /* Encoder short version string */
-    memset(version, 0, sizeof(version));
-    avio_read(s->pb, version, 9);
-    // (todo) LAME 3.100 encoder version string is *a lot longer than that*
-    // (todo) test "GoGo-no-Coda" MP3s too, similar signature as LAME MP3s pre-3.100.
-    // (todo) MP3HD has no encoder version string, it has two separate strings instead:
-    // these are "mp3HD" and "XHD3", respectively.
-
-    /* Info Tag revision + VBR method */
-    ctx.tag_info1 = avio_r8(s->pb);
-
-    /* Lowpass filter value */
-    ctx.lowpass = avio_r8(s->pb);
-
-    /* ReplayGain peak */
-    ctx.rg_peak = avio_rb32(s->pb);
-    peak = av_rescale(ctx.rg_peak, 100000, 1 << 23);
-
-    /* Radio ReplayGain */
-    ctx.rg_radio = avio_rb16(s->pb);
-
-    if (MIDDLE_BITS(ctx.rg_radio, 13, 15) == 1) {
-        r_gain = MIDDLE_BITS(ctx.rg_radio, 0, 8) * 10000;
-
-        if (ctx.rg_radio & (1 << 9))
-            r_gain *= -1;
     }
 
-    /* Audiophile ReplayGain */
-    ctx.rg_ap = avio_rb16(s->pb);
+	// mp3HD VBR files do not have XING_FLAG_QSCALE set,
+	// but leave out a 32-bit field that's always set to zero.
+	if (((ctx.flags & XING_FLAG_QSCALE) != XING_FLAG_QSCALE) && avio_rb32(s->pb)) {
+		avio_seek(s->pb, -4, SEEK_CUR);
+	}
 
-    if (MIDDLE_BITS(ctx.rg_ap, 13, 15) == 2) {
-        a_gain = MIDDLE_BITS(ctx.rg_ap, 0, 8) * 10000;
-
-        if (ctx.rg_ap & (1 << 9))
-            a_gain *= -1;
+    // Encoder short version string.
+    // Or, long, depending on file.
+    // LAME MP3s always had version string; it weighed in at 48 bytes maximum.
+    // However, starting with 3.90, its weight was reduced to just 9 bytes.
+    // "GoGo-no-Coda" MP3s had a version string that weighed 4 bytes.
+    // "Lavc"/"Lavf" MP3s followed LAME's 9-byte version string format.
+    version_pos = avio_tell(s->pb);
+    for (version_size = 0; version_size < (version_size+1); version_size++, valid_version_byte = 0) {
+		version_byte = avio_r8(s->pb);
+		
+		if (
+			((version_byte >= 'a') && (version_byte <= 'z'))
+			||
+			((version_byte >= 'A') && (version_byte <= 'Z'))
+			||
+			((version_byte >= '0') && (version_byte <= '9'))
+			||
+			(version_byte == '.')
+			||
+			(version_byte == '-')
+		   )
+		   {
+			valid_version_byte = 1;
+		   }
+   
+		if (!valid_version_byte)
+			break;
+	}
+	
+	if (version_size) {
+		avio_seek(s->pb, version_pos, SEEK_SET);
+		version_string = av_mallocz(version_size+1);
+	    avio_read(s->pb, version_string, version_size);
     }
-
-    /* Encoding flags + ATH Type */
-    ctx.tag_info2 = avio_r8(s->pb);
-
-    /* if ABR {specified bitrate} else {minimal bitrate} */
-    ctx.delay_info = avio_rb24(s->pb);
-
-    /* Encoder delays */
-    v = avio_rb24(s->pb);
-    if (AV_RB32(version) == MKBETAG('L', 'A', 'M', 'E')
-        || AV_RB32(version) == MKBETAG('L', 'a', 'v', 'f')
-        || AV_RB32(version) == MKBETAG('L', 'a', 'v', 'c')
-    ) {
-
+    
+    // observe any remaining padding out of a 9-byte string.
+    if (av_strcasecmp(version_string, "GOGO") > version_size) {
+	    if (version_size <= 9)
+	    	version_padding_hunch = 9 - version_size;
+		else
+	 		version_padding_hunch = 0;
+		
+		if (version_padding_hunch) {
+			version_pos = avio_tell(s->pb);
+	    	for (padding = 0; padding < version_padding_hunch; padding++) {
+				if (avio_r8(s->pb))
+					break;
+			}
+			
+			if (padding != version_padding_hunch)
+				avio_seek(s->pb, version_pos, SEEK_SET);
+	    }
+    }
+    
+    if (!av_strcasecmp(version_string, "mp3HD")) {
+		mp3hd_byte = avio_r8(s->pb);
+		
+		// i guess, this is the part where i gatekeep another string read?
+		if (mp3hd_byte == 1) {
+			version_pos = avio_tell(s->pb);
+		    for (version_size = 0; version_size < (version_size+1); version_size++, valid_version_byte = 0) {
+				version_byte = avio_r8(s->pb);
+				
+				if (
+					((version_byte >= 'a') && (version_byte <= 'z'))
+					||
+					((version_byte >= 'A') && (version_byte <= 'Z'))
+					||
+					((version_byte >= '0') && (version_byte <= '9'))
+					||
+					(version_byte == '.')
+					||
+					(version_byte == '-')
+				   ) {
+					valid_version_byte = 1;
+				   }
+		   
+				if (!valid_version_byte)
+					break;
+			}
+			
+			avio_seek(s->pb, version_pos, SEEK_SET);
+			xhd3_string = av_mallocz(version_size+1);
+		    avio_read(s->pb, xhd3_string, version_size);
+		    
+		    if (av_strcasecmp(xhd3_string, "XHD3") > version_size)
+		    	return;
+	    } else
+			return;
+	}
+	
+	if (!av_strncasecmp(version_string, "LAME", 4)
+	    ||
+        !av_strncasecmp(version_string, "Lavf", 4)
+        ||
+        !av_strncasecmp(version_string, "Lavc", 4)) {
+		enable_lame_info = 1;
+	}
+    
+    // (todo) test "GoGo-no-Coda" MP3s too.
+    if (enable_lame_info) {
+	    /* Info Tag revision + VBR method */
+	    ctx.tag_info1 = avio_r8(s->pb);
+	
+	    /* Lowpass filter value */
+	    ctx.lowpass = avio_r8(s->pb);
+	
+	    /* ReplayGain peak */
+	    ctx.rg_peak = avio_rb32(s->pb);
+	    peak = av_rescale(ctx.rg_peak, 100000, 1 << 23);
+	
+	    /* Radio ReplayGain */
+	    ctx.rg_radio = avio_rb16(s->pb);
+	
+	    if (MIDDLE_BITS(ctx.rg_radio, 13, 15) == 1) {
+	        r_gain = MIDDLE_BITS(ctx.rg_radio, 0, 8) * 10000;
+	
+	        if (ctx.rg_radio & (1 << 9))
+	            r_gain *= -1;
+	    }
+	
+	    /* Audiophile ReplayGain */
+	    ctx.rg_ap = avio_rb16(s->pb);
+	
+	    if (MIDDLE_BITS(ctx.rg_ap, 13, 15) == 2) {
+	        a_gain = MIDDLE_BITS(ctx.rg_ap, 0, 8) * 10000;
+	
+	        if (ctx.rg_ap & (1 << 9))
+	            a_gain *= -1;
+	    }
+	
+	    /* Encoding flags + ATH Type */
+	    ctx.tag_info2 = avio_r8(s->pb);
+	
+	    /* if ABR {specified bitrate} else {minimal bitrate} */
+	    ctx.bitrate_info = avio_rb24(s->pb);
+	
+	    /* Encoder delays */
+	    ctx.delay_info = avio_rb24(s->pb);
+	    
         mp3->start_pad = ctx.delay_info >> 12;
         mp3->end_pad = ctx.delay_info & 4095;
         sti->start_skip_samples = mp3->start_pad + 528 + 1;
@@ -335,31 +439,37 @@ static void mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
                                             (AVRational){1, c->sample_rate},
                                             st->time_base);
         av_log(s, AV_LOG_DEBUG, "pad %d %d\n", mp3->start_pad, mp3->end_pad);
-    }
-
-    /* Misc */
-    ctx.tag_info3 = avio_r8(s->pb);
-
-    /* MP3 gain */
-    ctx.mp3_gain = avio_r8(s->pb);
-
-    /* Preset + surround info */
-    ctx.tag_info4 = avio_rb16(s->pb);
-
-    /* Music length */
-    ctx.music_length = avio_rb32(s->pb);
-
-    /* Music CRC */
-    ctx.music_crc = avio_rb16(s->pb);
-
-    /* Info Tag CRC */
-    crc = ffio_get_checksum(s->pb);
-    ctx.info_tag_crc = avio_rb16(s->pb);
-
-    if (ctx.info_tag_crc == crc) {
-        ff_replaygain_export_raw(st, r_gain, peak, a_gain, 0);
-        av_dict_set(&st->metadata, "encoder", version, 0);
-    }
+	
+	    /* Misc */
+	    ctx.tag_info3 = avio_r8(s->pb);
+	
+	    /* MP3 gain */
+	    ctx.mp3_gain = avio_r8(s->pb);
+	
+	    /* Preset + surround info */
+	    ctx.tag_info4 = avio_rb16(s->pb);
+	
+	    /* Music length */
+	    ctx.music_length = avio_rb32(s->pb);
+	
+	    /* Music CRC */
+	    ctx.music_crc = avio_rb16(s->pb);
+	
+	    /* Info Tag CRC */
+	    crc = ffio_get_checksum(s->pb);
+	    ctx.info_tag_crc = avio_rb16(s->pb);
+	
+	    if (ctx.info_tag_crc == crc) {
+	        ff_replaygain_export_raw(st, r_gain, peak, a_gain, 0);
+	        av_dict_set(&st->metadata, "encoder", version_string, 0);
+	    }
+	}
+	
+	if (version_string)
+		av_freep(&version_string);
+	
+	if (xhd3_string)
+		av_freep(&xhd3_string);
 }
 
 static void read_vbri_toc(AVFormatContext *s, int64_t filesize, int64_t duration)
@@ -705,8 +815,6 @@ static int mp3_seek(AVFormatContext *s, int stream_index, int64_t timestamp,
 
         // NOTE: The MP3 TOC is not a precise lookup table.
         // Accuracy is worse for bigger files.
-        // "VBRI" does have a TOC with a varied number of entries
-        // instead of being restricted to just 100 entries like Xing TOC.
         switch (mp3->toc) {
         case 1: // "Xing"
             snprintf(toc_fmt_desc, sizeof(toc_fmt_desc), "Xing");
