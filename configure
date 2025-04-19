@@ -2550,6 +2550,7 @@ CONFIG_EXTRA="
     bswapdsp
     cabac
     cbs
+    cbs_apv
     cbs_av1
     cbs_h264
     cbs_h265
