@@ -201,6 +201,8 @@ static int config_output(AVFilterLink *outlink)
     case AV_SAMPLE_FMT_FLTP:
         s->filter_channels = filter_channels_float;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     return 0;
