@@ -20,9 +20,11 @@
 
 #include <limits.h>
 #include <stdarg.h>
+#include <string.h>
 
 #include "avtextwriters.h"
-#include "libavutil/opt.h"
+
+#include "libavutil/error.h"
 
 /* AVIO Writer */
 
@@ -34,24 +36,12 @@ typedef struct IOWriterContext {
     int close_on_uninit;
 } IOWriterContext;
 
-static const char *iowriter_get_name(void *ctx)
-{
-    return WRITER_NAME;
-}
-
-static const AVClass iowriter_class = {
-    .class_name = WRITER_NAME,
-    .item_name = iowriter_get_name,
-};
-
 static av_cold void iowriter_uninit(AVTextWriterContext *wctx)
 {
     IOWriterContext *ctx = wctx->priv;
 
-    if (ctx->close_on_uninit && ctx->avio_context) {
-        avio_flush(ctx->avio_context);
-        avio_close(ctx->avio_context);
-    }
+    if (ctx->close_on_uninit)
+        avio_closep(&ctx->avio_context);
 }
 
 static void io_w8(AVTextWriterContext *wctx, int b)
@@ -81,13 +71,12 @@ const AVTextWriter avtextwriter_avio = {
     .name                 = WRITER_NAME,
     .priv_size            = sizeof(IOWriterContext),
     .uninit               = iowriter_uninit,
-    .priv_class           = &iowriter_class,
     .writer_put_str       = io_put_str,
     .writer_printf        = io_printf,
     .writer_w8            = io_w8
 };
 
-int avtextwriter_create_file(AVTextWriterContext **pwctx, const char *output_filename, int close_on_uninit)
+int avtextwriter_create_file(AVTextWriterContext **pwctx, const char *output_filename)
 {
     IOWriterContext *ctx;
     int ret;
@@ -106,7 +95,7 @@ int avtextwriter_create_file(AVTextWriterContext **pwctx, const char *output_fil
         return ret;
     }
 
-    ctx->close_on_uninit = close_on_uninit;
+    ctx->close_on_uninit = 1;
 
     return ret;
 }
