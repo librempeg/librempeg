@@ -116,6 +116,8 @@ static int config_input(AVFilterLink *inlink)
         s->tx_channels = tx_channels_double;
         s->filter_channels = filter_channels_double;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     s->channels = inlink->ch_layout.nb_channels;
