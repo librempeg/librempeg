@@ -117,6 +117,76 @@ enum CheckRet {
     CHECK_SEEK_FAILED  = -2,
 };
 
+/**
+ * Locale-independent case-sensitive compare from the start of the string.
+ * @note This means a byte-to-byte comparison between the two arguments,
+ *       and does not account for ASCII-range characters in any way.
+ */
+int mp3_xstrstartcmp(const char* string, const char* target);
+
+/**
+ * Locale-independent case-sensitive compare
+ * within a given length from the start of the string.
+ * @note This means a byte-to-byte comparison between the two arguments,
+ *       and does not account for ASCII-range characters in any way.
+ */
+int mp3_xstrstartncmp(const char* string, const char* target, int length);
+
+int mp3_xstrstartcmp(const char* string, const char* target)
+{
+	const char *pos1 = string;
+	const char *pos2 = target;
+	int match, real_match;
+	int target_size;
+	
+	for (target_size = 0; target_size < (target_size+1); target_size++, pos2++) {
+		if (!*pos2)
+			break;
+	}
+	pos2 = target;
+	
+	for (match = 0, real_match = 0; match < target_size; match++, pos1++, pos2++) {
+		if (!*pos1)
+			break;
+		if (*pos1 == *pos2)
+			real_match++;
+	}
+	
+	if (real_match == target_size)
+		return 1;
+	
+	return 0;
+}
+
+int mp3_xstrstartncmp(const char* string, const char* target, int length)
+{
+	const char *pos1 = string;
+	const char *pos2 = target;
+	int match, real_match;
+	int target_size;
+	
+	for (target_size = 0; target_size < (target_size+1); target_size++, pos2++) {
+		if (!*pos2)
+			break;
+	}
+	pos2 = target;
+	
+	if (target_size != length)
+		return 0;
+	
+	for (match = 0, real_match = 0; match < length; match++, pos1++, pos2++) {
+		if (!*pos1)
+			break;
+		if (*pos1 == *pos2)
+			real_match++;
+	}
+	
+	if (real_match == target_size)
+		return 1;
+	
+	return 0;
+}
+
 static int check(AVIOContext *pb, int64_t pos, uint32_t *header);
 
 /* mp3 read */
@@ -323,7 +393,7 @@ static void mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
     }
     
     // observe any remaining padding out of a 9-byte string.
-    if (av_strcasecmp(version_string, "GOGO") > version_size) {
+    if (!mp3_xstrstartncmp(version_string, "GOGO", 4)) {
 	    if (version_size <= 9)
 	    	version_padding_hunch = 9 - version_size;
 		else
@@ -340,8 +410,9 @@ static void mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
 				avio_seek(s->pb, version_pos, SEEK_SET);
 	    }
     }
+    // (todo) test "GoGo-no-Coda" MP3s too.
     
-    if (!av_strcasecmp(version_string, "mp3HD")) {
+    if (mp3_xstrstartcmp(version_string, "mp3HD")) {
 		mp3hd_byte = avio_r8(s->pb);
 		
 		// i guess, this is the part where i gatekeep another string read?
@@ -372,21 +443,20 @@ static void mp3_parse_info_tag(AVFormatContext *s, AVStream *st,
 			xhd3_string = av_mallocz(version_size+1);
 		    avio_read(s->pb, xhd3_string, version_size);
 		    
-		    if (av_strcasecmp(xhd3_string, "XHD3") > version_size)
+		    if (!mp3_xstrstartcmp(xhd3_string, "XHD3"))
 		    	return;
 	    } else
 			return;
 	}
 	
-	if (!av_strncasecmp(version_string, "LAME", 4)
+	if ((mp3_xstrstartncmp(version_string, "LAME", 4))
 	    ||
-        !av_strncasecmp(version_string, "Lavf", 4)
+        (mp3_xstrstartncmp(version_string, "Lavf", 4))
         ||
-        !av_strncasecmp(version_string, "Lavc", 4)) {
+        (mp3_xstrstartncmp(version_string, "Lavc", 4))) {
 		enable_lame_info = 1;
 	}
-    
-    // (todo) test "GoGo-no-Coda" MP3s too.
+
     if (enable_lame_info) {
 	    /* Info Tag revision + VBR method */
 	    ctx.tag_info1 = avio_r8(s->pb);
