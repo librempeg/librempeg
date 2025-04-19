@@ -84,6 +84,7 @@ static int config_input(AVFilterLink *inlink)
     case AV_SAMPLE_FMT_DBLP: s->filter = aderivative_dblp; break;
     case AV_SAMPLE_FMT_S32P: s->filter = aderivative_s32p; break;
     case AV_SAMPLE_FMT_S16P: s->filter = aderivative_s16p; break;
+    default: return AVERROR_BUG;
     }
 
     if (strcmp(ctx->filter->name, "aintegral"))
