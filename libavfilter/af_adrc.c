@@ -149,6 +149,8 @@ static int config_output(AVFilterLink *outlink)
         s->generate_window = generate_hann_window_dblp;
         s->drc_channel = drc_channel_dblp;
         break;
+    default:
+        return AVERROR_BUG;
     }
 
     s->window = av_calloc(s->fft_size, sample_size);
