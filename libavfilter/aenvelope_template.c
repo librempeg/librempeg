@@ -209,11 +209,10 @@ static int fn(do_envelope)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, cons
     unsigned front = stc->front;
     unsigned back = stc->back;
     unsigned idx = stc->idx;
-    ftype prev;
 
     for (int n = 0; n < nb_samples; n++) {
         const ftype r = FABS(src[n]);
-        ftype p;
+        ftype p, prev;
 
         if (filled < size) {
             if (filled == 0)
@@ -221,16 +220,13 @@ static int fn(do_envelope)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, cons
             prev = cache[idx];
             cache[idx] = r;
             filled++;
-            idx++;
-            if (idx >= size)
-                idx = 0;
         } else {
             prev = cache[idx];
             cache[idx] = r;
-            idx++;
-            if (idx >= size)
-                idx = 0;
         }
+        idx++;
+        if (idx >= size)
+            idx = 0;
 
         p = fn(compute_peak)(sorted, r, prev, size, &front, &back);
 
@@ -278,10 +274,9 @@ static int fn(do_envelope_link)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     unsigned front = stc->front;
     unsigned back = stc->back;
     unsigned idx = stc->idx;
-    ftype prev;
 
     for (int n = 0; n < nb_samples; n++) {
-        ftype r = F(0.0), p;
+        ftype r = F(0.0), p, prev;
 
         for (int chi = 0; chi < nb_channels; chi++) {
             const ftype *src = (const ftype *)srce[chi];
@@ -296,16 +291,13 @@ static int fn(do_envelope_link)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
             prev = cache[idx];
             cache[idx] = r;
             filled++;
-            idx++;
-            if (idx >= size)
-                idx = 0;
         } else {
             prev = cache[idx];
             cache[idx] = r;
-            idx++;
-            if (idx >= size)
-                idx = 0;
         }
+        idx++;
+        if (idx >= size)
+            idx = 0;
 
         p = fn(compute_peak)(sorted, r, prev, size, &front, &back);
 
