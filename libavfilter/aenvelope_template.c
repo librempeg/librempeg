@@ -17,18 +17,21 @@
  */
 
 #undef ftype
+#undef FPOW
 #undef FABS
 #undef FMIN
 #undef FMAX
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
 #define SAMPLE_FORMAT fltp
+#define FPOW powf
 #define FABS fabsf
 #define FMIN fminf
 #define FMAX fmaxf
 #define ftype float
 #else
 #define SAMPLE_FORMAT dblp
+#define FPOW pow
 #define FABS fabs
 #define FMIN fmin
 #define FMAX fmax
@@ -46,7 +49,7 @@ typedef struct fn(StateContext) {
 
     unsigned filled, idx, size, front, back;
 
-    ftype attack, release, hold, hold_count, current;
+    ftype attack, release, hold, hold_count, current, beta;
 } fn(StateContext);
 
 static void fn(envelope_uninit)(AVFilterContext *ctx)
@@ -104,6 +107,7 @@ static int fn(envelope_init)(AVFilterContext *ctx)
         else
             stc->hold = F(1.0);
 
+        stc->beta = F(1.0) - FPOW(F(1.0) - stc->attack, s->hlook+1);
         stc->hold_count = F(0.0);
         stc->size = look;
         if (!stc->sorted) {
@@ -205,6 +209,7 @@ static int fn(do_envelope)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, cons
     const ftype attack = stc->attack;
     unsigned filled = stc->filled;
     ftype current = stc->current;
+    const ftype beta = stc->beta;
     const ftype hold = stc->hold;
     unsigned front = stc->front;
     unsigned back = stc->back;
@@ -231,7 +236,7 @@ static int fn(do_envelope)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, cons
         p = fn(compute_peak)(sorted, r, prev, size, &front, &back);
 
         if (p > current) {
-            current += (p-current) * attack;
+            current += (p/beta-current) * attack;
             hold_count = F(0.0);
         } else if (p < current) {
             if (hold_count >= F(1.0))
@@ -270,6 +275,7 @@ static int fn(do_envelope_link)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const ftype attack = stc->attack;
     unsigned filled = stc->filled;
     ftype current = stc->current;
+    const ftype beta = stc->beta;
     const ftype hold = stc->hold;
     unsigned front = stc->front;
     unsigned back = stc->back;
@@ -302,7 +308,7 @@ static int fn(do_envelope_link)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         p = fn(compute_peak)(sorted, r, prev, size, &front, &back);
 
         if (p > current) {
-            current += (p-current) * attack;
+            current += (p/beta-current) * attack;
             hold_count = F(0.0);
         } else if (p < current) {
             if (hold_count >= F(1.0))
