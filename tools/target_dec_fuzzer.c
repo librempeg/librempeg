@@ -87,6 +87,7 @@ static int subtitle_handler(AVCodecContext *avctx, AVFrame *unused,
 {
     AVSubtitle sub;
     int ret = avcodec_decode_subtitle2(avctx, &sub, got_sub_ptr, avpkt);
+    av_assert0(ret != AVERROR_BUG);
     if (ret >= 0 && *got_sub_ptr)
         avsubtitle_free(&sub);
     return ret;
@@ -96,6 +97,7 @@ static int audio_video_handler(AVCodecContext *avctx, AVFrame *frame,
                                int *got_frame, const AVPacket *dummy)
 {
     int ret = avcodec_receive_frame(avctx, frame);
+    av_assert0(ret != AVERROR_BUG);
     *got_frame = ret >= 0;
     return ret;
 }
@@ -468,6 +470,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
     int res = avcodec_open2(ctx, &c->p, &opts);
     if (res < 0) {
+        av_assert0(res != AVERROR_BUG);
         avcodec_free_context(&ctx);
         av_free(parser_avctx);
         av_parser_close(parser);
@@ -541,6 +544,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
           if (ctx->codec_type != AVMEDIA_TYPE_SUBTITLE) {
               int ret = avcodec_send_packet(ctx, avpkt);
+              av_assert0(ret != AVERROR_BUG);
               decode_more = ret >= 0;
               if(!decode_more) {
                     ec_pixels += (ctx->width + 32LL) * (ctx->height + 32LL);
@@ -594,8 +598,10 @@ maximums_reached:
 
     av_packet_unref(avpkt);
 
-    if (ctx->codec_type != AVMEDIA_TYPE_SUBTITLE)
-        avcodec_send_packet(ctx, NULL);
+    if (ctx->codec_type != AVMEDIA_TYPE_SUBTITLE) {
+        int ret = avcodec_send_packet(ctx, NULL);
+        av_assert0(ret != AVERROR_BUG);
+    }
 
     do {
         got_frame = 0;
