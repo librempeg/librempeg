@@ -814,11 +814,7 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
 
             for (int i = 0; i < link->incfg.formats->nb_formats; i++) {
                 enum AVSampleFormat p = link->incfg.formats->formats[i];
-                if (link->incfg.formats->flags & FILTER_SAME_BITDEPTH) {
-                    if (av_get_packed_sample_fmt(p) !=
-                        av_get_packed_sample_fmt(ref->format))
-                        continue;
-                }
+
                 best = find_best_sample_fmt_of_2(best, p, ref->format);
             }
             if (best == AV_SAMPLE_FMT_NONE)
@@ -946,6 +942,24 @@ do {                                                                   \
                     return ret;                                        \
                 ret = 1;                                               \
                 break;                                                 \
+            }                                                          \
+                                                                       \
+            if ((out_link->incfg.list->flags & FILTER_SAME_BITDEPTH) ||\
+                (link->outcfg.list->flags & FILTER_SAME_BITDEPTH)) {   \
+                if (out_link->type == AVMEDIA_TYPE_AUDIO) {            \
+                    for (k = 0; k < out_link->incfg.list->nb; k++) {   \
+                        if (av_get_packed_sample_fmt(fmts->var[k]) ==  \
+                            av_get_packed_sample_fmt(fmt)) {           \
+                            fmts->var[0] = fmt;                        \
+                            fmts->nb = 1;                              \
+                            ret = 1;                                   \
+                            break;                                     \
+                        }                                              \
+                    }                                                  \
+                }                                                      \
+                                                                       \
+                if (ret)                                               \
+                    break;                                             \
             }                                                          \
                                                                        \
             for (k = 0; k < out_link->incfg.list->nb; k++)             \
@@ -1326,7 +1340,7 @@ static int pick_formats(AVFilterGraph *graph)
             }
             if (filter->nb_inputs && filter->nb_outputs && filter->inputs[0]->format>=0) {
                 for (int j = 0; j < filter->nb_outputs; j++) {
-                    if (filter->outputs[j]->format<0) {
+                    if (filter->outputs[j]->incfg.formats && filter->outputs[j]->format<0) {
                         if ((ret = pick_format(filter->outputs[j], filter->inputs[0])) < 0)
                             return ret;
                         change = 1;
