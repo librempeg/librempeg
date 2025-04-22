@@ -495,7 +495,7 @@ static int query_formats(AVFilterGraph *graph, void *log_ctx)
                     count_delayed++;
                 } else if (a == b) {
                     count_already_merged++;
-                } else if (!convert_needed) {
+                } else if (!(convert_needed & (1U << neg_step))) {
                     count_merged++;
                     ret = m->merge(a, b);
                     if (ret < 0)

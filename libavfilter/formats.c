@@ -164,22 +164,6 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
         }
     }
 
-    if (type == AVMEDIA_TYPE_AUDIO && check) {
-        for (i = 0; i < a->nb_formats; i++) {
-            for (j = 0; j < b->nb_formats; j++) {
-                if (a->flags & FILTER_SAME_BITDEPTH) {
-                    if (av_get_packed_sample_fmt(a->formats[0]) == av_get_packed_sample_fmt(b->formats[j]))
-                        return 1;
-                } else {
-                    if (a->formats[i] == b->formats[j])
-                        return 1;
-                }
-            }
-        }
-
-        return 0;
-    }
-
     // If chroma or alpha can be lost through merging then do not merge
     if (alpha2 > alpha1 || chroma2 > chroma1)
         return 0;
@@ -242,15 +226,28 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
     }
 
     if (type == AVMEDIA_TYPE_AUDIO) {
-        for (i = 0; i < a->nb_formats; i++) {
-            for (j = 0; j < b->nb_formats; j++) {
-                if (a->flags & FILTER_SAME_BITDEPTH) {
-                    if (av_get_packed_sample_fmt(a->formats[0]) == av_get_packed_sample_fmt(b->formats[j])) {
-                        a->formats[k++] = b->formats[j];
-                        break;
+        for (int i = 0; i < a->nb_formats; i++) {
+            for (int j = 0; j < b->nb_formats; j++) {
+                if (b->flags & FILTER_SAME_BITDEPTH) {
+                    if (k > 0) {
+                        if (av_get_packed_sample_fmt(a->formats[0]) == av_get_packed_sample_fmt(b->formats[j])) {
+                            a->formats[k++] = b->formats[j];
+                            break;
+                        }
+                    } else {
+                        if (av_get_packed_sample_fmt(a->formats[i]) == av_get_packed_sample_fmt(b->formats[j])) {
+                            if (check)
+                                return 1;
+
+                            a->formats[k++] = a->formats[i];
+                            break;
+                        }
                     }
                 } else {
                     if (a->formats[i] == b->formats[j]) {
+                        if (check)
+                            return 1;
+
                         a->formats[k++] = a->formats[i];
                         break;
                     }
