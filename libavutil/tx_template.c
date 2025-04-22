@@ -1658,6 +1658,11 @@ static void TX_NAME(ff_tx_fft##n##_butterfly)(AVTXContext *s,\
     for (int i = 1; i <= n/2; i++)                          \
         out_pair(tmp_out, add, sub, W, i, n);               \
                                                             \
+    if (stride == 1) {                                      \
+        memcpy(out, tmp_out, n * sizeof(TXComplex));        \
+        return;                                             \
+    }                                                       \
+                                                            \
     for (int i = 0; i < n; i++) {                           \
         out[0] = tmp_out[i];                                \
         out += stride;                                      \
