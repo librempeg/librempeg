@@ -1404,12 +1404,15 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
 
     tmp2 = ((TXComplex *)s->exp) + len;
     tmp = tmp2 + len;
+
+    if (stride == 1)
+        tmp2 = dst;
+
     transpose_matrix(tmp2, tmp, 0, 0, n, m, n, m);
 
-    if (stride == 1) {
-        memcpy(dst, tmp2, len * sizeof(TXComplex));
+    if (stride == 1)
         return;
-    }
+
     for (int i = 0; i < len; i++) {
         dst[0] = tmp2[i];
         dst += stride;
@@ -1642,28 +1645,31 @@ static void TX_NAME(ff_tx_fft##n##_butterfly)(AVTXContext *s,\
                                     void *_dst, void *_src, \
                                     ptrdiff_t stride)       \
 {                                                           \
-    TXComplex tmp_out[n];                                   \
+    TXComplex stack[n], *tmp;                               \
     TXComplex add[n], sub[n];                               \
-    TXComplex *in = _src;                                   \
-    TXComplex *out = _dst;                                  \
+    TXComplex *src = _src;                                  \
+    TXComplex *dst = _dst;                                  \
     TXComplex *W = s->exp;                                  \
                                                             \
-    stride /= sizeof(*out);                                 \
+    stride /= sizeof(*dst);                                 \
                                                             \
-    like_terms(add, sub, in, n);                            \
-    out_special(tmp_out, add, sub, n);                      \
+    if (stride == 1)                                        \
+        tmp = dst;                                          \
+    else                                                    \
+        tmp = stack;                                        \
+                                                            \
+    like_terms(add, sub, src, n);                           \
+    out_special(tmp, add, sub, n);                          \
                                                             \
     for (int i = 1; i <= n/2; i++)                          \
-        out_pair(tmp_out, add, sub, W, i, n);               \
+        out_pair(tmp, add, sub, W, i, n);                   \
                                                             \
-    if (stride == 1) {                                      \
-        memcpy(out, tmp_out, n * sizeof(TXComplex));        \
+    if (stride == 1)                                        \
         return;                                             \
-    }                                                       \
                                                             \
     for (int i = 0; i < n; i++) {                           \
-        out[0] = tmp_out[i];                                \
-        out += stride;                                      \
+        dst[0] = tmp[i];                                    \
+        dst += stride;                                      \
     }                                                       \
 }                                                           \
                                                             \
