@@ -1642,7 +1642,7 @@ static void TX_NAME(ff_tx_fft##n##_butterfly)(AVTXContext *s,\
                                     void *_dst, void *_src, \
                                     ptrdiff_t stride)       \
 {                                                           \
-    TXComplex tmp_out[n], tmp_in[n];                        \
+    TXComplex tmp_out[n];                                   \
     TXComplex add[n], sub[n];                               \
     TXComplex *in = _src;                                   \
     TXComplex *out = _dst;                                  \
@@ -1650,9 +1650,7 @@ static void TX_NAME(ff_tx_fft##n##_butterfly)(AVTXContext *s,\
                                                             \
     stride /= sizeof(*out);                                 \
                                                             \
-    memcpy(tmp_in, in, sizeof(*in) * n);                    \
-                                                            \
-    like_terms(add, sub, tmp_in, n);                        \
+    like_terms(add, sub, in, n);                            \
     out_special(tmp_out, add, sub, n);                      \
                                                             \
     for (int i = 1; i <= n/2; i++)                          \
