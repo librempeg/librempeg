@@ -1001,7 +1001,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix3)(AVTXContext *s,
         return AVERROR(ENOMEM);
 
     exp = s->exp;
-    exp[0] = (TXComplex){RESCALE(-0.5), invf * sqrt(3.0) * 0.5};
+    exp[0] = (TXComplex){RESCALE(-0.5), RESCALE(invf * sqrt(3.0) * 0.5)};
 
     for (int m = r, z = 0; m <= n; m *= r, z++) {
         const double ww = phase / m;
@@ -1065,16 +1065,16 @@ static void TX_NAME(ff_tx_fft_radix3)(AVTXContext *s, void *_dst, void *_src,
 
                 srci0[idx].re += a;
                 srci0[idx].im += c;
-                e = t0.re + a * w31.re;
-                f = t0.im + c * w31.re;
+                e = t0.re + MULT(a, w31.re);
+                f = t0.im + MULT(c, w31.re);
 
                 srci1[idx].re = e;
                 srci1[idx].im = f;
                 srci2[idx].re = e;
                 srci2[idx].im = f;
 
-                d *= w31.im;
-                b *= w31.im;
+                d = MULT(d, w31.im);
+                b = MULT(b, w31.im);
 
                 srci1[idx].re -= d;
                 srci1[idx].im += b;
