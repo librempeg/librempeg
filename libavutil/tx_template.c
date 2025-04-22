@@ -1119,7 +1119,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
     const int plen = FFALIGN(len, av_cpu_max_align());
     const int len2 = len-1;
     const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
-    const double factor = 1.0 / len2;
+    const TXSample ifactor = RESCALE(1.0 / len2);
     TXComplex *exp;
     int *imap, *map;
 
@@ -1157,15 +1157,12 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
             RESCALE(cos(factor)),
             RESCALE(sin(factor)),
         };
+
+        exp[i].re = MULT(exp[i].re, ifactor);
+        exp[i].im = MULT(exp[i].im, ifactor);
     }
 
     s->fn[0](&s->sub[0], s->exp, exp, sizeof(TXComplex));
-    exp = s->exp;
-
-    for (int i = 0; i < len2; i++) {
-        exp[i].re = RESCALE(exp[i].re * factor);
-        exp[i].im = RESCALE(exp[i].im * factor);
-    }
 
     return 0;
 }
