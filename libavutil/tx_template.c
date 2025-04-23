@@ -1321,7 +1321,7 @@ static void TX_NAME(ff_tx_fft_naive_small)(AVTXContext *s, void *_dst, void *_sr
 }
 
 static void transpose_matrix(TXComplex *out, const TXComplex *in,
-                             int row, int col, int n, int m,
+                             const int row, const int col, const int n, const int m,
                              const int sn, const int sm)
 {
     const int block = 64 / sizeof(*out);
