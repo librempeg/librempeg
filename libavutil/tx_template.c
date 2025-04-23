@@ -997,7 +997,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix3)(AVTXContext *s,
         j += k / (r - 1);
     }
 
-    if (!(s->exp = av_mallocz((1+lrint(cbrt(n)))*sizeof(*s->exp))))
+    if (!(s->exp = av_mallocz((1+lrint(log2(n)/log2(r)))*sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     exp = s->exp;
