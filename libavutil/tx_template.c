@@ -1088,6 +1088,11 @@ static void TX_NAME(ff_tx_fft_radix3)(AVTXContext *s, void *_dst, void *_src,
         }
     }
 
+    if (stride == 1) {
+        memcpy(dst, src, n * sizeof(*dst));
+        return;
+    }
+
     for (int i = 0; i < n; i++) {
         dst[0] = src[i];
         dst += stride;
