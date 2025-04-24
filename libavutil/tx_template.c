@@ -1325,9 +1325,9 @@ static void TX_NAME(ff_tx_fft_naive_small)(AVTXContext *s, void *_dst, void *_sr
     }
 }
 
-static void transpose_matrix(TXComplex *out, const TXComplex *in,
-                             const int row, const int col, const int n, const int m,
-                             const int sn, const int sm)
+static void transpose_matrix_(TXComplex *out, const TXComplex *in,
+                              const int row, const int col, const int n, const int m,
+                              const int sn, const int sm)
 {
     const int block = 64 / sizeof(*out);
 
@@ -1335,13 +1335,13 @@ static void transpose_matrix(TXComplex *out, const TXComplex *in,
         if (n >= m) {
             const int half_n = n / 2;
 
-            transpose_matrix(out, in, row, col, half_n, m, sn, sm);
-            transpose_matrix(out, in, row, col+half_n, n-half_n, m, sn, sm);
+            transpose_matrix_(out, in, row, col, half_n, m, sn, sm);
+            transpose_matrix_(out, in, row, col+half_n, n-half_n, m, sn, sm);
         } else {
             const int half_m = m / 2;
 
-            transpose_matrix(out, in, row, col, n, half_m, sn, sm);
-            transpose_matrix(out, in, row+half_m, col, n, m-half_m, sn, sm);
+            transpose_matrix_(out, in, row, col, n, half_m, sn, sm);
+            transpose_matrix_(out, in, row+half_m, col, n, m-half_m, sn, sm);
         }
     } else {
         const TXComplex *src = in + row * sn;
@@ -1359,6 +1359,18 @@ static void transpose_matrix(TXComplex *out, const TXComplex *in,
 
             src += sn;
         }
+    }
+}
+
+static void transpose_matrix(TXComplex *out, const TXComplex *in,
+                             const int n, const int m)
+{
+    if (n == 7 && m == 7) {
+        transpose_matrix_(out, in, 0, 0, 7, 7, 7, 7);
+    } else if (n == 5 && m == 5) {
+        transpose_matrix_(out, in, 0, 0, 5, 5, 5, 5);
+    } else {
+        transpose_matrix_(out, in, 0, 0, n, m, n, m);
     }
 }
 
@@ -1380,7 +1392,7 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
 
     stride /= sizeof(*dst);
 
-    transpose_matrix(tmp2, src, 0, 0, n, m, n, m);
+    transpose_matrix(tmp2, src, n, m);
 
     for (int i = 0; i < n; i++) {
         fn0(sub0, tmp, tmp2, sizeof(TXComplex));
@@ -1396,7 +1408,7 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
         CMUL3(tmp[i], x, exp[i]);
     }
 
-    transpose_matrix(tmp2, tmp, 0, 0, m, n, m, n);
+    transpose_matrix(tmp2, tmp, m, n);
 
     for (int i = 0; i < m; i++) {
         fn1(sub1, tmp, tmp2, sizeof(TXComplex));
@@ -1410,7 +1422,7 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
     if (stride == 1)
         tmp2 = dst;
 
-    transpose_matrix(tmp2, tmp, 0, 0, n, m, n, m);
+    transpose_matrix(tmp2, tmp, n, m);
 
     if (stride == 1)
         return;
