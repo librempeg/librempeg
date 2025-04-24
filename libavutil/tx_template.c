@@ -1001,16 +1001,22 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix3)(AVTXContext *s,
     map = (int *)(s->tmp + n);
     radix_map(map, n, r);
 
-    if (!(s->exp = av_mallocz((1+lrint(log2(n)/log2(r)))*sizeof(*s->exp))))
+    if (!(s->exp = av_mallocz(1+n*sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     exp = s->exp;
     exp[0] = (TXComplex){RESCALE(-0.5), RESCALE(invf * sqrt(3.0) * 0.5)};
 
-    for (int m = r, z = 0; m <= n; m *= r, z++) {
-        const double ww = phase / m;
+    for (int m = r, z = 0; m <= n; m *= r) {
+        const int mr = m/r;
 
-        exp[1+z] = (TXComplex){RESCALE(cos(ww)), RESCALE(sin(ww))};
+        for (int j = 0; j < mr; j++) {
+            for (int i = 1; i < r; i++) {
+                const double ww = (j*i) * phase / m;
+
+                exp[1+z++] = (TXComplex){RESCALE(cos(ww)), RESCALE(sin(ww))};
+            }
+        }
     }
 
     return 0;
@@ -1034,62 +1040,39 @@ static void TX_NAME(ff_tx_fft_radix3)(AVTXContext *s, void *_dst, void *_src,
         tmp[i] = src[map[i]];
     src = tmp;
 
-    for (int m = r, z = 0; m <= n; m *= r, z++) {
-        TXComplex x, wi = (TXComplex){RESCALE(1.0), RESCALE(0.0)};
-        TXComplex *srci0, *srci1, *srci2;
-        const int mr = m / r;
+    for (int m = r, idx = 0; m <= n; m *= r) {
+        const int nm = n/m;
+        const int mr = m/r;
 
-        srci0 = src;
-        srci1 = src+mr;
-        srci2 = src+2*mr;
+        for (int i = 0; i < nm; i++) {
+            TXComplex *srci = src + i * m;
 
-        for (int i = 0; i < mr; i++) {
-            for (int j = 0; j < n; j += m) {
-                TXSample a, b, c, d, e, f;
-                TXComplex t0, t1, t2;
-                const int idx = i+j;
+            for (int j = 0; j < mr; j++) {
+                TXComplex z1, s0, s1, s2, s3, s4, s5, s6;
 
-                t0 = srci0[idx];
-                t1 = srci1[idx];
-                t2 = srci2[idx];
+                s0 = srci[j+mr*0];
+                CMUL3(z1, w[idx+j*2+0], srci[j+mr*1]);
+                CMUL3(s2, w[idx+j*2+1], srci[j+mr*2]);
+                s1.re = z1.re - s2.re;
+                s1.im = z1.im - s2.im;
+                s2.re = 2*z1.re - s1.re;
+                s2.im = 2*z1.im - s1.im;
+                s3.re = s2.re + s0.re;
+                s3.im = s2.im + s0.im;
+                s4.re = s0.re + w31.re * s2.re;
+                s4.im = s0.im + w31.re * s2.im;
+                s5.re = s4.re + w31.im * s1.im;
+                s5.im = s4.im - w31.im * s1.re;
+                s6.re = 2*s4.re - s5.re;
+                s6.im = 2*s4.im - s5.im;
 
-                if (i > 0) {
-                    x = t1;
-                    CMUL3(t1, x, wi);
-                    x = t2;
-                    CMUL3(t2, x, wi);
-                    x = t2;
-                    CMUL3(t2, x, wi);
-                }
-
-                a = t1.re + t2.re;
-                b = t1.re - t2.re;
-                c = t1.im + t2.im;
-                d = t1.im - t2.im;
-
-                srci0[idx].re += a;
-                srci0[idx].im += c;
-                e = t0.re + MULT(a, w31.re);
-                f = t0.im + MULT(c, w31.re);
-
-                srci1[idx].re = e;
-                srci1[idx].im = f;
-                srci2[idx].re = e;
-                srci2[idx].im = f;
-
-                d = MULT(d, w31.im);
-                b = MULT(b, w31.im);
-
-                srci1[idx].re -= d;
-                srci1[idx].im += b;
-
-                srci2[idx].re += d;
-                srci2[idx].im -= b;
+                srci[j+mr*0] = s3;
+                srci[j+mr*1] = s6;
+                srci[j+mr*2] = s5;
             }
-
-            x = wi;
-            CMUL3(wi, x, w[z]);
         }
+
+        idx += mr * 2;
     }
 
     if (stride == 1) {
