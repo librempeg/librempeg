@@ -961,6 +961,26 @@ static int generator(int p)
     return n;
 }
 
+static void radix_map(int *map, const int n, const int r)
+{
+    for (int i = 0; i < n; i++)
+        map[i] = i;
+
+    for (int i = 0, j = 0; i < n-1; i++) {
+        int k;
+
+        if (i < j)
+            FFSWAP(int, map[i], map[j]);
+
+        k = (r - 1) * n / r;
+        for (; k <= j;) {
+            j -= k;
+            k /= r;
+        }
+        j += k / (r - 1);
+    }
+}
+
 static av_cold int TX_NAME(ff_tx_fft_init_radix3)(AVTXContext *s,
                                                   const FFTXCodelet *cd,
                                                   uint64_t flags,
@@ -979,23 +999,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix3)(AVTXContext *s,
         return AVERROR(ENOMEM);
 
     map = (int *)(s->tmp + n);
-
-    for (int i = 0; i < n; i++)
-        map[i] = i;
-
-    for (int i = 0, j = 0; i < n-1; i++) {
-        int k;
-
-        if (i < j)
-            FFSWAP(int, map[i], map[j]);
-
-        k = (r - 1) * n / r;
-        for (; k <= j;) {
-            j -= k;
-            k /= r;
-        }
-        j += k / (r - 1);
-    }
+    radix_map(map, n, r);
 
     if (!(s->exp = av_mallocz((1+lrint(log2(n)/log2(r)))*sizeof(*s->exp))))
         return AVERROR(ENOMEM);
@@ -1109,6 +1113,151 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_radix3_def) = {
     .min_len    = 3,
     .max_len    = TX_LEN_UNLIMITED,
     .init       = TX_NAME(ff_tx_fft_init_radix3),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_BASE/5,
+};
+
+static av_cold int TX_NAME(ff_tx_fft_init_radix5)(AVTXContext *s,
+                                                  const FFTXCodelet *cd,
+                                                  uint64_t flags,
+                                                  FFTXCodeletOptions *opts,
+                                                  int len, int inv,
+                                                  const void *scale)
+{
+    const double invf = s->inv ? 1.0 : -1.0;
+    const double phase = 2.0*M_PI * invf;
+    const int n = len;
+    const int r = 5;
+    TXComplex *exp;
+    int *map;
+
+    if (!(s->tmp = av_mallocz(2*n*sizeof(TXComplex))))
+        return AVERROR(ENOMEM);
+
+    map = (int *)(s->tmp + n);
+    radix_map(map, n, r);
+
+    if (!(s->exp = av_mallocz(2+n*sizeof(*s->exp))))
+        return AVERROR(ENOMEM);
+
+    exp = s->exp;
+    exp[0] = (TXComplex){RESCALE(0.25), RESCALE(sqrt(5.0) * 0.25)};
+    exp[1] = (TXComplex){RESCALE(sqrt((5.0-sqrt(5.0))/(5.0+sqrt(5.0)))), RESCALE(-0.5 * invf * sqrt(2.5 + sqrt(5.0)*0.5))};
+
+    for (int m = r, z = 0; m <= n; m *= r) {
+        const int mr = m/r;
+
+        for (int j = 0; j < mr; j++) {
+            for (int i = 1; i < r; i++) {
+                const double ww = (j*i) * phase / m;
+
+                exp[2+z++] = (TXComplex){RESCALE(cos(ww)), RESCALE(sin(ww))};
+            }
+        }
+    }
+
+    return 0;
+}
+
+static void TX_NAME(ff_tx_fft_radix5)(AVTXContext *s, void *_dst, void *_src,
+                                      ptrdiff_t stride)
+{
+    const TXComplex w51 = s->exp[0];
+    const TXComplex w52 = s->exp[1];
+    const TXComplex *w = s->exp + 2;
+    const int n = s->len;
+    const int *map = (int *)(s->tmp + n);
+    TXComplex *tmp = s->tmp;
+    TXComplex *dst = _dst;
+    TXComplex *src = _src;
+    const int r = 5;
+
+    stride /= sizeof(*dst);
+
+    for (int i = 0; i < n; i++)
+        tmp[i] = src[map[i]];
+    src = tmp;
+
+    for (int m = r, idx = 0; m <= n; m *= r) {
+        const int nm = n/m;
+        const int mr = m/r;
+
+        for (int i = 0; i < nm; i++) {
+            TXComplex *srci = src + i * m;
+
+            for (int j = 0; j < mr; j++) {
+                TXComplex z0, z1, z2, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, t1, t2, t3, t4, t5;
+
+                z0 = srci[j];
+                CMUL3(z1, w[idx+j*4+0], srci[j+mr*1]);
+                CMUL3(z2, w[idx+j*4+1], srci[j+mr*2]);
+                CMUL3(s3, w[idx+j*4+2], srci[j+mr*3]);
+                CMUL3(s1, w[idx+j*4+3], srci[j+mr*4]);
+                s1.re = z1.re - s1.re;
+                s1.im = z1.im - s1.im;
+                s2.re = 2*z1.re - s1.re;
+                s2.im = 2*z1.im - s1.im;
+                s3.re = z2.re - s3.re;
+                s3.im = z2.im - s3.im;
+                s4.re = 2*z2.re - s3.re;
+                s4.im = 2*z2.im - s3.im;
+                s5.re = s2.re + s4.re;
+                s5.im = s2.im + s4.im;
+                s6.re = s2.re - s4.re;
+                s6.im = s2.im - s4.im;
+                s7.re = z0.re - w51.re * s5.re;
+                s7.im = z0.im - w51.re * s5.im;
+                s8.re = s7.re - w51.im * s6.re;
+                s8.im = s7.im - w51.im * s6.im;
+                s9.re = 2*s7.re - s8.re;
+                s9.im = 2*s7.im - s8.im;
+                s10.re = s1.re + w52.re * s3.re;
+                s10.im = s1.im + w52.re * s3.im;
+                s11.re = w52.re * s1.re - s3.re;
+                s11.im = w52.re * s1.im - s3.im;
+                t1.re = s9.re + w52.im * s10.im;
+                t1.im = s9.im - w52.im * s10.re;
+                t2.re = s8.re + w52.im * s11.im;
+                t2.im = s8.im - w52.im * s11.re;
+                t3.re = 2*s8.re - t2.re;
+                t3.im = 2*s8.im - t2.im;
+                t4.re = 2*s9.re - t1.re;
+                t4.im = 2*s9.im - t1.im;
+                t5.re = z0.re + s5.re;
+                t5.im = z0.im + s5.im;
+
+                srci[j+mr*0] = t5;
+                srci[j+mr*1] = t1;
+                srci[j+mr*2] = t2;
+                srci[j+mr*3] = t3;
+                srci[j+mr*4] = t4;
+            }
+        }
+
+        idx += mr * 4;
+    }
+
+    if (stride == 1) {
+        memcpy(dst, src, n * sizeof(*dst));
+        return;
+    }
+
+    for (int i = 0; i < n; i++) {
+        dst[0] = src[i];
+        dst += stride;
+    }
+}
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_radix5_def) = {
+    .name       = TX_NAME_STR("fft_radix5"),
+    .function   = TX_NAME(ff_tx_fft_radix5),
+    .type       = TX_TYPE(FFT),
+    .flags      = AV_TX_UNALIGNED | AV_TX_INPLACE | FF_TX_OUT_OF_PLACE,
+    .factors[0] = 5,
+    .nb_factors = 1,
+    .min_len    = 5,
+    .max_len    = TX_LEN_UNLIMITED,
+    .init       = TX_NAME(ff_tx_fft_init_radix5),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_BASE/5,
 };
@@ -3048,6 +3197,7 @@ const FFTXCodelet * const TX_NAME(ff_tx_codelet_list)[] = {
 
     /* Radix-X transforms */
     &TX_NAME(ff_tx_fft_radix3_def),
+    &TX_NAME(ff_tx_fft_radix5_def),
 
     /* Standalone transforms */
     &TX_NAME(ff_tx_fft_def),
