@@ -1045,30 +1045,32 @@ static void TX_NAME(ff_tx_fft_radix3)(AVTXContext *s, void *_dst, void *_src,
         const int mr = m/r;
 
         for (int i = 0; i < nm; i++) {
-            TXComplex *srci = src + i * m;
+            TXComplex *srci0 = src + i*m + mr*0;
+            TXComplex *srci1 = src + i*m + mr*1;
+            TXComplex *srci2 = src + i*m + mr*2;
 
             for (int j = 0; j < mr; j++) {
                 TXComplex z1, s0, s1, s2, s3, s4, s5, s6;
 
-                s0 = srci[j+mr*0];
-                CMUL3(z1, w[idx+j*2+0], srci[j+mr*1]);
-                CMUL3(s2, w[idx+j*2+1], srci[j+mr*2]);
+                s0 = srci0[j];
+                CMUL3(z1, w[idx+j*2+0], srci1[j]);
+                CMUL3(s2, w[idx+j*2+1], srci2[j]);
                 s1.re = z1.re - s2.re;
                 s1.im = z1.im - s2.im;
                 s2.re = 2*z1.re - s1.re;
                 s2.im = 2*z1.im - s1.im;
                 s3.re = s2.re + s0.re;
                 s3.im = s2.im + s0.im;
-                s4.re = s0.re + w31.re * s2.re;
-                s4.im = s0.im + w31.re * s2.im;
-                s5.re = s4.re + w31.im * s1.im;
-                s5.im = s4.im - w31.im * s1.re;
+                s4.re = s0.re + MULT(w31.re, s2.re);
+                s4.im = s0.im + MULT(w31.re, s2.im);
+                s5.re = s4.re + MULT(w31.im, s1.im);
+                s5.im = s4.im - MULT(w31.im, s1.re);
                 s6.re = 2*s4.re - s5.re;
                 s6.im = 2*s4.im - s5.im;
 
-                srci[j+mr*0] = s3;
-                srci[j+mr*1] = s6;
-                srci[j+mr*2] = s5;
+                srci0[j] = s3;
+                srci1[j] = s6;
+                srci2[j] = s5;
             }
         }
 
@@ -1166,16 +1168,20 @@ static void TX_NAME(ff_tx_fft_radix5)(AVTXContext *s, void *_dst, void *_src,
         const int mr = m/r;
 
         for (int i = 0; i < nm; i++) {
-            TXComplex *srci = src + i * m;
+            TXComplex *srci0 = src + i*m + mr*0;
+            TXComplex *srci1 = src + i*m + mr*1;
+            TXComplex *srci2 = src + i*m + mr*2;
+            TXComplex *srci3 = src + i*m + mr*3;
+            TXComplex *srci4 = src + i*m + mr*4;
 
             for (int j = 0; j < mr; j++) {
                 TXComplex z0, z1, z2, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, t1, t2, t3, t4, t5;
 
-                z0 = srci[j];
-                CMUL3(z1, w[idx+j*4+0], srci[j+mr*1]);
-                CMUL3(z2, w[idx+j*4+1], srci[j+mr*2]);
-                CMUL3(s3, w[idx+j*4+2], srci[j+mr*3]);
-                CMUL3(s1, w[idx+j*4+3], srci[j+mr*4]);
+                z0 = srci0[j];
+                CMUL3(z1, w[idx+j*4+0], srci1[j]);
+                CMUL3(z2, w[idx+j*4+1], srci2[j]);
+                CMUL3(s3, w[idx+j*4+2], srci3[j]);
+                CMUL3(s1, w[idx+j*4+3], srci4[j]);
                 s1.re = z1.re - s1.re;
                 s1.im = z1.im - s1.im;
                 s2.re = 2*z1.re - s1.re;
@@ -1188,20 +1194,20 @@ static void TX_NAME(ff_tx_fft_radix5)(AVTXContext *s, void *_dst, void *_src,
                 s5.im = s2.im + s4.im;
                 s6.re = s2.re - s4.re;
                 s6.im = s2.im - s4.im;
-                s7.re = z0.re - w51.re * s5.re;
-                s7.im = z0.im - w51.re * s5.im;
-                s8.re = s7.re - w51.im * s6.re;
-                s8.im = s7.im - w51.im * s6.im;
+                s7.re = z0.re - MULT(w51.re, s5.re);
+                s7.im = z0.im - MULT(w51.re, s5.im);
+                s8.re = s7.re - MULT(w51.im, s6.re);
+                s8.im = s7.im - MULT(w51.im, s6.im);
                 s9.re = 2*s7.re - s8.re;
                 s9.im = 2*s7.im - s8.im;
-                s10.re = s1.re + w52.re * s3.re;
-                s10.im = s1.im + w52.re * s3.im;
-                s11.re = w52.re * s1.re - s3.re;
-                s11.im = w52.re * s1.im - s3.im;
-                t1.re = s9.re + w52.im * s10.im;
-                t1.im = s9.im - w52.im * s10.re;
-                t2.re = s8.re + w52.im * s11.im;
-                t2.im = s8.im - w52.im * s11.re;
+                s10.re = s1.re + MULT(w52.re, s3.re);
+                s10.im = s1.im + MULT(w52.re, s3.im);
+                s11.re = MULT(w52.re, s1.re) - s3.re;
+                s11.im = MULT(w52.re, s1.im) - s3.im;
+                t1.re = s9.re + MULT(w52.im, s10.im);
+                t1.im = s9.im - MULT(w52.im, s10.re);
+                t2.re = s8.re + MULT(w52.im, s11.im);
+                t2.im = s8.im - MULT(w52.im, s11.re);
                 t3.re = 2*s8.re - t2.re;
                 t3.im = 2*s8.im - t2.im;
                 t4.re = 2*s9.re - t1.re;
@@ -1209,11 +1215,11 @@ static void TX_NAME(ff_tx_fft_radix5)(AVTXContext *s, void *_dst, void *_src,
                 t5.re = z0.re + s5.re;
                 t5.im = z0.im + s5.im;
 
-                srci[j+mr*0] = t5;
-                srci[j+mr*1] = t1;
-                srci[j+mr*2] = t2;
-                srci[j+mr*3] = t3;
-                srci[j+mr*4] = t4;
+                srci0[j] = t5;
+                srci1[j] = t1;
+                srci2[j] = t2;
+                srci3[j] = t3;
+                srci4[j] = t4;
             }
         }
 
