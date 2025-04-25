@@ -51,6 +51,7 @@ typedef struct CRIContext {
 
 static av_cold int cri_decode_init(AVCodecContext *avctx)
 {
+    EXTERN const FFCodec ff_mjpeg_decoder;
     CRIContext *s = avctx->priv_data;
     int ret;
 
@@ -62,7 +63,6 @@ static av_cold int cri_decode_init(AVCodecContext *avctx)
     if (!s->jpkt)
         return AVERROR(ENOMEM);
 
-    EXTERN const FFCodec ff_mjpeg_decoder;
     s->jpeg_avctx = avcodec_alloc_context3(&ff_mjpeg_decoder.p);
     if (!s->jpeg_avctx)
         return AVERROR(ENOMEM);

@@ -51,10 +51,11 @@ static const struct IMM5_unit {
 
 static av_cold int imm5_init(AVCodecContext *avctx)
 {
+    EXTERN const FFCodec ff_h264_decoder;
+    EXTERN const FFCodec ff_hevc_decoder;
     IMM5Context *ctx = avctx->priv_data;
     int ret;
 
-    EXTERN const FFCodec ff_h264_decoder;
     ctx->h264_avctx = avcodec_alloc_context3(&ff_h264_decoder.p);
     if (!ctx->h264_avctx)
         return AVERROR(ENOMEM);
@@ -65,7 +66,6 @@ static av_cold int imm5_init(AVCodecContext *avctx)
     if (ret < 0)
         return ret;
 
-    EXTERN const FFCodec ff_hevc_decoder;
     ctx->hevc_avctx = avcodec_alloc_context3(&ff_hevc_decoder.p);
     if (!ctx->hevc_avctx)
         return AVERROR(ENOMEM);

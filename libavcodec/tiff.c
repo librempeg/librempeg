@@ -2409,6 +2409,7 @@ again:
 
 static av_cold int tiff_init(AVCodecContext *avctx)
 {
+    EXTERN const FFCodec ff_mjpeg_decoder;
     TiffContext *s = avctx->priv_data;
     int ret;
 
@@ -2429,7 +2430,6 @@ static av_cold int tiff_init(AVCodecContext *avctx)
         return AVERROR(ENOMEM);
 
     /* Prepare everything needed for JPEG decoding */
-    EXTERN const FFCodec ff_mjpeg_decoder;
     s->avctx_mjpeg = avcodec_alloc_context3(&ff_mjpeg_decoder.p);
     if (!s->avctx_mjpeg)
         return AVERROR(ENOMEM);

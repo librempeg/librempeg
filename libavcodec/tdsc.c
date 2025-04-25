@@ -95,6 +95,7 @@ static av_cold int tdsc_close(AVCodecContext *avctx)
 
 static av_cold int tdsc_init(AVCodecContext *avctx)
 {
+    EXTERN const FFCodec ff_mjpeg_decoder;
     TDSCContext *ctx = avctx->priv_data;
     int ret;
 
@@ -120,7 +121,6 @@ static av_cold int tdsc_init(AVCodecContext *avctx)
         return AVERROR(ENOMEM);
 
     /* Prepare everything needed for JPEG decoding */
-    EXTERN const FFCodec ff_mjpeg_decoder;
     ctx->jpeg_avctx = avcodec_alloc_context3(&ff_mjpeg_decoder.p);
     if (!ctx->jpeg_avctx)
         return AVERROR(ENOMEM);
