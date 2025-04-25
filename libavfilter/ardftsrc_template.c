@@ -162,8 +162,9 @@ static int fn(src_init)(AVFilterContext *ctx)
         const ftype N = s->tr_nb_samples;
         const ftype k = n+(F(1.0)-e)*(N-F(1.0))+F(1.0);
         const ftype zbk = e*(N-F(1.0))*(F(1.0)/(N-F(1.0)-k)+F(1.0)/((F(1.0)-e)*(N-F(1.0))-k));
+        const ftype v = F(1.0)/(FEXP(zbk)+F(1.0));
 
-        taper[n].re = taper[n].im = F(1.0)/(FEXP(zbk)+F(1.0));
+        taper[n].re = taper[n].im = isnormal(v) ? v : F(0.0);
     }
 
     return 0;
