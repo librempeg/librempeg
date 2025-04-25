@@ -1041,13 +1041,14 @@ static void TX_NAME(ff_tx_fft_radix3)(AVTXContext *s, void *_dst, void *_src,
     src = tmp;
 
     for (int m = r, idx = 0; m <= n; m *= r) {
+        TXComplex *srci = src;
         const int nm = n/m;
         const int mr = m/r;
 
         for (int i = 0; i < nm; i++) {
-            TXComplex *srci0 = src + i*m + mr*0;
-            TXComplex *srci1 = src + i*m + mr*1;
-            TXComplex *srci2 = src + i*m + mr*2;
+            TXComplex *srci0 = srci + mr*0;
+            TXComplex *srci1 = srci + mr*1;
+            TXComplex *srci2 = srci + mr*2;
 
             for (int j = 0; j < mr; j++) {
                 TXComplex z1, s0, s1, s2, s3, s4, s5, s6;
@@ -1072,6 +1073,8 @@ static void TX_NAME(ff_tx_fft_radix3)(AVTXContext *s, void *_dst, void *_src,
                 srci1[j] = s6;
                 srci2[j] = s5;
             }
+
+            srci += m;
         }
 
         idx += mr * 2;
@@ -1164,15 +1167,16 @@ static void TX_NAME(ff_tx_fft_radix5)(AVTXContext *s, void *_dst, void *_src,
     src = tmp;
 
     for (int m = r, idx = 0; m <= n; m *= r) {
+        TXComplex *srci = src;
         const int nm = n/m;
         const int mr = m/r;
 
         for (int i = 0; i < nm; i++) {
-            TXComplex *srci0 = src + i*m + mr*0;
-            TXComplex *srci1 = src + i*m + mr*1;
-            TXComplex *srci2 = src + i*m + mr*2;
-            TXComplex *srci3 = src + i*m + mr*3;
-            TXComplex *srci4 = src + i*m + mr*4;
+            TXComplex *srci0 = srci + mr*0;
+            TXComplex *srci1 = srci + mr*1;
+            TXComplex *srci2 = srci + mr*2;
+            TXComplex *srci3 = srci + mr*3;
+            TXComplex *srci4 = srci + mr*4;
 
             for (int j = 0; j < mr; j++) {
                 TXComplex z0, z1, z2, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, t1, t2, t3, t4, t5;
@@ -1221,6 +1225,8 @@ static void TX_NAME(ff_tx_fft_radix5)(AVTXContext *s, void *_dst, void *_src,
                 srci3[j] = t3;
                 srci4[j] = t4;
             }
+
+            srci += m;
         }
 
         idx += mr * 4;
