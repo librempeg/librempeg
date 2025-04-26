@@ -437,10 +437,11 @@ static int magy_decode_frame(AVCodecContext *avctx, AVFrame *p,
                              int *got_frame, AVPacket *avpkt)
 {
     MagicYUVContext *s = avctx->priv_data;
+    const AVPixFmtDescriptor *desc;
     GetByteContext gb;
     uint32_t first_offset, offset, next_offset, header_size, slice_width;
     int width, height, format, version, table_size;
-    int ret, i, j;
+    int ret, i, j, is_rgb;
 
     if (avpkt->size < 36)
         return AVERROR_INVALIDDATA;
@@ -519,9 +520,9 @@ static int magy_decode_frame(AVCodecContext *avctx, AVFrame *p,
         avpriv_request_sample(avctx, "Format 0x%X", format);
         return AVERROR_PATCHWELCOME;
     }
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(avctx->pix_fmt);
+    desc = av_pix_fmt_desc_get(avctx->pix_fmt);
     av_assert1(desc);
-    int is_rgb = s->decorrelate = !!(desc->flags & AV_PIX_FMT_FLAG_RGB);
+    is_rgb = s->decorrelate = !!(desc->flags & AV_PIX_FMT_FLAG_RGB);
     s->hshift[1] = s->hshift[2] = desc->log2_chroma_w;
     s->vshift[1] = s->vshift[2] = desc->log2_chroma_h;
     s->bps = desc->comp[0].depth;
