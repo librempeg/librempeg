@@ -1355,8 +1355,8 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey)(AVTXContext *s,
         return AVERROR(ENOMEM);
 
     exp = s->exp;
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < m; j++) {
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
             const double factor = phase*i*j;
             exp[j] = (TXComplex){
                 RESCALE(cos(factor)),
@@ -1364,7 +1364,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey)(AVTXContext *s,
             };
         }
 
-        exp += m;
+        exp += n;
     }
 
     return 0;
@@ -1539,40 +1539,22 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
     transpose_matrix(tmp2, src, n, m);
 
     for (int i = 0; i < n; i++) {
-        fn0(sub0, tmp, tmp2, sizeof(TXComplex));
+        fn0(sub0, tmp, tmp2, n*sizeof(TXComplex));
         tmp2 += m;
-        tmp += m;
+        tmp++;
     }
 
     tmp2 = ((TXComplex *)s->exp) + len;
     tmp = tmp2 + len;
-    for (int i = m+1; i < len; i++) {
+    for (int i = 1; i < len; i++) {
         const TXComplex x = tmp[i];
 
         CMUL3(tmp[i], x, exp[i]);
     }
 
-    transpose_matrix(tmp2, tmp, m, n);
-
     for (int i = 0; i < m; i++) {
-        fn1(sub1, tmp, tmp2, sizeof(TXComplex));
-        tmp2 += n;
+        fn1(sub1, dst, tmp, stride*m*sizeof(TXComplex));
         tmp += n;
-    }
-
-    tmp2 = ((TXComplex *)s->exp) + len;
-    tmp = tmp2 + len;
-
-    if (stride == 1)
-        tmp2 = dst;
-
-    transpose_matrix(tmp2, tmp, n, m);
-
-    if (stride == 1)
-        return;
-
-    for (int i = 0; i < len; i++) {
-        dst[0] = tmp2[i];
         dst += stride;
     }
 }
