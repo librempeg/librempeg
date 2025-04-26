@@ -442,9 +442,10 @@ static int vp6_parse_coeff_huffman(VP56Context *s)
                 if (coeff_idx)
                     break;
             } else {
+                int coeff;
                 if (get_bits_left(&s->gb) <= 0)
                     return AVERROR_INVALIDDATA;
-                int coeff = get_vlc2(&s->gb, vlc_coeff->table, AC_DC_HUFF_BITS, 2);
+                coeff = get_vlc2(&s->gb, vlc_coeff->table, AC_DC_HUFF_BITS, 2);
                 if (coeff == 0) {
                     if (coeff_idx) {
                         int pt = (coeff_idx >= 6);
