@@ -1102,7 +1102,7 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_radix3_def) = {
     .max_len    = TX_LEN_UNLIMITED,
     .init       = TX_NAME(ff_tx_fft_init_radix3),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
-    .prio       = FF_TX_PRIO_BASE/5,
+    .prio       = FF_TX_PRIO_BASE,
 };
 
 static av_cold int TX_NAME(ff_tx_fft_init_radix5)(AVTXContext *s,
@@ -1254,7 +1254,7 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_radix5_def) = {
     .max_len    = TX_LEN_UNLIMITED,
     .init       = TX_NAME(ff_tx_fft_init_radix5),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
-    .prio       = FF_TX_PRIO_BASE/5,
+    .prio       = FF_TX_PRIO_BASE,
 };
 
 static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
