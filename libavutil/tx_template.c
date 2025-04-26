@@ -1001,7 +1001,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix3)(AVTXContext *s,
     map = (int *)(s->tmp + n);
     radix_map(map, n, r);
 
-    if (!(s->exp = av_mallocz(1+n*sizeof(*s->exp))))
+    if (!(s->exp = av_mallocz((1+n)*sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     exp = s->exp;
@@ -1125,7 +1125,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix5)(AVTXContext *s,
     map = (int *)(s->tmp + n);
     radix_map(map, n, r);
 
-    if (!(s->exp = av_mallocz(2+n*sizeof(*s->exp))))
+    if (!(s->exp = av_mallocz((2+n)*sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     exp = s->exp;
