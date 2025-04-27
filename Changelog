@@ -58,6 +58,7 @@ version <next>:
 - mipu demuxer
 - Perfect Clarity Audio decoder and parser
 - pngenc: set default prediction method to PAETH
+- APV decoder and APV raw bitstream muxing and demuxing
 
 
 version 7.1:
