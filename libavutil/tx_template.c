@@ -769,6 +769,15 @@ static av_cold int TX_NAME(ff_tx_fft_inplace_small_init)(AVTXContext *s,
     return TX_NAME(ff_tx_fft_init)(s, cd, flags, opts, len, inv, scale);
 }
 
+/* Compilers can't vectorize this anyway without assuming AVX2, which they
+ * generally don't, at least without -march=native -mtune=native */
+static void TX_NAME(ff_tx_remap)(TXComplex *dst, const TXComplex *src,
+                                 const int *map, const int len)
+{
+    for (int i = 0; i < len; i++)
+        dst[i] = src[map[i]];
+}
+
 static void TX_NAME(ff_tx_fft)(AVTXContext *s, void *_dst,
                                void *_src, ptrdiff_t stride)
 {
@@ -778,11 +787,7 @@ static void TX_NAME(ff_tx_fft)(AVTXContext *s, void *_dst,
     int *map = s->sub[0].map;
     int len = s->len;
 
-    /* Compilers can't vectorize this anyway without assuming AVX2, which they
-     * generally don't, at least without -march=native -mtune=native */
-    for (int i = 0; i < len; i++)
-        dst1[i] = src[map[i]];
-
+    TX_NAME(ff_tx_remap)(dst1, src, map, len);
     s->fn[0](&s->sub[0], dst2, dst1, stride);
 }
 
@@ -1036,8 +1041,7 @@ static void TX_NAME(ff_tx_fft_radix3)(AVTXContext *s, void *_dst, void *_src,
 
     stride /= sizeof(*dst);
 
-    for (int i = 0; i < n; i++)
-        tmp[i] = src[map[i]];
+    TX_NAME(ff_tx_remap)(tmp, src, map, n);
     src = tmp;
 
     for (int m = r, idx = 0; m <= n; m *= r) {
@@ -1162,8 +1166,7 @@ static void TX_NAME(ff_tx_fft_radix5)(AVTXContext *s, void *_dst, void *_src,
 
     stride /= sizeof(*dst);
 
-    for (int i = 0; i < n; i++)
-        tmp[i] = src[map[i]];
+    TX_NAME(ff_tx_remap)(tmp, src, map, n);
     src = tmp;
 
     for (int m = r, idx = 0; m <= n; m *= r) {
@@ -1576,9 +1579,7 @@ static void TX_NAME(ff_tx_fft_rader)(AVTXContext *s, void *_dst, void *_src,
 
     stride /= sizeof(*dst);
 
-    for (int i = 0; i < m; i++)
-        ww[i] = src[map[i]];
-
+    TX_NAME(ff_tx_remap)(ww, src, map, m);
     s->fn[0](&s->sub[0], w, ww, sizeof(TXComplex));
 
     dst[0].re = src0.re + w[0].re;
@@ -2038,8 +2039,7 @@ static void TX_NAME(ff_tx_fft_pfa)(AVTXContext *s, void *_out,
     stride /= sizeof(*out);
 
     for (int i = 0; i < m; i++) {
-        for (int j = 0; j < n; j++)
-            exp[j] = in[in_map[j]];
+        TX_NAME(ff_tx_remap)(exp, in, in_map, n);
         in_map += n;
         fn0(sub0, &tmp2[sub_map[i]], exp, m*sizeof(TXComplex));
     }
