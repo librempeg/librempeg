@@ -1700,8 +1700,10 @@ static av_always_inline void like_terms(TXComplex *add,
 {
     const int m = (r-1)/2;
 
-    if (r&1)
+    if (r&1) {
         add[0] = in[0];
+        cpx_neg(&sub[0], &in[0]);
+    }
 
     for (int h = 1, t = r-1; h <= m; h++, t--) {
         cpx_add(&add[h], &in[h], &in[t]);
