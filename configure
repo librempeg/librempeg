@@ -3457,6 +3457,7 @@ vp9_v4l2m2m_decoder_deps="v4l2_m2m vp9_v4l2_m2m"
 
 # parsers
 aac_parser_select="adts_header mpeg4audio"
+apv_parser_select="cbs_apv"
 av1_parser_select="cbs_av1"
 evc_parser_select="evcparse"
 ffv1_parser_select="rangecoder"

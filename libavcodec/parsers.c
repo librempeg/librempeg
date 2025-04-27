@@ -28,6 +28,7 @@ extern const AVCodecParser ff_adpcm_hvqm4_parser;
 extern const AVCodecParser ff_adx_parser;
 extern const AVCodecParser ff_ahx_parser;
 extern const AVCodecParser ff_amr_parser;
+extern const AVCodecParser ff_apv_parser;
 extern const AVCodecParser ff_av1_parser;
 extern const AVCodecParser ff_avs2_parser;
 extern const AVCodecParser ff_avs3_parser;

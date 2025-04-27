@@ -1225,6 +1225,7 @@ OBJS-$(CONFIG_ADPCM_HVQM4_PARSER)      += adpcm_hvqm4_parser.o
 OBJS-$(CONFIG_ADX_PARSER)              += adx_parser.o
 OBJS-$(CONFIG_AHX_PARSER)              += ahx_parser.o
 OBJS-$(CONFIG_AMR_PARSER)              += amr_parser.o
+OBJS-$(CONFIG_APV_PARSER)              += apv_parser.o
 OBJS-$(CONFIG_AV1_PARSER)              += av1_parser.o av1_parse.o
 OBJS-$(CONFIG_AVS2_PARSER)             += avs2.o avs2_parser.o
 OBJS-$(CONFIG_AVS3_PARSER)             += avs3_parser.o
