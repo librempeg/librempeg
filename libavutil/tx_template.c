@@ -1742,12 +1742,13 @@ static av_always_inline void out_pair(TXComplex *out,
 {
     TXComplex P, Q;
 
-    cpx_mla(&P, &add[0], &add[1], Wr[k].re);
-    cpx_mul_s(&Q, &sub[1], Wr[k].im);
+    cpx_mla(&P, &add[0], &add[1], Wr[k-1].re);
+    cpx_mul_s(&Q, &sub[1], Wr[k-1].im);
 
+    Wr += (r/2) * (k-1);
     for (int i = 2; i <= r/2; i++) {
-        cpx_mla(&P, &P, &add[i], Wr[i*k].re);
-        cpx_mla(&Q, &Q, &sub[i], Wr[i*k].im);
+        cpx_mla(&P, &P, &add[i], Wr[i-1].re);
+        cpx_mla(&Q, &Q, &sub[i], Wr[i-1].im);
     }
 
     cpx_out(&out[k], &out[r-k], &P, &Q);
@@ -1756,18 +1757,22 @@ static av_always_inline void out_pair(TXComplex *out,
 static int init_twiddles(AVTXContext *s, const int len)
 {
     const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
+    TXComplex *exp;
 
-    if (!(s->exp = av_mallocz((len/2+1)*(len/2+1)*sizeof(*s->exp))))
+    if (!(s->exp = av_mallocz((len/2)*(len/2)*sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
-    for (int i = 0; i <= len/2; i++) {
-        for (int j = 0; j <= len/2; j++) {
-            const double factor = phase*i*j;
-            s->exp[i*j] = (TXComplex){
+    exp = s->exp;
+    for (int i = 0; i < len/2; i++) {
+        for (int j = 0; j < len/2; j++) {
+            const double factor = phase*(i+1)*(j+1);
+            exp[j] = (TXComplex){
                 RESCALE(cos(factor)),
                 RESCALE(sin(factor)),
             };
         }
+
+        exp += len/2;
     }
 
     return 0;
