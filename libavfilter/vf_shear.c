@@ -38,7 +38,6 @@ typedef struct ShearContext {
     int interp;
 
     uint8_t fillcolor[4];   ///< color expressed either in YUVA or RGBA colorspace for the padding area
-    char *fillcolor_str;
     int fillcolor_enable;
     int nb_planes;
     int depth;
@@ -62,8 +61,9 @@ typedef struct ThreadData {
 static const AVOption shear_options[] = {
     { "shx",       "set x shear factor",        OFFSET(shx),           AV_OPT_TYPE_FLOAT,  {.dbl=0.},     -2, 2, .flags=FLAGS },
     { "shy",       "set y shear factor",        OFFSET(shy),           AV_OPT_TYPE_FLOAT,  {.dbl=0.},     -2, 2, .flags=FLAGS },
-    { "fillcolor", "set background fill color", OFFSET(fillcolor_str), AV_OPT_TYPE_STRING, {.str="black"}, 0, 0, .flags=FLAGS },
-    { "c",         "set background fill color", OFFSET(fillcolor_str), AV_OPT_TYPE_STRING, {.str="black"}, 0, 0, .flags=FLAGS },
+    { "fillcolor", "set background fill color", OFFSET(fillcolor),     AV_OPT_TYPE_COLOR,  {.str="black"}, 0, 0, .flags=FLAGS },
+    { "c",         "set background fill color", OFFSET(fillcolor),     AV_OPT_TYPE_COLOR,  {.str="black"}, 0, 0, .flags=FLAGS },
+    { "dofill",    "enable background fill",    OFFSET(fillcolor_enable),AV_OPT_TYPE_BOOL, {.i64=1},       0, 1, .flags=FLAGS },
     { "interp",    "set interpolation",         OFFSET(interp),        AV_OPT_TYPE_INT,    {.i64=1},       0, 1, .flags=FLAGS, .unit = "interp" },
     {  "nearest",  "nearest neighbour",         0,                     AV_OPT_TYPE_CONST,  {.i64=0},       0, 0, .flags=FLAGS, .unit = "interp" },
     {  "bilinear", "bilinear",                  0,                     AV_OPT_TYPE_CONST,  {.i64=1},       0, 0, .flags=FLAGS, .unit = "interp" },
@@ -71,19 +71,6 @@ static const AVOption shear_options[] = {
 };
 
 AVFILTER_DEFINE_CLASS(shear);
-
-static av_cold int init(AVFilterContext *ctx)
-{
-    ShearContext *s = ctx->priv;
-
-    if (!strcmp(s->fillcolor_str, "none"))
-        s->fillcolor_enable = 0;
-    else if (av_parse_color(s->fillcolor, s->fillcolor_str, -1, ctx) >= 0)
-        s->fillcolor_enable = 1;
-    else
-        return AVERROR(EINVAL);
-    return 0;
-}
 
 static const enum AVPixelFormat pix_fmts[] = {
     AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY9,
@@ -286,9 +273,6 @@ static int process_command(AVFilterContext *ctx,
     if (ret < 0)
         return ret;
 
-    ret = init(ctx);
-    if (ret < 0)
-        return ret;
     ff_draw_color(&s->draw, &s->color, s->fillcolor);
 
     return 0;
@@ -316,7 +300,6 @@ const FFFilter ff_vf_shear = {
     .p.priv_class    = &shear_class,
     .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size       = sizeof(ShearContext),
-    .init            = init,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
