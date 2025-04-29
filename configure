@@ -97,6 +97,8 @@ Standard options:
 Licensing options:
   --enable-gpl             allow use of GPL code, the resulting libs
                            and binaries will be under GPL [no]
+  --enable-agpl            allow use of AGPL code, the resulting libs
+                           and binaries will be under AGPL [no]
   --enable-version3        upgrade (L)GPL to version 3 [no]
   --enable-nonfree         allow use of nonfree code, the resulting libs
                            and binaries will be unredistributable [no]
@@ -2056,6 +2058,9 @@ FEATURE_LIST="
     swscale_alpha
 "
 
+FEATURE_AGPL_LIST="
+"
+
 # this list should be kept in linking order
 LIBRARY_LIST="
     avdevice
@@ -2069,6 +2074,7 @@ LIBRARY_LIST="
 
 LICENSE_LIST="
     gpl
+    agpl
     nonfree
     version3
 "
@@ -4494,6 +4500,7 @@ die_license_disabled_gpl() {
 
 map "die_license_disabled gpl"      $EXTERNAL_LIBRARY_GPL_LIST $EXTERNAL_LIBRARY_GPLV3_LIST
 map "die_license_disabled version3" $EXTERNAL_LIBRARY_VERSION3_LIST $EXTERNAL_LIBRARY_GPLV3_LIST
+map "die_license_disabled agpl"     $FEATURE_AGPL_LIST
 
 enabled gpl && map "die_license_disabled_gpl nonfree" $EXTERNAL_LIBRARY_NONFREE_LIST
 map "die_license_disabled nonfree" $HWACCEL_LIBRARY_NONFREE_LIST
@@ -4502,6 +4509,8 @@ enabled version3 && { enabled gpl && enable gplv3 || enable lgplv3; }
 
 if enabled nonfree; then
     license="nonfree and unredistributable"
+elif enabled agpl; then
+    license="AGPL version 3 or later"
 elif enabled gplv3; then
     license="GPL version 3 or later"
 elif enabled lgplv3; then
