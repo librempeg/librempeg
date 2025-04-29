@@ -198,6 +198,7 @@ static int fn(do_envelope)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, cons
     AudioEnvelopeContext *s = ctx->priv;
     const ftype *src = (const ftype *)in->extended_data[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
+    const int disabled = ff_filter_disabled(ctx);
     const int nb_samples = in->nb_samples;
     fn(StateContext) *st = s->st;
     fn(StateContext) *stc = &st[ch];
@@ -245,7 +246,7 @@ static int fn(do_envelope)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, cons
                 hold_count += hold;
         }
 
-        dst[n] = current;
+        dst[n] = disabled ? src[n] : current;
     }
 
     stc->hold_count = hold_count;
@@ -263,7 +264,9 @@ static int fn(do_envelope_link)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     AudioEnvelopeContext *s = ctx->priv;
     const int nb_channels = s->nb_channels;
     const uint8_t **srce = (const uint8_t **)in->extended_data;
+    const ftype *srci = (const ftype *)in->extended_data[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
+    const int disabled = ff_filter_disabled(ctx);
     const int nb_samples = in->nb_samples;
     fn(StateContext) *st = s->st;
     fn(StateContext) *stc = &st[ch];
@@ -317,7 +320,7 @@ static int fn(do_envelope_link)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
                 hold_count += hold;
         }
 
-        dst[n] = current;
+        dst[n] = disabled ? srci[n] : current;
     }
 
     stc->hold_count = hold_count;
