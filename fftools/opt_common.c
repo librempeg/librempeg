@@ -516,7 +516,7 @@ static void show_help_filter(const char *name)
         av_bprintf(&bp, "  %s\n", f->description);
 
     if (f->flags & AVFILTER_FLAG_SLICE_THREADS)
-        printf("    slice threading supported\n");
+        av_bprintf(&bp, "    slice threading supported\n");
     if (f->flags & AVFILTER_FLAG_FRAME_THREADS)
         av_bprintf(&bp, "    frame threading supported\n");
 
