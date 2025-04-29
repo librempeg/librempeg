@@ -33,7 +33,7 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 static void fn(biquad_process)(BiquadCoeffs *bq, ftype *dst, const ftype *src, int nb_samples,
-                               ftype *w, ftype level_in, ftype level_out)
+                               ftype *w, ftype level_in, ftype level_out, const int disabled)
 {
     const ftype b0 = bq->b0;
     const ftype b1 = bq->b1;
@@ -49,7 +49,7 @@ static void fn(biquad_process)(BiquadCoeffs *bq, ftype *dst, const ftype *src, i
         w1 = b1 * in + w2 + a1 * out;
         w2 = b2 * in + a2 * out;
 
-        dst[i] = out * level_out;
+        dst[i] = disabled ? src[i] : out * level_out;
     }
 
     w[0] = isnormal(w1) ? w1 : F(0.0);
@@ -58,6 +58,7 @@ static void fn(biquad_process)(BiquadCoeffs *bq, ftype *dst, const ftype *src, i
 
 static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
+    const int disabled = ff_filter_disabled(ctx);
     AudioEmphasisContext *s = ctx->priv;
     const ftype level_out = s->level_out;
     const ftype level_in = s->level_in;
@@ -72,7 +73,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
         ftype *w = (ftype *)s->w->extended_data[ch];
         ftype *dst = (ftype *)out->extended_data[ch];
 
-        fn(biquad_process)(&s->rc.r1, dst, src, in->nb_samples, w, level_in, level_out);
+        fn(biquad_process)(&s->rc.r1, dst, src, in->nb_samples, w, level_in, level_out, disabled);
     }
 
     return 0;

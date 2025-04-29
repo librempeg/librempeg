@@ -303,6 +303,6 @@ const FFFilter ff_af_aemphasis = {
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_FLTP),
     .process_command = process_command,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                      AVFILTER_FLAG_SLICE_THREADS,
 };
