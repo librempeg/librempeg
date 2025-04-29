@@ -210,8 +210,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
 
         ret = ff_filter_get_buffer(ctx, out);
-        if (ret < 0)
+        if (ret < 0) {
+            av_frame_free(&out);
+            av_frame_free(&in);
             return ret;
+        }
 
         av_frame_copy_props(out, in);
     }
