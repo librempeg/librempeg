@@ -2788,14 +2788,12 @@ static int decode_vol_header(Mpeg4DecContext *ctx, GetBitContext *gb)
                     last = v;
                     j = s->idsp.idct_permutation[ff_zigzag_direct[i]];
                     s->intra_matrix[j]        = last;
-                    s->chroma_intra_matrix[j] = last;
                 }
 
                 /* replicate last value */
                 for (; i < 64; i++) {
                     int j = s->idsp.idct_permutation[ff_zigzag_direct[i]];
                     s->intra_matrix[j]        = last;
-                    s->chroma_intra_matrix[j] = last;
                 }
             }
 
@@ -2815,14 +2813,12 @@ static int decode_vol_header(Mpeg4DecContext *ctx, GetBitContext *gb)
                     last = v;
                     j = s->idsp.idct_permutation[ff_zigzag_direct[i]];
                     s->inter_matrix[j]        = v;
-                    s->chroma_inter_matrix[j] = v;
                 }
 
                 /* replicate last value */
                 for (; i < 64; i++) {
                     int j = s->idsp.idct_permutation[ff_zigzag_direct[i]];
                     s->inter_matrix[j]        = last;
-                    s->chroma_inter_matrix[j] = last;
                 }
             }
 
