@@ -521,7 +521,8 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
     if (ret < 0) {
         goto fail;
     } else {
-        memset(pkt->data + pkt->size, 0, AV_INPUT_BUFFER_PADDING_SIZE);
+        memset(pkt->data + ret, 0, size - ret + AV_INPUT_BUFFER_PADDING_SIZE);
+        pkt->size = ret;
         s->img_number++;
         return 0;
     }
