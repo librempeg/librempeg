@@ -461,8 +461,6 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
         if (par->codec_id == AV_CODEC_ID_RAWVIDEO && !par->width)
             infer_size(&par->width, &par->height, size);
     } else {
-        if (avio_feof(s1->pb) && s->is_pipe)
-            avio_seek(s1->pb, 0, SEEK_SET);
         if (avio_feof(s1->pb))
             return AVERROR_EOF;
         if (s->frame_size > 0) {
@@ -514,12 +512,6 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
     }
 
     ret = avio_read(f ? f : s1->pb, pkt->data, size);
-    if (s->is_pipe && ret == AVERROR_EOF) {
-        if (avio_seek(s1->pb, 0, SEEK_SET) >= 0) {
-            pkt->pos = 0;
-            ret = avio_read(s1->pb, pkt->data, size);
-        }
-    }
     if (f)
         ff_format_io_close(s1, &f);
 
