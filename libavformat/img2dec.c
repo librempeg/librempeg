@@ -415,6 +415,9 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
     AVIOContext *f = NULL;
     int size, ret;
 
+    if (s->pattern_type == PT_NONE && s->img_number - s->img_first >= 1)
+        return AVERROR_EOF;
+
     if (!s->is_pipe) {
         if (s->pattern_type == PT_NONE) {
             av_strlcpy(filename_bytes, s->path, sizeof(filename_bytes));
