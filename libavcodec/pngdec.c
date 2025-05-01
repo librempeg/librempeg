@@ -1757,7 +1757,7 @@ static int decode_frame_png(AVCodecContext *avctx, AVFrame *p,
     PNGDecContext *const s = avctx->priv_data;
     const uint8_t *buf     = avpkt->data;
     int buf_size           = avpkt->size;
-    int64_t sig;
+    uint64_t sig;
     int ret;
 
     clear_frame_metadata(s);
