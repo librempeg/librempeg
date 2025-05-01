@@ -340,11 +340,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (s->passthrough)
         return ff_filter_frame(outlink, in);
 
-    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    out = av_frame_alloc();
     if (!out) {
-        err = AVERROR(ENOMEM);
-        goto fail;
+        av_frame_free(&in);
+        return AVERROR(ENOMEM);
     }
+
+    err = ff_filter_get_buffer(ctx, out);
+    if (err < 0)
+        goto fail;
 
     err = av_frame_copy_props(out, in);
     if (err < 0)
@@ -411,7 +415,7 @@ const FFFilter ff_vf_transpose = {
     .p.name        = "transpose",
     .p.description = NULL_IF_CONFIG_SMALL("Transpose input video."),
     .p.priv_class  = &transpose_class,
-    .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS | AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(TransContext),
     FILTER_INPUTS(transpose_inputs),
     FILTER_OUTPUTS(transpose_outputs),
