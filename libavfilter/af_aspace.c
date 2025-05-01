@@ -282,25 +282,43 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AudioSpaceContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     const int nb_speakers = outlink->ch_layout.nb_channels;
-    int nb_samples = in->nb_samples;
+    int ret, nb_samples = in->nb_samples;
     ThreadData td;
     double scale;
     AVFrame *out;
 
     if (!s->w || s->w->nb_samples < nb_samples) {
-        av_frame_free(&s->w);
-        s->w = ff_get_audio_buffer(outlink, nb_samples);
         if (!s->w) {
+            s->w = av_frame_alloc();
+            if (!s->w) {
+                av_frame_free(&in);
+                return AVERROR(ENOMEM);
+            }
+        } else {
+            av_frame_unref(s->w);
+        }
+        s->w->nb_samples = nb_samples;
+        ret = ff_filter_get_buffer(ctx, s->w);
+        if (ret < 0) {
             av_frame_free(&in);
-            return AVERROR(ENOMEM);
+            return ret;
         }
     }
 
-    out = ff_get_audio_buffer(outlink, nb_samples);
+    out = av_frame_alloc();
     if (!out) {
         av_frame_free(&in);
         return AVERROR(ENOMEM);
     }
+
+    out->nb_samples = nb_samples;
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0) {
+        av_frame_free(&out);
+        av_frame_free(&in);
+        return ret;
+    }
+
     av_frame_copy_props(out, in);
 
     s->source[0] = s->polar[2] * cos(s->polar[0] * M_PI / 180.0) * cos(s->polar[1] * M_PI / 180.0);
@@ -444,6 +462,28 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_frame_free(&s->w);
 }
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const AudioSpaceContext *s_src = src->priv;
+    AudioSpaceContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    memcpy(s_dst->polar, s_src->polar, sizeof(s_src->polar));
+    s_dst->rolloff = s_src->rolloff;
+    s_dst->blur = s_src->blur;
+
+    memcpy(s_dst->prev_source, s_src->prev_source, sizeof(s_src->prev_source));
+    memcpy(s_dst->reference, s_src->reference, sizeof(s_src->reference));
+    memcpy(s_dst->source, s_src->source, sizeof(s_src->source));
+
+    return 0;
+}
+#endif
+
 static const AVFilterPad inputs[] = {
     {
         .name         = "default",
@@ -469,9 +509,12 @@ const FFFilter ff_af_aspace = {
     .priv_size       = sizeof(AudioSpaceContext),
     .init            = init,
     .uninit          = uninit,
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state  = transfer_state,
+#endif
     FILTER_QUERY_FUNC2(query_formats),
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     .process_command = ff_filter_process_command,
-    .p.flags         = AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags         = AVFILTER_FLAG_SLICE_THREADS | AVFILTER_FLAG_FRAME_THREADS,
 };
