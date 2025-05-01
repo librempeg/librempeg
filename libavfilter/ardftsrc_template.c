@@ -61,6 +61,7 @@
 
 typedef struct fn(StateContext) {
     ftype *over;
+    ftype *temp;
     ftype *rdft_in0;
     ctype *rdft_in1;
     ctype *rdft_out0;
@@ -91,6 +92,7 @@ static void fn(src_uninit)(AVFilterContext *ctx)
             fn(StateContext) *stc = &state[ch];
 
             av_freep(&stc->over);
+            av_freep(&stc->temp);
             av_tx_uninit(&stc->tx_ctx);
             av_tx_uninit(&stc->itx_ctx);
             av_freep(&stc->rdft_in0);
@@ -136,6 +138,10 @@ static int fn(src_init)(AVFilterContext *ctx)
         if (!stc->over)
             return AVERROR(ENOMEM);
 
+        stc->temp = av_calloc(s->out_nb_samples, sizeof(*stc->temp));
+        if (!stc->temp)
+            return AVERROR(ENOMEM);
+
         stc->rdft_in0 = av_calloc(s->in_rdft_size+2, sizeof(*stc->rdft_in0));
         if (!stc->rdft_in0)
             return AVERROR(ENOMEM);
@@ -170,25 +176,64 @@ static int fn(src_init)(AVFilterContext *ctx)
     return 0;
 }
 
-static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
-                   const int ch, const int soffset, const int doffset)
+static int fn(src_out)(AVFilterContext *ctx, AVFrame *out, const int ch,
+                       const int doffset, const int mode)
 {
     AudioRDFTSRCContext *s = ctx->priv;
     fn(StateContext) *state = s->state;
     fn(StateContext) *stc = &state[ch];
-    ftype *over = stc->over;
+    ftype *over = mode ? s->over : stc->over;
+    ftype *irdft1 = mode ? stc->temp : stc->rdft_out1;
+    const int out_nb_samples = s->out_nb_samples;
+    const int write_samples = FFMIN(out_nb_samples, out->nb_samples - doffset);
+
+    if (mode)
+        over += ch * out_nb_samples;
+
+    if (s->out_planar) {
+        itype *dst = ((itype *)out->extended_data[ch]) + doffset;
+#if DEPTH == 16
+        for (int n = 0; n < write_samples; n++)
+            dst[n] = av_clip_int16(lrintf((irdft1[n] + over[n]) * F(1<<(DEPTH-1))));
+#else
+        memcpy(dst, irdft1, write_samples * sizeof(*dst));
+        for (int n = 0; n < write_samples; n++)
+            dst[n] += over[n];
+#endif
+    } else {
+        const int nb_channels = ctx->outputs[0]->ch_layout.nb_channels;
+        itype *dst = ((itype *)out->data[0]) + doffset * nb_channels;
+#if DEPTH == 16
+        for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
+            dst[m] = av_clip_int16(lrintf((irdft1[n] + over[n]) * F(1<<(DEPTH-1))));
+#else
+        for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
+            dst[m] = irdft1[n] + over[n];
+#endif
+    }
+
+    return 0;
+}
+
+static int fn(src_in)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
+                      const int ch, const int soffset, const int doffset)
+{
+    AudioRDFTSRCContext *s = ctx->priv;
+    fn(StateContext) *state = s->state;
+    fn(StateContext) *stc = &state[ch];
     ftype *rdft0 = stc->rdft_in0;
     ctype *rdft1 = stc->rdft_in1;
     ctype *irdft0 = stc->rdft_out0;
     ftype *irdft1 = stc->rdft_out1;
-    const int out_nb_samples = s->out_nb_samples;
+    ftype *over = stc->over;
+    ftype *temp = stc->temp;
     const int in_nb_samples = s->in_nb_samples;
     const int tr_nb_samples = s->tr_nb_samples;
     const int taper_samples = s->taper_samples;
     const int in_offset = s->in_offset;
     const int offset = tr_nb_samples - taper_samples;
-    const int write_samples = FFMIN(out_nb_samples, out->nb_samples-doffset);
-    const int copy_samples = FFMIN(in_nb_samples, in->nb_samples-soffset);
+    const int out_nb_samples = s->out_nb_samples;
+    const int copy_samples = FFMIN(in_nb_samples, in->nb_samples - soffset);
     const ttype *taper = s->taper;
 
     if (s->in_planar) {
@@ -225,30 +270,32 @@ static int fn(src)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 
     stc->itx_fn(stc->itx_ctx, irdft1, irdft0, sizeof(*irdft0));
 
-    if (s->out_planar) {
-        itype *dst = ((itype *)out->extended_data[ch]) + doffset;
-#if DEPTH == 16
-        for (int n = 0; n < write_samples; n++)
-            dst[n] = av_clip_int16(lrintf((irdft1[n] + over[n]) * F(1<<(DEPTH-1))));
-#else
-        memcpy(dst, irdft1, write_samples * sizeof(*dst));
-        for (int n = 0; n < write_samples; n++)
-            dst[n] += over[n];
-#endif
-    } else {
-        const int nb_channels = ctx->outputs[0]->ch_layout.nb_channels;
-        itype *dst = ((itype *)out->data[0]) + doffset * nb_channels;
-#if DEPTH == 16
-        for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
-            dst[m] = av_clip_int16(lrintf((irdft1[n] + over[n]) * F(1<<(DEPTH-1))));
-#else
-        for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
-            dst[m] = irdft1[n] + over[n];
-#endif
-    }
-    memcpy(over, irdft1 + write_samples, sizeof(*over) * out_nb_samples);
+    if (doffset > 0)
+        fn(src_out)(ctx, out, ch, doffset, 0);
+
+    memcpy(over, irdft1 + out_nb_samples, sizeof(*over) * out_nb_samples);
+
+    if (soffset == 0)
+        memcpy(temp, irdft1, sizeof(*temp) * out_nb_samples);
 
     return 0;
+}
+
+static void fn(copy_over)(AVFilterContext *ctx)
+{
+    const int nb_channels = ctx->outputs[0]->ch_layout.nb_channels;
+    AudioRDFTSRCContext *s = ctx->priv;
+    const int out_nb_samples = s->out_nb_samples;
+    fn(StateContext) *state = s->state;
+    ftype *over = s->over;
+
+    for (int ch = 0; ch < nb_channels; ch++) {
+        fn(StateContext) *stc = &state[ch];
+
+        memcpy(over, stc->over, out_nb_samples * sizeof(*over));
+
+        over += out_nb_samples;
+    }
 }
 
 static int fn(flush)(AVFilterContext *ctx, AVFrame *out, const int ch)
