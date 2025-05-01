@@ -459,6 +459,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 
     av_freep(&s->fdsp);
     av_freep(&s->speakers);
+    av_freep(&s->sorted_speakers);
     av_frame_free(&s->w);
 }
 
