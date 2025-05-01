@@ -427,9 +427,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             if (s->slide == 2) {
                 s->x_pos = out->width - 1;
                 for (j = 0; j < outlink->h; j++) {
-                    memmove(out->data[p] + j * out->linesize[p] ,
+                    memmove(out->data[p] + j * out->linesize[p],
                             out->data[p] + j * out->linesize[p] + bpp,
                             (outlink->w - 1) * bpp);
+
+                    if (s->histogram_size <= 256) {
+                        out->data[p][j * out->linesize[p] + outlink->w-1] = s->bg_color[0][p];
+                    } else {
+                        AV_WN16(s->out->data[p] + j * s->out->linesize[p] + (outlink->w-1) * 2, s->bg_color[0][p] * s->mult);
+                    }
                 }
             } else if (s->slide == 3) {
                 s->x_pos = 0;
@@ -437,6 +443,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                     memmove(out->data[p] + j * out->linesize[p] + bpp,
                             out->data[p] + j * out->linesize[p],
                             (outlink->w - 1) * bpp);
+
+                    if (s->histogram_size <= 256) {
+                        out->data[p][j * out->linesize[p]] = s->bg_color[0][p];
+                    } else {
+                        AV_WN16(s->out->data[p] + j * s->out->linesize[p], s->bg_color[0][p] * s->mult);
+                    }
                 }
             }
 
@@ -463,24 +475,24 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
             if (s->envelope) {
                 if (s->histogram_size <= 256) {
-                    s->out->data[0][(minh + starty) * s->out->linesize[p] + startx + s->x_pos] = s->envelope_color[0];
-                    s->out->data[0][(maxh + starty) * s->out->linesize[p] + startx + s->x_pos] = s->envelope_color[0];
+                    s->out->data[0][(minh + starty) * s->out->linesize[0] + startx + s->x_pos] = s->envelope_color[0];
+                    s->out->data[0][(maxh + starty) * s->out->linesize[0] + startx + s->x_pos] = s->envelope_color[0];
                     if (s->dncomp >= 3) {
-                        s->out->data[1][(minh + starty) * s->out->linesize[p] + startx + s->x_pos] = s->envelope_color[1];
-                        s->out->data[2][(minh + starty) * s->out->linesize[p] + startx + s->x_pos] = s->envelope_color[2];
-                        s->out->data[1][(maxh + starty) * s->out->linesize[p] + startx + s->x_pos] = s->envelope_color[1];
-                        s->out->data[2][(maxh + starty) * s->out->linesize[p] + startx + s->x_pos] = s->envelope_color[2];
+                        s->out->data[1][(minh + starty) * s->out->linesize[1] + startx + s->x_pos] = s->envelope_color[1];
+                        s->out->data[1][(maxh + starty) * s->out->linesize[1] + startx + s->x_pos] = s->envelope_color[1];
+                        s->out->data[2][(minh + starty) * s->out->linesize[2] + startx + s->x_pos] = s->envelope_color[2];
+                        s->out->data[2][(maxh + starty) * s->out->linesize[2] + startx + s->x_pos] = s->envelope_color[2];
                     }
                 } else {
                     const int mult = s->mult;
 
-                    AV_WN16(s->out->data[0] + (minh + starty) * s->out->linesize[p] + startx * 2 + s->x_pos * 2, s->envelope_color[0] * mult);
-                    AV_WN16(s->out->data[0] + (maxh + starty) * s->out->linesize[p] + startx * 2 + s->x_pos * 2, s->envelope_color[0] * mult);
+                    AV_WN16(s->out->data[0] + (minh + starty) * s->out->linesize[0] + startx * 2 + s->x_pos * 2, s->envelope_color[0] * mult);
+                    AV_WN16(s->out->data[0] + (maxh + starty) * s->out->linesize[0] + startx * 2 + s->x_pos * 2, s->envelope_color[0] * mult);
                     if (s->dncomp >= 3) {
-                        AV_WN16(s->out->data[1] + (minh + starty) * s->out->linesize[p] + startx * 2 + s->x_pos * 2, s->envelope_color[1] * mult);
-                        AV_WN16(s->out->data[2] + (minh + starty) * s->out->linesize[p] + startx * 2 + s->x_pos * 2, s->envelope_color[2] * mult);
-                        AV_WN16(s->out->data[1] + (maxh + starty) * s->out->linesize[p] + startx * 2 + s->x_pos * 2, s->envelope_color[1] * mult);
-                        AV_WN16(s->out->data[2] + (maxh + starty) * s->out->linesize[p] + startx * 2 + s->x_pos * 2, s->envelope_color[2] * mult);
+                        AV_WN16(s->out->data[1] + (minh + starty) * s->out->linesize[1] + startx * 2 + s->x_pos * 2, s->envelope_color[1] * mult);
+                        AV_WN16(s->out->data[1] + (maxh + starty) * s->out->linesize[2] + startx * 2 + s->x_pos * 2, s->envelope_color[1] * mult);
+                        AV_WN16(s->out->data[2] + (minh + starty) * s->out->linesize[2] + startx * 2 + s->x_pos * 2, s->envelope_color[2] * mult);
+                        AV_WN16(s->out->data[2] + (maxh + starty) * s->out->linesize[2] + startx * 2 + s->x_pos * 2, s->envelope_color[2] * mult);
                     }
                 }
             }
