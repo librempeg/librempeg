@@ -321,12 +321,6 @@ int ff_filter_frame_thread_config_links(FFFilterContext *ctxi)
                 if (ret < 0)
                     return ret;
             }
-
-            if (pad->config_props) {
-                ret = pad->config_props(l_dst);
-                if (ret < 0)
-                    return ret;
-            }
         }
 
         for (unsigned j = 0; j < ctx->nb_outputs; j++) {
@@ -360,9 +354,23 @@ int ff_filter_frame_thread_config_links(FFFilterContext *ctxi)
                 if (ret < 0)
                     return ret;
             }
+        }
+
+        for (unsigned j = 0; j < ctx->nb_inputs; j++) {
+            AVFilterPad *pad = &child->input_pads[j];
 
             if (pad->config_props) {
-                ret = pad->config_props(l_dst);
+                ret = pad->config_props(child->inputs[j]);
+                if (ret < 0)
+                    return ret;
+            }
+        }
+
+        for (unsigned j = 0; j < ctx->nb_outputs; j++) {
+            AVFilterPad *pad = &child->output_pads[j];
+
+            if (pad->config_props) {
+                ret = pad->config_props(child->outputs[j]);
                 if (ret < 0)
                     return ret;
             }
