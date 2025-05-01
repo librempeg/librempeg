@@ -354,6 +354,13 @@ int ff_filter_frame_thread_config_links(FFFilterContext *ctxi)
             l_dst->sample_rate         = l_src->sample_rate;
             l_dst->time_base           = l_src->time_base;
 
+            av_channel_layout_uninit(&l_dst->ch_layout);
+            if (l_src->ch_layout.nb_channels) {
+                ret = av_channel_layout_copy(&l_dst->ch_layout, &l_src->ch_layout);
+                if (ret < 0)
+                    return ret;
+            }
+
             if (pad->config_props) {
                 ret = pad->config_props(l_dst);
                 if (ret < 0)
