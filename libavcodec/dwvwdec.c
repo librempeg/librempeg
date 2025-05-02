@@ -128,6 +128,9 @@ static av_cold void decode_flush(AVCodecContext *avctx)
     DWVWContext *s = avctx->priv_data;
 
     s->last_sample = s->last_delta_width = 0;
+    s->prev_size = s->skip_bits = 0;
+
+    memset(s->prev, 0, sizeof(s->prev));
 }
 
 static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
