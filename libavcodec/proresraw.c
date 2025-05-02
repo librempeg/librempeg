@@ -391,6 +391,13 @@ static int decode_frame(AVCodecContext *avctx,
         int size;
 
         size = bytestream2_get_be16(&gb);
+        if (offset >= avpkt->size)
+            return AVERROR_INVALIDDATA;
+        if (size >= avpkt->size)
+            return AVERROR_INVALIDDATA;
+        if (offset > avpkt->size - size)
+            return AVERROR_INVALIDDATA;
+
         bytestream2_init(&tile->gb, avpkt->data + offset, size);
 
         tile->y = (n / s->nb_tw) * s->th;
