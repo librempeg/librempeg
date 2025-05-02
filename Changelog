@@ -17,8 +17,8 @@ version <next>:
 - ADPCM IMA XBOX audio decoder
 - native LC3 audio decoder
 - ADPCM N64 audio decoder
-- TAC audio decoder and demuxer
-- AHX audio decoder
+- TAC audio decoder and demuxer and parser
+- AHX audio decoder and parser
 - DWVW audio decoder
 - UTK and UTK R3 audio decoder and demuxer
 - EALAYER3 and EALAYER3MULTI audio decoder
