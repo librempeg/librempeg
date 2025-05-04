@@ -98,6 +98,7 @@ static int query_formats(const AVFilterContext *ctx,
 {
     const AudioRDFTSRCContext *s = ctx->priv;
     static const enum AVSampleFormat sample_fmts[] = {
+        AV_SAMPLE_FMT_U8,  AV_SAMPLE_FMT_U8P,
         AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_S16P,
         AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_FLTP,
         AV_SAMPLE_FMT_DBL, AV_SAMPLE_FMT_DBLP,
@@ -126,6 +127,10 @@ static int query_formats(const AVFilterContext *ctx,
                           &cfg_out[0]->samplerates);
 }
 
+#define DEPTH 8
+#include "ardftsrc_template.c"
+
+#undef DEPTH
 #define DEPTH 16
 #include "ardftsrc_template.c"
 
@@ -185,6 +190,15 @@ static int config_input(AVFilterLink *inlink)
 #endif
 
     switch (inlink->format) {
+    case AV_SAMPLE_FMT_U8:
+    case AV_SAMPLE_FMT_U8P:
+        s->flush_src = flush_u8p;
+        s->do_src_in = src_in_u8p;
+        s->do_src_out = src_out_u8p;
+        s->src_uninit = src_uninit_u8p;
+        s->copy_over = copy_over_u8p;
+        ret = src_init_u8p(ctx);
+        break;
     case AV_SAMPLE_FMT_S16:
     case AV_SAMPLE_FMT_S16P:
         s->flush_src = flush_s16p;
