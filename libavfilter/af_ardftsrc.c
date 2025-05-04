@@ -107,14 +107,9 @@ static int query_formats(const AVFilterContext *ctx,
     AVFilterFormats *formats;
 
     formats = ff_make_format_list(sample_fmts);
-    if (formats)
-        formats->flags = FILTER_SAME_BITDEPTH;
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
-    formats = ff_make_format_list(sample_fmts);
-    if (formats)
-        formats->flags = FILTER_SAME_BITDEPTH;
     if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
