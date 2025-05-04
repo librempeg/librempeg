@@ -44,6 +44,14 @@
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #elif DEPTH == 32
+#define FEXP exp
+#define ctype AVComplexDouble
+#define ftype double
+#define itype int32_t
+#define SAMPLE_FORMAT s32p
+#define ttype AVComplexDouble
+#define TX_TYPE AV_TX_DOUBLE_RDFT
+#elif DEPTH == 33
 #define FEXP expf
 #define ctype AVComplexFloat
 #define ftype float
@@ -206,6 +214,9 @@ static int fn(src_out)(AVFilterContext *ctx, AVFrame *out, const int ch,
 #elif DEPTH == 16
         for (int n = 0; n < write_samples; n++)
             dst[n] = av_clip_int16(lrintf((irdft1[n] + over[n]) * F(1<<(DEPTH-1))));
+#elif DEPTH == 32
+        for (int n = 0; n < write_samples; n++)
+            dst[n] = av_clipl_int32(lrint((irdft1[n] + over[n]) * F(1LL<<(DEPTH-1))));
 #else
         memcpy(dst, irdft1, write_samples * sizeof(*dst));
         for (int n = 0; n < write_samples; n++)
@@ -220,6 +231,9 @@ static int fn(src_out)(AVFilterContext *ctx, AVFrame *out, const int ch,
 #elif DEPTH == 16
         for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
             dst[m] = av_clip_int16(lrintf((irdft1[n] + over[n]) * F(1<<(DEPTH-1))));
+#elif DEPTH == 32
+        for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
+            dst[m] = av_clipl_int32(lrint((irdft1[n] + over[n]) * F(1LL<<(DEPTH-1))));
 #else
         for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
             dst[m] = irdft1[n] + over[n];
@@ -259,6 +273,9 @@ static int fn(src_in)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 #elif DEPTH == 16
         for (int n = 0; n < copy_samples; n++)
             rdft0o[n] = src[n] * (F(1.0)/F(1<<(DEPTH-1)));
+#elif DEPTH == 32
+        for (int n = 0; n < copy_samples; n++)
+            rdft0o[n] = src[n] * (F(1.0)/F(1LL<<(DEPTH-1)));
 #else
         memcpy(rdft0o, src, copy_samples * sizeof(*rdft0));
 #endif
@@ -272,6 +289,9 @@ static int fn(src_in)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 #elif DEPTH == 16
         for (int n = 0, m = ch; n < copy_samples; n++, m += nb_channels)
             rdft0o[n] = src[m] * (F(1.0)/F(1<<(DEPTH-1)));
+#elif DEPTH == 32
+        for (int n = 0, m = ch; n < copy_samples; n++, m += nb_channels)
+            rdft0o[n] = src[m] * (F(1.0)/F(1LL<<(DEPTH-1)));
 #else
         for (int n = 0, m = ch; n < copy_samples; n++, m += nb_channels)
             rdft0o[n] = src[m];
@@ -334,6 +354,9 @@ static int fn(flush)(AVFilterContext *ctx, AVFrame *out, const int ch)
 #elif DEPTH == 16
         for (int n = 0; n < nb_samples; n++)
             dst[n] = av_clip_int16(lrintf(over[n] * F(1<<(DEPTH-1))));
+#elif DEPTH == 32
+        for (int n = 0; n < nb_samples; n++)
+            dst[n] = av_clipl_int32(lrint(over[n] * F(1LL<<(DEPTH-1))));
 #else
         memcpy(dst, over, nb_samples * sizeof(*dst));
 #endif
@@ -346,6 +369,9 @@ static int fn(flush)(AVFilterContext *ctx, AVFrame *out, const int ch)
 #elif DEPTH == 16
         for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
             dst[m] = av_clip_int16(lrintf(over[n] * F(1<<(DEPTH-1))));
+#elif DEPTH == 32
+        for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
+            dst[m] = av_clipl_int32(lrint(over[n] * F(1LL<<(DEPTH-1))));
 #else
         for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
             dst[m] = over[n];

@@ -100,6 +100,7 @@ static int query_formats(const AVFilterContext *ctx,
     static const enum AVSampleFormat sample_fmts[] = {
         AV_SAMPLE_FMT_U8,  AV_SAMPLE_FMT_U8P,
         AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_S16P,
+        AV_SAMPLE_FMT_S32, AV_SAMPLE_FMT_S32P,
         AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_FLTP,
         AV_SAMPLE_FMT_DBL, AV_SAMPLE_FMT_DBLP,
         AV_SAMPLE_FMT_NONE
@@ -139,7 +140,11 @@ static int query_formats(const AVFilterContext *ctx,
 #include "ardftsrc_template.c"
 
 #undef DEPTH
-#define DEPTH 64
+#define DEPTH 33
+#include "ardftsrc_template.c"
+
+#undef DEPTH
+#define DEPTH 65
 #include "ardftsrc_template.c"
 
 static int config_input(AVFilterLink *inlink)
@@ -183,7 +188,7 @@ static int config_input(AVFilterLink *inlink)
     if (!ff_filter_is_frame_thread(ctx)) {
         const int64_t channels = outlink->ch_layout.nb_channels;
 
-        s->over = av_refstruct_allocz(FFMAX(av_get_bytes_per_sample(inlink->format), 4) * channels * s->out_nb_samples);
+        s->over = av_refstruct_allocz(FFMAX(av_get_bytes_per_sample(inlink->format), 8) * channels * s->out_nb_samples);
         if (!s->over)
             return AVERROR(ENOMEM);
     }
@@ -207,6 +212,15 @@ static int config_input(AVFilterLink *inlink)
         s->src_uninit = src_uninit_s16p;
         s->copy_over = copy_over_s16p;
         ret = src_init_s16p(ctx);
+        break;
+    case AV_SAMPLE_FMT_S32:
+    case AV_SAMPLE_FMT_S32P:
+        s->flush_src = flush_s32p;
+        s->do_src_in = src_in_s32p;
+        s->do_src_out = src_out_s32p;
+        s->src_uninit = src_uninit_s32p;
+        s->copy_over = copy_over_s32p;
+        ret = src_init_s32p(ctx);
         break;
     case AV_SAMPLE_FMT_FLT:
     case AV_SAMPLE_FMT_FLTP:
