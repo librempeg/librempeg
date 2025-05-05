@@ -126,9 +126,11 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
                     int add_param = 1;
 
                     if ((a->flags & FILTER_SAME_BITDEPTH) || (b->flags & FILTER_SAME_BITDEPTH)) {
+                        const int afloat = !!(adesc->flags & AV_PIX_FMT_FLAG_FLOAT);
+                        const int bfloat = !!(bdesc->flags & AV_PIX_FMT_FLAG_FLOAT);
                         const int abits = adesc->comp[0].depth;
                         const int bbits = bdesc->comp[0].depth;
-                        add_param &= (abits == bbits);
+                        add_param &= (abits == bbits && afloat == bfloat);
                     }
                     if ((a->flags & FILTER_SAME_ENDIANNESS) || (b->flags & FILTER_SAME_ENDIANNESS)) {
                         const int abe = !!(adesc->flags & AV_PIX_FMT_FLAG_BE);
@@ -177,10 +179,12 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
                     int add_format = 1;
 
                     if ((a->flags & FILTER_SAME_BITDEPTH) || (b->flags & FILTER_SAME_BITDEPTH)) {
+                        const int afloat = !!(adesc->flags & AV_PIX_FMT_FLAG_FLOAT);
+                        const int bfloat = !!(bdesc->flags & AV_PIX_FMT_FLAG_FLOAT);
                         const int abits = adesc->comp[0].depth;
                         const int bbits = bdesc->comp[0].depth;
 
-                        add_format &= (abits == bbits);
+                        add_format &= (abits == bbits && afloat == bfloat);
                     }
                     if ((a->flags & FILTER_SAME_ENDIANNESS) || (b->flags & FILTER_SAME_ENDIANNESS)) {
                         const int abe = !!(adesc->flags & AV_PIX_FMT_FLAG_BE);
