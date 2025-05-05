@@ -41,6 +41,7 @@
 #include "libavutil/avstring.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
+#include "libavutil/float2half.h"
 #include "libavutil/half2float.h"
 
 #include "avcodec.h"
@@ -193,6 +194,7 @@ typedef struct EXRContext {
     uint8_t *offset_table;
 
     Half2FloatTables h2f_tables;
+    Float2HalfTables f2h_tables;
 } EXRContext;
 
 static int zip_uncompress(const EXRContext *s, const uint8_t *src, int compressed_size,
@@ -1115,8 +1117,6 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
                 if (plane >= 0 && plane < 3) {
                     const int idx = (x >> 3) + (y >> 3) * dc_w + dc_w * dc_h * dc_j++;
                     uint16_t *dc = (uint16_t *)td->dc_data;
-                    float *dst = ((float *)td->uncompressed_data) +
-                        y * td->xsize * s->nb_channels + td->xsize * j + x;
                     union av_intfloat32 dc_val;
 
                     memset(td->block, 0, sizeof(td->block));
@@ -1126,14 +1126,32 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
                     ac_uncompress(s, &agb, block);
                     dct_inverse(block);
 
-                    for (int yy = 0; yy < 8; yy++) {
-                        for (int xx = 0; xx < 8; xx++) {
-                            const int idx = xx + yy * 8;
+                    if (s->pixel_type == EXR_HALF) {
+                        uint16_t *dst = ((uint16_t *)td->uncompressed_data) +
+                            y * td->xsize * s->nb_channels + td->xsize * j + x;
 
-                            dst[xx] = block[idx];
+                        for (int yy = 0; yy < 8; yy++) {
+                            for (int xx = 0; xx < 8; xx++) {
+                                const int idx = xx + yy * 8;
+
+                                dst[xx] = float2half(av_float2int(block[idx]), &s->f2h_tables);
+                            }
+
+                            dst += td->xsize * s->nb_channels;
                         }
+                    } else {
+                        float *dst = ((float *)td->uncompressed_data) +
+                            y * td->xsize * s->nb_channels + td->xsize * j + x;
 
-                        dst += td->xsize * s->nb_channels;
+                        for (int yy = 0; yy < 8; yy++) {
+                            for (int xx = 0; xx < 8; xx++) {
+                                const int idx = xx + yy * 8;
+
+                                dst[xx] = block[idx];
+                            }
+
+                            dst += td->xsize * s->nb_channels;
+                        }
                     }
                 }
             }
@@ -1147,52 +1165,106 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
             if (plane != 3)
                 continue;
 
-            for (int x = 0; x < td->xsize; x++) {
-                float *dst = ((float *)td->uncompressed_data) + y * td->xsize * s->nb_channels + td->xsize * j;
-                uint8_t *ai0 = td->rle_raw_data + y * td->xsize;
-                uint8_t *ai1 = td->rle_raw_data + y * td->xsize + rle_raw_size / 2;
-                uint16_t ha = ai0[x] | (ai1[x] << 8);
+            if (s->pixel_type == EXR_HALF) {
+                for (int x = 0; x < td->xsize; x++) {
+                    uint16_t *dst = ((uint16_t *)td->uncompressed_data) + y * td->xsize * s->nb_channels + td->xsize * j;
+                    uint8_t *ai0 = td->rle_raw_data + y * td->xsize;
+                    uint8_t *ai1 = td->rle_raw_data + y * td->xsize + rle_raw_size / 2;
+                    uint16_t ha = ai0[x] | (ai1[x] << 8);
 
-                dst[x] = half2float(ha, &s->h2f_tables);
+                    dst[x] = ha;
+                }
+            } else {
+                for (int x = 0; x < td->xsize; x++) {
+                    uint32_t *dst = ((uint32_t *)td->uncompressed_data) + y * td->xsize * s->nb_channels + td->xsize * j;
+                    uint8_t *ai0 = td->rle_raw_data + y * td->xsize;
+                    uint8_t *ai1 = td->rle_raw_data + y * td->xsize + rle_raw_size / 2;
+                    uint16_t ha = ai0[x] | (ai1[x] << 8);
+
+                    dst[x] = half2float(ha, &s->h2f_tables);
+                }
             }
         }
     }
 
     for (int y = 0; y < td->ysize; y++) {
         for (int p = 0; p < s->nb_channels;) {
-            float *yuv[4] = {NULL}, *rgb[4] = {NULL};
+            if (s->pixel_type == EXR_HALF) {
+                uint16_t *yuv[4] = {NULL}, *rgb[4] = {NULL};
 
-            for (int j = p; j < s->nb_channels; j++) {
-                float *dst = ((float *)td->uncompressed_data) + y * td->xsize * s->nb_channels + td->xsize * j;
-                const int plane = s->channels[j].plane;
+                for (int j = p; j < s->nb_channels; j++) {
+                    uint16_t *dst = ((uint16_t *)td->uncompressed_data) + y * td->xsize * s->nb_channels + td->xsize * j;
+                    const int plane = s->channels[j].plane;
 
-                if (plane < 0 || plane > 3)
-                    continue;
+                    if (plane < 0 || plane > 3)
+                        continue;
 
-                if (yuv[plane] == NULL)
-                    yuv[plane] = rgb[plane] = dst;
+                    if (yuv[plane] == NULL)
+                        yuv[plane] = rgb[plane] = dst;
 
-                if (yuv[0] != NULL &&
-                    yuv[1] != NULL &&
-                    yuv[2] != NULL) {
-                    p = j+1;
-                    break;
+                    if (yuv[0] != NULL &&
+                        yuv[1] != NULL &&
+                        yuv[2] != NULL) {
+                        p = j+1;
+                        break;
+                    }
                 }
-            }
 
-            if (yuv[0] == NULL ||
-                yuv[1] == NULL ||
-                yuv[2] == NULL) {
-                p++;
-                continue;
-            }
+                if (yuv[0] == NULL ||
+                    yuv[1] == NULL ||
+                    yuv[2] == NULL) {
+                    p++;
+                    continue;
+                }
 
-            for (int x = 0; x < td->xsize; x++) {
-                convert(yuv[2][x], yuv[1][x], yuv[0][x], &rgb[2][x], &rgb[1][x], &rgb[0][x]);
+                for (int x = 0; x < td->xsize; x++) {
+                    float YUV[3], RGB[3];
 
-                rgb[0][x] = to_linear(rgb[0][x], 1.f);
-                rgb[1][x] = to_linear(rgb[1][x], 1.f);
-                rgb[2][x] = to_linear(rgb[2][x], 1.f);
+                    YUV[0] = av_int2float(half2float(yuv[0][x], &s->h2f_tables));
+                    YUV[1] = av_int2float(half2float(yuv[1][x], &s->h2f_tables));
+                    YUV[2] = av_int2float(half2float(yuv[2][x], &s->h2f_tables));
+
+                    convert(YUV[2], YUV[1], YUV[0], &RGB[2], &RGB[1], &RGB[0]);
+
+                    rgb[0][x] = float2half(av_float2int(to_linear(RGB[0], 1.f)), &s->f2h_tables);
+                    rgb[1][x] = float2half(av_float2int(to_linear(RGB[1], 1.f)), &s->f2h_tables);
+                    rgb[2][x] = float2half(av_float2int(to_linear(RGB[2], 1.f)), &s->f2h_tables);
+                }
+            } else {
+                float *yuv[4] = {NULL}, *rgb[4] = {NULL};
+
+                for (int j = p; j < s->nb_channels; j++) {
+                    float *dst = ((float *)td->uncompressed_data) + y * td->xsize * s->nb_channels + td->xsize * j;
+                    const int plane = s->channels[j].plane;
+
+                    if (plane < 0 || plane > 3)
+                        continue;
+
+                    if (yuv[plane] == NULL)
+                        yuv[plane] = rgb[plane] = dst;
+
+                    if (yuv[0] != NULL &&
+                        yuv[1] != NULL &&
+                        yuv[2] != NULL) {
+                        p = j+1;
+                        break;
+                    }
+                }
+
+                if (yuv[0] == NULL ||
+                    yuv[1] == NULL ||
+                    yuv[2] == NULL) {
+                    p++;
+                    continue;
+                }
+
+                for (int x = 0; x < td->xsize; x++) {
+                    convert(yuv[2][x], yuv[1][x], yuv[0][x], &rgb[2][x], &rgb[1][x], &rgb[0][x]);
+
+                    rgb[0][x] = to_linear(rgb[0][x], 1.f);
+                    rgb[1][x] = to_linear(rgb[1][x], 1.f);
+                    rgb[2][x] = to_linear(rgb[2][x], 1.f);
+                }
             }
         }
     }
@@ -1407,9 +1479,7 @@ static int decode_block(AVCodecContext *avctx, void *tdata,
                 if (s->desc->flags & AV_PIX_FMT_FLAG_PLANAR || !c)
                     memset(ptr, 0, bxmin);
 
-                if (s->pixel_type == EXR_FLOAT ||
-                    s->compression == EXR_DWAA ||
-                    s->compression == EXR_DWAB) {
+                if (s->pixel_type == EXR_FLOAT) {
                     for (int x = 0; x < xsize; x++, ptr_x += step)
                         AV_WN32A(ptr_x, bytestream_get_le32(&src));
                 } else if (s->pixel_type == EXR_HALF) {
@@ -2038,31 +2108,22 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *picture,
     if ((ret = decode_header(s, picture)) < 0)
         return ret;
 
-    if ((s->compression == EXR_DWAA || s->compression == EXR_DWAB) &&
-        s->pixel_type == EXR_HALF) {
-        s->current_channel_offset *= 2;
-        for (int i = 0; i < 4; i++)
-            s->channel_offsets[i] *= 2;
-    }
-
     switch (s->pixel_type) {
     case EXR_HALF:
-        if (!(s->compression == EXR_DWAA || s->compression == EXR_DWAB)) {
-            if (s->channel_offsets[3] >= 0) {
-                if (!s->is_luma) {
-                    avctx->pix_fmt = AV_PIX_FMT_GBRAPF16;
-                } else {
-                    avctx->pix_fmt = AV_PIX_FMT_YAF16;
-                }
+        if (s->channel_offsets[3] >= 0) {
+            if (!s->is_luma) {
+                avctx->pix_fmt = AV_PIX_FMT_GBRAPF16;
             } else {
-                if (!s->is_luma) {
-                    avctx->pix_fmt = AV_PIX_FMT_GBRPF16;
-                } else {
-                    avctx->pix_fmt = AV_PIX_FMT_GRAYF16;
-                }
+                avctx->pix_fmt = AV_PIX_FMT_YAF16;
             }
-            break;
+        } else {
+            if (!s->is_luma) {
+                avctx->pix_fmt = AV_PIX_FMT_GBRPF16;
+            } else {
+                avctx->pix_fmt = AV_PIX_FMT_GRAYF16;
+            }
         }
+        break;
     case EXR_FLOAT:
         if (s->channel_offsets[3] >= 0) {
             if (!s->is_luma) {
@@ -2223,6 +2284,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     EXRContext *s = avctx->priv_data;
 
     ff_init_half2float_tables(&s->h2f_tables);
+    ff_init_float2half_tables(&s->f2h_tables);
 
     s->avctx              = avctx;
     avctx->color_trc = AVCOL_TRC_LINEAR;
