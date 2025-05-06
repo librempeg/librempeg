@@ -417,6 +417,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_refstruct_unref(&s->prev_progress);
     av_refstruct_unref(&s->progress);
     av_refstruct_unref(&s->over);
+    av_frame_free(&s->in);
 
     if (s->src_uninit)
         s->src_uninit(ctx);
