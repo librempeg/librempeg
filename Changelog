@@ -78,6 +78,7 @@ version <next>:
 - aoverlay audio filter
 - arampsrc audio source filter
 - WebP Animation decoder
+- APV in MP4/ISOBMFF demuxing
 
 
 version 7.1:
