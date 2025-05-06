@@ -324,13 +324,21 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (s->pass) {
         out = in;
     } else {
+        int ret, nb_jobs;
         ThreadData td;
-        int nb_jobs;
 
-        out = ff_get_audio_buffer(outlink, in->nb_samples);
+        out = av_frame_alloc();
         if (!out) {
             av_frame_free(&in);
             return AVERROR(ENOMEM);
+        }
+
+        out->nb_samples = in->nb_samples;
+        ret = ff_filter_get_buffer(ctx, out);
+        if (ret < 0) {
+            av_frame_free(&out);
+            av_frame_free(&in);
+            return ret;
         }
 
         td.in = in;
@@ -348,27 +356,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
-static int activate(AVFilterContext *ctx)
-{
-    AVFilterLink *inlink = ctx->inputs[0];
-    AVFilterLink *outlink = ctx->outputs[0];
-    AVFrame *in;
-    int ret;
-
-    FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
-
-    ret = ff_inlink_consume_frame(inlink, &in);
-    if (ret < 0)
-        return ret;
-    if (ret > 0)
-        return filter_frame(inlink, in);
-
-    FF_FILTER_FORWARD_STATUS(inlink, outlink);
-    FF_FILTER_FORWARD_WANTED(outlink, inlink);
-
-    return FFERROR_NOT_READY;
-}
-
 static AVFrame *get_in_audio_buffer(AVFilterLink *inlink, int nb_samples)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -383,6 +370,7 @@ static const AVFilterPad inputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_AUDIO,
+        .filter_frame  = filter_frame,
         .get_buffer.audio = get_in_audio_buffer,
     },
 };
@@ -400,9 +388,8 @@ const FFFilter ff_af_asf2sf = {
     .p.description = NULL_IF_CONFIG_SMALL("Switch audio sample format."),
     .p.priv_class  = &asf2sf_class,
     .priv_size     = sizeof(AudioSF2SFContext),
-    .activate      = activate,
     FILTER_QUERY_FUNC2(query_formats),
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS | AVFILTER_FLAG_FRAME_THREADS,
 };
