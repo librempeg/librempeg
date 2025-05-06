@@ -68,6 +68,13 @@ FFFramePool *ff_frame_pool_audio_init(AVBufferRef* (*alloc)(size_t size),
                                       enum AVSampleFormat format,
                                       int align);
 
+int ff_frame_pool_audio_resize(FFFramePool *,
+                               AVBufferRef* (*alloc)(size_t size),
+                               int channels,
+                               int samples,
+                               enum AVSampleFormat format,
+                               int align);
+
 /**
  * Deallocate the frame pool. It is safe to call this function while
  * some of the allocated frame are still in use.

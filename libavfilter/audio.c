@@ -70,10 +70,9 @@ AVFrame *ff_default_get_audio_buffer(AVFilterLink *link, int nb_samples)
         if (pool_channels != channels || pool_nb_samples < nb_samples ||
             pool_format != link->format || pool_align != align) {
 
-            ff_frame_pool_uninit(&li->frame_pool);
-            li->frame_pool = ff_frame_pool_audio_init(av_buffer_allocz, channels,
-                                                      nb_samples, link->format, align);
-            if (!li->frame_pool)
+            int ret = ff_frame_pool_audio_resize(li->frame_pool, av_buffer_allocz, channels,
+                                                 nb_samples, link->format, align);
+            if (ret < 0)
                 return NULL;
         }
     }

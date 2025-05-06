@@ -27,10 +27,13 @@
 #include "libavutil/imgutils_internal.h"
 #include "libavutil/mem.h"
 #include "libavutil/pixfmt.h"
+#include "libavutil/thread.h"
 
 struct FFFramePool {
 
     enum AVMediaType type;
+
+    AVMutex mutex;
 
     /* video */
     int width;
@@ -63,6 +66,9 @@ FFFramePool *ff_frame_pool_video_init(AVBufferRef* (*alloc)(size_t size),
     pool = av_mallocz(sizeof(FFFramePool));
     if (!pool)
         return NULL;
+
+    if (ff_mutex_init(&pool->mutex, NULL))
+        goto fail;
 
     pool->type = AVMEDIA_TYPE_VIDEO;
     pool->width = width;
@@ -112,6 +118,49 @@ fail:
     return NULL;
 }
 
+int ff_frame_pool_audio_resize(FFFramePool *pool,
+                               AVBufferRef* (*alloc)(size_t size),
+                               int channels,
+                               int nb_samples,
+                               enum AVSampleFormat format,
+                               int align)
+{
+    int ret, planar;
+
+    ff_mutex_lock(&pool->mutex);
+    planar = av_sample_fmt_is_planar(format);
+
+    pool->type = AVMEDIA_TYPE_AUDIO;
+    pool->planes = planar ? channels : 1;
+    pool->channels = channels;
+    pool->nb_samples = nb_samples;
+    pool->format = format;
+    pool->align = align;
+
+    ret = av_samples_get_buffer_size(&pool->linesize[0], channels,
+                                     nb_samples, format, 0);
+    if (ret < 0)
+        goto fail;
+
+    if (pool->linesize[0] > SIZE_MAX - align) {
+        ret = AVERROR(EINVAL);
+        goto fail;
+    }
+    av_buffer_pool_uninit(&pool->pools[0]);
+    pool->pools[0] = av_buffer_pool_init(pool->linesize[0] + align, NULL);
+    if (!pool->pools[0]) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+    ff_mutex_unlock(&pool->mutex);
+
+    return 0;
+
+fail:
+    ff_mutex_unlock(&pool->mutex);
+    return ret;
+}
+
 FFFramePool *ff_frame_pool_audio_init(AVBufferRef* (*alloc)(size_t size),
                                       int channels,
                                       int nb_samples,
@@ -126,6 +175,9 @@ FFFramePool *ff_frame_pool_audio_init(AVBufferRef* (*alloc)(size_t size),
         return NULL;
 
     planar = av_sample_fmt_is_planar(format);
+
+    if (ff_mutex_init(&pool->mutex, NULL))
+        goto fail;
 
     pool->type = AVMEDIA_TYPE_AUDIO;
     pool->planes = planar ? channels : 1;
@@ -161,12 +213,16 @@ int ff_frame_pool_get_video_config(FFFramePool *pool,
     if (!pool)
         return AVERROR(EINVAL);
 
+    ff_mutex_lock(&pool->mutex);
+
     av_assert0(pool->type == AVMEDIA_TYPE_VIDEO);
 
     *width = pool->width;
     *height = pool->height;
     *format = pool->format;
     *align = pool->align;
+
+    ff_mutex_unlock(&pool->mutex);
 
     return 0;
 }
@@ -180,12 +236,16 @@ int ff_frame_pool_get_audio_config(FFFramePool *pool,
     if (!pool)
         return AVERROR(EINVAL);
 
+    ff_mutex_lock(&pool->mutex);
+
     av_assert0(pool->type == AVMEDIA_TYPE_AUDIO);
 
     *channels = pool->channels;
     *nb_samples = pool->nb_samples;
     *format = pool->format;
     *align = pool->align;
+
+    ff_mutex_unlock(&pool->mutex);
 
     return 0;
 }
@@ -200,6 +260,8 @@ AVFrame *ff_frame_pool_get(FFFramePool *pool)
     if (!frame) {
         return NULL;
     }
+
+    ff_mutex_lock(&pool->mutex);
 
     switch(pool->type) {
     case AVMEDIA_TYPE_VIDEO:
@@ -277,22 +339,29 @@ AVFrame *ff_frame_pool_get(FFFramePool *pool)
         av_assert0(0);
     }
 
+    ff_mutex_unlock(&pool->mutex);
+
     return frame;
 fail:
+    ff_mutex_unlock(&pool->mutex);
+
     av_frame_free(&frame);
     return NULL;
 }
 
 void ff_frame_pool_uninit(FFFramePool **pool)
 {
-    int i;
-
     if (!pool || !*pool)
         return;
 
-    for (i = 0; i < 4; i++) {
+    ff_mutex_lock(&(*pool)->mutex);
+
+    for (int i = 0; i < 4; i++)
         av_buffer_pool_uninit(&(*pool)->pools[i]);
-    }
+
+    ff_mutex_unlock(&(*pool)->mutex);
+
+    ff_mutex_destroy(&(*pool)->mutex);
 
     av_freep(pool);
 }
