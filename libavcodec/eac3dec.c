@@ -327,7 +327,7 @@ static int ff_eac3_parse_header(AC3DecodeContext *s)
 
     /* volume control params */
     for (i = 0; i < (s->channel_mode ? 1 : 2); i++) {
-        s->dialog_normalization[i] = -get_bits(gbc, 5);
+        s->dialog_normalization[i] = -((int)get_bits(gbc, 5));
         if (s->dialog_normalization[i] == 0) {
             s->dialog_normalization[i] = -31;
         }
