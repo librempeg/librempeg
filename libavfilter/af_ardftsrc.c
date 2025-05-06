@@ -54,6 +54,7 @@ typedef struct AudioRDFTSRCContext {
     int trim_size;
     int flush_size;
     int64_t first_pts;
+    int64_t last_pts;
     int64_t eof_pts;
 
     void *over;
@@ -160,7 +161,7 @@ static int config_input(AVFilterLink *inlink)
         return 0;
     }
 
-    s->first_pts = AV_NOPTS_VALUE;
+    s->first_pts = s->last_pts = AV_NOPTS_VALUE;
 
     outlink->time_base = (AVRational) {1, outlink->sample_rate};
 
@@ -331,6 +332,7 @@ static int filter_frame(AVFilterLink *inlink)
     AVFrame *out, *in = s->in;
     int trim_size = s->trim_size * (s->first_pts == in->pts);
     int ret, in_samples;
+    int64_t last_pts;
 
     if (s->pass) {
         s->in = NULL;
@@ -339,6 +341,7 @@ static int filter_frame(AVFilterLink *inlink)
 
     in_samples = (in->nb_samples < s->in_nb_samples) ? FFMIN(in->nb_samples+s->in_offset, s->in_nb_samples) : in->nb_samples;
     s->flush_size -= FFMAX(in_samples-in->nb_samples, 0);
+    last_pts = in->pts + in->duration;
 
     out = av_frame_alloc();
     if (!out) {
@@ -396,7 +399,7 @@ static int filter_frame(AVFilterLink *inlink)
     if (ret < 0)
         return ret;
 
-    if (s->eof && s->out_offset > 0 && s->flush_size > 0)
+    if (last_pts >= s->last_pts && s->eof && s->out_offset > 0 && s->flush_size > 0)
         return flush_frame(outlink);
 
     return 0;
@@ -445,6 +448,7 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
         return 0;
 
     s_dst->first_pts = s_src->first_pts;
+    s_dst->last_pts = s_src->last_pts;
     s_dst->eof = s_src->eof;
     s_dst->pass = s_src->pass;
     s_dst->channels = s_src->channels;
@@ -519,6 +523,7 @@ static int filter_prepare(AVFilterContext *ctx)
     }
 
     if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+        s->last_pts = pts;
         s->eof_pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
         s->eof = 1;
     }
@@ -551,7 +556,7 @@ finish:
     if (s->in)
         return 0;
 
-    if (s->eof) {
+    if (s->eof && ff_inlink_queued_samples(inlink) <= 0) {
         ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_pts);
         return AVERROR_EOF;
     }
