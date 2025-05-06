@@ -379,16 +379,6 @@ static AVFrame *get_in_audio_buffer(AVFilterLink *inlink, int nb_samples)
         ff_default_get_audio_buffer(inlink, nb_samples);
 }
 
-static AVFrame *get_out_audio_buffer(AVFilterLink *outlink, int nb_samples)
-{
-    AVFilterContext *ctx = outlink->src;
-    AudioSF2SFContext *s = ctx->priv;
-
-    return s->pass ?
-        ff_null_get_audio_buffer   (outlink, nb_samples) :
-        ff_default_get_audio_buffer(outlink, nb_samples);
-}
-
 static const AVFilterPad inputs[] = {
     {
         .name          = "default",
@@ -402,7 +392,6 @@ static const AVFilterPad outputs[] = {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
         .config_props = config_output,
-        .get_buffer.audio = get_out_audio_buffer,
     },
 };
 
