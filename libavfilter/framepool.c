@@ -254,6 +254,9 @@ AVFrame *ff_frame_pool_get(FFFramePool *pool)
             av_assert0(frame->nb_extended_buf == 0);
         }
 
+        if (!pool->pools[0])
+            break;
+
         for (i = 0; i < FFMIN(pool->planes, AV_NUM_DATA_POINTERS); i++) {
             frame->buf[i] = av_buffer_pool_get(pool->pools[0]);
             if (!frame->buf[i])
