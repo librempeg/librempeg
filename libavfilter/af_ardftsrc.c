@@ -152,6 +152,7 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
+    const int64_t channels = outlink->ch_layout.nb_channels;
     AudioRDFTSRCContext *s = ctx->priv;
     int max_nb_samples, ret;
     int64_t factor;
@@ -187,12 +188,14 @@ static int config_input(AVFilterLink *inlink)
 
 #if CONFIG_AVFILTER_THREAD_FRAME
     if (!ff_filter_is_frame_thread(ctx)) {
-        const int64_t channels = outlink->ch_layout.nb_channels;
-
         s->over = av_refstruct_allocz(FFMAX(av_get_bytes_per_sample(inlink->format), 8) * channels * s->out_nb_samples);
         if (!s->over)
             return AVERROR(ENOMEM);
     }
+#else
+    s->over = av_calloc(channels * s->out_nb_samples, FFMAX(av_get_bytes_per_sample(inlink->format), 8));
+    if (!s->over)
+        return AVERROR(ENOMEM);
 #endif
 
     switch (inlink->format) {
@@ -423,7 +426,11 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_refstruct_unref(&s->progress_pool);
     av_refstruct_unref(&s->prev_progress);
     av_refstruct_unref(&s->progress);
+#if CONFIG_AVFILTER_THREAD_FRAME
     av_refstruct_unref(&s->over);
+#else
+    av_freep(&s->over);
+#endif
     av_frame_free(&s->in);
 
     if (s->src_uninit)
