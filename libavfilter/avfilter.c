@@ -946,7 +946,6 @@ static int threading_init(FFFilterContext *ctxi)
 {
     AVFilterContext *const     ctx = &ctxi->p;
     const int thread_types_allowed = ctx->thread_type & ctx->graph->thread_type;
-    int ret = 0;
 
 #if CONFIG_AVFILTER_THREAD_FRAME
     if (ctxi->is_frame_thread)
@@ -954,7 +953,7 @@ static int threading_init(FFFilterContext *ctxi)
 
     if ((ctx->filter->flags & AVFILTER_FLAG_FRAME_THREADS) &&
         (thread_types_allowed & AVFILTER_THREAD_FRAME_FILTER)) {
-        ret = ff_filter_frame_thread_init(ctxi);
+        int ret = ff_filter_frame_thread_init(ctxi);
         if (ret < 0) {
             av_log(ctx, AV_LOG_ERROR, "Error initializing frame threading\n");
             return ret;
