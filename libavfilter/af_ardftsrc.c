@@ -366,16 +366,20 @@ static int filter_frame(AVFilterLink *inlink)
     ff_filter_execute(ctx, src_in_channels, out, NULL,
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
+#if CONFIG_AVFILTER_THREAD_FRAME
     if (s->prev_progress)
         ff_thread_progress_await(s->prev_progress, INT_MAX);
+#endif
 
     ff_filter_execute(ctx, src_out_channels, out, NULL,
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     s->copy_over(ctx);
 
+#if CONFIG_AVFILTER_THREAD_FRAME
     if (s->progress)
         ff_thread_progress_report(s->progress, INT_MAX);
+#endif
 
     out->sample_rate = outlink->sample_rate;
     out->pts = av_rescale_q(in->pts - (trim_size ? 0 : s->delay), inlink->time_base, outlink->time_base);

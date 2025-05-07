@@ -382,8 +382,10 @@ static int do_ssim(FFFrameSync *fs)
     ff_filter_execute(ctx, s->ssim_plane, &td, NULL,
                       FFMIN((s->planeheight[1] + 3) >> 2, s->nb_slice_threads));
 
+#if CONFIG_AVFILTER_THREAD_FRAME
     if (s->prev_progress)
         ff_thread_progress_await(s->prev_progress, INT_MAX);
+#endif
 
     for (i = 0; i < s->nb_components; i++) {
         for (int j = 0; j < s->nb_slice_threads; j++)
@@ -417,8 +419,10 @@ static int do_ssim(FFFrameSync *fs)
     }
 
 finish:
+#if CONFIG_AVFILTER_THREAD_FRAME
     if (s->progress)
         ff_thread_progress_report(s->progress, INT_MAX);
+#endif
 
     if (ret < 0)
         return ret;
