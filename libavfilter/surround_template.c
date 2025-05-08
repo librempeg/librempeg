@@ -861,7 +861,7 @@ static int fn(config_input)(AVFilterContext *ctx)
         s->overlap = overlap;
 
     s->hop_size = FFMAX(1, LRINT(s->win_size * (F(1.0) - s->overlap)));
-    s->trim_size = s->win_size;
+    s->trim_size = s->win_size - s->hop_size;
     s->flush_size = s->win_size - s->hop_size;
 
     {

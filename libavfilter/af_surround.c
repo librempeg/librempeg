@@ -431,8 +431,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     s->filter(ctx);
 
     if (in) {
-        const int extra_samples = FFMIN(s->hop_size - in->nb_samples, s->flush_size);
+        int extra_samples = in->nb_samples % s->hop_size;
 
+        if (extra_samples)
+            extra_samples = FFMIN(s->hop_size - extra_samples, s->flush_size);
         nb_samples = in->nb_samples;
         if (extra_samples > 0) {
             nb_samples += extra_samples;
@@ -472,20 +474,17 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     s->last_pts = out->pts + out->duration;
 
-    if (s->trim_size > 0 && in) {
-        if (s->trim_size < in->nb_samples) {
-            for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
-                out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
+    if (s->trim_size > 0 && s->trim_size < out->nb_samples) {
+        for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
+            out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
 
-            s->trim_size = 0;
-        } else {
-            s->trim_size -= in->nb_samples;
-        }
-    }
-
-    if (s->trim_size > 0) {
-        av_frame_free(&in);
+        out->nb_samples -= s->trim_size;
+        s->trim_size = 0;
+    } else if (s->trim_size > 0) {
+        s->trim_size -= out->nb_samples;
         av_frame_free(&out);
+        av_frame_free(&in);
+
         ff_inlink_request_frame(inlink);
 
         return 0;
