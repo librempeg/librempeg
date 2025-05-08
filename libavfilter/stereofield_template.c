@@ -114,8 +114,9 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
             const ftype r_im = fr[i].im;
             const ftype re = l_re * r_re + l_im * r_im;
             const ftype im = l_re * r_im - l_im * r_re;
-            const ftype a = FABS(ATAN2(im, re));
-            const ftype lf = m * a + s * (F(M_PI) - a);
+            const ftype a = ATAN2(im, re);
+            const ftype aa = FABS(a);
+            const ftype lf = m * -a + s * (F(M_PI) - aa);
             const ftype lc = COS(lf);
             const ftype ls = SIN(lf);
 
@@ -138,8 +139,9 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
             const ftype r_im = fr[i].im;
             const ftype re = l_re * r_re + l_im * r_im;
             const ftype im = l_re * r_im - l_im * r_re;
-            const ftype a = -FABS(ATAN2(im, re));
-            const ftype lf = m * a - s * (F(M_PI) + a);
+            const ftype a = ATAN2(im, re);
+            const ftype aa = FABS(a);
+            const ftype lf = m * a - s * (F(M_PI) - aa);
             const ftype lc = COS(lf);
             const ftype ls = SIN(lf);
 
@@ -162,10 +164,10 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
             const ftype r_im = fr[i].im;
             const ftype re = l_re * r_re + l_im * r_im;
             const ftype im = l_re * r_im - l_im * r_re;
-            const ftype al = FABS(ATAN2(im, re)) * F(0.5);
-            const ftype ar = -al;
-            const ftype lfl = m * al + s * (F(M_PI) - al);
-            const ftype lfr = m * ar - s * ar;
+            const ftype a = ATAN2(im, re) * F(0.5);
+            const ftype aa = FABS(a);
+            const ftype lfl = m * -a + s * (F(M_PI) - aa);
+            const ftype lfr = m *  a + s * aa;
             const ftype lcl = COS(lfl);
             const ftype lsl = SIN(lfl);
             const ftype lcr = COS(lfr);
