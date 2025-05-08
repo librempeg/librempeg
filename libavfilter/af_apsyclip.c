@@ -48,6 +48,10 @@ typedef struct AudioPsyClipContext {
     int fft_size;
     int overlap;
 
+    int trim_size;
+    int flush_size;
+    int64_t last_pts;
+
     void *st;
 
     AVFrame *in;
@@ -61,6 +65,7 @@ typedef struct AudioPsyClipContext {
 
     int (*psy_init)(AVFilterContext *ctx);
     int (*psy_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int ch);
+    int (*psy_flush_channel)(AVFilterContext *ctx, AVFrame *out, const int ch);
     void (*psy_uninit)(AVFilterContext *ctx);
 } AudioPsyClipContext;
 
@@ -105,6 +110,8 @@ static int config_input(AVFilterLink *inlink)
     s->fft_size = inlink->sample_rate > 100000 ? 1024 : inlink->sample_rate > 50000 ? 512 : 256;
     s->nb_bins = s->fft_size / 2 + 1;
     s->overlap = s->fft_size / 4;
+    s->trim_size = s->fft_size - s->overlap;
+    s->flush_size = s->fft_size - s->overlap;
 
     // The psy masking calculation is O(n^2),
     // so skip it for frequencies not covered by base sampling rates (i.e. 44.1k)
@@ -133,11 +140,13 @@ static int config_input(AVFilterLink *inlink)
         s->psy_init = psy_init_fltp;
         s->psy_uninit = psy_uninit_fltp;
         s->psy_channel = psy_channel_fltp;
+        s->psy_flush_channel = psy_flush_channel_fltp;
         break;
     case AV_SAMPLE_FMT_DBLP:
         s->psy_init = psy_init_dblp;
         s->psy_uninit = psy_uninit_dblp;
         s->psy_channel = psy_channel_dblp;
+        s->psy_flush_channel = psy_flush_channel_dblp;
         break;
     default:
         return AVERROR_BUG;
@@ -159,33 +168,104 @@ static int psy_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     return 0;
 }
 
+static int psy_flush_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    AudioPsyClipContext *s = ctx->priv;
+    AVFrame *out = arg;
+    const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
+    const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+
+    for (int ch = start; ch < end; ch++)
+        s->psy_flush_channel(ctx, out, ch);
+
+    return 0;
+}
+
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioPsyClipContext *s = ctx->priv;
+    int extra_samples, nb_samples;
     AVFrame *out;
-    int ret;
 
-    out = ff_get_audio_buffer(outlink, in->nb_samples);
-    if (!out) {
-        ret = AVERROR(ENOMEM);
-        goto fail;
+    extra_samples = in->nb_samples % s->overlap;
+    if (extra_samples)
+        extra_samples = FFMIN(s->overlap - extra_samples, s->flush_size);
+    nb_samples = in->nb_samples;
+    if (extra_samples > 0) {
+        nb_samples += extra_samples;
+        s->flush_size -= extra_samples;
     }
 
-    s->in = in;
+    out = ff_get_audio_buffer(outlink, nb_samples);
+    if (!out) {
+        av_frame_free(&in);
+        return AVERROR(ENOMEM);
+    }
     av_frame_copy_props(out, in);
+
+    s->in = in;
     ff_filter_execute(ctx, psy_channels, out, NULL,
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     out->pts = in->pts;
     out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
-    out->nb_samples = in->nb_samples;
-    ret = ff_filter_frame(outlink, out);
-fail:
-    av_frame_free(&in);
+
+    s->last_pts = out->pts + out->duration;
+
+    if (s->trim_size > 0 && s->trim_size < out->nb_samples) {
+        for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
+            out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
+
+        out->nb_samples -= s->trim_size;
+        s->trim_size = 0;
+    } else if (s->trim_size > 0) {
+        s->trim_size -= out->nb_samples;
+        av_frame_free(&out);
+        av_frame_free(&in);
+
+        ff_inlink_request_frame(inlink);
+
+        return 0;
+    }
+
     s->in = NULL;
-    return ret < 0 ? ret : 0;
+    av_frame_free(&in);
+    return ff_filter_frame(outlink, out);
+}
+
+static int flush_frame(AVFilterLink *outlink)
+{
+    AVFilterContext *ctx = outlink->src;
+    AudioPsyClipContext *s = ctx->priv;
+    int ret = 0;
+
+    while (s->flush_size > 0) {
+        const int nb_samples = FFMIN(s->flush_size, s->overlap);
+        AVFrame *out = ff_get_audio_buffer(outlink, nb_samples);
+
+        if (!out)
+            return AVERROR(ENOMEM);
+
+        s->flush_size -= nb_samples;
+
+        ff_filter_execute(ctx, psy_flush_channels, out, NULL,
+                          FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
+
+
+        out->pts = s->last_pts;
+        out->duration = av_rescale_q(out->nb_samples,
+                                     (AVRational){1, outlink->sample_rate},
+                                     outlink->time_base);
+        s->last_pts += out->duration;
+
+        ret = ff_filter_frame(outlink, out);
+        if (ret < 0)
+            break;
+    }
+
+    return ret;
 }
 
 static int activate(AVFilterContext *ctx)
@@ -214,8 +294,11 @@ static int activate(AVFilterContext *ctx)
     }
 
     if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+        if (s->flush_size > 0)
+            ret = flush_frame(outlink);
+
         ff_outlink_set_status(outlink, status, pts);
-        return 0;
+        return ret;
     }
 
     FF_FILTER_FORWARD_WANTED(outlink, inlink);

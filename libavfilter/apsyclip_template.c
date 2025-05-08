@@ -501,6 +501,30 @@ static int fn(psy_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, cons
     return 0;
 }
 
+static int fn(psy_flush_channel)(AVFilterContext *ctx, AVFrame *out, const int ch)
+{
+    AudioPsyClipContext *s = ctx->priv;
+    ftype *in_buffer = (ftype *)s->in_buffer->extended_data[ch];
+    const int overlap = s->overlap;
+
+    for (int offset = 0; offset < out->nb_samples; offset += overlap) {
+        ftype *dst = ((ftype *)out->extended_data[ch])+offset;
+
+        for (int n = 0; n < overlap; n++)
+            in_buffer[n] = F(0.0);
+
+        fn(feed)(ctx, ch, in_buffer, dst, s->diff_only,
+                 (ftype *)(s->in_frame->extended_data[ch]),
+                 (ftype *)(s->out_dist_frame->extended_data[ch]),
+                 (ftype *)(s->windowed_frame->extended_data[ch]),
+                 (ftype *)(s->clipping_delta->extended_data[ch]),
+                 (ctype *)(s->spectrum_buf->extended_data[ch]),
+                 (ftype *)(s->mask_curve->extended_data[ch]));
+    }
+
+    return 0;
+}
+
 static void fn(psy_uninit)(AVFilterContext *ctx)
 {
     AudioPsyClipContext *s = ctx->priv;
