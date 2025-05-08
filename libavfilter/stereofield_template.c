@@ -20,14 +20,13 @@
 #include "avfilter.h"
 #include "audio.h"
 
+#undef SAMPLE_FORMAT
 #undef ctype
 #undef ftype
-#undef SAMPLE_FORMAT
 #undef TX_TYPE
 #undef ATAN2
 #undef SIN
 #undef COS
-#undef CLIP
 #undef FABS
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
@@ -37,7 +36,6 @@
 #define ATAN2 atan2f
 #define SIN sinf
 #define COS cosf
-#define CLIP av_clipf
 #define FABS fabsf
 #else
 #define SAMPLE_FORMAT double
@@ -47,7 +45,6 @@
 #define ATAN2 atan2
 #define SIN sin
 #define COS cos
-#define CLIP av_clipd
 #define FABS fabs
 #endif
 
