@@ -103,7 +103,7 @@ static int config_input(AVFilterLink *inlink)
 
     s->fft_size = 1 << av_ceil_log2((inlink->sample_rate + 19) / 20);
     s->overlap = (s->fft_size + 3) / 4;
-    s->trim_size = s->fft_size;
+    s->trim_size = s->fft_size - s->overlap;
     s->flush_size = s->fft_size - s->overlap;
 
     s->in_frame       = ff_get_audio_buffer(inlink, s->fft_size + 2);
@@ -154,11 +154,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         ret = AVERROR(ENOMEM);
         goto fail;
     }
+    av_frame_copy_props(out, in);
 
     s->in = in;
     s->cc_stereo(ctx, out);
 
-    av_frame_copy_props(out, in);
     out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
     out->duration = av_rescale_q(out->nb_samples,
                                  (AVRational){1, outlink->sample_rate},
@@ -166,20 +166,17 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     s->last_pts = out->pts + out->duration;
 
-    if (s->trim_size > 0) {
-        if (s->trim_size < in->nb_samples) {
-            for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
-                out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
+    if (s->trim_size > 0 && s->trim_size < out->nb_samples) {
+        for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
+            out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
 
-            s->trim_size = 0;
-        } else {
-            s->trim_size -= in->nb_samples;
-        }
-    }
-
-    if (s->trim_size > 0) {
-        ff_inlink_request_frame(inlink);
+        out->nb_samples -= s->trim_size;
+        s->trim_size = 0;
+    } else if (s->trim_size > 0) {
+        s->trim_size -= out->nb_samples;
         av_frame_free(&out);
+
+        ff_inlink_request_frame(inlink);
         ret = 0;
 
         goto fail;
