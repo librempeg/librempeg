@@ -38,6 +38,10 @@ typedef struct AudioSpectralSubtractionContext {
     int overlap;
     int channels;
 
+    int trim_size;
+    int flush_size;
+    int64_t last_pts;
+
     void *window;
     void *st;
 
@@ -49,6 +53,7 @@ typedef struct AudioSpectralSubtractionContext {
     int (*init)(AVFilterContext *ctx);
     void (*uninit)(AVFilterContext *ctx);
     int (*spectral_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int ch);
+    int (*spectral_flush_channel)(AVFilterContext *ctx,  AVFrame *out, int ch);
 } AudioSpectralSubtractionContext;
 
 #define OFFSET(x) offsetof(AudioSpectralSubtractionContext, x)
@@ -80,12 +85,15 @@ static int config_output(AVFilterLink *outlink)
 
     s->rdft_size = 1 << av_ceil_log2(outlink->sample_rate * 80 / 1000);
     s->overlap = s->rdft_size / 4;
+    s->trim_size = s->rdft_size - s->overlap;
+    s->flush_size = s->rdft_size - s->overlap;
 
     switch (outlink->format) {
     case AV_SAMPLE_FMT_FLTP:
         sample_size = sizeof(float);
         s->generate_window = generate_hann_window_fltp;
         s->spectral_channel = spectral_channel_fltp;
+        s->spectral_flush_channel = spectral_flush_channel_fltp;
         s->init = init_fltp;
         s->uninit = uninit_fltp;
         break;
@@ -93,6 +101,7 @@ static int config_output(AVFilterLink *outlink)
         sample_size = sizeof(double);
         s->generate_window = generate_hann_window_dblp;
         s->spectral_channel = spectral_channel_dblp;
+        s->spectral_flush_channel = spectral_flush_channel_dblp;
         s->init = init_dblp;
         s->uninit = uninit_dblp;
         break;
@@ -125,33 +134,103 @@ static int spectral_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_
     return 0;
 }
 
+static int spectral_flush_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    AudioSpectralSubtractionContext *s = ctx->priv;
+    AVFrame *out = arg;
+    const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
+    const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+
+    for (int ch = start; ch < end; ch++)
+        s->spectral_flush_channel(ctx, out, ch);
+
+    return 0;
+}
+
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioSpectralSubtractionContext *s = ctx->priv;
+    int extra_samples, nb_samples;
     AVFrame *out;
-    int ret;
 
-    out = ff_get_audio_buffer(outlink, in->nb_samples);
-    if (!out) {
-        ret = AVERROR(ENOMEM);
-        goto fail;
+    extra_samples = in->nb_samples % s->overlap;
+    if (extra_samples)
+        extra_samples = FFMIN(s->overlap - extra_samples, s->flush_size);
+    nb_samples = in->nb_samples;
+    if (extra_samples > 0) {
+        nb_samples += extra_samples;
+        s->flush_size -= extra_samples;
     }
 
-    s->in = in;
+    out = ff_get_audio_buffer(outlink, nb_samples);
+    if (!out) {
+        av_frame_free(&in);
+        return AVERROR(ENOMEM);
+    }
     av_frame_copy_props(out, in);
+
+    s->in = in;
     ff_filter_execute(ctx, spectral_channels, out, NULL,
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     out->pts = in->pts;
     out->pts -= av_rescale_q(s->rdft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
-    out->nb_samples = in->nb_samples;
-    ret = ff_filter_frame(outlink, out);
-fail:
-    av_frame_free(&in);
+
+    s->last_pts = out->pts + out->duration;
+
+    if (s->trim_size > 0 && s->trim_size < out->nb_samples) {
+        for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
+            out->extended_data[ch] += s->trim_size * av_get_bytes_per_sample(out->format);
+
+        out->nb_samples -= s->trim_size;
+        s->trim_size = 0;
+    } else if (s->trim_size > 0) {
+        s->trim_size -= out->nb_samples;
+        av_frame_free(&out);
+        av_frame_free(&in);
+
+        ff_inlink_request_frame(inlink);
+
+        return 0;
+    }
+
     s->in = NULL;
-    return ret < 0 ? ret : 0;
+    av_frame_free(&in);
+    return ff_filter_frame(outlink, out);
+}
+
+static int flush_frame(AVFilterLink *outlink)
+{
+    AVFilterContext *ctx = outlink->src;
+    AudioSpectralSubtractionContext *s = ctx->priv;
+    int ret = 0;
+
+    while (s->flush_size > 0) {
+        const int nb_samples = FFMIN(s->flush_size, s->overlap);
+        AVFrame *out = ff_get_audio_buffer(outlink, nb_samples);
+
+        if (!out)
+            return AVERROR(ENOMEM);
+
+        s->flush_size -= nb_samples;
+
+        ff_filter_execute(ctx, spectral_flush_channels, out, NULL,
+                          FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
+
+        out->pts = s->last_pts;
+        out->duration = av_rescale_q(out->nb_samples,
+                                     (AVRational){1, outlink->sample_rate},
+                                     outlink->time_base);
+        s->last_pts += out->duration;
+
+        ret = ff_filter_frame(outlink, out);
+        if (ret < 0)
+            break;
+    }
+
+    return ret;
 }
 
 static int activate(AVFilterContext *ctx)
@@ -159,8 +238,9 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     AudioSpectralSubtractionContext *s = ctx->priv;
-    int ret, available, wanted;
+    int ret, status, available, wanted;
     AVFrame *in = NULL;
+    int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
@@ -178,7 +258,14 @@ static int activate(AVFilterContext *ctx)
         return 0;
     }
 
-    FF_FILTER_FORWARD_STATUS(inlink, outlink);
+    if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+        if (s->flush_size > 0)
+            ret = flush_frame(outlink);
+
+        ff_outlink_set_status(outlink, status, pts);
+        return ret;
+    }
+
     FF_FILTER_FORWARD_WANTED(outlink, inlink);
 
     return FFERROR_NOT_READY;

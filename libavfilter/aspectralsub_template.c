@@ -222,7 +222,11 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
     memmove(st->input, st->input + overlap, offset * sizeof(*st->input));
     memmove(st->output, st->output + overlap, offset * sizeof(*st->output));
 
-    memcpy(st->input + offset, src, sizeof(*st->input) * overlap);
+    if (src)
+        memcpy(st->input + offset, src, sizeof(*st->input) * overlap);
+    else
+        memset(st->input + offset, 0, sizeof(*st->input) * overlap);
+
     memset(st->output + offset, 0, sizeof(*st->output) * overlap);
 
     fn(apply_window)(s, st->input, st->r2c_in, 0);
@@ -259,7 +263,10 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
     fn(apply_window)(s, st->c2r_out, st->output, 1);
 
     if (ff_filter_disabled(ctx) || bypass)
-        memcpy(dst, src, sizeof(*dst) * overlap);
+        if (src)
+            memcpy(dst, src, sizeof(*dst) * overlap);
+        else
+            memset(dst, 0, sizeof(*dst) * overlap);
     else
         memcpy(dst, st->output, sizeof(*dst) * overlap);
 
@@ -278,6 +285,20 @@ static int fn(spectral_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         ftype *dst = ((ftype *)out->extended_data[ch])+offset;
 
         fn(feed)(ctx, ch, src, dst, FFMIN(in->nb_samples - offset, overlap));
+    }
+
+    return 0;
+}
+
+static int fn(spectral_flush_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
+{
+    AudioSpectralSubtractionContext *s = ctx->priv;
+    const int overlap = s->overlap;
+
+    for (int offset = 0; offset < out->nb_samples; offset += overlap) {
+        ftype *dst = ((ftype *)out->extended_data[ch])+offset;
+
+        fn(feed)(ctx, ch, NULL, dst, FFMIN(out->nb_samples - offset, overlap));
     }
 
     return 0;
