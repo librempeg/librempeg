@@ -241,3 +241,28 @@ static int fn(wiener_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, i
 
     return 0;
 }
+
+static int fn(wiener_flush_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
+{
+    AudioWienerContext *s = ctx->priv;
+    ftype *in_buffer = (ftype *)s->in_buffer->extended_data[ch];
+    const int overlap = s->overlap;
+
+    for (int offset = 0; offset < out->nb_samples; offset += overlap) {
+        ftype *dst = ((ftype *)out->extended_data[ch])+offset;
+
+        memset(in_buffer, 0, sizeof(*in_buffer) * overlap);
+
+        fn(feed)(ctx, ch, in_buffer, dst,
+                 (ftype *)(s->in_frame->extended_data[ch]),
+                 (ftype *)(s->out_dist_frame->extended_data[ch]),
+                 (ftype *)(s->windowed_frame->extended_data[ch]),
+                 (ftype *)(s->wiener_frame->extended_data[ch]),
+                 (ctype *)(s->spectrum_buf->extended_data[ch]),
+                 (ctype *)(s->ss[0]->extended_data[ch]),
+                 (ctype *)(s->ss[1]->extended_data[ch]),
+                 (ftype *)(s->sbb->extended_data[ch]));
+    }
+
+    return 0;
+}
