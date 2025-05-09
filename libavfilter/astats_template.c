@@ -69,6 +69,13 @@ static void fn(update_minmax)(AudioStatsContext *s, ChannelStats *p, stype d)
         p->max = d;
 }
 
+static void fn(update_clip_count)(AudioStatsContext *s, ChannelStats *p, stype d)
+{
+    double scaled = SCALE(d);
+
+    p->clip_count += fabs(scaled) > 1.0;
+}
+
 static inline void fn(update_float_stat)(AudioStatsContext *s, ChannelStats *p, stype d)
 {
 #if (DEPTH == 32) || (DEPTH == 64)
@@ -197,6 +204,7 @@ static int fn(filter_channels_planar)(AVFilterContext *ctx, void *arg, int jobnr
     const uint32_t mask = s->measure_overall | s->measure_perchannel;
     const int measure_denormals = mask == (mask & MEASURE_DENORMALS);
     const int measure_minmax = mask == (mask & MEASURE_MINMAX);
+    const int measure_clip_count = mask == MEASURE_CLIP_COUNT;
     const int measure_nb_samples = mask == MEASURE_NB_SAMPLES;
     const int measure_peak = mask == MEASURE_PEAK;
 
@@ -206,6 +214,12 @@ static int fn(filter_channels_planar)(AVFilterContext *ctx, void *arg, int jobnr
 
         if (measure_nb_samples) {
             p->nb_samples += samples;
+            continue;
+        }
+
+        if (measure_clip_count) {
+            for (int n = 0; n < samples; n++)
+                fn(update_clip_count)(s, p, src[n]);
             continue;
         }
 
@@ -246,6 +260,7 @@ static int fn(filter_channels_packed)(AVFilterContext *ctx, void *arg, int jobnr
     const uint32_t mask = s->measure_overall | s->measure_perchannel;
     const int measure_denormals = mask == (mask & MEASURE_DENORMALS);
     const int measure_minmax = mask == (mask & MEASURE_MINMAX);
+    const int measure_clip_count = mask == MEASURE_CLIP_COUNT;
     const int measure_nb_samples = mask == MEASURE_NB_SAMPLES;
     const int measure_peak = mask == MEASURE_PEAK;
 
@@ -256,6 +271,12 @@ static int fn(filter_channels_packed)(AVFilterContext *ctx, void *arg, int jobnr
 
         if (measure_nb_samples) {
             p->nb_samples += samples;
+            continue;
+        }
+
+        if (measure_clip_count) {
+            for (src += c; src < srcend; src += channels)
+                fn(update_clip_count)(s, p, src[0]);
             continue;
         }
 
