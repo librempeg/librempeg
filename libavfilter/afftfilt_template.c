@@ -99,8 +99,12 @@ static int fn(tx_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
         ftype *tx_in = (ftype *)s->tx_in->extended_data[ch];
 
         memmove(src, &src[s->hop_size], offset * sizeof(ftype));
-        memcpy(&src[offset], in->extended_data[ch], in->nb_samples * sizeof(ftype));
-        memset(&src[offset + in->nb_samples], 0, (s->hop_size - in->nb_samples) * sizeof(ftype));
+        if (in) {
+            memcpy(&src[offset], in->extended_data[ch], in->nb_samples * sizeof(ftype));
+            memset(&src[offset + in->nb_samples], 0, (s->hop_size - in->nb_samples) * sizeof(ftype));
+        } else {
+            memset(&src[offset], 0, s->hop_size * sizeof(ftype));
+        }
 
         fn(apply_window)(s, src, tx_in, 0);
 
