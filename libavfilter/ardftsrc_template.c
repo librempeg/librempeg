@@ -216,7 +216,7 @@ static int fn(src_out)(AVFilterContext *ctx, AVFrame *out, const int ch,
             dst[n] = av_clip_int16(lrintf((irdft1[n] + over[n]) * F(1<<(DEPTH-1))));
 #elif DEPTH == 32
         for (int n = 0; n < write_samples; n++)
-            dst[n] = av_clipl_int32(lrint((irdft1[n] + over[n]) * F(1LL<<(DEPTH-1))));
+            dst[n] = av_clipl_int32(llrint((irdft1[n] + over[n]) * F(1LL<<(DEPTH-1))));
 #else
         memcpy(dst, irdft1, write_samples * sizeof(*dst));
         for (int n = 0; n < write_samples; n++)
@@ -233,7 +233,7 @@ static int fn(src_out)(AVFilterContext *ctx, AVFrame *out, const int ch,
             dst[m] = av_clip_int16(lrintf((irdft1[n] + over[n]) * F(1<<(DEPTH-1))));
 #elif DEPTH == 32
         for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
-            dst[m] = av_clipl_int32(lrint((irdft1[n] + over[n]) * F(1LL<<(DEPTH-1))));
+            dst[m] = av_clipl_int32(llrint((irdft1[n] + over[n]) * F(1LL<<(DEPTH-1))));
 #else
         for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
             dst[m] = irdft1[n] + over[n];
@@ -357,7 +357,7 @@ static int fn(flush)(AVFilterContext *ctx, AVFrame *out, const int ch)
             dst[n] = av_clip_int16(lrintf(over[n] * F(1<<(DEPTH-1))));
 #elif DEPTH == 32
         for (int n = 0; n < nb_samples; n++)
-            dst[n] = av_clipl_int32(lrint(over[n] * F(1LL<<(DEPTH-1))));
+            dst[n] = av_clipl_int32(llrint(over[n] * F(1LL<<(DEPTH-1))));
 #else
         memcpy(dst, over, nb_samples * sizeof(*dst));
 #endif
@@ -372,7 +372,7 @@ static int fn(flush)(AVFilterContext *ctx, AVFrame *out, const int ch)
             dst[m] = av_clip_int16(lrintf(over[n] * F(1<<(DEPTH-1))));
 #elif DEPTH == 32
         for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
-            dst[m] = av_clipl_int32(lrint(over[n] * F(1LL<<(DEPTH-1))));
+            dst[m] = av_clipl_int32(llrint(over[n] * F(1LL<<(DEPTH-1))));
 #else
         for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
             dst[m] = over[n];
