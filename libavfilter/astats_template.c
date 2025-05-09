@@ -197,11 +197,17 @@ static int fn(filter_channels_planar)(AVFilterContext *ctx, void *arg, int jobnr
     const uint32_t mask = s->measure_overall | s->measure_perchannel;
     const int measure_denormals = mask == (mask & MEASURE_DENORMALS);
     const int measure_minmax = mask == (mask & MEASURE_MINMAX);
+    const int measure_nb_samples = mask == MEASURE_NB_SAMPLES;
     const int measure_peak = mask == MEASURE_PEAK;
 
     for (int c = start; c < end; c++) {
         ChannelStats *p = &s->chstats[c];
         const stype *src = (const stype *)data[c];
+
+        if (measure_nb_samples) {
+            p->nb_samples += samples;
+            continue;
+        }
 
         if (measure_peak) {
             for (int n = 0; n < samples; n++)
@@ -240,12 +246,18 @@ static int fn(filter_channels_packed)(AVFilterContext *ctx, void *arg, int jobnr
     const uint32_t mask = s->measure_overall | s->measure_perchannel;
     const int measure_denormals = mask == (mask & MEASURE_DENORMALS);
     const int measure_minmax = mask == (mask & MEASURE_MINMAX);
+    const int measure_nb_samples = mask == MEASURE_NB_SAMPLES;
     const int measure_peak = mask == MEASURE_PEAK;
 
     for (int c = start; c < end; c++) {
         ChannelStats *p = &s->chstats[c];
         const stype *src = (const stype *)data[0];
         const stype * const srcend = src + samples * channels;
+
+        if (measure_nb_samples) {
+            p->nb_samples += samples;
+            continue;
+        }
 
         if (measure_peak) {
             for (src += c; src < srcend; src += channels)
