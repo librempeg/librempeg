@@ -41,6 +41,8 @@
 #include "decode.h"
 #include "get_bits.h"
 #include "mathops.h"
+//#include "mp3pro.h"
+//#include "mp3surround.h"
 #include "mpegaudiodsp.h"
 
 /*
@@ -75,6 +77,32 @@ typedef struct GranuleDef {
     DECLARE_ALIGNED(16, INTFLOAT, sb_hybrid)[SBLIMIT * 18]; /* 576 samples */
 } GranuleDef;
 
+typedef struct MP3ExtContext {
+	int locked;
+	int impartial;
+	int pass_ancil_info;
+	int pos;
+	int size_in_bits;
+	int size_in_bytes;
+	int mp3pro;
+	int mp3surround;
+} MP3ExtContext;
+
+typedef struct MP3P_DecodeContext {
+	int framesize;
+	int raw_frameSize;
+	uint8_t sbr_data[100];
+} MP3P_DecodeContext;
+
+typedef struct MP3S_DecodeContext {
+	int framesize;
+	uint16_t crc12;
+	int raw_frameSize;
+	int raw_framePos;
+	int startofFrameData;
+	uint8_t bcc_data[100];
+} MP3S_DecodeContext;
+
 typedef struct MPADecodeContext {
     MPA_DECODE_HEADER
     uint8_t last_buf[LAST_BUF_SIZE];
@@ -97,6 +125,9 @@ typedef struct MPADecodeContext {
     void (*butterflies_float)(float *restrict v1, float *restrict v2, int len);
     AVFrame *frame;
     uint32_t crc;
+    MP3ExtContext ext_data;
+    MP3S_DecodeContext mp3surround;
+    MP3P_DecodeContext mp3pro;
 } MPADecodeContext;
 
 #define HEADER_SIZE 4
@@ -119,6 +150,256 @@ static const int32_t scale_factor_mult2[3][3] = {
     SCALE_GEN(4.0 / 5.0), /* 5 steps */
     SCALE_GEN(4.0 / 9.0), /* 9 steps */
 };
+
+/* polynomial lookup table for mp3surround's CRC-12 algorithm. */
+static const uint16_t mp3s_crc12p[256] = 
+{
+    0, 2063, 2065,   30, 2093,   34,   60, 2099,
+ 2133,   90,   68, 2123,  120, 2167, 2153,  102,
+ 2213,  170,  180, 2235,  136, 2183, 2201,  150,
+  240, 2303, 2273,  238, 2269,  210,  204, 2243,
+ 2373,  330,  340, 2395,  360, 2407, 2425,  374,
+  272, 2335, 2305,  270, 2365,  306,  300, 2339,
+  480, 2543, 2545,  510, 2509,  450,  476, 2515,
+ 2485,  442,  420, 2475,  408, 2455, 2441,  390,
+ 2693,  650,  660, 2715,  680, 2727, 2745,  694,
+  720, 2783, 2753,  718, 2813,  754,  748, 2787,
+  544, 2607, 2609,  574, 2573,  514,  540, 2579,
+ 2677,  634,  612, 2667,  600, 2647, 2633,  582,
+  960, 3023, 3025,  990, 3053,  994, 1020, 3059,
+ 2965,  922,  900, 2955,  952, 2999, 2985,  934,
+ 2917,  874,  884, 2939,  840, 2887, 2905,  854,
+  816, 2879, 2849,  814, 2845,  786,  780, 2819,
+ 3333, 1290, 1300, 3355, 1320, 3367, 3385, 1334,
+ 1360, 3423, 3393, 1358, 3453, 1394, 1388, 3427,
+ 1440, 3503, 3505, 1470, 3469, 1410, 1436, 3475,
+ 3573, 1530, 1508, 3563, 1496, 3543, 3529, 1478,
+ 1088, 3151, 3153, 1118, 3181, 1122, 1148, 3187,
+ 3093, 1050, 1028, 3083, 1080, 3127, 3113, 1062,
+ 3301, 1258, 1268, 3323, 1224, 3271, 3289, 1238,
+ 1200, 3263, 3233, 1198, 3229, 1170, 1164, 3203,
+ 1920, 3983, 3985, 1950, 4013, 1954, 1980, 4019,
+ 4053, 2010, 1988, 4043, 2040, 4087, 4073, 2022,
+ 3877, 1834, 1844, 3899, 1800, 3847, 3865, 1814,
+ 1904, 3967, 3937, 1902, 3933, 1874, 1868, 3907,
+ 3781, 1738, 1748, 3803, 1768, 3815, 3833, 1782,
+ 1680, 3743, 3713, 1678, 3773, 1714, 1708, 3747,
+ 1632, 3695, 3697, 1662, 3661, 1602, 1628, 3667,
+ 3637, 1594, 1572, 3627, 1560, 3607, 3593, 1542
+};
+
+static int define_mp3_ancillary_info(MP3ExtContext *ext, int new_pos, int new_size_in_bits, int new_size_in_bytes) {
+	if (!ext)
+		return 0;
+	
+	ext->pos = new_pos;
+	ext->size_in_bits = new_size_in_bits;
+	ext->size_in_bytes = new_size_in_bytes;
+	
+	return 1;
+}
+
+static int advance_mp3_ancillary_info(MP3ExtContext *ext, int new_pos, int new_size_in_bits, int new_size_in_bytes) {
+	if (!ext)
+		return 0;
+	
+	ext->pos += new_pos;
+	ext->size_in_bits += new_size_in_bits;
+	ext->size_in_bytes += new_size_in_bytes;
+	
+	return 1;
+}
+
+/*
+static int reset_mp3_ancillary_info(MP3ExtContext *ext) {
+	if (!ext)
+		return 0;
+	
+	ext->pos = 0;
+	ext->size_in_bits = 0;
+	ext->size_in_bytes = 0;
+	
+	return 1;
+}
+*/
+
+static int init_mp3pro_frame(MPADecodeContext *s) {
+	GetBitContext *gb = &s->gb;
+	MP3ExtContext* ext = &s->ext_data;
+	MP3P_DecodeContext *mp3p = &s->mp3pro;
+	int baseBitSkip, bitSkip;
+	int sig1, sig1_expects, sig2, frame_size;
+	int exists;
+	int i;
+	int fakeBitPos, fakeBytePos;
+	
+	int breathing_room = 0x1fe;
+	if (ext->size_in_bytes < 0x1ff) {
+		breathing_room = ext->size_in_bytes;
+	}
+	
+	fakeBitPos = 0;
+	fakeBytePos = 0;
+	
+	baseBitSkip = (ext->pos) & 7;
+	bitSkip = (baseBitSkip) ? 8 - baseBitSkip : 0;
+	skip_bits(gb, bitSkip);
+	if (baseBitSkip)
+		define_mp3_ancillary_info(ext, get_bits_count(gb), get_bits_left(gb), (get_bits_left(gb) >> 3));
+	
+	sig1_expects = (char)(s->nb_channels == 1) + 0xe;
+	sig1 = get_bits(gb, 4);
+	if (sig1 != sig1_expects)
+		return 0;
+	
+	exists = 0;
+	
+	frame_size = get_bits(gb, 8);
+	if (frame_size == 0xff) {
+		frame_size = get_bits(gb, 8);
+		frame_size += 0xff;
+		
+		fakeBitPos += 8;
+	}
+	mp3p->framesize = frame_size;
+	
+	fakeBitPos += (4 + 8);
+	fakeBytePos = (fakeBitPos >> 3);
+	if ((fakeBitPos % 8) != 0)
+		fakeBytePos++;
+	breathing_room += -fakeBytePos;
+	
+	if ((frame_size <= breathing_room) && ((sig1 & (0xd | 2)) == sig1_expects)) {
+		sig2 = get_bits(gb, 4);
+		fakeBitPos += 4;
+		
+		mp3p->sbr_data[0] = (sig1 << 4) | sig2;
+		if ((mp3p->sbr_data[0] & 8) != 0) {
+			for (i = 1; i <= frame_size; i++) {
+				mp3p->sbr_data[i] = get_bits(gb, 8);
+				fakeBitPos += 8;
+			}
+			mp3p->framesize++;
+			exists = 1;
+			fakeBytePos = (fakeBitPos >> 3);
+		}
+	}
+	
+	advance_mp3_ancillary_info(ext, fakeBitPos, -fakeBitPos, -fakeBytePos);
+	
+	return (-exists & mp3p->framesize);
+}
+
+static int decode_mp3pro_frame(MPADecodeContext *s) {
+	return 0;
+}
+
+static uint16_t mp3surround_crc12(GetBitContext *gb, int frame_data_size)
+{
+	uint16_t crc12 = 0xfff;
+	int lapsed = 0;
+	
+	if (0 < frame_data_size) {
+		if (5 < frame_data_size) {
+			do {
+				crc12 = (((crc12 << 8) & 0xf00) ^
+				         mp3s_crc12p[(crc12 >> 4) ^ get_bits(gb, 8)]) & 0xfff;
+				crc12 = (((crc12 << 8) & 0xf00) ^
+				         mp3s_crc12p[(crc12 >> 4) ^ get_bits(gb, 8)]) & 0xfff;
+				crc12 = (((crc12 << 8) & 0xf00) ^
+				         mp3s_crc12p[(crc12 >> 4) ^ get_bits(gb, 8)]) & 0xfff;
+				crc12 = (((crc12 << 8) & 0xf00) ^
+				         mp3s_crc12p[(crc12 >> 4) ^ get_bits(gb, 8)]) & 0xfff;
+				crc12 = (((crc12 << 8) & 0xf00) ^
+				         mp3s_crc12p[(crc12 >> 4) ^ get_bits(gb, 8)]) & 0xfff;
+				lapsed += 5;
+			} while (lapsed <= (frame_data_size + -6));
+		}
+		do {
+			crc12 = (((crc12 << 8) & 0xf00) ^
+			         mp3s_crc12p[(crc12 >> 4) ^ get_bits(gb, 8)]) & 0xfff;
+			lapsed++;
+		} while (lapsed < frame_data_size);
+	}
+	
+	return crc12;
+}
+
+static void mp3s_save_bcc_data(MPADecodeContext *s, int frame_data_pos) {
+	GetBitContext *gb = &s->gb;
+	MP3ExtContext* ext = &s->ext_data;
+	MP3S_DecodeContext* mp3s = &s->mp3surround;
+	int lapsed = 0;
+	
+	seek_bits(gb, frame_data_pos, BITPOS_SET);
+	if (0 < mp3s->raw_frameSize) {
+		if (5 < mp3s->raw_frameSize) {
+			do {
+				mp3s->bcc_data[lapsed+0] = get_bits(gb, 8);
+				mp3s->bcc_data[lapsed+1] = get_bits(gb, 8);
+				mp3s->bcc_data[lapsed+2] = get_bits(gb, 8);
+				mp3s->bcc_data[lapsed+3] = get_bits(gb, 8);
+				mp3s->bcc_data[lapsed+4] = get_bits(gb, 8);
+				lapsed += 5;
+			} while (lapsed <= (mp3s->raw_frameSize + -6));
+		}
+		do {
+			mp3s->bcc_data[lapsed] = get_bits(gb, 8);
+			lapsed++;
+		} while (lapsed < mp3s->raw_frameSize);
+	}
+	
+	return;
+}
+
+/**
+ * Initializes one instance of mp3surround per frame.
+ * Key concepts here include "binaural cue coding",
+ * in which 5.1ch data chunks are compressed
+ * into several "binaural" signals to complement
+ * the base downmixed stereo stream
+ * from the original 5.1ch masters.
+ */
+static int init_mp3surround_frame(MPADecodeContext *s) {
+	GetBitContext *gb = &s->gb;
+	MP3ExtContext* ext = &s->ext_data;
+	MP3S_DecodeContext* mp3s = &s->mp3surround;
+	int fakeBitPos, fakeBytePos;
+	int base_pos, frame_data_pos;
+	
+	fakeBitPos = 0;
+	fakeBytePos = 0;
+	
+	base_pos = get_bits_count(gb);
+	if (get_bits(gb, 12) == 0xcf3) {
+		mp3s->framesize = get_bits(gb, 8);
+		mp3s->crc12 = get_bits(gb, 12);
+		fakeBitPos += (12 + 8 + 12);
+		fakeBytePos = (fakeBitPos >> 3);
+		
+		mp3s->raw_frameSize = (mp3s->framesize - 4);
+		if ((base_pos + (mp3s->framesize * 8)) <= gb->size_in_bits) {
+			frame_data_pos = get_bits_count(gb);
+			fakeBitPos += (mp3s->raw_frameSize * 8);
+			fakeBytePos = (fakeBitPos >> 3);
+			
+			if (mp3s->crc12 == mp3surround_crc12(gb, mp3s->raw_frameSize)) {
+				mp3s_save_bcc_data(s, frame_data_pos);
+				
+				advance_mp3_ancillary_info(ext, fakeBitPos, -fakeBitPos, -fakeBytePos);
+				return 1;
+			}
+		}
+	} else {
+		return 0;
+	}
+	
+	return 2;
+}
+
+static int decode_mp3surround_frame(MPADecodeContext *s) {
+	return 0;
+}
 
 /**
  * Convert region offsets to region sizes and truncate
@@ -1210,10 +1491,14 @@ static int is_ealayer3(const MPADecodeContext *s)
 static int mp_decode_layer3(MPADecodeContext *s)
 {
     int nb_granules, main_data_begin;
+    int unk_data1;
     int start_gr, gr, ch, blocksplit_flag, i, j, k, n, bits_pos;
     GetBitContext *gb = &s->gb;
     GranuleDef *g;
     int16_t exponents[576]; //FIXME try INTFLOAT
+    MP3ExtContext *ext = &s->ext_data;
+    MP3P_DecodeContext *mp3p = &s->mp3pro;
+    MP3S_DecodeContext *mp3s = &s->mp3surround;
     int ret;
 
     if (is_ealayer3(s)) {
@@ -1232,15 +1517,18 @@ static int mp_decode_layer3(MPADecodeContext *s)
     if (s->lsf) {
         ret = handle_crc(s, ((s->nb_channels == 1) ? 8*9  : 8*17));
         main_data_begin = get_bits(gb, 8);
-        skip_bits(gb, s->nb_channels);
+        unk_data1 = get_bits(gb, s->nb_channels);
+        //skip_bits(gb, s->nb_channels);
         nb_granules = 1;
     } else {
         ret = handle_crc(s, ((s->nb_channels == 1) ? 8*17 : 8*32));
         main_data_begin = get_bits(gb, 9);
         if (s->nb_channels == 2)
-            skip_bits(gb, 3);
+            unk_data1 = get_bits(gb, 3);
+			//skip_bits(gb, 3);
         else
-            skip_bits(gb, 5);
+            unk_data1 = get_bits(gb, 5);
+			//skip_bits(gb, 5);
         nb_granules = 2;
         for (ch = 0; ch < s->nb_channels; ch++) {
             s->granules[ch][0].scfsi = 0;/* all scale factors are transmitted */
@@ -1481,8 +1769,60 @@ static int mp_decode_layer3(MPADecodeContext *s)
                 compute_imdct(s, g, &s->sb_samples[ch][0][0], s->mdct_buf[ch]);
         }
     } /* gr */
-    if (get_bits_count(gb) < 0)
+    if (get_bits_count(gb) < 0) {
         skip_bits_long(gb, -get_bits_count(gb));
+    }
+	
+	if (!s->adu_mode) {
+		// get current bit position for them if possible.
+		define_mp3_ancillary_info(ext, get_bits_count(gb), get_bits_left(gb), (get_bits_left(gb) >> 3));
+		// now we auto-detect for *any* frame extensions here.
+		if (!ext->locked) {
+			// ok, so we have to do some guesswork
+			// over which frame extension is which.
+			for (i = 0; i < 3; i++) {
+				switch (i) {
+					case 0: // LAME tag
+						break;
+					case 1: // mp3PRO
+						ext->mp3pro = init_mp3pro_frame(s);
+						break;
+					case 2: // mp3surround
+						ext->mp3surround = init_mp3surround_frame(s);
+						break;
+					default:
+						break;
+				}
+				// mp3pro data exists
+				if (ext->mp3pro) {
+					mp3p->raw_frameSize = ext->mp3pro;
+					ext->mp3pro = 1;
+					// (todo) override resulting sample rate from frame header
+					// to one of the following: 48000, 44100, 32000.
+					// if 24000 then 48000
+					// if 22050 then 44100
+					// if 16000 then 32000
+					// alternatively just do sample_rate << 1
+					break;
+				}
+				// mp3surround data exists
+				if (ext->mp3surround) {
+					/*
+					mp3p->raw_frameSize = ext->mp3pro;
+					ext->mp3pro = 1;
+					*/
+					//ext->mp3surround = 1;
+					// (todo) said data is always in the first frame of an mp3 file;
+					// with that in mind, once it's found,
+					// set mp3 channels to 6 and "upgrade" mp3 AVChannelLayout to 5.1ch.
+					break;
+				}
+				// reset bit index to where we started.
+				seek_bits(gb, ext->pos, BITPOS_SET);
+			}
+			ext->locked = 1;
+		}
+	}
 
     if (is_ealayer3(s))
         nb_granules = 1;
@@ -1514,6 +1854,38 @@ static int mp_decode_frame(MPADecodeContext *s, OUT_INT **samples,
         s->avctx->frame_size = s->lsf ? 576 : 1152;
     default:
         nb_frames = mp_decode_layer3(s);
+        
+		if (s->ext_data.mp3pro) {
+			if (!s->ext_data.pass_ancil_info) {
+				av_log(s->avctx, AV_LOG_INFO, "Found mp3PRO ancillary data; sample rate will be adjusted to compensate.\n");
+				s->ext_data.pass_ancil_info = 1;
+			}
+			ret = decode_mp3pro_frame(s);
+		} else if (s->ext_data.mp3surround) {
+			if (!s->ext_data.pass_ancil_info) {
+				av_log(s->avctx, AV_LOG_INFO, "Found mp3surround ancillary data; multi-channel MP3 will now be recognized.\n");
+				s->ext_data.pass_ancil_info = 1;
+			}
+			ret = decode_mp3surround_frame(s);
+		}
+		/*
+		if (s->ext_data.mp3pro) {
+			// update sample rate for mp3pro.
+			s->frame->sample_rate = (s->sample_rate << 1);
+			avctx->sample_rate = s->frame->sample_rate;
+			//frame->sample_rate = avctx->sample_rate;
+		}
+		if (s->ext_data.mp3surround) {
+			// update codec info for mp3surround.
+			// must be done after the fact;
+			// all frame data is decoded into 6 channels each.
+			av_channel_layout_uninit(&avctx->ch_layout);
+			avctx->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT1;
+			// And now, we do it again, for our frame.
+			av_channel_layout_uninit(&s->frame->ch_layout);
+			s->frame->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT1;
+		}
+		*/
 
         s->last_buf_size=0;
         if (s->in_gb.buffer) {

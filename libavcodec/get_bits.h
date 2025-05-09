@@ -112,9 +112,14 @@ typedef struct GetBitContext {
     int size_in_bits_plus8;
 } GetBitContext;
 
+#define BITPOS_SET 0
+#define BITPOS_CUR 1
+#define BITPOS_END 2
+
 static inline unsigned int get_bits(GetBitContext *s, int n);
 static inline void skip_bits(GetBitContext *s, int n);
 static inline unsigned int show_bits(GetBitContext *s, int n);
+static inline void seek_bits(GetBitContext *s, int pos, int whence);
 
 /* Bitstream reader API docs:
  * name
@@ -244,6 +249,19 @@ static inline unsigned int show_bits(GetBitContext *s, int n);
 #endif
 
 #define GET_CACHE(name, gb) ((uint32_t) name ## _cache)
+
+#if UNCHECKED_BITSTREAM_READER
+#   define DEFINE_COUNTER(name, gb, num) name ## _index = (num)
+#   define ADJUST_COUNTER(name, gb, num) name ## _index += (num)
+#   define RECEDE_COUNTER(name, gb, num) name ## _index -= (num)
+#else
+#	define DEFINE_COUNTER(name, gb, num) \
+	name ## _index = FFMIN(name ## _size_plus8, name ## _index = (num))
+#	define ADJUST_COUNTER(name, gb, num) \
+	name ## _index = FFMIN(name ## _size_plus8, name ## _index + (num))
+#	define RECEDE_COUNTER(name, gb, num) \
+	name ## _index = FFMIN(name ## _size_plus8, name ## _index - (num))
+#endif
 
 
 static inline int get_bits_count(const GetBitContext *s)
@@ -692,6 +710,21 @@ static inline int skip_1stop_8data_bits(GetBitContext *gb)
     }
 
     return 0;
+}
+
+/**
+ * Adjust bit position from within the buffer.
+ */
+static inline void seek_bits(GetBitContext *s, int pos, int whence) {
+	OPEN_READER(re, s);
+	if (whence == BITPOS_SET) {
+		DEFINE_COUNTER(re, s, pos);
+	} else if (whence == BITPOS_CUR) {
+		ADJUST_COUNTER(re, s, pos);
+	} else if (whence == BITPOS_END) {
+		RECEDE_COUNTER(re, s, pos);
+	}
+	CLOSE_READER(re, s);
 }
 
 #endif // CACHED_BITSTREAM_READER

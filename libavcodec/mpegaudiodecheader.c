@@ -34,6 +34,9 @@
 int avpriv_mpegaudio_decode_header(MPADecodeHeader *s, uint32_t header)
 {
     int sample_rate, frame_size, mpeg25, padding;
+    //int framesync, profile;
+    //int profile_split[2];
+    //int sample_rate_level_index;
     int sample_rate_index, bitrate_index;
     int ret;
 
@@ -41,6 +44,38 @@ int avpriv_mpegaudio_decode_header(MPADecodeHeader *s, uint32_t header)
     if (ret < 0)
         return ret;
 
+    //framesync = (header >> 21);
+    /*
+     * if (framesync != 0x7ff)
+     *     return -1;
+     */
+    /*
+     * ff_mpa_check_header already has frame sync taken care of,
+     * which begs the question; why is this needed?
+     * one way this check would be called for would be if
+     * that function was somehow never called here
+     * or even placed *above* this block of code,
+     * which would be a fairly stupid idea, all things considered.
+     */
+    /*
+     * now, one way to read the profile field would be to split it
+     * into *two* vars containing just one bit *each* instead of two.
+     * the only possible usage it would have would be
+     * to determine the "sample rate level" which represents
+     * one set of three sample rates out of all three sets *each* (3x3).
+     * the actual sample rate would be obtained through an
+     * "sample rate index" field which is already set in the header.
+     */
+    //profile_split[0] = (header >> 20) & 1;
+    //profile_split[1] = (header >> 19) & 1;
+    /*
+     * if (profile_split[1])
+     *     sample_rate_level_index = 0;
+     * else if (profile_split[0])
+     *     sample_rate_level_index = 1;
+     * else
+     *     sample_rate_level_index = 2;
+     */
     if (header & (1<<20)) {
         s->lsf = (header & (1<<19)) ? 0 : 1;
         mpeg25 = 0;
@@ -62,7 +97,7 @@ int avpriv_mpegaudio_decode_header(MPADecodeHeader *s, uint32_t header)
 
     bitrate_index = (header >> 12) & 0xf;
     padding = (header >> 9) & 1;
-    //extension = (header >> 8) & 1;
+	s->extension = (header >> 8) & 1;
     s->mode = (header >> 6) & 3;
     s->mode_ext = (header >> 4) & 3;
     //copyright = (header >> 3) & 1;

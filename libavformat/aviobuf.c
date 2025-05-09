@@ -1477,3 +1477,15 @@ int ffio_close_null_buf(AVIOContext *s)
 
     return size;
 }
+
+uint64_t avio_rb8x(AVIOContext *s, int len)
+{
+    uint64_t val = 0;
+    int pos = 0;
+    do {
+        val <<= 8;
+        val |= avio_r8(s);
+        pos++;
+    } while (pos < len);
+    return val;
+}
