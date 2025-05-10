@@ -1342,7 +1342,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey)(AVTXContext *s,
     int ret, m, n;
 
     get_two_factors(len, &m, &n);
-    if ((m * n) != len || m <= 1 || n <= 1)
+    if ((m * n) != len || av_popcount(m) <= 1 || av_popcount(n) <= 1)
         return AVERROR(EINVAL);
 
     flags &= ~FF_TX_PRESHUFFLE;
@@ -1368,6 +1368,49 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey)(AVTXContext *s,
         }
 
         exp += n;
+    }
+
+    return 0;
+}
+
+static av_cold int TX_NAME(ff_tx_fft_init_bailey_slow)(AVTXContext *s,
+                                                       const FFTXCodelet *cd,
+                                                       uint64_t flags,
+                                                       FFTXCodeletOptions *opts,
+                                                       int len, int inv,
+                                                       const void *scale)
+{
+    const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
+    TXComplex *exp;
+    int ret, m, n;
+
+    get_two_factors(len, &m, &n);
+    if ((m * n) != len || m <= 1 || n <= 1)
+        return AVERROR(EINVAL);
+
+    flags &= ~FF_TX_PRESHUFFLE;
+    flags &= ~AV_TX_INPLACE;
+
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, m, s->inv, scale)))
+        return ret;
+
+    if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, n, s->inv, scale)))
+        return ret;
+
+    if (!(s->exp = av_mallocz(len*3*sizeof(*s->exp))))
+        return AVERROR(ENOMEM);
+
+    exp = s->exp;
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < m; j++) {
+            const double factor = phase*i*j;
+            exp[j] = (TXComplex){
+                RESCALE(cos(factor)),
+                RESCALE(sin(factor)),
+            };
+        }
+
+        exp += m;
     }
 
     return 0;
@@ -1558,6 +1601,65 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
     for (int i = 0; i < m; i++) {
         fn1(sub1, dst, tmp, stride*m*sizeof(TXComplex));
         tmp += n;
+        dst += stride;
+    }
+}
+
+static void TX_NAME(ff_tx_fft_bailey_slow)(AVTXContext *s, void *_dst, void *_src,
+                                           ptrdiff_t stride)
+{
+    const int len = s->len;
+    const int m = s->sub[0].len;
+    const int n = s->sub[1].len;
+    const TXComplex *exp = s->exp;
+    AVTXContext *sub0 = &s->sub[0];
+    AVTXContext *sub1 = &s->sub[1];
+    const av_tx_fn fn0 = s->fn[0];
+    const av_tx_fn fn1 = s->fn[1];
+    TXComplex *tmp2 = ((TXComplex *)s->exp) + len;
+    TXComplex *tmp = tmp2 + len;
+    TXComplex *src = _src;
+    TXComplex *dst = _dst;
+
+    stride /= sizeof(*dst);
+
+    transpose_matrix(tmp2, src, n, m);
+
+    for (int i = 0; i < n; i++) {
+        fn0(sub0, tmp, tmp2, sizeof(TXComplex));
+        tmp2 += m;
+        tmp += m;
+    }
+
+    tmp2 = ((TXComplex *)s->exp) + len;
+    tmp = tmp2 + len;
+    for (int i = m+1; i < len; i++) {
+        const TXComplex x = tmp[i];
+
+        CMUL3(tmp[i], x, exp[i]);
+    }
+
+    transpose_matrix(tmp2, tmp, m, n);
+
+    for (int i = 0; i < m; i++) {
+        fn1(sub1, tmp, tmp2, sizeof(TXComplex));
+        tmp2 += n;
+        tmp += n;
+    }
+
+    tmp2 = ((TXComplex *)s->exp) + len;
+    tmp = tmp2 + len;
+
+    if (stride == 1)
+        tmp2 = dst;
+
+    transpose_matrix(tmp2, tmp, n, m);
+
+    if (stride == 1)
+        return;
+
+    for (int i = 0; i < len; i++) {
+        dst[0] = tmp2[i];
         dst += stride;
     }
 }
@@ -1899,6 +2001,20 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_bailey_def) = {
     .min_len    = 6,
     .max_len    = TX_LEN_UNLIMITED,
     .init       = TX_NAME(ff_tx_fft_init_bailey),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_MIN/5,
+};
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_bailey_slow_def) = {
+    .name       = TX_NAME_STR("fft_bailey_slow"),
+    .function   = TX_NAME(ff_tx_fft_bailey_slow),
+    .type       = TX_TYPE(FFT),
+    .flags      = AV_TX_UNALIGNED | AV_TX_INPLACE | FF_TX_OUT_OF_PLACE,
+    .factors[0] = TX_FACTOR_ANY,
+    .nb_factors = 1,
+    .min_len    = 6,
+    .max_len    = TX_LEN_UNLIMITED,
+    .init       = TX_NAME(ff_tx_fft_init_bailey_slow),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_MIN/4,
 };
@@ -3193,6 +3309,7 @@ const FFTXCodelet * const TX_NAME(ff_tx_codelet_list)[] = {
     &TX_NAME(ff_tx_fft_naive_small_def),
     &TX_NAME(ff_tx_fft_bluestein_def),
     &TX_NAME(ff_tx_fft_bailey_def),
+    &TX_NAME(ff_tx_fft_bailey_slow_def),
     &TX_NAME(ff_tx_fft_rader_def),
     &TX_NAME(ff_tx_mdct_fwd_def),
     &TX_NAME(ff_tx_mdct_inv_def),
