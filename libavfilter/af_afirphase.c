@@ -18,8 +18,6 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <float.h>
-
 #include "libavutil/channel_layout.h"
 #include "libavutil/opt.h"
 #include "libavutil/mem.h"

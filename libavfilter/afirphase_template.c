@@ -23,6 +23,7 @@
 
 #undef ctype
 #undef ftype
+#undef FPOW
 #undef ATAN2
 #undef HYPOT
 #undef FABS
@@ -32,10 +33,10 @@
 #undef FLOG
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
-#undef EPSILON
 #undef MPI
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
+#define FPOW powf
 #define ATAN2 atan2f
 #define HYPOT hypotf
 #define FABS fabsf
@@ -46,10 +47,10 @@
 #define ctype AVComplexFloat
 #define ftype float
 #define TX_TYPE AV_TX_FLOAT_FFT
-#define EPSILON FLT_EPSILON
 #define MPI M_PIf
 #else
 #define SAMPLE_FORMAT double
+#define FPOW pow
 #define ATAN2 atan2
 #define HYPOT hypot
 #define FABS fabs
@@ -60,7 +61,6 @@
 #define ctype AVComplexDouble
 #define ftype double
 #define TX_TYPE AV_TX_DOUBLE_FFT
-#define EPSILON DBL_EPSILON
 #define MPI M_PI
 #endif
 
@@ -89,8 +89,8 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
     const ftype iscale = F(1.0) / fft_size;
     const ftype *src = (const ftype *)s->in->extended_data[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
-    const ftype threshold = pow(F(10.), -F(100.0 / 20.0));
-    const ftype logt = log(threshold);
+    const ftype threshold = FPOW(F(10.), -F(100.0 / 20.0));
+    const ftype logt = FLOG(threshold);
     const ftype scale = F(1.0);
     av_tx_fn tx_fn, itx_fn;
     ftype *linear_phase = NULL;
@@ -154,7 +154,7 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
         }
     } else {
         const ftype aphase = FABS(phase);
-        const ftype inter = pow(aphase, aphase > F(0.5) ? aphase/F(0.5) : F(0.5)/aphase);
+        const ftype inter = FPOW(aphase, aphase > F(0.5) ? aphase/F(0.5) : F(0.5)/aphase);
         const int mid = nb_taps/2;
 
         memset(fft_out, 0, sizeof(*fft_out) * fft_size);
