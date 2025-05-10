@@ -259,3 +259,30 @@ static int fn(drc_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, int 
 
     return 0;
 }
+
+static int fn(drc_flush)(AVFilterContext *ctx, AVFrame *out, int ch)
+{
+    AudioDRCContext *s = ctx->priv;
+    ftype *in_buffer = (ftype *)s->in_buffer->extended_data[ch];
+    const int overlap = s->overlap;
+
+    for (int offset = 0; offset < out->nb_samples; offset += overlap) {
+        ftype *dst = ((ftype *)out->extended_data[ch])+offset;
+
+        memset(in_buffer, 0, sizeof(*in_buffer) * overlap);
+
+        fn(feed)(ctx, ch, in_buffer, dst,
+                 (ftype *)(s->in_frame->extended_data[ch]),
+                 (ftype *)(s->out_dist_frame->extended_data[ch]),
+                 (ftype *)(s->windowed_frame->extended_data[ch]),
+                 (ftype *)(s->drc_frame->extended_data[ch]),
+                 (ftype *)(s->spectrum_buf->extended_data[ch]),
+                 (ftype *)(s->energy->extended_data[ch]),
+                 (ftype *)(s->threshold->extended_data[ch]),
+                 (ftype *)(s->target_gain->extended_data[ch]),
+                 (ftype *)(s->envelope->extended_data[ch]),
+                 (ftype *)(s->factors->extended_data[ch]));
+    }
+
+    return 0;
+}
