@@ -203,13 +203,18 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
 
         tx_fn(tx_ctx, fft_in, fft_out, sizeof(*fft_out));
 
-        for (int i = 0; i < fft_size; i++) {
-            const ftype eR = FEXP(fft_in[i].re);
-            const ftype min_phase = fft_in[i].im;
-            const ftype phase = (F(1.0) - inter) * linear_phase[i] + inter * min_phase;
+        {
+            ftype prev = fft_in[0].im, prev_min_phase = fft_in[0].im;
+            for (int i = 0; i < fft_size; i++) {
+                const ftype eR = FEXP(fft_in[i].re);
+                const ftype min_phase = fn(unwrap)(prev, fft_in[i].im, prev_min_phase);
+                const ftype phase = (F(1.0) - inter) * linear_phase[i] + inter * min_phase;
 
-            fft_in[i].re = eR * FCOS(phase);
-            fft_in[i].im = eR * FSIN(phase);
+                prev = fft_in[i].im;
+                prev_min_phase = min_phase;
+                fft_in[i].re = eR * FCOS(phase);
+                fft_in[i].im = eR * FSIN(phase);
+            }
         }
 
         itx_fn(itx_ctx, fft_out, fft_in, sizeof(*fft_in));
