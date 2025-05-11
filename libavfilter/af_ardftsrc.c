@@ -364,8 +364,6 @@ static int filter_frame(AVFilterLink *inlink)
 
     av_frame_copy_props(out, in);
 
-    s->trim_size = 0;
-
     ff_filter_execute(ctx, src_in_channels, out, NULL,
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
@@ -386,12 +384,21 @@ static int filter_frame(AVFilterLink *inlink)
 
     out->sample_rate = outlink->sample_rate;
     out->pts = av_rescale_q(in->pts - (trim_size ? 0 : s->delay), inlink->time_base, outlink->time_base);
-    if (trim_size > 0) {
+    if (trim_size > 0 && trim_size < out->nb_samples) {
         for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
             out->extended_data[ch] += trim_size * av_get_bytes_per_sample(out->format);
-    }
+        out->nb_samples -= trim_size;
+        s->trim_size = 0;
+    } else if (trim_size > 0) {
+        s->trim_size -= out->nb_samples;
+        av_frame_free(&out);
+        av_frame_free(&in);
+        s->in = NULL;
 
-    out->nb_samples -= trim_size;
+        ff_inlink_request_frame(inlink);
+
+        return 0;
+    }
 
     out->duration = av_rescale_q(out->nb_samples,
                                  (AVRational){1, outlink->sample_rate},
