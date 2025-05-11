@@ -385,8 +385,12 @@ static int filter_frame(AVFilterLink *inlink)
     out->sample_rate = outlink->sample_rate;
     out->pts = av_rescale_q(in->pts - (trim_size ? 0 : s->delay), inlink->time_base, outlink->time_base);
     if (trim_size > 0 && trim_size < out->nb_samples) {
-        for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
-            out->extended_data[ch] += trim_size * av_get_bytes_per_sample(out->format);
+        if (s->out_planar) {
+            for (int ch = 0; ch < out->ch_layout.nb_channels; ch++)
+                out->extended_data[ch] += trim_size * av_get_bytes_per_sample(out->format);
+        } else {
+            out->data[0] += trim_size * out->ch_layout.nb_channels * av_get_bytes_per_sample(out->format);
+        }
         out->nb_samples -= trim_size;
         s->trim_size = 0;
     } else if (trim_size > 0) {
