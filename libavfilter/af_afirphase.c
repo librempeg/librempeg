@@ -125,7 +125,7 @@ static int activate(AVFilterContext *ctx)
 
     available = ff_inlink_queued_samples(inlink);
     if (available > 0) {
-        if ((16ULL << av_ceil_log2(available)) > INT_MAX)
+        if ((4ULL << av_ceil_log2(available)) > INT_MAX)
             return AVERROR_INVALIDDATA;
     }
 

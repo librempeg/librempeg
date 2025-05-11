@@ -83,7 +83,7 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
     AudioFIRPhaseContext *s = ctx->priv;
     const ftype phase = s->phase;
     const int nb_taps = s->in->nb_samples;
-    const int oversample = 16;
+    const int oversample = 4;
     const int fft_size = oversample << av_ceil_log2(nb_taps);
     AVTXContext *tx_ctx = NULL, *itx_ctx;
     const ftype iscale = F(1.0) / fft_size;
