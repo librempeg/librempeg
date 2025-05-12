@@ -127,7 +127,7 @@ static int fn(src_init)(AVFilterContext *ctx)
     const int taper_samples = s->taper_samples;
     ftype iscale = fn(get_iscale)(s->in_rdft_size, s->out_rdft_size);
     ftype scale = fn(get_scale)(s->in_rdft_size, s->out_rdft_size);
-    const int rdft_size = FFMAX(s->in_rdft_size, s->out_rdft_size);
+    const int rdft_size = FFMAX(s->in_rdft_size, s->out_rdft_size) / 2;
     fn(StateContext) *state;
     ttype *taper;
     int ret;
