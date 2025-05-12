@@ -37,6 +37,9 @@ typedef struct AudioRDFTSRCContext {
     int out_planar;
     int pass;
     int eof;
+    int is_eof;
+    int do_flush;
+    int done_flush;
     int quality;
     int sample_rate;
     int in_rdft_size;
@@ -50,12 +53,14 @@ typedef struct AudioRDFTSRCContext {
     int channels;
     float bandwidth;
     int64_t delay;
+    int64_t last_in_pts;
     int64_t last_out_pts;
     int trim_size;
     int flush_size;
     int64_t first_pts;
-    int64_t last_pts;
-    int64_t eof_pts;
+    int64_t eof_in_pts;
+    int64_t eof_out_pts;
+    int status;
 
     void *over;
     AVRefStructPool *progress_pool;
@@ -162,7 +167,7 @@ static int config_input(AVFilterLink *inlink)
         return 0;
     }
 
-    s->first_pts = s->last_pts = AV_NOPTS_VALUE;
+    s->first_pts = s->eof_in_pts = AV_NOPTS_VALUE;
 
     outlink->time_base = (AVRational) {1, outlink->sample_rate};
 
@@ -300,9 +305,13 @@ static int flush_frame(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     AudioRDFTSRCContext *s = ctx->priv;
     const int nb_samples = av_rescale(s->flush_size, s->out_nb_samples, s->in_nb_samples);
-    AVFrame *out = av_frame_alloc();
+    AVFrame *out;
     int ret;
 
+    s->done_flush = 1;
+    s->flush_size = 0;
+
+    out = av_frame_alloc();
     if (!out)
         return AVERROR(ENOMEM);
 
@@ -312,8 +321,6 @@ static int flush_frame(AVFilterLink *outlink)
         av_frame_free(&out);
         return ret;
     }
-
-    s->flush_size = 0;
 
     ff_filter_execute(ctx, flush_channels, out, NULL,
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
@@ -332,10 +339,20 @@ static int filter_frame(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioRDFTSRCContext *s = ctx->priv;
+    int ret, trim_size, in_samples;
     AVFrame *out, *in = s->in;
-    int trim_size = s->trim_size * (s->first_pts == in->pts);
-    int ret, in_samples;
-    int64_t last_pts;
+
+    if (in == NULL) {
+        if (s->done_flush || s->flush_size == 0) {
+            return AVERROR_EOF;
+        } else if ((s->last_in_pts >= s->eof_in_pts) && s->flush_size > 0) {
+            return flush_frame(outlink);
+        } else {
+            s->flush_size = 0;
+            s->done_flush = 1;
+            return 0;
+        }
+    }
 
     if (s->pass) {
         s->in = NULL;
@@ -343,8 +360,8 @@ static int filter_frame(AVFilterLink *inlink)
     }
 
     in_samples = (in->nb_samples < s->in_nb_samples) ? FFMIN(in->nb_samples+s->in_offset, s->in_nb_samples) : in->nb_samples;
-    s->flush_size -= FFMAX(in_samples-in->nb_samples, 0);
-    last_pts = in->pts + in->duration;
+    s->flush_size = FFMAX(s->flush_size - FFMAX(in_samples-in->nb_samples, 0), 0);
+    s->last_in_pts = in->pts + in->nb_samples;
 
     out = av_frame_alloc();
     if (!out) {
@@ -383,6 +400,7 @@ static int filter_frame(AVFilterLink *inlink)
 #endif
 
     out->sample_rate = outlink->sample_rate;
+    trim_size = s->trim_size * (s->first_pts == in->pts);
     out->pts = av_rescale_q(in->pts - (trim_size ? 0 : s->delay), inlink->time_base, outlink->time_base);
     if (trim_size > 0 && trim_size < out->nb_samples) {
         if (s->out_planar) {
@@ -417,7 +435,7 @@ static int filter_frame(AVFilterLink *inlink)
     if (ret < 0)
         return ret;
 
-    if (last_pts >= s->last_pts && s->eof && s->out_offset > 0 && s->flush_size > 0)
+    if (s->last_in_pts >= s->eof_in_pts && s->do_flush && s->out_offset > 0 && s->flush_size > 0)
         return flush_frame(outlink);
 
     return 0;
@@ -464,18 +482,23 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
     const AudioRDFTSRCContext *s_src = src->priv;
     AudioRDFTSRCContext       *s_dst = dst->priv;
 
+    s_dst->eof = FFMAX(s_dst->eof, s_src->eof);
+    s_dst->is_eof = FFMAX(s_dst->is_eof, s_src->is_eof);
+    s_dst->do_flush = FFMAX(s_dst->do_flush, s_src->do_flush);
     s_dst->trim_size = FFMIN(s_dst->trim_size, s_src->trim_size);
+    s_dst->done_flush = FFMAX(s_dst->done_flush, s_src->done_flush);
+    s_dst->flush_size = FFMIN(s_dst->flush_size, s_src->flush_size);
+    s_dst->eof_in_pts = FFMAX(s_dst->eof_in_pts, s_src->eof_in_pts);
+    s_dst->eof_out_pts = FFMAX(s_dst->eof_out_pts, s_src->eof_out_pts);
+    s_dst->last_in_pts = FFMAX(s_dst->last_in_pts, s_src->last_in_pts);
+    s_dst->last_out_pts = FFMAX(s_dst->last_out_pts, s_src->last_out_pts);
 
     if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
         return 0;
 
     s_dst->first_pts = s_src->first_pts;
-    s_dst->last_pts = s_src->last_pts;
-    s_dst->eof = s_src->eof;
     s_dst->pass = s_src->pass;
     s_dst->channels = s_src->channels;
-    s_dst->flush_size = s_src->flush_size;
-    s_dst->last_out_pts = s_src->last_out_pts;
     s_dst->in_nb_samples = s_src->in_nb_samples;
     s_dst->out_nb_samples = s_src->out_nb_samples;
 
@@ -484,9 +507,11 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
     av_refstruct_replace(&s_dst->progress,      s_src->progress);
 
     av_frame_free(&s_dst->in);
-    s_dst->in = av_frame_clone(s_src->in);
-    if (!s_dst->in)
-        return AVERROR(ENOMEM);
+    if (s_src->in) {
+        s_dst->in = av_frame_clone(s_src->in);
+        if (!s_dst->in)
+            return AVERROR(ENOMEM);
+    }
 
     return 0;
 }
@@ -516,71 +541,103 @@ static int filter_prepare(AVFilterContext *ctx)
     int ret, status;
     int64_t pts;
 
+    if (s->eof || s->is_eof) {
+        if (!s->done_flush) {
+            ff_filter_set_ready(ctx, 100);
+            return 0;
+        }
+
+        ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_out_pts);
+        return AVERROR_EOF;
+    }
+
     av_frame_free(&s->in);
 
     ret = ff_outlink_get_status(outlink);
     if (ret) {
         ff_inlink_set_status(inlink, ret);
-        s->eof_pts = s->last_out_pts;
+        s->eof_out_pts = s->last_out_pts;
         s->eof = 1;
-        goto finish;
+        ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_out_pts);
+        return AVERROR_EOF;
     }
+
+    if (!ff_outlink_frame_wanted(outlink))
+        return AVERROR(EAGAIN);
 
     if (s->pass) {
-        ret = ff_inlink_consume_frame(inlink, &in);
+        ret = ff_inlink_consume_frame(inlink, &s->in);
+        if (ret < 0)
+            return ret;
+
+        if (ret > 0)
+            return 0;
+
+        if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+            ff_outlink_set_status(outlink, status, pts);
+            return AVERROR_EOF;
+        }
     } else {
-        const int available = ff_inlink_queued_samples(inlink);
-        const int is_eof = ff_inlink_check_available_samples(inlink, available + 1) == 1;
-        const int wanted = is_eof ? available : FFMAX(s->in_nb_samples, (available / s->in_nb_samples) * s->in_nb_samples);
+        int available, wanted;
+
+        available = ff_inlink_queued_samples(inlink);
+
+        s->is_eof |= ff_inlink_check_available_samples(inlink, available + 1) == 1;
+
+        if (!s->status && ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+            s->status = status;
+            s->eof_in_pts = pts;
+            s->eof_out_pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
+            s->eof = 1;
+        }
+
+        if (available < s->in_nb_samples) {
+            if (!s->is_eof && !s->eof) {
+                ff_inlink_request_frame(inlink);
+                return AVERROR(EAGAIN);
+            }
+        }
+
+        if (available <= 0) {
+            if (s->flush_size > 0 && s->done_flush == 0)
+                return 0;
+
+            ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_out_pts);
+            return AVERROR_EOF;
+        }
+
+        wanted = s->is_eof ? available : FFMAX(s->in_nb_samples, (available / s->in_nb_samples) * s->in_nb_samples);
 
         ret = ff_inlink_consume_samples(inlink, wanted, wanted, &in);
+        if (ret < 0)
+            return ret;
     }
 
-    if (ret < 0)
-        return ret;
     if (ret > 0) {
         if (s->first_pts == AV_NOPTS_VALUE)
             s->first_pts = in->pts;
         s->in = in;
-    }
-
-    if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
-        s->last_pts = pts;
-        s->eof_pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
-        s->eof = 1;
-    }
-
-    if ((s->in == NULL && s->eof == 0) && ff_outlink_frame_wanted(outlink)) {
-        ff_inlink_request_frame(inlink);
-        goto finish;
-    }
+        s->do_flush |= (s->is_eof|s->eof);
 
 #if CONFIG_AVFILTER_THREAD_FRAME
-    if (s->in && (ctx->thread_type & AVFILTER_THREAD_FRAME_FILTER)) {
-        if (!s->progress_pool) {
-            s->progress_pool = av_refstruct_pool_alloc_ext(sizeof(ThreadProgress), 0, NULL,
-                                                           progress_init, progress_reset,
-                                                           progress_free, NULL);
-            if (!s->progress_pool)
+        if (ctx->thread_type & AVFILTER_THREAD_FRAME_FILTER) {
+            if (!s->progress_pool) {
+                s->progress_pool = av_refstruct_pool_alloc_ext(sizeof(ThreadProgress), 0, NULL,
+                                                               progress_init, progress_reset,
+                                                               progress_free, NULL);
+                if (!s->progress_pool)
+                    return AVERROR(ENOMEM);
+            }
+
+            av_refstruct_unref(&s->prev_progress);
+            s->prev_progress = s->progress;
+
+            s->progress = av_refstruct_pool_get(s->progress_pool);
+            if (!s->progress)
                 return AVERROR(ENOMEM);
         }
-
-        av_refstruct_unref(&s->prev_progress);
-        s->prev_progress = s->progress;
-
-        s->progress = av_refstruct_pool_get(s->progress_pool);
-        if (!s->progress)
-            return AVERROR(ENOMEM);
-    }
 #endif
-
-finish:
-    if (s->in)
         return 0;
-
-    if (s->eof && ff_inlink_queued_samples(inlink) <= 0) {
-        ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_pts);
-        return AVERROR_EOF;
     }
 
     return AVERROR(EAGAIN);
