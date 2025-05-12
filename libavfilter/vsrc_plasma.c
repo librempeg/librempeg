@@ -137,7 +137,7 @@ static int draw_plasma_slice32_planar(AVFilterContext *ctx, void *arg, int job, 
             point_g[1] += speed_g[1];
             point_g[2] += speed_g[2];
 
-            point_b[0] += speed_b[0];;
+            point_b[0] += speed_b[0];
             point_b[1] += speed_b[1];
             point_b[2] += speed_b[2];
 
