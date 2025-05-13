@@ -175,10 +175,10 @@ static int fn(src_init)(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
     taper = s->taper;
     for (int n = 0; n < taper_samples-1; n++) {
-        const ftype e = F(1.0)-s->bandwidth;
+        const ftype t = taper_samples;
         const ftype N = s->tr_nb_samples;
-        const ftype k = n+(F(1.0)-e)*(N-F(1.0))+F(1.0);
-        const ftype zbk = e*(N-F(1.0))*(F(1.0)/(N-F(1.0)-k)+F(1.0)/((F(1.0)-e)*(N-F(1.0))-k));
+        const ftype k = n+N-t+F(1.0);
+        const ftype zbk = t*(F(1.0)/(N-k)+F(1.0)/(N-t-k));
         const ftype v = F(1.0)/(FEXP(zbk)+F(1.0));
 
         taper[n].re = taper[n].im = isnormal(v) ? v : F(0.0);
