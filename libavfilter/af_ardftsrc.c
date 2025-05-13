@@ -308,7 +308,6 @@ static int flush_frame(AVFilterLink *outlink)
     AVFrame *out;
     int ret;
 
-    s->done_flush = 1;
     s->flush_size = 0;
 
     out = av_frame_alloc();
@@ -331,6 +330,7 @@ static int flush_frame(AVFilterLink *outlink)
                                  (AVRational){1, outlink->sample_rate},
                                  outlink->time_base);
 
+    s->done_flush = 1;
     return ff_filter_frame(outlink, out);
 }
 
@@ -343,15 +343,12 @@ static int filter_frame(AVFilterLink *inlink)
     AVFrame *out, *in = s->in;
 
     if (in == NULL) {
-        if (s->done_flush || s->flush_size == 0) {
+        if (s->done_flush)
             return AVERROR_EOF;
-        } else if ((s->last_in_pts >= s->eof_in_pts) && s->flush_size > 0) {
+        else if (s->do_flush && (s->last_in_pts >= s->eof_in_pts) && s->flush_size > 0)
             return flush_frame(outlink);
-        } else {
-            s->flush_size = 0;
-            s->done_flush = 1;
-            return 0;
-        }
+
+        return 0;
     }
 
     if (s->pass) {
@@ -361,7 +358,7 @@ static int filter_frame(AVFilterLink *inlink)
 
     in_samples = (in->nb_samples < s->in_nb_samples) ? FFMIN(in->nb_samples+s->in_offset, s->in_nb_samples) : in->nb_samples;
     s->flush_size = FFMAX(s->flush_size - FFMAX(in_samples-in->nb_samples, 0), 0);
-    s->last_in_pts = in->pts + in->nb_samples;
+    s->last_in_pts = in->pts + in->duration;
 
     out = av_frame_alloc();
     if (!out) {
@@ -438,7 +435,7 @@ static int filter_frame(AVFilterLink *inlink)
     if (s->last_in_pts >= s->eof_in_pts && s->do_flush && s->out_offset > 0 && s->flush_size > 0)
         return flush_frame(outlink);
 
-    return 0;
+    return ret;
 }
 
 static int activate(AVFilterContext *ctx)
@@ -541,16 +538,6 @@ static int filter_prepare(AVFilterContext *ctx)
     int ret, status;
     int64_t pts;
 
-    if (s->eof || s->is_eof) {
-        if (!s->done_flush) {
-            ff_filter_set_ready(ctx, 100);
-            return 0;
-        }
-
-        ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_out_pts);
-        return AVERROR_EOF;
-    }
-
     av_frame_free(&s->in);
 
     ret = ff_outlink_get_status(outlink);
@@ -558,6 +545,16 @@ static int filter_prepare(AVFilterContext *ctx)
         ff_inlink_set_status(inlink, ret);
         s->eof_out_pts = s->last_out_pts;
         s->eof = 1;
+        ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_out_pts);
+        return AVERROR_EOF;
+    }
+
+    if (s->eof && !s->is_eof) {
+        if (s->do_flush && !s->done_flush && s->flush_size > 0) {
+            ff_filter_set_ready(ctx, 10);
+            return 0;
+        }
+
         ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_out_pts);
         return AVERROR_EOF;
     }
@@ -589,6 +586,7 @@ static int filter_prepare(AVFilterContext *ctx)
             s->eof_in_pts = pts;
             s->eof_out_pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
             s->eof = 1;
+            s->do_flush |= s->eof;
         }
 
         if (available < s->in_nb_samples) {
@@ -599,8 +597,10 @@ static int filter_prepare(AVFilterContext *ctx)
         }
 
         if (available <= 0) {
-            if (s->flush_size > 0 && s->done_flush == 0)
+            if (s->do_flush && !s->done_flush && s->flush_size > 0 && (s->eof && !s->is_eof)) {
+                ff_filter_set_ready(ctx, 10);
                 return 0;
+            }
 
             ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_out_pts);
             return AVERROR_EOF;
@@ -617,7 +617,7 @@ static int filter_prepare(AVFilterContext *ctx)
         if (s->first_pts == AV_NOPTS_VALUE)
             s->first_pts = in->pts;
         s->in = in;
-        s->do_flush |= (s->is_eof|s->eof);
+        s->do_flush |= s->is_eof;
 
 #if CONFIG_AVFILTER_THREAD_FRAME
         if (ctx->thread_type & AVFILTER_THREAD_FRAME_FILTER) {
