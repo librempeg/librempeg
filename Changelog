@@ -62,6 +62,8 @@ version <next>:
 - APV parser
 - APV encoding support through a libopenapv wrapper
 - plasma video source filter
+- VVC decoder supports all content of SCC (Screen Content Coding):
+  IBC (Inter Block Copy), Palette Mode and ACT (Adaptive Color Transform
 
 
 version 7.1:
