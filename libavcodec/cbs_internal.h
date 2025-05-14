@@ -287,7 +287,7 @@ int CBS_FUNC(write_signed)(CodedBitstreamContext *ctx, PutBitContext *pbc,
     int start_position; \
     do { \
         if (ctx->trace_enable) \
-            start_position = put_bits_count(pbc);; \
+            start_position = put_bits_count(pbc); \
     } while (0)
 
 // End of a syntax element for tracing, make callback.
