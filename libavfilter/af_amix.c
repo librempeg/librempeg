@@ -31,6 +31,7 @@
 #include "libavutil/attributes.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
+#include "libavutil/cpu.h"
 #include "libavutil/float_dsp.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/mem.h"
@@ -275,11 +276,14 @@ static int output_frame(AVFilterLink *outlink)
         InputContext *ic = &s->inputs[i];
 
         if (ic->frame) {
-            int planes, plane_size;
+            int align, planes, plane_size, sample_size;
 
+            sample_size= av_get_bytes_per_sample(out->format);
+            align      = av_cpu_max_align();
             nb_samples = s->inputs[i].frame->nb_samples;
             planes     = s->planar ? s->nb_channels : 1;
             plane_size = nb_samples * (s->planar ? 1 : s->nb_channels);
+            plane_size = FFALIGN(plane_size, align / sample_size);
             plane_size = plane_size & (~15);
             if (plane_size <= 0)
                 continue;
