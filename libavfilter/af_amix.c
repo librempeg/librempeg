@@ -281,6 +281,8 @@ static int output_frame(AVFilterLink *outlink)
             planes     = s->planar ? s->nb_channels : 1;
             plane_size = nb_samples * (s->planar ? 1 : s->nb_channels);
             plane_size = plane_size & (~15);
+            if (plane_size <= 0)
+                continue;
 
             if (out->format == AV_SAMPLE_FMT_FLT ||
                 out->format == AV_SAMPLE_FMT_FLTP) {
