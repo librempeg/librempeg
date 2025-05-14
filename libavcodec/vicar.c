@@ -125,7 +125,7 @@ static void get_value(GetByteContext *gb, char *value, const int size)
             value[n] = '\0';
             break;
         }
-        value[n] = bytestream2_get_byte(gb);;
+        value[n] = bytestream2_get_byte(gb);
     }
 }
 
