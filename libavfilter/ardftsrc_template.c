@@ -176,7 +176,7 @@ static int fn(src_init)(AVFilterContext *ctx)
     taper = s->taper;
     for (int n = 0; n < taper_samples-1; n++) {
         const ftype t = taper_samples;
-        const ftype zbk = t*(F(1.0)/(t-n-F(1.0))-F(1.0)/(n+F(1.0)));
+        const ftype zbk = t/((t-n)-F(1.0)) - t/(n+F(1.0));
         const ftype v = F(1.0)/(FEXP(zbk)+F(1.0));
 
         taper[n].re = taper[n].im = isnormal(v) ? v : F(0.0);
