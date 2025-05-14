@@ -246,7 +246,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     c->best_score = best_score;
     c->mode = EXPAND;
 
-    return fn(expand_write)(ctx, ch);;
+    return fn(expand_write)(ctx, ch);
 }
 
 static int fn(compress_write)(AVFilterContext *ctx, const int ch)
@@ -369,7 +369,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     c->best_score = best_score;
     c->mode = COMPRESS;
 
-    return fn(compress_write)(ctx, ch);;
+    return fn(compress_write)(ctx, ch);
 }
 
 static int fn(filter_samples)(AVFilterContext *ctx, const int ch)
