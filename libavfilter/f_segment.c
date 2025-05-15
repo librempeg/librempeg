@@ -217,7 +217,7 @@ static int activate(AVFilterContext *ctx)
         }
 
         s->last_pts = frame->pts + frame->duration;
-        ret = ff_filter_frame(ctx->outputs[s->current_point], frame);
+        return ff_filter_frame(ctx->outputs[s->current_point], frame);
     }
 
     if (ret < 0) {
