@@ -24,10 +24,14 @@
 #undef itype
 #undef ftype
 #undef ttype
+#undef FABS
 #undef FEXP
+#undef FPOW
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
 #if DEPTH == 8
+#define FPOW powf
+#define FABS fabsf
 #define FEXP expf
 #define ctype AVComplexFloat
 #define ftype float
@@ -36,6 +40,8 @@
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #elif DEPTH == 16
+#define FPOW powf
+#define FABS fabsf
 #define FEXP expf
 #define ctype AVComplexFloat
 #define ftype float
@@ -44,6 +50,8 @@
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #elif DEPTH == 32
+#define FPOW pow
+#define FABS fabs
 #define FEXP exp
 #define ctype AVComplexDouble
 #define ftype double
@@ -52,6 +60,8 @@
 #define ttype AVComplexDouble
 #define TX_TYPE AV_TX_DOUBLE_RDFT
 #elif DEPTH == 33
+#define FPOW powf
+#define FABS fabsf
 #define FEXP expf
 #define ctype AVComplexFloat
 #define ftype float
@@ -60,6 +70,8 @@
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #else
+#define FPOW pow
+#define FABS fabs
 #define FEXP exp
 #define ctype AVComplexDouble
 #define ftype double
@@ -118,6 +130,7 @@ static void fn(src_uninit)(AVFilterContext *ctx)
 
     av_freep(&s->state);
     av_freep(&s->taper);
+    av_freep(&s->phase);
 }
 
 static int fn(src_init)(AVFilterContext *ctx)
@@ -130,6 +143,7 @@ static int fn(src_init)(AVFilterContext *ctx)
     const int rdft_size = FFMAX(s->in_rdft_size, s->out_rdft_size) / 2;
     fn(StateContext) *state;
     ttype *taper;
+    ctype *phase;
     int ret;
 
     s->state = av_calloc(channels, sizeof(*state));
@@ -180,6 +194,23 @@ static int fn(src_init)(AVFilterContext *ctx)
         const ftype v = F(1.0)/(FEXP(zbk)+F(1.0));
 
         taper[n].re = taper[n].im = isnormal(v) ? v : F(0.0);
+    }
+
+    s->phase = av_calloc(s->tr_nb_samples, sizeof(*phase));
+    if (!s->phase)
+        return AVERROR(ENOMEM);
+    phase = s->phase;
+    for (int n = 0; n < s->tr_nb_samples; n++) {
+        const ftype aphase = FABS(s->phaset);
+        const ftype sgn = s->phaset < 0 ? F(-1.0) : F(1.0);
+        const ftype inter = FPOW(aphase, aphase > F(0.5) ? aphase/F(0.5) : F(0.5)/aphase);
+        const ftype x = F(n) / s->out_nb_samples;
+        const ftype a = F(0.25) / s->in_nb_samples;
+        const ftype z = F(M_PI)*F(2.0) + a * FEXP(F(4.0) * F(M_PI) * x);
+        const ftype w = (F(1.0) - inter) * F(2.0*M_PI) + inter * z;
+
+        phase[n].re = cosf(w * sgn);
+        phase[n].im = sinf(w * sgn);
     }
 
     return 0;
@@ -256,6 +287,7 @@ static int fn(src_in)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const int copy_samples = FFMIN(in_nb_samples, in->nb_samples - soffset);
     const int write_samples = FFMIN(out_nb_samples, out->nb_samples - doffset);
     const ttype *taper = s->taper;
+    const ctype *phase = s->phase;
 
     if (s->in_planar) {
         const itype *src = ((const itype *)in->extended_data[ch]) + soffset;
@@ -295,6 +327,19 @@ static int fn(src_in)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     stc->tx_fn(stc->tx_ctx, rdftc, rdft, sizeof(*rdft));
 
     memset(rdftc + tr_nb_samples, 0, (s->out_rdft_size / 2 + 1 - tr_nb_samples) * sizeof(*rdftc));
+
+    if (s->phaset != 0) {
+        for (int n = 0; n < tr_nb_samples; n++) {
+            const ftype re = rdftc[n].re;
+            const ftype im = rdftc[n].im;
+            const ftype cre = phase[n].re;
+            const ftype cim = phase[n].im;
+
+            rdftc[n].re = re * cre - im * cim;
+            rdftc[n].im = re * cim + im * cre;
+        }
+    }
+
     for (int n = 0, m = offset; n < taper_samples; n++, m++) {
         rdftc[m].re *= taper[n].re;
         rdftc[m].im *= taper[n].im;

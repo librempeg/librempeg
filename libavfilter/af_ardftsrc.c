@@ -52,6 +52,7 @@ typedef struct AudioRDFTSRCContext {
     int out_offset;
     int channels;
     float bandwidth;
+    float phaset;
     int64_t delay;
     int64_t last_in_pts;
     int64_t last_out_pts;
@@ -68,6 +69,7 @@ typedef struct AudioRDFTSRCContext {
     ThreadProgress  *progress;
 
     void *taper;
+    void *phase;
 
     AVFrame *in;
 
@@ -93,6 +95,7 @@ static const AVOption ardftsrc_options[] = {
     { "sample_rate", "set the sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=0}, 0, INT_MAX, FLAGS },
     { "quality", "set the quality", OFFSET(quality), AV_OPT_TYPE_INT, {.i64=1024}, 1, INT32_MAX, FLAGS },
     { "bandwidth", "set the bandwidth", OFFSET(bandwidth), AV_OPT_TYPE_FLOAT, {.dbl=0.95}, 0, 1, FLAGS },
+    { "phase", "set the phase", OFFSET(phaset), AV_OPT_TYPE_FLOAT, {.dbl=0}, -1, 1, FLAGS },
     {NULL}
 };
 
