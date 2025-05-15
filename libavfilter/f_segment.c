@@ -206,7 +206,6 @@ static int activate(AVFilterContext *ctx)
     }
 
     if (ret > 0) {
-        s->last_pts = frame->pts;
         while (current_segment_finished(ctx, frame)) {
             ff_outlink_set_status(ctx->outputs[s->current_point], AVERROR_EOF, frame->pts);
             s->current_point++;
@@ -217,6 +216,7 @@ static int activate(AVFilterContext *ctx)
             return AVERROR(EINVAL);
         }
 
+        s->last_pts = frame->pts + frame->duration;
         ret = ff_filter_frame(ctx->outputs[s->current_point], frame);
     }
 
