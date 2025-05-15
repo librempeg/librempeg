@@ -72,8 +72,8 @@ static int parse_points(AVFilterContext *ctx, char **item_str, int nb_points, in
             return ret;
         }
 
-        cur = points[i];
         points[i] += ref;
+        cur = points[i];
     }
 
     return 0;
