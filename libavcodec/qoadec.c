@@ -24,6 +24,7 @@
 #include "get_bits.h"
 #include "bytestream.h"
 #include "mathops.h"
+#include "thread.h"
 
 #define QOA_SLICE_LEN 20
 #define QOA_LMS_LEN 4
@@ -113,7 +114,7 @@ static int qoa_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         8LL * ((frame->nb_samples + QOA_SLICE_LEN - 1) / QOA_SLICE_LEN) * nb_channels)
         return AVERROR_INVALIDDATA;
 
-    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
+    if ((ret = ff_thread_get_buffer(avctx, frame, 0)) < 0)
         return ret;
 
     for (int ch = 0; ch < nb_channels; ch++) {
@@ -163,6 +164,7 @@ const FFCodec ff_qoa_decoder = {
     .init           = qoa_decode_init,
     FF_CODEC_DECODE_CB(qoa_decode_frame),
     .p.capabilities = AV_CODEC_CAP_CHANNEL_CONF |
+                      AV_CODEC_CAP_FRAME_THREADS |
                       AV_CODEC_CAP_DR1,
     CODEC_SAMPLEFMTS(AV_SAMPLE_FMT_S16P),
 };
