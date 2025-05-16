@@ -193,7 +193,7 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR(ENOMEM);
 
     for (int i = 0; i < s->nb_channels; i++) {
-        float scale = 1.f / (s->win_size*2);
+        float scale = 1.f;
 
         ret = av_tx_init(&s->fft[i], &s->tx_fn[i], AV_TX_FLOAT_RDFT,
                          0, s->win_size*2, &scale, 0);
