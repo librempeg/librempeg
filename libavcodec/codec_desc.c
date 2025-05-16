@@ -3697,6 +3697,27 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("PCA (Perfect Clarity Audio)"),
         .props     = AV_CODEC_PROP_LOSSLESS,
     },
+    {
+        .id        = AV_CODEC_ID_MP3PRO,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "mp3pro",
+        .long_name = NULL_IF_CONFIG_SMALL("mp3PRO (MPEG Audio Layer 3)"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_MP3SURROUND,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "mp3surround",
+        .long_name = NULL_IF_CONFIG_SMALL("MP3 Surround (MPEG Audio Layer 3)"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_MP3HD,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "mp3hd",
+        .long_name = NULL_IF_CONFIG_SMALL("mp3HD (MPEG Audio Layer 3)"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
 
     /* subtitle codecs */
     {
