@@ -27,9 +27,13 @@
 #undef FABS
 #undef FEXP
 #undef FPOW
+#undef FCOS
+#undef FSIN
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
 #if DEPTH == 8
+#define FCOS cosf
+#define FSIN sinf
 #define FPOW powf
 #define FABS fabsf
 #define FEXP expf
@@ -40,6 +44,8 @@
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #elif DEPTH == 16
+#define FCOS cosf
+#define FSIN sinf
 #define FPOW powf
 #define FABS fabsf
 #define FEXP expf
@@ -50,6 +56,8 @@
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #elif DEPTH == 32
+#define FCOS cos
+#define FSIN sin
 #define FPOW pow
 #define FABS fabs
 #define FEXP exp
@@ -60,6 +68,8 @@
 #define ttype AVComplexDouble
 #define TX_TYPE AV_TX_DOUBLE_RDFT
 #elif DEPTH == 33
+#define FCOS cosf
+#define FSIN sinf
 #define FPOW powf
 #define FABS fabsf
 #define FEXP expf
@@ -70,6 +80,8 @@
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #else
+#define FCOS cos
+#define FSIN sin
 #define FPOW pow
 #define FABS fabs
 #define FEXP exp
@@ -202,15 +214,15 @@ static int fn(src_init)(AVFilterContext *ctx)
     phase = s->phase;
     for (int n = 0; n < s->tr_nb_samples; n++) {
         const ftype aphase = FABS(s->phaset);
-        const ftype sgn = s->phaset < 0 ? F(-1.0) : F(1.0);
+        const ftype sgn = s->phaset < F(0.0) ? F(-1.0) : F(1.0);
         const ftype inter = FPOW(aphase, aphase > F(0.5) ? aphase/F(0.5) : F(0.5)/aphase);
         const ftype x = F(n) / s->out_nb_samples;
-        const ftype a = F(0.25) / s->in_nb_samples;
+        const ftype a = F(1.0) / (F(4.0) * s->in_nb_samples);
         const ftype z = F(M_PI)*F(2.0) + a * FEXP(F(4.0) * F(M_PI) * x);
         const ftype w = (F(1.0) - inter) * F(2.0*M_PI) + inter * z;
 
-        phase[n].re = cosf(w * sgn);
-        phase[n].im = sinf(w * sgn);
+        phase[n].re = FCOS(w * sgn);
+        phase[n].im = FSIN(w * sgn);
     }
 
     return 0;
@@ -328,7 +340,7 @@ static int fn(src_in)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 
     memset(rdftc + tr_nb_samples, 0, (s->out_rdft_size / 2 + 1 - tr_nb_samples) * sizeof(*rdftc));
 
-    if (s->phaset != 0) {
+    if (s->phaset != F(0.0)) {
         for (int n = 0; n < tr_nb_samples; n++) {
             const ftype re = rdftc[n].re;
             const ftype im = rdftc[n].im;
