@@ -67,7 +67,7 @@ static const AVOption acorrscope_options[] = {
     { "rate", "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
     { "r",    "set video rate", OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str="25"}, 0, INT_MAX, FLAGS },
     { "fade", "set the fade", OFFSET(fade), AV_OPT_TYPE_FLOAT, {.dbl=0.85}, 0, 1, TFLAGS },
-    { "contrast", "set the contrast", OFFSET(contrast), AV_OPT_TYPE_FLOAT, {.dbl=6000}, 0, 10000, TFLAGS },
+    { "contrast", "set the contrast", OFFSET(contrast), AV_OPT_TYPE_FLOAT, {.dbl=1}, 0, 10, TFLAGS },
     { NULL }
 };
 
