@@ -3069,6 +3069,7 @@ static inline int check_section_show_entries(int section_id)
 
 int main(int argc, char **argv)
 {
+    AVTextFormatOptions tf_options;
     const AVTextFormatter *f;
     AVTextFormatContext *tctx;
     AVTextWriterContext *wctx;
@@ -3167,13 +3168,11 @@ int main(int argc, char **argv)
     if (ret < 0)
         goto end;
 
-    AVTextFormatOptions tf_options = {
-        .show_optional_fields = show_optional_fields,
-        .show_value_unit = show_value_unit,
-        .use_value_prefix = use_value_prefix,
-        .use_byte_value_binary_prefix = use_byte_value_binary_prefix,
-        .use_value_sexagesimal_format = use_value_sexagesimal_format,
-    };
+    tf_options.show_optional_fields = show_optional_fields;
+    tf_options.show_value_unit = show_value_unit;
+    tf_options.use_value_prefix = use_value_prefix;
+    tf_options.use_byte_value_binary_prefix = use_byte_value_binary_prefix;
+    tf_options.use_value_sexagesimal_format = use_value_sexagesimal_format;
 
     if ((ret = avtext_context_open(&tctx, f, wctx, f_args, sections, FF_ARRAY_ELEMS(sections), tf_options, show_data_hash)) >= 0) {
         if (f == &avtextformatter_xml)
