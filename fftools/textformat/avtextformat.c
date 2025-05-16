@@ -270,13 +270,15 @@ void avtext_print_section_header(AVTextFormatContext *tctx, const void *data, in
 
 void avtext_print_section_footer(AVTextFormatContext *tctx)
 {
+    int section_id, parent_section_id;
+
     if (tctx->level < 0 || tctx->level >= SECTION_MAX_NB_LEVELS) {
         av_log(tctx, AV_LOG_ERROR, "Invalid level for section_footer: %d\n", tctx->level);
         return;
     }
 
-    int section_id = tctx->section[tctx->level]->id;
-    int parent_section_id = tctx->level ?
+    section_id = tctx->section[tctx->level]->id;
+    parent_section_id = tctx->level ?
         tctx->section[tctx->level - 1]->id : SECTION_ID_NONE;
 
     if (parent_section_id != SECTION_ID_NONE) {
