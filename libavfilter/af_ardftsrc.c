@@ -361,7 +361,6 @@ static int filter_frame(AVFilterLink *inlink)
 
     in_samples = (in->nb_samples < s->in_nb_samples) ? FFMIN(in->nb_samples+s->in_offset, s->in_nb_samples) : in->nb_samples;
     s->flush_size = FFMAX(s->flush_size - FFMAX(in_samples-in->nb_samples, 0), 0);
-    s->last_in_pts = in->pts + in->duration;
 
     out = av_frame_alloc();
     if (!out) {
@@ -621,6 +620,7 @@ static int filter_prepare(AVFilterContext *ctx)
             s->first_pts = in->pts;
         s->in = in;
         s->do_flush |= s->is_eof;
+        s->last_in_pts = in->pts + in->duration;
 
 #if CONFIG_AVFILTER_THREAD_FRAME
         if (ctx->thread_type & AVFILTER_THREAD_FRAME_FILTER) {
