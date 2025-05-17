@@ -788,6 +788,121 @@ fail:
     av_freep(&meta);
 }
 
+static void free_xhd3(void *obj)
+{
+    ID3v2ExtraMetaXHD3 *xhd3 = obj;
+    // (todo) actually free
+    return;
+}
+
+// "vlv" - variable length value/variable, made-up acronym.
+static uint32_t read_xhd3_vlv(AVIOContext *pb, int var_len)
+{
+    int var_len_in_bits = 0;
+    char var_len_backup;
+    int alt_var_len = var_len;
+    int var_pos = 0;
+    uint32_t val = 0;
+    uint8_t inp_var1;
+    uint16_t inp_var2;
+    uint8_t upper_var, lower_var;
+
+    var_len_in_bits = var_len * 8;
+    if (var_len & 1) {
+        inp_var1 = avio_r8(pb);
+        var_len_in_bits += (-8 - (var_len >> 1));
+        val |= ((inp_var1 & 0x7f) << (var_len_in_bits & 0x1f));
+        alt_var_len--;
+    } else
+        var_len_in_bits += (var_len >> 1);
+
+    do {
+        inp_var2 = avio_rb16(pb);
+        upper_var = (inp_var2 >> 8) & 0xff;
+        lower_var = inp_var2 & 0xff;
+
+        var_len_backup = var_len_in_bits;
+        var_len_in_bits += -15; // how!?
+
+        val |= ((upper_var & 0x7f) << ((var_len_backup - 7) & 0x1f));
+        val |= (lower_var << (var_len_in_bits & 0x1f));
+
+        var_pos += 2;
+    } while (var_pos < alt_var_len);
+
+    return val;
+}
+
+static void read_xhd3(AVFormatContext *s, AVIOContext *pb, int taglen,
+                      const char *tag, ExtraMetaList *extra_meta, int isv34)
+{
+    ID3v2ExtraMeta *meta;
+    ID3v2ExtraMetaXHD3 *xhd3;
+    ID3v2ExtraMetaXHD3_hd3 *hd3;
+    ID3v2ExtraMetaXHD3_cd *cd;
+
+    meta = av_mallocz(sizeof(*meta));
+    if (!meta)
+        return;
+
+    /*
+     * (todo)
+     * XHD3 block has "read-only" flag set before actual block data
+     * (which consist of both "hd3" and "cd" blocks, respectively).
+     * check against XHD3 having that flag set before doing anything.
+     */
+
+    xhd3 = &meta->data.xhd3;
+    hd3 = &meta->data.xhd3.hd3;
+    cd = &meta->data.xhd3.cd;
+    xhd3->hd3_offset = avio_tell(pb);
+    xhd3->cd_offset = avio_tell(pb);
+
+    if (avio_rb24(pb) != MKBETAG24('h', 'd', '3'))
+        goto fail;
+    xhd3->cd_offset += 3;
+
+    // (todo) actually understand what this "hd3" block does.
+    hd3->unk1 = avio_r8(pb);
+    if (hd3->unk1 == 0xff)
+        goto fail;
+    xhd3->cd_offset++;
+
+    hd3->unk2 = avio_r8(pb);
+    hd3->unk3 = avio_rb24(pb);
+    hd3->unk4 = avio_r8(pb);
+    if (!hd3->unk4)
+        goto fail;
+    xhd3->cd_offset += (1 + 3 + 1);
+
+    hd3->unk5 = avio_r8(pb);
+    // (byte*)(param_1 + 0x11), (byte*)(param_1 + 0x20)
+    hd3->unk6 = avio_rb32(pb);
+    hd3->vlv_size = avio_r8(pb);
+
+    if ((hd3->vlv_size == 0xff) && !hd3->vlv_size)
+        goto fail;
+    xhd3->cd_offset += (1 + 4 + 1);
+
+    hd3->num_samples = read_xhd3_vlv(pb, hd3->vlv_size);
+    hd3->mp3_data_size = read_xhd3_vlv(pb, hd3->vlv_size);
+    hd3->mp3hd_data_size = read_xhd3_vlv(pb, hd3->vlv_size);
+    xhd3->cd_offset += (hd3->vlv_size * 3);
+
+    /*
+    if (avio_rb16(pb) != MKBETAG16('c','d'))
+        goto fail;
+    */
+
+    meta->tag = "XHD3";
+    list_append(meta, extra_meta);
+
+    return;
+fail:
+    free_xhd3(xhd3);
+    av_freep(&meta);
+}
+
 typedef struct ID3v2EMFunc {
     const char *tag3;
     const char *tag4;
@@ -802,6 +917,7 @@ static const ID3v2EMFunc id3v2_extra_meta_funcs[] = {
     { "PIC", "APIC", read_apic,    free_apic    },
     { "CHAP","CHAP", read_chapter, free_chapter },
     { "PRIV","PRIV", read_priv,    free_priv    },
+    { "XHD3","XHD3", read_xhd3,    free_xhd3    },
     { NULL }
 };
 
@@ -1259,4 +1375,25 @@ int ff_id3v2_parse_priv_dict(AVDictionary **metadata, ID3v2ExtraMeta *extra_meta
 int ff_id3v2_parse_priv(AVFormatContext *s, ID3v2ExtraMeta *extra_meta)
 {
     return ff_id3v2_parse_priv_dict(&s->metadata, extra_meta);
+}
+
+int ff_id3v2_parse_xhd3(AVFormatContext *s, ID3v2ExtraMeta *extra_meta)
+{
+    ID3v2ExtraMeta *cur;
+    int how_many_xhd3 = 0;
+
+    for (cur = extra_meta; cur; cur = cur->next)
+    {
+        ID3v2ExtraMetaXHD3 *xhd3;
+        int ret;
+
+        if (!strcmp(cur->tag, "XHD3")) {
+            xhd3 = &cur->data.xhd3;
+            // (todo) parse "cd" format (consists of a table followed by encoded lossless data)
+        }
+
+        return -1;
+    }
+
+    return 0;
 }

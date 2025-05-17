@@ -97,6 +97,8 @@ typedef struct MPADecodeContext {
     void (*butterflies_float)(float *restrict v1, float *restrict v2, int len);
     AVFrame *frame;
     uint32_t crc;
+    int mp3pro_mode;
+    int mp3surround_mode;
 } MPADecodeContext;
 
 #define HEADER_SIZE 4
@@ -1214,6 +1216,7 @@ static int mp_decode_layer3(MPADecodeContext *s)
     GetBitContext *gb = &s->gb;
     GranuleDef *g;
     int16_t exponents[576]; //FIXME try INTFLOAT
+    int mp3pro_exists, mp3surround_exists;
     int ret;
 
     if (is_ealayer3(s)) {

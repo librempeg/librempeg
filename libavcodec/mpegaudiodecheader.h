@@ -40,6 +40,7 @@
     int sample_rate_index; /* between 0 and 8 */ \
     int bit_rate; \
     int nb_channels; \
+	int extension; \
     int mode; \
     int mode_ext; \
     int lsf;

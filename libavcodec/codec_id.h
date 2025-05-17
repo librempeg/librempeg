@@ -585,6 +585,9 @@ enum AVCodecID {
     AV_CODEC_ID_SONARC,
     AV_CODEC_ID_G728,
     AV_CODEC_ID_PCA,
+    AV_CODEC_ID_MP3PRO,
+    AV_CODEC_ID_MP3SURROUND,
+    AV_CODEC_ID_MP3HD,
 
     /* subtitle codecs */
     AV_CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.
