@@ -1616,6 +1616,8 @@ int ff_inlink_consume_samples(AVFilterLink *link, unsigned min, unsigned max,
     if (ret < 0)
         return ret;
     consume_update(li, frame);
+    frame->duration = av_rescale_q(frame->nb_samples, (AVRational){ 1, frame->sample_rate },
+                                   link->time_base);
     *rframe = frame;
     return 1;
 }
