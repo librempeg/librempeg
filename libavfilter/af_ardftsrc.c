@@ -58,6 +58,7 @@ typedef struct AudioRDFTSRCContext {
     int64_t last_out_pts;
     int trim_size;
     int flush_size;
+    int64_t flush_duration;
     int64_t first_pts;
     int64_t eof_in_pts;
     int64_t eof_out_pts;
@@ -170,7 +171,7 @@ static int config_input(AVFilterLink *inlink)
         return 0;
     }
 
-    s->first_pts = s->eof_in_pts = AV_NOPTS_VALUE;
+    s->first_pts = s->eof_in_pts = s->eof_out_pts = AV_NOPTS_VALUE;
 
     outlink->time_base = (AVRational) {1, outlink->sample_rate};
 
@@ -189,6 +190,8 @@ static int config_input(AVFilterLink *inlink)
     s->out_rdft_size = s->out_nb_samples * 2;
     s->out_offset = s->trim_size = (s->out_rdft_size - s->out_nb_samples) >> 1;
     s->in_offset = s->flush_size = (s->in_rdft_size - s->in_nb_samples) >> 1;
+    s->flush_size = av_rescale(s->flush_size, s->out_nb_samples, s->in_nb_samples);
+    s->flush_duration = av_rescale_q(s->flush_size, (AVRational){1, outlink->sample_rate}, outlink->time_base);
     s->delay = av_rescale_q(s->in_offset, (AVRational){ 1, inlink->sample_rate }, inlink->time_base);
     s->tr_nb_samples = FFMIN(s->in_nb_samples, s->out_nb_samples);
     s->taper_samples = lrint(s->tr_nb_samples * (1.0-s->bandwidth));
@@ -307,7 +310,7 @@ static int flush_frame(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AudioRDFTSRCContext *s = ctx->priv;
-    const int nb_samples = av_rescale(s->flush_size, s->out_nb_samples, s->in_nb_samples);
+    const int nb_samples = s->flush_size;
     AVFrame *out;
     int ret;
 
@@ -348,7 +351,9 @@ static int filter_frame(AVFilterLink *inlink)
     if (in == NULL) {
         if (s->done_flush)
             return AVERROR_EOF;
-        else if (s->do_flush && (s->last_in_pts >= s->eof_in_pts) && s->flush_size > 0)
+        else if ((s->eof_in_pts != AV_NOPTS_VALUE && s->last_in_pts >= s->eof_in_pts) &&
+                 (s->eof_out_pts != AV_NOPTS_VALUE && s->last_out_pts >= s->eof_out_pts - s->flush_duration) &&
+                 s->do_flush && s->flush_size > 0)
             return flush_frame(outlink);
 
         return 0;
@@ -434,7 +439,8 @@ static int filter_frame(AVFilterLink *inlink)
     if (ret < 0)
         return ret;
 
-    if (s->last_in_pts >= s->eof_in_pts && s->do_flush && s->flush_size > 0)
+    if ((s->eof_in_pts != AV_NOPTS_VALUE && s->last_in_pts >= s->eof_in_pts) &&
+        s->do_flush && s->flush_size > 0)
         return flush_frame(outlink);
 
     return ret;
@@ -481,20 +487,20 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
     const AudioRDFTSRCContext *s_src = src->priv;
     AudioRDFTSRCContext       *s_dst = dst->priv;
 
-    s_dst->eof = FFMAX(s_dst->eof, s_src->eof);
-    s_dst->is_eof = FFMAX(s_dst->is_eof, s_src->is_eof);
-    s_dst->do_flush = FFMAX(s_dst->do_flush, s_src->do_flush);
     s_dst->trim_size = FFMIN(s_dst->trim_size, s_src->trim_size);
     s_dst->done_flush = FFMAX(s_dst->done_flush, s_src->done_flush);
     s_dst->flush_size = FFMIN(s_dst->flush_size, s_src->flush_size);
-    s_dst->eof_in_pts = FFMAX(s_dst->eof_in_pts, s_src->eof_in_pts);
-    s_dst->eof_out_pts = FFMAX(s_dst->eof_out_pts, s_src->eof_out_pts);
-    s_dst->last_in_pts = FFMAX(s_dst->last_in_pts, s_src->last_in_pts);
     s_dst->last_out_pts = FFMAX(s_dst->last_out_pts, s_src->last_out_pts);
 
     if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
         return 0;
 
+    s_dst->eof_out_pts = s_src->eof_out_pts;
+    s_dst->do_flush = s_src->do_flush;
+    s_dst->eof = s_src->eof;
+    s_dst->is_eof = s_src->is_eof;
+    s_dst->last_in_pts = s_src->last_in_pts;
+    s_dst->eof_in_pts = s_src->eof_in_pts;
     s_dst->first_pts = s_src->first_pts;
     s_dst->pass = s_src->pass;
     s_dst->channels = s_src->channels;
