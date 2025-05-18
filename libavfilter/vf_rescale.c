@@ -223,16 +223,6 @@ static AVFrame *get_in_video_buffer(AVFilterLink *inlink, int w, int h)
         ff_default_get_video_buffer(inlink, w, h);
 }
 
-static AVFrame *get_out_video_buffer(AVFilterLink *outlink, int w, int h)
-{
-    AVFilterContext *ctx = outlink->src;
-    ReScaleContext *s = ctx->priv;
-
-    return s->pass ?
-        ff_null_get_video_buffer   (outlink, w, h) :
-        ff_default_get_video_buffer(outlink, s->w, s->h);
-}
-
 static const AVFilterPad inputs[] = {
     {
         .name          = "default",
@@ -246,7 +236,6 @@ static const AVFilterPad outputs[] = {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
         .config_props = config_output,
-        .get_buffer.video = get_out_video_buffer,
     },
 };
 
