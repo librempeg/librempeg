@@ -434,7 +434,7 @@ static int filter_frame(AVFilterLink *inlink)
     if (ret < 0)
         return ret;
 
-    if (s->last_in_pts >= s->eof_in_pts && s->do_flush && s->out_offset > 0 && s->flush_size > 0)
+    if (s->last_in_pts >= s->eof_in_pts && s->do_flush && s->flush_size > 0)
         return flush_frame(outlink);
 
     return ret;
