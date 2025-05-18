@@ -274,10 +274,12 @@ int attribute_align_arg av_buffersrc_add_frame_flags(AVFilterContext *ctx, AVFra
 int av_buffersrc_close(AVFilterContext *ctx, int64_t pts, unsigned flags)
 {
     BufferSourceContext *s = ctx->priv;
+    int ret;
 
-    s->eof = 1;
+    ret = (flags & AV_BUFFERSRC_FLAG_PUSH) ? push_frame(ctx->graph) : 0;
     ff_avfilter_link_set_in_status(ctx->outputs[0], AVERROR_EOF, pts);
-    return (flags & AV_BUFFERSRC_FLAG_PUSH) ? push_frame(ctx->graph) : 0;
+    s->eof = 1;
+    return ret;
 }
 
 static av_cold int init_video(AVFilterContext *ctx)
