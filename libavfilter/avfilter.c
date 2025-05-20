@@ -681,14 +681,18 @@ static const AVClass *filter_child_class_iterate(void **iter)
 }
 
 #define OFFSET(x) offsetof(AVFilterContext, x)
+#define FOFFSET(x) offsetof(FFFilterContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM
 #define TFLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
+#define X AV_OPT_FLAG_EXPORT
+#define R AV_OPT_FLAG_READONLY
 static const AVOption avfilter_options[] = {
     { "thread_type", "Allowed thread types", OFFSET(thread_type), AV_OPT_TYPE_FLAGS,
         { .i64 = AVFILTER_THREAD_SLICE }, 0, INT_MAX, FLAGS, .unit = "thread_type" },
         { "slice", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVFILTER_THREAD_SLICE }, .flags = FLAGS, .unit = "thread_type" },
         { "frame", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVFILTER_THREAD_FRAME_FILTER }, .flags = FLAGS, .unit = "thread_type" },
     { "enable", "set enable expression", OFFSET(enable_str), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = TFLAGS },
+    { "disabled", "is filter timeline disabled", FOFFSET(is_disabled), AV_OPT_TYPE_INT, {.i64=0}, .flags = TFLAGS|X|R },
     { "threads", "Allowed number of threads", OFFSET(nb_threads), AV_OPT_TYPE_INT,
         { .i64 = 0 }, 0, INT_MAX, FLAGS, .unit = "threads" },
         {"auto", "autodetect a suitable number of threads to use", 0, AV_OPT_TYPE_CONST, {.i64 = 0 }, .flags = FLAGS, .unit = "threads"},
@@ -1612,6 +1616,8 @@ int ff_inlink_consume_samples(AVFilterLink *link, unsigned min, unsigned max,
     if (ret < 0)
         return ret;
     consume_update(li, frame);
+    frame->duration = av_rescale_q(frame->nb_samples, (AVRational){ 1, frame->sample_rate },
+                                   link->time_base);
     *rframe = frame;
     return 1;
 }
