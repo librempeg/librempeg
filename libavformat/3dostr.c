@@ -149,7 +149,7 @@ static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
                 return AVERROR_INVALIDDATA;
             codec                  = avio_rl32(s->pb);
             avio_skip(s->pb, 4);
-            if (ctrl_size == 20 || ctrl_size == 3 || ctrl_size == -1)
+            if (ctrl_size == 20 || ctrl_size == 16 || ctrl_size == 3 || ctrl_size == -1)
                 st->duration       = (avio_rb32(s->pb) - 1) / st->codecpar->ch_layout.nb_channels;
             else
                 st->duration       = avio_rb32(s->pb) * 16 / st->codecpar->ch_layout.nb_channels;
@@ -200,6 +200,7 @@ static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
 
                 vcodec = chunk;
                 ctx->video_stream_index    = vst->index;
+                vst->start_time            = 0;
                 vst->codecpar->codec_type  = AVMEDIA_TYPE_VIDEO;
                 vst->codecpar->width       = 258;
                 vst->codecpar->height      = 258;
@@ -241,6 +242,9 @@ static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
                 vst->codecpar->codec_type  = AVMEDIA_TYPE_VIDEO;
                 vst->codecpar->height      = avio_rb32(s->pb);
                 vst->codecpar->width       = avio_rb32(s->pb);
+                avio_skip(s->pb, 4);
+                vst->start_time            = 0;
+                vst->duration = vst->nb_frames = avio_rb32(s->pb);
 
                 switch (vcodec) {
                 case MKTAG('c','v','i','d'):
@@ -253,7 +257,7 @@ static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
 
                 avpriv_set_pts_info(vst, 64, 1, 15);
 
-                size -= 16;
+                size -= 24;
             }
             size -= 12;
             break;
