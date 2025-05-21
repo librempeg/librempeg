@@ -1123,7 +1123,7 @@ static av_cold int svq3_decode_extradata(AVCodecContext *avctx, SVQ3Context *s,
     const uint8_t *extradata = avctx->extradata + seqh_offset;
     unsigned int size = AV_RB32(extradata + 4);
     GetBitContext gb;
-    int ret;
+    int ret, frame_size_code, w, h, unk0, unk1, unk2, unk3, unk4;
 
     if (size > avctx->extradata_size - seqh_offset - 8)
         return AVERROR_INVALIDDATA;
@@ -1131,8 +1131,7 @@ static av_cold int svq3_decode_extradata(AVCodecContext *avctx, SVQ3Context *s,
     init_get_bits(&gb, extradata, size * 8);
 
     /* 'frame size code' and optional 'width, height' */
-    int frame_size_code = get_bits(&gb, 3);
-    int w, h;
+    frame_size_code = get_bits(&gb, 3);
     switch (frame_size_code) {
     case 0:
         w = 160;
@@ -1175,16 +1174,16 @@ static av_cold int svq3_decode_extradata(AVCodecContext *avctx, SVQ3Context *s,
     s->thirdpel_flag = get_bits1(&gb);
 
     /* unknown fields */
-    int unk0 = get_bits1(&gb);
-    int unk1 = get_bits1(&gb);
-    int unk2 = get_bits1(&gb);
-    int unk3 = get_bits1(&gb);
+    unk0 = get_bits1(&gb);
+    unk1 = get_bits1(&gb);
+    unk2 = get_bits1(&gb);
+    unk3 = get_bits1(&gb);
 
     s->low_delay = get_bits1(&gb);
     avctx->has_b_frames = !s->low_delay;
 
     /* unknown field */
-    int unk4 = get_bits1(&gb);
+    unk4 = get_bits1(&gb);
 
     av_log(avctx, AV_LOG_DEBUG, "Unknown fields %d %d %d %d %d\n",
            unk0, unk1, unk2, unk3, unk4);
@@ -1198,6 +1197,7 @@ static av_cold int svq3_decode_extradata(AVCodecContext *avctx, SVQ3Context *s,
         return 0;
 
 #if CONFIG_ZLIB
+    {
     unsigned watermark_width  = get_interleaved_ue_golomb(&gb);
     unsigned watermark_height = get_interleaved_ue_golomb(&gb);
     int u1                    = get_interleaved_ue_golomb(&gb);
@@ -1207,6 +1207,7 @@ static av_cold int svq3_decode_extradata(AVCodecContext *avctx, SVQ3Context *s,
     unsigned long buf_len     = watermark_width *
                                 watermark_height * 4;
     int offset                = get_bits_count(&gb) + 7 >> 3;
+    uint8_t *buf;
 
     if (watermark_height <= 0 ||
         get_bits_left(&gb) <= 0 ||
@@ -1219,7 +1220,7 @@ static av_cold int svq3_decode_extradata(AVCodecContext *avctx, SVQ3Context *s,
            "u1: %x u2: %x u3: %x compressed data size: %d offset: %d\n",
            u1, u2, u3, u4, offset);
 
-    uint8_t *buf = av_malloc(buf_len);
+    buf = av_malloc(buf_len);
     if (!buf)
         return AVERROR(ENOMEM);
 
@@ -1236,6 +1237,7 @@ static av_cold int svq3_decode_extradata(AVCodecContext *avctx, SVQ3Context *s,
     av_log(avctx, AV_LOG_DEBUG,
            "watermark key %#"PRIx32"\n", s->watermark_key);
     av_free(buf);
+    }
 
     return 0;
 #else
@@ -1303,13 +1305,16 @@ static av_cold int svq3_decode_init(AVCodecContext *avctx)
     s->h_edge_pos = s->mb_width * 16;
     s->v_edge_pos = s->mb_height * 16;
 
-    const unsigned big_mb_num = s->mb_stride * (s->mb_height + 2) + 1;
+    {
+    unsigned big_mb_num = s->mb_stride * (s->mb_height + 2) + 1;
+    uint32_t *mb_type_buf;
 
     s->mb_type_buf = av_calloc(big_mb_num, NUM_PICS * sizeof(*s->mb_type_buf));
     if (!s->mb_type_buf)
         return AVERROR(ENOMEM);
-    uint32_t *mb_type_buf = s->mb_type_buf + 2 * s->mb_stride + 1;
+    mb_type_buf = s->mb_type_buf + 2 * s->mb_stride + 1;
 
+    {
     const unsigned b4_stride     = s->mb_width * 4 + 1;
     const unsigned b4_array_size = b4_stride * s->mb_height * 4;
     const unsigned motion_val_buf_size = b4_array_size + 4;
@@ -1318,6 +1323,7 @@ static av_cold int svq3_decode_init(AVCodecContext *avctx)
                                   NUM_PICS * 2 * sizeof(*s->motion_val_buf));
     if (!s->motion_val_buf)
         return AVERROR(ENOMEM);
+    {
     int16_t (*motion_val_buf)[2] = s->motion_val_buf + 4;
 
     for (size_t i = 0; i < NUM_PICS; ++i) {
@@ -1329,6 +1335,9 @@ static av_cold int svq3_decode_init(AVCodecContext *avctx)
             pic->motion_val[j] = motion_val_buf;
             motion_val_buf    += motion_val_buf_size;
         }
+    }
+    }
+    }
     }
 
     s->intra4x4_pred_mode = av_mallocz(s->mb_stride * 2 * 8);
@@ -1372,9 +1381,11 @@ static int get_buffer(AVCodecContext *avctx, SVQ3Frame *pic)
 
 static av_cold int alloc_dummy_frame(AVCodecContext *avctx, SVQ3Frame *pic)
 {
+    int ret;
+
     av_log(avctx, AV_LOG_ERROR, "Missing reference frame.\n");
     av_frame_unref(pic->f);
-    int ret = get_buffer(avctx, pic);
+    ret = get_buffer(avctx, pic);
     if (ret < 0)
         return ret;
 
