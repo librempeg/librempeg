@@ -97,18 +97,29 @@ static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
     AVStream *st, *vst;
     int64_t pos;
     int ret = 0;
+    int next_actual_chunk = 0;
 
     while (!avio_feof(s->pb)) {
         pos   = avio_tell(s->pb);
         chunk = avio_rl32(s->pb);
         size  = avio_rb32(s->pb);
-
+        
+        if (chunk == MKTAG('F', 'I', 'L', 'L')) {
+            if (size == (MKBETAG('C', 'T', 'R', 'L'))
+                ||
+                size == (MKBETAG('F', 'I', 'L', 'M'))) {
+                next_actual_chunk = 1;
+            }
+        }
+        
         if (!size)
             continue;
 
-        if (size < 8)
+         if (size < 8)
             return AVERROR_INVALIDDATA;
-        size -= 8;
+        
+        if (!next_actual_chunk)
+            size -= 8;
 
         switch (chunk) {
         case MKTAG('C','T','R','L'):
@@ -270,8 +281,13 @@ static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
             av_log(s, AV_LOG_DEBUG, "skipping unknown chunk: %X\n", chunk);
             break;
         }
-
-        avio_skip(s->pb, size);
+        
+        if (!next_actual_chunk)
+            avio_skip(s->pb, size);
+        else {
+            avio_seek(s->pb, -4, SEEK_CUR);
+            next_actual_chunk = 0;
+        }
     }
 
     return AVERROR_EOF;
