@@ -104,18 +104,13 @@ static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
         chunk = avio_rl32(s->pb);
         size  = avio_rb32(s->pb);
         
-        if (chunk == MKTAG('F', 'I', 'L', 'L')) {
-            if (size == (MKBETAG('C', 'T', 'R', 'L'))
-                ||
-                size == (MKBETAG('F', 'I', 'L', 'M'))) {
-                next_actual_chunk = 1;
-            }
-        }
+        if (chunk == MKTAG('F', 'I', 'L', 'L') && (size == MKBETAG('C', 'T', 'R', 'L')) || (size == MKBETAG('F', 'I', 'L', 'M')))
+            next_actual_chunk = 1;
         
         if (!size)
             continue;
 
-         if (size < 8)
+        if (size < 8)
             return AVERROR_INVALIDDATA;
         
         if (!next_actual_chunk)
