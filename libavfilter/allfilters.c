@@ -51,6 +51,7 @@ extern const FFFilter ff_af_aemphasis;
 extern const FFFilter ff_af_aenvelope;
 extern const FFFilter ff_af_aeval;
 extern const FFFilter ff_af_aexciter;
+extern const FFFilter ff_af_aextra;
 extern const FFFilter ff_af_afade;
 extern const FFFilter ff_af_afdelay;
 extern const FFFilter ff_af_afftdn;
