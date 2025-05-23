@@ -168,6 +168,8 @@ static int filter_frame(AVFilterLink *outlink, AVFrame *in)
         return ret;
     }
 
+    out->pts = in->pts;
+    out->duration = in->duration;
     memcpy(out->extended_data[0], in->extended_data[s->map[i]],
            in->nb_samples * av_get_bytes_per_sample(in->format));
 
