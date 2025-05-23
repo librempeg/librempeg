@@ -97,6 +97,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     ChannelSplitContext *s = ctx->priv;
 
+    av_frame_free(&s->in);
     av_freep(&s->map);
 }
 
