@@ -146,27 +146,29 @@ static int query_formats(const AVFilterContext *ctx,
     return 0;
 }
 
-static int filter_frame(AVFilterLink *outlink, AVFrame *buf)
+static int filter_frame(AVFilterLink *outlink, AVFrame *in)
 {
-    AVFrame *buf_out;
+    AVFrame *out;
     AVFilterContext *ctx = outlink->src;
     ChannelSplitContext *s = ctx->priv;
     const int i = FF_OUTLINK_IDX(outlink);
     int ret;
 
-    buf_out = av_frame_clone(buf);
-    if (!buf_out)
+    out = av_frame_alloc();
+    if (!out)
         return AVERROR(ENOMEM);
 
-    buf_out->data[0] = buf_out->extended_data[0] = buf_out->extended_data[s->map[i]];
-    av_channel_layout_uninit(&buf_out->ch_layout);
-    ret = av_channel_layout_copy(&buf_out->ch_layout, &outlink->ch_layout);
+    out->nb_samples = in->nb_samples;
+    ret = ff_filter_get_buffer_ext(ctx, out, i, 0, 0);
     if (ret < 0) {
-        av_frame_free(&buf_out);
+        av_frame_free(&out);
         return ret;
     }
 
-    return ff_filter_frame(ctx->outputs[i], buf_out);
+    memcpy(out->extended_data[0], in->extended_data[s->map[i]],
+           in->nb_samples * av_get_bytes_per_sample(in->format));
+
+    return ff_filter_frame(outlink, out);
 }
 
 static int activate(AVFilterContext *ctx)
