@@ -41,6 +41,8 @@ typedef struct ChannelSplitContext {
     AVChannelLayout channels;
 
     int     *map;
+
+    AVFrame *in;
 } ChannelSplitContext;
 
 #define OFFSET(x) offsetof(ChannelSplitContext, x)
@@ -148,10 +150,10 @@ static int query_formats(const AVFilterContext *ctx,
 
 static int filter_frame(AVFilterLink *outlink, AVFrame *in)
 {
-    AVFrame *out;
+    const int i = FF_OUTLINK_IDX(outlink);
     AVFilterContext *ctx = outlink->src;
     ChannelSplitContext *s = ctx->priv;
-    const int i = FF_OUTLINK_IDX(outlink);
+    AVFrame *out;
     int ret;
 
     out = av_frame_alloc();
@@ -171,34 +173,29 @@ static int filter_frame(AVFilterLink *outlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
-static int activate(AVFilterContext *ctx)
+static int filter_prepare(AVFilterContext *ctx)
 {
     AVFilterLink *inlink = ctx->inputs[0];
+    ChannelSplitContext *s = ctx->priv;
     int status, ret;
-    AVFrame *in;
     int64_t pts;
 
+    av_frame_free(&s->in);
+
     for (int i = 0; i < ctx->nb_outputs; i++) {
-        FF_FILTER_FORWARD_STATUS_BACK_ALL(ctx->outputs[i], ctx);
+        ret = ff_outlink_get_status(ctx->outputs[i]);
+        if (ret) {
+            for (int j = 0; j < ctx->nb_inputs; j++)
+                ff_inlink_set_status(ctx->inputs[j], ret);
+            return AVERROR_EOF;
+        }
     }
 
-    ret = ff_inlink_consume_frame(inlink, &in);
+    ret = ff_inlink_consume_frame(inlink, &s->in);
     if (ret < 0)
         return ret;
-    if (ret > 0) {
-        for (int i = 0; i < ctx->nb_outputs; i++) {
-            if (ff_outlink_get_status(ctx->outputs[i]))
-                continue;
-
-            ret = filter_frame(ctx->outputs[i], in);
-            if (ret < 0)
-                break;
-        }
-
-        av_frame_free(&in);
-        if (ret < 0)
-            return ret;
-    }
+    if (ret > 0)
+        return 0;
 
     if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
         for (int i = 0; i < ctx->nb_outputs; i++) {
@@ -206,7 +203,7 @@ static int activate(AVFilterContext *ctx)
                 continue;
             ff_outlink_set_status(ctx->outputs[i], status, pts);
         }
-        return 0;
+        return AVERROR_EOF;
     }
 
     for (int i = 0; i < ctx->nb_outputs; i++) {
@@ -215,20 +212,66 @@ static int activate(AVFilterContext *ctx)
 
         if (ff_outlink_frame_wanted(ctx->outputs[i])) {
             ff_inlink_request_frame(inlink);
-            return 0;
+            return AVERROR(EAGAIN);
         }
     }
 
-    return FFERROR_NOT_READY;
+    return AVERROR(EAGAIN);
 }
+
+static int activate(AVFilterContext *ctx)
+{
+    ChannelSplitContext *s = ctx->priv;
+    AVFrame *in = s->in;
+    int ret;
+
+    for (int i = 0; i < ctx->nb_outputs; i++) {
+        if (ff_outlink_get_status(ctx->outputs[i]))
+            continue;
+
+        ret = filter_frame(ctx->outputs[i], in);
+        if (ret < 0)
+            break;
+    }
+
+    if (ret < 0)
+        return ret;
+
+    return 0;
+}
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const ChannelSplitContext *s_src = src->priv;
+    ChannelSplitContext       *s_dst = dst->priv;
+
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    av_frame_free(&s_dst->in);
+    if (s_src->in) {
+        s_dst->in = av_frame_clone(s_src->in);
+        if (!s_dst->in)
+            return AVERROR(ENOMEM);
+    }
+
+    return 0;
+}
+#endif
 
 const FFFilter ff_af_channelsplit = {
     .p.name         = "channelsplit",
     .p.description  = NULL_IF_CONFIG_SMALL("Split audio into per-channel streams."),
     .p.priv_class   = &channelsplit_class,
-    .p.flags        = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
+    .p.flags        = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
+                      AVFILTER_FLAG_FRAME_THREADS,
     .priv_size      = sizeof(ChannelSplitContext),
     .init           = init,
+    .filter_prepare = filter_prepare,
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     .activate       = activate,
     .uninit         = uninit,
     FILTER_INPUTS(ff_audio_default_filterpad),
