@@ -1921,7 +1921,7 @@ static void palette_update_predictor(VVCLocalContext *lc, const bool local_dual_
     for (int c = start; c < end; c++) {
         Palette *pp  = lc->ep->pp + c;
         Palette *plt = cu->plt + c;
-        int i = cu->plt[start].size;;
+        int i = cu->plt[start].size;
 
         // copy unused predictors to the end of plt
         for (int j = 0; j < predictor_size && i < max_predictor; j++) {
