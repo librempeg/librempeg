@@ -50,6 +50,7 @@ typedef struct HaasContext {
     double phase[2];
 
     void (*do_haas)(AVFilterContext *ctx, AVFrame *out, AVFrame *in);
+    int (*do_update)(AVFilterContext *ctx);
 } HaasContext;
 
 #define OFFSET(x) offsetof(HaasContext, x)
@@ -83,8 +84,7 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_out)
 {
     static const enum AVSampleFormat formats[] = {
-        AV_SAMPLE_FMT_FLTP,
-        AV_SAMPLE_FMT_DBLP,
+        AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP,
         AV_SAMPLE_FMT_NONE,
     };
     static const AVChannelLayout layouts[] = {
@@ -122,29 +122,20 @@ static int config_input(AVFilterLink *inlink)
     s->buffer_size = new_buf_size;
     s->write_ptr = 0;
 
-    s->delay[0] = lrint(s->par_delay[0] * 0.001 * inlink->sample_rate);
-    s->delay[1] = lrint(s->par_delay[1] * 0.001 * inlink->sample_rate);
-
-    s->phase[0] = s->par_phase[0] ? 1.0 : -1.0;
-    s->phase[1] = s->par_phase[1] ? 1.0 : -1.0;
-
-    s->balance_l[0] = (s->par_balance[0] + 1) / 2 * s->par_gain[0] * s->phase[0];
-    s->balance_r[0] = (1.0 - (s->par_balance[0] + 1) / 2) * (s->par_gain[0]) * s->phase[0];
-    s->balance_l[1] = (s->par_balance[1] + 1) / 2 * s->par_gain[1] * s->phase[1];
-    s->balance_r[1] = (1.0 - (s->par_balance[1] + 1) / 2) * (s->par_gain[1]) * s->phase[1];
-
     switch (inlink->format) {
     case AV_SAMPLE_FMT_FLTP:
         s->do_haas = do_haas_fltp;
+        s->do_update = do_update_fltp;
         break;
     case AV_SAMPLE_FMT_DBLP:
         s->do_haas = do_haas_dblp;
+        s->do_update = do_update_dblp;
         break;
     default:
         return AVERROR_BUG;
     }
 
-    return 0;
+    return s->do_update(ctx);
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
@@ -176,25 +167,13 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
                            char *res, int res_len, int flags)
 {
     HaasContext *s = ctx->priv;
-    AVFilterLink *inlink = ctx->inputs[0];
     int ret;
 
     ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
     if (ret < 0)
         return ret;
 
-    s->delay[0] = lrint(s->par_delay[0] * 0.001 * inlink->sample_rate);
-    s->delay[1] = lrint(s->par_delay[1] * 0.001 * inlink->sample_rate);
-
-    s->phase[0] = s->par_phase[0] ? 1.0 : -1.0;
-    s->phase[1] = s->par_phase[1] ? 1.0 : -1.0;
-
-    s->balance_l[0] = (s->par_balance[0] + 1) / 2 * s->par_gain[0] * s->phase[0];
-    s->balance_r[0] = (1.0 - (s->par_balance[0] + 1) / 2) * (s->par_gain[0]) * s->phase[0];
-    s->balance_l[1] = (s->par_balance[1] + 1) / 2 * s->par_gain[1] * s->phase[1];
-    s->balance_r[1] = (1.0 - (s->par_balance[1] + 1) / 2) * (s->par_gain[1]) * s->phase[1];
-
-    return 0;
+    return s->do_update(ctx);
 }
 
 static av_cold void uninit(AVFilterContext *ctx)

@@ -32,6 +32,25 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
+static int fn(do_update)(AVFilterContext *ctx)
+{
+    AVFilterLink *inlink = ctx->inputs[0];
+    HaasContext *s = ctx->priv;
+
+    s->delay[0] = lrint(s->par_delay[0] * F(0.001) * inlink->sample_rate);
+    s->delay[1] = lrint(s->par_delay[1] * F(0.001) * inlink->sample_rate);
+
+    s->phase[0] = s->par_phase[0] ? F(1.0) : F(-1.0);
+    s->phase[1] = s->par_phase[1] ? F(1.0) : F(-1.0);
+
+    s->balance_l[0] = (s->par_balance[0] + 1) / 2 * s->par_gain[0] * s->phase[0];
+    s->balance_r[0] = (F(1.0) - (s->par_balance[0] + 1) / 2) * (s->par_gain[0]) * s->phase[0];
+    s->balance_l[1] = (s->par_balance[1] + 1) / 2 * s->par_gain[1] * s->phase[1];
+    s->balance_r[1] = (F(1.0) - (s->par_balance[1] + 1) / 2) * (s->par_gain[1]) * s->phase[1];
+
+    return 0;
+}
+
 static void fn(do_haas)(AVFilterContext *ctx, AVFrame *out, AVFrame *in)
 {
     HaasContext *s = ctx->priv;
