@@ -65,6 +65,7 @@ static int fn(echo_samples)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     const int max_samples = s->max_samples;
     uint8_t **delayptrs = s->delayptrs;
     const float *decays = s->decays;
+    const int *samples = s->samples;
 
     for (int ch = start; ch < end; ch++) {
         const stype *sample = (stype *)td->in->extended_data[ch];
@@ -79,7 +80,7 @@ static int fn(echo_samples)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
             out = in * in_gain;
             for (unsigned j = 0; j < nb_echoes; j++) {
                 const int jidx = FFMIN(j, nb_decays-1);
-                int ix = index + max_samples - s->samples[j];
+                int ix = index + max_samples - samples[j];
 
                 ix = MOD(ix, max_samples);
                 out += dbuf[ix] * decays[jidx];
