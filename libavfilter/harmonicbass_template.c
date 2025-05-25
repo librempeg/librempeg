@@ -17,14 +17,17 @@
  */
 
 #undef FABS
+#undef FTAN
 #undef ftype
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
 #define FABS fabsf
+#define FTAN tanf
 #define ftype float
 #define SAMPLE_FORMAT fltp
 #else
 #define FABS fabs
+#define FTAN tan
 #define ftype double
 #define SAMPLE_FORMAT dblp
 #endif
@@ -36,6 +39,33 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 #define SQR(x) ((x) * (x))
+
+static int fn(hb_update)(AVFilterContext *ctx)
+{
+    AudioHarmonicBassContext *s = ctx->priv;
+    AVFilterLink *inlink = ctx->inputs[0];
+    ftype g, k;
+
+    g = FTAN(M_PI * s->scutoff / inlink->sample_rate);
+    k = F(1.0) / s->sqfactor;
+    s->sa[0] = F(1.0) / (F(1.0) + g * (g + k));
+    s->sa[1] = g * s->sa[0];
+    s->sa[2] = g * s->sa[1];
+    s->sm[0] = F(0.0);
+    s->sm[1] = F(0.0);
+    s->sm[2] = F(1.0);
+
+    g = FTAN(M_PI * s->hcutoff / inlink->sample_rate);
+    k = F(1.0) / s->hqfactor;
+    s->ha[0] = F(1.0) / (F(1.0) + g * (g + k));
+    s->ha[1] = g * s->ha[0];
+    s->ha[2] = g * s->ha[1];
+    s->hm[0] = F(0.0);
+    s->hm[1] = F(0.0);
+    s->hm[2] = F(1.0);
+
+    return 0;
+}
 
 static ftype fn(saturate)(const ftype sample, const ftype bias)
 {
