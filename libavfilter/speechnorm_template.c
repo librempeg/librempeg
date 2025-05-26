@@ -35,7 +35,7 @@
 #define DIFFSIGN(x,y) (((x)>(y)) - ((x)<-(y)))
 
 static void fn(analyze_channel)(AVFilterContext *ctx, ChannelContext *cc,
-                                     const uint8_t *srcp, int nb_samples)
+                                const uint8_t *srcp, const int nb_samples)
 {
     const ftype min_peak = F(1./32768.);
     const ftype *src = (const ftype *)srcp;
@@ -125,8 +125,9 @@ static ftype fn(lerp)(ftype min, ftype max, ftype mix)
 
 static void fn(filter_link_channels)(AVFilterContext *ctx,
                                      AVFrame *in, AVFrame *out,
-                                     int nb_samples)
+                                     const int nb_samples)
 {
+    const int is_disabled = ff_filter_disabled(ctx);
     SpeechNormalizerContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
     int n = 0;
@@ -160,7 +161,7 @@ static void fn(filter_link_channels)(AVFilterContext *ctx,
             ftype *dst = (ftype *)out->extended_data[ch];
 
             consume_pi(cc, min_size);
-            if (cc->bypass || ff_filter_disabled(ctx)) {
+            if (cc->bypass || is_disabled) {
                 memcpy(dst + n, src + n, min_size * sizeof(*dst));
             } else {
                 for (int i = n; i < n + min_size; i++) {
@@ -176,8 +177,9 @@ static void fn(filter_link_channels)(AVFilterContext *ctx,
 }
 
 static void fn(filter_channels)(AVFilterContext *ctx,
-                                AVFrame *in, AVFrame *out, int nb_samples)
+                                AVFrame *in, AVFrame *out, const int nb_samples)
 {
+    const int is_disabled = ff_filter_disabled(ctx);
     SpeechNormalizerContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
 
@@ -198,7 +200,7 @@ static void fn(filter_channels)(AVFilterContext *ctx,
             av_assert1(size > 0);
             gain = cc->gain_state;
             consume_pi(cc, size);
-            if (ff_filter_disabled(ctx)) {
+            if (is_disabled) {
                 memcpy(dst + n, src + n, size * sizeof(*dst));
             } else {
                 for (int i = n; i < n + size; i++)
