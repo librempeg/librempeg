@@ -593,7 +593,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     if (ret < 0)
         return ret;
 
-    s->hop_size = FFMAX(1, s->win_size * (1. - s->overlap));
+    s->hop_size = FFMAX(1, lrint(s->win_size * (1.0 - s->overlap)));
 
     s->set_input_levels(ctx);
     s->set_output_levels(ctx);
