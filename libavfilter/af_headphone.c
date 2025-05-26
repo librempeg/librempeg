@@ -241,7 +241,7 @@ static int activate(AVFilterContext *ctx)
         return AVERROR_EOF;
 
     if ((ret = ff_inlink_consume_samples(inlink, s->size, s->size, &in)) > 0)
-        ret = headphone_frame(s, in, outlink);
+        return headphone_frame(s, in, outlink);
 
     if (ret < 0)
         return ret;
