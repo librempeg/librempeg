@@ -148,10 +148,6 @@ static void fn(set_smooth_levels)(AVFilterContext *ctx)
 
 static ftype fn(get_angle)(const ctype cor)
 {
-    if (FABS(cor.re) <= EPSILON &&
-        FABS(cor.im) <= EPSILON)
-        return F(0.0);
-
     return ATAN2(cor.im, cor.re);
 }
 
