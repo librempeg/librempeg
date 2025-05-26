@@ -118,10 +118,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     ThreadData td;
     AVFrame *out;
 
-    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    int ret;
+
+    out = av_frame_alloc();
     if (!out) {
         av_frame_free(&in);
         return AVERROR(ENOMEM);
+    }
+
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0) {
+        av_frame_free(&out);
+        av_frame_free(&in);
+        return ret;
     }
     av_frame_copy_props(out, in);
 
@@ -149,7 +158,9 @@ static const AVFilterPad inputs[] = {
 const FFFilter ff_vf_hflip = {
     .p.name        = "hflip",
     .p.description = NULL_IF_CONFIG_SMALL("Horizontally flip the input video."),
-    .p.flags       = AVFILTER_FLAG_SLICE_THREADS | AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS |
+                     AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
     .priv_size     = sizeof(FlipContext),
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
