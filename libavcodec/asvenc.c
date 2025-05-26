@@ -251,6 +251,9 @@ static void handle_partial_mb(ASVEncContext *a, const uint8_t *const data[3],
         const struct Descriptor *const desc = block_descriptor + i;
         int width_avail  = AV_CEIL_RSHIFT(valid_width,  desc->subsampling) - desc->x_offset;
         int height_avail = AV_CEIL_RSHIFT(valid_height, desc->subsampling) - desc->y_offset;
+        ptrdiff_t linesize = linesizes[desc->component];
+        const uint8_t *src = data[desc->component] + desc->y_offset * linesize + desc->x_offset;
+        int16_t *block = a->block[i];
 
         if (width_avail <= 0 || height_avail <= 0) {
             // This block is outside of the visible part; don't replicate pixels,
@@ -261,10 +264,6 @@ static void handle_partial_mb(ASVEncContext *a, const uint8_t *const data[3],
         width_avail  = FFMIN(width_avail,  8);
         height_avail = FFMIN(height_avail, 8);
 
-        ptrdiff_t linesize = linesizes[desc->component];
-        const uint8_t *src = data[desc->component] + desc->y_offset * linesize + desc->x_offset;
-        int16_t *block = a->block[i];
-
         for (int h = 0;; block += 8, src += linesize) {
             int16_t last;
             for (int w = 0; w < width_avail; ++w)
@@ -274,10 +273,13 @@ static void handle_partial_mb(ASVEncContext *a, const uint8_t *const data[3],
             if (++h == height_avail)
                 break;
         }
+
+        {
         const int16_t *const last_row = block;
         for (int h = height_avail; h < 8; ++h) {
             block += 8;
             AV_COPY128(block, last_row);
+        }
         }
 
         a->fdsp.fdct(a->block[i]);
