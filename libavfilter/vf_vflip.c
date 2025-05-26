@@ -75,16 +75,25 @@ static int flip_bayer(AVFilterLink *link, AVFrame *in)
     AVFrame *out;
     uint8_t *inrow = in->data[0], *outrow;
     int i, width = outlink->w << (av_pix_fmt_desc_get(link->format)->comp[0].step > 1);
+    int ret;
     if (outlink->h & 1) {
         av_log(ctx, AV_LOG_ERROR, "Bayer vertical flip needs even height\n");
         return AVERROR_INVALIDDATA;
     }
 
-    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    out = av_frame_alloc();
     if (!out) {
         av_frame_free(&in);
         return AVERROR(ENOMEM);
     }
+
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0) {
+        av_frame_free(&out);
+        av_frame_free(&in);
+        return ret;
+    }
+
     av_frame_copy_props(out, in);
     outrow = out->data[0] + out->linesize[0] * (outlink->h - 2);
     for (i = 0; i < outlink->h >> 1; i++) {
@@ -130,7 +139,8 @@ static const AVFilterPad inputs[] = {
 const FFFilter ff_vf_vflip = {
     .p.name        = "vflip",
     .p.description = NULL_IF_CONFIG_SMALL("Flip the input video vertically."),
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size   = sizeof(FlipContext),
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
