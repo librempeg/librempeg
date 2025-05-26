@@ -362,9 +362,11 @@ static void mpeg4_encode_blocks_intra(MPVEncContext *const s,
 {
     /* encode each block */
     for (int n = 0; n < 6; ++n) {
+        int last_index;
+
         mpeg4_encode_dc(dc_pb, intra_dc[n], n);
 
-        const int last_index = s->c.block_last_index[n];
+        last_index = s->c.block_last_index[n];
         if (last_index <= 0)
             continue;
 
@@ -1103,6 +1105,8 @@ static av_cold void init_uni_dc_tab(void)
 static av_cold void init_uni_mpeg4_rl_tab(RLTable *rl, uint32_t *bits_tab,
                                           uint8_t *len_tab)
 {
+    uint8_t max_run[2][32] = { 0 };
+
     // Type 3 escape method. The escape code is the same for both VLCs
     // (0x3, seven bits), so it is hardcoded.
     memset(len_tab, 30, 2 * 2 * 64 * 64);
@@ -1128,15 +1132,13 @@ static av_cold void init_uni_mpeg4_rl_tab(RLTable *rl, uint32_t *bits_tab,
         len_tab[UNI_MPEG4_ENC_INDEX(1, run, 0)] = 0;
     }
 
-    uint8_t max_run[2][32] = { 0 };
-
 #define VLC_NUM_CODES 102 // excluding the escape
     av_assert2(rl->n == VLC_NUM_CODES);
     for (int i = VLC_NUM_CODES - 1, max_level, cur_run = 0; i >= 0; --i) {
-        int run = rl->table_run[i], level = rl->table_level[i];
+        int run3, run = rl->table_run[i], level = rl->table_level[i];
         int last = i >= rl->last;
         unsigned code = rl->table_vlc[i][0] << 1;
-        int len = rl->table_vlc[i][1] + 1;
+        int len3, len = rl->table_vlc[i][1] + 1;
 
         bits_tab[UNI_MPEG4_ENC_INDEX(last, run,  level)] = code;
         len_tab [UNI_MPEG4_ENC_INDEX(last, run,  level)] = len;
@@ -1147,8 +1149,8 @@ static av_cold void init_uni_mpeg4_rl_tab(RLTable *rl, uint32_t *bits_tab,
             max_run[last][level] = run + 1;
         av_assert2(run + 1 <= max_run[last][level]);
 
-        int run3 = run + max_run[last][level];
-        int len3 = len + 7 + 2;
+        run3 = run + max_run[last][level];
+        len3 = len + 7 + 2;
 
         if (run3 < 64 && len3 < len_tab[UNI_MPEG4_ENC_INDEX(last, run3, level)]) {
             unsigned code3 = code | (0x3 << 2 | 0x2) << len;
