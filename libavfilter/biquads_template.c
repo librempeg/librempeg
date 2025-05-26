@@ -196,8 +196,8 @@ static void fn(clip_reset)(AVFilterContext *ctx,
 
 #if BIQUAD_DI
 static void fn(biquad_di)(void *st,
-                          const void *input, void *output, int len,
-                          int ch, int disabled)
+                          const void *input, void *output, const int len,
+                          const int ch, const int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
@@ -260,8 +260,8 @@ static void fn(biquad_di)(void *st,
 
 #if BIQUAD_DII
 static void fn(biquad_dii)(void *st,
-                           const void *input, void *output, int len,
-                           int ch, int disabled)
+                           const void *input, void *output, const int len,
+                           const int ch, const int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
@@ -306,8 +306,8 @@ static void fn(biquad_dii)(void *st,
 
 #if BIQUAD_TDI
 static void fn(biquad_tdi)(void *st,
-                           const void *input, void *output, int len,
-                           int ch, int disabled)
+                           const void *input, void *output, const int len,
+                           const int ch, const int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
@@ -362,8 +362,8 @@ static void fn(biquad_tdi)(void *st,
 
 #if BIQUAD_TDII
 static void fn(biquad_tdii)(void *st,
-                            const void *input, void *output, int len,
-                            int ch, int disabled)
+                            const void *input, void *output, const int len,
+                            const int ch, const int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
@@ -407,8 +407,8 @@ static void fn(biquad_tdii)(void *st,
 
 #if BIQUAD_LATT
 static void fn(biquad_latt)(void *st,
-                           const void *input, void *output, int len,
-                           int ch, int disabled)
+                           const void *input, void *output, const int len,
+                           const int ch, const int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
@@ -463,8 +463,8 @@ static void fn(biquad_latt)(void *st,
 
 #if BIQUAD_SVF
 static void fn(biquad_svf)(void *st,
-                           const void *input, void *output, int len,
-                           int ch, int disabled)
+                           const void *input, void *output, const int len,
+                           const int ch, const int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
@@ -512,8 +512,8 @@ static void fn(biquad_svf)(void *st,
 
 #if BIQUAD_WDF
 static void fn(biquad_wdf)(void *st,
-                           const void *input, void *output, int len,
-                           int ch, int disabled)
+                           const void *input, void *output, const int len,
+                           const int ch, const int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
@@ -564,8 +564,8 @@ static void fn(biquad_wdf)(void *st,
 
 #if BIQUAD_ZDF
 static void fn(biquad_zdf)(void *st,
-                           const void *input, void *output, int len,
-                           int ch, int disabled)
+                           const void *input, void *output, const int len,
+                           const int ch, const int disabled)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
