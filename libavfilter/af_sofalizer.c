@@ -137,7 +137,7 @@ static int close_sofa(struct MySofa *sofa)
 
 static int preload_sofa(AVFilterContext *ctx, char *filename, int *samplingrate)
 {
-    struct SOFAlizerContext *s = ctx->priv;
+    SOFAlizerContext *s = ctx->priv;
     struct MYSOFA_HRTF *mysofa;
     char *license;
     int ret;
@@ -245,7 +245,7 @@ static void parse_speaker_pos(AVFilterContext *ctx)
 static int get_speaker_pos(AVFilterContext *ctx,
                            float *speaker_azim, float *speaker_elev)
 {
-    struct SOFAlizerContext *s = ctx->priv;
+    SOFAlizerContext *s = ctx->priv;
     AVChannelLayout *channel_layout = &ctx->inputs[0]->ch_layout;
     float azim[64] = { 0 };
     float elev[64] = { 0 };
@@ -678,7 +678,7 @@ static int getfilter_float(AVFilterContext *ctx, float x, float y, float z,
                            float *left, float *right,
                            float *delay_left, float *delay_right)
 {
-    struct SOFAlizerContext *s = ctx->priv;
+    SOFAlizerContext *s = ctx->priv;
     float c[3], delays[2];
     float *fl, *fr;
     int nearest;
@@ -720,7 +720,7 @@ static int getfilter_float(AVFilterContext *ctx, float x, float y, float z,
 
 static int load_data(AVFilterContext *ctx, int azim, int elev, float radius, int sample_rate)
 {
-    struct SOFAlizerContext *s = ctx->priv;
+    SOFAlizerContext *s = ctx->priv;
     int n_samples;
     int ir_samples;
     int n_conv = s->n_conv; /* no. channels to convolve */
