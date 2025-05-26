@@ -240,11 +240,8 @@ static int activate(AVFilterContext *ctx)
     } else if (!s->have_hrirs)
         return AVERROR_EOF;
 
-    if ((ret = ff_inlink_consume_samples(inlink, s->size, s->size, &in)) > 0) {
+    if ((ret = ff_inlink_consume_samples(inlink, s->size, s->size, &in)) > 0)
         ret = headphone_frame(s, in, outlink);
-        if (ret < 0)
-            return ret;
-    }
 
     if (ret < 0)
         return ret;
