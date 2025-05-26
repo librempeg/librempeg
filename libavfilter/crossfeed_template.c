@@ -108,16 +108,16 @@ static void fn(uninit_state)(AVFilterContext *ctx)
 }
 
 static void fn(reverse_samples)(ftype *dst, const ftype *src,
-                                int nb_samples)
+                                const int nb_samples)
 {
     for (int i = 0, j = nb_samples - 1; i < nb_samples; i++, j--)
         dst[i] = src[j];
 }
 
 static void fn(filter_samples)(ftype *dst, const ftype *src,
-                               int nb_samples,
-                               ftype m0, ftype m1, ftype m2,
-                               ftype a0, ftype a1, ftype a2,
+                               const int nb_samples,
+                               const ftype m0, const ftype m1, const ftype m2,
+                               const ftype a0, const ftype a1, const ftype a2,
                                ftype *sw1, ftype *sw2)
 {
     ftype w1 = *sw1;
