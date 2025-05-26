@@ -246,6 +246,11 @@ static int activate(AVFilterContext *ctx)
     if (ret < 0)
         return ret;
 
+    if (ff_inlink_queued_samples(inlink) >= s->size) {
+        ff_filter_set_ready(ctx, 10);
+        return 0;
+    }
+
     FF_FILTER_FORWARD_STATUS(inlink, outlink);
     if (ff_outlink_frame_wanted(outlink))
         ff_inlink_request_frame(inlink);
