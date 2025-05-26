@@ -32,7 +32,7 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
-static void fn(biquad_process)(BiquadCoeffs *bq, ftype *dst, const ftype *src, int nb_samples,
+static void fn(biquad_process)(BiquadCoeffs *bq, ftype *dst, const ftype *src, const int nb_samples,
                                ftype *w, ftype level_in, ftype level_out, const int disabled)
 {
     const ftype b0 = bq->b0;
