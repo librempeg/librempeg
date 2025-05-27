@@ -105,6 +105,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->fft_data);
     av_freep(&s->fft_tdata);
     av_freep(&s->window_func_lut);
+    av_frame_free(&s->outpicref);
 }
 
 static int query_formats(const AVFilterContext *ctx,
