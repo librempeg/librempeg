@@ -121,10 +121,7 @@ static int query_formats(const AVFilterContext *ctx,
         return ret;
 
     formats = ff_make_format_list(pix_fmts);
-    if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
-        return ret;
-
-    return 0;
+    return ff_formats_ref(formats, &cfg_out[0]->formats);
 }
 
 static int run_channel_fft(AVFilterContext *ctx, AVFrame *in, int ch)
