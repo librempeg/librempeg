@@ -365,6 +365,7 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
     const int h1 = h-1;
     const int w1 = w-1;
     const int z = s->win_size + 1;
+    const float logf_eps = logf(FLT_EPSILON);
     float *power = s->power;
     AVFrame *clone;
     int ret;
@@ -472,7 +473,8 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
             break;
         }
 
-        cy = av_clipf(-10.f*logf(pwr + FLT_EPSILON), 0.f, 1.f);
+        cy = av_clipf(logf(pwr + FLT_EPSILON) / logf_eps, 0.f, 1.f);
+        cy = 1.f - cy;
         x = av_clip(w * Hsum, 0, w1);
         y = av_clip(h * Vsum, 0, h1);
 
