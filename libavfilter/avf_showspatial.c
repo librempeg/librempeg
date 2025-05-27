@@ -231,23 +231,58 @@ static int config_output(AVFilterLink *outlink)
         const int chan = av_channel_layout_channel_from_index(&inlink->ch_layout, ch);
         AVComplexFloat dir;
 
-        dir.re = dir.im = 0.5;
+        dir.re = dir.im = 0.f;
 
         switch (chan) {
         case AV_CHAN_FRONT_LEFT:
         case AV_CHAN_BACK_LEFT:
         case AV_CHAN_SIDE_LEFT:
+        case AV_CHAN_TOP_SIDE_LEFT:
+        case AV_CHAN_STEREO_LEFT:
+        case AV_CHAN_BINAURAL_LEFT:
+        case AV_CHAN_SURROUND_DIRECT_LEFT:
+        case AV_CHAN_SIDE_SURROUND_LEFT:
+        case AV_CHAN_BOTTOM_FRONT_LEFT:
+        case AV_CHAN_TOP_SURROUND_LEFT:
+        case AV_CHAN_TOP_FRONT_LEFT:
+        case AV_CHAN_TOP_BACK_LEFT:
             dir.re = -1.f;
             break;
         case AV_CHAN_FRONT_RIGHT:
         case AV_CHAN_BACK_RIGHT:
         case AV_CHAN_SIDE_RIGHT:
+        case AV_CHAN_TOP_SIDE_RIGHT:
+        case AV_CHAN_STEREO_RIGHT:
+        case AV_CHAN_BINAURAL_RIGHT:
+        case AV_CHAN_SURROUND_DIRECT_RIGHT:
+        case AV_CHAN_SIDE_SURROUND_RIGHT:
+        case AV_CHAN_BOTTOM_FRONT_RIGHT:
+        case AV_CHAN_TOP_SURROUND_RIGHT:
+        case AV_CHAN_TOP_FRONT_RIGHT:
+        case AV_CHAN_TOP_BACK_RIGHT:
             dir.re =  1.f;
             break;
+        case AV_CHAN_LOW_FREQUENCY_2:
         case AV_CHAN_LOW_FREQUENCY:
         case AV_CHAN_FRONT_CENTER:
         case AV_CHAN_BACK_CENTER:
+        case AV_CHAN_TOP_CENTER:
+        case AV_CHAN_TOP_FRONT_CENTER:
+        case AV_CHAN_TOP_BACK_CENTER:
+        case AV_CHAN_BOTTOM_FRONT_CENTER:
             dir.re =  0.f;
+            break;
+        case AV_CHAN_FRONT_LEFT_OF_CENTER:
+            dir.re = -0.5f;
+            break;
+        case AV_CHAN_FRONT_RIGHT_OF_CENTER:
+            dir.re =  0.5f;
+            break;
+        case AV_CHAN_WIDE_LEFT:
+            dir.re = -1.3f;
+            break;
+        case AV_CHAN_WIDE_RIGHT:
+            dir.re =  1.3f;
             break;
         }
 
