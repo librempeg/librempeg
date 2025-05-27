@@ -28,13 +28,6 @@
 #include "bsf.h"
 #include "bsf_internal.h"
 
-static av_cold int init(AVBSFContext *ctx)
-{
-    ctx->par_out->codec_id = AV_CODEC_ID_MP2;
-
-    return 0;
-}
-
 static int filter(AVBSFContext *ctx, AVPacket *pkt)
 {
     int ret;
@@ -57,6 +50,5 @@ static int filter(AVBSFContext *ctx, AVPacket *pkt)
 const FFBitStreamFilter ff_ahx_to_mp2_bsf = {
     .p.name         = "ahx_to_mp2",
     .p.codec_ids    = (const enum AVCodecID []){ AV_CODEC_ID_AHX, AV_CODEC_ID_NONE },
-    .init           = init,
     .filter         = filter,
 };
