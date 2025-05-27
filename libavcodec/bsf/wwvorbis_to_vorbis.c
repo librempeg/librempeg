@@ -58,7 +58,7 @@ static av_cold int init(AVBSFContext *ctx)
 
     s->channels = ctx->par_in->ch_layout.nb_channels;
     s->sample_rate = ctx->par_in->sample_rate;
-    ctx->par_out->codec_id = AV_CODEC_ID_VORBIS;
+    ctx->par_out->codec_id = AV_CODEC_ID_WWVORBIS;
 
     s->out_pkt = av_packet_alloc();
     if (!s->out_pkt)
