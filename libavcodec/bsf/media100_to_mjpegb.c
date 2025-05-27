@@ -29,12 +29,6 @@
 #include "bsf_internal.h"
 #include "bytestream.h"
 
-static av_cold int init(AVBSFContext *ctx)
-{
-    ctx->par_out->codec_id = AV_CODEC_ID_MJPEGB;
-    return 0;
-}
-
 static int filter(AVBSFContext *ctx, AVPacket *out)
 {
     unsigned second_field_offset = 0;
@@ -164,6 +158,5 @@ fail:
 const FFBitStreamFilter ff_media100_to_mjpegb_bsf = {
     .p.name         = "media100_to_mjpegb",
     .p.codec_ids    = (const enum AVCodecID []){ AV_CODEC_ID_MEDIA100, AV_CODEC_ID_NONE },
-    .init           = init,
     .filter         = filter,
 };
