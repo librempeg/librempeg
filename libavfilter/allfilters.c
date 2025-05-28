@@ -182,6 +182,7 @@ extern const FFFilter ff_af_pan;
 extern const FFFilter ff_af_peakpass;
 extern const FFFilter ff_af_replaygain;
 extern const FFFilter ff_af_rubberband;
+extern const FFFilter ff_af_sideboost;
 extern const FFFilter ff_af_silencedetect;
 extern const FFFilter ff_af_silenceremove;
 extern const FFFilter ff_af_sofalizer;

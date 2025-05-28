@@ -28,6 +28,8 @@
 typedef struct CrossfeedContext {
     const AVClass *class;
 
+    int is_sideboost;
+
     double range;
     double strength;
     double slope;
@@ -80,6 +82,8 @@ static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
     CrossfeedContext *s = ctx->priv;
+
+    s->is_sideboost = !strcmp("sideboost", ctx->filter->name);
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_DBL:
@@ -193,6 +197,32 @@ const FFFilter ff_af_crossfeed = {
     .p.name         = "crossfeed",
     .p.description  = NULL_IF_CONFIG_SMALL("Apply headphone crossfeed filter."),
     .p.priv_class   = &crossfeed_class,
+    .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    .priv_size      = sizeof(CrossfeedContext),
+    .activate       = activate,
+    .uninit         = uninit,
+    FILTER_INPUTS(inputs),
+    FILTER_OUTPUTS(ff_audio_default_filterpad),
+    FILTER_QUERY_FUNC2(query_formats),
+    .process_command = process_command,
+};
+
+static const AVOption sideboost_options[] = {
+    { "strength",  "set sideboost strength",  OFFSET(strength),  AV_OPT_TYPE_DOUBLE, {.dbl=.2}, 0, 1, FLAGS },
+    { "range",     "set soundstage wideness", OFFSET(range),     AV_OPT_TYPE_DOUBLE, {.dbl=.5}, 0, 1, FLAGS },
+    { "slope",     "set curve slope",         OFFSET(slope),     AV_OPT_TYPE_DOUBLE, {.dbl=.5}, .01, 1, FLAGS },
+    { "level_in",  "set level in",            OFFSET(level_in),  AV_OPT_TYPE_DOUBLE, {.dbl=.9}, 0, 1, FLAGS },
+    { "level_out", "set level out",           OFFSET(level_out), AV_OPT_TYPE_DOUBLE, {.dbl=1.}, 0, 1, FLAGS },
+    { "block_size", "set the block size",     OFFSET(block_size),AV_OPT_TYPE_INT,    {.i64=0}, 0, 32768, AF },
+    { NULL }
+};
+
+AVFILTER_DEFINE_CLASS(sideboost);
+
+const FFFilter ff_af_sideboost = {
+    .p.name         = "sideboost",
+    .p.description  = NULL_IF_CONFIG_SMALL("Apply stereo side boost for filter."),
+    .p.priv_class   = &sideboost_class,
     .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
     .priv_size      = sizeof(CrossfeedContext),
     .activate       = activate,

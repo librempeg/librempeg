@@ -56,7 +56,8 @@ static int fn(init_state)(AVFilterContext *ctx)
 {
     CrossfeedContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
-    ftype A = ff_exp10(s->strength * F(-30.0) / F(40.0));
+    const ftype sgn = s->is_sideboost ? F(1.0) : F(-1.0);
+    ftype A = ff_exp10(s->strength * sgn * F(30.0) / F(40.0));
     fn(StateContext) *stc;
     ftype g, k, Q;
 
@@ -73,9 +74,16 @@ static int fn(init_state)(AVFilterContext *ctx)
     stc->a0 = F(1.0) / (F(1.0) + g * (g + k));
     stc->a1 = g * stc->a0;
     stc->a2 = g * stc->a1;
-    stc->b0 = F(1.0);
-    stc->b1 = k * (A - F(1.0));
-    stc->b2 = A * A - F(1.0);
+
+    if (s->is_sideboost) {
+        stc->b0 = A * A;
+        stc->b1 = k * (F(1.0) - A) * A;
+        stc->b2 = F(1.0) - A * A;
+    } else {
+        stc->b0 = F(1.0);
+        stc->b1 = k * (A - F(1.0));
+        stc->b2 = A * A - F(1.0);
+    }
 
     if (s->block_samples == 0 && s->block_size > 0) {
         s->pts = AV_NOPTS_VALUE;
