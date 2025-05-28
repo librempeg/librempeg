@@ -148,7 +148,7 @@ static int fn(xfeed_frame)(AVFilterLink *inlink, AVFrame *in)
     const ftype *src = (const ftype *)in->data[0];
     const int is_disabled = ff_filter_disabled(ctx);
     fn(StateContext) *stc = s->st;
-    const ftype level_in = s->level_in;
+    const ftype level_in = s->level_in * F(0.5);
     const ftype level_out = s->level_out;
     const ftype b0 = stc->b0;
     const ftype b1 = stc->b1;
@@ -181,8 +181,8 @@ static int fn(xfeed_frame)(AVFilterLink *inlink, AVFrame *in)
         ftype w2 = stc->w2;
 
         for (int n = 0; n < nb_samples; n++, src += 2, dst += 2) {
-            const ftype mid = (src[0] + src[1]) * level_in * F(0.5);
-            const ftype side = (src[0] - src[1]) * level_in * F(0.5);
+            const ftype mid = (src[0] + src[1]) * level_in;
+            const ftype side = (src[0] - src[1]) * level_in;
             const ftype in = side;
             const ftype v0 = in;
             const ftype v3 = v0 - w2;
@@ -215,8 +215,8 @@ static int fn(xfeed_frame)(AVFilterLink *inlink, AVFrame *in)
         ftype w2 = stc->w2;
 
         for (int n = 0; n < nb_samples; n++, src += 2) {
-            mdst[n] = (src[0] + src[1]) * level_in * F(0.5);
-            sdst[n] = (src[0] - src[1]) * level_in * F(0.5);
+            mdst[n] = (src[0] + src[1]) * level_in;
+            sdst[n] = (src[0] - src[1]) * level_in;
         }
 
         for (int n = nb_samples; n < block_samples; n++) {
