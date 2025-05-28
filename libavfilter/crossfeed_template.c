@@ -56,7 +56,7 @@ static int fn(init_state)(AVFilterContext *ctx)
 {
     CrossfeedContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
-    const ftype sgn = s->is_sideboost ? F(1.0) : F(-1.0);
+    const ftype sgn = s->is_sideboost ? F(0.5) : F(-1.0);
     ftype A = ff_exp10(s->strength * sgn * F(30.0) / F(40.0));
     fn(StateContext) *stc;
     ftype g, k, Q;
