@@ -196,10 +196,8 @@ static int libxevd_image_copy(struct AVCodecContext *avctx, XEVD_IMGB *imgb, str
     }
 
     if (imgb->w[0] != avctx->width || imgb->h[0] != avctx->height) { // stream resolution changed
-        if (ff_set_dimensions(avctx, imgb->w[0], imgb->h[0]) < 0) {
-            av_log(avctx, AV_LOG_ERROR, "Cannot set new dimension\n");
-            return AVERROR_INVALIDDATA;
-        }
+        if ((ret = ff_set_dimensions(avctx, imgb->w[0], imgb->h[0])) < 0)
+            return ret;
     }
 
     ret = ff_get_buffer(avctx, frame, 0);
