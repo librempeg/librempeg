@@ -593,11 +593,8 @@ static int dds_decode(AVCodecContext *avctx, AVFrame *frame,
     height = bytestream2_get_le32(gbc);
     width  = bytestream2_get_le32(gbc);
     ret = ff_set_dimensions(avctx, width, height);
-    if (ret < 0) {
-        av_log(avctx, AV_LOG_ERROR, "Invalid image size %dx%d.\n",
-               avctx->width, avctx->height);
+    if (ret < 0)
         return ret;
-    }
 
     /* Since codec is based on 4x4 blocks, size is aligned to 4. */
     avctx->coded_width  = FFALIGN(avctx->width,  TEXTURE_BLOCK_W);
