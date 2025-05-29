@@ -352,10 +352,8 @@ int ff_vc1_decode_sequence_header(AVCodecContext *avctx, VC1Context *v, GetBitCo
         int w = get_bits(gb, 11);
         int h = get_bits(gb, 11);
         int ret = ff_set_dimensions(v->s.avctx, w, h);
-        if (ret < 0) {
-            av_log(avctx, AV_LOG_ERROR, "Failed to set dimensions %d %d\n", w, h);
+        if (ret < 0)
             return ret;
-        }
         skip_bits(gb, 5); //frame rate
         v->res_x8 = get_bits1(gb);
         if (get_bits1(gb)) { // something to do with DC VLC selection
@@ -524,10 +522,8 @@ int ff_vc1_decode_entry_point(AVCodecContext *avctx, VC1Context *v, GetBitContex
         w = v->max_coded_width;
         h = v->max_coded_height;
     }
-    if ((ret = ff_set_dimensions(avctx, w, h)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "Failed to set dimensions %d %d\n", w, h);
+    if ((ret = ff_set_dimensions(avctx, w, h)) < 0)
         return ret;
-    }
 
     if (v->extended_mv)
         v->extended_dmv = get_bits1(gb);
