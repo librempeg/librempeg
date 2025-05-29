@@ -97,10 +97,12 @@ static size_t hash_key(const struct FFHashtableContext *ctx, const void *key)
 
 int ff_hashtable_get(const struct FFHashtableContext *ctx, const void *key, void *val)
 {
+    size_t hash;
+
     if (!ctx->nb_entries)
         return 0;
 
-    size_t hash = hash_key(ctx, key);
+    hash = hash_key(ctx, key);
 
     for (size_t psl = 1; psl <= ctx->max_entries; psl++) {
         size_t wrapped_index = (hash + psl) % ctx->max_entries;
@@ -130,9 +132,11 @@ int ff_hashtable_set(struct FFHashtableContext *ctx, const void *key, const void
     memcpy(set + ctx->key_size_aligned, val, ctx->val_size);
 
     for (size_t i = 0; i < ctx->max_entries; i++) {
+        uint8_t *entry;
+
         if (++wrapped_index == ctx->max_entries)
             wrapped_index = 0;
-        uint8_t *entry = ctx->table + wrapped_index * ctx->entry_size;
+        entry = ctx->table + wrapped_index * ctx->entry_size;
         if (!ENTRY_PSL_VAL(entry) || (!swapping && KEYS_EQUAL(ENTRY_KEY_PTR(entry), set))) {
             if (!ENTRY_PSL_VAL(entry))
                 ctx->nb_entries++;
@@ -163,17 +167,21 @@ int ff_hashtable_set(struct FFHashtableContext *ctx, const void *key, const void
 
 int ff_hashtable_delete(struct FFHashtableContext *ctx, const void *key)
 {
+    size_t hash, wrapped_index;
+    uint8_t *next_entry;
+
     if (!ctx->nb_entries)
         return 0;
 
-    uint8_t *next_entry;
-    size_t hash = hash_key(ctx, key);
-    size_t wrapped_index = hash % ctx->max_entries;
+    hash = hash_key(ctx, key);
+    wrapped_index = hash % ctx->max_entries;
 
     for (size_t psl = 1; psl <= ctx->max_entries; psl++) {
+        uint8_t *entry;
+
         if (++wrapped_index == ctx->max_entries)
             wrapped_index = 0;
-        uint8_t *entry = ctx->table + wrapped_index * ctx->entry_size;
+        entry = ctx->table + wrapped_index * ctx->entry_size;
         if (ENTRY_PSL_VAL(entry) < psl)
             // When PSL stops increasing it means there are no further entries
             // with the same key hash.
