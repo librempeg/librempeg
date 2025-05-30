@@ -210,7 +210,7 @@ static int config_output(AVFilterLink *outlink)
             float max = i / (float)(s->w - 1);
 
             s->values[ch * VAR_VARS_NB + VAR_PEAK] = max;
-            s->values[ch * VAR_VARS_NB + VAR_VOLUME] = 20.0 * log10(max);
+            s->values[ch * VAR_VARS_NB + VAR_VOLUME] = 20.f * log10f(max);
             s->values[ch * VAR_VARS_NB + VAR_CHANNEL] = ch;
             s->color_lut[ch * s->w + i] = av_expr_eval(s->c_expr, &s->values[ch * VAR_VARS_NB], NULL);
         }
@@ -274,7 +274,7 @@ static inline int calc_max_draw(ShowVolumeContext *s, AVFilterLink *outlink, flo
     if (s->display_scale == LINEAR) {
         max_val = max;
     } else { /* log */
-        max_val = av_clipf(0.21 * log10(max) + 1, 0, 1);
+        max_val = av_clipf(0.21f * log10f(max) + 1.f, 0, 1);
     }
     if (s->orientation) { /* vertical */
         return outlink->h - outlink->h * max_val;
@@ -360,7 +360,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
             s->meter(src, insamples->nb_samples, &s->max[c]);
             max = s->max[c];
 
-            s->values[c * VAR_VARS_NB + VAR_VOLUME] = 20.0 * log10(max);
+            s->values[c * VAR_VARS_NB + VAR_VOLUME] = 20.f * log10f(max);
             max = av_clipf(max, 0, 1);
             max_draw = calc_max_draw(s, outlink, max);
 
@@ -391,7 +391,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
             s->meter(src, insamples->nb_samples, &s->max[c]);
             max = s->max[c];
 
-            s->values[c * VAR_VARS_NB + VAR_VOLUME] = 20.0 * log10(max);
+            s->values[c * VAR_VARS_NB + VAR_VOLUME] = 20.f * log10f(max);
             max = av_clipf(max, 0, 1);
             max_draw = calc_max_draw(s, outlink, max);
 
