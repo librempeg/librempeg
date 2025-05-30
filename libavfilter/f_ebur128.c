@@ -721,6 +721,10 @@ static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, c
     const double *rlb_a = ebur128->rlb_a;
     struct integrator *i3000 = &ebur128->i3000;
     struct integrator *i400 = &ebur128->i400;
+    double **i3000_cache = i3000->cache;
+    double **i400_cache = i400->cache;
+    double *i3000_sum = i3000->sum;
+    double *i400_sum = i400->sum;
     double *x = ebur128->x;
     double *y = ebur128->y;
     double *z = ebur128->z;
@@ -771,12 +775,12 @@ static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, c
 
         /* add the new value, and limit the sum to the cache size (400ms or 3s)
          * by removing the oldest one */
-        i400->sum [ch] += bin - i400->cache [ch][bin_id_400];
-        i3000->sum[ch] += bin - i3000->cache[ch][bin_id_3000];
+        i400_sum [ch] += bin - i400_cache [ch][bin_id_400];
+        i3000_sum[ch] += bin - i3000_cache[ch][bin_id_3000];
 
         /* override old cache entry with the new value */
-        i400->cache [ch][bin_id_400 ] = bin;
-        i3000->cache[ch][bin_id_3000] = bin;
+        i400_cache [ch][bin_id_400 ] = bin;
+        i3000_cache[ch][bin_id_3000] = bin;
     }
 
 #define FIND_PEAK(global, sp, ptype) do {                        \
