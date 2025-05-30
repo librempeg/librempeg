@@ -755,20 +755,18 @@ static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, c
         if (!ch_weighting[ch])
             continue;
 
-        /* Y[i] = X[i]*b0 + X[i-1]*b1 + X[i-2]*b2 - Y[i-1]*a1 - Y[i-2]*a2 */
 #define FILTER(y, x, NUM, DEN) do {                                         \
         double *dst = y;                                                    \
         double *src = x;                                                    \
-        dst[2] = dst[1];                                                    \
-        dst[1] = dst[0];                                                    \
-        dst[0] = src[0]*NUM[0] + src[1]*NUM[1] + src[2]*NUM[2]              \
-                               - dst[1]*DEN[1] - dst[2]*DEN[2];             \
+        double in = src[0];                                                 \
+        double out = NUM[0] * in + dst[1];                                  \
+        dst[1] = NUM[1] * in + dst[2] - DEN[1] * out;                       \
+        dst[2] = NUM[2] * in          - DEN[2] * out;                       \
+        dst[0] = out;                                                       \
 } while (0)
 
         // TODO: merge both filters in one?
         FILTER(yy, xx, pre_b, pre_a);  // apply pre-filter
-        xx[2] = xx[1];
-        xx[1] = xx[0];
         FILTER(zz, yy, rlb_b, rlb_a);  // apply RLB-filter
 
         bin = zz[0] * zz[0];
