@@ -256,7 +256,6 @@ static const uint8_t font_colors[] = {
 
 static void drawtext(AVFrame *pic, int x, int y, int ftid, const uint8_t *color, const char *fmt, ...)
 {
-    int i;
     char buf[128] = {0};
     const uint8_t *font;
     int font_height;
@@ -270,12 +269,11 @@ static void drawtext(AVFrame *pic, int x, int y, int ftid, const uint8_t *color,
     vsnprintf(buf, sizeof(buf), fmt, vl);
     va_end(vl);
 
-    for (i = 0; buf[i]; i++) {
-        int char_y, mask;
+    for (int i = 0; buf[i]; i++) {
         uint8_t *p = pic->data[0] + y*pic->linesize[0] + (x + i*8)*3;
 
-        for (char_y = 0; char_y < font_height; char_y++) {
-            for (mask = 0x80; mask; mask >>= 1) {
+        for (int char_y = 0; char_y < font_height; char_y++) {
+            for (int mask = 0x80; mask; mask >>= 1) {
                 if (font[buf[i] * font_height + char_y] & mask)
                     memcpy(p, color, 3);
                 else
@@ -289,10 +287,9 @@ static void drawtext(AVFrame *pic, int x, int y, int ftid, const uint8_t *color,
 
 static void drawline(AVFrame *pic, int x, int y, int len, int step)
 {
-    int i;
     uint8_t *p = pic->data[0] + y*pic->linesize[0] + x*3;
 
-    for (i = 0; i < len; i++) {
+    for (int i = 0; i < len; i++) {
         memcpy(p, "\x00\xff\x00", 3);
         p += step;
     }
@@ -300,7 +297,6 @@ static void drawline(AVFrame *pic, int x, int y, int len, int step)
 
 static int config_video_output(AVFilterLink *outlink)
 {
-    int i, x;
     uint8_t *p;
     FilterLink *l = ff_filter_link(outlink);
     AVFilterContext *ctx = outlink->src;
@@ -361,9 +357,9 @@ static int config_video_output(AVFilterLink *outlink)
 
     /* draw LU legends */
     drawtext(outpicref, PAD, PAD+16, FONT8, font_colors+3, " LU");
-    for (i = ebur128->meter; i >= -ebur128->meter * 2; i--) {
+    for (int i = ebur128->meter; i >= -ebur128->meter * 2; i--) {
         int y = lu_to_y(ebur128, i);
-        x = PAD + (i < 10 && i > -10) * 8;
+        int x = PAD + (i < 10 && i > -10) * 8;
         ebur128->y_line_ref[y] = i;
         y -= 4; // -4 to center vertically
         drawtext(outpicref, x, y + ebur128->graph.y, FONT8, font_colors+3,
@@ -379,7 +375,7 @@ static int config_video_output(AVFilterLink *outlink)
     for (int y = 0; y < ebur128->graph.h; y++) {
         const uint8_t *c = get_graph_color(ebur128, INT_MAX, y);
 
-        for (x = 0; x < ebur128->graph.w; x++)
+        for (int x = 0; x < ebur128->graph.w; x++)
             memcpy(p + x*3, c, 3);
         p += outpicref->linesize[0];
     }
@@ -448,7 +444,6 @@ static int config_audio_input(AVFilterLink *inlink)
 
 static int config_audio_out(AVFilterLink *outlink, EBUR128Context *ebur128)
 {
-    int i;
     const int nb_channels = outlink->ch_layout.nb_channels;
 
 #define BACK_MASK (AV_CH_BACK_LEFT    |AV_CH_BACK_CENTER    |AV_CH_BACK_RIGHT| \
@@ -475,7 +470,7 @@ static int config_audio_out(AVFilterLink *outlink, EBUR128Context *ebur128)
         !ebur128->i400.cache || !ebur128->i3000.cache)
         return AVERROR(ENOMEM);
 
-    for (i = 0; i < nb_channels; i++) {
+    for (int i = 0; i < nb_channels; i++) {
         /* channel weighting */
         const enum AVChannel chl = av_channel_layout_channel_from_index(&outlink->ch_layout, i);
         if (chl == AV_CHAN_LOW_FREQUENCY || chl == AV_CHAN_LOW_FREQUENCY_2) {
@@ -547,12 +542,11 @@ static int config_audio_output(AVFilterLink *outlink)
 
 static struct hist_entry *get_histogram(void)
 {
-    int i;
     struct hist_entry *h = av_calloc(HIST_SIZE, sizeof(*h));
 
     if (!h)
         return NULL;
-    for (i = 0; i < HIST_SIZE; i++) {
+    for (int i = 0; i < HIST_SIZE; i++) {
         h[i].loudness = i / (double)HIST_GRAIN + ABS_THRES;
         h[i].energy   = ENERGY(h[i].loudness);
     }
@@ -935,7 +929,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
             if (ebur128->do_video) {
                 AVFilterLink *voutlink = ctx->outputs[1];
                 AVFrame *clone;
-                int x, y;
                 uint8_t *p;
                 double gauge_value;
                 int y_loudness_lu_graph, y_loudness_lu_gauge;
@@ -958,7 +951,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
                 pic = ebur128->outpicref;
                 /* draw the graph using the short-term loudness */
                 p = pic->data[0] + ebur128->graph.y*pic->linesize[0] + ebur128->graph.x*3;
-                for (y = 0; y < ebur128->graph.h; y++) {
+                for (int y = 0; y < ebur128->graph.h; y++) {
                     const uint8_t *c = get_graph_color(ebur128, y_loudness_lu_graph, y);
 
                     memmove(p, p + 3, (ebur128->graph.w - 1) * 3);
@@ -968,10 +961,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 
                 /* draw the gauge using either momentary or short-term loudness */
                 p = pic->data[0] + ebur128->gauge.y*pic->linesize[0] + ebur128->gauge.x*3;
-                for (y = 0; y < ebur128->gauge.h; y++) {
+                for (int y = 0; y < ebur128->gauge.h; y++) {
                     const uint8_t *c = get_graph_color(ebur128, y_loudness_lu_gauge, y);
 
-                    for (x = 0; x < ebur128->gauge.w; x++)
+                    for (int x = 0; x < ebur128->gauge.w; x++)
                         memcpy(p + x*3, c, 3);
                     p += pic->linesize[0];
                 }
