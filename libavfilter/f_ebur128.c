@@ -124,9 +124,8 @@ typedef struct EBUR128Context {
 
     /* Filter caches.
      * The mult by 3 in the following is for X[i], X[i-1] and X[i-2] */
-    double *x;                      ///< 3 input samples cache for each channel
-    double *y;                      ///< 3 pre-filter samples cache for each channel
-    double *z;                      ///< 3 RLB-filter samples cache for each channel
+    double *t0;                     ///< 2 pre-filter samples cache for each channel
+    double *t1;                     ///< 2 RLB-filter samples cache for each channel
     double pre_b[3];                ///< pre-filter numerator coefficients
     double pre_a[3];                ///< pre-filter denominator coefficients
     double rlb_b[3];                ///< rlb-filter numerator coefficients
@@ -452,11 +451,10 @@ static int config_audio_out(AVFilterLink *outlink, EBUR128Context *ebur128)
                    AV_CH_SURROUND_DIRECT_LEFT               |AV_CH_SURROUND_DIRECT_RIGHT)
 
     ebur128->nb_channels  = nb_channels;
-    ebur128->x            = av_calloc(nb_channels, 3 * sizeof(*ebur128->x));
-    ebur128->y            = av_calloc(nb_channels, 3 * sizeof(*ebur128->y));
-    ebur128->z            = av_calloc(nb_channels, 3 * sizeof(*ebur128->z));
+    ebur128->t0           = av_calloc(nb_channels, 2 * sizeof(*ebur128->t0));
+    ebur128->t1           = av_calloc(nb_channels, 2 * sizeof(*ebur128->t1));
     ebur128->ch_weighting = av_calloc(nb_channels, sizeof(*ebur128->ch_weighting));
-    if (!ebur128->ch_weighting || !ebur128->x || !ebur128->y || !ebur128->z)
+    if (!ebur128->ch_weighting || !ebur128->t0 || !ebur128->t1)
         return AVERROR(ENOMEM);
 
 #define I400_BINS(x)  ((x) * 4 / 10)
@@ -719,9 +717,8 @@ static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, c
     double **i400_cache = i400->cache;
     double *i3000_sum = i3000->sum;
     double *i400_sum = i400->sum;
-    double *x = ebur128->x;
-    double *y = ebur128->y;
-    double *z = ebur128->z;
+    double *t0 = ebur128->t0;
+    double *t1 = ebur128->t1;
 
 #define MOVE_TO_NEXT_CACHED_ENTRY(time) do {                \
     ebur128->i##time.cache_pos++;                           \
@@ -738,32 +735,25 @@ static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, c
     for (int ch = 0; ch < nb_channels; ch++) {
         const double *samples = (const double *)csamples[ch];
         const double sample = samples[idx];
-        const int ch3 = ch * 3;
-        double *xx = x + ch3;
-        double *yy = y + ch3;
-        double *zz = z + ch3;
-        double bin;
-
-        xx[0] = sample; // set X[i]
+        const int ch2 = ch * 2;
+        double *tt0 = t0 + ch2;
+        double *tt1 = t1 + ch2;
+        double bin, out;
 
         if (!ch_weighting[ch])
             continue;
 
-#define FILTER(y, x, NUM, DEN) do {                                         \
-        double *dst = y;                                                    \
-        double *src = x;                                                    \
-        double in = src[0];                                                 \
-        double out = NUM[0] * in + dst[1];                                  \
-        dst[1] = NUM[1] * in + dst[2] - DEN[1] * out;                       \
-        dst[2] = NUM[2] * in          - DEN[2] * out;                       \
-        dst[0] = out;                                                       \
+#define FILTER(y, x, t, NUM, DEN) do {                       \
+        y = NUM[0] * x + t[0];                               \
+        t[0] = NUM[1] * x + t[1] - DEN[1] * y;               \
+        t[1] = NUM[2] * x        - DEN[2] * y;               \
 } while (0)
 
         // TODO: merge both filters in one?
-        FILTER(yy, xx, pre_b, pre_a);  // apply pre-filter
-        FILTER(zz, yy, rlb_b, rlb_a);  // apply RLB-filter
+        FILTER(out, sample, tt0, pre_b, pre_a);  // apply pre-filter
+        FILTER(bin, out,    tt1, rlb_b, rlb_a);  // apply RLB-filter
 
-        bin = zz[0] * zz[0];
+        bin *= bin;
 
         /* add the new value, and limit the sum to the cache size (400ms or 3s)
          * by removing the oldest one */
@@ -1133,9 +1123,8 @@ static int query_formats(const AVFilterContext *ctx,
 static av_cold void uninit_ebur128(AVFilterContext *ctx, EBUR128Context *ebur128)
 {
     av_freep(&ebur128->y_line_ref);
-    av_freep(&ebur128->x);
-    av_freep(&ebur128->y);
-    av_freep(&ebur128->z);
+    av_freep(&ebur128->t0);
+    av_freep(&ebur128->t1);
     av_freep(&ebur128->ch_weighting);
     av_freep(&ebur128->true_peaks);
     av_freep(&ebur128->sample_peaks);
