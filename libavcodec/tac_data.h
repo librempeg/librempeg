@@ -19,6 +19,8 @@
 #ifndef AVCODEC_TAC_DATA_H
 #define AVCODEC_TAC_DATA_H
 
+#include <stdint.h>
+
 typedef union REG_VF {
     struct {
         float x,y,z,w;
