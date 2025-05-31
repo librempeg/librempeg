@@ -1213,25 +1213,14 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     return config_input(ctx->inputs[0]);
 }
 
-/* These options are shared between several filters;
- * &lut3d_haldclut_options[COMMON_OPTIONS_OFFSET] must always
- * point to the first of the COMMON_OPTIONS. */
-#define COMMON_OPTIONS_OFFSET CONFIG_LUT3D_FILTER
-static const AVOption lut3d_haldclut_options[] = {
 #if CONFIG_LUT3D_FILTER
+
+static const AVOption lut3d_options[] = {
     { "file", "set 3D LUT file name", OFFSET(file), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
-#endif
-#if CONFIG_HALDCLUT_FILTER
-    { "clut", "when to process CLUT", OFFSET(clut), AV_OPT_TYPE_INT, {.i64=1}, 0, 1, .flags = TFLAGS, .unit = "clut" },
-    {   "first", "process only first CLUT, ignore rest", 0, AV_OPT_TYPE_CONST, {.i64=0}, .flags = TFLAGS, .unit = "clut" },
-    {   "all",   "process all CLUTs",                    0, AV_OPT_TYPE_CONST, {.i64=1}, .flags = TFLAGS, .unit = "clut" },
-#endif
     COMMON_OPTIONS
 };
 
-#if CONFIG_LUT3D_FILTER
-
-AVFILTER_DEFINE_CLASS_EXT(lut3d, "lut3d", lut3d_haldclut_options);
+AVFILTER_DEFINE_CLASS_EXT(lut3d, "lut3d", lut3d_options);
 
 static av_cold int lut3d_init(AVFilterContext *ctx)
 {
@@ -1549,8 +1538,14 @@ static av_cold void haldclut_uninit(AVFilterContext *ctx)
     av_freep(&lut3d->lut);
 }
 
-FRAMESYNC_DEFINE_CLASS_EXT(haldclut, LUT3DContext, fs,
-                           &lut3d_haldclut_options[COMMON_OPTIONS_OFFSET]);
+static const AVOption haldclut_options[] = {
+    { "clut", "when to process CLUT", OFFSET(clut), AV_OPT_TYPE_INT, {.i64=1}, 0, 1, .flags = TFLAGS, .unit = "clut" },
+    {   "first", "process only first CLUT, ignore rest", 0, AV_OPT_TYPE_CONST, {.i64=0}, .flags = TFLAGS, .unit = "clut" },
+    {   "all",   "process all CLUTs",                    0, AV_OPT_TYPE_CONST, {.i64=1}, .flags = TFLAGS, .unit = "clut" },
+    COMMON_OPTIONS
+};
+
+FRAMESYNC_DEFINE_CLASS_EXT(haldclut, LUT3DContext, fs, haldclut_options);
 
 static const AVFilterPad haldclut_inputs[] = {
     {
