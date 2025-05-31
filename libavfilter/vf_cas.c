@@ -183,12 +183,21 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = ctx->outputs[0];
     CASContext *s = ctx->priv;
     AVFrame *out;
+    int ret;
 
-    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    out = av_frame_alloc();
     if (!out) {
         av_frame_free(&in);
         return AVERROR(ENOMEM);
     }
+
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0) {
+        av_frame_free(&out);
+        av_frame_free(&in);
+        return ret;
+    }
+
     av_frame_copy_props(out, in);
 
     s->in = in;
@@ -197,7 +206,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     av_frame_free(&in);
     s->in = NULL;
 
-    return ff_filter_frame(ctx->outputs[0], out);
+    return ff_filter_frame(outlink, out);
 }
 
 static const enum AVPixelFormat pixel_fmts[] = {
@@ -269,7 +278,8 @@ const FFFilter ff_vf_cas = {
     .p.name        = "cas",
     .p.description = NULL_IF_CONFIG_SMALL("Contrast Adaptive Sharpen."),
     .p.priv_class  = &cas_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(CASContext),
     FILTER_INPUTS(cas_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
