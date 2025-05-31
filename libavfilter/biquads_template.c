@@ -129,9 +129,11 @@ typedef struct fn(BiquadContext) {
     ftype a[3];
     ftype b[3];
     ftype c[4];
+#if DEPTH == 8 || DEPTH == 16 || DEPTH == 31
     itype ia[3];
     itype ib[3];
     itype ic[4];
+#endif
     ftype mix;
     itype fraction;
     unsigned clip;
@@ -165,12 +167,14 @@ static int fn(init_biquad)(AVFilterContext *ctx, void **st,
         st->b[1] = b[1];
         st->b[2] = b[2];
 
+#if DEPTH == 8 || DEPTH == 16 || DEPTH == 31
         st->ia[0] = LRINT(a[0] * (1LL << IDEPTH));
         st->ia[1] = LRINT(a[1] * (1LL << IDEPTH));
         st->ia[2] = LRINT(a[2] * (1LL << IDEPTH));
         st->ib[0] = LRINT(b[0] * (1LL << IDEPTH));
         st->ib[1] = LRINT(b[1] * (1LL << IDEPTH));
         st->ib[2] = LRINT(b[2] * (1LL << IDEPTH));
+#endif
     }
 
     return 0;
@@ -203,11 +207,20 @@ static void fn(biquad_di)(void *st,
     stype *restrict obuf = output;
     fn(BiquadContext) *state = st;
     fn(BiquadContext) *stc = &state[ch];
+#if DEPTH == 8 || DEPTH == 16 || DEPTH == 31
     itype *fcache = stc->ic;
+#else
+    itype *fcache = stc->c;
+#endif
     itype i1 = fcache[0], i2 = fcache[1], o1 = fcache[2], o2 = fcache[3];
     itype fraction = stc->fraction;
+#if DEPTH == 8 || DEPTH == 16 || DEPTH == 31
     const itype *a = stc->ia;
     const itype *b = stc->ib;
+#else
+    const itype *a = stc->a;
+    const itype *b = stc->b;
+#endif
     const itype a1 = -a[1];
     const itype a2 = -a[2];
     const itype b0 = b[0];
