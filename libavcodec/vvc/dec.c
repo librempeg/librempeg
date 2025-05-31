@@ -1087,6 +1087,9 @@ static int frame_end(VVCContext *s, VVCFrameContext *fc)
             ret = ff_aom_apply_film_grain(fc->ref->frame_grain, fc->ref->frame, fgp);
             break;
         }
+
+        if (ret < 0)
+            return ret;
     }
 
     if (!s->avctx->hwaccel && s->avctx->err_recognition & AV_EF_CRCCHECK) {
