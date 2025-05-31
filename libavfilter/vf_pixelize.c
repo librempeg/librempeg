@@ -275,9 +275,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (av_frame_is_writable(in)) {
         out = in;
     } else {
-        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+        out = av_frame_alloc();
         if (!out) {
             ret = AVERROR(ENOMEM);
+            goto fail;
+        }
+
+        ret = ff_filter_get_buffer(ctx, out);
+        if (ret < 0) {
+            av_frame_free(&out);
             goto fail;
         }
 
@@ -342,7 +348,8 @@ const FFFilter ff_vf_pixelize = {
     .p.name        = "pixelize",
     .p.description = NULL_IF_CONFIG_SMALL("Pixelize video."),
     .p.priv_class  = &pixelize_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(PixelizeContext),
     FILTER_INPUTS(pixelize_inputs),
     FILTER_OUTPUTS(pixelize_outputs),
