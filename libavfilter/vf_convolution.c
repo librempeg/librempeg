@@ -860,12 +860,21 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out;
     ThreadData td;
+    int ret;
 
-    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    out = av_frame_alloc();
     if (!out) {
         av_frame_free(&in);
         return AVERROR(ENOMEM);
     }
+
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0) {
+        av_frame_free(&out);
+        av_frame_free(&in);
+        return ret;
+    }
+
     av_frame_copy_props(out, in);
 
     td.in = in;
@@ -904,7 +913,8 @@ const FFFilter ff_vf_convolution = {
     .p.name        = "convolution",
     .p.description = NULL_IF_CONFIG_SMALL("Apply convolution filter."),
     .p.priv_class  = &convolution_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(ConvolutionContext),
     FILTER_INPUTS(convolution_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
@@ -930,7 +940,8 @@ const FFFilter ff_vf_prewitt = {
     .p.name        = "prewitt",
     .p.description = NULL_IF_CONFIG_SMALL("Apply prewitt operator."),
     .p.priv_class  = &common_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(ConvolutionContext),
     FILTER_INPUTS(convolution_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
@@ -946,7 +957,8 @@ const FFFilter ff_vf_sobel = {
     .p.name        = "sobel",
     .p.description = NULL_IF_CONFIG_SMALL("Apply sobel operator."),
     .p.priv_class  = &common_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(ConvolutionContext),
     FILTER_INPUTS(convolution_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
@@ -962,7 +974,8 @@ const FFFilter ff_vf_roberts = {
     .p.name        = "roberts",
     .p.description = NULL_IF_CONFIG_SMALL("Apply roberts cross operator."),
     .p.priv_class  = &common_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(ConvolutionContext),
     FILTER_INPUTS(convolution_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
@@ -978,7 +991,8 @@ const FFFilter ff_vf_kirsch = {
     .p.name        = "kirsch",
     .p.description = NULL_IF_CONFIG_SMALL("Apply kirsch operator."),
     .p.priv_class  = &common_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(ConvolutionContext),
     FILTER_INPUTS(convolution_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
@@ -994,7 +1008,8 @@ const FFFilter ff_vf_scharr = {
     .p.name        = "scharr",
     .p.description = NULL_IF_CONFIG_SMALL("Apply scharr operator."),
     .p.priv_class  = &common_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(ConvolutionContext),
     FILTER_INPUTS(convolution_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
