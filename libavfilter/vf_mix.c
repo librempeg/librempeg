@@ -20,7 +20,6 @@
 
 #include "config_components.h"
 
-#include "libavutil/avstring.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
@@ -35,11 +34,11 @@
 typedef struct MixContext {
     const AVClass *class;
     const AVPixFmtDescriptor *desc;
-    char *weights_str;
     int nb_inputs;
     int nb_threads;
     int duration;
     float *weights;
+    unsigned nb_weights;
     float scale;
     float wfactor;
 
@@ -85,25 +84,15 @@ static int query_formats(const AVFilterContext *ctx,
 static int parse_weights(AVFilterContext *ctx)
 {
     MixContext *s = ctx->priv;
-    char *p, *arg, *saveptr = NULL;
-    int i, last = 0;
+    int i, last = s->nb_weights-1;
 
     s->fast = 1;
     s->wfactor = 0.f;
-    p = s->weights_str;
-    for (i = 0; i < s->nb_inputs; i++) {
-        if (!(arg = av_strtok(p, " |", &saveptr)))
-            break;
 
-        p = NULL;
-        if (av_sscanf(arg, "%f", &s->weights[i]) != 1) {
-            av_log(ctx, AV_LOG_ERROR, "Invalid syntax for weights[%d].\n", i);
-            return AVERROR(EINVAL);
-        }
+    for (i = 0; i < FFMIN(s->nb_weights, s->nb_inputs); i++) {
         s->wfactor += s->weights[i];
         if (i > 0)
             s->fast &= s->weights[i] == s->weights[0];
-        last = i;
     }
 
     for (; i < s->nb_inputs; i++) {
@@ -435,10 +424,13 @@ static int activate(AVFilterContext *ctx)
 #define OFFSET(x) offsetof(MixContext, x)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
 #define TFLAGS AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_RUNTIME_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_weights = {.def="1 1",.size_min=2,.sep=' '};
 
 static const AVOption mix_options[] = {
     { "inputs", "set number of inputs", OFFSET(nb_inputs), AV_OPT_TYPE_INT, {.i64=2}, 2, INT16_MAX, .flags = FLAGS },
-    { "weights", "set weight for each input", OFFSET(weights_str), AV_OPT_TYPE_STRING, {.str="1 1"}, 0, 0, .flags = TFLAGS },
+    { "weights", "set weight for each input", OFFSET(weights), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_weights}, 0, UINT16_MAX, .flags = TFLAGS },
     { "scale", "set scale", OFFSET(scale), AV_OPT_TYPE_FLOAT, {.dbl=0}, 0, INT16_MAX, .flags = TFLAGS },
     { "planes", "set what planes to filter", OFFSET(planes),   AV_OPT_TYPE_FLAGS, {.i64=15}, 0, 15,  .flags = TFLAGS },
     { "duration", "how to determine end of stream", OFFSET(duration), AV_OPT_TYPE_INT, {.i64=0}, 0, 2, .flags = FLAGS, .unit = "duration" },
@@ -525,9 +517,11 @@ static int tmix_filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
+static const AVOptionArrayDef def_tweights = {.def="1 1 1",.size_min=1,.sep=' '};
+
 static const AVOption tmix_options[] = {
     { "frames", "set number of successive frames to mix", OFFSET(nb_inputs), AV_OPT_TYPE_INT, {.i64=3}, 1, 1024, .flags = FLAGS },
-    { "weights", "set weight for each frame", OFFSET(weights_str), AV_OPT_TYPE_STRING, {.str="1 1 1"}, 0, 0, .flags = TFLAGS },
+    { "weights", "set weight for each frame", OFFSET(weights), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_tweights}, 0, UINT16_MAX, .flags = TFLAGS },
     { "scale", "set scale", OFFSET(scale), AV_OPT_TYPE_FLOAT, {.dbl=0}, 0, INT16_MAX, .flags = TFLAGS },
     { "planes", "set what planes to filter", OFFSET(planes),   AV_OPT_TYPE_FLAGS, {.i64=15}, 0, 15,  .flags = TFLAGS },
     { NULL },
