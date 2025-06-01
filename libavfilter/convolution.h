@@ -50,8 +50,19 @@ typedef struct ConvolutionContext {
     int nb_threads;
     int planewidth[4];
     int planeheight[4];
-    int matrix[4][49];
-    int matrix_length[4];
+
+    int *matrix0;
+    unsigned matrix_length0;
+
+    int *matrix1;
+    unsigned matrix_length1;
+
+    int *matrix2;
+    unsigned matrix_length2;
+
+    int *matrix3;
+    unsigned matrix_length3;
+
     int copy[4];
 
     void (*setup[4])(int radius, const uint8_t *c[], const uint8_t *src, int stride,

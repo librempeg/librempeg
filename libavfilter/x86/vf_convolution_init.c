@@ -37,11 +37,26 @@ void ff_filter_sobel_avx512icl(uint8_t *dst, int width,
 av_cold void ff_convolution_init_x86(ConvolutionContext *s)
 {
 #if ARCH_X86_64
-    int i;
     int cpu_flags = av_get_cpu_flags();
-    for (i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) {
+        int matrix_length;
+
+        switch (i) {
+        case 0:
+            matrix_length = s->matrix_length0;
+            break;
+        case 1:
+            matrix_length = s->matrix_length1;
+            break;
+        case 2:
+            matrix_length = s->matrix_length2;
+            break;
+        case 3:
+            matrix_length = s->matrix_length3;
+            break;
+        }
         if (s->mode[i] == MATRIX_SQUARE) {
-            if (s->matrix_length[i] == 9 && s->depth == 8) {
+            if (matrix_length == 9 && s->depth == 8) {
                 if (EXTERNAL_SSE4(cpu_flags))
                     s->filter[i] = ff_filter_3x3_sse4;
             }

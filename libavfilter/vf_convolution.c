@@ -21,7 +21,6 @@
 
 #include "config_components.h"
 
-#include "libavutil/avstring.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
@@ -35,12 +34,15 @@
 
 #define OFFSET(x) offsetof(ConvolutionContext, x)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_matrix = {.def="0 0 0 0 1 0 0 0 0",.size_min=1,.size_max=49,.sep=' '};
 
 static const AVOption convolution_options[] = {
-    { "0m", "set matrix for 1st plane", OFFSET(matrix_str[0]), AV_OPT_TYPE_STRING, {.str="0 0 0 0 1 0 0 0 0"}, 0, 0, FLAGS },
-    { "1m", "set matrix for 2nd plane", OFFSET(matrix_str[1]), AV_OPT_TYPE_STRING, {.str="0 0 0 0 1 0 0 0 0"}, 0, 0, FLAGS },
-    { "2m", "set matrix for 3rd plane", OFFSET(matrix_str[2]), AV_OPT_TYPE_STRING, {.str="0 0 0 0 1 0 0 0 0"}, 0, 0, FLAGS },
-    { "3m", "set matrix for 4th plane", OFFSET(matrix_str[3]), AV_OPT_TYPE_STRING, {.str="0 0 0 0 1 0 0 0 0"}, 0, 0, FLAGS },
+    { "0m", "set matrix for 1st plane", OFFSET(matrix0), AV_OPT_TYPE_INT|AR, {.arr=&def_matrix}, INT16_MIN, INT16_MAX, FLAGS },
+    { "1m", "set matrix for 2nd plane", OFFSET(matrix1), AV_OPT_TYPE_INT|AR, {.arr=&def_matrix}, INT16_MIN, INT16_MAX, FLAGS },
+    { "2m", "set matrix for 3rd plane", OFFSET(matrix2), AV_OPT_TYPE_INT|AR, {.arr=&def_matrix}, INT16_MIN, INT16_MAX, FLAGS },
+    { "3m", "set matrix for 4th plane", OFFSET(matrix3), AV_OPT_TYPE_INT|AR, {.arr=&def_matrix}, INT16_MIN, INT16_MAX, FLAGS },
     { "0rdiv", "set rdiv for 1st plane", OFFSET(user_rdiv[0]), AV_OPT_TYPE_FLOAT, {.dbl=0.0}, 0.0, INT_MAX, FLAGS},
     { "1rdiv", "set rdiv for 2nd plane", OFFSET(user_rdiv[1]), AV_OPT_TYPE_FLOAT, {.dbl=0.0}, 0.0, INT_MAX, FLAGS},
     { "2rdiv", "set rdiv for 3rd plane", OFFSET(user_rdiv[2]), AV_OPT_TYPE_FLOAT, {.dbl=0.0}, 0.0, INT_MAX, FLAGS},
@@ -599,9 +601,9 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
         const uint8_t *src = in->data[plane];
         const int dst_pos = slice_start * (mode == MATRIX_COLUMN ? bpc : dstride);
         uint8_t *dst = out->data[plane] + dst_pos;
-        const int *matrix = s->matrix[plane];
         const int step = mode == MATRIX_COLUMN ? 16 : 1;
         const uint8_t *c[49];
+        const int *matrix;
         int y, x;
 
         if (s->copy[plane]) {
@@ -613,6 +615,22 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
                                     width * bpc, slice_end - slice_start);
             continue;
         }
+
+        switch (plane) {
+        case 0:
+            matrix = s->matrix0;
+            break;
+        case 1:
+            matrix = s->matrix1;
+            break;
+        case 2:
+            matrix = s->matrix2;
+            break;
+        case 3:
+            matrix = s->matrix3;
+            break;
+        }
+
         for (y = slice_start; y < slice_end; y += step) {
             const int xoff = mode == MATRIX_COLUMN ? (y - slice_start) * bpc : radius * bpc;
             const int yoff = mode == MATRIX_COLUMN ? radius * dstride : 0;
@@ -668,42 +686,48 @@ static int param_init(AVFilterContext *ctx)
 
     if (!strcmp(ctx->filter->name, "convolution")) {
         for (i = 0; i < 4; i++) {
-            int *matrix = (int *)s->matrix[i];
-            char *orig, *p, *arg, *saveptr = NULL;
+            unsigned matrix_length;
+            int *matrix;
             float sum = 1.f;
 
-            p = orig = av_strdup(s->matrix_str[i]);
-            if (p) {
-                s->matrix_length[i] = 0;
-                s->rdiv[i] = s->user_rdiv[i];
-                sum = 0.f;
-
-                while (s->matrix_length[i] < 49) {
-                    if (!(arg = av_strtok(p, " |", &saveptr)))
-                        break;
-
-                    p = NULL;
-                    sscanf(arg, "%d", &matrix[s->matrix_length[i]]);
-                    sum += matrix[s->matrix_length[i]];
-                    s->matrix_length[i]++;
-                }
-
-                av_freep(&orig);
-                if (!(s->matrix_length[i] & 1)) {
-                    av_log(ctx, AV_LOG_ERROR, "number of matrix elements must be odd\n");
-                    return AVERROR(EINVAL);
-                }
+            switch (i) {
+            case 0:
+                matrix = s->matrix0;
+                matrix_length = s->matrix_length0;
+                break;
+            case 1:
+                matrix = s->matrix1;
+                matrix_length = s->matrix_length1;
+                break;
+            case 2:
+                matrix = s->matrix2;
+                matrix_length = s->matrix_length2;
+                break;
+            case 3:
+                matrix = s->matrix3;
+                matrix_length = s->matrix_length3;
+                break;
             }
+            s->rdiv[i] = s->user_rdiv[i];
+            sum = 0.f;
+
+            if (!(matrix_length & 1)) {
+                av_log(ctx, AV_LOG_ERROR, "number of matrix elements must be odd\n");
+                return AVERROR(EINVAL);
+            }
+
+            for (int j = 0; j < matrix_length; j++)
+                sum += matrix[i];
 
             if (s->mode[i] == MATRIX_ROW) {
                 s->filter[i] = filter_row;
                 s->setup[i] = setup_row;
-                s->size[i] = s->matrix_length[i];
+                s->size[i] = matrix_length;
             } else if (s->mode[i] == MATRIX_COLUMN) {
                 s->filter[i] = filter_column;
                 s->setup[i] = setup_column;
-                s->size[i] = s->matrix_length[i];
-            } else if (s->matrix_length[i] == 9) {
+                s->size[i] = matrix_length;
+            } else if (matrix_length == 9) {
                 s->size[i] = 3;
 
                 if (!memcmp(matrix, same3x3, sizeof(same3x3))) {
@@ -713,7 +737,7 @@ static int param_init(AVFilterContext *ctx)
                     s->copy[i] = 0;
                 }
                 s->setup[i] = setup_3x3;
-            } else if (s->matrix_length[i] == 25) {
+            } else if (matrix_length == 25) {
                 s->size[i] = 5;
                 if (!memcmp(matrix, same5x5, sizeof(same5x5))) {
                     s->copy[i] = 1;
@@ -722,7 +746,7 @@ static int param_init(AVFilterContext *ctx)
                     s->copy[i] = 0;
                 }
                 s->setup[i] = setup_5x5;
-            } else if (s->matrix_length[i] == 49) {
+            } else if (matrix_length == 49) {
                 s->size[i] = 7;
                 if (!memcmp(matrix, same7x7, sizeof(same7x7))) {
                     s->copy[i] = 1;
