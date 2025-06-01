@@ -238,7 +238,7 @@ static const AVFilterPad outputs[] = {
 
 const FFFilter ff_af_aawiener = {
     .p.name        = "aawiener",
-    .p.description = NULL_IF_CONFIG_SMALL("Audio Noise Reduction with Adapative Wiener filter."),
+    .p.description = NULL_IF_CONFIG_SMALL("Audio Noise Reduction with Adaptive Wiener filter."),
     .p.priv_class  = &aawiener_class,
     .priv_size     = sizeof(AudioAWienerContext),
     .activate      = activate,
