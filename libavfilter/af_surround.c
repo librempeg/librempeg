@@ -610,9 +610,9 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
 static const AVOptionArrayDef def_smooth = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_o  = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_i  = {.def="1",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_f_x  = {.def="8",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_f_y  = {.def="8",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_f_z  = {.def="8",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_f_x  = {.def="2",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_f_y  = {.def="2",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_f_z  = {.def="0.5",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_shift= {.def="0 0 0",.size_min=1,.size_max=3,.sep=' '};
 static const AVOptionArrayDef def_depth= {.def="0 0 0",.size_min=1,.size_max=3,.sep=' '};
 static const AVOptionArrayDef def_focus= {.def="0 0 0",.size_min=1,.size_max=3,.sep=' '};
