@@ -181,17 +181,18 @@ static int filter_slice_##name(AVFilterContext *ctx, void *arg, int jobnr, int n
     const int starty = height * jobnr       / nb_jobs;                                                    \
     const int endy   = height * (jobnr + 1) / nb_jobs;                                                    \
                                                                                                           \
-    int x, y;                                                                                             \
     int lower_x, higher_x;                                                                                \
     int lower_y, higher_y;                                                                                \
     int dist_y, count;                                                                                    \
     uint64_t sum, square_sum, mean, var;                                                                  \
                                                                                                           \
-    for (y = starty; y < endy; y++) {                                                                     \
+    src += starty * src_linesize;                                                                         \
+    dst += starty * dst_linesize;                                                                         \
+    for (int y = starty; y < endy; y++) {                                                                 \
         lower_y  = y - radius     < 0      ? 0      : y - radius;                                         \
         higher_y = y + radius + 1 > height ? height : y + radius + 1;                                     \
         dist_y = higher_y - lower_y;                                                                      \
-        for (x = 0; x < width; x++) {                                                                     \
+        for (int x = 0; x < width; x++) {                                                                 \
             lower_x  = x - radius     < 0     ? 0     : x - radius;                                       \
             higher_x = x + radius + 1 > width ? width : x + radius + 1;                                   \
             count = dist_y * (higher_x - lower_x);                                                        \
@@ -205,8 +206,10 @@ static int filter_slice_##name(AVFilterContext *ctx, void *arg, int jobnr, int n
                        + square_sat[lower_y  * sat_linesize + lower_x];                                   \
             mean = sum / count;                                                                           \
             var = (square_sum - sum * sum / count) / count;                                               \
-            dst[y * dst_linesize + x] = (sigma * mean + var * src[y * src_linesize + x]) / (sigma + var); \
+            dst[x] = (sigma * mean + var * src[x]) / (sigma + var);                                       \
         }                                                                                                 \
+        dst += dst_linesize;                                                                              \
+        src += src_linesize;                                                                              \
     }                                                                                                     \
     return 0;                                                                                             \
 }
