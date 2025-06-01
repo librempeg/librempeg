@@ -121,10 +121,6 @@ static av_cold int init(AVFilterContext *ctx)
     if (!s->frames)
         return AVERROR(ENOMEM);
 
-    s->weights = av_calloc(s->nb_inputs, sizeof(*s->weights));
-    if (!s->weights)
-        return AVERROR(ENOMEM);
-
     if (!s->tmix) {
         for (int i = 0; i < s->nb_inputs; i++) {
             AVFilterPad pad = { 0 };
@@ -390,7 +386,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     int i;
 
     ff_framesync_uninit(&s->fs);
-    av_freep(&s->weights);
     av_freep(&s->data);
     av_freep(&s->linesize);
 
