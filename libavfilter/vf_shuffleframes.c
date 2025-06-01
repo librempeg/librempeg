@@ -18,7 +18,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/avstring.h"
 #include "libavutil/common.h"
 #include "libavutil/internal.h"
 #include "libavutil/mem.h"
@@ -30,9 +29,9 @@
 
 typedef struct ShuffleFramesContext {
     const AVClass *class;
-    char *mapping;
     AVFrame **frames;
     int *map;
+    unsigned nb_map;
     int64_t *pts;
     int in_frames;
     int nb_frames;
@@ -41,42 +40,22 @@ typedef struct ShuffleFramesContext {
 static av_cold int init(AVFilterContext *ctx)
 {
     ShuffleFramesContext *s = ctx->priv;
-    char *mapping, *saveptr = NULL, *p;
-    int n, nb_items;
-
-    nb_items = 1;
-    for (p = s->mapping; *p; p++) {
-        if (*p == '|' || *p == ' ')
-            nb_items++;
-    }
+    int nb_items = s->nb_map;
 
     s->frames = av_calloc(nb_items, sizeof(*s->frames));
-    s->map    = av_calloc(nb_items, sizeof(*s->map));
     s->pts    = av_calloc(nb_items, sizeof(*s->pts));
-    if (!s->map || !s->frames || !s->pts) {
+    if (!s->frames || !s->pts) {
         return AVERROR(ENOMEM);
     }
 
-    mapping = av_strdup(s->mapping);
-    if (!mapping)
-        return AVERROR(ENOMEM);
-
-    for (n = 0; n < nb_items; n++) {
-        char *map = av_strtok(n == 0 ? mapping : NULL, " |", &saveptr);
-        if (!map || sscanf(map, "%d", &s->map[n]) != 1) {
-            av_free(mapping);
-            return AVERROR(EINVAL);
-        }
-
+    for (int n = 0; n < nb_items; n++) {
         if (s->map[n] < -1 || s->map[n] >= nb_items) {
             av_log(ctx, AV_LOG_ERROR, "Index %d out of range: [-1, %d].\n", s->map[n], nb_items - 1);
-            av_free(mapping);
             return AVERROR(EINVAL);
         }
     }
 
     s->nb_frames = nb_items;
-    av_free(mapping);
     return 0;
 }
 
@@ -126,14 +105,17 @@ static av_cold void uninit(AVFilterContext *ctx)
     }
 
     av_freep(&s->frames);
-    av_freep(&s->map);
     av_freep(&s->pts);
 }
 
 #define OFFSET(x) offsetof(ShuffleFramesContext, x)
 #define FLAGS (AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_VIDEO_PARAM)
+#define AR AV_OPT_TYPE_FLAG_ARRAY
+
+static const AVOptionArrayDef def_map = {.def="0",.size_min=1,.sep='|'};
+
 static const AVOption shuffleframes_options[] = {
-    { "mapping", "set destination indexes of input frames",  OFFSET(mapping), AV_OPT_TYPE_STRING, {.str="0"}, 0, 0, FLAGS },
+    { "mapping", "set destination indexes of input frames",  OFFSET(map), AV_OPT_TYPE_INT|AR, {.arr=&def_map}, -1, INT16_MAX, FLAGS },
     { NULL },
 };
 
