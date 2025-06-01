@@ -343,24 +343,32 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
     VibranceContext *s = avctx->priv;
     ThreadData td;
     AVFrame *out;
-    int res;
+    int ret;
 
     if (av_frame_is_writable(in)) {
         out = in;
     } else {
-        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+        out = av_frame_alloc();
         if (!out) {
             av_frame_free(&in);
             return AVERROR(ENOMEM);
         }
+
+        ret = ff_filter_get_buffer(avctx, out);
+        if (ret < 0) {
+            av_frame_free(&out);
+            av_frame_free(&in);
+            return ret;
+        }
+
         av_frame_copy_props(out, in);
     }
 
     td.out = out;
     td.in = in;
-    if (res = ff_filter_execute(avctx, s->do_slice, &td, NULL,
-                                FFMIN(out->height, ff_filter_get_nb_threads(avctx))))
-        return res;
+    if ((ret = ff_filter_execute(avctx, s->do_slice, &td, NULL,
+                                 FFMIN(out->height, ff_filter_get_nb_threads(avctx)))) < 0)
+        return ret;
 
     if (out != in)
         av_frame_free(&in);
@@ -436,7 +444,8 @@ const FFFilter ff_vf_vibrance = {
     .p.name        = "vibrance",
     .p.description = NULL_IF_CONFIG_SMALL("Boost or alter saturation."),
     .p.priv_class  = &vibrance_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(VibranceContext),
     FILTER_INPUTS(vibrance_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
