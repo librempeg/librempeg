@@ -105,11 +105,21 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (av_frame_is_writable(in)) {
         out = in;
     } else {
-        out = ff_get_audio_buffer(outlink, in->nb_samples);
+        int ret;
+
+        out = av_frame_alloc();
         if (!out) {
             av_frame_free(&in);
             return AVERROR(ENOMEM);
         }
+
+        ret = ff_filter_get_buffer(ctx, out);
+        if (ret < 0) {
+            av_frame_free(&out);
+            av_frame_free(&in);
+            return ret;
+        }
+
         av_frame_copy_props(out, in);
     }
 
@@ -153,5 +163,6 @@ const FFFilter ff_af_ainvert = {
                       AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
     .process_command = ff_filter_process_command,
     .p.flags         = AVFILTER_FLAG_SLICE_THREADS |
+                       AVFILTER_FLAG_FRAME_THREADS |
                        AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };
