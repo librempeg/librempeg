@@ -187,15 +187,24 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = ctx->outputs[0];
     ThreadData td;
     AVFrame *out;
+    int ret;
 
     if (av_frame_is_writable(in)) {
         out = in;
     } else {
-        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+        out = av_frame_alloc();
         if (!out) {
             av_frame_free(&in);
             return AVERROR(ENOMEM);
         }
+
+        ret = ff_filter_get_buffer(ctx, out);
+        if (ret < 0) {
+            av_frame_free(&in);
+            av_frame_free(&out);
+            return ret;
+        }
+
         av_frame_copy_props(out, in);
     }
 
@@ -235,6 +244,7 @@ const FFFilter ff_vf_limiter = {
     .p.description = NULL_IF_CONFIG_SMALL("Limit pixels components to the specified range."),
     .p.priv_class  = &limiter_class,
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+                     AVFILTER_FLAG_FRAME_THREADS |
                      AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(LimiterContext),
     .init          = init,
