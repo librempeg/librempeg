@@ -84,7 +84,7 @@ static int query_formats(const AVFilterContext *ctx,
 static int parse_weights(AVFilterContext *ctx)
 {
     MixContext *s = ctx->priv;
-    int i, last = s->nb_weights-1;
+    int i;
 
     s->fast = 1;
     s->wfactor = 0.f;
@@ -95,10 +95,9 @@ static int parse_weights(AVFilterContext *ctx)
             s->fast &= s->weights[i] == s->weights[0];
     }
 
-    for (; i < s->nb_inputs; i++) {
-        s->weights[i] = s->weights[last];
-        s->wfactor += s->weights[i];
-    }
+    for (; i < s->nb_inputs; i++)
+        s->wfactor += s->weights[FFMIN(i, s->nb_weights-1)];
+
     if (s->scale == 0) {
         s->wfactor = 1 / s->wfactor;
     } else {
@@ -208,9 +207,10 @@ typedef struct ThreadData {
                 float val = 0.f;                                                                \
                                                                                                 \
                 for (int i = 0; i < nb_inputs; i++) {                                           \
+                    const int wi = FFMIN(i, nb_weights-1);                                      \
                     float src = *(type *)(srcf[i] + x * sizeof(type));                          \
                                                                                                 \
-                    val += src * weights[i];                                                    \
+                    val += src * weights[wi];                                                   \
                 }                                                                               \
                                                                                                 \
                 dst[x] = clip(fun(val * wfactor), 0, max);                                      \
@@ -237,6 +237,7 @@ static int mix_frames(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     uint8_t **srcf = s->data + jobnr * s->nb_inputs;
     int *linesize = s->linesize + jobnr * s->nb_inputs;
     const int nb_unique = s->nb_unique_frames;
+    const unsigned nb_weights = s->nb_weights;
     const int nb_inputs = s->nb_inputs;
     const float wfactor = s->wfactor;
     const int max = s->max;
