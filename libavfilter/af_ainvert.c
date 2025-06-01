@@ -113,6 +113,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             return AVERROR(ENOMEM);
         }
 
+        out->nb_samples = in->nb_samples;
         ret = ff_filter_get_buffer(ctx, out);
         if (ret < 0) {
             av_frame_free(&out);
