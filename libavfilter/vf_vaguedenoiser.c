@@ -532,9 +532,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     VagueDenoiserContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out;
-    int direct = av_frame_is_writable(in);
 
-    if (direct) {
+    if (av_frame_is_writable(in)) {
         out = in;
     } else {
         out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
@@ -548,7 +547,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     filter(s, in, out);
 
-    if (!direct)
+    if (out != in)
         av_frame_free(&in);
 
     return ff_filter_frame(outlink, out);
@@ -591,7 +590,6 @@ static const AVFilterPad vaguedenoiser_inputs[] = {
         .filter_frame = filter_frame,
     },
 };
-
 
 const FFFilter ff_vf_vaguedenoiser = {
     .p.name        = "vaguedenoiser",
