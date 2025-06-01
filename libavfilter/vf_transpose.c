@@ -330,12 +330,12 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr,
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
-    int err = 0;
     AVFilterContext *ctx = inlink->dst;
-    TransContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
+    TransContext *s = ctx->priv;
     ThreadData td;
     AVFrame *out;
+    int ret;
 
     if (s->passthrough)
         return ff_filter_frame(outlink, in);
@@ -346,12 +346,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         return AVERROR(ENOMEM);
     }
 
-    err = ff_filter_get_buffer(ctx, out);
-    if (err < 0)
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0)
         goto fail;
 
-    err = av_frame_copy_props(out, in);
-    if (err < 0)
+    ret = av_frame_copy_props(out, in);
+    if (ret < 0)
         goto fail;
 
     if (in->sample_aspect_ratio.num == 0) {
@@ -370,7 +370,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 fail:
     av_frame_free(&in);
     av_frame_free(&out);
-    return err;
+    return ret;
 }
 
 #define OFFSET(x) offsetof(TransContext, x)
