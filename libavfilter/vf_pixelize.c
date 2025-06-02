@@ -308,6 +308,25 @@ fail:
     return ret;
 }
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const PixelizeContext *s_src = src->priv;
+    PixelizeContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->block_w[0]  = s_src->block_w[0];
+    s_dst->block_h[0]  = s_src->block_h[0];
+    s_dst->planes      = s_src->planes;
+    s_dst->mode        = s_src->mode;
+
+    return 0;
+}
+#endif
+
 #define OFFSET(x) offsetof(PixelizeContext, x)
 #define FLAGS (AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_RUNTIME_PARAM)
 
@@ -351,6 +370,9 @@ const FFFilter ff_vf_pixelize = {
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
                      AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(PixelizeContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(pixelize_inputs),
     FILTER_OUTPUTS(pixelize_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
