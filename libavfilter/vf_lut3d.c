@@ -1170,11 +1170,21 @@ static AVFrame *apply_lut(AVFilterLink *inlink, AVFrame *in)
     if (av_frame_is_writable(in)) {
         out = in;
     } else {
-        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+        int ret;
+
+        out = av_frame_alloc();
         if (!out) {
             av_frame_free(&in);
             return NULL;
         }
+
+        ret = ff_filter_get_buffer(ctx, out);
+        if (ret < 0) {
+            av_frame_free(&out);
+            av_frame_free(&in);
+            return NULL;
+        }
+
         av_frame_copy_props(out, in);
     }
 
@@ -1300,6 +1310,7 @@ const FFFilter ff_vf_lut3d = {
     .p.description = NULL_IF_CONFIG_SMALL("Adjust colors using a 3D LUT."),
     .p.priv_class  = &lut3d_class,
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+                     AVFILTER_FLAG_FRAME_THREADS |
                      AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(LUT3DContext),
     .init          = lut3d_init,
