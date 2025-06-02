@@ -92,11 +92,21 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (av_frame_is_writable(in)) {
         out = in;
     } else {
-        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+        int ret;
+
+        out = av_frame_alloc();
         if (!out) {
             av_frame_free(&in);
             return AVERROR(ENOMEM);
         }
+
+        ret = ff_filter_get_buffer(ctx, out);
+        if (ret < 0) {
+            av_frame_free(&out);
+            av_frame_free(&in);
+            return ret;
+        }
+
         av_frame_copy_props(out, in);
     }
 
@@ -122,6 +132,23 @@ static av_cold int config_input(AVFilterLink *inlink)
     return 0;
 }
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const ExposureContext *s_src = src->priv;
+    ExposureContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->exposure = s_src->exposure;
+    s_dst->black = s_src->black;
+
+    return 0;
+}
+#endif
+
 static const AVFilterPad exposure_inputs[] = {
     {
         .name           = "default",
@@ -146,8 +173,12 @@ const FFFilter ff_vf_exposure = {
     .p.name        = "exposure",
     .p.description = NULL_IF_CONFIG_SMALL("Adjust exposure of the video stream."),
     .p.priv_class  = &exposure_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(ExposureContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(exposure_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS(AV_PIX_FMT_GBRPF32, AV_PIX_FMT_GBRAPF32),
