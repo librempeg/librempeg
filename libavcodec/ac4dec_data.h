@@ -332,21 +332,25 @@ static const uint16_t aspx_hcb_noise_balance_dt_codes[25] = {
     0x0007f8, 0x0007f9, 0x0007fa, 0x0007fb,
 };
 
-static uint8_t aspx_codebook_signal_off[2][2][3] = {
+static const uint8_t aspx_codebook_signal_off[2][2] = { { 70, 35 }, { 24, 12 } };
+
+static const uint8_t acpl_codebook_signal_off[4][2][3] = {
     {
-        {  0, 70, 70, },
-        { 36, 35, 35, },
-    },
-    {
-        { 25, 24, 24, },
-        { 13, 12, 12, },
+        { 0, 16, 16 },
+        { 0, 32, 32 },
+    }, {
+        { 0, 4, 4 },
+        { 0, 8, 8 },
+    }, {
+        { 0,  8,  8 },
+        { 0, 16, 16 },
+    }, {
+        { 10, 20, 20 },
+        { 20, 40, 40 },
     },
 };
 
-static uint8_t aspx_codebook_noise_off[2][3] = {
-        { 30, 29, 29, },
-        { 13, 12, 12, },
-};
+static const uint8_t aspx_codebook_noise_off[2] = { 29, 12 };
 
 static const uint8_t scale_factors_bits[121] = {
     17, 14, 14, 14, 14, 14, 14, 15, 14, 14, 14, 14, 14, 14, 14, 14,
@@ -889,7 +893,7 @@ static const uint8_t sbg_template_highres[] = {
     36, 38, 40, 42, 44, 47, 50, 53, 56, 59, 62,
 };
 
-static const int tab_border[5][3][5] = {
+static const uint8_t tab_border[5][3][5] = {
     {
         { 0, 6, 0, 0, 0, },
         { 0, 3, 6, 0, 0, },
