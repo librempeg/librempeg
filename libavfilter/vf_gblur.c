@@ -220,7 +220,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     GBlurContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out;
-    int plane;
 
     set_params(s->sigma,  s->steps, &s->postscale,  &s->boundaryscale,  &s->nu);
     set_params(s->sigmaV, s->steps, &s->postscaleV, &s->boundaryscaleV, &s->nuV);
@@ -246,7 +245,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
 
-    for (plane = 0; plane < s->nb_planes; plane++) {
+    for (int plane = 0; plane < s->nb_planes; plane++) {
         const int height = s->planeheight[plane];
         const int width = s->planewidth[plane];
         float *bptr = s->buffer;
@@ -254,7 +253,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         const uint16_t *src16 = (const uint16_t *)in->data[plane];
         uint8_t *dst = out->data[plane];
         uint16_t *dst16 = (uint16_t *)out->data[plane];
-        int y, x;
 
         if (!(s->planes & (1 << plane))) {
             if (out != in)
@@ -269,16 +267,16 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                                 in->data[plane], in->linesize[plane],
                                 width * sizeof(float), height);
         } else if (s->depth == 8) {
-            for (y = 0; y < height; y++) {
-                for (x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
                     bptr[x] = src[x];
                 }
                 bptr += width;
                 src += in->linesize[plane];
             }
         } else {
-            for (y = 0; y < height; y++) {
-                for (x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
                     bptr[x] = src16[x];
                 }
                 bptr += width;
@@ -294,15 +292,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                                 (uint8_t *)bptr, width * sizeof(float),
                                 width * sizeof(float), height);
         } else if (s->depth == 8) {
-            for (y = 0; y < height; y++) {
-                for (x = 0; x < width; x++)
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++)
                     dst[x] = lrintf(bptr[x]);
                 bptr += width;
                 dst += out->linesize[plane];
             }
         } else {
-            for (y = 0; y < height; y++) {
-                for (x = 0; x < width; x++)
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++)
                     dst16[x] = lrintf(bptr[x]);
                 bptr += width;
                 dst16 += out->linesize[plane] / 2;
