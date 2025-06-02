@@ -356,6 +356,26 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     return ret;
 }
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const NegateContext *s_src = src->priv;
+    NegateContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    if (s_dst->requested_components != s_src->requested_components) {
+        s_dst->requested_components = s_src->requested_components;
+        config_input(dst->inputs[0]);
+    }
+    s_dst->negate_alpha = s_src->negate_alpha;
+
+    return 0;
+}
+#endif
+
 static const AVFilterPad inputs[] = {
     {
         .name         = "default",
@@ -372,6 +392,9 @@ const FFFilter ff_vf_negate = {
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
                      AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(NegateContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
