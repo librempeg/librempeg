@@ -230,6 +230,24 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     return config_input(ctx->inputs[0]);
 }
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const LimiterContext *s_src = src->priv;
+    LimiterContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->min    = s_src->min;
+    s_dst->max    = s_src->max;
+    s_dst->planes = s_src->planes;
+
+    return 0;
+}
+#endif
+
 static const AVFilterPad inputs[] = {
     {
         .name         = "default",
@@ -248,6 +266,9 @@ const FFFilter ff_vf_limiter = {
                      AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(LimiterContext),
     .init          = init,
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
