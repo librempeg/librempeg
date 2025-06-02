@@ -300,6 +300,24 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const DBlurContext *s_src = src->priv;
+    DBlurContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->angle  = s_src->angle;
+    s_dst->radius = s_src->radius;
+    s_dst->planes = s_src->planes;
+
+    return 0;
+}
+#endif
+
 static const AVFilterPad dblur_inputs[] = {
     {
         .name         = "default",
@@ -317,6 +335,9 @@ const FFFilter ff_vf_dblur = {
                      AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(DBlurContext),
     .uninit        = uninit,
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(dblur_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
