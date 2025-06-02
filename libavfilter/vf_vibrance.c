@@ -414,6 +414,25 @@ static av_cold int config_input(AVFilterLink *inlink)
     return 0;
 }
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const VibranceContext *s_src = src->priv;
+    VibranceContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->intensity = s_src->intensity;
+    s_dst->alternate = s_src->alternate;
+    memcpy(s_dst->balance, s_src->balance, sizeof(s_src->balance));
+    memcpy(s_dst->lcoeffs, s_src->lcoeffs, sizeof(s_src->lcoeffs));
+
+    return 0;
+}
+#endif
+
 static const AVFilterPad vibrance_inputs[] = {
     {
         .name           = "default",
@@ -447,6 +466,9 @@ const FFFilter ff_vf_vibrance = {
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
                      AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(VibranceContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(vibrance_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pixel_fmts),
