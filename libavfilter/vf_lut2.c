@@ -255,13 +255,14 @@ static int lut2_##zname##_##xname##_##yname(AVFilterContext *ctx,               
     AVFrame *out = td->out;                                                      \
     AVFrame *srcx = td->srcx;                                                    \
     AVFrame *srcy = td->srcy;                                                    \
+    const int depthx = s->depthx;                                                \
     const int odepth = s->odepth;                                                \
-    int p, y, x;                                                                 \
                                                                                  \
-    for (p = 0; p < s->nb_planes; p++) {                                         \
+    for (int p = 0; p < s->nb_planes; p++) {                                     \
         const int slice_start = (s->heightx[p] * jobnr) / nb_jobs;               \
         const int slice_end = (s->heightx[p] * (jobnr+1)) / nb_jobs;             \
         const uint16_t *lut = s->lut[p];                                         \
+        const int widthx = s->widthx[p];                                         \
         const xtype *srcxx;                                                      \
         const ytype *srcyy;                                                      \
         ztype *dst;                                                              \
@@ -270,10 +271,9 @@ static int lut2_##zname##_##xname##_##yname(AVFilterContext *ctx,               
         srcxx = (const xtype *)(srcx->data[p] + slice_start * srcx->linesize[p]);\
         srcyy = (const ytype *)(srcy->data[p] + slice_start * srcy->linesize[p]);\
                                                                                  \
-        for (y = slice_start; y < slice_end; y++) {                              \
-            for (x = 0; x < s->widthx[p]; x++) {                                 \
-                dst[x] = av_clip_uintp2_c(lut[(srcyy[x] << s->depthx) | srcxx[x]], odepth); \
-            }                                                                    \
+        for (int y = slice_start; y < slice_end; y++) {                          \
+            for (int x = 0; x < widthx; x++)                                     \
+                dst[x] = av_clip_uintp2_c(lut[(srcyy[x] << depthx) | srcxx[x]], odepth); \
                                                                                  \
             dst   += out->linesize[p] / zdiv;                                    \
             srcxx += srcx->linesize[p] / xdiv;                                   \
