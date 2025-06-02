@@ -595,7 +595,7 @@ static const AVFilterPad rotate_outputs[] = {
 
 const FFFilter ff_vf_rotate = {
     .p.name        = "rotate",
-    .p.description = NULL_IF_CONFIG_SMALL("Rotate the input image."),
+    .p.description = NULL_IF_CONFIG_SMALL("Rotate the input video stream."),
     .p.priv_class  = &rotate_class,
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(RotContext),

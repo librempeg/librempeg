@@ -305,7 +305,7 @@ static const AVFilterPad outputs[] = {
 
 const FFFilter ff_vf_shear = {
     .p.name          = "shear",
-    .p.description   = NULL_IF_CONFIG_SMALL("Shear transform the input image."),
+    .p.description   = NULL_IF_CONFIG_SMALL("Shear transform the input video stream."),
     .p.priv_class    = &shear_class,
     .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
                        AVFILTER_FLAG_FRAME_THREADS,

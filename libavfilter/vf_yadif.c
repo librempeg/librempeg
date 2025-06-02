@@ -323,7 +323,7 @@ static const AVFilterPad yadif_outputs[] = {
 
 const FFFilter ff_vf_yadif = {
     .p.name        = "yadif",
-    .p.description = NULL_IF_CONFIG_SMALL("Deinterlace the input image."),
+    .p.description = NULL_IF_CONFIG_SMALL("Deinterlace the input video stream."),
     .p.priv_class  = &yadif_class,
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(YADIFContext),

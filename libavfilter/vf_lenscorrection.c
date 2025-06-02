@@ -360,7 +360,7 @@ static const AVFilterPad lenscorrection_outputs[] = {
 
 const FFFilter ff_vf_lenscorrection = {
     .p.name        = "lenscorrection",
-    .p.description = NULL_IF_CONFIG_SMALL("Rectify the image by correcting for lens distortion."),
+    .p.description = NULL_IF_CONFIG_SMALL("Rectify the video by correcting for lens distortion."),
     .p.priv_class  = &lenscorrection_class,
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
                      AVFILTER_FLAG_FRAME_THREADS,

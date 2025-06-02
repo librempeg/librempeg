@@ -226,7 +226,7 @@ static const AVFilterPad bwdif_outputs[] = {
 
 const FFFilter ff_vf_bwdif = {
     .p.name        = "bwdif",
-    .p.description = NULL_IF_CONFIG_SMALL("Deinterlace the input image."),
+    .p.description = NULL_IF_CONFIG_SMALL("Deinterlace the input video stream."),
     .p.priv_class  = &bwdif_class,
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(BWDIFContext),
