@@ -193,7 +193,7 @@ static int query_formats(const AVFilterContext *ctx,
     case 12: pix_fmts = bit12_pix_fmts; break;
     case 14: pix_fmts = bit14_pix_fmts; break;
     case 16: pix_fmts = bit16_pix_fmts; break;
-    default: av_assert0(0);
+    default: return AVERROR_BUG;
     }
 
     return ff_formats_ref(ff_make_format_list(pix_fmts), &cfg_out[0]->formats);
