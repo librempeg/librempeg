@@ -135,6 +135,22 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const AudioInvertContext *s_src = src->priv;
+    AudioInvertContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    if (av_channel_layout_compare(&s_dst->ch_layout, &s_src->ch_layout))
+        return av_channel_layout_copy(&s_dst->ch_layout, &s_src->ch_layout);
+    return 0;
+}
+#endif
+
 static const AVFilterPad inputs[] = {
     {
         .name         = "default",
@@ -158,6 +174,9 @@ const FFFilter ff_af_ainvert = {
     .p.description   = NULL_IF_CONFIG_SMALL("Invert Audio Polarity."),
     .p.priv_class    = &ainvert_class,
     .priv_size       = sizeof(AudioInvertContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P, AV_SAMPLE_FMT_S64P,
