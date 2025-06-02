@@ -139,8 +139,10 @@ static av_cold int ac3_decode_init(AVCodecContext *avctx)
 #if USE_FIXED
     ff_ac3_init_static();
 #else
+    {
     static AVOnce init_static_once = AV_ONCE_INIT;
     ff_thread_once(&init_static_once, ac3_float_tables_init);
+    }
 #endif
 
     return 0;
