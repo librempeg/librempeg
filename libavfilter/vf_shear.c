@@ -287,6 +287,29 @@ static int process_command(AVFilterContext *ctx,
     return 0;
 }
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const ShearContext *s_src = src->priv;
+    ShearContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    if (memcmp(s_dst->fillcolor, s_src->fillcolor, sizeof(s_src->fillcolor))) {
+        memcpy(s_dst->fillcolor, s_src->fillcolor, sizeof(s_src->fillcolor));
+        ff_draw_color(&s_dst->draw, &s_dst->color, s_dst->fillcolor);
+    }
+    s_dst->fillcolor_enable = s_src->fillcolor_enable;
+    s_dst->interp = s_src->interp;
+    s_dst->shx = s_src->shx;
+    s_dst->shy = s_src->shy;
+
+    return 0;
+}
+#endif
+
 static const AVFilterPad inputs[] = {
     {
         .name         = "default",
@@ -310,6 +333,9 @@ const FFFilter ff_vf_shear = {
     .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
                        AVFILTER_FLAG_FRAME_THREADS,
     .priv_size       = sizeof(ShearContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
