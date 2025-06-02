@@ -25,7 +25,9 @@
 #include "libavutil/vulkan_loader.h"
 
 #define DECODER_IS_SDR(codec_id) \
-    ((codec_id) == AV_CODEC_ID_FFV1)
+    (((codec_id) == AV_CODEC_ID_FFV1) || \
+     ((codec_id) == AV_CODEC_ID_PRORESRAW) || \
+     ((codec_id) == AV_CODEC_ID_PRORES))
 
 #if CONFIG_H264_VULKAN_HWACCEL
 extern const FFVulkanDecodeDescriptor ff_vk_dec_h264_desc;
@@ -41,6 +43,9 @@ extern const FFVulkanDecodeDescriptor ff_vk_dec_av1_desc;
 #endif
 #if CONFIG_FFV1_VULKAN_HWACCEL
 extern const FFVulkanDecodeDescriptor ff_vk_dec_ffv1_desc;
+#endif
+#if CONFIG_PRORES_VULKAN_HWACCEL
+extern const FFVulkanDecodeDescriptor ff_vk_dec_prores_desc;
 #endif
 
 static const FFVulkanDecodeDescriptor *dec_descs[] = {
@@ -58,6 +63,9 @@ static const FFVulkanDecodeDescriptor *dec_descs[] = {
 #endif
 #if CONFIG_FFV1_VULKAN_HWACCEL
     &ff_vk_dec_ffv1_desc,
+#endif
+#if CONFIG_PRORES_VULKAN_HWACCEL
+    &ff_vk_dec_prores_desc,
 #endif
 };
 
