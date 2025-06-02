@@ -194,7 +194,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     DBlurContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out;
-    int plane;
 
     set_params(s, s->angle, s->radius);
 
@@ -219,7 +218,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
 
-    for (plane = 0; plane < s->nb_planes; plane++) {
+    for (int plane = 0; plane < s->nb_planes; plane++) {
         const int height = s->planeheight[plane];
         const int width = s->planewidth[plane];
         float *bptr = s->buffer;
@@ -229,7 +228,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         uint8_t *dst = out->data[plane];
         uint16_t *dst16 = (uint16_t *)out->data[plane];
         float *dst32 = (float *)out->data[plane];
-        int y, x;
 
         if (!(s->planes & (1 << plane))) {
             if (out != in)
@@ -240,24 +238,24 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
 
         if (s->depth == 8) {
-            for (y = 0; y < height; y++) {
-                for (x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
                     bptr[x] = src[x];
                 }
                 bptr += width;
                 src += in->linesize[plane];
             }
         } else if (s->depth <= 16) {
-            for (y = 0; y < height; y++) {
-                for (x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
                     bptr[x] = src16[x];
                 }
                 bptr += width;
                 src16 += in->linesize[plane] / 2;
             }
         } else {
-            for (y = 0; y < height; y++) {
-                for (x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
                     memcpy(bptr, src32, width * sizeof(float));
                 }
                 bptr += width;
@@ -269,24 +267,24 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
         bptr = s->buffer;
         if (s->depth == 8) {
-            for (y = 0; y < height; y++) {
-                for (x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
                     dst[x] = av_clip_uint8(lrintf(bptr[x]));
                 }
                 bptr += width;
                 dst += out->linesize[plane];
             }
         } else if (s->depth <= 16) {
-            for (y = 0; y < height; y++) {
-                for (x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
                     dst16[x] = av_clip_uintp2_c(lrintf(bptr[x]), s->depth);
                 }
                 bptr += width;
                 dst16 += out->linesize[plane] / 2;
             }
         } else {
-            for (y = 0; y < height; y++) {
-                for (x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
                     memcpy(dst32, bptr, width * sizeof(float));
                 }
                 bptr += width;
