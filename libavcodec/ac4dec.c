@@ -314,6 +314,8 @@ typedef struct Substream {
     int     spec_frontend_m;
     int     spec_frontend_s;
 
+    DECLARE_ALIGNED(32, float, g_sum)[MAX_QMF_TSLOTS];
+
     SubstreamChannel ssch[12];
 } Substream;
 
@@ -6358,6 +6360,7 @@ static void channel_companding(AC4DecodeContext *s, Substream *ss, int ch)
 
         ssch->L[ts] = sum * 0.9105f / K;
         ssch->g[ts] = powf(ssch->L[ts], (1.f - a) / a);
+        ss->g_sum[ts] += ssch->g[ts];
     }
 
     if (ss->sync_flag == 0) {
@@ -6386,12 +6389,6 @@ static void channel_companding(AC4DecodeContext *s, Substream *ss, int ch)
                 }
             }
         }
-    } else {
-        if (ss->compand_on[ch]) {
-            ;
-        } else if (ss->compand_avg) {
-            ;
-        }
     }
 }
 
@@ -6400,8 +6397,48 @@ static void channels_companding(AC4DecodeContext *s, Substream *ss, int nb_ch)
     if (s->substream.codec_mode < CM_ASPX)
         return;
 
+    memset(ss->g_sum, 0, sizeof(ss->g_sum));
+
     for (int ch = 0; ch < nb_ch; ch++)
         channel_companding(s, ss, ch);
+
+    if (ss->sync_flag) {
+        const float a = 0.65f;
+        const float G = powf(0.5f, -1.f / a);
+
+        for (int ch = 0; ch < nb_ch; ch++) {
+            SubstreamChannel *ssch = &ss->ssch[ch];
+            const int ts1 = ssch->atsg_sig[ssch->aspx_num_env] * s->num_ts_in_ats;
+            const int ts0 = ssch->atsg_sig[0] * s->num_ts_in_ats;
+            const int sb0 = 0, sb1 = ssch->sbx;
+
+            if (ss->compand_on[ch]) {
+                for (int ts = ts0; ts < ts1; ts++) {
+                    float factor = G * ss->g_sum[ts] / nb_ch;
+
+                    for (int sb = sb0; sb < sb1; sb++) {
+                        ssch->Q[0][ts][sb] *= factor;
+                        ssch->Q[1][ts][sb] *= factor;
+                    }
+                }
+            } else if (ss->compand_avg) {
+                const int D = ts1 - ts0;
+                float factor = 0.f;
+
+                for (int ts = ts0; ts < ts1; ts++)
+                    factor += ss->g_sum[ts] / nb_ch;
+                factor /= D;
+                factor *= G;
+
+                for (int ts = ts0; ts < ts1; ts++) {
+                    for (int sb = sb0; sb < sb1; sb++) {
+                        ssch->Q[0][ts][sb] *= factor;
+                        ssch->Q[1][ts][sb] *= factor;
+                    }
+                }
+            }
+        }
+    }
 }
 
 static void decode_channel(AC4DecodeContext *s, int ch, float *pcm)
