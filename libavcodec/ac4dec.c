@@ -299,7 +299,7 @@ typedef struct Substream {
     uint8_t mode_2ch;
     uint8_t chel_matsel;
 
-    uint8_t compand_on[5];
+    uint8_t compand_on[12];
     uint8_t compand_avg;
 
     int     max_sfb_master;
