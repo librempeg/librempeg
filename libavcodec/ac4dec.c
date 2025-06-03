@@ -3385,8 +3385,7 @@ static int aspx_elements(AC4DecodeContext *s, Substream *ss, SubstreamChannel *s
                          int iframe)
 {
     int sb, j, sbg = 0, goal_sb, msb, usb;
-    int source_band_low;
-    int idx[6];
+    int source_band_low, prev_idx;
 
     ssch->master_reset = !!(s->first_frame +
                             (ss->prev_aspx_start_freq != ss->aspx_start_freq) +
@@ -3421,7 +3420,7 @@ static int aspx_elements(AC4DecodeContext *s, Substream *ss, SubstreamChannel *s
         return AVERROR_INVALIDDATA;
     ssch->num_sb_aspx = ssch->sbg_sig_highres[ssch->num_sbg_sig_highres] - ssch->sbx;
 
-    ssch->num_sbg_sig_lowres = ssch->num_sbg_sig_highres - floorf(ssch->num_sbg_sig_highres / 2.);
+    ssch->num_sbg_sig_lowres = ssch->num_sbg_sig_highres - floorf(ssch->num_sbg_sig_highres / 2.f);
     av_log(s->avctx, AV_LOG_DEBUG, "num_sbg_sig_lowres: %d\n", ssch->num_sbg_sig_lowres);
 
     ssch->sbg_sig_lowres[0] = ssch->sbg_sig_highres[0];
@@ -3440,18 +3439,20 @@ static int aspx_elements(AC4DecodeContext *s, Substream *ss, SubstreamChannel *s
     ssch->num_sbg_sig[0] = ssch->num_sbg_sig_lowres;
     ssch->num_sbg_sig[1] = ssch->num_sbg_sig_highres;
 
-    ssch->num_sbg_noise = FFMAX(1, floorf(ss->aspx_noise_sbg * log2f(ssch->sbz / (float)ssch->sbx) + 0.5));
+    ssch->num_sbg_noise = FFMAX(1, floorf(ss->aspx_noise_sbg * log2f(ssch->sbz / (float)ssch->sbx) + 0.5f));
     if (ssch->num_sbg_noise > 5) {
         av_log(s->avctx, AV_LOG_ERROR, "invalid num sbg noise: %d\n", ssch->num_sbg_noise);
         return AVERROR_INVALIDDATA;
     }
 
-    idx[0] = 0;
+    prev_idx = 0;
     ssch->sbg_noise[0] = ssch->sbg_sig_lowres[0];
     for (int sbg = 1; sbg <= ssch->num_sbg_noise; sbg++) {
-        idx[sbg] = idx[sbg-1];
-        idx[sbg] += floorf((ssch->num_sbg_sig_lowres - idx[sbg - 1]) / (float)(ssch->num_sbg_noise + 1 - sbg));
-        ssch->sbg_noise[sbg] = ssch->sbg_sig_lowres[idx[sbg]];
+        int idx = prev_idx;
+
+        idx += floorf((ssch->num_sbg_sig_lowres - prev_idx) / (float)(ssch->num_sbg_noise + 1 - sbg));
+        ssch->sbg_noise[sbg] = ssch->sbg_sig_lowres[idx];
+        prev_idx = idx;
     }
 
     msb = ssch->sba;
