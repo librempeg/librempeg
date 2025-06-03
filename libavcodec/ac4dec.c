@@ -5500,6 +5500,7 @@ static void mono_deq_signal_factors(AC4DecodeContext *s, Substream *ss, int ch_i
 {
     SubstreamChannel *ssch = &ss->ssch[ch_id];
     const int a = 1 + (ssch->aspx_qmode_env == 0);
+    const int b = av_ceil_log2(ssch->sbx);
 
     memset(ssch->scf_sig_sbg, 0, sizeof(ssch->scf_sig_sbg));
 
@@ -5508,7 +5509,7 @@ static void mono_deq_signal_factors(AC4DecodeContext *s, Substream *ss, int ch_i
             av_assert2(6 + ssch->qscf_sig_sbg[atsg][sbg] / a >= -128);
             av_assert2(6 + ssch->qscf_sig_sbg[atsg][sbg] / a <=  127);
 
-            ssch->scf_sig_sbg[atsg][sbg] = 6 + ssch->qscf_sig_sbg[atsg][sbg] / a;
+            ssch->scf_sig_sbg[atsg][sbg] = b + ssch->qscf_sig_sbg[atsg][sbg] / a;
         }
 
         if (ssch->aspx_sig_delta_dir[atsg] == 0 &&
@@ -5542,6 +5543,7 @@ static void joint_deq_signoise_factors(AC4DecodeContext *s,
     SubstreamChannel *ssch1 = &ss->ssch[ch_id[1]];
 #define PAN_OFFSET 12
     const int a = 1 + (ssch0->aspx_qmode_env == 0);
+    const int b = av_ceil_log2(ssch0->sbx);
 
     memset(ssch0->scf_sig_sbg, 0, sizeof(ssch0->scf_sig_sbg));
     memset(ssch0->scf_noise_sbg, 0, sizeof(ssch0->scf_noise_sbg));
@@ -5551,7 +5553,7 @@ static void joint_deq_signoise_factors(AC4DecodeContext *s,
 
     for (int atsg = 0; atsg < ssch0->aspx_num_env; atsg++) {
         for (int sbg = 0; sbg < ssch0->num_sbg_sig[ssch0->atsg_freqres[atsg]]; sbg++) {
-            int nom = 6 + ssch0->qscf_sig_sbg[atsg][sbg] / a + 1;
+            int nom = b + ssch0->qscf_sig_sbg[atsg][sbg] / a + 1;
             int denom_a = PAN_OFFSET - ssch1->qscf_sig_sbg[atsg][sbg] / a;
             int denom_b = ssch1->qscf_sig_sbg[atsg][sbg] / a - PAN_OFFSET;
 
