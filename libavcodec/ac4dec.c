@@ -4577,9 +4577,9 @@ static int channel_element_5x(AC4DecodeContext *s, int lfe, int iframe)
                 return ret;
         }
         if (ss->coding_config == 0) {
-           ret = mono_data(s, ss, 2, 0, iframe);
-           if (ret < 0)
-               return ret;
+            ret = mono_data(s, ss, 2, 0, iframe);
+            if (ret < 0)
+                return ret;
         }
 
         s->ch_map[AV_CHAN_FRONT_LEFT]   = 0;
