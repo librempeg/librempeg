@@ -161,13 +161,13 @@ typedef struct SubstreamChannel {
     int     aspx_tsg_ptr_prev;
 
     int     aspx_qmode_env;
-    int     aspx_sig_delta_dir[MAX_ASPX_SIGNAL];
-    int     aspx_noise_delta_dir[2];
-    int     aspx_tna_mode[MAX_SBG_NOISE];
-    int     aspx_tna_mode_prev[MAX_SBG_NOISE];
-    int     aspx_add_harmonic[MAX_QMF_TSLOTS];
-    int     aspx_fic_used_in_sfb[MAX_QMF_TSLOTS];
-    int     aspx_tic_used_in_slot[MAX_QMF_TSLOTS];
+    uint8_t aspx_sig_delta_dir[MAX_ASPX_SIGNAL];
+    uint8_t aspx_noise_delta_dir[2];
+    uint8_t aspx_tna_mode[MAX_SBG_NOISE];
+    uint8_t aspx_tna_mode_prev[MAX_SBG_NOISE];
+    uint8_t aspx_add_harmonic[MAX_QMF_TSLOTS];
+    uint8_t aspx_fic_used_in_sfb[MAX_QMF_TSLOTS];
+    uint8_t aspx_tic_used_in_slot[MAX_QMF_TSLOTS];
     int     aspx_xover_subband_offset;
     int     aspx_balance;
 
@@ -3335,7 +3335,7 @@ static int aspx_ec_data(AC4DecodeContext *s,
                         SubstreamChannel *ssch,
                         int data_type, int num_env,
                         uint8_t *freq_res, int quant_mode,
-                        int stereo_mode, int *direction)
+                        int stereo_mode, uint8_t *direction)
 {
     int dir, num_sbg, ret;
 
