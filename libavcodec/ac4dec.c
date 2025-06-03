@@ -208,7 +208,7 @@ typedef struct SubstreamChannel {
     float   chirp_arr_prev[MAX_SBG_NOISE];
     float   est_sig_sb[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
     uint8_t sine_idx_sb[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
-    int     sine_idx_sb_prev[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
+    uint8_t sine_idx_sb_prev[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
     uint8_t sine_area_sb[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
     float   sine_lev_sb[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
     float   noise_lev_sb[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
