@@ -3388,17 +3388,20 @@ static int cmpints(const void *p1, const void *p2)
 }
 
 static int aspx_elements(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch,
-                         int iframe)
+                         const int iframe)
 {
     int sb, j, sbg = 0, goal_sb, msb, usb;
     int source_band_low, prev_idx;
 
-    ssch->master_reset = !!(s->first_frame +
-                            (ss->prev_aspx_start_freq != ss->aspx_start_freq) +
-                            (ss->prev_aspx_stop_freq != ss->aspx_stop_freq) +
-                            (ss->prev_aspx_master_freq_scale != ss->aspx_master_freq_scale));
+    ssch->master_reset = 0;
+    if (iframe) {
+        ssch->master_reset = !!(s->first_frame +
+                                (ss->prev_aspx_start_freq != ss->aspx_start_freq) +
+                                (ss->prev_aspx_stop_freq != ss->aspx_stop_freq) +
+                                (ss->prev_aspx_master_freq_scale != ss->aspx_master_freq_scale));
+    }
 
-    if (ssch->master_reset && iframe) {
+    if (ssch->master_reset) {
         if (ss->aspx_master_freq_scale == 1) {
             ssch->num_sbg_master = 22 - 2 * ss->aspx_start_freq - 2 * ss->aspx_stop_freq;
             for (int sbg = 0; sbg <= ssch->num_sbg_master; sbg++) {
@@ -6200,8 +6203,6 @@ static void assemble_hf_signal(AC4DecodeContext *s, Substream *ss, int ch_id)
     SubstreamChannel *ssch = &ss->ssch[ch_id];
     const int sbx = ssch->sbx;
     const int ts_offset_hfadj = 4;
-
-    ssch->master_reset = 0;
 
     memcpy(ssch->Y_prev, ssch->Y, sizeof(ssch->Y));
     memset(ssch->Y, 0, sizeof(ssch->Y));
