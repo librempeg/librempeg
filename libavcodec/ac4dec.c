@@ -5379,7 +5379,7 @@ static int get_qsignal_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_
         sbg_idx_high2low[sbg] = sbg_low;
     }
 
-    delta = ((ch_id == 1) && (ssch->aspx_balance == 1)) + 1;
+    delta = ((ch_id & 1) && (ssch->aspx_balance == 1)) + 1;
 
     memcpy(ssch->qscf_sig_sbg_prev, ssch->qscf_sig_sbg, sizeof(ssch->qscf_sig_sbg));
     memset(ssch->qscf_sig_sbg, 0, sizeof(ssch->qscf_sig_sbg));
@@ -5427,7 +5427,7 @@ static int get_qnoise_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_i
     SubstreamChannel *ssch = &ss->ssch[ch_id];
     int delta;
 
-    delta = ((ch_id == 1) && (ssch->aspx_balance == 1)) + 1;
+    delta = ((ch_id & 1) && (ssch->aspx_balance == 1)) + 1;
 
     memcpy(ssch->qscf_noise_prev, ssch->qscf_noise_sbg, sizeof(ssch->qscf_noise_sbg));
     memset(ssch->qscf_noise_sbg, 0, sizeof(ssch->qscf_noise_sbg));
