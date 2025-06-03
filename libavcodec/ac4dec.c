@@ -866,6 +866,8 @@ static int frame_rate_multiply_info(AC4DecodeContext *s, PresentationInfo *p)
         break;
     }
 
+    av_log(s->avctx, AV_LOG_DEBUG, "frame_rate_factor : %d\n", p->frame_rate_factor);
+
     return 0;
 }
 
