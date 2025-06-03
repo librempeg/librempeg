@@ -174,7 +174,7 @@ typedef struct SubstreamChannel {
     uint8_t atsg_freqres[MAX_ASPX_SIGNAL];
     uint8_t atsg_freqres_prev[MAX_ASPX_SIGNAL];
     uint8_t atsg_sig[MAX_SBG_NOISE];
-    uint8_t atsg_noise[3];
+    uint8_t atsg_noise[MAX_ASPX_SIGNAL + 1];
     int     previous_stop_pos;
 
     int     sbg_noise[MAX_SBG_NOISE];
@@ -3102,7 +3102,7 @@ static int aspx_framing(AC4DecodeContext *s, Substream *ss, int ch_id, int ifram
     if (ssch->aspx_int_class < 0)
         return AVERROR_INVALIDDATA;
 
-    ssch->aspx_num_env_prev = ssch->aspx_num_env;
+    ssch->aspx_num_env_prev = FFMAX(1, ssch->aspx_num_env);
 
     switch (ssch->aspx_int_class) {
     case FIXFIX:
@@ -3169,6 +3169,8 @@ static int aspx_framing(AC4DecodeContext *s, Substream *ss, int ch_id, int ifram
 
     if (!ssch->aspx_num_env_prev)
         ssch->aspx_num_env_prev = ssch->aspx_num_env;
+    ssch->aspx_num_env_prev = FFMAX(1, ssch->aspx_num_env_prev);
+
     if (!ssch->aspx_num_noise_prev)
         ssch->aspx_num_noise_prev = ssch->aspx_num_noise;
 
@@ -5380,6 +5382,8 @@ static int get_qsignal_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_
     memcpy(ssch->qscf_sig_sbg_prev, ssch->qscf_sig_sbg, sizeof(ssch->qscf_sig_sbg));
     memset(ssch->qscf_sig_sbg, 0, sizeof(ssch->qscf_sig_sbg));
 
+    ssch->aspx_num_env_prev = FFMAX(1, ssch->aspx_num_env_prev);
+
     /* Loop over Envelopes */
     for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
         /* Loop over scale factor subband groups */
@@ -5425,6 +5429,8 @@ static int get_qnoise_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_i
 
     memcpy(ssch->qscf_noise_prev, ssch->qscf_noise_sbg, sizeof(ssch->qscf_noise_sbg));
     memset(ssch->qscf_noise_sbg, 0, sizeof(ssch->qscf_noise_sbg));
+
+    ssch->aspx_num_noise_prev = FFMAX(1, ssch->aspx_num_noise_prev);
 
     /* Loop over envelopes */
     for (int atsg = 0; atsg < ssch->aspx_num_noise; atsg++) {
