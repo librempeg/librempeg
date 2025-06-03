@@ -5506,8 +5506,8 @@ static void mono_deq_signal_factors(AC4DecodeContext *s, Substream *ss, int ch_i
 
     for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
         for (int sbg = 0; sbg < ssch->num_sbg_sig[ssch->atsg_freqres[atsg]]; sbg++) {
-            av_assert2(6 + ssch->qscf_sig_sbg[atsg][sbg] / a >= -128);
-            av_assert2(6 + ssch->qscf_sig_sbg[atsg][sbg] / a <=  127);
+            av_assert2(b + ssch->qscf_sig_sbg[atsg][sbg] / a >= -128);
+            av_assert2(b + ssch->qscf_sig_sbg[atsg][sbg] / a <=  127);
 
             ssch->scf_sig_sbg[atsg][sbg] = b + ssch->qscf_sig_sbg[atsg][sbg] / a;
         }
