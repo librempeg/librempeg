@@ -249,6 +249,25 @@ static av_cold int config_input(AVFilterLink *inlink)
     return 0;
 }
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const ColorizeContext *s_src = src->priv;
+    ColorizeContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->mix        = s_src->mix;
+    s_dst->hue        = s_src->hue;
+    s_dst->lightness  = s_src->lightness;
+    s_dst->saturation = s_src->saturation;
+
+    return 0;
+}
+#endif
+
 static const AVFilterPad colorize_inputs[] = {
     {
         .name           = "default",
@@ -276,8 +295,12 @@ const FFFilter ff_vf_colorize = {
     .p.name        = "colorize",
     .p.description = NULL_IF_CONFIG_SMALL("Overlay a solid color on the video stream."),
     .p.priv_class  = &colorize_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(ColorizeContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(colorize_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pixel_fmts),
