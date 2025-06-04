@@ -5593,13 +5593,16 @@ static void preflattening(AC4DecodeContext *s, Substream *ss, int ch_id)
     }
     /* Calculate the spectral signal envelope in dB over the current interval. */
     for (int sb = 0; sb < num_qmf_subbands; sb++) {
-        pow_env[sb] = 0.f;
+        float denom, nom = 0.f;
+
         for (int ts = ssch->atsg_sig[0] * s->num_ts_in_ats; ts < ssch->atsg_sig[ssch->aspx_num_env] * s->num_ts_in_ats; ts++) {
-            pow_env[sb] += powf(ssch->Q_low[0][ts][sb], 2);
-            pow_env[sb] += powf(ssch->Q_low[1][ts][sb], 2);
+            nom += powf(ssch->Q_low[0][ts][sb], 2);
+            nom += powf(ssch->Q_low[1][ts][sb], 2);
         }
-        pow_env[sb] /= (ssch->atsg_sig[ssch->aspx_num_env] - ssch->atsg_sig[0]) * s->num_ts_in_ats;
-        pow_env[sb] = 10 * log10f(pow_env[sb] + 1);
+
+        denom = (ssch->atsg_sig[ssch->aspx_num_env] - ssch->atsg_sig[0]) * s->num_ts_in_ats;
+        pow_env[sb] = nom / denom;
+        pow_env[sb] = 10.f * log10f(pow_env[sb] + 1.f);
         mean_energy += pow_env[sb];
     }
 
@@ -5821,11 +5824,10 @@ static void estimate_spectral_envelopes(AC4DecodeContext *s, Substream *ss, int 
     const int ts_offset_hfadj = 4;
 
     for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
-        int sbg = 0;
         /* Loop over QMF subbands in A-SPX range */
-        for (int sb = 0; sb < ssch->num_sb_aspx; sb++) {
+        for (int sb = 0, sbg = 0; sb < ssch->num_sb_aspx; sb++) {
+            float est_sig = 0.f;
             int tsa, tsz;
-            float est_sig = 0;
 
             av_assert2(sbg+1 < FF_ARRAY_ELEMS(ssch->sbg_sig[0]));
             /* Update current subband group */
