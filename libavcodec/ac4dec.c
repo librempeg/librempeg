@@ -3609,8 +3609,13 @@ static int aspx_data_2ch(AC4DecodeContext *s, Substream *ss,
         if (ssch1->aspx_int_class == FIXFIX && ssch1->aspx_num_env == 1)
             ssch1->aspx_qmode_env = 0;
     } else {
+        ssch1->sbx = ssch0->sbx;
+        ssch1->num_sb_aspx = ssch0->num_sb_aspx;
         ssch1->aspx_num_env = ssch0->aspx_num_env;
         ssch1->aspx_num_noise = ssch0->aspx_num_noise;
+        memcpy(ssch1->sbg_sig, ssch0->sbg_sig, sizeof(ssch0->sbg_sig));
+        memcpy(ssch1->atsg_sig, ssch0->atsg_sig, sizeof(ssch0->atsg_sig));
+        memcpy(ssch1->num_sbg_sig, ssch0->num_sbg_sig, sizeof(ssch0->num_sbg_sig));
         memcpy(ssch1->atsg_freqres, ssch0->atsg_freqres, sizeof(ssch0->atsg_freqres));
     }
 
