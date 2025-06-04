@@ -60,13 +60,14 @@ av_cold int ff_hashtable_alloc(FFHashtableContext **ctx, size_t key_size,
                                size_t val_size, size_t max_entries)
 {
     const size_t keyval_size = key_size + val_size;
+    FFHashtableContext *res;
 
     if (keyval_size < key_size || // did (unsigned,defined) wraparound happen?
         keyval_size > FFMIN(SIZE_MAX - sizeof(size_t) - (ALIGN - 1),
                             (SIZE_MAX - sizeof(FFHashtableContext)) / 2))
         return AVERROR(ERANGE);
 
-    FFHashtableContext *res = av_mallocz(sizeof(*res) + 2 * keyval_size);
+    res = av_mallocz(sizeof(*res) + 2 * keyval_size);
     if (!res)
         return AVERROR(ENOMEM);
     res->key_size = key_size;
