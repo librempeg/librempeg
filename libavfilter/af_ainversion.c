@@ -117,6 +117,25 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const AudioInversionContext *s_src = src->priv;
+    AudioInversionContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->maxf  = s_src->maxf;
+    s_dst->unity = s_src->unity;
+
+    if (av_channel_layout_compare(&s_dst->ch_layout, &s_src->ch_layout))
+        return av_channel_layout_copy(&s_dst->ch_layout, &s_src->ch_layout);
+    return 0;
+}
+#endif
+
 static const AVFilterPad inputs[] = {
     {
         .name         = "default",
@@ -140,6 +159,9 @@ const FFFilter ff_af_ainversion = {
     .p.description   = NULL_IF_CONFIG_SMALL("Apply Audio Inversion Filter."),
     .p.priv_class    = &ainversion_class,
     .priv_size       = sizeof(AudioInversionContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
