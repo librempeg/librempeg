@@ -197,11 +197,11 @@ typedef struct SubstreamChannel {
     int8_t  qscf_noise_prev[2][MAX_QMF_BANDS];
     int8_t  qscf_sig_sbg[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
     int8_t  qscf_sig_sbg_prev[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
-    int8_t  scf_sig_sbg[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
-    int8_t  scf_sig_sb[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
+    float   scf_sig_sbg[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
+    float   scf_sig_sb[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
     int8_t  qscf_noise_sbg[2][MAX_QMF_BANDS];
-    int8_t  scf_noise_sbg[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
-    int8_t  scf_noise_sb[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
+    float   scf_noise_sbg[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
+    float   scf_noise_sb[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
 
     float   gain_vec[MAX_QMF_BANDS];
     float   chirp_arr[MAX_SBG_NOISE];
@@ -5506,18 +5506,14 @@ static void aspx_processing(AC4DecodeContext *s, Substream *ss, int ch_id)
 static void mono_deq_signal_factors(AC4DecodeContext *s, Substream *ss, int ch_id)
 {
     SubstreamChannel *ssch = &ss->ssch[ch_id];
-    const int a = 1 + (ssch->aspx_qmode_env == 0);
-    const int b = av_ceil_log2(ssch->sbx);
+    const float a = 1 + (ssch->aspx_qmode_env == 0);
+    const float b = ssch->sbx;
 
     memset(ssch->scf_sig_sbg, 0, sizeof(ssch->scf_sig_sbg));
 
     for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
-        for (int sbg = 0; sbg < ssch->num_sbg_sig[ssch->atsg_freqres[atsg]]; sbg++) {
-            av_assert2(b + ssch->qscf_sig_sbg[atsg][sbg] / a >= -128);
-            av_assert2(b + ssch->qscf_sig_sbg[atsg][sbg] / a <=  127);
-
-            ssch->scf_sig_sbg[atsg][sbg] = b + ssch->qscf_sig_sbg[atsg][sbg] / a;
-        }
+        for (int sbg = 0; sbg < ssch->num_sbg_sig[ssch->atsg_freqres[atsg]]; sbg++)
+            ssch->scf_sig_sbg[atsg][sbg] = b * powf(2.f, ssch->qscf_sig_sbg[atsg][sbg] / a);
 
         if (ssch->aspx_sig_delta_dir[atsg] == 0 &&
             ssch->qscf_sig_sbg[atsg][0] == 0 &&
@@ -5534,12 +5530,8 @@ static void mono_deq_noise_factors(AC4DecodeContext *s, Substream *ss, int ch_id
     memset(ssch->scf_noise_sbg, 0, sizeof(ssch->scf_noise_sbg));
 
     for (int atsg = 0; atsg < ssch->aspx_num_noise; atsg++) {
-        for (int sbg = 0; sbg < ssch->num_sbg_noise; sbg++) {
-            av_assert2(NOISE_FLOOR_OFFSET - ssch->qscf_noise_sbg[atsg][sbg] >= -128);
-            av_assert2(NOISE_FLOOR_OFFSET - ssch->qscf_noise_sbg[atsg][sbg] <=  127);
-
-            ssch->scf_noise_sbg[atsg][sbg] = NOISE_FLOOR_OFFSET - ssch->qscf_noise_sbg[atsg][sbg];
-        }
+        for (int sbg = 0; sbg < ssch->num_sbg_noise; sbg++)
+            ssch->scf_noise_sbg[atsg][sbg] = powf(2.f, NOISE_FLOOR_OFFSET - ssch->qscf_noise_sbg[atsg][sbg]);
     }
 }
 
@@ -5549,8 +5541,8 @@ static void joint_deq_signoise_factors(AC4DecodeContext *s,
     SubstreamChannel *ssch0 = &ss->ssch[ch_id[0]];
     SubstreamChannel *ssch1 = &ss->ssch[ch_id[1]];
 #define PAN_OFFSET 12
-    const int a = 1 + (ssch0->aspx_qmode_env == 0);
-    const int b = av_ceil_log2(ssch0->sbx);
+    const float a = 1 + (ssch0->aspx_qmode_env == 0);
+    const float b = ssch0->sbx;
 
     memset(ssch0->scf_sig_sbg, 0, sizeof(ssch0->scf_sig_sbg));
     memset(ssch0->scf_noise_sbg, 0, sizeof(ssch0->scf_noise_sbg));
@@ -5560,33 +5552,23 @@ static void joint_deq_signoise_factors(AC4DecodeContext *s,
 
     for (int atsg = 0; atsg < ssch0->aspx_num_env; atsg++) {
         for (int sbg = 0; sbg < ssch0->num_sbg_sig[ssch0->atsg_freqres[atsg]]; sbg++) {
-            int nom = b + ssch0->qscf_sig_sbg[atsg][sbg] / a + 1;
-            int denom_a = PAN_OFFSET - ssch1->qscf_sig_sbg[atsg][sbg] / a;
-            int denom_b = ssch1->qscf_sig_sbg[atsg][sbg] / a - PAN_OFFSET;
+            float nom = b * powf(2.f, ssch0->qscf_sig_sbg[atsg][sbg] / a + 1.f);
+            float denom_a = 1.f + powf(2.f, PAN_OFFSET - ssch1->qscf_sig_sbg[atsg][sbg] / a);
+            float denom_b = 1.f + powf(2.f, ssch1->qscf_sig_sbg[atsg][sbg] / a - PAN_OFFSET);
 
-            av_assert2(nom - denom_a >= -128);
-            av_assert2(nom - denom_a <=  127);
-            av_assert2(nom - denom_b >= -128);
-            av_assert2(nom - denom_b <=  127);
-
-            ssch0->scf_sig_sbg[atsg][sbg] = nom - denom_a;
-            ssch1->scf_sig_sbg[atsg][sbg] = nom - denom_b;
+            ssch0->scf_sig_sbg[atsg][sbg] = nom / denom_a;
+            ssch1->scf_sig_sbg[atsg][sbg] = nom / denom_b;
         }
     }
 
     for (int atsg = 0; atsg < ssch0->aspx_num_noise; atsg++) {
         for (int sbg = 0; sbg < ssch0->num_sbg_noise; sbg++) {
-            int nom = NOISE_FLOOR_OFFSET - ssch0->qscf_noise_sbg[atsg][sbg] + 1;
-            int denom_a = PAN_OFFSET - ssch1->qscf_noise_sbg[atsg][sbg];
-            int denom_b = ssch1->qscf_noise_sbg[atsg][sbg] - PAN_OFFSET;
+            float nom = powf(2.f, NOISE_FLOOR_OFFSET - ssch0->qscf_noise_sbg[atsg][sbg] + 1.f);
+            float denom_a = 1.f + powf(2.f, PAN_OFFSET - ssch1->qscf_noise_sbg[atsg][sbg]);
+            float denom_b = 1.f + powf(2.f, ssch1->qscf_noise_sbg[atsg][sbg] - PAN_OFFSET);
 
-            av_assert2(nom - denom_a >= -128);
-            av_assert2(nom - denom_a <=  127);
-            av_assert2(nom - denom_b >= -128);
-            av_assert2(nom - denom_b <=  127);
-
-            ssch0->scf_noise_sbg[atsg][sbg] = nom - denom_a;
-            ssch1->scf_noise_sbg[atsg][sbg] = nom - denom_b;
+            ssch0->scf_noise_sbg[atsg][sbg] = nom / denom_a;
+            ssch1->scf_noise_sbg[atsg][sbg] = nom / denom_b;
         }
     }
 }
@@ -5962,10 +5944,10 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
     for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
         /* Loop over QMF subbands in A-SPX range */
         for (int sb = 0; sb < ssch->num_sb_aspx; sb++) {
-            const int sig_noise_fact = ssch->scf_sig_sb[atsg][sb] - ssch->scf_noise_sb[atsg][sb];
+            const float sig_noise_fact = ssch->scf_sig_sb[atsg][sb] / (1.f + ssch->scf_noise_sb[atsg][sb]);
 
-            ssch->sine_lev_sb[atsg][sb]  = ldexpf(ssch->sine_idx_sb[atsg][sb], sig_noise_fact / 2);
-            ssch->noise_lev_sb[atsg][sb] = ldexpf(1.f, ssch->scf_sig_sb[atsg][sb] / 2);
+            ssch->sine_lev_sb[atsg][sb]  = sqrtf(ssch->sine_idx_sb[atsg][sb] * sig_noise_fact);
+            ssch->noise_lev_sb[atsg][sb] = sqrtf(ssch->scf_sig_sb[atsg][sb]);
         }
     }
 
@@ -5977,13 +5959,15 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
         for (int sb = 0; sb < ssch->num_sb_aspx; sb++) {
             if (ssch->sine_area_sb[atsg][sb] == 0) {
                 float denom = EPSILON + ssch->est_sig_sb[atsg][sb];
-                int sub = 0;
+
                 if (!(atsg == ssch->aspx_tsg_ptr || atsg == p_sine_at_end))
-                    sub = ssch->scf_noise_sb[atsg][sb];
-                ssch->sig_gain_sb[atsg][sb] = ldexpf(1.f / denom, (ssch->scf_sig_sb[atsg][sb] - sub) / 2);
+                    denom *= 1.f + ssch->scf_noise_sb[atsg][sb];
+                ssch->sig_gain_sb[atsg][sb] = sqrtf(ssch->scf_sig_sb[atsg][sb] / denom);
             } else {
                 float denom = EPSILON + ssch->est_sig_sb[atsg][sb];
-                ssch->sig_gain_sb[atsg][sb] = ldexpf(1.f / denom, ssch->scf_sig_sb[atsg][sb] / 2);
+
+                denom *= 1.f + ssch->scf_noise_sb[atsg][sb];
+                ssch->sig_gain_sb[atsg][sb] = sqrtf(ssch->scf_sig_sb[atsg][sb] * ssch->scf_noise_sb[atsg][sb] / denom);
             }
         }
     }
@@ -5995,8 +5979,8 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
     for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
         /* Loop over limiter subband groups */
         for (int sbg = 0; sbg < ssch->num_sbg_lim; sbg++) {
-            int nom = 0;
-            float denom = EPSILON0;
+            float denom = EPSILON0, nom = 0.f;
+
             for (int sb = ssch->sbg_lim[sbg]-ssch->sbx; sb < ssch->sbg_lim[sbg+1]-1-ssch->sbx; sb++) {
                 av_assert2(sb < FF_ARRAY_ELEMS(ssch->scf_sig_sb[0]));
                 av_assert2(sb < FF_ARRAY_ELEMS(ssch->est_sig_sb[0]));
@@ -6005,7 +5989,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
                 denom += ssch->est_sig_sb[atsg][sb];
             }
 
-            ssch->max_sig_gain_sbg[atsg][sbg] = sqrtf(ldexpf(1.f, nom)/denom) * LIM_GAIN;
+            ssch->max_sig_gain_sbg[atsg][sbg] = sqrtf(nom/denom) * LIM_GAIN;
         }
 
         /* Map to QMF subbands */
@@ -6044,8 +6028,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
     for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
         /* Loop over limiter subband groups */
         for (int sbg = 0; sbg < ssch->num_sbg_lim; sbg++) {
-            float denom = EPSILON0;
-            int nom = 0;
+            float denom = EPSILON0, nom = 0.f;
 
             /* Loop over subbands */
             for (int sb = ssch->sbg_lim[sbg]-ssch->sbx; sb < ssch->sbg_lim[sbg+1]-1-ssch->sbx; sb++) {
@@ -6064,7 +6047,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
                       || (atsg == ssch->aspx_tsg_ptr) || (atsg == p_sine_at_end)))
                     denom += powf(ssch->noise_lev_sb_lim[atsg][sb], 2);
             }
-            ssch->boost_fact_sbg[atsg][sbg] = sqrtf(ldexpf(1.f, nom)/denom);
+            ssch->boost_fact_sbg[atsg][sbg] = sqrtf(nom/denom);
         }
     }
 
