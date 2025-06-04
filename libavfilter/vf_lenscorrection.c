@@ -44,6 +44,7 @@ typedef struct LenscorrectionCtx {
     int nb_planes;
     double cx, cy, k1, k2;
     int interpolation;
+    int changed;
     uint8_t fill_rgba[4];
     int fill_color[4];
 
@@ -270,7 +271,7 @@ static int config_output(AVFilterLink *outlink)
         rect->fill_color[3] = rect->fill_rgba[3] * factor;
     }
 
-    for (int plane = 0; plane < rect->nb_planes; plane++) {
+    for (int plane = 0; plane < rect->nb_planes && !rect->changed; plane++) {
         int w = rect->planewidth[plane];
         int h = rect->planeheight[plane];
 
@@ -280,6 +281,7 @@ static int config_output(AVFilterLink *outlink)
             return AVERROR(ENOMEM);
         calc_correction(ctx, plane);
     }
+    rect->changed = 1;
 
     return 0;
 }
@@ -334,13 +336,41 @@ static int process_command(AVFilterContext *ctx,
                            int res_len,
                            int flags)
 {
+    LenscorrectionCtx *s = ctx->priv;
+    double cx = s->cx, cy = s->cy, k1 = s->k1, k2 = s->k2;
+
     int ret = ff_filter_process_command(ctx, cmd, arg, res, res_len, flags);
 
     if (ret < 0)
         return ret;
 
+    s->changed = !(s->cx != cx || s->cy != cy || s->k1 != k1 || s->k2 != k2);
+
     return config_output(ctx->outputs[0]);
 }
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const LenscorrectionCtx *s_src = src->priv;
+    LenscorrectionCtx       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->changed = !(s_dst->cx != s_src->cx || s_dst->cy != s_src->cy || s_dst->k1 != s_src->k1 || s_dst->k2 != s_src->k2);
+
+    s_dst->cx = s_src->cx;
+    s_dst->cy = s_src->cy;
+    s_dst->k1 = s_src->k1;
+    s_dst->k2 = s_src->k2;
+    s_dst->interpolation = s_src->interpolation;
+    memcpy(s_dst->fill_rgba, s_src->fill_rgba, sizeof(s_src->fill_rgba));
+
+    return config_output(dst->outputs[0]);
+}
+#endif
 
 static const AVFilterPad lenscorrection_inputs[] = {
     {
@@ -365,6 +395,9 @@ const FFFilter ff_vf_lenscorrection = {
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
                      AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(LenscorrectionCtx),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(lenscorrection_inputs),
     FILTER_OUTPUTS(lenscorrection_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
