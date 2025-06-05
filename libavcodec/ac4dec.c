@@ -153,7 +153,9 @@ typedef struct SubstreamChannel {
     int     aspx_num_env;
     int     aspx_num_env_prev;
     int     num_atsg_sig;
+    int     num_atsg_sig_prev;
     int     num_atsg_noise;
+    int     num_atsg_noise_prev;
     uint8_t aspx_freq_res[MAX_ASPX_SIGNAL+1];
     int     aspx_var_bord_left;
     int     aspx_var_bord_right;
@@ -3024,8 +3026,13 @@ static void get_tab_border(uint8_t *atsg_sig, int num_aspx_timeslots, int num_at
 
 static int aspx_atsg(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch, int iframe)
 {
-    int num_atsg_sig = ssch->num_atsg_sig = ssch->aspx_num_env;
-    int num_atsg_noise = ssch->num_atsg_noise = ssch->aspx_num_noise;
+    int num_atsg_sig, num_atsg_noise;
+
+    ssch->num_atsg_sig_prev = ssch->num_atsg_sig;
+    ssch->num_atsg_noise_prev = ssch->num_atsg_noise;
+
+    num_atsg_sig = ssch->num_atsg_sig = ssch->aspx_num_env;
+    num_atsg_noise = ssch->num_atsg_noise = ssch->aspx_num_noise;
 
     if (ssch->previous_stop_pos == 0)
         ssch->previous_stop_pos = s->num_aspx_timeslots;
@@ -3619,6 +3626,8 @@ static int aspx_data_2ch(AC4DecodeContext *s, Substream *ss,
         ssch1->num_sb_aspx = ssch0->num_sb_aspx;
         ssch1->aspx_num_env = ssch0->aspx_num_env;
         ssch1->aspx_num_noise = ssch0->aspx_num_noise;
+        ssch1->num_atsg_sig = ssch0->num_atsg_sig;
+        ssch1->num_atsg_noise = ssch0->num_atsg_noise;
         memcpy(ssch1->sbg_sig, ssch0->sbg_sig, sizeof(ssch0->sbg_sig));
         memcpy(ssch1->atsg_sig, ssch0->atsg_sig, sizeof(ssch0->atsg_sig));
         memcpy(ssch1->num_sbg_sig, ssch0->num_sbg_sig, sizeof(ssch0->num_sbg_sig));
@@ -5399,15 +5408,15 @@ static int get_qsignal_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_
     memcpy(ssch->qscf_sig_sbg_prev, ssch->qscf_sig_sbg, sizeof(ssch->qscf_sig_sbg));
     memset(ssch->qscf_sig_sbg, 0, sizeof(ssch->qscf_sig_sbg));
 
-    ssch->aspx_num_env_prev = FFMAX(1, ssch->aspx_num_env_prev);
+    ssch->num_atsg_sig_prev = FFMAX(1, ssch->num_atsg_sig_prev);
 
     /* Loop over Envelopes */
-    for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         /* Loop over scale factor subband groups */
         for (int sbg = 0; sbg < ssch->num_sbg_sig[ssch->atsg_freqres[atsg]]; sbg++) {
             if (atsg == 0) {
-                ssch->atsg_freqres_prev[atsg] = ssch->atsg_freqres[ssch->aspx_num_env_prev - 1];
-                ssch->qscf_prev[atsg][sbg] = ssch->qscf_sig_sbg_prev[ssch->aspx_num_env_prev - 1][sbg];
+                ssch->atsg_freqres_prev[atsg] = ssch->atsg_freqres[ssch->num_atsg_sig_prev - 1];
+                ssch->qscf_prev[atsg][sbg] = ssch->qscf_sig_sbg_prev[ssch->num_atsg_sig_prev - 1][sbg];
             } else {
                 ssch->atsg_freqres_prev[atsg] = ssch->atsg_freqres[atsg-1];
                 ssch->qscf_prev[atsg][sbg] = ssch->qscf_sig_sbg[atsg-1][sbg];
@@ -5447,10 +5456,10 @@ static int get_qnoise_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_i
     memcpy(ssch->qscf_noise_prev, ssch->qscf_noise_sbg, sizeof(ssch->qscf_noise_sbg));
     memset(ssch->qscf_noise_sbg, 0, sizeof(ssch->qscf_noise_sbg));
 
-    ssch->aspx_num_noise_prev = FFMAX(1, ssch->aspx_num_noise_prev);
+    ssch->num_atsg_noise_prev = FFMAX(1, ssch->num_atsg_noise_prev);
 
     /* Loop over envelopes */
-    for (int atsg = 0; atsg < ssch->aspx_num_noise; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_noise; atsg++) {
         /* Loop over noise subband groups */
         for (int sbg = 0; sbg < ssch->num_sbg_noise; sbg++) {
             if (ssch->aspx_noise_delta_dir[atsg] == 0) { /* FREQ */
@@ -5458,7 +5467,7 @@ static int get_qnoise_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_i
                     ssch->qscf_noise_sbg[atsg][sbg] += delta * ssch->aspx_data[1][atsg][i];
             } else { /* TIME */
                 if (atsg == 0) {
-                    ssch->qscf_noise_sbg[atsg][sbg]  = ssch->qscf_noise_prev[ssch->aspx_num_noise_prev-1][sbg];
+                    ssch->qscf_noise_sbg[atsg][sbg]  = ssch->qscf_noise_prev[ssch->num_atsg_noise_prev-1][sbg];
                     ssch->qscf_noise_sbg[atsg][sbg] += delta * ssch->aspx_data[1][atsg][sbg];
                 } else {
                     ssch->qscf_noise_sbg[atsg][sbg]  = ssch->qscf_noise_sbg[atsg-1][sbg];
@@ -5521,7 +5530,7 @@ static void mono_deq_signal_factors(AC4DecodeContext *s, Substream *ss, int ch_i
 
     memset(ssch->scf_sig_sbg, 0, sizeof(ssch->scf_sig_sbg));
 
-    for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         for (int sbg = 0; sbg < ssch->num_sbg_sig[ssch->atsg_freqres[atsg]]; sbg++)
             ssch->scf_sig_sbg[atsg][sbg] = b * powf(2.f, ssch->qscf_sig_sbg[atsg][sbg] / a);
 
@@ -5539,7 +5548,7 @@ static void mono_deq_noise_factors(AC4DecodeContext *s, Substream *ss, int ch_id
 #define NOISE_FLOOR_OFFSET 6
     memset(ssch->scf_noise_sbg, 0, sizeof(ssch->scf_noise_sbg));
 
-    for (int atsg = 0; atsg < ssch->aspx_num_noise; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_noise; atsg++) {
         for (int sbg = 0; sbg < ssch->num_sbg_noise; sbg++)
             ssch->scf_noise_sbg[atsg][sbg] = powf(2.f, NOISE_FLOOR_OFFSET - ssch->qscf_noise_sbg[atsg][sbg]);
     }
@@ -5560,7 +5569,7 @@ static void joint_deq_signoise_factors(AC4DecodeContext *s,
     memset(ssch1->scf_sig_sbg, 0, sizeof(ssch1->scf_sig_sbg));
     memset(ssch1->scf_noise_sbg, 0, sizeof(ssch1->scf_noise_sbg));
 
-    for (int atsg = 0; atsg < ssch0->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch0->num_atsg_sig; atsg++) {
         for (int sbg = 0; sbg < ssch0->num_sbg_sig[ssch0->atsg_freqres[atsg]]; sbg++) {
             float nom = b * powf(2.f, ssch0->qscf_sig_sbg[atsg][sbg] / a + 1.f);
             float denom_a = 1.f + powf(2.f, PAN_OFFSET - ssch1->qscf_sig_sbg[atsg][sbg] / a);
@@ -5571,7 +5580,7 @@ static void joint_deq_signoise_factors(AC4DecodeContext *s,
         }
     }
 
-    for (int atsg = 0; atsg < ssch0->aspx_num_noise; atsg++) {
+    for (int atsg = 0; atsg < ssch0->num_atsg_noise; atsg++) {
         for (int sbg = 0; sbg < ssch0->num_sbg_noise; sbg++) {
             float nom = powf(2.f, NOISE_FLOOR_OFFSET - ssch0->qscf_noise_sbg[atsg][sbg] + 1.f);
             float denom_a = 1.f + powf(2.f, PAN_OFFSET - ssch1->qscf_noise_sbg[atsg][sbg]);
@@ -5605,12 +5614,12 @@ static void preflattening(AC4DecodeContext *s, Substream *ss, int ch_id)
     for (int sb = 0; sb < num_qmf_subbands; sb++) {
         float denom, nom = 0.f;
 
-        for (int ts = ssch->atsg_sig[0] * s->num_ts_in_ats; ts < ssch->atsg_sig[ssch->aspx_num_env] * s->num_ts_in_ats; ts++) {
+        for (int ts = ssch->atsg_sig[0] * s->num_ts_in_ats; ts < ssch->atsg_sig[ssch->num_atsg_sig] * s->num_ts_in_ats; ts++) {
             nom += powf(ssch->Q_low[0][ts][sb], 2);
             nom += powf(ssch->Q_low[1][ts][sb], 2);
         }
 
-        denom = (ssch->atsg_sig[ssch->aspx_num_env] - ssch->atsg_sig[0]) * s->num_ts_in_ats;
+        denom = (ssch->atsg_sig[ssch->num_atsg_sig] - ssch->atsg_sig[0]) * s->num_ts_in_ats;
         pow_env[sb] = nom / denom;
         pow_env[sb] = 10.f * log10f(pow_env[sb] + 1.f);
         mean_energy += pow_env[sb];
@@ -5779,7 +5788,7 @@ static void create_high_signal(AC4DecodeContext *s, Substream *ss, int ch_id)
 
     /* Loop over QMF time slots */
     for (int ts = ssch->atsg_sig[0] * s->num_ts_in_ats;
-         ts < ssch->atsg_sig[ssch->aspx_num_env] * s->num_ts_in_ats; ts++) {
+         ts < ssch->atsg_sig[ssch->num_atsg_sig] * s->num_ts_in_ats; ts++) {
         int sum_sb_patches = 0;
         int g = 0;
         /* Loop over number of patches */
@@ -5833,7 +5842,7 @@ static void estimate_spectral_envelopes(AC4DecodeContext *s, Substream *ss, int 
     SubstreamChannel *ssch = &ss->ssch[ch_id];
     const int ts_offset_hfadj = 4;
 
-    for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         /* Loop over QMF subbands in A-SPX range */
         for (int sb = 0, sbg = 0; sb < ssch->num_sb_aspx; sb++) {
             float est_sig = 0.f;
@@ -5876,7 +5885,7 @@ static void map_signoise(AC4DecodeContext *s, Substream *ss, int ch_id)
     memset(ssch->scf_sig_sb, 0, sizeof(ssch->scf_sig_sb));
 
     /* Loop over Signal Envelopes */
-    for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         /* Map Signal Envelopes from subband groups to QMF subbands */
         for (int sbg = 0; sbg < ssch->num_sbg_sig[ssch->atsg_freqres[atsg]]; sbg++) {
             for (int sb = ssch->sbg_sig[ssch->atsg_freqres[atsg]][sbg]-ssch->sbx; sb < ssch->sbg_sig[ssch->atsg_freqres[atsg]][sbg+1]-ssch->sbx; sb++)
@@ -5905,7 +5914,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
     float MAX_BOOST_FACT = 1.584893192f;
     int p_sine_at_end;
 
-    if (ssch->aspx_tsg_ptr_prev == ssch->aspx_num_env_prev)
+    if (ssch->aspx_tsg_ptr_prev == ssch->num_atsg_sig_prev)
         p_sine_at_end = 0;
     else
         p_sine_at_end = -1;
@@ -5914,7 +5923,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
     memset(ssch->sine_idx_sb, 0, sizeof(ssch->sine_idx_sb));
 
     /* Loop over envelopes */
-    for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         /* Loop over high resolution signal envelope subband groups */
         for (int sbg = 0; sbg < ssch->num_sbg_sig_highres; sbg++) {
             int sba = ssch->sbg_sig_highres[sbg] - ssch->sbx;
@@ -5923,7 +5932,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
             /* Map sinusoid markers to QMF subbands */
             for (int sb = ssch->sbg_sig_highres[sbg]-ssch->sbx; sb < ssch->sbg_sig_highres[sbg+1]-ssch->sbx; sb++) {
                 if ((sb == sb_mid) && ((atsg >= ssch->aspx_tsg_ptr) || (p_sine_at_end == 0)
-                                       || ssch->sine_idx_sb_prev[ssch->aspx_num_env_prev-1][sb])) {
+                                       || ssch->sine_idx_sb_prev[ssch->num_atsg_sig_prev-1][sb])) {
                     ssch->sine_idx_sb[atsg][sb] = ssch->aspx_add_harmonic[sbg];
                 }
             }
@@ -5932,7 +5941,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
 
     memset(ssch->sine_area_sb, 0, sizeof(ssch->sine_area_sb));
 
-    for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         /* Loop over subband groups */
         for (int sbg = 0; sbg < ssch->num_sbg_sig[ssch->atsg_freqres[atsg]]; sbg++) {
             int sine_present = 0;
@@ -5953,7 +5962,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
     memset(ssch->noise_lev_sb, 0, sizeof(ssch->noise_lev_sb));
 
     /* Loop over envelopes */
-    for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         /* Loop over QMF subbands in A-SPX range */
         for (int sb = 0; sb < ssch->num_sb_aspx; sb++) {
             const float sig_noise_fact = ssch->scf_sig_sb[atsg][sb] / (1.f + ssch->scf_noise_sb[atsg][sb]);
@@ -5966,7 +5975,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
     memset(ssch->sig_gain_sb, 0, sizeof(ssch->sig_gain_sb));
 
     /* Loop over envelopes */
-    for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         /* Loop over QMF subbands in A-SPX range */
         for (int sb = 0; sb < ssch->num_sb_aspx; sb++) {
             if (ssch->sine_area_sb[atsg][sb] == 0) {
@@ -5988,7 +5997,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
     memset(ssch->max_sig_gain_sb, 0, sizeof(ssch->max_sig_gain_sb));
 
     /* Loop over envelopes */
-    for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         /* Loop over limiter subband groups */
         for (int sbg = 0; sbg < ssch->num_sbg_lim; sbg++) {
             float denom = EPSILON0, nom = 0.f;
@@ -6015,7 +6024,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
     memset(ssch->noise_lev_sb_lim, 0, sizeof(ssch->noise_lev_sb_lim));
 
     /* Loop over envelopes */
-    for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         /* Loop over QMF subbands */
         for (int sb = 0; sb < ssch->num_sb_aspx; sb++) {
             float tmp = ssch->noise_lev_sb[atsg][sb];
@@ -6026,7 +6035,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
     }
 
     /* Loop over envelopes */
-    for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         /* Loop over QMF subbands */
         for (int sb = 0; sb < ssch->num_sb_aspx; sb++) {
             ssch->sig_gain_sb_lim[atsg][sb] = fminf(ssch->sig_gain_sb[atsg][sb],
@@ -6037,7 +6046,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
     memset(ssch->boost_fact_sbg, 0, sizeof(ssch->boost_fact_sbg));
 
     /* Loop over envelopes */
-    for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         /* Loop over limiter subband groups */
         for (int sbg = 0; sbg < ssch->num_sbg_lim; sbg++) {
             float denom = EPSILON0, nom = 0.f;
@@ -6066,7 +6075,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
     memset(ssch->boost_fact_sb, 0, sizeof(ssch->boost_fact_sb));
 
     /* Loop over envelopes */
-    for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         int sbg = 0;
         /* Loop over QMF subbands */
         for (int sb = 0; sb < ssch->num_sb_aspx; sb++) {
@@ -6081,7 +6090,7 @@ static void add_sinusoids(AC4DecodeContext *s, Substream *ss, int ch_id)
     memset(ssch->sig_gain_sb_adj, 0, sizeof(ssch->sig_gain_sb_adj));
 
     /* Loop over envelopes */
-    for (int atsg = 0; atsg < ssch->aspx_num_env; atsg++) {
+    for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
         /* Loop over QMF subbands */
         for (int sb = 0; sb < ssch->num_sb_aspx; sb++) {
             const float boost_fact           = ssch->boost_fact_sb[atsg][sb];
@@ -6129,7 +6138,7 @@ static int generate_noise(AC4DecodeContext *s, Substream *ss, int ch_id)
 
     /* Loop over QMF time slots */
     for (int ts = ssch->atsg_sig[0] * s->num_ts_in_ats, atsg = 0;
-         ts < ssch->atsg_sig[ssch->aspx_num_env] * s->num_ts_in_ats; ts++) {
+         ts < ssch->atsg_sig[ssch->num_atsg_sig] * s->num_ts_in_ats; ts++) {
         if (ts == ssch->atsg_sig[atsg+1] * s->num_ts_in_ats)
             atsg++;
         /* Loop over QMF subbands in A-SPX */
@@ -6162,7 +6171,7 @@ static int generate_tones(AC4DecodeContext *s, Substream *ss, int ch_id)
 
     /* Loop over QMF time slots */
     for (int ts = ssch->atsg_sig[0] * s->num_ts_in_ats, atsg = 0;
-         ts < ssch->atsg_sig[ssch->aspx_num_env] * s->num_ts_in_ats; ts++) {
+         ts < ssch->atsg_sig[ssch->num_atsg_sig] * s->num_ts_in_ats; ts++) {
         if (ts == ssch->atsg_sig[atsg+1] * s->num_ts_in_ats)
             atsg++;
 
@@ -6217,7 +6226,7 @@ static void assemble_hf_signal(AC4DecodeContext *s, Substream *ss, int ch_id)
 
     /* Loop over QMF time slots */
     for (int ts = ssch->atsg_sig[0] * s->num_ts_in_ats, atsg = 0;
-         ts < ssch->atsg_sig[ssch->aspx_num_env] * s->num_ts_in_ats; ts++) {
+         ts < ssch->atsg_sig[ssch->num_atsg_sig] * s->num_ts_in_ats; ts++) {
         if (ts == ssch->atsg_sig[atsg+1] * s->num_ts_in_ats)
             atsg++;
         av_assert2(ts < FF_ARRAY_ELEMS(ssch->Y[0]));
@@ -6235,7 +6244,7 @@ static void assemble_hf_signal(AC4DecodeContext *s, Substream *ss, int ch_id)
 
     /* Loop over time slots */
     for (int ts = ssch->atsg_sig[0] * s->num_ts_in_ats;
-         ts < ssch->atsg_sig[ssch->aspx_num_env] * s->num_ts_in_ats; ts++) {
+         ts < ssch->atsg_sig[ssch->num_atsg_sig] * s->num_ts_in_ats; ts++) {
         av_assert2(ts < FF_ARRAY_ELEMS(ssch->Y[0]));
         /* Loop over QMF subbands */
         for (int sb = 0; sb < ssch->num_sb_aspx; sb++) {
@@ -6248,7 +6257,7 @@ static void assemble_hf_signal(AC4DecodeContext *s, Substream *ss, int ch_id)
 
     memcpy(ssch->Q_prev, ssch->Q, sizeof(ssch->Q));
 
-    for (int ts = 0; ts < ssch->atsg_sig[ssch->aspx_num_env] * s->num_ts_in_ats; ts++) {
+    for (int ts = 0; ts < ssch->atsg_sig[ssch->num_atsg_sig] * s->num_ts_in_ats; ts++) {
         av_assert2(ts < FF_ARRAY_ELEMS(ssch->Y[0]));
         av_assert2(ssch->num_sb_aspx + sbx <= MAX_QMF_BANDS);
         av_assert2(ts / s->num_ts_in_ats < FF_ARRAY_ELEMS(ssch->aspx_tic_used_in_slot));
