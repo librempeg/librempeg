@@ -38,6 +38,7 @@
 */
 
 #include "avcodec.h"
+#include "bytestream.h"
 #include "codec_internal.h"
 #include "decode.h"
 #include "libavutil/imgutils.h"
@@ -231,8 +232,17 @@ static int fmt_frame(AVCodecContext *avctx, AVFrame *frame, AVPacket *avpkt,
 static int dnxuc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                              int *got_frame, AVPacket *avpkt)
 {
+    GetByteContext gbc;
+    GetByteContext *gb = &gbc;
     char fourcc_buf[AV_FOURCC_MAX_STRING_SIZE];
+    uint32_t packet_size;
     int ret;
+
+    bytestream2_init(gb, avpkt->data, avpkt->size);
+
+    packet_size = bytestream2_get_le32(gb);
+    if (packet_size > avpkt->size)
+        return AVERROR_INVALIDDATA;
 
     av_fourcc_make_string(fourcc_buf, avctx->codec_tag);
     if ((avctx->width % 2) && ((fourcc_buf[0] == 'y' && fourcc_buf[1] == '2')
