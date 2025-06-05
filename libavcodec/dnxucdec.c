@@ -45,24 +45,22 @@
 #include "libavutil/intreadwrite.h"
 #include "thread.h"
 
-static int pass_through(AVCodecContext *avctx, AVFrame *frame, const AVPacket *avpkt)
+static int pass_through(AVCodecContext *avctx, AVFrame *frame, GetByteContext *gb)
 {
-    /* there is no need to copy as the data already match
-     * a known pixel format */
+    int linesize[4], ret;
 
-    frame->buf[0] = av_buffer_ref(avpkt->buf);
+    if ((ret = av_image_fill_linesizes(linesize, frame->format, frame->width)) < 0)
+        return ret;
 
-    if (!frame->buf[0]) {
-        return AVERROR(ENOMEM);
-    }
+    for (int y = 0; y < frame->height; y++)
+        bytestream2_get_buffer(gb, frame->data[0] + y * frame->linesize[0], linesize[0]);
 
-    return av_image_fill_arrays(frame->data, frame->linesize, avpkt->data,
-                               avctx->pix_fmt, avctx->width, avctx->height, 1);
+    return 0;
 }
 
 /// Unpack 10bit value
 static av_always_inline
-uint16_t get10(uint8_t *line_data, uint32_t pos, int msb_bytes)
+uint16_t get10(const uint8_t *line_data, uint32_t pos, int msb_bytes)
 {
     return (line_data[pos] << 2) |
         ((line_data[msb_bytes + (pos >> 2)] >> ((pos & 0x3u) << 1)) & 0x3u);
@@ -70,41 +68,45 @@ uint16_t get10(uint8_t *line_data, uint32_t pos, int msb_bytes)
 
 /// Unpack 12bit value
 static av_always_inline
-uint16_t get12(uint8_t *line_data, uint32_t pos, int msb_bytes)
+uint16_t get12(const uint8_t *line_data, uint32_t pos, int msb_bytes)
 {
     return (line_data[pos] << 4) |
         ((line_data[msb_bytes + (pos >> 1)] >> ((pos & 0x1u) << 2)) & 0xfu);
 }
 
-static int unpack_rg10(AVCodecContext *avctx, AVFrame *frame, const AVPacket *pkt)
+static int unpack_rg10(AVCodecContext *avctx, AVFrame *frame, GetByteContext *gb)
 {
-    uint8_t *data = &pkt->data[0];
+    const uint8_t *data = gb->buffer;
     int lw = frame->width;
     int msb_bytes = lw * 3;
     int line_offset = lw * 3 + (lw * 3 + 3) / 4;
     int pos = 0, pos_in = 0;
-    for(int y = 0; y < frame->height; y++){
-        for(int x = 0; x < lw; x++){
+
+    for (int y = 0; y < frame->height; y++) {
+        for (int x = 0; x < lw; x++) {
             AV_WL16(&frame->data[2][pos], get10(data, pos_in++, msb_bytes)); // r
             AV_WL16(&frame->data[0][pos], get10(data, pos_in++, msb_bytes)); // g
             AV_WL16(&frame->data[1][pos], get10(data, pos_in++, msb_bytes)); // b
             pos += 2;
         }
+
         data += line_offset;
         pos_in = 0;
     }
-    return pkt->size;
+
+    return 0;
 }
 
-static int unpack_y410(AVCodecContext *avctx, AVFrame *frame, const AVPacket *pkt)
+static int unpack_y410(AVCodecContext *avctx, AVFrame *frame, GetByteContext *gb)
 {
-    uint8_t *data = &pkt->data[0];
+    const uint8_t *data = gb->buffer;
     int lw = frame->width;
     int msb_bytes = lw * 3;
     int line_offset = lw * 3 + (lw * 3 + 3) / 4;
     int pos = 0, pos_in = 0;
-    for(int y = 0; y < frame->height; y++){
-        for(int x = 0; x < lw; x++){
+
+    for (int y = 0; y < frame->height; y++) {
+        for (int x = 0; x < lw; x++) {
             AV_WL16(&frame->data[0][pos], get10(data, pos_in++, msb_bytes)); // y
             AV_WL16(&frame->data[1][pos], get10(data, pos_in++, msb_bytes)); // u
             AV_WL16(&frame->data[2][pos], get10(data, pos_in++, msb_bytes)); // v
@@ -113,18 +115,20 @@ static int unpack_y410(AVCodecContext *avctx, AVFrame *frame, const AVPacket *pk
         data += line_offset;
         pos_in = 0;
     }
-    return pkt->size;
+
+    return 0;
 }
 
-static int unpack_rg12(AVCodecContext *avctx, AVFrame *frame, const AVPacket *pkt)
+static int unpack_rg12(AVCodecContext *avctx, AVFrame *frame, GetByteContext *gb)
 {
-    uint8_t *data = &pkt->data[0];
+    const uint8_t *data = gb->buffer;
     int lw = frame->width;
     int msb_bytes = lw * 3;
     int line_offset = lw * 3 + (lw * 3 + 1) / 2;
     int pos = 0, pos_in = 0;
-    for(int y = 0; y < frame->height; y++){
-        for(int x = 0; x < lw; x++){
+
+    for (int y = 0; y < frame->height; y++) {
+        for (int x = 0; x < lw; x++) {
             AV_WL16(&frame->data[2][pos], get12(data, pos_in++, msb_bytes)); // r
             AV_WL16(&frame->data[0][pos], get12(data, pos_in++, msb_bytes)); // g
             AV_WL16(&frame->data[1][pos], get12(data, pos_in++, msb_bytes)); // b
@@ -133,18 +137,19 @@ static int unpack_rg12(AVCodecContext *avctx, AVFrame *frame, const AVPacket *pk
         data += line_offset;
         pos_in = 0;
     }
-    return pkt->size;
+    return 0;
 }
 
-static int unpack_y412(AVCodecContext *avctx, AVFrame *frame, const AVPacket *pkt)
+static int unpack_y412(AVCodecContext *avctx, AVFrame *frame, GetByteContext *gb)
 {
-    uint8_t *data = &pkt->data[0];
+    const uint8_t *data = gb->buffer;
     int lw = frame->width;
     int msb_bytes = lw * 3;
     int line_offset = lw * 3 + (lw * 3 + 1) / 2;
     int pos = 0, pos_in = 0;
-    for(int y = 0; y < frame->height; y++){
-        for(int x = 0; x < lw; x++){
+
+    for (int y = 0; y < frame->height; y++) {
+        for (int x = 0; x < lw; x++) {
             AV_WL16(&frame->data[0][pos], get12(data, pos_in++, msb_bytes)); // y
             AV_WL16(&frame->data[1][pos], get12(data, pos_in++, msb_bytes)); // u
             AV_WL16(&frame->data[2][pos], get12(data, pos_in++, msb_bytes)); // v
@@ -153,18 +158,20 @@ static int unpack_y412(AVCodecContext *avctx, AVFrame *frame, const AVPacket *pk
         data += line_offset;
         pos_in = 0;
     }
-    return pkt->size;
+
+    return 0;
 }
 
-static int unpack_y210(AVCodecContext *avctx, AVFrame *frame, const AVPacket *pkt)
+static int unpack_y210(AVCodecContext *avctx, AVFrame *frame, GetByteContext *gb)
 {
-    uint8_t *data = &pkt->data[0];
+    const uint8_t *data = gb->buffer;
     int lw = frame->width;
     int msb_bytes = lw * 2;
     int line_offset = lw/2 * 5;
     int pos_uv = 0, pos_y = 0, pos_in = 0;
-    for(int y = 0; y < frame->height; y++){
-        for(int x = 0; x < lw/2; x++){
+
+    for (int y = 0; y < frame->height; y++) {
+        for (int x = 0; x < lw/2; x++) {
             AV_WL16(&frame->data[1][pos_uv],    get10(data, pos_in++, msb_bytes)); // u
             AV_WL16(&frame->data[0][pos_y],     get10(data, pos_in++, msb_bytes)); // y
             AV_WL16(&frame->data[2][pos_uv],    get10(data, pos_in++, msb_bytes)); // v
@@ -175,18 +182,20 @@ static int unpack_y210(AVCodecContext *avctx, AVFrame *frame, const AVPacket *pk
         data += line_offset;
         pos_in = 0;
     }
-    return pkt->size;
+
+    return 0;
 }
 
-static int unpack_y212(AVCodecContext *avctx, AVFrame *frame, const AVPacket *pkt)
+static int unpack_y212(AVCodecContext *avctx, AVFrame *frame, GetByteContext *gb)
 {
-    uint8_t *data = &pkt->data[0];
+    const uint8_t *data = gb->buffer;
     int lw = frame->width;
     int msb_bytes = lw * 2;
     int line_offset = lw * 3;
     int pos_uv = 0, pos_y = 0, pos_in = 0;
-    for(int y = 0; y < frame->height; y++){
-        for(int x = 0; x < lw/2; x++){
+
+    for (int y = 0; y < frame->height; y++) {
+        for (int x = 0; x < lw/2; x++) {
             AV_WL16(&frame->data[1][pos_uv],   get12(data, pos_in++, msb_bytes)); // u
             AV_WL16(&frame->data[0][pos_y],    get12(data, pos_in++, msb_bytes)); // y
             AV_WL16(&frame->data[2][pos_uv],   get12(data, pos_in++, msb_bytes)); // v
@@ -197,46 +206,47 @@ static int unpack_y212(AVCodecContext *avctx, AVFrame *frame, const AVPacket *pk
         data += line_offset;
         pos_in = 0;
     }
-    return pkt->size;
-}
 
-static int check_pkt_size(AVCodecContext *avctx, AVPacket *avpkt, int bpp)
-{
-    int needed = ((avctx->width * bpp + 7) / 8) * avctx->height;
-    if (avpkt->size < needed){
-        av_log(avctx, AV_LOG_ERROR,
-        "Insufficient size of AVPacket data (pkg size: %d needed: %d)\n", avpkt->size, needed);
-        return AVERROR_INVALIDDATA;
-    }
     return 0;
 }
 
-static int fmt_frame(AVCodecContext *avctx, AVFrame *frame, AVPacket *avpkt,
+static int check_gb_size(AVCodecContext *avctx, GetByteContext *gb, int bpp)
+{
+    const int needed = ((avctx->width * bpp + 7) / 8) * avctx->height;
+
+    if (bytestream2_get_bytes_left(gb) < needed)
+        return AVERROR_INVALIDDATA;
+
+    return 0;
+}
+
+static int fmt_frame(AVCodecContext *avctx, AVFrame *frame, GetByteContext *gb,
                     enum AVPixelFormat pix_fmt, int src_bpp,
-                    int (*frame_handler)(AVCodecContext *avctx, AVFrame *frame, const AVPacket *avpkt))
+                    int (*frame_handler)(AVCodecContext *avctx, AVFrame *frame, GetByteContext *gb))
 {
     int ret;
+
     avctx->pix_fmt = pix_fmt;
 
-    ret = check_pkt_size(avctx, avpkt, src_bpp);
-    if (ret)
+    ret = check_gb_size(avctx, gb, src_bpp);
+    if (ret < 0)
         return ret;
 
     ret = ff_thread_get_buffer(avctx, frame, 0);
     if (ret < 0)
         return ret;
 
-    return frame_handler(avctx, frame, avpkt);
+    return frame_handler(avctx, frame, gb);
 }
 
 static int dnxuc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                              int *got_frame, AVPacket *avpkt)
 {
+    uint32_t packet_size, box_header, fourcc, buffer_size;
     GetByteContext gbc;
     GetByteContext *gb = &gbc;
     char fourcc_buf[AV_FOURCC_MAX_STRING_SIZE];
-    uint32_t packet_size;
-    int ret;
+    int ret, w, h, interlaced;
 
     bytestream2_init(gb, avpkt->data, avpkt->size);
 
@@ -244,57 +254,82 @@ static int dnxuc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     if (packet_size > avpkt->size)
         return AVERROR_INVALIDDATA;
 
-    av_fourcc_make_string(fourcc_buf, avctx->codec_tag);
+    box_header = bytestream2_get_le32(gb);
+    if (box_header != MKTAG('p','a','c','k'))
+        return AVERROR_INVALIDDATA;
+    bytestream2_skip(gb, 4);
+
+    box_header = bytestream2_get_le32(gb);
+    if (box_header != MKTAG('s','i','n','f'))
+        return AVERROR_INVALIDDATA;
+
+    w = bytestream2_get_le32(gb);
+    h = bytestream2_get_le32(gb);
+    if ((ret = ff_set_dimensions(avctx, w, h)) < 0)
+        return ret;
+
+    fourcc = bytestream2_get_le32(gb);
+    interlaced = bytestream2_get_byte(gb) == 1;
+
+    buffer_size = bytestream2_get_le32(gb);
+    if (buffer_size - 4 > bytestream2_get_bytes_left(gb))
+        return AVERROR_INVALIDDATA;
+
+    box_header = bytestream2_get_le32(gb);
+    if (box_header != MKTAG('s','d','a','t'))
+        return AVERROR_INVALIDDATA;
+
+    av_fourcc_make_string(fourcc_buf, fourcc);
     if ((avctx->width % 2) && ((fourcc_buf[0] == 'y' && fourcc_buf[1] == '2')
-                             ||(fourcc_buf[1] == 'y' && fourcc_buf[2] == '2'))){
+                             ||(fourcc_buf[1] == 'y' && fourcc_buf[2] == '2'))) {
         av_log(avctx, AV_LOG_ERROR,
         "Image width must be a multiple of 2 for YUV 4:2:2 DNxUncompressed!\n");
         return AVERROR_INVALIDDATA;
     }
 
-    switch (avctx->codec_tag) {
+    switch (fourcc) {
     case MKTAG('y','2','0','8'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_UYVY422, 16, pass_through);
+        ret = fmt_frame(avctx, frame, gb, AV_PIX_FMT_UYVY422, 16, pass_through);
         break;
     case MKTAG('y','2','1','0'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV422P10LE, 20, unpack_y210);
+        ret = fmt_frame(avctx, frame, gb, AV_PIX_FMT_YUV422P10LE, 20, unpack_y210);
         break;
     case MKTAG('y','4','1','0'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444P10LE, 20, unpack_y410);
+        ret = fmt_frame(avctx, frame, gb, AV_PIX_FMT_YUV444P10LE, 20, unpack_y410);
         break;
     case MKTAG('y','2','1','2'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV422P12LE, 24, unpack_y212);
+        ret = fmt_frame(avctx, frame, gb, AV_PIX_FMT_YUV422P12LE, 24, unpack_y212);
         break;
     case MKTAG('y','4','1','2'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444P12LE, 24, unpack_y412);
+        ret = fmt_frame(avctx, frame, gb, AV_PIX_FMT_YUV444P12LE, 24, unpack_y412);
         break;
 
     case MKTAG('r','g','0','8'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_RGB24, 24, pass_through);
+        ret = fmt_frame(avctx, frame, gb, AV_PIX_FMT_RGB24, 24, pass_through);
         break;
     case MKTAG('r','g','1','0'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_GBRP10LE, 30, unpack_rg10);
+        ret = fmt_frame(avctx, frame, gb, AV_PIX_FMT_GBRP10LE, 30, unpack_rg10);
         break;
     case MKTAG('r','g','1','2'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_GBRP12LE, 36, unpack_rg12);
+        ret = fmt_frame(avctx, frame, gb, AV_PIX_FMT_GBRP12LE, 36, unpack_rg12);
         break;
     case MKTAG('r','g','1','6'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_RGB48LE, 48, pass_through);
+        ret = fmt_frame(avctx, frame, gb, AV_PIX_FMT_RGB48LE, 48, pass_through);
         break;
     case MKTAG(' ','r','g','h'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_RGBF16LE, 48, pass_through);
+        ret = fmt_frame(avctx, frame, gb, AV_PIX_FMT_RGBF16LE, 48, pass_through);
         break;
     case MKTAG(' ','r','g','f'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_RGBF32LE, 96, pass_through);
+        ret = fmt_frame(avctx, frame, gb, AV_PIX_FMT_RGBF32LE, 96, pass_through);
         break;
 
     case MKTAG(' ','a','0','8'):
     case MKTAG(' ','y','0','8'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_GRAY8, 8, pass_through);
+        ret = fmt_frame(avctx, frame, gb, AV_PIX_FMT_GRAY8, 8, pass_through);
         break;
     case MKTAG(' ','a','1','6'):
     case MKTAG(' ','y','1','6'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_GRAY16LE, 16, pass_through);
+        ret = fmt_frame(avctx, frame, gb, AV_PIX_FMT_GRAY16LE, 16, pass_through);
         break;
 
     default:
@@ -304,10 +339,10 @@ static int dnxuc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         return AVERROR_PATCHWELCOME;
     }
 
-    if (ret < 0) {
-        av_buffer_unref(&frame->buf[0]);
+    if (ret < 0)
         return ret;
-    }
+
+    frame->flags |= AV_FRAME_FLAG_INTERLACED * interlaced;
 
     *got_frame = 1;
 
@@ -320,5 +355,5 @@ const FFCodec ff_dnxuc_decoder = {
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_DNXUC,
     FF_CODEC_DECODE_CB(dnxuc_decode_frame),
-    .p.capabilities = AV_CODEC_CAP_FRAME_THREADS,
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS,
 };
