@@ -1,19 +1,18 @@
 /*
- * This file is part of FFmpeg.
+ * This file is part of Librempeg.
  *
- * FFmpeg is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * Librempeg is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- * FFmpeg is distributed in the hope that it will be useful,
+ * Librempeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with FFmpeg; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * You should have received a copy of the GNU Affero General Public License
+ * along with Librempeg.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <float.h>
@@ -64,7 +63,7 @@ typedef struct DemuxStream {
 
     int                      streamcopy_needed;
     int                      have_sub2video;
-    int                      reinit_filters;
+    enum IFilterParamChange  param_change;
     int                      autorotate;
     int                      apply_cropping;
 
@@ -1094,12 +1093,13 @@ int ist_filter_add(InputStream *ist, InputFilter *ifilter, int is_simple,
                           AV_NOPTS_VALUE : tsoffset;
     opts->trim_end_us   = d->recording_time;
 
+    opts->param_change  = ds->param_change;
+
     opts->name = av_strdup(ds->dec_name);
     if (!opts->name)
         return AVERROR(ENOMEM);
 
-    opts->flags |= IFILTER_FLAG_AUTOROTATE * !!(ds->autorotate) |
-                   IFILTER_FLAG_REINIT     * !!(ds->reinit_filters);
+    opts->flags |= IFILTER_FLAG_AUTOROTATE * !!(ds->autorotate);
 
     return 0;
 }
@@ -1260,6 +1260,7 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st, AVDictiona
     const char *hwaccel_output_format = NULL;
     const char *codec_tag = NULL;
     const char *bsfs = NULL;
+    const char *reinit_filters = NULL;
     char *next;
     const char *discard_str = NULL;
     int ret;
@@ -1407,8 +1408,32 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st, AVDictiona
             return ret;
     }
 
-    ds->reinit_filters = -1;
-    opt_match_per_stream_int(ist, &o->reinit_filters, ic, st, &ds->reinit_filters);
+    ds->param_change = IFILTER_PARAM_CHANGE_KEEP_FIRST;
+    opt_match_per_stream_str(ist, &o->reinit_filters, ic, st, &reinit_filters);
+    if (reinit_filters) {
+        if (!strcmp(reinit_filters, "keepfirst"))
+            ds->param_change = IFILTER_PARAM_CHANGE_KEEP_FIRST;
+        else if (!strcmp(reinit_filters, "reinit"))
+            ds->param_change = IFILTER_PARAM_CHANGE_REINIT;
+        else if (!strcmp(reinit_filters, "passthrough"))
+            ds->param_change = IFILTER_PARAM_CHANGE_PASSTHROUGH;
+        else {
+            char *endptr;
+            int val = strtol(reinit_filters, &endptr, 0);
+            if (*endptr) {
+                av_log(ist, AV_LOG_ERROR, "Invalid -reinit_filter argument: %s\n",
+                       reinit_filters);
+                return AVERROR(EINVAL);
+            }
+
+            av_log(ist, AV_LOG_WARNING, "Numeric arguments to -reinit_filter are "
+                   "deprecated, use '%s' rather than '%s'\n",
+                   val ? "reinit" : "passthrough", reinit_filters);
+
+            ds->param_change = val ? IFILTER_PARAM_CHANGE_REINIT :
+                                     IFILTER_PARAM_CHANGE_PASSTHROUGH;
+        }
+    }
 
     ist->user_set_discard = AVDISCARD_NONE;
 
