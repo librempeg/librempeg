@@ -277,6 +277,7 @@ typedef struct SubstreamChannel {
 
 typedef struct Substream {
     int     codec_mode;
+    int     im_codec_mode;
     int     core_5ch_grouping;
     int     use_sap_add_ch;
 
@@ -309,7 +310,7 @@ typedef struct Substream {
     int     max_sfb_master;
 
     uint8_t coding_config;
-    uint8_t mdct_stereo_proc[4];
+    uint8_t mdct_stereo_proc[8];
     float   matrix_stereo[16][128][2][2];
     float   alpha_q[16][128];
 
@@ -4245,17 +4246,18 @@ static int immers_cfg(AC4DecodeContext *s, Substream *ss)
     return 0;
 }
 
-static int immersive_channel_element(AC4DecodeContext *s, int fronts, int lfe, int iframe)
+static int immersive_channel_element(AC4DecodeContext *s, int lfe, int fronts, int iframe)
 {
     GetBitContext *gb = &s->gbc;
     Substream *ss = &s->substream;
     int ret;
 
-    ss->codec_mode = get_bits1(gb);
-    if (!ss->codec_mode)
-        ss->codec_mode = get_bits(gb, 2) + 1;
+    ss->im_codec_mode = get_bits1(gb);
+    if (!ss->im_codec_mode)
+        ss->im_codec_mode = get_bits(gb, 2);
     else
-        ss->codec_mode = 0;
+        ss->im_codec_mode = IM_ASPX_AJCC;
+    av_log(s->avctx, AV_LOG_DEBUG, "im_codec_mode: %d\n", ss->im_codec_mode);
 
     if (iframe)
         immers_cfg(s, ss);
@@ -4266,7 +4268,11 @@ static int immersive_channel_element(AC4DecodeContext *s, int fronts, int lfe, i
             return ret;
     }
 
+    if (ss->im_codec_mode == IM_ASPX_AJCC)
+        companding_control(s, ss, 5);
+
     ss->core_5ch_grouping = get_bits(gb, 2);
+    av_log(s->avctx, AV_LOG_DEBUG, "core_5ch_grouping: %d\n", ss->core_5ch_grouping);
     switch (ss->core_5ch_grouping) {
     case 0:
         ss->mode_2ch = get_bits1(gb);
@@ -4300,7 +4306,7 @@ static int immersive_channel_element(AC4DecodeContext *s, int fronts, int lfe, i
     if (ret < 0)
         return ret;
 
-    if (ss->codec_mode != IM_ASPX_AJCC) {
+    if (ss->im_codec_mode != IM_ASPX_AJCC) {
         ss->use_sap_add_ch = get_bits1(gb);
 
         if (ss->use_sap_add_ch) {
@@ -4310,13 +4316,14 @@ static int immersive_channel_element(AC4DecodeContext *s, int fronts, int lfe, i
             ret = chparam_info(s, ss, 6);
             if (ret < 0)
                 return ret;
+
             ret = two_channel_data(s, ss, (uint8_t []){5, 6}, 2, iframe);
             if (ret < 0)
                 return ret;
         }
     }
 
-    if (ss->codec_mode == IM_ASPX_SCPL) {
+    if (ss->im_codec_mode == IM_ASPX_SCPL) {
         ret = aspx_data_2ch(s, ss, (uint8_t []){0, 1}, iframe);
         if (ret < 0)
             return ret;
@@ -4339,12 +4346,69 @@ static int immersive_channel_element(AC4DecodeContext *s, int fronts, int lfe, i
             if (ret < 0)
                 return ret;
         }
+
         ret = aspx_data_2ch(s, ss, (uint8_t []){9, 10}, iframe);
         if (ret < 0)
             return ret;
         ret = aspx_data_2ch(s, ss, (uint8_t []){10, 11}, iframe);
         if (ret < 0)
             return ret;
+    } else if (ss->im_codec_mode != IM_SCPL) {
+        ret = aspx_data_2ch(s, ss, (uint8_t []){0, 1}, iframe);
+        if (ret < 0)
+            return ret;
+        ret = aspx_data_2ch(s, ss, (uint8_t []){2, 3}, iframe);
+        if (ret < 0)
+            return ret;
+
+        if (ss->im_codec_mode != IM_ASPX_AJCC) {
+            ret = aspx_data_2ch(s, ss, (uint8_t []){4, 5}, iframe);
+            if (ret < 0)
+                return ret;
+        }
+
+        ret = aspx_data_1ch(s, ss, 6, iframe);
+        if (ret < 0)
+            return ret;
+    }
+
+    if (ss->im_codec_mode == IM_ASPX_AJCC)
+        ;
+
+    if (ss->im_codec_mode == IM_SCPL ||
+        ss->im_codec_mode == IM_ASPX_SCPL ||
+        ss->im_codec_mode == IM_ASPX_ACPL_1) {
+        ret = two_channel_data(s, ss, (uint8_t []){8, 9}, 3, iframe);
+        if (ret < 0)
+            return ret;
+
+        ret = two_channel_data(s, ss, (uint8_t []){10, 11}, 4, iframe);
+        if (ret < 0)
+            return ret;
+    }
+
+    if (ss->im_codec_mode == IM_ASPX_ACPL_1 ||
+        ss->im_codec_mode == IM_ASPX_ACPL_2) {
+        ret = acpl_data_1ch(s, ss, 0);
+        if (ret < 0)
+            return ret;
+        ret = acpl_data_1ch(s, ss, 1);
+        if (ret < 0)
+            return ret;
+        ret = acpl_data_1ch(s, ss, 2);
+        if (ret < 0)
+            return ret;
+        ret = acpl_data_1ch(s, ss, 3);
+        if (ret < 0)
+            return ret;
+        if (fronts) {
+            ret = acpl_data_1ch(s, ss, 4);
+            if (ret < 0)
+                return ret;
+            ret = acpl_data_1ch(s, ss, 5);
+            if (ret < 0)
+                return ret;
+        }
     }
 
     return 0;
@@ -4707,8 +4771,17 @@ static int audio_data(AC4DecodeContext *s, int channel_mode, int iframe)
     case 6:
         ret = channel_element_7x(s, channel_mode, iframe);
         break;
+    case 11:
+        ret = immersive_channel_element(s, 0, 0, iframe);
+        break;
     case 12:
+        ret = immersive_channel_element(s, 1, 0, iframe);
+        break;
+    case 13:
         ret = immersive_channel_element(s, 0, 1, iframe);
+        break;
+    case 14:
+        ret = immersive_channel_element(s, 1, 1, iframe);
         break;
     default:
         avpriv_report_missing_feature(s->avctx, "channel_mode = %d", channel_mode);
