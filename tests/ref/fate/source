@@ -4,13 +4,17 @@ libavcodec/interplayacm.c
 libavcodec/log2_tab.c
 libavcodec/reverse.c
 libavcodec/riscv/cpu_common.c
+libavcodec/thread.c
 libavcodec/threadprogress.c
 libavdevice/file_open.c
 libavdevice/reverse.c
 libavdevice/riscv/cpu_common.c
 libavfilter/file_open.c
 libavfilter/log2_tab.c
+libavfilter/pthread_frame.c
 libavfilter/riscv/cpu_common.c
+libavfilter/thread.c
+libavfilter/threadprogress.c
 libavformat/file_open.c
 libavformat/golomb_tab.c
 libavformat/log2_tab.c
@@ -28,6 +32,7 @@ compat/float/limits.h
 compat/stdbit/stdbit.h
 libavcodec/bitstream_template.h
 libavcodec/bsf/wwisevorbis_data.h
+libavutil/threadprogress.h
 tools/decode_simple.h
 Use of av_clip() where av_clip_uintp2() could be used:
 Use of av_clip() where av_clip_intp2() could be used:
