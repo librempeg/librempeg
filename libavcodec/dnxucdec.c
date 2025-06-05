@@ -243,79 +243,79 @@ static int dnxuc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     }
 
     switch (avctx->codec_tag) {
-        case MKTAG('y','2','0','8'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_UYVY422, 16, pass_through);
-            break;
-        case MKTAG('y','4','0','8'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444, 24, pass_through);
-            break;
-        case MKTAG('y','2','1','0'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV422P10LE, 20, unpack_y210);
-            break;
-        case MKTAG('y','4','1','0'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444P10LE, 20, unpack_y410);
-            break;
-        case MKTAG('y','2','1','2'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV422P12LE, 24, unpack_y212);
-            break;
-        case MKTAG('y','4','1','2'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444P12LE, 24, unpack_y412);
-            break;
-        case MKTAG('y','2','1','6'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_UYVY422_16LE, 32, pass_through);
-            break;
-        case MKTAG('y','4','1','6'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444_16LE, 48, pass_through);
-            break;
-        case MKTAG(' ','y','2','h'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_UYVY422F16LE, 32, pass_through);
-            break;
-        case MKTAG(' ','y','4','h'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444F16LE, 48, pass_through);
-            break;
-        case MKTAG(' ','y','2','f'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_UYVY422F32LE, 64, pass_through);
-            break;
-        case MKTAG(' ','y','4','f'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444F32LE, 96, pass_through);
-            break;
+    case MKTAG('y','2','0','8'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_UYVY422, 16, pass_through);
+        break;
+    case MKTAG('y','4','0','8'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444, 24, pass_through);
+        break;
+    case MKTAG('y','2','1','0'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV422P10LE, 20, unpack_y210);
+        break;
+    case MKTAG('y','4','1','0'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444P10LE, 20, unpack_y410);
+        break;
+    case MKTAG('y','2','1','2'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV422P12LE, 24, unpack_y212);
+        break;
+    case MKTAG('y','4','1','2'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444P12LE, 24, unpack_y412);
+        break;
+    case MKTAG('y','2','1','6'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_UYVY422_16LE, 32, pass_through);
+        break;
+    case MKTAG('y','4','1','6'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444_16LE, 48, pass_through);
+        break;
+    case MKTAG(' ','y','2','h'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_UYVY422F16LE, 32, pass_through);
+        break;
+    case MKTAG(' ','y','4','h'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444F16LE, 48, pass_through);
+        break;
+    case MKTAG(' ','y','2','f'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_UYVY422F32LE, 64, pass_through);
+        break;
+    case MKTAG(' ','y','4','f'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444F32LE, 96, pass_through);
+        break;
 
-        case MKTAG('r','g','0','8'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_RGB24, 24, pass_through);
-            break;
-        case MKTAG('r','g','1','0'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_GBRP10LE, 30, unpack_rg10);
-            break;
-        case MKTAG('r','g','1','2'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_GBRP12LE, 36, unpack_rg12);
-            break;
-        case MKTAG('r','g','1','6'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_RGB48LE, 48, pass_through);
-            break;
-        case MKTAG(' ','r','g','h'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_RGBF16LE, 48, pass_through);
-            break;
-        case MKTAG(' ','r','g','f'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_RGBF32LE, 96, pass_through);
-            break;
+    case MKTAG('r','g','0','8'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_RGB24, 24, pass_through);
+        break;
+    case MKTAG('r','g','1','0'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_GBRP10LE, 30, unpack_rg10);
+        break;
+    case MKTAG('r','g','1','2'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_GBRP12LE, 36, unpack_rg12);
+        break;
+    case MKTAG('r','g','1','6'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_RGB48LE, 48, pass_through);
+        break;
+    case MKTAG(' ','r','g','h'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_RGBF16LE, 48, pass_through);
+        break;
+    case MKTAG(' ','r','g','f'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_RGBF32LE, 96, pass_through);
+        break;
 
-        case MKTAG(' ','a','0','8'):
-        case MKTAG(' ','y','0','8'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_GRAY8, 8, pass_through);
-            break;
-        case MKTAG(' ','a','1','6'):
-        case MKTAG(' ','y','1','6'):
-            ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_GRAY16LE, 16, pass_through);
-            break;
+    case MKTAG(' ','a','0','8'):
+    case MKTAG(' ','y','0','8'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_GRAY8, 8, pass_through);
+        break;
+    case MKTAG(' ','a','1','6'):
+    case MKTAG(' ','y','1','6'):
+        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_GRAY16LE, 16, pass_through);
+        break;
 
-        // case MKTAG('r','l','0','8'): TODO: RLE encoded 8bit alpha
-        // case MKTAG('r','l','1','6'): TODO: RLE encoded 16bit alpha
+    // case MKTAG('r','l','0','8'): TODO: RLE encoded 8bit alpha
+    // case MKTAG('r','l','1','6'): TODO: RLE encoded 16bit alpha
 
-        default:
-            av_log(avctx, AV_LOG_ERROR,
-            "Unsupported DNxUncompressed pixel format variant: '%s'\n",
-            fourcc_buf);
-            return AVERROR_PATCHWELCOME;
+    default:
+        av_log(avctx, AV_LOG_ERROR,
+        "Unsupported DNxUncompressed pixel format variant: '%s'\n",
+        fourcc_buf);
+        return AVERROR_PATCHWELCOME;
     }
 
     if (ret < 0) {
