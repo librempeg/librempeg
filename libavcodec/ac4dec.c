@@ -154,7 +154,7 @@ typedef struct SubstreamChannel {
     int     aspx_num_env_prev;
     int     num_atsg_sig;
     int     num_atsg_noise;
-    int     aspx_freq_res[MAX_ASPX_SIGNAL];
+    uint8_t aspx_freq_res[MAX_ASPX_SIGNAL+1];
     int     aspx_var_bord_left;
     int     aspx_var_bord_right;
     int     aspx_rel_bord_left[4];
@@ -2969,7 +2969,7 @@ static int noise_mid_border(int aspx_tsg_ptr, int aspx_int_class, int num_atsg_s
 
 static int freq_res(uint8_t *atsg_sig, int atsg, int aspx_tsg_ptr,
                     int num_aspx_timeslots, int aspx_freq_res_mode,
-                    int *aspx_freq_res)
+                    const uint8_t *aspx_freq_res)
 {
     int freq_res;
 
