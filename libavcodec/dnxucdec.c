@@ -308,9 +308,6 @@ static int dnxuc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_GRAY16LE, 16, pass_through);
         break;
 
-    // case MKTAG('r','l','0','8'): TODO: RLE encoded 8bit alpha
-    // case MKTAG('r','l','1','6'): TODO: RLE encoded 16bit alpha
-
     default:
         av_log(avctx, AV_LOG_ERROR,
         "Unsupported DNxUncompressed pixel format variant: '%s'\n",
