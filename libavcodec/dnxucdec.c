@@ -246,9 +246,6 @@ static int dnxuc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     case MKTAG('y','2','0','8'):
         ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_UYVY422, 16, pass_through);
         break;
-    case MKTAG('y','4','0','8'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444, 24, pass_through);
-        break;
     case MKTAG('y','2','1','0'):
         ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV422P10LE, 20, unpack_y210);
         break;
@@ -260,24 +257,6 @@ static int dnxuc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         break;
     case MKTAG('y','4','1','2'):
         ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444P12LE, 24, unpack_y412);
-        break;
-    case MKTAG('y','2','1','6'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_UYVY422_16LE, 32, pass_through);
-        break;
-    case MKTAG('y','4','1','6'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444_16LE, 48, pass_through);
-        break;
-    case MKTAG(' ','y','2','h'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_UYVY422F16LE, 32, pass_through);
-        break;
-    case MKTAG(' ','y','4','h'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444F16LE, 48, pass_through);
-        break;
-    case MKTAG(' ','y','2','f'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_UYVY422F32LE, 64, pass_through);
-        break;
-    case MKTAG(' ','y','4','f'):
-        ret = fmt_frame(avctx, frame, avpkt, AV_PIX_FMT_YUV444F32LE, 96, pass_through);
         break;
 
     case MKTAG('r','g','0','8'):
