@@ -152,6 +152,8 @@ typedef struct SubstreamChannel {
     int     aspx_num_rel_right;
     int     aspx_num_env;
     int     aspx_num_env_prev;
+    int     num_atsg_sig;
+    int     num_atsg_noise;
     int     aspx_freq_res[MAX_ASPX_SIGNAL];
     int     aspx_var_bord_left;
     int     aspx_var_bord_right;
@@ -186,8 +188,8 @@ typedef struct SubstreamChannel {
     int     sbg_patch_start_sb[MAX_SBG_NOISE];
     int     sbg_master[24];
 
-    int     num_sbg_sig[2];
-    int     sbg_sig[2][24];
+    int     num_sbg_sig[6];
+    int     sbg_sig[6][24];
     int     num_sbg_patches;
     int     num_sbg_lim;
 
@@ -3022,8 +3024,8 @@ static void get_tab_border(uint8_t *atsg_sig, int num_aspx_timeslots, int num_at
 
 static int aspx_atsg(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch, int iframe)
 {
-    int num_atsg_sig = ssch->aspx_num_env;
-    int num_atsg_noise = ssch->aspx_num_noise;
+    int num_atsg_sig = ssch->num_atsg_sig = ssch->aspx_num_env;
+    int num_atsg_noise = ssch->num_atsg_noise = ssch->aspx_num_noise;
 
     if (ssch->previous_stop_pos == 0)
         ssch->previous_stop_pos = s->num_aspx_timeslots;
@@ -3079,14 +3081,18 @@ static int aspx_atsg(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch,
 
     ssch->previous_stop_pos = ssch->atsg_sig[num_atsg_sig];
 
-    ssch->num_sbg_sig[1] = ssch->num_sbg_sig_highres;
-    memcpy(ssch->sbg_sig[1], ssch->sbg_sig_highres, sizeof(ssch->sbg_sig_highres));
-    ssch->num_sbg_sig[0] = ssch->num_sbg_sig_lowres;
-    memcpy(ssch->sbg_sig[0], ssch->sbg_sig_lowres, sizeof(ssch->sbg_sig_lowres));
-
     av_assert0(num_atsg_sig > 0 && num_atsg_sig <= 5);
-    for (int atsg = 0; atsg < num_atsg_sig; atsg++)
+    for (int atsg = 0; atsg < num_atsg_sig; atsg++) {
         av_log(s->avctx, AV_LOG_DEBUG, "atsg_sig[%d]: %d\n", atsg, ssch->atsg_sig[atsg]);
+
+        if (ssch->atsg_freqres[atsg]) {
+            ssch->num_sbg_sig[atsg] = ssch->num_sbg_sig_highres;
+            memcpy(ssch->sbg_sig[atsg], ssch->sbg_sig_highres, sizeof(ssch->sbg_sig_highres));
+        } else {
+            ssch->num_sbg_sig[atsg] = ssch->num_sbg_sig_lowres;
+            memcpy(ssch->sbg_sig[atsg], ssch->sbg_sig_lowres, sizeof(ssch->sbg_sig_lowres));
+        }
+    }
     ssch->atsg_sig[num_atsg_sig] = FFMIN(s->num_aspx_timeslots, ssch->atsg_sig[num_atsg_sig]);
     av_log(s->avctx, AV_LOG_DEBUG, "atsg_sig[%d]: %d\n", num_atsg_sig, ssch->atsg_sig[num_atsg_sig]);
 
