@@ -288,9 +288,9 @@ static int dnxuc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         break;
 
     default:
-        av_log(avctx, AV_LOG_ERROR,
-        "Unsupported DNxUncompressed pixel format variant: '%s'\n",
-        fourcc_buf);
+        avpriv_request_sample(avctx,
+                              "Unsupported DNxUncompressed pixel format variant: '%s'",
+                              fourcc_buf);
         return AVERROR_PATCHWELCOME;
     }
 
