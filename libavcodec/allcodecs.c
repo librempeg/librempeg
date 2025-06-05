@@ -96,6 +96,7 @@ extern const FFCodec ff_dfa_decoder;
 extern const FFCodec ff_dirac_decoder;
 extern const FFCodec ff_dnxhd_encoder;
 extern const FFCodec ff_dnxhd_decoder;
+extern const FFCodec ff_dnxuc_decoder;
 extern const FFCodec ff_dpx_encoder;
 extern const FFCodec ff_dpx_decoder;
 extern const FFCodec ff_dsicinvideo_decoder;

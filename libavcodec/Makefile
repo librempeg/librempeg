@@ -331,6 +331,7 @@ OBJS-$(CONFIG_DFPWM_DECODER)           += dfpwmdec.o
 OBJS-$(CONFIG_DFPWM_ENCODER)           += dfpwmenc.o
 OBJS-$(CONFIG_DNXHD_DECODER)           += dnxhddec.o dnxhddata.o
 OBJS-$(CONFIG_DNXHD_ENCODER)           += dnxhdenc.o dnxhddata.o
+OBJS-$(CONFIG_DNXUC_DECODER)           += dnxucdec.o
 OBJS-$(CONFIG_DOLBY_E_DECODER)         += dolby_e.o dolby_e_parse.o kbdwin.o
 OBJS-$(CONFIG_DPX_DECODER)             += dpx.o
 OBJS-$(CONFIG_DPX_ENCODER)             += dpxenc.o
