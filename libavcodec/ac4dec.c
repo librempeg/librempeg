@@ -5378,10 +5378,9 @@ static int get_qsignal_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_
     SubstreamChannel *ssch = &ss->ssch[ch_id];
     int sbg_idx_high2low[24] = {0};
     int sbg_idx_low2high[24] = {0};
-    int sbg_low = 0;
     int delta;
 
-    for (int sbg = 0; sbg < ssch->num_sbg_sig_highres; sbg++) {
+    for (int sbg = 0, sbg_low = 0; sbg < ssch->num_sbg_sig_highres; sbg++) {
         if (ssch->sbg_sig_lowres[sbg_low+1] == ssch->sbg_sig_highres[sbg]) {
             sbg_low++;
             sbg_idx_low2high[sbg_low] = sbg;
