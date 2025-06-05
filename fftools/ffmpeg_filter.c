@@ -2910,6 +2910,101 @@ static int prefilter_init_displaymatrix(Prefilter *pf, const InputFilterPriv *if
     return 0;
 }
 
+static int prefilter_init_fmtconv(Prefilter *pf, const InputFilterPriv *ifp,
+                                  AVFilterContext **last_filter, int *pad_idx)
+{
+    AVFilterContext *f;
+    const AVFilter *filter;
+    char name[128];
+    int ret;
+
+    if (ifp->type == AVMEDIA_TYPE_VIDEO) {
+        char buf[128];
+
+        filter = avfilter_get_by_name("scale");
+        if (!filter)
+            return AVERROR_FILTER_NOT_FOUND;
+
+        snprintf(name, sizeof(name), "prefilter %s/scale", ifp->opts.name);
+
+        f = avfilter_graph_alloc_filter(pf->graph, filter, name);
+        if (!f)
+            return AVERROR(ENOMEM);
+
+        if (ifp->color_range != AVCOL_RANGE_UNSPECIFIED)
+            av_opt_set_int(f, "out_range", ifp->color_range, AV_OPT_SEARCH_CHILDREN);
+        if (ifp->color_space != AVCOL_SPC_UNSPECIFIED)
+            av_opt_set_int(f, "out_color_matrix", ifp->color_space, AV_OPT_SEARCH_CHILDREN);
+
+        if (pf->graph->scale_sws_opts)
+            av_set_options_string(f, pf->graph->scale_sws_opts, "=", ":");
+
+        snprintf(buf, sizeof(buf), "w=%d:h=%d", ifp->width, ifp->height);
+
+        ret = avfilter_init_str(f, buf);
+        if (ret < 0)
+            return ret;
+
+        ret = avfilter_link(*last_filter, *pad_idx, f, 0);
+        if (ret < 0)
+            return ret;
+        *last_filter = f;
+        *pad_idx     = 0;
+
+        filter = avfilter_get_by_name("format");
+        if (!filter)
+            return AVERROR_FILTER_NOT_FOUND;
+
+        snprintf(name, sizeof(name), "prefilter %s/format", ifp->opts.name);
+
+        f = avfilter_graph_alloc_filter(pf->graph, filter, name);
+        if (!f)
+            return AVERROR(ENOMEM);
+
+        ret = av_opt_set_array(f, "pixel_formats", AV_OPT_SEARCH_CHILDREN,
+                               0, 1, AV_OPT_TYPE_PIXEL_FMT, &ifp->format);
+        if (ret < 0)
+            return ret;
+    } else {
+        filter = avfilter_get_by_name("aformat");
+        if (!filter)
+            return AVERROR_FILTER_NOT_FOUND;
+
+        snprintf(name, sizeof(name), "prefilter %s/format", ifp->opts.name);
+
+        f = avfilter_graph_alloc_filter(pf->graph, filter, name);
+        if (!f)
+            return AVERROR(ENOMEM);
+
+        ret = av_opt_set_array(f, "sample_formats", AV_OPT_SEARCH_CHILDREN,
+                               0, 1, AV_OPT_TYPE_SAMPLE_FMT, &ifp->format);
+        if (ret < 0)
+            return ret;
+
+        ret = av_opt_set_array(f, "sample_rates", AV_OPT_SEARCH_CHILDREN,
+                               0, 1, AV_OPT_TYPE_INT, &ifp->sample_rate);
+        if (ret < 0)
+            return ret;
+
+        ret = av_opt_set_array(f, "channel_layouts", AV_OPT_SEARCH_CHILDREN,
+                               0, 1, AV_OPT_TYPE_CHLAYOUT, &ifp->ch_layout);
+        if (ret < 0)
+            return ret;
+    }
+
+    ret = avfilter_init_dict(f, NULL);
+    if (ret < 0)
+        return ret;
+
+    ret = avfilter_link(*last_filter, *pad_idx, f, 0);
+    if (ret < 0)
+        return ret;
+    *last_filter = f;
+    *pad_idx     = 0;
+
+    return 0;
+}
+
 static int prefilter_init_out(Prefilter *pf, const InputFilterPriv *ifp,
                               AVFilterContext *last_filter, int pad_idx)
 {
@@ -2941,10 +3036,34 @@ static int prefilter_init_out(Prefilter *pf, const InputFilterPriv *ifp,
 
 static int prefilter_init(void *logctx, Prefilter *pf, const InputFilterPriv *ifp)
 {
+    const FilterGraph *fg = ifp->ifilter.graph;
     int need_prefilter = pf->displaymatrix_present;
+    int need_fmtconv = 0;
 
     AVFilterContext *last_filter;
     int pad_idx, ret;
+
+    if (ifp->opts.param_change == IFILTER_PARAM_CHANGE_KEEP_FIRST && ifp->format >= 0) {
+        need_fmtconv |= pf->format != ifp->format;
+
+        if (ifp->type == AVMEDIA_TYPE_VIDEO) {
+            need_fmtconv |= pf->width       != ifp->width       ||
+                            pf->height      != ifp->height      ||
+                            pf->color_space != ifp->color_space ||
+                            pf->color_range != ifp->color_range ||
+                            av_cmp_q(pf->sample_aspect_ratio, ifp->sample_aspect_ratio);
+        } else {
+            need_fmtconv |= pf->sample_rate != ifp->sample_rate ||
+                            av_channel_layout_compare(&pf->ch_layout, &ifp->ch_layout);
+        }
+
+        if (need_fmtconv) {
+            av_log(logctx, AV_LOG_INFO,
+                   "Input parameters changed, will convert back to initial ones. "
+                   "Use '-reinit_filter reinit' to reinit the filtergraph instead\n");
+        }
+    }
+    need_prefilter |= need_fmtconv;
 
     if (!need_prefilter)
         return 0;
@@ -2952,6 +3071,25 @@ static int prefilter_init(void *logctx, Prefilter *pf, const InputFilterPriv *if
     pf->graph = avfilter_graph_alloc();
     if (!pf->graph)
         return AVERROR(ENOMEM);
+
+    if (filtergraph_is_simple(fg)) {
+        const OutputFilterPriv *ofp = ofp_from_ofilter(fg->outputs[0]);
+
+        if (ifp->type == AVMEDIA_TYPE_VIDEO && av_dict_count(ofp->sws_opts)) {
+            ret = av_dict_get_string(ofp->sws_opts,
+                                     &pf->graph->scale_sws_opts,
+                                     '=', ':');
+            if (ret < 0)
+                return ret;
+        } else if (ifp->type == AVMEDIA_TYPE_AUDIO && av_dict_count(ofp->swr_opts)) {
+            char *args;
+            ret = av_dict_get_string(ofp->swr_opts, &args, '=', ':');
+            if (ret < 0)
+                return ret;
+            av_opt_set(pf->graph, "aresample_swr_opts", args, 0);
+            av_free(args);
+        }
+    }
 
     ret = prefilter_init_in(pf, ifp);
     if (ret < 0)
@@ -2961,6 +3099,12 @@ static int prefilter_init(void *logctx, Prefilter *pf, const InputFilterPriv *if
 
     if (pf->displaymatrix_present) {
         ret = prefilter_init_displaymatrix(pf, ifp, &last_filter, &pad_idx);
+        if (ret < 0)
+            return ret;
+    }
+
+    if (need_fmtconv) {
+        ret = prefilter_init_fmtconv(pf, ifp, &last_filter, &pad_idx);
         if (ret < 0)
             return ret;
     }
@@ -3135,7 +3279,7 @@ static int send_frame(FilterGraph *fg, FilterGraphThread *fgt,
     } else if (ifp->downmixinfo_present)
         need_reinit |= DOWNMIX_CHANGED;
 
-    if (!(ifp->opts.flags & IFILTER_FLAG_REINIT) && fgt->graph)
+    if (fgt->graph && ifp->opts.param_change == IFILTER_PARAM_CHANGE_PASSTHROUGH)
         need_reinit = 0;
 
     if (!!ifp->hw_frames_ctx != !!frame->hw_frames_ctx ||

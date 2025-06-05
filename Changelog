@@ -65,6 +65,9 @@ version <next>:
 - VVC decoder supports all content of SCC (Screen Content Coding):
   IBC (Inter Block Copy), Palette Mode and ACT (Adaptive Color Transform
 - ffmpeg CLI is now AGPL and requires passing --enable-agpl to configure
+- ffmpeg CLI no longer reinits filtergraphs on parameter changes by
+  default; see manpage for -reinit_filter for details, previous
+  behaviour can be restored with '-reinit_filter reinit'
 
 
 version 7.1:

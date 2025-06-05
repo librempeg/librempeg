@@ -1714,9 +1714,9 @@ const OptionDef options[] = {
         { .off = OFFSET(filter_scripts) },
         "deprecated, use -/filter", "filename" },
 #endif
-    { "reinit_filter",          OPT_TYPE_INT, OPT_PERSTREAM | OPT_INPUT | OPT_EXPERT,
+    { "reinit_filter",          OPT_TYPE_STRING, OPT_PERSTREAM | OPT_INPUT | OPT_EXPERT,
         { .off = OFFSET(reinit_filters) },
-        "reinit filtergraph on input parameter changes", "" },
+        "behaviour on input parameter changes: keepfirst(default)/reinit/passthrough", "" },
     { "filter_complex",         OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT,
         { .func_arg = opt_filter_complex },
         "create a complex filtergraph", "graph_description" },

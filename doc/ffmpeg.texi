@@ -1363,15 +1363,39 @@ syntax.
 See the @ref{filter_complex_option,,-filter_complex option} if you
 want to create filtergraphs with multiple inputs and/or outputs.
 
-@item -reinit_filter[:@var{stream_specifier}] @var{integer} (@emph{input,per-stream})
-This boolean option determines if the filtergraph(s) to which this stream is fed gets
-reinitialized when input frame parameters change mid-stream. This option is enabled by
-default as most video and all audio filters cannot handle deviation in input frame properties.
-Upon reinitialization, existing filter state is lost, like e.g. the frame count @code{n}
-reference available in some filters. Any frames buffered at time of reinitialization are lost.
-The properties where a change triggers reinitialization are,
-for video, frame resolution or pixel format;
-for audio, sample format, sample rate, channel count or channel layout.
+@item -reinit_filter[:@var{stream_specifier}] @var{mode} (@emph{input,per-stream})
+Configure filtering behaviour on an input stream parameter change. Stream
+parameters are width, height, pixel format, etc. for video; sample rate, sample
+format, and channel layout for audio. @var{mode} may be one of:
+@table @option
+@item keepfirst
+The filtergraph is created only once, with the initial stream parameters. If the
+parameters change at a later point, the data is automatically converted to match
+these initial parameters.
+
+This is the default. Note that this behaviour may be undesirable in certain cases.
+E.g. when stream starts at a very low resolution, this mode will all the frames
+to first be rescaled to this resolution before anything else is done with them.
+In such a case consider using one of the other modes.
+
+@item reinit
+On an input parameter change, the filtergraph is destroyed and reinitialized
+from scratch, while keeping the same @emph{output} parameters. Note that this
+causes filter properties (e.g. frame counts, various statistics, etc.) to be
+reset.
+
+This used to be the default behaviour, and is equivalent to the old
+now-deprecated @option{-reinit_filter 1} syntax.
+
+@item passthrough
+No action is performed on input parameter change, the frames are passed through
+to the filtergraph as they are output by the decoder. Note that most filters do
+not support dynamic parameter changes, so this will cause filtering to fail for
+them.
+
+This is equivalent to the old now-deprecated @option{-reinit_filter 0} syntax.
+
+@end table
 
 @item -filter_threads @var{nb_threads} (@emph{global})
 Defines how many threads are used to process a filter pipeline. Each pipeline

@@ -259,9 +259,14 @@ typedef struct OptionsContext {
 
 enum IFilterFlags {
     IFILTER_FLAG_AUTOROTATE     = (1 << 0),
-    IFILTER_FLAG_REINIT         = (1 << 1),
-    IFILTER_FLAG_CFR            = (1 << 2),
-    IFILTER_FLAG_CROP           = (1 << 3),
+    IFILTER_FLAG_CFR            = (1 << 1),
+    IFILTER_FLAG_CROP           = (1 << 2),
+};
+
+enum IFilterParamChange {
+    IFILTER_PARAM_CHANGE_KEEP_FIRST,
+    IFILTER_PARAM_CHANGE_REINIT,
+    IFILTER_PARAM_CHANGE_PASSTHROUGH,
 };
 
 typedef struct InputFilterOptions {
@@ -287,6 +292,8 @@ typedef struct InputFilterOptions {
 
     // a combination of IFILTER_FLAG_*
     unsigned            flags;
+
+    enum IFilterParamChange param_change;
 
     AVFrame            *fallback;
 } InputFilterOptions;
