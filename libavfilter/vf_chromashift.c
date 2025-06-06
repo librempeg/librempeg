@@ -307,11 +307,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = ctx->outputs[0];
     ChromaShiftContext *s = ctx->priv;
     AVFrame *out;
+    int ret;
 
-    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    out = av_frame_alloc();
     if (!out) {
         av_frame_free(&in);
         return AVERROR(ENOMEM);
+    }
+
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0) {
+        av_frame_free(&out);
+        av_frame_free(&in);
+        return ret;
     }
     av_frame_copy_props(out, in);
 
@@ -354,6 +362,33 @@ static int config_input(AVFilterLink *inlink)
 
     return av_image_fill_linesizes(s->linesize, inlink->format, inlink->w);
 }
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const ChromaShiftContext *s_src = src->priv;
+    ChromaShiftContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->edge = s_src->edge;
+    s_dst->cbh  = s_src->cbh;
+    s_dst->cbv  = s_src->cbv;
+    s_dst->crh  = s_src->crh;
+    s_dst->rh   = s_src->rh;
+    s_dst->rv   = s_src->rv;
+    s_dst->gh   = s_src->gh;
+    s_dst->gv   = s_src->gv;
+    s_dst->bh   = s_src->bh;
+    s_dst->bv   = s_src->bv;
+    s_dst->ah   = s_src->ah;
+    s_dst->av   = s_src->av;
+
+    return 0;
+}
+#endif
 
 #define OFFSET(x) offsetof(ChromaShiftContext, x)
 #define VFR AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_RUNTIME_PARAM
@@ -399,8 +434,12 @@ const FFFilter ff_vf_chromashift = {
     .p.name        = "chromashift",
     .p.description = NULL_IF_CONFIG_SMALL("Shift chroma."),
     .p.priv_class  = &chromashift_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(ChromaShiftContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_INPUTS(inputs),
     FILTER_PIXFMTS_ARRAY(yuv_pix_fmts),
@@ -436,8 +475,12 @@ const FFFilter ff_vf_rgbashift = {
     .p.name        = "rgbashift",
     .p.description = NULL_IF_CONFIG_SMALL("Shift RGBA."),
     .p.priv_class  = &rgbashift_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(ChromaShiftContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_INPUTS(inputs),
     FILTER_PIXFMTS_ARRAY(rgb_pix_fmts),
