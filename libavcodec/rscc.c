@@ -213,7 +213,7 @@ static int rscc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
 
             ret = ff_inflate(&ctx->ic, gbc->buffer, packed_tiles_size, inflated_tiles, 1, length, length);
-            if (ret)
+            if (ret < 0)
                 goto end;
 
             /* Skip the compressed tile section in the main byte reader,

@@ -560,7 +560,7 @@ static int query_formats(AVFilterGraph *graph, void *log_ctx)
                     const AVFilterFormatsMerger *m = &neg->mergers[av_log2(convert_needed)];
 
                     filter_name = m->conversion_filter;
-                    opts = NULL;
+                    opts = FF_FIELD_AT(char *, neg->conversion_opts_offset, *graph);
                 } else {
                     filter_name = neg->conversion_filter;
                     opts = FF_FIELD_AT(char *, neg->conversion_opts_offset, *graph);
