@@ -41,17 +41,18 @@ typedef struct ReScaleContext {
 
     int pass;
 
-    int (*rescale_slice)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+    int (*rescale_slice[NB_INTERP])(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } ReScaleContext;
 
 #define OFFSET(x) offsetof(ReScaleContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+#define TFLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_RUNTIME_PARAM
 
 static const AVOption rescale_options[] = {
     { "size", "output video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, .flags = FLAGS },
-    { "interpolation", "set interpolation", OFFSET(interpolation), AV_OPT_TYPE_INT, {.i64=LINEAR}, 0, NB_INTERP-1, .flags=FLAGS, .unit="interp" },
-    { "nearest", 0, 0, AV_OPT_TYPE_CONST, {.i64=NEAREST}, 0, 0, FLAGS, .unit = "interp" },
-    { "linear",  0, 0, AV_OPT_TYPE_CONST, {.i64=LINEAR},  0, 0, FLAGS, .unit = "interp" },
+    { "interpolation", "set interpolation", OFFSET(interpolation), AV_OPT_TYPE_INT, {.i64=LINEAR}, 0, NB_INTERP-1, .flags=TFLAGS, .unit="interp" },
+    { "nearest", "nearest neighbor", 0, AV_OPT_TYPE_CONST, {.i64=NEAREST}, 0, 0, TFLAGS, .unit = "interp" },
+    { "linear",  "bilinear", 0, AV_OPT_TYPE_CONST, {.i64=LINEAR},  0, 0, TFLAGS, .unit = "interp" },
     {NULL}
 };
 
@@ -136,21 +137,17 @@ static int config_output(AVFilterLink *outlink)
     s->src_desc = av_pix_fmt_desc_get(inlink->format);
 
     if (s->dst_desc->comp[0].depth <= 8) {
-        s->rescale_slice = rescale_slice_8;
-        if (s->interpolation == LINEAR)
-            s->rescale_slice = rescale_slice_linear_8;
+        s->rescale_slice[NEAREST] = rescale_slice_8;
+        s->rescale_slice[LINEAR] = rescale_slice_linear_8;
     } else if (s->dst_desc->comp[0].depth <= 16) {
-        s->rescale_slice = rescale_slice_16;
-        if (s->interpolation == LINEAR)
-            s->rescale_slice = rescale_slice_linear_16;
+        s->rescale_slice[NEAREST] = rescale_slice_16;
+        s->rescale_slice[LINEAR] = rescale_slice_linear_16;
     } else if (s->dst_desc->comp[0].depth <= 32 && !(s->dst_desc->flags & AV_PIX_FMT_FLAG_FLOAT)) {
-        s->rescale_slice = rescale_slice_32;
-        if (s->interpolation == LINEAR)
-            s->rescale_slice = rescale_slice_linear_32;
+        s->rescale_slice[NEAREST] = rescale_slice_32;
+        s->rescale_slice[LINEAR] = rescale_slice_linear_32;
     } else if (s->dst_desc->comp[0].depth <= 32 && (s->dst_desc->flags & AV_PIX_FMT_FLAG_FLOAT)) {
-        s->rescale_slice = rescale_slice_33;
-        if (s->interpolation == LINEAR)
-            s->rescale_slice = rescale_slice_linear_33;
+        s->rescale_slice[NEAREST] = rescale_slice_33;
+        s->rescale_slice[LINEAR] = rescale_slice_linear_33;
     } else {
         return AVERROR_BUG;
     }
@@ -189,7 +186,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
         nb_jobs = out->height;
 
-        ff_filter_execute(ctx, s->rescale_slice, &td, NULL,
+        ff_filter_execute(ctx, s->rescale_slice[s->interpolation], &td, NULL,
                           FFMIN(nb_jobs, ff_filter_get_nb_threads(ctx)));
 
         av_frame_copy_props(out, in);
@@ -208,6 +205,22 @@ static AVFrame *get_in_video_buffer(AVFilterLink *inlink, int w, int h)
         ff_null_get_video_buffer   (inlink, w, h) :
         ff_default_get_video_buffer(inlink, w, h);
 }
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const ReScaleContext *s_src = src->priv;
+    ReScaleContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->interpolation  = s_src->interpolation;
+
+    return 0;
+}
+#endif
 
 static const AVFilterPad inputs[] = {
     {
@@ -231,9 +244,13 @@ const FFFilter ff_vf_rescale = {
     .p.description = NULL_IF_CONFIG_SMALL("Rescale Video stream."),
     .p.priv_class  = &rescale_class,
     .priv_size     = sizeof(ReScaleContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_QUERY_FUNC2(query_formats),
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     .p.flags       = AVFILTER_FLAG_SLICE_THREADS |
                      AVFILTER_FLAG_FRAME_THREADS,
+    .process_command = ff_filter_process_command,
 };
