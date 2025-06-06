@@ -235,7 +235,7 @@ fate-aac-latm_000000001180bc60: CMD = pcm -i $(TARGET_SAMPLES)/aac/latm_00000000
 fate-aac-latm_000000001180bc60: REF = $(SAMPLES)/aac/latm_000000001180bc60.s16
 
 FATE_AAC_LATM += fate-aac-latm_stereo_to_51
-fate-aac-latm_stereo_to_51: CMD = pcm -i $(TARGET_SAMPLES)/aac/latm_stereo_to_51.ts -channel_layout 5.1
+fate-aac-latm_stereo_to_51: CMD = pcm -reinit_filter reinit -i $(TARGET_SAMPLES)/aac/latm_stereo_to_51.ts -channel_layout 5.1
 fate-aac-latm_stereo_to_51: REF = $(SAMPLES)/aac/latm_stereo_to_51_ref.s16
 
 fate-aac-autobsf-adtstoasc: CMD = transcode "aac" $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts \

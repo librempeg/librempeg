@@ -397,22 +397,22 @@ fate-filter-hqdn3d-sample: CMD = framecrc -idct simple -i $(TARGET_SAMPLES)/smjp
 
 FATE_FILTER_EPX-$(call FILTERDEMDEC, SCALE EPX, IMAGE2, PNG) = fate-filter-ep2x fate-filter-ep3x
 FATE_FILTER_SAMPLES-yes += $(FATE_FILTER_EPX-yes)
-fate-filter-ep2x: CMD = framecrc -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,format=rgb32,epx=2,scale,format=bgra
-fate-filter-ep3x: CMD = framecrc -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,format=rgb32,epx=3,scale,format=bgra
+fate-filter-ep2x: CMD = framecrc -reinit_filter reinit -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,format=rgb32,epx=2,scale,format=bgra
+fate-filter-ep3x: CMD = framecrc -reinit_filter reinit -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,format=rgb32,epx=3,scale,format=bgra
 fate-filter-epx: $(FATE_FILTER_EPX-yes)
 
 FATE_FILTER_HQX-$(call FILTERDEMDEC, SCALE HQX, IMAGE2, PNG) = fate-filter-hq2x fate-filter-hq3x fate-filter-hq4x
 FATE_FILTER_SAMPLES-yes += $(FATE_FILTER_HQX-yes)
-fate-filter-hq2x: CMD = framecrc -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,format=rgb32,hqx=2,scale,format=bgra
-fate-filter-hq3x: CMD = framecrc -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,format=rgb32,hqx=3,scale,format=bgra
-fate-filter-hq4x: CMD = framecrc -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,format=rgb32,hqx=4,scale,format=bgra
+fate-filter-hq2x: CMD = framecrc -reinit_filter reinit -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,format=rgb32,hqx=2,scale,format=bgra
+fate-filter-hq3x: CMD = framecrc -reinit_filter reinit -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,format=rgb32,hqx=3,scale,format=bgra
+fate-filter-hq4x: CMD = framecrc -reinit_filter reinit -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,format=rgb32,hqx=4,scale,format=bgra
 fate-filter-hqx: $(FATE_FILTER_HQX-yes)
 
 FATE_FILTER_XBR-$(call FILTERDEMDEC, SCALE XBR, IMAGE2, PNG) = fate-filter-2xbr fate-filter-3xbr fate-filter-4xbr
 FATE_FILTER_SAMPLES-yes += $(FATE_FILTER_XBR-yes)
-fate-filter-2xbr: CMD = framecrc -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,xbr=2,scale -pix_fmt bgra
-fate-filter-3xbr: CMD = framecrc -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,xbr=3,scale -pix_fmt bgra
-fate-filter-4xbr: CMD = framecrc -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,xbr=4,scale -pix_fmt bgra
+fate-filter-2xbr: CMD = framecrc -reinit_filter reinit -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,xbr=2,scale -pix_fmt bgra
+fate-filter-3xbr: CMD = framecrc -reinit_filter reinit -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,xbr=3,scale -pix_fmt bgra
+fate-filter-4xbr: CMD = framecrc -reinit_filter reinit -i $(TARGET_SAMPLES)/filter/pixelart%d.png -vf scale,xbr=4,scale -pix_fmt bgra
 fate-filter-xbr: $(FATE_FILTER_XBR-yes)
 
 FATE_FILTER_SAMPLES-$(call FILTERDEMDEC, PERMS CURVES, AVI, UTVIDEO) += fate-filter-curves
