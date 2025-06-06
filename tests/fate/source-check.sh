@@ -5,7 +5,7 @@ cd "$1"/..
 git show > /dev/null 2> /dev/null || { cat tests/ref/fate/source ; exit 0; }
 
 echo Files without standard license headers:
-git grep -L -E "This file is part of FFmpeg|This file is part of libswresample|"\
+git grep -L -E "This file is part of Librempeg|This file is part of FFmpeg|This file is part of libswresample|"\
 "Permission to use, copy, modify, and/or distribute this software for any|"\
 "Permission is hereby granted, free of charge, to any person|"\
 "Permission is hereby granted to use, copy, modify, and distribute this|"\
