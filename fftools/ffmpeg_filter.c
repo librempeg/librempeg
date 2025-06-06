@@ -2876,7 +2876,7 @@ static int prefilter_init_displaymatrix(Prefilter *pf, const InputFilterPriv *if
 {
     const int32_t *displaymatrix = pf->displaymatrix;
     double theta;
-    int ret;
+    int ret = 0;
 
     theta = get_rotation(pf->displaymatrix);
 
