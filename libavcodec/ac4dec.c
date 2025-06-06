@@ -2835,6 +2835,7 @@ static int sf_data(AC4DecodeContext *s, Substream *ss, int ch_id,
     SubstreamChannel *ssch = &ss->ssch[ch_id];
     int ret;
 
+    av_log(s->avctx, AV_LOG_DEBUG, "sf_data: channel %d\n", ch_id);
     av_log(s->avctx, AV_LOG_DEBUG, "spec_frontend: %d\n", spec_frontend);
     if (spec_frontend == SF_ASF) {
         ret = asf_section_data(s, ss, ssch);
@@ -4040,7 +4041,6 @@ static int four_channel_data(AC4DecodeContext *s, Substream *ss, int iframe, uin
     }
 
     for (int i = 0; i < 4; i++) {
-        av_log(s->avctx, AV_LOG_DEBUG, "channel: %d/4\n", i);
         ret = sf_data(s, ss, ch_id[i], iframe, SF_ASF);
         if (ret < 0)
             return ret;
@@ -4090,7 +4090,6 @@ static int five_channel_data(AC4DecodeContext *s, Substream *ss, int iframe, uin
         return ret;
 
     for (int n = 0; n < 5; n++) {
-        av_log(s->avctx, AV_LOG_DEBUG, "channel: %d/5\n", n);
         ret = sf_data(s, ss, ch_id[n], iframe, SF_ASF);
         if (ret < 0)
             return ret;
@@ -4131,7 +4130,6 @@ static int mono_data(AC4DecodeContext *s, Substream *ss,
     }
     if (ret < 0)
         return ret;
-    av_log(s->avctx, AV_LOG_DEBUG, "channel: %d/1\n", 0);
     return sf_data(s, ss, ch_id, iframe, spec_frontend);
 }
 
@@ -4166,11 +4164,9 @@ static int two_channel_data(AC4DecodeContext *s, Substream *ss,
         if (ret < 0)
             return ret;
     }
-    av_log(s->avctx, AV_LOG_DEBUG, "channel: %d/2\n", 0);
     ret = sf_data(s, ss, ch_id[0], iframe, SF_ASF);
     if (ret < 0)
         return ret;
-    av_log(s->avctx, AV_LOG_DEBUG, "channel: %d/2\n", 1);
     ret = sf_data(s, ss, ch_id[1], iframe, SF_ASF);
 
     return ret;
@@ -4216,15 +4212,12 @@ static int three_channel_data(AC4DecodeContext *s, Substream *ss,
     ret = three_channel_info(s, ss, ch_id);
     if (ret < 0)
         return ret;
-    av_log(s->avctx, AV_LOG_DEBUG, "channel: %d/3\n", 0);
     ret = sf_data(s, ss, ch_id[0], iframe, SF_ASF);
     if (ret < 0)
         return ret;
-    av_log(s->avctx, AV_LOG_DEBUG, "channel: %d/3\n", 1);
     ret = sf_data(s, ss, ch_id[1], iframe, SF_ASF);
     if (ret < 0)
         return ret;
-    av_log(s->avctx, AV_LOG_DEBUG, "channel: %d/3\n", 2);
     ret = sf_data(s, ss, ch_id[2], iframe, SF_ASF);
     if (ret < 0)
         return ret;
