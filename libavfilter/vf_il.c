@@ -133,16 +133,25 @@ static void interleave(uint8_t *dst, uint8_t *src, int w, int h,
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
 {
-    IlContext *s = inlink->dst->priv;
-    AVFilterLink *outlink = inlink->dst->outputs[0];
+    AVFilterContext *ctx = inlink->dst;
+    AVFilterLink *outlink = ctx->outputs[0];
+    IlContext *s = ctx->priv;
     AVFrame *out;
-    int comp;
+    int ret;
 
-    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    out = av_frame_alloc();
     if (!out) {
         av_frame_free(&inpicref);
         return AVERROR(ENOMEM);
     }
+
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0) {
+        av_frame_free(&out);
+        av_frame_free(&inpicref);
+        return ret;
+    }
+
     av_frame_copy_props(out, inpicref);
 
     interleave(out->data[0], inpicref->data[0],
@@ -150,7 +159,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
                out->linesize[0], inpicref->linesize[0],
                s->luma_mode, s->luma_swap);
 
-    for (comp = 1; comp < (s->nb_planes - s->has_alpha); comp++) {
+    for (int comp = 1; comp < (s->nb_planes - s->has_alpha); comp++) {
         interleave(out->data[comp], inpicref->data[comp],
                    s->linesize[comp], s->chroma_height,
                    out->linesize[comp], inpicref->linesize[comp],
@@ -158,7 +167,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
     }
 
     if (s->has_alpha) {
-        comp = s->nb_planes - 1;
+        int comp = s->nb_planes - 1;
         interleave(out->data[comp], inpicref->data[comp],
                    s->linesize[comp], inlink->h,
                    out->linesize[comp], inpicref->linesize[comp],
@@ -168,6 +177,27 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
     av_frame_free(&inpicref);
     return ff_filter_frame(outlink, out);
 }
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const IlContext *s_src = src->priv;
+    IlContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->luma_mode = s_src->luma_mode;
+    s_dst->chroma_mode = s_src->chroma_mode;
+    s_dst->alpha_mode = s_src->alpha_mode;
+    s_dst->luma_swap = s_src->luma_swap;
+    s_dst->chroma_swap = s_src->chroma_swap;
+    s_dst->alpha_swap = s_src->alpha_swap;
+
+    return 0;
+}
+#endif
 
 static const AVFilterPad inputs[] = {
     {
@@ -182,8 +212,12 @@ const FFFilter ff_vf_il = {
     .p.name        = "il",
     .p.description = NULL_IF_CONFIG_SMALL("Deinterleave or interleave fields."),
     .p.priv_class  = &il_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(IlContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_QUERY_FUNC2(query_formats),
