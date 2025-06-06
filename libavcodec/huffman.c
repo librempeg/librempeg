@@ -62,6 +62,9 @@ static void heap_sift(HeapElem *h, int root, int size)
 
 int ff_huff_gen_len_table(uint8_t *dst, const uint64_t *stats, int stats_size, int skip0)
 {
+    int offset, i, next;
+    int size = 0;
+    int ret = 0;
     int *up;
     uint16_t *map;
     uint8_t *len;
@@ -74,10 +77,6 @@ int ff_huff_gen_len_table(uint8_t *dst, const uint64_t *stats, int stats_size, i
     // and alignof(uint16_t) is either 1 or 2.
     map = (uint16_t*)(up + 2 * stats_size);
     len = (uint8_t*)(map + stats_size);
-
-    int offset, i, next;
-    int size = 0;
-    int ret = 0;
 
     for (i = 0; i<stats_size; i++) {
         dst[i] = 255;
