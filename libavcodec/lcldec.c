@@ -139,9 +139,9 @@ static int zlib_decomp(AVCodecContext *avctx, const uint8_t *src, int src_len, i
     ret = ff_inflate(ic, src, src_len, c->decomp_buf + offset, 1, c->decomp_size - offset,  c->decomp_size - offset);
     if (ret < 0)
         return ret;
-    if (expected != (ic->x + ic->y * (c->decomp_size - offset))) {
+    if (expected != ic->x) {
         av_log(avctx, AV_LOG_ERROR, "Decoded size differs (%d != %u)\n",
-               expected, ic->x + ic->y * (c->decomp_size - offset));
+               expected, ic->x);
         if (expected > ic->x)
             return ic->x;
         return AVERROR_UNKNOWN;
