@@ -1,19 +1,18 @@
 /*
- * This file is part of FFmpeg.
+ * This file is part of Librempeg.
  *
- * FFmpeg is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
+ * Librempeg is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
- * FFmpeg is distributed in the hope that it will be useful,
+ * Librempeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public
- * License along with FFmpeg; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ * You should have received a copy of the GNU Affero General Public License
+ * along with Librempeg.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #ifndef FFTOOLS_FFMPEG_H
@@ -260,7 +259,6 @@ typedef struct OptionsContext {
 enum IFilterFlags {
     IFILTER_FLAG_AUTOROTATE     = (1 << 0),
     IFILTER_FLAG_CFR            = (1 << 1),
-    IFILTER_FLAG_CROP           = (1 << 2),
 };
 
 enum IFilterParamChange {
@@ -281,11 +279,6 @@ typedef struct InputFilterOptions {
      * Otherwise, this is an estimate that should not be relied upon to be
      * accurate */
     AVRational          framerate;
-
-    unsigned            crop_top;
-    unsigned            crop_bottom;
-    unsigned            crop_left;
-    unsigned            crop_right;
 
     int                 sub2video_width;
     int                 sub2video_height;
@@ -403,6 +396,13 @@ enum DecoderFlags {
     DECODER_FLAG_BITEXACT         = (1 << 5),
 };
 
+enum CroppingType {
+    CROP_DISABLED = 0,
+    CROP_ALL,
+    CROP_CODEC,
+    CROP_CONTAINER,
+};
+
 typedef struct DecoderOpts {
     int                         flags;
 
@@ -423,6 +423,14 @@ typedef struct DecoderOpts {
     // Either forced (when DECODER_FLAG_FRAMERATE_FORCED is set) or
     // estimated (otherwise) video framerate.
     AVRational                  framerate;
+
+    enum CroppingType           apply_cropping;
+
+    // container cropping, applied when apply_cropping is ALL or CONTAINER
+    unsigned                    crop_top;
+    unsigned                    crop_bottom;
+    unsigned                    crop_left;
+    unsigned                    crop_right;
 } DecoderOpts;
 
 typedef struct Decoder {
@@ -579,13 +587,6 @@ typedef struct Encoder {
     uint64_t                frames_encoded;
     uint64_t                samples_encoded;
 } Encoder;
-
-enum CroppingType {
-    CROP_DISABLED = 0,
-    CROP_ALL,
-    CROP_CODEC,
-    CROP_CONTAINER,
-};
 
 typedef struct OutputStream {
     const AVClass *class;
