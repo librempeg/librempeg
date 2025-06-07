@@ -340,9 +340,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
-#if CONFIG_AVFILTER_THREAD_FRAME
 static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
 {
+#if CONFIG_AVFILTER_THREAD_FRAME
     const NContext *s_src = src->priv;
     NContext       *s_dst = dst->priv;
 
@@ -352,10 +352,9 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
 
     s_dst->coordinates = s_src->coordinates;
     memcpy(s_dst->threshold, s_src->threshold, sizeof(s_src->threshold));
-
+#endif
     return 0;
 }
-#endif
 
 static const AVFilterPad neighbor_inputs[] = {
     {
@@ -369,7 +368,7 @@ static const AVFilterPad neighbor_inputs[] = {
 #define OFFSET(x) offsetof(NContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 
-#define DEFINE_NEIGHBOR_FILTER(name_, description_, priv_class_, config_thread_) \
+#define DEFINE_NEIGHBOR_FILTER(name_, description_, priv_class_) \
 const FFFilter ff_vf_##name_ = {                             \
     .p.name        = #name_,                                 \
     .p.description = NULL_IF_CONFIG_SMALL(description_),     \
@@ -378,7 +377,7 @@ const FFFilter ff_vf_##name_ = {                             \
                      AVFILTER_FLAG_FRAME_THREADS |           \
                      AVFILTER_FLAG_SLICE_THREADS,            \
     .priv_size     = sizeof(NContext),                       \
-    .transfer_state = config_thread_ ? transfer_state : NULL,\
+    .transfer_state = transfer_state,                        \
     FILTER_INPUTS(neighbor_inputs),                          \
     FILTER_OUTPUTS(ff_video_default_filterpad),              \
     FILTER_PIXFMTS_ARRAY(pix_fmts),                          \
@@ -403,13 +402,13 @@ AVFILTER_DEFINE_CLASS_EXT(erosion_dilation, "erosion/dilation", options);
 
 #if CONFIG_EROSION_FILTER
 
-DEFINE_NEIGHBOR_FILTER(erosion, "Apply erosion effect.", erosion_dilation, CONFIG_AVFILTER_THREAD_FRAME);
+DEFINE_NEIGHBOR_FILTER(erosion, "Apply erosion effect.", erosion_dilation);
 
 #endif /* CONFIG_EROSION_FILTER */
 
 #if CONFIG_DILATION_FILTER
 
-DEFINE_NEIGHBOR_FILTER(dilation, "Apply dilation effect.", erosion_dilation, CONFIG_AVFILTER_THREAD_FRAME);
+DEFINE_NEIGHBOR_FILTER(dilation, "Apply dilation effect.", erosion_dilation);
 
 #endif /* CONFIG_DILATION_FILTER */
 
@@ -418,12 +417,12 @@ AVFILTER_DEFINE_CLASS_EXT(deflate_inflate, "deflate/inflate",
 
 #if CONFIG_DEFLATE_FILTER
 
-DEFINE_NEIGHBOR_FILTER(deflate, "Apply deflate effect.", deflate_inflate, CONFIG_AVFILTER_THREAD_FRAME);
+DEFINE_NEIGHBOR_FILTER(deflate, "Apply deflate effect.", deflate_inflate);
 
 #endif /* CONFIG_DEFLATE_FILTER */
 
 #if CONFIG_INFLATE_FILTER
 
-DEFINE_NEIGHBOR_FILTER(inflate, "Apply inflate effect.", deflate_inflate, CONFIG_AVFILTER_THREAD_FRAME);
+DEFINE_NEIGHBOR_FILTER(inflate, "Apply inflate effect.", deflate_inflate);
 
 #endif /* CONFIG_INFLATE_FILTER */
