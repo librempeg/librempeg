@@ -112,9 +112,8 @@ typedef struct PNGDecContext {
     uint8_t transparent_color_be[6];
     int significant_bits;
 
-    AVFrame *filter_frame;
-
     uint32_t palette[256];
+    uint8_t *crow_buf;
     uint8_t *idats;
     unsigned int idats_size;
     uint8_t *last_row;
@@ -124,6 +123,7 @@ typedef struct PNGDecContext {
     uint8_t *buffer;
     int buffer_size;
     int pass;
+    int crow_size; /* compressed row size (include filter type) */
     int row_size; /* decompressed row size */
     int pass_row_size; /* decompress row size of the current pass */
     int y;
@@ -366,20 +366,23 @@ static int percent_missing(PNGDecContext *s)
 }
 
 /* process exactly one decompressed row */
-static void png_handle_row(PNGDecContext *s, uint8_t *dst, ptrdiff_t dst_stride)
+static void png_handle_row(void *arg, uint8_t *dst, ptrdiff_t dst_stride,
+                           uint8_t *tmp, int *y, int *w, const int h)
 {
-    uint8_t *ptr, *last_row, *fptr;
+    PNGDecContext *s = arg;
+    uint8_t *ptr, *last_row;
     int got_line;
 
     if (!s->interlace_type) {
+        s->y = *y;
+
         ptr = dst + dst_stride * (s->y + s->y_offset) + s->x_offset * s->bpp;
-        fptr = s->filter_frame->data[0] + s->filter_frame->linesize[0] * s->y + 15;
         if (s->y == 0)
             last_row = s->last_row;
         else
             last_row = ptr - dst_stride;
 
-        ff_png_filter_row(&s->dsp, ptr, fptr[0], fptr + 1,
+        ff_png_filter_row(&s->dsp, ptr, tmp[0], tmp + 1,
                           last_row, s->row_size, s->bpp);
         /* loco lags by 1 row so that it doesn't interfere with top prediction */
         if (s->filter_type == PNG_FILTER_TYPE_LOCO && s->y > 0) {
@@ -408,13 +411,12 @@ static void png_handle_row(PNGDecContext *s, uint8_t *dst, ptrdiff_t dst_stride)
         got_line = 0;
         for (;;) {
             ptr = dst + dst_stride * (s->y + s->y_offset) + s->x_offset * s->bpp;
-            fptr = s->filter_frame->data[0] + s->filter_frame->linesize[0] * s->y + 15;
             if ((ff_png_pass_ymask[s->pass] << (s->y & 7)) & 0x80) {
                 /* if we already read one row, it is time to stop to
                  * wait for the next one */
                 if (got_line)
                     break;
-                ff_png_filter_row(&s->dsp, s->tmp_row, fptr[0], fptr + 1,
+                ff_png_filter_row(&s->dsp, s->tmp_row, tmp[0], tmp + 1,
                                   s->last_row, s->pass_row_size, s->bpp);
                 FFSWAP(uint8_t *, s->last_row, s->tmp_row);
                 FFSWAP(unsigned int, s->last_row_size, s->tmp_row_size);
@@ -437,6 +439,7 @@ static void png_handle_row(PNGDecContext *s, uint8_t *dst, ptrdiff_t dst_stride)
                         s->pass_row_size = ff_png_pass_row_size(s->pass,
                                                                 s->bits_per_pixel,
                                                                 s->cur_w);
+                        s->crow_size = s->pass_row_size + 1;
                         if (s->pass_row_size != 0)
                             break;
                         /* skip pass if empty row */
@@ -446,6 +449,9 @@ static void png_handle_row(PNGDecContext *s, uint8_t *dst, ptrdiff_t dst_stride)
         }
 the_end:;
     }
+
+    *w = s->crow_size;
+    *y = s->y;
 }
 
 static int png_decode_idats(PNGDecContext *s,
@@ -454,16 +460,13 @@ static int png_decode_idats(PNGDecContext *s,
     InflateContext *ic = &s->ic;
     int ret;
 
-    ret = ff_inflate(ic, s->idats, s->idats_size,
-                     s->filter_frame->data[0] + 15,
-                     s->filter_frame->height, s->row_size + 1,
-                     s->filter_frame->linesize[0]);
+    ret = ff_inflatex(ic, s->idats, s->idats_size, dst, s->cur_h,
+                      s->crow_size, dst_stride, s,
+                      s->crow_buf, png_handle_row);
     if (ret < 0)
         return ret;
 
     s->idats_size = 0;
-    for (int y = 0; y < s->ic.y; y++)
-        png_handle_row(s, dst, dst_stride);
 
     return 0;
 }
@@ -785,9 +788,9 @@ static int populate_avctx_color_fields(AVCodecContext *avctx, AVFrame *frame)
 static int decode_idat_chunk(AVCodecContext *avctx, PNGDecContext *s,
                              GetByteContext *gb, AVFrame *p)
 {
+    int ret;
     size_t byte_depth = s->bit_depth > 8 ? 2 : 1;
     unsigned offset, size;
-    int ret;
 
     if (!p)
         return AVERROR_INVALIDDATA;
@@ -796,9 +799,6 @@ static int decode_idat_chunk(AVCodecContext *avctx, PNGDecContext *s,
         return AVERROR_INVALIDDATA;
     }
     if (!(s->pic_state & PNG_IDAT)) {
-        int filter_height = s->filter_frame->height;
-        int filter_width = s->filter_frame->width;
-
         /* init image info */
         ret = ff_set_dimensions(avctx, s->width, s->height);
         if (ret < 0)
@@ -900,18 +900,6 @@ static int decode_idat_chunk(AVCodecContext *avctx, PNGDecContext *s,
                 return ret;
         }
 
-        if (s->height != filter_height ||
-            s->row_size + 16 != filter_width) {
-            av_frame_unref(s->filter_frame);
-
-            s->filter_frame->height = s->height;
-            s->filter_frame->width = s->row_size + 16;
-            s->filter_frame->format = AV_PIX_FMT_GRAY8;
-
-            if ((ret = ff_get_buffer(avctx, s->filter_frame, 0)) < 0)
-                return ret;
-        }
-
         p->pict_type        = AV_PICTURE_TYPE_I;
         p->flags           |= AV_FRAME_FLAG_KEY;
         p->flags |= AV_FRAME_FLAG_INTERLACED * !!s->interlace_type;
@@ -921,12 +909,17 @@ static int decode_idat_chunk(AVCodecContext *avctx, PNGDecContext *s,
         ff_thread_finish_setup(avctx);
 
         /* compute the compressed row size */
-        if (s->interlace_type) {
+        if (!s->interlace_type) {
+            s->crow_size = s->row_size + 1;
+        } else {
             s->pass          = 0;
             s->pass_row_size = ff_png_pass_row_size(s->pass,
-                    s->bits_per_pixel,
-                    s->cur_w);
+                                                    s->bits_per_pixel,
+                                                    s->cur_w);
+            s->crow_size = s->pass_row_size + 1;
         }
+        ff_dlog(avctx, "row_size=%d crow_size =%d\n",
+                s->row_size, s->crow_size);
 
         /* copy the palette if needed */
         if (avctx->pix_fmt == AV_PIX_FMT_PAL8)
@@ -943,6 +936,13 @@ static int decode_idat_chunk(AVCodecContext *avctx, PNGDecContext *s,
         }
 
         s->idats_size = 0;
+        /* compressed row */
+        av_fast_padded_malloc(&s->buffer, &s->buffer_size, s->row_size + 16);
+        if (!s->buffer)
+            return AVERROR(ENOMEM);
+
+        /* we want crow_buf+1 to be 16-byte aligned */
+        s->crow_buf          = s->buffer + 15;
     }
 
     s->pic_state |= PNG_IDAT;
@@ -1889,10 +1889,6 @@ static av_cold int png_dec_init(AVCodecContext *avctx)
 
     s->avctx = avctx;
 
-    s->filter_frame = av_frame_alloc();
-    if (!s->filter_frame)
-        return AVERROR(ENOMEM);
-
     ff_pngdsp_init(&s->dsp);
 
     return 0;
@@ -1904,13 +1900,14 @@ static av_cold int png_dec_end(AVCodecContext *avctx)
 
     ff_progress_frame_unref(&s->last_picture);
     ff_progress_frame_unref(&s->picture);
+    av_freep(&s->buffer);
+    s->buffer_size = 0;
     av_freep(&s->idats);
     s->idats_size = 0;
     av_freep(&s->last_row);
     s->last_row_size = 0;
     av_freep(&s->tmp_row);
     s->tmp_row_size = 0;
-    av_frame_free(&s->filter_frame);
 
     av_freep(&s->iccp_data);
     av_dict_free(&s->frame_metadata);
