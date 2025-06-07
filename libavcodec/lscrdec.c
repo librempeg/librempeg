@@ -234,7 +234,9 @@ static av_cold int lscr_decode_init(AVCodecContext *avctx)
 static av_cold void lscr_decode_flush(AVCodecContext *avctx)
 {
     LSCRContext *s = avctx->priv_data;
+
     av_frame_unref(s->last_picture);
+    ff_inflate(&s->ic, NULL, 0, NULL, 0, 0, 0);
 }
 
 const FFCodec ff_lscr_decoder = {

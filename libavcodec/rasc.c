@@ -724,6 +724,8 @@ static av_cold int decode_close(AVCodecContext *avctx)
     s->delta_size = 0;
     av_frame_free(&s->frame2);
 
+    ff_inflate(&s->ic, NULL, 0, NULL, 0, 0, 0);
+
     return 0;
 }
 

@@ -618,6 +618,9 @@ static av_cold int decode_end(AVCodecContext *avctx)
 {
     LclDecContext * const c = avctx->priv_data;
 
+#if CONFIG_ZLIB_DECODER
+    ff_inflate(&c->ic, NULL, 0, NULL, 0, 0, 0);
+#endif
     av_freep(&c->decomp_buf);
 
     return 0;

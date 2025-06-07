@@ -145,6 +145,8 @@ static av_cold int rscc_close(AVCodecContext *avctx)
     av_freep(&ctx->inflated_buf);
     av_frame_free(&ctx->reference);
 
+    ff_inflate(&ctx->ic, NULL, 0, NULL, 0, 0, 0);
+
     return 0;
 }
 

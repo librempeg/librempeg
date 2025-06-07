@@ -111,6 +111,8 @@ static void zerocodec_decode_flush(AVCodecContext *avctx)
 {
     ZeroCodecContext *zc = avctx->priv_data;
 
+    ff_inflate(&zc->ic, NULL, 0, NULL, 0, 0, 0);
+
     av_frame_unref(zc->previous_frame);
 }
 

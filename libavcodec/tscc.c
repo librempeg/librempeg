@@ -147,6 +147,7 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
     av_freep(&c->decomp_buf);
     av_frame_free(&c->frame);
+    ff_inflate(&c->ic, NULL, 0, NULL, 0, 0, 0);
 
     return 0;
 }

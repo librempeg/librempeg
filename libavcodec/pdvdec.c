@@ -106,6 +106,8 @@ static void decode_flush(AVCodecContext *avctx)
 {
     PDVContext *s = avctx->priv_data;
 
+    ff_inflate(&s->ic, NULL, 0, NULL, 0, 0, 0);
+
     av_frame_unref(s->previous_frame);
 }
 

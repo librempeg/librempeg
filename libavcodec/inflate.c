@@ -417,6 +417,15 @@ int ff_inflate(InflateContext *s,
     int bfinal, bmode;
     uint16_t hdr;
 
+    if (!src && !dst) {
+        if (s->fixed_cb_initialized) {
+            ff_vlc_free(&s->fixed_ltree.vlc);
+            ff_vlc_free(&s->fixed_dtree.vlc);
+        }
+
+        return 0;
+    }
+
     s->x = 0;
     s->y = 0;
     s->dst = dst;
