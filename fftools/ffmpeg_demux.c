@@ -942,6 +942,7 @@ int ist_use(InputStream *ist, int decoding_needed,
     ds->streamcopy_needed |= !decoding_needed;
 
     if (decoding_needed && ds->sch_idx_dec < 0) {
+        const AVPacketSideData *sd;
         int is_audio = ist->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO;
 
         ds->dec_opts.flags |= (!!ist->fix_sub_duration * DECODER_FLAG_FIX_SUB_DURATION) |
@@ -957,6 +958,18 @@ int ist_use(InputStream *ist, int decoding_needed,
             ds->dec_opts.framerate  = ist->framerate;
         } else
             ds->dec_opts.framerate  = ist->st->avg_frame_rate;
+
+        ds->dec_opts.apply_cropping = ds->apply_cropping;
+
+        sd = av_packet_side_data_get(ist->par->coded_side_data,
+                                     ist->par->nb_coded_side_data,
+                                     AV_PKT_DATA_FRAME_CROPPING);
+        if (sd && sd->size >= sizeof(uint32_t) * 4) {
+            ds->dec_opts.crop_top       = AV_RL32(sd->data +  0);
+            ds->dec_opts.crop_bottom    = AV_RL32(sd->data +  4);
+            ds->dec_opts.crop_left      = AV_RL32(sd->data +  8);
+            ds->dec_opts.crop_right     = AV_RL32(sd->data + 12);
+        }
 
         if (ist->dec->id == AV_CODEC_ID_DVB_SUBTITLE &&
            (ds->decoding_needed & DECODING_FOR_OST)) {
@@ -1027,23 +1040,11 @@ int ist_filter_add(InputStream *ist, InputFilter *ifilter, int is_simple,
     ist->filters[ist->nb_filters - 1] = ifilter;
 
     if (ist->par->codec_type == AVMEDIA_TYPE_VIDEO) {
-        const AVPacketSideData *sd = av_packet_side_data_get(ist->par->coded_side_data,
-                                                             ist->par->nb_coded_side_data,
-                                                             AV_PKT_DATA_FRAME_CROPPING);
         if (ist->framerate.num > 0 && ist->framerate.den > 0) {
             opts->framerate = ist->framerate;
             opts->flags |= IFILTER_FLAG_CFR;
         } else
             opts->framerate = av_guess_frame_rate(d->f.ctx, ist->st, NULL);
-        if (sd && sd->size >= sizeof(uint32_t) * 4) {
-            opts->crop_top    = AV_RL32(sd->data +  0);
-            opts->crop_bottom = AV_RL32(sd->data +  4);
-            opts->crop_left   = AV_RL32(sd->data +  8);
-            opts->crop_right  = AV_RL32(sd->data + 12);
-            if (ds->apply_cropping && ds->apply_cropping != CROP_CODEC &&
-                (opts->crop_top | opts->crop_bottom | opts->crop_left | opts->crop_right))
-                opts->flags |= IFILTER_FLAG_CROP;
-        }
     } else if (ist->par->codec_type == AVMEDIA_TYPE_SUBTITLE) {
         /* Compute the size of the canvas for the subtitles stream.
            If the subtitles codecpar has set a size, use it. Otherwise use the
@@ -1454,9 +1455,6 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st, AVDictiona
     }
 
     ds->dec_opts.flags |= DECODER_FLAG_BITEXACT * !!o->bitexact;
-
-    av_dict_set_int(&ds->decoder_opts, "apply_cropping",
-                    ds->apply_cropping && ds->apply_cropping != CROP_CONTAINER, 0);
 
     /* Attached pics are sparse, therefore we would not want to delay their decoding
      * till EOF. */

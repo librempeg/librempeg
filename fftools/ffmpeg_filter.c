@@ -1780,17 +1780,6 @@ static int configure_input_video_filter(FilterGraph *fg, AVFilterGraph *graph,
 
     last_filter = ifp->filter;
 
-    if ((ifp->opts.flags & IFILTER_FLAG_CROP)) {
-        char crop_buf[64];
-        snprintf(crop_buf, sizeof(crop_buf), "w=iw-%u-%u:h=ih-%u-%u:x=%u:y=%u",
-                 ifp->opts.crop_left, ifp->opts.crop_right,
-                 ifp->opts.crop_top, ifp->opts.crop_bottom,
-                 ifp->opts.crop_left, ifp->opts.crop_top);
-        ret = insert_filter(&last_filter, &pad_idx, "crop", crop_buf);
-        if (ret < 0)
-            return ret;
-    }
-
     snprintf(name, sizeof(name), "trim_in_%s", ifp->opts.name);
     ret = insert_trim(fg, ifp->opts.trim_start_us, ifp->opts.trim_end_us,
                       &last_filter, &pad_idx, name);
