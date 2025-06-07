@@ -33,11 +33,19 @@ typedef struct InflateTree {
 typedef struct InflateContext {
     GetBitContext gb;
 
+    uint8_t history[32768];
+    unsigned history_pos;
+
     int x, y;
     int height, width;
     int fixed_cb_initialized;
     uint8_t *dst;
     ptrdiff_t linesize;
+
+    void *priv_data;
+    uint8_t *tmp;
+    void (*row_fun)(void *priv_data, uint8_t *row, ptrdiff_t linesize,
+                    uint8_t *tmp, int *y, int *w, const int height);
 
     InflateTree fixed_ltree, fixed_dtree;
     InflateTree dynamic_ltree, dynamic_dtree;
@@ -45,5 +53,12 @@ typedef struct InflateContext {
 
 int ff_inflate(InflateContext *s, const uint8_t *src, int src_len,
                uint8_t *dst, int height, int width, ptrdiff_t linesize);
+
+int ff_inflatex(InflateContext *s, const uint8_t *src, int src_len,
+                uint8_t *dst, int height, int width, ptrdiff_t linesize,
+                void *priv_data, uint8_t *tmp, void (*row_fun)(void *priv_data, uint8_t *row,
+                                                               ptrdiff_t linesize,
+                                                               uint8_t *tmp,
+                                                               int *y, int *w, const int h));
 
 #endif /* AVCODEC_INFLATE_H */

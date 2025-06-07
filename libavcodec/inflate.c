@@ -106,39 +106,51 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
         33,   49,   65,   97,  129,  193,  257,   385,   513,   769,
         1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577
     };
+    const int have_fun = s->row_fun && s->priv_data && s->tmp;
     const ptrdiff_t linesize = s->linesize;
     GetBitContext *gb = &s->gb;
     const int height = s->height;
-    const int width = s->width;
+    int width = s->width;
     int ret = 0, x = s->x, y = s->y;
-    uint8_t *dst = s->dst + y * linesize;
+    uint8_t *dst = have_fun ? s->tmp : s->dst + y * linesize;
     const int dt_max_sym = dt->max_sym;
     const int lt_max_sym = lt->max_sym;
     const VLCElem *dt_tab = dt->vlc.table;
     const VLCElem *lt_tab = lt->vlc.table;
+    const unsigned history_size = FF_ARRAY_ELEMS(s->history);
+    unsigned history_pos = s->history_pos;
+    uint8_t *history = s->history;
 
     for (;;) {
         int sym = decode_symbol(gb, lt_tab);
 
         if (sym < 256) {
             dst[x] = sym;
+            history[history_pos++] = sym;
+            history_pos &= (history_size-1);
 
             x++;
             if (x >= width) {
-                dst += linesize;
+                if (have_fun) {
+                    s->row_fun(s->priv_data, s->dst, linesize, s->tmp, &y, &width, height);
+                    dst = s->tmp;
+                } else {
+                    dst += linesize;
+                    y++;
+                }
                 x = 0;
-                y++;
                 if (y >= height)
                     break;
             }
         } else if (sym == 256) {
             s->x = x;
             s->y = y;
+            s->width = width;
+            s->history_pos = history_pos;
 
             return 0;
         } else {
-            int len, dist, offs, offs_y, offs_x;
-            uint8_t *odst;
+            int len, dist, offs;
 
             if (sym > lt_max_sym || sym > 285) {
                 ret = AVERROR_INVALIDDATA;
@@ -163,52 +175,45 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
             }
 
             offs = get_bits_base(gb, dist_bits[dist], dist_base[dist]);
-            offs = y * width + x - offs;
-            if (offs < 0) {
-                ret = AVERROR_INVALIDDATA;
-                goto fail;
-            }
-
-            offs_y = offs / width;
-            offs_x = offs - offs_y * width;
-            odst = s->dst + offs_y * linesize;
+            offs = ((int)history_pos - offs) & (history_size-1);
 
             while (len > 0) {
-                const unsigned ix = width - FFMAX(x, offs_x);
-                const unsigned ilen = FFMIN(ix, len);
+                const int hmin = FFMIN(history_pos, offs);
+                const int hmax = FFMAX(history_pos, offs);
+                const int left = FFMIN3(len, history_size - offs, history_size - history_pos);
+                const int ix = FFMIN3(width - x, hmax - hmin, left);
 
-                if ((offs_y != y) || (x >= offs_x + ilen)) {
-                    memcpy(dst + x, odst + offs_x, ilen);
-                } else if (x > offs_x) {
-                    const int overlap = x - offs_x;
+                memcpy(dst + x, history + offs, ix);
+                memcpy(history + history_pos, dst + x, ix);
 
-                    av_memcpy_backptr(dst + x, overlap, ilen);
-                } else {
-                    ret = AVERROR_INVALIDDATA;
-                    goto fail;
-                }
+                offs += ix;
+                offs &= (history_size-1);
 
-                x += ilen;
+                history_pos += ix;
+                history_pos &= (history_size-1);
+
+                len -= ix;
+                x += ix;
                 if (x >= width) {
-                    dst += linesize;
+                    if (have_fun) {
+                        s->row_fun(s->priv_data, s->dst, linesize, s->tmp, &y, &width, height);
+                        dst = s->tmp;
+                    } else {
+                        dst += linesize;
+                        y++;
+                    }
+                    if (y >= height)
+                        break;
                     x = 0;
-                    y++;
                 }
-
-                offs_x += ilen;
-                if (offs_x >= width) {
-                    odst += linesize;
-                    offs_x = 0;
-                    offs_y++;
-                }
-
-                len -= ilen;
             }
         }
     }
 fail:
     s->x = x;
     s->y = y;
+    s->width = width;
+    s->history_pos = history_pos;
 
     return ret;
 }
@@ -368,11 +373,15 @@ static int inflate_dynamic_block(InflateContext *s)
 static int inflate_raw_block(InflateContext *s)
 {
     const ptrdiff_t linesize = s->linesize;
+    const int have_fun = s->row_fun && s->priv_data && s->tmp;
     GetBitContext *gb = &s->gb;
     const int height = s->height;
-    const int width = s->width;
+    int width = s->width;
     int x = s->x, y = s->y, len, inv_len;
-    uint8_t *dst = s->dst;
+    uint8_t *dst = have_fun ? s->tmp : s->dst + y * linesize;
+    const unsigned history_size = FF_ARRAY_ELEMS(s->history);
+    unsigned history_pos = s->history_pos;
+    uint8_t *history = s->history;
 
     align_get_bits(gb);
     len = get_bits(gb, 16);
@@ -389,12 +398,22 @@ static int inflate_raw_block(InflateContext *s)
     while (len > 0) {
         const int ilen = FFMIN(width - x, len);
 
-        memcpy(dst + linesize * y + x, gb->buffer + (get_bits_count(gb) >> 3), ilen);
+        memcpy(dst + x, gb->buffer + (get_bits_count(gb) >> 3), ilen);
+        for (int i = 0; i < ilen; i++) {
+            history[history_pos++] = dst[i];
+            history_pos &= (history_size-1);
+        }
 
         x += ilen;
         if (x >= width) {
             x = 0;
-            y++;
+            if (have_fun) {
+                s->row_fun(s->priv_data, s->dst, linesize, s->tmp, &y, &width, height);
+                dst = s->tmp;
+            } else {
+                dst += linesize;
+                y++;
+            }
         }
 
         len -= ilen;
@@ -403,6 +422,8 @@ static int inflate_raw_block(InflateContext *s)
 
     s->x = x;
     s->y = y;
+    s->width = width;
+    s->history_pos = history_pos;
 
     return 0;
 }
@@ -428,10 +449,14 @@ int ff_inflate(InflateContext *s,
 
     s->x = 0;
     s->y = 0;
+    s->history_pos = 0;
     s->dst = dst;
     s->height = height;
     s->width = width;
     s->linesize = linesize;
+    s->priv_data = NULL;
+    s->row_fun = NULL;
+    s->tmp = NULL;
 
     ret = init_get_bits8(gb, src, src_len);
     if (ret < 0)
@@ -464,6 +489,93 @@ int ff_inflate(InflateContext *s,
         }
 
         if (ret < 0)
+            break;
+
+        if (get_bits_left(gb) < 0) {
+            ret = AVERROR_INVALIDDATA;
+            break;
+        }
+    } while (!bfinal);
+
+end:
+    ff_vlc_free(&s->dynamic_ltree.vlc);
+    ff_vlc_free(&s->dynamic_dtree.vlc);
+
+    if (ret < 0)
+        return ret;
+
+    align_get_bits(gb);
+    skip_bits_long(gb, 32);
+
+    return (get_bits_count(gb) >> 3);
+}
+
+int ff_inflatex(InflateContext *s,
+                const uint8_t *src, int src_len,
+                uint8_t *dst, int height,
+                int width, ptrdiff_t linesize,
+                void *priv_data, uint8_t *tmp, void (*row_fun)(void *priv_data, uint8_t *row, ptrdiff_t linesize,
+                                                               uint8_t *tmp, int *y, int *width, const int height))
+{
+    GetBitContext *gb = &s->gb;
+    int ret, cm, cinfo;
+    int bfinal, bmode;
+    uint16_t hdr;
+
+    if (!src && !dst) {
+        if (s->fixed_cb_initialized) {
+            ff_vlc_free(&s->fixed_ltree.vlc);
+            ff_vlc_free(&s->fixed_dtree.vlc);
+        }
+
+        return 0;
+    }
+
+    s->x = 0;
+    s->y = 0;
+    s->history_pos = 0;
+    s->dst = dst;
+    s->height = height;
+    s->width = width;
+    s->linesize = linesize;
+    s->priv_data = priv_data;
+    s->row_fun = row_fun;
+    s->tmp = tmp;
+
+    ret = init_get_bits8(gb, src, src_len);
+    if (ret < 0)
+        goto end;
+
+    hdr = show_bits(gb, 16);
+    cm = hdr & 0xF;
+    cinfo = (hdr >> 4) & 7;
+
+    if (cm == 8 && cinfo <= 7 && ((av_bswap16(hdr) % 31) == 0))
+        skip_bits(gb, 16);
+
+    do {
+        bfinal = get_bits1(gb);
+        bmode = get_bits(gb, 2);
+
+        switch (bmode) {
+        case 0:
+            ret = inflate_raw_block(s);
+            break;
+        case 1:
+            ret = inflate_fixed_block(s);
+            break;
+        case 2:
+            ret = inflate_dynamic_block(s);
+            break;
+        case 3:
+            ret = AVERROR_INVALIDDATA;
+            break;
+        }
+
+        if (ret < 0)
+            break;
+
+        if (s->y >= s->height)
             break;
 
         if (get_bits_left(gb) < 0) {
