@@ -1911,6 +1911,7 @@ static av_cold int png_dec_end(AVCodecContext *avctx)
 
     av_freep(&s->iccp_data);
     av_dict_free(&s->frame_metadata);
+    ff_inflate(&s->ic, NULL, 0, NULL, 0, 0, 0);
 
     return 0;
 }
