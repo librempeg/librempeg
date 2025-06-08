@@ -44,7 +44,6 @@ typedef struct MVHAContext {
     AVFrame          *frame;
     uint8_t          *tmp;
     unsigned int      tmp_size;
-    int               row_size;
     int               plane;
     InflateContext    ic;
 } MVHAContext;
