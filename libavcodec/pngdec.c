@@ -45,9 +45,6 @@
 #include "progressframe.h"
 #include "thread.h"
 #include "inflate.h"
-#include "zlib_wrapper.h"
-
-#include <zlib.h>
 
 enum PNGHeaderState {
     PNG_IHDR = 1 << 0,
@@ -471,44 +468,48 @@ static int png_decode_idats(PNGDecContext *s,
     return 0;
 }
 
-static int decode_zbuf(AVBPrint *bp, const uint8_t *data,
-                       const uint8_t *data_end, void *logctx)
-{
-    FFZStream z;
-    z_stream *const zstream = &z.zstream;
+typedef struct ZBufContext {
     unsigned char *buf;
     unsigned buf_size;
-    int ret = ff_inflate_init(&z, logctx);
+    uint8_t tmp[1024+1];
+    AVBPrint *bp;
+} ZBufContext;
+
+static void zbuf_helper(void *arg, uint8_t *dst, ptrdiff_t dst_stride,
+                        uint8_t *tmp, int *y, int *w, const int h)
+{
+    ZBufContext *zc = arg;
+    AVBPrint *bp = zc->bp;
+
+    av_bprint_append_data(bp, tmp, dst_stride);
+    *y = *y + 1;
+
+    return;
+}
+
+static int decode_zbuf(InflateContext *ic,
+                       AVBPrint *bp, const uint8_t *data,
+                       const uint8_t *data_end, void *logctx)
+{
+    ZBufContext zc = { 0 };
+    int ret;
+
+    zc.bp = bp;
+    av_bprint_init(zc.bp, 0, AV_BPRINT_SIZE_UNLIMITED);
+
+    av_bprint_get_buffer(zc.bp, 1024, &zc.buf, &zc.buf_size);
+
+    ret = ff_inflatex(ic, data, data_end - data,
+                      zc.buf, UINT16_MAX, 1024, 1024, &zc,
+                      zc.tmp, zbuf_helper);
     if (ret < 0)
-        return ret;
-
-    zstream->next_in  = data;
-    zstream->avail_in = data_end - data;
-    av_bprint_init(bp, 0, AV_BPRINT_SIZE_UNLIMITED);
-
-    while (zstream->avail_in > 0) {
-        av_bprint_get_buffer(bp, 2, &buf, &buf_size);
-        if (buf_size < 2) {
-            ret = AVERROR(ENOMEM);
-            goto fail;
-        }
-        zstream->next_out  = buf;
-        zstream->avail_out = buf_size - 1;
-        ret = inflate(zstream, Z_PARTIAL_FLUSH);
-        if (ret != Z_OK && ret != Z_STREAM_END) {
-            ret = AVERROR_EXTERNAL;
-            goto fail;
-        }
-        bp->len += zstream->next_out - buf;
-        if (ret == Z_STREAM_END)
-            break;
-    }
-    ff_inflate_end(&z);
+        goto fail;
+    av_bprint_append_data(bp, zc.tmp, ic->x);
     bp->str[bp->len] = 0;
+
     return 0;
 
 fail:
-    ff_inflate_end(&z);
     av_bprint_finalize(bp, NULL);
     return ret;
 }
@@ -559,7 +560,7 @@ static int decode_text_chunk(PNGDecContext *s, GetByteContext *gb, int compresse
         method = *(data++);
         if (method)
             return AVERROR_INVALIDDATA;
-        if ((ret = decode_zbuf(&bp, data, data_end, s->avctx)) < 0)
+        if ((ret = decode_zbuf(&s->ic, &bp, data, data_end, s->avctx)) < 0)
             return ret;
         text     = bp.str;
         text_len = bp.len;
@@ -1055,7 +1056,7 @@ static int decode_iccp_chunk(PNGDecContext *s, GetByteContext *gb)
         goto fail;
     }
 
-    if ((ret = decode_zbuf(&bp, gb->buffer, gb->buffer_end, s->avctx)) < 0)
+    if ((ret = decode_zbuf(&s->ic, &bp, gb->buffer, gb->buffer_end, s->avctx)) < 0)
         return ret;
 
     av_freep(&s->iccp_data);
