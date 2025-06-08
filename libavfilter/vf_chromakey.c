@@ -68,11 +68,10 @@ static uint8_t do_chromakey_pixel(ChromakeyContext *ctx, uint8_t u[9], uint8_t v
 
 static uint16_t do_chromakey_pixel16(ChromakeyContext *ctx, uint16_t u[9], uint16_t v[9])
 {
-    double max = ctx->max;
-    double diff = 0.0;
-    int du, dv, i;
+    const double max = ctx->max;
+    double diff = 0.0, du, dv;
 
-    for (i = 0; i < 9; ++i) {
+    for (int i = 0; i < 9; ++i) {
         du = (int)u[i] - ctx->chromakey_uv[0];
         dv = (int)v[i] - ctx->chromakey_uv[1];
 
@@ -228,8 +227,7 @@ static int do_chromahold16_slice(AVFilterContext *avctx, void *arg, int jobnr, i
         for (x = 0; x < frame->width >> ctx->hsub_log2; ++x) {
             int u = AV_RN16(&frame->data[1][frame->linesize[1] * y + 2 * x]);
             int v = AV_RN16(&frame->data[2][frame->linesize[2] * y + 2 * x]);
-            double diff;
-            int du, dv;
+            double diff, du, dv;
 
             du = u - ctx->chromakey_uv[0];
             dv = v - ctx->chromakey_uv[1];
