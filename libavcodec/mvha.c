@@ -22,15 +22,14 @@
 
 #define CACHED_BITSTREAM_READER !ARCH_X86_32
 #include "libavutil/intreadwrite.h"
+#include "libavutil/mem.h"
 
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "decode.h"
 #include "get_bits.h"
 #include "lossless_videodsp.h"
-#include "zlib_wrapper.h"
-
-#include <zlib.h>
+#include "inflate.h"
 
 typedef struct MVHAContext {
     GetBitContext     gb;
@@ -40,8 +39,14 @@ typedef struct MVHAContext {
     uint32_t          prob[256];
     VLC               vlc;
 
-    FFZStream         zstream;
     LLVidDSPContext   llviddsp;
+
+    AVFrame          *frame;
+    uint8_t          *tmp;
+    unsigned int      tmp_size;
+    int               row_size;
+    int               plane;
+    InflateContext    ic;
 } MVHAContext;
 
 typedef struct Node {
@@ -143,6 +148,28 @@ static int build_vlc(AVCodecContext *avctx, VLC *vlc)
     return ff_vlc_init_sparse(vlc, 12, pos, lens, 2, 2, bits, 4, 4, xlat, 1, 1, 0);
 }
 
+static void lzyv_handle_row(void *arg, uint8_t *dst, ptrdiff_t dst_stride,
+                            uint8_t *tmp, int *y, int *w, const int h)
+{
+    MVHAContext *s = arg;
+    AVFrame *frame = s->frame;
+    uint8_t *ptr;
+
+    if (s->plane >= 3)
+        return;
+
+    ptr = frame->data[s->plane] + (frame->height - 1 - *y) * frame->linesize[s->plane];
+    memcpy(ptr, tmp, *w);
+
+    *y = *y + 1;
+    if (*y >= h) {
+        *y = 0;
+        s->plane++;
+        if (s->plane == 1 && *y == 0)
+            *w = *w / 2;
+    }
+}
+
 static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
                         int *got_frame, AVPacket *avpkt)
 {
@@ -160,33 +187,21 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
         return AVERROR_INVALIDDATA;
 
     if (type == MKTAG('L','Z','Y','V')) {
-        z_stream *const zstream = &s->zstream.zstream;
-        ret = inflateReset(zstream);
-        if (ret != Z_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Inflate reset error: %d\n", ret);
-            return AVERROR_EXTERNAL;
-        }
-
         if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
             return ret;
 
-        zstream->next_in  = avpkt->data + 8;
-        zstream->avail_in = avpkt->size - 8;
+        av_fast_malloc(&s->tmp, &s->tmp_size, avctx->width * sizeof(*s->tmp));
+        if (!s->tmp)
+            return AVERROR(ENOMEM);
 
-        for (int p = 0; p < 3; p++) {
-            for (int y = 0; y < avctx->height; y++) {
-                zstream->next_out  = frame->data[p] + (avctx->height - y - 1) * frame->linesize[p];
-                zstream->avail_out = avctx->width >> (p > 0);
-
-                ret = inflate(zstream, Z_SYNC_FLUSH);
-                if (ret != Z_OK && ret != Z_STREAM_END) {
-                    av_log(avctx, AV_LOG_ERROR, "Inflate error: %d\n", ret);
-                    return AVERROR_EXTERNAL;
-                }
-                if (zstream->avail_out > 0)
-                    memset(zstream->next_out, 0, zstream->avail_out);
-            }
-        }
+        s->plane = 0;
+        s->frame = frame;
+        ret = ff_inflatex(&s->ic, avpkt->data + 8, avpkt->size - 8, frame->data[0], avctx->height,
+                          avctx->width, -frame->linesize[0], s, s->tmp,
+                          lzyv_handle_row);
+        s->frame = NULL;
+        if (ret < 0)
+            return ret;
     } else if (type == MKTAG('H','U','F','Y')) {
         GetBitContext *gb = &s->gb;
         int first_symbol, symbol;
@@ -286,15 +301,16 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
     ff_llviddsp_init(&s->llviddsp);
 
-    return ff_inflate_init(&s->zstream, avctx);
+    return 0;
 }
 
 static av_cold int decode_close(AVCodecContext *avctx)
 {
     MVHAContext *s = avctx->priv_data;
 
-    ff_inflate_end(&s->zstream);
+    ff_inflate(&s->ic, NULL, 0, NULL, 0, 0, 0);
     ff_vlc_free(&s->vlc);
+    av_freep(&s->tmp);
 
     return 0;
 }
