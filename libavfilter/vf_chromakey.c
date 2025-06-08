@@ -321,6 +321,26 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     return config_output(ctx->outputs[0]);
 }
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const ChromakeyContext *s_src = src->priv;
+    ChromakeyContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->similarity      = s_src->similarity;
+    s_dst->blend           = s_src->blend;
+    s_dst->is_yuv          = s_src->is_yuv;
+    s_dst->chromakey_uv[0] = s_src->chromakey_uv[0];
+    s_dst->chromakey_uv[1] = s_src->chromakey_uv[1];
+
+    return 0;
+}
+#endif
+
 static const AVFilterPad inputs[] = {
     {
         .name           = "default",
@@ -367,8 +387,12 @@ const FFFilter ff_vf_chromakey = {
     .p.name        = "chromakey",
     .p.description = NULL_IF_CONFIG_SMALL("Turns a certain color into transparency. Operates on YUV colors."),
     .p.priv_class  = &chromakey_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(ChromakeyContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_PIXFMTS_ARRAY(chromakey_fmts),
@@ -408,8 +432,12 @@ const FFFilter ff_vf_chromahold = {
     .p.name        = "chromahold",
     .p.description = NULL_IF_CONFIG_SMALL("Turns a certain color range into gray."),
     .p.priv_class  = &chromahold_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(ChromakeyContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_PIXFMTS_ARRAY(hold_pixel_fmts),
