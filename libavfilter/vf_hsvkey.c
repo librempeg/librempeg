@@ -254,6 +254,26 @@ static av_cold int config_input(AVFilterLink *inlink)
     return 0;
 }
 
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const HSVKeyContext *s_src = src->priv;
+    HSVKeyContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->hue_opt    = s_src->hue_opt;
+    s_dst->sat        = s_src->sat;
+    s_dst->val        = s_src->val;
+    s_dst->similarity = s_src->similarity;
+    s_dst->blend      = s_src->blend;
+
+    return 0;
+}
+#endif
+
 static const enum AVPixelFormat key_pixel_fmts[] = {
     AV_PIX_FMT_YUVA420P,
     AV_PIX_FMT_YUVA422P,
@@ -301,8 +321,12 @@ const FFFilter ff_vf_hsvkey = {
     .p.name        = "hsvkey",
     .p.description = NULL_IF_CONFIG_SMALL("Turns a certain HSV range into transparency. Operates on YUV colors."),
     .p.priv_class  = &hsvkey_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(HSVKeyContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_PIXFMTS_ARRAY(key_pixel_fmts),
@@ -343,8 +367,12 @@ const FFFilter ff_vf_hsvhold = {
     .p.name        = "hsvhold",
     .p.description = NULL_IF_CONFIG_SMALL("Turns a certain HSV range into gray."),
     .p.priv_class  = &hsvhold_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(HSVKeyContext),
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_PIXFMTS_ARRAY(hold_pixel_fmts),
