@@ -54,6 +54,9 @@ typedef struct RemapContext {
     int nb_planes;
     int nb_components;
     int step;
+    int is_rgb;
+    int factor;
+    uint8_t rgba_map[4];
     uint8_t fill_rgba[4];
     int fill_color[4];
 
@@ -64,12 +67,13 @@ typedef struct RemapContext {
 
 #define OFFSET(x) offsetof(RemapContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
+#define TFLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 
 static const AVOption remap_options[] = {
     { "format", "set output format", OFFSET(format), AV_OPT_TYPE_INT, {.i64=0}, 0, 1, FLAGS, .unit = "format" },
         { "color",  "", 0, AV_OPT_TYPE_CONST, {.i64=0},   .flags = FLAGS, .unit = "format" },
         { "gray",   "", 0, AV_OPT_TYPE_CONST, {.i64=1},   .flags = FLAGS, .unit = "format" },
-    { "fill", "set the color of the unmapped pixels", OFFSET(fill_rgba), AV_OPT_TYPE_COLOR, {.str="black"}, .flags = FLAGS },
+    { "fill", "set the color of the unmapped pixels", OFFSET(fill_rgba), AV_OPT_TYPE_COLOR, {.str="black"}, .flags = TFLAGS },
     { NULL }
 };
 
@@ -151,6 +155,26 @@ static int query_formats(const AVFilterContext *ctx,
 #define MAP_TYPE 32
 #include "remap_template.c"
 
+static int set_fill_color(AVFilterContext *ctx)
+{
+    RemapContext *s = ctx->priv;
+    const int factor = s->factor;
+
+    if (s->is_rgb) {
+        s->fill_color[s->rgba_map[0]] = s->fill_rgba[0] * factor;
+        s->fill_color[s->rgba_map[1]] = s->fill_rgba[1] * factor;
+        s->fill_color[s->rgba_map[2]] = s->fill_rgba[2] * factor;
+        s->fill_color[s->rgba_map[3]] = s->fill_rgba[3] * factor;
+    } else {
+        s->fill_color[0] = RGB_TO_Y_BT709(s->fill_rgba[0], s->fill_rgba[1], s->fill_rgba[2]) * factor;
+        s->fill_color[1] = RGB_TO_U_BT709(s->fill_rgba[0], s->fill_rgba[1], s->fill_rgba[2], 0) * factor;
+        s->fill_color[2] = RGB_TO_V_BT709(s->fill_rgba[0], s->fill_rgba[1], s->fill_rgba[2], 0) * factor;
+        s->fill_color[3] = s->fill_rgba[3] * factor;
+    }
+
+    return 0;
+}
+
 static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -159,27 +183,16 @@ static int config_input(AVFilterLink *inlink)
     const AVPixFmtDescriptor *ydesc = av_pix_fmt_desc_get(ctx->inputs[2]->format);
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
     int depth = desc->comp[0].depth;
-    int is_rgb = !!(desc->flags & AV_PIX_FMT_FLAG_RGB);
-    int factor = 1 << (depth - 8);
     const int is_float_map = !!(xdesc->flags & AV_PIX_FMT_FLAG_FLOAT) &&
                              !!(ydesc->flags & AV_PIX_FMT_FLAG_FLOAT);
-    uint8_t rgba_map[4];
 
-    ff_fill_rgba_map(rgba_map, inlink->format);
+    s->factor = 1 << (depth - 8);
+    s->is_rgb = !!(desc->flags & AV_PIX_FMT_FLAG_RGB);
+    ff_fill_rgba_map(s->rgba_map, inlink->format);
     s->nb_planes = av_pix_fmt_count_planes(inlink->format);
     s->nb_components = desc->nb_components;
 
-    if (is_rgb) {
-        s->fill_color[rgba_map[0]] = s->fill_rgba[0] * factor;
-        s->fill_color[rgba_map[1]] = s->fill_rgba[1] * factor;
-        s->fill_color[rgba_map[2]] = s->fill_rgba[2] * factor;
-        s->fill_color[rgba_map[3]] = s->fill_rgba[3] * factor;
-    } else {
-        s->fill_color[0] = RGB_TO_Y_BT709(s->fill_rgba[0], s->fill_rgba[1], s->fill_rgba[2]) * factor;
-        s->fill_color[1] = RGB_TO_U_BT709(s->fill_rgba[0], s->fill_rgba[1], s->fill_rgba[2], 0) * factor;
-        s->fill_color[2] = RGB_TO_V_BT709(s->fill_rgba[0], s->fill_rgba[1], s->fill_rgba[2], 0) * factor;
-        s->fill_color[3] = s->fill_rgba[3] * factor;
-    }
+    set_fill_color(ctx);
 
     if (depth == 8) {
         if (s->nb_planes > 1 || s->nb_components == 1) {
@@ -293,6 +306,18 @@ static int activate(AVFilterContext *ctx)
     return ff_framesync_activate(&s->fs);
 }
 
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
+                           char *res, int res_len, int flags)
+{
+    int ret;
+
+    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    if (ret < 0)
+        return ret;
+
+    return set_fill_color(ctx);
+}
+
 static av_cold void uninit(AVFilterContext *ctx)
 {
     RemapContext *s = ctx->priv;
@@ -335,4 +360,5 @@ const FFFilter ff_vf_remap = {
     FILTER_INPUTS(remap_inputs),
     FILTER_OUTPUTS(remap_outputs),
     FILTER_QUERY_FUNC2(query_formats),
+    .process_command = process_command,
 };
