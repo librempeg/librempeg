@@ -345,6 +345,7 @@ extern const FFFilter ff_vf_freezedetect;
 extern const FFFilter ff_vf_freezeframes;
 extern const FFFilter ff_vf_frei0r;
 extern const FFFilter ff_vf_fspp;
+extern const FFFilter ff_vf_gamut;
 extern const FFFilter ff_vf_gblur;
 extern const FFFilter ff_vf_gblur_vulkan;
 extern const FFFilter ff_vf_geq;
