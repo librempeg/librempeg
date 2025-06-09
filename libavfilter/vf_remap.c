@@ -62,6 +62,8 @@ typedef struct RemapContext {
 
     FFFrameSync fs;
 
+    AVFrame *frame_source, *frame_xmap, *frame_ymap;
+
     int (*remap_slice)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } RemapContext;
 
@@ -217,32 +219,30 @@ static int process_frame(FFFrameSync *fs)
     AVFilterContext *ctx = fs->parent;
     RemapContext *s = fs->opaque;
     AVFilterLink *outlink = ctx->outputs[0];
-    AVFrame *out, *in, *xpic, *ypic;
+    ThreadData td;
+    AVFrame *out;
     int ret;
 
-    if ((ret = ff_framesync_get_frame(&s->fs, 0, &in,   0)) < 0 ||
-        (ret = ff_framesync_get_frame(&s->fs, 1, &xpic, 0)) < 0 ||
-        (ret = ff_framesync_get_frame(&s->fs, 2, &ypic, 0)) < 0)
+    out = av_frame_alloc();
+    if (!out)
+        return AVERROR(ENOMEM);
+
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0) {
+        av_frame_free(&out);
         return ret;
-
-    {
-        ThreadData td;
-
-        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
-        if (!out)
-            return AVERROR(ENOMEM);
-        av_frame_copy_props(out, in);
-
-        td.in  = in;
-        td.xin = xpic;
-        td.yin = ypic;
-        td.out = out;
-        td.nb_planes = s->nb_planes;
-        td.nb_components = s->nb_components;
-        td.step = s->step;
-        ff_filter_execute(ctx, s->remap_slice, &td, NULL,
-                          FFMIN(outlink->h, ff_filter_get_nb_threads(ctx)));
     }
+    av_frame_copy_props(out, s->frame_source);
+
+    td.in  = s->frame_source;
+    td.xin = s->frame_xmap;
+    td.yin = s->frame_ymap;
+    td.out = out;
+    td.nb_planes = s->nb_planes;
+    td.nb_components = s->nb_components;
+    td.step = s->step;
+    ff_filter_execute(ctx, s->remap_slice, &td, NULL,
+                      FFMIN(outlink->h, ff_filter_get_nb_threads(ctx)));
     out->pts = av_rescale_q(s->fs.pts, s->fs.time_base, outlink->time_base);
 
     return ff_filter_frame(outlink, out);
@@ -303,7 +303,40 @@ static int config_output(AVFilterLink *outlink)
 static int activate(AVFilterContext *ctx)
 {
     RemapContext *s = ctx->priv;
-    return ff_framesync_activate(&s->fs);
+    return ff_framesync_activate_frames(&s->fs);
+}
+
+static int filter_prepare(AVFilterContext *ctx)
+{
+    RemapContext *s = ctx->priv;
+    int ret;
+
+    ret = ff_framesync_filter_prepare(&s->fs);
+    if (ret < 0)
+        return ret;
+
+    av_frame_free(&s->frame_source);
+    av_frame_free(&s->frame_xmap);
+    av_frame_free(&s->frame_ymap);
+
+    ret = ff_framesync_get_frame(&s->fs, 0, &s->frame_source, 1);
+    if (ret < 0)
+        return ret;
+
+    ret = ff_framesync_get_frame(&s->fs, 1, &s->frame_xmap, 1);
+    if (ret < 0) {
+        av_frame_free(&s->frame_source);
+        return ret;
+    }
+
+    ret = ff_framesync_get_frame(&s->fs, 2, &s->frame_ymap, 1);
+    if (ret < 0) {
+        av_frame_free(&s->frame_source);
+        av_frame_free(&s->frame_xmap);
+        return ret;
+    }
+
+    return 0;
 }
 
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
@@ -322,8 +355,39 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     RemapContext *s = ctx->priv;
 
+    av_frame_free(&s->frame_source);
+    av_frame_free(&s->frame_xmap);
+    av_frame_free(&s->frame_ymap);
+
     ff_framesync_uninit(&s->fs);
 }
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const RemapContext *s_src = src->priv;
+    RemapContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    memcpy(s_dst->fill_color, s_src->fill_color, sizeof(s_src->fill_color));
+    s_dst->fs.pts = s_src->fs.pts;
+
+    av_frame_free(&s_dst->frame_source);
+    av_frame_free(&s_dst->frame_xmap);
+    av_frame_free(&s_dst->frame_ymap);
+
+    s_dst->frame_source = av_frame_clone(s_src->frame_source);
+    s_dst->frame_xmap   = av_frame_clone(s_src->frame_xmap);
+    s_dst->frame_ymap   = av_frame_clone(s_src->frame_ymap);
+    if (!s_dst->frame_source || !s_dst->frame_xmap || !s_dst->frame_ymap)
+        return AVERROR(ENOMEM);
+
+    return 0;
+}
+#endif
 
 static const AVFilterPad remap_inputs[] = {
     {
@@ -353,10 +417,15 @@ const FFFilter ff_vf_remap = {
     .p.name        = "remap",
     .p.description = NULL_IF_CONFIG_SMALL("Remap pixels."),
     .p.priv_class  = &remap_class,
-    .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(RemapContext),
     .uninit        = uninit,
     .activate      = activate,
+    .filter_prepare = filter_prepare,
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(remap_inputs),
     FILTER_OUTPUTS(remap_outputs),
     FILTER_QUERY_FUNC2(query_formats),
