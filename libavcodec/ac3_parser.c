@@ -286,7 +286,7 @@ static int eac3_parse_header(GetBitContext *gbc, AC3HeaderInfo *hdr)
 
 int ff_ac3_parse_header(GetBitContext *gbc, AC3HeaderInfo *hdr)
 {
-    int frame_size_code;
+    int frame_size_code, ret;
 
     memset(hdr, 0, sizeof(*hdr));
 
@@ -345,7 +345,7 @@ int ff_ac3_parse_header(GetBitContext *gbc, AC3HeaderInfo *hdr)
         hdr->frame_type = EAC3_FRAME_TYPE_AC3_CONVERT; //EAC3_FRAME_TYPE_INDEPENDENT;
         hdr->substreamid = 0;
 
-        int ret = ac3_parse_header(gbc, hdr);
+        ret = ac3_parse_header(gbc, hdr);
         if (ret < 0)
             return ret;
     } else {
@@ -381,7 +381,7 @@ int ff_ac3_parse_header(GetBitContext *gbc, AC3HeaderInfo *hdr)
                         (hdr->num_blocks * 256);
         hdr->channels = ff_ac3_channels_tab[hdr->channel_mode] + hdr->lfe_on;
 
-        int ret = eac3_parse_header(gbc, hdr);
+        ret = eac3_parse_header(gbc, hdr);
         if (ret < 0)
             return ret;
     }
