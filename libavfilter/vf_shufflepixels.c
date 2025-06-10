@@ -204,17 +204,18 @@ static int shuffle_horizontal## name(AVFilterContext *ctx, void *arg,        \
     AVFrame *out = td->out;                                                  \
                                                                              \
     for (int p = 0; p < s->nb_planes; p++) {                                 \
-        const int slice_start = (s->planeheight[p] * jobnr) / nb_jobs;       \
-        const int slice_end = (s->planeheight[p] * (jobnr+1)) / nb_jobs;     \
+        const int planeheight = s->planeheight[p];                           \
+        const int slice_start = (planeheight * jobnr) / nb_jobs;             \
+        const int slice_end = (planeheight * (jobnr+1)) / nb_jobs;           \
         type *dst = (type *)(out->data[p] + slice_start * out->linesize[p]); \
         const type *src = (const type *)(in->data[p] +                       \
                                          slice_start * in->linesize[p]);     \
+        const int planewidth = s->planewidth[p];                             \
         const int32_t *map = s->map;                                         \
                                                                              \
         for (int y = slice_start; y < slice_end; y++) {                      \
-            for (int x = 0; x < s->planewidth[p]; x++) {                     \
+            for (int x = 0; x < planewidth; x++)                             \
                 dst[x] = src[map[x]];                                        \
-            }                                                                \
                                                                              \
             dst += out->linesize[p] / sizeof(type);                          \
             src += in->linesize[p] / sizeof(type);                           \
@@ -237,14 +238,16 @@ static int shuffle_vertical## name(AVFilterContext *ctx, void *arg,          \
     AVFrame *out = td->out;                                                  \
                                                                              \
     for (int p = 0; p < s->nb_planes; p++) {                                 \
-        const int slice_start = (s->planeheight[p] * jobnr) / nb_jobs;       \
-        const int slice_end = (s->planeheight[p] * (jobnr+1)) / nb_jobs;     \
+        const int planeheight = s->planeheight[p];                           \
+        const int slice_start = (planeheight * jobnr) / nb_jobs;             \
+        const int slice_end = (planeheight * (jobnr+1)) / nb_jobs;           \
         type *dst = (type *)(out->data[p] + slice_start * out->linesize[p]); \
+        const ptrdiff_t in_linesize = in->linesize[p] / sizeof(type);        \
         const int32_t *map = s->map;                                         \
                                                                              \
         for (int y = slice_start; y < slice_end; y++) {                      \
             const type *src = (const type *)(in->data[p] +                   \
-                                             map[y] * in->linesize[p]);      \
+                                             map[y] * in_linesize);          \
                                                                              \
             memcpy(dst, src, s->linesize[p]);                                \
             dst += out->linesize[p] / sizeof(type);                          \
@@ -267,22 +270,25 @@ static int shuffle_block## name(AVFilterContext *ctx, void *arg,             \
     AVFrame *out = td->out;                                                  \
                                                                              \
     for (int p = 0; p < s->nb_planes; p++) {                                 \
-        const int slice_start = (s->planeheight[p] * jobnr) / nb_jobs;       \
-        const int slice_end = (s->planeheight[p] * (jobnr+1)) / nb_jobs;     \
+        const int planeheight = s->planeheight[p];                           \
+        const int slice_start = (planeheight * jobnr) / nb_jobs;             \
+        const int slice_end = (planeheight * (jobnr+1)) / nb_jobs;           \
         type *dst = (type *)(out->data[p] + slice_start * out->linesize[p]); \
         const type *src = (const type *)in->data[p];                         \
         const int32_t *map = s->map + slice_start * s->planewidth[p];        \
+        const ptrdiff_t in_linesize = in->linesize[p] / sizeof(type);        \
+        const int planewidth = s->planewidth[p];                             \
                                                                              \
         for (int y = slice_start; y < slice_end; y++) {                      \
-            for (int x = 0; x < s->planewidth[p]; x++) {                     \
-                int ymap = map[x] / s->planewidth[p];                        \
-                int xmap = map[x] % s->planewidth[p];                        \
+            for (int x = 0; x < planewidth; x++) {                           \
+                int ymap = map[x] / planewidth;                              \
+                int xmap = map[x] % planewidth;                              \
                                                                              \
-                dst[x] = src[xmap + ymap * in->linesize[p] / sizeof(type)];  \
+                dst[x] = src[xmap + ymap * in_linesize];                     \
             }                                                                \
                                                                              \
             dst += out->linesize[p] / sizeof(type);                          \
-            map += s->planewidth[p];                                         \
+            map += planewidth;                                               \
         }                                                                    \
     }                                                                        \
                                                                              \
