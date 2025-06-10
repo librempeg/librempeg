@@ -51,13 +51,11 @@ static int filter_frame(AVFilterLink *link, AVFrame *inpicref)
 
 static int is_planar_yuv(const AVPixFmtDescriptor *desc)
 {
-    int i;
-
     if (desc->flags & ~(AV_PIX_FMT_FLAG_BE | AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_ALPHA) ||
         desc->nb_components < 3 ||
         (desc->comp[1].depth != desc->comp[2].depth))
         return 0;
-    for (i = 0; i < desc->nb_components; i++) {
+    for (int i = 0; i < desc->nb_components; i++) {
         if (desc->comp[i].offset != 0 ||
             desc->comp[i].shift != 0 ||
             desc->comp[i].plane != i)
@@ -72,9 +70,9 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_out)
 {
     AVFilterFormats *formats = NULL;
-    int fmt, ret;
+    int ret;
 
-    for (fmt = 0; av_pix_fmt_desc_get(fmt); fmt++) {
+    for (int fmt = 0; av_pix_fmt_desc_get(fmt); fmt++) {
         const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(fmt);
         if (is_planar_yuv(desc) && (ret = ff_add_format(&formats, fmt)) < 0)
             return ret;
