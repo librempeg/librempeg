@@ -52,35 +52,35 @@ AVFILTER_DEFINE_CLASS(field);
 static int config_props_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
-    FieldContext *field = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
+    FieldContext *s = ctx->priv;
 
-    field->nb_planes = av_pix_fmt_count_planes(outlink->format);
+    s->nb_planes = av_pix_fmt_count_planes(outlink->format);
 
     outlink->w = inlink->w;
-    outlink->h = (inlink->h + (field->type == FIELD_TYPE_TOP)) / 2;
+    outlink->h = (inlink->h + (s->type == FIELD_TYPE_TOP)) / 2;
 
     av_log(ctx, AV_LOG_VERBOSE, "w:%d h:%d type:%s -> w:%d h:%d\n",
-           inlink->w, inlink->h, field->type == FIELD_TYPE_BOTTOM ? "bottom" : "top",
+           inlink->w, inlink->h, s->type == FIELD_TYPE_BOTTOM ? "bottom" : "top",
            outlink->w, outlink->h);
     return 0;
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
-    FieldContext *field = inlink->dst->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
-    int i;
+    FieldContext *s = inlink->dst->priv;
 
-    inpicref->height = outlink->h;
-    inpicref->flags &= ~AV_FRAME_FLAG_INTERLACED;
+    in->height = outlink->h;
+    in->flags &= ~AV_FRAME_FLAG_INTERLACED;
 
-    for (i = 0; i < field->nb_planes; i++) {
-        if (field->type == FIELD_TYPE_BOTTOM)
-            inpicref->data[i] = inpicref->data[i] + inpicref->linesize[i];
-        inpicref->linesize[i] = 2 * inpicref->linesize[i];
+    for (int i = 0; i < s->nb_planes; i++) {
+        if (s->type == FIELD_TYPE_BOTTOM)
+            in->data[i] = in->data[i] + in->linesize[i];
+        in->linesize[i] = 2 * in->linesize[i];
     }
-    return ff_filter_frame(outlink, inpicref);
+
+    return ff_filter_frame(outlink, in);
 }
 
 static const AVFilterPad field_inputs[] = {
@@ -103,7 +103,7 @@ const FFFilter ff_vf_field = {
     .p.name        = "field",
     .p.description = NULL_IF_CONFIG_SMALL("Extract a field from the input video."),
     .p.priv_class  = &field_class,
-    .priv_size   = sizeof(FieldContext),
+    .priv_size     = sizeof(FieldContext),
     FILTER_INPUTS(field_inputs),
     FILTER_OUTPUTS(field_outputs),
 };
