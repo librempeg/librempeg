@@ -372,12 +372,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     ShufflePixelsContext *s = ctx->priv;
-    AVFrame *out = ff_get_video_buffer(ctx->outputs[0], in->width, in->height);
     ThreadData td;
+    AVFrame *out;
     int ret;
 
+    out = av_frame_alloc();
     if (!out) {
         ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0) {
+        av_frame_free(&out);
         goto fail;
     }
 
@@ -450,7 +457,8 @@ const FFFilter ff_vf_shufflepixels = {
     .p.name        = "shufflepixels",
     .p.description = NULL_IF_CONFIG_SMALL("Shuffle video pixels."),
     .p.priv_class  = &shufflepixels_class,
-    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(ShufflePixelsContext),
     .uninit        = uninit,
     FILTER_INPUTS(shufflepixels_inputs),
