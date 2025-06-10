@@ -71,7 +71,6 @@ AVFILTER_DEFINE_CLASS(telecine);
 static av_cold int init(AVFilterContext *ctx)
 {
     TelecineContext *s = ctx->priv;
-    const char *p;
     int max = 0;
 
     if (!strlen(s->pattern)) {
@@ -79,7 +78,7 @@ static av_cold int init(AVFilterContext *ctx)
         return AVERROR_INVALIDDATA;
     }
 
-    for (p = s->pattern; *p; p++) {
+    for (const char *p = s->pattern; *p; p++) {
         if (!av_isdigit(*p)) {
             av_log(ctx, AV_LOG_ERROR, "Provided pattern includes non-numeric characters.\n");
             return AVERROR_INVALIDDATA;
@@ -115,12 +114,12 @@ static int config_input(AVFilterLink *inlink)
 {
     TelecineContext *s = inlink->dst->priv;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
-    int i, ret;
+    int ret;
 
     s->temp = ff_get_video_buffer(inlink, inlink->w, inlink->h);
     if (!s->temp)
         return AVERROR(ENOMEM);
-    for (i = 0; i < s->out_cnt; i++) {
+    for (int i = 0; i < s->out_cnt; i++) {
         s->frame[i] = ff_get_video_buffer(inlink, inlink->w, inlink->h);
         if (!s->frame[i])
             return AVERROR(ENOMEM);
@@ -171,7 +170,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
     AVFilterLink *outlink = ctx->outputs[0];
     FilterLink *outl = ff_filter_link(outlink);
     TelecineContext *s = ctx->priv;
-    int i, len, ret = 0, nout = 0;
+    int len, ret = 0, nout = 0;
 
     if (s->start_time == AV_NOPTS_VALUE)
         s->start_time = inpicref->pts;
@@ -193,7 +192,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
             av_frame_free(&inpicref);
             return ret;
         }
-        for (i = 0; i < s->nb_planes; i++) {
+        for (int i = 0; i < s->nb_planes; i++) {
             // fill in the EARLIER field from the buffered pic
             av_image_copy_plane(s->frame[nout]->data[i] + s->frame[nout]->linesize[i] * s->first_field,
                                 s->frame[nout]->linesize[i] * 2,
@@ -226,7 +225,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
             av_frame_free(&inpicref);
             return ret;
         }
-        for (i = 0; i < s->nb_planes; i++)
+        for (int i = 0; i < s->nb_planes; i++)
             av_image_copy_plane(s->frame[nout]->data[i], s->frame[nout]->linesize[i],
                                 inpicref->data[i], inpicref->linesize[i],
                                 s->stride[i],
@@ -238,7 +237,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
 
     if (len >= 1) {
         // copy THIS image to the buffer, we need it later
-        for (i = 0; i < s->nb_planes; i++)
+        for (int i = 0; i < s->nb_planes; i++)
             av_image_copy_plane(s->temp->data[i], s->temp->linesize[i],
                                 inpicref->data[i], inpicref->linesize[i],
                                 s->stride[i],
@@ -246,7 +245,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
         s->occupied = 1;
     }
 
-    for (i = 0; i < nout; i++) {
+    for (int i = 0; i < nout; i++) {
         AVFrame *frame = av_frame_clone(s->frame[i]);
         int interlaced = frame ? !!(frame->flags & AV_FRAME_FLAG_INTERLACED)      : 0;
         int tff        = frame ? !!(frame->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST) : 0;
@@ -278,10 +277,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
 static av_cold void uninit(AVFilterContext *ctx)
 {
     TelecineContext *s = ctx->priv;
-    int i;
 
     av_frame_free(&s->temp);
-    for (i = 0; i < s->out_cnt; i++)
+    for (int i = 0; i < s->out_cnt; i++)
         av_frame_free(&s->frame[i]);
 }
 
