@@ -363,9 +363,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     ff_filter_execute(ctx, s->func, &td, NULL,
                       FFMIN(inlink->h, ff_filter_get_nb_threads(ctx)));
 
-    out->width  = outlink->w;
-    out->height = outlink->h;
-
     av_frame_free(&in);
     return ff_filter_frame(outlink, out);
 }
