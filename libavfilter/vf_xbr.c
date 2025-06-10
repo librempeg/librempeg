@@ -348,11 +348,20 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = ctx->outputs[0];
     XBRContext *s = ctx->priv;
     ThreadData td;
+    AVFrame *out;
+    int ret;
 
-    AVFrame *out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    out = av_frame_alloc();
     if (!out) {
         av_frame_free(&in);
         return AVERROR(ENOMEM);
+    }
+
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0) {
+        av_frame_free(&out);
+        av_frame_free(&in);
+        return ret;
     }
 
     av_frame_copy_props(out, in);
@@ -414,7 +423,7 @@ const FFFilter ff_vf_xbr = {
     .p.name        = "xbr",
     .p.description = NULL_IF_CONFIG_SMALL("Scale the input using xBR algorithm."),
     .p.priv_class  = &xbr_class,
-    .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS | AVFILTER_FLAG_FRAME_THREADS,
     FILTER_INPUTS(xbr_inputs),
     FILTER_OUTPUTS(xbr_outputs),
     FILTER_SINGLE_PIXFMT(AV_PIX_FMT_0RGB32),
