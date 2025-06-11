@@ -288,6 +288,8 @@ static int decode_tile(AVCodecContext *avctx, TileContext *tile,
     size[1] = bytestream2_get_be16(gb);
     size[2] = bytestream2_get_be16(gb);
     size[3] = bytestream2_size(gb) - size[0] - size[1] - size[2] - 8;
+    if (size[3] < 0)
+        return AVERROR_INVALIDDATA;
 
     ret = decode_tilec(avctx, tile, frame, size[0], 2, qscale);
     if (ret < 0)
