@@ -3697,6 +3697,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("PCA (Perfect Clarity Audio)"),
         .props     = AV_CODEC_PROP_LOSSLESS,
     },
+    {
+        .id        = AV_CODEC_ID_G722_1,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "g722.1",
+        .long_name = NULL_IF_CONFIG_SMALL("G.722.1"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
 
     /* subtitle codecs */
     {

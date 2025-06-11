@@ -495,6 +495,7 @@ extern const FFCodec ff_flac_encoder;
 extern const FFCodec ff_flac_decoder;
 extern const FFCodec ff_ftr_decoder;
 extern const FFCodec ff_g719_decoder;
+extern const FFCodec ff_g722_1_decoder;
 extern const FFCodec ff_g723_1_encoder;
 extern const FFCodec ff_g723_1_decoder;
 extern const FFCodec ff_g728_decoder;

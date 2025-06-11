@@ -399,6 +399,7 @@ OBJS-$(CONFIG_FRWU_DECODER)            += frwu.o
 OBJS-$(CONFIG_FTR_DECODER)             += ftr.o
 OBJS-$(CONFIG_G2M_DECODER)             += g2meet.o elsdec.o mjpegdec_common.o
 OBJS-$(CONFIG_G719_DECODER)            += g719.o
+OBJS-$(CONFIG_G722_1_DECODER)          += g722_1dec.o
 OBJS-$(CONFIG_G723_1_DECODER)          += g723_1dec.o g723_1.o \
                                           acelp_vectors.o celp_filters.o celp_math.o
 OBJS-$(CONFIG_G723_1_ENCODER)          += g723_1enc.o g723_1.o \
