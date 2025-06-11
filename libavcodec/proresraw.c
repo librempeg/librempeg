@@ -387,6 +387,9 @@ static int decode_frame(AVCodecContext *avctx,
     if (!s->tiles)
         return AVERROR(ENOMEM);
 
+    if (bytestream2_get_bytes_left(&gb) < s->nb_tiles * 2)
+        return AVERROR_INVALIDDATA;
+
     offset = bytestream2_tell(&gb) + s->nb_tiles * 2;
     for (int n = 0; n < s->nb_tiles; n++) {
         TileContext *tile = &s->tiles[n];
