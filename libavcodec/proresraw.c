@@ -336,10 +336,12 @@ static int decode_frame(AVCodecContext *avctx,
         return AVERROR_INVALIDDATA;
 
     header_size = bytestream2_get_be16(&gb) + 8;
-    if (header_size < 144)
-        return AVERROR_INVALIDDATA;
     version = bytestream2_get_be16(&gb);
-    if (version != 0)
+    if (version != 0) {
+        avpriv_request_sample(avctx, "Version %d", version);
+        return AVERROR_PATCHWELCOME;
+    }
+    if (header_size < 144)
         return AVERROR_INVALIDDATA;
     bytestream2_skip(&gb, 4);
 
