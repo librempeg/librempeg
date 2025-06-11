@@ -63,6 +63,8 @@ static int bnsf_read_header(AVFormatContext *s)
             par->codec_type  = AVMEDIA_TYPE_AUDIO;
             if (codec == MKBETAG('I','S','2','2'))
                 par->codec_id    = AV_CODEC_ID_G719;
+            else if (codec == MKBETAG('I','S','1','4'))
+                par->codec_id    = AV_CODEC_ID_G722_1;
             par->codec_tag   = 0;
             par->ch_layout.nb_channels = avio_rb16(pb);
             par->sample_rate = avio_rb32(pb);
