@@ -106,8 +106,8 @@ static void vector_dmul_add_c(double *dst, const double *src0, const double *src
         dst[i] = src0[i] * src1[i] + src2[i];
 }
 
-static void vector_fmul_reverse_c(float *dst, const float *src0,
-                                  const float *src1, int len)
+void ff_vector_fmul_reverse_c(float *dst, const float *src0,
+                              const float *src1, int len)
 {
     int i;
 
@@ -154,7 +154,7 @@ av_cold AVFloatDSPContext *avpriv_float_dsp_alloc(int bit_exact)
     fdsp->vector_fmul_window = vector_fmul_window_c;
     fdsp->vector_fmul_add = vector_fmul_add_c;
     fdsp->vector_dmul_add = vector_dmul_add_c;
-    fdsp->vector_fmul_reverse = vector_fmul_reverse_c;
+    fdsp->vector_fmul_reverse = ff_vector_fmul_reverse_c;
     fdsp->butterflies_float = butterflies_float_c;
     fdsp->scalarproduct_float = ff_scalarproduct_float_c;
     fdsp->scalarproduct_double = ff_scalarproduct_double_c;
