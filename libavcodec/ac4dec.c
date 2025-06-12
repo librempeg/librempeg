@@ -5337,7 +5337,11 @@ static void spectral_synthesis(AC4DecodeContext *s, SubstreamChannel *ssch)
                                 sizeof(float));
 
             s->fdsp->vector_fmul(imdct_out, imdct_out, swinl, N);
-            s->fdsp->vector_fmul_reverse(overlap + nskip_prev,
+            if (!(N_prev & 15))
+                s->fdsp->vector_fmul_reverse(overlap + nskip_prev,
+                                             overlap + nskip_prev, swinr, N_prev);
+            else
+                ff_vector_fmul_reverse_c(overlap + nskip_prev,
                                          overlap + nskip_prev, swinr, N_prev);
 
             for (int n = 0; n < N; n++)
