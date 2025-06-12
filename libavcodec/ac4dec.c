@@ -5066,6 +5066,8 @@ static void spectral_reordering(AC4DecodeContext *s, SubstreamChannel *ssch)
         const uint16_t *sfb_offset = get_sfb_offset(transf_length_g);
         int max_sfb = get_max_sfb(s, ssch, g);
 
+        av_assert2(max_sfb < get_sfb_size(transf_length_g));
+
         for (int sfb = 0; sfb < max_sfb; sfb++) {
             for (int w = 0; w < ssch->scp.num_win_in_group[g]; w++) {
                 for (int l = sfb_offset[sfb]; l < sfb_offset[sfb+1]; l++)
