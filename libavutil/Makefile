@@ -139,6 +139,7 @@ OBJS = adler32.o                                                        \
        file.o                                                           \
        file_open.o                                                      \
        float_dsp.o                                                      \
+       float_fmul_reverse.o                                             \
        float_scalarproduct.o                                            \
        film_grain_params.o                                              \
        fixed_dsp.o                                                      \

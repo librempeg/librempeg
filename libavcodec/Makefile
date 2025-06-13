@@ -62,6 +62,7 @@ OBJS = ac3_parser.o                                                     \
        xiph.o                                                           \
 
 SHLIBOBJS = float_scalarproduct.o                                       \
+            float_fmul_reverse.o                                        \
             timecode_internal.o                                         \
 
 # subsystems
