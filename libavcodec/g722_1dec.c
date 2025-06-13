@@ -1070,7 +1070,7 @@ static av_cold int g722_1_close(AVCodecContext *avctx)
 
 const FFCodec ff_g722_1_decoder = {
     .p.name         = "g722_1",
-    CODEC_LONG_NAME("G.722.1 C"),
+    CODEC_LONG_NAME("G.722.1 Annex C"),
     .priv_data_size = sizeof(G7221Context),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_G722_1,

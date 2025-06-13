@@ -3700,8 +3700,8 @@ static const AVCodecDescriptor codec_descriptors[] = {
     {
         .id        = AV_CODEC_ID_G722_1,
         .type      = AVMEDIA_TYPE_AUDIO,
-        .name      = "g722.1",
-        .long_name = NULL_IF_CONFIG_SMALL("G.722.1"),
+        .name      = "g722_1",
+        .long_name = NULL_IF_CONFIG_SMALL("G.722.1 Annex C"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 
