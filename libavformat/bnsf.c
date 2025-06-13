@@ -99,11 +99,8 @@ static int bnsf_read_header(AVFormatContext *s)
 static int bnsf_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
-    int ret;
 
-    ret = av_get_packet(s->pb, pkt, par->block_align);
-    pkt->duration = 960;
-    return ret;
+    return av_get_packet(s->pb, pkt, par->block_align);
 }
 
 const FFInputFormat ff_bnsf_demuxer = {

@@ -595,6 +595,8 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
     case AV_CODEC_ID_GSM_MS:       return  320;
     case AV_CODEC_ID_MP1:          return  384;
     case AV_CODEC_ID_ATRAC1:       return  512;
+    case AV_CODEC_ID_G722_1:       return  640;
+    case AV_CODEC_ID_G719:         return  960;
     case AV_CODEC_ID_ATRAC9:
     case AV_CODEC_ID_ATRAC3:
         if (framecount > INT_MAX/1024)
