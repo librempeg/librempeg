@@ -166,23 +166,45 @@ static int process_slice(AVFilterContext *ctx, void *arg, int job, int nb_jobs)
     return 0;
 }
 
+static int filter_prepare(AVFilterContext *ctx)
+{
+    StackContext *s = ctx->priv;
+    AVFrame **in = s->frames;
+    int ret;
+
+    ret = ff_framesync_filter_prepare(&s->fs);
+    if (ret < 0)
+        return ret;
+
+    for (int i = 0; i < s->nb_inputs; i++)
+        av_frame_free(&in[i]);
+
+    for (int i = 0; i < s->nb_inputs; i++) {
+        if ((ret = ff_framesync_get_frame(&s->fs, i, &in[i], 1)) < 0)
+            return ret;
+    }
+
+    return 0;
+}
+
 static int process_frame(FFFrameSync *fs)
 {
     AVFilterContext *ctx = fs->parent;
     AVFilterLink *outlink = ctx->outputs[0];
     StackContext *s = fs->opaque;
-    AVFrame **in = s->frames;
     AVFrame *out;
-    int i, ret;
+    int ret;
 
-    for (i = 0; i < s->nb_inputs; i++) {
-        if ((ret = ff_framesync_get_frame(&s->fs, i, &in[i], 0)) < 0)
-            return ret;
-    }
-
-    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    out = av_frame_alloc();
     if (!out)
         return AVERROR(ENOMEM);
+
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0) {
+        av_frame_free(&out);
+        return ret;
+    }
+
     out->pts = av_rescale_q(s->fs.pts, s->fs.time_base, outlink->time_base);
     out->sample_aspect_ratio = outlink->sample_aspect_ratio;
 
@@ -432,15 +454,44 @@ static av_cold void uninit(AVFilterContext *ctx)
     StackContext *s = ctx->priv;
 
     ff_framesync_uninit(&s->fs);
-    av_freep(&s->frames);
+    if (s->frames) {
+        for (int i = 0; i < s->nb_inputs; i++)
+            av_frame_free(&s->frames[i]);
+        av_freep(&s->frames);
+    }
     av_freep(&s->items);
 }
 
 static int activate(AVFilterContext *ctx)
 {
     StackContext *s = ctx->priv;
-    return ff_framesync_activate(&s->fs);
+    return ff_framesync_activate_frames(&s->fs);
 }
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const StackContext *s_src = src->priv;
+    StackContext       *s_dst = dst->priv;
+
+    // only transfer state from main thread to workers
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    s_dst->fs.pts = s_src->fs.pts;
+
+    for (int i = 0; i < s_dst->nb_inputs; i++)
+        av_frame_free(&s_dst->frames[i]);
+
+    for (int i = 0; i < s_dst->nb_inputs; i++) {
+        s_dst->frames[i] = av_frame_clone(s_src->frames[i]);
+        if (!s_dst->frames[i])
+            return AVERROR(ENOMEM);
+    }
+
+    return 0;
+}
+#endif
 
 #define OFFSET(x) offsetof(StackContext, x)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
@@ -466,12 +517,17 @@ const FFFilter ff_vf_hstack = {
     .p.name        = "hstack",
     .p.description = NULL_IF_CONFIG_SMALL("Stack video inputs horizontally."),
     .p.priv_class  = &stack_class,
-    .p.flags       = AVFILTER_FLAG_DYNAMIC_INPUTS | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_DYNAMIC_INPUTS | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(StackContext),
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
     .init          = init,
     .uninit        = uninit,
+    .filter_prepare = filter_prepare,
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     .activate      = activate,
 };
 
@@ -483,12 +539,17 @@ const FFFilter ff_vf_vstack = {
     .p.name        = "vstack",
     .p.description = NULL_IF_CONFIG_SMALL("Stack video inputs vertically."),
     .p.priv_class  = &stack_class,
-    .p.flags       = AVFILTER_FLAG_DYNAMIC_INPUTS | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_DYNAMIC_INPUTS | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(StackContext),
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
     .init          = init,
     .uninit        = uninit,
+    .filter_prepare = filter_prepare,
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     .activate      = activate,
 };
 
@@ -511,12 +572,17 @@ const FFFilter ff_vf_xstack = {
     .p.name        = "xstack",
     .p.description = NULL_IF_CONFIG_SMALL("Stack video inputs into custom layout."),
     .p.priv_class  = &xstack_class,
-    .p.flags       = AVFILTER_FLAG_DYNAMIC_INPUTS | AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_DYNAMIC_INPUTS | AVFILTER_FLAG_SLICE_THREADS |
+                     AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(StackContext),
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
     .init          = init,
     .uninit        = uninit,
+    .filter_prepare = filter_prepare,
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     .activate      = activate,
 };
 
