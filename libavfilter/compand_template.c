@@ -97,6 +97,8 @@ static int fn(prepare)(AVFilterContext *ctx, AVFilterLink *outlink)
     channels = s->channels;
     segments = s->segments;
 
+    memset(segments, 0, s->nb_segments * sizeof(fn(CompandSegment)));
+
     for (int i = 0; i < nb_attacks; i++)
         channels[i].attack = s->attacks[i];
 
@@ -214,6 +216,7 @@ static int fn(prepare)(AVFilterContext *ctx, AVFilterLink *outlink)
         else
             cp->decay = F(1.0);
         cp->volume = s->initial_volume * F(M_LN10/20.0);
+        cp->delay_index = cp->delay_count = 0;
     }
 
     return 0;
