@@ -211,6 +211,7 @@ extern const FFFilter ff_asrc_anoisesrc;
 extern const FFFilter ff_asrc_anullsrc;
 extern const FFFilter ff_asrc_aquadosc;
 extern const FFFilter ff_asrc_arampsrc;
+extern const FFFilter ff_asrc_ardftsynth;
 extern const FFFilter ff_asrc_atonesrc;
 extern const FFFilter ff_asrc_flite;
 extern const FFFilter ff_asrc_hilbert;
