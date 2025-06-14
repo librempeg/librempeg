@@ -342,7 +342,7 @@ typedef struct G719Context {
     AVTXContext       *stx_ctx;
     AVFloatDSPContext *fdsp;
 
-    DECLARE_ALIGNED(32, float, window)[960];
+    DECLARE_ALIGNED(32, float, window)[FRAME_LENGTH];
     DECLARE_ALIGNED(32, float, short_window)[240];
 } G719Context;
 
@@ -365,8 +365,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
     if (!s->fdsp)
         return AVERROR(ENOMEM);
 
-    for (int i = 0; i < 960; i++) {
-        float angle = ((i + 0.5f) * M_PI_2) / 960.f;
+    for (int i = 0; i < FRAME_LENGTH; i++) {
+        float angle = ((i + 0.5f) * M_PI_2) / FRAME_LENGTH;
         s->window[i] = sinf(angle);
     }
 
@@ -375,7 +375,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
         s->short_window[i] = sinf(angle);
     }
 
-    ret = av_tx_init(&s->ltx_ctx, &s->ltx_fn, AV_TX_FLOAT_MDCT, 1, 960, &scale, 0);
+    ret = av_tx_init(&s->ltx_ctx, &s->ltx_fn, AV_TX_FLOAT_MDCT, 1, FRAME_LENGTH, &scale, 0);
     if (ret < 0)
         return ret;
     return av_tx_init(&s->stx_ctx, &s->stx_fn, AV_TX_FLOAT_MDCT, 1, 240, &scale, 0);
@@ -1463,10 +1463,10 @@ static void decode_channel(AVCodecContext *avctx, ChannelState *c, float *sample
 
     inverse_transform(avctx, c);
 
-    s->fdsp->vector_fmul_window(samples, c->imdct_prev + (960 >> 1),
-                                c->imdct_out, s->window, 960 >> 1);
+    s->fdsp->vector_fmul_window(samples, c->imdct_prev + (FRAME_LENGTH >> 1),
+                                c->imdct_out, s->window, FRAME_LENGTH >> 1);
 
-    memcpy(c->imdct_prev, c->imdct_out, 960 * sizeof(*c->imdct_out));
+    memcpy(c->imdct_prev, c->imdct_out, FRAME_LENGTH * sizeof(*c->imdct_out));
 }
 
 static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
@@ -1480,7 +1480,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     if (avpkt->size < (s->num_bits >> 3) * avctx->ch_layout.nb_channels)
         return AVERROR_INVALIDDATA;
 
-    frame->nb_samples = 960;
+    frame->nb_samples = FRAME_LENGTH;
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
     samples = (float **)frame->extended_data;
