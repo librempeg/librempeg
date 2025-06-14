@@ -33,6 +33,7 @@ typedef struct AudioEchoContext {
     float *delays;
     unsigned nb_delays;
     float *decays;
+    float feedback;
     unsigned nb_decays;
     unsigned nb_echoes;
     int *delay_index;
@@ -57,6 +58,7 @@ static const AVOption aecho_options[] = {
     { "out_gain", "set signal output gain", OFFSET(out_gain), AV_OPT_TYPE_FLOAT,  {.dbl=0.3}, 0, 1, AT },
     { "delays",   "set list of signal delays", OFFSET(delays), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_delays}, 0, 90000, A },
     { "decays",   "set list of signal decays", OFFSET(decays), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_decays}, 0, 1, A },
+    { "feedback", "set signal feedback gain",  OFFSET(feedback), AV_OPT_TYPE_FLOAT, {.dbl=0.0}, 0, 1, AT },
     { NULL }
 };
 

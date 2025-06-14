@@ -54,6 +54,7 @@ static int fn(echo_samples)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
 {
     AudioEchoContext *s = ctx->priv;
     ThreadData *td = arg;
+    const ftype feedback = s->feedback;
     const ftype out_gain = s->out_gain;
     const ftype in_gain = s->in_gain;
     const unsigned nb_decays = s->nb_decays;
@@ -88,7 +89,7 @@ static int fn(echo_samples)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
             out *= out_gain;
 
             d[n] = is_disabled ? in : CLIP(out);
-            dbuf[index] = in;
+            dbuf[index] = CLIP(in + feedback * d[n]);
 
             index = MOD(index + 1, max_samples);
         }
