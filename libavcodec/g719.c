@@ -1477,7 +1477,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     float **samples;
     int ret;
 
-    if (avpkt->size < (s->num_bits >> 3))
+    if (avpkt->size < (s->num_bits >> 3) * avctx->ch_layout.nb_channels)
         return AVERROR_INVALIDDATA;
 
     frame->nb_samples = 960;
