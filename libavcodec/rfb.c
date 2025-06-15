@@ -31,9 +31,6 @@
 #include "codec_internal.h"
 #include "decode.h"
 #include "thread.h"
-#include "zlib_wrapper.h"
-
-#include <zlib.h>
 
 #define HextileRaw                   (1 << 0)
 #define HextileBackgroundSpecified   (1 << 1)
@@ -60,8 +57,6 @@ typedef struct RFBContext {
 
     AVFifo *fifo;
     int length;
-
-    FFZStream zstream;
 } RFBContext;
 
 static av_cold int decode_init(AVCodecContext *avctx)
