@@ -19,21 +19,21 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/mem.h"
+#include "libavutil/lzo.h"
+
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "decode.h"
-#include "libavutil/mem.h"
-
-#if CONFIG_ZLIB
-#include <zlib.h>
-#endif
-#include "libavutil/lzo.h"
+#include "inflate.h"
 
 typedef struct CamStudioContext {
     AVFrame *pic;
     int linelen, height, bpp;
     unsigned int decomp_size;
     unsigned char* decomp_buf;
+
+    InflateContext ic;
 } CamStudioContext;
 
 static void copy_frame_default(AVFrame *f, const uint8_t *src,
@@ -92,19 +92,12 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *rframe,
         }
         break;
     }
-    case 1: { // zlib compression
-#if CONFIG_ZLIB
-        unsigned long dlen = c->decomp_size;
-        if (uncompress(c->decomp_buf, &dlen, &buf[2], buf_size - 2) != Z_OK || (dlen != c->decomp_size && dlen != c->decomp_size - bugdelta)) {
+    case 1: // zlib compression
+        if ((ret = ff_inflate(&c->ic, &buf[2], buf_size - 2, c->decomp_buf, c->height, c->linelen, c->linelen)) < 0) {
             av_log(avctx, AV_LOG_ERROR, "error during zlib decompression\n");
-            return AVERROR_INVALIDDATA;
+            return ret;
         }
         break;
-#else
-        av_log(avctx, AV_LOG_ERROR, "compiled without zlib support\n");
-        return AVERROR(ENOSYS);
-#endif
-    }
     default:
         av_log(avctx, AV_LOG_ERROR, "unknown compression\n");
         return AVERROR_INVALIDDATA;
@@ -163,8 +156,11 @@ static av_cold int decode_init(AVCodecContext *avctx)
 static av_cold int decode_end(AVCodecContext *avctx)
 {
     CamStudioContext *c = avctx->priv_data;
+
+    ff_inflate(&c->ic, NULL, 0, NULL, 0, 0, 0);
     av_freep(&c->decomp_buf);
     av_frame_free(&c->pic);
+
     return 0;
 }
 
