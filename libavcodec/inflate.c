@@ -25,6 +25,30 @@
 
 #include "inflate.h"
 
+static const uint8_t length_bits[30] = {
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
+    1, 1, 2, 2, 2, 2, 3, 3, 3, 3,
+    4, 4, 4, 4, 5, 5, 5, 5, 0, 127
+};
+
+static const uint16_t length_base[30] = {
+    3,  4,  5,   6,   7,   8,   9,   10,  11, 13,
+    15, 17, 19,  23,  27,  31,  35,  43,  51, 59,
+    67, 83, 99, 115, 131, 163, 195, 227, 258,  0
+};
+
+static const uint8_t dist_bits[30] = {
+    0, 0,  0,  0,  1,  1,  2,  2,  3,  3,
+    4, 4,  5,  5,  6,  6,  7,  7,  8,  8,
+    9, 9, 10, 10, 11, 11, 12, 12, 13, 13
+};
+
+static const uint16_t dist_base[30] = {
+    1,    2,    3,    4,    5,    7,    9,    13,    17,    25,
+    33,   49,   65,   97,   129,  193,  257,  385,   513,   769,
+    1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577
+};
+
 static int build_vlc(InflateTree *t, const int nb,
                      const uint8_t *lens, const uint16_t *symbols)
 {
@@ -84,35 +108,14 @@ static av_always_inline uint32_t get_bits_base(GetBitContext *gb, int bits, int 
     return base + get_bitsz(gb, bits);
 }
 
-static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *dt)
+static int inflate_block_datax(InflateContext *s, InflateTree *lt, InflateTree *dt)
 {
-    static const uint8_t length_bits[30] = {
-        0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
-        1, 1, 2, 2, 2, 2, 3, 3, 3, 3,
-        4, 4, 4, 4, 5, 5, 5, 5, 0, 127
-    };
-    static const uint16_t length_base[30] = {
-         3,  4,  5,   6,   7,   8,   9,  10,  11,  13,
-        15, 17, 19,  23,  27,  31,  35,  43,  51,  59,
-        67, 83, 99, 115, 131, 163, 195, 227, 258,   0
-    };
-    static const uint8_t dist_bits[30] = {
-        0, 0,  0,  0,  1,  1,  2,  2,  3,  3,
-        4, 4,  5,  5,  6,  6,  7,  7,  8,  8,
-        9, 9, 10, 10, 11, 11, 12, 12, 13, 13
-    };
-    static const uint16_t dist_base[30] = {
-        1,    2,    3,    4,    5,    7,    9,    13,    17,    25,
-        33,   49,   65,   97,  129,  193,  257,   385,   513,   769,
-        1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577
-    };
-    const int have_fun = s->row_fun && s->priv_data && s->tmp;
     const ptrdiff_t linesize = s->linesize;
     GetBitContext *gb = &s->gb;
     const int height = s->height;
     int width = s->width;
     int ret = 0, x = s->x, y = s->y;
-    uint8_t *dst = have_fun ? s->tmp : s->dst + y * linesize;
+    uint8_t *dst = s->tmp;
     const int dt_max_sym = dt->max_sym;
     const int lt_max_sym = lt->max_sym;
     const VLCElem *dt_tab = dt->vlc.table;
@@ -132,13 +135,8 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
 
             x++;
             if (x >= width) {
-                if (have_fun) {
-                    s->row_fun(s->priv_data, s->dst, linesize, s->tmp, &y, &width, height);
-                    dst = s->tmp;
-                } else {
-                    dst += linesize;
-                    y++;
-                }
+                s->row_fun(s->priv_data, s->dst, linesize, s->tmp, &y, &width, height);
+                dst = s->tmp;
                 x = 0;
                 if (y >= height)
                     break;
@@ -196,13 +194,8 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
                 len -= ix;
                 x += ix;
                 if (x >= width) {
-                    if (have_fun) {
-                        s->row_fun(s->priv_data, s->dst, linesize, s->tmp, &y, &width, height);
-                        dst = s->tmp;
-                    } else {
-                        dst += linesize;
-                        y++;
-                    }
+                    s->row_fun(s->priv_data, s->dst, linesize, s->tmp, &y, &width, height);
+                    dst = s->tmp;
                     if (y >= height)
                         break;
                     x = 0;
@@ -347,7 +340,7 @@ static int decode_trees(InflateContext *s, InflateTree *lt, InflateTree *dt)
     return build_tree(dt, lengths + hlit, hdist);
 }
 
-static int inflate_fixed_block(InflateContext *s)
+static int inflate_fixed_blockx(InflateContext *s)
 {
     if (!s->fixed_cb_initialized) {
         int ret = build_fixed_trees(&s->fixed_ltree, &s->fixed_dtree);
@@ -358,28 +351,27 @@ static int inflate_fixed_block(InflateContext *s)
         s->fixed_cb_initialized = 1;
     }
 
-    return inflate_block_data(s, &s->fixed_ltree, &s->fixed_dtree);
+    return inflate_block_datax(s, &s->fixed_ltree, &s->fixed_dtree);
 }
 
-static int inflate_dynamic_block(InflateContext *s)
+static int inflate_dynamic_blockx(InflateContext *s)
 {
     int ret = decode_trees(s, &s->dynamic_ltree, &s->dynamic_dtree);
 
     if (ret < 0)
         return ret;
 
-    return inflate_block_data(s, &s->dynamic_ltree, &s->dynamic_dtree);
+    return inflate_block_datax(s, &s->dynamic_ltree, &s->dynamic_dtree);
 }
 
-static int inflate_raw_block(InflateContext *s)
+static int inflate_raw_blockx(InflateContext *s)
 {
     const ptrdiff_t linesize = s->linesize;
-    const int have_fun = s->row_fun && s->priv_data && s->tmp;
     GetBitContext *gb = &s->gb;
     const int height = s->height;
     int width = s->width;
     int x = s->x, y = s->y, len, inv_len;
-    uint8_t *dst = have_fun ? s->tmp : s->dst + y * linesize;
+    uint8_t *dst = s->tmp;
     const unsigned history_size = FF_ARRAY_ELEMS(s->history);
     const unsigned history_mask = history_size-1;
     unsigned history_pos = s->history_pos;
@@ -409,13 +401,8 @@ static int inflate_raw_block(InflateContext *s)
         x += ilen;
         if (x >= width) {
             x = 0;
-            if (have_fun) {
-                s->row_fun(s->priv_data, s->dst, linesize, s->tmp, &y, &width, height);
-                dst = s->tmp;
-            } else {
-                dst += linesize;
-                y++;
-            }
+            s->row_fun(s->priv_data, s->dst, linesize, s->tmp, &y, &width, height);
+            dst = s->tmp;
         }
 
         len -= ilen;
@@ -428,6 +415,181 @@ static int inflate_raw_block(InflateContext *s)
     s->history_pos = history_pos;
 
     return 0;
+}
+
+static int inflate_raw_block(InflateContext *s)
+{
+    const ptrdiff_t linesize = s->linesize;
+    GetBitContext *gb = &s->gb;
+    const int height = s->height;
+    const int width = s->width;
+    int x = s->x, y = s->y, len, inv_len;
+    uint8_t *dst = s->dst;
+
+    align_get_bits(gb);
+    len = get_bits(gb, 16);
+    inv_len = get_bits(gb, 16);
+    if ((len ^ inv_len) != 0xFFFF)
+        return AVERROR_INVALIDDATA;
+
+    if (get_bits_left(gb) < len * 8)
+        return AVERROR_INVALIDDATA;
+
+    if (len > ((height - y) * width - x))
+        return AVERROR_INVALIDDATA;
+
+    while (len > 0) {
+        const int ilen = FFMIN(width - x, len);
+
+        memcpy(dst + linesize * y + x, gb->buffer + (get_bits_count(gb) >> 3), ilen);
+
+        x += ilen;
+        if (x >= width) {
+            x = 0;
+            y++;
+        }
+
+        len -= ilen;
+        skip_bits_long(gb, ilen * 8);
+    }
+
+    s->x = x;
+    s->y = y;
+
+    return 0;
+}
+
+static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *dt)
+{
+    const ptrdiff_t linesize = s->linesize;
+    GetBitContext *gb = &s->gb;
+    const int height = s->height;
+    const int width = s->width;
+    int ret = 0, x = s->x, y = s->y;
+    uint8_t *dst = s->dst + y * linesize;
+    const int dt_max_sym = dt->max_sym;
+    const int lt_max_sym = lt->max_sym;
+    const VLCElem *dt_tab = dt->vlc.table;
+    const VLCElem *lt_tab = lt->vlc.table;
+
+    for (;;) {
+        int sym = decode_symbol(gb, lt_tab);
+
+        if (sym < 256) {
+            dst[x] = sym;
+
+            x++;
+            if (x >= width) {
+                dst += linesize;
+                x = 0;
+                y++;
+                if (y >= height)
+                    break;
+            }
+        } else if (sym == 256) {
+            s->x = x;
+            s->y = y;
+
+            return 0;
+        } else {
+            int len, dist, offs, offs_y, offs_x;
+            uint8_t *odst;
+
+            if (sym > lt_max_sym || sym > 285) {
+                ret = AVERROR_INVALIDDATA;
+                goto fail;
+            }
+
+            sym -= 257;
+
+            len = get_bits_base(gb, length_bits[sym],
+                                length_base[sym]);
+
+            if (len > ((height - y) * width - x)) {
+                ret = AVERROR_INVALIDDATA;
+                goto fail;
+            }
+
+            dist = decode_symbol(gb, dt_tab);
+
+            if (dist < 0 || dist > dt_max_sym || dist > 29) {
+                ret = AVERROR_INVALIDDATA;
+                goto fail;
+            }
+
+            offs = get_bits_base(gb, dist_bits[dist], dist_base[dist]);
+            offs = y * width + x - offs;
+            if (offs < 0) {
+                ret = AVERROR_INVALIDDATA;
+                goto fail;
+            }
+
+            offs_y = offs / width;
+            offs_x = offs - offs_y * width;
+            odst = s->dst + offs_y * linesize;
+
+            while (len > 0) {
+                const unsigned ix = width - FFMAX(x, offs_x);
+                const unsigned ilen = FFMIN(ix, len);
+
+                if ((offs_y != y) || (x >= offs_x + ilen)) {
+                    memcpy(dst + x, odst + offs_x, ilen);
+                } else if (x > offs_x) {
+                    const int overlap = x - offs_x;
+
+                    av_memcpy_backptr(dst + x, overlap, ilen);
+                } else {
+                    ret = AVERROR_INVALIDDATA;
+                    goto fail;
+                }
+
+                x += ilen;
+                if (x >= width) {
+                    dst += linesize;
+                    x = 0;
+                    y++;
+                }
+
+                offs_x += ilen;
+                if (offs_x >= width) {
+                    odst += linesize;
+                    offs_x = 0;
+                    offs_y++;
+                }
+
+                len -= ilen;
+            }
+        }
+    }
+fail:
+    s->x = x;
+    s->y = y;
+
+    return ret;
+}
+
+static int inflate_fixed_block(InflateContext *s)
+{
+    if (!s->fixed_cb_initialized) {
+        int ret = build_fixed_trees(&s->fixed_ltree, &s->fixed_dtree);
+
+        if (ret < 0)
+            return ret;
+
+        s->fixed_cb_initialized = 1;
+    }
+
+    return inflate_block_data(s, &s->fixed_ltree, &s->fixed_dtree);
+}
+
+static int inflate_dynamic_block(InflateContext *s)
+{
+    int ret = decode_trees(s, &s->dynamic_ltree, &s->dynamic_dtree);
+
+    if (ret < 0)
+        return ret;
+
+    return inflate_block_data(s, &s->dynamic_ltree, &s->dynamic_dtree);
 }
 
 int ff_inflate(InflateContext *s,
@@ -561,13 +723,13 @@ int ff_inflatex(InflateContext *s,
 
         switch (bmode) {
         case 0:
-            ret = inflate_raw_block(s);
+            ret = inflate_raw_blockx(s);
             break;
         case 1:
-            ret = inflate_fixed_block(s);
+            ret = inflate_fixed_blockx(s);
             break;
         case 2:
-            ret = inflate_dynamic_block(s);
+            ret = inflate_dynamic_blockx(s);
             break;
         case 3:
             ret = AVERROR_INVALIDDATA;
