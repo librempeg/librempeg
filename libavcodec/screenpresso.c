@@ -34,7 +34,6 @@
  */
 
 #include <stdint.h>
-#include <zlib.h>
 
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
@@ -43,13 +42,16 @@
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "decode.h"
+#include "inflate.h"
 
 typedef struct ScreenpressoContext {
     AVFrame *current;
 
     /* zlib interaction */
     uint8_t *inflated_buf;
-    uLongf inflated_size;
+    int inflated_size;
+
+    InflateContext ic;
 } ScreenpressoContext;
 
 static av_cold int screenpresso_close(AVCodecContext *avctx)
@@ -58,6 +60,7 @@ static av_cold int screenpresso_close(AVCodecContext *avctx)
 
     av_frame_free(&ctx->current);
     av_freep(&ctx->inflated_buf);
+    ff_inflate(&ctx->ic, NULL, 0, NULL, 0, 0, 0);
 
     return 0;
 }
@@ -105,7 +108,7 @@ static int screenpresso_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                                      int *got_frame, AVPacket *avpkt)
 {
     ScreenpressoContext *ctx = avctx->priv_data;
-    uLongf length = ctx->inflated_size;
+    int length = ctx->inflated_size;
     int keyframe, component_size, src_linesize;
     int ret;
 
@@ -138,13 +141,12 @@ static int screenpresso_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     }
 
     /* Inflate the frame after the 2 byte header */
-    ret = uncompress(ctx->inflated_buf, &length,
-                     avpkt->data + 2, avpkt->size - 2);
-    if (ret) {
-        av_log(avctx, AV_LOG_ERROR, "Deflate error %d.\n", ret);
-        return AVERROR_UNKNOWN;
-    }
+    ret = ff_inflate(&ctx->ic, avpkt->data + 2, avpkt->size - 2,
+                     ctx->inflated_buf, 1, length, length);
+    if (ret < 0)
+        return ret;
 
+    length = ctx->ic.x;
     ret = ff_reget_buffer(avctx, ctx->current, 0);
     if (ret < 0)
         return ret;
