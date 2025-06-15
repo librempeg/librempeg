@@ -3963,6 +3963,7 @@ static av_cold void mpeg4_init_static(void)
     }
 
     ff_rl_init(&ff_mpeg4_rl_intra, mpeg4_rl_intra_table);
+    ff_h263_init_rl_inter();
 
     INIT_FIRST_VLC_RL(ff_mpeg4_rl_intra, 554);
     VLC_INIT_RL(ff_rvlc_rl_inter, 1072);
