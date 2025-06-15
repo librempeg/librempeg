@@ -30,8 +30,7 @@
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "decode.h"
-
-#include <zlib.h>
+#include "inflate.h"
 
 /*
  * Decoder context
@@ -43,6 +42,8 @@ typedef struct DxaDecContext {
 #define DECOMP_BUF_PADDING 16
     uint8_t *decomp_buf;
     uint32_t pal[256];
+
+    InflateContext ic;
 } DxaDecContext;
 
 static const uint8_t shift1[6] = { 0, 8, 8, 8, 4, 4 };
@@ -242,11 +243,12 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     dsize = c->dsize;
     if (compr != 4 && compr != -1) {
         bytestream2_skip(&gb, 4);
-        if (uncompress(c->decomp_buf, &dsize, avpkt->data + bytestream2_tell(&gb),
-                       bytestream2_get_bytes_left(&gb)) != Z_OK) {
+        if ((ret = ff_inflate(&c->ic, avpkt->data + bytestream2_tell(&gb), bytestream2_get_bytes_left(&gb),
+                             c->decomp_buf, 1, dsize, dsize)) < 0) {
             av_log(avctx, AV_LOG_ERROR, "Uncompress failed!\n");
-            return AVERROR_UNKNOWN;
+            return ret;
         }
+        dsize = c->ic.x;
         memset(c->decomp_buf + dsize, 0, DECOMP_BUF_PADDING);
     }
 
@@ -350,6 +352,7 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
     av_freep(&c->decomp_buf);
     av_frame_free(&c->prev);
+    ff_inflate(&c->ic, NULL, 0, NULL, 0, 0, 0);
 
     return 0;
 }
