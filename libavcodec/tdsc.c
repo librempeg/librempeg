@@ -34,7 +34,6 @@
  */
 
 #include <stdint.h>
-#include <zlib.h>
 
 #include "libavutil/attributes_internal.h"
 #include "libavutil/imgutils.h"
@@ -44,6 +43,7 @@
 #include "bytestream.h"
 #include "codec_internal.h"
 #include "decode.h"
+#include "inflate.h"
 
 #define BITMAPINFOHEADER_SIZE 0x28
 #define TDSF_HEADER_SIZE      0x56
@@ -60,9 +60,9 @@ typedef struct TDSCContext {
     AVFrame *jpgframe;          // decoded JPEG tile
     uint8_t *tilebuffer;        // buffer containing tile data
 
-    /* zlib interaction */
     uint8_t *deflatebuffer;
-    uLongf deflatelen;
+    int deflatelen;
+    InflateContext ic;
 
     /* All that is cursor */
     uint8_t    *cursor;
@@ -89,6 +89,7 @@ static av_cold int tdsc_close(AVCodecContext *avctx)
     av_freep(&ctx->tilebuffer);
     av_freep(&ctx->cursor);
     avcodec_free_context(&ctx->jpeg_avctx);
+    ff_inflate(&ctx->ic, NULL, 0, NULL, 0, 0, 0);
 
     return 0;
 }
@@ -524,8 +525,7 @@ static int tdsc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                              int *got_frame, AVPacket *avpkt)
 {
     TDSCContext *ctx = avctx->priv_data;
-    int ret, tag_header, keyframe = 0;
-    uLongf dlen;
+    int ret, tag_header, keyframe = 0, dlen;
 
     /* Resize deflate buffer on resolution change */
     if (ctx->width != avctx->width || ctx->height != avctx->height) {
@@ -542,11 +542,10 @@ static int tdsc_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     dlen = ctx->deflatelen;
 
     /* Frames are deflated, need to inflate them first */
-    ret = uncompress(ctx->deflatebuffer, &dlen, avpkt->data, avpkt->size);
-    if (ret) {
-        av_log(avctx, AV_LOG_ERROR, "Deflate error %d.\n", ret);
-        return AVERROR_UNKNOWN;
-    }
+    ret = ff_inflate(&ctx->ic,  avpkt->data, avpkt->size, ctx->deflatebuffer, 1, dlen, dlen);
+    if (ret < 0)
+        return ret;
+    dlen = ctx->ic.x;
 
     bytestream2_init(&ctx->gbc, ctx->deflatebuffer, dlen);
 
