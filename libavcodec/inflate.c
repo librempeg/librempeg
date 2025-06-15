@@ -118,6 +118,7 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
     const VLCElem *dt_tab = dt->vlc.table;
     const VLCElem *lt_tab = lt->vlc.table;
     const unsigned history_size = FF_ARRAY_ELEMS(s->history);
+    const unsigned history_mask = history_size-1;
     unsigned history_pos = s->history_pos;
     uint8_t *history = s->history;
 
@@ -127,7 +128,7 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
         if (sym < 256) {
             dst[x] = sym;
             history[history_pos++] = sym;
-            history_pos &= (history_size-1);
+            history_pos &= history_mask;
 
             x++;
             if (x >= width) {
@@ -175,7 +176,7 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
             }
 
             offs = get_bits_base(gb, dist_bits[dist], dist_base[dist]);
-            offs = ((int)history_pos - offs) & (history_size-1);
+            offs = ((int)history_pos - offs) & history_mask;
 
             while (len > 0) {
                 const int hmin = FFMIN(history_pos, offs);
@@ -187,10 +188,10 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
                 memcpy(history + history_pos, dst + x, ix);
 
                 offs += ix;
-                offs &= (history_size-1);
+                offs &= history_mask;
 
                 history_pos += ix;
-                history_pos &= (history_size-1);
+                history_pos &= history_mask;
 
                 len -= ix;
                 x += ix;
@@ -380,6 +381,7 @@ static int inflate_raw_block(InflateContext *s)
     int x = s->x, y = s->y, len, inv_len;
     uint8_t *dst = have_fun ? s->tmp : s->dst + y * linesize;
     const unsigned history_size = FF_ARRAY_ELEMS(s->history);
+    const unsigned history_mask = history_size-1;
     unsigned history_pos = s->history_pos;
     uint8_t *history = s->history;
 
@@ -401,7 +403,7 @@ static int inflate_raw_block(InflateContext *s)
         memcpy(dst + x, gb->buffer + (get_bits_count(gb) >> 3), ilen);
         for (int i = 0; i < ilen; i++) {
             history[history_pos++] = dst[i];
-            history_pos &= (history_size-1);
+            history_pos &= history_mask;
         }
 
         x += ilen;
