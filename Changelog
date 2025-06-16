@@ -68,6 +68,7 @@ version <next>:
 - ffmpeg CLI no longer reinits filtergraphs on parameter changes by
   default; see manpage for -reinit_filter for details, previous
   behaviour can be restored with '-reinit_filter reinit'
+- G.722.1 Annex C audio decoder
 
 
 version 7.1:
