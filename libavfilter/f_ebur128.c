@@ -888,6 +888,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     const int nb_samples  = insamples->nb_samples;
     const int block_samples = inlink->sample_rate / 10;
     const uint8_t **samples = (const uint8_t **)insamples->extended_data;
+    const int loglevel = ebur128->loglevel;
+    const int metadata = ebur128->metadata;
+    const int do_video = ebur128->do_video;
     AVFrame *pic;
 
     ret = process_peaks_ebur128(ebur128, samples, nb_samples);
@@ -902,21 +905,21 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
          * (4800 samples at 48kHz). */
         if (++ebur128->sample_count == block_samples) {
             double loudness_400, loudness_3000, loudness_integrated, peak;
-            const int64_t pts = insamples->pts +
-                av_rescale_q(idx_insample, (AVRational){ 1, inlink->sample_rate },
-                             outlink->time_base);
 
             ebur128_loudness(inlink, ebur128, &loudness_400, &loudness_3000, &loudness_integrated, &peak);
 
 #define LOG_FMT "TARGET:%d LUFS    M:%6.1f S:%6.1f     I:%6.1f %s       LRA:%6.1f LU"
 
             /* push one video frame */
-            if (ebur128->do_video) {
+            if (do_video) {
                 AVFilterLink *voutlink = ctx->outputs[1];
                 AVFrame *clone;
                 uint8_t *p;
                 double gauge_value;
                 int y_loudness_lu_graph, y_loudness_lu_gauge;
+                const int64_t pts = insamples->pts +
+                    av_rescale_q(idx_insample, (AVRational){ 1, inlink->sample_rate },
+                                 outlink->time_base);
 
                 if (ebur128->gauge_type == GAUGE_TYPE_MOMENTARY) {
                     gauge_value = loudness_400 - ebur128->target;
@@ -978,7 +981,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
                 return ff_filter_frame(voutlink, clone);
             }
 
-            if (ebur128->metadata) { /* happens only once per filter_frame call */
+            if (metadata) { /* happens only once per filter_frame call */
                 char metabuf[128];
 #define META_PREFIX "lavfi.r128."
 
@@ -1014,18 +1017,22 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
                 SET_META_PEAK(true,   TRUE);
             }
 
-            if (ebur128->loglevel != AV_LOG_QUIET) {
-            if (ebur128->scale == SCALE_TYPE_ABSOLUTE) {
-                av_log(ctx, ebur128->loglevel, "t: %-10s " LOG_FMT,
-                       av_ts2timestr(pts, &outlink->time_base),
-                       ebur128->target, loudness_400, loudness_3000,
-                       ebur128->integrated_loudness, "LUFS", ebur128->loudness_range);
-            } else {
-                av_log(ctx, ebur128->loglevel, "t: %-10s " LOG_FMT,
-                       av_ts2timestr(pts, &outlink->time_base),
-                       ebur128->target, loudness_400-ebur128->target, loudness_3000-ebur128->target,
-                       ebur128->integrated_loudness-ebur128->target, "LU", ebur128->loudness_range);
-            }
+            if (loglevel != AV_LOG_QUIET) {
+                const int64_t pts = insamples->pts +
+                    av_rescale_q(idx_insample, (AVRational){ 1, inlink->sample_rate },
+                                 outlink->time_base);
+
+                if (ebur128->scale == SCALE_TYPE_ABSOLUTE) {
+                    av_log(ctx, ebur128->loglevel, "t: %-10s " LOG_FMT,
+                           av_ts2timestr(pts, &outlink->time_base),
+                           ebur128->target, loudness_400, loudness_3000,
+                           ebur128->integrated_loudness, "LUFS", ebur128->loudness_range);
+                } else {
+                    av_log(ctx, ebur128->loglevel, "t: %-10s " LOG_FMT,
+                           av_ts2timestr(pts, &outlink->time_base),
+                           ebur128->target, loudness_400-ebur128->target, loudness_3000-ebur128->target,
+                           ebur128->integrated_loudness-ebur128->target, "LU", ebur128->loudness_range);
+                }
 
 #define PRINT_PEAKS(str, sp, ptype) do {                            \
     if (ebur128->peak_mode & PEAK_MODE_ ## ptype ## _PEAKS) {       \
@@ -1036,10 +1043,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     }                                                               \
 } while (0)
 
-            PRINT_PEAKS("SPK", ebur128->sample_peaks, SAMPLES);
-            PRINT_PEAKS("FTPK", ebur128->true_peaks_per_frame, TRUE);
-            PRINT_PEAKS("TPK", ebur128->true_peaks,   TRUE);
-            av_log(ctx, ebur128->loglevel, "\n");
+                PRINT_PEAKS("SPK", ebur128->sample_peaks, SAMPLES);
+                PRINT_PEAKS("FTPK", ebur128->true_peaks_per_frame, TRUE);
+                PRINT_PEAKS("TPK", ebur128->true_peaks,   TRUE);
+                av_log(ctx, ebur128->loglevel, "\n");
             }
         }
     }
