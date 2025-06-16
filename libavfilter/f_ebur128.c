@@ -891,6 +891,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     const int loglevel = ebur128->loglevel;
     const int metadata = ebur128->metadata;
     const int do_video = ebur128->do_video;
+    int sample_count = ebur128->sample_count;
     AVFrame *pic;
 
     ret = process_peaks_ebur128(ebur128, samples, nb_samples);
@@ -903,8 +904,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
         /* For integrated loudness, gating blocks are 400ms long with 75%
          * overlap (see BS.1770-2 p5), so a re-computation is needed each 100ms
          * (4800 samples at 48kHz). */
-        if (++ebur128->sample_count == block_samples) {
+        if (++sample_count >= block_samples) {
             double loudness_400, loudness_3000, loudness_integrated, peak;
+
+            sample_count = 0;
 
             ebur128_loudness(inlink, ebur128, &loudness_400, &loudness_3000, &loudness_integrated, &peak);
 
@@ -934,6 +937,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
                 if (ret < 0) {
                     av_frame_free(&insamples);
                     ebur128->insamples = NULL;
+                    ebur128->sample_count = sample_count;
                     return ret;
                 }
                 pic = ebur128->outpicref;
@@ -978,6 +982,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
                     return AVERROR(ENOMEM);
                 ebur128->idx_insample = idx_insample + 1;
                 ff_filter_set_ready(ctx, 100);
+                ebur128->sample_count = sample_count;
                 return ff_filter_frame(voutlink, clone);
             }
 
@@ -1051,6 +1056,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
         }
     }
 
+    ebur128->sample_count = sample_count;
     ebur128->idx_insample = 0;
     ebur128->insamples = NULL;
 
