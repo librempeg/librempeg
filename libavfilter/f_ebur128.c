@@ -636,9 +636,6 @@ static int gate_update(struct integrator *integ, double power,
 static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csamples,
                                  int nb_samples)
 {
-    if (ebur128->idx_insample)
-        return 0;
-
 #if CONFIG_SWRESAMPLE
     if (ebur128->peak_mode & PEAK_MODE_TRUE_PEAKS) {
         uint8_t **swr_samples = ebur128->swr_buf->extended_data;
@@ -694,26 +691,40 @@ static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csampl
         }
     }
 
+
+#define FIND_PEAK(global, sp, ptype) do {                        \
+    double maxpeak = 0.0;                                        \
+    if (ebur128->peak_mode & PEAK_MODE_ ## ptype ## _PEAKS) {    \
+        const int nb_channels = ebur128->nb_channels;            \
+                                                                 \
+        for (int ch = 0; ch < nb_channels; ch++)                 \
+            maxpeak = FFMAX(maxpeak, sp[ch]);                    \
+        global = DBFS(maxpeak);                                  \
+    }                                                            \
+} while (0)
+
+    FIND_PEAK(ebur128->frame_sample_peak, ebur128->sample_peaks_per_frame, SAMPLES);
+    FIND_PEAK(ebur128->sample_peak, ebur128->sample_peaks, SAMPLES);
+    FIND_PEAK(ebur128->true_peak,   ebur128->true_peaks,   TRUE);
+
     return 0;
 }
 
-static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, const int idx)
+static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, const int idx,
+                            const int nb_channels,
+                            const double *ch_weighting,
+                            const double *pre_b,
+                            const double *pre_a,
+                            const double *rlb_b,
+                            const double *rlb_a,
+                            double **i3000_cache,
+                            double **i400_cache,
+                            double *i3000_sum,
+                            double *i400_sum,
+                            double *t0)
 {
-    const int nb_channels = ebur128->nb_channels;
-    const int bin_id_400  = ebur128->i400.cache_pos;
     const int bin_id_3000 = ebur128->i3000.cache_pos;
-    const double *ch_weighting = ebur128->ch_weighting;
-    const double *pre_b = ebur128->pre_b;
-    const double *pre_a = ebur128->pre_a;
-    const double *rlb_b = ebur128->rlb_b;
-    const double *rlb_a = ebur128->rlb_a;
-    struct integrator *i3000 = &ebur128->i3000;
-    struct integrator *i400 = &ebur128->i400;
-    double **i3000_cache = i3000->cache;
-    double **i400_cache = i400->cache;
-    double *i3000_sum = i3000->sum;
-    double *i400_sum = i400->sum;
-    double *t0 = ebur128->t0;
+    const int bin_id_400  = ebur128->i400.cache_pos;
 
 #define MOVE_TO_NEXT_CACHED_ENTRY(time) do {                \
     ebur128->i##time.cache_pos++;                           \
@@ -759,19 +770,6 @@ static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, c
         i400_cache [ch][bin_id_400 ] = bin;
         i3000_cache[ch][bin_id_3000] = bin;
     }
-
-#define FIND_PEAK(global, sp, ptype) do {                        \
-    double maxpeak = 0.0;                                        \
-    if (ebur128->peak_mode & PEAK_MODE_ ## ptype ## _PEAKS) {    \
-        for (int ch = 0; ch < nb_channels; ch++)                 \
-            maxpeak = FFMAX(maxpeak, sp[ch]);                    \
-        global = DBFS(maxpeak);                                  \
-    }                                                            \
-} while (0)
-
-    FIND_PEAK(ebur128->frame_sample_peak, ebur128->sample_peaks_per_frame, SAMPLES);
-    FIND_PEAK(ebur128->sample_peak, ebur128->sample_peaks, SAMPLES);
-    FIND_PEAK(ebur128->true_peak,   ebur128->true_peaks,   TRUE);
 }
 
 static void ebur128_loudness(AVFilterLink *inlink,
@@ -892,6 +890,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     const int do_video = ebur128->do_video;
     int sample_count = ebur128->sample_count;
     int idx_insample = ebur128->idx_insample, ret, samples_to_process;
+    const double *ch_weighting = ebur128->ch_weighting;
+    const double *pre_b = ebur128->pre_b;
+    const double *pre_a = ebur128->pre_a;
+    const double *rlb_b = ebur128->rlb_b;
+    const double *rlb_a = ebur128->rlb_a;
+    struct integrator *i3000 = &ebur128->i3000;
+    struct integrator *i400 = &ebur128->i400;
+    double **i3000_cache = i3000->cache;
+    double **i400_cache = i400->cache;
+    double *i3000_sum = i3000->sum;
+    double *i400_sum = i400->sum;
+    double *t0 = ebur128->t0;
+
     AVFrame *pic;
 
     ret = process_peaks_ebur128(ebur128, samples, nb_samples);
@@ -901,7 +912,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     samples_to_process = FFMIN(nb_samples - idx_insample, block_samples - sample_count);
     while (samples_to_process > 0) {
         for (int n = 0; n < samples_to_process; n++)
-            process_ebur128(ebur128, samples, idx_insample + n);
+            process_ebur128(ebur128, samples, idx_insample + n, nb_channels,
+                            ch_weighting,
+                            pre_b, pre_a, rlb_b, rlb_a,
+                            i3000_cache, i400_cache,
+                            i3000_sum, i400_sum,
+                            t0);
 
         idx_insample += samples_to_process;
         sample_count += samples_to_process;
@@ -1521,6 +1537,19 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
     int nb_samples = in ? in->nb_samples : 0;
     const int block_samples = inlink->sample_rate / 10;
     const uint8_t **samples = in ? ((const uint8_t **)in->extended_data) : NULL;
+    const double *ch_weighting = r128_in->ch_weighting;
+    const double *pre_b = r128_in->pre_b;
+    const double *pre_a = r128_in->pre_a;
+    const double *rlb_b = r128_in->rlb_b;
+    const double *rlb_a = r128_in->rlb_a;
+    struct integrator *i3000 = &r128_in->i3000;
+    struct integrator *i400 = &r128_in->i400;
+    double **i3000_cache = i3000->cache;
+    double **i400_cache = i400->cache;
+    double *i3000_sum = i3000->sum;
+    double *i400_sum = i400->sum;
+    double *t0 = r128_in->t0;
+
     AVFrame *out;
     int ret;
 
@@ -1531,7 +1560,13 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
 
     for (int idx_insample = r128_in->idx_insample; idx_insample < nb_samples; idx_insample++) {
-        process_ebur128(r128_in, samples, idx_insample);
+        process_ebur128(r128_in, samples, idx_insample, nb_channels,
+                        ch_weighting,
+                        pre_b, pre_a, rlb_b, rlb_a,
+                        i3000_cache, i400_cache,
+                        i3000_sum, i400_sum,
+                        t0);
+
         if (++r128_in->sample_count == block_samples) {
             double peak;
 
@@ -1608,12 +1643,32 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (ret < 0)
         return ret;
 
-    samples = (const uint8_t **)out->extended_data;
-    for (int idx_insample = r128_out->idx_insample; idx_insample < out->nb_samples; idx_insample++) {
-        process_ebur128(r128_out, samples, idx_insample);
-        if (++r128_out->sample_count == inlink->sample_rate / 10) {
-            double loudness_400, loudness_3000, loudness_integrated, peak;
-            ebur128_loudness(inlink, r128_out, &loudness_400, &loudness_3000, &loudness_integrated, &peak);
+    {
+        const double *ch_weighting = r128_out->ch_weighting;
+        const double *pre_b = r128_out->pre_b;
+        const double *pre_a = r128_out->pre_a;
+        const double *rlb_b = r128_out->rlb_b;
+        const double *rlb_a = r128_out->rlb_a;
+        struct integrator *i3000 = &r128_out->i3000;
+        struct integrator *i400 = &r128_out->i400;
+        double **i3000_cache = i3000->cache;
+        double **i400_cache = i400->cache;
+        double *i3000_sum = i3000->sum;
+        double *i400_sum = i400->sum;
+        double *t0 = r128_out->t0;
+
+        samples = (const uint8_t **)out->extended_data;
+        for (int idx_insample = r128_out->idx_insample; idx_insample < out->nb_samples; idx_insample++) {
+            process_ebur128(r128_out, samples, idx_insample, nb_channels,
+                            ch_weighting,
+                            pre_b, pre_a, rlb_b, rlb_a,
+                            i3000_cache, i400_cache,
+                            i3000_sum, i400_sum,
+                            t0);
+            if (++r128_out->sample_count == inlink->sample_rate / 10) {
+                double loudness_400, loudness_3000, loudness_integrated, peak;
+                ebur128_loudness(inlink, r128_out, &loudness_400, &loudness_3000, &loudness_integrated, &peak);
+            }
         }
     }
 
