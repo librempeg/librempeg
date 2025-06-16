@@ -660,11 +660,10 @@ static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csampl
                 for (int idx = 0; idx < ret; idx++) {
                     const double asample = fabs(src[idx]);
 
-                    true_peak = FFMAX(true_peak, asample);
                     true_peak_per_frame = FFMAX(true_peak_per_frame, asample);
                 }
 
-                ebur128->true_peaks[ch] = true_peak;
+                ebur128->true_peaks[ch] = FFMAX(true_peak, true_peak_per_frame);
                 ebur128->true_peaks_per_frame[ch] = true_peak_per_frame;
             }
 
@@ -687,11 +686,10 @@ static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csampl
             for (int idx = 0; idx < nb_samples; idx++) {
                 const double asample = fabs(src[idx]);
 
-                sample_peak = FFMAX(sample_peak, asample);
                 sample_peak_per_frame = FFMAX(sample_peak_per_frame, asample);
             }
 
-            ebur128->sample_peaks[ch] = sample_peak;
+            ebur128->sample_peaks[ch] = FFMAX(sample_peak, sample_peak_per_frame);
             ebur128->sample_peaks_per_frame[ch] = sample_peak_per_frame;
         }
     }
