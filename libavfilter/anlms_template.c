@@ -108,6 +108,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     AVFrame *out = arg;
     const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int nb_samples = out->nb_samples;
 
     for (int c = start; c < end; c++) {
         const ftype *input = (const ftype *)s->frame[0]->extended_data[c];
@@ -118,7 +119,7 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
         int *offset = (int *)s->offset->extended_data[c];
         ftype *output = (ftype *)out->extended_data[c];
 
-        for (int n = 0; n < out->nb_samples; n++) {
+        for (int n = 0; n < nb_samples; n++) {
             output[n] = fn(process_sample)(s, input[n], desired[n], delay, coeffs, tmp, offset);
             if (ff_filter_disabled(ctx))
                 output[n] = input[n];
