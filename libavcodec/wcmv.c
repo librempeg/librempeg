@@ -28,31 +28,66 @@
 #include "bytestream.h"
 #include "codec_internal.h"
 #include "decode.h"
-#include "zlib_wrapper.h"
-
-#include <zlib.h>
+#include "inflate.h"
 
 typedef struct WCMVContext {
     int         bpp;
-    FFZStream   zstream;
+    InflateContext ic;
+    GetByteContext gb;
+    int         width, height;
+    int         x, y, w, h, cy;
+    int         block;
+    int         blocks;
+    int         intra;
     AVFrame    *prev_frame;
     uint8_t     block_data[65536*8];
+    uint8_t     tmp[32768];
 } WCMVContext;
+
+static void handle_block_row(void *arg, uint8_t *dst, ptrdiff_t dst_stride,
+                             uint8_t *tmp, int *cy, int *ow, const int uh)
+{
+    WCMVContext *s = arg;
+    GetByteContext *gb = &s->gb;
+    AVFrame *frame = s->prev_frame;
+
+    dst = frame->data[0] + (s->height - s->y - s->cy - 1) * frame->linesize[0] + s->x * s->bpp;
+    memcpy(dst, tmp, s->w * s->bpp);
+
+    s->cy++;
+    *cy = s->cy;
+    if (s->cy >= s->h) {
+        if (s->block >= s->blocks)
+            return;
+
+        s->x = bytestream2_get_le16(gb);
+        s->y = bytestream2_get_le16(gb);
+        s->w = bytestream2_get_le16(gb);
+        s->h = bytestream2_get_le16(gb);
+
+        if (s->blocks == 1 && s->x == 0 && s->y == 0 &&
+            s->w == s->width && s->h == s->height)
+            s->intra = 1;
+
+        if (s->x + s->w > s->width || s->y + s->h > s->height)
+            return;
+
+        if (s->w > s->width || s->h > s->height)
+            return;
+
+        *ow = s->w * s->bpp;
+        s->cy = *cy = 0;
+        s->block++;
+    }
+}
 
 static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
                         int *got_frame, AVPacket *avpkt)
 {
     WCMVContext *s = avctx->priv_data;
-    z_stream *const zstream = &s->zstream.zstream;
-    int skip, blocks, zret, ret, intra = 0, flags = 0, bpp = s->bpp;
+    InflateContext *ic = &s->ic;
+    int skip, blocks, ret, flags = 0, bpp = s->bpp;
     GetByteContext gb;
-    uint8_t *dst;
-
-    ret = inflateReset(zstream);
-    if (ret != Z_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Inflate reset error: %d\n", ret);
-        return AVERROR_EXTERNAL;
-    }
 
     bytestream2_init(&gb, avpkt->data, avpkt->size);
     blocks = bytestream2_get_le16(&gb);
@@ -61,6 +96,9 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     if ((ret = ff_reget_buffer(avctx, s->prev_frame, flags)) < 0)
         return ret;
+
+    s->width = avctx->width;
+    s->height = avctx->height;
 
     if (blocks > 5) {
         GetByteContext bgb;
@@ -77,23 +115,9 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
         if (size > avpkt->size - skip)
             return AVERROR_INVALIDDATA;
 
-        zstream->next_in   = avpkt->data + skip;
-        zstream->avail_in  = size;
-        zstream->next_out  = s->block_data;
-        zstream->avail_out = sizeof(s->block_data);
-
-        zret = inflate(zstream, Z_FINISH);
-        if (zret != Z_STREAM_END) {
-            av_log(avctx, AV_LOG_ERROR,
-                   "Inflate failed with return code: %d.\n", zret);
-            return AVERROR_INVALIDDATA;
-        }
-
-        ret = inflateReset(zstream);
-        if (ret != Z_OK) {
-            av_log(avctx, AV_LOG_ERROR, "Inflate reset error: %d\n", ret);
-            return AVERROR_EXTERNAL;
-        }
+        ret = ff_inflate(ic, avpkt->data + skip, size, s->block_data, 1, sizeof(s->block_data), sizeof(s->block_data));
+        if (ret < 0)
+            return ret;
 
         bytestream2_skip(&gb, size);
         bytestream2_init(&bgb, s->block_data, blocks * 8);
@@ -117,9 +141,6 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
             bytestream2_skip(&gb, 1);
 
         skip = bytestream2_tell(&gb);
-
-        zstream->next_in  = avpkt->data + skip;
-        zstream->avail_in = avpkt->size - skip;
 
         bytestream2_init(&gb, s->block_data, blocks * 8);
     } else if (blocks) {
@@ -147,9 +168,6 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
         skip = bytestream2_tell(&gb);
 
-        zstream->next_in  = avpkt->data + skip;
-        zstream->avail_in = avpkt->size - skip;
-
         bytestream2_seek(&gb, 2, SEEK_SET);
     }
 
@@ -162,44 +180,39 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
                             avctx->width, avctx->height);
     }
 
-    for (int block = 0; block < blocks; block++) {
-        int x, y, w, h;
+    if (blocks > 0) {
+        s->x = bytestream2_get_le16(&gb);
+        s->y = bytestream2_get_le16(&gb);
+        s->w = bytestream2_get_le16(&gb);
+        s->h = bytestream2_get_le16(&gb);
 
-        x = bytestream2_get_le16(&gb);
-        y = bytestream2_get_le16(&gb);
-        w = bytestream2_get_le16(&gb);
-        h = bytestream2_get_le16(&gb);
+        s->gb = gb;
+        s->cy = 0;
+        s->block = 0;
+        s->intra = 0;
+        s->blocks = blocks;
 
-        if (blocks == 1 && x == 0 && y == 0 && w == avctx->width && h == avctx->height)
-            intra = 1;
+        if (s->blocks == 1 && s->x == 0 && s->y == 0 &&
+            s->w == frame->width && s->h == frame->height)
+            s->intra = 1;
 
-        if (x + w > avctx->width || y + h > avctx->height)
+        if (s->x + s->w > avctx->width || s->y + s->h > avctx->height)
             return AVERROR_INVALIDDATA;
 
-        if (w > avctx->width || h > avctx->height)
+        if (s->w > avctx->width || s->h > avctx->height)
             return AVERROR_INVALIDDATA;
 
-        dst = s->prev_frame->data[0] + (avctx->height - y - 1) * s->prev_frame->linesize[0] + x * bpp;
-        for (int i = 0; i < h; i++) {
-            zstream->next_out  = dst;
-            zstream->avail_out = w * bpp;
-
-            zret = inflate(zstream, Z_SYNC_FLUSH);
-            if (zret != Z_OK && zret != Z_STREAM_END) {
-                av_log(avctx, AV_LOG_ERROR,
-                       "Inflate failed with return code: %d.\n", zret);
-                return AVERROR_INVALIDDATA;
-            }
-
-            dst -= s->prev_frame->linesize[0];
-        }
+        ret = ff_inflatex(ic, avpkt->data + skip, avpkt->size - skip, s->prev_frame->data[0],
+                          avctx->height, s->w * bpp, -s->prev_frame->linesize[0], s, s->tmp, handle_block_row);
+        if (ret < 0)
+            return ret;
     }
 
-    if (intra)
+    if (s->intra)
         s->prev_frame->flags |= AV_FRAME_FLAG_KEY;
     else
         s->prev_frame->flags &= ~AV_FRAME_FLAG_KEY;
-    s->prev_frame->pict_type = intra ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_P;
+    s->prev_frame->pict_type = s->intra ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_P;
 
     if ((ret = av_frame_ref(frame, s->prev_frame)) < 0)
         return ret;
@@ -228,7 +241,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     if (!s->prev_frame)
         return AVERROR(ENOMEM);
 
-    return ff_inflate_init(&s->zstream, avctx);
+    return 0;
 }
 
 static av_cold int decode_close(AVCodecContext *avctx)
@@ -236,7 +249,7 @@ static av_cold int decode_close(AVCodecContext *avctx)
     WCMVContext *s = avctx->priv_data;
 
     av_frame_free(&s->prev_frame);
-    ff_inflate_end(&s->zstream);
+    ff_inflate(&s->ic, NULL, 0, NULL, 0, 0, 0);
 
     return 0;
 }
