@@ -91,6 +91,7 @@ typedef struct EBUR128Context {
     double true_peak;               ///< global true peak
     double *true_peaks;             ///< true peaks per channel
     double sample_peak;             ///< global sample peak
+    double frame_true_peak;         ///< frame true peak
     double frame_sample_peak;       ///< frame sample peak
     double *sample_peaks;           ///< sample peaks per channel
     double *true_peaks_per_frame;   ///< true peaks in a frame per channel
@@ -634,18 +635,22 @@ static int gate_update(struct integrator *integ, double power,
 }
 
 static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csamples,
-                                 int nb_samples)
+                                 const int nb_samples)
 {
 #if CONFIG_SWRESAMPLE
     if (ebur128->peak_mode & PEAK_MODE_TRUE_PEAKS) {
         uint8_t **swr_samples = ebur128->swr_buf->extended_data;
         const int nb_channels = ebur128->nb_channels;
         int nb_out_samples = swr_get_out_samples(ebur128->swr_ctx, nb_samples);
+        int nb_in_samples = nb_samples;
 
         while (nb_out_samples > 0) {
             int ret = swr_convert(ebur128->swr_ctx, swr_samples, 19200,
-                                  csamples, nb_samples);
-            if (ret <= 0)
+                                  csamples, nb_in_samples);
+            if (ret == 0)
+                break;
+
+            if (ret < 0)
                 return ret;
             for (int ch = 0; ch < nb_channels; ch++)
                 ebur128->true_peaks_per_frame[ch] = 0.0;
@@ -664,8 +669,8 @@ static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csampl
                 ebur128->true_peaks_per_frame[ch] = true_peak_per_frame;
             }
 
+            nb_in_samples = 0;
             nb_out_samples -= ret;
-            nb_samples = 0;
         }
     }
 #endif
@@ -691,7 +696,6 @@ static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csampl
         }
     }
 
-
 #define FIND_PEAK(global, sp, ptype) do {                        \
     double maxpeak = 0.0;                                        \
     if (ebur128->peak_mode & PEAK_MODE_ ## ptype ## _PEAKS) {    \
@@ -704,6 +708,7 @@ static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csampl
 } while (0)
 
     FIND_PEAK(ebur128->frame_sample_peak, ebur128->sample_peaks_per_frame, SAMPLES);
+    FIND_PEAK(ebur128->frame_true_peak, ebur128->true_peaks_per_frame, TRUE);
     FIND_PEAK(ebur128->sample_peak, ebur128->sample_peaks, SAMPLES);
     FIND_PEAK(ebur128->true_peak,   ebur128->true_peaks,   TRUE);
 
