@@ -117,6 +117,7 @@ typedef struct EBUR128Context {
 
     /* audio */
     int nb_channels;                ///< number of channels in the input
+    int nozero_ch_weighting;        ///< all ch_weighting are > 0.0
     double *ch_weighting;           ///< channel weighting mapping
     int sample_count;               ///< sample count used for refresh frequency, reset at refresh
     int nb_samples;                 ///< number of samples to consume per single input frame
@@ -467,11 +468,13 @@ static int config_audio_out(AVFilterLink *outlink, EBUR128Context *ebur128)
         !ebur128->i400.cache || !ebur128->i3000.cache)
         return AVERROR(ENOMEM);
 
+    ebur128->nozero_ch_weighting = 1;
     for (int i = 0; i < nb_channels; i++) {
         /* channel weighting */
         const enum AVChannel chl = av_channel_layout_channel_from_index(&outlink->ch_layout, i);
         if (chl == AV_CHAN_LOW_FREQUENCY || chl == AV_CHAN_LOW_FREQUENCY_2) {
             ebur128->ch_weighting[i] = 0;
+            ebur128->nozero_ch_weighting = 0;
         } else if (chl < 64 && (1ULL << chl) & BACK_MASK) {
             ebur128->ch_weighting[i] = 1.41;
         } else {
@@ -751,7 +754,7 @@ static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, c
         double *tt1 = tt0 + 2;
         double bin, out;
 
-        if (!ch_weighting[ch])
+        if (ch_weighting && !ch_weighting[ch])
             continue;
 
 #define FILTER(y, x, t, NUM, DEN) do {                       \
@@ -895,6 +898,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     const int do_video = ebur128->do_video;
     int sample_count = ebur128->sample_count;
     int idx_insample = ebur128->idx_insample, ret, samples_to_process;
+    const int nozero_ch_weighting = ebur128->nozero_ch_weighting;
     const double *ch_weighting = ebur128->ch_weighting;
     const double *pre_b = ebur128->pre_b;
     const double *pre_a = ebur128->pre_a;
@@ -916,13 +920,23 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 
     samples_to_process = FFMIN(nb_samples - idx_insample, block_samples - sample_count);
     while (samples_to_process > 0) {
-        for (int n = 0; n < samples_to_process; n++)
-            process_ebur128(ebur128, samples, idx_insample + n, nb_channels,
-                            ch_weighting,
-                            pre_b, pre_a, rlb_b, rlb_a,
-                            i3000_cache, i400_cache,
-                            i3000_sum, i400_sum,
-                            t0);
+        if (nozero_ch_weighting) {
+            for (int n = 0; n < samples_to_process; n++)
+                process_ebur128(ebur128, samples, idx_insample + n, nb_channels,
+                                NULL,
+                                pre_b, pre_a, rlb_b, rlb_a,
+                                i3000_cache, i400_cache,
+                                i3000_sum, i400_sum,
+                                t0);
+        } else {
+            for (int n = 0; n < samples_to_process; n++)
+                process_ebur128(ebur128, samples, idx_insample + n, nb_channels,
+                                ch_weighting,
+                                pre_b, pre_a, rlb_b, rlb_a,
+                                i3000_cache, i400_cache,
+                                i3000_sum, i400_sum,
+                                t0);
+        }
 
         idx_insample += samples_to_process;
         sample_count += samples_to_process;
