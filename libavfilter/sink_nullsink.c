@@ -22,15 +22,16 @@
 #include "avfilter.h"
 #include "filters.h"
 #include "audio.h"
+#include "video.h"
 
-typedef struct ANullSinkContext {
+typedef struct NullSinkContext {
     const AVClass *class;
     unsigned eof;
-} ANullSinkContext;
+} NullSinkContext;
 
 static int activate(AVFilterContext *ctx)
 {
-    ANullSinkContext *s = ctx->priv;
+    NullSinkContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
     AVFrame *in;
     int64_t pts;
@@ -52,10 +53,19 @@ static int activate(AVFilterContext *ctx)
 }
 
 const FFFilter ff_asink_anullsink = {
-    .p.name      = "anullsink",
+    .p.name        = "anullsink",
     .p.description = NULL_IF_CONFIG_SMALL("Do absolutely nothing with the input audio."),
-    .priv_size   = sizeof(ANullSinkContext),
-    .activate    = activate,
+    .priv_size     = sizeof(NullSinkContext),
+    .activate      = activate,
+    .p.outputs     = NULL,
     FILTER_INPUTS(ff_audio_default_filterpad),
-    .p.outputs   = NULL,
+};
+
+const FFFilter ff_vsink_nullsink = {
+    .p.name        = "nullsink",
+    .p.description = NULL_IF_CONFIG_SMALL("Do absolutely nothing with the input video."),
+    .priv_size     = sizeof(NullSinkContext),
+    .activate      = activate,
+    .p.outputs     = NULL,
+    FILTER_INPUTS(ff_video_default_filterpad),
 };

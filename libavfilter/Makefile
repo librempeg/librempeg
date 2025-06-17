@@ -234,7 +234,7 @@ OBJS-$(CONFIG_LOUDEQUAL_FILTER)              += asrc_loudequal.o
 OBJS-$(CONFIG_SINC_FILTER)                   += asrc_sinc.o
 OBJS-$(CONFIG_SINE_FILTER)                   += asrc_sine.o
 
-OBJS-$(CONFIG_ANULLSINK_FILTER)              += asink_anullsink.o
+OBJS-$(CONFIG_ANULLSINK_FILTER)              += sink_nullsink.o
 
 # video filters
 OBJS-$(CONFIG_ADDROI_FILTER)                 += vf_addroi.o
@@ -672,7 +672,7 @@ OBJS-$(CONFIG_TESTSRC2_FILTER)               += vsrc_testsrc.o
 OBJS-$(CONFIG_YUVTESTSRC_FILTER)             += vsrc_testsrc.o
 OBJS-$(CONFIG_ZONEPLATE_FILTER)              += vsrc_testsrc.o
 
-OBJS-$(CONFIG_NULLSINK_FILTER)               += vsink_nullsink.o
+OBJS-$(CONFIG_NULLSINK_FILTER)               += sink_nullsink.o
 
 # multimedia filters
 OBJS-$(CONFIG_A3DSCOPE_FILTER)               += avf_a3dscope.o
