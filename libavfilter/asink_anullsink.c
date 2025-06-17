@@ -38,8 +38,10 @@ static int activate(AVFilterContext *ctx)
 
     if (ff_inlink_queued_frames(inlink) > 0) {
         int ret = ff_inlink_consume_frame(inlink, &in);
-        if (ret > 0)
+        if (ret > 0) {
             av_frame_free(&in);
+            return 0;
+        }
     }
     if (ff_inlink_acknowledge_status(inlink, &status, &pts))
         s->eof = 1;
