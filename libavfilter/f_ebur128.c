@@ -714,20 +714,21 @@ static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csampl
     return 0;
 }
 
-static void process_ebur128(EBUR128Context *ebur128, const uint8_t **csamples, const int idx,
-                            const int nb_channels,
-                            const int i3000_cache_size,
-                            const int i400_cache_size,
-                            const double *ch_weighting,
-                            const double *pre_b,
-                            const double *pre_a,
-                            const double *rlb_b,
-                            const double *rlb_a,
-                            double *i3000_cache,
-                            double *i400_cache,
-                            double *i3000_sum,
-                            double *i400_sum,
-                            double *t0)
+static av_always_inline void process_ebur128(EBUR128Context *ebur128,
+                                             const uint8_t **csamples, const int idx,
+                                             const int nb_channels,
+                                             const int i3000_cache_size,
+                                             const int i400_cache_size,
+                                             const double *ch_weighting,
+                                             const double *pre_b,
+                                             const double *pre_a,
+                                             const double *rlb_b,
+                                             const double *rlb_a,
+                                             double *i3000_cache,
+                                             double *i400_cache,
+                                             double *i3000_sum,
+                                             double *i400_sum,
+                                             double *t0)
 {
     const int bin_id_3000 = ebur128->i3000.cache_pos;
     const int bin_id_400  = ebur128->i400.cache_pos;
