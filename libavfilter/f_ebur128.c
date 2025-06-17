@@ -460,6 +460,9 @@ static int config_audio_out(AVFilterLink *outlink, EBUR128Context *ebur128)
 #define I400_BINS(x)  ((x) * 4 / 10)
 #define I3000_BINS(x) ((x) * 3)
 
+    ebur128->i400.cache_size = I400_BINS(outlink->sample_rate);
+    ebur128->i3000.cache_size = I3000_BINS(outlink->sample_rate);
+
     ebur128->i400.sum = av_calloc(nb_channels, sizeof(*ebur128->i400.sum));
     ebur128->i3000.sum = av_calloc(nb_channels, sizeof(*ebur128->i3000.sum));
     ebur128->i400.cache = av_calloc(nb_channels, sizeof(*ebur128->i400.cache));
@@ -485,8 +488,6 @@ static int config_audio_out(AVFilterLink *outlink, EBUR128Context *ebur128)
             continue;
 
         /* bins buffer for the two integration window (400ms and 3s) */
-        ebur128->i400.cache_size = I400_BINS(outlink->sample_rate);
-        ebur128->i3000.cache_size = I3000_BINS(outlink->sample_rate);
         ebur128->i400.cache[i]  = av_calloc(ebur128->i400.cache_size,  sizeof(*ebur128->i400.cache[0]));
         ebur128->i3000.cache[i] = av_calloc(ebur128->i3000.cache_size, sizeof(*ebur128->i3000.cache[0]));
         if (!ebur128->i400.cache[i] || !ebur128->i3000.cache[i])
