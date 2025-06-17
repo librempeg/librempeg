@@ -99,6 +99,7 @@ typedef struct EBUR128Context {
 #if CONFIG_SWRESAMPLE
     SwrContext *swr_ctx;            ///< over-sampling context for true peak metering
     AVFrame *swr_buf;               ///< resampled audio data for true peak metering
+    int swr_buf_samples;            ///< number of samples in swr_buf
 #endif
 
     /* video  */
@@ -493,7 +494,8 @@ static int config_audio_out(AVFilterLink *outlink, EBUR128Context *ebur128)
     if (ebur128->peak_mode & PEAK_MODE_TRUE_PEAKS) {
         int ret;
 
-        ebur128->swr_buf    = ff_get_audio_buffer(outlink, 19200);
+        ebur128->swr_buf_samples = (outlink->sample_rate * 4 + 9) / 10;
+        ebur128->swr_buf    = ff_get_audio_buffer(outlink, ebur128->swr_buf_samples);
         ebur128->true_peaks = av_calloc(nb_channels, sizeof(*ebur128->true_peaks));
         ebur128->true_peaks_per_frame = av_calloc(nb_channels, sizeof(*ebur128->true_peaks_per_frame));
         ebur128->swr_ctx    = swr_alloc();
@@ -506,7 +508,7 @@ static int config_audio_out(AVFilterLink *outlink, EBUR128Context *ebur128)
         av_opt_set_sample_fmt(ebur128->swr_ctx, "in_sample_fmt", outlink->format, 0);
 
         av_opt_set_chlayout(ebur128->swr_ctx, "out_chlayout",    &outlink->ch_layout, 0);
-        av_opt_set_int(ebur128->swr_ctx, "out_sample_rate",       192000, 0);
+        av_opt_set_int(ebur128->swr_ctx, "out_sample_rate",       outlink->sample_rate * 4, 0);
         av_opt_set_sample_fmt(ebur128->swr_ctx, "out_sample_fmt", outlink->format, 0);
 
         ret = swr_init(ebur128->swr_ctx);
@@ -644,7 +646,7 @@ static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csampl
         int nb_in_samples = nb_samples;
 
         while (nb_out_samples > 0) {
-            int ret = swr_convert(ebur128->swr_ctx, swr_samples, 19200,
+            int ret = swr_convert(ebur128->swr_ctx, swr_samples, ebur128->swr_buf_samples,
                                   csamples, nb_in_samples);
             if (ret == 0)
                 break;
