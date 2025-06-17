@@ -58,6 +58,7 @@ typedef struct HCAContext {
 
     int     ath_type;
     int     ciph_type;
+    int     ms_stereo;
     unsigned hfr_group_count;
     uint8_t track_count;
     uint8_t channel_config;
@@ -245,6 +246,8 @@ static int init_hca(AVCodecContext *avctx, const uint8_t *extradata,
         c->base_band_count     = bytestream2_get_byteu(gb);
         c->stereo_band_count   = bytestream2_get_byte (gb);
         c->bands_per_hfr_group = bytestream2_get_byte (gb);
+        c->ms_stereo           = bytestream2_get_byte (gb);
+        bytestream2_skip(gb, 1);
     } else if (chunk == MKBETAG('d', 'e', 'c', 0)) {
         bytestream2_skipu(gb, 2);
         bytestream2_skipu(gb, 1);
@@ -415,12 +418,39 @@ static void apply_intensity_stereo(HCAContext *s, ChannelContext *ch1, ChannelCo
     }
 }
 
+static void apply_ms_stereo(HCAContext *s, unsigned base_band_count,
+                            unsigned total_band_count, int subframe)
+{
+    if (!s->ms_stereo)
+        return;
+
+    if (s->ch[0].chan_type != 1)
+        return;
+
+    {
+        const float ratio = 0.70710676908493f;
+        float *sp_l = &s->ch[0].imdct_in[subframe];
+        float *sp_r = &s->ch[1].imdct_in[subframe];
+
+        for (int band = base_band_count; band < total_band_count; band++) {
+            const float coef_l = (sp_l[band] + sp_r[band]) * ratio;
+            const float coef_r = (sp_l[band] - sp_r[band]) * ratio;
+
+            sp_l[band] = coef_l;
+            sp_r[band] = coef_r;
+        }
+    }
+}
+
 static void reconstruct_hfr(HCAContext *s, ChannelContext *ch,
                             unsigned hfr_group_count,
                             unsigned bands_per_hfr_group,
                             unsigned start_band, unsigned total_band_count)
 {
     if (ch->chan_type == 2 || !bands_per_hfr_group)
+        return;
+
+    if (s->ms_stereo && ch->chan_type != 1)
         return;
 
     for (int i = 0, k = start_band, l = start_band - 1; i < hfr_group_count; i++){
@@ -591,10 +621,12 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
         for (ch = 0; ch < avctx->ch_layout.nb_channels; ch++)
             reconstruct_hfr(c, &c->ch[ch], c->hfr_group_count, c->bands_per_hfr_group,
                             c->stereo_band_count + c->base_band_count, c->total_band_count);
-        for (ch = 0; ch < avctx->ch_layout.nb_channels - 1; ch++)
+        for (ch = 0; ch < avctx->ch_layout.nb_channels - 1; ch++) {
             apply_intensity_stereo(c, &c->ch[ch], &c->ch[ch+1], i,
                                    c->total_band_count - c->base_band_count,
                                    c->base_band_count, c->stereo_band_count);
+            apply_ms_stereo(c, c->base_band_count, c->total_band_count, i);
+        }
         for (ch = 0; ch < avctx->ch_layout.nb_channels; ch++)
             run_imdct(c, &c->ch[ch], i, samples[ch] + i * 128);
     }
