@@ -426,12 +426,8 @@ static int config_audio_in(AVFilterLink *inlink, EBUR128Context *ebur128)
     ebur128->rlb_a[2] = (1.0 - K / Q + K * K) / (1.0 + K / Q + K * K);
 
     /* Force 100ms framing in case of metadata injection: the frames must have
-     * a granularity of the window overlap to be accurately exploited.
-     * As for the true peaks mode, it just simplifies the resampling buffer
-     * allocation and the lookup in it (since sample buffers differ in size, it
-     * can be more complex to integrate in the one-sample loop of
-     * filter_frame()). */
-    if (ebur128->metadata || (ebur128->peak_mode & PEAK_MODE_TRUE_PEAKS))
+     * a granularity of the window overlap to be accurately exploited. */
+    if (ebur128->metadata)
         ebur128->nb_samples = FFMAX(inlink->sample_rate / 10, 1);
     return 0;
 }
