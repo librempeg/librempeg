@@ -344,6 +344,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_EA_R2:
     case AV_CODEC_ID_ADPCM_EA_R3:
     case AV_CODEC_ID_ADPCM_EA_XAS:
+    case AV_CODEC_ID_ADPCM_TANTALUS:
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
     case AV_CODEC_ID_ADPCM_AFC:
@@ -775,6 +776,22 @@ static inline int16_t adpcm_circus_expand_nibble(ADPCMChannelStatus *c, uint8_t 
 
     c->predictor = sample;
     c->step = scale;
+
+    return sample;
+}
+
+static inline int16_t adpcm_tantalus_expand_nibble(ADPCMChannelStatus *c, uint8_t nibble)
+{
+    static const int8_t tantalus_nibbles[16] = {0,1,2,3,4,5,6,7,-8,-7,-6,-5,-4,-3,-2,-1};
+    int32_t sample = tantalus_nibbles[nibble];
+    int32_t shift = c->step;
+
+    sample = sample * (1 << shift);
+    sample = sample + c->predictor;
+
+    sample = av_clip_int16(sample);
+
+    c->predictor = sample;
 
     return sample;
 }
@@ -1364,6 +1381,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
             nb_samples += 1 + (bits_left - block_hdr_size) / (nbits * ch);
         break;
     }
+    case AV_CODEC_ID_ADPCM_TANTALUS:
+        nb_samples = (buf_size/ch/16) * 30;
+        break;
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
         if (avctx->extradata) {
@@ -2865,6 +2885,19 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             samples += channels;
         }
         ) /* End of CASE */
+    CASE(ADPCM_TANTALUS,
+        for (int block = 0; block < nb_samples/30; block++) {
+            for (int channel = 0; channel < channels; channel++) {
+                c->status[channel].step = bytestream2_get_byteu(&gb) & 0xf;
+                samples = samples_p[channel] + block * 30;
+                for (int n = 15; n > 0; n--) {
+                    int v = bytestream2_get_byteu(&gb);
+                    *samples++  = adpcm_tantalus_expand_nibble(&c->status[channel], v & 0xF);
+                    *samples++  = adpcm_tantalus_expand_nibble(&c->status[channel], v >> 4);
+                }
+            }
+        }
+        ) /* End of CASE */
     default:
         av_unreachable("There are cases for all codec ids using adpcm_decode_frame");
     }
@@ -3008,6 +3041,7 @@ ADPCM_DECODER(ADPCM_SBPRO_2,     sample_fmts_s16,  adpcm_sbpro_2,     "ADPCM Sou
 ADPCM_DECODER(ADPCM_SBPRO_3,     sample_fmts_s16,  adpcm_sbpro_3,     "ADPCM Sound Blaster Pro 2.6-bit")
 ADPCM_DECODER(ADPCM_SBPRO_4,     sample_fmts_s16,  adpcm_sbpro_4,     "ADPCM Sound Blaster Pro 4-bit")
 ADPCM_DECODER(ADPCM_SWF,         sample_fmts_s16,  adpcm_swf,         "ADPCM Shockwave Flash")
+ADPCM_DECODER(ADPCM_TANTALUS,    sample_fmts_s16p, adpcm_tantalus,    "ADPCM Tantalus")
 ADPCM_DECODER(ADPCM_THP_LE,      sample_fmts_s16p, adpcm_thp_le,      "ADPCM Nintendo THP (little-endian)")
 ADPCM_DECODER(ADPCM_THP,         sample_fmts_s16p, adpcm_thp,         "ADPCM Nintendo THP")
 ADPCM_DECODER(ADPCM_XA,          sample_fmts_s16p, adpcm_xa,          "ADPCM CDROM XA")

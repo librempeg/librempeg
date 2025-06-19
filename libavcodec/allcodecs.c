@@ -735,6 +735,7 @@ extern const FFCodec ff_adpcm_sbpro_3_decoder;
 extern const FFCodec ff_adpcm_sbpro_4_decoder;
 extern const FFCodec ff_adpcm_swf_encoder;
 extern const FFCodec ff_adpcm_swf_decoder;
+extern const FFCodec ff_adpcm_tantalus_decoder;
 extern const FFCodec ff_adpcm_thp_decoder;
 extern const FFCodec ff_adpcm_thp_le_decoder;
 extern const FFCodec ff_adpcm_vima_decoder;
