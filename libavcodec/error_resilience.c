@@ -27,11 +27,13 @@
 
 #include <limits.h>
 
+#include "libavutil/avassert.h"
 #include "libavutil/mem.h"
 #include "libavutil/threadprogress.h"
 
 #include "avcodec.h"
 #include "error_resilience.h"
+#include "mathops.h"
 #include "me_cmp.h"
 #include "mpegutils.h"
 #include "mpegvideo.h"
