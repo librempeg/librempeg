@@ -145,18 +145,25 @@ static int crossfade_prepare(AOverlayContext *s, AVFilterLink *main_inlink, AVFi
     (*main_buffer)->pts = s->pts;
     s->pts += av_rescale_q(nb_samples, (AVRational){ 1, outlink->sample_rate }, outlink->time_base);
 
-    if ((ret = av_audio_fifo_read(s->main_sample_buffers, (void **)(*main_buffer)->extended_data, nb_samples)) < 0)
+    if ((ret = av_audio_fifo_read(s->main_sample_buffers, (void **)(*main_buffer)->extended_data, nb_samples)) < 0) {
+        av_frame_free(main_buffer);
         return ret;
+    }
 
     if (mode == 1) {
         s->previous_samples = (*main_buffer)->nb_samples;
     } else if (mode == -1 || (mode == 0 && s->is_disabled)) {
         *overlay_buffer = ff_get_audio_buffer(outlink, nb_samples);
-        if (!(*overlay_buffer))
+        if (!(*overlay_buffer)) {
+            av_frame_free(main_buffer);
             return AVERROR(ENOMEM);
+        }
 
-        if ((ret = av_audio_fifo_read(s->overlay_sample_buffers, (void **)(*overlay_buffer)->extended_data, nb_samples)) < 0)
+        if ((ret = av_audio_fifo_read(s->overlay_sample_buffers, (void **)(*overlay_buffer)->extended_data, nb_samples)) < 0) {
+            av_frame_free(overlay_buffer);
+            av_frame_free(main_buffer);
             return ret;
+        }
 
         (*overlay_buffer)->pts = (*main_buffer)->pts;
     }
@@ -230,13 +237,12 @@ static int consume_samples(AOverlayContext *s, AVFilterLink *overlay_inlink, AVF
 static int activate(AVFilterContext *ctx)
 {
     AOverlayContext *s = ctx->priv;
-    int status, ret, nb_samples;
-    int64_t pts;
-    AVFrame *out = NULL, *main_buffer = NULL, *overlay_buffer = NULL;
-
     AVFilterLink *main_inlink = ctx->inputs[0];
     AVFilterLink *overlay_inlink = ctx->inputs[1];
     AVFilterLink *outlink = ctx->outputs[0];
+    AVFrame *out = NULL, *main_buffer = NULL, *overlay_buffer = NULL;
+    int status, ret, nb_samples;
+    int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK_ALL(outlink, ctx);
 
