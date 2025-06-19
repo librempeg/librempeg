@@ -250,8 +250,8 @@ static int activate(AVFilterContext *ctx)
 
         ret = ff_inlink_consume_samples(main_inlink, nb_samples, nb_samples, &s->main_input);
         if (ret > 0) {
-            if (ctx->enable_str && s->is_disabled != ctx->is_disabled && !s->overlay_eof) {
-                s->is_disabled = ctx->is_disabled;
+            if (ctx->enable_str && s->is_disabled != ff_filter_disabled(ctx) && !s->overlay_eof) {
+                s->is_disabled = ff_filter_disabled(ctx);
                 s->transition_pts = s->main_input->pts;
 
                 if (s->main_input->nb_samples < av_audio_fifo_space(s->main_sample_buffers))
