@@ -2992,7 +2992,7 @@ input stream to another.
 The filter accepts the following option:
 
 @table @option
-@item cf_duration
+@item duration
 Set duration (in seconds) for cross fade between the inputs. Default value is @code{100} milliseconds.
 @end table
 
@@ -3008,7 +3008,7 @@ ffmpeg -i first.wav -i second.wav -filter_complex "aoverlay=enable='between(t,10
 @item
 Do the same as above, but with crossfading for @code{2} seconds between the streams:
 @example
-ffmpeg -i first.wav -i second.wav -filter_complex "aoverlay=cf_duration=2:enable='between(t,10,20)'" output.wav
+ffmpeg -i first.wav -i second.wav -filter_complex "aoverlay=duration=2:enable='between(t,10,20)'" output.wav
 @end example
 
 @item
