@@ -94,10 +94,11 @@ static int choose_encoder(const OptionsContext *o, AVFormatContext *s,
         ms->par_in->codec_id = av_guess_codec(s->oformat, NULL, s->url, NULL, ost->type);
         *enc = avcodec_find_encoder(ms->par_in->codec_id);
         if (!*enc) {
-            av_log(ost, AV_LOG_FATAL, "Automatic encoder selection failed "
-                   "Default encoder for format %s (codec %s) is "
+            const char *type_str = av_get_media_type_string(ms->par_in->codec_type);
+            av_log(ost, AV_LOG_FATAL, "Automatic encoder selection failed; "
+                   "Default %s encoder for format %s (codec %s) is "
                    "probably disabled. Please choose an encoder manually.\n",
-                    s->oformat->name, avcodec_get_name(ms->par_in->codec_id));
+                    type_str ? type_str : "?", s->oformat->name, avcodec_get_name(ms->par_in->codec_id));
             return AVERROR_ENCODER_NOT_FOUND;
         }
     } else if (strcmp(codec_name, "copy")) {
