@@ -25,6 +25,7 @@
 #include "libavutil/opt.h"
 #include "avformat.h"
 #include "demux.h"
+#include "internal.h"
 
 #define APTX_BLOCK_SIZE   4
 #define APTX_PACKET_SIZE  (256*APTX_BLOCK_SIZE)
@@ -48,6 +49,7 @@ static AVStream *aptx_read_header_common(AVFormatContext *s)
     st->codecpar->ch_layout.nb_channels = 2;
     st->codecpar->sample_rate = s1->sample_rate;
     st->start_time = 0;
+    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
     return st;
 }
 
