@@ -93,6 +93,7 @@ static int nsp_read_header(AVFormatContext *s)
     st->codecpar->sample_rate = rate;
     st->codecpar->codec_id    = AV_CODEC_ID_PCM_S16LE;
     st->codecpar->block_align = 2 * channels;
+    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
 }
