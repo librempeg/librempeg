@@ -33,14 +33,14 @@
 #include "internal.h"
 
 typedef struct {
-    int offset;
-    int size;
-    int nb_pal;
+    unsigned offset;
+    unsigned size;
+    unsigned nb_pal;
 } IcoImage;
 
 typedef struct {
-    int current_image;
-    int nb_images;
+    unsigned current_image;
+    unsigned nb_images;
     IcoImage * images;
 } IcoDemuxContext;
 
@@ -80,7 +80,7 @@ static int read_header(AVFormatContext *s)
 {
     IcoDemuxContext *ico = s->priv_data;
     AVIOContext *pb = s->pb;
-    int i, codec;
+    int codec;
 
     avio_skip(pb, 4);
     ico->nb_images = avio_rl16(pb);
@@ -92,7 +92,7 @@ static int read_header(AVFormatContext *s)
     if (!ico->images)
         return AVERROR(ENOMEM);
 
-    for (i = 0; i < ico->nb_images; i++) {
+    for (unsigned i = 0; i < ico->nb_images; i++) {
         AVStream *st;
         int tmp;
 
