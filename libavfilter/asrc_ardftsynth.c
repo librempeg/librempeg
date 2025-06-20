@@ -51,8 +51,8 @@ typedef struct SynthEvent {
 } SynthEvent;
 
 typedef struct PRNGState {
-    uint64_t value[2];
-    unsigned size[2];
+    uint64_t value;
+    unsigned size;
 
     FFSFC64 state;
 } PRNGState;
@@ -183,29 +183,29 @@ static av_cold int config_props(AVFilterLink *outlink)
 
 static uint64_t get_prng(PRNGState *p, unsigned size)
 {
-    const uint64_t mask = (size >= 64) ? UINT64_MAX : ((1ULL << size)-1);
-    unsigned read;
-    uint64_t ret;
+    const uint64_t mask = (size >= 64) ? UINT64_MAX : ((1ULL << size)-1LL);
+    unsigned read, left = size;
+    uint64_t ret = 0;
 
-    if (p->size[0] == 0) {
-        p->value[0] = ff_sfc64_get(&p->state);
-        p->size[0] = 64;
+    while (left > 0) {
+        if (p->size == 0) {
+            p->value = ff_sfc64_get(&p->state);
+            p->size = 64;
+        }
+
+        read = FFMIN(p->size, left);
+        if (read < 64) {
+            ret <<= read;
+            ret |= p->value & ((1ULL << read)-1LL);
+        } else {
+            ret |= p->value;
+        }
+        p->value >>= read;
+        p->size -= read;
+        left -= read;
     }
 
-    if (p->size[1] == 0) {
-        p->value[1] = ff_sfc64_get(&p->state);
-        p->size[1] = 64;
-    }
-
-    read = FFMIN(p->size[0], size);
-
-    ret = (p->value[0] | (p->value[1] << p->size[0])) & mask;
-    p->value[0] >>= read;
-    p->value[1] >>= size - read;
-    p->size[0] -= read;
-    p->size[1] -= size - read;
-
-    return ret;
+    return ret & mask;
 }
 
 static int synth_channels(AVFilterContext *ctx, void *arg, int job, int nb_jobs)
