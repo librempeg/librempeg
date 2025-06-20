@@ -35,6 +35,7 @@ typedef struct AudioRDFTSRCContext {
 
     int in_planar;
     int out_planar;
+    int out_depth;
     int pass;
     int eof;
     int is_eof;
@@ -122,6 +123,7 @@ static int query_formats(const AVFilterContext *ctx,
     if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
+    formats = ff_make_format_list(sample_fmts);
     if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
@@ -184,7 +186,11 @@ static int config_input(AVFilterLink *inlink)
     s->in_nb_samples *= factor;
     s->out_nb_samples *= factor;
 
-    s->out_planar = av_sample_fmt_is_planar(ctx->outputs[0]->format);
+    s->out_planar = av_sample_fmt_is_planar(outlink->format);
+    s->out_depth = av_get_bytes_per_sample(outlink->format) * 8 + (outlink->format == AV_SAMPLE_FMT_FLTP ||
+                                                                   outlink->format == AV_SAMPLE_FMT_DBLP ||
+                                                                   outlink->format == AV_SAMPLE_FMT_FLT  ||
+                                                                   outlink->format == AV_SAMPLE_FMT_DBL);
     s->in_planar = av_sample_fmt_is_planar(inlink->format);
     s->in_rdft_size = s->in_nb_samples * 2;
     s->out_rdft_size = s->out_nb_samples * 2;

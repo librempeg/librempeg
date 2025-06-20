@@ -242,37 +242,50 @@ static int fn(src_out)(AVFilterContext *ctx, AVFrame *out, const int ch,
         over += ch * out_nb_samples;
 
     if (s->out_planar) {
-        itype *dst = ((itype *)out->extended_data[ch]) + doffset;
-#if DEPTH == 8
-        for (int n = 0; n < write_samples; n++)
-            dst[n] = av_clip_uint8(lrintf(0x80 + (irdft[n] + over[n]) * F(1<<(DEPTH-1))));
-#elif DEPTH == 16
-        for (int n = 0; n < write_samples; n++)
-            dst[n] = av_clip_int16(lrintf((irdft[n] + over[n]) * F(1<<(DEPTH-1))));
-#elif DEPTH == 32
-        for (int n = 0; n < write_samples; n++)
-            dst[n] = av_clipl_int32(llrint((irdft[n] + over[n]) * F(1LL<<(DEPTH-1))));
-#else
-        memcpy(dst, irdft, write_samples * sizeof(*dst));
-        for (int n = 0; n < write_samples; n++)
-            dst[n] += over[n];
-#endif
+        if (s->out_depth == 8) {
+            uint8_t *dst = ((uint8_t *)out->extended_data[ch]) + doffset;
+            for (int n = 0; n < write_samples; n++)
+                dst[n] = av_clip_uint8(lrintf(0x80 + (irdft[n] + over[n]) * F(1<<(8-1))));
+        } else if (s->out_depth == 16) {
+            int16_t *dst = ((int16_t *)out->extended_data[ch]) + doffset;
+            for (int n = 0; n < write_samples; n++)
+                dst[n] = av_clip_int16(lrintf((irdft[n] + over[n]) * F(1<<(16-1))));
+        } else if (s->out_depth == 32) {
+            int32_t *dst = ((int32_t *)out->extended_data[ch]) + doffset;
+            for (int n = 0; n < write_samples; n++)
+                dst[n] = av_clipl_int32(llrint((irdft[n] + over[n]) * F(1LL<<(32-1))));
+        } else if (s->out_depth == 33) {
+            float *dst = ((float *)out->extended_data[ch]) + doffset;
+            for (int n = 0; n < write_samples; n++)
+                dst[n] = irdft[n] + over[n];
+        } else {
+            double *dst = ((double *)out->extended_data[ch]) + doffset;
+            for (int n = 0; n < write_samples; n++)
+                dst[n] = irdft[n] + over[n];
+        }
     } else {
         const int nb_channels = ctx->outputs[0]->ch_layout.nb_channels;
-        itype *dst = ((itype *)out->data[0]) + doffset * nb_channels;
-#if DEPTH == 8
-        for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
-            dst[m] = av_clip_uint8(lrintf(0x80 + (irdft[n] + over[n]) * F(1<<(DEPTH-1))));
-#elif DEPTH == 16
-        for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
-            dst[m] = av_clip_int16(lrintf((irdft[n] + over[n]) * F(1<<(DEPTH-1))));
-#elif DEPTH == 32
-        for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
-            dst[m] = av_clipl_int32(llrint((irdft[n] + over[n]) * F(1LL<<(DEPTH-1))));
-#else
-        for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
-            dst[m] = irdft[n] + over[n];
-#endif
+        if (s->out_depth == 8) {
+            uint8_t *dst = ((uint8_t *)out->data[0]) + doffset * nb_channels;
+            for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
+                dst[m] = av_clip_uint8(lrintf(0x80 + (irdft[n] + over[n]) * F(1<<(8-1))));
+        } else if (s->out_depth == 16) {
+            int16_t *dst = ((int16_t *)out->data[0]) + doffset * nb_channels;
+            for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
+                dst[m] = av_clip_int16(lrintf((irdft[n] + over[n]) * F(1<<(16-1))));
+        } else if (s->out_depth == 32) {
+            int32_t *dst = ((int32_t *)out->data[0]) + doffset * nb_channels;
+            for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
+                dst[m] = av_clipl_int32(llrint((irdft[n] + over[n]) * F(1LL<<(32-1))));
+        } else if (s->out_depth = 33) {
+            float *dst = ((float *)out->data[0]) + doffset * nb_channels;
+            for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
+                dst[m] = irdft[n] + over[n];
+        } else {
+            double *dst = ((double *)out->data[0]) + doffset * nb_channels;
+            for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
+                dst[m] = irdft[n] + over[n];
+        }
     }
 
     return 0;
@@ -395,35 +408,50 @@ static int fn(flush)(AVFilterContext *ctx, AVFrame *out, const int ch)
 
     over += ch * out_nb_samples;
     if (s->out_planar) {
-        itype *dst = ((itype *)out->extended_data[ch]);
-#if DEPTH == 8
-        for (int n = 0; n < nb_samples; n++)
-            dst[n] = av_clip_uint8(lrintf(0x80 + over[n] * F(1<<(DEPTH-1))));
-#elif DEPTH == 16
-        for (int n = 0; n < nb_samples; n++)
-            dst[n] = av_clip_int16(lrintf(over[n] * F(1<<(DEPTH-1))));
-#elif DEPTH == 32
-        for (int n = 0; n < nb_samples; n++)
-            dst[n] = av_clipl_int32(llrint(over[n] * F(1LL<<(DEPTH-1))));
-#else
-        memcpy(dst, over, nb_samples * sizeof(*dst));
-#endif
+        if (s->out_depth == 8) {
+            uint8_t *dst = ((uint8_t *)out->extended_data[ch]);
+            for (int n = 0; n < nb_samples; n++)
+                dst[n] = av_clip_uint8(lrintf(0x80 + over[n] * F(1<<(8-1))));
+        } else if (s->out_depth == 16) {
+            int16_t *dst = ((int16_t *)out->extended_data[ch]);
+            for (int n = 0; n < nb_samples; n++)
+                dst[n] = av_clip_int16(lrintf(over[n] * F(1<<(16-1))));
+        } else if (s->out_depth == 32) {
+            int32_t *dst = ((int32_t *)out->extended_data[ch]);
+            for (int n = 0; n < nb_samples; n++)
+                dst[n] = av_clipl_int32(llrint(over[n] * F(1LL<<(32-1))));
+        } else if (s->out_depth == 33) {
+            float *dst = ((float *)out->extended_data[ch]);
+            for (int n = 0; n < nb_samples; n++)
+                dst[n] = over[n];
+        } else {
+            double *dst = ((double *)out->extended_data[ch]);
+            for (int n = 0; n < nb_samples; n++)
+                dst[n] = over[n];
+        }
     } else {
         const int nb_channels = ctx->outputs[0]->ch_layout.nb_channels;
-        itype *dst = (itype *)out->data[0];
-#if DEPTH == 8
-        for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
-            dst[m] = av_clip_uint8(lrintf(0x80 + over[n] * F(1<<(DEPTH-1))));
-#elif DEPTH == 16
-        for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
-            dst[m] = av_clip_int16(lrintf(over[n] * F(1<<(DEPTH-1))));
-#elif DEPTH == 32
-        for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
-            dst[m] = av_clipl_int32(llrint(over[n] * F(1LL<<(DEPTH-1))));
-#else
-        for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
-            dst[m] = over[n];
-#endif
+        if (s->out_depth == 8) {
+            uint8_t *dst = (uint8_t *)out->data[0];
+            for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
+                dst[m] = av_clip_uint8(lrintf(0x80 + over[n] * F(1<<(8-1))));
+        } else if (s->out_depth == 16) {
+            int16_t *dst = (int16_t *)out->data[0];
+            for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
+                dst[m] = av_clip_int16(lrintf(over[n] * F(1<<(16-1))));
+        } else if (s->out_depth == 32) {
+            int32_t *dst = (int32_t *)out->data[0];
+            for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
+                dst[m] = av_clipl_int32(llrint(over[n] * F(1LL<<(32-1))));
+        } else if (s->out_depth == 33) {
+            float *dst = (float *)out->data[0];
+            for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
+                dst[m] = over[n];
+        } else {
+            double *dst = (double *)out->data[0];
+            for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
+                dst[m] = over[n];
+        }
     }
 
     return 0;
