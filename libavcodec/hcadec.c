@@ -370,6 +370,9 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
     avctx->sample_fmt = AV_SAMPLE_FMT_FLTP;
 
+    if (avctx->sample_rate <= 0)
+        return AVERROR(EINVAL);
+
     if (avctx->ch_layout.nb_channels <= 0 || avctx->ch_layout.nb_channels > FF_ARRAY_ELEMS(c->ch))
         return AVERROR(EINVAL);
 
