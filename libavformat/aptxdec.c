@@ -92,7 +92,7 @@ static int aptx_hd_read_packet(AVFormatContext *s, AVPacket *pkt)
 }
 
 static const AVOption aptx_options[] = {
-    { "sample_rate", "", offsetof(AptXDemuxerContext, sample_rate), AV_OPT_TYPE_INT, {.i64 = 48000}, 0, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
+    { "sample_rate", "", offsetof(AptXDemuxerContext, sample_rate), AV_OPT_TYPE_INT, {.i64 = 48000}, 1, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
     { NULL },
 };
 

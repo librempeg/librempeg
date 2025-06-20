@@ -64,7 +64,7 @@ static const AVOption options[] = {
     { "code_size", "Bits per G.726 code",
         OFFSET(code_size),   AV_OPT_TYPE_INT, {.i64 =    4}, 2,       5, AV_OPT_FLAG_DECODING_PARAM },
     { "sample_rate", "",
-        OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64 = 8000}, 0, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
+        OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64 = 8000}, 1, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
     { NULL },
 };
 

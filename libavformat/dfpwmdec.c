@@ -61,7 +61,7 @@ static int dfpwm_read_header(AVFormatContext *s)
 }
 
 static const AVOption dfpwm_options[] = {
-    { "sample_rate", "", offsetof(DFPWMAudioDemuxerContext, sample_rate), AV_OPT_TYPE_INT, {.i64 = 48000}, 0, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
+    { "sample_rate", "", offsetof(DFPWMAudioDemuxerContext, sample_rate), AV_OPT_TYPE_INT, {.i64 = 48000}, 1, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
     { "ch_layout",   "", offsetof(DFPWMAudioDemuxerContext, ch_layout),   AV_OPT_TYPE_CHLAYOUT, {.str = "mono"}, 0, 0, AV_OPT_FLAG_DECODING_PARAM },
 { NULL },
 };

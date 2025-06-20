@@ -105,7 +105,7 @@ static int pcm_read_header(AVFormatContext *s)
 }
 
 static const AVOption pcm_options[] = {
-    { "sample_rate", "", offsetof(PCMAudioDemuxerContext, sample_rate), AV_OPT_TYPE_INT, {.i64 = 44100}, 0, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
+    { "sample_rate", "", offsetof(PCMAudioDemuxerContext, sample_rate), AV_OPT_TYPE_INT, {.i64 = 44100}, 1, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
     { "ch_layout",   "", offsetof(PCMAudioDemuxerContext, ch_layout),   AV_OPT_TYPE_CHLAYOUT, {.str = "mono"}, 0, 0, AV_OPT_FLAG_DECODING_PARAM },
     { NULL },
 };
@@ -165,7 +165,7 @@ PCMDEF(vidc,  "PCM Archimedes VIDC",                            NULL,  VIDC)
 
 #if CONFIG_SLN_DEMUXER
 static const AVOption sln_options[] = {
-    { "sample_rate", "", offsetof(PCMAudioDemuxerContext, sample_rate), AV_OPT_TYPE_INT, {.i64 = 8000}, 0, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
+    { "sample_rate", "", offsetof(PCMAudioDemuxerContext, sample_rate), AV_OPT_TYPE_INT, {.i64 = 8000}, 1, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
     { "ch_layout",   "", offsetof(PCMAudioDemuxerContext, ch_layout),   AV_OPT_TYPE_CHLAYOUT, {.str = "mono"}, 0, 0, AV_OPT_FLAG_DECODING_PARAM },
     { NULL },
 };
