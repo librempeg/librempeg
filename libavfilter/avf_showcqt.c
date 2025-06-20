@@ -1373,7 +1373,23 @@ static int config_output(AVFilterLink *outlink)
     if ((ret = init_volume(s)) < 0)
         return ret;
 
-    s->fft_bits = FFMAX(ceil(log2(inlink->sample_rate * s->timeclamp)), 4);
+    s->sono_count = 0;
+    s->next_pts = 0;
+    s->sono_idx = 0;
+    s->remaining_fill = s->remaining_fill_max;
+    s->remaining_frac = 0;
+    s->step_frac = av_div_q(av_make_q(inlink->sample_rate, s->count) , s->rate);
+    s->step = (int)(s->step_frac.num / s->step_frac.den);
+    s->step_frac.num %= s->step_frac.den;
+    if (s->step_frac.num) {
+        av_log(ctx, AV_LOG_VERBOSE, "audio: %d Hz, step = %d + %d/%d.\n",
+               inlink->sample_rate, s->step, s->step_frac.num, s->step_frac.den);
+    } else {
+        av_log(ctx, AV_LOG_VERBOSE, "audio: %d Hz, step = %d.\n",
+               inlink->sample_rate, s->step);
+    }
+
+    s->fft_bits = av_ceil_log2(FFMAX(llrint(inlink->sample_rate * s->timeclamp), s->step));
     s->fft_len = 1 << s->fft_bits;
     av_log(ctx, AV_LOG_VERBOSE, "fft_len = %d, cqt_len = %d.\n", s->fft_len, s->cqt_len);
 
@@ -1455,22 +1471,6 @@ static int config_output(AVFilterLink *outlink)
     s->c_buf = av_malloc_array(s->width, sizeof(*s->c_buf));
     if (!s->h_buf || !s->rcp_h_buf || !s->c_buf)
         return AVERROR(ENOMEM);
-
-    s->sono_count = 0;
-    s->next_pts = 0;
-    s->sono_idx = 0;
-    s->remaining_fill = s->remaining_fill_max;
-    s->remaining_frac = 0;
-    s->step_frac = av_div_q(av_make_q(inlink->sample_rate, s->count) , s->rate);
-    s->step = (int)(s->step_frac.num / s->step_frac.den);
-    s->step_frac.num %= s->step_frac.den;
-    if (s->step_frac.num) {
-        av_log(ctx, AV_LOG_VERBOSE, "audio: %d Hz, step = %d + %d/%d.\n",
-               inlink->sample_rate, s->step, s->step_frac.num, s->step_frac.den);
-    } else {
-        av_log(ctx, AV_LOG_VERBOSE, "audio: %d Hz, step = %d.\n",
-               inlink->sample_rate, s->step);
-    }
 
     return 0;
 }
