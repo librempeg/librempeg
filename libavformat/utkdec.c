@@ -58,6 +58,7 @@ static int utk_read_header(AVFormatContext *s)
     if ((ret = ff_get_wav_header(s, pb, st->codecpar, size, 0)) < 0)
         return ret;
     st->codecpar->codec_id = AV_CODEC_ID_UTK;
+    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
     return 0;
 }
 
