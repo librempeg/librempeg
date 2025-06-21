@@ -932,9 +932,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 
     samples_to_process = FFMIN(nb_samples - idx_insample, block_samples - sample_count);
     while (samples_to_process > 0) {
-        if (nozero_ch_weighting) {
+        if (nozero_ch_weighting && nb_channels == 2) {
             for (int n = 0; n < samples_to_process; n++)
-                process_ebur128(ch_samples, nb_channels,
+                process_ebur128(ch_samples, 2,
                                 i3000_cache_size, i400_cache_size,
                                 i3000_cache_pos, i400_cache_pos,
                                 i3000_filled, i400_filled,
