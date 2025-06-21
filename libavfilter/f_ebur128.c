@@ -130,6 +130,7 @@ typedef struct EBUR128Context {
     int sample_count;               ///< sample count used for refresh frequency, reset at refresh
     int nb_samples;                 ///< number of samples to consume per single input frame
     int idx_insample;               ///< current sample position of processed samples in single input frame
+    const double **ch_samples;      ///< input channel samples, at current pos
     AVFrame *insamples;             ///< input samples reference, updated regularly
 
     /* Filter caches.
@@ -454,6 +455,7 @@ static int config_audio_out(AVFilterLink *outlink, EBUR128Context *ebur128)
 
     ebur128->nb_channels  = nb_channels;
     ebur128->t0           = av_calloc(nb_channels, 4 * sizeof(*ebur128->t0));
+    ebur128->ch_samples   = av_calloc(nb_channels, sizeof(*ebur128->ch_samples));
     ebur128->ch_weighting = av_calloc(nb_channels, sizeof(*ebur128->ch_weighting));
     if (!ebur128->ch_weighting || !ebur128->t0)
         return AVERROR(ENOMEM);
@@ -716,8 +718,8 @@ static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csampl
     return 0;
 }
 
-static av_always_inline void process_ebur128(const uint8_t **csamples, const int idx,
-                                             const int nb_channels,
+static av_always_inline void process_ebur128(const double **ch_samples,
+                                             const unsigned nb_channels,
                                              const unsigned i3000_cache_size,
                                              const unsigned i400_cache_size,
                                              unsigned *i3000_cache_pos,
@@ -747,9 +749,8 @@ static av_always_inline void process_ebur128(const uint8_t **csamples, const int
     MOVE_TO_NEXT_CACHED_ENTRY(400);
     MOVE_TO_NEXT_CACHED_ENTRY(3000);
 
-    for (int ch = 0; ch < nb_channels; ch++) {
-        const double *samples = (const double *)csamples[ch];
-        const double sample = samples[idx];
+    for (unsigned ch = 0; ch < nb_channels; ch++) {
+        const double sample = *ch_samples[ch]++;
         const int ch4 = ch * 4;
         double *tt0 = t0 + ch4;
         double *tt1 = tt0 + 2;
@@ -907,6 +908,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     const struct filter_coeffs *cf = &ebur128->cf;
     struct integrator *i3000 = &ebur128->i3000;
     struct integrator *i400 = &ebur128->i400;
+    const double **ch_samples = ebur128->ch_samples;
     const unsigned i3000_cache_size = i3000->cache_size;
     const unsigned i400_cache_size = i400->cache_size;
     unsigned *i3000_cache_pos = &i3000->cache_pos;
@@ -925,11 +927,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     if (ret < 0)
         return ret;
 
+    for (int ch = 0; ch < nb_channels; ch++)
+        ch_samples[ch] = ((const double *)samples[ch]) + idx_insample;
+
     samples_to_process = FFMIN(nb_samples - idx_insample, block_samples - sample_count);
     while (samples_to_process > 0) {
         if (nozero_ch_weighting) {
             for (int n = 0; n < samples_to_process; n++)
-                process_ebur128(samples, idx_insample + n, nb_channels,
+                process_ebur128(ch_samples, nb_channels,
                                 i3000_cache_size, i400_cache_size,
                                 i3000_cache_pos, i400_cache_pos,
                                 i3000_filled, i400_filled,
@@ -939,7 +944,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
                                 t0);
         } else {
             for (int n = 0; n < samples_to_process; n++)
-                process_ebur128(samples, idx_insample + n, nb_channels,
+                process_ebur128(ch_samples, nb_channels,
                                 i3000_cache_size, i400_cache_size,
                                 i3000_cache_pos, i400_cache_pos,
                                 i3000_filled, i400_filled,
@@ -1193,6 +1198,7 @@ static av_cold void uninit_ebur128(AVFilterContext *ctx, EBUR128Context *ebur128
 {
     av_freep(&ebur128->y_line_ref);
     av_freep(&ebur128->t0);
+    av_freep(&ebur128->ch_samples);
     av_freep(&ebur128->ch_weighting);
     av_freep(&ebur128->true_peaks);
     av_freep(&ebur128->sample_peaks);
@@ -1573,6 +1579,7 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
     struct integrator *i400 = &r128_in->i400;
     const unsigned i3000_cache_size = i3000->cache_size;
     const unsigned i400_cache_size = i400->cache_size;
+    const double **ch_samples = r128_in->ch_samples;
     const struct filter_coeffs *cf = &r128_in->cf;
     unsigned *i3000_cache_pos = &i3000->cache_pos;
     unsigned *i400_cache_pos = &i400->cache_pos;
@@ -1593,8 +1600,11 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
             return ret;
     }
 
+    for (int ch = 0; ch < nb_channels && in; ch++)
+        ch_samples[ch] = ((const double *)samples[ch]) + r128_in->idx_insample;
+
     for (int idx_insample = r128_in->idx_insample; idx_insample < nb_samples; idx_insample++) {
-        process_ebur128(samples, idx_insample, nb_channels,
+        process_ebur128(ch_samples, nb_channels,
                         i3000_cache_size, i400_cache_size,
                         i3000_cache_pos, i400_cache_pos,
                         i3000_filled, i400_filled,
@@ -1685,6 +1695,7 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
         struct integrator *i400 = &r128_out->i400;
         const unsigned i3000_cache_size = i3000->cache_size;
         const unsigned i400_cache_size = i400->cache_size;
+        const double **ch_samples = r128_out->ch_samples;
         const struct filter_coeffs *cf = &r128_out->cf;
         unsigned *i3000_cache_pos = &i3000->cache_pos;
         unsigned *i400_cache_pos = &i400->cache_pos;
@@ -1697,8 +1708,11 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
         double *t0 = r128_out->t0;
 
         samples = (const uint8_t **)out->extended_data;
+        for (int ch = 0; ch < nb_channels; ch++)
+            ch_samples[ch] = ((const double *)samples[ch]) + r128_out->idx_insample;
+
         for (int idx_insample = r128_out->idx_insample; idx_insample < out->nb_samples; idx_insample++) {
-            process_ebur128(samples, idx_insample, nb_channels,
+            process_ebur128(ch_samples, nb_channels,
                             i3000_cache_size, i400_cache_size,
                             i3000_cache_pos, i400_cache_pos,
                             i3000_filled, i400_filled,
