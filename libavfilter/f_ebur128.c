@@ -74,6 +74,13 @@ struct integrator {
     struct hist_entry *histogram;   ///< histogram of the powers, used to compute LRA and I
 };
 
+struct filter_coeffs {
+    double pre_b[3];                ///< pre-filter numerator coefficients
+    double pre_a[3];                ///< pre-filter denominator coefficients
+    double rlb_b[3];                ///< rlb-filter numerator coefficients
+    double rlb_a[3];                ///< rlb-filter denominator coefficients
+};
+
 enum PrintFormat {
     NONE,
     JSON,
@@ -128,10 +135,7 @@ typedef struct EBUR128Context {
     /* Filter caches.
      * The mult by 3 in the following is for X[i], X[i-1] and X[i-2] */
     double *t0;                     ///< 2 pre-filter + 2 RLB-filter samples cache for each channel
-    double pre_b[3];                ///< pre-filter numerator coefficients
-    double pre_a[3];                ///< pre-filter denominator coefficients
-    double rlb_b[3];                ///< rlb-filter numerator coefficients
-    double rlb_a[3];                ///< rlb-filter denominator coefficients
+    struct filter_coeffs cf;        ///< filter coefficients for numerators/denominators
 
     struct integrator i400;         ///< 400ms integrator, used for Momentary loudness  (M), and Integrated loudness (I)
     struct integrator i3000;        ///<    3s integrator, used for Short term loudness (S), and Loudness Range      (LRA)
@@ -409,21 +413,21 @@ static int config_audio_in(AVFilterLink *inlink, EBUR128Context *ebur128)
 
     double a0 = 1.0 + K / Q + K * K;
 
-    ebur128->pre_b[0] = (Vh + Vb * K / Q + K * K) / a0;
-    ebur128->pre_b[1] = 2.0 * (K * K - Vh) / a0;
-    ebur128->pre_b[2] = (Vh - Vb * K / Q + K * K) / a0;
-    ebur128->pre_a[1] = 2.0 * (K * K - 1.0) / a0;
-    ebur128->pre_a[2] = (1.0 - K / Q + K * K) / a0;
+    ebur128->cf.pre_b[0] = (Vh + Vb * K / Q + K * K) / a0;
+    ebur128->cf.pre_b[1] = 2.0 * (K * K - Vh) / a0;
+    ebur128->cf.pre_b[2] = (Vh - Vb * K / Q + K * K) / a0;
+    ebur128->cf.pre_a[1] = 2.0 * (K * K - 1.0) / a0;
+    ebur128->cf.pre_a[2] = (1.0 - K / Q + K * K) / a0;
 
     f0 = 38.13547087602444;
     Q = 0.5003270373238773;
     K = tan(M_PI * f0 / (double)inlink->sample_rate);
 
-    ebur128->rlb_b[0] = 1.0;
-    ebur128->rlb_b[1] = -2.0;
-    ebur128->rlb_b[2] = 1.0;
-    ebur128->rlb_a[1] = 2.0 * (K * K - 1.0) / (1.0 + K / Q + K * K);
-    ebur128->rlb_a[2] = (1.0 - K / Q + K * K) / (1.0 + K / Q + K * K);
+    ebur128->cf.rlb_b[0] = 1.0;
+    ebur128->cf.rlb_b[1] = -2.0;
+    ebur128->cf.rlb_b[2] = 1.0;
+    ebur128->cf.rlb_a[1] = 2.0 * (K * K - 1.0) / (1.0 + K / Q + K * K);
+    ebur128->cf.rlb_a[2] = (1.0 - K / Q + K * K) / (1.0 + K / Q + K * K);
 
     /* Force 100ms framing in case of metadata injection: the frames must have
      * a granularity of the window overlap to be accurately exploited. */
@@ -721,10 +725,7 @@ static av_always_inline void process_ebur128(const uint8_t **csamples, const int
                                              unsigned *i3000_filled,
                                              unsigned *i400_filled,
                                              const double *ch_weighting,
-                                             const double *pre_b,
-                                             const double *pre_a,
-                                             const double *rlb_b,
-                                             const double *rlb_a,
+                                             const struct filter_coeffs *cf,
                                              double *i3000_cache,
                                              double *i400_cache,
                                              double *i3000_sum,
@@ -764,8 +765,8 @@ static av_always_inline void process_ebur128(const uint8_t **csamples, const int
 } while (0)
 
         // TODO: merge both filters in one?
-        FILTER(out, sample, tt0, pre_b, pre_a);  // apply pre-filter
-        FILTER(bin, out,    tt1, rlb_b, rlb_a);  // apply RLB-filter
+        FILTER(out, sample, tt0, cf->pre_b, cf->pre_a);  // apply pre-filter
+        FILTER(bin, out,    tt1, cf->rlb_b, cf->rlb_a);  // apply RLB-filter
 
         bin *= bin;
 
@@ -903,10 +904,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     int idx_insample = ebur128->idx_insample, ret, samples_to_process;
     const int nozero_ch_weighting = ebur128->nozero_ch_weighting;
     const double *ch_weighting = ebur128->ch_weighting;
-    const double *pre_b = ebur128->pre_b;
-    const double *pre_a = ebur128->pre_a;
-    const double *rlb_b = ebur128->rlb_b;
-    const double *rlb_a = ebur128->rlb_a;
+    const struct filter_coeffs *cf = &ebur128->cf;
     struct integrator *i3000 = &ebur128->i3000;
     struct integrator *i400 = &ebur128->i400;
     const unsigned i3000_cache_size = i3000->cache_size;
@@ -935,8 +933,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
                                 i3000_cache_size, i400_cache_size,
                                 i3000_cache_pos, i400_cache_pos,
                                 i3000_filled, i400_filled,
-                                NULL,
-                                pre_b, pre_a, rlb_b, rlb_a,
+                                NULL, cf,
                                 i3000_cache, i400_cache,
                                 i3000_sum, i400_sum,
                                 t0);
@@ -946,8 +943,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
                                 i3000_cache_size, i400_cache_size,
                                 i3000_cache_pos, i400_cache_pos,
                                 i3000_filled, i400_filled,
-                                ch_weighting,
-                                pre_b, pre_a, rlb_b, rlb_a,
+                                ch_weighting, cf,
                                 i3000_cache, i400_cache,
                                 i3000_sum, i400_sum,
                                 t0);
@@ -1566,14 +1562,11 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
     const int block_samples = inlink->sample_rate / 10;
     const uint8_t **samples = in ? ((const uint8_t **)in->extended_data) : NULL;
     const double *ch_weighting = r128_in->ch_weighting;
-    const double *pre_b = r128_in->pre_b;
-    const double *pre_a = r128_in->pre_a;
-    const double *rlb_b = r128_in->rlb_b;
-    const double *rlb_a = r128_in->rlb_a;
     struct integrator *i3000 = &r128_in->i3000;
     struct integrator *i400 = &r128_in->i400;
     const unsigned i3000_cache_size = i3000->cache_size;
     const unsigned i400_cache_size = i400->cache_size;
+    const struct filter_coeffs *cf = &r128_in->cf;
     unsigned *i3000_cache_pos = &i3000->cache_pos;
     unsigned *i400_cache_pos = &i400->cache_pos;
     unsigned *i3000_filled = &i3000->filled;
@@ -1598,8 +1591,7 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
                         i3000_cache_size, i400_cache_size,
                         i3000_cache_pos, i400_cache_pos,
                         i3000_filled, i400_filled,
-                        ch_weighting,
-                        pre_b, pre_a, rlb_b, rlb_a,
+                        ch_weighting, cf,
                         i3000_cache, i400_cache,
                         i3000_sum, i400_sum,
                         t0);
@@ -1682,14 +1674,11 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     {
         const double *ch_weighting = r128_out->ch_weighting;
-        const double *pre_b = r128_out->pre_b;
-        const double *pre_a = r128_out->pre_a;
-        const double *rlb_b = r128_out->rlb_b;
-        const double *rlb_a = r128_out->rlb_a;
         struct integrator *i3000 = &r128_out->i3000;
         struct integrator *i400 = &r128_out->i400;
         const unsigned i3000_cache_size = i3000->cache_size;
         const unsigned i400_cache_size = i400->cache_size;
+        const struct filter_coeffs *cf = &r128_out->cf;
         unsigned *i3000_cache_pos = &i3000->cache_pos;
         unsigned *i400_cache_pos = &i400->cache_pos;
         unsigned *i3000_filled = &i3000->filled;
@@ -1706,8 +1695,7 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
                             i3000_cache_size, i400_cache_size,
                             i3000_cache_pos, i400_cache_pos,
                             i3000_filled, i400_filled,
-                            ch_weighting,
-                            pre_b, pre_a, rlb_b, rlb_a,
+                            ch_weighting, cf,
                             i3000_cache, i400_cache,
                             i3000_sum, i400_sum,
                             t0);
