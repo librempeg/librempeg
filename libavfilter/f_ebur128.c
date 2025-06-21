@@ -949,6 +949,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
                                 t0);
         }
 
+        for (int n = 0; n < nb_channels * 4; n += 4) {
+            t0[n+0] = isnormal(t0[n+0]) ? t0[n+0] : 0.0;
+            t0[n+1] = isnormal(t0[n+1]) ? t0[n+1] : 0.0;
+            t0[n+2] = isnormal(t0[n+2]) ? t0[n+2] : 0.0;
+            t0[n+3] = isnormal(t0[n+3]) ? t0[n+3] : 0.0;
+        }
+
         idx_insample += samples_to_process;
         sample_count += samples_to_process;
 
@@ -1699,6 +1706,7 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
                             i3000_cache, i400_cache,
                             i3000_sum, i400_sum,
                             t0);
+
             if (++r128_out->sample_count == inlink->sample_rate / 10) {
                 double loudness_400, loudness_3000, loudness_integrated, peak;
                 ebur128_loudness(inlink, r128_out, &loudness_400, &loudness_3000, &loudness_integrated, &peak);
