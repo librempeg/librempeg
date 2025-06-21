@@ -5062,8 +5062,7 @@ static void reset_rot(V360Context *s)
     s->rot_quaternion[0][1] = s->rot_quaternion[0][2] = s->rot_quaternion[0][3] = 0.f;
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     V360Context *s = ctx->priv;
     int ret;
@@ -5073,7 +5072,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     if (s->reset_rot < 0)
         s->reset_rot = 0;
 
-    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    ret = ff_filter_process_command(ctx, cmd, arg);
     if (ret < 0)
         return ret;
 

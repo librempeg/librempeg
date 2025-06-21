@@ -387,14 +387,13 @@ static int config_input(AVFilterLink *inlink)
     return 0;
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     SpeechNormalizerContext *s = ctx->priv;
     int link = s->link;
     int ret;
 
-    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    ret = ff_filter_process_command(ctx, cmd, arg);
     if (ret < 0)
         return ret;
     if (link != s->link)

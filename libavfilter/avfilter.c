@@ -645,7 +645,7 @@ int avfilter_process_command(AVFilterContext *filter, const char *cmd, const cha
     }else if(!strcmp(cmd, "enable")) {
         return set_enable_expr(fffilterctx(filter), arg);
     }else if (fffilter(filter->filter)->process_command) {
-        return fffilter(filter->filter)->process_command(filter, cmd, arg, res, res_len, flags);
+        return fffilter(filter->filter)->process_command(filter, cmd, arg);
     }
     return AVERROR(ENOSYS);
 }
@@ -933,8 +933,7 @@ int ff_filter_opt_parse(void *logctx, const AVClass *priv_class,
     return 0;
 }
 
-int ff_filter_process_command(AVFilterContext *ctx, const char *cmd,
-                              const char *arg, char *res, int res_len, int flags)
+int ff_filter_process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     const AVOption *o;
 

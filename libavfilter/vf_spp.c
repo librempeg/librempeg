@@ -442,16 +442,15 @@ finish:
     return ret;
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     SPPContext *s = ctx->priv;
 
     if (!strcmp(cmd, "level") || !strcmp(cmd, "quality")) {
-        if (!strcmp(args, "max"))
+        if (!strcmp(arg, "max"))
             s->log2_count = MAX_LEVEL;
         else
-            s->log2_count = av_clip(strtol(args, NULL, 10), 0, MAX_LEVEL);
+            s->log2_count = av_clip(strtol(arg, NULL, 10), 0, MAX_LEVEL);
         return 0;
     }
     return AVERROR(ENOSYS);

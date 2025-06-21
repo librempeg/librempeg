@@ -463,8 +463,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpic)
     return ff_filter_frame(outlink, outpic);
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     HueContext *hue = ctx->priv;
     int ret;
@@ -472,7 +471,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
 #define SET_EXPR(expr, option)                                          \
     do {                                                                \
         ret = set_expr(&hue->expr##_pexpr, &hue->expr##_expr,           \
-                       args, option, ctx);                              \
+                       arg, option, ctx);                               \
         if (ret < 0)                                                    \
             return ret;                                                 \
     } while (0)

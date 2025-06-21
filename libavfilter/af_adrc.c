@@ -429,15 +429,14 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->itx_ctx);
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     AudioDRCContext *s = ctx->priv;
     char *old_transfer_str = av_strdup(s->transfer_str);
     char *old_threshold_str = av_strdup(s->threshold_str);
     int ret;
 
-    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    ret = ff_filter_process_command(ctx, cmd, arg);
     if (ret >= 0 && strcmp(old_transfer_str, s->transfer_str)) {
         ret = av_expr_parse(&s->transfer_expr, s->transfer_str, var_names,
                             NULL, NULL, NULL, NULL, 0, ctx);

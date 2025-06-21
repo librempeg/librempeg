@@ -976,8 +976,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     }
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     ZScaleContext *s = ctx->priv;
     int ret;
@@ -989,7 +988,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
         int old_h = s->h;
         AVFilterLink *outlink = ctx->outputs[0];
 
-        av_opt_set(s, cmd, args, 0);
+        av_opt_set(s, cmd, arg, 0);
         if ((ret = config_props(outlink)) < 0) {
             s->w = old_w;
             s->h = old_h;

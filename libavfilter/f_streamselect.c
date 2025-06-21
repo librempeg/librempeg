@@ -240,11 +240,10 @@ static int parse_mapping(AVFilterContext *ctx, const char *map)
     return 0;
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     if (!strcmp(cmd, "map")) {
-        int ret = parse_mapping(ctx, args);
+        int ret = parse_mapping(ctx, arg);
 
         if (ret < 0)
             return ret;

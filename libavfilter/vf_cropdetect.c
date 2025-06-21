@@ -443,14 +443,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     return ff_filter_frame(inlink->dst->outputs[0], frame);
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     CropDetectContext *s = ctx->priv;
     float old_limit = s->limit;
     int ret;
 
-    if ((ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags)) < 0)
+    if ((ret = ff_filter_process_command(ctx, cmd, arg)) < 0)
         return ret;
 
     if (old_limit != s->limit) {

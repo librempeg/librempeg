@@ -314,8 +314,7 @@ static int filter_frame(AVFilterLink *link, AVFrame *frame)
     return ff_filter_frame(link->dst->outputs[0], frame);
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     CropContext *s = ctx->priv;
     int ret;
@@ -332,7 +331,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
         AVFilterLink *outlink = ctx->outputs[0];
         AVFilterLink *inlink  = ctx->inputs[0];
 
-        av_opt_set(s, cmd, args, 0);
+        av_opt_set(s, cmd, arg, 0);
 
         if ((ret = config_input(inlink)) < 0) {
             s->x = old_x;

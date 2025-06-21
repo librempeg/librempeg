@@ -607,18 +607,13 @@ static av_cold int init(AVFilterContext *ctx)
     return 0;
 }
 
-static int process_command(AVFilterContext *ctx,
-                           const char *cmd,
-                           const char *arg,
-                           char *res,
-                           int res_len,
-                           int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     AudioFIRContext *s = ctx->priv;
     int prev_selir, ret;
 
     prev_selir = s->selir;
-    ret = ff_filter_process_command(ctx, cmd, arg, res, res_len, flags);
+    ret = ff_filter_process_command(ctx, cmd, arg);
     if (ret < 0)
         return ret;
 

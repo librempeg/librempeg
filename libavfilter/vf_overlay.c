@@ -126,16 +126,15 @@ static int set_expr(AVExpr **pexpr, const char *expr, const char *option, void *
     return 0;
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     OverlayContext *s = ctx->priv;
     int ret;
 
     if      (!strcmp(cmd, "x"))
-        ret = set_expr(&s->x_pexpr, args, cmd, ctx);
+        ret = set_expr(&s->x_pexpr, arg, cmd, ctx);
     else if (!strcmp(cmd, "y"))
-        ret = set_expr(&s->y_pexpr, args, cmd, ctx);
+        ret = set_expr(&s->y_pexpr, arg, cmd, ctx);
     else
         ret = AVERROR(ENOSYS);
 

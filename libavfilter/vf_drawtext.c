@@ -1183,7 +1183,7 @@ static int config_input(AVFilterLink *inlink)
     return 0;
 }
 
-static int command(AVFilterContext *ctx, const char *cmd, const char *arg, char *res, int res_len, int flags)
+static int command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     DrawTextContext *old = ctx->priv;
     DrawTextContext *new = NULL;
@@ -1224,7 +1224,7 @@ static int command(AVFilterContext *ctx, const char *cmd, const char *arg, char 
         return config_input(ctx->inputs[0]);
     } else {
         int old_borderw = old->borderw;
-        if ((ret = ff_filter_process_command(ctx, cmd, arg, res, res_len, flags)) < 0) {
+        if ((ret = ff_filter_process_command(ctx, cmd, arg)) < 0) {
             return ret;
         }
         if (old->borderw != old_borderw) {

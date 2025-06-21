@@ -578,10 +578,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
-    int ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    int ret = ff_filter_process_command(ctx, cmd, arg);
 
     if (ret < 0)
         return ret;

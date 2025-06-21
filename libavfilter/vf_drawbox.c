@@ -398,7 +398,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     return ff_filter_frame(inlink->dst->outputs[0], frame);
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args, char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     AVFilterLink *inlink = ctx->inputs[0];
     DrawBoxContext *s = ctx->priv;
@@ -410,7 +410,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     int old_r = s->replace;
     int ret;
 
-    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    ret = ff_filter_process_command(ctx, cmd, arg);
     if (ret < 0)
         return ret;
 

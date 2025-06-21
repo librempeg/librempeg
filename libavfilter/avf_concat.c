@@ -438,8 +438,7 @@ static int activate(AVFilterContext *ctx)
     return ret;
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     int ret = AVERROR(ENOSYS);
 

@@ -1993,8 +1993,7 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     AmbisonicContext *s = ctx->priv;
     int matrix_norm = s->matrix_norm;
@@ -2021,7 +2020,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     memcpy(rotate, s->rotate, sizeof(rotate));
     memcpy(zoom, s->zoom, sizeof(zoom));
 
-    ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    ret = ff_filter_process_command(ctx, cmd, arg);
     if (ret < 0)
         return ret;
 

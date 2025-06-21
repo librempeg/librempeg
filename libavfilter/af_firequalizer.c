@@ -888,8 +888,7 @@ static int request_frame(AVFilterLink *outlink)
     return ret;
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     FIREqualizerContext *s = ctx->priv;
     int ret = AVERROR(ENOSYS);
@@ -897,12 +896,12 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     if (!strcmp(cmd, "gain")) {
         char *gain_cmd;
 
-        if (SELECT_GAIN(s) && !strcmp(SELECT_GAIN(s), args)) {
+        if (SELECT_GAIN(s) && !strcmp(SELECT_GAIN(s), arg)) {
             av_log(ctx, AV_LOG_DEBUG, "equal gain, do not rebuild.\n");
             return 0;
         }
 
-        gain_cmd = av_strdup(args);
+        gain_cmd = av_strdup(arg);
         if (!gain_cmd)
             return AVERROR(ENOMEM);
 
@@ -916,12 +915,12 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     } else if (!strcmp(cmd, "gain_entry")) {
         char *gain_entry_cmd;
 
-        if (SELECT_GAIN_ENTRY(s) && !strcmp(SELECT_GAIN_ENTRY(s), args)) {
+        if (SELECT_GAIN_ENTRY(s) && !strcmp(SELECT_GAIN_ENTRY(s), arg)) {
             av_log(ctx, AV_LOG_DEBUG, "equal gain_entry, do not rebuild.\n");
             return 0;
         }
 
-        gain_entry_cmd = av_strdup(args);
+        gain_entry_cmd = av_strdup(arg);
         if (!gain_entry_cmd)
             return AVERROR(ENOMEM);
 

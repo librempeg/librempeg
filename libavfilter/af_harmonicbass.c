@@ -135,17 +135,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
-static int process_command(AVFilterContext *ctx,
-                           const char *cmd,
-                           const char *arg,
-                           char *res,
-                           int res_len,
-                           int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     AudioHarmonicBassContext *s = ctx->priv;
     int ret;
 
-    ret = ff_filter_process_command(ctx, cmd, arg, res, res_len, flags);
+    ret = ff_filter_process_command(ctx, cmd, arg);
     if (ret < 0)
         return ret;
 

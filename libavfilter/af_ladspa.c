@@ -804,10 +804,9 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_fifo_freep2(&s->fifo);
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
-    int ret = ff_filter_process_command(ctx, cmd, args, res, res_len, flags);
+    int ret = ff_filter_process_command(ctx, cmd, arg);
 
     if (ret < 0)
         return ret;

@@ -910,8 +910,7 @@ err:
     return ret;
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     ScaleContext *scale = ctx->priv;
     char *str_expr;
@@ -925,7 +924,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
         str_expr = w ? scale->w_expr : scale->h_expr;
         pexpr_ptr = w ? &scale->w_pexpr : &scale->h_pexpr;
 
-        ret = scale_parse_expr(ctx, str_expr, pexpr_ptr, cmd, args);
+        ret = scale_parse_expr(ctx, str_expr, pexpr_ptr, cmd, arg);
     } else
         ret = AVERROR(ENOSYS);
 

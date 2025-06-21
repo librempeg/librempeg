@@ -775,12 +775,10 @@ static void libplacebo_uninit(AVFilterContext *avctx)
     av_expr_free(s->pos_h_pexpr);
 }
 
-static int libplacebo_process_command(AVFilterContext *ctx, const char *cmd,
-                                      const char *arg, char *res, int res_len,
-                                      int flags)
+static int libplacebo_process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
     int err = 0;
-    RET(ff_filter_process_command(ctx, cmd, arg, res, res_len, flags));
+    RET(ff_filter_process_command(ctx, cmd, arg));
     RET(update_settings(ctx));
     return 0;
 

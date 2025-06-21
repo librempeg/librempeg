@@ -442,7 +442,7 @@ typedef struct FFFilter {
      * @returns >=0 on success otherwise an error code.
      *          AVERROR(ENOSYS) on unsupported commands
      */
-    int (*process_command)(AVFilterContext *, const char *cmd, const char *arg, char *res, int res_len, int flags);
+    int (*process_command)(AVFilterContext *, const char *cmd, const char *arg);
 
     /**
      * Filter activation function.
@@ -782,7 +782,7 @@ int ff_filter_init_hw_frames(AVFilterContext *avctx, AVFilterLink *link,
  * this function.
  */
 int ff_filter_process_command(AVFilterContext *ctx, const char *cmd,
-                              const char *arg, char *res, int res_len, int flags);
+                              const char *arg);
 
 /**
  * Get number of threads for current filter instance.
