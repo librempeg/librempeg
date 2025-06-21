@@ -39,11 +39,13 @@ typedef struct {
 // Licensed in the public domain
 
 // note, len denotes how many compressed bytes there are (uncompressed bytes / 8).
-static void au_compress(DFPWMState *state, int len, uint8_t *outbuf, const uint8_t *inbuf)
+static void au_compress(DFPWMState *state, int len, uint8_t *outbuf,
+                        const uint8_t *inbuf, const int nb_samples)
 {
-    unsigned d = 0;
-    for (int i = 0; i < len; i++) {
-        for (int j = 0; j < 8; j++) {
+    for (int i = 0; i < nb_samples; i += 8) {
+        unsigned d = 0;
+
+        for (int j = 0; j < FFMIN(8, nb_samples - i); j++) {
             int nq, st, ns;
             // get sample
             int v = *(inbuf++) - 128;
@@ -71,7 +73,7 @@ static void au_compress(DFPWMState *state, int len, uint8_t *outbuf, const uint8
         }
 
         // output bits
-        *(outbuf++) = d;
+        outbuf[i>>3] = d;
     }
 }
 
@@ -93,15 +95,15 @@ static int dfpwm_enc_frame(struct AVCodecContext *ctx, struct AVPacket *packet,
     const struct AVFrame *frame, int *got_packet)
 {
     DFPWMState *state = ctx->priv_data;
-    int size = frame->nb_samples * frame->ch_layout.nb_channels / 8 + (frame->nb_samples % 8 > 0 ? 1 : 0);
-    int ret = ff_get_encode_buffer(ctx, packet, size, 0);
+    int ret, size = (frame->nb_samples * frame->ch_layout.nb_channels + 7) / 8;
 
-    if (ret) {
+    ret = ff_get_encode_buffer(ctx, packet, size, 0);
+    if (ret < 0) {
         *got_packet = 0;
         return ret;
     }
 
-    au_compress(state, size, packet->data, frame->data[0]);
+    au_compress(state, size, packet->data, frame->data[0], frame->ch_layout.nb_channels * frame->nb_samples);
 
     *got_packet = 1;
     return 0;

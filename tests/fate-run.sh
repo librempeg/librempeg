@@ -371,10 +371,10 @@ lavf_audio(){
     outdir="tests/data/lavf"
     file=${outdir}/lavf.$t
     test "$keep" -ge 1 || cleanfiles="$cleanfiles $file"
-    do_avconv $file -auto_conversion_filters $DEC_OPTS $1 -ar 44100 -f s16le -i $pcm_src \
+    do_avconv $file -noauto_conversion_filters $DEC_OPTS $1 -ar 44100 -f s16le -i $pcm_src \
               "$ENC_OPTS -metadata title=lavftest" -t 1 -qscale 10 $2 || return
     test "$4" = "disable_crc" ||
-        do_avconv_crc $file -auto_conversion_filters $DEC_OPTS $3 -i $target_path/$file
+        do_avconv_crc $file -noauto_conversion_filters $DEC_OPTS $3 -i $target_path/$file
 }
 
 lavf_container(){

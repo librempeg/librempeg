@@ -30,7 +30,7 @@ $(FATE_LAVF_AUDIO): $(AREF)
 
 fate-lavf-aiff: CMD = lavf_audio "" "-metadata copyright=noone"
 fate-lavf-al fate-lavf-ul: CMD = lavf_audio "" "" "-ar 44100"
-fate-lavf-dfpwm: CMD = lavf_audio "" "-ar 48000"
+fate-lavf-dfpwm: CMD = lavf_audio "" "-sample_rate 44100" "-sample_rate 44100 -c:a pcm_u8"
 fate-lavf-ogg: CMD = lavf_audio "" "-c:a flac"
 fate-lavf-s16.voc: CMD = lavf_audio "-ac 2" "-c:a pcm_s16le"
 fate-lavf-ast: CMD = lavf_audio "-ac 2" "-loopstart 1 -loopend 10"
