@@ -64,13 +64,13 @@ struct hist_entry {
 
 struct integrator {
     double *cache;                  ///< window of filtered samples (N ms)
-    int cache_pos;                  ///< focus on the last added bin in the cache array
-    int cache_size;
+    unsigned cache_pos;             ///< focus on the last added bin in the cache array
+    unsigned cache_size;            ///< window cache size
     double *sum;                    ///< sum of the last N ms filtered samples (cache content)
-    int filled;                     ///< 1 if the cache is completely filled, 0 otherwise
+    unsigned filled;                ///< 1 if the cache is completely filled, 0 otherwise
     double rel_threshold;           ///< relative threshold
     double sum_kept_powers;         ///< sum of the powers (weighted sums) above absolute threshold
-    int nb_kept_powers;             ///< number of sum above absolute threshold
+    unsigned nb_kept_powers;        ///< number of sum above absolute threshold
     struct hist_entry *histogram;   ///< histogram of the powers, used to compute LRA and I
 };
 
@@ -712,11 +712,14 @@ static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csampl
     return 0;
 }
 
-static av_always_inline void process_ebur128(EBUR128Context *ebur128,
-                                             const uint8_t **csamples, const int idx,
+static av_always_inline void process_ebur128(const uint8_t **csamples, const int idx,
                                              const int nb_channels,
-                                             const int i3000_cache_size,
-                                             const int i400_cache_size,
+                                             const unsigned i3000_cache_size,
+                                             const unsigned i400_cache_size,
+                                             unsigned *i3000_cache_pos,
+                                             unsigned *i400_cache_pos,
+                                             unsigned *i3000_filled,
+                                             unsigned *i400_filled,
                                              const double *ch_weighting,
                                              const double *pre_b,
                                              const double *pre_a,
@@ -728,16 +731,16 @@ static av_always_inline void process_ebur128(EBUR128Context *ebur128,
                                              double *i400_sum,
                                              double *t0)
 {
-    const int bin_id_3000 = ebur128->i3000.cache_pos;
-    const int bin_id_400  = ebur128->i400.cache_pos;
+    const unsigned bin_id_3000 = i3000_cache_pos[0];
+    const unsigned bin_id_400  = i400_cache_pos[0];
 
-#define MOVE_TO_NEXT_CACHED_ENTRY(time) do {                \
-    ebur128->i##time.cache_pos++;                           \
-    if (ebur128->i##time.cache_pos ==                       \
-        i##time##_cache_size) {                             \
-        ebur128->i##time.filled    = 1;                     \
-        ebur128->i##time.cache_pos = 0;                     \
-    }                                                       \
+#define MOVE_TO_NEXT_CACHED_ENTRY(time) do { \
+    i##time##_cache_pos[0]++;                \
+    if (i##time##_cache_pos[0] >=            \
+        i##time##_cache_size) {              \
+        i##time##_filled[0]    = 1;          \
+        i##time##_cache_pos[0] = 0;          \
+    }                                        \
 } while (0)
 
     MOVE_TO_NEXT_CACHED_ENTRY(400);
@@ -906,8 +909,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     const double *rlb_a = ebur128->rlb_a;
     struct integrator *i3000 = &ebur128->i3000;
     struct integrator *i400 = &ebur128->i400;
-    const int i3000_cache_size = i3000->cache_size;
-    const int i400_cache_size = i400->cache_size;
+    const unsigned i3000_cache_size = i3000->cache_size;
+    const unsigned i400_cache_size = i400->cache_size;
+    unsigned *i3000_cache_pos = &i3000->cache_pos;
+    unsigned *i400_cache_pos = &i400->cache_pos;
+    unsigned *i3000_filled = &i3000->filled;
+    unsigned *i400_filled = &i400->filled;
     double *i3000_cache = i3000->cache;
     double *i400_cache = i400->cache;
     double *i3000_sum = i3000->sum;
@@ -924,8 +931,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     while (samples_to_process > 0) {
         if (nozero_ch_weighting) {
             for (int n = 0; n < samples_to_process; n++)
-                process_ebur128(ebur128, samples, idx_insample + n, nb_channels,
+                process_ebur128(samples, idx_insample + n, nb_channels,
                                 i3000_cache_size, i400_cache_size,
+                                i3000_cache_pos, i400_cache_pos,
+                                i3000_filled, i400_filled,
                                 NULL,
                                 pre_b, pre_a, rlb_b, rlb_a,
                                 i3000_cache, i400_cache,
@@ -933,8 +942,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
                                 t0);
         } else {
             for (int n = 0; n < samples_to_process; n++)
-                process_ebur128(ebur128, samples, idx_insample + n, nb_channels,
+                process_ebur128(samples, idx_insample + n, nb_channels,
                                 i3000_cache_size, i400_cache_size,
+                                i3000_cache_pos, i400_cache_pos,
+                                i3000_filled, i400_filled,
                                 ch_weighting,
                                 pre_b, pre_a, rlb_b, rlb_a,
                                 i3000_cache, i400_cache,
@@ -1561,8 +1572,12 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
     const double *rlb_a = r128_in->rlb_a;
     struct integrator *i3000 = &r128_in->i3000;
     struct integrator *i400 = &r128_in->i400;
-    const int i3000_cache_size = i3000->cache_size;
-    const int i400_cache_size = i400->cache_size;
+    const unsigned i3000_cache_size = i3000->cache_size;
+    const unsigned i400_cache_size = i400->cache_size;
+    unsigned *i3000_cache_pos = &i3000->cache_pos;
+    unsigned *i400_cache_pos = &i400->cache_pos;
+    unsigned *i3000_filled = &i3000->filled;
+    unsigned *i400_filled = &i400->filled;
     double *i3000_cache = i3000->cache;
     double *i400_cache = i400->cache;
     double *i3000_sum = i3000->sum;
@@ -1579,8 +1594,10 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
 
     for (int idx_insample = r128_in->idx_insample; idx_insample < nb_samples; idx_insample++) {
-        process_ebur128(r128_in, samples, idx_insample, nb_channels,
+        process_ebur128(samples, idx_insample, nb_channels,
                         i3000_cache_size, i400_cache_size,
+                        i3000_cache_pos, i400_cache_pos,
+                        i3000_filled, i400_filled,
                         ch_weighting,
                         pre_b, pre_a, rlb_b, rlb_a,
                         i3000_cache, i400_cache,
@@ -1671,8 +1688,12 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
         const double *rlb_a = r128_out->rlb_a;
         struct integrator *i3000 = &r128_out->i3000;
         struct integrator *i400 = &r128_out->i400;
-        const int i3000_cache_size = i3000->cache_size;
-        const int i400_cache_size = i400->cache_size;
+        const unsigned i3000_cache_size = i3000->cache_size;
+        const unsigned i400_cache_size = i400->cache_size;
+        unsigned *i3000_cache_pos = &i3000->cache_pos;
+        unsigned *i400_cache_pos = &i400->cache_pos;
+        unsigned *i3000_filled = &i3000->filled;
+        unsigned *i400_filled = &i400->filled;
         double *i3000_cache = i3000->cache;
         double *i400_cache = i400->cache;
         double *i3000_sum = i3000->sum;
@@ -1681,8 +1702,10 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
 
         samples = (const uint8_t **)out->extended_data;
         for (int idx_insample = r128_out->idx_insample; idx_insample < out->nb_samples; idx_insample++) {
-            process_ebur128(r128_out, samples, idx_insample, nb_channels,
+            process_ebur128(samples, idx_insample, nb_channels,
                             i3000_cache_size, i400_cache_size,
+                            i3000_cache_pos, i400_cache_pos,
+                            i3000_filled, i400_filled,
                             ch_weighting,
                             pre_b, pre_a, rlb_b, rlb_a,
                             i3000_cache, i400_cache,
