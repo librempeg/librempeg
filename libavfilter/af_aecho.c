@@ -141,7 +141,6 @@ static int config_output(AVFilterLink *outlink)
     default: return AVERROR_BUG;
     }
 
-
     if (s->delayptrs)
         av_freep(&s->delayptrs[0]);
     av_freep(&s->delayptrs);
