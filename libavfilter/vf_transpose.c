@@ -58,9 +58,9 @@ static int query_formats(const AVFilterContext *ctx,
 {
     AVFilterFormats *pix_fmts = NULL;
     const AVPixFmtDescriptor *desc;
-    int fmt, ret;
+    int ret;
 
-    for (fmt = 0; desc = av_pix_fmt_desc_get(fmt); fmt++) {
+    for (int fmt = 0; desc = av_pix_fmt_desc_get(fmt); fmt++) {
         if (!(desc->flags & AV_PIX_FMT_FLAG_PAL ||
               desc->flags & AV_PIX_FMT_FLAG_HWACCEL ||
               desc->flags & AV_PIX_FMT_FLAG_BITSTREAM ||
@@ -77,9 +77,8 @@ static inline void transpose_block_8_c(uint8_t *src, ptrdiff_t src_linesize,
                                        uint8_t *dst, ptrdiff_t dst_linesize,
                                        int w, int h)
 {
-    int x, y;
-    for (y = 0; y < h; y++, dst += dst_linesize, src++)
-        for (x = 0; x < w; x++)
+    for (int y = 0; y < h; y++, dst += dst_linesize, src++)
+        for (int x = 0; x < w; x++)
             dst[x] = src[x*src_linesize];
 }
 
@@ -93,9 +92,8 @@ static inline void transpose_block_16_c(uint8_t *src, ptrdiff_t src_linesize,
                                         uint8_t *dst, ptrdiff_t dst_linesize,
                                         int w, int h)
 {
-    int x, y;
-    for (y = 0; y < h; y++, dst += dst_linesize, src += 2)
-        for (x = 0; x < w; x++)
+    for (int y = 0; y < h; y++, dst += dst_linesize, src += 2)
+        for (int x = 0; x < w; x++)
             *((uint16_t *)(dst + 2*x)) = *((uint16_t *)(src + x*src_linesize));
 }
 
@@ -109,9 +107,8 @@ static inline void transpose_block_24_c(uint8_t *src, ptrdiff_t src_linesize,
                                         uint8_t *dst, ptrdiff_t dst_linesize,
                                         int w, int h)
 {
-    int x, y;
-    for (y = 0; y < h; y++, dst += dst_linesize) {
-        for (x = 0; x < w; x++) {
+    for (int y = 0; y < h; y++, dst += dst_linesize) {
+        for (int x = 0; x < w; x++) {
             int32_t v = AV_RB24(src + x*src_linesize + y*3);
             AV_WB24(dst + 3*x, v);
         }
@@ -128,9 +125,8 @@ static inline void transpose_block_32_c(uint8_t *src, ptrdiff_t src_linesize,
                                         uint8_t *dst, ptrdiff_t dst_linesize,
                                         int w, int h)
 {
-    int x, y;
-    for (y = 0; y < h; y++, dst += dst_linesize, src += 4) {
-        for (x = 0; x < w; x++)
+    for (int y = 0; y < h; y++, dst += dst_linesize, src += 4) {
+        for (int x = 0; x < w; x++)
             *((uint32_t *)(dst + 4*x)) = *((uint32_t *)(src + x*src_linesize));
     }
 }
@@ -145,9 +141,8 @@ static inline void transpose_block_48_c(uint8_t *src, ptrdiff_t src_linesize,
                                         uint8_t *dst, ptrdiff_t dst_linesize,
                                         int w, int h)
 {
-    int x, y;
-    for (y = 0; y < h; y++, dst += dst_linesize, src += 6) {
-        for (x = 0; x < w; x++) {
+    for (int y = 0; y < h; y++, dst += dst_linesize, src += 6) {
+        for (int x = 0; x < w; x++) {
             int64_t v = AV_RB48(src + x*src_linesize);
             AV_WB48(dst + 6*x, v);
         }
@@ -164,9 +159,8 @@ static inline void transpose_block_64_c(uint8_t *src, ptrdiff_t src_linesize,
                                         uint8_t *dst, ptrdiff_t dst_linesize,
                                         int w, int h)
 {
-    int x, y;
-    for (y = 0; y < h; y++, dst += dst_linesize, src += 8)
-        for (x = 0; x < w; x++)
+    for (int y = 0; y < h; y++, dst += dst_linesize, src += 8)
+        for (int x = 0; x < w; x++)
             *((uint64_t *)(dst + 8*x)) = *((uint64_t *)(src + x*src_linesize));
 }
 
@@ -273,9 +267,8 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr,
     ThreadData *td = arg;
     AVFrame *out = td->out;
     AVFrame *in = td->in;
-    int plane;
 
-    for (plane = 0; plane < s->planes; plane++) {
+    for (int plane = 0; plane < s->planes; plane++) {
         int hsub    = plane == 1 || plane == 2 ? s->hsub : 0;
         int vsub    = plane == 1 || plane == 2 ? s->vsub : 0;
         int pixstep = s->pixsteps[plane];
@@ -283,10 +276,9 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr,
         int outw    = AV_CEIL_RSHIFT(out->width,  hsub);
         int outh    = AV_CEIL_RSHIFT(out->height, vsub);
         int start   = (outh *  jobnr   ) / nb_jobs;
-        int end     = (outh * (jobnr+1)) / nb_jobs;
+        int x,y, end= (outh * (jobnr+1)) / nb_jobs;
         uint8_t *dst, *src;
-        int dstlinesize, srclinesize;
-        int x, y;
+        ptrdiff_t dstlinesize, srclinesize;
         TransVtable *v = &s->vtables[plane];
 
         dstlinesize = out->linesize[plane];
