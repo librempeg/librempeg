@@ -19,6 +19,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/opt.h"
 #include "libavutil/intfloat.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
@@ -47,10 +48,14 @@ typedef struct USMChannel {
 } USMChannel;
 
 typedef struct USMDemuxContext {
+    const AVClass *class;
     USMChannel ch[4][256];
     int nb_channels[4];
     uint8_t *header;
     unsigned header_size;
+    int64_t hca_keyl;
+    int64_t hca_keyh;
+    int hca_subkey;
 } USMDemuxContext;
 
 static int usm_probe(const AVProbeData *p)
@@ -315,6 +320,7 @@ static int64_t parse_chunk(AVFormatContext *s, AVIOContext *pb,
                     par->sample_rate = ch->rate.num;
                     par->ch_layout.nb_channels = ch->nb_channels;
                     st->duration = ch->duration;
+                    get_extradata = 1;
                     break;
                 }
 
@@ -324,7 +330,6 @@ static int64_t parse_chunk(AVFormatContext *s, AVIOContext *pb,
                 avpriv_set_pts_info(st, 64, ch->rate.den, ch->rate.num);
 
                 ffstream(st)->need_parsing = AVSTREAM_PARSE_TIMESTAMPS;
-                get_extradata = ch->codec_id == AV_CODEC_ID_ADPCM_ADX;
                 trim_size = (ch->codec_id == AV_CODEC_ID_VP9) * 44;
                 ch->extradata_pos = avio_tell(pb);
             } else {
@@ -337,10 +342,29 @@ static int64_t parse_chunk(AVFormatContext *s, AVIOContext *pb,
 
             pkt_size = chunk_size - (ret - chunk_start) - padding_size;
             if (get_extradata) {
-                if ((ret = ff_get_extradata(s, st->codecpar, pb, pkt_size)) < 0)
+                AVCodecParameters *par;
+                par = st->codecpar;
+
+                // HCA decoder expects last 10 bytes to contain decryption keys
+                int key_buf = ch->codec_id == AV_CODEC_ID_HCA ? 10 : 0;
+                ret = ff_alloc_extradata(par, pkt_size + key_buf);
+                if (ret < 0)
                     return ret;
+
+                ret = avio_read(pb, par->extradata, pkt_size);
+                if (ret < pkt_size) {
+                    av_freep(&par->extradata);
+                    par->extradata_size = 0;
+                    return AVERROR(EIO);
+                }
+
+                if (ch->codec_id == AV_CODEC_ID_HCA) {
+                    AV_WB32(par->extradata + par->extradata_size - 10, usm->hca_keyh);
+                    AV_WB32(par->extradata + par->extradata_size -  6, usm->hca_keyl);
+                    AV_WB16(par->extradata + par->extradata_size -  2, usm->hca_subkey);
+                }
             } else {
-                if (ret == ch->extradata_pos && ch->codec_id == AV_CODEC_ID_ADPCM_ADX) {
+                if (ret == ch->extradata_pos && ch->type == AVMEDIA_TYPE_AUDIO) {
                     avio_skip(pb, pkt_size);
                     ret = 0;
                 } else {
@@ -434,10 +458,33 @@ static int usm_read_close(AVFormatContext *s)
     return 0;
 }
 
+#define OFFSET(x) offsetof(USMDemuxContext, x)
+#define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_DECODING_PARAM
+static const AVOption usm_options[] = {
+    { "hca_lowkey",
+        "Low key used for handling CRI HCA streams", OFFSET(hca_keyl),
+        AV_OPT_TYPE_INT64, {.i64=0}, .min = 0, .max = UINT32_MAX, .flags = FLAGS, },
+    { "hca_highkey",
+        "High key used for handling CRI HCA streams", OFFSET(hca_keyh),
+        AV_OPT_TYPE_INT64, {.i64=0}, .min = 0, .max = UINT32_MAX, .flags = FLAGS, },
+    { "hca_subkey",
+        "Subkey used for handling CRI HCA streams", OFFSET(hca_subkey),
+        AV_OPT_TYPE_INT, {.i64=0}, .min = 0, .max = UINT16_MAX, .flags = FLAGS },
+    { NULL },
+};
+
+static const AVClass usm_class = {
+    .class_name = "usm",
+    .item_name  = av_default_item_name,
+    .option     = usm_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 const FFInputFormat ff_usm_demuxer = {
     .p.name         = "usm",
     .p.long_name    = NULL_IF_CONFIG_SMALL("CRI USM"),
     .p.extensions   = "usm",
+    .p.priv_class   = &usm_class,
     .p.flags        = AVFMT_GENERIC_INDEX | AVFMT_NO_BYTE_SEEK | AVFMT_NOBINSEARCH,
     .priv_data_size = sizeof(USMDemuxContext),
     .read_probe     = usm_probe,
