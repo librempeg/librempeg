@@ -180,8 +180,11 @@ static int flush_frame(AVFilterLink *outlink)
         AVFrame *out = ff_get_audio_buffer(outlink, nb_samples);
         AVFrame *in = ff_get_audio_buffer(outlink, nb_samples);
 
-        if (!out)
+        if (!out || !in) {
+            av_frame_free(&out);
+            av_frame_free(&in);
             return AVERROR(ENOMEM);
+        }
 
         s->flush_size -= nb_samples;
 
