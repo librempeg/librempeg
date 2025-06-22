@@ -32,7 +32,7 @@
 #include "encode.h"
 
 typedef struct {
-    int fq, q, s, lt;
+    int q, s, lt;
 } DFPWMState;
 
 // DFPWM codec from https://github.com/ChenThread/dfpwm/blob/master/1a/
@@ -81,7 +81,6 @@ static av_cold int dfpwm_enc_init(struct AVCodecContext *ctx)
 {
     DFPWMState *state = ctx->priv_data;
 
-    state->fq = 0;
     state->q = 0;
     state->s = 0;
     state->lt = -128;
