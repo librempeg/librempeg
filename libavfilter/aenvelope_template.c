@@ -173,8 +173,8 @@ static int fn(envelope_init)(AVFilterContext *ctx)
             back = n - 1;                    \
     }
 
-static ftype fn(compute_peak)(ftype *ss, ftype ax, ftype px,
-                              int n, int *ffront, int *bback)
+static ftype fn(compute_peak)(ftype *ss, const ftype ax, const ftype px,
+                              const int n, int *ffront, int *bback)
 {
     const ftype empty_value = F(-1.0);
     int front = *ffront;
