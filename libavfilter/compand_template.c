@@ -67,6 +67,7 @@ typedef struct fn(ChanParam) {
     ftype decay;
     ftype volume;
 
+    int initial_volume;
     int delay_count;
     int delay_index;
 } fn(ChanParam);
@@ -215,8 +216,7 @@ static int fn(prepare)(AVFilterContext *ctx, AVFilterLink *outlink)
             cp->decay = F(M_LN10) / (sample_rate * cp->decay);
         else
             cp->decay = F(1.0);
-        cp->volume = s->initial_volume * F(M_LN10/20.0);
-        cp->delay_index = cp->delay_count = 0;
+        cp->delay_index = cp->delay_count = cp->initial_volume = 0;
     }
 
     return 0;
@@ -308,6 +308,11 @@ static int fn(compand_nodelay_channels)(AVFilterContext *ctx, void *arg, int job
         ftype *dst = (ftype *)out->extended_data[ch];
         fn(ChanParam) *cp = &cps[ch];
 
+        if (!cp->initial_volume) {
+            cp->volume = FLOG(FABS(scsrc[0]) + EPS);
+            cp->initial_volume = 1;
+        }
+
         if (is_disabled) {
             for (int i = 0; i < nb_samples; i++) {
                 fn(update_volume)(cp, FABS(scsrc[i]));
@@ -349,6 +354,11 @@ static int fn(compand_delay_channels)(AVFilterContext *ctx, void *arg, int jobnr
         fn(ChanParam) *cp = &cps[ch];
         int count  = cp->delay_count;
         int dindex = cp->delay_index;
+
+        if (!cp->initial_volume) {
+            cp->volume = FLOG(FABS(scsrc[0]) + EPS);
+            cp->initial_volume = 1;
+        }
 
         for (int i = 0, oindex = 0; i < nb_samples; i++) {
             const ftype scsample = scsrc[i];

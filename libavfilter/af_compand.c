@@ -59,7 +59,6 @@ typedef struct CompandContext {
     double out_min_lin;
     double curve_dB;
     double gain_dB;
-    double initial_volume;
     double delay;
     AVFrame *delay_frame, *in, *sc;
     int delay_samples;
@@ -89,7 +88,6 @@ static const AVOption compand_options[] = {
     { "opoints", "set output points of transfer function", OFFSET(out_points), AV_OPT_TYPE_FLOAT|AR, { .arr = &def_out_points }, -900, 900, AT },
     { "soft-knee", "set soft-knee", OFFSET(curve_dB), AV_OPT_TYPE_DOUBLE, { .dbl = 0.01 }, 0.01, 900, AT },
     { "gain", "set output gain", OFFSET(gain_dB), AV_OPT_TYPE_DOUBLE, { .dbl = 0 }, -900, 900, AT },
-    { "volume", "set initial volume", OFFSET(initial_volume), AV_OPT_TYPE_DOUBLE, { .dbl = 0 }, -900, 0, A },
     { "delay", "set delay for samples before sending them to volume adjuster", OFFSET(delay), AV_OPT_TYPE_DOUBLE, { .dbl = 0 }, 0, 20, A },
     { "sidechain", "enable sidechain input", OFFSET(sidechain), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, A },
     { NULL }
