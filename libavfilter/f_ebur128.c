@@ -130,8 +130,14 @@ typedef struct EBUR128Context {
     int sample_count;               ///< sample count used for refresh frequency, reset at refresh
     int nb_samples;                 ///< number of samples to consume per single input frame
     int idx_insample;               ///< current sample position of processed samples in single input frame
-    const double **ch_samples;      ///< input channel samples, at current pos
+    union {
+        const double  **f64;        ///< input channel samples, double type, at current pos
+        const float   **f32;        ///< input channel samples, float type, at current pos
+        const int16_t **s16;        ///< input channel samples, int16_t type, at current pos
+    } ch_samples;
     AVFrame *insamples;             ///< input samples reference, updated regularly
+
+    double (*samples_peak)(const void *src, const int nb_samples);
 
     /* Filter caches.
      * The mult by 3 in the following is for X[i], X[i-1] and X[i-2] */
@@ -444,6 +450,17 @@ static int config_audio_input(AVFilterLink *inlink)
     return config_audio_in(inlink, ebur128);
 }
 
+#define DEPTH 16
+#include "ebur128_template.c"
+
+#undef DEPTH
+#define DEPTH 32
+#include "ebur128_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "ebur128_template.c"
+
 static int config_audio_out(AVFilterLink *outlink, EBUR128Context *ebur128)
 {
     const int nb_channels = outlink->ch_layout.nb_channels;
@@ -455,7 +472,28 @@ static int config_audio_out(AVFilterLink *outlink, EBUR128Context *ebur128)
 
     ebur128->nb_channels  = nb_channels;
     ebur128->t0           = av_calloc(nb_channels, 4 * sizeof(*ebur128->t0));
-    ebur128->ch_samples   = av_calloc(nb_channels, sizeof(*ebur128->ch_samples));
+    switch (outlink->format) {
+    case AV_SAMPLE_FMT_DBLP:
+        ebur128->samples_peak = samples_peak_dblp;
+        ebur128->ch_samples.f64 = av_calloc(nb_channels, sizeof(*ebur128->ch_samples.f64));
+        if (!ebur128->ch_samples.f64)
+            return AVERROR(ENOMEM);
+        break;
+    case AV_SAMPLE_FMT_FLTP:
+        ebur128->samples_peak = samples_peak_fltp;
+        ebur128->ch_samples.f32 = av_calloc(nb_channels, sizeof(*ebur128->ch_samples.f32));
+        if (!ebur128->ch_samples.f32)
+            return AVERROR(ENOMEM);
+        break;
+    case AV_SAMPLE_FMT_S16P:
+        ebur128->samples_peak = samples_peak_s16p;
+        ebur128->ch_samples.s16 = av_calloc(nb_channels, sizeof(*ebur128->ch_samples.s16));
+        if (!ebur128->ch_samples.s16)
+            return AVERROR(ENOMEM);
+        break;
+    default:
+        return AVERROR_BUG;
+    }
     ebur128->ch_weighting = av_calloc(nb_channels, sizeof(*ebur128->ch_weighting));
     if (!ebur128->ch_weighting || !ebur128->t0)
         return AVERROR(ENOMEM);
@@ -655,18 +693,14 @@ static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csampl
 
             if (ret < 0)
                 return ret;
+
             for (int ch = 0; ch < nb_channels; ch++)
                 ebur128->true_peaks_per_frame[ch] = 0.0;
+
             for (int ch = 0; ch < nb_channels; ch++) {
-                double true_peak_per_frame = ebur128->true_peaks_per_frame[ch];
-                const double *src = (const double *)swr_samples[ch];
+                const void *src = swr_samples[ch];
                 double true_peak = ebur128->true_peaks[ch];
-
-                for (int idx = 0; idx < ret; idx++) {
-                    const double asample = fabs(src[idx]);
-
-                    true_peak_per_frame = FFMAX(true_peak_per_frame, asample);
-                }
+                double true_peak_per_frame = ebur128->samples_peak(src, ret);
 
                 ebur128->true_peaks[ch] = FFMAX(true_peak, true_peak_per_frame);
                 ebur128->true_peaks_per_frame[ch] = true_peak_per_frame;
@@ -684,15 +718,9 @@ static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csampl
             ebur128->sample_peaks_per_frame[ch] = 0.0;
 
         for (int ch = 0; ch < nb_channels; ch++) {
-            double sample_peak_per_frame = ebur128->sample_peaks_per_frame[ch];
-            const double *src = (const double *)csamples[ch];
+            const void *src = csamples[ch];
             double sample_peak = ebur128->sample_peaks[ch];
-
-            for (int idx = 0; idx < nb_samples; idx++) {
-                const double asample = fabs(src[idx]);
-
-                sample_peak_per_frame = FFMAX(sample_peak_per_frame, asample);
-            }
+            double sample_peak_per_frame = ebur128->samples_peak(src, nb_samples);
 
             ebur128->sample_peaks[ch] = FFMAX(sample_peak, sample_peak_per_frame);
             ebur128->sample_peaks_per_frame[ch] = sample_peak_per_frame;
@@ -716,73 +744,6 @@ static int process_peaks_ebur128(EBUR128Context *ebur128, const uint8_t **csampl
     FIND_PEAK(ebur128->true_peak,   ebur128->true_peaks,   TRUE);
 
     return 0;
-}
-
-static av_always_inline void process_ebur128(const double **ch_samples,
-                                             const unsigned nb_channels,
-                                             const unsigned i3000_cache_size,
-                                             const unsigned i400_cache_size,
-                                             unsigned *i3000_cache_pos,
-                                             unsigned *i400_cache_pos,
-                                             unsigned *i3000_filled,
-                                             unsigned *i400_filled,
-                                             const double *ch_weighting,
-                                             const struct filter_coeffs *cf,
-                                             double *i3000_cache,
-                                             double *i400_cache,
-                                             double *i3000_sum,
-                                             double *i400_sum,
-                                             double *t0)
-{
-    const unsigned bin_id_3000 = i3000_cache_pos[0];
-    const unsigned bin_id_400  = i400_cache_pos[0];
-
-#define MOVE_TO_NEXT_CACHED_ENTRY(time) do { \
-    i##time##_cache_pos[0]++;                \
-    if (i##time##_cache_pos[0] >=            \
-        i##time##_cache_size) {              \
-        i##time##_filled[0]    = 1;          \
-        i##time##_cache_pos[0] = 0;          \
-    }                                        \
-} while (0)
-
-    MOVE_TO_NEXT_CACHED_ENTRY(400);
-    MOVE_TO_NEXT_CACHED_ENTRY(3000);
-
-    for (unsigned ch = 0; ch < nb_channels; ch++) {
-        const double sample = *ch_samples[ch]++;
-        const int ch4 = ch * 4;
-        double *tt0 = t0 + ch4;
-        double *tt1 = tt0 + 2;
-        double bin, out;
-
-        if (ch_weighting && !ch_weighting[ch])
-            continue;
-
-#define FILTER(y, x, t, NUM, DEN) do {                       \
-        y = NUM[0] * x + t[0];                               \
-        t[0] = NUM[1] * x + t[1] - DEN[1] * y;               \
-        t[1] = NUM[2] * x        - DEN[2] * y;               \
-} while (0)
-
-        // TODO: merge both filters in one?
-        FILTER(out, sample, tt0, cf->pre_b, cf->pre_a);  // apply pre-filter
-        FILTER(bin, out,    tt1, cf->rlb_b, cf->rlb_a);  // apply RLB-filter
-
-        bin *= bin;
-
-        /* add the new value, and limit the sum to the cache size (400ms or 3s)
-         * by removing the oldest one */
-        i400_sum [ch] += bin - i400_cache [bin_id_400];
-        i3000_sum[ch] += bin - i3000_cache[bin_id_3000];
-
-        /* override old cache entry with the new value */
-        i400_cache [bin_id_400 ] = bin;
-        i3000_cache[bin_id_3000] = bin;
-
-        i400_cache  += i400_cache_size;
-        i3000_cache += i3000_cache_size;
-    }
 }
 
 static void ebur128_loudness(AVFilterLink *inlink,
@@ -908,7 +869,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     const struct filter_coeffs *cf = &ebur128->cf;
     struct integrator *i3000 = &ebur128->i3000;
     struct integrator *i400 = &ebur128->i400;
-    const double **ch_samples = ebur128->ch_samples;
+    const int16_t **ch_samples_s16 = ebur128->ch_samples.s16;
+    const double **ch_samples_f64 = ebur128->ch_samples.f64;
+    const float **ch_samples_f32 = ebur128->ch_samples.f32;
     const unsigned i3000_cache_size = i3000->cache_size;
     const unsigned i400_cache_size = i400->cache_size;
     unsigned *i3000_cache_pos = &i3000->cache_pos;
@@ -927,31 +890,54 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     if (ret < 0)
         return ret;
 
-    for (int ch = 0; ch < nb_channels; ch++)
-        ch_samples[ch] = ((const double *)samples[ch]) + idx_insample;
+    switch (inlink->format) {
+    case AV_SAMPLE_FMT_DBLP:
+        for (int ch = 0; ch < nb_channels; ch++)
+            ch_samples_f64[ch] = ((const double *)samples[ch]) + idx_insample;
+        break;
+    case AV_SAMPLE_FMT_FLTP:
+        for (int ch = 0; ch < nb_channels; ch++)
+            ch_samples_f32[ch] = ((const float *)samples[ch]) + idx_insample;
+        break;
+    case AV_SAMPLE_FMT_S16P:
+        for (int ch = 0; ch < nb_channels; ch++)
+            ch_samples_s16[ch] = ((const int16_t *)samples[ch]) + idx_insample;
+        break;
+    }
 
     samples_to_process = FFMIN(nb_samples - idx_insample, block_samples - sample_count);
     while (samples_to_process > 0) {
-        if (nozero_ch_weighting && nb_channels == 2) {
-            for (int n = 0; n < samples_to_process; n++)
-                process_ebur128(ch_samples, 2,
-                                i3000_cache_size, i400_cache_size,
-                                i3000_cache_pos, i400_cache_pos,
-                                i3000_filled, i400_filled,
-                                NULL, cf,
-                                i3000_cache, i400_cache,
-                                i3000_sum, i400_sum,
-                                t0);
-        } else {
-            for (int n = 0; n < samples_to_process; n++)
-                process_ebur128(ch_samples, nb_channels,
-                                i3000_cache_size, i400_cache_size,
-                                i3000_cache_pos, i400_cache_pos,
-                                i3000_filled, i400_filled,
-                                ch_weighting, cf,
-                                i3000_cache, i400_cache,
-                                i3000_sum, i400_sum,
-                                t0);
+        switch (inlink->format) {
+        case AV_SAMPLE_FMT_DBLP:
+            process_block_dblp(ch_samples_f64, nb_channels,
+                               i3000_cache_size, i400_cache_size,
+                               i3000_cache_pos, i400_cache_pos,
+                               i3000_filled, i400_filled,
+                               ch_weighting, cf,
+                               i3000_cache, i400_cache,
+                               i3000_sum, i400_sum,
+                               t0, samples_to_process, nozero_ch_weighting);
+            break;
+        case AV_SAMPLE_FMT_FLTP:
+            process_block_fltp(ch_samples_f32, nb_channels,
+                               i3000_cache_size, i400_cache_size,
+                               i3000_cache_pos, i400_cache_pos,
+                               i3000_filled, i400_filled,
+                               ch_weighting, cf,
+                               i3000_cache, i400_cache,
+                               i3000_sum, i400_sum,
+                               t0, samples_to_process, nozero_ch_weighting);
+            break;
+        case AV_SAMPLE_FMT_S16P:
+            process_block_s16p(ch_samples_s16, nb_channels,
+                               i3000_cache_size, i400_cache_size,
+                               i3000_cache_pos, i400_cache_pos,
+                               i3000_filled, i400_filled,
+                               ch_weighting, cf,
+                               i3000_cache, i400_cache,
+                               i3000_sum, i400_sum,
+                               t0, samples_to_process, nozero_ch_weighting);
+            break;
         }
 
         for (int n = 0; n < nb_channels * 4; n += 4) {
@@ -1173,7 +1159,9 @@ static int query_formats(const AVFilterContext *ctx,
     AVFilterFormats *formats;
     int ret;
 
-    static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_NONE };
+    static const enum AVSampleFormat sample_fmts[] = {
+        AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_S16P,
+        AV_SAMPLE_FMT_NONE };
     static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_RGB24, AV_PIX_FMT_NONE };
 
     /* set optional output video format */
@@ -1198,7 +1186,7 @@ static av_cold void uninit_ebur128(AVFilterContext *ctx, EBUR128Context *ebur128
 {
     av_freep(&ebur128->y_line_ref);
     av_freep(&ebur128->t0);
-    av_freep(&ebur128->ch_samples);
+    av_freep(&ebur128->ch_samples.f64);
     av_freep(&ebur128->ch_weighting);
     av_freep(&ebur128->true_peaks);
     av_freep(&ebur128->sample_peaks);
@@ -1579,7 +1567,7 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
     struct integrator *i400 = &r128_in->i400;
     const unsigned i3000_cache_size = i3000->cache_size;
     const unsigned i400_cache_size = i400->cache_size;
-    const double **ch_samples = r128_in->ch_samples;
+    const double **ch_samples_f64 = r128_in->ch_samples.f64;
     const struct filter_coeffs *cf = &r128_in->cf;
     unsigned *i3000_cache_pos = &i3000->cache_pos;
     unsigned *i400_cache_pos = &i400->cache_pos;
@@ -1601,17 +1589,17 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
 
     for (int ch = 0; ch < nb_channels && in; ch++)
-        ch_samples[ch] = ((const double *)samples[ch]) + r128_in->idx_insample;
+        ch_samples_f64[ch] = ((const double *)samples[ch]) + r128_in->idx_insample;
 
     for (int idx_insample = r128_in->idx_insample; idx_insample < nb_samples; idx_insample++) {
-        process_ebur128(ch_samples, nb_channels,
-                        i3000_cache_size, i400_cache_size,
-                        i3000_cache_pos, i400_cache_pos,
-                        i3000_filled, i400_filled,
-                        ch_weighting, cf,
-                        i3000_cache, i400_cache,
-                        i3000_sum, i400_sum,
-                        t0);
+        process_ebur128_dblp(ch_samples_f64, nb_channels,
+                             i3000_cache_size, i400_cache_size,
+                             i3000_cache_pos, i400_cache_pos,
+                             i3000_filled, i400_filled,
+                             ch_weighting, cf,
+                             i3000_cache, i400_cache,
+                             i3000_sum, i400_sum,
+                             t0);
 
         if (++r128_in->sample_count == block_samples) {
             double peak;
@@ -1695,7 +1683,7 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
         struct integrator *i400 = &r128_out->i400;
         const unsigned i3000_cache_size = i3000->cache_size;
         const unsigned i400_cache_size = i400->cache_size;
-        const double **ch_samples = r128_out->ch_samples;
+        const double **ch_samples_f64 = r128_out->ch_samples.f64;
         const struct filter_coeffs *cf = &r128_out->cf;
         unsigned *i3000_cache_pos = &i3000->cache_pos;
         unsigned *i400_cache_pos = &i400->cache_pos;
@@ -1709,17 +1697,17 @@ static int loudnorm_filter_frame(AVFilterLink *inlink, AVFrame *in)
 
         samples = (const uint8_t **)out->extended_data;
         for (int ch = 0; ch < nb_channels; ch++)
-            ch_samples[ch] = ((const double *)samples[ch]) + r128_out->idx_insample;
+            ch_samples_f64[ch] = ((const double *)samples[ch]) + r128_out->idx_insample;
 
         for (int idx_insample = r128_out->idx_insample; idx_insample < out->nb_samples; idx_insample++) {
-            process_ebur128(ch_samples, nb_channels,
-                            i3000_cache_size, i400_cache_size,
-                            i3000_cache_pos, i400_cache_pos,
-                            i3000_filled, i400_filled,
-                            ch_weighting, cf,
-                            i3000_cache, i400_cache,
-                            i3000_sum, i400_sum,
-                            t0);
+            process_ebur128_dblp(ch_samples_f64, nb_channels,
+                                 i3000_cache_size, i400_cache_size,
+                                 i3000_cache_pos, i400_cache_pos,
+                                 i3000_filled, i400_filled,
+                                 ch_weighting, cf,
+                                 i3000_cache, i400_cache,
+                                 i3000_sum, i400_sum,
+                                 t0);
 
             if (++r128_out->sample_count == inlink->sample_rate / 10) {
                 double loudness_400, loudness_3000, loudness_integrated, peak;
