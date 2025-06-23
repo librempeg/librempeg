@@ -19,20 +19,24 @@
 #undef FABS
 #undef SCALE
 #undef ftype
+#undef ptype
 #undef SAMPLE_FORMAT
 #if DEPTH == 16
 #define FABS FFABS
 #define SCALE(x) ((x) * (1.0 / 32768.0))
+#define ptype int
 #define ftype int16_t
 #define SAMPLE_FORMAT s16p
 #elif DEPTH == 32
 #define FABS fabsf
 #define SCALE(x) (x)
+#define ptype float
 #define ftype float
 #define SAMPLE_FORMAT fltp
 #else
 #define FABS fabs
 #define SCALE(x) (x)
+#define ptype double
 #define ftype double
 #define SAMPLE_FORMAT dblp
 #endif
@@ -151,11 +155,12 @@ static void fn(process_block)(const ftype **ch_samples,
 
 static double fn(samples_peak)(const void *src_, const int nb_samples)
 {
-    ftype sample_peak_per_frame = 0;
+    ptype sample_peak_per_frame = 0;
     const ftype *src = src_;
 
     for (int idx = 0; idx < nb_samples; idx++) {
-        const ftype asample = FABS(src[idx]);
+        const ptype sample = src[idx];
+        const ptype asample = FABS(sample);
 
         sample_peak_per_frame = FFMAX(sample_peak_per_frame, asample);
     }
