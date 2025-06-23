@@ -67,6 +67,7 @@ typedef struct fn(ChanParam) {
     ftype decay;
     ftype volume;
 
+    int out_samples;
     int initial_volume;
     int delay_count;
     int delay_index;
@@ -251,6 +252,15 @@ static int fn(delay_count)(AVFilterContext *ctx)
     return cp->delay_count;
 }
 
+static int fn(out_samples)(AVFilterContext *ctx)
+{
+    CompandContext *s = ctx->priv;
+    fn(ChanParam) *cps = s->channels;
+    fn(ChanParam) *cp = &cps[0];
+
+    return cp->out_samples;
+}
+
 static void fn(drain)(AVFilterContext *ctx, AVFrame *frame)
 {
     AVFilterLink *outlink = ctx->outputs[0];
@@ -354,13 +364,14 @@ static int fn(compand_delay_channels)(AVFilterContext *ctx, void *arg, int jobnr
         fn(ChanParam) *cp = &cps[ch];
         int count  = cp->delay_count;
         int dindex = cp->delay_index;
+        int oindex = 0;
 
         if (!cp->initial_volume) {
             cp->volume = FLOG(FABS(scsrc[0]) + EPS);
             cp->initial_volume = 1;
         }
 
-        for (int i = 0, oindex = 0; i < nb_samples; i++) {
+        for (int i = 0; i < nb_samples; i++) {
             const ftype scsample = scsrc[i];
             const ftype sample = src[i];
 
@@ -379,6 +390,7 @@ static int fn(compand_delay_channels)(AVFilterContext *ctx, void *arg, int jobnr
             dindex = MOD(dindex + 1, delay_samples);
         }
 
+        cp->out_samples = oindex;
         cp->delay_count = count;
         cp->delay_index = dindex;
     }

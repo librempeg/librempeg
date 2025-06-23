@@ -68,6 +68,7 @@ typedef struct CompandContext {
     int (*compand)(AVFilterContext *ctx);
     int (*compand_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
     int (*delay_count)(AVFilterContext *ctx);
+    int (*out_samples)(AVFilterContext *ctx);
     void (*drain)(AVFilterContext *ctx, AVFrame *frame);
 } CompandContext;
 
@@ -226,6 +227,8 @@ static int compand_delay(AVFilterContext *ctx)
         return 0;
     }
 
+    out->nb_samples = s->out_samples(ctx);
+
     return ff_filter_frame(outlink, out);
 }
 
@@ -285,10 +288,12 @@ static int config_output(AVFilterLink *outlink)
         case AV_SAMPLE_FMT_FLTP:
             s->compand_channels = compand_delay_channels_fltp;
             s->delay_count = delay_count_fltp;
+            s->out_samples = out_samples_fltp;
             break;
         case AV_SAMPLE_FMT_DBLP:
             s->compand_channels = compand_delay_channels_dblp;
             s->delay_count = delay_count_dblp;
+            s->out_samples = out_samples_dblp;
             break;
         default:
             return AVERROR_BUG;
