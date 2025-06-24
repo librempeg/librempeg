@@ -86,6 +86,7 @@ static const AVOption v360_options[] = {
     {"octahedron", "octahedron",                                 0, AV_OPT_TYPE_CONST,  {.i64=OCTAHEDRON},      0,                   0, FLAGS, .unit = "in" },
     {"cylindricalea", "cylindrical equal area",                  0, AV_OPT_TYPE_CONST,  {.i64=CYLINDRICALEA},   0,                   0, FLAGS, .unit = "in" },
     {   "dsquare", "dual square fisheye",                        0, AV_OPT_TYPE_CONST,  {.i64=DUAL_SQUARE},     0,                   0, FLAGS, .unit = "in" },
+    {  "dstretch", "dual stretch fisheye",                       0, AV_OPT_TYPE_CONST,  {.i64=DUAL_STRETCH},    0,                   0, FLAGS, .unit = "in" },
     {    "output", "set output projection",            OFFSET(out), AV_OPT_TYPE_INT,    {.i64=CUBEMAP_3_2},     0,    NB_PROJECTIONS-1, FLAGS, .unit = "out" },
     {         "e", "equirectangular",                            0, AV_OPT_TYPE_CONST,  {.i64=EQUIRECTANGULAR}, 0,                   0, FLAGS, .unit = "out" },
     {  "equirect", "equirectangular",                            0, AV_OPT_TYPE_CONST,  {.i64=EQUIRECTANGULAR}, 0,                   0, FLAGS, .unit = "out" },
@@ -118,6 +119,7 @@ static const AVOption v360_options[] = {
     {"octahedron", "octahedron",                                 0, AV_OPT_TYPE_CONST,  {.i64=OCTAHEDRON},      0,                   0, FLAGS, .unit = "out" },
     {"cylindricalea", "cylindrical equal area",                  0, AV_OPT_TYPE_CONST,  {.i64=CYLINDRICALEA},   0,                   0, FLAGS, .unit = "out" },
     {   "dsquare", "dual square fisheye",                        0, AV_OPT_TYPE_CONST,  {.i64=DUAL_SQUARE},     0,                   0, FLAGS, .unit = "out" },
+    {  "dstretch", "dual stretch fisheye",                       0, AV_OPT_TYPE_CONST,  {.i64=DUAL_STRETCH},    0,                   0, FLAGS, .unit = "out" },
     {    "interp", "set interpolation method",      OFFSET(interp), AV_OPT_TYPE_INT,    {.i64=BILINEAR},        0, NB_INTERP_METHODS-1, FLAGS, .unit = "interp" },
     {      "near", "nearest neighbour",                          0, AV_OPT_TYPE_CONST,  {.i64=NEAREST},         0,                   0, FLAGS, .unit = "interp" },
     {   "nearest", "nearest neighbour",                          0, AV_OPT_TYPE_CONST,  {.i64=NEAREST},         0,                   0, FLAGS, .unit = "interp" },
@@ -3606,6 +3608,106 @@ static int xyz_to_dsquare(const V360Context *s,
 }
 
 /**
+ * Calculate 3D coordinates on sphere for corresponding frame position in dual stretch fisheye format.
+ *
+ * @param s filter private context
+ * @param i horizontal position on frame [0, width)
+ * @param j vertical position on frame [0, height)
+ * @param width frame width
+ * @param height frame height
+ * @param vec coordinates on sphere
+ */
+static int dstretch_to_xyz(const V360Context *s,
+                           int i, int j, int width, int height,
+                           float *vec)
+{
+    const float ew = width * 0.5f;
+    const float eh = height;
+
+    const int ei = i >= ew ? i - ew : i;
+    const float m = i >= ew ? 1.f : -1.f;
+    const float ouf = rescale(ei, ew);
+    const float ovf = rescale(j,  eh);
+    const float h = hypotf(ouf, ovf);
+    const float mx = fmaxf(fabsf(ouf), fabsf(ovf));
+    const float nuf = ouf * mx / h;
+    const float nvf = ovf * mx / h;
+
+    const float phi   = atan2f(nvf, nuf);
+    const float theta = M_PI_2 * (1.f - hypotf(nuf, nvf));
+
+    const float sin_phi   = sinf(phi);
+    const float cos_phi   = cosf(phi);
+    const float sin_theta = sinf(theta);
+    const float cos_theta = cosf(theta);
+
+    vec[0] = cos_theta * cos_phi * m;
+    vec[1] = cos_theta * sin_phi;
+    vec[2] = sin_theta * m;
+
+    return 1;
+}
+
+/**
+ * Calculate frame position in dual stretch format for corresponding 3D coordinates on sphere.
+ *
+ * @param s filter private context
+ * @param vec coordinates on sphere
+ * @param width frame width
+ * @param height frame height
+ * @param us horizontal coordinates for interpolation window
+ * @param vs vertical coordinates for interpolation window
+ * @param du horizontal relative coordinate
+ * @param dv vertical relative coordinate
+ */
+static int xyz_to_dstretch(const V360Context *s,
+                           const float *vec, int width, int height,
+                           int16_t us[4][4], int16_t vs[4][4], float *du, float *dv)
+{
+    const float ew = width * 0.5f;
+    const float eh = height;
+
+    const float h     = hypotf(vec[0], vec[1]);
+    const float lh    = h > 0.f ? h : 1.f;
+    const float theta = acosf(fabsf(vec[2])) / M_PI;
+
+    float ouf = theta * (vec[0] / lh) / s->iflat_range[0];
+    float ovf = theta * (vec[1] / lh) / s->iflat_range[1];
+    const float hh = hypotf(ouf, ovf);
+    const float mx = fmaxf(fabsf(ouf), fabsf(ovf));
+    const float nuf = ouf * hh / mx;
+    const float nvf = ovf * hh / mx;
+
+    float uf = scale(nuf, ew);
+    float vf = scale(nvf, eh);
+
+    int ui, vi;
+    int u_shift;
+
+    if (vec[2] >= 0.f) {
+        u_shift = ceilf(ew);
+    } else {
+        u_shift = 0;
+        uf = ew - uf - 1.f;
+    }
+
+    ui = floorf(uf);
+    vi = floorf(vf);
+
+    *du = uf - ui;
+    *dv = vf - vi;
+
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            us[i][j] = u_shift + av_clip(ui + j - 1, 0, ew - 1);
+            vs[i][j] = av_clip(          vi + i - 1, 0, height - 1);
+        }
+    }
+
+    return 1;
+}
+
+/**
  * Calculate 3D coordinates on sphere for corresponding frame position in barrel facebook's format.
  *
  * @param s filter private context
@@ -4303,6 +4405,7 @@ static void fov_from_dfov(int format, float d_fov, float w, float h, float *h_fo
             *v_fov = 2.f * atan2f(h * 0.5f, l) * 360.f / M_PI;
         }
         break;
+    case DUAL_STRETCH:
     case DUAL_SQUARE:
         {
             *h_fov = d_fov;
@@ -4564,6 +4667,7 @@ static int config_output(AVFilterLink *outlink)
     case ORTHOGRAPHIC:
     case STEREOGRAPHIC:
     case DUAL_FISHEYE:
+    case DUAL_STRETCH:
     case DUAL_SQUARE:
     case FISHEYE:
         default_ih_fov = 180.f;
@@ -4633,6 +4737,12 @@ static int config_output(AVFilterLink *outlink)
     case DUAL_SQUARE:
         s->in_transform = xyz_to_dsquare;
         err = prepare_dsquare_in(ctx);
+        wf = w;
+        hf = h;
+        break;
+    case DUAL_STRETCH:
+        s->in_transform = xyz_to_dstretch;
+        err = prepare_dfisheye_in(ctx);
         wf = w;
         hf = h;
         break;
@@ -4796,6 +4906,12 @@ static int config_output(AVFilterLink *outlink)
         w = lrintf(wf);
         h = lrintf(hf);
         break;
+    case DUAL_STRETCH:
+        s->out_transform = dstretch_to_xyz;
+        prepare_out = prepare_fisheye_out;
+        w = lrintf(wf);
+        h = lrintf(hf);
+        break;
     case BARREL:
         s->out_transform = barrel_to_xyz;
         prepare_out = NULL;
@@ -4945,6 +5061,7 @@ static int config_output(AVFilterLink *outlink)
     case ORTHOGRAPHIC:
     case STEREOGRAPHIC:
     case DUAL_FISHEYE:
+    case DUAL_STRETCH:
     case DUAL_SQUARE:
     case FISHEYE:
         default_h_fov = 180.f;
