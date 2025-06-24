@@ -393,6 +393,8 @@ static int lavfi_read_packet(AVFormatContext *avctx, AVPacket *pkt)
             ff_dlog(avctx, "EOF sink_idx:%d\n", i);
             lavfi->sink_eof[i] = 1;
             continue;
+        } else if (ret == AVERROR(EAGAIN)) {
+            continue;
         } else if (ret < 0)
             goto fail;
         d = av_rescale_q_rnd(frame->pts, tb, AV_TIME_BASE_Q, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
