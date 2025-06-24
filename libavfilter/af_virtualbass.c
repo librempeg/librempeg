@@ -35,7 +35,7 @@ typedef struct AudioVirtualBassContext {
 
     double a[3], m[3], cf[2];
 
-    void (*vb_stereo)(AVFilterContext *ctx, AVFrame *out, AVFrame *in);
+    void (*vb_stereo)(AVFilterContext *ctx, AVFrame *out, const AVFrame *in);
 } AudioVirtualBassContext;
 
 #define OFFSET(x) offsetof(AudioVirtualBassContext, x)

@@ -50,7 +50,7 @@ static ftype fn(vb_fun)(ftype x)
     return y < F(0.0) ? FSIN(y) : y;
 }
 
-static void fn(vb_stereo)(AVFilterContext *ctx, AVFrame *out, AVFrame *in)
+static void fn(vb_stereo)(AVFilterContext *ctx, AVFrame *out, const AVFrame *in)
 {
     AudioVirtualBassContext *s = ctx->priv;
     const ftype *lsrc = (const ftype *)in->extended_data[0];
