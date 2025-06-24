@@ -723,8 +723,8 @@ static void free_iplane(IPlane *imp)
     av_freep(&imp->img);
 }
 
-static int read_iplane(IPlane *imp, const uint8_t *dst, int dst_linesize,
-                       int w, int h, int R, int type_size, int depth)
+static int read_iplane(IPlane *imp, const uint8_t *dst, const ptrdiff_t dst_linesize,
+                       const int w, const int h, const int R, const int type_size, const int depth)
 {
     if (!imp->img)
         imp->img = av_calloc(h, sizeof(*imp->img));
@@ -932,13 +932,13 @@ static int do_morpho(FFFrameSync *fs)
 
     for (int p = 0; p < s->nb_planes; p++) {
         const uint8_t *ssrc = structurepic->data[p];
-        const int ssrc_linesize = structurepic->linesize[p];
+        const ptrdiff_t ssrc_linesize = structurepic->linesize[p];
         const int swidth = s->splanewidth[p];
         const int sheight = s->splaneheight[p];
         const uint8_t *src = in->data[p];
-        int src_linesize = in->linesize[p];
+        const ptrdiff_t src_linesize = in->linesize[p];
         uint8_t *dst = out->data[p];
-        int dst_linesize = out->linesize[p];
+        const ptrdiff_t dst_linesize = out->linesize[p];
         const int width = s->planewidth[p];
         const int height = s->planeheight[p];
         const int depth = s->depth;
