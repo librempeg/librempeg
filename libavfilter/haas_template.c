@@ -51,7 +51,7 @@ static int fn(do_update)(AVFilterContext *ctx)
     return 0;
 }
 
-static void fn(do_haas)(AVFilterContext *ctx, AVFrame *out, AVFrame *in)
+static void fn(do_haas)(AVFilterContext *ctx, AVFrame *out, const AVFrame *in)
 {
     HaasContext *s = ctx->priv;
     const ftype *srcl = (const ftype *)in->extended_data[0];

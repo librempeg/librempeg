@@ -49,7 +49,7 @@ typedef struct HaasContext {
     double balance_r[2];
     double phase[2];
 
-    void (*do_haas)(AVFilterContext *ctx, AVFrame *out, AVFrame *in);
+    void (*do_haas)(AVFilterContext *ctx, AVFrame *out, const AVFrame *in);
     int (*do_update)(AVFilterContext *ctx);
 } HaasContext;
 
