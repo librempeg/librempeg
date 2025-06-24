@@ -49,7 +49,8 @@ static int fn(init_state)(AVFilterContext *ctx)
     const double offset = 1. - s->depth * 0.5;
     fn(StateContext) *stc;
 
-    s->st = av_calloc(s->nb_channels, sizeof(*stc));
+    if (!s->st)
+        s->st = av_calloc(s->nb_channels, sizeof(*stc));
     if (!s->st)
         return AVERROR(ENOMEM);
 
