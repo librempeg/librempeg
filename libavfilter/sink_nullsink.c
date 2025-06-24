@@ -49,6 +49,8 @@ static int activate(AVFilterContext *ctx)
 
     if (s->eof)
         return AVERROR_EOF;
+    else
+        ff_inlink_request_frame(inlink);
     return 0;
 }
 
