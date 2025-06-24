@@ -75,7 +75,7 @@ static ftype fn(saturate)(const ftype sample, const ftype bias)
     return satOdd + bias * (satEven - satOdd);
 }
 
-static void fn(hb_stereo)(AVFilterContext *ctx, AVFrame *out, AVFrame *in)
+static void fn(hb_stereo)(AVFilterContext *ctx, AVFrame *out, const AVFrame *in)
 {
     AudioHarmonicBassContext *s = ctx->priv;
     const ftype *lsrc = (const ftype *)in->extended_data[0];

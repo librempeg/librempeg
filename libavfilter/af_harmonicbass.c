@@ -42,7 +42,7 @@ typedef struct AudioHarmonicBassContext {
     double sa[3], sm[3], scf[2];
     double ha[3], hm[3], hcf[2];
 
-    void (*hb_stereo)(AVFilterContext *ctx, AVFrame *out, AVFrame *in);
+    void (*hb_stereo)(AVFilterContext *ctx, AVFrame *out, const AVFrame *in);
     int (*hb_update)(AVFilterContext *ctx);
 } AudioHarmonicBassContext;
 
