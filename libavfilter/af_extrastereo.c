@@ -29,7 +29,7 @@ typedef struct ExtraStereoContext {
     const AVClass *class;
     float mult;
     int clip;
-    void (*do_extrastereo)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int clip);
+    void (*do_extrastereo)(AVFilterContext *ctx, AVFrame *out, const AVFrame *in, const int clip);
 } ExtraStereoContext;
 
 #define OFFSET(x) offsetof(ExtraStereoContext, x)
@@ -113,7 +113,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
 
-    s->do_extrastereo(ctx, in, out, s->clip);
+    s->do_extrastereo(ctx, out, in, s->clip);
 
     if (out != in)
         av_frame_free(&in);

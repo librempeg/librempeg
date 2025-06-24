@@ -35,7 +35,7 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
-static void fn(extrastereo)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int clip)
+static void fn(extrastereo)(AVFilterContext *ctx, AVFrame *out, const AVFrame *in, const int clip)
 {
     ExtraStereoContext *s = ctx->priv;
     const ftype *src = (const ftype *)in->data[0];
