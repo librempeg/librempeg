@@ -32,7 +32,7 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
-static void fn(stereowiden)(AVFilterContext *ctx, AVFrame *in, AVFrame *out)
+static void fn(stereowiden)(AVFilterContext *ctx, AVFrame *out, const AVFrame *in)
 {
     StereoWidenContext *s = ctx->priv;
     const ftype *src = (const ftype *)in->data[0];

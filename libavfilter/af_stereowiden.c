@@ -39,7 +39,7 @@ typedef struct StereoWidenContext {
     int idx;
     int length;
 
-    void (*do_widen)(AVFilterContext *ctx, AVFrame *in, AVFrame *out);
+    void (*do_widen)(AVFilterContext *ctx, AVFrame *out, const AVFrame *in);
 } StereoWidenContext;
 
 #define OFFSET(x) offsetof(StereoWidenContext, x)
@@ -132,7 +132,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
 
-    s->do_widen(ctx, in, out);
+    s->do_widen(ctx, out, in);
 
     if (out != in)
         av_frame_free(&in);
