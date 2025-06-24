@@ -447,15 +447,21 @@ static int activate(AVFilterContext *ctx)
     if (ret > 0) {
         select_frame(ctx, in);
         if (select->select && select->select_out >= 0 &&
-            (ff_outlink_get_status(ctx->outputs[select->select_out]) == 0))
-            ff_filter_frame(ctx->outputs[select->select_out], in);
-        else
+            (ff_outlink_get_status(ctx->outputs[select->select_out]) == 0)) {
+            return ff_filter_frame(ctx->outputs[select->select_out], in);
+        } else {
             av_frame_free(&in);
+            ff_filter_set_ready(ctx, 100);
+            return 0;
+        }
     }
 
     if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
-        for (int i = 0; i < ctx->nb_outputs; i++)
+        for (int i = 0; i < ctx->nb_outputs; i++) {
+            if (ff_outlink_get_status(ctx->outputs[i]))
+                continue;
             ff_outlink_set_status(ctx->outputs[i], status, pts);
+        }
         return 0;
     }
 
@@ -463,9 +469,10 @@ static int activate(AVFilterContext *ctx)
         if (ff_outlink_get_status(ctx->outputs[i]))
             continue;
 
-        if (ff_outlink_frame_wanted(ctx->outputs[i]))
+        if (ff_outlink_frame_wanted(ctx->outputs[i])) {
             ff_inlink_request_frame(inlink);
-        return 0;
+            return 0;
+        }
     }
 
     return FFERROR_NOT_READY;
