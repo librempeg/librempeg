@@ -107,14 +107,14 @@ static int get_frame_internal(AVFilterContext *ctx, AVFrame *frame, int flags, i
         } else if (ret) {
             /* TODO return the frame instead of copying it */
             return return_or_keep_frame(buf, frame, cur_frame, flags);
-        } else if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
-            return status;
-        } else if ((flags & AV_BUFFERSINK_FLAG_NO_REQUEST)) {
-            return AVERROR(EAGAIN);
         } else if (li->frame_wanted_out) {
             ret = ff_filter_graph_run_once(ctx->graph);
             if (ret < 0)
                 return ret;
+        } else if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+            return status;
+        } else if ((flags & AV_BUFFERSINK_FLAG_NO_REQUEST)) {
+            return AVERROR(EAGAIN);
         } else {
             ff_inlink_request_frame(inlink);
         }
