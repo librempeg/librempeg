@@ -51,8 +51,6 @@ typedef struct FilterGraphPriv {
     // true when the filtergraph contains only meta filters
     // that do not modify the frame data
     int              is_meta;
-    // source filters are present in the graph
-    int              have_sources;
     int              disable_conversions;
 
     unsigned         nb_outputs_done;
@@ -1152,15 +1150,6 @@ int fg_create(FilterGraph **pfg, char *graph_desc, Scheduler *sch)
                       hw_device_for_filter());
     if (ret < 0)
         goto fail;
-
-    for (unsigned i = 0; i < graph->nb_filters; i++) {
-        const AVFilter *f = graph->filters[i]->filter;
-        if (!avfilter_filter_pad_count(f, 0) &&
-            !(f->flags & AVFILTER_FLAG_DYNAMIC_INPUTS)) {
-            fgp->have_sources = 1;
-            break;
-        }
-    }
 
     for (AVFilterInOut *cur = inputs; cur; cur = cur->next) {
         InputFilter *const ifilter = ifilter_alloc(fg);
@@ -2629,7 +2618,6 @@ static int read_frames(FilterGraph *fg, FilterGraphThread *fgt,
                        AVFrame *frame)
 {
     FilterGraphPriv *fgp = fgp_from_fg(fg);
-    int did_step = 0;
 
     // graph not configured, just select the input to request
     if (!fgt->graph) {
@@ -2648,8 +2636,20 @@ static int read_frames(FilterGraph *fg, FilterGraphThread *fgt,
         return AVERROR_BUG;
     }
 
-    while (fgp->nb_outputs_done < fg->nb_outputs) {
+    if (fgp->nb_outputs_done < fg->nb_outputs) {
         int ret;
+
+        /* Reap all buffers present in the buffer sinks */
+        for (int i = 0; i < fg->nb_outputs; i++) {
+            OutputFilterPriv *ofp = ofp_from_ofilter(fg->outputs[i]);
+
+            ret = 0;
+            while (!ret) {
+                ret = fg_output_step(ofp, fgt, frame);
+                if (ret < 0)
+                    return ret;
+            }
+        }
 
         ret = avfilter_graph_request_oldest(fgt->graph);
         if (ret == AVERROR(EAGAIN)) {
@@ -2666,22 +2666,8 @@ static int read_frames(FilterGraph *fg, FilterGraphThread *fgt,
         }
         fgt->next_in = fg->nb_inputs;
 
-        // return after one iteration, so that scheduler can rate-control us
-        if (did_step && fgp->have_sources)
-            return 0;
-
-        /* Reap all buffers present in the buffer sinks */
-        for (int i = 0; i < fg->nb_outputs; i++) {
-            OutputFilterPriv *ofp = ofp_from_ofilter(fg->outputs[i]);
-
-            ret = 0;
-            while (!ret) {
-                ret = fg_output_step(ofp, fgt, frame);
-                if (ret < 0)
-                    return ret;
-            }
-        }
-        did_step = 1;
+        // return so that scheduler can rate-control us
+        return 0;
     }
 
     return AVERROR_EOF;
