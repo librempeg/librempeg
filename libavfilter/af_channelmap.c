@@ -107,20 +107,15 @@ static const char* split(const char *message, char delim)
 static int get_channel_idx(const char **map, int *ch, char delim)
 {
     const char *next;
-    int len;
-    int n = 0;
     if (!*map)
         return AVERROR(EINVAL);
     next = split(*map, delim);
     if (!next && delim == '-')
         return AVERROR(EINVAL);
-    len = strlen(*map);
-    sscanf(*map, "%d%n", ch, &n);
-    if (n != len)
-        return AVERROR(EINVAL);
+    *ch = atoi(*map);
     if (*ch < 0)
         return AVERROR(EINVAL);
-    *map = next;
+    *map = next ? next+1 : next;
     return 0;
 }
 
