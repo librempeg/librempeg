@@ -490,7 +490,6 @@ extern const FFCodec ff_ealayer3multi_decoder;
 extern const FFCodec ff_ealayer3multifloat_decoder;
 extern const FFCodec ff_evrc_decoder;
 extern const FFCodec ff_fastaudio_decoder;
-extern const FFCodec ff_ffwavesynth_decoder;
 extern const FFCodec ff_flac_encoder;
 extern const FFCodec ff_flac_decoder;
 extern const FFCodec ff_ftr_decoder;
