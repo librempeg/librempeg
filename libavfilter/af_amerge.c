@@ -112,7 +112,8 @@ static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AMergeContext *s = ctx->priv;
-    int nb_ch = 0, out_idx = 0;
+    uint8_t *used_ch;
+    int nb_ch = 0;
 
     s->bps = av_get_bytes_per_sample(outlink->format);
     outlink->time_base  = ctx->inputs[0]->time_base;
@@ -124,9 +125,14 @@ static int config_output(AVFilterLink *outlink)
         nb_ch += ii->in;
     }
 
+    used_ch = av_calloc(nb_ch, sizeof(*used_ch));
     s->route = av_calloc(nb_ch, sizeof(*s->route));
-    if (!s->route)
+    if (!s->route || !used_ch) {
+        av_freep(&used_ch);
         return AVERROR(ENOMEM);
+    }
+    for (int n = 0; n < nb_ch; n++)
+        s->route[n] = -1;
 
     for (int i = 0, j = 0; i < s->nb_inputs; i++) {
         InputItem *ii = &s->ii[i];
@@ -138,18 +144,27 @@ static int config_output(AVFilterLink *outlink)
             if (chan != AV_CHAN_NONE) {
                 int idx = av_channel_layout_index_from_channel(&ctx->outputs[0]->ch_layout, chan);
 
-                if (idx >= 0)
+                if (idx >= 0 && s->route[j] < 0 && !used_ch[idx]) {
                     s->route[j] = idx;
-            } else {
-                s->route[j] = out_idx++;
-            }
-
-            for (int n = j-1; n >= 0; n--) {
-                if (s->route[n] == s->route[j])
-                    s->route[n] = (s->route[n] + 1) % nb_ch;
+                    used_ch[idx] = 1;
+                }
             }
         }
     }
+
+    for (int k = 0; k < nb_ch; k++) {
+        if (s->route[k] < 0) {
+            for (int i = 0; i < nb_ch; i++) {
+                if (!used_ch[i]) {
+                    s->route[k] = i;
+                    used_ch[i] = 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    av_freep(&used_ch);
 
     return 0;
 }
