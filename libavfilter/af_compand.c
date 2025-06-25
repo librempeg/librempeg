@@ -60,11 +60,11 @@ typedef struct CompandContext {
     double curve_dB;
     double gain_dB;
     double delay;
-    AVFrame *delay_frame, *in, *sc;
+    AVFrame *delay_frame, *in_frame, *sort_frame, *in, *sc;
     int delay_samples;
     int64_t pts;
 
-    int (*prepare)(AVFilterContext *ctx, AVFilterLink *outlink);
+    int (*prepare)(AVFilterContext *ctx, AVFilterLink *outlink, const int reset);
     int (*compand)(AVFilterContext *ctx);
     int (*compand_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
     int (*delay_count)(AVFilterContext *ctx);
@@ -119,6 +119,8 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->segments);
     av_frame_free(&s->in);
     av_frame_free(&s->sc);
+    av_frame_free(&s->in_frame);
+    av_frame_free(&s->sort_frame);
     av_frame_free(&s->delay_frame);
 }
 
@@ -238,7 +240,6 @@ static int config_output(AVFilterLink *outlink)
     CompandContext *s     = ctx->priv;
     const int sample_rate = outlink->sample_rate;
     const int channels    = outlink->ch_layout.nb_channels;
-    int ret;
 
     if (s->nb_attacks > channels || s->nb_decays > channels)
         av_log(ctx, AV_LOG_WARNING,
@@ -259,10 +260,6 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR_BUG;
     }
 
-    ret = s->prepare(ctx, outlink);
-    if (ret < 0)
-        return ret;
-
     s->delay_samples = lrint(s->delay * sample_rate);
     if (s->delay_samples <= 0) {
         s->compand = compand_nodelay;
@@ -279,8 +276,10 @@ static int config_output(AVFilterLink *outlink)
             return AVERROR_BUG;
         }
     } else {
+        s->in_frame = ff_get_audio_buffer(outlink, s->delay_samples);
+        s->sort_frame = ff_get_audio_buffer(outlink, s->delay_samples);
         s->delay_frame = ff_get_audio_buffer(outlink, s->delay_samples);
-        if (!s->delay_frame)
+        if (!s->in_frame || !s->delay_frame || !s->sort_frame)
             return AVERROR(ENOMEM);
 
         s->compand = compand_delay;
@@ -300,7 +299,7 @@ static int config_output(AVFilterLink *outlink)
         }
     }
 
-    return 0;
+    return s->prepare(ctx, outlink, 1);
 }
 
 static int activate(AVFilterContext *ctx)
@@ -363,7 +362,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     if (ret < 0)
         return ret;
 
-    return s->prepare(ctx, ctx->outputs[0]);
+    return s->prepare(ctx, ctx->outputs[0], 0);
 }
 
 static const AVFilterPad compand_outputs[] = {
