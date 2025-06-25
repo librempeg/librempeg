@@ -33,14 +33,19 @@
 #include "audio.h"
 #include "formats.h"
 
+typedef struct InputItem {
+    int in;
+    uint8_t *ins;
+    AVFrame *inbuf;
+} InputItem;
+
 typedef struct AMergeContext {
     const AVClass *class;
     int nb_inputs;
     int *route; /**< channels routing, see copy_samples */
     int bps;
-    int *in;
-    uint8_t **ins;
-    AVFrame **inbuf;
+
+    InputItem *ii;
 } AMergeContext;
 
 #define OFFSET(x) offsetof(AMergeContext, x)
@@ -58,9 +63,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     AMergeContext *s = ctx->priv;
 
-    av_freep(&s->in);
-    av_freep(&s->ins);
-    av_freep(&s->inbuf);
+    av_freep(&s->ii);
     av_freep(&s->route);
 }
 
@@ -115,8 +118,10 @@ static int config_output(AVFilterLink *outlink)
     outlink->time_base  = ctx->inputs[0]->time_base;
 
     for (int i = 0; i < s->nb_inputs; i++) {
-        s->in[i] = ctx->inputs[i]->ch_layout.nb_channels;
-        nb_ch += s->in[i];
+        InputItem *ii = &s->ii[i];
+
+        ii->in = ctx->inputs[i]->ch_layout.nb_channels;
+        nb_ch += ii->in;
     }
 
     s->route = av_calloc(nb_ch, sizeof(*s->route));
@@ -124,7 +129,8 @@ static int config_output(AVFilterLink *outlink)
         return AVERROR(ENOMEM);
 
     for (int i = 0, j = 0; i < s->nb_inputs; i++) {
-        const int input_nb_ch = s->in[i];
+        InputItem *ii = &s->ii[i];
+        const int input_nb_ch = ii->in;
 
         for (int c = 0; c < input_nb_ch; c++, j++) {
             int chan = av_channel_layout_channel_from_index(&ctx->inputs[i]->ch_layout, c);
@@ -151,10 +157,8 @@ static int config_output(AVFilterLink *outlink)
 /**
  * Copy samples from several input streams to one output stream.
  * @param nb_inputs number of inputs
- * @param in        inputs
  * @param route     routing values;
- * @param ins       pointer to the samples of each inputs, in packed format;
- *                  will be left at the end of the copied samples
+ * @param ii        InputItem pointer
  * @param outs      pointer to the samples of the output, in packet format;
  *                  must point to a buffer big enough;
  *                  will be left at the end of the copied samples
@@ -162,16 +166,16 @@ static int config_output(AVFilterLink *outlink)
  * @param nb_ch     number of output channels
  * @param bps       bytes per sample
  */
-static inline void copy_samples(int nb_inputs, int in[],
-                                const int *route, uint8_t *ins[],
+static inline void copy_samples(int nb_inputs,
+                                const int *route, InputItem *ii,
                                 uint8_t **outs, int ns, int bps,
                                 const int nb_ch)
 {
     for (int n = 0; n < ns; n++) {
         for (int i = 0, j = 0; i < nb_inputs; i++) {
-            for (int c = 0; c < in[i]; c++, j++) {
-                memcpy(outs[0] + bps * route[j], ins[i], bps);
-                ins[i] += bps;
+            for (int c = 0; c < ii[i].in; c++, j++) {
+                memcpy(outs[0] + bps * route[j], ii[i].ins, bps);
+                ii[i].ins += bps;
             }
         }
 
@@ -179,10 +183,10 @@ static inline void copy_samples(int nb_inputs, int in[],
     }
 }
 
-static void free_frames(int nb_inputs, AVFrame **input_frames)
+static void free_frames(int nb_inputs, InputItem *ii)
 {
     for (int i = 0; i < nb_inputs; i++)
-        av_frame_free(&input_frames[i]);
+        av_frame_free(&ii[i].inbuf);
 }
 
 static int try_push_frame(AVFilterContext *ctx, int nb_samples)
@@ -190,27 +194,27 @@ static int try_push_frame(AVFilterContext *ctx, int nb_samples)
     AMergeContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     const int nb_ch = outlink->ch_layout.nb_channels;
-    AVFrame *outbuf, **inbuf = s->inbuf;
-    uint8_t *outs, **ins = s->ins;
+    AVFrame *outbuf;
+    uint8_t *outs;
     int ret;
 
     for (int i = 0; i < ctx->nb_inputs; i++) {
-        ret = ff_inlink_consume_samples(ctx->inputs[i], nb_samples, nb_samples, &inbuf[i]);
+        ret = ff_inlink_consume_samples(ctx->inputs[i], nb_samples, nb_samples, &s->ii[i].inbuf);
         if (ret < 0) {
-            free_frames(i, inbuf);
+            free_frames(i, s->ii);
             return ret;
         }
-        ins[i] = inbuf[i]->data[0];
+        s->ii[i].ins = s->ii[i].inbuf->data[0];
     }
 
     outbuf = ff_get_audio_buffer(outlink, nb_samples);
     if (!outbuf) {
-        free_frames(s->nb_inputs, inbuf);
+        free_frames(s->nb_inputs, s->ii);
         return AVERROR(ENOMEM);
     }
 
     outs = outbuf->data[0];
-    outbuf->pts = inbuf[0]->pts;
+    outbuf->pts = s->ii[0].inbuf->pts;
 
     outbuf->nb_samples     = nb_samples;
     outbuf->duration = av_rescale_q(outbuf->nb_samples,
@@ -218,7 +222,7 @@ static int try_push_frame(AVFilterContext *ctx, int nb_samples)
                                     outlink->time_base);
 
     if ((ret = av_channel_layout_copy(&outbuf->ch_layout, &outlink->ch_layout)) < 0) {
-        free_frames(s->nb_inputs, inbuf);
+        free_frames(s->nb_inputs, s->ii);
         av_frame_free(&outbuf);
         return ret;
     }
@@ -226,9 +230,9 @@ static int try_push_frame(AVFilterContext *ctx, int nb_samples)
     while (nb_samples) {
         if (av_sample_fmt_is_planar(outlink->format)) {
             for (int i = 0, j = 0; i < s->nb_inputs; i++) {
-                for (int c = 0; c < s->in[i]; c++, j++)
+                for (int c = 0; c < s->ii[i].in; c++, j++)
                     memcpy(outbuf->extended_data[s->route[j]],
-                           inbuf[i]->extended_data[c], s->bps * nb_samples);
+                           s->ii[i].inbuf->extended_data[c], s->bps * nb_samples);
             }
 
             break;
@@ -238,23 +242,23 @@ static int try_push_frame(AVFilterContext *ctx, int nb_samples)
            +~13% overall (including two common decoders) */
         switch (s->bps) {
         case 1:
-            copy_samples(s->nb_inputs, s->in, s->route, ins, &outs, nb_samples, 1, nb_ch);
+            copy_samples(s->nb_inputs, s->route, s->ii, &outs, nb_samples, 1, nb_ch);
             break;
         case 2:
-            copy_samples(s->nb_inputs, s->in, s->route, ins, &outs, nb_samples, 2, nb_ch);
+            copy_samples(s->nb_inputs, s->route, s->ii, &outs, nb_samples, 2, nb_ch);
             break;
         case 4:
-            copy_samples(s->nb_inputs, s->in, s->route, ins, &outs, nb_samples, 4, nb_ch);
+            copy_samples(s->nb_inputs, s->route, s->ii, &outs, nb_samples, 4, nb_ch);
             break;
         default:
-            copy_samples(s->nb_inputs, s->in, s->route, ins, &outs, nb_samples, s->bps, nb_ch);
+            copy_samples(s->nb_inputs, s->route, s->ii, &outs, nb_samples, s->bps, nb_ch);
             break;
         }
 
         nb_samples = 0;
     }
 
-    free_frames(s->nb_inputs, inbuf);
+    free_frames(s->nb_inputs, s->ii);
     return ff_filter_frame(outlink, outbuf);
 }
 
@@ -295,10 +299,8 @@ static av_cold int init(AVFilterContext *ctx)
 {
     AMergeContext *s = ctx->priv;
 
-    s->in = av_calloc(s->nb_inputs, sizeof(*s->in));
-    s->ins = av_calloc(s->nb_inputs, sizeof(*s->ins));
-    s->inbuf = av_calloc(s->nb_inputs, sizeof(*s->inbuf));
-    if (!s->in || !s->ins || !s->inbuf)
+    s->ii = av_calloc(s->nb_inputs, sizeof(*s->ii));
+    if (!s->ii)
         return AVERROR(ENOMEM);
 
     for (int i = 0; i < s->nb_inputs; i++) {
