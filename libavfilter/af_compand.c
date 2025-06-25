@@ -338,11 +338,15 @@ static int activate(AVFilterContext *ctx)
     }
 
     if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
-        int ret = (s->delay_count(ctx) > 0) ? compand_drain(outlink) : 0;
+        while (s->delay_count(ctx) > 0) {
+            int ret = compand_drain(outlink);
+            if (ret < 0)
+                return ret;
+        }
 
         ff_outlink_set_status(outlink, status, pts);
 
-        return ret;
+        return 0;
     }
 
     FF_FILTER_FORWARD_WANTED(outlink, inlink);
