@@ -62,6 +62,7 @@ extern const FFCodec ff_avrn_decoder;
 extern const FFCodec ff_avs_decoder;
 extern const FFCodec ff_avui_encoder;
 extern const FFCodec ff_avui_decoder;
+extern const FFCodec ff_awebp_decoder;
 extern const FFCodec ff_bethsoftvid_decoder;
 extern const FFCodec ff_bfi_decoder;
 extern const FFCodec ff_bink_decoder;
