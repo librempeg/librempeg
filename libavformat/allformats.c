@@ -540,6 +540,7 @@ extern const FFOutputFormat ff_webm_muxer;
 extern const FFInputFormat  ff_webm_dash_manifest_demuxer;
 extern const FFOutputFormat ff_webm_dash_manifest_muxer;
 extern const FFOutputFormat ff_webm_chunk_muxer;
+extern const FFInputFormat  ff_webp_demuxer;
 extern const FFOutputFormat ff_webp_muxer;
 extern const FFInputFormat  ff_webvtt_demuxer;
 extern const FFOutputFormat ff_webvtt_muxer;
