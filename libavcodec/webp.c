@@ -1736,52 +1736,64 @@ static void blend_alpha_yuva(AWebPContext *s,
                              const uint8_t *src1_data[4], int src1_linesize[4],
                              int src1_format,
                              const uint8_t *src2_data[4], int src2_linesize[4],
-                             int src2_step[4],
+                             const int src2_step[4],
                              int width, int height, int pos_x, int pos_y)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(src1_format);
 
+    const int log2_chroma_w = desc->log2_chroma_w;
+    const int log2_chroma_h = desc->log2_chroma_h;
     int plane_y = desc->comp[0].plane;
     int plane_u = desc->comp[1].plane;
     int plane_v = desc->comp[2].plane;
     int plane_a = desc->comp[3].plane;
 
     // blend U & V planes first, because the later step may modify alpha plane
-    int w  = AV_CEIL_RSHIFT(width,  desc->log2_chroma_w);
-    int h  = AV_CEIL_RSHIFT(height, desc->log2_chroma_h);
-    int px = AV_CEIL_RSHIFT(pos_x,  desc->log2_chroma_w);
-    int py = AV_CEIL_RSHIFT(pos_y,  desc->log2_chroma_h);
-    int tile_w = 1 << desc->log2_chroma_w;
-    int tile_h = 1 << desc->log2_chroma_h;
+    int w  = AV_CEIL_RSHIFT(width,  log2_chroma_w);
+    int h  = AV_CEIL_RSHIFT(height, log2_chroma_h);
+    int px = AV_CEIL_RSHIFT(pos_x,  log2_chroma_w);
+    int py = AV_CEIL_RSHIFT(pos_y,  log2_chroma_h);
+    int tile_w = 1 << log2_chroma_w;
+    int tile_h = 1 << log2_chroma_h;
 
     for (int y = 0; y < h; y++) {
         const uint8_t *src1_u = src1_data[plane_u] + y * src1_linesize[plane_u];
         const uint8_t *src1_v = src1_data[plane_v] + y * src1_linesize[plane_v];
+        const uint8_t *src1_a = src1_data[plane_a];
         const uint8_t *src2_u = src2_data[plane_u] + (y + py) * src2_linesize[plane_u] + px * src2_step[plane_u];
         const uint8_t *src2_v = src2_data[plane_v] + (y + py) * src2_linesize[plane_v] + px * src2_step[plane_v];
+        const uint8_t *src2_a = src2_data[plane_a];
         uint8_t       *dest_u = dest_data[plane_u] + (y + py) * dest_linesize[plane_u] + px;
         uint8_t       *dest_v = dest_data[plane_v] + (y + py) * dest_linesize[plane_v] + px;
+        const int u_fill = s->transparent_yuva[plane_u];
+        const int v_fill = s->transparent_yuva[plane_v];
+        const int u2_step = src2_step[plane_u];
+        const int v2_step = src2_step[plane_v];
+        const int a2_step = src2_step[plane_a];
+        const ptrdiff_t src1_linesize_a = src1_linesize[plane_a];
+        const ptrdiff_t src2_linesize_a = src2_linesize[plane_a];
+
         for (int x = 0; x < w; x++) {
             // calculate the average alpha of the tile
             int src1_alpha = 0;
             int src2_alpha = 0;
             for (int yy = 0; yy < tile_h; yy++) {
                 for (int xx = 0; xx < tile_w; xx++) {
-                    src1_alpha += src1_data[plane_a][(y * tile_h + yy) * src1_linesize[plane_a] +
-                                                     (x * tile_w + xx)];
-                    src2_alpha += src2_data[plane_a][((y + py) * tile_h + yy) * src2_linesize[plane_a] +
-                                                     ((x + px) * tile_w + xx) * src2_step[plane_a]];
+                    src1_alpha += src1_a[(y * tile_h + yy) * src1_linesize_a +
+                                         (x * tile_w + xx)];
+                    src2_alpha += src2_a[((y + py) * tile_h + yy) * src2_linesize_a +
+                                         ((x + px) * tile_w + xx) * a2_step];
                 }
             }
-            src1_alpha = AV_CEIL_RSHIFT(src1_alpha, desc->log2_chroma_w + desc->log2_chroma_h);
-            src2_alpha = AV_CEIL_RSHIFT(src2_alpha, desc->log2_chroma_w + desc->log2_chroma_h);
+            src1_alpha = AV_CEIL_RSHIFT(src1_alpha, log2_chroma_w + log2_chroma_h);
+            src2_alpha = AV_CEIL_RSHIFT(src2_alpha, log2_chroma_w + log2_chroma_h);
 
             if (src1_alpha == 255) {
                 *dest_u = *src1_u;
                 *dest_v = *src1_v;
             } else if (src1_alpha + src2_alpha == 0) {
-                *dest_u = s->transparent_yuva[plane_u];
-                *dest_v = s->transparent_yuva[plane_v];
+                *dest_u = u_fill;
+                *dest_v = v_fill;
             } else {
                 int tmp_alpha = src2_alpha - ROUNDED_DIV(src1_alpha * src2_alpha, 255);
                 int blend_alpha = src1_alpha + tmp_alpha;
@@ -1790,8 +1802,8 @@ static void blend_alpha_yuva(AWebPContext *s,
             }
             src1_u++;
             src1_v++;
-            src2_u += src2_step[plane_u];
-            src2_v += src2_step[plane_v];
+            src2_u += u2_step;
+            src2_v += v2_step;
             dest_u++;
             dest_v++;
         }
@@ -1805,6 +1817,10 @@ static void blend_alpha_yuva(AWebPContext *s,
         const uint8_t *src2_a = src2_data[plane_a] + (y + pos_y) * src2_linesize[plane_a] + pos_x * src2_step[plane_a];
         uint8_t       *dest_y = dest_data[plane_y] + (y + pos_y) * dest_linesize[plane_y] + pos_x;
         uint8_t       *dest_a = dest_data[plane_a] + (y + pos_y) * dest_linesize[plane_a] + pos_x;
+        const int y_fill = s->transparent_yuva[plane_y];
+        const int y2_step = src2_step[plane_y];
+        const int a2_step = src2_step[plane_a];
+
         for (int x = 0; x < width; x++) {
             int src1_alpha = *src1_a;
             int src2_alpha = *src2_a;
@@ -1813,7 +1829,7 @@ static void blend_alpha_yuva(AWebPContext *s,
                 *dest_y = *src1_y;
                 *dest_a = 255;
             } else if (src1_alpha + src2_alpha == 0) {
-                *dest_y = s->transparent_yuva[plane_y];
+                *dest_y = y_fill;
                 *dest_a = 0;
             } else {
                 int tmp_alpha = src2_alpha - ROUNDED_DIV(src1_alpha * src2_alpha, 255);
@@ -1823,8 +1839,8 @@ static void blend_alpha_yuva(AWebPContext *s,
             }
             src1_y++;
             src1_a++;
-            src2_y += src2_step[plane_y];
-            src2_a += src2_step[plane_a];
+            src2_y += y2_step;
+            src2_a += a2_step;
             dest_y++;
             dest_a++;
         }
@@ -1869,6 +1885,7 @@ static void copy_yuva2argb(AWebPContext *s, AVFrame *dst, AVFrame *src,
 
     // if src ARGB: copy
     // else if src YUV(A) copy pixel per pixel:
+    const int log2_chroma_w = src_desc->log2_chroma_w;
     int alpha    = src_desc->nb_components > 3;
     int plane_y  = src_desc->comp[0].plane;
     int plane_u  = src_desc->comp[1].plane;
@@ -1883,12 +1900,13 @@ static void copy_yuva2argb(AWebPContext *s, AVFrame *dst, AVFrame *src,
         uint8_t *src_u = src->data[plane_u] + (ys) * src->linesize[plane_u];
         uint8_t *src_v = src->data[plane_v] + (ys) * src->linesize[plane_v];
         uint8_t *src_a = src->data[plane_a] + (y ) * src->linesize[plane_a];
+        const int width = src->width;
 
-        for (int x = 0; x < src->width; x++) {
+        for (int x = 0; x < width; x++) {
             webp_yuva2argb(dest, *src_y, *src_u, *src_v, (alpha ? (*src_a): 255));
             src_y += 1;
-            src_u += (src_desc->log2_chroma_w) ? (x&1) : 1;
-            src_v += (src_desc->log2_chroma_w) ? (x&1) : 1;
+            src_u += log2_chroma_w ? (x&1) : 1;
+            src_v += log2_chroma_w ? (x&1) : 1;
             src_a += 1;
             dest  += 4;
         }
@@ -1902,6 +1920,7 @@ static void blend_yuva2argb(AWebPContext *s, AVFrame *dst, AVFrame *src,
 
     // if src ARGB: copy
     // else if src YUV(A) copy pixel per pixel:
+    const int log2_chroma_w = src_desc->log2_chroma_w;
     int alpha    = src_desc->nb_components > 3;
     int plane_y  = src_desc->comp[0].plane;
     int plane_u  = src_desc->comp[1].plane;
@@ -1910,14 +1929,16 @@ static void blend_yuva2argb(AWebPContext *s, AVFrame *dst, AVFrame *src,
 
     // assert pos_y = src->height < dst_height
     for (int y = 0; y < src->height; y++) {
-        int ys = (src_desc->log2_chroma_h) ? (y >> 1) : y;
+        const int ys = (src_desc->log2_chroma_h) ? (y >> 1) : y;
         uint8_t *dest = dst->data[0] + (y + pos_y) * dst->linesize[0] + pos_x * 4;
         uint8_t *src_y = src->data[plane_y] + (y ) * src->linesize[plane_y];
         uint8_t *src_u = src->data[plane_u] + (ys) * src->linesize[plane_u];
         uint8_t *src_v = src->data[plane_v] + (ys) * src->linesize[plane_v];
         uint8_t *src_a = src->data[plane_a] + (y ) * src->linesize[plane_a];
+        const int width = src->width;
 
-        for (int x = 0; x < src->width; x++) {
+        for (int x = 0; x < width; x++) {
+            const int xs = log2_chroma_w ? (x&1) : 1;
             int dst_alpha = dest[0];
             int src_alpha = *src_a;
 
@@ -1939,8 +1960,8 @@ static void blend_yuva2argb(AWebPContext *s, AVFrame *dst, AVFrame *src,
             }
 
             src_y += 1;
-            src_u += (src_desc->log2_chroma_w) ? (x&1) : 1;
-            src_v += (src_desc->log2_chroma_w) ? (x&1) : 1;
+            src_u += xs;
+            src_v += xs;
             src_a += 1;
             dest  += 4;
         }
@@ -1954,6 +1975,7 @@ static void blend_argb2yuva(AWebPContext *s, AVFrame *dst, AVFrame *src,
 
     // if src ARGB: copy
     // else if src YUV(A) copy pixel per pixel:
+    const int log2_chroma_w = dst_desc->log2_chroma_w;
     int alpha    = dst_desc->nb_components > 3;
     int plane_y  = dst_desc->comp[0].plane;
     int plane_u  = dst_desc->comp[1].plane;
@@ -1964,14 +1986,16 @@ static void blend_argb2yuva(AWebPContext *s, AVFrame *dst, AVFrame *src,
     for (int y = 0; y < src->height; y++) {
         int ys     = (dst_desc->log2_chroma_h) ? (y     >> 1) : y;
         int pos_ys = (dst_desc->log2_chroma_h) ? (pos_y >> 1) : pos_y;
-        int pos_xs = (dst_desc->log2_chroma_w) ? (pos_x >> 1) : pos_x;
+        int pos_xs = log2_chroma_w ? (pos_x >> 1) : pos_x;
         uint8_t *dst_y = dst->data[plane_y] + (y  + pos_y)  * dst->linesize[plane_y] + pos_x;
         uint8_t *dst_u = dst->data[plane_u] + (ys + pos_ys) * dst->linesize[plane_u] + pos_xs;
         uint8_t *dst_v = dst->data[plane_v] + (ys + pos_ys) * dst->linesize[plane_v] + pos_xs;
         uint8_t *dst_a = dst->data[plane_a] + (y  + pos_y)  * dst->linesize[plane_a] + pos_x;
         uint8_t *srcp  = src->data[0]       + (y) * src->linesize[0];
+        const int width = src->width;
 
-        for (int x = 0; x < src->width; x++) {
+        for (int x = 0; x < width; x++) {
+            const int xs = log2_chroma_w ? (x&1) : 1;
             int dst_alpha = *dst_a; //dest[0];
             int src_alpha = srcp[0]; //*src_a;
 
@@ -1996,7 +2020,7 @@ static void blend_argb2yuva(AWebPContext *s, AVFrame *dst, AVFrame *src,
                 webp_argb2yuva(&tmp_y, &tmp_u, &tmp_v, &tmp_a, srcp, (alpha ? (src_alpha): 255));
 
                 *dst_a = blend_alpha;
-                if (((dst_desc->log2_chroma_w) ? (x&1) : 1)) {
+                if (xs) {
                     *dst_y = ROUNDED_DIV(tmp_y * src_alpha + (*dst_y) * tmp_alpha, blend_alpha);
                     *dst_u = ROUNDED_DIV(tmp_u * src_alpha + (*dst_u) * tmp_alpha, blend_alpha);
                 }
@@ -2004,8 +2028,8 @@ static void blend_argb2yuva(AWebPContext *s, AVFrame *dst, AVFrame *src,
             }
 
             dst_y += 1;
-            dst_u += (dst_desc->log2_chroma_w) ? (x&1) : 1;
-            dst_v += (dst_desc->log2_chroma_w) ? (x&1) : 1;
+            dst_u += xs;
+            dst_v += xs;
             dst_a += 1;
             srcp  += 4;
         }
