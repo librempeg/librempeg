@@ -37,6 +37,7 @@ typedef struct AWebPParseContext {
     ParseContext pc;
 
     uint32_t chunk_type, chunk_size;
+    int64_t pts, dts;
     int key_frame;
     int delay;
     int state;
@@ -90,14 +91,8 @@ static int awebp_find_frame_end(AVCodecParserContext *s, AVCodecContext *avctx,
 
                 if (w->index == 16) {
                     w->delay = av_bswap32(state & 0xffffff00);
-
-                    s->duration  = (w->delay > 0) ? w->delay : 100;
-                    s->pts = s->last_pts + s->duration;
-                    s->dts = s->last_dts + s->duration;
-                    s->key_frame = w->key_frame;
-                    s->pict_type = w->key_frame ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_P;
-                    w->key_frame = 0;
-                    w->delay = 0;
+                    w->pts = s->last_pts + s->duration;
+                    w->dts = s->last_dts + s->duration;
                 }
             }
             if (w->index >= w->size) {
@@ -120,6 +115,15 @@ static int awebp_find_frame_end(AVCodecParserContext *s, AVCodecContext *avctx,
                     if (w->first) {
                         next = index - 7;
                         w->index -= 8 - FFMAX(0, -next);
+
+                        s->duration  = (w->delay > 0) ? w->delay : 100;
+                        s->pts = w->pts;
+                        s->dts = w->dts;
+                        s->key_frame = w->key_frame;
+                        s->pict_type = w->key_frame ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_P;
+                        w->key_frame = 0;
+                        w->delay = 0;
+
                         break;
                     }
                     w->first = 1;
