@@ -2392,7 +2392,7 @@ exif_end:
             }
 
             /* background is stored as BGRA, we need ARGB in native endian */
-            AV_WN32(s->background_argb, av_bswap32(bytestream2_get_ne32u(&gb)));
+            AV_WN32(s->background_argb, bytestream2_get_be32(&gb));
             bytestream2_skip(&gb, 2); /* loop count is ignored */
             break;
         case MKTAG('A', 'N', 'M', 'F'):
