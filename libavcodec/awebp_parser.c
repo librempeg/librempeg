@@ -74,8 +74,10 @@ static int awebp_find_frame_end(AVCodecParserContext *s, AVCodecContext *avctx,
                 w->size = w->chunk_size;
                 w->state = AWEBP_SKIP_CHUNK;
 
-                if (w->chunk_type == MKBETAG('R','I','F','F'))
+                if (w->chunk_type == MKBETAG('R','I','F','F')) {
                     w->size = 4;
+                    w->first = 0;
+                }
             }
         } else if (w->state == AWEBP_SKIP_CHUNK) {
             if (w->chunk_type == MKBETAG('A','N','M','F')) {
