@@ -2410,7 +2410,7 @@ exif_end:
             s->pos_y  = bytestream2_get_le24(&gb) * 2;
             s->width  = bytestream2_get_le24(&gb) + 1;
             s->height = bytestream2_get_le24(&gb) + 1;
-            bytestream2_skip(&gb, 3);   /* duration */
+            p->duration = bytestream2_get_le24(&gb);
             s->anmf_flags = bytestream2_get_byte(&gb);
 
             if (s->width  + s->pos_x > s->canvas_width ||
@@ -2457,6 +2457,8 @@ exif_end:
                 if (ret < 0)
                     return ret;
             }
+
+            p->pts = avpkt->pts;
         }
     }
 
