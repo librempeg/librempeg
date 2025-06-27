@@ -1726,52 +1726,64 @@ static void blend_alpha_argb(uint8_t *dest_data[4], int dest_linesize[4],
     }
 }
 
-/*
- * Blend src1 (foreground) and src2 (background) into dest, in YUVA format.
- * width, height are the dimensions of src1
- * pos_x, pos_y is the position in src2 and in dest
- */
-static void blend_alpha_yuva(AWebPContext *s,
-                             uint8_t *dest_data[4], int dest_linesize[4],
-                             const uint8_t *src1_data[4], int src1_linesize[4],
-                             int src1_format,
-                             const uint8_t *src2_data[4], int src2_linesize[4],
-                             const int src2_step[4],
-                             int width, int height, int pos_x, int pos_y)
+typedef struct AWebPThreadData {
+    const uint8_t *src1_data[4];
+    int src1_linesize[4];
+    const uint8_t *src2_data[4];
+    int src2_linesize[4];
+    uint8_t *dest_data[4];
+    int dest_linesize[4];
+
+    int log2_chroma_w;
+    int log2_chroma_h;
+    int src2_step[4];
+
+    int plane_y;
+    int plane_u;
+    int plane_v;
+    int plane_a;
+    int w;
+    int h;
+    int px;
+    int py;
+    int tile_w;
+    int tile_h;
+    int pos_x;
+    int pos_y;
+    int width;
+} AWebPThreadData;
+
+static int blend_alpha_uv(AVCodecContext *avctx, void *tdata, int jobnr, int threadnr)
 {
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(src1_format);
+    AWebPContext *s = avctx->priv_data;
+    AWebPThreadData *td = tdata;
+    const int log2_chroma_w = td->log2_chroma_w;
+    const int log2_chroma_h = td->log2_chroma_h;
+    int plane_u = td->plane_u;
+    int plane_v = td->plane_v;
+    int plane_a = td->plane_a;
+    int w  = td->w;
+    int px = td->px;
+    int py = td->py;
+    int tile_w = td->tile_w;
+    int tile_h = td->tile_h;
 
-    const int log2_chroma_w = desc->log2_chroma_w;
-    const int log2_chroma_h = desc->log2_chroma_h;
-    int plane_y = desc->comp[0].plane;
-    int plane_u = desc->comp[1].plane;
-    int plane_v = desc->comp[2].plane;
-    int plane_a = desc->comp[3].plane;
-
-    // blend U & V planes first, because the later step may modify alpha plane
-    int w  = AV_CEIL_RSHIFT(width,  log2_chroma_w);
-    int h  = AV_CEIL_RSHIFT(height, log2_chroma_h);
-    int px = AV_CEIL_RSHIFT(pos_x,  log2_chroma_w);
-    int py = AV_CEIL_RSHIFT(pos_y,  log2_chroma_h);
-    int tile_w = 1 << log2_chroma_w;
-    int tile_h = 1 << log2_chroma_h;
-
-    for (int y = 0; y < h; y++) {
-        const uint8_t *src1_u = src1_data[plane_u] + y * src1_linesize[plane_u];
-        const uint8_t *src1_v = src1_data[plane_v] + y * src1_linesize[plane_v];
-        const uint8_t *src1_a = src1_data[plane_a];
-        const uint8_t *src2_u = src2_data[plane_u] + (y + py) * src2_linesize[plane_u] + px * src2_step[plane_u];
-        const uint8_t *src2_v = src2_data[plane_v] + (y + py) * src2_linesize[plane_v] + px * src2_step[plane_v];
-        const uint8_t *src2_a = src2_data[plane_a];
-        uint8_t       *dest_u = dest_data[plane_u] + (y + py) * dest_linesize[plane_u] + px;
-        uint8_t       *dest_v = dest_data[plane_v] + (y + py) * dest_linesize[plane_v] + px;
+    for (int y = jobnr; y < jobnr+1; y++) {
+        const uint8_t *src1_u = td->src1_data[plane_u] + y * td->src1_linesize[plane_u];
+        const uint8_t *src1_v = td->src1_data[plane_v] + y * td->src1_linesize[plane_v];
+        const uint8_t *src1_a = td->src1_data[plane_a];
+        const uint8_t *src2_u = td->src2_data[plane_u] + (y + py) * td->src2_linesize[plane_u] + px * td->src2_step[plane_u];
+        const uint8_t *src2_v = td->src2_data[plane_v] + (y + py) * td->src2_linesize[plane_v] + px * td->src2_step[plane_v];
+        const uint8_t *src2_a = td->src2_data[plane_a];
+        uint8_t       *dest_u = td->dest_data[plane_u] + (y + py) * td->dest_linesize[plane_u] + px;
+        uint8_t       *dest_v = td->dest_data[plane_v] + (y + py) * td->dest_linesize[plane_v] + px;
         const int u_fill = s->transparent_yuva[plane_u];
         const int v_fill = s->transparent_yuva[plane_v];
-        const int u2_step = src2_step[plane_u];
-        const int v2_step = src2_step[plane_v];
-        const int a2_step = src2_step[plane_a];
-        const ptrdiff_t src1_linesize_a = src1_linesize[plane_a];
-        const ptrdiff_t src2_linesize_a = src2_linesize[plane_a];
+        const int u2_step = td->src2_step[plane_u];
+        const int v2_step = td->src2_step[plane_v];
+        const int a2_step = td->src2_step[plane_a];
+        const ptrdiff_t src1_linesize_a = td->src1_linesize[plane_a];
+        const ptrdiff_t src2_linesize_a = td->src2_linesize[plane_a];
 
         for (int x = 0; x < w; x++) {
             // calculate the average alpha of the tile
@@ -1809,17 +1821,27 @@ static void blend_alpha_yuva(AWebPContext *s,
         }
     }
 
-    // blend Y & A planes
-    for (int y = 0; y < height; y++) {
-        const uint8_t *src1_y = src1_data[plane_y] + y * src1_linesize[plane_y];
-        const uint8_t *src1_a = src1_data[plane_a] + y * src1_linesize[plane_a];
-        const uint8_t *src2_y = src2_data[plane_y] + (y + pos_y) * src2_linesize[plane_y] + pos_x * src2_step[plane_y];
-        const uint8_t *src2_a = src2_data[plane_a] + (y + pos_y) * src2_linesize[plane_a] + pos_x * src2_step[plane_a];
-        uint8_t       *dest_y = dest_data[plane_y] + (y + pos_y) * dest_linesize[plane_y] + pos_x;
-        uint8_t       *dest_a = dest_data[plane_a] + (y + pos_y) * dest_linesize[plane_a] + pos_x;
+    return 0;
+}
+
+static int blend_alpha_ya(AVCodecContext *avctx, void *tdata, int jobnr, int threadnr)
+{
+    AWebPContext *s = avctx->priv_data;
+    AWebPThreadData *td = tdata;
+    const int width = td->width;
+    int plane_y = td->plane_y;
+    int plane_a = td->plane_a;
+
+    for (int y = jobnr; y < jobnr+1; y++) {
+        const uint8_t *src1_y = td->src1_data[plane_y] + y * td->src1_linesize[plane_y];
+        const uint8_t *src1_a = td->src1_data[plane_a] + y * td->src1_linesize[plane_a];
+        const uint8_t *src2_y = td->src2_data[plane_y] + (y + td->pos_y) * td->src2_linesize[plane_y] + td->pos_x * td->src2_step[plane_y];
+        const uint8_t *src2_a = td->src2_data[plane_a] + (y + td->pos_y) * td->src2_linesize[plane_a] + td->pos_x * td->src2_step[plane_a];
+        uint8_t       *dest_y = td->dest_data[plane_y] + (y + td->pos_y) * td->dest_linesize[plane_y] + td->pos_x;
+        uint8_t       *dest_a = td->dest_data[plane_a] + (y + td->pos_y) * td->dest_linesize[plane_a] + td->pos_x;
         const int y_fill = s->transparent_yuva[plane_y];
-        const int y2_step = src2_step[plane_y];
-        const int a2_step = src2_step[plane_a];
+        const int y2_step = td->src2_step[plane_y];
+        const int a2_step = td->src2_step[plane_a];
 
         for (int x = 0; x < width; x++) {
             int src1_alpha = *src1_a;
@@ -1845,6 +1867,73 @@ static void blend_alpha_yuva(AWebPContext *s,
             dest_a++;
         }
     }
+
+    return 0;
+}
+
+/*
+ * Blend src1 (foreground) and src2 (background) into dest, in YUVA format.
+ * width, height are the dimensions of src1
+ * pos_x, pos_y is the position in src2 and in dest
+ */
+static void blend_alpha_yuva(AWebPContext *s,
+                             uint8_t *dest_data[4], int dest_linesize[4],
+                             const uint8_t *src1_data[4], int src1_linesize[4],
+                             int src1_format,
+                             const uint8_t *src2_data[4], int src2_linesize[4],
+                             const int src2_step[4],
+                             int width, int height, int pos_x, int pos_y)
+{
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(src1_format);
+    AWebPThreadData td;
+
+    td.width = width;
+    td.pos_x = pos_x;
+    td.pos_y = pos_y;
+    td.src1_linesize[0] = src1_linesize[0];
+    td.src1_linesize[1] = src1_linesize[1];
+    td.src1_linesize[2] = src1_linesize[2];
+    td.src1_linesize[3] = src1_linesize[3];
+    td.src2_linesize[0] = src2_linesize[0];
+    td.src2_linesize[1] = src2_linesize[1];
+    td.src2_linesize[2] = src2_linesize[2];
+    td.src2_linesize[3] = src2_linesize[3];
+    td.dest_linesize[0] = dest_linesize[0];
+    td.dest_linesize[1] = dest_linesize[1];
+    td.dest_linesize[2] = dest_linesize[2];
+    td.dest_linesize[3] = dest_linesize[3];
+    td.src1_data[0] = src1_data[0];
+    td.src1_data[1] = src1_data[1];
+    td.src1_data[2] = src1_data[2];
+    td.src1_data[3] = src1_data[3];
+    td.src2_data[0] = src2_data[0];
+    td.src2_data[1] = src2_data[1];
+    td.src2_data[2] = src2_data[2];
+    td.src2_data[3] = src2_data[3];
+    td.dest_data[0] = dest_data[0];
+    td.dest_data[1] = dest_data[1];
+    td.dest_data[2] = dest_data[2];
+    td.dest_data[3] = dest_data[3];
+    td.src2_step[0] = src2_step[0];
+    td.src2_step[1] = src2_step[1];
+    td.src2_step[2] = src2_step[2];
+    td.src2_step[3] = src2_step[3];
+
+    td.log2_chroma_w = desc->log2_chroma_w;
+    td.log2_chroma_h = desc->log2_chroma_h;
+    td.plane_y = desc->comp[0].plane;
+    td.plane_u = desc->comp[1].plane;
+    td.plane_v = desc->comp[2].plane;
+    td.plane_a = desc->comp[3].plane;
+    td.w  = AV_CEIL_RSHIFT(width,  desc->log2_chroma_w);
+    td.h  = AV_CEIL_RSHIFT(height, desc->log2_chroma_h);
+    td.px = AV_CEIL_RSHIFT(pos_x,  desc->log2_chroma_w);
+    td.py = AV_CEIL_RSHIFT(pos_y,  desc->log2_chroma_h);
+    td.tile_w = 1 << desc->log2_chroma_w;
+    td.tile_h = 1 << desc->log2_chroma_h;
+
+    s->webp.avctx->execute2(s->webp.avctx, blend_alpha_uv, &td, NULL, td.h);
+    s->webp.avctx->execute2(s->webp.avctx, blend_alpha_ya, &td, NULL, height);
 }
 
 static av_always_inline void webp_yuva2argb(uint8_t *out, int Y, int U, int V, int A)
@@ -2509,7 +2598,8 @@ const FFCodec ff_awebp_decoder = {
     .init           = awebp_decode_init,
     FF_CODEC_DECODE_CB(awebp_decode_frame),
     .close          = awebp_decode_close,
-    .p.capabilities = AV_CODEC_CAP_DR1,
+    .p.capabilities = AV_CODEC_CAP_DR1 |
+                      AV_CODEC_CAP_SLICE_THREADS,
     .caps_internal  = FF_CODEC_CAP_ICC_PROFILES |
                       FF_CODEC_CAP_USES_PROGRESSFRAMES,
 };
