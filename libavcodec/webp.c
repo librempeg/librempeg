@@ -2471,9 +2471,7 @@ static av_cold int awebp_decode_close(AVCodecContext *avctx)
     av_frame_free(&s->frame);
     av_packet_unref(&s->alpha_packet);
 
-    webp_decode_close(avctx);
-
-    return 0;
+    return webp_decode_close(avctx);
 }
 
 const FFCodec ff_awebp_decoder = {
