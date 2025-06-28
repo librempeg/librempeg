@@ -292,6 +292,7 @@ static int flush_frame(AVFilterLink *outlink, int final, AVFrame **outsamplesref
     n_out = swr_convert(aresample->swr, outsamplesref->extended_data, n_out, final ? NULL : (void*)outsamplesref->extended_data, 0);
     if (n_out <= 0) {
         av_frame_free(&outsamplesref);
+        *outsamplesref_ret = NULL;
         return (n_out == 0) ? AVERROR_EOF : n_out;
     }
 
