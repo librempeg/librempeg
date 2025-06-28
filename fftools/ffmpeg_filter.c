@@ -2132,8 +2132,8 @@ static void send_command(FilterGraph *fg, AVFilterGraph *graph,
 
 static int choose_input(const FilterGraph *fg, const FilterGraphThread *fgt)
 {
-    int nb_requests, nb_requests_max = -1;
-    int best_input = -1;
+    int64_t nb_requests, nb_requests_max = -1;
+    int best_input = fg->nb_inputs;
 
     for (int i = 0; i < fg->nb_inputs; i++) {
         InputFilter *ifilter = fg->inputs[i];
@@ -2148,8 +2148,6 @@ static int choose_input(const FilterGraph *fg, const FilterGraphThread *fgt)
             best_input = i;
         }
     }
-
-    av_assert0(best_input >= 0);
 
     return best_input;
 }
@@ -2652,10 +2650,7 @@ static int read_frames(FilterGraph *fg, FilterGraphThread *fgt,
         }
 
         ret = avfilter_graph_request_oldest(fgt->graph);
-        if (ret == AVERROR(EAGAIN)) {
-            fgt->next_in = choose_input(fg, fgt);
-            return 0;
-        } else if (ret < 0) {
+        if (ret < 0 && ret != AVERROR(EAGAIN)) {
             if (ret == AVERROR_EOF)
                 av_log(fg, AV_LOG_VERBOSE, "Filtergraph returned EOF, finishing\n");
             else
@@ -2664,7 +2659,7 @@ static int read_frames(FilterGraph *fg, FilterGraphThread *fgt,
                        av_err2str(ret));
             return ret;
         }
-        fgt->next_in = fg->nb_inputs;
+        fgt->next_in = choose_input(fg, fgt);
 
         // return so that scheduler can rate-control us
         return 0;
