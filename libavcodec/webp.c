@@ -1627,31 +1627,14 @@ static av_cold int awebp_decode_init(AVCodecContext *avctx)
     return webp_decode_init(avctx);
 }
 
-static int init_canvas_frame(AVCodecContext *avctx)
+static void fill_canvas_frame(AVCodecContext *avctx)
 {
     AWebPContext *s = avctx->priv_data;
-    AVFrame *canvas;
-    AVFrame *frame = s->frame;
+    AVFrame *canvas = s->canvas_frame;
     int width, height;
-    int ret;
 
-    canvas = av_frame_alloc();
     if (!canvas)
-        return AVERROR(ENOMEM);
-    s->canvas_frame = canvas;
-
-    /* let canvas always have alpha */
-    canvas->format = frame->format == AV_PIX_FMT_YUV420P ? AV_PIX_FMT_YUVA420P : frame->format;
-    canvas->width = s->canvas_width;
-    canvas->height = s->canvas_height;
-
-    ret = av_frame_copy_props(canvas, frame);
-    if (ret < 0)
-        return ret;
-
-    ret = av_frame_get_buffer(canvas, 0);
-    if (ret < 0)
-        return ret;
+        return;
 
     if (canvas->format == AV_PIX_FMT_ARGB) {
         width  = canvas->width;
@@ -1683,6 +1666,34 @@ static int init_canvas_frame(AVCodecContext *avctx)
                        s->background_yuva[component], width);
         }
     }
+}
+
+static int init_canvas_frame(AVCodecContext *avctx)
+{
+    AWebPContext *s = avctx->priv_data;
+    AVFrame *frame = s->frame;
+    AVFrame *canvas;
+    int ret;
+
+    canvas = av_frame_alloc();
+    if (!canvas)
+        return AVERROR(ENOMEM);
+    s->canvas_frame = canvas;
+
+    /* let canvas always have alpha */
+    canvas->format = frame->format == AV_PIX_FMT_YUV420P ? AV_PIX_FMT_YUVA420P : frame->format;
+    canvas->width = s->canvas_width;
+    canvas->height = s->canvas_height;
+
+    ret = av_frame_copy_props(canvas, frame);
+    if (ret < 0)
+        return ret;
+
+    ret = av_frame_get_buffer(canvas, 0);
+    if (ret < 0)
+        return ret;
+
+    fill_canvas_frame(avctx);
 
     return 0;
 }
@@ -2578,6 +2589,11 @@ exif_end:
     return avpkt->size;
 }
 
+static void awebp_decode_flush(AVCodecContext *avctx)
+{
+    fill_canvas_frame(avctx);
+}
+
 static av_cold int awebp_decode_close(AVCodecContext *avctx)
 {
     AWebPContext *s = avctx->priv_data;
@@ -2597,6 +2613,7 @@ const FFCodec ff_awebp_decoder = {
     .priv_data_size = sizeof(AWebPContext),
     .init           = awebp_decode_init,
     FF_CODEC_DECODE_CB(awebp_decode_frame),
+    .flush          = awebp_decode_flush,
     .close          = awebp_decode_close,
     .p.capabilities = AV_CODEC_CAP_DR1 |
                       AV_CODEC_CAP_SLICE_THREADS,
