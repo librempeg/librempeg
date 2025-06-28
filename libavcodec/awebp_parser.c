@@ -123,6 +123,14 @@ static int awebp_find_frame_end(AVCodecParserContext *s, AVCodecContext *avctx,
         }
     }
 
+    if (buf_size == 0) {
+        s->duration  = (w->delay > 0) ? w->delay : 100;
+        s->pts = w->pts;
+        s->dts = w->dts;
+        s->key_frame = s->pts == 0;
+        s->pict_type = s->key_frame ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_P;
+    }
+
     w->pc.state64 = state;
 
     return next;
