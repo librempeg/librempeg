@@ -268,8 +268,8 @@ static int fn(fir_to_phase)(SincContext *s, ftype **h, int *len, int *post_len, 
         *len = end - begin;
         *h = av_realloc_f(*h, *len, sizeof(**h));
         if (!*h) {
-            av_free(work);
-            return AVERROR(ENOMEM);
+            ret = AVERROR(ENOMEM);
+            goto fail;
         }
     }
 
@@ -292,7 +292,7 @@ static int fn(generate)(AVFilterContext *ctx)
     SincContext *s = ctx->priv;
     ftype Fn = s->sample_rate * F(0.5);
     ftype *h[2], *coeffs;
-    int n, post_peak, longer;
+    int ret = 0, n, post_peak, longer;
 
     if (s->Fc0 >= Fn || s->Fc1 >= Fn) {
         av_log(ctx, AV_LOG_ERROR,
@@ -302,6 +302,8 @@ static int fn(generate)(AVFilterContext *ctx)
 
     h[0] = fn(lpf)(Fn, s->Fc0, s->tbw0, &s->num_taps[0], s->att, &s->beta, s->round);
     h[1] = fn(lpf)(Fn, s->Fc1, s->tbw1, &s->num_taps[1], s->att, &s->beta, s->round);
+    if (!h[0] && !h[1])
+        return AVERROR(ENOMEM);
 
     if (h[0])
         fn(invert)(h[0], s->num_taps[0]);
@@ -320,24 +322,27 @@ static int fn(generate)(AVFilterContext *ctx)
     }
 
     if (s->phase != F(50.0)) {
-        int ret = fn(fir_to_phase)(s, &h[longer], &n, &post_peak, s->phase);
+        ret = fn(fir_to_phase)(s, &h[longer], &n, &post_peak, s->phase);
         if (ret < 0)
-            return ret;
+            goto fail;
     } else {
         post_peak = n >> 1;
     }
 
     s->n = 1 << av_ceil_log2(n);
     s->coeffs = coeffs = av_calloc(s->n, s->sample_size);
-    if (!s->coeffs)
-        return AVERROR(ENOMEM);
+    if (!s->coeffs) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
 
     for (int i = 0; i < n; i++)
         coeffs[i] = h[longer][i];
 
+fail:
     av_free(h[longer]);
     av_tx_uninit(&s->tx);
     av_tx_uninit(&s->itx);
 
-    return 0;
+    return ret;
 }
