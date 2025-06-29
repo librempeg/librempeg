@@ -123,7 +123,6 @@ static int trim_filter_frame(AVFilterLink *inlink, AVFrame *frame)
 
         if (drop) {
             s->eof = 1;
-            ff_inlink_set_status(inlink, AVERROR_EOF);
             ff_outlink_set_status(ctx->outputs[0], AVERROR_EOF, frame->pts);
             goto drop;
         }
