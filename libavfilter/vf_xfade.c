@@ -2211,8 +2211,11 @@ static int xfade_frame(AVFilterContext *ctx, AVFrame *a, AVFrame *b)
     AVFrame *out;
 
     out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
-    if (!out)
+    if (!out) {
+        av_frame_free(&s->xf[0]);
+        av_frame_free(&s->xf[1]);
         return AVERROR(ENOMEM);
+    }
     av_frame_copy_props(out, a);
 
     td.xf[0] = a, td.xf[1] = b, td.out = out, td.progress = progress;
@@ -2220,6 +2223,9 @@ static int xfade_frame(AVFilterContext *ctx, AVFrame *a, AVFrame *b)
                       FFMIN(outlink->h, ff_filter_get_nb_threads(ctx)));
 
     out->pts = s->pts;
+
+    av_frame_free(&s->xf[0]);
+    av_frame_free(&s->xf[1]);
 
     return ff_filter_frame(outlink, out);
 }
@@ -2323,10 +2329,8 @@ static int xfade_activate(AVFilterContext *avctx)
                 ff_inlink_set_status(in_a, AVERROR_EOF);
                 s->passthrough = 1;
             }
-            ret = xfade_frame(avctx, s->xf[0], s->xf[1]);
-            av_frame_free(&s->xf[0]);
-            av_frame_free(&s->xf[1]);
-            return ret;
+
+            return xfade_frame(avctx, s->xf[0], s->xf[1]);
         }
 
         // We did not get a frame from second input, check its status.
