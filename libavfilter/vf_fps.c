@@ -237,9 +237,7 @@ static int read_frame(AVFilterContext *ctx, FPSContext *s, AVFilterLink *inlink,
     av_assert1(s->frames_count < 2);
 
     ret = ff_inlink_consume_frame(inlink, &frame);
-    /* Caller must have run ff_inlink_check_available_frame first */
-    av_assert1(ret);
-    if (ret < 0)
+    if (ret <= 0)
         return ret;
 
     /* Convert frame pts to output timebase.
@@ -308,7 +306,7 @@ static int write_frame(AVFilterContext *ctx, FPSContext *s, AVFilterLink *outlin
         av_log(ctx, AV_LOG_DEBUG, "Writing frame with pts %"PRId64" to pts %"PRId64"\n",
                s->frames[0]->pts, frame->pts);
         s->cur_frame_out++;
-        *again = 1;
+        *again = 0;
         return ff_filter_frame(outlink, frame);
     }
 }
@@ -335,28 +333,29 @@ static int activate(AVFilterContext *ctx)
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    /* No buffered status: normal operation */
-    if (!s->status) {
+    if (!ff_outlink_frame_wanted(outlink))
+        return FFERROR_NOT_READY;
 
-        /* Read available input frames if we have room */
-        while (s->frames_count < 2 && ff_inlink_check_available_frame(inlink)) {
-            ret = read_frame(ctx, s, inlink, outlink);
-            if (ret < 0)
-                return ret;
-        }
+    /* Read available input frames if we have room */
+    while (s->frames_count < 2) {
+        ret = read_frame(ctx, s, inlink, outlink);
+        if (ret < 0)
+            return ret;
+        if (ret == 0)
+            break;
+    }
 
-        /* We do not yet have enough frames to produce output */
-        if (s->frames_count < 2) {
-            /* Check if we've hit EOF (or otherwise that an error status is set) */
-            ret = ff_inlink_acknowledge_status(inlink, &s->status, &status_pts);
-            if (ret > 0)
-                update_eof_pts(ctx, s, inlink, outlink, status_pts);
+    /* We do not yet have enough frames to produce output */
+    if (s->frames_count <= 2) {
+        /* Check if we've hit EOF (or otherwise that an error status is set) */
+        ret = ff_inlink_acknowledge_status(inlink, &s->status, &status_pts);
+        if (ret > 0)
+            update_eof_pts(ctx, s, inlink, outlink, status_pts);
 
-            if (!ret) {
-                /* If someone wants us to output, we'd better ask for more input */
-                FF_FILTER_FORWARD_WANTED(outlink, inlink);
-                return 0;
-            }
+        if (!ret && s->frames_count < 2) {
+            /* If someone wants us to output, we'd better ask for more input */
+            ff_inlink_request_frame(inlink);
+            return 0;
         }
     }
 
@@ -364,7 +363,7 @@ static int activate(AVFilterContext *ctx)
     if (s->frames_count > 0) {
         ret = write_frame(ctx, s, outlink, &again);
         /* Couldn't generate a frame, so schedule us to perform another step */
-        if (again && ff_inoutlink_check_flow(inlink, outlink))
+        if (again)
             ff_filter_set_ready(ctx, 100);
         return ret;
     }
