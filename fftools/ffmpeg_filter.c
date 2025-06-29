@@ -3432,7 +3432,11 @@ static int filter_thread(void *arg)
                                           &input_idx, fgt.frame);
         if (input_status == AVERROR_EOF) {
             av_log(fg, AV_LOG_VERBOSE, "Filtering thread received EOF\n");
-            break;
+            if (fgp->sch_idx > 0)
+                break;
+
+            input_status = 0;
+            goto read_frames;
         } else if (input_status == AVERROR(EAGAIN)) {
             // should only happen when we didn't request any input
             av_assert0(input_idx == fg->nb_inputs);
