@@ -86,6 +86,9 @@ fate-filter-lavd-life: CMD = framecrc -f lavfi -i life=s=40x40:r=5:seed=42:mold=
 FATE_FILTER-$(call FILTERFRAMECRC, TESTSRC, LAVFI_INDEV) += fate-filter-lavd-testsrc
 fate-filter-lavd-testsrc: CMD = framecrc -f lavfi -i testsrc=r=7:n=2:d=10
 
+FATE_FILTER-$(call FILTERFRAMECRC, TESTSRC TRIM LOOP, LAVFI_INDEV) += fate-filter-lavd-testsrc-trim-loop
+fate-filter-lavd-testsrc-trim-loop: CMD = framecrc -f lavfi -i testsrc=d=1 -vf trim=end_frame=15,loop=loop=12:size=15:start=0
+
 FATE_FILTER-$(call FILTERFRAMECRC, TESTSRC2) += $(addprefix fate-filter-testsrc2-, yuv420p yuv444p rgb24 rgba)
 fate-filter-testsrc2-%: CMD = framecrc -lavfi testsrc2=r=7:d=10 -pix_fmt $(word 4, $(subst -, ,$(@)))
 
