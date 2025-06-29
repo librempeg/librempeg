@@ -370,11 +370,18 @@ static int channelmap_filter_frame(AVFilterLink *inlink, AVFrame *in)
     const int sample_size = av_get_bytes_per_sample(in->format);
     const int nch_out = s->nch;
     AVFrame *out;
+    int ret;
 
-    out = ff_get_audio_buffer(outlink, in->nb_samples);
-    if (!out) {
-        av_frame_free(&in);
+    out = av_frame_alloc();
+    if (!out)
         return AVERROR(ENOMEM);
+
+    out->nb_samples = in->nb_samples;
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0) {
+        av_frame_free(&out);
+        av_frame_free(&in);
+        return ret;
     }
 
     for (int ch = 0; ch < nch_out; ch++) {
@@ -427,6 +434,7 @@ const FFFilter ff_af_channelmap = {
     .p.name        = "channelmap",
     .p.description = NULL_IF_CONFIG_SMALL("Remap audio channels."),
     .p.priv_class  = &channelmap_class,
+    .p.flags       = AVFILTER_FLAG_FRAME_THREADS,
     .init          = channelmap_init,
     .uninit        = channelmap_uninit,
     .priv_size     = sizeof(ChannelMapContext),
