@@ -162,7 +162,6 @@ static int atrim_filter_frame(AVFilterLink *inlink, AVFrame *frame)
                            (AVRational){ 1, inlink->sample_rate });
     else
         pts = s->next_pts;
-    s->next_pts = pts + frame->nb_samples;
 
     /* check if at least a part of the frame is after the start time */
     if (s->start_sample < 0 && s->start_pts == AV_NOPTS_VALUE) {
@@ -216,7 +215,7 @@ static int atrim_filter_frame(AVFilterLink *inlink, AVFrame *frame)
 
         if (drop) {
             s->eof = 1;
-            ff_outlink_set_status(ctx->outputs[0], AVERROR_EOF, frame->pts);
+            ff_outlink_set_status(ctx->outputs[0], AVERROR_EOF, s->next_pts);
             goto drop;
         }
     }
@@ -244,8 +243,10 @@ static int atrim_filter_frame(AVFilterLink *inlink, AVFrame *frame)
 
         av_frame_free(&frame);
         frame = out;
-    } else
+    } else {
         frame->nb_samples = end_sample;
+        s->next_pts = frame->pts + end_sample;
+    }
 
     return ff_filter_frame(ctx->outputs[0], frame);
 
