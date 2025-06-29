@@ -2322,11 +2322,9 @@ static int xfade_activate(AVFilterContext *avctx)
             if (s->inputs_offset_pts == AV_NOPTS_VALUE)
                 s->inputs_offset_pts = s->pts - s->xf[1]->pts;
 
-            // Check if we finished transitioning, in which case we
-            // report back EOF to first input as it is no longer needed.
+            // Check if we finished transitioning
             if (s->pts - s->start_pts > s->duration_pts) {
                 s->status[0] = AVERROR_EOF;
-                ff_inlink_set_status(in_a, AVERROR_EOF);
                 s->passthrough = 1;
             }
 
