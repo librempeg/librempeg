@@ -125,7 +125,7 @@ fate-sub-rcwt: CMD = md5 -i $(TARGET_SAMPLES)/sub/witch.scc -map 0 -c copy -f rc
 FATE_SUBTITLES-$(call ALLYES, MPEGTS_DEMUXER DVBSUB_DECODER DVBSUB_ENCODER) += fate-sub-dvb
 fate-sub-dvb: CMD = framecrc -i $(TARGET_SAMPLES)/sub/dvbsubtest_filter.ts -map s:0 -c dvbsub
 
-FATE_SUBTITLES-$(call ALLYES, FILE_PROTOCOL PIPE_PROTOCOL SRT_DEMUXER SUBRIP_DECODER TTML_ENCODER TTML_MUXER) += fate-sub-ttmlenc
+FATE_SUBTITLES-$(call ALLYES, PIPE_PROTOCOL SRT_DEMUXER SUBRIP_DECODER TTML_ENCODER TTML_MUXER) += fate-sub-ttmlenc
 fate-sub-ttmlenc: CMD = fmtstdout ttml -i $(TARGET_SAMPLES)/sub/SubRip_capability_tester.srt
 
 FATE_SUBTITLES-$(call ENCMUX, ASS, ASS) += $(FATE_SUBTITLES_ASS-yes)
