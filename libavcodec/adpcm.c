@@ -257,7 +257,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
 
     adpcm_flush(avctx);
 
-    switch(avctx->codec->id) {
+    switch (avctx->codec->id) {
     case AV_CODEC_ID_ADPCM_IMA_AMV:
     case AV_CODEC_ID_ADPCM_N64:
         max_channels = 1;
@@ -304,7 +304,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
         return AVERROR(EINVAL);
     }
 
-    switch(avctx->codec->id) {
+    switch (avctx->codec->id) {
     case AV_CODEC_ID_ADPCM_IMA_WAV:
         if (avctx->bits_per_coded_sample < 2 || avctx->bits_per_coded_sample > 5)
             return AVERROR_INVALIDDATA;
@@ -1456,7 +1456,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     st = channels == 2 ? 1 : 0;
 
-    switch(avctx->codec->id) {
+    switch (avctx->codec->id) {
     CASE(ADPCM_IMA_QT,
         /* In QuickTime, IMA is encoded by chunks of 34 bytes (=64 samples).
            Channel data is interleaved per-chunk. */
@@ -2782,9 +2782,10 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         ) /* End of CASE */
     CASE(ADPCM_SANYO,
         int (*expand)(ADPCMChannelStatus *c, int bits);
+        const int bpcs = avctx->bits_per_coded_sample;
         GetBitContext g;
 
-        switch(avctx->bits_per_coded_sample) {
+        switch (bpcs) {
         case 3: expand = adpcm_sanyo_expand3; break;
         case 4: expand = adpcm_sanyo_expand4; break;
         case 5: expand = adpcm_sanyo_expand5; break;
@@ -2798,7 +2799,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         init_get_bits8(&g, gb.buffer, bytestream2_get_bytes_left(&gb));
         for (int i = 0; i < nb_samples; i++)
             for (int ch = 0; ch < channels; ch++)
-                samples_p[ch][i] = expand(&c->status[ch], get_bits_le(&g, avctx->bits_per_coded_sample));
+                samples_p[ch][i] = expand(&c->status[ch], get_bits_le(&g, bpcs));
 
         align_get_bits(&g);
         bytestream2_skip(&gb, get_bits_count(&g) / 8);
@@ -2890,7 +2891,7 @@ static void adpcm_flush(AVCodecContext *avctx)
     /* Just nuke the entire state and re-init. */
     memset(c, 0, sizeof(ADPCMDecodeContext));
 
-    switch(avctx->codec_id) {
+    switch (avctx->codec_id) {
     case AV_CODEC_ID_ADPCM_CT:
         c->status[0].step = c->status[1].step = 511;
         break;
