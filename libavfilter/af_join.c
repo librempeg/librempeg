@@ -518,12 +518,11 @@ static int try_push_frame(AVFilterContext *ctx)
     s->eof_pts = frame->pts + av_rescale_q(frame->nb_samples,
                                            av_make_q(1, outlink->sample_rate),
                                            outlink->time_base);
-    ret = ff_filter_frame(outlink, frame);
 
     for (int i = 0; i < ctx->nb_inputs; i++)
         av_frame_free(&s->input_frames[i]);
 
-    return ret;
+    return ff_filter_frame(outlink, frame);
 
 fail:
     av_frame_free(&frame);
