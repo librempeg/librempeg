@@ -179,8 +179,11 @@ static int inflate_block_datax(InflateContext *s, InflateTree *lt, InflateTree *
             while (len > 0) {
                 const int hmin = FFMIN(history_pos, offs);
                 const int hmax = FFMAX(history_pos, offs);
-                const int left = FFMIN3(len, history_size - offs, history_size - history_pos);
-                const int ix = FFMIN3(width - x, hmax - hmin, left);
+                const int hdif = hmax - hmin;
+                const int hsdf = history_size - history_pos;
+                const int hsiz = (hdif > 0) ? hdif : hsdf;
+                const int left = FFMIN3(len, history_size - offs, hsdf);
+                const int ix = FFMIN3(width - x, hsiz, left);
 
                 memcpy(dst + x, history + offs, ix);
                 memcpy(history + history_pos, dst + x, ix);
