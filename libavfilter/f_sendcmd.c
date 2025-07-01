@@ -194,7 +194,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
     AVFilterContext *ctx = inlink->dst;
     SendCmdContext *s = ctx->priv;
     int64_t ts, duration;
-    int i, j, ret;
+    int ret;
 
     if (ref->pts == AV_NOPTS_VALUE)
         goto end;
@@ -204,7 +204,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
 
 #define WITHIN_INTERVAL(ts, duration, start_ts, end_ts) ((ts)+(duration) >= (start_ts) && (ts) < (end_ts))
 
-    for (i = 0; i < s->nb_intervals; i++) {
+    for (int i = 0; i < s->nb_intervals; i++) {
         Interval *interval = &s->intervals[i];
         int flags = 0;
 
@@ -222,7 +222,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
         if (flags) {
             char buf[1024];
 
-            for (j = 0; j < s->nb_commands_opt; j++) {
+            for (int j = 0; j < s->nb_commands_opt; j++) {
                 const int target_flags = (j < s->nb_flags_opt) ? s->flags_opt[j] : COMMAND_FLAG_ENTER;
 
                 if (target_flags & flags) {
