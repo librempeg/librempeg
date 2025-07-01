@@ -21,7 +21,7 @@
 
 #include "libavutil/arm/asm.S"
 
-#define MAX_CHANNELS        8
+#define MAX_CHANNELS       16
 #define MAX_FIR_ORDER       8
 #define MAX_IIR_ORDER       4
 #define MAX_RATEFACTOR      4

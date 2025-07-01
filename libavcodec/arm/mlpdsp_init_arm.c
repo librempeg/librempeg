@@ -113,6 +113,7 @@ static int32_t (*mlp_select_pack_output_armv6(uint8_t *ch_assign,
         ch_index = 2;
         break;
     default:
+        // max_matrix_channel > 7 requires &7 lossless buffer channel shift
         return ff_mlp_pack_output;
     }
 
@@ -139,7 +140,7 @@ av_cold void ff_mlpdsp_init_arm(MLPDSPContext *c)
 
     if (have_armv5te(cpu_flags)) {
         c->mlp_filter_channel = ff_mlp_filter_channel_arm;
-        c->mlp_rematrix_channel = ff_mlp_rematrix_channel_arm;
+        // c->mlp_rematrix_channel = ff_mlp_rematrix_channel_arm; // TODO: update to 2.18 coeff
     }
     if (have_armv6(cpu_flags))
         c->mlp_select_pack_output = mlp_select_pack_output_armv6;

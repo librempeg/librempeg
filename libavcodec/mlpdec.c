@@ -61,8 +61,8 @@ typedef struct SubStream {
 
     //@{
     /** restart header data */
-    /// The type of noise to be used in the rematrix stage.
-    uint16_t    noise_type;
+    /// The type of substream given by the restart header sync word.
+    uint16_t    substream_type;
 
     /// The index of the first channel coded in this substream.
     uint8_t     min_channel;
@@ -88,6 +88,13 @@ typedef struct SubStream {
     /// The current seed value for the pseudorandom noise generator(s).
     uint32_t    noisegen_seed;
 
+    /// Maximum output_shift value.
+    int8_t      max_shift;
+    /// Maximum size of coded audio samples LSBs part.
+    int8_t      max_lsbs;
+    /// Maximum bit-depth of output audio samples.
+    int8_t      max_bits;
+
     /// Set if the substream contains extra info to check the size of VLC blocks.
     uint8_t     data_check_present;
 
@@ -104,11 +111,23 @@ typedef struct SubStream {
     /// matrix output channel
     uint8_t     matrix_out_ch[MAX_MATRICES];
 
-    /// Whether the LSBs of the matrix output are encoded in the bitstream.
+    /// Size of the LSBs of the matrix output encoded in the bitstream.
     uint8_t     lsb_bypass[MAX_MATRICES];
-    /// Matrix coefficients, stored as 2.14 fixed point.
+    /// Matrix coefficients fractional part size in bits.
+    uint8_t     matrix_coeff_frac_bits[MAX_MATRICES];
+    /// Matrix coefficients shift amount.
+    int8_t      matrix_coeff_shift[MAX_MATRICES];
+    /// Matrix coefficients presence mask.
+    uint16_t    matrix_coeff_mask[MAX_MATRICES];
+    /// Matrix coefficients, stored as 2.18 fixed point.
     DECLARE_ALIGNED(32, int32_t, matrix_coeff)[MAX_MATRICES][MAX_CHANNELS];
-    /// Left shift to apply to noise values in 0x31eb substreams.
+    /// Delta matrix coefficients size in bits for 0x31ec substreams.
+    uint8_t     delta_matrix_coeff_bits[MAX_MATRICES];
+    /// Delta matrix coefficients precision.
+    uint8_t     delta_matrix_coeff_prec[MAX_MATRICES];
+    /// Delta matrix coefficients, stored as 2.18 fixed point.
+    DECLARE_ALIGNED(32, int32_t, delta_matrix_coeff)[MAX_MATRICES][MAX_CHANNELS];
+    /// Left shift to apply to noise values in 0x31eb and 0x31ec substreams.
     uint8_t     matrix_noise_shift[MAX_MATRICES];
     //@}
 
@@ -133,6 +152,8 @@ typedef struct MLPDecodeContext {
     AVCodecContext *avctx;
 
     AVChannelLayout downmix_layout;
+    /// Set to enable decoding of non-loudspeaker feed (objects) audio channels
+    int extract_objects;
 
     /// Current access unit being read has a major sync.
     int         is_major_sync_unit;
@@ -267,7 +288,7 @@ static inline int read_huff_channels(MLPDecodeContext *m, GetBitContext *gbp,
 
     for (mat = 0; mat < s->num_primitive_matrices; mat++)
         if (s->lsb_bypass[mat])
-            m->bypassed_lsbs[pos + s->blockpos][mat] = get_bits1(gbp);
+            m->bypassed_lsbs[pos + s->blockpos][mat] = get_bits(gbp, s->lsb_bypass[mat]);
 
     for (channel = s->min_channel; channel <= s->max_channel; channel++) {
         ChannelParams *cp = &s->channel_params[channel];
@@ -410,8 +431,12 @@ static int read_major_sync(MLPDecodeContext *m, GetBitContext *gb)
         m->avctx->profile     = AV_PROFILE_TRUEHD_ATMOS;
     }
 
-    /* limit to decoding 3 substreams, as the 4th is used by Dolby Atmos for non-audio data */
-    m->max_decoded_substream = FFMIN(m->num_substreams - 1, 2);
+    /* Limit to decoding the first 3 substreams (or allow the 4th for objects) */
+    m->max_decoded_substream = FFMIN(m->num_substreams - 1,
+        m->extract_objects ? 3 : 2);
+
+    av_log(m->avctx, AV_LOG_DEBUG, "decoding up to substream %" PRIu8 "\n",
+        m->max_decoded_substream);
 
     m->avctx->sample_rate    = mh.group1_samplerate;
     m->avctx->frame_size     = mh.access_unit_size;
@@ -531,23 +556,22 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
     int sync_word, tmp;
     uint8_t checksum;
     uint8_t lossless_check;
+    uint8_t max_bit_depth;
     int start_count = get_bits_count(gbp);
-    int min_channel, max_channel, max_matrix_channel, noise_type;
+    int min_channel, max_channel, max_matrix_channel;
     const int std_max_matrix_channel = m->avctx->codec_id == AV_CODEC_ID_MLP
                                      ? MAX_MATRIX_CHANNEL_MLP
                                      : MAX_MATRIX_CHANNEL_TRUEHD;
 
-    sync_word = get_bits(gbp, 13);
+    sync_word = get_bits(gbp, 14);
 
-    if (sync_word != 0x31ea >> 1) {
+    if (sync_word < 0x31ea || 0x31ec < sync_word) {
         av_log(m->avctx, AV_LOG_ERROR,
                "restart header sync incorrect (got 0x%04x)\n", sync_word);
         return AVERROR_INVALIDDATA;
     }
 
-    noise_type = get_bits1(gbp);
-
-    if (m->avctx->codec_id == AV_CODEC_ID_MLP && noise_type) {
+    if (m->avctx->codec_id == AV_CODEC_ID_MLP && 0x31ea != sync_word) {
         av_log(m->avctx, AV_LOG_ERROR, "MLP must have 0x31ea sync word.\n");
         return AVERROR_INVALIDDATA;
     }
@@ -567,7 +591,7 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
 
     /* This should happen for TrueHD streams with >6 channels and MLP's noise
      * type. It is not yet known if this is allowed. */
-    if (max_matrix_channel > MAX_MATRIX_CHANNEL_MLP && !noise_type) {
+    if (max_matrix_channel > MAX_MATRIX_CHANNEL_MLP && 0x31ea == sync_word) {
         avpriv_request_sample(m->avctx,
                               "%d channels (more than the "
                               "maximum supported by the decoder)",
@@ -582,7 +606,7 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
     s->max_channel        = max_channel;
     s->coded_channels     = ((1LL << (max_channel - min_channel + 1)) - 1) << min_channel;
     s->max_matrix_channel = max_matrix_channel;
-    s->noise_type         = noise_type;
+    s->substream_type     = sync_word;
 
     if (mlp_channel_layout_subset(&m->downmix_layout, s->mask) &&
         m->max_decoded_substream > substr) {
@@ -595,8 +619,28 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
 
     s->noise_shift   = get_bits(gbp,  4);
     s->noisegen_seed = get_bits(gbp, 23);
+    s->max_shift     = get_bits(gbp,  4);
+    s->max_lsbs      = get_bits(gbp,  5);
+    s->max_bits      = get_bits(gbp,  5);
 
-    skip_bits(gbp, 19);
+    max_bit_depth = (0x31ec == sync_word) ? 31 : 24;
+    if (max_bit_depth < s->max_lsbs) {
+        av_log(m->avctx, AV_LOG_ERROR,
+               "Max LSB size %" PRIu8 " for substream %u exceeds "
+               "%" PRIu8 " bits.\n",
+               s->max_lsbs, substr, max_bit_depth);
+        return AVERROR_INVALIDDATA;
+    }
+
+    if (max_bit_depth < s->max_bits) {
+        av_log(m->avctx, AV_LOG_ERROR,
+               "Max output bit-depth %" PRIu8 " for substream %u exceeds "
+               "%" PRIu8 " bits.\n",
+               s->max_bits, substr, max_bit_depth);
+        return AVERROR_INVALIDDATA;
+    }
+
+    skip_bits(gbp, 5);
 
     s->data_check_present = get_bits1(gbp);
     lossless_check = get_bits(gbp, 8);
@@ -615,7 +659,7 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
 
     for (ch = 0; ch <= s->max_matrix_channel; ch++) {
         int ch_assign = get_bits(gbp, 6);
-        if (m->avctx->codec_id == AV_CODEC_ID_TRUEHD) {
+        if (m->avctx->codec_id == AV_CODEC_ID_TRUEHD && s->mask) {
             AVChannelLayout l;
             enum AVChannel channel = thd_channel_layout_extract_channel(s->mask, ch_assign);
 
@@ -656,12 +700,19 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
         cp->huff_offset      = 0;
         cp->sign_huff_offset = -(1 << 23);
         cp->codebook         = 0;
-        cp->huff_lsbs        = 24;
+        cp->huff_lsbs        = (3 == substr) ? 31 : 24;
     }
 
     if (substr == m->max_decoded_substream) {
         av_channel_layout_uninit(&m->avctx->ch_layout);
-        av_channel_layout_from_mask(&m->avctx->ch_layout, s->mask);
+        if (substr < 3) /* Loudspeaker feed channels */
+            av_channel_layout_from_mask(&m->avctx->ch_layout, s->mask);
+        else /* Object channels */
+            m->avctx->ch_layout = (AVChannelLayout) {
+                AV_CHANNEL_ORDER_UNSPEC,
+                s->max_channel+1
+            };
+
         m->pack_output = m->dsp.mlp_select_pack_output(s->ch_assign,
                                                        s->output_shift,
                                                        s->max_matrix_channel,
@@ -760,17 +811,43 @@ static int read_filter_params(MLPDecodeContext *m, GetBitContext *gbp,
     return 0;
 }
 
-/** Read parameters for primitive matrices. */
+/** Get the maximum number of primitive matrices allowed. */
 
-static int read_matrix_params(MLPDecodeContext *m, unsigned int substr, GetBitContext *gbp)
+static int get_max_nb_primitive_matrices(MLPDecodeContext *m, unsigned int substr)
+{
+    switch (substr) {
+    case 0: // substream 0 (up to 2 matrix channels)
+        return 2;
+    case 1: // substream 1
+        if (m->substream_info & 0x8) // 6-ch pres carried
+            return 6;
+        if (m->substream_info & 0x20) // 8-ch pres carried
+            return 8;
+        break;
+    case 2: // substream 2
+        if (m->substream_info & 0x40) // 8-ch pres carried
+            return 8;
+        break;
+    case 3: // substream 3
+        if (m->substream_info & 80) // 16-ch pres carried
+            return 16;
+        break;
+    }
+
+    return MAX_MATRICES_TRUEHD;
+}
+
+/** Read parameters for primitive matrices (0x31ea and 0x31eb substreams). */
+
+static int read_31ea_31eb_matrix_params(MLPDecodeContext *m, unsigned int substr, GetBitContext *gbp)
 {
     SubStream *s = &m->substream[substr];
     unsigned int mat, ch;
     const int max_primitive_matrices = m->avctx->codec_id == AV_CODEC_ID_MLP
                                      ? MAX_MATRICES_MLP
-                                     : MAX_MATRICES_TRUEHD;
+                                     : get_max_nb_primitive_matrices(m, substr);
 
-    if (m->matrix_changed++ > 1) {
+    if (++m->matrix_changed > 1) {
         av_log(m->avctx, AV_LOG_ERROR, "Matrices may change only once per access unit.\n");
         return AVERROR_INVALIDDATA;
     }
@@ -779,8 +856,9 @@ static int read_matrix_params(MLPDecodeContext *m, unsigned int substr, GetBitCo
 
     if (s->num_primitive_matrices > max_primitive_matrices) {
         av_log(m->avctx, AV_LOG_ERROR,
-               "Number of primitive matrices cannot be greater than %d.\n",
-               max_primitive_matrices);
+               "Number of primitive matrices cannot be greater than %d "
+               "for substream %u of type 0x%04x.\n",
+               max_primitive_matrices, substr, s->substream_type);
         goto error;
     }
 
@@ -788,7 +866,7 @@ static int read_matrix_params(MLPDecodeContext *m, unsigned int substr, GetBitCo
         int frac_bits, max_chan;
         s->matrix_out_ch[mat] = get_bits(gbp, 4);
         frac_bits             = get_bits(gbp, 4);
-        s->lsb_bypass   [mat] = get_bits1(gbp);
+        s->lsb_bypass[mat]    = get_bits1(gbp);
 
         if (s->matrix_out_ch[mat] > s->max_matrix_channel) {
             av_log(m->avctx, AV_LOG_ERROR,
@@ -803,21 +881,140 @@ static int read_matrix_params(MLPDecodeContext *m, unsigned int substr, GetBitCo
         }
 
         max_chan = s->max_matrix_channel;
-        if (!s->noise_type)
-            max_chan+=2;
+        if (0x31ea == s->substream_type)
+            max_chan += 2;
 
         for (ch = 0; ch <= max_chan; ch++) {
             int coeff_val = 0;
             if (get_bits1(gbp))
                 coeff_val = get_sbits(gbp, frac_bits + 2);
 
-            s->matrix_coeff[mat][ch] = coeff_val * (1 << (14 - frac_bits));
+            s->matrix_coeff[mat][ch] = coeff_val * (1 << ((14 + 4) - frac_bits));
         }
 
-        if (s->noise_type)
+        if (0x31eb == s->substream_type)
             s->matrix_noise_shift[mat] = get_bits(gbp, 4);
         else
             s->matrix_noise_shift[mat] = 0;
+    }
+
+    return 0;
+
+error:
+    s->num_primitive_matrices = 0;
+    memset(s->matrix_out_ch, 0, sizeof(s->matrix_out_ch));
+
+    return AVERROR_INVALIDDATA;
+}
+
+/** Read parameters for primitive matrices (0x31ec substreams). */
+
+static int read_31ec_matrix_params(MLPDecodeContext *m, unsigned int substr, GetBitContext *gbp)
+{
+    SubStream *s = &m->substream[substr];
+    unsigned int mat, ch;
+
+    const int max_primitive_matrices = get_max_nb_primitive_matrices(m, substr);
+
+    if (++m->matrix_changed > 1) {
+        av_log(m->avctx, AV_LOG_ERROR, "Matrices may change only once per access unit.\n");
+        return AVERROR_INVALIDDATA;
+    }
+
+    /* Seed primitive matrices */
+
+    if (get_bits1(gbp)) {
+        /* New seed primitive matrices */
+
+        if (get_bits1(gbp)) {
+            /* New seed matrices parameters */
+            s->num_primitive_matrices = get_bits(gbp, 4) + 1;
+
+            if (s->num_primitive_matrices > max_primitive_matrices) {
+                av_log(m->avctx, AV_LOG_ERROR,
+                    "Number of primitive matrices cannot be greater than %d "
+                    "in substream %u of type 0x%04x.\n",
+                    max_primitive_matrices, substr, s->substream_type);
+                goto error;
+            }
+
+            for (mat = 0; mat < s->num_primitive_matrices; mat++) {
+                s->matrix_out_ch         [mat] = get_bits(gbp, 4);
+                s->matrix_coeff_frac_bits[mat] = get_bits(gbp, 4);
+                s->matrix_coeff_shift    [mat] = ((int) get_bits(gbp, 3)) - 1;
+                s->lsb_bypass            [mat] = get_bits(gbp, 2);
+                s->matrix_noise_shift    [mat] = get_bits(gbp, 4);
+                s->matrix_coeff_mask     [mat] = get_bits(gbp, s->max_matrix_channel + 1);
+
+                if (s->matrix_out_ch[mat] > s->max_matrix_channel) {
+                    av_log(m->avctx, AV_LOG_ERROR,
+                            "Invalid channel %d specified as output from matrix.\n",
+                            s->matrix_out_ch[mat]);
+                    goto error;
+                }
+                if (s->matrix_coeff_frac_bits[mat] > 14) {
+                    av_log(m->avctx, AV_LOG_ERROR,
+                            "Too many fractional bits specified.\n");
+                    goto error;
+                }
+            }
+        }
+
+        /* Seed matrices coefficients */
+        for (mat = 0; mat < s->num_primitive_matrices; mat++) {
+            const int coeff_shift = s->matrix_coeff_shift[mat] -
+                                    s->matrix_coeff_frac_bits[mat];
+
+            memset(s->matrix_coeff[mat], 0, sizeof(s->matrix_coeff[mat]));
+
+            for (ch = 0; ch <= s->max_matrix_channel; ch++) {
+                int64_t coeff_val;
+
+                if (!((s->matrix_coeff_mask[mat] >> ch) & 0x1))
+                    continue; // skip channel
+
+                coeff_val = get_sbits(gbp, s->matrix_coeff_frac_bits[mat] + 2);
+                s->matrix_coeff[mat][ch] = coeff_val * (1 << (18 + coeff_shift));
+            }
+        }
+    }
+
+    if (!get_bits1(gbp)) {
+        /* No primitive matrices interpolation */
+        memset(s->delta_matrix_coeff, 0, sizeof(s->delta_matrix_coeff));
+    }
+    else if (get_bits1(gbp)) {
+        /* New delta primitive matrices */
+
+        if (get_bits1(gbp)) {
+            /* New delta primitive matrices parameters */
+
+            for (mat = 0; mat < s->num_primitive_matrices; mat++) {
+                s->delta_matrix_coeff_bits[mat] = get_bits(gbp, 4) + 1;
+                s->delta_matrix_coeff_prec[mat] = get_bits(gbp, 2);
+            }
+        }
+
+        for (mat = 0; mat < s->num_primitive_matrices; mat++) {
+            const int coeff_shift = s->matrix_coeff_shift[mat]
+                - s->delta_matrix_coeff_prec[mat]
+                - s->matrix_coeff_frac_bits[mat];
+
+            memset(s->delta_matrix_coeff[mat], 0, sizeof(s->delta_matrix_coeff[mat]));
+
+            if (s->delta_matrix_coeff_bits[mat] <= 1)
+                continue; // skip matrice
+
+            for (ch = 0; ch <= s->max_matrix_channel; ch++) {
+                int64_t coeff_val;
+
+                if (!((s->matrix_coeff_mask[mat] >> ch) & 0x1))
+                    continue; // skip channel
+
+                coeff_val = get_sbits(gbp, s->delta_matrix_coeff_bits[mat]);
+                s->delta_matrix_coeff[mat][ch] = coeff_val * (1 << (18 + coeff_shift));
+            }
+        }
     }
 
     return 0;
@@ -875,8 +1072,10 @@ static int read_channel_params(MLPDecodeContext *m, unsigned int substr,
     cp->codebook  = get_bits(gbp, 2);
     cp->huff_lsbs = get_bits(gbp, 5);
 
-    if (cp->codebook > 0 && cp->huff_lsbs > 24) {
-        av_log(m->avctx, AV_LOG_ERROR, "Invalid huff_lsbs.\n");
+    if (cp->codebook > 0 && cp->huff_lsbs > s->max_lsbs) {
+        av_log(m->avctx, AV_LOG_ERROR, "Invalid huff_lsbs=%" PRIu8 ", "
+               "exceeds max_lsbs=%" PRIu8 ".\n",
+               cp->huff_lsbs, s->max_lsbs);
         cp->huff_lsbs = 0;
         return AVERROR_INVALIDDATA;
     }
@@ -910,9 +1109,14 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
         }
 
     if (s->param_presence_flags & PARAM_MATRIX)
-        if (get_bits1(gbp))
-            if ((ret = read_matrix_params(m, substr, gbp)) < 0)
+        if (get_bits1(gbp)) {
+            if (0x31ec == s->substream_type)
+                ret = read_31ec_matrix_params(m, substr, gbp);
+            else
+                ret = read_31ea_31eb_matrix_params(m, substr, gbp);
+            if (ret < 0)
                 return ret;
+        }
 
     if (s->param_presence_flags & PARAM_OUTSHIFT)
         if (get_bits1(gbp)) {
@@ -922,6 +1126,10 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                     avpriv_request_sample(m->avctx, "Negative output_shift");
                     s->output_shift[ch] = 0;
                 }
+                if (s->max_shift < s->output_shift[ch])
+                    av_log(m->avctx, AV_LOG_WARNING,
+                           "output_shift=%d exceeds max_shift=%d\n",
+                           s->output_shift[ch], s->max_shift);
             }
             if (substr == m->max_decoded_substream)
                 m->pack_output = m->dsp.mlp_select_pack_output(s->ch_assign,
@@ -1103,6 +1311,56 @@ static void fill_noise_buffer(MLPDecodeContext *m, unsigned int substr)
     s->noisegen_seed = seed;
 }
 
+#if defined(ASSERT_LEVEL) && ASSERT_LEVEL >= 2
+
+/** Check matrices-based channel remapping output for saturation. */
+
+static void check_rematrix_output(MLPDecodeContext *m, unsigned int substr)
+{
+    SubStream *s = &m->substream[substr];
+    unsigned int mat, sample;
+
+    for (mat = 0; mat < s->num_primitive_matrices; mat++) {
+        unsigned int dest_ch = s->matrix_out_ch[mat];
+
+        const uint8_t shift = (3 <= substr && s->min_channel <= dest_ch) ? 31 : 23;
+        const int32_t min_value = -(1u << shift);
+        const int32_t max_value =  (1u << shift) - 1;
+
+        for (sample = 0; sample < s->blockpos; sample++) {
+            if (m->sample_buffer[sample][dest_ch] < min_value)
+                av_log(m->avctx, AV_LOG_WARNING,
+                    "rematrix negative saturation substr=%u mat=%u sample=%d "
+                    "value=%" PRId32 "\n",
+                    substr, mat, sample, m->sample_buffer[sample][dest_ch]);
+            if (m->sample_buffer[sample][dest_ch] > max_value)
+                av_log(m->avctx, AV_LOG_WARNING,
+                    "rematrix positive saturation substr=%u mat=%u sample=%d "
+                    "value=%" PRId32 "\n",
+                    substr, mat, sample, m->sample_buffer[sample][dest_ch]);
+        }
+    }
+}
+
+/** Check output audio bit-depth. */
+
+static void check_output_bit_depth(MLPDecodeContext *m, unsigned int substr)
+{
+    SubStream *s = &m->substream[substr];
+    uint32_t cumul_mask = 0;
+    unsigned int chan, sample;
+
+    for (chan = 0; chan <= s->max_matrix_channel; chan++)
+        for (sample = 0; sample < s->blockpos; sample++)
+            cumul_mask |= FFABS(m->sample_buffer[sample][chan]);
+
+    if ((1u << s->max_bits) <= cumul_mask)
+        av_log(m->avctx, AV_LOG_WARNING, "output audio bit-depth exceeds "
+               "expected %u bits.\n",
+               s->max_bits);
+}
+#endif
+
 /** Write the audio data into the output buffer. */
 
 static int output_data(MLPDecodeContext *m, unsigned int substr,
@@ -1110,8 +1368,7 @@ static int output_data(MLPDecodeContext *m, unsigned int substr,
 {
     AVCodecContext *avctx = m->avctx;
     SubStream *s = &m->substream[substr];
-    unsigned int mat;
-    unsigned int maxchan;
+    unsigned int mat, chan, maxchan;
     int ret;
     int is32 = (m->avctx->sample_fmt == AV_SAMPLE_FMT_S32);
 
@@ -1126,7 +1383,7 @@ static int output_data(MLPDecodeContext *m, unsigned int substr,
     }
 
     maxchan = s->max_matrix_channel;
-    if (!s->noise_type) {
+    if (0x31ea == s->substream_type) {
         generate_2_noise_channels(m, substr);
         maxchan += 2;
     } else {
@@ -1137,18 +1394,44 @@ static int output_data(MLPDecodeContext *m, unsigned int substr,
      * samples. */
     for (mat = 0; mat < s->num_primitive_matrices; mat++) {
         unsigned int dest_ch = s->matrix_out_ch[mat];
-        m->dsp.mlp_rematrix_channel(&m->sample_buffer[0][0],
-                                    s->matrix_coeff[mat],
-                                    &m->bypassed_lsbs[0][mat],
-                                    m->noise_buffer,
-                                    s->num_primitive_matrices - mat,
-                                    dest_ch,
-                                    s->blockpos,
-                                    maxchan,
-                                    s->matrix_noise_shift[mat],
-                                    m->access_unit_size_pow2,
-                                    MSB_MASK(s->quant_step_size[dest_ch]));
+
+        if (substr < 3) {
+            /* Single primitive matrices */
+            m->dsp.mlp_rematrix_channel(&m->sample_buffer[0][0],
+                                        s->matrix_coeff[mat],
+                                        &m->bypassed_lsbs[0][mat],
+                                        m->noise_buffer,
+                                        s->num_primitive_matrices - mat,
+                                        dest_ch,
+                                        s->blockpos,
+                                        maxchan,
+                                        s->matrix_noise_shift[mat],
+                                        m->access_unit_size_pow2,
+                                        MSB_MASK(s->quant_step_size[dest_ch]));
+        }
+        else {
+            /* Interpolated primitive matrices */
+            m->dsp.mlp_rematrix_interp_channel(&m->sample_buffer[0][0],
+                                               s->matrix_coeff[mat],
+                                               s->delta_matrix_coeff[mat],
+                                               &m->bypassed_lsbs[0][mat],
+                                               m->noise_buffer,
+                                               s->num_primitive_matrices - mat,
+                                               dest_ch,
+                                               s->blockpos,
+                                               maxchan,
+                                               s->matrix_noise_shift[mat],
+                                               m->access_unit_size_pow2,
+                                               MSB_MASK(s->quant_step_size[dest_ch]));
+
+            for (chan = 0; chan <= maxchan; chan++)
+                s->matrix_coeff[mat][chan] += s->delta_matrix_coeff[mat][chan];
+        }
     }
+
+#if defined(ASSERT_LEVEL) && ASSERT_LEVEL >= 2
+    check_rematrix_output(m, substr);
+#endif
 
     /* get output buffer */
     frame->nb_samples = s->blockpos;
@@ -1162,6 +1445,10 @@ static int output_data(MLPDecodeContext *m, unsigned int substr,
                                             s->output_shift,
                                             s->max_matrix_channel,
                                             is32);
+
+#if defined(ASSERT_LEVEL) && ASSERT_LEVEL >= 2
+    check_output_bit_depth(m, substr);
+#endif
 
     /* Update matrix encoding side data */
     if (s->matrix_encoding != s->prev_matrix_encoding) {
@@ -1320,6 +1607,7 @@ static int read_access_unit(AVCodecContext *avctx, AVFrame *frame,
                  (avctx->ch_layout.nb_channels == 8 &&
                   ((m->substream_info >> 4) & 0x7) != 0x7 &&
                   ((m->substream_info >> 4) & 0x7) != 0x6 &&
+                  ((m->substream_info >> 4) & 0x7) != 0x4 &&
                   ((m->substream_info >> 4) & 0x7) != 0x3)) &&
                 substr > 0 && substr < m->max_decoded_substream &&
                 (s->min_channel <= m->substream[substr - 1].max_channel)) {
@@ -1429,8 +1717,10 @@ static void mlp_decode_flush(AVCodecContext *avctx)
 #define OFFSET(x) offsetof(MLPDecodeContext, x)
 #define FLAGS (AV_OPT_FLAG_DECODING_PARAM | AV_OPT_FLAG_AUDIO_PARAM)
 static const AVOption options[] = {
-    { "downmix", "Request a specific channel layout from the decoder", OFFSET(downmix_layout),
-        AV_OPT_TYPE_CHLAYOUT, {.str = NULL}, .flags = FLAGS },
+    { "downmix", "Request a specific channel layout from the decoder",
+        OFFSET(downmix_layout), AV_OPT_TYPE_CHLAYOUT, {.str = NULL}, .flags = FLAGS },
+    { "extract_objects", "Enable extraction of audio object channels",
+        OFFSET(extract_objects), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, .flags = FLAGS },
     { NULL },
 };
 

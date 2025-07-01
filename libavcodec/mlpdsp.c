@@ -79,11 +79,51 @@ void ff_mlp_rematrix_channel(int32_t *samples,
 
         if (matrix_noise_shift) {
             index &= access_unit_size_pow2 - 1;
-            accum += noise_buffer[index] * (1 << (matrix_noise_shift + 7));
+            accum += noise_buffer[index] * (1 << (matrix_noise_shift + 11));
             index += index2;
         }
 
-        samples[dest_ch] = ((accum >> 14) & mask) + *bypassed_lsbs;
+        samples[dest_ch] = ((accum >> 18) & mask) + *bypassed_lsbs;
+        bypassed_lsbs += MAX_CHANNELS;
+        samples += MAX_CHANNELS;
+    }
+}
+
+void ff_mlp_rematrix_interp_channel(int32_t *samples,
+                                    const int32_t *seed_coeffs,
+                                    const int32_t *delta_coeffs,
+                                    const uint8_t *bypassed_lsbs,
+                                    const int8_t *noise_buffer,
+                                    int index,
+                                    unsigned int dest_ch,
+                                    uint16_t blockpos,
+                                    unsigned int maxchan,
+                                    int matrix_noise_shift,
+                                    int access_unit_size_pow2,
+                                    int32_t mask)
+{
+    unsigned int src_ch, i;
+    int index2 = 2 * index + 1;
+
+    int32_t delta_inc = (1 << 16) / blockpos;
+
+    for (i = 0; i < blockpos; i++) {
+        int64_t accum = 0, delta_accum = 0;
+
+        for (src_ch = 0; src_ch <= maxchan; src_ch++) {
+            accum += (int64_t) samples[src_ch] * seed_coeffs[src_ch];
+            delta_accum += (int64_t) samples[src_ch] * delta_coeffs[src_ch];
+        }
+
+        accum += ((delta_accum >> 18) * i * delta_inc * (1 << 18)) >> 16;
+
+        if (matrix_noise_shift) {
+            index &= access_unit_size_pow2 - 1;
+            accum += noise_buffer[index] * (1 << (matrix_noise_shift + 11));
+            index += index2;
+        }
+
+        samples[dest_ch] = ((accum >> 18) & mask) + *bypassed_lsbs;
         bypassed_lsbs += MAX_CHANNELS;
         samples += MAX_CHANNELS;
     }
@@ -115,7 +155,8 @@ int32_t ff_mlp_pack_output(int32_t lossless_check_data,
             int mat_ch = ch_assign[out_ch];
             int32_t sample = sample_buffer[i][mat_ch] *
                           (1U << output_shift[mat_ch]);
-            lossless_check_data ^= (sample & 0xffffff) << mat_ch;
+            lossless_check_data ^= (sample & 0xffffff) << (mat_ch & 7);
+
             if (is32)
                 *data_32++ = sample * 256U;
             else
@@ -129,6 +170,7 @@ av_cold void ff_mlpdsp_init(MLPDSPContext *c)
 {
     c->mlp_filter_channel = mlp_filter_channel;
     c->mlp_rematrix_channel = ff_mlp_rematrix_channel;
+    c->mlp_rematrix_interp_channel = ff_mlp_rematrix_interp_channel;
     c->mlp_select_pack_output = mlp_select_pack_output;
 #if ARCH_ARM
     ff_mlpdsp_init_arm(c);

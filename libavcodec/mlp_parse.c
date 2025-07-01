@@ -85,7 +85,7 @@ static int mlp_get_major_sync_size(const uint8_t * buf, int bufsize)
 
 int ff_mlp_read_major_sync(void *log, MLPHeaderInfo *mh, GetBitContext *gb)
 {
-    int ratebits, channel_arrangement, header_size;
+    int ratebits, channel_arrangement, header_size, extra_ch_length;
     uint16_t checksum;
 
     av_assert1(get_bits_count(gb) == 0);
@@ -93,7 +93,7 @@ int ff_mlp_read_major_sync(void *log, MLPHeaderInfo *mh, GetBitContext *gb)
     header_size = mlp_get_major_sync_size(gb->buffer, gb->size_in_bits >> 3);
     if (header_size < 0 || gb->size_in_bits < header_size << 3) {
         av_log(log, AV_LOG_ERROR, "packet too short, unable to read major sync\n");
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
 
     checksum = ff_mlp_checksum16(gb->buffer, header_size - 2);
@@ -163,7 +163,34 @@ int ff_mlp_read_major_sync(void *log, MLPHeaderInfo *mh, GetBitContext *gb)
     mh->extended_substream_info = get_bits(gb, 2);
     mh->substream_info = get_bits(gb, 8);
 
-    skip_bits_long(gb, (header_size - 18) * 8);
+    extra_ch_length = 0;
+    mh->channels_thd_stream3 = 0;
+
+    if (mh->stream_type == 0xba) {
+        skip_bits_long(gb, 63);
+
+        extra_ch_length = 64;
+        if (get_bits1(gb) && (mh->substream_info & 0x80)) {
+            /* 16ch_channel_meaning */
+            int length = (get_bits(gb, 4) + 1) << 1;
+            if (header_size - 26 < length) {
+                av_log(log, AV_LOG_ERROR, "packet too short, "
+                    "unable to read 16ch extra meaning in major sync %d %d\n",
+                    header_size, length);
+                return AVERROR_INVALIDDATA;
+            }
+
+            skip_bits_long(gb, 5+6); // dialogue norm/mix level
+            mh->channels_thd_stream3 = get_bits(gb, 5) + 1;
+            if (!get_bits1(gb)) { // dyn_object_only
+                avpriv_request_sample(log, "16ch presentation with a mixture of channels");
+                return AVERROR_PATCHWELCOME;
+            }
+            extra_ch_length += 21;
+        }
+    }
+
+    skip_bits_long(gb, (header_size - 18) * 8 - extra_ch_length);
 
     return 0;
 }

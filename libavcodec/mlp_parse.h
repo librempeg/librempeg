@@ -47,6 +47,7 @@ typedef struct MLPHeaderInfo
     int channels_mlp;                       ///< Channel count for MLP streams
     int channels_thd_stream1;               ///< Channel count for substream 1 of TrueHD streams ("6-channel presentation")
     int channels_thd_stream2;               ///< Channel count for substream 2 of TrueHD streams ("8-channel presentation")
+    int channels_thd_stream3;               ///< Channel count for substream 3 of TrueHD streams ("16-channel presentation")
     uint64_t channel_layout_mlp;            ///< Channel layout for MLP streams
     uint64_t channel_layout_thd_stream1;    ///< Channel layout for substream 1 of TrueHD streams ("6-channel presentation")
     uint64_t channel_layout_thd_stream2;    ///< Channel layout for substream 2 of TrueHD streams ("8-channel presentation")

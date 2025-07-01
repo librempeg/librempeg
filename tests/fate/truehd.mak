@@ -18,5 +18,15 @@ fate-truehd-mono1726: CMD = md5pipe -f truehd -i $(TARGET_SAMPLES)/truehd/ticket
 fate-truehd-mono1726: CMP = oneline
 fate-truehd-mono1726: REF = 9be9551fac418440bb02101bfdb11df9
 
+FATE_TRUEHD-$(call DEMDEC, TRUEHD, TRUEHD) += fate-truehd-atmos-no-obj
+fate-truehd-atmos-no-obj: CMD = md5pipe -f truehd -extract_objects 0 -i $(TARGET_SAMPLES)/truehd/atmos.thd -f s32le
+fate-truehd-atmos-no-obj: CMP = oneline
+fate-truehd-atmos-no-obj: REF = 53da6ce35c778bcc2182ef2160bf16a2
+
+FATE_TRUEHD-$(call DEMDEC, TRUEHD, TRUEHD) += fate-truehd-atmos-obj
+fate-truehd-atmos-obj: CMD = md5pipe -f truehd -extract_objects 1 -i $(TARGET_SAMPLES)/truehd/atmos.thd -f s32le
+fate-truehd-atmos-obj: CMP = oneline
+fate-truehd-atmos-obj: REF = f19f6f8ec8b040050aaa019f016f7ddc
+
 FATE_SAMPLES_AUDIO += $(FATE_TRUEHD-yes)
 fate-truehd: $(FATE_TRUEHD-yes)

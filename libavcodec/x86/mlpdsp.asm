@@ -61,12 +61,12 @@ SECTION .text
     paddq        xm0, xm1
     movq      accumq, xm0
     movzx     blsbsd, byte [blsbs_ptrq]             ; load *bypassed_lsbs
-    sar       accumq, 14                            ; accum >>= 14
+    sar       accumq, 18                            ; accum >>= 18
     and       accumd, maskd                         ; accum &= mask
     add       accumd, blsbsd                        ; accum += *bypassed_lsbs
     mov   [samplesq + dest_chq], accumd             ; samples[dest_ch] = accum
-    add   blsbs_ptrq, 8                             ; bypassed_lsbs += MAX_CHANNELS;
-    add     samplesq, 32                            ; samples += MAX_CHANNELS;
+    add   blsbs_ptrq, 16                            ; bypassed_lsbs += MAX_CHANNELS;
+    add     samplesq, 64                            ; samples += MAX_CHANNELS;
     cmp   blsbs_ptrq, cntq
 %endmacro
 
@@ -80,12 +80,12 @@ SECTION .text
     SHLX      noiseq, mns                           ; noise_buffer[index] <<= matrix_noise_shift
     add       accumq, noiseq                        ; accum += noise_buffer[index]
     movzx     noised, byte [blsbs_ptrq]             ; load *bypassed_lsbs (reuse tmp noise register)
-    sar       accumq, 14                            ; accum >>= 14
+    sar       accumq, 18                            ; accum >>= 18
     and       accumd, maskd                         ; accum &= mask
     add       accumd, noised                        ; accum += *bypassed_lsbs
     mov   [samplesq + dest_chq], accumd             ; samples[dest_ch] = accum
-    add   blsbs_ptrq, 8                             ; bypassed_lsbs += MAX_CHANNELS;
-    add     samplesq, 32                            ; samples += MAX_CHANNELS;
+    add   blsbs_ptrq, 16                            ; bypassed_lsbs += MAX_CHANNELS;
+    add     samplesq, 64                            ; samples += MAX_CHANNELS;
     cmp   blsbs_ptrq, cntq
 %endmacro
 
@@ -106,7 +106,8 @@ cglobal mlp_rematrix_channel, 0, 13, 5, samples, coeffs, blsbs_ptr, blsbs, \
     mov     dest_chd, dest_chm                      ; load dest_chd (not needed on UNIX64)
 %endif
     shl     dest_chd, 2
-    lea         cntq, [blsbs_ptrq + blockposq*8]
+    lea         cntq, [blsbs_ptrq + blockposq*8]    ; loop end address (bypassed_lsbs + blockpos * MAX_CHANNELS)
+    lea         cntq, [cntq + blockposq*8]
     test        mnsd, mnsd                          ; is matrix_noise_shift != 0?
     jne .shift                                      ; jump if true
     cmp     maxchand, 4                             ; is maxchan < 4?
@@ -144,7 +145,7 @@ align 16
     DEFINE_ARGS samples, coeffs, blsbs_ptr, noise_buffer, \
                 index, dest_ch, accum, index2, mns, \
                 ausp, mask, cnt, noise
-    add         mnsd, 7              ; matrix_noise_shift += 7
+    add         mnsd, 11             ; matrix_noise_shift += 11
 %else ; sse4
     mov           r6, rcx            ; move rcx elsewhere so we can use cl for matrix_noise_shift
 %if WIN64
@@ -156,7 +157,7 @@ align 16
     DEFINE_ARGS samples, coeffs, blsbs_ptr, mns, index, dest_ch, noise_buffer, \
                 index2, accum, ausp, mask, cnt, noise
 %endif
-    lea         mnsd, [r8 + 7]       ; rcx = matrix_noise_shift + 7
+    lea         mnsd, [r8 + 11]      ; rcx = matrix_noise_shift + 11
 %endif ; cpuflag
     sub        auspd, 1              ; access_unit_size_pow2 -= 1
     cmp          r7d, 4              ; is maxchan < 4?
