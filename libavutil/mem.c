@@ -444,6 +444,34 @@ static void fill32(uint8_t *dst, int len)
     }
 }
 
+static void fill64(uint8_t *dst, int len)
+{
+    uint64_t v;
+
+    if (len >= 8)
+        v = AV_RN64(dst - 8);
+
+    while (len >= 32) {
+        AV_WN64(dst   , v);
+        AV_WN64(dst+ 8, v);
+        AV_WN64(dst+16, v);
+        AV_WN64(dst+24, v);
+        dst += 32;
+        len -= 32;
+    }
+
+    while (len >= 8) {
+        AV_WN64(dst, v);
+        dst += 8;
+        len -= 8;
+    }
+
+    while (len--) {
+        *dst = dst[-8];
+        dst++;
+    }
+}
+
 void av_memcpy_backptr(uint8_t *dst, int back, int cnt)
 {
     const uint8_t *src = &dst[-back];
@@ -458,6 +486,8 @@ void av_memcpy_backptr(uint8_t *dst, int back, int cnt)
         fill24(dst, cnt);
     } else if (back == 4) {
         fill32(dst, cnt);
+    } else if (back == 8) {
+        fill64(dst, cnt);
     } else {
         if (cnt >= 16) {
             int blocklen = back;
