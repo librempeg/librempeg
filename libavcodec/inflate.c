@@ -469,7 +469,8 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
     const int height = s->height;
     const int width = s->width;
     int ret = 0, x = s->x, y = s->y;
-    uint8_t *dst = s->dst + y * linesize;
+    uint8_t *dsto = s->dst;
+    uint8_t *dst = dsto + y * linesize;
     const int dt_max_sym = dt->max_sym;
     const int lt_max_sym = lt->max_sym;
     const VLCElem *dt_tab = dt->vlc.table;
@@ -529,7 +530,7 @@ static int inflate_block_data(InflateContext *s, InflateTree *lt, InflateTree *d
 
             offs_y = offs / width;
             offs_x = offs - offs_y * width;
-            odst = s->dst + offs_y * linesize;
+            odst = dsto + offs_y * linesize;
 
             while (len > 0) {
                 const unsigned ix = width - FFMAX(x, offs_x);
