@@ -46,6 +46,7 @@ typedef struct ExtractPlanesContext {
     int map[4];
     int linesize[4];
     int is_packed;
+    int is_bayer;
 
     int plane[4];
     int step[4];
@@ -155,6 +156,7 @@ static int config_input(AVFilterLink *inlink)
 
     s->is_packed = !(desc->flags & AV_PIX_FMT_FLAG_PLANAR) &&
                     (desc->nb_components > 1);
+    s->is_bayer = !!(desc->flags & AV_PIX_FMT_FLAG_BAYER);
 
     return 0;
 }
@@ -167,12 +169,140 @@ static int config_output(AVFilterLink *outlink)
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
     const int output = outlink->srcpad - ctx->output_pads;
 
-    if (s->map[output] == 1 || s->map[output] == 2) {
+    if (s->is_bayer) {
+        const int idx = s->map[FF_OUTLINK_IDX(outlink)];
+
+        outlink->h = inlink->h >> (idx != 1);
+        outlink->w = inlink->w >> 1;
+    } else if (s->map[output] == 1 || s->map[output] == 2) {
         outlink->h = AV_CEIL_RSHIFT(inlink->h, desc->log2_chroma_h);
         outlink->w = AV_CEIL_RSHIFT(inlink->w, desc->log2_chroma_w);
     }
 
     return 0;
+}
+
+static void extract_from_bayer(uint8_t *dst, int dst_linesize,
+                               const uint8_t *src, int src_linesize,
+                               int width, int height, const int idx,
+                               const int format)
+{
+    int x_off, y_off;
+
+    switch (format) {
+    case AV_PIX_FMT_BAYER_RGGB8:
+    case AV_PIX_FMT_BAYER_RGGB16BE:
+    case AV_PIX_FMT_BAYER_RGGB16LE:
+        switch (idx) {
+        case 0: x_off = 0; y_off = 0; break;
+        case 1: x_off = 1; y_off = 0; break;
+        case 2: x_off = 1; y_off = 1; break;
+        }
+    case AV_PIX_FMT_BAYER_BGGR8:
+    case AV_PIX_FMT_BAYER_BGGR16BE:
+    case AV_PIX_FMT_BAYER_BGGR16LE:
+        switch (idx) {
+        case 0: x_off = 1; y_off = 1; break;
+        case 1: x_off = 1; y_off = 0; break;
+        case 2: x_off = 0; y_off = 0; break;
+        }
+    case AV_PIX_FMT_BAYER_GRBG8:
+    case AV_PIX_FMT_BAYER_GRBG16BE:
+    case AV_PIX_FMT_BAYER_GRBG16LE:
+        switch (idx) {
+        case 0: x_off = 1; y_off = 0; break;
+        case 1: x_off = 0; y_off = 0; break;
+        case 2: x_off = 0; y_off = 1; break;
+        }
+    case AV_PIX_FMT_BAYER_GBRG8:
+    case AV_PIX_FMT_BAYER_GBRG16BE:
+    case AV_PIX_FMT_BAYER_GBRG16LE:
+        switch (idx) {
+        case 0: x_off = 0; y_off = 1; break;
+        case 1: x_off = 0; y_off = 0; break;
+        case 2: x_off = 1; y_off = 0; break;
+        }
+    }
+
+    if (y_off)
+        src += src_linesize;
+
+    for (int y = 0; y < height; y++) {
+        switch (format) {
+        case AV_PIX_FMT_BAYER_BGGR16LE:
+        case AV_PIX_FMT_BAYER_BGGR16BE:
+        case AV_PIX_FMT_BAYER_RGGB16LE:
+        case AV_PIX_FMT_BAYER_RGGB16BE:
+            for (int x = 0; x < width; x++)
+                AV_WN16(dst + x * 2, AV_RN16(src + x * 4 + x_off * 2));
+            dst += dst_linesize;
+            src += src_linesize;
+
+            if (idx != 1) {
+                src += src_linesize;
+            } else {
+                for (int x = 0; x < width; x++)
+                    AV_WN16(dst + x * 2, AV_RN16(src + x * 4));
+                dst += dst_linesize;
+                src += src_linesize;
+                y++;
+            }
+            break;
+        case AV_PIX_FMT_BAYER_BGGR8:
+        case AV_PIX_FMT_BAYER_RGGB8:
+            for (int x = 0; x < width; x++)
+                dst[x] = src[x * 2 + x_off];
+            dst += dst_linesize;
+            src += src_linesize;
+
+            if (idx != 1) {
+                src += src_linesize;
+            } else {
+                for (int x = 0; x < width; x++)
+                    dst[x] = src[x * 2];
+                dst += dst_linesize;
+                src += src_linesize;
+                y++;
+            }
+            break;
+        case AV_PIX_FMT_BAYER_GBRG16LE:
+        case AV_PIX_FMT_BAYER_GBRG16BE:
+        case AV_PIX_FMT_BAYER_GRBG16LE:
+        case AV_PIX_FMT_BAYER_GRBG16BE:
+            for (int x = 0; x < width; x++)
+                AV_WN16(dst + x * 2, AV_RN16(src + x * 4 + x_off * 2));
+            dst += dst_linesize;
+            src += src_linesize;
+
+            if (idx != 1) {
+                src += src_linesize;
+            } else {
+                for (int x = 0; x < width; x++)
+                    AV_WN16(dst + x * 2, AV_RN16(src + x * 4 + 2));
+                dst += dst_linesize;
+                src += src_linesize;
+                y++;
+            }
+            break;
+        case AV_PIX_FMT_BAYER_GRBG8:
+        case AV_PIX_FMT_BAYER_GBRG8:
+            for (int x = 0; x < width; x++)
+                dst[x] = src[x * 2 + x_off];
+            dst += dst_linesize;
+            src += src_linesize;
+
+            if (idx != 1) {
+                src += src_linesize;
+            } else {
+                for (int x = 0; x < width; x++)
+                    dst[x] = src[x * 2 + 1];
+                dst += dst_linesize;
+                src += src_linesize;
+                y++;
+            }
+            break;
+        }
+    }
 }
 
 static void extract_from_packed(uint8_t *dst, int dst_linesize,
@@ -311,7 +441,11 @@ static int extract_plane(AVFilterLink *outlink, AVFrame *frame)
     if (idx == 3 /* alpha */)
         out->color_range = AVCOL_RANGE_JPEG;
 
-    if (s->is_packed) {
+    if (s->is_bayer) {
+        extract_from_bayer(out->data[0], out->linesize[0],
+                           frame->data[0], frame->linesize[0],
+                           outlink->w, outlink->h, idx, frame->format);
+    } else if (s->is_packed) {
         extract_from_packed(out->data[0], out->linesize[0],
                             frame->data[0], frame->linesize[0],
                             outlink->w, outlink->h,
