@@ -800,8 +800,10 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
                     if (link->incfg.formats->flags & FILTER_SAME_BITDEPTH) {
                         const int afloat = !!(a->flags & AV_PIX_FMT_FLAG_FLOAT);
                         const int bfloat = !!(b->flags & AV_PIX_FMT_FLAG_FLOAT);
-                        const int abits = a->comp[0].depth;
-                        const int bbits = b->comp[0].depth;
+                        const int afactor = 1+3*(!!(a->flags & AV_PIX_FMT_FLAG_BAYER));
+                        const int bfactor = 1+3*(!!(b->flags & AV_PIX_FMT_FLAG_BAYER));
+                        const int abits = a->comp[0].depth * afactor;
+                        const int bbits = b->comp[0].depth * bfactor;
                         if (abits != bbits && (abits > 8 || bbits > 8) || (afloat != bfloat))
                             continue;
                     }

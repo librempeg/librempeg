@@ -128,8 +128,10 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
                     if ((a->flags & FILTER_SAME_BITDEPTH) || (b->flags & FILTER_SAME_BITDEPTH)) {
                         const int afloat = !!(adesc->flags & AV_PIX_FMT_FLAG_FLOAT);
                         const int bfloat = !!(bdesc->flags & AV_PIX_FMT_FLAG_FLOAT);
-                        const int abits = adesc->comp[0].depth;
-                        const int bbits = bdesc->comp[0].depth;
+                        const int afactor = 1+3*(!!(adesc->flags & AV_PIX_FMT_FLAG_BAYER));
+                        const int bfactor = 1+3*(!!(bdesc->flags & AV_PIX_FMT_FLAG_BAYER));
+                        const int abits = adesc->comp[0].depth * afactor;
+                        const int bbits = bdesc->comp[0].depth * bfactor;
                         add_param &= (abits == bbits && afloat == bfloat);
                     }
                     if ((a->flags & FILTER_SAME_ENDIANNESS) || (b->flags & FILTER_SAME_ENDIANNESS)) {
