@@ -70,12 +70,42 @@ static av_cold int init(AVFilterContext *ctx)
         AVFilterPad pad = { .flags = AVFILTERPAD_FLAG_FREE_NAME };
         char buf[128];
 
-        if (channel > AV_CHAN_NONE) {
-            if (av_channel_layout_index_from_channel(&s->channels, channel) < 0)
+        if (s->channel_layout.order == AV_CHANNEL_ORDER_UNSPEC &&
+            s->channels.order == AV_CHANNEL_ORDER_CUSTOM) {
+            int have_ch = 0;
+
+            for (int j = 0; j < s->channels.nb_channels; j++) {
+                if (i == s->channels.u.map[j].id) {
+                    snprintf(buf, sizeof(buf), "USR%d", i);
+                    have_ch = 1;
+                    break;
+                }
+            }
+
+            if (!have_ch)
                 continue;
+        } else if (s->channel_layout.order == AV_CHANNEL_ORDER_UNSPEC &&
+                   s->channels.order == AV_CHANNEL_ORDER_NATIVE) {
+            int have_ch = 0;
+
+            for (int j = 0; j < s->channels.nb_channels; j++) {
+                if (i == j) {
+                    have_ch = 1;
+                    snprintf(buf, sizeof(buf), "USR%d", i);
+                    break;
+                }
+            }
+
+            if (!have_ch)
+                continue;
+        } else {
+            if (channel > AV_CHAN_NONE) {
+                if (av_channel_layout_index_from_channel(&s->channels, channel) < 0)
+                    continue;
+            }
+            av_channel_name(buf, sizeof(buf), channel);
         }
 
-        av_channel_name(buf, sizeof(buf), channel);
         pad.type = AVMEDIA_TYPE_AUDIO;
         pad.name = av_strdup(buf);
         if (!pad.name) {
