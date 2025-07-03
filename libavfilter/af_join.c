@@ -73,12 +73,12 @@ typedef struct JoinContext {
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 static const AVOptionArrayDef def_map = {.def=NULL,.size_min=0,.sep=MAP_SEPARATOR};
 static const AVOption join_options[] = {
-    { "inputs",         "Number of input streams.", OFFSET(inputs),             AV_OPT_TYPE_INT,    { .i64 = 2 }, 1, INT_MAX,       A|F },
+    { "inputs",         "Number of input streams", OFFSET(inputs),             AV_OPT_TYPE_INT,    { .i64 = 2 }, 1, INT_MAX,  A|F },
     { "channel_layout", "Channel layout of the "
-                        "output stream.",           OFFSET(ch_layout),          AV_OPT_TYPE_CHLAYOUT, {.str = "stereo"}, 0, 0, A|F },
+                        "output stream",           OFFSET(ch_layout),          AV_OPT_TYPE_CHLAYOUT, {.str = "stereo"}, 0, 0, A|F },
     { "map",            "set the list of channels maps in the format "
-                        "'input_stream.input_channel-output_channel.",
-                                                    OFFSET(map),                AV_OPT_TYPE_STRING|AR, {.arr=&def_map}, .flags = A|F },
+                        "'input_stream.input_channel-output_channel",
+                                                   OFFSET(map),                AV_OPT_TYPE_STRING|AR, {.arr=&def_map}, .flags = A|F },
     { NULL }
 };
 
