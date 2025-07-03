@@ -90,17 +90,17 @@ typedef struct MixContext {
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 static const AVOptionArrayDef def_weights = {.def="1 1",.size_min=1,.sep=' '};
 static const AVOption amix_options[] = {
-    { "inputs", "Number of inputs.",
+    { "inputs", "Number of inputs",
             OFFSET(nb_inputs), AV_OPT_TYPE_INT, { .i64 = 2 }, 1, INT16_MAX, A|F },
-    { "duration", "How to determine the end-of-stream.",
+    { "duration", "How to determine the end-of-stream",
             OFFSET(duration_mode), AV_OPT_TYPE_INT, { .i64 = DURATION_LONGEST }, 0,  2, A|F, .unit = "duration" },
-        { "longest",  "Duration of longest input.",  0, AV_OPT_TYPE_CONST, { .i64 = DURATION_LONGEST  }, 0, 0, A|F, .unit = "duration" },
-        { "shortest", "Duration of shortest input.", 0, AV_OPT_TYPE_CONST, { .i64 = DURATION_SHORTEST }, 0, 0, A|F, .unit = "duration" },
-        { "first",    "Duration of first input.",    0, AV_OPT_TYPE_CONST, { .i64 = DURATION_FIRST    }, 0, 0, A|F, .unit = "duration" },
+        { "longest",  "Duration of longest input",  0, AV_OPT_TYPE_CONST, { .i64 = DURATION_LONGEST  }, 0, 0, A|F, .unit = "duration" },
+        { "shortest", "Duration of shortest input", 0, AV_OPT_TYPE_CONST, { .i64 = DURATION_SHORTEST }, 0, 0, A|F, .unit = "duration" },
+        { "first",    "Duration of first input",    0, AV_OPT_TYPE_CONST, { .i64 = DURATION_FIRST    }, 0, 0, A|F, .unit = "duration" },
     { "dropout_transition", "Transition time, in seconds, for volume "
-                            "renormalization when an input stream ends.",
+                            "renormalization when an input stream ends",
             OFFSET(dropout_transition), AV_OPT_TYPE_FLOAT, { .dbl = 2.0 }, 0, INT_MAX, A|F },
-    { "weights", "Set weight for each input.",
+    { "weights", "Set weight for each input",
             OFFSET(weights_opt), AV_OPT_TYPE_FLOAT|AR, {.arr=&def_weights}, INT_MIN, INT_MAX, A|F|T },
     { "normalize", "Scale inputs",
             OFFSET(normalize), AV_OPT_TYPE_BOOL, {.i64=1}, 0, 1, A|F|T },
