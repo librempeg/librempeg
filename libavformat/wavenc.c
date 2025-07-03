@@ -187,7 +187,6 @@ static av_cold int peak_init_writer(AVFormatContext *s)
     return 0;
 
 nomem:
-    av_log(s, AV_LOG_ERROR, "Out of memory\n");
     return AVERROR(ENOMEM);
 }
 
