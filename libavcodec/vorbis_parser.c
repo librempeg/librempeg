@@ -98,10 +98,8 @@ static int parse_setup_header(AVVorbisParseContext *s,
     }
 
     /* reverse bytes so we can easily read backwards with get_bits() */
-    if (!(rev_buf = av_malloc(buf_size))) {
-        av_log(s, AV_LOG_ERROR, "Out of memory\n");
+    if (!(rev_buf = av_malloc(buf_size)))
         return AVERROR(ENOMEM);
-    }
     for (i = 0; i < buf_size; i++)
         rev_buf[i] = buf[buf_size - 1 - i];
     init_get_bits(&gb, rev_buf, buf_size * 8);
