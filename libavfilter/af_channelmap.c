@@ -78,11 +78,11 @@ typedef struct ChannelMapContext {
 static const AVOptionArrayDef def_map = {.def=NULL,.size_min=0,.sep='|'};
 
 static const AVOption channelmap_options[] = {
-    { "map", "set the list of input channel numbers in output order.",
+    { "map", "set the list of input channel numbers in output order",
           OFFSET(mapping_str),        AV_OPT_TYPE_STRING|AR, {.arr = &def_map}, .flags = A|F },
-    { "channel_layout", "Output channel layout.",
+    { "channel_layout", "Output channel layout",
           OFFSET(output_layout),      AV_OPT_TYPE_CHLAYOUT, .flags = A|F },
-    { "flags", "set the mapping flags.",
+    { "flags", "set the mapping flags",
           OFFSET(flags),              AV_OPT_TYPE_FLAGS, {.i64 = 0}, 0, 3, .flags = A|F, .unit = "flags" },
     {  "in_empty",  "allow empty input channels",  0, AV_OPT_TYPE_CONST, {.i64 = IN_EMPTY},  .flags = A|F, .unit = "flags" },
     {  "out_empty", "allow empty output channels", 0, AV_OPT_TYPE_CONST, {.i64 = OUT_EMPTY}, .flags = A|F, .unit = "flags" },
