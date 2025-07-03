@@ -56,7 +56,7 @@ version <next>:
 - baf demuxer
 - msnd demuxer
 - mipu demuxer
-- Perfect Clarity Audio decoder and parser
+- Perfect Clarity Audio (PCA) decoder and parser
 - pngenc: set default prediction method to PAETH
 - APV decoder and APV raw bitstream muxing and demuxing
 - APV parser
@@ -69,6 +69,15 @@ version <next>:
   default; see manpage for -reinit_filter for details, previous
   behaviour can be restored with '-reinit_filter reinit'
 - G.722.1 Annex C audio decoder
+- Sanyo ADPCM decoder
+- Tantalus ADPCM decoder
+- PIFF demuxer
+- channelsum audio filter
+- arate audio filter
+- sideboost audio filter
+- aoverlay audio filter
+- arampsrc audio source filter
+- WebP Animation decoder
 
 
 version 7.1:
