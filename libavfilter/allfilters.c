@@ -148,6 +148,7 @@ extern const FFFilter ff_af_bs2b;
 extern const FFFilter ff_af_channelmap;
 extern const FFFilter ff_af_channelmix;
 extern const FFFilter ff_af_channelsplit;
+extern const FFFilter ff_af_channelsum;
 extern const FFFilter ff_af_chorus;
 extern const FFFilter ff_af_clap;
 extern const FFFilter ff_af_compand;
