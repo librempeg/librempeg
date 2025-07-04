@@ -42,6 +42,8 @@
 #define FF_API_V408_CODECID        (LIBAVCODEC_VERSION_MAJOR < 63)
 #define FF_API_CODEC_PROPS         (LIBAVCODEC_VERSION_MAJOR < 63)
 
+#define FF_API_NVDEC_OLD_PIX_FMTS  (LIBAVCODEC_VERSION_MAJOR < 63)
+
 // reminder to remove the OMX encoder on next major bump
 #define FF_CODEC_OMX               (LIBAVCODEC_VERSION_MAJOR < 63)
 
