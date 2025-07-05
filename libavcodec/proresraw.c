@@ -147,7 +147,7 @@ static int decode_tilec(AVCodecContext *avctx, TileContext *tile,
     const int log2_nb_blocks = av_log2(nb_blocks);
     const int block_mask = (1 << log2_nb_blocks)-1;
     const int nb_codes = 64 * nb_blocks;
-    LOCAL_ALIGNED_32(int16_t, block, [64*8]);
+    LOCAL_ALIGNED_32(int16_t, block, [128*8]);
     LOCAL_ALIGNED_32(int16_t, qmat, [64]);
     LOCAL_ALIGNED_32(int16_t, out, [64]);
     int prev_dc = 0, ret, sign = 0, dc_add = 0;
@@ -183,9 +183,9 @@ static int decode_tilec(AVCodecContext *avctx, TileContext *tile,
             goto fail;
         }
 
-        if ((n & 7) == 0) {
+        if ((n & 15) == 0) {
             dc_codebook = 700;
-        } else if ((n & 7) == 1) {
+        } else if ((n & 15) == 1) {
             dc_codebook = 100;
         } else {
             dc_codebook = dc_cb[FFMIN(TODCCODEBOOK(dc), FF_ARRAY_ELEMS(dc_cb)-1)];
@@ -339,11 +339,11 @@ static int decode_frame(AVCodecContext *avctx,
 
     header_size = bytestream2_get_be16(&gb) + 8;
     version = bytestream2_get_be16(&gb);
-    if (version != 0) {
+    if (version > 1) {
         avpriv_request_sample(avctx, "Version %d", version);
         return AVERROR_PATCHWELCOME;
     }
-    if (header_size < 144)
+    if (header_size < (version == 0 ? 144 : 96))
         return AVERROR_INVALIDDATA;
     bytestream2_skip(&gb, 4);
 
@@ -360,18 +360,32 @@ static int decode_frame(AVCodecContext *avctx,
             return ret;
     }
 
-    bytestream2_skip(&gb, 1 * 4);
-    bytestream2_skip(&gb, 2);
-    bytestream2_skip(&gb, 2);
-    bytestream2_skip(&gb, 4);
-    bytestream2_skip(&gb, 4);
-    bytestream2_skip(&gb, 3 * 3 * 4);
-    bytestream2_skip(&gb, 4);
-    bytestream2_skip(&gb, 2);
-    flags = bytestream2_get_be16(&gb);
-    aa = (flags >> 1) & 7;
+    switch (version) {
+    case 0:
+        bytestream2_skip(&gb, 1 * 4);
+        bytestream2_skip(&gb, 2);
+        bytestream2_skip(&gb, 2);
+        bytestream2_skip(&gb, 4);
+        bytestream2_skip(&gb, 4);
+        bytestream2_skip(&gb, 3 * 3 * 4);
+        bytestream2_skip(&gb, 4);
+        bytestream2_skip(&gb, 2);
 
-    bytestream2_get_buffer(&gb, qmat, 64);
+        flags = bytestream2_get_be16(&gb);
+        aa = (flags >> 1) & 7;
+        bytestream2_get_buffer(&gb, qmat, 64);
+        break;
+    case 1:
+        bytestream2_skip(&gb, 10);
+        bytestream2_skip(&gb, 48);
+
+        memset(qmat, 1, 64);
+        flags = bytestream2_get_be16(&gb);
+        aa = (flags >> 1) & 7;
+        bytestream2_skip(&gb, 16);
+        break;
+    }
+
     ff_permute_scantable(s->qmat, s->prodsp.idct_permutation, qmat);
     bytestream2_skip(&gb, header_size - bytestream2_tell(&gb));
 
@@ -381,7 +395,7 @@ static int decode_frame(AVCodecContext *avctx,
     s->nb_tiles = s->nb_tw * s->nb_th;
     av_log(avctx, AV_LOG_DEBUG, "nb tiles: %d\n", s->nb_tiles);
 
-    s->tw = 128;
+    s->tw = version == 0 ? 128 : 256;
     s->th = 16;
     av_log(avctx, AV_LOG_DEBUG, "tile size: %dx%d\n", s->tw, s->th);
 
