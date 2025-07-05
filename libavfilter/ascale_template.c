@@ -379,7 +379,8 @@ static int fn(filter_samples)(AVFilterContext *ctx, const int ch)
     const ftype fs = ctx->inputs[0]->sample_rate;
     AScaleContext *s = ctx->priv;
     ChannelContext *c = &s->c[ch];
-    double state = c->state[OUT] * s->tempo - c->state[IN];
+    const double offset = (s->tempo > 1.0) ? 2.0*s->max_period/fs : 0.0;
+    double state = (c->state[OUT] + offset) * s->tempo - c->state[IN];
 
     c->mode = COPY;
 
