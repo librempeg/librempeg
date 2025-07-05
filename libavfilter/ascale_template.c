@@ -116,7 +116,7 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
     best_xcorr = num/den;
     best_xcorr = CLIP(best_xcorr, F(-0.75), F(1.0));
 
-    av_log(ctx, AV_LOG_DEBUG, "E: %g/%g %d/%d\n", best_xcorr, best_score, best_period, max_period);
+    av_log(ctx, AV_LOG_DEBUG, "E: [%d] %g/%g %d/%d\n", ch, best_xcorr, best_score, best_period, max_period);
 
     dptrx += n;
     datax[0] = dptrx;
@@ -271,7 +271,7 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
     best_xcorr = num/den;
     best_xcorr = CLIP(best_xcorr, F(-0.75), F(1.0));
 
-    av_log(ctx, AV_LOG_DEBUG, "C: %g/%g %d/%d\n", best_xcorr, best_score, best_period, max_period);
+    av_log(ctx, AV_LOG_DEBUG, "C: [%d] %g/%g %d/%d\n", ch, best_xcorr, best_score, best_period, max_period);
 
     scale = F(1.0) / best_period;
     for (int n = 0; n < best_period; n++) {
