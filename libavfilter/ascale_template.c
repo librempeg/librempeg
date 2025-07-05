@@ -70,6 +70,8 @@ static int fn(copy_samples)(AVFilterContext *ctx, const int ch,
         av_audio_fifo_drain(c->in_fifo, size);
     }
 
+    av_log(ctx, AV_LOG_DEBUG, "P: [%d] %d/%d/%d\n", ch, size, period, s->max_period);
+
     return av_audio_fifo_size(c->in_fifo) >= s->max_period;
 }
 
