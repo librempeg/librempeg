@@ -110,20 +110,6 @@ static int min_output_fifo_samples(AVFilterContext *ctx)
     return nb_samples;
 }
 
-static int max_input_fifo_samples(AVFilterContext *ctx)
-{
-    AScaleContext *s = ctx->priv;
-    int nb_samples = 0;
-
-    for (int ch = 0; ch < s->nb_channels; ch++) {
-        ChannelContext *c = &s->c[ch];
-
-        nb_samples = FFMAX(av_audio_fifo_size(c->in_fifo), nb_samples);
-    }
-
-    return nb_samples;
-}
-
 static int min_input_fifo_samples(AVFilterContext *ctx)
 {
     AScaleContext *s = ctx->priv;
@@ -187,41 +173,6 @@ static void filter_frame(AVFilterContext *ctx)
 
     ff_filter_execute(ctx, filter_channels, NULL, NULL,
                       FFMIN(s->nb_channels, ff_filter_get_nb_threads(ctx)));
-}
-
-static void drain_output_samples(AVFilterContext *ctx, AVFrame *out)
-{
-    const int sample_size = (out->format == AV_SAMPLE_FMT_FLTP) ? sizeof(float) : sizeof(double);
-    AScaleContext *s = ctx->priv;
-    const int offset = (s->tempo < 1.0) ? s->max_period : 0;
-    const int sub_samples = offset;
-    const int nb_samples = out->nb_samples;
-
-    for (int ch = 0; ch < s->nb_channels; ch++) {
-        ChannelContext *c = &s->c[ch];
-        const int out_size = FFMAX(av_audio_fifo_size(c->out_fifo) - sub_samples, 0);
-        const int rout_size = FFMIN(nb_samples, out_size);
-        const int in_size = av_audio_fifo_size(c->in_fifo);
-        const int rin_size = FFMIN(in_size, nb_samples - out_size);
-        uint8_t *dptr = (uint8_t *)out->extended_data[ch];
-        uint8_t *dptr2 = ((uint8_t *)out->extended_data[ch]) + out_size * sample_size;
-        void *data[1] = { (void *)dptr };
-        void *data2[1] = { (void *)dptr2 };
-
-        av_log(ctx, AV_LOG_DEBUG, "drain: [%d] %d/%d in: %d out: %d\n", ch, rin_size, rout_size, in_size, out_size);
-        if (rout_size > 0 && rin_size > 0) {
-            av_audio_fifo_peek_at(c->out_fifo, data, rout_size, offset);
-            av_audio_fifo_peek_at(c->in_fifo, data2, rin_size, 0);
-            av_audio_fifo_drain(c->out_fifo, offset + rout_size);
-            av_audio_fifo_drain(c->in_fifo, rin_size);
-        } else {
-            av_audio_fifo_peek_at(c->in_fifo, data, nb_samples, 0);
-            av_audio_fifo_drain(c->in_fifo, nb_samples);
-        }
-    }
-
-    if (s->nb_channels == 2)
-        s->decorrelate_stereo(ctx, out);
 }
 
 static void peek_input_samples(AVFilterContext *ctx, AVFrame *in)
@@ -344,30 +295,15 @@ static int activate(AVFilterContext *ctx)
         s->eof = 1;
 
     if (s->eof) {
-        if (min_input_fifo_samples(ctx) < s->max_period*2) {
-            if (!s->flush[LAST]) {
-                const int sub_samples = (s->tempo < 1.0) ? s->max_period : 0;
-                const int nb_samples = max_input_fifo_samples(ctx) + FFMAX(min_output_fifo_samples(ctx) - sub_samples, 0);
-                AVFrame *out = ff_get_audio_buffer(outlink, nb_samples);
-
-                if (!out)
-                    return AVERROR(ENOMEM);
-
-                out->pts = s->pts[OUT];
-                s->pts[OUT] += out->nb_samples;
-                drain_output_samples(ctx, out);
-                s->flush[LAST] = 1;
-                return ff_filter_frame(outlink, out);
-            } else {
-                ff_outlink_set_status(outlink, AVERROR_EOF, s->pts[OUT]);
-            }
-        } else {
+        while (min_input_fifo_samples(ctx) > 0) {
             filter_frame(ctx);
             if (min_output_fifo_samples(ctx) > 0)
                 return output_frame(ctx);
             else
                 ff_filter_set_ready(ctx, 100);
         }
+
+        ff_outlink_set_status(outlink, AVERROR_EOF, s->pts[OUT]);
         return 0;
     } else if (min_input_fifo_samples(ctx) >= s->max_period*2) {
         ff_filter_set_ready(ctx, 100);
