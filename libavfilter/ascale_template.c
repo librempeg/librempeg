@@ -288,6 +288,15 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
     }
 
     av_audio_fifo_write(c->out_fifo, datax, best_period);
+    if (c->state[OUT] == 0.0) {
+        const int period = max_period-best_period;
+        ftype *dptr = dptrx + period;
+        void *data[1] = { (void *)dptr };
+
+        av_audio_fifo_write(c->out_fifo, data, period);
+        c->state[OUT] += period*fs;
+        av_audio_fifo_drain(c->in_fifo, period);
+    }
     c->state[OUT] += best_period*fs;
     av_audio_fifo_drain(c->in_fifo, best_period*2);
     return av_audio_fifo_size(c->in_fifo) >= max_period*2;
