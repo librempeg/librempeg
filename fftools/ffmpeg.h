@@ -722,6 +722,7 @@ extern float max_error_rate;
 
 extern char *filter_nbthreads;
 extern int filter_complex_nbthreads;
+extern int filter_buffered_frames;
 extern int vstats_version;
 extern int auto_conversion_filters;
 
