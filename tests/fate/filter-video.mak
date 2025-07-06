@@ -332,6 +332,10 @@ FATE_FILTER_VSYNTH_PGMYUV-$(CONFIG_SELECT_FILTER) += fate-filter-select-alternat
 fate-filter-select-alternate: tests/data/filtergraphs/select-alternate
 fate-filter-select-alternate: CMD = framecrc -c:v pgmyuv -i $(SRC) -/filter $(TARGET_PATH)/tests/data/filtergraphs/select-alternate
 
+FATE_FILTER-$(call FILTERFRAMECRC, SMPTEBARS SELECT, LAVFI_INDEV WRAPPED_AVFRAME_ENCODER NULL_MUXER) += fate-filter-select-buffering
+fate-filter-select-buffering: tests/data/filtergraphs/select-buffering
+fate-filter-select-buffering: CMD = framecrc -filter_buffered_frames 1 -f lavfi -i "smptebars=d=21" -/filter_complex $(TARGET_PATH)/tests/data/filtergraphs/select-buffering -map "[o1]" -f null none -map "[o2]" -f null none -map "[o3]"
+
 FATE_FILTER_VSYNTH_PGMYUV-$(call ALLYES, SETPTS_FILTER  SETTB_FILTER) += fate-filter-setpts
 fate-filter-setpts: tests/data/filtergraphs/setpts
 fate-filter-setpts: CMD = framecrc -c:v pgmyuv -i $(SRC) -/filter $(TARGET_PATH)/tests/data/filtergraphs/setpts
