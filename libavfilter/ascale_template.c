@@ -94,6 +94,16 @@ static ftype fn(l2norm)(const ftype *x, const int N)
     return SQRT(y);
 }
 
+static ftype fn(l2norm2)(const ftype *x, const ftype *y, const int N)
+{
+    ftype r = F(0.0);
+
+    for (int n = 0; n < N; n++)
+        r += x[n]*y[n];
+
+    return r;
+}
+
 static int fn(expand_write)(AVFilterContext *ctx, const int ch)
 {
     AScaleContext *s = ctx->priv;
@@ -105,12 +115,11 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
     const int n = max_period-best_period;
     ftype *dptrx = c->data[0];
     ftype *dptry = c->data[1];
-    const ftype *rptrx = c->r_data[0];
     void *datax[1] = { (void *)c->data[0] };
     void *datay[1] = { (void *)c->data[1] };
     const ftype xx = fn(l2norm)(dptrx+n, best_period);
     const ftype yy = fn(l2norm)(dptry, best_period);
-    const ftype xy = rptrx[best_period];
+    const ftype xy = fn(l2norm2)(dptrx+n, dptry, best_period);
     ftype best_xcorr = F(-1.0), scale;
     const ftype num = xy;
     const ftype den = xx * yy + EPS;
@@ -282,7 +291,7 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
     void *datax[1] = { (void *)c->data[0] };
     const ftype xx = fn(l2norm)(dptrx, best_period);
     const ftype yy = fn(l2norm)(dptry+n, best_period);
-    const ftype xy = best_score;
+    const ftype xy = fn(l2norm2)(dptrx, dptry+n, best_period);
     ftype best_xcorr = F(-1.0), scale;
     const ftype num = xy;
     const ftype den = xx * yy + EPS;
@@ -305,15 +314,7 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
     }
 
     av_audio_fifo_write(c->out_fifo, datax, best_period);
-    if (c->state[OUT] == 0.0) {
-        const int period = max_period-best_period;
-        ftype *dptr = dptrx + period;
-        void *data[1] = { (void *)dptr };
 
-        av_audio_fifo_write(c->out_fifo, data, period);
-        c->state[OUT] += period*fs;
-        av_audio_fifo_drain(c->in_fifo, period);
-    }
     c->state[OUT] += best_period*fs;
     av_audio_fifo_drain(c->in_fifo, best_period*2);
     return av_audio_fifo_size(c->in_fifo) >= max_period*2;
@@ -538,7 +539,7 @@ static void fn(uninit_state)(AVFilterContext *ctx)
         av_freep(&c->r_data[0]);
         av_freep(&c->r_data[1]);
 
-        av_log(ctx, AV_LOG_DEBUG, "[%d]: out: %d | in: %d\n", ch,
+        av_log(ctx, AV_LOG_DEBUG, "U: [%d] out: %d | in: %d\n", ch,
                av_audio_fifo_size(c->out_fifo),
                av_audio_fifo_size(c->in_fifo));
 
