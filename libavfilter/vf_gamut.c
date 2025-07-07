@@ -35,53 +35,76 @@ typedef struct GamutContext {
 
     int (*do_slice)(AVFilterContext *ctx, void *arg,
                     int jobnr, int nb_jobs);
+
+    int (*is_inside)(float y, float u, float v);
 } GamutContext;
-
-static av_always_inline void get_pixel(uint8_t *data[4],
-                                       const int linesize[4],
-                                       int hsub_log2, int vsub_log2,
-                                       int x, int y,
-                                       const int width, const int height,
-                                       int *cy, int *cu, int *cv, int *ca)
-{
-    *cy = data[0][linesize[0] * y + x];
-    *ca = data[3][linesize[3] * y + x];
-
-    x >>= hsub_log2;
-    y >>= vsub_log2;
-
-    *cu = data[1][linesize[1] * y + x];
-    *cv = data[2][linesize[2] * y + x];
-}
-
-static av_always_inline void get_pixel16(uint8_t *data[4],
-                                         const int linesize[4],
-                                         int hsub_log2, int vsub_log2,
-                                         int x, int y,
-                                         const int width, const int height,
-                                         int *cy, int *cu, int *cv, int *ca)
-{
-    *cy = AV_RN16(data[0] + linesize[0] * y + x * 2);
-    *ca = AV_RN16(data[3] + linesize[3] * y + x * 2);
-
-    x >>= hsub_log2;
-    y >>= vsub_log2;
-
-    *cu = AV_RN16(data[1] + linesize[1] * y + x * 2);
-    *cv = AV_RN16(data[2] + linesize[2] * y + x * 2);
-}
 
 typedef struct ThreadData {
     AVFrame *out, *in;
 } ThreadData;
 
-static int is_inside(float y, float u, float v)
+static int is_inside_bt709(float Y, float U, float V)
 {
-    float r = y + 1.5747f * (v - 0.5f);
-    float g = y - 0.4682f * (v - 0.5f) - 0.1873f * (u - 0.5f);
-    float b = y + 1.8556f * (u - 0.5f);
+    float V_min, V_max, U_min, U_max, G_comb, G_min, G_max;
 
-    return (r >= 0.f) && (r <= 1.f) && (g >= 0.f) && (g <= 1.f) && (b >= 0.f) && (b <= 1.f);
+    G_comb = 1.f + 0.1873f * U + 0.4681f * V;
+    G_min = Y + (0.1873f + 0.4681f) * 0.5f;
+    if (G_comb < G_min)
+        return 0;
+
+    G_max = Y + (0.1873f + 0.4681f + 2.f) * 0.5f;
+    if (G_comb > G_max)
+        return 0;
+
+    V_min = fmaxf(0.f, -Y * (1.f / 1.5748f) + 0.5f);
+    if (V < V_min)
+        return 0;
+
+    V_max = fminf(1.f, (1.f - Y) * (1.f / 1.5748f) + 0.5f);
+    if (V > V_max)
+        return 0;
+
+    U_min = fmaxf(0.f, -Y * (1.f / 1.8556f) + 0.5f);
+    if (U < U_min)
+        return 0;
+
+    U_max = fminf(1.f, (1.f - Y) * (1.f / 1.8556f) + 0.5f);
+    if (U > U_max)
+        return 0;
+
+    return 1;
+}
+
+static int is_inside_bt601(float Y, float U, float V)
+{
+    float V_min, V_max, U_min, U_max, G_comb, G_min, G_max;
+
+    G_comb = 1.f + 0.34414f * U + 0.71414f * V;
+    G_min = Y + (0.34414f + 0.71414f) * 0.5f;
+    if (G_comb < G_min)
+        return 0;
+
+    G_max = Y + (0.34414f + 0.71414f + 2.f) * 0.5f;
+    if (G_comb > G_max)
+        return 0;
+
+    V_min = fmaxf(0.f, -Y * (1.f / 1.402f) + 0.5f);
+    if (V < V_min)
+        return 0;
+
+    V_max = fminf(1.f, (1.f - Y) * (1.f / 1.402f) + 0.5f);
+    if (V > V_max)
+        return 0;
+
+    U_min = fmaxf(0.f, -Y * (1.f / 1.772f) + 0.5f);
+    if (U < U_min)
+        return 0;
+
+    U_max = fminf(1.f, (1.f - Y) * (1.f / 1.772f) + 0.5f);
+    if (U > U_max)
+        return 0;
+
+    return 1;
 }
 
 static int do_gamut_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
@@ -89,36 +112,58 @@ static int do_gamut_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     ThreadData *td = arg;
     AVFrame *out = td->out;
     AVFrame *in = td->in;
-    const int slice_start = (in->height * jobnr) / nb_jobs;
-    const int slice_end = (in->height * (jobnr + 1)) / nb_jobs;
     const int height = in->height;
+    const int slice_start = (height * jobnr) / nb_jobs;
+    const int slice_end = (height * (jobnr + 1)) / nb_jobs;
     const int width = in->width;
     GamutContext *s = ctx->priv;
+    int (*is_inside)(float y, float u, float v) = s->is_inside;
     const float factor = 1.f / ((1 << s->depth)-1);
     const int hsub_log2 = s->hsub_log2;
     const int vsub_log2 = s->vsub_log2;
     const int *gamut_yuv = s->gamut_yuv;
     const int *out_linesize = out->linesize;
     uint8_t **out_data = out->data;
+    const uint8_t *srcy = in->data[0] + slice_start * in->linesize[0];
+    const uint8_t *srca = in->data[3] + slice_start * in->linesize[3];
+    uint8_t *dsty = out->data[0] + slice_start * out->linesize[0];
+    uint8_t *dsta = out->data[3] + slice_start * out->linesize[3];
 
     for (int y = slice_start; y < slice_end; y++) {
         const int sy = y >> vsub_log2;
+        const uint8_t *srcu = in->data[1] + sy * in->linesize[1];
+        const uint8_t *srcv = in->data[2] + sy * in->linesize[2];
+        uint8_t *dstu = out_data[1] + sy * out_linesize[1];
+        uint8_t *dstv = out_data[2] + sy * out_linesize[2];
 
         for (int x = 0; x < width; x++) {
             const int sx = x >> hsub_log2;
             int cy, cu, cv, ca, valid;
 
-            get_pixel(in->data, in->linesize,
-                      hsub_log2, vsub_log2, x, y,
-                      width, height, &cy, &cu, &cv, &ca);
+            cy = srcy[x];
+            cu = srcu[sx];
+            cv = srcv[sx];
+            ca = srca[x];
 
             valid = is_inside(cy * factor, cu * factor, cv * factor);
 
-            out_data[0][out_linesize[0] *  y +  x] = valid ? cy : gamut_yuv[0];
-            out_data[1][out_linesize[1] * sy + sx] = valid ? cu : gamut_yuv[1];
-            out_data[2][out_linesize[2] * sy + sx] = valid ? cv : gamut_yuv[2];
-            out_data[3][out_linesize[3] *  y +  x] = valid ? ca : gamut_yuv[3];
+            if (valid) {
+                dsty[x]  = cy;
+                dstu[sx] = cu;
+                dstv[sx] = cv;
+                dsta[x]  = ca;
+            } else {
+                dsty[x]  = gamut_yuv[0];
+                dstu[sx] = gamut_yuv[1];
+                dstv[sx] = gamut_yuv[2];
+                dsta[x]  = gamut_yuv[3];
+            }
         }
+
+        srcy += in->linesize[0];
+        srca += in->linesize[3];
+        dsty += out->linesize[0];
+        dsta += out->linesize[3];
     }
 
     return 0;
@@ -129,36 +174,58 @@ static int do_gamut16_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     ThreadData *td = arg;
     AVFrame *out = td->out;
     AVFrame *in = td->in;
-    const int slice_start = (in->height * jobnr) / nb_jobs;
-    const int slice_end = (in->height * (jobnr + 1)) / nb_jobs;
     const int height = in->height;
+    const int slice_start = (height * jobnr) / nb_jobs;
+    const int slice_end = (height * (jobnr + 1)) / nb_jobs;
     const int width = in->width;
     GamutContext *s = ctx->priv;
+    int (*is_inside)(float y, float u, float v) = s->is_inside;
     const float factor = 1.f / ((1 << s->depth)-1);
     const int hsub_log2 = s->hsub_log2;
     const int vsub_log2 = s->vsub_log2;
     const int *gamut_yuv = s->gamut_yuv;
     const int *out_linesize = out->linesize;
     uint8_t **out_data = out->data;
+    const uint16_t *srcy = (const uint16_t *)(in->data[0] + slice_start * in->linesize[0]);
+    const uint16_t *srca = (const uint16_t *)(in->data[3] + slice_start * in->linesize[3]);
+    uint16_t *dsty = (uint16_t *)(out->data[0] + slice_start * out->linesize[0]);
+    uint16_t *dsta = (uint16_t *)(out->data[3] + slice_start * out->linesize[3]);
 
     for (int y = slice_start; y < slice_end; y++) {
         const int sy = y >> vsub_log2;
+        const uint16_t *srcu = (const uint16_t *)(in->data[1] + sy * in->linesize[1]);
+        const uint16_t *srcv = (const uint16_t *)(in->data[2] + sy * in->linesize[2]);
+        uint16_t *dstu = (uint16_t *)(out_data[1] + sy * out_linesize[1]);
+        uint16_t *dstv = (uint16_t *)(out_data[2] + sy * out_linesize[2]);
 
         for (int x = 0; x < width; x++) {
             const int sx = x >> hsub_log2;
             int cy, cu, cv, ca, valid;
 
-            get_pixel16(in->data, in->linesize,
-                        hsub_log2, vsub_log2, x, y,
-                        width, height, &cy, &cu, &cv, &ca);
+            cy = srcy[x];
+            cu = srcu[sx];
+            cv = srcv[sx];
+            ca = srca[x];
 
             valid  = is_inside(cy * factor, cu * factor, cv * factor);
 
-            AV_WN16(out_data[0] + out_linesize[0] *  y +  x*2, valid ? cy : gamut_yuv[0]);
-            AV_WN16(out_data[1] + out_linesize[1] * sy + sx*2, valid ? cu : gamut_yuv[1]);
-            AV_WN16(out_data[2] + out_linesize[2] * sy + sx*2, valid ? cv : gamut_yuv[2]);
-            AV_WN16(out_data[3] + out_linesize[3] *  y +  x*2, valid ? ca : gamut_yuv[3]);
+            if (valid) {
+                dsty[x]  = cy;
+                dstu[sx] = cu;
+                dstv[sx] = cv;
+                dsta[x]  = ca;
+            } else {
+                dsty[x]  = gamut_yuv[0];
+                dstu[sx] = gamut_yuv[1];
+                dstv[sx] = gamut_yuv[2];
+                dsta[x]  = gamut_yuv[3];
+            }
         }
+
+        srcy += in->linesize[0]/2;
+        srca += in->linesize[3]/2;
+        dsty += out->linesize[0]/2;
+        dsta += out->linesize[3]/2;
     }
 
     return 0;
@@ -212,6 +279,7 @@ static av_cold int config_output(AVFilterLink *outlink)
     s->gamut_yuv[3] = s->gamut_rgba[3] * factor;
 
     s->do_slice = s->depth <= 8 ? do_gamut_slice : do_gamut16_slice;
+    s->is_inside = (outlink->colorspace == AVCOL_SPC_BT709) ? is_inside_bt709 : is_inside_bt601;
 
     return 0;
 }
