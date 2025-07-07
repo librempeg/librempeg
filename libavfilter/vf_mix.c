@@ -51,6 +51,7 @@ typedef struct MixContext {
     int max;
     int planes;
     int nb_planes;
+    int sum_linesizes[4];
     int linesizes[4];
     int height[4];
 
@@ -141,42 +142,83 @@ typedef struct ThreadData {
     AVFrame **in, *out;
 } ThreadData;
 
-#define FAST_TMIX_SLICE(type, stype, round)                                                     \
+#define TMIX_SLICE(type, stype, round, fun, clip)                                               \
     for (int p = 0; p < s->nb_planes; p++) {                                                    \
         const int slice_start = (s->height[p] * jobnr) / nb_jobs;                               \
         const int slice_end = (s->height[p] * (jobnr+1)) / nb_jobs;                             \
         const int width = s->linesizes[p] / sizeof(type);                                       \
-        stype *sum = (stype *)(s->sum[p] + slice_start * s->linesizes[p] * 2);                  \
+        stype *sum = (stype *)(s->sum[p] + slice_start * s->sum_linesizes[p]);                  \
         type *dst = (type *)(out->data[p] + slice_start * out->linesize[p]);                    \
-        const ptrdiff_t sum_linesize = (s->linesizes[p] * 2) / sizeof(stype);                   \
+        const ptrdiff_t sum_linesize = s->sum_linesizes[p] / sizeof(stype);                     \
         const ptrdiff_t dst_linesize = out->linesize[p] / sizeof(type);                         \
         const int idx = FFMAX(0, nb_inputs - nb_unique);                                        \
         const ptrdiff_t src_linesize[2] = { in[idx]->linesize[p],                               \
                                             in[nb_inputs-1]->linesize[p] };                     \
         const type *src[2];                                                                     \
                                                                                                 \
-        if (!((1 << p) & s->planes)) {                                                          \
-            av_image_copy_plane((uint8_t *)dst, out->linesize[p],                               \
-                                in[0]->data[p] + slice_start * in[0]->linesize[p],              \
-                                in[0]->linesize[p],                                             \
-                                s->linesizes[p], slice_end - slice_start);                      \
-            continue;                                                                           \
-        }                                                                                       \
-                                                                                                \
         src[0] = (const type *)(in[idx]->data[p] + slice_start*src_linesize[0]);                \
         src[1] = (const type *)(in[nb_inputs-1]->data[p] + slice_start * src_linesize[1]);      \
                                                                                                 \
-        for (int y = slice_start; y < slice_end; y++) {                                         \
-            for (int x = 0; x < width; x++) {                                                   \
-                sum[x] += src[1][x] * (1 + (nb_inputs - 1) * (idx == (nb_inputs - 1)));         \
-                dst[x] = (sum[x] + (round)) / nb_inputs;                                        \
-                sum[x] -= src[0][x];                                                            \
+        if (!s->fast) {                                                                         \
+            for (int i = 0; i < nb_inputs; i++)                                                 \
+                linesize[i] = in[i]->linesize[p];                                               \
+                                                                                                \
+            for (int i = 0; i < nb_inputs; i++)                                                 \
+                srcf[i] = in[i]->data[p] + slice_start * linesize[i];                           \
+                                                                                                \
+            for (int y = slice_start; y < slice_end; y++) {                                     \
+                for (int x = 0; x < width; x++) {                                               \
+                    float val = 0.f;                                                            \
+                                                                                                \
+                    sum[x] += src[1][x] * (1 + (nb_inputs - 1) * (idx == (nb_inputs - 1)));     \
+                    sum[x] -= src[0][x];                                                        \
+                    for (int i = 0; i < nb_inputs; i++) {                                       \
+                        const int wi = FFMIN(i, nb_weights-1);                                  \
+                        float src = *(type *)(srcf[i] + x * sizeof(type));                      \
+                                                                                                \
+                        val += src * weights[wi];                                               \
+                    }                                                                           \
+                                                                                                \
+                    dst[x] = clip(fun(val * wfactor), 0, max);                                  \
+                }                                                                               \
+                                                                                                \
+                dst += dst_linesize;                                                            \
+                sum += sum_linesize;                                                            \
+                src[0] += src_linesize[0] / sizeof(type);                                       \
+                src[1] += src_linesize[1] / sizeof(type);                                       \
+                for (int i = 0; i < nb_inputs; i++)                                             \
+                    srcf[i] += linesize[i];                                                     \
             }                                                                                   \
                                                                                                 \
-            dst    += dst_linesize;                                                             \
-            sum    += sum_linesize;                                                             \
-            src[0] += src_linesize[0] / sizeof(type);                                           \
-            src[1] += src_linesize[1] / sizeof(type);                                           \
+            continue;                                                                           \
+        }                                                                                       \
+                                                                                                \
+        if (disabled || !((1 << p) & s->planes)) {                                              \
+            for (int y = slice_start; y < slice_end; y++) {                                     \
+                for (int x = 0; x < width; x++) {                                               \
+                    sum[x] += src[1][x] * (1 + (nb_inputs - 1) * (idx == (nb_inputs - 1)));     \
+                    dst[x] = src[0][x];                                                         \
+                    sum[x] -= src[0][x];                                                        \
+                }                                                                               \
+                                                                                                \
+                dst    += dst_linesize;                                                         \
+                sum    += sum_linesize;                                                         \
+                src[0] += src_linesize[0] / sizeof(type);                                       \
+                src[1] += src_linesize[1] / sizeof(type);                                       \
+            }                                                                                   \
+        } else {                                                                                \
+            for (int y = slice_start; y < slice_end; y++) {                                     \
+                for (int x = 0; x < width; x++) {                                               \
+                    sum[x] += src[1][x] * (1 + (nb_inputs - 1) * (idx == (nb_inputs - 1)));     \
+                    dst[x] = (sum[x] + (round)) / nb_inputs;                                    \
+                    sum[x] -= src[0][x];                                                        \
+                }                                                                               \
+                                                                                                \
+                dst    += dst_linesize;                                                         \
+                sum    += sum_linesize;                                                         \
+                src[0] += src_linesize[0] / sizeof(type);                                       \
+                src[1] += src_linesize[1] / sizeof(type);                                       \
+            }                                                                                   \
         }                                                                                       \
     }
 
@@ -229,6 +271,7 @@ typedef struct ThreadData {
 
 static int mix_frames(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
+    const int disabled = ff_filter_disabled(ctx);
     MixContext *s = ctx->priv;
     ThreadData *td = arg;
     AVFrame **in = td->in;
@@ -242,13 +285,13 @@ static int mix_frames(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const float wfactor = s->wfactor;
     const int max = s->max;
 
-    if (s->tmix && s->fast) {
+    if (s->tmix) {
         if (s->depth <= 8) {
-            FAST_TMIX_SLICE(uint8_t, uint16_t, nb_inputs >> 1)
+            TMIX_SLICE(uint8_t, uint16_t, nb_inputs >> 1, lrintf, CLIP8)
         } else if (s->depth <= 16) {
-            FAST_TMIX_SLICE(uint16_t, uint32_t, nb_inputs >> 1)
+            TMIX_SLICE(uint16_t, uint32_t, nb_inputs >> 1, lrintf, CLIP16)
         } else {
-            FAST_TMIX_SLICE(float, float, 0.f)
+            TMIX_SLICE(float, float, 0.f, NOP, CLIPF)
         }
 
         return 0;
@@ -347,7 +390,8 @@ static int config_output(AVFilterLink *outlink)
 
     if (s->tmix) {
         for (int p = 0; p < s->nb_planes; p++) {
-            s->sum[p] = av_calloc(s->linesizes[p], s->height[p] * sizeof(*s->sum) * 2);
+            s->sum_linesizes[p] = s->linesizes[p] * (1 + !(s->desc->flags & AV_PIX_FMT_FLAG_FLOAT));
+            s->sum[p] = av_calloc(s->sum_linesizes[p], s->height[p]);
             if (!s->sum[p])
                 return AVERROR(ENOMEM);
         }
@@ -489,13 +533,6 @@ static int tmix_filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_free(&s->frames[0]);
         memmove(&s->frames[0], &s->frames[1], sizeof(*s->frames) * (s->nb_inputs - 1));
         s->frames[s->nb_inputs - 1] = in;
-    }
-
-    if (ff_filter_disabled(ctx)) {
-        out = av_frame_clone(s->frames[0]);
-        if (!out)
-            return AVERROR(ENOMEM);
-        return ff_filter_frame(outlink, out);
     }
 
     out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
