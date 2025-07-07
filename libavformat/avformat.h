@@ -1944,6 +1944,15 @@ typedef struct AVFormatContext {
      * Name of this format context, only used for logging purposes.
      */
     char *name;
+
+    /**
+     * Depth recursion limit,
+     *
+     * The maximum recursion depth that a Demuxer can open a Demuxer within itself.
+     *
+     * - demuxing: Set by user
+     */
+    int recursion_limit;
 } AVFormatContext;
 
 /**
