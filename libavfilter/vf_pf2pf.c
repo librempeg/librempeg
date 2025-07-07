@@ -365,12 +365,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         out = in;
     } else {
         ThreadData td;
-        int nb_jobs;
+        int ret, nb_jobs;
 
-        out = ff_get_video_buffer(outlink, in->width, in->height);
+        out = av_frame_alloc();
         if (!out) {
             av_frame_free(&in);
             return AVERROR(ENOMEM);
+        }
+
+        ret = ff_filter_get_buffer(ctx, out);
+        if (ret < 0) {
+            av_frame_free(&out);
+            av_frame_free(&in);
+            return ret;
         }
 
         td.in = in;
@@ -388,27 +395,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
-static int activate(AVFilterContext *ctx)
-{
-    AVFilterLink *inlink = ctx->inputs[0];
-    AVFilterLink *outlink = ctx->outputs[0];
-    AVFrame *in;
-    int ret;
-
-    FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
-
-    ret = ff_inlink_consume_frame(inlink, &in);
-    if (ret < 0)
-        return ret;
-    if (ret > 0)
-        return filter_frame(inlink, in);
-
-    FF_FILTER_FORWARD_STATUS(inlink, outlink);
-    FF_FILTER_FORWARD_WANTED(outlink, inlink);
-
-    return FFERROR_NOT_READY;
-}
-
 static AVFrame *get_in_video_buffer(AVFilterLink *inlink, int w, int h)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -419,20 +405,11 @@ static AVFrame *get_in_video_buffer(AVFilterLink *inlink, int w, int h)
         ff_default_get_video_buffer(inlink, w, h);
 }
 
-static AVFrame *get_out_video_buffer(AVFilterLink *outlink, int w, int h)
-{
-    AVFilterContext *ctx = outlink->src;
-    PF2PFContext *s = ctx->priv;
-
-    return s->pass ?
-        ff_null_get_video_buffer   (outlink, w, h) :
-        ff_default_get_video_buffer(outlink, w, h);
-}
-
 static const AVFilterPad inputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
+        .filter_frame  = filter_frame,
         .get_buffer.video = get_in_video_buffer,
     },
 };
@@ -442,7 +419,6 @@ static const AVFilterPad outputs[] = {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
         .config_props = config_output,
-        .get_buffer.video = get_out_video_buffer,
     },
 };
 
@@ -451,9 +427,8 @@ const FFFilter ff_vf_pf2pf = {
     .p.description = NULL_IF_CONFIG_SMALL("Switch video pixel format."),
     .p.priv_class  = &pf2pf_class,
     .priv_size     = sizeof(PF2PFContext),
-    .activate      = activate,
     FILTER_QUERY_FUNC2(query_formats),
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS | AVFILTER_FLAG_FRAME_THREADS,
 };
