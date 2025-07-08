@@ -493,14 +493,20 @@ static int activate(AVFilterContext *ctx)
         AVFrame *frame = NULL;
         int ret;
 
-        ret = ff_inlink_consume_frame(inlink, &frame);
-        if (ret < 0)
-            return ret;
-        if (ret > 0) {
-            pts = frame->pts;
-            av_frame_free(&frame);
-        }
+        do {
+            ret = ff_inlink_consume_frame(inlink, &frame);
+            if (ret < 0)
+                return ret;
+            if (ret > 0) {
+                pts = frame->pts;
+                av_frame_free(&frame);
+            }
+        } while (ret > 0);
+
     }
+
+    if (!s->eof && ff_inlink_queued_frames(inlink) == 0)
+        ff_inlink_request_frame(inlink);
 
     if (pts != AV_NOPTS_VALUE) {
         pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
