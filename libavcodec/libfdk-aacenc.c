@@ -2,7 +2,7 @@
  * AAC encoder wrapper
  * Copyright (c) 2012 Martin Storsjo
  *
- * This file is part of FFmpeg.
+ * This file is part of Librempeg.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above

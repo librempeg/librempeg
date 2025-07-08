@@ -2,7 +2,7 @@
  * LC3 decoder wrapper
  * Copyright (C) 2024  Antoine Soulier <asoulier@google.com>
  *
- * This file is part of FFmpeg.
+ * This file is part of Librempeg.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above

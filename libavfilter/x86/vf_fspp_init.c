@@ -2,14 +2,14 @@
  * Copyright (c) 2003 Michael Niedermayer <michaelni@gmx.at>
  * Copyright (C) 2005 Nikolaj Poroshin <porosh3@psu.ru>
  *
- * This file is part of FFmpeg.
+ * This file is part of Librempeg.
  *
- * FFmpeg is free software; you can redistribute it and/or modify
+ * Librempeg is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * FFmpeg is distributed in the hope that it will be useful,
+ * Librempeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.

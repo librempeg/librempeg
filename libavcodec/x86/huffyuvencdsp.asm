@@ -6,14 +6,14 @@
 ;* MMX optimization by Nick Kurshev <nickols_k@mail.ru>
 ;* Conversion to NASM format by Tiancheng "Timothy" Gu <timothygu99@gmail.com>
 ;*
-;* This file is part of FFmpeg.
+;* This file is part of Librempeg.
 ;*
-;* FFmpeg is free software; you can redistribute it and/or
+;* Librempeg is free software; you can redistribute it and/or
 ;* modify it under the terms of the GNU Lesser General Public
 ;* License as published by the Free Software Foundation; either
 ;* version 2.1 of the License, or (at your option) any later version.
 ;*
-;* FFmpeg is distributed in the hope that it will be useful,
+;* Librempeg is distributed in the hope that it will be useful,
 ;* but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;* Lesser General Public License for more details.

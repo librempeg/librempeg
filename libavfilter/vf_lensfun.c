@@ -2,7 +2,7 @@
  * Copyright (C) 2007 by Andrew Zabolotny (author of lensfun, from which this filter derives from)
  * Copyright (C) 2018 Stephen Seo
  *
- * This file is part of FFmpeg.
+ * This file is part of Librempeg.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

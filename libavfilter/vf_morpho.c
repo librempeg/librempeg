@@ -2,7 +2,7 @@
  * Copyright (c) 2016 ReneBrals
  * Copyright (c) 2021 Paul B Mahol
  *
- * This file is part of FFmpeg.
+ * This file is part of Librempeg.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
