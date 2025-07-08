@@ -568,7 +568,8 @@ static int filter_prepare(AVFilterContext *ctx)
         if (ret > 0)
             return 0;
 
-        ff_inlink_request_frame(inlink);
+        if (ff_inlink_queued_frames(inlink) < 1)
+            ff_inlink_request_frame(inlink);
 
         if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
             ff_outlink_set_status(outlink, status, pts);
