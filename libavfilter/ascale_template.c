@@ -170,6 +170,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     const ftype fs = F(1.0)/ctx->inputs[0]->sample_rate;
     AScaleContext *s = ctx->priv;
     const int max_period = s->max_period;
+    int best_period = -1, ns = max_period;
     const int max_size = s->max_size;
     ChannelContext *c = &s->c[ch];
     void *datax[1] = { (void *)c->data[0] };
@@ -181,7 +182,6 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     ftype *dptrx = c->data[0];
     ftype *dptry = c->data[1];
     ftype best_score = -MAXF;
-    int best_period = -1, ns;
     int size;
 
     if (av_audio_fifo_size(c->in_fifo) <= 0)
@@ -249,10 +249,11 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     c->c2r_fn(c->c2r, rptrx, cptrx, sizeof(*cptrx));
 
     for (int n = 1; n < max_period-1; n++) {
-        ns = n;
         if (rptrx[n] <= rptrx[n-1] &&
-            rptrx[n] <= rptrx[n+1])
+            rptrx[n] <= rptrx[n+1]) {
+            ns = n;
             break;
+        }
     }
 
     for (int n = ns; n < max_period-1; n++) {
@@ -325,6 +326,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     const ftype fs = F(1.0)/ctx->inputs[0]->sample_rate;
     AScaleContext *s = ctx->priv;
     const int max_period = s->max_period;
+    int best_period = -1, ns = max_period;
     const int max_size = s->max_size;
     ChannelContext *c = &s->c[ch];
     void *datax[1] = { (void *)c->data[0] };
@@ -335,7 +337,6 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     ftype *dptrx = c->data[0];
     ftype *dptry = c->data[0];
     ftype best_score = -MAXF;
-    int best_period = -1, ns;
     int size;
 
     if (av_audio_fifo_size(c->in_fifo) <= 0)
@@ -377,10 +378,11 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
     c->c2r_fn(c->c2r, rptrx, cptrx, sizeof(*cptrx));
 
     for (int n = 1; n < max_period-1; n++) {
-        ns = n;
         if (rptrx[n] <= rptrx[n-1] &&
-            rptrx[n] <= rptrx[n+1])
+            rptrx[n] <= rptrx[n+1]) {
+            ns = n;
             break;
+        }
     }
 
     for (int n = ns; n < max_period-1; n++) {
