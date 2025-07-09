@@ -30,9 +30,19 @@ typedef struct LOPUSDemuxContext {
 
 static int lopus_probe(const AVProbeData *p)
 {
-    if (AV_RL32(p->buf) == 0x80000001 &&
+    int offset = 0;
+
+    if (AV_RL32(p->buf) == MKTAG('O','P','U','S'))
+        offset = 24;
+
+    if (p->buf_size < offset + 9)
+        return 0;
+
+    if (AV_RL32(p->buf+offset) == 0x80000001 &&
+        AV_RL32(p->buf+offset+4) == 0x18 &&
         p->buf[9] > 0)
         return AVPROBE_SCORE_MAX;
+
     return 0;
 }
 
@@ -40,18 +50,27 @@ static int lopus_read_header(AVFormatContext *s)
 {
     LOPUSDemuxContext *lc = s->priv_data;
     AVIOContext *pb = s->pb;
-    uint32_t data_offset;
+    uint32_t chunk, data_offset, duration = 0, offset = 0;
+    int skip, ret, nb_channels;
     AVStream *st;
-    int skip, ret;
 
-    avio_skip(pb, 9);
+    chunk = avio_rl32(pb);
+    if (chunk == MKTAG('O','P','U','S')) {
+        avio_skip(pb, 4);
+        duration = avio_rl32(pb);
+        avio_skip(pb, 16);
+        offset = 24;
+    }
+    avio_skip(pb, 5);
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
+    st->start_time = 0;
+    st->duration = duration;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->ch_layout.nb_channels = avio_r8(pb);
+    st->codecpar->ch_layout.nb_channels = nb_channels = avio_r8(pb);
     if (st->codecpar->ch_layout.nb_channels < 1)
         return AVERROR_INVALIDDATA;
 
@@ -62,30 +81,45 @@ static int lopus_read_header(AVFormatContext *s)
         st->codecpar->sample_rate = 48000;
     st->codecpar->codec_id = AV_CODEC_ID_OPUS;
 
-    data_offset = avio_rl32(pb);
+    data_offset = avio_rl32(pb) + offset;
     avio_skip(pb, 8);
     skip = avio_rl16(pb);
+    avio_skip(pb, 2);
+
+    ret = ff_alloc_extradata(st->codecpar, 19 + 2 + nb_channels);
+    if (ret < 0)
+        return ret;
+    memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
+
+    st->codecpar->extradata[9] = nb_channels;
+    AV_WL16(st->codecpar->extradata + 10, skip);
 
     if (avio_tell(pb) > data_offset)
         return AVERROR_INVALIDDATA;
+    chunk = avio_rl32(pb);
+    if (chunk == 0x80000005 && nb_channels <= 8) {
+        avio_skip(pb, 4);
+        st->codecpar->extradata[18] = 1;
+        st->codecpar->extradata[19] = avio_r8(pb);
+        st->codecpar->extradata[20] = avio_r8(pb);
+        avio_skip(pb, 2);
 
-    avio_skip(pb, data_offset - avio_tell(pb));
-    if (avio_rl32(pb) != 0x80000004)
+        for (int ch = 0; ch < nb_channels; ch++)
+            st->codecpar->extradata[21 + ch] = avio_r8(pb);
+
+        chunk = avio_rl32(pb);
+    } else if (chunk != 0x80000004) {
+        avio_skip(pb, data_offset - avio_tell(pb));
+        chunk = avio_rl32(pb);
+    }
+    if (chunk != 0x80000004)
         return AVERROR_INVALIDDATA;
+
     lc->data_end = avio_tell(pb) + avio_rl32(pb);
 
     ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
-
-    ret = ff_alloc_extradata(st->codecpar, 19);
-    if (ret < 0)
-        return ret;
-    memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
-
-    st->codecpar->extradata[9] = st->codecpar->ch_layout.nb_channels;
-
-    AV_WL16(st->codecpar->extradata + 10, skip);
 
     return 0;
 }
