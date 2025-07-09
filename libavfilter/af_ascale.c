@@ -29,22 +29,23 @@
 #include "avfilter.h"
 #include "filters.h"
 
-#define MIN_HZ 10
-#define MAX_HZ 25
+#define MAX_STATES 3
+
 #define IN 0
 #define OUT 1
 #define FIRST 0
 #define LAST 1
 
 typedef struct ChannelContext {
-    AVTXContext *r2c, *c2r;
-    av_tx_fn r2c_fn, c2r_fn;
+    AVTXContext *r2c[MAX_STATES], *c2r[MAX_STATES];
+    av_tx_fn r2c_fn[MAX_STATES], c2r_fn[MAX_STATES];
 
     double state[2];
 
     int mode;
     int keep[2];
     int best_period;
+    int best_max_period;
     double best_score;
 
     void *r_data[2];
@@ -83,7 +84,6 @@ typedef struct AScaleContext {
 
 static const AVOption ascale_options[] = {
     { "tempo", "set the tempo", OFFSET(tempo), AV_OPT_TYPE_DOUBLE, {.dbl=1.0}, 0.01, 100.0, TFLAGS },
-    { "period", "set the period", OFFSET(hz), AV_OPT_TYPE_INT, {.i64=24}, MIN_HZ, MAX_HZ, FLAGS },
     { NULL }
 };
 
@@ -323,9 +323,11 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     AScaleContext *s = ctx->priv;
 
+    s->hz = 10;
     s->pts[IN] = AV_NOPTS_VALUE;
     s->max_period = (inlink->sample_rate + s->hz-1) / s->hz;
     s->max_size = 1 << av_ceil_log2(s->max_period*2);
+    s->max_period = s->max_size >> 1;
     s->nb_channels = inlink->ch_layout.nb_channels;
 
     switch (inlink->format) {
