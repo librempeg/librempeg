@@ -133,9 +133,18 @@ static inline void fn(update_stat)(AudioStatsContext *s, ChannelStats *p, stype 
     }
 
     if (d != 0) {
-        p->zero_runs += FFSIGN(d) != FFSIGN(p->last_non_zero);
+        int changed = FFSIGN(d) != FFSIGN(p->last_non_zero);
+
+        if (changed) {
+            p->cur_period = 0;
+        } else {
+            p->cur_period++;
+        }
+        p->zero_runs += changed;
         p->last_non_zero = d;
     }
+
+    p->max_period = FFMAX(p->max_period, p->cur_period);
 
     p->sigma_x += scaled;
     p->sigma_ax += fabs(scaled);
