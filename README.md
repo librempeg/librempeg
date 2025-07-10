@@ -31,8 +31,8 @@ Coding examples are available in the **doc/examples** directory.
 
 ## License
 
-Librempeg codebase is mainly LGPL-licensed with optional components licensed under
-GPL. Please refer to the LICENSE file for detailed information.
+Librempeg codebase is mainly GPLv3-licensed with optional components licensed under
+AGPL. Please refer to the LICENSE file for detailed information.
 
 ## Contributing
 
