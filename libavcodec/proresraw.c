@@ -137,7 +137,7 @@ static const uint16_t ln_cb[15] = {
 };
 
 static int decode_tilec(AVCodecContext *avctx, TileContext *tile,
-                        AVFrame *frame, int size, int component, int qscale)
+                        AVFrame *frame, int size, int component, const int16_t *qmat)
 {
     ProResRAWContext *s = avctx->priv_data;
     const ptrdiff_t linesize = frame->linesize[0] / 2;
@@ -148,7 +148,6 @@ static int decode_tilec(AVCodecContext *avctx, TileContext *tile,
     const int block_mask = (1 << log2_nb_blocks)-1;
     const int nb_codes = 64 * nb_blocks;
     LOCAL_ALIGNED_32(int16_t, block, [128*8]);
-    LOCAL_ALIGNED_32(int16_t, qmat, [64]);
     LOCAL_ALIGNED_32(int16_t, out, [64]);
     int prev_dc = 0, ret, sign = 0, dc_add = 0;
     GetByteContext *gb = &tile->gb;
@@ -164,9 +163,6 @@ static int decode_tilec(AVCodecContext *avctx, TileContext *tile,
         ret = AVERROR_INVALIDDATA;
         goto fail;
     }
-
-    for (int n = 0; n < 64; n++)
-        qmat[n] = s->qmat[n] * 8;
 
     if (component > 1)
         dst += linesize;
@@ -275,6 +271,7 @@ fail:
 static int decode_tile(AVCodecContext *avctx, TileContext *tile,
                        AVFrame *frame)
 {
+    LOCAL_ALIGNED_32(int16_t, qmat, [64]);
     GetByteContext *gb = &tile->gb;
     int ret, size[4];
     uint16_t qscale;
@@ -283,6 +280,8 @@ static int decode_tile(AVCodecContext *avctx, TileContext *tile,
         return 0;
 
     qscale = bytestream2_get_be16(gb);
+    for (int i = 0; i < 64; i++)
+        qmat[i] = (qscale - 16384) >> 1;
 
     size[0] = bytestream2_get_be16(gb);
     size[1] = bytestream2_get_be16(gb);
@@ -291,16 +290,16 @@ static int decode_tile(AVCodecContext *avctx, TileContext *tile,
     if (size[3] < 0)
         return AVERROR_INVALIDDATA;
 
-    ret = decode_tilec(avctx, tile, frame, size[0], 2, qscale);
+    ret = decode_tilec(avctx, tile, frame, size[0], 2, qmat);
     if (ret < 0)
         goto fail;
-    ret = decode_tilec(avctx, tile, frame, size[1], 1, qscale);
+    ret = decode_tilec(avctx, tile, frame, size[1], 1, qmat);
     if (ret < 0)
         goto fail;
-    ret = decode_tilec(avctx, tile, frame, size[2], 3, qscale);
+    ret = decode_tilec(avctx, tile, frame, size[2], 3, qmat);
     if (ret < 0)
         goto fail;
-    ret = decode_tilec(avctx, tile, frame, size[3], 0, qscale);
+    ret = decode_tilec(avctx, tile, frame, size[3], 0, qmat);
     if (ret < 0)
         goto fail;
 
