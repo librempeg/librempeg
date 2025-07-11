@@ -432,6 +432,7 @@ extern const FFOutputFormat ff_rm_muxer;
 extern const FFInputFormat  ff_roq_demuxer;
 extern const FFOutputFormat ff_roq_muxer;
 extern const FFInputFormat  ff_rpl_demuxer;
+extern const FFInputFormat  ff_rs03_demuxer;
 extern const FFInputFormat  ff_rsd_demuxer;
 extern const FFInputFormat  ff_rso_demuxer;
 extern const FFOutputFormat ff_rso_muxer;
