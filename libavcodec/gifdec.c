@@ -249,6 +249,9 @@ static int gif_read_image(GifState *s, AVFrame *frame)
 
     /* now get the image data */
     code_size = bytestream2_get_byteu(&s->gb);
+    if (!code_size || code_size >= 12)
+        goto skip;
+
     if ((ret = ff_lzw_decode_init(s->lzw, code_size, s->gb.buffer,
                                   bytestream2_get_bytes_left(&s->gb), FF_LZW_GIF)) < 0) {
         av_log(s->avctx, AV_LOG_ERROR, "LZW init failed\n");
@@ -308,6 +311,7 @@ static int gif_read_image(GifState *s, AVFrame *frame)
     lzwed_len = ff_lzw_decode_tail(s->lzw);
     bytestream2_skipu(&s->gb, lzwed_len);
 
+skip:
     /* Graphic Control Extension's scope is single frame.
      * Remove its influence. */
     s->transparent_color_index = -1;
