@@ -4069,6 +4069,12 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("SMPTE ST 2038 VANC in MPEG-2 TS"),
     },
     {
+        .id        = AV_CODEC_ID_SMPTE_436M_ANC,
+        .type      = AVMEDIA_TYPE_DATA,
+        .name      = "smpte_436m_anc",
+        .long_name = NULL_IF_CONFIG_SMALL("MXF SMPTE-436M ANC"),
+    },
+    {
         .id        = AV_CODEC_ID_MPEG2TS,
         .type      = AVMEDIA_TYPE_DATA,
         .name      = "mpegts",
