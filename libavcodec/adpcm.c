@@ -1391,7 +1391,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
         if (avctx->extradata) {
-            nb_samples = buf_size * 14 / (8 * ch);
+            nb_samples = (buf_size / ch) / 8 * 14;
             break;
         }
         has_coded_samples = 1;
