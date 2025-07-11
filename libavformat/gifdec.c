@@ -32,43 +32,7 @@
 #include "avio_internal.h"
 #include "internal.h"
 #include "libavcodec/gif.h"
-
-#define GIF_PACKET_SIZE 1024
-
-typedef struct GIFDemuxContext {
-    const AVClass *class;
-    /**
-     * Time span in hundredths of second before
-     * the next frame should be drawn on screen.
-     */
-    int delay;
-    /**
-     * Minimum allowed delay between frames in hundredths of
-     * second. Values below this threshold considered to be
-     * invalid and set to value of default_delay.
-     */
-    int min_delay;
-    int max_delay;
-    int default_delay;
-
-    /**
-     * loop options
-     */
-    int total_iter;
-    int iter_count;
-    int ignore_loop;
-} GIFDemuxContext;
-
-/**
- * Major web browsers display gifs at ~10-15fps when rate
- * is not explicitly set or have too low values. We assume default rate to be 10.
- * Default delay = 100hundredths of second / 10fps = 10hos per frame.
- */
-#define GIF_DEFAULT_DELAY   10
-/**
- * By default delay values less than this threshold considered to be invalid.
- */
-#define GIF_MIN_DELAY       2
+#include "rawdec.h"
 
 static int gif_probe(const AVProbeData *p)
 {
@@ -114,7 +78,6 @@ static int gif_skip_subblocks(AVIOContext *pb)
 
 static int gif_read_header(AVFormatContext *s)
 {
-    GIFDemuxContext *gdc = s->priv_data;
     AVIOContext     *pb  = s->pb;
     AVStream        *st;
     int type, width, height, ret, n, flags;
@@ -124,7 +87,6 @@ static int gif_read_header(AVFormatContext *s)
         return ret;
 
     pos = avio_tell(pb);
-    gdc->delay  = gdc->default_delay;
     width  = avio_rl16(pb);
     height = avio_rl16(pb);
     flags = avio_r8(pb);
@@ -167,7 +129,6 @@ static int gif_read_header(AVFormatContext *s)
 
                     avio_skip(pb, 1);
                     delay = avio_rl16(pb);
-                    delay = delay ? delay : gdc->default_delay;
                     duration += delay;
                     avio_skip(pb, 1);
                 } else {
@@ -190,11 +151,9 @@ static int gif_read_header(AVFormatContext *s)
                         break;
 
                     if (sb_size == 3 && data[0] == 1) {
-                        gdc->total_iter = AV_RL16(data+1);
-                        av_log(s, AV_LOG_DEBUG, "Loop count is %d\n", gdc->total_iter);
+                        int total_iter = AV_RL16(data+1);
 
-                        if (gdc->total_iter == 0)
-                            gdc->total_iter = -1;
+                        av_log(s, AV_LOG_DEBUG, "Loop count is %d\n", total_iter);
                     }
                 }
                 gif_skip_subblocks(pb);
@@ -242,54 +201,14 @@ skip:
     return 0;
 }
 
-static int gif_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    GIFDemuxContext *gdc = s->priv_data;
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    if ((pb->seekable & AVIO_SEEKABLE_NORMAL) &&
-        !gdc->ignore_loop && avio_feof(pb) &&
-        (gdc->total_iter < 0 || (++gdc->iter_count < gdc->total_iter))) {
-        avio_seek(pb, 0, SEEK_SET);
-    }
-    if ((ret = av_new_packet(pkt, GIF_PACKET_SIZE)) < 0)
-        return ret;
-
-    pkt->pos = avio_tell(pb);
-    pkt->stream_index = 0;
-    ret = avio_read_partial(pb, pkt->data, GIF_PACKET_SIZE);
-    if (ret < 0) {
-        av_packet_unref(pkt);
-        return ret;
-    }
-    av_shrink_packet(pkt, ret);
-    return ret;
-}
-
-static const AVOption options[] = {
-    { "min_delay"    , "minimum valid delay between frames (in hundredths of second)", offsetof(GIFDemuxContext, min_delay)    , AV_OPT_TYPE_INT, {.i64 = GIF_MIN_DELAY}    , 0, 100 * 60, AV_OPT_FLAG_DECODING_PARAM },
-    { "max_gif_delay", "maximum valid delay between frames (in hundredths of seconds)", offsetof(GIFDemuxContext, max_delay)   , AV_OPT_TYPE_INT, {.i64 = 65535}            , 0, 65535   , AV_OPT_FLAG_DECODING_PARAM },
-    { "default_delay", "default delay between frames (in hundredths of second)"      , offsetof(GIFDemuxContext, default_delay), AV_OPT_TYPE_INT, {.i64 = GIF_DEFAULT_DELAY}, 0, 100 * 60, AV_OPT_FLAG_DECODING_PARAM },
-    { "ignore_loop"  , "ignore loop setting (netscape extension)"                    , offsetof(GIFDemuxContext, ignore_loop)  , AV_OPT_TYPE_BOOL,{.i64 = 1}                , 0,        1, AV_OPT_FLAG_DECODING_PARAM },
-    { NULL },
-};
-
-static const AVClass demuxer_class = {
-    .class_name = "GIF demuxer",
-    .option     = options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_DEMUXER,
-};
-
 const FFInputFormat ff_gif_demuxer = {
     .p.name         = "gif",
     .p.long_name    = NULL_IF_CONFIG_SMALL("CompuServe Graphics Interchange Format (GIF)"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "gif",
-    .p.priv_class   = &demuxer_class,
-    .priv_data_size = sizeof(GIFDemuxContext),
+    .p.priv_class   = &ff_raw_demuxer_class,
+    .priv_data_size = sizeof(FFRawDemuxerContext),
     .read_probe     = gif_probe,
     .read_header    = gif_read_header,
-    .read_packet    = gif_read_packet,
+    .read_packet    = ff_raw_read_partial_packet,
 };
