@@ -346,8 +346,7 @@ static int read_header(AVFormatContext *s)
                 return AVERROR_INVALIDDATA;
             avio_skip(pb, start - avio_tell(pb));
 
-            if (bfstm && (codec == AV_CODEC_ID_ADPCM_THP ||
-                          codec == AV_CODEC_ID_ADPCM_THP_LE))
+            if (bfstm)
                 avio_skip(pb, 24);
 
             b->data_start = avio_tell(pb);
