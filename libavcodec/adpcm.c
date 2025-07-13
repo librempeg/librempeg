@@ -2571,8 +2571,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             /* Read in every sample for this channel.  */
             for (int i = 0; i < (nb_samples + 13) / 14; i++) {
                 int byte = bytestream2_get_byteu(&gb);
-                int index = (byte >> 4) & 7;
-                unsigned int exp = byte & 0x0F;
+                const int index = (byte >> 4) & 0xF;
+                const int scale = 1 << (byte & 0xF);
                 int64_t factor1 = table[ch][index * 2];
                 int64_t factor2 = table[ch][index * 2 + 1];
 
@@ -2587,8 +2587,9 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                         sampledat = sign_extend(byte >> 4, 4);
                     }
 
-                    sampledat = ((c->status[ch].sample1 * factor1
-                                + c->status[ch].sample2 * factor2) >> 11) + sampledat * (1 << exp);
+                    sampledat = (sampledat * scale) << 11;
+                    sampledat = ((c->status[ch].sample1 * factor1 +
+                                  c->status[ch].sample2 * factor2 + 1024 + sampledat) >> 11);
                     *samples = av_clip_int16(sampledat);
                     c->status[ch].sample2 = c->status[ch].sample1;
                     c->status[ch].sample1 = *samples++;
