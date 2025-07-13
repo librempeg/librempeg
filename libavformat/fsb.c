@@ -215,10 +215,64 @@ static int fsb_read_header(AVFormatContext *s)
         default: return AVERROR_INVALIDDATA;
         }
 
+        if (sample_mode & 0x01) {
+            uint32_t extraflag, extraflag_type, extraflag_size, extraflag_end;
+
+            do {
+                extraflag = avio_rl32(pb);
+                extraflag_type = (extraflag >> 25) & 0x7F;
+                extraflag_size = (extraflag >> 1) & 0xFFFFFF;
+                extraflag_end  = extraflag & 0x01;
+
+                if (avio_feof(pb))
+                    break;
+
+                switch (extraflag_type) {
+                case 0x01:
+                    channels = avio_r8(pb);
+                    if (channels == 0)
+                        return AVERROR_INVALIDDATA;
+                    break;
+                case 0x02:
+                    sample_rate = avio_rl32(pb);
+                    if (sample_rate <= 0)
+                        return AVERROR_INVALIDDATA;
+                    break;
+                case 0x05:
+                    avio_skip(pb, 4);
+                    break;
+                case 0x07:
+                    switch (codec) {
+                    case 0x6:
+                        ret = ff_alloc_extradata(par, 32 * channels);
+                        if (ret < 0)
+                            return ret;
+
+                        for (int ch = 0; ch < channels; ch++) {
+                            for (int n = 0; n < 16; n++)
+                                AV_WL16(par->extradata + n * 2, avio_rb16(pb));
+                        }
+                        break;
+                    }
+                    break;
+                case 0x0e:
+                    channels = channels * avio_rl32(pb);
+                    break;
+                default:
+                    avio_skip(pb, extraflag_size);
+                    break;
+                }
+            } while (extraflag_end != 0);
+        }
+
         par->ch_layout.nb_channels = channels;
         par->sample_rate = sample_rate;
 
         switch (codec) {
+        case 0x06:
+            par->codec_id = AV_CODEC_ID_ADPCM_THP_LE;
+            par->block_align = 0x8 * channels;
+            break;
         case 0x10:
             par->codec_id = AV_CODEC_ID_ADPCM_FMOD;
             par->block_align = 0x8C * channels;
