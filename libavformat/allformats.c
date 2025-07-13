@@ -354,6 +354,7 @@ extern const FFOutputFormat ff_null_muxer;
 extern const FFInputFormat  ff_nut_demuxer;
 extern const FFOutputFormat ff_nut_muxer;
 extern const FFInputFormat  ff_nuv_demuxer;
+extern const FFInputFormat  ff_nwav_demuxer;
 extern const FFInputFormat  ff_obu_demuxer;
 extern const FFOutputFormat ff_obu_muxer;
 extern const FFOutputFormat ff_oga_muxer;
