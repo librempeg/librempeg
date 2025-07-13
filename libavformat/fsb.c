@@ -39,6 +39,7 @@ static int fsb_read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     unsigned format, version, c;
+    int minor_version;
     int64_t offset;
     AVCodecParameters *par;
     AVStream *st = avformat_new_stream(s, NULL);
@@ -47,12 +48,12 @@ static int fsb_read_header(AVFormatContext *s)
 
     avio_skip(pb, 3); // "FSB"
     version = avio_r8(pb) - '0';
-    if (version != 4 && version != 3) {
+    if (version != 5 && version != 4 && version != 3) {
         avpriv_request_sample(s, "version %d", version);
         return AVERROR_PATCHWELCOME;
     }
 
-    avio_skip(pb, 4);
+    minor_version = avio_rl32(pb);
 
     if (!st)
         return AVERROR(ENOMEM);
@@ -162,7 +163,70 @@ static int fsb_read_header(AVFormatContext *s)
             sti->need_parsing = AVSTREAM_PARSE_FULL;
             break;
         }
-    } else {
+    } else if (version == 5) {
+        uint64_t sample_mode;
+        int sample_header_size;
+        int sample_data_size;
+        int name_table_size;
+        int sample_rate;
+        int base_hsize;
+        int channels;
+        int codec;
+
+        avio_rl32(pb);
+        sample_header_size = avio_rl32(pb);
+        name_table_size = avio_rl32(pb);
+        sample_data_size = avio_rl32(pb);
+        codec = avio_rl32(pb);
+        if (minor_version == 1)
+            base_hsize = 0x3C;
+        else
+            base_hsize = 0x40;
+
+        avio_seek(pb, base_hsize, SEEK_SET);
+
+        sample_mode = avio_rl64(pb);
+        st->duration = ((sample_mode >> 34) & 0x3FFFFFFF);
+        offset = ((sample_mode >> 7) & 0x07FFFFFF) << 5;
+        offset += base_hsize;
+        offset += sample_header_size;
+        offset += name_table_size;
+
+        switch ((sample_mode >> 5) & 0x03) {
+        case 0:  channels = 1; break;
+        case 1:  channels = 2; break;
+        case 2:  channels = 6; break;
+        case 3:  channels = 8; break;
+        default: return AVERROR_INVALIDDATA;
+        }
+
+        switch ((sample_mode >> 1) & 0x0f) {
+        case 0:  sample_rate = 4000;  break;
+        case 1:  sample_rate = 8000;  break;
+        case 2:  sample_rate = 11000; break;
+        case 3:  sample_rate = 11025; break;
+        case 4:  sample_rate = 16000; break;
+        case 5:  sample_rate = 22050; break;
+        case 6:  sample_rate = 24000; break;
+        case 7:  sample_rate = 32000; break;
+        case 8:  sample_rate = 44100; break;
+        case 9:  sample_rate = 48000; break;
+        case 10: sample_rate = 96000; break;
+        default: return AVERROR_INVALIDDATA;
+        }
+
+        par->ch_layout.nb_channels = channels;
+        par->sample_rate = sample_rate;
+
+        switch (codec) {
+        case 0x10:
+            par->codec_id = AV_CODEC_ID_ADPCM_FMOD;
+            par->block_align = 0x8C * channels;
+            break;
+        default:
+            return AVERROR_PATCHWELCOME;
+        }
+     } else {
         av_assert0(0);
     }
 
