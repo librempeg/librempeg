@@ -224,6 +224,7 @@ static int fsb_read_header(AVFormatContext *s)
             par->block_align = 0x8C * channels;
             break;
         default:
+            avpriv_request_sample(s, "codec 0x%X", codec);
             return AVERROR_PATCHWELCOME;
         }
      } else {
