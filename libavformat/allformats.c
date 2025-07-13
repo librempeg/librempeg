@@ -240,6 +240,7 @@ extern const FFOutputFormat ff_ico_muxer;
 extern const FFInputFormat  ff_idcin_demuxer;
 extern const FFInputFormat  ff_idf_demuxer;
 extern const FFInputFormat  ff_idsp_demuxer;
+extern const FFOutputFormat ff_idsp_muxer;
 extern const FFInputFormat  ff_iff_demuxer;
 extern const FFInputFormat  ff_ifv_demuxer;
 extern const FFInputFormat  ff_ilbc_demuxer;
