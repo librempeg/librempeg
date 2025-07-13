@@ -87,6 +87,14 @@ static const int8_t xa_adpcm_table[5][2] = {
     { 122, -60 }
 };
 
+static const int8_t fmod_adpcm_table[8][2] = {
+    {   0,   0 },
+    {  60,   0 },
+    { 122,  60 },
+    { 115,  52 },
+    {  98,  55 },
+};
+
 static const int16_t afc_coeffs[2][16] = {
     { 0, 2048, 0, 1024, 4096, 3584, 3072, 4608, 4200, 4800, 5120, 2048, 1024, -1024, -1024, -2048 },
     { 0, 0, 2048, 1024, -2048, -1536, -1024, -2560, -2248, -2300, -3072, -2048, -1024, 1024, 0, 0 }
@@ -287,6 +295,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
             avctx->block_align % (16 * avctx->ch_layout.nb_channels))
             return AVERROR_INVALIDDATA;
         break;
+    case AV_CODEC_ID_ADPCM_FMOD:
     case AV_CODEC_ID_ADPCM_PSXC:
         max_channels = 8;
         if (avctx->ch_layout.nb_channels <= 0)
@@ -356,6 +365,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_ARGO:
     case AV_CODEC_ID_ADPCM_IMA_MOFLEX:
     case AV_CODEC_ID_ADPCM_N64:
+    case AV_CODEC_ID_ADPCM_FMOD:
         avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
         break;
     case AV_CODEC_ID_ADPCM_IMA_WS:
@@ -1433,6 +1443,10 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         if (!avctx->extradata || avctx->extradata_size != 2)
             return AVERROR_INVALIDDATA;
         nb_samples = AV_RL16(avctx->extradata);
+    case AV_CODEC_ID_ADPCM_FMOD:
+        if (buf_size / ch <= 0xc)
+            return AVERROR_INVALIDDATA;
+        nb_samples = (buf_size / ch - 0xc) * 2;
         break;
     }
 
@@ -2805,6 +2819,52 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
         }
         ) /* End of CASE */
+    CASE(ADPCM_FMOD,
+        for (int block = 0; block < avpkt->size / avctx->block_align; block++) {
+            int nb_samples_per_block = (avctx->block_align / channels - 0xc) * 2;
+            for (int channel = 0; channel < channels; channel++) {
+                uint32_t coefs, shifts;
+                int hist2, hist1;
+
+                samples = samples_p[channel] + block * nb_samples_per_block;
+                av_assert0((block + 1) * nb_samples_per_block <= nb_samples);
+
+                coefs  = bytestream2_get_le32u(&gb);
+                shifts = bytestream2_get_le32u(&gb);
+                hist1  = sign_extend(bytestream2_get_le16u(&gb), 16);
+                hist2  = sign_extend(bytestream2_get_le16u(&gb), 16);
+
+                for (int i = 0; i < 8; i++) {
+                    int index, shift, coef1, coef2;
+
+                    index = ((coefs >> i*4) & 0x0f) & 0x07;
+                    shift = (shifts >> i*4) & 0x0f;
+
+                    coef1 = fmod_adpcm_table[index][0];
+                    coef2 = fmod_adpcm_table[index][1];
+                    shift = 22 - shift;
+
+                    for (int j = 0; j < 4; j++) {
+                        uint32_t nibbles = bytestream2_get_le32u(&gb);
+
+                        for (int k = 0; k < 8; k++) {
+                            int32_t sample;
+
+                            sample = (nibbles >> k*4) & 0x0f;
+                            sample = (sample << 28) >> shift;
+                            sample = (sample - hist2*coef2 + hist1*coef1) >> 6;
+                            sample = av_clip_int16(sample);
+
+                            *samples++ = sample;
+
+                            hist2 = hist1;
+                            hist1 = sample;
+                        }
+                    }
+                }
+            }
+        }
+        ) /* End of CASE */
     CASE(ADPCM_SANYO,
         int (*expand)(ADPCMChannelStatus *c, int bits);
         const int bpcs = avctx->bits_per_coded_sample;
@@ -3009,6 +3069,7 @@ ADPCM_DECODER(ADPCM_EA_R1,       sample_fmts_s16p, adpcm_ea_r1,       "ADPCM Ele
 ADPCM_DECODER(ADPCM_EA_R2,       sample_fmts_s16p, adpcm_ea_r2,       "ADPCM Electronic Arts R2")
 ADPCM_DECODER(ADPCM_EA_R3,       sample_fmts_s16p, adpcm_ea_r3,       "ADPCM Electronic Arts R3")
 ADPCM_DECODER(ADPCM_EA_XAS,      sample_fmts_s16p, adpcm_ea_xas,      "ADPCM Electronic Arts XAS")
+ADPCM_DECODER(ADPCM_FMOD,        sample_fmts_s16p, adpcm_fmod,        "ADPCM FMOD")
 ADPCM_DECODER(ADPCM_IMA_ACORN,   sample_fmts_s16,  adpcm_ima_acorn,   "ADPCM IMA Acorn Replay")
 ADPCM_DECODER(ADPCM_IMA_AMV,     sample_fmts_s16,  adpcm_ima_amv,     "ADPCM IMA AMV")
 ADPCM_DECODER(ADPCM_IMA_APC,     sample_fmts_s16,  adpcm_ima_apc,     "ADPCM IMA CRYO APC")

@@ -682,6 +682,7 @@ extern const FFCodec ff_adpcm_ea_r1_decoder;
 extern const FFCodec ff_adpcm_ea_r2_decoder;
 extern const FFCodec ff_adpcm_ea_r3_decoder;
 extern const FFCodec ff_adpcm_ea_xas_decoder;
+extern const FFCodec ff_adpcm_fmod_decoder;
 extern const FFCodec ff_adpcm_g722_encoder;
 extern const FFCodec ff_adpcm_g722_decoder;
 extern const FFCodec ff_adpcm_g726_encoder;
