@@ -72,7 +72,7 @@ version <next>:
 - G.722.1 Annex C audio decoder
 - Sanyo ADPCM decoder
 - Tantalus ADPCM decoder
-- PIFF demuxer
+- piff demuxer
 - channelsum audio filter
 - arate audio filter
 - sideboost audio filter
@@ -80,6 +80,12 @@ version <next>:
 - arampsrc audio source filter
 - WebP Animation decoder
 - APV in MP4/ISOBMFF demuxing
+- lopus demuxer
+- rs03 demuxer
+- csmp demuxer
+- bwav demuxer
+- nwav demuxer
+- dkanim demuxer
 
 
 version 7.1:
