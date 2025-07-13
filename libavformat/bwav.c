@@ -85,7 +85,10 @@ static int read_header(AVFormatContext *s)
     }
 
     avio_seek(pb, 0x8c, SEEK_SET);
-    st->codecpar->block_align = avio_rl32(pb) * st->codecpar->ch_layout.nb_channels;
+    if (st->codecpar->ch_layout.nb_channels > 1)
+        st->codecpar->block_align = avio_rl32(pb) * st->codecpar->ch_layout.nb_channels;
+    if (!st->codecpar->block_align)
+        return AVERROR_INVALIDDATA;
 
     avio_seek(pb, 0x44, SEEK_SET);
     offset = avio_rl32(pb);
