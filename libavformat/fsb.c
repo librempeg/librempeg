@@ -104,26 +104,32 @@ static int fsb_read_header(AVFormatContext *s)
             return AVERROR_PATCHWELCOME;
         }
     } else if (version == 4) {
+        uint32_t flags;
+
         offset = avio_rl32(pb) + 0x30;
-        avio_skip(pb, 80);
+        avio_skip(pb, 8);
+        flags = avio_rl32(pb);
+        avio_skip(pb, 68);
         st->duration = avio_rl32(pb);
 
-        format = avio_rb32(pb);
-        switch(format) {
-        case 0x40001001:
-        case 0x00001005:
-        case 0x40001081:
-        case 0x40200001:
+        format = avio_rl32(pb);
+        if (format & 0x01000000) {
             par->codec_id = AV_CODEC_ID_XMA2;
-            break;
-        case 0x40000802:
+        } else if (format & 0x02000000) {
             par->codec_id = AV_CODEC_ID_ADPCM_THP;
-            break;
-        case 0x40220010:
-        case 0x20010:
+        } else if (format & 0x00000200) {
             par->codec_id = AV_CODEC_ID_MP3;
-            break;
-        default:
+        } else if (format & 0x00000008) {
+            if (format & 0x00000080)
+                par->codec_id = AV_CODEC_ID_PCM_U8;
+            else
+                par->codec_id = AV_CODEC_ID_PCM_S8;
+        } else if (format & 0x00000010) {
+            if (flags & 0x00000008)
+                par->codec_id = AV_CODEC_ID_PCM_S16BE;
+            else
+                par->codec_id = AV_CODEC_ID_PCM_S16LE;
+        } else {
             avpriv_request_sample(s, "format 0x%X", format);
             return AVERROR_PATCHWELCOME;
         }
@@ -163,6 +169,12 @@ static int fsb_read_header(AVFormatContext *s)
         case AV_CODEC_ID_MP3:
             par->block_align = 1024;
             sti->need_parsing = AVSTREAM_PARSE_FULL;
+            break;
+        case AV_CODEC_ID_PCM_S16BE:
+        case AV_CODEC_ID_PCM_S16LE:
+        case AV_CODEC_ID_PCM_S8:
+        case AV_CODEC_ID_PCM_U8:
+            par->block_align = 1024 * par->ch_layout.nb_channels;
             break;
         }
     } else if (version == 5) {
