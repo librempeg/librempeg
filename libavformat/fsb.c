@@ -251,6 +251,7 @@ static int fsb_read_header(AVFormatContext *s)
                         for (int ch = 0; ch < channels; ch++) {
                             for (int n = 0; n < 16; n++)
                                 AV_WL16(par->extradata + n * 2, avio_rb16(pb));
+                            avio_skip(pb, 0xe);
                         }
                         break;
                     }
