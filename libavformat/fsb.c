@@ -272,6 +272,18 @@ static int fsb_read_header(AVFormatContext *s)
         par->sample_rate = sample_rate;
 
         switch (codec) {
+        case 0x01:
+            par->codec_id = AV_CODEC_ID_PCM_U8;
+            par->block_align = 1024 * channels;
+            break;
+        case 0x02:
+            par->codec_id = AV_CODEC_ID_PCM_S16LE;
+            par->block_align = 512 * channels;
+            break;
+        case 0x05:
+            par->codec_id = AV_CODEC_ID_PCM_F32LE;
+            par->block_align = 256 * channels;
+            break;
         case 0x06:
             par->codec_id = AV_CODEC_ID_ADPCM_THP_LE;
             par->block_align = 0x8 * channels;
