@@ -79,7 +79,7 @@ version <next>:
 - aoverlay audio filter
 - arampsrc audio source filter
 - WebP Animation decoder
-- APV in MP4/ISOBMFF demuxing
+- APV in MP4/ISOBMFF muxing and demuxing
 - lopus demuxer
 - rs03 demuxer
 - csmp demuxer
