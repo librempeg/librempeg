@@ -139,11 +139,13 @@ static int fsb_read_header(AVFormatContext *s)
 
         switch (par->codec_id) {
         case AV_CODEC_ID_XMA2:
+            par->block_align = 2048;
             ret = ff_alloc_extradata(par, 34);
             if (ret < 0)
                 return ret;
             memset(par->extradata, 0, 34);
-            par->block_align = 2048;
+            AV_WL16(par->extradata, 1);
+            sti->need_parsing = AVSTREAM_PARSE_FULL;
             break;
         case AV_CODEC_ID_ADPCM_THP:
             if (par->ch_layout.nb_channels > INT_MAX / 32)
@@ -273,6 +275,16 @@ static int fsb_read_header(AVFormatContext *s)
         case 0x06:
             par->codec_id = AV_CODEC_ID_ADPCM_THP_LE;
             par->block_align = 0x8 * channels;
+            break;
+        case 0x0A:
+            par->codec_id = AV_CODEC_ID_XMA2;
+            par->block_align = 2048;
+            ret = ff_alloc_extradata(par, 34);
+            if (ret < 0)
+                return ret;
+            memset(par->extradata, 0, 34);
+            AV_WL16(par->extradata, 1);
+            sti->need_parsing = AVSTREAM_PARSE_FULL;
             break;
         case 0x0B:
             par->codec_id = AV_CODEC_ID_MP3;
