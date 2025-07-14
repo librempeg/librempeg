@@ -274,6 +274,11 @@ static int fsb_read_header(AVFormatContext *s)
             par->codec_id = AV_CODEC_ID_ADPCM_THP_LE;
             par->block_align = 0x8 * channels;
             break;
+        case 0x0B:
+            par->codec_id = AV_CODEC_ID_MP3;
+            par->block_align = 1024;
+            sti->need_parsing = AVSTREAM_PARSE_FULL;
+            break;
         case 0x10:
             par->codec_id = AV_CODEC_ID_ADPCM_FMOD;
             par->block_align = 0x8C * channels;
