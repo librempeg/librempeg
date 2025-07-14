@@ -617,6 +617,9 @@ break_loop:
 
     avio_seek(pb, data_ofs, SEEK_SET);
 
+    if (st->codecpar->codec_id == AV_CODEC_ID_WWVORBIS)
+        st->codecpar->level = !!av_match_ext(s->url, "wem");
+
     if (st->codecpar->codec_id == AV_CODEC_ID_WWVORBIS &&
         st->codecpar->extradata && st->codecpar->extradata_size >= 8) {
         AV_WL64(st->codecpar->extradata, avio_tell(pb));

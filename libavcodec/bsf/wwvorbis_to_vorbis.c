@@ -36,6 +36,7 @@
 
 typedef struct WwVorbisContext {
     AVPacket *out_pkt;
+    int is_wem;
     int setup_done;
     int header_done;
     int channels;
@@ -58,7 +59,8 @@ static av_cold int init(AVBSFContext *ctx)
 
     s->channels = ctx->par_in->ch_layout.nb_channels;
     s->sample_rate = ctx->par_in->sample_rate;
-    ctx->par_out->codec_id = AV_CODEC_ID_WWVORBIS;
+    s->is_wem = ctx->par_in->level == 1;
+    ctx->par_out->codec_id = AV_CODEC_ID_VORBIS;
 
     s->out_pkt = av_packet_alloc();
     if (!s->out_pkt)
@@ -337,7 +339,7 @@ static int filter(AVBSFContext *ctx, AVPacket *pkt)
         for (int i = 0; i < codebook_count; i++) {
             uint32_t codebook_id = get_bits(gb, 10);
 
-            if (codebook_rebuild_by_id(pb, codebook_id, 1) == 0) {
+            if (codebook_rebuild_by_id(pb, codebook_id, s->is_wem) == 0) {
                 av_log(NULL, AV_LOG_ERROR, "failed to rebuild codebook\n");
                 ret = AVERROR_INVALIDDATA;
                 goto fail;
