@@ -153,7 +153,7 @@ static int lopus_read_packet(AVFormatContext *s, AVPacket *pkt)
 
 const FFInputFormat ff_lopus_demuxer = {
     .p.name         = "lopus",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Switch OPUS "),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Switch OPUS"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "lopus",
     .priv_data_size = sizeof(LOPUSDemuxContext),
