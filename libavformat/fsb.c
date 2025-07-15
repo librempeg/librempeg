@@ -76,7 +76,7 @@ static int fsb_read_header(AVFormatContext *s)
         if (!par->ch_layout.nb_channels)
             return AVERROR_INVALIDDATA;
 
-        if (format & 0x00000100) {
+        if (format & 0x00000010) {
             par->codec_id    = AV_CODEC_ID_PCM_S16LE;
             par->block_align = 4096 * par->ch_layout.nb_channels;
         } else if (format & 0x00400000) {
