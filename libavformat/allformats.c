@@ -272,6 +272,7 @@ extern const FFInputFormat  ff_jpegxl_anim_demuxer;
 extern const FFInputFormat  ff_kux_demuxer;
 extern const FFInputFormat  ff_kvag_demuxer;
 extern const FFOutputFormat ff_kvag_muxer;
+extern const FFInputFormat  ff_kvs_demuxer;
 extern const FFInputFormat  ff_laf_demuxer;
 extern const FFOutputFormat ff_latm_muxer;
 extern const FFInputFormat  ff_lc3_demuxer;
