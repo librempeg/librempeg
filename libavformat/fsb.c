@@ -157,6 +157,8 @@ static int fsb_read_header(AVFormatContext *s)
             par->codec_id = AV_CODEC_ID_ADPCM_THP;
         } else if (format & 0x00000200) {
             par->codec_id = AV_CODEC_ID_MP3;
+        } else if (format & 0x00800000) {
+            par->codec_id = AV_CODEC_ID_ADPCM_PSX;
         } else if (format & 0x00000008) {
             if (format & 0x00000080)
                 par->codec_id = AV_CODEC_ID_PCM_U8;
@@ -203,6 +205,9 @@ static int fsb_read_header(AVFormatContext *s)
                 avio_skip(pb, 14);
             }
             par->block_align = 8 * par->ch_layout.nb_channels;
+            break;
+        case AV_CODEC_ID_ADPCM_PSX:
+            par->block_align = 16 * par->ch_layout.nb_channels;
             break;
         case AV_CODEC_ID_MP3:
             par->block_align = 1024;
