@@ -48,7 +48,7 @@ static int fsb_read_header(AVFormatContext *s)
 
     avio_skip(pb, 3); // "FSB"
     version = avio_r8(pb) - '0';
-    if (version != 5 && version != 4 && version != 3) {
+    if (version != 5 && version != 4 && version != 3 && version != 1) {
         avpriv_request_sample(s, "version %d", version);
         return AVERROR_PATCHWELCOME;
     }
@@ -62,7 +62,31 @@ static int fsb_read_header(AVFormatContext *s)
     par->codec_type  = AVMEDIA_TYPE_AUDIO;
     par->codec_tag   = 0;
 
-    if (version == 3) {
+    if (version == 1) {
+        offset = 0x80;
+        avio_skip(pb, 40);
+        st->duration = avio_rl32(pb);
+        avio_skip(pb, 4);
+        par->sample_rate = avio_rl32(pb);
+        avio_skip(pb, 8);
+        format = avio_rl32(pb);
+
+        par->ch_layout.nb_channels = 1 + !!(format & 0x00000040);
+
+        if (format & 0x00800000) {
+            par->codec_id    = AV_CODEC_ID_ADPCM_PSX;
+            par->block_align = 16 * par->ch_layout.nb_channels;
+
+            ret = ff_alloc_extradata(par, 32 * par->ch_layout.nb_channels);
+            if (ret < 0)
+                return ret;
+            avio_seek(pb, 0x50, SEEK_SET);
+            for (int ch = 0; ch < par->ch_layout.nb_channels; ch++) {
+                avio_read(pb, par->extradata + 32 * ch, 32);
+                avio_skip(pb, 14);
+            }
+        }
+    } else if (version == 3) {
         offset = avio_rl32(pb) + 0x18;
         avio_skip(pb, 44);
         st->duration = avio_rl32(pb);
