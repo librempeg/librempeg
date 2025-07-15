@@ -103,6 +103,16 @@ static int fsb_read_header(AVFormatContext *s)
         if (format & 0x00000010) {
             par->codec_id    = AV_CODEC_ID_PCM_S16LE;
             par->block_align = 4096 * par->ch_layout.nb_channels;
+        } else if (format & 0x01000000) {
+            par->codec_id = AV_CODEC_ID_XMA1;
+            par->block_align = 2048;
+            ret = ff_alloc_extradata(par, 8 + 20);
+            if (ret < 0)
+                return ret;
+            memset(par->extradata, 0, par->extradata_size);
+            par->extradata[4] = 1;
+            par->extradata[8+17] = par->ch_layout.nb_channels;
+            sti->need_parsing = AVSTREAM_PARSE_FULL;
         } else if (format & 0x00000200) {
             par->codec_id = AV_CODEC_ID_MP3;
             par->block_align = 1024;
