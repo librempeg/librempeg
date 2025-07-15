@@ -2055,10 +2055,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
     if (!ctx->quant_cof              || !ctx->lpc_cof        ||
         !ctx->quant_cof_buffer       || !ctx->lpc_cof_buffer ||
-        !ctx->lpc_cof_reversed_buffer) {
-        av_log(avctx, AV_LOG_ERROR, "Allocating buffer memory failed.\n");
+        !ctx->lpc_cof_reversed_buffer)
         return AVERROR(ENOMEM);
-    }
 
     // assign quantized parcor coefficient buffers
     for (c = 0; c < num_buffers; c++) {
@@ -2079,10 +2077,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
     if (!ctx->const_block || !ctx->shift_lsbs ||
         !ctx->opt_order || !ctx->store_prev_samples ||
         !ctx->use_ltp  || !ctx->ltp_lag ||
-        !ctx->ltp_gain || !ctx->ltp_gain_buffer) {
-        av_log(avctx, AV_LOG_ERROR, "Allocating buffer memory failed.\n");
+        !ctx->ltp_gain || !ctx->ltp_gain_buffer)
         return AVERROR(ENOMEM);
-    }
 
     for (c = 0; c < num_buffers; c++)
         ctx->ltp_gain[c] = ctx->ltp_gain_buffer + c * 5;
@@ -2095,10 +2091,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
         ctx->reverted_channels = av_malloc_array(num_buffers,
                                                  sizeof(*ctx->reverted_channels));
 
-        if (!ctx->chan_data_buffer || !ctx->chan_data || !ctx->reverted_channels) {
-            av_log(avctx, AV_LOG_ERROR, "Allocating buffer memory failed.\n");
+        if (!ctx->chan_data_buffer || !ctx->chan_data || !ctx->reverted_channels)
             return AVERROR(ENOMEM);
-        }
 
         for (c = 0; c < num_buffers; c++)
             ctx->chan_data[c] = ctx->chan_data_buffer + c * num_buffers;
@@ -2120,10 +2114,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
         ctx->mlz    = av_mallocz(sizeof(*ctx->mlz));
 
         if (!ctx->larray || !ctx->nbits || !ctx->mlz || !ctx->acf || !ctx->shift_value
-            || !ctx->last_shift_value || !ctx->last_acf_mantissa || !ctx->raw_mantissa) {
-            av_log(avctx, AV_LOG_ERROR, "Allocating buffer memory failed.\n");
+            || !ctx->last_shift_value || !ctx->last_acf_mantissa || !ctx->raw_mantissa)
             return AVERROR(ENOMEM);
-        }
 
         ret = ff_mlz_init_dict(avctx, ctx->mlz);
         if (ret < 0)
@@ -2132,10 +2124,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
         for (c = 0; c < channels; ++c) {
             ctx->raw_mantissa[c] = av_calloc(ctx->cur_frame_length, sizeof(**ctx->raw_mantissa));
-            if (!ctx->raw_mantissa[c]) {
-                av_log(avctx, AV_LOG_ERROR, "Allocating buffer memory failed.\n");
+            if (!ctx->raw_mantissa[c])
                 return AVERROR(ENOMEM);
-            }
         }
     }
 
@@ -2145,10 +2135,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
     ctx->prev_raw_samples = av_malloc_array(sconf->max_order, sizeof(*ctx->prev_raw_samples));
     ctx->raw_buffer       = av_calloc(channels * channel_size, sizeof(*ctx->raw_buffer));
     ctx->raw_samples      = av_malloc_array(channels, sizeof(*ctx->raw_samples));
-    if (!ctx->prev_raw_samples || !ctx->raw_buffer|| !ctx->raw_samples) {
-        av_log(avctx, AV_LOG_ERROR, "Allocating buffer memory failed.\n");
+    if (!ctx->prev_raw_samples || !ctx->raw_buffer|| !ctx->raw_samples)
         return AVERROR(ENOMEM);
-    }
 
     // assign raw samples buffers
     ctx->raw_samples[0] = ctx->raw_buffer + sconf->max_order;
@@ -2162,10 +2150,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
                                           channels *
                                           av_get_bytes_per_sample(avctx->sample_fmt),
                                           sizeof(*ctx->crc_buffer));
-        if (!ctx->crc_buffer) {
-            av_log(avctx, AV_LOG_ERROR, "Allocating buffer memory failed.\n");
+        if (!ctx->crc_buffer)
             return AVERROR(ENOMEM);
-        }
     }
 
     ff_bswapdsp_init(&ctx->bdsp);
