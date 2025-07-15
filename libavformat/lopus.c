@@ -35,12 +35,13 @@ static int lopus_probe(const AVProbeData *p)
     if (AV_RL32(p->buf) == MKTAG('O','P','U','S'))
         offset = 24;
 
-    if (p->buf_size < offset + 9)
+    if (p->buf_size < offset + 16)
         return 0;
 
     if (AV_RL32(p->buf+offset) == 0x80000001 &&
         AV_RL32(p->buf+offset+4) == 0x18 &&
-        p->buf[9] > 0)
+        p->buf[offset+9] > 0 &&
+        AV_RL32(p->buf+offset+12) > 0)
         return AVPROBE_SCORE_MAX;
 
     return 0;
