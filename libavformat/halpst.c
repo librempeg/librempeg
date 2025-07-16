@@ -19,6 +19,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/intreadwrite.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
@@ -26,6 +27,12 @@
 static int halpst_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, " HALPST\0", 8))
+        return 0;
+
+    if (AV_RB32(p->buf + 8) <= 0)
+        return 0;
+
+    if (AV_RB32(p->buf + 12) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
