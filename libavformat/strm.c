@@ -77,6 +77,11 @@ static int read_header(AVFormatContext *s)
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
         st->codecpar->block_align = 512 * st->codecpar->ch_layout.nb_channels;
         break;
+    case 2:
+        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_NDS;
+        avio_skip(pb, 0x30 - avio_tell(pb));
+        st->codecpar->block_align = avio_rl32(pb) * st->codecpar->ch_layout.nb_channels;
+        break;
     default:
         avpriv_request_sample(s, "codec 0x%X", codec);
         return AVERROR_PATCHWELCOME;
