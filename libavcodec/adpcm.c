@@ -369,7 +369,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
         avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
         break;
     case AV_CODEC_ID_ADPCM_IMA_WS:
-        avctx->sample_fmt = c->vqa_version == 3 ? AV_SAMPLE_FMT_S16P :
+        avctx->sample_fmt = c->vqa_version >= 3 ? AV_SAMPLE_FMT_S16P :
                                                   AV_SAMPLE_FMT_S16;
         break;
     case AV_CODEC_ID_ADPCM_MS:
@@ -1994,6 +1994,16 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     int v = bytestream2_get_byteu(&gb);
                     *smp++ = adpcm_ima_expand_nibble(&c->status[channel], v & 0x0F, 3);
                     *smp++ = adpcm_ima_expand_nibble(&c->status[channel], v >> 4  , 3);
+                }
+            }
+        } else if (c->vqa_version == 4) {
+            for (int channel = 0; channel < channels; channel++) {
+                int16_t *smp = samples_p[channel];
+
+                for (int n = nb_samples / 2; n > 0; n--) {
+                    int v = bytestream2_get_byteu(&gb);
+                    *smp++ = adpcm_ima_expand_nibble(&c->status[channel], v >> 4  , 3);
+                    *smp++ = adpcm_ima_expand_nibble(&c->status[channel], v & 0x0F, 3);
                 }
             }
         } else {
