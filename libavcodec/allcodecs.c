@@ -710,6 +710,7 @@ extern const FFCodec ff_adpcm_ima_iss_decoder;
 extern const FFCodec ff_adpcm_ima_magix_decoder;
 extern const FFCodec ff_adpcm_ima_moflex_decoder;
 extern const FFCodec ff_adpcm_ima_mtf_decoder;
+extern const FFCodec ff_adpcm_ima_nds_decoder;
 extern const FFCodec ff_adpcm_ima_oki_decoder;
 extern const FFCodec ff_adpcm_ima_pda_decoder;
 extern const FFCodec ff_adpcm_ima_qt_encoder;

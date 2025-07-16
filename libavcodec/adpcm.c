@@ -366,6 +366,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_IMA_MOFLEX:
     case AV_CODEC_ID_ADPCM_N64:
     case AV_CODEC_ID_ADPCM_FMOD:
+    case AV_CODEC_ID_ADPCM_IMA_NDS:
         avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
         break;
     case AV_CODEC_ID_ADPCM_IMA_WS:
@@ -1419,6 +1420,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_AFC:
         nb_samples = buf_size / (9 * ch) * 16;
         break;
+    case AV_CODEC_ID_ADPCM_IMA_NDS:
+        nb_samples = ((buf_size / ch) - 4) * 2;
+        break;
     case AV_CODEC_ID_ADPCM_XA:
         nb_samples = (buf_size / 128) * 224 / ch;
         break;
@@ -1832,6 +1836,26 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             for (int n = 8; n > 0; n--, v0 >>= 4, v1 >>= 4, samples += 2) {
                 samples[0] = adpcm_ima_expand_nibble(&c->status[0], v0 & 15, 3);
                 samples[1] = adpcm_ima_expand_nibble(&c->status[1], v1 & 15, 3);
+            }
+        }
+        ) /* End of CASE */
+    CASE(ADPCM_IMA_NDS,
+        for (int channel = 0; channel < channels; channel++) {
+            ADPCMChannelStatus *cs = &c->status[channel];
+            cs->predictor  = sign_extend(bytestream2_get_le16u(&gb), 16);
+            cs->step_index = sign_extend(bytestream2_get_le16u(&gb), 16);
+            if (cs->step_index > 88u){
+                av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
+                       channel, cs->step_index);
+                return AVERROR_INVALIDDATA;
+            }
+
+            samples = samples_p[channel];
+            for (int m = 0; m < nb_samples; m += 2) {
+                unsigned v0 = bytestream2_get_byteu(&gb);
+
+                *samples++ = adpcm_ima_expand_nibble(&c->status[channel], v0 & 0xf, 3);
+                *samples++ = adpcm_ima_expand_nibble(&c->status[channel], v0 >>  4, 3);
             }
         }
         ) /* End of CASE */
@@ -3097,6 +3121,7 @@ ADPCM_DECODER(ADPCM_IMA_ISS,     sample_fmts_s16,  adpcm_ima_iss,     "ADPCM IMA
 ADPCM_DECODER(ADPCM_IMA_MAGIX,   sample_fmts_s16,  adpcm_ima_magix,   "ADPCM IMA Magix")
 ADPCM_DECODER(ADPCM_IMA_MOFLEX,  sample_fmts_s16p, adpcm_ima_moflex,  "ADPCM IMA MobiClip MOFLEX")
 ADPCM_DECODER(ADPCM_IMA_MTF,     sample_fmts_s16,  adpcm_ima_mtf,     "ADPCM IMA Capcom's MT Framework")
+ADPCM_DECODER(ADPCM_IMA_NDS,     sample_fmts_s16p, adpcm_ima_nds,     "ADPCM IMA Nintendo DS")
 ADPCM_DECODER(ADPCM_IMA_OKI,     sample_fmts_s16,  adpcm_ima_oki,     "ADPCM IMA Dialogic OKI")
 ADPCM_DECODER(ADPCM_IMA_PDA,     sample_fmts_s16,  adpcm_ima_pda,     "ADPCM IMA PlayDate")
 ADPCM_DECODER(ADPCM_IMA_QT,      sample_fmts_s16p, adpcm_ima_qt,      "ADPCM IMA QuickTime")
