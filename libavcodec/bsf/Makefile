@@ -4,6 +4,7 @@ clean::
 OBJS-$(CONFIG_AAC_ADTSTOASC_BSF)          += bsf/aac_adtstoasc.o
 OBJS-$(CONFIG_AHX_TO_MP2_BSF)             += bsf/ahx_to_mp2.o
 OBJS-$(CONFIG_APV_METADATA_BSF)           += bsf/apv_metadata.o
+OBJS-$(CONFIG_ATRAC3PLUS_SKIP_BSF)        += bsf/atrac3plus_skip.o
 OBJS-$(CONFIG_AV1_FRAME_MERGE_BSF)        += bsf/av1_frame_merge.o
 OBJS-$(CONFIG_AV1_FRAME_SPLIT_BSF)        += bsf/av1_frame_split.o
 OBJS-$(CONFIG_AV1_METADATA_BSF)           += bsf/av1_metadata.o
