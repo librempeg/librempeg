@@ -43,6 +43,7 @@ enum {
 };
 
 extern const uint16_t ff_oma_srate_tab[8];
+extern const AVChannelLayout ff_oma_chid_to_native_layout[7];
 
 extern const AVCodecTag ff_oma_codec_tags[];
 extern const AVCodecTag *const ff_oma_codec_tags_list[];

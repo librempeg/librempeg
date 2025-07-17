@@ -25,6 +25,17 @@
 
 const uint16_t ff_oma_srate_tab[8] = { 320, 441, 480, 882, 960, 0 };
 
+/** map ATRAC-X channel id to internal channel layout */
+const AVChannelLayout  ff_oma_chid_to_native_layout[7] = {
+    AV_CHANNEL_LAYOUT_MONO,
+    AV_CHANNEL_LAYOUT_STEREO,
+    AV_CHANNEL_LAYOUT_SURROUND,
+    AV_CHANNEL_LAYOUT_4POINT0,
+    AV_CHANNEL_LAYOUT_5POINT1_BACK,
+    AV_CHANNEL_LAYOUT_6POINT1_BACK,
+    AV_CHANNEL_LAYOUT_7POINT1
+};
+
 const AVCodecTag ff_oma_codec_tags[] = {
     { AV_CODEC_ID_ATRAC3,      OMA_CODECID_ATRAC3    },
     { AV_CODEC_ID_ATRAC3P,     OMA_CODECID_ATRAC3P   },

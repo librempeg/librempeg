@@ -28,6 +28,7 @@
 #include "demux.h"
 #include "internal.h"
 #include "mpeg.h"
+#include "oma.h"
 
 /*********************************************/
 /* demux code */
@@ -623,6 +624,9 @@ redo:
     } else if (startcode == 0x69 || startcode == 0x49) {
         type     = AVMEDIA_TYPE_SUBTITLE;
         codec_id = AV_CODEC_ID_IVTV_VBI;
+    } else if (startcode == 0x0) {
+        type     = AVMEDIA_TYPE_AUDIO;
+        codec_id = AV_CODEC_ID_ATRAC3P;
     } else {
 skip:
         /* skip packet */
@@ -642,19 +646,40 @@ skip:
         st->codecpar->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_MONO;
         st->codecpar->sample_rate = 8000;
     }
+    if (st->codecpar->codec_id == AV_CODEC_ID_ATRAC3P) {
+        int ret = ffio_ensure_seekback(s->pb, 7);
+        uint32_t codec_params, channel_id;
+
+        if (ret < 0)
+            return ret;
+
+        avio_skip(s->pb, 4);
+        codec_params = avio_rb24(s->pb);
+        avio_skip(s->pb, -7);
+
+        channel_id = (codec_params >> 10) & 7;
+        if (channel_id == 0)
+            return AVERROR_INVALIDDATA;
+
+        av_channel_layout_copy(&st->codecpar->ch_layout,
+                               &ff_oma_chid_to_native_layout[channel_id - 1]);
+        st->codecpar->sample_rate = ff_oma_srate_tab[(codec_params >> 13) & 7] * 100;
+        st->codecpar->block_align = (codec_params & 0x3ff) * 8 + 8;
+    }
     sti->request_probe = request_probe;
     sti->need_parsing  = AVSTREAM_PARSE_FULL;
 
 found:
     if (st->discard >= AVDISCARD_ALL)
         goto skip;
+
     if (startcode >= 0xa0 && startcode <= 0xaf) {
-      if (st->codecpar->codec_id == AV_CODEC_ID_MLP) {
+        if (st->codecpar->codec_id == AV_CODEC_ID_MLP) {
             if (len < 6)
                 goto skip;
             avio_skip(s->pb, 6);
-            len -=6;
-      }
+            len -= 6;
+        }
     }
     ret = av_get_packet(s->pb, pkt, len);
 

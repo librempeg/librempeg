@@ -54,22 +54,10 @@
 #include "pcm.h"
 #include "id3v2.h"
 
-
 static const uint64_t leaf_table[] = {
     0xd79e8283acea4620, 0x7a9762f445afd0d8,
     0x354d60a60b8c79f1, 0x584e1cde00b07aee,
     0x1573cd93da7df623, 0x47f98d79620dd535
-};
-
-/** map ATRAC-X channel id to internal channel layout */
-static const AVChannelLayout  oma_chid_to_native_layout[7] = {
-    AV_CHANNEL_LAYOUT_MONO,
-    AV_CHANNEL_LAYOUT_STEREO,
-    AV_CHANNEL_LAYOUT_SURROUND,
-    AV_CHANNEL_LAYOUT_4POINT0,
-    AV_CHANNEL_LAYOUT_5POINT1_BACK,
-    AV_CHANNEL_LAYOUT_6POINT1_BACK,
-    AV_CHANNEL_LAYOUT_7POINT1
 };
 
 typedef struct OMAContext {
@@ -500,7 +488,7 @@ static int oma_read_header(AVFormatContext *s)
             return AVERROR_INVALIDDATA;
         }
         av_channel_layout_copy(&st->codecpar->ch_layout,
-                               &oma_chid_to_native_layout[channel_id - 1]);
+                               &ff_oma_chid_to_native_layout[channel_id - 1]);
         framesize = ((codec_params & 0x3FF) * 8) + 8;
         samplerate = ff_oma_srate_tab[(codec_params >> 13) & 7] * 100;
         if (!samplerate) {
