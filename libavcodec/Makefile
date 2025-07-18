@@ -906,6 +906,7 @@ OBJS-$(CONFIG_PCM_F64BE_DECODER)          += pcm.o
 OBJS-$(CONFIG_PCM_F64BE_ENCODER)          += pcm.o
 OBJS-$(CONFIG_PCM_F64LE_DECODER)          += pcm.o
 OBJS-$(CONFIG_PCM_F64LE_ENCODER)          += pcm.o
+OBJS-$(CONFIG_PCM_HDMV_DECODER)           += pcm-hdmv.o
 OBJS-$(CONFIG_PCM_LXF_DECODER)            += pcm.o
 OBJS-$(CONFIG_PCM_MULAW_DECODER)          += pcm.o
 OBJS-$(CONFIG_PCM_MULAW_ENCODER)          += pcm.o

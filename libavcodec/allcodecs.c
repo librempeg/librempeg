@@ -601,6 +601,7 @@ extern const FFCodec ff_pcm_f64be_encoder;
 extern const FFCodec ff_pcm_f64be_decoder;
 extern const FFCodec ff_pcm_f64le_encoder;
 extern const FFCodec ff_pcm_f64le_decoder;
+extern const FFCodec ff_pcm_hdmv_decoder;
 extern const FFCodec ff_pcm_lxf_decoder;
 extern const FFCodec ff_pcm_mulaw_encoder;
 extern const FFCodec ff_pcm_mulaw_decoder;
