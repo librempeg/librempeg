@@ -628,6 +628,9 @@ redo:
     } else if (startcode == 0x0 && m->pamf) {
         type     = AVMEDIA_TYPE_AUDIO;
         codec_id = AV_CODEC_ID_ATRAC3P;
+    } else if (startcode == 0x40 && m->pamf) {
+        type     = AVMEDIA_TYPE_AUDIO;
+        codec_id = AV_CODEC_ID_PCM_HDMV;
     } else {
 skip:
         /* skip packet */
