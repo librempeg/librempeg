@@ -428,6 +428,7 @@ const FFCodec ff_atrac3p_decoder = {
     .init           = atrac3p_decode_init,
     .close          = atrac3p_decode_close,
     FF_CODEC_DECODE_CB(atrac3p_decode_frame),
+    .bsfs           = "atrac3plus_skip",
 };
 
 const FFCodec ff_atrac3pal_decoder = {
