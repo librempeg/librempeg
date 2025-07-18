@@ -481,6 +481,7 @@ OBJS-$(CONFIG_OPUS_MUXER)                += oggenc.o \
                                             vorbiscomment.o
 OBJS-$(CONFIG_OSQ_DEMUXER)               += osq.o rawdec.o
 OBJS-$(CONFIG_PAF_DEMUXER)               += paf.o
+OBJS-$(CONFIG_PAMF_DEMUXER)              += mpeg.o
 OBJS-$(CONFIG_PCM_ALAW_DEMUXER)          += pcmdec.o pcm.o
 OBJS-$(CONFIG_PCM_ALAW_MUXER)            += pcmenc.o rawenc.o
 OBJS-$(CONFIG_PCM_F32BE_DEMUXER)         += pcmdec.o pcm.o

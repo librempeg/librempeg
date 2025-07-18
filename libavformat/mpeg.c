@@ -129,6 +129,7 @@ typedef struct MpegDemuxContext {
     int sofdec;
     int dvd;
     int imkh_cctv;
+    int pamf;
     int raw_ac3;
 } MpegDemuxContext;
 
@@ -624,7 +625,7 @@ redo:
     } else if (startcode == 0x69 || startcode == 0x49) {
         type     = AVMEDIA_TYPE_SUBTITLE;
         codec_id = AV_CODEC_ID_IVTV_VBI;
-    } else if (startcode == 0x0) {
+    } else if (startcode == 0x0 && m->pamf) {
         type     = AVMEDIA_TYPE_AUDIO;
         codec_id = AV_CODEC_ID_ATRAC3P;
     } else {
@@ -733,6 +734,35 @@ const FFInputFormat ff_mpegps_demuxer = {
     .priv_data_size = sizeof(MpegDemuxContext),
     .read_probe     = mpegps_probe,
     .read_header    = mpegps_read_header,
+    .read_packet    = mpegps_read_packet,
+    .read_timestamp = mpegps_read_dts,
+};
+
+static int pamf_probe(const AVProbeData *p)
+{
+    if (memcmp("PAMF0041", p->buf, 8))
+        return 0;
+
+    return AVPROBE_SCORE_MAX;
+}
+
+static int pamf_read_header(AVFormatContext *s)
+{
+    MpegDemuxContext *m = s->priv_data;
+
+    m->pamf = 1;
+    avio_skip(s->pb, 0x800);
+
+    return mpegps_read_header(s);
+}
+
+const FFInputFormat ff_pamf_demuxer = {
+    .p.name         = "pamf",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Sony PlayStation Advanced Movie Format"),
+    .p.flags        = AVFMT_SHOW_IDS | AVFMT_TS_DISCONT,
+    .priv_data_size = sizeof(MpegDemuxContext),
+    .read_probe     = pamf_probe,
+    .read_header    = pamf_read_header,
     .read_packet    = mpegps_read_packet,
     .read_timestamp = mpegps_read_dts,
 };
