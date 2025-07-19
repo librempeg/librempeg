@@ -41,6 +41,7 @@ static int mo_read_header(AVFormatContext *s)
     MODemuxContext *m = s->priv_data;
     AVIOContext *pb = s->pb;
     AVStream *vst, *ast;
+    int audio_codec;
     int64_t offset;
     AVRational fps;
 
@@ -72,11 +73,24 @@ static int mo_read_header(AVFormatContext *s)
     if (!ast)
         return AVERROR(ENOMEM);
 
-    avio_seek(pb, 0xd8, SEEK_SET);
+    avio_seek(pb, 0xd5, SEEK_SET);
+    audio_codec = avio_r8(pb);
+    avio_skip(pb, 2);
 
     ast->start_time           = 0;
     ast->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    ast->codecpar->codec_id   = AV_CODEC_ID_FASTAUDIO;
+
+    switch (audio_codec) {
+    case 0x33:
+        ast->codecpar->codec_id   = AV_CODEC_ID_FASTAUDIO;
+        break;
+    case 0x39:
+        break;
+    default:
+        avpriv_request_sample(s, "codec 0x%X", audio_codec);
+        return AVERROR_PATCHWELCOME;
+    }
+
     ast->codecpar->sample_rate = avio_rl32(pb);
     ast->codecpar->ch_layout.nb_channels = avio_rl32(pb);
     ffstream(ast)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
