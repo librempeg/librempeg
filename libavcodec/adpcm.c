@@ -363,6 +363,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_SANYO:
     case AV_CODEC_ID_ADPCM_MTAF:
     case AV_CODEC_ID_ADPCM_ARGO:
+    case AV_CODEC_ID_ADPCM_IMA_MO:
     case AV_CODEC_ID_ADPCM_IMA_MOFLEX:
     case AV_CODEC_ID_ADPCM_N64:
     case AV_CODEC_ID_ADPCM_FMOD:
@@ -1289,6 +1290,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_EA_MAXIS_XA:
         nb_samples = (buf_size - ch) / ch * 2;
         break;
+    case AV_CODEC_ID_ADPCM_IMA_MO:
+        nb_samples = (buf_size / (132 * ch)) * 256;
+        break;
     case AV_CODEC_ID_ADPCM_EA_R1:
     case AV_CODEC_ID_ADPCM_EA_R2:
     case AV_CODEC_ID_ADPCM_EA_R3:
@@ -1884,6 +1888,27 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
             *samples++ = adpcm_ima_expand_nibble(&c->status[0 ], v1, 3);
             *samples++ = adpcm_ima_expand_nibble(&c->status[st], v2, 3);
+        }
+        ) /* End of CASE */
+    CASE(ADPCM_IMA_MO,
+        for (int subframe = 0; subframe < nb_samples / 256; subframe++) {
+            for (int channel = 0; channel < channels; channel++) {
+                ADPCMChannelStatus *cs = &c->status[channel];
+                cs->step_index = sign_extend(bytestream2_get_le16u(&gb), 16);
+                cs->predictor  = sign_extend(bytestream2_get_le16u(&gb), 16);
+                if (cs->step_index > 88u){
+                    av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
+                           channel, cs->step_index);
+                    return AVERROR_INVALIDDATA;
+                }
+
+                samples = samples_p[channel] + 256 * subframe;
+                for (int n = 0; n < 256; n += 2) {
+                    int v = bytestream2_get_byteu(&gb);
+                    *samples++ = adpcm_ima_expand_nibble(&c->status[channel], v & 0x0F, 3);
+                    *samples++ = adpcm_ima_expand_nibble(&c->status[channel], v >> 4  , 3);
+                }
+            }
         }
         ) /* End of CASE */
     CASE(ADPCM_IMA_MOFLEX,
@@ -3119,6 +3144,7 @@ ADPCM_DECODER(ADPCM_IMA_HVQM2,   sample_fmts_s16,  adpcm_ima_hvqm2,   "ADPCM IMA
 ADPCM_DECODER(ADPCM_IMA_HVQM4,   sample_fmts_s16,  adpcm_ima_hvqm4,   "ADPCM IMA HVQM4")
 ADPCM_DECODER(ADPCM_IMA_ISS,     sample_fmts_s16,  adpcm_ima_iss,     "ADPCM IMA Funcom ISS")
 ADPCM_DECODER(ADPCM_IMA_MAGIX,   sample_fmts_s16,  adpcm_ima_magix,   "ADPCM IMA Magix")
+ADPCM_DECODER(ADPCM_IMA_MO,      sample_fmts_s16p, adpcm_ima_mo,      "ADPCM IMA MobiClip MO")
 ADPCM_DECODER(ADPCM_IMA_MOFLEX,  sample_fmts_s16p, adpcm_ima_moflex,  "ADPCM IMA MobiClip MOFLEX")
 ADPCM_DECODER(ADPCM_IMA_MTF,     sample_fmts_s16,  adpcm_ima_mtf,     "ADPCM IMA Capcom's MT Framework")
 ADPCM_DECODER(ADPCM_IMA_NDS,     sample_fmts_s16p, adpcm_ima_nds,     "ADPCM IMA Nintendo DS")
