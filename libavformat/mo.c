@@ -64,8 +64,6 @@ static int mo_read_header(AVFormatContext *s)
 
     avpriv_set_pts_info(vst, 64, fps.den, fps.num);
 
-    avio_seek(pb, offset, SEEK_SET);
-
     m->audio_pkt = av_packet_alloc();
     if (!m->audio_pkt)
         return AVERROR(ENOMEM);
@@ -74,13 +72,17 @@ static int mo_read_header(AVFormatContext *s)
     if (!ast)
         return AVERROR(ENOMEM);
 
+    avio_seek(pb, 0xd8, SEEK_SET);
+
     ast->start_time           = 0;
     ast->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     ast->codecpar->codec_id   = AV_CODEC_ID_FASTAUDIO;
-    ast->codecpar->ch_layout.nb_channels = 2;
-    ast->codecpar->sample_rate = 44100;
+    ast->codecpar->sample_rate = avio_rl32(pb);
+    ast->codecpar->ch_layout.nb_channels = avio_rl32(pb);
     ffstream(ast)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
     avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
+
+    avio_seek(pb, offset, SEEK_SET);
 
     return 0;
 }
