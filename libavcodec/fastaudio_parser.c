@@ -28,7 +28,7 @@ static int fastaudio_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
                            const uint8_t **poutbuf, int *poutbuf_size,
                            const uint8_t *buf, int buf_size)
 {
-    const int block_size = avctx->ch_layout.nb_channels * 40;
+    const int block_size = avctx->block_align;
     FastAudioParseContext *a = s1->priv_data;
     int next = END_NOT_FOUND;
     int size = a->left + buf_size;
@@ -54,7 +54,7 @@ static int fastaudio_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
 }
 
 const AVCodecParser ff_fastaudio_parser = {
-    .codec_ids      = { AV_CODEC_ID_FASTAUDIO },
+    .codec_ids      = { AV_CODEC_ID_FASTAUDIO, AV_CODEC_ID_ADPCM_IMA_MO },
     .priv_data_size = sizeof(FastAudioParseContext),
     .parser_parse   = fastaudio_parse,
 };
