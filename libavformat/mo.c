@@ -73,8 +73,8 @@ static int mo_read_header(AVFormatContext *s)
     if (!ast)
         return AVERROR(ENOMEM);
 
-    avio_seek(pb, 0xd5, SEEK_SET);
-    audio_codec = avio_r8(pb);
+    avio_seek(pb, 0xd4, SEEK_SET);
+    audio_codec = avio_rl16(pb);
     avio_skip(pb, 2);
 
     ast->start_time = 0;
@@ -83,12 +83,14 @@ static int mo_read_header(AVFormatContext *s)
     ast->codecpar->ch_layout.nb_channels = avio_rl32(pb);
 
     switch (audio_codec) {
-    case 0x33:
+    case 0x3341:
+    case 0x3241:
         ast->codecpar->codec_id = AV_CODEC_ID_FASTAUDIO;
         ast->codecpar->block_align = 40 * ast->codecpar->ch_layout.nb_channels;
         ffstream(ast)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
         break;
-    case 0x39:
+    case 0x3941:
+    case 0x3841:
         ast->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_MO;
         ast->codecpar->block_align = 132 * ast->codecpar->ch_layout.nb_channels;
         ffstream(ast)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
