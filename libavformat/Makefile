@@ -530,6 +530,7 @@ OBJS-$(CONFIG_PDV_DEMUXER)               += pdvdec.o
 OBJS-$(CONFIG_PIFF_DEMUXER)              += piff.o
 OBJS-$(CONFIG_PJS_DEMUXER)               += pjsdec.o subtitles.o
 OBJS-$(CONFIG_PMP_DEMUXER)               += pmpdec.o
+OBJS-$(CONFIG_PONA_DEMUXER)              += pona.o
 OBJS-$(CONFIG_PP_BNK_DEMUXER)            += pp_bnk.o
 OBJS-$(CONFIG_PVA_DEMUXER)               += pva.o
 OBJS-$(CONFIG_PVF_DEMUXER)               += pvfdec.o pcm.o
