@@ -88,20 +88,21 @@ static int init_huffman(AVCodecContext *avctx)
     int left = avctx->extradata_size-32;
     unsigned idx;
 
-    left -= 256;
-    if (left <= 0)
-        return AVERROR_INVALIDDATA;
-
     for (int i = 0; i < 256; i++) {
-        int16_t n = *src++;
+        int16_t n;
+
+        left--;
+        if (left < 0)
+            n = 0;
+        else
+            n = *src++;
 
         if (n & 0x80) {
             n &= 0x7F;
-            if (left <= 0)
-                return AVERROR_INVALIDDATA;
-
-            left--;
-            n |= *src++ << 7;
+            if (left >= 0) {
+                left--;
+                n |= *src++ << 7;
+            }
         }
 
         s->huff_table_1[i] = n;
