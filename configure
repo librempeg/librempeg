@@ -7497,6 +7497,7 @@ check_disable_warning -Wno-unused-const-variable
 check_disable_warning -Wno-bool-operation
 check_disable_warning -Wno-char-subscripts
 check_disable_warning -Wno-implicit-const-int-float-conversion
+check_disable_warning -Wno-microsoft-enum-forward-reference
 
 # Disable mixed decl and code warning for Objective-C
 test_objcflags $unknown_warning_flags '-Wdeclaration-after-statement' &&
