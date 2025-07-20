@@ -54,10 +54,9 @@ static int mo_read_header(AVFormatContext *s)
 
     avio_skip(pb, 4);
     offset = avio_rl32(pb) + 8;
-    avio_skip(pb, 4);
     fps.num = avio_rl32(pb);
+    fps.den = avio_rl32(pb);
     vst->duration = avio_rl32(pb);
-    fps.den = 0x100;
     avio_skip(pb, 8);
 
     vst->start_time           = 0;
