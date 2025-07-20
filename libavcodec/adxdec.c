@@ -93,6 +93,7 @@ static int adx_decode_header(AVCodecContext *avctx, const uint8_t *buf,
         cutoff = AV_RB16(buf + 16);
         ff_adx_calculate_coeffs(cutoff, avctx->sample_rate, COEFF_BITS, coeff);
     }
+    avctx->level = buf[18];
 
     *header_size = offset;
     return 0;
@@ -126,13 +127,14 @@ static av_cold int adx_decode_init(AVCodecContext *avctx)
  * 2nd-order LPC filter applied to it to form the output signal for a single
  * channel.
  */
-static int adx_decode(ADXContext *c, int16_t *out, int offset,
+static int adx_decode(ADXContext *c, const int level, int16_t *out, int offset,
                       const uint8_t *in, int ch)
 {
     ADXChannelState *prev = &c->prev[ch];
     GetBitContext gb;
     int scale = AV_RB16(in);
-    int i;
+    const int c0 = c->coeff[0];
+    const int c1 = c->coeff[1];
     int s0, s1, s2, d;
 
     /* check if this is an EOF packet */
@@ -143,12 +145,23 @@ static int adx_decode(ADXContext *c, int16_t *out, int offset,
     out += offset;
     s1 = prev->s1;
     s2 = prev->s2;
-    for (i = 0; i < BLOCK_SAMPLES; i++) {
-        d  = get_sbits(&gb, 4);
-        s0 = d * scale + ((c->coeff[0] * s1 + c->coeff[1] * s2) >> COEFF_BITS);
-        s2 = s1;
-        s1 = av_clip_int16(s0);
-        *out++ = s1;
+
+    if (level == 3) {
+        for (int i = 0; i < BLOCK_SAMPLES; i++) {
+            d  = get_sbits(&gb, 4);
+            s0 = d * scale + ((c0 * s1) >> COEFF_BITS) + ((c1 * s2) >> COEFF_BITS);
+            s2 = s1;
+            s1 = av_clip_int16(s0);
+            *out++ = s1;
+        }
+    } else {
+        for (int i = 0; i < BLOCK_SAMPLES; i++) {
+            d  = get_sbits(&gb, 4);
+            s0 = d * scale + ((c0 * s1 + c1 * s2) >> COEFF_BITS);
+            s2 = s1;
+            s1 = av_clip_int16(s0);
+            *out++ = s1;
+        }
     }
     prev->s1 = s1;
     prev->s2 = s2;
@@ -228,7 +241,7 @@ static int adx_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     while (num_blocks--) {
         for (ch = 0; ch < c->channels; ch++) {
-            if (buf_end - buf < BLOCK_SIZE || adx_decode(c, samples[ch], samples_offset, buf, ch)) {
+            if (buf_end - buf < BLOCK_SIZE || adx_decode(c, avctx->level, samples[ch], samples_offset, buf, ch)) {
                 c->eof = 1;
                 buf = avpkt->data + avpkt->size;
                 break;
