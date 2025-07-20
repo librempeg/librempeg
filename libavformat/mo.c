@@ -138,6 +138,7 @@ static int mo_read_packet(AVFormatContext *s, AVPacket *pkt)
         ret = av_get_packet(pb, m->audio_pkt, size - vsize);
         if (ret < 0)
             return ret;
+        m->audio_pkt->pos = pos;
     }
 
     pkt->pos = pos;
@@ -145,6 +146,16 @@ static int mo_read_packet(AVFormatContext *s, AVPacket *pkt)
     pkt->flags |= AV_PKT_FLAG_KEY;
 
     return ret;
+}
+
+static int mo_read_seek(AVFormatContext *s, int stream_index,
+                        int64_t timestamp, int flags)
+{
+    MODemuxContext *m = s->priv_data;
+
+    av_packet_unref(m->audio_pkt);
+
+    return -1;
 }
 
 static int mo_read_close(AVFormatContext *s)
@@ -165,5 +176,6 @@ const FFInputFormat ff_mo_demuxer = {
     .read_probe     = mo_probe,
     .read_header    = mo_read_header,
     .read_packet    = mo_read_packet,
+    .read_seek      = mo_read_seek,
     .read_close     = mo_read_close,
 };
