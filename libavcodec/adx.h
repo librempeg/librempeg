@@ -44,6 +44,11 @@ typedef struct ADXContext {
     int eof;
     int cutoff;
     int coeff[2];
+
+    int encryption;
+    uint16_t xor_start;
+    uint16_t xor_mult;
+    uint16_t xor_add;
 } ADXContext;
 
 #define COEFF_BITS  12

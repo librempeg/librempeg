@@ -99,6 +99,11 @@ static int adx_decode_header(AVCodecContext *avctx, const uint8_t *buf,
     return 0;
 }
 
+static uint16_t adx_next_key(const uint16_t xor, const uint16_t mult, const uint16_t add)
+{
+    return (xor * mult + add) & 0x7fff;
+}
+
 static av_cold int adx_decode_init(AVCodecContext *avctx)
 {
     ADXContext *c = avctx->priv_data;
@@ -113,6 +118,13 @@ static av_cold int adx_decode_init(AVCodecContext *avctx)
         }
         c->channels      = avctx->ch_layout.nb_channels;
         c->header_parsed = 1;
+
+        if (avctx->extradata_size >= header_size + 6) {
+            c->encryption = avctx->extradata[19];
+            c->xor_start = AV_RB16(avctx->extradata + avctx->extradata_size-6);
+            c->xor_mult  = AV_RB16(avctx->extradata + avctx->extradata_size-4);
+            c->xor_add   = AV_RB16(avctx->extradata + avctx->extradata_size-2);
+        }
     }
 
     avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
@@ -131,6 +143,8 @@ static int adx_decode(ADXContext *c, const int level, int16_t *out, int offset,
                       const uint8_t *in, int ch)
 {
     ADXChannelState *prev = &c->prev[ch];
+    const uint16_t xor = c->xor_start;
+    const int enc = c->encryption;
     GetBitContext gb;
     int scale = AV_RB16(in);
     const int c0 = c->coeff[0];
@@ -145,6 +159,9 @@ static int adx_decode(ADXContext *c, const int level, int16_t *out, int offset,
     out += offset;
     s1 = prev->s1;
     s2 = prev->s2;
+
+    if (enc == 8 || enc == 9)
+        scale = ((scale ^ xor) & 0x1fff) + 1;
 
     if (level == 3) {
         for (int i = 0; i < BLOCK_SAMPLES; i++) {
@@ -248,7 +265,10 @@ static int adx_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
             buf_size -= BLOCK_SIZE;
             buf      += BLOCK_SIZE;
+
+            c->xor_start = adx_next_key(c->xor_start, c->xor_mult, c->xor_add);
         }
+
         if (!c->eof)
             samples_offset += BLOCK_SAMPLES;
     }

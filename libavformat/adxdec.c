@@ -25,6 +25,7 @@
 
 #include "libavutil/intreadwrite.h"
 #include "avformat.h"
+#include "adx_keys.h"
 #include "demux.h"
 #include "internal.h"
 #include "rawdec.h"
@@ -91,7 +92,7 @@ static int adx_read_header(AVFormatContext *s)
     ADXDemuxerContext *c = s->priv_data;
     AVCodecParameters *par;
     FFStream *sti;
-    int ret;
+    int ret, enc;
     int channels;
 
     AVStream *st = avformat_new_stream(s, NULL);
@@ -104,8 +105,12 @@ static int adx_read_header(AVFormatContext *s)
     c->header_size = avio_rb16(s->pb) + 4;
     avio_seek(s->pb, -4, SEEK_CUR);
 
-    if ((ret = ff_get_extradata(s, par, s->pb, c->header_size)) < 0)
+    if ((ret = ff_alloc_extradata(par, c->header_size + 6)) < 0)
         return ret;
+
+    if ((ret = avio_read(s->pb, par->extradata, c->header_size)) < 0)
+        return ret;
+    memset(par->extradata + c->header_size, 0, 6);
 
     if (par->extradata_size < 12) {
         av_log(s, AV_LOG_ERROR, "Invalid extradata size.\n");
@@ -122,6 +127,37 @@ static int adx_read_header(AVFormatContext *s)
     if (par->sample_rate <= 0) {
         av_log(s, AV_LOG_ERROR, "Invalid sample rate %d\n", par->sample_rate);
         return AVERROR_INVALIDDATA;
+    }
+
+    enc = par->extradata[19];
+    if (enc == 8 || enc == 9) {
+        uint16_t xor_start, xor_mult, xor_add;
+        int64_t pos = avio_tell(s->pb);
+        uint16_t prescales[16];
+        uint16_t scales[16];
+
+        for (int i = 0; i < 16; i++) {
+            prescales[i] = avio_rb16(s->pb);
+            avio_skip(s->pb, BLOCK_SIZE-2);
+        }
+
+        for (int i = 0; i < 16; i++) {
+            scales[i] = avio_rb16(s->pb);
+            avio_skip(s->pb, BLOCK_SIZE-2);
+        }
+
+        ret = ff_adx_find_key(enc, prescales, 16, scales, 16,
+                              &xor_start, &xor_mult, &xor_add, 0);
+        if (ret != 1) {
+            av_log(s, AV_LOG_ERROR, "No valid keys found.\n");
+            return AVERROR(EINVAL);
+        }
+
+        AV_WB16(par->extradata + par->extradata_size-6, xor_start);
+        AV_WB16(par->extradata + par->extradata_size-4, xor_mult);
+        AV_WB16(par->extradata + par->extradata_size-2, xor_add);
+
+        avio_seek(s->pb, pos, SEEK_SET);
     }
 
     sti = ffstream(st);
