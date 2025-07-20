@@ -33,6 +33,11 @@ static int fastaudio_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
     int next = END_NOT_FOUND;
     int size = a->left + buf_size;
 
+    if (block_size <= 0) {
+        next = buf_size;
+        goto end;
+    }
+
     size = (size / block_size) * block_size;
     if (size == 0) {
         a->left += buf_size;
@@ -47,6 +52,7 @@ static int fastaudio_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
         return buf_size;
     }
 
+end:
     *poutbuf      = buf;
     *poutbuf_size = buf_size;
 
