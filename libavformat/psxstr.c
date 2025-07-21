@@ -137,8 +137,6 @@ static int str_read_header(AVFormatContext *s)
     unsigned char sector[RAW_CD_SECTOR_SIZE];
     int start, ret;
 
-    s->bit_rate = 355000 * 8LL;
-
     /* skip over any RIFF header */
     if ((ret = ffio_ensure_seekback(pb, RIFF_HEADER_SIZE)) < 0)
         return ret;
@@ -283,6 +281,7 @@ static int str_read_packet(AVFormatContext *s,
                 av_channel_layout_default(&st->codecpar->ch_layout, (fmt & 1) + 1);
                 st->codecpar->sample_rate = (fmt&4)?18900:37800;
                 st->codecpar->block_align = 128;
+                st->codecpar->bit_rate = (int64_t)st->codecpar->sample_rate * st->codecpar->ch_layout.nb_channels * 128 * 8LL / 224;
 
                 avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
                 st->start_time = 0;
