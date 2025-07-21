@@ -122,6 +122,7 @@ extern const FFInputFormat  ff_bnvib_demuxer;
 extern const FFOutputFormat ff_bnvib_muxer;
 extern const FFInputFormat  ff_bfstm_demuxer;
 extern const FFInputFormat  ff_brstm_demuxer;
+extern const FFInputFormat  ff_btsnd_demuxer;
 extern const FFInputFormat  ff_bwav_demuxer;
 extern const FFInputFormat  ff_boa_demuxer;
 extern const FFInputFormat  ff_bonk_demuxer;
