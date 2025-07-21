@@ -85,10 +85,17 @@ static int mods_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     pos = avio_tell(pb);
     size = avio_rl32(pb) >> 14;
+    if (size == 0)
+        return AVERROR_INVALIDDATA;
+
     ret = av_get_packet(pb, pkt, size);
+    if (ret < 0)
+        return ret;
+
     pkt->pos = pos;
     pkt->stream_index = 0;
-    pkt->flags |= AV_PKT_FLAG_KEY;
+    if (pkt->data[1] & 0x80)
+        pkt->flags |= AV_PKT_FLAG_KEY;
 
     return ret;
 }
