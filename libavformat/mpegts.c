@@ -2045,6 +2045,11 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
         ext_desc_tag = get8(pp, desc_end);
         if (ext_desc_tag < 0)
             return AVERROR_INVALIDDATA;
+        if (st->codecpar->codec_id == AV_CODEC_ID_BIN_DATA &&
+            ext_desc_tag == AC4_DESCRIPTOR_TAG_EXTENSION) {
+            st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+            st->codecpar->codec_id = AV_CODEC_ID_AC4;
+        }
         if (st->codecpar->codec_id == AV_CODEC_ID_OPUS &&
             ext_desc_tag == 0x80) { /* User defined (provisional Opus) */
             if (!st->codecpar->extradata) {

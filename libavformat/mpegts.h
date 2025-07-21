@@ -216,6 +216,7 @@ https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/
 #define ENHANCED_AC3_DESCRIPTOR      0x7a /* enhanced_AC-3_descriptor */
 #define DTS_DESCRIPTOR               0x7b
 #define EXTENSION_DESCRIPTOR         0x7f
+#define AC4_DESCRIPTOR_TAG_EXTENSION 0x15
 
 /* DVB descriptor_tag_extension values from
    ETSI EN 300 468 Table 109: Possible locations of extended descriptors */
