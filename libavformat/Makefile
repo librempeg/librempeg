@@ -589,6 +589,7 @@ OBJS-$(CONFIG_SBC_MUXER)                 += rawenc.o
 OBJS-$(CONFIG_SCC_DEMUXER)               += sccdec.o subtitles.o
 OBJS-$(CONFIG_SCC_MUXER)                 += sccenc.o
 OBJS-$(CONFIG_SCD_DEMUXER)               += scd.o
+OBJS-$(CONFIG_SCDPCM_DEMUXER)            += scdpcm.o
 OBJS-$(CONFIG_SDNS_DEMUXER)              += sdns.o
 OBJS-$(CONFIG_SDP_DEMUXER)               += rtsp.o
 OBJS-$(CONFIG_SDR2_DEMUXER)              += sdr2.o
