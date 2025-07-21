@@ -86,6 +86,7 @@ version <next>:
 - bwav demuxer
 - nwav demuxer
 - dkanim demuxer
+- colordetect filter
 
 
 version 7.1:
