@@ -47,10 +47,48 @@ static int adx_probe(const AVProbeData *p)
     if (p->buf_size < 16)
         return 0;
 
+    if (p->buf[4] != 3)
+        return 0;
+
     if (p->buf[5] != 0x12)
         return 0;
 
     if (p->buf[6] != 4)
+        return 0;
+
+    if (p->buf[7] == 0 || p->buf[7] > 8)
+        return 0;
+
+    if (AV_RB32(p->buf + 8) <= 0)
+        return 0;
+
+    if (AV_RB32(p->buf + 12) <= 0)
+        return 0;
+
+    offset = AV_RB16(&p->buf[2]);
+    if (   offset < 8
+        || offset > p->buf_size - 4
+        || memcmp(p->buf + offset - 2, "(c)CRI", 6))
+        return 0;
+    return AVPROBE_SCORE_MAX;
+}
+
+static int ahx_probe(const AVProbeData *p)
+{
+    int offset;
+    if (AV_RB16(p->buf) != 0x8000)
+        return 0;
+
+    if (p->buf_size < 16)
+        return 0;
+
+    if (p->buf[4] != 16)
+        return 0;
+
+    if (p->buf[5] != 0)
+        return 0;
+
+    if (p->buf[6] != 0)
         return 0;
 
     if (p->buf[7] == 0 || p->buf[7] > 8)
@@ -209,6 +247,18 @@ const FFInputFormat ff_adx_demuxer = {
     .p.priv_class   = &ff_raw_demuxer_class,
     .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = adx_probe,
+    .priv_data_size = sizeof(ADXDemuxerContext),
+    .read_header    = adx_read_header,
+    .read_packet    = adx_read_packet,
+};
+
+const FFInputFormat ff_ahx_demuxer = {
+    .p.name         = "ahx",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("CRI AHX"),
+    .p.extensions   = "ahx",
+    .p.priv_class   = &ff_raw_demuxer_class,
+    .p.flags        = AVFMT_GENERIC_INDEX,
+    .read_probe     = ahx_probe,
     .priv_data_size = sizeof(ADXDemuxerContext),
     .read_header    = adx_read_header,
     .read_packet    = adx_read_packet,
