@@ -43,12 +43,31 @@ static int adx_probe(const AVProbeData *p)
     int offset;
     if (AV_RB16(p->buf) != 0x8000)
         return 0;
+
+    if (p->buf_size < 16)
+        return 0;
+
+    if (p->buf[5] != 0x12)
+        return 0;
+
+    if (p->buf[6] != 4)
+        return 0;
+
+    if (p->buf[7] == 0 || p->buf[7] > 8)
+        return 0;
+
+    if (AV_RB32(p->buf + 8) <= 0)
+        return 0;
+
+    if (AV_RB32(p->buf + 12) <= 0)
+        return 0;
+
     offset = AV_RB16(&p->buf[2]);
     if (   offset < 8
         || offset > p->buf_size - 4
         || memcmp(p->buf + offset - 2, "(c)CRI", 6))
         return 0;
-    return AVPROBE_SCORE_MAX * 3 / 4;
+    return AVPROBE_SCORE_MAX;
 }
 
 static int adx_read_packet(AVFormatContext *s, AVPacket *pkt)
