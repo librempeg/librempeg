@@ -250,6 +250,7 @@ static int audio_frame(AVFilterLink *outlink)
 static void draw_text(FFDrawContext *draw, AVFrame *out, FFDrawColor *color,
                       int x0, int y0, const uint8_t *text)
 {
+    const uint8_t *cga_font = avpriv_cga_font_get();
     int x = x0;
 
     for (; *text; text++) {
@@ -260,7 +261,7 @@ static void draw_text(FFDrawContext *draw, AVFrame *out, FFDrawColor *color,
         }
         ff_blend_mask(draw, color, out->data, out->linesize,
                       out->width, out->height,
-                      avpriv_cga_font + *text * 8, 1, 8, 8, 0, 0, x, y0);
+                      &cga_font[*text * 8], 1, 8, 8, 0, 0, x, y0);
         x += 8;
     }
 }
