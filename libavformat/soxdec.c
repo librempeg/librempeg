@@ -45,6 +45,11 @@ static int sox_probe(const AVProbeData *p)
         return 0;
     if (AV_RN32(p->buf+4) == 0)
         return 0;
+    if (p->buf_size < 28)
+        return 0;
+
+    if (AV_RN64(p->buf+16) == 0)
+        return 0;
     if (AV_RN32(p->buf+24) == 0)
         return 0;
     return AVPROBE_SCORE_MAX;
