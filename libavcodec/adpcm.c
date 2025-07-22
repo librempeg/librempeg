@@ -266,6 +266,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     adpcm_flush(avctx);
 
     switch (avctx->codec->id) {
+    case AV_CODEC_ID_ADPCM_BRR:
     case AV_CODEC_ID_ADPCM_IMA_AMV:
     case AV_CODEC_ID_ADPCM_N64:
         max_channels = 1;
@@ -368,6 +369,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_N64:
     case AV_CODEC_ID_ADPCM_FMOD:
     case AV_CODEC_ID_ADPCM_IMA_NDS:
+    case AV_CODEC_ID_ADPCM_BRR:
         avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
         break;
     case AV_CODEC_ID_ADPCM_IMA_WS:
@@ -1422,6 +1424,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         *approx_nb_samples = 1;
         break;
     case AV_CODEC_ID_ADPCM_AFC:
+    case AV_CODEC_ID_ADPCM_BRR:
         nb_samples = buf_size / (9 * ch) * 16;
         break;
     case AV_CODEC_ID_ADPCM_IMA_NDS:
@@ -1463,6 +1466,34 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         return AVERROR_INVALIDDATA;
 
     return nb_samples;
+}
+
+static int brr_predict(const int filter, const int p1, const int p2)
+{
+    int p;
+
+    switch (filter)  {
+    case 0:
+        return 0;
+    case 1:
+        p = p1;
+        p -= p1 >> 4;
+        return p;
+    case 2:
+        p = p1 << 1;
+        p += (-(p1 + (p1 << 1))) >> 5;
+        p -= p2;
+        p += p2 >> 4;
+        return p;
+    case 3:
+        p = p1 << 1;
+        p += (-(p1 + (p1 << 2) + (p1 << 3))) >> 6;
+        p -= p2;
+        p += (p2 + (p2 << 1)) >> 4;
+        return p;
+    default:
+        return 0;
+    }
 }
 
 static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
@@ -2878,6 +2909,50 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
         }
         ) /* End of CASE */
+    CASE(ADPCM_BRR,
+        for (int i = 0; i < avpkt->size / 9; i++) {
+            uint8_t control = bytestream2_get_byteu(&gb);
+            int filter, factor, shift, hist1, hist2;
+
+            shift = FFMIN(control >> 4, 12);
+            factor = 1 << shift;
+            filter = (control & 0xC) >> 2;
+
+            hist1 = c->status[0].sample1;
+            hist2 = c->status[0].sample2;
+
+            for (int n = 0; n < 16; n += 2) {
+                int32_t sample;
+                int8_t nibble;
+                uint8_t block;
+
+                block = bytestream2_get_byteu(&gb);
+
+                nibble = sign_extend(block >> 4, 4);
+                sample = factor * nibble;
+                sample += brr_predict(filter, hist1, hist2);
+                sample = av_clip_int16(sample);
+
+                *samples++ = sample;
+
+                hist2 = hist1;
+                hist1 = sample;
+
+                nibble = sign_extend(block & 0xf, 4);
+                sample = factor * nibble;
+                sample += brr_predict(filter, hist1, hist2);
+                sample = av_clip_int16(sample);
+
+                *samples++ = sample;
+
+                hist2 = hist1;
+                hist1 = sample;
+            }
+
+            c->status[0].sample1 = hist1;
+            c->status[0].sample2 = hist2;
+        }
+        ) /* End of CASE */
     CASE(ADPCM_FMOD,
         for (int block = 0; block < avpkt->size / avctx->block_align; block++) {
             int nb_samples_per_block = (avctx->block_align / channels - 0xc) * 2;
@@ -3119,6 +3194,7 @@ ADPCM_DECODER(ADPCM_AFC,         sample_fmts_s16p, adpcm_afc,         "ADPCM Nin
 ADPCM_DECODER(ADPCM_AGM,         sample_fmts_s16,  adpcm_agm,         "ADPCM AmuseGraphics Movie")
 ADPCM_DECODER(ADPCM_AICA,        sample_fmts_s16p, adpcm_aica,        "ADPCM Yamaha AICA")
 ADPCM_DECODER(ADPCM_ARGO,        sample_fmts_s16p, adpcm_argo,        "ADPCM Argonaut Games")
+ADPCM_DECODER(ADPCM_BRR,         sample_fmts_s16p, adpcm_brr,         "ADPCM Bit Rate Reduction")
 ADPCM_DECODER(ADPCM_CIRCUS,      sample_fmts_s16,  adpcm_circus,      "ADPCM Circus")
 ADPCM_DECODER(ADPCM_CT,          sample_fmts_s16,  adpcm_ct,          "ADPCM Creative Technology")
 ADPCM_DECODER(ADPCM_DTK,         sample_fmts_s16p, adpcm_dtk,         "ADPCM Nintendo Gamecube DTK")
