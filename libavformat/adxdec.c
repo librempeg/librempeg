@@ -82,7 +82,7 @@ static int ahx_probe(const AVProbeData *p)
     if (p->buf_size < 16)
         return 0;
 
-    if (p->buf[4] != 16)
+    if (p->buf[4] != 16 && p->buf[4] != 17)
         return 0;
 
     if (p->buf[5] != 0)
@@ -91,7 +91,7 @@ static int ahx_probe(const AVProbeData *p)
     if (p->buf[6] != 0)
         return 0;
 
-    if (p->buf[7] == 0 || p->buf[7] > 8)
+    if (p->buf[7] == 0 || p->buf[7] > 1)
         return 0;
 
     if (AV_RB32(p->buf + 8) <= 0)
@@ -228,6 +228,7 @@ static int adx_read_header(AVFormatContext *s)
         avpriv_set_pts_info(st, 64, BLOCK_SAMPLES, par->sample_rate);
         break;
     case 16:
+    case 17:
         sti->need_parsing = AVSTREAM_PARSE_FULL_RAW;
         par->codec_id = AV_CODEC_ID_AHX;
         avpriv_set_pts_info(st, 64, 1, par->sample_rate);
