@@ -36,20 +36,21 @@
  */
 
 static void adx_encode(ADXContext *c, uint8_t *adx, const int16_t *wav,
-                       ADXChannelState *prev, int channels)
+                       ADXChannelState *prev)
 {
+    const int c0 = -c->coeff[0];
+    const int c1 = -c->coeff[1];
     PutBitContext pb;
     int scale;
-    int i, j;
     int s0, s1, s2, d;
     int max = 0;
     int min = 0;
 
     s1 = prev->s1;
     s2 = prev->s2;
-    for (i = 0, j = 0; j < 32; i += channels, j++) {
+    for (int i = 0, j = 0; j < 32; i++, j++) {
         s0 = wav[i];
-        d = s0 + ((-c->coeff[0] * s1 - c->coeff[1] * s2) >> COEFF_BITS);
+        d = s0 + ((c0 * s1 + c1 * s2) >> COEFF_BITS);
         if (max < d)
             max = d;
         if (min > d)
@@ -79,14 +80,14 @@ static void adx_encode(ADXContext *c, uint8_t *adx, const int16_t *wav,
 
     s1 = prev->s1;
     s2 = prev->s2;
-    for (i = 0, j = 0; j < 32; i += channels, j++) {
-        d = wav[i] + ((-c->coeff[0] * s1 - c->coeff[1] * s2) >> COEFF_BITS);
+    for (int i = 0, j = 0; j < 32; i++, j++) {
+        d = wav[i] + ((c0 * s1 + c1 * s2) >> COEFF_BITS);
 
         d = av_clip_intp2(ROUNDED_DIV(d, scale), 3);
 
         put_sbits(&pb, 4, d);
 
-        s0 = d * scale + ((c->coeff[0] * s1 + c->coeff[1] * s2) >> COEFF_BITS);
+        s0 = d * scale + ((-c0 * s1 + -c1 * s2) >> COEFF_BITS);
         s2 = s1;
         s1 = s0;
     }
@@ -142,12 +143,11 @@ static int adx_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                             const AVFrame *frame, int *got_packet_ptr)
 {
     ADXContext *c          = avctx->priv_data;
-    const int16_t *samples = frame ? (const int16_t *)frame->data[0] : NULL;
     uint8_t *dst;
     int channels = avctx->ch_layout.nb_channels;
     int ch, out_size, ret;
 
-    if (!samples) {
+    if (!frame) {
         if (c->eof)
             return 0;
         if ((ret = ff_get_encode_buffer(avctx, avpkt, 18, 0)) < 0)
@@ -179,7 +179,9 @@ static int adx_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     }
 
     for (ch = 0; ch < channels; ch++) {
-        adx_encode(c, dst, samples + ch, &c->prev[ch], channels);
+        const int16_t *samples = (const int16_t *)frame->extended_data[ch];
+
+        adx_encode(c, dst, samples, &c->prev[ch]);
         dst += BLOCK_SIZE;
     }
 
@@ -197,6 +199,6 @@ const FFCodec ff_adpcm_adx_encoder = {
     .priv_data_size = sizeof(ADXContext),
     .init           = adx_encode_init,
     FF_CODEC_ENCODE_CB(adx_encode_frame),
-    CODEC_SAMPLEFMTS(AV_SAMPLE_FMT_S16),
+    CODEC_SAMPLEFMTS(AV_SAMPLE_FMT_S16P),
     .caps_internal  = FF_CODEC_CAP_EOF_FLUSH,
 };
