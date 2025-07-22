@@ -33,7 +33,7 @@ static int read_probe(const AVProbeData *p)
             return 0;
 
         if (score < AVPROBE_SCORE_MAX)
-            score++;
+            score += !!(p->buf[n] >> 4);
     }
 
     return score;
