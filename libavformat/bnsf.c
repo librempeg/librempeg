@@ -67,11 +67,17 @@ static int bnsf_read_header(AVFormatContext *s)
                 par->codec_id    = AV_CODEC_ID_G722_1;
             par->codec_tag   = 0;
             par->ch_layout.nb_channels = avio_rb16(pb);
+            if (par->ch_layout.nb_channels == 0)
+                return AVERROR_INVALIDDATA;
             par->sample_rate = avio_rb32(pb);
+            if (par->sample_rate <= 0)
+                return AVERROR_INVALIDDATA;
             st->start_time = 0;
             st->duration     = avio_rb32(pb);
             avio_skip(pb, 4);
             par->block_align = avio_rb16(pb);
+            if (par->block_align == 0)
+                return AVERROR_INVALIDDATA;
             found_sfmt = 1;
             if (size > 18)
                 avio_skip(pb, size - 18);
