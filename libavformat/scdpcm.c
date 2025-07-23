@@ -39,7 +39,7 @@ static int scdpcm_read_probe(const AVProbeData *p)
             return 0;
     }
 
-    return 3*AVPROBE_SCORE_MAX/2;
+    return 3*AVPROBE_SCORE_MAX/4;
 }
 
 static int scdpcm_read_header(AVFormatContext *s)
