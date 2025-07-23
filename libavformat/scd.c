@@ -43,6 +43,8 @@
 #define SCD_TRACK_ID_OGG        6
 #define SCD_TRACK_ID_MP3        7
 #define SCD_TRACK_ID_MS_ADPCM  12
+#define SCD_TRACK_ID_ATRAC9    22
+#define SCD_TRACK_ID_DUMMY     0xffffffffu
 
 typedef struct SCDOffsetTable {
     uint16_t  count;
@@ -53,7 +55,7 @@ typedef struct SCDOffsetTable {
 typedef struct SCDHeader {
     uint64_t magic;         /* SEDBSSCF                                     */
     uint32_t version;       /* Verison number. We only know about 3.        */
-    uint16_t unk1;          /* Unknown, 260 in Drakengard 3, 1024 in FFXIV. */
+    uint16_t flags;
     uint16_t header_size;   /* Total size of this header.                   */
     uint32_t file_size;     /* Is often 0, just ignore it.                  */
 
@@ -72,17 +74,18 @@ typedef struct SCDTrackHeader {
     uint32_t data_type;
     uint32_t loop_start;
     uint32_t loop_end;
-    uint32_t data_offset; /* Offset to data + this header. */
+    uint32_t extradata_size;
     uint32_t aux_count;
 
-    uint32_t absolute_offset;
-    uint32_t bytes_read;
+    int stream_index;
+    uint64_t absolute_offset;
 } SCDTrackHeader;
 
 typedef struct SCDDemuxContext {
     SCDHeader        hdr;
     SCDTrackHeader  *tracks;
     int              current_track;
+    int              nb_streams;
 } SCDDemuxContext;
 
 static int scd_probe(const AVProbeData *p)
@@ -93,7 +96,7 @@ static int scd_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int scd_read_table(AVFormatContext *s, SCDOffsetTable *table)
+static int scd_read_table(AVFormatContext *s, const int be, SCDOffsetTable *table)
 {
     int64_t ret;
 
@@ -107,7 +110,7 @@ static int scd_read_table(AVFormatContext *s, SCDOffsetTable *table)
         return ret;
 
     for (size_t i = 0; i < table->count; i++)
-        table->entries[i] = AV_RB32(table->entries + i);
+        table->entries[i] = be ? AV_RB32(table->entries + i) : AV_RL32(table->entries + i);
 
     av_log(s, AV_LOG_TRACE, "Table, size = %u, offset = %u\n", table->count, table->offset);
     for (size_t i = 0; i < table->count; i++)
@@ -116,7 +119,7 @@ static int scd_read_table(AVFormatContext *s, SCDOffsetTable *table)
     return 0;
 }
 
-static int scd_read_offsets(AVFormatContext *s)
+static int scd_read_offsets(AVFormatContext *s, const int be)
 {
     int64_t ret;
     SCDDemuxContext  *ctx = s->priv_data;
@@ -125,44 +128,36 @@ static int scd_read_offsets(AVFormatContext *s)
     if ((ret = avio_read(s->pb, buf, SCD_OFFSET_HEADER_SIZE)) < 0)
         return ret;
 
-    ctx->hdr.table0.count  = AV_RB16(buf +  0);
-    ctx->hdr.table1.count  = AV_RB16(buf +  2);
-    ctx->hdr.table2.count  = AV_RB16(buf +  4);
-    ctx->hdr.unk2          = AV_RB16(buf +  6);
-    ctx->hdr.table0.offset = AV_RB32(buf +  8);
-    ctx->hdr.table1.offset = AV_RB32(buf + 12);
-    ctx->hdr.table2.offset = AV_RB32(buf + 16);
-    ctx->hdr.unk3          = AV_RB32(buf + 20);
-    ctx->hdr.unk4          = AV_RB32(buf + 24);
+    ctx->hdr.table0.count  = be ? AV_RB16(buf +  0) : AV_RL16(buf +  0);
+    ctx->hdr.table1.count  = be ? AV_RB16(buf +  2) : AV_RL16(buf +  2);
+    ctx->hdr.table2.count  = be ? AV_RB16(buf +  4) : AV_RL16(buf +  4);
+    ctx->hdr.unk2          = be ? AV_RB16(buf +  6) : AV_RL16(buf +  6);
+    ctx->hdr.table0.offset = be ? AV_RB32(buf +  8) : AV_RL32(buf +  8);
+    ctx->hdr.table1.offset = be ? AV_RB32(buf + 12) : AV_RL32(buf + 12);
+    ctx->hdr.table2.offset = be ? AV_RB32(buf + 16) : AV_RL32(buf + 16);
+    ctx->hdr.unk3          = be ? AV_RB32(buf + 20) : AV_RL32(buf + 20);
+    ctx->hdr.unk4          = be ? AV_RB32(buf + 24) : AV_RL32(buf + 24);
 
-    if ((ret = scd_read_table(s, &ctx->hdr.table0)) < 0)
+    if ((ret = scd_read_table(s, be, &ctx->hdr.table0)) < 0)
         return ret;
 
-    if ((ret = scd_read_table(s, &ctx->hdr.table1)) < 0)
+    if ((ret = scd_read_table(s, be, &ctx->hdr.table1)) < 0)
         return ret;
 
-    if ((ret = scd_read_table(s, &ctx->hdr.table2)) < 0)
+    if ((ret = scd_read_table(s, be, &ctx->hdr.table2)) < 0)
         return ret;
 
     return 0;
 }
 
-static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index)
+static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, const int be)
 {
     int64_t ret;
-    uint32_t hoffset;
+    uint32_t hoffset, chunk;
     AVStream *st;
     AVCodecParameters *par;
     SCDDemuxContext *ctx = s->priv_data;
     uint8_t buf[SCD_TRACK_HEADER_SIZE];
-
-    /* Mark as experimental until I find more files from more than just one game. */
-    if (s->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL) {
-        av_log(s, AV_LOG_ERROR, "SCD demuxing is experimental, "
-               "add '-strict %d' if you want to use it.\n",
-               FF_COMPLIANCE_EXPERIMENTAL);
-        return AVERROR_EXPERIMENTAL;
-    }
 
     hoffset = ctx->hdr.table1.entries[index];
 
@@ -172,27 +167,30 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index)
     if ((ret = avio_read(s->pb, buf, SCD_TRACK_HEADER_SIZE)) < 0)
         return ret;
 
-    track->length       = AV_RB32(buf +  0);
-    track->num_channels = AV_RB32(buf +  4);
-    track->sample_rate  = AV_RB32(buf +  8);
-    track->data_type    = AV_RB32(buf + 12);
-    track->loop_start   = AV_RB32(buf + 16);
-    track->loop_end     = AV_RB32(buf + 20);
-    track->data_offset  = AV_RB32(buf + 24);
-    track->aux_count    = AV_RB32(buf + 28);
+    track->length       = be ? AV_RB32(buf +  0) : AV_RL32(buf +  0);
+    track->num_channels = be ? AV_RB32(buf +  4) : AV_RL32(buf +  4);
+    track->sample_rate  = be ? AV_RB32(buf +  8) : AV_RL32(buf +  8);
+    track->data_type    = be ? AV_RB32(buf + 12) : AV_RL32(buf + 12);
+    track->loop_start   = be ? AV_RB32(buf + 16) : AV_RL32(buf + 16);
+    track->loop_end     = be ? AV_RB32(buf + 20) : AV_RL32(buf + 20);
+    track->extradata_size = be ? AV_RB32(buf + 24) : AV_RL32(buf + 24);
+    track->aux_count    = be ? AV_RB32(buf + 28) : AV_RL32(buf + 28);
 
     /* Sanity checks */
-    if (track->num_channels <= 0 || track->num_channels > 8 ||
-        track->sample_rate <= 0 || track->sample_rate >= 192000 ||
-        track->loop_start > track->loop_end)
+    if ((track->data_type != SCD_TRACK_ID_DUMMY) &&
+        (track->num_channels <= 0 || track->num_channels > 8 ||
+         track->sample_rate <= 0 || track->sample_rate >= 192000 ||
+         track->loop_start > track->loop_end))
         return AVERROR_INVALIDDATA;
 
-    track->absolute_offset = hoffset + SCD_TRACK_HEADER_SIZE + track->data_offset;
-    track->bytes_read      = 0;
+    track->absolute_offset = hoffset + SCD_TRACK_HEADER_SIZE + track->extradata_size;
 
     /* Not sure what to do with these, it seems to be fine to ignore them. */
     if (track->aux_count != 0)
         av_log(s, AV_LOG_DEBUG, "[%d] Track has %u auxiliary chunk(s).\n", index, track->aux_count);
+
+    if (track->data_type == SCD_TRACK_ID_DUMMY)
+        return 0;
 
     if ((st = avformat_new_stream(s, NULL)) == NULL)
         return AVERROR(ENOMEM);
@@ -201,8 +199,9 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index)
     par->codec_type   = AVMEDIA_TYPE_AUDIO;
     par->ch_layout.nb_channels = track->num_channels;
     par->sample_rate  = track->sample_rate;
-    st->index         = index;
+    st->index         = ctx->nb_streams++;
     st->start_time    = 0;
+    track->stream_index = st->index;
 
     /* TODO: Check this with other types. Drakengard 3 MP3s have 47999 instead of 48000. */
     if (track->data_type == SCD_TRACK_ID_MP3)
@@ -227,10 +226,49 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index)
         break;
     case SCD_TRACK_ID_MP3:
         par->codec_id              = AV_CODEC_ID_MP3;
+        par->block_align           = 1024;
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+        break;
+    case SCD_TRACK_ID_MS_ADPCM:
+        par->codec_id              = AV_CODEC_ID_ADPCM_MS;
+        avio_skip(s->pb, 12);
+        par->block_align           = be ? avio_rb16(s->pb) : avio_rl16(s->pb);
+        if (par->block_align == 0)
+            return AVERROR_INVALIDDATA;
+        par->block_align          *= track->num_channels;
+        break;
+    case SCD_TRACK_ID_ATRAC9:
+        par->codec_id              = AV_CODEC_ID_ATRAC9;
+        chunk = avio_rb32(s->pb);
+        if (chunk == MKBETAG('M','A','R','K')) {
+            int size = be ? avio_rb32(s->pb) : avio_rl32(s->pb);
+
+            avio_skip(s->pb, size - 4);
+        }
+        par->block_align           = be ? avio_rb16(s->pb) : avio_rl16(s->pb);
+        avio_skip(s->pb, 2);
+        if (track->extradata_size < 8+12)
+            return AVERROR_INVALIDDATA;
+
+        ret = ff_get_extradata(s, par, s->pb, 12);
+        if (ret < 0)
+            return ret;
+
+        if (!be) {
+            AV_WB32(par->extradata+4, AV_RL32(par->extradata+4));
+            AV_WB32(par->extradata+8, AV_RL32(par->extradata+8));
+        }
+
         ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
         break;
     case SCD_TRACK_ID_OGG:
-    case SCD_TRACK_ID_MS_ADPCM:
+        par->codec_id              = AV_CODEC_ID_VORBIS;
+        ret = ff_get_extradata(s, par, s->pb, track->extradata_size);
+        if (ret < 0)
+            return ret;
+
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+        break;
     default:
         par->codec_id              = AV_CODEC_ID_NONE;
         avpriv_request_sample(s, "data type %u", track->data_type);
@@ -241,23 +279,25 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index)
 
 static int scd_read_header(AVFormatContext *s)
 {
-    int64_t ret;
     SCDDemuxContext *ctx = s->priv_data;
     uint8_t buf[SCD_MIN_HEADER_SIZE];
+    int64_t ret;
+    int be = 0;
 
     if ((ret = ffio_read_size(s->pb, buf, SCD_MIN_HEADER_SIZE)) < 0)
         return ret;
 
     ctx->hdr.magic       = AV_RB64(buf +  0);
-    ctx->hdr.version     = AV_RB32(buf +  8);
-    ctx->hdr.unk1        = AV_RB16(buf + 12);
-    ctx->hdr.header_size = AV_RB16(buf + 14);
-    ctx->hdr.file_size   = AV_RB32(buf + 16);
+    ctx->hdr.flags       = AV_RB16(buf + 12);
+    be = (ctx->hdr.flags >> 8) == 0x01;
+    ctx->hdr.version     = be ? AV_RB32(buf +  8) : AV_RL32(buf + 8);
+    ctx->hdr.header_size = be ? AV_RB16(buf + 14) : AV_RL16(buf + 14);
+    ctx->hdr.file_size   = be ? AV_RB32(buf + 16) : AV_RL32(buf + 16);
 
     if (ctx->hdr.magic != SCD_MAGIC)
         return AVERROR_INVALIDDATA;
 
-    if (ctx->hdr.version != 3) {
+    if (ctx->hdr.version != 3 && ctx->hdr.version != 4) {
         avpriv_request_sample(s, "SCD version %u", ctx->hdr.version);
         return AVERROR_PATCHWELCOME;
     }
@@ -268,7 +308,7 @@ static int scd_read_header(AVFormatContext *s)
     if ((ret = avio_skip(s->pb, ctx->hdr.header_size - SCD_MIN_HEADER_SIZE)) < 0)
         return ret;
 
-    if ((ret = scd_read_offsets(s)) < 0)
+    if ((ret = scd_read_offsets(s, be)) < 0)
         return ret;
 
     ctx->tracks = av_calloc(ctx->hdr.table1.count, sizeof(SCDTrackHeader));
@@ -276,7 +316,7 @@ static int scd_read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     for (int i = 0; i < ctx->hdr.table1.count; i++) {
-        if ((ret = scd_read_track(s, ctx->tracks + i, i)) < 0)
+        if ((ret = scd_read_track(s, ctx->tracks + i, i, be)) < 0)
             return ret;
     }
 
@@ -291,70 +331,52 @@ static int scd_read_header(AVFormatContext *s)
 
 static int scd_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    SCDDemuxContext   *ctx = s->priv_data;
+    SCDDemuxContext *ctx = s->priv_data;
+    int64_t ret, track_end;
     AVCodecParameters *par;
+    SCDTrackHeader *trk;
+    int64_t current_pos;
+    int size;
 
-    /* Streams aren't interleaved, round-robin them. */
-    for (int i = 0; i < ctx->hdr.table1.count; i++) {
-        int64_t ret;
-        int size;
-        SCDTrackHeader *trk;
+redo:
+    current_pos = avio_tell(s->pb);
+    if (ctx->current_track >= ctx->hdr.table1.count)
+        return AVERROR_EOF;
 
-        ctx->current_track %= ctx->hdr.table1.count;
-
+    do {
         trk = ctx->tracks + ctx->current_track;
-        par = s->streams[ctx->current_track]->codecpar;
+        track_end = trk->absolute_offset + trk->length;
+        par = s->streams[trk->stream_index]->codecpar;
 
-        if (trk->bytes_read >= trk->length)
-            continue;
-
-        if ((ret = avio_seek(s->pb, trk->absolute_offset + trk->bytes_read, SEEK_SET)) < 0)
-            return ret;
-
-        switch (trk->data_type) {
-        case SCD_TRACK_ID_PCM:
-            size = par->block_align;
+        if (trk->data_type != SCD_TRACK_ID_DUMMY &&
+            track_end >= current_pos)
             break;
-        case SCD_TRACK_ID_MP3:
-        default:
-            size = FFMIN(trk->length - trk->bytes_read, 4096);
-            break;
-        }
-
-        ret = av_get_packet(s->pb, pkt, size);
-        if (ret == AVERROR_EOF) {
-            trk->length = trk->bytes_read;
-            continue;
-        } else if (ret < 0) {
-            return ret;
-        }
-
-        if (trk->data_type == SCD_TRACK_ID_PCM) {
-            pkt->pts      = trk->bytes_read / (par->ch_layout.nb_channels * sizeof(uint16_t));
-            pkt->duration = size / (par->ch_layout.nb_channels * sizeof(int16_t));
-        }
-
-        trk->bytes_read   += ret;
-        pkt->flags        &= ~AV_PKT_FLAG_CORRUPT;
-        pkt->stream_index  = ctx->current_track;
 
         ctx->current_track++;
-        return 0;
+    } while (ctx->current_track < ctx->hdr.table1.count);
+
+    track_end = trk->absolute_offset + trk->length;
+
+    size = FFMIN(par->block_align, track_end - current_pos);
+    if (size == 0) {
+        ctx->current_track++;
+        goto redo;
     }
 
-    return AVERROR_EOF;
-}
+    ret = av_get_packet(s->pb, pkt, size);
+    if (ret == AVERROR_EOF) {
+        return ret;
+    } else if (ret < 0) {
+        return ret;
+    }
 
-static int scd_seek(AVFormatContext *s, int stream_index,
-                    int64_t pts, int flags)
-{
-    SCDDemuxContext *ctx = s->priv_data;
+    if (trk->data_type == SCD_TRACK_ID_PCM) {
+        pkt->pts      = (current_pos - trk->absolute_offset) / (par->ch_layout.nb_channels * sizeof(uint16_t));
+        pkt->duration = size / (par->ch_layout.nb_channels * sizeof(int16_t));
+    }
 
-    if (pts != 0)
-        return AVERROR(EINVAL);
-
-    for(int i = 0; i < ctx->hdr.table1.count; ++i)
-        ctx->tracks[i].bytes_read = 0;
+    pkt->flags        &= ~AV_PKT_FLAG_CORRUPT;
+    pkt->stream_index  = trk->stream_index;
 
     return 0;
 }
@@ -367,17 +389,18 @@ static int scd_read_close(AVFormatContext *s)
     av_freep(&ctx->hdr.table1.entries);
     av_freep(&ctx->hdr.table2.entries);
     av_freep(&ctx->tracks);
+
     return 0;
 }
 
 const FFInputFormat ff_scd_demuxer = {
     .p.name         = "scd",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Square Enix SCD"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .priv_data_size = sizeof(SCDDemuxContext),
     .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
     .read_probe     = scd_probe,
     .read_header    = scd_read_header,
     .read_packet    = scd_read_packet,
-    .read_seek      = scd_seek,
     .read_close     = scd_read_close,
 };
