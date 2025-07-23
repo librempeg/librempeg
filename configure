@@ -2644,6 +2644,7 @@ CONFIG_EXTRA="
     rv34dsp
     scene_sad
     sinewin
+    smpte_436m
     snappy
     srtp
     startcode
