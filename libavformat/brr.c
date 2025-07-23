@@ -28,6 +28,9 @@ static int read_probe(const AVProbeData *p)
 {
     int score = 0;
 
+    if (av_match_ext(p->filename, "brr") == 0)
+        return 0;
+
     for (int n = 0; n < p->buf_size - 9; n += 9) {
         if ((p->buf[n] >> 4) > 12)
             return 0;
