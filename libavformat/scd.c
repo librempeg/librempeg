@@ -182,7 +182,8 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index)
     track->aux_count    = AV_RB32(buf + 28);
 
     /* Sanity checks */
-    if (track->num_channels > 8 || track->sample_rate >= 192000 ||
+    if (track->num_channels <= 0 || track->num_channels > 8 ||
+        track->sample_rate <= 0 || track->sample_rate >= 192000 ||
         track->loop_start > track->loop_end)
         return AVERROR_INVALIDDATA;
 
@@ -198,8 +199,8 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index)
 
     par               = st->codecpar;
     par->codec_type   = AVMEDIA_TYPE_AUDIO;
-    par->ch_layout.nb_channels = (int)track->num_channels;
-    par->sample_rate  = (int)track->sample_rate;
+    par->ch_layout.nb_channels = track->num_channels;
+    par->sample_rate  = track->sample_rate;
     st->index         = index;
     st->start_time    = 0;
 
@@ -218,21 +219,21 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index)
     if (av_dict_set_int(&st->metadata, "loop_end", track->loop_end, 0) < 0)
         return AVERROR(ENOMEM);
 
-    switch(track->data_type) {
-        case SCD_TRACK_ID_PCM:
-            par->codec_id              = AV_CODEC_ID_PCM_S16BE;
-            par->bits_per_coded_sample = 16;
-            par->block_align           = par->bits_per_coded_sample * par->ch_layout.nb_channels / 8;
-            break;
-        case SCD_TRACK_ID_MP3:
-            par->codec_id              = AV_CODEC_ID_MP3;
-            ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
-            break;
-        case SCD_TRACK_ID_OGG:
-        case SCD_TRACK_ID_MS_ADPCM:
-        default:
-            par->codec_id              = AV_CODEC_ID_NONE;
-            avpriv_request_sample(s, "data type %u", track->data_type);
+    switch (track->data_type) {
+    case SCD_TRACK_ID_PCM:
+        par->codec_id              = AV_CODEC_ID_PCM_S16BE;
+        par->bits_per_coded_sample = 16;
+        par->block_align           = par->bits_per_coded_sample * par->ch_layout.nb_channels / 8;
+        break;
+    case SCD_TRACK_ID_MP3:
+        par->codec_id              = AV_CODEC_ID_MP3;
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+        break;
+    case SCD_TRACK_ID_OGG:
+    case SCD_TRACK_ID_MS_ADPCM:
+    default:
+        par->codec_id              = AV_CODEC_ID_NONE;
+        avpriv_request_sample(s, "data type %u", track->data_type);
     }
 
     return 0;
@@ -310,14 +311,14 @@ static int scd_read_packet(AVFormatContext *s, AVPacket *pkt)
         if ((ret = avio_seek(s->pb, trk->absolute_offset + trk->bytes_read, SEEK_SET)) < 0)
             return ret;
 
-        switch(trk->data_type) {
-            case SCD_TRACK_ID_PCM:
-                size = par->block_align;
-                break;
-            case SCD_TRACK_ID_MP3:
-            default:
-                size = FFMIN(trk->length - trk->bytes_read, 4096);
-                break;
+        switch (trk->data_type) {
+        case SCD_TRACK_ID_PCM:
+            size = par->block_align;
+            break;
+        case SCD_TRACK_ID_MP3:
+        default:
+            size = FFMIN(trk->length - trk->bytes_read, 4096);
+            break;
         }
 
         ret = av_get_packet(s->pb, pkt, size);
