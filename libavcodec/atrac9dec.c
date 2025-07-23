@@ -919,7 +919,7 @@ static av_cold int atrac9_decode_init(AVCodecContext *avctx)
     }
 
     version = AV_RL32(avctx->extradata);
-    if (version > 2) {
+    if (version > 3) {
         av_log(avctx, AV_LOG_ERROR, "Unsupported version (%i)!\n", version);
         return AVERROR_INVALIDDATA;
     }
