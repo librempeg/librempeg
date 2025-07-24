@@ -51,6 +51,7 @@ static int hvqm4_read_header(AVFormatContext *s)
     AVIOContext *pb = s->pb;
     AVStream *vst, *ast;
     uint32_t header_size, usec_per_frame;
+    uint32_t nb_audio_frames;
     int audio_format, ret;
 
     vst = avformat_new_stream(s, NULL);
@@ -68,7 +69,7 @@ static int hvqm4_read_header(AVFormatContext *s)
     vst->start_time = 0;
     vst->nb_frames = avio_rb32(pb);
     vst->duration = vst->nb_frames;
-    avio_skip(pb, 4);
+    nb_audio_frames = avio_rb32(pb);
     usec_per_frame = avio_rb32(pb);
     avio_skip(pb, 12);
 
@@ -82,14 +83,22 @@ static int hvqm4_read_header(AVFormatContext *s)
 
     avpriv_set_pts_info(vst, 64, usec_per_frame, 1000000);
 
+    if (nb_audio_frames == 0) {
+        avio_skip(pb, header_size - avio_tell(pb));
+        return 0;
+    }
+
     ast = avformat_new_stream(s, NULL);
     if (!ast)
         return AVERROR(ENOMEM);
 
     ast->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     ast->codecpar->ch_layout.nb_channels = avio_r8(pb);
+    if (ast->codecpar->ch_layout.nb_channels == 0)
+        return AVERROR_INVALIDDATA;
+
     ast->codecpar->bits_per_coded_sample = avio_r8(pb);
-    audio_format              = avio_r8(pb);
+    audio_format = avio_r8(pb);
     switch (audio_format) {
     case 0:
         ast->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_HVQM4;
@@ -97,9 +106,15 @@ static int hvqm4_read_header(AVFormatContext *s)
     case 1:
         ast->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
         break;
+    default:
+        avpriv_request_sample(s, "audio_format 0x%X", audio_format);
+        return AVERROR_PATCHWELCOME;
     }
     avio_skip(pb, 1);
     ast->codecpar->sample_rate = avio_rb32(pb);
+    if (ast->codecpar->sample_rate <= 0)
+        return AVERROR_INVALIDDATA;
+
     avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
     ffstream(ast)->need_parsing = AVSTREAM_PARSE_HEADERS;
 
@@ -152,6 +167,8 @@ static int hvqm4_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     ppos = avio_tell(pb);
     media_type = avio_rb16(pb);
+    if (media_type == 0 && s->nb_streams == 1)
+        return AVERROR_INVALIDDATA;
     frame_type = avio_rb16(pb);
     size = avio_rb32(pb);
     ret = av_new_packet(pkt, size + 2);
@@ -168,6 +185,8 @@ static int hvqm4_read_packet(AVFormatContext *s, AVPacket *pkt)
     if ((frame_type == 0x10 && media_type == 1) ||
         media_type == 0)
         pkt->flags |= AV_PKT_FLAG_KEY;
+    if (media_type == 1)
+        pkt->duration = 1;
 
     return ret;
 }
