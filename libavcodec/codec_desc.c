@@ -2059,6 +2059,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("WebP Animation"),
         .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_LOSSLESS,
     },
+    {
+        .id        = AV_CODEC_ID_CFAST,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "cfast",
+        .long_name = NULL_IF_CONFIG_SMALL("CFAST ((Disney Animation Studio))"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
 
     /* various PCM "codecs" */
     {

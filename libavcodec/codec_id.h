@@ -340,6 +340,7 @@ enum AVCodecID {
     AV_CODEC_ID_VICAR,
     AV_CODEC_ID_APV,
     AV_CODEC_ID_AWEBP,
+    AV_CODEC_ID_CFAST,
 
     /* various PCM "codecs" */
     AV_CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
