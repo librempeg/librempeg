@@ -72,14 +72,25 @@ static int ace_read_header(AVFormatContext *s)
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
-    st->start_time = 0;
+
     par = st->codecpar;
+    switch (codec) {
+    case 4:
+    case 5:
+    case 6:
+        par->codec_id = AV_CODEC_ID_ATRAC3;
+        break;
+    default:
+        avpriv_request_sample(s, "codec 0x%04X", codec);
+        return AVERROR_PATCHWELCOME;
+    }
+
+    st->start_time = 0;
     par->codec_type  = AVMEDIA_TYPE_AUDIO;
     par->ch_layout.nb_channels = nb_channels;
     par->sample_rate = rate;
     par->block_align = (codec == 4 ? 0x60 : codec == 5 ? 0x98 : 0xC0) * nb_channels;
     st->duration     = (size / par->block_align) * 1024LL;
-    par->codec_id    = AV_CODEC_ID_ATRAC3;
 
     ret = ff_alloc_extradata(par, 14);
     if (ret < 0)
