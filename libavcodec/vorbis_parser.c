@@ -40,10 +40,10 @@ static const AVClass vorbis_parser_class = {
 };
 
 static int parse_id_header(AVVorbisParseContext *s,
-                           const uint8_t *buf, int buf_size)
+                           const uint8_t *buf, int buf_size,
+                           const int expected_size)
 {
-    /* Id header should be 30 bytes */
-    if (buf_size < 30) {
+    if (buf_size < expected_size) {
         av_log(s, AV_LOG_ERROR, "Id header is too short\n");
         return AVERROR_INVALIDDATA;
     }
@@ -55,24 +55,26 @@ static int parse_id_header(AVVorbisParseContext *s,
     }
 
     /* check for header signature */
-    if (memcmp(&buf[1], "vorbis", 6)) {
+    if ((expected_size == 26 && memcmp(&buf[1], "SK", 2)) ||
+        (expected_size == 30 && memcmp(&buf[1], "vorbis", 6))) {
         av_log(s, AV_LOG_ERROR, "Invalid packet signature in Id header\n");
         return AVERROR_INVALIDDATA;
     }
 
-    if (!(buf[29] & 0x1)) {
+    if (!(buf[expected_size-1] & 0x1)) {
         av_log(s, AV_LOG_ERROR, "Invalid framing bit in Id header\n");
         return AVERROR_INVALIDDATA;
     }
 
-    s->blocksize[0] = 1 << (buf[28] & 0xF);
-    s->blocksize[1] = 1 << (buf[28] >>  4);
+    s->blocksize[0] = 1 << (buf[expected_size-2] & 0xF);
+    s->blocksize[1] = 1 << (buf[expected_size-2] >>  4);
 
     return 0;
 }
 
 static int parse_setup_header(AVVorbisParseContext *s,
-                              const uint8_t *buf, int buf_size)
+                              const uint8_t *buf, int buf_size,
+                              const int expected_size)
 {
     GetBitContext gb, gb0;
     uint8_t *rev_buf;
@@ -92,7 +94,8 @@ static int parse_setup_header(AVVorbisParseContext *s,
     }
 
     /* check for header signature */
-    if (memcmp(&buf[1], "vorbis", 6)) {
+    if ((expected_size == 26 && memcmp(&buf[1], "SK", 2)) ||
+        (expected_size == 30 && memcmp(&buf[1], "vorbis", 6))) {
         av_log(s, AV_LOG_ERROR, "Invalid packet signature in Setup header\n");
         return AVERROR_INVALIDDATA;
     }
@@ -181,7 +184,8 @@ bad_header:
 }
 
 static int vorbis_parse_init(AVVorbisParseContext *s,
-                             const uint8_t *extradata, int extradata_size)
+                             const uint8_t *extradata, int extradata_size,
+                             const int expected_size)
 {
     const uint8_t *header_start[3];
     int header_len[3];
@@ -197,10 +201,10 @@ static int vorbis_parse_init(AVVorbisParseContext *s,
         return ret;
     }
 
-    if ((ret = parse_id_header(s, header_start[0], header_len[0])) < 0)
+    if ((ret = parse_id_header(s, header_start[0], header_len[0], expected_size)) < 0)
         return ret;
 
-    if ((ret = parse_setup_header(s, header_start[2], header_len[2])) < 0)
+    if ((ret = parse_setup_header(s, header_start[2], header_len[2], expected_size)) < 0)
         return ret;
 
     s->valid_extradata = 1;
@@ -287,7 +291,25 @@ AVVorbisParseContext *av_vorbis_parse_init(const uint8_t *extradata,
     if (!s)
         return NULL;
 
-    ret = vorbis_parse_init(s, extradata, extradata_size);
+    ret = vorbis_parse_init(s, extradata, extradata_size, 30);
+    if (ret < 0) {
+        av_vorbis_parse_free(&s);
+        return NULL;
+    }
+
+    return s;
+}
+
+AVVorbisParseContext *av_sk_vorbis_parse_init(const uint8_t *extradata,
+                                              int extradata_size)
+{
+    AVVorbisParseContext *s = av_mallocz(sizeof(*s));
+    int ret;
+
+    if (!s)
+        return NULL;
+
+    ret = vorbis_parse_init(s, extradata, extradata_size, 26);
     if (ret < 0) {
         av_vorbis_parse_free(&s);
         return NULL;
@@ -333,7 +355,7 @@ static void vorbis_parser_close(AVCodecParserContext *ctx)
 }
 
 const AVCodecParser ff_vorbis_parser = {
-    .codec_ids      = { AV_CODEC_ID_VORBIS },
+    .codec_ids      = { AV_CODEC_ID_VORBIS, AV_CODEC_ID_SKVORBIS },
     .priv_data_size = sizeof(VorbisParseContext),
     .parser_parse   = vorbis_parse,
     .parser_close   = vorbis_parser_close,

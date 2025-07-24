@@ -710,6 +710,8 @@ OBJS-$(CONFIG_SIPR_DECODER)            += sipr.o acelp_pitch_delay.o \
                                           sipr16k.o
 OBJS-$(CONFIG_SIREN_DECODER)           += siren.o
 OBJS-$(CONFIG_SIMBIOSIS_IMX_DECODER)   += imx.o
+OBJS-$(CONFIG_SKVORBIS_DECODER)        += vorbisdec.o vorbisdsp.o vorbis.o \
+                                          vorbis_data.o
 OBJS-$(CONFIG_SMACKAUD_DECODER)        += smacker.o
 OBJS-$(CONFIG_SMACKER_DECODER)         += smacker.o
 OBJS-$(CONFIG_SMC_DECODER)             += smc.o

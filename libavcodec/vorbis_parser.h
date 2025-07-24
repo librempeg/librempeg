@@ -37,6 +37,12 @@ AVVorbisParseContext *av_vorbis_parse_init(const uint8_t *extradata,
                                            int extradata_size);
 
 /**
+ * Allocate and initialize the SK Vorbis parser using headers in the extradata.
+ */
+AVVorbisParseContext *av_sk_vorbis_parse_init(const uint8_t *extradata,
+                                              int extradata_size);
+
+/**
  * Free the parser and everything associated with it.
  */
 void av_vorbis_parse_free(AVVorbisParseContext **s);

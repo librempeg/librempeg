@@ -926,9 +926,12 @@ static int vorbis_parse_setup_hdr(vorbis_context *vc)
     GetBitContext *gb = &vc->gb;
     int ret;
 
-    if ((get_bits(gb, 8) != 'v') || (get_bits(gb, 8) != 'o') ||
-        (get_bits(gb, 8) != 'r') || (get_bits(gb, 8) != 'b') ||
-        (get_bits(gb, 8) != 'i') || (get_bits(gb, 8) != 's')) {
+    if (((vc->avctx->codec_id == AV_CODEC_ID_SKVORBIS) &&
+         ((get_bits(gb, 8) != 'S') || (get_bits(gb, 8) != 'K'))) ||
+        ((vc->avctx->codec_id == AV_CODEC_ID_VORBIS) &&
+         ((get_bits(gb, 8) != 'v') || (get_bits(gb, 8) != 'o') ||
+          (get_bits(gb, 8) != 'r') || (get_bits(gb, 8) != 'b') ||
+          (get_bits(gb, 8) != 'i') || (get_bits(gb, 8) != 's')))) {
         av_log(vc->avctx, AV_LOG_ERROR, " Vorbis setup header packet corrupt (no vorbis signature). \n");
         return AVERROR_INVALIDDATA;
     }
@@ -974,9 +977,12 @@ static int vorbis_parse_id_hdr(vorbis_context *vc)
     float scale = -1.0;
     int ret;
 
-    if ((get_bits(gb, 8) != 'v') || (get_bits(gb, 8) != 'o') ||
-        (get_bits(gb, 8) != 'r') || (get_bits(gb, 8) != 'b') ||
-        (get_bits(gb, 8) != 'i') || (get_bits(gb, 8) != 's')) {
+    if (((vc->avctx->codec_id == AV_CODEC_ID_SKVORBIS) &&
+         ((get_bits(gb, 8) != 'S') || (get_bits(gb, 8) != 'K'))) ||
+        ((vc->avctx->codec_id == AV_CODEC_ID_VORBIS) &&
+         ((get_bits(gb, 8) != 'v') || (get_bits(gb, 8) != 'o') ||
+          (get_bits(gb, 8) != 'r') || (get_bits(gb, 8) != 'b') ||
+          (get_bits(gb, 8) != 'i') || (get_bits(gb, 8) != 's')))) {
         av_log(vc->avctx, AV_LOG_ERROR, " Vorbis id header packet corrupt (no vorbis signature). \n");
         return AVERROR_INVALIDDATA;
     }
@@ -1889,6 +1895,22 @@ const FFCodec ff_vorbis_decoder = {
     CODEC_LONG_NAME("Vorbis"),
     .p.type          = AVMEDIA_TYPE_AUDIO,
     .p.id            = AV_CODEC_ID_VORBIS,
+    .priv_data_size  = sizeof(vorbis_context),
+    .init            = vorbis_decode_init,
+    .close           = vorbis_decode_close,
+    FF_CODEC_DECODE_CB(vorbis_decode_frame),
+    .flush           = vorbis_decode_flush,
+    .p.capabilities  = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_CHANNEL_CONF,
+    .caps_internal   = FF_CODEC_CAP_INIT_CLEANUP,
+    CODEC_CH_LAYOUTS_ARRAY(ff_vorbis_ch_layouts),
+    CODEC_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP),
+};
+
+const FFCodec ff_skvorbis_decoder = {
+    .p.name          = "skvorbis",
+    CODEC_LONG_NAME("SK Vorbis"),
+    .p.type          = AVMEDIA_TYPE_AUDIO,
+    .p.id            = AV_CODEC_ID_SKVORBIS,
     .priv_data_size  = sizeof(vorbis_context),
     .init            = vorbis_decode_init,
     .close           = vorbis_decode_close,
