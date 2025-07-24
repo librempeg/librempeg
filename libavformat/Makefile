@@ -606,6 +606,20 @@ OBJS-$(CONFIG_SGA_DEMUXER)               += sga.o
 OBJS-$(CONFIG_SHORTEN_DEMUXER)           += shortendec.o rawdec.o
 OBJS-$(CONFIG_SIFF_DEMUXER)              += siff.o
 OBJS-$(CONFIG_SIMBIOSIS_IMX_DEMUXER)     += imx.o
+OBJS-$(CONFIG_SK_DEMUXER)                += oggdec.o         \
+                                            oggparsecelt.o   \
+                                            oggparsedirac.o  \
+                                            oggparseflac.o   \
+                                            oggparseogm.o    \
+                                            oggparseopus.o   \
+                                            oggparseskeleton.o \
+                                            oggparsespeex.o  \
+                                            oggparsetheora.o \
+                                            oggparsevorbis.o \
+                                            oggparsevp8.o    \
+                                            replaygain.o     \
+                                            vorbiscomment.o  \
+                                            flac_picture.o
 OBJS-$(CONFIG_SLN_DEMUXER)               += pcmdec.o pcm.o
 OBJS-$(CONFIG_SMACKER_DEMUXER)           += smacker.o
 OBJS-$(CONFIG_SMJPEG_DEMUXER)            += smjpegdec.o smjpeg.o

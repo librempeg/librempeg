@@ -57,6 +57,7 @@ static const struct ogg_codec * const ogg_codecs[] = {
     &ff_ogm_audio_codec,
     &ff_ogm_text_codec,
     &ff_ogm_old_codec,
+    &ff_sk_vorbis_codec,
     NULL
 };
 
@@ -310,6 +311,7 @@ static int buf_realloc(struct ogg_stream *os, int size)
 
 static int ogg_read_page(AVFormatContext *s, int *sid, int probing)
 {
+    const int sk_ogg = !strcmp(s->iformat->name, "sk");
     AVIOContext *bc = s->pb;
     struct ogg *ogg = s->priv_data;
     struct ogg_stream *os;
@@ -332,6 +334,12 @@ static int ogg_read_page(AVFormatContext *s, int *sid, int probing)
 
     do {
         int c;
+
+        if (sk_ogg &&
+            sync[sp & 3] == 0x11 &&
+            sync[(sp + 1) & 3] == 'S' &&
+            sync[(sp + 2) & 3] == 'K' && sync[(sp + 3) & 3] == 0x10)
+            break;
 
         if (sync[sp & 3] == 'O' &&
             sync[(sp + 1) & 3] == 'g' &&
@@ -357,8 +365,12 @@ static int ogg_read_page(AVFormatContext *s, int *sid, int probing)
         return AVERROR_INVALIDDATA;
     }
 
-    /* 0x4fa9b05f = av_crc(AV_CRC_32_IEEE, 0x0, "OggS", 4) */
-    ffio_init_checksum(bc, ff_crc04C11DB7_update, 0x4fa9b05f);
+    if (sk_ogg) {
+        ffio_init_checksum(bc, ff_crc04C11DB7_update, 0x900045B7);
+    } else {
+        /* 0x4fa9b05f = av_crc(AV_CRC_32_IEEE, 0x0, "OggS", 4) */
+        ffio_init_checksum(bc, ff_crc04C11DB7_update, 0x4fa9b05f);
+    }
 
     /* To rewind if checksum is bad/check magic on switches - this is the max packet size */
     ret = ffio_ensure_seekback(bc, MAX_PAGE_SIZE);
@@ -984,6 +996,28 @@ const FFInputFormat ff_ogg_demuxer = {
     .priv_data_size = sizeof(struct ogg),
     .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
     .read_probe     = ogg_probe,
+    .read_header    = ogg_read_header,
+    .read_packet    = ogg_read_packet,
+    .read_close     = ogg_read_close,
+    .read_seek      = ogg_read_seek,
+    .read_timestamp = ogg_read_timestamp,
+};
+
+static int sk_probe(const AVProbeData *p)
+{
+    if (!memcmp("\x11SK\x10", p->buf, 5) && p->buf[5] <= 0x7)
+        return AVPROBE_SCORE_MAX;
+    return 0;
+}
+
+const FFInputFormat ff_sk_demuxer = {
+    .p.name         = "sk",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("SK Ogg"),
+    .p.extensions   = "aud",
+    .p.flags        = AVFMT_GENERIC_INDEX | AVFMT_TS_DISCONT | AVFMT_NOBINSEARCH,
+    .priv_data_size = sizeof(struct ogg),
+    .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
+    .read_probe     = sk_probe,
     .read_header    = ogg_read_header,
     .read_packet    = ogg_read_packet,
     .read_close     = ogg_read_close,

@@ -482,6 +482,7 @@ extern const FFInputFormat  ff_sga_demuxer;
 extern const FFInputFormat  ff_shorten_demuxer;
 extern const FFInputFormat  ff_siff_demuxer;
 extern const FFInputFormat  ff_simbiosis_imx_demuxer;
+extern const FFInputFormat  ff_sk_demuxer;
 extern const FFInputFormat  ff_sln_demuxer;
 extern const FFInputFormat  ff_smacker_demuxer;
 extern const FFInputFormat  ff_smjpeg_demuxer;

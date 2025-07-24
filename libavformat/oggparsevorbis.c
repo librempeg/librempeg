@@ -532,3 +532,147 @@ const struct ogg_codec ff_vorbis_codec = {
     .cleanup   = vorbis_cleanup,
     .nb_header = 3,
 };
+
+static int sk_parse_header(AVFormatContext *s, AVStream *st,
+                           const uint8_t *p, unsigned int psize)
+{
+    unsigned blocksize, bs0, bs1;
+    int srate;
+    int channels;
+
+    if (psize != 26)
+        return AVERROR_INVALIDDATA;
+
+    p += 3; /* skip "\001SK" tag */
+
+    if (bytestream_get_le32(&p) != 0) /* vorbis_version */
+        return AVERROR_INVALIDDATA;
+
+    channels = bytestream_get_byte(&p);
+    if (st->codecpar->ch_layout.nb_channels &&
+        channels != st->codecpar->ch_layout.nb_channels) {
+        av_log(s, AV_LOG_ERROR, "Channel change is not supported\n");
+        return AVERROR_PATCHWELCOME;
+    }
+    st->codecpar->ch_layout.nb_channels = channels;
+    srate               = bytestream_get_le32(&p);
+    p += 4; // skip maximum bitrate
+    st->codecpar->bit_rate = bytestream_get_le32(&p); // nominal bitrate
+    p += 4; // skip minimum bitrate
+
+    blocksize = bytestream_get_byte(&p);
+    bs0       = blocksize & 15;
+    bs1       = blocksize >> 4;
+
+    if (bs0 > bs1)
+        return AVERROR_INVALIDDATA;
+    if (bs0 < 6 || bs1 > 13)
+        return AVERROR_INVALIDDATA;
+
+    if (bytestream_get_byte(&p) != 1) /* framing_flag */
+        return AVERROR_INVALIDDATA;
+
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id   = AV_CODEC_ID_SKVORBIS;
+
+    if (srate > 0) {
+        if (st->codecpar->sample_rate &&
+            srate != st->codecpar->sample_rate) {
+            av_log(s, AV_LOG_ERROR, "Sample rate change is not supported\n");
+            return AVERROR_PATCHWELCOME;
+        }
+
+        st->codecpar->sample_rate = srate;
+        avpriv_set_pts_info(st, 64, 1, srate);
+    }
+
+    return 1;
+}
+
+static int sk_header(AVFormatContext *s, int idx)
+{
+    struct ogg *ogg = s->priv_data;
+    AVStream *st    = s->streams[idx];
+    struct ogg_stream *os = ogg->streams + idx;
+    struct oggvorbis_private *priv;
+    int pkt_type = os->buf[os->pstart];
+
+    if (!os->private) {
+        os->private = av_mallocz(sizeof(struct oggvorbis_private));
+        if (!os->private)
+            return AVERROR(ENOMEM);
+    }
+
+    priv = os->private;
+
+    if (!(pkt_type & 1))
+        return priv->vp ? 0 : AVERROR_INVALIDDATA;
+
+    if (pkt_type > 5) {
+        av_log(s, AV_LOG_VERBOSE, "Ignoring packet with unknown type %d\n", pkt_type);
+        return 1;
+    }
+
+    if (os->psize < 1)
+        return AVERROR_INVALIDDATA;
+
+    if (priv->packet[pkt_type >> 1])
+        return AVERROR_INVALIDDATA;
+    if (pkt_type > 1 && !priv->packet[0] || pkt_type > 3 && !priv->packet[1])
+        return priv->vp ? 0 : AVERROR_INVALIDDATA;
+
+    priv->len[pkt_type >> 1]    = os->psize;
+    priv->packet[pkt_type >> 1] = av_memdup(os->buf + os->pstart, os->psize);
+    if (!priv->packet[pkt_type >> 1])
+        return AVERROR(ENOMEM);
+    if (pkt_type == 1)
+        return sk_parse_header(s, st, os->buf + os->pstart, os->psize);
+
+    if (pkt_type == 3) {
+        if (vorbis_update_metadata(s, idx) >= 0 && priv->len[1] > 10) {
+            unsigned new_len;
+
+            int ret = ff_replaygain_export(st, st->metadata);
+            if (ret < 0)
+                return ret;
+
+            // drop all metadata we parsed and which is not required by libvorbis
+            new_len = 7 + 4 + AV_RL32(priv->packet[1] + 7) + 4 + 1;
+            if (new_len >= 16 && new_len < os->psize) {
+                AV_WL32(priv->packet[1] + new_len - 5, 0);
+                priv->packet[1][new_len - 1] = 1;
+                priv->len[1]                 = new_len;
+            }
+        }
+    } else {
+        int ret;
+
+        if (priv->vp)
+             return AVERROR_INVALIDDATA;
+
+        ret = fixup_vorbis_headers(s, priv, &st->codecpar->extradata);
+        if (ret < 0) {
+            st->codecpar->extradata_size = 0;
+            return ret;
+        }
+        st->codecpar->extradata_size = ret;
+
+        priv->vp = av_sk_vorbis_parse_init(st->codecpar->extradata, st->codecpar->extradata_size);
+        if (!priv->vp) {
+            av_freep(&st->codecpar->extradata);
+            st->codecpar->extradata_size = 0;
+            return AVERROR_UNKNOWN;
+        }
+    }
+
+    return 1;
+}
+
+const struct ogg_codec ff_sk_vorbis_codec = {
+    .magic     = "\001SK",
+    .magicsize = 3,
+    .header    = sk_header,
+    .packet    = vorbis_packet,
+    .cleanup   = vorbis_cleanup,
+    .nb_header = 3,
+};
