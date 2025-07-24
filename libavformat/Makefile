@@ -182,6 +182,7 @@ OBJS-$(CONFIG_CAVSVIDEO_DEMUXER)         += cavsvideodec.o rawdec.o
 OBJS-$(CONFIG_CAVSVIDEO_MUXER)           += rawenc.o
 OBJS-$(CONFIG_CDG_DEMUXER)               += cdg.o
 OBJS-$(CONFIG_CDXL_DEMUXER)              += cdxl.o
+OBJS-$(CONFIG_CFAST_DEMUXER)             += cfast.o
 OBJS-$(CONFIG_CINE_DEMUXER)              += cinedec.o
 OBJS-$(CONFIG_CODEC2_DEMUXER)            += codec2.o pcm.o
 OBJS-$(CONFIG_CODEC2_MUXER)              += codec2.o rawenc.o
