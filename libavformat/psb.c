@@ -895,6 +895,13 @@ static int prepare_codec(AVFormatContext *s, PSBHeader *psb)
 
         if (psb->format == 0x0001)
             psb->codec = ff_get_pcm_codec_id(psb->bps, 0, 0, 0xFFFF);
+        if (psb->format == 0x0166 && (psb->block_size == 0 || psb->bps == 0)) {
+            if (psb->block_size == 0)
+                psb->block_size = 0x800;
+            if (psb->bps == 0)
+                psb->bps = 16;
+        }
+
         return 1;
     }
 
@@ -1104,6 +1111,20 @@ static int read_header(AVFormatContext *s)
 
         memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
         AV_WL16(st->codecpar->extradata + 4, 0x1f);
+    } else if (st->codecpar->codec_id == AV_CODEC_ID_XMA2) {
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
+
+        ret = ff_alloc_extradata(st->codecpar, 34);
+        if (ret < 0)
+            return ret;
+
+        memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
+        AV_WL16(st->codecpar->extradata, (p->psb.channels + 1) / 2);
+
+        if (p->psb.fmt_size > 34) {
+            avio_seek(pb, p->psb.fmt_offset + 0x18, SEEK_SET);
+            st->duration = p->psb.num_samples = avio_rl32(pb);
+        }
     }
 
     avio_seek(pb, p->psb.stream_offset[0], SEEK_SET);
