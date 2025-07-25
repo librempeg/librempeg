@@ -892,6 +892,9 @@ static int prepare_codec(AVFormatContext *s, PSBHeader *psb)
 
     if (psb->format != 0) {
         psb->codec = ff_codec_get_id(ff_codec_wav_tags, psb->format);
+
+        if (psb->format == 0x0001)
+            psb->codec = ff_get_pcm_codec_id(psb->bps, 0, 0, 0xFFFF);
         return 1;
     }
 
