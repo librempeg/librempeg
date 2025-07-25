@@ -112,6 +112,8 @@ typedef struct PSBContext {
     int keys_count;
 
     PSBHeader psb;
+
+    AVFormatContext *wav_ctx;
 } PSBContext;
 
 typedef struct PSBNode {
@@ -947,12 +949,49 @@ static int prepare_codec(AVFormatContext *s, PSBHeader *psb)
     }
 
     if (strcmp(spec, "vita") == 0 || strcmp(spec, "ps4") == 0) {
+        PSBContext *p = s->priv_data;
+        int ret;
+
         avio_seek(pb, psb->stream_offset[0], SEEK_SET);
 
-        if (avio_rb32(pb) == MKBETAG('R','I','F','F'))
-            psb->codec = AV_CODEC_ID_ATRAC9;
-        else
-            psb->codec = 0;
+        if (avio_rb32(pb) == MKBETAG('R','I','F','F')) {
+            extern const FFInputFormat ff_wav_demuxer;
+
+            if (!(p->wav_ctx = avformat_alloc_context()))
+                return AVERROR(ENOMEM);
+
+            if ((ret = ff_copy_whiteblacklists(p->wav_ctx, s)) < 0) {
+                avformat_free_context(p->wav_ctx);
+                p->wav_ctx = NULL;
+
+                return ret;
+            }
+
+            avio_seek(pb, -4, SEEK_CUR);
+
+            p->wav_ctx->flags = AVFMT_FLAG_CUSTOM_IO | AVFMT_FLAG_GENPTS;
+            p->wav_ctx->ctx_flags |= AVFMTCTX_UNSEEKABLE;
+            p->wav_ctx->probesize = 0;
+            p->wav_ctx->max_analyze_duration = 0;
+            p->wav_ctx->interrupt_callback = s->interrupt_callback;
+            p->wav_ctx->pb = pb;
+            p->wav_ctx->io_open = NULL;
+
+            ret = avformat_open_input(&p->wav_ctx, "", &ff_wav_demuxer.p, NULL);
+            if (ret < 0)
+                return ret;
+
+            ret = avformat_find_stream_info(p->wav_ctx, NULL);
+            if (ret < 0)
+                return ret;
+
+            p->psb.num_samples = p->wav_ctx->streams[0]->duration;
+            p->psb.bps = p->wav_ctx->streams[0]->codecpar->bits_per_coded_sample;
+            p->psb.block_size = p->wav_ctx->streams[0]->codecpar->block_align;
+            p->psb.codec = p->wav_ctx->streams[0]->codecpar->codec_id;
+            p->psb.sample_rate = p->wav_ctx->streams[0]->codecpar->sample_rate;
+            p->psb.channels = p->wav_ctx->streams[0]->codecpar->ch_layout.nb_channels;
+        }
         return 1;
     }
 
@@ -1080,54 +1119,91 @@ static int read_header(AVFormatContext *s)
     if (!prepare_psb_extra(s, &p->psb))
         return AVERROR_INVALIDDATA;
 
-    if (p->psb.sample_rate <= 0 ||
-        p->psb.channels <= 0 ||
-        p->psb.block_size <= 0)
-        return AVERROR_INVALIDDATA;
+    if (p->wav_ctx) {
+        FFStream *sti;
 
-    st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
+        if (p->psb.sample_rate <= 0 ||
+            p->psb.channels <= 0 ||
+            p->psb.block_size <= 0)
+            return AVERROR_INVALIDDATA;
 
-    st->start_time = 0;
-    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id = p->psb.codec;
-    st->codecpar->bits_per_coded_sample = p->psb.bps;
-    st->codecpar->ch_layout.nb_channels = p->psb.channels;
-    st->codecpar->sample_rate = p->psb.sample_rate;
-    st->codecpar->block_align = p->psb.block_size;
-    if (st->codecpar->block_align / ((p->psb.bps + 7) / 8) <= p->psb.channels)
-        st->codecpar->block_align *= 1024;
-    st->codecpar->bit_rate = p->psb.avg_bitrate * 8LL;
-    if (p->psb.num_samples > 0)
-        st->duration = p->psb.num_samples;
+        st = avformat_new_stream(s, NULL);
+        if (!st)
+            return AVERROR(ENOMEM);
 
-    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+        st->start_time = 0;
+        st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+        st->codecpar->codec_id = p->psb.codec;
+        st->codecpar->bits_per_coded_sample = p->psb.bps;
+        st->codecpar->sample_rate = p->psb.sample_rate;
+        st->codecpar->block_align = p->psb.block_size;
+        if (p->psb.num_samples > 0)
+            st->duration = p->psb.num_samples;
 
-    if (st->codecpar->codec_id == AV_CODEC_ID_WMAV2) {
-        ret = ff_alloc_extradata(st->codecpar, 6);
+        ret = av_channel_layout_copy(&st->codecpar->ch_layout, &p->wav_ctx->streams[0]->codecpar->ch_layout);
         if (ret < 0)
             return ret;
 
-        memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
-        AV_WL16(st->codecpar->extradata + 4, 0x1f);
-    } else if (st->codecpar->codec_id == AV_CODEC_ID_XMA2) {
-        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
-
-        ret = ff_alloc_extradata(st->codecpar, 34);
+        ret = ff_alloc_extradata(st->codecpar, p->wav_ctx->streams[0]->codecpar->extradata_size);
         if (ret < 0)
             return ret;
 
-        memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
-        AV_WL16(st->codecpar->extradata, (p->psb.channels + 1) / 2);
+        memcpy(st->codecpar->extradata, p->wav_ctx->streams[0]->codecpar->extradata,
+               p->wav_ctx->streams[0]->codecpar->extradata_size);
 
-        if (p->psb.fmt_size > 34) {
-            avio_seek(pb, p->psb.fmt_offset + 0x18, SEEK_SET);
-            st->duration = p->psb.num_samples = avio_rl32(pb);
+        sti = ffstream(st);
+        sti->request_probe = 0;
+        sti->need_parsing = AVSTREAM_PARSE_HEADERS;
+    } else {
+        if (p->psb.sample_rate <= 0 ||
+            p->psb.channels <= 0 ||
+            p->psb.block_size <= 0)
+            return AVERROR_INVALIDDATA;
+
+        st = avformat_new_stream(s, NULL);
+        if (!st)
+            return AVERROR(ENOMEM);
+
+        st->start_time = 0;
+        st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+        st->codecpar->codec_id = p->psb.codec;
+        st->codecpar->bits_per_coded_sample = p->psb.bps;
+        st->codecpar->ch_layout.nb_channels = p->psb.channels;
+        st->codecpar->sample_rate = p->psb.sample_rate;
+        st->codecpar->block_align = p->psb.block_size;
+        if (st->codecpar->block_align / ((p->psb.bps + 7) / 8) <= p->psb.channels)
+            st->codecpar->block_align *= 1024;
+        st->codecpar->bit_rate = p->psb.avg_bitrate * 8LL;
+        if (p->psb.num_samples > 0)
+            st->duration = p->psb.num_samples;
+
+        if (st->codecpar->codec_id == AV_CODEC_ID_WMAV2) {
+            ret = ff_alloc_extradata(st->codecpar, 6);
+            if (ret < 0)
+                return ret;
+
+            memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
+            AV_WL16(st->codecpar->extradata + 4, 0x1f);
+        } else if (st->codecpar->codec_id == AV_CODEC_ID_XMA2) {
+            ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
+
+            ret = ff_alloc_extradata(st->codecpar, 34);
+            if (ret < 0)
+                return ret;
+
+            memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
+            AV_WL16(st->codecpar->extradata, (p->psb.channels + 1) / 2);
+
+            if (p->psb.fmt_size > 34) {
+                avio_seek(pb, p->psb.fmt_offset + 0x18, SEEK_SET);
+                st->duration = p->psb.num_samples = avio_rl32(pb);
+            }
         }
+
+        avio_seek(pb, p->psb.stream_offset[0], SEEK_SET);
     }
 
-    avio_seek(pb, p->psb.stream_offset[0], SEEK_SET);
+    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
 }
@@ -1146,9 +1222,14 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     if (pos >= end)
         return AVERROR_EOF;
 
-    ret = av_get_packet(pb, pkt, FFMIN(end - pos, s->streams[0]->codecpar->block_align));
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
+    if (p->wav_ctx) {
+        ret = av_read_frame(p->wav_ctx, pkt);
+        pkt->stream_index = 0;
+    } else {
+        ret = av_get_packet(pb, pkt, FFMIN(end - pos, s->streams[0]->codecpar->block_align));
+        pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
+        pkt->stream_index = 0;
+    }
 
     return ret;
 }
@@ -1160,6 +1241,7 @@ static int read_close(AVFormatContext *s)
     av_freep(&p->strings_data);
     av_freep(&p->keys_pos);
     av_freep(&p->keys);
+    avformat_close_input(&p->wav_ctx);
 
     return 0;
 }
