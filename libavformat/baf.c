@@ -207,7 +207,7 @@ static int read_header(AVFormatContext *s)
 
             if ((ret = ff_alloc_extradata(st->codecpar, 8 + 20 * ((st->codecpar->ch_layout.nb_channels + 1) / 2))) < 0)
                 return ret;
-            memset(st->codecpar->extradata, 0, 28);
+            memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
             st->codecpar->extradata[4] = (st->codecpar->ch_layout.nb_channels + 1) / 2;
             for (int i = 0; i < st->codecpar->extradata[4]; i++)
                 st->codecpar->extradata[8 + 20 * i + 17] = FFMIN(2, st->codecpar->ch_layout.nb_channels - i * 2);
