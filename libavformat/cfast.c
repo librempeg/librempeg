@@ -39,12 +39,14 @@ static int cfast_read_probe(const AVProbeData *p)
     if (AV_RB32(p->buf) == MKBETAG('S','T','D','Y'))
         offset += 2 + AV_RB16(p->buf+4);
 
-    if (p->buf_size < offset + 20)
+    if (p->buf_size < offset + 28)
         return 0;
 
-    if (AV_RB32(p->buf+offset+  0) == 0 ||
-        AV_RB32(p->buf+offset+  4) == 0 ||
-        AV_RB32(p->buf+offset+ 16) == 0)
+    if (AV_RB32(p->buf+offset +  0) == 0 ||
+        AV_RB32(p->buf+offset +  4) == 0 ||
+        AV_RB8( p->buf+offset + 16) == 0 ||
+        AV_RB8( p->buf+offset + 16)  > 5 ||
+        AV_RB32(p->buf+offset + 24) == 0)
         return 0;
 
     return 2*AVPROBE_SCORE_MAX/3;
@@ -86,6 +88,10 @@ static int cfast_read_header(AVFormatContext *s)
         avio_read(pb, st->codecpar->extradata + 8, hdr[7]);
 
     cfast->nb_bit_planes = hdr[0];
+    if (cfast->nb_bit_planes == 0 ||
+        cfast->nb_bit_planes > 5)
+        return AVERROR_INVALIDDATA;
+
     nb_frames = avio_rb32(pb);
 
     st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
