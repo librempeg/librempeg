@@ -24,6 +24,8 @@
 #include "demux.h"
 #include "internal.h"
 
+#define HEADER 0x80000001
+
 typedef struct LOPUSDemuxContext {
     int64_t data_end;
 } LOPUSDemuxContext;
@@ -35,10 +37,13 @@ static int lopus_probe(const AVProbeData *p)
     if (AV_RL32(p->buf) == MKTAG('O','P','U','S'))
         offset = 24;
 
+    if (AV_RL32(p->buf+offset) != HEADER)
+        offset = 64;
+
     if (p->buf_size < offset + 16)
         return 0;
 
-    if (AV_RL32(p->buf+offset) == 0x80000001 &&
+    if (AV_RL32(p->buf+offset) == HEADER &&
         AV_RL32(p->buf+offset+4) == 0x18 &&
         p->buf[offset+9] > 0 &&
         AV_RL32(p->buf+offset+12) > 0)
@@ -59,11 +64,19 @@ static int lopus_read_header(AVFormatContext *s)
     if (chunk == MKTAG('O','P','U','S')) {
         avio_skip(pb, 4);
         duration = avio_rl32(pb);
-        avio_skip(pb, 16);
+        avio_skip(pb, 12);
         offset = 24;
+        chunk = avio_rl32(pb);
+        if (chunk != HEADER) {
+            avio_skip(pb, 36);
+            chunk = avio_rl32(pb);
+            offset = 64;
+        }
     }
-    avio_skip(pb, 5);
+    if (chunk != HEADER)
+        return AVERROR_INVALIDDATA;
 
+    avio_skip(pb, 5);
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
