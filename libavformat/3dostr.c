@@ -104,6 +104,8 @@ static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     while (!avio_feof(s->pb)) {
         pos   = avio_tell(s->pb);
+        if (pos & 3)
+            avio_skip(s->pb, 4 - (pos & 3));
         chunk = avio_rl32(s->pb);
         size  = avio_rb32(s->pb);
 
@@ -276,6 +278,35 @@ static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
                 avpriv_set_pts_info(vst, 64, 1, 15);
 
                 size -= 24;
+            }
+            size -= 12;
+            break;
+        case MKTAG('M','P','V','D'):
+            if (ctx->video_stream_index >= 0) {
+                if (size <= 20)
+                    return AVERROR_INVALIDDATA;
+                avio_skip(s->pb, 16);
+                size -= 16;
+                ret = av_get_packet(s->pb, pkt, size);
+                pkt->pos = pos;
+                pkt->stream_index = ctx->video_stream_index;
+                pkt->duration = 1;
+                return ret;
+            }
+
+            avio_skip(s->pb, 8);
+            if (avio_rl32(s->pb) == MKTAG('V','H','D','R')) {
+                vst = avformat_new_stream(s, NULL);
+                if (!vst)
+                    return AVERROR(ENOMEM);
+
+                vst->start_time = 0;
+                ctx->video_stream_index   = vst->index;
+                vst->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+                vst->codecpar->codec_id   = AV_CODEC_ID_MPEG1VIDEO;
+                ffstream(vst)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+
+                avpriv_set_pts_info(vst, 64, 1, 15);
             }
             size -= 12;
             break;
