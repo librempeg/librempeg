@@ -40,6 +40,7 @@
 #define SCD_TRACK_HEADER_SIZE  32
 
 #define SCD_TRACK_ID_PCM        0
+#define SCD_TRACK_ID_PCM_LE     1
 #define SCD_TRACK_ID_OGG        6
 #define SCD_TRACK_ID_MP3        7
 #define SCD_TRACK_ID_XMA2      11
@@ -222,6 +223,11 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
     switch (track->data_type) {
     case SCD_TRACK_ID_PCM:
         par->codec_id              = AV_CODEC_ID_PCM_S16BE;
+        par->bits_per_coded_sample = 16;
+        par->block_align           = par->bits_per_coded_sample * par->ch_layout.nb_channels / 8;
+        break;
+    case SCD_TRACK_ID_PCM_LE:
+        par->codec_id              = AV_CODEC_ID_PCM_S16LE;
         par->bits_per_coded_sample = 16;
         par->block_align           = par->bits_per_coded_sample * par->ch_layout.nb_channels / 8;
         break;
