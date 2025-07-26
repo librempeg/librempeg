@@ -76,7 +76,9 @@ static int str_probe(const AVProbeData *p)
 {
     const uint8_t *sector = p->buf;
     const uint8_t *end = sector + p->buf_size;
-    int aud = 0, vid = 0;
+    int aud = 0, vid = 0, score = 0;
+    int prev_mode = -1, mode = -1;
+    int sector_size, offset;
 
     if (p->buf_size < RAW_CD_SECTOR_SIZE)
         return 0;
@@ -89,19 +91,42 @@ static int str_probe(const AVProbeData *p)
     }
 
     while (end - sector >= RAW_CD_SECTOR_SIZE) {
+        prev_mode = mode;
         /* look for CD sync header (00, 0xFF x 10, 00) */
-        if (memcmp(sector, sync_header, sizeof(sync_header)))
+        if (!memcmp(sector, sync_header, sizeof(sync_header))) {
+            sector_size = RAW_CD_SECTOR_SIZE;
+            mode = 0;
+            score += 9;
+            offset = 0x10;
+        } else {
+            if (AV_RB32(sector) == 0x60010180) {
+                sector_size = 2048;
+                mode = 2;
+                score += 4;
+                offset = -8;
+            } else {
+                sector_size = 2336;
+                mode = 1;
+                score += 7;
+                offset = 0;
+            }
+        }
+
+        if (prev_mode >= 0 && prev_mode != mode)
             return 0;
 
-        if (sector[0x11] >= 32)
+        if (mode == 2)
+            goto skip;
+
+        if (sector[offset + 1] >= 32)
             return 0;
 
-        switch (sector[0x12] & CDXA_TYPE_MASK) {
+        switch (sector[offset + 2] & CDXA_TYPE_MASK) {
         case CDXA_TYPE_DATA:
         case CDXA_TYPE_VIDEO: {
-                int current_sector = AV_RL16(&sector[0x1C]);
-                int sector_count   = AV_RL16(&sector[0x1E]);
-                int frame_size = AV_RL32(&sector[0x24]);
+                int current_sector = AV_RL16(&sector[offset + 0xC]);
+                int sector_count   = AV_RL16(&sector[offset + 0xE]);
+                int frame_size = AV_RL32(&sector[offset + 0x14]);
 
                 if (!(  frame_size >= 0
                      && current_sector < sector_count
@@ -113,19 +138,20 @@ static int str_probe(const AVProbeData *p)
             }
             break;
         case CDXA_TYPE_AUDIO:
-            if (sector[0x13] & 0x2A)
+            if (sector[offset + 0x3] & 0x2A)
                 return 0;
             aud++;
             break;
         default:
-            if (sector[0x12] & CDXA_TYPE_MASK)
+            if (sector[offset + 0x2] & CDXA_TYPE_MASK)
                 return 0;
         }
-        sector += RAW_CD_SECTOR_SIZE;
+skip:
+        sector += sector_size;
     }
     /* MPEG files (like those ripped from VCDs) can also look like this;
      * only return half certainty */
-    if (vid+aud > 3)  return AVPROBE_SCORE_EXTENSION;
+    if (mode == 2 || vid+aud > 3)  return FFMIN(score, AVPROBE_SCORE_MAX);
     else if (vid+aud) return 1;
     else              return 0;
 }
