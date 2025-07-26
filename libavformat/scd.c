@@ -399,6 +399,16 @@ redo:
     return 0;
 }
 
+static int scd_read_seek(AVFormatContext *s, int stream_index,
+                         int64_t timestamp, int flags)
+{
+    SCDDemuxContext *ctx = s->priv_data;
+
+    ctx->current_track = FFMAX(stream_index, 0);
+
+    return -1;
+}
+
 static int scd_read_close(AVFormatContext *s)
 {
     SCDDemuxContext *ctx = s->priv_data;
@@ -420,5 +430,6 @@ const FFInputFormat ff_scd_demuxer = {
     .read_probe     = scd_probe,
     .read_header    = scd_read_header,
     .read_packet    = scd_read_packet,
+    .read_seek      = scd_read_seek,
     .read_close     = scd_read_close,
 };
