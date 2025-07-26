@@ -190,11 +190,15 @@ static int str_read_packet(AVFormatContext *s,
 
             if (read != sizeof(sector)-RAW_DATA_SIZE)
                 return AVERROR(EIO);
-        } else {
+        } else if (AV_RB32(sector) == 0x60010180) {
             memmove(sector + 0x18, sector, RAW_DATA_SIZE);
             memset(sector, 0, 0x18);
             sector[0x12] = 0x02;
             memset(sector + 0x18 + RAW_DATA_SIZE, 0, sizeof(sector) - 0x18 - RAW_DATA_SIZE);
+        } else {
+            memmove(sector + 0x10, sector, RAW_DATA_SIZE);
+            memset(sector, 0, 0x10);
+            avio_read(pb, sector + 0x10 + RAW_DATA_SIZE, sizeof(sector) - RAW_DATA_SIZE - 16);
         }
 
         channel = sector[0x11];
