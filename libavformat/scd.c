@@ -42,6 +42,7 @@
 #define SCD_TRACK_ID_PCM        0
 #define SCD_TRACK_ID_OGG        6
 #define SCD_TRACK_ID_MP3        7
+#define SCD_TRACK_ID_XMA2      11
 #define SCD_TRACK_ID_MS_ADPCM  12
 #define SCD_TRACK_ID_ATRAC9    22
 #define SCD_TRACK_ID_DUMMY     0xffffffffu
@@ -227,6 +228,16 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
     case SCD_TRACK_ID_MP3:
         par->codec_id              = AV_CODEC_ID_MP3;
         par->block_align           = 1024;
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+        break;
+    case SCD_TRACK_ID_XMA2:
+        par->codec_id              = AV_CODEC_ID_XMA2;
+        par->block_align           = 0x800;
+        avio_skip(s->pb, 18);
+        ret = ff_get_extradata(s, par, s->pb, 34);
+        if (ret < 0)
+            return ret;
+
         ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
         break;
     case SCD_TRACK_ID_MS_ADPCM:
