@@ -226,6 +226,10 @@ static int nus3_read_packet(AVFormatContext *s, AVPacket *pkt)
 static int nus3_read_seek(AVFormatContext *s, int stream_index,
                           int64_t timestamp, int flags)
 {
+    NUS3DemuxContext *nus3 = s->priv_data;
+
+    nus3->current_stream = FFMAX(stream_index, 0);
+
     return -1;
 }
 
