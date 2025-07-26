@@ -254,7 +254,6 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
         par->block_align           = be ? avio_rb16(s->pb) : avio_rl16(s->pb);
         if (par->block_align == 0)
             return AVERROR_INVALIDDATA;
-        par->block_align          *= track->num_channels;
         break;
     case SCD_TRACK_ID_ATRAC9:
         par->codec_id              = AV_CODEC_ID_ATRAC9;
