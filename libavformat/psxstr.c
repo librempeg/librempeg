@@ -256,6 +256,7 @@ static int str_read_packet(AVFormatContext *s,
 
                     str->channels[channel].video_stream_index = st->index;
 
+                    st->start_time = 0;
                     st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
                     st->codecpar->codec_id   = AV_CODEC_ID_MDEC;
                     st->codecpar->codec_tag  = 0;  /* no fourcc */
@@ -305,6 +306,7 @@ static int str_read_packet(AVFormatContext *s,
 
                 str->channels[channel].audio_stream_index = st->index;
 
+                st->start_time = 0;
                 st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
                 st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_XA;
                 st->codecpar->codec_tag   = 0;  /* no fourcc */
@@ -314,7 +316,6 @@ static int str_read_packet(AVFormatContext *s,
                 st->codecpar->bit_rate = (int64_t)st->codecpar->sample_rate * st->codecpar->ch_layout.nb_channels * 128 * 8LL / 224;
 
                 avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
-                st->start_time = 0;
             }
             pkt = ret_pkt;
             if ((ret = av_new_packet(pkt, 2304)) < 0)
