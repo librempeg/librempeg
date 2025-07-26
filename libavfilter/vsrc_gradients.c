@@ -238,7 +238,7 @@ static float project(float origin_x, float origin_y,
         break;
     case 2:
     case 3:
-        od_s_q = M_PI * 2.f;
+        od_s_q = M_PIf * 2.f;
         break;
     case 4:
         od_s_q = fmaxf(fabsf(od_x), fabsf(od_y));
@@ -253,10 +253,10 @@ static float project(float origin_x, float origin_y,
         op_x_od = sqrtf(op_x * op_x + op_y * op_y);
         break;
     case 2:
-        op_x_od = atan2f(op_x, op_y) + M_PI;
+        op_x_od = atan2f(op_x, op_y) + M_PIf;
         break;
     case 3:
-        op_x_od = fmodf(atan2f(op_x, op_y) + M_PI + point_x / fmaxf(origin_x, dest_x), 2.f * M_PI);
+        op_x_od = fmodf(atan2f(op_x, op_y) + M_PIf + point_x / fmaxf(origin_x, dest_x), 2.f * M_PIf);
         break;
     case 4:
         op_x_od = fmaxf(fabsf(op_x), fabsf(op_y));
