@@ -59,6 +59,8 @@ static int threedostr_probe(const AVProbeData *p)
             i += 4;
             if (AV_RL32(p->buf + i) == MKTAG('S','D','X','2'))
                 return AVPROBE_SCORE_MAX;
+            else if (AV_RL32(p->buf + i) == MKTAG('C','B','D','2'))
+                return AVPROBE_SCORE_MAX;
             else
                 return 0;
             break;
@@ -170,6 +172,10 @@ static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
             switch (codec) {
             case MKTAG('S','D','X','2'):
                 st->codecpar->codec_id    = AV_CODEC_ID_SDX2_DPCM;
+                st->codecpar->block_align = 1 * st->codecpar->ch_layout.nb_channels;
+                break;
+            case MKTAG('C','B','D','2'):
+                st->codecpar->codec_id    = AV_CODEC_ID_CBD2_DPCM;
                 st->codecpar->block_align = 1 * st->codecpar->ch_layout.nb_channels;
                 break;
             default:
