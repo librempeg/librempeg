@@ -94,7 +94,8 @@ static int threedostr_read_header(AVFormatContext *s)
 
 static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    unsigned chunk, vcodec = 0, codec = 0, size, ctrl_size = -1;
+    unsigned chunk, vcodec = 0, codec = 0, size;
+    int64_t ctrl_size = -1;
     ThreeDOSTRContext *ctx = s->priv_data;
     AVStream *st, *vst;
     int64_t pos;
