@@ -82,6 +82,7 @@ static int read_header(AVFormatContext *s)
     case 2:
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_CIRCUS;
         st->codecpar->block_align = st->codecpar->ch_layout.nb_channels * 256;
+        break;
     case 1:
     case 3:
         avpriv_request_sample(s, "codec %d", codec);
