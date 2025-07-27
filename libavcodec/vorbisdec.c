@@ -928,7 +928,8 @@ static int vorbis_parse_setup_hdr(vorbis_context *vc)
 
     if (((vc->avctx->codec_id == AV_CODEC_ID_SKVORBIS) &&
          ((get_bits(gb, 8) != 'S') || (get_bits(gb, 8) != 'K'))) ||
-        ((vc->avctx->codec_id == AV_CODEC_ID_VORBIS) &&
+        ((vc->avctx->codec_id == AV_CODEC_ID_VORBIS ||
+          vc->avctx->codec_id == AV_CODEC_ID_WWVORBIS) &&
          ((get_bits(gb, 8) != 'v') || (get_bits(gb, 8) != 'o') ||
           (get_bits(gb, 8) != 'r') || (get_bits(gb, 8) != 'b') ||
           (get_bits(gb, 8) != 'i') || (get_bits(gb, 8) != 's')))) {
@@ -979,7 +980,8 @@ static int vorbis_parse_id_hdr(vorbis_context *vc)
 
     if (((vc->avctx->codec_id == AV_CODEC_ID_SKVORBIS) &&
          ((get_bits(gb, 8) != 'S') || (get_bits(gb, 8) != 'K'))) ||
-        ((vc->avctx->codec_id == AV_CODEC_ID_VORBIS) &&
+        ((vc->avctx->codec_id == AV_CODEC_ID_VORBIS ||
+          vc->avctx->codec_id == AV_CODEC_ID_WWVORBIS) &&
          ((get_bits(gb, 8) != 'v') || (get_bits(gb, 8) != 'o') ||
           (get_bits(gb, 8) != 'r') || (get_bits(gb, 8) != 'b') ||
           (get_bits(gb, 8) != 'i') || (get_bits(gb, 8) != 's')))) {
