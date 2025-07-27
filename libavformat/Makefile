@@ -636,6 +636,7 @@ OBJS-$(CONFIG_SNDB_DEMUXER)              += sndb.o
 OBJS-$(CONFIG_SOL_DEMUXER)               += sol.o pcm.o
 OBJS-$(CONFIG_SOX_DEMUXER)               += soxdec.o pcm.o
 OBJS-$(CONFIG_SOX_MUXER)                 += soxenc.o rawenc.o
+OBJS-$(CONFIG_SPCM_DEMUXER)              += spcm.o
 OBJS-$(CONFIG_SPDIF_DEMUXER)             += spdif.o spdifdec.o
 OBJS-$(CONFIG_SPDIF_MUXER)               += spdif.o spdifenc.o
 OBJS-$(CONFIG_SPEEX_MUXER)               += oggenc.o \

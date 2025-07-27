@@ -499,6 +499,7 @@ extern const FFInputFormat  ff_sndb_demuxer;
 extern const FFInputFormat  ff_sol_demuxer;
 extern const FFInputFormat  ff_sox_demuxer;
 extern const FFOutputFormat ff_sox_muxer;
+extern const FFInputFormat  ff_spcm_demuxer;
 extern const FFOutputFormat ff_spx_muxer;
 extern const FFInputFormat  ff_spdif_demuxer;
 extern const FFOutputFormat ff_spdif_muxer;
