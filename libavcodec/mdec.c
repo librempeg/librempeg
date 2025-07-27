@@ -61,6 +61,7 @@ typedef struct MDECContext {
 //very similar to MPEG-1
 static inline int mdec_decode_block_intra(MDECContext *a, int16_t *block, int n)
 {
+    GetBitContext *gb = &a->gb;
     int level, diff, i, j, run;
     int component;
     const uint8_t *const scantable = a->permutated_scantable;
@@ -69,21 +70,21 @@ static inline int mdec_decode_block_intra(MDECContext *a, int16_t *block, int n)
 
     /* DC coefficient */
     if (a->version <= 2) {
-        block[0] = 2 * get_sbits(&a->gb, 10) + 1024;
+        block[0] = 2 * get_sbits(gb, 10) + 1024;
     } else {
         component = (n <= 3 ? 0 : n - 4 + 1);
-        diff = decode_dc(&a->gb, component);
+        diff = decode_dc(gb, component);
         a->last_dc[component] += diff;
         block[0] = a->last_dc[component] * (1 << 3);
     }
 
     i = 0;
     {
-        OPEN_READER(re, &a->gb);
+        OPEN_READER(re, gb);
         /* now quantify & encode AC coefficients */
         for (;;) {
-            UPDATE_CACHE(re, &a->gb);
-            GET_RL_VLC(level, run, re, &a->gb, ff_mpeg1_rl_vlc, TEX_VLC_BITS, 2, 0);
+            UPDATE_CACHE(re, gb);
+            GET_RL_VLC(level, run, re, gb, ff_mpeg1_rl_vlc, TEX_VLC_BITS, 2, 0);
 
             if (level == 127) {
                 break;
@@ -96,14 +97,14 @@ static inline int mdec_decode_block_intra(MDECContext *a, int16_t *block, int n)
                 }
                 j     = scantable[i];
                 level = (level * qscale * quant_matrix[j]) >> 3;
-                level = (level ^ SHOW_SBITS(re, &a->gb, 1)) - SHOW_SBITS(re, &a->gb, 1);
-                LAST_SKIP_BITS(re, &a->gb, 1);
+                level = (level ^ SHOW_SBITS(re, gb, 1)) - SHOW_SBITS(re, gb, 1);
+                LAST_SKIP_BITS(re, gb, 1);
             } else {
                 /* escape */
-                run = SHOW_UBITS(re, &a->gb, 6) + 1;
-                SKIP_BITS(re, &a->gb, 6);
-                level = SHOW_SBITS(re, &a->gb, 10);
-                LAST_SKIP_BITS(re, &a->gb, 10);
+                run = SHOW_UBITS(re, gb, 6) + 1;
+                SKIP_BITS(re, gb, 6);
+                level = SHOW_SBITS(re, gb, 10);
+                LAST_SKIP_BITS(re, gb, 10);
                 i += run;
                 if (i > 63) {
                     av_log(a->avctx, AV_LOG_ERROR,
@@ -124,7 +125,7 @@ static inline int mdec_decode_block_intra(MDECContext *a, int16_t *block, int n)
 
             block[j] = level;
         }
-        CLOSE_READER(re, &a->gb);
+        CLOSE_READER(re, gb);
     }
     return 0;
 }
