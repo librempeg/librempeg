@@ -53,7 +53,7 @@
 #define CDXA_TYPE_VIDEO    0x02
 #define CDXA_TYPE_EMPTY    0x00
 
-#define STR_MAGIC (0x80010160)
+#define STR_MAGIC 0x60010180
 
 typedef struct StrChannel {
     /* video parameters */
@@ -100,7 +100,7 @@ static int str_probe(const AVProbeData *p)
             score += 9;
             offset = 0x10;
         } else {
-            if (AV_RB32(sector) == 0x60010180) {
+            if (AV_RB32(sector) == STR_MAGIC) {
                 sector_size = 2048;
                 mode = 2;
                 score += 4;
@@ -221,13 +221,13 @@ static int str_read_packet(AVFormatContext *s,
 
             if (read != sizeof(sector)-RAW_DATA_SIZE)
                 return AVERROR(EIO);
-        } else if ((str->mode == 2) || AV_RB32(sector) == 0x60010180) {
+        } else if ((str->mode == 2) || AV_RB32(sector) == STR_MAGIC) {
             if (str->mode < 0)
                 str->mode = 2;
 
             memmove(sector + 0x18, sector, RAW_DATA_SIZE);
             memset(sector, 0, 0x18);
-            sector[0x12] = (AV_RB32(sector + 0x18) == 0x60010180) ? CDXA_TYPE_VIDEO : CDXA_TYPE_AUDIO;
+            sector[0x12] = (AV_RB32(sector + 0x18) == STR_MAGIC) ? CDXA_TYPE_VIDEO : CDXA_TYPE_AUDIO;
             memset(sector + 0x18 + RAW_DATA_SIZE, 0, sizeof(sector) - 0x18 - RAW_DATA_SIZE);
         } else if (str->mode == 1 || str->mode < 0) {
             if (str->mode < 0)
