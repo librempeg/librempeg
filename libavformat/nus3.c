@@ -144,7 +144,7 @@ static int nus3_read_packet(AVFormatContext *s, AVPacket *pkt)
     int size, ret;
 
     if (nus3->streams[0].index == -1) {
-        uint32_t codec, duration, skip = 0;
+        uint32_t codec, duration, skip = 0, new_size = 0;
         int nb_channels, rate;
         AVStream *st;
 
@@ -167,6 +167,9 @@ static int nus3_read_packet(AVFormatContext *s, AVPacket *pkt)
             skip = avio_rl16(pb);
             if (avio_rl32(pb) != 0x80000004)
                 return AVERROR_INVALIDDATA;
+
+            new_size = avio_rl32(pb);
+            nus3->streams[0].stop = nus3->streams[0].start + new_size;
 
             avio_seek(pb, pos + offset, SEEK_SET);
             break;
@@ -211,9 +214,10 @@ static int nus3_read_packet(AVFormatContext *s, AVPacket *pkt)
         return AVERROR_EOF;
 
     size = avio_rb32(pb);
-    if (size < 2 &&
-        size > nus3->streams[0].stop - pos - 8)
-        return AVERROR(EIO);
+    if (size < 2 ||
+        size > nus3->streams[0].stop - pos - 4) {
+        size = nus3->streams[0].stop - pos - 4;
+    }
 
     avio_skip(pb, 4);
     ret = av_get_packet(pb, pkt, size);
