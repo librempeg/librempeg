@@ -202,8 +202,11 @@ static int nus3_read_packet(AVFormatContext *s, AVPacket *pkt)
             return ret;
         memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
 
+        memcpy(st->codecpar->extradata, "OpusHead", 8);
+        st->codecpar->extradata[8] = 1;
         st->codecpar->extradata[9] = nb_channels;
         AV_WL16(st->codecpar->extradata + 10, skip);
+        AV_WL32(st->codecpar->extradata + 12, 48000);
     }
 
     pos = avio_tell(pb);
