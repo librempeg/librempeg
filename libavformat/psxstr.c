@@ -54,6 +54,10 @@
 #define CDXA_TYPE_EMPTY    0x00
 
 #define STR_MAGIC 0x60010180
+#define STR_MAGIC_A 0x60010000
+#define STR_MAGIC_B 0x60010001
+#define STR_MAGIC_C 0x60010100
+#define STR_MAGIC_D 0x60010101
 
 typedef struct StrChannel {
     /* video parameters */
@@ -100,7 +104,11 @@ static int str_probe(const AVProbeData *p)
             score += 9;
             offset = 0x10;
         } else {
-            if (AV_RB32(sector) == STR_MAGIC) {
+            if (AV_RB32(sector) == STR_MAGIC ||
+                AV_RB32(sector) == STR_MAGIC_A ||
+                AV_RB32(sector) == STR_MAGIC_B ||
+                AV_RB32(sector) == STR_MAGIC_C ||
+                AV_RB32(sector) == STR_MAGIC_D) {
                 sector_size = 2048;
                 mode = 2;
                 score += 4;
@@ -221,6 +229,18 @@ static int str_read_packet(AVFormatContext *s,
 
             if (read != sizeof(sector)-RAW_DATA_SIZE)
                 return AVERROR(EIO);
+        } else if ((str->mode == 3) ||
+                   AV_RB32(sector) == STR_MAGIC_A ||
+                   AV_RB32(sector) == STR_MAGIC_B ||
+                   AV_RB32(sector) == STR_MAGIC_C ||
+                   AV_RB32(sector) == STR_MAGIC_D) {
+            if (str->mode < 0)
+                str->mode = 3;
+
+            memmove(sector + 0x18, sector, RAW_DATA_SIZE);
+            memset(sector, 0, 0x18);
+            sector[0x12] = (AV_RB32(sector + 0x18) == STR_MAGIC) ? CDXA_TYPE_VIDEO : CDXA_TYPE_AUDIO;
+            memset(sector + 0x18 + RAW_DATA_SIZE, 0, sizeof(sector) - 0x18 - RAW_DATA_SIZE);
         } else if ((str->mode == 2) || AV_RB32(sector) == STR_MAGIC) {
             if (str->mode < 0)
                 str->mode = 2;
@@ -319,24 +339,38 @@ static int str_read_packet(AVFormatContext *s,
 
                 st->start_time = 0;
                 st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
-                st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_XA;
                 st->codecpar->codec_tag   = 0;  /* no fourcc */
-                av_channel_layout_default(&st->codecpar->ch_layout, (fmt & 1) + 1);
-                st->codecpar->sample_rate = (fmt&4)?18900:37800;
-                st->codecpar->block_align = 128;
+
+                if (str->mode == 3) {
+                    st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_PSX;
+                    av_channel_layout_default(&st->codecpar->ch_layout, 2);
+                    st->codecpar->sample_rate = 44100;
+                    st->codecpar->block_align = 1680 * st->codecpar->ch_layout.nb_channels;
+                    ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+                } else {
+                    st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_XA;
+                    av_channel_layout_default(&st->codecpar->ch_layout, (fmt & 1) + 1);
+                    st->codecpar->sample_rate = (fmt & 4) ? 18900 : 37800;
+                    st->codecpar->block_align = 128;
+                }
                 st->codecpar->bit_rate = (int64_t)st->codecpar->sample_rate * st->codecpar->ch_layout.nb_channels * 128 * 8LL / 224;
 
                 avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
             }
             pkt = ret_pkt;
-            if ((ret = av_new_packet(pkt, 2304)) < 0)
-                return ret;
-            memcpy(pkt->data, sector + 24, 2304);
+
+            if (str->mode == 3) {
+                if ((ret = av_new_packet(pkt, 1680)) < 0)
+                    return ret;
+                memcpy(pkt->data, sector + 232, 1680);
+            } else {
+                if ((ret = av_new_packet(pkt, 2304)) < 0)
+                    return ret;
+                memcpy(pkt->data, sector + 24, 2304);
+            }
 
             pkt->pos = pos;
-            pkt->stream_index =
-                str->channels[channel].audio_stream_index;
-            pkt->duration = 18 * 224 / s->streams[pkt->stream_index]->codecpar->ch_layout.nb_channels;
+            pkt->stream_index = str->channels[channel].audio_stream_index;
             return 0;
         case CDXA_TYPE_EMPTY: /* CD-ROM XA, May 1991, 4.3.2.3 */
             /* NOTE this also catches 0x80 (EOF bit) because of CDXA_TYPE_MASK */
