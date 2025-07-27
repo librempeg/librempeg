@@ -186,7 +186,11 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
         return ret;
 
     /* skip over 4 preamble bytes in stream (typically 0xXX 0xXX 0x00 0x38) */
-    skip_bits(&a->gb, 32);
+    if ((show_bits_long(&a->gb, 32) & 0xFFFF) == 0x3800) {
+        skip_bits_long(&a->gb, 32);
+    } else {
+        skip_bits_long(&a->gb, 64);
+    }
 
     a->qscale  = get_bits(&a->gb, 16);
     a->version = get_bits(&a->gb, 16);
