@@ -180,6 +180,7 @@ OBJS-$(CONFIG_CAF_DEMUXER)               += cafdec.o caf.o mov_chan.o mov_esds.o
 OBJS-$(CONFIG_CAF_MUXER)                 += cafenc.o caf.o riff.o
 OBJS-$(CONFIG_CAVSVIDEO_DEMUXER)         += cavsvideodec.o rawdec.o
 OBJS-$(CONFIG_CAVSVIDEO_MUXER)           += rawenc.o
+OBJS-$(CONFIG_CDA_DEMUXER)               += cda.o
 OBJS-$(CONFIG_CDG_DEMUXER)               += cdg.o
 OBJS-$(CONFIG_CDXL_DEMUXER)              += cdxl.o
 OBJS-$(CONFIG_CFAST_DEMUXER)             += cfast.o

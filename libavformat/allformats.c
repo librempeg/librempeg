@@ -133,6 +133,7 @@ extern const FFInputFormat  ff_caf_demuxer;
 extern const FFOutputFormat ff_caf_muxer;
 extern const FFInputFormat  ff_cavsvideo_demuxer;
 extern const FFOutputFormat ff_cavsvideo_muxer;
+extern const FFInputFormat  ff_cda_demuxer;
 extern const FFInputFormat  ff_cdg_demuxer;
 extern const FFInputFormat  ff_cdxl_demuxer;
 extern const FFInputFormat  ff_cfast_demuxer;
