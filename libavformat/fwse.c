@@ -30,12 +30,20 @@ static int fwse_probe(const AVProbeData *p)
 {
     if (AV_RL32(p->buf) != MKTAG('F','W','S','E'))
         return 0;
+
+    if (p->buf_size < 28)
+        return 0;
+
     if (AV_RL32(p->buf+4) != 2 && AV_RL32(p->buf+4) != 3)
         return 0;
     if (AV_RL32(p->buf+16) != 1 && AV_RL32(p->buf+16) != 2)
         return 0;
+    if (AV_RL32(p->buf+20) == 0)
+        return 0;
+    if (AV_RL32(p->buf+24) <= 0)
+        return 0;
 
-    return AVPROBE_SCORE_MAX / 4 * 3;
+    return AVPROBE_SCORE_MAX;
 }
 
 static int fwse_read_header(AVFormatContext *s)
