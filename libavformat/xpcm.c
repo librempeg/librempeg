@@ -43,7 +43,7 @@ static int read_probe(const AVProbeData *p)
     if (AV_RL32(p->buf+16) == 0)
         return 0;
 
-    if (p->buf[8] != 0 && p->buf[8] != 2)
+    if (p->buf[8] > 3)
         return 0;
 
     return AVPROBE_SCORE_MAX*2/3;
@@ -82,6 +82,10 @@ static int read_header(AVFormatContext *s)
     case 2:
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_CIRCUS;
         st->codecpar->block_align = st->codecpar->ch_layout.nb_channels * 256;
+    case 1:
+    case 3:
+        avpriv_request_sample(s, "codec %d", codec);
+        return AVERROR_PATCHWELCOME;
         break;
     default:
         return AVERROR_INVALIDDATA;
