@@ -65,6 +65,7 @@ typedef struct StrChannel {
 } StrChannel;
 
 typedef struct StrDemuxContext {
+    int mode;
 
     /* a STR file can contain up to 32 channels of data */
     StrChannel channels[32];
@@ -182,6 +183,7 @@ static int str_read_header(AVFormatContext *s)
     }
 
     s->ctx_flags |= AVFMTCTX_NOHEADER;
+    str->mode = -1;
 
     return 0;
 }
@@ -208,23 +210,32 @@ static int str_read_packet(AVFormatContext *s,
         if (read != RAW_DATA_SIZE)
             return AVERROR(EIO);
 
-        if (!memcmp(sector, sync_header, sizeof(sync_header))) {
+        if ((str->mode == 0) || !memcmp(sector, sync_header, sizeof(sync_header))) {
             int read = avio_read(pb, sector + RAW_DATA_SIZE, sizeof(sector) - RAW_DATA_SIZE);
+
+            if (str->mode < 0)
+                str->mode = 0;
 
             if (read == AVERROR_EOF)
                 return AVERROR_EOF;
 
             if (read != sizeof(sector)-RAW_DATA_SIZE)
                 return AVERROR(EIO);
-        } else if (AV_RB32(sector) == 0x60010180) {
+        } else if ((str->mode == 2) || AV_RB32(sector) == 0x60010180) {
+            if (str->mode < 0)
+                str->mode = 2;
+
             memmove(sector + 0x18, sector, RAW_DATA_SIZE);
             memset(sector, 0, 0x18);
-            sector[0x12] = 0x02;
+            sector[0x12] = (AV_RB32(sector + 0x18) == 0x60010180) ? CDXA_TYPE_VIDEO : CDXA_TYPE_AUDIO;
             memset(sector + 0x18 + RAW_DATA_SIZE, 0, sizeof(sector) - 0x18 - RAW_DATA_SIZE);
-        } else {
+        } else if (str->mode == 1 || str->mode < 0) {
+            if (str->mode < 0)
+                str->mode = 1;
+
             memmove(sector + 0x10, sector, RAW_DATA_SIZE);
             memset(sector, 0, 0x10);
-            avio_read(pb, sector + 0x10 + RAW_DATA_SIZE, sizeof(sector) - RAW_DATA_SIZE - 16);
+            avio_read(pb, sector + 0x10 + RAW_DATA_SIZE, sizeof(sector) - RAW_DATA_SIZE - 0x10);
         }
 
         channel = sector[0x11];
