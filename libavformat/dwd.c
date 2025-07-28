@@ -21,6 +21,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int dwd_probe(const AVProbeData *p)
 {
@@ -53,7 +54,7 @@ static int dwd_read_header(AVFormatContext *s)
     par->bits_per_coded_sample = avio_r8(pb);
     par->codec_id = (par->bits_per_coded_sample > 8) ? AV_CODEC_ID_PCM_S16LE : AV_CODEC_ID_PCM_S8;
     avio_skip(pb, 2);
-    par->block_align = 2;
+    par->block_align = par->ch_layout.nb_channels * ((par->bits_per_coded_sample + 7) / 8);
     avio_skip(pb, 4);
     st->duration = avio_rl32(pb);
 
@@ -64,22 +65,12 @@ static int dwd_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int dwd_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-
-    if (avio_feof(pb))
-        return AVERROR_EOF;
-
-    return av_get_packet(pb, pkt, 512);
-}
-
 const FFInputFormat ff_dwd_demuxer = {
     .p.name         = "dwd",
     .p.long_name    = NULL_IF_CONFIG_SMALL("DWD (DiamondWare Digitized)"),
     .p.extensions   = "dwd",
-    .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = dwd_probe,
     .read_header    = dwd_read_header,
-    .read_packet    = dwd_read_packet,
+    .read_packet    = ff_pcm_read_packet,
+    .read_seek      = ff_pcm_read_seek,
 };
