@@ -274,7 +274,7 @@ static int adx_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     }
 
     frame->nb_samples = samples_offset;
-    *got_frame_ptr = 1;
+    *got_frame_ptr = samples_offset > 0;
 
     return buf - avpkt->data;
 }
