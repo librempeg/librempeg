@@ -96,7 +96,7 @@ static int cda_read_header(AVFormatContext *s)
     st->codecpar->ch_layout.nb_channels = 2;
     st->codecpar->bits_per_coded_sample = 16;
     st->codecpar->sample_rate = 44100;
-    st->codecpar->block_align = 4 * 256;
+    st->codecpar->block_align = 4;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
