@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int btsnd_read_probe(const AVProbeData *p)
 {
@@ -52,31 +53,19 @@ static int btsnd_read_header(AVFormatContext *s)
     st->codecpar->codec_id = AV_CODEC_ID_PCM_S16BE;
     st->codecpar->sample_rate = 48000;
     st->codecpar->ch_layout.nb_channels = 2;
-    st->codecpar->block_align = 2048;
+    st->codecpar->block_align = 4;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
 }
 
-static int btsnd_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_btsnd_demuxer = {
     .p.name         = "btsnd",
     .p.long_name    = NULL_IF_CONFIG_SMALL("BTSND (Wii Boot Sound)"),
-    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "btsnd",
     .read_probe     = btsnd_read_probe,
     .read_header    = btsnd_read_header,
-    .read_packet    = btsnd_read_packet,
+    .read_packet    = ff_pcm_read_packet,
+    .read_seek      = ff_pcm_read_seek,
 };
