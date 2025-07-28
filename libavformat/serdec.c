@@ -46,6 +46,7 @@ static int ser_probe(const AVProbeData *pd)
 
 static int ser_read_header(AVFormatContext *s)
 {
+    AVIOContext *pb = s->pb;
     SERDemuxerContext *ser = s->priv_data;
     enum AVPixelFormat pix_fmt;
     int depth, color_id, endian;
@@ -56,18 +57,18 @@ static int ser_read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(s->pb, 14);
-    avio_skip(s->pb, 4);
-    color_id = avio_rl32(s->pb);
-    endian = avio_rl32(s->pb);
-    ser->width = avio_rl32(s->pb);
-    ser->height = avio_rl32(s->pb);
-    depth = avio_rl32(s->pb);
+    avio_skip(pb, 14);
+    avio_skip(pb, 4);
+    color_id = avio_rl32(pb);
+    endian = avio_rl32(pb);
+    ser->width = avio_rl32(pb);
+    ser->height = avio_rl32(pb);
+    depth = avio_rl32(pb);
     st->start_time = 0;
-    st->nb_frames = st->duration = avio_rl32(s->pb);
-    avio_skip(s->pb, 120);
-    avio_skip(s->pb, 8);
-    avio_skip(s->pb, 8);
+    st->nb_frames = st->duration = avio_rl32(pb);
+    avio_skip(pb, 120);
+    avio_skip(pb, 8);
+    avio_skip(pb, 8);
 
     switch (color_id) {
     case   0: pix_fmt = depth <= 8 ? AV_PIX_FMT_GRAY8       : endian ? AV_PIX_FMT_GRAY16BE       : AV_PIX_FMT_GRAY16LE;       break;
@@ -103,15 +104,16 @@ static int ser_read_header(AVFormatContext *s)
 
 static int ser_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
+    AVIOContext *pb = s->pb;
     SERDemuxerContext *ser = s->priv_data;
     int64_t pos;
     int ret;
 
-    pos = avio_tell(s->pb);
+    pos = avio_tell(pb);
     if (pos >= ser->end)
         return AVERROR_EOF;
 
-    ret = av_get_packet(s->pb, pkt, s->packet_size);
+    ret = av_get_packet(pb, pkt, s->packet_size);
     pkt->pts = pkt->dts = (pkt->pos - ffformatcontext(s)->data_offset) / s->packet_size;
 
     pkt->stream_index = 0;
