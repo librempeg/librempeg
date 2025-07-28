@@ -163,8 +163,9 @@ static int nus3_read_packet(AVFormatContext *s, AVPacket *pkt)
             avio_skip(pb, 2);
             rate = avio_rl32(pb);
             offset = avio_rl32(pb) + 8LL;
-            avio_skip(pb, 10);
+            avio_skip(pb, 8);
             skip = avio_rl16(pb);
+            avio_skip(pb, 2);
             if (avio_rl32(pb) != 0x80000004)
                 return AVERROR_INVALIDDATA;
 
@@ -197,7 +198,7 @@ static int nus3_read_packet(AVFormatContext *s, AVPacket *pkt)
         avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
         ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
 
-        ret = ff_alloc_extradata(st->codecpar, 19 + 2 + nb_channels);
+        ret = ff_alloc_extradata(st->codecpar, 19);
         if (ret < 0)
             return ret;
         memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
