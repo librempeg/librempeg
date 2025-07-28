@@ -96,5 +96,6 @@ const FFOutputFormat ff_idsp_muxer = {
     .write_header     = idsp_write_header,
     .write_packet     = idsp_write_packet,
     .write_trailer    = idsp_write_trailer,
-    .flags_internal   = FF_OFMT_FLAG_MAX_ONE_OF_EACH,
+    .flags_internal   = FF_OFMT_FLAG_MAX_ONE_OF_EACH |
+                        FF_OFMT_FLAG_ONLY_DEFAULT_CODECS,
 };
