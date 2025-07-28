@@ -118,6 +118,7 @@ static int redspark_read_header(AVFormatContext *s)
     par->ch_layout.nb_channels = bytestream2_get_byteu(&gbc);
     if (!par->ch_layout.nb_channels)
         return AVERROR_INVALIDDATA;
+    par->block_align = 8 * par->ch_layout.nb_channels;
 
     coef_off = 0x54 + par->ch_layout.nb_channels * 8;
     if (bytestream2_get_byteu(&gbc)) // Loop flag
@@ -151,7 +152,6 @@ static int redspark_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
     RedSparkContext *redspark = s->priv_data;
-    const uint32_t size = 8 * par->ch_layout.nb_channels;
     int ret;
 
     if (avio_tell(s->pb) >= redspark->data_stop)
@@ -160,8 +160,8 @@ static int redspark_read_packet(AVFormatContext *s, AVPacket *pkt)
     if (avio_feof(s->pb))
         return AVERROR_EOF;
 
-    ret = av_get_packet(s->pb, pkt, size);
-    if (ret != size)
+    ret = av_get_packet(s->pb, pkt, par->block_align);
+    if (ret != par->block_align)
         return AVERROR(EIO);
     pkt->stream_index = 0;
 
