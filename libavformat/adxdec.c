@@ -112,20 +112,21 @@ static int adx_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     ADXDemuxerContext *c = s->priv_data;
     AVCodecParameters *par = s->streams[0]->codecpar;
+    AVIOContext *pb = s->pb;
     int ret, size;
 
     if (par->codec_id == AV_CODEC_ID_AHX)
         return ff_raw_read_partial_packet(s, pkt);
 
-    if (avio_feof(s->pb))
+    if (avio_feof(pb))
         return AVERROR_EOF;
 
     size = BLOCK_SIZE * par->ch_layout.nb_channels;
 
-    pkt->pos = avio_tell(s->pb);
+    pkt->pos = avio_tell(pb);
     pkt->stream_index = 0;
 
-    ret = av_get_packet(s->pb, pkt, size * 128);
+    ret = av_get_packet(pb, pkt, size * 128);
     if (ret < 0)
         return ret;
     if ((ret % size) && ret >= size) {
@@ -147,6 +148,7 @@ static int adx_read_packet(AVFormatContext *s, AVPacket *pkt)
 static int adx_read_header(AVFormatContext *s)
 {
     ADXDemuxerContext *c = s->priv_data;
+    AVIOContext *pb = s->pb;
     AVCodecParameters *par;
     FFStream *sti;
     int ret, enc;
@@ -157,15 +159,15 @@ static int adx_read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
     par = s->streams[0]->codecpar;
 
-    if (avio_rb16(s->pb) != 0x8000)
+    if (avio_rb16(pb) != 0x8000)
         return AVERROR_INVALIDDATA;
-    c->header_size = avio_rb16(s->pb) + 4;
-    avio_seek(s->pb, -4, SEEK_CUR);
+    c->header_size = avio_rb16(pb) + 4;
+    avio_seek(pb, -4, SEEK_CUR);
 
     if ((ret = ff_alloc_extradata(par, c->header_size + 6)) < 0)
         return ret;
 
-    if ((ret = avio_read(s->pb, par->extradata, c->header_size)) < 0)
+    if ((ret = avio_read(pb, par->extradata, c->header_size)) < 0)
         return ret;
     memset(par->extradata + c->header_size, 0, 6);
 
@@ -189,18 +191,18 @@ static int adx_read_header(AVFormatContext *s)
     enc = par->extradata[19];
     if (enc == 8 || enc == 9) {
         uint16_t xor_start, xor_mult, xor_add;
-        int64_t pos = avio_tell(s->pb);
+        int64_t pos = avio_tell(pb);
         uint16_t prescales[16];
         uint16_t scales[16];
 
         for (int i = 0; i < 16; i++) {
-            prescales[i] = avio_rb16(s->pb);
-            avio_skip(s->pb, BLOCK_SIZE-2);
+            prescales[i] = avio_rb16(pb);
+            avio_skip(pb, BLOCK_SIZE-2);
         }
 
         for (int i = 0; i < 16; i++) {
-            scales[i] = avio_rb16(s->pb);
-            avio_skip(s->pb, BLOCK_SIZE-2);
+            scales[i] = avio_rb16(pb);
+            avio_skip(pb, BLOCK_SIZE-2);
         }
 
         ret = ff_adx_find_key(enc, prescales, 16, scales, 16,
@@ -214,7 +216,7 @@ static int adx_read_header(AVFormatContext *s)
         AV_WB16(par->extradata + par->extradata_size-4, xor_mult);
         AV_WB16(par->extradata + par->extradata_size-2, xor_add);
 
-        avio_seek(s->pb, pos, SEEK_SET);
+        avio_seek(pb, pos, SEEK_SET);
     }
 
     sti = ffstream(st);
