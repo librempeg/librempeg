@@ -554,6 +554,7 @@ OBJS-$(CONFIG_RCWT_DEMUXER)              += rcwtdec.o subtitles.o
 OBJS-$(CONFIG_RCWT_MUXER)                += rcwtenc.o subtitles.o
 OBJS-$(CONFIG_REALTEXT_DEMUXER)          += realtextdec.o subtitles.o
 OBJS-$(CONFIG_REDSPARK_DEMUXER)          += redspark.o
+OBJS-$(CONFIG_REDSPARK_MUXER)            += redsparkenc.o
 OBJS-$(CONFIG_RFB_DEMUXER)               += rfb.o
 OBJS-$(CONFIG_RKA_DEMUXER)               += rka.o apetag.o img2.o
 OBJS-$(CONFIG_RL2_DEMUXER)               += rl2.o
