@@ -29,6 +29,9 @@ static int halpst_probe(const AVProbeData *p)
     if (memcmp(p->buf, " HALPST\0", 8))
         return 0;
 
+    if (p->buf_size < 16)
+        return 0;
+
     if (AV_RB32(p->buf + 8) <= 0)
         return 0;
 
