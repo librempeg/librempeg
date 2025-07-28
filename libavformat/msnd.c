@@ -44,8 +44,11 @@ static int msnd_read_header(AVFormatContext *s)
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_IMA_MAGIX;
     st->codecpar->ch_layout.nb_channels = 2;
-    avio_skip(s->pb, 6);
-    st->codecpar->sample_rate = 22050;
+    avio_skip(s->pb, 2);
+    st->codecpar->sample_rate = avio_rl16(s->pb);
+    if (st->codecpar->sample_rate == 0)
+        return AVERROR_INVALIDDATA;
+    avio_skip(s->pb, 2);
     st->codecpar->block_align = avio_rl16(s->pb);
     if (st->codecpar->block_align == 0)
         return AVERROR_INVALIDDATA;
