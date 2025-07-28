@@ -46,9 +46,9 @@ static int msnd_read_header(AVFormatContext *s)
     st->codecpar->ch_layout.nb_channels = 2;
     avio_skip(s->pb, 6);
     st->codecpar->sample_rate = 22050;
-    if (st->codecpar->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
     st->codecpar->block_align = avio_rl16(s->pb);
+    if (st->codecpar->block_align == 0)
+        return AVERROR_INVALIDDATA;
     st->start_time = 0;
     avio_seek(s->pb, 0x800, SEEK_SET);
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
