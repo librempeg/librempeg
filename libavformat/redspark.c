@@ -111,9 +111,9 @@ static int redspark_read_header(AVFormatContext *s)
         return AVERROR_INVALIDDATA;
     }
 
-    if (ff_alloc_extradata(par, 32 * par->ch_layout.nb_channels)) {
-        return AVERROR_INVALIDDATA;
-    }
+    ret = ff_alloc_extradata(par, 32 * par->ch_layout.nb_channels);
+    if (ret < 0)
+        return ret;
 
     /* Get the ADPCM table */
     bytestream2_seek(&gbc, coef_off, SEEK_SET);
