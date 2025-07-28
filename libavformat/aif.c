@@ -51,9 +51,18 @@ static int aif_read_header(AVFormatContext *s)
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_IMA_XBOX;
     st->codecpar->ch_layout.nb_channels = avio_rl16(pb);
+    if (st->codecpar->ch_layout.nb_channels == 0)
+        return AVERROR_INVALIDDATA;
+
     st->codecpar->sample_rate = avio_rl32(pb);
+    if (st->codecpar->sample_rate <= 0)
+        return AVERROR_INVALIDDATA;
+
     st->codecpar->bit_rate = avio_rl32(pb) * 8LL;
     st->codecpar->block_align = avio_rl16(pb);
+    if (st->codecpar->block_align == 0)
+        return AVERROR_INVALIDDATA;
+
     st->codecpar->bits_per_coded_sample = avio_rl16(pb);
 
     avio_seek(s->pb, 20, SEEK_SET);
