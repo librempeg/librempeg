@@ -30,13 +30,16 @@ static int msnd_probe(const AVProbeData *p)
     if (memcmp(p->buf, "\x00\x08MSND", 6))
         return 0;
 
-    if (p->buf_size < 14)
+    if (p->buf_size < 18)
         return 0;
 
     if (AV_RL16(p->buf + 8) == 0)
         return 0;
 
     if (AV_RL16(p->buf + 12) == 0)
+        return 0;
+
+    if (AV_RL32(p->buf + 14) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
@@ -63,7 +66,10 @@ static int msnd_read_header(AVFormatContext *s)
     if (st->codecpar->block_align == 0)
         return AVERROR_INVALIDDATA;
     st->start_time = 0;
+    st->duration = avio_rl32(s->pb);
+
     avio_seek(s->pb, 0x800, SEEK_SET);
+
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
