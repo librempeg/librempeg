@@ -36,6 +36,7 @@ static int aix_probe(const AVProbeData *p)
 
 static int aix_read_header(AVFormatContext *s)
 {
+    AVIOContext *pb = s->pb;
     unsigned nb_streams, first_offset, nb_segments;
     unsigned stream_list_offset;
     unsigned segment_list_offset = 0x20;
@@ -43,20 +44,20 @@ static int aix_read_header(AVFormatContext *s)
     unsigned size;
     int i;
 
-    avio_skip(s->pb, 4);
-    first_offset = avio_rb32(s->pb) + 8;
-    avio_skip(s->pb, 16);
-    nb_segments = avio_rb16(s->pb);
+    avio_skip(pb, 4);
+    first_offset = avio_rb32(pb) + 8;
+    avio_skip(pb, 16);
+    nb_segments = avio_rb16(pb);
     if (nb_segments == 0)
         return AVERROR_INVALIDDATA;
     stream_list_offset = segment_list_offset + segment_list_entry_size * nb_segments + 0x10;
     if (stream_list_offset >= first_offset)
         return AVERROR_INVALIDDATA;
-    avio_seek(s->pb, stream_list_offset, SEEK_SET);
-    nb_streams = avio_r8(s->pb);
+    avio_seek(pb, stream_list_offset, SEEK_SET);
+    nb_streams = avio_r8(pb);
     if (nb_streams == 0)
         return AVERROR_INVALIDDATA;
-    avio_skip(s->pb, 7);
+    avio_skip(pb, 7);
     for (i = 0; i < nb_streams; i++) {
         AVStream *st = avformat_new_stream(s, NULL);
 
@@ -64,21 +65,21 @@ static int aix_read_header(AVFormatContext *s)
             return AVERROR(ENOMEM);
         st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
         st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_ADX;
-        st->codecpar->sample_rate = avio_rb32(s->pb);
-        st->codecpar->ch_layout.nb_channels = avio_r8(s->pb);
+        st->codecpar->sample_rate = avio_rb32(pb);
+        st->codecpar->ch_layout.nb_channels = avio_r8(pb);
         avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
-        avio_skip(s->pb, 3);
+        avio_skip(pb, 3);
     }
 
-    avio_seek(s->pb, first_offset, SEEK_SET);
+    avio_seek(pb, first_offset, SEEK_SET);
     for (i = 0; i < nb_streams; i++) {
-        if (avio_rl32(s->pb) != MKTAG('A','I','X','P'))
+        if (avio_rl32(pb) != MKTAG('A','I','X','P'))
             return AVERROR_INVALIDDATA;
-        size = avio_rb32(s->pb);
+        size = avio_rb32(pb);
         if (size <= 8)
             return AVERROR_INVALIDDATA;
-        avio_skip(s->pb, 8);
-        ff_get_extradata(s, s->streams[i]->codecpar, s->pb, size - 8);
+        avio_skip(pb, 8);
+        ff_get_extradata(s, s->streams[i]->codecpar, pb, size - 8);
     }
 
     return 0;
@@ -86,44 +87,45 @@ static int aix_read_header(AVFormatContext *s)
 
 static int aix_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
+    AVIOContext *pb = s->pb;
     unsigned size, index, duration, chunk;
     int64_t pos;
     int sequence, ret, i;
 
-    pos = avio_tell(s->pb);
-    if (avio_feof(s->pb))
+    pos = avio_tell(pb);
+    if (avio_feof(pb))
         return AVERROR_EOF;
-    chunk = avio_rl32(s->pb);
-    size = avio_rb32(s->pb);
+    chunk = avio_rl32(pb);
+    size = avio_rb32(pb);
     if (chunk == MKTAG('A','I','X','E')) {
-        avio_skip(s->pb, size);
+        avio_skip(pb, size);
         for (i = 0; i < s->nb_streams; i++) {
-            if (avio_feof(s->pb))
+            if (avio_feof(pb))
                 return AVERROR_EOF;
-            chunk = avio_rl32(s->pb);
-            size = avio_rb32(s->pb);
-            avio_skip(s->pb, size);
+            chunk = avio_rl32(pb);
+            size = avio_rb32(pb);
+            avio_skip(pb, size);
         }
-        pos = avio_tell(s->pb);
-        chunk = avio_rl32(s->pb);
-        size = avio_rb32(s->pb);
+        pos = avio_tell(pb);
+        chunk = avio_rl32(pb);
+        size = avio_rb32(pb);
     }
 
     if (chunk != MKTAG('A','I','X','P'))
         return AVERROR_INVALIDDATA;
     if (size <= 8)
         return AVERROR_INVALIDDATA;
-    index = avio_r8(s->pb);
-    if (avio_r8(s->pb) != s->nb_streams || index >= s->nb_streams)
+    index = avio_r8(pb);
+    if (avio_r8(pb) != s->nb_streams || index >= s->nb_streams)
         return AVERROR_INVALIDDATA;
-    duration = avio_rb16(s->pb);
-    sequence = avio_rb32(s->pb);
+    duration = avio_rb16(pb);
+    sequence = avio_rb32(pb);
     if (sequence < 0) {
-        avio_skip(s->pb, size - 8);
+        avio_skip(pb, size - 8);
         return 0;
     }
 
-    ret = av_get_packet(s->pb, pkt, size - 8);
+    ret = av_get_packet(pb, pkt, size - 8);
     pkt->stream_index = index;
     pkt->duration = duration;
     pkt->pos = pos;
