@@ -100,18 +100,21 @@ static int lopus_read_header(AVFormatContext *s)
     skip = avio_rl16(pb);
     avio_skip(pb, 2);
 
-    ret = ff_alloc_extradata(st->codecpar, 19 + 2 + nb_channels);
+    ret = ff_alloc_extradata(st->codecpar, 19 + (2 + nb_channels) * (nb_channels > 2));
     if (ret < 0)
         return ret;
     memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
 
+    memcpy(st->codecpar->extradata, "OpusHead", 8);
+    st->codecpar->extradata[8] = 1;
     st->codecpar->extradata[9] = nb_channels;
     AV_WL16(st->codecpar->extradata + 10, skip);
+    AV_WL32(st->codecpar->extradata + 12, 48000);
 
     if (avio_tell(pb) > data_offset)
         return AVERROR_INVALIDDATA;
     chunk = avio_rl32(pb);
-    if (chunk == 0x80000005 && nb_channels <= 8) {
+    if (chunk == 0x80000005 && nb_channels > 2 && nb_channels <= 8) {
         avio_skip(pb, 4);
         st->codecpar->extradata[18] = 1;
         st->codecpar->extradata[19] = avio_r8(pb);
