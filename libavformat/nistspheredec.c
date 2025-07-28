@@ -36,6 +36,7 @@ static int nist_probe(const AVProbeData *p)
 static int nist_read_header(AVFormatContext *s)
 {
     char buffer[256] = {0}, coding[32] = "pcm", format[32] = "01";
+    AVIOContext *pb = s->pb;
     int bps = 0, be = 0;
     int32_t header_size = -1;
     AVStream *st;
@@ -46,16 +47,16 @@ static int nist_read_header(AVFormatContext *s)
 
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
 
-    ff_get_line(s->pb, buffer, sizeof(buffer));
-    ff_get_line(s->pb, buffer, sizeof(buffer));
+    ff_get_line(pb, buffer, sizeof(buffer));
+    ff_get_line(pb, buffer, sizeof(buffer));
     sscanf(buffer, "%"SCNd32, &header_size);
     if (header_size <= 0)
         return AVERROR_INVALIDDATA;
 
-    while (!avio_feof(s->pb)) {
-        ff_get_line(s->pb, buffer, sizeof(buffer));
+    while (!avio_feof(pb)) {
+        ff_get_line(pb, buffer, sizeof(buffer));
 
-        if (avio_tell(s->pb) >= header_size)
+        if (avio_tell(pb) >= header_size)
             return AVERROR_INVALIDDATA;
 
         if (!memcmp(buffer, "end_head", 8)) {
@@ -84,10 +85,10 @@ static int nist_read_header(AVFormatContext *s)
             st->codecpar->block_align = st->codecpar->bits_per_coded_sample *
                                         st->codecpar->ch_layout.nb_channels / 8;
 
-            if (avio_tell(s->pb) > header_size)
+            if (avio_tell(pb) > header_size)
                 return AVERROR_INVALIDDATA;
 
-            avio_skip(s->pb, header_size - avio_tell(s->pb));
+            avio_skip(pb, header_size - avio_tell(pb));
 
             return 0;
         } else if (!memcmp(buffer, "channel_count", 13)) {
