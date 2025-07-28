@@ -28,9 +28,38 @@
 
 static int sdx_probe(const AVProbeData *p)
 {
-    if (AV_RB32(p->buf) == AV_RB32("SDX:"))
-        return AVPROBE_SCORE_EXTENSION;
-    return 0;
+    int n = 0;
+
+    if (AV_RB32(p->buf) != AV_RB32("SDX:"))
+        return 0;
+
+    for (n = 4; n < p->buf_size-1; n++) {
+        if (p->buf[n] == 0x1a) {
+            n++;
+            if (p->buf[n] != 1)
+                return 0;
+            n++;
+            break;
+        }
+    }
+
+    if (n >= p->buf_size)
+        return 0;
+
+    n += p->buf[n] + 5;
+    if (n > p->buf_size - 5)
+        return 0;
+
+    if (p->buf[n] != 8 &&
+        p->buf[n] != 16 &&
+        p->buf[n] != 24 &&
+        p->buf[n] != 32)
+        return 0;
+
+    if (AV_RL32(p->buf + n + 1) <= 0)
+        return 0;
+
+    return AVPROBE_SCORE_MAX;
 }
 
 static int sdx_read_header(AVFormatContext *s)
