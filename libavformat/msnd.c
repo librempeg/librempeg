@@ -47,28 +47,29 @@ static int msnd_probe(const AVProbeData *p)
 
 static int msnd_read_header(AVFormatContext *s)
 {
+    AVIOContext *pb = s->pb;
     AVStream *st;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(s->pb, 6);
+    avio_skip(pb, 6);
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_IMA_MAGIX;
     st->codecpar->ch_layout.nb_channels = 2;
-    avio_skip(s->pb, 2);
-    st->codecpar->sample_rate = avio_rl16(s->pb);
+    avio_skip(pb, 2);
+    st->codecpar->sample_rate = avio_rl16(pb);
     if (st->codecpar->sample_rate == 0)
         return AVERROR_INVALIDDATA;
-    avio_skip(s->pb, 2);
-    st->codecpar->block_align = avio_rl16(s->pb);
+    avio_skip(pb, 2);
+    st->codecpar->block_align = avio_rl16(pb);
     if (st->codecpar->block_align == 0)
         return AVERROR_INVALIDDATA;
     st->start_time = 0;
-    st->duration = avio_rl32(s->pb);
+    st->duration = avio_rl32(pb);
 
-    avio_seek(s->pb, 0x800, SEEK_SET);
+    avio_seek(pb, 0x800, SEEK_SET);
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
