@@ -20,6 +20,7 @@
  */
 
 #include "libavutil/channel_layout.h"
+#include "libavutil/intreadwrite.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
@@ -27,6 +28,15 @@
 static int msnd_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "\x00\x08MSND", 6))
+        return 0;
+
+    if (p->buf_size < 14)
+        return 0;
+
+    if (AV_RL16(p->buf + 8) == 0)
+        return 0;
+
+    if (AV_RL16(p->buf + 12) == 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
