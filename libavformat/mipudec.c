@@ -32,7 +32,10 @@ static int mipu_read_probe(const AVProbeData *p)
     if (AV_RB32(p->buf) != MKBETAG('M', 'I', 'P', 'U'))
         return 0;
 
-    if (AV_RL32(p->buf + 4) == 0)
+    if (p->buf_size < 20)
+        return 0;
+
+    if (AV_RL16(p->buf + 6) == 0)
         return 0;
 
     if (AV_RL16(p->buf + 8) == 0)
