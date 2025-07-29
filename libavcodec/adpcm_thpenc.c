@@ -191,7 +191,7 @@ static int thp_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     int out_size, ret, nb_blocks;
     uint8_t *dst;
 
-    nb_blocks = ((avctx->frame_size + BLOCK_SAMPLES-1) / BLOCK_SAMPLES);
+    nb_blocks = ((frame->nb_samples + BLOCK_SAMPLES-1) / BLOCK_SAMPLES);
     out_size = nb_blocks * BLOCK_SIZE * nb_channels;
     if (c->coded_nb_samples)
         out_size += (32 + 4) * nb_channels + 8;
