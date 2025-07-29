@@ -18,6 +18,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/intreadwrite.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
@@ -27,6 +28,22 @@ static int dwd_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "DiamondWare Digitized\n\0\x1a", 24))
         return 0;
+
+    if (p->buf_size < 37)
+        return 0;
+
+    if (AV_RL16(p->buf + 32) == 0)
+        return 0;
+
+    if (AV_RL8(p->buf + 34) == 0)
+        return 0;
+
+    if (AV_RL8(p->buf + 35) == 0)
+        return 0;
+
+    if (AV_RL8(p->buf + 36) == 0)
+        return 0;
+
     return AVPROBE_SCORE_MAX;
 }
 
