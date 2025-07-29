@@ -40,30 +40,14 @@ typedef struct THPChannel {
 typedef struct THPContext {
     AVClass *class;
 
+    uint8_t *coeffs;
+    int coeffs_len;
+
     int coded_nb_samples;
     int le;
 
     THPChannel chs[8];
 } THPContext;
-
-static int16_t tab[16] = {
-    4088,
-    -2048,
-    2044,
-    -1024,
-    1022,
-    -512,
-    511,
-    -256,
-    255,
-    -128,
-    127,
-    -64,
-    63,
-    -32,
-    31,
-    -16,
-};
 
 static av_cold int thp_encode_init(AVCodecContext *avctx)
 {
@@ -88,13 +72,17 @@ static av_cold int thp_encode_init(AVCodecContext *avctx)
         avctx->extradata_size = nb_channels * 32;
 
         for (int ch = 0; ch < nb_channels; ch++) {
-            memcpy(c->chs[ch].table, tab, 32);
+            if (c->coeffs_len >= 32 * nb_channels) {
+                for (int n = 0; n < 16; n++)
+                    c->chs[ch].table[n] = AV_RL16(c->coeffs + n*2 + 32*ch);
+            }
+
             if (c->le) {
                 for (int n = 0; n < 16; n++)
-                    AV_WL16(avctx->extradata + n*2 + 32*ch, tab[n]);
+                    AV_WL16(avctx->extradata + n*2 + 32*ch, c->chs[ch].table[n]);
             } else {
                 for (int n = 0; n < 16; n++)
-                    AV_WB16(avctx->extradata + n*2 + 32*ch, tab[n]);
+                    AV_WB16(avctx->extradata + n*2 + 32*ch, c->chs[ch].table[n]);
             }
         }
     }
@@ -230,8 +218,12 @@ static int thp_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 
 #define OFFSET(x) offsetof(THPContext, x)
 #define FLAGS AV_OPT_FLAG_ENCODING_PARAM | AV_OPT_FLAG_AUDIO_PARAM
+
 static const AVOption options[] = {
     { "coded_nb_samples",  "", OFFSET(coded_nb_samples), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS },
+    { "coeffs", "channel coefficients table", OFFSET(coeffs), AV_OPT_TYPE_BINARY,
+        {.str="f80f00f8fc0700fcfe0300feff0100ffff0080ff7f00c0ff3f00e0ff1f00f0fff80f00f8fc0700fcfe0300feff0100ffff0080ff7f00c0ff3f00e0ff1f00f0ff"},
+        .flags = FLAGS },
     { NULL },
 };
 
