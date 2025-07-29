@@ -51,7 +51,11 @@ static int dwd_read_header(AVFormatContext *s)
         return AVERROR_INVALIDDATA;
     par->codec_type = AVMEDIA_TYPE_AUDIO;
     par->ch_layout.nb_channels = avio_r8(pb);
+    if (par->ch_layout.nb_channels == 0)
+        return AVERROR_INVALIDDATA;
     par->bits_per_coded_sample = avio_r8(pb);
+    if (par->bits_per_coded_sample == 0)
+        return AVERROR_INVALIDDATA;
     par->codec_id = (par->bits_per_coded_sample > 8) ? AV_CODEC_ID_PCM_S16LE : AV_CODEC_ID_PCM_S8;
     avio_skip(pb, 2);
     par->block_align = par->ch_layout.nb_channels * ((par->bits_per_coded_sample + 7) / 8);
