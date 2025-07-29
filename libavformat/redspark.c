@@ -70,6 +70,7 @@ static int redspark_read_header(AVFormatContext *s)
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
+    st->start_time = 0;
     par = st->codecpar;
 
     /* Decrypt header */
