@@ -251,6 +251,7 @@ static const int8_t mtf_index_table[16] = {
 
 typedef struct ADPCMDecodeContext {
     ADPCMChannelStatus status[14];
+    int table[14][16];
     int vqa_version;                /**< VQA version. Used for ADPCM_IMA_WS */
     int has_status;                 /**< Status flag. Reset to 0 after a flush. */
 } ADPCMDecodeContext;
@@ -383,6 +384,35 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     default:
         avctx->sample_fmt = AV_SAMPLE_FMT_S16;
     }
+
+    switch (avctx->codec->id) {
+    case AV_CODEC_ID_ADPCM_THP:
+    case AV_CODEC_ID_ADPCM_THP_LE:
+        if (avctx->extradata_size > 0 &&
+            avctx->extradata_size < 32 * avctx->ch_layout.nb_channels) {
+            av_log(avctx, AV_LOG_ERROR, "Missing coeff table\n");
+            return AVERROR_INVALIDDATA;
+        }
+        break;
+    }
+
+    switch (avctx->codec->id) {
+    case AV_CODEC_ID_ADPCM_THP:
+        for (int ch = 0; ch < avctx->ch_layout.nb_channels && avctx->extradata; ch++) {
+            for (int n = 0; n < 16; n++)
+                c->table[ch][n] = sign_extend(AV_RB16(avctx->extradata + ch * 32 + n * 2), 16);
+        }
+        break;
+    case AV_CODEC_ID_ADPCM_THP_LE:
+        for (int ch = 0; ch < avctx->ch_layout.nb_channels && avctx->extradata; ch++) {
+            for (int n = 0; n < 16; n++)
+                c->table[ch][n] = sign_extend(AV_RL16(avctx->extradata + ch * 32 + n * 2), 16);
+        }
+        break;
+    default:
+        break;
+    }
+
     return 0;
 }
 
@@ -2632,30 +2662,16 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 #if CONFIG_ADPCM_THP_DECODER || CONFIG_ADPCM_THP_LE_DECODER
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
-    {
-        int table[14][16];
-
 #define THP_GET16(g) \
     sign_extend( \
         avctx->codec->id == AV_CODEC_ID_ADPCM_THP_LE ? \
         bytestream2_get_le16u(&(g)) : \
         bytestream2_get_be16u(&(g)), 16)
 
-        if (avctx->extradata) {
-            GetByteContext tb;
-            if (avctx->extradata_size < 32 * channels) {
-                av_log(avctx, AV_LOG_ERROR, "Missing coeff table\n");
-                return AVERROR_INVALIDDATA;
-            }
-
-            bytestream2_init(&tb, avctx->extradata, avctx->extradata_size);
+        if (!avctx->extradata) {
             for (int i = 0; i < channels; i++)
                 for (int n = 0; n < 16; n++)
-                    table[i][n] = THP_GET16(tb);
-        } else {
-            for (int i = 0; i < channels; i++)
-                for (int n = 0; n < 16; n++)
-                    table[i][n] = THP_GET16(gb);
+                    c->table[i][n] = THP_GET16(gb);
 
             if (!c->has_status) {
                 /* Initialize the previous sample.  */
@@ -2677,8 +2693,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 int byte = bytestream2_get_byteu(&gb);
                 const int index = (byte >> 4) & 0xF;
                 const int scale = 1 << (byte & 0xF);
-                int64_t factor1 = table[ch][index * 2];
-                int64_t factor2 = table[ch][index * 2 + 1];
+                int64_t factor1 = c->table[ch][index * 2];
+                int64_t factor2 = c->table[ch][index * 2 + 1];
 
                 /* Decode 14 samples.  */
                 for (int n = 0; n < 14 && (i * 14 + n < nb_samples); n++) {
@@ -2701,7 +2717,6 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
         }
         break;
-    }
 #endif /* CONFIG_ADPCM_THP(_LE)_DECODER */
     CASE(ADPCM_DTK,
         for (int channel = 0; channel < channels; channel++) {
@@ -3120,8 +3135,8 @@ static void adpcm_flush(AVCodecContext *avctx)
 {
     ADPCMDecodeContext *c = avctx->priv_data;
 
-    /* Just nuke the entire state and re-init. */
-    memset(c, 0, sizeof(ADPCMDecodeContext));
+    /* Just nuke the entire status in state and re-init. */
+    memset(c->status, 0, sizeof(c->status));
 
     switch (avctx->codec_id) {
     case AV_CODEC_ID_ADPCM_CT:
