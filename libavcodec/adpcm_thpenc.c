@@ -1,0 +1,270 @@
+/*
+ * ADPCM THP codecs
+ *
+ * This file is part of Librempeg
+ *
+ * Librempeg is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Librempeg is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with Librempeg; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
+#include <float.h>
+
+#include "libavutil/mem.h"
+#include "libavutil/opt.h"
+#include "avcodec.h"
+#include "bytestream.h"
+#include "codec_internal.h"
+#include "encode.h"
+
+#define BLOCK_SAMPLES 14
+#define BLOCK_SIZE 8
+
+typedef struct THPChannel {
+    int16_t input[BLOCK_SAMPLES+2];
+    int16_t table[16];
+
+    int prev;
+} THPChannel;
+
+typedef struct THPContext {
+    AVClass *class;
+
+    int coded_nb_samples;
+    int le;
+
+    THPChannel chs[8];
+} THPContext;
+
+static int16_t tab[16] = {
+    4088,
+    -2048,
+    2044,
+    -1024,
+    1022,
+    -512,
+    511,
+    -256,
+    255,
+    -128,
+    127,
+    -64,
+    63,
+    -32,
+    31,
+    -16,
+};
+
+static av_cold int thp_encode_init(AVCodecContext *avctx)
+{
+    const int nb_channels = avctx->ch_layout.nb_channels;
+    THPContext *c = avctx->priv_data;
+
+    if (nb_channels > FF_ARRAY_ELEMS(c->chs))
+        return AVERROR(EINVAL);
+
+    c->le = avctx->codec_id == AV_CODEC_ID_ADPCM_THP_LE;
+
+    if ((avctx->frame_size % BLOCK_SAMPLES) > 0)
+        avctx->frame_size = ((avctx->frame_size + BLOCK_SAMPLES-1) / BLOCK_SAMPLES) * BLOCK_SAMPLES;
+    if (avctx->frame_size <= 0)
+        avctx->frame_size = BLOCK_SAMPLES;
+    avctx->block_align = (avctx->frame_size / BLOCK_SAMPLES) * BLOCK_SIZE * nb_channels;
+
+    if (!c->coded_nb_samples) {
+        avctx->extradata = av_malloc(nb_channels * 32);
+        if (!avctx->extradata)
+            return AVERROR(ENOMEM);
+        avctx->extradata_size = nb_channels * 32;
+
+        for (int ch = 0; ch < nb_channels; ch++) {
+            memcpy(c->chs[ch].table, tab, 32);
+            if (c->le) {
+                for (int n = 0; n < 16; n++)
+                    AV_WL16(avctx->extradata + n*2 + 32*ch, tab[n]);
+            } else {
+                for (int n = 0; n < 16; n++)
+                    AV_WB16(avctx->extradata + n*2 + 32*ch, tab[n]);
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int thp_encode(THPChannel *chs, uint8_t *dst,
+                      const int16_t *samples, const int nb_samples)
+{
+    const int16_t *coefs = chs->table;
+    int in_samples[8][BLOCK_SAMPLES+2];
+    int out_samples[8][BLOCK_SAMPLES];
+    int16_t *input = chs->input;
+    double min, distAccum[8];
+    int best_index = 0;
+    int scale[8];
+
+    for (int n = 0; n < nb_samples; n++)
+        input[n + 2] = samples[n];
+
+    for (int i = 0 ; i < 8; i++) {
+        const int16_t *coefs_in = coefs + i * 2;
+        int distance, index;
+        int v1, v2, v3;
+
+        in_samples[i][0] = input[0];
+        in_samples[i][1] = input[1];
+
+        distance = 0;
+        for (int s = 0; s < nb_samples; s++) {
+            in_samples[i][s + 2] = v1 = ((input[s] * coefs_in[1]) + (input[s + 1] * coefs_in[0])) / 2048;
+            v2 = input[s + 2] - v1;
+            v3 = av_clip_int16(v2);
+            if (FFABS(v3) > FFABS(distance))
+                distance = v3;
+        }
+
+        for (scale[i] = 0; (scale[i] <= 12) && ((distance > 7) || (distance <- 8)); scale[i]++, distance /= 2);
+
+        scale[i] = (scale[i] <= 1) ? -1 : scale[i] - 2;
+
+        do {
+            scale[i]++;
+            distAccum[i] = 0;
+            index = 0;
+
+            for (int s = 0; s < nb_samples; s++) {
+                v1 = (in_samples[i][s] * coefs_in[1]) + (in_samples[i][s + 1] * coefs_in[0]);
+                v2 = ((input[s + 2] * (1 << 11)) - v1) / 2048;
+                v3 = (v2 > 0) ? (int)((double)v2 / (1 << scale[i]) + 0.4999999f) : (int)((double)v2 / (1 << scale[i]) - 0.4999999f);
+
+                if (v3 < -8) {
+                    if (index < (v3 = -8 - v3))
+                        index = v3;
+                    v3 = -8;
+                } else if (v3 > 7) {
+                    if (index < (v3 -= 7))
+                        index = v3;
+                    v3 = 7;
+                }
+
+                out_samples[i][s] = v3;
+
+                v1 = (v1 + ((v3 * (1 << scale[i])) * (1 << 11)) + 1024) >> 11;
+                in_samples[i][s + 2] = v2 = av_clip_int16(v1);
+                v3 = input[s + 2] - v2;
+                distAccum[i] += v3 * (double)v3;
+            }
+
+            for (int x = index + 8; x > 256; x >>= 1)
+                if (++scale[i] >= 12)
+                    scale[i] = 11;
+        } while ((scale[i] < 12) && (index > 1));
+    }
+
+    min = DBL_MAX;
+    for (int i = 0; i < 8; i++) {
+        if (distAccum[i] < min) {
+            min = distAccum[i];
+            best_index = i;
+        }
+    }
+
+    for (int s = 0; s < nb_samples; s++)
+        input[s + 2] = in_samples[best_index][s + 2];
+
+    dst[0] = (best_index << 4) | (scale[best_index] & 0xF);
+    for (int s = nb_samples; s < 14; s++)
+        out_samples[best_index][s] = 0;
+
+    for (int y = 0; y < 7; y++)
+        dst[y + 1] = (((unsigned)out_samples[best_index][y * 2]) << 4) | (out_samples[best_index][y * 2 + 1] & 0xF);
+
+    input[0] = input[BLOCK_SAMPLES];
+    input[1] = input[BLOCK_SAMPLES+1];
+
+    return 0;
+}
+
+static int thp_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
+                            const AVFrame *frame, int *got_packet_ptr)
+{
+    const int nb_channels = avctx->ch_layout.nb_channels;
+    THPContext *c = avctx->priv_data;
+    int out_size, ret, nb_blocks;
+    uint8_t *dst;
+
+    nb_blocks = ((avctx->frame_size + BLOCK_SAMPLES-1) / BLOCK_SAMPLES);
+    out_size = nb_blocks * BLOCK_SIZE * nb_channels;
+    if (c->coded_nb_samples)
+        out_size += (32 + 4) * nb_channels + 8;
+
+    if ((ret = ff_get_encode_buffer(avctx, avpkt, out_size, 0)) < 0)
+        return ret;
+    dst = avpkt->data;
+
+    for (int ch = 0; ch < nb_channels; ch++) {
+        const int16_t *samples = (const int16_t *)frame->extended_data[ch];
+
+        for (int n = 0; n < nb_blocks; n++) {
+            thp_encode(&c->chs[ch], dst, samples + BLOCK_SAMPLES * n,
+                       FFMIN(frame->nb_samples - n * BLOCK_SAMPLES, BLOCK_SAMPLES));
+
+            dst += BLOCK_SIZE;
+        }
+    }
+
+    *got_packet_ptr = 1;
+
+    return 0;
+}
+
+#define OFFSET(x) offsetof(THPContext, x)
+#define FLAGS AV_OPT_FLAG_ENCODING_PARAM | AV_OPT_FLAG_AUDIO_PARAM
+static const AVOption options[] = {
+    { "coded_nb_samples",  "", OFFSET(coded_nb_samples), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS },
+    { NULL },
+};
+
+static const AVClass adpcm_thp_encoder_class = {
+    .class_name = "ADPCM THP encoder",
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
+const FFCodec ff_adpcm_thp_encoder = {
+    .p.name         = "adpcm_thp",
+    CODEC_LONG_NAME("ADPCM Nintendo THP"),
+    .p.type         = AVMEDIA_TYPE_AUDIO,
+    .p.id           = AV_CODEC_ID_ADPCM_THP,
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_SMALL_LAST_FRAME |
+                      AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
+    .priv_data_size = sizeof(THPContext),
+    .p.priv_class   = &adpcm_thp_encoder_class,
+    .init           = thp_encode_init,
+    FF_CODEC_ENCODE_CB(thp_encode_frame),
+    CODEC_SAMPLEFMTS(AV_SAMPLE_FMT_S16P),
+};
+
+const FFCodec ff_adpcm_thp_le_encoder = {
+    .p.name         = "adpcm_thp_le",
+    CODEC_LONG_NAME("ADPCM Nintendo THP (little-endian)"),
+    .p.type         = AVMEDIA_TYPE_AUDIO,
+    .p.id           = AV_CODEC_ID_ADPCM_THP_LE,
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_SMALL_LAST_FRAME |
+                      AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
+    .priv_data_size = sizeof(THPContext),
+    .p.priv_class   = &adpcm_thp_encoder_class,
+    .init           = thp_encode_init,
+    FF_CODEC_ENCODE_CB(thp_encode_frame),
+    CODEC_SAMPLEFMTS(AV_SAMPLE_FMT_S16P),
+};
