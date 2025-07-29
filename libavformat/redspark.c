@@ -134,9 +134,8 @@ static int redspark_read_header(AVFormatContext *s)
     /* Get the ADPCM table */
     bytestream2_seek(&gbc, coef_off, SEEK_SET);
     for (int i = 0; i < par->ch_layout.nb_channels; i++) {
-        if (bytestream2_get_bufferu(&gbc, par->extradata + i * 32, 32) != 32) {
+        if (bytestream2_get_bufferu(&gbc, par->extradata + i * 32, 32) != 32)
             return AVERROR_INVALIDDATA;
-        }
 
         bytestream2_skipu(&gbc, 14);
     }
