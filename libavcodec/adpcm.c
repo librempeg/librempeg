@@ -306,6 +306,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_IMA_DAT4:
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
+    case AV_CODEC_ID_ADPCM_THP_SI:
         max_channels = 14;
         break;
     }
@@ -358,6 +359,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_TANTALUS:
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
+    case AV_CODEC_ID_ADPCM_THP_SI:
     case AV_CODEC_ID_ADPCM_AFC:
     case AV_CODEC_ID_ADPCM_DTK:
     case AV_CODEC_ID_ADPCM_PSX:
@@ -388,6 +390,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     switch (avctx->codec->id) {
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
+    case AV_CODEC_ID_ADPCM_THP_SI:
         if (avctx->extradata_size > 0 &&
             avctx->extradata_size < 32 * avctx->ch_layout.nb_channels) {
             av_log(avctx, AV_LOG_ERROR, "Missing coeff table\n");
@@ -398,6 +401,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
 
     switch (avctx->codec->id) {
     case AV_CODEC_ID_ADPCM_THP:
+    case AV_CODEC_ID_ADPCM_THP_SI:
         for (int ch = 0; ch < avctx->ch_layout.nb_channels && avctx->extradata; ch++) {
             for (int n = 0; n < 16; n++)
                 c->table[ch][n] = sign_extend(AV_RB16(avctx->extradata + ch * 32 + n * 2), 16);
@@ -1437,6 +1441,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         break;
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
+    case AV_CODEC_ID_ADPCM_THP_SI:
         if (avctx->extradata) {
             nb_samples = (buf_size / ch) / 8 * 14;
             break;
@@ -2723,6 +2728,53 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         break;
 #endif /* CONFIG_ADPCM_THP(_LE)_DECODER */
+    CASE(ADPCM_THP_SI,
+        for (int ch = 0; ch < channels; ch++) {
+            uint8_t *src = avpkt->data;
+            samples = samples_p[ch];
+
+            /* Read in every sample for this channel.  */
+            for (int i = 0; i < (nb_samples + 13) / 14; i++) {
+                int factor1, factor2, sample1, sample2;
+                int byte, index, scale;
+                uint8_t data[8];
+
+                for (int j = 0; j < 8; j++)
+                    data[j] = src[(j/2)*2*channels + (j&1) + 2*ch];
+
+                byte = data[0];
+                index = (byte >> 4) & 0x7;
+                scale = 1 << (byte & 0xF);
+                factor1 = c->table[ch][index * 2];
+                factor2 = c->table[ch][index * 2 + 1];
+                sample1 = c->status[ch].sample1;
+                sample2 = c->status[ch].sample2;
+
+                /* Decode 14 samples.  */
+                for (int n = 0; n < 14 && (i * 14 + n < nb_samples); n++) {
+                    int32_t sampledat;
+
+                    if (n & 1) {
+                        sampledat = sign_extend(byte, 4);
+                    } else {
+                        byte = data[1+n/2];
+                        sampledat = sign_extend(byte >> 4, 4);
+                    }
+
+                    sampledat = (sampledat * scale) << 11;
+                    sampledat = ((sample1 * factor1 +
+                                  sample2 * factor2 + 1024 + sampledat) >> 11);
+                    *samples = av_clip_int16(sampledat);
+                    sample2 = sample1;
+                    sample1 = *samples++;
+                }
+
+                c->status[ch].sample1 = sample1;
+                c->status[ch].sample2 = sample2;
+            }
+        }
+        bytestream2_seek(&gb, 0, SEEK_END);
+        ) /* End of CASE */
     CASE(ADPCM_DTK,
         for (int channel = 0; channel < channels; channel++) {
             samples = samples_p[channel];
@@ -3268,6 +3320,7 @@ ADPCM_DECODER(ADPCM_SBPRO_4,     sample_fmts_s16,  adpcm_sbpro_4,     "ADPCM Sou
 ADPCM_DECODER(ADPCM_SWF,         sample_fmts_s16,  adpcm_swf,         "ADPCM Shockwave Flash")
 ADPCM_DECODER(ADPCM_TANTALUS,    sample_fmts_s16p, adpcm_tantalus,    "ADPCM Tantalus")
 ADPCM_DECODER(ADPCM_THP_LE,      sample_fmts_s16p, adpcm_thp_le,      "ADPCM Nintendo THP (little-endian)")
+ADPCM_DECODER(ADPCM_THP_SI,      sample_fmts_s16p, adpcm_thp_si,      "ADPCM Nintendo THP (sub-interleave)")
 ADPCM_DECODER(ADPCM_THP,         sample_fmts_s16p, adpcm_thp,         "ADPCM Nintendo THP")
 ADPCM_DECODER(ADPCM_XA,          sample_fmts_s16p, adpcm_xa,          "ADPCM CDROM XA")
 ADPCM_DECODER(ADPCM_XMD,         sample_fmts_s16p, adpcm_xmd,         "ADPCM Konami XMD")
