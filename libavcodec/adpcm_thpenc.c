@@ -131,7 +131,7 @@ static int thp_encode(THPChannel *chs, uint8_t *dst,
             for (int s = 0; s < nb_samples; s++) {
                 v1 = (in_samples[i][s] * coefs_in[1]) + (in_samples[i][s + 1] * coefs_in[0]);
                 v2 = ((input[s + 2] * (1 << 11)) - v1) / 2048;
-                v3 = (v2 > 0) ? (int)((double)v2 / (1 << scale[i]) + 0.4999999f) : (int)((double)v2 / (1 << scale[i]) - 0.4999999f);
+                v3 = (v2 > 0) ? (v2 + (1 << scale[i])/2) / (1 << scale[i]) : (v2 - (1 << scale[i])/2) / (1 << scale[i]);
 
                 if (v3 < -8) {
                     if (index < (v3 = -8 - v3))
