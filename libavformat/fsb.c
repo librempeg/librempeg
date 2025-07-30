@@ -39,7 +39,7 @@ static int fsb_probe(const AVProbeData *p)
 static int fsb_read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
-    unsigned format, version, c;
+    unsigned format, version, nb_streams;
     int minor_version;
     int64_t offset;
     AVCodecParameters *par;
@@ -135,7 +135,7 @@ static int fsb_read_header(AVFormatContext *s)
             if (ret < 0)
                 return ret;
             avio_seek(pb, 0x68, SEEK_SET);
-            for (c = 0; c < par->ch_layout.nb_channels; c++) {
+            for (int c = 0; c < par->ch_layout.nb_channels; c++) {
                 avio_read(pb, par->extradata + 32 * c, 32);
                 avio_skip(pb, 14);
             }
@@ -202,7 +202,7 @@ static int fsb_read_header(AVFormatContext *s)
             if (ret < 0)
                 return ret;
             avio_seek(pb, 0x80, SEEK_SET);
-            for (c = 0; c < par->ch_layout.nb_channels; c++) {
+            for (int c = 0; c < par->ch_layout.nb_channels; c++) {
                 avio_read(pb, par->extradata + 32 * c, 32);
                 avio_skip(pb, 14);
             }
@@ -232,7 +232,7 @@ static int fsb_read_header(AVFormatContext *s)
         int channels;
         int codec;
 
-        avio_rl32(pb);
+        nb_streams = avio_rl32(pb);
         sample_header_size = avio_rl32(pb);
         name_table_size = avio_rl32(pb);
         sample_data_size = avio_rl32(pb);
