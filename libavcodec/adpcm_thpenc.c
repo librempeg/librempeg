@@ -95,7 +95,7 @@ static int thp_encode(THPChannel *chs, uint8_t *dst,
     int in_samples[8][BLOCK_SAMPLES+2];
     int out_samples[8][BLOCK_SAMPLES];
     int16_t *input = chs->input;
-    double min, distAccum[8];
+    int64_t min, error_sum[8];
     int best_index = 0;
     int scale[8];
 
@@ -125,7 +125,7 @@ static int thp_encode(THPChannel *chs, uint8_t *dst,
 
         do {
             scale[i]++;
-            distAccum[i] = 0;
+            error_sum[i] = 0;
             index = 0;
 
             for (int s = 0; s < nb_samples; s++) {
@@ -148,7 +148,7 @@ static int thp_encode(THPChannel *chs, uint8_t *dst,
                 v1 = (v1 + ((v3 * (1 << scale[i])) * (1 << 11)) + 1024) >> 11;
                 in_samples[i][s + 2] = v2 = av_clip_int16(v1);
                 v3 = input[s + 2] - v2;
-                distAccum[i] += v3 * (double)v3;
+                error_sum[i] += v3 * (int64_t)v3;
             }
 
             for (int x = index + 8; x > 256; x >>= 1)
@@ -157,10 +157,10 @@ static int thp_encode(THPChannel *chs, uint8_t *dst,
         } while ((scale[i] < 12) && (index > 1));
     }
 
-    min = DBL_MAX;
+    min = INT64_MAX;
     for (int i = 0; i < 8; i++) {
-        if (distAccum[i] < min) {
-            min = distAccum[i];
+        if (error_sum[i] < min) {
+            min = error_sum[i];
             best_index = i;
         }
     }
