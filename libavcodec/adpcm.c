@@ -2691,10 +2691,12 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             /* Read in every sample for this channel.  */
             for (int i = 0; i < (nb_samples + 13) / 14; i++) {
                 int byte = bytestream2_get_byteu(&gb);
-                const int index = (byte >> 4) & 0xF;
+                const int index = (byte >> 4) & 0x7;
                 const int scale = 1 << (byte & 0xF);
-                int64_t factor1 = c->table[ch][index * 2];
-                int64_t factor2 = c->table[ch][index * 2 + 1];
+                int factor1 = c->table[ch][index * 2];
+                int factor2 = c->table[ch][index * 2 + 1];
+                int sample1 = c->status[ch].sample1;
+                int sample2 = c->status[ch].sample2;
 
                 /* Decode 14 samples.  */
                 for (int n = 0; n < 14 && (i * 14 + n < nb_samples); n++) {
@@ -2708,12 +2710,15 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     }
 
                     sampledat = (sampledat * scale) << 11;
-                    sampledat = ((c->status[ch].sample1 * factor1 +
-                                  c->status[ch].sample2 * factor2 + 1024 + sampledat) >> 11);
+                    sampledat = ((sample1 * factor1 +
+                                  sample2 * factor2 + 1024 + sampledat) >> 11);
                     *samples = av_clip_int16(sampledat);
-                    c->status[ch].sample2 = c->status[ch].sample1;
-                    c->status[ch].sample1 = *samples++;
+                    sample2 = sample1;
+                    sample1 = *samples++;
                 }
+
+                c->status[ch].sample1 = sample1;
+                c->status[ch].sample2 = sample2;
             }
         }
         break;
