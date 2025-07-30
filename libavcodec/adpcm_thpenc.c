@@ -26,6 +26,7 @@
 #include "bytestream.h"
 #include "codec_internal.h"
 #include "encode.h"
+#include "mathops.h"
 
 #define BLOCK_SAMPLES 14
 #define BLOCK_SIZE 8
@@ -72,7 +73,7 @@ static av_cold int thp_encode_init(AVCodecContext *avctx)
         for (int ch = 0; ch < nb_channels; ch++) {
             if (c->coeffs_len >= 32 * nb_channels) {
                 for (int n = 0; n < 16; n++)
-                    c->chs[ch].table[n] = AV_RL16(c->coeffs + n*2 + 32*ch);
+                    c->chs[ch].table[n] = sign_extend(AV_RL16(c->coeffs + n*2 + 32*ch), 16);
             }
 
             if (c->le) {
@@ -169,11 +170,11 @@ static int thp_encode(THPChannel *chs, uint8_t *dst,
         input[s + 2] = in_samples[best_index][s + 2];
 
     dst[0] = (best_index << 4) | (scale[best_index] & 0xF);
-    for (int s = nb_samples; s < 14; s++)
+    for (int s = nb_samples; s < BLOCK_SAMPLES; s++)
         out_samples[best_index][s] = 0;
 
-    for (int y = 0; y < 7; y++)
-        dst[y + 1] = (((unsigned)out_samples[best_index][y * 2]) << 4) | (out_samples[best_index][y * 2 + 1] & 0xF);
+    for (int y = 0; y < BLOCK_SIZE-1; y++)
+        dst[y + 1] = ((out_samples[best_index][y * 2] & 0xF) << 4) | (out_samples[best_index][y * 2 + 1] & 0xF);
 
     input[0] = input[BLOCK_SAMPLES];
     input[1] = input[BLOCK_SAMPLES+1];
