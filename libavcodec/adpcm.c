@@ -2986,8 +2986,10 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 for (int i = 0; i < 8; i++) {
                     int index, shift, coef1, coef2;
 
-                    index = ((coefs >> i*4) & 0x0f) & 0x07;
-                    shift = (shifts >> i*4) & 0x0f;
+                    index = coefs  & 0x07;
+                    shift = shifts & 0x0f;
+                    coefs  >>= 4;
+                    shifts >>= 4;
 
                     coef1 = fmod_adpcm_table[index][0];
                     coef2 = fmod_adpcm_table[index][1];
