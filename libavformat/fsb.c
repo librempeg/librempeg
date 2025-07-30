@@ -57,6 +57,7 @@ static int fsb_read_header(AVFormatContext *s)
 
     if (!st)
         return AVERROR(ENOMEM);
+    st->start_time = 0;
     sti = ffstream(st);
     par = st->codecpar;
     par->codec_type  = AVMEDIA_TYPE_AUDIO;
