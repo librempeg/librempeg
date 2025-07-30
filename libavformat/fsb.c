@@ -30,7 +30,8 @@ static int fsb_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "FSB", 3) || p->buf[3] - '0' < 1 || p->buf[3] - '0' > 5)
         return 0;
-    if (AV_RL32(p->buf + 4) != 1)
+    if (AV_RL32(p->buf + 4) != 0 &&
+        AV_RL32(p->buf + 4) != 1)
         return 0;
     return AVPROBE_SCORE_MAX;
 }
