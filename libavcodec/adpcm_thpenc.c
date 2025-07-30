@@ -33,8 +33,6 @@
 typedef struct THPChannel {
     int16_t input[BLOCK_SAMPLES+2];
     int16_t table[16];
-
-    int prev;
 } THPChannel;
 
 typedef struct THPContext {
@@ -66,7 +64,7 @@ static av_cold int thp_encode_init(AVCodecContext *avctx)
     avctx->block_align = (avctx->frame_size / BLOCK_SAMPLES) * BLOCK_SIZE * nb_channels;
 
     if (!c->coded_nb_samples) {
-        avctx->extradata = av_malloc(nb_channels * 32);
+        avctx->extradata = av_calloc(nb_channels, 32);
         if (!avctx->extradata)
             return AVERROR(ENOMEM);
         avctx->extradata_size = nb_channels * 32;
