@@ -46,7 +46,7 @@ static int fsb_read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     unsigned format, version, nb_streams;
-    int minor_version;
+    int minor_version, flags = 0;
     int64_t offset;
     AVCodecParameters *par;
     FSBStream *fst;
@@ -127,7 +127,9 @@ static int fsb_read_header(AVFormatContext *s)
         fst->start_offset = offset;
         fst->stop_offset = INT64_MAX;
 
-        avio_skip(pb, 44);
+        avio_skip(pb, 8);
+        flags = avio_rl32(pb);
+        avio_skip(pb, 32);
         st->duration = avio_rl32(pb);
         avio_skip(pb, 12);
         format = avio_rl32(pb);
@@ -164,7 +166,11 @@ static int fsb_read_header(AVFormatContext *s)
             par->codec_id    = AV_CODEC_ID_ADPCM_PSX;
             par->block_align = 16 * par->ch_layout.nb_channels;
         } else if (format & 0x02000000) {
-            par->codec_id    = AV_CODEC_ID_ADPCM_THP;
+            if (flags & 0x00000010)
+                par->codec_id = AV_CODEC_ID_ADPCM_THP;
+            else
+                par->codec_id = AV_CODEC_ID_ADPCM_THP_SI;
+
             par->block_align = 8 * par->ch_layout.nb_channels;
             if (par->ch_layout.nb_channels > INT_MAX / 32)
                 return AVERROR_INVALIDDATA;
@@ -183,8 +189,6 @@ static int fsb_read_header(AVFormatContext *s)
 
         avpriv_set_pts_info(st, 64, 1, par->sample_rate);
     } else if (version == 4) {
-        uint32_t flags;
-
         st = avformat_new_stream(s, NULL);
         if (!st)
             return AVERROR(ENOMEM);
@@ -213,7 +217,10 @@ static int fsb_read_header(AVFormatContext *s)
         if (format & 0x01000000) {
             par->codec_id = AV_CODEC_ID_XMA2;
         } else if (format & 0x02000000) {
-            par->codec_id = AV_CODEC_ID_ADPCM_THP;
+            if (flags & 0x00000010)
+                par->codec_id = AV_CODEC_ID_ADPCM_THP;
+            else
+                par->codec_id = AV_CODEC_ID_ADPCM_THP_SI;
         } else if (format & 0x00000200) {
             par->codec_id = AV_CODEC_ID_MP3;
         } else if (format & 0x00800000) {
@@ -297,10 +304,14 @@ static int fsb_read_header(AVFormatContext *s)
         name_table_size = avio_rl32(pb);
         sample_data_size = avio_rl32(pb);
         codec = avio_rl32(pb);
-        if (minor_version == 1)
+        if (minor_version == 1) {
             base_hsize = 0x3C;
-        else
+            avio_skip(pb, 4);
+            flags = avio_rl32(pb);
+        } else {
+            flags = 0;
             base_hsize = 0x40;
+        }
 
         avio_seek(pb, base_hsize, SEEK_SET);
 
@@ -458,7 +469,7 @@ static int fsb_read_header(AVFormatContext *s)
                 par->block_align = 256 * channels;
                 break;
             case 0x06:
-                par->codec_id = AV_CODEC_ID_ADPCM_THP;
+                par->codec_id = (flags & 0x02) ? AV_CODEC_ID_ADPCM_THP : AV_CODEC_ID_ADPCM_THP_SI;
                 par->block_align = 0x8 * channels;
                 break;
             case 0x0A:
