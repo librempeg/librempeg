@@ -181,12 +181,38 @@ static int thp_encode(THPChannel *chs, uint8_t *dst,
     return 0;
 }
 
+typedef struct ThreadData {
+    const AVFrame *frame;
+    uint8_t *dst;
+    int nb_blocks;
+} ThreadData;
+
+static int encode_channel(AVCodecContext *avctx, void *arg, int ch, int threadnr)
+{
+    THPContext *c = avctx->priv_data;
+    ThreadData *td = arg;
+    const int nb_blocks = td->nb_blocks;
+    const AVFrame *frame = td->frame;
+    uint8_t *dst = td->dst + nb_blocks * BLOCK_SIZE * ch;
+    const int16_t *samples = (const int16_t *)frame->extended_data[ch];
+
+    for (int n = 0; n < nb_blocks; n++) {
+        thp_encode(&c->chs[ch], dst, samples + BLOCK_SAMPLES * n,
+                   FFMIN(frame->nb_samples - n * BLOCK_SAMPLES, BLOCK_SAMPLES));
+
+        dst += BLOCK_SIZE;
+    }
+
+    return 0;
+}
+
 static int thp_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                             const AVFrame *frame, int *got_packet_ptr)
 {
     const int nb_channels = avctx->ch_layout.nb_channels;
     THPContext *c = avctx->priv_data;
     int out_size, ret, nb_blocks;
+    ThreadData td;
     uint8_t *dst;
 
     nb_blocks = ((frame->nb_samples + BLOCK_SAMPLES-1) / BLOCK_SAMPLES);
@@ -198,16 +224,10 @@ static int thp_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
         return ret;
     dst = avpkt->data;
 
-    for (int ch = 0; ch < nb_channels; ch++) {
-        const int16_t *samples = (const int16_t *)frame->extended_data[ch];
-
-        for (int n = 0; n < nb_blocks; n++) {
-            thp_encode(&c->chs[ch], dst, samples + BLOCK_SAMPLES * n,
-                       FFMIN(frame->nb_samples - n * BLOCK_SAMPLES, BLOCK_SAMPLES));
-
-            dst += BLOCK_SIZE;
-        }
-    }
+    td.nb_blocks = nb_blocks;
+    td.frame = frame;
+    td.dst = dst;
+    avctx->execute2(avctx, encode_channel, &td, NULL, nb_channels);
 
     *got_packet_ptr = 1;
 
@@ -251,6 +271,7 @@ const FFCodec ff_adpcm_thp_le_encoder = {
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_ADPCM_THP_LE,
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_SMALL_LAST_FRAME |
+                      AV_CODEC_CAP_SLICE_THREADS |
                       AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
     .priv_data_size = sizeof(THPContext),
     .p.priv_class   = &adpcm_thp_encoder_class,
