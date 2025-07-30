@@ -300,7 +300,7 @@ static int fsb_read_header(AVFormatContext *s)
                     break;
                 case 0x07:
                     switch (codec) {
-                    case 0x6:
+                    case 0x06:
                         ret = ff_alloc_extradata(par, 32 * channels);
                         if (ret < 0)
                             return ret;
@@ -312,6 +312,29 @@ static int fsb_read_header(AVFormatContext *s)
                         }
                         break;
                     }
+                    break;
+                case 0x09:
+                    switch (codec) {
+                    case 0x0D:
+                        ret = ff_alloc_extradata(par, 12);
+                        if (ret < 0)
+                            return ret;
+                        memset(par->extradata, 0, par->extradata_size);
+
+                        avio_read(pb, par->extradata + 4, 4);
+                        extraflag_size -= 4;
+                        if (par->extradata[4] != 0xFE && extraflag_size >= 4) {
+                            par->block_align = AV_RL16(par->extradata + 4);
+                            avio_read(pb, par->extradata + 4, 4);
+                            extraflag_size -= 4;
+                        } else {
+                            avio_read(pb, par->extradata + 8, 4);
+                            extraflag_size -= 4;
+                        }
+
+                        break;
+                    }
+                    avio_skip(pb, extraflag_size);
                     break;
                 case 0x0e:
                     channels = channels * avio_rl32(pb);
@@ -356,6 +379,12 @@ static int fsb_read_header(AVFormatContext *s)
         case 0x0B:
             par->codec_id = AV_CODEC_ID_MP3;
             par->block_align = 1024;
+            sti->need_parsing = AVSTREAM_PARSE_FULL;
+            break;
+        case 0x0D:
+            par->codec_id = AV_CODEC_ID_ATRAC9;
+            if (par->block_align == 0)
+                par->block_align = 1024;
             sti->need_parsing = AVSTREAM_PARSE_FULL;
             break;
         case 0x10:
