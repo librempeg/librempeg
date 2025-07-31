@@ -351,9 +351,9 @@ static int scd_read_header(AVFormatContext *s)
 
 static int scd_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
+    int64_t ret, track_start, track_stop;
     SCDDemuxContext *ctx = s->priv_data;
     AVIOContext *pb = s->pb;
-    int64_t ret, track_end;
     AVCodecParameters *par;
     SCDTrackHeader *trk;
     int64_t current_pos;
@@ -366,19 +366,23 @@ redo:
 
     do {
         trk = ctx->tracks + ctx->current_track;
-        track_end = trk->absolute_offset + trk->length;
+        track_stop = trk->absolute_offset + trk->length;
         par = s->streams[trk->stream_index]->codecpar;
 
         if (trk->data_type != SCD_TRACK_ID_DUMMY &&
-            track_end >= current_pos)
+            track_stop > current_pos)
             break;
 
         ctx->current_track++;
     } while (ctx->current_track < ctx->hdr.table1.count);
 
-    track_end = trk->absolute_offset + trk->length;
+    track_start = trk->absolute_offset;
+    if (current_pos < track_start)
+        avio_skip(pb, track_start - current_pos);
 
-    size = FFMIN(par->block_align, track_end - current_pos);
+    track_stop = trk->absolute_offset + trk->length;
+
+    size = FFMIN(par->block_align, track_stop - current_pos);
     if (size == 0) {
         ctx->current_track++;
         goto redo;
