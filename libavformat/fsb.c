@@ -533,8 +533,6 @@ static int fsb_read_packet(AVFormatContext *s, AVPacket *pkt)
 
             pkt->pos = pos;
             pkt->stream_index = st->index;
-            if (par->codec_id == AV_CODEC_ID_XMA2 && pkt->size >= 1)
-                pkt->duration = (pkt->data[0] >> 2) * 512;
 
             break;
         } else if (pos >= fst->stop_offset && n+1 < s->nb_streams) {
