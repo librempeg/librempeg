@@ -851,9 +851,9 @@ static int parse_psb_voice(PSBHeader *psb, PSBNode *nvoice)
     if (psb_node_exists(&nstream, "device") <= 0)
         goto fail;
 
-    return 1;
-fail:
     return 0;
+fail:
+    return AVERROR_INVALIDDATA;
 }
 
 static int prepare_fmt(AVFormatContext *s, PSBHeader *psb)
@@ -1022,9 +1022,9 @@ static int prepare_psb_extra(AVFormatContext *s, PSBHeader *psb)
     if (!prepare_codec(s, psb))
         goto fail;
 
-    return 1;
-fail:
     return 0;
+fail:
+    return AVERROR_INVALIDDATA;
 }
 
 static int read_header(AVFormatContext *s)
@@ -1113,11 +1113,13 @@ static int read_header(AVFormatContext *s)
     p->psb.spec = psb_node_get_string(&nroot, "spec");
 
     psb_node_by_key(&nroot, "voice", &nvoice);
-    if (!parse_psb_voice(&p->psb, &nvoice))
-        return AVERROR_INVALIDDATA;
+    ret = parse_psb_voice(&p->psb, &nvoice);
+    if (ret < 0)
+        return ret;
 
-    if (!prepare_psb_extra(s, &p->psb))
-        return AVERROR_INVALIDDATA;
+    ret = prepare_psb_extra(s, &p->psb);
+    if (ret < 0)
+        return ret;
 
     if (p->wav_ctx) {
         FFStream *sti;
