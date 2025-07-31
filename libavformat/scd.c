@@ -211,9 +211,6 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
 
     avpriv_set_pts_info(st, 64, 1, par->sample_rate);
 
-    if (av_dict_set_int(&st->metadata, "start", track->absolute_offset, 0) < 0)
-        return AVERROR(ENOMEM);
-
     if (av_dict_set_int(&st->metadata, "loop_start", track->loop_start, 0) < 0)
         return AVERROR(ENOMEM);
 
