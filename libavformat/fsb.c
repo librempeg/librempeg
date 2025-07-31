@@ -28,6 +28,7 @@
 #include "internal.h"
 
 typedef struct FSBStream {
+    int64_t name_offset;
     int64_t start_offset;
     int64_t stop_offset;
 } FSBStream;
@@ -291,9 +292,9 @@ static int fsb_read_header(AVFormatContext *s)
     } else if (version == 5) {
         uint64_t sample_mode;
         int64_t start_offset;
-        int sample_header_size;
-        int sample_data_size;
-        int name_table_size;
+        int64_t sample_header_size;
+        int64_t sample_data_size;
+        int64_t name_table_size;
         int sample_rate;
         int base_hsize;
         int channels;
@@ -503,6 +504,30 @@ static int fsb_read_header(AVFormatContext *s)
             }
 
             avpriv_set_pts_info(st, 64, 1, par->sample_rate);
+        }
+
+        avio_seek(pb, base_hsize + sample_header_size, SEEK_SET);
+
+        for (int si = 0; si < nb_streams; si++) {
+            FSBStream *fst = s->streams[si]->priv_data;
+
+            if (avio_feof(pb))
+                return AVERROR_EOF;
+
+            fst->name_offset  = base_hsize + sample_header_size;
+            fst->name_offset += avio_rl32(pb);
+        }
+
+        for (int si = 0; si < nb_streams; si++) {
+            AVStream *st = s->streams[si];
+            FSBStream *fst = st->priv_data;
+            char title[1025];
+
+            avio_seek(pb, fst->name_offset, SEEK_SET);
+
+            avio_get_str(pb, INT_MAX, title, sizeof(title));
+
+            av_dict_set(&st->metadata, "title", title, 0);
         }
     } else {
         av_assert0(0);
