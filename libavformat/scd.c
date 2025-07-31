@@ -100,15 +100,16 @@ static int scd_probe(const AVProbeData *p)
 
 static int scd_read_table(AVFormatContext *s, const int be, SCDOffsetTable *table)
 {
+    AVIOContext *pb = s->pb;
     int64_t ret;
 
-    if ((ret = avio_seek(s->pb, table->offset, SEEK_SET)) < 0)
+    if ((ret = avio_seek(pb, table->offset, SEEK_SET)) < 0)
         return ret;
 
     if ((table->entries = av_calloc(table->count, sizeof(uint32_t))) == NULL)
         return ret;
 
-    if ((ret = avio_read(s->pb, (unsigned char*)table->entries, table->count * sizeof(uint32_t))) < 0)
+    if ((ret = avio_read(pb, (unsigned char*)table->entries, table->count * sizeof(uint32_t))) < 0)
         return ret;
 
     for (size_t i = 0; i < table->count; i++)
@@ -154,6 +155,7 @@ static int scd_read_offsets(AVFormatContext *s, const int be)
 
 static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, const int be)
 {
+    AVIOContext *pb = s->pb;
     int64_t ret;
     uint32_t hoffset, chunk;
     AVStream *st;
@@ -163,10 +165,10 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
 
     hoffset = ctx->hdr.table1.entries[index];
 
-    if ((ret = avio_seek(s->pb, hoffset, SEEK_SET)) < 0)
+    if ((ret = avio_seek(pb, hoffset, SEEK_SET)) < 0)
         return ret;
 
-    if ((ret = avio_read(s->pb, buf, SCD_TRACK_HEADER_SIZE)) < 0)
+    if ((ret = avio_read(pb, buf, SCD_TRACK_HEADER_SIZE)) < 0)
         return ret;
 
     track->length       = be ? AV_RB32(buf +  0) : AV_RL32(buf +  0);
@@ -238,8 +240,8 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
     case SCD_TRACK_ID_XMA2:
         par->codec_id              = AV_CODEC_ID_XMA2;
         par->block_align           = 0x800;
-        avio_skip(s->pb, 18);
-        ret = ff_get_extradata(s, par, s->pb, 34);
+        avio_skip(pb, 18);
+        ret = ff_get_extradata(s, par, pb, 34);
         if (ret < 0)
             return ret;
 
@@ -247,25 +249,25 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
         break;
     case SCD_TRACK_ID_MS_ADPCM:
         par->codec_id              = AV_CODEC_ID_ADPCM_MS;
-        avio_skip(s->pb, 12);
-        par->block_align           = be ? avio_rb16(s->pb) : avio_rl16(s->pb);
+        avio_skip(pb, 12);
+        par->block_align           = be ? avio_rb16(pb) : avio_rl16(pb);
         if (par->block_align == 0)
             return AVERROR_INVALIDDATA;
         break;
     case SCD_TRACK_ID_ATRAC9:
         par->codec_id              = AV_CODEC_ID_ATRAC9;
-        chunk = avio_rb32(s->pb);
+        chunk = avio_rb32(pb);
         if (chunk == MKBETAG('M','A','R','K')) {
-            int size = be ? avio_rb32(s->pb) : avio_rl32(s->pb);
+            int size = be ? avio_rb32(pb) : avio_rl32(pb);
 
-            avio_skip(s->pb, size - 4);
+            avio_skip(pb, size - 4);
         }
-        par->block_align           = be ? avio_rb16(s->pb) : avio_rl16(s->pb);
-        avio_skip(s->pb, 2);
+        par->block_align           = be ? avio_rb16(pb) : avio_rl16(pb);
+        avio_skip(pb, 2);
         if (track->extradata_size < 8+12)
             return AVERROR_INVALIDDATA;
 
-        ret = ff_get_extradata(s, par, s->pb, 12);
+        ret = ff_get_extradata(s, par, pb, 12);
         if (ret < 0)
             return ret;
 
@@ -278,7 +280,7 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
         break;
     case SCD_TRACK_ID_OGG:
         par->codec_id              = AV_CODEC_ID_VORBIS;
-        ret = ff_get_extradata(s, par, s->pb, track->extradata_size);
+        ret = ff_get_extradata(s, par, pb, track->extradata_size);
         if (ret < 0)
             return ret;
 
@@ -294,12 +296,13 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
 
 static int scd_read_header(AVFormatContext *s)
 {
+    AVIOContext *pb = s->pb;
     SCDDemuxContext *ctx = s->priv_data;
     uint8_t buf[SCD_MIN_HEADER_SIZE];
     int64_t ret;
     int be = 0;
 
-    if ((ret = ffio_read_size(s->pb, buf, SCD_MIN_HEADER_SIZE)) < 0)
+    if ((ret = ffio_read_size(pb, buf, SCD_MIN_HEADER_SIZE)) < 0)
         return ret;
 
     ctx->hdr.magic       = AV_RB64(buf +  0);
@@ -320,7 +323,7 @@ static int scd_read_header(AVFormatContext *s)
     if (ctx->hdr.header_size < SCD_MIN_HEADER_SIZE)
         return AVERROR_INVALIDDATA;
 
-    if ((ret = avio_skip(s->pb, ctx->hdr.header_size - SCD_MIN_HEADER_SIZE)) < 0)
+    if ((ret = avio_skip(pb, ctx->hdr.header_size - SCD_MIN_HEADER_SIZE)) < 0)
         return ret;
 
     if ((ret = scd_read_offsets(s, be)) < 0)
@@ -338,7 +341,7 @@ static int scd_read_header(AVFormatContext *s)
     if (ctx->hdr.table1.count == 0)
         return 0;
 
-    if ((ret = avio_seek(s->pb, ctx->tracks[0].absolute_offset, SEEK_SET)) < 0)
+    if ((ret = avio_seek(pb, ctx->tracks[0].absolute_offset, SEEK_SET)) < 0)
         return ret;
 
     return 0;
@@ -347,6 +350,7 @@ static int scd_read_header(AVFormatContext *s)
 static int scd_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     SCDDemuxContext *ctx = s->priv_data;
+    AVIOContext *pb = s->pb;
     int64_t ret, track_end;
     AVCodecParameters *par;
     SCDTrackHeader *trk;
@@ -354,7 +358,7 @@ static int scd_read_packet(AVFormatContext *s, AVPacket *pkt)
     int size;
 
 redo:
-    current_pos = avio_tell(s->pb);
+    current_pos = avio_tell(pb);
     if (ctx->current_track >= ctx->hdr.table1.count)
         return AVERROR_EOF;
 
@@ -378,7 +382,7 @@ redo:
         goto redo;
     }
 
-    ret = av_get_packet(s->pb, pkt, size);
+    ret = av_get_packet(pb, pkt, size);
     if (ret == AVERROR_EOF) {
         return ret;
     } else if (ret < 0) {
