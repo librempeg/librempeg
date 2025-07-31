@@ -255,7 +255,7 @@ static int fsb_read_header(AVFormatContext *s)
             ret = ff_alloc_extradata(par, 34);
             if (ret < 0)
                 return ret;
-            memset(par->extradata, 0, 34);
+            memset(par->extradata, 0, par->extradata_size);
             AV_WL16(par->extradata, 1);
             sti->need_parsing = AVSTREAM_PARSE_FULL;
             break;
@@ -478,7 +478,7 @@ static int fsb_read_header(AVFormatContext *s)
                 ret = ff_alloc_extradata(par, 34);
                 if (ret < 0)
                     return ret;
-                memset(par->extradata, 0, 34);
+                memset(par->extradata, 0, par->extradata_size);
                 AV_WL16(par->extradata, 1);
                 sti->need_parsing = AVSTREAM_PARSE_FULL;
                 break;
