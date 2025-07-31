@@ -252,6 +252,7 @@ static const int8_t mtf_index_table[16] = {
 typedef struct ADPCMDecodeContext {
     ADPCMChannelStatus status[14];
     int table[14][16];
+    int start_skip;
     int vqa_version;                /**< VQA version. Used for ADPCM_IMA_WS */
     int has_status;                 /**< Status flag. Reset to 0 after a flush. */
 } ADPCMDecodeContext;
@@ -406,12 +407,16 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
             for (int n = 0; n < 16; n++)
                 c->table[ch][n] = sign_extend(AV_RB16(avctx->extradata + ch * 32 + n * 2), 16);
         }
+        if (avctx->extradata_size > 32 * avctx->ch_layout.nb_channels)
+            c->start_skip = avctx->extradata[32 * avctx->ch_layout.nb_channels];
         break;
     case AV_CODEC_ID_ADPCM_THP_LE:
         for (int ch = 0; ch < avctx->ch_layout.nb_channels && avctx->extradata; ch++) {
             for (int n = 0; n < 16; n++)
                 c->table[ch][n] = sign_extend(AV_RL16(avctx->extradata + ch * 32 + n * 2), 16);
         }
+        if (avctx->extradata_size > 32 * avctx->ch_layout.nb_channels)
+            c->start_skip = avctx->extradata[32 * avctx->ch_layout.nb_channels];
         break;
     default:
         break;
@@ -1220,7 +1225,8 @@ static int adpcm_sanyo_expand5(ADPCMChannelStatus *c, int bits)
  *                               returned is an approximation.
  */
 static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
-                          int buf_size, int *coded_samples, int *approx_nb_samples)
+                          int buf_size, int *coded_samples, int *approx_nb_samples,
+                          int64_t pts)
 {
     ADPCMDecodeContext *s = avctx->priv_data;
     int nb_samples        = 0;
@@ -1443,7 +1449,11 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_THP_LE:
     case AV_CODEC_ID_ADPCM_THP_SI:
         if (avctx->extradata) {
-            nb_samples = (buf_size / ch) / 8 * 14;
+            if (s->start_skip > 0 && pts == 0) {
+                nb_samples = ((buf_size - s->start_skip * ch) / ch) / 8 * 14;
+            } else {
+                nb_samples = (buf_size / ch) / 8 * 14;
+            }
             break;
         }
         has_coded_samples = 1;
@@ -1545,7 +1555,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     GetByteContext gb;
 
     bytestream2_init(&gb, buf, buf_size);
-    nb_samples = get_nb_samples(avctx, &gb, buf_size, &coded_samples, &approx_nb_samples);
+    nb_samples = get_nb_samples(avctx, &gb, buf_size, &coded_samples, &approx_nb_samples, avpkt->pts);
     if (nb_samples <= 0) {
         av_log(avctx, AV_LOG_ERROR, "invalid number of samples in packet\n");
         return AVERROR_INVALIDDATA;
@@ -2692,6 +2702,9 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
         for (int ch = 0; ch < channels; ch++) {
             samples = samples_p[ch];
+
+            if (avpkt->pts == 0 && c->start_skip > 0)
+                bytestream2_skip(&gb, c->start_skip);
 
             /* Read in every sample for this channel.  */
             for (int i = 0; i < (nb_samples + 13) / 14; i++) {
