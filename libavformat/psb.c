@@ -834,15 +834,15 @@ static int parse_psb_voice(PSBHeader *psb, PSBNode *nvoice)
     PSBNode nstream, nchans;
 
     psb->total_streams = psb_node_get_count(nvoice);
-    if (psb->target_stream == 0)
-        psb->target_stream = 1;
-    if (psb->total_streams <= 0 || psb->target_stream > psb->total_streams)
+    if (psb->target_stream < 0)
+        psb->target_stream = 0;
+    if (psb->total_streams <= 0 || psb->target_stream >= psb->total_streams)
         goto fail;
 
-    if (!psb_node_by_index(nvoice, psb->target_stream - 1, &nstream))
+    if (!psb_node_by_index(nvoice, psb->target_stream, &nstream))
         goto fail;
 
-    psb->voice = psb_node_get_key(nvoice, psb->target_stream - 1);
+    psb->voice = psb_node_get_key(nvoice, psb->target_stream);
 
     psb_node_by_key(&nstream, "channelList", &nchans);
     if (!parse_psb_channels(psb, &nchans))
