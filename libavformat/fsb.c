@@ -257,7 +257,7 @@ static int fsb_read_header(AVFormatContext *s)
                 return ret;
             memset(par->extradata, 0, par->extradata_size);
             AV_WL16(par->extradata, 1);
-            sti->need_parsing = AVSTREAM_PARSE_FULL;
+            sti->need_parsing = AVSTREAM_PARSE_FULL_RAW;
             break;
         case AV_CODEC_ID_ADPCM_THP:
             if (par->ch_layout.nb_channels > INT_MAX / 32)
@@ -480,7 +480,7 @@ static int fsb_read_header(AVFormatContext *s)
                     return ret;
                 memset(par->extradata, 0, par->extradata_size);
                 AV_WL16(par->extradata, 1);
-                sti->need_parsing = AVSTREAM_PARSE_FULL;
+                sti->need_parsing = AVSTREAM_PARSE_FULL_RAW;
                 break;
             case 0x0B:
                 par->codec_id = AV_CODEC_ID_MP3;
