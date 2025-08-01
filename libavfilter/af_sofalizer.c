@@ -737,7 +737,7 @@ static int load_data(AVFilterContext *ctx, int azim, int elev, float radius, int
     float *tx_in_r = NULL;
     float *data_ir_l = NULL;
     float *data_ir_r = NULL;
-    int offset = 0; /* used for faster pointer arithmetics in for-loop */
+    int offset = 0; /* used for faster pointer arithmetic in for-loop */
     int i, j, azim_orig = azim, elev_orig = elev;
     int ret = 0;
     int n_current;

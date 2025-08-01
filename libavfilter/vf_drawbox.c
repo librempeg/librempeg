@@ -449,7 +449,7 @@ static const AVOption drawbox_options[] = {
     { "t",         "set the box thickness",                        OFFSET(t_expr),    AV_OPT_TYPE_STRING, { .str="3" },       0, 0, FLAGS },
     { "replace",   "replace color & alpha",                        OFFSET(replace),   AV_OPT_TYPE_BOOL,   { .i64=0   },       0, 1, FLAGS },
     { "invert",    "invert color",                                 OFFSET(invert_color),AV_OPT_TYPE_BOOL, { .i64=0   },       0, 1, FLAGS },
-    { "box_source", "use datas from bounding box in side data",    OFFSET(box_source_string), AV_OPT_TYPE_STRING, { .str=NULL }, 0, 1, FLAGS },
+    { "box_source", "use data from bounding box in side data",     OFFSET(box_source_string), AV_OPT_TYPE_STRING, { .str=NULL }, 0, 1, FLAGS },
     { NULL }
 };
 

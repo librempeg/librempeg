@@ -2112,7 +2112,7 @@ retry:
         break;
     }
 
-    /* If nothing was sucessful, error out */
+    /* If nothing was successful, error out */
     if (ret < 0)
         return ret;
 

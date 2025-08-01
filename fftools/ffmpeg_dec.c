@@ -1635,7 +1635,7 @@ static int dec_open(DecoderPriv *dp, AVDictionary **dec_opts,
     if (o->flags & DECODER_FLAG_BITEXACT)
         dp->dec_ctx->flags |= AV_CODEC_FLAG_BITEXACT;
 
-    // we apply cropping outselves
+    // we apply cropping ourselves
     dp->dec_ctx->apply_cropping = 0;
 
     if ((ret = avcodec_open2(dp->dec_ctx, codec, NULL)) < 0) {
