@@ -40,7 +40,7 @@ static int fwse_probe(const AVProbeData *p)
         return 0;
     if (AV_RL32(p->buf+20) == 0)
         return 0;
-    if (AV_RL32(p->buf+24) <= 0)
+    if ((int32_t)AV_RL32(p->buf+24) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;

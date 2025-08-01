@@ -39,7 +39,7 @@ static int msnd_probe(const AVProbeData *p)
     if (AV_RL16(p->buf + 12) == 0)
         return 0;
 
-    if (AV_RL32(p->buf + 14) <= 0)
+    if (AV_RL32(p->buf + 14) == 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;

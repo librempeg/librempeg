@@ -56,7 +56,7 @@ static int sdx_probe(const AVProbeData *p)
         p->buf[n] != 32)
         return 0;
 
-    if (AV_RL32(p->buf + n + 1) <= 0)
+    if ((int32_t)AV_RL32(p->buf + n + 1) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
