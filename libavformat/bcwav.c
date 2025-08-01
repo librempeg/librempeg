@@ -176,7 +176,7 @@ static int read_header(AVFormatContext *s)
             st->codecpar->block_align = 128 * 2;
             break;
         case 2:
-            st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP_LE;
+            st->codecpar->codec_id = b->little_endian ? AV_CODEC_ID_ADPCM_NDSP_LE : AV_CODEC_ID_ADPCM_NDSP;
             st->codecpar->block_align = 8 * 8;
             break;
         }
@@ -208,22 +208,15 @@ static int read_header(AVFormatContext *s)
         }
     }
 
-    for (int ch = 0; ch < nb_channels; ch++) {
+    for (int ch = 0; ch < nb_channels && codec == 2; ch++) {
         AVStream *st = s->streams[ch];
         BCWAVStream *bc = st->priv_data;
         int ret;
 
         avio_seek(pb, bc->coef_offset, SEEK_SET);
-        ret = ff_alloc_extradata(st->codecpar, 32);
+        ret = ff_get_extradata(s, st->codecpar, pb, 32);
         if (ret < 0)
             return ret;
-
-        {
-            int16_t *dst = (int16_t *)st->codecpar->extradata;
-
-            for (int n = 0; n < 16; n++)
-                dst[n] = read16(s);
-        }
     }
 
     if (data_offset > avio_tell(pb)) {
