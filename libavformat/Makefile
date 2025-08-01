@@ -656,6 +656,7 @@ OBJS-$(CONFIG_SUP_DEMUXER)               += supdec.o
 OBJS-$(CONFIG_SUP_MUXER)                 += supenc.o
 OBJS-$(CONFIG_SVAG_DEMUXER)              += svag.o
 OBJS-$(CONFIG_SVS_DEMUXER)               += svs.o
+OBJS-$(CONFIG_SWAR_DEMUXER)              += swar.o
 OBJS-$(CONFIG_SWAV_DEMUXER)              += swav.o
 OBJS-$(CONFIG_SWF_DEMUXER)               += swfdec.o swf.o
 OBJS-$(CONFIG_SWF_MUXER)                 += swfenc.o swf.o

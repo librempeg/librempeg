@@ -517,6 +517,7 @@ extern const FFInputFormat  ff_sup_demuxer;
 extern const FFOutputFormat ff_sup_muxer;
 extern const FFInputFormat  ff_svag_demuxer;
 extern const FFInputFormat  ff_svs_demuxer;
+extern const FFInputFormat  ff_swar_demuxer;
 extern const FFInputFormat  ff_swav_demuxer;
 extern const FFInputFormat  ff_swf_demuxer;
 extern const FFOutputFormat ff_swf_muxer;
