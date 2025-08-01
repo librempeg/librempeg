@@ -73,6 +73,18 @@ static av_always_inline unsigned int read32(AVFormatContext *s)
         return avio_rb32(s->pb);
 }
 
+static int sort_streams(const void *a, const void *b)
+{
+    const AVStream *const *s1p = a;
+    const AVStream *const *s2p = b;
+    const AVStream *s1 = *s1p;
+    const AVStream *s2 = *s2p;
+    const BCWAVStream *bs1 = s1->priv_data;
+    const BCWAVStream *bs2 = s2->priv_data;
+
+    return FFDIFFSIGN(bs1->start_offset, bs2->start_offset);
+}
+
 static int read_header(AVFormatContext *s)
 {
     uint32_t info_offset = -1, data_offset = -1, duration;
@@ -225,6 +237,13 @@ static int read_header(AVFormatContext *s)
 
         avio_skip(pb, data_offset + 4LL - avio_tell(pb));
         bc->stop_offset = avio_tell(pb) + read32(s);
+    }
+
+    qsort(s->streams, s->nb_streams, sizeof(AVStream *), sort_streams);
+    for (int n = 0; n < s->nb_streams; n++) {
+        AVStream *st = s->streams[n];
+
+        st->index = n;
     }
 
     return 0;
