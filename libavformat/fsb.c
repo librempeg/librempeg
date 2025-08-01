@@ -43,13 +43,25 @@ static int fsb_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
+static int sort_streams(const void *a, const void *b)
+{
+    const AVStream *const *s1p = a;
+    const AVStream *const *s2p = b;
+    const AVStream *s1 = *s1p;
+    const AVStream *s2 = *s2p;
+    const FSBStream *fs1 = s1->priv_data;
+    const FSBStream *fs2 = s2->priv_data;
+
+    return FFDIFFSIGN(fs1->start_offset, fs2->start_offset);
+}
+
 static int fsb_read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     unsigned format, version, nb_streams;
     int minor_version, flags = 0;
-    int64_t offset;
     AVCodecParameters *par;
+    int64_t offset;
     FSBStream *fst;
     AVStream *st;
     FFStream *sti;
@@ -533,7 +545,14 @@ static int fsb_read_header(AVFormatContext *s)
         av_assert0(0);
     }
 
-    avio_skip(pb, offset - avio_tell(pb));
+    qsort(s->streams, s->nb_streams, sizeof(AVStream *), sort_streams);
+    for (int n = 0; n < s->nb_streams; n++) {
+        AVStream *st = s->streams[n];
+
+        st->index = n;
+    }
+
+    avio_seek(pb, offset, SEEK_SET);
 
     return 0;
 }
