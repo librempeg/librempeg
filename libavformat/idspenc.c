@@ -45,10 +45,9 @@ static int idsp_write_header(AVFormatContext *s)
     avio_wb32(pb, par->block_align / par->ch_layout.nb_channels);
 
     for (int ch = 0; ch < par->ch_layout.nb_channels; ch++) {
-        const int16_t *src = (const int16_t *)(par->extradata + 32*ch);
+        const uint8_t *src = par->extradata + 32*ch;
 
-        for (int n = 0; n < 16; n++)
-            avio_wb16(pb, src[n]);
+        avio_write(pb, src, 32);
         ffio_fill(pb, 0, 14);
     }
 
@@ -89,7 +88,7 @@ const FFOutputFormat ff_idsp_muxer = {
     .p.long_name      = NULL_IF_CONFIG_SMALL("IDSP (Inevitable Entertainment)"),
     .p.flags          = AVFMT_TS_NONSTRICT,
     .p.extensions     = "idsp",
-    .p.audio_codec    = AV_CODEC_ID_ADPCM_NDSP_LE,
+    .p.audio_codec    = AV_CODEC_ID_ADPCM_NDSP,
     .p.video_codec    = AV_CODEC_ID_NONE,
     .p.subtitle_codec = AV_CODEC_ID_NONE,
     .priv_data_size   = sizeof(IDSPMuxContext),
