@@ -393,14 +393,6 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     }
 
     switch (avctx->codec->id) {
-    case AV_CODEC_ID_ADPCM_THP:
-    case AV_CODEC_ID_ADPCM_THP_LE:
-        if (avctx->extradata_size > 0 &&
-            avctx->extradata_size < 32 * avctx->ch_layout.nb_channels) {
-            av_log(avctx, AV_LOG_ERROR, "Missing coeff table\n");
-            return AVERROR_INVALIDDATA;
-        }
-        break;
     case AV_CODEC_ID_ADPCM_NDSP:
     case AV_CODEC_ID_ADPCM_NDSP_LE:
     case AV_CODEC_ID_ADPCM_NDSP_SI:
@@ -412,7 +404,6 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     }
 
     switch (avctx->codec->id) {
-    case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_NDSP:
     case AV_CODEC_ID_ADPCM_NDSP_SI:
         for (int ch = 0; ch < avctx->ch_layout.nb_channels && avctx->extradata; ch++) {
@@ -423,7 +414,6 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
             c->start_skip = avctx->extradata[32 * avctx->ch_layout.nb_channels];
         break;
     case AV_CODEC_ID_ADPCM_NDSP_LE:
-    case AV_CODEC_ID_ADPCM_THP_LE:
         for (int ch = 0; ch < avctx->ch_layout.nb_channels && avctx->extradata; ch++) {
             for (int n = 0; n < 16; n++)
                 c->table[ch][n] = sign_extend(AV_RL16(avctx->extradata + ch * 32 + n * 2), 16);
