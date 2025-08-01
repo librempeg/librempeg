@@ -307,7 +307,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_IMA_DAT4:
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
-    case AV_CODEC_ID_ADPCM_THP_SI:
+    case AV_CODEC_ID_ADPCM_NDSP_SI:
         max_channels = 14;
         break;
     }
@@ -360,7 +360,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_TANTALUS:
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
-    case AV_CODEC_ID_ADPCM_THP_SI:
+    case AV_CODEC_ID_ADPCM_NDSP_SI:
     case AV_CODEC_ID_ADPCM_AFC:
     case AV_CODEC_ID_ADPCM_DTK:
     case AV_CODEC_ID_ADPCM_PSX:
@@ -391,9 +391,14 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     switch (avctx->codec->id) {
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
-    case AV_CODEC_ID_ADPCM_THP_SI:
         if (avctx->extradata_size > 0 &&
             avctx->extradata_size < 32 * avctx->ch_layout.nb_channels) {
+            av_log(avctx, AV_LOG_ERROR, "Missing coeff table\n");
+            return AVERROR_INVALIDDATA;
+        }
+        break;
+    case AV_CODEC_ID_ADPCM_NDSP_SI:
+        if (avctx->extradata_size < 32 * avctx->ch_layout.nb_channels) {
             av_log(avctx, AV_LOG_ERROR, "Missing coeff table\n");
             return AVERROR_INVALIDDATA;
         }
@@ -402,7 +407,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
 
     switch (avctx->codec->id) {
     case AV_CODEC_ID_ADPCM_THP:
-    case AV_CODEC_ID_ADPCM_THP_SI:
+    case AV_CODEC_ID_ADPCM_NDSP_SI:
         for (int ch = 0; ch < avctx->ch_layout.nb_channels && avctx->extradata; ch++) {
             for (int n = 0; n < 16; n++)
                 c->table[ch][n] = sign_extend(AV_RB16(avctx->extradata + ch * 32 + n * 2), 16);
@@ -1447,7 +1452,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         break;
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
-    case AV_CODEC_ID_ADPCM_THP_SI:
+    case AV_CODEC_ID_ADPCM_NDSP_SI:
         if (avctx->extradata) {
             if (s->start_skip > 0 && pts == 0) {
                 nb_samples = ((buf_size - s->start_skip * ch) / ch) / 8 * 14;
@@ -2741,7 +2746,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         break;
 #endif /* CONFIG_ADPCM_THP(_LE)_DECODER */
-    CASE(ADPCM_THP_SI,
+    CASE(ADPCM_NDSP_SI,
         for (int ch = 0; ch < channels; ch++) {
             uint8_t *src = avpkt->data;
             samples = samples_p[ch];
@@ -3324,6 +3329,7 @@ ADPCM_DECODER(ADPCM_IMA_XBOX,    sample_fmts_s16p, adpcm_ima_xbox,    "ADPCM IMA
 ADPCM_DECODER(ADPCM_MS,          sample_fmts_both, adpcm_ms,          "ADPCM Microsoft")
 ADPCM_DECODER(ADPCM_MTAF,        sample_fmts_s16p, adpcm_mtaf,        "ADPCM MTAF")
 ADPCM_DECODER(ADPCM_N64,         sample_fmts_s16p, adpcm_n64,         "ADPCM Silicon Graphics N64")
+ADPCM_DECODER(ADPCM_NDSP_SI,     sample_fmts_s16p, adpcm_ndsp_si,     "ADPCM Nintendo DSP (sub-interleave)")
 ADPCM_DECODER(ADPCM_PSX,         sample_fmts_s16p, adpcm_psx,         "ADPCM Playstation")
 ADPCM_DECODER(ADPCM_PSXC,        sample_fmts_s16p, adpcm_psxc,        "ADPCM Playstation C")
 ADPCM_DECODER(ADPCM_SANYO,       sample_fmts_s16p, adpcm_sanyo,       "ADPCM Sanyo")
@@ -3333,7 +3339,6 @@ ADPCM_DECODER(ADPCM_SBPRO_4,     sample_fmts_s16,  adpcm_sbpro_4,     "ADPCM Sou
 ADPCM_DECODER(ADPCM_SWF,         sample_fmts_s16,  adpcm_swf,         "ADPCM Shockwave Flash")
 ADPCM_DECODER(ADPCM_TANTALUS,    sample_fmts_s16p, adpcm_tantalus,    "ADPCM Tantalus")
 ADPCM_DECODER(ADPCM_THP_LE,      sample_fmts_s16p, adpcm_thp_le,      "ADPCM Nintendo THP (little-endian)")
-ADPCM_DECODER(ADPCM_THP_SI,      sample_fmts_s16p, adpcm_thp_si,      "ADPCM Nintendo THP (sub-interleave)")
 ADPCM_DECODER(ADPCM_THP,         sample_fmts_s16p, adpcm_thp,         "ADPCM Nintendo THP")
 ADPCM_DECODER(ADPCM_XA,          sample_fmts_s16p, adpcm_xa,          "ADPCM CDROM XA")
 ADPCM_DECODER(ADPCM_XMD,         sample_fmts_s16p, adpcm_xmd,         "ADPCM Konami XMD")

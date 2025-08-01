@@ -2813,10 +2813,10 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
     {
-        .id        = AV_CODEC_ID_ADPCM_THP_SI,
+        .id        = AV_CODEC_ID_ADPCM_NDSP_SI,
         .type      = AVMEDIA_TYPE_AUDIO,
-        .name      = "adpcm_thp_si",
-        .long_name = NULL_IF_CONFIG_SMALL("ADPCM Nintendo THP (sub-interleave)"),
+        .name      = "adpcm_ndsp_si",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM Nintendo DSP (sub-interleave)"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 

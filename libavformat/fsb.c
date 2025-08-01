@@ -182,7 +182,7 @@ static int fsb_read_header(AVFormatContext *s)
             if (flags & 0x00000010)
                 par->codec_id = AV_CODEC_ID_ADPCM_THP;
             else
-                par->codec_id = AV_CODEC_ID_ADPCM_THP_SI;
+                par->codec_id = AV_CODEC_ID_ADPCM_NDSP_SI;
 
             par->block_align = 8 * par->ch_layout.nb_channels;
             if (par->ch_layout.nb_channels > INT_MAX / 32)
@@ -233,7 +233,7 @@ static int fsb_read_header(AVFormatContext *s)
             if (flags & 0x00000010)
                 par->codec_id = AV_CODEC_ID_ADPCM_THP;
             else
-                par->codec_id = AV_CODEC_ID_ADPCM_THP_SI;
+                par->codec_id = AV_CODEC_ID_ADPCM_NDSP_SI;
         } else if (format & 0x00000200) {
             par->codec_id = AV_CODEC_ID_MP3;
         } else if (format & 0x00800000) {
@@ -482,7 +482,7 @@ static int fsb_read_header(AVFormatContext *s)
                 par->block_align = 256 * channels;
                 break;
             case 0x06:
-                par->codec_id = (flags & 0x02) ? AV_CODEC_ID_ADPCM_THP : AV_CODEC_ID_ADPCM_THP_SI;
+                par->codec_id = (flags & 0x02) ? AV_CODEC_ID_ADPCM_THP : AV_CODEC_ID_ADPCM_NDSP_SI;
                 par->block_align = 0x8 * channels;
                 break;
             case 0x0A:
