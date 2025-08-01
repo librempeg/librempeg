@@ -56,7 +56,8 @@ static av_cold int thp_encode_init(AVCodecContext *avctx)
     if (nb_channels > FF_ARRAY_ELEMS(c->chs))
         return AVERROR(EINVAL);
 
-    c->le = avctx->codec_id == AV_CODEC_ID_ADPCM_THP_LE;
+    c->le = avctx->codec_id == AV_CODEC_ID_ADPCM_THP_LE || avctx->codec_id == AV_CODEC_ID_ADPCM_NDSP_LE;
+    c->coded_nb_samples = avctx->codec_id == AV_CODEC_ID_ADPCM_THP || avctx->codec_id == AV_CODEC_ID_ADPCM_THP_LE;
 
     if ((avctx->frame_size % BLOCK_SAMPLES) > 0)
         avctx->frame_size = ((avctx->frame_size + BLOCK_SAMPLES-1) / BLOCK_SAMPLES) * BLOCK_SAMPLES;
@@ -239,7 +240,6 @@ static int thp_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 #define FLAGS AV_OPT_FLAG_ENCODING_PARAM | AV_OPT_FLAG_AUDIO_PARAM
 
 static const AVOption options[] = {
-    { "coded_nb_samples",  "", OFFSET(coded_nb_samples), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS },
     { "coeffs", "channel coefficients table", OFFSET(coeffs), AV_OPT_TYPE_BINARY,
         {.str="f80f00f8fc0700fcfe0300feff0100ffff0080ff7f00c0ff3f00e0ff1f00f0fff80f00f8fc0700fcfe0300feff0100ffff0080ff7f00c0ff3f00e0ff1f00f0ff"},
         .flags = FLAGS },
@@ -247,7 +247,7 @@ static const AVOption options[] = {
 };
 
 static const AVClass adpcm_thp_encoder_class = {
-    .class_name = "ADPCM THP encoder",
+    .class_name = "ADPCM THP/NDSP encoder",
     .option     = options,
     .version    = LIBAVUTIL_VERSION_INT,
 };
@@ -258,6 +258,7 @@ const FFCodec ff_adpcm_thp_encoder = {
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_ADPCM_THP,
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_SMALL_LAST_FRAME |
+                      AV_CODEC_CAP_SLICE_THREADS |
                       AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
     .priv_data_size = sizeof(THPContext),
     .p.priv_class   = &adpcm_thp_encoder_class,
@@ -272,6 +273,36 @@ const FFCodec ff_adpcm_thp_le_encoder = {
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_ADPCM_THP_LE,
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_SMALL_LAST_FRAME |
+                      AV_CODEC_CAP_SLICE_THREADS |
+                      AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
+    .priv_data_size = sizeof(THPContext),
+    .p.priv_class   = &adpcm_thp_encoder_class,
+    .init           = thp_encode_init,
+    FF_CODEC_ENCODE_CB(thp_encode_frame),
+    CODEC_SAMPLEFMTS(AV_SAMPLE_FMT_S16P),
+};
+
+const FFCodec ff_adpcm_ndsp_encoder = {
+    .p.name         = "adpcm_ndsp",
+    CODEC_LONG_NAME("ADPCM Nintendo DSP"),
+    .p.type         = AVMEDIA_TYPE_AUDIO,
+    .p.id           = AV_CODEC_ID_ADPCM_NDSP,
+    .p.capabilities = AV_CODEC_CAP_DR1 |
+                      AV_CODEC_CAP_SLICE_THREADS |
+                      AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
+    .priv_data_size = sizeof(THPContext),
+    .p.priv_class   = &adpcm_thp_encoder_class,
+    .init           = thp_encode_init,
+    FF_CODEC_ENCODE_CB(thp_encode_frame),
+    CODEC_SAMPLEFMTS(AV_SAMPLE_FMT_S16P),
+};
+
+const FFCodec ff_adpcm_ndsp_le_encoder = {
+    .p.name         = "adpcm_ndsp_le",
+    CODEC_LONG_NAME("ADPCM Nintendo DSP (little-endian)"),
+    .p.type         = AVMEDIA_TYPE_AUDIO,
+    .p.id           = AV_CODEC_ID_ADPCM_NDSP_LE,
+    .p.capabilities = AV_CODEC_CAP_DR1 |
                       AV_CODEC_CAP_SLICE_THREADS |
                       AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
     .priv_data_size = sizeof(THPContext),
