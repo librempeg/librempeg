@@ -307,6 +307,8 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_IMA_DAT4:
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
+    case AV_CODEC_ID_ADPCM_NDSP:
+    case AV_CODEC_ID_ADPCM_NDSP_LE:
     case AV_CODEC_ID_ADPCM_NDSP_SI:
         max_channels = 14;
         break;
@@ -360,6 +362,8 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_TANTALUS:
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
+    case AV_CODEC_ID_ADPCM_NDSP:
+    case AV_CODEC_ID_ADPCM_NDSP_LE:
     case AV_CODEC_ID_ADPCM_NDSP_SI:
     case AV_CODEC_ID_ADPCM_AFC:
     case AV_CODEC_ID_ADPCM_DTK:
@@ -397,6 +401,8 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
             return AVERROR_INVALIDDATA;
         }
         break;
+    case AV_CODEC_ID_ADPCM_NDSP:
+    case AV_CODEC_ID_ADPCM_NDSP_LE:
     case AV_CODEC_ID_ADPCM_NDSP_SI:
         if (avctx->extradata_size < 32 * avctx->ch_layout.nb_channels) {
             av_log(avctx, AV_LOG_ERROR, "Missing coeff table\n");
@@ -407,6 +413,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
 
     switch (avctx->codec->id) {
     case AV_CODEC_ID_ADPCM_THP:
+    case AV_CODEC_ID_ADPCM_NDSP:
     case AV_CODEC_ID_ADPCM_NDSP_SI:
         for (int ch = 0; ch < avctx->ch_layout.nb_channels && avctx->extradata; ch++) {
             for (int n = 0; n < 16; n++)
@@ -415,6 +422,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
         if (avctx->extradata_size > 32 * avctx->ch_layout.nb_channels)
             c->start_skip = avctx->extradata[32 * avctx->ch_layout.nb_channels];
         break;
+    case AV_CODEC_ID_ADPCM_NDSP_LE:
     case AV_CODEC_ID_ADPCM_THP_LE:
         for (int ch = 0; ch < avctx->ch_layout.nb_channels && avctx->extradata; ch++) {
             for (int n = 0; n < 16; n++)
@@ -1452,6 +1460,8 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         break;
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
+    case AV_CODEC_ID_ADPCM_NDSP:
+    case AV_CODEC_ID_ADPCM_NDSP_LE:
     case AV_CODEC_ID_ADPCM_NDSP_SI:
         if (avctx->extradata) {
             if (s->start_skip > 0 && pts == 0) {
@@ -2679,7 +2689,9 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         bytestream2_seek(&gb, 0, SEEK_END);
         ) /* End of CASE */
-#if CONFIG_ADPCM_THP_DECODER || CONFIG_ADPCM_THP_LE_DECODER
+#if CONFIG_ADPCM_NDSP_DECODER || CONFIG_ADPCM_NDSP_LE_DECODER || CONFIG_ADPCM_THP_DECODER || CONFIG_ADPCM_THP_LE_DECODER
+    case AV_CODEC_ID_ADPCM_NDSP:
+    case AV_CODEC_ID_ADPCM_NDSP_LE:
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
 #define THP_GET16(g) \
@@ -2745,7 +2757,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
         }
         break;
-#endif /* CONFIG_ADPCM_THP(_LE)_DECODER */
+#endif /* CONFIG_ADPCM_(NDSP/THP)(_LE)_DECODER */
     CASE(ADPCM_NDSP_SI,
         for (int ch = 0; ch < channels; ch++) {
             uint8_t *src = avpkt->data;
@@ -3329,6 +3341,8 @@ ADPCM_DECODER(ADPCM_IMA_XBOX,    sample_fmts_s16p, adpcm_ima_xbox,    "ADPCM IMA
 ADPCM_DECODER(ADPCM_MS,          sample_fmts_both, adpcm_ms,          "ADPCM Microsoft")
 ADPCM_DECODER(ADPCM_MTAF,        sample_fmts_s16p, adpcm_mtaf,        "ADPCM MTAF")
 ADPCM_DECODER(ADPCM_N64,         sample_fmts_s16p, adpcm_n64,         "ADPCM Silicon Graphics N64")
+ADPCM_DECODER(ADPCM_NDSP,        sample_fmts_s16p, adpcm_ndsp,        "ADPCM Nintendo DSP")
+ADPCM_DECODER(ADPCM_NDSP_LE,     sample_fmts_s16p, adpcm_ndsp_le,     "ADPCM Nintendo DSP (little-endian)")
 ADPCM_DECODER(ADPCM_NDSP_SI,     sample_fmts_s16p, adpcm_ndsp_si,     "ADPCM Nintendo DSP (sub-interleave)")
 ADPCM_DECODER(ADPCM_PSX,         sample_fmts_s16p, adpcm_psx,         "ADPCM Playstation")
 ADPCM_DECODER(ADPCM_PSXC,        sample_fmts_s16p, adpcm_psxc,        "ADPCM Playstation C")

@@ -151,7 +151,7 @@ static int read_header(AVFormatContext *s)
         header_size - 0x30 * par->ch_layout.nb_channels + nb_metadata * 0x14;
 
     st->start_time = 0;
-    par->codec_id = AV_CODEC_ID_ADPCM_THP_LE;
+    par->codec_id = AV_CODEC_ID_ADPCM_NDSP_LE;
 
     ret = ff_alloc_extradata(st->codecpar, 32 * par->ch_layout.nb_channels);
     if (ret < 0)

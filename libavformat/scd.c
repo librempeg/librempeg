@@ -43,10 +43,10 @@
 #define SCD_TRACK_ID_PCM_LE     1
 #define SCD_TRACK_ID_OGG        6
 #define SCD_TRACK_ID_MP3        7
-#define SCD_TRACK_ID_ADPCMTHP  10
+#define SCD_TRACK_ID_ADPCMNDSP 10
 #define SCD_TRACK_ID_XMA2      11
 #define SCD_TRACK_ID_MS_ADPCM  12
-#define SCD_TRACK_ID_ADPCM_THP 21
+#define SCD_TRACK_ID_ADPCM_NDSP 21
 #define SCD_TRACK_ID_ATRAC9    22
 #define SCD_TRACK_ID_DUMMY     0xffffffffu
 
@@ -258,9 +258,9 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
         if (par->block_align == 0)
             return AVERROR_INVALIDDATA;
         break;
-    case SCD_TRACK_ID_ADPCM_THP:
-    case SCD_TRACK_ID_ADPCMTHP:
-        par->codec_id              = be ? AV_CODEC_ID_ADPCM_THP : AV_CODEC_ID_ADPCM_THP_LE;
+    case SCD_TRACK_ID_ADPCM_NDSP:
+    case SCD_TRACK_ID_ADPCMNDSP:
+        par->codec_id              = be ? AV_CODEC_ID_ADPCM_NDSP : AV_CODEC_ID_ADPCM_NDSP_LE;
         par->block_align           = 0x800 * par->ch_layout.nb_channels;
 
         avio_seek(pb, track->absolute_offset + 0x1c, SEEK_SET);

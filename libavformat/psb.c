@@ -927,7 +927,7 @@ static int prepare_codec(AVFormatContext *s, PSBHeader *psb)
         }
 
         if (strcmp(ext, ".adpcm") == 0) {
-            psb->codec = AV_CODEC_ID_ADPCM_THP_LE;
+            psb->codec = AV_CODEC_ID_ADPCM_NDSP_LE;
 
             psb->channels = psb->layers;
 

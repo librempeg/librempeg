@@ -54,7 +54,7 @@ static int read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_THP;
+    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP;
     st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
     if (st->codecpar->ch_layout.nb_channels <= 0)
         return AVERROR_INVALIDDATA;

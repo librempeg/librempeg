@@ -56,7 +56,7 @@ static int halpst_read_header(AVFormatContext *s)
     par = st->codecpar;
 
     par->codec_type = AVMEDIA_TYPE_AUDIO;
-    par->codec_id   = AV_CODEC_ID_ADPCM_THP;
+    par->codec_id   = AV_CODEC_ID_ADPCM_NDSP;
     par->sample_rate = avio_rb32(pb);
     par->ch_layout.nb_channels = avio_rb32(pb);
     if (par->sample_rate <= 0 ||

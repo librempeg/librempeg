@@ -176,7 +176,7 @@ static int read_header(AVFormatContext *s)
             st->codecpar->block_align = 128 * 2;
             break;
         case 2:
-            st->codecpar->codec_id = AV_CODEC_ID_ADPCM_THP_LE;
+            st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP_LE;
             st->codecpar->block_align = 8 * 8;
             break;
         }

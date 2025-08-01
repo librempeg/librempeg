@@ -59,7 +59,7 @@ static int idsp_read_header(AVFormatContext *s)
     st->start_time = 0;
     st->duration = avio_rb32(pb);
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_THP_LE;
+    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP_LE;
     st->codecpar->sample_rate = avio_rb32(pb);
     if (st->codecpar->sample_rate <= 0)
         return AVERROR_INVALIDDATA;

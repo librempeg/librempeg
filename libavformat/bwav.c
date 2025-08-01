@@ -67,7 +67,7 @@ static int read_header(AVFormatContext *s)
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE_PLANAR;
         break;
     case 1:
-        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_THP_LE;
+        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP_LE;
         break;
     default:
         avpriv_request_sample(s, "codec %d", codec);

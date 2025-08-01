@@ -27,8 +27,8 @@
 
 static const AVCodecTag rsd_tags[] = {
     { AV_CODEC_ID_ADPCM_PSX,       MKTAG('V','A','G',' ') },
-    { AV_CODEC_ID_ADPCM_THP_LE,    MKTAG('G','A','D','P') },
-    { AV_CODEC_ID_ADPCM_THP,       MKTAG('W','A','D','P') },
+    { AV_CODEC_ID_ADPCM_NDSP_LE,   MKTAG('G','A','D','P') },
+    { AV_CODEC_ID_ADPCM_NDSP,      MKTAG('W','A','D','P') },
     { AV_CODEC_ID_ADPCM_IMA_RAD,   MKTAG('R','A','D','P') },
     { AV_CODEC_ID_ADPCM_IMA_WAV,   MKTAG('X','A','D','P') },
     { AV_CODEC_ID_PCM_S16BE,       MKTAG('P','C','M','B') },
@@ -114,7 +114,7 @@ static int rsd_read_header(AVFormatContext *s)
         par->bits_per_coded_sample = 4;
         par->block_align = 36 * par->ch_layout.nb_channels;
         break;
-    case AV_CODEC_ID_ADPCM_THP_LE:
+    case AV_CODEC_ID_ADPCM_NDSP_LE:
         /* RSD3GADP is mono, so only alloc enough memory
            to store the coeff table for a single channel. */
 
@@ -123,7 +123,7 @@ static int rsd_read_header(AVFormatContext *s)
         if ((ret = ff_get_extradata(s, par, s->pb, 32)) < 0)
             return ret;
         break;
-    case AV_CODEC_ID_ADPCM_THP:
+    case AV_CODEC_ID_ADPCM_NDSP:
         par->block_align = 8 * par->ch_layout.nb_channels;
         avio_skip(s->pb, 0x1A4 - avio_tell(s->pb));
 
@@ -155,10 +155,10 @@ static int rsd_read_header(AVFormatContext *s)
             case AV_CODEC_ID_ADPCM_PSX:
             case AV_CODEC_ID_ADPCM_IMA_RAD:
             case AV_CODEC_ID_ADPCM_IMA_WAV:
-            case AV_CODEC_ID_ADPCM_THP_LE:
+            case AV_CODEC_ID_ADPCM_NDSP_LE:
                 st->duration = av_get_audio_frame_duration2(par, remaining - start);
                 break;
-            case AV_CODEC_ID_ADPCM_THP:
+            case AV_CODEC_ID_ADPCM_NDSP:
                 st->duration = (remaining - start) / (8 * par->ch_layout.nb_channels) * 14;
                 break;
             case AV_CODEC_ID_PCM_S16LE:

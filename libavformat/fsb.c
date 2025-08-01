@@ -180,7 +180,7 @@ static int fsb_read_header(AVFormatContext *s)
             par->block_align = 16 * par->ch_layout.nb_channels;
         } else if (format & 0x02000000) {
             if (flags & 0x00000010)
-                par->codec_id = AV_CODEC_ID_ADPCM_THP;
+                par->codec_id = AV_CODEC_ID_ADPCM_NDSP;
             else
                 par->codec_id = AV_CODEC_ID_ADPCM_NDSP_SI;
 
@@ -231,7 +231,7 @@ static int fsb_read_header(AVFormatContext *s)
             par->codec_id = AV_CODEC_ID_XMA2;
         } else if (format & 0x02000000) {
             if (flags & 0x00000010)
-                par->codec_id = AV_CODEC_ID_ADPCM_THP;
+                par->codec_id = AV_CODEC_ID_ADPCM_NDSP;
             else
                 par->codec_id = AV_CODEC_ID_ADPCM_NDSP_SI;
         } else if (format & 0x00000200) {
@@ -272,7 +272,7 @@ static int fsb_read_header(AVFormatContext *s)
             AV_WL16(par->extradata, 1);
             sti->need_parsing = AVSTREAM_PARSE_FULL_RAW;
             break;
-        case AV_CODEC_ID_ADPCM_THP:
+        case AV_CODEC_ID_ADPCM_NDSP:
             if (par->ch_layout.nb_channels > INT_MAX / 32)
                 return AVERROR_INVALIDDATA;
             ret = ff_alloc_extradata(par, 32 * par->ch_layout.nb_channels);
@@ -482,7 +482,7 @@ static int fsb_read_header(AVFormatContext *s)
                 par->block_align = 256 * channels;
                 break;
             case 0x06:
-                par->codec_id = (flags & 0x02) ? AV_CODEC_ID_ADPCM_THP : AV_CODEC_ID_ADPCM_NDSP_SI;
+                par->codec_id = (flags & 0x02) ? AV_CODEC_ID_ADPCM_NDSP : AV_CODEC_ID_ADPCM_NDSP_SI;
                 par->block_align = 0x8 * channels;
                 break;
             case 0x0A:

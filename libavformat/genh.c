@@ -102,7 +102,7 @@ static int genh_read_header(AVFormatContext *s)
              AV_WL16(st->codecpar->extradata, 3);
              st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;     break;
     case 10: st->codecpar->codec_id = AV_CODEC_ID_ADPCM_AICA;       break;
-    case 12: st->codecpar->codec_id = AV_CODEC_ID_ADPCM_THP;        break;
+    case 12: st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP;       break;
     case 13: st->codecpar->codec_id = AV_CODEC_ID_PCM_U8;           break;
     case 17: st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_QT;     break;
     default:
@@ -126,7 +126,7 @@ static int genh_read_header(AVFormatContext *s)
     coef_splitted[0] = avio_rl32(s->pb);
     coef_splitted[1] = avio_rl32(s->pb);
 
-    if (st->codecpar->codec_id == AV_CODEC_ID_ADPCM_THP) {
+    if (st->codecpar->codec_id == AV_CODEC_ID_ADPCM_NDSP) {
         if (st->codecpar->ch_layout.nb_channels > 2) {
             avpriv_request_sample(s, "channels %d>2", st->codecpar->ch_layout.nb_channels);
             return AVERROR_PATCHWELCOME;
@@ -168,7 +168,7 @@ static int genh_read_packet(AVFormatContext *s, AVPacket *pkt)
     GENHDemuxContext *c = s->priv_data;
     int ret;
 
-    if (c->dsp_int_type == 1 && par->codec_id == AV_CODEC_ID_ADPCM_THP &&
+    if (c->dsp_int_type == 1 && par->codec_id == AV_CODEC_ID_ADPCM_NDSP &&
         par->ch_layout.nb_channels > 1) {
         int i, ch;
 

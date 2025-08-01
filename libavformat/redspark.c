@@ -93,7 +93,7 @@ static int redspark_read_header(AVFormatContext *s)
         }
     }
 
-    par->codec_id   = encrypted ? AV_CODEC_ID_ADPCM_THP : AV_CODEC_ID_ADPCM_THP_LE;
+    par->codec_id   = encrypted ? AV_CODEC_ID_ADPCM_NDSP : AV_CODEC_ID_ADPCM_NDSP_LE;
     par->codec_type = AVMEDIA_TYPE_AUDIO;
 
     bytestream2_init(&gbc, header, HEADER_SIZE);
