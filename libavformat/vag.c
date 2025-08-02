@@ -20,13 +20,15 @@
  */
 
 #include "libavutil/channel_layout.h"
+#include "libavutil/intreadwrite.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
 
 static int vag_probe(const AVProbeData *p)
 {
-    if (memcmp(p->buf, "VAGp\0\0\0", 7))
+    if (memcmp(p->buf, "VAGp\0\0\0", 7) &&
+        AV_RB32(p->buf) != MKBETAG('V','A','G','2'))
         return 0;
 
     return AVPROBE_SCORE_MAX;
@@ -34,33 +36,40 @@ static int vag_probe(const AVProbeData *p)
 
 static int vag_read_header(AVFormatContext *s)
 {
+    AVIOContext *pb = s->pb;
+    uint32_t type;
     AVStream *st;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(s->pb, 4);
+    type = avio_rb32(pb);
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_PSX;
-    st->codecpar->ch_layout.nb_channels = 1 + (avio_rb32(s->pb) == 0x00000004);
-    avio_skip(s->pb, 4);
+    st->codecpar->ch_layout.nb_channels = 1 + (avio_rb32(pb) == 0x00000004);
+    avio_skip(pb, 4);
     if (st->codecpar->ch_layout.nb_channels > 1) {
-        st->duration       = avio_rb32(s->pb);
+        st->duration = avio_rb32(pb);
     } else {
-        st->duration       = avio_rb32(s->pb) / 16 * 28;
+        st->duration = avio_rb32(pb) / 16 * 28;
     }
-    st->codecpar->sample_rate = avio_rb32(s->pb);
+    st->codecpar->sample_rate = avio_rb32(pb);
     if (st->codecpar->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
-    avio_seek(s->pb, 0x1000, SEEK_SET);
-    if (avio_rl32(s->pb) == MKTAG('V','A','G','p')) {
+    if (type == MKBETAG('V','A','G','p'))
+        avio_seek(pb, 0x1000, SEEK_SET);
+    if (type == MKBETAG('V','A','G','2')) {
+        st->codecpar->ch_layout.nb_channels = 2;
+        st->codecpar->block_align = 0x800 * st->codecpar->ch_layout.nb_channels;
+        avio_seek(pb, 0x40, SEEK_SET);
+    } else if (avio_rl32(pb) == MKTAG('V','A','G','p')) {
         st->codecpar->block_align = 0x1000 * st->codecpar->ch_layout.nb_channels;
-        avio_seek(s->pb, 0, SEEK_SET);
+        avio_seek(pb, 0, SEEK_SET);
         st->duration = st->duration / 16 * 28;
     } else {
         st->codecpar->block_align = 16 * st->codecpar->ch_layout.nb_channels;
-        avio_seek(s->pb, st->codecpar->ch_layout.nb_channels > 1 ? 0x80 : 0x30, SEEK_SET);
+        avio_seek(pb, st->codecpar->ch_layout.nb_channels > 1 ? 0x80 : 0x30, SEEK_SET);
     }
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
@@ -70,8 +79,9 @@ static int vag_read_header(AVFormatContext *s)
 static int vag_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
+    AVIOContext *pb = s->pb;
 
-    return av_get_packet(s->pb, pkt, par->block_align);
+    return av_get_packet(pb, pkt, par->block_align);
 }
 
 const FFInputFormat ff_vag_demuxer = {
