@@ -153,7 +153,7 @@ static int agsc_read_header(AVFormatContext *s)
         if (avio_rb16(pb) != 0x3c00)
             return AVERROR_INVALIDDATA;
         st->codecpar->sample_rate = avio_rb16(pb);
-        st->nb_frames = avio_rb32(pb);
+        st->duration = avio_rb32(pb);
         st->codecpar->block_align = 512;
         if (i == (nb_streams - 1))
             ast->end_offset = data_offset + data_size;
@@ -169,6 +169,7 @@ static int agsc_read_header(AVFormatContext *s)
             av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
             av_dict_set_int(&st->metadata, "loop_end", loop_end, 0);
         }
+        avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
         coefs_offset = avio_rb32(pb) + head_offset;
         if (coefs_offset < min_coefs_offset)
