@@ -118,6 +118,8 @@ static int agsc_read_header(AVFormatContext *s)
 
         head_offset = avio_tell(pb) + unk1_size + unk2_size;
         data_offset = head_offset + head_size;
+    } else {
+        data_size = 0;
     }
 
     if (data_size == 0 || head_size < 0x48) {
