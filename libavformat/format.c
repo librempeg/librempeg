@@ -254,12 +254,15 @@ int av_probe_input_buffer2(AVIOContext *pb, const AVInputFormat **fmt,
                            const char *filename, void *logctx,
                            unsigned int offset, unsigned int max_probe_size)
 {
-    AVProbeData pd = { filename ? filename : "" };
+    AVProbeData pd = { 0 };
     uint8_t *buf = NULL;
     int ret = 0, probe_size, buf_offset = 0;
     int score = 0;
     int ret2;
     int eof = 0;
+
+    if (filename)
+        pd.filename = filename;
 
     if (!max_probe_size)
         max_probe_size = PROBE_BUF_MAX;
