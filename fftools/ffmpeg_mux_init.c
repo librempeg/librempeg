@@ -3307,6 +3307,10 @@ int of_open(const OptionsContext *o, const char *filename, Scheduler *sch)
     }
     mux->fc = oc;
 
+    err = av_opt_set_dict(oc, &o->g->format_opts);
+    if (err < 0)
+        return err;
+
     av_strlcat(mux->log_name, "/",               sizeof(mux->log_name));
     av_strlcat(mux->log_name, oc->oformat->name, sizeof(mux->log_name));
 
