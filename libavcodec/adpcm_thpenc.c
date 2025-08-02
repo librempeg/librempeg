@@ -104,7 +104,7 @@ static av_cold int thp_encode_init(AVCodecContext *avctx)
 static inline void inner_product_merge(tvec vec_out, const int16_t pcm[14])
 {
     for (int i = 0; i <= 2; i++) {
-        vec_out[i] = 0.0;
+        vec_out[i] = 0;
 
         for (int x = 0; x < 14; x++)
             vec_out[i] -= pcm[x-i] * pcm[x];
@@ -115,7 +115,7 @@ static inline void outer_product_merge(tvec out[3], const int16_t pcm[14])
 {
     for (int x = 1; x <= 2; x++) {
         for (int y = 1; y <= 2; y++) {
-            out[x][y] = 0.0;
+            out[x][y] = 0;
 
             for (int z = 0; z < 14; z++)
                 out[x][y] += pcm[z-x] * pcm[z-y];
@@ -259,7 +259,7 @@ static void biderectional_filter(tvec mtx[3], int *vecIdxs, tvec vec_out)
         tmp = vec_out[index];
         vec_out[index] = vec_out[i];
         if (x != 0) {
-            for (int y=x; y <= i-1; y++)
+            for (int y = x; y <= i-1; y++)
                 tmp -= vec_out[y] * mtx[i][y];
         } else if (tmp != 0.0) {
             x = i;
@@ -270,7 +270,7 @@ static void biderectional_filter(tvec mtx[3], int *vecIdxs, tvec vec_out)
     for (int i = 2; i > 0; i--) {
         tmp = vec_out[i];
 
-        for (int y= i+1; y <= 2; y++)
+        for (int y = i + 1; y <= 2; y++)
             tmp -= vec_out[y] * mtx[i][y];
         vec_out[i] = tmp / mtx[i][i];
     }
@@ -425,9 +425,9 @@ static int thp_correlate(THPChannel *chs,
                          const int16_t *samples, const int nb_samples)
 {
     int16_t *input = chs->input;
-    int vecIdxs[3];
-    tvec mtx[3];
-    tvec vec1;
+    int vecIdxs[3] = { 0 };
+    tvec mtx[3] = { 0 };
+    tvec vec1 = { 0 };
 
     for (int z = 0; z < 2; z++)
         input[z] = input[BLOCK_SAMPLES+z];
