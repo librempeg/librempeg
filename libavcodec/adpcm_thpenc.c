@@ -70,13 +70,15 @@ static av_cold int thp_encode_init(AVCodecContext *avctx)
         if (!avctx->extradata)
             return AVERROR(ENOMEM);
         avctx->extradata_size = nb_channels * 32;
+    }
 
-        for (int ch = 0; ch < nb_channels; ch++) {
-            if (c->coeffs_len >= 32 * nb_channels) {
-                for (int n = 0; n < 16; n++)
-                    c->chs[ch].table[n] = sign_extend(AV_RL16(c->coeffs + n*2 + 32*ch), 16);
-            }
+    for (int ch = 0; ch < nb_channels; ch++) {
+        if (c->coeffs_len >= 32 * nb_channels) {
+            for (int n = 0; n < 16; n++)
+                c->chs[ch].table[n] = sign_extend(AV_RL16(c->coeffs + n*2 + 32*ch), 16);
+        }
 
+        if (!c->coded_nb_samples) {
             if (c->le) {
                 for (int n = 0; n < 16; n++)
                     AV_WL16(avctx->extradata + n*2 + 32*ch, c->chs[ch].table[n]);
