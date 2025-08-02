@@ -3438,7 +3438,7 @@ static int filter_thread(void *arg)
                                           &input_idx, fgt.frame);
         if (input_status == AVERROR_EOF) {
             av_log(fg, AV_LOG_VERBOSE, "Filtering thread received EOF\n");
-            if (fgp->sch_idx > 0)
+            if (fgp->sch_idx > 0 || exit_on_error)
                 break;
 
             input_status = 0;
