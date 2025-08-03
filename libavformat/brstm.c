@@ -102,7 +102,7 @@ static av_always_inline unsigned int read32(AVFormatContext *s)
 static int read_header(AVFormatContext *s)
 {
     BRSTMDemuxContext *b = s->priv_data;
-    int bom, major, minor, codec, chunk;
+    int bom, major, minor, codec, orig_codec, chunk;
     int64_t h1offset, pos, toffset;
     uint32_t size, asize, start = 0;
     AVIOContext *pb = s->pb;
@@ -195,7 +195,7 @@ static int read_header(AVFormatContext *s)
         return AVERROR_INVALIDDATA;
 
     avio_skip(pb, pos + h1offset + 8 - avio_tell(pb));
-    codec = avio_r8(pb);
+    orig_codec = codec = avio_r8(pb);
 
     switch (codec) {
     case 0: codec = AV_CODEC_ID_PCM_S8_PLANAR;    break;
@@ -354,7 +354,7 @@ static int read_header(AVFormatContext *s)
             if (!bfstm && (major != 1 || minor))
                 avpriv_request_sample(s, "Version %d.%d", major, minor);
 
-            if (b->adpc)
+            if (b->adpc || (orig_codec != 2))
                 return 0;
 
             avio_skip(pb, size);
