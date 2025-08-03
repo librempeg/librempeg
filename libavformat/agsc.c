@@ -209,9 +209,7 @@ static int agsc_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         pos = avio_tell(pb);
         if (pos >= ast->start_offset && pos < ast->end_offset) {
-            block_size = ast->end_offset - pos;
-            if (block_size < st->codecpar->block_align)
-                block_size = st->codecpar->block_align;
+            block_size = FFMIN(ast->end_offset - pos, st->codecpar->block_align);
             ret = av_get_packet(pb, pkt, block_size);
             pkt->pos = pos;
             pkt->stream_index = st->index;
