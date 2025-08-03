@@ -2033,7 +2033,7 @@ negotiate the most appropriate format to minimize conversions.
 It accepts the following parameters:
 @table @option
 
-@item sample_fmts, f
+@item sample_formats, f
 A '|'-separated list of requested sample formats.
 
 @item sample_rates, r
@@ -2050,7 +2050,7 @@ If a parameter is omitted, all values are allowed.
 
 Force the output to either unsigned 8-bit or signed 16-bit stereo
 @example
-aformat=sample_fmts=u8|s16:channel_layouts=stereo
+aformat=sample_formats=u8|s16:channel_layouts=stereo
 @end example
 
 @section afreqshift
@@ -14496,9 +14496,9 @@ the next filter.
 It accepts the following parameters:
 @table @option
 
-@item pix_fmts
+@item pixel_formats
 A '|'-separated list of pixel format names, such as
-"pix_fmts=yuv420p|monow|rgb24".
+"pixel_formats=yuv420p|monow|rgb24".
 
 @item color_spaces
 A '|'-separated list of color space names, such as
@@ -14516,12 +14516,12 @@ A '|'-separated list of color range names, such as
 @item
 Convert the input video to the @var{yuv420p} format
 @example
-format=pix_fmts=yuv420p
+format=pixel_formats=yuv420p
 @end example
 
 Convert the input video to any of the formats in the list
 @example
-format=pix_fmts=yuv420p|yuv444p|yuv410p
+format=pixel_formats=yuv420p|yuv444p|yuv410p
 @end example
 @end itemize
 
@@ -18512,9 +18512,9 @@ input to the next filter.
 It accepts the following parameters:
 @table @option
 
-@item pix_fmts
+@item pixel_formats
 A '|'-separated list of pixel format names, such as
-pix_fmts=yuv420p|monow|rgb24".
+pixel_formats=yuv420p|monow|rgb24".
 
 @end table
 
@@ -18525,7 +18525,7 @@ pix_fmts=yuv420p|monow|rgb24".
 Force libavfilter to use a format different from @var{yuv420p} for the
 input to the vflip filter:
 @example
-noformat=pix_fmts=yuv420p,vflip
+noformat=pixel_formats=yuv420p,vflip
 @end example
 
 @item
