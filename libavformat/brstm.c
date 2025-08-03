@@ -338,11 +338,11 @@ static int read_header(AVFormatContext *s)
                 }
                 avio_skip(pb, size - asize);
             }
+            if (b->data_start)
+                return avio_seek(pb, b->data_start, SEEK_SET);
             break;
         case MKTAG('D','A','T','A'):
-            if ((start < avio_tell(pb)) ||
-                (!b->adpc && (codec == AV_CODEC_ID_ADPCM_THP ||
-                              codec == AV_CODEC_ID_ADPCM_THP_LE)))
+            if (start < avio_tell(pb))
                 return AVERROR_INVALIDDATA;
             avio_skip(pb, start - avio_tell(pb));
 
@@ -354,7 +354,11 @@ static int read_header(AVFormatContext *s)
             if (!bfstm && (major != 1 || minor))
                 avpriv_request_sample(s, "Version %d.%d", major, minor);
 
-            return 0;
+            if (b->adpc)
+                return 0;
+
+            avio_skip(pb, size);
+            break;
         default:
             av_log(s, AV_LOG_WARNING, "skipping unknown chunk: %X\n", chunk);
 skip:
