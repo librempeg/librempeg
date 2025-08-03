@@ -71,6 +71,7 @@ static int read_header(AVFormatContext *s)
 
     if (avio_rb16(pb) != 0x166)
         return AVERROR_INVALIDDATA;
+    st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_XMA2;
     st->codecpar->ch_layout.nb_channels = avio_rb16(pb);
