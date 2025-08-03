@@ -28,6 +28,7 @@
 #include "avio_internal.h"
 
 typedef struct BRSTMMuxContext {
+    int codec;
     int nb_channels;
 
     int64_t stop_offset;
@@ -60,6 +61,9 @@ typedef struct BRSTMMuxContext {
     uint8_t track_rchannel_id[8];
     int64_t head2_track_info_offsets[8];
     int64_t head3_ch_info_offsets[16];
+    int64_t adpcm_ch_coeff_offsets[16];
+
+    uint8_t table[16 * 32];
 } BRSTMMuxContext;
 
 static void brstm_w8(AVIOContext *pb, uint8_t value, const int64_t off)
@@ -113,9 +117,10 @@ static int brstm_write_header(AVFormatContext *s)
     if (par->sample_rate > 65535)
         return AVERROR(EINVAL);
 
-    if (par->ch_layout.nb_channels > 255)
+    if (!par->ch_layout.nb_channels || par->ch_layout.nb_channels > 16)
         return AVERROR(EINVAL);
     r->nb_channels = par->ch_layout.nb_channels;
+    r->codec = codec;
 
     avio_wb32(pb, MKBETAG('R','S','T','M'));
     avio_wb16(pb, 0xFEFF);
@@ -198,17 +203,17 @@ static int brstm_write_header(AVFormatContext *s)
         brstm_w32(pb, 0x0, avio_tell(pb)); // offset to channel information, will be written later from head3_ch_info_offsets
     }
     // channel info
-    for (int i = 0; i < par->ch_layout.nb_channels; i++) {
+    for (int ch = 0; ch < par->ch_layout.nb_channels; ch++) {
         // write offset to offset table
-        r->head3_ch_info_offsets[i] = avio_tell(pb) - r->head_chunk_offset - 8;
-        brstm_w32(pb, r->head3_ch_info_offsets[i], r->head_chunk_offset + r->head3_offset + 12 + 8*i + 4);
+        r->head3_ch_info_offsets[ch] = avio_tell(pb) - r->head_chunk_offset - 8;
+        brstm_w32(pb, r->head3_ch_info_offsets[ch], r->head_chunk_offset + r->head3_offset + 12 + 8*ch + 4);
         // write channel info
         brstm_w32(pb, 0x01000000, avio_tell(pb)); // marker
         if (codec == 2) {
             // this information exists only in ADPCM files
             brstm_w32(pb, avio_tell(pb) - r->head_chunk_offset - 4, avio_tell(pb)); // offset to ADPCM coefs?
-            // write coefs
-            avio_write(pb, par->extradata, 32 * par->ch_layout.nb_channels);
+            r->adpcm_ch_coeff_offsets[ch] = avio_tell(pb);
+            avio_write(pb, r->table + ch * 32, 32); // write coefs
 
             brstm_w16(pb, 0x0, avio_tell(pb)); // Gain, always zero
             brstm_w16(pb, 0x0, avio_tell(pb)); // Initial scale, will be written later
@@ -225,10 +230,9 @@ static int brstm_write_header(AVFormatContext *s)
 
     r->head_chunk_size = avio_tell(pb) - r->head_chunk_offset;
     ffio_fill(pb, 0, 6); // padding
-    while (avio_tell(pb) & 31) {
-        brstm_w8(pb, 0, avio_tell(pb));
-        r->head_chunk_size = avio_tell(pb) - r->head_chunk_offset;
-    }
+    while (avio_tell(pb) & 31)
+        avio_w8(pb, 0);
+    r->head_chunk_size = avio_tell(pb) - r->head_chunk_offset;
     // write head chunk length
     brstm_w32(pb, r->head_chunk_size, r->head_chunk_offset + 4);
 
@@ -243,17 +247,34 @@ static int brstm_write_packet(AVFormatContext *s, AVPacket *avpkt)
 {
     BRSTMMuxContext *r = s->priv_data;
     AVIOContext *pb = s->pb;
+    int size, skip;
 
-    avio_write(pb, avpkt->data, avpkt->size);
+    switch (r->codec) {
+    case 0:
+    case 1:
+        skip = 0;
+        size = avpkt->size;
+        break;
+    case 2:
+        skip = 8 + (32 + 4) * r->nb_channels;
+        size = avpkt->size;
+        size -= skip;
+        if (size <= 0)
+            return AVERROR_INVALIDDATA;
+        memcpy(r->table, avpkt->data + 8, 32 * r->nb_channels);
+        break;
+    }
+
+    avio_write(pb, avpkt->data + skip, size);
     r->duration += avpkt->duration;
     r->total_blocks++;
 
     if (!r->block_size)
-        r->block_size = avpkt->size;
+        r->block_size = size;
     if (!r->block_samples)
         r->block_samples = avpkt->duration;
 
-    r->final_block_size = avpkt->size;
+    r->final_block_size = size;
     r->final_block_samples = avpkt->duration;
 
     return 0;
@@ -267,6 +288,29 @@ static int brstm_write_trailer(AVFormatContext *s)
     if (pb->seekable & AVIO_SEEKABLE_NORMAL) {
         r->stop_offset = avio_tell(pb);
         r->data_chunk_size = r->stop_offset - r->data_chunk_offset;
+
+        if (r->codec == 2) {
+            r->adpc_chunk_offset = r->stop_offset;
+            avio_wb32(pb, MKBETAG('A','D','P','C'));
+            avio_wb32(pb, 0x0);
+
+            ffio_fill(pb, 0, (4LL * r->nb_channels) * r->total_blocks);
+
+            while (avio_tell(pb) & 31)
+                avio_w8(pb, 0);
+
+            r->adpc_chunk_size = avio_tell(pb) - r->adpc_chunk_offset;
+
+            r->stop_offset = avio_tell(pb);
+
+            avio_seek(pb, r->adpc_chunk_offset + 4, SEEK_SET);
+            avio_wb32(pb, r->adpc_chunk_size);
+
+            for (int ch = 0; ch < r->nb_channels; ch++) {
+                avio_seek(pb, r->adpcm_ch_coeff_offsets[ch], SEEK_SET);
+                avio_write(pb, r->table + ch * 32, 32); // write coefs
+            }
+        }
 
         avio_seek(pb, 0x08, SEEK_SET);
         avio_wb32(pb, r->stop_offset);
@@ -286,6 +330,9 @@ static int brstm_write_trailer(AVFormatContext *s)
         avio_seek(pb, r->data_chunk_offset + 4, SEEK_SET);
         avio_wb32(pb, r->data_chunk_size);
 
+        avio_seek(pb, r->head_chunk_offset + 8LL + r->head1_offset + 0x10LL, SEEK_SET);
+        avio_wb32(pb, r->data_chunk_offset + 0x20LL);
+
         avio_seek(pb, r->head_chunk_offset + 44, SEEK_SET);
         avio_wb32(pb, r->duration);
         avio_wb32(pb, r->data_chunk_offset + 8);
@@ -295,6 +342,8 @@ static int brstm_write_trailer(AVFormatContext *s)
         avio_wb32(pb, r->final_block_size / r->nb_channels);
         avio_wb32(pb, r->final_block_samples);
         avio_wb32(pb, r->final_block_size);
+    } else {
+        return AVERROR(EINVAL);
     }
 
     return 0;
