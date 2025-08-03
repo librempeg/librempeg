@@ -664,6 +664,7 @@ OBJS-$(CONFIG_SWAR_DEMUXER)              += swar.o
 OBJS-$(CONFIG_SWAV_DEMUXER)              += swav.o
 OBJS-$(CONFIG_SWF_DEMUXER)               += swfdec.o swf.o
 OBJS-$(CONFIG_SWF_MUXER)                 += swfenc.o swf.o
+OBJS-$(CONFIG_SWP_DEMUXER)               += swp.o
 OBJS-$(CONFIG_TAC_DEMUXER)               += tac.o rawdec.o
 OBJS-$(CONFIG_TAK_DEMUXER)               += takdec.o apetag.o img2.o rawdec.o
 OBJS-$(CONFIG_TEDCAPTIONS_DEMUXER)       += tedcaptionsdec.o subtitles.o
