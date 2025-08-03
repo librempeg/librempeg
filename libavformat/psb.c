@@ -1159,7 +1159,7 @@ static int read_header(AVFormatContext *s)
             if (!st)
                 return AVERROR(ENOMEM);
 
-            pst = av_mallocz(sizeof(PSBStream));
+            pst = av_mallocz(sizeof(*pst));
             if (!pst)
                 return AVERROR(ENOMEM);
             st->priv_data = pst;
@@ -1206,7 +1206,7 @@ static int read_header(AVFormatContext *s)
             if (!st)
                 return AVERROR(ENOMEM);
 
-            pst = av_mallocz(sizeof(PSBStream));
+            pst = av_mallocz(sizeof(*pst));
             if (!pst)
                 return AVERROR(ENOMEM);
             st->priv_data = pst;

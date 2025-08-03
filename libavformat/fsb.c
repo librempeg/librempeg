@@ -81,7 +81,7 @@ static int fsb_read_header(AVFormatContext *s)
         if (!st)
             return AVERROR(ENOMEM);
 
-        fst = av_mallocz(sizeof(FSBStream));
+        fst = av_mallocz(sizeof(*fst));
         if (!fst)
             return AVERROR(ENOMEM);
         st->priv_data = fst;
@@ -125,7 +125,7 @@ static int fsb_read_header(AVFormatContext *s)
         if (!st)
             return AVERROR(ENOMEM);
 
-        fst = av_mallocz(sizeof(FSBStream));
+        fst = av_mallocz(sizeof(*fst));
         if (!fst)
             return AVERROR(ENOMEM);
         st->priv_data = fst;
@@ -206,7 +206,7 @@ static int fsb_read_header(AVFormatContext *s)
         if (!st)
             return AVERROR(ENOMEM);
 
-        fst = av_mallocz(sizeof(FSBStream));
+        fst = av_mallocz(sizeof(*fst));
         if (!fst)
             return AVERROR(ENOMEM);
         st->priv_data = fst;
@@ -338,7 +338,7 @@ static int fsb_read_header(AVFormatContext *s)
             if (!st)
                 return AVERROR(ENOMEM);
 
-            fst = av_mallocz(sizeof(FSBStream));
+            fst = av_mallocz(sizeof(*fst));
             if (!fst)
                 return AVERROR(ENOMEM);
 

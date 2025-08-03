@@ -113,7 +113,7 @@ static int read_header(AVFormatContext *s)
             first_start_offset = start_offset;
         stream_size = avio_r32(pb);
 
-        bst = av_mallocz(sizeof(BAFStream));
+        bst = av_mallocz(sizeof(*bst));
         if (!bst)
             return AVERROR(ENOMEM);
         bst->start_offset = start_offset;

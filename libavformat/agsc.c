@@ -138,7 +138,7 @@ static int agsc_read_header(AVFormatContext *s)
         AVStream *st = avformat_new_stream(s, NULL);
         if (!st)
             return AVERROR(ENOMEM);
-        AGSCStream *ast = av_mallocz(sizeof(AGSCStream));
+        AGSCStream *ast = av_mallocz(sizeof(*ast));
         if (!ast)
             return AVERROR(ENOMEM);
 

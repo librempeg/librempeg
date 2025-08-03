@@ -196,7 +196,7 @@ static int naxat_asd_bnk_read_header(AVFormatContext *s)
         AVStream *st = avformat_new_stream(s, NULL);
         if (!st)
             return AVERROR(ENOMEM);
-        NaxatASDStream *ast = av_mallocz(sizeof(NaxatASDStream));
+        NaxatASDStream *ast = av_mallocz(sizeof(*ast));
         if (!ast)
             return AVERROR(ENOMEM);
 
