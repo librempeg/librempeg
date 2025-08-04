@@ -54,6 +54,9 @@ static int astb_read_header(AVFormatContext *s)
     avio_skip(pb, 16);
     start_offset = avio_rb32(pb);
     avio_skip(pb, 32);
+    if (start_offset <= avio_tell(pb) + 6)
+        return AVERROR_INVALIDDATA;
+
     ret = ff_get_extradata(s, st->codecpar, pb, start_offset - avio_tell(pb));
     if (ret < 0)
         return ret;
