@@ -19,12 +19,19 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/intreadwrite.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
 
 static int dcstr_probe(const AVProbeData *p)
 {
+    if ((int32_t)AV_RL32(p->buf) <= 0)
+        return 0;
+
+    if ((int32_t)AV_RL32(p->buf+4) <= 0)
+        return 0;
+
     if (p->buf_size < 224 || memcmp(p->buf + 213, "Sega Stream", 11))
         return 0;
 
@@ -33,6 +40,7 @@ static int dcstr_probe(const AVProbeData *p)
 
 static int dcstr_read_header(AVFormatContext *s)
 {
+    AVIOContext *pb = s->pb;
     unsigned codec, align;
     int mult;
     AVStream *st;
@@ -42,15 +50,17 @@ static int dcstr_read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->ch_layout.nb_channels = avio_rl32(s->pb);
-    st->codecpar->sample_rate = avio_rl32(s->pb);
+    st->codecpar->ch_layout.nb_channels = avio_rl32(pb);
+    if (st->codecpar->ch_layout.nb_channels <= 0)
+        return AVERROR_INVALIDDATA;
+    st->codecpar->sample_rate = avio_rl32(pb);
     if (st->codecpar->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
-    codec                  = avio_rl32(s->pb);
-    align                  = avio_rl32(s->pb);
-    avio_skip(s->pb, 4);
-    st->duration           = avio_rl32(s->pb);
-    mult                   = avio_rl32(s->pb);
+    codec                  = avio_rl32(pb);
+    align                  = avio_rl32(pb);
+    avio_skip(pb, 4);
+    st->duration           = avio_rl32(pb);
+    mult                   = avio_rl32(pb);
     if (st->codecpar->ch_layout.nb_channels <= 0 || mult <= 0 ||
         mult > INT_MAX / st->codecpar->ch_layout.nb_channels) {
         av_log(s, AV_LOG_ERROR, "invalid number of channels %d x %d\n",
@@ -69,7 +79,7 @@ static int dcstr_read_header(AVFormatContext *s)
              return AVERROR_PATCHWELCOME;
     }
 
-    avio_skip(s->pb, 0x800 - avio_tell(s->pb));
+    avio_skip(pb, 0x800 - avio_tell(pb));
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
