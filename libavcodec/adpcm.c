@@ -2619,12 +2619,20 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         ) /* End of CASE */
     CASE(ADPCM_AICA,
-        for (int channel = 0; channel < channels; channel++) {
-            samples = samples_p[channel];
-            for (int n = nb_samples >> 1; n > 0; n--) {
-                int v = bytestream2_get_byteu(&gb);
-                *samples++ = adpcm_yamaha_expand_nibble(&c->status[channel], v & 0x0F);
-                *samples++ = adpcm_yamaha_expand_nibble(&c->status[channel], v >> 4  );
+        int blocks, block_samples;
+
+        blocks = buf_size / avctx->block_align;
+        block_samples = nb_samples / blocks;
+        for (int block = 0; block < blocks; block++) {
+            for (int channel = 0; channel < channels; channel++) {
+                ADPCMChannelStatus *cs = &c->status[channel];
+
+                samples = samples_p[channel] + block * block_samples;
+                for (int n = block_samples >> 1; n > 0; n--) {
+                    int v = bytestream2_get_byteu(&gb);
+                    *samples++ = adpcm_yamaha_expand_nibble(cs, v & 0x0F);
+                    *samples++ = adpcm_yamaha_expand_nibble(cs, v >> 4  );
+                }
             }
         }
         ) /* End of CASE */
