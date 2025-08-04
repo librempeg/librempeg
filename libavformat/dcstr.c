@@ -60,7 +60,10 @@ static int dcstr_read_header(AVFormatContext *s)
     align                  = avio_rl32(pb);
     avio_skip(pb, 4);
     st->start_time = 0;
-    st->duration           = avio_rl32(pb);
+    if (codec == 4)
+        st->duration = avio_rl32(pb);
+    else
+        avio_skip(pb, 4);
     mult                   = avio_rl32(pb);
     if (st->codecpar->ch_layout.nb_channels <= 0 || mult <= 0 ||
         mult > INT_MAX / st->codecpar->ch_layout.nb_channels) {
