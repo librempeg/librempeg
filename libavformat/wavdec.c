@@ -434,6 +434,8 @@ static int wav_read_header(AVFormatContext *s)
                 return ret;
             } else if (got_fmt)
                 av_log(s, AV_LOG_WARNING, "found more than one 'fmt ' tag\n");
+            if (st->codecpar->codec_id == AV_CODEC_ID_ADPCM_AICA && size == 0x12) /* skip ADPCM AICA junk data */
+                next_tag_ofs += 2;
 
             got_fmt = 1;
             break;
