@@ -93,7 +93,7 @@ static int swp_read_header(AVFormatContext *s)
             AVStream *st = avformat_new_stream(s, NULL);
             if (!st)
                 return AVERROR(ENOMEM);
-            SWPStream *sst = av_mallocz(sizeof(SWPStream));
+            SWPStream *sst = av_mallocz(sizeof(*sst));
             if (!sst)
                 return AVERROR(ENOMEM);
 
