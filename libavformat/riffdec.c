@@ -132,6 +132,9 @@ int ff_get_wav_header(AVFormatContext *s, AVIOContext *pb,
     }
     if (id == 0xFFFE) {
         par->codec_tag = 0;
+    /* Do some additional checks for unofficial ADPCM AICA */
+    } else if (id == 0x0000 && par->bits_per_coded_sample == 4 && (par->block_align == 2 * channels || par->block_align == channels)) {
+        par->codec_id = AV_CODEC_ID_ADPCM_AICA;
     } else {
         par->codec_tag = id;
         par->codec_id  = ff_wav_codec_get_id(id,
@@ -190,6 +193,9 @@ int ff_get_wav_header(AVFormatContext *s, AVIOContext *pb,
         channels         = 0;
         par->sample_rate = 0;
     }
+    /* override block_align for ADPCM AICA */
+    if (par->codec_id == AV_CODEC_ID_ADPCM_AICA)
+        par->block_align = channels;
     /* override bits_per_coded_sample for G.726 */
     if (par->codec_id == AV_CODEC_ID_ADPCM_G726 && par->sample_rate)
         par->bits_per_coded_sample = par->bit_rate / par->sample_rate;
