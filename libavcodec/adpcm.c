@@ -2619,10 +2619,11 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         ) /* End of CASE */
     CASE(ADPCM_AICA,
-        int blocks, block_samples;
+        int blocks = 1, block_samples;
 
-        blocks = buf_size / avctx->block_align;
-        block_samples = nb_samples / blocks;
+        if (avctx->block_align > 0)
+            blocks = (buf_size + avctx->block_align - 1) / avctx->block_align;
+        block_samples = nb_samples / FFMAX(blocks, 1);
         for (int block = 0; block < blocks; block++) {
             for (int channel = 0; channel < channels; channel++) {
                 ADPCMChannelStatus *cs = &c->status[channel];
