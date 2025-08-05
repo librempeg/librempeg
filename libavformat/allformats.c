@@ -601,6 +601,7 @@ extern const FFInputFormat  ff_xmd_demuxer;
 extern const FFInputFormat  ff_xmv_demuxer;
 extern const FFInputFormat  ff_xpcm_demuxer;
 extern const FFInputFormat  ff_xvag_demuxer;
+extern const FFInputFormat  ff_xwc_demuxer;
 extern const FFInputFormat  ff_xwma_demuxer;
 extern const FFInputFormat  ff_yop_demuxer;
 extern const FFInputFormat  ff_yuv4mpegpipe_demuxer;
