@@ -86,6 +86,8 @@ static int read_header(AVFormatContext *s)
     st->duration = avio_rb32(pb);
     avio_skip(pb, 4);
     st->codecpar->sample_rate = avio_rb32(pb);
+    if (st->codecpar->sample_rate <= 0)
+        return AVERROR_INVALIDDATA;
     st->codecpar->block_align = 1024;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
