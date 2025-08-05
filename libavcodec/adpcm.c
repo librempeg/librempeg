@@ -1504,6 +1504,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         if (!avctx->extradata || avctx->extradata_size != 2)
             return AVERROR_INVALIDDATA;
         nb_samples = AV_RL16(avctx->extradata);
+        break;
     case AV_CODEC_ID_ADPCM_FMOD:
         if (buf_size / ch <= 0xc)
             return AVERROR_INVALIDDATA;
