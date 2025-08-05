@@ -72,6 +72,10 @@ static int read_header(AVFormatContext *s)
     st->duration = duration;
 
     switch (codec) {
+    case 0:
+        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX;
+        st->codecpar->block_align = 0x800 * st->codecpar->ch_layout.nb_channels;
+        break;
     case 2:
         st->codecpar->bits_per_coded_sample = 4;
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_XBOX;
