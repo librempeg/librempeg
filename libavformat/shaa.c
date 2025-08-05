@@ -29,6 +29,13 @@ static int shaa_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "SHAA", 4) || AV_RL32(p->buf + 4) != 2)
         return 0;
+
+    if (p->buf_size < 24)
+        return 0;
+
+    if ((int32_t)AV_RL32(p->buf + 20) <= 0)
+        return 0;
+
     return AVPROBE_SCORE_MAX;
 }
 
@@ -56,6 +63,8 @@ static int shaa_read_header(AVFormatContext *s)
     format = avio_r8(pb);
     avio_skip(pb, 3);
     st->codecpar->sample_rate = avio_rl32(pb);
+    if (st->codecpar->sample_rate <= 0)
+        return AVERROR_INVALIDDATA;
     st->duration = avio_rl32(pb);
     coefs_offset = avio_tell(pb) + avio_rl32(pb);
     avio_skip(pb, 4);
@@ -80,10 +89,9 @@ static int shaa_read_header(AVFormatContext *s)
     } else if (format == 2) {
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP_LE;
         avio_seek(pb, coefs_offset, SEEK_SET);
-        ret = ff_alloc_extradata(st->codecpar, 0x20);
+        ret = ff_get_extradata(s, st->codecpar, pb, 0x20);
         if (ret < 0)
             return ret;
-        avio_read(pb, st->codecpar->extradata, 0x20);
     } else {
         avpriv_request_sample(st, "format 0x%X", format);
         return AVERROR_PATCHWELCOME;
