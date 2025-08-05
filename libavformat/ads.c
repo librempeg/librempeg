@@ -35,6 +35,7 @@ static int ads_probe(const AVProbeData *p)
 
 static int ads_read_header(AVFormatContext *s)
 {
+    AVIOContext *pb = s->pb;
     int align, codec;
     AVStream *st;
     int64_t size;
@@ -43,27 +44,34 @@ static int ads_read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(s->pb, 8);
+    avio_skip(pb, 8);
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
-    codec                  = avio_rl32(s->pb);
-    st->codecpar->sample_rate = avio_rl32(s->pb);
+    codec = avio_rl32(pb);
+    st->codecpar->sample_rate = avio_rl32(pb);
     if (st->codecpar->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
-    st->codecpar->ch_layout.nb_channels = avio_rl32(s->pb);
+    st->codecpar->ch_layout.nb_channels = avio_rl32(pb);
     if (st->codecpar->ch_layout.nb_channels <= 0)
         return AVERROR_INVALIDDATA;
-    align                  = avio_rl32(s->pb);
+    align = avio_rl32(pb);
     if (align <= 0 || align > INT_MAX / st->codecpar->ch_layout.nb_channels)
         return AVERROR_INVALIDDATA;
 
-    if (codec == 1)
+    switch (codec) {
+    case 1:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE_PLANAR;
-    else
+        break;
+    case 16:
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX;
+        break;
+    default:
+        avpriv_request_sample(s, "codec %d", codec);
+        return AVERROR_PATCHWELCOME;
+    }
 
     st->codecpar->block_align = st->codecpar->ch_layout.nb_channels * align;
-    avio_skip(s->pb, 12);
-    size = avio_rl32(s->pb);
+    avio_skip(pb, 12);
+    size = avio_rl32(pb);
     if (st->codecpar->codec_id == AV_CODEC_ID_ADPCM_PSX && size >= 0x40)
         st->duration = (size - 0x40) / 16 / st->codecpar->ch_layout.nb_channels * 28;
     st->start_time = 0;
@@ -75,10 +83,13 @@ static int ads_read_header(AVFormatContext *s)
 static int ads_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
+    AVIOContext *pb = s->pb;
     int ret;
 
-    ret = av_get_packet(s->pb, pkt, par->block_align);
+    ret = av_get_packet(pb, pkt, par->block_align);
+    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
     pkt->stream_index = 0;
+
     return ret;
 }
 
@@ -86,6 +97,7 @@ const FFInputFormat ff_ads_demuxer = {
     .p.name         = "ads",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sony PS2 ADS"),
     .p.extensions   = "ads,ss2",
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = ads_probe,
     .read_header    = ads_read_header,
     .read_packet    = ads_read_packet,
