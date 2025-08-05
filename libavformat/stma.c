@@ -78,6 +78,10 @@ static int read_header(AVFormatContext *s)
             return ret;
         AV_WL16(st->codecpar->extradata, 4);
         break;
+    case 16:
+        st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
+        st->codecpar->block_align = 1024 * st->codecpar->ch_layout.nb_channels;
+        break;
     default:
         avpriv_request_sample(s, "bps 0x%X", bps);
         return AVERROR_PATCHWELCOME;
