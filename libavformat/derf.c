@@ -32,6 +32,8 @@ static int derf_probe(const AVProbeData *p)
         return 0;
     if (AV_RL32(p->buf+4) != 1 && AV_RL32(p->buf+4) != 2)
         return 0;
+    if (AV_RL32(p->buf+8) == 0)
+        return 0;
 
     return AVPROBE_SCORE_MAX / 3 * 2;
 }
