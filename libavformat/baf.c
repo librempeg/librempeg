@@ -62,10 +62,8 @@ static int read_header(AVFormatContext *s)
 {
     uint32_t offset, version, nb_tracks, nb_streams = 0, codec, start_offset, stream_size;
     uint32_t first_start_offset;
-    uint8_t stream_name[33] = { 0 };
     AVIOContext *pb = s->pb;
     avio_r32 avio_r32;
-    AVStream *st;
     int ret;
 
     avio_skip(pb, 4);
@@ -89,8 +87,10 @@ static int read_header(AVFormatContext *s)
 
     for (int n = 0; n < nb_tracks; n++) {
         int64_t metadata_end = avio_tell(pb);
+        uint8_t stream_name[33] = { 0 };
         uint32_t tag, sub_tracks;
         BAFStream *bst;
+        AVStream *st;
 
         tag = avio_rb32(pb);
         if (tag != MKBETAG('W','A','V','E') &&
@@ -122,6 +122,9 @@ static int read_header(AVFormatContext *s)
         st = avformat_new_stream(s, NULL);
         if (!st)
             return AVERROR(ENOMEM);
+
+        if (stream_name[0])
+            av_dict_set(&st->metadata, "title", stream_name, 0);
 
         st->id = nb_streams++;
         st->priv_data = bst;
