@@ -45,7 +45,7 @@ static int read_probe(const AVProbeData *p)
     if (AV_RB16(p->buf + offset+2) == 0)
         return 0;
 
-    if (AV_RB32(p->buf + offset+6) <= 0)
+    if ((int32_t)AV_RB32(p->buf + offset+4) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
