@@ -167,7 +167,7 @@ static int decode_registered_user_data(H2645SEI *h, GetByteContext *gb,
         }
     }
 #if CONFIG_HEVC_SEI
-    else if (country_code == ITU_T_T35_COUNTRY_CODE_CN && provider_code == ITU_T_T35_PROVIDER_CODE_CUVA) {
+    else if (country_code == ITU_T_T35_COUNTRY_CODE_CN && provider_code == ITU_T_T35_PROVIDER_CODE_HDR_VIVID) {
         const uint16_t cuva_provider_oriented_code = 0x0005;
         uint16_t provider_oriented_code;
 
@@ -181,7 +181,7 @@ static int decode_registered_user_data(H2645SEI *h, GetByteContext *gb,
         if (provider_oriented_code == cuva_provider_oriented_code) {
             return decode_registered_user_data_dynamic_hdr_vivid(&h->dynamic_hdr_vivid, gb);
         }
-    } else if(country_code == ITU_T_T35_COUNTRY_CODE_US && provider_code == ITU_T_T35_PROVIDER_CODE_SMTPE) {
+    } else if(country_code == ITU_T_T35_COUNTRY_CODE_US && provider_code == ITU_T_T35_PROVIDER_CODE_SAMSUNG) {
         // A/341 Amendment - 2094-40
         const uint16_t smpte2094_40_provider_oriented_code = 0x0001;
         const uint8_t smpte2094_40_application_identifier = 0x04;
