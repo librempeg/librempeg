@@ -58,11 +58,12 @@ static int read_header(AVStream *st, AVIOContext *pb)
 
 static int naxat_asd_probe(const AVProbeData *p)
 {
-    int score = AVPROBE_SCORE_MAX / 3 * 2;
+    uint32_t data_size;
+    int score = 40;
 
     if (0x20 >= p->buf_size)
         return 0;
-    uint32_t data_size = AV_RL32(p->buf);
+    data_size = AV_RL32(p->buf);
     // data size has to be smaller than whole buffer
     if (data_size == 0 || data_size + 0x20 <= p->buf_size)
         return 0;
@@ -181,6 +182,9 @@ static int naxat_asd_bnk_read_header(AVFormatContext *s)
 
     header_end = 0xFFFFFFFF;
     for (int i = 0; i < 0xFFFF; i++) {
+        NaxatASDStream *ast;
+        AVStream *st;
+
         if (avio_feof(pb))
             return AVERROR_EOF;
         addr = avio_tell(pb);
@@ -193,10 +197,10 @@ static int naxat_asd_bnk_read_header(AVFormatContext *s)
         if (header_end > start)
             header_end = start;
 
-        AVStream *st = avformat_new_stream(s, NULL);
+        st = avformat_new_stream(s, NULL);
         if (!st)
             return AVERROR(ENOMEM);
-        NaxatASDStream *ast = av_mallocz(sizeof(*ast));
+        ast = av_mallocz(sizeof(*ast));
         if (!ast)
             return AVERROR(ENOMEM);
 
