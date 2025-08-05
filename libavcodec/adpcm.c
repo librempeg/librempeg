@@ -2755,6 +2755,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 c->status[ch].sample2 = sample2;
             }
         }
+        bytestream2_seek(&gb, 0, SEEK_END);
         break;
 #endif /* CONFIG_ADPCM_(NDSP/THP)(_LE)_DECODER */
     CASE(ADPCM_NDSP_SI,
