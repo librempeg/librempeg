@@ -33,6 +33,7 @@ typedef struct AGSCStream {
 static int agsc_probe(const AVProbeData *p)
 {
     int64_t off;
+    int i;
 
     // version 2
     if (AV_RB32(p->buf) == 1)
@@ -45,7 +46,6 @@ static int agsc_probe(const AVProbeData *p)
     else
         return 0;
 
-    int i;
     for (i = 0; i < 0x30; ++i) {
         if (p->buf[off + i] == '\0' && i != 0)
             break;
@@ -72,26 +72,26 @@ static int sort_streams(const void *a, const void *b)
 
 static int agsc_read_header(AVFormatContext *s)
 {
+    char bank_name[0x30-1];
     uint8_t version;
     uint32_t unk1_size, unk2_size, data_size, head_size, head_offset, data_offset, loop_start, loop_end, coefs_offset, min_coefs_offset;
     int64_t addr, nb_streams;
     int ret;
     AVIOContext *pb = s->pb;
 
-    if (avio_rb32(pb) == 1)
+    if (avio_rb32(pb) == 1) {
         version = 2;
-    else {
-        char testchr[7];
+    } else {
+        uint8_t testchr[6] = { 0 };
 
         avio_seek(pb, 0, SEEK_SET);
-        avio_get_str(pb, 8, testchr, sizeof(testchr));
-        if (!strncmp(testchr,"Audio/",7))
+        avio_read(pb, testchr, sizeof(testchr));
+        if (!memcmp(testchr, "Audio/", 6))
             version = 1;
         else
             return AVERROR_INVALIDDATA;
     }
 
-    char bank_name[0x30-1];
     ret = avio_get_str(pb, 0x30, bank_name, sizeof(bank_name));
     if (ret < 0)
         return ret;
@@ -131,14 +131,17 @@ static int agsc_read_header(AVFormatContext *s)
     avio_seek(pb, head_offset, SEEK_SET);
     min_coefs_offset = 0xFFFFFFFF;
     for (int i = 0; i < nb_streams; i++) {
+        AGSCStream *ast;
+        AVStream *st;
+
         avio_skip(pb, 4);
         if (avio_tell(pb) >= min_coefs_offset)
             break;
 
-        AVStream *st = avformat_new_stream(s, NULL);
+        st = avformat_new_stream(s, NULL);
         if (!st)
             return AVERROR(ENOMEM);
-        AGSCStream *ast = av_mallocz(sizeof(*ast));
+        ast = av_mallocz(sizeof(*ast));
         if (!ast)
             return AVERROR(ENOMEM);
 
