@@ -61,6 +61,7 @@ static int ads_read_header(AVFormatContext *s)
     case 1:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE_PLANAR;
         break;
+    case 2:
     case 16:
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX;
         break;
