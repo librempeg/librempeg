@@ -37,9 +37,16 @@ static int fsb_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "FSB", 3) || p->buf[3] - '0' < 1 || p->buf[3] - '0' > 5)
         return 0;
-    if (AV_RL32(p->buf + 4) != 0 &&
-        AV_RL32(p->buf + 4) != 1)
-        return 0;
+
+    if (p->buf[3] - '0' == 5) {
+        if (AV_RL32(p->buf + 4) != 0 &&
+            AV_RL32(p->buf + 4) != 1)
+            return 0;
+    } else {
+        if ((int32_t)AV_RL32(p->buf + 4) <= 0)
+            return 0;
+    }
+
     return AVPROBE_SCORE_MAX;
 }
 
@@ -74,7 +81,11 @@ static int fsb_read_header(AVFormatContext *s)
         return AVERROR_PATCHWELCOME;
     }
 
-    minor_version = avio_rl32(pb);
+    if (version == 5) {
+        minor_version = avio_rl32(pb);
+    } else {
+        nb_streams = avio_rl32(pb);
+    }
 
     if (version == 1) {
         st = avformat_new_stream(s, NULL);
@@ -202,105 +213,163 @@ static int fsb_read_header(AVFormatContext *s)
 
         avpriv_set_pts_info(st, 64, 1, par->sample_rate);
     } else if (version == 4) {
-        st = avformat_new_stream(s, NULL);
-        if (!st)
-            return AVERROR(ENOMEM);
+        const int32_t sample_header_min = 0x50;
+        const int32_t base_header_size = 0x30;
+        int32_t sample_headers_size;
+        int64_t header_offset = base_header_size;
+        int64_t extradata_offset;
+        int64_t start_offset;
+        int64_t stream_size;
+        int rate, nb_channels;
 
-        fst = av_mallocz(sizeof(*fst));
-        if (!fst)
-            return AVERROR(ENOMEM);
-        st->priv_data = fst;
-
-        st->start_time = 0;
-        sti = ffstream(st);
-        par = st->codecpar;
-        par->codec_type  = AVMEDIA_TYPE_AUDIO;
-        par->codec_tag   = 0;
-
-        offset = avio_rl32(pb) + 0x30;
-        fst->start_offset = offset;
-        fst->stop_offset = INT64_MAX;
-
-        avio_skip(pb, 8);
+        sample_headers_size = avio_rl32(pb);
+        start_offset = offset = sample_headers_size + base_header_size;
+        avio_skip(pb, 4);
+        minor_version = avio_rl32(pb);
         flags = avio_rl32(pb);
-        avio_skip(pb, 68);
-        st->duration = avio_rl32(pb);
 
-        format = avio_rl32(pb);
-        if (format & 0x01000000) {
-            par->codec_id = AV_CODEC_ID_XMA2;
-        } else if (format & 0x02000000) {
-            if (flags & 0x00000010)
-                par->codec_id = AV_CODEC_ID_ADPCM_NDSP;
-            else
-                par->codec_id = AV_CODEC_ID_ADPCM_NDSP_SI;
-        } else if (format & 0x00000200) {
-            par->codec_id = AV_CODEC_ID_MP3;
-        } else if (format & 0x00800000) {
-            par->codec_id = AV_CODEC_ID_ADPCM_PSX;
-        } else if (format & 0x00000008) {
-            if (format & 0x00000080)
-                par->codec_id = AV_CODEC_ID_PCM_U8;
-            else
-                par->codec_id = AV_CODEC_ID_PCM_S8;
-        } else if (format & 0x00000010) {
-            if (flags & 0x00000008)
-                par->codec_id = AV_CODEC_ID_PCM_S16BE;
-            else
-                par->codec_id = AV_CODEC_ID_PCM_S16LE;
-        } else {
-            avpriv_request_sample(s, "format 0x%X", format);
-            return AVERROR_PATCHWELCOME;
-        }
+        for (int si = 0; si < nb_streams; si++) {
+            uint32_t stream_header_size;
 
-        par->sample_rate = avio_rl32(pb);
-        if (par->sample_rate <= 0)
-            return AVERROR_INVALIDDATA;
-        avio_skip(pb, 6);
+            st = avformat_new_stream(s, NULL);
+            if (!st)
+                return AVERROR(ENOMEM);
 
-        par->ch_layout.nb_channels = avio_rl16(pb);
-        if (!par->ch_layout.nb_channels)
-            return AVERROR_INVALIDDATA;
+            fst = av_mallocz(sizeof(*fst));
+            if (!fst)
+                return AVERROR(ENOMEM);
+            st->priv_data = fst;
 
-        switch (par->codec_id) {
-        case AV_CODEC_ID_XMA2:
-            par->block_align = 2048;
-            ret = ff_alloc_extradata(par, 34);
-            if (ret < 0)
-                return ret;
-            memset(par->extradata, 0, par->extradata_size);
-            AV_WL16(par->extradata, 1);
-            sti->need_parsing = AVSTREAM_PARSE_FULL_RAW;
-            break;
-        case AV_CODEC_ID_ADPCM_NDSP:
-            if (par->ch_layout.nb_channels > INT_MAX / 32)
-                return AVERROR_INVALIDDATA;
-            ret = ff_alloc_extradata(par, 32 * par->ch_layout.nb_channels);
-            if (ret < 0)
-                return ret;
-            avio_seek(pb, 0x80, SEEK_SET);
-            for (int c = 0; c < par->ch_layout.nb_channels; c++) {
-                avio_read(pb, par->extradata + 32 * c, 32);
-                avio_skip(pb, 14);
+            st->start_time = 0;
+            sti = ffstream(st);
+            par = st->codecpar;
+            par->codec_type  = AVMEDIA_TYPE_AUDIO;
+            par->codec_tag   = 0;
+
+            fst->start_offset = start_offset;
+
+            if ((flags & 0x00000002) && si > 0) {
+                stream_header_size = 8;
+                avio_seek(pb, header_offset, SEEK_SET);
+                st->duration = avio_rl32(pb);
+                stream_size = avio_rl32(pb);
+
+                if (format & 0x01000000) {
+                    avio_skip(pb, 12);
+                    stream_header_size += 16 + avio_rl32(pb);
+                }
+            } else {
+                avio_seek(pb, header_offset, SEEK_SET);
+                stream_header_size = avio_rl16(pb);
+                fst->name_offset = header_offset + 2;
+                avio_skip(pb, 30);
+                st->duration = avio_rl32(pb);
+                stream_size = avio_rl32(pb);
+                avio_skip(pb, 8);
+                format = avio_rl32(pb);
+                rate = avio_rl32(pb);
+                avio_skip(pb, 6);
+                nb_channels = avio_rl16(pb);
             }
-            par->block_align = 8 * par->ch_layout.nb_channels;
-            break;
-        case AV_CODEC_ID_ADPCM_PSX:
-            par->block_align = 16 * par->ch_layout.nb_channels;
-            break;
-        case AV_CODEC_ID_MP3:
-            par->block_align = 1024;
-            sti->need_parsing = AVSTREAM_PARSE_FULL;
-            break;
-        case AV_CODEC_ID_PCM_S16BE:
-        case AV_CODEC_ID_PCM_S16LE:
-        case AV_CODEC_ID_PCM_S8:
-        case AV_CODEC_ID_PCM_U8:
-            par->block_align = 1024 * par->ch_layout.nb_channels;
-            break;
+
+            fst->stop_offset = fst->start_offset + stream_size;
+
+            if (format & 0x01000000) {
+                par->codec_id = AV_CODEC_ID_XMA2;
+            } else if (format & 0x02000000) {
+                if (flags & 0x00000010)
+                    par->codec_id = AV_CODEC_ID_ADPCM_NDSP;
+                else
+                    par->codec_id = AV_CODEC_ID_ADPCM_NDSP_SI;
+            } else if (format & 0x00000200) {
+                par->codec_id = AV_CODEC_ID_MP3;
+            } else if (format & 0x00800000) {
+                par->codec_id = AV_CODEC_ID_ADPCM_PSX;
+            } else if (format & 0x00000008) {
+                if (format & 0x00000080)
+                    par->codec_id = AV_CODEC_ID_PCM_U8;
+                else
+                    par->codec_id = AV_CODEC_ID_PCM_S8;
+            } else if (format & 0x00000010) {
+                if (flags & 0x00000008)
+                    par->codec_id = AV_CODEC_ID_PCM_S16BE;
+                else
+                    par->codec_id = AV_CODEC_ID_PCM_S16LE;
+            } else {
+                avpriv_request_sample(s, "format 0x%X", format);
+                return AVERROR_PATCHWELCOME;
+            }
+
+            par->sample_rate = rate;
+            if (par->sample_rate <= 0)
+                return AVERROR_INVALIDDATA;
+
+            par->ch_layout.nb_channels = nb_channels;
+            if (!par->ch_layout.nb_channels)
+                return AVERROR_INVALIDDATA;
+
+            extradata_offset = header_offset + sample_header_min;
+
+            switch (par->codec_id) {
+            case AV_CODEC_ID_XMA2:
+                par->block_align = 2048;
+                ret = ff_alloc_extradata(par, 34);
+                if (ret < 0)
+                    return ret;
+                memset(par->extradata, 0, par->extradata_size);
+                AV_WL16(par->extradata, 1);
+                sti->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+                break;
+            case AV_CODEC_ID_ADPCM_NDSP:
+                if (par->ch_layout.nb_channels > INT_MAX / 32)
+                    return AVERROR_INVALIDDATA;
+                ret = ff_alloc_extradata(par, 32 * par->ch_layout.nb_channels);
+                if (ret < 0)
+                    return ret;
+                avio_seek(pb, extradata_offset, SEEK_SET);
+                for (int c = 0; c < par->ch_layout.nb_channels; c++) {
+                    avio_read(pb, par->extradata + 32 * c, 32);
+                    avio_skip(pb, 14);
+                }
+                par->block_align = 8 * par->ch_layout.nb_channels;
+                break;
+            case AV_CODEC_ID_ADPCM_PSX:
+                par->block_align = 16 * par->ch_layout.nb_channels;
+                break;
+            case AV_CODEC_ID_MP3:
+                par->block_align = 1024;
+                sti->need_parsing = AVSTREAM_PARSE_FULL;
+                break;
+            case AV_CODEC_ID_PCM_S16BE:
+            case AV_CODEC_ID_PCM_S16LE:
+            case AV_CODEC_ID_PCM_S8:
+            case AV_CODEC_ID_PCM_U8:
+                par->block_align = 1024 * par->ch_layout.nb_channels;
+                break;
+            }
+
+            avpriv_set_pts_info(st, 64, 1, par->sample_rate);
+
+            header_offset += stream_header_size;
+            start_offset += stream_size;
+
+            if (flags & 0x00000040) {
+                if (start_offset & 31)
+                    start_offset += 32 - (start_offset & 31);
+            }
         }
 
-        avpriv_set_pts_info(st, 64, 1, par->sample_rate);
+        for (int si = 0; si < nb_streams; si++) {
+            AVStream *st = s->streams[si];
+            FSBStream *fst = st->priv_data;
+            char title[31] = { 0 };
+
+            avio_seek(pb, fst->name_offset, SEEK_SET);
+
+            avio_get_str(pb, 30, title, sizeof(title));
+
+            av_dict_set(&st->metadata, "title", title, 0);
+        }
     } else if (version == 5) {
         uint64_t sample_mode;
         int64_t start_offset;
