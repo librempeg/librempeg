@@ -1010,6 +1010,9 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
     dc_count = AV_RL64(src + 72);
     ac_compression = AV_RL64(src + 80);
 
+    if ((uint64_t)rle_raw_size > INT_MAX)
+        return AVERROR_INVALIDDATA;
+
     if (   compressed_size < (uint64_t)(lo_size | ac_size | dc_size | rle_csize) || compressed_size < 88LL + lo_size + ac_size + dc_size + rle_csize
         || ac_count > (uint64_t)INT_MAX/2
     )
@@ -1089,6 +1092,9 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
         av_fast_padded_malloc(&td->rle_data, &td->rle_size, rle_usize);
         if (!td->rle_data)
             return AVERROR(ENOMEM);
+
+        if (rle_raw_size < 2LL * td->xsize * td->ysize)
+            return AVERROR_INVALIDDATA;
 
         av_fast_padded_malloc(&td->rle_raw_data, &td->rle_raw_size, rle_raw_size);
         if (!td->rle_raw_data)
