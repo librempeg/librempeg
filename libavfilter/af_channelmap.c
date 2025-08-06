@@ -321,7 +321,7 @@ static av_cold int channelmap_init(AVFilterContext *ctx)
         const int out_idx = s->map[i].out_channel_idx;
         ret = check_idx_and_id(ctx, out_idx, s->map[i].out_channel, &s->output_layout, "out", OUT_EMPTY);
         if (ret < 0)
-            return ret;
+            break;
         s->map[i].out_empty = ret;
         if (s->map[i].out_empty)
             continue;
