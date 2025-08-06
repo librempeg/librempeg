@@ -199,25 +199,35 @@ static int channelsum_filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     for (int ch = 0; ch < outlink->ch_layout.nb_channels; ch++) {
         unsigned dst_ch_idx = s->sum[ch].out_ch_idx;
-        float *dst = (float *)out->extended_data[dst_ch_idx];
+        double *dst_d = (double *)out->extended_data[dst_ch_idx];
+        float *dst_f = (float *)out->extended_data[dst_ch_idx];
         const int nb_ich = s->sum[ch].nb_in_ch;
 
         for (int ich = 0; ich < nb_ich; ich++) {
             const int in_ch_idx = s->sum[ch].in_ch_idx[ich];
+            const double *src_d;
+            const float *src_f;
 
             if (in_ch_idx < 0)
                 continue;
 
-            {
-                const float *src = (const float *)in->extended_data[in_ch_idx];
+            src_d = (const double *)in->extended_data[in_ch_idx];
+            src_f = (const float *)in->extended_data[in_ch_idx];
 
-                if (ich == 0) {
-                    memcpy(dst, src, nb_samples * sample_size);
-                    continue;
-                }
+            if (ich == 0) {
+                memcpy(dst_f, src_f, nb_samples * sample_size);
+                continue;
+            }
 
+            switch (sample_size) {
+            case sizeof(float):
                 for (int n = 0; n < nb_samples; n++)
-                    dst[n] += src[n];
+                    dst_f[n] += src_f[n];
+                break;
+            case sizeof(double):
+                for (int n = 0; n < nb_samples; n++)
+                    dst_d[n] += src_d[n];
+                break;
             }
         }
     }
