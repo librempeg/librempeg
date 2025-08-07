@@ -310,6 +310,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_NDSP:
     case AV_CODEC_ID_ADPCM_NDSP_LE:
     case AV_CODEC_ID_ADPCM_NDSP_SI:
+    case AV_CODEC_ID_ADPCM_NDSP_SI1:
         max_channels = 14;
         break;
     }
@@ -396,6 +397,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_NDSP:
     case AV_CODEC_ID_ADPCM_NDSP_LE:
     case AV_CODEC_ID_ADPCM_NDSP_SI:
+    case AV_CODEC_ID_ADPCM_NDSP_SI1:
         if (avctx->extradata_size < 32 * avctx->ch_layout.nb_channels) {
             av_log(avctx, AV_LOG_ERROR, "Missing coeff table\n");
             return AVERROR_INVALIDDATA;
@@ -406,6 +408,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     switch (avctx->codec->id) {
     case AV_CODEC_ID_ADPCM_NDSP:
     case AV_CODEC_ID_ADPCM_NDSP_SI:
+    case AV_CODEC_ID_ADPCM_NDSP_SI1:
         for (int ch = 0; ch < avctx->ch_layout.nb_channels && avctx->extradata; ch++) {
             for (int n = 0; n < 16; n++)
                 c->table[ch][n] = sign_extend(AV_RB16(avctx->extradata + ch * 32 + n * 2), 16);
@@ -1453,6 +1456,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_NDSP:
     case AV_CODEC_ID_ADPCM_NDSP_LE:
     case AV_CODEC_ID_ADPCM_NDSP_SI:
+    case AV_CODEC_ID_ADPCM_NDSP_SI1:
         if (avctx->extradata) {
             if (s->start_skip > 0 && pts == 0) {
                 nb_samples = ((buf_size - s->start_skip * ch) / ch) / 8 * 14;
@@ -2806,6 +2810,53 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         bytestream2_seek(&gb, 0, SEEK_END);
         ) /* End of CASE */
+    CASE(ADPCM_NDSP_SI1,
+        for (int n = 0; n < 8; n++) {
+            for (int ch = 0; ch < channels; ch++) {
+                int byte, scale, coeff1, coeff2, sample1, sample2;
+                ADPCMChannelStatus *chs = &c->status[ch];
+                int32_t sampledat;
+
+                if (n == 0) {
+                    int index;
+
+                    byte = bytestream2_get_byteu(&gb);
+                    index = (byte >> 4) & 0x7;
+                    chs->step = 1 << (byte & 0xF);
+                    chs->coeff1 = c->table[ch][index * 2];
+                    chs->coeff2 = c->table[ch][index * 2 + 1];
+                } else {
+                    sample1 = chs->sample1;
+                    sample2 = chs->sample2;
+                    coeff1 = chs->coeff1;
+                    coeff2 = chs->coeff2;
+                    scale =  chs->step;
+
+                    byte = bytestream2_get_byteu(&gb);
+
+                    sampledat = sign_extend(byte >> 4, 4);
+                    sampledat = (sampledat * scale) << 11;
+                    sampledat = ((sample1 * coeff1 +
+                                  sample2 * coeff2 + 1024 + sampledat) >> 11);
+                    *samples = av_clip_int16(sampledat);
+                    sample2 = sample1;
+                    sample1 = *samples++;
+
+                    sampledat = sign_extend(byte, 4);
+                    sampledat = (sampledat * scale) << 11;
+                    sampledat = ((sample1 * coeff1 +
+                                  sample2 * coeff2 + 1024 + sampledat) >> 11);
+                    *samples = av_clip_int16(sampledat);
+                    sample2 = sample1;
+                    sample1 = *samples++;
+
+                    chs->sample1 = sample1;
+                    chs->sample2 = sample2;
+                }
+            }
+        }
+        bytestream2_seek(&gb, 0, SEEK_END);
+        ) /* End of CASE */
     CASE(ADPCM_DTK,
         for (int channel = 0; channel < channels; channel++) {
             samples = samples_p[channel];
@@ -3344,7 +3395,8 @@ ADPCM_DECODER(ADPCM_MTAF,        sample_fmts_s16p, adpcm_mtaf,        "ADPCM MTA
 ADPCM_DECODER(ADPCM_N64,         sample_fmts_s16p, adpcm_n64,         "ADPCM Silicon Graphics N64")
 ADPCM_DECODER(ADPCM_NDSP,        sample_fmts_s16p, adpcm_ndsp,        "ADPCM Nintendo DSP")
 ADPCM_DECODER(ADPCM_NDSP_LE,     sample_fmts_s16p, adpcm_ndsp_le,     "ADPCM Nintendo DSP (little-endian)")
-ADPCM_DECODER(ADPCM_NDSP_SI,     sample_fmts_s16p, adpcm_ndsp_si,     "ADPCM Nintendo DSP (sub-interleave)")
+ADPCM_DECODER(ADPCM_NDSP_SI,     sample_fmts_s16p, adpcm_ndsp_si,     "ADPCM Nintendo DSP (sub-interleave 2)")
+ADPCM_DECODER(ADPCM_NDSP_SI1,    sample_fmts_s16,  adpcm_ndsp_si1,    "ADPCM Nintendo DSP (sub-interleave 1)")
 ADPCM_DECODER(ADPCM_PSX,         sample_fmts_s16p, adpcm_psx,         "ADPCM Playstation")
 ADPCM_DECODER(ADPCM_PSXC,        sample_fmts_s16p, adpcm_psxc,        "ADPCM Playstation C")
 ADPCM_DECODER(ADPCM_SANYO,       sample_fmts_s16p, adpcm_sanyo,       "ADPCM Sanyo")

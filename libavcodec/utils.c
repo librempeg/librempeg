@@ -711,6 +711,7 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
             case AV_CODEC_ID_ADPCM_NDSP:
             case AV_CODEC_ID_ADPCM_NDSP_LE:
             case AV_CODEC_ID_ADPCM_NDSP_SI:
+            case AV_CODEC_ID_ADPCM_NDSP_SI1:
                 if (extradata)
                     return frame_bytes * 14LL / (8 * ch);
                 break;

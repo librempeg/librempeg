@@ -1031,6 +1031,7 @@ OBJS-$(CONFIG_ADPCM_NDSP_ENCODER)         += adpcm_thpenc.o
 OBJS-$(CONFIG_ADPCM_NDSP_LE_DECODER)      += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_NDSP_LE_ENCODER)      += adpcm_thpenc.o
 OBJS-$(CONFIG_ADPCM_NDSP_SI_DECODER)      += adpcm.o adpcm_data.o
+OBJS-$(CONFIG_ADPCM_NDSP_SI1_DECODER)     += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_PSX_DECODER)          += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_PSXC_DECODER)         += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_PT_DECODER)           += wwise_adpcm_pt.o

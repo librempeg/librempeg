@@ -2816,7 +2816,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_ADPCM_NDSP_SI,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "adpcm_ndsp_si",
-        .long_name = NULL_IF_CONFIG_SMALL("ADPCM Nintendo DSP (sub-interleave)"),
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM Nintendo DSP (sub-interleave 2)"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
     {
@@ -2831,6 +2831,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "adpcm_ndsp_le",
         .long_name = NULL_IF_CONFIG_SMALL("ADPCM Nintendo DSP (little-endian)"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_NDSP_SI1,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ndsp_si1",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM Nintendo DSP (sub-interleave 1)"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 
