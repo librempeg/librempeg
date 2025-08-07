@@ -30,13 +30,13 @@ static int wiibgm_probe(const AVProbeData *p)
     if (memcmp(p->buf, "WiiBGM\0\0", 8))
         return 0;
 
-    if (p->buf_size < 34)
+    if (p->buf_size < 40)
         return 0;
 
     if ((int32_t)AV_RB32(p->buf + 32) <= 0)
         return 0;
 
-    if ((int32_t)AV_RB32(p->buf + 34) <= 0)
+    if ((int32_t)AV_RB32(p->buf + 36) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
