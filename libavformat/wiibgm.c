@@ -29,15 +29,25 @@ static int wiibgm_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "WiiBGM\0\0", 8))
         return 0;
+
+    if (p->buf_size < 34)
+        return 0;
+
+    if ((int32_t)AV_RB32(p->buf + 26) <= 0)
+        return 0;
+
+    if ((int32_t)AV_RB32(p->buf + 30) <= 0)
+        return 0;
+
     return AVPROBE_SCORE_MAX;
 }
 
 static int wiibgm_read_header(AVFormatContext *s)
 {
-    int ret;
+    AVIOContext *pb = s->pb;
     uint32_t loop_start;
     AVStream *st;
-    AVIOContext *pb = s->pb;
+    int ret;
 
     avio_skip(pb, 0x10);
 
@@ -47,7 +57,7 @@ static int wiibgm_read_header(AVFormatContext *s)
 
     st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP_SI;
+    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP_SI1;
 
     st->duration = avio_rb32(pb);
     loop_start = avio_rb32(pb);
@@ -55,7 +65,13 @@ static int wiibgm_read_header(AVFormatContext *s)
         av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
     avio_skip(pb, 8);
     st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
+    if (st->codecpar->ch_layout.nb_channels <= 0)
+        return AVERROR_INVALIDDATA;
+
     st->codecpar->sample_rate = avio_rb32(pb);
+    if (st->codecpar->sample_rate <= 0)
+        return AVERROR_INVALIDDATA;
+
     st->codecpar->block_align = 8 * st->codecpar->ch_layout.nb_channels;
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
@@ -68,6 +84,7 @@ static int wiibgm_read_header(AVFormatContext *s)
     }
 
     avio_seek(pb, 0x800, SEEK_SET);
+
     return 0;
 }
 
