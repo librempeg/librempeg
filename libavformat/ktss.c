@@ -39,17 +39,18 @@ static int ktss_probe(const AVProbeData *p)
 
 static int ktss_read_header(AVFormatContext *s)
 {
-    int ret, skip;
-    uint8_t version, version2;
+    uint32_t start_offset, loop_start, loop_length, coeff_skip, coeff_gap, frames;
+    KTSSDemuxContext *kc = s->priv_data;
     uint16_t format, channels;
-    uint32_t start_offset, loop_start, loop_length, coef_offset, coef_spacing, frames;
-    AVStream *st;
     AVIOContext *pb = s->pb;
+    uint8_t version;
+    int ret, skip;
+    AVStream *st;
 
     avio_skip(pb, 0x20);
     format = avio_rl16(pb);
     version = avio_r8(pb);
-    version2 = avio_r8(pb);
+    /* version2 = */avio_r8(pb);
     start_offset = avio_rl32(pb) + 0x20;
 
     st = avformat_new_stream(s, NULL);
@@ -79,12 +80,12 @@ static int ktss_read_header(AVFormatContext *s)
     case 0x02: /* DSP ADPCM - Shingeki no Kyojin - Shichi-Kara no Dasshutsu (3DS) */
         switch (version) {
         case 0x1:
-            coef_offset = 0x40;
-            coef_spacing = 0x20 + 0x0e;
+            coeff_skip = 4;
+            coeff_gap = 14;
             break;
         case 0x3:
-            coef_offset = 0x5c;
-            coef_spacing = 0x20 + 0x40;
+            coeff_skip = 32;
+            coeff_gap = 0x40;
             break;
         default:
             avpriv_request_sample(st, "format 0x%X, version 0x%X", format, version);
@@ -97,18 +98,18 @@ static int ktss_read_header(AVFormatContext *s)
         ret = ff_alloc_extradata(st->codecpar, 0x20 * st->codecpar->ch_layout.nb_channels);
         if (ret < 0)
             return ret;
+        avio_skip(pb, coeff_skip);
         for (int c = 0; c < st->codecpar->ch_layout.nb_channels; c++) {
-            avio_seek(pb, coef_offset + coef_spacing * c, SEEK_SET);
-            avio_read(pb, st->codecpar->extradata + 0x20 * c, 0x20);
+            avio_read(pb, st->codecpar->extradata + 0x20 * c, 32);
+            avio_skip(pb, coeff_gap);
         }
 
         break;
     case 0x09: /* OPUS - Dead or Alive Xtreme 3: Scarlet (Switch), Fire Emblem: Three Houses (Switch) */
         if (channels > 8)
             return AVERROR_INVALIDDATA;
-        KTSSDemuxContext *kc = s->priv_data;
 
-        avio_seek(pb, 0x40, SEEK_SET);
+        avio_skip(pb, 4);
         st->codecpar->codec_id = AV_CODEC_ID_OPUS;
 
         start_offset = avio_rl32(pb);
@@ -169,6 +170,7 @@ static int ktss_read_header(AVFormatContext *s)
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     avio_seek(pb, start_offset, SEEK_SET);
+
     return 0;
 }
 
