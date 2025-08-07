@@ -33,10 +33,10 @@ static int wiibgm_probe(const AVProbeData *p)
     if (p->buf_size < 34)
         return 0;
 
-    if ((int32_t)AV_RB32(p->buf + 26) <= 0)
+    if ((int32_t)AV_RB32(p->buf + 32) <= 0)
         return 0;
 
-    if ((int32_t)AV_RB32(p->buf + 30) <= 0)
+    if ((int32_t)AV_RB32(p->buf + 34) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
