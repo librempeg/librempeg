@@ -78,9 +78,11 @@ static int wiibgm_read_header(AVFormatContext *s)
     ret = ff_alloc_extradata(st->codecpar, 0x20 * st->codecpar->ch_layout.nb_channels);
     if (ret < 0)
         return ret;
+
+    avio_skip(pb, 0x34);
     for (int c = 0; c < st->codecpar->ch_layout.nb_channels; c++) {
-        avio_seek(pb, 0x5c + 0x60 * c, SEEK_SET);
         avio_read(pb, st->codecpar->extradata + 0x20 * c, 0x20);
+        avio_skip(pb, 0x40);
     }
 
     avio_seek(pb, 0x800, SEEK_SET);
