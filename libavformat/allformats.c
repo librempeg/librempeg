@@ -210,6 +210,7 @@ extern const FFOutputFormat ff_framemd5_muxer;
 extern const FFInputFormat  ff_frm_demuxer;
 extern const FFInputFormat  ff_fsb_demuxer;
 extern const FFInputFormat  ff_fwse_demuxer;
+extern const FFInputFormat  ff_g1l_demuxer;
 extern const FFInputFormat  ff_g722_demuxer;
 extern const FFOutputFormat ff_g722_muxer;
 extern const FFInputFormat  ff_g723_1_demuxer;
