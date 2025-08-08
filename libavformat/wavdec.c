@@ -796,13 +796,17 @@ smv_out:
         wav->data_end = avio_tell(s->pb) + left;
     }
 
-    size = wav->max_size;
-    if (st->codecpar->block_align > 1) {
-        if (size < st->codecpar->block_align)
-            size = st->codecpar->block_align;
-        size = (size / st->codecpar->block_align) * st->codecpar->block_align;
+    if (st->codecpar->codec_id == AV_CODEC_ID_ATRAC3P) {
+        size = FFMIN(st->codecpar->block_align, left);
+    } else {
+        size = wav->max_size;
+        if (st->codecpar->block_align > 1) {
+            if (size < st->codecpar->block_align)
+                size = st->codecpar->block_align;
+            size = (size / st->codecpar->block_align) * st->codecpar->block_align;
+        }
+        size = FFMIN(size, left);
     }
-    size = FFMIN(size, left);
     ret  = av_get_packet(s->pb, pkt, size);
     if (ret < 0)
         return ret;
