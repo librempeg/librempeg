@@ -151,7 +151,7 @@ static int ktss_read_header(AVFormatContext *s)
         for (int c = 0; c < channels; c++)
             st->codecpar->extradata[21 + c] = avio_r8(pb);
 
-        if (channels == 6) {
+        if (channels == 6 && 0) {
             /* undo KTSS opus reordering: FL FC FR BL LFE BR > FL FR FC LFE BL BR */
             st->codecpar->ch_layout.u.map[0].id = AV_CHAN_FRONT_LEFT;
             st->codecpar->ch_layout.u.map[1].id = AV_CHAN_FRONT_CENTER;
