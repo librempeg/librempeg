@@ -52,7 +52,7 @@ static int read_data(void *opaque, uint8_t *buf, int buf_size)
 {
     AVFormatContext *s = opaque;
     AVIOContext *pb = s->pb;
-    int64_t pos = avio_tell(pb) - 32;
+    int64_t pos = avio_tell(pb) - 32 - s->skip_initial_bytes;
     int ret;
 
     ret = avio_read(pb, buf, buf_size);
