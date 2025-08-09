@@ -729,6 +729,7 @@ extern const FFCodec ff_adpcm_ima_wav_decoder;
 extern const FFCodec ff_adpcm_ima_ws_encoder;
 extern const FFCodec ff_adpcm_ima_ws_decoder;
 extern const FFCodec ff_adpcm_ima_xbox_decoder;
+extern const FFCodec ff_adpcm_ima_zmusic_decoder;
 extern const FFCodec ff_adpcm_ms_encoder;
 extern const FFCodec ff_adpcm_ms_decoder;
 extern const FFCodec ff_adpcm_mtaf_decoder;

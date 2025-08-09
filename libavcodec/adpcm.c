@@ -754,6 +754,29 @@ static inline int16_t adpcm_ima_oki_expand_nibble(ADPCMChannelStatus *c, int nib
     return c->predictor * 16;
 }
 
+static inline int16_t adpcm_ima_zmusic_expand_nibble(ADPCMChannelStatus *c, int nibble)
+{
+    int step_index, predictor, diff, step;
+
+    step = oki_step_table[c->step_index];
+    step_index = c->step_index + ff_adpcm_index_table[(unsigned)nibble];
+    step_index = av_clip(step_index, 0, 48);
+
+    diff = step >> 3;
+    if (nibble & 4) diff += step;
+    if (nibble & 2) diff += step >> 1;
+    if (nibble & 1) diff += step >> 2;
+    if (nibble & 8) diff = -diff;
+
+    predictor = c->predictor;
+    predictor += diff;
+
+    c->predictor = av_clip_intp2(predictor, 11);
+    c->step_index = step_index;
+
+    return c->predictor * 16;
+}
+
 static inline int16_t adpcm_ct_expand_nibble(ADPCMChannelStatus *c, int8_t nibble)
 {
     int sign, delta, diff;
@@ -1275,6 +1298,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_IMA_APM:
     case AV_CODEC_ID_ADPCM_IMA_ALP:
     case AV_CODEC_ID_ADPCM_IMA_MTF:
+    case AV_CODEC_ID_ADPCM_IMA_ZMUSIC:
         nb_samples = buf_size * 2 / ch;
         break;
     }
@@ -2093,6 +2117,13 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             int v = bytestream2_get_byteu(&gb);
             *samples++ = adpcm_ima_oki_expand_nibble(&c->status[0],  v >> 4  );
             *samples++ = adpcm_ima_oki_expand_nibble(&c->status[st], v & 0x0F);
+        }
+        ) /* End of CASE */
+    CASE(ADPCM_IMA_ZMUSIC,
+        for (int n = nb_samples >> (1 - st); n > 0; n--) {
+            int v = bytestream2_get_byteu(&gb);
+            *samples++ = adpcm_ima_zmusic_expand_nibble(&c->status[st], v & 0x0F);
+            *samples++ = adpcm_ima_zmusic_expand_nibble(&c->status[0],  v >> 4  );
         }
         ) /* End of CASE */
     CASE(ADPCM_IMA_RAD,
@@ -3390,6 +3421,7 @@ ADPCM_DECODER(ADPCM_IMA_ALP,     sample_fmts_s16,  adpcm_ima_alp,     "ADPCM IMA
 ADPCM_DECODER(ADPCM_IMA_WAV,     sample_fmts_s16p, adpcm_ima_wav,     "ADPCM IMA WAV")
 ADPCM_DECODER(ADPCM_IMA_WS,      sample_fmts_both, adpcm_ima_ws,      "ADPCM IMA Westwood")
 ADPCM_DECODER(ADPCM_IMA_XBOX,    sample_fmts_s16p, adpcm_ima_xbox,    "ADPCM IMA Xbox")
+ADPCM_DECODER(ADPCM_IMA_ZMUSIC,  sample_fmts_s16,  adpcm_ima_zmusic,  "ADPCM IMA Z-Music")
 ADPCM_DECODER(ADPCM_MS,          sample_fmts_both, adpcm_ms,          "ADPCM Microsoft")
 ADPCM_DECODER(ADPCM_MTAF,        sample_fmts_s16p, adpcm_mtaf,        "ADPCM MTAF")
 ADPCM_DECODER(ADPCM_N64,         sample_fmts_s16p, adpcm_n64,         "ADPCM Silicon Graphics N64")
