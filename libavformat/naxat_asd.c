@@ -218,6 +218,9 @@ static int naxat_asd_bnk_read_header(AVFormatContext *s)
         avio_seek(pb, addr, SEEK_SET);
     }
 
+    if (s->nb_streams <= 0)
+        return AVERROR_INVALIDDATA;
+
     qsort(s->streams, s->nb_streams, sizeof(AVStream *), sort_streams);
     for (int n = 0; n < s->nb_streams; n++) {
         AVStream *st = s->streams[n];
@@ -228,18 +231,17 @@ static int naxat_asd_bnk_read_header(AVFormatContext *s)
     }
 
     avio_seek(pb, first_ast->start_offset, SEEK_SET);
+
     return 0;
 }
 
 static int naxat_asd_bnk_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    int ret;
     int64_t pos, block_size;
     AVIOContext *pb = s->pb;
+    int ret = AVERROR_EOF;
 
-    ret = AVERROR_EOF;
-    for (int i = 0; i < s->nb_streams; i++)
-    {
+    for (int i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
         NaxatASDStream *ast = st->priv_data;
 
