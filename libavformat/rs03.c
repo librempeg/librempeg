@@ -19,7 +19,6 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include "libavutil/bswap.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
 #include "avformat.h"
@@ -33,6 +32,9 @@ static int read_probe(const AVProbeData *p)
     if (AV_RB32(p->buf+4) < 1 ||
         AV_RB32(p->buf+4) > 2)
         return 0;
+    if (p->buf_size < 16)
+        return 0;
+
     if (AV_RB32(p->buf+8) == 0)
         return 0;
     if (AV_RB32(p->buf+12) == 0)
