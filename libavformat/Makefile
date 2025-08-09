@@ -233,6 +233,7 @@ OBJS-$(CONFIG_EAC3_DEMUXER)              += ac3dec.o rawdec.o
 OBJS-$(CONFIG_EAC3_MUXER)                += rawenc.o
 OBJS-$(CONFIG_EALAYER3_DEMUXER)          += ealayer3.o
 OBJS-$(CONFIG_EPAF_DEMUXER)              += epafdec.o pcm.o
+OBJS-$(CONFIG_FBLPCM_DEMUXER)            += fblpcm.o
 OBJS-$(CONFIG_FFMETADATA_DEMUXER)        += ffmetadec.o
 OBJS-$(CONFIG_FFMETADATA_MUXER)          += ffmetaenc.o
 OBJS-$(CONFIG_FIFO_MUXER)                += fifo.o

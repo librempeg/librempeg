@@ -190,6 +190,7 @@ extern const FFInputFormat  ff_epaf_demuxer;
 extern const FFInputFormat  ff_evc_demuxer;
 extern const FFOutputFormat ff_evc_muxer;
 extern const FFOutputFormat ff_f4v_muxer;
+extern const FFInputFormat  ff_fblpcm_demuxer;
 extern const FFInputFormat  ff_ffmetadata_demuxer;
 extern const FFOutputFormat ff_ffmetadata_muxer;
 extern const FFOutputFormat ff_fifo_muxer;
