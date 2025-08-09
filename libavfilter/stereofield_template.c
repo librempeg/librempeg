@@ -95,7 +95,8 @@ static void fn(apply_window)(StereoFieldContext *s,
 }
 
 static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
-                            const ftype d, const ftype p, const int M)
+                            const ftype d, const ftype a0, const ftype a1,
+                            const ftype p, const int M)
 {
     const ftype lx = (p > F(0.0)) ? F(1.0)-p : F(1.0);
     const ftype rx = (p < F(0.0)) ? F(1.0)+p : F(1.0);
@@ -116,11 +117,17 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
             const ftype lf = m * -a + s * (F(M_PI) - aa);
             const ftype lc = COS(lf);
             const ftype ls = SIN(lf);
+            const ftype bx = a1 * aa / F(M_PI) + a0 * ((F(M_PI) - aa) / F(M_PI));
 
             fl[i].re = l_re * lc - l_im * ls;
             fl[i].im = l_re * ls + l_im * lc;
             fr[i].re = r_re;
             fr[i].im = r_im;
+
+            fl[i].re *= bx;
+            fl[i].im *= bx;
+            fr[i].re *= bx;
+            fr[i].im *= bx;
 
             fl[i].re *= lx;
             fl[i].im *= lx;
@@ -141,11 +148,17 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
             const ftype lf = m * a - s * (F(M_PI) - aa);
             const ftype lc = COS(lf);
             const ftype ls = SIN(lf);
+            const ftype bx = a1 * aa / F(M_PI) + a0 * ((F(M_PI) - aa) / F(M_PI));
 
             fl[i].re = l_re;
             fl[i].im = l_im;
             fr[i].re = r_re * lc - r_im * ls;
             fr[i].im = r_re * ls + r_im * lc;
+
+            fl[i].re *= bx;
+            fl[i].im *= bx;
+            fr[i].re *= bx;
+            fr[i].im *= bx;
 
             fl[i].re *= lx;
             fl[i].im *= lx;
@@ -169,11 +182,17 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
             const ftype lsl = SIN(lfl);
             const ftype lcr = COS(lfr);
             const ftype lsr = SIN(lfr);
+            const ftype bx = a1 * aa / F(M_PI_2) + a0 * ((F(M_PI_2) - aa) / F(M_PI_2));
 
             fl[i].re = l_re * lcl - l_im * lsl;
             fl[i].im = l_re * lsl + l_im * lcl;
             fr[i].re = r_re * lcr - r_im * lsr;
             fr[i].im = r_re * lsr + r_im * lcr;
+
+            fl[i].re *= bx;
+            fl[i].im *= bx;
+            fr[i].re *= bx;
+            fr[i].im *= bx;
 
             fl[i].re *= lx;
             fl[i].im *= lx;
@@ -203,6 +222,8 @@ static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out)
     const int offset = s->fft_size - overlap;
     const int nb_samples = FFMIN(overlap, s->in->nb_samples);
     const int M = s->mode;
+    const ftype A0 = s->A[0];
+    const ftype A1 = s->A[1];
     const ftype D = s->D;
     const ftype P = s->P;
 
@@ -222,7 +243,7 @@ static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out)
     s->tx_fn(s->tx_ctx, windowed_oright, windowed_right, sizeof(ftype));
 
     fn(stereofield)(windowed_oleft, windowed_oright,
-                    s->fft_size/2 + 1, D, P, M);
+                    s->fft_size/2 + 1, D, A0, A1, P, M);
 
     s->itx_fn(s->itx_ctx, windowed_left, windowed_oleft, sizeof(ctype));
     s->itx_fn(s->itx_ctx, windowed_right, windowed_oright, sizeof(ctype));
@@ -263,6 +284,8 @@ static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out)
     const int offset = s->fft_size - overlap;
     const int nb_samples = 0;
     const int M = s->mode;
+    const ftype A0 = s->A[0];
+    const ftype A1 = s->A[1];
     const ftype D = s->D;
     const ftype P = s->P;
 
@@ -280,7 +303,7 @@ static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out)
     s->tx_fn(s->tx_ctx, windowed_oright, windowed_right, sizeof(ftype));
 
     fn(stereofield)(windowed_oleft, windowed_oright,
-                    s->fft_size/2 + 1, D, P, M);
+                    s->fft_size/2 + 1, D, A0, A1, P, M);
 
     s->itx_fn(s->itx_ctx, windowed_left, windowed_oleft, sizeof(ctype));
     s->itx_fn(s->itx_ctx, windowed_right, windowed_oright, sizeof(ctype));
