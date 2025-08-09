@@ -208,7 +208,7 @@ static int init_segment(AVFilterContext *ctx, AudioFIRSegment *seg, int selir,
     seg->tempout = ff_get_audio_buffer(ctx->inputs[0], seg->block_size);
     seg->buffer = ff_get_audio_buffer(ctx->inputs[0], seg->part_size);
     seg->input  = ff_get_audio_buffer(ctx->inputs[0], seg->input_size);
-    seg->output = ff_get_audio_buffer(ctx->inputs[0], seg->part_size * 5);
+    seg->output = ff_get_audio_buffer(ctx->inputs[0], seg->part_size);
     if (!seg->buffer || !seg->sumin || !seg->sumout || !seg->blockout ||
         !seg->input || !seg->output || !seg->tempin || !seg->tempout)
         return AVERROR(ENOMEM);
