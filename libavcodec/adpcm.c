@@ -368,6 +368,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_NDSP_SI:
     case AV_CODEC_ID_ADPCM_AFC:
     case AV_CODEC_ID_ADPCM_DTK:
+    case AV_CODEC_ID_ADPCM_PROCYON:
     case AV_CODEC_ID_ADPCM_PSX:
     case AV_CODEC_ID_ADPCM_PSXC:
     case AV_CODEC_ID_ADPCM_SANYO:
@@ -1517,6 +1518,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_DTK:
     case AV_CODEC_ID_ADPCM_PSX:
         nb_samples = buf_size / (16 * ch) * 28;
+        break;
+    case AV_CODEC_ID_ADPCM_PROCYON:
+        nb_samples = (buf_size / ch - 1) * 2;
         break;
     case AV_CODEC_ID_ADPCM_PSXC:
         nb_samples = ((buf_size - 1) / ch) * 2;
@@ -3019,6 +3023,54 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         bytestream2_seek(&gb, 0, SEEK_END);
         ) /* End of CASE */
+    CASE(ADPCM_PROCYON,
+        for (int block = 0; block < avpkt->size / FFMAX(avctx->block_align, 16 * channels); block++) {
+            int nb_samples_per_block = 30 * FFMAX(avctx->block_align, 16 * channels) / (16 * channels);
+            for (int channel = 0; channel < channels; channel++) {
+                int scale, coef1, coef2, hist1, hist2, filter;
+                uint8_t frame[16], header;
+
+                samples = samples_p[channel] + block * nb_samples_per_block;
+                av_assert0((block + 1) * nb_samples_per_block <= nb_samples);
+
+                bytestream2_get_bufferu(&gb, frame, sizeof(frame));
+
+                header = frame[0x0F] ^ 0x80;
+                scale = 12 - (header & 0xf);
+                filter = (header >> 4) & 0xf;
+                if (filter >= FF_ARRAY_ELEMS(xa_adpcm_table))
+                    return AVERROR_INVALIDDATA;
+
+                coef1 = xa_adpcm_table[filter][0];
+                coef2 = xa_adpcm_table[filter][1];
+
+                hist1 = c->status[channel].sample1;
+                hist2 = c->status[channel].sample2;
+
+                for (int n = 0; n < 30; n++) {
+                    uint8_t nibbles = frame[n>>1] ^ 0x80;
+                    int32_t sample;
+
+                    sample = (n&1) ? sign_extend(nibbles >>  4, 4) :
+                                     sign_extend(nibbles & 0xF, 4);
+                    sample = sample * (1 << 12);
+                    if (scale < 0)
+                        sample <<= -scale;
+                    else
+                        sample >>= scale;
+                    sample = (hist1 * coef1 + hist2 * coef2 + 32) / 64  + (sample * 64);
+
+                    hist2 = hist1;
+                    hist1 = sample;
+
+                    *samples++ = av_clip_int16((sample + 32) / 64);
+                }
+
+                c->status[channel].sample1 = hist1;
+                c->status[channel].sample2 = hist2;
+            }
+        }
+        ) /* End of CASE */
     CASE(ADPCM_PSX,
         for (int block = 0; block < avpkt->size / FFMAX(avctx->block_align, 16 * channels); block++) {
             int nb_samples_per_block = 28 * FFMAX(avctx->block_align, 16 * channels) / (16 * channels);
@@ -3429,6 +3481,7 @@ ADPCM_DECODER(ADPCM_NDSP,        sample_fmts_s16p, adpcm_ndsp,        "ADPCM Nin
 ADPCM_DECODER(ADPCM_NDSP_LE,     sample_fmts_s16p, adpcm_ndsp_le,     "ADPCM Nintendo DSP (little-endian)")
 ADPCM_DECODER(ADPCM_NDSP_SI,     sample_fmts_s16p, adpcm_ndsp_si,     "ADPCM Nintendo DSP (sub-interleave 2)")
 ADPCM_DECODER(ADPCM_NDSP_SI1,    sample_fmts_s16,  adpcm_ndsp_si1,    "ADPCM Nintendo DSP (sub-interleave 1)")
+ADPCM_DECODER(ADPCM_PROCYON,     sample_fmts_s16p, adpcm_procyon,     "ADPCM Procyon")
 ADPCM_DECODER(ADPCM_PSX,         sample_fmts_s16p, adpcm_psx,         "ADPCM Playstation")
 ADPCM_DECODER(ADPCM_PSXC,        sample_fmts_s16p, adpcm_psxc,        "ADPCM Playstation C")
 ADPCM_DECODER(ADPCM_SANYO,       sample_fmts_s16p, adpcm_sanyo,       "ADPCM Sanyo")
