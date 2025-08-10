@@ -27,6 +27,7 @@ typedef struct AudioCL2CLContext {
     const AVClass *class;
 
     AVChannelLayout ch_layout;
+    AVChannelLayout default_in_layout;
     int pass;
     int in_planar, out_planar;
 
@@ -127,6 +128,8 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioCL2CLContext *s = ctx->priv;
+
+    av_channel_layout_default(&s->default_in_layout, inlink->ch_layout.nb_channels);
 
     s->out_planar = av_sample_fmt_is_planar(outlink->format);
     s->in_planar = av_sample_fmt_is_planar(inlink->format);

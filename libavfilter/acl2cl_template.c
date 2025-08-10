@@ -69,7 +69,7 @@ static int fn(do_cl2cl)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const int start = (nb_channels * jobnr) / nb_jobs;
     const int end = (nb_channels * (jobnr+1)) / nb_jobs;
     AVChannelLayout *out_ch_layout = &out->ch_layout;
-    AVChannelLayout *in_ch_layout = &in->ch_layout;
+    AVChannelLayout *in_ch_layout = (in->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC) ? &s->default_in_layout : &in->ch_layout;
     const size_t bytes_per_sample = av_get_bytes_per_sample(in->format);
 
     for (int ch = start; ch < end; ch++) {
