@@ -206,6 +206,7 @@ OBJS-$(CONFIG_DCIDVI_DEMUXER)            += dcidvi.o
 OBJS-$(CONFIG_DCKCEY_DEMUXER)            += dckcey.o
 OBJS-$(CONFIG_DCSTR_DEMUXER)             += dcstr.o
 OBJS-$(CONFIG_DERF_DEMUXER)              += derf.o pcm.o
+OBJS-$(CONFIG_DERFVIDEO_DEMUXER)         += derfvideo.o
 OBJS-$(CONFIG_DFA_DEMUXER)               += dfa.o
 OBJS-$(CONFIG_DFPWM_DEMUXER)             += dfpwmdec.o pcm.o
 OBJS-$(CONFIG_DFPWM_MUXER)               += rawenc.o
