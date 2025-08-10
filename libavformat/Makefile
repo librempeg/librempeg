@@ -193,6 +193,7 @@ OBJS-$(CONFIG_CODEC2_MUXER)              += codec2.o rawenc.o
 OBJS-$(CONFIG_CODEC2RAW_DEMUXER)         += codec2.o pcm.o
 OBJS-$(CONFIG_CODEC2RAW_MUXER)           += rawenc.o
 OBJS-$(CONFIG_CONCAT_DEMUXER)            += concatdec.o
+OBJS-$(CONFIG_COVOX_DEMUXER)             += covox.o
 OBJS-$(CONFIG_CRC_MUXER)                 += crcenc.o
 OBJS-$(CONFIG_CSMP_DEMUXER)              += csmp.o
 OBJS-$(CONFIG_DAT_DEMUXER)               += dat.o pcm.o

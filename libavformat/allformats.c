@@ -146,6 +146,7 @@ extern const FFOutputFormat ff_codec2_muxer;
 extern const FFInputFormat  ff_codec2raw_demuxer;
 extern const FFOutputFormat ff_codec2raw_muxer;
 extern const FFInputFormat  ff_concat_demuxer;
+extern const FFInputFormat  ff_covox_demuxer;
 extern const FFOutputFormat ff_crc_muxer;
 extern const FFInputFormat  ff_csmp_demuxer;
 extern const FFInputFormat  ff_dash_demuxer;
