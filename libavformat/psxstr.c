@@ -169,7 +169,7 @@ static int str_read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     StrDemuxContext *str = s->priv_data;
-    unsigned char sector[RAW_CD_SECTOR_SIZE];
+    uint8_t sector[RAW_CD_SECTOR_SIZE];
     int start, ret;
 
     /* skip over any RIFF header */
@@ -201,7 +201,7 @@ static int str_read_packet(AVFormatContext *s,
 {
     AVIOContext *pb = s->pb;
     StrDemuxContext *str = s->priv_data;
-    unsigned char sector[RAW_CD_SECTOR_SIZE];
+    uint8_t sector[RAW_CD_SECTOR_SIZE];
     int channel, ret;
     AVPacket *pkt;
     AVStream *st;
