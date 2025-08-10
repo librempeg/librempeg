@@ -1,5 +1,5 @@
 /*
- * DERF demuxer
+ * DERF Audio demuxer
  * Copyright (c) 2020 Paul B Mahol
  *
  * This file is part of Librempeg
@@ -72,7 +72,7 @@ static int derf_read_header(AVFormatContext *s)
 
 const FFInputFormat ff_derf_demuxer = {
     .p.name         = "derf",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Xilam DERF"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Xilam DERF Audio"),
     .p.extensions   = "adp",
     .read_probe     = derf_probe,
     .read_header    = derf_read_header,
