@@ -210,6 +210,8 @@ static int str_read_packet(AVFormatContext *s,
     pos = avio_tell(pb);
 
     while (!avio_feof(pb)) {
+        int audio_packet_size = 2304;
+        int split_index = 0;
         int read = avio_read(pb, sector, RAW_DATA_SIZE);
 
         if (read == AVERROR_EOF)
@@ -217,6 +219,13 @@ static int str_read_packet(AVFormatContext *s,
 
         if (read != RAW_DATA_SIZE)
             return AVERROR(EIO);
+
+        for (int n = 0; n < RAW_DATA_SIZE-4; n++) {
+            if (AV_RB32(sector + n) == STR_MAGIC) {
+                split_index = n;
+                break;
+            }
+        }
 
         if ((str->mode == 0) || !memcmp(sector, sync_header, sizeof(sync_header))) {
             int read = avio_read(pb, sector + RAW_DATA_SIZE, sizeof(sector) - RAW_DATA_SIZE);
@@ -248,7 +257,12 @@ static int str_read_packet(AVFormatContext *s,
             memmove(sector + 0x18, sector, RAW_DATA_SIZE);
             memset(sector, 0, 0x18);
             sector[0x12] = (AV_RB32(sector + 0x18) == STR_MAGIC) ? CDXA_TYPE_VIDEO : CDXA_TYPE_AUDIO;
+            if (sector[0x12] == CDXA_TYPE_AUDIO) // guess stereo
+                sector[0x13] |= 1;
             memset(sector + 0x18 + RAW_DATA_SIZE, 0, sizeof(sector) - 0x18 - RAW_DATA_SIZE);
+            audio_packet_size = (split_index > 0) ? split_index : 2304;
+            if (split_index > 0)
+                avio_seek(pb, -(RAW_DATA_SIZE - split_index), SEEK_CUR);
         } else if (str->mode == 1 || str->mode < 0) {
             if (str->mode < 0)
                 str->mode = 1;
@@ -364,9 +378,9 @@ static int str_read_packet(AVFormatContext *s,
                     return ret;
                 memcpy(pkt->data, sector + 232, 1680);
             } else {
-                if ((ret = av_new_packet(pkt, 2304)) < 0)
+                if ((ret = av_new_packet(pkt, audio_packet_size)) < 0)
                     return ret;
-                memcpy(pkt->data, sector + 24, 2304);
+                memcpy(pkt->data, sector + 24, audio_packet_size);
             }
 
             pkt->pos = pos;
