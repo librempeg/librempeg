@@ -72,18 +72,21 @@ static int mlp_parse(AVCodecParserContext *s,
         next = buf_size;
     } else {
         if (!mp->in_sync) {
+            const int index = mp->pc.index;
+            uint32_t state = mp->pc.state;
             // Not in sync - find a major sync header
 
             for (i = 0; i < buf_size; i++) {
-                mp->pc.state = (mp->pc.state << 8) | buf[i];
-                if ((mp->pc.state & 0xfffffffe) == 0xf8726fba &&
+                state = (state << 8) | buf[i];
+                if ((state & 0xfffffffe) == 0xf8726fba &&
                     // ignore if we do not have the data for the start of header
-                    mp->pc.index + i >= 7) {
+                    index + i >= 7) {
                     mp->in_sync = 1;
                     mp->bytes_left = 0;
                     break;
                 }
             }
+            mp->pc.state = state;
 
             if (!mp->in_sync) {
                 if (ff_combine_frame(&mp->pc, END_NOT_FOUND, &buf, &buf_size) != -1)
