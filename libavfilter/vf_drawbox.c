@@ -365,7 +365,8 @@ static av_pure av_always_inline int pixel_belongs_to_box(DrawBoxContext *s, int 
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 {
-    DrawBoxContext *s = inlink->dst->priv;
+    AVFilterContext *ctx = inlink->dst;
+    DrawBoxContext *s = ctx->priv;
     const AVDetectionBBoxHeader *header = NULL;
     const AVDetectionBBox *bbox;
     AVFrameSideData *sd;
@@ -377,7 +378,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
             header = (AVDetectionBBoxHeader *)sd->data;
             loop = header->nb_bboxes;
         } else {
-            av_log(s, AV_LOG_WARNING, "No detection bboxes.\n");
+            av_log(ctx, AV_LOG_WARNING, "No detection bboxes.\n");
             return ff_filter_frame(inlink->dst->outputs[0], frame);
         }
     }
