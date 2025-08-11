@@ -50,7 +50,7 @@ version 8.0:
 - DWD demuxer
 - raw G.728 demuxer
 - macbinary demuxer
-- idsp demuxer
+- idsp demuxer and muxer
 - bfwav demuxer
 - bcwav demuxer
 - bnsf demuxer
@@ -89,6 +89,59 @@ version 8.0:
 - bwav demuxer
 - nwav demuxer
 - dkanim demuxer
+- kvs demuxer
+- bnvib demuxer and muxer
+- lopu demuxer
+- stma demuxer
+- ADPCM FMOD decoder
+- aus demuxer
+- strm demuxer
+- ADPCM IMA NDS decoder
+- pamf demuxer
+- swav demuxer
+- ADPCM IMA MO decoder
+- mo demuxer
+- pona demuxer
+- btsnd demuxer
+- scdpcm demuxer
+- pasx demuxer
+- APDCM BRR decoder
+- brr demuxer
+- skvorbis decoder
+- sk demuxer
+- CFAST video decoder
+- cfast demuxer
+- psb demuxer
+- nus3 demuxer
+- ngcdspstd demuxer
+- cda demuxer
+- spcm demuxer
+- redspark muxer
+- swar demuxer
+- brstm muxer
+- naxat asd demuxer
+- agsc demuxer
+- vig demuxer
+- pasd demuxer
+- swp demuxer
+- dcidvi demuxer
+- dckcey demuxer
+- xwc demuxer
+- swaa/shsa demuxer
+- cdr demuxer
+- snrsns demuxer
+- ktss demuxer
+- wiibgm demuxer
+- g1l demuxer
+- ADPCM Z-Music decoder
+- zpd demuxer
+- fblpcm demuxer
+- saud demuxer
+- derfvideo demuxer
+- covox demuxer
+- ADPCM Procyon decoder
+- sadl demuxer
+- ADPCM THP/ADPCM NDSP encoders
 - colordetect filter
 
 
