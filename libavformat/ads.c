@@ -19,6 +19,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/intreadwrite.h"
 #include "libavutil/channel_layout.h"
 #include "avformat.h"
 #include "demux.h"
@@ -26,11 +27,23 @@
 
 static int ads_probe(const AVProbeData *p)
 {
+    if (p->buf_size < 36)
+        return 0;
+
     if (memcmp(p->buf, "SShd", 4) ||
         memcmp(p->buf+32, "SSbd", 4))
         return 0;
 
-    return AVPROBE_SCORE_MAX / 3 * 2;
+    if ((int32_t)AV_RL32(p->buf + 12) <= 0)
+        return 0;
+
+    if ((int32_t)AV_RL32(p->buf + 16) <= 0)
+        return 0;
+
+    if ((int32_t)AV_RL32(p->buf + 20) <= 0)
+        return 0;
+
+    return AVPROBE_SCORE_MAX;
 }
 
 static int ads_read_header(AVFormatContext *s)
