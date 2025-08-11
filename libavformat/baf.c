@@ -58,9 +58,21 @@ typedef struct BAFStream {
     int64_t stop_offset;
 } BAFStream;
 
+static int sort_streams(const void *a, const void *b)
+{
+    const AVStream *const *s1p = a;
+    const AVStream *const *s2p = b;
+    const AVStream *s1 = *s1p;
+    const AVStream *s2 = *s2p;
+    const BAFStream *bs1 = s1->priv_data;
+    const BAFStream *bs2 = s2->priv_data;
+
+    return FFDIFFSIGN(bs1->start_offset, bs2->start_offset);
+}
+
 static int read_header(AVFormatContext *s)
 {
-    uint32_t offset, version, nb_tracks, nb_streams = 0, codec, start_offset, stream_size;
+    uint32_t offset, version, nb_tracks, codec, start_offset, stream_size;
     uint32_t first_start_offset;
     AVIOContext *pb = s->pb;
     avio_r32 avio_r32;
@@ -109,8 +121,6 @@ static int read_header(AVFormatContext *s)
         if (ret < sizeof(stream_name)-1)
             avio_skip(pb, sizeof(stream_name) - ret - 1);
         start_offset = avio_r32(pb);
-        if (n == 0)
-            first_start_offset = start_offset;
         stream_size = avio_r32(pb);
 
         bst = av_mallocz(sizeof(*bst));
@@ -126,7 +136,6 @@ static int read_header(AVFormatContext *s)
         if (stream_name[0])
             av_dict_set(&st->metadata, "title", stream_name, 0);
 
-        st->id = nb_streams++;
         st->priv_data = bst;
         st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
         st->start_time = 0;
@@ -226,9 +235,20 @@ next:
             avio_skip(pb, metadata_end - avio_tell(pb));
     }
 
-    if (first_start_offset < avio_tell(pb))
-        return AVERROR_INVALIDDATA;
-    avio_skip(pb, first_start_offset - avio_tell(pb));
+    qsort(s->streams, s->nb_streams, sizeof(AVStream *), sort_streams);
+    for (int n = 0; n < s->nb_streams; n++) {
+        AVStream *st = s->streams[n];
+
+        if (n == 0) {
+            BAFStream *bst = st->priv_data;
+
+            first_start_offset = bst->start_offset;
+        }
+
+        st->index = n;
+    }
+
+    avio_seek(pb, first_start_offset, SEEK_SET);
 
     return 0;
 }
@@ -250,7 +270,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
         pos = avio_tell(pb);
         if (pos >= bst->start_offset && pos < bst->stop_offset) {
             ret = av_get_packet(pb, pkt, par->block_align);
-            pkt->stream_index = st->id;
+            pkt->stream_index = st->index;
             break;
         } else if (pos >= bst->stop_offset && n+1 < s->nb_streams) {
             AVStream *st_next = s->streams[n+1];
