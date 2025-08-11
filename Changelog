@@ -145,6 +145,8 @@ version 8.0:
 - colordetect filter
 - ffprobe -codec option
 - EXIF Metadata Parsing
+- ffprobe -codec option
+- HDR10+ metadata passthrough when decoding/encoding with libaom-av1
 
 
 version 7.1:
