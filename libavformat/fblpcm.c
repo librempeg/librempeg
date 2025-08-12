@@ -36,6 +36,9 @@ static int read_probe(const AVProbeData *p)
     if (p->buf_size < 0x4c)
         return 0;
 
+    if ((int32_t)AV_RL32(p->buf+0x28) <= 0)
+        return 0;
+
     if (AV_RL32(p->buf+0x38) != 2)
         return 0;
 
