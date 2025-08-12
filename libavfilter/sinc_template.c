@@ -167,8 +167,9 @@ static ftype fn(safe_log)(ftype x)
     return FLOG(FMINV);
 }
 
-static int fn(fir_to_phase)(SincContext *s, ftype **h, int *len, int *post_len, ftype phase)
+static int fn(fir_to_phase)(AVFilterContext *ctx, ftype **h, int *len, int *post_len, ftype phase)
 {
+    SincContext *s = ctx->priv;
     ftype *pi_wraps, *work, phase1 = (phase > F(50.0) ? F(100.0) - phase : phase) / F(50.0);
     int work_len, begin, end, imp_peak = 0, peak = 0, ret;
     ftype imp_sum = 0, peak_imp_sum = 0, scale = F(1.0), iscale;
@@ -277,7 +278,7 @@ static int fn(fir_to_phase)(SincContext *s, ftype **h, int *len, int *post_len, 
         (*h)[i] = work[(begin + (phase > F(50.0) ? *len - 1 - i : i) + work_len) & (work_len - 1)];
     *post_len = phase > F(50.0) ? peak - begin : begin + *len - (peak + 1);
 
-    av_log(s, AV_LOG_DEBUG, "%d nPI=%g peak-sum@%i=%g (val@%i=%g); len=%i post=%i (%g%%)\n",
+    av_log(ctx, AV_LOG_DEBUG, "%d nPI=%g peak-sum@%i=%g (val@%i=%g); len=%i post=%i (%g%%)\n",
            work_len, pi_wraps[work_len >> 1] / M_PI, peak, peak_imp_sum, imp_peak,
            work[imp_peak], *len, *post_len, F(100.0) - F(100.0) * *post_len / (*len - 1));
 
@@ -322,7 +323,7 @@ static int fn(generate)(AVFilterContext *ctx)
     }
 
     if (s->phase != F(50.0)) {
-        ret = fn(fir_to_phase)(s, &h[longer], &n, &post_peak, s->phase);
+        ret = fn(fir_to_phase)(ctx, &h[longer], &n, &post_peak, s->phase);
         if (ret < 0)
             goto fail;
     } else {
