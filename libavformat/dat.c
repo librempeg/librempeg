@@ -35,11 +35,11 @@ static const enum AVCodecID encoded_codec[] = {
     AV_CODEC_ID_NONE, AV_CODEC_ID_NONE,
 };
 
-static int valid_frame(uint8_t *frame)
+static int valid_frame(const uint8_t *frame)
 {
-    uint8_t *scode = frame+DAT_OFFSET;
-    uint8_t *subid = scode+7*8;
-    uint8_t *mainid = subid+4;
+    const uint8_t *scode = frame+DAT_OFFSET;
+    const uint8_t *subid = scode+7*8;
+    const uint8_t *mainid = subid+4;
     int chan_index = (mainid[0] >> 0) & 0x3;
     int rate_index = (mainid[0] >> 2) & 0x3;
     int enc_index  = (mainid[1] >> 6) & 0x3;
