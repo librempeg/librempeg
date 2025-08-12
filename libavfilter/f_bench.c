@@ -76,7 +76,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     BenchContext *s = ctx->priv;
 
     if (s->n > 0)
-        av_log(s, AV_LOG_INFO, "avg:%f max:%f min:%f\n",
+        av_log(ctx, AV_LOG_INFO, "avg:%f max:%f min:%f\n",
                T2F(s->sum / s->n), T2F(s->max), T2F(s->min));
 }
 
@@ -102,7 +102,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             s->min = FFMIN(s->min, diff);
             s->max = FFMAX(s->max, diff);
             if (s->loglevel != AV_LOG_QUIET)
-                av_log(s, s->loglevel, "t:%f avg:%f max:%f min:%f\n",
+                av_log(ctx, s->loglevel, "t:%f avg:%f max:%f min:%f\n",
                        T2F(diff), T2F(s->sum / s->n), T2F(s->max), T2F(s->min));
         }
         av_dict_set(&in->metadata, START_TIME_KEY, NULL, 0);
