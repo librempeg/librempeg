@@ -66,7 +66,7 @@ static av_cold int init(AVFilterContext *ctx)
     HilbertContext *s = ctx->priv;
 
     if (!(s->nb_taps & 1)) {
-        av_log(s, AV_LOG_WARNING, "Number of taps %d must be odd number.\n", s->nb_taps);
+        av_log(ctx, AV_LOG_WARNING, "Number of taps %d must be odd number.\n", s->nb_taps);
         s->nb_taps |= 1;
     }
 
