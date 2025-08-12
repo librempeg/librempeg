@@ -30,9 +30,10 @@
 #include "avio_internal.h"
 
 typedef struct DKAnimDemuxContext {
+    AVPacket *video_pkt;
+
+    int64_t video_start_pos;
     int image_factor;
-    int audio_size;
-    int got_audio;
 } DKAnimDemuxContext;
 
 static int dkanim_probe(const AVProbeData *p)
@@ -58,13 +59,16 @@ static int dkanim_probe(const AVProbeData *p)
 
 static int dkanim_read_header(AVFormatContext *s)
 {
-    int audio_size, sample_rate, codec, nb_channels, bps, ba;
+    int nb_chunks, audio_size, sample_rate, codec, nb_channels, bps, ba, fps;
     DKAnimDemuxContext *d = s->priv_data;
     AVIOContext *pb = s->pb;
-    AVStream *st;
+    AVStream *ast, *vst;
 
-    avio_skip(pb, 8);
+    avio_skip(pb, 2);
+    nb_chunks = avio_rl16(pb);
+    avio_skip(pb, 2);
 
+    fps = avio_rl16(pb);
     d->image_factor = avio_rl16(pb);
     audio_size = avio_rl16(pb);
     avio_skip(pb, 2);
@@ -78,40 +82,68 @@ static int dkanim_read_header(AVFormatContext *s)
     if (nb_channels <= 0 || sample_rate <= 0 || bps <= 0 || ba <= 0)
         return AVERROR_INVALIDDATA;
 
-    st = avformat_new_stream(s, NULL);
-    if (!st)
+    ast = avformat_new_stream(s, NULL);
+    if (!ast)
         return AVERROR(ENOMEM);
 
-    st->codecpar->block_align = ba;
-    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->bits_per_coded_sample = bps;
+    ast->start_time = 0;
+    ast->codecpar->block_align = ba;
+    ast->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    ast->codecpar->bits_per_coded_sample = bps;
     switch (codec) {
     case 1:
-        st->codecpar->codec_id = ff_get_pcm_codec_id(st->codecpar->bits_per_coded_sample,
-                                                     0, 0, 0);
+        ast->codecpar->codec_id = ff_get_pcm_codec_id(ast->codecpar->bits_per_coded_sample,
+                                                      0, 0, 0);
         break;
     case 2:
-        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_MS;
+        ast->codecpar->codec_id = AV_CODEC_ID_ADPCM_MS;
         break;
     default:
         avpriv_request_sample(s, "codec %d", codec);
         return AVERROR_PATCHWELCOME;
     }
-    st->codecpar->ch_layout.nb_channels = nb_channels;
-    st->codecpar->sample_rate = sample_rate;
+    ast->codecpar->ch_layout.nb_channels = nb_channels;
+    ast->codecpar->sample_rate = sample_rate;
 
-    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+    avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
 
     avio_seek(pb, 0xE + audio_size, SEEK_SET);
+
+    d->video_pkt = av_packet_alloc();
+    if (!d->video_pkt)
+        return AVERROR(ENOMEM);
+
+    vst = avformat_new_stream(s, NULL);
+    if (!vst)
+        return AVERROR(ENOMEM);
+
+    vst->start_time = 0;
+    vst->nb_frames = nb_chunks;
+    vst->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+    vst->codecpar->codec_id = AV_CODEC_ID_DKANIM;
+
+    avpriv_set_pts_info(vst, 64, 1, fps);
+
+    d->video_start_pos = -1;
 
     return 0;
 }
 
 static int dkanim_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
+    DKAnimDemuxContext *d = s->priv_data;
     AVIOContext *pb = s->pb;
     int ret = 0, audio_size, video_size;
+    uint8_t video_header[12];
     int64_t pos = avio_tell(pb);
+
+    if (d->video_pkt->size > 0) {
+        av_packet_move_ref(pkt, d->video_pkt);
+        pkt->pos = d->video_pkt->pos;
+        pkt->stream_index = 1;
+        pkt->duration = 1;
+        return 0;
+    }
 
     if (avio_feof(pb))
         return AVERROR_EOF;
@@ -119,19 +151,65 @@ static int dkanim_read_packet(AVFormatContext *s, AVPacket *pkt)
     if (avio_rl16(pb) != 1)
         return AVERROR_INVALIDDATA;
     audio_size = avio_rl32(pb);
-    avio_skip(pb, 8);
-    avio_skip(pb, 4);
+    avio_read(pb, video_header, 12);
     video_size = avio_rl32(pb);
     avio_skip(pb, 6);
 
-    if (audio_size > 0)
+    if (audio_size > 0) {
         ret = av_get_packet(pb, pkt, audio_size);
-    avio_skip(pb, video_size);
+        if (ret < 0)
+            return ret;
+        pkt->stream_index = 0;
+        pkt->pos = pos;
+    }
 
-    pkt->stream_index = 0;
-    pkt->pos = pos;
+    if (video_size > 0) {
+        if (video_size >= INT_MAX - sizeof(video_header))
+            return AVERROR_INVALIDDATA;
 
+        ret = av_new_packet(d->video_pkt, video_size + sizeof(video_header));
+        if (ret < 0)
+            return ret;
+        memcpy(d->video_pkt->data, video_header, sizeof(video_header));
+        avio_read(pb, d->video_pkt->data + sizeof(video_header), video_size);
+        d->video_pkt->pos = pos;
+        if (d->video_start_pos < 0)
+            d->video_start_pos = pos;
+        if (pos == d->video_start_pos)
+            d->video_pkt->flags |= AV_PKT_FLAG_KEY;
+    } else {
+        ret = av_new_packet(d->video_pkt, 1);
+        if (ret < 0)
+            return ret;
+        memset(d->video_pkt->data, 0, 1);
+        if (d->video_start_pos < 0)
+            d->video_start_pos = pos;
+        if (pos == d->video_start_pos)
+            d->video_pkt->flags |= AV_PKT_FLAG_KEY;
+    }
+
+    if (audio_size == 0)
+        return FFERROR_REDO;
     return ret;
+}
+
+static int dkanim_read_seek(AVFormatContext *s, int stream_index,
+                            int64_t timestamp, int flags)
+{
+    DKAnimDemuxContext *d = s->priv_data;
+
+    av_packet_unref(d->video_pkt);
+
+    return -1;
+}
+
+static int dkanim_read_close(AVFormatContext *s)
+{
+    DKAnimDemuxContext *d = s->priv_data;
+
+    av_packet_free(&d->video_pkt);
+
+    return 0;
 }
 
 const FFInputFormat ff_dkanim_demuxer = {
@@ -143,4 +221,6 @@ const FFInputFormat ff_dkanim_demuxer = {
     .read_probe     = dkanim_probe,
     .read_header    = dkanim_read_header,
     .read_packet    = dkanim_read_packet,
+    .read_seek      = dkanim_read_seek,
+    .read_close     = dkanim_read_close,
 };
