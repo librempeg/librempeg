@@ -132,7 +132,8 @@ static int lopus_read_header(AVFormatContext *s)
     if (chunk != 0x80000004)
         return AVERROR_INVALIDDATA;
 
-    lc->data_end = avio_tell(pb) + avio_rl32(pb);
+    lc->data_end  = avio_rl32(pb);
+    lc->data_end += avio_tell(pb);
 
     ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
 
