@@ -126,6 +126,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
         if (!st)
             return AVERROR(ENOMEM);
 
+        st->start_time = 0;
         pcm_size = parse_frame(data, st->codecpar);
 
         avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
