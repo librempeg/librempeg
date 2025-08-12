@@ -135,7 +135,7 @@ static int lopus_read_header(AVFormatContext *s)
     lc->data_end  = avio_rl32(pb);
     lc->data_end += avio_tell(pb);
 
-    ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+    ffstream(st)->need_parsing = AVSTREAM_PARSE_HEADERS;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
