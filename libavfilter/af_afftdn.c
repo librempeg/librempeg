@@ -1002,10 +1002,11 @@ static void finish_sample_noise(AudioFFTDeNoiseContext *s,
     }
 }
 
-static void set_noise_profile(AudioFFTDeNoiseContext *s,
+static void set_noise_profile(AVFilterContext *ctx,
                               DeNoiseChannel *dnch,
                               double *sample_noise)
 {
+    AudioFFTDeNoiseContext *s = ctx->priv;
     double new_band_noise[NB_PROFILE_BANDS];
     double temp[NB_PROFILE_BANDS];
     double sum = 0.0;
@@ -1029,13 +1030,13 @@ static void set_noise_profile(AudioFFTDeNoiseContext *s,
 
     reduce_mean(temp);
 
-    av_log(s, AV_LOG_INFO, "bn=");
+    av_log(ctx, AV_LOG_INFO, "bn=");
     for (int m = 0; m < NB_PROFILE_BANDS; m++) {
         new_band_noise[m] = temp[m];
         new_band_noise[m] = av_clipd(new_band_noise[m], -24.0, 24.0);
-        av_log(s, AV_LOG_INFO, "%f ", new_band_noise[m]);
+        av_log(ctx, AV_LOG_INFO, "%f ", new_band_noise[m]);
     }
-    av_log(s, AV_LOG_INFO, "\n");
+    av_log(ctx, AV_LOG_INFO, "\n");
     memcpy(dnch->band_noise, new_band_noise, sizeof(new_band_noise));
 }
 
@@ -1182,7 +1183,7 @@ static int output_subframe(AVFilterLink *inlink,
             if (s->sample_noise_blocks <= 0)
                 break;
             finish_sample_noise(s, dnch, sample_noise);
-            set_noise_profile(s, dnch, sample_noise);
+            set_noise_profile(ctx, dnch, sample_noise);
             set_parameters(s, dnch, 1, 1);
         }
         s->sample_noise = 0;
