@@ -143,7 +143,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     if (pcm_size < 0)
-        return 0;
+        return FFERROR_REDO;
 
     if ((ret = av_new_packet(pkt, pcm_size)) < 0)
         return ret;
