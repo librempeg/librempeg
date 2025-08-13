@@ -257,7 +257,7 @@ static int config_output(AVFilterLink *outlink)
     s->planeheight[1] = s->planeheight[2] = AV_CEIL_RSHIFT(ctx->inputs[0]->h, desc->log2_chroma_h);
     s->planeheight[0] = s->planeheight[3] = ctx->inputs[0]->h;
 
-    ret = ff_draw_init2(&s->draw, outlink->format, outlink->colorspace, outlink->color_range, 0);
+    ret = ff_draw_init_from_link(&s->draw, outlink, 0);
     if (ret < 0)
         return ret;
     ff_draw_color(&s->draw, &s->color, s->fillcolor);

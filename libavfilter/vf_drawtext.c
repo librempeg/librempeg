@@ -1145,7 +1145,7 @@ static int config_input(AVFilterLink *inlink)
     char *expr;
     int ret;
 
-    ret = ff_draw_init2(&s->dc, inlink->format, inlink->colorspace, inlink->color_range, FF_DRAW_PROCESS_ALPHA);
+    ret = ff_draw_init_from_link(&s->dc, inlink, FF_DRAW_PROCESS_ALPHA);
     if (ret < 0)
         return ret;
     ff_draw_color(&s->dc, &s->fontcolor,   s->fontcolor.rgba);
