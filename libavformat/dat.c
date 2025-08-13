@@ -35,6 +35,19 @@ static const enum AVCodecID encoded_codec[] = {
     AV_CODEC_ID_NONE, AV_CODEC_ID_NONE,
 };
 
+static int valid_subcode(const uint8_t *subcode)
+{
+    int parity = 0;
+
+    for (int i = 0; i < 7; i++)
+        parity ^= subcode[i];
+
+    if (parity != subcode[7])
+        return 0;
+
+    return 1 + (!!subcode[7]) * 7;
+}
+
 static int valid_frame(const uint8_t *frame)
 {
     const uint8_t *scode = frame+DAT_OFFSET;
@@ -44,13 +57,18 @@ static int valid_frame(const uint8_t *frame)
     int rate_index = (mainid[0] >> 2) & 0x3;
     int enc_index  = (mainid[1] >> 6) & 0x3;
     int dataid     = (subid[0] >> 0) & 0xf;
+    int ret = 0;
 
     if (dataid != 0 || encoded_codec[enc_index] == AV_CODEC_ID_NONE ||
         encoded_chans[chan_index] == 0 ||
         encoded_rate[rate_index] == 0)
         return 0;
 
-    return 1;
+    ret++;
+    for (int i = 0; i < 7; i++)
+        ret += valid_subcode(scode + i * 8);
+
+    return ret;
 }
 
 static int read_probe(const AVProbeData *p)
