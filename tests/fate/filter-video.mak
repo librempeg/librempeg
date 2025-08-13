@@ -333,7 +333,7 @@ fate-filter-select-alternate: tests/data/filtergraphs/select-alternate
 fate-filter-select-alternate: CMD = framecrc -c:v pgmyuv -i $(SRC) -/filter $(TARGET_PATH)/tests/data/filtergraphs/select-alternate
 
 FATE_FILTER_FFPROBE-$(call ALLYES, FFPROBE SELECT_FILTER SMPTEBARS_FILTER LAVFI_INDEV) += fate-filter-select-ffprobe
-fate-filter-select-ffprobe: CMD = probe -print_format compact -show_entries packet=stream_index,pts,pts_time -f lavfi "smptebars=d=1,select=n=2:e=1[out0][out1]"
+fate-filter-select-ffprobe: CMD = ffprobe -print_format compact -show_entries packet=stream_index,pts,pts_time -f lavfi "smptebars=d=1,select=n=2:e=1[out0][out1]"
 
 FATE_FILTER-$(call FILTERFRAMECRC, SMPTEBARS SELECT, LAVFI_INDEV WRAPPED_AVFRAME_ENCODER NULL_MUXER) += fate-filter-select-buffering
 fate-filter-select-buffering: tests/data/filtergraphs/select-buffering
