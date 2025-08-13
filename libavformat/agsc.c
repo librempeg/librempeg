@@ -36,8 +36,11 @@ static int agsc_probe(const AVProbeData *p)
     int i;
 
     // version 2
-    if (AV_RB32(p->buf) == 1)
+    if (AV_RB32(p->buf) == 1) {
         off = 4;
+        if (av_match_ext(p->filename, "agsc") == 0)
+            return 0;
+    }
     // version 1
     else if (!memcmp(p->buf, "Audio/\0", 7))
         off = 8;
