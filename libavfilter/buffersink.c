@@ -113,7 +113,7 @@ static int get_frame_internal(AVFilterContext *ctx, AVFrame *frame, int flags, i
                 return ret;
         } else if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
             return status;
-        } else if ((flags & AV_BUFFERSINK_FLAG_NO_REQUEST)) {
+        } else if (flags & AV_BUFFERSINK_FLAG_NO_REQUEST) {
             return AVERROR(EAGAIN);
         } else {
             ff_inlink_request_frame(inlink);
