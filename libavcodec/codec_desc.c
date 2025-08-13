@@ -2063,7 +2063,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_CFAST,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "cfast",
-        .long_name = NULL_IF_CONFIG_SMALL("CFAST ((Disney Animation Studio))"),
+        .long_name = NULL_IF_CONFIG_SMALL("CFAST (Disney Animation Studio)"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
     {
