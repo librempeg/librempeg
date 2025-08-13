@@ -14,14 +14,14 @@ libavfilter/log2_tab.c
 libavfilter/riscv/cpu_common.c
 libavfilter/thread.c
 libavfilter/threadprogress.c
+libavformat/cbs.c
+libavformat/cbs_apv.c
+libavformat/cbs_av1.c
 libavformat/file_open.c
 libavformat/golomb_tab.c
 libavformat/log2_tab.c
 libavformat/rangecoder_dec.c
 libavformat/riscv/cpu_common.c
-libavformat/cbs.c
-libavformat/cbs_apv.c
-libavformat/cbs_av1.c
 libswresample/log2_tab.c
 libswscale/log2_tab.c
 libswscale/riscv/cpu_common.c
@@ -34,6 +34,7 @@ compat/float/limits.h
 compat/stdbit/stdbit.h
 libavcodec/bitstream_template.h
 libavcodec/bsf/wwisevorbis_data.h
+libavformat/adx_keys.h
 libavutil/threadprogress.h
 tools/decode_simple.h
 Use of av_clip() where av_clip_uintp2() could be used:
