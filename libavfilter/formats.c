@@ -979,9 +979,9 @@ int ff_set_common_color_spaces(AVFilterContext *ctx,
 }
 
 int ff_set_common_color_spaces_from_list(AVFilterContext *ctx,
-                                         const int *color_ranges)
+                                         const int *color_spaces)
 {
-    return ff_set_common_color_spaces(ctx, ff_make_format_list(color_ranges));
+    return ff_set_common_color_spaces(ctx, ff_make_format_list(color_spaces));
 }
 
 int ff_set_common_all_color_spaces(AVFilterContext *ctx)
@@ -1116,9 +1116,9 @@ int ff_set_common_color_spaces2(const AVFilterContext *ctx,
 int ff_set_common_color_spaces_from_list2(const AVFilterContext *ctx,
                                           AVFilterFormatsConfig **cfg_in,
                                           AVFilterFormatsConfig **cfg_out,
-                                          const int *color_ranges)
+                                          const int *color_spaces)
 {
-    return ff_set_common_color_spaces2(ctx, cfg_in, cfg_out, ff_make_format_list(color_ranges));
+    return ff_set_common_color_spaces2(ctx, cfg_in, cfg_out, ff_make_format_list(color_spaces));
 }
 
 int ff_set_common_all_color_spaces2(const AVFilterContext *ctx,
