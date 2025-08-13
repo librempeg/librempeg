@@ -24,6 +24,7 @@
  * Tiertex Limited SEQ file demuxer
  */
 
+#include "libavutil/intreadwrite.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/mem.h"
 #include "avformat.h"
@@ -64,22 +65,29 @@ typedef struct SeqDemuxContext {
 
 static int seq_probe(const AVProbeData *p)
 {
-    int i;
+    int score = AVPROBE_SCORE_MAX / 4;
 
-    if (p->buf_size < 258)
+    if (p->buf_size < 256 + SEQ_NUM_FRAME_BUFFERS * 2)
         return 0;
 
     /* there's no real header in a .seq file, the only thing they have in common */
     /* is the first 256 bytes of the file which are always filled with 0 */
-    for (i = 0; i < 256; i++)
+    for (int i = 0; i < 256; i++)
         if (p->buf[i])
             return 0;
 
-    if(p->buf[256]==0 && p->buf[257]==0)
+    if (AV_RL16(p->buf + 256) == 0)
         return 0;
 
-    /* only one fourth of the score since the previous check is too naive */
-    return AVPROBE_SCORE_MAX / 4;
+    score += 5;
+    for (int i = 1; i < SEQ_NUM_FRAME_BUFFERS; i++) {
+        if (AV_RL16(p->buf + 256 + i*2) != 0)
+            score += 5;
+        if (score >= AVPROBE_SCORE_MAX)
+            break;
+    }
+
+    return score;
 }
 
 static int seq_init_frame_buffers(SeqDemuxContext *seq, AVIOContext *pb)
