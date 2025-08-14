@@ -421,6 +421,7 @@ OBJS-$(CONFIG_MMF_MUXER)                 += mmf.o rawenc.o
 OBJS-$(CONFIG_MO_DEMUXER)                += mo.o
 OBJS-$(CONFIG_MODS_DEMUXER)              += mods.o
 OBJS-$(CONFIG_MOFLEX_DEMUXER)            += moflex.o
+OBJS-$(CONFIG_MOGG_DEMUXER)              += mogg.o
 OBJS-$(CONFIG_MOV_DEMUXER)               += mov.o mov_chan.o mov_esds.o \
                                             qtpalette.o replaygain.o dovi_isom.o \
                                             dvdclut.o

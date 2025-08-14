@@ -331,6 +331,7 @@ extern const FFOutputFormat ff_mmf_muxer;
 extern const FFInputFormat  ff_mo_demuxer;
 extern const FFInputFormat  ff_mods_demuxer;
 extern const FFInputFormat  ff_moflex_demuxer;
+extern const FFInputFormat  ff_mogg_demuxer;
 extern const FFInputFormat  ff_mov_demuxer;
 extern const FFOutputFormat ff_mov_muxer;
 extern const FFOutputFormat ff_mp2_muxer;
