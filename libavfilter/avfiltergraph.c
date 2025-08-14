@@ -27,6 +27,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/bprint.h"
 #include "libavutil/channel_layout.h"
+#include "libavutil/fifo.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
@@ -103,6 +104,12 @@ AVFilterGraph *avfilter_graph_alloc(void)
         return NULL;
     }
 
+    graph->fifo_empty_frames = av_fifo_alloc2(32, sizeof(AVFrame *), AV_FIFO_FLAG_AUTO_GROW);
+    if (!graph->fifo_empty_frames) {
+        av_freep(&graph);
+        return NULL;
+    }
+
     ret = &graph->p;
     ret->av_class = &filtergraph_class;
     av_opt_set_defaults(ret);
@@ -153,6 +160,15 @@ void avfilter_graph_free(AVFilterGraph **graphp)
     av_opt_free(graph);
 
     ff_mutex_destroy(&graphi->get_buffer_lock);
+
+    while (av_fifo_can_read(graphi->fifo_empty_frames)) {
+        AVFrame *frame = NULL;
+
+        av_fifo_read(graphi->fifo_empty_frames, &frame, 1);
+
+        av_frame_free(&frame);
+    }
+    av_fifo_freep2(&graphi->fifo_empty_frames);
 
     av_freep(&graph->filters);
     av_freep(graphp);

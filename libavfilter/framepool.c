@@ -248,16 +248,19 @@ int ff_frame_pool_get_audio_config(FFFramePool *pool,
     return 0;
 }
 
-AVFrame *ff_frame_pool_get(FFFramePool *pool)
+AVFrame *ff_frame_pool_get(FFFramePool *pool, AVFifo *fifo_empty_frames)
 {
     int i;
     AVFrame *frame;
     const AVPixFmtDescriptor *desc;
 
-    frame = av_frame_alloc();
-    if (!frame) {
-        return NULL;
+    if (fifo_empty_frames && av_fifo_can_read(fifo_empty_frames) > 0) {
+        av_fifo_read(fifo_empty_frames, &frame, 1);
+    } else {
+        frame = av_frame_alloc();
     }
+    if (!frame)
+        return NULL;
 
     ff_mutex_lock(&pool->mutex);
 

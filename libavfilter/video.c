@@ -49,6 +49,7 @@ AVFrame *ff_null_get_video_buffer(AVFilterLink *link, int w, int h)
 AVFrame *ff_default_get_video_buffer2(AVFilterLink *link, int w, int h, int align)
 {
     FilterLinkInternal *const li = ff_link_internal(link);
+    AVFifo *fifo_empty_frames;
     AVFrame *frame = NULL;
     int pool_width = 0;
     int pool_height = 0;
@@ -97,7 +98,15 @@ AVFrame *ff_default_get_video_buffer2(AVFilterLink *link, int w, int h, int alig
         }
     }
 
-    frame = ff_frame_pool_get(li->frame_pool);
+    if (link->src) {
+        fifo_empty_frames = fffiltergraph(link->src->graph)->fifo_empty_frames;
+    } else if (link->dst) {
+        fifo_empty_frames = fffiltergraph(link->dst->graph)->fifo_empty_frames;
+    } else {
+        fifo_empty_frames = NULL;
+    }
+
+    frame = ff_frame_pool_get(li->frame_pool, fifo_empty_frames);
     if (!frame)
         return NULL;
 

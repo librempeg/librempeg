@@ -27,6 +27,7 @@
 
 #include <stdint.h>
 
+#include "libavutil/fifo.h"
 #include "libavutil/thread.h"
 
 #include "avfilter.h"
@@ -170,6 +171,8 @@ typedef struct FFFilterGraph {
 
     // used by frame threads to avoid concurrent get_buffer() calls
     AVMutex get_buffer_lock;
+
+    AVFifo *fifo_empty_frames;
 } FFFilterGraph;
 
 static inline FFFilterGraph *fffiltergraph(AVFilterGraph *graph)

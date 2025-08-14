@@ -73,8 +73,10 @@ int attribute_align_arg av_buffersink_get_frame(AVFilterContext *ctx, AVFrame *f
     return av_buffersink_get_frame_flags(ctx, frame, 0);
 }
 
-static int return_or_keep_frame(BufferSinkContext *buf, AVFrame *out, AVFrame *in, int flags)
+static int return_or_keep_frame(AVFilterContext *ctx, AVFrame *out, AVFrame *in, int flags)
 {
+    BufferSinkContext *buf = ctx->priv;
+
     if ((flags & AV_BUFFERSINK_FLAG_PEEK)) {
         buf->peeked_frame = in;
         return out ? av_frame_ref(out, in) : 0;
@@ -82,7 +84,8 @@ static int return_or_keep_frame(BufferSinkContext *buf, AVFrame *out, AVFrame *i
         av_assert1(out);
         buf->peeked_frame = NULL;
         av_frame_move_ref(out, in);
-        av_frame_free(&in);
+        if (av_fifo_write(fffiltergraph(ctx->graph)->fifo_empty_frames, &in, 1) < 0)
+            av_frame_free(&in);
         return 0;
     }
 }
@@ -97,7 +100,7 @@ static int get_frame_internal(AVFilterContext *ctx, AVFrame *frame, int flags, i
     int64_t pts;
 
     if (buf->peeked_frame)
-        return return_or_keep_frame(buf, frame, buf->peeked_frame, flags);
+        return return_or_keep_frame(ctx, frame, buf->peeked_frame, flags);
 
     while (1) {
         ret = samples ? ff_inlink_consume_samples(inlink, samples, samples, &cur_frame) :
@@ -106,7 +109,7 @@ static int get_frame_internal(AVFilterContext *ctx, AVFrame *frame, int flags, i
             return ret;
         } else if (ret) {
             /* TODO return the frame instead of copying it */
-            return return_or_keep_frame(buf, frame, cur_frame, flags);
+            return return_or_keep_frame(ctx, frame, cur_frame, flags);
         } else if (li->frame_wanted_out) {
             ret = ff_filter_graph_run_once(ctx->graph);
             if (ret < 0)
