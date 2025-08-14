@@ -169,8 +169,11 @@ static void fn(uninit_state)(AVFilterContext *ctx)
     AudioDynamicEqualizerContext *s = ctx->priv;
     fn(BandContext) *bc = s->bc;
 
-    for (int n = 0; n < s->nb_bands; n++)
-        av_freep(&bc->cc);
+    for (int n = 0; n < s->nb_bands && bc; n++) {
+        fn(BandContext) *b = &bc[n];
+
+        av_freep(&b->cc);
+    }
     av_freep(&bc);
     s->bc = NULL;
 }
