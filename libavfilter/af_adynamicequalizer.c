@@ -126,6 +126,9 @@ typedef struct AudioDynamicEqualizerContext {
     AVChannelLayout *channel;
     unsigned nb_channel;
 
+    double *fdetection;
+    unsigned nb_fdetection;
+
     int sidechain;
     int precision;
     int format;
@@ -133,6 +136,7 @@ typedef struct AudioDynamicEqualizerContext {
     int nb_channels;
 
     int (*filter_prepare)(AVFilterContext *ctx);
+    void (*fill_fdetection)(AVFilterContext *ctx);
     int (*filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
     int (*init_state)(AVFilterContext *ctx, int nb_channels, int nb_bands);
     void (*uninit_state)(AVFilterContext *ctx);
@@ -198,12 +202,14 @@ static int config_output(AVFilterLink *outlink)
     case AV_SAMPLE_FMT_DBLP:
         s->init_state      = init_state_double;
         s->uninit_state    = uninit_state_double;
+        s->fill_fdetection  = fill_fdetection_double;
         s->filter_prepare  = filter_prepare_double;
         s->filter_channels = filter_channels_double;
         break;
     case AV_SAMPLE_FMT_FLTP:
         s->init_state      = init_state_float;
         s->uninit_state    = uninit_state_float;
+        s->fill_fdetection  = fill_fdetection_float;
         s->filter_prepare  = filter_prepare_float;
         s->filter_channels = filter_channels_float;
         break;
@@ -216,6 +222,11 @@ static int config_output(AVFilterLink *outlink)
     if (ret < 0)
         return ret;
     s->nb_channels = outlink->ch_layout.nb_channels;
+
+    s->nb_fdetection = nb_bands;
+    s->fdetection = av_calloc(s->nb_fdetection, sizeof(*s->fdetection));
+    if (!s->fdetection)
+        return AVERROR(ENOMEM);
 
     return 0;
 }
@@ -245,6 +256,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in, AVFrame *sc)
     s->filter_prepare(ctx);
     ff_filter_execute(ctx, s->filter_channels, &td, NULL,
                       FFMIN(s->nb_channels, ff_filter_get_nb_threads(ctx)));
+    s->fill_fdetection(ctx);
 
     if (out != in)
         av_frame_free(&s->in);
@@ -306,6 +318,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 #define AF AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
+#define XR AV_OPT_FLAG_EXPORT|AV_OPT_FLAG_READONLY
 
 static const AVOptionArrayDef def_threshold  = {.def="0",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_dfrequency = {.def="1000",.size_min=1,.sep=' '};
@@ -325,6 +338,7 @@ static const AVOptionArrayDef def_mode       = {.def="cut",.size_min=1,.sep=' '}
 static const AVOptionArrayDef def_auto       = {.def="off",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_active     = {.def="true",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_channel    = {.def="24c",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_fdetection  = {.def="0",.size_min=1,.sep=' '};
 
 static const AVOption adynamicequalizer_options[] = {
     { "threshold",  "set detection threshold", OFFSET(threshold),  AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_threshold}, 0, 100,     FLAGS },
@@ -369,6 +383,7 @@ static const AVOption adynamicequalizer_options[] = {
     {   "float", "set single-floating point processing precision", 0, AV_OPT_TYPE_CONST, {.i64=1},          0, 0,   AF, .unit = "precision" },
     {   "double","set double-floating point processing precision", 0, AV_OPT_TYPE_CONST, {.i64=2},          0, 0,   AF, .unit = "precision" },
     { "sidechain",  "enable sidechain input",  OFFSET(sidechain),  AV_OPT_TYPE_BOOL,   {.i64=0},            0, 1,   AF },
+    { "fdetection", "filtered detection value",OFFSET(fdetection), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_fdetection}, 0, 100, AF|XR },
     { NULL }
 };
 

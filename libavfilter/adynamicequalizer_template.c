@@ -697,3 +697,32 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
 
     return 0;
 }
+
+static void fn(fill_band_fdetection)(AVFilterContext *ctx, const int nb_channels,
+                                     const int band)
+{
+    AudioDynamicEqualizerContext *s = ctx->priv;
+    fn(BandContext) *bc = s->bc;
+    fn(BandContext) *b = &bc[band];
+    fn(ChannelContext) *cs = b->cc;
+    double fdetection = 0.0;
+
+    for (int ch = 0; ch < nb_channels; ch++) {
+        fn(ChannelContext) *cc = &cs[ch];
+
+        fdetection = fmax(cc->detect, fdetection);
+    }
+
+    if (band < s->nb_fdetection)
+        s->fdetection[band] = fdetection;
+}
+
+static void fn(fill_fdetection)(AVFilterContext *ctx)
+{
+    AudioDynamicEqualizerContext *s = ctx->priv;
+    const int nb_channels = s->nb_channels;
+    const int nb_bands = s->nb_bands;
+
+    for (int band = 0; band < nb_bands; band++)
+        fn(fill_band_fdetection)(ctx, nb_channels, band);
+}
