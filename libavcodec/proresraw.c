@@ -349,15 +349,15 @@ static int decode_frame(AVCodecContext *avctx,
     w = bytestream2_get_be16(&gb);
     h = bytestream2_get_be16(&gb);
 
-    avctx->coded_width = FFALIGN(w, 16);
-    avctx->coded_height = FFALIGN(h, 16);
-
     if (w != avctx->width || h != avctx->height) {
         av_log(avctx, AV_LOG_WARNING, "picture resolution change: %dx%d -> %dx%d\n",
                avctx->width, avctx->height, w, h);
         if ((ret = ff_set_dimensions(avctx, w, h)) < 0)
             return ret;
     }
+
+    avctx->coded_width = FFALIGN(w, 16);
+    avctx->coded_height = FFALIGN(h, 16);
 
     switch (version) {
     case 0:
