@@ -149,7 +149,7 @@ static int msx_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         pos = avio_tell(pb);
         if (pos >= mst->start_offset && pos < mst->end_offset) {
-            block_size = ((mst->end_offset - mst->start_offset) / st->codecpar->block_align) * st->codecpar->block_align;
+            block_size = st->codecpar->block_align;
             ret = av_get_packet(pb, pkt, FFMIN(block_size, mst->end_offset - pos));
             pkt->pos = pos;
             pkt->stream_index = st->index;
