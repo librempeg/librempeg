@@ -34,14 +34,24 @@ typedef struct MSXStream {
 static int msx_probe(const AVProbeData *p)
 {
     uint32_t off;
-    if (AV_RL32(p->buf) == 1)
+
+    if (AV_RL32(p->buf) == 1) {
+        if (p->buf_size - 4 < 0x1C)
+            return 0;
+
         off = AV_RL32(p->buf + 0x1C);
-    else if (AV_RL32(p->buf) == 2) {
+    } else if (AV_RL32(p->buf) == 2) {
         if (AV_RL32(p->buf + 8) != AV_RL32(p->buf + 0x10))
             return 0;
+        if (p->buf_size < 0x44)
+            return 0;
+
         off = AV_RL32(p->buf + 0x40);
     } else
         return 0;
+    if (p->buf_size - 4 < off)
+        return 0;
+
     if (memcmp(p->buf + off, "RIFF", 4) || memcmp(p->buf + off + 8, "WAVEfmt ", 8))
         return 0;
 
