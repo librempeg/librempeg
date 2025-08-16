@@ -609,7 +609,7 @@ static inline int16_t adpcm_ima_wav_expand_nibble(ADPCMChannelStatus *c, GetBitC
     return (int16_t)c->predictor;
 }
 
-static inline int adpcm_ima_qt_expand_nibble(ADPCMChannelStatus *c, int nibble)
+int16_t ff_adpcm_ima_qt_expand_nibble(ADPCMChannelStatus *c, int nibble)
 {
     int step_index;
     int predictor;
@@ -663,9 +663,9 @@ static void decode_adpcm_ima_hvqm2(AVCodecContext *avctx, int16_t *outbuf, int s
     for (int i = 0; i < samples_to_do; i++) {
         if (!(i&1)) {
             nibble = bytestream2_get_byte(gb);
-            *outbuf++ = adpcm_ima_qt_expand_nibble(&c->status[st], nibble >>  4);
+            *outbuf++ = ff_adpcm_ima_qt_expand_nibble(&c->status[st], nibble >>  4);
         } else {
-            *outbuf++ = adpcm_ima_qt_expand_nibble(&c->status[ 0], nibble & 0xF);
+            *outbuf++ = ff_adpcm_ima_qt_expand_nibble(&c->status[ 0], nibble & 0xF);
         }
     }
 
@@ -708,8 +708,8 @@ static void decode_adpcm_ima_hvqm4(AVCodecContext *avctx, int16_t *outbuf, int s
     for (int i = 0; i < samples_to_do; i += 1+(!st)) {
         uint8_t nibble = bytestream2_get_byte(gb);
 
-        *outbuf++ = adpcm_ima_qt_expand_nibble(&c->status[st], nibble & 0xF);
-        *outbuf++ = adpcm_ima_qt_expand_nibble(&c->status[ 0], nibble >>  4);
+        *outbuf++ = ff_adpcm_ima_qt_expand_nibble(&c->status[st], nibble & 0xF);
+        *outbuf++ = ff_adpcm_ima_qt_expand_nibble(&c->status[ 0], nibble >>  4);
     }
 
     bytestream2_seek(gb, 0, SEEK_END);
@@ -1653,8 +1653,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
             for (int m = 0; m < 64; m += 2) {
                 int byte = bytestream2_get_byteu(&gb);
-                samples[m    ] = adpcm_ima_qt_expand_nibble(cs, byte & 0x0F);
-                samples[m + 1] = adpcm_ima_qt_expand_nibble(cs, byte >> 4  );
+                samples[m    ] = ff_adpcm_ima_qt_expand_nibble(cs, byte & 0x0F);
+                samples[m + 1] = ff_adpcm_ima_qt_expand_nibble(cs, byte >> 4  );
             }
         }
         ) /* End of CASE */
@@ -1702,8 +1702,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     samples = &samples_p[i][1 + n * 8];
                     for (int m = 0; m < 8; m += 2) {
                         int v = bytestream2_get_byteu(&gb);
-                        samples[m    ] = adpcm_ima_qt_expand_nibble(cs, v & 0x0F);
-                        samples[m + 1] = adpcm_ima_qt_expand_nibble(cs, v >> 4);
+                        samples[m    ] = ff_adpcm_ima_qt_expand_nibble(cs, v & 0x0F);
+                        samples[m + 1] = ff_adpcm_ima_qt_expand_nibble(cs, v >> 4);
                     }
                 }
             }
@@ -2082,16 +2082,16 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     CASE(ADPCM_IMA_SSI,
         for (int n = nb_samples >> (1 - st); n > 0; n--) {
             int v = bytestream2_get_byteu(&gb);
-            *samples++ = adpcm_ima_qt_expand_nibble(&c->status[0],  v >> 4  );
-            *samples++ = adpcm_ima_qt_expand_nibble(&c->status[st], v & 0x0F);
+            *samples++ = ff_adpcm_ima_qt_expand_nibble(&c->status[0],  v >> 4  );
+            *samples++ = ff_adpcm_ima_qt_expand_nibble(&c->status[st], v & 0x0F);
         }
         ) /* End of CASE */
     CASE(ADPCM_IMA_APM,
         for (int n = nb_samples / 2; n > 0; n--) {
             for (int channel = 0; channel < channels; channel++) {
                 int v = bytestream2_get_byteu(&gb);
-                *samples++  = adpcm_ima_qt_expand_nibble(&c->status[channel], v >> 4  );
-                samples[st] = adpcm_ima_qt_expand_nibble(&c->status[channel], v & 0x0F);
+                *samples++  = ff_adpcm_ima_qt_expand_nibble(&c->status[channel], v >> 4  );
+                samples[st] = ff_adpcm_ima_qt_expand_nibble(&c->status[channel], v & 0x0F);
             }
             samples += channels;
         }
@@ -2571,8 +2571,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         for (int n = nb_samples >> (1 - st); n > 0; n--) {
             int v = bytestream2_get_byteu(&gb);
 
-            *samples++ = adpcm_ima_qt_expand_nibble(&c->status[0 ], v >> 4 );
-            *samples++ = adpcm_ima_qt_expand_nibble(&c->status[st], v & 0xf);
+            *samples++ = ff_adpcm_ima_qt_expand_nibble(&c->status[0 ], v >> 4 );
+            *samples++ = ff_adpcm_ima_qt_expand_nibble(&c->status[st], v & 0xf);
         }
         ) /* End of CASE */
     CASE(ADPCM_IMA_SMJPEG,
@@ -2590,8 +2590,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         for (int n = nb_samples >> (1 - st); n > 0; n--) {
             int v = bytestream2_get_byteu(&gb);
 
-            *samples++ = adpcm_ima_qt_expand_nibble(&c->status[0 ], v >> 4 );
-            *samples++ = adpcm_ima_qt_expand_nibble(&c->status[st], v & 0xf);
+            *samples++ = ff_adpcm_ima_qt_expand_nibble(&c->status[0 ], v >> 4 );
+            *samples++ = ff_adpcm_ima_qt_expand_nibble(&c->status[st], v & 0xf);
         }
         ) /* End of CASE */
     CASE(ADPCM_CT,
