@@ -24,7 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
-#include "riffdec.c"
+#include "riff.h"
 
 typedef struct MSXStream {
     int64_t start_offset;
