@@ -360,6 +360,7 @@ extern const FFInputFormat  ff_msf_demuxer;
 extern const FFInputFormat  ff_msnd_demuxer;
 extern const FFInputFormat  ff_msnwc_tcp_demuxer;
 extern const FFInputFormat  ff_msp_demuxer;
+extern const FFInputFormat  ff_msx_demuxer;
 extern const FFInputFormat  ff_mtaf_demuxer;
 extern const FFInputFormat  ff_mtv_demuxer;
 extern const FFInputFormat  ff_musx_demuxer;
