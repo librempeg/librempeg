@@ -36,14 +36,13 @@ enum DetectionModes {
 };
 
 enum DirectionModes {
-    BELOW,
-    ABOVE,
+    DOWN,
+    UP,
 };
 
 enum FilterModes {
     LISTEN = -1,
-    CUT,
-    BOOST,
+    FILTER = 0,
     NB_FMODES,
 };
 
@@ -72,8 +71,11 @@ enum TargetFilter {
 typedef struct AudioDynamicEqualizerContext {
     const AVClass *class;
 
-    double *threshold;
-    unsigned nb_threshold;
+    double *cthreshold;
+    unsigned nb_cthreshold;
+
+    double *ethreshold;
+    unsigned nb_ethreshold;
 
     double *dfrequency;
     unsigned nb_dfrequency;
@@ -102,20 +104,32 @@ typedef struct AudioDynamicEqualizerContext {
     int *tftype;
     unsigned nb_tftype;
 
-    double *ratio;
-    unsigned nb_ratio;
+    double *cratio;
+    unsigned nb_cratio;
 
-    double *range;
-    unsigned nb_range;
+    double *crange;
+    unsigned nb_crange;
 
-    int *direction;
-    unsigned nb_direction;
+    double *cmakeup;
+    unsigned nb_cmakeup;
 
-    double *makeup;
-    unsigned nb_makeup;
+    double *eratio;
+    unsigned nb_eratio;
+
+    double *erange;
+    unsigned nb_erange;
+
+    double *emakeup;
+    unsigned nb_emakeup;
 
     int *detection;
     unsigned nb_detection;
+
+    int *cdirection;
+    unsigned nb_cdirection;
+
+    int *edirection;
+    unsigned nb_edirection;
 
     int *mode;
     unsigned nb_mode;
@@ -320,7 +334,8 @@ static av_cold void uninit(AVFilterContext *ctx)
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 #define XR AV_OPT_FLAG_EXPORT|AV_OPT_FLAG_READONLY
 
-static const AVOptionArrayDef def_threshold  = {.def="0",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_cthreshold = {.def="100",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_ethreshold = {.def="0",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_dfrequency = {.def="1000",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_dqfactor   = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_tfrequency = {.def="1000",.size_min=1,.sep=' '};
@@ -330,18 +345,23 @@ static const AVOptionArrayDef def_dttype     = {.def="absolute",.size_min=1,.sep
 static const AVOptionArrayDef def_tattack    = {.def="20",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_trelease   = {.def="200",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_tftype     = {.def="bell",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_ratio      = {.def="1",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_makeup     = {.def="0",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_range      = {.def="50",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_direction  = {.def="below",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_mode       = {.def="cut",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_cratio     = {.def="0",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_cmakeup    = {.def="0",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_crange     = {.def="50",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_eratio     = {.def="0",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_emakeup    = {.def="0",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_erange     = {.def="50",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_cdirection = {.def="down",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_edirection = {.def="down",.size_min=1,.sep=' '};
+static const AVOptionArrayDef def_mode       = {.def="filter",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_auto       = {.def="off",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_active     = {.def="true",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_channel    = {.def="24c",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_fdetection  = {.def="0",.size_min=1,.sep=' '};
 
 static const AVOption adynamicequalizer_options[] = {
-    { "threshold",  "set detection threshold", OFFSET(threshold),  AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_threshold}, 0, 100,     FLAGS },
+    { "cthreshold", "set compression detection threshold", OFFSET(cthreshold), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_cthreshold}, 0, 100, FLAGS },
+    { "ethreshold", "set expansion detection threshold",   OFFSET(ethreshold), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_ethreshold}, 0, 100, FLAGS },
     { "dfrequency", "set detection frequency", OFFSET(dfrequency), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_dfrequency},2, 1000000, FLAGS },
     { "dqfactor",   "set detection Q factor",  OFFSET(dqfactor),   AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_dqfactor},  0.001, 1000,FLAGS },
     { "dftype",     "set detection filter type",OFFSET(dftype),    AV_OPT_TYPE_INT|AR, {.arr=&def_dftype}, 0,NB_DFILTERS-1,FLAGS, .unit = "dftype" },
@@ -361,16 +381,19 @@ static const AVOption adynamicequalizer_options[] = {
     {   "bell",     0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=TBELL},    0, 0,       FLAGS, .unit = "tftype" },
     {   "lowshelf", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=TLOWSHELF},0, 0,       FLAGS, .unit = "tftype" },
     {   "highshelf",0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=THIGHSHELF},0,0,       FLAGS, .unit = "tftype" },
-    { "ratio",      "set ratio factor",        OFFSET(ratio),      AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_ratio},     0, 30,      FLAGS },
-    { "makeup",     "set makeup gain",         OFFSET(makeup),     AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_makeup},    0, 1000,    FLAGS },
-    { "range",      "set max gain",            OFFSET(range),      AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_range},     0, 2000,    FLAGS },
-    { "direction",  "set filtering direction", OFFSET(direction),  AV_OPT_TYPE_INT|AR, {.arr=&def_direction}, BELOW, ABOVE,  FLAGS, .unit = "direction" },
-    {   "below",    "filter below threshold",  0,                  AV_OPT_TYPE_CONST,  {.i64=BELOW},             0, 0,       FLAGS, .unit = "direction" },
-    {   "above",    "filter above threshold",  0,                  AV_OPT_TYPE_CONST,  {.i64=ABOVE},             0, 0,       FLAGS, .unit = "direction" },
-    { "mode",       "set filtering mode",      OFFSET(mode),       AV_OPT_TYPE_INT|AR, {.arr=&def_mode}, LISTEN,NB_FMODES-1,FLAGS, .unit = "mode" },
-    {     "listen", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=LISTEN},            0, 0,       FLAGS, .unit = "mode" },
-    {        "cut", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=CUT},               0, 0,       FLAGS, .unit = "mode" },
-    {      "boost", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=BOOST},             0, 0,       FLAGS, .unit = "mode" },
+    { "cratio",     "set compression ratio factor", OFFSET(cratio),AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_cratio},  0, 30,   FLAGS },
+    { "cmakeup",    "set compression makeup gain", OFFSET(cmakeup),AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_cmakeup}, 0, 1000, FLAGS },
+    { "crange",     "set compression max gain", OFFSET(crange),    AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_crange},  0, 2000, FLAGS },
+    { "eratio",     "set expansion ratio factor", OFFSET(eratio),  AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_eratio},  0, 30,   FLAGS },
+    { "emakeup",    "set expansion makeup gain", OFFSET(emakeup),  AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_emakeup}, 0, 1000, FLAGS },
+    { "erange",     "set expansion max gain",  OFFSET(erange),     AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_erange},  0, 2000, FLAGS },
+    { "cdirection", "set compression direction",OFFSET(cdirection),AV_OPT_TYPE_INT|AR, {.arr=&def_cdirection}, DOWN, UP, FLAGS, .unit = "direction" },
+    {       "down", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DOWN},         0, 0, FLAGS, .unit = "direction" },
+    {         "up", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=UP},           0, 0, FLAGS, .unit = "direction" },
+    { "edirection", "set expansion direction", OFFSET(edirection), AV_OPT_TYPE_INT|AR, {.arr=&def_edirection}, DOWN, UP, FLAGS, .unit = "direction" },
+    { "mode",       "set filtering mode",      OFFSET(mode),       AV_OPT_TYPE_INT|AR, {.arr=&def_mode}, LISTEN, NB_FMODES-1,FLAGS, .unit = "mode" },
+    {     "listen", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=LISTEN},       0, 0, FLAGS, .unit = "mode" },
+    {     "filter", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=FILTER},       0, 0, FLAGS, .unit = "mode" },
     { "auto",       "set auto threshold",      OFFSET(detection),  AV_OPT_TYPE_INT|AR, {.arr=&def_auto},DET_DISABLED,NB_DMODES-1,FLAGS, .unit = "auto" },
     {   "disabled", 0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_DISABLED}, 0, 0,   FLAGS, .unit = "auto" },
     {   "off",      0,                         0,                  AV_OPT_TYPE_CONST,  {.i64=DET_OFF},      0, 0,   FLAGS, .unit = "auto" },

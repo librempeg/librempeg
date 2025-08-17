@@ -107,14 +107,16 @@ typedef struct fn(ChannelContext) {
 typedef ftype (*fn(filter_svf))(ftype in, const ftype m[3], const ftype a[3], ftype b[2]);
 
 typedef struct fn(BandContext) {
-    ftype threshold;
+    ftype cthreshold;
+    ftype ethreshold;
 
     ftype aa[3], am[3];
     ftype da[3], dm[3];
 
     ftype tattack_coef;
     ftype trelease_coef;
-    ftype threshold_log;
+    ftype cthreshold_log;
+    ftype ethreshold_log;
 
     ftype scale_tqfactor;
 
@@ -125,9 +127,12 @@ typedef struct fn(BandContext) {
     fn(filter_svf) lowpass_fn;
 
     void (*target_update)(ftype iQ, ftype A, ftype g, ftype a[3], ftype m[3]);
-    ftype (*target_gain)(const ftype detect, const ftype threshold, const ftype threshold_log,
-                         const ftype makeup, const ftype ratio, const ftype range,
-                         const ftype power, const int direction);
+    ftype (*target_gain)(const ftype detect,
+                         const ftype cthreshold, const ftype cthreshold_log,
+                         const ftype ethreshold, const ftype ethreshold_log,
+                         const ftype cmakeup, const ftype cratio, const ftype crange,
+                         const ftype emakeup, const ftype eratio, const ftype erange,
+                         const ftype cpower, const ftype epower);
 } fn(BandContext);
 
 static int fn(init_state)(AVFilterContext *ctx, const int nb_channels,
@@ -290,51 +295,39 @@ static void fn(update_high)(ftype iQ, ftype A, ftype g,
     m[2] = F(1.0) - A * A;
 }
 
-static ftype fn(target_gain)(const ftype detect, const ftype threshold,
-                             const ftype threshold_log,
-                             const ftype makeup, const ftype ratio,
-                             const ftype range,  const ftype power,
-                             const int direction)
+static ftype fn(target_gain)(const ftype detect,
+                             const ftype cthreshold, const ftype cthreshold_log,
+                             const ftype ethreshold, const ftype ethreshold_log,
+                             const ftype cmakeup, const ftype cratio, const ftype crange,
+                             const ftype emakeup, const ftype eratio, const ftype erange,
+                             const ftype cpower, const ftype epower)
 {
-    switch (direction) {
-    case BELOW:
-        if (detect < threshold) {
-            ftype ld = LIN2LOG(detect);
-            ftype new_log_gain = CLIP(makeup + (threshold_log - ld) * ratio, F(0.0), range) * power;
-            return LOG2LIN(new_log_gain);
-        }
-        break;
-    case ABOVE:
-        if (detect > threshold) {
-            ftype ld = LIN2LOG(detect);
-            ftype new_log_gain = CLIP(makeup + (ld - threshold_log) * ratio, F(0.0), range) * power;
-            return LOG2LIN(new_log_gain);
-        }
-        break;
+    if (detect > cthreshold) {
+        ftype ld = LIN2LOG(detect);
+        ftype new_log_gain = CLIP(cmakeup + (ld - cthreshold_log) * cratio, F(0.0), crange) * cpower;
+        return LOG2LIN(new_log_gain);
+    } else if (detect < ethreshold) {
+        ftype ld = LIN2LOG(detect);
+        ftype new_log_gain = CLIP(emakeup + (ethreshold_log - ld) * eratio, F(0.0), erange) * epower;
+        return LOG2LIN(new_log_gain);
     }
 
     return F(1.0);
 }
 
-static ftype fn(target_gain_noratio)(const ftype detect, const ftype threshold,
-                                     const ftype unused2,
-                                     const ftype makeup, const ftype unused3,
-                                     const ftype range,  const ftype power,
-                                     const int direction)
+static ftype fn(target_gain_noratio)(const ftype detect,
+                                     const ftype cthreshold, const ftype unused2,
+                                     const ftype ethreshold, const ftype unused3,
+                                     const ftype cmakeup, const ftype unused4, const ftype crange,
+                                     const ftype emakeup, const ftype unused5, const ftype erange,
+                                     const ftype cpower, const ftype epower)
 {
-    switch (direction) {
-    case BELOW:
-        if (detect < threshold) {
-            ftype new_log_gain = FMIN(makeup, range) * power;
-            return LOG2LIN(new_log_gain);
-        }
-        break;
-    case ABOVE:
-        if (detect > threshold) {
-            ftype new_log_gain = FMIN(makeup, range) * power;
-            return LOG2LIN(new_log_gain);
-        }
-        break;
+    if (detect > cthreshold) {
+        ftype new_log_gain = FMIN(cmakeup, crange) * cpower;
+        return LOG2LIN(new_log_gain);
+    } else if (detect < ethreshold) {
+        ftype new_log_gain = FMIN(emakeup, erange) * epower;
+        return LOG2LIN(new_log_gain);
     }
 
     return F(1.0);
@@ -349,7 +342,8 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
     for (int band = 0; band < s->nb_bands; band++) {
         fn(BandContext) *b = &bc[band];
         const ftype dfrequency = FMIN(s->dfrequency[FFMIN(band, s->nb_dfrequency-1)], sample_rate * F(0.5));
-        const ftype ratio = s->ratio[FFMIN(band, s->nb_ratio-1)];
+        const ftype cratio = s->cratio[FFMIN(band, s->nb_cratio-1)];
+        const ftype eratio = s->eratio[FFMIN(band, s->nb_cratio-1)];
         const ftype dg = FTAN(F(M_PI) * dfrequency / sample_rate);
         const int tftype = s->tftype[FFMIN(band, s->nb_tftype-1)];
         const int dftype = s->dftype[FFMIN(band, s->nb_dftype-1)];
@@ -366,8 +360,10 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
         ftype *dm = b->dm;
         ftype k, dqfactor;
 
-        b->threshold = s->threshold[FFMIN(band, s->nb_threshold-1)];
-        b->threshold_log = LIN2LOG(b->threshold);
+        b->cthreshold = s->cthreshold[FFMIN(band, s->nb_cthreshold-1)];
+        b->ethreshold = s->ethreshold[FFMIN(band, s->nb_ethreshold-1)];
+        b->cthreshold_log = LIN2LOG(b->cthreshold);
+        b->ethreshold_log = LIN2LOG(b->ethreshold);
         b->tattack_coef = fn(get_coef)(s->tattack[FFMIN(band, s->nb_tattack-1)], sample_rate);
         b->trelease_coef = fn(get_coef)(s->trelease[FFMIN(band, s->nb_trelease-1)], sample_rate);
 
@@ -464,7 +460,7 @@ static int fn(filter_prepare)(AVFilterContext *ctx)
         b->scale_tqfactor = scale_tqfactor;
         b->lowpass_fn = fn(get_svf_low);
 
-        if (ratio > F(0.0))
+        if (cratio > F(0.0) || eratio > F(0.0))
             b->target_gain = fn(target_gain);
         else
             b->target_gain = fn(target_gain_noratio);
@@ -533,17 +529,24 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
     AVFrame *sc = td->sc ? td->sc : in;
     AVFrame *out = td->out;
     const ftype sample_rate = in->sample_rate;
-    const ftype makeup = s->makeup[FFMIN(band, s->nb_makeup-1)];
-    const ftype ratio = s->ratio[FFMIN(band, s->nb_ratio-1)];
-    const ftype range = s->range[FFMIN(band, s->nb_range-1)];
+    const ftype cmakeup = s->cmakeup[FFMIN(band, s->nb_cmakeup-1)];
+    const ftype cratio = s->cratio[FFMIN(band, s->nb_cratio-1)];
+    const ftype crange = s->crange[FFMIN(band, s->nb_crange-1)];
+    const ftype emakeup = s->emakeup[FFMIN(band, s->nb_emakeup-1)];
+    const ftype eratio = s->eratio[FFMIN(band, s->nb_eratio-1)];
+    const ftype erange = s->erange[FFMIN(band, s->nb_erange-1)];
     const ftype tfrequency = FMIN(s->tfrequency[FFMIN(band, s->nb_tfrequency-1)], sample_rate * F(0.5));
     const AVChannelLayout ch_layout = s->channel[FFMIN(band, s->nb_channel-1)];
-    const int direction = s->direction[FFMIN(band, s->nb_direction-1)];
     const int dttype = s->dttype[FFMIN(band, s->nb_dttype-1)];
     const int mode = s->mode[FFMIN(band, s->nb_mode-1)];
-    const ftype power = (mode == CUT) ? F(-1.0) : F(1.0);
-    const ftype band_threshold_log = b->threshold_log;
-    const ftype band_threshold = b->threshold;
+    const int cdir = s->cdirection[FFMIN(band, s->nb_cdirection-1)];
+    const int edir = s->edirection[FFMIN(band, s->nb_edirection-1)];
+    const ftype cpower = (cdir == DOWN) ? F(-1.0) : F(1.0);
+    const ftype epower = (edir == DOWN) ? F(-1.0) : F(1.0);
+    const ftype band_cthreshold_log = b->cthreshold_log;
+    const ftype band_ethreshold_log = b->ethreshold_log;
+    const ftype band_cthreshold = b->cthreshold;
+    const ftype band_ethreshold = b->ethreshold;
     const ftype trelease = b->trelease_coef;
     const ftype tattack = b->tattack_coef;
     const ftype tqfactor = s->tqfactor[FFMIN(band, s->nb_tqfactor-1)];
@@ -617,15 +620,15 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
                     threshold_log = LIN2LOG(threshold);
                     av_log(ctx, AV_LOG_DEBUG, "[%d]: %g %g|%g\n", band, score, threshold, threshold_log);
                 } else if (detection == DET_UNSET) {
-                    threshold     = band_threshold;
-                    threshold_log = band_threshold_log;
+                    threshold     = band_ethreshold;
+                    threshold_log = band_ethreshold_log;
                     new_threshold = EPSILON;
                 }
                 detection = band_detection;
             } else if (band_detection == DET_DISABLED) {
                 if (detection != band_detection) {
-                    threshold     = band_threshold;
-                    threshold_log = band_threshold_log;
+                    threshold     = band_ethreshold;
+                    threshold_log = band_ethreshold_log;
                     new_threshold = EPSILON;
                     detection     = band_detection;
                 }
@@ -635,15 +638,19 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
                     threshold_log = LIN2LOG(new_threshold);
                     av_log(ctx, AV_LOG_DEBUG, "[%d]: %g|%g\n", band, threshold, threshold_log);
                 } else if (detection == DET_UNSET) {
-                    threshold     = band_threshold;
-                    threshold_log = band_threshold_log;
+                    threshold     = band_ethreshold;
+                    threshold_log = band_ethreshold_log;
                     new_threshold = EPSILON;
                 }
                 detection = band_detection;
             }
 
-            new_lin_gain = b->target_gain(detect, threshold, threshold_log,
-                                          makeup, ratio, range, power, direction);
+            new_lin_gain = b->target_gain(detect,
+                                          band_cthreshold, band_cthreshold_log,
+                                          threshold, threshold_log,
+                                          cmakeup, cratio, crange,
+                                          emakeup, eratio, erange,
+                                          cpower, epower);
 
             if (FABS(lin_gain - new_lin_gain) > EPSILON) {
                 ftype f = (new_lin_gain > lin_gain) * tattack + (new_lin_gain < lin_gain) * trelease;
