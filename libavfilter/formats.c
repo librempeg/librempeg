@@ -517,6 +517,7 @@ static const AVFilterFormatsMerger mergers_video[] = {
         .offset     = offsetof(AVFilterFormatsConfig, alpha_modes),
         .merge      = merge_generic,
         .can_merge  = can_merge_generic,
+        .conversion_filter = "premultiply_dynamic",
     },
 };
 
