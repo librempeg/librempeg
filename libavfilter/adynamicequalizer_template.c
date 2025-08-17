@@ -323,10 +323,10 @@ static ftype fn(target_gain_noratio)(const ftype detect,
                                      const ftype cpower, const ftype epower)
 {
     if (detect > cthreshold) {
-        ftype new_log_gain = FMIN(cmakeup, crange) * cpower;
+        ftype new_log_gain = cmakeup * cpower;
         return LOG2LIN(new_log_gain);
     } else if (detect < ethreshold) {
-        ftype new_log_gain = FMIN(emakeup, erange) * epower;
+        ftype new_log_gain = emakeup * epower;
         return LOG2LIN(new_log_gain);
     }
 
@@ -529,12 +529,12 @@ static int fn(filter_channels_band)(AVFilterContext *ctx, void *arg,
     AVFrame *sc = td->sc ? td->sc : in;
     AVFrame *out = td->out;
     const ftype sample_rate = in->sample_rate;
-    const ftype cmakeup = s->cmakeup[FFMIN(band, s->nb_cmakeup-1)];
     const ftype cratio = s->cratio[FFMIN(band, s->nb_cratio-1)];
-    const ftype crange = s->crange[FFMIN(band, s->nb_crange-1)];
-    const ftype emakeup = s->emakeup[FFMIN(band, s->nb_emakeup-1)];
     const ftype eratio = s->eratio[FFMIN(band, s->nb_eratio-1)];
+    const ftype crange = s->crange[FFMIN(band, s->nb_crange-1)];
     const ftype erange = s->erange[FFMIN(band, s->nb_erange-1)];
+    const ftype cmakeup = FMIN(crange, s->cmakeup[FFMIN(band, s->nb_cmakeup-1)]);
+    const ftype emakeup = FMIN(erange, s->emakeup[FFMIN(band, s->nb_emakeup-1)]);
     const ftype tfrequency = FMIN(s->tfrequency[FFMIN(band, s->nb_tfrequency-1)], sample_rate * F(0.5));
     const AVChannelLayout ch_layout = s->channel[FFMIN(band, s->nb_channel-1)];
     const int dttype = s->dttype[FFMIN(band, s->nb_dttype-1)];
