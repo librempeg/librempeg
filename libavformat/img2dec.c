@@ -188,7 +188,6 @@ int ff_img_read_header(AVFormatContext *s1)
         return AVERROR(EINVAL);
     }
 
-    av_strlcpy(s->path, s1->url, sizeof(s->path));
     s->img_number = 0;
 
     /* find format */
@@ -225,22 +224,22 @@ int ff_img_read_header(AVFormatContext *s1)
                 s->pattern_type = PT_SEQUENCE;
         }
         if (s->pattern_type == PT_SEQUENCE) {
-            if (find_image_range(&first_index, &last_index, s->path,
+            if (find_image_range(&first_index, &last_index, s1->url,
                                  s->start_number, s->start_number_range) < 0) {
-                if (s1->pb || avio_check(s->path, AVIO_FLAG_READ) > 0) {
+                if (s1->pb || avio_check(s1->url, AVIO_FLAG_READ) > 0) {
                     // Fallback to normal mode
                     s->pattern_type = PT_NONE;
                 } else {
                     av_log(s1, AV_LOG_ERROR,
                            "Could find no file or sequence with path '%s' and index in the range %d-%d\n",
-                           s->path, s->start_number, s->start_number + s->start_number_range - 1);
+                           s1->url, s->start_number, s->start_number + s->start_number_range - 1);
                     return AVERROR(ENOENT);
                 }
             }
         } else if (s->pattern_type == PT_GLOB) {
 #if HAVE_GLOB
             int gerr;
-            gerr = glob(s->path, GLOB_NOCHECK|GLOB_BRACE|GLOB_NOMAGIC, NULL, &s->globstate);
+            gerr = glob(s1->url, GLOB_NOCHECK|GLOB_BRACE|GLOB_NOMAGIC, NULL, &s->globstate);
             if (gerr != 0) {
                 return AVERROR(ENOENT);
             }
@@ -318,7 +317,7 @@ int ff_img_read_header(AVFormatContext *s1)
                 ffio_rewind_with_probe_data(s1->pb, &probe_buffer, probe_buffer_size);
         }
         if (st->codecpar->codec_id == AV_CODEC_ID_NONE)
-            st->codecpar->codec_id = ff_guess_image2_codec(s->path);
+            st->codecpar->codec_id = ff_guess_image2_codec(s1->url);
         if (st->codecpar->codec_id == AV_CODEC_ID_LJPEG)
             st->codecpar->codec_id = AV_CODEC_ID_MJPEG;
         if (st->codecpar->codec_id == AV_CODEC_ID_ALIAS_PIX) // we cannot distinguish this from BRENDER_PIX
@@ -360,31 +359,37 @@ static int add_filename_as_pkt_side_data(char *filename, AVPacket *pkt) {
 int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
 {
     VideoDemuxData *s = s1->priv_data;
-    char filename_bytes[1024];
-    char *filename = filename_bytes;
     AVCodecParameters *par = s1->streams[0]->codecpar;
+    AVBPrint filename;
     AVIOContext *f = NULL;
     int size, ret;
+
+    av_bprint_init(&filename, 0, AV_BPRINT_SIZE_UNLIMITED);
 
     if (s->pattern_type == PT_NONE && s->img_number - s->img_first >= 1)
         return AVERROR_EOF;
 
     if (!s->is_pipe) {
         if (s->pattern_type == PT_NONE) {
-            av_strlcpy(filename_bytes, s->path, sizeof(filename_bytes));
+            av_bprintf(&filename, "%s", s1->url);
         } else if (s->use_glob) {
 #if HAVE_GLOB
-            filename = s->globstate.gl_pathv[s->img_number];
+            av_bprintf(&filename, "%s", s->globstate.gl_pathv[s->img_number]);
 #endif
         } else {
-            ret = av_get_frame_filename(filename_bytes, sizeof(filename_bytes),
-                                        s->path,
-                                        s->img_number);
-            if (ret < 0)
+            int ret = ff_bprint_get_frame_filename(&filename, s1->url, s->img_number, 0);
+            if (ret < 0) {
+                av_bprint_finalize(&filename, NULL);
                 return ret;
+            }
         }
 
-        ret = s1->io_open(s1, &f, filename, AVIO_FLAG_READ, NULL);
+        if (!av_bprint_is_complete(&filename)) {
+            av_bprint_finalize(&filename, NULL);
+            return AVERROR(ENOMEM);
+        }
+
+        ret = s1->io_open(s1, &f, filename.str, AVIO_FLAG_READ, NULL);
         if (ret < 0) {
             ret = AVERROR_EOF;
             goto fail;
@@ -405,7 +410,7 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
             avio_skip(f, -ret);
             pd.buf = header;
             pd.buf_size = ret;
-            pd.filename = filename;
+            pd.filename = filename.str;
 
             ifmt = ffifmt(av_probe_input_format3(&pd, 1, &score));
             if (ifmt && ifmt->read_packet == ff_img_read_packet && ifmt->raw_codec_id)
@@ -427,15 +432,14 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
     }
 
     ret = av_new_packet(pkt, size);
-    if (ret < 0) {
+    if (ret < 0)
         goto fail;
-    }
     pkt->stream_index = 0;
     pkt->flags       |= AV_PKT_FLAG_KEY;
     if (s->ts_from_file) {
         struct stat img_stat;
         av_assert0(!s->is_pipe); // The ts_from_file option is not supported by piped input demuxers
-        if (stat(filename, &img_stat)) {
+        if (stat(filename.str, &img_stat)) {
             ret = AVERROR(EIO);
             goto fail;
         }
@@ -460,10 +464,12 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
      * as packet side_data.
      */
     if (!s->is_pipe && s->export_path_metadata == 1) {
-        ret = add_filename_as_pkt_side_data(filename, pkt);
+        ret = add_filename_as_pkt_side_data(filename.str, pkt);
         if (ret < 0)
             goto fail;
     }
+
+    av_bprint_finalize(&filename, NULL);
 
     ret = avio_read(f ? f : s1->pb, pkt->data, size);
     if (f)
@@ -479,6 +485,7 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
     }
 
 fail:
+    av_bprint_finalize(&filename, NULL);
     return ret;
 }
 
