@@ -486,24 +486,32 @@ static int merge_generic(void *a, void *b)
     return merge_generic_internal(a, b, 0);
 }
 
+#define CONVERSION_FILTER_SWSCALE \
+    .conversion_filter = "scale", \
+    .conversion_opts_offset = offsetof(AVFilterGraph, scale_sws_opts),
+
+#define CONVERSION_FILTER_ARESAMPLE \
+    .conversion_filter = "aresample", \
+    .conversion_opts_offset = offsetof(AVFilterGraph, aresample_swr_opts),
+
 static const AVFilterFormatsMerger mergers_video[] = {
     {
         .offset     = offsetof(AVFilterFormatsConfig, formats),
         .merge      = merge_pix_fmts,
         .can_merge  = can_merge_pix_fmts,
-        .conversion_filter = "scale",
+        CONVERSION_FILTER_SWSCALE
     },
     {
         .offset     = offsetof(AVFilterFormatsConfig, color_spaces),
         .merge      = merge_generic,
         .can_merge  = can_merge_generic,
-        .conversion_filter = "scale",
+        CONVERSION_FILTER_SWSCALE
     },
     {
         .offset     = offsetof(AVFilterFormatsConfig, color_ranges),
         .merge      = merge_generic,
         .can_merge  = can_merge_generic,
-        .conversion_filter = "scale",
+        CONVERSION_FILTER_SWSCALE
     },
 };
 
@@ -531,15 +539,11 @@ static const AVFilterFormatsMerger mergers_audio[] = {
 static const AVFilterNegotiation negotiate_video = {
     .nb_mergers = FF_ARRAY_ELEMS(mergers_video),
     .mergers = mergers_video,
-    .conversion_filter = "scale",
-    .conversion_opts_offset = offsetof(AVFilterGraph, scale_sws_opts),
 };
 
 static const AVFilterNegotiation negotiate_audio = {
     .nb_mergers = FF_ARRAY_ELEMS(mergers_audio),
     .mergers = mergers_audio,
-    .conversion_filter = "aresample",
-    .conversion_opts_offset = offsetof(AVFilterGraph, aresample_swr_opts),
 };
 
 const AVFilterNegotiation *ff_filter_get_negotiation(AVFilterLink *link)
