@@ -66,6 +66,7 @@ typedef struct DemuxStream {
     enum IFilterParamChange  param_change;
     int                      autorotate;
     int                      apply_cropping;
+    int                      force_display_matrix;
 
 
     int                      wrap_correction_done;
@@ -1182,6 +1183,7 @@ static int add_display_matrix_to_stream(const OptionsContext *o,
                                         AVFormatContext *ctx, InputStream *ist)
 {
     AVStream *st = ist->st;
+    DemuxStream *ds = ds_from_ist(ist);
     AVPacketSideData *sd;
     double rotation = DBL_MAX;
     int hflip = -1, vflip = -1;
@@ -1215,6 +1217,8 @@ static int add_display_matrix_to_stream(const OptionsContext *o,
     av_display_matrix_flip(buf,
                            hflip_set ? hflip : 0,
                            vflip_set ? vflip : 0);
+
+    ds->force_display_matrix = 1;
 
     return 0;
 }
@@ -1465,6 +1469,15 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st, AVDictiona
 
     ds->dec_opts.flags |= DECODER_FLAG_BITEXACT * !!o->bitexact;
 
+    if (ds->force_display_matrix) {
+        char buf[32];
+        if (av_dict_get(ds->decoder_opts, "side_data_prefer_packet", NULL, 0))
+            buf[0] = ',';
+        else
+            buf[0] = '\0';
+        av_strlcat(buf, "displaymatrix", sizeof(buf));
+        av_dict_set(&ds->decoder_opts, "side_data_prefer_packet", buf, AV_DICT_APPEND);
+    }
     /* Attached pics are sparse, therefore we would not want to delay their decoding
      * till EOF. */
     if (ist->st->disposition & AV_DISPOSITION_ATTACHED_PIC)
