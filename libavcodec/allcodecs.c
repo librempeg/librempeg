@@ -110,6 +110,7 @@ extern const FFCodec ff_dxa_decoder;
 extern const FFCodec ff_dxtory_decoder;
 extern const FFCodec ff_dxv_encoder;
 extern const FFCodec ff_dxv_decoder;
+extern const FFCodec ff_dyuv_decoder;
 extern const FFCodec ff_eacmv_decoder;
 extern const FFCodec ff_eamad_decoder;
 extern const FFCodec ff_eatgq_decoder;

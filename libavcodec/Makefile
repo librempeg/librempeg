@@ -362,6 +362,7 @@ OBJS-$(CONFIG_DXA_DECODER)             += dxa.o
 OBJS-$(CONFIG_DXTORY_DECODER)          += dxtory.o
 OBJS-$(CONFIG_DXV_DECODER)             += dxv.o
 OBJS-$(CONFIG_DXV_ENCODER)             += dxvenc.o hashtable.o
+OBJS-$(CONFIG_DYUV_DECODER)            += dyuv.o
 OBJS-$(CONFIG_DWVW_DECODER)            += dwvwdec.o
 OBJS-$(CONFIG_EAC3_DECODER)            += eac3_data.o
 OBJS-$(CONFIG_EAC3_ENCODER)            += eac3enc.o eac3_data.o
