@@ -2078,7 +2078,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "dyuv",
         .long_name = NULL_IF_CONFIG_SMALL("CD-I Delta YUV"),
-        .props     = AV_CODEC_PROP_LOSSY,
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 
     /* various PCM "codecs" */
