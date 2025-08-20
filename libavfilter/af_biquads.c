@@ -1046,7 +1046,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     }
 
     if (buf != out_buf)
-        av_frame_free(&buf);
+        ff_graph_frame_free(ctx, &buf);
 
     if (!drop)
         return ff_filter_frame(outlink, out_buf);
