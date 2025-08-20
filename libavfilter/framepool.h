@@ -20,9 +20,10 @@
 #define AVFILTER_FRAMEPOOL_H
 
 #include "libavutil/buffer.h"
-#include "libavutil/fifo.h"
 #include "libavutil/frame.h"
 #include "libavutil/internal.h"
+
+#include "avfilter_internal.h"
 
 /**
  * Frame pool. This structure is opaque and not meant to be accessed
@@ -119,7 +120,7 @@ int ff_frame_pool_get_audio_config(FFFramePool *pool,
  *
  * @return a new AVFrame on success, NULL on error.
  */
-AVFrame *ff_frame_pool_get(FFFramePool *pool, AVFifo *fifo_empty_frames);
+AVFrame *ff_frame_pool_get(FFFramePool *pool, FFFilterGraph *graphi);
 
 
 #endif /* AVFILTER_FRAMEPOOL_H */

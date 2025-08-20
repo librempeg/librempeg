@@ -1847,10 +1847,13 @@ int ff_filter_is_frame_thread(const AVFilterContext *ctx)
 AVFrame *ff_graph_frame_alloc(AVFilterContext *ctx)
 {
     AVFifo *fifo = fffiltergraph(ctx->graph)->fifo_empty_frames;
+    AVMutex *lock = &fffiltergraph(ctx->graph)->fifo_lock;
     AVFrame *ret = NULL;
 
+    ff_mutex_lock(lock);
     if (fifo && av_fifo_can_read(fifo) > 0)
         av_fifo_read(fifo, &ret, 1);
+    ff_mutex_unlock(lock);
 
     if (!ret)
         ret = av_frame_alloc();
@@ -1861,11 +1864,14 @@ AVFrame *ff_graph_frame_alloc(AVFilterContext *ctx)
 void ff_graph_frame_free(AVFilterContext *ctx, AVFrame **frame)
 {
     AVFifo *fifo = fffiltergraph(ctx->graph)->fifo_empty_frames;
+    AVMutex *lock = &fffiltergraph(ctx->graph)->fifo_lock;
 
     av_frame_unref(*frame);
+    ff_mutex_lock(lock);
     if (!fifo || av_fifo_write(fifo, frame, 1) < 0) {
         av_frame_free(frame);
     } else {
         frame = NULL;
     }
+    ff_mutex_unlock(lock);
 }

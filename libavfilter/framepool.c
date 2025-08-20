@@ -248,17 +248,20 @@ int ff_frame_pool_get_audio_config(FFFramePool *pool,
     return 0;
 }
 
-AVFrame *ff_frame_pool_get(FFFramePool *pool, AVFifo *fifo_empty_frames)
+AVFrame *ff_frame_pool_get(FFFramePool *pool, FFFilterGraph *graphi)
 {
     int i;
-    AVFrame *frame;
+    AVFrame *frame = NULL;
     const AVPixFmtDescriptor *desc;
 
-    if (fifo_empty_frames && av_fifo_can_read(fifo_empty_frames) > 0) {
-        av_fifo_read(fifo_empty_frames, &frame, 1);
-    } else {
-        frame = av_frame_alloc();
+    if (graphi->fifo_empty_frames) {
+        ff_mutex_lock(&graphi->fifo_lock);
+        if (av_fifo_can_read(graphi->fifo_empty_frames) > 0)
+            av_fifo_read(graphi->fifo_empty_frames, &frame, 1);
+        ff_mutex_unlock(&graphi->fifo_lock);
     }
+    if (!frame)
+        frame = av_frame_alloc();
     if (!frame)
         return NULL;
 

@@ -110,6 +110,12 @@ AVFilterGraph *avfilter_graph_alloc(void)
         return NULL;
     }
 
+    err = ff_mutex_init(&graph->fifo_lock, NULL);
+    if (err) {
+        av_freep(&graph);
+        return NULL;
+    }
+
     ret = &graph->p;
     ret->av_class = &filtergraph_class;
     av_opt_set_defaults(ret);
@@ -160,6 +166,7 @@ void avfilter_graph_free(AVFilterGraph **graphp)
     av_opt_free(graph);
 
     ff_mutex_destroy(&graphi->get_buffer_lock);
+    ff_mutex_destroy(&graphi->fifo_lock);
 
     while (av_fifo_can_read(graphi->fifo_empty_frames)) {
         AVFrame *frame = NULL;

@@ -173,6 +173,7 @@ typedef struct FFFilterGraph {
     AVMutex get_buffer_lock;
 
     AVFifo *fifo_empty_frames;
+    AVMutex fifo_lock;
 } FFFilterGraph;
 
 static inline FFFilterGraph *fffiltergraph(AVFilterGraph *graph)

@@ -49,7 +49,7 @@ AVFrame *ff_default_get_audio_buffer(AVFilterLink *link, int nb_samples)
     FilterLinkInternal *const li = ff_link_internal(link);
     int channels = link->ch_layout.nb_channels;
     int align = av_cpu_max_align();
-    AVFifo *fifo_empty_frames;
+    FFFilterGraph *graphi;
 
     if (!li->frame_pool) {
         li->frame_pool = ff_frame_pool_audio_init(av_buffer_allocz, channels,
@@ -79,14 +79,14 @@ AVFrame *ff_default_get_audio_buffer(AVFilterLink *link, int nb_samples)
     }
 
     if (link->src) {
-        fifo_empty_frames = fffiltergraph(link->src->graph)->fifo_empty_frames;
+        graphi = fffiltergraph(link->src->graph);
     } else if (link->dst) {
-        fifo_empty_frames = fffiltergraph(link->dst->graph)->fifo_empty_frames;
+        graphi = fffiltergraph(link->dst->graph);
     } else {
-        fifo_empty_frames = NULL;
+        graphi = NULL;
     }
 
-    frame = ff_frame_pool_get(li->frame_pool, fifo_empty_frames);
+    frame = ff_frame_pool_get(li->frame_pool, graphi);
     if (!frame)
         return NULL;
 
