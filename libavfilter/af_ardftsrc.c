@@ -73,6 +73,7 @@ typedef struct AudioRDFTSRCContext {
     void *phase;
 
     AVFrame *in;
+    AVFrame *out;
 
     void *state;
 
@@ -352,7 +353,7 @@ static int filter_frame(AVFilterLink *inlink)
     AVFilterLink *outlink = ctx->outputs[0];
     AudioRDFTSRCContext *s = ctx->priv;
     int ret, trim_size, in_samples;
-    AVFrame *out, *in = s->in;
+    AVFrame *out = s->out, *in = s->in;
 
     if (in == NULL) {
         if (s->flush_size > 0 && !s->done_flush &&
@@ -370,13 +371,6 @@ static int filter_frame(AVFilterLink *inlink)
     }
 
     in_samples = in->nb_samples;
-
-    out = av_frame_alloc();
-    if (!out) {
-        av_frame_free(&in);
-        s->in = NULL;
-        return AVERROR(ENOMEM);
-    }
 
     out->nb_samples = av_rescale(in_samples, s->out_nb_samples, s->in_nb_samples);
     ret = ff_filter_get_buffer(ctx, out);
@@ -491,6 +485,7 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
     if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
         return 0;
 
+    s_dst->out = s_src->out;
     s_dst->last_in_pts = s_src->last_in_pts;
     s_dst->flush_size = s_src->flush_size;
     s_dst->done_flush = s_src->done_flush;
@@ -630,6 +625,13 @@ static int filter_prepare(AVFilterContext *ctx)
                 return AVERROR(ENOMEM);
         }
 #endif
+        s->out = av_frame_alloc();
+        if (!s->out) {
+            av_frame_free(&in);
+            s->in = NULL;
+            return AVERROR(ENOMEM);
+        }
+
         return 0;
     }
 
