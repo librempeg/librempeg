@@ -1851,7 +1851,7 @@ AVFrame *ff_graph_frame_alloc(AVFilterContext *ctx)
     AVFrame *ret = NULL;
 
     ff_mutex_lock(lock);
-    if (fifo && av_fifo_can_read(fifo) > 0)
+    if (fifo && (av_fifo_can_read(fifo) > 0))
         av_fifo_read(fifo, &ret, 1);
     ff_mutex_unlock(lock);
 
@@ -1868,7 +1868,7 @@ void ff_graph_frame_free(AVFilterContext *ctx, AVFrame **frame)
 
     av_frame_unref(*frame);
     ff_mutex_lock(lock);
-    if (!fifo || av_fifo_write(fifo, frame, 1) < 0) {
+    if ((fifo == NULL) || (av_fifo_write(fifo, frame, 1) < 0)) {
         av_frame_free(frame);
     } else {
         frame = NULL;
