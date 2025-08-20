@@ -430,7 +430,7 @@ static int filter_frame(AVFilterLink *inlink)
 
     s->last_out_pts = out->pts + out->duration;
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     s->in = NULL;
 
     return ff_filter_frame(outlink, out);
@@ -625,7 +625,7 @@ static int filter_prepare(AVFilterContext *ctx)
                 return AVERROR(ENOMEM);
         }
 #endif
-        s->out = av_frame_alloc();
+        s->out = ff_graph_frame_alloc(ctx);
         if (!s->out) {
             av_frame_free(&in);
             s->in = NULL;
