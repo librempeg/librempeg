@@ -56,7 +56,8 @@ static int rawvideo_read_header(AVFormatContext *ctx)
     st->codecpar->codec_id = ffifmt(ctx->iformat)->raw_codec_id;
 
     if ((ffifmt(ctx->iformat)->raw_codec_id != AV_CODEC_ID_V210) &&
-        (ffifmt(ctx->iformat)->raw_codec_id != AV_CODEC_ID_V210X)) {
+        (ffifmt(ctx->iformat)->raw_codec_id != AV_CODEC_ID_V210X) &&
+        (ffifmt(ctx->iformat)->raw_codec_id != AV_CODEC_ID_DYUV)) {
         if ((pix_fmt = av_get_pix_fmt(s->pixel_format)) == AV_PIX_FMT_NONE) {
             av_log(ctx, AV_LOG_ERROR, "No such pixel format: %s.\n",
                     s->pixel_format);
@@ -65,6 +66,11 @@ static int rawvideo_read_header(AVFormatContext *ctx)
     }
 
     avpriv_set_pts_info(st, 64, s->framerate.den, s->framerate.num);
+
+    if (ffifmt(ctx->iformat)->raw_codec_id == AV_CODEC_ID_DYUV) {
+        s->width  = 384;
+        s->height = 240;
+    }
 
     ret = av_image_check_size(s->width, s->height, 0, ctx);
     if (ret < 0)
@@ -103,6 +109,8 @@ static int rawvideo_read_header(AVFormatContext *ctx)
                   AV_PIX_FMT_YUV422P10 : AV_PIX_FMT_YUV422P16;
 
         packet_size = GET_PACKET_SIZE(s->width, s->height);
+    } else if (ffifmt(ctx->iformat)->raw_codec_id == AV_CODEC_ID_DYUV) {
+        packet_size = 384 * 240 * 2;
     } else {
         packet_size = av_image_get_buffer_size(pix_fmt, s->width, s->height, 1);
         if (packet_size < 0)
@@ -214,3 +222,23 @@ const FFInputFormat ff_v210x_demuxer = {
     .raw_codec_id   = AV_CODEC_ID_V210X,
 };
 #endif // CONFIG_V210X_DEMUXER
+
+#if CONFIG_DYUV_DEMUXER
+static const AVClass dyuv_demuxer_class = {
+    .class_name = "dyuv demuxer",
+    .option     = rawvideo_options + 2,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
+const FFInputFormat ff_dyuv_demuxer = {
+    .p.name         = "dyuv",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("CD-I Delta YUV"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
+    .p.extensions   = "dyu,dyv",
+    .p.priv_class   = &dyuv_demuxer_class,
+    .priv_data_size = sizeof(RawVideoDemuxerContext),
+    .read_header    = rawvideo_read_header,
+    .read_packet    = rawvideo_read_packet,
+    .raw_codec_id   = AV_CODEC_ID_DYUV,
+};
+#endif // CONFIG_DYUV_DEMUXER

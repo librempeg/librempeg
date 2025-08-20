@@ -183,6 +183,7 @@ extern const FFInputFormat  ff_dvbtxt_demuxer;
 extern const FFInputFormat  ff_dvdvideo_demuxer;
 extern const FFInputFormat  ff_dwd_demuxer;
 extern const FFInputFormat  ff_dxa_demuxer;
+extern const FFInputFormat  ff_dyuv_demuxer;
 extern const FFInputFormat  ff_ea_demuxer;
 extern const FFInputFormat  ff_ea_cdata_demuxer;
 extern const FFInputFormat  ff_eac3_demuxer;
