@@ -84,8 +84,7 @@ static int return_or_keep_frame(AVFilterContext *ctx, AVFrame *out, AVFrame *in,
         av_assert1(out);
         buf->peeked_frame = NULL;
         av_frame_move_ref(out, in);
-        if (av_fifo_write(fffiltergraph(ctx->graph)->fifo_empty_frames, &in, 1) < 0)
-            av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
         return 0;
     }
 }
