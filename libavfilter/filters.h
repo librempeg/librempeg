@@ -901,4 +901,14 @@ static inline int ff_filter_get_buffer(AVFilterContext *ctx, AVFrame *frame)
  */
 int ff_filter_is_frame_thread(const AVFilterContext *ctx);
 
+/**
+ * @return newly allocated AVFrame or unused one from fifo
+ */
+AVFrame *ff_graph_frame_alloc(AVFilterContext *ctx);
+
+/**
+ * free AVFrame
+ */
+void ff_graph_frame_free(AVFilterContext *ctx, AVFrame **frame);
+
 #endif /* AVFILTER_FILTERS_H */
