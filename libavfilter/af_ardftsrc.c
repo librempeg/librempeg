@@ -41,6 +41,7 @@ typedef struct AudioRDFTSRCContext {
     int is_eof;
     int done_flush;
     int quality;
+    int shape;
     int sample_rate;
     int in_rdft_size;
     int out_rdft_size;
@@ -98,6 +99,7 @@ static const AVOption ardftsrc_options[] = {
     { "quality", "set the quality", OFFSET(quality), AV_OPT_TYPE_INT, {.i64=1024}, 1, INT32_MAX, FLAGS },
     { "bandwidth", "set the bandwidth", OFFSET(bandwidth), AV_OPT_TYPE_FLOAT, {.dbl=0.95}, 0, 1, FLAGS },
     { "phase", "set the phase", OFFSET(phaset), AV_OPT_TYPE_FLOAT, {.dbl=0}, -1, 1, FLAGS },
+    { "shape", "enable noise shaping", OFFSET(shape), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1, FLAGS },
     {NULL}
 };
 
