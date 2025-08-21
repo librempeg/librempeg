@@ -244,7 +244,7 @@ int attribute_align_arg av_buffersrc_add_frame_flags(AVFilterContext *ctx, AVFra
     }
 
     if (refcounted && !(flags & AV_BUFFERSRC_FLAG_KEEP_REF)) {
-        if (!(copy = av_frame_alloc()))
+        if (!(copy = ff_graph_frame_alloc(ctx)))
             return AVERROR(ENOMEM);
         av_frame_move_ref(copy, frame);
     } else {
