@@ -185,7 +185,7 @@ static int channelsum_filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFrame *out;
     int ret;
 
-    out = av_frame_alloc();
+    out = ff_graph_frame_alloc(ctx);
     if (!out)
         return AVERROR(ENOMEM);
 
@@ -233,7 +233,7 @@ static int channelsum_filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
 
     av_frame_copy_props(out, in);
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
