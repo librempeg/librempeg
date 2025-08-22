@@ -1237,7 +1237,12 @@ static int take_samples(FilterLinkInternal *li, unsigned min, unsigned max,
         av_samples_copy(buf->extended_data, frame->extended_data, p, 0,
                         frame->nb_samples, link->ch_layout.nb_channels, link->format);
         p += frame->nb_samples;
-        av_frame_free(&frame);
+        if (link->src)
+            ff_graph_frame_free(link->src, &frame);
+        else if (link->dst)
+            ff_graph_frame_free(link->dst, &frame);
+        else
+            av_frame_free(&frame);
     }
     if (p < nb_samples) {
         unsigned n = nb_samples - p;
@@ -1834,7 +1839,7 @@ int ff_filter_get_buffer_ext(AVFilterContext *ctx, AVFrame *frame,
 
     av_frame_unref(frame);
     av_frame_move_ref(frame, tmp);
-    av_frame_free(&tmp);
+    ff_graph_frame_free(ctx, &tmp);
 
     return 0;
 }
