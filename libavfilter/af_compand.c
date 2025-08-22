@@ -180,10 +180,10 @@ static int compand_nodelay(AVFilterContext *ctx)
                             ff_filter_get_nb_threads(ctx)));
 
     if (s->in != out)
-        av_frame_free(&s->in);
+        ff_graph_frame_free(ctx, &s->in);
 
     s->in = NULL;
-    av_frame_free(&s->sc);
+    ff_graph_frame_free(ctx, &s->sc);
 
     return ff_filter_frame(outlink, out);
 }
@@ -218,8 +218,8 @@ static int compand_delay(AVFilterContext *ctx)
     s->pts = out->pts + out->nb_samples;
     out->pts -= s->delay_samples;
 
-    av_frame_free(&s->in);
-    av_frame_free(&s->sc);
+    ff_graph_frame_free(ctx, &s->in);
+    ff_graph_frame_free(ctx, &s->sc);
 
     if (s->delay_count(ctx) < s->delay_samples) {
         av_frame_free(&out);
