@@ -427,7 +427,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     }
 
     if (buf != out_buf)
-        av_frame_free(&buf);
+        ff_graph_frame_free(ctx, &buf);
 
 end:
     vol->var_values[VAR_NB_CONSUMED_SAMPLES] += out_buf->nb_samples;
