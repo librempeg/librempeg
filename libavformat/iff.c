@@ -43,6 +43,7 @@
 
 #define ID_8SVX       MKTAG('8','S','V','X')
 #define ID_16SV       MKTAG('1','6','S','V')
+#define ID_IHDR       MKTAG('I','H','D','R')
 #define ID_MAUD       MKTAG('M','A','U','D')
 #define ID_MHDR       MKTAG('M','H','D','R')
 #define ID_MDAT       MKTAG('M','D','A','T')
@@ -52,6 +53,7 @@
 #define ID_CHAN       MKTAG('C','H','A','N')
 #define ID_PBM        MKTAG('P','B','M',' ')
 #define ID_ILBM       MKTAG('I','L','B','M')
+#define ID_IMAG       MKTAG('I','M','A','G')
 #define ID_BMHD       MKTAG('B','M','H','D')
 #define ID_DGBL       MKTAG('D','G','B','L')
 #define ID_CAMG       MKTAG('C','A','M','G')
@@ -59,6 +61,7 @@
 #define ID_ACBM       MKTAG('A','C','B','M')
 #define ID_DEEP       MKTAG('D','E','E','P')
 #define ID_RGB8       MKTAG('R','G','B','8')
+#define ID_IDAT       MKTAG('I','D','A','T')
 #define ID_RGBN       MKTAG('R','G','B','N')
 #define ID_DSD        MKTAG('D','S','D',' ')
 #define ID_DST        MKTAG('D','S','T',' ')
@@ -125,6 +128,7 @@ typedef struct IffDemuxContext {
     unsigned  masking;      ///< masking method used
     uint8_t   tvdc[32];     ///< TVDC lookup table
     uint32_t  form_tag;
+    int       imag_compression;
     int       audio_stream_index;
     int       video_stream_index;
 } IffDemuxContext;
@@ -160,6 +164,7 @@ static int iff_probe(const AVProbeData *p)
           AV_RL32(d+8) == ID_ACBM ||
           AV_RL32(d+8) == ID_DEEP ||
           AV_RL32(d+8) == ID_ILBM ||
+          AV_RL32(d+8) == ID_IMAG ||
           AV_RL32(d+8) == ID_RGB8 ||
           AV_RL32(d+8) == ID_ANIM ||
           AV_RL32(d+8) == ID_RGBN)) ||
@@ -457,6 +462,7 @@ static int iff_read_header(AVFormatContext *s)
     if (iff->form_tag == ID_ANIM) {
         avio_skip(pb, 12);
     }
+    iff->imag_compression = -1;
     iff->bitmap_compression = -1;
     iff->svx8_compression = -1;
     iff->maud_bits = -1;
@@ -475,6 +481,33 @@ static int iff_read_header(AVFormatContext *s)
             return AVERROR_INVALIDDATA;
 
         switch(chunk_id) {
+        case ID_IHDR:
+            if (data_size <= 10)
+                return AVERROR_INVALIDDATA;
+            if (!new_stream(s, &stv, &iff->video_stream_index, AVMEDIA_TYPE_VIDEO))
+                return AVERROR(ENOMEM);
+            stv->codecpar->width  = avio_rb16(pb);
+            avio_skip(pb, 2);
+            stv->codecpar->height = avio_rb16(pb);
+            iff->imag_compression = avio_rb16(pb);
+            avio_skip(pb, 2);
+            switch (iff->imag_compression) {
+            case 1:
+                stv->codecpar->codec_id = AV_CODEC_ID_RAWVIDEO;
+                stv->codecpar->format = AV_PIX_FMT_RGB24;
+                break;
+            case 3:
+                res = ff_get_extradata(s, stv->codecpar, pb, 4);
+                if (res < 0)
+                    return res;
+                stv->codecpar->codec_id = AV_CODEC_ID_DYUV;
+                break;
+            default:
+                avpriv_request_sample(s, "imag_compression %d", iff->imag_compression);
+                return AVERROR_PATCHWELCOME;
+            }
+            break;
+
         case ID_VHDR:
             if (data_size < 14)
                 return AVERROR_INVALIDDATA;
@@ -519,6 +552,7 @@ static int iff_read_header(AVFormatContext *s)
         case ID_DBOD:
         case ID_DSD:
         case ID_DST:
+        case ID_IDAT:
         case ID_MDAT:
             iff->body_pos = avio_tell(pb);
             if (iff->body_pos < 0 || iff->body_pos + data_size > INT64_MAX)
@@ -850,7 +884,7 @@ static int iff_read_header(AVFormatContext *s)
             return AVERROR_INVALIDDATA;
     }
 
-    if (stv) {
+    if (stv && iff->imag_compression < 0) {
         iff->bpp          = stv->codecpar->bits_per_coded_sample;
         if (iff->form_tag == ID_ANIM)
             avpriv_set_pts_info(stv, 32, 1, 60);
