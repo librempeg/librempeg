@@ -437,7 +437,7 @@ static int try_push_frame(AVFilterContext *ctx)
         goto eof;
 
     /* setup the output frame */
-    frame = av_frame_alloc();
+    frame = ff_graph_frame_alloc(ctx);
     if (!frame)
         return AVERROR(ENOMEM);
     if (s->ch_layout.nb_channels > FF_ARRAY_ELEMS(frame->data)) {
@@ -520,7 +520,7 @@ static int try_push_frame(AVFilterContext *ctx)
                                            outlink->time_base);
 
     for (int i = 0; i < ctx->nb_inputs; i++)
-        av_frame_free(&s->input_frames[i]);
+        ff_graph_frame_free(ctx, &s->input_frames[i]);
 
     return ff_filter_frame(outlink, frame);
 
