@@ -187,7 +187,7 @@ static int filter_frame(AVFilterLink *outlink, AVFrame *in)
     AVFrame *out;
     int ret;
 
-    out = av_frame_alloc();
+    out = ff_graph_frame_alloc(ctx);
     if (!out)
         return AVERROR(ENOMEM);
 
@@ -213,7 +213,7 @@ static int filter_prepare(AVFilterContext *ctx)
     int status, ret;
     int64_t pts;
 
-    av_frame_free(&s->in);
+    ff_graph_frame_free(ctx, &s->in);
 
     for (int i = 0; i < ctx->nb_outputs; i++) {
         ret = ff_outlink_get_status(ctx->outputs[i]);
