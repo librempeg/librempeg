@@ -27,13 +27,31 @@
 
 static const uint8_t quant[] = { 0, 1, 4, 9, 16, 27, 44, 79, 128, 177, 212, 229, 240, 247, 252, 255 };
 
+typedef struct DYUVVideoContext {
+    int mode;
+    int y_pred, u_pred, v_pred;
+} DYUVVideoContext;
+
 static av_cold int dyuv_decode_init(AVCodecContext *avctx)
 {
+    DYUVVideoContext *s = avctx->priv_data;
+
     if (!avctx->width || !avctx->height) {
         avctx->width = 384;
         avctx->height = 240;
     }
     avctx->pix_fmt = AV_PIX_FMT_YUV422P;
+
+    s->y_pred = 16;
+    s->u_pred = 128;
+    s->v_pred = 128;
+
+    if (avctx->extradata && avctx->extradata_size >= 4) {
+        s->mode   = avctx->extradata[0];
+        s->y_pred = avctx->extradata[1];
+        s->u_pred = avctx->extradata[2];
+        s->v_pred = avctx->extradata[3];
+    }
 
     return 0;
 }
@@ -41,6 +59,7 @@ static av_cold int dyuv_decode_init(AVCodecContext *avctx)
 static int dyuv_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                              int *got_frame, AVPacket *avpkt)
 {
+    DYUVVideoContext *s = avctx->priv_data;
     GetByteContext gbc, *gb = &gbc;
     const int h = avctx->height;
     const int w2 = avctx->width/2;
@@ -55,7 +74,7 @@ static int dyuv_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         uint8_t *y_dst = frame->data[0] + y * frame->linesize[0];
         uint8_t *u_dst = frame->data[1] + y * frame->linesize[1];
         uint8_t *v_dst = frame->data[2] + y * frame->linesize[2];
-        int y_pred = 16, u_pred = 128, v_pred = 128;
+        int y_pred = s->y_pred, u_pred = s->u_pred, v_pred = s->v_pred;
 
         for (int x = 0; x < w2; x++) {
             int s0, s1;
@@ -80,6 +99,7 @@ const FFCodec ff_dyuv_decoder = {
     CODEC_LONG_NAME("CD-I Delta YUV"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_DYUV,
+    .priv_data_size = sizeof(DYUVVideoContext),
     .init           = dyuv_decode_init,
     FF_CODEC_DECODE_CB(dyuv_decode_frame),
     .p.capabilities = AV_CODEC_CAP_DR1,
