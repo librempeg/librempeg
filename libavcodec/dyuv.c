@@ -29,8 +29,10 @@ static const uint8_t quant[] = { 0, 1, 4, 9, 16, 27, 44, 79, 128, 177, 212, 229,
 
 static av_cold int dyuv_decode_init(AVCodecContext *avctx)
 {
-    avctx->width = 384;
-    avctx->height = 240;
+    if (!avctx->width || !avctx->height) {
+        avctx->width = 384;
+        avctx->height = 240;
+    }
     avctx->pix_fmt = AV_PIX_FMT_YUV422P;
 
     return 0;
