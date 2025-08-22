@@ -220,7 +220,7 @@ static AVStream *get_curr_st(MOVContext *c)
     if (c->cur_item_id == -1)
         return c->fc->streams[c->fc->nb_streams-1];
 
-    item = heif_cur_item(c);
+    item = get_heif_item(c, c->cur_item_id);
     if (item)
         st = item->st;
 
@@ -1245,7 +1245,7 @@ static int mov_read_clap(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     AVRational pc_x, pc_y;
     uint64_t top, bottom, left, right;
 
-    item = heif_cur_item(c);
+    item = get_heif_item(c, c->cur_item_id);
     st = get_curr_st(c);
     if (!st)
         return 0;
@@ -2078,7 +2078,7 @@ static int mov_read_colr(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     st = get_curr_st(c);
     if (!st) {
-        item = heif_cur_item(c);
+        item = get_heif_item(c, c->cur_item_id);
         if (!item)
             return 0;
     }
@@ -9106,7 +9106,7 @@ static int mov_read_ispe(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     av_log(c->fc, AV_LOG_TRACE, "ispe: item_id %d, width %u, height %u\n",
            c->cur_item_id, width, height);
 
-    item = heif_cur_item(c);
+    item = get_heif_item(c, c->cur_item_id);
     if (item) {
         item->width  = width;
         item->height = height;
@@ -9125,7 +9125,7 @@ static int mov_read_irot(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     av_log(c->fc, AV_LOG_TRACE, "irot: item_id %d, angle %u\n",
            c->cur_item_id, angle);
 
-    item = heif_cur_item(c);
+    item = get_heif_item(c, c->cur_item_id);
     if (item) {
         // angle * 90 specifies the angle (in anti-clockwise direction)
         // in units of degrees.
@@ -9145,7 +9145,7 @@ static int mov_read_imir(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     av_log(c->fc, AV_LOG_TRACE, "imir: item_id %d, axis %u\n",
            c->cur_item_id, axis);
 
-    item = heif_cur_item(c);
+    item = get_heif_item(c, c->cur_item_id);
     if (item) {
         item->hflip =  axis;
         item->vflip = !axis;
