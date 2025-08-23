@@ -248,7 +248,7 @@ int attribute_align_arg av_buffersrc_add_frame_flags(AVFilterContext *ctx, AVFra
             return AVERROR(ENOMEM);
         av_frame_move_ref(copy, frame);
     } else {
-        copy = av_frame_clone(frame);
+        copy = ff_graph_frame_clone(ctx, frame);
         if (!copy)
             return AVERROR(ENOMEM);
     }
