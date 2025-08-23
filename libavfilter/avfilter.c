@@ -1668,7 +1668,12 @@ int ff_inlink_make_frame_writable(AVFilterLink *link, AVFrame **rframe)
         return ret;
     }
 
-    av_frame_free(&frame);
+    if (link->src)
+        ff_graph_frame_free(link->src, &frame);
+    else if (link->dst)
+        ff_graph_frame_free(link->dst, &frame);
+    else
+        av_frame_free(&frame);
     *rframe = out;
     return 0;
 }
