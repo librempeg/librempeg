@@ -678,7 +678,7 @@ static int analyze_frame(AVFilterContext *ctx, AVFilterLink *outlink, AVFrame **
                 return ret;
             }
 
-            av_frame_free(frame);
+            ff_graph_frame_free(ctx, frame);
             *frame = out;
         }
     }
@@ -799,7 +799,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->pts = out->pts + av_rescale_q(out->nb_samples, av_make_q(1, outlink->sample_rate),
                                          outlink->time_base);
         if (out != in)
-            av_frame_free(&in);
+            ff_graph_frame_free(ctx, &in);
         ret = ff_filter_frame(outlink, out);
         if (ret < 0)
             return ret;
@@ -812,7 +812,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         ff_bufqueue_add(ctx, &s->queue, in);
         cqueue_enqueue(s->is_enabled, !ff_filter_disabled(ctx));
     } else {
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
     }
 
     return 1;
