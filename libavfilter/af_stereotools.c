@@ -182,7 +182,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     s->do_filter(ctx, out, in);
 
     if (out != in)
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
