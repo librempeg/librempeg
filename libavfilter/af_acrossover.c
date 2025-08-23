@@ -358,7 +358,7 @@ static int activate(AVFilterContext *ctx)
         return ret;
     if (ret > 0) {
         ret = filter_frame(inlink, in);
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
         if (ret <= 0)
             return ret;
     }
