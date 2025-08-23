@@ -273,9 +273,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in, AVFrame *sc)
     s->fill_fdetection(ctx);
 
     if (out != in)
-        av_frame_free(&s->in);
+        ff_graph_frame_free(ctx, &s->in);
     s->in = NULL;
-    av_frame_free(&s->sc);
+    ff_graph_frame_free(ctx, &s->sc);
     return ff_filter_frame(outlink, out);
 }
 
