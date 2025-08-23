@@ -373,7 +373,7 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
 
     if (!s->outpicref || s->outpicref->width  != outlink->w ||
                          s->outpicref->height != outlink->h) {
-        av_frame_free(&s->outpicref);
+        ff_graph_frame_free(ctx, &s->outpicref);
         s->outpicref = ff_get_video_buffer(outlink, outlink->w, outlink->h);
         if (!s->outpicref)
             return AVERROR(ENOMEM);
@@ -495,7 +495,7 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
     s->outpicref->pts = pts;
     s->outpicref->duration = 1;
 
-    clone = av_frame_clone(s->outpicref);
+    clone = ff_graph_frame_clone(ctx, s->outpicref);
     if (!clone)
         return AVERROR(ENOMEM);
 
@@ -519,7 +519,7 @@ static int spatial_activate(AVFilterContext *ctx)
         int64_t pts = av_rescale_q(in->pts, inlink->time_base, outlink->time_base);
 
         ff_filter_execute(ctx, run_channels_fft, in, NULL, s->nb_channels);
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
 
         if (s->pts != pts) {
             s->pts = pts;
