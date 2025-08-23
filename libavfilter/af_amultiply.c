@@ -63,7 +63,7 @@ static int activate(AVFilterContext *ctx)
             out = s->frames[0];
 
             s->frames[0] = NULL;
-            av_frame_free(&s->frames[1]);
+            ff_graph_frame_free(ctx, &s->frames[1]);
 
             return ff_filter_frame(ctx->outputs[0], out);
         }
@@ -98,8 +98,8 @@ static int activate(AVFilterContext *ctx)
             }
         }
 
-        av_frame_free(&s->frames[0]);
-        av_frame_free(&s->frames[1]);
+        ff_graph_frame_free(ctx, &s->frames[0]);
+        ff_graph_frame_free(ctx, &s->frames[1]);
 
         return ff_filter_frame(ctx->outputs[0], out);
     }
