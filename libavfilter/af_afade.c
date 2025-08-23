@@ -190,8 +190,9 @@ static av_cold int init(AVFilterContext *ctx)
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
 {
-    AudioFadeContext *s     = inlink->dst->priv;
-    AVFilterLink *outlink   = inlink->dst->outputs[0];
+    AVFilterContext *ctx = inlink->dst;
+    AudioFadeContext *s = ctx->priv;
+    AVFilterLink *outlink = ctx->outputs[0];
     int nb_samples          = buf->nb_samples;
     AVFrame *out_buf;
     int64_t cur_sample = av_rescale_q(buf->pts, inlink->time_base, (AVRational){1, inlink->sample_rate});
@@ -240,7 +241,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     }
 
     if (buf != out_buf)
-        av_frame_free(&buf);
+        ff_graph_frame_free(ctx, &buf);
 
     return ff_filter_frame(outlink, out_buf);
 }
@@ -393,8 +394,8 @@ static int pass_crossfade(AVFilterContext *ctx)
         s->pts += av_rescale_q(s->nb_samples,
             (AVRational){ 1, outlink->sample_rate }, outlink->time_base);
         s->passthrough = 1;
-        av_frame_free(&cf[0]);
-        av_frame_free(&cf[1]);
+        ff_graph_frame_free(ctx, &cf[0]);
+        ff_graph_frame_free(ctx, &cf[1]);
         return ff_filter_frame(outlink, out);
     } else {
         out = ff_get_audio_buffer(outlink, s->nb_samples);
@@ -412,7 +413,7 @@ static int pass_crossfade(AVFilterContext *ctx)
         out->pts = s->pts;
         s->pts += av_rescale_q(s->nb_samples,
             (AVRational){ 1, outlink->sample_rate }, outlink->time_base);
-        av_frame_free(&cf[0]);
+        ff_graph_frame_free(ctx, &cf[0]);
         ret = ff_filter_frame(outlink, out);
         if (ret < 0)
             return ret;
@@ -433,7 +434,7 @@ static int pass_crossfade(AVFilterContext *ctx)
         s->pts += av_rescale_q(s->nb_samples,
             (AVRational){ 1, outlink->sample_rate }, outlink->time_base);
         s->passthrough = 1;
-        av_frame_free(&cf[1]);
+        ff_graph_frame_free(ctx, &cf[1]);
         return ff_filter_frame(outlink, out);
     }
 }
