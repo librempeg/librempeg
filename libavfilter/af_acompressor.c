@@ -191,9 +191,9 @@ static int filter_frame(AVFilterLink *outlink)
     s->compress(ctx, out, s->in->nb_samples, inlink, sclink);
 
     if (out != s->in)
-        av_frame_free(&s->in);
+        ff_graph_frame_free(ctx, &s->in);
     s->in = NULL;
-    av_frame_free(&s->sc);
+    ff_graph_frame_free(ctx, &s->sc);
     return ff_filter_frame(outlink, out);
 }
 
