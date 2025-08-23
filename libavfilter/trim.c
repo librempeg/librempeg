@@ -91,7 +91,7 @@ static int trim_filter_frame(AVFilterLink *inlink, AVFrame *frame)
 
     /* drop everything if EOF has already been returned */
     if (s->eof) {
-        av_frame_free(&frame);
+        ff_graph_frame_free(ctx, &frame);
         return 0;
     }
 
@@ -136,7 +136,7 @@ drop:
     if (!s->eof)
         ff_filter_set_ready(ctx, 100);
     s->nb_frames++;
-    av_frame_free(&frame);
+    ff_graph_frame_free(ctx, &frame);
     return 0;
 }
 #endif // CONFIG_TRIM_FILTER
@@ -240,7 +240,7 @@ static int atrim_filter_frame(AVFilterLink *inlink, AVFrame *frame)
             out->pts += av_rescale_q(start_sample, (AVRational){ 1, out->sample_rate },
                                      inlink->time_base);
 
-        av_frame_free(&frame);
+        ff_graph_frame_free(ctx, &frame);
         frame = out;
     } else {
         frame->nb_samples = end_sample;
@@ -253,7 +253,7 @@ drop:
     if (!s->eof)
         ff_filter_set_ready(ctx, 100);
     s->nb_samples += frame->nb_samples;
-    av_frame_free(&frame);
+    ff_graph_frame_free(ctx, &frame);
     return 0;
 }
 #endif // CONFIG_ATRIM_FILTER
