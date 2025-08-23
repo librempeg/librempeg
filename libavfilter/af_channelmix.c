@@ -105,7 +105,7 @@ static void free_frames(AVFilterContext *ctx)
     ChannelMixContext *s = ctx->priv;
 
     for (int i = 0; i < ctx->nb_inputs; i++)
-        av_frame_free(&s->frames[i]);
+        ff_graph_frame_free(ctx, &s->frames[i]);
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
