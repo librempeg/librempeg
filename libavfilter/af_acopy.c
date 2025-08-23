@@ -22,7 +22,8 @@
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
-    AVFilterLink *outlink = inlink->dst->outputs[0];
+    AVFilterContext *ctx = inlink->dst;
+    AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out = ff_get_audio_buffer(outlink, in->nb_samples);
     int ret;
 
@@ -37,7 +38,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     ret = av_frame_copy(out, in);
     if (ret < 0)
         goto fail;
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 fail:
     av_frame_free(&in);
