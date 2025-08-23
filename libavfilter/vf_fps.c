@@ -295,7 +295,7 @@ static int write_frame(AVFilterContext *ctx, FPSContext *s, AVFilterLink *outlin
 
     /* Output a copy of the first buffered frame */
     } else {
-        frame = av_frame_clone(s->frames[0]);
+        frame = ff_graph_frame_clone(ctx, s->frames[0]);
         if (!frame)
             return AVERROR(ENOMEM);
         // Make sure Closed Captions will not be duplicated
