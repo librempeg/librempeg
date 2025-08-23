@@ -284,7 +284,7 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
 
     av_frame_free(&s_dst->in);
     if (s_src->in) {
-        s_dst->in = av_frame_clone(s_src->in);
+        s_dst->in = ff_graph_frame_clone(dst, s_src->in);
         if (!s_dst->in)
             return AVERROR(ENOMEM);
     }
