@@ -348,7 +348,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     out_frame->duration = av_rescale_q(out_frame->nb_samples, (AVRational){1, outlink->sample_rate}, outlink->time_base);
     s->next_pts += out_frame->duration;
     if (out_frame != frame)
-        av_frame_free(&frame);
+        ff_graph_frame_free(ctx, &frame);
     s->input = NULL;
     return ff_filter_frame(outlink, out_frame);
 }
