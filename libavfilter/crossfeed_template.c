@@ -275,11 +275,11 @@ static int fn(xfeed_frame)(AVFilterLink *inlink, AVFrame *in)
     }
 
     if (out != in)
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
     if (!drop) {
         return ff_filter_frame(outlink, out);
     } else {
-        av_frame_free(&out);
+        ff_graph_frame_free(ctx, &out);
         ff_filter_set_ready(ctx, 10);
         return 0;
     }
