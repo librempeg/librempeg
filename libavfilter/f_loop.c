@@ -187,7 +187,7 @@ static int afilter_frame(AVFilterLink *inlink, AVFrame *frame)
         } else {
             int nb_samples = frame->nb_samples;
 
-            av_frame_free(&frame);
+            ff_graph_frame_free(ctx, &frame);
             ret = push_samples(ctx, nb_samples);
         }
     } else {
@@ -335,7 +335,7 @@ static void free_frames(AVFilterContext *ctx)
     LoopContext *s = ctx->priv;
 
     for (int i = 0; i < s->nb_frames; i++)
-        av_frame_free(&s->frames[i]);
+        ff_graph_frame_free(ctx, &s->frames[i]);
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
@@ -403,7 +403,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
             s->pts_offset = s->duration;
             ret = ff_filter_frame(outlink, frame);
         } else {
-            av_frame_free(&frame);
+            ff_graph_frame_free(ctx, &frame);
             ret = push_frame(ctx);
         }
     } else {
