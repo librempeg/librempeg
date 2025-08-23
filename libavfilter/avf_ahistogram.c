@@ -208,7 +208,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     if (!s->out || s->out->width  != outlink->w ||
                    s->out->height != outlink->h) {
-        av_frame_free(&s->out);
+        ff_graph_frame_free(ctx, &s->out);
         s->out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
         if (!s->out) {
             av_frame_free(&in);
@@ -296,7 +296,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         break;
     }
 
-    av_frame_free(&s->in[s->frame_count]);
+    ff_graph_frame_free(ctx, &s->in[s->frame_count]);
     s->in[s->frame_count] = in;
     s->frame_count++;
     if (s->frame_count > s->count)
@@ -431,7 +431,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             s->ypos = H;
     }
 
-    clone = av_frame_clone(s->out);
+    clone = ff_graph_frame_clone(ctx, s->out);
     if (!clone)
         return AVERROR(ENOMEM);
 
