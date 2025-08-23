@@ -88,7 +88,7 @@ static int activate(AVFilterContext *ctx)
         av_samples_set_silence(pad_frame->extended_data, frame->nb_samples,
                                s->nb_out_samples - frame->nb_samples, frame->ch_layout.nb_channels,
                                frame->format);
-        av_frame_free(&frame);
+        ff_graph_frame_free(ctx, &frame);
         return ff_filter_frame(outlink, pad_frame);
     }
 
