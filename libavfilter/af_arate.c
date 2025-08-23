@@ -137,7 +137,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         if (nb_samples >= in->nb_samples) {
             ff_filter_set_ready(ctx, 100);
             s->drop += in->nb_samples;
-            av_frame_free(&in);
+            ff_graph_frame_free(ctx, &in);
             return 0;
         } else {
             s->drop += nb_samples;
