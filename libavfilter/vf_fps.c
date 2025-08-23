@@ -274,7 +274,7 @@ static int write_frame(AVFilterContext *ctx, FPSContext *s, AVFilterLink *outlin
             av_log(ctx, AV_LOG_WARNING, "Discarding initial frame(s) with no "
                    "timestamp.\n");
             frame = shift_frame(ctx, s);
-            av_frame_free(&frame);
+            ff_graph_frame_free(ctx, &frame);
             *again = 1;
             return 0;
         }
@@ -289,7 +289,7 @@ static int write_frame(AVFilterContext *ctx, FPSContext *s, AVFilterLink *outlin
         (s->status            && s->status_pts     <= s->next_pts)) {
 
         frame = shift_frame(ctx, s);
-        av_frame_free(&frame);
+        ff_graph_frame_free(ctx, &frame);
         *again = 1;
         return 0;
 
