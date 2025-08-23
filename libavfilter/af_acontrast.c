@@ -156,7 +156,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
               in->nb_samples, in->ch_layout.nb_channels, s->contrast / 750);
 
     if (out != in)
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
 
     return ff_filter_frame(outlink, out);
 }
