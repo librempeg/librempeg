@@ -143,10 +143,10 @@ static int filter_frame(AVFilterLink *outlink, AVFrame *in)
 
     if (s->trim_size > 0) {
         ff_inlink_request_frame(inlink);
-        av_frame_free(&out);
+        ff_graph_frame_free(ctx, &out);
     }
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     s->in = NULL;
     if (out)
         return ff_filter_frame(outlink, out);
