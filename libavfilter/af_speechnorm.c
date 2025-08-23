@@ -282,7 +282,7 @@ static int filter_frame(AVFilterContext *ctx)
                                         outlink->time_base);
 
         if (out != in)
-            av_frame_free(&in);
+            ff_graph_frame_free(ctx, &in);
         return ff_filter_frame(outlink, out);
     }
 
