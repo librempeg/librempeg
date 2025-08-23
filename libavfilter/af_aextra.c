@@ -144,7 +144,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (s->post)
         out->nb_samples = s->nb_samples;
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
