@@ -1926,9 +1926,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFrame *out;
 
     if (!s->rframe || s->rframe->nb_samples < in->nb_samples) {
-        av_frame_free(&s->sframe);
-        av_frame_free(&s->rframe);
-        av_frame_free(&s->frame2);
+        ff_graph_frame_free(ctx, &s->sframe);
+        ff_graph_frame_free(ctx, &s->rframe);
+        ff_graph_frame_free(ctx, &s->frame2);
         s->sframe = ff_get_audio_buffer(inlink, in->nb_samples);
         s->rframe = ff_get_audio_buffer(inlink, in->nb_samples);
         s->frame2 = ff_get_audio_buffer(inlink, in->nb_samples);
@@ -1950,7 +1950,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     s->process(ctx, in, out);
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
