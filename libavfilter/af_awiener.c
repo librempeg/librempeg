@@ -219,8 +219,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->trim_size = 0;
     } else if (s->trim_size > 0) {
         s->trim_size -= out->nb_samples;
-        av_frame_free(&out);
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &out);
+        ff_graph_frame_free(ctx, &in);
 
         ff_inlink_request_frame(inlink);
 
@@ -228,7 +228,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
 
     s->in = NULL;
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
