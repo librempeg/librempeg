@@ -269,7 +269,7 @@ static int activate(AVFilterContext *ctx)
             ret = write_input_samples(ctx, in);
             if (ret < 0)
                 return ret;
-            av_frame_free(&in);
+            ff_graph_frame_free(ctx, &in);
         }
     }
 
