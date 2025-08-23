@@ -1866,6 +1866,17 @@ AVFrame *ff_graph_frame_alloc(AVFilterContext *ctx)
     return ret;
 }
 
+AVFrame *ff_graph_frame_clone(AVFilterContext *ctx, AVFrame *src)
+{
+    AVFrame *ret;
+
+    ret = ff_graph_frame_alloc(ctx);
+    if (ret && (av_frame_ref(ret, src) < 0))
+        av_frame_free(&ret);
+
+    return ret;
+}
+
 void ff_graph_frame_free(AVFilterContext *ctx, AVFrame **frame)
 {
     AVFifo *fifo = fffiltergraph(ctx->graph)->fifo_empty_frames;

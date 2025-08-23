@@ -907,6 +907,11 @@ int ff_filter_is_frame_thread(const AVFilterContext *ctx);
 AVFrame *ff_graph_frame_alloc(AVFilterContext *ctx);
 
 /**
+ * @return clone of frame using graph fifo
+ */
+AVFrame *ff_graph_frame_clone(AVFilterContext *ctx, AVFrame *src);
+
+/**
  * free AVFrame
  */
 void ff_graph_frame_free(AVFilterContext *ctx, AVFrame **frame);
