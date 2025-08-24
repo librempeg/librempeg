@@ -207,7 +207,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                                  outlink->time_base);
     ret = ff_filter_frame(outlink, out);
 fail:
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     s->in = NULL;
     return ret < 0 ? ret : 0;
 }
