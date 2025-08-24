@@ -603,7 +603,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                n_clippings[0] + n_clippings[1], out->nb_samples * 2);
     }
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
