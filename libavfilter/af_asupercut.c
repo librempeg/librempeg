@@ -310,7 +310,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                       FFMIN(inlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     if (out != in)
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
