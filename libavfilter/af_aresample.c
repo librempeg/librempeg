@@ -250,15 +250,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamplesref)
     n_out = swr_convert(aresample->swr, outsamplesref->extended_data, n_out,
                                  (void *)insamplesref->extended_data, n_in);
     if (n_out <= 0) {
-        av_frame_free(&outsamplesref);
-        av_frame_free(&insamplesref);
+        ff_graph_frame_free(ctx, &outsamplesref);
+        ff_graph_frame_free(ctx, &insamplesref);
         ff_filter_set_ready(ctx, 100);
         return 0;
     }
 
     outsamplesref->nb_samples  = n_out;
 
-    av_frame_free(&insamplesref);
+    ff_graph_frame_free(ctx, &insamplesref);
     return ff_filter_frame(outlink, outsamplesref);
 }
 
@@ -282,7 +282,7 @@ static int flush_frame(AVFilterLink *outlink, AVFrame **outsamplesref_ret)
 
     n_out = swr_convert(aresample->swr, outsamplesref->extended_data, n_out, NULL, 0);
     if (n_out <= 0) {
-        av_frame_free(&outsamplesref);
+        ff_graph_frame_free(ctx, &outsamplesref);
         *outsamplesref_ret = NULL;
         return (n_out == 0) ? AVERROR_EOF : n_out;
     }
