@@ -263,7 +263,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     out->pts -= av_rescale_q(s->tx_size - s->hop_size, av_make_q(1, outlink->sample_rate), outlink->time_base);
     s->last_pts = out->pts + out->duration;
     s->out = out;
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
 
     ff_filter_execute(ctx, s->filter_channels, values, NULL,
                       FFMIN(s->channels, ff_filter_get_nb_threads(ctx)));
@@ -277,8 +277,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->trim_size = 0;
     } else if (s->trim_size > 0) {
         s->trim_size -= out->nb_samples;
-        av_frame_free(&out);
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &out);
+        ff_graph_frame_free(ctx, &in);
 
         ff_inlink_request_frame(inlink);
 
