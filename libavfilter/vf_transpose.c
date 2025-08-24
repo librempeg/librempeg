@@ -332,7 +332,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (s->passthrough)
         return ff_filter_frame(outlink, in);
 
-    out = av_frame_alloc();
+    out = ff_graph_frame_alloc(ctx);
     if (!out) {
         av_frame_free(&in);
         return AVERROR(ENOMEM);
@@ -356,7 +356,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     td.in = in, td.out = out;
     ff_filter_execute(ctx, filter_slice, &td, NULL,
                       FFMIN(outlink->h, ff_filter_get_nb_threads(ctx)));
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 
 fail:
