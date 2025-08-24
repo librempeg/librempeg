@@ -370,7 +370,7 @@ static int modplug_probe(const AVProbeData *p)
     if (av_match_ext(p->filename, modplug_extensions)) {
         if (av_match_ext(p->filename, "stm")) {
             if ((memcmp(p->buf + 20, "!SCREAM!", 8) && memcmp(p->buf + 20, "BMOD2STM", 8))
-                || AV_RL8(p->buf, 28) != 0x1A || AV_RL8(p->buf, 29) != 2)
+                || AV_RL8(p->buf + 28) != 0x1A || AV_RL8(p->buf + 29) != 2)
                 return 0;
             return AVPROBE_SCORE_MAX;
         }
