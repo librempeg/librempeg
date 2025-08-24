@@ -179,7 +179,7 @@ static int flush_frame(AVFilterLink *outlink)
                                      outlink->time_base);
         s->last_pts += out->duration;
 
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
         s->in = NULL;
         ret = ff_filter_frame(outlink, out);
         if (ret < 0)
