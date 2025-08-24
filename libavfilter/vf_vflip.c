@@ -81,7 +81,7 @@ static int flip_bayer(AVFilterLink *link, AVFrame *in)
         return AVERROR_INVALIDDATA;
     }
 
-    out = av_frame_alloc();
+    out = ff_graph_frame_alloc(ctx);
     if (!out) {
         av_frame_free(&in);
         return AVERROR(ENOMEM);
@@ -102,7 +102,7 @@ static int flip_bayer(AVFilterLink *link, AVFrame *in)
         inrow  += 2 *  in->linesize[0];
         outrow -= 2 * out->linesize[0];
     }
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
