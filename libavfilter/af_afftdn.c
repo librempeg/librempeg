@@ -1288,7 +1288,7 @@ static int activate(AVFilterContext *ctx)
         for (int offset = 0; offset < out->nb_samples; offset += s->sample_advance)
             output_subframe(inlink, in, out, offset);
         if (out != in)
-            av_frame_free(&in);
+            ff_graph_frame_free(ctx, &in);
         return ff_filter_frame(outlink, out);
     }
 
