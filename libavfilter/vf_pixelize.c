@@ -275,7 +275,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (av_frame_is_writable(in)) {
         out = in;
     } else {
-        out = av_frame_alloc();
+        out = ff_graph_frame_alloc(ctx);
         if (!out) {
             ret = AVERROR(ENOMEM);
             goto fail;
@@ -301,7 +301,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                             ff_filter_get_nb_threads(ctx)));
 
     if (out != in)
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 fail:
     av_frame_free(&in);
