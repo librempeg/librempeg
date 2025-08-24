@@ -139,7 +139,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
     AVFrame *out;
     int ret;
 
-    out = av_frame_alloc();
+    out = ff_graph_frame_alloc(ctx);
     if (!out) {
         av_frame_free(&inpicref);
         return AVERROR(ENOMEM);
@@ -174,7 +174,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
                    s->alpha_mode, s->alpha_swap);
     }
 
-    av_frame_free(&inpicref);
+    ff_graph_frame_free(ctx, &inpicref);
     return ff_filter_frame(outlink, out);
 }
 
