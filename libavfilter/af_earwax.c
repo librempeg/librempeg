@@ -198,7 +198,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     for (int ch = 0; ch < 2; ch++) {
         if (!s->frame[ch] || s->frame[ch]->nb_samples < in->nb_samples) {
-            av_frame_free(&s->frame[ch]);
+            ff_graph_frame_free(ctx, &s->frame[ch]);
             s->frame[ch] = ff_get_audio_buffer(outlink, in->nb_samples);
             if (!s->frame[ch]) {
                 av_frame_free(&in);
@@ -222,7 +222,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     mix(ctx, out, in, 0, 0, 1, 1, 0);
     mix(ctx, out, in, 1, 0, 1, 0, 1);
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
