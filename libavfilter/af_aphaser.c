@@ -204,8 +204,9 @@ static int config_output(AVFilterLink *outlink)
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *inbuf)
 {
-    AudioPhaserContext *s = inlink->dst->priv;
-    AVFilterLink *outlink = inlink->dst->outputs[0];
+    AVFilterContext *ctx = inlink->dst;
+    AudioPhaserContext *s = ctx->priv;
+    AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *outbuf;
 
     if (av_frame_is_writable(inbuf)) {
@@ -223,7 +224,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inbuf)
               outbuf->nb_samples, outbuf->ch_layout.nb_channels);
 
     if (inbuf != outbuf)
-        av_frame_free(&inbuf);
+        ff_graph_frame_free(ctx, &inbuf);
 
     return ff_filter_frame(outlink, outbuf);
 }
