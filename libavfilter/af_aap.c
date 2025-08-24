@@ -150,8 +150,8 @@ static int activate(AVFilterContext *ctx)
 
         av_frame_copy_props(out, s->frame[0]);
 
-        av_frame_free(&s->frame[0]);
-        av_frame_free(&s->frame[1]);
+        ff_graph_frame_free(ctx, &s->frame[0]);
+        ff_graph_frame_free(ctx, &s->frame[1]);
 
         return ff_filter_frame(ctx->outputs[0], out);
     }
