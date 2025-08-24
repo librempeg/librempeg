@@ -348,7 +348,7 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
     if (av_frame_is_writable(in)) {
         out = in;
     } else {
-        out = av_frame_alloc();
+        out = ff_graph_frame_alloc(avctx);
         if (!out) {
             av_frame_free(&in);
             return AVERROR(ENOMEM);
@@ -371,7 +371,7 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
         return ret;
 
     if (out != in)
-        av_frame_free(&in);
+        ff_graph_frame_free(avctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
