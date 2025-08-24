@@ -198,10 +198,10 @@ static inline void copy_samples(int nb_inputs,
     }
 }
 
-static void free_frames(int nb_inputs, InputItem *ii)
+static void free_frames(AVFilterContext *ctx, int nb_inputs, InputItem *ii)
 {
     for (int i = 0; i < nb_inputs; i++)
-        av_frame_free(&ii[i].inbuf);
+        ff_graph_frame_free(ctx, &ii[i].inbuf);
 }
 
 static int try_push_frame(AVFilterContext *ctx, int nb_samples)
@@ -216,7 +216,7 @@ static int try_push_frame(AVFilterContext *ctx, int nb_samples)
     for (int i = 0; i < ctx->nb_inputs; i++) {
         ret = ff_inlink_consume_samples(ctx->inputs[i], nb_samples, nb_samples, &s->ii[i].inbuf);
         if (ret < 0) {
-            free_frames(i, s->ii);
+            free_frames(ctx, i, s->ii);
             return ret;
         }
         s->ii[i].ins = s->ii[i].inbuf->data[0];
@@ -224,7 +224,7 @@ static int try_push_frame(AVFilterContext *ctx, int nb_samples)
 
     outbuf = ff_get_audio_buffer(outlink, nb_samples);
     if (!outbuf) {
-        free_frames(s->nb_inputs, s->ii);
+        free_frames(ctx, s->nb_inputs, s->ii);
         return AVERROR(ENOMEM);
     }
 
@@ -237,7 +237,7 @@ static int try_push_frame(AVFilterContext *ctx, int nb_samples)
                                     outlink->time_base);
 
     if ((ret = av_channel_layout_copy(&outbuf->ch_layout, &outlink->ch_layout)) < 0) {
-        free_frames(s->nb_inputs, s->ii);
+        free_frames(ctx, s->nb_inputs, s->ii);
         av_frame_free(&outbuf);
         return ret;
     }
@@ -273,7 +273,7 @@ static int try_push_frame(AVFilterContext *ctx, int nb_samples)
         nb_samples = 0;
     }
 
-    free_frames(s->nb_inputs, s->ii);
+    free_frames(ctx, s->nb_inputs, s->ii);
     return ff_filter_frame(outlink, outbuf);
 }
 
