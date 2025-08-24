@@ -134,6 +134,7 @@ typedef struct EBUR128Context {
         const double  **f64;        ///< input channel samples, double type, at current pos
         const float   **f32;        ///< input channel samples, float type, at current pos
         const int16_t **s16;        ///< input channel samples, int16_t type, at current pos
+        const int32_t **s32;        ///< input channel samples, int32_t type, at current pos
     } ch_samples;
     AVFrame *insamples;             ///< input samples reference, updated regularly
 
@@ -458,6 +459,10 @@ static int config_audio_input(AVFilterLink *inlink)
 #include "ebur128_template.c"
 
 #undef DEPTH
+#define DEPTH 33
+#include "ebur128_template.c"
+
+#undef DEPTH
 #define DEPTH 64
 #include "ebur128_template.c"
 
@@ -489,6 +494,12 @@ static int config_audio_out(AVFilterLink *outlink, EBUR128Context *ebur128)
         ebur128->samples_peak = samples_peak_s16p;
         ebur128->ch_samples.s16 = av_calloc(nb_channels, sizeof(*ebur128->ch_samples.s16));
         if (!ebur128->ch_samples.s16)
+            return AVERROR(ENOMEM);
+        break;
+    case AV_SAMPLE_FMT_S32P:
+        ebur128->samples_peak = samples_peak_s32p;
+        ebur128->ch_samples.s32 = av_calloc(nb_channels, sizeof(*ebur128->ch_samples.s32));
+        if (!ebur128->ch_samples.s32)
             return AVERROR(ENOMEM);
         break;
     default:
@@ -870,6 +881,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     struct integrator *i3000 = &ebur128->i3000;
     struct integrator *i400 = &ebur128->i400;
     const int16_t **ch_samples_s16 = ebur128->ch_samples.s16;
+    const int32_t **ch_samples_s32 = ebur128->ch_samples.s32;
     const double **ch_samples_f64 = ebur128->ch_samples.f64;
     const float **ch_samples_f32 = ebur128->ch_samples.f32;
     const unsigned i3000_cache_size = i3000->cache_size;
@@ -903,6 +915,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
         for (int ch = 0; ch < nb_channels; ch++)
             ch_samples_s16[ch] = ((const int16_t *)samples[ch]) + idx_insample;
         break;
+    case AV_SAMPLE_FMT_S32P:
+        for (int ch = 0; ch < nb_channels; ch++)
+            ch_samples_s32[ch] = ((const int32_t *)samples[ch]) + idx_insample;
+        break;
     }
 
     samples_to_process = FFMIN(nb_samples - idx_insample, block_samples - sample_count);
@@ -930,6 +946,16 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
             break;
         case AV_SAMPLE_FMT_S16P:
             process_block_s16p(ch_samples_s16, nb_channels,
+                               i3000_cache_size, i400_cache_size,
+                               i3000_cache_pos, i400_cache_pos,
+                               i3000_filled, i400_filled,
+                               ch_weighting, cf,
+                               i3000_cache, i400_cache,
+                               i3000_sum, i400_sum,
+                               t0, samples_to_process, nozero_ch_weighting);
+            break;
+        case AV_SAMPLE_FMT_S32P:
+            process_block_s32p(ch_samples_s32, nb_channels,
                                i3000_cache_size, i400_cache_size,
                                i3000_cache_pos, i400_cache_pos,
                                i3000_filled, i400_filled,
@@ -1160,7 +1186,7 @@ static int query_formats(const AVFilterContext *ctx,
     int ret;
 
     static const enum AVSampleFormat sample_fmts[] = {
-        AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_S16P,
+        AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P,
         AV_SAMPLE_FMT_NONE };
     static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_RGB24, AV_PIX_FMT_NONE };
 

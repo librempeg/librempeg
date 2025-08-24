@@ -28,6 +28,12 @@
 #define ftype int16_t
 #define SAMPLE_FORMAT s16p
 #elif DEPTH == 32
+#define FABS FFABS
+#define SCALE(x) ((x) * (1.0 / 2147483648.0))
+#define ptype int64_t
+#define ftype int32_t
+#define SAMPLE_FORMAT s32p
+#elif DEPTH == 33
 #define FABS fabsf
 #define SCALE(x) (x)
 #define ptype float
