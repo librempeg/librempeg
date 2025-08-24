@@ -122,11 +122,11 @@ static int query_formats(const AVFilterContext *ctx,
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 {
-    int ret;
+    AVFilterContext *ctx = inlink->dst;
+    Bs2bContext     *bs2b = ctx->priv;
+    AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out_frame;
-
-    Bs2bContext     *bs2b = inlink->dst->priv;
-    AVFilterLink *outlink = inlink->dst->outputs[0];
+    int ret;
 
     if (av_frame_is_writable(frame)) {
         out_frame = frame;
@@ -148,7 +148,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     bs2b->filter(bs2b->bs2bp, out_frame->extended_data[0], out_frame->nb_samples);
 
     if (frame != out_frame)
-        av_frame_free(&frame);
+        ff_graph_frame_free(ctx, &frame);
 
     return ff_filter_frame(outlink, out_frame);
 }
