@@ -103,7 +103,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     s->in = NULL;
     if (in != out)
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
 
     return ff_filter_frame(outlink, out);
 }
