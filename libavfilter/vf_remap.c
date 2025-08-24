@@ -223,7 +223,7 @@ static int process_frame(FFFrameSync *fs)
     AVFrame *out;
     int ret;
 
-    out = av_frame_alloc();
+    out = ff_graph_frame_alloc(ctx);
     if (!out)
         return AVERROR(ENOMEM);
 
@@ -315,9 +315,9 @@ static int filter_prepare(AVFilterContext *ctx)
     if (ret < 0)
         return ret;
 
-    av_frame_free(&s->frame_source);
-    av_frame_free(&s->frame_xmap);
-    av_frame_free(&s->frame_ymap);
+    ff_graph_frame_free(ctx, &s->frame_source);
+    ff_graph_frame_free(ctx, &s->frame_xmap);
+    ff_graph_frame_free(ctx, &s->frame_ymap);
 
     ret = ff_framesync_get_frame(&s->fs, 0, &s->frame_source, 1);
     if (ret < 0)
@@ -373,13 +373,13 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
     memcpy(s_dst->fill_color, s_src->fill_color, sizeof(s_src->fill_color));
     s_dst->fs.pts = s_src->fs.pts;
 
-    av_frame_free(&s_dst->frame_source);
-    av_frame_free(&s_dst->frame_xmap);
-    av_frame_free(&s_dst->frame_ymap);
+    ff_graph_frame_free(dst, &s_dst->frame_source);
+    ff_graph_frame_free(dst, &s_dst->frame_xmap);
+    ff_graph_frame_free(dst, &s_dst->frame_ymap);
 
-    s_dst->frame_source = av_frame_clone(s_src->frame_source);
-    s_dst->frame_xmap   = av_frame_clone(s_src->frame_xmap);
-    s_dst->frame_ymap   = av_frame_clone(s_src->frame_ymap);
+    s_dst->frame_source = ff_graph_frame_clone(dst, s_src->frame_source);
+    s_dst->frame_xmap   = ff_graph_frame_clone(dst, s_src->frame_xmap);
+    s_dst->frame_ymap   = ff_graph_frame_clone(dst, s_src->frame_ymap);
     if (!s_dst->frame_source || !s_dst->frame_xmap || !s_dst->frame_ymap)
         return AVERROR(ENOMEM);
 
