@@ -179,11 +179,11 @@ static int filter_frame(AVFilterContext *ctx)
     s->steady_time += s->in_frames[0]->nb_samples;
 
     for (int i = 0; i < s->in_ports; i++)
-        av_frame_free(&s->in_frames[i]);
+        ff_graph_frame_free(ctx, &s->in_frames[i]);
 
     for (int i = 0; i < s->out_ports; i++) {
         if (!err) {
-            av_frame_free(&s->out_frames[i]);
+            ff_graph_frame_free(ctx, &s->out_frames[i]);
             ret = AVERROR(EINVAL);
             continue;
         }
