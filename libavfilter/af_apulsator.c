@@ -144,7 +144,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                             ff_filter_get_nb_threads(ctx)));
 
     if (in != out)
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
 
     return ff_filter_frame(outlink, out);
 }
