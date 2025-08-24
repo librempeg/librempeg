@@ -1038,7 +1038,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         if (in)
             av_samples_copy(new_in->extended_data, in->extended_data, 0, 0,
                             in->nb_samples, in->ch_layout.nb_channels, in->format);
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
         in = new_in;
     }
 
@@ -1053,8 +1053,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (s->drop_samples >= in->nb_samples) {
         s->drop_samples -= in->nb_samples;
         s->delay += in->nb_samples;
-        av_frame_free(&in);
-        av_frame_free(&out);
+        ff_graph_frame_free(ctx, &in);
+        ff_graph_frame_free(ctx, &out);
         FF_FILTER_FORWARD_STATUS(inlink, outlink);
         FF_FILTER_FORWARD_WANTED(outlink, inlink);
         return 0;
@@ -1078,7 +1078,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             out->pts = in->pts - av_rescale_q(s->delay, (AVRational){1, outlink->sample_rate}, outlink->time_base);
     }
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
