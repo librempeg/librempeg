@@ -364,11 +364,12 @@ static int config_props(AVFilterLink *link)
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 {
+    AVFilterContext *ctx = inlink->dst;
     int ret;
     int n = insamples->nb_samples;
-    AVFilterLink *const outlink = inlink->dst->outputs[0];
+    AVFilterLink *const outlink = ctx->outputs[0];
     AVFrame *outsamples = ff_get_audio_buffer(outlink, n);
-    PanContext *pan = inlink->dst->priv;
+    PanContext *pan = ctx->priv;
 
     if (!outsamples) {
         av_frame_free(&insamples);
@@ -383,7 +384,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
         return ret;
     }
 
-    av_frame_free(&insamples);
+    ff_graph_frame_free(ctx, &insamples);
     return ff_filter_frame(outlink, outsamples);
 }
 
