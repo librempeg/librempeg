@@ -222,7 +222,7 @@ static void free_frames(AVFilterContext *ctx)
     s->got_inputs = 0;
     s->nb_samples = 0;
     for (int i = 0; i < s->nb_inputs; i++)
-        av_frame_free(&s->inputs[i].frame);
+        ff_graph_frame_free(ctx, &s->inputs[i].frame);
 }
 
 /**
