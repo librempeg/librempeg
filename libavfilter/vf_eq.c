@@ -228,7 +228,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     const AVPixFmtDescriptor *desc;
     int i, ret;
 
-    out = av_frame_alloc();
+    out = ff_graph_frame_alloc(ctx);
     if (!out)
         return AVERROR(ENOMEM);
 
@@ -267,7 +267,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                                  in->data[i], in->linesize[i], w, h);
     }
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
