@@ -198,7 +198,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                                 ff_filter_get_nb_threads(ctx)));
 
         av_frame_copy_props(out, in);
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
     }
 
     return ff_filter_frame(outlink, out);
