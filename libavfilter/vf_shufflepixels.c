@@ -376,7 +376,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFrame *out;
     int ret;
 
-    out = av_frame_alloc();
+    out = ff_graph_frame_alloc(ctx);
     if (!out) {
         ret = AVERROR(ENOMEM);
         goto fail;
@@ -399,7 +399,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     ff_filter_execute(ctx, s->shuffle_pixels, &td, NULL,
                       FFMIN(s->planeheight[1], ff_filter_get_nb_threads(ctx)));
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(ctx->outputs[0], out);
 fail:
     av_frame_free(&in);
