@@ -313,7 +313,7 @@ static int filter_frame(AVFilterLink *outlink, AVFrame *in)
                          s->start_silence +
                          s->stop_silence;
     if (max_out_nb_samples <= 0) {
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
         ff_filter_set_ready(ctx, 100);
         return 0;
     }
@@ -400,14 +400,14 @@ static int filter_frame(AVFilterLink *outlink, AVFrame *in)
         break;
     }
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     if (out_nb_samples > 0) {
         s->next_pts += out_nb_samples;
         out->nb_samples = out_nb_samples;
         return ff_filter_frame(outlink, out);
     }
 
-    av_frame_free(&out);
+    ff_graph_frame_free(ctx, &out);
     ff_filter_set_ready(ctx, 100);
 
     return 0;
