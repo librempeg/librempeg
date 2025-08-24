@@ -246,7 +246,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     lilv_instance_run(s->instance, in->nb_samples);
 
     if (out != in)
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
 
     return ff_filter_frame(ctx->outputs[0], out);
 }
