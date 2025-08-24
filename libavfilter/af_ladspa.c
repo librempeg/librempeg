@@ -229,7 +229,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     av_fifo_write(s->fifo, &meta, 1);
 
     if (out != in)
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
 
     new_out_samples = out->nb_samples;
     if (s->in_trim > 0) {
@@ -240,7 +240,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
 
     if (new_out_samples <= 0) {
-        av_frame_free(&out);
+        ff_graph_frame_free(ctx, &out);
         return 0;
     } else if (new_out_samples < out->nb_samples) {
         int offset = out->nb_samples - new_out_samples;
