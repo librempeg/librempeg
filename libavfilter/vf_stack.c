@@ -195,7 +195,7 @@ static int process_frame(FFFrameSync *fs)
     AVFrame *out;
     int ret;
 
-    out = av_frame_alloc();
+    out = ff_graph_frame_alloc(ctx);
     if (!out)
         return AVERROR(ENOMEM);
 
@@ -481,10 +481,10 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
     s_dst->fs.pts = s_src->fs.pts;
 
     for (int i = 0; i < s_dst->nb_inputs; i++)
-        av_frame_free(&s_dst->frames[i]);
+        ff_graph_frame_free(dst, &s_dst->frames[i]);
 
     for (int i = 0; i < s_dst->nb_inputs; i++) {
-        s_dst->frames[i] = av_frame_clone(s_src->frames[i]);
+        s_dst->frames[i] = ff_graph_frame_clone(dst, s_src->frames[i]);
         if (!s_dst->frames[i])
             return AVERROR(ENOMEM);
     }
