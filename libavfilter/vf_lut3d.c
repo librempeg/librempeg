@@ -1172,7 +1172,7 @@ static AVFrame *apply_lut(AVFilterLink *inlink, AVFrame *in)
     } else {
         int ret;
 
-        out = av_frame_alloc();
+        out = ff_graph_frame_alloc(ctx);
         if (!out) {
             av_frame_free(&in);
             return NULL;
@@ -1197,7 +1197,7 @@ static AVFrame *apply_lut(AVFilterLink *inlink, AVFrame *in)
                       FFMIN(outlink->h, ff_filter_get_nb_threads(ctx)));
 
     if (out != in)
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
 
     return out;
 }
