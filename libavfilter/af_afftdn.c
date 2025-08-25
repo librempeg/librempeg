@@ -362,6 +362,8 @@ static void process_frame(AVFilterContext *ctx,
                           AudioFFTDeNoiseContext *s, DeNoiseChannel *dnch,
                           double *prior, double *prior_band_excit, int track_noise)
 {
+    const int number_of_bands = s->number_of_bands;
+    const int bin_count = s->bin_count;
     AVFilterLink *outlink = ctx->outputs[0];
     FilterLink      *outl = ff_filter_link(outlink);
     const double *abs_var = dnch->abs_var;
@@ -376,7 +378,7 @@ static void process_frame(AVFilterContext *ctx,
     AVComplexFloat *fft_data_flt = dnch->fft_out;
     double *gain = dnch->gain;
 
-    for (int i = 0; i < s->bin_count; i++) {
+    for (int i = 0; i < bin_count; i++) {
         double sqr_new_gain, new_gain, power, mag_abs_var, new_mag_abs_var;
 
         switch (s->format) {
@@ -402,11 +404,11 @@ static void process_frame(AVFilterContext *ctx,
     if (track_noise) {
         double flatness, num, den;
 
-        spectral_flatness(s, noisy_data, s->floor, s->bin_count, &num, &den);
+        spectral_flatness(s, noisy_data, s->floor, bin_count, &num, &den);
 
         flatness = num / den;
         if (flatness > 0.8) {
-            const double offset = s->floor_offset * floor_offset(noisy_data, s->bin_count, den);
+            const double offset = s->floor_offset * floor_offset(noisy_data, bin_count, den);
             const double new_floor = av_clipd(10.0 * log10(den) - 100.0 + offset, -90., -20.);
 
             dnch->noise_floor = 0.1 * new_floor + dnch->noise_floor * 0.9;
@@ -414,31 +416,31 @@ static void process_frame(AVFilterContext *ctx,
         }
     }
 
-    for (int i = 0; i < s->number_of_bands; i++) {
+    for (int i = 0; i < number_of_bands; i++) {
         band_excit[i] = 0.0;
         band_amt[i] = 0.0;
     }
 
-    for (int i = 0; i < s->bin_count; i++)
+    for (int i = 0; i < bin_count; i++)
         band_excit[bin2band[i]] += dnch->clean_data[i];
 
-    for (int i = 0; i < s->number_of_bands; i++) {
+    for (int i = 0; i < number_of_bands; i++) {
         band_excit[i] = fmax(band_excit[i],
                              s->band_alpha[i] * band_excit[i] +
                              s->band_beta[i] * prior_band_excit[i]);
         prior_band_excit[i] = band_excit[i];
     }
 
-    for (int j = 0, i = 0; j < s->number_of_bands; j++) {
-        for (int k = 0; k < s->number_of_bands; k++) {
+    for (int j = 0, i = 0; j < number_of_bands; j++) {
+        for (int k = 0; k < number_of_bands; k++) {
             band_amt[j] += dnch->spread_function[i++] * band_excit[k];
         }
     }
 
-    for (int i = 0; i < s->bin_count; i++)
+    for (int i = 0; i < bin_count; i++)
         dnch->amt[i] = band_amt[bin2band[i]];
 
-    for (int i = 0; i < s->bin_count; i++) {
+    for (int i = 0; i < bin_count; i++) {
         if (dnch->amt[i] > abs_var[i]) {
             gain[i] = 1.0;
         } else if (dnch->amt[i] > dnch->min_abs_var[i]) {
@@ -450,11 +452,11 @@ static void process_frame(AVFilterContext *ctx,
         }
     }
 
-    memcpy(smoothed_gain, gain, s->bin_count * sizeof(*smoothed_gain));
+    memcpy(smoothed_gain, gain, bin_count * sizeof(*smoothed_gain));
     if (s->gain_smooth > 0) {
         const int r = s->gain_smooth;
 
-        for (int i = r; i < s->bin_count - r; i++) {
+        for (int i = r; i < bin_count - r; i++) {
             const double gc = gain[i];
             double num = 0., den = 0.;
 
@@ -472,7 +474,7 @@ static void process_frame(AVFilterContext *ctx,
 
     switch (s->format) {
     case AV_SAMPLE_FMT_FLTP:
-        for (int i = 0; i < s->bin_count; i++) {
+        for (int i = 0; i < bin_count; i++) {
             const float new_gain = smoothed_gain[i];
 
             fft_data_flt[i].re *= new_gain;
@@ -480,7 +482,7 @@ static void process_frame(AVFilterContext *ctx,
         }
         break;
     case AV_SAMPLE_FMT_DBLP:
-        for (int i = 0; i < s->bin_count; i++) {
+        for (int i = 0; i < bin_count; i++) {
             const double new_gain = smoothed_gain[i];
 
             fft_data_dbl[i].re *= new_gain;
