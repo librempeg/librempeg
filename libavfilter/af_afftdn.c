@@ -1088,11 +1088,11 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
         switch (s->format) {
         case AV_SAMPLE_FMT_FLTP:
             for (int m = 0; m < window_length; m++)
-                dst[m] += s->window[m] * fft_in_flt[m] / (1LL << 23);
+                dst[m] += window[m] * fft_in_flt[m] / (1LL << 23);
             break;
         case AV_SAMPLE_FMT_DBLP:
             for (int m = 0; m < window_length; m++)
-                dst[m] += s->window[m] * fft_in_dbl[m] / (1LL << 23);
+                dst[m] += window[m] * fft_in_dbl[m] / (1LL << 23);
             break;
         default:
             av_assert0(0);
