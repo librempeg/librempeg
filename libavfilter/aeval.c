@@ -418,8 +418,9 @@ static int aeval_config_output(AVFilterLink *outlink)
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
-    EvalContext *eval     = inlink->dst->priv;
-    AVFilterLink *outlink = inlink->dst->outputs[0];
+    AVFilterContext *ctx = inlink->dst;
+    EvalContext *eval     = ctx->priv;
+    AVFilterLink *outlink = ctx->outputs[0];
     int nb_samples        = in->nb_samples;
     AVFrame *out;
     double t0;
@@ -449,7 +450,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
     }
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
