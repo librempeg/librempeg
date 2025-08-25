@@ -602,11 +602,18 @@ static void set_parameters(AudioFFTDeNoiseContext *s, DeNoiseChannel *dnch, int 
     dnch->gain_scale = 1.0 / (dnch->max_gain * dnch->max_gain);
 
     if (update_var) {
+        const int bin_count = s->bin_count;
+        const double gain_scale = dnch->gain_scale;
+        double *min_abs_var = dnch->min_abs_var;
+        const double *rel_var = dnch->rel_var;
+        const double max_var = dnch->max_var;
+        double *abs_var = dnch->abs_var;
+
         set_band_parameters(s, dnch);
 
-        for (int i = 0; i < s->bin_count; i++) {
-            dnch->abs_var[i] = fmax(dnch->max_var * dnch->rel_var[i], 1.0);
-            dnch->min_abs_var[i] = dnch->gain_scale * dnch->abs_var[i];
+        for (int i = 0; i < bin_count; i++) {
+            abs_var[i] = fmax(max_var * rel_var[i], 1.0);
+            min_abs_var[i] = gain_scale * abs_var[i];
         }
     }
 }
