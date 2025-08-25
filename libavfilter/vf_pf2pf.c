@@ -304,7 +304,7 @@ static int do_pf2pf(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 
     for (int comp = 0; comp < nb_components; comp++) {
         if (out->data[comp]) {
-            const int dst_sh = (comp > 0) ? s->dst_desc->log2_chroma_h : 0;
+            const int dst_sh = (comp > 0 && comp < 3) ? s->dst_desc->log2_chroma_h : 0;
             const int cstart = start >> dst_sh;
             const int cend = end >> dst_sh;
             uint8_t *dst_data = out->data[comp] + cstart * out->linesize[comp];
@@ -327,8 +327,8 @@ static int do_pf2pf(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
         const int src_shift = s->src_desc->comp[comp].shift;
         const int src_offset= s->src_desc->comp[comp].offset;
         const int src_depth = s->src_desc->comp[comp].depth;
-        const int dst_sw = (comp > 0) ? s->dst_desc->log2_chroma_w : 0;
-        const int dst_sh = (comp > 0) ? s->dst_desc->log2_chroma_h : 0;
+        const int dst_sw = (comp > 0 && comp < 3) ? s->dst_desc->log2_chroma_w : 0;
+        const int dst_sh = (comp > 0 && comp < 3) ? s->dst_desc->log2_chroma_h : 0;
         uint8_t *dst_data[4] = {NULL}, *src_data[4] = {NULL};
         const int cstart = start >> dst_sh;
         const int cend = end >> dst_sh;
