@@ -137,8 +137,8 @@ static int query_formats(const AVFilterContext *ctx,
             if (!(desc->flags & AV_PIX_FMT_FLAG_PAL ||
                   desc->flags & AV_PIX_FMT_FLAG_HWACCEL ||
                   desc->flags & AV_PIX_FMT_FLAG_BITSTREAM ||
-                  desc->log2_chroma_w != src_desc->log2_chroma_w ||
-                  desc->log2_chroma_h != src_desc->log2_chroma_h ||
+                  (src_desc->nb_components > 1 && desc->log2_chroma_w != src_desc->log2_chroma_w) ||
+                  (src_desc->nb_components > 1 && desc->log2_chroma_h != src_desc->log2_chroma_h) ||
                   (desc->flags & AV_PIX_FMT_FLAG_RGB) != (src_desc->flags & AV_PIX_FMT_FLAG_RGB)) &&
                 (ret = ff_add_format(&formats, fmt)) < 0)
                 return ret;
