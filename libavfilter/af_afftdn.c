@@ -374,6 +374,7 @@ static void process_frame(AVFilterContext *ctx,
     double *band_excit = dnch->band_excit;
     double *band_amt = dnch->band_amt;
     double *smoothed_gain = dnch->smoothed_gain;
+    double *clean_data = dnch->clean_data;
     AVComplexDouble *fft_data_dbl = dnch->fft_out;
     AVComplexFloat *fft_data_flt = dnch->fft_out;
     double *gain = dnch->gain;
@@ -397,7 +398,7 @@ static void process_frame(AVFilterContext *ctx,
         new_gain = new_mag_abs_var / (1.0 + new_mag_abs_var);
         sqr_new_gain = new_gain * new_gain;
         prior[i] = mag_abs_var * sqr_new_gain;
-        dnch->clean_data[i] = power * sqr_new_gain;
+        clean_data[i] = power * sqr_new_gain;
         gain[i] = new_gain;
     }
 
@@ -422,7 +423,7 @@ static void process_frame(AVFilterContext *ctx,
     }
 
     for (int i = 0; i < bin_count; i++)
-        band_excit[bin2band[i]] += dnch->clean_data[i];
+        band_excit[bin2band[i]] += clean_data[i];
 
     for (int i = 0; i < number_of_bands; i++) {
         band_excit[i] = fmax(band_excit[i],
