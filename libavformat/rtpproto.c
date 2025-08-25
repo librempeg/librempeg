@@ -239,6 +239,7 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
     const char *p;
     int i, max_retry_count = 3;
     int rtcpflags;
+    int ret;
 
     av_url_split(NULL, 0, NULL, 0, hostname, sizeof(hostname), &rtp_port,
                  path, sizeof(path), uri);
@@ -295,8 +296,10 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
         if (av_find_info_tag(buf, sizeof(buf), "localaddr", p)) {
             av_freep(&s->localaddr);
             s->localaddr = av_strdup(buf);
-            if (!s->localaddr)
+            if (!s->localaddr) {
+                ret = AVERROR(ENOMEM);
                 goto fail;
+            }
         }
     }
     if (s->rw_timeout >= 0)
@@ -307,10 +310,12 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
 
         if (!(fec_protocol = av_get_token(&p, "="))) {
             av_log(h, AV_LOG_ERROR, "Failed to parse the FEC protocol value\n");
+            ret = AVERROR(EINVAL);
             goto fail;
         }
         if (strcmp(fec_protocol, "prompeg")) {
             av_log(h, AV_LOG_ERROR, "Unsupported FEC protocol %s\n", fec_protocol);
+            ret = AVERROR(EINVAL);
             goto fail;
         }
 
@@ -319,6 +324,7 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
 
         if (av_dict_parse_string(&fec_opts, p, "=", ":", 0) < 0) {
             av_log(h, AV_LOG_ERROR, "Failed to parse the FEC options\n");
+            ret = AVERROR(EINVAL);
             goto fail;
         }
         if (s->ttl > 0) {
@@ -330,8 +336,9 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
         build_udp_url(s, buf, sizeof(buf),
                       hostname, s->localaddr, rtp_port, s->local_rtpport,
                       sources, block);
-        if (ffurl_open_whitelist(&s->rtp_hd, buf, flags, &h->interrupt_callback,
-                                 NULL, h->protocol_whitelist, h->protocol_blacklist, h) < 0)
+        ret = ffurl_open_whitelist(&s->rtp_hd, buf, flags, &h->interrupt_callback,
+                                   NULL, h->protocol_whitelist, h->protocol_blacklist, h);
+        if (ret < 0)
             goto fail;
         s->local_rtpport = ff_udp_get_local_port(s->rtp_hd);
         if(s->local_rtpport == 65535) {
@@ -355,8 +362,9 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
         build_udp_url(s, buf, sizeof(buf),
                       hostname, s->localaddr, s->rtcp_port, s->local_rtcpport,
                       sources, block);
-        if (ffurl_open_whitelist(&s->rtcp_hd, buf, rtcpflags, &h->interrupt_callback,
-                                 NULL, h->protocol_whitelist, h->protocol_blacklist, h) < 0)
+        ret = ffurl_open_whitelist(&s->rtcp_hd, buf, rtcpflags, &h->interrupt_callback,
+                                   NULL, h->protocol_whitelist, h->protocol_blacklist, h);
+        if (ret < 0)
             goto fail;
         break;
     }
@@ -364,8 +372,9 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
     s->fec_hd = NULL;
     if (fec_protocol) {
         ff_url_join(buf, sizeof(buf), fec_protocol, NULL, hostname, rtp_port, NULL);
-        if (ffurl_open_whitelist(&s->fec_hd, buf, flags, &h->interrupt_callback,
-                             &fec_opts, h->protocol_whitelist, h->protocol_blacklist, h) < 0)
+        ret = ffurl_open_whitelist(&s->fec_hd, buf, flags, &h->interrupt_callback,
+                                   &fec_opts, h->protocol_whitelist, h->protocol_blacklist, h);
+        if (ret < 0)
             goto fail;
     }
 
@@ -389,7 +398,7 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
     ffurl_closep(&s->fec_hd);
     av_free(fec_protocol);
     av_dict_free(&fec_opts);
-    return AVERROR(EIO);
+    return ret;
 }
 
 static int rtp_read(URLContext *h, uint8_t *buf, int size)
