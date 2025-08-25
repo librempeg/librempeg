@@ -134,7 +134,7 @@ static int activate(AVFilterContext *ctx)
         }
     }
 
-    if (!s->main_frame) {
+    if (!s->main_frame || s->main_frame->nb_samples == 0) {
         if (s->cf_samples > 0)
             ret = ff_inlink_consume_samples(main_inlink, s->cf_samples, s->cf_samples, &s->main_frame);
         else
