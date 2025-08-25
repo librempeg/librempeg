@@ -309,9 +309,36 @@ static int do_pf2pf(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
             const int cend = end >> dst_sh;
             uint8_t *dst_data = out->data[comp] + cstart * out->linesize[comp];
 
-            for (int y = cstart; y < cend; y++) {
-                memset(dst_data, 0, linesize[comp]);
-                dst_data += out->linesize[comp];
+            if ((s->dst_desc->flags & AV_PIX_FMT_FLAG_PLANAR) && comp == 3 &&
+                (s->dst_desc->flags & AV_PIX_FMT_FLAG_ALPHA) &&
+                !(s->src_desc->flags & AV_PIX_FMT_FLAG_ALPHA)) {
+                if (s->dst_desc->comp[comp].depth <= 8) {
+                    for (int y = cstart; y < cend; y++) {
+                        memset(dst_data, 255, linesize[comp]);
+                        dst_data += out->linesize[comp];
+                    }
+                } else if (s->dst_desc->comp[comp].depth <= 16) {
+                    const unsigned fill = (1ULL << s->dst_desc->comp[comp].depth) - 1;
+
+                    if (s->dst_desc->flags & AV_PIX_FMT_FLAG_BE) {
+                        for (int y = cstart; y < cend; y++) {
+                            for (int x = 0; x < w; x++)
+                                AV_WB16(dst_data + x*2, fill);
+                            dst_data += out->linesize[comp];
+                        }
+                    } else {
+                        for (int y = cstart; y < cend; y++) {
+                            for (int x = 0; x < w; x++)
+                                AV_WL16(dst_data + x*2, fill);
+                            dst_data += out->linesize[comp];
+                        }
+                    }
+                }
+            } else {
+                for (int y = cstart; y < cend; y++) {
+                    memset(dst_data, 0, linesize[comp]);
+                    dst_data += out->linesize[comp];
+                }
             }
         }
     }
