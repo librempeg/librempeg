@@ -151,7 +151,7 @@ static int activate(AVFilterContext *ctx)
     if (s->main_frame && (overlay_frame || s->overlay_eof)) {
         if (filter_is_disabled) {
             if (s->done_fade) {
-                av_frame_free(&overlay_frame);
+                ff_graph_frame_free(ctx, &overlay_frame);
                 ret = ff_filter_frame(outlink, s->main_frame);
                 s->main_frame = NULL;
             } else if (overlay_frame) {
@@ -160,8 +160,8 @@ static int activate(AVFilterContext *ctx)
                 ret = crossfade_frame(s, s->main_frame, overlay_frame, outlink, &out_frame);
                 s->done_fade = 1;
 
-                av_frame_free(&s->main_frame);
-                av_frame_free(&overlay_frame);
+                ff_graph_frame_free(ctx, &s->main_frame);
+                ff_graph_frame_free(ctx, &overlay_frame);
                 ret = ff_filter_frame(outlink, out_frame);
             }
 
@@ -172,11 +172,11 @@ static int activate(AVFilterContext *ctx)
             ret = crossfade_frame(s, s->main_frame, overlay_frame, outlink, &out_frame);
             s->done_fade = 1;
 
-            av_frame_free(&s->main_frame);
-            av_frame_free(&overlay_frame);
+            ff_graph_frame_free(ctx, &s->main_frame);
+            ff_graph_frame_free(ctx, &overlay_frame);
             return ff_filter_frame(outlink, out_frame);
         } else if (overlay_frame) {
-            av_frame_free(&s->main_frame);
+            ff_graph_frame_free(ctx, &s->main_frame);
             return ff_filter_frame(outlink, overlay_frame);
         } else {
             ret = ff_filter_frame(outlink, s->main_frame);
