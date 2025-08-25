@@ -379,20 +379,23 @@ static void process_frame(AVFilterContext *ctx,
     AVComplexFloat *fft_data_flt = dnch->fft_out;
     double *gain = dnch->gain;
 
+    switch (s->format) {
+    case AV_SAMPLE_FMT_FLTP:
+        for (int i = 0; i < bin_count; i++)
+            noisy_data[i] = get_power(fft_data_flt[i].re, fft_data_flt[i].im);
+        break;
+    case AV_SAMPLE_FMT_DBLP:
+        for (int i = 0; i < bin_count; i++)
+            noisy_data[i] = get_power(fft_data_dbl[i].re, fft_data_dbl[i].im);
+        break;
+    default:
+        av_assert0(0);
+    }
+
     for (int i = 0; i < bin_count; i++) {
         double sqr_new_gain, new_gain, power, mag_abs_var, new_mag_abs_var;
 
-        switch (s->format) {
-        case AV_SAMPLE_FMT_FLTP:
-            noisy_data[i] = power = get_power(fft_data_flt[i].re, fft_data_flt[i].im);
-            break;
-        case AV_SAMPLE_FMT_DBLP:
-            noisy_data[i] = power = get_power(fft_data_dbl[i].re, fft_data_dbl[i].im);
-            break;
-        default:
-            av_assert0(0);
-        }
-
+        power = noisy_data[i];
         mag_abs_var = power / abs_var[i];
         new_mag_abs_var = ratio * prior[i] + rratio * fmax(mag_abs_var - 1.0, 0.0);
         new_gain = new_mag_abs_var / (1.0 + new_mag_abs_var);
