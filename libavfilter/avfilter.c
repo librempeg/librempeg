@@ -1895,7 +1895,7 @@ void ff_graph_frame_free(AVFilterContext *ctx, AVFrame **frame)
     if ((fifo == NULL) || (av_fifo_write(fifo, frame, 1) < 0)) {
         av_frame_free(frame);
     } else {
-        frame = NULL;
+        *frame = NULL;
     }
     ff_mutex_unlock(lock);
 }
