@@ -1591,7 +1591,7 @@ static int plot_spectrum_column(AVFilterLink *inlink, AVFrame *insamples)
                 av_free(units);
             }
             s->old_pts = outpicref->pts;
-            clone = av_frame_clone(s->outpicref);
+            clone = ff_graph_frame_clone(ctx, s->outpicref);
             if (!clone)
                 return AVERROR(ENOMEM);
             ret = ff_filter_frame(outlink, clone);
@@ -1637,7 +1637,7 @@ static int activate(AVFilterContext *ctx)
             if (s->sliding != FULLFRAME || s->xpos == 0)
                 s->in_pts = fin->pts;
             ret = plot_spectrum_column(inlink, fin);
-            av_frame_free(&fin);
+            ff_graph_frame_free(ctx, &fin);
             if (ret <= 0)
                 return ret;
         }
@@ -1818,7 +1818,7 @@ static int showspectrumpic_request_frame(AVFilterLink *outlink)
                 src_offset += nb_samples;
                 dst_offset += nb_samples;
                 if (cur_frame_samples <= src_offset) {
-                    av_frame_free(&s->frames[nb_frame]);
+                    ff_graph_frame_free(ctx, &s->frames[nb_frame]);
                     nb_frame++;
                     src_offset = 0;
                 }
@@ -1843,7 +1843,7 @@ static int showspectrumpic_request_frame(AVFilterLink *outlink)
             }
         }
 
-        av_frame_free(&fin);
+        ff_graph_frame_free(ctx, &fin);
         s->outpicref->pts = 0;
 
         if (s->legend)
