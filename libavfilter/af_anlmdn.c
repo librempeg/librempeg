@@ -141,7 +141,7 @@ static int config_filter(AVFilterContext *ctx)
             if (s->cache)
                 av_samples_copy(new_cache->extended_data, s->cache->extended_data, 0, 0,
                                 s->cache->nb_samples, new_cache->ch_layout.nb_channels, new_cache->format);
-            av_frame_free(&s->cache);
+            ff_graph_frame_free(ctx, &s->cache);
             s->cache = new_cache;
         } else {
             return AVERROR(ENOMEM);
@@ -156,7 +156,7 @@ static int config_filter(AVFilterContext *ctx)
             if (s->window)
                 av_samples_copy(new_window->extended_data, s->window->extended_data, 0, 0,
                                 s->window->nb_samples, new_window->ch_layout.nb_channels, new_window->format);
-            av_frame_free(&s->window);
+            ff_graph_frame_free(ctx, &s->window);
             s->window = new_window;
         } else {
             return AVERROR(ENOMEM);
@@ -287,7 +287,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     ff_filter_execute(ctx, filter_channel, out, NULL, inlink->ch_layout.nb_channels);
 
     if (out != in)
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
