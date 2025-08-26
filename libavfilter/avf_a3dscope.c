@@ -329,7 +329,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
     }
 
-    av_frame_free(&s->frames[59]);
+    ff_graph_frame_free(ctx, &s->frames[59]);
     memmove(&s->frames[1], &s->frames[0], 59 * sizeof(AVFrame *));
     s->frames[0] = NULL;
 
