@@ -160,6 +160,7 @@ OBJS-$(CONFIG_AZMQ_FILTER)                   += f_zmq.o
 OBJS-$(CONFIG_BANDPASS_FILTER)               += af_biquads.o
 OBJS-$(CONFIG_BANDREJECT_FILTER)             += af_biquads.o
 OBJS-$(CONFIG_BASS_FILTER)                   += af_biquads.o
+OBJS-$(CONFIG_BINAURALIZER_FILTER)           += af_binauralizer.o
 OBJS-$(CONFIG_BIQUAD_FILTER)                 += af_biquads.o
 OBJS-$(CONFIG_BS2B_FILTER)                   += af_bs2b.o
 OBJS-$(CONFIG_CHANNELMAP_FILTER)             += af_channelmap.o

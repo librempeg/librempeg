@@ -144,6 +144,7 @@ extern const FFFilter ff_af_azmq;
 extern const FFFilter ff_af_bandpass;
 extern const FFFilter ff_af_bandreject;
 extern const FFFilter ff_af_bass;
+extern const FFFilter ff_af_binauralizer;
 extern const FFFilter ff_af_biquad;
 extern const FFFilter ff_af_bs2b;
 extern const FFFilter ff_af_channelmap;
