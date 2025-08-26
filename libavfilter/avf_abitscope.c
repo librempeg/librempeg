@@ -206,7 +206,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
             av_frame_free(&insamples);
             return ret;
         }
-        outpicref = av_frame_clone(s->outpicref);
+        outpicref = ff_graph_frame_clone(ctx, s->outpicref);
         if (!outpicref) {
             av_frame_free(&insamples);
             return AVERROR(ENOMEM);
@@ -237,7 +237,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     s->current_vpos++;
     if (s->current_vpos >= outlink->h)
         s->current_vpos = 0;
-    av_frame_free(&insamples);
+    ff_graph_frame_free(ctx, &insamples);
 
     return ff_filter_frame(outlink, outpicref);
 }
