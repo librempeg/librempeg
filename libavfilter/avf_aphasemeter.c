@@ -258,7 +258,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     if (do_video && (!s->out || s->out->width  != outlink->w ||
                                    s->out->height != outlink->h)) {
-        av_frame_free(&s->out);
+        ff_graph_frame_free(ctx, &s->out);
         s->out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
         if (!s->out) {
             ret = AVERROR(ENOMEM);
@@ -337,7 +337,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->out->pts = s->last_pts = new_pts;
         s->out->duration = 1;
 
-        clone = av_frame_clone(s->out);
+        clone = ff_graph_frame_clone(ctx, s->out);
         if (!clone) {
             ret = AVERROR(ENOMEM);
             goto fail;
@@ -349,7 +349,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     s->in = NULL;
     return ff_filter_frame(aoutlink, in);
 fail:
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     s->in = NULL;
     return ret;
 }
