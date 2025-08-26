@@ -953,7 +953,7 @@ static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *in)
         memcpy(history + s->history_filled, p, nb_samples * nb_channels * sizeof(*history));
         s->history_filled += nb_samples * nb_channels;
         s->in_pts = in->pts;
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
 
         if (s->history_filled < s->history_nb_samples) {
             int64_t pts;
@@ -1166,7 +1166,7 @@ static int showwavespic_filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     }
 
 end:
-    av_frame_free(&insamples);
+    ff_graph_frame_free(ctx, &insamples);
     return ret;
 }
 
