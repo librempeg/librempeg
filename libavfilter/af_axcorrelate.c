@@ -133,7 +133,7 @@ static int activate(AVFilterContext *ctx)
                             s->in[0]->ch_layout.nb_channels,
                             s->in[0]->format);
             s->samples_in_cache[0] = needed;
-            av_frame_free(&old_cache);
+            ff_graph_frame_free(ctx, &old_cache);
         } else {
             av_samples_copy(s->cache[0]->extended_data,
                             s->cache[0]->extended_data, 0,
@@ -166,7 +166,7 @@ static int activate(AVFilterContext *ctx)
 
             s->cache[1] = ff_get_audio_buffer(outlink, needed);
             if (!s->cache[1]) {
-                av_frame_free(&old_cache);
+                ff_graph_frame_free(ctx, &old_cache);
                 return AVERROR(ENOMEM);
             }
             av_samples_copy(s->cache[1]->extended_data,
@@ -182,7 +182,7 @@ static int activate(AVFilterContext *ctx)
                             s->in[1]->ch_layout.nb_channels,
                             s->in[1]->format);
             s->samples_in_cache[1] = needed;
-            av_frame_free(&old_cache);
+            ff_graph_frame_free(ctx, &old_cache);
         } else {
             av_samples_copy(s->cache[1]->extended_data,
                             s->cache[1]->extended_data, 0,
@@ -212,8 +212,8 @@ skip:
 
         av_frame_copy_props(out, s->in[0]);
 
-        av_frame_free(&s->in[0]);
-        av_frame_free(&s->in[1]);
+        ff_graph_frame_free(ctx, &s->in[0]);
+        ff_graph_frame_free(ctx, &s->in[1]);
 
         return ff_filter_frame(outlink, out);
     }
