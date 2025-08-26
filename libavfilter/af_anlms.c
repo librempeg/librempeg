@@ -141,8 +141,8 @@ static int activate(AVFilterContext *ctx)
         ff_filter_execute(ctx, s->filter_channels, out, NULL,
                           FFMIN(ctx->outputs[0]->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
-        av_frame_free(&s->frame[0]);
-        av_frame_free(&s->frame[1]);
+        ff_graph_frame_free(ctx, &s->frame[0]);
+        ff_graph_frame_free(ctx, &s->frame[1]);
 
         return ff_filter_frame(ctx->outputs[0], out);
     }
