@@ -1824,7 +1824,7 @@ static int output_frame(AVFilterContext *ctx)
         return 1;
 
     if (s->old_pts < s->outpicref->pts) {
-        AVFrame *out = av_frame_clone(s->outpicref);
+        AVFrame *out = ff_graph_frame_clone(ctx, s->outpicref);
         if (!out)
             return AVERROR(ENOMEM);
         s->old_pts = s->outpicref->pts;
@@ -1880,7 +1880,7 @@ static int activate(AVFilterContext *ctx)
                             s->old_pts = av_rescale_q(s->in_pts, inlink->time_base, outlink->time_base) - 1;
                     }
                     s->hop_index += fin->nb_samples;
-                    av_frame_free(&fin);
+                    ff_graph_frame_free(ctx, &fin);
                 } else {
                     s->hop_index = s->hop_size;
                 }
