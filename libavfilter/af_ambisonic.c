@@ -251,7 +251,7 @@ static const struct {
                                                AV_CH_BACK_CENTER|
                                                AV_CH_SIDE_LEFT|
                                                AV_CH_SIDE_RIGHT),
-        .speakers_azimuth = (const double[4]){ 0, -90, 180, 90 },
+        .speakers_azimuth = (const double[4]){ 0, 180, -90, 90 },
         .speakers_distance = same_distance,
     },
     [L4_0] = {
