@@ -329,6 +329,21 @@ static int decode_frame(AVCodecContext *avctx,
     uint8_t qmat[64];
     uint32_t offset;
 
+    switch (avctx->codec_tag) {
+    case 0:
+        break;
+    case MKTAG('a','p','r','n'):
+        avctx->profile = AV_PROFILE_PRORES_RAW;
+        break;
+    case MKTAG('a','p','r','h'):
+        avctx->profile = AV_PROFILE_PRORES_RAW_HQ;
+        break;
+    default:
+        avpriv_request_sample(avctx, "Profile %d", avctx->codec_tag);
+        return AVERROR_PATCHWELCOME;
+        break;
+    }
+
     bytestream2_init(&gb, avpkt->data, avpkt->size);
     if (bytestream2_get_be32(&gb) != avpkt->size)
         return AVERROR_INVALIDDATA;
