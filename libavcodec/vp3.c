@@ -2527,7 +2527,8 @@ static int vp3_update_thread_context(AVCodecContext *dst, const AVCodecContext *
     const Vp3DecodeContext *s1 = src->priv_data;
     int qps_changed = 0;
 
-    av_refstruct_replace(&s->coeff_vlc, s1->coeff_vlc);
+    if (s1->coeff_vlc)
+        av_refstruct_replace(&s->coeff_vlc, s1->coeff_vlc);
 
     // copy previous frame data
     ref_frames(s, s1);
