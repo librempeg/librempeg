@@ -620,6 +620,7 @@ extern const FFFilter ff_vsrc_colorwheel;
 extern const FFFilter ff_vsrc_coreimagesrc;
 extern const FFFilter ff_vsrc_ddagrab;
 extern const FFFilter ff_vsrc_frei0r_src;
+extern const FFFilter ff_vsrc_gfxcapture;
 extern const FFFilter ff_vsrc_gradients;
 extern const FFFilter ff_vsrc_haldclutsrc;
 extern const FFFilter ff_vsrc_life;
