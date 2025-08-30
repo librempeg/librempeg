@@ -40,6 +40,9 @@ typedef struct BinauralizerContext {
     double *y_size;
     unsigned nb_y_size;
 
+    double *i_gain;
+    unsigned nb_i_gain;
+
     int fft_size;
     int overlap;
 
@@ -72,6 +75,7 @@ static const AVOption binauralizer_options[] = {
     { "gain",  "set the output gain", OFFSET(gain),   AV_OPT_TYPE_DOUBLE,    {.dbl=1.},        0,10, FLAGS },
     { "xsize", "X-axis size values",  OFFSET(x_size), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_size}, 0, 1, FLAGS },
     { "ysize", "Y-axis size values",  OFFSET(y_size), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_size}, 0, 1, FLAGS },
+    { "igain", "set the input channel gain values", OFFSET(i_gain), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_size}, 0, 10, FLAGS },
     {NULL}
 };
 

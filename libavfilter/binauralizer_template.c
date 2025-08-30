@@ -92,7 +92,7 @@ static void fn(apply_window)(BinauralizerContext *s,
             out_frame[i] += in_frame[i] * window[i] * gain;
     } else {
         for (int i = 0; i < size; i++)
-            out_frame[i] = in_frame[i] * window[i];
+            out_frame[i] = in_frame[i] * window[i] * gain;
     }
 }
 
@@ -176,8 +176,10 @@ static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *out)
     const int nb_samples = FFMIN(overlap, s->in->nb_samples);
     const unsigned nb_x_size = s->nb_x_size;
     const unsigned nb_y_size = s->nb_y_size;
+    const unsigned nb_i_gain = s->nb_i_gain;
     const double *x_size = s->x_size;
     const double *y_size = s->y_size;
+    const double *i_gain = s->i_gain;
     const int N = s->fft_size/2 + 1;
     const ftype G = s->gain;
 
@@ -185,6 +187,7 @@ static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *out)
     memset(windowed_oright, 0, N * sizeof(*windowed_oright));
 
     for (int ch = 0; ch < nb_in_channels; ch++) {
+        const ftype igain = i_gain[FFMIN(ch, nb_i_gain-1)];
         ftype *in = (ftype *)s->in_frame->extended_data[ch];
         ftype *iwindowed = (ftype *)s->windowed_frame->extended_data[0];
         ctype *owindowed = (ctype *)s->windowed_frame->extended_data[1];
@@ -201,7 +204,7 @@ static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *out)
         memcpy(&in[offset], samples, nb_samples * sizeof(*in));
         memset(&in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*in));
 
-        fn(apply_window)(s, in, iwindowed, 0, 0);
+        fn(apply_window)(s, in, iwindowed, 0, igain);
 
         s->tx_fn(s->tx_ctx, owindowed, iwindowed, sizeof(ftype));
 
@@ -242,8 +245,10 @@ static int fn(ba_flush)(AVFilterContext *ctx, AVFrame *out)
     const int offset = s->fft_size - overlap;
     const unsigned nb_x_size = s->nb_x_size;
     const unsigned nb_y_size = s->nb_y_size;
+    const unsigned nb_i_gain = s->nb_i_gain;
     const double *x_size = s->x_size;
     const double *y_size = s->y_size;
+    const double *i_gain = s->i_gain;
     const int N = s->fft_size/2 + 1;
     const int nb_samples = 0;
     const ftype G = s->gain;
@@ -252,6 +257,7 @@ static int fn(ba_flush)(AVFilterContext *ctx, AVFrame *out)
     memset(windowed_oright, 0, N * sizeof(*windowed_oright));
 
     for (int ch = 0; ch < nb_in_channels; ch++) {
+        const ftype igain = i_gain[FFMIN(ch, nb_i_gain-1)];
         ftype *in = (ftype *)s->in_frame->extended_data[ch];
         ftype *iwindowed = (ftype *)s->windowed_frame->extended_data[0];
         ctype *owindowed = (ctype *)s->windowed_frame->extended_data[1];
@@ -266,7 +272,7 @@ static int fn(ba_flush)(AVFilterContext *ctx, AVFrame *out)
 
         memset(&in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*in));
 
-        fn(apply_window)(s, in, iwindowed, 0, 0);
+        fn(apply_window)(s, in, iwindowed, 0, igain);
 
         s->tx_fn(s->tx_ctx, owindowed, iwindowed, sizeof(ftype));
 
