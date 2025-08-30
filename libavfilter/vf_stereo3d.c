@@ -693,8 +693,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
          s->in.format == ABOVE_BELOW ||
          s->in.format == ABOVE_BELOW_2 ||
          s->in.format == INTERLEAVE_ROWS)) {
-        oright = av_frame_clone(s->prev);
-        oleft  = av_frame_clone(s->prev);
+        oright = ff_graph_frame_clone(ctx, s->prev);
+        oleft  = ff_graph_frame_clone(ctx, s->prev);
         if (!oright || !oleft) {
             av_frame_free(&oright);
             av_frame_free(&oleft);
@@ -708,7 +708,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
          s->in.format == ABOVE_BELOW ||
          s->in.format == ABOVE_BELOW_2 ||
          s->in.format == INTERLEAVE_ROWS)) {
-        out = oleft = oright = av_frame_clone(inpicref);
+        out = oleft = oright = ff_graph_frame_clone(ctx, inpicref);
         if (!out) {
             av_frame_free(&s->prev);
             av_frame_free(&inpicref);
@@ -718,12 +718,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
                (s->out.eyes == s->in.eyes)) {
         s->prev->pts /= 2;
         ret = ff_filter_frame(outlink, s->prev);
-        av_frame_free(&inpicref);
+        ff_graph_frame_free(ctx, &inpicref);
         s->prev = NULL;
         return ret;
     } else if ((s->out.format == MONO && s->in.format == ALTERNATING) &&
                (s->out.eyes != s->in.eyes)) {
-        av_frame_free(&s->prev);
+        ff_graph_frame_free(ctx, &s->prev);
         inpicref->pts /= 2;
         return ff_filter_frame(outlink, inpicref);
     } else if ((s->out.format == ALTERNATING && s->in.format == ALTERNATING) &&
@@ -1019,15 +1019,15 @@ copy:
         ff_filter_frame(outlink, oright);
         out = oleft;
         oleft->pts = s->prev->pts + inpicref->pts;
-        av_frame_free(&s->prev);
+        ff_graph_frame_free(ctx, &s->prev);
         s->prev = inpicref;
     } else if (s->in.format == ALTERNATING) {
         out->pts = s->prev->pts / 2;
-        av_frame_free(&s->prev);
-        av_frame_free(&inpicref);
+        ff_graph_frame_free(ctx, &s->prev);
+        ff_graph_frame_free(ctx, &inpicref);
     } else {
-        av_frame_free(&s->prev);
-        av_frame_free(&inpicref);
+        ff_graph_frame_free(ctx, &s->prev);
+        ff_graph_frame_free(ctx, &inpicref);
     }
     av_assert0(out);
     out->sample_aspect_ratio = s->aspect;
