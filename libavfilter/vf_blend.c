@@ -227,7 +227,7 @@ static AVFrame *blend_frame(AVFilterContext *ctx, AVFrame *top_buf,
     }
 
     if (!s->tblend)
-        av_frame_free(&top_buf);
+        ff_graph_frame_free(ctx, &top_buf);
 
     return dst_buf;
 }
@@ -457,10 +457,10 @@ static int tblend_filter_frame(AVFilterLink *inlink, AVFrame *frame)
         AVFrame *out;
 
         if (ff_filter_disabled(ctx))
-            out = av_frame_clone(frame);
+            out = ff_graph_frame_clone(ctx, frame);
         else
             out = blend_frame(ctx, frame, s->prev_frame);
-        av_frame_free(&s->prev_frame);
+        ff_graph_frame_free(ctx, &s->prev_frame);
         s->prev_frame = frame;
         return ff_filter_frame(outlink, out);
     }
