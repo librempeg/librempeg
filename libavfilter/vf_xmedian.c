@@ -217,7 +217,7 @@ static int process_frame(FFFrameSync *fs)
     }
 
     if (ff_filter_disabled(ctx)) {
-        out = av_frame_clone(in[0]);
+        out = ff_graph_frame_clone(ctx, in[0]);
     } else {
         out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     }
@@ -409,13 +409,13 @@ static int tmedian_filter_frame(AVFilterLink *inlink, AVFrame *in)
         if (s->nb_frames < s->nb_inputs)
             return 0;
     } else {
-        av_frame_free(&s->frames[0]);
+        ff_graph_frame_free(ctx, &s->frames[0]);
         memmove(&s->frames[0], &s->frames[1], sizeof(*s->frames) * (s->nb_inputs - 1));
         s->frames[s->nb_inputs - 1] = in;
     }
 
     if (ff_filter_disabled(ctx)) {
-        out = av_frame_clone(s->frames[0]);
+        out = ff_graph_frame_clone(ctx, s->frames[0]);
         if (!out)
             return AVERROR(ENOMEM);
         return ff_filter_frame(outlink, out);
