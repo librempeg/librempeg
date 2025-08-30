@@ -211,7 +211,7 @@ static int framesync_advance(FFFrameSync *fs)
                  fs->in[i].pts_next - pts < pts - fs->in[i].pts) ||
                 (fs->in[i].before == EXT_INFINITY &&
                  fs->in[i].state == STATE_BOF)) {
-                av_frame_free(&fs->in[i].frame);
+                ff_graph_frame_free(fs->parent, &fs->in[i].frame);
                 fs->in[i].frame      = fs->in[i].frame_next;
                 fs->in[i].pts        = fs->in[i].pts_next;
                 fs->in[i].frame_next = NULL;
@@ -287,7 +287,7 @@ int ff_framesync_get_frame(FFFrameSync *fs, unsigned in, AVFrame **rframe,
                 (!fs->in[i].have_next || fs->in[i].pts_next < pts_next))
                 need_copy = 1;
         if (need_copy) {
-            if (!(frame = av_frame_clone(frame)))
+            if (!(frame = ff_graph_frame_clone(fs->parent, frame)))
                 return AVERROR(ENOMEM);
         } else {
             fs->in[in].frame = NULL;
