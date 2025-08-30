@@ -189,7 +189,7 @@ static int process_frame(FFFrameSync *fs)
         return ret;
 
     if (ff_filter_disabled(ctx)) {
-        out = av_frame_clone(src);
+        out = ff_graph_frame_clone(ctx, src);
         if (!out)
             return AVERROR(ENOMEM);
     } else {
