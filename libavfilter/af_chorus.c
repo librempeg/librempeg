@@ -257,7 +257,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     s->next_pts = frame->pts + av_rescale_q(frame->nb_samples, (AVRational){1, inlink->sample_rate}, inlink->time_base);
 
     if (frame != out_frame)
-        av_frame_free(&frame);
+        ff_graph_frame_free(ctx, &frame);
 
     return ff_filter_frame(ctx->outputs[0], out_frame);
 }
