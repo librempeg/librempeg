@@ -120,7 +120,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->nb_samples_out += nb_samples;
     }
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     if (ff_inlink_queued_samples(inlink) >= s->nb_samples)
         ff_filter_set_ready(ctx, 100);
     return ret < 0 ? ret : nb_samples;
