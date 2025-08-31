@@ -305,7 +305,7 @@ static int process_frame(FFFrameSync *fs)
         return ret;
 
     if (ff_filter_disabled(ctx) || !srcy) {
-        out = av_frame_clone(srcx);
+        out = ff_graph_frame_clone(ctx, srcx);
         if (!out)
             return AVERROR(ENOMEM);
     } else {
@@ -606,7 +606,7 @@ static int tlut2_filter_frame(AVFilterLink *inlink, AVFrame *frame)
         AVFrame *out;
 
         if (ff_filter_disabled(ctx)) {
-            out = av_frame_clone(frame);
+            out = ff_graph_frame_clone(ctx, frame);
         } else {
             ThreadData td;
 
@@ -627,7 +627,7 @@ static int tlut2_filter_frame(AVFilterLink *inlink, AVFrame *frame)
             ff_filter_execute(ctx, s->lut2, &td, NULL,
                               FFMIN(s->heightx[1], ff_filter_get_nb_threads(ctx)));
         }
-        av_frame_free(&s->prev_frame);
+        ff_graph_frame_free(ctx, &s->prev_frame);
         s->prev_frame = frame;
         return ff_filter_frame(outlink, out);
     }
