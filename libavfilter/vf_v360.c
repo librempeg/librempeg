@@ -5169,7 +5169,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     ff_filter_execute(ctx, s->remap_slice, &td, NULL, s->nb_threads);
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
