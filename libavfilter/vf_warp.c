@@ -608,7 +608,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     ff_filter_execute(ctx, s->warp_slice, &td, NULL, FFMIN(outlink->h, ff_filter_get_nb_threads(ctx)));
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
