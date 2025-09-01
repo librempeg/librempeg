@@ -119,6 +119,7 @@ static int thp_read_header(AVFormatContext *s)
             st->codecpar->width = avio_rb32(pb);
             st->codecpar->height = avio_rb32(pb);
             st->codecpar->sample_rate = av_q2d(thp->fps);
+            st->start_time = 0;
             st->nb_frames = st->duration = framecnt;
             thp->vst = st;
             thp->video_stream_index = st->index;
@@ -139,6 +140,7 @@ static int thp_read_header(AVFormatContext *s)
             st->codecpar->codec_tag = 0;  /* no fourcc */
             st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
             st->codecpar->sample_rate = avio_rb32(pb); /* Frequency.  */
+            st->start_time = 0;
             st->duration = avio_rb32(pb);
 
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
