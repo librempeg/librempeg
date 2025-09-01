@@ -727,4 +727,4 @@ PCM_CODEC    (S64BE,        S64, s64be,        "PCM signed 64-bit big-endian");
 PCM_CODEC    (S64LE,        S64, s64le,        "PCM signed 64-bit little-endian");
 PCM_CODEC_EXT(VIDC,         S16, vidc,         "PCM Archimedes VIDC",                   PCMLUTDecode,   pcm_lut_decode_init);
 PCM_DECODER_X(DAT,          S16, dat,          "PCM DAT (NonLinear 12bit PCM)",         PCMLUTDecode,   pcm_lut_decode_init);
-PCM_DECODER  (SGA,          U8P,  sga,         "PCM SGA");
+PCM_DECODER  (SGA,          U8P, sga,          "PCM SGA");
