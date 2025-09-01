@@ -43,8 +43,12 @@ static int ueba_read_header(AVFormatContext *s)
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_BINKAUDIO_DCT;
     st->codecpar->ch_layout.nb_channels = avio_r8(pb);
+    if (st->codecpar->ch_layout.nb_channels == 0)
+        return AVERROR_INVALIDDATA;
     avio_skip(pb, 2);
     st->codecpar->sample_rate = avio_rl32(pb);
+    if (st->codecpar->sample_rate <= 0)
+        return AVERROR_INVALIDDATA;
     st->duration = avio_rl32(pb);
     avio_skip(pb, 8);
     nb_seek_entries = avio_rl16(pb);
