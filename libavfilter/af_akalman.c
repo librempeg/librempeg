@@ -138,8 +138,8 @@ static int activate(AVFilterContext *ctx)
         out->pts = s->frame[0]->pts;
         out->duration = s->frame[0]->duration;
 
-        av_frame_free(&s->frame[0]);
-        av_frame_free(&s->frame[1]);
+        ff_graph_frame_free(ctx, &s->frame[0]);
+        ff_graph_frame_free(ctx, &s->frame[1]);
 
         return ff_filter_frame(ctx->outputs[0], out);
     }
