@@ -49,6 +49,7 @@ static int ueba_read_header(AVFormatContext *s)
     st->codecpar->sample_rate = avio_rl32(pb);
     if (st->codecpar->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
+    st->start_time = 0;
     st->duration = avio_rl32(pb);
     avio_skip(pb, 8);
     nb_seek_entries = avio_rl16(pb);
