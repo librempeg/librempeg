@@ -593,7 +593,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     s->histogram[level]++;
 
-    av_frame_free(&out);
+    ff_graph_frame_free(ctx, &out);
     return ff_filter_frame(outlink, in);
 }
 
