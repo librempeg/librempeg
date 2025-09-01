@@ -325,7 +325,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     for (int i = 0; i < ctx->nb_outputs; i++) {
         if (ff_outlink_get_status(ctx->outputs[i])) {
-            av_frame_free(&frames[i]);
+            ff_graph_frame_free(ctx, &frames[i]);
             continue;
         }
 
@@ -337,7 +337,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
 fail:
     for (int i = 0; i < ctx->nb_outputs; i++)
-        av_frame_free(&frames[i]);
+        ff_graph_frame_free(ctx, &frames[i]);
 
     return ret;
 }
