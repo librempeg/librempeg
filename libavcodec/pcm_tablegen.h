@@ -24,6 +24,7 @@
 #define AVCODEC_PCM_TABLEGEN_H
 
 #include <stdint.h>
+#include "config_components.h"
 #include "libavutil/attributes.h"
 #include "libavutil/macros.h"
 
