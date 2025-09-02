@@ -551,7 +551,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
 
     av_frame_copy_props(out, in);
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     s->x_pos++;
     if (s->x_pos >= s->width) {
         s->x_pos = 0;
