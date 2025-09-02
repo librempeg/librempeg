@@ -168,8 +168,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         out->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
 
     if (!s->double_weave)
-        av_frame_free(&in);
-    av_frame_free(&s->prev);
+        ff_graph_frame_free(ctx, &in);
+    ff_graph_frame_free(ctx, &s->prev);
     if (s->double_weave)
         s->prev = in;
     return ff_filter_frame(outlink, out);
