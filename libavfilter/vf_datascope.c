@@ -377,7 +377,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     ff_filter_execute(ctx, s->filter, &td, NULL,
                       FFMIN(ff_filter_get_nb_threads(ctx), FFMAX(outlink->w / 20, 1)));
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
@@ -715,7 +715,7 @@ static int pixscope_filter_frame(AVFilterLink *inlink, AVFrame *in)
         draw_text(&s->draw, out, s->colors[i], X + 28, Y + s->ww + 15 * (i + 6), text, 0);
     }
 
-    av_frame_free(&in);
+    ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
 
