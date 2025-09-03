@@ -385,7 +385,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
     AVFrame *cur, *next, *out;
     int field, tff, full, ret;
 
-    av_frame_free(&tinterlace->cur);
+    ff_graph_frame_free(ctx, &tinterlace->cur);
     tinterlace->cur  = tinterlace->next;
     tinterlace->next = picref;
 
@@ -421,15 +421,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
                            inlink->format, inlink->w, inlink->h,
                            FIELD_UPPER_AND_LOWER, 1, tinterlace->mode == MODE_MERGEX2 ? (1 + inl->frame_count_out) & 1 ? FIELD_UPPER : FIELD_LOWER : FIELD_LOWER, tinterlace->flags);
         if (tinterlace->mode != MODE_MERGEX2)
-            av_frame_free(&tinterlace->next);
+            ff_graph_frame_free(ctx, &tinterlace->next);
         break;
 
     case MODE_DROP_ODD:  /* only output even frames, odd  frames are dropped; height unchanged, half framerate */
     case MODE_DROP_EVEN: /* only output odd  frames, even frames are dropped; height unchanged, half framerate */
-        out = av_frame_clone(tinterlace->mode == MODE_DROP_EVEN ? cur : next);
+        out = ff_graph_frame_clone(ctx, tinterlace->mode == MODE_DROP_EVEN ? cur : next);
         if (!out)
             return AVERROR(ENOMEM);
-        av_frame_free(&tinterlace->next);
+        ff_graph_frame_free(ctx, &tinterlace->next);
         break;
 
     case MODE_PAD: /* expand each frame to double height, but pad alternate
@@ -462,7 +462,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
         if ((tinterlace->flags & TINTERLACE_FLAG_BYPASS_IL) && (cur->flags & AV_FRAME_FLAG_INTERLACED)) {
             av_log(ctx, AV_LOG_WARNING,
                    "video is already interlaced, adjusting framerate only\n");
-            out = av_frame_clone(cur);
+            out = ff_graph_frame_clone(ctx, cur);
             if (!out)
                 return AVERROR(ENOMEM);
             out->pts /= 2;  // adjust pts to new framerate
@@ -493,11 +493,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
                            inlink->format, inlink->w, inlink->h,
                            tff ? FIELD_LOWER : FIELD_UPPER, 1, tff ? FIELD_LOWER : FIELD_UPPER,
                            tinterlace->flags);
-        av_frame_free(&tinterlace->next);
+        ff_graph_frame_free(ctx, &tinterlace->next);
         break;
     case MODE_INTERLACEX2: /* re-interlace preserving image height, double frame rate */
         /* output current frame first */
-        out = av_frame_clone(cur);
+        out = ff_graph_frame_clone(ctx, cur);
         if (!out)
             return AVERROR(ENOMEM);
         out->flags |= AV_FRAME_FLAG_INTERLACED;
