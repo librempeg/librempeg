@@ -713,14 +713,15 @@ retry:
                     av_assert0(outlink-> incfg.channel_layouts->refcount > 0);
                     av_assert0(outlink->outcfg.channel_layouts->refcount > 0);
                 }
+
 #define MERGE(merger, link)                                                  \
     ((merger)->merge(FF_FIELD_AT(void *, (merger)->offset, (link)->incfg),   \
                      FF_FIELD_AT(void *, (merger)->offset, (link)->outcfg)))
+
                 for (neg_step = 0; neg_step < neg->nb_mergers; neg_step++) {
                     const AVFilterFormatsMerger *m = &neg->mergers[neg_step];
                     if (m->conversion_filter != conv_filters[k])
                         continue;
-
                     if ((ret = MERGE(m,  inlink)) <= 0 ||
                         (ret = MERGE(m, outlink)) <= 0) {
                         if (ret < 0)
@@ -732,14 +733,14 @@ retry:
                         return AVERROR(ENOSYS);
                     } else {
                         count_merged += 2;
+                    }
                 }
             }
-        }
 
-            /* if there is more than one auto filter, we may need another round
+            /* if there is non-zero auto filter, we may need another round
              * to fully settle formats due to possible cross-incompatibilities
              * between the auto filters themselves */
-            if (num_conv > 1)
+            if (num_conv > 0)
                 goto retry;
         }
     }
