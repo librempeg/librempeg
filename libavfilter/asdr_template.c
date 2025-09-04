@@ -269,3 +269,28 @@ static int fn(identity)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 
     return 0;
 }
+
+static int fn(mse)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    AudioSDRContext *s = ctx->priv;
+    AVFrame *u = s->cache[0];
+    AVFrame *v = s->cache[1];
+    const int channels = u->ch_layout.nb_channels;
+    const int start = (channels * jobnr) / nb_jobs;
+    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);
+
+    for (int ch = start; ch < end; ch++) {
+        ChanStats *chs = &s->chs[ch];
+        const ftype *const us = (ftype *)u->extended_data[ch];
+        const ftype *const vs = (ftype *)v->extended_data[ch];
+        double uv = 0.;
+
+        for (int n = 0; n < nb_samples; n++)
+            uv += (us[n] - vs[n]) * (us[n] - vs[n]);
+
+        chs->uv += uv;
+    }
+
+    return 0;
+}

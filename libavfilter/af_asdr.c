@@ -38,6 +38,7 @@ enum FilterType {
     AMDA,
     AIDENTITY,
     AMAPE,
+    AMSE,
 };
 
 typedef struct ChanStats {
@@ -93,6 +94,7 @@ static void get_score(AVFilterContext *ctx)
             break;
         case AMAE:
         case AMAPE:
+        case AMSE:
             s->export[ch] = -10. * log10(s->chs[ch].uv / s->nb_samples);
             break;
         case AMDA:
@@ -206,6 +208,9 @@ static int config_output(AVFilterLink *outlink)
     case AMAPE:
         s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? mape_fltp : mape_dblp;
         break;
+    case AMSE:
+        s->filter = inlink->format == AV_SAMPLE_FMT_FLTP ? mse_fltp : mse_dblp;
+        break;
     default:
         return AVERROR_BUG;
     }
@@ -299,5 +304,6 @@ DEFINE_AAA_FILTER(ASISDR,    asisdr,    "Measure Audio Scale-Invariant Signal-to
 DEFINE_AAA_FILTER(ANRMSE,    anrmse,    "Measure Audio Normalized Root Mean Square Error.");
 DEFINE_AAA_FILTER(AMAE,      amae,      "Measure Audio Mean Absolute Error.");
 DEFINE_AAA_FILTER(AMDA,      amda,      "Measure Audio Mean Directional Accuracy.");
+DEFINE_AAA_FILTER(AMSE,      amse,      "Measure Audio Mean Squared Error.");
 DEFINE_AAA_FILTER(AIDENTITY, aidentity, "Measure Identity between two audio streams.");
 DEFINE_AAA_FILTER(AMAPE,     amape,     "Measure Audio Mean Absolute Percentage Error.");

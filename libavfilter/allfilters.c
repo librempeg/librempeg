@@ -83,6 +83,7 @@ extern const FFFilter ff_af_amda;
 extern const FFFilter ff_af_amerge;
 extern const FFFilter ff_af_ametadata;
 extern const FFFilter ff_af_amix;
+extern const FFFilter ff_af_amse;
 extern const FFFilter ff_af_amultiply;
 extern const FFFilter ff_af_anequalizer;
 extern const FFFilter ff_af_anlmdn;
