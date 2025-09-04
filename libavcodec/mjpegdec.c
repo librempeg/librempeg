@@ -32,7 +32,7 @@
 
 #include "config_components.h"
 
-#include "libavutil/display.h"
+#include "libavutil/attributes.h"
 #include "libavutil/emms.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/avassert.h"
@@ -43,6 +43,7 @@
 #include "codec_internal.h"
 #include "copy_block.h"
 #include "decode.h"
+#include "exif.h"
 #include "hwaccel_internal.h"
 #include "hwconfig.h"
 #include "idctdsp.h"
@@ -54,8 +55,6 @@
 #include "profiles.h"
 #include "put_bits.h"
 #include "thread.h"
-#include "exif_internal.h"
-#include "bytestream.h"
 
 static int init_default_huffman_tables(MJpegDecodeContext *s)
 {
@@ -2849,7 +2848,7 @@ av_cold int ff_mjpeg_decode_end(AVCodecContext *avctx)
     return 0;
 }
 
-static void decode_flush(AVCodecContext *avctx)
+static av_cold void decode_flush(AVCodecContext *avctx)
 {
     MJpegDecodeContext *s = avctx->priv_data;
     s->got_picture = 0;

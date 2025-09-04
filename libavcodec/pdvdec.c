@@ -20,6 +20,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/attributes.h"
+
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "decode.h"
@@ -102,7 +104,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     return avpkt->size;
 }
 
-static void decode_flush(AVCodecContext *avctx)
+static av_cold void decode_flush(AVCodecContext *avctx)
 {
     PDVContext *s = avctx->priv_data;
 

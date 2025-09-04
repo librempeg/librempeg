@@ -1613,7 +1613,7 @@ static int wavpack_decode_block(AVCodecContext *avctx, AVFrame *frame, int block
     return 0;
 }
 
-static void wavpack_decode_flush(AVCodecContext *avctx)
+static av_cold void wavpack_decode_flush(AVCodecContext *avctx)
 {
     WavpackContext *s = avctx->priv_data;
 

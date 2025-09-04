@@ -46,6 +46,8 @@
 #include "codec_internal.h"
 #include "decode.h"
 
+#include "libavutil/attributes.h"
+
 /**
  * @file
  * ADPCM decoders
@@ -3355,7 +3357,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     return bytestream2_tell(&gb);
 }
 
-static void adpcm_flush(AVCodecContext *avctx)
+static av_cold void adpcm_flush(AVCodecContext *avctx)
 {
     ADPCMDecodeContext *c = avctx->priv_data;
 
