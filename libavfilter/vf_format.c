@@ -118,7 +118,7 @@ static av_cold int init(AVFilterContext *ctx)
             return ret;
     }
 
-    for (unsigned n = 0; n < s->nb_ranges; n++) {
+    for (unsigned n = 0; n < s->nb_alphamodes; n++) {
         const char *cur = s->alphamodes[n];
 
         if ((ret = av_alpha_mode_from_name(cur)) < 0 ||
