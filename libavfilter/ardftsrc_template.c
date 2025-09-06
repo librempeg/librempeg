@@ -217,13 +217,12 @@ static int fn(src_init)(AVFilterContext *ctx)
     for (int n = 0; n < s->tr_nb_samples; n++) {
         const ftype aphase = FABS(s->phaset);
         const ftype sgn = s->phaset < F(0.0) ? F(-1.0) : F(1.0);
-        const ftype inter = FPOW(aphase, aphase > F(0.5) ? aphase/F(0.5) : F(0.5)/aphase);
-        const ftype x = F(n+1) / s->tr_nb_samples;
-        const ftype z = F(4.0 * M_PI) * FPOW(x, F(4.0) * F(M_PI));
-        const ftype w = inter * z;
+        const ftype x = F(n) / s->tr_nb_samples;
+        const ftype z = F(0.5) * FEXP((x - F(0.5)) * F(2.0 * M_PI));
+        const ftype w = aphase * z * sgn;
 
-        phase[n].re = FCOS(w * sgn);
-        phase[n].im = FSIN(w * sgn);
+        phase[n].re = FCOS(w);
+        phase[n].im = FSIN(w);
     }
 
     return 0;
