@@ -1570,6 +1570,8 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
     const int len = s->len;
     const int m = s->sub[0].len;
     const int n = s->sub[1].len;
+    const ptrdiff_t n_stride = n * sizeof(TXComplex);
+    const ptrdiff_t m_stride = m * stride;
     const TXComplex *exp = s->exp;
     AVTXContext *sub0 = &s->sub[0];
     AVTXContext *sub1 = &s->sub[1];
@@ -1585,7 +1587,7 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
     transpose_matrix(tmp2, src, n, m);
 
     for (int i = 0; i < n; i++) {
-        fn0(sub0, tmp, tmp2, n*sizeof(TXComplex));
+        fn0(sub0, tmp, tmp2, n_stride);
         tmp2 += m;
         tmp++;
     }
@@ -1599,7 +1601,7 @@ static void TX_NAME(ff_tx_fft_bailey)(AVTXContext *s, void *_dst, void *_src,
     }
 
     for (int i = 0; i < m; i++) {
-        fn1(sub1, dst, tmp, stride*m*sizeof(TXComplex));
+        fn1(sub1, dst, tmp, m_stride);
         tmp += n;
         dst += stride;
     }
@@ -2150,6 +2152,7 @@ static void TX_NAME(ff_tx_fft_pfa)(AVTXContext *s, void *_out,
     const int n = s->sub[0].len, m = s->sub[1].len, l = s->len;
     const int *in_map = s->map, *out_map = in_map + l;
     const int *sub_map = s->sub[1].map;
+    const ptrdiff_t m_stride = m * sizeof(TXComplex);
     TXComplex *tmp1 = s->sub[1].flags & AV_TX_INPLACE ? s->tmp : s->exp;
     TXComplex *tmp2 = s->tmp;
     TXComplex *exp = s->exp;
@@ -2164,7 +2167,7 @@ static void TX_NAME(ff_tx_fft_pfa)(AVTXContext *s, void *_out,
     for (int i = 0; i < m; i++) {
         TX_NAME(ff_tx_remap)(exp, in, in_map, n);
         in_map += n;
-        fn0(sub0, &tmp2[sub_map[i]], exp, m*sizeof(TXComplex));
+        fn0(sub0, &tmp2[sub_map[i]], exp, m_stride);
     }
 
     for (int i = 0; i < n; i++) {
