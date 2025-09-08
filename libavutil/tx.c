@@ -75,7 +75,7 @@ int ff_tx_gen_pfa_input_map(AVTXContext *s, FFTXCodeletOptions *opts,
 int ff_tx_gen_compound_mapping(AVTXContext *s, FFTXCodeletOptions *opts,
                                int inv, int n, int m)
 {
-    int *in_map, *out_map;
+    int *in_map, *out_map, *tmp_map;
     const int64_t len = n*m;    /* Will not be equal to s->len for MDCTs */
     int64_t m_inv, n_inv;
 
@@ -92,22 +92,44 @@ int ff_tx_gen_compound_mapping(AVTXContext *s, FFTXCodeletOptions *opts,
     in_map  = s->map;
     out_map = s->map + len;
 
+    if (!(tmp_map = av_malloc(n*sizeof(*tmp_map))))
+        return AVERROR(ENOMEM);
+
+    for (int i = 0; i < n; i++)
+        tmp_map[i] = (i*m*m_inv + 0*n*n_inv) % len;
+
     /* Ruritanian map for input, CRT map for output, can be swapped */
     if (opts && opts->map_dir == FF_TX_MAP_SCATTER) {
         for (int j = 0; j < m; j++) {
+            int tmp;
+
             for (int i = 0; i < n; i++) {
                 in_map[(i*m + j*n) % len] = j*n + i;
-                out_map[(i*m*m_inv + j*n*n_inv) % len] = i*m + j;
+                out_map[tmp_map[i]] = i*m + j;
             }
+
+            tmp = tmp_map[n-1];
+            for (int i = n-1; i > 0; i--)
+                tmp_map[i] = tmp_map[i-1] + 1;
+            tmp_map[0] = tmp + 1;
         }
     } else {
         for (int j = 0; j < m; j++) {
+            int tmp;
+
             for (int i = 0; i < n; i++) {
                 in_map[j*n + i] = (i*m + j*n) % len;
-                out_map[(i*m*m_inv + j*n*n_inv) % len] = i*m + j;
+                out_map[tmp_map[i]] = i*m + j;
             }
+
+            tmp = tmp_map[n-1];
+            for (int i = n-1; i > 0; i--)
+                tmp_map[i] = tmp_map[i-1] + 1;
+            tmp_map[0] = tmp + 1;
         }
     }
+
+    av_freep(&tmp_map);
 
     if (inv) {
         for (int i = 0; i < m; i++) {
