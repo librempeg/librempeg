@@ -331,7 +331,7 @@ static int fn(src_out)(AVFilterContext *ctx, AVFrame *out, const int ch,
             int32_t *dst = ((int32_t *)out->data[0]) + doffset * nb_channels;
             for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
                 dst[m] = av_clipl_int32(llrint((irdft[n] + over[n]) * F(1LL<<(32-1))));
-        } else if (s->out_depth = 33) {
+        } else if (s->out_depth == 33) {
             float *dst = ((float *)out->data[0]) + doffset * nb_channels;
             for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
                 dst[m] = irdft[n] + over[n];
