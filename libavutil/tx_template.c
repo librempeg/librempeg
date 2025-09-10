@@ -886,14 +886,19 @@ static av_always_inline void stockham0(const int n, const int z, TXComplex *y, c
                                        const TXComplex **exp)
 {
     if (n <= 2) {
-        for (int q = 0; q < z; q++) {
-            const TXComplex a = x[q + 0];
-            const TXComplex b = x[q + z];
+        const TXComplex *xa = x + 0;
+        const TXComplex *xb = x + z;
+        TXComplex *y0 = y + 0;
+        TXComplex *yz = y + z;
 
-            y[q + 0].re = a.re + b.re;
-            y[q + 0].im = a.im + b.im;
-            y[q + z].re = a.re - b.re;
-            y[q + z].im = a.im - b.im;
+        for (int q = 0; q < z; q++) {
+            const TXComplex a = xa[q];
+            const TXComplex b = xb[q];
+
+            y0[q].re = a.re + b.re;
+            y0[q].im = a.im + b.im;
+            yz[q].re = a.re - b.re;
+            yz[q].im = a.im - b.im;
         }
     } else if (n >= 4) {
         const int m = n / 2;
@@ -901,20 +906,24 @@ static av_always_inline void stockham0(const int n, const int z, TXComplex *y, c
         for (int p = 0; p < m; p++) {
             const int s2p0 = z * (2 * p + 0);
             const int s2p1 = z * (2 * p + 1);
+            const TXComplex wp = exp[0][p];
             const int sp0 = z * (p + 0);
             const int spm = z * (p + m);
-            const TXComplex wp = exp[0][p];
+            const TXComplex *xa = x + sp0;
+            const TXComplex *xb = x + spm;
+            TXComplex *y0 = y + s2p0;
+            TXComplex *y1 = y + s2p1;
 
             for (int q = 0; q < z; q++) {
-                const TXComplex a = x[q + sp0];
-                const TXComplex b = x[q + spm];
+                const TXComplex a = xa[q];
+                const TXComplex b = xb[q];
                 TXComplex t;
 
                 t.re = a.re - b.re;
                 t.im = a.im - b.im;
-                y[q + s2p0].re = a.re + b.re;
-                y[q + s2p0].im = a.im + b.im;
-                CMUL3(y[q + s2p1], t, wp);
+                y0[q].re = a.re + b.re;
+                y0[q].im = a.im + b.im;
+                CMUL3(y1[q], t, wp);
             }
         }
 
