@@ -956,6 +956,26 @@ static av_cold int TX_NAME(ff_tx_fft_init_stockham)(AVTXContext *s,
     return 0;
 }
 
+static void TX_NAME(ff_tx_fft_stockham16)(AVTXContext *s, void *_dst, void *_src,
+                                          ptrdiff_t stride)
+{
+    const TXComplex *exp = s->exp;
+    TXComplex *tmp = s->tmp;
+    TXComplex *tm0 = tmp+16;
+    TXComplex *src = _src;
+    TXComplex *dst = _dst;
+
+    stride /= sizeof(*dst);
+
+    stockham0(16, 1, tmp, src, &exp);
+    stockham0(8,  2, tm0, tmp, &exp);
+    stockham0(4,  4, tmp, tm0, &exp);
+    stockham0(2,  8, tm0, tmp, &exp);
+
+    for (int i = 0; i < 16; i++)
+        dst[i*stride] = tm0[i];
+}
+
 static void TX_NAME(ff_tx_fft_stockham32)(AVTXContext *s, void *_dst, void *_src,
                                           ptrdiff_t stride)
 {
@@ -1180,6 +1200,20 @@ static void TX_NAME(ff_tx_fft_stockham8192)(AVTXContext *s, void *_dst, void *_s
     for (int i = 0; i < 8192; i++)
         dst[i*stride] = tmp[i];
 }
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_stockham16_def) = {
+    .name       = TX_NAME_STR("fft_stockham16"),
+    .function   = TX_NAME(ff_tx_fft_stockham16),
+    .type       = TX_TYPE(FFT),
+    .flags      = AV_TX_UNALIGNED | FF_TX_OUT_OF_PLACE | AV_TX_INPLACE,
+    .factors[0] = 2,
+    .nb_factors = 1,
+    .min_len    = 16,
+    .max_len    = 16,
+    .init       = TX_NAME(ff_tx_fft_init_stockham),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_BASE+128,
+};
 
 static const FFTXCodelet TX_NAME(ff_tx_fft_stockham32_def) = {
     .name       = TX_NAME_STR("fft_stockham32"),
@@ -3699,6 +3733,7 @@ const FFTXCodelet * const TX_NAME(ff_tx_codelet_list)[] = {
     &TX_NAME(ff_tx_fft2097152_ns_def),
 
     /* Stockham codelets */
+    &TX_NAME(ff_tx_fft_stockham16_def),
     &TX_NAME(ff_tx_fft_stockham32_def),
     &TX_NAME(ff_tx_fft_stockham64_def),
     &TX_NAME(ff_tx_fft_stockham128_def),
