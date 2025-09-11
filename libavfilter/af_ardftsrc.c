@@ -372,7 +372,14 @@ static int filter_frame(AVFilterLink *inlink)
         return ff_filter_frame(outlink, in);
     }
 
-    in_samples = in->nb_samples;
+    if (s->is_eof) {
+        const int pad = FFMAX(0, 1 + s->in_offset - in->nb_samples);
+
+        in_samples = in->nb_samples + pad;
+        s->flush_size -= av_rescale(pad, s->in_nb_samples, s->out_nb_samples);
+    } else {
+        in_samples = in->nb_samples;
+    }
 
     out->nb_samples = av_rescale(in_samples, s->out_nb_samples, s->in_nb_samples);
     ret = ff_filter_get_buffer(ctx, out);
