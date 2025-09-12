@@ -730,6 +730,7 @@ OBJS-$(CONFIG_SNOW_ENCODER)            += snowenc.o snow.o snow_dwt.o           
                                           motion_est.o ratecontrol.o
 OBJS-$(CONFIG_SOL_DPCM_DECODER)        += dpcm.o
 OBJS-$(CONFIG_SONARC_DECODER)          += sonarc.o
+OBJS-$(CONFIG_SONCDVID_DECODER)        += soncdvid.o
 OBJS-$(CONFIG_SPEEDHQ_DECODER)         += speedhqdec.o speedhq.o mpeg12.o \
                                           mpeg12data.o
 OBJS-$(CONFIG_SPEEDHQ_ENCODER)         += speedhq.o mpeg12data.o mpeg12enc.o speedhqenc.o
@@ -951,6 +952,7 @@ OBJS-$(CONFIG_PCM_S64BE_ENCODER)          += pcm.o
 OBJS-$(CONFIG_PCM_S64LE_DECODER)          += pcm.o
 OBJS-$(CONFIG_PCM_S64LE_ENCODER)          += pcm.o
 OBJS-$(CONFIG_PCM_SGA_DECODER)            += pcm.o
+OBJS-$(CONFIG_PCM_SB8_DECODER)            += pcm.o
 OBJS-$(CONFIG_PCM_U8_DECODER)             += pcm.o
 OBJS-$(CONFIG_PCM_U8_ENCODER)             += pcm.o
 OBJS-$(CONFIG_PCM_U16BE_DECODER)          += pcm.o

@@ -343,6 +343,7 @@ enum AVCodecID {
     AV_CODEC_ID_CFAST,
     AV_CODEC_ID_DKANIM,
     AV_CODEC_ID_DYUV,
+    AV_CODEC_ID_SONCDVID,
 
     /* various PCM "codecs" */
     AV_CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
@@ -385,6 +386,7 @@ enum AVCodecID {
     AV_CODEC_ID_PCM_SGA,
     AV_CODEC_ID_PCM_DAT,
     AV_CODEC_ID_PCM_HDMV,
+    AV_CODEC_ID_PCM_SB8,
 
     /* various ADPCM codecs */
     AV_CODEC_ID_ADPCM_IMA_QT = 0x11000,

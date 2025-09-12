@@ -223,6 +223,7 @@ static const enum AVCodecID codec_ids[] = {
     AV_CODEC_ID_PCM_S64LE,
     AV_CODEC_ID_PCM_S8,
     AV_CODEC_ID_PCM_SGA,
+    AV_CODEC_ID_PCM_SB8,
     AV_CODEC_ID_PCM_U8,
     AV_CODEC_ID_PCM_VIDC,
     AV_CODEC_ID_NONE,

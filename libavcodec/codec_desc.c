@@ -2080,6 +2080,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("CD-I Delta YUV"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_SONCDVID,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "soncdvid",
+        .long_name = NULL_IF_CONFIG_SMALL("Sonic CD Video"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
+    },
 
     /* various PCM "codecs" */
     {
@@ -2346,6 +2353,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "pcm_hdmv",
         .long_name = NULL_IF_CONFIG_SMALL("PCM signed 16-bit big-endian for HDMV media"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
+    },
+    {
+        .id        = AV_CODEC_ID_PCM_SB8,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "pcm_sb8",
+        .long_name = NULL_IF_CONFIG_SMALL("PCM signed bit 8-bit"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
     },
 

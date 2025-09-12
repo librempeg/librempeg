@@ -268,6 +268,7 @@ static av_cold av_unused int pcm_decode_init(AVCodecContext *avctx)
         ENTRY(S32LE_PLANAR, S32P, 32),
         ENTRY(S64BE, S64, 64),   ENTRY(S64LE, S64, 64),
         ENTRY(SGA, U8P, 8),      ENTRY(U8, U8, 8),
+        ENTRY(SB8, U8, 8),
         ENTRY(DAT, S16, 16),
         ENTRY(U16BE, S16, 16),   ENTRY(U16LE, S16, 16),
         ENTRY(U24BE, S32, 24),   ENTRY(U24LE, S32, 24),
@@ -483,6 +484,14 @@ static int pcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     case AV_CODEC_ID_PCM_S8:
         for (; n > 0; n--)
             *samples++ = *src++ + 128;
+        break;
+    case AV_CODEC_ID_PCM_SB8:
+        for (; n > 0; n--) {
+            uint8_t v = *src++;
+            if (v < 0x80)
+                v = 0x80 - v;
+            *samples++ = v;
+        }
         break;
     case AV_CODEC_ID_PCM_SGA:
         n /= avctx->ch_layout.nb_channels;
@@ -727,4 +736,5 @@ PCM_CODEC    (S64BE,        S64, s64be,        "PCM signed 64-bit big-endian");
 PCM_CODEC    (S64LE,        S64, s64le,        "PCM signed 64-bit little-endian");
 PCM_CODEC_EXT(VIDC,         S16, vidc,         "PCM Archimedes VIDC",                   PCMLUTDecode,   pcm_lut_decode_init);
 PCM_DECODER_X(DAT,          S16, dat,          "PCM DAT (NonLinear 12bit PCM)",         PCMLUTDecode,   pcm_lut_decode_init);
-PCM_DECODER  (SGA,          U8P,  sga,         "PCM SGA");
+PCM_DECODER  (SGA,          U8P, sga,          "PCM SGA");
+PCM_DECODER  (SB8,          U8,  sb8,          "PCM signed bit 8-bit");
