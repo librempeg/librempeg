@@ -102,12 +102,12 @@ static int init_default_huffman_tables(MJpegDecodeContext *s)
 static void parse_avid(MJpegDecodeContext *s, uint8_t *buf, int len)
 {
     s->buggy_avid = 1;
-    if (len > 14 && buf[12] == 1) /* 1 - NTSC */
+    if (len > 12 && buf[12] == 1) /* 1 - NTSC */
         s->interlace_polarity = 1;
-    if (len > 14 && buf[12] == 2) /* 2 - PAL */
+    if (len > 12 && buf[12] == 2) /* 2 - PAL */
         s->interlace_polarity = 0;
     if (s->avctx->debug & FF_DEBUG_PICT_INFO)
-        av_log(s->avctx, AV_LOG_INFO, "AVID: len:%d %d\n", len, len > 14 ? buf[12] : -1);
+        av_log(s->avctx, AV_LOG_INFO, "AVID: len:%d %d\n", len, len > 12 ? buf[12] : -1);
 }
 
 static void init_idct(AVCodecContext *avctx)
@@ -191,17 +191,25 @@ av_cold int ff_mjpeg_decode_init(AVCodecContext *avctx)
 }
 
 
+static int mjpeg_parse_len(MJpegDecodeContext *s, GetBitContext *gb, int *plen, const char *name)
+{
+    int len = get_bits(gb, 16);
+    if (len < 2 || get_bits_left(gb) < (8 * len - 16)) {
+        av_log(s->avctx, AV_LOG_ERROR, "%s: invalid len %d\n", name, len);
+        return AVERROR_INVALIDDATA;
+    }
+    *plen = len - 2;
+    return 0;
+}
+
 /* quantize tables */
 int ff_mjpeg_decode_dqt(MJpegDecodeContext *s)
 {
     int len, index, i;
 
-    len = get_bits(&s->gb, 16) - 2;
-
-    if (8*len > get_bits_left(&s->gb)) {
-        av_log(s->avctx, AV_LOG_ERROR, "dqt: len %d is too large\n", len);
-        return AVERROR_INVALIDDATA;
-    }
+    int ret = mjpeg_parse_len(s, &s->gb, &len, "dqt");
+    if (ret < 0)
+        return ret;
 
     while (len >= 65) {
         int pr = get_bits(&s->gb, 4);
@@ -243,14 +251,11 @@ int ff_mjpeg_decode_dht(MJpegDecodeContext *s)
     int len, index, i, class, n, v;
     uint8_t bits_table[17];
     uint8_t val_table[256];
-    int ret = 0;
+    int ret;
 
-    len = get_bits(gb, 16) - 2;
-
-    if (8*len > get_bits_left(gb)) {
-        av_log(s->avctx, AV_LOG_ERROR, "dht: len %d is too large\n", len);
-        return AVERROR_INVALIDDATA;
-    }
+    ret = mjpeg_parse_len(s, gb, &len, "dht");
+    if (ret < 0)
+        return ret;
 
     while (len > 0) {
         if (len < 17)
@@ -311,7 +316,11 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
     memset(s->upscale_h, 0, sizeof(s->upscale_h));
     memset(s->upscale_v, 0, sizeof(s->upscale_v));
 
-    len     = get_bits(gb, 16);
+    ret = mjpeg_parse_len(s, gb, &len, "sof");
+    if (ret < 0)
+        return ret;
+    if (len < 6)
+        return AVERROR_INVALIDDATA;
     bits    = get_bits(gb, 8);
 
     if (bits > 16 || bits < 1) {
@@ -351,7 +360,8 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
                                       "bits/component or 16-bit gray");
         return AVERROR_PATCHWELCOME;
     }
-    if (len != 8 + 3 * nb_components) {
+    len -= 6;
+    if (len != 3 * nb_components) {
         av_log(s->avctx, AV_LOG_ERROR, "decode_sof0: error, len(%d) mismatch %d components\n", len, nb_components);
         return AVERROR_INVALIDDATA;
     }
@@ -1638,8 +1648,11 @@ int ff_mjpeg_decode_sos(MJpegDecodeContext *s, const uint8_t *mb_bitmask,
         return -1;
     }
 
-    /* XXX: verify len field validity */
-    len = get_bits(gb, 16);
+    ret = mjpeg_parse_len(s, gb, &len, "sos");
+    if (ret < 0)
+        return ret;
+    if (len < 1)
+        return AVERROR_INVALIDDATA;
     nb_components = get_bits(gb, 8);
     if (nb_components == 0 || nb_components > MAX_COMPONENTS) {
         avpriv_report_missing_feature(s->avctx,
@@ -1647,8 +1660,8 @@ int ff_mjpeg_decode_sos(MJpegDecodeContext *s, const uint8_t *mb_bitmask,
                                       nb_components);
         return AVERROR_PATCHWELCOME;
     }
-    if (len != 6 + 2 * nb_components) {
-        av_log(s->avctx, AV_LOG_ERROR, "decode_sos: invalid len (%d)\n", len);
+    if (len != 4 + 2 * nb_components) {
+        av_log(s->avctx, AV_LOG_ERROR, "decode_sos: len(%d) mismatch %d components\n", len, nb_components);
         return AVERROR_INVALIDDATA;
     }
     for (i = 0; i < nb_components; i++) {
@@ -1789,10 +1802,9 @@ static int mjpeg_decode_app(MJpegDecodeContext *s)
 {
     int len, id, i;
 
-    len = get_bits(&s->gb, 16);
-    if (len < 2)
+    int ret = mjpeg_parse_len(s, &s->gb, &len, "app");
+    if (ret < 0)
         return AVERROR_INVALIDDATA;
-    len -= 2;
 
     if (len < 4) {
         if (s->avctx->err_recognition & AV_EF_EXPLODE)
@@ -1800,9 +1812,6 @@ static int mjpeg_decode_app(MJpegDecodeContext *s)
         av_log(s->avctx, AV_LOG_VERBOSE, "skipping APPx stub (len=%" PRId32 ")\n", len);
         goto out;
     }
-
-    if (8 * len > get_bits_left(&s->gb))
-        return AVERROR_INVALIDDATA;
 
     id   = get_bits_long(&s->gb, 32);
     len -= 4;
@@ -2095,38 +2104,42 @@ out:
 static int mjpeg_decode_com(MJpegDecodeContext *s)
 {
     GetBitContext *gb = &s->gb;
-    int len = get_bits(gb, 16);
-    if (len >= 2 && 8 * len - 16 <= get_bits_left(gb)) {
-        int i;
-        char *cbuf = av_malloc(len - 1);
-        if (!cbuf)
-            return AVERROR(ENOMEM);
+    int len, ret, i;
 
-        for (i = 0; i < len - 2; i++)
-            cbuf[i] = get_bits(gb, 8);
-        if (i > 0 && cbuf[i - 1] == '\n')
-            cbuf[i - 1] = 0;
-        else
-            cbuf[i] = 0;
+    ret = mjpeg_parse_len(s, gb, &len, "com");
+    if (ret < 0)
+        return ret;
+    if (!len)
+        return 0;
 
-        if (s->avctx->debug & FF_DEBUG_PICT_INFO)
-            av_log(s->avctx, AV_LOG_INFO, "comment: '%s'\n", cbuf);
+    char *cbuf = av_malloc(len + 1);
+    if (!cbuf)
+        return AVERROR(ENOMEM);
 
-        /* buggy avid, it puts EOI only at every 10th frame */
-        if (!strncmp(cbuf, "AVID", 4)) {
-            parse_avid(s, cbuf, len);
-        } else if (!strcmp(cbuf, "CS=ITU601"))
-            s->cs_itu601 = 1;
-        else if ((!strncmp(cbuf, "Intel(R) JPEG Library, version 1", 32) && s->avctx->codec_tag) ||
-                 (!strncmp(cbuf, "Metasoft MJPEG Codec", 20)))
-            s->flipped = 1;
-        else if (!strcmp(cbuf, "MULTISCOPE II")) {
-            s->avctx->sample_aspect_ratio = (AVRational) { 1, 2 };
-            s->multiscope = 2;
-        }
+    for (i = 0; i < len; i++)
+        cbuf[i] = get_bits(gb, 8);
+    if (cbuf[i - 1] == '\n')
+        cbuf[i - 1] = 0;
+    else
+        cbuf[i] = 0;
 
-        av_free(cbuf);
+    if (s->avctx->debug & FF_DEBUG_PICT_INFO)
+        av_log(s->avctx, AV_LOG_INFO, "comment: '%s'\n", cbuf);
+
+    /* buggy avid, it puts EOI only at every 10th frame */
+    if (!strncmp(cbuf, "AVID", 4)) {
+        parse_avid(s, cbuf, len);
+    } else if (!strcmp(cbuf, "CS=ITU601"))
+        s->cs_itu601 = 1;
+    else if ((!strncmp(cbuf, "Intel(R) JPEG Library, version 1", 32) && s->avctx->codec_tag) ||
+             (!strncmp(cbuf, "Metasoft MJPEG Codec", 20)))
+        s->flipped = 1;
+    else if (!strcmp(cbuf, "MULTISCOPE II")) {
+        s->avctx->sample_aspect_ratio = (AVRational) { 1, 2 };
+        s->multiscope = 2;
     }
+
+    av_free(cbuf);
 
     return 0;
 }
