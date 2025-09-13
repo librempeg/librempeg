@@ -148,6 +148,7 @@ version 8.0:
 - ffprobe -codec option
 - HDR10+ metadata passthrough when decoding/encoding with libaom-av1
 - gfxcapture: Windows.Graphics.Capture based window/monitor capture
+- hxvs demuxer for HXVS/HXVT IP camera format
 
 
 version 7.1:

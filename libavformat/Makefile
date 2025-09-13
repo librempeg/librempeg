@@ -301,6 +301,7 @@ OBJS-$(CONFIG_HLS_MUXER)                 += hlsenc.o hlsplaylist.o
 OBJS-$(CONFIG_HNM_DEMUXER)               += hnm.o
 OBJS-$(CONFIG_HVQM2_DEMUXER)             += hvqm2dec.o
 OBJS-$(CONFIG_HVQM4_DEMUXER)             += hvqm4dec.o
+OBJS-$(CONFIG_HXVS_DEMUXER)              += hxvs.o
 OBJS-$(CONFIG_IAMF_DEMUXER)              += iamfdec.o
 OBJS-$(CONFIG_IAMF_MUXER)                += iamfenc.o
 OBJS-$(CONFIG_ICO_DEMUXER)               += icodec.o
