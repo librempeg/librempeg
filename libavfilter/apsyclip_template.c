@@ -362,7 +362,8 @@ static void fn(limit_clip_spectrum)(AudioPsyClipContext *s,
 }
 
 static void fn(feed)(AVFilterContext *ctx, int ch,
-                     const ftype *in_samples, ftype *out_samples, int diff_only,
+                     const ftype *in_samples, ftype *out_samples,
+                     const int nb_samples, int diff_only,
                      ftype *in_frame, ftype *out_dist_frame,
                      ftype *windowed_frame, ftype *clipping_delta,
                      ctype *spectrum_buf, ftype *mask_curve)
@@ -457,20 +458,20 @@ static void fn(feed)(AVFilterContext *ctx, int ch,
     fn(apply_window)(s, clipping_delta, out_dist_frame, 1);
 
     if (ff_filter_disabled(ctx)) {
-        memcpy(out_samples, in_frame, overlap * sizeof(*out_samples));
+        memcpy(out_samples, in_frame, nb_samples * sizeof(*out_samples));
     } else {
-        memcpy(out_samples, out_dist_frame, overlap * sizeof(*out_samples));
+        memcpy(out_samples, out_dist_frame, nb_samples * sizeof(*out_samples));
         if (!diff_only) {
-            for (int i = 0; i < overlap; i++)
+            for (int i = 0; i < nb_samples; i++)
                 out_samples[i] += in_frame[i];
         }
 
         if (s->auto_level) {
-            for (int i = 0; i < overlap; i++)
+            for (int i = 0; i < nb_samples; i++)
                 out_samples[i] *= clip_level_inv;
         }
 
-        for (int i = 0; i < overlap; i++)
+        for (int i = 0; i < nb_samples; i++)
             out_samples[i] *= level_out;
     }
 }
@@ -485,11 +486,15 @@ static int fn(psy_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, cons
     for (int offset = 0; offset < out->nb_samples; offset += overlap) {
         const ftype *src = ((const ftype *)in->extended_data[ch])+offset;
         ftype *dst = ((ftype *)out->extended_data[ch])+offset;
+        const int out_nb_samples = FFMIN(overlap, out->nb_samples - offset);
+        const int nb_samples = av_clip(in->nb_samples - offset, 0, overlap);
 
-        for (int n = 0; n < overlap; n++)
+        for (int n = 0; n < nb_samples; n++)
             in_buffer[n] = src[n] * level_in;
+        for (int n = nb_samples; n < overlap; n++)
+            in_buffer[n] = F(0.0);
 
-        fn(feed)(ctx, ch, in_buffer, dst, s->diff_only,
+        fn(feed)(ctx, ch, in_buffer, dst, out_nb_samples, s->diff_only,
                  (ftype *)(s->in_frame->extended_data[ch]),
                  (ftype *)(s->out_dist_frame->extended_data[ch]),
                  (ftype *)(s->windowed_frame->extended_data[ch]),
@@ -508,12 +513,13 @@ static int fn(psy_flush_channel)(AVFilterContext *ctx, AVFrame *out, const int c
     const int overlap = s->overlap;
 
     for (int offset = 0; offset < out->nb_samples; offset += overlap) {
+        const int out_nb_samples = FFMIN(overlap, out->nb_samples - offset);
         ftype *dst = ((ftype *)out->extended_data[ch])+offset;
 
         for (int n = 0; n < overlap; n++)
             in_buffer[n] = F(0.0);
 
-        fn(feed)(ctx, ch, in_buffer, dst, s->diff_only,
+        fn(feed)(ctx, ch, in_buffer, dst, out_nb_samples, s->diff_only,
                  (ftype *)(s->in_frame->extended_data[ch]),
                  (ftype *)(s->out_dist_frame->extended_data[ch]),
                  (ftype *)(s->windowed_frame->extended_data[ch]),

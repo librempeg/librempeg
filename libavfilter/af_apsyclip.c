@@ -183,16 +183,18 @@ static int psy_flush_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
+    int pad_samples, extra_samples, nb_samples;
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     AudioPsyClipContext *s = ctx->priv;
-    int extra_samples, nb_samples;
     AVFrame *out;
 
+    pad_samples = FFMAX(0, s->trim_size + 1 - in->nb_samples);
+    s->flush_size -= pad_samples;
     extra_samples = in->nb_samples % s->overlap;
     if (extra_samples)
         extra_samples = FFMIN(s->overlap - extra_samples, s->flush_size);
-    nb_samples = in->nb_samples;
+    nb_samples = in->nb_samples + pad_samples;
     if (extra_samples > 0) {
         nb_samples += extra_samples;
         s->flush_size -= extra_samples;
