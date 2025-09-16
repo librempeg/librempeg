@@ -165,7 +165,7 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
             fft_out[mid+i].im = F(0.0);
         }
 
-        tx_fn(tx_ctx, fft_in, fft_out, sizeof(*linear_phase));
+        tx_fn(tx_ctx, fft_in, fft_out, sizeof(*fft_out));
 
         for (int i = 0; i < fft_size; i++) {
             linear_phase[i] = ATAN2(fft_in[i].im, fft_in[i].re);
