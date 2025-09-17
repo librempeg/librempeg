@@ -86,12 +86,12 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
     const int oversample = 4;
     const int fft_size = oversample << av_ceil_log2(nb_taps);
     AVTXContext *tx_ctx = NULL, *itx_ctx;
-    const ftype iscale = F(1.0) / fft_size;
     const ftype *src = (const ftype *)s->in->extended_data[ch];
     ftype *dst = (ftype *)out->extended_data[ch];
     const ftype threshold = FPOW(F(10.), -F(100.0 / 20.0));
     const ftype logt = FLOG(threshold);
-    const ftype scale = F(1.0);
+    const ftype scale = F(1.0) / sqrt(fft_size);
+    const ftype unused = F(1.0);
     av_tx_fn tx_fn, itx_fn;
     ftype *linear_phase = NULL;
     ftype *magnitude = NULL;
@@ -99,11 +99,11 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
     ctype *fft_in = NULL;
     int ret;
 
-    ret = av_tx_init(&tx_ctx, &tx_fn, TX_TYPE, 0, fft_size, &scale, 0);
+    ret = av_tx_init(&tx_ctx, &tx_fn, TX_TYPE, 0, fft_size, &unused, 0);
     if (ret < 0)
         return ret;
 
-    ret = av_tx_init(&itx_ctx, &itx_fn, TX_TYPE, 1, fft_size, &iscale, 0);
+    ret = av_tx_init(&itx_ctx, &itx_fn, TX_TYPE, 1, fft_size, &unused, 0);
     if (ret < 0)
         goto fail;
 
@@ -139,7 +139,7 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
     tx_fn(tx_ctx, fft_out, fft_in, sizeof(*fft_in));
 
     for (int i = 0; i < fft_size; i++) {
-        fft_out[i].re = HYPOT(fft_out[i].re, fft_out[i].im);
+        fft_out[i].re = HYPOT(fft_out[i].re * scale, fft_out[i].im * scale);
         fft_out[i].im = F(0.0);
     }
 
@@ -149,8 +149,8 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
         const int mid = nb_taps/2;
 
         for (int i = 0; i < mid; i++) {
-            dst[mid-i] = fft_in[i].re / fft_size;
-            dst[mid+i] = fft_in[i].re / fft_size;
+            dst[mid-i] = fft_in[i].re * scale;
+            dst[mid+i] = fft_in[i].re * scale;
         }
     } else {
         const ftype aphase = FABS(phase);
@@ -159,8 +159,8 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
 
         memset(fft_out, 0, sizeof(*fft_out) * fft_size);
         for (int i = 0; i < mid; i++) {
-            fft_out[mid-i].re = fft_in[i].re / fft_size;
-            fft_out[mid+i].re = fft_in[i].re / fft_size;
+            fft_out[mid-i].re = fft_in[i].re * scale;
+            fft_out[mid+i].re = fft_in[i].re * scale;
             fft_out[mid-i].im = F(0.0);
             fft_out[mid+i].im = F(0.0);
         }
@@ -168,8 +168,11 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
         tx_fn(tx_ctx, fft_in, fft_out, sizeof(*fft_out));
 
         for (int i = 0; i < fft_size; i++) {
-            linear_phase[i] = ATAN2(fft_in[i].im, fft_in[i].re);
-            magnitude[i] = HYPOT(fft_in[i].re, fft_in[i].im);
+            const ftype re = fft_in[i].re * scale;
+            const ftype im = fft_in[i].im * scale;
+
+            linear_phase[i] = ATAN2(im, re);
+            magnitude[i] = HYPOT(re, im);
         }
 
         {
@@ -189,8 +192,8 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
 
         itx_fn(itx_ctx, fft_out, fft_in, sizeof(*fft_in));
         for (int i = 0; i < fft_size; i++) {
-            fft_out[i].re /= fft_size;
-            fft_out[i].im /= fft_size;
+            fft_out[i].re *= scale;
+            fft_out[i].im *= scale;
         }
 
         for (int i = 1; i < nb_taps; i++) {
@@ -204,13 +207,15 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
         tx_fn(tx_ctx, fft_in, fft_out, sizeof(*fft_out));
 
         {
-            ftype prev = fft_in[0].im, prev_min_phase = fft_in[0].im;
+            ftype prev = fft_in[0].im * scale, prev_min_phase = fft_in[0].im * scale;
             for (int i = 0; i < fft_size; i++) {
-                const ftype eR = FEXP(fft_in[i].re);
-                const ftype min_phase = fn(unwrap)(prev, fft_in[i].im, prev_min_phase);
+                const ftype re = fft_in[i].re * scale;
+                const ftype im = fft_in[i].im * scale;
+                const ftype eR = FEXP(re);
+                const ftype min_phase = fn(unwrap)(prev, im, prev_min_phase);
                 const ftype phase = (F(1.0) - inter) * linear_phase[i] + inter * min_phase;
 
-                prev = fft_in[i].im;
+                prev = im;
                 prev_min_phase = min_phase;
                 fft_in[i].re = eR * FCOS(phase);
                 fft_in[i].im = eR * FSIN(phase);
@@ -221,10 +226,10 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
 
         if (phase > F(0.0)) {
             for (int i = 0; i < nb_taps; i++)
-                dst[i] = fft_out[nb_taps-i-1].re / fft_size;
+                dst[i] = fft_out[nb_taps-i-1].re * scale;
         } else {
             for (int i = 0; i < nb_taps; i++)
-                dst[i] = fft_out[i].re / fft_size;
+                dst[i] = fft_out[i].re * scale;
         }
     }
 
