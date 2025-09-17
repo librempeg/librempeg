@@ -208,7 +208,11 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
 
         {
             ftype prev = fft_in[0].im * scale, prev_min_phase = fft_in[0].im * scale;
-            for (int i = 0; i < fft_size; i++) {
+            const ftype eR = FEXP(fft_in[0].re * scale);
+
+            fft_in[0].re = eR * FCOS(prev);
+            fft_in[0].im = eR * FSIN(prev);
+            for (int i = 1; i < fft_size; i++) {
                 const ftype re = fft_in[i].re * scale;
                 const ftype im = fft_in[i].im * scale;
                 const ftype eR = FEXP(re);
