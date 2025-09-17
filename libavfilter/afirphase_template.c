@@ -47,7 +47,7 @@
 #define ctype AVComplexFloat
 #define ftype float
 #define TX_TYPE AV_TX_FLOAT_FFT
-#define MPI M_PIf
+#define MPI M_PI
 #else
 #define SAMPLE_FORMAT double
 #define FPOW pow
@@ -70,9 +70,9 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
-static ftype fn(unwrap)(ftype previous_angle, ftype new_angle, const ftype angle)
+static double fn(unwrap)(const double previous_angle, const double new_angle, const double angle)
 {
-    ftype d = new_angle - previous_angle;
+    double d = new_angle - previous_angle;
     d = d > MPI ? d - F(2.0) * MPI : (d < -MPI ? d + F(2.0) * MPI : d);
 
     return angle + d;
@@ -176,11 +176,11 @@ static int fn(rephase)(AVFilterContext *ctx, AVFrame *out, const int ch)
         }
 
         {
-            ftype prev = linear_phase[0];
+            double prev = linear_phase[0], prev_unwrap = linear_phase[0];
             for (int i = 1; i < fft_size; i++) {
-                ftype next_prev = linear_phase[i];
+                double next_prev = linear_phase[i];
 
-                linear_phase[i] = fn(unwrap)(prev, linear_phase[i], linear_phase[i-1]);
+                linear_phase[i] = prev_unwrap = fn(unwrap)(prev, linear_phase[i], prev_unwrap);
                 prev = next_prev;
             }
         }
