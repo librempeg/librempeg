@@ -999,6 +999,9 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
     if (version != 2)
         return AVERROR_INVALIDDATA;
 
+    if (s->nb_channels < 3)
+        return AVERROR_INVALIDDATA;
+
     lo_usize = AV_RL64(src + 8);
     lo_size = AV_RL64(src + 16);
     ac_size = AV_RL64(src + 24);
