@@ -1010,6 +1010,9 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
     dc_count = AV_RL64(src + 72);
     ac_compression = AV_RL64(src + 80);
 
+    if ((uint64_t)ac_size > INT_MAX)
+        return AVERROR_INVALIDDATA;
+
     if ((uint64_t)rle_raw_size > INT_MAX)
         return AVERROR_INVALIDDATA;
 
