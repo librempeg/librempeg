@@ -651,8 +651,6 @@ static void print_cd_info(const FFTXCodelet *cd, int prio, int len, int print_pr
                 av_bprintf(&bp, ", ");
             if (cd->factors[i] == TX_FACTOR_ANY)
                 av_bprintf(&bp, "any");
-            else if (cd->factors[i] == TX_FACTOR_NONE)
-                av_bprintf(&bp, "none");
             else if (cd->factors[i])
                 av_bprintf(&bp, "%i", cd->factors[i]);
             else
@@ -733,22 +731,6 @@ static inline int check_cd_factors(const FFTXCodelet *cd, int len)
     return (cd->nb_factors <= matches) && (any_flag || len == 1);
 }
 
-static int len_is_prime(int n)
-{
-    if (n == 2 || n == 3)
-        return 1;
-
-    if (n <= 1 || n % 2 == 0 || n % 3 == 0)
-        return 0;
-
-    for (int i = 5; i * i <= n; i += 6) {
-        if (n % i == 0 || n % (i + 2) == 0)
-            return 0;
-    }
-
-    return 1;
-}
-
 av_cold int ff_tx_init_subtx(AVTXContext *s, enum AVTXType type,
                              uint64_t flags, FFTXCodeletOptions *opts,
                              int len, int inv, const void *scale)
@@ -819,14 +801,9 @@ av_cold int ff_tx_init_subtx(AVTXContext *s, enum AVTXType type,
                 !(cpu_flags & (cd->cpu_flags & ~cpu_slow_mask)))
                 continue;
 
-            if (cd->factors[0] == TX_FACTOR_NONE) {
-                if (!len_is_prime(len) || len_is_prime(len-1))
-                    continue;
-            } else {
-                /* Check for factors */
-                if (!check_cd_factors(cd, len))
-                    continue;
-            }
+            /* Check for factors */
+            if (!check_cd_factors(cd, len))
+                continue;
 
             /* Realloc array and append */
             cd_tmp = av_fast_realloc(cd_matches, &cd_matches_size,

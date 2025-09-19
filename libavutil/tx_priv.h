@@ -206,7 +206,6 @@ typedef struct FFTXCodelet {
                                    * flags that describe its properties. */
 
     int factors[TX_MAX_FACTORS];  /* Length factors. MUST be coprime. */
-#define TX_FACTOR_NONE -2         /* When used alone, signals that the codelet is single prime in size */
 #define TX_FACTOR_ANY -1          /* When used alone, signals that the codelet
                                    * supports all factors. Otherwise, if other
                                    * factors are present, it signals that whatever

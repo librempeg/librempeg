@@ -1728,6 +1728,22 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_radix5_def) = {
     .prio       = FF_TX_PRIO_BASE,
 };
 
+static int len_is_prime(int n)
+{
+    if (n == 2 || n == 3)
+        return 1;
+
+    if (n <= 1 || n % 2 == 0 || n % 3 == 0)
+        return 0;
+
+    for (int i = 5; i * i <= n; i += 6) {
+        if (n % i == 0 || n % (i + 2) == 0)
+            return 0;
+    }
+
+    return 1;
+}
+
 static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
                                                  const FFTXCodelet *cd,
                                                  uint64_t flags,
@@ -1742,6 +1758,9 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
     const TXSample ifactor = RESCALE(1.0 / len2);
     TXComplex *exp;
     int *imap, *map;
+
+    if (!len_is_prime(len) || len_is_prime(len-1))
+        return AVERROR(EINVAL);
 
     flags &= ~FF_TX_PRESHUFFLE;
     flags &= ~AV_TX_INPLACE;
@@ -2452,7 +2471,7 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_rader_def) = {
     .function   = TX_NAME(ff_tx_fft_rader),
     .type       = TX_TYPE(FFT),
     .flags      = AV_TX_UNALIGNED | AV_TX_INPLACE | FF_TX_OUT_OF_PLACE,
-    .factors[0] = TX_FACTOR_NONE,
+    .factors[0] = TX_FACTOR_ANY,
     .nb_factors = 1,
     .min_len    = 5,
     .max_len    = TX_LEN_UNLIMITED,
