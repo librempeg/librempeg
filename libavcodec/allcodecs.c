@@ -640,6 +640,7 @@ extern const FFCodec ff_pcm_s64be_decoder;
 extern const FFCodec ff_pcm_s64le_encoder;
 extern const FFCodec ff_pcm_s64le_decoder;
 extern const FFCodec ff_pcm_sga_decoder;
+extern const FFCodec ff_pcm_sonic_decoder;
 extern const FFCodec ff_pcm_u8_encoder;
 extern const FFCodec ff_pcm_u8_decoder;
 extern const FFCodec ff_pcm_u16be_encoder;
