@@ -238,6 +238,7 @@ OBJS-$(CONFIG_HILBERT_FILTER)                += asrc_hilbert.o
 OBJS-$(CONFIG_LOUDEQUAL_FILTER)              += asrc_loudequal.o
 OBJS-$(CONFIG_SINC_FILTER)                   += asrc_sinc.o
 OBJS-$(CONFIG_SINE_FILTER)                   += asrc_sine.o
+OBJS-$(CONFIG_SWEEP_FILTER)                  += asrc_sweep.o
 
 OBJS-$(CONFIG_ANULLSINK_FILTER)              += sink_nullsink.o
 

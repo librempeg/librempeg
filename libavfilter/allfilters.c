@@ -223,6 +223,7 @@ extern const FFFilter ff_asrc_hilbert;
 extern const FFFilter ff_asrc_loudequal;
 extern const FFFilter ff_asrc_sinc;
 extern const FFFilter ff_asrc_sine;
+extern const FFFilter ff_asrc_sweep;
 
 extern const FFFilter ff_asink_anullsink;
 
