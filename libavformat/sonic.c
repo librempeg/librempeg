@@ -34,6 +34,8 @@ typedef struct SonicDemuxContext {
     uint8_t video_data[VIDEO_SIZE];
     int64_t pos;
     int have_video;
+    int frame_size;
+    int width, height;
 } SonicDemuxContext;
 
 static int sonic_read_probe(const AVProbeData *p)
@@ -70,16 +72,34 @@ static int sonic_read_header(AVFormatContext *s)
     vst->start_time = 0;
     vst->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
     vst->codecpar->codec_tag = 0;
-    vst->codecpar->format = AV_PIX_FMT_PAL8;
-    vst->codecpar->codec_id = AV_CODEC_ID_RAWVIDEO;
-    vst->codecpar->width = 32 * 8;
-    vst->codecpar->height = 14 * 8;
+    vst->codecpar->codec_id = AV_CODEC_ID_SONIC_VIDEO;
+    vst->codecpar->width = sonic->width = 32 * 8;
+    vst->codecpar->height = sonic->height = 14 * 8;
 
     avpriv_set_pts_info(vst, 64, 2, 15);
 
     sonic->have_video = 0;
 
     return 0;
+}
+
+static int sonic_frame_size(const int mode, int *w, int *h)
+{
+    switch (mode) {
+    case 0x5253:
+    case 0x5352:
+    case 0x3135:
+        w[0] = 15 * 8;
+        h[0] = 10 * 8;
+        return w[0] * h[0] / 2 + 32 + 16;
+    case 0x4E4F:
+    case 0x3038:
+        w[0] = 32 * 8;
+        h[0] = 14 * 8;
+        return w[0] * h[0] / 2 + 32 + 16;
+    default:
+        return w[0] * h[0] / 2 + 32;
+    }
 }
 
 static int sonic_read_packet(AVFormatContext *s, AVPacket *pkt)
@@ -91,18 +111,25 @@ static int sonic_read_packet(AVFormatContext *s, AVPacket *pkt)
     if (avio_feof(pb))
         return AVERROR_EOF;
 
-    if (sonic->have_video) {
-        sonic->pos = avio_tell(pb);
+    if (sonic->frame_size > 0 &&
+        sonic->have_video >= sonic->frame_size) {
 
-        if ((ret = av_new_packet(pkt, sizeof(sonic->video_data))) < 0)
+        if ((ret = av_new_packet(pkt, sonic->frame_size)) < 0)
             return ret;
-        memcpy(pkt->data, sonic->video_data, sizeof(sonic->video_data));
+        memcpy(pkt->data, sonic->video_data + sizeof(sonic->video_data) - sonic->have_video, sonic->frame_size);
         pkt->pos = sonic->pos;
         pkt->duration = 1;
         pkt->stream_index = 1;
 
-        sonic->have_video = 0;
+        sonic->have_video -= sonic->frame_size;
+        if (sonic->have_video >= 2) {
+            int mode = AV_RB16(sonic->video_data + sizeof(sonic->video_data) - sonic->have_video);
+            sonic->frame_size = sonic_frame_size(mode, &sonic->width, &sonic->height);
+        }
     } else {
+        int mode;
+
+        sonic->pos = avio_tell(pb);
         ret = av_get_packet(pb, pkt, AUDIO_SIZE);
         if (ret < 0)
             return ret;
@@ -110,10 +137,22 @@ static int sonic_read_packet(AVFormatContext *s, AVPacket *pkt)
         pkt->stream_index = 0;
         ret = avio_read(pb, sonic->video_data, sizeof(sonic->video_data));
 
-        sonic->have_video = ret == sizeof(sonic->video_data);
+        sonic->have_video = sizeof(sonic->video_data);
+        mode = AV_RB16(sonic->video_data + sizeof(sonic->video_data) - sonic->have_video);
+        sonic->frame_size = sonic_frame_size(mode, &sonic->width, &sonic->height);
     }
 
     return ret;
+}
+
+static int sonic_read_seek(AVFormatContext *s, int stream_index,
+                           int64_t timestamp, int flags)
+{
+    SonicDemuxContext *sonic = s->priv_data;
+
+    sonic->have_video = sonic->frame_size = 0;
+
+    return -1;
 }
 
 const FFInputFormat ff_sonic_demuxer = {
@@ -125,4 +164,5 @@ const FFInputFormat ff_sonic_demuxer = {
     .read_probe     = sonic_read_probe,
     .read_header    = sonic_read_header,
     .read_packet    = sonic_read_packet,
+    .read_seek      = sonic_read_seek,
 };
