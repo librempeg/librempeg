@@ -332,6 +332,7 @@ extern const FFCodec ff_smc_decoder;
 extern const FFCodec ff_smvjpeg_decoder;
 extern const FFCodec ff_snow_encoder;
 extern const FFCodec ff_snow_decoder;
+extern const FFCodec ff_sonic_video_decoder;
 extern const FFCodec ff_sp5x_decoder;
 extern const FFCodec ff_speedhq_decoder;
 extern const FFCodec ff_speedhq_encoder;

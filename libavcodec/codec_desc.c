@@ -2080,6 +2080,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("CD-I Delta YUV"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_SONIC_VIDEO,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "sonic",
+        .long_name = NULL_IF_CONFIG_SMALL("Sonic CD Video"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
 
     /* various PCM "codecs" */
     {
