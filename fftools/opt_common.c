@@ -833,15 +833,15 @@ int show_filters(void *optctx, const char *opt, const char *arg)
     const AVFilterPad *pad;
 
     printf("Filters:\n"
-           "  T... = Timeline support\n"
-           "  .S.. = Slice threading\n"
-           "  ..C. = Command support\n"
-           "  ...F = Frame threading\n"
-           "  A = Audio input/output\n"
-           "  V = Video input/output\n"
-           "  N = Dynamic number and/or type of input/output\n"
-           "  | = Source or sink filter\n"
-           "  ------\n");
+           " T... = Timeline support\n"
+           " .S.. = Slice threading\n"
+           " ..C. = Command support\n"
+           " ...F = Frame threading\n"
+           " A = Audio input/output\n"
+           " V = Video input/output\n"
+           " N = Dynamic number and/or type of input/output\n"
+           " | = Source or sink filter\n"
+           " ------\n");
     while ((filter = av_filter_iterate(&opaque))) {
         descr_cur = descr;
         for (i = 0; i < 2; i++) {
