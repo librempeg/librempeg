@@ -71,7 +71,7 @@ static int dkanim_decode_frame(AVCodecContext *avctx, AVFrame *p,
     bytestream2_skip(gb, 4);
 
     linesize = p->linesize[0];
-    dst = p->data[0] + by[0] * linesize;;
+    dst = p->data[0] + by[0] * linesize;
 
     for (int y = by[0]; y < by[1]; y++) {
         for (int x = bx[0]; x < bx[1]; x++) {
