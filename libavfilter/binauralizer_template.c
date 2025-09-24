@@ -57,7 +57,7 @@
 static int fn(ba_tx_init)(AVFilterContext *ctx)
 {
     BinauralizerContext *s = ctx->priv;
-    const int nb_in_channels = ctx->inputs[0]->ch_layout.nb_channels;;
+    const int nb_in_channels = ctx->inputs[0]->ch_layout.nb_channels;
     ftype scale = F(1.0), iscale = F(0.5) / (s->fft_size * nb_in_channels);
     ftype *window;
     int ret;
@@ -170,7 +170,7 @@ static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *out)
     ctype *windowed_oright = (ctype *)s->windowed_out->extended_data[1];
     ftype *left_osamples   = (ftype *)out->extended_data[0];
     ftype *right_osamples  = (ftype *)out->extended_data[1];
-    const int nb_in_channels = ch_layout->nb_channels;;
+    const int nb_in_channels = ch_layout->nb_channels;
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
     const int nb_samples = FFMIN(overlap, s->in->nb_samples);
@@ -240,7 +240,7 @@ static int fn(ba_flush)(AVFilterContext *ctx, AVFrame *out)
     ctype *windowed_oright = (ctype *)s->windowed_out->extended_data[1];
     ftype *left_osamples   = (ftype *)out->extended_data[0];
     ftype *right_osamples  = (ftype *)out->extended_data[1];
-    const int nb_in_channels = ch_layout->nb_channels;;
+    const int nb_in_channels = ch_layout->nb_channels;
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
     const unsigned nb_x_size = s->nb_x_size;
