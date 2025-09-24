@@ -69,7 +69,7 @@ static void fn(uninit_ambiophonic)(AVFilterContext *ctx)
 {
     AmbiophonicContext *s = ctx->priv;
 
-    av_freep(&s->biquad_st);;
+    av_freep(&s->biquad_st);
     fn(uninit_afdelay)(ctx, &s->st, s->nb_channels);
 }
 
