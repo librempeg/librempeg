@@ -28,6 +28,7 @@
 #include "internal.h"
 
 #define VIDEO_SIZE 0x1d800
+#define VIDEO_SIZE_ALT 0x2800
 #define AUDIO_SIZE 0x8000
 
 typedef struct SonicDemuxContext {
@@ -40,13 +41,21 @@ typedef struct SonicDemuxContext {
 
 static int sonic_read_probe(const AVProbeData *p)
 {
-    int score = AVPROBE_SCORE_EXTENSION;
-    const uint8_t *buf = p->buf;
+    int off;
+    uint16_t mode = AV_RB16(p->buf);
 
-    if (p->buf_size < 0x8000 + 16)
+    if (mode == 0x3038 || mode == 0x3135 || mode == 0x4E4F || mode == 0x5253 || mode == 0x5352)
+        off = VIDEO_SIZE_ALT;
+    else
+        off = AUDIO_SIZE;
+
+    if (p->buf_size < off + 2)
         return 0;
 
-    return score * 0;
+    mode = AV_RB16(p->buf + off);
+    if (mode == 0x3038 || mode == 0x3135 || mode == 0x4E4F || mode == 0x5253 || mode == 0x5352 || (mode == 0 && AV_RB16(p->buf + off + 2) == 0x06EA))
+        return AVPROBE_SCORE_EXTENSION;
+    return 0;
 }
 
 static int sonic_read_header(AVFormatContext *s)
