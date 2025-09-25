@@ -38,7 +38,7 @@
 #include "encode.h"
 #include "pcm_tablegen.h"
 
-static av_cold av_unused int pcm_encode_init(AVCodecContext *avctx)
+av_unused av_cold static int pcm_encode_init(AVCodecContext *avctx)
 {
     avctx->frame_size = 0;
 #if !CONFIG_HARDCODED_TABLES
@@ -104,7 +104,7 @@ static av_cold av_unused int pcm_encode_init(AVCodecContext *avctx)
         }                                                               \
     }
 
-static av_unused int pcm_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
+av_unused static int pcm_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                                       const AVFrame *frame, int *got_packet_ptr)
 {
     int n, c, sample_size, ret;
@@ -263,7 +263,7 @@ typedef struct PCMDecode {
     int sample_size;
 } PCMDecode;
 
-static av_cold av_unused int pcm_decode_init(AVCodecContext *avctx)
+av_unused av_cold static int pcm_decode_init(AVCodecContext *avctx)
 {
     PCMDecode *s = avctx->priv_data;
 
@@ -316,7 +316,7 @@ typedef struct PCMScaleDecode {
     float   scale;
 } PCMScaleDecode;
 
-static av_cold av_unused int pcm_scale_decode_init(AVCodecContext *avctx)
+av_unused av_cold static int pcm_scale_decode_init(AVCodecContext *avctx)
 {
     PCMScaleDecode *s = avctx->priv_data;
     AVFloatDSPContext *fdsp;
@@ -343,7 +343,7 @@ typedef struct PCMLUTDecode {
     uint16_t perm[5760];
 } PCMLUTDecode;
 
-static av_cold av_unused int pcm_lut_decode_init(AVCodecContext *avctx)
+av_unused av_cold static int pcm_lut_decode_init(AVCodecContext *avctx)
 {
     PCMLUTDecode *s = avctx->priv_data;
 
