@@ -49,6 +49,8 @@ static int a2m_read_header(AVFormatContext *s)
     st->codecpar->sample_rate = avio_rb32(pb);
     if (st->codecpar->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
+    st->codecpar->bit_rate = 16LL * st->codecpar->ch_layout.nb_channels * 8 *
+                                    st->codecpar->sample_rate / 28;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
