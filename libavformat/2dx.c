@@ -57,7 +57,7 @@ static int twodx_probe(const AVProbeData *p)
     return twodx9_probe_sub(p, AV_RL32(p->buf + 0x10));
 }
 
-static int twodx9_read_stream(AVFormatContext *s, AVStream *st, int start_offset)
+static int twodx9_read_stream(AVFormatContext *s, AVStream *st, int64_t start_offset)
 {
     int ret;
     int32_t wav_offset;
@@ -145,6 +145,7 @@ static int twodx_read_header(AVFormatContext *s)
 
     avio_skip(pb, 0x30);
     for (int i = 0; i < nb_streams; i++) {
+        uint32_t offset = avio_rl32(pb);
         AVStream *st;
 
         st = avformat_new_stream(s, NULL);
@@ -152,7 +153,7 @@ static int twodx_read_header(AVFormatContext *s)
             return AVERROR(ENOMEM);
 
         pos = avio_tell(pb);
-        if ((ret = twodx9_read_stream(s, st, avio_rl32(pb))) < 0)
+        if ((ret = twodx9_read_stream(s, st, offset)) < 0)
             return ret;
         avio_seek(pb, pos, SEEK_SET);
     }
