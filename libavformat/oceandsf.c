@@ -35,7 +35,8 @@ static int read_probe(const AVProbeData *p)
 static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
-    int rate, channels;
+    int rate, channels, ret;
+    char title[0x21];
     int64_t start;
     AVStream *st;
 
@@ -45,6 +46,11 @@ static int read_header(AVFormatContext *s)
     channels = avio_rl32(pb) + 1;
     if (rate <= 0 || channels <= 0 || channels >= INT_MAX/8)
         return AVERROR_INVALIDDATA;
+
+    if ((ret = avio_get_str(pb, 0x21, title, sizeof(title))) < 0)
+        return ret;
+    if (title[0] != '\0')
+        av_dict_set(&s->metadata, "title", title, 0);
 
     st = avformat_new_stream(s, NULL);
     if (!st)
