@@ -30,6 +30,7 @@
 #include "mux.h"
 
 /* (de)muxers */
+extern const FFInputFormat  ff_a2m_demuxer;
 extern const FFOutputFormat ff_a64_muxer;
 extern const FFInputFormat  ff_aa_demuxer;
 extern const FFInputFormat  ff_aac_demuxer;
