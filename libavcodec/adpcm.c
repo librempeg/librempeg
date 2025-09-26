@@ -249,6 +249,13 @@ static const int8_t mtf_index_table[16] = {
     -1, -1, -1, -1,  2,  4,  6,  8,
 };
 
+static const int32_t dsa_coefs[16] = {
+    0x0,     0x1999,  0x3333,  0x4CCC,
+    0x6666,  0x8000,  0x9999,  0xB333,
+    0xCCCC,  0xE666,  0x10000, 0x11999,
+    0x13333, 0x18000, 0x1CCCC, 0x21999
+};
+
 /* end of tables */
 
 typedef struct ADPCMDecodeContext {
@@ -356,6 +363,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_IMA_WAV:
     case AV_CODEC_ID_ADPCM_IMA_XBOX:
     case AV_CODEC_ID_ADPCM_4XM:
+    case AV_CODEC_ID_ADPCM_DSA:
     case AV_CODEC_ID_ADPCM_XA:
     case AV_CODEC_ID_ADPCM_XMD:
     case AV_CODEC_ID_ADPCM_EA_R1:
@@ -1521,6 +1529,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_PSX:
         nb_samples = buf_size / (16 * ch) * 28;
         break;
+    case AV_CODEC_ID_ADPCM_DSA:
     case AV_CODEC_ID_ADPCM_PROCYON:
         nb_samples = (buf_size / ch - 1) * 2;
         break;
@@ -3148,6 +3157,42 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
         }
         ) /* End of CASE */
+    CASE(ADPCM_DSA,
+        for (int block = 0; block < avpkt->size / avctx->block_align; block++) {
+            int nb_samples_per_block = (avctx->block_align / channels - 1) * 2;
+            for (int channel = 0; channel < channels; channel++) {
+                int index, shift, byte, hist1;
+                int32_t coef;
+
+                samples = samples_p[channel] + block * nb_samples_per_block;
+                av_assert0((block + 1) * nb_samples_per_block <= nb_samples);
+
+                index = bytestream2_get_byteu(&gb);
+                shift = 12 - (index >> 4);
+                index = index & 0xf;
+                coef = dsa_coefs[index];
+                hist1 = c->status[channel].sample1;
+
+                for (int n = 0; n < nb_samples_per_block; n++) {
+                    int32_t sample;
+
+                    if (n & 1) {
+                        sample = sign_extend(byte, 4);
+                    } else {
+                        byte = bytestream2_get_byteu(&gb);
+                        sample = sign_extend(byte >> 4, 4);
+                    }
+
+                    sample = (int16_t)((sample * (1 << 12)) >> shift);
+                    sample += ((hist1 * coef) >> 16);
+                    *samples++ = av_clip_int16(sample * 4);
+                    hist1 = sample;
+                }
+
+                c->status[channel].sample1 = hist1;
+            }
+        }
+        ) /* End of CASE */
     CASE(ADPCM_BRR,
         for (int i = 0; i < avpkt->size / 9; i++) {
             uint8_t control = bytestream2_get_byteu(&gb);
@@ -3438,6 +3483,7 @@ ADPCM_DECODER(ADPCM_ARGO,        sample_fmts_s16p, adpcm_argo,        "ADPCM Arg
 ADPCM_DECODER(ADPCM_BRR,         sample_fmts_s16p, adpcm_brr,         "ADPCM Bit Rate Reduction")
 ADPCM_DECODER(ADPCM_CIRCUS,      sample_fmts_s16,  adpcm_circus,      "ADPCM Circus")
 ADPCM_DECODER(ADPCM_CT,          sample_fmts_s16,  adpcm_ct,          "ADPCM Creative Technology")
+ADPCM_DECODER(ADPCM_DSA,         sample_fmts_s16p, adpcm_dsa,         "ADPCM Ocean DSA")
 ADPCM_DECODER(ADPCM_DTK,         sample_fmts_s16p, adpcm_dtk,         "ADPCM Nintendo Gamecube DTK")
 ADPCM_DECODER(ADPCM_EA,          sample_fmts_s16,  adpcm_ea,          "ADPCM Electronic Arts")
 ADPCM_DECODER(ADPCM_EA_MAXIS_XA, sample_fmts_s16,  adpcm_ea_maxis_xa, "ADPCM Electronic Arts Maxis CDROM XA")

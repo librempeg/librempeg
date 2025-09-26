@@ -984,6 +984,7 @@ OBJS-$(CONFIG_ADPCM_ARGO_ENCODER)         += adpcm.o adpcm_data.o adpcmenc.o
 OBJS-$(CONFIG_ADPCM_BRR_DECODER)          += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_CIRCUS_DECODER)       += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_CT_DECODER)           += adpcm.o adpcm_data.o
+OBJS-$(CONFIG_ADPCM_DSA_DECODER)          += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_DTK_DECODER)          += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_EA_DECODER)           += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_EA_MAXIS_XA_DECODER)  += adpcm.o adpcm_data.o
