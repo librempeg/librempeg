@@ -562,6 +562,8 @@ extern const FFInputFormat  ff_tta_demuxer;
 extern const FFOutputFormat ff_tta_muxer;
 extern const FFOutputFormat ff_ttml_muxer;
 extern const FFInputFormat  ff_two08_demuxer;
+extern const FFInputFormat  ff_twodx_demuxer;
+extern const FFInputFormat  ff_twodx9_demuxer;
 extern const FFInputFormat  ff_txd_demuxer;
 extern const FFInputFormat  ff_tty_demuxer;
 extern const FFInputFormat  ff_ty_demuxer;
