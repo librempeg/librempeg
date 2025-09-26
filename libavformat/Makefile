@@ -620,6 +620,7 @@ OBJS-$(CONFIG_SCC_DEMUXER)               += sccdec.o subtitles.o
 OBJS-$(CONFIG_SCC_MUXER)                 += sccenc.o
 OBJS-$(CONFIG_SCD_DEMUXER)               += scd.o
 OBJS-$(CONFIG_SCDPCM_DEMUXER)            += scdpcm.o
+OBJS-$(CONFIG_SD9_DEMUXER)               += ssp_sd9.o riff.o
 OBJS-$(CONFIG_SDNS_DEMUXER)              += sdns.o
 OBJS-$(CONFIG_SDP_DEMUXER)               += rtsp.o
 OBJS-$(CONFIG_SDR2_DEMUXER)              += sdr2.o
@@ -668,6 +669,7 @@ OBJS-$(CONFIG_SPEEX_MUXER)               += oggenc.o \
                                             vorbiscomment.o
 OBJS-$(CONFIG_SRT_DEMUXER)               += srtdec.o subtitles.o
 OBJS-$(CONFIG_SRT_MUXER)                 += srtenc.o
+OBJS-$(CONFIG_SSP_DEMUXER)               += ssp_sd9.o riff.o
 OBJS-$(CONFIG_STL_DEMUXER)               += stldec.o subtitles.o
 OBJS-$(CONFIG_STMA_DEMUXER)              += stma.o
 OBJS-$(CONFIG_STR_DEMUXER)               += psxstr.o
