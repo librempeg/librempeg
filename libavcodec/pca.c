@@ -19,10 +19,6 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include "libavutil/channel_layout.h"
-#include "libavutil/intreadwrite.h"
-#include "libavutil/mem.h"
-
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "bytestream.h"
