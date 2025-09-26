@@ -481,6 +481,7 @@ OBJS-$(CONFIG_NWAV_DEMUXER)              += nwav.o
 OBJS-$(CONFIG_AV1_DEMUXER)               += av1dec.o
 OBJS-$(CONFIG_OBU_DEMUXER)               += av1dec.o
 OBJS-$(CONFIG_OBU_MUXER)                 += rawenc.o
+OBJS-$(CONFIG_OCEANDSF_DEMUXER)          += oceandsf.o
 OBJS-$(CONFIG_OGG_DEMUXER)               += oggdec.o         \
                                             oggparsecelt.o   \
                                             oggparsedirac.o  \

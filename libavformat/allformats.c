@@ -389,6 +389,7 @@ extern const FFInputFormat  ff_nuv_demuxer;
 extern const FFInputFormat  ff_nwav_demuxer;
 extern const FFInputFormat  ff_obu_demuxer;
 extern const FFOutputFormat ff_obu_muxer;
+extern const FFInputFormat  ff_oceandsf_demuxer;
 extern const FFOutputFormat ff_oga_muxer;
 extern const FFInputFormat  ff_ogg_demuxer;
 extern const FFOutputFormat ff_ogg_muxer;
