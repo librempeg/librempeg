@@ -66,7 +66,7 @@ static int sort_streams(const void *a, const void *b)
     return FFDIFFSIGN(ss1->start_offset, ss2->start_offset);
 }
 
-static int sd9_read_stream(AVFormatContext *s, AVStream *st, uint32_t start_offset)
+static int sd9_read_stream(AVFormatContext *s, AVStream *st, int64_t start_offset)
 {
     int ret;
     int16_t loop_count;
