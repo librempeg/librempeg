@@ -61,6 +61,7 @@ static int derf_read_header(AVFormatContext *s)
         return AVERROR_INVALIDDATA;
     av_channel_layout_default(&par->ch_layout, channels);
     data_size = avio_rl32(pb);
+    st->start_time = 0;
     st->duration = data_size / channels;
     par->sample_rate = 22050;
     par->block_align = 1;
