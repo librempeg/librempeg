@@ -187,7 +187,7 @@ static void next_pi(AVFilterContext *ctx, ChannelContext *cc, int bypass)
 {
     av_assert1(cc->pi_size >= 0);
     if (cc->pi_size == 0) {
-        SpeechNormalizerContext *av_unused s = ctx->priv;
+        av_unused SpeechNormalizerContext *s = ctx->priv;
         int start = cc->pi_start;
         double scale;
 
