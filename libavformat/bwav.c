@@ -59,6 +59,7 @@ static int read_header(AVFormatContext *s)
     avio_skip(pb, 2);
     st->codecpar->sample_rate = avio_rl32(pb);
     avio_skip(pb, 4);
+    st->start_time = 0;
     st->duration = avio_rl32(pb);
     st->codecpar->block_align = 1024;
 
