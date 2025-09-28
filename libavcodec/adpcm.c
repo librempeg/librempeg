@@ -3091,6 +3091,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
                 /* Read in every sample for this channel.  */
                 for (int i = 0; i < nb_samples_per_block / 28; i++) {
+                    int coef1, coef2, hist1, hist2;
                     int filter, shift, flag, byte;
 
                     filter = bytestream2_get_byteu(&gb);
@@ -3099,6 +3100,12 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     if (filter >= FF_ARRAY_ELEMS(xa_adpcm_table))
                         return AVERROR_INVALIDDATA;
                     flag   = bytestream2_get_byteu(&gb) & 0x7;
+
+                    coef1 = xa_adpcm_table[filter][0];
+                    coef2 = xa_adpcm_table[filter][1];
+
+                    hist1 = c->status[channel].sample1;
+                    hist2 = c->status[channel].sample2;
 
                     /* Decode 28 samples.  */
                     for (int n = 0; n < 28; n++) {
@@ -3113,12 +3120,15 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
                         if (flag < 0x07) {
                             scale  = scale * (1 << 12);
-                            sample = (int)((scale >> shift) + (c->status[channel].sample1 * xa_adpcm_table[filter][0] + c->status[channel].sample2 * xa_adpcm_table[filter][1]) / 64);
+                            sample = (int)((scale >> shift) + (hist1 * coef1 + hist2 * coef2) / 64);
                         }
                         *samples++ = av_clip_int16(sample);
-                        c->status[channel].sample2 = c->status[channel].sample1;
-                        c->status[channel].sample1 = sample;
+                        hist2 = hist1;
+                        hist1 = sample;
                     }
+
+                    c->status[channel].sample1 = hist1;
+                    c->status[channel].sample2 = hist2;
                 }
             }
         }
