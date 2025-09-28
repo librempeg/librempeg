@@ -83,6 +83,7 @@ static int read_header(AVFormatContext *s)
             break;
     }
 
+    st->start_time = 0;
     st->duration = avio_rb32(pb);
     avio_skip(pb, 4);
     st->codecpar->sample_rate = avio_rb32(pb);
