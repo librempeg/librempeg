@@ -193,6 +193,7 @@ extern const FFInputFormat  ff_ealayer3_demuxer;
 extern const FFInputFormat  ff_epaf_demuxer;
 extern const FFInputFormat  ff_evc_demuxer;
 extern const FFOutputFormat ff_evc_muxer;
+extern const FFInputFormat  ff_exaktsc_demuxer;
 extern const FFOutputFormat ff_f4v_muxer;
 extern const FFInputFormat  ff_fblpcm_demuxer;
 extern const FFInputFormat  ff_ffmetadata_demuxer;
