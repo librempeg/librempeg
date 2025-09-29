@@ -30,9 +30,9 @@ static int npsf_probe(const AVProbeData *p)
         return 0;
     if (p->buf_size < 32)
         return 0;
-    if (AV_RL32(p->buf + 12) <= 0)
+    if ((int)AV_RL32(p->buf + 12) <= 0)
         return 0;
-    if (AV_RL32(p->buf + 24) <= 0)
+    if ((int)AV_RL32(p->buf + 24) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
