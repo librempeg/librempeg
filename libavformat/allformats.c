@@ -621,6 +621,7 @@ extern const FFInputFormat  ff_wiibgm_demuxer;
 extern const FFInputFormat  ff_wsaud_demuxer;
 extern const FFOutputFormat ff_wsaud_muxer;
 extern const FFInputFormat  ff_wsd_demuxer;
+extern const FFInputFormat  ff_wsi_demuxer;
 extern const FFInputFormat  ff_wsvqa_demuxer;
 extern const FFInputFormat  ff_wtv_demuxer;
 extern const FFOutputFormat ff_wtv_muxer;

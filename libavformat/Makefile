@@ -758,6 +758,7 @@ OBJS-$(CONFIG_WIIBGM_DEMUXER)            += wiibgm.o
 OBJS-$(CONFIG_WSAUD_DEMUXER)             += westwood_aud.o
 OBJS-$(CONFIG_WSAUD_MUXER)               += westwood_audenc.o
 OBJS-$(CONFIG_WSD_DEMUXER)               += wsddec.o rawdec.o
+OBJS-$(CONFIG_WSI_DEMUXER)               += wsi.o
 OBJS-$(CONFIG_WSVQA_DEMUXER)             += westwood_vqa.o
 OBJS-$(CONFIG_WTV_DEMUXER)               += wtvdec.o wtv_common.o \
                                             asf.o
