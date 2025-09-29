@@ -30,8 +30,11 @@ typedef struct SD9Stream {
     int64_t stop_offset;
 } SD9Stream;
 
-static int sd9_probe_sub(const AVProbeData *p, int off)
+static int sd9_probe_sub(const AVProbeData *p, uint32_t off)
 {
+    if (p->buf_size - 0x76 < off)
+        return 0;
+
     if (AV_RL32(p->buf + off + 0x00) != MKTAG('S','D','9', 0 ) || AV_RL32(p->buf + off + 0x04) != 0x20 || AV_RB16(p->buf + off + 0x0C) != 0x3132 ||
         AV_RL32(p->buf + off + 0x20) != MKTAG('R','I','F','F') || AV_RL32(p->buf + off + 0x28) != MKTAG('W','A','V','E') ||
         AV_RL32(p->buf + off + 0x2C) != MKTAG('f','m','t',' ') || AV_RL32(p->buf + off + 0x66) != MKTAG('f','a','c','t') ||
