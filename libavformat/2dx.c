@@ -30,7 +30,7 @@ typedef struct TwoDXStream {
     int64_t stop_offset;
 } TwoDXStream;
 
-static int twodx9_probe_sub(const AVProbeData *p, int off)
+static int twodx9_probe_sub(const AVProbeData *p, uint32_t off)
 {
     if (AV_RL32(p->buf + off + 0x00) != MKTAG('2','D','X','9') || AV_RL32(p->buf + off + 0x04) != 0x18 ||
         AV_RL32(p->buf + off + 0x18) != MKTAG('R','I','F','F') || AV_RL32(p->buf + off + 0x20) != MKTAG('W','A','V','E') ||
@@ -51,7 +51,7 @@ static int twodx_probe(const AVProbeData *p)
     if (AV_RL32(p->buf + 0x10) != AV_RL32(p->buf + 0x48) || AV_RL32(p->buf + 0x10) != (0x48 + AV_RL32(p->buf + 0x14) * 4))
         return 0;
 
-    if ((AV_RL32(p->buf + 0x10) + 0x6E) > p->buf_size)
+    if (AV_RL32(p->buf + 0x10) > p->buf_size - 0x6E)
         return 0;
 
     return twodx9_probe_sub(p, AV_RL32(p->buf + 0x10));
