@@ -32,7 +32,7 @@ static int musc_probe(const AVProbeData *p)
         return 0;
     if (AV_RL16(p->buf + 6) <= 0)
         return 0;
-    if (AV_RL32(p->buf + 24) <= 0)
+    if ((int)AV_RL32(p->buf + 24) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
