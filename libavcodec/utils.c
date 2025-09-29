@@ -485,6 +485,7 @@ int av_get_exact_bits_per_sample(enum AVCodecID codec_id)
     case AV_CODEC_ID_PCM_SGA:
     case AV_CODEC_ID_PCM_SONIC:
     case AV_CODEC_ID_PCM_U8:
+    case AV_CODEC_ID_SASSC_DPCM:
     case AV_CODEC_ID_SDX2_DPCM:
     case AV_CODEC_ID_CBD2_DPCM:
     case AV_CODEC_ID_DERF_DPCM:

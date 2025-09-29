@@ -2986,6 +2986,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("DPCM Cuberoot-Delta-Exact"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_SASSC_DPCM,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "sassc_dpcm",
+        .long_name = NULL_IF_CONFIG_SMALL("DPCM Activision Exakt SASSC"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
 
     /* audio codecs */
     {

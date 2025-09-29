@@ -666,6 +666,7 @@ extern const FFCodec ff_gremlin_dpcm_decoder;
 extern const FFCodec ff_interplay_dpcm_decoder;
 extern const FFCodec ff_roq_dpcm_encoder;
 extern const FFCodec ff_roq_dpcm_decoder;
+extern const FFCodec ff_sassc_dpcm_decoder;
 extern const FFCodec ff_sdx2_dpcm_decoder;
 extern const FFCodec ff_sol_dpcm_decoder;
 extern const FFCodec ff_xan_dpcm_decoder;

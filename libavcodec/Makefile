@@ -708,6 +708,7 @@ OBJS-$(CONFIG_S302M_ENCODER)           += s302menc.o
 OBJS-$(CONFIG_SANM_DECODER)            += sanm.o
 OBJS-$(CONFIG_SCPR_DECODER)            += scpr.o
 OBJS-$(CONFIG_SCREENPRESSO_DECODER)    += screenpresso.o
+OBJS-$(CONFIG_SASSC_DPCM_DECODER)      += dpcm.o
 OBJS-$(CONFIG_SDX2_DPCM_DECODER)       += dpcm.o
 OBJS-$(CONFIG_SGA_DECODER)             += sga.o
 OBJS-$(CONFIG_SGI_DECODER)             += sgidec.o

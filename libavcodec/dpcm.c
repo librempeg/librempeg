@@ -148,6 +148,25 @@ static const int16_t wady_table[128] = {
     -580,-610,-650,-700,-750,-800,-900,-1000,
 };
 
+static const uint16_t sassc_table[128] = {
+        0,     16,     32,    48,    64,    80,    96,   112,
+      128,    144,    160,   176,   192,   208,   224,   240,
+      256,    272,    288,   304,   320,   336,   352,   368,
+      384,    400,    416,   432,   448,   464,   480,   496,
+      512,    624,    736,   848,   960,  1072,  1184,  1296,
+     1408,   1520,   1632,  1744,  1856,  1968,  2080,  2192,
+     2304,   2416,   2528,  2640,  2752,  2864,  2976,  3088,
+     3200,   3312,   3424,  3536,  3648,  3760,  3872,  3984,
+     4097,   4481,   4865,  5249,  5633,  6017,  6401,  6785,
+     7169,   7553,   7937,  8322,  8706,  9090,  9474,  9858,
+    10242,  10626,  11010, 11394, 11778, 12162, 12547, 12931,
+    13315,  13699,  14083, 14467, 14851, 15235, 15619, 16003,
+    16388,  17924,  19460, 20997, 22533, 24069, 25606, 27142,
+    28679,  30215,  31751, 33288, 34824, 36360, 37897, 39433,
+    40970,  42506,  44042, 45579, 47115, 48651, 50188, 51724,
+    53261,  54797,  56333, 57870, 59406, 60942, 62479, 64015,
+};
+
 static av_cold int dpcm_decode_init(AVCodecContext *avctx)
 {
     DPCMContext *s = avctx->priv_data;
@@ -233,6 +252,8 @@ static av_cold int dpcm_decode_init(AVCodecContext *avctx)
         avctx->sample_fmt = AV_SAMPLE_FMT_U8;
     else
         avctx->sample_fmt = AV_SAMPLE_FMT_S16;
+    if (avctx->codec->id == AV_CODEC_ID_SASSC_DPCM)
+        avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
 
     return 0;
 }
@@ -276,6 +297,7 @@ static int dpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     case AV_CODEC_ID_GREMLIN_DPCM:
     case AV_CODEC_ID_CBD2_DPCM:
     case AV_CODEC_ID_SDX2_DPCM:
+    case AV_CODEC_ID_SASSC_DPCM:
         out = buf_size;
         break;
     }
@@ -452,6 +474,28 @@ static int dpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         }
         break;
+
+    case AV_CODEC_ID_SASSC_DPCM:
+        for (int block = 0; block < frame->nb_samples/256; block++) {
+            for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++) {
+                int sample = s->sample[ch];
+
+                output_samples = ((int16_t *)frame->extended_data[ch]) + 256 * block;
+                for (int i = 0; i < 256; i++) {
+                    const uint8_t n = bytestream2_get_byteu(&gb);
+                    const int32_t v = sassc_table[n & 0x7f];
+
+                    if ((n & 0x80) && n != 255)
+                        sample -= v;
+                    else
+                        sample += v;
+                    output_samples[i] = av_clip_int16(sample);
+                }
+
+                s->sample[ch] = sample;
+            }
+        }
+        break;
     }
 
     *got_frame_ptr = 1;
@@ -484,6 +528,7 @@ DPCM_DECODER(AV_CODEC_ID_DERF_DPCM,      derf_dpcm,      "DPCM Xilam DERF");
 DPCM_DECODER(AV_CODEC_ID_GREMLIN_DPCM,   gremlin_dpcm,   "DPCM Gremlin");
 DPCM_DECODER(AV_CODEC_ID_INTERPLAY_DPCM, interplay_dpcm, "DPCM Interplay");
 DPCM_DECODER(AV_CODEC_ID_ROQ_DPCM,       roq_dpcm,       "DPCM id RoQ");
+DPCM_DECODER(AV_CODEC_ID_SASSC_DPCM,     sassc_dpcm,     "DPCM Activision Exakt SASSC");
 DPCM_DECODER(AV_CODEC_ID_SDX2_DPCM,      sdx2_dpcm,      "DPCM Squareroot-Delta-Exact");
 DPCM_DECODER(AV_CODEC_ID_SOL_DPCM,       sol_dpcm,       "DPCM Sol");
 DPCM_DECODER(AV_CODEC_ID_XAN_DPCM,       xan_dpcm,       "DPCM Xan");
