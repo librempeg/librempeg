@@ -58,8 +58,10 @@ static int read_data(void *opaque, uint8_t *buf, int buf_size)
     ret = avio_read(pb, buf, buf_size);
 
     if (pos >= 0 && pos < 256) {
-        for (int i = pos; i < FFMIN(256, buf_size); i++)
-            buf[i] ^= i;
+        const int maxi = FFMIN(256, buf_size);
+
+        for (int i = pos; i < maxi; i++)
+            buf[i-pos] ^= i;
     }
 
     return ret;
