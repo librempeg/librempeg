@@ -486,6 +486,7 @@ extern const FFInputFormat  ff_rs03_demuxer;
 extern const FFInputFormat  ff_rsd_demuxer;
 extern const FFInputFormat  ff_rso_demuxer;
 extern const FFOutputFormat ff_rso_muxer;
+extern const FFInputFormat  ff_rstm_demuxer;
 extern const FFInputFormat  ff_rtp_demuxer;
 extern const FFOutputFormat ff_rtp_muxer;
 extern const FFOutputFormat ff_rtp_mpegts_muxer;
