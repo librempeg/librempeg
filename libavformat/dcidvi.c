@@ -48,7 +48,7 @@ static int dcidvi_read_header(AVFormatContext *s)
     avio_skip(pb, 4);
     nb_channels = avio_rl32(pb);
     rate = avio_rl32(pb);
-    if (nb_channels <= 0 || rate <= 0)
+    if (nb_channels <= 0 || rate <= 0 || nb_channels > INT_MAX/0x400)
         return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
