@@ -65,7 +65,8 @@ static int read_header(AVFormatContext *s)
     if (st->codecpar->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
     st->codecpar->ch_layout.nb_channels = avio_rl32(pb);
-    if (st->codecpar->ch_layout.nb_channels <= 0)
+    if (st->codecpar->ch_layout.nb_channels <= 0 ||
+        st->codecpar->ch_layout.nb_channels > INT_MAX/0x800)
         return AVERROR_INVALIDDATA;
     st->codecpar->block_align = 0x800 * st->codecpar->ch_layout.nb_channels;
     st->codecpar->bit_rate = (int64_t)st->codecpar->sample_rate * st->codecpar->ch_layout.nb_channels * 16 * 8LL / 28;
