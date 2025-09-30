@@ -172,9 +172,9 @@ const FFInputFormat ff_wsd_demuxer = {
     .p.extensions   = "wsd",
     .p.flags        = AVFMT_GENERIC_INDEX | AVFMT_NO_BYTE_SEEK,
     .p.priv_class   = &ff_raw_demuxer_class,
-    .read_probe   = wsd_probe,
-    .read_header  = wsd_read_header,
-    .read_packet  = ff_raw_read_partial_packet,
-    .raw_codec_id = AV_CODEC_ID_DSD_MSBF,
+    .read_probe     = wsd_probe,
+    .read_header    = wsd_read_header,
+    .read_packet    = ff_raw_read_partial_packet,
+    .raw_codec_id   = AV_CODEC_ID_DSD_MSBF,
     .priv_data_size = sizeof(FFRawDemuxerContext),
 };
