@@ -25,7 +25,7 @@
 #include "internal.h"
 
 typedef struct VPKDemuxContext {
-    unsigned data_start;
+    int64_t data_start;
     unsigned block_count;
     unsigned current_block;
     unsigned last_block_size;
@@ -35,15 +35,23 @@ static int vpk_probe(const AVProbeData *p)
 {
     if (AV_RL32(p->buf) != MKBETAG('V','P','K',' '))
         return 0;
+    if (p->buf_size < 32)
+        return 0;
+    if ((int)AV_RL32(p->buf + 12) <= 0)
+        return 0;
+    if ((int)AV_RL32(p->buf + 16) <= 0)
+        return 0;
+    if ((int)AV_RL32(p->buf + 20) <= 0)
+        return 0;
 
-    return AVPROBE_SCORE_MAX / 3 * 2;
+    return AVPROBE_SCORE_MAX;
 }
 
 static int vpk_read_header(AVFormatContext *s)
 {
     VPKDemuxContext *vpk = s->priv_data;
     AVIOContext *pb = s->pb;
-    unsigned offset;
+    int64_t offset;
     unsigned samples_per_block;
     AVStream *st;
 
@@ -54,7 +62,7 @@ static int vpk_read_header(AVFormatContext *s)
 
     avio_skip(pb, 4);
     st->duration           = avio_rl32(pb) * 28 / 16;
-    offset                 = avio_rl32(pb);
+    offset = avio_rl32(pb);
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_PSX;
     st->codecpar->block_align = avio_rl32(pb);
@@ -70,11 +78,10 @@ static int vpk_read_header(AVFormatContext *s)
     vpk->block_count       = (st->duration + (samples_per_block - 1)) / samples_per_block;
     vpk->last_block_size   = (st->duration % samples_per_block) * 16 * st->codecpar->ch_layout.nb_channels / 28;
 
-    if (offset < avio_tell(pb))
-        return AVERROR_INVALIDDATA;
-    avio_skip(pb, offset - avio_tell(pb));
-    vpk->data_start = offset;
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+
+    vpk->data_start = offset;
+    avio_seek(pb, offset, SEEK_SET);
 
     return 0;
 }
@@ -98,9 +105,8 @@ static int vpk_read_packet(AVFormatContext *s, AVPacket *pkt)
         for (i = 0; i < par->ch_layout.nb_channels; i++) {
             ret = avio_read(pb, pkt->data + i * size, size);
             avio_skip(pb, skip);
-            if (ret != size) {
+            if (ret != size)
                 return AVERROR(EIO);
-            }
         }
         pkt->pos = pos;
         pkt->stream_index = 0;
