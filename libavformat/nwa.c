@@ -78,6 +78,7 @@ static int read_header(AVFormatContext *s)
     st->start_time = 0;
     st->duration = duration / channels;
     st->codecpar->sample_rate = rate;
+    st->codecpar->bits_per_coded_sample = bps;
     st->codecpar->block_align = 1024 * FFMAX(1, bps/8) * st->codecpar->ch_layout.nb_channels;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
