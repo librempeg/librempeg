@@ -38,8 +38,7 @@ static int read_probe(const AVProbeData *p)
     if (AV_RL16(p->buf) != 1 &&
         AV_RL16(p->buf) != 2)
         return 0;
-    if (AV_RL16(p->buf+2) != 0 &&
-        AV_RL16(p->buf+2) != 8 &&
+    if (AV_RL16(p->buf+2) != 8 &&
         AV_RL16(p->buf+2) != 16)
         return 0;
     if ((int32_t)AV_RL32(p->buf+4) <= 0)
@@ -68,7 +67,7 @@ static int read_header(AVFormatContext *s)
     avio_skip(pb, 8);
     duration = avio_rl32(pb);
     bsize = avio_rl32(pb);
-    if ((bps != 0 && bps != 8 && bps != 16) || channels == 0 || rate <= 0 ||
+    if ((bps != 8 && bps != 16) || channels == 0 || rate <= 0 ||
         compression < -1 || compression > 5)
         return AVERROR_INVALIDDATA;
 
