@@ -24,6 +24,12 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
+
+typedef struct NWADemuxContext {
+    int block_size;
+    int current_block;
+} NWADemuxContext;
 
 static int read_probe(const AVProbeData *p)
 {
@@ -47,17 +53,21 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int bps, channels, rate, compression;
+    int ret, bps, channels, rate, compression, blocks, bsize;
+    NWADemuxContext *nwa = s->priv_data;
+    int64_t duration, next_pos;
     AVIOContext *pb = s->pb;
-    int64_t duration;
     AVStream *st;
 
     channels = avio_rl16(pb);
     bps = avio_rl16(pb);
     rate = avio_rl32(pb);
     compression = avio_rl32(pb);
-    avio_skip(pb, 16);
+    avio_skip(pb, 4);
+    blocks = avio_rl32(pb);
+    avio_skip(pb, 8);
     duration = avio_rl32(pb);
+    bsize = avio_rl32(pb);
     if ((bps != 0 && bps != 8 && bps != 16) || channels == 0 || rate <= 0 ||
         compression < -1 || compression > 5)
         return AVERROR_INVALIDDATA;
@@ -66,14 +76,44 @@ static int read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
+    avio_seek(pb, 0x2c, SEEK_SET);
+
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     switch (compression) {
     case -1:
         st->codecpar->codec_id = (bps == 8) ? AV_CODEC_ID_PCM_S8 : AV_CODEC_ID_PCM_S16LE;
         break;
     default:
+        st->codecpar->codec_id = AV_CODEC_ID_NWA;
+        ret = ff_alloc_extradata(st->codecpar, 8);
+        if (ret < 0)
+            return ret;
+        AV_WL32(st->codecpar->extradata, compression);
+        AV_WL32(st->codecpar->extradata+4, bsize);
+
+        nwa->block_size = bsize;
+        nwa->current_block = 0;
+
+        next_pos = avio_rl32(pb);
+        for (int block = 0; block < blocks; block++) {
+            int64_t timestamp = block;
+            int64_t pos = next_pos;
+
+            if (avio_feof(pb))
+                return AVERROR_INVALIDDATA;
+
+            if (block < blocks-1)
+                next_pos = avio_rl32(pb);
+            else
+                next_pos = avio_size(pb);
+
+            if ((ret = av_add_index_entry(st, pos, timestamp * bsize / (bps/8), next_pos - pos, 0,
+                                          AVINDEX_KEYFRAME)) < 0)
+                return ret;
+        }
         break;
     }
+
     st->codecpar->ch_layout.nb_channels = channels;
     st->start_time = 0;
     st->duration = duration / channels;
@@ -83,29 +123,74 @@ static int read_header(AVFormatContext *s)
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
-    avio_seek(pb, 0x2c, SEEK_SET);
-
     return 0;
 }
 
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
+    NWADemuxContext *nwa = s->priv_data;
+    AVStream *st = s->streams[0];
     AVIOContext *pb = s->pb;
     int ret;
 
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
+    if (avio_feof(pb))
+        return AVERROR_EOF;
+
+    if (st->codecpar->codec_id != AV_CODEC_ID_NWA) {
+        ret = av_get_packet(pb, pkt, st->codecpar->block_align);
+    } else {
+        FFStream *const sti = ffstream(st);
+        int pkt_size;
+
+        if (nwa->current_block >= sti->nb_index_entries)
+            return AVERROR_EOF;
+
+        pkt_size = sti->index_entries[nwa->current_block].size;
+        ret = av_get_packet(pb, pkt, pkt_size);
+        pkt->pts = nwa->current_block * nwa->block_size/2;
+        pkt->duration = nwa->block_size/2;
+        nwa->current_block++;
+    }
+
     pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
     pkt->stream_index = 0;
 
     return ret;
 }
 
+static int read_seek(AVFormatContext *s, int stream_index, int64_t timestamp, int flags)
+{
+    NWADemuxContext *nwa = s->priv_data;
+    AVStream *st = s->streams[0];
+    FFStream *const sti = ffstream(st);
+    int64_t ret;
+    int index;
+
+    if (st->codecpar->codec_id != AV_CODEC_ID_NWA)
+        return ff_pcm_read_seek(s, stream_index, timestamp, flags);
+
+    if (timestamp < 0)
+        return -1;
+
+    index = av_index_search_timestamp(st, timestamp, flags);
+    if (index < 0 || index >= sti->nb_index_entries)
+        return -1;
+
+    ret = avio_seek(s->pb, sti->index_entries[index].pos, SEEK_SET);
+    if (ret < 0)
+        return -1;
+    nwa->current_block = FFMAX(0, index);
+
+    return 0;
+}
+
 const FFInputFormat ff_nwa_demuxer = {
     .p.name         = "nwa",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Visual Arts NWA"),
-    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "nwa",
+    .priv_data_size = sizeof(NWADemuxContext),
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
+    .read_seek      = read_seek,
 };
