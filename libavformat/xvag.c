@@ -37,9 +37,10 @@ static int xvag_probe(const AVProbeData *p)
 static int xvag_read_header(AVFormatContext *s)
 {
     unsigned offset, big_endian, codec;
+    AVIOContext *pb = s->pb;
     AVStream *st;
 
-    avio_skip(s->pb, 4);
+    avio_skip(pb, 4);
 
     st = avformat_new_stream(s, NULL);
     if (!st)
@@ -47,25 +48,25 @@ static int xvag_read_header(AVFormatContext *s)
 
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
 
-    offset     = avio_rl32(s->pb);
+    offset     = avio_rl32(pb);
     big_endian = offset > av_bswap32(offset);
     if (big_endian) {
         offset                 = av_bswap32(offset);
-        avio_skip(s->pb, 28);
-        codec                  = avio_rb32(s->pb);
-        st->codecpar->ch_layout.nb_channels = avio_rb32(s->pb);
-        avio_skip(s->pb, 4);
-        st->duration           = avio_rb32(s->pb);
-        avio_skip(s->pb, 8);
-        st->codecpar->sample_rate = avio_rb32(s->pb);
+        avio_skip(pb, 28);
+        codec                  = avio_rb32(pb);
+        st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
+        avio_skip(pb, 4);
+        st->duration           = avio_rb32(pb);
+        avio_skip(pb, 8);
+        st->codecpar->sample_rate = avio_rb32(pb);
     } else {
-        avio_skip(s->pb, 28);
-        codec                  = avio_rl32(s->pb);
-        st->codecpar->ch_layout.nb_channels = avio_rl32(s->pb);
-        avio_skip(s->pb, 4);
-        st->duration           = avio_rl32(s->pb);
-        avio_skip(s->pb, 8);
-        st->codecpar->sample_rate = avio_rl32(s->pb);
+        avio_skip(pb, 28);
+        codec                  = avio_rl32(pb);
+        st->codecpar->ch_layout.nb_channels = avio_rl32(pb);
+        avio_skip(pb, 4);
+        st->duration           = avio_rl32(pb);
+        avio_skip(pb, 8);
+        st->codecpar->sample_rate = avio_rl32(pb);
     }
 
     if (st->codecpar->sample_rate <= 0)
@@ -84,15 +85,15 @@ static int xvag_read_header(AVFormatContext *s)
         return AVERROR_PATCHWELCOME;
     };
 
-    avio_skip(s->pb, offset - avio_tell(s->pb));
+    avio_skip(pb, offset - avio_tell(pb));
 
-    if (avio_rb16(s->pb) == 0xFFFB) {
+    if (avio_rb16(pb) == 0xFFFB) {
         st->codecpar->codec_id    = AV_CODEC_ID_MP3;
         st->codecpar->block_align = 0x1000;
         ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
     }
 
-    avio_skip(s->pb, -2);
+    avio_skip(pb, -2);
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
