@@ -109,6 +109,7 @@ static int xvag_read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_xvag_demuxer = {
     .p.name         = "xvag",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sony PS3 XVAG"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "xvag",
     .read_probe     = xvag_probe,
     .read_header    = xvag_read_header,
