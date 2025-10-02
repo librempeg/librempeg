@@ -76,13 +76,14 @@ static av_cold int nwa_decode_init(AVCodecContext *avctx)
 static int nwa_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                             int *got_frame_ptr, AVPacket *avpkt)
 {
+    int ret, nb_samples, bits0, bits1, shift0, shift1;
     const int channels = avctx->ch_layout.nb_channels;
     NWAContext *s = avctx->priv_data;
     const int compression = s->compression;
     GetBitContext gbit, *gb = &gbit;
+    const int use_rle = s->use_rle;
     int runlen = 0, ch_idx = 0;
     const int bps = s->bps;
-    int ret, nb_samples;
     int16_t *dst16;
     uint8_t *dst8;
     int16_t d[2];
@@ -101,6 +102,18 @@ static int nwa_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     dst16 = (int16_t *)frame->data[0];
     dst8  = frame->data[0];
 
+    if (compression >= 3) {
+        bits0 = 8;
+        bits1 = compression + 3;
+        shift0 = 9;
+        shift1 = 1;
+    } else {
+        bits0 = 8 - compression;
+        bits1 = 5 - compression;
+        shift0 = 9 + compression;
+        shift1 = 2 + compression;
+    }
+
     for (int n = 0; n < nb_samples * channels; n++) {
         if (get_bits_left(gb) < 0)
             return AVERROR_INVALIDDATA;
@@ -115,49 +128,22 @@ static int nwa_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 if (get_bits1(gb)) {
                     d[ch_idx] = 0;
                 } else {
-                    int bits, shift;
+                    const int mask1 = 1 << (bits0 - 1);
+                    const int mask2 = mask1 - 1;
+                    const int b = get_bits(gb, bits0);
+                    const int sgn = (b & mask1) ? -1 : 1;
 
-                    if (compression >= 3) {
-                        bits = 8;
-                        shift = 9;
-                    } else {
-                        bits = 8 - compression;
-                        shift = 9 + compression;
-                    }
-
-                    {
-                        const int mask1 = 1 << (bits - 1);
-                        const int mask2 = mask1 - 1;
-                        const int b = get_bits(gb, bits);
-
-                        if (b & mask1)
-                            d[ch_idx] -= (b & mask2) * (1 << shift);
-                        else
-                            d[ch_idx] += (b & mask2) * (1 << shift);
-                    }
+                    d[ch_idx] += sgn * (b & mask2) * (1 << shift0);
                 }
             } else if (type != 0) {
-                int bits, shift;
+                const int shift = shift1 + type;
+                const int mask1 = 1 << (bits1 - 1);
+                const int mask2 = mask1 - 1;
+                const int b = get_bits(gb, bits1);
+                const int sgn = (b & mask1) ? -1 : 1;
 
-                if (compression >= 3) {
-                    bits = compression + 3;
-                    shift = 1 + type;
-                } else {
-                    bits = 5 - compression;
-                    shift = 2 + type + compression;
-                }
-
-                {
-                    const int mask1 = 1 << (bits - 1);
-                    const int mask2 = mask1 - 1;
-                    const int b = get_bits(gb, bits);
-
-                    if (b & mask1)
-                        d[ch_idx] -= (b & mask2) * (1 << shift);
-                    else
-                        d[ch_idx] += (b & mask2) * (1 << shift);
-                }
-            } else if (s->use_rle) {
+                d[ch_idx] += sgn * (b & mask2) * (1 << shift);
+            } else if (use_rle) {
                 if (get_bits1(gb)) {
                     runlen = get_bits(gb, 2);
                     if (runlen == 3)
