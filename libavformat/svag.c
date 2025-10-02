@@ -19,13 +19,20 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/intreadwrite.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
 
 static int svag_probe(const AVProbeData *p)
 {
-    if (memcmp(p->buf, "Svag", 4))
+    if (AV_RB32(p->buf) != MKBETAG('S','v','a','g'))
+        return 0;
+    if ((int)AV_RL32(p->buf + 8) <= 0)
+        return 0;
+    if ((int)AV_RL32(p->buf + 12) <= 0)
+        return 0;
+    if ((int)AV_RL32(p->buf + 16) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
@@ -33,47 +40,52 @@ static int svag_probe(const AVProbeData *p)
 
 static int svag_read_header(AVFormatContext *s)
 {
-    unsigned size, align;
+    unsigned size, align, rate, channels;
+    AVIOContext *pb = s->pb;
     AVStream *st;
 
-    avio_skip(s->pb, 4);
+    avio_skip(pb, 4);
+    size = avio_rl32(pb);
+    rate = avio_rl32(pb);
+    channels = avio_rl32(pb);
+    align = avio_rl32(pb);
+    if (rate <= 0 || channels <= 0 || channels > 8 || align <= 0 || align > INT_MAX/channels)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    size                   = avio_rl32(s->pb);
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_PSX;
-    st->codecpar->sample_rate = avio_rl32(s->pb);
-    if (st->codecpar->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
-    st->codecpar->ch_layout.nb_channels = avio_rl32(s->pb);
-    if (st->codecpar->ch_layout.nb_channels <= 0 ||
-        st->codecpar->ch_layout.nb_channels > 8)
-        return AVERROR_INVALIDDATA;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->ch_layout.nb_channels = channels;
     st->start_time = 0;
     st->duration           = size / (16 * st->codecpar->ch_layout.nb_channels) * 28;
-    align                  = avio_rl32(s->pb);
-    if (align <= 0 || align > INT_MAX / st->codecpar->ch_layout.nb_channels)
-        return AVERROR_INVALIDDATA;
     st->codecpar->block_align = align * st->codecpar->ch_layout.nb_channels;
-    avio_skip(s->pb, 0x800 - avio_tell(s->pb));
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+
+    avio_seek(pb, 0x800, SEEK_SET);
 
     return 0;
 }
 
 static int svag_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    AVCodecParameters *par = s->streams[0]->codecpar;
+    AVIOContext *pb = s->pb;
+    int ret;
 
-    return av_get_packet(s->pb, pkt, par->block_align);
+    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
+    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
+    pkt->stream_index = 0;
+
+    return ret;
 }
 
 const FFInputFormat ff_svag_demuxer = {
     .p.name         = "svag",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Konami PS2 SVAG"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "svag",
     .read_probe     = svag_probe,
     .read_header    = svag_read_header,
