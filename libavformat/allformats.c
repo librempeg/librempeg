@@ -346,6 +346,7 @@ extern const FFInputFormat  ff_mp3_demuxer;
 extern const FFOutputFormat ff_mp3_muxer;
 extern const FFOutputFormat ff_mp4_muxer;
 extern const FFInputFormat  ff_mpc_demuxer;
+extern const FFInputFormat  ff_mpc3_demuxer;
 extern const FFInputFormat  ff_mpc8_demuxer;
 extern const FFInputFormat  ff_mpds_demuxer;
 extern const FFOutputFormat ff_mpeg1system_muxer;
