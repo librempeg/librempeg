@@ -2128,7 +2128,6 @@ static int find_marker(const uint8_t **pbuf_ptr, const uint8_t *buf_end)
 {
     const uint8_t *buf_ptr;
     int val;
-    int skipped = 0;
 
     buf_ptr = *pbuf_ptr;
     while (buf_ptr < buf_end) {
@@ -2146,7 +2145,6 @@ static int find_marker(const uint8_t **pbuf_ptr, const uint8_t *buf_end)
     buf_ptr = buf_end;
     val = -1;
 found:
-    ff_dlog(NULL, "find_marker skipped %d bytes\n", skipped);
     *pbuf_ptr = buf_ptr;
     return val;
 }
