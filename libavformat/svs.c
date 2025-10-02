@@ -41,16 +41,17 @@ static int svs_probe(const AVProbeData *p)
 
 static int svs_read_header(AVFormatContext *s)
 {
-    AVStream *st;
+    AVIOContext *pb = s->pb;
     uint32_t pitch;
+    AVStream *st;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(s->pb, 16);
-    pitch = avio_rl32(s->pb);
-    avio_skip(s->pb, 12);
+    avio_skip(pb, 16);
+    pitch = avio_rl32(pb);
+    avio_skip(pb, 12);
 
     st->codecpar->codec_type     = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id       = AV_CODEC_ID_ADPCM_PSX;
@@ -58,9 +59,9 @@ static int svs_read_header(AVFormatContext *s)
     st->codecpar->sample_rate    = av_rescale_rnd(pitch, 48000, 4096, AV_ROUND_INF);
     st->codecpar->block_align    = 32;
     st->start_time               = 0;
-    if (s->pb->seekable & AVIO_SEEKABLE_NORMAL)
+    if (pb->seekable & AVIO_SEEKABLE_NORMAL)
         st->duration = av_get_audio_frame_duration2(st->codecpar,
-                                                    avio_size(s->pb) - 32);
+                                                    avio_size(pb) - 32);
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
@@ -88,8 +89,9 @@ static int svs_read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_svs_demuxer = {
     .p.name         = "svs",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Square SVS"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "svs",
-    .read_probe  = svs_probe,
-    .read_header = svs_read_header,
-    .read_packet = svs_read_packet,
+    .read_probe     = svs_probe,
+    .read_header    = svs_read_header,
+    .read_packet    = svs_read_packet,
 };
