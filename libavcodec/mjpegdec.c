@@ -810,10 +810,11 @@ static int decode_block(MJpegDecodeContext *s, int16_t *block, int component,
     block[0] = av_clip_int16(val);
     /* AC coefs */
     i = 0;
+    VLCElem *table = s->vlcs[1][ac_index].table;
     {OPEN_READER(re, gb);
     do {
         UPDATE_CACHE(re, gb);
-        GET_VLC(code, re, gb, s->vlcs[1][ac_index].table, 9, 2);
+        GET_VLC(code, re, gb, table, 9, 2);
 
         i += ((unsigned)code) >> 4;
             code &= 0xf;
@@ -874,10 +875,11 @@ static int decode_block_progressive(MJpegDecodeContext *s, int16_t *block,
 
     {
         GetBitContext *gb = &s->gb;
+        VLCElem *table = s->vlcs[2][ac_index].table;
         OPEN_READER(re, gb);
         for (i = ss; ; i++) {
             UPDATE_CACHE(re, gb);
-            GET_VLC(code, re, gb, s->vlcs[2][ac_index].table, 9, 2);
+            GET_VLC(code, re, gb, table, 9, 2);
 
             run = ((unsigned) code) >> 4;
             code &= 0xF;
@@ -972,9 +974,11 @@ static int decode_block_refinement(MJpegDecodeContext *s, int16_t *block,
     if (*EOBRUN) {
         (*EOBRUN)--;
     } else {
+        VLCElem *table = s->vlcs[2][ac_index].table;
+
         for (; ; i++) {
             UPDATE_CACHE(re, gb);
-            GET_VLC(code, re, gb, s->vlcs[2][ac_index].table, 9, 2);
+            GET_VLC(code, re, gb, table, 9, 2);
 
             if (code & 0xF) {
                 run = ((unsigned) code) >> 4;
