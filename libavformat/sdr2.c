@@ -36,6 +36,7 @@ static int sdr2_probe(const AVProbeData *p)
 
 static int sdr2_read_header(AVFormatContext *s)
 {
+    AVIOContext *pb = s->pb;
     AVStream *st, *ast;
 
     ast = avformat_new_stream(s, 0);
@@ -46,11 +47,11 @@ static int sdr2_read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(s->pb, 20);
-    avpriv_set_pts_info(st, 64, 1, avio_rl32(s->pb));
+    avio_skip(pb, 20);
+    avpriv_set_pts_info(st, 64, 1, avio_rl32(pb));
     st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
-    st->codecpar->width      = avio_rl32(s->pb);
-    st->codecpar->height     = avio_rl32(s->pb);
+    st->codecpar->width      = avio_rl32(pb);
+    st->codecpar->height     = avio_rl32(pb);
     st->codecpar->codec_id   = AV_CODEC_ID_H264;
     ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
 
@@ -60,7 +61,7 @@ static int sdr2_read_header(AVFormatContext *s)
     ast->codecpar->codec_id    = AV_CODEC_ID_PCM_S16LE;
     avpriv_set_pts_info(ast, 64, 1, 8000);
 
-    avio_seek(s->pb, FIRST, SEEK_SET);
+    avio_seek(pb, FIRST, SEEK_SET);
 
     return 0;
 }
@@ -73,34 +74,35 @@ static const uint8_t header[24] = {
 
 static int sdr2_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
+    AVIOContext *pb = s->pb;
     int64_t pos;
     unsigned next;
     int flags, ret = 0, is_video;
 
-    pos = avio_tell(s->pb);
+    pos = avio_tell(pb);
 
-    flags = avio_rl32(s->pb);
-    avio_skip(s->pb, 4);
+    flags = avio_rl32(pb);
+    avio_skip(pb, 4);
 
-    next = avio_rl32(s->pb);
+    next = avio_rl32(pb);
     if (next <= 52)
         return AVERROR_INVALIDDATA;
 
-    avio_skip(s->pb, 6);
-    is_video = avio_rl32(s->pb);
-    avio_skip(s->pb, 30);
+    avio_skip(pb, 6);
+    is_video = avio_rl32(pb);
+    avio_skip(pb, 30);
 
     if (pos == FIRST) {
         if ((ret = av_new_packet(pkt, next - 52 + 24)) < 0)
             return ret;
         memcpy(pkt->data, header, 24);
-        ret = avio_read(s->pb, pkt->data + 24, next - 52);
+        ret = avio_read(pb, pkt->data + 24, next - 52);
         if (ret < 0) {
             return ret;
         }
         av_shrink_packet(pkt, ret + 24);
     } else {
-        ret = av_get_packet(s->pb, pkt, next - 52);
+        ret = av_get_packet(pb, pkt, next - 52);
     }
     pkt->stream_index = !!is_video;
     pkt->pos = pos;
