@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -56,7 +57,8 @@ static int read_header(AVFormatContext *s)
     avio_skip(pb, 20);
     start_offset = avio_rl32(pb);
     avio_skip(pb, 8);
-    loop_start = avio_rl32(pb) ;
+    loop_start = avio_rl32(pb);
+    loop_start -= start_offset;
 
     switch (flags & 0xf0) {
     case 0xb0:
@@ -90,18 +92,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_sadl_demuxer = {
     .p.name         = "sadl",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Procyon DS SADL)"),
@@ -109,5 +99,5 @@ const FFInputFormat ff_sadl_demuxer = {
     .p.extensions   = "sad",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
