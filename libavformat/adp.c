@@ -69,15 +69,11 @@ static int adp_read_header(AVFormatContext *s)
 
 static int adp_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    int ret, size = 1024;
+    AVIOContext *pb = s->pb;
+    int ret;
 
-    if (avio_feof(s->pb))
-        return AVERROR_EOF;
-
-    ret = av_get_packet(s->pb, pkt, size);
-    if (ret < 0)
-        return ret;
-
+    ret = av_get_packet(pb, pkt, 1024);
+    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
     pkt->stream_index = 0;
 
     return ret;
