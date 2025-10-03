@@ -30,16 +30,16 @@ static int idsp_probe(const AVProbeData *p)
     if (AV_RB32(p->buf) != MKBETAG('I','D','S','P'))
         return 0;
 
-    if (AV_RB32(p->buf + 4) <= 0)
+    if ((int)AV_RB32(p->buf + 4) <= 0)
         return 0;
 
-    if (AV_RB32(p->buf + 8) <= 0)
+    if ((int)AV_RB32(p->buf + 8) <= 0)
         return 0;
 
-    if (AV_RB32(p->buf + 12) <= 0)
+    if ((int)AV_RB32(p->buf + 12) <= 0)
         return 0;
 
-    if (AV_RB32(p->buf + 16) <= 0)
+    if ((int)AV_RB32(p->buf + 16) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
