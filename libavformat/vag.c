@@ -46,6 +46,7 @@ static int vag_read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     type = avio_rb32(pb);
+    st->start_time = 0;
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_PSX;
     st->codecpar->ch_layout.nb_channels = 1 + (avio_rb32(pb) == 0x00000004);
