@@ -428,7 +428,7 @@ static int pcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         samples_per_block = 2;
     }
 
-    if (channels == 0) {
+    if (channels <= 0) {
         av_log(avctx, AV_LOG_ERROR, "Invalid number of channels\n");
         return AVERROR(EINVAL);
     }
