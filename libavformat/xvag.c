@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int xvag_probe(const AVProbeData *p)
 {
@@ -99,13 +100,6 @@ static int xvag_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int xvag_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVCodecParameters *par = s->streams[0]->codecpar;
-
-    return av_get_packet(s->pb, pkt, par->block_align);
-}
-
 const FFInputFormat ff_xvag_demuxer = {
     .p.name         = "xvag",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sony PS3 XVAG"),
@@ -113,5 +107,5 @@ const FFInputFormat ff_xvag_demuxer = {
     .p.extensions   = "xvag",
     .read_probe     = xvag_probe,
     .read_header    = xvag_read_header,
-    .read_packet    = xvag_read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
