@@ -236,8 +236,8 @@ static int sd9_read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_ssp_demuxer = {
     .p.name         = "ssp",
     .p.long_name    = NULL_IF_CONFIG_SMALL("SSP (Konami)"),
-    .p.extensions   = "ssp",
     .p.flags        = AVFMT_GENERIC_INDEX,
+    .p.extensions   = "ssp",
     .read_probe     = ssp_probe,
     .read_header    = ssp_read_header,
     .read_packet    = sd9_read_packet,
@@ -246,6 +246,7 @@ const FFInputFormat ff_ssp_demuxer = {
 const FFInputFormat ff_sd9_demuxer = {
     .p.name         = "sd9",
     .p.long_name    = NULL_IF_CONFIG_SMALL("SD9 (Konami)"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "sd9",
     .read_probe     = sd9_probe,
     .read_header    = sd9_read_header,

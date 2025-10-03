@@ -229,8 +229,8 @@ static int twodx_read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_twodx_demuxer = {
     .p.name         = "2dx",
     .p.long_name    = NULL_IF_CONFIG_SMALL("2DX (Konami)"),
-    .p.extensions   = "2dx",
     .p.flags        = AVFMT_GENERIC_INDEX,
+    .p.extensions   = "2dx",
     .read_probe     = twodx_probe,
     .read_header    = twodx_read_header,
     .read_packet    = twodx_read_packet,
@@ -239,6 +239,7 @@ const FFInputFormat ff_twodx_demuxer = {
 const FFInputFormat ff_twodx9_demuxer = {
     .p.name         = "2dx9",
     .p.long_name    = NULL_IF_CONFIG_SMALL("2DX9 (Konami)"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "2dx9",
     .read_probe     = twodx9_probe,
     .read_header    = twodx9_read_header,
