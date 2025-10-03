@@ -291,6 +291,7 @@ static int read_close(AVFormatContext *s)
 const FFInputFormat ff_awb_demuxer = {
     .p.name         = "awb",
     .p.long_name    = NULL_IF_CONFIG_SMALL("AWB (Atom Wave Bank)"),
+    .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "awb",
     .priv_data_size = sizeof(AWBDemuxContext),
