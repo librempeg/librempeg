@@ -27,7 +27,7 @@
 
 static int a2m_probe(const AVProbeData *p)
 {
-    if (memcmp(p->buf, "A2M\0PS2\0", 8) || AV_RB32(p->buf + 0x10) <= 0)
+    if (memcmp(p->buf, "A2M\0PS2\0", 8) || (int)AV_RB32(p->buf + 0x10) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
