@@ -41,25 +41,25 @@ static int read_probe(const AVProbeData *p)
 
     if ((int32_t)AV_RB32(p->buf+8) <= 0)
         return 0;
-    score++;
+    score += 4;
 
     if (AV_RB16(p->buf+0xc) != 0 &&
         AV_RB16(p->buf+0xc) != 1)
         return 0;
-    score += 2;
+    score += 4;
 
     if (AV_RB16(p->buf+0xe) != 0)
         return 0;
-    score++;
+    score += 2;
 
     for (int n = 0 ; n < 16; n++) {
         if (AV_RB16(p->buf + 0x1c + n * 2) != 0)
-            score++;
+            score += 2;
     }
 
     if (AV_RB16(p->buf+0x3c) != 0)
         return 0;
-    score++;
+    score += 2;
 
     return score;
 }
