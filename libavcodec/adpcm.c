@@ -1530,7 +1530,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         nb_samples = buf_size / (16 * ch) * 28;
         break;
     case AV_CODEC_ID_ADPCM_DSA:
-        nb_samples = (buf_size / ch - 1) * 2;
+        nb_samples = buf_size / (8 * ch) * 14;
         break;
     case AV_CODEC_ID_ADPCM_PROCYON:
         nb_samples = buf_size / (16 * ch) * 30;
@@ -3211,7 +3211,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
                     sample = (int16_t)((sample * (1 << 12)) >> shift);
                     sample += ((hist1 * coef) >> 16);
-                    *samples++ = av_clip_int16(sample * 4);
+                    samples[n] = av_clip_int16(sample * 4);
                     hist1 = sample;
                 }
 
