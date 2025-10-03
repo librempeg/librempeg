@@ -87,6 +87,7 @@ static int vag_read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_vag_demuxer = {
     .p.name         = "vag",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sony PS2 VAG"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "vag",
     .read_probe     = vag_probe,
     .read_header    = vag_read_header,
