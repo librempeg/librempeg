@@ -27,23 +27,21 @@
 
 static int adp_probe(const AVProbeData *p)
 {
-    int i, changes = 0;
     uint8_t last = 0;
+    int changes = 0;
 
     if (p->buf_size < 32)
         return 0;
 
-    for (i = 0; i < p->buf_size - 3; i+=32) {
+    for (int i = 0; i < p->buf_size - 3; i+=32) {
         if (p->buf[i] != p->buf[i+2] || p->buf[i+1] != p->buf[i+3])
             return 0;
         if (p->buf[i] != last)
-            changes++;
+            changes += !!last;
         last = p->buf[i];
     }
-    if (changes <= 1)
-        return 0;
 
-    return p->buf_size < 260 ? 1 : AVPROBE_SCORE_MAX / 4;
+    return av_clip((changes+130)/260, 0, AVPROBE_SCORE_MAX);
 }
 
 static int adp_read_header(AVFormatContext *s)
