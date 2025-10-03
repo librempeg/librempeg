@@ -85,7 +85,7 @@ static int nsp_read_header(AVFormatContext *s)
             break;
         }
 
-        if (channels)
+        if (channels > 0 && rate > 0)
             break;
     }
 
