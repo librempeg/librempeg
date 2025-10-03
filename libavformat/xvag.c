@@ -47,6 +47,7 @@ static int xvag_read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
+    st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
 
     offset     = avio_rl32(pb);
