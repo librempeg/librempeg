@@ -86,6 +86,7 @@ static int adp_read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_adp_demuxer = {
     .p.name         = "adp",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Nintendo GC DTK"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "adp,dtk",
     .read_probe     = adp_probe,
     .read_header    = adp_read_header,
