@@ -710,6 +710,7 @@ OBJS-$(CONFIG_TRUEHD_DEMUXER)            += rawdec.o mlpdec.o
 OBJS-$(CONFIG_TRUEHD_MUXER)              += rawenc.o
 OBJS-$(CONFIG_TTA_DEMUXER)               += tta.o apetag.o img2.o
 OBJS-$(CONFIG_TTA_MUXER)                 += ttaenc.o apetag.o img2.o
+OBJS-$(CONFIG_TTIDSP_DEMUXER)            += ttidsp.o
 OBJS-$(CONFIG_TTML_MUXER)                += ttmlenc.o
 OBJS-$(CONFIG_TTY_DEMUXER)               += tty.o sauce.o
 OBJS-$(CONFIG_TWO08_DEMUXER)             += 208.o pcm.o
