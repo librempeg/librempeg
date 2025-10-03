@@ -1530,8 +1530,10 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         nb_samples = buf_size / (16 * ch) * 28;
         break;
     case AV_CODEC_ID_ADPCM_DSA:
-    case AV_CODEC_ID_ADPCM_PROCYON:
         nb_samples = (buf_size / ch - 1) * 2;
+        break;
+    case AV_CODEC_ID_ADPCM_PROCYON:
+        nb_samples = buf_size / (16 * ch) * 30;
         break;
     case AV_CODEC_ID_ADPCM_PSXC:
         nb_samples = ((buf_size - 1) / ch) * 2;
@@ -3039,7 +3041,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         ) /* End of CASE */
     CASE(ADPCM_PROCYON,
         for (int block = 0; block < avpkt->size / FFMAX(avctx->block_align, 16 * channels); block++) {
-            int nb_samples_per_block = 30 * FFMAX(avctx->block_align, 16 * channels) / (16 * channels);
+            const int nb_samples_per_block = 30 * FFMAX(avctx->block_align, 16 * channels) / (16 * channels);
+
             for (int channel = 0; channel < channels; channel++) {
                 int scale, coef1, coef2, hist1, hist2, filter;
                 uint8_t frame[16], header;
@@ -3077,7 +3080,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     hist2 = hist1;
                     hist1 = sample;
 
-                    *samples++ = av_clip_int16((sample + 32) / 64);
+                    samples[n] = av_clip_int16((sample + 32) / 64);
                 }
 
                 c->status[channel].sample1 = hist1;
