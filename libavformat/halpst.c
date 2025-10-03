@@ -32,10 +32,10 @@ static int halpst_probe(const AVProbeData *p)
     if (p->buf_size < 16)
         return 0;
 
-    if (AV_RB32(p->buf + 8) <= 0)
+    if ((int)AV_RB32(p->buf + 8) <= 0)
         return 0;
 
-    if (AV_RB32(p->buf + 12) <= 0)
+    if ((int)AV_RB32(p->buf + 12) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
