@@ -23,6 +23,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int a2m_probe(const AVProbeData *p)
 {
@@ -58,16 +59,11 @@ static int a2m_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int a2m_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    return av_get_packet(s->pb, pkt, s->streams[0]->codecpar->block_align);
-}
-
 const FFInputFormat ff_a2m_demuxer = {
     .p.name         = "a2m",
     .p.long_name    = NULL_IF_CONFIG_SMALL("A2M (Artificial Mind & Movement)"),
     .p.extensions   = "int",
     .read_probe     = a2m_probe,
     .read_header    = a2m_read_header,
-    .read_packet    = a2m_read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
