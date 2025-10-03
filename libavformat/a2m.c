@@ -62,6 +62,7 @@ static int a2m_read_header(AVFormatContext *s)
 const FFInputFormat ff_a2m_demuxer = {
     .p.name         = "a2m",
     .p.long_name    = NULL_IF_CONFIG_SMALL("A2M (Artificial Mind & Movement)"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "int",
     .read_probe     = a2m_probe,
     .read_header    = a2m_read_header,
