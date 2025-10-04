@@ -29,10 +29,10 @@ static int msf_probe(const AVProbeData *p)
     if (memcmp(p->buf, "MSF", 3))
         return 0;
 
-    if (AV_RB32(p->buf+8) <= 0)
+    if ((int)AV_RB32(p->buf+8) <= 0)
         return 0;
 
-    if (AV_RB32(p->buf+16) <= 0)
+    if ((int)AV_RB32(p->buf+16) <= 0)
         return 0;
 
     if (AV_RB32(p->buf+4) > 16)
@@ -53,8 +53,8 @@ static int msf_read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
-    st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
-    codec                  = avio_rb32(s->pb);
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    codec = avio_rb32(s->pb);
     st->codecpar->ch_layout.nb_channels = avio_rb32(s->pb);
     if (st->codecpar->ch_layout.nb_channels <= 0 ||
         st->codecpar->ch_layout.nb_channels >= INT_MAX / 1024)
