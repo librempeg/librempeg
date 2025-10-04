@@ -43,10 +43,11 @@ static int probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
+    AVIOContext *pb = s->pb;
     AVStream *st;
     MCADemuxContext *m = s->priv_data;
     AVCodecParameters *par;
-    int64_t file_size = avio_size(s->pb);
+    int64_t file_size = avio_size(pb);
     uint16_t version = 0;
     uint32_t header_size, data_size, data_offset, loop_start, loop_end,
         nb_samples, nb_metadata, coef_offset = 0;
@@ -60,21 +61,21 @@ static int read_header(AVFormatContext *s)
     par->codec_type = AVMEDIA_TYPE_AUDIO;
 
     // parse file headers
-    avio_skip(s->pb, 0x4);      // skip the file magic
-    version          = avio_rl16(s->pb);
-    avio_skip(s->pb, 0x2);      // padding
-    par->ch_layout.nb_channels = avio_r8(s->pb);
-    avio_skip(s->pb, 0x1);      // padding
-    m->block_size    = avio_rl16(s->pb);
-    nb_samples       = avio_rl32(s->pb);
-    par->sample_rate = avio_rl32(s->pb);
-    loop_start       = avio_rl32(s->pb);
-    loop_end         = avio_rl32(s->pb);
-    header_size      = avio_rl32(s->pb);
-    data_size        = avio_rl32(s->pb);
-    avio_skip(s->pb, 0x4);
-    nb_metadata      = avio_rl16(s->pb);
-    avio_skip(s->pb, 0x2);      // unknown u16 field
+    avio_skip(pb, 0x4);      // skip the file magic
+    version          = avio_rl16(pb);
+    avio_skip(pb, 0x2);      // padding
+    par->ch_layout.nb_channels = avio_r8(pb);
+    avio_skip(pb, 0x1);      // padding
+    m->block_size    = avio_rl16(pb);
+    nb_samples       = avio_rl32(pb);
+    par->sample_rate = avio_rl32(pb);
+    loop_start       = avio_rl32(pb);
+    loop_end         = avio_rl32(pb);
+    header_size      = avio_rl32(pb);
+    data_size        = avio_rl32(pb);
+    avio_skip(pb, 0x4);
+    nb_metadata      = avio_rl16(pb);
+    avio_skip(pb, 0x2);      // unknown u16 field
 
     // samples per frame = 14; frame size = 8 (2^3)
     m->samples_per_block = (m->block_size * 14) >> 3;
@@ -120,9 +121,9 @@ static int read_header(AVFormatContext *s)
         if (0x30 * par->ch_layout.nb_channels + 0x4 > header_size)
             return AVERROR_INVALIDDATA;
         data_offset = header_size - 0x30 * par->ch_layout.nb_channels - 0x4;
-        if ((ret_size = avio_seek(s->pb, data_offset, SEEK_SET)) < 0)
+        if ((ret_size = avio_seek(pb, data_offset, SEEK_SET)) < 0)
             return ret_size;
-        m->data_start = avio_rl32(s->pb);
+        m->data_start = avio_rl32(pb);
         // check if the metadata is reasonable
         if (file_size > 0 && (int64_t)m->data_start + data_size > file_size) {
             // the header is broken beyond repair
@@ -157,18 +158,18 @@ static int read_header(AVFormatContext *s)
     if (ret < 0)
         return ret;
 
-    if ((ret_size = avio_seek(s->pb, coef_offset, SEEK_SET)) < 0)
+    if ((ret_size = avio_seek(pb, coef_offset, SEEK_SET)) < 0)
         return ret_size;
     for (ch = 0; ch < par->ch_layout.nb_channels; ch++) {
-        if ((ret = ffio_read_size(s->pb, par->extradata + ch * 32, 32)) < 0)
+        if ((ret = ffio_read_size(pb, par->extradata + ch * 32, 32)) < 0)
             return ret;
         // 0x30 (alignment) - 0x20 (actual size, 32) = 0x10 (padding)
-        avio_skip(s->pb, 0x10);
+        avio_skip(pb, 0x10);
     }
 
     // seek to the beginning of the adpcm data
     // there are some files where the adpcm audio data is not immediately after the header
-    if ((ret_size = avio_seek(s->pb, m->data_start, SEEK_SET)) < 0)
+    if ((ret_size = avio_seek(pb, m->data_start, SEEK_SET)) < 0)
         return ret_size;
 
     return 0;
