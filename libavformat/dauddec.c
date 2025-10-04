@@ -48,14 +48,17 @@ static int daud_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *pb = s->pb;
     int ret, size;
+    int64_t pos;
 
     if (avio_feof(pb))
         return AVERROR_EOF;
 
+    pos = avio_tell(pb);
     size = avio_rb16(pb);
     avio_rb16(pb); // unknown
     ret = av_get_packet(pb, pkt, size);
     pkt->stream_index = 0;
+    pkt->pos = pos;
 
     return ret;
 }
@@ -64,6 +67,7 @@ const FFInputFormat ff_daud_demuxer = {
     .p.name         = "daud",
     .p.long_name    = NULL_IF_CONFIG_SMALL("D-Cinema audio"),
     .p.extensions   = "302,daud",
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .read_header    = daud_header,
     .read_packet    = daud_packet,
 };
