@@ -220,7 +220,7 @@ static int read_seek(AVFormatContext *s, int stream_index,
 
 const FFInputFormat ff_mca_demuxer = {
     .p.name         = "mca",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("MCA Audio Format"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Capcom 3DS MCA"),
     .p.extensions   = "mca",
     .priv_data_size = sizeof(MCADemuxContext),
     .read_probe     = probe,
