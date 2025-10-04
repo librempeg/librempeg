@@ -109,6 +109,7 @@ const FFInputFormat ff_msf_demuxer = {
     .p.name         = "msf",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sony PS3 MSF (MultiStream File)"),
     .p.extensions   = "msf",
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = msf_probe,
     .read_header    = msf_read_header,
     .read_packet    = msf_read_packet,
