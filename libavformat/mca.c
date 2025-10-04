@@ -25,14 +25,6 @@
 #include "demux.h"
 #include "internal.h"
 
-typedef struct MCADemuxContext {
-    uint32_t block_count;
-    uint16_t block_size;
-    uint32_t current_block;
-    uint32_t data_start;
-    uint32_t samples_per_block;
-} MCADemuxContext;
-
 static int probe(const AVProbeData *p)
 {
     if (AV_RL32(p->buf) == MKTAG('M', 'A', 'D', 'P') &&
@@ -44,63 +36,53 @@ static int probe(const AVProbeData *p)
 static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
-    AVStream *st;
-    MCADemuxContext *m = s->priv_data;
     AVCodecParameters *par;
     int64_t file_size = avio_size(pb);
-    uint16_t version = 0;
+    uint16_t version;
     uint32_t header_size, data_size, data_offset, loop_start, loop_end,
         nb_samples, nb_metadata, coef_offset = 0;
-    int ch, ret;
-    int64_t ret_size;
+    int ch, ret, block_size;
+    int64_t ret_size, data_start;
+    AVStream *st;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
+
     par = st->codecpar;
     par->codec_type = AVMEDIA_TYPE_AUDIO;
 
     // parse file headers
     avio_skip(pb, 0x4);      // skip the file magic
-    version          = avio_rl16(pb);
+    version = avio_rl16(pb);
     avio_skip(pb, 0x2);      // padding
     par->ch_layout.nb_channels = avio_r8(pb);
     avio_skip(pb, 0x1);      // padding
-    m->block_size    = avio_rl16(pb);
-    nb_samples       = avio_rl32(pb);
+    block_size = avio_rl16(pb);
+    nb_samples = avio_rl32(pb);
     par->sample_rate = avio_rl32(pb);
-    loop_start       = avio_rl32(pb);
-    loop_end         = avio_rl32(pb);
-    header_size      = avio_rl32(pb);
-    data_size        = avio_rl32(pb);
+    loop_start = avio_rl32(pb);
+    loop_end = avio_rl32(pb);
+    header_size = avio_rl32(pb);
+    data_size = avio_rl32(pb);
     avio_skip(pb, 0x4);
-    nb_metadata      = avio_rl16(pb);
+    nb_metadata = avio_rl16(pb);
     avio_skip(pb, 0x2);      // unknown u16 field
 
-    // samples per frame = 14; frame size = 8 (2^3)
-    m->samples_per_block = (m->block_size * 14) >> 3;
-
-    if (m->samples_per_block < 1)
-        return AVERROR_INVALIDDATA;
-
-    m->block_count = nb_samples / m->samples_per_block;
     st->duration = nb_samples;
 
     // sanity checks
-    if (!par->ch_layout.nb_channels || par->sample_rate <= 0
-        || loop_start > loop_end || m->block_count < 1)
+    if (par->ch_layout.nb_channels <= 0 || par->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
-    if ((ret = av_dict_set_int(&s->metadata, "loop_start",
-                        av_rescale(loop_start, AV_TIME_BASE,
-                                   par->sample_rate), 0)) < 0)
-        return ret;
-    if ((ret = av_dict_set_int(&s->metadata, "loop_end",
-                        av_rescale(loop_end, AV_TIME_BASE,
-                                   par->sample_rate), 0)) < 0)
-        return ret;
-    if ((32 + 4 + m->block_size) > (INT_MAX / par->ch_layout.nb_channels) ||
-        (32 + 4 + m->block_size) * par->ch_layout.nb_channels > INT_MAX - 8)
+    if (block_size <= 0 || block_size > INT_MAX/par->ch_layout.nb_channels)
         return AVERROR_INVALIDDATA;
+
+    if (loop_end > loop_start) {
+        if ((ret = av_dict_set_int(&s->metadata, "loop_start", loop_start, 0)) < 0)
+            return ret;
+        if ((ret = av_dict_set_int(&s->metadata, "loop_end", loop_end, 0)) < 0)
+            return ret;
+    }
     avpriv_set_pts_info(st, 64, 1, par->sample_rate);
 
     if (version <= 4) {
@@ -110,11 +92,11 @@ static int read_header(AVFormatContext *s)
         }
         if (file_size - data_size > UINT32_MAX)
             return AVERROR_INVALIDDATA;
-        m->data_start = file_size - data_size;
+        data_start = file_size - data_size;
         if (version <= 3) {
             nb_metadata = 0;
             // header_size is not available or incorrect in older versions
-            header_size = m->data_start;
+            header_size = data_start;
         }
     } else if (version == 5) {
         // read data_start location from the header
@@ -123,9 +105,9 @@ static int read_header(AVFormatContext *s)
         data_offset = header_size - 0x30 * par->ch_layout.nb_channels - 0x4;
         if ((ret_size = avio_seek(pb, data_offset, SEEK_SET)) < 0)
             return ret_size;
-        m->data_start = avio_rl32(pb);
+        data_start = avio_rl32(pb);
         // check if the metadata is reasonable
-        if (file_size > 0 && (int64_t)m->data_start + data_size > file_size) {
+        if (file_size > 0 && (int64_t)data_start + data_size > file_size) {
             // the header is broken beyond repair
             if ((int64_t)header_size + data_size > file_size) {
                 av_log(s, AV_LOG_ERROR,
@@ -138,7 +120,7 @@ static int read_header(AVFormatContext *s)
                    "header size approximated from the data size\n");
             if (file_size - data_offset > UINT32_MAX)
                 return AVERROR_INVALIDDATA;
-            m->data_start = file_size - data_size;
+            data_start = file_size - data_size;
         }
     } else {
         avpriv_request_sample(s, "version %d", version);
@@ -148,11 +130,11 @@ static int read_header(AVFormatContext *s)
     // coefficient alignment = 0x30; metadata size = 0x14
     if (0x30 * par->ch_layout.nb_channels + nb_metadata * 0x14 > header_size)
         return AVERROR_INVALIDDATA;
-    coef_offset =
-        header_size - 0x30 * par->ch_layout.nb_channels + nb_metadata * 0x14;
+    coef_offset = header_size - 0x30 * par->ch_layout.nb_channels + nb_metadata * 0x14;
 
     st->start_time = 0;
     par->codec_id = AV_CODEC_ID_ADPCM_NDSP_LE;
+    par->block_align = block_size * par->ch_layout.nb_channels;
 
     ret = ff_alloc_extradata(st->codecpar, 32 * par->ch_layout.nb_channels);
     if (ret < 0)
@@ -169,7 +151,7 @@ static int read_header(AVFormatContext *s)
 
     // seek to the beginning of the adpcm data
     // there are some files where the adpcm audio data is not immediately after the header
-    if ((ret_size = avio_seek(pb, m->data_start, SEEK_SET)) < 0)
+    if ((ret_size = avio_seek(pb, data_start, SEEK_SET)) < 0)
         return ret_size;
 
     return 0;
@@ -178,44 +160,15 @@ static int read_header(AVFormatContext *s)
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
-    MCADemuxContext *m     = s->priv_data;
-    uint16_t size          = m->block_size;
-    uint32_t samples       = m->samples_per_block;
-    int ret = 0;
+    int ret;
 
     if (avio_feof(s->pb))
         return AVERROR_EOF;
-    m->current_block++;
-    if (m->current_block > m->block_count)
-        return AVERROR_EOF;
 
-    if ((ret = av_get_packet(s->pb, pkt, size * par->ch_layout.nb_channels)) < 0)
+    if ((ret = av_get_packet(s->pb, pkt, par->block_align)) < 0)
         return ret;
-    pkt->duration = samples;
     pkt->stream_index = 0;
 
-    return 0;
-}
-
-static int read_seek(AVFormatContext *s, int stream_index,
-                     int64_t timestamp, int flags)
-{
-    AVStream *st = s->streams[stream_index];
-    MCADemuxContext *m = s->priv_data;
-    int64_t ret = 0;
-
-    if (timestamp < 0)
-        timestamp = 0;
-    timestamp /= m->samples_per_block;
-    if (timestamp >= m->block_count)
-        timestamp = m->block_count - 1;
-    ret = avio_seek(s->pb, m->data_start + timestamp * m->block_size *
-                    st->codecpar->ch_layout.nb_channels, SEEK_SET);
-    if (ret < 0)
-        return ret;
-
-    m->current_block = timestamp;
-    avpriv_update_cur_dts(s, st, timestamp * m->samples_per_block);
     return 0;
 }
 
@@ -223,9 +176,8 @@ const FFInputFormat ff_mca_demuxer = {
     .p.name         = "mca",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Capcom 3DS MCA"),
     .p.extensions   = "mca",
-    .priv_data_size = sizeof(MCADemuxContext),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
-    .read_seek      = read_seek,
 };
