@@ -125,6 +125,7 @@ static int xa_read_packet(AVFormatContext *s,
 const FFInputFormat ff_xa_demuxer = {
     .p.name         = "xa",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Maxis XA"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .priv_data_size = sizeof(MaxisXADemuxContext),
     .read_probe     = xa_probe,
     .read_header    = xa_read_header,
