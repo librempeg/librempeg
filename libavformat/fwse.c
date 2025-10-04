@@ -73,6 +73,7 @@ static int fwse_read_header(AVFormatContext *s)
     if (channels != 1 && channels != 2)
         return AVERROR_INVALIDDATA;
     av_channel_layout_default(&par->ch_layout, channels);
+    st->start_time = 0;
     st->duration = avio_rl32(pb);
     par->sample_rate = avio_rl32(pb);
     if (par->sample_rate <= 0)
