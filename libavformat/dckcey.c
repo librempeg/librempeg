@@ -48,7 +48,7 @@ static int dckcey_read_header(AVFormatContext *s)
 
     avio_skip(pb, 8);
     nb_channels = avio_rb32(pb);
-    if (nb_channels <= 0)
+    if (nb_channels <= 0 || nb_channels > INT_MAX/0x200)
         return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
