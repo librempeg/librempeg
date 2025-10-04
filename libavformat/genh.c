@@ -199,6 +199,7 @@ static int genh_read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_genh_demuxer = {
     .p.name         = "genh",
     .p.long_name    = NULL_IF_CONFIG_SMALL("GENeric Header"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "genh",
     .priv_data_size = sizeof(GENHDemuxContext),
     .read_probe     = genh_probe,
