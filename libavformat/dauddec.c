@@ -24,7 +24,8 @@
 #include "demux.h"
 #include "internal.h"
 
-static int daud_header(AVFormatContext *s) {
+static int daud_header(AVFormatContext *s)
+{
     AVStream *st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
@@ -42,15 +43,19 @@ static int daud_header(AVFormatContext *s) {
     return 0;
 }
 
-static int daud_packet(AVFormatContext *s, AVPacket *pkt) {
+static int daud_packet(AVFormatContext *s, AVPacket *pkt)
+{
     AVIOContext *pb = s->pb;
     int ret, size;
+
     if (avio_feof(pb))
         return AVERROR_EOF;
+
     size = avio_rb16(pb);
     avio_rb16(pb); // unknown
     ret = av_get_packet(pb, pkt, size);
     pkt->stream_index = 0;
+
     return ret;
 }
 
