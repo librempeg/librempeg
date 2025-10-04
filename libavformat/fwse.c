@@ -94,4 +94,5 @@ const FFInputFormat ff_fwse_demuxer = {
     .read_probe     = fwse_probe,
     .read_header    = fwse_read_header,
     .read_packet    = ff_pcm_read_packet,
+    .read_seek      = ff_pcm_read_seek,
 };
