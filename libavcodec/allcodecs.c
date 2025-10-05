@@ -712,6 +712,7 @@ extern const FFCodec ff_adpcm_ima_cunning_decoder;
 extern const FFCodec ff_adpcm_ima_dat4_decoder;
 extern const FFCodec ff_adpcm_ima_dk3_decoder;
 extern const FFCodec ff_adpcm_ima_dk4_decoder;
+extern const FFCodec ff_adpcm_ima_dvi_decoder;
 extern const FFCodec ff_adpcm_ima_ea_eacs_decoder;
 extern const FFCodec ff_adpcm_ima_ea_sead_decoder;
 extern const FFCodec ff_adpcm_ima_escape_decoder;

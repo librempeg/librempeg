@@ -390,6 +390,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_FMOD:
     case AV_CODEC_ID_ADPCM_IMA_NDS:
     case AV_CODEC_ID_ADPCM_BRR:
+    case AV_CODEC_ID_ADPCM_IMA_DVI:
         avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
         break;
     case AV_CODEC_ID_ADPCM_IMA_WS:
@@ -1299,6 +1300,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_CT:
     case AV_CODEC_ID_ADPCM_IMA_APC:
     case AV_CODEC_ID_ADPCM_IMA_CUNNING:
+    case AV_CODEC_ID_ADPCM_IMA_DVI:
     case AV_CODEC_ID_ADPCM_IMA_EA_SEAD:
     case AV_CODEC_ID_ADPCM_IMA_ESCAPE:
     case AV_CODEC_ID_ADPCM_IMA_OKI:
@@ -2203,6 +2205,22 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
         }
         bytestream2_seek(&gb, 0, SEEK_END);
+        ) /* End of CASE */
+    CASE(ADPCM_IMA_DVI,
+        for (int block = 0; block < avpkt->size / FFMAX(avctx->block_align, 1); block++) {
+            const int nb_samples_per_block = 2 * FFMAX(avctx->block_align, 1) / channels;
+
+            for (int channel = 0; channel < channels; channel++) {
+                ADPCMChannelStatus *cs = c->status + channel;
+                int16_t *smp = samples_p[channel] + block * nb_samples_per_block;
+
+                for (int n = nb_samples_per_block / 2; n > 0; n--) {
+                    int v = bytestream2_get_byteu(&gb);
+                    *smp++ = adpcm_ima_expand_nibble(cs, v >> 4  , 3);
+                    *smp++ = adpcm_ima_expand_nibble(cs, v & 0x0F, 3);
+                }
+            }
+        }
         ) /* End of CASE */
     CASE(ADPCM_XMD,
         int bytes_remaining, block = 0;
@@ -3527,6 +3545,7 @@ ADPCM_DECODER(ADPCM_IMA_CUNNING, sample_fmts_s16p, adpcm_ima_cunning, "ADPCM IMA
 ADPCM_DECODER(ADPCM_IMA_DAT4,    sample_fmts_s16,  adpcm_ima_dat4,    "ADPCM IMA Eurocom DAT4")
 ADPCM_DECODER(ADPCM_IMA_DK3,     sample_fmts_s16,  adpcm_ima_dk3,     "ADPCM IMA Duck DK3")
 ADPCM_DECODER(ADPCM_IMA_DK4,     sample_fmts_s16,  adpcm_ima_dk4,     "ADPCM IMA Duck DK4")
+ADPCM_DECODER(ADPCM_IMA_DVI,     sample_fmts_s16p, adpcm_ima_dvi,     "ADPCM IMA Intel DVI")
 ADPCM_DECODER(ADPCM_IMA_EA_EACS, sample_fmts_s16,  adpcm_ima_ea_eacs, "ADPCM IMA Electronic Arts EACS")
 ADPCM_DECODER(ADPCM_IMA_EA_SEAD, sample_fmts_s16,  adpcm_ima_ea_sead, "ADPCM IMA Electronic Arts SEAD")
 ADPCM_DECODER(ADPCM_IMA_ESCAPE,  sample_fmts_s16,  adpcm_ima_escape,  "ADPCM IMA Acorn Escape")

@@ -1013,6 +1013,7 @@ OBJS-$(CONFIG_ADPCM_IMA_CUNNING_DECODER)  += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_DAT4_DECODER)     += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_DK3_DECODER)      += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_DK4_DECODER)      += adpcm.o adpcm_data.o
+OBJS-$(CONFIG_ADPCM_IMA_DVI_DECODER)      += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_EA_EACS_DECODER)  += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_EA_SEAD_DECODER)  += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_ESCAPE_DECODER)   += adpcm.o adpcm_data.o
