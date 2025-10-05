@@ -668,6 +668,7 @@ OBJS-$(CONFIG_SMJPEG_DEMUXER)            += smjpegdec.o smjpeg.o
 OBJS-$(CONFIG_SMJPEG_MUXER)              += smjpegenc.o smjpeg.o
 OBJS-$(CONFIG_SMOOTHSTREAMING_MUXER)     += smoothstreamingenc.o
 OBJS-$(CONFIG_SMP_DEMUXER)               += smp.o
+OBJS-$(CONFIG_SMPL_DEMUXER)              += smpl.o pcm.o
 OBJS-$(CONFIG_SMUSH_DEMUXER)             += smush.o
 OBJS-$(CONFIG_SNDB_DEMUXER)              += sndb.o
 OBJS-$(CONFIG_SNRSNS_DEMUXER)            += snrsns.o
