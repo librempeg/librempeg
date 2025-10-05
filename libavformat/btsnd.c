@@ -35,7 +35,7 @@ static int btsnd_read_probe(const AVProbeData *p)
     if (av_match_ext(p->filename, "btsnd") == 0)
         return 0;
 
-    return AVPROBE_SCORE_MAX/6;
+    return AVPROBE_SCORE_MAX;
 }
 
 static int btsnd_read_header(AVFormatContext *s)
