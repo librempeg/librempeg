@@ -476,6 +476,7 @@ OBJS-$(CONFIG_MVI_DEMUXER)               += mvi.o
 OBJS-$(CONFIG_MXF_DEMUXER)               += mxfdec.o mxf.o avlanguage.o
 OBJS-$(CONFIG_MXF_MUXER)                 += mxfenc.o mxf.o
 OBJS-$(CONFIG_MXG_DEMUXER)               += mxg.o
+OBJS-$(CONFIG_NAAC_DEMUXER)              += naac.o
 OBJS-$(CONFIG_NAXAT_ASD_DEMUXER)         += naxat_asd.o
 OBJS-$(CONFIG_NAXAT_ASD_BANK_DEMUXER)    += naxat_asd.o
 OBJS-$(CONFIG_NC_DEMUXER)                += ncdec.o
