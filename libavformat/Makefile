@@ -231,6 +231,7 @@ OBJS-$(CONFIG_DV_MUXER)                  += dvenc.o
 OBJS-$(CONFIG_DVBSUB_DEMUXER)            += dvbsub.o rawdec.o
 OBJS-$(CONFIG_DVBTXT_DEMUXER)            += dvbtxt.o rawdec.o
 OBJS-$(CONFIG_DVDVIDEO_DEMUXER)          += dvdvideodec.o dvdclut.o
+OBJS-$(CONFIG_DVI_DEMUXER)               += dvi.o pcm.o
 OBJS-$(CONFIG_DWD_DEMUXER)               += dwd.o pcm.o
 OBJS-$(CONFIG_DXA_DEMUXER)               += dxa.o
 OBJS-$(CONFIG_DYUV_DEMUXER)              += rawvideodec.o
