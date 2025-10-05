@@ -70,6 +70,7 @@ static int read_header(AVFormatContext *s)
     st->codecpar->ch_layout.nb_channels = nb_channels;
     st->codecpar->sample_rate = rate;
     st->duration = duration;
+    st->start_time = 0;
 
     switch (codec) {
     case 0:
