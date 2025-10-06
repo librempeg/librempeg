@@ -88,7 +88,9 @@ static int read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     st->id = n->ogg_ctx->streams[0]->id;
+    st->pts_wrap_bits = n->ogg_ctx->streams[0]->pts_wrap_bits;
     st->start_time = n->ogg_ctx->streams[0]->start_time;
+    st->time_base = n->ogg_ctx->streams[0]->time_base;
     st->duration = n->ogg_ctx->streams[0]->duration;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = n->ogg_ctx->streams[0]->codecpar->codec_id;
@@ -106,8 +108,6 @@ static int read_header(AVFormatContext *s)
     sti = ffstream(st);
     sti->request_probe = 0;
     sti->need_parsing = AVSTREAM_PARSE_HEADERS;
-
-    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
 }
