@@ -67,9 +67,16 @@ static int read_data(void *opaque, uint8_t *buf, int buf_size)
     return ret;
 }
 
+static int64_t seek_data(void *opaque, int64_t offset, int whence)
+{
+    AVFormatContext *s = opaque;
+    AVIOContext *pb = s->pb;
+
+    return avio_seek(pb, offset, whence);
+}
+
 static int read_header(AVFormatContext *s)
 {
-    extern const FFInputFormat ff_ogg_demuxer;
     KVSDemuxContext *n = s->priv_data;
     AVIOContext *pb = s->pb;
     FFStream *sti;
@@ -89,7 +96,7 @@ static int read_header(AVFormatContext *s)
     }
 
     ffio_init_context(&n->ogg_pb, NULL, 0, 0, s,
-                      read_data, NULL, NULL);
+                      read_data, NULL, seek_data);
 
     n->ogg_ctx->flags = AVFMT_FLAG_CUSTOM_IO | AVFMT_FLAG_GENPTS;
     n->ogg_ctx->ctx_flags |= AVFMTCTX_UNSEEKABLE;
@@ -99,7 +106,7 @@ static int read_header(AVFormatContext *s)
     n->ogg_ctx->pb = &n->ogg_pb.pub;
     n->ogg_ctx->io_open = NULL;
 
-    ret = avformat_open_input(&n->ogg_ctx, "", &ff_ogg_demuxer.p, NULL);
+    ret = avformat_open_input(&n->ogg_ctx, "", NULL, NULL);
     if (ret < 0)
         return ret;
 
@@ -112,6 +119,7 @@ static int read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     st->id = n->ogg_ctx->streams[0]->id;
+    st->start_time = n->ogg_ctx->streams[0]->start_time;
     st->duration = n->ogg_ctx->streams[0]->duration;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = n->ogg_ctx->streams[0]->codecpar->codec_id;
@@ -146,6 +154,14 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     return ret;
 }
 
+static int read_seek(AVFormatContext *s, int stream_index,
+                     int64_t ts, int flags)
+{
+    KVSDemuxContext *n = s->priv_data;
+
+    return av_seek_frame(n->ogg_ctx, 0, ts, flags);
+}
+
 static int read_close(AVFormatContext *s)
 {
     KVSDemuxContext *n = s->priv_data;
@@ -158,11 +174,11 @@ static int read_close(AVFormatContext *s)
 const FFInputFormat ff_kvs_demuxer = {
     .p.name         = "kvs",
     .p.long_name    = NULL_IF_CONFIG_SMALL("KVS Audio"),
-    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "kvs",
     .priv_data_size = sizeof(KVSDemuxContext),
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
+    .read_seek      = read_seek,
     .read_close     = read_close,
 };
