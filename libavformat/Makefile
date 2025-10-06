@@ -99,6 +99,7 @@ OBJS-$(CONFIG_ADX_MUXER)                 += rawenc.o
 OBJS-$(CONFIG_AEA_DEMUXER)               += aeadec.o pcm.o
 OBJS-$(CONFIG_AEA_MUXER)                 += aeaenc.o rawenc.o
 OBJS-$(CONFIG_AFC_DEMUXER)               += afc.o
+OBJS-$(CONFIG_AFS_DEMUXER)               += afs.o
 OBJS-$(CONFIG_AGSC_DEMUXER)              += agsc.o
 OBJS-$(CONFIG_AHX_DEMUXER)               += adxdec.o rawdec.o adx_keys.o
 OBJS-$(CONFIG_AIF_DEMUXER)               += aif.o
