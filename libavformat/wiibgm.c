@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int wiibgm_probe(const AVProbeData *p)
 {
@@ -65,7 +66,8 @@ static int wiibgm_read_header(AVFormatContext *s)
         av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
     avio_skip(pb, 8);
     st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
-    if (st->codecpar->ch_layout.nb_channels <= 0)
+    if (st->codecpar->ch_layout.nb_channels <= 0 ||
+        st->codecpar->ch_layout.nb_channels > INT_MAX/8)
         return AVERROR_INVALIDDATA;
 
     st->codecpar->sample_rate = avio_rb32(pb);
@@ -90,18 +92,6 @@ static int wiibgm_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int wiibgm_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_wiibgm_demuxer = {
     .p.name         = "wiibgm",
     .p.long_name    = NULL_IF_CONFIG_SMALL("WiiBGM (Koei Tecmo)"),
@@ -109,5 +99,5 @@ const FFInputFormat ff_wiibgm_demuxer = {
     .p.extensions   = "dsp,wiibgm",
     .read_probe     = wiibgm_probe,
     .read_header    = wiibgm_read_header,
-    .read_packet    = wiibgm_read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
