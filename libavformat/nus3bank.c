@@ -78,10 +78,17 @@ static int read_data(void *opaque, uint8_t *buf, int buf_size)
     NUS3Stream *nst = opaque;
     AVFormatContext *s = nst->parent;
     AVIOContext *pb = s->pb;
-    int ret;
 
-    ret = avio_read(pb, buf, buf_size);
-    return ret;
+    return avio_read(pb, buf, buf_size);
+}
+
+static int64_t seek_data(void *opaque, int64_t offset, int whence)
+{
+    NUS3Stream *nst = opaque;
+    AVFormatContext *s = nst->parent;
+    AVIOContext *pb = s->pb;
+
+    return avio_seek(pb, offset + nst->start_offset, whence);
 }
 
 static int read_header(AVFormatContext *s)
@@ -226,10 +233,9 @@ static int read_header(AVFormatContext *s)
         }
 
         ffio_init_context(&nst->apb, NULL, 0, 0, nst,
-                          read_data, NULL, NULL);
+                          read_data, NULL, seek_data);
 
         nst->xctx->flags = AVFMT_FLAG_CUSTOM_IO | AVFMT_FLAG_GENPTS;
-        nst->xctx->ctx_flags |= AVFMTCTX_UNSEEKABLE;
         nst->xctx->probesize = 0;
         nst->xctx->max_analyze_duration = 0;
         nst->xctx->interrupt_callback = s->interrupt_callback;
