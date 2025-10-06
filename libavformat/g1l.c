@@ -199,6 +199,9 @@ static int g1l_read_header(AVFormatContext *s)
 
         st->id = gst->xctx->streams[0]->id;
         st->duration = gst->xctx->streams[0]->duration;
+        st->time_base = gst->xctx->streams[0]->time_base;
+        st->start_time = gst->xctx->streams[0]->start_time;
+        st->pts_wrap_bits = gst->xctx->streams[0]->pts_wrap_bits;
         st->codecpar->codec_id = gst->xctx->streams[0]->codecpar->codec_id;
         st->codecpar->sample_rate = gst->xctx->streams[0]->codecpar->sample_rate;
         st->codecpar->block_align = gst->xctx->streams[0]->codecpar->block_align;
@@ -218,8 +221,6 @@ static int g1l_read_header(AVFormatContext *s)
 
         ffstream(st)->request_probe = 0;
         ffstream(st)->need_parsing = AVSTREAM_PARSE_HEADERS;
-
-        avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
         gst->data_offset = avio_tell(gst->xctx->pb);
     }
