@@ -251,7 +251,9 @@ static int read_header(AVFormatContext *s)
 
         st->id = nst->xctx->streams[0]->id;
         st->duration = nst->xctx->streams[0]->duration;
+        st->time_base = nst->xctx->streams[0]->time_base;
         st->start_time = nst->xctx->streams[0]->start_time;
+        st->pts_wrap_bits = nst->xctx->streams[0]->pts_wrap_bits;
         st->codecpar->codec_id = nst->xctx->streams[0]->codecpar->codec_id;
         st->codecpar->sample_rate = nst->xctx->streams[0]->codecpar->sample_rate;
         st->codecpar->block_align = nst->xctx->streams[0]->codecpar->block_align;
@@ -271,8 +273,6 @@ static int read_header(AVFormatContext *s)
 
         ffstream(st)->request_probe = 0;
         ffstream(st)->need_parsing = AVSTREAM_PARSE_HEADERS;
-
-        avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
         nst->data_offset = avio_tell(pb);
     }
