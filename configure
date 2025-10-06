@@ -6383,7 +6383,8 @@ if enabled aarch64; then
     # internal assembler in clang 3.3 does not support this instruction
     enabled neon && check_insn neon 'ext   v0.8B, v0.8B, v1.8B, #1'
 
-    archext_list="dotprod i8mm sve sve2"
+    archext_list="arm_crc dotprod i8mm sve sve2 sme"
+    enabled arm_crc && check_archext_name_insn arm_crc crc 'crc32x w0, w0, x0'
     enabled dotprod && check_archext_insn dotprod 'udot v0.4s, v0.16b, v0.16b'
     enabled i8mm    && check_archext_insn i8mm    'usdot v0.4s, v0.16b, v0.16b'
     enabled sve     && check_archext_insn sve     'whilelt p0.s, x0, x1'
