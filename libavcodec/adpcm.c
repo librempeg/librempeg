@@ -2880,47 +2880,49 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         bytestream2_seek(&gb, 0, SEEK_END);
         ) /* End of CASE */
     CASE(ADPCM_NDSP_SI1,
-        for (int n = 0; n < 8; n++) {
-            for (int ch = 0; ch < channels; ch++) {
-                int byte, scale, coeff1, coeff2, sample1, sample2;
-                ADPCMChannelStatus *chs = &c->status[ch];
-                int32_t sampledat;
+        for (int block = 0; block < avpkt->size / FFMAX(avctx->block_align, 8 * channels); block++) {
+            for (int n = 0; n < 8; n++) {
+                for (int ch = 0; ch < channels; ch++) {
+                    int byte, scale, coeff1, coeff2, sample1, sample2;
+                    ADPCMChannelStatus *chs = &c->status[ch];
+                    int32_t sampledat;
 
-                if (n == 0) {
-                    int index;
+                    if (n == 0) {
+                        int index;
 
-                    byte = bytestream2_get_byteu(&gb);
-                    index = (byte >> 4) & 0x7;
-                    chs->step = 1 << (byte & 0xF);
-                    chs->coeff1 = c->table[ch][index * 2];
-                    chs->coeff2 = c->table[ch][index * 2 + 1];
-                } else {
-                    sample1 = chs->sample1;
-                    sample2 = chs->sample2;
-                    coeff1 = chs->coeff1;
-                    coeff2 = chs->coeff2;
-                    scale =  chs->step;
+                        byte = bytestream2_get_byteu(&gb);
+                        index = (byte >> 4) & 0x7;
+                        chs->step = 1 << (byte & 0xF);
+                        chs->coeff1 = c->table[ch][index * 2];
+                        chs->coeff2 = c->table[ch][index * 2 + 1];
+                    } else {
+                        sample1 = chs->sample1;
+                        sample2 = chs->sample2;
+                        coeff1 = chs->coeff1;
+                        coeff2 = chs->coeff2;
+                        scale =  chs->step;
 
-                    byte = bytestream2_get_byteu(&gb);
+                        byte = bytestream2_get_byteu(&gb);
 
-                    sampledat = sign_extend(byte >> 4, 4);
-                    sampledat = (sampledat * scale) << 11;
-                    sampledat = ((sample1 * coeff1 +
-                                  sample2 * coeff2 + 1024 + sampledat) >> 11);
-                    *samples = av_clip_int16(sampledat);
-                    sample2 = sample1;
-                    sample1 = *samples++;
+                        sampledat = sign_extend(byte >> 4, 4);
+                        sampledat = (sampledat * scale) << 11;
+                        sampledat = ((sample1 * coeff1 +
+                                      sample2 * coeff2 + 1024 + sampledat) >> 11);
+                        *samples = av_clip_int16(sampledat);
+                        sample2 = sample1;
+                        sample1 = *samples++;
 
-                    sampledat = sign_extend(byte, 4);
-                    sampledat = (sampledat * scale) << 11;
-                    sampledat = ((sample1 * coeff1 +
-                                  sample2 * coeff2 + 1024 + sampledat) >> 11);
-                    *samples = av_clip_int16(sampledat);
-                    sample2 = sample1;
-                    sample1 = *samples++;
+                        sampledat = sign_extend(byte, 4);
+                        sampledat = (sampledat * scale) << 11;
+                        sampledat = ((sample1 * coeff1 +
+                                      sample2 * coeff2 + 1024 + sampledat) >> 11);
+                        *samples = av_clip_int16(sampledat);
+                        sample2 = sample1;
+                        sample1 = *samples++;
 
-                    chs->sample1 = sample1;
-                    chs->sample2 = sample2;
+                        chs->sample1 = sample1;
+                        chs->sample2 = sample2;
+                    }
                 }
             }
         }
