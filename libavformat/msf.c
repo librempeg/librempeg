@@ -43,11 +43,12 @@ static int msf_probe(const AVProbeData *p)
 
 static int msf_read_header(AVFormatContext *s)
 {
+    AVIOContext *pb = s->pb;
     unsigned codec;
     AVStream *st;
     int ret;
 
-    avio_skip(s->pb, 4);
+    avio_skip(pb, 4);
 
     st = avformat_new_stream(s, NULL);
     if (!st)
@@ -55,16 +56,16 @@ static int msf_read_header(AVFormatContext *s)
 
     st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    codec = avio_rb32(s->pb);
-    st->codecpar->ch_layout.nb_channels = avio_rb32(s->pb);
+    codec = avio_rb32(pb);
+    st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
     if (st->codecpar->ch_layout.nb_channels <= 0 ||
         st->codecpar->ch_layout.nb_channels >= INT_MAX / 1024)
         return AVERROR_INVALIDDATA;
-    avio_rb32(s->pb);
-    st->codecpar->sample_rate = avio_rb32(s->pb);
+    avio_rb32(pb);
+    st->codecpar->sample_rate = avio_rb32(pb);
     if (st->codecpar->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
-    // avio_rb32(s->pb); /* byte flags with encoder info */
+    // avio_rb32(pb); /* byte flags with encoder info */
     switch (codec) {
     case 0:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16BE;
@@ -103,7 +104,7 @@ static int msf_read_header(AVFormatContext *s)
         avpriv_request_sample(s, "Codec %d", codec);
         return AVERROR_PATCHWELCOME;
     }
-    avio_seek(s->pb, 0x40, SEEK_SET);
+    avio_seek(pb, 0x40, SEEK_SET);
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
