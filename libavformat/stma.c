@@ -48,17 +48,16 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    uint32_t interleave, bps, nb_channels, rate;
+    int interleave, bps, nb_channels, rate, ret;
     AVIOContext *pb = s->pb;
     AVStream *st;
-    int ret;
 
     avio_skip(pb, 8);
     interleave = avio_rl32(pb);
     rate = avio_rl32(pb);
     bps = avio_rl32(pb);
     nb_channels = avio_rl32(pb);
-    if (nb_channels <= 0 || rate <= 0 || bps <= 0)
+    if (nb_channels <= 0 || rate <= 0 || bps <= 0 || interleave <= 0)
         return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
