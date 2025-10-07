@@ -700,6 +700,7 @@ extern const FFCodec ff_adpcm_g726_encoder;
 extern const FFCodec ff_adpcm_g726_decoder;
 extern const FFCodec ff_adpcm_g726le_encoder;
 extern const FFCodec ff_adpcm_g726le_decoder;
+extern const FFCodec ff_adpcm_hevag_decoder;
 extern const FFCodec ff_adpcm_ima_acorn_decoder;
 extern const FFCodec ff_adpcm_ima_amv_decoder;
 extern const FFCodec ff_adpcm_ima_amv_encoder;
