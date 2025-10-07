@@ -71,6 +71,9 @@ typedef struct PSBHeader {
     int channels;
     int format;
     int sample_rate;
+    int64_t start_time;
+    AVRational time_base;
+    int pts_wrap_bits;
     int block_size;
     int avg_bitrate;
     int bps;
@@ -989,7 +992,10 @@ static int prepare_codec(AVFormatContext *s, PSBHeader *psb)
             if (ret < 0)
                 return ret;
 
+            p->psb.start_time = p->wav_ctx->streams[0]->start_time;
             p->psb.num_samples = p->wav_ctx->streams[0]->duration;
+            p->psb.time_base = p->wav_ctx->streams[0]->time_base;
+            p->psb.pts_wrap_bits = p->wav_ctx->streams[0]->pts_wrap_bits;
             p->psb.bps = p->wav_ctx->streams[0]->codecpar->bits_per_coded_sample;
             p->psb.block_size = p->wav_ctx->streams[0]->codecpar->block_align;
             p->psb.codec = p->wav_ctx->streams[0]->codecpar->codec_id;
@@ -1169,7 +1175,9 @@ static int read_header(AVFormatContext *s)
                     return AVERROR(ENOMEM);
             }
 
-            st->start_time = 0;
+            st->start_time = p->psb.start_time;
+            st->time_base = p->psb.time_base;
+            st->pts_wrap_bits = p->psb.pts_wrap_bits;
             st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
             st->codecpar->codec_id = p->psb.codec;
             st->codecpar->bits_per_coded_sample = p->psb.bps;
@@ -1256,10 +1264,10 @@ static int read_header(AVFormatContext *s)
             pst->stop_offset  = pst->start_offset;
             pst->stop_offset += p->psb.stream_size[0];
 
+            avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+
             avio_seek(pb, p->start_offset, SEEK_SET);
         }
-
-        avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
     }
 
     qsort(s->streams, s->nb_streams, sizeof(AVStream *), sort_streams);
