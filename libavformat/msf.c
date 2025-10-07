@@ -43,7 +43,7 @@ static int msf_probe(const AVProbeData *p)
 
 static int msf_read_header(AVFormatContext *s)
 {
-    unsigned codec, size;
+    unsigned codec;
     AVStream *st;
     int ret;
 
@@ -53,46 +53,58 @@ static int msf_read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
+    st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     codec = avio_rb32(s->pb);
     st->codecpar->ch_layout.nb_channels = avio_rb32(s->pb);
     if (st->codecpar->ch_layout.nb_channels <= 0 ||
         st->codecpar->ch_layout.nb_channels >= INT_MAX / 1024)
         return AVERROR_INVALIDDATA;
-    size = avio_rb32(s->pb);
+    avio_rb32(s->pb);
     st->codecpar->sample_rate = avio_rb32(s->pb);
     if (st->codecpar->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
     // avio_rb32(s->pb); /* byte flags with encoder info */
     switch (codec) {
-    case 0: st->codecpar->codec_id = AV_CODEC_ID_PCM_S16BE; break;
-    case 1: st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE; break;
-    case 3: st->codecpar->block_align = 16 * st->codecpar->ch_layout.nb_channels;
-            st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX; break;
+    case 0:
+        st->codecpar->codec_id = AV_CODEC_ID_PCM_S16BE;
+        break;
+    case 1:
+        st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
+        break;
+    case 3:
+        st->codecpar->block_align = 16 * st->codecpar->ch_layout.nb_channels;
+        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX;
+        st->codecpar->bit_rate = 16LL * st->codecpar->ch_layout.nb_channels * 8 *
+                                        st->codecpar->sample_rate / 28;
+        break;
     case 4:
     case 5:
-    case 6: st->codecpar->block_align = (codec == 4 ? 96 : codec == 5 ? 152 : 192) * st->codecpar->ch_layout.nb_channels;
-            if (st->codecpar->ch_layout.nb_channels > UINT16_MAX / 2048)
-                return AVERROR_INVALIDDATA;
-            ret = ff_alloc_extradata(st->codecpar, 14);
-            if (ret < 0)
-                return ret;
-            memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
-            AV_WL16(st->codecpar->extradata, 1); /* version */
-            AV_WL16(st->codecpar->extradata+2, 2048 * st->codecpar->ch_layout.nb_channels); /* unknown size */
-            AV_WL16(st->codecpar->extradata+6, codec == 4 ? 1 : 0); /* joint stereo */
-            AV_WL16(st->codecpar->extradata+8, codec == 4 ? 1 : 0); /* joint stereo (repeat?) */
-            AV_WL16(st->codecpar->extradata+10, 1);
-            st->codecpar->codec_id = AV_CODEC_ID_ATRAC3;    break;
-    case 7: ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
-            st->codecpar->codec_id = AV_CODEC_ID_MP3;       break;
+    case 6:
+        st->codecpar->block_align = (codec == 4 ? 96 : codec == 5 ? 152 : 192) * st->codecpar->ch_layout.nb_channels;
+        if (st->codecpar->ch_layout.nb_channels > UINT16_MAX / 2048)
+            return AVERROR_INVALIDDATA;
+        ret = ff_alloc_extradata(st->codecpar, 14);
+        if (ret < 0)
+            return ret;
+        memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
+        AV_WL16(st->codecpar->extradata, 1); /* version */
+        AV_WL16(st->codecpar->extradata+2, 2048 * st->codecpar->ch_layout.nb_channels); /* unknown size */
+        AV_WL16(st->codecpar->extradata+6, codec == 4 ? 1 : 0); /* joint stereo */
+        AV_WL16(st->codecpar->extradata+8, codec == 4 ? 1 : 0); /* joint stereo (repeat?) */
+        AV_WL16(st->codecpar->extradata+10, 1);
+        st->codecpar->codec_id = AV_CODEC_ID_ATRAC3;
+        break;
+    case 7:
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+        st->codecpar->codec_id = AV_CODEC_ID_MP3;
+        break;
     default:
-            avpriv_request_sample(s, "Codec %d", codec);
-            return AVERROR_PATCHWELCOME;
+        avpriv_request_sample(s, "Codec %d", codec);
+        return AVERROR_PATCHWELCOME;
     }
-    st->start_time = 0;
-    st->duration = av_get_audio_frame_duration2(st->codecpar, size);
-    avio_skip(s->pb, 0x40 - avio_tell(s->pb));
+    avio_seek(s->pb, 0x40, SEEK_SET);
+
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
