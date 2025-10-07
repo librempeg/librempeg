@@ -2,6 +2,7 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>:
+- Rockchip H.264/HEVC hardware encoder
 
 
 version 8.0:
