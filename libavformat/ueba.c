@@ -21,39 +21,54 @@
 #include "demux.h"
 #include "internal.h"
 
-static int ueba_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
-    if (AV_RL32(p->buf) == MKBETAG('U','E','B','A') && p->buf[4] == 1 &&
-        (p->buf[5] == 1 || p->buf[5] == 2) && AV_RL32(p->buf + 8))
-        return AVPROBE_SCORE_MAX / 2;
-    return 0;
+    if (AV_RL32(p->buf) != MKBETAG('U','E','B','A'))
+        return 0;
+    if (p->buf_size < 20)
+        return 0;
+    if (p->buf[4] != 1)
+        return 0;
+    if (p->buf[5] == 0)
+        return 0;
+    if ((int)AV_RL32(p->buf + 8) <= 0)
+        return 0;
+    if (AV_RL32(p->buf + 12) == 0)
+        return 0;
+    if ((int)AV_RL16(p->buf + 18) != 1)
+        return 0;
+
+    return AVPROBE_SCORE_MAX;
 }
 
-static int ueba_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
+    int nb_seek_entries, ret, rate, channels;
     AVIOContext *pb = s->pb;
+    int64_t duration;
     AVStream *st;
-    int nb_seek_entries, ret;
+
+    avio_skip(pb, 5);
+    channels = avio_r8(pb);
+    avio_skip(pb, 2);
+    rate = avio_rl32(pb);
+    duration = avio_rl32(pb);
+    avio_skip(pb, 8);
+    nb_seek_entries = avio_rl16(pb);
+    avio_skip(pb, 2 + nb_seek_entries * 2);
+    if (channels == 0 || rate <= 0)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(pb, 5);
-    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id = AV_CODEC_ID_BINKAUDIO_DCT;
-    st->codecpar->ch_layout.nb_channels = avio_r8(pb);
-    if (st->codecpar->ch_layout.nb_channels == 0)
-        return AVERROR_INVALIDDATA;
-    avio_skip(pb, 2);
-    st->codecpar->sample_rate = avio_rl32(pb);
-    if (st->codecpar->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
     st->start_time = 0;
-    st->duration = avio_rl32(pb);
-    avio_skip(pb, 8);
-    nb_seek_entries = avio_rl16(pb);
-    avio_skip(pb, 2 + nb_seek_entries * 2);
+    st->duration = duration;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->ch_layout.nb_channels = channels;
+    st->codecpar->codec_id = AV_CODEC_ID_BINKAUDIO_DCT;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
@@ -64,7 +79,7 @@ static int ueba_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int ueba_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *pb = s->pb;
     AVStream *st = s->streams[0];
@@ -107,7 +122,7 @@ const FFInputFormat ff_ueba_demuxer = {
     .p.name         = "ueba",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Unreal Engine Bink Audio"),
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = ueba_probe,
-    .read_header    = ueba_read_header,
-    .read_packet    = ueba_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
