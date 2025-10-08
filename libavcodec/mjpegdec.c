@@ -819,9 +819,9 @@ static int decode_block(MJpegDecodeContext *s, int16_t *block, int component,
         i += ((unsigned)code) >> 4;
             code &= 0xf;
         if (code) {
-            if (code > MIN_CACHE_BITS - 16)
-                UPDATE_CACHE(re, gb);
-
+            // GET_VLC updates the cache if parsing reaches the second stage.
+            // So we have at least MIN_CACHE_BITS - 9 > 15 bits left here
+            // and don't need to refill the cache.
             {
                 int cache = GET_CACHE(re, gb);
                 int sign  = (~cache) >> 31;
@@ -885,8 +885,6 @@ static int decode_block_progressive(MJpegDecodeContext *s, int16_t *block,
             code &= 0xF;
             if (code) {
                 i += run;
-                if (code > MIN_CACHE_BITS - 16)
-                    UPDATE_CACHE(re, gb);
 
                 {
                     int cache = GET_CACHE(re, gb);
@@ -917,7 +915,8 @@ static int decode_block_progressive(MJpegDecodeContext *s, int16_t *block,
                 } else {
                     val = (1 << run);
                     if (run) {
-                        UPDATE_CACHE(re, gb);
+                        // Given that GET_VLC reloads internally, we always
+                        // have at least 16 bits in the cache here.
                         val += NEG_USR32(GET_CACHE(re, gb), run);
                         LAST_SKIP_BITS(re, gb, run);
                     }
@@ -982,7 +981,6 @@ static int decode_block_refinement(MJpegDecodeContext *s, int16_t *block,
 
             if (code & 0xF) {
                 run = ((unsigned) code) >> 4;
-                UPDATE_CACHE(re, gb);
                 val = SHOW_UBITS(re, gb, 1);
                 LAST_SKIP_BITS(re, gb, 1);
                 ZERO_RUN;
@@ -1003,7 +1001,8 @@ static int decode_block_refinement(MJpegDecodeContext *s, int16_t *block,
                     val = run;
                     run = (1 << run);
                     if (val) {
-                        UPDATE_CACHE(re, gb);
+                        // Given that GET_VLC reloads internally, we always
+                        // have at least 16 bits in the cache here.
                         run += SHOW_UBITS(re, gb, val);
                         LAST_SKIP_BITS(re, gb, val);
                     }
