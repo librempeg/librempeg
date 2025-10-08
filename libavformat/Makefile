@@ -787,6 +787,7 @@ OBJS-$(CONFIG_XMU_DEMUXER)               += xmu.o
 OBJS-$(CONFIG_XMV_DEMUXER)               += xmv.o
 OBJS-$(CONFIG_XPCM_DEMUXER)              += xpcm.o
 OBJS-$(CONFIG_XVAG_DEMUXER)              += xvag.o pcm.o
+OBJS-$(CONFIG_XWB_DEMUXER)               += xwb.o
 OBJS-$(CONFIG_XWC_DEMUXER)               += xwc.o
 OBJS-$(CONFIG_XWMA_DEMUXER)              += xwma.o
 OBJS-$(CONFIG_YOP_DEMUXER)               += yop.o
