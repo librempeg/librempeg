@@ -81,20 +81,35 @@ static int read_header(AVFormatContext *s)
 
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    AVIOContext *pb = s->pb;
-    AVStream *st = s->streams[0];
-    int64_t pos;
     int magic, size, duration, ret;
+    AVStream *st = s->streams[0];
+    AVIOContext *pb = s->pb;
+    uint32_t header;
+    int64_t pos;
 
     pos = avio_tell(pb);
-
-    magic = avio_rl16(pb);
+    header = avio_rl32(pb);
     if (avio_feof(pb))
         return AVERROR_EOF;
+
+    if (header == MKBETAG('S','E','E','K') ||
+        header == MKTAG('S','E','E','K')) {
+        int entries;
+
+        avio_skip(pb, 7);
+        entries = avio_rl32(pb);
+        if (entries <= 0)
+            return AVERROR_INVALIDDATA;
+        avio_skip(pb, entries * 2);
+
+        return FFERROR_REDO;
+    } else {
+        magic = header & 0xFFFF;
+        size = header >> 16;
+    }
     if (magic != 0x9999)
         return AVERROR_INVALIDDATA;
 
-    size = avio_rl16(pb);
     if (size == 0xFFFF) {
         size = avio_rl16(pb);
         duration = avio_rl16(pb);
