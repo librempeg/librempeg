@@ -312,6 +312,7 @@ OBJS-$(CONFIG_CDGRAPHICS_DECODER)      += cdgraphics.o
 OBJS-$(CONFIG_CDTOONS_DECODER)         += cdtoons.o
 OBJS-$(CONFIG_CDXL_DECODER)            += cdxl.o
 OBJS-$(CONFIG_CFAST_DECODER)           += cfast.o
+OBJS-$(CONFIG_CFDF_DPCM_DECODER)       += dpcm.o
 OBJS-$(CONFIG_CFHD_DECODER)            += cfhd.o cfhddata.o cfhddsp.o
 OBJS-$(CONFIG_CFHD_ENCODER)            += cfhdenc.o cfhddata.o cfhdencdsp.o
 OBJS-$(CONFIG_CINEPAK_DECODER)         += cinepak.o

@@ -3021,6 +3021,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("DPCM Activision Exakt SASSC"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_CFDF_DPCM,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "cfdf_dpcm",
+        .long_name = NULL_IF_CONFIG_SMALL("DPCM Cyberflix DreamFactory CFDF"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
 
     /* audio codecs */
     {

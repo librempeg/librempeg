@@ -296,6 +296,7 @@ static int dpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     case AV_CODEC_ID_DERF_DPCM:
     case AV_CODEC_ID_GREMLIN_DPCM:
     case AV_CODEC_ID_CBD2_DPCM:
+    case AV_CODEC_ID_CFDF_DPCM:
     case AV_CODEC_ID_SDX2_DPCM:
     case AV_CODEC_ID_SASSC_DPCM:
         out = buf_size;
@@ -496,6 +497,25 @@ static int dpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
         }
         break;
+
+    case AV_CODEC_ID_CFDF_DPCM:
+        while (output_samples < samples_end) {
+            uint8_t n = bytestream2_get_byteu(&gb);
+            int16_t sample = s->sample[0];
+
+            if (n & 0x80) {
+                sample = n << 9;
+            } else {
+                int16_t delta = n << 9;
+
+                delta >>= 4;
+                sample += delta;
+            }
+
+            s->sample[0] = sample;
+            *output_samples++ = s->sample[0];
+        }
+        break;
     }
 
     *got_frame_ptr = 1;
@@ -524,6 +544,7 @@ const FFCodec ff_ ## name_ ## _decoder = {                  \
 }
 
 DPCM_DECODER(AV_CODEC_ID_CBD2_DPCM,      cbd2_dpcm,      "DPCM Cuberoot-Delta-Exact");
+DPCM_DECODER(AV_CODEC_ID_CFDF_DPCM,      cfdf_dpcm,      "DPCM Cyberflix DreamFactory CFDF");
 DPCM_DECODER(AV_CODEC_ID_DERF_DPCM,      derf_dpcm,      "DPCM Xilam DERF");
 DPCM_DECODER(AV_CODEC_ID_GREMLIN_DPCM,   gremlin_dpcm,   "DPCM Gremlin");
 DPCM_DECODER(AV_CODEC_ID_INTERPLAY_DPCM, interplay_dpcm, "DPCM Interplay");
