@@ -262,6 +262,8 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
     case SCD_TRACK_ID_ADPCMNDSP:
         par->codec_id              = be ? AV_CODEC_ID_ADPCM_NDSP : AV_CODEC_ID_ADPCM_NDSP_LE;
         par->block_align           = 0x800 * par->ch_layout.nb_channels;
+        par->bit_rate              = 8LL * st->codecpar->ch_layout.nb_channels * 8 *
+                                           st->codecpar->sample_rate / 14;
 
         avio_seek(pb, track->absolute_offset + 0x1c, SEEK_SET);
 
