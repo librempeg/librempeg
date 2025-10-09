@@ -2087,6 +2087,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("Sonic CD Video"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_QON,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "qon",
+        .long_name = NULL_IF_CONFIG_SMALL("QON (Quite OK aNimation)"),
+        .props     = AV_CODEC_PROP_LOSSLESS,
+    },
 
     /* various PCM "codecs" */
     {

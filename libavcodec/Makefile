@@ -670,6 +670,7 @@ OBJS-$(CONFIG_QOA_DECODER)             += qoadec.o
 OBJS-$(CONFIG_QOA_ENCODER)             += qoaenc.o
 OBJS-$(CONFIG_QOI_DECODER)             += qoidec.o
 OBJS-$(CONFIG_QOI_ENCODER)             += qoienc.o
+OBJS-$(CONFIG_QON_DECODER)             += qondec.o
 OBJS-$(CONFIG_QPEG_DECODER)            += qpeg.o
 OBJS-$(CONFIG_QTRLE_DECODER)           += qtrle.o
 OBJS-$(CONFIG_QTRLE_ENCODER)           += qtrleenc.o
