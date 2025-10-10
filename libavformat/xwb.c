@@ -22,12 +22,17 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
 #include "avformat.h"
+#include "avio_internal.h"
 #include "demux.h"
 #include "internal.h"
 
 typedef struct XWBStream {
     int64_t start_offset;
     int64_t stop_offset;
+
+    AVFormatContext *xctx;
+    AVFormatContext *parent;
+    FFIOContext apb;
 } XWBStream;
 
 static int read_probe(const AVProbeData *p)
@@ -49,6 +54,24 @@ static int sort_streams(const void *a, const void *b)
     const XWBStream *xs2 = s2->priv_data;
 
     return FFDIFFSIGN(xs1->start_offset, xs2->start_offset);
+}
+
+static int read_data(void *opaque, uint8_t *buf, int buf_size)
+{
+    XWBStream *xst = opaque;
+    AVFormatContext *s = xst->parent;
+    AVIOContext *pb = s->pb;
+
+    return avio_read(pb, buf, buf_size);
+}
+
+static int64_t seek_data(void *opaque, int64_t offset, int whence)
+{
+    XWBStream *xst = opaque;
+    AVFormatContext *s = xst->parent;
+    AVIOContext *pb = s->pb;
+
+    return avio_seek(pb, offset + xst->start_offset, whence);
 }
 
 typedef unsigned int (*avio_r32)(AVIOContext *s);
@@ -292,7 +315,7 @@ static int read_header(AVFormatContext *s)
                 codec = AV_CODEC_ID_ADPCM_IMA_XBOX;
                 break;
             case 2:
-                codec = 0;
+                codec = AV_CODEC_ID_WMAV2;
                 break;
             case 3:
                 codec = 0;
@@ -368,9 +391,63 @@ static int read_header(AVFormatContext *s)
             AV_WL16(st->codecpar->extradata, 1);
             st->codecpar->block_align = 2048;
             ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
-        }
+            avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+        } else if (codec == AV_CODEC_ID_WMAV2) {
+            if (!(xst->xctx = avformat_alloc_context()))
+                return AVERROR(ENOMEM);
 
-        avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+            if ((ret = ff_copy_whiteblacklists(xst->xctx, s)) < 0) {
+                avformat_free_context(xst->xctx);
+                xst->xctx = NULL;
+
+                return ret;
+            }
+
+            ffio_init_context(&xst->apb, NULL, 0, 0, xst,
+                              read_data, NULL, seek_data);
+
+            xst->xctx->flags = AVFMT_FLAG_CUSTOM_IO | AVFMT_FLAG_GENPTS;
+            xst->xctx->probesize = 0;
+            xst->xctx->max_analyze_duration = 0;
+            xst->xctx->interrupt_callback = s->interrupt_callback;
+            xst->xctx->pb = &xst->apb.pub;
+            xst->xctx->io_open = NULL;
+            xst->xctx->skip_initial_bytes = 0;
+            xst->parent = s;
+
+            avio_seek(pb, xst->start_offset, SEEK_SET);
+            ret = avformat_open_input(&xst->xctx, "", NULL, NULL);
+            if (ret < 0)
+                return ret;
+
+            st->id = xst->xctx->streams[0]->id;
+            st->duration = xst->xctx->streams[0]->duration;
+            st->time_base = xst->xctx->streams[0]->time_base;
+            st->start_time = xst->xctx->streams[0]->start_time;
+            st->pts_wrap_bits = xst->xctx->streams[0]->pts_wrap_bits;
+            st->codecpar->codec_id = xst->xctx->streams[0]->codecpar->codec_id;
+            st->codecpar->bit_rate = xst->xctx->streams[0]->codecpar->bit_rate;
+            st->codecpar->sample_rate = xst->xctx->streams[0]->codecpar->sample_rate;
+            st->codecpar->block_align = xst->xctx->streams[0]->codecpar->block_align;
+            ret = av_channel_layout_copy(&st->codecpar->ch_layout, &xst->xctx->streams[0]->codecpar->ch_layout);
+            if (ret < 0)
+                return ret;
+
+            ret = ff_alloc_extradata(st->codecpar, xst->xctx->streams[0]->codecpar->extradata_size);
+            if (ret < 0)
+                return ret;
+            memcpy(st->codecpar->extradata, xst->xctx->streams[0]->codecpar->extradata,
+                   xst->xctx->streams[0]->codecpar->extradata_size);
+
+            ret = av_dict_copy(&st->metadata, xst->xctx->streams[0]->metadata, 0);
+            if (ret < 0)
+                return ret;
+
+            ffstream(st)->request_probe = 0;
+            ffstream(st)->need_parsing = AVSTREAM_PARSE_HEADERS;
+
+            xst->start_offset = avio_tell(pb);
+        }
 
         if (names_offset > 0 && names_entry_size > 0 && names_size > 0) {
             avio_seek(pb, names_offset + si * names_entry_size, SEEK_SET);
@@ -432,14 +509,21 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
         pos = avio_tell(pb);
         if (pos >= xst->start_offset && pos < xst->stop_offset) {
-            const int size = FFMIN(par->block_align, xst->stop_offset - pos);
+            if (xst->xctx) {
+                ret = av_read_frame(xst->xctx, pkt);
+                pkt->stream_index = st->index;
+                if (ret == AVERROR_EOF)
+                    continue;
+            } else {
+                const int size = FFMIN(par->block_align, xst->stop_offset - pos);
 
-            ret = av_get_packet(pb, pkt, size);
+                ret = av_get_packet(pb, pkt, size);
 
-            pkt->pos = pos;
-            pkt->stream_index = st->index;
+                pkt->pos = pos;
+                pkt->stream_index = st->index;
 
-            break;
+                break;
+            }
         } else if (pos >= xst->stop_offset && n+1 < s->nb_streams) {
             AVStream *st_next = s->streams[n+1];
             XWBStream *pst_next = st_next->priv_data;
@@ -452,6 +536,23 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     return ret;
 }
 
+static int read_seek(AVFormatContext *s, int stream_index,
+                     int64_t ts, int flags)
+{
+    int current_stream;
+    XWBStream *xst;
+    AVStream *st;
+
+    current_stream = av_clip(stream_index, 0, s->nb_streams-1);
+    st = s->streams[current_stream];
+    xst = st->priv_data;
+
+    if (xst->xctx)
+        return av_seek_frame(xst->xctx, 0, ts, flags);
+    else
+        return -1;
+}
+
 const FFInputFormat ff_xwb_demuxer = {
     .p.name         = "xwb",
     .p.long_name    = NULL_IF_CONFIG_SMALL("XWB (Microsoft Wave Bank)"),
@@ -461,4 +562,5 @@ const FFInputFormat ff_xwb_demuxer = {
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
+    .read_seek      = read_seek,
 };
