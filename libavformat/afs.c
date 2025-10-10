@@ -156,6 +156,7 @@ static int read_header(AVFormatContext *s)
         st->start_time = ast->xctx->streams[0]->start_time;
         st->pts_wrap_bits = ast->xctx->streams[0]->pts_wrap_bits;
         st->codecpar->codec_id = ast->xctx->streams[0]->codecpar->codec_id;
+        st->codecpar->bit_rate = ast->xctx->streams[0]->codecpar->bit_rate;
         st->codecpar->sample_rate = ast->xctx->streams[0]->codecpar->sample_rate;
         st->codecpar->block_align = ast->xctx->streams[0]->codecpar->block_align;
         if ((ret = av_channel_layout_copy(&st->codecpar->ch_layout, &ast->xctx->streams[0]->codecpar->ch_layout)) < 0)
