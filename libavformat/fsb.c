@@ -555,6 +555,11 @@ static int fsb_read_header(AVFormatContext *s)
                 par->codec_id = (flags & 0x02) ? AV_CODEC_ID_ADPCM_NDSP : AV_CODEC_ID_ADPCM_NDSP_SI;
                 par->block_align = 0x8 * channels;
                 break;
+            case 0x07:
+                par->codec_id = (channels > 2) ? AV_CODEC_ID_NONE : AV_CODEC_ID_ADPCM_IMA_XBOX;
+                par->bits_per_coded_sample = 4;
+                par->block_align = 0x24 * channels;
+                break;
             case 0x09:
                 par->codec_id = AV_CODEC_ID_ADPCM_HEVAG;
                 par->block_align = 0x10 * channels;
