@@ -615,27 +615,29 @@ static int fsb_read_header(AVFormatContext *s)
 
         avio_seek(pb, base_hsize + sample_header_size, SEEK_SET);
 
-        for (int si = 0; si < nb_streams; si++) {
-            FSBStream *fst = s->streams[si]->priv_data;
+        if (name_table_size > 0) {
+            for (int si = 0; si < nb_streams; si++) {
+                FSBStream *fst = s->streams[si]->priv_data;
 
-            if (avio_feof(pb))
-                return AVERROR_EOF;
+                if (avio_feof(pb))
+                    return AVERROR_EOF;
 
-            fst->name_offset  = base_hsize + sample_header_size;
-            fst->name_offset += avio_rl32(pb);
-        }
+                fst->name_offset  = base_hsize + sample_header_size;
+                fst->name_offset += avio_rl32(pb);
+            }
 
-        for (int si = 0; si < nb_streams; si++) {
-            AVStream *st = s->streams[si];
-            FSBStream *fst = st->priv_data;
-            char title[1025] = { 0 };
+            for (int si = 0; si < nb_streams; si++) {
+                AVStream *st = s->streams[si];
+                FSBStream *fst = st->priv_data;
+                char title[1025] = { 0 };
 
-            avio_seek(pb, fst->name_offset, SEEK_SET);
+                avio_seek(pb, fst->name_offset, SEEK_SET);
 
-            avio_get_str(pb, INT_MAX, title, sizeof(title));
+                avio_get_str(pb, INT_MAX, title, sizeof(title));
 
-            if (title[0])
-                av_dict_set(&st->metadata, "title", title, 0);
+                if (title[0])
+                    av_dict_set(&st->metadata, "title", title, 0);
+            }
         }
     } else {
         av_assert0(0);
