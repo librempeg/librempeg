@@ -100,6 +100,9 @@ static int read_header(AVFormatContext *s)
         ACXStream *ast;
         AVStream *st;
 
+        if (avio_feof(pb))
+            return AVERROR_INVALIDDATA;
+
         st = avformat_new_stream(s, NULL);
         if (!st)
             return AVERROR(ENOMEM);
