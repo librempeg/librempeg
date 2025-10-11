@@ -163,6 +163,8 @@ static int adx_decode(ADXContext *c, const int level, int16_t *out, int offset,
 
     if (enc == 8 || enc == 9)
         scale = ((scale ^ xor) & 0x1fff) + 1;
+    else
+        scale += 1;
 
     if (level == 3) {
         for (int i = 0; i < BLOCK_SAMPLES; i++) {
