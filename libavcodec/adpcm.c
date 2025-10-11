@@ -755,8 +755,8 @@ static inline int16_t adpcm_ima_wav_expand_nibble(ADPCMChannelStatus *c, GetBitC
 
 int16_t ff_adpcm_ima_qt_expand_nibble(ADPCMChannelStatus *c, int nibble)
 {
+    int predictor = c->predictor;
     int step_index;
-    int predictor;
     int diff, step;
 
     step = ff_adpcm_step_table[c->step_index];
@@ -767,16 +767,15 @@ int16_t ff_adpcm_ima_qt_expand_nibble(ADPCMChannelStatus *c, int nibble)
     if (nibble & 4) diff += step;
     if (nibble & 2) diff += step >> 1;
     if (nibble & 1) diff += step >> 2;
+    if (nibble & 8) diff = -diff;
 
-    if (nibble & 8)
-        predictor = c->predictor - diff;
-    else
-        predictor = c->predictor + diff;
+    predictor += diff;
+    predictor = av_clip_int16(predictor);
 
-    c->predictor = av_clip_int16(predictor);
+    c->predictor = predictor;
     c->step_index = step_index;
 
-    return c->predictor;
+    return predictor;
 }
 
 static void decode_adpcm_ima_hvqm2(AVCodecContext *avctx, int16_t *outbuf, int samples_to_do,
