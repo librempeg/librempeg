@@ -278,6 +278,9 @@ static int read_header(AVFormatContext *s)
         AWCStream *ast;
         AVStream *st;
 
+        if (avio_feof(pb))
+            return AVERROR_INVALIDDATA;
+
         if (is_streamed) {
             sinfo[i].hash_id = hash_id;
             sinfo[i].tag_count = entry_count;
