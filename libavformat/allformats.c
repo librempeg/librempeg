@@ -42,6 +42,7 @@ extern const FFOutputFormat ff_ac4_muxer;
 extern const FFInputFormat  ff_ace_demuxer;
 extern const FFInputFormat  ff_acm_demuxer;
 extern const FFInputFormat  ff_act_demuxer;
+extern const FFInputFormat  ff_acx_demuxer;
 extern const FFInputFormat  ff_adf_demuxer;
 extern const FFInputFormat  ff_adp_demuxer;
 extern const FFInputFormat  ff_ads_demuxer;

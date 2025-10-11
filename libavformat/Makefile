@@ -89,6 +89,7 @@ OBJS-$(CONFIG_AC4_MUXER)                 += ac4enc.o
 OBJS-$(CONFIG_ACE_DEMUXER)               += acedec.o
 OBJS-$(CONFIG_ACM_DEMUXER)               += acm.o rawdec.o
 OBJS-$(CONFIG_ACT_DEMUXER)               += act.o
+OBJS-$(CONFIG_ACX_DEMUXER)               += acx.o
 OBJS-$(CONFIG_ADF_DEMUXER)               += bintext.o sauce.o
 OBJS-$(CONFIG_ADP_DEMUXER)               += adp.o
 OBJS-$(CONFIG_ADS_DEMUXER)               += ads.o
