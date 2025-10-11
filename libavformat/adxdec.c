@@ -115,9 +115,6 @@ static int adx_read_packet(AVFormatContext *s, AVPacket *pkt)
     AVIOContext *pb = s->pb;
     int ret, size;
 
-    if (par->codec_id == AV_CODEC_ID_AHX)
-        return ff_raw_read_partial_packet(s, pkt);
-
     if (avio_feof(pb))
         return AVERROR_EOF;
 
@@ -264,5 +261,5 @@ const FFInputFormat ff_ahx_demuxer = {
     .read_probe     = ahx_probe,
     .priv_data_size = sizeof(ADXDemuxerContext),
     .read_header    = adx_read_header,
-    .read_packet    = adx_read_packet,
+    .read_packet    = ff_raw_read_partial_packet,
 };
