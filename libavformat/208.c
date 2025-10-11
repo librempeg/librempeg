@@ -44,7 +44,7 @@ static int two08_probe(const AVProbeData *p)
 
 static int two08_read_header(AVFormatContext *s)
 {
-    int32_t start_offset;
+    int64_t start_offset;
     uint32_t format;
     AVIOContext *pb = s->pb;
     AVStream *st = avformat_new_stream(s, NULL);
