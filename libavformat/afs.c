@@ -228,12 +228,12 @@ redo:
 static int read_seek(AVFormatContext *s, int stream_index,
                      int64_t ts, int flags)
 {
-    AFSDemuxContext *bkhd = s->priv_data;
+    AFSDemuxContext *afs = s->priv_data;
     AFSStream *ast;
     AVStream *st;
 
-    bkhd->current_stream = av_clip(stream_index, 0, s->nb_streams-1);
-    st = s->streams[bkhd->current_stream];
+    afs->current_stream = av_clip(stream_index, 0, s->nb_streams-1);
+    st = s->streams[afs->current_stream];
     ast = st->priv_data;
 
     return av_seek_frame(ast->xctx, 0, ts, flags);
