@@ -729,6 +729,7 @@ OBJS-$(CONFIG_TTY_DEMUXER)               += tty.o sauce.o
 OBJS-$(CONFIG_TWO08_DEMUXER)             += 208.o pcm.o
 OBJS-$(CONFIG_TWODX_DEMUXER)             += 2dx.o riff.o
 OBJS-$(CONFIG_TWODX9_DEMUXER)            += 2dx.o riff.o
+OBJS-$(CONFIG_TWOPFS_DEMUXER)            += 2pfs.o pcm.o
 OBJS-$(CONFIG_TY_DEMUXER)                += ty.o
 OBJS-$(CONFIG_TXD_DEMUXER)               += txd.o
 OBJS-$(CONFIG_UEBA_DEMUXER)              += ueba.o
