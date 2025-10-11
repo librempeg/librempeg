@@ -1,4 +1,4 @@
-c257001314241b469a6512616fd56548 *tests/data/fate/acodec-adpcm-adx.adx
+842b9f45d9ee933734b0ecc2b9eff0bf *tests/data/fate/acodec-adpcm-adx.adx
 297738 tests/data/fate/acodec-adpcm-adx.adx
-e6c69f5ea2a2dab3d29ba75d8afc8fa9 *tests/data/fate/acodec-adpcm-adx.out.wav
-stddev: 2494.96 PSNR: 28.39 MAXDIFF:53708 bytes:  1058400/  1058432
+7bc2e43aabe17cd89566a07b879895f7 *tests/data/fate/acodec-adpcm-adx.out.wav
+stddev: 2598.82 PSNR: 28.03 MAXDIFF:63967 bytes:  1058400/  1058432

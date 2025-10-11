@@ -66,15 +66,15 @@ static void adx_encode(ADXContext *c, uint8_t *adx, const int16_t *wav,
         return;
     }
 
-    if (max / 7 > -min / 8)
-        scale = max / 7;
+    if ((max+6) / 7 > (-min+7) / 8)
+        scale = (max+6) / 7;
     else
-        scale = -min / 8;
+        scale = (-min+7) / 8;
 
-    if (scale == 0)
+    if (scale <= 0)
         scale = 1;
 
-    AV_WB16(adx, scale);
+    AV_WB16(adx, scale-1);
 
     init_put_bits(&pb, adx + 2, 16);
 
