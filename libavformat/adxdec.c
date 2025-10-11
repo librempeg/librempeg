@@ -60,7 +60,7 @@ static int adx_probe(const AVProbeData *p)
     if (p->buf[7] == 0 || p->buf[7] > 8)
         return 0;
 
-    if (AV_RB32(p->buf + 8) <= 0)
+    if ((int)AV_RB32(p->buf + 8) <= 0)
         return 0;
 
     if (AV_RB32(p->buf + 12) <= 0)
@@ -95,7 +95,7 @@ static int ahx_probe(const AVProbeData *p)
     if (p->buf[7] == 0 || p->buf[7] > 1)
         return 0;
 
-    if (AV_RB32(p->buf + 8) <= 0)
+    if ((int)AV_RB32(p->buf + 8) <= 0)
         return 0;
 
     if (AV_RB32(p->buf + 12) <= 0)
