@@ -66,6 +66,8 @@ static int two08_read_header(AVFormatContext *s)
     if (st->codecpar->ch_layout.nb_channels <= 0)
         return AVERROR_INVALIDDATA;
     st->codecpar->block_align = avio_rl32(pb);
+    if (st->codecpar->block_align <= 0)
+        return AVERROR_INVALIDDATA;
 
     switch (format) {
     case 8:
