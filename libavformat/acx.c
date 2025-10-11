@@ -177,7 +177,7 @@ static int read_header(AVFormatContext *s)
             return ret;
 
         ffstream(st)->request_probe = 0;
-        ffstream(st)->need_parsing = AVSTREAM_PARSE_HEADERS;
+        ffstream(st)->need_parsing = ffstream(ast->xctx->streams[0])->need_parsing;
 
         ast->data_offset = avio_tell(pb);
     }
