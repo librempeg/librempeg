@@ -368,7 +368,8 @@ static int fsb_read_header(AVFormatContext *s)
 
             avio_get_str(pb, 30, title, sizeof(title));
 
-            av_dict_set(&st->metadata, "title", title, 0);
+            if (title[0])
+                av_dict_set(&st->metadata, "title", title, 0);
         }
     } else if (version == 5) {
         uint64_t sample_mode;
@@ -606,13 +607,14 @@ static int fsb_read_header(AVFormatContext *s)
         for (int si = 0; si < nb_streams; si++) {
             AVStream *st = s->streams[si];
             FSBStream *fst = st->priv_data;
-            char title[1025];
+            char title[1025] = { 0 };
 
             avio_seek(pb, fst->name_offset, SEEK_SET);
 
             avio_get_str(pb, INT_MAX, title, sizeof(title));
 
-            av_dict_set(&st->metadata, "title", title, 0);
+            if (title[0])
+                av_dict_set(&st->metadata, "title", title, 0);
         }
     } else {
         av_assert0(0);
