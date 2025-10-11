@@ -101,7 +101,7 @@ static int read_header(AVFormatContext *s)
         if (!st)
             return AVERROR(ENOMEM);
 
-        ast = av_malloc(sizeof(AFSStream));
+        ast = av_mallocz(sizeof(*ast));
         if (!ast)
             return AVERROR(ENOMEM);
 
