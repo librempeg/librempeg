@@ -589,7 +589,6 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
 
     /* codecs with a fixed packet duration */
     switch (id) {
-    case AV_CODEC_ID_ADPCM_ADX:    return   32;
     case AV_CODEC_ID_ADPCM_IMA_QT: return   64;
     case AV_CODEC_ID_ADPCM_EA_XAS: return  128;
     case AV_CODEC_ID_AMR_NB:
@@ -762,6 +761,9 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
                 int blocks = frame_bytes / ba;
                 int64_t tmp = 0;
                 switch (id) {
+                case AV_CODEC_ID_ADPCM_ADX:
+                    tmp = blocks * 32;
+                    break;
                 case AV_CODEC_ID_ADPCM_IMA_XBOX:
                     if (bps != 4)
                         return 0;

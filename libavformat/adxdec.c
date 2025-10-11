@@ -29,6 +29,7 @@
 #include "demux.h"
 #include "internal.h"
 #include "rawdec.h"
+#include "pcm.h"
 
 #define BLOCK_SIZE    18
 #define BLOCK_SAMPLES 32
@@ -106,40 +107,6 @@ static int ahx_probe(const AVProbeData *p)
         || memcmp(p->buf + offset - 2, "(c)CRI", 6))
         return 0;
     return AVPROBE_SCORE_MAX;
-}
-
-static int adx_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    ADXDemuxerContext *c = s->priv_data;
-    AVCodecParameters *par = s->streams[0]->codecpar;
-    AVIOContext *pb = s->pb;
-    int ret, size;
-
-    if (avio_feof(pb))
-        return AVERROR_EOF;
-
-    size = BLOCK_SIZE * par->ch_layout.nb_channels;
-
-    pkt->pos = avio_tell(pb);
-    pkt->stream_index = 0;
-
-    ret = av_get_packet(pb, pkt, size * 128);
-    if (ret < 0)
-        return ret;
-    if ((ret % size) && ret >= size) {
-        size = ret - (ret % size);
-        av_shrink_packet(pkt, size);
-        pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    } else if (ret < size) {
-        return AVERROR(EIO);
-    } else {
-        size = ret;
-    }
-
-    pkt->duration = size / (BLOCK_SIZE * par->ch_layout.nb_channels);
-    pkt->pts      = (pkt->pos - c->header_size) / (BLOCK_SIZE * par->ch_layout.nb_channels);
-
-    return 0;
 }
 
 static int adx_read_header(AVFormatContext *s)
@@ -221,10 +188,10 @@ static int adx_read_header(AVFormatContext *s)
     par->codec_type  = AVMEDIA_TYPE_AUDIO;
     switch (par->extradata[4]) {
     case 3:
-        sti->need_parsing = AVSTREAM_PARSE_FULL_RAW;
         par->codec_id = AV_CODEC_ID_ADPCM_ADX;
         par->bit_rate    = (int64_t)par->sample_rate * par->ch_layout.nb_channels * BLOCK_SIZE * 8LL / BLOCK_SAMPLES;
-        avpriv_set_pts_info(st, 64, BLOCK_SAMPLES, par->sample_rate);
+        par->block_align = BLOCK_SIZE * channels;
+        avpriv_set_pts_info(st, 64, 1, par->sample_rate);
         break;
     case 16:
     case 17:
@@ -249,7 +216,7 @@ const FFInputFormat ff_adx_demuxer = {
     .read_probe     = adx_probe,
     .priv_data_size = sizeof(ADXDemuxerContext),
     .read_header    = adx_read_header,
-    .read_packet    = adx_read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
 
 const FFInputFormat ff_ahx_demuxer = {

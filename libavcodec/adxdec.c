@@ -150,13 +150,16 @@ static int adx_decode(ADXContext *c, const int level, int16_t *out, int offset,
     int scale = AV_RB16(in);
     const int c0 = c->coeff[0];
     const int c1 = c->coeff[1];
-    int s0, s1, s2, d;
+    int s0, s1, s2, d, ret;
 
     /* check if this is an EOF packet */
     if (scale & 0x8000)
         return -1;
 
-    init_get_bits(&gb, in + 2, (BLOCK_SIZE - 2) * 8);
+    ret = init_get_bits8(&gb, in + 2, BLOCK_SIZE - 2);
+    if (ret < 0)
+        return ret;
+
     out += offset;
     s1 = prev->s1;
     s2 = prev->s2;
@@ -249,7 +252,8 @@ static int adx_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             *got_frame_ptr = 0;
             return avpkt->size;
         }
-        return AVERROR_INVALIDDATA;
+        if (buf_size < (BLOCK_SIZE * c->channels))
+            return AVERROR_INVALIDDATA;
     }
 
     /* get output buffer */
