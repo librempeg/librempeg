@@ -72,7 +72,12 @@ static int read_header(AVFormatContext *s)
     version = avio_rb32(pb);
     reserved = avio_rb32(pb);
     avio_rb32(pb);
-    rate = avio_rb32(pb);
+    if (version == 0 && type == MKBETAG('V','A','G','p')) {
+        avio_skip(pb, 2);
+        rate = avio_rb16(pb);
+    } else {
+        rate = avio_rb32(pb);
+    }
     codec = AV_CODEC_ID_ADPCM_PSX;
     if (rate <= 0)
         return AVERROR_INVALIDDATA;
