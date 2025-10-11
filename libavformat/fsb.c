@@ -165,8 +165,16 @@ static int fsb_read_header(AVFormatContext *s)
         if (!par->ch_layout.nb_channels)
             return AVERROR_INVALIDDATA;
 
-        if (format & 0x00000010) {
-            par->codec_id    = AV_CODEC_ID_PCM_S16LE;
+        if (format & 0x00000008) {
+            if (format & 0x00000080)
+                par->codec_id = AV_CODEC_ID_PCM_U8;
+            else
+                par->codec_id = AV_CODEC_ID_PCM_S8;
+        } else if (format & 0x00000010) {
+            if (flags & 0x00000008)
+                par->codec_id = AV_CODEC_ID_PCM_S16BE;
+            else
+                par->codec_id = AV_CODEC_ID_PCM_S16LE;
             par->block_align = 4096 * par->ch_layout.nb_channels;
         } else if (format & 0x01000000) {
             par->codec_id = AV_CODEC_ID_XMA1;
@@ -544,11 +552,19 @@ static int fsb_read_header(AVFormatContext *s)
                 par->block_align = 1024 * channels;
                 break;
             case 0x02:
-                par->codec_id = AV_CODEC_ID_PCM_S16LE;
+                par->codec_id = (flags & 0x01) ? AV_CODEC_ID_PCM_S16BE : AV_CODEC_ID_PCM_S16LE;
+                par->block_align = 512 * channels;
+                break;
+            case 0x03:
+                par->codec_id = (flags & 0x01) ? AV_CODEC_ID_PCM_S24BE : AV_CODEC_ID_PCM_S24LE;
+                par->block_align = 768 * channels;
+                break;
+            case 0x04:
+                par->codec_id = (flags & 0x01) ? AV_CODEC_ID_PCM_S32BE : AV_CODEC_ID_PCM_S32LE;
                 par->block_align = 512 * channels;
                 break;
             case 0x05:
-                par->codec_id = AV_CODEC_ID_PCM_F32LE;
+                par->codec_id = (flags & 0x01) ? AV_CODEC_ID_PCM_F32BE : AV_CODEC_ID_PCM_F32LE;
                 par->block_align = 256 * channels;
                 break;
             case 0x06:
