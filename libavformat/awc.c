@@ -507,18 +507,24 @@ static int read_header(AVFormatContext *s)
             memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
             bytestream2_init_writer(&pbc, st->codecpar->extradata, st->codecpar->extradata_size);
             ret = avio_rl32(pb);
+            if (ret <= 0)
+                return AVERROR_INVALIDDATA;
             bytestream2_put_be16(&pbc, ret);
             if (bytestream2_get_bytes_left_p(&pbc) < ret)
                 return AVERROR_INVALIDDATA;
             avio_read(pb, st->codecpar->extradata+bytestream2_tell_p(&pbc), ret);
             bytestream2_skip_p(&pbc, ret);
             ret = avio_rl32(pb);
+            if (ret <= 0)
+                return AVERROR_INVALIDDATA;
             bytestream2_put_be16(&pbc, ret);
             if (bytestream2_get_bytes_left_p(&pbc) < ret)
                 return AVERROR_INVALIDDATA;
             avio_read(pb, st->codecpar->extradata+bytestream2_tell_p(&pbc), ret);
             bytestream2_skip_p(&pbc, ret);
             ret = avio_rl32(pb);
+            if (ret <= 0)
+                return AVERROR_INVALIDDATA;
             bytestream2_put_be16(&pbc, ret);
             if (bytestream2_get_bytes_left_p(&pbc) < ret)
                 return AVERROR_INVALIDDATA;
