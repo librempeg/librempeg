@@ -364,7 +364,7 @@ static int read_header(AVFormatContext *s)
                 codec = AV_CODEC_ID_XMA2;
                 break;
             case 2:
-                codec = AV_CODEC_ID_ADPCM_MS;;
+                codec = AV_CODEC_ID_ADPCM_MS;
                 break;
             case 3:
                 codec = 0;
