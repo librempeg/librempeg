@@ -24,8 +24,9 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
-static int scdpcm_read_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RB16(p->buf) != 1 &&
         AV_RB16(p->buf) != 2)
@@ -42,7 +43,7 @@ static int scdpcm_read_probe(const AVProbeData *p)
     return 3*AVPROBE_SCORE_MAX/4;
 }
 
-static int scdpcm_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     int nb_channels;
@@ -68,24 +69,12 @@ static int scdpcm_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int scdpcm_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_scdpcm_demuxer = {
     .p.name         = "scdpcm",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sega CD PCM"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "pcm",
-    .read_probe     = scdpcm_read_probe,
-    .read_header    = scdpcm_read_header,
-    .read_packet    = scdpcm_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = ff_pcm_read_packet,
 };
