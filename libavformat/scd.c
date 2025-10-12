@@ -41,6 +41,7 @@
 
 #define SCD_TRACK_ID_PCM        0
 #define SCD_TRACK_ID_PCM_LE     1
+#define SCD_TRACK_ID_ADPCM_PSX  3
 #define SCD_TRACK_ID_OGG        6
 #define SCD_TRACK_ID_MP3        7
 #define SCD_TRACK_ID_ADPCMNDSP 10
@@ -235,6 +236,10 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
         par->bits_per_coded_sample = 16;
         par->block_align           = par->bits_per_coded_sample * par->ch_layout.nb_channels / 8;
         par->block_align          *= 256;
+        break;
+    case SCD_TRACK_ID_ADPCM_PSX:
+        par->codec_id              = AV_CODEC_ID_ADPCM_PSX;
+        par->block_align           = 16 * par->ch_layout.nb_channels;
         break;
     case SCD_TRACK_ID_MP3:
         par->codec_id              = AV_CODEC_ID_MP3;
