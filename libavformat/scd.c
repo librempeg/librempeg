@@ -82,8 +82,15 @@ typedef struct SCDTrackHeader {
     uint32_t extradata_size;
     uint32_t aux_count;
 
+    int xor_byte;
+    int64_t start_offset;
+    int64_t stop_xor_offset;
+    AVFormatContext *xctx;
+    AVFormatContext *parent;
+    FFIOContext apb;
+
     int stream_index;
-    uint64_t absolute_offset;
+    int64_t absolute_offset;
 } SCDTrackHeader;
 
 typedef struct SCDDemuxContext {
@@ -154,6 +161,35 @@ static int scd_read_offsets(AVFormatContext *s, const int be)
         return ret;
 
     return 0;
+}
+
+static int read_data(void *opaque, uint8_t *buf, int buf_size)
+{
+    SCDTrackHeader *track = opaque;
+    AVFormatContext *s = track->parent;
+    AVIOContext *pb = s->pb;
+    int64_t pos = avio_tell(pb);
+    int ret;
+
+    ret = avio_read(pb, buf, buf_size);
+    if (ret > 0 && pos >= track->start_offset && pos < track->stop_xor_offset) {
+        const int64_t stop_offset = FFMIN(pos + ret, track->stop_xor_offset);
+        const int xor_byte = track->xor_byte;
+
+        for (int n = pos; n < stop_offset; n++)
+            buf[n-pos] ^= xor_byte;
+    }
+
+    return ret;
+}
+
+static int64_t seek_data(void *opaque, int64_t offset, int whence)
+{
+    SCDTrackHeader *track = opaque;
+    AVFormatContext *s = track->parent;
+    AVIOContext *pb = s->pb;
+
+    return avio_seek(pb, offset + track->start_offset, whence);
 }
 
 static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, const int be)
@@ -311,12 +347,81 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
         ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
         break;
     case SCD_TRACK_ID_OGG:
-        par->codec_id              = AV_CODEC_ID_VORBIS;
-        ret = ff_get_extradata(s, par, pb, track->extradata_size);
-        if (ret < 0)
-            return ret;
+        {
+            int version, seek_table_size = -1, vorb_header_size = -1;
+            int64_t skip;
 
-        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+            version = avio_r8(pb);
+            avio_skip(pb, 1);
+            track->xor_byte = avio_r8(pb);
+            if (version == 2) {
+                avio_skip(pb, 13);
+                seek_table_size = be ? avio_rb32(pb) : avio_rl32(pb);
+                vorb_header_size = be ? avio_rb32(pb) : avio_rl32(pb);
+                avio_skip(pb, 8);
+            }
+
+            if (seek_table_size < 0 ||
+                vorb_header_size < 0)
+                return AVERROR_INVALIDDATA;
+
+            avio_skip(pb, seek_table_size);
+
+            track->start_offset = avio_tell(pb);
+            track->stop_xor_offset = track->start_offset + vorb_header_size;
+            if (!(track->xctx = avformat_alloc_context()))
+                return AVERROR(ENOMEM);
+
+            if ((ret = ff_copy_whiteblacklists(track->xctx, s)) < 0) {
+                avformat_free_context(track->xctx);
+                track->xctx = NULL;
+
+                return ret;
+            }
+
+            ffio_init_context(&track->apb, NULL, 0, 0, track,
+                              read_data, NULL, seek_data);
+
+            track->xctx->flags = AVFMT_FLAG_CUSTOM_IO | AVFMT_FLAG_GENPTS;
+            track->xctx->probesize = 0;
+            track->xctx->max_analyze_duration = 0;
+            track->xctx->interrupt_callback = s->interrupt_callback;
+            track->xctx->pb = &track->apb.pub;
+            track->xctx->io_open = NULL;
+            track->xctx->skip_initial_bytes = 0;
+            track->parent = s;
+
+            avio_seek(pb, track->start_offset, SEEK_SET);
+            if ((ret = avformat_open_input(&track->xctx, "", NULL, NULL)) < 0)
+                return ret;
+
+            st->id = track->xctx->streams[0]->id;
+            st->duration = track->xctx->streams[0]->duration;
+            st->time_base = track->xctx->streams[0]->time_base;
+            st->start_time = track->xctx->streams[0]->start_time;
+            st->pts_wrap_bits = track->xctx->streams[0]->pts_wrap_bits;
+            st->codecpar->codec_id = track->xctx->streams[0]->codecpar->codec_id;
+            st->codecpar->bit_rate = track->xctx->streams[0]->codecpar->bit_rate;
+            st->codecpar->sample_rate = track->xctx->streams[0]->codecpar->sample_rate;
+            st->codecpar->block_align = track->xctx->streams[0]->codecpar->block_align;
+            if ((ret = av_channel_layout_copy(&st->codecpar->ch_layout, &track->xctx->streams[0]->codecpar->ch_layout)) < 0)
+                return ret;
+
+            if ((ret = ff_alloc_extradata(st->codecpar, track->xctx->streams[0]->codecpar->extradata_size)))
+                return ret;
+            memcpy(st->codecpar->extradata, track->xctx->streams[0]->codecpar->extradata, track->xctx->streams[0]->codecpar->extradata_size);
+
+            ret = av_dict_copy(&st->metadata, track->xctx->streams[0]->metadata, 0);
+            if (ret < 0)
+                return ret;
+
+            ffstream(st)->request_probe = 0;
+            ffstream(st)->need_parsing = ffstream(track->xctx->streams[0])->need_parsing;
+
+            skip = avio_tell(pb) - track->absolute_offset;
+            track->absolute_offset += skip;
+            track->length -= skip;
+        }
         break;
     default:
         par->codec_id              = AV_CODEC_ID_NONE;
@@ -412,17 +517,25 @@ redo:
 
     track_stop = trk->absolute_offset + trk->length;
 
-    size = FFMIN(par->block_align, track_stop - current_pos);
-    if (size == 0) {
-        ctx->current_track++;
-        goto redo;
-    }
+    if (trk->xctx) {
+        ret = av_read_frame(trk->xctx, pkt);
+        if (ret == AVERROR_EOF) {
+            ctx->current_track++;
+            goto redo;
+        }
+    } else {
+        size = FFMIN(par->block_align, track_stop - current_pos);
+        if (size == 0) {
+            ctx->current_track++;
+            goto redo;
+        }
 
-    ret = av_get_packet(pb, pkt, size);
-    if (ret == AVERROR_EOF) {
-        return ret;
-    } else if (ret < 0) {
-        return ret;
+        ret = av_get_packet(pb, pkt, size);
+        if (ret == AVERROR_EOF) {
+            return ret;
+        } else if (ret < 0) {
+            return ret;
+        }
     }
 
     if (trk->data_type == SCD_TRACK_ID_PCM) {
@@ -440,8 +553,12 @@ static int scd_read_seek(AVFormatContext *s, int stream_index,
                          int64_t timestamp, int flags)
 {
     SCDDemuxContext *ctx = s->priv_data;
+    SCDTrackHeader *trk;
 
-    ctx->current_track = FFMAX(stream_index, 0);
+    ctx->current_track = av_clip(stream_index, 0, s->nb_streams-1);
+    trk = ctx->tracks + ctx->current_track;
+    if (trk->xctx)
+        return av_seek_frame(trk->xctx, 0, timestamp, flags);
 
     return -1;
 }
