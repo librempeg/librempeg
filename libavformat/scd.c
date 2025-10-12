@@ -228,10 +228,6 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
 
     track->absolute_offset = hoffset + SCD_TRACK_HEADER_SIZE + track->extradata_size;
 
-    /* Not sure what to do with these, it seems to be fine to ignore them. */
-    if (track->aux_count != 0)
-        av_log(s, AV_LOG_DEBUG, "[%d] Track has %u auxiliary chunk(s).\n", index, track->aux_count);
-
     if (track->data_type == SCD_TRACK_ID_DUMMY)
         return 0;
 
@@ -258,6 +254,17 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
 
         if (av_dict_set_int(&st->metadata, "loop_end", track->loop_end, 0) < 0)
             return AVERROR(ENOMEM);
+    }
+
+    if (track->aux_count > 0) {
+        uint32_t chunk_id = avio_rb32(pb);
+        int64_t chunk_size = be ? avio_rb32(pb) : avio_rl32(pb);
+
+        if (chunk_id == MKBETAG('M','A','R','K')) {
+            avio_skip(pb, chunk_size - 8);
+        } else {
+            avio_seek(pb, -8, SEEK_CUR);
+        }
     }
 
     switch (track->data_type) {
@@ -289,6 +296,10 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
         ret = ff_get_extradata(s, par, pb, 34);
         if (ret < 0)
             return ret;
+        if (be) {
+            AV_WB16(par->extradata, AV_RL16(par->extradata));
+            AV_WB32(par->extradata+2, AV_RL32(par->extradata+2));
+        }
 
         ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
         break;
