@@ -37,7 +37,7 @@ static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     int rate, channels, ret;
-    char title[0x21];
+    char title[0x21] = { 0 };
     int64_t start;
     AVStream *st;
 
