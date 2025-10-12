@@ -418,7 +418,7 @@ static int read_close(AVFormatContext *s)
 
 const FFInputFormat ff_nus3_demuxer = {
     .p.name         = "nus3",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Namco NUS3"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Namco NUS3 Audio"),
     .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "nus3audio",
