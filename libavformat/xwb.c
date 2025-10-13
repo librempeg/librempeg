@@ -383,7 +383,22 @@ static int read_header(AVFormatContext *s)
         st->codecpar->sample_rate = rate;
         st->codecpar->block_align = block_align * channels;
 
-        if (codec == AV_CODEC_ID_XMA1 || codec == AV_CODEC_ID_XMA2) {
+        if (version == 0x10000 && codec == AV_CODEC_ID_XMA2 &&
+            (block_align = 0x60 || block_align == 0x98 || block_align == 0xc0)) {
+            st->codecpar->codec_id = AV_CODEC_ID_ATRAC3;
+
+            ret = ff_alloc_extradata(st->codecpar, 14);
+            if (ret < 0)
+                return ret;
+            memset(st->codecpar->extradata, 0, 14);
+            AV_WL16(st->codecpar->extradata, 1);
+            AV_WL16(st->codecpar->extradata+2, channels * 0x800);
+            AV_WL16(st->codecpar->extradata+4, (block_align == 60 && channels > 1));
+            AV_WL16(st->codecpar->extradata+6, (block_align == 60 && channels > 1));
+            AV_WL16(st->codecpar->extradata+10, 1);
+            ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
+            avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+        } else if (codec == AV_CODEC_ID_XMA1 || codec == AV_CODEC_ID_XMA2) {
             ret = ff_alloc_extradata(st->codecpar, 34);
             if (ret < 0)
                 return ret;
@@ -394,6 +409,7 @@ static int read_header(AVFormatContext *s)
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
         } else if (codec == AV_CODEC_ID_ADPCM_MS) {
             st->codecpar->block_align = (block_align + 22) * channels;
+            avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
         } else if (codec == AV_CODEC_ID_WMAV2) {
             if (!(xst->xctx = avformat_alloc_context()))
                 return AVERROR(ENOMEM);
