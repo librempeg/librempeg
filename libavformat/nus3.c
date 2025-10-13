@@ -262,6 +262,8 @@ static int read_header(AVFormatContext *s)
 
             nst->start = pos + offset;
             break;
+        case MKBETAG('I','D','S','P'):
+        case MKBETAG('B','N','S','F'):
         case MKBETAG('R','I','F','F'):
             if (!(nst->xctx = avformat_alloc_context()))
                 return AVERROR(ENOMEM);
