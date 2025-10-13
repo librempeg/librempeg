@@ -56,7 +56,7 @@ static int read_header(AVFormatContext *s)
 
     while (!avio_feof(pb)) {
         uint32_t chunk, size, data = 0;
-        char name[1025];
+        char name[1025] = { 0 };
 
         chunk = avio_rb32(pb);
         size = avio_rb32(pb);
@@ -70,7 +70,8 @@ static int read_header(AVFormatContext *s)
             ret = avio_get_str(pb, size, name, sizeof(name));
             size -= ret;
 
-            av_dict_set(&st->metadata, "name", name, 0);
+            if (name[0])
+                av_dict_set(&st->metadata, "name", name, 0);
             avio_skip(pb, size);
             break;
         case MKBETAG('I','N','F','O'):
