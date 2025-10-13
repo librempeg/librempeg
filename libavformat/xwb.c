@@ -338,7 +338,7 @@ static int read_header(AVFormatContext *s)
                 }
                 break;
             case 1:
-                codec = version <= 38 ? AV_CODEC_ID_XMA1 : AV_CODEC_ID_XMA1;
+                codec = version <= 38 ? AV_CODEC_ID_XMA1 : AV_CODEC_ID_XMA2;
                 break;
             case 2:
                 codec = AV_CODEC_ID_ADPCM_MS;
