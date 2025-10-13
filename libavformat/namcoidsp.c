@@ -40,7 +40,7 @@ static int read_probe(const AVProbeData *p)
         return 0;
     if ((int)AV_RB32(p->buf + 28) <= 0)
         return 0;
-    if (AV_RB32(p->buf + 10) == 0)
+    if (AV_RB32(p->buf + 16) == 0)
         return 0;
     if (AV_RB32(p->buf + 40) <= 44)
         return 0;
