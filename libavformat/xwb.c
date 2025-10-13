@@ -392,6 +392,8 @@ static int read_header(AVFormatContext *s)
             st->codecpar->block_align = 2048;
             ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+        } else if (codec == AV_CODEC_ID_ADPCM_MS) {
+            st->codecpar->block_align = (block_align + 22) * channels;
         } else if (codec == AV_CODEC_ID_WMAV2) {
             if (!(xst->xctx = avformat_alloc_context()))
                 return AVERROR(ENOMEM);
