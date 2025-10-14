@@ -114,6 +114,7 @@ OBJS-$(CONFIG_AMR_DEMUXER)               += amr.o rawdec.o
 OBJS-$(CONFIG_AMR_MUXER)                 += amr.o rawenc.o
 OBJS-$(CONFIG_AMRNB_DEMUXER)             += amr.o rawdec.o
 OBJS-$(CONFIG_AMRWB_DEMUXER)             += amr.o rawdec.o
+OBJS-$(CONFIG_AMTS_DEMUXER)              += amts.o
 OBJS-$(CONFIG_AMV_MUXER)                 += amvenc.o
 OBJS-$(CONFIG_ANM_DEMUXER)               += anm.o
 OBJS-$(CONFIG_APAC_DEMUXER)              += apac.o rawdec.o

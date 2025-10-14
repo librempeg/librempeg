@@ -65,6 +65,7 @@ extern const FFInputFormat  ff_amr_demuxer;
 extern const FFOutputFormat ff_amr_muxer;
 extern const FFInputFormat  ff_amrnb_demuxer;
 extern const FFInputFormat  ff_amrwb_demuxer;
+extern const FFInputFormat  ff_amts_demuxer;
 extern const FFOutputFormat ff_amv_muxer;
 extern const FFInputFormat  ff_anm_demuxer;
 extern const FFInputFormat  ff_apac_demuxer;
