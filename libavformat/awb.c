@@ -196,19 +196,10 @@ static int read_header(AVFormatContext *s)
         st->time_base = ast->xctx->streams[0]->time_base;
         st->start_time = ast->xctx->streams[0]->start_time;
         st->pts_wrap_bits = ast->xctx->streams[0]->pts_wrap_bits;
-        st->codecpar->codec_id = ast->xctx->streams[0]->codecpar->codec_id;
-        st->codecpar->bit_rate = ast->xctx->streams[0]->codecpar->bit_rate;
-        st->codecpar->sample_rate = ast->xctx->streams[0]->codecpar->sample_rate;
-        st->codecpar->block_align = ast->xctx->streams[0]->codecpar->block_align;
-        ret = av_channel_layout_copy(&st->codecpar->ch_layout, &ast->xctx->streams[0]->codecpar->ch_layout);
-        if (ret < 0)
-            return ret;
 
-        ret = ff_alloc_extradata(st->codecpar, ast->xctx->streams[0]->codecpar->extradata_size);
+        ret = avcodec_parameters_copy(st->codecpar, ast->xctx->streams[0]->codecpar);
         if (ret < 0)
             return ret;
-        memcpy(st->codecpar->extradata, ast->xctx->streams[0]->codecpar->extradata,
-               ast->xctx->streams[0]->codecpar->extradata_size);
 
         ret = av_dict_copy(&st->metadata, ast->xctx->streams[0]->metadata, 0);
         if (ret < 0)
