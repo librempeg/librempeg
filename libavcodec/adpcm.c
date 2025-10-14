@@ -524,6 +524,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_IMA_NDS:
     case AV_CODEC_ID_ADPCM_BRR:
     case AV_CODEC_ID_ADPCM_IMA_DVI:
+    case AV_CODEC_ID_ADPCM_IMA_HWAS:
         avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
         break;
     case AV_CODEC_ID_ADPCM_IMA_WS:
@@ -1433,6 +1434,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_IMA_APC:
     case AV_CODEC_ID_ADPCM_IMA_CUNNING:
     case AV_CODEC_ID_ADPCM_IMA_DVI:
+    case AV_CODEC_ID_ADPCM_IMA_HWAS:
     case AV_CODEC_ID_ADPCM_IMA_EA_SEAD:
     case AV_CODEC_ID_ADPCM_IMA_ESCAPE:
     case AV_CODEC_ID_ADPCM_IMA_OKI:
@@ -2351,6 +2353,29 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     int v = bytestream2_get_byteu(&gb);
                     *smp++ = adpcm_ima_expand_nibble(cs, v >> 4  , 3);
                     *smp++ = adpcm_ima_expand_nibble(cs, v & 0x0F, 3);
+                }
+            }
+        }
+        ) /* End of CASE */
+    CASE(ADPCM_IMA_HWAS,
+        for (int block = 0; block < avpkt->size / FFMAX(avctx->block_align, 1); block++) {
+            const int nb_samples_per_block = 2 * FFMAX(avctx->block_align, 1) / channels;
+
+            for (int channel = 0; channel < channels; channel++) {
+                ADPCMChannelStatus *cs = c->status + channel;
+
+                cs->predictor = 0;
+                cs->step_index = 0;
+            }
+
+            for (int channel = 0; channel < channels; channel++) {
+                ADPCMChannelStatus *cs = c->status + channel;
+                int16_t *smp = samples_p[channel] + block * nb_samples_per_block;
+
+                for (int n = nb_samples_per_block / 2; n > 0; n--) {
+                    int v = bytestream2_get_byteu(&gb);
+                    *smp++ = ff_adpcm_ima_qt_expand_nibble(cs, v & 0x0F);
+                    *smp++ = ff_adpcm_ima_qt_expand_nibble(cs, v >> 4  );
                 }
             }
         }
@@ -3753,6 +3778,7 @@ ADPCM_DECODER(ADPCM_IMA_EA_SEAD, sample_fmts_s16,  adpcm_ima_ea_sead, "ADPCM IMA
 ADPCM_DECODER(ADPCM_IMA_ESCAPE,  sample_fmts_s16,  adpcm_ima_escape,  "ADPCM IMA Acorn Escape")
 ADPCM_DECODER(ADPCM_IMA_HVQM2,   sample_fmts_s16,  adpcm_ima_hvqm2,   "ADPCM IMA HVQM2")
 ADPCM_DECODER(ADPCM_IMA_HVQM4,   sample_fmts_s16,  adpcm_ima_hvqm4,   "ADPCM IMA HVQM4")
+ADPCM_DECODER(ADPCM_IMA_HWAS,    sample_fmts_s16p, adpcm_ima_hwas,    "ADPCM IMA Nintendo DS HWAS")
 ADPCM_DECODER(ADPCM_IMA_ISS,     sample_fmts_s16,  adpcm_ima_iss,     "ADPCM IMA Funcom ISS")
 ADPCM_DECODER(ADPCM_IMA_MAGIX,   sample_fmts_s16,  adpcm_ima_magix,   "ADPCM IMA Magix")
 ADPCM_DECODER(ADPCM_IMA_MO,      sample_fmts_s16p, adpcm_ima_mo,      "ADPCM IMA MobiClip MO")

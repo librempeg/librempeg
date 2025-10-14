@@ -722,6 +722,7 @@ extern const FFCodec ff_adpcm_ima_ea_sead_decoder;
 extern const FFCodec ff_adpcm_ima_escape_decoder;
 extern const FFCodec ff_adpcm_ima_hvqm2_decoder;
 extern const FFCodec ff_adpcm_ima_hvqm4_decoder;
+extern const FFCodec ff_adpcm_ima_hwas_decoder;
 extern const FFCodec ff_adpcm_ima_iss_decoder;
 extern const FFCodec ff_adpcm_ima_magix_decoder;
 extern const FFCodec ff_adpcm_ima_mo_decoder;
