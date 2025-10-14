@@ -64,6 +64,7 @@ static int read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
+    st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->ch_layout.nb_channels = nb_channels;
     st->codecpar->sample_rate = rate;
