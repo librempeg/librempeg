@@ -575,6 +575,12 @@ static int scd_read_close(AVFormatContext *s)
     av_freep(&ctx->hdr.table0.entries);
     av_freep(&ctx->hdr.table1.entries);
     av_freep(&ctx->hdr.table2.entries);
+
+    for (int i = 0; i < ctx->nb_streams; i++) {
+        SCDTrackHeader *trk = &ctx->tracks[i];
+
+        avformat_close_input(&trk->xctx);
+    }
     av_freep(&ctx->tracks);
 
     return 0;
