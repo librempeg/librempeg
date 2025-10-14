@@ -411,16 +411,10 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
             st->time_base = track->xctx->streams[0]->time_base;
             st->start_time = track->xctx->streams[0]->start_time;
             st->pts_wrap_bits = track->xctx->streams[0]->pts_wrap_bits;
-            st->codecpar->codec_id = track->xctx->streams[0]->codecpar->codec_id;
-            st->codecpar->bit_rate = track->xctx->streams[0]->codecpar->bit_rate;
-            st->codecpar->sample_rate = track->xctx->streams[0]->codecpar->sample_rate;
-            st->codecpar->block_align = track->xctx->streams[0]->codecpar->block_align;
-            if ((ret = av_channel_layout_copy(&st->codecpar->ch_layout, &track->xctx->streams[0]->codecpar->ch_layout)) < 0)
-                return ret;
 
-            if ((ret = ff_alloc_extradata(st->codecpar, track->xctx->streams[0]->codecpar->extradata_size)))
+            ret = avcodec_parameters_copy(st->codecpar, track->xctx->streams[0]->codecpar);
+            if (ret < 0)
                 return ret;
-            memcpy(st->codecpar->extradata, track->xctx->streams[0]->codecpar->extradata, track->xctx->streams[0]->codecpar->extradata_size);
 
             ret = av_dict_copy(&st->metadata, track->xctx->streams[0]->metadata, 0);
             if (ret < 0)
