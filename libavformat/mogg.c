@@ -98,21 +98,18 @@ static int read_header(AVFormatContext *s)
     st->time_base = m->ogg_ctx->streams[0]->time_base;
     st->start_time = m->ogg_ctx->streams[0]->start_time;
     st->pts_wrap_bits = m->ogg_ctx->streams[0]->pts_wrap_bits;
-    st->codecpar->codec_id = m->ogg_ctx->streams[0]->codecpar->codec_id;
-    st->codecpar->sample_rate = m->ogg_ctx->streams[0]->codecpar->sample_rate;
-    ret = av_channel_layout_copy(&st->codecpar->ch_layout, &m->ogg_ctx->streams[0]->codecpar->ch_layout);
+
+    ret = avcodec_parameters_copy(st->codecpar, m->ogg_ctx->streams[0]->codecpar);
     if (ret < 0)
         return ret;
 
-    ret = ff_alloc_extradata(st->codecpar, m->ogg_ctx->streams[0]->codecpar->extradata_size);
+    ret = av_dict_copy(&st->metadata, m->ogg_ctx->streams[0]->metadata, 0);
     if (ret < 0)
         return ret;
-    memcpy(st->codecpar->extradata, m->ogg_ctx->streams[0]->codecpar->extradata,
-           m->ogg_ctx->streams[0]->codecpar->extradata_size);
 
     sti = ffstream(st);
     sti->request_probe = 0;
-    sti->need_parsing = AVSTREAM_PARSE_HEADERS;
+    sti->need_parsing = ffstream(m->ogg_ctx->streams[0])->need_parsing;
 
     return 0;
 }
