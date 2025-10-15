@@ -208,8 +208,10 @@ static int write_input_samples(AVFilterContext *ctx, AVFrame *in)
     if (outlink->ch_layout.nb_channels == 2) {
         int ret = ff_inlink_make_frame_writable(ctx->inputs[0], &in);
 
-        if (ret < 0)
+        if (ret < 0) {
+            ff_graph_frame_free(ctx, &in);
             return ret;
+        }
 
         s->correlate_stereo(ctx, in);
     }
@@ -222,6 +224,8 @@ static int write_input_samples(AVFilterContext *ctx, AVFrame *in)
         av_audio_fifo_write(c->in_fifo, data, nb_samples);
         c->state[IN] += nb_samples * fs;
     }
+
+    ff_graph_frame_free(ctx, &in);
 
     return 0;
 }
@@ -269,7 +273,6 @@ static int activate(AVFilterContext *ctx)
             ret = write_input_samples(ctx, in);
             if (ret < 0)
                 return ret;
-            ff_graph_frame_free(ctx, &in);
         }
     }
 
