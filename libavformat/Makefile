@@ -748,6 +748,7 @@ OBJS-$(CONFIG_VC1_DEMUXER)               += rawdec.o vc1dec.o
 OBJS-$(CONFIG_VC1_MUXER)                 += rawenc.o
 OBJS-$(CONFIG_VC1T_DEMUXER)              += vc1test.o
 OBJS-$(CONFIG_VC1T_MUXER)                += vc1testenc.o
+OBJS-$(CONFIG_VGS_DEMUXER)               += vgs.o pcm.o
 OBJS-$(CONFIG_VIG_DEMUXER)               += vig.o
 OBJS-$(CONFIG_VIVIDAS_DEMUXER)           += vividas.o
 OBJS-$(CONFIG_VIVO_DEMUXER)              += vivo.o
