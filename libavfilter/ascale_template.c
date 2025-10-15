@@ -75,12 +75,18 @@ static int fn(copy_samples)(AVFilterContext *ctx, const int ch,
     return av_audio_fifo_size(c->in_fifo) >= s->max_period;
 }
 
-static ftype fn(get_gain)(const ftype w, const ftype c)
+static ftype fn(get_wgain)(const ftype w)
 {
     const ftype x = w*F(2.0)-F(1.0);
-    const ftype a = F(9.0/16.0)*FSIN(x*F(M_PI_2))+F(1.0/16.0)*FSIN(F(3.0)*x*F(M_PI_2));
+    return F(9.0/16.0)*FSIN(x*F(M_PI_2))+F(1.0/16.0)*FSIN(F(3.0)*x*F(M_PI_2));
+}
+
+static ftype fn(get_gain)(const ftype w, const ftype c, ftype *m)
+{
+    const ftype a = fn(get_wgain)(w);
     const ftype b = F(1.0)+c;
 
+    m[0] = a + F(0.5);
     return SQRT(F(0.5)/b-(F(1.0)-c)*a*a/b)+a;
 }
 
@@ -164,14 +170,15 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
 
     scale = F(1.0) / best_period;
     for (int n = 0; n < best_period; n++) {
+        ftype mxf, myf;
         const ftype xf = n*scale;
         const ftype yf = F(1.0)-xf;
-        const ftype axf = fn(get_gain)(xf, best_xcorr);
-        const ftype ayf = fn(get_gain)(yf, best_xcorr);
+        const ftype axf = fn(get_gain)(xf, best_xcorr, &mxf);
+        const ftype ayf = fn(get_gain)(yf, best_xcorr, &myf);
         const ftype x = dptrx[n] - mean.re;
         const ftype y = dptry[n] - mean.im;
 
-        dptrx[n] = x * axf + y * ayf + xf * mean.re + yf * mean.im;
+        dptrx[n] = x * axf + y * ayf + mxf * mean.re + myf * mean.im;
     }
 
     av_audio_fifo_write(c->out_fifo, datax, best_period);
@@ -352,14 +359,15 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
 
     scale = F(1.0) / best_period;
     for (int n = 0; n < best_period; n++) {
+        ftype mxf, myf;
         const ftype yf = n*scale;
         const ftype xf = F(1.0)-yf;
-        const ftype axf = fn(get_gain)(xf, best_xcorr);
-        const ftype ayf = fn(get_gain)(yf, best_xcorr);
+        const ftype axf = fn(get_gain)(xf, best_xcorr, &mxf);
+        const ftype ayf = fn(get_gain)(yf, best_xcorr, &myf);
         const ftype x = dptrx[n] - mean.re;
         const ftype y = dptry[n+best_period] - mean.im;
 
-        dptrx[n] = x * axf + y * ayf + xf * mean.re + yf * mean.im;
+        dptrx[n] = x * axf + y * ayf + mxf * mean.re + myf * mean.im;
     }
 
     av_audio_fifo_write(c->out_fifo, datax, best_period);
