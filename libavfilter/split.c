@@ -84,7 +84,7 @@ static int activate(AVFilterContext *ctx)
 
             if (ff_outlink_get_status(ctx->outputs[i]))
                 continue;
-            buf_out = av_frame_clone(in);
+            buf_out = ff_graph_frame_clone(ctx, in);
             if (!buf_out) {
                 ret = AVERROR(ENOMEM);
                 break;
@@ -95,7 +95,7 @@ static int activate(AVFilterContext *ctx)
                 break;
         }
 
-        av_frame_free(&in);
+        ff_graph_frame_free(ctx, &in);
         return ret;
     }
 
