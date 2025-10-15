@@ -182,7 +182,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
         s->pattern_pos = 0;
 
     if (!len) { // do not output any field from this frame
-        av_frame_free(&inpicref);
+        ff_graph_frame_free(ctx, &inpicref);
         return 0;
     }
 
@@ -246,7 +246,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
     }
 
     for (int i = 0; i < nout; i++) {
-        AVFrame *frame = av_frame_clone(s->frame[i]);
+        AVFrame *frame = ff_graph_frame_clone(ctx, s->frame[i]);
         int interlaced = frame ? !!(frame->flags & AV_FRAME_FLAG_INTERLACED)      : 0;
         int tff        = frame ? !!(frame->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST) : 0;
 
@@ -269,7 +269,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
                                 s->ts_unit.den);
         ret = ff_filter_frame(outlink, frame);
     }
-    av_frame_free(&inpicref);
+    ff_graph_frame_free(ctx, &inpicref);
 
     return ret;
 }
