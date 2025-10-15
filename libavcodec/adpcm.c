@@ -3267,8 +3267,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         ) /* End of CASE */
     CASE(ADPCM_PSX,
-        for (int block = 0; block < avpkt->size / FFMAX(avctx->block_align, 16 * channels); block++) {
-            int nb_samples_per_block = 28 * FFMAX(avctx->block_align, 16 * channels) / (16 * channels);
+        for (int block = 0; block < avpkt->size / FFMAX(FFMIN(avctx->block_align, avpkt->size), 16 * channels); block++) {
+            int nb_samples_per_block = 28 * FFMAX(FFMIN(avctx->block_align, avpkt->size), 16 * channels) / (16 * channels);
             for (int channel = 0; channel < channels; channel++) {
                 samples = samples_p[channel] + block * nb_samples_per_block;
                 av_assert0((block + 1) * nb_samples_per_block <= nb_samples);
