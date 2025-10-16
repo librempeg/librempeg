@@ -25,7 +25,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int ads_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (p->buf_size < 36)
         return 0;
@@ -34,56 +34,55 @@ static int ads_probe(const AVProbeData *p)
         memcmp(p->buf+32, "SSbd", 4))
         return 0;
 
-    if ((int32_t)AV_RL32(p->buf + 12) <= 0)
+    if ((int)AV_RL32(p->buf + 12) <= 0)
         return 0;
 
-    if ((int32_t)AV_RL32(p->buf + 16) <= 0)
+    if ((int)AV_RL32(p->buf + 16) <= 0)
         return 0;
 
-    if ((int32_t)AV_RL32(p->buf + 20) <= 0)
+    if ((int)AV_RL32(p->buf + 20) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
 }
 
-static int ads_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
+    int align, codec, rate, channels;
     AVIOContext *pb = s->pb;
-    int align, codec;
     AVStream *st;
     int64_t size;
 
-    st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
-
     avio_skip(pb, 8);
-    st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     codec = avio_rl32(pb);
-    st->codecpar->sample_rate = avio_rl32(pb);
-    if (st->codecpar->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
-    st->codecpar->ch_layout.nb_channels = avio_rl32(pb);
-    if (st->codecpar->ch_layout.nb_channels <= 0)
-        return AVERROR_INVALIDDATA;
+    rate = avio_rl32(pb);
+    channels = avio_rl32(pb);
     align = avio_rl32(pb);
-    if (align <= 0 || align > INT_MAX / st->codecpar->ch_layout.nb_channels)
+    if (rate <= 0 || channels <= 0 || align <= 0 || align > INT_MAX/channels)
         return AVERROR_INVALIDDATA;
 
     switch (codec) {
     case 1:
-        st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE_PLANAR;
+        codec = AV_CODEC_ID_PCM_S16LE_PLANAR;
         break;
     case 2:
     case 16:
-        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX;
+        codec = AV_CODEC_ID_ADPCM_PSX;
         break;
     default:
         avpriv_request_sample(s, "codec %d", codec);
         return AVERROR_PATCHWELCOME;
     }
 
-    st->codecpar->block_align = st->codecpar->ch_layout.nb_channels * align;
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
+
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id = codec;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->ch_layout.nb_channels = channels;
+    st->codecpar->block_align = channels * align;
     avio_skip(pb, 12);
     size = avio_rl32(pb);
     if (st->codecpar->codec_id == AV_CODEC_ID_ADPCM_PSX && size >= 0x40)
@@ -94,7 +93,7 @@ static int ads_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int ads_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
     AVIOContext *pb = s->pb;
@@ -112,7 +111,7 @@ const FFInputFormat ff_ads_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sony PS2 ADS"),
     .p.extensions   = "ads,ss2",
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = ads_probe,
-    .read_header    = ads_read_header,
-    .read_packet    = ads_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
