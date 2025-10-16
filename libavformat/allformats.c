@@ -256,6 +256,7 @@ extern const FFInputFormat  ff_halpst_demuxer;
 extern const FFOutputFormat ff_hash_muxer;
 extern const FFInputFormat  ff_hca_demuxer;
 extern const FFInputFormat  ff_hcom_demuxer;
+extern const FFInputFormat  ff_hdbd_demuxer;
 extern const FFOutputFormat ff_hds_muxer;
 extern const FFInputFormat  ff_hevc_demuxer;
 extern const FFOutputFormat ff_hevc_muxer;
