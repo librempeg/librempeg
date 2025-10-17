@@ -74,6 +74,7 @@ static int read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
+    st->start_time = 0;
     st->duration = avio_rb32(pb);
     avio_skip(pb, 4);
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
