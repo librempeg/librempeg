@@ -134,6 +134,9 @@ typedef struct InputFilterPriv {
     // used to hold submitted input
     AVFrame            *frame;
 
+    // For inputs bound to a filtergraph output
+    OutputFilter       *ofilter_src;
+
     /* for filters that are not yet bound to an input stream,
      * this stores the input linklabel, if any */
     uint8_t            *linklabel;
@@ -954,6 +957,8 @@ static int ofilter_bind_ifilter(OutputFilter *ofilter, InputFilterPriv *ifp,
     ofp->name = av_strdup(opts->name);
     if (!ofp->name)
         return AVERROR(EINVAL);
+
+    ifp->ofilter_src = ofilter;
 
     av_strlcatf(ofp->log_name, sizeof(ofp->log_name), "->%s", ofp->name);
 
@@ -2123,6 +2128,27 @@ static int ifilter_parameters_from_frame(InputFilter *ifilter, const AVFrame *fr
     return 0;
 }
 
+static int ifilter_parameters_from_ofilter(InputFilter *ifilter, OutputFilter *ofilter)
+{
+    const OutputFilterPriv *ofp = ofp_from_ofilter(ofilter);
+    InputFilterPriv  *ifp = ifp_from_ifilter(ifilter);
+
+    if (!ifp->opts.framerate.num) {
+        ifp->opts.framerate = ofp->fps.framerate;
+        if (ifp->opts.framerate.num > 0 && ifp->opts.framerate.den > 0)
+            ifp->opts.flags |= IFILTER_FLAG_CFR;
+    }
+
+    for (int i = 0; i < ofp->nb_side_data; i++) {
+        int ret = av_frame_side_data_clone(&ifp->side_data, &ifp->nb_side_data,
+                                           ofp->side_data[i], AV_FRAME_SIDE_DATA_FLAG_REPLACE);
+        if (ret < 0)
+            return ret;
+    }
+
+    return 0;
+}
+
 int filtergraph_is_simple(const FilterGraph *fg)
 {
     const FilterGraphPriv *fgp = cfgp_from_cfg(fg);
@@ -3286,6 +3312,14 @@ static int send_frame(FilterGraph *fg, FilterGraphThread *fgt,
         ret = ifilter_parameters_from_frame(ifilter, frame);
         if (ret < 0)
             return ret;
+
+        /* Inputs bound to a filtergraph output will have some fields unset.
+         * Handle them here */
+        if (ifp->ofilter_src) {
+            ret = ifilter_parameters_from_ofilter(ifilter, ifp->ofilter_src);
+            if (ret < 0)
+                return ret;
+        }
     }
 
     /* (re)init the graph if possible, otherwise buffer the frame and return */
