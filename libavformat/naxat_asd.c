@@ -61,7 +61,7 @@ static int naxat_asd_probe(const AVProbeData *p)
     uint32_t data_size;
     int score = 40;
 
-    if (0x20 >= p->buf_size)
+    if (p->buf_size < 0x20)
         return 0;
     data_size = AV_RL32(p->buf);
     // data size has to be smaller than whole buffer
@@ -77,6 +77,8 @@ static int naxat_asd_probe(const AVProbeData *p)
     if (AV_RL16(p->buf + 10) <= 2)
         score += 10;
     // sample rate;
+    if ((int)AV_RL32(p->buf + 12) <= 0)
+        return 0;
     if (AV_RL32(p->buf + 12) == 22050)
         score += 10;
     // block size
@@ -91,9 +93,9 @@ static int naxat_asd_probe(const AVProbeData *p)
 
 static int naxat_asd_read_header(AVFormatContext *s)
 {
-    int ret;
-    AVStream *st;
     AVIOContext *pb = s->pb;
+    AVStream *st;
+    int ret;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
@@ -101,15 +103,18 @@ static int naxat_asd_read_header(AVFormatContext *s)
 
     avio_skip(pb, 8);
     ret = read_header(st, pb);
+    if (ret < 0)
+        return ret;
 
     avio_seek(pb, 0x20, SEEK_SET);
-    return ret;
+
+    return 0;
 }
 
 static int naxat_asd_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    int64_t block_size;
     AVIOContext *pb = s->pb;
+    int64_t block_size;
 
     pkt->pos = avio_tell(pb);
     block_size = avio_size(pb) - pkt->pos;
@@ -128,8 +133,8 @@ const FFInputFormat ff_naxat_asd_demuxer = {
 };
 
 typedef struct NaxatASDStream {
-    uint32_t start_offset;
-    uint32_t end_offset;
+    int64_t start_offset;
+    int64_t end_offset;
 } NaxatASDStream;
 
 static int naxat_asd_bnk_probe(const AVProbeData *p)
@@ -143,6 +148,8 @@ static int naxat_asd_bnk_probe(const AVProbeData *p)
     if (AV_RL16(p->buf + 2) <= 2)
         score += 10;
     // sample rate
+    if ((int)AV_RL32(p->buf + 4) <= 0)
+        return 0;
     if (AV_RL32(p->buf + 4) == 22050)
         score += 10;
     // block size
@@ -172,11 +179,11 @@ static int sort_streams(const void *a, const void *b)
 
 static int naxat_asd_bnk_read_header(AVFormatContext *s)
 {
-    int ret;
-    uint32_t size, header_end, start;
-    int64_t addr;
+    uint32_t size, header_end;
+    int64_t addr, start;
     NaxatASDStream *first_ast;
     AVIOContext *pb = s->pb;
+    int ret;
 
     avio_skip(pb, 0x10);
 
