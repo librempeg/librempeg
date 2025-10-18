@@ -21,17 +21,36 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/intreadwrite.h"
+#include "libavcodec/bytestream.h"
 #include "libavutil/mem.h"
 #include "avformat.h"
 #include "avio.h"
 #include "demux.h"
 #include "internal.h"
+#include "fsbvorbis_data.h"
 
 typedef struct FSBStream {
     int64_t name_offset;
     int64_t start_offset;
     int64_t stop_offset;
+    uint8_t *extradata;
+    int extradata_size;
 } FSBStream;
+
+static int load_vorbis_cb(const uint32_t setup_id, const uint8_t **buf, int *buf_size)
+{
+    for (int i = 0; i < FF_ARRAY_ELEMS(ff_fsbvb_cb); i++) {
+        if (ff_fsbvb_cb[i].id != setup_id)
+            continue;
+
+        buf[0] = ff_fsbvb_cb[i].codebooks;
+        buf_size[0] = ff_fsbvb_cb[i].size;
+
+        return 0;
+    }
+
+    return AVERROR(EINVAL);
+}
 
 static int fsb_probe(const AVProbeData *p)
 {
@@ -533,6 +552,13 @@ static int fsb_read_header(AVFormatContext *s)
                         }
                         avio_skip(pb, extraflag_size);
                         break;
+                    case 0x0b:
+                        fst->extradata = av_calloc(extraflag_size, sizeof(*fst->extradata));
+                        if (!fst->extradata)
+                            return AVERROR(ENOMEM);
+                        avio_read(pb, fst->extradata, extraflag_size);
+                        fst->extradata_size = extraflag_size;
+                        break;
                     case 0x0e:
                         channels = channels * avio_rl32(pb);
                         break;
@@ -600,6 +626,70 @@ static int fsb_read_header(AVFormatContext *s)
                 if (par->block_align == 0)
                     par->block_align = 1024;
                 sti->need_parsing = AVSTREAM_PARSE_FULL;
+                break;
+            case 0x0F:
+                par->codec_id = AV_CODEC_ID_VORBIS;
+                sti->need_parsing = AVSTREAM_PARSE_FULL;
+                par->block_align = 0;
+                {
+                    uint32_t setup_id = AV_RL32(fst->extradata);
+                    const uint8_t *cb = NULL;
+                    PutByteContext pbc;
+                    uint8_t block_size;
+                    int cb_size = 0;
+                    int bl0, bl1;
+
+                    ret = load_vorbis_cb(setup_id, &cb, &cb_size);
+                    if (ret < 0)
+                        return ret;
+
+                    ret = ff_alloc_extradata(par, cb_size + 2048);
+                    if (ret < 0)
+                        return ret;
+
+                    bl0 = av_log2(2048);
+                    bl1 = av_log2(256);
+                    block_size = (bl0 << 4) | bl1;
+
+                    bytestream2_init_writer(&pbc, par->extradata, par->extradata_size);
+                    bytestream2_put_be16(&pbc, 30);
+                    bytestream2_put_byte(&pbc, 0x01);
+                    bytestream2_put_byte(&pbc, 'v');
+                    bytestream2_put_byte(&pbc, 'o');
+                    bytestream2_put_byte(&pbc, 'r');
+                    bytestream2_put_byte(&pbc, 'b');
+                    bytestream2_put_byte(&pbc, 'i');
+                    bytestream2_put_byte(&pbc, 's');
+                    bytestream2_put_le32(&pbc, 0);
+                    bytestream2_put_byte(&pbc, channels);
+                    bytestream2_put_le32(&pbc, sample_rate);
+                    bytestream2_put_le32(&pbc, 0);
+                    bytestream2_put_le32(&pbc, 0);
+                    bytestream2_put_le32(&pbc, 0);
+                    bytestream2_put_byte(&pbc, block_size);
+                    bytestream2_put_byte(&pbc, 0x01);
+
+                    bytestream2_put_be16(&pbc, 20);
+                    bytestream2_put_byte(&pbc, 0x03);
+                    bytestream2_put_byte(&pbc, 'v');
+                    bytestream2_put_byte(&pbc, 'o');
+                    bytestream2_put_byte(&pbc, 'r');
+                    bytestream2_put_byte(&pbc, 'b');
+                    bytestream2_put_byte(&pbc, 'i');
+                    bytestream2_put_byte(&pbc, 's');
+                    bytestream2_put_le32(&pbc, 0x04);
+                    bytestream2_put_buffer(&pbc, "lavf", 4);
+                    bytestream2_put_le32(&pbc, 0x00);
+                    bytestream2_put_byte(&pbc, 0x01);
+
+                    bytestream2_put_be16(&pbc, cb_size);
+                    bytestream2_put_buffer(&pbc, cb, cb_size);
+
+                    par->extradata_size = bytestream2_tell_p(&pbc);
+
+                    av_freep(&fst->extradata);
+                    fst->extradata_size = 0;
+                }
                 break;
             case 0x10:
                 par->codec_id = AV_CODEC_ID_ADPCM_FMOD;
@@ -671,7 +761,13 @@ static int fsb_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         pos = avio_tell(pb);
         if (pos >= fst->start_offset && pos < fst->stop_offset) {
-            ret = av_get_packet(pb, pkt, par->block_align);
+            if (par->block_align > 0) {
+                ret = av_get_packet(pb, pkt, par->block_align);
+            } else {
+                const int size = avio_rl16(pb);
+
+                ret = av_get_packet(pb, pkt, size);
+            }
 
             pkt->pos = pos;
             pkt->stream_index = st->index;
