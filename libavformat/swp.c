@@ -94,11 +94,7 @@ static int swp_read_header(AVFormatContext *s)
             return AVERROR_INVALIDDATA;
 
         avio_seek(pb, 0x10 * (i + 1), SEEK_SET);
-        avio_skip(pb, 1);
-        if (avio_r8(pb) != 0xFF)
-            return AVERROR_INVALIDDATA;
-
-        avio_skip(pb, 1);
+        avio_skip(pb, 3);
         if (avio_r8(pb) != channels)
             return AVERROR_INVALIDDATA;
 
