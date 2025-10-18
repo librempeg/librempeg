@@ -182,10 +182,9 @@ static int agsc_read_header(AVFormatContext *s)
             min_coefs_offset = coefs_offset;
         addr = avio_tell(pb);
         avio_seek(pb, coefs_offset + 8, SEEK_SET);
-        ret = ff_alloc_extradata(st->codecpar, 0x20);
+        ret = ff_get_extradata(s, st->codecpar, pb, 0x20);
         if (ret < 0)
             return ret;
-        avio_read(pb, st->codecpar->extradata, 0x20);
         avio_seek(pb, addr, SEEK_SET);
     }
 
