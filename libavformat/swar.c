@@ -87,8 +87,10 @@ static int read_header(AVFormatContext *s)
         SWARStream *sst;
         AVStream *st;
 
-        avio_seek(pb, 0x3c + 4 * si, SEEK_SET);
+        avio_seek(pb, 0x3c + 4LL * si, SEEK_SET);
         head_offset = avio_rl32(pb);
+        if (avio_feof(pb))
+            return AVERROR_INVALIDDATA;
 
         avio_seek(pb, head_offset, SEEK_SET);
 
