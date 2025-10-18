@@ -26,8 +26,8 @@
 #include "internal.h"
 
 typedef struct SWPStream {
-    uint32_t start_offset;
-    uint32_t end_offset;
+    int64_t start_offset;
+    int64_t end_offset;
 } SWPStream;
 
 static int swp_probe(const AVProbeData *p)
@@ -55,26 +55,38 @@ static int sort_streams(const void *a, const void *b)
 
 static int swp_read_header(AVFormatContext *s)
 {
-    uint32_t entry_count1, max_entry_count, real_entry_count, table2_offset, data_offset, start_offset, size, channels;
+    int entry_count1, max_entry_count, real_entry_count, size, channels;
+    int64_t table2_offset, data_offset, start_offset;
     uint8_t entry_count2;
     AVIOContext *pb = s->pb;
 
     avio_skip(pb, 4);
     entry_count1 = avio_rl32(pb);
+    if (entry_count1 <= 0)
+        return AVERROR_INVALIDDATA;
+
     entry_count2 = avio_r8(pb);
     if (entry_count2 != avio_r8(pb))
         return AVERROR_INVALIDDATA;
+
     max_entry_count = entry_count1 * entry_count2;
     avio_skip(pb, 6);
 
-    avio_skip(pb, 0x10 * (max_entry_count - 1));
+    avio_skip(pb, 0x10LL * (max_entry_count - 1));
     real_entry_count = avio_rl32(pb);
+    if (real_entry_count <= 0)
+        return AVERROR_INVALIDDATA;
+
     avio_skip(pb, 12);
     table2_offset = avio_tell(pb);
     data_offset = table2_offset + (real_entry_count + 1) * 0x10;
 
     for (int i = 0; i < real_entry_count; i++) {
-        avio_seek(pb, table2_offset + i * 0x10, SEEK_SET);
+        avio_seek(pb, table2_offset + i * 0x10LL, SEEK_SET);
+
+        if (avio_feof(pb))
+            return AVERROR_INVALIDDATA;
+
         start_offset = avio_rl32(pb) + data_offset;
         size = avio_rl32(pb);
         channels = avio_rl16(pb);
@@ -85,6 +97,7 @@ static int swp_read_header(AVFormatContext *s)
         avio_skip(pb, 1);
         if (avio_r8(pb) != 0xFF)
             return AVERROR_INVALIDDATA;
+
         avio_skip(pb, 1);
         if (avio_r8(pb) != channels)
             return AVERROR_INVALIDDATA;
@@ -119,6 +132,7 @@ static int swp_read_header(AVFormatContext *s)
     }
 
     avio_seek(pb, data_offset, SEEK_SET);
+
     return 0;
 }
 
@@ -142,6 +156,7 @@ static int swp_read_packet(AVFormatContext *s, AVPacket *pkt)
             ret = av_get_packet(pb, pkt, block_size);
             pkt->pos = pos;
             pkt->stream_index = st->index;
+
             break;
         } else if (pos >= sst->end_offset && i+1 < s->nb_streams) {
             AVStream *st_next = s->streams[i+1];
