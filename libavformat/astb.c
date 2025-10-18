@@ -25,7 +25,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int astb_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RL32(p->buf) != MKTAG('A','S','T','B'))
         return 0;
@@ -39,10 +39,10 @@ static int astb_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX / 3 * 2;
 }
 
-static int astb_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
-    uint32_t start_offset;
+    int64_t start_offset;
     int ret, channels = 0;
     int streams;
     AVStream *st;
@@ -77,7 +77,7 @@ static int astb_read_header(AVFormatContext *s)
     st->codecpar->extradata_size = 8 + 20 * streams;
 
     st->codecpar->ch_layout.nb_channels = channels;
-    if (!st->codecpar->ch_layout.nb_channels)
+    if (st->codecpar->ch_layout.nb_channels <= 0)
         return AVERROR_INVALIDDATA;
 
     st->codecpar->sample_rate = AV_RB32(st->codecpar->extradata + 12);
@@ -89,13 +89,12 @@ static int astb_read_header(AVFormatContext *s)
     ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
-    if (start_offset > avio_tell(pb))
-        avio_skip(pb, start_offset - avio_tell(pb));
+    avio_seek(pb, start_offset, SEEK_SET);
 
     return 0;
 }
 
-static int astb_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVStream *st = s->streams[0];
     AVCodecParameters *par = st->codecpar;
@@ -115,7 +114,7 @@ const FFInputFormat ff_astb_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Capcom ASTB (Audio Stream)"),
     .p.extensions   = "ast",
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = astb_probe,
-    .read_header    = astb_read_header,
-    .read_packet    = astb_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
