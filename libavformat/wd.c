@@ -125,9 +125,8 @@ static int read_header(AVFormatContext *s)
         st->codecpar->sample_rate = 22050;
         st->codecpar->block_align = 512;
 
-        if ((ret = ff_alloc_extradata(st->codecpar, 32)) < 0)
+        if ((ret = ff_get_extradata(s, st->codecpar, pb, 32)) < 0)
             return ret;
-        avio_read(pb, st->codecpar->extradata, 32);
 
         avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
     }
