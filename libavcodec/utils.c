@@ -565,6 +565,7 @@ int av_get_bits_per_sample(enum AVCodecID codec_id)
     case AV_CODEC_ID_ADPCM_SBPRO_3:
         return 3;
     case AV_CODEC_ID_ADPCM_SBPRO_4:
+    case AV_CODEC_ID_ADPCM_IMA_WAV_MONO:
     case AV_CODEC_ID_ADPCM_IMA_WAV:
     case AV_CODEC_ID_ADPCM_IMA_XBOX:
     case AV_CODEC_ID_ADPCM_IMA_QT:
@@ -770,6 +771,7 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
                         return 0;
                     tmp = blocks * ((ba - 4 * ch) / (bps * ch) * 8);
                     break;
+                case AV_CODEC_ID_ADPCM_IMA_WAV_MONO:
                 case AV_CODEC_ID_ADPCM_IMA_WAV:
                     if (bps < 2 || bps > 5)
                         return 0;

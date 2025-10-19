@@ -462,6 +462,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     }
 
     switch (avctx->codec->id) {
+    case AV_CODEC_ID_ADPCM_IMA_WAV_MONO:
     case AV_CODEC_ID_ADPCM_IMA_WAV:
         if (avctx->bits_per_coded_sample < 2 || avctx->bits_per_coded_sample > 5)
             return AVERROR_INVALIDDATA;
@@ -492,6 +493,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_IMA_CUNNING:
     case AV_CODEC_ID_ADPCM_IMA_DAT4:
     case AV_CODEC_ID_ADPCM_IMA_QT:
+    case AV_CODEC_ID_ADPCM_IMA_WAV_MONO:
     case AV_CODEC_ID_ADPCM_IMA_WAV:
     case AV_CODEC_ID_ADPCM_IMA_XBOX:
     case AV_CODEC_ID_ADPCM_4XM:
@@ -1559,6 +1561,15 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
             buf_size = FFMIN(buf_size, avctx->block_align);
         nb_samples = (buf_size - 4 * ch) * 2 / ch;
         break;
+    CASE(ADPCM_IMA_WAV_MONO,
+        int bsize = ff_adpcm_ima_block_sizes[avctx->bits_per_coded_sample - 2];
+        int bsamples = ff_adpcm_ima_block_samples[avctx->bits_per_coded_sample - 2];
+        if (avctx->block_align > 0)
+            buf_size = FFMIN(buf_size, avctx->block_align);
+        if (buf_size < 4 * ch)
+            return AVERROR_INVALIDDATA;
+        nb_samples = 1 + (buf_size - 4 * ch) / (bsize * ch) * bsamples;
+        ) /* End of CASE */
     CASE(ADPCM_IMA_WAV,
         int bsize = ff_adpcm_ima_block_sizes[avctx->bits_per_coded_sample - 2];
         int bsamples = ff_adpcm_ima_block_samples[avctx->bits_per_coded_sample - 2];
@@ -1805,6 +1816,24 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 int byte = bytestream2_get_byteu(&gb);
                 samples[m    ] = ff_adpcm_ima_qt_expand_nibble(cs, byte & 0x0F);
                 samples[m + 1] = ff_adpcm_ima_qt_expand_nibble(cs, byte >> 4  );
+            }
+        }
+        ) /* End of CASE */
+    CASE(ADPCM_IMA_WAV_MONO,
+        for (int i = 0; i < channels; i++) {
+            ADPCMChannelStatus *cs = &c->status[i];
+
+            cs->predictor = samples_p[i][0] = sign_extend(bytestream2_get_le16u(&gb), 16);
+            cs->step_index = av_clip(bytestream2_get_byte(&gb), 0, 88);
+            bytestream2_skip(&gb, 1);
+
+            for (int n = 0; n < (nb_samples - 1) / 8; n++) {
+                samples = &samples_p[i][1 + n * 8];
+                for (int m = 0; m < 8; m += 2) {
+                    int v = bytestream2_get_byteu(&gb);
+                    samples[m    ] = ff_adpcm_ima_qt_expand_nibble(cs, v & 0x0F);
+                    samples[m + 1] = ff_adpcm_ima_qt_expand_nibble(cs, v >> 4);
+                }
             }
         }
         ) /* End of CASE */
@@ -3793,6 +3822,7 @@ ADPCM_DECODER(ADPCM_IMA_SSI,     sample_fmts_s16,  adpcm_ima_ssi,     "ADPCM IMA
 ADPCM_DECODER(ADPCM_IMA_SMJPEG,  sample_fmts_s16,  adpcm_ima_smjpeg,  "ADPCM IMA Loki SDL MJPEG")
 ADPCM_DECODER(ADPCM_IMA_ALP,     sample_fmts_s16,  adpcm_ima_alp,     "ADPCM IMA High Voltage Software ALP")
 ADPCM_DECODER(ADPCM_IMA_WAV,     sample_fmts_s16p, adpcm_ima_wav,     "ADPCM IMA WAV")
+ADPCM_DECODER(ADPCM_IMA_WAV_MONO,sample_fmts_s16p, adpcm_ima_wav_mono,"ADPCM IMA WAV (Mono)")
 ADPCM_DECODER(ADPCM_IMA_WS,      sample_fmts_both, adpcm_ima_ws,      "ADPCM IMA Westwood")
 ADPCM_DECODER(ADPCM_IMA_XBOX,    sample_fmts_s16p, adpcm_ima_xbox,    "ADPCM IMA Xbox")
 ADPCM_DECODER(ADPCM_IMA_ZMUSIC,  sample_fmts_s16,  adpcm_ima_zmusic,  "ADPCM IMA Z-Music")
