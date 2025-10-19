@@ -382,6 +382,11 @@ typedef struct FilterGraph {
     int          nb_inputs;
     OutputFilter **outputs;
     int         nb_outputs;
+
+    // true when the filtergraph is created internally for
+    // purposes like stream group merging. Meant to be freed
+    // if unbound.
+    int        is_internal;
 } FilterGraph;
 
 enum DecoderFlags {
