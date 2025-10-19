@@ -27,6 +27,8 @@
 
 typedef struct TTADDemuxContext {
     AVFormatContext *xctx;
+    FFIOContext apb;
+    int64_t start_offset;
 } TTADDemuxContext;
 
 static int read_probe(const AVProbeData *p)
@@ -44,6 +46,23 @@ static int read_probe(const AVProbeData *p)
         return 0;
 
     return AVPROBE_SCORE_MAX;
+}
+
+static int read_data(void *opaque, uint8_t *buf, int buf_size)
+{
+    AVFormatContext *s = opaque;
+    AVIOContext *pb = s->pb;
+
+    return avio_read(pb, buf, buf_size);
+}
+
+static int64_t seek_data(void *opaque, int64_t offset, int whence)
+{
+    AVFormatContext *s = opaque;
+    TTADDemuxContext *tt = s->priv_data;
+    AVIOContext *pb = s->pb;
+
+    return avio_seek(pb, offset + tt->start_offset, whence);
 }
 
 static int read_header(AVFormatContext *s)
@@ -142,13 +161,16 @@ static int read_header(AVFormatContext *s)
         return ret;
     }
 
+    ffio_init_context(&tt->apb, NULL, 0, 0, s,
+                      read_data, NULL, seek_data);
+
     tt->xctx->flags = AVFMT_FLAG_CUSTOM_IO | AVFMT_FLAG_GENPTS;
     tt->xctx->ctx_flags |= AVFMTCTX_UNSEEKABLE;
     tt->xctx->probesize = 0;
     tt->xctx->max_analyze_duration = 0;
     tt->xctx->interrupt_callback = s->interrupt_callback;
-    tt->xctx->pb = pb;
-    tt->xctx->skip_initial_bytes = offset;
+    tt->xctx->pb = &tt->apb.pub;
+    tt->xctx->skip_initial_bytes = 0;
     tt->xctx->io_open = NULL;
 
     ret = avformat_open_input(&tt->xctx, "", NULL, NULL);
@@ -176,6 +198,7 @@ static int read_header(AVFormatContext *s)
     sti = ffstream(st);
     sti->request_probe = 0;
     sti->need_parsing = ffstream(tt->xctx->streams[0])->need_parsing;
+    tt->start_offset = avio_tell(pb);
 
     return 0;
 }
