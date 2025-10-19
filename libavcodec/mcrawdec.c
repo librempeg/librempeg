@@ -61,7 +61,7 @@ static void decode_header(GetByteContext *gb, uint8_t *bits, uint16_t *reference
 static void decode1(GetByteContext *gb, uint16_t *output)
 {
     for (int i = 0; i < 8; i++) {
-        uint8_t p = bytestream2_get_byte(gb);
+        uint8_t p = bytestream2_get_byteu(gb);
 
         for (int j = 0; j < 8; j++) {
             output[j] = p & 1;
@@ -77,7 +77,7 @@ static void decode2_one(GetByteContext *gb, uint16_t *output)
     const unsigned N = 0x03;
 
     for (int i = 0; i < 8; i++) {
-        const unsigned p = bytestream2_get_byte(gb);
+        const unsigned p = bytestream2_get_byteu(gb);
 
         const unsigned r0 =  p & N;
         const unsigned r1 = (p & (N << 2)) >> 2;
@@ -106,13 +106,13 @@ static void decode3(GetByteContext *gb, uint16_t *output)
     GetByteContext gb1 = *gb;
     GetByteContext gb2 = *gb;
 
-    bytestream2_skip(&gb1, 8);
-    bytestream2_skip(&gb2, 16);
+    bytestream2_skipu(&gb1, 8);
+    bytestream2_skipu(&gb2, 16);
 
     for (int i = 0; i < 8; i++) {
-        const unsigned p0 = bytestream2_get_byte(gb);
-        const unsigned p1 = bytestream2_get_byte(&gb1);
-        const unsigned p2 = bytestream2_get_byte(&gb2);
+        const unsigned p0 = bytestream2_get_byteu(gb);
+        const unsigned p1 = bytestream2_get_byteu(&gb1);
+        const unsigned p2 = bytestream2_get_byteu(&gb2);
 
         const unsigned r0  =  p0 & N;
         const unsigned r1  = (p0 & (N << 3)) >> 3;
@@ -138,13 +138,13 @@ static void decode3(GetByteContext *gb, uint16_t *output)
         output[i+56] = r7;
     }
 
-    bytestream2_skip(gb, 16);
+    bytestream2_skipu(gb, 16);
 }
 
 static void decode4_one(GetByteContext *gb, uint16_t *output)
 {
     for (int i = 0; i < 8; i++) {
-        const unsigned p = bytestream2_get_byte(gb);
+        const unsigned p = bytestream2_get_byteu(gb);
         uint16_t r0 =  p & 0x0F;
         uint16_t r1 = (p & 0xF0) >> 4;
 
@@ -173,17 +173,17 @@ static void decode5(GetByteContext *gb, uint16_t *output)
     GetByteContext gb3 = *gb;
     GetByteContext gb4 = *gb;
 
-    bytestream2_skip(&gb1, 8);
-    bytestream2_skip(&gb2, 16);
-    bytestream2_skip(&gb3, 24);
-    bytestream2_skip(&gb4, 32);
+    bytestream2_skipu(&gb1, 8);
+    bytestream2_skipu(&gb2, 16);
+    bytestream2_skipu(&gb3, 24);
+    bytestream2_skipu(&gb4, 32);
 
     for (int i = 0; i < 8; i++) {
-        const unsigned p0 = bytestream2_get_byte(gb);
-        const unsigned p1 = bytestream2_get_byte(&gb1);
-        const unsigned p2 = bytestream2_get_byte(&gb2);
-        const unsigned p3 = bytestream2_get_byte(&gb3);
-        const unsigned p4 = bytestream2_get_byte(&gb4);
+        const unsigned p0 = bytestream2_get_byteu(gb);
+        const unsigned p1 = bytestream2_get_byteu(&gb1);
+        const unsigned p2 = bytestream2_get_byteu(&gb2);
+        const unsigned p3 = bytestream2_get_byteu(&gb3);
+        const unsigned p4 = bytestream2_get_byteu(&gb4);
 
         const unsigned r0 = p0 & N;
         const unsigned r1 = p1 & N;
@@ -209,7 +209,7 @@ static void decode5(GetByteContext *gb, uint16_t *output)
         output[i+56] = r7;
     }
 
-    bytestream2_skip(gb, 32);
+    bytestream2_skipu(gb, 32);
 }
 
 static void decode6(GetByteContext *gb, uint16_t *output)
@@ -223,19 +223,19 @@ static void decode6(GetByteContext *gb, uint16_t *output)
     GetByteContext gb4 = *gb;
     GetByteContext gb5 = *gb;
 
-    bytestream2_skip(&gb1, 8);
-    bytestream2_skip(&gb2, 16);
-    bytestream2_skip(&gb3, 24);
-    bytestream2_skip(&gb4, 32);
-    bytestream2_skip(&gb5, 40);
+    bytestream2_skipu(&gb1, 8);
+    bytestream2_skipu(&gb2, 16);
+    bytestream2_skipu(&gb3, 24);
+    bytestream2_skipu(&gb4, 32);
+    bytestream2_skipu(&gb5, 40);
 
     for (int i = 0; i < 8; i++) {
-        const unsigned p0 = bytestream2_get_byte(gb);
-        const unsigned p1 = bytestream2_get_byte(&gb1);
-        const unsigned p2 = bytestream2_get_byte(&gb2);
-        const unsigned p3 = bytestream2_get_byte(&gb3);
-        const unsigned p4 = bytestream2_get_byte(&gb4);
-        const unsigned p5 = bytestream2_get_byte(&gb5);
+        const unsigned p0 = bytestream2_get_byteu(gb);
+        const unsigned p1 = bytestream2_get_byteu(&gb1);
+        const unsigned p2 = bytestream2_get_byteu(&gb2);
+        const unsigned p3 = bytestream2_get_byteu(&gb3);
+        const unsigned p4 = bytestream2_get_byteu(&gb4);
+        const unsigned p5 = bytestream2_get_byteu(&gb5);
 
         const unsigned r0 = p0 & N;
         const unsigned r1 = p1 & N;
@@ -265,14 +265,14 @@ static void decode6(GetByteContext *gb, uint16_t *output)
         output[i+56] = r7;
     }
 
-    bytestream2_skip(gb, 40);
+    bytestream2_skipu(gb, 40);
 }
 
 static void decode8(GetByteContext *gb, uint16_t *output)
 {
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++)
-            output[j] = bytestream2_get_byte(gb);
+            output[j] = bytestream2_get_byteu(gb);
         output += 8;
     }
 }
@@ -292,27 +292,27 @@ static void decode10(GetByteContext *gb, uint16_t *output)
     GetByteContext gb8 = *gb;
     GetByteContext gb9 = *gb;
 
-    bytestream2_skip(&gb1, 8);
-    bytestream2_skip(&gb2, 16);
-    bytestream2_skip(&gb3, 24);
-    bytestream2_skip(&gb4, 32);
-    bytestream2_skip(&gb5, 40);
-    bytestream2_skip(&gb6, 48);
-    bytestream2_skip(&gb7, 56);
-    bytestream2_skip(&gb8, 64);
-    bytestream2_skip(&gb9, 72);
+    bytestream2_skipu(&gb1, 8);
+    bytestream2_skipu(&gb2, 16);
+    bytestream2_skipu(&gb3, 24);
+    bytestream2_skipu(&gb4, 32);
+    bytestream2_skipu(&gb5, 40);
+    bytestream2_skipu(&gb6, 48);
+    bytestream2_skipu(&gb7, 56);
+    bytestream2_skipu(&gb8, 64);
+    bytestream2_skipu(&gb9, 72);
 
     for (int i = 0; i < 8; i++) {
-        const unsigned p0 = bytestream2_get_byte(gb);
-        const unsigned p1 = bytestream2_get_byte(&gb1);
-        const unsigned p2 = bytestream2_get_byte(&gb2);
-        const unsigned p3 = bytestream2_get_byte(&gb3);
-        const unsigned p4 = bytestream2_get_byte(&gb4);
-        const unsigned p5 = bytestream2_get_byte(&gb5);
-        const unsigned p6 = bytestream2_get_byte(&gb6);
-        const unsigned p7 = bytestream2_get_byte(&gb7);
-        const unsigned p8 = bytestream2_get_byte(&gb8);
-        const unsigned p9 = bytestream2_get_byte(&gb9);
+        const unsigned p0 = bytestream2_get_byteu(gb);
+        const unsigned p1 = bytestream2_get_byteu(&gb1);
+        const unsigned p2 = bytestream2_get_byteu(&gb2);
+        const unsigned p3 = bytestream2_get_byteu(&gb3);
+        const unsigned p4 = bytestream2_get_byteu(&gb4);
+        const unsigned p5 = bytestream2_get_byteu(&gb5);
+        const unsigned p6 = bytestream2_get_byteu(&gb6);
+        const unsigned p7 = bytestream2_get_byteu(&gb7);
+        const unsigned p8 = bytestream2_get_byteu(&gb8);
+        const unsigned p9 = bytestream2_get_byteu(&gb9);
 
         const unsigned _r0 = p0 & N;
         const unsigned _r1 = p1 & N;
@@ -344,14 +344,14 @@ static void decode10(GetByteContext *gb, uint16_t *output)
         output[i+56] = r7;
     }
 
-    bytestream2_skip(gb, 72);
+    bytestream2_skipu(gb, 72);
 }
 
 static void decode16(GetByteContext *gb, uint16_t *output)
 {
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++)
-            output[j] = bytestream2_get_le16(gb);
+            output[j] = bytestream2_get_le16u(gb);
         output += 8;
     }
 }
