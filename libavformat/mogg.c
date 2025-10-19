@@ -93,7 +93,6 @@ static int read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     st->id = m->ogg_ctx->streams[0]->id;
-    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->duration = m->ogg_ctx->streams[0]->duration;
     st->time_base = m->ogg_ctx->streams[0]->time_base;
     st->start_time = m->ogg_ctx->streams[0]->start_time;
