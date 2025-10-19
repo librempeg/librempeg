@@ -654,12 +654,7 @@ static int fsb_read_header(AVFormatContext *s)
                     bytestream2_init_writer(&pbc, par->extradata, par->extradata_size);
                     bytestream2_put_be16(&pbc, 30);
                     bytestream2_put_byte(&pbc, 0x01);
-                    bytestream2_put_byte(&pbc, 'v');
-                    bytestream2_put_byte(&pbc, 'o');
-                    bytestream2_put_byte(&pbc, 'r');
-                    bytestream2_put_byte(&pbc, 'b');
-                    bytestream2_put_byte(&pbc, 'i');
-                    bytestream2_put_byte(&pbc, 's');
+                    bytestream2_put_buffer(&pbc, "vorbis", 6);
                     bytestream2_put_le32(&pbc, 0);
                     bytestream2_put_byte(&pbc, channels);
                     bytestream2_put_le32(&pbc, sample_rate);
@@ -671,12 +666,7 @@ static int fsb_read_header(AVFormatContext *s)
 
                     bytestream2_put_be16(&pbc, 20);
                     bytestream2_put_byte(&pbc, 0x03);
-                    bytestream2_put_byte(&pbc, 'v');
-                    bytestream2_put_byte(&pbc, 'o');
-                    bytestream2_put_byte(&pbc, 'r');
-                    bytestream2_put_byte(&pbc, 'b');
-                    bytestream2_put_byte(&pbc, 'i');
-                    bytestream2_put_byte(&pbc, 's');
+                    bytestream2_put_buffer(&pbc, "vorbis", 6);
                     bytestream2_put_le32(&pbc, 0x04);
                     bytestream2_put_buffer(&pbc, "lavf", 4);
                     bytestream2_put_le32(&pbc, 0x00);
