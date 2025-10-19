@@ -445,6 +445,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
         if (avctx->ch_layout.nb_channels <= 0)
             return AVERROR_INVALIDDATA;
         break;
+    case AV_CODEC_ID_ADPCM_IMA_WAV_MONO:
     case AV_CODEC_ID_ADPCM_IMA_DAT4:
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
