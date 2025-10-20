@@ -291,6 +291,7 @@ extern const FFOutputFormat ff_image2pipe_muxer;
 extern const FFInputFormat  ff_image2_alias_pix_demuxer;
 extern const FFInputFormat  ff_image2_brender_pix_demuxer;
 extern const FFInputFormat  ff_imf_demuxer;
+extern const FFInputFormat  ff_imuse_demuxer;
 extern const FFInputFormat  ff_ingenient_demuxer;
 extern const FFInputFormat  ff_ipmovie_demuxer;
 extern const FFOutputFormat ff_ipod_muxer;
