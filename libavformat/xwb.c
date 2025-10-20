@@ -192,7 +192,7 @@ static int read_header(AVFormatContext *s)
     }
 
     for (int si = 0; si < nb_streams; si++) {
-        uint32_t chunk_id;
+        uint32_t chunk_id, extra_id;
         XWBStream *xst;
         AVStream *st;
         int codec;
@@ -392,6 +392,8 @@ static int read_header(AVFormatContext *s)
 
         avio_seek(pb, xst->start_offset, SEEK_SET);
         chunk_id = avio_rb32(pb);
+        avio_skip(pb, 4);
+        extra_id = le ? avio_rl32(pb) : avio_rb32(pb);
         if (codec == AV_CODEC_ID_WMAV2 || chunk_id == MKBETAG('R','I','F','F')) {
             if (!(xst->xctx = avformat_alloc_context()))
                 return AVERROR(ENOMEM);
@@ -438,6 +440,21 @@ static int read_header(AVFormatContext *s)
             ffstream(st)->need_parsing = ffstream(xst->xctx->streams[0])->need_parsing;
 
             xst->data_offset = avio_tell(pb);
+        } else if (extra_id == rate && version == 46 && codec == AV_CODEC_ID_XMA2 &&
+            (block_align = 0x2 || block_align == 0x4) && (bps == 0 || bps == 1)) {
+            st->codecpar->codec_id = le ? AV_CODEC_ID_ADPCM_NDSP_LE : AV_CODEC_ID_ADPCM_NDSP;
+
+            ret = ff_alloc_extradata(st->codecpar, 32 * channels);
+            if (ret < 0)
+                return ret;
+
+            for (int ch = 0; ch < channels; ch++) {
+                avio_seek(pb, xst->start_offset + ch * ((xst->stop_offset - xst->start_offset) / channels), SEEK_SET);
+                avio_skip(pb, 0x1c);
+                avio_read(pb, st->codecpar->extradata + ch * 32, 32);
+            }
+
+            st->codecpar->block_align = xst->stop_offset - xst->start_offset;
         } else if (version == 0x10000 && codec == AV_CODEC_ID_XMA2 &&
             (block_align = 0x60 || block_align == 0x98 || block_align == 0xc0)) {
             st->codecpar->codec_id = AV_CODEC_ID_ATRAC3;
@@ -537,8 +554,28 @@ redo:
 
     if (xst->xctx) {
         ret = av_read_frame(xst->xctx, pkt);
+    } else if (st->codecpar->codec_id == AV_CODEC_ID_ADPCM_NDSP ||
+               st->codecpar->codec_id == AV_CODEC_ID_ADPCM_NDSP_LE) {
+        const int64_t pos = avio_tell(pb);
+        const int ch_size = st->codecpar->block_align / st->codecpar->ch_layout.nb_channels;
+        const int ch_out_size = FFALIGN(ch_size - 0x60, 8);
+        const int out_size = ch_out_size * st->codecpar->ch_layout.nb_channels;
+
+        if (ch_size <= 0x60)
+            return AVERROR_INVALIDDATA;
+
+        ret = av_new_packet(pkt, out_size);
+        if (ret < 0)
+            return ret;
+
+        for (int ch = 0; ch < st->codecpar->ch_layout.nb_channels; ch++) {
+            avio_skip(pb, 0x60);
+            avio_read(pb, pkt->data + ch * ch_out_size, ch_size - 0x60);
+        }
+
+        pkt->pos = pos;
     } else {
-        int64_t pos = avio_tell(pb);
+        const int64_t pos = avio_tell(pb);
         const int size = FFMIN(st->codecpar->block_align, xst->stop_offset - pos);
 
         ret = av_get_packet(pb, pkt, size);
