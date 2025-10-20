@@ -163,11 +163,13 @@ static int iamf_read_header(AVFormatContext *s)
 static int iamf_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     IAMFDemuxContext *const c = s->priv_data;
+    int64_t pos = avio_tell(s->pb);
     int ret;
 
     ret = ff_iamf_read_packet(s, c, s->pb, INT_MAX, 0, pkt);
     if (ret < 0)
         return ret;
+    pkt->pos = pos;
 
     return 0;
 }
