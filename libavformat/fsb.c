@@ -150,110 +150,47 @@ static int fsb_read_header(AVFormatContext *s)
         }
 
         avpriv_set_pts_info(st, 64, 1, par->sample_rate);
-    } else if (version == 3) {
-        st = avformat_new_stream(s, NULL);
-        if (!st)
-            return AVERROR(ENOMEM);
-
-        fst = av_mallocz(sizeof(*fst));
-        if (!fst)
-            return AVERROR(ENOMEM);
-        st->priv_data = fst;
-
-        st->start_time = 0;
-        sti = ffstream(st);
-        par = st->codecpar;
-        par->codec_type  = AVMEDIA_TYPE_AUDIO;
-        par->codec_tag   = 0;
-
-        offset = avio_rl32(pb) + 0x18;
-        fst->start_offset = offset;
-        fst->stop_offset = INT64_MAX;
-
-        avio_skip(pb, 8);
-        flags = avio_rl32(pb);
-        avio_skip(pb, 32);
-        st->duration = avio_rl32(pb);
-        avio_skip(pb, 12);
-        format = avio_rl32(pb);
-        par->sample_rate = avio_rl32(pb);
-        if (par->sample_rate <= 0)
-            return AVERROR_INVALIDDATA;
-        avio_skip(pb, 6);
-        par->ch_layout.nb_channels = avio_rl16(pb);
-        if (!par->ch_layout.nb_channels)
-            return AVERROR_INVALIDDATA;
-
-        if (format & 0x00000008) {
-            if (format & 0x00000080)
-                par->codec_id = AV_CODEC_ID_PCM_U8;
-            else
-                par->codec_id = AV_CODEC_ID_PCM_S8;
-        } else if (format & 0x00000010) {
-            if (flags & 0x00000008)
-                par->codec_id = AV_CODEC_ID_PCM_S16BE;
-            else
-                par->codec_id = AV_CODEC_ID_PCM_S16LE;
-            par->block_align = 4096 * par->ch_layout.nb_channels;
-        } else if (format & 0x01000000) {
-            par->codec_id = AV_CODEC_ID_XMA1;
-            par->block_align = 2048;
-            ret = ff_alloc_extradata(par, 8 + 20);
-            if (ret < 0)
-                return ret;
-            memset(par->extradata, 0, par->extradata_size);
-            par->extradata[4] = 1;
-            par->extradata[8+17] = par->ch_layout.nb_channels;
-            sti->need_parsing = AVSTREAM_PARSE_FULL;
-        } else if (format & 0x00000200) {
-            par->codec_id = AV_CODEC_ID_MP3;
-            par->block_align = 1024;
-            sti->need_parsing = AVSTREAM_PARSE_FULL;
-        } else if (format & 0x00400000) {
-            par->bits_per_coded_sample = 4;
-            par->codec_id    = AV_CODEC_ID_ADPCM_IMA_WAV;
-            par->block_align = 36 * par->ch_layout.nb_channels;
-        } else if (format & 0x00800000) {
-            par->codec_id    = AV_CODEC_ID_ADPCM_PSX;
-            par->block_align = 16 * par->ch_layout.nb_channels;
-        } else if (format & 0x02000000) {
-            if (flags & 0x00000010)
-                par->codec_id = AV_CODEC_ID_ADPCM_NDSP;
-            else
-                par->codec_id = AV_CODEC_ID_ADPCM_NDSP_SI;
-
-            par->block_align = 8 * par->ch_layout.nb_channels;
-            if (par->ch_layout.nb_channels > INT_MAX / 32)
-                return AVERROR_INVALIDDATA;
-            ret = ff_alloc_extradata(par, 32 * par->ch_layout.nb_channels);
-            if (ret < 0)
-                return ret;
-            avio_seek(pb, 0x68, SEEK_SET);
-            for (int c = 0; c < par->ch_layout.nb_channels; c++) {
-                avio_read(pb, par->extradata + 32 * c, 32);
-                avio_skip(pb, 14);
-            }
-        } else {
-            avpriv_request_sample(s, "format 0x%X", format);
-            return AVERROR_PATCHWELCOME;
-        }
-
-        avpriv_set_pts_info(st, 64, 1, par->sample_rate);
-    } else if (version == 4) {
-        const int32_t sample_header_min = 0x50;
-        const int32_t base_header_size = 0x30;
+    } else if (version == 4 || version == 3 || version == 2) {
+        int32_t sample_header_min;
+        int32_t base_header_size;
         int32_t sample_headers_size;
-        int64_t header_offset = base_header_size;
+        int64_t header_offset;
         int64_t extradata_offset;
         int64_t start_offset;
         int64_t stream_size;
         int rate, nb_channels;
 
+        switch (version) {
+        case 2:
+            sample_header_min = 0x40;
+            base_header_size = 0x10;
+            break;
+        case 3:
+            sample_header_min = 0x40;
+            base_header_size = 0x18;
+            break;
+        case 4:
+            sample_header_min = 0x50;
+            base_header_size = 0x30;
+            break;
+        }
+        header_offset = base_header_size;
+
         sample_headers_size = avio_rl32(pb);
         start_offset = offset = sample_headers_size + base_header_size;
         avio_skip(pb, 4);
-        minor_version = avio_rl32(pb);
-        flags = avio_rl32(pb);
+        if (base_header_size > 0x10) {
+            minor_version = avio_rl32(pb);
+            flags = avio_rl32(pb);
+        } else {
+            minor_version = flags = 0;
+        }
+
+        if (minor_version == 0x00030001) {
+            sample_header_min = 0x50;
+        } else if (minor_version != 0 && minor_version != 0x00030000  && minor_version != 0x00040000) {
+            return AVERROR_INVALIDDATA;
+        }
 
         for (int si = 0; si < nb_streams; si++) {
             uint32_t stream_header_size;
@@ -301,13 +238,19 @@ static int fsb_read_header(AVFormatContext *s)
 
             fst->stop_offset = fst->start_offset + stream_size;
 
-            if (format & 0x01000000) {
+            if ((format & 0x01000000) && minor_version == 0x00040000) {
                 par->codec_id = AV_CODEC_ID_XMA2;
+            } else if (format & 0x01000000) {
+                par->codec_id = AV_CODEC_ID_XMA1;
             } else if (format & 0x02000000) {
                 if (flags & 0x00000010)
                     par->codec_id = AV_CODEC_ID_ADPCM_NDSP;
                 else
                     par->codec_id = AV_CODEC_ID_ADPCM_NDSP_SI;
+            } else if (format & 0x00400000) {
+                par->bits_per_coded_sample = 4;
+                par->codec_id = AV_CODEC_ID_ADPCM_IMA_XBOX;
+                par->block_align = 36 * nb_channels;
             } else if (format & 0x00000200) {
                 par->codec_id = AV_CODEC_ID_MP3;
             } else if (format & 0x00800000) {
@@ -338,6 +281,16 @@ static int fsb_read_header(AVFormatContext *s)
             extradata_offset = header_offset + sample_header_min;
 
             switch (par->codec_id) {
+            case AV_CODEC_ID_XMA1:
+                par->block_align = 2048;
+                ret = ff_alloc_extradata(par, 8 + 20);
+                if (ret < 0)
+                    return ret;
+                memset(par->extradata, 0, par->extradata_size);
+                par->extradata[4] = 1;
+                par->extradata[8+17] = nb_channels;
+                sti->need_parsing = AVSTREAM_PARSE_FULL;
+                break;
             case AV_CODEC_ID_XMA2:
                 par->block_align = 2048;
                 ret = ff_alloc_extradata(par, 34);
