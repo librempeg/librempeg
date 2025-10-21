@@ -4208,13 +4208,13 @@ static int three_channel_data(AC4DecodeContext *s, Substream *ss,
 
 static int immers_cfg(AC4DecodeContext *s, Substream *ss)
 {
-    if (ss->codec_mode != IM_SCPL)
+    if (ss->im_codec_mode != IM_SCPL)
         aspx_config(s, ss);
 
-    if (ss->codec_mode == IM_ASPX_ACPL_1)
+    if (ss->im_codec_mode == IM_ASPX_ACPL_1)
         acpl_config_1ch(s, ss, ACPL_PARTIAL);
 
-    if (ss->codec_mode == IM_ASPX_ACPL_2)
+    if (ss->im_codec_mode == IM_ASPX_ACPL_2)
         acpl_config_1ch(s, ss, ACPL_FULL);
 
     return 0;
