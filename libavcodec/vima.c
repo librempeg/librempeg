@@ -37,6 +37,13 @@
 
 static uint16_t predict_table[5786];
 
+static const uint8_t size_table_v1[] = {
+    2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4,
+    5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7,
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+};
+
 static const uint8_t size_table[] = {
     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
@@ -86,6 +93,34 @@ static const int8_t *const step_index_tables[] = {
     index_table4, index_table5, index_table6
 };
 
+static const int8_t index_table2_v1[] = {
+    -1,-1, 2, 8, -1,-1, 2, 8
+};
+
+static const int8_t index_table4_v1[] = {
+    -1,-1,-1,-1,-1,-1,-1,-1, 1, 2, 4, 6, 8,12,16,32,
+    -1,-1,-1,-1,-1,-1,-1,-1, 1, 2, 4, 6, 8,12,16,32,
+};
+
+static const int8_t index_table5_v1[] = {
+    -1, -1, -1, -1, -1, -1, -1, -1,  -1, -1, -1, -1, -1, -1, -1, -1,  1,
+     2,  4,  6,  8, 10, 12, 14,  16, 18, 20, 22, 24, 26, 28, 32, -1, -1,
+    -1, -1, -1, -1, -1, -1,  -1, -1, -1, -1, -1, -1, -1, -1,  1,  2,  4,
+     6,  8, 10, 12, 14,  16, 18, 20, 22, 24, 26, 28, 32,
+};
+
+static const int8_t index_table6_v1[] = {
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+     1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+     1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,
+};
+
+static const int8_t *const step_index_tables_v1[] = {
+    index_table1,    index_table2_v1, index_table3,
+    index_table4_v1, index_table5_v1, index_table6_v1
+};
+
 static av_cold void predict_table_init(void)
 {
     for (int start_pos = 0; start_pos < 64; start_pos++) {
@@ -112,6 +147,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
     static AVOnce init_static_once = AV_ONCE_INIT;
 
     avctx->sample_fmt = AV_SAMPLE_FMT_S16;
+    if (avctx->profile && avctx->ch_layout.nb_channels <= 0)
+        return AVERROR(EINVAL);
 
     ff_thread_once(&init_static_once, predict_table_init);
 
@@ -121,6 +158,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
                         int *got_frame_ptr, AVPacket *pkt)
 {
+    const int profile = avctx->profile;
     GetBitContext gb;
     int16_t pcm_data[2];
     uint32_t samples;
@@ -143,17 +181,27 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     if (samples > pkt->size * 2)
         return AVERROR_INVALIDDATA;
 
-    channel_hint[0] = get_sbits(&gb, 8);
-    if (channel_hint[0] & 0x80) {
-        channel_hint[0] = ~channel_hint[0];
-        channels = 2;
-    }
-    av_channel_layout_uninit(&avctx->ch_layout);
-    av_channel_layout_default(&avctx->ch_layout, channels);
-    pcm_data[0] = get_sbits(&gb, 16);
-    if (channels > 1) {
-        channel_hint[1] = get_sbits(&gb, 8);
-        pcm_data[1]     = get_sbits(&gb, 16);
+    if (profile == 1) {
+        channels = avctx->ch_layout.nb_channels;
+        get_bits(&gb, 16);
+        for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++) {
+            channel_hint[ch] = get_sbits(&gb, 8);
+            skip_bits_long(&gb, 32);
+            pcm_data[ch] = get_sbits_long(&gb, 32);
+        }
+    } else {
+        channel_hint[0] = get_sbits(&gb, 8);
+        if (channel_hint[0] & 0x80) {
+            channel_hint[0] = ~channel_hint[0];
+            channels = 2;
+        }
+        av_channel_layout_uninit(&avctx->ch_layout);
+        av_channel_layout_default(&avctx->ch_layout, channels);
+        pcm_data[0] = get_sbits(&gb, 16);
+        if (channels > 1) {
+            channel_hint[1] = get_sbits(&gb, 8);
+            pcm_data[1]     = get_sbits(&gb, 16);
+        }
     }
 
     frame->nb_samples = samples;
@@ -183,7 +231,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 int lookup_size, lookup, highbit, lowbits;
 
                 step_index  = av_clip(step_index, 0, 88);
-                lookup_size = size_table[step_index];
+                lookup_size = profile ? size_table_v1[step_index] : size_table[step_index];
                 lookup      = get_bits(&gb, lookup_size);
                 highbit     = 1 << (lookup_size - 1);
                 lowbits     = highbit - 1;
@@ -193,7 +241,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 else
                     highbit = 0;
 
-                if (lookup == lowbits) {
+                if (!profile && (lookup == lowbits)) {
                     output = get_sbits(&gb, 16);
                 } else {
                     int predict_index, diff;
@@ -201,7 +249,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     predict_index = (lookup << (7 - lookup_size)) | (step_index << 6);
                     predict_index = av_clip(predict_index, 0, 5785);
                     diff          = predict_table[predict_index];
-                    if (lookup)
+                    if ((profile == 1) || (!profile && lookup))
                         diff += ff_adpcm_step_table[step_index] >> (lookup_size - 1);
                     if (highbit)
                         diff = -diff;
@@ -212,7 +260,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 *dest = output;
                 dest += channels;
 
-                step_index += step_index_tables[lookup_size - 2][lookup];
+                step_index += profile ? step_index_tables_v1[lookup_size - 2][lookup] : step_index_tables[lookup_size - 2][lookup];
             }
         }
     }
