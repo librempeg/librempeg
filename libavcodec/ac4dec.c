@@ -890,38 +890,17 @@ static int emdf_payloads_substream_info(AC4DecodeContext *s, EMDFInfo *e)
 static int emdf_protection(AC4DecodeContext *s, EMDFInfo *e)
 {
     GetBitContext *gb = &s->gbc;
-    int first, second;
+    int first, second, skip = 0;
 
     first = get_bits(gb, 2);
     second = get_bits(gb, 2);
 
-    switch (first) {
-    case 0:
-        break;
-    case 1:
-        skip_bits(gb, 8);
-        break;
-    case 2:
-        skip_bits_long(gb, 32);
-        break;
-    case 3:
-        skip_bits_long(gb, 128);
-        break;
-    }
+    if (first > 0)
+        skip += 1 << (2 * (first - 1));
+    if (second > 0)
+        skip += 1 << (2 * (second - 1));
 
-    switch (second) {
-    case 0:
-        break;
-    case 1:
-        skip_bits(gb, 8);
-        break;
-    case 2:
-        skip_bits_long(gb, 32);
-        break;
-    case 3:
-        skip_bits_long(gb, 128);
-        break;
-    }
+    skip_bits_long(gb, 8 * skip);
 
     return 0;
 }
@@ -1508,6 +1487,7 @@ static int ac4_presentation_v1_info(AC4DecodeContext *s, PresentationInfo *p)
 
     if (single_substream_group != 1 && p->presentation_config == 6) {
         p->add_emdf_substreams = 1;
+        av_log(s->avctx, AV_LOG_DEBUG, "add_emdf_substreams\n");
     } else {
         if (s->version != 1)
             p->mdcompat = get_bits(gb, 3);
@@ -1524,6 +1504,7 @@ static int ac4_presentation_v1_info(AC4DecodeContext *s, PresentationInfo *p)
 
         if (single_substream_group == 1) {
             ac4_sgi_specifier(s, &s->ssgroup[0]);
+            av_log(s->avctx, AV_LOG_DEBUG, "single substream group\n");
             p->n_substream_groups = 1;
         } else {
             p->multi_pid = get_bits1(gb);
