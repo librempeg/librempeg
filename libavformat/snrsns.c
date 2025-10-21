@@ -142,6 +142,9 @@ static int snrsns_read_header(AVFormatContext *s)
         st->codecpar->codec_id = AV_CODEC_ID_EALAYER3;
         ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
         break;
+    case EAAC_CODEC_XAS1:
+        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_EA_XAS;
+        break;
     default:
         avpriv_request_sample(s, "codec %d", h.codec);
         return AVERROR_PATCHWELCOME;
