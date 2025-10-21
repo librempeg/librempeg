@@ -20,10 +20,10 @@
  */
 
 #include "libavutil/intreadwrite.h"
-#include "libavutil/mem.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -64,31 +64,19 @@ static int read_header(AVFormatContext *s)
     st->codecpar->ch_layout.nb_channels = 1;
     st->start_time = 0;
     st->codecpar->sample_rate = 22050;
-    st->codecpar->block_align = 1024;
+    st->codecpar->block_align = 1;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_saud_demuxer = {
     .p.name         = "saud",
     .p.long_name    = NULL_IF_CONFIG_SMALL("LucasArts SAUD"),
-    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "sad",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
+    .read_seek      = ff_pcm_read_seek,
 };
