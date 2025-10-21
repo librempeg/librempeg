@@ -4290,11 +4290,11 @@ static int immersive_channel_element(AC4DecodeContext *s, int lfe, int fronts, i
             ret = chparam_info(s, ss, 6);
             if (ret < 0)
                 return ret;
-
-            ret = two_channel_data(s, ss, (uint8_t []){5, 6}, 2, iframe);
-            if (ret < 0)
-                return ret;
         }
+
+        ret = two_channel_data(s, ss, (uint8_t []){5, 6}, 2, iframe);
+        if (ret < 0)
+            return ret;
     }
 
     if (ss->im_codec_mode == IM_ASPX_SCPL) {
