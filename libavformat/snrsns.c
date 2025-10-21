@@ -21,6 +21,7 @@
 
 #include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/mem.h"
 #include "libavcodec/mathops.h"
 #include "avformat.h"
 #include "demux.h"
@@ -83,6 +84,7 @@ static int eaac_parse_header(EAACHeader *h,
         h->sample_rate == 0)
         return -1;
 
+    h->streamed = h->type != EAAC_TYPE_RAM;
     if (h->type != EAAC_TYPE_RAM && h->type != EAAC_TYPE_STREAM && h->type != EAAC_TYPE_GIGASAMPLE)
         return -1;
 
@@ -157,6 +159,28 @@ static int snrsns_read_header(AVFormatContext *s)
     st->codecpar->ch_layout.nb_channels = h.channels;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+
+    if (avio_size(pb) <= 8) {
+        extern const FFInputFormat ff_hdbd_demuxer;
+        char *sns_file_name = av_strdup(s->url);
+        AVDictionary *tmp = NULL;
+        int len;
+
+        if (!sns_file_name)
+            return AVERROR(ENOMEM);
+
+        len = strlen(sns_file_name);
+        if (len > 3) {
+            sns_file_name[len-1] = 's';
+        } else {
+            return AVERROR_INVALIDDATA;
+        }
+
+        ret = s->io_open(s, &s->pb, sns_file_name, AVIO_FLAG_READ, &tmp);
+        av_freep(&sns_file_name);
+        if (ret < 0)
+            return ret;
+    }
 
     return 0;
 }
