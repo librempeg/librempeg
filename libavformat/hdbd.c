@@ -187,6 +187,9 @@ static int read_header(AVFormatContext *s)
             return AVERROR_INVALIDDATA;
         }
 
+        ret = s->io_close2(s, s->pb);
+        if (ret < 0)
+            return ret;
         ret = s->io_open(s, &s->pb, bd_file_name, AVIO_FLAG_READ, &tmp);
         av_freep(&bd_file_name);
         if (ret < 0)
