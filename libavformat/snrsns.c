@@ -190,11 +190,13 @@ static int snrsns_read_packet(AVFormatContext *s, AVPacket *pkt)
     AVStream *st = s->streams[0];
     AVCodecParameters *par = st->codecpar;
     AVIOContext *pb = s->pb;
+    int64_t pos;
     int ret;
 
     if (avio_feof(pb))
         return AVERROR_EOF;
 
+    pos = avio_tell(pb);
     if (par->block_align > 0) {
         ret = ff_pcm_read_packet(s, pkt);
     } else {
@@ -210,6 +212,7 @@ static int snrsns_read_packet(AVFormatContext *s, AVPacket *pkt)
         pkt->stream_index = 0;
         pkt->duration = duration;
     }
+    pkt->pos = pos;
 
     return ret;
 }
@@ -218,8 +221,8 @@ const FFInputFormat ff_snrsns_demuxer = {
     .p.name         = "snrsns",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Electronic Arts SNR/SNS"),
     .p.extensions   = "snrsns",
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = snrsns_read_probe,
     .read_header    = snrsns_read_header,
     .read_packet    = snrsns_read_packet,
-    .read_seek      = ff_pcm_read_seek,
 };
