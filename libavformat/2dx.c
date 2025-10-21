@@ -43,11 +43,17 @@ static int twodx9_probe_sub(const AVProbeData *p, uint32_t off)
 
 static int twodx9_probe(const AVProbeData *p)
 {
+    if (p->buf_size < 0x6E)
+        return 0;
+
     return twodx9_probe_sub(p, 0);
 }
 
 static int twodx_probe(const AVProbeData *p)
 {
+    if (p->buf_size < 0x4C)
+        return 0;
+
     if (AV_RL32(p->buf + 0x10) != AV_RL32(p->buf + 0x48) || AV_RL32(p->buf + 0x10) != (0x48 + AV_RL32(p->buf + 0x14) * 4))
         return 0;
 
