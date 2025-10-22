@@ -1061,9 +1061,11 @@ static int ac4_presentation_info(AC4DecodeContext *s, PresentationInfo *p)
                 ret = ac4_substream_info(s, p, &p->ssinfo);
                 if (ret < 0)
                     return ret;
-                ret = ac4_hsf_ext_substream_info(s, &p->ssinfo, 1);
-                if (ret < 0)
-                    return ret;
+                if (p->hsf_ext) {
+                    ret = ac4_hsf_ext_substream_info(s, &p->ssinfo, 1);
+                    if (ret < 0)
+                        return ret;
+                }
                 ret = ac4_substream_info(s, p, &p->ssinfo);
                 if (ret < 0)
                     return ret;
