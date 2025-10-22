@@ -1028,9 +1028,9 @@ static int ac4_presentation_info(AC4DecodeContext *s, PresentationInfo *p)
     p->single_substream = get_bits1(gb);
     if (p->single_substream != 1) {
         p->presentation_config = get_bits(gb, 3);
-        if (p->presentation_config == 0x7) {
+        if (p->presentation_config == 7)
             p->presentation_config += variable_bits(gb, 2);
-        }
+        av_log(s->avctx, AV_LOG_DEBUG, "presentation config: %d\n", p->presentation_config);
     }
 
     p->presentation_version = get_unary(gb, 0, 31);
