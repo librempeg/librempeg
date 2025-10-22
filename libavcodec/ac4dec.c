@@ -413,7 +413,7 @@ typedef struct PresentationInfo {
     int     hsf_ext;
     EMDFInfo emdf[32];
     PresentationSubstreamInfo psinfo;
-    SubstreamInfo ssinfo;
+    SubstreamInfo ssinfo[4];
 } PresentationInfo;
 
 typedef struct AC4DecodeContext {
@@ -1051,24 +1051,31 @@ static int ac4_presentation_info(AC4DecodeContext *s, PresentationInfo *p)
         emdf_info(s, &p->emdf[0]);
 
         if (p->single_substream == 1) {
-            ret = ac4_substream_info(s, p, &p->ssinfo);
+            ret = ac4_substream_info(s, p, &p->ssinfo[0]);
             if (ret < 0)
                 return ret;
         } else {
             p->hsf_ext = get_bits1(gb);
             switch (p->presentation_config) {
             case 0:
-                ret = ac4_substream_info(s, p, &p->ssinfo);
+                ret = ac4_substream_info(s, p, &p->ssinfo[0]);
                 if (ret < 0)
                     return ret;
                 if (p->hsf_ext) {
-                    ret = ac4_hsf_ext_substream_info(s, &p->ssinfo, 1);
+                    ret = ac4_hsf_ext_substream_info(s, &p->ssinfo[0], 1);
                     if (ret < 0)
                         return ret;
                 }
-                ret = ac4_substream_info(s, p, &p->ssinfo);
+                ret = ac4_substream_info(s, p, &p->ssinfo[1]);
                 if (ret < 0)
                     return ret;
+                break;
+            case 1:
+            case 2:
+            case 3:
+            case 4:
+            case 5:
+                //FIXME
                 break;
             default:
                 presentation_config_ext_info(s);
@@ -6577,7 +6584,7 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     }
 
     presentation = FFMIN(s->target_presentation, FFMAX(0, s->nb_presentations - 1));
-    ssinfo = s->version == 2 ? &s->ssgroup[0].ssinfo : &s->pinfo[presentation].ssinfo;
+    ssinfo = s->version == 2 ? &s->ssgroup[0].ssinfo : &s->pinfo[presentation].ssinfo[0];
     avctx->sample_rate = s->fs_index ? 48000 : 44100;
 
     if (ssinfo->channel_mode >= FF_ARRAY_ELEMS(channel_mode_layouts)) {
