@@ -333,8 +333,8 @@ static int fn(convert_coeffs)(AVFilterContext *ctx, AVFilterLink *inlink)
 
         if (s->hrir_fmt == HRIR_STEREO) {
             const int step = planar ? 1 : 2;
-            int idx = av_channel_layout_index_from_channel(&s->map_channel_layout,
-                                                          s->mapping[i]);
+            int idx = av_channel_layout_index_from_channel(&inlink->ch_layout,
+                                                           s->mapping[i]);
             if (idx < 0)
                 continue;
 
