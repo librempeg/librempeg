@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "rawdec.h"
+#include "internal.h"
 
 static int ac4_probe(const AVProbeData *p)
 {
@@ -66,6 +67,7 @@ static int ac4_read_header(AVFormatContext *s)
 
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id   = AV_CODEC_ID_AC4;
+    ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
 
     return 0;
 }
