@@ -23,6 +23,7 @@
 extern const AVCodecParser ff_aac_parser;
 extern const AVCodecParser ff_aac_latm_parser;
 extern const AVCodecParser ff_ac3_parser;
+extern const AVCodecParser ff_ac4_parser;
 extern const AVCodecParser ff_adpcm_hvqm2_parser;
 extern const AVCodecParser ff_adpcm_hvqm4_parser;
 extern const AVCodecParser ff_adx_parser;
