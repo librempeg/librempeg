@@ -7,9 +7,11 @@ HEADERS = avformat.h                                                    \
           version_major.h                                               \
 
 OBJS = allformats.o         \
+       av1.o                \
        avformat.o           \
        avio.o               \
        aviobuf.o            \
+       codecstring.o        \
        demux.o              \
        demux_utils.o        \
        dump.o               \
@@ -21,6 +23,7 @@ OBJS = allformats.o         \
        metadata.o           \
        mux.o                \
        mux_utils.o          \
+       nal.o                \
        options.o            \
        os_support.o         \
        protocols.o          \
@@ -31,12 +34,13 @@ OBJS = allformats.o         \
        urldecode.o          \
        utils.o              \
        version.o            \
+       vpcc.o               \
 
 OBJS-$(HAVE_LIBC_MSVCRT)                 += file_open.o
 
 # subsystems
 OBJS-$(CONFIG_ISO_MEDIA)                 += isom.o
-OBJS-$(CONFIG_ISO_WRITER)                += av1.o avc.o hevc.o nal.o vvc.o vpcc.o
+OBJS-$(CONFIG_ISO_WRITER)                += avc.o hevc.o vvc.o
 OBJS-$(CONFIG_IAMFDEC)                   += iamf_reader.o iamf_parse.o iamf.o
 OBJS-$(CONFIG_IAMFENC)                   += iamf_writer.o iamf.o
 OBJS-$(CONFIG_NETWORK)                   += network.o
@@ -784,7 +788,7 @@ OBJS-$(CONFIG_WAV_MUXER)                 += wavenc.o
 OBJS-$(CONFIG_WC3_DEMUXER)               += wc3movie.o
 OBJS-$(CONFIG_WD_DEMUXER)                += wd.o
 OBJS-$(CONFIG_WEBM_MUXER)                += matroskaenc.o matroska.o \
-                                            av1.o avlanguage.o
+                                            avlanguage.o
 OBJS-$(CONFIG_WEBM_DASH_MANIFEST_MUXER)  += webmdashenc.o
 OBJS-$(CONFIG_WEBM_CHUNK_MUXER)          += webm_chunk.o
 OBJS-$(CONFIG_WEBP_DEMUXER)              += webpdec.o
