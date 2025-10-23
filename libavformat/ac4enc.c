@@ -18,6 +18,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/intreadwrite.h"
 #include "libavcodec/codec_id.h"
 #include "libavcodec/packet.h"
 #include "libavutil/crc.h"
@@ -35,8 +36,15 @@ static int ac4_write_packet(AVFormatContext *s, AVPacket *pkt)
     AC4Context *ac4 = s->priv_data;
     AVIOContext *pb = s->pb;
 
-    if (!pkt->size)
+    if (pkt->size > 2 &&
+        AV_RB16(pkt->data) == 0xAC40 ||
+        AV_RB16(pkt->data) == 0xAC41) {
+        avio_write(pb, pkt->data, pkt->size);
         return 0;
+    }
+
+    if (!pkt->size)
+        return AVERROR_INVALIDDATA;
 
     if (ac4->write_crc)
         avio_wb16(pb, 0xAC41);
