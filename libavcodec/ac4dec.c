@@ -473,8 +473,8 @@ typedef struct AC4DecodeContext {
     DECLARE_ALIGNED(32, float, cos_stab)[MAX_QMF_BANDS*2][MAX_QMF_BANDS];
     DECLARE_ALIGNED(32, float, sin_stab)[MAX_QMF_BANDS*2][MAX_QMF_BANDS];
 
-    PresentationInfo   pinfo[8];
-    SubstreamGroupInfo ssgroup[8];
+    PresentationInfo   pinfo[16];
+    SubstreamGroupInfo ssgroup[16];
     Substream          substream;
 } AC4DecodeContext;
 
@@ -1684,7 +1684,7 @@ static int ac4_toc(AC4DecodeContext *s)
                 return ret;
         }
 
-        if (s->total_groups > FF_ARRAY_ELEMS(s->ssgroup))
+        if (s->total_groups + 1 >= FF_ARRAY_ELEMS(s->ssgroup))
             return AVERROR_INVALIDDATA;
 
         av_log(s->avctx, AV_LOG_DEBUG, "total_groups: %d\n", s->total_groups + 1);
