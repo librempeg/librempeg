@@ -313,9 +313,13 @@ static int src_out_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
 
 static int flush_frame(AVFilterLink *outlink)
 {
+    FilterLink *flo = ff_filter_link(outlink);
     AVFilterContext *ctx = outlink->src;
+    FilterLink *fli = ff_filter_link(ctx->inputs[0]);
     AudioRDFTSRCContext *s = ctx->priv;
-    const int nb_samples = s->flush_size;
+    const int64_t output_samples = flo->sample_count_out;
+    const int64_t input_samples = av_rescale(fli->sample_count_out, s->out_nb_samples, s->in_nb_samples);
+    const int nb_samples = FFMIN(s->flush_size, input_samples - output_samples);
     AVFrame *out;
     int ret;
 
