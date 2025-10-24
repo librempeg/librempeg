@@ -106,6 +106,9 @@ typedef struct fn(StateContext) {
     ctype *rdft_complex;
     ftype *rdft_out;
 
+    int done_start;
+    int done_stop;
+
     ftype error;
 
     AVTXContext *tx_ctx, *itx_ctx;
@@ -345,6 +348,99 @@ static int fn(src_out)(AVFilterContext *ctx, AVFrame *out, const int ch,
     return 0;
 }
 
+static void fn(autocorr)(const ftype *data, const int N, double *ac, const int m)
+{
+    for (int j = 0; j <= m; j++) {
+        double d = 0.0;
+
+        for (int n = j; n < N; n++)
+            d += (double)data[n] * (double)data[n-j];
+
+        ac[j] = d;
+    }
+}
+
+static int fn(do_lpc)(const double *ac, double *lpc, const int lpc_order)
+{
+    double r, error, epsilon;
+    int max_order = lpc_order;
+
+    error = ac[0] * (1.+1e-10);
+    epsilon = 1e-9 * ac[0] + 1e-10;
+
+    for (int i = 0; i < lpc_order; i++) {
+        if (error < epsilon) {
+            memset(&lpc[i], 0, (lpc_order - i) * sizeof(lpc[0]));
+            max_order = i;
+            break;
+        }
+
+        r = -ac[i+1];
+        for (int j = 0; j < i; j++)
+            r -= lpc[j] * ac[i-j];
+        r /= error;
+
+        lpc[i] = r;
+        for (int j = 0; j < i/2; j++) {
+            const double tmp = lpc[j];
+
+            lpc[j    ] += r * lpc[i-1-j];
+            lpc[i-1-j] += r * tmp;
+        }
+
+        if (i & 1)
+            lpc[i/2] += lpc[i/2]*r;
+
+        error *= 1.0 - r*r;
+    }
+
+    {
+        const double g = F(0.999);
+        double damp = g;
+
+        for (int j = 0; j < max_order; j++) {
+            lpc[j] *= damp;
+            damp *= g;
+        }
+    }
+
+    if (max_order == 0) {
+        max_order = 1;
+        lpc[0] = F(-1.0);
+    }
+
+    return max_order;
+}
+
+static void fn(extrapolate)(ftype *data0, const size_t N,
+                            const int extra, const double *lpc,
+                            const int O, const int dir)
+{
+    if (dir) {
+        ftype *data = data0 - 1 + O;
+
+        for (int n = 0; n < extra; n++) {
+            ftype sum = F(0.0);
+
+            for (int j = 0; j < O; j++)
+                sum -= data[-n-j] * lpc[O-1-j];
+
+            data[-O-n] = sum;
+        }
+    } else {
+        ftype *data = data0 + N - O;
+
+        for (int n = 0; n < extra; n++) {
+            ftype sum = F(0.0);
+
+            for (int j = 0; j < O; j++)
+                sum -= data[n+j] * lpc[O-1-j];
+
+            data[O+n] = sum;
+        }
+    }
+}
+
 static int fn(src_in)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
                       const int ch, const int soffset, const int doffset)
 {
@@ -356,6 +452,7 @@ static int fn(src_in)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     ftype *irdft = stc->rdft_out;
     ftype *over = stc->over;
     ftype *temp = stc->temp;
+    ftype *oover = s->over;
     const int in_nb_samples = s->in_nb_samples;
     const int tr_nb_samples = s->tr_nb_samples;
     const int taper_samples = s->taper_samples;
@@ -367,6 +464,9 @@ static int fn(src_in)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const ttype *taper = s->taper;
     const ctype *phase = s->phase;
 
+    oover += s->out_nb_samples * ch;
+
+redo:
     if (s->in_planar) {
         const itype *src = ((const itype *)in->extended_data[ch]) + soffset;
         ftype *rdft0o = rdft + in_offset;
@@ -402,6 +502,38 @@ static int fn(src_in)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     }
     memset(rdft + in_offset+copy_samples, 0, (in_nb_samples-copy_samples) * sizeof(*rdft));
 
+    if (stc->done_start == 0 && s->first_pts == in->pts) {
+        const int extra_samples = copy_samples/2;
+        const int lpc_order = FFMIN(64, (extra_samples+1)/2);
+        ftype *rdft0o = rdft + in_offset;
+        double ac[64+1] = { 0 };
+        double lpc[64] = { 0 };
+        int order;
+
+        fn(autocorr)(rdft0o, copy_samples, ac, lpc_order);
+        order = fn(do_lpc)(ac, lpc, lpc_order);
+        fn(extrapolate)(rdft0o, copy_samples, extra_samples, lpc, order, 1);
+        memmove(rdft0o+copy_samples-extra_samples, rdft0o-extra_samples, extra_samples * sizeof(*rdft0o));
+        memset(rdft0o-extra_samples, 0, copy_samples * sizeof(*rdft0o));
+
+        stc->done_start = 1;
+    } else if (stc->done_start == 1) {
+        stc->done_start = 2;
+    } else if (stc->done_stop == 0 && copy_samples < in_nb_samples) {
+        const int extra_samples = in_nb_samples-copy_samples;
+        const int lpc_order = FFMIN(64, (extra_samples+1)/2);
+        ftype *rdft0o = rdft + in_offset;
+        double ac[64+1] = { 0 };
+        double lpc[64] = { 0 };
+        int order;
+
+        fn(autocorr)(rdft0o, copy_samples, ac, lpc_order);
+        order = fn(do_lpc)(ac, lpc, lpc_order);
+        fn(extrapolate)(rdft0o, copy_samples, extra_samples, lpc, order, 0);
+
+        stc->done_stop = 1;
+    }
+
     stc->tx_fn(stc->tx_ctx, rdftc, rdft, sizeof(*rdft));
 
     memset(rdftc + tr_nb_samples, 0, (s->out_rdft_size / 2 + 1 - tr_nb_samples) * sizeof(*rdftc));
@@ -428,10 +560,15 @@ static int fn(src_in)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     if (doffset > 0)
         fn(src_out)(ctx, out, ch, doffset, 0);
 
+    if (stc->done_start == 1)
+        memcpy(oover, irdft + write_samples, sizeof(*over) * out_nb_samples);
     memcpy(over, irdft + write_samples, sizeof(*over) * out_nb_samples);
 
     if (soffset == 0)
         memcpy(temp, irdft, sizeof(*temp) * out_nb_samples);
+
+    if (stc->done_start == 1)
+        goto redo;
 
     return 0;
 }
