@@ -59,7 +59,6 @@ typedef struct AudioRDFTSRCContext {
     int64_t last_out_pts;
     int trim_size;
     int flush_size;
-    int64_t flush_duration;
     int64_t first_pts;
     int64_t eof_in_pts;
     int64_t eof_out_pts;
@@ -196,10 +195,8 @@ static int config_input(AVFilterLink *inlink)
     s->in_planar = av_sample_fmt_is_planar(inlink->format);
     s->in_rdft_size = s->in_nb_samples * 2;
     s->out_rdft_size = s->out_nb_samples * 2;
-    s->out_offset = s->trim_size = (s->out_rdft_size - s->out_nb_samples) >> 1;
-    s->in_offset = s->flush_size = (s->in_rdft_size - s->in_nb_samples) >> 1;
-    s->flush_size = av_rescale(s->flush_size, s->out_nb_samples, s->in_nb_samples);
-    s->flush_duration = av_rescale_q(s->flush_size, (AVRational){1, outlink->sample_rate}, outlink->time_base);
+    s->flush_size = s->out_offset = s->trim_size = (s->out_rdft_size - s->out_nb_samples) >> 1;
+    s->in_offset = (s->in_rdft_size - s->in_nb_samples) >> 1;
     s->delay = av_rescale_q(s->in_offset, (AVRational){ 1, inlink->sample_rate }, inlink->time_base);
     s->tr_nb_samples = FFMIN(s->in_nb_samples, s->out_nb_samples);
     s->taper_samples = lrint(s->tr_nb_samples * (1.0-s->bandwidth));
