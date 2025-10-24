@@ -504,7 +504,7 @@ redo:
 
     if (stc->done_start == 0 && s->first_pts == in->pts) {
         const int extra_samples = copy_samples/2;
-        const int lpc_order = FFMIN(64, (extra_samples+1)/2);
+        const int lpc_order = FFMIN(64, (copy_samples+1)/2);
         ftype *rdft0o = rdft + in_offset;
         double ac[64+1] = { 0 };
         double lpc[64] = { 0 };
@@ -521,7 +521,7 @@ redo:
         stc->done_start = 2;
     } else if (stc->done_stop == 0 && copy_samples < in_nb_samples) {
         const int extra_samples = in_nb_samples-copy_samples;
-        const int lpc_order = FFMIN(64, (extra_samples+1)/2);
+        const int lpc_order = FFMIN(64, (copy_samples+1)/2);
         ftype *rdft0o = rdft + in_offset;
         double ac[64+1] = { 0 };
         double lpc[64] = { 0 };
