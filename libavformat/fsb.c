@@ -194,6 +194,8 @@ static int fsb_read_header(AVFormatContext *s)
 
         for (int si = 0; si < nb_streams; si++) {
             uint32_t stream_header_size;
+            int full_loop;
+            int32_t loop_start, loop_end;
 
             st = avformat_new_stream(s, NULL);
             if (!st)
@@ -222,6 +224,8 @@ static int fsb_read_header(AVFormatContext *s)
                     avio_skip(pb, 12);
                     stream_header_size += 16 + avio_rl32(pb);
                 }
+
+                loop_start = loop_end = 0;
             } else {
                 avio_seek(pb, header_offset, SEEK_SET);
                 stream_header_size = avio_rl16(pb);
@@ -229,7 +233,9 @@ static int fsb_read_header(AVFormatContext *s)
                 avio_skip(pb, 30);
                 st->duration = avio_rl32(pb);
                 stream_size = avio_rl32(pb);
-                avio_skip(pb, 8);
+                loop_start = avio_rl32(pb);
+                loop_end = avio_rl32(pb);
+                if (loop_end != 0) loop_end += 1;
                 format = avio_rl32(pb);
                 rate = avio_rl32(pb);
                 avio_skip(pb, 6);
@@ -328,6 +334,19 @@ static int fsb_read_header(AVFormatContext *s)
                 break;
             }
 
+            if (!(format & 0x00000001)) {
+                if (par->codec_id == AV_CODEC_ID_CELT) full_loop = loop_start <= 512 && loop_end >= (st->duration - 512);
+                else if (par->codec_id == AV_CODEC_ID_MP3) full_loop = loop_start <= 1152 && loop_end >= (st->duration - 1152);
+                else full_loop = loop_start <= 0 && loop_end >= st->duration;
+
+                if (!(!(format & 0x00000002) && full_loop && st->duration < (20 * par->sample_rate))) {
+                    if (loop_start > 0)
+                        av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
+                    if (loop_end < st->duration)
+                        av_dict_set_int(&st->metadata, "loop_end", loop_end, 0);
+                }
+            }
+
             avpriv_set_pts_info(st, 64, 1, par->sample_rate);
 
             header_offset += stream_header_size;
@@ -357,6 +376,7 @@ static int fsb_read_header(AVFormatContext *s)
         int64_t sample_header_size;
         int64_t sample_data_size;
         int64_t name_table_size;
+        int32_t loop_start, loop_end;
         int sample_rate;
         int base_hsize;
         int channels;
@@ -441,6 +461,7 @@ static int fsb_read_header(AVFormatContext *s)
             default: return AVERROR_INVALIDDATA;
             }
 
+            loop_start = loop_end = 0;
             if (sample_mode & 0x01) {
                 uint32_t extraflag, extraflag_type, extraflag_size, extraflag_end;
 
@@ -463,6 +484,10 @@ static int fsb_read_header(AVFormatContext *s)
                         sample_rate = avio_rl32(pb);
                         if (sample_rate <= 0)
                             return AVERROR_INVALIDDATA;
+                        break;
+                    case 0x03:
+                        loop_start = avio_rl32(pb);
+                        loop_end = avio_rl32(pb) + 1;
                         break;
                     case 0x07:
                         switch (codec) {
@@ -641,6 +666,23 @@ static int fsb_read_header(AVFormatContext *s)
             default:
                 avpriv_request_sample(s, "codec 0x%X", codec);
                 return AVERROR_PATCHWELCOME;
+            }
+
+
+            if (
+                !(loop_start == 0 && loop_end == 0) &&
+                !(loop_start == 0x3C && loop_end == (0x007F007F+1) && st->duration > (loop_end + 10000)) // wrong loop values for pce2p_bgm_ajurika_*.fsb files from Pac-Man CE2 Plus (Switch)
+            ) {
+                int full_loop;
+                if (par->codec_id == AV_CODEC_ID_MP3) full_loop = loop_start == 0 && (loop_end + 1152) >= st->duration;
+                else full_loop = loop_start <= 0 && (loop_end + 32) >= st->duration;
+
+                if (!(full_loop && st->duration < (20 * par->sample_rate))) {
+                    if (loop_end > 0 && loop_end < st->duration)
+                        av_dict_set_int(&st->metadata, "loop_end", loop_end, 0);
+                    if (loop_start > 0 && loop_start < st->duration)
+                        av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
+                }
             }
 
             avpriv_set_pts_info(st, 64, 1, par->sample_rate);
