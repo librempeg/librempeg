@@ -111,6 +111,7 @@ static int fsb_read_header(AVFormatContext *s)
 
         for (int si = 0; si < nb_streams; si++) {
             int32_t loop_start, loop_end;
+            char title[0x21] = { 0 };
 
             st = avformat_new_stream(s, NULL);
             if (!st)
@@ -126,8 +127,10 @@ static int fsb_read_header(AVFormatContext *s)
             par = st->codecpar;
             par->codec_type = AVMEDIA_TYPE_AUDIO;
 
-            fst->name_offset = avio_tell(pb);
-            avio_skip(pb, 0x20);
+            ret = avio_get_str(pb, 0x20, title, sizeof(title));
+            if (title[0])
+                av_dict_set(&st->metadata, "title", title, 0);
+            avio_skip(pb, 0x20-ret);
 
             st->duration = avio_rl32(pb);
             if (si == 0) {
@@ -161,19 +164,6 @@ static int fsb_read_header(AVFormatContext *s)
             }
 
             avpriv_set_pts_info(st, 64, 1, par->sample_rate);
-        }
-
-        for (int si = 0; si < nb_streams; si++) {
-            AVStream *st = s->streams[si];
-            FSBStream *fst = st->priv_data;
-            char title[0x21] = { 0 };
-
-            avio_seek(pb, fst->name_offset, SEEK_SET);
-
-            avio_get_str(pb, 0x20, title, sizeof(title));
-
-            if (title[0])
-                av_dict_set(&st->metadata, "title", title, 0);
         }
     } else if (version == 4 || version == 3 || version == 2) {
         int32_t sample_header_min;
