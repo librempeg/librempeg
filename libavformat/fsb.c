@@ -573,6 +573,14 @@ static int fsb_read_header(AVFormatContext *s)
                 par->bits_per_coded_sample = 4;
                 par->block_align = 0x24 * channels;
                 break;
+            case 0x08:
+                if (flags & 0x02) {
+                    avpriv_request_sample(s, "block layered ADPCM PSX");
+                    return AVERROR_PATCHWELCOME;
+                }
+                par->codec_id = AV_CODEC_ID_ADPCM_PSX;
+                par->block_align = 0x10 * channels;
+                break;
             case 0x09:
                 par->codec_id = AV_CODEC_ID_ADPCM_HEVAG;
                 par->block_align = 0x10 * channels;
