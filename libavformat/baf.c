@@ -269,7 +269,9 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
         pos = avio_tell(pb);
         if (pos >= bst->start_offset && pos < bst->stop_offset) {
-            ret = av_get_packet(pb, pkt, par->block_align);
+            const int size = FFMIN(par->block_align, bst->stop_offset - pos);
+
+            ret = av_get_packet(pb, pkt, size);
             pkt->stream_index = st->index;
             break;
         } else if (pos >= bst->stop_offset && n+1 < s->nb_streams) {
