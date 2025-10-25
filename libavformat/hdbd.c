@@ -172,7 +172,6 @@ static int read_header(AVFormatContext *s)
 
         avio_seek(pb, hd_size, SEEK_SET);
     } else {
-        extern const FFInputFormat ff_hdbd_demuxer;
         char *bd_file_name = av_strdup(s->url);
         AVDictionary *tmp = NULL;
         int len;

@@ -161,7 +161,6 @@ static int snrsns_read_header(AVFormatContext *s)
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     if (avio_size(pb) <= 8) {
-        extern const FFInputFormat ff_hdbd_demuxer;
         char *sns_file_name = av_strdup(s->url);
         AVDictionary *tmp = NULL;
         int len;
