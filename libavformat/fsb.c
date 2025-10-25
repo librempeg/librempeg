@@ -611,7 +611,7 @@ static int fsb_read_header(AVFormatContext *s)
 
                                     if (extraflag_size & 3) {
                                         av_log(s, AV_LOG_WARNING,
-                                            "dpds chunk size %"PRId64" not divisible by 4\n", extraflag_size);
+                                            "dpds chunk size %d not divisible by 4\n", extraflag_size);
                                     }
 
                                     bps = (channels * par->bits_per_coded_sample) >> 3;
@@ -625,7 +625,7 @@ static int fsb_read_header(AVFormatContext *s)
                                     dpds_table_size = extraflag_size / 4;
                                     if (dpds_table_size == 0 || dpds_table_size >= INT_MAX / 4) {
                                         av_log(s, AV_LOG_ERROR,
-                                            "dpds chunk size %"PRId64" invalid\n", extraflag_size);
+                                            "dpds chunk size %d invalid\n", extraflag_size);
                                         return AVERROR_INVALIDDATA;
                                     }
 
