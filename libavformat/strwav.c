@@ -150,7 +150,7 @@ static int read_seek(AVFormatContext *s, int stream_index,
 
     block_align = st->codecpar->block_align;
     byte_rate = 36LL * st->codecpar->ch_layout.nb_channels *
-                      st->codecpar->sample_rate / 64;
+                       st->codecpar->sample_rate / 64;
     pos = av_rescale_rnd(ts * byte_rate,
                          st->time_base.num,
                          st->time_base.den * (int64_t)block_align,
