@@ -25,6 +25,11 @@
 #include "demux.h"
 #include "internal.h"
 
+typedef struct HDBDContext {
+    AVClass     *class;
+    AVIOContext *pb;
+} HDBDContext;
+
 typedef struct HDBDStream {
     int64_t info_offset;
     int64_t start_offset;
@@ -172,6 +177,7 @@ static int read_header(AVFormatContext *s)
 
         avio_seek(pb, hd_size, SEEK_SET);
     } else {
+        HDBDContext *hdbd = s->priv_data;
         char *bd_file_name = av_strdup(s->url);
         AVDictionary *tmp = NULL;
         int len;
@@ -186,10 +192,7 @@ static int read_header(AVFormatContext *s)
             return AVERROR_INVALIDDATA;
         }
 
-        ret = s->io_close2(s, s->pb);
-        if (ret < 0)
-            return ret;
-        ret = s->io_open(s, &s->pb, bd_file_name, AVIO_FLAG_READ, &tmp);
+        ret = s->io_open(s, &hdbd->pb, bd_file_name, AVIO_FLAG_READ, &tmp);
         av_freep(&bd_file_name);
         if (ret < 0)
             return ret;
@@ -200,7 +203,8 @@ static int read_header(AVFormatContext *s)
 
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    AVIOContext *pb = s->pb;
+    HDBDContext *hdbd = s->priv_data;
+    AVIOContext *pb = hdbd->pb ? hdbd->pb : s->pb;
     int ret = AVERROR_EOF;
     int64_t pos;
 
@@ -237,13 +241,52 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     return ret;
 }
 
+static int read_seek(AVFormatContext *s, int stream_index,
+                     int64_t ts, int flags)
+{
+    HDBDContext *hdbd = s->priv_data;
+    AVIOContext *pb = hdbd->pb ? hdbd->pb : s->pb;
+    const int sti = av_clip(stream_index, 0, s->nb_streams-1);
+    AVStream *st = s->streams[sti];
+    HDBDStream *hst = st->priv_data;
+    int block_align, byte_rate;
+    int64_t pos;
+
+    if (ts < 0)
+        ts = 0;
+
+    block_align = st->codecpar->block_align;
+    byte_rate = 16LL * st->codecpar->ch_layout.nb_channels *
+                       st->codecpar->sample_rate / 28;
+    pos = av_rescale_rnd(ts * byte_rate,
+                         st->time_base.num,
+                         st->time_base.den * (int64_t)block_align,
+                         (flags & AVSEEK_FLAG_BACKWARD) ? AV_ROUND_DOWN : AV_ROUND_UP);
+    pos *= block_align;
+    ffstream(st)->cur_dts = av_rescale(pos, st->time_base.den, byte_rate * (int64_t)st->time_base.num);
+    avio_seek(pb, hst->start_offset + pos, SEEK_SET);
+
+    return 0;
+}
+
+static int read_close(AVFormatContext *s)
+{
+    HDBDContext *hdbd = s->priv_data;
+
+    s->io_close2(s, hdbd->pb);
+
+    return 0;
+}
+
 const FFInputFormat ff_hdbd_demuxer = {
     .p.name         = "hdbd",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sony HD+BD"),
     .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
-    .p.flags        = AVFMT_GENERIC_INDEX,
+    .priv_data_size = sizeof(HDBDContext),
     .p.extensions   = "hd,hbd",
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
+    .read_seek      = read_seek,
+    .read_close     = read_close,
 };
