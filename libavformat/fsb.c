@@ -144,6 +144,8 @@ static int fsb_read_header(AVFormatContext *s)
             fst->stop_offset = fst->start_offset + avio_rl32(pb);
 
             par->sample_rate = avio_rl32(pb);
+            if (par->sample_rate <= 0)
+                return AVERROR_INVALIDDATA;
             avio_skip(pb, 8);
             format = avio_rl32(pb);
 
