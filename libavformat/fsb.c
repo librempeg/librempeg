@@ -318,6 +318,7 @@ static int fsb_read_header(AVFormatContext *s)
                 sti->need_parsing = AVSTREAM_PARSE_FULL_RAW;
                 break;
             case AV_CODEC_ID_ADPCM_NDSP:
+            case AV_CODEC_ID_ADPCM_NDSP_SI:
                 if (par->ch_layout.nb_channels > INT_MAX / 32)
                     return AVERROR_INVALIDDATA;
                 ret = ff_alloc_extradata(par, 32 * par->ch_layout.nb_channels);
