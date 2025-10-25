@@ -834,7 +834,9 @@ static int fsb_read_packet(AVFormatContext *s, AVPacket *pkt)
         pos = avio_tell(pb);
         if (pos >= fst->start_offset && pos < fst->stop_offset) {
             if (par->block_align > 0) {
-                ret = av_get_packet(pb, pkt, par->block_align);
+                const int size = FFMIN(par->block_align, fst->stop_offset - pos);
+
+                ret = av_get_packet(pb, pkt, size);
             } else {
                 const int size = avio_rl16(pb);
 
