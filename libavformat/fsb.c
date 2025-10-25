@@ -557,7 +557,7 @@ static int fsb_read_header(AVFormatContext *s)
                                 par->block_align = avio_rb16(pb);
                                 extraflag_size -= 2;
                                 if (!par->block_align) par->block_align = 2230;
-                                par->bit_rate = avio_rb32(pb);
+                                par->bit_rate = avio_rb32(pb) * 8;
                                 extraflag_size -= 4;
                                 par->bits_per_coded_sample = 16;
 
@@ -575,8 +575,7 @@ static int fsb_read_header(AVFormatContext *s)
                                             br = 20000;
                                         else if (sr == 44100 && (br==96000 || br==192000))
                                             br = 48000;
-                                    }
-                                    else if (ch == 2) {
+                                    } else if (ch == 2) {
                                         if (sr == 22050 && (br==48000 || br==192000))
                                             br = 32000;
                                         else if (sr == 32000 && (br==192000))
@@ -587,7 +586,6 @@ static int fsb_read_header(AVFormatContext *s)
 
                                     if ((ret = ff_alloc_extradata(par, 6)) < 0)
                                         return ret;
-
                                     memset(par->extradata, 0, par->extradata_size);
                                     par->extradata[4] = 31;
                                 } else if (format_id == 0x0162) {
@@ -602,58 +600,6 @@ static int fsb_read_header(AVFormatContext *s)
                                 } else {
                                     avpriv_request_sample(s, "Unexpected format %d", format_id);
                                     return AVERROR_PATCHWELCOME;
-                                }
-
-                                if (extraflag_size > 0) {
-                                    int i;
-                                    uint32_t dpds_table_size, bps;
-                                    uint32_t *dpds_table = NULL;
-
-                                    if (extraflag_size & 3) {
-                                        av_log(s, AV_LOG_WARNING,
-                                            "dpds chunk size %d not divisible by 4\n", extraflag_size);
-                                    }
-
-                                    bps = (channels * par->bits_per_coded_sample) >> 3;
-                                    if (!bps) {
-                                        av_log(s, AV_LOG_ERROR,
-                                            "Invalid bits_per_coded_sample %d for %d channels\n",
-                                            par->bits_per_coded_sample, channels);
-                                        return AVERROR_INVALIDDATA;
-                                    }
-
-                                    dpds_table_size = extraflag_size / 4;
-                                    if (dpds_table_size == 0 || dpds_table_size >= INT_MAX / 4) {
-                                        av_log(s, AV_LOG_ERROR,
-                                            "dpds chunk size %d invalid\n", extraflag_size);
-                                        return AVERROR_INVALIDDATA;
-                                    }
-
-                                    dpds_table = av_malloc_array(dpds_table_size, sizeof(uint32_t));
-                                    if (!dpds_table)
-                                        return AVERROR(ENOMEM);
-
-                                    for (i = 0; i < dpds_table_size; ++i) {
-                                        if (extraflag_size < 4) {
-                                            av_free(dpds_table);
-                                            return AVERROR_INVALIDDATA;
-                                        }
-                                        dpds_table[i] = avio_rb32(pb);
-                                        extraflag_size -= 4;
-                                    }
-
-                                    st->duration = (uint64_t)dpds_table[dpds_table_size - 1] / bps;
-                                    for (i = 0; i < dpds_table_size; ++i) {
-                                        av_add_index_entry(st,
-                                                           fst->start_offset + (i+1) * st->codecpar->block_align,
-                                                           dpds_table[i] / bps,
-                                                           st->codecpar->block_align,
-                                                           0,AVINDEX_KEYFRAME);
-                                    }
-
-                                    av_free(dpds_table);
-                                } else {
-                                    st->duration = av_rescale((fst->stop_offset - fst->start_offset)<<3, sample_rate, par->bit_rate);
                                 }
                             }
                             break;
