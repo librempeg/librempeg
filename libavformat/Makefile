@@ -710,6 +710,7 @@ OBJS-$(CONFIG_STR_DEMUXER)               += psxstr.o
 OBJS-$(CONFIG_STRM_DEMUXER)              += strm.o
 OBJS-$(CONFIG_STREAMHASH_MUXER)          += hashenc.o
 OBJS-$(CONFIG_STREAM_SEGMENT_MUXER)      += segment.o
+OBJS-$(CONFIG_STRWAV_DEMUXER)            += strwav.o
 OBJS-$(CONFIG_SUBVIEWER1_DEMUXER)        += subviewer1dec.o subtitles.o
 OBJS-$(CONFIG_SUBVIEWER_DEMUXER)         += subviewerdec.o subtitles.o
 OBJS-$(CONFIG_SUP_DEMUXER)               += supdec.o
