@@ -858,9 +858,21 @@ static int fsb_read_packet(AVFormatContext *s, AVPacket *pkt)
 
                 ret = av_get_packet(pb, pkt, size);
             } else {
-                const int size = avio_rl16(pb);
-                if (!size)
+                const int64_t max_size = fst->stop_offset - pos - 2;
+                const int pkt_size = avio_rl16(pb);
+                const int size = FFMIN(max_size, pkt_size);
+
+                if (size <= 0) {
+                    if (n + 1 < s->nb_streams) {
+                        AVStream *st_next = s->streams[n+1];
+                        FSBStream *fst_next = st_next->priv_data;
+
+                        avio_seek(pb, fst_next->start_offset, SEEK_SET);
+                        continue;
+                    }
+
                     return AVERROR_EOF;
+                }
 
                 ret = av_get_packet(pb, pkt, size);
             }
@@ -874,7 +886,7 @@ static int fsb_read_packet(AVFormatContext *s, AVPacket *pkt)
             FSBStream *fst_next = st_next->priv_data;
 
             if (fst_next->start_offset > pos)
-                avio_skip(pb, fst_next->start_offset - pos);
+                avio_seek(pb, fst_next->start_offset, SEEK_SET);
         }
     }
 
