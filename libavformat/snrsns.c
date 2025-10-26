@@ -28,6 +28,11 @@
 #include "internal.h"
 #include "pcm.h"
 
+typedef struct SNRSNSContext {
+    AVClass     *class;
+    AVIOContext *pb;
+} SNRSNSContext;
+
 typedef struct EAACHeader {
     int version;
     int codec;
@@ -161,6 +166,7 @@ static int snrsns_read_header(AVFormatContext *s)
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     if (avio_size(pb) <= 8) {
+        SNRSNSContext *snr = s->priv_data;
         char *sns_file_name = av_strdup(s->url);
         AVDictionary *tmp = NULL;
         int len;
@@ -175,10 +181,7 @@ static int snrsns_read_header(AVFormatContext *s)
             return AVERROR_INVALIDDATA;
         }
 
-        ret = s->io_close2(s, s->pb);
-        if (ret < 0)
-            return ret;
-        ret = s->io_open(s, &s->pb, sns_file_name, AVIO_FLAG_READ, &tmp);
+        ret = s->io_open(s, &snr->pb, sns_file_name, AVIO_FLAG_READ, &tmp);
         av_freep(&sns_file_name);
         if (ret < 0)
             return ret;
@@ -189,9 +192,10 @@ static int snrsns_read_header(AVFormatContext *s)
 
 static int snrsns_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
+    SNRSNSContext *snr = s->priv_data;
     AVStream *st = s->streams[0];
     AVCodecParameters *par = st->codecpar;
-    AVIOContext *pb = s->pb;
+    AVIOContext *pb = snr->pb ? snr->pb : s->pb;
     int64_t pos;
     int ret;
 
@@ -200,7 +204,8 @@ static int snrsns_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     pos = avio_tell(pb);
     if (par->block_align > 0) {
-        ret = ff_pcm_read_packet(s, pkt);
+        const int blocks = FFMAX(1, 4096 / par->block_align);
+        ret = av_get_packet(pb, pkt, blocks * par->block_align);
     } else {
         int size, duration;
 
@@ -211,20 +216,76 @@ static int snrsns_read_packet(AVFormatContext *s, AVPacket *pkt)
         size -= 8;
 
         ret = av_get_packet(pb, pkt, size);
-        pkt->stream_index = 0;
         pkt->duration = duration;
     }
     pkt->pos = pos;
+    pkt->stream_index = 0;
 
     return ret;
+}
+
+static int snrsns_read_seek(AVFormatContext *s, int stream_index,
+                            int64_t ts, int flags)
+{
+    SNRSNSContext *snr = s->priv_data;
+    AVIOContext *pb = snr->pb ? snr->pb : s->pb;
+    const int sti = av_clip(stream_index, 0, s->nb_streams-1);
+    AVStream *st = s->streams[sti];
+    AVCodecParameters *par = st->codecpar;
+    int block_align, byte_rate;
+    int64_t pos;
+
+    if (ts < 0)
+        ts = 0;
+
+    if (par->block_align > 0) {
+        block_align = st->codecpar->block_align;
+        byte_rate = 2LL * st->codecpar->ch_layout.nb_channels *
+                          st->codecpar->sample_rate;
+        pos = av_rescale_rnd(ts * byte_rate,
+                             st->time_base.num,
+                             st->time_base.den * (int64_t)block_align,
+                             (flags & AVSEEK_FLAG_BACKWARD) ? AV_ROUND_DOWN : AV_ROUND_UP);
+        pos *= block_align;
+        ffstream(st)->cur_dts = av_rescale(pos, st->time_base.den, byte_rate * (int64_t)st->time_base.num);
+    } else {
+        AVIndexEntry *ie;
+        int index;
+
+        index = ff_index_search_timestamp(ffstream(st)->index_entries,
+                                          ffstream(st)->nb_index_entries, ts, flags);
+        if (index < 0) {
+            return AVERROR(EINVAL);
+        } else {
+            ie = &ffstream(st)->index_entries[index];
+        }
+        ffstream(st)->cur_dts = ie->timestamp;
+        pos = ie->pos;
+    }
+
+    avio_seek(pb, pos, SEEK_SET);
+
+    return 0;
+}
+
+static int snrsns_read_close(AVFormatContext *s)
+{
+    SNRSNSContext *snr = s->priv_data;
+
+    s->io_close2(s, snr->pb);
+
+    return 0;
 }
 
 const FFInputFormat ff_snrsns_demuxer = {
     .p.name         = "snrsns",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Electronic Arts SNR/SNS"),
+    .priv_data_size = sizeof(SNRSNSContext),
     .p.extensions   = "snrsns",
     .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = snrsns_read_probe,
     .read_header    = snrsns_read_header,
     .read_packet    = snrsns_read_packet,
+    .read_seek      = snrsns_read_seek,
+    .read_close     = snrsns_read_close,
 };
