@@ -100,6 +100,6 @@ static int pca_parse(AVCodecParserContext *s, AVCodecContext *avctx,
 const FFCodecParser ff_pca_parser = {
     PARSER_CODEC_LIST(AV_CODEC_ID_PCA),
     .priv_data_size = sizeof(PCAParseContext),
-    .parser_parse   = pca_parse,
-    .parser_close   = ff_parse_close,
+    .parse          = pca_parse,
+    .close          = ff_parse_close,
 };

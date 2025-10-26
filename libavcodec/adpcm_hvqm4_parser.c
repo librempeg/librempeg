@@ -54,5 +54,5 @@ static int adpcm_hvqm4_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
 
 const FFCodecParser ff_adpcm_hvqm4_parser = {
     PARSER_CODEC_LIST(AV_CODEC_ID_ADPCM_IMA_HVQM4),
-    .parser_parse   = adpcm_hvqm4_parse,
+    .parse = adpcm_hvqm4_parse,
 };

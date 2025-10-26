@@ -96,6 +96,6 @@ static int sonarc_parse(AVCodecParserContext *s, AVCodecContext *avctx,
 const FFCodecParser ff_sonarc_parser = {
     PARSER_CODEC_LIST(AV_CODEC_ID_SONARC),
     .priv_data_size = sizeof(SonarcParseContext),
-    .parser_parse   = sonarc_parse,
-    .parser_close   = ff_parse_close,
+    .parse          = sonarc_parse,
+    .close          = ff_parse_close,
 };

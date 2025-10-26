@@ -92,6 +92,6 @@ static int wwvorbis_parse(AVCodecParserContext *pc, AVCodecContext *avctx,
 const FFCodecParser ff_wwvorbis_parser = {
     PARSER_CODEC_LIST(AV_CODEC_ID_WWVORBIS),
     .priv_data_size = sizeof(WwVorbisParseContext),
-    .parser_parse   = wwvorbis_parse,
-    .parser_close   = ff_parse_close,
+    .parse          = wwvorbis_parse,
+    .close          = ff_parse_close,
 };

@@ -93,5 +93,5 @@ static int ac4_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
 
 const FFCodecParser ff_ac4_parser = {
     PARSER_CODEC_LIST(AV_CODEC_ID_AC4),
-    .parser_parse   = ac4_parse,
+    .parse = ac4_parse,
 };

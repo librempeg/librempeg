@@ -167,6 +167,6 @@ static int awebp_parse(AVCodecParserContext *s, AVCodecContext *avctx,
 const FFCodecParser ff_awebp_parser = {
     PARSER_CODEC_LIST(AV_CODEC_ID_AWEBP),
     .priv_data_size = sizeof(AWebPParseContext),
-    .parser_parse   = awebp_parse,
-    .parser_close   = ff_parse_close,
+    .parse          = awebp_parse,
+    .close          = ff_parse_close,
 };

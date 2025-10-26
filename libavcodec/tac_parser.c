@@ -106,6 +106,6 @@ static int tac_parse(AVCodecParserContext *s1,
 const FFCodecParser ff_tac_parser = {
     PARSER_CODEC_LIST(AV_CODEC_ID_TAC),
     .priv_data_size = sizeof(TACParseContext),
-    .parser_parse   = tac_parse,
-    .parser_close   = ff_parse_close,
+    .parse          = tac_parse,
+    .close          = ff_parse_close,
 };
