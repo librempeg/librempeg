@@ -126,6 +126,23 @@ static int read_header(AVFormatContext *s)
 
         ret = s->io_open(s, &str->pb, str_file_name, AVIO_FLAG_READ, &tmp);
         av_freep(&str_file_name);
+        if (ret < 0) {
+            const int url_len = strlen(s->url);
+
+            if (url_len > 4) {
+                str_file_name = av_strdup(s->url);
+
+                if (!str_file_name)
+                    return AVERROR(ENOMEM);
+
+                str_file_name[url_len-3] = 's';
+                str_file_name[url_len-2] = 't';
+                str_file_name[url_len-1] = 'r';
+
+                ret = s->io_open(s, &str->pb, str_file_name, AVIO_FLAG_READ, &tmp);
+                av_freep(&str_file_name);
+            }
+        }
         if (ret < 0)
             return ret;
     }
