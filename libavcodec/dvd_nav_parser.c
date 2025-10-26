@@ -19,6 +19,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 #include "avcodec.h"
+#include "parser_internal.h"
 #include "libavutil/intreadwrite.h"
 
 #define PCI_SIZE  980
@@ -107,7 +108,7 @@ static int dvd_nav_parse(AVCodecParserContext *s,
 }
 
 const AVCodecParser ff_dvd_nav_parser = {
-    .codec_ids      = { AV_CODEC_ID_DVD_NAV },
+    PARSER_CODEC_LIST(AV_CODEC_ID_DVD_NAV),
     .priv_data_size = sizeof(DVDNavParseContext),
     .parser_init    = dvd_nav_parse_init,
     .parser_parse   = dvd_nav_parse,
