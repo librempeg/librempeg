@@ -18,6 +18,7 @@
 
 #include "libavutil/intreadwrite.h"
 #include "parser.h"
+#include "parser_internal.h"
 
 typedef struct FastAudioParseContext {
     ParseContext pc;
@@ -59,8 +60,8 @@ end:
     return next;
 }
 
-const AVCodecParser ff_fastaudio_parser = {
-    .codec_ids      = { AV_CODEC_ID_FASTAUDIO, AV_CODEC_ID_ADPCM_IMA_MO, AV_CODEC_ID_ADPCM_PSX },
+const FFCodecParser ff_fastaudio_parser = {
+    PARSER_CODEC_LIST(AV_CODEC_ID_FASTAUDIO, AV_CODEC_ID_ADPCM_IMA_MO, AV_CODEC_ID_ADPCM_PSX),
     .priv_data_size = sizeof(FastAudioParseContext),
     .parser_parse   = fastaudio_parse,
 };

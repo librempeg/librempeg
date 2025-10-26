@@ -26,6 +26,7 @@
 
 #include "libavutil/bswap.h"
 #include "parser.h"
+#include "parser_internal.h"
 
 enum PCAParseState {
     FRAME_START,
@@ -96,8 +97,8 @@ static int pca_parse(AVCodecParserContext *s, AVCodecContext *avctx,
     return next;
 }
 
-const AVCodecParser ff_pca_parser = {
-    .codec_ids      = { AV_CODEC_ID_PCA },
+const FFCodecParser ff_pca_parser = {
+    PARSER_CODEC_LIST(AV_CODEC_ID_PCA),
     .priv_data_size = sizeof(PCAParseContext),
     .parser_parse   = pca_parse,
     .parser_close   = ff_parse_close,

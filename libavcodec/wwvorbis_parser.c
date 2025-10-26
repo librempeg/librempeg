@@ -26,6 +26,7 @@
 
 #include "libavutil/intreadwrite.h"
 #include "parser.h"
+#include "parser_internal.h"
 
 typedef struct WwVorbisParseContext {
     ParseContext pc;
@@ -88,8 +89,8 @@ static int wwvorbis_parse(AVCodecParserContext *pc, AVCodecContext *avctx,
     return next;
 }
 
-const AVCodecParser ff_wwvorbis_parser = {
-    .codec_ids      = { AV_CODEC_ID_WWVORBIS },
+const FFCodecParser ff_wwvorbis_parser = {
+    PARSER_CODEC_LIST(AV_CODEC_ID_WWVORBIS),
     .priv_data_size = sizeof(WwVorbisParseContext),
     .parser_parse   = wwvorbis_parse,
     .parser_close   = ff_parse_close,

@@ -25,6 +25,7 @@
 
 #include "libavutil/intreadwrite.h"
 #include "parser.h"
+#include "parser_internal.h"
 
 static int adpcm_hvqm2_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
                              const uint8_t **poutbuf, int *poutbuf_size,
@@ -42,7 +43,7 @@ static int adpcm_hvqm2_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
     return buf_size;
 }
 
-const AVCodecParser ff_adpcm_hvqm2_parser = {
-    .codec_ids      = { AV_CODEC_ID_ADPCM_IMA_HVQM2 },
+const FFCodecParser ff_adpcm_hvqm2_parser = {
+    PARSER_CODEC_LIST(AV_CODEC_ID_ADPCM_IMA_HVQM2),
     .parser_parse   = adpcm_hvqm2_parse,
 };

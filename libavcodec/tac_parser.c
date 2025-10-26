@@ -25,6 +25,7 @@
 
 #include "libavutil/intreadwrite.h"
 #include "parser.h"
+#include "parser_internal.h"
 
 typedef struct TACParseContext {
     ParseContext pc;
@@ -102,8 +103,8 @@ static int tac_parse(AVCodecParserContext *s1,
     return next;
 }
 
-const AVCodecParser ff_tac_parser = {
-    .codec_ids      = { AV_CODEC_ID_TAC },
+const FFCodecParser ff_tac_parser = {
+    PARSER_CODEC_LIST(AV_CODEC_ID_TAC),
     .priv_data_size = sizeof(TACParseContext),
     .parser_parse   = tac_parse,
     .parser_close   = ff_parse_close,

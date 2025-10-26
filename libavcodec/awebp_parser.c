@@ -26,6 +26,7 @@
 
 #include "libavutil/bswap.h"
 #include "parser.h"
+#include "parser_internal.h"
 
 typedef enum AWebPParseStates {
     AWEBP_HEADER = 1,
@@ -163,8 +164,8 @@ static int awebp_parse(AVCodecParserContext *s, AVCodecContext *avctx,
     return next;
 }
 
-const AVCodecParser ff_awebp_parser = {
-    .codec_ids      = { AV_CODEC_ID_AWEBP },
+const FFCodecParser ff_awebp_parser = {
+    PARSER_CODEC_LIST(AV_CODEC_ID_AWEBP),
     .priv_data_size = sizeof(AWebPParseContext),
     .parser_parse   = awebp_parse,
     .parser_close   = ff_parse_close,

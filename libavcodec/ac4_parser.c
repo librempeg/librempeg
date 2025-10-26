@@ -30,6 +30,7 @@
 #include "ac4dec_data.h"
 #include "get_bits.h"
 #include "parser.h"
+#include "parser_internal.h"
 
 static int variable_bits(GetBitContext *gb, int bits)
 {
@@ -90,7 +91,7 @@ static int ac4_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
     return buf_size;
 }
 
-const AVCodecParser ff_ac4_parser = {
-    .codec_ids      = { AV_CODEC_ID_AC4 },
+const FFCodecParser ff_ac4_parser = {
+    PARSER_CODEC_LIST(AV_CODEC_ID_AC4),
     .parser_parse   = ac4_parse,
 };

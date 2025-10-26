@@ -26,6 +26,7 @@
 
 #include "libavutil/bswap.h"
 #include "parser.h"
+#include "parser_internal.h"
 
 enum SonarcParseState {
     FRAME_START,
@@ -92,8 +93,8 @@ static int sonarc_parse(AVCodecParserContext *s, AVCodecContext *avctx,
     return next;
 }
 
-const AVCodecParser ff_sonarc_parser = {
-    .codec_ids      = { AV_CODEC_ID_SONARC },
+const FFCodecParser ff_sonarc_parser = {
+    PARSER_CODEC_LIST(AV_CODEC_ID_SONARC),
     .priv_data_size = sizeof(SonarcParseContext),
     .parser_parse   = sonarc_parse,
     .parser_close   = ff_parse_close,
