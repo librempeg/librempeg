@@ -86,6 +86,16 @@ static int read_header(AVFormatContext *s)
         align = (tracks > 1) ? 0xD800/2 : 0xD800;
         channels = tracks * ((flags & 0x02) ? 2 : 1);
         bps = 4;
+    } else if ((header == 0x00000800 || header == 0x00000900) &&
+               read_rl32(pb, 0x24) == read_rl32(pb, 0x70) &&
+               read_rl32(pb, 0x78) * 4 + read_rl32(pb, 0x7c) == header_size) {
+        duration = read_rl32(pb, 0x20);
+        sample_rate = read_rl32(pb, 0x24);
+        flags = read_rl32(pb, 0x2c);
+        tracks = read_rl32(pb, 0x40);
+        codec = AV_CODEC_ID_ADPCM_PSX;
+        align = (tracks > 1) ? 0x4000 : 0x8000;
+        channels = tracks * ((flags & 0x02) ? 2 : 1);
     }
 
     if (channels <= 0 || sample_rate <= 0 || align <= 0 || align > INT_MAX/channels)
