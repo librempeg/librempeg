@@ -751,6 +751,26 @@ static int fsb_read_header(AVFormatContext *s)
                 par->codec_id = AV_CODEC_ID_ADPCM_FMOD;
                 par->block_align = 0x8C * channels;
                 break;
+            case 0x11:
+                if (channels > 2) {
+                    avpriv_request_sample(s, "OPUS channels %d", channels);
+                    return AVERROR_PATCHWELCOME;
+                }
+
+                par->sample_rate = 48000; // have seen files with 44100 set so can't trust that
+                par->codec_id = AV_CODEC_ID_OPUS;
+                sti->need_parsing = AVSTREAM_PARSE_FULL;
+
+                par->block_align = 0;
+                if ((ret = ff_alloc_extradata(par, 19)) < 0)
+                    return ret;
+                memset(par->extradata, 0, par->extradata_size);
+                memcpy(par->extradata, "OpusHead", 8);
+                par->extradata[8] = 1;
+                par->extradata[9] = channels;
+                AV_WL16(par->extradata + 10, 312); // skip, seems fixed
+                AV_WL32(par->extradata + 12, par->sample_rate);
+                break;
             default:
                 avpriv_request_sample(s, "codec 0x%X", codec);
                 return AVERROR_PATCHWELCOME;
@@ -839,6 +859,8 @@ static int fsb_read_packet(AVFormatContext *s, AVPacket *pkt)
                 ret = av_get_packet(pb, pkt, size);
             } else {
                 const int size = avio_rl16(pb);
+                if (!size)
+                    return AVERROR_EOF;
 
                 ret = av_get_packet(pb, pkt, size);
             }
