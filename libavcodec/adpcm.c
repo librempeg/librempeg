@@ -411,6 +411,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_BRR:
     case AV_CODEC_ID_ADPCM_IMA_AMV:
     case AV_CODEC_ID_ADPCM_N64:
+    case AV_CODEC_ID_ADPCM_IMA_WV6:
         max_channels = 1;
         break;
     case AV_CODEC_ID_ADPCM_AFC:
@@ -901,6 +902,26 @@ static inline int16_t adpcm_ima_oki_expand_nibble(ADPCMChannelStatus *c, int nib
     c->step_index = step_index;
 
     return c->predictor * 16;
+}
+
+static inline int16_t adpcm_ima_wv6_expand_nibble(ADPCMChannelStatus *c, int nibble)
+{
+    int sample_decoded, step, delta;
+
+    sample_decoded = c->predictor;
+    step = ff_adpcm_step_table[c->step_index];
+
+    delta = (nibble & 0x7);
+    delta = ((delta * step) >> 3) + ((delta * step) >> 2);
+    if (nibble & 8)
+        delta = -delta;
+    sample_decoded += delta;
+
+    c->predictor = av_clip_int16(sample_decoded);
+    c->step_index += ff_adpcm_index_table[nibble];
+    c->step_index = av_clip(c->step_index, 0, 88);
+
+    return c->predictor;
 }
 
 static inline int16_t adpcm_ima_zmusic_expand_nibble(ADPCMChannelStatus *c, int nibble)
@@ -1449,6 +1470,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_IMA_APM:
     case AV_CODEC_ID_ADPCM_IMA_ALP:
     case AV_CODEC_ID_ADPCM_IMA_MTF:
+    case AV_CODEC_ID_ADPCM_IMA_WV6:
     case AV_CODEC_ID_ADPCM_IMA_ZMUSIC:
         nb_samples = buf_size * 2 / ch;
         break;
@@ -2308,6 +2330,13 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             int v = bytestream2_get_byteu(&gb);
             *samples++ = adpcm_ima_oki_expand_nibble(&c->status[0],  v >> 4  );
             *samples++ = adpcm_ima_oki_expand_nibble(&c->status[st], v & 0x0F);
+        }
+        ) /* End of CASE */
+    CASE(ADPCM_IMA_WV6,
+        for (int n = nb_samples; n > 0; n -= 2) {
+            int v = bytestream2_get_byteu(&gb);
+            *samples++ = adpcm_ima_wv6_expand_nibble(&c->status[0], v >> 4  );
+            *samples++ = adpcm_ima_wv6_expand_nibble(&c->status[0], v & 0x0F);
         }
         ) /* End of CASE */
     CASE(ADPCM_IMA_ZMUSIC,
@@ -3829,6 +3858,7 @@ ADPCM_DECODER(ADPCM_IMA_ALP,     sample_fmts_s16,  adpcm_ima_alp,     "ADPCM IMA
 ADPCM_DECODER(ADPCM_IMA_WAV,     sample_fmts_s16p, adpcm_ima_wav,     "ADPCM IMA WAV")
 ADPCM_DECODER(ADPCM_IMA_WAV_MONO,sample_fmts_s16p, adpcm_ima_wav_mono,"ADPCM IMA WAV (Mono)")
 ADPCM_DECODER(ADPCM_IMA_WS,      sample_fmts_both, adpcm_ima_ws,      "ADPCM IMA Westwood")
+ADPCM_DECODER(ADPCM_IMA_WV6,     sample_fmts_s16p, adpcm_ima_wv6,     "ADPCM IMA WV6")
 ADPCM_DECODER(ADPCM_IMA_XBOX,    sample_fmts_s16p, adpcm_ima_xbox,    "ADPCM IMA Xbox")
 ADPCM_DECODER(ADPCM_IMA_ZMUSIC,  sample_fmts_s16,  adpcm_ima_zmusic,  "ADPCM IMA Z-Music")
 ADPCM_DECODER(ADPCM_MS,          sample_fmts_both, adpcm_ms,          "ADPCM Microsoft")
