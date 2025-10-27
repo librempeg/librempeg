@@ -411,6 +411,7 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
             pd.buf = header;
             pd.buf_size = ret;
             pd.filename = filename.str;
+            pd.fullsize = size;
 
             ifmt = ffifmt(av_probe_input_format3(&pd, 1, &score));
             if (ifmt && ifmt->read_packet == ff_img_read_packet && ifmt->raw_codec_id)

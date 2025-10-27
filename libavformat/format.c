@@ -286,6 +286,9 @@ int av_probe_input_buffer2(AVIOContext *pb, const AVInputFormat **fmt,
         }
     }
 
+    if (pb->buffer_size > 0)
+        pd.fullsize = pb->buffer_size - offset;
+
     for (probe_size = PROBE_BUF_MIN; probe_size <= max_probe_size && !*fmt && !eof;
          probe_size = FFMIN(probe_size << 1,
                             FFMAX(max_probe_size, probe_size + 1))) {

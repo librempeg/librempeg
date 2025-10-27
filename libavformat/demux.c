@@ -159,7 +159,7 @@ static int init_input(AVFormatContext *s, const char *filename,
                       AVDictionary **options)
 {
     int ret;
-    AVProbeData pd = { filename, NULL, 0 };
+    AVProbeData pd = { filename, NULL, 0, 0 };
     int score = AVPROBE_SCORE_RETRY;
 
     if (s->pb) {
