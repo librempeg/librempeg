@@ -28,13 +28,13 @@
 
 static int read_probe(const AVProbeData *p)
 {
-    if (AV_RB32(p->buf) != MKBETAG('s','a','d','l'))
+    if (AV_RB32(p->buf) != MKBETAG('s','a','d','l') || AV_RL32(p->buf + 4) != 0)
         return 0;
 
-    if (p->buf_size < 33)
+    if (p->buf_size < 0x21)
         return 0;
 
-    if (p->buf[32] == 0)
+    if (AV_RL64(p->buf + 0x18) != 0 && p->buf[0x20] == 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
@@ -42,12 +42,20 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int flags, loop_flag, nb_channels;
+    int ret = 0, flags, loop_flag, nb_channels;
     AVIOContext *pb = s->pb;
     int64_t start_offset, loop_start;
     AVStream *st;
 
-    avio_skip(pb, 0x31);
+    avio_skip(pb, 0x18);
+    if (avio_rl64(pb) > 0) {
+        char title[0x10];
+        ret = avio_get_str(pb, 0x10, title, sizeof(title));
+        if (title[0])
+            av_dict_set(&s->metadata, "title", title, 0);
+    }
+    avio_skip(pb, 0x10-ret + 1);
+
     loop_flag = avio_r8(pb);
     nb_channels = avio_r8(pb);
     flags = avio_r8(pb);
