@@ -2373,13 +2373,17 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         ) /* End of CASE */
     CASE(ADPCM_IMA_WS,
         if (c->vqa_version == 3) {
-            for (int channel = 0; channel < channels; channel++) {
-                int16_t *smp = samples_p[channel];
+            const int block_samples = avctx->block_align / channels * 2;
 
-                for (int n = nb_samples / 2; n > 0; n--) {
-                    int v = bytestream2_get_byteu(&gb);
-                    *smp++ = adpcm_ima_expand_nibble(&c->status[channel], v & 0x0F, 3);
-                    *smp++ = adpcm_ima_expand_nibble(&c->status[channel], v >> 4  , 3);
+            for (int block = 0; block < avpkt->size / avctx->block_align; block++) {
+                for (int channel = 0; channel < channels; channel++) {
+                    int16_t *smp = samples_p[channel] + block * block_samples;
+
+                    for (int n = block_samples / 2; n > 0; n--) {
+                        int v = bytestream2_get_byteu(&gb);
+                        *smp++ = adpcm_ima_expand_nibble(&c->status[channel], v & 0x0F, 3);
+                        *smp++ = adpcm_ima_expand_nibble(&c->status[channel], v >> 4  , 3);
+                    }
                 }
             }
         } else if (c->vqa_version == 4) {
