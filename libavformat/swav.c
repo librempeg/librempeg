@@ -50,8 +50,8 @@ static int read_probe(const AVProbeData *p)
 static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
-    int codec, rate, ret, loop_flag;
     int64_t start = 0x24, loop_start, loop_end;
+    int codec, rate, loop_flag;
     AVStream *st;
 
     avio_skip(pb, 24);
@@ -87,10 +87,7 @@ static int read_header(AVFormatContext *s)
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;
         st->codecpar->bits_per_coded_sample = 4;
         st->codecpar->block_align = 0x40 * st->codecpar->ch_layout.nb_channels;
-        ret = ff_alloc_extradata(st->codecpar, 2);
-        if (ret < 0)
-            return ret;
-        AV_WL16(st->codecpar->extradata, 3);
+        st->codecpar->profile = 3;
         start += 4;
         break;
     default:

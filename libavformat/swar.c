@@ -71,8 +71,8 @@ static int sort_streams(const void *a, const void *b)
 static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
-    int ret, nb_streams;
     int64_t start, size;
+    int nb_streams;
 
     avio_skip(pb, 0x8);
     size = avio_rl32(pb);
@@ -145,10 +145,7 @@ static int read_header(AVFormatContext *s)
             st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;
             st->codecpar->bits_per_coded_sample = 4;
             st->codecpar->block_align = 0x40 * st->codecpar->ch_layout.nb_channels;
-            ret = ff_alloc_extradata(st->codecpar, 2);
-            if (ret < 0)
-                return ret;
-            AV_WL16(st->codecpar->extradata, 3);
+            st->codecpar->profile = 3;
             break;
         default:
             avpriv_request_sample(s, "codec 0x%X", codec);

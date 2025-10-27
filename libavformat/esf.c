@@ -79,12 +79,8 @@ static int read_header(AVFormatContext *s)
     st->codecpar->block_align = 1024;
     st->codecpar->sample_rate = rate;
     st->codecpar->codec_id = codec;
-    if (codec == AV_CODEC_ID_ADPCM_IMA_WS) {
-        int ret = ff_alloc_extradata(st->codecpar, 2);
-        if (ret < 0)
-            return ret;
-        AV_WL16(st->codecpar->extradata, 4);
-    }
+    if (codec == AV_CODEC_ID_ADPCM_IMA_WS)
+        st->codecpar->profile = 4;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 

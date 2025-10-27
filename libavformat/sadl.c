@@ -82,11 +82,7 @@ static int read_header(AVFormatContext *s)
     case 0x70:
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;
         loop_start = loop_start / nb_channels * 2;
-
-        ret = ff_alloc_extradata(st->codecpar, 2);
-        if (ret < 0)
-            return ret;
-        AV_WL16(st->codecpar->extradata, 3);
+        st->codecpar->profile = 3;
         break;
     case 0xb0:
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PROCYON;

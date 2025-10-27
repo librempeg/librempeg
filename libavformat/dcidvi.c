@@ -41,8 +41,8 @@ static int dcidvi_probe(const AVProbeData *p)
 
 static int dcidvi_read_header(AVFormatContext *s)
 {
-    int rate, nb_channels, ret;
     AVIOContext *pb = s->pb;
+    int rate, nb_channels;
     AVStream *st;
 
     avio_skip(pb, 4);
@@ -60,14 +60,10 @@ static int dcidvi_read_header(AVFormatContext *s)
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;
     st->codecpar->ch_layout.nb_channels = nb_channels;
     st->codecpar->sample_rate = rate;
+    st->codecpar->profile = 4;
     st->codecpar->block_align = 0x400 * st->codecpar->ch_layout.nb_channels;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
-
-    ret = ff_alloc_extradata(st->codecpar, 2);
-    if (ret < 0)
-        return ret;
-    AV_WL16(st->codecpar->extradata, 4);
 
     avio_seek(pb, 0x800, SEEK_SET);
 

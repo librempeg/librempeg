@@ -45,7 +45,7 @@ static int genh_read_header(AVFormatContext *s)
     unsigned start_offset, header_size, codec, coef_type, coef[2];
     GENHDemuxContext *c = s->priv_data;
     av_unused unsigned coef_splitted[2];
-    int align, ch, ret;
+    int align, ch;
     AVStream *st;
 
     avio_skip(s->pb, 4);
@@ -96,10 +96,7 @@ static int genh_read_header(AVFormatContext *s)
     case  6: if (st->codecpar->block_align > INT_MAX/1024)
                  return AVERROR_INVALIDDATA;
              st->codecpar->codec_id = AV_CODEC_ID_SDX2_DPCM;        break;
-    case  7: ret = ff_alloc_extradata(st->codecpar, 2);
-             if (ret < 0)
-                 return ret;
-             AV_WL16(st->codecpar->extradata, 3);
+    case  7: st->codecpar->profile = 3;
              st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;     break;
     case 10: st->codecpar->codec_id = AV_CODEC_ID_ADPCM_AICA;       break;
     case 12: st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP;       break;

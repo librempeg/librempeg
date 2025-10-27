@@ -47,7 +47,7 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int interleave, bps, nb_channels, rate, ret;
+    int interleave, bps, nb_channels, rate;
     AVIOContext *pb = s->pb;
     AVStream *st;
 
@@ -72,10 +72,7 @@ static int read_header(AVFormatContext *s)
     case 4:
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;
         st->codecpar->block_align = 0x40 * (1 + (interleave == 0xc000)) * st->codecpar->ch_layout.nb_channels;
-        ret = ff_alloc_extradata(st->codecpar, 2);
-        if (ret < 0)
-            return ret;
-        AV_WL16(st->codecpar->extradata, 4);
+        st->codecpar->profile = 4;
         break;
     case 16:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;

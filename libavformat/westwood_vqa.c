@@ -248,9 +248,7 @@ static int wsvqa_read_packet(AVFormatContext *s,
                         break;
                     case SND2_TAG:
                         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;
-                        if ((ret = ff_alloc_extradata(st->codecpar, 2)) < 0)
-                            return ret;
-                        AV_WL16(st->codecpar->extradata, wsvqa->version);
+                        st->codecpar->profile = wsvqa->version;
                         break;
                     }
                 }

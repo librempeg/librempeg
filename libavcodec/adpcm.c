@@ -3769,8 +3769,7 @@ static av_cold void adpcm_flush(AVCodecContext *avctx)
         break;
 
     case AV_CODEC_ID_ADPCM_IMA_WS:
-        if (avctx->extradata && avctx->extradata_size >= 2)
-            c->vqa_version = AV_RL16(avctx->extradata);
+        c->vqa_version = avctx->profile;
         break;
     default:
         /* Other codecs may want to handle this during decoding. */
