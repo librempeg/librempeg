@@ -82,8 +82,8 @@ static int read_header(AVFormatContext *s)
         return AVERROR_INVALIDDATA;
 
     for (int si = 0; si < nb_streams; si++) {
-        int64_t head_offset, loop_start, loop_stop;
-        int codec, rate, loop;
+        int64_t head_offset, loop_start, loop_end;
+        int codec, rate, loop_flag;
         SWARStream *sst;
         AVStream *st;
 
@@ -95,13 +95,13 @@ static int read_header(AVFormatContext *s)
         avio_seek(pb, head_offset, SEEK_SET);
 
         codec = avio_r8(pb);
-        loop = avio_r8(pb) != 0;
+        loop_flag = avio_r8(pb) != 0;
         rate = avio_rl16(pb);
         if (rate <= 0)
             return AVERROR_INVALIDDATA;
         avio_skip(pb, 2);
         loop_start = avio_rl16(pb);
-        loop_stop = avio_rl32(pb);
+        loop_end = avio_rl32(pb);
 
         st = avformat_new_stream(s, NULL);
         if (!st)
@@ -155,16 +155,16 @@ static int read_header(AVFormatContext *s)
             return AVERROR_PATCHWELCOME;
         }
 
-        if (loop) {
+        if (loop_flag) {
             loop_start = loop_start * 32 / st->codecpar->bits_per_coded_sample;
-            loop_stop = loop_stop * 32 / st->codecpar->bits_per_coded_sample + loop_start;
+            loop_end = loop_end * 32 / st->codecpar->bits_per_coded_sample + loop_start;
             if (codec == 2) {
                 loop_start -= 32 / st->codecpar->bits_per_coded_sample;
-                loop_stop -= 32 / st->codecpar->bits_per_coded_sample;
+                loop_end -= 32 / st->codecpar->bits_per_coded_sample;
             }
 
             av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
-            av_dict_set_int(&st->metadata, "loop_stop", loop_stop, 0);
+            av_dict_set_int(&st->metadata, "loop_end", loop_end, 0);
         }
 
         avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
