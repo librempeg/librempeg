@@ -42,14 +42,13 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int flags, loop, nb_channels;
+    int flags, loop_flag, nb_channels;
     AVIOContext *pb = s->pb;
-    int64_t start_offset;
-    int64_t loop_start;
+    int64_t start_offset, loop_start;
     AVStream *st;
 
     avio_skip(pb, 0x31);
-    loop = avio_r8(pb);
+    loop_flag = avio_r8(pb);
     nb_channels = avio_r8(pb);
     flags = avio_r8(pb);
     if (nb_channels == 0)
@@ -60,30 +59,30 @@ static int read_header(AVFormatContext *s)
     loop_start = avio_rl32(pb);
     loop_start -= start_offset;
 
-    switch (flags & 0xf0) {
-    case 0xb0:
-        break;
-    default:
-        avpriv_request_sample(s, "flags %d", flags);
-        return AVERROR_PATCHWELCOME;
-    }
-
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    if (loop)
-        av_dict_set_int(&st->metadata, "loop_start", loop_start / nb_channels / 16 * 30, 0);
+    switch (flags & 0xf0) {
+    case 0xb0:
+        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PROCYON;
+        loop_start = loop_start / nb_channels / 16 * 30;
+        st->codecpar->bit_rate = 16LL * st->codecpar->ch_layout.nb_channels * 8 *
+                                        st->codecpar->sample_rate / 30;
+        break;
+    default:
+        avpriv_request_sample(s, "flags 0x%02x", flags);
+        return AVERROR_PATCHWELCOME;
+    }
 
     st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PROCYON;
     st->codecpar->ch_layout.nb_channels = nb_channels;
     st->codecpar->sample_rate = ((flags & 6) == 4) ? 32728 : 16364;
     st->codecpar->block_align = 0x10 * st->codecpar->ch_layout.nb_channels;
-    st->codecpar->bit_rate = 16LL * st->codecpar->ch_layout.nb_channels * 8 *
-                                    st->codecpar->sample_rate / 30;
 
+    if (loop_flag)
+        av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
