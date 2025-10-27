@@ -45,19 +45,35 @@ static int read_header(AVFormatContext *s)
 {
     int ret, align, channels, rate;
     AVIOContext *pb = s->pb;
-    int64_t duration;
+    int64_t duration, loop_start, loop_end, nibbles;
     AVStream *st;
 
     avio_skip(pb, 6);
     align = avio_rb16(pb);
-    avio_skip(pb, 19);
+    avio_skip(pb, 8);
+    loop_start = avio_rb32(pb);
+    avio_skip(pb, 7);
     channels = avio_r8(pb);
     avio_skip(pb, 4);
     duration = avio_rb32(pb);
-    avio_skip(pb, 4);
+    nibbles = avio_rb32(pb);
     rate = avio_rb32(pb);
+    avio_skip(pb, 6);
+    loop_end = avio_rb32(pb);
     if (align == 0 || channels == 0 || rate <= 0)
         return AVERROR_INVALIDDATA;
+
+    if (loop_end != nibbles) {
+        if (loop_start > 0)
+            av_dict_set_int(&s->metadata, "loop_start", loop_start / 8 * 14, 0);
+        if (loop_end > 0) {
+            if (loop_end * 2 + 1 <= nibbles)
+                loop_end *= 2;
+            loop_end = (loop_end / 16)*14 + ((loop_end % 16) ? (loop_end % 16)-1 : 1);
+            if (loop_end > loop_start && loop_end < duration)
+                av_dict_set_int(&s->metadata, "loop_end", loop_end, 0);
+        }
+    }
 
     st = avformat_new_stream(s, NULL);
     if (!st)
