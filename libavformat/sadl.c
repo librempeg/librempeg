@@ -71,7 +71,23 @@ static int read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
+    st->start_time = 0;
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->ch_layout.nb_channels = nb_channels;
+    st->codecpar->sample_rate = ((flags & 6) == 4) ? 32728 : 16364;
+    st->codecpar->block_align = 0x10 * st->codecpar->ch_layout.nb_channels;
+
     switch (flags & 0xf0) {
+    case 0x00:
+    case 0x70:
+        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;
+        loop_start = loop_start / nb_channels * 2;
+
+        ret = ff_alloc_extradata(st->codecpar, 2);
+        if (ret < 0)
+            return ret;
+        AV_WL16(st->codecpar->extradata, 3);
+        break;
     case 0xb0:
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PROCYON;
         loop_start = loop_start / nb_channels / 16 * 30;
@@ -82,12 +98,6 @@ static int read_header(AVFormatContext *s)
         avpriv_request_sample(s, "flags 0x%02x", flags);
         return AVERROR_PATCHWELCOME;
     }
-
-    st->start_time = 0;
-    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->ch_layout.nb_channels = nb_channels;
-    st->codecpar->sample_rate = ((flags & 6) == 4) ? 32728 : 16364;
-    st->codecpar->block_align = 0x10 * st->codecpar->ch_layout.nb_channels;
 
     if (loop_flag)
         av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
