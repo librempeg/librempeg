@@ -50,16 +50,19 @@ static int read_probe(const AVProbeData *p)
 static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
-    int codec, rate, ret;
-    int64_t start = 0x24;
+    int codec, rate, ret, loop_flag;
+    int64_t start = 0x24, loop_start, loop_end;
     AVStream *st;
 
     avio_skip(pb, 24);
     codec = avio_r8(pb);
-    avio_skip(pb, 1);
+    loop_flag = avio_r8(pb) != 0;
     rate = avio_rl16(pb);
     if (rate <= 0)
         return AVERROR_INVALIDDATA;
+    avio_skip(pb, 2);
+    loop_start = avio_rl16(pb);
+    loop_end = avio_rl32(pb);
 
     st = avformat_new_stream(s, NULL);
     if (!st)
@@ -72,10 +75,12 @@ static int read_header(AVFormatContext *s)
     switch (codec) {
     case 0:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S8;
+        st->codecpar->bits_per_coded_sample = 8;
         st->codecpar->block_align = 1024 * st->codecpar->ch_layout.nb_channels;
         break;
     case 1:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
+        st->codecpar->bits_per_coded_sample = 16;
         st->codecpar->block_align = 512 * st->codecpar->ch_layout.nb_channels;
         break;
     case 2:
@@ -91,6 +96,18 @@ static int read_header(AVFormatContext *s)
     default:
         avpriv_request_sample(s, "codec 0x%X", codec);
         return AVERROR_PATCHWELCOME;
+    }
+
+    if (loop_flag) {
+        loop_start = loop_start * 32 / st->codecpar->bits_per_coded_sample;
+        loop_end = loop_end * 32 / st->codecpar->bits_per_coded_sample + loop_start;
+        if (codec == 2) {
+            loop_start -= 32 / st->codecpar->bits_per_coded_sample;
+            loop_end -= 32 / st->codecpar->bits_per_coded_sample;
+        }
+
+        av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
+        av_dict_set_int(&st->metadata, "loop_end", loop_end, 0);
     }
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
