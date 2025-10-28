@@ -3426,6 +3426,11 @@ static const char * const color_primaries_names[AVCOL_PRI_NB] = {
     [AVCOL_PRI_EBU3213] = "ebu3213",
 };
 
+static const char * const color_primaries_names_ext[AVCOL_PRI_EXT_NB -
+                                                    AVCOL_PRI_EXT_BASE] = {
+    [AVCOL_PRI_V_GAMUT - AVCOL_PRI_EXT_BASE] = "vgamut",
+};
+
 static const char * const color_transfer_names[] = {
     [AVCOL_TRC_RESERVED0] = "reserved",
     [AVCOL_TRC_BT709] = "bt709",
@@ -3918,8 +3923,12 @@ int av_color_range_from_name(const char *name)
 
 const char *av_color_primaries_name(enum AVColorPrimaries primaries)
 {
-    return (unsigned) primaries < AVCOL_PRI_NB ?
-        color_primaries_names[primaries] : NULL;
+    if ((unsigned)primaries < AVCOL_PRI_NB)
+        return color_primaries_names[primaries];
+    else if (((unsigned)primaries >= AVCOL_PRI_EXT_BASE) &&
+             ((unsigned)primaries < AVCOL_PRI_EXT_NB))
+        return color_primaries_names_ext[primaries - AVCOL_TRC_EXT_BASE];
+    return NULL;
 }
 
 int av_color_primaries_from_name(const char *name)
@@ -3932,6 +3941,14 @@ int av_color_primaries_from_name(const char *name)
 
         if (av_strstart(name, color_primaries_names[i], NULL))
             return i;
+    }
+
+    for (i = 0; i < FF_ARRAY_ELEMS(color_primaries_names_ext); i++) {
+        if (!color_primaries_names_ext[i])
+            continue;
+
+        if (av_strstart(name, color_primaries_names_ext[i], NULL))
+            return AVCOL_PRI_EXT_BASE + i;
     }
 
     return AVERROR(EINVAL);
