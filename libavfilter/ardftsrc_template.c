@@ -105,6 +105,7 @@ typedef struct fn(StateContext) {
     ftype *rdft_in;
     ctype *rdft_complex;
     ftype *rdft_out;
+    ftype *rdft_in_last;
 
     int done_start;
     int done_stop;
@@ -140,6 +141,7 @@ static void fn(src_uninit)(AVFilterContext *ctx)
             av_tx_uninit(&stc->tx_ctx);
             av_tx_uninit(&stc->itx_ctx);
             av_freep(&stc->rdft_in);
+            av_freep(&stc->rdft_in_last);
             av_freep(&stc->rdft_complex);
             av_freep(&stc->rdft_out);
         }
@@ -190,6 +192,10 @@ static int fn(src_init)(AVFilterContext *ctx)
 
         stc->rdft_in = av_calloc(s->in_rdft_size+2, sizeof(*stc->rdft_in));
         if (!stc->rdft_in)
+            return AVERROR(ENOMEM);
+
+        stc->rdft_in_last = av_calloc(s->in_nb_samples*2, sizeof(*stc->rdft_in_last));
+        if (!stc->rdft_in_last)
             return AVERROR(ENOMEM);
 
         stc->rdft_complex = av_calloc(rdft_size+2, sizeof(*stc->rdft_complex));
@@ -520,18 +526,33 @@ redo:
     } else if (stc->done_start == 1) {
         stc->done_start = 2;
     } else if (stc->done_stop == 0 && copy_samples < in_nb_samples) {
-        const int extra_samples = in_nb_samples-copy_samples;
-        const int lpc_order = FFMIN(64, (copy_samples+1)/2);
+        const int pad_samples = in_nb_samples-copy_samples;
+        const int lpc_order = FFMIN(64, in_nb_samples/2);
         ftype *rdft0o = rdft + in_offset;
+        ftype *last = stc->rdft_in_last;
         double ac[64+1] = { 0 };
         double lpc[64] = { 0 };
         int order;
 
-        fn(autocorr)(rdft0o, copy_samples, ac, lpc_order);
+        memmove(last, last+copy_samples, pad_samples * sizeof(*last));
+        memcpy(last+pad_samples, rdft0o, copy_samples * sizeof(*last));
+        memcpy(rdft, last, in_nb_samples * sizeof(*rdft));
+        memset(rdft+in_nb_samples, 0, in_nb_samples * sizeof(*rdft));
+        fn(autocorr)(rdft, in_nb_samples, ac, lpc_order);
         order = fn(do_lpc)(ac, lpc, lpc_order);
-        fn(extrapolate)(rdft0o, copy_samples, extra_samples, lpc, order, 0);
+        fn(extrapolate)(rdft, in_nb_samples, in_nb_samples, lpc, order, 0);
+        memcpy(last, rdft+in_nb_samples + pad_samples, copy_samples * sizeof(*rdft));
+        memset(last+copy_samples, 0, pad_samples * sizeof(*last));
+        memmove(rdft0o, rdft + pad_samples, in_nb_samples * sizeof(*rdft0o));
+        memset(rdft, 0, in_offset * sizeof(*rdft));
+        memset(rdft0o+in_nb_samples, 0, in_offset * sizeof(*rdft0o));
 
         stc->done_stop = 1;
+    } else {
+        const ftype *src = rdft + in_offset;
+        ftype *dst = stc->rdft_in_last;
+
+        memcpy(dst, src, in_nb_samples * sizeof(*dst));
     }
 
     stc->tx_fn(stc->tx_ctx, rdftc, rdft, sizeof(*rdft));
@@ -594,10 +615,63 @@ static int fn(flush)(AVFilterContext *ctx, AVFrame *out, const int ch)
 {
     const int nb_samples = out->nb_samples;
     AudioRDFTSRCContext *s = ctx->priv;
+    fn(StateContext) *state = s->state;
+    fn(StateContext) *stc = &state[ch];
     const int out_nb_samples = s->out_nb_samples;
     ftype *over = s->over;
 
     over += ch * out_nb_samples;
+
+    if (stc->done_stop == 0) {
+        const int tr_nb_samples = s->tr_nb_samples;
+        const int taper_samples = s->taper_samples;
+        const int offset = tr_nb_samples - taper_samples;
+        const int in_offset = s->in_offset;
+        const ttype *taper = s->taper;
+        const ctype *phase = s->phase;
+        ftype *irdft = stc->rdft_out;
+        ftype *rdft = stc->rdft_in;
+        ctype *rdftc = stc->rdft_complex;
+        const int in_nb_samples = s->in_nb_samples;
+        const int lpc_order = FFMIN(64, in_nb_samples/2);
+        ftype *rdft0o = rdft + in_offset;
+        ftype *last = stc->rdft_in_last;
+        double ac[64+1] = { 0 };
+        double lpc[64] = { 0 };
+        int order;
+
+        fn(autocorr)(last, in_nb_samples, ac, lpc_order);
+        order = fn(do_lpc)(ac, lpc, lpc_order);
+        fn(extrapolate)(last, in_nb_samples, in_offset, lpc, order, 0);
+        memcpy(rdft0o, last + in_nb_samples, in_nb_samples * sizeof(*rdft0o));
+
+        stc->tx_fn(stc->tx_ctx, rdftc, rdft, sizeof(*rdft));
+
+        memset(rdftc + tr_nb_samples, 0, (s->out_rdft_size / 2 + 1 - tr_nb_samples) * sizeof(*rdftc));
+
+        if (s->phaset != F(0.0)) {
+            for (int n = 0; n < tr_nb_samples; n++) {
+                const ftype re = rdftc[n].re;
+                const ftype im = rdftc[n].im;
+                const ftype cre = phase[n].re;
+                const ftype cim = phase[n].im;
+
+                rdftc[n].re = re * cre - im * cim;
+                rdftc[n].im = re * cim + im * cre;
+            }
+        }
+
+        for (int n = 0, m = offset; n < taper_samples; n++, m++) {
+            rdftc[m].re *= taper[n].re;
+            rdftc[m].im *= taper[n].im;
+        }
+
+        stc->itx_fn(stc->itx_ctx, irdft, rdftc, sizeof(*rdftc));
+
+        for (int n = 0; n < nb_samples; n++)
+            over[n] += irdft[n];
+    }
+
     if (s->out_planar) {
         if (s->out_depth == 8) {
             uint8_t *dst = ((uint8_t *)out->extended_data[ch]);
