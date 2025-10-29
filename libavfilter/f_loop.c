@@ -334,27 +334,28 @@ static void free_frames(AVFilterContext *ctx)
 {
     LoopContext *s = ctx->priv;
 
-    for (int i = 0; i < s->nb_frames; i++)
-        ff_graph_frame_free(ctx, &s->frames[i]);
+    if (s->frames) {
+        for (int i = 0; i < s->nb_frames; i++)
+            av_frame_free(&s->frames[i]);
+        av_freep(&s->frames);
+    }
+    s->nb_frames = 0;
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
-    LoopContext *s = ctx->priv;
-
     free_frames(ctx);
-    av_freep(&s->frames);
-    s->nb_frames = 0;
 }
 
 static int push_frame(AVFilterContext *ctx)
 {
     AVFilterLink *outlink = ctx->outputs[0];
     LoopContext *s = ctx->priv;
-    AVFrame *out;
+    AVFrame *out = NULL;
     int ret;
 
-    out = av_frame_clone(s->frames[s->current_frame]);
+    if (s->frames[s->current_frame])
+        out = ff_graph_frame_clone(ctx, s->frames[s->current_frame]);
     if (!out)
         return AVERROR(ENOMEM);
     out->pts += s->pts_offset;
@@ -389,7 +390,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
           frame->pts >= s->time_pts)) &&
         s->size > 0 && s->loop != 0) {
         if (s->nb_frames < s->size) {
-            s->frames[s->nb_frames] = av_frame_clone(frame);
+            s->frames[s->nb_frames] = ff_graph_frame_clone(ctx, frame);
             if (!s->frames[s->nb_frames]) {
                 av_frame_free(&frame);
                 return AVERROR(ENOMEM);
