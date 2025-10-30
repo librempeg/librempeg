@@ -26,7 +26,7 @@
 #include "internal.h"
 #include "pcm.h"
 
-static int wiibgm_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "WiiBGM\0\0", 8))
         return 0;
@@ -43,46 +43,46 @@ static int wiibgm_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int wiibgm_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
+    int ret, channels, rate;
     uint32_t loop_start;
+    int64_t duration;
     AVStream *st;
-    int ret;
 
     avio_skip(pb, 0x10);
+    duration = avio_rb32(pb);
+    loop_start = avio_rb32(pb);
+    avio_skip(pb, 8);
+    channels = avio_rb32(pb);
+    rate = avio_rb32(pb);
+    if (channels <= 0 || rate <= 0 || channels > INT_MAX/8)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
     st->start_time = 0;
+    st->duration = duration;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP_SI1;
+    st->codecpar->ch_layout.nb_channels = channels;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->block_align = 8 * channels;
 
-    st->duration = avio_rb32(pb);
-    loop_start = avio_rb32(pb);
     if (loop_start > 0)
         av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
-    avio_skip(pb, 8);
-    st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
-    if (st->codecpar->ch_layout.nb_channels <= 0 ||
-        st->codecpar->ch_layout.nb_channels > INT_MAX/8)
-        return AVERROR_INVALIDDATA;
 
-    st->codecpar->sample_rate = avio_rb32(pb);
-    if (st->codecpar->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
-
-    st->codecpar->block_align = 8 * st->codecpar->ch_layout.nb_channels;
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
-    ret = ff_alloc_extradata(st->codecpar, 0x20 * st->codecpar->ch_layout.nb_channels);
+    ret = ff_alloc_extradata(st->codecpar, 32 * channels);
     if (ret < 0)
         return ret;
 
     avio_skip(pb, 0x34);
-    for (int c = 0; c < st->codecpar->ch_layout.nb_channels; c++) {
+    for (int c = 0; c < channels; c++) {
         avio_read(pb, st->codecpar->extradata + 0x20 * c, 0x20);
         avio_skip(pb, 0x40);
     }
@@ -97,7 +97,7 @@ const FFInputFormat ff_wiibgm_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("WiiBGM (Koei Tecmo)"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "dsp,wiibgm",
-    .read_probe     = wiibgm_probe,
-    .read_header    = wiibgm_read_header,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
 };
