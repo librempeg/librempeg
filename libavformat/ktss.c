@@ -161,7 +161,7 @@ static int ktss_read_header(AVFormatContext *s)
             st->codecpar->ch_layout.u.map[5].id = AV_CHAN_BACK_RIGHT;
         }
 
-        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
         break;
     default:
         avpriv_request_sample(st, "format 0x%X", format);
@@ -184,7 +184,7 @@ static int ktss_read_packet(AVFormatContext *s, AVPacket *pkt)
         int64_t pos = avio_tell(pb);
         uint32_t size;
 
-        if (avio_feof(pb) || pos >= kc->data_end)
+        if (avio_feof(pb) || pos >= kc->data_end - 8)
             return AVERROR_EOF;
 
         size = avio_rb32(pb);
