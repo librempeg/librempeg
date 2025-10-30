@@ -70,8 +70,11 @@ static int read_header(AVFormatContext *s)
 
     for (int ch = 0; ch < par->ch_layout.nb_channels; ch++) {
         if (ch == 0) {
+            int64_t nibbles;
+
             avio_skip(pb, 8);
-            st->duration = avio_rb32(pb);
+            nibbles = avio_rb32(pb);
+            st->duration = nibbles/16*14 + (nibbles%16)-1;
             avio_skip(pb, 4);
         } else {
             avio_skip(pb, 16);
@@ -91,12 +94,12 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     int64_t pos;
     int size, ret;
 
-    if (avio_feof(pb))
-        return AVERROR_EOF;
-
     pos = avio_tell(pb);
     size = avio_rb32(pb);
     avio_skip(pb, 28);
+    if (avio_feof(pb))
+        return AVERROR_EOF;
+
     if (size <= 0 || size > INT_MAX)
         return AVERROR_INVALIDDATA;
 
