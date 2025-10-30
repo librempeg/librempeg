@@ -38,6 +38,8 @@ typedef struct G1LStream {
     int64_t stop_offset;
 
     AVFormatContext *xctx;
+    AVFormatContext *parent;
+    FFIOContext apb;
 } G1LStream;
 
 static int g1l_probe(const AVProbeData *p)
@@ -47,6 +49,24 @@ static int g1l_probe(const AVProbeData *p)
     if (memcmp(p->buf + 4, "0000", 4))
         return 0;
     return AVPROBE_SCORE_MAX;
+}
+
+static int read_data(void *opaque, uint8_t *buf, int buf_size)
+{
+    G1LStream *gst = opaque;
+    AVFormatContext *s = gst->parent;
+    AVIOContext *pb = s->pb;
+
+    return avio_read(pb, buf, buf_size);
+}
+
+static int64_t seek_data(void *opaque, int64_t offset, int whence)
+{
+    G1LStream *gst = opaque;
+    AVFormatContext *s = gst->parent;
+    AVIOContext *pb = s->pb;
+
+    return avio_seek(pb, offset + gst->start_offset, whence);
 }
 
 static av_always_inline unsigned int read32(AVFormatContext *s)
@@ -72,14 +92,10 @@ static int sort_streams(const void *a, const void *b)
 
 static int g1l_read_header(AVFormatContext *s)
 {
-    extern const FFInputFormat ff_kvs_demuxer;
-    extern const FFInputFormat ff_wav_demuxer;
-    extern const FFInputFormat ff_ktss_demuxer;
-    extern const FFInputFormat ff_wiibgm_demuxer;
-    uint32_t bom, format, nb_streams;
     G1LDemuxContext *g = s->priv_data;
     AVIOContext *pb = s->pb;
-    int ret;
+    uint32_t bom, format;
+    int ret, nb_streams;
 
     bom = avio_rb32(pb);
     if (bom == MKTAG('G','1','L','_'))
@@ -146,14 +162,17 @@ static int g1l_read_header(AVFormatContext *s)
             return ret;
         }
 
+        ffio_init_context(&gst->apb, NULL, 0, 0, gst,
+                          read_data, NULL, seek_data);
+
         gst->xctx->flags = AVFMT_FLAG_CUSTOM_IO | AVFMT_FLAG_GENPTS;
-        gst->xctx->ctx_flags |= AVFMTCTX_UNSEEKABLE;
         gst->xctx->probesize = 0;
         gst->xctx->max_analyze_duration = 0;
         gst->xctx->interrupt_callback = s->interrupt_callback;
-        gst->xctx->pb = pb;
+        gst->xctx->pb = &gst->apb.pub;
         gst->xctx->io_open = NULL;
-        gst->xctx->skip_initial_bytes = gst->start_offset;
+        gst->xctx->skip_initial_bytes = 0;
+        gst->parent = s;
 
         avio_seek(pb, gst->start_offset, SEEK_SET);
 
@@ -164,27 +183,18 @@ static int g1l_read_header(AVFormatContext *s)
             avio_skip(pb, 40);
             size = avio_rl32(pb);
             gst->start_offset += size;
-            gst->xctx->skip_initial_bytes = gst->start_offset;
-            avio_seek(pb, 0, SEEK_SET);
-        } else {
-            avio_seek(pb, 0, SEEK_SET);
         }
+        avio_seek(pb, gst->start_offset, SEEK_SET);
 
         switch (format) {
         case 0x00: /* KOVS (OGG) Romance of the Three Kingdoms XIII (PC) */
         case 0x0A: /* KOVS (OGG) Dragon Quest Heroes (PC), Bladestorm (PC) */
-            ret = avformat_open_input(&gst->xctx, "", &ff_kvs_demuxer.p, NULL);
-            break;
         case 0x01: /* RIFF (ATRAC3P) One Piece Pirate Warriors 2 (PS3) */
         case 0x06: /* RIFF (ATRAC9) One Piece Pirate Warriors 3 (Vita) */
-            ret = avformat_open_input(&gst->xctx, "", &ff_wav_demuxer.p, NULL);
-            break;
         case 0x05: /* KTSS (DSP ADPCM) Shingeki no Kyojin - Shichi-Kara no Dasshutsu (3DS) */
         case 0x10: /* KTSS (OPUS) Dead Or Alive Xtreme 3 Scarlet (Switch) */
-            ret = avformat_open_input(&gst->xctx, "", &ff_ktss_demuxer.p, NULL);
-            break;
         case 0x09: /* WiiBGM (DSP ADPCM) Hyrule Warriors (Wii U) */
-            ret = avformat_open_input(&gst->xctx, "", &ff_wiibgm_demuxer.p, NULL);
+            ret = avformat_open_input(&gst->xctx, "", NULL, NULL);
             break;
         default:
             avpriv_request_sample(st, "format 0x%X", format);
@@ -212,16 +222,16 @@ static int g1l_read_header(AVFormatContext *s)
             return ret;
 
         ffstream(st)->request_probe = 0;
-        ffstream(st)->need_parsing = AVSTREAM_PARSE_HEADERS;
+        ffstream(st)->need_parsing = ffstream(gst->xctx->streams[0])->need_parsing;
 
-        gst->data_offset = avio_tell(gst->xctx->pb);
+        gst->data_offset = avio_tell(pb);
     }
 
     {
         AVStream *st = s->streams[0];
         G1LStream *gst = st->priv_data;
 
-        avio_seek(gst->xctx->pb, gst->data_offset + gst->start_offset, SEEK_SET);
+        avio_seek(pb, gst->data_offset, SEEK_SET);
     }
 
     return 0;
@@ -246,9 +256,9 @@ redo:
     st = s->streams[g->current_stream];
     gst = st->priv_data;
     if (do_seek)
-        avio_seek(gst->xctx->pb, gst->data_offset + gst->start_offset, SEEK_SET);
+        avio_seek(pb, gst->data_offset, SEEK_SET);
 
-    if (avio_tell(gst->xctx->pb) >= gst->stop_offset) {
+    if (avio_tell(pb) >= gst->stop_offset) {
         do_seek = 1;
         g->current_stream++;
         goto redo;
