@@ -30,8 +30,6 @@ static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "WiiBGM\0\0", 8))
         return 0;
-    if (AV_RB32(p->buf + 4) != 0x474D0000)
-        return 0;
 
     if (p->buf_size < 40)
         return 0;
