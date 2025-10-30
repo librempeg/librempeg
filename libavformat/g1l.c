@@ -225,6 +225,8 @@ static int g1l_read_header(AVFormatContext *s)
         ffstream(st)->need_parsing = ffstream(gst->xctx->streams[0])->need_parsing;
 
         gst->data_offset = avio_tell(pb);
+        if (gst->data_offset > gst->stop_offset)
+            gst->data_offset = gst->stop_offset;
     }
 
     {
@@ -242,7 +244,6 @@ static int g1l_read_packet(AVFormatContext *s, AVPacket *pkt)
     G1LDemuxContext *g = s->priv_data;
     AVIOContext *pb = s->pb;
     int ret = AVERROR_EOF;
-    int do_seek = 0;
     G1LStream *gst;
     AVStream *st;
 
@@ -255,20 +256,29 @@ redo:
 
     st = s->streams[g->current_stream];
     gst = st->priv_data;
-    if (do_seek)
-        avio_seek(pb, gst->data_offset, SEEK_SET);
 
     if (avio_tell(pb) >= gst->stop_offset) {
-        do_seek = 1;
-        g->current_stream++;
-        goto redo;
+        if (g->current_stream+1 < s->nb_streams) {
+            g->current_stream++;
+            st = s->streams[g->current_stream];
+            gst = st->priv_data;
+
+            avio_seek(pb, gst->data_offset, SEEK_SET);
+            goto redo;
+        }
     }
 
     ret = av_read_frame(gst->xctx, pkt);
     pkt->stream_index = st->index;
     if (ret == AVERROR_EOF) {
-        g->current_stream++;
-        goto redo;
+        if (g->current_stream+1 < s->nb_streams) {
+            g->current_stream++;
+            st = s->streams[g->current_stream];
+            gst = st->priv_data;
+
+            avio_seek(pb, gst->data_offset, SEEK_SET);
+            goto redo;
+        }
     }
 
     return ret;
