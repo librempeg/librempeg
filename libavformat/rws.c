@@ -220,7 +220,7 @@ static int read_header(AVFormatContext *s)
 
     for (int i = 0; i < total_layers; i++) {
         int codec, sample_rate, channels;
-        int64_t coefs_offset;
+        int64_t coefs_offset, duration = 0;
 
         avio_seek(pb, offset, SEEK_SET);
 
@@ -235,6 +235,7 @@ static int read_header(AVFormatContext *s)
         offset += 0x2c;
 
         if (codec == 0xF86215B0) {
+            duration = avio_r32(pb);
             coefs_offset = offset + 0x1c;
             offset += 0x60;
         }
@@ -247,6 +248,7 @@ static int read_header(AVFormatContext *s)
             st = s->streams[sti];
             rst = st->priv_data;
             st->start_time = 0;
+            st->duration = duration;
             st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
             st->codecpar->sample_rate = sample_rate;
             st->codecpar->ch_layout.nb_channels = channels;
