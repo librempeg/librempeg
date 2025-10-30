@@ -24,7 +24,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int halpst_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, " HALPST\0", 8))
         return 0;
@@ -41,27 +41,28 @@ static int halpst_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int halpst_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
+    int ret, channels, rate;
     AVIOContext *pb = s->pb;
     AVCodecParameters *par;
     AVStream *st;
-    int ret;
+
+    avio_skip(pb, 8);
+    rate = avio_rb32(pb);
+    channels = avio_rb32(pb);
+    if (rate <= 0 || channels <= 0)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(pb, 8);
     par = st->codecpar;
-
     par->codec_type = AVMEDIA_TYPE_AUDIO;
-    par->codec_id   = AV_CODEC_ID_ADPCM_NDSP;
-    par->sample_rate = avio_rb32(pb);
-    par->ch_layout.nb_channels = avio_rb32(pb);
-    if (par->sample_rate <= 0 ||
-        par->ch_layout.nb_channels <= 0)
-        return AVERROR_INVALIDDATA;
+    par->codec_id = AV_CODEC_ID_ADPCM_NDSP;
+    par->ch_layout.nb_channels = channels;
+    par->sample_rate = rate;
 
     ret = ff_alloc_extradata(par, par->ch_layout.nb_channels * 32);
     if (ret < 0)
@@ -84,7 +85,7 @@ static int halpst_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int halpst_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *pb = s->pb;
     int64_t pos;
@@ -110,8 +111,8 @@ const FFInputFormat ff_halpst_demuxer = {
     .p.name         = "halpst",
     .p.long_name    = NULL_IF_CONFIG_SMALL("HAL Labs"),
     .p.extensions   = "hps",
-    .read_probe     = halpst_probe,
-    .read_header    = halpst_read_header,
-    .read_packet    = halpst_read_packet,
     .p.flags        = AVFMT_GENERIC_INDEX,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
