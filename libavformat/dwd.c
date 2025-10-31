@@ -24,7 +24,7 @@
 #include "internal.h"
 #include "pcm.h"
 
-static int dwd_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "DiamondWare Digitized\n\0\x1a", 24))
         return 0;
@@ -47,37 +47,39 @@ static int dwd_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int dwd_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVCodecParameters *par;
     AVIOContext *pb = s->pb;
+    int rate, bps, channels;
+    int64_t duration;
     AVStream *st;
-
-    st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
 
     avio_skip(pb, 31);
     if (avio_r8(pb))
         return AVERROR_PATCHWELCOME;
 
+    rate = avio_rl16(pb);
+    channels = avio_r8(pb);
+    bps = avio_r8(pb);
+    avio_skip(pb, 6);
+    duration = avio_rl32(pb);
+    if (rate <= 0 || channels == 0 || bps == 0)
+        return AVERROR_INVALIDDATA;
+
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
+
     par = st->codecpar;
     st->start_time = 0;
-    par->sample_rate = avio_rl16(pb);
-    if (par->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
+    par->sample_rate = rate;
     par->codec_type = AVMEDIA_TYPE_AUDIO;
-    par->ch_layout.nb_channels = avio_r8(pb);
-    if (par->ch_layout.nb_channels == 0)
-        return AVERROR_INVALIDDATA;
-    par->bits_per_coded_sample = avio_r8(pb);
-    if (par->bits_per_coded_sample == 0)
-        return AVERROR_INVALIDDATA;
-    par->codec_id = (par->bits_per_coded_sample > 8) ? AV_CODEC_ID_PCM_S16LE : AV_CODEC_ID_PCM_S8;
-    avio_skip(pb, 2);
-    par->block_align = par->ch_layout.nb_channels * ((par->bits_per_coded_sample + 7) / 8);
-    avio_skip(pb, 4);
-    st->duration = avio_rl32(pb);
+    par->ch_layout.nb_channels = channels;
+    par->bits_per_coded_sample = bps;
+    par->codec_id = (bps > 8) ? AV_CODEC_ID_PCM_S16LE : AV_CODEC_ID_PCM_S8;
+    par->block_align = channels * ((bps + 7) / 8);
+    st->duration = duration;
 
     avio_seek(pb, avio_rl32(pb), SEEK_SET);
 
@@ -90,8 +92,8 @@ const FFInputFormat ff_dwd_demuxer = {
     .p.name         = "dwd",
     .p.long_name    = NULL_IF_CONFIG_SMALL("DWD (DiamondWare Digitized)"),
     .p.extensions   = "dwd",
-    .read_probe     = dwd_probe,
-    .read_header    = dwd_read_header,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
     .read_seek      = ff_pcm_read_seek,
 };
