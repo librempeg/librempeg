@@ -26,6 +26,9 @@
 
 static int read_probe(const AVProbeData *p)
 {
+    if (p->buf_size < 24)
+        return 0;
+
     if (memcmp(p->buf, "DiamondWare Digitized\n\0\x1a", 24))
         return 0;
 
