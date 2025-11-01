@@ -48,7 +48,7 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int codec, nb_channels, rate;
+    int codec, nb_channels, rate, align, bps;
     AVIOContext *pb = s->pb;
     int64_t duration;
     AVStream *st;
@@ -59,33 +59,36 @@ static int read_header(AVFormatContext *s)
     nb_channels = avio_rl32(pb);
     rate = avio_rl32(pb);
 
-    if (rate <= 0 || nb_channels <= 0)
+    switch (codec) {
+    case 0:
+        codec = AV_CODEC_ID_ADPCM_PSX;
+        align = 0x800;
+        break;
+    case 2:
+        bps = 4;
+        codec = AV_CODEC_ID_ADPCM_IMA_XBOX;
+        align = 0x24;
+        break;
+    default:
+        avpriv_request_sample(s, "codec 0x%X", codec);
+        return AVERROR_PATCHWELCOME;
+    }
+
+    if (rate <= 0 || nb_channels <= 0 || align > INT_MAX/nb_channels)
         return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->ch_layout.nb_channels = nb_channels;
-    st->codecpar->sample_rate = rate;
-    st->duration = duration;
     st->start_time = 0;
-
-    switch (codec) {
-    case 0:
-        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX;
-        st->codecpar->block_align = 0x800 * st->codecpar->ch_layout.nb_channels;
-        break;
-    case 2:
-        st->codecpar->bits_per_coded_sample = 4;
-        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_XBOX;
-        st->codecpar->block_align = 0x24 * st->codecpar->ch_layout.nb_channels;
-        break;
-    default:
-        avpriv_request_sample(s, "codec 0x%X", codec);
-        return AVERROR_PATCHWELCOME;
-    }
+    st->duration = duration;
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id = codec;
+    st->codecpar->ch_layout.nb_channels = nb_channels;
+    st->codecpar->block_align = align * nb_channels;
+    st->codecpar->bits_per_coded_sample = bps;
+    st->codecpar->sample_rate = rate;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
