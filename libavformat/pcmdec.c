@@ -121,7 +121,7 @@ const FFInputFormat ff_pcm_ ## name_ ## _demuxer = {        \
     .p.name         = #name_,                               \
     .p.long_name    = NULL_IF_CONFIG_SMALL(long_name_),     \
     .p.flags        = AVFMT_GENERIC_INDEX,                  \
-    .p.extensions   = ext,                                  \
+    .p.extensions   = (ext) ? #name_ "," ext : #name_,      \
     .p.priv_class   = &pcm_demuxer_class,                   \
     .priv_data_size = sizeof(PCMAudioDemuxerContext),       \
     .read_header    = pcm_read_header,                      \
@@ -140,25 +140,25 @@ const FFInputFormat ff_pcm_ ## name_ ## _demuxer = {        \
 #define PCMDEF(name, long_name, ext, uppercase)             \
     PCMDEF_EXT(name, long_name, ext, uppercase, )
 
-PCMDEF(f64be, "PCM 64-bit floating-point big-endian",           NULL, F64BE)
-PCMDEF(f64le, "PCM 64-bit floating-point little-endian",        NULL, F64LE)
-PCMDEF(f32be, "PCM 32-bit floating-point big-endian",           NULL, F32BE)
-PCMDEF(f32le, "PCM 32-bit floating-point little-endian",        NULL, F32LE)
-PCMDEF(s32be, "PCM signed 32-bit big-endian",                   NULL, S32BE)
-PCMDEF(s32le, "PCM signed 32-bit little-endian",                NULL, S32LE)
-PCMDEF(s24be, "PCM signed 24-bit big-endian",                   NULL, S24BE)
-PCMDEF(s24le, "PCM signed 24-bit little-endian",                NULL, S24LE)
+PCMDEF(f64be, "PCM 64-bit floating-point big-endian",    AV_NE("f64", NULL), F64BE)
+PCMDEF(f64le, "PCM 64-bit floating-point little-endian", AV_NE(NULL, "f64"), F64LE)
+PCMDEF(f32be, "PCM 32-bit floating-point big-endian",    AV_NE("f32", NULL), F32BE)
+PCMDEF(f32le, "PCM 32-bit floating-point little-endian", AV_NE(NULL, "f32"), F32LE)
+PCMDEF(s32be, "PCM signed 32-bit big-endian",      AV_NE("s32", NULL),S32BE)
+PCMDEF(s32le, "PCM signed 32-bit little-endian",   AV_NE(NULL, "s32"),S32LE)
+PCMDEF(s24be, "PCM signed 24-bit big-endian",      AV_NE("s24", NULL),S24BE)
+PCMDEF(s24le, "PCM signed 24-bit little-endian",   AV_NE(NULL, "s24"),S24LE)
 PCMDEF_EXT(s16be, "PCM signed 16-bit big-endian",
-           AV_NE("sw", NULL), S16BE, .p.mime_type = "audio/L16")
-PCMDEF(s16le, "PCM signed 16-bit little-endian",   AV_NE(NULL, "sw"), S16LE)
-PCMDEF(s8,    "PCM signed 8-bit",                               "sb",    S8)
-PCMDEF(u32be, "PCM unsigned 32-bit big-endian",                 NULL, U32BE)
-PCMDEF(u32le, "PCM unsigned 32-bit little-endian",              NULL, U32LE)
-PCMDEF(u24be, "PCM unsigned 24-bit big-endian",                 NULL, U24BE)
-PCMDEF(u24le, "PCM unsigned 24-bit little-endian",              NULL, U24LE)
-PCMDEF(u16be, "PCM unsigned 16-bit big-endian",    AV_NE("uw", NULL), U16BE)
-PCMDEF(u16le, "PCM unsigned 16-bit little-endian", AV_NE(NULL, "uw"), U16LE)
-PCMDEF(u8,    "PCM unsigned 8-bit",                             "ub",    U8)
+           AV_NE("sw,s16", NULL), S16BE, .p.mime_type = "audio/L16")
+PCMDEF(s16le, "PCM signed 16-bit little-endian",   AV_NE(NULL, "sw,s16"),S16LE)
+PCMDEF(s8,    "PCM signed 8-bit",                              "sb,s8",  S8)
+PCMDEF(u32be, "PCM unsigned 32-bit big-endian",    AV_NE("u32", NULL),U32BE)
+PCMDEF(u32le, "PCM unsigned 32-bit little-endian", AV_NE(NULL, "u32"),U32LE)
+PCMDEF(u24be, "PCM unsigned 24-bit big-endian",    AV_NE("u24", NULL),U24BE)
+PCMDEF(u24le, "PCM unsigned 24-bit little-endian", AV_NE(NULL, "u24"),U24LE)
+PCMDEF(u16be, "PCM unsigned 16-bit big-endian",    AV_NE("uw,u16", NULL),U16BE)
+PCMDEF(u16le, "PCM unsigned 16-bit little-endian", AV_NE(NULL, "uw,u16"),U16LE)
+PCMDEF(u8,    "PCM unsigned 8-bit",                             "ub,u8", U8)
 PCMDEF(alaw,  "PCM A-law",                                      "al",  ALAW)
 PCMDEF(mulaw, "PCM mu-law",                                     "ul", MULAW)
 PCMDEF(vidc,  "PCM Archimedes VIDC",                            NULL,  VIDC)
