@@ -154,22 +154,22 @@ static int adx_read_header(AVFormatContext *s)
 
     enc = par->extradata[19];
     if (enc == 8 || enc == 9) {
+#define MAX_NB_FRAMES 512
         uint16_t xor_start, xor_mult, xor_add;
         int64_t pos = avio_tell(pb);
-        uint16_t prescales[16];
-        uint16_t scales[16];
+        uint16_t scales[MAX_NB_FRAMES] = { 0 };
+        int nb_scales = 0;
 
-        for (int i = 0; i < 16; i++) {
-            prescales[i] = avio_rb16(pb);
-            avio_skip(pb, BLOCK_SIZE-2);
-        }
-
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < MAX_NB_FRAMES; i++) {
+            if (avio_feof(pb))
+                break;
             scales[i] = avio_rb16(pb);
             avio_skip(pb, BLOCK_SIZE-2);
+            nb_scales++;
         }
 
-        ret = ff_adx_find_key(enc, prescales, 16, scales, 16,
+        ret = ff_adx_find_key(enc, scales, nb_scales/2,
+                              scales + nb_scales/2, nb_scales - nb_scales/2,
                               &xor_start, &xor_mult, &xor_add, 0);
         if (ret != 1) {
             av_log(s, AV_LOG_ERROR, "No valid keys found.\n");
