@@ -130,16 +130,17 @@ static int read_header(AVFormatContext *s)
 
         avio_read(pb, st->codecpar->extradata, 32);
         avio_skip(pb, 16);
-        if (channels == 2) {
+        if (channels >= 2) {
             int64_t align;
 
-            avio_skip(pb, 20);
+            avio_skip(pb, 4);
             align = avio_rb32(pb);
-            st->codecpar->block_align = (align / 16 * 8 - sst->start_offset) * 2;
+            align -= sst->start_offset;
+            st->codecpar->block_align = (align / 16 * 8) * channels;
             if (st->codecpar->block_align <= 0)
                 return AVERROR_INVALIDDATA;
+            avio_skip(pb, 24);
             avio_read(pb, st->codecpar->extradata+32, 32);
-            avio_skip(pb, 8);
         } else {
             st->codecpar->block_align = 1024;
         }
