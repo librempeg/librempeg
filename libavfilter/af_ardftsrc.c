@@ -56,6 +56,7 @@ typedef struct AudioRDFTSRCContext {
     int64_t delay;
     int64_t last_in_pts;
     int64_t last_out_pts;
+    int pad_size;
     int trim_size;
     int flush_size;
     int64_t first_pts;
@@ -373,11 +374,8 @@ static int filter_frame(AVFilterLink *inlink)
         return ff_filter_frame(outlink, in);
     }
 
-    if (s->eof_in_pts == s->last_in_pts) {
-        const int pad = FFMAX(0, FFMIN(s->flush_size, s->in_nb_samples - in->nb_samples));
-
-        in_samples = in->nb_samples + pad;
-        s->flush_size -= av_rescale(pad, s->in_nb_samples, s->out_nb_samples);
+    if (s->pad_size > 0) {
+        in_samples = in->nb_samples + s->pad_size;
     } else {
         in_samples = in->nb_samples;
     }
@@ -488,6 +486,7 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
     AudioRDFTSRCContext       *s_dst = dst->priv;
 
     s_dst->last_out_pts = FFMAX(s_dst->last_out_pts, s_src->last_out_pts);
+    s_dst->last_in_pts = FFMAX(s_dst->last_in_pts, s_src->last_in_pts);
     s_dst->eof_out_pts = FFMAX(s_dst->eof_out_pts, s_src->eof_out_pts);
     s_dst->eof_in_pts = FFMAX(s_dst->eof_in_pts, s_src->eof_in_pts);
     s_dst->flush_size = FFMIN(s_dst->flush_size, s_src->flush_size);
@@ -498,7 +497,6 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
         return 0;
 
     s_dst->out = s_src->out;
-    s_dst->last_in_pts = s_src->last_in_pts;
     s_dst->eof = s_src->eof;
     s_dst->first_pts = s_src->first_pts;
     s_dst->pass = s_src->pass;
@@ -546,11 +544,6 @@ static int filter_prepare(AVFilterContext *ctx)
     int64_t pts;
 
     av_frame_free(&s->in);
-
-    if (s->done_flush || s->status) {
-        ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_out_pts);
-        return AVERROR_EOF;
-    }
 
     ret = ff_outlink_get_status(outlink);
     if (ret) {
@@ -608,6 +601,10 @@ static int filter_prepare(AVFilterContext *ctx)
             s->first_pts = in->pts;
         s->in = in;
         s->last_in_pts = in->pts + in->duration;
+        if (s->eof_in_pts == s->last_in_pts) {
+            s->pad_size = FFMAX(0, FFMIN(s->in_offset, s->in_nb_samples - in->nb_samples));
+            s->flush_size -= av_rescale(s->pad_size, s->out_nb_samples, s->in_nb_samples);
+        }
 
 #if CONFIG_AVFILTER_THREAD_FRAME
         if (ctx->thread_type & AVFILTER_THREAD_FRAME_FILTER) {
