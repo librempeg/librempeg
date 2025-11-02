@@ -590,6 +590,9 @@ static int filter_prepare(AVFilterContext *ctx)
             s->status = status;
             s->eof_in_pts = pts;
             s->eof_out_pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
+
+            if (ret == 0)
+                ff_filter_set_ready(ctx, 10);
         }
     }
 
