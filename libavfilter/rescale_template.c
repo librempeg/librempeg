@@ -165,6 +165,12 @@ static int fn(rescale_slice_linear)(AVFilterContext *ctx, void *arg, int jobnr, 
             const im_type ffracy = IFACTOR-fracy;
             inc_type isx = 0;
 
+            if (dst_cw == src_cw && dst_ch == src_ch) {
+                memcpy(dst_data, src_data, dst_cw * sizeof(*dst_data));
+                isy += h_inc;
+                continue;
+            }
+
             for (int x = 0; x < dst_cw; x++) {
                 const int sx = SH(isx);
                 const int o = (sx+1)<src_cw;
