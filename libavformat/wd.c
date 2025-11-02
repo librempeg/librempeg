@@ -63,6 +63,13 @@ static int sort_streams(const void *a, const void *b)
     return FFDIFFSIGN(ws1->start_offset, ws2->start_offset);
 }
 
+static int key_to_rate(int key, int base_rate)
+{
+    int sample_rate = lrint(base_rate * pow(2.0, key / (double)0x1000000 / 12.0));
+
+    return FFMIN(sample_rate, base_rate);
+}
+
 static int read_header(AVFormatContext *s)
 {
     int64_t first_entry_offset, data_offset, start_offset;
@@ -95,6 +102,7 @@ static int read_header(AVFormatContext *s)
         const int64_t single_entry_size = 0x60;
         WDStream *wst;
         AVStream *st;
+        int key;
 
         avio_seek(pb, first_entry_offset + single_entry_size * si, SEEK_SET);
 
@@ -115,14 +123,15 @@ static int read_header(AVFormatContext *s)
         avio_skip(pb, 8);
         wst->stop_offset = avio_rb32(pb);
         wst->stop_offset += wst->start_offset;
-        avio_skip(pb, 14);
+        key = avio_rb32(pb);
+        avio_skip(pb, 10);
 
         st->start_time = 0;
         st->duration = (wst->stop_offset - wst->start_offset) / 8 * 14;
         st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
         st->codecpar->ch_layout.nb_channels = 1;
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP;
-        st->codecpar->sample_rate = 22050;
+        st->codecpar->sample_rate = key_to_rate(key, 32000);
         st->codecpar->block_align = 512;
 
         if ((ret = ff_get_extradata(s, st->codecpar, pb, 32)) < 0)
