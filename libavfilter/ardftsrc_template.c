@@ -109,6 +109,7 @@ typedef struct fn(StateContext) {
 
     int done_start;
     int done_stop;
+    int64_t last_in_pts;
 
     ftype error;
 
@@ -450,6 +451,15 @@ static void fn(extrapolate)(ftype *data0, const size_t N,
     }
 }
 
+static int64_t fn(last_in_pts)(AVFilterContext *ctx)
+{
+    AudioRDFTSRCContext *s = ctx->priv;
+    fn(StateContext) *state = s->state;
+    fn(StateContext) *stc = &state[0];
+
+    return stc->last_in_pts;
+}
+
 static int fn(src_in)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
                       const int ch, const int soffset, const int doffset)
 {
@@ -472,6 +482,8 @@ static int fn(src_in)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const int write_samples = FFMIN(out_nb_samples, out->nb_samples - doffset);
     const ttype *taper = s->taper;
     const ctype *phase = s->phase;
+
+    stc->last_in_pts = in->pts + in->duration;
 
     oover += s->out_nb_samples * ch;
 

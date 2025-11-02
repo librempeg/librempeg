@@ -76,6 +76,8 @@ typedef struct AudioRDFTSRCContext {
 
     void *state;
 
+    int64_t (*last_in_pts_fn)(AVFilterContext *ctx);
+
     int (*flush_src)(AVFilterContext *ctx, AVFrame *out, const int ch);
 
     int (*do_src_in)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int ch,
@@ -216,6 +218,7 @@ static int config_input(AVFilterLink *inlink)
     switch (inlink->format) {
     case AV_SAMPLE_FMT_U8:
     case AV_SAMPLE_FMT_U8P:
+        s->last_in_pts_fn = last_in_pts_u8p;
         s->flush_src = flush_u8p;
         s->do_src_in = src_in_u8p;
         s->do_src_out = src_out_u8p;
@@ -225,6 +228,7 @@ static int config_input(AVFilterLink *inlink)
         break;
     case AV_SAMPLE_FMT_S16:
     case AV_SAMPLE_FMT_S16P:
+        s->last_in_pts_fn = last_in_pts_s16p;
         s->flush_src = flush_s16p;
         s->do_src_in = src_in_s16p;
         s->do_src_out = src_out_s16p;
@@ -234,6 +238,7 @@ static int config_input(AVFilterLink *inlink)
         break;
     case AV_SAMPLE_FMT_S32:
     case AV_SAMPLE_FMT_S32P:
+        s->last_in_pts_fn = last_in_pts_s32p;
         s->flush_src = flush_s32p;
         s->do_src_in = src_in_s32p;
         s->do_src_out = src_out_s32p;
@@ -243,6 +248,7 @@ static int config_input(AVFilterLink *inlink)
         break;
     case AV_SAMPLE_FMT_FLT:
     case AV_SAMPLE_FMT_FLTP:
+        s->last_in_pts_fn = last_in_pts_fltp;
         s->flush_src = flush_fltp;
         s->do_src_in = src_in_fltp;
         s->do_src_out = src_out_fltp;
@@ -252,6 +258,7 @@ static int config_input(AVFilterLink *inlink)
         break;
     case AV_SAMPLE_FMT_DBL:
     case AV_SAMPLE_FMT_DBLP:
+        s->last_in_pts_fn = last_in_pts_dblp;
         s->flush_src = flush_dblp;
         s->do_src_in = src_in_dblp;
         s->do_src_out = src_out_dblp;
@@ -361,7 +368,7 @@ static int filter_frame(AVFilterLink *inlink)
     if (in == NULL) {
         if (s->flush_size > 0 && !s->done_flush &&
             s->eof_in_pts != AV_NOPTS_VALUE &&
-            s->last_in_pts >= s->eof_in_pts) {
+            s->last_in_pts_fn(ctx) >= s->eof_in_pts) {
             flush_frame(outlink);
             return 0;
         }
