@@ -37,7 +37,6 @@ typedef struct AudioRDFTSRCContext {
     int out_planar;
     int out_depth;
     int pass;
-    int eof;
     int done_flush;
     int quality;
     int shape;
@@ -497,7 +496,6 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
         return 0;
 
     s_dst->out = s_src->out;
-    s_dst->eof = s_src->eof;
     s_dst->first_pts = s_src->first_pts;
     s_dst->pass = s_src->pass;
     s_dst->channels = s_src->channels;
@@ -549,7 +547,6 @@ static int filter_prepare(AVFilterContext *ctx)
     if (ret) {
         ff_inlink_set_status(inlink, ret);
         s->eof_out_pts = s->last_out_pts;
-        s->eof = 1;
         ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_out_pts);
         return AVERROR_EOF;
     }
