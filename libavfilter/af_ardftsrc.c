@@ -48,7 +48,6 @@ typedef struct AudioRDFTSRCContext {
     int taper_samples;
     int out_nb_samples;
     int in_offset;
-    int out_offset;
     int channels;
     float bandwidth;
     float phaset;
@@ -196,7 +195,7 @@ static int config_input(AVFilterLink *inlink)
     s->in_planar = av_sample_fmt_is_planar(inlink->format);
     s->in_rdft_size = s->in_nb_samples * 2;
     s->out_rdft_size = s->out_nb_samples * 2;
-    s->flush_size = s->out_offset = s->trim_size = (s->out_rdft_size - s->out_nb_samples) >> 1;
+    s->flush_size = s->trim_size = (s->out_rdft_size - s->out_nb_samples) >> 1;
     s->in_offset = (s->in_rdft_size - s->in_nb_samples) >> 1;
     s->delay = av_rescale_q(s->in_offset, (AVRational){ 1, inlink->sample_rate }, inlink->time_base);
     s->tr_nb_samples = FFMIN(s->in_nb_samples, s->out_nb_samples);
