@@ -504,6 +504,7 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
     s_dst->out = s_src->out;
     s_dst->first_pts = s_src->first_pts;
     s_dst->pass = s_src->pass;
+    s_dst->pad_size = s_src->pad_size;
     s_dst->channels = s_src->channels;
     s_dst->in_nb_samples = s_src->in_nb_samples;
     s_dst->out_nb_samples = s_src->out_nb_samples;
