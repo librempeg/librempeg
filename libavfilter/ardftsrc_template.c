@@ -366,7 +366,7 @@ static void fn(autocorr)(const ftype *data, const int N, double *ac, const int m
         for (int n = j; n < N; n++)
             d += (double)data[n] * (double)data[n-j];
 
-        ac[j] = d;
+        ac[j] = isnormal(d) ? d : 0.0;
     }
 }
 
@@ -410,6 +410,7 @@ static int fn(do_lpc)(const double *ac, double *lpc, const int lpc_order)
 
         for (int j = 0; j < max_order; j++) {
             lpc[j] *= damp;
+            lpc[j] = isnormal(lpc[j]) ? lpc[j] : 0.0;
             damp *= g;
         }
     }
