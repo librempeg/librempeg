@@ -1298,9 +1298,7 @@ const FFCodec ff_png_encoder = {
                   AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY8A,
                   AV_PIX_FMT_GRAY16BE, AV_PIX_FMT_YA16BE,
                   AV_PIX_FMT_MONOBLACK),
-    .alpha_modes    = (const enum AVAlphaMode[]) {
-        AVALPHA_MODE_STRAIGHT, AVALPHA_MODE_UNSPECIFIED
-    },
+    .alpha_modes    = AVALPHA_MODE_STRAIGHT,
     .p.priv_class   = &pngenc_class,
     .caps_internal  = FF_CODEC_CAP_ICC_PROFILES,
 };
@@ -1321,9 +1319,7 @@ const FFCodec ff_apng_encoder = {
                   AV_PIX_FMT_PAL8,
                   AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY8A,
                   AV_PIX_FMT_GRAY16BE, AV_PIX_FMT_YA16BE),
-    .alpha_modes    = (const enum AVAlphaMode[]) {
-        AVALPHA_MODE_STRAIGHT, AVALPHA_MODE_UNSPECIFIED
-    },
+    .alpha_modes    = AVALPHA_MODE_STRAIGHT,
     .p.priv_class   = &pngenc_class,
     .caps_internal  = FF_CODEC_CAP_ICC_PROFILES,
 };
