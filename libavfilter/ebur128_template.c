@@ -69,6 +69,10 @@ static av_always_inline void fn(process_ebur128)(const ftype **ch_samples,
 {
     const unsigned bin_id_3000 = i3000_cache_pos[0];
     const unsigned bin_id_400  = i400_cache_pos[0];
+    const double *pre_a = cf->pre_a;
+    const double *pre_b = cf->pre_b;
+    const double *rlb_a = cf->rlb_a;
+    const double *rlb_b = cf->rlb_b;
 
 #define MOVE_TO_NEXT_CACHED_ENTRY(time) do { \
     i##time##_cache_pos[0]++;                \
@@ -99,8 +103,8 @@ static av_always_inline void fn(process_ebur128)(const ftype **ch_samples,
 } while (0)
 
         // TODO: merge both filters in one?
-        FILTER(out, sample, tt0, cf->pre_b, cf->pre_a);  // apply pre-filter
-        FILTER(bin, out,    tt1, cf->rlb_b, cf->rlb_a);  // apply RLB-filter
+        FILTER(out, sample, tt0, pre_b, pre_a);  // apply pre-filter
+        FILTER(bin, out,    tt1, rlb_b, rlb_a);  // apply RLB-filter
 
         bin *= bin;
 
