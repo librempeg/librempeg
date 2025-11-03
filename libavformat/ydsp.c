@@ -45,7 +45,7 @@ static int read_header(AVFormatContext *s)
 {
     int ret, channels, rate, align;
     AVIOContext *pb = s->pb;
-    int64_t blocks;
+    int64_t blocks, loop_start, loop_end;
     AVStream *st;
 
     avio_skip(pb, 8);
@@ -70,6 +70,15 @@ static int read_header(AVFormatContext *s)
     st->codecpar->block_align = align * channels;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+
+    avio_seek(pb, 0xB0, SEEK_SET);
+    loop_start = avio_rb32(pb);
+    loop_end = avio_rb32(pb);
+    if (loop_start > 0) {
+        av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
+        if (loop_end > 0 && loop_end < st->duration)
+            av_dict_set_int(&st->metadata, "loop_end", loop_end, 0);
+    }
 
     avio_seek(pb, 0x20, SEEK_SET);
     if ((ret = ff_alloc_extradata(st->codecpar, 32 * channels)) < 0)
@@ -98,7 +107,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
 const FFInputFormat ff_ydsp_demuxer = {
     .p.name         = "ydsp",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("GameCube YDSP"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Yuke's Games DSP"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "ydsp",
     .read_probe     = read_probe,
