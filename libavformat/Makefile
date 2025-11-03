@@ -333,6 +333,7 @@ OBJS-$(CONFIG_IDSP_DEMUXER)              += idsp.o
 OBJS-$(CONFIG_IDSP_MUXER)                += idspenc.o
 OBJS-$(CONFIG_IFF_DEMUXER)               += iff.o
 OBJS-$(CONFIG_IFV_DEMUXER)               += ifv.o
+OBJS-$(CONFIG_IIVB_DEMUXER)              += iivb.o
 OBJS-$(CONFIG_ILBC_DEMUXER)              += ilbc.o
 OBJS-$(CONFIG_ILBC_MUXER)                += ilbc.o rawenc.o
 OBJS-$(CONFIG_ILDA_DEMUXER)              += ildadec.o
