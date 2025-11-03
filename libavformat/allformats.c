@@ -682,6 +682,7 @@ extern const FFInputFormat  ff_yop_demuxer;
 extern const FFInputFormat  ff_yuv4mpegpipe_demuxer;
 extern const FFOutputFormat ff_yuv4mpegpipe_muxer;
 extern const FFInputFormat  ff_zpd_demuxer;
+extern const FFInputFormat  ff_zsd_demuxer;
 
 /* image demuxers */
 extern const FFInputFormat  ff_image_bmp_pipe_demuxer;

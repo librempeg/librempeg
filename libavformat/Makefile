@@ -820,6 +820,7 @@ OBJS-$(CONFIG_YOP_DEMUXER)               += yop.o
 OBJS-$(CONFIG_YUV4MPEGPIPE_DEMUXER)      += yuv4mpegdec.o
 OBJS-$(CONFIG_YUV4MPEGPIPE_MUXER)        += yuv4mpegenc.o
 OBJS-$(CONFIG_ZPD_DEMUXER)               += zpd.o
+OBJS-$(CONFIG_ZSD_DEMUXER)               += zsd.o pcm.o
 
 # external library muxers/demuxers
 OBJS-$(CONFIG_AVISYNTH_DEMUXER)          += avisynth.o
