@@ -52,7 +52,7 @@ static int xopus_read_header(AVFormatContext *s)
     int ret;
     uint8_t channels;
     uint32_t skip, pt_entries;
-    int64_t pkt_off;
+    int64_t pkt_off, ts;
     XOpusDemuxContext *dc = s->priv_data;
     AVIOContext *pb = s->pb;
     AVStream *st = avformat_new_stream(s, NULL);
@@ -81,12 +81,15 @@ static int xopus_read_header(AVFormatContext *s)
     dc->data_end = 0x20 + 2*pt_entries + avio_rl32(pb);
     avio_skip(pb, 4);
 
+    ts = 0;
     pkt_off = 0x20 + 2*pt_entries;
     for (int i = 0; i < pt_entries; i++) {
-        uint16_t size = avio_rl16(pb);
-        if ((ret = av_add_index_entry(st, pkt_off, i, size, 0, AVINDEX_KEYFRAME)) < 0)
+        const int size = avio_rl16(pb);
+
+        if ((ret = av_add_index_entry(st, pkt_off, ts, size, 0, AVINDEX_KEYFRAME)) < 0)
             return ret;
         pkt_off += size;
+        ts += 960;
     }
 
     if ((ret = ff_alloc_extradata(st->codecpar, 19)) < 0)
@@ -107,25 +110,26 @@ static int xopus_read_header(AVFormatContext *s)
 
 static int xopus_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    int ret, n;
     AVIndexEntry *e;
     AVStream *st = s->streams[0];
     XOpusDemuxContext *dc = s->priv_data;
     FFStream *sti = ffstream(st);
-    int64_t pos = avio_tell(s->pb);
+    AVIOContext *pb = s->pb;
+    int64_t pos = avio_tell(pb);
+    int ret;
 
-    if (pos >= dc->data_end || avio_feof(s->pb))
+    if (pos >= dc->data_end || avio_feof(pb))
         return AVERROR_EOF;
 
-    for (n = 0; n < sti->nb_index_entries; n++) {
+    for (int n = 0; n < sti->nb_index_entries; n++) {
         e = &sti->index_entries[n];
         if (e->pos == pos)
             break;
     }
-    if (n >= sti->nb_index_entries)
+    if (e->pos != pos)
         return AVERROR_EOF;
 
-    ret = av_get_packet(s->pb, pkt, ((e->pos+e->size) > dc->data_end) ? ((e->pos+e->size) - dc->data_end) : e->size);
+    ret = av_get_packet(pb, pkt, ((e->pos+e->size) > dc->data_end) ? (dc->data_end - e->pos) : e->size);
     pkt->pos = pos;
     pkt->stream_index = 0;
     pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
@@ -137,7 +141,6 @@ static int xopus_read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_xopus_demuxer = {
     .p.name         = "xopus",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Exient XOpus"),
-    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "xopus",
     .priv_data_size = sizeof(XOpusDemuxContext),
     .read_probe     = xopus_probe,
