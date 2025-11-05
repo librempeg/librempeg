@@ -25,36 +25,57 @@
 #include "internal.h"
 #include "pcm.h"
 
-static int zsd_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
-    if (memcmp(p->buf, "ZSD\0", 4) || AV_RL32(p->buf + 4) != 0x1000 || AV_RL32(p->buf + 8) != 0xC)
+    if (AV_RB32(p->buf) != MKBETAG('Z','S','D','\0'))
+        return 0;
+    if (p->buf_size < 20)
+        return 0;
+    if (AV_RL32(p->buf + 4) != 0x1000)
+        return 0;
+    if (AV_RL32(p->buf + 8) != 0xC)
+        return 0;
+    if ((int)AV_RL32(p->buf + 12) <= 0)
+        return 0;
+    if ((int)AV_RL32(p->buf + 16) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
 }
 
-static int zsd_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
+    int64_t duration, start_offset;
     AVIOContext *pb = s->pb;
-    AVStream *st = avformat_new_stream(s, NULL);
+    int channels, rate;
+    AVStream *st;
+
+    avio_skip(pb, 12);
+    channels = avio_rl32(pb);
+    rate = avio_rl32(pb);
+    avio_skip(pb, 4);
+    duration = avio_rl32(pb);
+    avio_skip(pb, 4);
+    start_offset = avio_rl32(pb);
+    if (channels <= 0 || rate <= 0)
+        return AVERROR_INVALIDDATA;
+
+    st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
     st->start_time = 0;
+    st->duration = duration / channels;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_PCM_S8;
-    st->codecpar->block_align = 0x400;
-
-    avio_skip(pb, 12);
-    st->codecpar->ch_layout.nb_channels = avio_rl32(pb);
-    st->codecpar->sample_rate = avio_rl32(pb);
-    avio_skip(pb, 4);
-    st->duration = avio_rl32(pb) / st->codecpar->ch_layout.nb_channels;
-    avio_skip(pb, 4);
+    st->codecpar->block_align = channels;
+    st->codecpar->ch_layout.nb_channels = channels;
+    st->codecpar->sample_rate = rate;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
-    avio_seek(pb, avio_rl32(pb), SEEK_SET);
+    avio_seek(pb, start_offset, SEEK_SET);
+
     return 0;
 }
 
@@ -62,8 +83,8 @@ const FFInputFormat ff_zsd_demuxer = {
     .p.name         = "zsd",
     .p.long_name    = NULL_IF_CONFIG_SMALL("ZSD (Dragon Booster DS)"),
     .p.extensions   = "zsd",
-    .read_probe     = zsd_probe,
-    .read_header    = zsd_read_header,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
     .read_seek      = ff_pcm_read_seek,
 };
