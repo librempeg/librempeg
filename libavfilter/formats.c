@@ -524,12 +524,9 @@ static void print_sample_rate(AVBPrint *bp, const void *ratesp)
     .conversion_filter = "scale", \
     .conversion_opts_offset = offsetof(AVFilterGraph, scale_sws_opts),
 
-#define CONVERSION_FILTER_ARESAMPLE \
-    .conversion_filter = "aresample", \
-    .conversion_opts_offset = offsetof(AVFilterGraph, aresample_swr_opts),
-
 static const AVFilterFormatsMerger mergers_video[] = {
     {
+        .name       = "Pixel formats",
         .offset     = offsetof(AVFilterFormatsConfig, formats),
         .merge      = merge_pix_fmts,
         .can_merge  = can_merge_pix_fmts,
@@ -537,6 +534,7 @@ static const AVFilterFormatsMerger mergers_video[] = {
         CONVERSION_FILTER_SWSCALE
     },
     {
+        .name       = "Color spaces",
         .offset     = offsetof(AVFilterFormatsConfig, color_spaces),
         .merge      = merge_generic,
         .can_merge  = can_merge_generic,
@@ -544,6 +542,7 @@ static const AVFilterFormatsMerger mergers_video[] = {
         CONVERSION_FILTER_SWSCALE
     },
     {
+        .name       = "Color ranges",
         .offset     = offsetof(AVFilterFormatsConfig, color_ranges),
         .merge      = merge_generic,
         .can_merge  = can_merge_generic,
@@ -551,6 +550,7 @@ static const AVFilterFormatsMerger mergers_video[] = {
         CONVERSION_FILTER_SWSCALE
     },
     {
+        .name       = "Alpha modes",
         .offset     = offsetof(AVFilterFormatsConfig, alpha_modes),
         .merge      = merge_generic,
         .can_merge  = can_merge_generic,
@@ -561,6 +561,7 @@ static const AVFilterFormatsMerger mergers_video[] = {
 
 static const AVFilterFormatsMerger mergers_audio[] = {
     {
+        .name       = "Channel layouts",
         .offset     = offsetof(AVFilterFormatsConfig, channel_layouts),
         .merge      = merge_channel_layouts,
         .can_merge  = can_merge_channel_layouts,
@@ -568,6 +569,7 @@ static const AVFilterFormatsMerger mergers_audio[] = {
         .conversion_filter = "acl2cl",
     },
     {
+        .name       = "Sample rates",
         .offset     = offsetof(AVFilterFormatsConfig, samplerates),
         .merge      = merge_samplerates,
         .can_merge  = can_merge_samplerates,
@@ -575,6 +577,7 @@ static const AVFilterFormatsMerger mergers_audio[] = {
         .conversion_filter = "ardftsrc",
     },
     {
+        .name       = "Sample formats",
         .offset     = offsetof(AVFilterFormatsConfig, formats),
         .merge      = merge_sample_fmts,
         .can_merge  = can_merge_sample_fmts,
