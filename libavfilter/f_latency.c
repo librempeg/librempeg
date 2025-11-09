@@ -29,6 +29,7 @@ typedef struct LatencyContext {
     int64_t min_latency;
     int64_t max_latency;
     int64_t sum;
+    int64_t count;
 } LatencyContext;
 
 static av_cold int init(AVFilterContext *ctx)
@@ -68,6 +69,8 @@ static int activate(AVFilterContext *ctx)
         if (delta > 0) {
             s->min_latency = FFMIN(s->min_latency, delta);
             s->max_latency = FFMAX(s->max_latency, delta);
+            s->sum += delta;
+            s->count++;
         }
     }
 
@@ -96,6 +99,8 @@ static av_cold void uninit(AVFilterContext *ctx)
         av_log(ctx, AV_LOG_INFO, "Min latency: %"PRId64"\n", s->min_latency);
     if (s->max_latency != INT64_MIN)
         av_log(ctx, AV_LOG_INFO, "Max latency: %"PRId64"\n", s->max_latency);
+    if (s->count > 0)
+        av_log(ctx, AV_LOG_INFO, "Average latency: %"PRId64"\n", s->sum / s->count);
 }
 
 #if CONFIG_LATENCY_FILTER
