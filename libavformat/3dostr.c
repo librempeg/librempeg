@@ -110,7 +110,7 @@ static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
         chunk = avio_rl32(pb);
         size  = avio_rb32(pb);
 
-        if (chunk == MKTAG('F', 'I', 'L', 'L') && (size == MKBETAG('C', 'T', 'R', 'L')) || (size == MKBETAG('F', 'I', 'L', 'M')))
+        if (chunk == MKTAG('F','I','L','L') && (size == MKBETAG('C','T','R','L')) || (size == MKBETAG('F','I','L','M')))
             next_actual_chunk = 1;
 
         if (!size)
@@ -284,10 +284,21 @@ static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
             break;
         case MKTAG('M','P','V','D'):
             if (ctx->video_stream_index >= 0) {
-                if (size <= 20)
+                if (size <= 12)
                     return AVERROR_INVALIDDATA;
-                avio_skip(pb, 16);
-                size -= 16;
+                avio_skip(pb, 8);
+                size -= 12;
+                chunk = avio_rl32(pb);
+                switch (chunk) {
+                case MKTAG('F','R','A','M'):
+                case MKTAG('F','R','M','['):
+                case MKTAG('F','R','M',']'):
+                    break;
+                default:
+                    av_log(s, AV_LOG_DEBUG, "unknown chunk: %X\n", chunk);
+                    break;
+                }
+
                 ret = av_get_packet(pb, pkt, size);
                 pkt->pos = pos;
                 pkt->stream_index = ctx->video_stream_index;
@@ -296,7 +307,8 @@ static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
             }
 
             avio_skip(pb, 8);
-            if (avio_rl32(pb) == MKTAG('V','H','D','R')) {
+            chunk = avio_rl32(pb);
+            if (chunk == MKTAG('V','H','D','R')) {
                 vst = avformat_new_stream(s, NULL);
                 if (!vst)
                     return AVERROR(ENOMEM);
