@@ -268,11 +268,12 @@ static int fn(src_out)(AVFilterContext *ctx, AVFrame *out, const int ch,
                     int rsample = lrintf(sample + error);
 
                     error += sample - rsample;
-                    dst[n] = av_clip_uint8(0x80 + rsample);
+                    dst[n] = av_clip_int8(rsample) + 0x80;
                 }
+                stc->error = error;
             } else {
                 for (int n = 0; n < write_samples; n++)
-                    dst[n] = av_clip_uint8(lrintf(0x80 + irdft[n] * F(1<<(8-1))));
+                    dst[n] = av_clip_int8(lrintf(irdft[n] * F(1<<(8-1)))) + 0x80;
             }
         } else if (s->out_depth == 16) {
             int16_t *dst = ((int16_t *)out->extended_data[ch]) + doffset;
@@ -287,6 +288,7 @@ static int fn(src_out)(AVFilterContext *ctx, AVFrame *out, const int ch,
                     error += sample - rsample;
                     dst[n] = av_clip_int16(rsample);
                 }
+                stc->error = error;
             } else {
                 for (int n = 0; n < write_samples; n++)
                     dst[n] = av_clip_int16(lrintf(irdft[n] * F(1<<(16-1))));
@@ -317,11 +319,12 @@ static int fn(src_out)(AVFilterContext *ctx, AVFrame *out, const int ch,
                     int rsample = lrintf(sample + error);
 
                     error += sample - rsample;
-                    dst[m] = av_clip_uint8(0x80 + rsample);
+                    dst[m] = av_clip_int8(rsample) + 0x80;
                 }
+                stc->error = error;
             } else {
                 for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
-                    dst[m] = av_clip_uint8(lrintf(0x80 + irdft[n] * F(1<<(8-1))));
+                    dst[m] = av_clip_int8(lrintf(irdft[n] * F(1<<(8-1)))) + 0x80;
             }
         } else if (s->out_depth == 16) {
             int16_t *dst = ((int16_t *)out->data[0]) + doffset * nb_channels;
@@ -336,6 +339,7 @@ static int fn(src_out)(AVFilterContext *ctx, AVFrame *out, const int ch,
                     error += sample - rsample;
                     dst[m] = av_clip_int16(rsample);
                 }
+                stc->error = error;
             } else {
                 for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
                     dst[m] = av_clip_int16(lrintf(irdft[n] * F(1<<(16-1))));
