@@ -271,24 +271,6 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-static AVFrame *get_out_audio_buffer(AVFilterLink *outlink, int nb_samples)
-{
-    AVFilterContext *ctx = outlink->src;
-    const AASRCContext *s = ctx->priv;
-
-    return s->pass ?
-        ff_null_get_audio_buffer   (outlink, nb_samples) :
-        ff_default_get_audio_buffer(outlink, nb_samples);
-}
-
-static const AVFilterPad outputs[] = {
-    {
-        .name         = "default",
-        .type         = AVMEDIA_TYPE_AUDIO,
-        .get_buffer.audio = get_out_audio_buffer,
-    },
-};
-
 const FFFilter ff_af_aasrc = {
     .p.name          = "aasrc",
     .p.description   = NULL_IF_CONFIG_SMALL("Arbitrary Audio Sample Rate Conversion."),
@@ -298,6 +280,6 @@ const FFFilter ff_af_aasrc = {
     .activate        = activate,
     .uninit          = uninit,
     FILTER_INPUTS(inputs),
-    FILTER_OUTPUTS(outputs),
+    FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC2(query_formats),
 };
