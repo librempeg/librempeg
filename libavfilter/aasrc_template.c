@@ -58,6 +58,8 @@
 #endif
 
 #define F(x) ((ftype)(x))
+#undef isnormal
+#define isnormal(x) (1)
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
@@ -109,9 +111,13 @@ static void fn(complex_exponential)(ctype *x,
 {
     for (int n = 0; n < N; n++) {
         ftype mag = FEXP2(Log2MagP[n] * delta_t);
+        ftype re, im;
 
-        x[n].re = mag * FCOS(theta[n] * delta_t);
-        x[n].im = mag * FSIN(theta[n] * delta_t);
+        re = mag * FCOS(theta[n] * delta_t);
+        im = mag * FSIN(theta[n] * delta_t);
+
+        x[n].re = isnormal(re) ? re : F(0.0);
+        x[n].im = isnormal(im) ? im : F(0.0);
     }
 }
 
@@ -124,8 +130,8 @@ static void fn(vector_mul_complex)(ctype *x,
         ftype re = a[n].re * b[n].re - a[n].im * b[n].im;
         ftype im = a[n].re * b[n].im + a[n].im * b[n].re;
 
-        x[n].re = re;
-        x[n].im = im;
+        x[n].re = isnormal(re) ? re : F(0.0);
+        x[n].im = isnormal(im) ? im : F(0.0);
     }
 }
 
@@ -144,19 +150,27 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
     stc->nb_poles = FF_ARRAY_ELEMS(ps1);
 
     for (int n = 0; n < stc->nb_poles; n++) {
+        ftype re, im;
+
         stc->pCur[n].re = F(1.0);
         stc->pCur[n].im = F(0.0);
-        stc->rFixed[n].re = rs1[n][0] * stc->scale_factor;
-        stc->rFixed[n].im = rs1[n][1] * stc->scale_factor;
+        re = rs1[n][0] * stc->scale_factor;
+        im = rs1[n][1] * stc->scale_factor;
+        stc->rFixed[n].re = isnormal(re) ? re : F(0.0);
+        stc->rFixed[n].im = isnormal(im) ? im : F(0.0);
     }
 
     fn(vector_mul_complex)(stc->pCur, stc->pCur, stc->rFixed, stc->nb_poles);
 
     for (int n = 0; n < stc->nb_poles; n++) {
+        ftype a, b;
+
         stc->Log2MagP[n] = FLOG2(ps1[n][0]);
         stc->thetaP[n] = ps1[n][1];
-        stc->Log2MagP_Fsf[n] = stc->Log2MagP[n] * stc->scale_factor;
-        stc->thetaP_Fsf[n] = stc->thetaP[n] * stc->scale_factor;
+        a = stc->Log2MagP[n] * stc->scale_factor;
+        b = stc->thetaP[n] * stc->scale_factor;
+        stc->Log2MagP_Fsf[n] = isnormal(a) ? a : F(0.0);
+        stc->thetaP_Fsf[n] = isnormal(b) ? b : F(0.0);
     }
 
     stc->pAdv = NULL;
@@ -166,12 +180,19 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         const ftype pCos = FCOS(stc->thetaP_Fsf[n]);
         const ftype pSin = FSIN(stc->thetaP_Fsf[n]);
         const ftype pMag = FEXP2(stc->Log2MagP_Fsf[n]);
+        ftype re, im;
 
-        stc->pInv[n].re = pInvMag *  pCos;
-        stc->pInv[n].im = pInvMag * -pSin;
+        re = pInvMag *  pCos;
+        im = pInvMag * -pSin;
 
-        stc->pFixed[n].re = pMag * pCos;
-        stc->pFixed[n].im = pMag * pSin;
+        stc->pInv[n].re = isnormal(re) ? re : F(0.0);
+        stc->pInv[n].im = isnormal(im) ? im : F(0.0);
+
+        re = pMag * pCos;
+        im = pMag * pSin;
+
+        stc->pFixed[n].re = isnormal(re) ? re : F(0.0);
+        stc->pFixed[n].im = isnormal(im) ? im : F(0.0);
     }
 
     fn(complex_exponential)(stc->pAdvDown, stc->Log2MagP_Fsf, stc->thetaP_Fsf, stc->t_inc_frac, stc->nb_poles);
@@ -214,6 +235,9 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const int nb_poles = stc->nb_poles;
     ftype delta_t = stc->delta_t;
     int in_idx = stc->in_idx;
+    const ctype *pAdvDown = stc->pAdvDown;
+    const ctype *pAdvUp = stc->pAdvUp;
+    const ctype *pAdv = stc->pAdv;
 
     if (stc->hat_samples < n_in_samples) {
         stc->hat = av_realloc_f(stc->hat, n_in_samples, nb_poles * sizeof(*stc->hat));
@@ -239,28 +263,32 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
             re = z.re * a.re - z.im * a.im + x;
             im = z.re * a.im + z.im * a.re;
 
-            h[i].re = z.re = re;
-            h[i].im = z.im = im;
+            h[i].re = z.re = isnormal(re) ? re : F(0.0);
+            h[i].im = z.im = isnormal(im) ? im : F(0.0);
         }
 
-        stc->filter_state[n].re = isnormal(z.re) ? z.re : F(0.0);
-        stc->filter_state[n].im = isnormal(z.im) ? z.im : F(0.0);
+        stc->filter_state[n].re = z.re;
+        stc->filter_state[n].im = z.im;
     }
 
     for (int n = 0; n < n_out_samples && in_idx < n_in_samples; n++) {
         ftype delta_t_frac, y = F(0.0);
-        ctype *h = stc->hat;
+        const ctype *h = stc->hat;
         int frac_carry;
 
-        if (stc->pAdv)
-            fn(vector_mul_complex)(stc->pCur, stc->pCur, stc->pAdv, nb_poles);
+        if (pAdv)
+            fn(vector_mul_complex)(stc->pCur, stc->pCur, pAdv, nb_poles);
 
         {
             const ctype *const pCur = stc->pCur;
 
             for (int i = 0; i < nb_poles; i++) {
-                y += h[in_idx].re * pCur[i].re -
-                     h[in_idx].im * pCur[i].im;
+                const ftype re = h[in_idx].re;
+                const ftype im = h[in_idx].im;
+                const ftype cre = pCur[i].re;
+                const ftype cim = pCur[i].im;
+
+                y += re * cre - im * cim;
                 h += n_in_samples;
             }
         }
@@ -286,11 +314,12 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         in_idx += frac_carry + t_inc_int;
         delta_t = delta_t_frac;
 
-        stc->pAdv = (frac_carry == 0) ? stc->pAdvDown : stc->pAdvUp;
+        pAdv = (frac_carry == 0) ? pAdvDown : pAdvUp;
 
         stc->out_idx = n+1;
     }
 
+    stc->pAdv = (ctype *)pAdv;
     stc->delta_t = delta_t;
     stc->in_idx = FFMAX(0, in_idx - n_in_samples);
 }
