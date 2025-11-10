@@ -18,40 +18,40 @@
 
 #undef ftype
 #undef itype
-#undef FLOG2
+#undef FLOG
 #undef FSIN
 #undef FCOS
-#undef FEXP2
+#undef FEXP
 #undef FLOOR
 #undef LRINT
 #undef SAMPLE_FORMAT
 #if DEPTH == 16
 #define ftype float
 #define itype int16_t
-#define FLOG2 log2f
+#define FLOG logf
 #define FSIN sinf
 #define FCOS cosf
-#define FEXP2 exp2f
+#define FEXP expf
 #define FLOOR floorf
 #define LRINT lrintf
 #define SAMPLE_FORMAT s16p
 #elif DEPTH == 32
 #define ftype float
 #define itype float
-#define FLOG2 log2f
+#define FLOG logf
 #define FSIN sinf
 #define FCOS cosf
-#define FEXP2 exp2f
+#define FEXP expf
 #define FLOOR floorf
 #define LRINT lrintf
 #define SAMPLE_FORMAT fltp
 #else
 #define ftype double
 #define itype double
-#define FLOG2 log2
+#define FLOG log
 #define FSIN sin
 #define FCOS cos
-#define FEXP2 exp2
+#define FEXP exp
 #define FLOOR floor
 #define LRINT lrint
 #define SAMPLE_FORMAT dblp
@@ -77,9 +77,9 @@ typedef struct fn(StateContext) {
     int   K1;
 
     ftype scale_factor;
-    ftype Log2MagP[MAX_NB_POLES];
+    ftype log_mag[MAX_NB_POLES];
     ftype thetaP[MAX_NB_POLES];
-    ftype Log2MagP_Fsf[MAX_NB_POLES];
+    ftype log_mag_scaled[MAX_NB_POLES];
     ftype thetaP_Fsf[MAX_NB_POLES];
     ctype pInv[MAX_NB_POLES];
     ctype pFixed[MAX_NB_POLES];
@@ -104,13 +104,13 @@ typedef struct fn(StateContext) {
 } fn(StateContext);
 
 static void fn(complex_exponential)(ctype *x,
-                                    const ftype *Log2MagP,
+                                    const ftype *log_mag,
                                     const ftype *theta,
                                     const ftype delta_t,
                                     const int N)
 {
     for (int n = 0; n < N; n++) {
-        ftype mag = FEXP2(Log2MagP[n] * delta_t);
+        ftype mag = FEXP(log_mag[n] * delta_t);
         ftype re, im;
 
         re = mag * FCOS(theta[n] * delta_t);
@@ -165,21 +165,21 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
     for (int n = 0; n < stc->nb_poles; n++) {
         ftype a, b;
 
-        stc->Log2MagP[n] = FLOG2(ps1[n][0]);
+        stc->log_mag[n] = FLOG(ps1[n][0]);
         stc->thetaP[n] = ps1[n][1];
-        a = stc->Log2MagP[n] * stc->scale_factor;
+        a = stc->log_mag[n] * stc->scale_factor;
         b = stc->thetaP[n] * stc->scale_factor;
-        stc->Log2MagP_Fsf[n] = isnormal(a) ? a : F(0.0);
+        stc->log_mag_scaled[n] = isnormal(a) ? a : F(0.0);
         stc->thetaP_Fsf[n] = isnormal(b) ? b : F(0.0);
     }
 
     stc->pAdv = NULL;
 
     for (int n = 0; n < stc->nb_poles; n++) {
-        const ftype pInvMag = FEXP2(-stc->Log2MagP_Fsf[n]);
+        const ftype pInvMag = FEXP(-stc->log_mag_scaled[n]);
         const ftype pCos = FCOS(stc->thetaP_Fsf[n]);
         const ftype pSin = FSIN(stc->thetaP_Fsf[n]);
-        const ftype pMag = FEXP2(stc->Log2MagP_Fsf[n]);
+        const ftype pMag = FEXP(stc->log_mag_scaled[n]);
         ftype re, im;
 
         re = pInvMag *  pCos;
@@ -195,7 +195,7 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         stc->pFixed[n].im = isnormal(im) ? im : F(0.0);
     }
 
-    fn(complex_exponential)(stc->pAdvDown, stc->Log2MagP_Fsf, stc->thetaP_Fsf, stc->t_inc_frac, stc->nb_poles);
+    fn(complex_exponential)(stc->pAdvDown, stc->log_mag_scaled, stc->thetaP_Fsf, stc->t_inc_frac, stc->nb_poles);
     fn(vector_mul_complex)(stc->pAdvUp, stc->pAdvDown, stc->pInv, stc->nb_poles);
 
     memset(stc->filter_state, 0, sizeof(stc->filter_state));
@@ -300,7 +300,7 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 
         if (stc->reset_phasors) {
             if (stc->reset_index >= stc->K1) {
-                fn(complex_exponential)(stc->pCur, stc->Log2MagP_Fsf, stc->thetaP_Fsf, delta_t, nb_poles);
+                fn(complex_exponential)(stc->pCur, stc->log_mag_scaled, stc->thetaP_Fsf, delta_t, nb_poles);
                 fn(vector_mul_complex)(stc->pCur, stc->rFixed, stc->pCur, nb_poles);
                 stc->reset_index = 0;
             }
