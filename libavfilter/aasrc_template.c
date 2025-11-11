@@ -234,6 +234,7 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const ctype *pAdvDown = stc->pAdvDown;
     const ctype *pAdvUp = stc->pAdvUp;
     const ctype *pAdv = stc->pAdv;
+    ctype *pCur = stc->pCur;
 
     if (stc->hat_samples < n_in_samples) {
         stc->hat = av_realloc_f(stc->hat, n_in_samples, nb_poles * sizeof(*stc->hat));
@@ -273,20 +274,16 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         int frac_carry;
 
         if (pAdv)
-            fn(vector_mul_complex)(stc->pCur, stc->pCur, pAdv, nb_poles);
+            fn(vector_mul_complex)(pCur, pCur, pAdv, nb_poles);
 
-        {
-            const ctype *const pCur = stc->pCur;
+        for (int i = 0; i < nb_poles; i++) {
+            const ftype re = h[in_idx].re;
+            const ftype im = h[in_idx].im;
+            const ftype cre = pCur[i].re;
+            const ftype cim = pCur[i].im;
 
-            for (int i = 0; i < nb_poles; i++) {
-                const ftype re = h[in_idx].re;
-                const ftype im = h[in_idx].im;
-                const ftype cre = pCur[i].re;
-                const ftype cim = pCur[i].im;
-
-                y += re * cre - im * cim;
-                h += n_in_samples;
-            }
+            y += re * cre - im * cim;
+            h += n_in_samples;
         }
 #if DEPTH == 16
         dst[n] = LRINT(y * F(1<<(DEPTH-1)));
@@ -295,8 +292,8 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 #endif
 
         if (stc->reset_index >= K1) {
-            fn(complex_exponential)(stc->pCur, stc->log_mag_scaled, stc->thetaP_Fsf, delta_t, nb_poles);
-            fn(vector_mul_complex)(stc->pCur, stc->rFixed, stc->pCur, nb_poles);
+            fn(complex_exponential)(pCur, stc->log_mag_scaled, stc->thetaP_Fsf, delta_t, nb_poles);
+            fn(vector_mul_complex)(pCur, stc->rFixed, pCur, nb_poles);
             stc->reset_index = 0;
         }
         stc->reset_index++;
