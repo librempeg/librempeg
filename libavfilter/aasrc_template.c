@@ -90,9 +90,9 @@ typedef struct fn(complex_ftype) {
 typedef struct fn(StateContext) {
     ftype scale_factor;
     ftype log_mag[MAX_NB_POLES];
-    ftype thetaP[MAX_NB_POLES];
+    ftype angle[MAX_NB_POLES];
     ftype log_mag_scaled[MAX_NB_POLES];
-    ftype thetaP_Fsf[MAX_NB_POLES];
+    ftype angle_scaled[MAX_NB_POLES];
     ctype pInv[MAX_NB_POLES];
     ctype pFixed[MAX_NB_POLES];
     ctype rFixed[MAX_NB_POLES];
@@ -176,19 +176,19 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         ftype a, b;
 
         stc->log_mag[n] = FLOG(ps1[n][0]);
-        stc->thetaP[n] = ps1[n][1];
+        stc->angle[n] = ps1[n][1];
         a = stc->log_mag[n] * stc->scale_factor;
-        b = stc->thetaP[n] * stc->scale_factor;
+        b = stc->angle[n] * stc->scale_factor;
         stc->log_mag_scaled[n] = isnormal(a) ? a : F(0.0);
-        stc->thetaP_Fsf[n] = isnormal(b) ? b : F(0.0);
+        stc->angle_scaled[n] = isnormal(b) ? b : F(0.0);
     }
 
     stc->pAdv = NULL;
 
     for (int n = 0; n < stc->nb_poles; n++) {
         const ftype pInvMag = FEXP(-stc->log_mag_scaled[n]);
-        const ftype pCos = FCOS(stc->thetaP_Fsf[n]);
-        const ftype pSin = FSIN(stc->thetaP_Fsf[n]);
+        const ftype pCos = FCOS(stc->angle_scaled[n]);
+        const ftype pSin = FSIN(stc->angle_scaled[n]);
         const ftype pMag = FEXP(stc->log_mag_scaled[n]);
         ftype re, im;
 
@@ -205,7 +205,7 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         stc->pFixed[n].im = isnormal(im) ? im : F(0.0);
     }
 
-    fn(complex_exponential)(stc->pAdvDown, stc->log_mag_scaled, stc->thetaP_Fsf, stc->t_inc_frac, stc->nb_poles);
+    fn(complex_exponential)(stc->pAdvDown, stc->log_mag_scaled, stc->angle_scaled, stc->t_inc_frac, stc->nb_poles);
     fn(vector_mul_complex)(stc->pAdvUp, stc->pAdvDown, stc->pInv, stc->nb_poles);
 
     memset(stc->filter_state, 0, sizeof(stc->filter_state));
@@ -290,7 +290,7 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     n = 0;
 repeat:
     if (reset_index >= K1) {
-        fn(complex_exponential)(pCur, stc->log_mag_scaled, stc->thetaP_Fsf, reset_delta_t, nb_poles);
+        fn(complex_exponential)(pCur, stc->log_mag_scaled, stc->angle_scaled, reset_delta_t, nb_poles);
         fn(vector_mul_complex)(pCur, stc->rFixed, pCur, nb_poles);
         reset_index = 0;
     }
