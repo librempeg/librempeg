@@ -201,20 +201,8 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         stc->prev_delta_t[n] = F(-1.0);
 
     for (int n = 0; n < stc->nb_poles; n++) {
-        ftype re, im;
-
-        stc->pCur[n].re = F(1.0);
-        stc->pCur[n].im = F(0.0);
-        re = rs[n][0] * stc->scale_factor;
-        im = rs[n][1] * stc->scale_factor;
-        stc->rFixed[n].re = isnormal(re) ? re : F(0.0);
-        stc->rFixed[n].im = isnormal(im) ? im : F(0.0);
-    }
-
-    fn(vector_mul_complex)(stc->pCur, stc->pCur, stc->rFixed, stc->nb_poles);
-
-    for (int n = 0; n < stc->nb_poles; n++) {
-        ftype a, b;
+        ftype pInvMag, pCos, pSin, pMag;
+        ftype re, im, a, b;
 
         stc->log_mag[n] = FLOG(ps[n][0]);
         stc->angle[n] = ps[n][1];
@@ -222,16 +210,18 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         b = stc->angle[n] * stc->scale_factor;
         stc->log_mag_scaled[n] = isnormal(a) ? a : F(0.0);
         stc->angle_scaled[n] = isnormal(b) ? b : F(0.0);
-    }
 
-    stc->pAdv = NULL;
+        stc->pCur[n].re = F(1.0);
+        stc->pCur[n].im = F(0.0);
+        re = rs[n][0] * stc->scale_factor;
+        im = rs[n][1] * stc->scale_factor;
+        stc->rFixed[n].re = isnormal(re) ? re : F(0.0);
+        stc->rFixed[n].im = isnormal(im) ? im : F(0.0);
 
-    for (int n = 0; n < stc->nb_poles; n++) {
-        const ftype pInvMag = FEXP(-stc->log_mag_scaled[n]);
-        const ftype pCos = FCOS(stc->angle_scaled[n]);
-        const ftype pSin = FSIN(stc->angle_scaled[n]);
-        const ftype pMag = FEXP(stc->log_mag_scaled[n]);
-        ftype re, im;
+        pInvMag = FEXP(-stc->log_mag_scaled[n]);
+        pCos = FCOS(stc->angle_scaled[n]);
+        pSin = FSIN(stc->angle_scaled[n]);
+        pMag = FEXP(stc->log_mag_scaled[n]);
 
         re = pInvMag *  pCos;
         im = pInvMag * -pSin;
@@ -245,6 +235,10 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         stc->pFixed[n].re = isnormal(re) ? re : F(0.0);
         stc->pFixed[n].im = isnormal(im) ? im : F(0.0);
     }
+
+    fn(vector_mul_complex)(stc->pCur, stc->pCur, stc->rFixed, stc->nb_poles);
+
+    stc->pAdv = NULL;
 
     fn(complex_exponential)(stc, stc->pAdvDown, stc->log_mag_scaled, stc->angle_scaled, stc->t_inc_frac, stc->nb_poles);
     fn(vector_mul_complex)(stc->pAdvUp, stc->pAdvDown, stc->pInv, stc->nb_poles);
