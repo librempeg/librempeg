@@ -284,7 +284,9 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     ftype delta_t = stc->delta_t;
     int out_idx = 0, in_idx = stc->in_idx;
     int reset_index = stc->reset_index;
+    ctype *filter_state = stc->filter_state;
     const ctype *adv_down = stc->adv_down;
+    const ctype *p_fixed = stc->p_fixed;
     const ctype *adv_up = stc->adv_up;
     const ctype *adv = stc->adv;
     ctype *cur = stc->cur;
@@ -300,12 +302,12 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     }
 
     hat = stc->hat;
-    for (int n = 0; n < nb_poles; n++) {
-        ctype *h = hat + n * n_in_samples;
-        const ctype a = stc->p_fixed[n];
-        ctype z = stc->filter_state[n];
+    for (int i = 0; i < n_in_samples; i++) {
+        ctype *h = hat + i * nb_poles;
 
-        for (int i = 0; i < n_in_samples; i++) {
+        for (int n = 0; n < nb_poles; n++) {
+            const ctype a = p_fixed[n];
+            ctype z = filter_state[n];
             ftype re, im, x;
 
 #if DEPTH == 16 || DEPTH == 32
@@ -316,12 +318,10 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
             re = z.re * a.re - z.im * a.im + x;
             im = z.re * a.im + z.im * a.re;
 
-            h[i].re = z.re = isnormal(re) ? re : F(0.0);
-            h[i].im = z.im = isnormal(im) ? im : F(0.0);
+            h[n].re = z.re = isnormal(re) ? re : F(0.0);
+            h[n].im = z.im = isnormal(im) ? im : F(0.0);
+            filter_state[n] = z;
         }
-
-        stc->filter_state[n].re = z.re;
-        stc->filter_state[n].im = z.im;
     }
 
     n = 0;
@@ -333,20 +333,19 @@ repeat:
     }
 
     while (n < n_out_samples && in_idx < n_in_samples && reset_index < K1) {
+        const ctype *h = hat + in_idx * nb_poles;
         ftype delta_t_frac, y = F(0.0);
-        const ctype *h = hat;
         int frac_carry;
 
         fn(vector_mul_complex)(cur, cur, adv, nb_poles);
 
         for (int i = 0; i < nb_poles; i++) {
-            const ftype re = h[in_idx].re;
-            const ftype im = h[in_idx].im;
+            const ftype re = h[i].re;
+            const ftype im = h[i].im;
             const ftype cre = cur[i].re;
             const ftype cim = cur[i].im;
 
             y += re * cre - im * cim;
-            h += n_in_samples;
         }
 #if DEPTH == 16 || DEPTH == 32
         dst[n] = CLIP(LRINT(y * F(1<<(DEPTH-1))));
