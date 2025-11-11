@@ -107,6 +107,7 @@ typedef struct fn(StateContext) {
     ftype t_inc_frac;
     int   t_inc_int;
     ctype *pAdv;
+    ctype one[MAX_NB_POLES];
     ctype pCur[MAX_NB_POLES];
     ctype pAdvUp[MAX_NB_POLES];
     ctype pAdvDown[MAX_NB_POLES];
@@ -211,8 +212,9 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         stc->log_mag_scaled[n] = isnormal(a) ? a : F(0.0);
         stc->angle_scaled[n] = isnormal(b) ? b : F(0.0);
 
-        stc->pCur[n].re = F(1.0);
-        stc->pCur[n].im = F(0.0);
+        stc->one[n].re = F(1.0);
+        stc->one[n].im = F(0.0);
+        stc->pCur[n] = stc->one[n];
         re = rs[n][0] * stc->scale_factor;
         im = rs[n][1] * stc->scale_factor;
         stc->rFixed[n].re = isnormal(re) ? re : F(0.0);
@@ -238,7 +240,7 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
 
     fn(vector_mul_complex)(stc->pCur, stc->pCur, stc->rFixed, stc->nb_poles);
 
-    stc->pAdv = NULL;
+    stc->pAdv = stc->one;
 
     fn(complex_exponential)(stc, stc->pAdvDown, stc->log_mag_scaled, stc->angle_scaled, stc->t_inc_frac, stc->nb_poles);
     fn(vector_mul_complex)(stc->pAdvUp, stc->pAdvDown, stc->pInv, stc->nb_poles);
@@ -335,8 +337,7 @@ repeat:
         const ctype *h = hat;
         int frac_carry;
 
-        if (pAdv)
-            fn(vector_mul_complex)(pCur, pCur, pAdv, nb_poles);
+        fn(vector_mul_complex)(pCur, pCur, pAdv, nb_poles);
 
         for (int i = 0; i < nb_poles; i++) {
             const ftype re = h[in_idx].re;
