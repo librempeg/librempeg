@@ -86,7 +86,6 @@ typedef struct fn(StateContext) {
     ctype rFixed[MAX_NB_POLES];
 
     int   reset_index;
-    int   reset_phasors;
     int   in_idx;
     int   out_idx;
     int   nb_poles;
@@ -146,7 +145,6 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
     stc->reset_index = 0;
     stc->t_inc_frac = t_inc - FLOOR(t_inc);
     stc->t_inc_int = LRINT(t_inc - stc->t_inc_frac);
-    stc->reset_phasors = 1;
     stc->nb_poles = FF_ARRAY_ELEMS(ps1);
 
     for (int n = 0; n < stc->nb_poles; n++) {
@@ -298,15 +296,12 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         dst[n] = y;
 #endif
 
-        if (stc->reset_phasors) {
-            if (stc->reset_index >= stc->K1) {
-                fn(complex_exponential)(stc->pCur, stc->log_mag_scaled, stc->thetaP_Fsf, delta_t, nb_poles);
-                fn(vector_mul_complex)(stc->pCur, stc->rFixed, stc->pCur, nb_poles);
-                stc->reset_index = 0;
-            }
-
-            stc->reset_index++;
+        if (stc->reset_index >= stc->K1) {
+            fn(complex_exponential)(stc->pCur, stc->log_mag_scaled, stc->thetaP_Fsf, delta_t, nb_poles);
+            fn(vector_mul_complex)(stc->pCur, stc->rFixed, stc->pCur, nb_poles);
+            stc->reset_index = 0;
         }
+        stc->reset_index++;
 
         delta_t += t_inc_frac;
         delta_t_frac = delta_t - FLOOR(delta_t);
