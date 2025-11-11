@@ -65,6 +65,7 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
+#define K1 32
 #define MAX_NB_POLES 8
 
 typedef struct fn(complex_ftype) {
@@ -74,8 +75,6 @@ typedef struct fn(complex_ftype) {
 #define ctype fn(complex_ftype)
 
 typedef struct fn(StateContext) {
-    int   K1;
-
     ftype scale_factor;
     ftype log_mag[MAX_NB_POLES];
     ftype thetaP[MAX_NB_POLES];
@@ -138,7 +137,6 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
                               const double t_inc)
 {
     stc->scale_factor = (t_inc > 1.0) ? F(1.0) / t_inc : F(1.0);
-    stc->K1 = 32;
     stc->out_idx = 0;
     stc->in_idx = 0;
     stc->delta_t = F(0.0);
@@ -296,7 +294,7 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         dst[n] = y;
 #endif
 
-        if (stc->reset_index >= stc->K1) {
+        if (stc->reset_index >= K1) {
             fn(complex_exponential)(stc->pCur, stc->log_mag_scaled, stc->thetaP_Fsf, delta_t, nb_poles);
             fn(vector_mul_complex)(stc->pCur, stc->rFixed, stc->pCur, nb_poles);
             stc->reset_index = 0;
