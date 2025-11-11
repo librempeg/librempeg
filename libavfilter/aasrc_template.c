@@ -24,6 +24,7 @@
 #undef FEXP
 #undef FLOOR
 #undef LRINT
+#undef CLIP
 #undef SAMPLE_FORMAT
 #if DEPTH == 16
 #define ftype float
@@ -34,8 +35,20 @@
 #define FEXP expf
 #define FLOOR floorf
 #define LRINT lrintf
+#define CLIP av_clip_int16
 #define SAMPLE_FORMAT s16p
 #elif DEPTH == 32
+#define ftype double
+#define itype int32_t
+#define FLOG log
+#define FSIN sin
+#define FCOS cos
+#define FEXP exp
+#define FLOOR floor
+#define LRINT lrint
+#define CLIP av_clipl_int32
+#define SAMPLE_FORMAT s32p
+#elif DEPTH == 33
 #define ftype float
 #define itype float
 #define FLOG logf
@@ -252,7 +265,7 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         for (int i = 0; i < n_in_samples; i++) {
             ftype re, im, x;
 
-#if DEPTH == 16
+#if DEPTH == 16 || DEPTH == 32
             x = src[i] / F(1<<(DEPTH-1));
 #else
             x = src[i];
@@ -285,8 +298,8 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
             y += re * cre - im * cim;
             h += n_in_samples;
         }
-#if DEPTH == 16
-        dst[n] = LRINT(y * F(1<<(DEPTH-1)));
+#if DEPTH == 16 || DEPTH == 32
+        dst[n] = CLIP(LRINT(y * F(1<<(DEPTH-1))));
 #else
         dst[n] = y;
 #endif

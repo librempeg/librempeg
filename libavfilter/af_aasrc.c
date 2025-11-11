@@ -64,6 +64,9 @@ static int query_formats(const AVFilterContext *ctx,
     ret = ff_add_format(&formats, AV_SAMPLE_FMT_S16P);
     if (ret)
         return ret;
+    ret = ff_add_format(&formats, AV_SAMPLE_FMT_S32P);
+    if (ret)
+        return ret;
     ret = ff_add_format(&formats, AV_SAMPLE_FMT_FLTP);
     if (ret)
         return ret;
@@ -119,7 +122,11 @@ static const double rs1[][2] =
 #include "aasrc_template.c"
 
 #undef DEPTH
-#define DEPTH 64
+#define DEPTH 33
+#include "aasrc_template.c"
+
+#undef DEPTH
+#define DEPTH 65
 #include "aasrc_template.c"
 
 static int config_input(AVFilterLink *inlink)
@@ -144,6 +151,12 @@ static int config_input(AVFilterLink *inlink)
         s->aasrc_uninit = aasrc_uninit_s16p;
         s->nb_output_samples = nb_output_samples_s16p;
         ret = aasrc_init_s16p(ctx);
+        break;
+    case AV_SAMPLE_FMT_S32P:
+        s->do_aasrc = aasrc_s32p;
+        s->aasrc_uninit = aasrc_uninit_s32p;
+        s->nb_output_samples = nb_output_samples_s32p;
+        ret = aasrc_init_s32p(ctx);
         break;
     case AV_SAMPLE_FMT_FLTP:
         s->do_aasrc = aasrc_fltp;
