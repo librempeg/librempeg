@@ -102,6 +102,7 @@ typedef struct fn(StateContext) {
     int   out_idx;
     int   nb_poles;
     ftype delta_t;
+    ftype reset_delta_t;
     ftype t_inc_frac;
     int   t_inc_int;
     ctype *pAdv;
@@ -240,14 +241,18 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     fn(StateContext) *state = s->state;
     fn(StateContext) *stc = &state[ch];
     const ftype t_inc_frac = stc->t_inc_frac;
+    ftype reset_delta_t = stc->reset_delta_t;
     const int t_inc_int = stc->t_inc_int;
     const int nb_poles = stc->nb_poles;
     ftype delta_t = stc->delta_t;
-    int in_idx = stc->in_idx;
+    int out_idx = 0, in_idx = stc->in_idx;
+    int reset_index = stc->reset_index;
     const ctype *pAdvDown = stc->pAdvDown;
     const ctype *pAdvUp = stc->pAdvUp;
     const ctype *pAdv = stc->pAdv;
     ctype *pCur = stc->pCur;
+    ctype *hat;
+    int n;
 
     if (stc->hat_samples < n_in_samples) {
         stc->hat = av_realloc_f(stc->hat, n_in_samples, nb_poles * sizeof(*stc->hat));
@@ -257,8 +262,9 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         stc->hat_samples = n_in_samples;
     }
 
+    hat = stc->hat;
     for (int n = 0; n < nb_poles; n++) {
-        ctype *h = stc->hat + n * n_in_samples;
+        ctype *h = hat + n * n_in_samples;
         const ctype a = stc->pFixed[n];
         ctype z = stc->filter_state[n];
 
@@ -281,9 +287,17 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         stc->filter_state[n].im = z.im;
     }
 
-    for (int n = 0; n < n_out_samples && in_idx < n_in_samples; n++) {
+    n = 0;
+repeat:
+    if (reset_index >= K1) {
+        fn(complex_exponential)(pCur, stc->log_mag_scaled, stc->thetaP_Fsf, reset_delta_t, nb_poles);
+        fn(vector_mul_complex)(pCur, stc->rFixed, pCur, nb_poles);
+        reset_index = 0;
+    }
+
+    while (n < n_out_samples && in_idx < n_in_samples && reset_index < K1) {
         ftype delta_t_frac, y = F(0.0);
-        const ctype *h = stc->hat;
+        const ctype *h = hat;
         int frac_carry;
 
         if (pAdv)
@@ -304,12 +318,8 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         dst[n] = y;
 #endif
 
-        if (stc->reset_index >= K1) {
-            fn(complex_exponential)(pCur, stc->log_mag_scaled, stc->thetaP_Fsf, delta_t, nb_poles);
-            fn(vector_mul_complex)(pCur, stc->rFixed, pCur, nb_poles);
-            stc->reset_index = 0;
-        }
-        stc->reset_index++;
+        reset_delta_t = delta_t;
+        reset_index++;
 
         delta_t += t_inc_frac;
         delta_t_frac = delta_t - FLOOR(delta_t);
@@ -319,11 +329,18 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 
         pAdv = (frac_carry == 0) ? pAdvDown : pAdvUp;
 
-        stc->out_idx = n+1;
+        out_idx = n+1;
+        n++;
     }
+
+    if (n < n_out_samples && in_idx < n_in_samples)
+        goto repeat;
 
     stc->pAdv = (ctype *)pAdv;
     stc->delta_t = delta_t;
+    stc->out_idx = out_idx;
+    stc->reset_index = reset_index;
+    stc->reset_delta_t = reset_delta_t;
     stc->in_idx = FFMAX(0, in_idx - n_in_samples);
 }
 
