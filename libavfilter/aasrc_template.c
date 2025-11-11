@@ -80,6 +80,7 @@
 
 #define K1 32
 #define MAX_NB_POLES 8
+#define MAX_HISTORY 4
 
 typedef struct fn(complex_ftype) {
     ftype re, im;
@@ -111,16 +112,30 @@ typedef struct fn(StateContext) {
     ctype pAdvDown[MAX_NB_POLES];
     ctype filter_state[MAX_NB_POLES];
 
+    int   prev_index;
+    ftype prev_delta_t[MAX_HISTORY];
+    ctype prev_pCur[MAX_HISTORY][MAX_NB_POLES];
+
     ctype *hat;
     int   hat_samples;
 } fn(StateContext);
 
-static void fn(complex_exponential)(ctype *x,
+static void fn(complex_exponential)(fn(StateContext) *stc,
+                                    ctype *x,
                                     const ftype *log_mag,
                                     const ftype *theta,
                                     const ftype delta_t,
                                     const int N)
 {
+    ftype *prev_delta_t = stc->prev_delta_t;
+
+    for (int n = 0; n < MAX_HISTORY; n++) {
+        if (prev_delta_t[n] == delta_t) {
+            memcpy(x, stc->prev_pCur[n], MAX_NB_POLES * sizeof(*x));
+            return;
+        }
+    }
+
     for (int n = 0; n < N; n++) {
         ftype mag = FEXP(log_mag[n] * delta_t);
         ftype re, im;
@@ -131,6 +146,13 @@ static void fn(complex_exponential)(ctype *x,
         x[n].re = isnormal(re) ? re : F(0.0);
         x[n].im = isnormal(im) ? im : F(0.0);
     }
+
+    prev_delta_t[stc->prev_index] = delta_t;
+    memcpy(stc->prev_pCur[stc->prev_index], x, MAX_NB_POLES * sizeof(*x));
+
+    stc->prev_index++;
+    if (stc->prev_index >= MAX_HISTORY)
+        stc->prev_index = 0;
 }
 
 static void fn(vector_mul_complex)(ctype *x,
@@ -158,6 +180,9 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
     stc->t_inc_frac = t_inc - FLOOR(t_inc);
     stc->t_inc_int = LRINT(t_inc - stc->t_inc_frac);
     stc->nb_poles = FF_ARRAY_ELEMS(ps1);
+
+    for (int n = 0; n < MAX_HISTORY; n++)
+        stc->prev_delta_t[n] = F(-1.0);
 
     for (int n = 0; n < stc->nb_poles; n++) {
         ftype re, im;
@@ -205,7 +230,7 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         stc->pFixed[n].im = isnormal(im) ? im : F(0.0);
     }
 
-    fn(complex_exponential)(stc->pAdvDown, stc->log_mag_scaled, stc->angle_scaled, stc->t_inc_frac, stc->nb_poles);
+    fn(complex_exponential)(stc, stc->pAdvDown, stc->log_mag_scaled, stc->angle_scaled, stc->t_inc_frac, stc->nb_poles);
     fn(vector_mul_complex)(stc->pAdvUp, stc->pAdvDown, stc->pInv, stc->nb_poles);
 
     memset(stc->filter_state, 0, sizeof(stc->filter_state));
@@ -290,7 +315,7 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     n = 0;
 repeat:
     if (reset_index >= K1) {
-        fn(complex_exponential)(pCur, stc->log_mag_scaled, stc->angle_scaled, reset_delta_t, nb_poles);
+        fn(complex_exponential)(stc, pCur, stc->log_mag_scaled, stc->angle_scaled, reset_delta_t, nb_poles);
         fn(vector_mul_complex)(pCur, stc->rFixed, pCur, nb_poles);
         reset_index = 0;
     }
