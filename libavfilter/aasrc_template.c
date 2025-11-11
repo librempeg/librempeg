@@ -79,7 +79,7 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 #define K1 32
-#define MAX_NB_POLES 8
+#define MAX_NB_POLES 9
 #define MAX_HISTORY 4
 
 typedef struct fn(complex_ftype) {
@@ -172,6 +172,10 @@ static void fn(vector_mul_complex)(ctype *x,
 static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
                               const double t_inc)
 {
+    AASRCContext *s = ctx->priv;
+    const double (*ps)[2];
+    const double (*rs)[2];
+
     stc->scale_factor = (t_inc > 1.0) ? F(1.0) / t_inc : F(1.0);
     stc->out_idx = 0;
     stc->in_idx = 0;
@@ -179,7 +183,19 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
     stc->reset_index = 0;
     stc->t_inc_frac = t_inc - FLOOR(t_inc);
     stc->t_inc_int = LRINT(t_inc - stc->t_inc_frac);
-    stc->nb_poles = FF_ARRAY_ELEMS(ps1);
+
+    switch (s->coeffs) {
+    case 0:
+        stc->nb_poles = FF_ARRAY_ELEMS(ps0);
+        ps = ps0;
+        rs = rs0;
+        break;
+    case 1:
+        stc->nb_poles = FF_ARRAY_ELEMS(ps1);
+        ps = ps1;
+        rs = rs1;
+        break;
+    }
 
     for (int n = 0; n < MAX_HISTORY; n++)
         stc->prev_delta_t[n] = F(-1.0);
@@ -189,8 +205,8 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
 
         stc->pCur[n].re = F(1.0);
         stc->pCur[n].im = F(0.0);
-        re = rs1[n][0] * stc->scale_factor;
-        im = rs1[n][1] * stc->scale_factor;
+        re = rs[n][0] * stc->scale_factor;
+        im = rs[n][1] * stc->scale_factor;
         stc->rFixed[n].re = isnormal(re) ? re : F(0.0);
         stc->rFixed[n].im = isnormal(im) ? im : F(0.0);
     }
@@ -200,8 +216,8 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
     for (int n = 0; n < stc->nb_poles; n++) {
         ftype a, b;
 
-        stc->log_mag[n] = FLOG(ps1[n][0]);
-        stc->angle[n] = ps1[n][1];
+        stc->log_mag[n] = FLOG(ps[n][0]);
+        stc->angle[n] = ps[n][1];
         a = stc->log_mag[n] * stc->scale_factor;
         b = stc->angle[n] * stc->scale_factor;
         stc->log_mag_scaled[n] = isnormal(a) ? a : F(0.0);
