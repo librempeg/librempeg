@@ -139,10 +139,12 @@ static void fn(complex_exponential)(fn(StateContext) *stc,
 
     for (int n = 0; n < N; n++) {
         ftype mag = FEXP(log_mag[n] * delta_t);
-        ftype re, im;
+        ftype re, im, w;
 
-        re = mag * FCOS(theta[n] * delta_t);
-        im = mag * FSIN(theta[n] * delta_t);
+        w = theta[n] * delta_t;
+
+        re = mag * FCOS(w);
+        im = mag * FSIN(w);
 
         x[n].re = isnormal(re) ? re : F(0.0);
         x[n].im = isnormal(im) ? im : F(0.0);
