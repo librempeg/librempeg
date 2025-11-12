@@ -26,6 +26,8 @@
 #include "avfilter.h"
 #include "filters.h"
 
+#include "af_aasrcdsp.h"
+
 typedef struct AASRCContext {
     const AVClass *class;
 
@@ -42,6 +44,8 @@ typedef struct AASRCContext {
     void (*do_aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int ch);
     int (*nb_output_samples)(AVFilterContext *ctx);
     void (*aasrc_uninit)(AVFilterContext *ctx);
+
+    AudioASRCDSPContext dsp;
 } AASRCContext;
 
 #define OFFSET(x) offsetof(AASRCContext, x)
@@ -49,7 +53,6 @@ typedef struct AASRCContext {
 
 static const AVOption aasrc_options[] = {
     { "sample_rate", "set the sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=0}, 0, INT_MAX, FLAGS },
-    { "coeffs", "set the coefficients", OFFSET(coeffs), AV_OPT_TYPE_INT, {.i64=0}, 0, 1, FLAGS },
     {NULL}
 };
 
@@ -92,52 +95,26 @@ static int query_formats(const AVFilterContext *ctx,
                           &cfg_out[0]->samplerates);
 }
 
-static const double ps1[][2] = {
-  { 0.9760535775175809, -2.765918363175261 },
-  { 0.926562340797499, -2.726903835326539 },
-  { 0.8702572385985653, -2.6428107179193105 },
-  { 0.8033402468123371, -2.5013620592467447 },
-  { 0.725431288377867, -2.2843792363427995 },
-  { 0.6412639318348922, -1.9700093384685355 },
-  { 0.5610460039575634, -1.5391900107579972 },
-  { 0.4978949434452733, -0.9879241842155264 },
-  { 0.46321543404892235, -0.3415500246486273 },
+static const double ps0[][2] = {
+    { 0.9578630055624432, -2.784298020236839 },
+    { 0.8756728560948531, -2.7134971317661205 },
+    { 0.7925790723509234, -2.5653276484827483 },
+    { 0.7077725559159986, -2.3279396797974865 },
+    { 0.6249832854781561, -1.987556815944955 },
+    { 0.5516977023223343, -1.5349700908197366 },
+    { 0.4967440107215344, -0.9749835345933451 },
+    { 0.46735244096670364, -0.3349736204989223 },
 };
 
-static const double rs1[][2] = {
-  { -0.060466567873674805, 0.018500789079324682 },
-  { 0.21778634785563217, 0.1090502163213473 },
-  { -0.1948245584934657, -0.5417739598776901 },
-  { -0.35806701350792886, 1.0033247482045409 },
-  { 1.4055371903824312, -0.9911949241798701 },
-  { -2.5196335222023727, 0.15461860777467187 },
-  { 3.072951417413359, 1.4585365704958246 },
-  { -2.568358528210207, -3.307050764109 },
-  { 1.0050751692462099, 4.5531538925746355 },
-};
-
-static const double ps0[][2] =
-{
-    { 0.96637235322842, -2.65273372307310 },
-    { 0.89626967235734, -2.59860038103081 },
-    { 0.81440696349573, -2.47839598145581 },
-    { 0.71673488065413, -2.26785948965747 },
-    { 0.60901667084191, -1.93229493507569 },
-    { 0.50829206119013, -1.43723297659565 },
-    { 0.43674907667108, -0.77529073927169 },
-    { 0.41102514780717,  0.00000000000000 },
-};
-
-static const double rs0[][2] =
-{
-    {  1.559454965418541e-02, -8.711330296099162e-02 },
-    { -2.821143538662592e-01,  1.931070842024560e-01 },
-    {  8.057326481185847e-01,  1.604232271503586e-01 },
-    { -9.406390985581723e-01, -1.229353144143673e+00 },
-    {  3.054992725022572e-02,  2.511596664326740e+00 },
-    {  1.911629155795335e+00, -3.046222365096745e+00 },
-    { -3.979491574060914e+00,  2.124135337714532e+00 },
-    {  2.438749735037705e+00, -1.110054033101757e-15 },
+static const double rs0[][2] = {
+    { 0.10533169861666732, 0.04001101951151979 },
+    { -0.1961910503264387, -0.3799830289563059 },
+    { -0.24232584341445335, 0.9450542522734389 },
+    { 1.3413659926925265, -1.0585295826422831 },
+    { -2.5535974738617053, 0.2344164280469507 },
+    { 3.134534391075847, 1.4222846483145621 },
+    { -2.5992127778668843, -3.283140714505958 },
+    { 1.0100950630858414, 4.510648237601227 },
 };
 
 #define DEPTH 16
@@ -155,6 +132,22 @@ static const double rs0[][2] =
 #define DEPTH 65
 #include "aasrc_template.c"
 
+void ff_aasrc_init(AudioASRCDSPContext *dsp)
+{
+    dsp->vector_fmul_complex = vector_mul_complex_fltp;
+    dsp->vector_dmul_complex = vector_mul_complex_dblp;
+
+    dsp->vector_fmul_real = vector_mul_real_fltp;
+    dsp->vector_dmul_real = vector_mul_real_dblp;
+
+    dsp->vector_fmul_complex_add = vector_mul_complex_add_fltp;
+    dsp->vector_dmul_complex_add = vector_mul_complex_add_dblp;
+
+#if ARCH_X86
+    ff_aasrc_init_x86(dsp);
+#endif
+}
+
 static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -170,6 +163,8 @@ static int config_input(AVFilterLink *inlink)
     outlink->time_base = (AVRational) {1, outlink->sample_rate};
     s->channels = inlink->ch_layout.nb_channels;
     s->t_inc = inlink->sample_rate / ((double)outlink->sample_rate);
+
+    ff_aasrc_init(&s->dsp);
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_S16P:

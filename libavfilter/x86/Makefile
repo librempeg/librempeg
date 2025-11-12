@@ -1,5 +1,6 @@
 OBJS-$(CONFIG_SCENE_SAD)                     += x86/scene_sad_init.o
 
+OBJS-$(CONFIG_AASRC_FILTER)                  += x86/af_aasrc_init.o
 OBJS-$(CONFIG_AFIR_FILTER)                   += x86/af_afir_init.o
 OBJS-$(CONFIG_ANLMDN_FILTER)                 += x86/af_anlmdn_init.o
 OBJS-$(CONFIG_ATADENOISE_FILTER)             += x86/vf_atadenoise_init.o
@@ -47,6 +48,7 @@ OBJS-$(CONFIG_YADIF_FILTER)                  += x86/vf_yadif_init.o
 
 X86ASM-OBJS-$(CONFIG_SCENE_SAD)              += x86/scene_sad.o
 
+X86ASM-OBJS-$(CONFIG_AASRC_FILTER)           += x86/af_aasrc.o
 X86ASM-OBJS-$(CONFIG_AFIR_FILTER)            += x86/af_afir.o
 X86ASM-OBJS-$(CONFIG_ANLMDN_FILTER)          += x86/af_anlmdn.o
 X86ASM-OBJS-$(CONFIG_ATADENOISE_FILTER)      += x86/vf_atadenoise.o

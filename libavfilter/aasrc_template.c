@@ -16,6 +16,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#undef ctype
 #undef ftype
 #undef itype
 #undef FLOG
@@ -25,8 +26,12 @@
 #undef FLOOR
 #undef LRINT
 #undef CLIP
+#undef dsp_vector_mul_real
+#undef dsp_vector_mul_complex
+#undef dsp_vector_mul_complex_add
 #undef SAMPLE_FORMAT
 #if DEPTH == 16
+#define ctype complex_float
 #define ftype float
 #define itype int16_t
 #define FLOG logf
@@ -36,8 +41,12 @@
 #define FLOOR floorf
 #define LRINT lrintf
 #define CLIP av_clip_int16
+#define dsp_vector_mul_real dsp->vector_fmul_real
+#define dsp_vector_mul_complex dsp->vector_fmul_complex
+#define dsp_vector_mul_complex_add dsp->vector_fmul_complex_add
 #define SAMPLE_FORMAT s16p
 #elif DEPTH == 32
+#define ctype complex_double
 #define ftype double
 #define itype int32_t
 #define FLOG log
@@ -47,8 +56,12 @@
 #define FLOOR floor
 #define LRINT lrint
 #define CLIP av_clipl_int32
+#define dsp_vector_mul_real dsp->vector_dmul_real
+#define dsp_vector_mul_complex dsp->vector_dmul_complex
+#define dsp_vector_mul_complex_add dsp->vector_dmul_complex_add
 #define SAMPLE_FORMAT s32p
 #elif DEPTH == 33
+#define ctype complex_float
 #define ftype float
 #define itype float
 #define FLOG logf
@@ -57,8 +70,12 @@
 #define FEXP expf
 #define FLOOR floorf
 #define LRINT lrintf
+#define dsp_vector_mul_real dsp->vector_fmul_real
+#define dsp_vector_mul_complex dsp->vector_fmul_complex
+#define dsp_vector_mul_complex_add dsp->vector_fmul_complex_add
 #define SAMPLE_FORMAT fltp
 #else
+#define ctype complex_double
 #define ftype double
 #define itype double
 #define FLOG log
@@ -67,6 +84,9 @@
 #define FEXP exp
 #define FLOOR floor
 #define LRINT lrint
+#define dsp_vector_mul_real dsp->vector_dmul_real
+#define dsp_vector_mul_complex dsp->vector_dmul_complex
+#define dsp_vector_mul_complex_add dsp->vector_dmul_complex_add
 #define SAMPLE_FORMAT dblp
 #endif
 
@@ -78,15 +98,13 @@
 #define fn2(a,b)   fn3(a,b)
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
+#define fnc3(a,b)   a##_##b
+#define fnc2(a,b)   fn3(a, b)
+#define fnc(a)      fnc2(a, ftype)
+
 #define K1 32
-#define MAX_NB_POLES 9
+#define MAX_NB_POLES 8
 #define MAX_HISTORY 4
-
-typedef struct fn(complex_ftype) {
-    ftype re, im;
-} fn(complex_ftype);
-
-#define ctype fn(complex_ftype)
 
 typedef struct fn(StateContext) {
     ftype scale_factor;
@@ -176,6 +194,7 @@ static void fn(vector_mul_complex)(ctype *x,
     }
 }
 
+#if DEPTH == 33 || DEPTH == 65
 static ftype fn(vector_mul_real)(const ctype *cur,
                                  const ctype *h,
                                  const int N)
@@ -195,27 +214,29 @@ static ftype fn(vector_mul_real)(const ctype *cur,
 }
 
 static void fn(vector_mul_complex_add)(const ftype src,
-                                       ctype *h,
                                        const ctype *fixed,
-                                       ctype *state,
+                                       const ctype *in,
+                                       ctype *out,
                                        const int N)
 {
     for (int n = 0; n < N; n++) {
         const ctype a = fixed[n];
-        ctype z = state[n];
+        ctype z = in[n];
         ftype re, im;
 
         re = z.re * a.re - z.im * a.im + src;
         im = z.re * a.im + z.im * a.re;
 
-        h[n].re = z.re = isnormal(re) ? re : F(0.0);
-        h[n].im = z.im = isnormal(im) ? im : F(0.0);
-        state[n] = z;
+        z.re = re;
+        z.im = im;
+
+        out[n] = z;
     }
 }
+#endif
 
-static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
-                              const double t_inc)
+static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
+                             const double t_inc)
 {
     AASRCContext *s = ctx->priv;
     const double (*ps)[2];
@@ -235,11 +256,8 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         ps = ps0;
         rs = rs0;
         break;
-    case 1:
-        stc->nb_poles = FF_ARRAY_ELEMS(ps1);
-        ps = ps1;
-        rs = rs1;
-        break;
+    default:
+        return AVERROR(EINVAL);
     }
 
     for (int n = 0; n < MAX_HISTORY; n++)
@@ -290,6 +308,8 @@ static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
     fn(vector_mul_complex)(stc->adv_up, stc->adv_down, stc->inv, stc->nb_poles);
 
     memset(stc->filter_state, 0, sizeof(stc->filter_state));
+
+    return 0;
 }
 
 static int fn(aasrc_init)(AVFilterContext *ctx)
@@ -304,8 +324,11 @@ static int fn(aasrc_init)(AVFilterContext *ctx)
 
     for (int ch = 0; ch < s->channels; ch++) {
         fn(StateContext) *stc = &state[ch];
+        int ret;
 
-        fn(aasrc_prepare)(ctx, stc, s->t_inc);
+        ret = fn(aasrc_prepare)(ctx, stc, s->t_inc);
+        if (ret < 0)
+            return ret;
     }
 
     return 0;
@@ -315,6 +338,7 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
                       const int ch)
 {
     AASRCContext *s = ctx->priv;
+    const AudioASRCDSPContext *const dsp = &s->dsp;
     const itype *src = (const itype *)in->extended_data[ch];
     itype *dst = (itype *)out->extended_data[ch];
     const int n_out_samples = out->nb_samples;
@@ -337,6 +361,21 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     ctype *hat;
     int n;
 
+    ftype (*vector_mul_real)(const ctype *cur,
+                             const ctype *h,
+                             const int N) = dsp_vector_mul_real;
+
+    void (*vector_mul_complex)(ctype *x,
+                               const ctype *a,
+                               const ctype *b,
+                               const int N) = dsp_vector_mul_complex;
+
+    void (*vector_mul_complex_add)(const ftype src,
+                                   const ctype *fixed,
+                                   const ctype *in,
+                                   ctype *out,
+                                   const int N) = dsp_vector_mul_complex_add;
+
     if (stc->hat_samples < n_in_samples) {
         stc->hat = av_realloc_f(stc->hat, n_in_samples, nb_poles * sizeof(*stc->hat));
         if (!stc->hat)
@@ -346,7 +385,18 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     }
 
     hat = stc->hat;
-    for (int i = 0; i < n_in_samples; i++) {
+    {
+        ctype *h = hat;
+        ftype x = src[0];
+
+#if DEPTH == 16 || DEPTH == 32
+        x /= F(1<<(DEPTH-1));
+#endif
+
+        vector_mul_complex_add(x, p_fixed, filter_state, h, nb_poles);
+    }
+
+    for (int i = 1; i < n_in_samples; i++) {
         ctype *h = hat + i * nb_poles;
         ftype x = src[i];
 
@@ -354,14 +404,15 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
         x /= F(1<<(DEPTH-1));
 #endif
 
-        fn(vector_mul_complex_add)(x, h, p_fixed, filter_state, nb_poles);
+        vector_mul_complex_add(x, p_fixed, h - nb_poles, h, nb_poles);
     }
+    memcpy(filter_state, hat + (n_in_samples-1) * nb_poles, nb_poles * sizeof(*hat));
 
     n = 0;
 repeat:
     if (reset_index >= K1) {
         fn(complex_exponential)(stc, cur, stc->log_mag_scaled, stc->angle_scaled, reset_delta_t, nb_poles);
-        fn(vector_mul_complex)(cur, stc->r_fixed, cur, nb_poles);
+        vector_mul_complex(cur, stc->r_fixed, cur, nb_poles);
         reset_index = 0;
     }
 
@@ -370,9 +421,9 @@ repeat:
         ftype delta_t_frac, y;
         int frac_carry;
 
-        fn(vector_mul_complex)(cur, cur, adv, nb_poles);
+        vector_mul_complex(cur, cur, adv, nb_poles);
 
-        y = fn(vector_mul_real)(cur, h, nb_poles);
+        y = vector_mul_real(cur, h, nb_poles);
 
 #if DEPTH == 16 || DEPTH == 32
         dst[n] = CLIP(LRINT(y * F(1<<(DEPTH-1))));
