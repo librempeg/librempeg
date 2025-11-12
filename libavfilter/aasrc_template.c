@@ -164,8 +164,12 @@ static void fn(vector_mul_complex)(ctype *x,
                                    const int N)
 {
     for (int n = 0; n < N; n++) {
-        ftype re = a[n].re * b[n].re - a[n].im * b[n].im;
-        ftype im = a[n].re * b[n].im + a[n].im * b[n].re;
+        const ftype are = a[n].re;
+        const ftype aim = a[n].im;
+        const ftype bre = b[n].re;
+        const ftype bim = b[n].im;
+        ftype re = are * bre - aim * bim;
+        ftype im = are * bim + aim * bre;
 
         x[n].re = isnormal(re) ? re : F(0.0);
         x[n].im = isnormal(im) ? im : F(0.0);
