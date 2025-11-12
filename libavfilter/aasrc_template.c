@@ -172,6 +172,24 @@ static void fn(vector_mul_complex)(ctype *x,
     }
 }
 
+static ftype fn(vector_mul_real)(const ctype *cur,
+                                 const ctype *h,
+                                 const int N)
+{
+    ftype y = F(0.0);
+
+    for (int n = 0; n < N; n++) {
+        const ftype cre = cur[n].re;
+        const ftype cim = cur[n].im;
+        const ftype re = h[n].re;
+        const ftype im = h[n].im;
+
+        y += re * cre - im * cim;
+    }
+
+    return y;
+}
+
 static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
                               const double t_inc)
 {
@@ -336,19 +354,13 @@ repeat:
 
     while (n < n_out_samples && in_idx < n_in_samples && reset_index < K1) {
         const ctype *h = hat + in_idx * nb_poles;
-        ftype delta_t_frac, y = F(0.0);
+        ftype delta_t_frac, y;
         int frac_carry;
 
         fn(vector_mul_complex)(cur, cur, adv, nb_poles);
 
-        for (int i = 0; i < nb_poles; i++) {
-            const ftype re = h[i].re;
-            const ftype im = h[i].im;
-            const ftype cre = cur[i].re;
-            const ftype cim = cur[i].im;
+        y = fn(vector_mul_real)(cur, h, nb_poles);
 
-            y += re * cre - im * cim;
-        }
 #if DEPTH == 16 || DEPTH == 32
         dst[n] = CLIP(LRINT(y * F(1<<(DEPTH-1))));
 #else
