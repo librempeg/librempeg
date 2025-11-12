@@ -194,6 +194,26 @@ static ftype fn(vector_mul_real)(const ctype *cur,
     return y;
 }
 
+static void fn(vector_mul_complex_add)(const ftype src,
+                                       ctype *h,
+                                       const ctype *fixed,
+                                       ctype *state,
+                                       const int N)
+{
+    for (int n = 0; n < N; n++) {
+        const ctype a = fixed[n];
+        ctype z = state[n];
+        ftype re, im;
+
+        re = z.re * a.re - z.im * a.im + src;
+        im = z.re * a.im + z.im * a.re;
+
+        h[n].re = z.re = isnormal(re) ? re : F(0.0);
+        h[n].im = z.im = isnormal(im) ? im : F(0.0);
+        state[n] = z;
+    }
+}
+
 static void fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
                               const double t_inc)
 {
@@ -328,24 +348,13 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     hat = stc->hat;
     for (int i = 0; i < n_in_samples; i++) {
         ctype *h = hat + i * nb_poles;
-
-        for (int n = 0; n < nb_poles; n++) {
-            const ctype a = p_fixed[n];
-            ctype z = filter_state[n];
-            ftype re, im, x;
+        ftype x = src[i];
 
 #if DEPTH == 16 || DEPTH == 32
-            x = src[i] / F(1<<(DEPTH-1));
-#else
-            x = src[i];
+        x /= F(1<<(DEPTH-1));
 #endif
-            re = z.re * a.re - z.im * a.im + x;
-            im = z.re * a.im + z.im * a.re;
 
-            h[n].re = z.re = isnormal(re) ? re : F(0.0);
-            h[n].im = z.im = isnormal(im) ? im : F(0.0);
-            filter_state[n] = z;
-        }
+        fn(vector_mul_complex_add)(x, h, p_fixed, filter_state, nb_poles);
     }
 
     n = 0;
