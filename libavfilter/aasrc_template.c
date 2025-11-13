@@ -103,7 +103,7 @@
 #define fnc(a)      fnc2(a, ftype)
 
 #define K1 32
-#define MAX_NB_POLES 8
+#define MAX_NB_POLES 12
 #define MAX_HISTORY 4
 
 typedef struct fn(StateContext) {
