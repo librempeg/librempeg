@@ -145,7 +145,7 @@ INIT_YMM fma3
 %if UNIX64
 cglobal vector_fmul_complex_add, 4,4,5, fixed, in, out, N
 %else
-cglobal vector_fmul_complex_add, 5,5,5, src, fixed. in, out, N
+cglobal vector_fmul_complex_add, 5,5,5, src, fixed, in, out, N
 %endif
     shl       Nd, 3
     vbroadcastsd m0, xm0
@@ -178,7 +178,7 @@ INIT_YMM fma3
 %if UNIX64
 cglobal vector_dmul_complex_add, 4,4,5, fixed, in, out, N
 %else
-cglobal vector_dmul_complex_add, 5,5,5, src, fixed. in, out, N
+cglobal vector_dmul_complex_add, 5,5,5, src, fixed, in, out, N
 %endif
     shl       Nd, 4
     vbroadcastsd m0, xm0
