@@ -124,11 +124,10 @@ typedef struct fn(StateContext) {
     ftype reset_delta_t;
     ftype t_inc_frac;
     int   t_inc_int;
-    ctype *adv;
+    const ctype *adv_ptr;
     ctype one[MAX_NB_POLES];
     ctype cur[MAX_NB_POLES];
-    ctype adv_up[MAX_NB_POLES];
-    ctype adv_down[MAX_NB_POLES];
+    ctype adv[2][MAX_NB_POLES];
     ctype filter_state[MAX_NB_POLES];
 
     int   prev_index;
@@ -302,10 +301,10 @@ static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
 
     fn(vector_mul_complex)(stc->cur, stc->cur, stc->r_fixed, stc->nb_poles);
 
-    stc->adv = stc->one;
+    stc->adv_ptr = stc->one;
 
-    fn(complex_exponential)(stc, stc->adv_down, stc->log_mag_scaled, stc->angle_scaled, stc->t_inc_frac, stc->nb_poles);
-    fn(vector_mul_complex)(stc->adv_up, stc->adv_down, stc->inv, stc->nb_poles);
+    fn(complex_exponential)(stc, stc->adv[0], stc->log_mag_scaled, stc->angle_scaled, stc->t_inc_frac, stc->nb_poles);
+    fn(vector_mul_complex)(stc->adv[1], stc->adv[0], stc->inv, stc->nb_poles);
 
     memset(stc->filter_state, 0, sizeof(stc->filter_state));
 
@@ -350,13 +349,12 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const int t_inc_int = stc->t_inc_int;
     const int nb_poles = stc->nb_poles;
     ftype delta_t = stc->delta_t;
-    int out_idx = 0, in_idx = stc->in_idx;
+    int in_idx = stc->in_idx;
     int reset_index = stc->reset_index;
     ctype *filter_state = stc->filter_state;
-    const ctype *adv_down = stc->adv_down;
     const ctype *p_fixed = stc->p_fixed;
-    const ctype *adv_up = stc->adv_up;
-    const ctype *adv = stc->adv;
+    const ctype (*adv)[MAX_NB_POLES] = stc->adv;
+    const ctype *adv_ptr = stc->adv_ptr;
     ctype *cur = stc->cur;
     ctype *hat;
     int n;
@@ -421,7 +419,7 @@ repeat:
         ftype delta_t_frac, y;
         int frac_carry;
 
-        vector_mul_complex(cur, cur, adv, nb_poles);
+        vector_mul_complex(cur, cur, adv_ptr, nb_poles);
 
         y = vector_mul_real(cur, h, nb_poles);
 
@@ -440,18 +438,17 @@ repeat:
         in_idx += frac_carry + t_inc_int;
         delta_t = delta_t_frac;
 
-        adv = (frac_carry == 0) ? adv_down : adv_up;
+        adv_ptr = adv[frac_carry];
 
-        out_idx = n+1;
         n++;
     }
 
     if (n < n_out_samples && in_idx < n_in_samples)
         goto repeat;
 
-    stc->adv = (ctype *)adv;
+    stc->out_idx = n;
+    stc->adv_ptr = adv_ptr;
     stc->delta_t = delta_t;
-    stc->out_idx = out_idx;
     stc->reset_index = reset_index;
     stc->reset_delta_t = reset_delta_t;
     stc->in_idx = FFMAX(0, in_idx - n_in_samples);
