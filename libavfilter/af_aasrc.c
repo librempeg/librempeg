@@ -228,7 +228,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFrame *out;
     int ret;
 
-    nb_out_samples = lrint(ceil(in->nb_samples / s->t_inc));
+    nb_out_samples = lrint(ceil(in->nb_samples / s->t_inc)) + 1;
 
     out = ff_get_audio_buffer(outlink, nb_out_samples);
     if (!out) {
