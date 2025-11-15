@@ -181,7 +181,7 @@ static int config_input(AVFilterLink *inlink)
     av_reduce(&s->in_nb_samples, &s->out_nb_samples,
               inlink->sample_rate, outlink->sample_rate, INT_MAX);
 
-    factor = lrint(2.0*ceil(s->quality/(2.0*s->out_nb_samples)));
+    factor = lrint(ceil(s->quality/((double)FFMIN(s->in_nb_samples, s->out_nb_samples))));
     max_nb_samples = 2*FFMAX(s->in_nb_samples, s->out_nb_samples);
     factor = FFMIN(factor, INT32_MAX/max_nb_samples);
     s->in_nb_samples *= factor;
