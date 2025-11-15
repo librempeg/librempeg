@@ -707,6 +707,7 @@ OBJS-$(CONFIG_SRT_DEMUXER)               += srtdec.o subtitles.o
 OBJS-$(CONFIG_SRT_MUXER)                 += srtenc.o
 OBJS-$(CONFIG_SSM_DEMUXER)               += ssm.o
 OBJS-$(CONFIG_SSP_DEMUXER)               += ssp_sd9.o riff.o
+OBJS-$(CONFIG_SSV_DEMUXER)               += ssv.o
 OBJS-$(CONFIG_STER_DEMUXER)              += ster.o pcm.o
 OBJS-$(CONFIG_STL_DEMUXER)               += stldec.o subtitles.o
 OBJS-$(CONFIG_STMA_DEMUXER)              += stma.o
