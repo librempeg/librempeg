@@ -142,7 +142,7 @@ static int opus_find_frame_end(AVCodecParserContext *ctx, AVCodecContext *avctx,
     if (!s->ts_framing)
         payload_len = buf_size;
 
-    if (payload_len <= buf_size && (!s->ts_framing || start_found)) {
+    if (payload_len > 0 && payload_len <= buf_size && (!s->ts_framing || start_found)) {
         ret = set_frame_duration(ctx, avctx, payload, payload_len);
         if (ret < 0) {
             pc->frame_start_found = 0;
@@ -189,8 +189,9 @@ static int opus_parse(AVCodecParserContext *ctx, AVCodecContext *avctx,
     if (ctx->flags & PARSER_FLAG_COMPLETE_FRAMES) {
         next = buf_size;
 
-        if (set_frame_duration(ctx, avctx, buf, buf_size) < 0)
-            goto fail;
+        if (buf_size > 0)
+            if (set_frame_duration(ctx, avctx, buf, buf_size) < 0)
+                goto fail;
     } else {
         next = opus_find_frame_end(ctx, avctx, buf, buf_size, &header_len);
 
