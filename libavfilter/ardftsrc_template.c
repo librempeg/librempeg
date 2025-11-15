@@ -26,17 +26,17 @@
 #undef ttype
 #undef FABS
 #undef FEXP
-#undef FPOW
 #undef FCOS
 #undef FSIN
+#undef FTANH
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
 #if DEPTH == 8
 #define FCOS cosf
 #define FSIN sinf
-#define FPOW powf
 #define FABS fabsf
 #define FEXP expf
+#define FTANH tanhf
 #define ctype AVComplexFloat
 #define ftype float
 #define itype uint8_t
@@ -46,9 +46,9 @@
 #elif DEPTH == 16
 #define FCOS cosf
 #define FSIN sinf
-#define FPOW powf
 #define FABS fabsf
 #define FEXP expf
+#define FTANH tanhf
 #define ctype AVComplexFloat
 #define ftype float
 #define itype int16_t
@@ -58,9 +58,9 @@
 #elif DEPTH == 32
 #define FCOS cos
 #define FSIN sin
-#define FPOW pow
 #define FABS fabs
 #define FEXP exp
+#define FTANH tanh
 #define ctype AVComplexDouble
 #define ftype double
 #define itype int32_t
@@ -70,9 +70,9 @@
 #elif DEPTH == 33
 #define FCOS cosf
 #define FSIN sinf
-#define FPOW powf
 #define FABS fabsf
 #define FEXP expf
+#define FTANH tanhf
 #define ctype AVComplexFloat
 #define ftype float
 #define itype float
@@ -82,9 +82,9 @@
 #else
 #define FCOS cos
 #define FSIN sin
-#define FPOW pow
 #define FABS fabs
 #define FEXP exp
+#define FTANH tanh
 #define ctype AVComplexDouble
 #define ftype double
 #define itype double
@@ -214,8 +214,9 @@ static int fn(src_init)(AVFilterContext *ctx)
     taper = s->taper;
     for (int n = 0; n < taper_samples-1; n++) {
         const ftype t = taper_samples;
+        const ftype a = F(0.9);
         const ftype zbk = t/((t-n)-F(1.0)) - t/(n+F(1.0));
-        const ftype v = F(1.0)/(FEXP(zbk)+F(1.0));
+        const ftype v = F(0.5) * FTANH(-a * zbk) + F(0.5);
 
         taper[n].re = taper[n].im = isnormal(v) ? v : F(0.0);
     }
