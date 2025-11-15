@@ -128,14 +128,11 @@ typedef struct fn(StateContext) {
     ctype one[MAX_NB_POLES];
     ctype cur[MAX_NB_POLES];
     ctype adv[2][MAX_NB_POLES];
-    ctype filter_state[MAX_NB_POLES];
+    ctype h[MAX_NB_POLES];
 
     int   prev_index;
     ftype prev_delta_t[MAX_HISTORY];
     ctype prev_cur[MAX_HISTORY][MAX_NB_POLES];
-
-    ctype *hat;
-    int   hat_samples;
 } fn(StateContext);
 
 static void fn(complex_exponential)(fn(StateContext) *stc,
@@ -306,8 +303,6 @@ static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
     fn(complex_exponential)(stc, stc->adv[0], stc->log_mag_scaled, stc->angle_scaled, stc->t_inc_frac, stc->nb_poles);
     fn(vector_mul_complex)(stc->adv[1], stc->adv[0], stc->inv, stc->nb_poles);
 
-    memset(stc->filter_state, 0, sizeof(stc->filter_state));
-
     return 0;
 }
 
@@ -351,12 +346,13 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     ftype delta_t = stc->delta_t;
     int in_idx = stc->in_idx;
     int reset_index = stc->reset_index;
-    ctype *filter_state = stc->filter_state;
     const ctype *p_fixed = stc->p_fixed;
     const ctype (*adv)[MAX_NB_POLES] = stc->adv;
     const ctype *adv_ptr = stc->adv_ptr;
     ctype *cur = stc->cur;
-    ctype *hat;
+    int prev_in_idx = -1;
+    ctype *h = stc->h;
+    ftype x;
     int n;
 
     ftype (*vector_mul_real)(const ctype *cur,
@@ -374,38 +370,6 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
                                    ctype *out,
                                    const int N) = dsp_vector_mul_complex_add;
 
-    if (stc->hat_samples < n_in_samples) {
-        stc->hat = av_realloc_f(stc->hat, n_in_samples, nb_poles * sizeof(*stc->hat));
-        if (!stc->hat)
-            return;
-
-        stc->hat_samples = n_in_samples;
-    }
-
-    hat = stc->hat;
-    {
-        ctype *h = hat;
-        ftype x = src[0];
-
-#if DEPTH == 16 || DEPTH == 32
-        x /= F(1<<(DEPTH-1));
-#endif
-
-        vector_mul_complex_add(x, p_fixed, filter_state, h, nb_poles);
-    }
-
-    for (int i = 1; i < n_in_samples; i++) {
-        ctype *h = hat + i * nb_poles;
-        ftype x = src[i];
-
-#if DEPTH == 16 || DEPTH == 32
-        x /= F(1<<(DEPTH-1));
-#endif
-
-        vector_mul_complex_add(x, p_fixed, h - nb_poles, h, nb_poles);
-    }
-    memcpy(filter_state, hat + (n_in_samples-1) * nb_poles, nb_poles * sizeof(*hat));
-
     n = 0;
 repeat:
     if (reset_index >= K1) {
@@ -415,9 +379,17 @@ repeat:
     }
 
     while (n < n_out_samples && in_idx < n_in_samples && reset_index < K1) {
-        const ctype *h = hat + in_idx * nb_poles;
+        int frac_carry, idx_inc;
         ftype delta_t_frac, y;
-        int frac_carry;
+
+        if (prev_in_idx < in_idx) {
+            x = src[in_idx];
+#if DEPTH == 16 || DEPTH == 32
+            x /= F(1<<(DEPTH-1));
+#endif
+            vector_mul_complex_add(x, p_fixed, h, h, nb_poles);
+            prev_in_idx = in_idx;
+        }
 
         vector_mul_complex(cur, cur, adv_ptr, nb_poles);
 
@@ -435,11 +407,20 @@ repeat:
         delta_t += t_inc_frac;
         delta_t_frac = delta_t - FLOOR(delta_t);
         frac_carry = LRINT(delta_t - delta_t_frac);
-        in_idx += frac_carry + t_inc_int;
+        idx_inc = frac_carry + t_inc_int;
         delta_t = delta_t_frac;
 
         adv_ptr = adv[frac_carry];
 
+        for (int i = 1; i < idx_inc; i++) {
+            x = src[in_idx+i];
+#if DEPTH == 16 || DEPTH == 32
+            x /= F(1<<(DEPTH-1));
+#endif
+            vector_mul_complex_add(x, p_fixed, h, h, nb_poles);
+        }
+
+        in_idx += idx_inc;
         n++;
     }
 
@@ -467,15 +448,5 @@ static void fn(aasrc_uninit)(AVFilterContext *ctx)
 {
     AASRCContext *s = ctx->priv;
 
-    if (s->state) {
-        fn(StateContext) *state = s->state;
-
-        for (int ch = 0; ch < s->channels; ch++) {
-            fn(StateContext) *stc = &state[ch];
-
-            av_freep(&stc->hat);
-        }
-
-        av_freep(&s->state);
-    }
+    av_freep(&s->state);
 }
