@@ -176,8 +176,8 @@ static int str_read_header(AVFormatContext *s)
     if ((ret = ffio_ensure_seekback(pb, RIFF_HEADER_SIZE)) < 0)
         return ret;
 
-    if (avio_read(pb, sector, RIFF_HEADER_SIZE) != RIFF_HEADER_SIZE)
-        return AVERROR(EIO);
+    if ((ret = ffio_read_size(pb, sector, RIFF_HEADER_SIZE)) < 0)
+        return ret;
     if (AV_RL32(&sector[0]) == RIFF_TAG)
         start = RIFF_HEADER_SIZE;
     else
@@ -218,7 +218,7 @@ static int str_read_packet(AVFormatContext *s,
             return AVERROR_EOF;
 
         if (read != RAW_DATA_SIZE)
-            return AVERROR(EIO);
+            return AVERROR_INVALIDDATA;
 
         for (int n = 0; n < RAW_DATA_SIZE-4; n++) {
             if (AV_RB32(sector + n) == STR_MAGIC) {
@@ -237,7 +237,7 @@ static int str_read_packet(AVFormatContext *s,
                 return AVERROR_EOF;
 
             if (read != sizeof(sector)-RAW_DATA_SIZE)
-                return AVERROR(EIO);
+                return AVERROR_INVALIDDATA;
         } else if ((str->mode == 3) ||
                    AV_RB32(sector) == STR_MAGIC_A ||
                    AV_RB32(sector) == STR_MAGIC_B ||

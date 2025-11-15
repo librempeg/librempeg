@@ -206,7 +206,7 @@ static int thp_read_packet(AVFormatContext *s,
         if (ret < 0)
             return ret;
         if (ret != size)
-            return AVERROR(EIO);
+            return AVERROR_INVALIDDATA;
 
         if (audio_size > 0) {
             ret = av_get_packet(pb, thp->audio_pkt, audio_size);

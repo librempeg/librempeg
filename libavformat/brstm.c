@@ -23,6 +23,7 @@
 #include "libavutil/mem.h"
 #include "libavcodec/bytestream.h"
 #include "avformat.h"
+#include "avio_internal.h"
 #include "demux.h"
 #include "internal.h"
 
@@ -429,12 +430,11 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
                                     (b->current_block - 1), 4 * channels);
 
         for (i = 0; i < channels; i++) {
-            ret = avio_read(pb, dst, size);
+            ret = ffio_read_size(pb, dst, size);
             dst += size;
             avio_skip(pb, skip);
-            if (ret != size) {
-                return AVERROR(EIO);
-            }
+            if (ret < 0)
+                return ret;
         }
         pkt->duration = samples;
     } else {
@@ -445,7 +445,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     pkt->stream_index = 0;
 
     if (ret != size)
-        ret = AVERROR(EIO);
+        ret = AVERROR_INVALIDDATA;
 
     return ret;
 }

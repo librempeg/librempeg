@@ -74,10 +74,10 @@ static int binka_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     pos = avio_tell(pb);
     if (avio_rl16(pb) != 0x9999)
-        return AVERROR(EIO);
+        return AVERROR_INVALIDDATA;
     pkt_size = avio_rl16(pb) + 4;
     if (pkt_size <= 4)
-        return AVERROR(EIO);
+        return AVERROR_INVALIDDATA;
     ret = av_new_packet(pkt, pkt_size);
     if (ret < 0)
         return ret;

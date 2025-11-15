@@ -162,7 +162,7 @@ static int redspark_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     ret = av_get_packet(s->pb, pkt, par->block_align);
     if (ret != par->block_align)
-        return AVERROR(EIO);
+        return AVERROR_INVALIDDATA;
     pkt->stream_index = 0;
 
     return ret;
