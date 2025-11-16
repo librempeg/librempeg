@@ -161,6 +161,7 @@ static int fn(src_init)(AVFilterContext *ctx)
     ftype iscale = fn(get_iscale)(s->in_rdft_size, s->out_rdft_size);
     ftype scale = fn(get_scale)(s->in_rdft_size, s->out_rdft_size);
     const int rdft_size = FFMAX(s->in_rdft_size, s->out_rdft_size) / 2;
+    int trim_start, trim_stop;
     fn(StateContext) *state;
     ttype *taper;
     ctype *phase;
@@ -212,7 +213,7 @@ static int fn(src_init)(AVFilterContext *ctx)
     if (!s->taper)
         return AVERROR(ENOMEM);
     taper = s->taper;
-    for (int n = 0; n < taper_samples-1; n++) {
+    for (int n = 0; n < taper_samples; n++) {
         const ftype t = taper_samples;
         const ftype a = F(0.9);
         const ftype zbk = t/((t-n)-F(1.0)) - t/(n+F(1.0));
@@ -220,6 +221,23 @@ static int fn(src_init)(AVFilterContext *ctx)
 
         taper[n].re = taper[n].im = isnormal(v) ? v : F(0.0);
     }
+
+    trim_start = 0;
+    for (int n = 0; n < taper_samples; n++) {
+        if (taper[n].re < F(1.0))
+            break;
+        trim_start++;
+    }
+
+    trim_stop = 0;
+    for (int n = taper_samples-1; n > trim_start; n--) {
+        if (taper[n].re > F(0.0))
+            break;
+        trim_stop++;
+    }
+
+    s->taper_samples = taper_samples - (trim_start + trim_stop);
+    memmove(taper, taper+trim_start, s->taper_samples * sizeof(*taper));
 
     s->phase = av_calloc(s->tr_nb_samples, sizeof(*phase));
     if (!s->phase)
