@@ -199,7 +199,7 @@ static int config_input(AVFilterLink *inlink)
     s->in_offset = (s->in_rdft_size - s->in_nb_samples) >> 1;
     s->delay = av_rescale_q(s->in_offset, (AVRational){ 1, inlink->sample_rate }, inlink->time_base);
     s->tr_nb_samples = FFMIN(s->in_nb_samples, s->out_nb_samples);
-    s->taper_samples = lrint(s->tr_nb_samples * (1.0-s->bandwidth));
+    s->taper_samples = lrint(ceil(s->tr_nb_samples * (1.0-s->bandwidth)));
     av_log(ctx, AV_LOG_DEBUG, "factor: %"PRId64" | %d => %d | delay: %"PRId64"\n", factor, s->in_rdft_size, s->out_rdft_size, s->delay);
 
 #if CONFIG_AVFILTER_THREAD_FRAME
