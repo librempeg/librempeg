@@ -31,7 +31,6 @@ typedef struct AudioQuantContext {
     int bits;
     int noise_shaper;
     int precision;
-    int got_input;
 
     AVFrame *frame[2];
 
@@ -90,8 +89,6 @@ static int activate(AVFilterContext *ctx)
                                             &s->frame[1]);
         if (ret < 0)
             return ret;
-
-        s->got_input = ret > 0;
     }
 
     if (!s->noise_shaper && s->frame[0]) {
@@ -110,7 +107,7 @@ static int activate(AVFilterContext *ctx)
         ff_graph_frame_free(ctx, &s->frame[0]);
 
         return ff_filter_frame(ctx->outputs[0], out);
-    } else if (s->got_input && s->frame[0] && s->frame[1]) {
+    } else if (s->frame[0] && s->frame[1]) {
         AVFrame *out[2];
         int ret;
 
@@ -138,7 +135,7 @@ static int activate(AVFilterContext *ctx)
             return ret;
         }
         return ff_filter_frame(ctx->outputs[1], out[1]);
-    } else if (!s->got_input && s->frame[0] && !s->frame[1]) {
+    } else if (s->noise_shaper && s->frame[0] && !s->frame[1]) {
         AVFrame *out[2];
         int ret;
 
