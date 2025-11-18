@@ -3548,20 +3548,6 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_INTRA_ONLY,
     },
     {
-        .id        = AV_CODEC_ID_SONIC,
-        .type      = AVMEDIA_TYPE_AUDIO,
-        .name      = "sonic",
-        .long_name = NULL_IF_CONFIG_SMALL("Sonic"),
-        .props     = AV_CODEC_PROP_INTRA_ONLY,
-    },
-    {
-        .id        = AV_CODEC_ID_SONIC_LS,
-        .type      = AVMEDIA_TYPE_AUDIO,
-        .name      = "sonicls",
-        .long_name = NULL_IF_CONFIG_SMALL("Sonic lossless"),
-        .props     = AV_CODEC_PROP_INTRA_ONLY,
-    },
-    {
         .id        = AV_CODEC_ID_EVRC,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "evrc",
