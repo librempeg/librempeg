@@ -205,7 +205,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
                         hist += diff;
 
                     step_index += step_table[index];
-                    step_index = av_clip(step_index, 0, 63);
+                    step_index = av_clip_uintp2(step_index, 6);
 
                     dst[i] = hist;
                     history[ch] = hist;
