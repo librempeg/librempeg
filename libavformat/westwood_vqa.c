@@ -249,6 +249,7 @@ static int wsvqa_read_packet(AVFormatContext *s,
                     case SND2_TAG:
                         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;
                         st->codecpar->profile = wsvqa->version;
+                        st->codecpar->block_align = wsvqa->channels;
                         break;
                     }
                 }
