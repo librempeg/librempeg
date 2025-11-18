@@ -969,7 +969,7 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
             link->incfg.formats->nb_formats = 1;
         }
     } else if (link->type == AVMEDIA_TYPE_AUDIO) {
-        if(ref && ref->type == AVMEDIA_TYPE_AUDIO) {
+        if (ref && ref->type == AVMEDIA_TYPE_AUDIO) {
             enum AVSampleFormat best = AV_SAMPLE_FMT_NONE;
 
             for (int i = 0; i < link->incfg.formats->nb_formats; i++) {
@@ -979,7 +979,7 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
             }
             if (best == AV_SAMPLE_FMT_NONE)
                 return AVERROR(EINVAL);
-            av_log(link->src,AV_LOG_DEBUG, "picking %s out of %d ref:%s\n",
+            av_log(link->src, AV_LOG_DEBUG, "picking %s out of %d ref:%s\n",
                    av_get_sample_fmt_name(best), link->incfg.formats->nb_formats,
                    av_get_sample_fmt_name(ref->format));
             link->incfg.formats->formats[0] = best;
