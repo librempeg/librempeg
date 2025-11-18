@@ -91,10 +91,6 @@ static int pcm_read_header(AVFormatContext *s)
             if (little_endian)
                 par->codec_id = AV_CODEC_ID_PCM_S16LE;
         }
-    } else if (av_match_ext(s->url, "son") && par->codec_id == AV_CODEC_ID_PCM_S16LE) {
-        par->sample_rate = 44100;
-        av_channel_layout_uninit(&par->ch_layout);
-        par->ch_layout.nb_channels = 2;
     }
     av_freep(&mime_type);
 
@@ -154,7 +150,7 @@ PCMDEF(s24be, "PCM signed 24-bit big-endian",      AV_NE("s24", NULL),S24BE)
 PCMDEF(s24le, "PCM signed 24-bit little-endian",   AV_NE(NULL, "s24"),S24LE)
 PCMDEF_EXT(s16be, "PCM signed 16-bit big-endian",
            AV_NE("sw,s16", NULL), S16BE, .p.mime_type = "audio/L16")
-PCMDEF(s16le, "PCM signed 16-bit little-endian",   AV_NE("son","sw,s16,son"),S16LE)
+PCMDEF(s16le, "PCM signed 16-bit little-endian",   AV_NE(NULL, "sw,s16"),S16LE)
 PCMDEF(s8,    "PCM signed 8-bit",                              "sb,s8",  S8)
 PCMDEF(u32be, "PCM unsigned 32-bit big-endian",    AV_NE("u32", NULL),U32BE)
 PCMDEF(u32le, "PCM unsigned 32-bit little-endian", AV_NE(NULL, "u32"),U32LE)
