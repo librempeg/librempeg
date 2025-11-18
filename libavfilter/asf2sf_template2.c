@@ -52,6 +52,12 @@ static dtype fnc(convert)(stype src)
     dst = (src-0x80)<<8;
 #elif (SRC_DEPTH ==  8) && (DST_DEPTH == 31)
     dst = (src-0x80)<<24;
+#elif (SRC_DEPTH ==  8) && (DST_DEPTH == 32)
+    dst = (src-0x80)*(1.f/(1<<7));
+#elif (SRC_DEPTH ==  8) && (DST_DEPTH == 63)
+    dst = (src-0x80)*(1LL<<56);
+#elif (SRC_DEPTH ==  8) && (DST_DEPTH == 64)
+    dst = (src-0x80)*(1.0/(1<<7));
 #elif (SRC_DEPTH == 16) && (DST_DEPTH ==  8)
     dst = (src>>8)+0x80;
 #elif (SRC_DEPTH == 16) && (DST_DEPTH == 31)
