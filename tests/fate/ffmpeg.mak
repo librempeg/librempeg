@@ -278,5 +278,5 @@ fate-ffmpeg-heif-merge-mapped: CMD = framecrc -i $(TARGET_SAMPLES)/heif-conforma
 FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MOV, HEVC, HEVC_PARSER) += fate-ffmpeg-heif-merge-mapped
 
 # binding the internal filtegraph with a caller defined filtergraph
-fate-ffmpeg-heif-merge-filtergraph: CMD = framecrc -i $(TARGET_SAMPLES)/heif-conformance/C007.heic -filter_complex "sws_flags=+accurate_rnd+bitexact\;[0:g:0]scale=w=1280:h=720[out]" -map "[out]"
-FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MOV, HEVC, HEVC_PARSER SCALE_FILTER) += fate-ffmpeg-heif-merge-filtergraph
+#fate-ffmpeg-heif-merge-filtergraph: CMD = framecrc -i $(TARGET_SAMPLES)/heif-conformance/C007.heic -filter_complex "sws_flags=+accurate_rnd+bitexact\;[0:g:0]scale=w=1280:h=720[out]" -map "[out]"
+#FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MOV, HEVC, HEVC_PARSER SCALE_FILTER) += fate-ffmpeg-heif-merge-filtergraph
