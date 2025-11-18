@@ -367,7 +367,7 @@ static int filter_frame(AVFilterLink *inlink)
     if (in == NULL) {
         if (s->flush_size > 0 && !s->done_flush &&
             s->eof_in_pts != AV_NOPTS_VALUE &&
-            s->last_in_pts_fn(ctx) >= s->eof_in_pts) {
+            s->last_in_pts_fn(ctx) >= s->last_in_pts) {
             flush_frame(outlink);
             return 0;
         }
