@@ -76,6 +76,9 @@ static int read_probe(const AVProbeData *p)
     const int cnt = p->buf_size / DAT_PACKET_SIZE;
     int score = 0;
 
+    if (av_match_ext(p->filename, "spdif"))
+        return 0;
+
     for (int i = 0; i < cnt; i++) {
         const int ret = valid_frame(&p->buf[i * DAT_PACKET_SIZE]);
 
