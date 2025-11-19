@@ -2057,11 +2057,6 @@ static int process_frame_obj(SANMVideoContext *ctx, GetByteContext *gb,
             if (w > xres || h > yres)
                 return AVERROR_INVALIDDATA;
             ctx->have_dimensions = 1;
-        } else if (fsc) {
-            /* these codecs work on full frames, trust their dimensions */
-            xres = w;
-            yres = h;
-            ctx->have_dimensions = 1;
         } else {
             /* detect common sizes */
             xres = w + left;
