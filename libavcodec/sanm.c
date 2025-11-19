@@ -636,9 +636,19 @@ static av_cold int decode_init(AVCodecContext *avctx)
     avctx->pix_fmt = ctx->version ? AV_PIX_FMT_RGB565 : AV_PIX_FMT_PAL8;
 
     if (!ctx->version) {
-        // ANIM has no dimensions in the header, distrust the incoming data.
-        avctx->width = avctx->height = 0;
-        ctx->have_dimensions = 0;
+        // ANIM valid range is 2x2 up to 640x480. If the given
+        // width/height are within that range, lock the dimensions
+        // and forego future changes in process_frame_obj().
+        // NOTE: the smush demuxer passes 0/0 since ANM/SAN files
+        //       have no dimension information in their header.
+        if (avctx->width != 0 || avctx->height != 0) {
+            if ((avctx->width < 2) || (avctx->height < 2))
+                return AVERROR_INVALIDDATA;
+            if ((avctx->width <= 640) && (avctx->height <= 480))
+                ctx->have_dimensions = 1;
+            else
+                return AVERROR_INVALIDDATA;
+        }
     } else if (avctx->width > 800 || avctx->height > 600 ||
                avctx->width < 8 || avctx->height < 8) {
         // BL16 valid range is 8x8 - 800x600
