@@ -45,9 +45,14 @@
 #define F(x) ((ftype)(x))
 
 typedef struct fn(StateContext) {
-    ftype *sorted, *cache;
+    ftype *data;
 
-    unsigned filled, idx, size, front, back;
+    int N;
+    int scan_start_low;
+    int scan_start_mid;
+    int scan_start_high;
+    int write_pos, scan_pos, scan_stop, scan_start;
+    ftype in_max, scan_max;
 
     ftype attack, release, hold, hold_count, current, beta;
 } fn(StateContext);
@@ -60,8 +65,7 @@ static void fn(envelope_uninit)(AVFilterContext *ctx)
     for (int ch = 0; ch < s->nb_channels && st; ch++) {
         fn(StateContext) *stc = &st[ch];
 
-        av_freep(&stc->cache);
-        av_freep(&stc->sorted);
+        av_freep(&stc->data);
     }
 
     av_freep(&s->st);
@@ -109,88 +113,62 @@ static int fn(envelope_init)(AVFilterContext *ctx)
 
         stc->beta = F(1.0) - FPOW(F(1.0) - stc->attack, s->hlook+1);
         stc->hold_count = F(0.0);
-        stc->size = look;
-        if (!stc->sorted) {
-            stc->sorted = av_calloc(look, sizeof(*stc->sorted));
+        stc->current = NAN;
+        if (!stc->data) {
+            stc->N = look;
+            stc->data = av_calloc(stc->N, sizeof(*stc->data));
+            stc->scan_start_low = (stc->N-1)/2;
+            stc->scan_start_mid = (stc->N+1)/2;
+            stc->scan_start_high = stc->N-1;
+            stc->scan_start = stc->scan_start_low;
+            stc->write_pos = 0;
+            stc->scan_stop = 0;
+            stc->scan_pos = 0;
 
-            if (stc->sorted) {
+            if (stc->data) {
                 for (int n = 0; n < look; n++)
-                    stc->sorted[n] = F(-1.0);
+                    stc->data[n] = F(-1.0);
             }
         }
-        if (!stc->cache) {
-            stc->cache = av_calloc(look, sizeof(*stc->cache));
-
-            if (stc->cache) {
-                for (int n = 0; n < look; n++)
-                    stc->cache[n] = F(-1.0);
-            }
-        }
-        if (!stc->sorted || !stc->cache)
+        if (!stc->data)
             return AVERROR(ENOMEM);
     }
 
     return 0;
 }
 
-#define PEAKS(empty_value,op,sample, psample)\
-    if (!empty && psample == ss[front]) {    \
-        ss[front] = empty_value;             \
-        if (back != front) {                 \
-            front--;                         \
-            if (front < 0)                   \
-                front = n - 1;               \
-        }                                    \
-        empty = (front == back) &&           \
-                (ss[front] == empty_value);  \
-    }                                        \
-                                             \
-    while (!empty && sample op ss[front]) {  \
-        ss[front] = empty_value;             \
-        if (back == front) {                 \
-            empty = 1;                       \
-            break;                           \
-        }                                    \
-        front--;                             \
-        if (front < 0)                       \
-            front = n - 1;                   \
-    }                                        \
-                                             \
-    while (!empty && sample op ss[back]) {   \
-        ss[back] = empty_value;              \
-        if (back == front) {                 \
-            empty = 1;                       \
-            break;                           \
-        }                                    \
-        back++;                              \
-        if (back >= n)                       \
-            back = 0;                        \
-    }                                        \
-                                             \
-    if (!empty) {                            \
-        back--;                              \
-        if (back < 0)                        \
-            back = n - 1;                    \
+static ftype fn(compute_peak)(fn(StateContext) *stc, const ftype x)
+{
+    int write_pos = stc->write_pos;
+    ftype *data = stc->data;
+    ftype p;
+
+    stc->scan_pos--;
+    if (stc->scan_pos >= stc->scan_stop) {
+        stc->in_max = FMAX(x, stc->in_max);
+        data[stc->scan_pos] = FMAX(data[stc->scan_pos], data[stc->scan_pos+1]);
+    } else {
+        stc->scan_max = stc->in_max;
+        stc->in_max = x;
+        if (stc->scan_stop == 0) {
+            stc->scan_start = stc->scan_start_high;
+            stc->scan_stop = stc->scan_start_mid;
+        } else {
+            stc->scan_start = stc->scan_start_low;
+            stc->scan_stop = 0;
+        }
+        stc->scan_pos = stc->scan_start;
     }
 
-static ftype fn(compute_peak)(ftype *ss, const ftype ax, const ftype px,
-                              const int n, int *ffront, int *bback)
-{
-    const ftype empty_value = F(-1.0);
-    int front = *ffront;
-    int back = *bback;
-    int empty = front == back && ss[front] == empty_value;
-    ftype r;
+    data[write_pos] = x;
+    write_pos++;
+    if (write_pos >= stc->N)
+        write_pos = 0;
 
-    PEAKS(empty_value, >, ax, px)
+    p = FMAX(stc->in_max, FMAX(stc->scan_max, data[write_pos]));
+    stc->write_pos = write_pos;
 
-    ss[back] = ax;
-    r = ss[front];
-
-    *ffront = front;
-    *bback = back;
-
-    return r;
+    return p;
 }
 
 static int fn(do_envelope)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int ch)
@@ -202,39 +180,21 @@ static int fn(do_envelope)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, cons
     const int nb_samples = in->nb_samples;
     fn(StateContext) *st = s->st;
     fn(StateContext) *stc = &st[ch];
-    const unsigned size = stc->size;
-    ftype *sorted = stc->sorted;
-    ftype *cache = stc->cache;
     const ftype release = stc->release;
     ftype hold_count = stc->hold_count;
     const ftype attack = stc->attack;
-    unsigned filled = stc->filled;
     ftype current = stc->current;
     const ftype beta = stc->beta;
     const ftype hold = stc->hold;
-    unsigned front = stc->front;
-    unsigned back = stc->back;
-    unsigned idx = stc->idx;
+
+    if (isnan(current))
+        current = FABS(src[0]);
 
     for (int n = 0; n < nb_samples; n++) {
         const ftype r = FABS(src[n]);
-        ftype p, prev;
+        ftype p;
 
-        if (filled < size) {
-            if (filled == 0)
-                current = r;
-            prev = cache[idx];
-            cache[idx] = r;
-            filled++;
-        } else {
-            prev = cache[idx];
-            cache[idx] = r;
-        }
-        idx++;
-        if (idx >= size)
-            idx = 0;
-
-        p = fn(compute_peak)(sorted, r, prev, size, &front, &back);
+        p = fn(compute_peak)(stc, r);
 
         if (p > current) {
             current += (p/beta-current) * attack;
@@ -251,10 +211,6 @@ static int fn(do_envelope)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, cons
 
     stc->hold_count = hold_count;
     stc->current = current;
-    stc->filled = filled;
-    stc->front = front;
-    stc->back = back;
-    stc->idx = idx;
 
     return 0;
 }
@@ -270,22 +226,15 @@ static int fn(do_envelope_link)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const int nb_samples = in->nb_samples;
     fn(StateContext) *st = s->st;
     fn(StateContext) *stc = &st[ch];
-    const unsigned size = stc->size;
-    ftype *sorted = stc->sorted;
-    ftype *cache = stc->cache;
     const ftype release = stc->release;
     ftype hold_count = stc->hold_count;
     const ftype attack = stc->attack;
-    unsigned filled = stc->filled;
     ftype current = stc->current;
     const ftype beta = stc->beta;
     const ftype hold = stc->hold;
-    unsigned front = stc->front;
-    unsigned back = stc->back;
-    unsigned idx = stc->idx;
 
     for (int n = 0; n < nb_samples; n++) {
-        ftype r = F(0.0), p, prev;
+        ftype r = F(0.0), p;
 
         for (int chi = 0; chi < nb_channels; chi++) {
             const ftype *src = (const ftype *)srce[chi];
@@ -294,21 +243,10 @@ static int fn(do_envelope_link)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
             r = FMAX(cr, r);
         }
 
-        if (filled < size) {
-            if (filled == 0)
-                current = r;
-            prev = cache[idx];
-            cache[idx] = r;
-            filled++;
-        } else {
-            prev = cache[idx];
-            cache[idx] = r;
-        }
-        idx++;
-        if (idx >= size)
-            idx = 0;
+        if (isnan(current))
+            current = r;
 
-        p = fn(compute_peak)(sorted, r, prev, size, &front, &back);
+        p = fn(compute_peak)(stc, r);
 
         if (p > current) {
             current += (p/beta-current) * attack;
@@ -325,10 +263,6 @@ static int fn(do_envelope_link)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 
     stc->hold_count = hold_count;
     stc->current = current;
-    stc->filled = filled;
-    stc->front = front;
-    stc->back = back;
-    stc->idx = idx;
 
     return 0;
 }
