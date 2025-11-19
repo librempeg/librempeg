@@ -2087,17 +2087,11 @@ static int process_frame_obj(SANMVideoContext *ctx, GetByteContext *gb,
             }
         }
     } else {
-        if (((w > ctx->width) || (h > ctx->height) || (w * h > ctx->buf_size)) && fsc) {
-            /* correct unexpected overly large frames: this happens
-             * for instance with The Dig's sq1.san video: it has a few
-             * (all black) 640x480 frames halfway in, while the rest is
-             * 320x200.
-             */
-            av_log(ctx->avctx, AV_LOG_WARNING,
-                   "resizing too large fobj: c%d  %d %d @ %d %d\n", codec, w, h, left, top);
-            w = ctx->width;
-            h = ctx->height;
-        }
+        /* for codec37/47/48, return error for frames larger than the canvas, it's also
+         * what the DOS engines do.
+         */
+        if (((w > ctx->width) || (h > ctx->height) || (w * h > ctx->buf_size)) && fsc)
+            return AVERROR_INVALIDDATA;
     }
 
     /* users of codecs>=37 are subversion 2, enforce that for STOR/FTCH */
