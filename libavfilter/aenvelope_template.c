@@ -140,16 +140,18 @@ static int fn(envelope_init)(AVFilterContext *ctx)
 static ftype fn(compute_peak)(fn(StateContext) *stc, const ftype x)
 {
     int write_pos = stc->write_pos;
+    int scan_pos = stc->scan_pos;
+    ftype in_max = stc->in_max;
     ftype *data = stc->data;
     ftype p;
 
-    stc->scan_pos--;
-    if (stc->scan_pos >= stc->scan_stop) {
-        stc->in_max = FMAX(x, stc->in_max);
-        data[stc->scan_pos] = FMAX(data[stc->scan_pos], data[stc->scan_pos+1]);
+    scan_pos--;
+    if (scan_pos >= stc->scan_stop) {
+        in_max = FMAX(x, in_max);
+        data[scan_pos] = FMAX(data[scan_pos], data[scan_pos+1]);
     } else {
-        stc->scan_max = stc->in_max;
-        stc->in_max = x;
+        stc->scan_max = in_max;
+        in_max = x;
         if (stc->scan_stop == 0) {
             stc->scan_start = stc->scan_start_high;
             stc->scan_stop = stc->scan_start_mid;
@@ -157,7 +159,7 @@ static ftype fn(compute_peak)(fn(StateContext) *stc, const ftype x)
             stc->scan_start = stc->scan_start_low;
             stc->scan_stop = 0;
         }
-        stc->scan_pos = stc->scan_start;
+        scan_pos = stc->scan_start;
     }
 
     data[write_pos] = x;
@@ -165,8 +167,10 @@ static ftype fn(compute_peak)(fn(StateContext) *stc, const ftype x)
     if (write_pos >= stc->N)
         write_pos = 0;
 
-    p = FMAX(stc->in_max, FMAX(stc->scan_max, data[write_pos]));
+    p = FMAX(in_max, FMAX(stc->scan_max, data[write_pos]));
     stc->write_pos = write_pos;
+    stc->scan_pos = scan_pos;
+    stc->in_max = in_max;
 
     return p;
 }
