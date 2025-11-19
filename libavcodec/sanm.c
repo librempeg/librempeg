@@ -2028,8 +2028,8 @@ static int process_frame_obj(SANMVideoContext *ctx, GetByteContext *gb,
 
     codec = bytestream2_get_byteu(gb);
     param = bytestream2_get_byteu(gb);
-    left  = bytestream2_get_le16u(gb) + xoff;
-    top   = bytestream2_get_le16u(gb) + yoff;
+    left  = bytestream2_get_le16u(gb);
+    top   = bytestream2_get_le16u(gb);
     w     = bytestream2_get_le16u(gb);
     h     = bytestream2_get_le16u(gb);
     bytestream2_skip(gb, 2);
@@ -2116,6 +2116,9 @@ static int process_frame_obj(SANMVideoContext *ctx, GetByteContext *gb,
         if (!fsc)
             memset(ctx->fbuf, 0, ctx->frm0_size);
     }
+
+    left += xoff;
+    top += yoff;
 
     switch (codec) {
     case 1:
