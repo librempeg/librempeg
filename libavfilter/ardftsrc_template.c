@@ -713,23 +713,23 @@ static int fn(flush)(AVFilterContext *ctx, AVFrame *out, const int ch)
 
     if (s->out_planar) {
         if (s->out_depth == 8) {
-            uint8_t *dst = ((uint8_t *)out->extended_data[ch]);
+            uint8_t *dst = (uint8_t *)out->extended_data[ch];
             for (int n = 0; n < nb_samples; n++)
                 dst[n] = 0x80 + av_clip_int8(lrintf(over[n] * F(1<<(8-1))));
         } else if (s->out_depth == 16) {
-            int16_t *dst = ((int16_t *)out->extended_data[ch]);
+            int16_t *dst = (int16_t *)out->extended_data[ch];
             for (int n = 0; n < nb_samples; n++)
                 dst[n] = av_clip_int16(lrintf(over[n] * F(1<<(16-1))));
         } else if (s->out_depth == 32) {
-            int32_t *dst = ((int32_t *)out->extended_data[ch]);
+            int32_t *dst = (int32_t *)out->extended_data[ch];
             for (int n = 0; n < nb_samples; n++)
                 dst[n] = av_clipl_int32(llrint(over[n] * F(1LL<<(32-1))));
         } else if (s->out_depth == 33) {
-            float *dst = ((float *)out->extended_data[ch]);
+            float *dst = (float *)out->extended_data[ch];
             for (int n = 0; n < nb_samples; n++)
                 dst[n] = over[n];
         } else {
-            double *dst = ((double *)out->extended_data[ch]);
+            double *dst = (double *)out->extended_data[ch];
             for (int n = 0; n < nb_samples; n++)
                 dst[n] = over[n];
         }
