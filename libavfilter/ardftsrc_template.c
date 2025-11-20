@@ -548,8 +548,8 @@ redo:
     memset(rdft + in_offset+copy_samples, 0, (in_nb_samples-copy_samples) * sizeof(*rdft));
 
     if (stc->done_start == 0 && s->first_pts == in->pts) {
-        const int extra_samples = in_nb_samples/2;
         const int lpc_order = FFMIN(64, (copy_samples+1)/2);
+        const int extra_samples = in_nb_samples/2;
         ftype *rdft0o = rdft + in_offset;
         double ac[64+1] = { 0 };
         double lpc[64] = { 0 };
@@ -563,6 +563,20 @@ redo:
 
         stc->done_start = 1;
     } else if (stc->done_start == 1) {
+        const int pad_samples = in_nb_samples-copy_samples;
+
+        if (pad_samples > 0) {
+            const int lpc_order = FFMIN(64, (copy_samples+1)/2);
+            ftype *rdft0o = rdft + in_offset;
+            double ac[64+1] = { 0 };
+            double lpc[64] = { 0 };
+            int order;
+
+            fn(autocorr)(rdft0o, copy_samples, ac, lpc_order);
+            order = fn(do_lpc)(ac, lpc, lpc_order);
+            fn(extrapolate)(rdft0o, copy_samples, pad_samples, lpc, order, 0);
+            stc->done_stop = 1;
+        }
         stc->done_start = 2;
     } else if (stc->done_stop == 0 && copy_samples < in_nb_samples) {
         const int pad_samples = in_nb_samples-copy_samples;
