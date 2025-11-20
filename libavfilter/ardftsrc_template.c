@@ -548,7 +548,7 @@ redo:
     memset(rdft + in_offset+copy_samples, 0, (in_nb_samples-copy_samples) * sizeof(*rdft));
 
     if (stc->done_start == 0 && s->first_pts == in->pts) {
-        const int extra_samples = copy_samples/2;
+        const int extra_samples = in_nb_samples/2;
         const int lpc_order = FFMIN(64, (copy_samples+1)/2);
         ftype *rdft0o = rdft + in_offset;
         double ac[64+1] = { 0 };
@@ -558,8 +558,8 @@ redo:
         fn(autocorr)(rdft0o, copy_samples, ac, lpc_order);
         order = fn(do_lpc)(ac, lpc, lpc_order);
         fn(extrapolate)(rdft0o, copy_samples, extra_samples, lpc, order, 1);
-        memmove(rdft0o+copy_samples-extra_samples, rdft0o-extra_samples, extra_samples * sizeof(*rdft0o));
-        memset(rdft0o-extra_samples, 0, copy_samples * sizeof(*rdft0o));
+        memmove(rdft0o+in_nb_samples-extra_samples, rdft0o-extra_samples, extra_samples * sizeof(*rdft0o));
+        memset(rdft0o-extra_samples, 0, in_nb_samples * sizeof(*rdft0o));
 
         stc->done_start = 1;
     } else if (stc->done_start == 1) {
@@ -620,9 +620,14 @@ redo:
     if (doffset > 0)
         fn(src_out)(ctx, out, ch, doffset, 0);
 
-    if (stc->done_start == 1)
-        memcpy(oover, irdft + write_samples, sizeof(*over) * out_nb_samples);
-    memcpy(over, irdft + write_samples, sizeof(*over) * out_nb_samples);
+    if (copy_samples < in_nb_samples && stc->done_start == 1) {
+        memcpy(oover, irdft + out_nb_samples, sizeof(*over) * out_nb_samples);
+        memcpy(over, irdft + out_nb_samples, sizeof(*over) * out_nb_samples);
+    } else {
+        if (stc->done_start == 1)
+            memcpy(oover, irdft + write_samples, sizeof(*over) * out_nb_samples);
+        memcpy(over, irdft + write_samples, sizeof(*over) * out_nb_samples);
+    }
 
     if (soffset == 0)
         memcpy(temp, irdft, sizeof(*temp) * out_nb_samples);
