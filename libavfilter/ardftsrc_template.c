@@ -247,7 +247,8 @@ static int fn(src_init)(AVFilterContext *ctx)
         const ftype aphase = FABS(s->phaset);
         const ftype sgn = s->phaset < F(0.0) ? F(-1.0) : F(1.0);
         const ftype x = F(n) / s->tr_nb_samples;
-        const ftype z = F(M_SQRT1_2) * (FEXP((x - F(0.5)) * F(M_LN10 * M_PI)) - FEXP(F(-0.5) * F(M_LN10 * M_PI)));
+        const ftype shift = F(-0.4);
+        const ftype z = F(M_SQRT1_2) * (FEXP((x + shift) * F(M_LN10 * M_PI)) - FEXP(shift * F(M_LN10 * M_PI)));
         const ftype w = aphase * z * sgn;
 
         phase[n].re = FCOS(w);
