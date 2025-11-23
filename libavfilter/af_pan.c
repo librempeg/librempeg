@@ -31,7 +31,6 @@
 #include "libavutil/channel_layout.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
-#include "libswresample/swresample.h"
 #include "audio.h"
 #include "avfilter.h"
 #include "filters.h"
@@ -51,7 +50,6 @@ typedef struct PanContext {
     int pure_gains;
     /* channel mapping specific */
     int channel_map[MAX_CHANNELS];
-    struct SwrContext *swr;
 } PanContext;
 
 static void skip_spaces(char **arg)
@@ -264,7 +262,7 @@ static int config_props(AVFilterLink *link)
     AVFilterContext *ctx = link->dst;
     PanContext *pan = ctx->priv;
     char buf[1024], *cur;
-    int i, j, k, r, ret;
+    int i, j, k, r;
     double t;
 
     if (pan->need_renumber) {
@@ -288,17 +286,8 @@ static int config_props(AVFilterLink *link)
         return AVERROR_PATCHWELCOME;
     }
 
-    // init libswresample context
-    ret = swr_alloc_set_opts2(&pan->swr,
-                              &pan->layout, link->format, link->sample_rate,
-                              &link->ch_layout, link->format, link->sample_rate,
-                              0, ctx);
-    if (ret < 0)
-        return AVERROR(ENOMEM);
-
     // gains are pure, init the channel mapping
     if (pan->pure_gains) {
-
         // get channel map from the pure gains
         for (i = 0; i < pan->layout.nb_channels; i++) {
             int ch_id = -1;
@@ -310,9 +299,6 @@ static int config_props(AVFilterLink *link)
             }
             pan->channel_map[i] = ch_id;
         }
-
-        av_opt_set_chlayout(pan->swr, "uchl", &pan->layout, 0);
-        swr_set_channel_mapping(pan->swr, pan->channel_map);
     } else {
         // renormalize
         for (i = 0; i < pan->layout.nb_channels; i++) {
@@ -331,12 +317,7 @@ static int config_props(AVFilterLink *link)
             for (j = 0; j < link->ch_layout.nb_channels; j++)
                 pan->gain[i][j] /= t;
         }
-        swr_set_matrix(pan->swr, pan->gain[0], pan->gain[1] - pan->gain[0]);
     }
-
-    r = swr_init(pan->swr);
-    if (r < 0)
-        return r;
 
     // summary
     for (i = 0; i < pan->layout.nb_channels; i++) {
@@ -362,36 +343,347 @@ static int config_props(AVFilterLink *link)
     return 0;
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     int ret;
-    int n = insamples->nb_samples;
+    int n = in->nb_samples;
     AVFilterLink *const outlink = ctx->outputs[0];
-    AVFrame *outsamples = ff_get_audio_buffer(outlink, n);
+    const int planar = av_sample_fmt_is_planar(outlink->format);
+    AVFrame *out = ff_get_audio_buffer(outlink, n);
+    const int out_channels = out->ch_layout.nb_channels;
+    const int in_channels = in->ch_layout.nb_channels;
     PanContext *pan = ctx->priv;
 
-    if (!outsamples) {
-        av_frame_free(&insamples);
+    if (!out) {
+        av_frame_free(&in);
         return AVERROR(ENOMEM);
     }
-    swr_convert(pan->swr, outsamples->extended_data, n,
-                (void *)insamples->extended_data, n);
-    av_frame_copy_props(outsamples, insamples);
-    if ((ret = av_channel_layout_copy(&outsamples->ch_layout, &outlink->ch_layout)) < 0) {
-        av_frame_free(&outsamples);
-        av_frame_free(&insamples);
+    av_frame_copy_props(out, in);
+    if ((ret = av_channel_layout_copy(&out->ch_layout, &outlink->ch_layout)) < 0) {
+        av_frame_free(&out);
+        av_frame_free(&in);
         return ret;
     }
 
-    ff_graph_frame_free(ctx, &insamples);
-    return ff_filter_frame(outlink, outsamples);
+    if (pan->pure_gains) {
+        const int bps = av_get_bytes_per_sample(outlink->format);
+
+        if (planar) {
+            for (int ch = 0; ch < out_channels; ch++) {
+                const int in_ch = pan->channel_map[ch];
+                uint8_t *dst = out->extended_data[ch];
+
+                if (in_ch < 0) {
+                    const uint8_t fill = (bps == 8) ? 128 : 0;
+
+                    memset(dst, fill, sizeof(*dst) * n * bps);
+                } else {
+                    const uint8_t *src = in->extended_data[in_ch];
+
+                    memcpy(dst, src, sizeof(*dst) * n * bps);
+                }
+            }
+        } else {
+            switch (outlink->format) {
+            case AV_SAMPLE_FMT_U8:
+                for (int ch = 0; ch < out_channels; ch++) {
+                    const int in_ch = pan->channel_map[ch];
+                    const uint8_t *src = in->data[0] + in_ch;
+                    uint8_t *dst = out->data[0] + ch;
+
+                    if (in_ch < 0) {
+                        for (int i = 0; i < n; i++) {
+                            dst[0] = 128;
+                            dst += out_channels;
+                        }
+                    } else {
+                        for (int i = 0; i < n; i++) {
+                            dst[0] = src[0];
+                            src += in_channels;
+                            dst += out_channels;
+                        }
+                    }
+                }
+                break;
+            case AV_SAMPLE_FMT_S16:
+                for (int ch = 0; ch < out_channels; ch++) {
+                    const int in_ch = pan->channel_map[ch];
+                    const int16_t *src = ((const int16_t *)in->data[0]) + in_ch;
+                    int16_t *dst = ((int16_t *)out->data[0]) + ch;
+
+                    if (in_ch < 0) {
+                        for (int i = 0; i < n; i++) {
+                            dst[0] = 0;
+                            dst += out_channels;
+                        }
+                    } else {
+                        for (int i = 0; i < n; i++) {
+                            dst[0] = src[0];
+                            src += in_channels;
+                            dst += out_channels;
+                        }
+                    }
+                }
+                break;
+            case AV_SAMPLE_FMT_S32:
+                for (int ch = 0; ch < out_channels; ch++) {
+                    const int in_ch = pan->channel_map[ch];
+                    const int32_t *src = ((const int32_t *)in->data[0]) + in_ch;
+                    int32_t *dst = ((int32_t *)out->data[0]) + ch;
+
+                    if (in_ch < 0) {
+                        for (int i = 0; i < n; i++) {
+                            dst[0] = 0;
+                            dst += out_channels;
+                        }
+                    } else {
+                        for (int i = 0; i < n; i++) {
+                            dst[0] = src[0];
+                            src += in_channels;
+                            dst += out_channels;
+                        }
+                    }
+                }
+                break;
+            case AV_SAMPLE_FMT_S64:
+                for (int ch = 0; ch < out_channels; ch++) {
+                    const int in_ch = pan->channel_map[ch];
+                    const int64_t *src = ((const int64_t *)in->data[0]) + in_ch;
+                    int64_t *dst = ((int64_t *)out->data[0]) + ch;
+
+                    if (in_ch < 0) {
+                        for (int i = 0; i < n; i++) {
+                            dst[0] = 0;
+                            dst += out_channels;
+                        }
+                    } else {
+                        for (int i = 0; i < n; i++) {
+                            dst[0] = src[0];
+                            src += in_channels;
+                            dst += out_channels;
+                        }
+                    }
+                }
+                break;
+            case AV_SAMPLE_FMT_FLT:
+                for (int ch = 0; ch < out_channels; ch++) {
+                    const int in_ch = pan->channel_map[ch];
+                    const float *src = ((const float *)in->data[0]) + in_ch;
+                    float *dst = ((float *)out->data[0]) + ch;
+
+                    if (in_ch < 0) {
+                        for (int i = 0; i < n; i++) {
+                            dst[0] = 0;
+                            dst += out_channels;
+                        }
+                    } else {
+                        for (int i = 0; i < n; i++) {
+                            dst[0] = src[0];
+                            src += in_channels;
+                            dst += out_channels;
+                        }
+                    }
+                }
+                break;
+            case AV_SAMPLE_FMT_DBL:
+                for (int ch = 0; ch < out_channels; ch++) {
+                    const int in_ch = pan->channel_map[ch];
+                    const double *src = ((const double *)in->data[0]) + in_ch;
+                    double *dst = ((double *)out->data[0]) + ch;
+
+                    if (in_ch < 0) {
+                        for (int i = 0; i < n; i++) {
+                            dst[0] = 0;
+                            dst += out_channels;
+                        }
+                    } else {
+                        for (int i = 0; i < n; i++) {
+                            dst[0] = src[0];
+                            src += in_channels;
+                            dst += out_channels;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    } else {
+        for (int ch = 0; ch < out_channels; ch++) {
+            const double *gains = pan->gain[ch];
+
+            if (planar) {
+                switch (outlink->format) {
+                case AV_SAMPLE_FMT_U8P:
+                    for (int i = 0; i < n; i++) {
+                        uint8_t *dst = out->extended_data[ch];
+                        float sum = 0.f;
+
+                        for (int ich = 0; ich < in_channels; ich++) {
+                            const uint8_t *src = (const uint8_t *)in->extended_data[ich];
+
+                            sum += gains[ich] * (src[i] - 0x80);
+                        }
+
+                        dst[i] = av_clip_int8(sum) + 0x80;
+                    }
+                    break;
+                case AV_SAMPLE_FMT_S16P:
+                    for (int i = 0; i < n; i++) {
+                        int16_t *dst = (int16_t *)out->extended_data[ch];
+                        float sum = 0.f;
+
+                        for (int ich = 0; ich < in_channels; ich++) {
+                            const int16_t *src = (const int16_t *)in->extended_data[ich];
+
+                            sum += gains[ich] * src[i];
+                        }
+
+                        dst[i] = av_clip_int16(sum);
+                    }
+                    break;
+                case AV_SAMPLE_FMT_S32P:
+                    for (int i = 0; i < n; i++) {
+                        int32_t *dst = (int32_t *)out->extended_data[ch];
+                        double sum = 0.0;
+
+                        for (int ich = 0; ich < in_channels; ich++) {
+                            const int32_t *src = (const int32_t *)in->extended_data[ich];
+
+                            sum += gains[ich] * src[i];
+                        }
+
+                        dst[i] = av_clipl_int32(sum);
+                    }
+                    break;
+                case AV_SAMPLE_FMT_S64P:
+                    for (int i = 0; i < n; i++) {
+                        int64_t *dst = (int64_t *)out->extended_data[ch];
+                        double sum = 0.0;
+
+                        for (int ich = 0; ich < in_channels; ich++) {
+                            const int64_t *src = (const int64_t *)in->extended_data[ich];
+
+                            sum += gains[ich] * src[i];
+                        }
+
+                        dst[i] = av_clipl_int32(sum);
+                    }
+                    break;
+                case AV_SAMPLE_FMT_FLTP:
+                    for (int i = 0; i < n; i++) {
+                        float *dst = (float *)out->extended_data[ch];
+                        double sum = 0.0;
+
+                        for (int ich = 0; ich < in_channels; ich++) {
+                            const float *src = (const float *)in->extended_data[ich];
+
+                            sum += gains[ich] * src[i];
+                        }
+
+                        dst[i] = sum;
+                    }
+                    break;
+                case AV_SAMPLE_FMT_DBLP:
+                    for (int i = 0; i < n; i++) {
+                        double *dst = (double *)out->extended_data[ch];
+                        double sum = 0.0;
+
+                        for (int ich = 0; ich < in_channels; ich++) {
+                            const double *src = (const double *)in->extended_data[ich];
+
+                            sum += gains[ich] * src[i];
+                        }
+
+                        dst[i] = sum;
+                    }
+                    break;
+                }
+            } else {
+                switch (outlink->format) {
+                case AV_SAMPLE_FMT_U8:
+                    for (int i = 0; i < n; i++) {
+                        const uint8_t *src = ((const uint8_t *)in->data[0]) + in_channels * i;
+                        uint8_t *dst = out->data[0] + out_channels * i + ch;
+                        float sum = 0.f;
+
+                        for (int ich = 0; ich < in_channels; ich++)
+                            sum += gains[ich] * (src[ich] - 0x80);
+
+                        dst[0] = av_clip_int8(sum) + 0x80;
+                    }
+                    break;
+                case AV_SAMPLE_FMT_S16:
+                    for (int i = 0; i < n; i++) {
+                        const int16_t *src = ((const int16_t *)in->data[0]) + in_channels * i;
+                        int16_t *dst = ((int16_t *)out->data[0]) + out_channels * i + ch;
+                        float sum = 0.f;
+
+                        for (int ich = 0; ich < in_channels; ich++)
+                            sum += gains[ich] * src[ich];
+
+                        dst[0] = av_clip_int16(lrintf(sum));
+                    }
+                    break;
+                case AV_SAMPLE_FMT_S32:
+                    for (int i = 0; i < n; i++) {
+                        const int32_t *src = ((const int32_t *)in->data[0]) + in_channels * i;
+                        int32_t *dst = ((int32_t *)out->data[0]) + out_channels * i + ch;
+                        double sum = 0.0;
+
+                        for (int ich = 0; ich < in_channels; ich++)
+                            sum += gains[ich] * src[ich];
+
+                        dst[0] = av_clipl_int32(sum);
+                    }
+                    break;
+                case AV_SAMPLE_FMT_S64:
+                    for (int i = 0; i < n; i++) {
+                        const int64_t *src = ((const int64_t *)in->data[0]) + in_channels * i;
+                        int64_t *dst = ((int64_t *)out->data[0]) + out_channels * i + ch;
+                        double sum = 0.0;
+
+                        for (int ich = 0; ich < in_channels; ich++)
+                            sum += gains[ich] * src[ich];
+
+                        dst[0] = av_clipl_int32(sum);
+                    }
+                    break;
+                case AV_SAMPLE_FMT_FLT:
+                    for (int i = 0; i < n; i++) {
+                        const float *src = ((const float *)in->data[0]) + in_channels * i;
+                        float *dst = ((float *)out->data[0]) + out_channels * i + ch;
+                        float sum = 0.f;
+
+                        for (int ich = 0; ich < in_channels; ich++)
+                            sum += gains[ich] * src[ich];
+
+                        dst[0] = sum;
+                    }
+                    break;
+                case AV_SAMPLE_FMT_DBL:
+                    for (int i = 0; i < n; i++) {
+                        const double *src = ((const double *)in->data[0]) + in_channels * i;
+                        double *dst = ((double *)out->data[0]) + out_channels * i + ch;
+                        double sum = 0.0;
+
+                        for (int ich = 0; ich < in_channels; ich++)
+                            sum += gains[ich] * src[ich];
+
+                        dst[0] = sum;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    ff_graph_frame_free(ctx, &in);
+    return ff_filter_frame(outlink, out);
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
-    PanContext *pan = ctx->priv;
-    swr_free(&pan->swr);
 }
 
 #define OFFSET(x) offsetof(PanContext, x)
