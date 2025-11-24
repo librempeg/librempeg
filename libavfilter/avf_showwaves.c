@@ -797,9 +797,6 @@ inline static int push_frame(AVFilterLink *outlink, AVFrame *out, int64_t pts)
     for (int i = 0; i < inlink->ch_layout.nb_channels; i++)
         s->buf_idy[i] = -1;
 
-    if (s->status && s->history_filled <= 0)
-        ff_outlink_set_status(outlink, s->status, s->eof_pts);
-
     return ret;
 }
 
@@ -945,7 +942,6 @@ static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *in)
     ptrdiff_t linesize;
     uint8_t *dst;
     AVFrame *out;
-    int ret;
 
     if (in) {
         const int nb_samples = in->nb_samples;
@@ -957,15 +953,14 @@ static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *in)
         ff_graph_frame_free(ctx, &in);
 
         if (s->history_filled < s->history_nb_samples) {
-            int64_t pts;
-            if (!ff_inlink_acknowledge_status(inlink, &s->status, &pts)) {
+            if (!s->status) {
                 ff_inlink_request_frame(inlink);
                 return 0;
             }
         }
+    } else {
+        s->in_pts += s->step_size;
     }
-
-flush:
 
     out = alloc_out_frame(s, outlink);
     if (out == NULL)
@@ -1026,15 +1021,7 @@ flush:
     memmove(history, history + s->step_size * nb_channels, s->history_filled * sizeof(*history));
     memset(history + s->history_filled, 0, (2 * s->history_nb_samples - s->history_filled) * sizeof(*history));
 
-    ret = push_frame(outlink, out, s->in_pts);
-    if (ret < 0)
-        return ret;
-    if (s->status && s->history_filled > 0) {
-        s->in_pts += s->step_size;
-        goto flush;
-    }
-
-    return 0;
+    return push_frame(outlink, out, s->in_pts);
 }
 
 static int activate(AVFilterContext *ctx)
@@ -1042,26 +1029,32 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     ShowWavesContext *s = ctx->priv;
+    int ret, status;
     AVFrame *in;
     int64_t pts;
-    int ret;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
     ret = ff_inlink_consume_samples(inlink, s->step_size, s->step_size, &in);
+
+    if (ff_inlink_acknowledge_status(inlink, &status, &pts))
+        s->status = status;
+
     if (ret < 0)
         return ret;
     if (ret > 0)
         return showwaves_filter_frame(inlink, in);
 
-    if (!ff_inlink_acknowledge_status(inlink, &s->status, &pts) &&
-        ff_outlink_frame_wanted(outlink)) {
-        if (ff_inlink_queued_samples(inlink) < s->step_size)
+    if (!s->status && ff_outlink_frame_wanted(outlink)) {
+        if (s->history_filled < s->history_nb_samples) {
             ff_inlink_request_frame(inlink);
-        else
-            ff_filter_set_ready(ctx, 100);
-    } else {
+            return 0;
+        }
+    } else if (s->status && s->history_filled <= 0) {
         ff_outlink_set_status(outlink, s->status, s->eof_pts);
+        return 0;
+    } else if (s->status) {
+        return showwaves_filter_frame(inlink, NULL);
     }
 
     return 0;
