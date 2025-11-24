@@ -941,6 +941,7 @@ static int showwaves_filter_frame(AVFilterLink *inlink, AVFrame *in)
     const uint8_t *fg = s->fg;
     const int w = s->w;
     const int h = s->h;
+    int history_filled;
     ptrdiff_t linesize;
     uint8_t *dst;
     AVFrame *out;
@@ -970,12 +971,13 @@ flush:
     if (out == NULL)
         return AVERROR(ENOMEM);
 
+    history_filled = s->history_filled;
     /* draw data in the buffer */
     dst = out->data[0];
     linesize = out->linesize[0];
     switch (s->orientation) {
     case ORIENTATION_LR:
-        for (int i = 0, k = 0;;) {
+        for (int i = 0, k = 0; k < history_filled;) {
             s->c = av_add_q(s->c, in_q);
             if (av_cmp_q(s->c, u_q) >= 0) {
                 s->c = av_sub_q(s->c, u_q);
@@ -997,7 +999,7 @@ flush:
         }
         break;
     case ORIENTATION_UD:
-        for (int i = 0, k = 0;;) {
+        for (int i = 0, k = 0; k < history_filled;) {
             s->c = av_add_q(s->c, in_q);
             if (av_cmp_q(s->c, u_q) >= 0) {
                 s->c = av_sub_q(s->c, u_q);
