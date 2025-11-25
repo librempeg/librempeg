@@ -796,6 +796,7 @@ static inline int mjpeg_decode_dc(MJpegDecodeContext *s, int dc_index, int *val)
 static int decode_block(MJpegDecodeContext *s, int16_t *block, int component,
                         int dc_index, int ac_index, uint16_t *quant_matrix)
 {
+    const uint8_t *permutated_scantable = s->permutated_scantable;
     GetBitContext *gb = &s->gb;
     int code, i, j, level, val;
 
@@ -816,7 +817,7 @@ static int decode_block(MJpegDecodeContext *s, int16_t *block, int component,
         GET_VLC(code, re, gb, table, 9, 2);
 
         i += ((unsigned)code) >> 4;
-            code &= 0xf;
+        code &= 0xf;
         if (code) {
             // GET_VLC updates the cache if parsing reaches the second stage.
             // So we have at least MIN_CACHE_BITS - 9 > 15 bits left here
@@ -833,7 +834,7 @@ static int decode_block(MJpegDecodeContext *s, int16_t *block, int component,
                 av_log(s->avctx, AV_LOG_ERROR, "error count: %d\n", i);
                 return AVERROR_INVALIDDATA;
             }
-            j        = s->permutated_scantable[i];
+            j        = permutated_scantable[i];
             block[j] = level * quant_matrix[i];
         }
     } while (i < 63);
