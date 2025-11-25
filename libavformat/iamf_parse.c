@@ -418,6 +418,9 @@ static int scalable_channel_layout_config(void *s, AVIOContext *pb,
         }
 
         if (ch_layout.order == AV_CHANNEL_ORDER_NATIVE) {
+            if (n > ch_layout.nb_channels)
+                return AVERROR_INVALIDDATA;
+
             ret = av_channel_layout_custom_init(&layer->ch_layout, ch_layout.nb_channels);
             if (ret < 0)
                 return ret;
