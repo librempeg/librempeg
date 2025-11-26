@@ -1262,7 +1262,7 @@ static av_cold int vvc_decode_init(AVCodecContext *avctx)
 
     s->avctx = avctx;
 
-    ret = ff_cbs_init(&s->cbc, AV_CODEC_ID_VVC, avctx);
+    ret = ff_cbs_init(&s->cbc, avctx->codec_id, avctx);
     if (ret)
         return ret;
 
@@ -1302,6 +1302,22 @@ const FFCodec ff_vvc_decoder = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("VVC (Versatile Video Coding)"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_VVC,
+    .priv_data_size = sizeof(VVCContext),
+    .init           = vvc_decode_init,
+    .close          = vvc_decode_free,
+    FF_CODEC_DECODE_CB(vvc_decode_frame),
+    .flush          = vvc_decode_flush,
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY | AV_CODEC_CAP_OTHER_THREADS,
+    .caps_internal  = FF_CODEC_CAP_EXPORTS_CROPPING | FF_CODEC_CAP_INIT_CLEANUP |
+                      FF_CODEC_CAP_AUTO_THREADS,
+    .p.profiles     = NULL_IF_CONFIG_SMALL(ff_vvc_profiles),
+};
+
+const FFCodec ff_bvc2_decoder = {
+    .p.name         = "bvc2",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("BVC2"),
+    .p.type         = AVMEDIA_TYPE_VIDEO,
+    .p.id           = AV_CODEC_ID_BVC2,
     .priv_data_size = sizeof(VVCContext),
     .init           = vvc_decode_init,
     .close          = vvc_decode_free,

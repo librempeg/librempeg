@@ -580,7 +580,7 @@ int ff_h2645_packet_split(H2645Packet *pkt, const uint8_t *buf, int length,
         /* Reset type in case it contains a stale value from a previously parsed NAL */
         nal->type = 0;
 
-        if (codec_id == AV_CODEC_ID_VVC)
+        if (codec_id == AV_CODEC_ID_VVC || codec_id == AV_CODEC_ID_BVC2)
             ret = vvc_parse_nal_header(nal, logctx);
         else if (codec_id == AV_CODEC_ID_HEVC) {
             ret = hevc_parse_nal_header(nal, logctx);

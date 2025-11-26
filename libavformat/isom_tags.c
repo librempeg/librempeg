@@ -309,6 +309,8 @@ const AVCodecTag ff_codec_movvideo_tags[] = {
 
     { AV_CODEC_ID_APV, MKTAG('a', 'p', 'v', '1') },
 
+    { AV_CODEC_ID_BVC2, MKTAG('b', 'v', 'c', '2') },
+
     { AV_CODEC_ID_NONE, 0 },
 };
 

@@ -736,6 +736,23 @@ static int cbs_h2645_split_fragment(CodedBitstreamContext *ctx,
             if (err < 0)
                 return err;
         }
+    } else if (codec_id == AV_CODEC_ID_BVC2) {
+        int flags = H2645_FLAG_IS_NALFF | H2645_FLAG_SMALL_PADDING | H2645_FLAG_USE_REF;
+        // Annex B, or later MP4 with already-known parameters.
+
+        priv->nal_length_size = 4;
+
+        err = ff_h2645_packet_split(&priv->read_packet,
+                                    frag->data, frag->data_size,
+                                    ctx->log_ctx,
+                                    priv->nal_length_size,
+                                    codec_id, flags);
+        if (err < 0)
+            return err;
+
+        err = cbs_h2645_fragment_add_nals(ctx, frag, &priv->read_packet);
+        if (err < 0)
+            return err;
     } else {
         int flags = (H2645_FLAG_IS_NALFF * !!priv->mp4) | H2645_FLAG_SMALL_PADDING | H2645_FLAG_USE_REF;
         // Annex B, or later MP4 with already-known parameters.
@@ -1827,7 +1844,7 @@ static int cbs_h2645_unit_requires_zero_byte(enum AVCodecID codec_id,
         return type == H264_NAL_SPS || type == H264_NAL_PPS;
     if (codec_id == AV_CODEC_ID_HEVC)
         return type == HEVC_NAL_VPS || type == HEVC_NAL_SPS || type == HEVC_NAL_PPS;
-    if (codec_id == AV_CODEC_ID_VVC)
+    if (codec_id == AV_CODEC_ID_VVC || codec_id == AV_CODEC_ID_BVC2)
         return type >= VVC_OPI_NUT && type <= VVC_SUFFIX_APS_NUT;
     return 0;
 }
@@ -2145,6 +2162,22 @@ const CodedBitstreamType ff_cbs_type_h266 = {
     .close             = &cbs_h266_close,
 };
 
+const CodedBitstreamType ff_cbs_type_bvc2 = {
+    .codec_id          = AV_CODEC_ID_BVC2,
+
+    .priv_data_size    = sizeof(CodedBitstreamH266Context),
+
+    .unit_types        = cbs_h266_unit_types,
+
+    .split_fragment    = &cbs_h2645_split_fragment,
+    .read_unit         = &cbs_h266_read_nal_unit,
+    .write_unit        = &cbs_h266_write_nal_unit,
+    .assemble_fragment = &cbs_h2645_assemble_fragment,
+
+    .flush             = &cbs_h266_flush,
+    .close             = &cbs_h266_close,
+};
+
 // Macro for the read/write pair.
 #define SEI_MESSAGE_RW(codec, name) \
     .read  = cbs_ ## codec ## _read_  ## name ## _internal, \
@@ -2363,6 +2396,7 @@ const SEIMessageTypeDescriptor *ff_cbs_sei_find_type(CodedBitstreamContext *ctx,
     case AV_CODEC_ID_H265:
         codec_list = cbs_sei_h265_types;
         break;
+    case AV_CODEC_ID_BVC2:
     case AV_CODEC_ID_H266:
         codec_list = cbs_sei_h266_types;
         break;
@@ -2375,7 +2409,8 @@ const SEIMessageTypeDescriptor *ff_cbs_sei_find_type(CodedBitstreamContext *ctx,
             return &codec_list[i];
     }
 
-    if (ctx->codec->codec_id == AV_CODEC_ID_H266) {
+    if (ctx->codec->codec_id == AV_CODEC_ID_H266 ||
+        ctx->codec->codec_id == AV_CODEC_ID_BVC2) {
         for (i = 0; cbs_sei_h274_types[i].type >= 0; i++) {
             if (cbs_sei_h274_types[i].type == payload_type)
                 return &cbs_sei_h274_types[i];

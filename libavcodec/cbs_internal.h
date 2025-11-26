@@ -48,6 +48,9 @@
 #ifndef CBS_AV1
 #define CBS_AV1 CONFIG_CBS_AV1
 #endif
+#ifndef CBS_BVC2
+#define CBS_BVC2 CONFIG_CBS_BVC2
+#endif
 #ifndef CBS_H264
 #define CBS_H264 CONFIG_CBS_H264
 #endif
@@ -388,6 +391,7 @@ int CBS_FUNC(write_signed)(CodedBitstreamContext *ctx, PutBitContext *pbc,
 
 extern const CodedBitstreamType CBS_FUNC(type_apv);
 extern const CodedBitstreamType CBS_FUNC(type_av1);
+extern const CodedBitstreamType CBS_FUNC(type_bvc2);
 extern const CodedBitstreamType CBS_FUNC(type_h264);
 extern const CodedBitstreamType CBS_FUNC(type_h265);
 extern const CodedBitstreamType CBS_FUNC(type_h266);

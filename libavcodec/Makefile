@@ -90,6 +90,7 @@ OBJS-$(CONFIG_CABAC)                   += cabac.o
 OBJS-$(CONFIG_CBS)                     += cbs.o cbs_bsf.o
 OBJS-$(CONFIG_CBS_APV)                 += cbs_apv.o
 OBJS-$(CONFIG_CBS_AV1)                 += cbs_av1.o
+OBJS-$(CONFIG_CBS_BVC2)                += cbs_h2645.o cbs_sei.o h2645_parse.o
 OBJS-$(CONFIG_CBS_H264)                += cbs_h2645.o cbs_sei.o h2645_parse.o
 OBJS-$(CONFIG_CBS_H265)                += cbs_h2645.o cbs_sei.o h2645_parse.o
 OBJS-$(CONFIG_CBS_H266)                += cbs_h2645.o cbs_sei.o h2645_parse.o
@@ -303,6 +304,7 @@ OBJS-$(CONFIG_BMV_VIDEO_DECODER)       += bmvvideo.o
 OBJS-$(CONFIG_BONK_DECODER)            += bonk.o
 OBJS-$(CONFIG_BRAW_DECODER)            += braw.o
 OBJS-$(CONFIG_BRENDER_PIX_DECODER)     += brenderpix.o
+OBJS-$(CONFIG_BVC2_DECODER)            += executor.o h2645data.o
 OBJS-$(CONFIG_C93_DECODER)             += c93.o
 OBJS-$(CONFIG_CAVS_DECODER)            += cavs.o cavsdec.o cavsdsp.o \
                                           cavsdata.o

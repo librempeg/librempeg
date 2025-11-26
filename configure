@@ -2595,6 +2595,7 @@ CONFIG_EXTRA="
     cbs
     cbs_apv
     cbs_av1
+    cbs_bvc2
     cbs_h264
     cbs_h265
     cbs_h266
@@ -2900,6 +2901,7 @@ threads_if_any="$THREADS_LIST"
 # subsystems
 cbs_apv_select="cbs"
 cbs_av1_select="cbs"
+cbs_bvc2_select="cbs"
 cbs_h264_select="cbs"
 cbs_h265_select="cbs"
 cbs_h266_select="cbs"
@@ -2981,6 +2983,7 @@ av1_decoder_select="atsc_a53 cbs_av1 dovi_rpudec"
 bink_decoder_select="blockdsp hpeldsp"
 binkaudio_dct_decoder_select="wma_freqs"
 binkaudio_rdft_decoder_select="wma_freqs"
+bvc2_decoder_select="cabac cbs_bvc2 golomb videodsp vvc_sei"
 cavs_decoder_select="blockdsp golomb h264chroma idctdsp qpeldsp videodsp"
 clearvideo_decoder_select="idctdsp"
 cllc_decoder_select="bswapdsp"

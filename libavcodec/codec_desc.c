@@ -2094,6 +2094,14 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("QON (Quite OK aNimation)"),
         .props     = AV_CODEC_PROP_LOSSLESS,
     },
+    {
+        .id        = AV_CODEC_ID_BVC2,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "bvc2",
+        .long_name = NULL_IF_CONFIG_SMALL("byteVC2"),
+        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
+        .profiles  = NULL_IF_CONFIG_SMALL(ff_vvc_profiles),
+    },
 
     /* various PCM "codecs" */
     {
