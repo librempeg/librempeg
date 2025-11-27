@@ -49,6 +49,7 @@
 #include "internal.h"
 #include "jpegtables.h"
 #include "mjpeg.h"
+#define CACHED_BITSTREAM_READER !ARCH_X86_32
 #include "mjpegdec.h"
 #include "jpeglsdec.h"
 #include "profiles.h"
@@ -811,25 +812,13 @@ static int decode_block(MJpegDecodeContext *s, int16_t *block, int component,
     /* AC coefs */
     i = 0;
     VLCElem *table = s->vlcs[1][ac_index].table;
-    {OPEN_READER(re, gb);
     do {
-        UPDATE_CACHE(re, gb);
-        GET_VLC(code, re, gb, table, 9, 2);
+        code = get_vlc2(gb, table, 9, 2);
 
         i += ((unsigned)code) >> 4;
         code &= 0xf;
         if (code) {
-            // GET_VLC updates the cache if parsing reaches the second stage.
-            // So we have at least MIN_CACHE_BITS - 9 > 15 bits left here
-            // and don't need to refill the cache.
-            {
-                int cache = GET_CACHE(re, gb);
-                int sign  = (~cache) >> 31;
-                level     = (NEG_USR32(sign ^ cache,code) ^ sign) - sign;
-            }
-
-            LAST_SKIP_BITS(re, gb, code);
-
+            level = get_xbits(gb, code);
             if (i > 63) {
                 av_log(s->avctx, AV_LOG_ERROR, "error count: %d\n", i);
                 return AVERROR_INVALIDDATA;
@@ -838,7 +827,6 @@ static int decode_block(MJpegDecodeContext *s, int16_t *block, int component,
             block[j] = level * quant_matrix[i];
         }
     } while (i < 63);
-    CLOSE_READER(re, gb);}
 
     return 0;
 }
@@ -876,23 +864,15 @@ static int decode_block_progressive(MJpegDecodeContext *s, int16_t *block,
     {
         GetBitContext *gb = &s->gb;
         VLCElem *table = s->vlcs[2][ac_index].table;
-        OPEN_READER(re, gb);
         for (i = ss; ; i++) {
-            UPDATE_CACHE(re, gb);
-            GET_VLC(code, re, gb, table, 9, 2);
+            code = get_vlc2(gb, table, 9, 2);
 
             run = ((unsigned) code) >> 4;
             code &= 0xF;
             if (code) {
                 i += run;
 
-                {
-                    int cache = GET_CACHE(re, gb);
-                    int sign  = (~cache) >> 31;
-                    level     = (NEG_USR32(sign ^ cache,code) ^ sign) - sign;
-                }
-
-                LAST_SKIP_BITS(re, gb, code);
+                level = get_xbits(gb, code);
 
                 if (i >= se) {
                     if (i == se) {
@@ -914,18 +894,13 @@ static int decode_block_progressive(MJpegDecodeContext *s, int16_t *block,
                     }
                 } else {
                     val = (1 << run);
-                    if (run) {
-                        // Given that GET_VLC reloads internally, we always
-                        // have at least 16 bits in the cache here.
-                        val += NEG_USR32(GET_CACHE(re, gb), run);
-                        LAST_SKIP_BITS(re, gb, run);
-                    }
+                    if (run)
+                        val += get_bits(gb, run);
                     *EOBRUN = val - 1;
                     break;
                 }
             }
         }
-        CLOSE_READER(re, gb);
     }
 
     if (i > *last_nnz)
@@ -935,11 +910,9 @@ static int decode_block_progressive(MJpegDecodeContext *s, int16_t *block,
 }
 
 #define REFINE_BIT(j) {                                             \
-    UPDATE_CACHE(re, &s->gb);                                       \
     sign = block[j] >> 15;                                          \
-    block[j] += SHOW_UBITS(re, &s->gb, 1) *                         \
+    block[j] += get_bits1(&s->gb) *                                 \
                 ((quant_matrix[i] ^ sign) - sign) << Al;            \
-    LAST_SKIP_BITS(re, &s->gb, 1);                                  \
 }
 
 #define ZERO_RUN                                                    \
@@ -969,20 +942,17 @@ static int decode_block_refinement(MJpegDecodeContext *s, int16_t *block,
     int code, i = ss, j, sign, val, run;
     int last    = FFMIN(se, *last_nnz);
 
-    OPEN_READER(re, gb);
     if (*EOBRUN) {
         (*EOBRUN)--;
     } else {
         VLCElem *table = s->vlcs[2][ac_index].table;
 
         for (; ; i++) {
-            UPDATE_CACHE(re, gb);
-            GET_VLC(code, re, gb, table, 9, 2);
+            code = get_vlc2(gb, table, 9, 2);
 
             if (code & 0xF) {
                 run = ((unsigned) code) >> 4;
-                val = SHOW_UBITS(re, gb, 1);
-                LAST_SKIP_BITS(re, gb, 1);
+                val = get_bits1(gb);
                 ZERO_RUN;
                 j = s->permutated_scantable[i];
                 val--;
@@ -990,7 +960,6 @@ static int decode_block_refinement(MJpegDecodeContext *s, int16_t *block,
                 if (i == se) {
                     if (i > *last_nnz)
                         *last_nnz = i;
-                    CLOSE_READER(re, gb);
                     return 0;
                 }
             } else {
@@ -1000,12 +969,8 @@ static int decode_block_refinement(MJpegDecodeContext *s, int16_t *block,
                 } else {
                     val = run;
                     run = (1 << run);
-                    if (val) {
-                        // Given that GET_VLC reloads internally, we always
-                        // have at least 16 bits in the cache here.
-                        run += SHOW_UBITS(re, gb, val);
-                        LAST_SKIP_BITS(re, gb, val);
-                    }
+                    if (val)
+                        run += get_bits(gb, val);
                     *EOBRUN = run - 1;
                     break;
                 }
@@ -1021,7 +986,6 @@ static int decode_block_refinement(MJpegDecodeContext *s, int16_t *block,
         if (block[j])
             REFINE_BIT(j)
     }
-    CLOSE_READER(re, gb);
 
     return 0;
 }

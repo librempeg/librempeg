@@ -22,6 +22,7 @@
 
 #include "avcodec.h"
 #include "internal.h"
+#define CACHED_BITSTREAM_READER !ARCH_X86_32
 #include "mjpegdec.h"
 #include "nvdec.h"
 #include "decode.h"

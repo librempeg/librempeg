@@ -53,6 +53,7 @@
 #include "tiff.h"
 #include "tiff_common.h"
 #include "tiff_data.h"
+#define CACHED_BITSTREAM_READER !ARCH_X86_32
 #include "mjpegdec.h"
 #include "thread.h"
 #include "get_bits.h"

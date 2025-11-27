@@ -29,6 +29,7 @@
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "mjpeg.h"
+#define CACHED_BITSTREAM_READER !ARCH_X86_32
 #include "mjpegdec.h"
 
 static uint32_t read_offs(AVCodecContext *avctx, GetBitContext *gb, uint32_t size, const char *err_msg){

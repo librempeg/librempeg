@@ -38,9 +38,9 @@
 #include "codec_internal.h"
 #include "decode.h"
 #include "elsdec.h"
-#include "get_bits.h"
 #include "idctdsp.h"
 #include "jpegtables.h"
+#define CACHED_BITSTREAM_READER !ARCH_X86_32
 #include "mjpegdec.h"
 
 #define EPIC_PIX_STACK_SIZE 1024

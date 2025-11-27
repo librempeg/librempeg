@@ -28,6 +28,7 @@
 #include "libavutil/mem.h"
 #include "avcodec.h"
 #include "codec_internal.h"
+#define CACHED_BITSTREAM_READER !ARCH_X86_32
 #include "get_bits.h"
 #include "golomb.h"
 #include "mathops.h"

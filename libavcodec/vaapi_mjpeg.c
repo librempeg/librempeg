@@ -21,6 +21,7 @@
 
 #include "hwaccel_internal.h"
 #include "vaapi_decode.h"
+#define CACHED_BITSTREAM_READER !ARCH_X86_32
 #include "mjpegdec.h"
 
 static int vaapi_mjpeg_start_frame(AVCodecContext          *avctx,

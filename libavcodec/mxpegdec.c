@@ -30,6 +30,7 @@
 #include "decode.h"
 #include "hpeldsp.h"
 #include "mjpeg.h"
+#define CACHED_BITSTREAM_READER !ARCH_X86_32
 #include "mjpegdec.h"
 
 typedef struct MXpegDecodeContext {
