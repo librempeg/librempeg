@@ -61,7 +61,7 @@ static int framecrc_write_packet(struct AVFormatContext *s, AVPacket *pkt)
         av_strlcatf(buf, sizeof(buf), ", S=%d", pkt->side_data_elems);
 
         for (int i = 0; i < pkt->side_data_elems; i++) {
-            av_strlcatf(buf, sizeof(buf), ", %8"SIZE_SPECIFIER,
+            av_strlcatf(buf, sizeof(buf), ", %8zu",
                         pkt->side_data[i].size);
         }
     }
