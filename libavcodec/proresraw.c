@@ -404,6 +404,8 @@ static int decode_frame(AVCodecContext *avctx,
     }
 
     ff_permute_scantable(s->qmat, s->prodsp.idct_permutation, qmat);
+    if (bytestream2_tell(&gb) > header_size)
+        return AVERROR_INVALIDDATA;
     bytestream2_skip(&gb, header_size - bytestream2_tell(&gb));
 
     s->nb_tw = (w + 15) >> 4;
