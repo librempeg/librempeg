@@ -69,6 +69,11 @@ fate-filter-agate: tests/data/asynth-44100-2.wav
 fate-filter-agate: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
 fate-filter-agate: CMD = framecrc -i $(SRC) -af aresample,agate=level_in=10:range=0:threshold=1:ratio=1:attack=1:knee=1:makeup=4,aresample
 
+FATE_AFILTER-$(call FILTERDEMDECENCMUX, AINVERT ARESAMPLE, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-ainvert
+fate-filter-ainvert: tests/data/asynth-44100-2.wav
+fate-filter-ainvert: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
+fate-filter-ainvert: CMD = framecrc -i $(SRC) -af aresample,ainvert,aresample
+
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, ALIMITER ARESAMPLE, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-alimiter
 fate-filter-alimiter: tests/data/asynth-44100-2.wav
 fate-filter-alimiter: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
