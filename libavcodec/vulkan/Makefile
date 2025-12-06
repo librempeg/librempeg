@@ -15,7 +15,6 @@ OBJS-$(CONFIG_FFV1_VULKAN_HWACCEL)  +=  vulkan/common.o \
 					vulkan/ffv1_dec_setup.o vulkan/ffv1_dec.o
 
 OBJS-$(CONFIG_PRORES_VULKAN_HWACCEL) += vulkan/common.o \
-                                        vulkan/prores_reset.o \
                                         vulkan/prores_vld.o \
                                         vulkan/prores_idct.o
 
