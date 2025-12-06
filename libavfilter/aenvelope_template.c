@@ -237,6 +237,19 @@ static int fn(do_envelope_link)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const ftype beta = stc->beta;
     const ftype hold = stc->hold;
 
+    if (isnan(current)) {
+        ftype r = F(0.0);
+
+        for (int chi = 0; chi < nb_channels; chi++) {
+            const ftype *src = (const ftype *)srce[chi];
+            const ftype cr = FABS(src[0]);
+
+            r = FMAX(cr, r);
+        }
+
+        current = r;
+    }
+
     for (int n = 0; n < nb_samples; n++) {
         ftype r = F(0.0), p;
 
@@ -246,9 +259,6 @@ static int fn(do_envelope_link)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 
             r = FMAX(cr, r);
         }
-
-        if (isnan(current))
-            current = r;
 
         p = fn(compute_peak)(stc, r);
 
