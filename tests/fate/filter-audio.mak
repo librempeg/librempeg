@@ -20,6 +20,11 @@ fate-filter-aemphasis-cd: CMD = framecrc -i $(SRC) -af aresample,aemphasis=2:8:r
 
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, AEMPHASIS ARESAMPLE, WAV, PCM_S16LE, PCM_S16LE, WAV) += $(FATE_FILTER_AEMPHASIS)
 
+FATE_AFILTER-$(call FILTERDEMDECENCMUX, AENVELOPE ARESAMPLE, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-aenvelope
+fate-filter-aenvelope: tests/data/asynth-44100-2.wav
+fate-filter-aenvelope: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
+fate-filter-aenvelope: CMD = framecrc -i $(SRC) -af aresample,aenvelope,aresample
+
 FATE_FILTER_AFADE += fate-filter-afade-qsin
 fate-filter-afade-qsin: tests/data/asynth-44100-2.wav
 fate-filter-afade-qsin: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
