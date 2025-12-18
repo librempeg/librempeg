@@ -371,6 +371,9 @@ struct AVFrame;
  *       For example: Author-ger=Michael, Author-eng=Mike
  *       The original/default language is in the unqualified "Author" tag.
  *       A demuxer should set a default if it sets any translated tag.
+ *       When a language is required by the format but not specified in the key
+ *       (e.g. ID3v2 COMM and USLT frames), the default is left to the
+ *       underlying implementation (ID3v2 defaults to "und").
  *    -  sorting  -- a modified version of a tag that should be used for
  *       sorting will have '-sort' appended. E.g. artist="The Beatles",
  *       artist-sort="Beatles, The".

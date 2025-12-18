@@ -1,2 +1,4 @@
-ID3v2 frame TXXX (21 bytes):|.comment-foobar.test.|
+ID3v2 frame COMM (16 bytes):|.undfoobar.test.|
+Deprecated: COMM descriptor 'foobar' used as metadata key. This will change in a future version.
+foobar=test
 comment-foobar=test

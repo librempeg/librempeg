@@ -1,2 +1,4 @@
-ID3v2 frame TXXX (20 bytes):|.comment-sort-.test.|
-comment-sort-=test
+ID3v2 frame COMM (14 bytes):|.undsort.test.|
+Deprecated: COMM descriptor 'sort' used as metadata key. This will change in a future version.
+sort=test
+comment-sort=test

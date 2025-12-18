@@ -47,6 +47,7 @@
 #include "id3v2.h"
 
 const AVMetadataConv ff_id3v2_34_metadata_conv[] = {
+    { "COMM", "comment"      },
     { "TALB", "album"        },
     { "TCOM", "composer"     },
     { "TCON", "genre"        },
@@ -404,7 +405,10 @@ static void read_lang_descr_tag(AVFormatContext *s, AVIOContext *pb,
         *p = av_tolower(*p);
 
     // Some libraries set XXX for unknown language.
-    if (!strcmp(language, "xxx"))
+    if (!strcmp(language, "xxx") ||
+        // By convention, "und" is represented as a key with
+        // no language, e.g. "comment" or "lyrics"
+        !strcmp(language, "und"))
         memset(language, 0, sizeof(language));
 
     taglen -= 4;

@@ -1,4 +1,4 @@
-ID3v2 frame TXXX (17 bytes):|.lyrics-und.test.|
-ID3v2 frame TXXX (19 bytes):|.comment-und.test2.|
-lyrics-und=test
-comment-und=test2
+ID3v2 frame USLT (10 bytes):|.und.test.|
+ID3v2 frame COMM (11 bytes):|.und.test2.|
+lyrics=test
+comment=test2
