@@ -2102,20 +2102,16 @@ static int mjpeg_decode_com(MJpegDecodeContext *s)
 static int find_marker(const uint8_t **pbuf_ptr, const uint8_t *buf_end)
 {
     const uint8_t *buf_ptr;
+    uint16_t state = 0;
     int val;
 
     buf_ptr = *pbuf_ptr;
     while (buf_ptr < buf_end) {
-        if (*buf_ptr++ == 0xff) {
-            while (buf_ptr < buf_end) {
-                val = *buf_ptr++;
-                if (val != 0xff) {
-                    if ((val >= SOF0) && (val <= COM))
-                        goto found;
-                    break;
-                }
-            }
-        }
+        state <<= 8;
+        val = *buf_ptr++;
+        state |= val;
+        if ((state >= (0xff00|SOF0)) && (state <= (0xff00|COM)))
+            goto found;
     }
     buf_ptr = buf_end;
     val = -1;
@@ -2129,8 +2125,7 @@ int ff_mjpeg_find_marker(MJpegDecodeContext *s,
                          const uint8_t **unescaped_buf_ptr,
                          int *unescaped_buf_size)
 {
-    int start_code;
-    start_code = find_marker(buf_ptr, buf_end);
+    int start_code = find_marker(buf_ptr, buf_end);
 
     av_fast_padded_malloc(&s->buffer, &s->buffer_size, buf_end - *buf_ptr);
     if (!s->buffer)
