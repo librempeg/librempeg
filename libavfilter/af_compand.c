@@ -60,7 +60,7 @@ typedef struct CompandContext {
     double curve_dB;
     double gain_dB;
     double delay;
-    AVFrame *delay_frame, *in_frame, *sort_frame, *in, *sc;
+    AVFrame *delay_frame, *data_frame, *in, *sc;
     int delay_samples;
     int64_t pts;
 
@@ -119,8 +119,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->segments);
     av_frame_free(&s->in);
     av_frame_free(&s->sc);
-    av_frame_free(&s->in_frame);
-    av_frame_free(&s->sort_frame);
+    av_frame_free(&s->data_frame);
     av_frame_free(&s->delay_frame);
 }
 
@@ -276,10 +275,9 @@ static int config_output(AVFilterLink *outlink)
             return AVERROR_BUG;
         }
     } else {
-        s->in_frame = ff_get_audio_buffer(outlink, s->delay_samples);
-        s->sort_frame = ff_get_audio_buffer(outlink, s->delay_samples);
+        s->data_frame = ff_get_audio_buffer(outlink, s->delay_samples);
         s->delay_frame = ff_get_audio_buffer(outlink, s->delay_samples);
-        if (!s->in_frame || !s->delay_frame || !s->sort_frame)
+        if (!s->delay_frame || !s->data_frame)
             return AVERROR(ENOMEM);
 
         s->compand = compand_delay;

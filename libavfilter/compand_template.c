@@ -18,6 +18,7 @@
 
 #undef EPS
 #undef FMA
+#undef FMAX
 #undef FABS
 #undef FEXP
 #undef FLOG
@@ -31,6 +32,7 @@
 #if DEPTH == 32
 #define EPS FLT_EPSILON
 #define FMA fmaf
+#define FMAX fmaxf
 #define FABS fabsf
 #define FEXP expf
 #define FLOG logf
@@ -44,6 +46,7 @@
 #else
 #define EPS DBL_EPSILON
 #define FMA fma
+#define FMAX fmax
 #define FABS fabs
 #define FEXP exp
 #define FLOG log
@@ -72,8 +75,12 @@ typedef struct fn(ChanParam) {
     int delay_count;
     int delay_index;
 
-    int front, back;
-    int input_index;
+    int N;
+    int scan_start_low;
+    int scan_start_mid;
+    int scan_start_high;
+    int write_pos, scan_pos, scan_stop, scan_start;
+    ftype in_max, scan_max;
 } fn(ChanParam);
 
 typedef struct fn(CompandSegment) {
@@ -223,16 +230,22 @@ static int fn(prepare)(AVFilterContext *ctx, AVFilterLink *outlink, const int re
 
         if (reset) {
             cp->delay_index = cp->delay_count = cp->initial_volume = 0;
-            cp->front = cp->back = cp->input_index = 0;
+            cp->N = s->delay_samples;
+            cp->scan_start_low = (cp->N-1)/2;
+            cp->scan_start_mid = (cp->N+1)/2;
+            cp->scan_start_high = cp->N-1;
+            cp->scan_start = cp->scan_start_low;
+            cp->write_pos = 0;
+            cp->scan_stop = 0;
+            cp->scan_pos = 0;
+
         }
 
         if (s->delay_samples > 0 && reset) {
-            ftype *sort = (ftype *)s->sort_frame->extended_data[ch];
-            ftype *in = (ftype *)s->in_frame->extended_data[ch];
+            ftype *data = (ftype *)s->data_frame->extended_data[ch];
 
             for (int n = 0; n < s->delay_samples; n++) {
-                sort[n] = F(-1.0);
-                in[n] = F(-1.0);
+                data[n] = F(0.0);
             }
         }
     }
@@ -305,15 +318,18 @@ static void fn(drain)(AVFilterContext *ctx, AVFrame *frame)
     }
 }
 
-static void fn(update_volume)(fn(ChanParam) *cp, const ftype in)
+static ftype fn(update_volume)(const ftype attack, const ftype decay, const ftype in, const ftype volume)
 {
     const ftype in_log = in > EPS ? FLOG(in) : FLOG(EPS);
-    const ftype delta = in_log - cp->volume;
+    const ftype delta = in_log - volume;
+    ftype ret = volume;
 
     if (delta > F(0.0))
-        cp->volume = FMA(delta, cp->attack, cp->volume);
+        ret = FMA(delta, attack, volume);
     else if (delta < F(0.0))
-        cp->volume = FMA(delta, cp->decay, cp->volume);
+        ret = FMA(delta, decay, volume);
+
+    return ret;
 }
 
 static int fn(compand_nodelay_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
@@ -334,88 +350,70 @@ static int fn(compand_nodelay_channels)(AVFilterContext *ctx, void *arg, int job
         const ftype *src = (const ftype *)in->extended_data[ch];
         ftype *dst = (ftype *)out->extended_data[ch];
         fn(ChanParam) *cp = &cps[ch];
+        const ftype attack = cp->attack;
+        const ftype decay = cp->decay;
+        ftype volume = cp->volume;
 
         if (!cp->initial_volume) {
-            cp->volume = FLOG(FABS(scsrc[0]) + EPS);
+            volume = FLOG(FABS(scsrc[0]) + EPS);
             cp->initial_volume = 1;
         }
 
         if (is_disabled) {
             for (int i = 0; i < nb_samples; i++) {
-                fn(update_volume)(cp, FABS(scsrc[i]));
+                volume = fn(update_volume)(attack, decay, FABS(scsrc[i]), volume);
 
                 dst[i] = src[i];
             }
+
+            cp->volume = volume;
+
             continue;
         }
-        for (int i = 0; i < nb_samples; i++) {
-            fn(update_volume)(cp, FABS(scsrc[i]));
 
-            dst[i] = src[i] * fn(get_volume)(s, cp->volume);
+        for (int i = 0; i < nb_samples; i++) {
+            volume = fn(update_volume)(attack, decay, FABS(scsrc[i]), volume);
+
+            dst[i] = src[i] * fn(get_volume)(s, volume);
         }
+
+        cp->volume = volume;
     }
 
     return 0;
 }
 
-#define PEAKS(empty_value,op,sample, psample)\
-    if (!empty && psample == ss[front]) {    \
-        ss[front] = empty_value;             \
-        if (back != front) {                 \
-            front--;                         \
-            if (front < 0)                   \
-                front = n - 1;               \
-        }                                    \
-        empty = (front == back) &&           \
-                (ss[front] == empty_value);  \
-    }                                        \
-                                             \
-    while (!empty && sample op ss[front]) {  \
-        ss[front] = empty_value;             \
-        if (back == front) {                 \
-            empty = 1;                       \
-            break;                           \
-        }                                    \
-        front--;                             \
-        if (front < 0)                       \
-            front = n - 1;                   \
-    }                                        \
-                                             \
-    while (!empty && sample op ss[back]) {   \
-        ss[back] = empty_value;              \
-        if (back == front) {                 \
-            empty = 1;                       \
-            break;                           \
-        }                                    \
-        back++;                              \
-        if (back >= n)                       \
-            back = 0;                        \
-    }                                        \
-                                             \
-    if (!empty) {                            \
-        back--;                              \
-        if (back < 0)                        \
-            back = n - 1;                    \
+static ftype fn(compute_peak)(fn(ChanParam) *c, ftype *data, const ftype x)
+{
+    int write_pos = c->write_pos;
+    ftype p;
+
+    c->scan_pos--;
+    if (c->scan_pos >= c->scan_stop) {
+        c->in_max = FMAX(x, c->in_max);
+        data[c->scan_pos] = FMAX(data[c->scan_pos], data[c->scan_pos+1]);
+    } else {
+        c->scan_max = c->in_max;
+        c->in_max = x;
+        if (c->scan_stop == 0) {
+            c->scan_start = c->scan_start_high;
+            c->scan_stop = c->scan_start_mid;
+        } else {
+            c->scan_start = c->scan_start_low;
+            c->scan_stop = 0;
+        }
+        c->scan_pos = c->scan_start;
     }
 
-static ftype fn(compute_peak)(ftype *ss, const ftype ax, const ftype px,
-                              const int n, int *ffront, int *bback)
-{
-    const ftype empty_value = F(-1.0);
-    int front = *ffront;
-    int back = *bback;
-    int empty = front == back && ss[front] == empty_value;
-    ftype r;
+    data[write_pos] = x;
+    write_pos++;
+    if (write_pos >= c->N)
+        write_pos = 0;
 
-    PEAKS(empty_value, >, ax, px)
+    p = FMAX(c->in_max, FMAX(c->scan_max, data[write_pos]));
+    c->write_pos = write_pos;
 
-    ss[back] = ax;
-    r = ss[front];
-
-    *ffront = front;
-    *bback = back;
-
-    return r;
+    return p;
 }
 
 static int fn(compand_delay_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
@@ -435,21 +433,20 @@ static int fn(compand_delay_channels)(AVFilterContext *ctx, void *arg, int jobnr
 
     for (int ch = start; ch < end; ch++) {
         const ftype *scsrc = (const ftype *)sc->extended_data[ch];
-        ftype *sorted = (ftype *)s->sort_frame->extended_data[ch];
-        ftype *input = (ftype *)s->in_frame->extended_data[ch];
         const ftype *src = (const ftype *)in->extended_data[ch];
+        ftype *data = (ftype *)s->data_frame->extended_data[ch];
         ftype *dbuf = (ftype *)delay_frame->extended_data[ch];
         ftype *dst = (ftype *)out->extended_data[ch];
         fn(ChanParam) *cp = &cps[ch];
         int count  = cp->delay_count;
         int dindex = cp->delay_index;
-        int iindex = cp->input_index;
-        int front = cp->front;
-        int back = cp->back;
+        const ftype attack = cp->attack;
+        const ftype decay = cp->decay;
+        ftype volume = cp->volume;
         int oindex = 0;
 
         if (!cp->initial_volume) {
-            cp->volume = FLOG(FABS(scsrc[0]) + EPS);
+            volume = FLOG(FABS(scsrc[0]) + EPS);
             cp->initial_volume = 1;
         }
 
@@ -457,22 +454,15 @@ static int fn(compand_delay_channels)(AVFilterContext *ctx, void *arg, int jobnr
             const ftype scsample = scsrc[i];
             const ftype ascsample = FABS(scsample);
             const ftype sample = src[i];
-            ftype peak, prev;
+            ftype peak;
 
-            prev = input[iindex];
-            input[iindex] = ascsample;
-
-            iindex++;
-            if (iindex >= delay_samples)
-                iindex = 0;
-
-            peak = fn(compute_peak)(sorted, ascsample, prev, delay_samples, &front, &back);
-            fn(update_volume)(cp, peak);
+            peak = fn(compute_peak)(cp, data, ascsample);
+            volume = fn(update_volume)(attack, decay, peak, volume);
 
             if (count >= delay_samples) {
                 dst[oindex] = dbuf[dindex];
                 if (is_enabled)
-                    dst[oindex] *= fn(get_volume)(s, cp->volume);
+                    dst[oindex] *= fn(get_volume)(s, volume);
                 oindex++;
             } else {
                 count++;
@@ -482,12 +472,10 @@ static int fn(compand_delay_channels)(AVFilterContext *ctx, void *arg, int jobnr
             dindex = MOD(dindex + 1, delay_samples);
         }
 
+        cp->volume = volume;
         cp->out_samples = oindex;
         cp->delay_count = count;
         cp->delay_index = dindex;
-        cp->input_index = iindex;
-        cp->front = front;
-        cp->back = back;
     }
 
     return 0;
