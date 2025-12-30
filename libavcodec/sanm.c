@@ -105,7 +105,7 @@ static const int8_t c47_mv[256][2] = {
     {  -6,  43 }, {   1,  43 }, {   0,   0 }, {   0,   0 }, {   0,   0 },
 };
 
-/* codec37/48 motion vector tables: 3x 510 bytes/255 x-y pairs */
+/* codec37/48 motion vector tables: 3x 512 bytes/256 x-y pairs */
 static const int8_t c37_mv[] = {
     0,   0,   1,   0,   2,   0,   3,   0,   5,   0,
     8,   0,  13,   0,  21,   0,  -1,   0,  -2,   0,
@@ -158,6 +158,7 @@ static const int8_t c37_mv[] = {
     0, -21,   1, -21,   2, -21,   3, -21,   5, -21,
     8, -21,  13, -21,  21, -21,  -1, -21,  -2, -21,
    -3, -21,  -5, -21,  -8, -21, -13, -21, -17, -21,
+    0,   0,
     0,   0,  -8, -29,   8, -29, -18, -25,  17, -25,
     0, -23,  -6, -22,   6, -22, -13, -19,  12, -19,
     0, -18,  25, -18, -25, -17,  -5, -17,   5, -17,
@@ -209,6 +210,7 @@ static const int8_t c37_mv[] = {
    -5,  17,   5,  17,  25,  17, -25,  18,   0,  18,
   -12,  19,  13,  19,  -6,  22,   6,  22,   0,  23,
   -17,  25,  18,  25,  -8,  29,   8,  29,   0,  31,
+    0,   0,
     0,   0,  -6, -22,   6, -22, -13, -19,  12, -19,
     0, -18,  -5, -17,   5, -17, -10, -15,  10, -15,
     0, -14,  -4, -13,   4, -13,  19, -13, -19, -12,
@@ -260,6 +262,7 @@ static const int8_t c37_mv[] = {
    19,  12, -19,  13,  -4,  13,   4,  13,   0,  14,
   -10,  15,  10,  15,  -5,  17,   5,  17,   0,  18,
   -12,  19,  13,  19,  -6,  22,   6,  22,   0,  23,
+    0,   0
 };
 
 typedef struct SANMVideoContext {
@@ -1326,9 +1329,8 @@ static int old_codec37(SANMVideoContext *ctx, GetByteContext *gb, int top, int l
                     }
                 }
                 /* 4x4 block copy from prev with MV */
-                code = (code == 0xff) ? 0 : code;
-                mx = c37_mv[(mvoff * 255 + code) * 2];
-                my = c37_mv[(mvoff * 255 + code) * 2 + 1];
+                mx = c37_mv[(mvoff * 256 + code) * 2];
+                my = c37_mv[(mvoff * 256 + code) * 2 + 1];
                 codec37_mv(dst + i, prev + i + mx + my * width,
                            height, width, i + mx, j + my);
                 len--;
@@ -1380,8 +1382,8 @@ static int old_codec37(SANMVideoContext *ctx, GetByteContext *gb, int top, int l
                     for (k = 0; k < 4; k++)
                         memset(dst + i + k * width, t, 4);
                } else {
-                    mx = c37_mv[(mvoff * 255 + code) * 2];
-                    my = c37_mv[(mvoff * 255 + code) * 2 + 1];
+                    mx = c37_mv[(mvoff * 256 + code) * 2];
+                    my = c37_mv[(mvoff * 256 + code) * 2 + 1];
                     codec37_mv(dst + i, prev + i + mx + my * width,
                                height, width, i + mx, j + my);
 
@@ -1756,7 +1758,6 @@ static int codec48_block(GetByteContext *gb, uint8_t *dst, uint8_t *db, int x, i
         for (i = 0; i < 8; i += 4) {
             for (k = 0; k < 8; k += 4) {
                 opc =  bytestream2_get_byteu(gb);
-                opc = (opc == 255) ? 0 : opc;
                 mvofs = c37_mv[opc * 2] + (c37_mv[opc * 2 + 1] * w);
                 if (c48_invalid_mv(x+k, y+i, w, aligned_height, 4, mvofs))
                     continue;
@@ -1797,7 +1798,6 @@ static int codec48_block(GetByteContext *gb, uint8_t *dst, uint8_t *db, int x, i
             for (j = 0; j < 8; j += 2) {
                 ofs = (w * i) + j;
                 opc = bytestream2_get_byteu(gb);
-                opc = (opc == 255) ? 0 : opc;
                 mvofs = c37_mv[opc * 2] + (c37_mv[opc * 2 + 1] * w);
                 if (c48_invalid_mv(x+j, y+i, w, aligned_height, 2, mvofs))
                     continue;
