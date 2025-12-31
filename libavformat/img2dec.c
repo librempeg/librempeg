@@ -423,7 +423,11 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
         if (s->frame_size > 0) {
             size = s->frame_size;
         } else if (!ffstream(s1->streams[0])->parser) {
-            size = avio_size(s1->pb);
+            int64_t full_size = avio_size(s1->pb);
+
+            if (full_size <= 0 || full_size > INT_MAX)
+                return AVERROR_INVALIDDATA;
+            size = full_size;
         } else {
             size = 4096;
         }
