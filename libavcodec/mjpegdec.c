@@ -1391,9 +1391,19 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
     int i, mb_x, mb_y, chroma_h_shift, chroma_v_shift, chroma_width, chroma_height;
     uint8_t *data[MAX_COMPONENTS];
     const uint8_t *reference_data[MAX_COMPONENTS];
-    int linesize[MAX_COMPONENTS];
     GetBitContext mb_bitmask_gb = {0}; // initialize to silence gcc warning
     int bytes_per_pixel = 1 + (s->bits > 8);
+    GetBitContext *gb = &s->gb;
+    const int progressive = s->progressive;
+    const int lowres = s->avctx->lowres;
+    const int height = s->height;
+    const int width = s->width;
+    int16_t *block = s->block;
+    const int *nb_blocks = s->nb_blocks;
+    const int *comp_index = s->comp_index;
+    const int *h_scount = s->h_scount;
+    const int *v_scount = s->v_scount;
+    int *linesize = s->linesize;
 
     if (mb_bitmask) {
         if (mb_bitmask_size != (s->mb_width * s->mb_height + 7)>>3) {
@@ -1407,14 +1417,13 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
 
     av_pix_fmt_get_chroma_sub_sample(s->avctx->pix_fmt, &chroma_h_shift,
                                      &chroma_v_shift);
-    chroma_width  = AV_CEIL_RSHIFT(s->width,  chroma_h_shift);
-    chroma_height = AV_CEIL_RSHIFT(s->height, chroma_v_shift);
+    chroma_width  = AV_CEIL_RSHIFT(width,  chroma_h_shift);
+    chroma_height = AV_CEIL_RSHIFT(height, chroma_v_shift);
 
     for (i = 0; i < nb_components; i++) {
-        int c   = s->comp_index[i];
+        int c   = comp_index[i];
         data[c] = s->picture_ptr->data[c];
         reference_data[c] = reference ? reference->data[c] : NULL;
-        linesize[c] = s->linesize[c];
         s->coefs_finished[c] |= 1;
     }
 
@@ -1425,73 +1434,96 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
             if (s->restart_interval && !s->restart_count)
                 s->restart_count = s->restart_interval;
 
-            if (get_bits_left(&s->gb) < 0) {
+            if (get_bits_left(gb) < 0) {
                 av_log(s->avctx, AV_LOG_ERROR, "overread %d\n",
-                       -get_bits_left(&s->gb));
+                       -get_bits_left(gb));
                 return AVERROR_INVALIDDATA;
             }
             for (i = 0; i < nb_components; i++) {
                 uint8_t *ptr;
                 int n, h, v, x, y, c, j;
                 int block_offset;
-                n = s->nb_blocks[i];
-                c = s->comp_index[i];
-                h = s->h_scount[i];
-                v = s->v_scount[i];
+                int linesizec;
+                n = nb_blocks[i];
+                c = comp_index[i];
+                h = h_scount[i];
+                v = v_scount[i];
                 x = 0;
                 y = 0;
-                for (j = 0; j < n; j++) {
-                    block_offset = (((linesize[c] * (v * mb_y + y) * 8) +
-                                     (h * mb_x + x) * 8 * bytes_per_pixel) >> s->avctx->lowres);
+                linesizec = linesize[c];
 
-                    if (   8*(h * mb_x + x) < ((c == 1) || (c == 2) ? chroma_width  : s->width)
-                        && 8*(v * mb_y + y) < ((c == 1) || (c == 2) ? chroma_height : s->height)) {
-                        ptr = data[c] + block_offset;
-                    } else
-                        ptr = NULL;
-                    if (!s->progressive) {
-                        if (copy_mb) {
-                            if (ptr)
-                                mjpeg_copy_block(s, ptr, reference_data[c] + block_offset,
-                                                linesize[c], s->avctx->lowres);
+                if (!progressive) {
+                    for (j = 0; j < n; j++) {
+                        block_offset = (((linesizec * (v * mb_y + y) * 8) +
+                                         (h * mb_x + x) * 8 * bytes_per_pixel) >> lowres);
+
+                        if (   8*(h * mb_x + x) < ((c == 1) || (c == 2) ? chroma_width  : width)
+                               && 8*(v * mb_y + y) < ((c == 1) || (c == 2) ? chroma_height : height)) {
+                            ptr = data[c] + block_offset;
+                        } else
+                            ptr = NULL;
+                        if (copy_mb && ptr) {
+                            mjpeg_copy_block(s, ptr, reference_data[c] + block_offset,
+                                             linesizec, lowres);
 
                         } else {
-                            s->bdsp.clear_block(s->block);
-                            if (decode_block(s, s->block, i,
+                            s->bdsp.clear_block(block);
+                            if (decode_block(s, block, i,
                                              s->dc_index[i], s->ac_index[i],
                                              s->quant_matrixes[s->quant_sindex[i]]) < 0) {
                                 av_log(s->avctx, AV_LOG_ERROR,
                                        "error y=%d x=%d\n", mb_y, mb_x);
                                 return AVERROR_INVALIDDATA;
                             }
-                            if (ptr && linesize[c]) {
-                                s->idsp.idct_put(ptr, linesize[c], s->block);
+                            if (ptr && linesizec) {
+                                s->idsp.idct_put(ptr, linesizec, block);
                                 if (s->bits & 7)
-                                    shift_output(s, ptr, linesize[c]);
+                                    shift_output(s, ptr, linesizec);
                             }
                         }
-                    } else {
-                        int block_idx  = s->block_stride[c] * (v * mb_y + y) +
-                                         (h * mb_x + x);
-                        int16_t *block = s->blocks[c][block_idx];
-                        if (Ah)
-                            block[0] += get_bits1(&s->gb) *
-                                        s->quant_matrixes[s->quant_sindex[i]][0] << Al;
-                        else if (decode_dc_progressive(s, block, i, s->dc_index[i],
-                                                       s->quant_matrixes[s->quant_sindex[i]],
-                                                       Al) < 0) {
-                            av_log(s->avctx, AV_LOG_ERROR,
-                                   "error y=%d x=%d\n", mb_y, mb_x);
-                            return AVERROR_INVALIDDATA;
+                        ff_dlog(s->avctx, "mb: %d %d processed\n", mb_y, mb_x);
+                        ff_dlog(s->avctx, "%d %d %d %d %d %d %d \n",
+                                mb_x, mb_y, x, y, c,
+                                (v * mb_y + y) * 8, (h * mb_x + x) * 8);
+                        if (++x == h) {
+                            x = 0;
+                            y++;
                         }
                     }
-                    ff_dlog(s->avctx, "mb: %d %d processed\n", mb_y, mb_x);
-                    ff_dlog(s->avctx, "%d %d %d %d %d %d %d \n",
-                            mb_x, mb_y, x, y, c,
-                            (v * mb_y + y) * 8, (h * mb_x + x) * 8);
-                    if (++x == h) {
-                        x = 0;
-                        y++;
+                } else {
+                    for (j = 0; j < n; j++) {
+                        block_offset = (((linesizec * (v * mb_y + y) * 8) +
+                                         (h * mb_x + x) * 8 * bytes_per_pixel) >> lowres);
+
+                        if (   8*(h * mb_x + x) < ((c == 1) || (c == 2) ? chroma_width  : width)
+                               && 8*(v * mb_y + y) < ((c == 1) || (c == 2) ? chroma_height : height)) {
+                            ptr = data[c] + block_offset;
+                        } else
+                            ptr = NULL;
+                        {
+                            int block_idx  = s->block_stride[c] * (v * mb_y + y) +
+                                (h * mb_x + x);
+                            int16_t *block = s->blocks[c][block_idx];
+                            if (Ah)
+                                block[0] += get_bits1(gb) *
+                                    s->quant_matrixes[s->quant_sindex[i]][0] << Al;
+                            else if (decode_dc_progressive(s, block, i, s->dc_index[i],
+                                                           s->quant_matrixes[s->quant_sindex[i]],
+                                                           Al) < 0) {
+                                av_log(s->avctx, AV_LOG_ERROR,
+                                       "error y=%d x=%d\n", mb_y, mb_x);
+                                return AVERROR_INVALIDDATA;
+                            }
+                        }
+
+                        ff_dlog(s->avctx, "mb: %d %d processed\n", mb_y, mb_x);
+                        ff_dlog(s->avctx, "%d %d %d %d %d %d %d \n",
+                                mb_x, mb_y, x, y, c,
+                                (v * mb_y + y) * 8, (h * mb_x + x) * 8);
+                        if (++x == h) {
+                            x = 0;
+                            y++;
+                        }
                     }
                 }
             }
