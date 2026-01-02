@@ -482,6 +482,13 @@ static int read_header(AVFormatContext *s)
         } else if (codec == AV_CODEC_ID_ADPCM_MS) {
             st->codecpar->block_align = (block_align + 22) * channels;
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+        } else if (codec == AV_CODEC_ID_PCM_S16LE ||
+                   codec == AV_CODEC_ID_PCM_S16BE) {
+            st->codecpar->block_align = 2 * channels * 512;
+            avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+        } else if (codec == AV_CODEC_ID_PCM_U8) {
+            st->codecpar->block_align = channels * 1024;
+            avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
         }
 
         if (names_offset > 0 && names_entry_size > 0 && names_size > 0) {
