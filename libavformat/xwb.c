@@ -608,10 +608,19 @@ static int read_seek(AVFormatContext *s, int stream_index,
     st = s->streams[xwb->current_stream];
     xst = st->priv_data;
 
-    if (xst->xctx)
+    if (xst->xctx) {
         return av_seek_frame(xst->xctx, 0, ts, flags);
-    else
+    } else {
+        AVIOContext *pb = s->pb;
+        int64_t pos = avio_tell(pb);
+
+        if (pos < xst->data_offset) {
+            avio_seek(pb, xst->data_offset, SEEK_SET);
+            return 0;
+        }
+
         return -1;
+    }
 }
 
 static int read_close(AVFormatContext *s)
