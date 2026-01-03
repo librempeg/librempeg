@@ -23,8 +23,9 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
-static int ace_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     uint32_t asc;
 
@@ -51,7 +52,7 @@ static int ace_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX / 2 + 1;
 }
 
-static int ace_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     int streams = 0, version, ret, codec, rate = 0, nb_channels = 0;
     uint32_t chunk, chunk_pos, size = 0;
@@ -184,23 +185,11 @@ static int ace_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int ace_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_ace_demuxer = {
     .p.name         = "ace",
     .p.long_name    = NULL_IF_CONFIG_SMALL("tri-Ace Audio Container"),
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = ace_probe,
-    .read_header    = ace_read_header,
-    .read_packet    = ace_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = ff_pcm_read_packet,
 };
