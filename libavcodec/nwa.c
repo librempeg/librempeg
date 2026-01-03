@@ -157,7 +157,7 @@ static int nwa_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         if (bps == 16)
             dst16[n] = d[ch_idx];
         else
-            dst8[n] = av_clip_uint8(d[ch_idx] + 128);
+            dst8[n] = av_clip_int8(d[ch_idx]) + 128;
     }
 
     *got_frame_ptr = 1;
