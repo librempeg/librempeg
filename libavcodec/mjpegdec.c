@@ -1455,6 +1455,8 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
                 return AVERROR_INVALIDDATA;
             }
             for (i = 0; i < nb_components; i++) {
+                const int ac_index = s->ac_index[i];
+                const int dc_index = s->dc_index[i];
                 uint8_t *ptr;
                 int n, h, v, x, y, c, j;
                 int block_offset;
@@ -1484,7 +1486,7 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
                         } else {
                             s->bdsp.clear_block(block);
                             if (decode_block(s, block, i,
-                                             s->dc_index[i], s->ac_index[i],
+                                             dc_index, ac_index,
                                              s->quant_matrixes[s->quant_sindex[i]]) < 0) {
                                 av_log(s->avctx, AV_LOG_ERROR,
                                        "error y=%d x=%d\n", mb_y, mb_x);
@@ -1522,7 +1524,7 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
                             if (Ah)
                                 block[0] += get_bits1(gb) *
                                     s->quant_matrixes[s->quant_sindex[i]][0] << Al;
-                            else if (decode_dc_progressive(s, block, i, s->dc_index[i],
+                            else if (decode_dc_progressive(s, block, i, dc_index,
                                                            s->quant_matrixes[s->quant_sindex[i]],
                                                            Al) < 0) {
                                 av_log(s->avctx, AV_LOG_ERROR,
