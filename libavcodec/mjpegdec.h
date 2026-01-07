@@ -125,7 +125,6 @@ typedef struct MJpegDecodeContext {
     int restart_interval;
     int restart_count;
 
-    int buggy_avid;
     int cs_itu601;
     int interlace_polarity;
     int multiscope;
