@@ -796,7 +796,8 @@ smv_out:
         wav->data_end = avio_tell(s->pb) + left;
     }
 
-    if (st->codecpar->codec_id == AV_CODEC_ID_ATRAC3P) {
+    if (st->codecpar->codec_id == AV_CODEC_ID_ATRAC3P ||
+        st->codecpar->codec_id == AV_CODEC_ID_ADPCM_IMA_XBOX) {
         size = FFMIN(st->codecpar->block_align, left);
     } else {
         size = wav->max_size;
