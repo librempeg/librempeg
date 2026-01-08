@@ -3445,13 +3445,13 @@ static int matroska_read_header(AVFormatContext *s)
     chapters = chapters_list->elem;
     for (i = 0; i < chapters_list->nb_elem; i++)
         if (chapters[i].start != AV_NOPTS_VALUE && chapters[i].uid &&
-            (max_start == 0 || chapters[i].start > max_start)) {
+            (max_start == 0 || chapters[i].end >= max_start)) {
             chapters[i].chapter =
                 avpriv_new_chapter(s, chapters[i].uid,
                                    (AVRational) { 1, 1000000000 },
-                                   chapters[i].start, chapters[i].end,
+                                   FFMIN(max_start, chapters[i].start), chapters[i].end,
                                    chapters[i].title);
-            max_start = chapters[i].start;
+            max_start = chapters[i].end;
         }
 
     matroska_add_index_entries(matroska);
