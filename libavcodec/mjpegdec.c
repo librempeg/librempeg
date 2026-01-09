@@ -1457,25 +1457,28 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
             for (i = 0; i < nb_components; i++) {
                 const int ac_index = s->ac_index[i];
                 const int dc_index = s->dc_index[i];
-                uint8_t *ptr;
-                int n, h, v, x, y, c, j;
+                const int c = comp_index[i];
+                const int plane_height = (c == 1) || (c == 2) ? chroma_height : height;
+                const int plane_width = (c == 1) || (c == 2) ? chroma_width : width;
+                const int linesizec = linesize[c];
+                const int n = nb_blocks[i];
+                const int h = h_scount[i];
+                const int v = v_scount[i];
+                const int h_mb_x = h * mb_x;
+                const int v_mb_y = v * mb_y;
                 int block_offset;
-                int linesizec;
-                n = nb_blocks[i];
-                c = comp_index[i];
-                h = h_scount[i];
-                v = v_scount[i];
+                uint8_t *ptr;
+                int x, y;
+
                 x = 0;
                 y = 0;
-                linesizec = linesize[c];
-
                 if (!progressive) {
-                    for (j = 0; j < n; j++) {
-                        block_offset = (((linesizec * (v * mb_y + y) * 8) +
-                                         (h * mb_x + x) * 8 * bytes_per_pixel) >> lowres);
+                    for (int j = 0; j < n; j++) {
+                        block_offset = (((linesizec * (v_mb_y + y) * 8) +
+                                         (h_mb_x + x) * 8 * bytes_per_pixel) >> lowres);
 
-                        if (   8*(h * mb_x + x) < ((c == 1) || (c == 2) ? chroma_width  : width)
-                               && 8*(v * mb_y + y) < ((c == 1) || (c == 2) ? chroma_height : height)) {
+                        if (8*(h_mb_x + x) < plane_width &&
+                            8*(v_mb_y + y) < plane_height) {
                             ptr = data[c] + block_offset;
                         } else
                             ptr = NULL;
@@ -1501,25 +1504,25 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
                         ff_dlog(s->avctx, "mb: %d %d processed\n", mb_y, mb_x);
                         ff_dlog(s->avctx, "%d %d %d %d %d %d %d \n",
                                 mb_x, mb_y, x, y, c,
-                                (v * mb_y + y) * 8, (h * mb_x + x) * 8);
+                                (v_mb_y + y) * 8, (h_mb_x + x) * 8);
                         if (++x == h) {
                             x = 0;
                             y++;
                         }
                     }
                 } else {
-                    for (j = 0; j < n; j++) {
-                        block_offset = (((linesizec * (v * mb_y + y) * 8) +
-                                         (h * mb_x + x) * 8 * bytes_per_pixel) >> lowres);
+                    for (int j = 0; j < n; j++) {
+                        block_offset = (((linesizec * (v_mb_y + y) * 8) +
+                                         (h_mb_x + x) * 8 * bytes_per_pixel) >> lowres);
 
-                        if (   8*(h * mb_x + x) < ((c == 1) || (c == 2) ? chroma_width  : width)
-                               && 8*(v * mb_y + y) < ((c == 1) || (c == 2) ? chroma_height : height)) {
+                        if (8*(h_mb_x + x) < plane_width &&
+                            8*(v_mb_y + y) < plane_height) {
                             ptr = data[c] + block_offset;
                         } else
                             ptr = NULL;
                         {
-                            int block_idx  = s->block_stride[c] * (v * mb_y + y) +
-                                (h * mb_x + x);
+                            int block_idx  = s->block_stride[c] * (v_mb_y + y) +
+                                (h_mb_x + x);
                             int16_t *block = s->blocks[c][block_idx];
                             if (Ah)
                                 block[0] += get_bits1(gb) *
@@ -1536,7 +1539,7 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
                         ff_dlog(s->avctx, "mb: %d %d processed\n", mb_y, mb_x);
                         ff_dlog(s->avctx, "%d %d %d %d %d %d %d \n",
                                 mb_x, mb_y, x, y, c,
-                                (v * mb_y + y) * 8, (h * mb_x + x) * 8);
+                                (v_mb_y + y) * 8, (h_mb_x + x) * 8);
                         if (++x == h) {
                             x = 0;
                             y++;
