@@ -30,6 +30,8 @@
  * MJPEG decoder.
  */
 
+#define UNCHECKED_BITSTREAM_READER 0
+
 #include "config_components.h"
 
 #include "libavutil/attributes.h"
