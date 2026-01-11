@@ -574,6 +574,7 @@ extern const FFInputFormat  ff_ssm_demuxer;
 extern const FFInputFormat  ff_ssp_demuxer;
 extern const FFInputFormat  ff_ssv_demuxer;
 extern const FFInputFormat  ff_ster_demuxer;
+extern const FFInputFormat  ff_sthd_demuxer;
 extern const FFInputFormat  ff_stl_demuxer;
 extern const FFInputFormat  ff_stma_demuxer;
 extern const FFInputFormat  ff_str_demuxer;
