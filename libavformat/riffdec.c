@@ -130,7 +130,9 @@ int ff_get_wav_header(AVFormatContext *s, AVIOContext *pb,
             par->bits_per_coded_sample = avio_rb16(pb);
         }
     }
-    if (id == 0xFFFE) {
+    if (id == 0xFFFE && av_match_ext(s->url, "wem")) {
+        par->codec_id = AV_CODEC_ID_PCM_S16LE;
+    } else if (id == 0xFFFE) {
         par->codec_tag = 0;
     /* Do some additional checks for unofficial ADPCM AICA */
     } else if (id == 0x0000 && par->bits_per_coded_sample == 4 && (par->block_align == 2 * channels || par->block_align == channels)) {
