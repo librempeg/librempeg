@@ -64,6 +64,9 @@ static int read_header(AVFormatContext *s)
     st->codecpar->bits_per_coded_sample = build_date >= 0x20170000 ? 16 : 4;
     st->codecpar->ch_layout.nb_channels = nb_channels;
     st->codecpar->sample_rate = rate;
+    if (build_date < 0x20170000)
+        st->codecpar->bit_rate = 36LL * st->codecpar->ch_layout.nb_channels * 8 *
+                                        st->codecpar->sample_rate / 64;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
