@@ -202,15 +202,14 @@ static const char *const ctlidstr[] = {
 #endif
 };
 
-static av_cold void log_encoder_error(AVCodecContext *avctx, const char *desc)
+static av_cold void log_encoder_error(void *logctx, struct vpx_codec_ctx *encoder, const char *desc)
 {
-    VPxContext *ctx = avctx->priv_data;
-    const char *error  = vpx_codec_error(&ctx->encoder);
-    const char *detail = vpx_codec_error_detail(&ctx->encoder);
+    const char *error  = vpx_codec_error(encoder);
+    const char *detail = vpx_codec_error_detail(encoder);
 
-    av_log(avctx, AV_LOG_ERROR, "%s: %s\n", desc, error);
+    av_log(logctx, AV_LOG_ERROR, "%s: %s\n", desc, error);
     if (detail)
-        av_log(avctx, AV_LOG_ERROR, "  Additional information: %s\n", detail);
+        av_log(logctx, AV_LOG_ERROR, "  Additional information: %s\n", detail);
 }
 
 static av_cold void dump_enc_cfg(AVCodecContext *avctx,
@@ -446,7 +445,7 @@ static av_cold int codecctl_int(AVCodecContext *avctx,
     if (res != VPX_CODEC_OK) {
         snprintf(buf, sizeof(buf), "Failed to set %s codec control",
                  ctlidstr[id]);
-        log_encoder_error(avctx, buf);
+        log_encoder_error(avctx, &ctx->encoder, buf);
         return AVERROR(EINVAL);
     }
 
@@ -455,7 +454,7 @@ static av_cold int codecctl_int(AVCodecContext *avctx,
         if (res_alpha != VPX_CODEC_OK) {
             snprintf(buf, sizeof(buf), "Failed to set %s alpha codec control",
                      ctlidstr[id]);
-            log_encoder_error(avctx, buf);
+            log_encoder_error(avctx, &ctx->encoder_alpha, buf);
             return AVERROR(EINVAL);
         }
     }
@@ -479,7 +478,7 @@ static av_cold int codecctl_intp(AVCodecContext *avctx,
     if (res != VPX_CODEC_OK) {
         snprintf(buf, sizeof(buf), "Failed to set %s codec control",
                  ctlidstr[id]);
-        log_encoder_error(avctx, buf);
+        log_encoder_error(avctx, &ctx->encoder, buf);
         return AVERROR(EINVAL);
     }
 
@@ -488,7 +487,7 @@ static av_cold int codecctl_intp(AVCodecContext *avctx,
         if (res_alpha != VPX_CODEC_OK) {
             snprintf(buf, sizeof(buf), "Failed to set %s alpha codec control",
                      ctlidstr[id]);
-            log_encoder_error(avctx, buf);
+            log_encoder_error(avctx, &ctx->encoder_alpha, buf);
             return AVERROR(EINVAL);
         }
     }
@@ -1152,7 +1151,7 @@ static av_cold int vpx_init(AVCodecContext *avctx,
     res = vpx_codec_enc_init(&ctx->encoder, iface, &enccfg, flags);
     if (res != VPX_CODEC_OK) {
         dump_enc_cfg(avctx, &enccfg, AV_LOG_WARNING);
-        log_encoder_error(avctx, "Failed to initialize encoder");
+        log_encoder_error(avctx, &ctx->encoder, "Failed to initialize encoder");
         return AVERROR(EINVAL);
     }
     dump_enc_cfg(avctx, &enccfg, AV_LOG_DEBUG);
@@ -1176,7 +1175,7 @@ static av_cold int vpx_init(AVCodecContext *avctx,
         enccfg_alpha = enccfg;
         res = vpx_codec_enc_init(&ctx->encoder_alpha, iface, &enccfg_alpha, flags);
         if (res != VPX_CODEC_OK) {
-            log_encoder_error(avctx, "Failed to initialize alpha encoder");
+            log_encoder_error(avctx, &ctx->encoder_alpha, "Failed to initialize alpha encoder");
             return AVERROR(EINVAL);
         }
     }
@@ -1606,14 +1605,14 @@ static int vp9_encode_set_roi(AVCodecContext *avctx, int frame_width, int frame_
 
         ret = set_roi_map(avctx, sd, frame_width, frame_height, &roi_map, block_size, segment_cnt);
         if (ret) {
-            log_encoder_error(avctx, "Failed to set_roi_map.\n");
+            log_encoder_error(avctx, &ctx->encoder, "Failed to set_roi_map.\n");
             return ret;
         }
 
         memset(roi_map.ref_frame, -1, sizeof(roi_map.ref_frame));
 
         if (vpx_codec_control(&ctx->encoder, VP9E_SET_ROI_MAP, &roi_map)) {
-            log_encoder_error(avctx, "Failed to set VP9E_SET_ROI_MAP codec control.\n");
+            log_encoder_error(avctx, &ctx->encoder, "Failed to set VP9E_SET_ROI_MAP codec control.\n");
             ret = AVERROR_INVALIDDATA;
         }
         av_freep(&roi_map.roi_map);
@@ -1638,12 +1637,12 @@ static int vp8_encode_set_roi(AVCodecContext *avctx, int frame_width, int frame_
 
     int ret = set_roi_map(avctx, sd, frame_width, frame_height, &roi_map, block_size, segment_cnt);
     if (ret) {
-        log_encoder_error(avctx, "Failed to set_roi_map.\n");
+        log_encoder_error(avctx, &ctx->encoder, "Failed to set_roi_map.\n");
         return ret;
     }
 
     if (vpx_codec_control(&ctx->encoder, VP8E_SET_ROI_MAP, &roi_map)) {
-        log_encoder_error(avctx, "Failed to set VP8E_SET_ROI_MAP codec control.\n");
+        log_encoder_error(avctx, &ctx->encoder, "Failed to set VP8E_SET_ROI_MAP codec control.\n");
         ret = AVERROR_INVALIDDATA;
     }
 
@@ -1698,7 +1697,7 @@ static int vpx_encode(AVCodecContext *avctx, AVPacket *pkt,
         cfg.rc_max_quantizer = avctx->qmax;
         res = vpx_codec_enc_config_set(&ctx->encoder, &cfg);
         if (res != VPX_CODEC_OK) {
-            log_encoder_error(avctx, "Error reconfiguring encoder");
+            log_encoder_error(avctx, &ctx->encoder, "Error reconfiguring encoder");
             return AVERROR_INVALIDDATA;
         }
     }
@@ -1836,7 +1835,7 @@ static int vpx_encode(AVCodecContext *avctx, AVPacket *pkt,
     res = vpx_codec_encode(&ctx->encoder, rawimg, timestamp,
                            duration, flags, ctx->deadline);
     if (res != VPX_CODEC_OK) {
-        log_encoder_error(avctx, "Error encoding frame");
+        log_encoder_error(avctx, &ctx->encoder, "Error encoding frame");
         return AVERROR_INVALIDDATA;
     }
 
@@ -1844,7 +1843,7 @@ static int vpx_encode(AVCodecContext *avctx, AVPacket *pkt,
         res = vpx_codec_encode(&ctx->encoder_alpha, rawimg_alpha, timestamp,
                                duration, flags, ctx->deadline);
         if (res != VPX_CODEC_OK) {
-            log_encoder_error(avctx, "Error encoding alpha frame");
+            log_encoder_error(avctx, &ctx->encoder_alpha, "Error encoding alpha frame");
             return AVERROR_INVALIDDATA;
         }
     }
