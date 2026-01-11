@@ -3892,6 +3892,9 @@ srtp_protocol_select="rtp_protocol srtp"
 tcp_protocol_select="network"
 tls_protocol_deps_any="gnutls openssl schannel securetransport libtls mbedtls"
 tls_protocol_select="tcp_protocol"
+# TODO: Support libtls, mbedtls, and gnutls.
+dtls_protocol_deps_any="openssl schannel"
+dtls_protocol_select="udp_protocol"
 udp_protocol_select="network"
 udplite_protocol_select="network"
 unix_protocol_deps="sys_un_h"
@@ -7293,7 +7296,6 @@ enabled rkmpp             && { require_pkg_config rkmpp "rockchip_mpp >= 1.3.8" 
                              }
 enabled vapoursynth       && require_headers "vapoursynth/VSScript4.h vapoursynth/VapourSynth4.h"
 
-
 if enabled gcrypt; then
     GCRYPT_CONFIG="${cross_prefix}libgcrypt-config"
     if "${GCRYPT_CONFIG}" --version > /dev/null 2>&1; then
@@ -7342,9 +7344,13 @@ enabled securetransport &&
 
 enabled schannel &&
     check_func_headers "windows.h security.h" InitializeSecurityContext -DSECURITY_WIN32 -lsecur32 &&
+    check_func_headers "windows.h ncrypt.h" NCryptOpenStorageProvider -DSECURITY_WIN32 -lncrypt &&
+    check_func_headers "windows.h wincrypt.h" CertCreateSelfSignCertificate -DSECURITY_WIN32 -lcrypt32 &&
     test_cpp_condition winerror.h "defined(SEC_I_CONTEXT_EXPIRED)" &&
     schannel_extralibs="-lsecur32" ||
         disable schannel
+
+enabled schannel && check_cc dtls_protocol "windows.h security.h schnlsp.h" "int i = SECPKG_ATTR_DTLS_MTU;" -DSECURITY_WIN32
 
 makeinfo --version > /dev/null 2>&1 && enable makeinfo  || disable makeinfo
 enabled makeinfo \
@@ -7587,7 +7593,6 @@ fi
 enabled debug && add_allcflags -g"$debuglevel" && add_asflags -g"$debuglevel"
 
 # add some useful compiler flags if supported
-#check_cflags -Wdeclaration-after-statement
 check_allcflags -Wall
 check_allcflags -Wdisabled-optimization
 check_allcflags -Wpointer-arith
@@ -7626,10 +7631,6 @@ check_disable_warning -Wno-bool-operation
 check_disable_warning -Wno-char-subscripts
 check_disable_warning -Wno-implicit-const-int-float-conversion
 check_disable_warning -Wno-microsoft-enum-forward-reference
-
-# Disable mixed decl and code warning for Objective-C
-#test_objcflags $unknown_warning_flags '-Wdeclaration-after-statement' &&
-#    add_objcflags '-Wno-declaration-after-statement'
 
 check_disable_warning_headers(){
     warning_flag=-W${1#-Wno-}
