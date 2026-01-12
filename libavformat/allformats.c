@@ -521,6 +521,7 @@ extern const FFInputFormat  ff_rtsp_demuxer;
 extern const FFOutputFormat ff_rtsp_muxer;
 extern const FFInputFormat  ff_rws_demuxer;
 extern const FFInputFormat  ff_s337m_demuxer;
+extern const FFInputFormat  ff_sab_demuxer;
 extern const FFInputFormat  ff_sadl_demuxer;
 extern const FFInputFormat  ff_sami_demuxer;
 extern const FFInputFormat  ff_sap_demuxer;
