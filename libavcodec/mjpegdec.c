@@ -2519,7 +2519,10 @@ eoi_parser:
 
             s->cur_scan++;
             if (avctx->skip_frame == AVDISCARD_ALL) {
-                skip_bits(&s->gb, get_bits_left(&s->gb));
+                int nb_skip_bits = get_bits_left(&s->gb);
+
+                if (nb_skip_bits > 0)
+                    skip_bits_long(&s->gb, nb_skip_bits);
                 break;
             }
 
