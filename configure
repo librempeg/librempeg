@@ -7347,7 +7347,7 @@ enabled schannel &&
     check_func_headers "windows.h ncrypt.h" NCryptOpenStorageProvider -DSECURITY_WIN32 -lncrypt &&
     check_func_headers "windows.h wincrypt.h" CertCreateSelfSignCertificate -DSECURITY_WIN32 -lcrypt32 &&
     test_cpp_condition winerror.h "defined(SEC_I_CONTEXT_EXPIRED)" &&
-    schannel_extralibs="-lsecur32" ||
+    schannel_extralibs="-lsecur32 -lncrypt -lcrypt32" ||
         disable schannel
 
 enabled schannel && check_cc dtls_protocol "windows.h security.h schnlsp.h" "int i = SECPKG_ATTR_DTLS_MTU;" -DSECURITY_WIN32
