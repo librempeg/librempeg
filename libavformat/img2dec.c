@@ -370,6 +370,8 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
         return AVERROR_EOF;
 
     if (!s->is_pipe) {
+        int64_t full_size;
+
         if (s->pattern_type == PT_NONE) {
             av_bprintf(&filename, "%s", s1->url);
         } else if (s->use_glob) {
@@ -393,7 +395,12 @@ int ff_img_read_packet(AVFormatContext *s1, AVPacket *pkt)
         if (ret < 0)
             goto fail;
 
-        size = avio_size(f);
+        full_size = avio_size(f);
+        if (full_size <= 0 || full_size > INT_MAX) {
+            ret = AVERROR(EINVAL);
+            goto fail;
+        }
+        size = full_size;
 
         if (par->codec_id == AV_CODEC_ID_NONE) {
             AVProbeData pd = { 0 };
