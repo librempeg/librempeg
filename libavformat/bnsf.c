@@ -93,7 +93,7 @@ static int bnsf_read_header(AVFormatContext *s)
         }
     }
 
-    if (!found_sdat && !found_sfmt)
+    if (!found_sdat || !found_sfmt)
         return AVERROR_INVALIDDATA;
 
     avio_seek(pb, data_offset, SEEK_SET);
