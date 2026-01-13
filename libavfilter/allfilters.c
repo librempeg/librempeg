@@ -187,6 +187,7 @@ extern const FFFilter ff_af_lowpass;
 extern const FFFilter ff_af_lowshelf;
 extern const FFFilter ff_af_lv2;
 extern const FFFilter ff_af_mcompand;
+extern const FFFilter ff_af_musicnorm;
 extern const FFFilter ff_af_pan;
 extern const FFFilter ff_af_peakpass;
 extern const FFFilter ff_af_replaygain;
