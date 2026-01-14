@@ -236,12 +236,13 @@ static void fn(scale_samples)(uint8_t **dst, uint8_t *const *src,
 
 static void fn(crossfade_samplesp)(uint8_t **dst, uint8_t *const *cf0,
                                    uint8_t *const *cf1,
-                                   int nb_samples, int channels,
+                                   int nb_samples, int64_t total_samples,
+                                   int64_t offset, int channels,
                                    int curve0, int curve1)
 {
     for (int i = 0; i < nb_samples; i++) {
-        const ftype gain0 = fn(fade_gain)(curve0, nb_samples-1-i, nb_samples,F(0.0),F(1.0));
-        const ftype gain1 = fn(fade_gain)(curve1, i, nb_samples, F(0.0), F(1.0));
+        const ftype gain0 = fn(fade_gain)(curve0, total_samples-1-(offset+i), total_samples,F(0.0),F(1.0));
+        const ftype gain1 = fn(fade_gain)(curve1, offset+i, total_samples, F(0.0), F(1.0));
         for (int c = 0; c < channels; c++) {
             const stype *s0 = (stype *)cf0[c];
             const stype *s1 = (stype *)cf1[c];
@@ -254,7 +255,8 @@ static void fn(crossfade_samplesp)(uint8_t **dst, uint8_t *const *cf0,
 
 static void fn(crossfade_samples)(uint8_t **dst, uint8_t *const *cf0,
                                   uint8_t *const *cf1,
-                                  int nb_samples, int channels,
+                                  int nb_samples, int64_t total_samples,
+                                  int64_t offset, int channels,
                                   int curve0, int curve1)
 {
     stype *d = (stype *)dst[0];
@@ -262,8 +264,8 @@ static void fn(crossfade_samples)(uint8_t **dst, uint8_t *const *cf0,
     const stype *s1 = (stype *)cf1[0];
 
     for (int i = 0, k = 0; i < nb_samples; i++) {
-        const ftype gain0 = fn(fade_gain)(curve0, nb_samples-1-i, nb_samples,F(0.0),F(1.0));
-        const ftype gain1 = fn(fade_gain)(curve1, i, nb_samples, F(0.0), F(1.0));
+        const ftype gain0 = fn(fade_gain)(curve0, total_samples-1-(offset+i), total_samples,F(0.0),F(1.0));
+        const ftype gain1 = fn(fade_gain)(curve1, offset+i, total_samples, F(0.0), F(1.0));
         for (int c = 0; c < channels; c++, k++)
             d[k] = s0[k] * gain0 + s1[k] * gain1;
     }
