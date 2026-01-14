@@ -46,6 +46,10 @@ typedef struct AudioFadeContext {
     int passthrough;
     int64_t pts;
 
+    /* Incremental crossfade state */
+    int crossfade_in_progress;
+    int64_t crossfade_offset;
+
     void (*fade_samples)(uint8_t **dst, uint8_t * const *src,
                          int nb_samples, int channels, int direction,
                          int64_t start, int64_t range, int curve,
@@ -54,7 +58,8 @@ typedef struct AudioFadeContext {
                           int nb_samples, int channels, double unity);
     void (*crossfade_samples)(uint8_t **dst, uint8_t * const *cf0,
                               uint8_t * const *cf1,
-                              int nb_samples, int channels,
+                              int nb_samples, int64_t total_samples,
+                              int64_t offset, int channels,
                               int curve0, int curve1);
 } AudioFadeContext;
 
@@ -292,8 +297,8 @@ const FFFilter ff_af_afade = {
 static const AVOption acrossfade_options[] = {
     { "nb_samples",   "set number of samples for cross fade duration", OFFSET(nb_samples),   AV_OPT_TYPE_INT64,  {.i64 = 44100}, 1, INT32_MAX/10, FLAGS },
     { "ns",           "set number of samples for cross fade duration", OFFSET(nb_samples),   AV_OPT_TYPE_INT64,  {.i64 = 44100}, 1, INT32_MAX/10, FLAGS },
-    { "duration",     "set cross fade duration",                       OFFSET(duration),     AV_OPT_TYPE_DURATION, {.i64 = 0 },  0, 60000000, FLAGS },
-    { "d",            "set cross fade duration",                       OFFSET(duration),     AV_OPT_TYPE_DURATION, {.i64 = 0 },  0, 60000000, FLAGS },
+    { "duration",     "set cross fade duration",                       OFFSET(duration),     AV_OPT_TYPE_DURATION, {.i64 = 0 },  0, INT64_MAX/2, FLAGS },
+    { "d",            "set cross fade duration",                       OFFSET(duration),     AV_OPT_TYPE_DURATION, {.i64 = 0 },  0, INT64_MAX/2, FLAGS },
     { "overlap",      "overlap 1st stream end with 2nd stream start",  OFFSET(overlap),      AV_OPT_TYPE_BOOL,   {.i64 = 1    }, 0,  1, FLAGS },
     { "o",            "overlap 1st stream end with 2nd stream start",  OFFSET(overlap),      AV_OPT_TYPE_BOOL,   {.i64 = 1    }, 0,  1, FLAGS },
     { "curve1",       "set fade curve type for 1st stream",            OFFSET(curve),        AV_OPT_TYPE_INT,    {.i64 = TRI  }, NONE, NB_CURVES - 1, FLAGS, .unit = "curve" },
@@ -362,6 +367,55 @@ static int pass_samples(AVFilterLink *inlink, AVFilterLink *outlink, unsigned nb
     return ff_filter_frame(outlink, in);
 }
 
+/* Process a chunk of crossfade samples incrementally.
+ * This consumes samples as they become available, reducing peak memory usage
+ * by not waiting for all input 1 samples to be buffered. */
+static int pass_crossfade_chunk(AVFilterContext *ctx, int chunk_samples)
+{
+    AudioFadeContext *s = ctx->priv;
+    AVFilterLink *outlink = ctx->outputs[0];
+    AVFrame *out, *cf[2] = { NULL };
+    int ret;
+
+    out = ff_get_audio_buffer(outlink, chunk_samples);
+    if (!out)
+        return AVERROR(ENOMEM);
+
+    ret = ff_inlink_consume_samples(ctx->inputs[0], chunk_samples, chunk_samples, &cf[0]);
+    if (ret < 0) {
+        av_frame_free(&out);
+        return ret;
+    }
+
+    ret = ff_inlink_consume_samples(ctx->inputs[1], chunk_samples, chunk_samples, &cf[1]);
+    if (ret < 0) {
+        av_frame_free(&out);
+        ff_graph_frame_free(ctx, &cf[0]);
+        return ret;
+    }
+
+    s->crossfade_samples(out->extended_data, cf[0]->extended_data,
+                         cf[1]->extended_data,
+                         chunk_samples, s->nb_samples, s->crossfade_offset,
+                         out->ch_layout.nb_channels,
+                         s->curve, s->curve2);
+    out->pts = s->pts;
+    s->pts += av_rescale_q(chunk_samples,
+        (AVRational){ 1, outlink->sample_rate }, outlink->time_base);
+
+    s->crossfade_offset += chunk_samples;
+
+    /* Check if crossfade is complete */
+    if (s->crossfade_offset >= s->nb_samples) {
+        s->crossfade_in_progress = 0;
+        s->passthrough = 1;
+    }
+
+    ff_graph_frame_free(ctx, &cf[0]);
+    ff_graph_frame_free(ctx, &cf[1]);
+    return ff_filter_frame(outlink, out);
+}
+
 static int pass_crossfade(AVFilterContext *ctx)
 {
     AudioFadeContext *s = ctx->priv;
@@ -388,7 +442,8 @@ static int pass_crossfade(AVFilterContext *ctx)
 
         s->crossfade_samples(out->extended_data, cf[0]->extended_data,
                              cf[1]->extended_data,
-                             s->nb_samples, out->ch_layout.nb_channels,
+                             s->nb_samples, s->nb_samples, 0,
+                             out->ch_layout.nb_channels,
                              s->curve, s->curve2);
         out->pts = s->pts;
         s->pts += av_rescale_q(s->nb_samples,
@@ -454,14 +509,67 @@ static int activate(AVFilterContext *ctx)
         FF_FILTER_FORWARD_WANTED(outlink, ctx->inputs[1]);
     }
 
+    /* Handle incremental crossfade in progress (overlap mode only) */
+    if (s->crossfade_in_progress) {
+        int64_t remaining = s->nb_samples - s->crossfade_offset;
+        int available0 = ff_inlink_queued_samples(ctx->inputs[0]);
+        int available1 = ff_inlink_queued_samples(ctx->inputs[1]);
+        int chunk = FFMIN3(available0, available1, remaining);
+
+        if (chunk > 0) {
+            return pass_crossfade_chunk(ctx, chunk);
+        } else if (ff_outlink_frame_wanted(outlink)) {
+            /* Check if input 1 ended prematurely */
+            if (check_input(ctx->inputs[1])) {
+                s->status[1] = AVERROR_EOF;
+                ff_outlink_set_status(outlink, AVERROR_EOF, AV_NOPTS_VALUE);
+                return 0;
+            }
+            /* Need more samples from input 1 */
+            ff_inlink_request_frame(ctx->inputs[1]);
+            return 0;
+        }
+        return 0;
+    }
+
     nb_samples = ff_inlink_queued_samples(ctx->inputs[0]);
     if (nb_samples  > s->nb_samples) {
         nb_samples -= s->nb_samples;
         s->passthrough = 1;
         return pass_samples(ctx->inputs[0], outlink, nb_samples, &s->pts);
-    } else if (s->status[0] && nb_samples >= s->nb_samples &&
-               ff_inlink_queued_samples(ctx->inputs[1]) >= s->nb_samples) {
-        return pass_crossfade(ctx);
+    } else if (s->status[0] && nb_samples >= s->nb_samples) {
+        /* Input 0 has EOF and has exactly nb_samples remaining.
+         * For overlap mode, use incremental crossfade to reduce memory.
+         * For non-overlap mode, use original blocking behavior. */
+        if (s->overlap) {
+            int available1 = ff_inlink_queued_samples(ctx->inputs[1]);
+            if (available1 > 0) {
+                /* Start incremental crossfade */
+                s->crossfade_in_progress = 1;
+                s->crossfade_offset = 0;
+                return pass_crossfade_chunk(ctx, FFMIN3(nb_samples, available1, s->nb_samples));
+            } else if (ff_outlink_frame_wanted(outlink)) {
+                /* Check if input 1 ended before crossfade could start */
+                if (check_input(ctx->inputs[1])) {
+                    s->status[1] = AVERROR_EOF;
+                    ff_outlink_set_status(outlink, AVERROR_EOF, AV_NOPTS_VALUE);
+                    return 0;
+                }
+                /* Start crossfade mode, request input 1 */
+                s->crossfade_in_progress = 1;
+                s->crossfade_offset = 0;
+                ff_inlink_request_frame(ctx->inputs[1]);
+                return 0;
+            }
+        } else {
+            /* Non-overlap mode: wait for all samples (original behavior) */
+            if (ff_inlink_queued_samples(ctx->inputs[1]) >= s->nb_samples) {
+                return pass_crossfade(ctx);
+            } else if (ff_outlink_frame_wanted(outlink)) {
+                ff_inlink_request_frame(ctx->inputs[1]);
+                return 0;
+            }
+        }
     } else if (ff_outlink_frame_wanted(outlink)) {
         if (!s->status[0] && check_input(ctx->inputs[0]))
             s->status[0] = AVERROR_EOF;
