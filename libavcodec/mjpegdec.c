@@ -1761,7 +1761,8 @@ int ff_mjpeg_decode_sos(MJpegDecodeContext *s)
         if (ret < 0)
             return ret;
 
-    } else if (s->lossless) {
+    } else {
+    if (s->lossless) {
         av_assert0(s->picture_ptr == s->picture);
         if (CONFIG_JPEGLS_DECODER && s->ls) {
             if ((ret = ff_jpegls_decode_picture(s)) < 0)
@@ -1784,6 +1785,7 @@ int ff_mjpeg_decode_sos(MJpegDecodeContext *s)
             if ((ret = mjpeg_decode_scan(s)) < 0)
                 return ret;
         }
+    }
     }
 
     if (s->avctx->codec_id == AV_CODEC_ID_MEDIA100 ||
