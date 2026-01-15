@@ -116,7 +116,7 @@ static int mjpegb_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
         if (avctx->skip_frame == AVDISCARD_ALL) {
             bytestream2_skipu(&s->gB, bytestream2_get_bytes_left(&s->gB));
         } else {
-            ret = ff_mjpeg_decode_sos(s, NULL, 0, NULL);
+            ret = ff_mjpeg_decode_sos(s);
             if (ret < 0 && (avctx->err_recognition & AV_EF_EXPLODE))
                 return ret;
         }
