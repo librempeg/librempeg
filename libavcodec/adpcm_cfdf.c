@@ -25,18 +25,15 @@
 #include "mathops.h"
 
 typedef struct ADPCMCFDFContext {
-    int index;
+    int left;
     int8_t prev_sample;
     uint8_t control_byte;
 } ADPCMCFDFContext;
 
 static av_cold int decode_init(AVCodecContext *avctx)
 {
-    ADPCMCFDFContext *s = avctx->priv_data;
-
     avctx->sample_fmt = AV_SAMPLE_FMT_S16;
     avctx->ch_layout.nb_channels = 1;
-    s->index = 256;
 
     return 0;
 }
@@ -48,7 +45,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     uint8_t control_byte = s->control_byte;
     int8_t prev_sample = s->prev_sample;
     GetByteContext gbc, *gb = &gbc;
-    int index = s->index;
+    int left = s->left;
     int16_t *dst;
     int ret, n;
 
@@ -60,50 +57,51 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     n = 0;
     dst = (int16_t *)frame->data[0];
-    while (n < frame->nb_samples && bytestream2_get_bytes_left(gb) > 0) {
-        if (index >= ((control_byte & 0x3f) + 1)) {
-            control_byte = bytestream2_get_byte(gb);
-            index = 0;
-        }
 
-        if ((control_byte & 0x80) == 0) {
+    if (avpkt->pts == 0) {
+        prev_sample = bytestream2_get_byte(gb);
+        dst[n] = prev_sample * 256;
+        left = 0;
+        n++;
+    }
+
+    while (n < frame->nb_samples && bytestream2_get_bytes_left(gb) > 0) {
+        if (left <= 0)
+            control_byte = bytestream2_get_byte(gb);
+
+        if (!(control_byte & 0x80)) {
             prev_sample = (int8_t)control_byte;
             dst[n++] = (prev_sample - 0x40) * 256;
-            index = 256;
-        } else if ((control_byte & 0x40) == 0) {
-            int count = (control_byte & 0x3f) + 1;
+        } else if (!(control_byte & 0x40)) {
+            if (left <= 0)
+                left = (control_byte & 0x3f) + 1;
 
-            for (int j = index; j < count; j++) {
+            while (left > 0 && n < frame->nb_samples &&
+                   bytestream2_get_bytes_left(gb) > 0) {
                 uint8_t table_val = bytestream2_get_byte(gb);
                 int8_t step_delta = (int8_t)table_val >> 4;
                 int8_t index_delta = (int8_t)(table_val << 4) >> 4;
                 int8_t step_sample = prev_sample + step_delta;
                 int8_t index_sample = step_sample + index_delta;
                 dst[n++] = (step_sample - 0x40) * 256;
-                if (n >= frame->nb_samples) {
-                    index = j+1;
-                    prev_sample = step_sample;
-                    break;
-                }
                 dst[n++] = (index_sample - 0x40) * 256;
                 prev_sample = index_sample;
-                index = j+1;
-                if (bytestream2_get_bytes_left(gb) <= 0)
-                    break;
+                left--;
             }
         } else {
-            int count = (control_byte & 0x3f) + 1;
+            if (left <= 0)
+                left = (control_byte & 0x3f) + 1;
 
-            for (int j = index; j < count && n < frame->nb_samples; j++) {
+            while (left > 0 && n < frame->nb_samples) {
                 dst[n++] = (prev_sample - 0x40) * 256;
-                index = j+1;
+                left--;
             }
         }
     }
 
     s->control_byte = control_byte;
     s->prev_sample = prev_sample;
-    s->index = index;
+    s->left = left;
 
     frame->nb_samples = n;
 
