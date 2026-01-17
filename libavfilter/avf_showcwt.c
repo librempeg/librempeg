@@ -1636,7 +1636,7 @@ static int config_output(AVFilterLink *outlink)
         break;
     case DIRECTION_RL:
     case DIRECTION_DU:
-        s->pos = s->sono_size;
+        s->pos = s->sono_size - (s->bar_size==0);
         break;
     }
 
@@ -1684,7 +1684,7 @@ static int output_frame(AVFilterContext *ctx)
             for (int p = 0; p < nb_planes; p++) {
                 ptrdiff_t linesize = s->outpicref->linesize[p];
 
-                for (int y = 0; y < s->sono_size; y++) {
+                for (int y = 0; y < s->sono_size - (s->bar_size==0); y++) {
                     uint8_t *dst = s->outpicref->data[p] + y * linesize;
 
                     memmove(dst, dst + linesize, s->w);
@@ -1715,7 +1715,7 @@ static int output_frame(AVFilterContext *ctx)
         case DIRECTION_RL:
             s->pos--;
             if (s->pos < 0) {
-                s->pos = s->sono_size;
+                s->pos = s->sono_size - (s->bar_size==0);
                 s->new_frame = 1;
             }
             break;
@@ -1729,7 +1729,7 @@ static int output_frame(AVFilterContext *ctx)
         case DIRECTION_DU:
             s->pos--;
             if (s->pos < 0) {
-                s->pos = s->sono_size;
+                s->pos = s->sono_size - (s->bar_size==0);
                 s->new_frame = 1;
             }
             break;
@@ -1743,7 +1743,7 @@ static int output_frame(AVFilterContext *ctx)
             break;
         case DIRECTION_RL:
         case DIRECTION_DU:
-            s->pos = s->sono_size;
+            s->pos = s->sono_size - (s->bar_size==0);
             break;
         }
         break;
