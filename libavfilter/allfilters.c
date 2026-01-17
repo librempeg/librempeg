@@ -129,6 +129,7 @@ extern const FFFilter ff_af_aspectralstats;
 extern const FFFilter ff_af_aspectralsub;
 extern const FFFilter ff_af_asplit;
 extern const FFFilter ff_af_asr;
+extern const FFFilter ff_af_astatespace;
 extern const FFFilter ff_af_astats;
 extern const FFFilter ff_af_astreamselect;
 extern const FFFilter ff_af_asubboost;

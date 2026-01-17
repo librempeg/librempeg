@@ -145,6 +145,7 @@ OBJS-$(CONFIG_ASPECTRALSTATS_FILTER)         += af_aspectralstats.o
 OBJS-$(CONFIG_ASPECTRALSUB_FILTER)           += af_aspectralsub.o
 OBJS-$(CONFIG_ASPLIT_FILTER)                 += split.o
 OBJS-$(CONFIG_ASR_FILTER)                    += af_asr.o
+OBJS-$(CONFIG_ASTATESPACE_FILTER)            += af_astatespace.o
 OBJS-$(CONFIG_ASTATS_FILTER)                 += af_astats.o
 OBJS-$(CONFIG_ASTREAMSELECT_FILTER)          += f_streamselect.o framesync.o
 OBJS-$(CONFIG_ASUBBOOST_FILTER)              += af_asubboost.o
