@@ -34,6 +34,37 @@ typedef struct AudioMultiplyContext {
     int channels;
 } AudioMultiplyContext;
 
+static int multiply_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    AudioMultiplyContext *s = ctx->priv;
+    AVFrame *out = arg;
+    const int start = (s->planes * jobnr) / nb_jobs;
+    const int end = (s->planes * (jobnr+1)) / nb_jobs;
+    const int plane_samples = FFMIN(s->frames[0]->nb_samples, s->frames[1]->nb_samples);
+
+    if (av_get_packed_sample_fmt(ctx->inputs[0]->format) == AV_SAMPLE_FMT_FLT) {
+        for (int i = start; i < end; i++) {
+            const float *src0 = (const float *)s->frames[0]->extended_data[i];
+            const float *src1 = (const float *)s->frames[1]->extended_data[i];
+            float *dst = (float *)out->extended_data[i];
+
+            for (int n = 0; n < plane_samples; n++)
+                dst[n] = src0[n] * src1[n];
+        }
+    } else {
+        for (int i = start; i < end; i++) {
+            const double *src0 = (const double *)s->frames[0]->extended_data[i];
+            const double *src1 = (const double *)s->frames[1]->extended_data[i];
+            double *dst = (double *)out->extended_data[i];
+
+            for (int n = 0; n < plane_samples; n++)
+                dst[n] = src0[n] * src1[n];
+        }
+    }
+
+    return 0;
+}
+
 static int activate(AVFilterContext *ctx)
 {
     AudioMultiplyContext *s = ctx->priv;
@@ -56,7 +87,6 @@ static int activate(AVFilterContext *ctx)
     }
 
     if (s->frames[0] && s->frames[1]) {
-        int plane_samples;
         AVFrame *out;
 
         if (ff_filter_disabled(ctx)) {
@@ -68,8 +98,6 @@ static int activate(AVFilterContext *ctx)
             return ff_filter_frame(ctx->outputs[0], out);
         }
 
-        plane_samples = FFMIN(s->frames[0]->nb_samples, s->frames[1]->nb_samples);
-
         out = ff_get_audio_buffer(ctx->outputs[0], s->frames[0]->nb_samples);
         if (!out) {
             av_frame_free(&s->frames[0]);
@@ -78,25 +106,8 @@ static int activate(AVFilterContext *ctx)
         }
         av_frame_copy_props(out, s->frames[0]);
 
-        if (av_get_packed_sample_fmt(ctx->inputs[0]->format) == AV_SAMPLE_FMT_FLT) {
-            for (int i = 0; i < s->planes; i++) {
-                const float *src0 = (const float *)s->frames[0]->extended_data[i];
-                const float *src1 = (const float *)s->frames[1]->extended_data[i];
-                float *dst = (float *)out->extended_data[i];
-
-                for (int n = 0; n < plane_samples; n++)
-                    dst[n] = src0[n] * src1[n];
-            }
-        } else {
-            for (int i = 0; i < s->planes; i++) {
-                const double *src0 = (const double *)s->frames[0]->extended_data[i];
-                const double *src1 = (const double *)s->frames[1]->extended_data[i];
-                double *dst = (double *)out->extended_data[i];
-
-                for (int n = 0; n < plane_samples; n++)
-                    dst[n] = src0[n] * src1[n];
-            }
-        }
+        ff_filter_execute(ctx, multiply_channels, out, NULL,
+                          FFMIN(s->planes, ff_filter_get_nb_threads(ctx)));
 
         ff_graph_frame_free(ctx, &s->frames[0]);
         ff_graph_frame_free(ctx, &s->frames[1]);
@@ -174,5 +185,6 @@ const FFFilter ff_af_amultiply = {
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_FLTP,
                       AV_SAMPLE_FMT_DBL, AV_SAMPLE_FMT_DBLP),
-    .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                      AVFILTER_FLAG_SLICE_THREADS,
 };
