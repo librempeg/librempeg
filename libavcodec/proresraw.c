@@ -108,10 +108,6 @@ static uint32_t get_value(GetBitContext *gb, uint16_t codebook)
 
 #define TODCCODEBOOK(x) (((x) & 1) + (x) >> 1)
 
-static const uint8_t align_tile_w[16] = {
-    0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
-};
-
 static const uint8_t dc_cb[13] = {
     16, 33, 50, 51, 51, 51, 68, 68, 68, 68, 68, 68, 118,
 };
@@ -410,7 +406,7 @@ static int decode_frame(AVCodecContext *avctx,
 
     s->nb_tw = (w + 15) >> 4;
     s->nb_th = (h + 15) >> 4;
-    s->nb_tw = (s->nb_tw >> aa) + align_tile_w[~(-1 * (1 << aa)) & s->nb_tw];
+    s->nb_tw = (s->nb_tw >> aa) + av_popcount(~(-1 * (1 << aa)) & s->nb_tw);
     s->nb_tiles = s->nb_tw * s->nb_th;
     av_log(avctx, AV_LOG_DEBUG, "nb tiles: %d\n", s->nb_tiles);
 
