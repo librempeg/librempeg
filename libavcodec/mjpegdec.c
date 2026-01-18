@@ -1757,9 +1757,6 @@ int ff_mjpeg_decode_sos(MJpegDecodeContext *s, const uint8_t *mb_bitmask,
     } else if (s->lossless) {
         av_assert0(s->picture_ptr == s->picture);
         if (CONFIG_JPEGLS_DECODER && s->ls) {
-//            for () {
-//            reset_ls_coding_parameters(s, 0);
-
             if ((ret = ff_jpegls_decode_picture(s, predictor,
                                                 point_transform, ilv)) < 0)
                 return ret;
