@@ -32,6 +32,7 @@
 typedef struct ChannelStats {
     uint64_t nb_samples;
     uint64_t blknum;
+    float blockpeak;
     float secondpeak;
     float peak;
     float sum;
@@ -74,24 +75,23 @@ static void finish_block(ChannelStats *p)
     float rms;
     int rms_bin;
 
+    if (p->blockpeak > p->peak) {
+        p->secondpeak = p->peak;
+        p->peak = p->blockpeak;
+    }
     rms = sqrtf(2.f * p->sum / p->nb_samples);
     rms_bin = av_clip(lrintf(rms * BINS), 0, BINS);
     p->rms[rms_bin]++;
 
     p->sum = 0;
+    p->blockpeak = 0;
     p->nb_samples = 0;
     p->blknum++;
 }
 
 static void update_stat(DRMeterContext *s, ChannelStats *p, float sample)
 {
-    float peak;
-
-    peak = fmaxf(fabsf(sample), p->peak);
-    if (peak > p->peak) {
-        p->secondpeak = p->peak;
-        p->peak = peak;
-    }
+    p->blockpeak = fmaxf(fabsf(sample), p->blockpeak);
     p->sum += sample * sample;
     p->nb_samples++;
     if (p->nb_samples >= s->tc_samples)
