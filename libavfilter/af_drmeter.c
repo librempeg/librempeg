@@ -32,9 +32,9 @@
 typedef struct ChannelStats {
     uint64_t nb_samples;
     uint64_t blknum;
+    float secondpeak;
     float peak;
     float sum;
-    uint32_t peaks[BINS+1];
     uint32_t rms[BINS+1];
 } ChannelStats;
 
@@ -71,17 +71,13 @@ static int config_output(AVFilterLink *outlink)
 
 static void finish_block(ChannelStats *p)
 {
-    int peak_bin, rms_bin;
-    float peak, rms;
+    float rms;
+    int rms_bin;
 
     rms = sqrtf(2.f * p->sum / p->nb_samples);
-    peak = p->peak;
     rms_bin = av_clip(lrintf(rms * BINS), 0, BINS);
-    peak_bin = av_clip(lrintf(peak * BINS), 0, BINS);
     p->rms[rms_bin]++;
-    p->peaks[peak_bin]++;
 
-    p->peak = 0;
     p->sum = 0;
     p->nb_samples = 0;
     p->blknum++;
@@ -89,7 +85,13 @@ static void finish_block(ChannelStats *p)
 
 static void update_stat(DRMeterContext *s, ChannelStats *p, float sample)
 {
-    p->peak = fmaxf(fabsf(sample), p->peak);
+    float peak;
+
+    peak = fmaxf(fabsf(sample), p->peak);
+    if (peak > p->peak) {
+        p->secondpeak = p->peak;
+        p->peak = peak;
+    }
     p->sum += sample * sample;
     p->nb_samples++;
     if (p->nb_samples >= s->tc_samples)
@@ -133,9 +135,8 @@ static void print_stats(AVFilterContext *ctx)
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
         ChannelStats *p = &s->chstats[ch];
-        float chdr, secondpeak, rmssum = 0.f;
-        int first = 0, last = lrintf(0.2f * p->blknum);
-        int peak_bin = BINS;
+        float chdr, rmssum = 0.f;
+        int last = lrintf(0.2f * p->blknum);
 
         if (!p->nb_samples) {
             av_log(ctx, AV_LOG_INFO, "No data, dynamic range not measurable\n");
@@ -145,18 +146,6 @@ static void print_stats(AVFilterContext *ctx)
         if (p->nb_samples)
             finish_block(p);
 
-        for (int i = BINS; i >= 0; i--) {
-            if (p->peaks[i]) {
-                if (first || p->peaks[i] > 1) {
-                    peak_bin = i;
-                    break;
-                }
-                first = 1;
-            }
-        }
-
-        secondpeak = peak_bin / (float)BINS;
-
         for (int64_t i = BINS, j = 0; i >= 0 && j < last; i--) {
             if (p->rms[i]) {
                 rmssum += SQR(i / (float)BINS) * p->rms[i];
@@ -164,7 +153,7 @@ static void print_stats(AVFilterContext *ctx)
             }
         }
 
-        chdr = 20.f * log10f(secondpeak / sqrtf(rmssum / (float)last));
+        chdr = 20.f * log10f(p->secondpeak / sqrtf(rmssum / (float)last));
         dr += chdr;
         av_log(ctx, AV_LOG_INFO, "Channel %d: DR: %g\n", ch + 1, chdr);
     }
