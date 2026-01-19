@@ -98,32 +98,50 @@ static void update_stat(DRMeterContext *s, ChannelStats *p, float sample)
         finish_block(p);
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
+static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    DRMeterContext *s = inlink->dst->priv;
-    const int channels = s->nb_channels;
+    AVFilterLink *inlink = ctx->inputs[0];
+    DRMeterContext *s = ctx->priv;
+    AVFrame *in = arg;
+    const int nb_channels = s->nb_channels;
+    const int nb_samples = in->nb_samples;
+    const int start = (nb_channels * jobnr) / nb_jobs;
+    const int end = (nb_channels * (jobnr+1)) / nb_jobs;
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_FLTP:
-        for (int c = 0; c < channels; c++) {
-            ChannelStats *p = &s->chstats[c];
-            const float *src = (const float *)buf->extended_data[c];
+        for (int ch = start; ch < end; ch++) {
+            const float *src = (const float *)in->extended_data[ch];
+            ChannelStats *p = &s->chstats[ch];
 
-            for (int i = 0; i < buf->nb_samples; i++, src++)
+            for (int n = 0; n < nb_samples; n++)
+                update_stat(s, p, src[n]);
+        }
+        break;
+    case AV_SAMPLE_FMT_FLT:
+        for (int ch = start; ch < end; ch++) {
+            const float *src = ((const float *)in->extended_data[0]) + ch;
+            ChannelStats *p = &s->chstats[ch];
+
+            for (int n = 0; n < nb_samples; n++, src += nb_channels)
                 update_stat(s, p, *src);
         }
         break;
-    case AV_SAMPLE_FMT_FLT: {
-        const float *src = (const float *)buf->extended_data[0];
-
-        for (int i = 0; i < buf->nb_samples; i++) {
-            for (int c = 0; c < channels; c++, src++)
-                update_stat(s, &s->chstats[c], *src);
-        }}
-        break;
     }
 
-    return ff_filter_frame(inlink->dst->outputs[0], buf);
+    return 0;
+}
+
+static int filter_frame(AVFilterLink *inlink, AVFrame *in)
+{
+    AVFilterContext *ctx = inlink->dst;
+    DRMeterContext *s = ctx->priv;
+    const int nb_channels = s->nb_channels;
+
+    ff_filter_execute(ctx, filter_channels, in, NULL,
+                      FFMIN(nb_channels, ff_filter_get_nb_threads(ctx)));
+
+    return ff_filter_frame(ctx->outputs[0], in);
 }
 
 #define SQR(a) ((a)*(a))
@@ -190,7 +208,8 @@ const FFFilter ff_af_drmeter = {
     .p.name        = "drmeter",
     .p.description = NULL_IF_CONFIG_SMALL("Measure audio dynamic range."),
     .p.priv_class  = &drmeter_class,
-    .p.flags       = AVFILTER_FLAG_METADATA_ONLY,
+    .p.flags       = AVFILTER_FLAG_METADATA_ONLY |
+                     AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(DRMeterContext),
     .uninit        = uninit,
     FILTER_INPUTS(drmeter_inputs),
