@@ -45,6 +45,7 @@ typedef struct AudioFadeContext {
     int status[2];
     int passthrough;
     int64_t pts;
+    int64_t offset;
 
     void (*fade_samples)(uint8_t **dst, uint8_t * const *src,
                          int nb_samples, int channels, int direction,
@@ -373,13 +374,11 @@ static int pass_crossfade(AVFilterContext *ctx)
     int ret;
 
     if (s->overlap) {
-        int64_t offset = 0;
-
         /* Process crossfade in chunks to reduce peak memory usage.
          * Instead of allocating one large output buffer, we process
          * and output smaller chunks, freeing input samples as we go. */
-        while (offset < s->nb_samples) {
-            int chunk = FFMIN(CROSSFADE_CHUNK_SIZE, (int)(s->nb_samples - offset));
+        if (s->offset < s->nb_samples) {
+            int chunk = FFMIN(CROSSFADE_CHUNK_SIZE, s->nb_samples - s->offset);
 
             out = ff_get_audio_buffer(outlink, chunk);
             if (!out)
@@ -400,7 +399,7 @@ static int pass_crossfade(AVFilterContext *ctx)
 
             s->crossfade_samples(out->extended_data, cf[0]->extended_data,
                                  cf[1]->extended_data,
-                                 chunk, s->nb_samples, offset,
+                                 chunk, s->nb_samples, s->offset,
                                  out->ch_layout.nb_channels,
                                  s->curve, s->curve2);
             out->pts = s->pts;
@@ -415,10 +414,11 @@ static int pass_crossfade(AVFilterContext *ctx)
             if (ret < 0)
                 return ret;
 
-            offset += chunk;
+            s->offset += chunk;
         }
 
-        s->passthrough = 1;
+        s->passthrough = s->offset >= s->nb_samples;
+
         return 0;
     } else {
         out = ff_get_audio_buffer(outlink, s->nb_samples);
@@ -482,8 +482,9 @@ static int activate(AVFilterContext *ctx)
         nb_samples -= s->nb_samples;
         s->passthrough = 1;
         return pass_samples(ctx->inputs[0], outlink, nb_samples, &s->pts);
-    } else if (s->status[0] && nb_samples >= s->nb_samples &&
-               ff_inlink_queued_samples(ctx->inputs[1]) >= s->nb_samples) {
+    } else if ((s->status[0] && nb_samples >= s->nb_samples &&
+               ff_inlink_queued_samples(ctx->inputs[1]) >= s->nb_samples) ||
+               s->offset > 0) {
         /* Both inputs have enough samples - start crossfade.
          * pass_crossfade processes in chunks to reduce peak memory. */
         return pass_crossfade(ctx);
