@@ -36,7 +36,8 @@ typedef struct ChannelStats {
     float secondpeak;
     float peak;
     float sum;
-    uint32_t rms[BINS+1];
+    float *rmsvalues;
+    unsigned nb_rmsvalues;
 } ChannelStats;
 
 typedef struct DRMeterContext {
@@ -73,20 +74,29 @@ static int config_output(AVFilterLink *outlink)
 static void finish_block(ChannelStats *p)
 {
     float rms;
-    int rms_bin;
 
     if (p->blockpeak > p->peak) {
         p->secondpeak = p->peak;
         p->peak = p->blockpeak;
     }
+
     rms = sqrtf(2.f * p->sum / p->nb_samples);
-    rms_bin = av_clip(lrintf(rms * BINS), 0, BINS);
-    p->rms[rms_bin]++;
 
     p->sum = 0;
     p->blockpeak = 0;
     p->nb_samples = 0;
     p->blknum++;
+
+    if (p->blknum >= p->nb_rmsvalues) {
+        p->rmsvalues = av_realloc_f(p->rmsvalues, FFMAX(1, p->nb_rmsvalues * 2), sizeof(*p->rmsvalues));
+        if (p->rmsvalues) {
+            p->nb_rmsvalues = FFMAX(p->nb_rmsvalues, 1);
+            p->nb_rmsvalues *= 2;
+            p->rmsvalues[p->blknum-1] = rms;
+        }
+    } else {
+        p->rmsvalues[p->blknum-1] = rms;
+    }
 }
 
 static void update_stat(DRMeterContext *s, ChannelStats *p, float sample)
@@ -146,6 +156,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
 #define SQR(a) ((a)*(a))
 
+static int cmp(const void *p1, const void *p2)
+{
+    return ((*(const float *)p1) < (*(const float *)p2));
+}
+
 static void print_stats(AVFilterContext *ctx)
 {
     DRMeterContext *s = ctx->priv;
@@ -153,8 +168,8 @@ static void print_stats(AVFilterContext *ctx)
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
         ChannelStats *p = &s->chstats[ch];
+        const unsigned rmscount = lrintf(0.2f * p->blknum);
         float chdr, rmssum = 0.f;
-        int last = lrintf(0.2f * p->blknum);
 
         if (!p->nb_samples) {
             av_log(ctx, AV_LOG_INFO, "No data, dynamic range not measurable\n");
@@ -164,16 +179,15 @@ static void print_stats(AVFilterContext *ctx)
         if (p->nb_samples)
             finish_block(p);
 
-        for (int64_t i = BINS, j = 0; i >= 0 && j < last; i--) {
-            if (p->rms[i]) {
-                rmssum += SQR(i / (float)BINS) * p->rms[i];
-                j += p->rms[i];
-            }
-        }
+        qsort(p->rmsvalues, p->blknum, sizeof(*p->rmsvalues), cmp);
+        for (uint64_t i = 0; i < rmscount; i++)
+            rmssum += p->rmsvalues[i];
 
-        chdr = 20.f * log10f(p->secondpeak / sqrtf(rmssum / (float)last));
+        chdr = 20.f * log10f(p->secondpeak / (rmssum / (float)rmscount));
         dr += chdr;
         av_log(ctx, AV_LOG_INFO, "Channel %d: DR: %g\n", ch + 1, chdr);
+
+        av_freep(&p->rmsvalues);
     }
 
     av_log(ctx, AV_LOG_INFO, "Overall DR: %g\n", dr / s->nb_channels);
