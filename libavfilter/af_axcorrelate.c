@@ -223,7 +223,7 @@ skip:
             s->eof = 1;
     }
 
-    if (s->eof && !s->in[0] && !s->in[1]) {
+    if (s->eof && (!s->in[0] || !s->in[1])) {
         ff_outlink_set_status(outlink, s->eof_status, s->eof_pts);
         return 0;
     }
