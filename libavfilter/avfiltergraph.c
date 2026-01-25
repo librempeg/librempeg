@@ -1515,28 +1515,10 @@ static int pick_formats(AVFilterGraph *graph)
                     }
                 }
             }
-            if (filter->nb_inputs && filter->nb_outputs && filter->inputs[0]->format>=0) {
-                for (int j = 0; j < filter->nb_outputs; j++) {
-                    if (filter->outputs[j]->incfg.formats && filter->outputs[j]->format<0) {
-                        if ((ret = pick_format(filter->outputs[j], filter->inputs[0])) < 0)
-                            return ret;
-                        change = 1;
-                    }
-                }
-            }
             if (filter->nb_inputs && filter->nb_outputs && filter->inputs[0]->sample_rate>0) {
                 for (int j = 0; j < filter->nb_outputs; j++) {
                     if (filter->outputs[j]->incfg.samplerates && filter->outputs[j]->sample_rate<=0) {
                         if ((ret = pick_samplerate(filter->outputs[j], filter->inputs[0])) < 0)
-                            return ret;
-                        change = 1;
-                    }
-                }
-            }
-            if (filter->nb_inputs && filter->nb_outputs && filter->outputs[0]->format>=0) {
-                for (int j = 0; j < filter->nb_inputs; j++) {
-                    if (filter->inputs[j]->incfg.formats && filter->inputs[j]->format<0) {
-                        if ((ret = pick_format(filter->inputs[j], filter->outputs[0])) < 0)
                             return ret;
                         change = 1;
                     }
