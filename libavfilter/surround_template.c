@@ -359,6 +359,11 @@ static void fn(filter_3_1)(AVFilterContext *ctx)
         dif.re = (l_re - r_re) * F(0.5);
         dif.im = (l_im - r_im) * F(0.5);
 
+        sum.re = isnormal(sum.re) ? sum.re : F(0.0);
+        sum.im = isnormal(sum.im) ? sum.im : F(0.0);
+        dif.re = isnormal(dif.re) ? dif.re : F(0.0);
+        dif.im = isnormal(dif.im) ? dif.im : F(0.0);
+
         fn(stereo_position)(l_mag, r_mag, cor, &x, &y, &z);
 
         xpos[n] = x;
