@@ -228,6 +228,11 @@ static void fn(filter_stereo)(AVFilterContext *ctx)
         dif.re = (l_re - r_re) * F(0.5);
         dif.im = (l_im - r_im) * F(0.5);
 
+        sum.re = isnormal(sum.re) ? sum.re : F(0.0);
+        sum.im = isnormal(sum.im) ? sum.im : F(0.0);
+        dif.re = isnormal(dif.re) ? dif.re : F(0.0);
+        dif.im = isnormal(dif.im) ? dif.im : F(0.0);
+
         fn(stereo_position)(l_mag, r_mag, cor, &x, &y, &z);
         fn(get_lfe)(output_lfe, n, lowcut, highcut, &lfe, sum, &sum, lfe_mode);
 
@@ -269,6 +274,11 @@ static void fn(filter_2_1)(AVFilterContext *ctx)
         sum.im = (l_im + r_im) * F(0.5);
         dif.re = (l_re - r_re) * F(0.5);
         dif.im = (l_im - r_im) * F(0.5);
+
+        sum.re = isnormal(sum.re) ? sum.re : F(0.0);
+        sum.im = isnormal(sum.im) ? sum.im : F(0.0);
+        dif.re = isnormal(dif.re) ? dif.re : F(0.0);
+        dif.im = isnormal(dif.im) ? dif.im : F(0.0);
 
         fn(stereo_position)(l_mag, r_mag, cor, &x, &y, &z);
 
@@ -316,6 +326,11 @@ static void fn(filter_surround)(AVFilterContext *ctx)
         sum.im = (l_im + r_im) * F(0.5);
         dif.re = (l_re - r_re) * F(0.5);
         dif.im = (l_im - r_im) * F(0.5);
+
+        sum.re = isnormal(sum.re) ? sum.re : F(0.0);
+        sum.im = isnormal(sum.im) ? sum.im : F(0.0);
+        dif.re = isnormal(dif.re) ? dif.re : F(0.0);
+        dif.im = isnormal(dif.im) ? dif.im : F(0.0);
 
         cnt.re = c_re;
         cnt.im = c_im;
