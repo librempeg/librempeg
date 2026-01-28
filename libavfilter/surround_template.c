@@ -155,18 +155,24 @@ static void fn(stereo_position)(const ftype l, const ftype r,
                                 const ctype cor,
                                 ftype *x, ftype *y, ftype *z)
 {
-    ftype x0 = (r-l)/(r+l+EPSILON);
-    ftype a0 = fn(get_angle)(cor);
-    ftype y0 = F(1.0)-FABS(a0 * M_2PI);
-    ftype z0 = COPYSIGN(F(1.0)-F(2.0)*FABS(FABS(y0)-F(0.5)), a0);
+    if (r <= EPSILON && l <= EPSILON) {
+        x[0] = F(0.0);
+        y[0] = F(0.0);
+        z[0] = F(0.0);
+    } else {
+        ftype x0 = (r-l)/(r+l+EPSILON);
+        ftype a0 = fn(get_angle)(cor);
+        ftype y0 = F(1.0)-FABS(a0 * M_2PI);
+        ftype z0 = COPYSIGN(F(1.0)-F(2.0)*FABS(FABS(y0)-F(0.5)), a0);
 
-    x0 = isnormal(x0) ? x0 : F(0.0);
-    y0 = isnormal(y0) ? y0 : F(0.0);
-    z0 = isnormal(z0) ? z0 : F(0.0);
+        x0 = isnormal(x0) ? x0 : F(0.0);
+        y0 = isnormal(y0) ? y0 : F(0.0);
+        z0 = isnormal(z0) ? z0 : F(0.0);
 
-    x[0] = CLIP(x0, F(-1.0), F(1.0));
-    y[0] = CLIP(y0, F(-1.0), F(1.0));
-    z[0] = CLIP(z0, F(-1.0), F(1.0));
+        x[0] = CLIP(x0, F(-1.0), F(1.0));
+        y[0] = CLIP(y0, F(-1.0), F(1.0));
+        z[0] = CLIP(z0, F(-1.0), F(1.0));
+    }
 }
 
 static inline void fn(get_lfe)(int output_lfe, int n, ftype lowcut, ftype highcut,
