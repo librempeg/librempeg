@@ -437,7 +437,7 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
                     const float re = nre * mre + nim * mim;
                     const float im = mre * nim - mim * nre;
                     const float x0 = (n-m)/(n+m+FLT_EPSILON);
-                    const float y0 = fabsf(atan2f(im,re)/M_PIf);
+                    const float y0 = fabsf(atan2f(im,re)*M_1_PIf);
                     float dir = dn - dm;
                     float H, V;
 
