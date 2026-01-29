@@ -229,7 +229,8 @@ static int config_output(AVFilterLink *outlink)
         const int chan = av_channel_layout_channel_from_index(&inlink->ch_layout, ch);
         AVComplexFloat dir;
 
-        dir.re = dir.im = 0.f;
+        dir.re = 0.f;
+        dir.im = 1.f;
 
         switch (chan) {
         case AV_CHAN_FRONT_LEFT:
@@ -281,6 +282,31 @@ static int config_output(AVFilterLink *outlink)
             break;
         case AV_CHAN_WIDE_RIGHT:
             dir.re =  1.3f;
+            break;
+        }
+
+        switch (chan) {
+        case AV_CHAN_FRONT_CENTER:
+        case AV_CHAN_FRONT_LEFT:
+        case AV_CHAN_FRONT_RIGHT:
+            dir.im = 0.25f;
+            break;
+        case AV_CHAN_SURROUND_DIRECT_LEFT:
+        case AV_CHAN_SURROUND_DIRECT_RIGHT:
+            dir.im = 0.333f;
+            break;
+        case AV_CHAN_SIDE_LEFT:
+        case AV_CHAN_SIDE_RIGHT:
+            dir.im = 0.666f;
+            break;
+        case AV_CHAN_BACK_CENTER:
+        case AV_CHAN_BACK_LEFT:
+        case AV_CHAN_BACK_RIGHT:
+            dir.im = 1.f;
+            break;
+        case AV_CHAN_LOW_FREQUENCY_2:
+        case AV_CHAN_LOW_FREQUENCY:
+            dir.im = 0.5f;
             break;
         }
 
@@ -425,10 +451,12 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
             const float mre = RE(idx, i);
             const float mim = IM(idx, i);
             const float dm = direction[i].re;
+            const float pm = direction[i].im;
             const float m = power[i];
 
             for (int k = i+1; k < nb_channels; k++) {
                 const float dn = direction[k].re;
+                const float pn = direction[k].im;
                 const float n = power[k];
 
                 if (fmaxf(n, m) > FLT_MIN) {
@@ -438,7 +466,8 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
                     const float im = mre * nim - mim * nre;
                     const float x0 = (n-m)/(n+m+FLT_EPSILON);
                     const float y0 = fabsf(atan2f(im,re)*M_1_PIf);
-                    float dir = dn - dm;
+                    const float dirv = pn - pm;
+                    const float dir = dn - dm;
                     float H, V;
 
                     H = av_clipf(x0, -1.f, 1.f);
@@ -446,8 +475,8 @@ static int draw_spatial(AVFilterLink *inlink, int64_t pts)
                     hsum += fabsf(dir);
 
                     V = av_clipf(y0, 0.f, 1.f);
-                    Vsum += V;
-                    vsum += 1.f;
+                    Vsum += V * (1.f + fabsf(dirv));
+                    vsum += (1.f + fabsf(dirv));
                 }
             }
         }
