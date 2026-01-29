@@ -7254,12 +7254,6 @@ In @var{add} mode, LFE channel is created from input audio and added to output.
 In @var{sub} mode, LFE channel is created from input audio and added to output but
 also all non-LFE output channels are subtracted with output LFE channel.
 
-@item smooth
-Set temporal smoothness strength, used to gradually change factors when transforming
-stereo sound in time. Allowed range is from @var{0.0} to @var{1.0}.
-Useful to improve output quality with @var{focus} option values greater than @var{0.0}.
-Default is @var{0.0}. Only values inside this range and without edges are effective.
-
 @item angle
 Set angle of stereo surround transform, Allowed range is from @var{0} to @var{360}.
 Default is @var{90}.
@@ -7275,24 +7269,6 @@ Default is @var{0 0 0}.
 @item focus
 Set the focus of stereo surround transform, Allowed range is from @var{-1} to @var{1}.
 Default is @var{0 0 0}.
-
-@item spread_x
-Set spread usage of stereo image across X axis for each channel.
-Allowed range is from @var{0.06} to @var{15}.
-By default this value is @var{2.0}.
-
-@item spread_y
-Set spread usage of stereo image across Y axis for each channel.
-Allowed range is from @var{0.06} to @var{15}.
-By default this value is @var{2.0}.
-
-@item spread_z
-Set spread usage of stereo image across Z axis for each channel.
-Allowed range is from @var{0.06} to @var{15}.
-By default this value is @var{2.0}.
-
-@item smooth
-Set temporal smoothness strength.
 
 @item win_func
 Set window function.

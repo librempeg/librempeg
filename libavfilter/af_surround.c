@@ -22,6 +22,7 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/channel_layout.h"
+#include "libavutil/ffmath.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/tx.h"
@@ -38,31 +39,25 @@ enum SurroundChannel {
     SC_NB,
 };
 
-static const int8_t ch_dif[SC_NB] = {
-    [SC_FC]  =  0,
-    [SC_LF]  =  0,
-    [SC_BC]  =  0,
-    [SC_LF2] =  0,
-    [SC_TC]  =  0,
-    [SC_TFC] =  0,
-    [SC_TBC] =  0,
-    [SC_BFC] =  0,
-    [SC_FL]  =  1,
-    [SC_BL]  =  1,
-    [SC_SL]  =  1,
-    [SC_TFL] =  1,
-    [SC_TBL] =  1,
-    [SC_TSL] =  1,
-    [SC_BFL] =  1,
-    [SC_FLC] =  1,
-    [SC_FR]  = -1,
-    [SC_BR]  = -1,
-    [SC_SR]  = -1,
-    [SC_TFR] = -1,
-    [SC_TBR] = -1,
-    [SC_TSR] = -1,
-    [SC_BFR] = -1,
-    [SC_FRC] = -1,
+static const float sc_ch_pos[SC_NB][5] = {
+    [SC_FL]  = { -1.f,  1.f, 0.f, 1.f, 0.f },
+    [SC_FR]  = {  1.f,  1.f, 0.f, 0.f, 1.f },
+    [SC_FC]  = {  0.f,  1.f, 0.f, .5f, .5f },
+    [SC_SL]  = { -1.f,  0.f, 0.f, 1.f, 0.f },
+    [SC_SR]  = {  1.f,  0.f, 0.f, 0.f, 1.f },
+    [SC_BL]  = { -1.f, -1.f, 0.f, 1.f, 0.f },
+    [SC_BR]  = {  1.f, -1.f, 0.f, 0.f, 1.f },
+    [SC_BC]  = {  0.f, -1.f, 0.f, .5f, .5f },
+    [SC_LF]  = {  0.f,  0.f, 0.f, .5f, .5f },
+    [SC_LF2] = {  0.f,  0.f, 0.f, .5f, .5f },
+    [SC_FLC] = {-0.4f,  1.f, 0.f, 1.f, 0.f },
+    [SC_FRC] = { 0.4f,  1.f, 0.f, 0.f, 1.f },
+    [SC_TFL] = {-1.0f,  1.f, 1.f, 1.f, 0.f },
+    [SC_TFR] = { 1.0f,  1.f, 1.f, 0.f, 1.f },
+    [SC_TSL] = {-1.0f,  0.f, 1.f, 1.f, 0.f },
+    [SC_TSR] = { 1.0f,  0.f, 1.f, 0.f, 1.f },
+    [SC_TBL] = {-1.0f, -1.f, 1.f, 1.f, 0.f },
+    [SC_TBR] = { 1.0f, -1.f, 1.f, 0.f, 1.f },
 };
 
 static const int sc_map[64] = {
@@ -103,8 +98,6 @@ typedef struct AudioSurroundContext {
     float *f_o;
     unsigned nb_f_o;
 
-    float *smooth;
-    unsigned nb_smooth;
     float angle;
     float *shift;
     unsigned nb_shift;
@@ -113,7 +106,6 @@ typedef struct AudioSurroundContext {
     float *focus;
     unsigned nb_focus;
 
-    int   smooth_init;
     int   lfe_mode;
     int   win_size;
     int   win_func;
@@ -138,8 +130,6 @@ typedef struct AudioSurroundContext {
     int nb_in_channels;
     int nb_out_channels;
 
-    AVFrame *factors;
-    AVFrame *sfactors;
     AVFrame *input_in;
     AVFrame *input;
     AVFrame *output;
@@ -147,21 +137,16 @@ typedef struct AudioSurroundContext {
     AVFrame *y_out;
     AVFrame *z_out;
     AVFrame *output_out;
-    AVFrame *output_sum;
-    AVFrame *output_dif;
     AVFrame *overlap_buffer;
     AVFrame *window;
 
     void *input_levels;
     void *output_levels;
-    void *smooth_levels;
 
     void *x_pos;
     void *y_pos;
     void *z_pos;
 
-    void *sum;
-    void *dif;
     void *cnt;
     void *lfe;
 
@@ -177,12 +162,9 @@ typedef struct AudioSurroundContext {
     void (*filter)(AVFilterContext *ctx);
     void (*set_input_levels)(AVFilterContext *ctx);
     void (*set_output_levels)(AVFilterContext *ctx);
-    void (*set_smooth_levels)(AVFilterContext *ctx);
     void (*upmix)(AVFilterContext *ctx, int ch);
     int (*fft_channel)(AVFilterContext *ctx, AVFrame *out, int ch);
     int (*ifft_channel)(AVFilterContext *ctx, AVFrame *out, int ch);
-    void (*calculate_factors)(AVFilterContext *ctx, int ch, int chan);
-    void (*stereo_copy)(AVFilterContext *ctx, int ch, int chan);
     void (*do_transform)(AVFilterContext *ctx, int ch);
     void (*bypass_transform)(AVFilterContext *ctx, int ch, int is_lfe);
     int (*transform_xy)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
@@ -224,11 +206,6 @@ static int query_formats(const AVFilterContext *ctx,
 static void stereo_upmix(AVFilterContext *ctx, int ch)
 {
     AudioSurroundContext *s = ctx->priv;
-    const int chan = av_channel_layout_channel_from_index(&s->out_ch_layout, ch);
-
-    s->calculate_factors(ctx, ch, chan);
-
-    s->stereo_copy(ctx, ch, chan);
 
     s->do_transform(ctx, ch);
 }
@@ -244,11 +221,8 @@ static void l2_1_upmix(AVFilterContext *ctx, int ch)
         s->bypass_transform(ctx, ch, 1);
         return;
     default:
-        s->calculate_factors(ctx, ch, chan);
         break;
     }
-
-    s->stereo_copy(ctx, ch, chan);
 
     s->do_transform(ctx, ch);
 }
@@ -263,11 +237,8 @@ static void surround_upmix(AVFilterContext *ctx, int ch)
         s->bypass_transform(ctx, ch, 0);
         return;
     default:
-        s->calculate_factors(ctx, ch, chan);
         break;
     }
-
-    s->stereo_copy(ctx, ch, chan);
 
     s->do_transform(ctx, ch);
 }
@@ -286,11 +257,8 @@ static void l3_1_upmix(AVFilterContext *ctx, int ch)
         s->bypass_transform(ctx, ch, 1);
         return;
     default:
-        s->calculate_factors(ctx, ch, chan);
         break;
     }
-
-    s->stereo_copy(ctx, ch, chan);
 
     s->do_transform(ctx, ch);
 }
@@ -460,8 +428,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                       FFMIN(outlink->ch_layout.nb_channels,
                             ff_filter_get_nb_threads(ctx)));
 
-    s->smooth_init = 1;
-
     if (in) {
         av_frame_copy_props(out, in);
         out->pts -= av_rescale_q(s->win_size - s->hop_size, av_make_q(1, outlink->sample_rate), outlink->time_base);
@@ -549,15 +515,11 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     AudioSurroundContext *s = ctx->priv;
 
-    av_frame_free(&s->factors);
-    av_frame_free(&s->sfactors);
     av_frame_free(&s->window);
     av_frame_free(&s->input_in);
     av_frame_free(&s->input);
     av_frame_free(&s->output);
     av_frame_free(&s->output_out);
-    av_frame_free(&s->output_sum);
-    av_frame_free(&s->output_dif);
     av_frame_free(&s->overlap_buffer);
     av_frame_free(&s->x_out);
     av_frame_free(&s->y_out);
@@ -569,7 +531,6 @@ static av_cold void uninit(AVFilterContext *ctx)
         av_tx_uninit(&s->irdft[ch]);
     av_freep(&s->input_levels);
     av_freep(&s->output_levels);
-    av_freep(&s->smooth_levels);
     av_freep(&s->rdft);
     av_freep(&s->irdft);
     av_freep(&s->window_func_lut);
@@ -577,8 +538,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->x_pos);
     av_freep(&s->y_pos);
     av_freep(&s->z_pos);
-    av_freep(&s->sum);
-    av_freep(&s->dif);
     av_freep(&s->cnt);
     av_freep(&s->lfe);
 }
@@ -596,7 +555,6 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
 
     s->set_input_levels(ctx);
     s->set_output_levels(ctx);
-    s->set_smooth_levels(ctx);
 
     return 0;
 }
@@ -606,12 +564,8 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
 #define TFLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
-static const AVOptionArrayDef def_smooth = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_o  = {.def="1",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_f_i  = {.def="1",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_f_x  = {.def="2",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_f_y  = {.def="2",.size_min=1,.sep=' '};
-static const AVOptionArrayDef def_f_z  = {.def="0.5",.size_min=1,.sep=' '};
 static const AVOptionArrayDef def_shift= {.def="0 0 0",.size_min=1,.size_max=3,.sep=' '};
 static const AVOptionArrayDef def_depth= {.def="0 0 0",.size_min=1,.size_max=3,.sep=' '};
 static const AVOptionArrayDef def_focus= {.def="0 0 0",.size_min=1,.size_max=3,.sep=' '};
@@ -631,10 +585,6 @@ static const AVOption surround_options[] = {
     { "shift",     "set soundfield shift per X/Y/Z axis",OFFSET(shift),    AV_OPT_TYPE_FLOAT|AR, {.arr=&def_shift},-1,1,TFLAGS },
     { "depth",     "set soundfield depth per X/Y/Z axis",OFFSET(depth),    AV_OPT_TYPE_FLOAT|AR, {.arr=&def_depth},-1,1,TFLAGS },
     { "focus",     "set soundfield focus per X/Y/Z axis",OFFSET(focus),    AV_OPT_TYPE_FLOAT|AR, {.arr=&def_focus},-1,1,TFLAGS },
-    { "spread_x",  "set output channels X-axis spread",  OFFSET(f_x),      AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_x}, 0.0, 15, TFLAGS },
-    { "spread_y",  "set output channels Y-axis spread",  OFFSET(f_y),      AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_y}, 0.0, 15, TFLAGS },
-    { "spread_z",  "set output channels Z-axis spread",  OFFSET(f_z),      AV_OPT_TYPE_FLOAT|AR, {.arr=&def_f_z}, 0.0, 15, TFLAGS },
-    { "smooth",    "set output channels temporal smoothness strength", OFFSET(smooth),AV_OPT_TYPE_FLOAT|AR, {.arr=&def_smooth},0,1,TFLAGS },
     WIN_FUNC_OPTION("win_func", OFFSET(win_func), FLAGS, WFUNC_SINE),
     { "overlap", "set window overlap", OFFSET(overlap), AV_OPT_TYPE_FLOAT, {.dbl=0.5}, 0, 1, TFLAGS },
     { NULL }

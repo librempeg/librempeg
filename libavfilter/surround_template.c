@@ -23,15 +23,12 @@
 #undef ftype
 #undef ctype
 #undef COPYSIGN
-#undef HYPOT
 #undef ATAN2
 #undef FABS
-#undef FEXP
+#undef FEXP10
 #undef FMA
-#undef SIN
 #undef COS
 #undef POW
-#undef TAN
 #undef SQRT
 #undef FMIN
 #undef FMAX
@@ -49,15 +46,12 @@
 #define ftype float
 #define ctype AVComplexFloat
 #define COPYSIGN copysignf
-#define HYPOT hypotf
 #define ATAN2 atan2f
 #define FABS fabsf
-#define FEXP expf
+#define FEXP10 ff_exp10f
 #define FMA fmaf
-#define SIN sinf
 #define COS cosf
 #define POW powf
-#define TAN tanf
 #define SQRT sqrtf
 #define FMIN fminf
 #define FMAX fmaxf
@@ -74,20 +68,17 @@
 #define ftype double
 #define ctype AVComplexDouble
 #define COPYSIGN copysign
-#define HYPOT hypot
 #define ATAN2 atan2
 #define FABS fabs
-#define FEXP exp
+#define FEXP10 ff_exp10
 #define FMA fma
-#define SIN sin
 #define COS cos
 #define POW pow
-#define TAN tan
 #define SQRT sqrt
 #define FMIN fmin
 #define FMAX fmax
 #define LRINT lrint
-#define EPSILON FLT_EPSILON /* to keep similar output with float */
+#define EPSILON DBL_EPSILON
 #define CLIP av_clipd
 #define SAMPLE_FORMAT dblp
 #define TX_TYPE AV_TX_DOUBLE_RDFT
@@ -98,6 +89,7 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 #define F(x) ((ftype)(x))
+#define HYPOT(x, y) SQRT(((x)*(x))+((y)*(y)))
 
 #undef AVFILTER_WINDOW_FUNC_H
 #include "window_func.h"
@@ -123,26 +115,6 @@ static void fn(set_output_levels)(AVFilterContext *ctx)
         const int fch = FFMIN(ch, s->nb_f_o-1);
 
         output_levels[ch] = s->f_o[fch];
-    }
-}
-
-static void fn(set_smooth_levels)(AVFilterContext *ctx)
-{
-    AudioSurroundContext *s = ctx->priv;
-    ftype *smooth_levels = s->smooth_levels;
-    const int rdft_size = s->rdft_size;
-    const ftype fs = ctx->inputs[0]->sample_rate;
-    const ftype scale = F(0.5) * fs / rdft_size;
-
-    for (int ch = 0; ch < s->nb_out_channels; ch++) {
-        const ftype S = s->smooth[FFMIN(ch, s->nb_smooth-1)];
-        ftype *smooth = smooth_levels + ch * rdft_size;
-
-        for (int n = 0; n < rdft_size; n++) {
-            const ftype rk = S / ((n+F(1.0)) * scale);
-
-            smooth[n] = F(1.0) - FEXP(F(-1.0)/(rk*fs));
-        }
     }
 }
 
@@ -208,8 +180,6 @@ static void fn(filter_stereo)(AVFilterContext *ctx)
     ftype *xpos = s->x_pos;
     ftype *ypos = s->y_pos;
     ftype *zpos = s->z_pos;
-    ctype *osum = s->sum;
-    ctype *odif = s->dif;
     ctype *olfe = s->lfe;
 
     for (int n = 0; n < rdft_size; n++) {
@@ -217,7 +187,7 @@ static void fn(filter_stereo)(AVFilterContext *ctx)
         ftype l_im = srcl[n].im, r_im = srcr[n].im;
         ftype l_mag = HYPOT(l_re, l_im);
         ftype r_mag = HYPOT(r_re, r_im);
-        ctype sum, dif, lfe, cor;
+        ctype sum, lfe, cor;
         ftype x, y, z;
 
         cor.re = l_re * r_re + l_im * r_im;
@@ -225,13 +195,9 @@ static void fn(filter_stereo)(AVFilterContext *ctx)
 
         sum.re = (l_re + r_re) * F(0.5);
         sum.im = (l_im + r_im) * F(0.5);
-        dif.re = (l_re - r_re) * F(0.5);
-        dif.im = (l_im - r_im) * F(0.5);
 
         sum.re = isnormal(sum.re) ? sum.re : F(0.0);
         sum.im = isnormal(sum.im) ? sum.im : F(0.0);
-        dif.re = isnormal(dif.re) ? dif.re : F(0.0);
-        dif.im = isnormal(dif.im) ? dif.im : F(0.0);
 
         fn(stereo_position)(l_mag, r_mag, cor, &x, &y, &z);
         fn(get_lfe)(output_lfe, n, lowcut, highcut, &lfe, sum, &sum, lfe_mode);
@@ -239,8 +205,6 @@ static void fn(filter_stereo)(AVFilterContext *ctx)
         xpos[n] = x;
         ypos[n] = y;
         zpos[n] = z;
-        osum[n] = sum;
-        odif[n] = dif;
         olfe[n] = lfe;
     }
 }
@@ -255,8 +219,6 @@ static void fn(filter_2_1)(AVFilterContext *ctx)
     ftype *xpos = s->x_pos;
     ftype *ypos = s->y_pos;
     ftype *zpos = s->z_pos;
-    ctype *osum = s->sum;
-    ctype *odif = s->dif;
     ctype *olfe = s->lfe;
 
     for (int n = 0; n < rdft_size; n++) {
@@ -264,29 +226,17 @@ static void fn(filter_2_1)(AVFilterContext *ctx)
         ftype l_im = srcl[n].im, r_im = srcr[n].im;
         ftype l_mag = HYPOT(l_re, l_im);
         ftype r_mag = HYPOT(r_re, r_im);
-        ctype sum, dif, cor;
         ftype x, y, z;
+        ctype cor;
 
         cor.re = l_re * r_re + l_im * r_im;
         cor.im = r_re * l_im - r_im * l_re;
-
-        sum.re = (l_re + r_re) * F(0.5);
-        sum.im = (l_im + r_im) * F(0.5);
-        dif.re = (l_re - r_re) * F(0.5);
-        dif.im = (l_im - r_im) * F(0.5);
-
-        sum.re = isnormal(sum.re) ? sum.re : F(0.0);
-        sum.im = isnormal(sum.im) ? sum.im : F(0.0);
-        dif.re = isnormal(dif.re) ? dif.re : F(0.0);
-        dif.im = isnormal(dif.im) ? dif.im : F(0.0);
 
         fn(stereo_position)(l_mag, r_mag, cor, &x, &y, &z);
 
         xpos[n] = x;
         ypos[n] = y;
         zpos[n] = z;
-        osum[n] = sum;
-        odif[n] = dif;
         olfe[n] = srclfe[n];
     }
 }
@@ -305,8 +255,6 @@ static void fn(filter_surround)(AVFilterContext *ctx)
     ftype *xpos = s->x_pos;
     ftype *ypos = s->y_pos;
     ftype *zpos = s->z_pos;
-    ctype *osum = s->sum;
-    ctype *odif = s->dif;
     ctype *ocnt = s->cnt;
     ctype *olfe = s->lfe;
 
@@ -341,8 +289,6 @@ static void fn(filter_surround)(AVFilterContext *ctx)
         xpos[n] = x;
         ypos[n] = y;
         zpos[n] = z;
-        osum[n] = sum;
-        odif[n] = dif;
         ocnt[n] = cnt;
         olfe[n] = lfe;
     }
@@ -359,8 +305,6 @@ static void fn(filter_3_1)(AVFilterContext *ctx)
     ftype *xpos = s->x_pos;
     ftype *ypos = s->y_pos;
     ftype *zpos = s->z_pos;
-    ctype *osum = s->sum;
-    ctype *odif = s->dif;
     ctype *ocnt = s->cnt;
     ctype *olfe = s->lfe;
 
@@ -390,8 +334,6 @@ static void fn(filter_3_1)(AVFilterContext *ctx)
         xpos[n] = x;
         ypos[n] = y;
         zpos[n] = z;
-        osum[n] = sum;
-        odif[n] = dif;
         ocnt[n] = srcc[n];
         olfe[n] = srclfe[n];
     }
@@ -417,26 +359,19 @@ static int fn(config_output)(AVFilterContext *ctx)
             return ret;
     }
 
-    s->smooth_levels = av_malloc_array(s->nb_out_channels, sizeof(ftype) * s->rdft_size);
     s->output_levels = av_malloc_array(s->nb_out_channels, sizeof(ftype));
-    if (!s->output_levels || !s->smooth_levels)
+    if (!s->output_levels)
         return AVERROR(ENOMEM);
 
     fn(set_output_levels)(ctx);
-    fn(set_smooth_levels)(ctx);
 
-    s->factors = ff_get_audio_buffer(outlink, s->rdft_size);
-    s->sfactors = ff_get_audio_buffer(outlink, s->rdft_size);
-    s->output_sum = ff_get_audio_buffer(outlink, s->rdft_size * 2);
-    s->output_dif = ff_get_audio_buffer(outlink, s->rdft_size * 2);
     s->output_out = ff_get_audio_buffer(outlink, s->win_size + 1);
     s->output = ff_get_audio_buffer(outlink, s->rdft_size * 2);
     s->overlap_buffer = ff_get_audio_buffer(outlink, s->win_size * 2);
     s->x_out = ff_get_audio_buffer(outlink, s->rdft_size);
     s->y_out = ff_get_audio_buffer(outlink, s->rdft_size);
     s->z_out = ff_get_audio_buffer(outlink, s->rdft_size);
-    if (!s->overlap_buffer || !s->factors || !s->sfactors ||
-        !s->output_sum || !s->output_dif ||
+    if (!s->overlap_buffer ||
         !s->output || !s->output_out ||
         !s->x_out || !s->y_out || !s->z_out)
         return AVERROR(ENOMEM);
@@ -444,11 +379,9 @@ static int fn(config_output)(AVFilterContext *ctx)
     s->x_pos = av_calloc(s->rdft_size, sizeof(ftype));
     s->y_pos = av_calloc(s->rdft_size, sizeof(ftype));
     s->z_pos = av_calloc(s->rdft_size, sizeof(ftype));
-    s->sum = av_calloc(s->rdft_size, sizeof(ctype));
-    s->dif = av_calloc(s->rdft_size, sizeof(ctype));
     s->lfe = av_calloc(s->rdft_size, sizeof(ctype));
     s->cnt = av_calloc(s->rdft_size, sizeof(ctype));
-    if (!s->x_pos || !s->y_pos || !s->z_pos || !s->sum || !s->dif ||
+    if (!s->x_pos || !s->y_pos || !s->z_pos ||
         !s->lfe || !s->cnt)
         return AVERROR(ENOMEM);
 
@@ -547,7 +480,7 @@ static void fn(angle_transform)(ftype *x, ftype *y, ftype a)
     a /= F(90.0);
     a -= F(1.0);
 
-    y[0] = CLIP(y[0] + FABS(x[0]) * (y[0]+F(1.0)) * a, F(-1.0), F(1.0));
+    y[0] = CLIP(y[0] - FABS(x[0]) * (y[0]+F(1.0)) * a, F(-1.0), F(1.0));
 }
 
 static void fn(shift_transform)(ftype *y, const ftype shift)
@@ -585,164 +518,6 @@ static void fn(focus_transform)(ftype *x, ftype focus)
     x[0] = CLIP(COPYSIGN(POW(FABS(x[0]), focus), x[0]), F(-1.0), F(1.0));
 }
 
-static void fn(power_factors)(AVFilterContext *ctx, const int ch)
-{
-    AudioSurroundContext *s = ctx->priv;
-    const ftype f_x = -s->f_x[FFMIN(ch, s->nb_f_x-1)];
-    const ftype f_y = -s->f_y[FFMIN(ch, s->nb_f_y-1)];
-    const ftype f_z = -s->f_z[FFMIN(ch, s->nb_f_z-1)];
-    const ftype *xin = (const ftype *)s->x_out->extended_data[ch];
-    const ftype *yin = (const ftype *)s->y_out->extended_data[ch];
-    const ftype *zin = (const ftype *)s->z_out->extended_data[ch];
-    ftype *factor = (ftype *)s->factors->extended_data[ch];
-    const ftype num_x = F(1.0) + FEXP(f_x * F(0.5));
-    const ftype num_y = F(1.0) + FEXP(f_y * F(0.5));
-    const ftype num_z = F(1.0) + FEXP(f_z * F(0.5));
-    const ftype num = num_x * num_y * num_z;
-    const int rdft_size = s->rdft_size;
-
-    for (int n = 0; n < rdft_size; n++) {
-        ftype x = xin[n];
-        ftype y = yin[n];
-        ftype z = zin[n];
-
-        x = F(1.0) + FEXP(f_x * (x - F(0.5)));
-        y = F(1.0) + FEXP(f_y * (y - F(0.5)));
-        z = F(1.0) + FEXP(f_z * (z - F(0.5)));
-
-        factor[n] = num / (x*y*z);
-        factor[n] = isnormal(factor[n]) ? factor[n] : F(0.0);
-    }
-}
-
-static void fn(calculate_factors)(AVFilterContext *ctx, int ch, int chan)
-{
-    AudioSurroundContext *s = ctx->priv;
-    ftype *x_out = (ftype *)s->x_out->extended_data[ch];
-    ftype *y_out = (ftype *)s->y_out->extended_data[ch];
-    ftype *z_out = (ftype *)s->z_out->extended_data[ch];
-    const int rdft_size = s->rdft_size;
-    const ftype *x = s->x_pos;
-    const ftype *y = s->y_pos;
-    const ftype *z = s->z_pos;
-
-    if (chan == AV_CHAN_NONE)
-        return;
-
-    switch (chan) {
-    case AV_CHAN_FRONT_CENTER:
-    case AV_CHAN_BACK_CENTER:
-    case AV_CHAN_TOP_CENTER:
-    case AV_CHAN_TOP_FRONT_CENTER:
-    case AV_CHAN_TOP_BACK_CENTER:
-    case AV_CHAN_LOW_FREQUENCY:
-    case AV_CHAN_LOW_FREQUENCY_2:
-    case AV_CHAN_BOTTOM_FRONT_CENTER:
-        for (int n = 0; n < rdft_size; n++)
-            x_out[n] = F(1.0) - FMIN(FABS(x[n]*F(2.0)), F(1.0));
-        break;
-    case AV_CHAN_BOTTOM_FRONT_LEFT:
-    case AV_CHAN_TOP_FRONT_LEFT:
-    case AV_CHAN_TOP_BACK_LEFT:
-    case AV_CHAN_FRONT_LEFT:
-    case AV_CHAN_SIDE_LEFT:
-    case AV_CHAN_TOP_SIDE_LEFT:
-    case AV_CHAN_BACK_LEFT:
-        for (int n = 0; n < rdft_size; n++)
-            x_out[n] = FMAX(-x[n], F(0.0));
-        break;
-    case AV_CHAN_BOTTOM_FRONT_RIGHT:
-    case AV_CHAN_TOP_FRONT_RIGHT:
-    case AV_CHAN_TOP_BACK_RIGHT:
-    case AV_CHAN_FRONT_RIGHT:
-    case AV_CHAN_SIDE_RIGHT:
-    case AV_CHAN_TOP_SIDE_RIGHT:
-    case AV_CHAN_BACK_RIGHT:
-        for (int n = 0; n < rdft_size; n++)
-            x_out[n] = FMAX(x[n], F(0.0));
-        break;
-    case AV_CHAN_FRONT_LEFT_OF_CENTER:
-        for (int n = 0; n < rdft_size; n++)
-            x_out[n] = F(1.0) - FMIN(FABS(x[n]+F(0.5)), F(1.0));
-        break;
-    case AV_CHAN_FRONT_RIGHT_OF_CENTER:
-        for (int n = 0; n < rdft_size; n++)
-            x_out[n] = F(1.0) - FMIN(FABS(x[n]-F(0.5)), F(1.0));
-        break;
-    default:
-        for (int n = 0; n < rdft_size; n++)
-            x_out[n] = x[n];
-        break;
-    }
-
-    switch (chan) {
-    case AV_CHAN_FRONT_CENTER:
-    case AV_CHAN_FRONT_LEFT:
-    case AV_CHAN_FRONT_RIGHT:
-    case AV_CHAN_TOP_FRONT_CENTER:
-    case AV_CHAN_TOP_FRONT_LEFT:
-    case AV_CHAN_TOP_FRONT_RIGHT:
-    case AV_CHAN_BOTTOM_FRONT_CENTER:
-    case AV_CHAN_BOTTOM_FRONT_LEFT:
-    case AV_CHAN_BOTTOM_FRONT_RIGHT:
-    case AV_CHAN_FRONT_LEFT_OF_CENTER:
-    case AV_CHAN_FRONT_RIGHT_OF_CENTER:
-        for (int n = 0; n < rdft_size; n++)
-            y_out[n] = FMAX(y[n], F(0.0));
-        break;
-    case AV_CHAN_TOP_CENTER:
-    case AV_CHAN_SIDE_LEFT:
-    case AV_CHAN_SIDE_RIGHT:
-    case AV_CHAN_TOP_SIDE_LEFT:
-    case AV_CHAN_TOP_SIDE_RIGHT:
-    case AV_CHAN_LOW_FREQUENCY:
-    case AV_CHAN_LOW_FREQUENCY_2:
-        for (int n = 0; n < rdft_size; n++)
-            y_out[n] = F(1.0) - FMIN(FABS(y[n]*F(2.0)), F(1.0));
-        break;
-    case AV_CHAN_BACK_CENTER:
-    case AV_CHAN_BACK_RIGHT:
-    case AV_CHAN_BACK_LEFT:
-    case AV_CHAN_TOP_BACK_CENTER:
-    case AV_CHAN_TOP_BACK_LEFT:
-    case AV_CHAN_TOP_BACK_RIGHT:
-        for (int n = 0; n < rdft_size; n++)
-            y_out[n] = FMAX(-y[n], F(0.0));
-        break;
-    default:
-        for (int n = 0; n < rdft_size; n++)
-            y_out[n] = y[n];
-        break;
-    }
-
-    switch (chan) {
-    case AV_CHAN_TOP_CENTER:
-    case AV_CHAN_TOP_FRONT_LEFT:
-    case AV_CHAN_TOP_FRONT_CENTER:
-    case AV_CHAN_TOP_FRONT_RIGHT:
-    case AV_CHAN_TOP_BACK_CENTER:
-    case AV_CHAN_TOP_BACK_LEFT:
-    case AV_CHAN_TOP_BACK_RIGHT:
-    case AV_CHAN_TOP_SIDE_LEFT:
-    case AV_CHAN_TOP_SIDE_RIGHT:
-        for (int n = 0; n < rdft_size; n++)
-            z_out[n] = FMAX(z[n], F(0.0));
-        break;
-    case AV_CHAN_BOTTOM_FRONT_LEFT:
-    case AV_CHAN_BOTTOM_FRONT_CENTER:
-    case AV_CHAN_BOTTOM_FRONT_RIGHT:
-        for (int n = 0; n < rdft_size; n++)
-            z_out[n] = FMAX(-z[n], F(0.0));
-        break;
-    default:
-        for (int n = 0; n < rdft_size; n++)
-            z_out[n] = F(1.0) - FABS(z[n]);
-        break;
-    }
-
-    fn(power_factors)(ctx, ch);
-}
-
 static void fn(bypass_transform)(AVFilterContext *ctx, int ch, int is_lfe)
 {
     AudioSurroundContext *s = ctx->priv;
@@ -755,50 +530,43 @@ static void fn(bypass_transform)(AVFilterContext *ctx, int ch, int is_lfe)
     memcpy(dst, src, rdft_size * sizeof(*dst));
 }
 
+static ctype fn(transform)(const ctype l, const ctype r,
+                           const ftype x, const ftype y,
+                           const ftype z,
+                           const ftype ch_x, const ftype ch_y,
+                           const ftype ch_z,
+                           const ftype sign0, const ftype sign1)
+{
+    const ftype xx = (FABS(ch_z - z) + FABS(ch_x - x) + FABS(ch_y - y)) * F(-0.5);
+    const ftype xf = FEXP10(xx);
+    ctype ret;
+
+    ret.re = sign0 * xf * l.re + xf * r.re * sign1;
+    ret.im = sign0 * xf * l.im + xf * r.im * sign1;
+
+    return ret;
+}
+
 static void fn(do_transform)(AVFilterContext *ctx, int ch)
 {
     AudioSurroundContext *s = ctx->priv;
     const int chan = av_channel_layout_channel_from_index(&s->out_ch_layout, ch);
-    const ftype *smooth_levels = s->smooth_levels;
-    ftype *sfactor = (ftype *)s->sfactors->extended_data[ch];
-    ftype *factor = (ftype *)s->factors->extended_data[ch];
-    const ctype *odif = (const ctype *)s->output_dif->extended_data[ch];
-    const ctype *osum = (const ctype *)s->output_sum->extended_data[ch];
+    const int sc_chan = sc_map[chan];
+    const ctype *srcl = (const ctype *)s->input->extended_data[0];
+    const ctype *srcr = (const ctype *)s->input->extended_data[1];
     ctype *dst = (ctype *)s->output->extended_data[ch];
+    const ftype ch_x = sc_ch_pos[sc_chan][0];
+    const ftype ch_y = sc_ch_pos[sc_chan][1];
+    const ftype ch_z = sc_ch_pos[sc_chan][2];
+    const ftype sign0 = sc_ch_pos[sc_chan][3];
+    const ftype sign1 = sc_ch_pos[sc_chan][4];
     const int rdft_size = s->rdft_size;
+    const ftype *x = s->x_pos;
+    const ftype *y = s->y_pos;
+    const ftype *z = s->z_pos;
 
-    if (chan == AV_CHAN_LOW_FREQUENCY ||
-        chan == AV_CHAN_LOW_FREQUENCY_2) {
-        memcpy(dst, osum, rdft_size * sizeof(*dst));
-        return;
-    }
-
-    if (s->smooth_init) {
-        const ftype *smooth = smooth_levels + ch * rdft_size;
-
-        for (int n = 0; n < rdft_size; n++) {
-            sfactor[n] = FMA(factor[n] - sfactor[n], smooth[n], sfactor[n]);
-            sfactor[n] = isnormal(sfactor[n]) ? sfactor[n] : F(0.0);
-        }
-    } else {
-        memcpy(sfactor, factor, rdft_size * sizeof(*sfactor));
-    }
-    factor = sfactor;
-
-    for (int n = 0; n < rdft_size; n++) {
-        const ctype dif = odif[n];
-        const ctype sum = osum[n];
-        const ftype a = factor[n];
-        ctype out;
-
-        out.re = a * (sum.re + dif.re);
-        out.im = a * (sum.im + dif.im);
-
-        out.re = isnormal(out.re) ? out.re : F(0.0);
-        out.im = isnormal(out.im) ? out.im : F(0.0);
-
-        dst[n] = out;
-    }
+    for (int n = 0; n < rdft_size; n++)
+        dst[n] = fn(transform)(srcl[n], srcr[n], x[n], y[n], z[n], ch_x, ch_y, ch_z, sign0, sign1);
 }
 
 static int fn(transform_xy)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
@@ -838,29 +606,6 @@ static int fn(transform_xy)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     }
 
     return 0;
-}
-
-static void fn(stereo_copy)(AVFilterContext *ctx, int ch, int chan)
-{
-    AudioSurroundContext *s = ctx->priv;
-    ctype *odif = (ctype *)s->output_dif->extended_data[ch];
-    ctype *osum = (ctype *)s->output_sum->extended_data[ch];
-    const ftype dif_factor = ch_dif[sc_map[chan]];
-    const int rdft_size = s->rdft_size;
-    const ctype *sum = s->sum;
-    const ctype *dif = s->dif;
-
-    if (chan == AV_CHAN_LOW_FREQUENCY ||
-        chan == AV_CHAN_LOW_FREQUENCY_2) {
-        memcpy(osum, s->lfe, rdft_size * sizeof(*osum));
-        return;
-    }
-
-    memcpy(osum, sum, rdft_size * sizeof(*osum));
-    for (int n = 0; n < rdft_size; n++) {
-        odif[n].re = dif[n].re * dif_factor;
-        odif[n].im = dif[n].im * dif_factor;
-    }
 }
 
 static int fn(config_input)(AVFilterContext *ctx)
@@ -905,11 +650,8 @@ static int fn(config_input)(AVFilterContext *ctx)
 
     s->set_input_levels = fn(set_input_levels);
     s->set_output_levels = fn(set_output_levels);
-    s->set_smooth_levels = fn(set_smooth_levels);
     s->ifft_channel = fn(ifft_channel);
     s->fft_channel = fn(fft_channel);
-    s->calculate_factors = fn(calculate_factors);
-    s->stereo_copy = fn(stereo_copy);
     s->do_transform = fn(do_transform);
     s->bypass_transform = fn(bypass_transform);
     s->transform_xy = fn(transform_xy);
