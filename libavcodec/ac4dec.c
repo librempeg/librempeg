@@ -6333,8 +6333,7 @@ static void assemble_hf_signal(AC4DecodeContext *s, Substream *ss, int ch_id)
         av_assert2(ts + ts_offset_hfadj < FF_ARRAY_ELEMS(ssch->Q_high[0]));
         /* Loop over QMF subbands */
         for (int sb = 0; sb < ssch->num_sb_aspx; sb++) {
-            ssch->Y[0][ts][sb] = ssch->sig_gain_sb_adj[atsg][sb];
-            ssch->Y[1][ts][sb] = 0;
+            ssch->Y[1][ts][sb] = ssch->Y[0][ts][sb] = ssch->sig_gain_sb_adj[atsg][sb];
             fcomplex_mul(&ssch->Y[0][ts][sb], &ssch->Y[1][ts][sb],
                          ssch->Y[0][ts][sb], ssch->Y[1][ts][sb],
                          ssch->Q_high[0][ts + ts_offset_hfadj][sb + sbx],
