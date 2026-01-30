@@ -6213,11 +6213,11 @@ static int sine_idx(int sb, int ts, AC4DecodeContext *s, SubstreamChannel *ssch)
     if (s->first_frame) {
         index = 1;
     } else {
-        index = (ssch->sine_idx_prev[ts][sb] + 1) % 4;
+        index = (ssch->sine_idx_prev[ts][sb] + 1) & 3;
     }
     index += ts - ssch->atsg_sig[0];
 
-    return index % 4;
+    return index & 3;
 }
 
 static int noise_idx(int sb, int ts, Substream *ss, SubstreamChannel *ssch)
@@ -6232,7 +6232,7 @@ static int noise_idx(int sb, int ts, Substream *ss, SubstreamChannel *ssch)
     index += ssch->num_sb_aspx * (ts - ssch->atsg_sig[0]);
     index += sb + 1;
 
-    return index % 512;
+    return index & 511;
 }
 
 static int generate_noise(AC4DecodeContext *s, Substream *ss, int ch_id)
@@ -6257,8 +6257,6 @@ static int generate_noise(AC4DecodeContext *s, Substream *ss, int ch_id)
             av_assert2(sb < FF_ARRAY_ELEMS(ssch->qmf_noise[0][0]));
 
             ssch->noise_idx_prev[ts][sb] = idx = noise_idx(sb, ts, ss, ssch);
-            if (idx < 0)
-                return AVERROR_INVALIDDATA;
 
             ssch->qmf_noise[0][ts][sb] = ssch->noise_lev_sb_adj[atsg][sb] * aspx_noise[idx][0];
             ssch->qmf_noise[1][ts][sb] = ssch->noise_lev_sb_adj[atsg][sb] * aspx_noise[idx][1];
@@ -6294,8 +6292,6 @@ static int generate_tones(AC4DecodeContext *s, Substream *ss, int ch_id)
             av_assert2(sb < FF_ARRAY_ELEMS(ssch->sine_lev_sb_adj[0]));
 
             ssch->sine_idx_prev[ts][sb] = idx = sine_idx(sb, ts, s, ssch);
-            if (idx < 0)
-                return AVERROR_INVALIDDATA;
 
             ssch->qmf_sine[0][ts][sb]  = ssch->sine_lev_sb_adj[atsg][sb];
             ssch->qmf_sine[0][ts][sb] *= aspx_sine[0][idx];
