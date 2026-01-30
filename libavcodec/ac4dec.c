@@ -6238,7 +6238,7 @@ static int noise_idx(int sb, int ts, Substream *ss, SubstreamChannel *ssch)
     return index & 511;
 }
 
-static int generate_noise(AC4DecodeContext *s, Substream *ss, int ch_id)
+static void generate_noise(AC4DecodeContext *s, Substream *ss, int ch_id)
 {
     SubstreamChannel *ssch = &ss->ssch[ch_id];
 
@@ -6265,11 +6265,9 @@ static int generate_noise(AC4DecodeContext *s, Substream *ss, int ch_id)
             ssch->qmf_noise[1][ts][sb] = ssch->noise_lev_sb_adj[atsg][sb] * aspx_noise[idx][1];
         }
     }
-
-    return 0;
 }
 
-static int generate_tones(AC4DecodeContext *s, Substream *ss, int ch_id)
+static void generate_tones(AC4DecodeContext *s, Substream *ss, int ch_id)
 {
     SubstreamChannel *ssch = &ss->ssch[ch_id];
 
@@ -6302,8 +6300,6 @@ static int generate_tones(AC4DecodeContext *s, Substream *ss, int ch_id)
             ssch->qmf_sine[1][ts][sb] *= aspx_sine[1][idx];
         }
     }
-
-    return 0;
 }
 
 static void assemble_hf_signal(AC4DecodeContext *s, Substream *ss, int ch_id)
@@ -6386,8 +6382,6 @@ static void assemble_hf_signal(AC4DecodeContext *s, Substream *ss, int ch_id)
 
 static int channels_aspx_processing(AC4DecodeContext *s, Substream *ss, int nb_ch)
 {
-    int ret;
-
     if (s->substream.codec_mode < CM_ASPX)
         return 0;
 
@@ -6431,16 +6425,10 @@ static int channels_aspx_processing(AC4DecodeContext *s, Substream *ss, int nb_c
         map_signoise(s, ss, ch);
     for (int ch = 0; ch < nb_ch; ch++)
         add_sinusoids(s, ss, ch);
-    for (int ch = 0; ch < nb_ch; ch++) {
-        ret = generate_tones(s, ss, ch);
-        if (ret < 0)
-            return ret;
-    }
-    for (int ch = 0; ch < nb_ch; ch++) {
-        ret = generate_noise(s, ss, ch);
-        if (ret < 0)
-            return ret;
-    }
+    for (int ch = 0; ch < nb_ch; ch++)
+        generate_tones(s, ss, ch);
+    for (int ch = 0; ch < nb_ch; ch++)
+        generate_noise(s, ss, ch);
     for (int ch = 0; ch < nb_ch; ch++)
         assemble_hf_signal(s, ss, ch);
 
