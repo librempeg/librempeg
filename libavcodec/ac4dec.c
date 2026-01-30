@@ -452,6 +452,7 @@ typedef struct AC4DecodeContext {
     int             iframe_global;
     int             first_frame;
     int             have_iframe;
+    int             had_corruption;
     int             nb_presentations;
     int             payload_base;
     int             short_program_id;
@@ -794,6 +795,9 @@ static av_cold int ac4_decode_init(AVCodecContext *avctx)
     return 0;
 }
 
+/* Forward declaration for corruption recovery */
+static av_cold void ac4_flush(AVCodecContext *avctx);
+
 static int variable_bits(GetBitContext *gb, int bits)
 {
     int value = 0;
@@ -814,8 +818,8 @@ static int variable_bits(GetBitContext *gb, int bits)
 static int check_sequence(AC4DecodeContext *s)
 {
     if (s->sequence_counter > 1020) {
-        av_log(s->avctx, AV_LOG_ERROR, "invalid sequence counter: %d\n", s->sequence_counter);
-        return AVERROR_INVALIDDATA;
+        av_log(s->avctx, AV_LOG_WARNING, "invalid sequence counter: %d (OTA corruption, continuing)\n", s->sequence_counter);
+        return 0;
     }
 
     if (s->sequence_counter == s->sequence_counter_prev + 1)
@@ -830,8 +834,8 @@ static int check_sequence(AC4DecodeContext *s)
     if (s->sequence_counter == 0 && s->sequence_counter_prev == 0)
         return 0;
 
-    av_log(s->avctx, AV_LOG_ERROR, "unexpected sequence counter: %d vs %d\n", s->sequence_counter, s->sequence_counter_prev);
-    return AVERROR_INVALIDDATA;
+    av_log(s->avctx, AV_LOG_WARNING, "unexpected sequence counter: %d vs %d (OTA corruption, continuing)\n", s->sequence_counter, s->sequence_counter_prev);
+    return 0;
 }
 
 static int frame_rate_multiply_info(AC4DecodeContext *s, PresentationInfo *p)
@@ -3124,8 +3128,8 @@ static int aspx_framing(AC4DecodeContext *s, Substream *ss, int ch_id, int ifram
     case FIXFIX:
         ssch->aspx_num_env = 1 << get_bits(gb, 1 + ss->aspx_num_env_bits_fixfix);
         if (ssch->aspx_num_env > 4) {
-            av_log(s->avctx, AV_LOG_ERROR, "invalid aspx num env in FIXFIX: %d\n", ssch->aspx_num_env);
-            return AVERROR_INVALIDDATA;
+            av_log(s->avctx, AV_LOG_WARNING, "invalid aspx num env in FIXFIX: %d, clamping to 4 (OTA corruption)\n", ssch->aspx_num_env);
+            ssch->aspx_num_env = 4;
         }
 
         if (ss->aspx_freq_res_mode == 0)
@@ -3162,8 +3166,8 @@ static int aspx_framing(AC4DecodeContext *s, Substream *ss, int ch_id, int ifram
 
         ssch->aspx_num_env = ssch->aspx_num_rel_left + ssch->aspx_num_rel_right + 1;
         if (ssch->aspx_num_env > 5) {
-            av_log(s->avctx, AV_LOG_ERROR, "invalid aspx num env: %d (class %d)\n", ssch->aspx_num_env, ssch->aspx_int_class);
-            return AVERROR_INVALIDDATA;
+            av_log(s->avctx, AV_LOG_WARNING, "invalid aspx num env: %d (class %d), clamping to 5 (OTA corruption)\n", ssch->aspx_num_env, ssch->aspx_int_class);
+            ssch->aspx_num_env = 5;
         }
 
         ptr_bits = ceilf(logf(ssch->aspx_num_env + 2) / logf(2));
@@ -3171,9 +3175,12 @@ static int aspx_framing(AC4DecodeContext *s, Substream *ss, int ch_id, int ifram
         ssch->aspx_tsg_ptr_prev = ssch->aspx_tsg_ptr;
         ssch->aspx_tsg_ptr = get_bits(gb, ptr_bits);
         ssch->aspx_tsg_ptr -= 1;
-        if (ss->aspx_freq_res_mode == 0)
-            for (int env = 0; env < ssch->aspx_num_env; env++)
+        if (ss->aspx_freq_res_mode == 0) {
+            /* Double-check bounds to prevent buffer overflow */
+            int num_env = FFMIN(ssch->aspx_num_env, MAX_ASPX_SIGNAL);
+            for (int env = 0; env < num_env; env++)
                 ssch->aspx_freq_res[env] = get_bits1(gb);
+        }
     }
 
     ssch->aspx_num_noise_prev = ssch->aspx_num_noise;
@@ -5500,6 +5507,13 @@ static int get_qsignal_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_
     int sbg_idx_low2high[24] = {0};
     int delta;
 
+    /* Validate envelope count to prevent buffer overrun */
+    if (ssch->num_atsg_sig > MAX_ASPX_SIGNAL) {
+        av_log(s->avctx, AV_LOG_ERROR, "num_atsg_sig %d exceeds maximum %d\n",
+               ssch->num_atsg_sig, MAX_ASPX_SIGNAL);
+        return AVERROR_INVALIDDATA;
+    }
+
     for (int sbg = 0, sbg_low = 0; sbg < ssch->num_sbg_sig_highres; sbg++) {
         if (ssch->sbg_sig_lowres[sbg_low+1] == ssch->sbg_sig_highres[sbg]) {
             sbg_low++;
@@ -5514,6 +5528,12 @@ static int get_qsignal_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_
     memset(ssch->qscf_sig_sbg, 0, sizeof(ssch->qscf_sig_sbg));
 
     ssch->num_atsg_sig_prev = FFMAX(1, ssch->num_atsg_sig_prev);
+    /* Clamp to valid range to prevent array access violations from corrupted state */
+    if (ssch->num_atsg_sig_prev > MAX_ASPX_SIGNAL) {
+        av_log(s->avctx, AV_LOG_WARNING, "num_atsg_sig_prev %d exceeds maximum, clamping to %d\n",
+               ssch->num_atsg_sig_prev, MAX_ASPX_SIGNAL);
+        ssch->num_atsg_sig_prev = MAX_ASPX_SIGNAL;
+    }
 
     /* Loop over Envelopes */
     for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
@@ -5543,8 +5563,8 @@ static int get_qsignal_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_
                 }
             }
 
-            av_assert2(ssch->qscf_sig_sbg[atsg][sbg] >= -63);
-            av_assert2(ssch->qscf_sig_sbg[atsg][sbg] <=  63);
+            /* Clamp the value to the valid range instead of asserting */
+            ssch->qscf_sig_sbg[atsg][sbg] = av_clip(ssch->qscf_sig_sbg[atsg][sbg], -63, 63);
         }
     }
 
@@ -5556,12 +5576,25 @@ static int get_qnoise_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_i
     SubstreamChannel *ssch = &ss->ssch[ch_id];
     int delta;
 
+    /* Validate envelope count to prevent buffer overrun */
+    if (ssch->num_atsg_noise > MAX_ASPX_SIGNAL) {
+        av_log(s->avctx, AV_LOG_ERROR, "num_atsg_noise %d exceeds maximum %d\n",
+               ssch->num_atsg_noise, MAX_ASPX_SIGNAL);
+        return AVERROR_INVALIDDATA;
+    }
+
     delta = ((ch_id & 1) && (ssch->aspx_balance == 1)) + 1;
 
     memcpy(ssch->qscf_noise_prev, ssch->qscf_noise_sbg, sizeof(ssch->qscf_noise_sbg));
     memset(ssch->qscf_noise_sbg, 0, sizeof(ssch->qscf_noise_sbg));
 
     ssch->num_atsg_noise_prev = FFMAX(1, ssch->num_atsg_noise_prev);
+    /* Clamp to valid range to prevent array access violations from corrupted state */
+    if (ssch->num_atsg_noise_prev > MAX_ASPX_SIGNAL) {
+        av_log(s->avctx, AV_LOG_WARNING, "num_atsg_noise_prev %d exceeds maximum, clamping to %d\n",
+               ssch->num_atsg_noise_prev, MAX_ASPX_SIGNAL);
+        ssch->num_atsg_noise_prev = MAX_ASPX_SIGNAL;
+    }
 
     /* Loop over envelopes */
     for (int atsg = 0; atsg < ssch->num_atsg_noise; atsg++) {
@@ -5580,8 +5613,8 @@ static int get_qnoise_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_i
                 }
             }
 
-            av_assert2(ssch->qscf_noise_sbg[atsg][sbg] >= -63);
-            av_assert2(ssch->qscf_noise_sbg[atsg][sbg] <=  63);
+            /* Clamp the value to the valid range instead of asserting */
+            ssch->qscf_noise_sbg[atsg][sbg] = av_clip(ssch->qscf_noise_sbg[atsg][sbg], -63, 63);
         }
     }
 
@@ -6394,10 +6427,16 @@ static int channels_aspx_processing(AC4DecodeContext *s, Substream *ss, int nb_c
 
     for (int ch = 0; ch < nb_ch; ch++)
         aspx_processing(s, ss, ch);
-    for (int ch = 0; ch < nb_ch; ch++)
-        get_qsignal_scale_factors(s, ss, ch);
-    for (int ch = 0; ch < nb_ch; ch++)
-        get_qnoise_scale_factors(s, ss, ch);
+    for (int ch = 0; ch < nb_ch; ch++) {
+        ret = get_qsignal_scale_factors(s, ss, ch);
+        if (ret < 0)
+            return ret;
+    }
+    for (int ch = 0; ch < nb_ch; ch++) {
+        ret = get_qnoise_scale_factors(s, ss, ch);
+        if (ret < 0)
+            return ret;
+    }
 
     for (int ch = 0; ch < nb_ch; ch++) {
         if (ss->ssch[ch].aspx_balance == 0)
@@ -6590,6 +6629,13 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     av_log(s->avctx, AV_LOG_DEBUG, "packet_size: %d\n", avpkt->size);
     skip_bits_long(gb, start_offset * 8);
 
+    /* Reset decoder state if previous frame had corruption */
+    /* Use the existing flush function which safely resets state */
+    if (s->had_corruption) {
+        ac4_flush(avctx);
+        s->had_corruption = 0;
+    }
+
     ret = ac4_toc(s);
     if (ret < 0)
         return ret;
@@ -6635,14 +6681,18 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             av_assert0(0);
         }
 
-        if (ret < 0)
-            return ret;
+        if (ret < 0) {
+            av_log(s->avctx, AV_LOG_WARNING, "substream decode failed (OTA corruption), outputting silence\n");
+            goto output_silence;
+        }
         if (substream_type == ST_SUBSTREAM)
             break;
     }
 
-    if (get_bits_left(gb) < 0)
-        av_log(s->avctx, AV_LOG_WARNING, "overread\n");
+    if (get_bits_left(gb) < 0) {
+        av_log(s->avctx, AV_LOG_WARNING, "overread detected (OTA corruption), outputting silence\n");
+        goto output_silence;
+    }
 
     for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++)
         scale_spec(s, ch);
@@ -6666,8 +6716,10 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     channels_companding(s, &s->substream, avctx->ch_layout.nb_channels);
 
     ret = channels_aspx_processing(s, &s->substream, avctx->ch_layout.nb_channels);
-    if (ret < 0)
-        return ret;
+    if (ret < 0) {
+        av_log(s->avctx, AV_LOG_WARNING, "aspx processing failed (OTA corruption), outputting silence\n");
+        goto output_silence;
+    }
 
     if (get_bits_left(gb) > 0)
         av_log(s->avctx, AV_LOG_DEBUG, "underread %d\n", get_bits_left(gb));
@@ -6679,6 +6731,17 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         decode_channel(s, dch, (float *)frame->extended_data[ch]);
     }
 
+    goto frame_done;
+
+output_silence:
+    /* Output silence to maintain A/V sync when frame is corrupted */
+    /* Mark that we had corruption so next frame can reset dangerous state */
+    s->had_corruption = 1;
+    for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++) {
+        memset(frame->extended_data[ch], 0, frame->nb_samples * sizeof(float));
+    }
+
+frame_done:
     if (s->iframe_global)
         frame->flags |= AV_FRAME_FLAG_KEY;
 
