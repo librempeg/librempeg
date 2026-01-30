@@ -6569,7 +6569,8 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     if (avpkt->size < 8) {
         av_log(s->avctx, AV_LOG_ERROR, "invalid packet size: %d\n", avpkt->size);
-        return AVERROR_INVALIDDATA;
+        ret = AVERROR_INVALIDDATA;
+        goto error;
     }
 
     header = AV_RB16(avpkt->data);
@@ -6582,20 +6583,21 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     }
 
     if ((ret = init_get_bits8(gb, avpkt->data, avpkt->size)) < 0)
-        return ret;
+        goto error;
     av_log(s->avctx, AV_LOG_DEBUG, "packet_size: %d\n", avpkt->size);
     skip_bits_long(gb, start_offset * 8);
 
     ret = ac4_toc(s);
     if (ret < 0)
-        return ret;
+        goto error;
 
     if (!s->have_iframe)
         return avpkt->size;
 
     if (s->version == 2 && !s->ssgroup[0].channel_coded) {
         avpriv_report_missing_feature(s->avctx, "object coding");
-        return AVERROR_PATCHWELCOME;
+        ret = AVERROR_PATCHWELCOME;
+        goto error;
     }
 
     presentation = FFMIN(s->target_presentation, FFMAX(0, s->nb_presentations - 1));
@@ -6604,7 +6606,8 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     if (ssinfo->channel_mode >= FF_ARRAY_ELEMS(channel_mode_layouts)) {
         av_log(s->avctx, AV_LOG_ERROR, "invalid channel mode: %d\n", ssinfo->channel_mode);
-        return AVERROR_INVALIDDATA;
+        ret = AVERROR_INVALIDDATA;
+        goto error;
     }
 
     av_channel_layout_copy(&avctx->ch_layout, &channel_mode_layouts[ssinfo->channel_mode]);
@@ -6612,8 +6615,6 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                                     s->resampling_ratio.den,
                                     s->resampling_ratio.num);
     frame->nb_samples = s->frame_len_base;
-    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
-        return ret;
 
     skip_bits_long(gb, s->payload_base * 8);
 
@@ -6632,7 +6633,8 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
 
         if (ret < 0)
-            return ret;
+            goto error;
+
         if (substream_type == ST_SUBSTREAM)
             break;
     }
@@ -6663,10 +6665,13 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     ret = channels_aspx_processing(s, &s->substream, avctx->ch_layout.nb_channels);
     if (ret < 0)
-        return ret;
+        goto error;
 
     if (get_bits_left(gb) > 0)
         av_log(s->avctx, AV_LOG_DEBUG, "underread %d\n", get_bits_left(gb));
+
+    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
+        return ret;
 
     for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++) {
         const int sch = av_channel_layout_channel_from_index(&avctx->ch_layout, ch);
@@ -6683,6 +6688,13 @@ static int ac4_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     *got_frame_ptr = 1;
 
     return avpkt->size;
+
+error:
+    s->have_iframe = 0;
+
+    *got_frame_ptr = 0;
+
+    return ret;
 }
 
 static av_cold void ac4_flush(AVCodecContext *avctx)
