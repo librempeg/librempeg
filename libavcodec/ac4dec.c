@@ -121,7 +121,7 @@ typedef struct SubstreamChannel {
 
     uint8_t ms_used[16][128];
     uint8_t sap_coeff_used[16][128];
-    int     dpcm_alpha_q[16][128];
+    uint8_t dpcm_alpha_q[16][128];
 
     int     delta_code_time;
 
@@ -312,7 +312,7 @@ typedef struct Substream {
     uint8_t coding_config;
     uint8_t mdct_stereo_proc[8];
     float   matrix_stereo[16][128][2][2];
-    float   alpha_q[16][128];
+    int8_t  alpha_q[16][128];
 
     int     spec_frontend_l;
     int     spec_frontend_r;
@@ -2330,6 +2330,7 @@ static int sap_data(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch)
     GetBitContext *gb = &s->gbc;
 
     memset(ssch->sap_coeff_used, 0, sizeof(ssch->sap_coeff_used));
+    memset(ssch->dpcm_alpha_q, 0, sizeof(ssch->dpcm_alpha_q));
 
     if (!get_bits1(gb)) {
         for (int g = 0; g < ssch->scp.num_window_groups; g++) {
@@ -2364,10 +2365,12 @@ static int sap_data(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch)
         av_assert2(max_sfb_g <= FF_ARRAY_ELEMS(ssch->sap_coeff_used[0]));
         for (int sfb = 0; sfb < max_sfb_g; sfb += 2) {
             if (ssch->sap_coeff_used[g][sfb]) {
-                ssch->dpcm_alpha_q[g][sfb] = get_vlc2(gb, scale_factors_vlc.table,
-                                                      scale_factors_vlc.bits, 3);
-                if (ssch->dpcm_alpha_q[g][sfb] < 0)
+                int v = get_vlc2(gb, scale_factors_vlc.table,
+                                 scale_factors_vlc.bits, 3);
+                if (v < 0)
                     return AVERROR_INVALIDDATA;
+
+                ssch->dpcm_alpha_q[g][sfb] = v;
             }
         }
     }
@@ -5158,12 +5161,12 @@ static int two_channel_processing(AC4DecodeContext *s, Substream *ss,
                 m[0][1] =
                 m[1][0] =  1;
                 m[1][1] = -1;
-            } else { // sap_mode == 3
+            } else if (ssch0->sap_mode == 3) {
                 if (ssch0->sap_coeff_used[g][sfb]) { // setup alpha_q[g][sfb]
                     if (sfb & 1) {
                         ss->alpha_q[g][sfb] = ss->alpha_q[g][sfb-1];
                     } else {
-                        float delta = ssch0->dpcm_alpha_q[g][sfb] - 60;
+                        int delta = ssch0->dpcm_alpha_q[g][sfb] - 60;
                         int code_delta;
 
                         if ((g == 0) || (max_sfb_g != max_sfb_prev)) {
