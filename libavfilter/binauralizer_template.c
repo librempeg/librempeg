@@ -24,28 +24,22 @@
 #undef ctype
 #undef ftype
 #undef TX_TYPE
-#undef ATAN2
 #undef SIN
 #undef COS
-#undef FABS
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
 #define ctype AVComplexFloat
 #define ftype float
 #define TX_TYPE AV_TX_FLOAT_RDFT
-#define ATAN2 atan2f
 #define SIN sinf
 #define COS cosf
-#define FABS fabsf
 #else
 #define SAMPLE_FORMAT double
 #define ctype AVComplexDouble
 #define ftype double
 #define TX_TYPE AV_TX_DOUBLE_RDFT
-#define ATAN2 atan2
 #define SIN sin
 #define COS cos
-#define FABS fabs
 #endif
 
 #define F(x) ((ftype)(x))
