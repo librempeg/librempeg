@@ -3035,6 +3035,8 @@ static int aspx_atsg(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch,
 
     num_atsg_sig = ssch->num_atsg_sig = ssch->aspx_num_env;
     num_atsg_noise = ssch->num_atsg_noise = ssch->aspx_num_noise;
+    if (ssch->num_atsg_sig_prev == 0)
+        ssch->num_atsg_sig_prev = ssch->num_atsg_sig;
 
     if (ssch->previous_stop_pos == 0)
         ssch->previous_stop_pos = s->num_aspx_timeslots;
@@ -5516,7 +5518,8 @@ static int get_qsignal_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_
     memcpy(ssch->qscf_sig_sbg_prev, ssch->qscf_sig_sbg, sizeof(ssch->qscf_sig_sbg));
     memset(ssch->qscf_sig_sbg, 0, sizeof(ssch->qscf_sig_sbg));
 
-    ssch->num_atsg_sig_prev = FFMAX(1, ssch->num_atsg_sig_prev);
+    if (ssch->num_atsg_sig_prev <= 0)
+        return AVERROR_INVALIDDATA;
 
     /* Loop over Envelopes */
     for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
