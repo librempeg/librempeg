@@ -5545,7 +5545,7 @@ static int get_qsignal_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_
 
         /* Loop over scale factor subband groups */
         for (int sbg = 0; sbg < ssch->num_sbg_sig[atsg]; sbg++) {
-            int sbg_prev;
+            int sbg_prev, v;
 
             if (ssch->atsg_freqres[atsg] == freqres_prev) {
                 sbg_prev = sbg;
@@ -5562,16 +5562,17 @@ static int get_qsignal_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_
             }
 
             if (ssch->aspx_sig_delta_dir[atsg] == 0) { /* FREQ */
-                ssch->qscf_sig_sbg[atsg][sbg] = 0;
+                v = 0;
                 for (int i = 0; i <= sbg; i++)
-                    ssch->qscf_sig_sbg[atsg][sbg] += delta * ssch->aspx_data[0][atsg][i];
+                    v += delta * ssch->aspx_data[0][atsg][i];
             } else { /* TIME */
-                ssch->qscf_sig_sbg[atsg][sbg]  = ssch->qscf_prev[atsg][sbg];
-                ssch->qscf_sig_sbg[atsg][sbg] += delta * ssch->aspx_data[0][atsg][sbg];
+                v  = ssch->qscf_prev[atsg][sbg];
+                v += delta * ssch->aspx_data[0][atsg][sbg];
             }
 
-            av_assert2(ssch->qscf_sig_sbg[atsg][sbg] >= -63);
-            av_assert2(ssch->qscf_sig_sbg[atsg][sbg] <=  63);
+            av_assert2(v >= -128);
+            av_assert2(v <=  128);
+            ssch->qscf_sig_sbg[atsg][sbg] = v;
         }
     }
 
