@@ -147,11 +147,9 @@ typedef struct SubstreamChannel {
 
     int     aspx_int_class;
     int     aspx_num_noise;
-    int     aspx_num_noise_prev;
     int     aspx_num_rel_left;
     int     aspx_num_rel_right;
     int     aspx_num_env;
-    int     aspx_num_env_prev;
     int     num_atsg_sig;
     int     num_atsg_sig_prev;
     int     num_atsg_noise;
@@ -3132,8 +3130,6 @@ static int aspx_framing(AC4DecodeContext *s, Substream *ss, int ch_id, int ifram
     if (ssch->aspx_int_class < 0)
         return AVERROR_INVALIDDATA;
 
-    ssch->aspx_num_env_prev = FFMAX(1, ssch->aspx_num_env);
-
     switch (ssch->aspx_int_class) {
     case FIXFIX:
         ssch->aspx_num_env = 1 << get_bits(gb, 1 + ss->aspx_num_env_bits_fixfix);
@@ -3190,19 +3186,10 @@ static int aspx_framing(AC4DecodeContext *s, Substream *ss, int ch_id, int ifram
                 ssch->aspx_freq_res[env] = get_bits1(gb);
     }
 
-    ssch->aspx_num_noise_prev = ssch->aspx_num_noise;
-
     if (ssch->aspx_num_env > 1)
         ssch->aspx_num_noise = 2;
     else
         ssch->aspx_num_noise = 1;
-
-    if (!ssch->aspx_num_env_prev)
-        ssch->aspx_num_env_prev = ssch->aspx_num_env;
-    ssch->aspx_num_env_prev = FFMAX(1, ssch->aspx_num_env_prev);
-
-    if (!ssch->aspx_num_noise_prev)
-        ssch->aspx_num_noise_prev = ssch->aspx_num_noise;
 
     av_log(s->avctx, AV_LOG_DEBUG, "aspx_num_sig: %d\n", ssch->aspx_num_env);
     av_log(s->avctx, AV_LOG_DEBUG, "aspx_num_noise: %d\n", ssch->aspx_num_noise);
