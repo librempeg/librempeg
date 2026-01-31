@@ -176,7 +176,6 @@ typedef struct SubstreamChannel {
     int     aspx_balance;
 
     uint8_t atsg_freqres[MAX_ASPX_SIGNAL];
-    uint8_t atsg_freqres_prev[MAX_ASPX_SIGNAL];
     uint8_t atsg_sig[MAX_SBG_NOISE];
     uint8_t atsg_noise[MAX_ASPX_SIGNAL + 1];
     int     previous_stop_pos;
@@ -5523,30 +5522,39 @@ static int get_qsignal_scale_factors(AC4DecodeContext *s, Substream *ss, int ch_
 
     /* Loop over Envelopes */
     for (int atsg = 0; atsg < ssch->num_atsg_sig; atsg++) {
+        int freqres_prev;
+
+        if (atsg == 0) {
+            freqres_prev = ssch->atsg_freqres[ssch->num_atsg_sig_prev - 1];
+        } else {
+            freqres_prev = ssch->atsg_freqres[atsg-1];
+        }
+
         /* Loop over scale factor subband groups */
-        for (int sbg = 0; sbg < ssch->num_sbg_sig[ssch->atsg_freqres[atsg]]; sbg++) {
-            if (atsg == 0) {
-                ssch->atsg_freqres_prev[atsg] = ssch->atsg_freqres[ssch->num_atsg_sig_prev - 1];
-                ssch->qscf_prev[atsg][sbg] = ssch->qscf_sig_sbg_prev[ssch->num_atsg_sig_prev - 1][sbg];
-            } else {
-                ssch->atsg_freqres_prev[atsg] = ssch->atsg_freqres[atsg-1];
-                ssch->qscf_prev[atsg][sbg] = ssch->qscf_sig_sbg[atsg-1][sbg];
+        for (int sbg = 0; sbg < ssch->num_sbg_sig[atsg]; sbg++) {
+            int sbg_prev;
+
+            if (ssch->atsg_freqres[atsg] == freqres_prev) {
+                sbg_prev = sbg;
+            } else if (ssch->atsg_freqres[atsg] == 0 && freqres_prev == 1) {
+                sbg_prev = sbg_idx_low2high[sbg];
+            } else if (ssch->atsg_freqres[atsg] == 1 && freqres_prev == 0) {
+                sbg_prev = sbg_idx_high2low[sbg];
             }
+
+            if (atsg == 0) {
+                ssch->qscf_prev[atsg][sbg] = ssch->qscf_sig_sbg_prev[ssch->num_atsg_sig_prev-1][sbg_prev];
+            } else {
+                ssch->qscf_prev[atsg][sbg] = ssch->qscf_sig_sbg[atsg-1][sbg_prev];
+            }
+
             if (ssch->aspx_sig_delta_dir[atsg] == 0) { /* FREQ */
                 ssch->qscf_sig_sbg[atsg][sbg] = 0;
                 for (int i = 0; i <= sbg; i++)
                     ssch->qscf_sig_sbg[atsg][sbg] += delta * ssch->aspx_data[0][atsg][i];
             } else { /* TIME */
-                if (ssch->atsg_freqres[atsg] == ssch->atsg_freqres_prev[atsg]) {
-                    ssch->qscf_sig_sbg[atsg][sbg]  = ssch->qscf_prev[atsg][sbg];
-                    ssch->qscf_sig_sbg[atsg][sbg] += delta * ssch->aspx_data[0][atsg][sbg];
-                } else if ((ssch->atsg_freqres[atsg] == 0) && (ssch->atsg_freqres_prev[atsg] == 1)) {
-                    ssch->qscf_sig_sbg[atsg][sbg]  = ssch->qscf_prev[atsg][sbg_idx_low2high[sbg]];
-                    ssch->qscf_sig_sbg[atsg][sbg] += delta * ssch->aspx_data[0][atsg][sbg];
-                } else if ((ssch->atsg_freqres[atsg] == 1) && (ssch->atsg_freqres_prev[atsg] == 0)) {
-                    ssch->qscf_sig_sbg[atsg][sbg]  = ssch->qscf_prev[atsg][sbg_idx_high2low[sbg]];
-                    ssch->qscf_sig_sbg[atsg][sbg] += delta * ssch->aspx_data[0][atsg][sbg];
-                }
+                ssch->qscf_sig_sbg[atsg][sbg]  = ssch->qscf_prev[atsg][sbg];
+                ssch->qscf_sig_sbg[atsg][sbg] += delta * ssch->aspx_data[0][atsg][sbg];
             }
 
             av_assert2(ssch->qscf_sig_sbg[atsg][sbg] >= -63);
