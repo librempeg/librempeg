@@ -2269,6 +2269,7 @@ static int asf_psy_info(AC4DecodeContext *s, Substream *ss,
     int n_msfb_bits = get_msfb_bits(ssch->scp.transf_length[0]);
     int n_grp_bits = get_grp_bits(s, ssch);
 
+    av_log(s->avctx, AV_LOG_DEBUG, "n_grp_bits: %d\n", n_grp_bits);
     if (n_grp_bits < 0)
         return n_grp_bits;
 
@@ -2584,6 +2585,10 @@ static int asf_section_data(AC4DecodeContext *s, Substream *ss, SubstreamChannel
 
     memset(ssch->sect_cb, 0, sizeof(ssch->sect_cb));
     memset(ssch->sfb_cb, 0, sizeof(ssch->sfb_cb));
+    memset(ssch->sect_start, 0, sizeof(ssch->sect_start));
+    memset(ssch->sect_end, 0, sizeof(ssch->sect_end));
+    memset(ssch->num_sec_lsf, 0, sizeof(ssch->num_sec_lsf));
+    memset(ssch->num_sec, 0, sizeof(ssch->num_sec));
 
     for (int g = 0; g < ssch->scp.num_window_groups; g++) {
         int gidx;
@@ -2620,6 +2625,8 @@ static int asf_section_data(AC4DecodeContext *s, Substream *ss, SubstreamChannel
             }
 
             sect_len += sect_len_incr;
+            av_assert2(i < FF_ARRAY_ELEMS(ssch->sect_start[g]));
+            av_assert2(i < FF_ARRAY_ELEMS(ssch->sect_end[g]));
             ssch->sect_start[g][i] = k;
             ssch->sect_end[g][i] = k + sect_len;
 
@@ -2673,8 +2680,11 @@ static int asf_spectral_data(AC4DecodeContext *s, Substream *ss, SubstreamChanne
         for (int i = 0; i < ssch->num_sec_lsf[g]; i++) {
             int sect_start_line, sect_end_line, cb;
 
-            if (ssch->sect_cb[g][i] == 0 || ssch->sect_cb[g][i] > 11)
+            if (ssch->sect_cb[g][i] == 0 || ssch->sect_cb[g][i] > 11) {
+                if (ssch->sect_cb[g][i])
+                    av_log(s->avctx, AV_LOG_DEBUG, "invalid codebook %d\n", ssch->sect_cb[g][i]);
                 continue;
+            }
 
             sect_start_line = ssch->sect_sfb_offset[g][ssch->sect_start[g][i]];
             sect_end_line = ssch->sect_sfb_offset[g][ssch->sect_end[g][i]];
@@ -2705,8 +2715,8 @@ static int asf_spectral_data(AC4DecodeContext *s, Substream *ss, SubstreamChanne
                     ssch->quant_spec[k+3] = cb_idx - cb_off;
 
                     if (asf_codebook_unsigned[cb]) {
-                        if (ssch->quant_spec[k] && get_bits1(gb))
-                            ssch->quant_spec[k]   = -ssch->quant_spec[k];
+                        if (ssch->quant_spec[k+0] && get_bits1(gb))
+                            ssch->quant_spec[k+0] = -ssch->quant_spec[k];
                         if (ssch->quant_spec[k+1] && get_bits1(gb))
                             ssch->quant_spec[k+1] = -ssch->quant_spec[k+1];
                         if (ssch->quant_spec[k+2] && get_bits1(gb))
@@ -4143,6 +4153,7 @@ static int two_channel_data(AC4DecodeContext *s, Substream *ss,
     int ret;
 
     ss->mdct_stereo_proc[x] = get_bits1(gb);
+    av_log(s->avctx, AV_LOG_DEBUG, "mdct_stereo_proc[%d]: %d\n", x, ss->mdct_stereo_proc[x]);
     if (ss->mdct_stereo_proc[x]) {
         ret = sf_info(s, ss, ch_id[0], SF_ASF, 0, 0);
         if (ret < 0)
@@ -4589,6 +4600,8 @@ static int channel_element_5x(AC4DecodeContext *s, int lfe, int iframe)
         switch (ss->coding_config) {
         case 0:
             ss->mode_2ch = get_bits1(gb);
+
+            av_log(s->avctx, AV_LOG_DEBUG, "mode_2ch: %d\n", ss->mode_2ch);
 
             if (ss->mode_2ch) {
                 s->ch_map[AV_CHAN_FRONT_LEFT]  = 0;
