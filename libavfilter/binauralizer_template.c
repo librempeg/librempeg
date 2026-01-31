@@ -128,7 +128,7 @@ static void fn(get_angle_depth)(const AVChannelLayout *ch_layout, const int ch,
                                 ftype *angle, ftype *depth)
 {
     const ftype x_size = x[FFMIN(ch, nb_x_size-1)];
-    const ftype y_size = x[FFMIN(ch, nb_y_size-1)];
+    const ftype y_size = y[FFMIN(ch, nb_y_size-1)];
     const int chan = av_channel_layout_channel_from_index(ch_layout, ch);
     ftype a, d;
 
