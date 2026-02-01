@@ -3433,6 +3433,8 @@ static int aspx_elements(AC4DecodeContext *s, Substream *ss, SubstreamChannel *s
         }
     }
 
+    av_log(s->avctx, AV_LOG_DEBUG, "num_sbg_master: %d\n", ssch->num_sbg_master);
+
     ssch->sba = ssch->sbg_master[0];
     ssch->sbz = ssch->sbg_master[ssch->num_sbg_master];
 
