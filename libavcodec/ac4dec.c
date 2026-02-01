@@ -3042,6 +3042,9 @@ static int aspx_atsg(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch,
 {
     int num_atsg_sig, num_atsg_noise;
 
+    memset(ssch->atsg_freqres, 0, sizeof(ssch->atsg_freqres));
+    memset(ssch->atsg_sig, 0, sizeof(ssch->atsg_sig));
+
     ssch->num_atsg_sig_prev = ssch->num_atsg_sig;
     ssch->num_atsg_noise_prev = ssch->num_atsg_noise;
 
