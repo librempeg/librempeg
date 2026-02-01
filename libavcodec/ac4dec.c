@@ -3118,9 +3118,8 @@ static int aspx_atsg(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch,
     return 0;
 }
 
-static int aspx_framing(AC4DecodeContext *s, Substream *ss, int ch_id, int iframe)
+static int aspx_framing(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch, const int iframe)
 {
-    SubstreamChannel *ssch = &ss->ssch[ch_id];
     GetBitContext *gb = &s->gbc;
 
     ssch->aspx_num_rel_left = 0;
@@ -3607,7 +3606,7 @@ static int aspx_data_2ch(AC4DecodeContext *s, Substream *ss,
     if (ret < 0)
         return ret;
 
-    ret = aspx_framing(s, ss, ch_id[0], iframe);
+    ret = aspx_framing(s, ss, ssch0, iframe);
     if (ret < 0)
         return ret;
 
@@ -3618,7 +3617,7 @@ static int aspx_data_2ch(AC4DecodeContext *s, Substream *ss,
     ssch0->aspx_balance = ssch1->aspx_balance = get_bits1(gb);
 
     if (ssch0->aspx_balance == 0) {
-        ret = aspx_framing(s, ss, ch_id[1], iframe);
+        ret = aspx_framing(s, ss, ssch1, iframe);
         if (ret < 0)
             return ret;
         ssch1->aspx_qmode_env = ss->aspx_quant_mode_env;
@@ -3727,7 +3726,7 @@ static int aspx_data_1ch(AC4DecodeContext *s, Substream *ss,
     if (ret < 0)
         return ret;
 
-    ret = aspx_framing(s, ss, ch_id, iframe);
+    ret = aspx_framing(s, ss, ssch, iframe);
     if (ret < 0)
         return ret;
 
