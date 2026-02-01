@@ -981,8 +981,10 @@ static int ac4_substream_info(AC4DecodeContext *s, PresentationInfo *p,
     if (get_bits1(gb))
         content_type(s, p);
 
-    for (int i = 0; i < p->frame_rate_factor; i++)
+    for (int i = 0; i < p->frame_rate_factor; i++) {
         ssi->iframe[i] = get_bits1(gb);
+        av_log(s->avctx, AV_LOG_DEBUG, "iframe[%d]: %d\n", i, ssi->iframe[i]);
+    }
 
     ssi->substream_index = get_bits(gb, 2);
     if (ssi->substream_index == 3)
@@ -1190,7 +1192,7 @@ static int ac4_substream_info_chan(AC4DecodeContext *s, SubstreamGroupInfo *g,
 
     ssi->sus_ver = sus_ver;
     ssi->channel_mode = get_vlc2(gb, channel_mode_vlc.table, channel_mode_vlc.bits, 3);
-    av_log(s->avctx, AV_LOG_DEBUG, "channel mode: %d\n", ssi->channel_mode);
+    av_log(s->avctx, AV_LOG_DEBUG, "channel_mode: %d\n", ssi->channel_mode);
     if (ssi->channel_mode < 0)
         return AVERROR_INVALIDDATA;
 
@@ -1228,8 +1230,10 @@ static int ac4_substream_info_chan(AC4DecodeContext *s, SubstreamGroupInfo *g,
         ssi->channel_mode == 10)
         ssi->add_ch_base = get_bits1(gb);
 
-    for (int i = 0; i < s->pinfo[0].frame_rate_factor; i++)
+    for (int i = 0; i < s->pinfo[0].frame_rate_factor; i++) {
         ssi->iframe[i] = get_bits1(gb);
+        av_log(s->avctx, AV_LOG_DEBUG, "iframe[%d]: %d\n", i, ssi->iframe[i]);
+    }
 
     if (substreams_present) {
         ssi->substream_index = get_bits(gb, 2);
