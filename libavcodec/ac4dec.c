@@ -175,7 +175,7 @@ typedef struct SubstreamChannel {
     int     aspx_balance;
 
     uint8_t atsg_freqres[MAX_ASPX_SIGNAL];
-    uint8_t atsg_sig[MAX_QMF_BANDS];
+    uint8_t atsg_sig[MAX_ASPX_SIGNAL+1];
     uint8_t atsg_noise[MAX_ASPX_SIGNAL];
     int     previous_stop_pos;
 
@@ -3104,7 +3104,6 @@ static int aspx_atsg(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch,
 
     ssch->previous_stop_pos = ssch->atsg_sig[num_atsg_sig];
 
-    av_assert0(num_atsg_sig > 0 && num_atsg_sig <= 5);
     for (int atsg = 0; atsg < num_atsg_sig; atsg++) {
         av_log(s->avctx, AV_LOG_DEBUG, "atsg_sig[%d]: %d\n", atsg, ssch->atsg_sig[atsg]);
 
