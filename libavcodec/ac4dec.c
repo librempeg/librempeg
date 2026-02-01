@@ -41,7 +41,8 @@
 
 #define MAX_QMF_TSLOTS 32
 #define MAX_QMF_BANDS 64
-#define MAX_SBG_NOISE 6
+#define MAX_SBG_NOISE 5
+#define MAX_ATSG_NOISE 2
 #define MAX_ASPX_SIGNAL 5
 
 /* Number of model bits */
@@ -174,8 +175,8 @@ typedef struct SubstreamChannel {
     int     aspx_balance;
 
     uint8_t atsg_freqres[MAX_ASPX_SIGNAL];
-    uint8_t atsg_sig[MAX_SBG_NOISE];
-    uint8_t atsg_noise[MAX_ASPX_SIGNAL + 1];
+    uint8_t atsg_sig[MAX_QMF_BANDS];
+    uint8_t atsg_noise[MAX_ASPX_SIGNAL];
     int     previous_stop_pos;
 
     int     sbg_noise[MAX_SBG_NOISE];
@@ -195,13 +196,13 @@ typedef struct SubstreamChannel {
     int16_t aspx_data[2][MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
 
     int8_t  qscf_prev[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
-    int8_t  qscf_noise_prev[2][MAX_QMF_BANDS];
+    int8_t  qscf_noise_prev[MAX_ATSG_NOISE][MAX_SBG_NOISE];
     int8_t  qscf_sig_sbg[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
     int8_t  qscf_sig_sbg_prev[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
     float   scf_sig_sbg[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
     float   scf_sig_sb[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
-    int8_t  qscf_noise_sbg[2][MAX_QMF_BANDS];
-    float   scf_noise_sbg[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
+    int8_t  qscf_noise_sbg[MAX_ATSG_NOISE][MAX_SBG_NOISE];
+    float   scf_noise_sbg[MAX_ATSG_NOISE][MAX_SBG_NOISE];
     float   scf_noise_sb[MAX_ASPX_SIGNAL][MAX_QMF_BANDS];
 
     float   gain_vec[MAX_QMF_BANDS];
