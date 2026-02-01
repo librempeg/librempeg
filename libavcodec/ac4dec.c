@@ -3126,6 +3126,8 @@ static int aspx_framing(AC4DecodeContext *s, Substream *ss, int ch_id, int ifram
     ssch->aspx_num_rel_left = 0;
     ssch->aspx_num_rel_right = 0;
 
+    memset(ssch->aspx_freq_res, 0, sizeof(ssch->aspx_freq_res));
+
     ssch->aspx_int_class = get_vlc2(gb, aspx_int_class_vlc.table,
                                     aspx_int_class_vlc.bits, 3);
     if (ssch->aspx_int_class < 0)
