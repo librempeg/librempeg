@@ -24,6 +24,7 @@
 #undef FSIN
 #undef TX_TYPE
 #undef MAXF
+#undef FABS
 #undef SAMPLE_FORMAT
 #if DEPTH == 32
 #define EPS FLT_EPSILON
@@ -32,6 +33,7 @@
 #define ctype AVComplexFloat
 #define ftype float
 #define MAXF FLT_MAX
+#define FABS fabsf
 #define CLIP av_clipf
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #define SAMPLE_FORMAT fltp
@@ -42,6 +44,7 @@
 #define ctype AVComplexDouble
 #define ftype double
 #define MAXF DBL_MAX
+#define FABS fabs
 #define CLIP av_clipd
 #define TX_TYPE AV_TX_DOUBLE_RDFT
 #define SAMPLE_FORMAT dblp
@@ -267,9 +270,6 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
         int cur_max_period = max_period >> i;
         int ns = cur_max_period;
 
-        best_period = best_max_period = -1;
-        best_score = -MAXF;
-
         memset(rptrx+cur_max_period, 0, (max_size+2-cur_max_period) * sizeof(*rptrx));
         for (int n = 0; n < cur_max_period; n++)
             rptrx[n] = dptrx[max_period-n-1];
@@ -294,17 +294,17 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
         c->c2r_fn[i](c->c2r[i], rptrx, cptrx, sizeof(*cptrx));
 
         for (int n = 1; n < cur_max_period-1; n++) {
-            if (rptrx[n] <= rptrx[n-1] &&
-                rptrx[n] <= rptrx[n+1]) {
+            if (rptrx[n] < rptrx[n-1] &&
+                rptrx[n] < rptrx[n+1]) {
                 ns = n;
                 break;
             }
         }
 
         for (int n = ns; n < cur_max_period-1; n++) {
-            if (rptrx[n] >= rptrx[n-1] &&
-                rptrx[n] >= rptrx[n+1]) {
-                const ftype score = rptrx[n];
+            if (rptrx[n] > rptrx[n-1] &&
+                rptrx[n] > rptrx[n+1]) {
+                const ftype score = rptrx[n] / FABS(rptrx[0] + EPS);
 
                 if (score > best_score) {
                     best_score = score;
@@ -320,7 +320,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
 
     if (best_period <= 0) {
         best_period = max_period/2;
-        best_max_period = s->max_period;
+        best_max_period = max_period;
     }
 
     c->best_max_period = best_max_period;
@@ -415,9 +415,6 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
         int cur_max_period = max_period >> i;
         int ns = cur_max_period;
 
-        best_period = best_max_period = -1;
-        best_score = -MAXF;
-
         memset(rptrx+cur_max_period, 0, (max_size+2-cur_max_period) * sizeof(*rptrx));
         for (int n = 0; n < cur_max_period; n++)
             rptrx[n] = dptrx[cur_max_period-n-1];
@@ -442,17 +439,17 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
         c->c2r_fn[i](c->c2r[i], rptrx, cptrx, sizeof(*cptrx));
 
         for (int n = 1; n < cur_max_period-1; n++) {
-            if (rptrx[n] <= rptrx[n-1] &&
-                rptrx[n] <= rptrx[n+1]) {
+            if (rptrx[n] < rptrx[n-1] &&
+                rptrx[n] < rptrx[n+1]) {
                 ns = n;
                 break;
             }
         }
 
         for (int n = ns; n < cur_max_period-1; n++) {
-            if (rptrx[n] >= rptrx[n-1] &&
-                rptrx[n] >= rptrx[n+1]) {
-                const ftype score = rptrx[n];
+            if (rptrx[n] > rptrx[n-1] &&
+                rptrx[n] > rptrx[n+1]) {
+                const ftype score = rptrx[n] / FABS(rptrx[0] + EPS);
 
                 if (score > best_score) {
                     best_score = score;
@@ -468,7 +465,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
 
     if (best_period <= 0) {
         best_period = max_period/2;
-        best_max_period = s->max_period;
+        best_max_period = max_period;
     }
 
     c->best_max_period = best_max_period;
