@@ -1,5 +1,5 @@
-87d0185c5b780dd9509aafd957236bdd *tests/data/fate/matroska-ogg-opus-remux.matroska
-10203 tests/data/fate/matroska-ogg-opus-remux.matroska
+c8596f7b31a8b6693f53759942c3754f *tests/data/fate/matroska-ogg-opus-remux.matroska
+10206 tests/data/fate/matroska-ogg-opus-remux.matroska
 #extradata 0:       19, 0x399c0471
 #tb 0: 1/1000
 #media_type 0: audio
