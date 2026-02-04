@@ -164,7 +164,7 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
     const ftype den = xx * yy + EPS;
 
     best_xcorr = num/den;
-    best_xcorr = CLIP(best_xcorr, F(-0.75), F(1.0));
+    best_xcorr = CLIP(best_xcorr, F(-0.99), F(1.0));
 
     av_log(ctx, AV_LOG_DEBUG, "E: [%d] %g/%g %d/%d\n", ch, best_xcorr, best_score, best_period, best_max_period);
 
@@ -353,7 +353,7 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
     const ftype den = xx * yy + EPS;
 
     best_xcorr = num/den;
-    best_xcorr = CLIP(best_xcorr, F(-0.75), F(1.0));
+    best_xcorr = CLIP(best_xcorr, F(-0.99), F(1.0));
 
     av_log(ctx, AV_LOG_DEBUG, "C: [%d] %g/%g %d/%d\n", ch, best_xcorr, best_score, best_period, best_max_period);
 
