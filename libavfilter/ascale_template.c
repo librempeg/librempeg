@@ -344,7 +344,7 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
     ftype *dptrx = c->data[0];
     ftype *dptry = c->data[0];
     void *datax[1] = { (void *)c->data[0] };
-    const ctype mean = fn(lmean)(dptrx+n, dptry, best_period);
+    const ctype mean = fn(lmean)(dptrx, dptry+n, best_period);
     const ftype xx = fn(l2norm)(dptrx, mean.re, best_period);
     const ftype yy = fn(l2norm)(dptry+n, mean.im, best_period);
     const ftype xy = fn(l2norm2)(dptrx, dptry+n, mean.re, mean.im, best_period);
