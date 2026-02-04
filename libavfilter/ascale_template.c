@@ -159,7 +159,7 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
     const ftype xx = fn(l2norm)(dptrx+n, mean.re, best_period);
     const ftype yy = fn(l2norm)(dptry, mean.im, best_period);
     const ftype xy = fn(l2norm2)(dptrx+n, dptry, mean.re, mean.im, best_period);
-    ftype best_xcorr = F(-1.0), scale;
+    ftype best_xcorr, scale;
     const ftype num = xy;
     const ftype den = xx * yy + EPS;
 
@@ -348,7 +348,7 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
     const ftype xx = fn(l2norm)(dptrx, mean.re, best_period);
     const ftype yy = fn(l2norm)(dptry+n, mean.im, best_period);
     const ftype xy = fn(l2norm2)(dptrx, dptry+n, mean.re, mean.im, best_period);
-    ftype best_xcorr = F(-1.0), scale;
+    ftype best_xcorr, scale;
     const ftype num = xy;
     const ftype den = xx * yy + EPS;
 
