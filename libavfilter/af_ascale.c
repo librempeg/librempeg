@@ -95,21 +95,6 @@ enum ScaleMode {
 
 AVFILTER_DEFINE_CLASS(ascale);
 
-static int min_output_fifo_samples(AVFilterContext *ctx)
-{
-    AScaleContext *s = ctx->priv;
-    int nb_samples = INT_MAX;
-
-    for (int ch = 0; ch < s->nb_channels; ch++) {
-        ChannelContext *c = &s->c[ch];
-        const int size = FFMAX(av_audio_fifo_size(c->out_fifo)-c->keep[OUT], 0);
-
-        nb_samples = FFMIN(size, nb_samples);
-    }
-
-    return nb_samples;
-}
-
 static int min_input_fifo_samples(AVFilterContext *ctx)
 {
     AScaleContext *s = ctx->priv;
@@ -124,19 +109,36 @@ static int min_input_fifo_samples(AVFilterContext *ctx)
     return nb_samples;
 }
 
+static int min_output_fifo_samples(AVFilterContext *ctx)
+{
+    AScaleContext *s = ctx->priv;
+    int nb_samples = INT_MAX;
+    const int have_input = !s->eof || (min_input_fifo_samples(ctx) > 0);
+
+    for (int ch = 0; ch < s->nb_channels; ch++) {
+        ChannelContext *c = &s->c[ch];
+        const int size = FFMAX(av_audio_fifo_size(c->out_fifo)-c->keep[OUT] * have_input, 0);
+
+        nb_samples = FFMIN(size, nb_samples);
+    }
+
+    return nb_samples;
+}
+
 static void read_output_samples(AVFilterContext *ctx, AVFrame *out)
 {
     AVFilterLink *outlink = ctx->outputs[0];
     AScaleContext *s = ctx->priv;
     const int nb_samples = out->nb_samples;
     const int max_period = s->max_period;
+    const int have_input = !s->eof || (min_input_fifo_samples(ctx) > 0);
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
         ChannelContext *c = &s->c[ch];
         void *data[1] = { (void *)out->extended_data[ch] };
         int size;
 
-        size = av_audio_fifo_peek_at(c->out_fifo, data, nb_samples, c->keep[OUT]);
+        size = av_audio_fifo_peek_at(c->out_fifo, data, nb_samples, c->keep[OUT] * have_input);
         if (size > 0) {
             c->keep[OUT] = FFMIN(c->keep[OUT]+size, max_period);
             av_audio_fifo_drain(c->out_fifo, size);
@@ -307,6 +309,11 @@ static int activate(AVFilterContext *ctx)
                 return output_frame(ctx);
             else
                 ff_filter_set_ready(ctx, 100);
+        }
+
+        if (min_input_fifo_samples(ctx) <= 0) {
+            while (min_output_fifo_samples(ctx) > 0)
+                return output_frame(ctx);
         }
 
         ff_outlink_set_status(outlink, AVERROR_EOF, s->pts[OUT]);
