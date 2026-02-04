@@ -84,12 +84,11 @@ static ftype fn(get_wgain)(const ftype w)
     return F(9.0/16.0)*FSIN(x*F(M_PI_2))+F(1.0/16.0)*FSIN(F(3.0)*x*F(M_PI_2));
 }
 
-static ftype fn(get_gain)(const ftype w, const ftype c, ftype *m)
+static ftype fn(get_gain)(const ftype w, const ftype c)
 {
     const ftype a = fn(get_wgain)(w);
     const ftype b = F(1.0)+c;
 
-    m[0] = a + F(0.5);
     return SQRT(F(0.5)/b-(F(1.0)-c)*a*a/b)+a;
 }
 
@@ -159,12 +158,14 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
     const ftype xx = fn(l2norm)(dptrx+n, mean.re, best_period);
     const ftype yy = fn(l2norm)(dptry, mean.im, best_period);
     const ftype xy = fn(l2norm2)(dptrx+n, dptry, mean.re, mean.im, best_period);
-    ftype best_xcorr, scale;
+    ftype mean_xcorr, best_xcorr, scale;
     const ftype num = xy;
     const ftype den = xx * yy + EPS;
 
     best_xcorr = num/den;
-    best_xcorr = CLIP(best_xcorr, F(-0.99), F(1.0));
+    mean_xcorr = (mean.re * mean.im) / SQRT(mean.re * mean.re + mean.im * mean.im + EPS);
+    best_xcorr = CLIP(best_xcorr, F(-0.999), F(1.0));
+    mean_xcorr = CLIP(mean_xcorr, F(-0.999), F(1.0));
 
     av_log(ctx, AV_LOG_DEBUG, "E: [%d] %g/%g %d/%d\n", ch, best_xcorr, best_score, best_period, best_max_period);
 
@@ -173,11 +174,12 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
 
     scale = F(1.0) / best_period;
     for (int n = 0; n < best_period; n++) {
-        ftype mxf, myf;
         const ftype xf = n*scale;
         const ftype yf = F(1.0)-xf;
-        const ftype axf = fn(get_gain)(xf, best_xcorr, &mxf);
-        const ftype ayf = fn(get_gain)(yf, best_xcorr, &myf);
+        const ftype axf = fn(get_gain)(xf, best_xcorr);
+        const ftype ayf = fn(get_gain)(yf, best_xcorr);
+        const ftype mxf = fn(get_gain)(xf, mean_xcorr);
+        const ftype myf = fn(get_gain)(yf, mean_xcorr);
         const ftype x = dptrx[n] - mean.re;
         const ftype y = dptry[n] - mean.im;
 
@@ -304,7 +306,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
         for (int n = ns; n < cur_max_period-1; n++) {
             if (rptrx[n] > rptrx[n-1] &&
                 rptrx[n] > rptrx[n+1]) {
-                const ftype score = rptrx[n] / FABS(rptrx[0] + EPS);
+                const ftype score = rptrx[n];
 
                 if (score > best_score) {
                     best_score = score;
@@ -348,22 +350,25 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
     const ftype xx = fn(l2norm)(dptrx, mean.re, best_period);
     const ftype yy = fn(l2norm)(dptry+n, mean.im, best_period);
     const ftype xy = fn(l2norm2)(dptrx, dptry+n, mean.re, mean.im, best_period);
-    ftype best_xcorr, scale;
+    ftype mean_xcorr, best_xcorr, scale;
     const ftype num = xy;
     const ftype den = xx * yy + EPS;
 
     best_xcorr = num/den;
-    best_xcorr = CLIP(best_xcorr, F(-0.99), F(1.0));
+    mean_xcorr = (mean.re * mean.im) / SQRT(mean.re * mean.re + mean.im * mean.im + EPS);
+    best_xcorr = CLIP(best_xcorr, F(-0.999), F(1.0));
+    mean_xcorr = CLIP(mean_xcorr, F(-0.999), F(1.0));
 
     av_log(ctx, AV_LOG_DEBUG, "C: [%d] %g/%g %d/%d\n", ch, best_xcorr, best_score, best_period, best_max_period);
 
     scale = F(1.0) / best_period;
     for (int n = 0; n < best_period; n++) {
-        ftype mxf, myf;
         const ftype yf = n*scale;
         const ftype xf = F(1.0)-yf;
-        const ftype axf = fn(get_gain)(xf, best_xcorr, &mxf);
-        const ftype ayf = fn(get_gain)(yf, best_xcorr, &myf);
+        const ftype axf = fn(get_gain)(xf, best_xcorr);
+        const ftype ayf = fn(get_gain)(yf, best_xcorr);
+        const ftype mxf = fn(get_gain)(xf, mean_xcorr);
+        const ftype myf = fn(get_gain)(yf, mean_xcorr);
         const ftype x = dptrx[n] - mean.re;
         const ftype y = dptry[n+best_period] - mean.im;
 
@@ -481,8 +486,7 @@ static int fn(filter_samples)(AVFilterContext *ctx, const int ch)
     const ftype fs = ctx->inputs[0]->sample_rate;
     AScaleContext *s = ctx->priv;
     ChannelContext *c = &s->c[ch];
-    const double offset = (s->tempo > 1.0) ? 2.0*s->max_period/fs : 0.0;
-    double state = (c->state[OUT] + offset) * s->tempo - c->state[IN];
+    double state = c->state[OUT] * s->tempo - c->state[IN];
 
     c->mode = COPY;
 

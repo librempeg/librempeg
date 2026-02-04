@@ -29,7 +29,7 @@
 #include "avfilter.h"
 #include "filters.h"
 
-#define MAX_STATES 3
+#define MAX_STATES 4
 
 #define IN 0
 #define OUT 1
@@ -102,7 +102,7 @@ static int min_output_fifo_samples(AVFilterContext *ctx)
 
     for (int ch = 0; ch < s->nb_channels; ch++) {
         ChannelContext *c = &s->c[ch];
-        const int size = FFMAX(av_audio_fifo_size(c->out_fifo)-c->keep[OUT] * (s->tempo < 1.0), 0);
+        const int size = FFMAX(av_audio_fifo_size(c->out_fifo)-c->keep[OUT], 0);
 
         nb_samples = FFMIN(size, nb_samples);
     }
@@ -136,9 +136,9 @@ static void read_output_samples(AVFilterContext *ctx, AVFrame *out)
         void *data[1] = { (void *)out->extended_data[ch] };
         int size;
 
-        size = av_audio_fifo_peek_at(c->out_fifo, data, nb_samples, c->keep[OUT] * (s->tempo < 1.0));
+        size = av_audio_fifo_peek_at(c->out_fifo, data, nb_samples, c->keep[OUT]);
         if (size > 0) {
-            c->keep[OUT] = FFMIN(c->keep[OUT]+size, max_period) * (s->tempo < 1.0);
+            c->keep[OUT] = FFMIN(c->keep[OUT]+size, max_period);
             av_audio_fifo_drain(c->out_fifo, size);
         }
     }
@@ -326,7 +326,7 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     AScaleContext *s = ctx->priv;
 
-    s->hz = 10;
+    s->hz = 5;
     s->pts[IN] = AV_NOPTS_VALUE;
     s->max_period = (inlink->sample_rate + s->hz-1) / s->hz;
     s->max_size = 1 << av_ceil_log2(s->max_period*2);
