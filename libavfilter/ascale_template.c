@@ -486,15 +486,15 @@ static int fn(filter_samples)(AVFilterContext *ctx, const int ch)
     const ftype fs = ctx->inputs[0]->sample_rate;
     AScaleContext *s = ctx->priv;
     ChannelContext *c = &s->c[ch];
-    double state = c->state[OUT] * s->tempo - c->state[IN];
+    const double state = c->state[OUT] * s->tempo - c->state[IN];
 
     c->mode = COPY;
 
     if (s->tempo == 1.0 || ff_filter_disabled(ctx))
         return fn(copy_samples)(ctx, ch, s->max_period);
-    else if (state < 0.0 && s->tempo < 1.0)
+    else if (s->tempo <= 0.5 || (state < 0.0 && s->tempo < 1.0))
         return fn(expand_samples)(ctx, ch);
-    else if (state > 0.0 && s->tempo > 1.0)
+    else if (s->tempo >= 2.0 || (state > 0.0 && s->tempo > 1.0))
         return fn(compress_samples)(ctx, ch);
     return fn(copy_samples)(ctx, ch, lrint(fabs(state*fs)));
 }
