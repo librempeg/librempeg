@@ -29,7 +29,7 @@
 #include "avfilter.h"
 #include "filters.h"
 
-#define MAX_STATES 4
+#define MAX_STATES 3
 
 #define IN 0
 #define OUT 1
@@ -333,7 +333,7 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     AScaleContext *s = ctx->priv;
 
-    s->hz = 5;
+    s->hz = 10;
     s->pts[IN] = AV_NOPTS_VALUE;
     s->max_period = (inlink->sample_rate + s->hz-1) / s->hz;
     s->max_size = 1 << av_ceil_log2(s->max_period*2);

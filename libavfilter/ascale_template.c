@@ -164,8 +164,8 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
 
     best_xcorr = num/den;
     mean_xcorr = (mean.re * mean.im) / SQRT(mean.re * mean.re + mean.im * mean.im + EPS);
-    best_xcorr = CLIP(best_xcorr, F(-0.999), F(1.0));
-    mean_xcorr = CLIP(mean_xcorr, F(-0.999), F(1.0));
+    best_xcorr = CLIP(FABS(best_xcorr), F(0.0), F(1.0));
+    mean_xcorr = CLIP(FABS(mean_xcorr), F(0.0), F(1.0));
 
     av_log(ctx, AV_LOG_DEBUG, "E: [%d] %g/%g %d/%d\n", ch, best_xcorr, best_score, best_period, best_max_period);
 
@@ -356,8 +356,8 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
 
     best_xcorr = num/den;
     mean_xcorr = (mean.re * mean.im) / SQRT(mean.re * mean.re + mean.im * mean.im + EPS);
-    best_xcorr = CLIP(best_xcorr, F(-0.999), F(1.0));
-    mean_xcorr = CLIP(mean_xcorr, F(-0.999), F(1.0));
+    best_xcorr = CLIP(FABS(best_xcorr), F(0.0), F(1.0));
+    mean_xcorr = CLIP(FABS(mean_xcorr), F(0.0), F(1.0));
 
     av_log(ctx, AV_LOG_DEBUG, "C: [%d] %g/%g %d/%d\n", ch, best_xcorr, best_score, best_period, best_max_period);
 
