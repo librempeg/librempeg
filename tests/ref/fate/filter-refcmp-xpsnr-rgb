@@ -1,20 +1,20 @@
 frame:0    pts:0       pts_time:0
-lavfi.xpsnr.xpsnr.r=10.844733
-lavfi.xpsnr.xpsnr.g=18.610714
-lavfi.xpsnr.xpsnr.b=25.113884
+lavfi.xpsnr.xpsnr.y=26.016598
+lavfi.xpsnr.xpsnr.u=24.582632
+lavfi.xpsnr.xpsnr.v=21.117346
 frame:1    pts:1       pts_time:1
-lavfi.xpsnr.xpsnr.r=5.962447
-lavfi.xpsnr.xpsnr.g=10.468726
-lavfi.xpsnr.xpsnr.b=14.122101
+lavfi.xpsnr.xpsnr.y=14.228536
+lavfi.xpsnr.xpsnr.u=11.780097
+lavfi.xpsnr.xpsnr.v=6.419084
 frame:2    pts:2       pts_time:2
-lavfi.xpsnr.xpsnr.r=5.907167
-lavfi.xpsnr.xpsnr.g=10.561430
-lavfi.xpsnr.xpsnr.b=13.334916
+lavfi.xpsnr.xpsnr.y=13.756808
+lavfi.xpsnr.xpsnr.u=11.235946
+lavfi.xpsnr.xpsnr.v=6.796674
 frame:3    pts:3       pts_time:3
-lavfi.xpsnr.xpsnr.r=5.866307
-lavfi.xpsnr.xpsnr.g=10.523605
-lavfi.xpsnr.xpsnr.b=12.099272
+lavfi.xpsnr.xpsnr.y=13.852882
+lavfi.xpsnr.xpsnr.u=11.275736
+lavfi.xpsnr.xpsnr.v=6.597760
 frame:4    pts:4       pts_time:4
-lavfi.xpsnr.xpsnr.r=6.047683
-lavfi.xpsnr.xpsnr.g=10.493720
-lavfi.xpsnr.xpsnr.b=11.922785
+lavfi.xpsnr.xpsnr.y=14.085605
+lavfi.xpsnr.xpsnr.u=10.951605
+lavfi.xpsnr.xpsnr.v=6.261392
