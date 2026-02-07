@@ -164,8 +164,8 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
 
     best_xcorr = num/den;
     mean_xcorr = (mean.re * mean.im) / SQRT(mean.re * mean.re + mean.im * mean.im + EPS);
-    best_xcorr = CLIP(FABS(best_xcorr), F(0.0), F(1.0));
-    mean_xcorr = CLIP(FABS(mean_xcorr), F(0.0), F(1.0));
+    best_xcorr = CLIP(best_xcorr, F(0.0), F(1.0));
+    mean_xcorr = CLIP(mean_xcorr, F(0.0), F(1.0));
 
     av_log(ctx, AV_LOG_DEBUG, "E: [%d] %g/%g %d/%d\n", ch, best_xcorr, best_score, best_period, best_max_period);
 
@@ -174,7 +174,7 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
 
     scale = F(1.0) / best_period;
     for (int n = 0; n < best_period; n++) {
-        const ftype xf = n*scale;
+        const ftype xf = (n+F(0.5))*scale;
         const ftype yf = F(1.0)-xf;
         const ftype axf = fn(get_gain)(xf, best_xcorr);
         const ftype ayf = fn(get_gain)(yf, best_xcorr);
@@ -282,7 +282,6 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
         c->r2c_fn[i](c->r2c[i], cptrx, rptrx, sizeof(*rptrx));
         c->r2c_fn[i](c->r2c[i], cptry, rptry, sizeof(*rptry));
 
-        cptrx[0].re = cptrx[0].im = cptry[0].re = cptry[0].im = F(0.0);
         for (int n = 0; n < cur_max_size/2+1; n++) {
             const ftype re0 = cptrx[n].re;
             const ftype im0 = cptrx[n].im;
@@ -296,8 +295,9 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
         c->c2r_fn[i](c->c2r[i], rptrx, cptrx, sizeof(*cptrx));
 
         for (int n = 1; n < cur_max_period-1; n++) {
-            if (rptrx[n] < rptrx[n-1] &&
-                rptrx[n] < rptrx[n+1]) {
+            if (rptrx[n-1] <= F(0.0) &&
+                rptrx[n] > F(0.0) &&
+                rptrx[n+1] > F(0.0)) {
                 ns = n;
                 break;
             }
@@ -306,9 +306,9 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
         for (int n = ns; n < cur_max_period-1; n++) {
             if (rptrx[n] > rptrx[n-1] &&
                 rptrx[n] > rptrx[n+1]) {
-                const ftype score = rptrx[n];
+                const ftype score = rptrx[n] / (FABS(rptrx[0]) + EPS);
 
-                if (score > best_score) {
+                if (score >= best_score) {
                     best_score = score;
                     best_period = n;
                     best_max_period = cur_max_period;
@@ -356,14 +356,14 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
 
     best_xcorr = num/den;
     mean_xcorr = (mean.re * mean.im) / SQRT(mean.re * mean.re + mean.im * mean.im + EPS);
-    best_xcorr = CLIP(FABS(best_xcorr), F(0.0), F(1.0));
-    mean_xcorr = CLIP(FABS(mean_xcorr), F(0.0), F(1.0));
+    best_xcorr = CLIP(best_xcorr, F(0.0), F(1.0));
+    mean_xcorr = CLIP(mean_xcorr, F(0.0), F(1.0));
 
     av_log(ctx, AV_LOG_DEBUG, "C: [%d] %g/%g %d/%d\n", ch, best_xcorr, best_score, best_period, best_max_period);
 
     scale = F(1.0) / best_period;
     for (int n = 0; n < best_period; n++) {
-        const ftype yf = n*scale;
+        const ftype yf = (n+F(0.5))*scale;
         const ftype xf = F(1.0)-yf;
         const ftype axf = fn(get_gain)(xf, best_xcorr);
         const ftype ayf = fn(get_gain)(yf, best_xcorr);
@@ -430,7 +430,6 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
         c->r2c_fn[i](c->r2c[i], cptrx, rptrx, sizeof(*rptrx));
         c->r2c_fn[i](c->r2c[i], cptry, rptry, sizeof(*rptry));
 
-        cptrx[0].re = cptrx[0].im = cptry[0].re = cptry[0].im = F(0.0);
         for (int n = 0; n < cur_max_size/2+1; n++) {
             const ftype re0 = cptrx[n].re;
             const ftype im0 = cptrx[n].im;
@@ -444,8 +443,9 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
         c->c2r_fn[i](c->c2r[i], rptrx, cptrx, sizeof(*cptrx));
 
         for (int n = 1; n < cur_max_period-1; n++) {
-            if (rptrx[n] < rptrx[n-1] &&
-                rptrx[n] < rptrx[n+1]) {
+            if (rptrx[n-1] <= F(0.0) &&
+                rptrx[n] > F(0.0) &&
+                rptrx[n+1] > F(0.0)) {
                 ns = n;
                 break;
             }
@@ -454,9 +454,9 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
         for (int n = ns; n < cur_max_period-1; n++) {
             if (rptrx[n] > rptrx[n-1] &&
                 rptrx[n] > rptrx[n+1]) {
-                const ftype score = rptrx[n] / FABS(rptrx[0] + EPS);
+                const ftype score = rptrx[n] / (FABS(rptrx[0]) + EPS);
 
-                if (score > best_score) {
+                if (score >= best_score) {
                     best_score = score;
                     best_period = n;
                     best_max_period = cur_max_period;
