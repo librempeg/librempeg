@@ -281,7 +281,7 @@ static int activate(AVFilterContext *ctx)
     if (min_input_fifo_samples(ctx) >= s->max_period && !s->flush[FIRST]) {
         s->flush[FIRST] = 1;
 
-        if (s->tempo != 1.0) {
+        if (s->tempo < 1.0) {
             AVFrame *out = ff_get_audio_buffer(outlink, s->max_period);
             if (!out)
                 return AVERROR(ENOMEM);
