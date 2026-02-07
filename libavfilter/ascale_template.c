@@ -164,8 +164,8 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
 
     best_xcorr = num/den;
     mean_xcorr = (mean.re * mean.im) / SQRT(mean.re * mean.re + mean.im * mean.im + EPS);
-    best_xcorr = CLIP(best_xcorr, F(0.0), F(1.0));
-    mean_xcorr = CLIP(mean_xcorr, F(0.0), F(1.0));
+    best_xcorr = CLIP(best_xcorr, F(-0.9999), F(1.0));
+    mean_xcorr = CLIP(mean_xcorr, F(-0.9999), F(1.0));
 
     av_log(ctx, AV_LOG_DEBUG, "E: [%d] %g/%g %d/%d\n", ch, best_xcorr, best_score, best_period, best_max_period);
 
@@ -271,6 +271,7 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
         const int cur_max_size = max_size >> i;
         int cur_max_period = max_period >> i;
         int ns = cur_max_period;
+        int ne = 0;
 
         memset(rptrx+cur_max_period, 0, (max_size+2-cur_max_period) * sizeof(*rptrx));
         for (int n = 0; n < cur_max_period; n++)
@@ -303,9 +304,18 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
             }
         }
 
-        for (int n = ns; n < cur_max_period-1; n++) {
-            if (rptrx[n] > rptrx[n-1] &&
-                rptrx[n] > rptrx[n+1]) {
+        for (int n = cur_max_period-1; n >= 1; n--) {
+            if (rptrx[n+1] <= F(0.0) &&
+                rptrx[n] > F(0.0) &&
+                rptrx[n-1] > F(0.0)) {
+                ne = n;
+                break;
+            }
+        }
+
+        for (int n = ns; n <= ne; n++) {
+            if (rptrx[n] >= rptrx[n-1] &&
+                rptrx[n] >= rptrx[n+1]) {
                 const ftype score = rptrx[n] / (FABS(rptrx[0]) + EPS);
 
                 if (score >= best_score) {
@@ -356,10 +366,12 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
 
     best_xcorr = num/den;
     mean_xcorr = (mean.re * mean.im) / SQRT(mean.re * mean.re + mean.im * mean.im + EPS);
-    best_xcorr = CLIP(best_xcorr, F(0.0), F(1.0));
-    mean_xcorr = CLIP(mean_xcorr, F(0.0), F(1.0));
+    best_xcorr = CLIP(best_xcorr, F(-0.9999), F(1.0));
+    mean_xcorr = CLIP(mean_xcorr, F(-0.9999), F(1.0));
 
     av_log(ctx, AV_LOG_DEBUG, "C: [%d] %g/%g %d/%d\n", ch, best_xcorr, best_score, best_period, best_max_period);
+
+    dptry += n;
 
     scale = F(1.0) / best_period;
     for (int n = 0; n < best_period; n++) {
@@ -370,7 +382,7 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
         const ftype mxf = fn(get_gain)(xf, mean_xcorr);
         const ftype myf = fn(get_gain)(yf, mean_xcorr);
         const ftype x = dptrx[n] - mean.re;
-        const ftype y = dptry[n+best_period] - mean.im;
+        const ftype y = dptry[n] - mean.im;
 
         dptrx[n] = x * axf + y * ayf + mxf * mean.re + myf * mean.im;
     }
@@ -419,6 +431,7 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
         const int cur_max_size = max_size >> i;
         int cur_max_period = max_period >> i;
         int ns = cur_max_period;
+        int ne = 0;
 
         memset(rptrx+cur_max_period, 0, (max_size+2-cur_max_period) * sizeof(*rptrx));
         for (int n = 0; n < cur_max_period; n++)
@@ -451,9 +464,18 @@ static int fn(compress_samples)(AVFilterContext *ctx, const int ch)
             }
         }
 
-        for (int n = ns; n < cur_max_period-1; n++) {
-            if (rptrx[n] > rptrx[n-1] &&
-                rptrx[n] > rptrx[n+1]) {
+        for (int n = cur_max_period-1; n >= 1; n--) {
+            if (rptrx[n+1] <= F(0.0) &&
+                rptrx[n] > F(0.0) &&
+                rptrx[n-1] > F(0.0)) {
+                ne = n;
+                break;
+            }
+        }
+
+        for (int n = ns; n <= ne; n++) {
+            if (rptrx[n] >= rptrx[n-1] &&
+                rptrx[n] >= rptrx[n+1]) {
                 const ftype score = rptrx[n] / (FABS(rptrx[0]) + EPS);
 
                 if (score >= best_score) {
@@ -585,7 +607,6 @@ static int fn(init_state)(AVFilterContext *ctx)
             return AVERROR(ENOMEM);
 
         for (int i = 0; i < MAX_STATES; i++) {
-            ftype iscale = F(1.0) / (s->max_size >> i);
             ftype scale = F(1.0);
 
             ret = av_tx_init(&c->r2c[i], &c->r2c_fn[i],
@@ -594,7 +615,7 @@ static int fn(init_state)(AVFilterContext *ctx)
                 return ret;
 
             ret = av_tx_init(&c->c2r[i], &c->c2r_fn[i],
-                             TX_TYPE, 1, s->max_size >> i, &iscale, 0);
+                             TX_TYPE, 1, s->max_size >> i, &scale, 0);
             if (ret < 0)
                 return ret;
         }
