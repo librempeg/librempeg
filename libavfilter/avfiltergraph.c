@@ -988,17 +988,7 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
     }
 
     link->format = link->incfg.formats->formats[0];
-    if (link->type == AVMEDIA_TYPE_VIDEO) {
-        link->incfg.formats->nb_formats = 1;
-    } else if (link->type == AVMEDIA_TYPE_AUDIO) {
-        for (int n = 1; n < link->incfg.formats->nb_formats; n++) {
-            if (av_get_bytes_per_sample(link->format) <
-                av_get_bytes_per_sample(link->incfg.formats->formats[n]))
-                link->format = link->incfg.formats->formats[n];
-        }
-        link->incfg.formats->formats[0] = link->format;
-        link->incfg.formats->nb_formats = 1;
-    }
+    link->incfg.formats->nb_formats = 1;
 
     if (link->type == AVMEDIA_TYPE_VIDEO) {
         enum AVPixelFormat swfmt = link->format;
