@@ -1102,7 +1102,7 @@ FATE_SWR_CUSTOM_REMATRIX-$(call FILTERDEMDECENCMUX, ARESAMPLE CHANNELMAP AFORMAT
 fate-swr-custom-rematrix: tests/data/asynth-44100-8.wav tests/data/filtergraphs/custom_rematrix
 fate-swr-custom-rematrix: CMD = md5 -i $(TARGET_PATH)/tests/data/asynth-44100-8.wav -/filter_complex $(TARGET_PATH)/tests/data/filtergraphs/custom_rematrix -map [OUT] -f s16le
 fate-swr-custom-rematrix: CMP = oneline
-fate-swr-custom-rematrix: REF = 2a14a44deb4ae26e3b474ddbfbc048f8
+fate-swr-custom-rematrix: REF = 3c2b7e3659006224d855300a43c5ac2a
 
 FATE_SWR += $(FATE_SWR_CUSTOM_REMATRIX-yes)
 FATE_FFMPEG += $(FATE_SWR)
