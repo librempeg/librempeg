@@ -33,6 +33,7 @@ Coding examples are available in the **doc/examples** directory.
 
 Librempeg codebase is mainly GPLv3-licensed with optional components licensed under
 AGPL. Please refer to the LICENSE file for detailed information.
+Additionally some code is inspired by or used from vgmstream project.
 
 ## Contributing
 
