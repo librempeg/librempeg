@@ -62,7 +62,7 @@ static int sort_streams(const void *a, const void *b)
 static int read_header(AVFormatContext *s)
 {
     SNDZContext *sndz = s->priv_data;
-    int streamed, entries, entry_size, data_size;
+    int entries, entry_size, data_size;
     AVIOContext *pb = s->pb;
     int ret, nb_streams;
     int64_t offset = 0;
@@ -105,9 +105,9 @@ static int read_header(AVFormatContext *s)
         return AVERROR_INVALIDDATA;
 
     for (int n = 0; n < nb_streams; n++) {
+        int codec, channels, sample_rate, align, streamed;
         int64_t entry_end = avio_tell(pb) + entry_size;
         int64_t name_offset, duration, stream_offset;
-        int codec, channels, sample_rate, align;
         int32_t loop_start, loop_end;
         uint32_t config, stream_size;
         char title[64] = { 0 };
@@ -225,7 +225,7 @@ static int read_header(AVFormatContext *s)
             av_freep(&sndz_file_name);
             if (ret < 0)
                 return ret;
-        } else if (sndz->pb != NULL && (stream_offset + stream_size > avio_size(pb))) {
+        } else if (!streamed && sndz->pb != NULL && (stream_offset + stream_size > avio_size(pb))) {
             return AVERROR_INVALIDDATA;
         }
     }
