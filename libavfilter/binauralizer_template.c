@@ -119,8 +119,12 @@ static void fn(binaural)(ctype *fl, ctype *fr, ctype *in,
 static void fn(get_angle_depth)(const AVChannelLayout *ch_layout, const int ch,
                                 const double *x, const double *y,
                                 const unsigned nb_x_size, const unsigned nb_y_size,
+                                const double *xoff, const double *yoff,
+                                const unsigned nb_x_offset, const unsigned nb_y_offset,
                                 ftype *angle, ftype *depth)
 {
+    const ftype x_off = xoff[FFMIN(ch, nb_x_offset-1)];
+    const ftype y_off = yoff[FFMIN(ch, nb_y_offset-1)];
     const ftype x_size = x[FFMIN(ch, nb_x_size-1)];
     const ftype y_size = y[FFMIN(ch, nb_y_size-1)];
     const int chan = av_channel_layout_channel_from_index(ch_layout, ch);
@@ -148,8 +152,8 @@ static void fn(get_angle_depth)(const AVChannelLayout *ch_layout, const int ch,
     default:                            a = F(45.0),                               d = F(0.0);                      break;
     }
 
-    *angle = a * F(M_PI/180.0);
-    *depth = d * F(M_PI/180.0);
+    *angle = (a + x_off * F(90.0)) * F(M_PI/180.0);
+    *depth = (d + y_off * F(90.0)) * F(M_PI/180.0);
 }
 
 static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *out)
@@ -168,9 +172,13 @@ static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *out)
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
     const int nb_samples = FFMIN(overlap, s->in->nb_samples);
+    const unsigned nb_x_offset = s->nb_x_offset;
+    const unsigned nb_y_offset = s->nb_y_offset;
     const unsigned nb_x_size = s->nb_x_size;
     const unsigned nb_y_size = s->nb_y_size;
     const unsigned nb_i_gain = s->nb_i_gain;
+    const double *x_offset = s->x_offset;
+    const double *y_offset = s->y_offset;
     const double *x_size = s->x_size;
     const double *y_size = s->y_size;
     const double *i_gain = s->i_gain;
@@ -190,6 +198,8 @@ static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *out)
 
         fn(get_angle_depth)(ch_layout, ch, x_size, y_size,
                             nb_x_size, nb_y_size,
+                            x_offset, y_offset,
+                            nb_x_offset, nb_y_offset,
                             &angle, &depth);
 
         // shift in/out buffers
@@ -237,9 +247,13 @@ static int fn(ba_flush)(AVFilterContext *ctx, AVFrame *out)
     const int nb_in_channels = ch_layout->nb_channels;
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
+    const unsigned nb_x_offset = s->nb_x_offset;
+    const unsigned nb_y_offset = s->nb_y_offset;
     const unsigned nb_x_size = s->nb_x_size;
     const unsigned nb_y_size = s->nb_y_size;
     const unsigned nb_i_gain = s->nb_i_gain;
+    const double *x_offset = s->x_offset;
+    const double *y_offset = s->y_offset;
     const double *x_size = s->x_size;
     const double *y_size = s->y_size;
     const double *i_gain = s->i_gain;
@@ -259,6 +273,8 @@ static int fn(ba_flush)(AVFilterContext *ctx, AVFrame *out)
 
         fn(get_angle_depth)(ch_layout, ch, x_size, y_size,
                             nb_x_size, nb_y_size,
+                            x_offset, y_offset,
+                            nb_x_offset, nb_y_offset,
                             &angle, &depth);
 
         // shift in/out buffers

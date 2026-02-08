@@ -40,6 +40,12 @@ typedef struct BinauralizerContext {
     double *y_size;
     unsigned nb_y_size;
 
+    double *x_offset;
+    unsigned nb_x_offset;
+
+    double *y_offset;
+    unsigned nb_y_offset;
+
     double *i_gain;
     unsigned nb_i_gain;
 
@@ -70,12 +76,15 @@ typedef struct BinauralizerContext {
 #define AR AV_OPT_TYPE_FLAG_ARRAY
 
 static const AVOptionArrayDef def_size  = {.def="1", .size_min=1, .sep=' '};
+static const AVOptionArrayDef def_offset= {.def="0", .size_min=1, .sep=' '};
 
 static const AVOption binauralizer_options[] = {
-    { "gain",  "set the output gain", OFFSET(gain),   AV_OPT_TYPE_DOUBLE,    {.dbl=1.},        0,10, FLAGS },
-    { "xsize", "X-axis size values",  OFFSET(x_size), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_size}, 0, 1, FLAGS },
-    { "ysize", "Y-axis size values",  OFFSET(y_size), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_size}, 0, 1, FLAGS },
-    { "igain", "set the input channel gain values", OFFSET(i_gain), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_size}, 0, 10, FLAGS },
+    { "gain",  "set the output gain",               OFFSET(gain),     AV_OPT_TYPE_DOUBLE,    {.dbl=1.},           0,10, FLAGS },
+    { "xsize", "X-axis channel size values",        OFFSET(x_size),   AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_size},    0, 1, FLAGS },
+    { "ysize", "Y-axis channel size values",        OFFSET(y_size),   AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_size},    0, 1, FLAGS },
+    { "xoff",  "X-axis channel offset values",      OFFSET(x_offset), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_offset}, -1, 1, FLAGS },
+    { "yoff",  "Y-axis channel offset values",      OFFSET(y_offset), AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_offset}, -1, 1, FLAGS },
+    { "igain", "set the input channel gain values", OFFSET(i_gain),   AV_OPT_TYPE_DOUBLE|AR, {.arr=&def_size},    0,10, FLAGS },
     {NULL}
 };
 
