@@ -127,18 +127,18 @@ static void fn(get_angle_depth)(const AVChannelLayout *ch_layout, const int ch,
     ftype a, d;
 
     switch (chan) {
-    case AV_CHAN_FRONT_LEFT:            a = F( 0.5) + (F(1.0) - x_size) * F(44.5), d = (F(1.0) - y_size) * F(90.0); break;
-    case AV_CHAN_FRONT_RIGHT:           a = F(89.5) - (F(1.0) - x_size) * F(44.5), d = (F(1.0) - y_size) * F(90.0); break;
-    case AV_CHAN_FRONT_CENTER:          a = F(45.0),                               d = (F(1.0) - y_size) * F(90.0); break;
+    case AV_CHAN_FRONT_LEFT:            a = F( 0.5) + (F(1.0) - x_size) * F(44.5), d = F(0.0);                      break;
+    case AV_CHAN_FRONT_RIGHT:           a = F(89.5) - (F(1.0) - x_size) * F(44.5), d = F(0.0);                      break;
+    case AV_CHAN_FRONT_CENTER:          a = F(45.0),                               d = F(0.0);                      break;
     case AV_CHAN_LOW_FREQUENCY:
     case AV_CHAN_LOW_FREQUENCY_2:       a = F(45.0),                               d = F(90.0) * y_size;            break;
-    case AV_CHAN_BACK_LEFT:             a = F( 0.5) + (F(1.0) - x_size) * F(44.5), d = F(90.0) + y_size * F(89.0);  break;
-    case AV_CHAN_BACK_RIGHT:            a = F(89.5) - (F(1.0) - x_size) * F(44.5), d = F(90.0) + y_size * F(89.0);  break;
-    case AV_CHAN_BACK_CENTER:           a = F(45.0),                               d = F(90.0) + y_size * F(89.0);  break;
+    case AV_CHAN_BACK_LEFT:             a = F( 0.5) + (F(1.0) - x_size) * F(44.5), d = y_size * F(189.0);           break;
+    case AV_CHAN_BACK_RIGHT:            a = F(89.5) - (F(1.0) - x_size) * F(44.5), d = y_size * F(189.0);           break;
+    case AV_CHAN_BACK_CENTER:           a = F(45.0),                               d = y_size * F(189.0);           break;
     case AV_CHAN_SIDE_LEFT:             a = F( 0.5) + (F(1.0) - x_size) * F(44.5), d = F(85.0) * y_size;            break;
     case AV_CHAN_SIDE_RIGHT:            a = F(89.5) - (F(1.0) - x_size) * F(44.5), d = F(85.0) * y_size;            break;
-    case AV_CHAN_FRONT_LEFT_OF_CENTER:  a = F(15.0),                               d = F(20.0) * y_size;            break;
-    case AV_CHAN_FRONT_RIGHT_OF_CENTER: a = F(75.0),                               d = F(20.0) * y_size;            break;
+    case AV_CHAN_FRONT_LEFT_OF_CENTER:  a = F(15.0),                               d = F(0.0);                      break;
+    case AV_CHAN_FRONT_RIGHT_OF_CENTER: a = F(75.0),                               d = F(0.0);                      break;
     case AV_CHAN_WIDE_LEFT:             a = F( 0.5) + (F(1.0) - x_size) * F(44.5), d = F(90.0) * y_size;            break;
     case AV_CHAN_WIDE_RIGHT:            a = F(89.5) - (F(1.0) - x_size) * F(44.5), d = F(90.0) * y_size;            break;
     case AV_CHAN_SURROUND_DIRECT_LEFT:  a = F( 0.5) + (F(1.0) - x_size) * F(44.5), d = F(85.0) * y_size;            break;
