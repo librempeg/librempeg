@@ -628,7 +628,7 @@ redo:
     } else if (startcode == 0x69 || startcode == 0x49) {
         type     = AVMEDIA_TYPE_SUBTITLE;
         codec_id = AV_CODEC_ID_IVTV_VBI;
-    } else if (startcode == 0x0 && m->pamf) {
+    } else if (startcode == 0x0) {
         type     = AVMEDIA_TYPE_AUDIO;
         codec_id = AV_CODEC_ID_ATRAC3P;
     } else if (startcode == 0x40 && m->pamf) {
@@ -699,7 +699,8 @@ skip:
         if (ret < 0)
             return ret;
 
-        avio_skip(s->pb, 4);
+        if (avio_rb32(s->pb) != 15)
+            return AVERROR_INVALIDDATA;
         codec_params = avio_rb24(s->pb);
         avio_skip(s->pb, -7);
 
