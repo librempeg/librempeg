@@ -40,6 +40,8 @@ static int fastaudio_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
     }
 
     size = (size / block_size) * block_size;
+    if (avctx->codec_id == AV_CODEC_ID_PCM_S16LE_PLANAR)
+        size = FFMIN(size, block_size);
     if (size == 0) {
         a->left += buf_size;
     } else {
@@ -61,7 +63,7 @@ end:
 }
 
 const FFCodecParser ff_fastaudio_parser = {
-    PARSER_CODEC_LIST(AV_CODEC_ID_FASTAUDIO, AV_CODEC_ID_ADPCM_IMA_MO, AV_CODEC_ID_ADPCM_PSX),
+    PARSER_CODEC_LIST(AV_CODEC_ID_FASTAUDIO, AV_CODEC_ID_ADPCM_IMA_MO, AV_CODEC_ID_ADPCM_PSX, AV_CODEC_ID_PCM_S16LE_PLANAR),
     .priv_data_size = sizeof(FastAudioParseContext),
     .parse          = fastaudio_parse,
 };

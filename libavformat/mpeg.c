@@ -491,6 +491,9 @@ static int mpegps_read_packet(AVFormatContext *s,
     int len, startcode, i, es_type, ret;
     int pcm_dvd = 0;
     int request_probe= 0;
+    int nb_channels = 0;
+    int sample_rate = 0;
+    int align = 0;
     enum AVCodecID codec_id = AV_CODEC_ID_NONE;
     enum AVMediaType type;
     int64_t pts, dts, dummy_pos; // dummy_pos is needed for the index building to work
@@ -631,6 +634,39 @@ redo:
     } else if (startcode == 0x40 && m->pamf) {
         type     = AVMEDIA_TYPE_AUDIO;
         codec_id = AV_CODEC_ID_PCM_HDMV;
+    } else if (startcode == 0xff && len >= 40) {
+        uint8_t buffer[40];
+        int ret = ffio_ensure_seekback(s->pb, sizeof(buffer));
+
+        if (ret < 0)
+            return ret;
+
+        ret = ffio_read_size(s->pb, buffer, sizeof(buffer));
+        if (ret < 0)
+            return ret;
+
+        if ((buffer[0] & 0xF0) == 0xA0) {
+            if (!memcmp(buffer+0x03, "SShd", 4) &&
+                !memcmp(buffer+0x23, "SSbd", 4)) {
+                type = AVMEDIA_TYPE_AUDIO;
+                codec_id = (AV_RL32(buffer+11) == 1) ? AV_CODEC_ID_PCM_S16LE_PLANAR : AV_CODEC_ID_ADPCM_PSX;
+                sample_rate = AV_RL32(buffer+15);
+                nb_channels = AV_RL32(buffer+19);
+                align = AV_RL32(buffer+23);
+                if (align <= 0 || sample_rate <= 0 || nb_channels <= 0) {
+                    avio_seek(s->pb, -sizeof(buffer), SEEK_CUR);
+                    goto skip;
+                }
+
+                len -= sizeof(buffer);
+            } else {
+                avio_seek(s->pb, -sizeof(buffer), SEEK_CUR);
+                goto skip;
+            }
+        } else {
+            avio_seek(s->pb, -sizeof(buffer), SEEK_CUR);
+            goto skip;
+        }
     } else {
 skip:
         /* skip packet */
@@ -649,6 +685,12 @@ skip:
         || st->codecpar->codec_id == AV_CODEC_ID_PCM_ALAW) {
         st->codecpar->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_MONO;
         st->codecpar->sample_rate = 8000;
+    }
+    if (st->codecpar->codec_id == AV_CODEC_ID_ADPCM_PSX ||
+        st->codecpar->codec_id == AV_CODEC_ID_PCM_S16LE_PLANAR) {
+        st->codecpar->ch_layout.nb_channels = nb_channels;
+        st->codecpar->sample_rate = sample_rate;
+        st->codecpar->block_align = align * nb_channels;
     }
     if (st->codecpar->codec_id == AV_CODEC_ID_ATRAC3P) {
         int ret = ffio_ensure_seekback(s->pb, 7);
@@ -683,6 +725,27 @@ found:
                 goto skip;
             avio_skip(s->pb, 6);
             len -= 6;
+        }
+    }
+    if (startcode == 0xff) {
+        if (st->codecpar->codec_id == AV_CODEC_ID_PCM_S16LE_PLANAR ||
+            st->codecpar->codec_id == AV_CODEC_ID_ADPCM_PSX) {
+            if (len < 7)
+                goto skip;
+
+            avio_skip(s->pb, 3);
+            len -= 3;
+
+            ret = ffio_ensure_seekback(s->pb, 4);
+            if (ret < 0)
+                return ret;
+
+            if (avio_rb32(s->pb) == MKBETAG('S','S','h','d')) {
+                avio_skip(s->pb, 36);
+                len -= 40;
+            } else {
+                avio_skip(s->pb, -4);
+            }
         }
     }
     ret = av_get_packet(s->pb, pkt, len);
