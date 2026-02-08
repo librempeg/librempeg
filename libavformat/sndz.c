@@ -110,7 +110,7 @@ static int read_header(AVFormatContext *s)
         int codec, channels, sample_rate, align;
         int32_t loop_start, loop_end;
         uint32_t config, stream_size;
-        char title[31] = { 0 };
+        char title[64] = { 0 };
         SNDZStream *sst;
         AVStream *st;
 
@@ -200,7 +200,7 @@ static int read_header(AVFormatContext *s)
         sst->stop_offset += stream_size;
 
         avio_seek(pb, name_offset, SEEK_SET);
-        avio_get_str(pb, 30, title, sizeof(title));
+        avio_get_str(pb, sizeof(title)-1, title, sizeof(title));
         if (title[0])
             av_dict_set(&st->metadata, "title", title, 0);
 
