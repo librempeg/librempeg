@@ -112,13 +112,6 @@ typedef struct AudioSurroundContext {
     float win_gain;
     float overlap;
 
-    float *f_x;
-    unsigned nb_f_x;
-    float *f_y;
-    unsigned nb_f_y;
-    float *f_z;
-    unsigned nb_f_z;
-
     int output_lfe;
     int create_lfe;
     int lowcutf;
