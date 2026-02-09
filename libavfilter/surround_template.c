@@ -472,7 +472,7 @@ static int fn(fft_channel)(AVFilterContext *ctx, AVFrame *in, int ch)
     return 0;
 }
 
-static void fn(angle_transform)(ftype *x, ftype *y, ftype a)
+static void fn(angle_transform)(ftype *x, ftype *y, ftype a, const int start, const int end)
 {
     if (a == F(90.0))
         return;
@@ -480,32 +480,36 @@ static void fn(angle_transform)(ftype *x, ftype *y, ftype a)
     a /= F(90.0);
     a -= F(1.0);
 
-    y[0] = CLIP(y[0] - FABS(x[0]) * (y[0]+F(1.0)) * a, F(-1.0), F(1.0));
+    for (int n = start; n < end; n++)
+        y[n] = CLIP(y[n] - FABS(x[n]) * (y[n]+F(1.0)) * a, F(-1.0), F(1.0));
 }
 
-static void fn(shift_transform)(ftype *y, const ftype shift)
+static void fn(shift_transform)(ftype *y, const ftype shift, const int start, const int end)
 {
     if (shift == F(0.0))
         return;
 
-    y[0] = CLIP(y[0] + shift, F(-1.0), F(1.0));
+    for (int n = start; n < end; n++)
+        y[n] = CLIP(y[n] + shift, F(-1.0), F(1.0));
 }
 
-static void fn(depth_transform)(ftype *y, const ftype depth)
+static void fn(depth_transform)(ftype *y, const ftype depth, const int start, const int end)
 {
     if (depth == F(0.0))
         return;
 
-    if (depth < F(0.0) && y[0] > F(0.0))
-        return;
+    for (int n = start; n < end; n++) {
+        if (depth < F(0.0) && y[n] > F(0.0))
+            continue;
 
-    if (depth > F(0.0) && y[0] < F(0.0))
-        return;
+        if (depth > F(0.0) && y[n] < F(0.0))
+            continue;
 
-    y[0] = CLIP(FMA(y[0], depth, y[0]), F(-1.0), F(1.0));
+        y[n] = CLIP(FMA(y[n], depth, y[n]), F(-1.0), F(1.0));
+    }
 }
 
-static void fn(focus_transform)(ftype *x, ftype focus)
+static void fn(focus_transform)(ftype *x, ftype focus, const int start, const int end)
 {
     if (focus == F(0.0))
         return;
@@ -515,7 +519,8 @@ static void fn(focus_transform)(ftype *x, ftype focus)
     if (focus < F(0.0))
         focus = F(1.0) * (F(1.0) + -focus * F(10.0));
 
-    x[0] = CLIP(COPYSIGN(POW(FABS(x[0]), focus), x[0]), F(-1.0), F(1.0));
+    for (int n = start; n < end; n++)
+        x[n] = CLIP(COPYSIGN(POW(FABS(x[n]), focus), x[n]), F(-1.0), F(1.0));
 }
 
 static void fn(bypass_transform)(AVFilterContext *ctx, int ch, int is_lfe)
@@ -589,21 +594,19 @@ static int fn(transform_xy)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     ftype *y = s->y_pos;
     ftype *z = s->z_pos;
 
-    for (int n = start; n < end; n++) {
-        fn(angle_transform)(&x[n], &y[n], angle);
+    fn(angle_transform)(x, y, angle, start, end);
 
-        fn(shift_transform)(&x[n], shift_x);
-        fn(shift_transform)(&y[n], shift_y);
-        fn(shift_transform)(&z[n], shift_z);
+    fn(shift_transform)(x, shift_x, start, end);
+    fn(shift_transform)(y, shift_y, start, end);
+    fn(shift_transform)(z, shift_z, start, end);
 
-        fn(depth_transform)(&x[n], depth_x);
-        fn(depth_transform)(&y[n], depth_y);
-        fn(depth_transform)(&z[n], depth_z);
+    fn(depth_transform)(x, depth_x, start, end);
+    fn(depth_transform)(y, depth_y, start, end);
+    fn(depth_transform)(z, depth_z, start, end);
 
-        fn(focus_transform)(&x[n], focus_x);
-        fn(focus_transform)(&y[n], focus_y);
-        fn(focus_transform)(&z[n], focus_z);
-    }
+    fn(focus_transform)(x, focus_x, start, end);
+    fn(focus_transform)(y, focus_y, start, end);
+    fn(focus_transform)(z, focus_z, start, end);
 
     return 0;
 }
