@@ -159,7 +159,9 @@ static int img_read_probe(const AVProbeData *p)
             return AVPROBE_SCORE_EXTENSION + 2; // score chosen to be a tad above the image pipes
         else if (p->buf_size == 0)
             return 0;
-        else if (av_match_ext(p->filename, "raw") || av_match_ext(p->filename, "gif"))
+        else if (av_match_ext(p->filename, "raw") ||
+                 av_match_ext(p->filename, "pcd") ||
+                 av_match_ext(p->filename, "gif"))
             return 5;
         else
             return AVPROBE_SCORE_EXTENSION;
