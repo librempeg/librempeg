@@ -47,13 +47,6 @@ static int read_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX*2/3;
 }
 
-static uint32_t read_rb32(AVIOContext *pb, const int64_t offset)
-{
-    avio_seek(pb, offset, SEEK_SET);
-
-    return avio_rb32(pb);
-}
-
 static uint32_t read_rl32(AVIOContext *pb, const int64_t offset)
 {
     avio_seek(pb, offset, SEEK_SET);
