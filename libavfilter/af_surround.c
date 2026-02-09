@@ -512,10 +512,12 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_frame_free(&s->output_out);
     av_frame_free(&s->overlap_buffer);
 
-    for (int ch = 0; ch < s->nb_in_channels; ch++)
-        av_tx_uninit(&s->rdft[ch]);
-    for (int ch = 0; ch < s->nb_out_channels; ch++)
-        av_tx_uninit(&s->irdft[ch]);
+    if (s->rdft)
+        for (int ch = 0; ch < s->nb_in_channels; ch++)
+            av_tx_uninit(&s->rdft[ch]);
+    if (s->irdft)
+        for (int ch = 0; ch < s->nb_out_channels; ch++)
+            av_tx_uninit(&s->irdft[ch]);
     av_freep(&s->input_levels);
     av_freep(&s->output_levels);
     av_freep(&s->rdft);
