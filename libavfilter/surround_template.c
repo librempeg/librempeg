@@ -368,12 +368,7 @@ static int fn(config_output)(AVFilterContext *ctx)
     s->output_out = ff_get_audio_buffer(outlink, s->win_size + 1);
     s->output = ff_get_audio_buffer(outlink, s->rdft_size * 2);
     s->overlap_buffer = ff_get_audio_buffer(outlink, s->win_size * 2);
-    s->x_out = ff_get_audio_buffer(outlink, s->rdft_size);
-    s->y_out = ff_get_audio_buffer(outlink, s->rdft_size);
-    s->z_out = ff_get_audio_buffer(outlink, s->rdft_size);
-    if (!s->overlap_buffer ||
-        !s->output || !s->output_out ||
-        !s->x_out || !s->y_out || !s->z_out)
+    if (!s->overlap_buffer || !s->output || !s->output_out)
         return AVERROR(ENOMEM);
 
     s->x_pos = av_calloc(s->rdft_size, sizeof(ftype));
@@ -398,7 +393,6 @@ static int fn(bypass_channel)(AVFilterContext *ctx, AVFrame *out, int ch)
     const ftype level_out = output_levels[ch] * s->win_gain;
     const int win_size = s->win_size;
     ftype *dst, *ptr;
-
 
     dst = (ftype *)s->output_out->extended_data[ch];
     ptr = (ftype *)s->overlap_buffer->extended_data[ch];
