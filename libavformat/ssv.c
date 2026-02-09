@@ -79,8 +79,8 @@ static int ssv_read_header(AVFormatContext *s)
 static int ssv_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     SSVDemuxContext *ssv = s->priv_data;
-    int32_t packet_size, video_size;
     AVIOContext *pb = s->pb;
+    int32_t video_size;
     uint64_t chunk;
     int ret;
 
@@ -131,7 +131,7 @@ static int ssv_read_packet(AVFormatContext *s, AVPacket *pkt)
         return AVERROR_INVALIDDATA;
 
     avio_skip(pb, 8);
-    packet_size = avio_rl32(pb);
+    /*packet_size = */avio_rl32(pb);
     video_size = avio_rl32(pb);
     if (video_size <= 0)
         return AVERROR_INVALIDDATA;
