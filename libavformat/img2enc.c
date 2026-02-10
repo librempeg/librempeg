@@ -43,7 +43,6 @@ typedef struct VideoMuxData {
     const AVClass *class;  /**< Class for private options. */
     int start_img_number;
     int img_number;
-    int split_planes;       /**< use independent file for each Y, U, V plane */
     int update;
     int use_strftime;
     int frame_pts;
@@ -56,7 +55,6 @@ static int write_header(AVFormatContext *s)
 {
     VideoMuxData *img = s->priv_data;
     AVStream *st = s->streams[0];
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(st->codecpar->format);
 
     if (st->codecpar->codec_id == AV_CODEC_ID_GIF) {
         img->muxer = "gif";
@@ -64,14 +62,6 @@ static int write_header(AVFormatContext *s)
         img->muxer = "fits";
     } else if (st->codecpar->codec_id == AV_CODEC_ID_AV1) {
         img->muxer = "avif";
-    } else if (st->codecpar->codec_id == AV_CODEC_ID_RAWVIDEO) {
-        const char *str = strrchr(s->url, '.');
-        img->split_planes =     str
-                             && !av_strcasecmp(str + 1, "y")
-                             && s->nb_streams == 1
-                             && desc
-                             &&(desc->flags & AV_PIX_FMT_FLAG_PLANAR)
-                             && desc->nb_components >= 3;
     }
     img->img_number = img->start_img_number;
 
@@ -143,8 +133,6 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
     AVIOContext *pb[4] = {0};
     char* target[4]    = {0};
     char* tmp[4]       = {0};
-    AVCodecParameters *par = s->streams[pkt->stream_index]->codecpar;
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(par->format);
     int ret, i;
     AVDictionary *options = NULL;
     AVBPrint filename;
@@ -204,26 +192,11 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
             goto fail;
         }
 
-        if (!img->split_planes || i+1 >= desc->nb_components)
-            break;
-        filename.str[filename.len - 1] = "UVAx"[i];
+        break;
     }
     av_bprint_finalize(&filename, NULL);
 
-    if (img->split_planes) {
-        int ysize = par->width * par->height;
-        int usize = AV_CEIL_RSHIFT(par->width, desc->log2_chroma_w) * AV_CEIL_RSHIFT(par->height, desc->log2_chroma_h);
-        if (desc->comp[0].depth >= 9) {
-            ysize *= 2;
-            usize *= 2;
-        }
-        if ((ret = write_and_close(s, &pb[0], pkt->data                , ysize)) < 0 ||
-            (ret = write_and_close(s, &pb[1], pkt->data + ysize        , usize)) < 0 ||
-            (ret = write_and_close(s, &pb[2], pkt->data + ysize + usize, usize)) < 0)
-            goto fail;
-        if (desc->nb_components > 3)
-            ret = write_and_close(s, &pb[3], pkt->data + ysize + 2*usize, ysize);
-    } else if (img->muxer) {
+    if (img->muxer) {
         if ((ret = write_muxed_file(s, pb[0], pkt)) < 0)
             goto fail;
         ret = ff_format_io_close(s, &pb[0]);
