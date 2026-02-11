@@ -96,8 +96,8 @@ static void fn(binaural)(ctype *fl, ctype *fr, ctype *in,
     const ftype hd = depth * F(0.5);
     const ftype lcd = COS(-hd);
     const ftype lsd = SIN(-hd);
-    const ftype rcd = COS(hd);
-    const ftype rsd = SIN(hd);
+    const ftype rcd =  lcd;
+    const ftype rsd = -lsd;
     const ftype ca = COS(angle);
     const ftype sa = SIN(angle);
 
