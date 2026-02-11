@@ -63,9 +63,15 @@ static int fn(ba_tx_init)(AVFilterContext *ctx)
     for (int n = 0; n < s->fft_size; n++)
         window[n] = SIN(M_PI*n/(s->fft_size-1));
 
-    ret = av_tx_init(&s->tx_ctx, &s->tx_fn, TX_TYPE, 0, s->fft_size, &scale, 0);
-    if (ret < 0)
-        return ret;
+    s->tx_ctx = av_calloc(s->nb_in_channels, sizeof(*s->tx_ctx));
+    if (!s->tx_ctx)
+        return AVERROR(ENOMEM);
+
+    for (int ch = 0; ch < s->nb_in_channels; ch++) {
+        ret = av_tx_init(&s->tx_ctx[ch], &s->tx_fn, TX_TYPE, 0, s->fft_size, &scale, 0);
+        if (ret < 0)
+            return ret;
+    }
 
     ret = av_tx_init(&s->itx_ctx, &s->itx_fn, TX_TYPE, 1, s->fft_size, &iscale, 0);
     if (ret < 0)
@@ -109,10 +115,10 @@ static void fn(binaural)(ctype *fl, ctype *fr, ctype *in,
         const ftype r_re = in_re * sa;
         const ftype r_im = in_im * sa;
 
-        fl[i].re += (l_re * lcd - l_im * lsd);
-        fl[i].im += (l_re * lsd + l_im * lcd);
-        fr[i].re += (r_re * rcd - r_im * rsd);
-        fr[i].im += (r_re * rsd + r_im * rcd);
+        fl[i].re = (l_re * lcd - l_im * lsd);
+        fl[i].im = (l_re * lsd + l_im * lcd);
+        fr[i].re = (r_re * rcd - r_im * rsd);
+        fr[i].im = (r_re * rsd + r_im * rcd);
     }
 }
 
@@ -156,6 +162,63 @@ static void fn(get_angle_depth)(const AVChannelLayout *ch_layout, const int ch,
     *depth = (d + y_off * F(90.0)) * F(M_PI/180.0);
 }
 
+static int fn(ba_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    BinauralizerContext *s = ctx->priv;
+    const AVChannelLayout *ch_layout = &ctx->inputs[0]->ch_layout;
+    const int nb_in_channels = ch_layout->nb_channels;
+    const int start = (nb_in_channels * jobnr) / nb_jobs;
+    const int end = (nb_in_channels * (jobnr+1)) / nb_jobs;
+    const unsigned nb_x_offset = s->nb_x_offset;
+    const unsigned nb_y_offset = s->nb_y_offset;
+    const unsigned nb_x_size = s->nb_x_size;
+    const unsigned nb_y_size = s->nb_y_size;
+    const unsigned nb_i_gain = s->nb_i_gain;
+    const double *x_offset = s->x_offset;
+    const double *y_offset = s->y_offset;
+    const double *x_size = s->x_size;
+    const double *y_size = s->y_size;
+    const double *i_gain = s->i_gain;
+    const int overlap = s->overlap;
+    const int offset = s->fft_size - overlap;
+    const int *nb_samples_ptr = arg;
+    const int nb_samples = nb_samples_ptr[0];
+    const int N = s->fft_size/2 + 1;
+
+    for (int ch = start; ch < end; ch++) {
+        const ftype igain = i_gain[FFMIN(ch, nb_i_gain-1)];
+        ftype *in = (ftype *)s->in_frame->extended_data[ch];
+        ftype *iwindowed = (ftype *)s->iwindowed_frame->extended_data[ch];
+        ctype *owindowed = (ctype *)s->owindowed_frame->extended_data[ch];
+        ctype *windowed_outl = (ctype *)s->windowed_outl->extended_data[ch];
+        ctype *windowed_outr = (ctype *)s->windowed_outr->extended_data[ch];
+        ftype angle, depth;
+
+        fn(get_angle_depth)(ch_layout, ch, x_size, y_size,
+                            nb_x_size, nb_y_size,
+                            x_offset, y_offset,
+                            nb_x_offset, nb_y_offset,
+                            &angle, &depth);
+
+        // shift in/out buffers
+        memmove(in, &in[overlap], offset * sizeof(*in));
+
+        if (nb_samples > 0) {
+            const ftype *samples = (const ftype *)s->in->extended_data[ch];
+            memcpy(&in[offset], samples, nb_samples * sizeof(*in));
+        }
+        memset(&in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*in));
+
+        fn(apply_window)(s, in, iwindowed, 0, igain);
+
+        s->tx_fn(s->tx_ctx[ch], owindowed, iwindowed, sizeof(ftype));
+
+        fn(binaural)(windowed_outl, windowed_outr, owindowed, angle, depth, N);
+    }
+
+    return 0;
+}
+
 static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *out)
 {
     BinauralizerContext *s = ctx->priv;
@@ -170,49 +233,27 @@ static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *out)
     ftype *right_osamples  = (ftype *)out->extended_data[1];
     const int nb_in_channels = ch_layout->nb_channels;
     const int overlap = s->overlap;
-    const int offset = s->fft_size - overlap;
     const int nb_samples = FFMIN(overlap, s->in->nb_samples);
-    const unsigned nb_x_offset = s->nb_x_offset;
-    const unsigned nb_y_offset = s->nb_y_offset;
-    const unsigned nb_x_size = s->nb_x_size;
-    const unsigned nb_y_size = s->nb_y_size;
-    const unsigned nb_i_gain = s->nb_i_gain;
-    const double *x_offset = s->x_offset;
-    const double *y_offset = s->y_offset;
-    const double *x_size = s->x_size;
-    const double *y_size = s->y_size;
-    const double *i_gain = s->i_gain;
+    const int offset = s->fft_size - overlap;
     const int N = s->fft_size/2 + 1;
     const ftype G = s->gain;
 
     memset(windowed_oleft, 0, N * sizeof(*windowed_oleft));
     memset(windowed_oright, 0, N * sizeof(*windowed_oright));
 
+    ff_filter_execute(ctx, fn(ba_channels), (void *)&nb_samples, NULL,
+                      FFMIN(nb_in_channels, ff_filter_get_nb_threads(ctx)));
+
     for (int ch = 0; ch < nb_in_channels; ch++) {
-        const ftype igain = i_gain[FFMIN(ch, nb_i_gain-1)];
-        ftype *in = (ftype *)s->in_frame->extended_data[ch];
-        ftype *iwindowed = (ftype *)s->windowed_frame->extended_data[0];
-        ctype *owindowed = (ctype *)s->windowed_frame->extended_data[1];
-        const ftype *samples = (const ftype *)s->in->extended_data[ch];
-        ftype angle, depth;
+        const ctype *windowed_outl = (const ctype *)s->windowed_outl->extended_data[ch];
+        const ctype *windowed_outr = (const ctype *)s->windowed_outr->extended_data[ch];
 
-        fn(get_angle_depth)(ch_layout, ch, x_size, y_size,
-                            nb_x_size, nb_y_size,
-                            x_offset, y_offset,
-                            nb_x_offset, nb_y_offset,
-                            &angle, &depth);
-
-        // shift in/out buffers
-        memmove(in, &in[overlap], offset * sizeof(*in));
-
-        memcpy(&in[offset], samples, nb_samples * sizeof(*in));
-        memset(&in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*in));
-
-        fn(apply_window)(s, in, iwindowed, 0, igain);
-
-        s->tx_fn(s->tx_ctx, owindowed, iwindowed, sizeof(ftype));
-
-        fn(binaural)(windowed_oleft, windowed_oright, owindowed, angle, depth, N);
+        for (int n = 0; n < N; n++) {
+            windowed_oleft[n].re  += windowed_outl[n].re;
+            windowed_oleft[n].im  += windowed_outl[n].im;
+            windowed_oright[n].re += windowed_outr[n].re;
+            windowed_oright[n].im += windowed_outr[n].im;
+        }
     }
 
     s->itx_fn(s->itx_ctx, windowed_left, windowed_oleft, sizeof(ctype));
@@ -247,16 +288,6 @@ static int fn(ba_flush)(AVFilterContext *ctx, AVFrame *out)
     const int nb_in_channels = ch_layout->nb_channels;
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
-    const unsigned nb_x_offset = s->nb_x_offset;
-    const unsigned nb_y_offset = s->nb_y_offset;
-    const unsigned nb_x_size = s->nb_x_size;
-    const unsigned nb_y_size = s->nb_y_size;
-    const unsigned nb_i_gain = s->nb_i_gain;
-    const double *x_offset = s->x_offset;
-    const double *y_offset = s->y_offset;
-    const double *x_size = s->x_size;
-    const double *y_size = s->y_size;
-    const double *i_gain = s->i_gain;
     const int N = s->fft_size/2 + 1;
     const int nb_samples = 0;
     const ftype G = s->gain;
@@ -264,29 +295,19 @@ static int fn(ba_flush)(AVFilterContext *ctx, AVFrame *out)
     memset(windowed_oleft, 0, N * sizeof(*windowed_oleft));
     memset(windowed_oright, 0, N * sizeof(*windowed_oright));
 
+    ff_filter_execute(ctx, fn(ba_channels), (void *)&nb_samples, NULL,
+                      FFMIN(nb_in_channels, ff_filter_get_nb_threads(ctx)));
+
     for (int ch = 0; ch < nb_in_channels; ch++) {
-        const ftype igain = i_gain[FFMIN(ch, nb_i_gain-1)];
-        ftype *in = (ftype *)s->in_frame->extended_data[ch];
-        ftype *iwindowed = (ftype *)s->windowed_frame->extended_data[0];
-        ctype *owindowed = (ctype *)s->windowed_frame->extended_data[1];
-        ftype angle, depth;
+        const ctype *windowed_outl = (const ctype *)s->windowed_outl->extended_data[ch];
+        const ctype *windowed_outr = (const ctype *)s->windowed_outr->extended_data[ch];
 
-        fn(get_angle_depth)(ch_layout, ch, x_size, y_size,
-                            nb_x_size, nb_y_size,
-                            x_offset, y_offset,
-                            nb_x_offset, nb_y_offset,
-                            &angle, &depth);
-
-        // shift in/out buffers
-        memmove(in, &in[overlap], offset * sizeof(*in));
-
-        memset(&in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*in));
-
-        fn(apply_window)(s, in, iwindowed, 0, igain);
-
-        s->tx_fn(s->tx_ctx, owindowed, iwindowed, sizeof(ftype));
-
-        fn(binaural)(windowed_oleft, windowed_oright, owindowed, angle, depth, N);
+        for (int n = 0; n < N; n++) {
+            windowed_oleft[n].re  += windowed_outl[n].re;
+            windowed_oleft[n].im  += windowed_outl[n].im;
+            windowed_oright[n].re += windowed_outr[n].re;
+            windowed_oright[n].im += windowed_outr[n].im;
+        }
     }
 
     s->itx_fn(s->itx_ctx, windowed_left, windowed_oleft, sizeof(ctype));

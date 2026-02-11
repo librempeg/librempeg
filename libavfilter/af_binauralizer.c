@@ -51,6 +51,7 @@ typedef struct BinauralizerContext {
 
     int fft_size;
     int overlap;
+    int nb_in_channels;
 
     int trim_size;
     int flush_size;
@@ -62,12 +63,16 @@ typedef struct BinauralizerContext {
     AVFrame *in_frame;
     AVFrame *out_dist_frame;
     AVFrame *windowed_frame;
+    AVFrame *iwindowed_frame;
+    AVFrame *owindowed_frame;
+    AVFrame *windowed_outl;
+    AVFrame *windowed_outr;
     AVFrame *windowed_out;
 
     int (*ba_stereo)(AVFilterContext *ctx, AVFrame *out);
     int (*ba_flush)(AVFilterContext *ctx, AVFrame *out);
 
-    AVTXContext *tx_ctx, *itx_ctx;
+    AVTXContext **tx_ctx, *itx_ctx;
     av_tx_fn tx_fn, itx_fn;
 } BinauralizerContext;
 
@@ -135,6 +140,7 @@ static int config_input(AVFilterLink *inlink)
     BinauralizerContext *s = ctx->priv;
     int ret;
 
+    s->nb_in_channels = inlink->ch_layout.nb_channels;
     s->fft_size = 1 << av_ceil_log2((inlink->sample_rate + 19) / 20);
     s->overlap = (s->fft_size + 3) / 4;
     s->trim_size = s->fft_size - s->overlap;
@@ -143,8 +149,14 @@ static int config_input(AVFilterLink *inlink)
     s->in_frame       = ff_get_audio_buffer(inlink, s->fft_size + 2);
     s->out_dist_frame = ff_get_audio_buffer(outlink, s->fft_size * 2);
     s->windowed_frame = ff_get_audio_buffer(outlink, s->fft_size + 2);
-    s->windowed_out   = ff_get_audio_buffer(outlink, s->fft_size + 2);
-    if (!s->in_frame || !s->windowed_out || !s->out_dist_frame || !s->windowed_frame)
+    s->iwindowed_frame = ff_get_audio_buffer(inlink, s->fft_size + 2);
+    s->owindowed_frame = ff_get_audio_buffer(inlink, s->fft_size + 2);
+    s->windowed_outl = ff_get_audio_buffer(inlink, s->fft_size + 2);
+    s->windowed_outr = ff_get_audio_buffer(inlink, s->fft_size + 2);
+    s->windowed_out = ff_get_audio_buffer(outlink, s->fft_size + 2);
+    if (!s->in_frame || !s->windowed_out || !s->out_dist_frame || !s->windowed_frame ||
+        !s->iwindowed_frame || !s->owindowed_frame ||
+        !s->windowed_outl || !s->windowed_outr)
         return AVERROR(ENOMEM);
 
     switch (inlink->format) {
@@ -296,9 +308,16 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_frame_free(&s->in_frame);
     av_frame_free(&s->out_dist_frame);
     av_frame_free(&s->windowed_frame);
+    av_frame_free(&s->iwindowed_frame);
+    av_frame_free(&s->owindowed_frame);
+    av_frame_free(&s->windowed_outl);
+    av_frame_free(&s->windowed_outr);
     av_frame_free(&s->windowed_out);
 
-    av_tx_uninit(&s->tx_ctx);
+    if (s->tx_ctx)
+        for (int ch = 0; ch < s->nb_in_channels; ch++)
+            av_tx_uninit(&s->tx_ctx[ch]);
+    av_freep(&s->tx_ctx);
     av_tx_uninit(&s->itx_ctx);
 }
 
@@ -314,6 +333,7 @@ const FFFilter ff_af_binauralizer = {
     .p.name          = "binauralizer",
     .p.description   = NULL_IF_CONFIG_SMALL("Apply Binauralizer effect."),
     .p.priv_class    = &binauralizer_class,
+    .p.flags         = AVFILTER_FLAG_SLICE_THREADS,
     .priv_size       = sizeof(BinauralizerContext),
     .uninit          = uninit,
     FILTER_INPUTS(inputs),
