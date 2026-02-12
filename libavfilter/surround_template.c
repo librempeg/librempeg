@@ -274,7 +274,7 @@ static int fn(filter_surround)(AVFilterContext *ctx, void *arg, int jobnr, int n
         ftype c_re = srcc[n].re, c_im = srcc[n].im;
         ftype l_mag = HYPOT(l_re, l_im);
         ftype r_mag = HYPOT(r_re, r_im);
-        ctype sum, dif, cnt, lfe, cor;
+        ctype sum, cnt, lfe, cor;
         ftype x, y, z;
 
         cor.re = l_re * r_re + l_im * r_im;
@@ -282,13 +282,9 @@ static int fn(filter_surround)(AVFilterContext *ctx, void *arg, int jobnr, int n
 
         sum.re = (l_re + r_re) * F(0.5);
         sum.im = (l_im + r_im) * F(0.5);
-        dif.re = (l_re - r_re) * F(0.5);
-        dif.im = (l_im - r_im) * F(0.5);
 
         sum.re = isnormal(sum.re) ? sum.re : F(0.0);
         sum.im = isnormal(sum.im) ? sum.im : F(0.0);
-        dif.re = isnormal(dif.re) ? dif.re : F(0.0);
-        dif.im = isnormal(dif.im) ? dif.im : F(0.0);
 
         cnt.re = c_re;
         cnt.im = c_im;
@@ -327,21 +323,11 @@ static int fn(filter_3_1)(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
         ftype l_im = srcl[n].im, r_im = srcr[n].im;
         ftype l_mag = HYPOT(l_re, l_im);
         ftype r_mag = HYPOT(r_re, r_im);
-        ctype sum, dif, cor;
         ftype x, y, z;
+        ctype cor;
 
         cor.re = l_re * r_re + l_im * r_im;
         cor.im = r_re * l_im - r_im * l_re;
-
-        sum.re = (l_re + r_re) * F(0.5);
-        sum.im = (l_im + r_im) * F(0.5);
-        dif.re = (l_re - r_re) * F(0.5);
-        dif.im = (l_im - r_im) * F(0.5);
-
-        sum.re = isnormal(sum.re) ? sum.re : F(0.0);
-        sum.im = isnormal(sum.im) ? sum.im : F(0.0);
-        dif.re = isnormal(dif.re) ? dif.re : F(0.0);
-        dif.im = isnormal(dif.im) ? dif.im : F(0.0);
 
         fn(stereo_position)(l_mag, r_mag, cor, &x, &y, &z);
 
