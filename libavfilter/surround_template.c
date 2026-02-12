@@ -566,6 +566,11 @@ static void fn(do_transform)(AVFilterContext *ctx, int ch)
     const ftype *y = s->y_pos;
     const ftype *z = s->z_pos;
 
+    if (chan == AV_CHAN_LOW_FREQUENCY || chan == AV_CHAN_LOW_FREQUENCY_2) {
+        memcpy(dst, s->lfe, rdft_size * sizeof(*dst));
+        return;
+    }
+
     for (int n = 0; n < rdft_size; n++)
         dst[n] = fn(transform)(srcl[n], srcr[n], x[n], y[n], z[n], ch_x, ch_y, ch_z, sign0, sign1);
 }
