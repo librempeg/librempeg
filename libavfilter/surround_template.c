@@ -167,13 +167,15 @@ static inline void fn(get_lfe)(int output_lfe, int n, ftype lowcut, ftype highcu
     }
 }
 
-static void fn(filter_stereo)(AVFilterContext *ctx)
+static int fn(filter_stereo)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AudioSurroundContext *s = ctx->priv;
+    const int rdft_size = s->rdft_size;
+    const int start = (rdft_size * jobnr) / nb_jobs;
+    const int end = (rdft_size * (jobnr+1)) / nb_jobs;
     const ctype *srcl = (const ctype *)s->input->extended_data[0];
     const ctype *srcr = (const ctype *)s->input->extended_data[1];
     const int output_lfe = s->output_lfe && s->create_lfe;
-    const int rdft_size = s->rdft_size;
     const int lfe_mode = s->lfe_mode;
     const ftype highcut = s->highcut;
     const ftype lowcut = s->lowcut;
@@ -182,7 +184,7 @@ static void fn(filter_stereo)(AVFilterContext *ctx)
     ftype *zpos = s->z_pos;
     ctype *olfe = s->lfe;
 
-    for (int n = 0; n < rdft_size; n++) {
+    for (int n = start; n < end; n++) {
         ftype l_re = srcl[n].re, r_re = srcr[n].re;
         ftype l_im = srcl[n].im, r_im = srcr[n].im;
         ftype l_mag = HYPOT(l_re, l_im);
@@ -207,21 +209,25 @@ static void fn(filter_stereo)(AVFilterContext *ctx)
         zpos[n] = z;
         olfe[n] = lfe;
     }
+
+    return 0;
 }
 
-static void fn(filter_2_1)(AVFilterContext *ctx)
+static int fn(filter_2_1)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AudioSurroundContext *s = ctx->priv;
+    const int rdft_size = s->rdft_size;
+    const int start = (rdft_size * jobnr) / nb_jobs;
+    const int end = (rdft_size * (jobnr+1)) / nb_jobs;
     const ctype *srcl = (const ctype *)s->input->extended_data[0];
     const ctype *srcr = (const ctype *)s->input->extended_data[1];
     const ctype *srclfe = (const ctype *)s->input->extended_data[2];
-    const int rdft_size = s->rdft_size;
     ftype *xpos = s->x_pos;
     ftype *ypos = s->y_pos;
     ftype *zpos = s->z_pos;
     ctype *olfe = s->lfe;
 
-    for (int n = 0; n < rdft_size; n++) {
+    for (int n = start; n < end; n++) {
         ftype l_re = srcl[n].re, r_re = srcr[n].re;
         ftype l_im = srcl[n].im, r_im = srcr[n].im;
         ftype l_mag = HYPOT(l_re, l_im);
@@ -239,16 +245,20 @@ static void fn(filter_2_1)(AVFilterContext *ctx)
         zpos[n] = z;
         olfe[n] = srclfe[n];
     }
+
+    return 0;
 }
 
-static void fn(filter_surround)(AVFilterContext *ctx)
+static int fn(filter_surround)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AudioSurroundContext *s = ctx->priv;
+    const int rdft_size = s->rdft_size;
+    const int start = (rdft_size * jobnr) / nb_jobs;
+    const int end = (rdft_size * (jobnr+1)) / nb_jobs;
     const ctype *srcl = (const ctype *)s->input->extended_data[0];
     const ctype *srcr = (const ctype *)s->input->extended_data[1];
     const ctype *srcc = (const ctype *)s->input->extended_data[2];
     const int output_lfe = s->output_lfe && s->create_lfe;
-    const int rdft_size = s->rdft_size;
     const int lfe_mode = s->lfe_mode;
     const ftype highcut = s->highcut;
     const ftype lowcut = s->lowcut;
@@ -258,7 +268,7 @@ static void fn(filter_surround)(AVFilterContext *ctx)
     ctype *ocnt = s->cnt;
     ctype *olfe = s->lfe;
 
-    for (int n = 0; n < rdft_size; n++) {
+    for (int n = start; n < end; n++) {
         ftype l_re = srcl[n].re, r_re = srcr[n].re;
         ftype l_im = srcl[n].im, r_im = srcr[n].im;
         ftype c_re = srcc[n].re, c_im = srcc[n].im;
@@ -292,23 +302,27 @@ static void fn(filter_surround)(AVFilterContext *ctx)
         ocnt[n] = cnt;
         olfe[n] = lfe;
     }
+
+    return 0;
 }
 
-static void fn(filter_3_1)(AVFilterContext *ctx)
+static int fn(filter_3_1)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AudioSurroundContext *s = ctx->priv;
+    const int rdft_size = s->rdft_size;
+    const int start = (rdft_size * jobnr) / nb_jobs;
+    const int end = (rdft_size * (jobnr+1)) / nb_jobs;
     const ctype *srcl = (const ctype *)s->input->extended_data[0];
     const ctype *srcr = (const ctype *)s->input->extended_data[1];
     const ctype *srcc = (const ctype *)s->input->extended_data[2];
     const ctype *srclfe = (const ctype *)s->input->extended_data[3];
-    const int rdft_size = s->rdft_size;
     ftype *xpos = s->x_pos;
     ftype *ypos = s->y_pos;
     ftype *zpos = s->z_pos;
     ctype *ocnt = s->cnt;
     ctype *olfe = s->lfe;
 
-    for (int n = 0; n < rdft_size; n++) {
+    for (int n = start; n < end; n++) {
         ftype l_re = srcl[n].re, r_re = srcr[n].re;
         ftype l_im = srcl[n].im, r_im = srcr[n].im;
         ftype l_mag = HYPOT(l_re, l_im);
@@ -337,6 +351,8 @@ static void fn(filter_3_1)(AVFilterContext *ctx)
         ocnt[n] = srcc[n];
         olfe[n] = srclfe[n];
     }
+
+    return 0;
 }
 
 static int fn(config_output)(AVFilterContext *ctx)

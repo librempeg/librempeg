@@ -149,7 +149,7 @@ typedef struct AudioSurroundContext {
     av_tx_fn tx_fn, itx_fn;
     void *window_func_lut;
 
-    void (*filter)(AVFilterContext *ctx);
+    int (*filter)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
     void (*set_input_levels)(AVFilterContext *ctx);
     void (*set_output_levels)(AVFilterContext *ctx);
     void (*upmix)(AVFilterContext *ctx, int ch);
@@ -386,7 +386,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                       FFMIN(inlink->ch_layout.nb_channels,
                             ff_filter_get_nb_threads(ctx)));
 
-    s->filter(ctx);
+    ff_filter_execute(ctx, s->filter, NULL, NULL,
+                      FFMIN(s->rdft_size, ff_filter_get_nb_threads(ctx)));
 
     if (in) {
         int extra_samples = in->nb_samples % s->hop_size;
