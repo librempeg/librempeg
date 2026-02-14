@@ -182,7 +182,7 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
             const ftype lsl = SIN(lfl);
             const ftype lcr = COS(lfr);
             const ftype lsr = SIN(lfr);
-            const ftype bx = a1 * aa / F(M_PI_2) + a0 * ((F(M_PI_2) - aa) / F(M_PI_2));
+            const ftype bx = a1 * aa * F(M_2_PI) + a0 * ((F(M_PI_2) - aa) * F(M_2_PI));
 
             fl[i].re = l_re * lcl - l_im * lsl;
             fl[i].im = l_re * lsl + l_im * lcl;
