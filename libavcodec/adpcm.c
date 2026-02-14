@@ -3407,7 +3407,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 int16_t *sf_out = &out[j*8];
 
                 for (int i = 0; i < 8; i++) {
-                    int sample, delta = 0;
+                    int sample;
+                    unsigned delta = 0;
 
                     for (int o = 0; o < order; o++)
                         delta += coefs[o*8 + i] * hist[(8 - order) + o];
@@ -3418,7 +3419,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     }
 
                     sample = sf_codes[i] * 2048;
-                    sample = (sample + delta) / 2048;
+                    sample = (int)(sample + delta) / 2048;
                     sample = av_clip_int16(sample);
                     sf_out[i] = sample;
                 }
