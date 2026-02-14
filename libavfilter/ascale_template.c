@@ -163,7 +163,7 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
     const ftype den = xx * yy + EPS;
 
     best_xcorr = num/den;
-    mean_xcorr = (mean.re * mean.im) / SQRT(mean.re * mean.re + mean.im * mean.im + EPS);
+    mean_xcorr = (mean.re * mean.im) / (SQRT(mean.re * mean.re + mean.im * mean.im) + EPS);
     best_xcorr = CLIP(best_xcorr, F(-0.9999), F(1.0));
     mean_xcorr = CLIP(mean_xcorr, F(-0.9999), F(1.0));
 
@@ -365,7 +365,7 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
     const ftype den = xx * yy + EPS;
 
     best_xcorr = num/den;
-    mean_xcorr = (mean.re * mean.im) / SQRT(mean.re * mean.re + mean.im * mean.im + EPS);
+    mean_xcorr = (mean.re * mean.im) / (SQRT(mean.re * mean.re + mean.im * mean.im) + EPS);
     best_xcorr = CLIP(best_xcorr, F(-0.9999), F(1.0));
     mean_xcorr = CLIP(mean_xcorr, F(-0.9999), F(1.0));
 
