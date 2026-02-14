@@ -30,6 +30,10 @@ static int adp_probe(const AVProbeData *p)
     uint8_t last = 0;
     int64_t changes = 0;
 
+    if (!av_match_ext(p->filename, "adp") &&
+        !av_match_ext(p->filename, "dtk"))
+        return 0;
+
     if (p->buf_size < 32)
         return 0;
 
