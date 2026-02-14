@@ -94,6 +94,7 @@ static ftype fn(get_gain)(const ftype w, const ftype c)
 
 static ctype fn(lmean)(const ftype *x, const ftype *y, const int N)
 {
+    const ftype scale = F(1.0) / N;
     ftype xm = F(0.0), ym = F(0.0);
     ctype m;
 
@@ -102,8 +103,8 @@ static ctype fn(lmean)(const ftype *x, const ftype *y, const int N)
         ym += y[n];
     }
 
-    xm /= N;
-    ym /= N;
+    xm *= scale;
+    ym *= scale;
 
     m.re = xm;
     m.im = ym;
@@ -121,7 +122,7 @@ static ftype fn(l2norm)(const ftype *x, const ftype xm, const int N)
         y += xn*xn;
     }
 
-    return SQRT(y);
+    return SQRT(y + EPS);
 }
 
 static ftype fn(l2norm2)(const ftype *x, const ftype *y,
