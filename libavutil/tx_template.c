@@ -979,10 +979,14 @@ static void TX_NAME(ff_tx_fft_stockham16)(AVTXContext *s, void *_dst, void *_src
     stockham0(16, 1, tmp, src, &exp);
     stockham0(8,  2, tm0, tmp, &exp);
     stockham0(4,  4, tmp, tm0, &exp);
-    stockham0(2,  8, tm0, tmp, &exp);
 
-    for (int i = 0; i < 16; i++)
-        dst[i*stride] = tm0[i];
+    if (stride == 1) {
+        stockham0(2,  8, dst, tmp, &exp);
+    } else {
+        stockham0(2,  8, tm0, tmp, &exp);
+        for (int i = 0; i < 16; i++)
+            dst[i*stride] = tm0[i];
+    }
 }
 
 static void TX_NAME(ff_tx_fft_stockham32)(AVTXContext *s, void *_dst, void *_src,
@@ -1000,10 +1004,15 @@ static void TX_NAME(ff_tx_fft_stockham32)(AVTXContext *s, void *_dst, void *_src
     stockham0(16, 2, tm0, tmp, &exp);
     stockham0(8,  4, tmp, tm0, &exp);
     stockham0(4,  8, tm0, tmp, &exp);
-    stockham0(2, 16, tmp, tm0, &exp);
 
-    for (int i = 0; i < 32; i++)
-        dst[i*stride] = tmp[i];
+    if (stride == 1) {
+        stockham0(2, 16, dst, tm0, &exp);
+    } else {
+        stockham0(2, 16, tmp, tm0, &exp);
+
+        for (int i = 0; i < 32; i++)
+            dst[i*stride] = tmp[i];
+    }
 }
 
 static void TX_NAME(ff_tx_fft_stockham64)(AVTXContext *s, void *_dst, void *_src,
@@ -1022,10 +1031,15 @@ static void TX_NAME(ff_tx_fft_stockham64)(AVTXContext *s, void *_dst, void *_src
     stockham0(16, 4, tmp, tm0, &exp);
     stockham0(8,  8, tm0, tmp, &exp);
     stockham0(4, 16, tmp, tm0, &exp);
-    stockham0(2, 32, tm0, tmp, &exp);
 
-    for (int i = 0; i < 64; i++)
-        dst[i*stride] = tm0[i];
+    if (stride == 1) {
+        stockham0(2, 32, dst, tmp, &exp);
+    } else {
+        stockham0(2, 32, tm0, tmp, &exp);
+
+        for (int i = 0; i < 64; i++)
+            dst[i*stride] = tm0[i];
+    }
 }
 
 static void TX_NAME(ff_tx_fft_stockham128)(AVTXContext *s, void *_dst, void *_src,
@@ -1045,10 +1059,15 @@ static void TX_NAME(ff_tx_fft_stockham128)(AVTXContext *s, void *_dst, void *_sr
     stockham0(16,  8, tm0, tmp, &exp);
     stockham0(8,  16, tmp, tm0, &exp);
     stockham0(4,  32, tm0, tmp, &exp);
-    stockham0(2,  64, tmp, tm0, &exp);
 
-    for (int i = 0; i < 128; i++)
-        dst[i*stride] = tmp[i];
+    if (stride == 1) {
+        stockham0(2,  64, dst, tm0, &exp);
+    } else {
+        stockham0(2,  64, tmp, tm0, &exp);
+
+        for (int i = 0; i < 128; i++)
+            dst[i*stride] = tmp[i];
+    }
 }
 
 static void TX_NAME(ff_tx_fft_stockham256)(AVTXContext *s, void *_dst, void *_src,
@@ -1069,10 +1088,15 @@ static void TX_NAME(ff_tx_fft_stockham256)(AVTXContext *s, void *_dst, void *_sr
     stockham0(16, 16, tmp, tm0, &exp);
     stockham0(8,  32, tm0, tmp, &exp);
     stockham0(4,  64, tmp, tm0, &exp);
-    stockham0(2, 128, tm0, tmp, &exp);
 
-    for (int i = 0; i < 256; i++)
-        dst[i*stride] = tm0[i];
+    if (stride == 1) {
+        stockham0(2, 128, dst, tmp, &exp);
+    } else {
+        stockham0(2, 128, tm0, tmp, &exp);
+
+        for (int i = 0; i < 256; i++)
+            dst[i*stride] = tm0[i];
+    }
 }
 
 static void TX_NAME(ff_tx_fft_stockham512)(AVTXContext *s, void *_dst, void *_src,
@@ -1094,10 +1118,15 @@ static void TX_NAME(ff_tx_fft_stockham512)(AVTXContext *s, void *_dst, void *_sr
     stockham0(16, 32, tm0, tmp, &exp);
     stockham0(8,  64, tmp, tm0, &exp);
     stockham0(4, 128, tm0, tmp, &exp);
-    stockham0(2, 256, tmp, tm0, &exp);
 
-    for (int i = 0; i < 512; i++)
-        dst[i*stride] = tmp[i];
+    if (stride == 1) {
+        stockham0(2, 256, dst, tm0, &exp);
+    } else {
+        stockham0(2, 256, tmp, tm0, &exp);
+
+        for (int i = 0; i < 512; i++)
+            dst[i*stride] = tmp[i];
+    }
 }
 
 static void TX_NAME(ff_tx_fft_stockham1024)(AVTXContext *s, void *_dst, void *_src,
@@ -1120,10 +1149,15 @@ static void TX_NAME(ff_tx_fft_stockham1024)(AVTXContext *s, void *_dst, void *_s
     stockham0(16,  64, tmp, tm0, &exp);
     stockham0(8,  128, tm0, tmp, &exp);
     stockham0(4,  256, tmp, tm0, &exp);
-    stockham0(2,  512, tm0, tmp, &exp);
 
-    for (int i = 0; i < 1024; i++)
-        dst[i*stride] = tm0[i];
+    if (stride == 1) {
+        stockham0(2,  512, dst, tmp, &exp);
+    } else {
+        stockham0(2,  512, tm0, tmp, &exp);
+
+        for (int i = 0; i < 1024; i++)
+            dst[i*stride] = tm0[i];
+    }
 }
 
 static void TX_NAME(ff_tx_fft_stockham2048)(AVTXContext *s, void *_dst, void *_src,
@@ -1147,10 +1181,15 @@ static void TX_NAME(ff_tx_fft_stockham2048)(AVTXContext *s, void *_dst, void *_s
     stockham0(16, 128, tm0, tmp, &exp);
     stockham0(8,  256, tmp, tm0, &exp);
     stockham0(4,  512, tm0, tmp, &exp);
-    stockham0(2, 1024, tmp, tm0, &exp);
 
-    for (int i = 0; i < 2048; i++)
-        dst[i*stride] = tmp[i];
+    if (stride == 1) {
+        stockham0(2, 1024, dst, tm0, &exp);
+    } else {
+        stockham0(2, 1024, tmp, tm0, &exp);
+
+        for (int i = 0; i < 2048; i++)
+            dst[i*stride] = tmp[i];
+    }
 }
 
 static void TX_NAME(ff_tx_fft_stockham4096)(AVTXContext *s, void *_dst, void *_src,
@@ -1175,10 +1214,15 @@ static void TX_NAME(ff_tx_fft_stockham4096)(AVTXContext *s, void *_dst, void *_s
     stockham0(16, 256, tmp, tm0, &exp);
     stockham0(8,  512, tm0, tmp, &exp);
     stockham0(4, 1024, tmp, tm0, &exp);
-    stockham0(2, 2048, tm0, tmp, &exp);
 
-    for (int i = 0; i < 4096; i++)
-        dst[i*stride] = tm0[i];
+    if (stride == 1) {
+        stockham0(2, 2048, dst, tmp, &exp);
+    } else {
+        stockham0(2, 2048, tm0, tmp, &exp);
+
+        for (int i = 0; i < 4096; i++)
+            dst[i*stride] = tm0[i];
+    }
 }
 
 static void TX_NAME(ff_tx_fft_stockham8192)(AVTXContext *s, void *_dst, void *_src,
@@ -1204,10 +1248,15 @@ static void TX_NAME(ff_tx_fft_stockham8192)(AVTXContext *s, void *_dst, void *_s
     stockham0(16, 512, tm0, tmp, &exp);
     stockham0(8, 1024, tmp, tm0, &exp);
     stockham0(4, 2048, tm0, tmp, &exp);
-    stockham0(2, 4096, tmp, tm0, &exp);
 
-    for (int i = 0; i < 8192; i++)
-        dst[i*stride] = tmp[i];
+    if (stride == 1) {
+        stockham0(2, 4096, dst, tm0, &exp);
+    } else {
+        stockham0(2, 4096, tmp, tm0, &exp);
+
+        for (int i = 0; i < 8192; i++)
+            dst[i*stride] = tmp[i];
+    }
 }
 
 static const FFTXCodelet TX_NAME(ff_tx_fft_stockham16_def) = {
