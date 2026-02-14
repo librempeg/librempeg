@@ -117,7 +117,7 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
             const ftype lf = m * -a + s * (F(M_PI) - aa);
             const ftype lc = COS(lf);
             const ftype ls = SIN(lf);
-            const ftype bx = a1 * aa / F(M_PI) + a0 * ((F(M_PI) - aa) / F(M_PI));
+            const ftype bx = a1 * aa * F(M_1_PI) + a0 * ((F(M_PI) - aa) * F(M_1_PI));
 
             fl[i].re = l_re * lc - l_im * ls;
             fl[i].im = l_re * ls + l_im * lc;
@@ -148,7 +148,7 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
             const ftype lf = m * a - s * (F(M_PI) - aa);
             const ftype lc = COS(lf);
             const ftype ls = SIN(lf);
-            const ftype bx = a1 * aa / F(M_PI) + a0 * ((F(M_PI) - aa) / F(M_PI));
+            const ftype bx = a1 * aa * F(M_1_PI) + a0 * ((F(M_PI) - aa) * F(M_1_PI));
 
             fl[i].re = l_re;
             fl[i].im = l_im;
