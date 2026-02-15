@@ -1834,6 +1834,8 @@ static int http_read_stream(URLContext *h, uint8_t *buf, int size)
     if (s->compressed)
         return http_buf_read_compressed(h, buf, size);
 #endif /* CONFIG_ZLIB */
+
+retry:
     read_ret = http_buf_read(h, buf, size);
     while (read_ret < 0) {
         uint64_t target = h->is_streamed ? 0 : s->off;
@@ -1881,7 +1883,6 @@ static int http_read_stream(URLContext *h, uint8_t *buf, int size)
             return read_ret;
         }
 
-retry:
         read_ret = http_buf_read(h, buf, size);
     }
 
