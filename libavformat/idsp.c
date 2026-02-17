@@ -25,7 +25,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int idsp_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RB32(p->buf) != MKBETAG('I','D','S','P'))
         return 0;
@@ -45,36 +45,38 @@ static int idsp_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int idsp_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
+    int ret, rate, nb_channels, block_align;
     AVIOContext *pb = s->pb;
+    int64_t duration;
     AVStream *st;
-    int ret;
+
+    avio_skip(pb, 4);
+    duration = avio_rb32(pb);
+    rate = avio_rb32(pb);
+    nb_channels = avio_rb32(pb);
+    block_align = avio_rb32(pb);
+    if (rate <= 0 || nb_channels <= 0 || block_align <= 0 || block_align > INT_MAX/nb_channels)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(pb, 4);
     st->start_time = 0;
-    st->duration = avio_rb32(pb);
+    st->duration = duration;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP;
-    st->codecpar->sample_rate = avio_rb32(pb);
-    if (st->codecpar->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
-    st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
-    if (st->codecpar->ch_layout.nb_channels <= 0)
-        return AVERROR_INVALIDDATA;
-    st->codecpar->block_align = avio_rb32(pb) * st->codecpar->ch_layout.nb_channels;
-    if (st->codecpar->block_align <= 0)
-        return AVERROR_INVALIDDATA;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->ch_layout.nb_channels = nb_channels;
+    st->codecpar->block_align = block_align * nb_channels;
 
     ret = ff_alloc_extradata(st->codecpar, 32 * st->codecpar->ch_layout.nb_channels);
     if (ret < 0)
         return ret;
 
-    for (int ch = 0; ch < st->codecpar->ch_layout.nb_channels; ch++) {
+    for (int ch = 0; ch < nb_channels; ch++) {
         uint8_t *dst = st->codecpar->extradata + 32*ch;
 
         avio_read(pb, dst, 32);
@@ -88,7 +90,7 @@ static int idsp_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int idsp_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *pb = s->pb;
     AVCodecParameters *par = s->streams[0]->codecpar;
@@ -101,7 +103,7 @@ const FFInputFormat ff_idsp_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("IDSP (Inevitable Entertainment)"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "idsp",
-    .read_probe     = idsp_probe,
-    .read_header    = idsp_read_header,
-    .read_packet    = idsp_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
