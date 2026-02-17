@@ -26,7 +26,7 @@
 #include "internal.h"
 #include "pcm.h"
 
-static int fwse_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RL32(p->buf) != MKTAG('F','W','S','E'))
         return 0;
@@ -46,43 +46,46 @@ static int fwse_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int fwse_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     unsigned start_offset, version;
-    int channels;
     AVIOContext *pb = s->pb;
     AVCodecParameters *par;
+    int channels, rate;
+    int64_t duration;
     AVStream *st;
 
     avio_skip(pb, 4);
     version = avio_rl32(pb);
     if (version != 2 && version != 3)
         return AVERROR_INVALIDDATA;
+
     avio_skip(pb, 4);
     start_offset = avio_rl32(pb);
+
+    channels = avio_rl32(pb);
+    duration = avio_rl32(pb);
+    rate = avio_rl32(pb);
+    if ((channels != 1 && channels != 2) || rate <= 0)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
+    st->start_time   = 0;
+    st->duration     = duration;
     par              = st->codecpar;
     par->codec_type  = AVMEDIA_TYPE_AUDIO;
     par->codec_id    = AV_CODEC_ID_ADPCM_IMA_MTF;
     par->format      = AV_SAMPLE_FMT_S16;
-    channels         = avio_rl32(pb);
-    if (channels != 1 && channels != 2)
-        return AVERROR_INVALIDDATA;
-    av_channel_layout_default(&par->ch_layout, channels);
-    st->start_time = 0;
-    st->duration = avio_rl32(pb);
-    par->sample_rate = avio_rl32(pb);
-    if (par->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
-
+    par->sample_rate = rate;
     par->block_align = 1;
-    avio_skip(pb, start_offset - avio_tell(pb));
+    av_channel_layout_default(&par->ch_layout, channels);
 
     avpriv_set_pts_info(st, 64, 1, par->sample_rate);
+
+    avio_skip(pb, start_offset - avio_tell(pb));
 
     return 0;
 }
@@ -91,8 +94,8 @@ const FFInputFormat ff_fwse_demuxer = {
     .p.name         = "fwse",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Capcom's MT Framework sound"),
     .p.extensions   = "fwse",
-    .read_probe     = fwse_probe,
-    .read_header    = fwse_read_header,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
     .read_seek      = ff_pcm_read_seek,
 };
