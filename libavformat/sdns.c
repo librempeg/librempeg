@@ -25,7 +25,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int sdns_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RL32(p->buf) != MKTAG('S','D','N','S'))
         return 0;
@@ -37,14 +37,18 @@ static int sdns_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX / 3;
 }
 
-static int sdns_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
+    int channels, ret, rate;
     AVCodecParameters *par;
-    int channels, ret;
     AVStream *st;
 
     avio_skip(pb, 8);
+    rate = avio_rb32(pb);
+    channels = avio_rb32(pb);
+    if (channels <= 0 || channels > 128 || rate <= 0)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
@@ -53,13 +57,8 @@ static int sdns_read_header(AVFormatContext *s)
     par              = st->codecpar;
     par->codec_type  = AVMEDIA_TYPE_AUDIO;
     par->codec_id    = AV_CODEC_ID_XMA1;
-    par->sample_rate = avio_rb32(pb);
-    channels         = avio_rb32(pb);
-    if (channels <= 0 || channels > 128)
-        return AVERROR_INVALIDDATA;
+    par->sample_rate = rate;
     av_channel_layout_default(&par->ch_layout, channels);
-    if (par->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
     par->block_align = 2048;
     if ((ret = ff_alloc_extradata(par, 8 + 20 * ((channels + 1) / 2))) < 0)
         return ret;
@@ -73,7 +72,7 @@ static int sdns_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int sdns_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     int ret;
 
@@ -90,7 +89,7 @@ const FFInputFormat ff_sdns_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Xbox SDNS"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "sdns",
-    .read_probe     = sdns_probe,
-    .read_header    = sdns_read_header,
-    .read_packet    = sdns_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
