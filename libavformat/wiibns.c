@@ -39,7 +39,7 @@ static int read_probe(const AVProbeData *p)
         bns_offset += AV_RB32(p->buf + bns_offset + 0x54);
     }
 
-    if (p->buf_size < bns_offset+4)
+    if (p->buf_size < bns_offset+8)
         return 0;
 
     if (AV_RB32(p->buf + bns_offset) == MKBETAG('I','M','D','5'))
