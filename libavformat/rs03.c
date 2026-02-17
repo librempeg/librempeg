@@ -45,26 +45,28 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
+    int ret, rate, nb_channels;
     AVIOContext *pb = s->pb;
+    int64_t duration;
     AVStream *st;
-    int ret;
 
     avio_skip(pb, 4);
+    nb_channels = avio_rb32(pb);
+    duration = avio_rb32(pb);
+    rate = avio_rb32(pb);
+    if (nb_channels <= 0 || rate <= 0 || nb_channels > INT_MAX/0x8f00)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
+    st->start_time = 0;
+    st->duration = duration;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP;
-    st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
-    if (st->codecpar->ch_layout.nb_channels <= 0)
-        return AVERROR_INVALIDDATA;
-    st->start_time = 0;
-    st->duration = avio_rb32(pb);
-    st->codecpar->sample_rate = avio_rb32(pb);
-    if (st->codecpar->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
+    st->codecpar->ch_layout.nb_channels = nb_channels;
+    st->codecpar->sample_rate = rate;
     st->codecpar->block_align = 0x8f00 * st->codecpar->ch_layout.nb_channels;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
