@@ -35,6 +35,7 @@
 
 #include "config_components.h"
 
+#include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/common.h"
 #include "libavutil/ffmath.h"
@@ -1053,7 +1054,7 @@ static void rgbtest_put_pixel(uint8_t *dstp[4], int dst_linesizep[4],
     case AV_PIX_FMT_GBRAP:
         p = dstp[3] + x + y * dst_linesizep[3];
         p[0] = a;
-    // fall-through
+        av_fallthrough;
     case AV_PIX_FMT_GBRP:
         p = dstp[0] + x + y * dst_linesize;
         p[0] = g;
@@ -1068,7 +1069,7 @@ static void rgbtest_put_pixel(uint8_t *dstp[4], int dst_linesizep[4],
     case AV_PIX_FMT_GBRAP16:
         p16 = (uint16_t *)(dstp[3] + x*2 + y * dst_linesizep[3]);
         p16[0] = a;
-    // fall-through
+        av_fallthrough;
     case AV_PIX_FMT_GBRP9:
     case AV_PIX_FMT_GBRP10:
     case AV_PIX_FMT_GBRP12:
@@ -1220,7 +1221,7 @@ static void yuvtest_put_pixel(uint8_t *dstp[4], int dst_linesizep[4],
     case AV_PIX_FMT_XV36:
     case AV_PIX_FMT_XV48:
         a = UINT16_MAX;
-    // fall-through
+        av_fallthrough;
     case AV_PIX_FMT_AYUV64:
         AV_WN16A(&dstp[0][i*8 + ayuv_map[Y]*2 + j*dst_linesizep[0]], y << desc->comp[0].shift);
         AV_WN16A(&dstp[0][i*8 + ayuv_map[U]*2 + j*dst_linesizep[0]], u << desc->comp[1].shift);
@@ -1229,7 +1230,7 @@ static void yuvtest_put_pixel(uint8_t *dstp[4], int dst_linesizep[4],
         break;
     case AV_PIX_FMT_VUYX:
         a = UINT8_MAX;
-    // fall-through
+        av_fallthrough;
     case AV_PIX_FMT_UYVA:
     case AV_PIX_FMT_VUYA:
     case AV_PIX_FMT_AYUV:
@@ -1238,7 +1239,7 @@ static void yuvtest_put_pixel(uint8_t *dstp[4], int dst_linesizep[4],
         break;
     case AV_PIX_FMT_YUVA444P:
         dstp[3][i + j*dst_linesizep[3]] = a;
-    // fall-through
+        av_fallthrough;
     case AV_PIX_FMT_YUV444P:
     case AV_PIX_FMT_YUVJ444P:
         dstp[0][i + j*dst_linesizep[0]] = y;
@@ -1250,7 +1251,7 @@ static void yuvtest_put_pixel(uint8_t *dstp[4], int dst_linesizep[4],
     case AV_PIX_FMT_YUVA444P12:
     case AV_PIX_FMT_YUVA444P16:
         AV_WN16A(&dstp[3][i*2 + j*dst_linesizep[3]], a);
-    // fall-through
+        av_fallthrough;
     case AV_PIX_FMT_YUV444P9:
     case AV_PIX_FMT_YUV444P10:
     case AV_PIX_FMT_YUV444P12:
