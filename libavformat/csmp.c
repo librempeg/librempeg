@@ -38,24 +38,16 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
+    int64_t offset = 0, duration;
+    char name[1025] = { 0 };
     AVIOContext *pb = s->pb;
-    int64_t offset = 0;
+    int ret, rate;
     AVStream *st;
-    int ret;
 
     avio_skip(pb, 8);
 
-    st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
-
-    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP;
-    st->codecpar->ch_layout.nb_channels = 1;
-
     while (!avio_feof(pb)) {
         uint32_t chunk, size, data = 0;
-        char name[1025] = { 0 };
 
         chunk = avio_rb32(pb);
         size = avio_rb32(pb);
@@ -69,8 +61,6 @@ static int read_header(AVFormatContext *s)
             ret = avio_get_str(pb, size, name, sizeof(name));
             size -= ret;
 
-            if (name[0])
-                av_dict_set(&st->metadata, "name", name, 0);
             avio_skip(pb, size);
             break;
         case MKBETAG('I','N','F','O'):
@@ -83,13 +73,26 @@ static int read_header(AVFormatContext *s)
             break;
     }
 
-    st->start_time = 0;
-    st->duration = avio_rb32(pb);
+    duration = avio_rb32(pb);
     avio_skip(pb, 4);
-    st->codecpar->sample_rate = avio_rb32(pb);
-    if (st->codecpar->sample_rate <= 0)
+    rate = avio_rb32(pb);
+    if (rate <= 0)
         return AVERROR_INVALIDDATA;
+
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
+
+    st->start_time = 0;
+    st->duration = duration;
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP;
+    st->codecpar->ch_layout.nb_channels = 1;
+    st->codecpar->sample_rate = rate;
     st->codecpar->block_align = 1024;
+
+    if (name[0])
+        av_dict_set(&st->metadata, "name", name, 0);
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
