@@ -26,7 +26,7 @@
 #include "internal.h"
 #include "pcm.h"
 
-static int wady_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RL32(p->buf) != MKTAG('W','A','D','Y'))
         return 0;
@@ -39,37 +39,42 @@ static int wady_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX / 3 * 2;
 }
 
-static int wady_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
+    int channels, ret, scale, rate;
     AVIOContext *pb = s->pb;
     AVCodecParameters *par;
-    int channels, ret;
+    int64_t duration;
     AVStream *st;
 
     avio_skip(pb, 4 + 1);
+    scale = avio_r8(pb);
+    channels = avio_rl16(pb);
+    rate = avio_rl32(pb);
+    avio_skip(pb, 4);
+    duration = avio_rl32(pb);
+    if (channels <= 0 || rate <= 0 || scale == 0)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
+    st->start_time   = 0;
+    st->duration     = duration;
     par              = st->codecpar;
     par->codec_type  = AVMEDIA_TYPE_AUDIO;
     par->codec_id    = AV_CODEC_ID_WADY_DPCM;
     par->format      = AV_SAMPLE_FMT_S16;
-    if ((ret = ff_get_extradata(s, par, pb, 1)) < 0)
-        return ret;
-    channels         = avio_rl16(pb);
-    if (channels == 0)
-        return AVERROR_INVALIDDATA;
-    av_channel_layout_default(&par->ch_layout, channels);
-    par->sample_rate = avio_rl32(pb);
-    if (par->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
-    avio_skip(pb, 4);
-    st->start_time = 0;
-    st->duration = avio_rl32(pb);
+    par->sample_rate = rate;
     par->block_align = channels;
+    av_channel_layout_default(&par->ch_layout, channels);
+
     avpriv_set_pts_info(st, 64, 1, par->sample_rate);
+
+    if ((ret = ff_alloc_extradata(par, 1)) < 0)
+        return ret;
+    par->extradata[0] = scale;
 
     avio_seek(pb, 0x30, SEEK_SET);
 
@@ -81,8 +86,8 @@ const FFInputFormat ff_wady_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Marble WADY"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "way",
-    .read_probe     = wady_probe,
-    .read_header    = wady_read_header,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
     .read_seek      = ff_pcm_read_seek,
 };
