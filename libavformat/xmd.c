@@ -62,6 +62,7 @@ static int xmd_read_header(AVFormatContext *s)
     par->sample_rate = rate;
     par->block_align = 21 * channels;
     st->duration = (avio_rl32(pb) / par->block_align) * 32LL;
+    st->start_time = 0;
     avpriv_set_pts_info(st, 64, 1, par->sample_rate);
     avio_skip(pb, 7);
 
