@@ -19,7 +19,6 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include "libavutil/mem.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
@@ -49,10 +48,6 @@ static int read_header(AVFormatContext *s)
     int64_t start = 0;
     AVStream *st;
 
-    st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
-
     while (start < 3) {
         while (!avio_feof(pb)) {
             if  ((avio_r8(pb) >> 4) > 12) {
@@ -72,6 +67,10 @@ static int read_header(AVFormatContext *s)
 
     if (start >= 3)
         return AVERROR_INVALIDDATA;
+
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
 
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_BRR;
