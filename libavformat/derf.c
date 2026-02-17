@@ -26,7 +26,7 @@
 #include "internal.h"
 #include "pcm.h"
 
-static int derf_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RL32(p->buf) != MKTAG('D','E','R','F'))
         return 0;
@@ -38,33 +38,34 @@ static int derf_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX / 3 * 2;
 }
 
-static int derf_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
-    unsigned data_size;
-    int channels;
     AVIOContext *pb = s->pb;
     AVCodecParameters *par;
+    unsigned data_size;
+    int channels;
     AVStream *st;
 
     avio_skip(pb, 4);
+    channels = avio_rl32(pb);
+    if (channels != 1 && channels != 2)
+        return AVERROR_INVALIDDATA;
+    data_size = avio_rl32(pb);
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
+    st->start_time   = 0;
+    st->duration     = data_size / channels;
     par              = st->codecpar;
     par->codec_type  = AVMEDIA_TYPE_AUDIO;
     par->codec_id    = AV_CODEC_ID_DERF_DPCM;
     par->format      = AV_SAMPLE_FMT_S16;
-    channels         = avio_rl32(pb);
-    if (channels != 1 && channels != 2)
-        return AVERROR_INVALIDDATA;
-    av_channel_layout_default(&par->ch_layout, channels);
-    data_size = avio_rl32(pb);
-    st->start_time = 0;
-    st->duration = data_size / channels;
     par->sample_rate = 22050;
     par->block_align = 1;
+
+    av_channel_layout_default(&par->ch_layout, channels);
 
     avpriv_set_pts_info(st, 64, 1, par->sample_rate);
 
@@ -75,8 +76,8 @@ const FFInputFormat ff_derf_demuxer = {
     .p.name         = "derf",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Xilam DERF Audio"),
     .p.extensions   = "adp",
-    .read_probe     = derf_probe,
-    .read_header    = derf_read_header,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
     .read_seek      = ff_pcm_read_seek,
 };
