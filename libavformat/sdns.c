@@ -54,6 +54,7 @@ static int read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
+    st->start_time   = 0;
     par              = st->codecpar;
     par->codec_type  = AVMEDIA_TYPE_AUDIO;
     par->codec_id    = AV_CODEC_ID_XMA1;
