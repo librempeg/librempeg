@@ -279,10 +279,8 @@ static int square_ps2fmv_read_packet(AVFormatContext *s, AVPacket *pkt)
             if (*(block_frames_ptr) != 0xffffffff) {
                 for (i = ps2fmv->current_block_frame; i < *(block_frames_ptr); i++)
                 {
-                    if (i >= 1)
-                        *(current_frame_offset) = *(next_frame_offset);
-
                     if (processed_frame) {
+                        *(current_frame_offset) = *(next_frame_offset);
                         processed_frame = 0;
                         break;
                     }
