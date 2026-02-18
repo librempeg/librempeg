@@ -570,6 +570,7 @@ extern const FFInputFormat  ff_spcm_demuxer;
 extern const FFOutputFormat ff_spx_muxer;
 extern const FFInputFormat  ff_spdif_demuxer;
 extern const FFOutputFormat ff_spdif_muxer;
+extern const FFInputFormat  ff_square_ps2fmv_demuxer;
 extern const FFInputFormat  ff_srt_demuxer;
 extern const FFOutputFormat ff_srt_muxer;
 extern const FFInputFormat  ff_ssm_demuxer;
