@@ -27,91 +27,66 @@
 #include "internal.h"
 
 /*
+ * todo list for this demuxer:
  *
- * ---
- * (todo) dat+sz file format can house B-picture IPU frame data,
- * may require uploaded (as-is) I-picture IPU frame data to parse it correctly tho.
+ * 1. dat+sz file format can house B-picture IPU frame data,
+ *    may require uploaded (as-is) I-picture IPU frame data to parse it correctly tho.
  *
- * ---
- * (todo) dat file format can house multiple I-picture IPU frames in one group out of many.
- * example: group 1 = 9 frames, group 2 = 14 frames, group 3 = 21 frames, group 4 = 11 frames, etc.
+ * 2. dat file format can house multiple I-picture IPU frames in one group out of many.
+ *    example: group 1 = 9 frames, group 2 = 14 frames, group 3 = 21 frames, group 4 = 11 frames, etc.
+ *    SOLVED by processing them like such.
  *
- * ---
- * (todo) dat+sz file format can house PSX ADPCM data, always fixed to 0x1c30 size.
- * layout of said data goes as follows:
- * 0x00-0x0f - 2 int32 hists per channel (in practice 2x2 int32 vars)
- * 0x10-0x1c2f - PSX ADPCM with block size of (9 * 4) = 36 bytes per channel.
- * (in practice it's (9 * 4) * 2 = 72 bytes).
+ * 3. dat+sz file format can house PSX ADPCM data, always fixed to 0x1c30 size.
+ *    layout of said data goes as follows:
+ *    0x00-0x0f - 2 int32 hists per channel (in practice 2x2 int32 vars)
+ *    0x10-0x1c2f - PSX ADPCM with block size of (9 * 4) = 36 bytes per channel.
+ *    (in practice it's (9 * 4) * 2 = 72 bytes).
  *
- * ---
- * (todo) dat+sz file format can house IMA ADPCM data, always fixed to 0x1900 size.
- * block size is fixed to 128 bytes per channel (in practice, (128 * 2) = 256 bytes)
- * and has no header, literally every byte is just 4-bit encoded sample data.
+ * 4. dat+sz file format can house IMA ADPCM data, always fixed to 0x1900 size.
+ *    (said data, however, is just not present in any SQUARESOFT PS2 game period)
+ *    block size is fixed to 128 bytes per channel (in practice, (128 * 2) = 256 bytes)
+ *    and has no header, literally every byte is just 4-bit encoded sample data.
  *
- * ---
- * (todo) dat+sz file format can house raw PCM16+AC-3 data into one grouped block.
- * said block may hold either one or two audio tracks into both PCM16+AC-3 portions.
+ * 5. dat+sz file format can house raw PCM16+AC-3 data into one grouped block.
+ *    said block may hold either one or two audio tracks into both PCM16+AC-3 portions.
  *
- * example:
- * PCM16 audio track 1 is within 0-0x6400 range,
- * PCM16 audio track 2 is within 0x6400-0xc800 range.
- * AC-3 audio track 1 is within 0xc800-0xe800 range (padding included).
- * AC-3 audio track 2 is within 0xe800-0x10800 range (padding included).
+ *    example:
+ *    PCM16 audio track 1 is within 0-0x6400 range,
+ *    PCM16 audio track 2 is within 0x6400-0xc800 range.
+ *    AC-3 audio track 1 is within 0xc800-0xe800 range (padding included).
+ *    AC-3 audio track 2 is within 0xe800-0x10800 range (padding included).
  *
- * AC-3 data portion is optional, but if present may also have 0-byte padding,
- * all aligned into 4-8 bytes.
- * or last last AC-3 frame may be 0x3f8 bytes, which as a consequence
- * is incomplete and will error out upon playback if not taken care of.
- * both cases must be compensated for with an empty AC-3 frame block, one hardcoded to 0x700 bytes.
+ *    AC-3 data portion is optional, but if present
+ *    may require 0-byte padding, all aligned into 4-8 bytes.
+ *    or last last AC-3 frame may be 0x3f8 bytes, which as a consequence
+ *    is incomplete and will error out upon playback should it not be taken care of.
+ *    both cases must be compensated for with an empty AC-3 frame block, one hardcoded to 0x700 bytes.
  *
- * ---
- * (todo) dat+sz file format can sometimes house compressed raw PCM16 data, and only that.
- * said data may either be grouped with AC-3 data or stored stand-alone.
- * (in which case the above two cases wrt. that AC-3 codec are expected to be handed out very similarly)
- * this practice is only seen with FFX PS2 FMVs.
+ * 6. dat+sz file format can sometimes house compressed raw PCM16 data, and only that.
+ *    said data may either be grouped with AC-3 data or stored stand-alone.
+ *    (in which case the above two cases wrt. that AC-3 codec are expected to be handed out very similarly)
+ *    this practice is only seen with FFX PS2 FMVs.
  *
-*/
+ * 7. PS2 FMV format may come in dat+sz file pairs,
+ * or may be just standalone dat file.
+ * additionally, certain PS2 games that use the former pair format,
+ * do not call such files by name.
+ * said format also had latter standalone file format being revised over time.
+ * (v1->v2->v3)
+ *
+ * 8. check libavformat\demux.h and libavformat\avformat
+ * on how to fill this info over time.
+ *
+ * 9. proper seek and close functions.
+ */
 
 typedef struct SquarePS2FMVDemuxContext {
     int is_standalone_v1_dat;
     int video_stream_index;
-    int this_block_is_busy;
     unsigned int block_frames;
-    int current_block_frame;
     unsigned int block_size;
     unsigned int block_offset[2];
-    unsigned int frame_size;
-    unsigned int frame_offset[2];
 } SquarePS2FMVDemuxContext;
-
-static unsigned int square_ps2fmv_guess_the_frame_size(AVIOContext *pb)
-{
-    int found_frame_size = 0;
-    int lapsed_bytes = 0;
-    uint32_t target_u32;
-
-    while (!found_frame_size || (lapsed_bytes < 0x10000))
-    {
-        target_u32 = avio_rb32(pb);
-        if (target_u32 != 0x00000100) {
-            avio_seek(pb, -3, SEEK_CUR);
-            lapsed_bytes++;
-        } else {
-            found_frame_size = 1;
-            break;
-        }
-    }
-
-    if (found_frame_size) {
-        lapsed_bytes += 4;
-        avio_seek(pb, -(lapsed_bytes), SEEK_CUR);
-    } else {
-        avio_seek(pb, -(lapsed_bytes), SEEK_CUR);
-        if (lapsed_bytes)
-            lapsed_bytes = 0;
-    }
-    return lapsed_bytes;
-}
 
 static int square_ps2fmv_read_probe(const AVProbeData *p)
 {
@@ -242,90 +217,29 @@ static int square_ps2fmv_read_packet(AVFormatContext *s, AVPacket *pkt)
     pos = avio_tell(pb);
     if (ps2fmv->is_standalone_v1_dat == 10)
     {
-        unsigned int *block_frames_ptr = &ps2fmv->block_frames;
         unsigned int *current_block_offset = &ps2fmv->block_offset[0];
         unsigned int *next_block_offset = &ps2fmv->block_offset[1];
-        unsigned int *current_frame_offset = &ps2fmv->frame_offset[0];
-        unsigned int *next_frame_offset = &ps2fmv->frame_offset[1];
-        unsigned int i;
 
-        /*
-         * two separate if statements.
-         * normally speaking, this wouldn't be necessary but who knows?
-         * necessary for this kind of block structure to actually work,
-         * otherwise it'll just hang with no end in sight.
-         */
-        if (!ps2fmv->this_block_is_busy) {
-            uint32_t block_size, block_frames;
+        ps2fmv->block_size = avio_rl32(pb);
+        ps2fmv->block_frames = avio_rl32(pb);
 
-            block_size = avio_rl32(pb);
-            block_frames = avio_rl32(pb);
+        *(current_block_offset) = pos + 8;
+        *(next_block_offset) = *(current_block_offset) + ps2fmv->block_size;
 
-            *(current_block_offset) = pos;
-            ps2fmv->block_size = block_size;
-            *(block_frames_ptr) = block_frames;
-            *(current_frame_offset) = *(current_block_offset) + 8;
-            *(next_block_offset) = *(current_frame_offset) + block_size;
+        if ((!ps2fmv->block_size)
+            &&
+            (ps2fmv->block_frames != 0xffffffff)) {
+            ret = av_get_packet(pb, pkt, ps2fmv->block_size);
+            if (ret < 0)
+                return ret;
+            if (ret != ps2fmv->block_size)
+                return AVERROR_INVALIDDATA;
 
-            ps2fmv->current_block_frame = 0;
-            ps2fmv->this_block_is_busy = 1;
-        }
+            pkt->pos = *(current_block_offset);
+            pkt->duration = ps2fmv->block_frames;
+            pkt->stream_index = ps2fmv->video_stream_index;
 
-        if (ps2fmv->this_block_is_busy) {
-            int processed_frame = 0;
-            int processed_frame_fail = 0;
-
-            if (*(block_frames_ptr) != 0xffffffff) {
-                for (i = ps2fmv->current_block_frame; i < *(block_frames_ptr); i++)
-                {
-                    if (processed_frame) {
-                        *(current_frame_offset) = *(next_frame_offset);
-                        processed_frame = 0;
-                        break;
-                    }
-
-                    ps2fmv->frame_size = square_ps2fmv_guess_the_frame_size(pb);
-                    if (ps2fmv->frame_size) {
-                        processed_frame = 1;
-                    } else {
-                        processed_frame_fail = 1;
-                        break;
-                    }
-
-                    if (processed_frame) {
-                        *(next_frame_offset) = *(current_frame_offset) + ps2fmv->frame_size;
-                        ps2fmv->current_block_frame++;
-                    }
-                }
-
-                if (!processed_frame_fail) {
-                    ret = av_get_packet(pb, pkt, ps2fmv->frame_size);
-                    if (ret < 0)
-                        return ret;
-                    if (ret != ps2fmv->frame_size)
-                        return AVERROR_INVALIDDATA;
-
-                    pos = avio_tell(pb);
-                    if (ps2fmv->frame_size)
-                        ps2fmv->frame_size = 0;
-
-                    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-                    pkt->pos = *(current_frame_offset);
-                    pkt->stream_index = ps2fmv->video_stream_index;
-
-                    /*
-                     * (todo) needs full-fledged seeking support at a bare minimum, for now just play from start-to-finish.
-                     *(jumping to any frame from any point in time, etc.)
-                     */
-                    if (i >= *(block_frames_ptr)) {
-                        avio_seek(pb, *(next_block_offset), SEEK_SET);
-                        ps2fmv->current_block_frame = 0;
-                        ps2fmv->this_block_is_busy = 0;
-                    }
-                } else {
-                    return AVERROR_INVALIDDATA;
-                }
-            }
+            avio_seek(pb, *(next_block_offset), SEEK_SET);
         }
     }
 
@@ -340,15 +254,4 @@ const FFInputFormat ff_square_ps2fmv_demuxer = {
     .read_probe = square_ps2fmv_read_probe,
     .read_header = square_ps2fmv_read_header,
     .read_packet = square_ps2fmv_read_packet,
-    /*
-     * (todo)
-     * PS2 FMV format may come in dat+sz file pairs
-     * or may be just standalone dat file.
-     * additionally, certain PS2 games that use the former pair format
-     * do not call such files by name.
-     * said format also had latter standalone file format being revised over time.
-     * (todo) check libavformat\demux.h and libavformat\avformat
-     * on how to fill this info over time.
-     * (todo) proper seek and close functions.
-     */
 };
