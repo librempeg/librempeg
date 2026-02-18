@@ -258,7 +258,6 @@ static int square_ps2fmv_read_packet(AVFormatContext *s, AVPacket *pkt)
         if (!ps2fmv->this_block_is_busy) {
             uint32_t block_size, block_frames;
 
-            pos = avio_tell(pb);
             block_size = avio_rl32(pb);
             block_frames = avio_rl32(pb);
 
