@@ -390,6 +390,7 @@ OBJS-$(CONFIG_IMF_DEMUXER)               += imfdec.o imf_cpl.o
 OBJS-$(CONFIG_IMUSE_DEMUXER)             += imuse.o
 OBJS-$(CONFIG_INGENIENT_DEMUXER)         += ingenientdec.o rawdec.o
 OBJS-$(CONFIG_IPMOVIE_DEMUXER)           += ipmovie.o
+OBJS-$(CONFIG_IPS_DEMUXER)               += ipsdec.o
 OBJS-$(CONFIG_IPU_DEMUXER)               += ipudec.o rawdec.o
 OBJS-$(CONFIG_IRCAM_DEMUXER)             += ircamdec.o ircam.o pcm.o
 OBJS-$(CONFIG_IRCAM_MUXER)               += ircamenc.o ircam.o rawenc.o

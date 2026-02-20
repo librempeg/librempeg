@@ -299,6 +299,7 @@ extern const FFInputFormat  ff_imuse_demuxer;
 extern const FFInputFormat  ff_ingenient_demuxer;
 extern const FFInputFormat  ff_ipmovie_demuxer;
 extern const FFOutputFormat ff_ipod_muxer;
+extern const FFInputFormat  ff_ips_demuxer;
 extern const FFInputFormat  ff_ipu_demuxer;
 extern const FFInputFormat  ff_ircam_demuxer;
 extern const FFOutputFormat ff_ircam_muxer;
