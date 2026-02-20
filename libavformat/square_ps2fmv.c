@@ -67,15 +67,14 @@
  *    (in which case the above two cases wrt. that AC-3 codec are expected to be handed out very similarly)
  *    this practice is only seen with FFX PS2 FMVs.
  *
- * 7. PS2 FMV format may come in dat+sz file pairs,
- * or may be just standalone dat file.
- * additionally, certain PS2 games that use the former pair format,
- * do not call such files by name.
- * said format also had latter standalone file format being revised over time.
- * (v1->v2->v3)
+ * 7. PS2 FMV format may come in dat+sz file pairs, or may be just standalone dat file.
+ *    additionally, FFX PS2 ver, the game that uses the former pair format,
+ *    do not call such files by name.
+ *    said format also had latter standalone file format being revised over time.
+ *    (v1->v2->v3)
  *
  * 8. check libavformat\demux.h and libavformat\avformat
- * on how to fill this info over time.
+ *    on how to fill this info over time.
  *
  * 9. proper seek and close functions.
  */
