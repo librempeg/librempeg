@@ -50,15 +50,23 @@ static int ipu_read_probe(const AVProbeData *p)
 static int ipu_read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
-    AVStream *st = avformat_new_stream(s, NULL);
+    int width, height;
+    AVStream *st;
 
+    avio_skip(pb, 8);
+    width  = avio_rl16(pb);
+    height = avio_rl16(pb);
+    if (width <= 0 || height <= 0)
+        return AVERROR_INVALIDDATA;
+
+    st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
-    avio_skip(pb, 8);
+
     st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
     st->codecpar->codec_id = AV_CODEC_ID_IPU;
-    st->codecpar->width    = avio_rl16(pb);
-    st->codecpar->height   = avio_rl16(pb);
+    st->codecpar->width    = width;
+    st->codecpar->height   = height;
     st->start_time         = 0;
     st->duration           =
     st->nb_frames          = avio_rl32(pb);
