@@ -68,6 +68,7 @@ static int mipu_read_header(AVFormatContext *s)
 
     st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
     st->codecpar->codec_id = AV_CODEC_ID_IPU;
+    st->codecpar->profile = 1;
     st->codecpar->width = width;
     st->codecpar->height = height;
     st->start_time = 0;
