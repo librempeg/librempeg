@@ -1426,7 +1426,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
                           int64_t pts)
 {
     ADPCMDecodeContext *s = avctx->priv_data;
-    const int block_align = avctx->block_align;
+    int block_align       = avctx->block_align;
     int nb_samples        = 0;
     int ch                = avctx->ch_layout.nb_channels;
     int has_coded_samples = 0;
@@ -1609,6 +1609,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         {
             int left = buf_size;
 
+            if (block_align <= 0)
+                block_align = left;
+
             nb_samples = 0;
             while (left > 0) {
                 const int block_size = FFMIN(left, block_align);
@@ -1672,6 +1675,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_NDSP_SI1:
         {
             int left = buf_size;
+
+            if (block_align <= 0)
+                block_align = left;
 
             nb_samples = 0;
             while (left > 0) {
@@ -1937,10 +1943,11 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     CASE(ADPCM_IMA_XBOX,
         {
             int left = avpkt->size;
+            int block_align = (avctx->block_align > 0) ? avctx->block_align : left;
             int samples_offset = 0;
 
             while (left > 0) {
-                const int block_size = FFMIN(left, avctx->block_align);
+                const int block_size = FFMIN(left, block_align);
                 const int nb_samples_per_block = 64 * (block_size / (36 * channels)) + 1;
 
                 for (int bc = 0; bc < channels; bc += 2) {
@@ -1983,10 +1990,11 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     CASE(ADPCM_IMA_XBOX_MONO,
         {
             int left = avpkt->size;
+            int block_align = (avctx->block_align > 0) ? avctx->block_align : left;
             int samples_offset = 0;
 
             while (left > 0) {
-                const int block_size = FFMIN(left, avctx->block_align);
+                const int block_size = FFMIN(left, block_align);
                 const int nb_samples_per_block = 64 * (block_size / (36 * channels)) + 1;
 
                 for (int ch = 0; ch < channels; ch++) {
