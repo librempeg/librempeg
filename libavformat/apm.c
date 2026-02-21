@@ -205,6 +205,8 @@ static int apm_read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_apm_demuxer = {
     .p.name         = "apm",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Ubisoft Rayman 2 APM"),
+    .p.extensions   = "apm",
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = apm_probe,
     .read_header    = apm_read_header,
     .read_packet    = apm_read_packet
