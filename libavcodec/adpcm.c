@@ -2351,8 +2351,11 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     CASE(ADPCM_IMA_DAT4,
         for (int channel = 0; channel < channels; channel++) {
             ADPCMChannelStatus *cs = &c->status[channel];
+
             samples = samples_p[channel];
-            bytestream2_skip(&gb, 4);
+            cs->predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
+            cs->step_index = av_clip(bytestream2_get_byteu(&gb), 0, 88);
+            bytestream2_skipu(&gb, 1);
             for (int n = 0; n < nb_samples; n += 2) {
                 int v = bytestream2_get_byteu(&gb);
                 *samples++ = adpcm_ima_expand_nibble(cs, v >> 4  , 3);
