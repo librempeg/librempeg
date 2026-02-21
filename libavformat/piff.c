@@ -88,7 +88,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_piff_demuxer = {
     .p.name         = "piff",
     .p.long_name    = NULL_IF_CONFIG_SMALL("PIFF Tantalus"),
-    .p.extensions   = "piff",
+    .p.extensions   = "tad",
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
