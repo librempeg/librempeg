@@ -196,6 +196,7 @@ static int square_ps2fmv_read_header(AVFormatContext *s)
         st->nb_frames          = nb_frames;
         avpriv_set_pts_info(st, 64, 1, 25);
         ps2fmv->video_stream_index = st->index;
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
     }
 
     avio_seek(pb, start_offset, SEEK_SET);
@@ -209,6 +210,9 @@ static int square_ps2fmv_read_packet(AVFormatContext *s, AVPacket *pkt)
     AVIOContext *pb = s->pb;
     int64_t pos;
     int ret;
+    int block_size_limits;
+    int block_frames_limits;
+    int cannot_process_this_block;
 
     if (avio_feof(pb))
         return AVERROR_EOF;
@@ -222,12 +226,17 @@ static int square_ps2fmv_read_packet(AVFormatContext *s, AVPacket *pkt)
         ps2fmv->block_size = avio_rl32(pb);
         ps2fmv->block_frames = avio_rl32(pb);
 
+        block_size_limits =
+            (!ps2fmv->block_size) || (ps2fmv->block_size > 0x40000);
+        block_frames_limits =
+               (!ps2fmv->block_frames) || (ps2fmv->block_frames == 0xffffffff)
+            || (ps2fmv->block_frames > 31);
+        cannot_process_this_block = block_size_limits && block_size_limits;
+
         *(current_block_offset) = pos + 8;
         *(next_block_offset) = *(current_block_offset) + ps2fmv->block_size;
 
-        if ((!ps2fmv->block_size)
-            &&
-            (ps2fmv->block_frames != 0xffffffff)) {
+        if (!cannot_process_this_block) {
             ret = av_get_packet(pb, pkt, ps2fmv->block_size);
             if (ret < 0)
                 return ret;
