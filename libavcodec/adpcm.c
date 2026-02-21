@@ -3090,7 +3090,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
             while (left > 0) {
                 const int block_size = FFMIN(left, block_align);
-                const int nb_samples_per_block = 14 * (block_size / (8 * channels));
+                const int start_skip = (left == avpkt->size && avpkt->pts == 0) ? c->start_skip * channels : 0;
+                const int nb_samples_per_block = 14 * ((block_size - start_skip) / channels / 8);
 
                 for (int ch = 0; ch < channels; ch++) {
                     samples = samples_p[ch] + samples_offset;
@@ -3099,7 +3100,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                         bytestream2_skip(&gb, c->start_skip);
 
                     /* Read in every sample for this channel.  */
-                    for (int i = 0; i < (nb_samples_per_block + 13) / 14; i++) {
+                    for (int i = 0; i < nb_samples_per_block / 14; i++) {
                         int byte = bytestream2_get_byteu(&gb);
                         const int index = (byte >> 4) & 0x7;
                         const int scale = 1 << (byte & 0xF);
@@ -3109,7 +3110,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                         int sample2 = c->status[ch].sample2;
 
                         /* Decode 14 samples.  */
-                        for (int n = 0; n < 14 && (i * 14 + n < nb_samples_per_block); n++) {
+                        for (int n = 0; n < 14; n++) {
                             int32_t sampledat;
 
                             if (n & 1) {
