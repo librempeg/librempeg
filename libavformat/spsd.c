@@ -1,6 +1,6 @@
 /*
- * YDSP demuxer
- * Copyright (c) 2025 Paul B Mahol
+ * Dreamcast SPSD demuxer
+ * Copyright (c) 2026 Paul B Mahol
  *
  * This file is part of Librempeg
  *
@@ -20,7 +20,6 @@
  */
 
 #include "libavutil/intreadwrite.h"
-#include "libavutil/mem.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
@@ -28,15 +27,20 @@
 
 static int read_probe(const AVProbeData *p)
 {
-    if (AV_RB32(p->buf) != MKBETAG('Y','D','S','P'))
+    if (AV_RB32(p->buf) != MKBETAG('S','P','S','D'))
         return 0;
-    if (p->buf_size < 24)
+    if (p->buf_size < 0x30)
         return 0;
-    if ((int)AV_RB32(p->buf+12) <= 0)
+    if (AV_RB32(p->buf+4) != 0x01010004 &&
+        AV_RB32(p->buf+4) != 0x00010004)
         return 0;
-    if ((int)AV_RB16(p->buf+16) <= 0)
+    if (AV_RL16(p->buf+0x0A) != 0 &&
+        AV_RL16(p->buf+0x0A) != 0xd &&
+        AV_RL16(p->buf+0x0A) != 0xff)
         return 0;
-    if ((int)AV_RB32(p->buf+20) <= 0)
+    if (AV_RL32(p->buf+0x0C) == 0)
+        return 0;
+    if (AV_RL16(p->buf+0x2A) == 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
@@ -44,61 +48,74 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int ret, channels, rate, align;
+    int align, rate, codec, flags, channels, index, data_size;
     AVIOContext *pb = s->pb;
-    int64_t blocks, loop_start, loop_end;
     AVStream *st;
 
     avio_skip(pb, 8);
-    blocks = avio_rb32(pb);
-    rate = avio_rb32(pb);
-    channels = avio_rb16(pb);
-    avio_skip(pb, 2);
-    align = avio_rb32(pb);
-    if (align <= 0 || channels <= 0 || channels > INT_MAX/align)
+    codec = avio_r8(pb);
+    flags = avio_r8(pb);
+    index = avio_rl16(pb);
+    data_size = avio_rl32(pb);
+    avio_seek(pb, 0x2A, SEEK_SET);
+    rate = avio_rl16(pb);
+    channels = (flags & 3) ? 2 : 1;
+    if (rate <= 0 || data_size <= 0)
         return AVERROR_INVALIDDATA;
+
+    switch (index) {
+    case 0:
+        if (channels > 1)
+            return AVERROR_INVALIDDATA;
+        align = 0x1000;
+        break;
+    case 0xd:
+        align = 0x2000;
+        break;
+    case 0xff:
+        align = data_size / channels;
+        break;
+    default:
+        return AVERROR_INVALIDDATA;
+    }
+
+    switch (codec) {
+    case 0:
+        codec = AV_CODEC_ID_PCM_S16LE;
+        break;
+    case 1:
+        codec = AV_CODEC_ID_PCM_S8;
+        break;
+    case 3:
+        codec = AV_CODEC_ID_ADPCM_AICA;
+        break;
+    default:
+        return AVERROR_INVALIDDATA;
+    }
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
     st->start_time = 0;
-    st->duration = blocks / (channels * 8) * 14LL;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP;
     st->codecpar->ch_layout.nb_channels = channels;
-    st->codecpar->sample_rate = rate;
     st->codecpar->block_align = align * channels;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->codec_id = codec;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
-    avio_seek(pb, 0xB0, SEEK_SET);
-    loop_start = avio_rb32(pb);
-    loop_end = avio_rb32(pb);
-    if (loop_start > 0) {
-        av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
-        if (loop_end > 0 && loop_end < st->duration)
-            av_dict_set_int(&st->metadata, "loop_end", loop_end, 0);
-    }
-
-    avio_seek(pb, 0x20, SEEK_SET);
-    if ((ret = ff_alloc_extradata(st->codecpar, 32 * channels)) < 0)
-        return ret;
-    for (int ch = 0; ch < channels; ch++) {
-        avio_read(pb, st->codecpar->extradata + ch * 32, 32);
-        avio_skip(pb, 4);
-    }
-
-    avio_seek(pb, 0x120, SEEK_SET);
+    avio_seek(pb, 0x40, SEEK_SET);
 
     return 0;
 }
 
-const FFInputFormat ff_ydsp_demuxer = {
-    .p.name         = "ydsp",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Yuke's Games DSP"),
+const FFInputFormat ff_spsd_demuxer = {
+    .p.name         = "spsd",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Dreamcast Naomi SPSD"),
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .p.extensions   = "ydsp",
+    .p.extensions   = "str,spsd",
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,

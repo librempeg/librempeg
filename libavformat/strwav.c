@@ -152,6 +152,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     int ret;
 
     ret = av_get_packet(pb, pkt, par->block_align);
+    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
     pkt->stream_index = 0;
 
     return ret;

@@ -2781,7 +2781,7 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     if (ret < 0)
         return ret;
 
-    for (int i = 0; i < avpkt->size; i++) {
+    for (int i = 0; i < avpkt->size && avctx->profile == 1; i++) {
         if (avpkt->data[i])
             break;
         skip++;
@@ -2857,10 +2857,6 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                              frame->linesize[2], block[5]);
         }
     }
-
-    align_get_bits(gb);
-    if (get_bits_left(gb) != 32)
-        return AVERROR_INVALIDDATA;
 
     *got_frame = 1;
 

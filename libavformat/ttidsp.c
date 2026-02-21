@@ -23,6 +23,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -50,8 +51,6 @@ static int read_header(AVFormatContext *s)
     version_main = avio_rb32(pb);
     version_sub = avio_rb32(pb);
     align = avio_rb32(pb);
-    if (align <= 0)
-        return AVERROR_INVALIDDATA;
 
     if (version_main == 0x01 && version_sub == 0xc8) {
         channels = 2;
@@ -65,11 +64,12 @@ static int read_header(AVFormatContext *s)
         header_offset = 0x20;
         channels = avio_rb32(pb);
         rate = avio_rb32(pb);
-        if (rate <= 0 || channels <= 0 || channels > INT_MAX/align)
-            return AVERROR_INVALIDDATA;
     } else {
         return AVERROR_INVALIDDATA;
     }
+
+    if (align <= 0 || rate <= 0 || channels <= 0 || channels > INT_MAX/align)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
@@ -102,18 +102,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_ttidsp_demuxer = {
     .p.name         = "ttidsp",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Traveller's Tales IDSP"),
@@ -121,5 +109,5 @@ const FFInputFormat ff_ttidsp_demuxer = {
     .p.extensions   = "gcm,dsp,wua",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };

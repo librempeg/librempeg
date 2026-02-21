@@ -1,6 +1,6 @@
 /*
- * YDSP demuxer
- * Copyright (c) 2025 Paul B Mahol
+ * Monster NST demuxer
+ * Copyright (c) 2026 Paul B Mahol
  *
  * This file is part of Librempeg
  *
@@ -20,7 +20,6 @@
  */
 
 #include "libavutil/intreadwrite.h"
-#include "libavutil/mem.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
@@ -28,15 +27,19 @@
 
 static int read_probe(const AVProbeData *p)
 {
-    if (AV_RB32(p->buf) != MKBETAG('Y','D','S','P'))
+    if (AV_RB32(p->buf) != 1)
         return 0;
-    if (p->buf_size < 24)
+    if (p->buf_size < 0x64)
         return 0;
-    if ((int)AV_RB32(p->buf+12) <= 0)
+    if (AV_RB32(p->buf+0x0) != AV_RB32(p->buf+0x54))
         return 0;
-    if ((int)AV_RB16(p->buf+16) <= 0)
+    if (AV_RB32(p->buf+0x4) != AV_RB32(p->buf+0x58))
         return 0;
-    if ((int)AV_RB32(p->buf+20) <= 0)
+    if (AV_RB32(p->buf+0x8) != AV_RB32(p->buf+0x5C))
+        return 0;
+    if (AV_RB32(p->buf+0xC) != AV_RB32(p->buf+0x60))
+        return 0;
+    if ((int)AV_RB32(p->buf+0x14) <= 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
@@ -44,18 +47,16 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int ret, channels, rate, align;
     AVIOContext *pb = s->pb;
-    int64_t blocks, loop_start, loop_end;
+    int64_t duration;
+    int ret, rate;
     AVStream *st;
 
     avio_skip(pb, 8);
-    blocks = avio_rb32(pb);
+    duration = avio_rb32(pb);
+    avio_skip(pb, 8);
     rate = avio_rb32(pb);
-    channels = avio_rb16(pb);
-    avio_skip(pb, 2);
-    align = avio_rb32(pb);
-    if (align <= 0 || channels <= 0 || channels > INT_MAX/align)
+    if (rate <= 0)
         return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
@@ -63,42 +64,30 @@ static int read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     st->start_time = 0;
-    st->duration = blocks / (channels * 8) * 14LL;
+    st->duration = duration;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP;
-    st->codecpar->ch_layout.nb_channels = channels;
+    st->codecpar->ch_layout.nb_channels = 2;
     st->codecpar->sample_rate = rate;
-    st->codecpar->block_align = align * channels;
+    st->codecpar->block_align = 16 * 2;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
-    avio_seek(pb, 0xB0, SEEK_SET);
-    loop_start = avio_rb32(pb);
-    loop_end = avio_rb32(pb);
-    if (loop_start > 0) {
-        av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
-        if (loop_end > 0 && loop_end < st->duration)
-            av_dict_set_int(&st->metadata, "loop_end", loop_end, 0);
-    }
-
     avio_seek(pb, 0x20, SEEK_SET);
-    if ((ret = ff_alloc_extradata(st->codecpar, 32 * channels)) < 0)
+    if ((ret = ff_get_extradata(s, st->codecpar, pb, 32 * 2)) < 0)
         return ret;
-    for (int ch = 0; ch < channels; ch++) {
-        avio_read(pb, st->codecpar->extradata + ch * 32, 32);
-        avio_skip(pb, 4);
-    }
+    memcpy(st->codecpar->extradata+32, st->codecpar->extradata, 32);
 
-    avio_seek(pb, 0x120, SEEK_SET);
+    avio_seek(pb, 0xAC, SEEK_SET);
 
     return 0;
 }
 
-const FFInputFormat ff_ydsp_demuxer = {
-    .p.name         = "ydsp",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Yuke's Games DSP"),
+const FFInputFormat ff_nst_demuxer = {
+    .p.name         = "nst",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Monster GameCube NST"),
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .p.extensions   = "ydsp",
+    .p.extensions   = "nst",
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
