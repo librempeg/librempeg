@@ -50,8 +50,6 @@ static int read_header(AVFormatContext *s)
     version_main = avio_rb32(pb);
     version_sub = avio_rb32(pb);
     align = avio_rb32(pb);
-    if (align <= 0)
-        return AVERROR_INVALIDDATA;
 
     if (version_main == 0x01 && version_sub == 0xc8) {
         channels = 2;
@@ -65,11 +63,12 @@ static int read_header(AVFormatContext *s)
         header_offset = 0x20;
         channels = avio_rb32(pb);
         rate = avio_rb32(pb);
-        if (rate <= 0 || channels <= 0 || channels > INT_MAX/align)
-            return AVERROR_INVALIDDATA;
     } else {
         return AVERROR_INVALIDDATA;
     }
+
+    if (align <= 0 || rate <= 0 || channels <= 0 || channels > INT_MAX/align)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
