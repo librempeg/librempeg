@@ -202,6 +202,7 @@ const FFInputFormat ff_musx_demuxer = {
     .p.name         = "musx",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Eurocom MUSX"),
     .p.extensions   = "musx",
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
