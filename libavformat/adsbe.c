@@ -72,7 +72,7 @@ static int read_header(AVFormatContext *s)
     case 0x21:
         start_offset = 0x28;
         align = 0x24;
-        codec = AV_CODEC_ID_ADPCM_IMA_XBOX;
+        codec = AV_CODEC_ID_ADPCM_IMA_XBOX_MONO;
         break;
     default:
         avpriv_request_sample(s, "codec %d", codec);
