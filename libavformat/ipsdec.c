@@ -66,7 +66,7 @@ static int read_header(AVFormatContext *s)
     ips->sample_rate = avio_rl16(pb);
     avio_skip(pb, 2);
     ips->start_offset = avio_rl16(pb);
-    if (ips->start_offset <= 0x40)
+    if (ips->start_offset <= 0x40 || ips->nb_channels <= 0 || ips->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
 
     ips->packet_stream_index = av_calloc(ips->start_offset - 0x40, sizeof(*ips->packet_stream_index));
