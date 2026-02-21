@@ -1867,8 +1867,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             ADPCMChannelStatus *cs = &c->status[i];
 
             cs->predictor = samples_p[i][0] = sign_extend(bytestream2_get_le16u(&gb), 16);
-            cs->step_index = av_clip(bytestream2_get_byte(&gb), 0, 88);
-            bytestream2_skip(&gb, 1);
+            cs->step_index = av_clip(bytestream2_get_byteu(&gb), 0, 88);
+            bytestream2_skipu(&gb, 1);
 
             for (int n = 0; n < (nb_samples - 1) / 8; n++) {
                 samples = &samples_p[i][1 + n * 8];
@@ -1939,7 +1939,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     ADPCMChannelStatus *cs = &c->status[bc+i];
                     cs->predictor = samples_p[bc+i][bs] = sign_extend(bytestream2_get_le16u(&gb), 16);
 
-                    cs->step_index = sign_extend(bytestream2_get_le16u(&gb), 16);
+                    cs->step_index = bytestream2_get_byteu(&gb);
+                    bytestream2_skipu(&gb, 1);
                     if (cs->step_index > 88u) {
                         av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
                                i, cs->step_index);
@@ -1969,7 +1970,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
             for (int bs = 0; bs < nb_samples-1; bs += 64) {
                 cs->predictor = samples_p[ch][bs] = sign_extend(bytestream2_get_le16u(&gb), 16);
-                cs->step_index = sign_extend(bytestream2_get_le16u(&gb), 16);
+                cs->step_index = bytestream2_get_byteu(&gb);
+                bytestream2_skipu(&gb, 1);
                 if (cs->step_index > 88u) {
                     av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
                            ch, cs->step_index);
@@ -1992,7 +1994,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             c->status[i].predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
 
         for (int i = 0; i < channels; i++) {
-            c->status[i].step_index = sign_extend(bytestream2_get_le16u(&gb), 16);
+            c->status[i].step_index = bytestream2_get_byteu(&gb);
+            bytestream2_skipu(&gb, 1);
             if (c->status[i].step_index > 88u) {
                 av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
                        i, c->status[i].step_index);
@@ -2113,7 +2116,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         for (int channel = 0; channel < channels; channel++) {
             ADPCMChannelStatus *cs = &c->status[channel];
             cs->predictor  = *samples++ = sign_extend(bytestream2_get_le16u(&gb), 16);
-            cs->step_index = sign_extend(bytestream2_get_le16u(&gb), 16);
+            cs->step_index = bytestream2_get_byteu(&gb);
+            bytestream2_skipu(&gb, 1);
             if (cs->step_index > 88u){
                 av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
                        channel, cs->step_index);
@@ -2192,7 +2196,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         for (int channel = 0; channel < channels; channel++) {
             ADPCMChannelStatus *cs = &c->status[channel];
             cs->predictor  = sign_extend(bytestream2_get_le16u(&gb), 16);
-            cs->step_index = sign_extend(bytestream2_get_le16u(&gb), 16);
+            cs->step_index = bytestream2_get_byteu(&gb);
+            bytestream2_skipu(&gb, 1);
             if (cs->step_index > 88u){
                 av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
                        channel, cs->step_index);
@@ -2214,7 +2219,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         for (int channel = 0; channel < channels; channel++) {
             ADPCMChannelStatus *cs = &c->status[channel];
             cs->predictor  = sign_extend(bytestream2_get_le16u(&gb), 16);
-            cs->step_index = sign_extend(bytestream2_get_le16u(&gb), 16);
+            cs->step_index = bytestream2_get_byteu(&gb);
+            bytestream2_skipu(&gb, 1);
             if (cs->step_index > 88u){
                 av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
                        channel, cs->step_index);
@@ -2234,7 +2240,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         for (int channel = 0; channel < channels; channel++) {
             ADPCMChannelStatus *cs = &c->status[channel];
             cs->predictor  = sign_extend(bytestream2_get_le16u(&gb), 16);
-            cs->step_index = sign_extend(bytestream2_get_le16u(&gb), 16);
+            cs->step_index = bytestream2_get_byteu(&gb);
+            bytestream2_skipu(&gb, 1);
             if (cs->step_index > 88u){
                 av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
                        channel, cs->step_index);
@@ -2261,7 +2268,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         for (int subframe = 0; subframe < nb_samples / 256; subframe++) {
             for (int channel = 0; channel < channels; channel++) {
                 ADPCMChannelStatus *cs = &c->status[channel];
-                cs->step_index = sign_extend(bytestream2_get_le16u(&gb), 16);
+                cs->step_index = bytestream2_get_byteu(&gb);
+                bytestream2_skipu(&gb, 1);
                 cs->predictor  = sign_extend(bytestream2_get_le16u(&gb), 16);
                 if (cs->step_index > 88u){
                     av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
@@ -2281,7 +2289,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     CASE(ADPCM_IMA_MOFLEX,
         for (int channel = 0; channel < channels; channel++) {
             ADPCMChannelStatus *cs = &c->status[channel];
-            cs->step_index = sign_extend(bytestream2_get_le16u(&gb), 16);
+            cs->step_index = bytestream2_get_byteu(&gb);
+            bytestream2_skipu(&gb, 1);
             cs->predictor  = sign_extend(bytestream2_get_le16u(&gb), 16);
             if (cs->step_index > 88u){
                 av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
@@ -2395,7 +2404,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     CASE(ADPCM_IMA_RAD,
         for (int channel = 0; channel < channels; channel++) {
             ADPCMChannelStatus *cs = &c->status[channel];
-            cs->step_index = sign_extend(bytestream2_get_le16u(&gb), 16);
+            cs->step_index = bytestream2_get_byteu(&gb);
+            bytestream2_skipu(&gb, 1);
             cs->predictor  = sign_extend(bytestream2_get_le16u(&gb), 16);
             if (cs->step_index > 88u){
                 av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
