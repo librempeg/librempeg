@@ -3085,10 +3085,11 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     case AV_CODEC_ID_ADPCM_NDSP_LE:
         {
             int left = avpkt->size;
+            int block_align = (avctx->block_align > 0) ? avctx->block_align : left;
             int samples_offset = 0;
 
             while (left > 0) {
-                const int block_size = FFMIN(left, avctx->block_align);
+                const int block_size = FFMIN(left, block_align);
                 const int nb_samples_per_block = 14 * (block_size / (8 * channels));
 
                 for (int ch = 0; ch < channels; ch++) {
