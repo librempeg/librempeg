@@ -509,6 +509,7 @@ OBJS-$(CONFIG_NISTSPHERE_DEMUXER)        += nistspheredec.o pcm.o
 OBJS-$(CONFIG_NISTSPHERE_MUXER)          += nistsphereenc.o rawenc.o
 OBJS-$(CONFIG_NPSF_DEMUXER)              += npsf.o pcm.o
 OBJS-$(CONFIG_NSP_DEMUXER)               += nspdec.o pcm.o
+OBJS-$(CONFIG_NST_DEMUXER)               += nst.o pcm.o
 OBJS-$(CONFIG_NSV_DEMUXER)               += nsvdec.o
 OBJS-$(CONFIG_NULL_MUXER)                += nullenc.o
 OBJS-$(CONFIG_NUS3_DEMUXER)              += nus3.o
