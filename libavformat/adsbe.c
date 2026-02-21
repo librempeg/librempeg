@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -110,19 +111,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVCodecParameters *par = s->streams[0]->codecpar;
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, par->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_adsbe_demuxer = {
     .p.name         = "adsbe",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Midway ADS"),
@@ -130,5 +118,5 @@ const FFInputFormat ff_adsbe_demuxer = {
     .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
