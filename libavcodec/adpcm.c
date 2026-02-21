@@ -1609,11 +1609,20 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         nb_samples = 1 + (buf_size - 4 * ch) / (bsize * ch) * bsamples;
         ) /* End of CASE */
     CASE(ADPCM_IMA_XBOX,
-        if (block_align > 0)
-            buf_size = FFMIN(buf_size, block_align);
-        if (buf_size < 4 * ch)
-            return AVERROR_INVALIDDATA;
-        nb_samples = (buf_size / (0x24 * ch)) * 64 + 1;
+        {
+            int left = buf_size;
+
+            nb_samples = 0;
+            while (left > 0) {
+                const int block_size = FFMIN(left, block_align);
+
+                if (block_size <= 0)
+                    break;
+
+                nb_samples += (block_size / (0x24 * ch)) * 64 + 1;
+                left -= block_size;
+            }
+        }
         ) /* End of CASE */
     CASE(ADPCM_IMA_XBOX_MONO,
         if (block_align > 0)
@@ -1936,35 +1945,49 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         ) /* End of CASE */
     CASE(ADPCM_IMA_XBOX,
-        for (int bc = 0; bc < channels; bc += 2) {
-            for (int bs = 0; bs < nb_samples-1; bs += 64) {
-                for (int i = 0; i < FFMIN(channels, 2); i++) {
-                    ADPCMChannelStatus *cs = &c->status[bc+i];
-                    cs->predictor = samples_p[bc+i][bs] = sign_extend(bytestream2_get_le16u(&gb), 16);
+        {
+            int left = avpkt->size;
+            int samples_offset = 0;
 
-                    cs->step_index = bytestream2_get_byteu(&gb);
-                    bytestream2_skipu(&gb, 1);
-                    if (cs->step_index > 88u) {
-                        av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
-                               i, cs->step_index);
-                        return AVERROR_INVALIDDATA;
-                    }
-                }
+            while (left > 0) {
+                const int block_size = FFMIN(left, avctx->block_align);
+                const int nb_samples_per_block = 64 * (block_size / (36 * channels)) + 1;
 
-                for (int n = 0; n < 8; n++) {
-                    for (int i = 0; i < FFMIN(channels, 2); i++) {
-                        ADPCMChannelStatus *cs = &c->status[bc+i];
-                        samples = &samples_p[bc+i][bs + 1 + n * 8];
-                        for (int m = 0; m < 8; m += 2) {
-                            int v = bytestream2_get_byteu(&gb);
-                            samples[m    ] = ff_adpcm_ima_qt_expand_nibble(cs, v & 0x0F);
-                            samples[m + 1] = ff_adpcm_ima_qt_expand_nibble(cs, v >> 4  );
+                for (int bc = 0; bc < channels; bc += 2) {
+                    for (int bs = 0; bs < nb_samples_per_block-1; bs += 64) {
+                        for (int i = 0; i < FFMIN(channels, 2); i++) {
+                            ADPCMChannelStatus *cs = &c->status[bc+i];
+
+                            cs->predictor = samples_p[bc+i][bs + samples_offset] = sign_extend(bytestream2_get_le16u(&gb), 16);
+                            cs->step_index = bytestream2_get_byteu(&gb);
+                            bytestream2_skipu(&gb, 1);
+                            if (cs->step_index > 88u) {
+                                av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
+                                       i, cs->step_index);
+                                return AVERROR_INVALIDDATA;
+                            }
+                        }
+
+                        for (int n = 0; n < 8; n++) {
+                            for (int i = 0; i < FFMIN(channels, 2); i++) {
+                                ADPCMChannelStatus *cs = &c->status[bc+i];
+
+                                samples = samples_p[bc+i] + bs + 1 + n * 8 + samples_offset;
+                                for (int m = 0; m < 8; m += 2) {
+                                    int v = bytestream2_get_byteu(&gb);
+                                    samples[m    ] = ff_adpcm_ima_qt_expand_nibble(cs, v & 0x0F);
+                                    samples[m + 1] = ff_adpcm_ima_qt_expand_nibble(cs, v >> 4  );
+                                }
+                            }
                         }
                     }
                 }
+
+                samples_offset += nb_samples_per_block-1;
+                left -= block_size;
+                frame->nb_samples--;
             }
         }
-        frame->nb_samples--;
         bytestream2_seek(&gb, 0, SEEK_END);
         ) /* End of CASE */
     CASE(ADPCM_IMA_XBOX_MONO,
