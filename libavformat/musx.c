@@ -195,8 +195,15 @@ static int read_header(AVFormatContext *s)
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
+    int ret;
 
-    return av_get_packet(s->pb, pkt, par->block_align);
+    ret = av_get_packet(s->pb, pkt, par->block_align);
+    if (pkt->size >= 4 && AV_RB32(pkt->data) == AV_RB32("\xab\xab\xab\xab")) {
+        pkt->size = 0;
+        return AVERROR_EOF;
+    }
+
+    return ret;
 }
 
 const FFInputFormat ff_musx_demuxer = {
