@@ -23,8 +23,9 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
-static int svag_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RB32(p->buf) != MKBETAG('S','v','a','g'))
         return 0;
@@ -38,7 +39,7 @@ static int svag_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int svag_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     unsigned size, align, rate, channels;
     AVIOContext *pb = s->pb;
@@ -61,7 +62,7 @@ static int svag_read_header(AVFormatContext *s)
     st->codecpar->sample_rate = rate;
     st->codecpar->ch_layout.nb_channels = channels;
     st->start_time = 0;
-    st->duration           = size / (16 * st->codecpar->ch_layout.nb_channels) * 28;
+    st->duration = size / (16 * st->codecpar->ch_layout.nb_channels) * 28;
     st->codecpar->block_align = align * st->codecpar->ch_layout.nb_channels;
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
@@ -70,24 +71,12 @@ static int svag_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int svag_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_svag_demuxer = {
     .p.name         = "svag",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Konami PS2 SVAG"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "svag",
-    .read_probe     = svag_probe,
-    .read_header    = svag_read_header,
-    .read_packet    = svag_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = ff_pcm_read_packet,
 };
