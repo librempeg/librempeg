@@ -41,37 +41,33 @@ static int ast_probe(const AVProbeData *p)
 
 static int ast_read_header(AVFormatContext *s)
 {
+    int depth, codec, nb_channels, rate;
     AVIOContext *pb = s->pb;
-    int depth;
     AVStream *st;
+
+    avio_skip(pb, 8);
+    codec = avio_rb16(pb);
+    depth = avio_rb16(pb);
+    nb_channels = avio_rb16(pb);
+    avio_skip(pb, 2);
+    rate = avio_rb32(pb);
+    if (depth != 16 || nb_channels <= 0 || rate <= 0)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(pb, 8);
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id   = ff_codec_get_id(ff_codec_ast_tags, avio_rb16(pb));
-
-    depth = avio_rb16(pb);
-    if (depth != 16) {
-        avpriv_request_sample(s, "depth %d", depth);
-        return AVERROR_INVALIDDATA;
-    }
-
-    st->codecpar->ch_layout.nb_channels = avio_rb16(pb);
-    if (!st->codecpar->ch_layout.nb_channels)
-        return AVERROR_INVALIDDATA;
+    st->codecpar->codec_id   = ff_codec_get_id(ff_codec_ast_tags, codec);
+    st->codecpar->ch_layout.nb_channels = nb_channels;
+    st->codecpar->sample_rate = rate;
 
     if (st->codecpar->ch_layout.nb_channels == 2)
         st->codecpar->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
     else if (st->codecpar->ch_layout.nb_channels == 4)
         st->codecpar->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_4POINT0;
 
-    avio_skip(pb, 2);
-    st->codecpar->sample_rate = avio_rb32(pb);
-    if (st->codecpar->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
     st->start_time         = 0;
     st->duration           = avio_rb32(pb);
     avio_skip(pb, 40);
