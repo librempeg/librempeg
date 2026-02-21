@@ -26,7 +26,7 @@
 #include "internal.h"
 #include "pcm.h"
 
-static int piff_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RB32(p->buf)    == AV_RB32("PIFF") &&
         AV_RB32(p->buf+8)  == AV_RB32("TPCM") &&
@@ -36,41 +36,39 @@ static int piff_probe(const AVProbeData *p)
     return 0;
 }
 
-static int piff_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
+    int rate, nb_channels;
     AVIOContext *pb = s->pb;
     AVStream *st;
 
     avio_skip(pb, 22);
+    nb_channels = avio_rl16(pb);
+    rate = avio_rl32(pb);
+    avio_skip(pb, 0x38 - avio_tell(pb));
+    if (avio_rb32(pb) != AV_RB32("BODY"))
+        return AVERROR_INVALIDDATA;
+    if (nb_channels <= 0 || rate <= 0 || nb_channels > INT_MAX/16)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->ch_layout.nb_channels = avio_rl16(pb);
-    if (st->codecpar->ch_layout.nb_channels < 1)
-        return AVERROR_INVALIDDATA;
-
-    st->codecpar->sample_rate = avio_rl32(pb);
-    if (st->codecpar->sample_rate < 1)
-        return AVERROR_INVALIDDATA;
-
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_TANTALUS;
+    st->codecpar->ch_layout.nb_channels = nb_channels;
+    st->codecpar->sample_rate = rate;
     st->codecpar->block_align = 16 * st->codecpar->ch_layout.nb_channels;
 
-    avio_skip(pb, 0x38 - avio_tell(pb));
-    if (avio_rb32(pb) != AV_RB32("BODY"))
-        return AVERROR_INVALIDDATA;
-
-    st->duration = (avio_rl32(pb) * 2) / st->codecpar->ch_layout.nb_channels;
+    st->duration = (avio_rl32(pb) * 2LL) / st->codecpar->ch_layout.nb_channels;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
 }
 
-static int piff_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     int ret, size, key = avio_tell(s->pb) == 0x40;
 
@@ -90,8 +88,8 @@ static int piff_read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_piff_demuxer = {
     .p.name         = "piff",
     .p.long_name    = NULL_IF_CONFIG_SMALL("PIFF Tantalus"),
-    .p.extensions   = "piff",
-    .read_probe     = piff_probe,
-    .read_header    = piff_read_header,
-    .read_packet    = piff_read_packet,
+    .p.extensions   = "tad",
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };

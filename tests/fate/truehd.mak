@@ -28,5 +28,5 @@ fate-truehd-atmos-obj: CMD = md5pipe -f truehd -extract_objects 1 -i $(TARGET_SA
 fate-truehd-atmos-obj: CMP = oneline
 fate-truehd-atmos-obj: REF = f19f6f8ec8b040050aaa019f016f7ddc
 
-FATE_SAMPLES_AUDIO += $(FATE_TRUEHD-yes)
-fate-truehd: $(FATE_TRUEHD-yes)
+FATE_SAMPLES_FFMPEG += $(FATE_TRUEHD-yes)
+fate-audio fate-truehd: $(FATE_TRUEHD-yes)

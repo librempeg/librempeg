@@ -156,6 +156,7 @@ typedef struct HTTPContext {
     int nb_redirects;
     int sum_latency; /* divide by nb_requests */
     int max_latency;
+    int max_redirects;
 } HTTPContext;
 
 #define OFFSET(x) offsetof(HTTPContext, x)
@@ -202,6 +203,7 @@ static const AVOption options[] = {
     { "resource", "The resource requested by a client", OFFSET(resource), AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, E },
     { "reply_code", "The http status code to return to a client", OFFSET(reply_code), AV_OPT_TYPE_INT, { .i64 = 200}, INT_MIN, 599, E},
     { "short_seek_size", "Threshold to favor readahead over seek.", OFFSET(short_seek_size), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, D },
+    { "max_redirects", "Maximum number of redirects", OFFSET(max_redirects), AV_OPT_TYPE_INT, { .i64 = MAX_REDIRECTS }, 0, INT_MAX, D },
     { NULL }
 };
 
@@ -410,6 +412,9 @@ redo:
 
     cached = redirect_cache_get(s);
     if (cached) {
+        if (redirects++ >= s->max_redirects)
+            return AVERROR(EIO);
+
         av_free(s->location);
         s->location = av_strdup(cached);
         if (!s->location) {
@@ -480,7 +485,7 @@ redo:
         s->new_location) {
         /* url moved, get next */
         ffurl_closep(&s->hd);
-        if (redirects++ >= MAX_REDIRECTS)
+        if (redirects++ >= s->max_redirects)
             return AVERROR(EIO);
 
         if (!s->expires) {
@@ -2113,7 +2118,7 @@ static int64_t http_seek_internal(URLContext *h, int64_t off, int whence, int fo
 
     /* try to reuse existing connection for small seeks */
     uint64_t remaining = s->range_end - old_off - old_buf_size;
-    if (!s->willclose && s->range_end && remaining <= ffurl_get_short_seek(h)) {
+    if (s->hd && !s->willclose && s->range_end && remaining <= ffurl_get_short_seek(h)) {
         /* drain remaining data left on the wire from previous request */
         av_log(h, AV_LOG_DEBUG, "Soft-seeking to offset %"PRIu64" by draining "
                "%"PRIu64" remaining byte(s)\n", s->off, remaining);

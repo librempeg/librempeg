@@ -677,10 +677,10 @@ typedef struct VulkanOptExtension {
 } VulkanOptExtension;
 
 static const VulkanOptExtension optional_instance_exts[] = {
-    { VK_EXT_LAYER_SETTINGS_EXTENSION_NAME,                   FF_VK_EXT_NO_FLAG                },
 #ifdef __APPLE__
     { VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,          FF_VK_EXT_NO_FLAG                },
 #endif
+    { 0 },
 };
 
 static const VulkanOptExtension optional_device_exts[] = {
@@ -695,6 +695,9 @@ static const VulkanOptExtension optional_device_exts[] = {
     { VK_KHR_SHADER_SUBGROUP_ROTATE_EXTENSION_NAME,           FF_VK_EXT_SUBGROUP_ROTATE        },
     { VK_EXT_HOST_IMAGE_COPY_EXTENSION_NAME,                  FF_VK_EXT_HOST_IMAGE_COPY        },
     { VK_KHR_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_EXTENSION_NAME, FF_VK_EXT_EXPLICIT_MEM_LAYOUT    },
+#ifdef VK_KHR_shader_relaxed_extended_instruction
+    { VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME, FF_VK_EXT_RELAXED_EXTENDED_INSTR },
+#endif
 #ifdef VK_EXT_shader_long_vector
     { VK_EXT_SHADER_LONG_VECTOR_EXTENSION_NAME,               FF_VK_EXT_LONG_VECTOR            },
 #endif
@@ -743,14 +746,14 @@ static const VulkanOptExtension optional_device_exts[] = {
 const char **av_vk_get_optional_instance_extensions(int *count)
 {
     const char **exts = av_malloc_array(sizeof(*exts),
-                                        FF_ARRAY_ELEMS(optional_instance_exts));
+                                        FF_ARRAY_ELEMS(optional_instance_exts) - 1);
     if (!exts)
         return NULL;
 
-    for (int i = 0; i < FF_ARRAY_ELEMS(optional_instance_exts); i++)
+    for (int i = 0; i < FF_ARRAY_ELEMS(optional_instance_exts) - 1; i++)
         exts[i] = optional_instance_exts[i].name;
 
-    *count = FF_ARRAY_ELEMS(optional_instance_exts);
+    *count = FF_ARRAY_ELEMS(optional_instance_exts) - 1;
     return exts;
 }
 
@@ -850,8 +853,6 @@ enum FFVulkanDebugMode {
     FF_VULKAN_DEBUG_PRINTF = 2,
     /* Enables extra printouts */
     FF_VULKAN_DEBUG_PRACTICES = 3,
-    /* Disables validation but keeps shader debug info and optimizations */
-    FF_VULKAN_DEBUG_PROFILE = 4,
 
     FF_VULKAN_DEBUG_NB,
 };
@@ -878,7 +879,7 @@ static int check_extensions(AVHWDeviceContext *ctx, int dev, AVDictionary *opts,
     if (!dev) {
         mod = "instance";
         optional_exts = optional_instance_exts;
-        optional_exts_num = FF_ARRAY_ELEMS(optional_instance_exts);
+        optional_exts_num = FF_ARRAY_ELEMS(optional_instance_exts) - 1;
         user_exts = av_dict_get(opts, "instance_extensions", NULL, 0);
         if (user_exts) {
             user_exts_str = av_strdup(user_exts->value);
@@ -931,7 +932,8 @@ static int check_extensions(AVHWDeviceContext *ctx, int dev, AVDictionary *opts,
             ((debug_mode == FF_VULKAN_DEBUG_VALIDATE) ||
              (debug_mode == FF_VULKAN_DEBUG_PRINTF) ||
              (debug_mode == FF_VULKAN_DEBUG_PRACTICES)) &&
-            !strcmp(tstr, VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME)) {
+            (!strcmp(tstr, VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME) ||
+             !strcmp(tstr, VK_EXT_SHADER_OBJECT_EXTENSION_NAME))) {
             continue;
         }
 
@@ -973,8 +975,7 @@ static int check_extensions(AVHWDeviceContext *ctx, int dev, AVDictionary *opts,
     }
 
 #ifdef VK_KHR_shader_relaxed_extended_instruction
-    if (((debug_mode == FF_VULKAN_DEBUG_PRINTF) ||
-         (debug_mode == FF_VULKAN_DEBUG_PROFILE)) && dev) {
+    if ((debug_mode == FF_VULKAN_DEBUG_PRINTF) && dev) {
         tstr = VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME;
         found = 0;
         for (int j = 0; j < sup_ext_count; j++) {
@@ -983,10 +984,7 @@ static int check_extensions(AVHWDeviceContext *ctx, int dev, AVDictionary *opts,
                 break;
             }
         }
-        if (found) {
-            av_log(ctx, AV_LOG_VERBOSE, "Using %s extension %s\n", mod, tstr);
-            ADD_VAL_TO_LIST(extension_names, extensions_found, tstr);
-        } else {
+        if (!found) {
             av_log(ctx, AV_LOG_ERROR, "Debug_printf/profile enabled, but extension \"%s\" not found!\n",
                    tstr);
             err = AVERROR(EINVAL);
@@ -1073,9 +1071,7 @@ static int check_layers(AVHWDeviceContext *ctx, AVDictionary *opts,
 
     /* Check for any properly supported validation layer */
     if (debug_opt) {
-        if (!strcmp(debug_opt->value, "profile")) {
-            mode = FF_VULKAN_DEBUG_PROFILE;
-        } else if (!strcmp(debug_opt->value, "printf")) {
+        if (!strcmp(debug_opt->value, "printf")) {
             mode = FF_VULKAN_DEBUG_PRINTF;
         } else if (!strcmp(debug_opt->value, "validate")) {
             mode = FF_VULKAN_DEBUG_VALIDATE;
@@ -1115,8 +1111,6 @@ static int check_layers(AVHWDeviceContext *ctx, AVDictionary *opts,
             err = AVERROR(ENOTSUP);
             goto end;
         }
-    } else if (mode == FF_VULKAN_DEBUG_PROFILE) {
-        *debug_mode = mode;
     }
 
     /* Process any custom layers enabled */
@@ -4153,14 +4147,14 @@ static int vulkan_map_to_drm(AVHWFramesContext *hwfc, AVFrame *dst,
     AVVulkanDeviceContext *hwctx = &p->p;
     FFVulkanFunctions *vk = &p->vkctx.vkfn;
     VulkanFramesPriv *fp = hwfc->hwctx;
-    const int planes = av_pix_fmt_count_planes(hwfc->sw_format);
+    const int nb_images = ff_vk_count_images(f);
     VkImageDrmFormatModifierPropertiesEXT drm_mod = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT,
     };
     VkSemaphoreWaitInfo wait_info = {
         .sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
         .flags          = 0x0,
-        .semaphoreCount = planes,
+        .semaphoreCount = nb_images,
     };
 
     AVDRMFrameDescriptor *drm_desc = av_mallocz(sizeof(*drm_desc));
@@ -4189,7 +4183,7 @@ static int vulkan_map_to_drm(AVHWFramesContext *hwfc, AVFrame *dst,
         goto end;
     }
 
-    for (int i = 0; (i < planes) && (f->mem[i]); i++) {
+    for (int i = 0; (i < nb_images) && (f->mem[i]); i++) {
         VkMemoryGetFdInfoKHR export_info = {
             .sType      = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
             .memory     = f->mem[i],
@@ -4209,7 +4203,7 @@ static int vulkan_map_to_drm(AVHWFramesContext *hwfc, AVFrame *dst,
         drm_desc->objects[i].format_modifier = drm_mod.drmFormatModifier;
     }
 
-    drm_desc->nb_layers = planes;
+    drm_desc->nb_layers = nb_images;
     for (int i = 0; i < drm_desc->nb_layers; i++) {
         VkFormat plane_vkfmt = av_vkfmt_from_pixfmt(hwfc->sw_format)[i];
 
@@ -4528,10 +4522,10 @@ static int vulkan_transfer_host(AVHWFramesContext *hwfc, AVFrame *hwf,
         for (int i = 0; i < planes; i++) {
             int img_idx = FFMIN(i, (nb_images - 1));
             uint32_t p_w, p_h;
-            get_plane_wh(&p_w, &p_h, swf->format,
-                         swf->linesize[i]/desc->comp[i].step, swf->height, i);
+            get_plane_wh(&p_w, &p_h, swf->format, swf->width, swf->height, i);
 
             region_info.pHostPointer = swf->data[i];
+            region_info.memoryRowLength = swf->linesize[i] / desc->comp[i].step;
             region_info.imageSubresource.aspectMask = ff_vk_aspect_flag(hwf, i);
             region_info.imageExtent = (VkExtent3D){ p_w, p_h, 1 };
             copy_info.dstImage = hwf_vk->img[img_idx];

@@ -774,6 +774,7 @@ void ff_rtsp_undo_setup(AVFormatContext *s, int send_packets)
     RTSPState *rt = s->priv_data;
     int i;
 
+    rt->stored_msg.expected_seq = -1;
     for (i = 0; i < rt->nb_rtsp_streams; i++) {
         RTSPStream *rtsp_st = rt->rtsp_streams[i];
         if (!rtsp_st)
@@ -1173,6 +1174,7 @@ int ff_rtsp_skip_packet(AVFormatContext *s)
     int ret, len, len1;
     uint8_t buf[MAX_URL_SIZE];
 
+    rt->pending_packet = 0;
     ret = ffurl_read_complete(rt->rtsp_hd, buf, 3);
     if (ret != 3)
         return ret < 0 ? ret : AVERROR(EIO);
@@ -1194,9 +1196,11 @@ int ff_rtsp_skip_packet(AVFormatContext *s)
     return 0;
 }
 
-int ff_rtsp_read_reply(AVFormatContext *s, RTSPMessageHeader *reply,
-                       unsigned char **content_ptr,
-                       int return_on_interleaved_data, const char *method)
+static int ff_rtsp_read_reply_internal(AVFormatContext *s,
+                                       RTSPMessageHeader *reply,
+                                       unsigned char **content_ptr,
+                                       int return_on_interleaved_data,
+                                       const char *method)
 {
     RTSPState *rt = s->priv_data;
     char buf[MAX_URL_SIZE], buf1[MAX_URL_SIZE], *q;
@@ -1227,6 +1231,7 @@ start:
                 break;
             if (ch == '$' && q == buf) {
                 if (return_on_interleaved_data) {
+                    rt->pending_packet = 1;
                     return 1;
                 } else {
                     ret = ff_rtsp_skip_packet(s);
@@ -1345,6 +1350,56 @@ start:
     return 0;
 }
 
+int ff_rtsp_read_reply(AVFormatContext *s, RTSPMessageHeader *reply,
+                       unsigned char **content_ptr,
+                       int return_on_interleaved_data, const char *method)
+{
+    int ret;
+    RTSPState *rt = s->priv_data;
+
+    // If we returned on pending packet last time,
+    // do not try to read again, as it would corrupt
+    // the state due to the already consumed '$'.
+    if (rt->pending_packet) {
+        if (return_on_interleaved_data)
+            return 1;
+
+        ret = ff_rtsp_skip_packet(s);
+        if (ret < 0)
+            return ret;
+    }
+
+    if (rt->stored_msg.expected_seq != -1) {
+        RTSPMessageHeader header;
+
+        ret = ff_rtsp_read_reply_internal(s, &header,
+            &rt->stored_msg.body, return_on_interleaved_data, NULL);
+        if (ret != 0)
+            return ret;
+
+        if (rt->stored_msg.expected_seq == header.seq) {
+            // Got the expected reply, store it for later
+            rt->stored_msg.expected_seq = -1;
+            rt->stored_msg.header = av_calloc(1, sizeof(*rt->stored_msg.header));
+            if (!rt->stored_msg.header) {
+                av_freep(&rt->stored_msg.body);
+                return AVERROR(ENOMEM);
+            }
+            memcpy(rt->stored_msg.header, &header, sizeof(header));
+        } else {
+            av_log(s, AV_LOG_WARNING, "Unexpected reply with seq %d, expected %d\n",
+                header.seq, rt->stored_msg.expected_seq);
+            av_freep(&rt->stored_msg.body);
+        }
+
+        // Do not return here as we still need to read the reply
+        // the caller was actually wanting to retrieve.
+    }
+
+    return ff_rtsp_read_reply_internal(s, reply, content_ptr,
+        return_on_interleaved_data, method);
+}
+
 /**
  * Send a command to the RTSP server without waiting for the reply.
  *
@@ -1358,7 +1413,7 @@ start:
  *
  * @return zero if success, nonzero otherwise
  */
-static int rtsp_send_cmd_with_content_async(AVFormatContext *s,
+int ff_rtsp_send_cmd_with_content_async(AVFormatContext *s,
                                             const char *method, const char *url,
                                             const char *headers,
                                             const unsigned char *send_content,
@@ -1415,10 +1470,28 @@ static int rtsp_send_cmd_with_content_async(AVFormatContext *s,
     return 0;
 }
 
+int ff_rtsp_send_cmd_with_content_async_stored(AVFormatContext *s,
+                                               const char *method, const char *url,
+                                               const char *headers,
+                                               const unsigned char *send_content,
+                                               int send_content_length)
+{
+    RTSPState *rt = s->priv_data;
+    int ret = ff_rtsp_send_cmd_with_content_async(s, method, url, headers,
+        send_content, send_content_length);
+    if (ret < 0)
+        return ret;
+
+    rt->stored_msg.expected_seq = rt->seq;
+    av_freep(&rt->stored_msg.header);
+    av_freep(&rt->stored_msg.body);
+    return 0;
+}
+
 int ff_rtsp_send_cmd_async(AVFormatContext *s, const char *method,
                            const char *url, const char *headers)
 {
-    return rtsp_send_cmd_with_content_async(s, method, url, headers, NULL, 0);
+    return ff_rtsp_send_cmd_with_content_async(s, method, url, headers, NULL, 0);
 }
 
 int ff_rtsp_send_cmd(AVFormatContext *s, const char *method, const char *url,
@@ -1443,7 +1516,7 @@ int ff_rtsp_send_cmd_with_content(AVFormatContext *s,
 
 retry:
     cur_auth_type = rt->auth_state.auth_type;
-    if ((ret = rtsp_send_cmd_with_content_async(s, method, url, header,
+    if ((ret = ff_rtsp_send_cmd_with_content_async(s, method, url, header,
                                                 send_content,
                                                 send_content_length)) < 0)
         return ret;
@@ -1458,13 +1531,40 @@ retry:
         goto retry;
 
     if (reply->status_code > 400){
-        av_log(s, AV_LOG_ERROR, "method %s failed: %d%s\n",
+        av_log(s, AV_LOG_ERROR, "method %s failed: %d (%s)\n",
                method,
                reply->status_code,
                reply->reason);
         av_log(s, AV_LOG_DEBUG, "%s\n", rt->last_reply);
     }
 
+    return 0;
+}
+
+int ff_rtsp_read_reply_async_stored(AVFormatContext *s, RTSPMessageHeader **reply,
+                                    unsigned char **content_ptr)
+{
+    RTSPState *rt = s->priv_data;
+    if (rt->stored_msg.header == NULL) {
+        if (rt->stored_msg.expected_seq == -1)
+            return AVERROR(EINVAL); // Reply to be stored was never requested
+
+        // Reply pending, tell caller to try again later
+        return AVERROR(EAGAIN);
+    }
+
+    if (reply)
+        *reply = rt->stored_msg.header;
+    else
+        av_free(rt->stored_msg.header);
+
+    if (content_ptr)
+        *content_ptr = rt->stored_msg.body;
+    else
+        av_free(rt->stored_msg.body);
+
+    rt->stored_msg.header = NULL;
+    rt->stored_msg.body = NULL;
     return 0;
 }
 
@@ -1755,6 +1855,7 @@ int ff_rtsp_connect(AVFormatContext *s)
     struct sockaddr_storage peer;
     socklen_t peer_len = sizeof(peer);
 
+    rt->stored_msg.expected_seq = -1;
     if (rt->rtp_port_max < rt->rtp_port_min) {
         av_log(s, AV_LOG_ERROR, "Invalid UDP port range, max port %d less "
                                 "than min port %d\n", rt->rtp_port_max,

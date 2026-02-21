@@ -25,6 +25,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -48,7 +49,7 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int codec, nb_channels, rate, align, bps;
+    int codec, nb_channels, rate, align;
     AVIOContext *pb = s->pb;
     int64_t duration;
     AVStream *st;
@@ -65,7 +66,6 @@ static int read_header(AVFormatContext *s)
         align = 0x800;
         break;
     case 2:
-        bps = 4;
         codec = AV_CODEC_ID_ADPCM_IMA_XBOX;
         align = 0x24;
         break;
@@ -87,7 +87,6 @@ static int read_header(AVFormatContext *s)
     st->codecpar->codec_id = codec;
     st->codecpar->ch_layout.nb_channels = nb_channels;
     st->codecpar->block_align = align * nb_channels;
-    st->codecpar->bits_per_coded_sample = bps;
     st->codecpar->sample_rate = rate;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
@@ -97,18 +96,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_aus_demuxer = {
     .p.name         = "aus",
     .p.long_name    = NULL_IF_CONFIG_SMALL("AUS (Atomic Planet)"),
@@ -116,5 +103,5 @@ const FFInputFormat ff_aus_demuxer = {
     .p.extensions   = "aus",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };

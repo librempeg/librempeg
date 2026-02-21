@@ -24,8 +24,9 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
-static int svs_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (p->buf_size < 32)
         return 0;
@@ -39,7 +40,7 @@ static int svs_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX / 3;
 }
 
-static int svs_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     uint32_t pitch;
@@ -68,30 +69,12 @@ static int svs_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int svs_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    int ret;
-
-    if (avio_feof(s->pb))
-        return AVERROR_EOF;
-
-    ret = av_get_packet(s->pb, pkt, 32 * 256);
-    if (ret != 32 * 256) {
-        if (ret < 0)
-            return ret;
-        pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    }
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_svs_demuxer = {
     .p.name         = "svs",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Square SVS"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "svs",
-    .read_probe     = svs_probe,
-    .read_header    = svs_read_header,
-    .read_packet    = svs_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = ff_pcm_read_packet,
 };
