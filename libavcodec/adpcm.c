@@ -2358,8 +2358,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             bytestream2_skipu(&gb, 1);
             for (int n = 0; n < nb_samples; n += 2) {
                 int v = bytestream2_get_byteu(&gb);
-                *samples++ = adpcm_ima_expand_nibble(cs, v >> 4  , 3);
-                *samples++ = adpcm_ima_expand_nibble(cs, v & 0x0F, 3);
+                *samples++ = ff_adpcm_ima_qt_expand_nibble(cs, v >> 4  );
+                *samples++ = ff_adpcm_ima_qt_expand_nibble(cs, v & 0x0F);
             }
         }
         ) /* End of CASE */
