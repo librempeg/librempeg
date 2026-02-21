@@ -23,8 +23,9 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
-static int musc_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RB32(p->buf) != MKBETAG('M','U','S','C'))
         return 0;
@@ -38,7 +39,7 @@ static int musc_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int musc_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     int64_t start_offset;
@@ -75,24 +76,12 @@ static int musc_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int musc_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_musc_demuxer = {
     .p.name         = "musc",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Krome MUSC"),
     .p.extensions   = "musc,mus",
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = musc_probe,
-    .read_header    = musc_read_header,
-    .read_packet    = musc_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = ff_pcm_read_packet,
 };
