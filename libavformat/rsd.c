@@ -115,6 +115,7 @@ static int rsd_read_header(AVFormatContext *s)
         par->block_align = 36 * par->ch_layout.nb_channels;
         break;
     case AV_CODEC_ID_ADPCM_NDSP_LE:
+        par->block_align = 8 * par->ch_layout.nb_channels;
         /* RSD3GADP is mono, so only alloc enough memory
            to store the coeff table for a single channel. */
 
