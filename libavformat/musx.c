@@ -37,6 +37,7 @@ static int read_probe(const AVProbeData *p)
         version != 6 &&
         version != 5 &&
         version != 4 &&
+        version != 1 &&
         version != 201)
         return 0;
 
@@ -55,6 +56,7 @@ static int read_header(AVFormatContext *s)
         version != 6 &&
         version != 5 &&
         version != 4 &&
+        version != 1 &&
         version != 201) {
         avpriv_request_sample(s, "Unsupported version: %d", version);
         return AVERROR_PATCHWELCOME;
@@ -65,7 +67,7 @@ static int read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
-    if (version == 201) {
+    if (version == 201 || version == 1) {
         avio_skip(pb, 8);
         offset = avio_rl32(pb);
         st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
@@ -75,7 +77,7 @@ static int read_header(AVFormatContext *s)
         st->codecpar->block_align = 0x80 * st->codecpar->ch_layout.nb_channels;
         st->codecpar->bit_rate = 16LL * st->codecpar->ch_layout.nb_channels * 8 *
                                         st->codecpar->sample_rate / 28;
-    }  else if (version == 10) {
+    } else if (version == 10) {
         type = avio_rl32(pb);
         st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
         offset = 0x800;
