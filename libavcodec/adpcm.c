@@ -1678,6 +1678,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
             while (left > 0) {
                 const int block_size = FFMIN(left, block_align);
 
+                if (block_size <= 0)
+                    break;
+
                 if (s->start_skip > 0 && pts == 0 && left == buf_size) {
                     nb_samples += ((block_size - s->start_skip * ch) / ch) / 8 * 14;
                 } else {
