@@ -685,6 +685,7 @@ static int cfhd_decode(AVCodecContext *avctx, AVFrame *pic,
             s->coded_height = 0;
             s->coded_format = AV_PIX_FMT_NONE;
             got_buffer = 1;
+            ff_thread_finish_setup(avctx);
         } else if (tag == FrameIndex && data == 1 && s->sample_type == 1 && s->frame_type == 2) {
             pic->width = pic->height = 0;
 
@@ -694,6 +695,7 @@ static int cfhd_decode(AVCodecContext *avctx, AVFrame *pic,
             s->coded_height = 0;
             s->coded_format = AV_PIX_FMT_NONE;
             got_buffer = 1;
+            ff_thread_finish_setup(avctx);
         }
 
         if (s->subband_num_actual == 255)
@@ -914,8 +916,6 @@ finish:
         s->progressive = 1;
         s->planes = 4;
     }
-
-    ff_thread_finish_setup(avctx);
 
     if (!s->a_width || !s->a_height || s->a_format == AV_PIX_FMT_NONE ||
         s->a_transform_type == INT_MIN ||
