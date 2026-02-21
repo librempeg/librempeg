@@ -480,10 +480,6 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
         if (avctx->bits_per_coded_sample < 3 || avctx->bits_per_coded_sample > 5)
             return AVERROR_INVALIDDATA;
         break;
-    case AV_CODEC_ID_ADPCM_IMA_XBOX:
-        if (avctx->bits_per_coded_sample != 4)
-            return AVERROR_INVALIDDATA;
-        break;
     case AV_CODEC_ID_ADPCM_ZORK:
         if (avctx->bits_per_coded_sample != 8)
             return AVERROR_INVALIDDATA;
