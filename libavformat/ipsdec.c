@@ -89,6 +89,11 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     int64_t pos;
 
     pos = avio_tell(pb);
+    if ((pos - ips->start_offset) & (0x1000-1)) {
+        pos = ips->start_offset + ((pos - ips->start_offset) & ~(0x1000-1));
+        avio_seek(pb, pos, SEEK_SET);
+        pos = avio_tell(pb);
+    }
     idx = (pos - ips->start_offset) / 0x1000;
     if ((idx>>3) >= (ips->start_offset - 0x40))
         return AVERROR_EOF;
