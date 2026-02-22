@@ -3,6 +3,80 @@ releases are sorted from youngest to oldest.
 
 version <next>:
 - Rockchip H.264/HEVC hardware encoder
+- bvc2 video decoder
+- mogg demuxer
+- msx demuxer
+- dyuv demuxer
+- sonic demuxer
+- 208 demuxer
+- oceandsf demuxer
+- 2dx and 2dx9 demuxer
+- ssp and sd9 demuxer
+- a2m demuxer
+- npsf demuxer
+- musc demuxer
+- vsf demuxer
+- gccstr demuxer
+- gcsw demuxer
+- ild demuxer
+- exaktsc demuxer
+- mpds demuxer
+- wsi demuxer
+- rstm demuxer
+- nwa demuxer
+- mpc3 demuxer
+- ttidsp demuxer
+- awb demuxer
+- xmu demuxer
+- esf demuxer
+- bhhd demuxer
+- smpl demuxer
+- omu demuxer
+- naac demuxer
+- dvi demuxer
+- nus3bank demuxer
+- afs demuxer
+- ssm demuxer
+- xwb demuxer
+- cfdf demuxer
+- qon demuxer
+- awc demuxer
+- 2pfs demuxer
+- acx demuxer
+- ster demuxer
+- namcoidsp demuxer
+- hwas demuxer
+- amts demuxer
+- vgs demuxer
+- hdbd demuxer
+- gcstr demuxer
+- ydsp demuxer
+- adsbe demuxer
+- cxs demuxer
+- wd demuxer
+- ttad demuxer
+- imuse demuxer
+- jstm demuxer
+- strwav demuxer
+- wv6 demuxer
+- rws demuxer
+- wiibns demuxer
+- astl demuxer
+- diva demuxer
+- iivb demuxer
+- zsd demuxer
+- xopus demuxer
+- ssv demuxer
+- baka demuxer
+- sthd demuxer
+- sab demuxer
+- sndz demuxer
+- ips demuxer
+- nst demuxer
+- spsd demuxer
+- exst demuxer
+- ktac demuxer
+- kat demuxer
 
 
 version 8.0:
