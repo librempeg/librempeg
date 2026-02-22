@@ -198,7 +198,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
 const FFInputFormat ff_wd_demuxer = {
     .p.name         = "wd",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Wave WD"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Square Wave WD"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "wd",
     .read_probe     = read_probe,
