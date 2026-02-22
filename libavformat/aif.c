@@ -41,32 +41,33 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
+    int nb_channels, rate, align;
     AVIOContext *pb = s->pb;
+    int64_t bit_rate;
     AVStream *st;
+
+    avio_skip(pb, 2);
+    nb_channels = avio_rl16(pb);
+    rate = avio_rl32(pb);
+    bit_rate = avio_rl32(pb) * 8LL;
+    align = avio_rl16(pb);
+    if (nb_channels <= 0 || rate <= 0 || align <= 0)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(pb, 2);
-    st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_IMA_XBOX;
-    st->codecpar->ch_layout.nb_channels = avio_rl16(pb);
-    if (st->codecpar->ch_layout.nb_channels == 0)
-        return AVERROR_INVALIDDATA;
-
-    st->codecpar->sample_rate = avio_rl32(pb);
-    if (st->codecpar->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
-
-    st->codecpar->bit_rate = avio_rl32(pb) * 8LL;
-    st->codecpar->block_align = avio_rl16(pb);
-    if (st->codecpar->block_align == 0)
-        return AVERROR_INVALIDDATA;
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_XBOX;
+    st->codecpar->ch_layout.nb_channels = nb_channels;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->bit_rate = bit_rate;
+    st->codecpar->block_align = align;
 
     st->codecpar->bits_per_coded_sample = avio_rl16(pb);
 
-    avio_seek(s->pb, 20, SEEK_SET);
+    avio_seek(pb, 20, SEEK_SET);
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
