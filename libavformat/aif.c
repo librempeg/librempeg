@@ -77,6 +77,7 @@ const FFInputFormat ff_aif_demuxer = {
     .p.name         = "aif",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Asobo Studio Games AIF"),
     .p.extensions   = "aif,laif",
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
