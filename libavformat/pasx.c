@@ -36,6 +36,8 @@ static int read_probe(const AVProbeData *p)
     if (p->buf_size < 20)
         return 0;
     offset = AV_RB32(p->buf+16);
+    if (offset < 20)
+        return 0;
 
     if (p->buf_size < offset + 8)
         return 0;
