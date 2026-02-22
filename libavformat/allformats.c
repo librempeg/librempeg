@@ -315,6 +315,7 @@ extern const FFOutputFormat ff_jacosub_muxer;
 extern const FFInputFormat  ff_jv_demuxer;
 extern const FFInputFormat  ff_jpegxl_anim_demuxer;
 extern const FFInputFormat  ff_jstm_demuxer;
+extern const FFInputFormat  ff_kat_demuxer;
 extern const FFInputFormat  ff_ktac_demuxer;
 extern const FFInputFormat  ff_ktss_demuxer;
 extern const FFInputFormat  ff_kux_demuxer;
