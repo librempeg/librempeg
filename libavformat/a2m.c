@@ -36,20 +36,24 @@ static int a2m_probe(const AVProbeData *p)
 static int a2m_read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
-    AVStream *st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
+    AVStream *st;
+    int rate;
 
     avio_seek(pb, 0x10, SEEK_SET);
+    rate = avio_rb32(pb);
+    if (rate <= 0)
+        return AVERROR_INVALIDDATA;
+
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
 
     st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX;
     st->codecpar->ch_layout.nb_channels = 2;
     st->codecpar->block_align = 0x6000 * st->codecpar->ch_layout.nb_channels;
-    st->codecpar->sample_rate = avio_rb32(pb);
-    if (st->codecpar->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
+    st->codecpar->sample_rate = rate;
     st->codecpar->bit_rate = 16LL * st->codecpar->ch_layout.nb_channels * 8 *
                                     st->codecpar->sample_rate / 28;
 
