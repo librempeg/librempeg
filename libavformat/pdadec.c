@@ -58,6 +58,8 @@ static int pda_read_header(AVFormatContext *s)
     par->sample_rate = avio_rl24(pb);
     type             = avio_r8(pb);
     par->ch_layout.nb_channels = 1 + (type & 1);
+    if (par->sample_rate <= 0)
+        return AVERROR_INVALIDDATA;
 
     switch (type >> 1) {
     case 0:
@@ -76,6 +78,8 @@ static int pda_read_header(AVFormatContext *s)
 
     if (type > 3) {
         par->block_align = avio_rl16(pb);
+        if (par->block_align <= 0)
+            return AVERROR_INVALIDDATA;
         par->bit_rate = (8LL * par->block_align * par->sample_rate / av_get_audio_frame_duration2(par, par->block_align));
     } else {
         par->block_align = par->bits_per_coded_sample *
