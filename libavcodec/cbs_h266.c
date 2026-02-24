@@ -249,6 +249,34 @@ static int FUNC_H266(name) args
 
 
 
+static int cbs_bvc2_split_fragment(CodedBitstreamContext *ctx,
+                                   CodedBitstreamFragment *frag,
+                                   int header)
+{
+    enum AVCodecID codec_id = ctx->codec->codec_id;
+    CodedBitstreamH266Context *priv = ctx->priv_data;
+    CodedBitstreamH2645Context *h2645 = &priv->common;
+    int err;
+    int flags = H2645_FLAG_IS_NALFF | H2645_FLAG_SMALL_PADDING | H2645_FLAG_USE_REF;
+    // Annex B, or later MP4 with already-known parameters.
+
+    h2645->nal_length_size = 4;
+
+    err = ff_h2645_packet_split(&h2645->read_packet,
+                                frag->data, frag->data_size,
+                                ctx->log_ctx,
+                                h2645->nal_length_size,
+                                codec_id, flags);
+    if (err < 0)
+        return err;
+
+    err = ff_cbs_h2645_fragment_add_nals(ctx, frag, &h2645->read_packet);
+    if (err < 0)
+        return err;
+
+    return 0;
+}
+
 static int cbs_h266_split_fragment(CodedBitstreamContext *ctx,
                                    CodedBitstreamFragment *frag,
                                    int header)
@@ -800,6 +828,22 @@ const CodedBitstreamType ff_cbs_type_h266 = {
     .unit_types        = cbs_h266_unit_types,
 
     .split_fragment    = &cbs_h266_split_fragment,
+    .read_unit         = &cbs_h266_read_nal_unit,
+    .write_unit        = &cbs_h266_write_nal_unit,
+    .assemble_fragment = &ff_cbs_h2645_assemble_fragment,
+
+    .flush             = &cbs_h266_flush,
+    .close             = &cbs_h266_close,
+};
+
+const CodedBitstreamType ff_cbs_type_bvc2 = {
+    .codec_id          = AV_CODEC_ID_BVC2,
+
+    .priv_data_size    = sizeof(CodedBitstreamH266Context),
+
+    .unit_types        = cbs_h266_unit_types,
+
+    .split_fragment    = &cbs_bvc2_split_fragment,
     .read_unit         = &cbs_h266_read_nal_unit,
     .write_unit        = &cbs_h266_write_nal_unit,
     .assemble_fragment = &ff_cbs_h2645_assemble_fragment,
