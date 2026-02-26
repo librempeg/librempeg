@@ -146,9 +146,8 @@ static int xbox_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
         for (int ch = 0; ch < nb_channels; ch++) {
             const int16_t *src = (const int16_t *)frame->extended_data[ch];
             XboxState *state = &c->state[ch];
-            XboxState xenc_state, xdec_state;
+            XboxState xenc_state;
             XboxState *enc_state = &xenc_state;
-            XboxState *dec_state = &xdec_state;
             int start = blk * BLOCK_SAMPLES;
             const int16_t predictor = src[start];
             double best_diff = DBL_MAX;
@@ -160,10 +159,6 @@ static int xbox_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                 enc_state->predictor = predictor;
                 enc_state->index = index;
                 enc_state->step_size = step_tab[index];
-
-                dec_state->predictor = predictor;
-                dec_state->index = index;
-                dec_state->step_size = step_tab[index];
 
                 for (int group = 0; group < 8; group++) {
                     for (int i = 0; i < 8; i++) {
