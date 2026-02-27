@@ -1530,7 +1530,6 @@ static int estimate_best_b_count(MPVMainEncContext *const m)
     if (!pkt)
         return AVERROR(ENOMEM);
 
-    //emms_c();
     p_lambda = m->last_lambda_for[AV_PICTURE_TYPE_P];
     //p_lambda * FFABS(s->c.avctx->b_quant_factor) + s->c.avctx->b_quant_offset;
     b_lambda = m->last_lambda_for[AV_PICTURE_TYPE_B];
@@ -1748,8 +1747,6 @@ static int set_bframe_chain_length(MPVMainEncContext *const m)
                 return b_frames;
             }
         }
-
-        emms_c();
 
         for (int i = b_frames - 1; i >= 0; i--) {
             int type = m->input_picture[i]->f->pict_type;
@@ -1974,7 +1971,6 @@ int ff_mpv_encode_picture(AVCodecContext *avctx, AVPacket *pkt,
         }
 
         s->c.pict_type = s->new_pic->pict_type;
-        //emms_c();
         frame_start(m);
 vbv_retry:
         ret = encode_picture(m, pkt);
