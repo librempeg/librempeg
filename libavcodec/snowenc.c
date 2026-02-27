@@ -1945,6 +1945,7 @@ redo_frame:
                 pic->pict_type= AV_PICTURE_TYPE_I;
                 s->keyframe=1;
                 s->current_picture->flags |= AV_FRAME_FLAG_KEY;
+                emms_c();
                 goto redo_frame;
             }
 
