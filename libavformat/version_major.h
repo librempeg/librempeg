@@ -49,4 +49,6 @@
 
 #define FF_API_R_FRAME_RATE            1
 
+#define FF_API_NVENC_H264_MAIN     (LIBAVCODEC_VERSION_MAJOR < 63)
+
 #endif /* AVFORMAT_VERSION_MAJOR_H */
