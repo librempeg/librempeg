@@ -29,7 +29,12 @@
 
 static int vig_probe(const AVProbeData *p)
 {
-    if (AV_RB32(p->buf) != 0x01006408 || AV_RL32(p->buf + 4) != 0 || AV_RL32(p->buf + 0x20) != 0)
+    if (AV_RB32(p->buf) != 0x01006408)
+        return 0;
+
+    if (p->buf_size < 36)
+        return 0;
+    if (AV_RL32(p->buf + 4) != 0 || AV_RL32(p->buf + 0x20) != 0)
         return 0;
     if ((AV_RL32(p->buf + 8) + AV_RL32(p->buf + 12)) > p->buf_size)
         return 0;
