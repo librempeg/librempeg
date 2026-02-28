@@ -45,39 +45,28 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
+    int64_t start, extra_offset, chunk_offset, duration;
     uint32_t codec, seek_size, chunk_size;
-    int64_t start, extra_offset, chunk_offset;
     AVIOContext *pb = s->pb;
+    int nb_channels, rate;
     AVStream *st;
     int ret;
 
     avio_skip(pb, 12);
-
-    st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
-
-    extra_offset = 0x28;
-    st->start_time = 0;
-    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->ch_layout.nb_channels = avio_rl32(pb);
-    if (st->codecpar->ch_layout.nb_channels <= 0)
-        return AVERROR_INVALIDDATA;
+    nb_channels = avio_rl32(pb);
     avio_skip(pb, 12);
-
     codec = avio_rb32(pb);
     switch (codec) {
     case MKBETAG('X','M','A','\0'):
-        st->codecpar->codec_id = AV_CODEC_ID_XMA2;
-        st->codecpar->block_align = 0x800;
+        codec = AV_CODEC_ID_XMA2;
         break;
     default:
         avpriv_request_sample(s, "codec %08X", codec);
         return AVERROR_PATCHWELCOME;
     }
 
-    st->duration = avio_rl32(pb);
-
+    duration = avio_rl32(pb);
+    extra_offset = 0x28;
     avio_seek(pb, extra_offset, SEEK_SET);
     seek_size = avio_rl32(pb);
     avio_seek(pb, extra_offset + seek_size + 4, SEEK_SET);
@@ -90,17 +79,32 @@ static int read_header(AVFormatContext *s)
     case 0x2c:
         chunk_offset = extra_offset + 4 + seek_size + 16;
         avio_seek(pb, chunk_offset, SEEK_SET);
-        st->codecpar->sample_rate = avio_rb32(pb);
+        rate = avio_rb32(pb);
         break;
     case 0x34:
         chunk_offset = extra_offset + 4 + seek_size + 8;
         avio_seek(pb, chunk_offset, SEEK_SET);
-        st->codecpar->sample_rate = avio_rl32(pb);
+        rate = avio_rl32(pb);
+        break;
+    default:
+        rate = 0;
         break;
     }
 
-    if (st->codecpar->sample_rate <= 0)
+    if (nb_channels <= 0 || rate <= 0)
         return AVERROR_INVALIDDATA;
+
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
+
+    st->start_time = 0;
+    st->duration = duration;
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id = codec;
+    st->codecpar->ch_layout.nb_channels = nb_channels;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->block_align = 0x800;
 
     ret = ff_alloc_extradata(st->codecpar, 34);
     if (ret < 0)
