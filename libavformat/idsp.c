@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -90,14 +91,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    AVCodecParameters *par = s->streams[0]->codecpar;
-
-    return av_get_packet(pb, pkt, par->block_align);
-}
-
 const FFInputFormat ff_idsp_demuxer = {
     .p.name         = "idsp",
     .p.long_name    = NULL_IF_CONFIG_SMALL("IDSP (Inevitable Entertainment)"),
@@ -105,5 +98,5 @@ const FFInputFormat ff_idsp_demuxer = {
     .p.extensions   = "idsp",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
