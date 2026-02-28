@@ -38,6 +38,10 @@ static int vig_probe(const AVProbeData *p)
         return 0;
     if ((AV_RL32(p->buf + 8) + AV_RL32(p->buf + 12)) > p->buf_size)
         return 0;
+    if ((int)AV_RL32(p->buf + 0x18) <= 0)
+        return 0;
+    if ((int)AV_RL32(p->buf + 0x1C) <= 0)
+        return 0;
     return AVPROBE_SCORE_MAX;
 }
 
