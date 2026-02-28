@@ -60,7 +60,7 @@ static int vpk_read_header(AVFormatContext *s)
     vpk->current_block = 0;
 
     avio_skip(pb, 4);
-    duration = avio_rl32(pb) * 28 / 16;
+    duration = avio_rl32(pb) * 28LL / 16;
     offset = avio_rl32(pb);
     align = avio_rl32(pb);
     rate = avio_rl32(pb);
