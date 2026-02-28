@@ -51,32 +51,37 @@ static int vpk_probe(const AVProbeData *p)
 static int vpk_read_header(AVFormatContext *s)
 {
     VPKDemuxContext *vpk = s->priv_data;
+    int align, rate, nb_channels;
+    int64_t offset, duration;
     AVIOContext *pb = s->pb;
-    int64_t offset;
-    unsigned samples_per_block;
+    int samples_per_block;
     AVStream *st;
 
     vpk->current_block = 0;
+
+    avio_skip(pb, 4);
+    duration = avio_rl32(pb) * 28 / 16;
+    offset = avio_rl32(pb);
+    align = avio_rl32(pb);
+    rate = avio_rl32(pb);
+    nb_channels = avio_rl32(pb);
+    if (rate <= 0 || align <= 0 || nb_channels <= 0)
+        return AVERROR_INVALIDDATA;
+    samples_per_block = ((align / nb_channels) * 28LL) / 16;
+    if (samples_per_block <= 0)
+        return AVERROR_INVALIDDATA;
+
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(pb, 4);
-    st->duration           = avio_rl32(pb) * 28 / 16;
     st->start_time = 0;
-    offset = avio_rl32(pb);
+    st->duration = duration;
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_PSX;
-    st->codecpar->block_align = avio_rl32(pb);
-    st->codecpar->sample_rate = avio_rl32(pb);
-    if (st->codecpar->sample_rate <= 0 || st->codecpar->block_align <= 0)
-        return AVERROR_INVALIDDATA;
-    st->codecpar->ch_layout.nb_channels = avio_rl32(pb);
-    if (st->codecpar->ch_layout.nb_channels <= 0)
-        return AVERROR_INVALIDDATA;
-    samples_per_block      = ((st->codecpar->block_align / st->codecpar->ch_layout.nb_channels) * 28LL) / 16;
-    if (samples_per_block <= 0)
-        return AVERROR_INVALIDDATA;
+    st->codecpar->block_align = align;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->ch_layout.nb_channels = nb_channels;
     vpk->block_count       = (st->duration + (samples_per_block - 1)) / samples_per_block;
     vpk->last_block_size   = (st->duration % samples_per_block) * 16 * st->codecpar->ch_layout.nb_channels / 28;
 
