@@ -86,6 +86,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_msnd_demuxer = {
     .p.name         = "msnd",
     .p.long_name    = NULL_IF_CONFIG_SMALL("PS2 MSND"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "snd",
     .read_probe     = read_probe,
     .read_header    = read_header,
