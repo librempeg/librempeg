@@ -2094,7 +2094,7 @@ static int decode_frame_ealayer3multi(AVCodecContext *avctx, AVFrame *frame,
 
         ch_step = 1;
         for (int i = ch+1; i < avctx->ch_layout.nb_channels; i++) {
-            if (IS_VIRTUAL_OFFSET(offsets[i])) {
+            if (avctx->ch_layout.nb_channels == 2 || IS_VIRTUAL_OFFSET(offsets[i])) {
                 ch_step = 2;
                 continue;
             }
