@@ -60,7 +60,7 @@ static int read_header(AVFormatContext *s)
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX;
     st->codecpar->sample_rate = 2 + (48000 * pitch + 2048) / 4096;
     st->codecpar->ch_layout.nb_channels = (flags & 1) ? 2 : 1;
-    st->codecpar->block_align = 0x400  * st->codecpar->ch_layout.nb_channels;
+    st->codecpar->block_align = 0x400 * st->codecpar->ch_layout.nb_channels;
     st->codecpar->bit_rate = 16LL * st->codecpar->ch_layout.nb_channels * 8 *
                                     st->codecpar->sample_rate / 28;
 
