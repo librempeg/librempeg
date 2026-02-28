@@ -28,10 +28,11 @@
 
 static int read_probe(const AVProbeData *p)
 {
-    if (AV_RB32(p->buf) != 0x00030000)
+    if (p->buf_size < 16)
         return 0;
 
-    if (p->buf_size < 16)
+    if (AV_RB32(p->buf) != 0x00030000 &&
+        AV_RB32(p->buf) != 0x00040000)
         return 0;
 
     if (AV_RB32(p->buf+4) != 0x00900000)
@@ -46,49 +47,54 @@ static int read_probe(const AVProbeData *p)
 static int read_header(AVFormatContext *s)
 {
     int64_t start, extra_offset, chunk_offset, duration;
-    uint32_t codec, seek_size, chunk_size;
+    uint32_t version, codec, seek_size, chunk_size;
     AVIOContext *pb = s->pb;
     int nb_channels, rate;
     AVStream *st;
     int ret;
 
-    avio_skip(pb, 12);
+    version = avio_rb32(pb);
+    avio_skip(pb, 8);
     nb_channels = avio_rl32(pb);
-    avio_skip(pb, 12);
+    avio_skip(pb, 12 + 8 * (version == 0x00040000));
     codec = avio_rb32(pb);
+    duration = avio_rl32(pb);
     switch (codec) {
     case MKBETAG('X','M','A','\0'):
         codec = AV_CODEC_ID_XMA2;
+        extra_offset = 0x28;
+        avio_seek(pb, extra_offset, SEEK_SET);
+        seek_size = avio_rl32(pb);
+        avio_seek(pb, extra_offset + seek_size + 4, SEEK_SET);
+        chunk_size = avio_rl32(pb);
+        chunk_offset = extra_offset + 4 + seek_size + 4;
+        start = chunk_offset + 4 + chunk_size;
+        start = FFALIGN(start, 0x800);
+
+        switch (chunk_size) {
+        case 0x2c:
+            chunk_offset = extra_offset + 4 + seek_size + 16;
+            avio_seek(pb, chunk_offset, SEEK_SET);
+            rate = avio_rb32(pb);
+            break;
+        case 0x34:
+            chunk_offset = extra_offset + 4 + seek_size + 8;
+            avio_seek(pb, chunk_offset, SEEK_SET);
+            rate = avio_rl32(pb);
+            break;
+        default:
+            rate = 0;
+            break;
+        }
+        break;
+    case MKBETAG('M','P','E','G'):
+        codec = AV_CODEC_ID_MP3;
+        start = 0x800;
+        rate = 44100;
         break;
     default:
         avpriv_request_sample(s, "codec %08X", codec);
         return AVERROR_PATCHWELCOME;
-    }
-
-    duration = avio_rl32(pb);
-    extra_offset = 0x28;
-    avio_seek(pb, extra_offset, SEEK_SET);
-    seek_size = avio_rl32(pb);
-    avio_seek(pb, extra_offset + seek_size + 4, SEEK_SET);
-    chunk_size = avio_rl32(pb);
-    chunk_offset = extra_offset + 4 + seek_size + 4;
-    start = chunk_offset + 4 + chunk_size;
-    start = FFALIGN(start, 0x800);
-
-    switch (chunk_size) {
-    case 0x2c:
-        chunk_offset = extra_offset + 4 + seek_size + 16;
-        avio_seek(pb, chunk_offset, SEEK_SET);
-        rate = avio_rb32(pb);
-        break;
-    case 0x34:
-        chunk_offset = extra_offset + 4 + seek_size + 8;
-        avio_seek(pb, chunk_offset, SEEK_SET);
-        rate = avio_rl32(pb);
-        break;
-    default:
-        rate = 0;
-        break;
     }
 
     if (nb_channels <= 0 || rate <= 0)
@@ -106,11 +112,15 @@ static int read_header(AVFormatContext *s)
     st->codecpar->sample_rate = rate;
     st->codecpar->block_align = 0x800;
 
-    ret = ff_alloc_extradata(st->codecpar, 34);
-    if (ret < 0)
-        return ret;
-    memset(st->codecpar->extradata, 0, 34);
-    AV_WL16(st->codecpar->extradata, 1);
+    switch (codec) {
+    case AV_CODEC_ID_XMA2:
+        ret = ff_alloc_extradata(st->codecpar, 34);
+        if (ret < 0)
+            return ret;
+        memset(st->codecpar->extradata, 0, 34);
+        AV_WL16(st->codecpar->extradata, 1);
+        break;
+    }
     ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
