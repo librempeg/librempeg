@@ -48,24 +48,26 @@ static int read_probe(const AVProbeData *p)
 static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
+    int rate, align;
     AVStream *st;
+
+    avio_skip(pb, 6);
+    avio_skip(pb, 2);
+    rate = avio_rl16(pb);
+    avio_skip(pb, 2);
+    align = avio_rl16(pb);
+    if (rate <= 0 || align <= 0)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(pb, 6);
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_IMA_MAGIX;
     st->codecpar->ch_layout.nb_channels = 2;
-    avio_skip(pb, 2);
-    st->codecpar->sample_rate = avio_rl16(pb);
-    if (st->codecpar->sample_rate == 0)
-        return AVERROR_INVALIDDATA;
-    avio_skip(pb, 2);
-    st->codecpar->block_align = avio_rl16(pb);
-    if (st->codecpar->block_align == 0)
-        return AVERROR_INVALIDDATA;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->block_align = align;
     st->start_time = 0;
     st->duration = avio_rl32(pb);
 
