@@ -41,8 +41,9 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    unsigned size, align, rate, channels;
+    int align, rate, channels;
     AVIOContext *pb = s->pb;
+    int64_t size;
     AVStream *st;
 
     avio_skip(pb, 4);
