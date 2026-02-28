@@ -23,6 +23,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 #define PSB2SMP(s, c) (s / c / 0x10 * 28)
 
@@ -75,14 +76,6 @@ static int vig_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int vig_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVCodecParameters *par = s->streams[0]->codecpar;
-    AVIOContext *pb = s->pb;
-
-    return av_get_packet(pb, pkt, par->block_align);
-}
-
 const FFInputFormat ff_vig_demuxer = {
     .p.name         = "vig",
     .p.long_name    = NULL_IF_CONFIG_SMALL("VIG (Konami/KCE Studio)"),
@@ -90,5 +83,5 @@ const FFInputFormat ff_vig_demuxer = {
     .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = vig_probe,
     .read_header    = vig_read_header,
-    .read_packet    = vig_read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
