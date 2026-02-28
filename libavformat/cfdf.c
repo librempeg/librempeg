@@ -25,6 +25,10 @@
 #include "demux.h"
 #include "internal.h"
 
+typedef struct CFDFDemuxContext {
+    int current_stream;
+} CFDFDemuxContext;
+
 typedef struct CFDFStream {
     int64_t start_offset;
     int64_t stop_offset;
@@ -146,9 +150,11 @@ static int read_header(AVFormatContext *s)
         avio_skip(pb, 4);
         chunk->uncompressed_size = avio_rl32(pb);
         avio_skip(pb, 4);
-        chunk->offset = header_pos + avio_rl32(pb);
+        chunk->offset = avio_rl32(pb);
         if (valid)
             total_chunks++;
+        chunk->size -= chunk->offset;
+        chunk->offset += header_pos;
     }
 
     if (total_chunks <= 0)
@@ -233,17 +239,17 @@ static int read_header(AVFormatContext *s)
 
     for (int si = 0; si < nb_streams; si++) {
         CFDFChunk *chunk = &chunks[si];
-        CFDFStream *xst;
+        CFDFStream *cst;
         AVStream *st;
 
         st = avformat_new_stream(s, NULL);
         if (!st)
             return AVERROR(ENOMEM);
 
-        xst = av_mallocz(sizeof(*xst));
-        if (!xst)
+        cst = av_mallocz(sizeof(*cst));
+        if (!cst)
             return AVERROR(ENOMEM);
-        st->priv_data = xst;
+        st->priv_data = cst;
 
         st->start_time = 0;
         st->duration = chunk->uncompressed_size / chunk->codec_flag;
@@ -253,9 +259,9 @@ static int read_header(AVFormatContext *s)
         st->codecpar->ch_layout.nb_channels = 1;
         st->codecpar->block_align = 256;
 
-        xst->start_offset = chunk->offset;
-        xst->stop_offset = chunk->offset;
-        xst->stop_offset += chunk->size;
+        cst->start_offset = chunk->offset;
+        cst->stop_offset = chunk->offset;
+        cst->stop_offset += chunk->size;
         if (chunk->name[0] != '\0')
             av_dict_set(&st->metadata, "title", chunk->name, 0);
     }
@@ -270,9 +276,9 @@ static int read_header(AVFormatContext *s)
 
     {
         AVStream *st = s->streams[0];
-        CFDFStream *xst = st->priv_data;
+        CFDFStream *cst = st->priv_data;
 
-        first_start_offset = xst->start_offset;
+        first_start_offset = cst->start_offset;
     }
 
     avio_seek(pb, first_start_offset, SEEK_SET);
@@ -282,41 +288,67 @@ static int read_header(AVFormatContext *s)
 
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
+    CFDFDemuxContext *cfdf = s->priv_data;
+    int size, n, ret = AVERROR_EOF;
     AVIOContext *pb = s->pb;
-    int ret = AVERROR_EOF;
+    AVCodecParameters *par;
+    int do_seek = 0;
+    CFDFStream *cst;
+    AVStream *st;
     int64_t pos;
 
+redo:
     if (avio_feof(pb))
         return AVERROR_EOF;
 
-    for (int n = 0; n < s->nb_streams; n++) {
-        AVStream *st = s->streams[n];
-        AVCodecParameters *par = st->codecpar;
-        CFDFStream *xst = st->priv_data;
+    if (cfdf->current_stream >= s->nb_streams)
+        return AVERROR_EOF;
 
-        if (avio_feof(pb))
-            return AVERROR_EOF;
+    n = cfdf->current_stream;
+    st = s->streams[n];
+    par = st->codecpar;
+    cst = st->priv_data;
 
-        pos = avio_tell(pb);
-        if (pos >= xst->start_offset && pos < xst->stop_offset) {
-            const int size = FFMIN(par->block_align, xst->stop_offset - pos);
+    if (do_seek)
+        avio_seek(pb, cst->start_offset, SEEK_SET);
 
-            ret = av_get_packet(pb, pkt, size);
-
-            pkt->pos = pos;
-            pkt->stream_index = st->index;
-
-            break;
-        } else if (pos >= xst->stop_offset && n+1 < s->nb_streams) {
-            AVStream *st_next = s->streams[n+1];
-            CFDFStream *pst_next = st_next->priv_data;
-
-            if (pst_next->start_offset > pos)
-                avio_skip(pb, pst_next->start_offset - pos);
-        }
+    if (avio_tell(pb) >= cst->stop_offset) {
+        do_seek = 1;
+        cfdf->current_stream++;
+        goto redo;
     }
 
+    pos = avio_tell(pb);
+    size = FFMIN(par->block_align, cst->stop_offset - pos);
+
+    ret = av_get_packet(pb, pkt, size);
+    pkt->pos = pos;
+    pkt->stream_index = st->index;
+    pkt->duration = pkt->size;
+
     return ret;
+}
+
+static int read_seek(AVFormatContext *s, int stream_index,
+                     int64_t ts, int flags)
+{
+    CFDFDemuxContext *cdfd = s->priv_data;
+    AVIOContext *pb = s->pb;
+    CFDFStream *cst;
+    AVStream *st;
+    int64_t pos;
+
+    cdfd->current_stream = av_clip(stream_index, 0, s->nb_streams-1);
+    st = s->streams[cdfd->current_stream];
+    cst = st->priv_data;
+
+    pos = avio_tell(pb);
+    if (pos < cst->start_offset) {
+        avio_seek(pb, cst->start_offset, SEEK_SET);
+        return 0;
+    }
+
+    return -1;
 }
 
 const FFInputFormat ff_cfdf_demuxer = {
@@ -325,7 +357,9 @@ const FFInputFormat ff_cfdf_demuxer = {
     .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "trk",
+    .priv_data_size = sizeof(CFDFDemuxContext),
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
+    .read_seek      = read_seek,
 };
