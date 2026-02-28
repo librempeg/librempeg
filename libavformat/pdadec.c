@@ -31,6 +31,8 @@ static int read_probe(const AVProbeData *pd)
 {
     if (memcmp(pd->buf, PDA_MAGIC, sizeof(PDA_MAGIC)-1))
         return 0;
+    if (pd->buf_size < 16)
+        return 0;
     if (AV_RL24(pd->buf + 12) == 0)
         return 0;
     if (pd->buf[15] > 5)
