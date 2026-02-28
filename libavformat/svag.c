@@ -62,8 +62,8 @@ static int read_header(AVFormatContext *s)
     st->codecpar->sample_rate = rate;
     st->codecpar->ch_layout.nb_channels = channels;
     st->start_time = 0;
-    st->duration = size / (16 * st->codecpar->ch_layout.nb_channels) * 28;
-    st->codecpar->block_align = align * st->codecpar->ch_layout.nb_channels;
+    st->duration = size / (16 * channels) * 28;
+    st->codecpar->block_align = align * channels;
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     avio_seek(pb, 0x800, SEEK_SET);
