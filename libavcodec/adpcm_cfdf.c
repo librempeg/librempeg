@@ -110,6 +110,13 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     return avpkt->size;
 }
 
+static av_cold void decode_flush(AVCodecContext *avctx)
+{
+    ADPCMCFDFContext *s = avctx->priv_data;
+
+    s->left = s->prev_sample = s->control_byte = 0;
+}
+
 const FFCodec ff_adpcm_cfdf_decoder = {
     .p.name         = "adpcm_cfdf",
     CODEC_LONG_NAME("ADPCM Cyberflix DreamFactory CFDF"),
@@ -117,6 +124,7 @@ const FFCodec ff_adpcm_cfdf_decoder = {
     .p.id           = AV_CODEC_ID_ADPCM_CFDF,
     .priv_data_size = sizeof(ADPCMCFDFContext),
     .init           = decode_init,
+    .flush          = decode_flush,
     FF_CODEC_DECODE_CB(decode_frame),
     .p.capabilities = AV_CODEC_CAP_DR1,
 };
