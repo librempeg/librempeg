@@ -28,6 +28,9 @@
 
 static int read_probe(const AVProbeData *p)
 {
+    if (p->buf_size < 60)
+        return 0;
+
     if (AV_RB32(p->buf)    == AV_RB32("PIFF") &&
         AV_RB32(p->buf+8)  == AV_RB32("TPCM") &&
         AV_RB32(p->buf+12) == AV_RB32("TADH") &&
