@@ -25,7 +25,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int msnd_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "\x00\x08MSND", 6))
         return 0;
@@ -45,7 +45,7 @@ static int msnd_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int msnd_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     AVStream *st;
@@ -76,7 +76,7 @@ static int msnd_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int msnd_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
 
@@ -87,7 +87,7 @@ const FFInputFormat ff_msnd_demuxer = {
     .p.name         = "msnd",
     .p.long_name    = NULL_IF_CONFIG_SMALL("PS2 MSND"),
     .p.extensions   = "snd",
-    .read_probe     = msnd_probe,
-    .read_header    = msnd_read_header,
-    .read_packet    = msnd_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
