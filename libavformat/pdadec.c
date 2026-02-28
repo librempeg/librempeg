@@ -27,7 +27,7 @@
 
 #define PDA_MAGIC "Playdate AUD"
 
-static int pda_probe(const AVProbeData *pd)
+static int read_probe(const AVProbeData *pd)
 {
     if (memcmp(pd->buf, PDA_MAGIC, sizeof(PDA_MAGIC)-1))
         return 0;
@@ -38,7 +38,7 @@ static int pda_probe(const AVProbeData *pd)
     return AVPROBE_SCORE_MAX;
 }
 
-static int pda_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     AVCodecParameters *par;
@@ -91,7 +91,7 @@ static int pda_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int pda_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
 
@@ -111,7 +111,7 @@ const FFInputFormat ff_pda_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("PlayDate Audio"),
     .p.extensions   = "pda",
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = pda_probe,
-    .read_header    = pda_read_header,
-    .read_packet    = pda_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
