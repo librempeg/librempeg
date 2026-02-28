@@ -82,7 +82,7 @@ static int vpk_read_header(AVFormatContext *s)
     st->codecpar->block_align = align;
     st->codecpar->sample_rate = rate;
     st->codecpar->ch_layout.nb_channels = nb_channels;
-    vpk->block_count       = (st->duration + (samples_per_block - 1)) / samples_per_block;
+    vpk->block_count       = st->duration / samples_per_block;
     vpk->last_block_size   = (st->duration % samples_per_block) * 16 * st->codecpar->ch_layout.nb_channels / 28;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
