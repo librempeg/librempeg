@@ -27,7 +27,7 @@
 
 #define PSB2SMP(s, c) (s / c / 0x10 * 28)
 
-static int vig_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RB32(p->buf) != 0x01006408)
         return 0;
@@ -45,7 +45,7 @@ static int vig_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int vig_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     uint32_t data_offset, data_size, loop_start, loop_end, block_size;
     AVIOContext *pb = s->pb;
@@ -90,7 +90,7 @@ const FFInputFormat ff_vig_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("VIG (Konami/KCE Studio)"),
     .p.extensions   = "vig",
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = vig_probe,
-    .read_header    = vig_read_header,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
 };
