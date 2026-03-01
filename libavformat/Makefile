@@ -717,6 +717,7 @@ OBJS-$(CONFIG_SPDIF_MUXER)               += spdif.o spdifenc.o
 OBJS-$(CONFIG_SPSD_DEMUXER)              += spsd.o pcm.o
 OBJS-$(CONFIG_SPEEX_MUXER)               += oggenc.o \
                                             vorbiscomment.o
+OBJS-$(CONFIG_SQUARE_PS2FMV_DEMUXER)     += square_ps2fmv.o
 OBJS-$(CONFIG_SRT_DEMUXER)               += srtdec.o subtitles.o
 OBJS-$(CONFIG_SRT_MUXER)                 += srtenc.o
 OBJS-$(CONFIG_SSM_DEMUXER)               += ssm.o
