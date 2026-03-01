@@ -63,25 +63,23 @@ static int twodx_probe(const AVProbeData *p)
     return twodx9_probe_sub(p, AV_RL32(p->buf + 0x10));
 }
 
-static int twodx9_read_stream(AVFormatContext *s, AVStream *st, int64_t start_offset)
+static int twodx9_read_stream(AVFormatContext *s, AVStream **stp, int64_t start_offset)
 {
-    int ret;
+    int64_t tst_start_offset, tst_stop_offset;
+    AVCodecParameters par = {0};
+    AVIOContext *pb = s->pb;
     int32_t wav_offset;
     uint32_t loop_start;
-    AVIOContext *pb = s->pb;
-    TwoDXStream *tst = av_mallocz(sizeof(TwoDXStream));
-    if (!tst)
-        return AVERROR(ENOMEM);
-
-    st->start_time = 0;
-    st->priv_data = tst;
+    TwoDXStream *tst;
+    AVStream *st;
+    int ret;
 
     avio_seek(pb, start_offset, SEEK_SET);
     if (avio_rl32(pb) != MKTAG('2','D','X','9'))
         return AVERROR_INVALIDDATA;
 
     wav_offset = avio_rl32(pb);
-    tst->start_offset = start_offset + 0x5A + wav_offset;
+    tst_start_offset = start_offset + 0x5A + wav_offset;
 
     avio_skip(pb, 12);
     loop_start = avio_rl32(pb);
@@ -93,31 +91,63 @@ static int twodx9_read_stream(AVFormatContext *s, AVStream *st, int64_t start_of
     if (avio_rl32(pb) != MKTAG('W','A','V','E') || avio_rl32(pb) != MKTAG('f','m','t',' '))
         return AVERROR_INVALIDDATA;
 
-    if ((ret = ff_get_wav_header(s, pb, st->codecpar, avio_rl32(pb), 0)) < 0)
+    par.format = -1;
+    av_channel_layout_uninit(&par.ch_layout);
+    if ((ret = ff_get_wav_header(s, pb, &par, avio_rl32(pb), 0)) < 0)
         return ret;
-    if (st->codecpar->codec_id != AV_CODEC_ID_ADPCM_MS) {
+
+    if (par.codec_id != AV_CODEC_ID_ADPCM_MS) {
         avpriv_request_sample(s, "codec id isn't MSADPCM");
-        return AVERROR_PATCHWELCOME;
+        ret = AVERROR_PATCHWELCOME;
+        goto fail;
     }
 
-    if (st->codecpar->codec_id == AV_CODEC_ID_ADPCM_MS && st->codecpar->ch_layout.nb_channels > 2 &&
-        st->codecpar->block_align < INT_MAX / st->codecpar->ch_layout.nb_channels)
-        st->codecpar->block_align *= st->codecpar->ch_layout.nb_channels;
+    if (par.codec_id == AV_CODEC_ID_ADPCM_MS &&
+        par.ch_layout.nb_channels > 2 &&
+        par.block_align < INT_MAX / par.ch_layout.nb_channels)
+        par.block_align *= par.ch_layout.nb_channels;
 
-    if (avio_rl32(pb) != MKTAG('f','a','c','t') || avio_rl32(pb) != 4)
-        return AVERROR_INVALIDDATA;
+    if (avio_rl32(pb) != MKTAG('f','a','c','t') || avio_rl32(pb) != 4) {
+        ret = AVERROR_INVALIDDATA;
+        goto fail;
+    }
     avio_skip(pb, 4);
 
     if (avio_rl32(pb) != MKTAG('d','a','t','a'))
         return AVERROR_INVALIDDATA;
-    tst->stop_offset = tst->start_offset + avio_rl32(pb);
+    tst_stop_offset = avio_rl32(pb);
 
+    stp[0] = avformat_new_stream(s, NULL);
+    if (!stp[0]) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+
+    st = stp[0];
     if (loop_start > 0)
-        av_dict_set_int(&st->metadata, "loop_start", loop_start / 2 / st->codecpar->ch_layout.nb_channels, 0);
+        av_dict_set_int(&st->metadata, "loop_start", loop_start / 2 / par.ch_layout.nb_channels, 0);
+
+    tst = av_mallocz(sizeof(TwoDXStream));
+    if (!tst) {
+        ret = AVERROR(ENOMEM);
+        goto fail;;
+    }
+    tst->start_offset = tst_start_offset;
+    tst->stop_offset = tst->start_offset + tst_stop_offset;
+
+    st->start_time = 0;
+    st->priv_data = tst;
+    ret = avcodec_parameters_copy(st->codecpar, &par);
+    av_freep(&par.extradata);
+    if (ret < 0)
+        return ret;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
+fail:
+    av_freep(&par.extradata);
+    return ret;
 }
 
 static int sort_streams(const void *a, const void *b)
@@ -154,12 +184,8 @@ static int twodx_read_header(AVFormatContext *s)
         uint32_t offset = avio_rl32(pb);
         AVStream *st;
 
-        st = avformat_new_stream(s, NULL);
-        if (!st)
-            return AVERROR(ENOMEM);
-
         pos = avio_tell(pb);
-        if ((ret = twodx9_read_stream(s, st, offset)) < 0)
+        if ((ret = twodx9_read_stream(s, &st, offset)) < 0)
             return ret;
         avio_seek(pb, pos, SEEK_SET);
     }
@@ -183,12 +209,10 @@ static int twodx_read_header(AVFormatContext *s)
 
 static int twodx9_read_header(AVFormatContext *s)
 {
+    AVStream *st;
     int ret;
-    AVStream *st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
 
-    if ((ret = twodx9_read_stream(s, st, 0)) < 0)
+    if ((ret = twodx9_read_stream(s, &st, 0)) < 0)
         return ret;
 
     {
