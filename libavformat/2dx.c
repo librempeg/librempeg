@@ -164,12 +164,12 @@ static int sort_streams(const void *a, const void *b)
 static int twodx_read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
-    char title[0x10];
+    char title[257];
     int nb_streams;
     int64_t pos;
     int ret;
 
-    if ((ret = avio_get_str(pb, 0x10, title, sizeof(title))) < 0)
+    if ((ret = avio_get_str(pb, INT_MAX, title, sizeof(title))) < 0)
         return ret;
     av_dict_set(&s->metadata, "title", title, 0);
 
