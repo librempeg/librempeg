@@ -65,10 +65,9 @@ static int twodx_probe(const AVProbeData *p)
 
 static int twodx9_read_stream(AVFormatContext *s, AVStream **stp, int64_t start_offset)
 {
-    int64_t tst_start_offset, tst_stop_offset;
+    int64_t tst_start_offset, tst_stop_offset, wav_offset;
     AVCodecParameters par = {0};
     AVIOContext *pb = s->pb;
-    int32_t wav_offset;
     uint32_t loop_start;
     TwoDXStream *tst;
     AVStream *st;
@@ -164,11 +163,11 @@ static int sort_streams(const void *a, const void *b)
 
 static int twodx_read_header(AVFormatContext *s)
 {
-    int ret;
-    int64_t pos;
-    char title[0x10];
-    int32_t nb_streams;
     AVIOContext *pb = s->pb;
+    char title[0x10];
+    int nb_streams;
+    int64_t pos;
+    int ret;
 
     if ((ret = avio_get_str(pb, 0x10, title, sizeof(title))) < 0)
         return ret;
@@ -181,7 +180,7 @@ static int twodx_read_header(AVFormatContext *s)
 
     avio_skip(pb, 0x30);
     for (int i = 0; i < nb_streams; i++) {
-        uint32_t offset = avio_rl32(pb);
+        int64_t offset = avio_rl32(pb);
         AVStream *st;
 
         pos = avio_tell(pb);
