@@ -25,7 +25,7 @@
 #include "internal.h"
 #include "pcm.h"
 
-static int a2m_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "A2M\0PS2\0", 8) || (int)AV_RB32(p->buf + 0x10) <= 0)
         return 0;
@@ -33,7 +33,7 @@ static int a2m_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int a2m_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     AVStream *st;
@@ -68,7 +68,7 @@ const FFInputFormat ff_a2m_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("A2M (Artificial Mind & Movement)"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "int",
-    .read_probe     = a2m_probe,
-    .read_header    = a2m_read_header,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
 };
