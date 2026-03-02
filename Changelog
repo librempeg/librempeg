@@ -78,6 +78,7 @@ version <next>:
 - ktac demuxer
 - kat demuxer
 - Remove the old HLS protocol handler
+- LCEVC parser
 
 
 version 8.0:
