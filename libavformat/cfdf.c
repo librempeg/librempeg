@@ -259,6 +259,8 @@ static int read_header(AVFormatContext *s)
         st->codecpar->ch_layout.nb_channels = 1;
         st->codecpar->block_align = 256;
 
+        avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+
         cst->start_offset = chunk->offset;
         cst->stop_offset = chunk->offset;
         cst->stop_offset += chunk->size;
