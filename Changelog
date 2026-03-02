@@ -79,6 +79,7 @@ version <next>:
 - kat demuxer
 - Remove the old HLS protocol handler
 - LCEVC parser
+- LCEVC enhancement layer exporting in MPEG-TS
 
 
 version 8.0:
