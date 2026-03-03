@@ -173,6 +173,9 @@ int ff_get_cpu_flags_aarch64(void)
 #ifdef __ARM_FEATURE_SVE2
     flags |= AV_CPU_FLAG_SVE2;
 #endif
+#ifdef __ARM_FEATURE_CRC32
+    flags |= AV_CPU_FLAG_ARM_CRC;
+#endif
 
     flags |= detect_flags();
 
