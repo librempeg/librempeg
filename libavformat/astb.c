@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -94,21 +95,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVStream *st = s->streams[0];
-    AVCodecParameters *par = st->codecpar;
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    if (avio_feof(pb))
-        return AVERROR_EOF;
-
-    ret = av_get_packet(pb, pkt, par->block_align);
-    pkt->stream_index = 0;
-    return ret;
-}
-
 const FFInputFormat ff_astb_demuxer = {
     .p.name         = "astb",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Capcom ASTB (Audio Stream)"),
@@ -116,5 +102,5 @@ const FFInputFormat ff_astb_demuxer = {
     .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
