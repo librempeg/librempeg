@@ -7,8 +7,6 @@ OBJS += x86/aes_init.o                                                  \
 
 OBJS-$(HAVE_X86ASM) += x86/tx_float_init.o                              \
 
-OBJS-$(CONFIG_PIXELUTILS) += x86/pixelutils_init.o                      \
-
 EMMS_OBJS_$(HAVE_MMX_INLINE)_$(HAVE_MMX_EXTERNAL)_$(HAVE_MM_EMPTY) = x86/emms.o
 
 X86ASM-OBJS += x86/aes.o                                                \
