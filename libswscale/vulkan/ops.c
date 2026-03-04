@@ -21,18 +21,16 @@
 #include "../ops_internal.h"
 #include "../swscale_internal.h"
 #include "libavutil/mem.h"
+#include "libavutil/refstruct.h"
 #include "ops.h"
 
-void ff_sws_vk_uninit(SwsContext *sws)
+static void ff_sws_vk_uninit(AVRefStructOpaque opaque, void *obj)
 {
     SwsInternal *c = sws_internal(sws);
-    FFVulkanOpsCtx *s = c->hw_priv;
-    if (!s)
-        return;
+    FFVulkanOpsCtx *s = obj;
 
     ff_vk_exec_pool_free(&s->vkctx, &s->e);
     ff_vk_uninit(&s->vkctx);
-    av_freep(&c->hw_priv);
 }
 
 int ff_sws_vk_init(SwsContext *sws, AVBufferRef *dev_ref)
@@ -41,7 +39,8 @@ int ff_sws_vk_init(SwsContext *sws, AVBufferRef *dev_ref)
     SwsInternal *c = sws_internal(sws);
 
     if (!c->hw_priv) {
-        c->hw_priv = av_mallocz(sizeof(FFVulkanOpsCtx));
+        c->hw_priv = av_refstruct_alloc_ext(sizeof(FFVulkanOpsCtx), 0, NULL,
+                                            ff_sws_vk_uninit);
         if (!c->hw_priv)
             return AVERROR(ENOMEM);
     }
