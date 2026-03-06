@@ -890,7 +890,7 @@ int ff_format_check_set_url(AVFormatContext *s, const char *url)
         return AVERROR(ENOMEM);
 
     av_freep(&s->url);
-    s->url = url;
+    s->url = (char *)url;
     return 0;
 }
 
