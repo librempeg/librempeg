@@ -121,12 +121,29 @@ static int read_header(AVFormatContext *s)
                                             st->codecpar->sample_rate / 56;
             break;
         case MKTAG('X', 'E', '_', '_'):
+            avio_skip(pb, 44);
+            coding = avio_rl32(pb);
             st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_IMA_DAT4;
             st->codecpar->ch_layout.nb_channels = 2;
             st->codecpar->sample_rate = 32000;
             st->codecpar->block_align = 0x20 * st->codecpar->ch_layout.nb_channels;
             st->codecpar->bit_rate = 32LL * st->codecpar->ch_layout.nb_channels * 8 *
                                             st->codecpar->sample_rate / 56;
+            switch (coding) {
+            case MKTAG('D','A','T','4'):
+            case MKTAG('D','A','T','5'):
+            case MKTAG('D','A','T','8'):
+            case MKTAG('D','A','T','9'):
+                avio_skip(pb, 4);
+                st->codecpar->ch_layout.nb_channels = avio_rl32(pb);
+                st->codecpar->sample_rate = avio_rl32(pb);
+                st->codecpar->block_align = 0x20 * st->codecpar->ch_layout.nb_channels;
+                st->codecpar->bit_rate = 32LL * st->codecpar->ch_layout.nb_channels * 8 *
+                                         st->codecpar->sample_rate / 56;
+                break;
+            default:
+                break;
+            }
             break;
         case MKTAG('P', 'S', 'P', '_'):
             st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_PSX;
