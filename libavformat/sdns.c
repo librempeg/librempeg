@@ -67,6 +67,7 @@ static int read_header(AVFormatContext *s)
     par->extradata[4] = (channels + 1) / 2;
     for (int i = 0; i < par->extradata[4]; i++)
         par->extradata[8 + 20 * i + 17] = FFMIN(2, channels - i * 2);
+    ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
     avpriv_set_pts_info(st, 64, 1, par->sample_rate);
     avio_seek(pb, 0x1000, SEEK_SET);
 
