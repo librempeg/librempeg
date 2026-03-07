@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -73,18 +74,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    int ret;
-
-    if (avio_feof(s->pb))
-        return AVERROR_EOF;
-    ret = av_get_packet(s->pb, pkt, 2048);
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_sdns_demuxer = {
     .p.name         = "sdns",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Xbox SDNS"),
@@ -92,5 +81,5 @@ const FFInputFormat ff_sdns_demuxer = {
     .p.extensions   = "sdns",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
