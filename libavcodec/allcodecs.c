@@ -715,6 +715,7 @@ extern const FFCodec ff_adpcm_ima_alp_encoder;
 extern const FFCodec ff_adpcm_ima_apc_decoder;
 extern const FFCodec ff_adpcm_ima_apm_decoder;
 extern const FFCodec ff_adpcm_ima_apm_encoder;
+extern const FFCodec ff_adpcm_ima_awc_decoder;
 extern const FFCodec ff_adpcm_ima_cunning_decoder;
 extern const FFCodec ff_adpcm_ima_dat4_decoder;
 extern const FFCodec ff_adpcm_ima_dk3_decoder;
