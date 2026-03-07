@@ -224,6 +224,7 @@ static int read_header(AVFormatContext *s)
             for (int i = 0; i < st->codecpar->extradata[4]; i++)
                 st->codecpar->extradata[8 + 20 * i + 17] = FFMIN(2, st->codecpar->ch_layout.nb_channels - i * 2);
             st->codecpar->block_align = 2048;
+            ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
             break;
         default:
