@@ -29,10 +29,9 @@ static int read_probe(const AVProbeData *p)
 {
     if (AV_RL32(p->buf) != MKTAG('S','D','N','S'))
         return 0;
-    if (AV_RB32(p->buf + 8) <= 0)
+    if ((int)AV_RB32(p->buf + 8) <= 0)
         return 0;
-    if (AV_RB32(p->buf + 12) <= 0 ||
-        AV_RB32(p->buf + 12) > 128)
+    if ((int)AV_RB32(p->buf + 12) <= 0)
         return 0;
     return AVPROBE_SCORE_MAX / 3;
 }
