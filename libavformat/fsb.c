@@ -320,7 +320,7 @@ static int fsb_read_header(AVFormatContext *s)
                 if (ret < 0)
                     return ret;
                 memset(par->extradata, 0, par->extradata_size);
-                AV_WL16(par->extradata, 1);
+                AV_WL16(par->extradata, (nb_channels+1)/2);
                 sti->need_parsing = AVSTREAM_PARSE_FULL_RAW;
                 break;
             case AV_CODEC_ID_ADPCM_NDSP:
