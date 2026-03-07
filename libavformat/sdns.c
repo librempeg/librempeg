@@ -24,15 +24,15 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
     if (AV_RL32(p->buf) != MKTAG('S','D','N','S'))
         return 0;
-    if (AV_RB32(p->buf + 8) <= 0)
+    if ((int)AV_RB32(p->buf + 8) <= 0)
         return 0;
-    if (AV_RB32(p->buf + 12) <= 0 ||
-        AV_RB32(p->buf + 12) > 128)
+    if ((int)AV_RB32(p->buf + 12) <= 0)
         return 0;
     return AVPROBE_SCORE_MAX / 3;
 }
@@ -67,22 +67,11 @@ static int read_header(AVFormatContext *s)
     par->extradata[4] = (channels + 1) / 2;
     for (int i = 0; i < par->extradata[4]; i++)
         par->extradata[8 + 20 * i + 17] = FFMIN(2, channels - i * 2);
+    ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
     avpriv_set_pts_info(st, 64, 1, par->sample_rate);
     avio_seek(pb, 0x1000, SEEK_SET);
 
     return 0;
-}
-
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    int ret;
-
-    if (avio_feof(s->pb))
-        return AVERROR_EOF;
-    ret = av_get_packet(s->pb, pkt, 2048);
-    pkt->stream_index = 0;
-
-    return ret;
 }
 
 const FFInputFormat ff_sdns_demuxer = {
@@ -92,5 +81,5 @@ const FFInputFormat ff_sdns_demuxer = {
     .p.extensions   = "sdns",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };

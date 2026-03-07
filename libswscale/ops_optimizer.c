@@ -518,8 +518,14 @@ retry:
 
         case SWS_OP_DITHER:
             for (int i = 0; i < 4; i++) {
-                noop &= (prev->comps.flags[i] & SWS_COMP_EXACT) ||
-                        next->comps.unused[i];
+                if (next->comps.unused[i] || op->dither.y_offset[i] < 0)
+                    continue;
+                if (prev->comps.flags[i] & SWS_COMP_EXACT) {
+                    op->dither.y_offset[i] = -1; /* unnecessary dither */
+                    goto retry;
+                } else {
+                    noop = false;
+                }
             }
 
             if (noop) {
@@ -684,15 +690,13 @@ int ff_sws_solve_shuffle(const SwsOpList *const ops, uint8_t shuffle[],
     if (!ops->num_ops)
         return AVERROR(EINVAL);
 
-    const SwsOp read = ops->ops[0];
-    const int read_size = ff_sws_pixel_type_size(read.type);
-    uint32_t mask[4] = {0};
-
-    if (read.op != SWS_OP_READ || read.rw.frac ||
-        (!read.rw.packed && read.rw.elems > 1))
+    const SwsOp *read = ff_sws_op_list_input(ops);
+    if (!read || read->rw.frac || (!read->rw.packed && read->rw.elems > 1))
         return AVERROR(ENOTSUP);
 
-    for (int i = 0; i < read.rw.elems; i++)
+    const int read_size = ff_sws_pixel_type_size(read->type);
+    uint32_t mask[4] = {0};
+    for (int i = 0; i < read->rw.elems; i++)
         mask[i] = 0x01010101 * i * read_size + 0x03020100;
 
     for (int opidx = 1; opidx < ops->num_ops; opidx++) {
@@ -744,7 +748,7 @@ int ff_sws_solve_shuffle(const SwsOpList *const ops, uint8_t shuffle[],
             memset(shuffle, clear_val, size);
 
             const int write_size  = ff_sws_pixel_type_size(op->type);
-            const int read_chunk  = read.rw.elems * read_size;
+            const int read_chunk  = read->rw.elems * read_size;
             const int write_chunk = op->rw.elems * write_size;
             const int num_groups  = size / FFMAX(read_chunk, write_chunk);
             for (int n = 0; n < num_groups; n++) {

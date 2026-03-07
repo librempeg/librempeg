@@ -139,7 +139,7 @@ typedef struct SwsConvertOp {
 typedef struct SwsDitherOp {
     AVRational *matrix; /* tightly packed dither matrix (refstruct) */
     int size_log2; /* size (in bits) of the dither matrix */
-    uint8_t y_offset[4]; /* row offset for each component */
+    int8_t y_offset[4]; /* row offset for each component, or -1 for ignored */
 } SwsDitherOp;
 
 typedef struct SwsLinearOp {
@@ -223,6 +223,9 @@ typedef struct SwsOpList {
     SwsOp *ops;
     int num_ops;
 
+    /* Purely informative metadata associated with this operation list */
+    SwsFormat src, dst;
+
     /* Input/output plane pointer swizzle mask */
     SwsSwizzleOp order_src, order_dst;
 
@@ -236,9 +239,6 @@ typedef struct SwsOpList {
      * information is known.
      */
     SwsComps comps_src;
-
-    /* Purely informative metadata associated with this operation list */
-    SwsFormat src, dst;
 } SwsOpList;
 
 SwsOpList *ff_sws_op_list_alloc(void);
@@ -248,6 +248,21 @@ void ff_sws_op_list_free(SwsOpList **ops);
  * Returns a duplicate of `ops`, or NULL on OOM.
  */
 SwsOpList *ff_sws_op_list_duplicate(const SwsOpList *ops);
+
+/**
+ * Returns the input operation for a given op list, or NULL if there is none
+ * (e.g. for a pure CLEAR-only operation list).
+ *
+ * This will always be an op of type SWS_OP_READ.
+ */
+const SwsOp *ff_sws_op_list_input(const SwsOpList *ops);
+
+/**
+ * Returns the output operation for a given op list, or NULL if there is none.
+ *
+ * This will always be an op of type SWS_OP_WRITE.
+ */
+const SwsOp *ff_sws_op_list_output(const SwsOpList *ops);
 
 /**
  * Returns whether an op list represents a true no-op operation, i.e. may be
@@ -271,7 +286,8 @@ void ff_sws_op_list_remove_at(SwsOpList *ops, int index, int count);
 /**
  * Print out the contents of an operation list.
  */
-void ff_sws_op_list_print(void *log_ctx, int log_level, const SwsOpList *ops);
+void ff_sws_op_list_print(void *log_ctx, int log_level, int log_level_extra,
+                          const SwsOpList *ops);
 
 /**
  * Infer + propagate known information about components. Called automatically
@@ -296,7 +312,7 @@ enum SwsOpCompileFlags {
  *
  * Note: `ops` may be modified by this function.
  */
-int ff_sws_compile_pass(SwsGraph *graph, SwsOpList *ops, int flags, SwsFormat dst,
-                        SwsPass *input, SwsPass **output);
+int ff_sws_compile_pass(SwsGraph *graph, SwsOpList *ops, int flags,
+                        const SwsFormat *dst, SwsPass *input, SwsPass **output);
 
 #endif

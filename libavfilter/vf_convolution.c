@@ -521,11 +521,8 @@ static void setup_5x5(int radius, const uint8_t *c[], const uint8_t *src, int st
     int i;
 
     for (i = 0; i < 25; i++) {
-        int xoff = FFABS(x + ((i % 5) - 2));
-        int yoff = FFABS(y + (i / 5) - 2);
-
-        xoff = xoff >= w ? 2 * w - 1 - xoff : xoff;
-        yoff = yoff >= h ? 2 * h - 1 - yoff : yoff;
+        int xoff = avpriv_mirror(x + (i % 5) - 2, w - 1);
+        int yoff = avpriv_mirror(y + (i / 5) - 2, h - 1);
 
         c[i] = src + xoff * bpc + yoff * stride;
     }
@@ -537,11 +534,8 @@ static void setup_7x7(int radius, const uint8_t *c[], const uint8_t *src, int st
     int i;
 
     for (i = 0; i < 49; i++) {
-        int xoff = FFABS(x + ((i % 7) - 3));
-        int yoff = FFABS(y + (i / 7) - 3);
-
-        xoff = xoff >= w ? 2 * w - 1 - xoff : xoff;
-        yoff = yoff >= h ? 2 * h - 1 - yoff : yoff;
+        int xoff = avpriv_mirror(x + (i % 7) - 3, w - 1);
+        int yoff = avpriv_mirror(y + (i / 7) - 3, h - 1);
 
         c[i] = src + xoff * bpc + yoff * stride;
     }
@@ -553,9 +547,7 @@ static void setup_row(int radius, const uint8_t *c[], const uint8_t *src, int st
     int i;
 
     for (i = 0; i < radius * 2 + 1; i++) {
-        int xoff = FFABS(x + i - radius);
-
-        xoff = xoff >= w ? 2 * w - 1 - xoff : xoff;
+        int xoff = avpriv_mirror(x + i - radius, w - 1);
 
         c[i] = src + xoff * bpc + y * stride;
     }
@@ -567,9 +559,7 @@ static void setup_column(int radius, const uint8_t *c[], const uint8_t *src, int
     int i;
 
     for (i = 0; i < radius * 2 + 1; i++) {
-        int xoff = FFABS(x + i - radius);
-
-        xoff = xoff >= h ? 2 * h - 1 - xoff : xoff;
+        int xoff = avpriv_mirror(x + i - radius, h - 1);
 
         c[i] = src + y * bpc + xoff * stride;
     }
@@ -631,10 +621,12 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
         }
 
         for (y = slice_start; y < slice_end; y += step) {
-            const int xoff = mode == MATRIX_COLUMN ? (y - slice_start) * bpc : radius * bpc;
-            const int yoff = mode == MATRIX_COLUMN ? radius * dstride : 0;
+            const int left = FFMIN(radius, sizew);
+            const int right = FFMAX(left, sizew - radius);
+            const int xoff = mode == MATRIX_COLUMN ? (y - slice_start) * bpc : left * bpc;
+            const int yoff = mode == MATRIX_COLUMN ? left * dstride : 0;
 
-            for (x = 0; x < radius; x++) {
+            for (x = 0; x < left; x++) {
                 const int xoff = mode == MATRIX_COLUMN ? (y - slice_start) * bpc : x * bpc;
                 const int yoff = mode == MATRIX_COLUMN ? x * dstride : 0;
 
@@ -643,11 +635,11 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
                                  bias, matrix, c, s->max, radius,
                                  dstride, stride, slice_end - step);
             }
-            s->setup[plane](radius, c, src, stride, radius, width, y, height, bpc);
-            s->filter[plane](dst + yoff + xoff, sizew - 2 * radius,
+            s->setup[plane](radius, c, src, stride, left, width, y, height, bpc);
+            s->filter[plane](dst + yoff + xoff, right - left,
                              rdiv, bias, matrix, c, s->max, radius,
                              dstride, stride, slice_end - step);
-            for (x = sizew - radius; x < sizew; x++) {
+            for (x = right; x < sizew; x++) {
                 const int xoff = mode == MATRIX_COLUMN ? (y - slice_start) * bpc : x * bpc;
                 const int yoff = mode == MATRIX_COLUMN ? x * dstride : 0;
 

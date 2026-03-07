@@ -118,7 +118,8 @@ static int compile(SwsContext *ctx, SwsOpList *ops, SwsCompiledOp *out)
     }
 
     *out = (SwsCompiledOp) {
-        .block_size = 1,
+        .slice_align = 1,
+        .block_size  = 1,
         .func = process,
         .priv = av_memdup(&p, sizeof(p)),
         .free = av_free,
@@ -127,6 +128,7 @@ static int compile(SwsContext *ctx, SwsOpList *ops, SwsCompiledOp *out)
 }
 
 const SwsOpBackend backend_murder = {
-    .name    = "memcpy",
-    .compile = compile,
+    .name       = "memcpy",
+    .compile    = compile,
+    .hw_format  = AV_PIX_FMT_NONE,
 };

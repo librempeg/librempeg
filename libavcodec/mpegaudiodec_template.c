@@ -382,7 +382,7 @@ static int handle_crc(MPADecodeContext *s, int sec_len)
         crc_val = av_crc(crc_tab, crc_val, tmp_buf, 3);
 
         if (crc_val) {
-            av_log(s->avctx, AV_LOG_ERROR, "CRC mismatch %X!\n", crc_val);
+            av_log(s->avctx, AV_LOG_ERROR, "CRC mismatch %"PRIX32"!\n", crc_val);
             if (s->err_recognition & AV_EF_EXPLODE)
                 return AVERROR_INVALIDDATA;
         }
@@ -2094,7 +2094,7 @@ static int decode_frame_ealayer3multi(AVCodecContext *avctx, AVFrame *frame,
 
         ch_step = 1;
         for (int i = ch+1; i < avctx->ch_layout.nb_channels; i++) {
-            if (IS_VIRTUAL_OFFSET(offsets[i])) {
+            if (avctx->ch_layout.nb_channels == 2 || IS_VIRTUAL_OFFSET(offsets[i])) {
                 ch_step = 2;
                 continue;
             }

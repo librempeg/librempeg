@@ -4075,7 +4075,7 @@ smartblur_filter_deps="gpl swscale"
 sobel_opencl_filter_deps="opencl"
 sofalizer_filter_deps="libmysofa"
 spp_filter_deps="gpl avcodec"
-spp_filter_select="idctdsp fdctdsp me_cmp pixblockdsp"
+spp_filter_select="idctdsp fdctdsp pixblockdsp"
 sr_filter_deps="avformat swscale"
 sr_filter_select="dnn"
 stereo3d_filter_deps="gpl"
@@ -7659,6 +7659,10 @@ check_warning -Wwrite-strings
 check_warning -Wtype-limits
 check_warning -Wundef
 check_warning -Wempty-body
+# Warn about excessive stack usage, using a 120 KiB per-function threshold.
+# This roughly matches the default thread stack size on Musl, which is 128 KiB,
+# leaving some headroom for caller frames.
+check_warning -Wstack-usage=122880
 check_c_warning -Wmissing-prototypes
 check_c_warning -Wstrict-prototypes
 check_c_warning -Wunterminated-string-initialization
@@ -7957,16 +7961,19 @@ enabled threads || warn \
     "environment."
 
 case $target_os in
-haiku)
-    disable memalign
-    disable posix_memalign
-    ;;
 *-dos|freedos|opendos)
     if test_cpp_condition sys/version.h "defined(__DJGPP__) && __DJGPP__ == 2 && __DJGPP_MINOR__ == 5"; then
         disable memalign
     fi
     ;;
 esac
+
+if ! enabled_any memalign posix_memalign aligned_malloc; then
+    if enabled_any asm inline_asm; then
+        die "ERROR: Building with assembly enabled is not supported on platforms "\
+            "without aligned memory allocations! Try reconfiguring with --disable-asm"
+    fi
+fi
 
 flatten_extralibs(){
     nested_entries=

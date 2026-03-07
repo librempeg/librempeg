@@ -272,7 +272,7 @@ static int fsb_read_header(AVFormatContext *s)
                     par->codec_id = AV_CODEC_ID_ADPCM_NDSP_SI;
             } else if (format & 0x00400000) {
                 par->bits_per_coded_sample = 4;
-                par->codec_id = AV_CODEC_ID_ADPCM_IMA_XBOX;
+                par->codec_id = (format & 0x04000000) ? AV_CODEC_ID_ADPCM_IMA_FSB : AV_CODEC_ID_ADPCM_IMA_XBOX;
                 par->block_align = 36 * nb_channels;
             } else if (format & 0x00000200) {
                 par->codec_id = AV_CODEC_ID_MP3;
@@ -320,7 +320,7 @@ static int fsb_read_header(AVFormatContext *s)
                 if (ret < 0)
                     return ret;
                 memset(par->extradata, 0, par->extradata_size);
-                AV_WL16(par->extradata, 1);
+                AV_WL16(par->extradata, (nb_channels+1)/2);
                 sti->need_parsing = AVSTREAM_PARSE_FULL_RAW;
                 break;
             case AV_CODEC_ID_ADPCM_NDSP:

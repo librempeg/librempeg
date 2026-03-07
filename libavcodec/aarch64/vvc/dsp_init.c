@@ -60,6 +60,19 @@ void ff_vvc_put_luma_v16_12_neon(int16_t *dst, const uint8_t *_src, const ptrdif
 void ff_vvc_put_luma_v_x16_12_neon(int16_t *dst, const uint8_t *_src, const ptrdiff_t _src_stride,
                                    const int height, const int8_t *hf, const int8_t *vf, const int width);
 
+void ff_vvc_put_luma_hv8_10_neon(int16_t *dst, const uint8_t *_src, const ptrdiff_t _src_stride,
+                                 const int height, const int8_t *hf, const int8_t *vf, const int width);
+void ff_vvc_put_luma_hv16_10_neon(int16_t *dst, const uint8_t *_src, const ptrdiff_t _src_stride,
+                                  const int height, const int8_t *hf, const int8_t *vf, const int width);
+void ff_vvc_put_luma_hv_x16_10_neon(int16_t *dst, const uint8_t *_src, const ptrdiff_t _src_stride,
+                                    const int height, const int8_t *hf, const int8_t *vf, const int width);
+void ff_vvc_put_luma_hv8_12_neon(int16_t *dst, const uint8_t *_src, const ptrdiff_t _src_stride,
+                                 const int height, const int8_t *hf, const int8_t *vf, const int width);
+void ff_vvc_put_luma_hv16_12_neon(int16_t *dst, const uint8_t *_src, const ptrdiff_t _src_stride,
+                                  const int height, const int8_t *hf, const int8_t *vf, const int width);
+void ff_vvc_put_luma_hv_x16_12_neon(int16_t *dst, const uint8_t *_src, const ptrdiff_t _src_stride,
+                                    const int height, const int8_t *hf, const int8_t *vf, const int width);
+
 void ff_alf_classify_sum_neon(int *sum0, int *sum1, int16_t *grad, uint32_t gshift, uint32_t steps);
 
 #define BIT_DEPTH 8
@@ -107,10 +120,10 @@ void ff_vvc_w_avg_12_neon(uint8_t *_dst, ptrdiff_t _dst_stride,
 #define W_AVG_FUN(bit_depth) \
 static void vvc_w_avg_ ## bit_depth(uint8_t *dst, ptrdiff_t dst_stride, \
     const int16_t *src0, const int16_t *src1, int width, int height, \
-    int denom, int w0, int w1, int o0, int o1) \
+    int denom, int w0, int w1, int o) \
 { \
     int shift = denom + FFMAX(3, 15 - bit_depth); \
-    int offset = ((o0 + o1) * (1 << (bit_depth - 8)) + 1) * (1 << (shift - 1)); \
+    int offset = (o * (1 << (bit_depth - 8)) + 1) * (1 << (shift - 1)); \
     uintptr_t w0_w1 = ((uintptr_t)w0 << 32) | (uint32_t)w1; \
     uintptr_t offset_shift = ((uintptr_t)offset << 32) | (uint32_t)shift; \
     ff_vvc_w_avg_ ## bit_depth ## _neon(dst, dst_stride, src0, src1, width, height, w0_w1, offset_shift); \
@@ -268,6 +281,9 @@ void ff_vvc_dsp_init_aarch64(VVCDSPContext *const c, const int bd)
             c->inter.put[1][5][1][1] = ff_vvc_put_epel_hv64_8_neon_i8mm;
             c->inter.put[1][6][1][1] = ff_vvc_put_epel_hv128_8_neon_i8mm;
         }
+        if (have_sme2(cpu_flags) && have_sme_i16i64(cpu_flags)) {
+            c->alf.filter[LUMA] = alf_filter_luma_8_sme2;
+        }
     } else if (bd == 10) {
         c->inter.avg = ff_vvc_avg_10_neon;
         c->inter.w_avg = vvc_w_avg_10;
@@ -287,9 +303,18 @@ void ff_vvc_dsp_init_aarch64(VVCDSPContext *const c, const int bd)
         c->inter.put[0][5][1][0] =
         c->inter.put[0][6][1][0] = ff_vvc_put_luma_v_x16_10_neon;
 
+        c->inter.put[0][2][1][1] = ff_vvc_put_luma_hv8_10_neon;
+        c->inter.put[0][3][1][1] = ff_vvc_put_luma_hv16_10_neon;
+        c->inter.put[0][4][1][1] =
+        c->inter.put[0][5][1][1] =
+        c->inter.put[0][6][1][1] = ff_vvc_put_luma_hv_x16_10_neon;
+
         c->alf.filter[LUMA] = alf_filter_luma_10_neon;
         c->alf.filter[CHROMA] = alf_filter_chroma_10_neon;
         c->alf.classify = alf_classify_10_neon;
+        if (have_sme2(cpu_flags) && have_sme_i16i64(cpu_flags)) {
+            c->alf.filter[LUMA] = alf_filter_luma_10_sme2;
+        }
     } else if (bd == 12) {
         c->inter.avg = ff_vvc_avg_12_neon;
         c->inter.w_avg = vvc_w_avg_12;
@@ -303,6 +328,12 @@ void ff_vvc_dsp_init_aarch64(VVCDSPContext *const c, const int bd)
         c->inter.put[0][5][0][1] =
         c->inter.put[0][6][0][1] = ff_vvc_put_luma_h_x16_12_neon;
 
+        c->inter.put[0][2][1][1] = ff_vvc_put_luma_hv8_12_neon;
+        c->inter.put[0][3][1][1] = ff_vvc_put_luma_hv16_12_neon;
+        c->inter.put[0][4][1][1] =
+        c->inter.put[0][5][1][1] =
+        c->inter.put[0][6][1][1] = ff_vvc_put_luma_hv_x16_12_neon;
+
         c->inter.put[0][1][1][0] = ff_vvc_put_luma_v4_12_neon;
         c->inter.put[0][2][1][0] = ff_vvc_put_luma_v8_12_neon;
         c->inter.put[0][3][1][0] = ff_vvc_put_luma_v16_12_neon;
@@ -313,6 +344,9 @@ void ff_vvc_dsp_init_aarch64(VVCDSPContext *const c, const int bd)
         c->alf.filter[LUMA] = alf_filter_luma_12_neon;
         c->alf.filter[CHROMA] = alf_filter_chroma_12_neon;
         c->alf.classify = alf_classify_12_neon;
+        if (have_sme2(cpu_flags) && have_sme_i16i64(cpu_flags)) {
+            c->alf.filter[LUMA] = alf_filter_luma_12_sme2;
+        }
     }
 
     c->inter.sad = ff_vvc_sad_neon;

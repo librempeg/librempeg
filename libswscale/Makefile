@@ -30,8 +30,13 @@ OBJS-$(CONFIG_UNSTABLE) +=                              \
        ops.o                                            \
        ops_backend.o                                    \
        ops_chain.o                                      \
+       ops_dispatch.o                                   \
        ops_memcpy.o                                     \
        ops_optimizer.o                                  \
+
+ifeq ($(CONFIG_UNSTABLE),yes)
+include $(SRC_PATH)/libswscale/vulkan/Makefile
+endif
 
 # Objects duplicated from other libraries for shared builds
 SHLIBOBJS                    += log2_tab.o half2float.o

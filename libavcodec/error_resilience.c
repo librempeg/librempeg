@@ -28,6 +28,7 @@
 #include <limits.h>
 
 #include "libavutil/avassert.h"
+#include "libavutil/attributes.h"
 #include "libavutil/mem.h"
 #include "libavutil/threadprogress.h"
 
@@ -38,6 +39,24 @@
 #include "mpegutils.h"
 #include "mpegvideo.h"
 #include "threadframe.h"
+ 
+av_cold int ff_er_init(ERContext *const s)
+{
+    MECmpContext mecc;
+    unsigned mb_array_size = s->mb_height * s->mb_stride;
+
+    s->error_status_table = av_mallocz(mb_array_size);
+    if (!s->error_status_table)
+        return AVERROR(ENOMEM);
+    s->er_temp_buffer = av_malloc_array(mb_array_size, 4*sizeof(int) + 1);
+    if (!s->er_temp_buffer)
+        return AVERROR(ENOMEM);
+
+    ff_me_cmp_init(&mecc, s->avctx);
+    s->sad = mecc.sad[0];
+
+    return 0;
+}
 
 /**
  * @param stride the number of MVs to get to the next row
@@ -795,13 +814,6 @@ void ff_er_frame_start(ERContext *s)
 {
     if (!s->avctx->error_concealment)
         return;
-
-    if (!s->mecc_inited) {
-        MECmpContext mecc;
-        ff_me_cmp_init(&mecc, s->avctx);
-        s->sad = mecc.sad[0];
-        s->mecc_inited = 1;
-    }
 
     memset(s->error_status_table, ER_MB_ERROR | VP_START | ER_MB_END,
            s->mb_stride * s->mb_height * sizeof(uint8_t));

@@ -25,7 +25,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int msnd_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "\x00\x08MSND", 6))
         return 0;
@@ -45,27 +45,29 @@ static int msnd_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int msnd_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
+    int rate, align;
     AVStream *st;
+
+    avio_skip(pb, 6);
+    avio_skip(pb, 2);
+    rate = avio_rl16(pb);
+    avio_skip(pb, 2);
+    align = avio_rl16(pb);
+    if (rate <= 0 || align <= 0)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(pb, 6);
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_IMA_MAGIX;
     st->codecpar->ch_layout.nb_channels = 2;
-    avio_skip(pb, 2);
-    st->codecpar->sample_rate = avio_rl16(pb);
-    if (st->codecpar->sample_rate == 0)
-        return AVERROR_INVALIDDATA;
-    avio_skip(pb, 2);
-    st->codecpar->block_align = avio_rl16(pb);
-    if (st->codecpar->block_align == 0)
-        return AVERROR_INVALIDDATA;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->block_align = align;
     st->start_time = 0;
     st->duration = avio_rl32(pb);
 
@@ -76,7 +78,7 @@ static int msnd_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int msnd_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
 
@@ -86,8 +88,9 @@ static int msnd_read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_msnd_demuxer = {
     .p.name         = "msnd",
     .p.long_name    = NULL_IF_CONFIG_SMALL("PS2 MSND"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "snd",
-    .read_probe     = msnd_probe,
-    .read_header    = msnd_read_header,
-    .read_packet    = msnd_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };

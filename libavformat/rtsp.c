@@ -1892,7 +1892,8 @@ redirect:
     } else if (!strcmp(proto, "satip")) {
         av_strlcpy(proto, "rtsp", sizeof(proto));
         rt->server_type = RTSP_SERVER_SATIP;
-    }
+    } else if (strcmp(proto, "rtsp"))
+        return AVERROR_INVALIDDATA;
 
     if (*auth) {
         av_strlcpy(rt->auth, auth, sizeof(rt->auth));
@@ -1956,6 +1957,15 @@ redirect:
         if (!rt->rtsp_hd->protocol_whitelist && s->protocol_whitelist) {
             rt->rtsp_hd->protocol_whitelist = av_strdup(s->protocol_whitelist);
             if (!rt->rtsp_hd->protocol_whitelist) {
+                av_dict_free(&options);
+                err = AVERROR(ENOMEM);
+                goto fail;
+            }
+        }
+
+        if (!rt->rtsp_hd->protocol_blacklist && s->protocol_blacklist) {
+            rt->rtsp_hd->protocol_blacklist = av_strdup(s->protocol_blacklist);
+            if (!rt->rtsp_hd->protocol_blacklist) {
                 av_dict_free(&options);
                 err = AVERROR(ENOMEM);
                 goto fail;
@@ -2123,12 +2133,11 @@ redirect:
     ff_rtsp_close_streams(s);
     ff_rtsp_close_connections(s);
     if (reply->status_code >=300 && reply->status_code < 400 && s->iformat) {
-        char *new_url = av_strdup(reply->location);
-        if (!new_url) {
-            err = AVERROR(ENOMEM);
+        int ret = ff_format_check_set_url(s, reply->location);
+        if (ret < 0) {
+            err = ret;
             goto fail2;
         }
-        ff_format_set_url(s, new_url);
         rt->session_id[0] = '\0';
         av_log(s, AV_LOG_INFO, "Status %d: Redirecting to %s\n",
                reply->status_code,

@@ -33,7 +33,7 @@
 static const AVOption options[] = {
     FF_RTP_FLAG_OPTS(RTPMuxContext, flags),
     { "payload_type", "Specify RTP payload type", offsetof(RTPMuxContext, payload_type), AV_OPT_TYPE_INT, {.i64 = -1 }, -1, 127, AV_OPT_FLAG_ENCODING_PARAM },
-    { "ssrc", "Stream identifier", offsetof(RTPMuxContext, ssrc), AV_OPT_TYPE_INT, { .i64 = 0 }, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM },
+    { "ssrc", "Stream identifier", offsetof(RTPMuxContext, ssrc), AV_OPT_TYPE_UINT, { .i64 = 0 }, 0, UINT32_MAX, AV_OPT_FLAG_ENCODING_PARAM },
     { "cname", "CNAME to include in RTCP SR packets", offsetof(RTPMuxContext, cname), AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, AV_OPT_FLAG_ENCODING_PARAM },
     { "seq", "Starting sequence number", offsetof(RTPMuxContext, seq), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 65535, AV_OPT_FLAG_ENCODING_PARAM },
     { NULL },
@@ -177,9 +177,16 @@ static int rtp_write_header(AVFormatContext *s1)
     case AV_CODEC_ID_MPEG2VIDEO:
         break;
     case AV_CODEC_ID_MPEG2TS:
+        if (s->max_payload_size < TS_PACKET_SIZE) {
+            av_log(s1, AV_LOG_ERROR,
+                   "RTP payload size %u too small for MPEG-TS "
+                   "(minimum %d bytes required)\n",
+                   s->max_payload_size, TS_PACKET_SIZE);
+            ret = AVERROR(EINVAL);
+            goto fail;
+        }
+
         n = s->max_payload_size / TS_PACKET_SIZE;
-        if (n < 1)
-            n = 1;
         s->max_payload_size = n * TS_PACKET_SIZE;
         break;
     case AV_CODEC_ID_DIRAC:

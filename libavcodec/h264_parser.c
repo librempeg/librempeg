@@ -225,6 +225,9 @@ static int scan_mmco_reset(AVCodecParserContext *s, GetBitContext *gb,
     if (get_bits1(gb)) { // adaptive_ref_pic_marking_mode_flag
         int i;
         for (i = 0; i < H264_MAX_MMCO_COUNT; i++) {
+            if (get_bits_left(gb) < 1)
+                return AVERROR_INVALIDDATA;
+
             MMCOOpcode opcode = get_ue_golomb_31(gb);
             if (opcode > (unsigned) MMCO_LONG) {
                 av_log(logctx, AV_LOG_ERROR,
@@ -649,8 +652,12 @@ static int h264_parse(AVCodecParserContext *s,
                 s->dts = av_sat_add64(p->reference_dts, av_rescale(s->dts_ref_dts_delta, num, den));
             }
 
-            if (p->reference_dts != AV_NOPTS_VALUE && s->pts == AV_NOPTS_VALUE)
-                s->pts = s->dts + av_rescale(s->pts_dts_delta, num, den);
+            if (p->reference_dts != AV_NOPTS_VALUE && s->pts == AV_NOPTS_VALUE) {
+                int64_t pts_dts_delta = av_rescale(s->pts_dts_delta, num, den);
+                uint64_t pts = (uint64_t)s->dts + pts_dts_delta;
+                if (pts == av_sat_add64(s->dts, pts_dts_delta))
+                    s->pts = pts;
+            }
 
             if (s->dts_sync_point > 0)
                 p->reference_dts = s->dts; // new reference

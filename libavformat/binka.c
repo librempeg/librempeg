@@ -23,30 +23,39 @@
 #include "demux.h"
 #include "internal.h"
 
-static int binka_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
-    if (AV_RB32(p->buf) == MKBETAG('1', 'F', 'C', 'B') &&
-        (p->buf[4] == 1 || p->buf[4] == 2))
-        return AVPROBE_SCORE_MAX;
-    return 0;
+    if (AV_RB32(p->buf) != MKBETAG('1', 'F', 'C', 'B'))
+        return 0;
+    if (p->buf[4] != 1 && p->buf[4] != 2)
+        return 0;
+    if ((int)p->buf[5] <= 0)
+        return 0;
+    if ((int)AV_RL16(p->buf+6) <= 0)
+        return 0;
+    return AVPROBE_SCORE_MAX;
 }
 
-static int binka_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
+    int entries, offset, channels, rate;
     AVIOContext *pb = s->pb;
     AVStream *st;
-    int entries, offset;
+
+    avio_skip(pb, 5);
+    channels = avio_r8(pb);
+    rate = avio_rl16(pb);
+    if (channels <= 0 || rate <= 0)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    avio_skip(pb, 5);
-
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_BINKAUDIO_DCT;
-    st->codecpar->ch_layout.nb_channels = avio_r8(pb);
-    st->codecpar->sample_rate = avio_rl16(pb);
+    st->codecpar->ch_layout.nb_channels = channels;
+    st->codecpar->sample_rate = rate;
     st->duration = avio_rl32(pb);
     st->start_time = 0;
 
@@ -61,7 +70,7 @@ static int binka_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int binka_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *pb = s->pb;
     AVStream *st = s->streams[0];
@@ -97,7 +106,7 @@ const FFInputFormat ff_binka_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Bink Audio"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "binka",
-    .read_probe     = binka_probe,
-    .read_header    = binka_read_header,
-    .read_packet    = binka_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };

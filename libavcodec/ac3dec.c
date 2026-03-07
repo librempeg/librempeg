@@ -402,7 +402,7 @@ static void ac3_decode_transform_coeffs_ch(AC3DecodeContext *s, int ch_index, ma
         case 0:
             /* random noise with approximate range of -0.707 to 0.707 */
             if (dither)
-                mantissa = (((av_lfg_get(&s->dith_state)>>8)*181)>>8) - 5931008;
+                mantissa = av_lfg_get(&s->dith_state) & 0xff;
             else
                 mantissa = 0;
             break;
@@ -453,7 +453,7 @@ static void ac3_decode_transform_coeffs_ch(AC3DecodeContext *s, int ch_index, ma
                 av_log(s->avctx, AV_LOG_ERROR, "bap %d is invalid in plain AC-3\n", bap);
                 bap = 15;
             }
-            mantissa = (unsigned)get_sbits(gbc, ff_ac3_quantization_tab[bap]) << (24 - ff_ac3_quantization_tab[bap]);
+            mantissa = get_sbits(gbc, ff_ac3_quantization_tab[bap]) * (1 << (24 - ff_ac3_quantization_tab[bap]));
             break;
         }
         coeffs[freq] = mantissa >> exps[freq];

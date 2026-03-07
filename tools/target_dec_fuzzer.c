@@ -223,6 +223,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     case AV_CODEC_ID_ARBC:        maxpixels  /= 1024;  break;
     case AV_CODEC_ID_ARGO:        maxpixels  /= 1024;  break;
     case AV_CODEC_ID_BETHSOFTVID: maxpixels  /= 8192;  break;
+    case AV_CODEC_ID_BFI:         maxpixels  /= 8192;  break;
     case AV_CODEC_ID_BINKVIDEO:   maxpixels  /= 32;    break;
     case AV_CODEC_ID_BONK:        maxsamples /= 1<<20; break;
     case AV_CODEC_ID_CAVS:        maxpixels  /= 1024;  break;
@@ -230,6 +231,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     case AV_CODEC_ID_CFHD:        maxpixels  /= 16384; break;
     case AV_CODEC_ID_CINEPAK:     maxpixels  /= 128;   break;
     case AV_CODEC_ID_COOK:        maxsamples /= 1<<20; break;
+    case AV_CODEC_ID_CPIA:        maxpixels  /= 256;   break;
     case AV_CODEC_ID_CRI:         maxpixels  /= 1024;  break;
     case AV_CODEC_ID_CSCD:        maxpixels  /= 1024;  break;
     case AV_CODEC_ID_DFA:         maxpixels  /= 1024;  break;
@@ -247,7 +249,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     case AV_CODEC_ID_FLIC:        maxpixels  /= 1024;  break;
     case AV_CODEC_ID_FLV1:        maxpixels  /= 1024;  break;
     case AV_CODEC_ID_FMVC:        maxpixels  /= 1024;  break;
-    case AV_CODEC_ID_G2M:         maxpixels  /= 1024;  break;
+    case AV_CODEC_ID_G2M:         maxpixels  /= 16384; break;
     case AV_CODEC_ID_GEM:         maxpixels  /= 512;   break;
     case AV_CODEC_ID_GDV:         maxpixels  /= 512;   break;
     case AV_CODEC_ID_GIF:         maxpixels  /= 16;    break;
@@ -273,6 +275,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     case AV_CODEC_ID_MP4ALS:      maxsamples /= 65536;
                                   av_dict_set_int(&opts, "max_order", 15, 0);
                                   break;
+    case AV_CODEC_ID_MUSEPACK8:   maxsamples /= 16384; break;
     case AV_CODEC_ID_MSA1:        maxpixels  /= 16384; break;
     case AV_CODEC_ID_MSCC:        maxpixels  /= 4096;  break;
     case AV_CODEC_ID_MSRLE:       maxpixels  /= 16;    break;
@@ -295,6 +298,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     case AV_CODEC_ID_PAF_VIDEO:   maxpixels  /= 16;    break;
     case AV_CODEC_ID_PRORES:      maxpixels  /= 256;   break;
     case AV_CODEC_ID_QDRAW:       maxpixels  /= 256;   break;
+    case AV_CODEC_ID_QOI:         maxpixels  /= 256;   break;
     case AV_CODEC_ID_QPEG:        maxpixels  /= 256;   break;
     case AV_CODEC_ID_RKA:         maxsamples /= 1<<20; break;
     case AV_CODEC_ID_RSCC:        maxpixels  /= 256;   break;
@@ -344,6 +348,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     case AV_CODEC_ID_WS_VQA:      maxpixels  /= 16384; break;
     case AV_CODEC_ID_WMALOSSLESS: maxsamples /= 1024;  break;
     case AV_CODEC_ID_WMAPRO:      maxsamples /= 16384; break;
+    case AV_CODEC_ID_XAN_WC3:     maxpixels  /= 1024;  break;
     case AV_CODEC_ID_YLC:         maxpixels  /= 1024;  break;
     case AV_CODEC_ID_ZEROCODEC:   maxpixels  /= 128;   break;
     case AV_CODEC_ID_ZLIB:        maxpixels  /= 4096;  break;

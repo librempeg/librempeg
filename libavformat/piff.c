@@ -28,6 +28,9 @@
 
 static int read_probe(const AVProbeData *p)
 {
+    if (p->buf_size < 60)
+        return 0;
+
     if (AV_RB32(p->buf)    == AV_RB32("PIFF") &&
         AV_RB32(p->buf+8)  == AV_RB32("TPCM") &&
         AV_RB32(p->buf+12) == AV_RB32("TADH") &&
@@ -88,6 +91,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_piff_demuxer = {
     .p.name         = "piff",
     .p.long_name    = NULL_IF_CONFIG_SMALL("PIFF Tantalus"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "tad",
     .read_probe     = read_probe,
     .read_header    = read_header,

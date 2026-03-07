@@ -576,7 +576,14 @@ int main(int argc, char **argv)
             opts.w = 1920;
             opts.h = 1080;
         } else if (!strcmp(argv[i], "-flags")) {
-            opts.flags = strtol(argv[i + 1], NULL, 0);
+            SwsContext *dummy = sws_alloc_context();
+            const AVOption *flags_opt = av_opt_find(dummy, "sws_flags", NULL, 0, 0);
+            ret = av_opt_eval_flags(dummy, flags_opt, argv[i + 1], &opts.flags);
+            sws_free_context(&dummy);
+            if (ret < 0) {
+                fprintf(stderr, "invalid flags %s\n", argv[i + 1]);
+                goto error;
+            }
         } else if (!strcmp(argv[i], "-dither")) {
             opts.dither = atoi(argv[i + 1]);
         } else if (!strcmp(argv[i], "-unscaled")) {

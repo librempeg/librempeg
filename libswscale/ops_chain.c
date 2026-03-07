@@ -152,7 +152,7 @@ static int op_match(const SwsOp *op, const SwsOpEntry *entry, const SwsComps nex
     case SWS_OP_LSHIFT:
     case SWS_OP_RSHIFT:
         av_assert1(entry->flexible);
-        return score;
+        break;
     case SWS_OP_SWIZZLE:
         for (int i = 0; i < 4; i++) {
             if (op->swizzle.in[i] != entry->swizzle.in[i] && !next.unused[i])
@@ -169,7 +169,7 @@ static int op_match(const SwsOp *op, const SwsOpEntry *entry, const SwsComps nex
     case SWS_OP_MIN:
     case SWS_OP_MAX:
         av_assert1(entry->flexible);
-        return score;
+        break;
     case SWS_OP_LINEAR:
         /* All required elements must be present */
         if (op->lin.mask & ~entry->linear_mask)
@@ -184,7 +184,7 @@ static int op_match(const SwsOp *op, const SwsOpEntry *entry, const SwsComps nex
         score += av_popcount(SWS_MASK_ALL ^ entry->linear_mask);
         return score;
     case SWS_OP_SCALE:
-        return score;
+        return av_cmp_q(op->c.q, entry->scale) ? 0 : score;
     case SWS_OP_TYPE_NB:
         break;
     }

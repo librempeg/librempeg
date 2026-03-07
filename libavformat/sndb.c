@@ -26,6 +26,10 @@
 #include "demux.h"
 #include "internal.h"
 
+typedef struct SNDBDemuxContext {
+    int current_stream;
+} SNDBDemuxContext;
+
 typedef struct SNDBStream {
     int64_t start_offset;
     int64_t stop_offset;
@@ -36,6 +40,8 @@ static int read_probe(const AVProbeData *p)
     if (AV_RB32(p->buf) != MKBETAG('S','N','D','B'))
         return 0;
 
+    if (p->buf_size < 36)
+        return 0;
     if (AV_RB32(p->buf+32) != MKBETAG('C','S','R',' '))
         return 0;
 
@@ -160,6 +166,7 @@ static int read_header(AVFormatContext *s)
         if (!st->codecpar->ch_layout.nb_channels)
             return AVERROR_INVALIDDATA;
 
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
         avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
     }
 
@@ -188,41 +195,68 @@ static int read_header(AVFormatContext *s)
 
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
+    SNDBDemuxContext *sndb = s->priv_data;
     AVIOContext *pb = s->pb;
     int ret = AVERROR_EOF;
-    int64_t pos;
+    int do_seek = 0;
+    SNDBStream *sst;
+    AVStream *st;
 
+redo:
     if (avio_feof(pb))
         return AVERROR_EOF;
 
-    for (int n = 0; n < s->nb_streams; n++) {
-        AVStream *st = s->streams[n];
-        AVCodecParameters *par = st->codecpar;
-        SNDBStream *sst = st->priv_data;
+    if (sndb->current_stream >= s->nb_streams)
+        return AVERROR_EOF;
 
-        if (avio_feof(pb))
-            return AVERROR_EOF;
+    st = s->streams[sndb->current_stream];
+    sst = st->priv_data;
+    if (do_seek)
+        avio_seek(pb, sst->start_offset, SEEK_SET);
 
-        pos = avio_tell(pb);
-        if (pos >= sst->start_offset && pos < sst->stop_offset) {
-            const int size = FFMIN(par->block_align, sst->stop_offset - pos);
+    if (avio_tell(pb) >= sst->stop_offset) {
+        do_seek = 1;
+        sndb->current_stream++;
+        goto redo;
+    }
 
-            ret = av_get_packet(pb, pkt, size);
+    {
+        const int64_t pos = avio_tell(pb);
+        const int block_size = st->codecpar->block_align;
+        const int size = FFMIN(block_size, sst->stop_offset - pos);
 
-            pkt->pos = pos;
-            pkt->stream_index = st->index;
-
-            break;
-        } else if (pos >= sst->stop_offset && n+1 < s->nb_streams) {
-            AVStream *st_next = s->streams[n+1];
-            SNDBStream *pst_next = st_next->priv_data;
-
-            if (pst_next->start_offset > pos)
-                avio_skip(pb, pst_next->start_offset - pos);
-        }
+        ret = av_get_packet(pb, pkt, size);
+        pkt->pos = pos;
+    }
+    pkt->stream_index = st->index;
+    if (ret == AVERROR_EOF) {
+        sndb->current_stream++;
+        goto redo;
     }
 
     return ret;
+}
+
+static int read_seek(AVFormatContext *s, int stream_index,
+                     int64_t ts, int flags)
+{
+    SNDBDemuxContext *sndb = s->priv_data;
+    AVIOContext *pb = s->pb;
+    SNDBStream *sst;
+    AVStream *st;
+    int64_t pos;
+
+    sndb->current_stream = av_clip(stream_index, 0, s->nb_streams-1);
+    st = s->streams[sndb->current_stream];
+    sst = st->priv_data;
+
+    pos = avio_tell(pb);
+    if (pos < sst->start_offset) {
+        avio_seek(pb, sst->start_offset, SEEK_SET);
+        return 0;
+    }
+
+    return -1;
 }
 
 const FFInputFormat ff_sndb_demuxer = {
@@ -230,7 +264,9 @@ const FFInputFormat ff_sndb_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Capcom SNDB (Sound Bank)"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "snd",
+    .priv_data_size = sizeof(SNDBDemuxContext),
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
+    .read_seek      = read_seek,
 };

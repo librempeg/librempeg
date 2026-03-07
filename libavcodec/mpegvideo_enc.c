@@ -1530,7 +1530,6 @@ static int estimate_best_b_count(MPVMainEncContext *const m)
     if (!pkt)
         return AVERROR(ENOMEM);
 
-    //emms_c();
     p_lambda = m->last_lambda_for[AV_PICTURE_TYPE_P];
     //p_lambda * FFABS(s->c.avctx->b_quant_factor) + s->c.avctx->b_quant_offset;
     b_lambda = m->last_lambda_for[AV_PICTURE_TYPE_B];
@@ -1748,8 +1747,6 @@ static int set_bframe_chain_length(MPVMainEncContext *const m)
                 return b_frames;
             }
         }
-
-        emms_c();
 
         for (int i = b_frames - 1; i >= 0; i--) {
             int type = m->input_picture[i]->f->pict_type;
@@ -1974,7 +1971,6 @@ int ff_mpv_encode_picture(AVCodecContext *avctx, AVPacket *pkt,
         }
 
         s->c.pict_type = s->new_pic->pict_type;
-        //emms_c();
         frame_start(m);
 vbv_retry:
         ret = encode_picture(m, pkt);
@@ -2921,21 +2917,13 @@ static void write_mb_info(MPVEncContext *const s)
     bytestream_put_byte(&ptr, 0); /* vmv2 */
 }
 
-static void update_mb_info(MPVEncContext *const s, int startcode)
+static void update_mb_info(MPVEncContext *const s)
 {
     if (!s->mb_info)
         return;
     if (put_bytes_count(&s->pb, 0) - s->prev_mb_info >= s->mb_info) {
         s->mb_info_size += 12;
         s->prev_mb_info = s->last_mb_info;
-    }
-    if (startcode) {
-        s->prev_mb_info = put_bytes_count(&s->pb, 0);
-        /* This might have incremented mb_info_size above, and we return without
-         * actually writing any info into that slot yet. But in that case,
-         * this will be called again at the start of the after writing the
-         * start code, actually writing the mb info. */
-        return;
     }
 
     s->last_mb_info = put_bytes_count(&s->pb, 0);
@@ -3150,8 +3138,11 @@ static int encode_thread(AVCodecContext *c, void *arg){
 #endif
                     case AV_CODEC_ID_H263:
                         if (CONFIG_H263_ENCODER) {
-                            update_mb_info(s, 1);
+                            if (s->mb_info && put_bytes_count(&s->pb, 0) - s->prev_mb_info >= s->mb_info)
+                                s->mb_info_size += 12;
+
                             ff_h263_encode_gob_header(s, mb_y);
+                            s->prev_mb_info = put_bits_count(&s->pb)/8;
                         }
                     break;
                     }
@@ -3176,7 +3167,7 @@ static int encode_thread(AVCodecContext *c, void *arg){
             s->c.mb_skipped = 0;
             s->dquant=0; //only for QP_RD
 
-            update_mb_info(s, 0);
+            update_mb_info(s);
 
             if (mb_type & (mb_type-1) || (s->mpv_flags & FF_MPV_FLAG_QP_RD)) { // more than 1 MB type possible or FF_MPV_FLAG_QP_RD
                 int next_block=0;

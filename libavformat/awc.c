@@ -71,9 +71,15 @@ typedef struct StreamInfo {
 
 static int read_probe(const AVProbeData *p)
 {
-    if (AV_RB32(p->buf) != MKBETAG('A','D','A','T') &&
-        AV_RL32(p->buf) != MKBETAG('A','D','A','T'))
+    if (AV_RB32(p->buf) == MKBETAG('A','D','A','T')) {
+        if ((int)AV_RB32(p->buf+8) <= 0)
+            return 0;
+    } else if (AV_RL32(p->buf) == MKBETAG('A','D','A','T')) {
+        if ((int)AV_RL32(p->buf+8) <= 0)
+            return 0;
+    } else {
         return 0;
+    }
 
     return AVPROBE_SCORE_MAX/2;
 }

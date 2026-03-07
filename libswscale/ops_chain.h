@@ -44,8 +44,10 @@ typedef union SwsOpPriv {
 
     /* Common types */
     void *ptr;
+    int8_t    i8[16];
     uint8_t   u8[16];
     uint16_t u16[8];
+    int16_t  i16[8];
     uint32_t u32[4];
     float    f32[4];
 } SwsOpPriv;
@@ -111,6 +113,7 @@ typedef struct SwsOpEntry {
         uint32_t       linear_mask; /* subset of SwsLinearOp */
         int            dither_size; /* subset of SwsDitherOp */
         int            clear_value; /* clear value for integer clears */
+        AVRational     scale;       /* scale factor for SWS_OP_SCALE */
     };
 
     /* Kernel implementation */

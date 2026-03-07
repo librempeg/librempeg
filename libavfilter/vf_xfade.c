@@ -18,6 +18,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <float.h>
+
 #include "libavutil/eval.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
@@ -459,7 +461,7 @@ static void slideleft##name##_transition(AVFilterContext *ctx,                  
     XFadeContext *s = ctx->priv;                                                     \
     const int height = slice_end - slice_start;                                      \
     const int width = out->width;                                                    \
-    const int z = -progress * width;                                                 \
+    const int z = -progress * (width - 1);                                           \
                                                                                      \
     for (int p = 0; p < s->nb_planes; p++) {                                         \
         const type *xf0 = (const type *)(a->data[p] + slice_start * a->linesize[p]); \
@@ -492,7 +494,7 @@ static void slideright##name##_transition(AVFilterContext *ctx,                 
     XFadeContext *s = ctx->priv;                                                     \
     const int height = slice_end - slice_start;                                      \
     const int width = out->width;                                                    \
-    const int z = progress * width;                                                  \
+    const int z = progress * (width - 1);                                            \
                                                                                      \
     for (int p = 0; p < s->nb_planes; p++) {                                         \
         const type *xf0 = (const type *)(a->data[p] + slice_start * a->linesize[p]); \
@@ -525,7 +527,7 @@ static void slideup##name##_transition(AVFilterContext *ctx,                    
     XFadeContext *s = ctx->priv;                                                    \
     const int height = out->height;                                                 \
     const int width = out->width;                                                   \
-    const int z = -progress * height;                                               \
+    const int z = -progress * (height - 1);                                         \
                                                                                     \
     for (int p = 0; p < s->nb_planes; p++) {                                        \
         type *dst = (type *)(out->data[p] + slice_start * out->linesize[p]);        \
@@ -557,7 +559,7 @@ static void slidedown##name##_transition(AVFilterContext *ctx,                  
     XFadeContext *s = ctx->priv;                                                    \
     const int height = out->height;                                                 \
     const int width = out->width;                                                   \
-    const int z = progress * height;                                                \
+    const int z = progress * (height - 1);                                          \
                                                                                     \
     for (int p = 0; p < s->nb_planes; p++) {                                        \
         type *dst = (type *)(out->data[p] + slice_start * out->linesize[p]);        \
@@ -1622,7 +1624,7 @@ static void squeezeh##name##_transition(AVFilterContext *ctx,                   
                                 int slice_start, int slice_end, int jobnr)           \
 {                                                                                    \
     XFadeContext *s = ctx->priv;                                                     \
-    const float h = out->height;                                                     \
+    const float h = out->height - 1;                                                 \
     const int height = slice_end - slice_start;                                      \
     const int width = out->width;                                                    \
                                                                                      \
@@ -1631,13 +1633,13 @@ static void squeezeh##name##_transition(AVFilterContext *ctx,                   
         type *dst = (type *)(out->data[p] + slice_start * out->linesize[p]);         \
                                                                                      \
         for (int y = 0; y < height; y++) {                                           \
-            const float z = .5f + ((slice_start + y) / h - .5f) / progress;          \
+            const float z = .5f + ((slice_start + y) / h - .5f) / (progress+FLT_MIN);\
                                                                                      \
             if (z < 0.f || z > 1.f) {                                                \
                 for (int x = 0; x < width; x++)                                      \
                     dst[x] = xf1[x];                                                 \
             } else {                                                                 \
-                const int yy = lrintf(z * (h - 1.f));                                \
+                const int yy = lrintf(z * h);                                        \
                 const type *xf0 = (const type *)(a->data[p] + yy * a->linesize[p]);  \
                                                                                      \
                 for (int x = 0; x < width; x++)                                      \
@@ -1661,7 +1663,7 @@ static void squeezev##name##_transition(AVFilterContext *ctx,                   
 {                                                                                    \
     XFadeContext *s = ctx->priv;                                                     \
     const int width = out->width;                                                    \
-    const float w = width;                                                           \
+    const float w = width - 1;                                                       \
     const int height = slice_end - slice_start;                                      \
                                                                                      \
     for (int p = 0; p < s->nb_planes; p++) {                                         \
@@ -1671,12 +1673,12 @@ static void squeezev##name##_transition(AVFilterContext *ctx,                   
                                                                                      \
         for (int y = 0; y < height; y++) {                                           \
             for (int x = 0; x < width; x++) {                                        \
-                const float z = .5f + (x / w - .5f) / progress;                      \
+                const float z = .5f + (x / w - .5f) / (progress + FLT_MIN);          \
                                                                                      \
                 if (z < 0.f || z > 1.f) {                                            \
                     dst[x] = xf1[x];                                                 \
                 } else {                                                             \
-                    const int xx = lrintf(z * (w - 1.f));                            \
+                    const int xx = lrintf(z * w);                                    \
                                                                                      \
                     dst[x] = xf0[xx];                                                \
                 }                                                                    \
@@ -1943,7 +1945,7 @@ static void reveal##dir##name##_transition(AVFilterContext *ctx,                
     XFadeContext *s = ctx->priv;                                                     \
     const int height = slice_end - slice_start;                                      \
     const int width = out->width;                                                    \
-    const int z = (expr progress) * width;                                           \
+    const int z = (expr progress) * (width - 1);                                     \
                                                                                      \
     for (int p = 0; p < s->nb_planes; p++) {                                         \
         const type *xf0 = (const type *)(a->data[p] + slice_start * a->linesize[p]); \
@@ -1978,7 +1980,7 @@ static void reveal##dir##name##_transition(AVFilterContext *ctx,                
     XFadeContext *s = ctx->priv;                                                    \
     const int height = out->height;                                                 \
     const int width = out->width;                                                   \
-    const int z = (expr progress) * height;                                         \
+    const int z = (expr progress) * (height - 1);                                   \
                                                                                     \
     for (int p = 0; p < s->nb_planes; p++) {                                        \
         type *dst = (type *)(out->data[p] + slice_start * out->linesize[p]);        \

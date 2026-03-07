@@ -78,6 +78,7 @@ typedef struct SwsFormat {
     int width, height;
     int interlaced;
     enum AVPixelFormat format;
+    enum AVPixelFormat hw_format;
     enum AVColorRange range;
     enum AVColorSpace csp;
     enum AVChromaLocation loc;
@@ -167,9 +168,43 @@ int ff_sws_encode_pixfmt(SwsOpList *ops, enum AVPixelFormat fmt);
  * Returns 0 on success, or a negative error code on failure.
  */
 int ff_sws_decode_colors(SwsContext *ctx, SwsPixelType type, SwsOpList *ops,
-                         const SwsFormat fmt, bool *incomplete);
+                         const SwsFormat *fmt, bool *incomplete);
 int ff_sws_encode_colors(SwsContext *ctx, SwsPixelType type, SwsOpList *ops,
-                         const SwsFormat src, const SwsFormat dst,
+                         const SwsFormat *src, const SwsFormat *dst,
                          bool *incomplete);
+
+/**
+ * Represents a view into a single field of frame data.
+ *
+ * Ostensibly, this is a (non-compatible) subset of AVFrame, however, the
+ * semantics are VERY different.
+ *
+ * Unlike AVFrame, this struct does NOT own any data references. All buffers
+ * referenced by a SwsFrame are managed externally. This merely represents
+ * a view into data.
+ *
+ * This struct is not refcounted, and may be freely copied onto the stack.
+ */
+typedef struct SwsFrame {
+    /* Data buffers and line stride */
+    uint8_t *data[4];
+    int linesize[4];
+
+    /**
+     * Dimensions and format
+     */
+    int width, height;
+    enum AVPixelFormat format;
+
+    /**
+     * Pointer to the original AVFrame, if there is a 1:1 correspondence.
+     **/
+    const AVFrame *avframe;
+} SwsFrame;
+
+/**
+ * Initialize a SwsFrame from an AVFrame.
+ */
+void ff_sws_frame_from_avframe(SwsFrame *dst, const AVFrame *src);
 
 #endif /* SWSCALE_FORMAT_H */

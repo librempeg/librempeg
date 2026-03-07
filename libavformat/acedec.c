@@ -189,6 +189,7 @@ const FFInputFormat ff_ace_demuxer = {
     .p.name         = "ace",
     .p.long_name    = NULL_IF_CONFIG_SMALL("tri-Ace Audio Container"),
     .p.flags        = AVFMT_GENERIC_INDEX,
+    .p.extensions   = "laac",
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,

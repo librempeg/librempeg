@@ -420,6 +420,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_EA_R3:
     case AV_CODEC_ID_ADPCM_EA_XAS:
     case AV_CODEC_ID_ADPCM_MS:
+    case AV_CODEC_ID_ADPCM_IMA_FSB:
     case AV_CODEC_ID_ADPCM_IMA_XBOX:
     case AV_CODEC_ID_ADPCM_IMA_XBOX_MONO:
         max_channels = 6;
@@ -495,6 +496,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_IMA_QT:
     case AV_CODEC_ID_ADPCM_IMA_WAV_MONO:
     case AV_CODEC_ID_ADPCM_IMA_WAV:
+    case AV_CODEC_ID_ADPCM_IMA_FSB:
     case AV_CODEC_ID_ADPCM_IMA_XBOX:
     case AV_CODEC_ID_ADPCM_IMA_XBOX_MONO:
     case AV_CODEC_ID_ADPCM_4XM:
@@ -1604,6 +1606,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
             return AVERROR_INVALIDDATA;
         nb_samples = 1 + (buf_size - 4 * ch) / (bsize * ch) * bsamples;
         ) /* End of CASE */
+    case AV_CODEC_ID_ADPCM_IMA_FSB:
     case AV_CODEC_ID_ADPCM_IMA_XBOX:
     case AV_CODEC_ID_ADPCM_IMA_XBOX_MONO:
         {
@@ -1939,6 +1942,56 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 }
             }
         }
+        ) /* End of CASE */
+    CASE(ADPCM_IMA_FSB,
+        {
+            int left = avpkt->size;
+            int block_align = (avctx->block_align > 0) ? avctx->block_align : left;
+            int samples_offset = 0;
+
+            while (left > 0) {
+                const int block_size = FFMIN(left, block_align);
+                const int nb_samples_per_block = 64 * (block_size / (36 * channels)) + 1;
+
+                for (int bs = 0; bs < nb_samples_per_block-1; bs += 64) {
+                    for (int bc = 0; bc < channels; bc++) {
+                        ADPCMChannelStatus *cs = &c->status[bc];
+
+                        cs->predictor = samples_p[bc][bs + samples_offset] = sign_extend(bytestream2_get_le16u(&gb), 16);
+                    }
+
+                    for (int bc = 0; bc < channels; bc++) {
+                        ADPCMChannelStatus *cs = &c->status[bc];
+
+                        cs->step_index = bytestream2_get_byteu(&gb);
+                        bytestream2_skipu(&gb, 1);
+                        if (cs->step_index > 88u) {
+                            av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
+                                   bc, cs->step_index);
+                            return AVERROR_INVALIDDATA;
+                        }
+                    }
+
+                    for (int n = 0; n < 16; n++) {
+                        for (int bc = 0; bc < channels; bc++) {
+                            ADPCMChannelStatus *cs = &c->status[bc];
+
+                            samples = samples_p[bc] + bs + 1 + n * 4 + samples_offset;
+                            for (int m = 0; m < 4; m += 2) {
+                                int v = bytestream2_get_byteu(&gb);
+                                samples[m    ] = ff_adpcm_ima_qt_expand_nibble(cs, v & 0x0F);
+                                samples[m + 1] = ff_adpcm_ima_qt_expand_nibble(cs, v >> 4  );
+                            }
+                        }
+                    }
+
+                    samples_offset += nb_samples_per_block-1;
+                    left -= block_size;
+                    frame->nb_samples--;
+                }
+            }
+        }
+        bytestream2_seek(&gb, 0, SEEK_END);
         ) /* End of CASE */
     CASE(ADPCM_IMA_XBOX,
         {
@@ -3407,7 +3460,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 int16_t *sf_out = &out[j*8];
 
                 for (int i = 0; i < 8; i++) {
-                    int sample, delta = 0;
+                    int sample;
+                    unsigned delta = 0;
 
                     for (int o = 0; o < order; o++)
                         delta += coefs[o*8 + i] * hist[(8 - order) + o];
@@ -3418,7 +3472,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     }
 
                     sample = sf_codes[i] * 2048;
-                    sample = (sample + delta) / 2048;
+                    sample = (int)(sample + delta) / 2048;
                     sample = av_clip_int16(sample);
                     sf_out[i] = sample;
                 }
@@ -3486,8 +3540,10 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         ) /* End of CASE */
     CASE(ADPCM_PSX,
-        for (int block = 0; block < avpkt->size / FFMAX(FFMIN(avctx->block_align, avpkt->size), 16 * channels); block++) {
-            int nb_samples_per_block = 28 * FFMAX(FFMIN(avctx->block_align, avpkt->size), 16 * channels) / (16 * channels);
+        const int block_size = (avctx->block_align > 0) ? FFMIN(avctx->block_align, avpkt->size) : avpkt->size;
+
+        for (int block = 0; block < avpkt->size / block_size; block++) {
+            int nb_samples_per_block = block_size / (16 * channels) * 28;
             for (int channel = 0; channel < channels; channel++) {
                 samples = samples_p[channel] + block * nb_samples_per_block;
                 av_assert0((block + 1) * nb_samples_per_block <= nb_samples);
@@ -3994,6 +4050,7 @@ ADPCM_DECODER(ADPCM_IMA_DVI,     sample_fmts_s16p, adpcm_ima_dvi,     "ADPCM IMA
 ADPCM_DECODER(ADPCM_IMA_EA_EACS, sample_fmts_s16,  adpcm_ima_ea_eacs, "ADPCM IMA Electronic Arts EACS")
 ADPCM_DECODER(ADPCM_IMA_EA_SEAD, sample_fmts_s16,  adpcm_ima_ea_sead, "ADPCM IMA Electronic Arts SEAD")
 ADPCM_DECODER(ADPCM_IMA_ESCAPE,  sample_fmts_s16,  adpcm_ima_escape,  "ADPCM IMA Acorn Escape")
+ADPCM_DECODER(ADPCM_IMA_FSB,     sample_fmts_s16p, adpcm_ima_fsb,     "ADPCM IMA FSB")
 ADPCM_DECODER(ADPCM_IMA_HVQM2,   sample_fmts_s16,  adpcm_ima_hvqm2,   "ADPCM IMA HVQM2")
 ADPCM_DECODER(ADPCM_IMA_HVQM4,   sample_fmts_s16,  adpcm_ima_hvqm4,   "ADPCM IMA HVQM4")
 ADPCM_DECODER(ADPCM_IMA_HWAS,    sample_fmts_s16p, adpcm_ima_hwas,    "ADPCM IMA Nintendo DS HWAS")

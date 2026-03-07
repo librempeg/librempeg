@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -77,25 +78,13 @@ static int read_header(AVFormatContext *s)
         return ret;
     memset(st->codecpar->extradata, 0, 34);
     AV_WL16(st->codecpar->extradata, 1);
-    ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
+    ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     avio_seek(pb, start_offset, SEEK_SET);
 
     return 0;
-}
-
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
 }
 
 const FFInputFormat ff_cxs_demuxer = {
@@ -105,5 +94,5 @@ const FFInputFormat ff_cxs_demuxer = {
     .p.extensions   = "cxs",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };

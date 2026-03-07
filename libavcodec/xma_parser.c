@@ -35,18 +35,36 @@ static int xma_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
     XMAParserContext *s = s1->priv_data;
 
     if (buf_size % 2048 == 0) {
-        int duration = 0, packet, nb_packets = buf_size / 2048;
+        if (avctx->codec_id == AV_CODEC_ID_XMA2) {
+            int duration = 0, nb_packets = buf_size / 2048;
 
-        for (packet = 0; packet < nb_packets; packet++) {
-            if (s->skip_packets == 0) {
-                duration += buf[packet * 2048] * 128;
-                s->skip_packets = buf[packet * 2048 + 3] + 1;
+            for (int packet = 0; packet < nb_packets; packet++) {
+                if (s->skip_packets == 0) {
+                    duration += buf[packet * 2048] * 128;
+                    s->skip_packets = buf[packet * 2048 + 3] + 1;
+                }
+                s->skip_packets--;
             }
-            s->skip_packets--;
-        }
 
-        s1->duration = duration;
-        s1->key_frame = !!duration;
+            s1->duration = duration;
+            s1->key_frame = !!duration;
+        } else {
+            int is_key = 0, duration = 0, nb_packets = buf_size / 2048;
+
+            for (int packet = 0; packet < nb_packets; packet++) {
+                if (s->skip_packets == 0) {
+                    s->skip_packets = buf[packet * 2048 + 3] + 1;
+                    if (s->skip_packets == 1)
+                        duration += 8 * 512;
+                    if (packet == 0 && s->skip_packets == 1)
+                        is_key = 1;
+                }
+                s->skip_packets--;
+            }
+
+            s1->duration = duration;
+            s1->key_frame = is_key;
+        }
     }
 
     /* always return the full packet. this parser isn't doing any splitting or
@@ -57,7 +75,7 @@ static int xma_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
 }
 
 const FFCodecParser ff_xma_parser = {
-    PARSER_CODEC_LIST(AV_CODEC_ID_XMA2),
+    PARSER_CODEC_LIST(AV_CODEC_ID_XMA1, AV_CODEC_ID_XMA2),
     .priv_data_size = sizeof(XMAParserContext),
     .parse          = xma_parse,
 };

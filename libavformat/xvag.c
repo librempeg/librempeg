@@ -38,49 +38,40 @@ static int xvag_probe(const AVProbeData *p)
 static int xvag_read_header(AVFormatContext *s)
 {
     unsigned offset, big_endian, codec;
+    int nb_channels, rate, align;
     AVIOContext *pb = s->pb;
+    int64_t duration;
     AVStream *st;
 
     avio_skip(pb, 4);
 
-    st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
-
-    st->start_time = 0;
-    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-
     offset     = avio_rl32(pb);
     big_endian = offset > av_bswap32(offset);
     if (big_endian) {
-        offset                 = av_bswap32(offset);
+        offset = av_bswap32(offset);
         avio_skip(pb, 28);
-        codec                  = avio_rb32(pb);
-        st->codecpar->ch_layout.nb_channels = avio_rb32(pb);
+        codec = avio_rb32(pb);
+        nb_channels = avio_rb32(pb);
         avio_skip(pb, 4);
-        st->duration           = avio_rb32(pb);
+        duration = avio_rb32(pb);
         avio_skip(pb, 8);
-        st->codecpar->sample_rate = avio_rb32(pb);
+        rate = avio_rb32(pb);
     } else {
         avio_skip(pb, 28);
-        codec                  = avio_rl32(pb);
-        st->codecpar->ch_layout.nb_channels = avio_rl32(pb);
+        codec = avio_rl32(pb);
+        nb_channels = avio_rl32(pb);
         avio_skip(pb, 4);
-        st->duration           = avio_rl32(pb);
+        duration = avio_rl32(pb);
         avio_skip(pb, 8);
-        st->codecpar->sample_rate = avio_rl32(pb);
+        rate = avio_rl32(pb);
     }
-
-    if (st->codecpar->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
-    if (st->codecpar->ch_layout.nb_channels <= 0 ||
-        st->codecpar->ch_layout.nb_channels > FF_SANE_NB_CHANNELS)
-        return AVERROR_INVALIDDATA;
 
     switch (codec) {
     case 0x1c:
-        st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_PSX;
-        st->codecpar->block_align = 16 * st->codecpar->ch_layout.nb_channels;
+        codec = AV_CODEC_ID_ADPCM_PSX;
+        if (nb_channels > INT_MAX/16)
+            return AVERROR_INVALIDDATA;
+        align = 16 * nb_channels;
         break;
     default:
         avpriv_request_sample(s, "codec %X", codec);
@@ -90,12 +81,29 @@ static int xvag_read_header(AVFormatContext *s)
     avio_skip(pb, offset - avio_tell(pb));
 
     if (avio_rb16(pb) == 0xFFFB) {
-        st->codecpar->codec_id    = AV_CODEC_ID_MP3;
-        st->codecpar->block_align = 0x1000;
-        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+        codec = AV_CODEC_ID_MP3;
+        align = 0x1000;
     }
-
     avio_skip(pb, -2);
+
+    if (rate <= 0 || nb_channels <= 0 || align <= 0)
+        return AVERROR_INVALIDDATA;
+
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
+
+    st->start_time = 0;
+    st->duration = duration;
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id = codec;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->ch_layout.nb_channels = nb_channels;
+    st->codecpar->block_align = align;
+
+    if (codec == AV_CODEC_ID_MP3)
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;

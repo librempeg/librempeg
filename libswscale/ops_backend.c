@@ -48,28 +48,12 @@ typedef    float f32block_t[SWS_BLOCK_SIZE];
 # include "ops_tmpl_float.c"
 #undef BIT_DEPTH
 
-static void process(const SwsOpExec *exec, const void *priv,
-                    const int bx_start, const int y_start, int bx_end, int y_end)
-{
-    const SwsOpChain *chain = priv;
-    const SwsOpImpl *impl = chain->impl;
-    u32block_t x, y, z, w; /* allocate enough space for any intermediate */
-
-    SwsOpIter iterdata;
-    SwsOpIter *iter = &iterdata; /* for CONTINUE() macro to work */
-
-    for (iter->y = y_start; iter->y < y_end; iter->y++) {
-        for (int i = 0; i < 4; i++) {
-            iter->in[i]  = exec->in[i]  + (iter->y - y_start) * exec->in_stride[i];
-            iter->out[i] = exec->out[i] + (iter->y - y_start) * exec->out_stride[i];
-        }
-
-        for (int block = bx_start; block < bx_end; block++) {
-            iter->x = block * SWS_BLOCK_SIZE;
-            CONTINUE(u32block_t, x, y, z, w);
-        }
-    }
-}
+static const SwsOpTable *const tables[] = {
+    &bitfn(op_table_int,    u8),
+    &bitfn(op_table_int,   u16),
+    &bitfn(op_table_int,   u32),
+    &bitfn(op_table_float, f32),
+};
 
 static int compile(SwsContext *ctx, SwsOpList *ops, SwsCompiledOp *out)
 {
@@ -79,33 +63,46 @@ static int compile(SwsContext *ctx, SwsOpList *ops, SwsCompiledOp *out)
     if (!chain)
         return AVERROR(ENOMEM);
 
-    static const SwsOpTable *const tables[] = {
-        &bitfn(op_table_int,    u8),
-        &bitfn(op_table_int,   u16),
-        &bitfn(op_table_int,   u32),
-        &bitfn(op_table_float, f32),
-    };
+    av_assert0(ops->num_ops > 0);
+    const SwsPixelType read_type = ops->ops[0].type;
 
+    /* Make on-stack copy of `ops` to iterate over */
+    SwsOpList rest = *ops;
     do {
-        ret = ff_sws_op_compile_tables(tables, FF_ARRAY_ELEMS(tables), ops,
+        ret = ff_sws_op_compile_tables(tables, FF_ARRAY_ELEMS(tables), &rest,
                                        SWS_BLOCK_SIZE, chain);
     } while (ret == AVERROR(EAGAIN));
+
     if (ret < 0) {
         ff_sws_op_chain_free(chain);
+        if (rest.num_ops < ops->num_ops) {
+            av_log(ctx, AV_LOG_TRACE, "Uncompiled remainder:\n");
+            ff_sws_op_list_print(ctx, AV_LOG_TRACE, AV_LOG_TRACE, &rest);
+        }
         return ret;
     }
 
     *out = (SwsCompiledOp) {
-        .func       = process,
-        .block_size = SWS_BLOCK_SIZE,
-        .cpu_flags  = chain->cpu_flags,
-        .priv       = chain,
-        .free       = ff_sws_op_chain_free_cb,
+        .slice_align = 1,
+        .block_size  = SWS_BLOCK_SIZE,
+        .cpu_flags   = chain->cpu_flags,
+        .priv        = chain,
+        .free        = ff_sws_op_chain_free_cb,
     };
+
+    switch (read_type) {
+    case SWS_PIXEL_U8:  out->func = process_u8;  break;
+    case SWS_PIXEL_U16: out->func = process_u16; break;
+    case SWS_PIXEL_U32: out->func = process_u32; break;
+    case SWS_PIXEL_F32: out->func = process_f32; break;
+    default: av_unreachable("Invalid pixel type!");
+    }
+
     return 0;
 }
 
 const SwsOpBackend backend_c = {
     .name       = "c",
     .compile    = compile,
+    .hw_format  = AV_PIX_FMT_NONE,
 };
