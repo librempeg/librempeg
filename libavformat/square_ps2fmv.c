@@ -210,8 +210,6 @@ static int square_ps2fmv_read_packet(AVFormatContext *s, AVPacket *pkt)
     AVIOContext *pb = s->pb;
     int64_t pos;
     int ret;
-    int block_size_limits;
-    int block_frames_limits;
     int cannot_process_this_block;
 
     if (avio_feof(pb))
@@ -226,12 +224,8 @@ static int square_ps2fmv_read_packet(AVFormatContext *s, AVPacket *pkt)
         ps2fmv->block_size = avio_rl32(pb);
         ps2fmv->block_frames = avio_rl32(pb);
 
-        block_size_limits =
+        cannot_process_this_block =
             (!ps2fmv->block_size) || (ps2fmv->block_size > 0x40000);
-        block_frames_limits =
-               (!ps2fmv->block_frames) || (ps2fmv->block_frames == 0xffffffff)
-            || (ps2fmv->block_frames > 31);
-        cannot_process_this_block = block_size_limits && block_size_limits;
 
         *(current_block_offset) = pos + 8;
         *(next_block_offset) = *(current_block_offset) + ps2fmv->block_size;
@@ -248,6 +242,13 @@ static int square_ps2fmv_read_packet(AVFormatContext *s, AVPacket *pkt)
             pkt->stream_index = ps2fmv->video_stream_index;
 
             avio_seek(pb, *(next_block_offset), SEEK_SET);
+        } else {
+            // (TODO) last block is reported as having 0 bytes and no actual frames in it
+            // (denoted by block_frames being 0xffffffff instead).
+            // despite this, there is a possibility that a block
+            // that *isn't* stored at the tail end of the file may have similar block info data,
+            // which consists of "block size" and "block frames", respectively.
+            return AVERROR_EOF;
         }
     }
 
