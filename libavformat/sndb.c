@@ -162,6 +162,7 @@ static int read_header(AVFormatContext *s)
         if (!st->codecpar->ch_layout.nb_channels)
             return AVERROR_INVALIDDATA;
 
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
         avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
     }
 
