@@ -28,6 +28,10 @@
 
 typedef unsigned int (*avio_r32)(AVIOContext *s);
 
+typedef struct BAFDemuxContext {
+    int current_stream;
+} BAFDemuxContext;
+
 static int read_probe(const AVProbeData *p)
 {
     uint32_t version;
@@ -72,6 +76,7 @@ static int sort_streams(const void *a, const void *b)
 
 static int read_header(AVFormatContext *s)
 {
+    BAFDemuxContext *baf = s->priv_data;
     uint32_t offset, version, nb_tracks, codec, start_offset, stream_size;
     uint32_t first_start_offset;
     AVIOContext *pb = s->pb;
@@ -251,39 +256,75 @@ next:
 
     avio_seek(pb, first_start_offset, SEEK_SET);
 
+    baf->current_stream = 0;
+
     return 0;
 }
 
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
+    BAFDemuxContext *baf = s->priv_data;
     AVIOContext *pb = s->pb;
     int ret = AVERROR_EOF;
+    int do_seek = 0;
+    BAFStream *bst;
+    AVStream *st;
 
-    for (int n = 0; n < s->nb_streams; n++) {
-        AVStream *st = s->streams[n];
-        AVCodecParameters *par = st->codecpar;
-        BAFStream *bst = st->priv_data;
-        int64_t pos;
+redo:
+    if (avio_feof(pb))
+        return AVERROR_EOF;
 
-        if (avio_feof(pb))
-            return AVERROR_EOF;
+    if (baf->current_stream >= s->nb_streams)
+        return AVERROR_EOF;
 
-        pos = avio_tell(pb);
-        if (pos >= bst->start_offset && pos < bst->stop_offset) {
-            const int size = FFMIN(par->block_align, bst->stop_offset - pos);
+    st = s->streams[baf->current_stream];
+    bst = st->priv_data;
+    if (do_seek)
+        avio_seek(pb, bst->start_offset, SEEK_SET);
 
-            ret = av_get_packet(pb, pkt, size);
-            pkt->stream_index = st->index;
-            break;
-        } else if (pos >= bst->stop_offset && n+1 < s->nb_streams) {
-            AVStream *st_next = s->streams[n+1];
-            BAFStream *bst_next = st_next->priv_data;
-
-            if (bst_next->start_offset > pos)
-                avio_skip(pb, bst_next->start_offset - pos);
-        }
+    if (avio_tell(pb) >= bst->stop_offset) {
+        do_seek = 1;
+        baf->current_stream++;
+        goto redo;
     }
+
+    {
+        const int64_t pos = avio_tell(pb);
+        const int block_size = st->codecpar->block_align;
+        const int size = FFMIN(block_size, bst->stop_offset - pos);
+
+        ret = av_get_packet(pb, pkt, size);
+        pkt->pos = pos;
+    }
+    pkt->stream_index = st->index;
+    if (ret == AVERROR_EOF) {
+        baf->current_stream++;
+        goto redo;
+    }
+
     return ret;
+}
+
+static int read_seek(AVFormatContext *s, int stream_index,
+                     int64_t ts, int flags)
+{
+    BAFDemuxContext *baf = s->priv_data;
+    AVIOContext *pb = s->pb;
+    BAFStream *bst;
+    AVStream *st;
+    int64_t pos;
+
+    baf->current_stream = av_clip(stream_index, 0, s->nb_streams-1);
+    st = s->streams[baf->current_stream];
+    bst = st->priv_data;
+
+    pos = avio_tell(pb);
+    if (pos < bst->start_offset) {
+        avio_seek(pb, bst->start_offset, SEEK_SET);
+        return 0;
+    }
+
+    return -1;
 }
 
 const FFInputFormat ff_baf_demuxer = {
@@ -291,7 +332,9 @@ const FFInputFormat ff_baf_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("BAF (Bizarre Creations Bank File)"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "baf",
+    .priv_data_size = sizeof(BAFDemuxContext),
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
+    .read_seek      = read_seek,
 };
