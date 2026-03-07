@@ -44,6 +44,7 @@ typedef struct AWCDemuxContext {
     int codec;
     int channels;
     int big_endian;
+    int blocked;
     AWCBlock blk[32];
 } AWCDemuxContext;
 
@@ -110,13 +111,15 @@ static int read_block(AVFormatContext *s, const int is_big_endian)
     avio_r16 avio_r16;
     uint32_t sync = 0;
 
-    while (sync != 0xffffffff) {
-        sync <<= 8;
-        sync |= avio_r8(pb);
-        if (avio_feof(pb))
-            return AVERROR_EOF;
+    if (!awc->blocked) {
+        while (sync != 0xffffffff) {
+            sync <<= 8;
+            sync |= avio_r8(pb);
+            if (avio_feof(pb))
+                return AVERROR_EOF;
+        }
+        avio_seek(pb, -4, SEEK_CUR);
     }
-    avio_seek(pb, -4, SEEK_CUR);
     block_offset = offset = avio_tell(pb);
 
     if (is_big_endian) {
@@ -128,6 +131,7 @@ static int read_block(AVFormatContext *s, const int is_big_endian)
     }
 
     switch (awc->codec) {
+    case 0x04:
     case 0x05:
         channel_entry_size = 0x10;
         seek_entry_size = 0x04;
@@ -171,6 +175,7 @@ static int read_block(AVFormatContext *s, const int is_big_endian)
 
     for (int ch = 0; ch < awc->channels; ch++) {
         switch (awc->codec) {
+        case 0x04:
         case 0x05:
         case 0x08:
             awc->blk[ch].frame_size = 0x800;
@@ -208,9 +213,10 @@ static int read_block(AVFormatContext *s, const int is_big_endian)
     for (int i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
         AWCStream *ast = st->priv_data;
+        const int channels = awc->blocked ? awc->channels : 1;
 
         ast->start_offset = awc->blk[i].chunk_start;
-        ast->stop_offset = ast->start_offset + awc->blk[i].chunk_size;
+        ast->stop_offset = ast->start_offset + awc->blk[i].chunk_size * channels;
     }
 
     {
@@ -234,7 +240,7 @@ static int read_header(AVFormatContext *s)
     av_unused int is_alt;
     uint32_t flags;
     AVIOContext *pb = s->pb;
-    StreamInfo sinfo[32];
+    StreamInfo sinfo[32] = { 0 };
     avio_r64 avio_r64;
     avio_r32 avio_r32;
     avio_r16 avio_r16;
@@ -425,8 +431,14 @@ static int read_header(AVFormatContext *s)
 
         switch (codec) {
         case 0x00:
+        case 0x01:
             codec = (avio_r32 == avio_rl32) ? AV_CODEC_ID_PCM_S16LE : AV_CODEC_ID_PCM_S16BE;
             st->codecpar->block_align = 1024 * channels;
+            break;
+        case 0x04:
+            codec = AV_CODEC_ID_ADPCM_IMA_AWC;
+            awc->blocked = is_streamed;
+            st->codecpar->block_align = is_streamed ? 0 : 0x800 * channels;
             break;
         case 0x05:
             codec = AV_CODEC_ID_XMA2;
@@ -606,9 +618,20 @@ static int read_header(AVFormatContext *s)
             avio_read(pb, st->codecpar->extradata+bytestream2_tell_p(&pbc), ret);
             bytestream2_skip_p(&pbc, ret);
         }
+    }
 
-        offset = sinfo[streamed_channels-1].vorbis_offset + sinfo[streamed_channels-1].vorbis_size;
-        avio_seek(pb, offset, SEEK_SET);
+    if (is_streamed) {
+        if (awc->blocked) {
+            AVStream *st = s->streams[0];
+            AWCStream *ast = st->priv_data;
+
+            avio_seek(pb, ast->start_offset, SEEK_SET);
+        } else if (streamed_channels >= 1) {
+            offset = sinfo[streamed_channels-1].vorbis_offset + sinfo[streamed_channels-1].vorbis_size;
+            if (offset > 0)
+                avio_seek(pb, offset, SEEK_SET);
+        }
+
         if (read_block(s, avio_r32 == avio_rb32) < 0)
             return AVERROR_INVALIDDATA;
     }
@@ -668,8 +691,10 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
                         continue;
                     }
                 }
-            } else {
+            } else if (par->block_align > 0) {
                 packet_size = par->block_align;
+            } else {
+                packet_size = INT_MAX;
             }
             const int size = FFMIN(packet_size, ast->stop_offset - pos);
 
