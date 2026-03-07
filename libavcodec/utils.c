@@ -680,6 +680,7 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
                 return (frame_bytes / (132 * ch)) * 256;
             case AV_CODEC_ID_ADPCM_IMA_MOFLEX:
                 return (frame_bytes - 4 * ch) / (128 * ch) * 256;
+            case AV_CODEC_ID_ADPCM_IMA_FSB:
             case AV_CODEC_ID_ADPCM_IMA_XBOX:
             case AV_CODEC_ID_ADPCM_IMA_XBOX_MONO:
                 return (frame_bytes / (0x24 * ch)) * 64;
