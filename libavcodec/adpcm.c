@@ -2416,8 +2416,11 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 ADPCMChannelStatus *cs = &c->status[channel];
 
                 cs->predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
-                cs->step_index = av_clip(bytestream2_get_byteu(&gb), 0, 88);
+                cs->step_index = bytestream2_get_byteu(&gb);
                 bytestream2_skipu(&gb, 1);
+                if (cs->step_index > 88u)
+                    continue;
+
                 samples = samples_p[channel] + block * nb_samples_per_block;
                 for (int n = 0; n < nb_samples_per_block; n += 2) {
                     int v = bytestream2_get_byteu(&gb);
@@ -2426,6 +2429,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 }
             }
         }
+        bytestream2_seek(&gb, 0, SEEK_END);
         ) /* End of CASE */
     CASE(ADPCM_IMA_APC,
         for (int n = nb_samples >> (1 - st); n > 0; n--) {
