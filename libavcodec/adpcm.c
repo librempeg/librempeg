@@ -1488,7 +1488,6 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         case AV_CODEC_ID_ADPCM_4XM:
         case AV_CODEC_ID_ADPCM_AGM:
         case AV_CODEC_ID_ADPCM_IMA_ACORN:
-        case AV_CODEC_ID_ADPCM_IMA_DAT4:
         case AV_CODEC_ID_ADPCM_IMA_MAGIX:
         case AV_CODEC_ID_ADPCM_IMA_MOFLEX:
         case AV_CODEC_ID_ADPCM_IMA_ISS:     header_size = 4 * ch;      break;
@@ -1717,6 +1716,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_AFC:
     case AV_CODEC_ID_ADPCM_BRR:
         nb_samples = buf_size / (9 * ch) * 16;
+        break;
+    case AV_CODEC_ID_ADPCM_IMA_DAT4:
+        nb_samples = (buf_size / block_align) * ((block_align/ch - 4) * 2);
         break;
     case AV_CODEC_ID_ADPCM_IMA_AWC:
         nb_samples = ((buf_size / (0x800 * ch))) * ((0x800 - 4) * 2);
@@ -2406,17 +2408,22 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         ) /* End of CASE */
     CASE(ADPCM_IMA_DAT4,
-        for (int channel = 0; channel < channels; channel++) {
-            ADPCMChannelStatus *cs = &c->status[channel];
+        const int block_size = (avctx->block_align > 0) ? FFMIN(avctx->block_align, avpkt->size) : avpkt->size;
+        int nb_samples_per_block = (block_size/channels - 4) * 2;
 
-            samples = samples_p[channel];
-            cs->predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
-            cs->step_index = av_clip(bytestream2_get_byteu(&gb), 0, 88);
-            bytestream2_skipu(&gb, 1);
-            for (int n = 0; n < nb_samples; n += 2) {
-                int v = bytestream2_get_byteu(&gb);
-                *samples++ = ff_adpcm_ima_qt_expand_nibble(cs, v >> 4  );
-                *samples++ = ff_adpcm_ima_qt_expand_nibble(cs, v & 0x0F);
+        for (int block = 0; block < avpkt->size / block_size; block++) {
+            for (int channel = 0; channel < channels; channel++) {
+                ADPCMChannelStatus *cs = &c->status[channel];
+
+                cs->predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
+                cs->step_index = av_clip(bytestream2_get_byteu(&gb), 0, 88);
+                bytestream2_skipu(&gb, 1);
+                samples = samples_p[channel] + block * nb_samples_per_block;
+                for (int n = 0; n < nb_samples_per_block; n += 2) {
+                    int v = bytestream2_get_byteu(&gb);
+                    samples[n+0] = ff_adpcm_ima_qt_expand_nibble(cs, v >> 4  );
+                    samples[n+1] = ff_adpcm_ima_qt_expand_nibble(cs, v & 0x0F);
+                }
             }
         }
         ) /* End of CASE */
