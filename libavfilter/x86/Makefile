@@ -46,6 +46,10 @@ OBJS-$(CONFIG_W3FDIF_FILTER)                 += x86/vf_w3fdif_init.o
 OBJS-$(CONFIG_XPSNR_FILTER)                  += x86/vf_psnr_init.o
 OBJS-$(CONFIG_YADIF_FILTER)                  += x86/vf_yadif_init.o
 
+EMMS_OBJS_$(HAVE_MMX_INLINE)_$(HAVE_MMX_EXTERNAL)_$(HAVE_MM_EMPTY) = x86/emms.o
+# Add internal copy of ff_emms() to libavfilter for shared builds (if needed).
+SHLIBOBJS-$(CONFIG_FSPP_FILTER)              += $(EMMS_OBJS__yes_)
+
 X86ASM-OBJS-$(CONFIG_SCENE_SAD)              += x86/scene_sad.o
 
 X86ASM-OBJS-$(CONFIG_AASRC_FILTER)           += x86/af_aasrc.o
