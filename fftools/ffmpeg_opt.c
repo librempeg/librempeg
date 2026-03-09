@@ -1271,31 +1271,6 @@ static int opt_filter_complex(void *optctx, const char *opt, const char *arg)
     return 0;
 }
 
-#if FFMPEG_OPT_FILTER_SCRIPT
-static int opt_filter_complex_script(void *optctx, const char *opt, const char *arg)
-{
-    GlobalOptionsContext *go = optctx;
-    char *graph_desc;
-    int ret;
-
-    graph_desc = read_file_to_string(arg);
-    if (!graph_desc)
-        return AVERROR(EINVAL);
-
-    av_log(NULL, AV_LOG_WARNING, "-%s is deprecated, use -/filter_complex %s instead\n",
-           opt, arg);
-
-    ret = GROW_ARRAY(go->filtergraphs, go->nb_filtergraphs);
-    if (ret < 0) {
-        av_freep(&graph_desc);
-        return ret;
-    }
-    go->filtergraphs[go->nb_filtergraphs - 1] = graph_desc;
-
-    return 0;
-}
-#endif
-
 void show_help_default(const char *opt, const char *arg)
 {
     int show_advanced = 0, show_avoptions = 0;
@@ -1792,11 +1767,6 @@ const OptionDef options[] = {
     { "filter_buffered_frames", OPT_TYPE_INT, OPT_EXPERT,
         { &filter_buffered_frames },
         "maximum number of buffered frames in a filter graph" },
-#if FFMPEG_OPT_FILTER_SCRIPT
-    { "filter_script",          OPT_TYPE_STRING, OPT_PERSTREAM | OPT_EXPERT | OPT_OUTPUT,
-        { .off = OFFSET(filter_scripts) },
-        "deprecated, use -/filter", "filename" },
-#endif
     { "reinit_filter",          OPT_TYPE_STRING, OPT_PERSTREAM | OPT_INPUT | OPT_EXPERT,
         { .off = OFFSET(reinit_filters) },
         "behaviour on input parameter changes: keepfirst(default)/reinit/passthrough", "" },
@@ -1809,11 +1779,6 @@ const OptionDef options[] = {
     { "lavfi",               OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT,
         { .func_arg = opt_filter_complex },
         "create a complex filtergraph", "graph_description" },
-#if FFMPEG_OPT_FILTER_SCRIPT
-    { "filter_complex_script", OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT,
-        { .func_arg = opt_filter_complex_script },
-        "deprecated, use -/filter_complex instead", "filename" },
-#endif
     { "auto_conversion_filters", OPT_TYPE_BOOL, OPT_EXPERT,
         { &auto_conversion_filters },
         "enable automatic conversion filters globally" },

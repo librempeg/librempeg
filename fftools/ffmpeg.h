@@ -51,7 +51,6 @@
 
 // deprecated features
 #define FFMPEG_OPT_VSYNC 1
-#define FFMPEG_OPT_FILTER_SCRIPT 1
 
 #define FFMPEG_ERROR_RATE_EXCEEDED FFERRTAG('E', 'R', 'E', 'D')
 
@@ -218,9 +217,6 @@ typedef struct OptionsContext {
     SpecifierOptList copy_initial_nonkeyframes;
     SpecifierOptList copy_prior_start;
     SpecifierOptList filters;
-#if FFMPEG_OPT_FILTER_SCRIPT
-    SpecifierOptList filter_scripts;
-#endif
     SpecifierOptList reinit_filters;
     SpecifierOptList fix_sub_duration;
     SpecifierOptList fix_sub_duration_heartbeat;
