@@ -167,6 +167,10 @@ static int read_header(AVFormatContext *s)
             codec = AV_CODEC_ID_PCM_S16BE;
             align = 2 * channels;
             break;
+        case 0x03:
+            codec = AV_CODEC_ID_ADPCM_PSX;
+            align = 0x10 * channels;
+            break;
         case 0x04:
             riff = 1;
             break;
