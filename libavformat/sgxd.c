@@ -108,7 +108,10 @@ static int read_header(AVFormatContext *s)
 
         len = strlen(sgh_file_name);
         if (len > 3) {
-            sgh_file_name[len-1] = 'b';
+            if (sgh_file_name[len-1] == 'h')
+                sgh_file_name[len-1] = 'b';
+            else
+                sgh_file_name[len-1] = 'B';
         } else {
             return AVERROR_INVALIDDATA;
         }
@@ -168,6 +171,7 @@ static int read_header(AVFormatContext *s)
             riff = 1;
             break;
         default:
+            av_log(s, AV_LOG_ERROR, "unsupported codec: %X\n", codec);
             return AVERROR_PATCHWELCOME;
         }
 
