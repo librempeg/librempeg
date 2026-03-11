@@ -240,8 +240,8 @@ static int read_header(AVFormatContext *s)
             break;
         case 0x07:
             need_xctx = 1;
-            avio_seek(pb, extradata_offset, SEEK_SET);
-            get_extradata = extradata_size;
+            stream_size += extradata_size - 0x10;
+            extradata_size = 0x10;
             break;
         case 0:
             continue;
