@@ -41,10 +41,11 @@ static int npsf_probe(const AVProbeData *p)
 
 static int npsf_read_header(AVFormatContext *s)
 {
+    int ret, channels, rate;
     AVIOContext *pb = s->pb;
+    char title[129] = { 0 };
     int64_t start_offset;
     int32_t loop_start;
-    int channels, rate;
     AVStream *st;
 
     avio_skip(pb, 12);
@@ -73,6 +74,12 @@ static int npsf_read_header(AVFormatContext *s)
         av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+
+    avio_seek(pb, 0x34, SEEK_SET);
+    if ((ret = avio_get_str(pb, INT_MAX, title, sizeof(title))) < 0)
+        return ret;
+    if (title[0] != '\0')
+        av_dict_set(&st->metadata, "title", title, 0);
 
     avio_seek(pb, start_offset, SEEK_SET);
 
