@@ -85,7 +85,7 @@ static int dcidvi_read_packet(AVFormatContext *s, AVPacket *pkt)
 
 const FFInputFormat ff_dcidvi_demuxer = {
     .p.name         = "dcidvi",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Capcom DC IDVI"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Capcom Dreamcast IDVI"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "idvi",
     .read_probe     = dcidvi_probe,
