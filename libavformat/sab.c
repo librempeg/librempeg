@@ -246,8 +246,8 @@ static int read_header(AVFormatContext *s)
         case 0:
             continue;
         default:
-            av_log(s, AV_LOG_WARNING, "Unsupported codec(%02X)\n", codec);
-            break;
+            av_log(s, AV_LOG_ERROR, "Unsupported codec: %02X\n", codec);
+            return AVERROR_PATCHWELCOME;
         }
 
         if ((codec == 0 || nb_channels == 0 || rate <= 0 || block_align <= 0 ||
