@@ -21340,7 +21340,7 @@ scale_cuda=passthrough=0
 @end example
 @end itemize
 
-@subsection thumbnail_cuda
+@section thumbnail_cuda
 
 Select the most representative frame in a given sequence of consecutive frames using CUDA.
 
@@ -21356,7 +21356,7 @@ the end. Default is @code{100}.
 Since the filter keeps track of the whole frames sequence, a bigger @var{n}
 value will result in a higher memory usage, so a high value is not recommended.
 
-@subsubsection Example
+@subsection Example
 
 @itemize
 
