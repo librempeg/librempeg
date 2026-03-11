@@ -25,7 +25,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int dckcey_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RB32(p->buf) != MKBETAG('K','C','E','Y'))
         return 0;
@@ -39,7 +39,7 @@ static int dckcey_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int dckcey_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     int nb_channels;
@@ -71,7 +71,7 @@ static int dckcey_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int dckcey_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
     AVIOContext *pb = s->pb;
@@ -89,7 +89,7 @@ const FFInputFormat ff_dckcey_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Konami Dreamcast KCEY"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "kcey",
-    .read_probe     = dckcey_probe,
-    .read_header    = dckcey_read_header,
-    .read_packet    = dckcey_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
