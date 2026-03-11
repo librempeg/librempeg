@@ -25,7 +25,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int dcidvi_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RB32(p->buf) != MKBETAG('I','D','V','I'))
         return 0;
@@ -39,7 +39,7 @@ static int dcidvi_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int dcidvi_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     int rate, nb_channels;
@@ -70,7 +70,7 @@ static int dcidvi_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int dcidvi_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
     AVIOContext *pb = s->pb;
@@ -88,7 +88,7 @@ const FFInputFormat ff_dcidvi_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Capcom Dreamcast IDVI"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "idvi",
-    .read_probe     = dcidvi_probe,
-    .read_header    = dcidvi_read_header,
-    .read_packet    = dcidvi_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
