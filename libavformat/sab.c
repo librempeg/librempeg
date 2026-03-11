@@ -106,7 +106,7 @@ static int read_data(void *opaque, uint8_t *buf, int buf_size)
         const int key_start = sst->key_start;
 
         for (int i = 0; i < ret; i++) {
-            if (pos + i >= header_size)
+            if (pos + i >= header_size-2)
                 buf[i] ^= key[(key_start + (pos - header_size) + i) & 255];
         }
     }
