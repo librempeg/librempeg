@@ -86,7 +86,7 @@ static int dckcey_read_packet(AVFormatContext *s, AVPacket *pkt)
 
 const FFInputFormat ff_dckcey_demuxer = {
     .p.name         = "dckcey",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Konami DC KCEY"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Konami Dreamcast KCEY"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "kcey",
     .read_probe     = dckcey_probe,
