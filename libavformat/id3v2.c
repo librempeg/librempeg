@@ -39,7 +39,6 @@
 #include "libavutil/dict.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
-#include "libavutil/opt.h"
 #include "libavcodec/png.h"
 #include "avio_internal.h"
 #include "avlanguage.h"
@@ -379,9 +378,7 @@ static void read_ttag(AVFormatContext *s, AVIOContext *pb, int taglen,
 /**
  * Parse a lang descr tag such as COMM and USLT.
  *
- * COMM with a non-empty descriptor: the descriptor becomes the bare key
- * (e.g. "MusicMatch_Bio").  USLT and all other cases produce
- * "<base>-<descriptor>-<lang>".
+ * A non-empty descriptor produces "<base>-<descriptor>-<lang>" keys.
  */
 static void read_lang_descr_tag(AVFormatContext *s, AVIOContext *pb,
                                 const char *key, int taglen,
@@ -424,29 +421,35 @@ static void read_lang_descr_tag(AVFormatContext *s, AVIOContext *pb,
     }
 
     if (descriptor && *descriptor) {
+#if FF_API_OLD_ID3V2_COMMENT
         if (!strcmp(key, "comment")) {
-            /* legacy COMM: non-empty descriptor becomes the metadata key */
-            flags |= AV_DICT_DONT_STRDUP_KEY;
-            key = (char *)descriptor;
-            descriptor = NULL;
-        } else {
-            /* USLT: <tag>-<descriptor>-<lang> */
-            if (av_strnlen(language, 3) > 0)
-                full_key = av_asprintf("%s-%s-%s", key, descriptor, language);
-            else if (strlen((char *)descriptor) == 3 &&
-                     ff_convert_lang_to((char *)descriptor, AV_LANG_ISO639_2_BIBL))
-                /* Descriptor looks like a lang code: add trailing lang to
-                 * keep the key unambiguous on the write side. */
-                full_key = av_asprintf("%s-%s-und", key, descriptor);
-            else
-                full_key = av_asprintf("%s-%s", key, descriptor);
-            if (!full_key) {
-                av_freep(&descriptor);
-                av_freep(&dst);
-                return;
-            }
-            key = full_key;
+            av_log(s, AV_LOG_WARNING,
+                   "Deprecated: COMM descriptor '%s' used as metadata key. "
+                   "This will change in a future version.\n", descriptor);
+            av_dict_set(metadata, (const char *)descriptor, (const char *)dst,
+                        AV_DICT_DONT_OVERWRITE);
         }
+#endif
+        int descr_len = strlen((char *)descriptor);
+        if (av_strnlen(language, 3) > 0)
+            full_key = av_asprintf("%s-%s-%s", key, descriptor, language);
+                 // descr = "eng"
+        else if ((descr_len == 3 &&
+                 ff_convert_lang_to((char *)descriptor, AV_LANG_ISO639_2_BIBL)) ||
+                 // descr = Foo-eng
+                 (descr_len > 4 && descriptor[descr_len-4] == '-' &&
+                 ff_convert_lang_to((char *)descriptor+descr_len-3, AV_LANG_ISO639_2_BIBL))) {
+            /* Descriptor looks like a lang code: add trailing lang to
+             * keep the key unambiguous on the write side. */
+            full_key = av_asprintf("%s-%s-und", key, descriptor);
+        } else
+            full_key = av_asprintf("%s-%s", key, descriptor);
+        if (!full_key) {
+            av_freep(&descriptor);
+            av_freep(&dst);
+            return;
+        }
+        key = full_key;
     } else if (av_strnlen(language, 3) == 3) {
         full_key = av_asprintf("%s-%s", key, language);
         if (!full_key) {
