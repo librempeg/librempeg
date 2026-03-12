@@ -512,6 +512,7 @@ OBJS-$(CONFIG_NAXAT_ASD_DEMUXER)         += naxat_asd.o
 OBJS-$(CONFIG_NAXAT_ASD_BANK_DEMUXER)    += naxat_asd.o
 OBJS-$(CONFIG_NC_DEMUXER)                += ncdec.o
 OBJS-$(CONFIG_NGCDSPSTD_DEMUXER)         += ngcdspstd.o pcm.o
+OBJS-$(CONFIG_NINETAV_DEMUXER)           += 9tav.o
 OBJS-$(CONFIG_NISTSPHERE_DEMUXER)        += nistspheredec.o pcm.o
 OBJS-$(CONFIG_NISTSPHERE_MUXER)          += nistsphereenc.o rawenc.o
 OBJS-$(CONFIG_NPSF_DEMUXER)              += npsf.o pcm.o

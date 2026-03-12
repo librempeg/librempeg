@@ -415,6 +415,7 @@ extern const FFInputFormat  ff_naxat_asd_demuxer;
 extern const FFInputFormat  ff_naxat_asd_bank_demuxer;
 extern const FFInputFormat  ff_nc_demuxer;
 extern const FFInputFormat  ff_ngcdspstd_demuxer;
+extern const FFInputFormat  ff_ninetav_demuxer;
 extern const FFInputFormat  ff_nistsphere_demuxer;
 extern const FFOutputFormat ff_nistsphere_muxer;
 extern const FFInputFormat  ff_npsf_demuxer;
