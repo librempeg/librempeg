@@ -441,7 +441,7 @@ OBJS-$(CONFIG_MATROSKA_DEMUXER)          += matroskadec.o matroska.o  \
 OBJS-$(CONFIG_MATROSKA_MUXER)            += matroskaenc.o matroska.o \
                                             flacenc_header.o avlanguage.o \
                                             vorbiscomment.o wv.o dovi_isom.o
-OBJS-$(CONFIG_MCA_DEMUXER)               += mca.o
+OBJS-$(CONFIG_MCA_DEMUXER)               += mca.o pcm.o
 OBJS-$(CONFIG_MCC_DEMUXER)               += mccdec.o subtitles.o
 OBJS-$(CONFIG_MCC_MUXER)                 += mccenc.o
 OBJS-$(CONFIG_MCRAW_DEMUXER)             += mcrawdec.o

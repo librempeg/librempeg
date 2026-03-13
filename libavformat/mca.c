@@ -24,6 +24,7 @@
 #include "avio_internal.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -155,21 +156,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVCodecParameters *par = s->streams[0]->codecpar;
-    int ret;
-
-    if (avio_feof(s->pb))
-        return AVERROR_EOF;
-
-    if ((ret = av_get_packet(s->pb, pkt, par->block_align)) < 0)
-        return ret;
-    pkt->stream_index = 0;
-
-    return 0;
-}
-
 const FFInputFormat ff_mca_demuxer = {
     .p.name         = "mca",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Capcom 3DS MCA"),
@@ -177,5 +163,5 @@ const FFInputFormat ff_mca_demuxer = {
     .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
