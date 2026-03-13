@@ -25,7 +25,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RL32(p->buf) == MKTAG('M', 'A', 'D', 'P') &&
         AV_RL16(p->buf + 4) <= 0x5)
@@ -175,7 +175,7 @@ const FFInputFormat ff_mca_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Capcom 3DS MCA"),
     .p.extensions   = "mca",
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = probe,
+    .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
 };
