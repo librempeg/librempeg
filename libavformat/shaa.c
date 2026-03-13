@@ -43,10 +43,10 @@ static int read_probe(const AVProbeData *p)
 static int read_header(AVFormatContext *s)
 {
     uint32_t start_offset, coefs_offset, loop_start, loop_end, title_length;
+    char title[1024] = { 0 };
     AVIOContext *pb = s->pb;
     int ret, rate, codec;
     int64_t duration;
-    char title[1024];
     uint8_t format;
     AVStream *st;
 
