@@ -63,6 +63,25 @@ static int read_header(AVFormatContext *s)
     if (nb_channels <= 0 || rate <= 0 || block_size <= 0 || block_size > INT_MAX/nb_channels)
         return AVERROR_INVALIDDATA;
 
+    coef_start = header_size - 0x30LL * nb_channels;
+    coef_offset = coef_start + nb_metadata * 0x14LL;
+
+    switch (version) {
+    case 3:
+        data_start = header_size;
+        break;
+    case 4:
+        data_start = avio_size(pb) - data_size;
+        break;
+    case 5:
+        avio_seek(pb, coef_start - 4, SEEK_SET);
+        data_start = avio_rl32(pb);
+        break;
+    default:
+        avpriv_request_sample(s, "version %d", version);
+        return AVERROR_PATCHWELCOME;
+    }
+
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
@@ -83,25 +102,6 @@ static int read_header(AVFormatContext *s)
             return ret;
         if ((ret = av_dict_set_int(&s->metadata, "loop_end", loop_end, 0)) < 0)
             return ret;
-    }
-
-    coef_start = header_size - 0x30LL * nb_channels;
-    coef_offset = coef_start + nb_metadata * 0x14LL;
-
-    switch (version) {
-    case 3:
-        data_start = header_size;
-        break;
-    case 4:
-        data_start = avio_size(pb) - data_size;
-        break;
-    case 5:
-        avio_seek(pb, coef_start - 4, SEEK_SET);
-        data_start = avio_rl32(pb);
-        break;
-    default:
-        avpriv_request_sample(s, "version %d", version);
-        return AVERROR_PATCHWELCOME;
     }
 
     ret = ff_alloc_extradata(st->codecpar, 32 * par->ch_layout.nb_channels);
