@@ -28,10 +28,23 @@
 
 static int read_probe(const AVProbeData *p)
 {
-    if (AV_RL32(p->buf) == MKTAG('M', 'A', 'D', 'P') &&
-        AV_RL16(p->buf + 4) <= 0x5)
-        return AVPROBE_SCORE_MAX / 3 * 2;
-    return 0;
+    if (AV_RL32(p->buf) != MKTAG('M', 'A', 'D', 'P'))
+        return 0;
+
+    if (p->buf_size < 36)
+        return 0;
+    if (AV_RL16(p->buf + 4) > 5)
+        return 0;
+    if (AV_RL16(p->buf + 8) <= 0)
+        return 0;
+    if (AV_RL16(p->buf + 10) == 0)
+        return 0;
+    if ((int)AV_RL32(p->buf + 16) <= 0)
+        return 0;
+    if (AV_RL32(p->buf + 32) == 0)
+        return 0;
+
+    return AVPROBE_SCORE_MAX;
 }
 
 static int read_header(AVFormatContext *s)
@@ -46,9 +59,8 @@ static int read_header(AVFormatContext *s)
 
     avio_skip(pb, 4);
     version = avio_rl16(pb);
-    avio_skip(pb, 2);      // padding
-    nb_channels = avio_r8(pb);
-    avio_skip(pb, 1);      // padding
+    avio_skip(pb, 2);
+    nb_channels = avio_rl16(pb);
     block_size = avio_rl16(pb);
     duration = avio_rl32(pb);
     rate = avio_rl32(pb);
