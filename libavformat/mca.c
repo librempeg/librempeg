@@ -36,14 +36,12 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
+    int64_t header_size, data_size, duration, data_start, coef_offset, coef_start;
+    int nb_metadata, ret, block_size, nb_channels, rate;
+    uint32_t loop_start, loop_end;
     AVIOContext *pb = s->pb;
     AVCodecParameters *par;
-    int64_t file_size = avio_size(pb);
     uint16_t version;
-    uint32_t header_size, data_size, data_offset, loop_start, loop_end,
-        nb_samples, nb_metadata, coef_offset = 0;
-    int ch, ret, block_size, nb_channels, rate;
-    int64_t ret_size, data_start;
     AVStream *st;
 
     avio_skip(pb, 4);
@@ -52,7 +50,7 @@ static int read_header(AVFormatContext *s)
     nb_channels = avio_r8(pb);
     avio_skip(pb, 1);      // padding
     block_size = avio_rl16(pb);
-    nb_samples = avio_rl32(pb);
+    duration = avio_rl32(pb);
     rate = avio_rl32(pb);
     loop_start = avio_rl32(pb);
     loop_end = avio_rl32(pb);
@@ -70,7 +68,7 @@ static int read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     st->start_time = 0;
-    st->duration = nb_samples;
+    st->duration = duration;
     par = st->codecpar;
     par->codec_type = AVMEDIA_TYPE_AUDIO;
     par->codec_id = AV_CODEC_ID_ADPCM_NDSP_LE;
@@ -78,78 +76,45 @@ static int read_header(AVFormatContext *s)
     par->ch_layout.nb_channels = nb_channels;
     par->block_align = block_size * nb_channels;
 
+    avpriv_set_pts_info(st, 64, 1, par->sample_rate);
+
     if (loop_end > loop_start) {
         if ((ret = av_dict_set_int(&s->metadata, "loop_start", loop_start, 0)) < 0)
             return ret;
         if ((ret = av_dict_set_int(&s->metadata, "loop_end", loop_end, 0)) < 0)
             return ret;
     }
-    avpriv_set_pts_info(st, 64, 1, par->sample_rate);
 
-    if (version <= 4) {
-        // version <= 4 needs to use the file size to calculate the offsets
-        if (file_size < 0) {
-            return AVERROR_INVALIDDATA;
-        }
-        if (file_size - data_size > UINT32_MAX)
-            return AVERROR_INVALIDDATA;
-        data_start = file_size - data_size;
-        if (version <= 3) {
-            nb_metadata = 0;
-            // header_size is not available or incorrect in older versions
-            header_size = data_start;
-        }
-    } else if (version == 5) {
-        // read data_start location from the header
-        if (0x30 * par->ch_layout.nb_channels + 0x4 > header_size)
-            return AVERROR_INVALIDDATA;
-        data_offset = header_size - 0x30 * par->ch_layout.nb_channels - 0x4;
-        if ((ret_size = avio_seek(pb, data_offset, SEEK_SET)) < 0)
-            return ret_size;
+    coef_start = header_size - 0x30LL * nb_channels;
+    coef_offset = coef_start + nb_metadata * 0x14LL;
+
+    switch (version) {
+    case 3:
+        data_start = header_size;
+        break;
+    case 4:
+        data_start = avio_size(pb) - data_size;
+        break;
+    case 5:
+        avio_seek(pb, coef_start - 4, SEEK_SET);
         data_start = avio_rl32(pb);
-        // check if the metadata is reasonable
-        if (file_size > 0 && (int64_t)data_start + data_size > file_size) {
-            // the header is broken beyond repair
-            if ((int64_t)header_size + data_size > file_size) {
-                av_log(s, AV_LOG_ERROR,
-                       "MCA metadata corrupted, unable to determine the data offset.\n");
-                return AVERROR_INVALIDDATA;
-            }
-            // recover the data_start information from the data size
-            av_log(s, AV_LOG_WARNING,
-                   "Incorrect header size found in metadata, "
-                   "header size approximated from the data size\n");
-            if (file_size - data_offset > UINT32_MAX)
-                return AVERROR_INVALIDDATA;
-            data_start = file_size - data_size;
-        }
-    } else {
+        break;
+    default:
         avpriv_request_sample(s, "version %d", version);
         return AVERROR_PATCHWELCOME;
     }
-
-    // coefficient alignment = 0x30; metadata size = 0x14
-    if (0x30 * par->ch_layout.nb_channels + nb_metadata * 0x14 > header_size)
-        return AVERROR_INVALIDDATA;
-    coef_offset = header_size - 0x30 * par->ch_layout.nb_channels + nb_metadata * 0x14;
 
     ret = ff_alloc_extradata(st->codecpar, 32 * par->ch_layout.nb_channels);
     if (ret < 0)
         return ret;
 
-    if ((ret_size = avio_seek(pb, coef_offset, SEEK_SET)) < 0)
-        return ret_size;
-    for (ch = 0; ch < par->ch_layout.nb_channels; ch++) {
-        if ((ret = ffio_read_size(pb, par->extradata + ch * 32, 32)) < 0)
-            return ret;
-        // 0x30 (alignment) - 0x20 (actual size, 32) = 0x10 (padding)
+    avio_seek(pb, coef_offset, SEEK_SET);
+    for (int ch = 0; ch < par->ch_layout.nb_channels; ch++) {
+        avio_read(pb, par->extradata + ch * 32, 32);
         avio_skip(pb, 0x10);
     }
 
-    // seek to the beginning of the adpcm data
-    // there are some files where the adpcm audio data is not immediately after the header
-    if ((ret_size = avio_seek(pb, data_start, SEEK_SET)) < 0)
-        return ret_size;
+    avio_seek(pb, data_start, SEEK_SET);
 
     return 0;
 }
