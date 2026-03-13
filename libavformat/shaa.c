@@ -26,7 +26,7 @@
 #include "internal.h"
 #include "pcm.h"
 
-static int shaa_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "SHAA", 4) || AV_RL32(p->buf + 4) != 2)
         return 0;
@@ -40,7 +40,7 @@ static int shaa_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int shaa_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     int ret;
     uint8_t format;
@@ -108,7 +108,7 @@ const FFInputFormat ff_shaa_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("SHAA/SHSA (Nintendo Alarmo)"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "shaa,shsa",
-    .read_probe     = shaa_probe,
-    .read_header    = shaa_read_header,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
 };
