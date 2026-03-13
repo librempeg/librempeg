@@ -42,25 +42,18 @@ static int read_header(AVFormatContext *s)
     uint16_t version;
     uint32_t header_size, data_size, data_offset, loop_start, loop_end,
         nb_samples, nb_metadata, coef_offset = 0;
-    int ch, ret, block_size;
+    int ch, ret, block_size, nb_channels, rate;
     int64_t ret_size, data_start;
     AVStream *st;
-
-    st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
-
-    par = st->codecpar;
-    par->codec_type = AVMEDIA_TYPE_AUDIO;
 
     avio_skip(pb, 4);
     version = avio_rl16(pb);
     avio_skip(pb, 2);      // padding
-    par->ch_layout.nb_channels = avio_r8(pb);
+    nb_channels = avio_r8(pb);
     avio_skip(pb, 1);      // padding
     block_size = avio_rl16(pb);
     nb_samples = avio_rl32(pb);
-    par->sample_rate = avio_rl32(pb);
+    rate = avio_rl32(pb);
     loop_start = avio_rl32(pb);
     loop_end = avio_rl32(pb);
     header_size = avio_rl32(pb);
@@ -69,12 +62,21 @@ static int read_header(AVFormatContext *s)
     nb_metadata = avio_rl16(pb);
     avio_skip(pb, 2);
 
-    st->duration = nb_samples;
+    if (nb_channels <= 0 || rate <= 0 || block_size <= 0 || block_size > INT_MAX/nb_channels)
+        return AVERROR_INVALIDDATA;
 
-    if (par->ch_layout.nb_channels <= 0 || par->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
-    if (block_size <= 0 || block_size > INT_MAX/par->ch_layout.nb_channels)
-        return AVERROR_INVALIDDATA;
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
+
+    st->start_time = 0;
+    st->duration = nb_samples;
+    par = st->codecpar;
+    par->codec_type = AVMEDIA_TYPE_AUDIO;
+    par->codec_id = AV_CODEC_ID_ADPCM_NDSP_LE;
+    par->sample_rate = rate;
+    par->ch_layout.nb_channels = nb_channels;
+    par->block_align = block_size * nb_channels;
 
     if (loop_end > loop_start) {
         if ((ret = av_dict_set_int(&s->metadata, "loop_start", loop_start, 0)) < 0)
@@ -130,10 +132,6 @@ static int read_header(AVFormatContext *s)
     if (0x30 * par->ch_layout.nb_channels + nb_metadata * 0x14 > header_size)
         return AVERROR_INVALIDDATA;
     coef_offset = header_size - 0x30 * par->ch_layout.nb_channels + nb_metadata * 0x14;
-
-    st->start_time = 0;
-    par->codec_id = AV_CODEC_ID_ADPCM_NDSP_LE;
-    par->block_align = block_size * par->ch_layout.nb_channels;
 
     ret = ff_alloc_extradata(st->codecpar, 32 * par->ch_layout.nb_channels);
     if (ret < 0)
