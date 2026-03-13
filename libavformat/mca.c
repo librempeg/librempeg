@@ -52,12 +52,11 @@ static int read_header(AVFormatContext *s)
     par = st->codecpar;
     par->codec_type = AVMEDIA_TYPE_AUDIO;
 
-    // parse file headers
-    avio_skip(pb, 0x4);      // skip the file magic
+    avio_skip(pb, 4);
     version = avio_rl16(pb);
-    avio_skip(pb, 0x2);      // padding
+    avio_skip(pb, 2);      // padding
     par->ch_layout.nb_channels = avio_r8(pb);
-    avio_skip(pb, 0x1);      // padding
+    avio_skip(pb, 1);      // padding
     block_size = avio_rl16(pb);
     nb_samples = avio_rl32(pb);
     par->sample_rate = avio_rl32(pb);
@@ -65,13 +64,12 @@ static int read_header(AVFormatContext *s)
     loop_end = avio_rl32(pb);
     header_size = avio_rl32(pb);
     data_size = avio_rl32(pb);
-    avio_skip(pb, 0x4);
+    avio_skip(pb, 4);
     nb_metadata = avio_rl16(pb);
-    avio_skip(pb, 0x2);      // unknown u16 field
+    avio_skip(pb, 2);
 
     st->duration = nb_samples;
 
-    // sanity checks
     if (par->ch_layout.nb_channels <= 0 || par->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
     if (block_size <= 0 || block_size > INT_MAX/par->ch_layout.nb_channels)
