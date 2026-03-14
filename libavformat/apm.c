@@ -1,5 +1,5 @@
 /*
- * Rayman 2 APM (De)muxer
+ * Ubisoft APM (De)muxer
  *
  * Copyright (C) 2020 Zane van Iperen (zane@zanevaniperen.com)
  *
@@ -204,7 +204,7 @@ static int apm_read_packet(AVFormatContext *s, AVPacket *pkt)
 
 const FFInputFormat ff_apm_demuxer = {
     .p.name         = "apm",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Ubisoft Rayman 2 APM"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Ubisoft APM"),
     .p.extensions   = "apm",
     .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = apm_probe,
@@ -295,7 +295,7 @@ static int apm_write_trailer(AVFormatContext *s)
 
 const FFOutputFormat ff_apm_muxer = {
     .p.name         = "apm",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Ubisoft Rayman 2 APM"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Ubisoft APM"),
     .p.extensions   = "apm",
     .p.audio_codec  = AV_CODEC_ID_ADPCM_IMA_APM,
     .p.video_codec  = AV_CODEC_ID_NONE,
