@@ -168,6 +168,7 @@ static int update_size(AVCodecContext *avctx, int w, int h)
                      CONFIG_VP9_D3D11VA_HWACCEL * 2 + \
                      CONFIG_VP9_D3D12VA_HWACCEL + \
                      CONFIG_VP9_NVDEC_HWACCEL + \
+                     CONFIG_VP9_NVDEC_CUARRAY_HWACCEL + \
                      CONFIG_VP9_VAAPI_HWACCEL + \
                      CONFIG_VP9_VDPAU_HWACCEL + \
                      CONFIG_VP9_VIDEOTOOLBOX_HWACCEL + \
@@ -202,6 +203,9 @@ static int update_size(AVCodecContext *avctx, int w, int h)
 #if CONFIG_VP9_NVDEC_HWACCEL
             *fmtp++ = AV_PIX_FMT_CUDA;
 #endif
+#if CONFIG_VP9_NVDEC_CUARRAY_HWACCEL
+            *fmtp++ = AV_PIX_FMT_CUARRAY;
+#endif
 #if CONFIG_VP9_VAAPI_HWACCEL
             *fmtp++ = AV_PIX_FMT_VAAPI;
 #endif
@@ -218,6 +222,9 @@ static int update_size(AVCodecContext *avctx, int w, int h)
         case AV_PIX_FMT_YUV420P12:
 #if CONFIG_VP9_NVDEC_HWACCEL
             *fmtp++ = AV_PIX_FMT_CUDA;
+#endif
+#if CONFIG_VP9_NVDEC_CUARRAY_HWACCEL
+            *fmtp++ = AV_PIX_FMT_CUARRAY;
 #endif
 #if CONFIG_VP9_VAAPI_HWACCEL
             *fmtp++ = AV_PIX_FMT_VAAPI;
@@ -1946,6 +1953,9 @@ const FFCodec ff_vp9_decoder = {
 #endif
 #if CONFIG_VP9_NVDEC_HWACCEL
                                HWACCEL_NVDEC(vp9),
+#endif
+#if CONFIG_VP9_NVDEC_CUARRAY_HWACCEL
+                               HWACCEL_NVDEC_CUARRAY(vp9),
 #endif
 #if CONFIG_VP9_VAAPI_HWACCEL
                                HWACCEL_VAAPI(vp9),

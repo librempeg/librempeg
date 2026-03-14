@@ -20,6 +20,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "config_components.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -321,6 +323,7 @@ static int nvdec_hevc_decode_init(AVCodecContext *avctx) {
     return ff_nvdec_decode_init(avctx);
 }
 
+#if CONFIG_HEVC_NVDEC_HWACCEL
 const FFHWAccel ff_hevc_nvdec_hwaccel = {
     .p.name               = "hevc_nvdec",
     .p.type               = AVMEDIA_TYPE_VIDEO,
@@ -334,3 +337,20 @@ const FFHWAccel ff_hevc_nvdec_hwaccel = {
     .uninit               = ff_nvdec_decode_uninit,
     .priv_data_size       = sizeof(NVDECContext),
 };
+#endif
+
+#if CONFIG_HEVC_NVDEC_CUARRAY_HWACCEL
+const FFHWAccel ff_hevc_nvdec_cuarray_hwaccel = {
+    .p.name               = "hevc_nvdec_cuarray",
+    .p.type               = AVMEDIA_TYPE_VIDEO,
+    .p.id                 = AV_CODEC_ID_HEVC,
+    .p.pix_fmt            = AV_PIX_FMT_CUARRAY,
+    .start_frame          = nvdec_hevc_start_frame,
+    .end_frame            = ff_nvdec_end_frame,
+    .decode_slice         = nvdec_hevc_decode_slice,
+    .frame_params         = nvdec_hevc_frame_params,
+    .init                 = nvdec_hevc_decode_init,
+    .uninit               = ff_nvdec_decode_uninit,
+    .priv_data_size       = sizeof(NVDECContext),
+};
+#endif

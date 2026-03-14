@@ -20,6 +20,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "config_components.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -172,6 +174,7 @@ static int nvdec_h264_frame_params(AVCodecContext *avctx,
     return ff_nvdec_frame_params(avctx, hw_frames_ctx, sps->ref_frame_count + sps->num_reorder_frames, 0);
 }
 
+#if CONFIG_H264_NVDEC_HWACCEL
 const FFHWAccel ff_h264_nvdec_hwaccel = {
     .p.name               = "h264_nvdec",
     .p.type               = AVMEDIA_TYPE_VIDEO,
@@ -185,3 +188,20 @@ const FFHWAccel ff_h264_nvdec_hwaccel = {
     .uninit               = ff_nvdec_decode_uninit,
     .priv_data_size       = sizeof(NVDECContext),
 };
+#endif
+
+#if CONFIG_H264_NVDEC_CUARRAY_HWACCEL
+const FFHWAccel ff_h264_nvdec_cuarray_hwaccel = {
+    .p.name               = "h264_nvdec_cuarray",
+    .p.type               = AVMEDIA_TYPE_VIDEO,
+    .p.id                 = AV_CODEC_ID_H264,
+    .p.pix_fmt            = AV_PIX_FMT_CUARRAY,
+    .start_frame          = nvdec_h264_start_frame,
+    .end_frame            = ff_nvdec_end_frame,
+    .decode_slice         = nvdec_h264_decode_slice,
+    .frame_params         = nvdec_h264_frame_params,
+    .init                 = ff_nvdec_decode_init,
+    .uninit               = ff_nvdec_decode_uninit,
+    .priv_data_size       = sizeof(NVDECContext),
+};
+#endif

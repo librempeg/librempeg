@@ -159,6 +159,7 @@ static int nvdec_vc1_frame_params(AVCodecContext *avctx,
     return ff_nvdec_frame_params(avctx, hw_frames_ctx, 2, 0);
 }
 
+#if CONFIG_VC1_NVDEC_HWACCEL
 const FFHWAccel ff_vc1_nvdec_hwaccel = {
     .p.name               = "vc1_nvdec",
     .p.type               = AVMEDIA_TYPE_VIDEO,
@@ -172,6 +173,23 @@ const FFHWAccel ff_vc1_nvdec_hwaccel = {
     .uninit               = ff_nvdec_decode_uninit,
     .priv_data_size       = sizeof(NVDECContext),
 };
+#endif
+
+#if CONFIG_VC1_NVDEC_CUARRAY_HWACCEL
+const FFHWAccel ff_vc1_nvdec_cuarray_hwaccel = {
+    .p.name               = "vc1_nvdec_cuarray",
+    .p.type               = AVMEDIA_TYPE_VIDEO,
+    .p.id                 = AV_CODEC_ID_VC1,
+    .p.pix_fmt            = AV_PIX_FMT_CUARRAY,
+    .start_frame          = nvdec_vc1_start_frame,
+    .end_frame            = ff_nvdec_simple_end_frame,
+    .decode_slice         = nvdec_vc1_decode_slice,
+    .frame_params         = nvdec_vc1_frame_params,
+    .init                 = ff_nvdec_decode_init,
+    .uninit               = ff_nvdec_decode_uninit,
+    .priv_data_size       = sizeof(NVDECContext),
+};
+#endif
 
 #if CONFIG_WMV3_NVDEC_HWACCEL
 const FFHWAccel ff_wmv3_nvdec_hwaccel = {
@@ -179,6 +197,22 @@ const FFHWAccel ff_wmv3_nvdec_hwaccel = {
     .p.type               = AVMEDIA_TYPE_VIDEO,
     .p.id                 = AV_CODEC_ID_WMV3,
     .p.pix_fmt            = AV_PIX_FMT_CUDA,
+    .start_frame          = nvdec_vc1_start_frame,
+    .end_frame            = ff_nvdec_simple_end_frame,
+    .decode_slice         = ff_nvdec_simple_decode_slice,
+    .frame_params         = nvdec_vc1_frame_params,
+    .init                 = ff_nvdec_decode_init,
+    .uninit               = ff_nvdec_decode_uninit,
+    .priv_data_size       = sizeof(NVDECContext),
+};
+#endif
+
+#if CONFIG_WMV3_NVDEC_CUARRAY_HWACCEL
+const FFHWAccel ff_wmv3_nvdec_cuarray_hwaccel = {
+    .p.name               = "wmv3_nvdec_cuarray",
+    .p.type               = AVMEDIA_TYPE_VIDEO,
+    .p.id                 = AV_CODEC_ID_WMV3,
+    .p.pix_fmt            = AV_PIX_FMT_CUARRAY,
     .start_frame          = nvdec_vc1_start_frame,
     .end_frame            = ff_nvdec_simple_end_frame,
     .decode_slice         = ff_nvdec_simple_decode_slice,

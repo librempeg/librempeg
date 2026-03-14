@@ -118,12 +118,44 @@ const FFHWAccel ff_mpeg2_nvdec_hwaccel = {
 };
 #endif
 
+#if CONFIG_MPEG2_NVDEC_CUARRAY_HWACCEL
+const FFHWAccel ff_mpeg2_nvdec_cuarray_hwaccel = {
+    .p.name               = "mpeg2_nvdec_cuarray",
+    .p.type               = AVMEDIA_TYPE_VIDEO,
+    .p.id                 = AV_CODEC_ID_MPEG2VIDEO,
+    .p.pix_fmt            = AV_PIX_FMT_CUARRAY,
+    .start_frame          = nvdec_mpeg12_start_frame,
+    .end_frame            = ff_nvdec_simple_end_frame,
+    .decode_slice         = ff_nvdec_simple_decode_slice,
+    .frame_params         = nvdec_mpeg12_frame_params,
+    .init                 = ff_nvdec_decode_init,
+    .uninit               = ff_nvdec_decode_uninit,
+    .priv_data_size       = sizeof(NVDECContext),
+};
+#endif
+
 #if CONFIG_MPEG1_NVDEC_HWACCEL
 const FFHWAccel ff_mpeg1_nvdec_hwaccel = {
     .p.name               = "mpeg1_nvdec",
     .p.type               = AVMEDIA_TYPE_VIDEO,
     .p.id                 = AV_CODEC_ID_MPEG1VIDEO,
     .p.pix_fmt            = AV_PIX_FMT_CUDA,
+    .start_frame          = nvdec_mpeg12_start_frame,
+    .end_frame            = ff_nvdec_simple_end_frame,
+    .decode_slice         = ff_nvdec_simple_decode_slice,
+    .frame_params         = nvdec_mpeg12_frame_params,
+    .init                 = ff_nvdec_decode_init,
+    .uninit               = ff_nvdec_decode_uninit,
+    .priv_data_size       = sizeof(NVDECContext),
+};
+#endif
+
+#if CONFIG_MPEG1_NVDEC_CUARRAY_HWACCEL
+const FFHWAccel ff_mpeg1_nvdec_cuarray_hwaccel = {
+    .p.name               = "mpeg1_nvdec_cuarray",
+    .p.type               = AVMEDIA_TYPE_VIDEO,
+    .p.id                 = AV_CODEC_ID_MPEG1VIDEO,
+    .p.pix_fmt            = AV_PIX_FMT_CUARRAY,
     .start_frame          = nvdec_mpeg12_start_frame,
     .end_frame            = ff_nvdec_simple_end_frame,
     .decode_slice         = ff_nvdec_simple_decode_slice,

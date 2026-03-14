@@ -543,6 +543,7 @@ static int get_pixel_format(AVCodecContext *avctx)
                      CONFIG_AV1_D3D11VA_HWACCEL * 2 + \
                      CONFIG_AV1_D3D12VA_HWACCEL + \
                      CONFIG_AV1_NVDEC_HWACCEL + \
+                     CONFIG_AV1_NVDEC_CUARRAY_HWACCEL + \
                      CONFIG_AV1_VAAPI_HWACCEL + \
                      CONFIG_AV1_VDPAU_HWACCEL + \
                      CONFIG_AV1_VIDEOTOOLBOX_HWACCEL + \
@@ -566,6 +567,9 @@ static int get_pixel_format(AVCodecContext *avctx)
 #endif
 #if CONFIG_AV1_NVDEC_HWACCEL
         *fmtp++ = AV_PIX_FMT_CUDA;
+#endif
+#if CONFIG_AV1_NVDEC_CUARRAY_HWACCEL
+        *fmtp++ = AV_PIX_FMT_CUARRAY;
 #endif
 #if CONFIG_AV1_VAAPI_HWACCEL
         *fmtp++ = AV_PIX_FMT_VAAPI;
@@ -593,6 +597,9 @@ static int get_pixel_format(AVCodecContext *avctx)
 #endif
 #if CONFIG_AV1_NVDEC_HWACCEL
         *fmtp++ = AV_PIX_FMT_CUDA;
+#endif
+#if CONFIG_AV1_NVDEC_CUARRAY_HWACCEL
+        *fmtp++ = AV_PIX_FMT_CUARRAY;
 #endif
 #if CONFIG_AV1_VAAPI_HWACCEL
         *fmtp++ = AV_PIX_FMT_VAAPI;
@@ -646,10 +653,16 @@ static int get_pixel_format(AVCodecContext *avctx)
 #if CONFIG_AV1_NVDEC_HWACCEL
         *fmtp++ = AV_PIX_FMT_CUDA;
 #endif
+#if CONFIG_AV1_NVDEC_CUARRAY_HWACCEL
+        *fmtp++ = AV_PIX_FMT_CUARRAY;
+#endif
         break;
     case AV_PIX_FMT_GRAY10:
 #if CONFIG_AV1_NVDEC_HWACCEL
         *fmtp++ = AV_PIX_FMT_CUDA;
+#endif
+#if CONFIG_AV1_NVDEC_CUARRAY_HWACCEL
+        *fmtp++ = AV_PIX_FMT_CUARRAY;
 #endif
         break;
     }
@@ -1554,6 +1567,9 @@ const FFCodec ff_av1_decoder = {
 #endif
 #if CONFIG_AV1_NVDEC_HWACCEL
         HWACCEL_NVDEC(av1),
+#endif
+#if CONFIG_AV1_NVDEC_CUARRAY_HWACCEL
+        HWACCEL_NVDEC_CUARRAY(av1),
 #endif
 #if CONFIG_AV1_VAAPI_HWACCEL
         HWACCEL_VAAPI(av1),
