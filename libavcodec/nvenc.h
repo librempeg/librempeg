@@ -78,6 +78,7 @@ typedef void ID3D11Device;
 #if NVENCAPI_CHECK_VERSION(13, 1)
 #define NVENC_NEW_COUNTING_TYPE
 #define NVENC_HAVE_AV1_HGOP_SUPPORT
+#define NVENC_HAVE_CUDA_ARRAY_INPUT_SUPPORT
 #endif
 
 typedef struct NvencSurface

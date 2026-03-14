@@ -56,6 +56,7 @@ const enum AVPixelFormat ff_nvenc_pix_fmts[] = {
     AV_PIX_FMT_P010,
     AV_PIX_FMT_YUV444P,
     AV_PIX_FMT_P012,      // Truncated to 10bits
+    AV_PIX_FMT_NV24,
     AV_PIX_FMT_P016,      // Truncated to 10bits
 #ifdef NVENC_HAVE_422_SUPPORT
     AV_PIX_FMT_NV16,
@@ -66,6 +67,9 @@ const enum AVPixelFormat ff_nvenc_pix_fmts[] = {
     AV_PIX_FMT_YUV444P10MSB,
     AV_PIX_FMT_YUV444P12MSB, // Truncated to 10bits
     AV_PIX_FMT_YUV444P16, // Truncated to 10bits
+    AV_PIX_FMT_P410,
+    AV_PIX_FMT_P412,      // Truncated to 10bits
+    AV_PIX_FMT_P416,      // Truncated to 10bits
     AV_PIX_FMT_0RGB32,
     AV_PIX_FMT_RGB32,
     AV_PIX_FMT_0BGR32,
@@ -76,6 +80,9 @@ const enum AVPixelFormat ff_nvenc_pix_fmts[] = {
     AV_PIX_FMT_GBRP10MSB,
     AV_PIX_FMT_GBRP16,    // Truncated to 10bits
     AV_PIX_FMT_CUDA,
+#ifdef NVENC_HAVE_CUDA_ARRAY_INPUT_SUPPORT
+    AV_PIX_FMT_CUARRAY,
+#endif
 #if CONFIG_D3D11VA
     AV_PIX_FMT_D3D11,
 #endif
@@ -84,6 +91,9 @@ const enum AVPixelFormat ff_nvenc_pix_fmts[] = {
 
 const AVCodecHWConfigInternal *const ff_nvenc_hw_configs[] = {
     HW_CONFIG_ENCODER_FRAMES(CUDA,  CUDA),
+#ifdef NVENC_HAVE_CUDA_ARRAY_INPUT_SUPPORT
+    HW_CONFIG_ENCODER_FRAMES(CUARRAY, CUDA),
+#endif
     HW_CONFIG_ENCODER_DEVICE(NONE,  CUDA),
 #if CONFIG_D3D11VA
     HW_CONFIG_ENCODER_FRAMES(D3D11, D3D11VA),
@@ -101,6 +111,9 @@ const AVCodecHWConfigInternal *const ff_nvenc_hw_configs[] = {
                             pix_fmt == AV_PIX_FMT_YUV444P10MSB || \
                             pix_fmt == AV_PIX_FMT_YUV444P12MSB || \
                             pix_fmt == AV_PIX_FMT_YUV444P16    || \
+                            pix_fmt == AV_PIX_FMT_P410         || \
+                            pix_fmt == AV_PIX_FMT_P412         || \
+                            pix_fmt == AV_PIX_FMT_P416         || \
                             pix_fmt == AV_PIX_FMT_X2RGB10      || \
                             pix_fmt == AV_PIX_FMT_X2BGR10      || \
                             pix_fmt == AV_PIX_FMT_GBRP10MSB    || \
@@ -114,9 +127,13 @@ const AVCodecHWConfigInternal *const ff_nvenc_hw_configs[] = {
                             pix_fmt == AV_PIX_FMT_X2BGR10)
 
 #define IS_YUV444(pix_fmt) (pix_fmt == AV_PIX_FMT_YUV444P      || \
+                            pix_fmt == AV_PIX_FMT_NV24         || \
                             pix_fmt == AV_PIX_FMT_YUV444P10MSB || \
                             pix_fmt == AV_PIX_FMT_YUV444P12MSB || \
                             pix_fmt == AV_PIX_FMT_YUV444P16    || \
+                            pix_fmt == AV_PIX_FMT_P410         || \
+                            pix_fmt == AV_PIX_FMT_P412         || \
+                            pix_fmt == AV_PIX_FMT_P416         || \
                             pix_fmt == AV_PIX_FMT_GBRP         || \
                             pix_fmt == AV_PIX_FMT_GBRP10MSB    || \
                             pix_fmt == AV_PIX_FMT_GBRP16       || \
@@ -126,6 +143,10 @@ const AVCodecHWConfigInternal *const ff_nvenc_hw_configs[] = {
                             pix_fmt == AV_PIX_FMT_P210 || \
                             pix_fmt == AV_PIX_FMT_P212 || \
                             pix_fmt == AV_PIX_FMT_P216)
+
+#define IS_HWACCEL(pix_fmt) (pix_fmt == AV_PIX_FMT_CUDA    || \
+                             pix_fmt == AV_PIX_FMT_CUARRAY  || \
+                             pix_fmt == AV_PIX_FMT_D3D11)
 
 #define IS_GBRP(pix_fmt) (pix_fmt == AV_PIX_FMT_GBRP      || \
                           pix_fmt == AV_PIX_FMT_GBRP10MSB || \
@@ -712,7 +733,8 @@ static av_cold int nvenc_setup_device(AVCodecContext *avctx)
 
     nvenc_map_preset(ctx);
 
-    if (avctx->pix_fmt == AV_PIX_FMT_CUDA || avctx->pix_fmt == AV_PIX_FMT_D3D11 || avctx->hw_frames_ctx || avctx->hw_device_ctx) {
+    if (IS_HWACCEL(avctx->pix_fmt) ||
+        avctx->hw_frames_ctx || avctx->hw_device_ctx) {
         AVHWFramesContext   *frames_ctx;
         AVHWDeviceContext   *hwdev_ctx;
         AVCUDADeviceContext *cuda_device_hwctx = NULL;
@@ -723,7 +745,7 @@ static av_cold int nvenc_setup_device(AVCodecContext *avctx)
 
         if (avctx->hw_frames_ctx) {
             frames_ctx = (AVHWFramesContext*)avctx->hw_frames_ctx->data;
-            if (frames_ctx->format == AV_PIX_FMT_CUDA)
+            if (frames_ctx->format == AV_PIX_FMT_CUDA || frames_ctx->format == AV_PIX_FMT_CUARRAY)
                 cuda_device_hwctx = frames_ctx->device_ctx->hwctx;
 #if CONFIG_D3D11VA
             else if (frames_ctx->format == AV_PIX_FMT_D3D11)
@@ -1883,7 +1905,7 @@ static av_cold int nvenc_alloc_surface(AVCodecContext *avctx, int idx)
     NV_ENC_CREATE_BITSTREAM_BUFFER allocOut = { 0 };
     allocOut.version = NV_ENC_CREATE_BITSTREAM_BUFFER_VER;
 
-    if (avctx->pix_fmt == AV_PIX_FMT_CUDA || avctx->pix_fmt == AV_PIX_FMT_D3D11) {
+    if (IS_HWACCEL(avctx->pix_fmt)) {
         ctx->surfaces[idx].in_ref = av_frame_alloc();
         if (!ctx->surfaces[idx].in_ref)
             return AVERROR(ENOMEM);
@@ -1915,7 +1937,7 @@ static av_cold int nvenc_alloc_surface(AVCodecContext *avctx, int idx)
     nv_status = p_nvenc->nvEncCreateBitstreamBuffer(ctx->nvencoder, &allocOut);
     if (nv_status != NV_ENC_SUCCESS) {
         int err = nvenc_print_error(avctx, nv_status, "CreateBitstreamBuffer failed");
-        if (avctx->pix_fmt != AV_PIX_FMT_CUDA && avctx->pix_fmt != AV_PIX_FMT_D3D11)
+        if (!IS_HWACCEL(avctx->pix_fmt))
             p_nvenc->nvEncDestroyInputBuffer(ctx->nvencoder, ctx->surfaces[idx].input_surface);
         av_frame_free(&ctx->surfaces[idx].in_ref);
         return err;
@@ -2038,7 +2060,7 @@ av_cold int ff_nvenc_encode_close(AVCodecContext *avctx)
         av_freep(&ctx->frame_data_array);
     }
 
-    if (ctx->surfaces && (avctx->pix_fmt == AV_PIX_FMT_CUDA || avctx->pix_fmt == AV_PIX_FMT_D3D11)) {
+    if (ctx->surfaces && IS_HWACCEL(avctx->pix_fmt)) {
         for (i = 0; i < ctx->nb_registered_frames; i++) {
             if (ctx->registered_frames[i].mapped)
                 p_nvenc->nvEncUnmapInputResource(ctx->nvencoder, ctx->registered_frames[i].in_map.mappedResource);
@@ -2050,7 +2072,7 @@ av_cold int ff_nvenc_encode_close(AVCodecContext *avctx)
 
     if (ctx->surfaces) {
         for (i = 0; i < ctx->nb_surfaces; ++i) {
-            if (avctx->pix_fmt != AV_PIX_FMT_CUDA && avctx->pix_fmt != AV_PIX_FMT_D3D11)
+            if (!IS_HWACCEL(avctx->pix_fmt))
                 p_nvenc->nvEncDestroyInputBuffer(ctx->nvencoder, ctx->surfaces[i].input_surface);
             av_frame_free(&ctx->surfaces[i].in_ref);
             p_nvenc->nvEncDestroyBitstreamBuffer(ctx->nvencoder, ctx->surfaces[i].output_surface);
@@ -2098,7 +2120,7 @@ av_cold int ff_nvenc_encode_init(AVCodecContext *avctx)
     NvencContext *ctx = avctx->priv_data;
     int ret;
 
-    if (avctx->pix_fmt == AV_PIX_FMT_CUDA || avctx->pix_fmt == AV_PIX_FMT_D3D11) {
+    if (IS_HWACCEL(avctx->pix_fmt)) {
         AVHWFramesContext *frames_ctx;
         if (!avctx->hw_frames_ctx) {
             av_log(avctx, AV_LOG_ERROR,
@@ -2231,7 +2253,9 @@ static int nvenc_register_frame(AVCodecContext *avctx, const AVFrame *frame)
     int i, idx, ret;
 
     for (i = 0; i < ctx->nb_registered_frames; i++) {
-        if (avctx->pix_fmt == AV_PIX_FMT_CUDA && ctx->registered_frames[i].ptr == frame->data[0])
+        if ((avctx->pix_fmt == AV_PIX_FMT_CUDA ||
+             avctx->pix_fmt == AV_PIX_FMT_CUARRAY) &&
+            ctx->registered_frames[i].ptr == frame->data[0])
             return i;
         else if (avctx->pix_fmt == AV_PIX_FMT_D3D11 && ctx->registered_frames[i].ptr == frame->data[0] && ctx->registered_frames[i].ptr_index == (intptr_t)frame->data[1])
             return i;
@@ -2249,6 +2273,12 @@ static int nvenc_register_frame(AVCodecContext *avctx, const AVFrame *frame)
 
     if (avctx->pix_fmt == AV_PIX_FMT_CUDA) {
         reg.resourceType   = NV_ENC_INPUT_RESOURCE_TYPE_CUDADEVICEPTR;
+#ifdef NVENC_HAVE_CUDA_ARRAY_INPUT_SUPPORT
+    } else if (avctx->pix_fmt == AV_PIX_FMT_CUARRAY) {
+        const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frames_ctx->sw_format);
+        reg.resourceType = NV_ENC_INPUT_RESOURCE_TYPE_CUDAARRAY;
+        reg.pitch = frames_ctx->width * (desc && desc->comp[0].depth > 8 ? 2 : 1);
+#endif
     }
     else if (avctx->pix_fmt == AV_PIX_FMT_D3D11) {
         reg.resourceType     = NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX;
@@ -2256,6 +2286,23 @@ static int nvenc_register_frame(AVCodecContext *avctx, const AVFrame *frame)
     }
 
     reg.bufferFormat       = nvenc_map_buffer_format(frames_ctx->sw_format);
+#ifdef NVENC_HAVE_CUDA_ARRAY_INPUT_SUPPORT
+    if (reg.bufferFormat == NV_ENC_BUFFER_FORMAT_UNDEFINED &&
+        reg.resourceType == NV_ENC_INPUT_RESOURCE_TYPE_CUDAARRAY) {
+        switch (frames_ctx->sw_format) {
+        case AV_PIX_FMT_NV24:
+            reg.bufferFormat = NV_ENC_BUFFER_FORMAT_YUV444;
+            break;
+        case AV_PIX_FMT_P410:
+        case AV_PIX_FMT_P412:
+        case AV_PIX_FMT_P416:
+            reg.bufferFormat = NV_ENC_BUFFER_FORMAT_YUV444_10BIT;
+            break;
+        default:
+            break;
+        }
+    }
+#endif
     if (reg.bufferFormat == NV_ENC_BUFFER_FORMAT_UNDEFINED) {
         av_log(avctx, AV_LOG_FATAL, "Invalid input pixel format: %s\n",
                av_get_pix_fmt_name(frames_ctx->sw_format));
@@ -2271,6 +2318,7 @@ static int nvenc_register_frame(AVCodecContext *avctx, const AVFrame *frame)
     ctx->registered_frames[idx].ptr       = frame->data[0];
     ctx->registered_frames[idx].ptr_index = reg.subResourceIndex;
     ctx->registered_frames[idx].regptr    = reg.registeredResource;
+
     return idx;
 }
 
@@ -2284,7 +2332,7 @@ static int nvenc_upload_frame(AVCodecContext *avctx, const AVFrame *frame,
     int res;
     NVENCSTATUS nv_status;
 
-    if (avctx->pix_fmt == AV_PIX_FMT_CUDA || avctx->pix_fmt == AV_PIX_FMT_D3D11) {
+    if (IS_HWACCEL(avctx->pix_fmt)) {
         int reg_idx = nvenc_register_frame(avctx, frame);
         if (reg_idx < 0) {
             av_log(avctx, AV_LOG_ERROR, "Could not register an input HW frame\n");
@@ -2602,7 +2650,7 @@ static int process_output_surface(AVCodecContext *avctx, AVPacket *pkt, NvencSur
     }
 
 
-    if (avctx->pix_fmt == AV_PIX_FMT_CUDA || avctx->pix_fmt == AV_PIX_FMT_D3D11) {
+    if (IS_HWACCEL(avctx->pix_fmt)) {
         ctx->registered_frames[tmpoutsurf->reg_idx].mapped -= 1;
         if (ctx->registered_frames[tmpoutsurf->reg_idx].mapped == 0) {
             nv_status = p_nvenc->nvEncUnmapInputResource(ctx->nvencoder, ctx->registered_frames[tmpoutsurf->reg_idx].in_map.mappedResource);
