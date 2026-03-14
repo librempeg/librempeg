@@ -593,6 +593,7 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
     /* codecs with a fixed packet duration */
     switch (id) {
     case AV_CODEC_ID_ADPCM_IMA_QT: return   64;
+    case AV_CODEC_ID_RCAVOC:       return   80;
     case AV_CODEC_ID_ADPCM_EA_XAS: return  128;
     case AV_CODEC_ID_AMR_NB:
     case AV_CODEC_ID_EVRC:
