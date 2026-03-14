@@ -477,6 +477,18 @@ static int read_seek(AVFormatContext *s, int stream_index,
     }
 }
 
+static int read_close(AVFormatContext *s)
+{
+    for (int i = 0; i < s->nb_streams; i++) {
+        AVStream *st = s->streams[i];
+        SABStream *sst = st->priv_data;
+
+        avformat_close_input(&sst->xctx);
+    }
+
+    return 0;
+}
+
 const FFInputFormat ff_sab_demuxer = {
     .p.name         = "sab",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Square Enix SAB"),
@@ -488,4 +500,5 @@ const FFInputFormat ff_sab_demuxer = {
     .read_header    = read_header,
     .read_packet    = read_packet,
     .read_seek      = read_seek,
+    .read_close     = read_close,
 };
