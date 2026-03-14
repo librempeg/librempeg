@@ -393,6 +393,7 @@ extern const FFInputFormat  ff_mpjpeg_demuxer;
 extern const FFOutputFormat ff_mpjpeg_muxer;
 extern const FFInputFormat  ff_mpl2_demuxer;
 extern const FFInputFormat  ff_mpsub_demuxer;
+extern const FFInputFormat  ff_mraw_demuxer;
 extern const FFInputFormat  ff_msf_demuxer;
 extern const FFInputFormat  ff_msnd_demuxer;
 extern const FFInputFormat  ff_msnwc_tcp_demuxer;
