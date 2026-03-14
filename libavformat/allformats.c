@@ -172,6 +172,7 @@ extern const FFInputFormat  ff_daud_demuxer;
 extern const FFOutputFormat ff_daud_muxer;
 extern const FFInputFormat  ff_dcidvi_demuxer;
 extern const FFInputFormat  ff_dckcey_demuxer;
+extern const FFInputFormat  ff_dcnaomi_demuxer;
 extern const FFInputFormat  ff_dcstr_demuxer;
 extern const FFInputFormat  ff_dcswav_demuxer;
 extern const FFInputFormat  ff_derf_demuxer;
