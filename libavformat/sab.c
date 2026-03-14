@@ -35,6 +35,7 @@
 
 typedef struct SABStream {
     int64_t start_offset;
+    int64_t data_offset;
     int64_t stop_offset;
     int key_start;
     int header_size;
@@ -354,7 +355,7 @@ static int read_header(AVFormatContext *s)
             if (ret < 0)
                 return ret;
 
-            sst->start_offset = avio_tell(pb);
+            sst->data_offset = avio_tell(pb);
             ffstream(st)->request_probe = 0;
             ffstream(st)->need_parsing = ffstream(sst->xctx->streams[0])->need_parsing;
         } else {
@@ -363,6 +364,7 @@ static int read_header(AVFormatContext *s)
             st->codecpar->ch_layout.nb_channels = nb_channels;
             st->codecpar->sample_rate = rate;
             st->codecpar->block_align = block_align;
+            sst->data_offset = sst->start_offset;
 
             if (get_extradata > 0) {
                 ret = ff_alloc_extradata(st->codecpar, get_extradata);
@@ -396,7 +398,7 @@ static int read_header(AVFormatContext *s)
 
         if (n == 0) {
             SABStream *sst = st->priv_data;
-            avio_seek(pb, sst->start_offset, SEEK_SET);
+            avio_seek(pb, sst->data_offset, SEEK_SET);
         }
     }
 
