@@ -2648,7 +2648,7 @@ static int parse_sb(ubi_sb_header *sb, AVFormatContext *s)
             bst->ctx->probesize = 0;
             bst->ctx->max_analyze_duration = 0;
             bst->ctx->interrupt_callback = s->interrupt_callback;
-            bst->ctx->pb = bst->pb;
+            bst->ctx->pb = bst->pb ? bst->pb : pb;
             bst->ctx->io_open = NULL;
             bst->ctx->skip_initial_bytes = 0;
 
