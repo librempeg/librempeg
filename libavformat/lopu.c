@@ -30,12 +30,17 @@ typedef struct LOPUDemuxContext {
 
 static int lopu_probe(const AVProbeData *p)
 {
-    if (AV_RL32(p->buf) == MKTAG('L','O','P','U') &&
-        AV_RL32(p->buf+8) > 0 &&
-        AV_RL16(p->buf+12) > 0)
-        return AVPROBE_SCORE_MAX/2;
+    if (AV_RL32(p->buf) != MKTAG('L','O','P','U'))
+        return 0;
 
-    return 0;
+    if (p->buf_size < 16)
+        return 0;
+    if ((int)AV_RL32(p->buf+8) <= 0)
+        return 0;
+    if ((int)AV_RL32(p->buf+12) <= 0)
+        return 0;
+
+    return AVPROBE_SCORE_MAX;
 }
 
 static int lopu_read_header(AVFormatContext *s)
