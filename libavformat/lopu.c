@@ -73,7 +73,7 @@ static int lopu_read_header(AVFormatContext *s)
     st->codecpar->codec_id = AV_CODEC_ID_OPUS;
     st->codecpar->sample_rate = rate;
     st->codecpar->ch_layout.nb_channels = nb_channels;
-    ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+    ffstream(st)->need_parsing = AVSTREAM_PARSE_HEADERS;
 
     ret = ff_alloc_extradata(st->codecpar, 19 + 2 + nb_channels);
     if (ret < 0)
