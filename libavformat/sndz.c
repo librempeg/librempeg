@@ -176,7 +176,7 @@ static int read_header(AVFormatContext *s)
 
             AV_WL32(st->codecpar->extradata, 3);
             AV_WB32(st->codecpar->extradata+4, config);
-            st->codecpar->block_align = 4 * (((config >> 5) & 0x7ff) + 1);
+            st->codecpar->block_align = (1 << ((config>>3) & 3)) * (((config >> 5) & 0x7ff) + 1);
 
             ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
         }
