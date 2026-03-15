@@ -84,6 +84,7 @@ const FFInputFormat ff_mtaf_demuxer = {
     .p.name         = "mtaf",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Konami PS2 MTAF"),
     .p.extensions   = "mtaf",
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
