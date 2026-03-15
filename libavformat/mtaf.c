@@ -25,7 +25,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int mtaf_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (p->buf_size < 0x800)
         return 0;
@@ -39,7 +39,7 @@ static int mtaf_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int mtaf_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     int stream_count;
@@ -72,7 +72,7 @@ static int mtaf_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int mtaf_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
     AVIOContext *pb = s->pb;
@@ -84,7 +84,7 @@ const FFInputFormat ff_mtaf_demuxer = {
     .p.name         = "mtaf",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Konami PS2 MTAF"),
     .p.extensions   = "mtaf",
-    .read_probe     = mtaf_probe,
-    .read_header    = mtaf_read_header,
-    .read_packet    = mtaf_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
