@@ -145,7 +145,7 @@ static int decode_registered_user_data_closed_caption(H2645SEIA53Caption *h,
 static int decode_registered_user_data(H2645SEI *h, GetByteContext *gb,
                                        enum AVCodecID codec_id, void *logctx)
 {
-    int country_code, provider_code;
+    int country_code, provider_code = 0;
 
     if (bytestream2_get_bytes_left(gb) < 3)
         return AVERROR_INVALIDDATA;
@@ -548,6 +548,10 @@ int ff_h2645_sei_ctx_replace(H2645SEI *dst, const H2645SEI *src)
         av_buffer_unref(&dst->unregistered.buf_ref[i]);
     dst->unregistered.nb_buf_ref = 0;
 
+    ret = av_buffer_replace(&dst->lcevc.info, src->lcevc.info);
+    if (ret < 0)
+        return ret;
+
     if (src->unregistered.nb_buf_ref) {
         ret = av_reallocp_array(&dst->unregistered.buf_ref,
                                 src->unregistered.nb_buf_ref,
@@ -844,6 +848,13 @@ FF_ENABLE_DEPRECATION_WARNINGS
         }
     }
 
+    if (sei->lcevc.info) {
+        HEVCSEILCEVC *lcevc = &sei->lcevc;
+        ret = ff_frame_new_side_data_from_buf(avctx, frame, AV_FRAME_DATA_LCEVC, &lcevc->info);
+        if (ret < 0)
+            return ret;
+    }
+
     if (sei->film_grain_characteristics && sei->film_grain_characteristics->present) {
         H2645SEIFilmGrainCharacteristics *fgc = sei->film_grain_characteristics;
         AVFilmGrainParams *fgp = av_film_grain_params_create_side_data(frame);
@@ -934,6 +945,7 @@ void ff_h2645_sei_reset(H2645SEI *s)
     av_freep(&s->unregistered.buf_ref);
     av_buffer_unref(&s->dynamic_hdr_plus.info);
     av_buffer_unref(&s->dynamic_hdr_vivid.info);
+    av_buffer_unref(&s->lcevc.info);
 
     s->ambient_viewing_environment.present = 0;
     s->mastering_display.present = 0;
