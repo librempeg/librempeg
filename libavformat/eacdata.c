@@ -29,6 +29,7 @@
  */
 
 #include "libavutil/channel_layout.h"
+#include "libavutil/intreadwrite.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
@@ -39,9 +40,20 @@ static int cdata_probe(const AVProbeData *p)
 {
     const uint8_t *b = p->buf;
 
-    if (b[0] == 0x04 && (b[1] == 0x00 || b[1] == 0x04 || b[1] == 0x0C || b[1] == 0x14))
-        return AVPROBE_SCORE_MAX/8;
-    return 0;
+    switch (AV_RB16(b)) {
+    case 0x0400:
+    case 0x0404:
+    case 0x040C:
+    case 0x0414:
+        break;
+    default:
+        return 0;
+    }
+
+    if (AV_RB16(b+2) == 0)
+        return 0;
+
+    return AVPROBE_SCORE_MAX/3;
 }
 
 static int cdata_read_header(AVFormatContext *s)
