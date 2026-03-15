@@ -2209,22 +2209,25 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             int offset = block * nb_samples_per_block;
 
             for (int channel = 0; channel < channels; channel += 2) {
+                ADPCMChannelStatus *cs0 = &c->status[channel + 0];
+                ADPCMChannelStatus *cs1 = &c->status[channel + 1];
+
                 bytestream2_skipu(&gb, 4);
-                c->status[channel    ].step      = bytestream2_get_le16u(&gb) & 0x1f;
-                c->status[channel + 1].step      = bytestream2_get_le16u(&gb) & 0x1f;
-                c->status[channel    ].predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
+                cs0->step = bytestream2_get_le16u(&gb) & 0x1f;
+                cs1->step = bytestream2_get_le16u(&gb) & 0x1f;
+                cs0->predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
                 bytestream2_skipu(&gb, 2);
-                c->status[channel + 1].predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
+                cs1->predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
                 bytestream2_skipu(&gb, 2);
                 for (int n = 0; n < nb_samples_per_block; n += 2) {
                     int v = bytestream2_get_byteu(&gb);
-                    samples_p[channel][offset + n    ] = adpcm_mtaf_expand_nibble(&c->status[channel], v & 0x0F);
-                    samples_p[channel][offset + n + 1] = adpcm_mtaf_expand_nibble(&c->status[channel], v >> 4  );
+                    samples_p[channel][offset + n    ] = adpcm_mtaf_expand_nibble(cs0, v & 0x0F);
+                    samples_p[channel][offset + n + 1] = adpcm_mtaf_expand_nibble(cs0, v >> 4  );
                 }
                 for (int n = 0; n < nb_samples_per_block; n += 2) {
                     int v = bytestream2_get_byteu(&gb);
-                    samples_p[channel + 1][offset + n    ] = adpcm_mtaf_expand_nibble(&c->status[channel + 1], v & 0x0F);
-                    samples_p[channel + 1][offset + n + 1] = adpcm_mtaf_expand_nibble(&c->status[channel + 1], v >> 4  );
+                    samples_p[channel + 1][offset + n    ] = adpcm_mtaf_expand_nibble(cs1, v & 0x0F);
+                    samples_p[channel + 1][offset + n + 1] = adpcm_mtaf_expand_nibble(cs1, v >> 4  );
                 }
             }
         }
