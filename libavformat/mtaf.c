@@ -43,25 +43,28 @@ static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     int stream_count;
+    int64_t duration;
     AVStream *st;
 
-    st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
-
     avio_skip(pb, 0x5c);
-    st->duration = avio_rl32(pb);
+    duration = avio_rl32(pb);
     avio_skip(pb, 1);
     stream_count = avio_r8(pb);
     if (!stream_count)
         return AVERROR_INVALIDDATA;
 
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
+
     st->start_time = 0;
+    st->duration = duration;
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_MTAF;
     st->codecpar->ch_layout.nb_channels = 2 * stream_count;
     st->codecpar->sample_rate = 48000;
     st->codecpar->block_align = 0x110 * st->codecpar->ch_layout.nb_channels / 2;
+
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     avio_seek(pb, 0x7f8, SEEK_SET);
