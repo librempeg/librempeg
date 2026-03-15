@@ -56,6 +56,7 @@ static int read_header(AVFormatContext *s)
     if (!stream_count)
         return AVERROR_INVALIDDATA;
 
+    st->start_time = 0;
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_MTAF;
     st->codecpar->ch_layout.nb_channels = 2 * stream_count;
