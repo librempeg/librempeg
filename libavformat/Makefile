@@ -776,6 +776,7 @@ OBJS-$(CONFIG_TWODX9_DEMUXER)            += 2dx.o riff.o
 OBJS-$(CONFIG_TWOPFS_DEMUXER)            += 2pfs.o pcm.o
 OBJS-$(CONFIG_TY_DEMUXER)                += ty.o
 OBJS-$(CONFIG_TXD_DEMUXER)               += txd.o
+OBJS-$(CONFIG_UE4OPUS_DEMUXER)           += ue4opus.o
 OBJS-$(CONFIG_UBIBAO_DEMUXER)            += ubibao.o
 OBJS-$(CONFIG_UBIBNM_DEMUXER)            += ubibnm.o
 OBJS-$(CONFIG_UEBA_DEMUXER)              += ueba.o
