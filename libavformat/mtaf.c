@@ -67,11 +67,7 @@ static int read_header(AVFormatContext *s)
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
-    avio_seek(pb, 0x7f8, SEEK_SET);
-    if (avio_rl32(pb) != MKTAG('D','A','T','A'))
-        return AVERROR_INVALIDDATA;
-    if (avio_rl32(pb) == 0)
-        return AVERROR_INVALIDDATA;
+    avio_seek(pb, 0x800, SEEK_SET);
 
     return 0;
 }
