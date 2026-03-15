@@ -86,11 +86,14 @@ static int cdata_read_header(AVFormatContext *s)
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
+
+    st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_tag = 0; /* no fourcc */
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_EA_XAS;
     st->codecpar->ch_layout = channel_layout;
     st->codecpar->sample_rate = sample_rate;
+
     avpriv_set_pts_info(st, 64, 1, sample_rate);
 
     return 0;
