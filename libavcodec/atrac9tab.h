@@ -84,6 +84,15 @@ static const ATRAC9BlockConfig at9_block_layout[] = {
         .plane_map       = { { 0, 1 }, { 2, 3 }, },
         .count           = 2,
     },
+    { /* LFE */
+        .channel_layout  = {
+            .nb_channels = 1,
+            .order = AV_CHANNEL_ORDER_NATIVE,
+            .u.mask = AV_CH_LOW_FREQUENCY,
+        },
+        .type            = { ATRAC9_BLOCK_TYPE_LFE, },
+        .count           = 1,
+    },
 };
 
 static const uint8_t at9_tab_sri_frame_log2[] = {
