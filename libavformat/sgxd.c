@@ -59,7 +59,7 @@ static int read_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX/3;
 }
 
-static int find_chunk(AVIOContext *pb, uint32_t chunk_id, int64_t start_offset)
+static int find_chunk(AVIOContext *pb, uint32_t chunk_id)
 {
     while (!avio_feof(pb)) {
         uint32_t chunk_type = avio_rb32(pb);
@@ -122,7 +122,7 @@ static int read_header(AVFormatContext *s)
             return ret;
     }
 
-    ret = find_chunk(pb, AV_RB32("WAVE"), 16);
+    ret = find_chunk(pb, AV_RB32("WAVE"));
     if (ret < 0)
         return ret;
 
@@ -204,7 +204,7 @@ static int read_header(AVFormatContext *s)
             if ((ret = ff_get_wav_header(s, pb, st->codecpar, avio_rl32(pb), 0)) < 0)
                 return ret;
 
-            ret = find_chunk(pb, AV_RB32("data"), avio_tell(pb));
+            ret = find_chunk(pb, AV_RB32("data"));
             if (ret < 0)
                 return ret;
 
