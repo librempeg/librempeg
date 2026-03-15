@@ -62,15 +62,13 @@ static int sort_streams(const void *a, const void *b)
 static int read_header(AVFormatContext *s)
 {
     SNDZContext *sndz = s->priv_data;
-    int entries, entry_size, data_size;
+    int64_t offset = 0, data_size;
     AVIOContext *pb = s->pb;
+    int entries, entry_size;
     int ret, nb_streams;
-    int64_t offset = 0;
 
     avio_skip(pb, 8);
     data_size = avio_rl32(pb);
-    if (data_size <= 0)
-        return AVERROR_INVALIDDATA;
 
     avio_seek(pb, 0x70, SEEK_SET);
     avio_skip(pb, avio_rl32(pb) - 4);
