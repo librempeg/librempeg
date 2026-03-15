@@ -1633,9 +1633,23 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         nb_samples = (buf_size - 6 * ch) * 2 / ch;
         break;
     case AV_CODEC_ID_ADPCM_MTAF:
-        if (block_align > 0)
-            buf_size = FFMIN(buf_size, block_align);
-        nb_samples = (buf_size - 16 * (ch / 2)) * 2 / ch;
+        {
+            int left = buf_size;
+
+            if (block_align <= 0)
+                block_align = left;
+
+            nb_samples = 0;
+            while (left > 0) {
+                const int block_size = FFMIN(left, block_align);
+
+                if (block_size <= 0)
+                    break;
+
+                nb_samples += (block_size - 16 * (ch / 2)) * 2 / ch;
+                left -= block_size;
+            }
+        }
         break;
     case AV_CODEC_ID_ADPCM_SBPRO_2:
     case AV_CODEC_ID_ADPCM_SBPRO_3:
@@ -2188,23 +2202,30 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         ) /* End of CASE */
     CASE(ADPCM_MTAF,
-        for (int channel = 0; channel < channels; channel += 2) {
-            bytestream2_skipu(&gb, 4);
-            c->status[channel    ].step      = bytestream2_get_le16u(&gb) & 0x1f;
-            c->status[channel + 1].step      = bytestream2_get_le16u(&gb) & 0x1f;
-            c->status[channel    ].predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
-            bytestream2_skipu(&gb, 2);
-            c->status[channel + 1].predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
-            bytestream2_skipu(&gb, 2);
-            for (int n = 0; n < nb_samples; n += 2) {
-                int v = bytestream2_get_byteu(&gb);
-                samples_p[channel][n    ] = adpcm_mtaf_expand_nibble(&c->status[channel], v & 0x0F);
-                samples_p[channel][n + 1] = adpcm_mtaf_expand_nibble(&c->status[channel], v >> 4  );
-            }
-            for (int n = 0; n < nb_samples; n += 2) {
-                int v = bytestream2_get_byteu(&gb);
-                samples_p[channel + 1][n    ] = adpcm_mtaf_expand_nibble(&c->status[channel + 1], v & 0x0F);
-                samples_p[channel + 1][n + 1] = adpcm_mtaf_expand_nibble(&c->status[channel + 1], v >> 4  );
+        const int block_size = (avctx->block_align > 0) ? FFMIN(avctx->block_align, avpkt->size) : avpkt->size;
+        const int nb_samples_per_block = block_size - 16 * (channels / 2) * 2 / channels;
+
+        for (int block = 0; block < avpkt->size / block_size; block++) {
+            int offset = block * nb_samples_per_block;
+
+            for (int channel = 0; channel < channels; channel += 2) {
+                bytestream2_skipu(&gb, 4);
+                c->status[channel    ].step      = bytestream2_get_le16u(&gb) & 0x1f;
+                c->status[channel + 1].step      = bytestream2_get_le16u(&gb) & 0x1f;
+                c->status[channel    ].predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
+                bytestream2_skipu(&gb, 2);
+                c->status[channel + 1].predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
+                bytestream2_skipu(&gb, 2);
+                for (int n = 0; n < nb_samples_per_block; n += 2) {
+                    int v = bytestream2_get_byteu(&gb);
+                    samples_p[channel][offset + n    ] = adpcm_mtaf_expand_nibble(&c->status[channel], v & 0x0F);
+                    samples_p[channel][offset + n + 1] = adpcm_mtaf_expand_nibble(&c->status[channel], v >> 4  );
+                }
+                for (int n = 0; n < nb_samples_per_block; n += 2) {
+                    int v = bytestream2_get_byteu(&gb);
+                    samples_p[channel + 1][offset + n    ] = adpcm_mtaf_expand_nibble(&c->status[channel + 1], v & 0x0F);
+                    samples_p[channel + 1][offset + n + 1] = adpcm_mtaf_expand_nibble(&c->status[channel + 1], v >> 4  );
+                }
             }
         }
         ) /* End of CASE */
