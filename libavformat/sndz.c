@@ -127,8 +127,10 @@ static int read_header(AVFormatContext *s)
         stream_size = avio_rl32(pb);
         stream_offset = avio_rl32(pb);
 
-        if (channels <= 0 || sample_rate <= 0)
-            return AVERROR_INVALIDDATA;
+        if (channels <= 0 || sample_rate <= 0) {
+            avio_seek(pb, entry_end, SEEK_SET);
+            continue;
+        }
 
         switch (codec) {
         case 0x02:
@@ -227,6 +229,9 @@ static int read_header(AVFormatContext *s)
             return AVERROR_INVALIDDATA;
         }
     }
+
+    if (s->nb_streams <= 0)
+        return AVERROR_INVALIDDATA;
 
     qsort(s->streams, s->nb_streams, sizeof(AVStream *), sort_streams);
     for (int n = 0; n < s->nb_streams; n++) {
