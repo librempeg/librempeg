@@ -154,6 +154,7 @@ static int read_header(AVFormatContext *s)
             align = 512;
             break;
         default:
+            avpriv_request_sample(s, "codec %X", codec);
             return AVERROR_PATCHWELCOME;
         }
 
