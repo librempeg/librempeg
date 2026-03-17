@@ -503,6 +503,7 @@ extern const FFInputFormat  ff_psnd_demuxer;
 extern const FFOutputFormat ff_psp_muxer;
 extern const FFInputFormat  ff_pva_demuxer;
 extern const FFInputFormat  ff_pvf_demuxer;
+extern const FFInputFormat  ff_pxnd_demuxer;
 extern const FFInputFormat  ff_qcp_demuxer;
 extern const FFInputFormat  ff_qoa_demuxer;
 extern const FFOutputFormat ff_qoa_muxer;
