@@ -91,6 +91,12 @@ typedef struct MOVDref {
     int16_t nlvl_to, nlvl_from;
 } MOVDref;
 
+typedef struct MovTref {
+    uint32_t    name;
+    int         nb_id;
+    uint32_t   *id; ///< trackID of the referenced track
+} MovTref;
+
 typedef struct MOVAtom {
     uint32_t type;
     int64_t size; /* total size (excluding the size and type fields) */
@@ -222,9 +228,8 @@ typedef struct MOVStreamContext {
     unsigned drefs_count;
     MOVDref *drefs;
     int dref_id;
-    unsigned tref_flags;
-    int tref_id;
-    int timecode_track;
+    int nb_tref_tags;
+    MovTref *tref_tags;
     int width;            ///< tkhd width
     int height;           ///< tkhd height
     int h_spacing;        ///< pasp hSpacing
@@ -433,8 +438,6 @@ void ff_mp4_parse_es_descr(AVIOContext *pb, int *es_id);
 #define MOV_SAMPLE_DEPENDENCY_UNKNOWN 0x0
 #define MOV_SAMPLE_DEPENDENCY_YES     0x1
 #define MOV_SAMPLE_DEPENDENCY_NO      0x2
-
-#define MOV_TREF_FLAG_ENHANCEMENT     0x1
 
 #define TAG_IS_AVCI(tag)                    \
     ((tag) == MKTAG('a', 'i', '5', 'p') ||  \
