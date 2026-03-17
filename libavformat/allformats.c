@@ -499,6 +499,7 @@ extern const FFInputFormat  ff_pmp_demuxer;
 extern const FFInputFormat  ff_pona_demuxer;
 extern const FFInputFormat  ff_pp_bnk_demuxer;
 extern const FFInputFormat  ff_psb_demuxer;
+extern const FFInputFormat  ff_psnd_demuxer;
 extern const FFOutputFormat ff_psp_muxer;
 extern const FFInputFormat  ff_pva_demuxer;
 extern const FFInputFormat  ff_pvf_demuxer;
