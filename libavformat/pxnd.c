@@ -44,11 +44,13 @@ static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     int rate, channels;
+    int64_t duration;
     AVStream *st;
 
     avio_skip(pb, 8);
     channels = avio_rb32(pb);
     rate = avio_rb32(pb);
+    duration = avio_rb32(pb);
     if (rate <= 0 || channels <= 0)
         return AVERROR_INVALIDDATA;
 
@@ -57,6 +59,7 @@ static int read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     st->start_time = 0;
+    st->duration = duration;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_AAC;
     st->codecpar->ch_layout.nb_channels = channels;
