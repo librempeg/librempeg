@@ -1087,12 +1087,29 @@ typedef struct AVStreamGroupLCEVC {
     int height;
 } AVStreamGroupLCEVC;
 
+/**
+ * AVStreamGroupTREF is meant to define the relation between video, audio,
+ * or subtitle streams, and a data stream containing metadata.
+ *
+ * No more than one stream of @ref AVCodecParameters.codec_type "codec_type"
+ * AVMEDIA_TYPE_DATA shall be present.
+ */
+typedef struct AVStreamGroupTREF {
+    const AVClass *av_class;
+
+    /**
+     * Index of the metadata stream in the AVStreamGroup.
+     */
+    unsigned int metadata_index;
+} AVStreamGroupTREF;
+
 enum AVStreamGroupParamsType {
     AV_STREAM_GROUP_PARAMS_NONE,
     AV_STREAM_GROUP_PARAMS_IAMF_AUDIO_ELEMENT,
     AV_STREAM_GROUP_PARAMS_IAMF_MIX_PRESENTATION,
     AV_STREAM_GROUP_PARAMS_TILE_GRID,
     AV_STREAM_GROUP_PARAMS_LCEVC,
+    AV_STREAM_GROUP_PARAMS_TREF,
 };
 
 struct AVIAMFAudioElement;
@@ -1135,6 +1152,7 @@ typedef struct AVStreamGroup {
         struct AVIAMFMixPresentation *iamf_mix_presentation;
         struct AVStreamGroupTileGrid *tile_grid;
         struct AVStreamGroupLCEVC *lcevc;
+        struct AVStreamGroupTREF *tref;
     } params;
 
     /**
