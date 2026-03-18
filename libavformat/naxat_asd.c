@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_header(AVStream *st, AVIOContext *pb)
 {
@@ -111,25 +112,13 @@ static int naxat_asd_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int naxat_asd_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int64_t block_size;
-
-    pkt->pos = avio_tell(pb);
-    block_size = avio_size(pb) - pkt->pos;
-    if (block_size > s->streams[0]->codecpar->block_align)
-        block_size = s->streams[0]->codecpar->block_align;
-    return av_get_packet(pb, pkt, block_size);
-}
-
 const FFInputFormat ff_naxat_asd_demuxer = {
     .p.name         = "naxat_asd",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Naxat ASD"),
     .p.extensions   = "asd",
     .read_probe     = naxat_asd_probe,
     .read_header    = naxat_asd_read_header,
-    .read_packet    = naxat_asd_read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
 
 typedef struct NaxatASDStream {
