@@ -48,7 +48,7 @@ static int read_header(AVStream *st, AVIOContext *pb)
 
     if (format == 1) {
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
-        st->codecpar->block_align = 1024 * st->codecpar->ch_layout.nb_channels;
+        st->codecpar->block_align = 2 * st->codecpar->ch_layout.nb_channels;
     }
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
