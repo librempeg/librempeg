@@ -25,58 +25,84 @@
 #include "internal.h"
 #include "pcm.h"
 
+#define READ_PROBE(score, R32, R16)             \
+do {                                            \
+    if (p->buf_size < 0x60) {                   \
+        score = 0;                              \
+        break;                                  \
+    }                                           \
+                                                \
+    if (R32(p->buf) == 0) {                     \
+        score = 0;                              \
+        break;                                  \
+    }                                           \
+    score++;                                    \
+                                                \
+    if (R32(p->buf+4) == 0) {                   \
+        score = 0;                              \
+        break;                                  \
+    }                                           \
+    score++;                                    \
+                                                \
+    if (((int)R32(p->buf+8)) <= 0) {            \
+        score = 0;                              \
+        break;                                  \
+    }                                           \
+    score += 4;                                 \
+                                                \
+    if (R16(p->buf+0xc) != 0 &&                 \
+        R16(p->buf+0xc) != 1) {                 \
+        score = 0;                              \
+        break;                                  \
+    }                                           \
+    score += 4;                                 \
+                                                \
+    if (R16(p->buf+0xe) != 0) {                 \
+        score = 0;                              \
+        break;                                  \
+    }                                           \
+    score += 2;                                 \
+                                                \
+    for (int n = 0 ; n < 16; n++) {             \
+        if (R16(p->buf + 0x1c + n * 2) != 0)    \
+            score += 2;                         \
+    }                                           \
+                                                \
+    if (R16(p->buf+0x3c) != 0) {                \
+        score = 0;                              \
+        break;                                  \
+    }                                           \
+    score += 2;                                 \
+} while (0);
+
 static int read_probe(const AVProbeData *p)
 {
-    int score = 0;
+    int score_le = 0, score_be = 0;
 
-    if (p->buf_size < 0x60)
-        return 0;
+    READ_PROBE(score_le, AV_RL32, AV_RL16)
+    READ_PROBE(score_be, AV_RB32, AV_RB16)
 
-    if (AV_RB32(p->buf) == 0)
-        return 0;
-    score++;
-
-    if (AV_RB32(p->buf+4) == 0)
-        return 0;
-    score++;
-
-    if ((int32_t)AV_RB32(p->buf+8) <= 0)
-        return 0;
-    score += 4;
-
-    if (AV_RB16(p->buf+0xc) != 0 &&
-        AV_RB16(p->buf+0xc) != 1)
-        return 0;
-    score += 4;
-
-    if (AV_RB16(p->buf+0xe) != 0)
-        return 0;
-    score += 2;
-
-    for (int n = 0 ; n < 16; n++) {
-        if (AV_RB16(p->buf + 0x1c + n * 2) != 0)
-            score += 2;
-    }
-
-    if (AV_RB16(p->buf+0x3c) != 0)
-        return 0;
-    score += 2;
-
-    return score;
+    return FFMAX(score_le, score_be);
 }
 
-static int read_header(AVFormatContext *s)
+typedef unsigned (*avio_r32)(AVIOContext *s);
+typedef unsigned (*avio_r16)(AVIOContext *s);
+
+static int read_header_e(AVFormatContext *s,
+                         int codec,
+                         avio_r32 r32,
+                         avio_r16 r16)
 {
     AVIOContext *pb = s->pb;
     int64_t duration;
     int ret, rate;
     AVStream *st;
 
-    duration = avio_rb32(pb);
+    duration = r32(pb);
     avio_skip(pb, 4);
-    rate = avio_rb32(pb);
+    rate = r32(pb);
     avio_skip(pb, 2);
-    if (avio_rb16(pb) != 0)
+    if (r16(pb) != 0)
         return AVERROR_INVALIDDATA;
     if (rate <= 0)
         return AVERROR_INVALIDDATA;
@@ -88,7 +114,7 @@ static int read_header(AVFormatContext *s)
     st->start_time = 0;
     st->duration = duration;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP;
+    st->codecpar->codec_id = codec;
     st->codecpar->sample_rate = rate;
     st->codecpar->ch_layout.nb_channels = 1;
     st->codecpar->block_align = 8;
@@ -102,6 +128,19 @@ static int read_header(AVFormatContext *s)
     avio_seek(pb, 0x60, SEEK_SET);
 
     return 0;
+}
+
+static int read_header(AVFormatContext *s)
+{
+    int ret;
+
+    ret = read_header_e(s, AV_CODEC_ID_ADPCM_NDSP, avio_rb32, avio_rb16);
+    if (ret == AVERROR_INVALIDDATA) {
+        avio_seek(s->pb, 0, SEEK_SET);
+        ret = read_header_e(s, AV_CODEC_ID_ADPCM_NDSP_LE, avio_rl32, avio_rl16);
+    }
+
+    return ret;
 }
 
 const FFInputFormat ff_ngcdspstd_demuxer = {
