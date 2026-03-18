@@ -91,7 +91,7 @@ static int read_header(AVFormatContext *s)
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP;
     st->codecpar->sample_rate = rate;
     st->codecpar->ch_layout.nb_channels = 1;
-    st->codecpar->block_align = 512;
+    st->codecpar->block_align = 8;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
