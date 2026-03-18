@@ -128,7 +128,7 @@ typedef struct NaxatASDStream {
 
 static int naxat_asd_bnk_probe(const AVProbeData *p)
 {
-    int score = AVPROBE_SCORE_MAX / 2;
+    int score = AVPROBE_SCORE_MAX / 3;
 
     // identifier?
     if (AV_RL16(p->buf) != 0x1001)
