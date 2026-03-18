@@ -49,24 +49,21 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int ret;
-    uint8_t channels;
-    uint32_t skip, pt_entries;
-    int64_t pkt_off, ts;
     XOpusDemuxContext *dc = s->priv_data;
     AVIOContext *pb = s->pb;
-    AVStream *st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
+    uint32_t skip, pt_entries;
+    int64_t pkt_off, ts;
+    uint8_t channels;
+    int ret;
 
     avio_skip(pb, 5);
     channels = avio_r8(pb);
     if (channels == 0)
         return AVERROR_INVALIDDATA;
-    if (channels > 2) {
-        avpriv_request_sample(s, "channels %d", channels);
-        return AVERROR_PATCHWELCOME;
-    }
+
+    AVStream *st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
 
     st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
