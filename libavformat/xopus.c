@@ -29,7 +29,7 @@ typedef struct XOpusDemuxContext {
     int64_t data_end;
 } XOpusDemuxContext;
 
-static int xopus_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     int score;
     if (memcmp(p->buf, "XOpu", 4) || p->buf[4] != 1 || p->buf[6] != 0x30 || p->buf[7] != 0)
@@ -47,7 +47,7 @@ static int xopus_probe(const AVProbeData *p)
     return FFMAX(score, 0);
 }
 
-static int xopus_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     int ret;
     uint8_t channels;
@@ -108,7 +108,7 @@ static int xopus_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int xopus_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIndexEntry *e;
     AVStream *st = s->streams[0];
@@ -143,7 +143,7 @@ const FFInputFormat ff_xopus_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Exient XOpus"),
     .p.extensions   = "xopus",
     .priv_data_size = sizeof(XOpusDemuxContext),
-    .read_probe     = xopus_probe,
-    .read_header    = xopus_read_header,
-    .read_packet    = xopus_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
