@@ -3897,7 +3897,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_WWVORBIS,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "wwvorbis",
-        .long_name = NULL_IF_CONFIG_SMALL("Wwise Vorbis"),
+        .long_name = NULL_IF_CONFIG_SMALL("Audiokinetic Wwise Vorbis"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
     {
