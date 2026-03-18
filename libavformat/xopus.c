@@ -35,7 +35,7 @@ static int read_probe(const AVProbeData *p)
     if (memcmp(p->buf, "XOpu", 4) || p->buf[4] != 1 || p->buf[6] != 0x30 || p->buf[7] != 0)
         return 0;
 
-    if (p->buf_size < (0x20 + 2*AV_RL32(p->buf + 0x14)))
+    if (p->buf_size < (0x20 + 2LL*AV_RL32(p->buf + 0x14)))
         return 0;
 
     score = AVPROBE_SCORE_MAX;
@@ -78,13 +78,16 @@ static int read_header(AVFormatContext *s)
     st->duration = avio_rl32(pb);
     skip = avio_rl32(pb);
     pt_entries = avio_rl32(pb);
-    dc->data_end = 0x20 + 2*pt_entries + avio_rl32(pb);
+    dc->data_end = 0x20 + 2LL*pt_entries + avio_rl32(pb);
     avio_skip(pb, 4);
 
     ts = 0;
-    pkt_off = 0x20 + 2*pt_entries;
-    for (int i = 0; i < pt_entries; i++) {
+    pkt_off = 0x20 + 2LL*pt_entries;
+    for (unsigned i = 0; i < pt_entries; i++) {
         const int size = avio_rl16(pb);
+
+        if (avio_feof(pb))
+            return AVERROR_INVALIDDATA;
 
         if ((ret = av_add_index_entry(st, pkt_off, ts, size, 0, AVINDEX_KEYFRAME)) < 0)
             return ret;
