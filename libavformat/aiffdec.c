@@ -138,6 +138,21 @@ static int get_aiff_header(AVFormatContext *s, int64_t size,
     } else if (version == AIFF_C_VERSION1) {
         par->codec_tag = avio_rl32(pb);
         par->codec_id  = ff_codec_get_id(ff_codec_aiff_tags, par->codec_tag);
+        if (par->codec_tag == AV_RL32("COMP") && size > 4) {
+            uint8_t name_size = avio_r8(pb);
+
+            if (name_size >= 16 && size >= name_size+4+1) {
+                uint8_t codec_name[16] = { 0 };
+
+                size -= avio_read(pb, codec_name, 16);
+                if (!memcmp(codec_name, "Relic Codec v1.6", 16)) {
+                    par->codec_id = AV_CODEC_ID_RELIC;
+                    par->block_align = 512;
+                }
+            }
+
+            size -= 2;
+        }
         if (par->codec_id == AV_CODEC_ID_NONE)
             avpriv_request_sample(s, "unknown or unsupported codec tag: %s",
                                   av_fourcc2str(par->codec_tag));
@@ -408,7 +423,7 @@ got_sound:
     if (!st->codecpar->block_align && st->codecpar->codec_id == AV_CODEC_ID_QCELP) {
         av_log(s, AV_LOG_WARNING, "qcelp without wave chunk, assuming full rate\n");
         st->codecpar->block_align = 35;
-    } else if (st->codecpar->block_align <= 0) {
+    } else if (st->codecpar->block_align <= 0 && st->codecpar->codec_id != AV_CODEC_ID_RELIC) {
         av_log(s, AV_LOG_ERROR, "could not find COMM tag or invalid block_align value\n");
         return AVERROR_INVALIDDATA;
     }
@@ -422,6 +437,22 @@ got_sound:
 
     /* Position the stream at the first block */
     avio_seek(pb, offset, SEEK_SET);
+
+    if (st->codecpar->codec_id == AV_CODEC_ID_RELIC) {
+        uint16_t bit_rate = avio_rb16(pb);
+
+        if (bit_rate < 8)
+            return AVERROR_INVALIDDATA;
+
+        ret = ff_alloc_extradata(st->codecpar, 6);
+        if (ret < 0)
+            return ret;
+
+        AV_WB16(st->codecpar->extradata, bit_rate);
+        AV_WB32(st->codecpar->extradata+2, 44100);
+
+        st->codecpar->block_align = (bit_rate >> 3) * st->codecpar->ch_layout.nb_channels;
+    }
 
     return 0;
 }
@@ -452,6 +483,7 @@ static int aiff_read_packet(AVFormatContext *s,
     case AV_CODEC_ID_GSM:
     case AV_CODEC_ID_QDM2:
     case AV_CODEC_ID_QCELP:
+    case AV_CODEC_ID_RELIC:
         size = st->codecpar->block_align;
         break;
     default:
