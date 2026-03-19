@@ -622,6 +622,7 @@ enum AVCodecID {
     AV_CODEC_ID_SKVORBIS,
     AV_CODEC_ID_NWA,
     AV_CODEC_ID_RCAVOC,
+    AV_CODEC_ID_RELIC,
 
     /* subtitle codecs */
     AV_CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.
