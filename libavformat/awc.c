@@ -488,6 +488,8 @@ static int read_header(AVFormatContext *s)
         st->codecpar->sample_rate = rate;
         st->codecpar->codec_id = codec;
 
+        avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+
         if (is_streamed && codec == AV_CODEC_ID_VORBIS) {
             PutByteContext pbc;
             int ret;
@@ -584,6 +586,9 @@ static int read_header(AVFormatContext *s)
             st->codecpar->block_align = st0->codecpar->block_align;
             st->codecpar->codec_type = st0->codecpar->codec_type;
             st->codecpar->codec_id = st0->codecpar->codec_id;
+
+            avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+
             ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
 
             avio_seek(pb, sinfo[i].vorbis_offset, SEEK_SET);
