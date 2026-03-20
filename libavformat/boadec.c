@@ -67,6 +67,8 @@ static int read_header(AVFormatContext *s)
         return AVERROR_INVALIDDATA;
     st->codecpar->block_align *= st->codecpar->ch_layout.nb_channels;
 
+    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+
     avio_seek(s->pb, data_offset, SEEK_SET);
 
     return 0;
