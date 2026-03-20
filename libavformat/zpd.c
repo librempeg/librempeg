@@ -89,6 +89,8 @@ static int read_header(AVFormatContext *s)
         st->start_time = 0;
         st->codecpar->sample_rate = 22050;
         st->codecpar->block_align = 1024;
+
+        avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
     }
 
     qsort(s->streams, s->nb_streams, sizeof(AVStream *), sort_streams);
