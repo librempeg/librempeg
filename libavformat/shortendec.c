@@ -31,7 +31,7 @@ static int shn_probe(const AVProbeData *p)
     GetBitContext gb;
     int version, internal_ftype, channels, blocksize;
 
-    if (AV_RB32(p->buf) != 0x616a6b67)
+    if (AV_RB32(p->buf) != AV_RB32("ajkg"))
         return 0;
     version = p->buf[4];
     if (init_get_bits8(&gb, p->buf + 5, p->buf_size - 5 - AV_INPUT_BUFFER_PADDING_SIZE) < 0)
