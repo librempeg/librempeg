@@ -127,6 +127,8 @@ static int msx_read_header(AVFormatContext *s)
         if (ret < 0)
             return ret;
 
+        avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+
         if (version == 1)
             mst->start_offset = avio_tell(pb) + 8;
         mst->end_offset = mst->start_offset + size;
