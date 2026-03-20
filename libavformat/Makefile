@@ -532,6 +532,7 @@ OBJS-$(CONFIG_NUT_MUXER)                 += nutenc.o nut.o
 OBJS-$(CONFIG_NUV_DEMUXER)               += nuv.o
 OBJS-$(CONFIG_NWA_DEMUXER)               += nwa.o pcm.o
 OBJS-$(CONFIG_NWAV_DEMUXER)              += nwav.o
+OBJS-$(CONFIG_NXA1_DEMUXER)              += nxa1.o
 OBJS-$(CONFIG_AV1_DEMUXER)               += av1dec.o
 OBJS-$(CONFIG_OBU_DEMUXER)               += av1dec.o
 OBJS-$(CONFIG_OBU_MUXER)                 += rawenc.o
