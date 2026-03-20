@@ -24,6 +24,7 @@
 #include "libavutil/channel_layout.h"
 #include "avformat.h"
 #include "demux.h"
+#include "internal.h"
 
 static int apc_probe(const AVProbeData *p)
 {
@@ -65,6 +66,8 @@ static int apc_read_header(AVFormatContext *s)
     st->codecpar->bit_rate = (int64_t)st->codecpar->bits_per_coded_sample * channels
                           * st->codecpar->sample_rate;
     st->codecpar->block_align = 1;
+
+    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     return 0;
 }
