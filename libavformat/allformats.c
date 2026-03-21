@@ -707,6 +707,7 @@ extern const FFInputFormat  ff_xbin_demuxer;
 extern const FFInputFormat  ff_xmd_demuxer;
 extern const FFInputFormat  ff_xmu_demuxer;
 extern const FFInputFormat  ff_xmv_demuxer;
+extern const FFInputFormat  ff_xnb_demuxer;
 extern const FFInputFormat  ff_xopus_demuxer;
 extern const FFInputFormat  ff_xpcm_demuxer;
 extern const FFInputFormat  ff_xssb_demuxer;
