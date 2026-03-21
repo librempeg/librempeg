@@ -45,7 +45,12 @@ static int read_probe(const AVProbeData *p)
 
     if (AV_RB32(p->buf+8) != MKBETAG('I', 'P', 'S', '0'))
         return 0;
-
+    if (p->buf[19] == 0)
+        return 0;
+    if ((int)AV_RL16(p->buf+20) <= 0)
+        return 0;
+    if (AV_RL16(p->buf+24) <= 0x40)
+        return 0;
     if (AV_RB32(p->buf+40) != MKBETAG('A', 'P', 'C', 'M'))
         return 0;
 
