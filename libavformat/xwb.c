@@ -81,6 +81,14 @@ static int64_t seek_data(void *opaque, int64_t offset, int whence)
 
 typedef unsigned int (*avio_r32)(AVIOContext *s);
 
+static const uint16_t wma_avg_bps_index[7] = {
+    12000, 24000, 4000, 6000, 8000, 20000, 2500
+};
+
+static const uint16_t wma_block_align_index[17] = {
+    929, 1487, 1280, 2230, 8917, 8192, 4459, 5945, 2304, 1536, 1485, 1008, 2731, 4096, 6827, 5462, 1280
+};
+
 static int read_header(AVFormatContext *s)
 {
     int64_t suboffset, offset, first_start_offset, entry_offset, entry_size, data_offset;
@@ -374,7 +382,7 @@ static int read_header(AVFormatContext *s)
                 codec = AV_CODEC_ID_ADPCM_MS;
                 break;
             case 3:
-                codec = 0;
+                codec = bps ? AV_CODEC_ID_WMAPRO : AV_CODEC_ID_WMAV2;
                 break;
             default:
                 return AVERROR_INVALIDDATA;
@@ -394,7 +402,7 @@ static int read_header(AVFormatContext *s)
         chunk_id = avio_rb32(pb);
         avio_skip(pb, 4);
         extra_id = le ? avio_rl32(pb) : avio_rb32(pb);
-        if (codec == AV_CODEC_ID_WMAV2 || chunk_id == MKBETAG('R','I','F','F')) {
+        if ((chunk_id == 0x3026B275) || (chunk_id == MKBETAG('R','I','F','F'))) {
             if (!(xst->xctx = avformat_alloc_context()))
                 return AVERROR(ENOMEM);
 
@@ -488,6 +496,37 @@ static int read_header(AVFormatContext *s)
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
         } else if (codec == AV_CODEC_ID_PCM_U8) {
             st->codecpar->block_align = channels * 1024;
+            avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+        } else if (codec == AV_CODEC_ID_WMAV2) {
+            int bps_index = block_align >> 5;
+            int block_index =  block_align & 0x1F;
+            int avg_bps = wma_avg_bps_index[bps_index] * 8;
+            block_align = wma_block_align_index[block_index];
+
+            ret = ff_alloc_extradata(st->codecpar, 6);
+            if (ret < 0)
+                return ret;
+
+            if (channels == 1) {
+                if (rate == 22050 && (avg_bps == 48000 || avg_bps == 192000)) {
+                    avg_bps = 20000;
+                } else if (rate == 32000 && (avg_bps == 48000 || avg_bps == 192000)) {
+                    avg_bps = 20000;
+                } else if (rate == 44100 && (avg_bps == 96000 || avg_bps == 192000)) {
+                    avg_bps = 48000;
+                }
+            } else if (channels == 2) {
+                if (rate == 22050 && (avg_bps == 48000 || avg_bps == 192000)) {
+                    avg_bps = 32000;
+                } else if (rate == 32000 && (avg_bps == 192000)) {
+                    avg_bps = 48000;
+                }
+            }
+
+            st->codecpar->block_align = block_align;
+            st->codecpar->bit_rate = avg_bps;
+            AV_WL32(st->codecpar->extradata + 0, 0);
+            AV_WL16(st->codecpar->extradata + 4, 0x1f);
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
         }
 
