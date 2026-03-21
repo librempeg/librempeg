@@ -810,6 +810,7 @@ OBJS-$(CONFIG_VPK_DEMUXER)               += vpk.o
 OBJS-$(CONFIG_VPLAYER_DEMUXER)           += vplayerdec.o subtitles.o
 OBJS-$(CONFIG_VQF_DEMUXER)               += vqf.o
 OBJS-$(CONFIG_VSF_DEMUXER)               += vsf.o pcm.o
+OBJS-$(CONFIG_VSSTR_DEMUXER)             += vsstr.o
 OBJS-$(CONFIG_VVC_DEMUXER)               += vvcdec.o rawdec.o
 OBJS-$(CONFIG_VVC_MUXER)                 += rawenc.o
 OBJS-$(CONFIG_W64_DEMUXER)               += wavdec.o w64.o pcm.o
