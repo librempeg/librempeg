@@ -29,7 +29,7 @@
 static const AVCodecTag rsd_tags[] = {
     { AV_CODEC_ID_ADPCM_PSX,       MKTAG('V','A','G',' ') },
     { AV_CODEC_ID_ADPCM_NDSP_LE,   MKTAG('G','A','D','P') },
-    { AV_CODEC_ID_ADPCM_NDSP,      MKTAG('W','A','D','P') },
+    { AV_CODEC_ID_ADPCM_NDSP_SI,   MKTAG('W','A','D','P') },
     { AV_CODEC_ID_ADPCM_IMA_RAD,   MKTAG('R','A','D','P') },
     { AV_CODEC_ID_ADPCM_IMA_WAV,   MKTAG('X','A','D','P') },
     { AV_CODEC_ID_PCM_S16BE,       MKTAG('P','C','M','B') },
@@ -125,7 +125,7 @@ static int rsd_read_header(AVFormatContext *s)
         if ((ret = ff_get_extradata(s, par, pb, 32)) < 0)
             return ret;
         break;
-    case AV_CODEC_ID_ADPCM_NDSP:
+    case AV_CODEC_ID_ADPCM_NDSP_SI:
         par->block_align = 8 * par->ch_layout.nb_channels;
         avio_skip(pb, 0x1A4 - avio_tell(pb));
 
@@ -160,7 +160,7 @@ static int rsd_read_header(AVFormatContext *s)
             case AV_CODEC_ID_ADPCM_NDSP_LE:
                 st->duration = av_get_audio_frame_duration2(par, remaining - start);
                 break;
-            case AV_CODEC_ID_ADPCM_NDSP:
+            case AV_CODEC_ID_ADPCM_NDSP_SI:
                 st->duration = (remaining - start) / (8 * par->ch_layout.nb_channels) * 14;
                 break;
             case AV_CODEC_ID_PCM_S16LE:
@@ -193,23 +193,10 @@ static int rsd_read_packet(AVFormatContext *s, AVPacket *pkt)
     pos = avio_tell(pb);
     if (par->codec_id == AV_CODEC_ID_ADPCM_IMA_RAD ||
         par->codec_id == AV_CODEC_ID_ADPCM_PSX     ||
+        par->codec_id == AV_CODEC_ID_ADPCM_NDSP_SI ||
         par->codec_id == AV_CODEC_ID_ADPCM_IMA_WAV ||
         par->codec_id == AV_CODEC_ID_XMA2) {
         ret = av_get_packet(pb, pkt, par->block_align);
-    } else if (par->codec_tag == MKTAG('W','A','D','P') &&
-               par->ch_layout.nb_channels > 1) {
-        int i, ch;
-
-        ret = av_new_packet(pkt, par->block_align);
-        if (ret < 0)
-            return ret;
-        for (i = 0; i < 4; i++) {
-            for (ch = 0; ch < par->ch_layout.nb_channels; ch++) {
-                pkt->data[ch * 8 + i * 2 + 0] = avio_r8(pb);
-                pkt->data[ch * 8 + i * 2 + 1] = avio_r8(pb);
-            }
-        }
-        ret = 0;
     } else {
         ret = av_get_packet(pb, pkt, size);
     }
