@@ -77,8 +77,13 @@
 #define AV_CPU_FLAG_I8MM         (1 << 9)
 #define AV_CPU_FLAG_SVE          (1 <<10)
 #define AV_CPU_FLAG_SVE2         (1 <<11)
+#define AV_CPU_FLAG_SME          (1 <<12)
 #define AV_CPU_FLAG_ARM_CRC      (1 <<13)
+#define AV_CPU_FLAG_SME2         (1 <<14)
+#define AV_CPU_FLAG_SME_I16I64   (1 <<15)
 #define AV_CPU_FLAG_SETEND       (1 <<16)
+#define AV_CPU_FLAG_PMULL        (1 <<17)
+#define AV_CPU_FLAG_EOR3         (1 <<18)
 
 #define AV_CPU_FLAG_MMI          (1 << 0)
 #define AV_CPU_FLAG_MSA          (1 << 1)

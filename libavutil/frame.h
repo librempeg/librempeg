@@ -230,6 +230,12 @@ enum AVFrameSideDataType {
     AV_FRAME_DATA_VIDEO_HINT,
 
     /**
+     * Raw LCEVC payload data, as a uint8_t array, with NAL emulation
+     * bytes intact.
+     */
+    AV_FRAME_DATA_LCEVC,
+
+    /**
      * This side data must be associated with a video frame.
      * The presence of this side data indicates that the video stream is
      * composed of multiple views (e.g. stereoscopic 3D content,

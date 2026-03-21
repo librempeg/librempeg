@@ -29,6 +29,7 @@
  */
 
 #include "libavutil/channel_layout.h"
+#include "libavutil/intreadwrite.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
@@ -39,9 +40,20 @@ static int cdata_probe(const AVProbeData *p)
 {
     const uint8_t *b = p->buf;
 
-    if (b[0] == 0x04 && (b[1] == 0x00 || b[1] == 0x04 || b[1] == 0x0C || b[1] == 0x14))
-        return AVPROBE_SCORE_MAX/8;
-    return 0;
+    switch (AV_RB16(b)) {
+    case 0x0400:
+    case 0x0404:
+    case 0x040C:
+    case 0x0414:
+        break;
+    default:
+        return 0;
+    }
+
+    if (AV_RB16(b+2) == 0)
+        return 0;
+
+    return AVPROBE_SCORE_MAX/3;
 }
 
 static int cdata_read_header(AVFormatContext *s)
@@ -74,11 +86,16 @@ static int cdata_read_header(AVFormatContext *s)
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
+
+    st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_tag = 0; /* no fourcc */
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_EA_XAS;
     st->codecpar->ch_layout = channel_layout;
     st->codecpar->sample_rate = sample_rate;
+    st->codecpar->block_align = 76 * channel_layout.nb_channels;
+    st->codecpar->bit_rate = 76LL * st->codecpar->sample_rate * st->codecpar->ch_layout.nb_channels * 8LL / 128;
+
     avpriv_set_pts_info(st, 64, 1, sample_rate);
 
     return 0;
@@ -87,8 +104,7 @@ static int cdata_read_header(AVFormatContext *s)
 static int cdata_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
-    const int packet_size = 76 * par->ch_layout.nb_channels;
-    int ret = av_get_packet(s->pb, pkt, packet_size);
+    int ret = av_get_packet(s->pb, pkt, par->block_align);
 
     if (ret < 0)
         return ret;

@@ -30,7 +30,7 @@ typedef struct LOPUSDemuxContext {
     int64_t data_end;
 } LOPUSDemuxContext;
 
-static int lopus_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     int offset = 0;
 
@@ -52,7 +52,7 @@ static int lopus_probe(const AVProbeData *p)
     return 0;
 }
 
-static int lopus_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     LOPUSDemuxContext *lc = s->priv_data;
     AVIOContext *pb = s->pb;
@@ -142,7 +142,7 @@ static int lopus_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int lopus_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     LOPUSDemuxContext *lc = s->priv_data;
     AVIOContext *pb = s->pb;
@@ -174,7 +174,7 @@ const FFInputFormat ff_lopus_demuxer = {
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "lopus",
     .priv_data_size = sizeof(LOPUSDemuxContext),
-    .read_probe     = lopus_probe,
-    .read_header    = lopus_read_header,
-    .read_packet    = lopus_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };

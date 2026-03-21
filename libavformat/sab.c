@@ -35,7 +35,11 @@
 
 typedef struct SABStream {
     int64_t start_offset;
+    int64_t data_offset;
     int64_t stop_offset;
+    int key_start;
+    int header_size;
+    int encryption;
 
     AVFormatContext *xctx;
     AVFormatContext *parent;
@@ -67,13 +71,48 @@ static int read_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
+static const uint8_t key[256] =
+{
+    0x3A,0x32,0x32,0x32,0x03,0x7E,0x12,0xF7,0xB2,0xE2,0xA2,0x67,0x32,0x32,0x22,0x32,
+    0x32,0x52,0x16,0x1B,0x3C,0xA1,0x54,0x7B,0x1B,0x97,0xA6,0x93,0x1A,0x4B,0xAA,0xA6,
+    0x7A,0x7B,0x1B,0x97,0xA6,0xF7,0x02,0xBB,0xAA,0xA6,0xBB,0xF7,0x2A,0x51,0xBE,0x03,
+    0xF4,0x2A,0x51,0xBE,0x03,0xF4,0x2A,0x51,0xBE,0x12,0x06,0x56,0x27,0x32,0x32,0x36,
+    0x32,0xB2,0x1A,0x3B,0xBC,0x91,0xD4,0x7B,0x58,0xFC,0x0B,0x55,0x2A,0x15,0xBC,0x40,
+    0x92,0x0B,0x5B,0x7C,0x0A,0x95,0x12,0x35,0xB8,0x63,0xD2,0x0B,0x3B,0xF0,0xC7,0x14,
+    0x51,0x5C,0x94,0x86,0x94,0x59,0x5C,0xFC,0x1B,0x17,0x3A,0x3F,0x6B,0x37,0x32,0x32,
+    0x30,0x32,0x72,0x7A,0x13,0xB7,0x26,0x60,0x7A,0x13,0xB7,0x26,0x50,0xBA,0x13,0xB4,
+    0x2A,0x50,0xBA,0x13,0xB5,0x2E,0x40,0xFA,0x13,0x95,0xAE,0x40,0x38,0x18,0x9A,0x92,
+    0xB0,0x38,0x00,0xFA,0x12,0xB1,0x7E,0x00,0xDB,0x96,0xA1,0x7C,0x08,0xDB,0x9A,0x91,
+    0xBC,0x08,0xD8,0x1A,0x86,0xE2,0x70,0x39,0x1F,0x86,0xE0,0x78,0x7E,0x03,0xE7,0x64,
+    0x51,0x9C,0x8F,0x34,0x6F,0x4E,0x41,0xFC,0x0B,0xD5,0xAE,0x41,0xFC,0x0B,0xD5,0xAE,
+    0x41,0xFC,0x3B,0x70,0x71,0x64,0x33,0x32,0x12,0x32,0x32,0x36,0x70,0x34,0x2B,0x56,
+    0x22,0x70,0x3A,0x13,0xB7,0x26,0x60,0xBA,0x1B,0x94,0xAA,0x40,0x38,0x00,0xFA,0xB2,
+    0xE2,0xA2,0x67,0x32,0x32,0x12,0x32,0xB2,0x32,0x32,0x32,0x32,0x75,0xA3,0x26,0x7B,
+    0x83,0x26,0xF9,0x83,0x2E,0xFF,0xE3,0x16,0x7D,0xC0,0x1E,0x63,0x21,0x07,0xE3,0x01,
+};
+
 static int read_data(void *opaque, uint8_t *buf, int buf_size)
 {
     SABStream *sst = opaque;
     AVFormatContext *s = sst->parent;
     AVIOContext *pb = s->pb;
+    int64_t pos;
+    int ret;
 
-    return avio_read(pb, buf, buf_size);
+    pos = avio_tell(pb) - sst->start_offset;
+    ret = avio_read(pb, buf, buf_size);
+
+    if (sst->encryption && ret > 0) {
+        const int header_size = sst->header_size;
+        const int key_start = sst->key_start;
+
+        for (int i = 0; i < ret; i++) {
+            if (pos + i >= header_size-2)
+                buf[i] ^= key[(key_start + (pos - header_size) + i) & 255];
+        }
+    }
+
+    return ret;
 }
 
 static int64_t seek_data(void *opaque, int64_t offset, int whence)
@@ -196,7 +235,7 @@ static int read_header(AVFormatContext *s)
     avio_seek(pb, ctx->mtrl_section_offset + 4, SEEK_SET);
     entries = avio_r16(pb);
     for (int n = 0; n < entries; n++) {
-        int nb_channels, codec, rate, extradata_size, block_align = 0, need_parsing = 0, ret, get_extradata = 0, need_xctx = 0;
+        int nb_channels, codec, rate, extradata_size, block_align = 0, need_parsing = 0, ret, get_extradata = 0, need_xctx = 0, extradata_id, encryption = 0, key_start = 0, header_size = 0;
         int64_t entry_offset, stream_size, extradata_offset;
         SABStream *sst;
         AVStream *st;
@@ -215,6 +254,7 @@ static int read_header(AVFormatContext *s)
         avio_skip(pb, 8);
         extradata_size = avio_r32(pb);
         stream_size = avio_r32(pb);
+        extradata_id = avio_r16(pb);
 
         switch (codec) {
         case 0x01:
@@ -240,14 +280,19 @@ static int read_header(AVFormatContext *s)
             break;
         case 0x07:
             need_xctx = 1;
-            avio_seek(pb, extradata_offset, SEEK_SET);
-            get_extradata = extradata_size;
+            stream_size += extradata_size - 0x10;
+            extradata_size = 0x10;
+            key_start = extradata_id & 0xff;
+            avio_seek(pb, extradata_offset + 0x2, SEEK_SET);
+            header_size = avio_r16(pb);
+            avio_seek(pb, extradata_offset + 0xd, SEEK_SET);
+            encryption = avio_r8(pb);
             break;
         case 0:
             continue;
         default:
-            av_log(s, AV_LOG_WARNING, "Unsupported codec(%02X)\n", codec);
-            break;
+            av_log(s, AV_LOG_ERROR, "Unsupported codec: %02X\n", codec);
+            return AVERROR_PATCHWELCOME;
         }
 
         if ((codec == 0 || nb_channels == 0 || rate <= 0 || block_align <= 0 ||
@@ -264,6 +309,9 @@ static int read_header(AVFormatContext *s)
         st->priv_data = sst;
         sst->start_offset = extradata_offset + extradata_size;
         sst->stop_offset = sst->start_offset + stream_size;
+        sst->header_size = header_size;
+        sst->encryption = encryption;
+        sst->key_start = key_start;
 
         st->start_time = 0;
         if (need_xctx) {
@@ -307,7 +355,7 @@ static int read_header(AVFormatContext *s)
             if (ret < 0)
                 return ret;
 
-            sst->start_offset = avio_tell(pb);
+            sst->data_offset = avio_tell(pb);
             ffstream(st)->request_probe = 0;
             ffstream(st)->need_parsing = ffstream(sst->xctx->streams[0])->need_parsing;
         } else {
@@ -316,6 +364,7 @@ static int read_header(AVFormatContext *s)
             st->codecpar->ch_layout.nb_channels = nb_channels;
             st->codecpar->sample_rate = rate;
             st->codecpar->block_align = block_align;
+            sst->data_offset = sst->start_offset;
 
             if (get_extradata > 0) {
                 ret = ff_alloc_extradata(st->codecpar, get_extradata);
@@ -349,7 +398,7 @@ static int read_header(AVFormatContext *s)
 
         if (n == 0) {
             SABStream *sst = st->priv_data;
-            avio_seek(pb, sst->start_offset, SEEK_SET);
+            avio_seek(pb, sst->data_offset, SEEK_SET);
         }
     }
 
@@ -430,6 +479,18 @@ static int read_seek(AVFormatContext *s, int stream_index,
     }
 }
 
+static int read_close(AVFormatContext *s)
+{
+    for (int i = 0; i < s->nb_streams; i++) {
+        AVStream *st = s->streams[i];
+        SABStream *sst = st->priv_data;
+
+        avformat_close_input(&sst->xctx);
+    }
+
+    return 0;
+}
+
 const FFInputFormat ff_sab_demuxer = {
     .p.name         = "sab",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Square Enix SAB"),
@@ -441,4 +502,5 @@ const FFInputFormat ff_sab_demuxer = {
     .read_header    = read_header,
     .read_packet    = read_packet,
     .read_seek      = read_seek,
+    .read_close     = read_close,
 };

@@ -593,6 +593,7 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
     /* codecs with a fixed packet duration */
     switch (id) {
     case AV_CODEC_ID_ADPCM_IMA_QT: return   64;
+    case AV_CODEC_ID_RCAVOC:       return   80;
     case AV_CODEC_ID_ADPCM_EA_XAS: return  128;
     case AV_CODEC_ID_AMR_NB:
     case AV_CODEC_ID_EVRC:
@@ -602,6 +603,7 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
     case AV_CODEC_ID_AMR_WB:
     case AV_CODEC_ID_GSM_MS:       return  320;
     case AV_CODEC_ID_MP1:          return  384;
+    case AV_CODEC_ID_RELIC:
     case AV_CODEC_ID_ATRAC1:       return  512;
     case AV_CODEC_ID_G722_1:       return  640;
     case AV_CODEC_ID_G719:         return  960;
@@ -711,7 +713,6 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
                 return frame_bytes * 2;
             case AV_CODEC_ID_ADPCM_4XM:
             case AV_CODEC_ID_ADPCM_IMA_ACORN:
-            case AV_CODEC_ID_ADPCM_IMA_DAT4:
             case AV_CODEC_ID_ADPCM_IMA_ISS:
             case AV_CODEC_ID_ADPCM_IMA_MAGIX:
             case AV_CODEC_ID_ADPCM_IMA_PDA:
@@ -720,6 +721,8 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
                 return (frame_bytes - 4) * 2 / ch;
             case AV_CODEC_ID_ADPCM_IMA_AMV:
                 return (frame_bytes - 8) * 2;
+            case AV_CODEC_ID_ADPCM_IMA_AWC:
+                return ((frame_bytes / (0x800 * ch))) * (0x800 - 4) * 2;
             case AV_CODEC_ID_ADPCM_IMA_NDS:
                 return (frame_bytes/ch-4) * 2;
             case AV_CODEC_ID_ADPCM_TANTALUS:
@@ -767,6 +770,9 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
                 int blocks = frame_bytes / ba;
                 int64_t tmp = 0;
                 switch (id) {
+                case AV_CODEC_ID_ADPCM_IMA_DAT4:
+                    tmp = blocks * ((ba/ch - 4) * 2);
+                    break;
                 case AV_CODEC_ID_ADPCM_ADX:
                     tmp = blocks * 32;
                     break;

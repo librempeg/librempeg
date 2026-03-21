@@ -2976,6 +2976,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA FSB"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_ADPCM_IMA_AWC,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ima_awc",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA AWC"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
 
     /* AMR */
     {
@@ -3890,7 +3897,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_WWVORBIS,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "wwvorbis",
-        .long_name = NULL_IF_CONFIG_SMALL("Wwise Vorbis"),
+        .long_name = NULL_IF_CONFIG_SMALL("Audiokinetic Wwise Vorbis"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
     {
@@ -3940,6 +3947,20 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "nwa",
         .long_name = NULL_IF_CONFIG_SMALL("Visual Arts NWA"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_RCAVOC,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "rcavoc",
+        .long_name = NULL_IF_CONFIG_SMALL("RCA VOC"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_RELIC,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "relic",
+        .long_name = NULL_IF_CONFIG_SMALL("Relic"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 
@@ -4213,9 +4234,10 @@ static const AVCodecDescriptor codec_descriptors[] = {
     },
     {
         .id        = AV_CODEC_ID_LCEVC,
-        .type      = AVMEDIA_TYPE_DATA,
+        .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "lcevc",
         .long_name = NULL_IF_CONFIG_SMALL("LCEVC (Low Complexity Enhancement Video Coding) / MPEG-5 LCEVC / MPEG-5 part 2"),
+        .props     = AV_CODEC_PROP_ENHANCEMENT,
     },
     {
         .id        = AV_CODEC_ID_SMPTE_436M_ANC,

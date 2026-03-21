@@ -65,7 +65,7 @@ static const char *const slave_bsfs_spec_sep = "/";
 static const char *const slave_select_sep = ",";
 
 #define OFFSET(x) offsetof(TeeContext, x)
-static const AVOption options[] = {
+static const AVOption tee_options[] = {
         {"use_fifo", "Use fifo pseudo-muxer to separate actual muxers from encoder",
          OFFSET(use_fifo), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, AV_OPT_FLAG_ENCODING_PARAM},
         {"fifo_options", "fifo pseudo-muxer options", OFFSET(fifo_options),
@@ -75,7 +75,7 @@ static const AVOption options[] = {
 
 static const AVClass tee_muxer_class = {
     .class_name = "Tee muxer",
-    .option = options,
+    .option     = tee_options,
     .version    = LIBAVUTIL_VERSION_INT,
 };
 

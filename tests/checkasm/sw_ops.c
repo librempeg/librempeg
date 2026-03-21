@@ -30,9 +30,9 @@
 #include "checkasm.h"
 
 enum {
-    LINES  = 2,
-    NB_PLANES = 4,
-    PIXELS = 64,
+    NB_PLANES   = 4,
+    PIXELS      = 64,
+    LINES       = 2,
 };
 
 enum {
@@ -117,10 +117,10 @@ static void check_ops(const char *report, const unsigned ranges[NB_PLANES],
 
     declare_func(void, const SwsOpExec *, const void *, int bx, int y, int bx_end, int y_end);
 
-    DECLARE_ALIGNED_64(char, src0)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
-    DECLARE_ALIGNED_64(char, src1)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
-    DECLARE_ALIGNED_64(char, dst0)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
-    DECLARE_ALIGNED_64(char, dst1)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
+    static DECLARE_ALIGNED_64(char, src0)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
+    static DECLARE_ALIGNED_64(char, src1)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
+    static DECLARE_ALIGNED_64(char, dst0)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
+    static DECLARE_ALIGNED_64(char, dst1)[NB_PLANES][LINES][PIXELS * sizeof(uint32_t[4])];
 
     if (!ctx)
         return;
@@ -174,7 +174,7 @@ static void check_ops(const char *report, const unsigned ranges[NB_PLANES],
 
     SwsOpExec exec = {0};
     exec.width = PIXELS;
-    exec.height = exec.slice_h = 1;
+    exec.height = exec.slice_h = LINES;
     for (int i = 0; i < NB_PLANES; i++) {
         exec.in_stride[i]  = sizeof(src0[i][0]);
         exec.out_stride[i] = sizeof(dst0[i][0]);
@@ -241,10 +241,9 @@ static void check_ops(const char *report, const unsigned ranges[NB_PLANES],
         bench(comp_new.func, &exec, comp_new.priv, 0, 0, PIXELS / comp_new.block_size, LINES);
     }
 
-    if (comp_new.func != comp_ref.func && comp_new.free)
-        comp_new.free(comp_new.priv);
-    if (comp_ref.free)
-        comp_ref.free(comp_ref.priv);
+    if (comp_new.func != comp_ref.func)
+        ff_sws_compiled_op_unref(&comp_new);
+    ff_sws_compiled_op_unref(&comp_ref);
     sws_free_context(&ctx);
 }
 

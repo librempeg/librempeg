@@ -1977,7 +1977,7 @@ static av_cold int wwvorbis_decode_init(AVCodecContext *avctx)
 
 const FFCodec ff_wwvorbis_decoder = {
     .p.name          = "wwvorbis",
-    CODEC_LONG_NAME("Wwise Vorbis"),
+    CODEC_LONG_NAME("Audiokinetic Wwise Vorbis"),
     .p.type          = AVMEDIA_TYPE_AUDIO,
     .p.id            = AV_CODEC_ID_WWVORBIS,
     .priv_data_size  = sizeof(vorbis_context),

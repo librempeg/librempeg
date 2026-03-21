@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_header(AVStream *st, AVIOContext *pb)
 {
@@ -48,7 +49,7 @@ static int read_header(AVStream *st, AVIOContext *pb)
 
     if (format == 1) {
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
-        st->codecpar->block_align = 1024 * st->codecpar->ch_layout.nb_channels;
+        st->codecpar->block_align = 2 * st->codecpar->ch_layout.nb_channels;
     }
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
@@ -111,25 +112,13 @@ static int naxat_asd_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int naxat_asd_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int64_t block_size;
-
-    pkt->pos = avio_tell(pb);
-    block_size = avio_size(pb) - pkt->pos;
-    if (block_size > s->streams[0]->codecpar->block_align)
-        block_size = s->streams[0]->codecpar->block_align;
-    return av_get_packet(pb, pkt, block_size);
-}
-
 const FFInputFormat ff_naxat_asd_demuxer = {
     .p.name         = "naxat_asd",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Naxat ASD"),
     .p.extensions   = "asd",
     .read_probe     = naxat_asd_probe,
     .read_header    = naxat_asd_read_header,
-    .read_packet    = naxat_asd_read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
 
 typedef struct NaxatASDStream {
@@ -139,7 +128,7 @@ typedef struct NaxatASDStream {
 
 static int naxat_asd_bnk_probe(const AVProbeData *p)
 {
-    int score = AVPROBE_SCORE_MAX / 2;
+    int score = AVPROBE_SCORE_MAX / 3;
 
     // identifier?
     if (AV_RL16(p->buf) != 0x1001)

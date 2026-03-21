@@ -937,8 +937,8 @@ static av_cold int atrac9_decode_init(AVCodecContext *avctx)
     avctx->sample_rate = at9_tab_samplerates[s->samplerate_idx];
 
     block_config_idx = get_bits(&gb, 3);
-    if (block_config_idx > 5) {
-        av_log(avctx, AV_LOG_ERROR, "Incorrect block config!\n");
+    if (block_config_idx >= FF_ARRAY_ELEMS(at9_block_layout)) {
+        av_log(avctx, AV_LOG_ERROR, "Incorrect block config index: %d!\n", block_config_idx);
         return AVERROR_INVALIDDATA;
     }
     s->block_config = &at9_block_layout[block_config_idx];

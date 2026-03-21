@@ -87,6 +87,10 @@ FATE_LIBAVUTIL += fate-fifo
 fate-fifo: libavutil/tests/fifo$(EXESUF)
 fate-fifo: CMD = run libavutil/tests/fifo$(EXESUF)
 
+FATE_LIBAVUTIL += fate-film_grain_params
+fate-film_grain_params: libavutil/tests/film_grain_params$(EXESUF)
+fate-film_grain_params: CMD = run libavutil/tests/film_grain_params$(EXESUF)
+
 FATE_LIBAVUTIL += fate-hash
 fate-hash: libavutil/tests/hash$(EXESUF)
 fate-hash: CMD = run libavutil/tests/hash$(EXESUF)
@@ -151,6 +155,10 @@ fate-sha512: CMD = run libavutil/tests/sha512$(EXESUF)
 FATE_LIBAVUTIL += fate-side_data_array
 fate-side_data_array: libavutil/tests/side_data_array$(EXESUF)
 fate-side_data_array: CMD = run libavutil/tests/side_data_array$(EXESUF)
+
+FATE_LIBAVUTIL += fate-stereo3d
+fate-stereo3d: libavutil/tests/stereo3d$(EXESUF)
+fate-stereo3d: CMD = run libavutil/tests/stereo3d$(EXESUF)
 
 FATE_LIBAVUTIL += fate-tree
 fate-tree: libavutil/tests/tree$(EXESUF)

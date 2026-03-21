@@ -24,8 +24,9 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
-static int mtaf_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (p->buf_size < 0x800)
         return 0;
@@ -39,52 +40,45 @@ static int mtaf_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int mtaf_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     int stream_count;
+    int64_t duration;
     AVStream *st;
 
-    st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
-
     avio_skip(pb, 0x5c);
-    st->duration = avio_rl32(pb);
+    duration = avio_rl32(pb);
     avio_skip(pb, 1);
     stream_count = avio_r8(pb);
     if (!stream_count)
         return AVERROR_INVALIDDATA;
 
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
+
+    st->start_time = 0;
+    st->duration = duration;
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_MTAF;
     st->codecpar->ch_layout.nb_channels = 2 * stream_count;
     st->codecpar->sample_rate = 48000;
     st->codecpar->block_align = 0x110 * st->codecpar->ch_layout.nb_channels / 2;
+
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
-    avio_seek(pb, 0x7f8, SEEK_SET);
-    if (avio_rl32(pb) != MKTAG('D','A','T','A'))
-        return AVERROR_INVALIDDATA;
-    if (avio_rl32(pb) == 0)
-        return AVERROR_INVALIDDATA;
+    avio_seek(pb, 0x800, SEEK_SET);
 
     return 0;
-}
-
-static int mtaf_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVCodecParameters *par = s->streams[0]->codecpar;
-    AVIOContext *pb = s->pb;
-
-    return av_get_packet(pb, pkt, par->block_align);
 }
 
 const FFInputFormat ff_mtaf_demuxer = {
     .p.name         = "mtaf",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Konami PS2 MTAF"),
     .p.extensions   = "mtaf",
-    .read_probe     = mtaf_probe,
-    .read_header    = mtaf_read_header,
-    .read_packet    = mtaf_read_packet,
+    .p.flags        = AVFMT_GENERIC_INDEX,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = ff_pcm_read_packet,
 };

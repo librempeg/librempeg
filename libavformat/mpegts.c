@@ -813,6 +813,7 @@ static const StreamType ISO_types[] = {
     { STREAM_TYPE_VIDEO_MVC,      AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_H264       },
     { STREAM_TYPE_VIDEO_JPEG2000, AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_JPEG2000   },
     { STREAM_TYPE_VIDEO_HEVC,     AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_HEVC       },
+    { STREAM_TYPE_VIDEO_LCEVC,    AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_LCEVC      },
     { STREAM_TYPE_VIDEO_VVC,      AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_VVC        },
     { STREAM_TYPE_VIDEO_CAVS,     AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_CAVS       },
     { STREAM_TYPE_VIDEO_DIRAC,    AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_DIRAC      },
@@ -1682,7 +1683,7 @@ static int mp4_read_iods(AVFormatContext *s, const uint8_t *buf, unsigned size,
 
     ret = parse_mp4_descr(&d, avio_tell(&d.pb.pub), size, MP4IODescrTag);
 
-    *descr_count = d.descr_count;
+    *descr_count += d.descr_count;
     return ret;
 }
 
@@ -1814,7 +1815,176 @@ static const uint8_t opus_channel_map[8][8] = {
     { 0,6,1,2,3,4,5,7 },
 };
 
-int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type,
+static int parse_mpeg2_extension_descriptor(AVFormatContext *fc, AVStream *st, int prg_id,
+                                            const uint8_t **pp, const uint8_t *desc_end)
+{
+    MpegTSContext *ts = fc->priv_data;
+    int ext_tag = get8(pp, desc_end);
+
+    switch (ext_tag) {
+    case JXS_VIDEO_DESCRIPTOR: /* JPEG-XS video descriptor*/
+        {
+            int horizontal_size, vertical_size, schar;
+            int colour_primaries, transfer_characteristics, matrix_coefficients, video_full_range_flag;
+            int descriptor_version, interlace_mode, n_fields;
+            unsigned frat;
+
+            if (desc_end - *pp < 29)
+                return AVERROR_INVALIDDATA;
+
+            descriptor_version = get8(pp, desc_end);
+            if (descriptor_version) {
+                av_log(fc, AV_LOG_WARNING, "Unsupported JPEG-XS descriptor version (%d != 0)", descriptor_version);
+                return AVERROR_INVALIDDATA;
+            }
+
+            horizontal_size = get16(pp, desc_end);
+            vertical_size = get16(pp, desc_end);
+            *pp += 4; /* brat */
+            frat = bytestream_get_be32(pp);
+            schar = get16(pp, desc_end);
+            *pp += 2; /* Ppih */
+            *pp += 2; /* Plev */
+            *pp += 4; /* max_buffer_size */
+            *pp += 1; /* buffer_model_type */
+            colour_primaries = get8(pp, desc_end);
+            transfer_characteristics = get8(pp, desc_end);
+            matrix_coefficients = get8(pp, desc_end);
+            video_full_range_flag = (get8(pp, desc_end) & 0x80) == 0x80 ? 1 : 0;
+
+            interlace_mode = (frat >> 30) & 0x3;
+            if (interlace_mode == 3) {
+                av_log(fc, AV_LOG_WARNING, "Unknown JPEG XS interlace mode 3");
+                return AVERROR_INVALIDDATA;
+            }
+
+            st->codecpar->field_order = interlace_mode == 0 ? AV_FIELD_PROGRESSIVE
+                                                            : (interlace_mode == 1 ? AV_FIELD_TT : AV_FIELD_BB);
+            n_fields = st->codecpar->field_order == AV_FIELD_PROGRESSIVE ? 1 : 2;
+
+            st->codecpar->width  = horizontal_size;
+            st->codecpar->height = vertical_size * n_fields;
+
+            if (frat != 0) {
+                int framerate_num = (frat & 0x0000FFFFU);
+                int framerate_den = ((frat >> 24) & 0x0000003FU);
+
+                if (framerate_den == 2) {
+                    framerate_num *= 1000;
+                    framerate_den = 1001;
+                } else if (framerate_den != 1) {
+                    av_log(fc, AV_LOG_WARNING, "Unknown JPEG XS framerate denominator code %u", framerate_den);
+                    return AVERROR_INVALIDDATA;
+                }
+
+                st->codecpar->framerate.num = framerate_num;
+                st->codecpar->framerate.den = framerate_den;
+            }
+
+            switch (schar & 0xf) {
+            case 0: st->codecpar->format = AV_PIX_FMT_YUV422P10LE; break;
+            case 1: st->codecpar->format = AV_PIX_FMT_YUV444P10LE; break;
+            default:
+                av_log(fc, AV_LOG_WARNING, "Unknown JPEG XS sampling format");
+                break;
+            }
+
+            st->codecpar->color_range = video_full_range_flag ? AVCOL_RANGE_JPEG : AVCOL_RANGE_MPEG;
+            st->codecpar->color_primaries = colour_primaries;
+            st->codecpar->color_trc = transfer_characteristics;
+            st->codecpar->color_space = matrix_coefficients;
+        }
+        break;
+    case LCEVC_VIDEO_DESCRIPTOR:
+        {
+            AVStreamGroup *stg = NULL;
+            int lcevc_stream_tag = get8(pp, desc_end);
+            int ret, i;
+
+            if (!get_program(ts, prg_id))
+                return 0;
+
+            if (st->codecpar->codec_id != AV_CODEC_ID_LCEVC)
+                return AVERROR_INVALIDDATA;
+
+            for (i = 0; i < fc->nb_stream_groups; i++) {
+                stg = fc->stream_groups[i];
+                if (stg->type != AV_STREAM_GROUP_PARAMS_LCEVC)
+                    continue;
+                if (stg->id == lcevc_stream_tag)
+                    break;
+            }
+            if (i == fc->nb_stream_groups)
+                stg = avformat_stream_group_create(fc, AV_STREAM_GROUP_PARAMS_LCEVC, NULL);
+            if (!stg)
+                return AVERROR(ENOMEM);
+
+            stg->id = lcevc_stream_tag;
+            for (i = 0; i < stg->nb_streams; i++) {
+                if (stg->streams[i]->codecpar->codec_id == AV_CODEC_ID_LCEVC)
+                    break;
+            }
+            if (i == stg->nb_streams) {
+                ret = avformat_stream_group_add_stream(stg, st);
+                av_assert0(ret != AVERROR(EEXIST));
+                if (ret < 0)
+                    return ret;
+            } else
+                stg->streams[i] = st;
+
+            av_assert0(i < stg->nb_streams);
+            stg->params.lcevc->lcevc_index = i;
+        }
+        break;
+    case LCEVC_LINKAGE_DESCRIPTOR:
+        {
+            int num_lcevc_stream_tags = get8(pp, desc_end);
+
+            if (!get_program(ts, prg_id))
+                return 0;
+
+            if (st->codecpar->codec_id == AV_CODEC_ID_LCEVC)
+                return AVERROR_INVALIDDATA;
+
+            for (int i = 0; i < num_lcevc_stream_tags; i++) {
+                AVStreamGroup *stg = NULL;
+                int lcevc_stream_tag = get8(pp, desc_end);;
+                int ret, j;
+
+                for (j = 0; j < fc->nb_stream_groups; j++) {
+                    stg = fc->stream_groups[j];
+                    if (stg->type != AV_STREAM_GROUP_PARAMS_LCEVC)
+                        continue;
+                    if (stg->id == lcevc_stream_tag)
+                        break;
+                }
+                if (j == fc->nb_stream_groups)
+                    stg = avformat_stream_group_create(fc, AV_STREAM_GROUP_PARAMS_LCEVC, NULL);
+                if (!stg)
+                    return AVERROR(ENOMEM);
+
+                stg->id = lcevc_stream_tag;
+                for (j = 0; j < stg->nb_streams; j++) {
+                    if (stg->streams[j]->index == st->index)
+                        break;
+                }
+                if (j == stg->nb_streams) {
+                    ret = avformat_stream_group_add_stream(stg, st);
+                    av_assert0(ret != AVERROR(EEXIST));
+                    if (ret < 0)
+                        return ret;
+                }
+            }
+        }
+        break;
+    default:
+        break;
+    }
+
+    return 0;
+}
+
+int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type, int prg_id,
                               const uint8_t **pp, const uint8_t *desc_list_end,
                               Mp4Descr *mp4_descr, int mp4_descr_count, int pid,
                               MpegTSContext *ts)
@@ -2041,7 +2211,7 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
                 mpegts_find_stream_type(st, st->codecpar->codec_tag, METADATA_types);
         }
         break;
-    case EXTENSION_DESCRIPTOR: /* DVB extension descriptor */
+    case DVB_EXTENSION_DESCRIPTOR: /* DVB extension descriptor */
         ext_desc_tag = get8(pp, desc_end);
         if (ext_desc_tag < 0)
             return AVERROR_INVALIDDATA;
@@ -2251,6 +2421,14 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
                    dovi->dv_md_compression);
         }
         break;
+    case EXTENSION_DESCRIPTOR: /* descriptor extension */
+        {
+            int ret = parse_mpeg2_extension_descriptor(fc, st, prg_id, pp, desc_end);
+
+            if (ret < 0)
+                return ret;
+        }
+        break;
     default:
         break;
     }
@@ -2421,7 +2599,7 @@ static void pmt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
             get8(&p, p_end); // label
             len -= 2;
             mp4_read_iods(ts->stream, p, len, mp4_descr + mp4_descr_count,
-                          &mp4_descr_count, MAX_MP4_DESCR_COUNT);
+                          &mp4_descr_count, MAX_MP4_DESCR_COUNT - mp4_descr_count);
         } else if (tag == REGISTRATION_DESCRIPTOR && len >= 4) {
             prog_reg_desc = bytestream_get_le32(&p);
             len -= 4;
@@ -2534,7 +2712,7 @@ static void pmt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
         if (desc_list_end > p_end)
             goto out;
         for (;;) {
-            if (ff_parse_mpeg2_descriptor(ts->stream, st, stream_type, &p,
+            if (ff_parse_mpeg2_descriptor(ts->stream, st, stream_type, h->id, &p,
                                           desc_list_end, mp4_descr,
                                           mp4_descr_count, pid, ts) < 0)
                 break;

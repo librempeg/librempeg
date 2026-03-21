@@ -40,10 +40,13 @@ typedef struct ChannelContext {
     DECLARE_ALIGNED(32, float, imdct_prev)[128];
     int8_t   scale_factors[128];
     uint8_t  scale[128];
+    uint8_t  noises[128];
     int8_t   intensity[8];
     int8_t  *hfr_scale;
     unsigned count;
     int      chan_type;
+    int      noise_count;
+    int      valid_count;
 } ChannelContext;
 
 typedef struct HCAContext {
@@ -56,12 +59,15 @@ typedef struct HCAContext {
     uint64_t key;
     uint16_t subkey;
 
+    int     version;
     int     ath_type;
     int     ciph_type;
     int     ms_stereo;
     unsigned hfr_group_count;
     uint8_t track_count;
     uint8_t channel_config;
+    uint8_t min_resolution;
+    uint8_t max_resolution;
     uint8_t total_band_count;
     uint8_t base_band_count;
     uint8_t stereo_band_count;
@@ -213,8 +219,8 @@ static int init_hca(AVCodecContext *avctx, const uint8_t *extradata,
     GetByteContext gb0, *const gb = &gb0;
     int8_t r[16] = { 0 };
     unsigned b, chunk;
-    int version, ret;
     unsigned hfr_group_count;
+    int ret;
 
     init_flush(avctx);
 
@@ -224,10 +230,10 @@ static int init_hca(AVCodecContext *avctx, const uint8_t *extradata,
     bytestream2_init(gb, extradata, extradata_size);
 
     bytestream2_skipu(gb, 4);
-    version = bytestream2_get_be16(gb);
+    c->version = bytestream2_get_be16(gb);
     bytestream2_skipu(gb, 2);
 
-    c->ath_type = version >= 0x200 ? 0 : 1;
+    c->ath_type = c->version < 0x200 ? 1 : 0;
 
     if ((bytestream2_get_be32u(gb) & HCA_MASK) != MKBETAG('f', 'm', 't', 0))
         return AVERROR_INVALIDDATA;
@@ -238,8 +244,8 @@ static int init_hca(AVCodecContext *avctx, const uint8_t *extradata,
     chunk = bytestream2_get_be32u(gb) & HCA_MASK;
     if (chunk == MKBETAG('c', 'o', 'm', 'p')) {
         bytestream2_skipu(gb, 2);
-        bytestream2_skipu(gb, 1);
-        bytestream2_skipu(gb, 1);
+        c->min_resolution      = bytestream2_get_byteu(gb);
+        c->max_resolution      = bytestream2_get_byteu(gb);
         c->track_count         = bytestream2_get_byteu(gb);
         c->channel_config      = bytestream2_get_byteu(gb);
         c->total_band_count    = bytestream2_get_byteu(gb);
@@ -250,8 +256,8 @@ static int init_hca(AVCodecContext *avctx, const uint8_t *extradata,
         bytestream2_skip(gb, 1);
     } else if (chunk == MKBETAG('d', 'e', 'c', 0)) {
         bytestream2_skipu(gb, 2);
-        bytestream2_skipu(gb, 1);
-        bytestream2_skipu(gb, 1);
+        c->min_resolution   = bytestream2_get_byteu(gb);
+        c->max_resolution   = bytestream2_get_byteu(gb);
         c->total_band_count = bytestream2_get_byteu(gb) + 1;
         c->base_band_count  = bytestream2_get_byteu(gb) + 1;
         c->track_count      = bytestream2_peek_byteu(gb) >> 4;
@@ -450,14 +456,25 @@ static void reconstruct_hfr(HCAContext *s, ChannelContext *ch,
                             unsigned bands_per_hfr_group,
                             unsigned start_band, unsigned total_band_count)
 {
+    int group_limit;
+
     if (ch->chan_type == 2 || !bands_per_hfr_group)
         return;
 
     if (s->ms_stereo && ch->chan_type != 1)
         return;
 
-    for (int i = 0, k = start_band, l = start_band - 1; i < hfr_group_count; i++){
-        for (int j = 0; j < bands_per_hfr_group && k < total_band_count && l >= 0; j++, k++, l--){
+    if (s->version <= 0x0200) {
+        group_limit = hfr_group_count;
+    } else {
+        group_limit = hfr_group_count;
+        group_limit = group_limit >> 1;
+    }
+
+    for (int i = 0, k = start_band, l = start_band - 1; i < hfr_group_count; i++) {
+        int lowband_sub = (i < group_limit) ? 1 : 0;
+
+        for (int j = 0; j < bands_per_hfr_group && k < total_band_count && l >= 0; j++, k++, l -= lowband_sub) {
             ch->imdct_in[k] = scale_conversion_table[ scale_conv_bias +
                 av_clip_intp2(ch->hfr_scale[i] - ch->scale_factors[l], 6) ] * ch->imdct_in[l];
         }
@@ -503,9 +520,22 @@ static void unpack(HCAContext *c, ChannelContext *ch,
                    const uint8_t *ath)
 {
     int delta_bits = get_bits(gb, 3);
+    int count = ch->count;
+    int noise_count = 0;
+    int valid_count = 0;
+    int extra_count;
+
+    if (ch->chan_type == 2 || hfr_group_count <= 0 || c->version <= 0x0200) {
+        extra_count = 0;
+    } else {
+        extra_count = hfr_group_count;
+        count = count + extra_count;
+        if (count > 128)
+            return;
+    }
 
     if (delta_bits > 5) {
-        for (int i = 0; i < ch->count; i++)
+        for (int i = 0; i < count; i++)
             ch->scale_factors[i] = get_bits(gb, 6);
     } else if (delta_bits) {
         int factor = get_bits(gb, 6);
@@ -513,7 +543,7 @@ static void unpack(HCAContext *c, ChannelContext *ch,
         int half_max = max_value >> 1;
 
         ch->scale_factors[0] = factor;
-        for (int i = 1; i < ch->count; i++){
+        for (int i = 1; i < count; i++) {
             int delta = get_bits(gb, delta_bits);
 
             if (delta == max_value) {
@@ -529,30 +559,93 @@ static void unpack(HCAContext *c, ChannelContext *ch,
         memset(ch->scale_factors, 0, 128);
     }
 
-    if (ch->chan_type == 2){
-        ch->intensity[0] = get_bits(gb, 4);
-        if (ch->intensity[0] < 15) {
-            for (int i = 1; i < 8; i++)
-                ch->intensity[i] = get_bits(gb, 4);
+    for (int i = 0; i < extra_count; i++)
+        ch->scale_factors[128 - 1 - i] = ch->scale_factors[count - i];
+
+    if (ch->chan_type == 2) {
+        if (c->version <= 0x0200) {
+            ch->intensity[0] = get_bits(gb, 4);
+            if (ch->intensity[0] < 15) {
+                for (int i = 1; i < 8; i++)
+                    ch->intensity[i] = get_bits(gb, 4);
+            }
+        } else {
+            int value = show_bits(gb, 4);
+            int delta_bits;
+
+            if (value < 15) {
+                skip_bits(gb, 4);
+
+                delta_bits = get_bits(gb, 2);
+
+                ch->intensity[0] = value;
+                if (delta_bits == 3) {
+                    for (int i = 1; i < 8; i++)
+                        ch->intensity[i] = get_bits(gb, 4);
+                } else {
+                    int bmax = (2 << delta_bits) - 1;
+                    int bits = delta_bits + 1;
+
+                    for (int i = 1; i < 8; i++) {
+                        int delta = get_bits(gb, bits);
+
+                        if (delta == bmax) {
+                            value = get_bits(gb, 4);
+                        } else {
+                            value = value - (bmax >> 1) + delta;
+                            if (value > 15)
+                                return;
+                        }
+
+                        ch->intensity[i] = value;
+                    }
+                }
+            } else {
+                skip_bits(gb, 4);
+
+                for (int i = 0; i < 8; i++)
+                    ch->intensity[i] = 7;
+            }
         }
-    } else {
+    } else if (c->version <= 0x0200) {
         for (int i = 0; i < hfr_group_count; i++)
             ch->hfr_scale[i] = get_bits(gb, 6);
     }
 
-    for (int i = 0; i < ch->count; i++) {
+    for (int i = 0; i < count; i++) {
         int scale = ch->scale_factors[i];
+        int new_resolution = 0;
 
-        if (scale) {
-            scale = c->ath[i] + ((packed_noise_level + i) >> 8) - ((scale * 5) >> 1) + 2;
-            scale = scale_table[av_clip(scale, 0, 58)];
+        if (scale > 0) {
+            int noise_level = ath[i] + ((packed_noise_level + i) >> 8);
+            int curve_position = noise_level + 1 - ((5 * scale) >> 1);
+
+            if (curve_position < 0) {
+                new_resolution = 15;
+            } else if (curve_position <= 65) {
+                new_resolution = scale_table[curve_position];
+            } else {
+                new_resolution = 0;
+            }
+
+            new_resolution = av_clip(new_resolution, c->min_resolution, c->max_resolution);
+            if (new_resolution < 1) {
+                ch->noises[noise_count] = i;
+                noise_count++;
+            } else {
+                ch->noises[128 - 1 - valid_count] = i;
+                valid_count++;
+            }
         }
-        ch->scale[i] = scale;
+        ch->scale[i] = new_resolution;
     }
 
-    memset(ch->scale + ch->count, 0, sizeof(ch->scale) - ch->count);
+    ch->noise_count = noise_count;
+    ch->valid_count = valid_count;
 
-    for (int i = 0; i < ch->count; i++)
+    memset(ch->scale + count, 0, sizeof(ch->scale) - count);
+
+    for (int i = 0; i < count; i++)
         ch->base[i] = dequantizer_scaling_table[ch->scale_factors[i]] * quant_step_size[ch->scale[i]];
 }
 

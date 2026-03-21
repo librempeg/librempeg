@@ -2,6 +2,9 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>:
+
+
+version 8.1:
 - Rockchip H.264/HEVC hardware encoder
 - bvc2 video decoder
 - mogg demuxer
@@ -78,6 +81,8 @@ version <next>:
 - ktac demuxer
 - kat demuxer
 - Remove the old HLS protocol handler
+- LCEVC parser
+- LCEVC enhancement layer exporting in MPEG-TS
 
 
 version 8.0:

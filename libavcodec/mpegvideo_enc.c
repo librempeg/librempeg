@@ -72,7 +72,7 @@
 #include "mpeg4videoenc.h"
 #include "internal.h"
 #include "bytestream.h"
-#include "rv10enc.h"
+#include "rv20enc.h"
 #include "libavutil/refstruct.h"
 #include <limits.h>
 #include "sp5x.h"
@@ -607,25 +607,6 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
 
     s->c.quarter_sample     = (avctx->flags & AV_CODEC_FLAG_QPEL) != 0;
     s->rtp_mode           = !!s->rtp_payload_size;
-    s->c.intra_dc_precision = avctx->intra_dc_precision;
-
-    // workaround some differences between how applications specify dc precision
-    if (s->c.intra_dc_precision < 0) {
-        s->c.intra_dc_precision += 8;
-    } else if (s->c.intra_dc_precision >= 8)
-        s->c.intra_dc_precision -= 8;
-
-    if (s->c.intra_dc_precision < 0) {
-        av_log(avctx, AV_LOG_ERROR,
-                "intra dc precision must be positive, note some applications use"
-                " 0 and some 8 as base meaning 8bit, the value must not be smaller than that\n");
-        return AVERROR(EINVAL);
-    }
-
-    if (s->c.intra_dc_precision > (avctx->codec_id == AV_CODEC_ID_MPEG2VIDEO ? 3 : 0)) {
-        av_log(avctx, AV_LOG_ERROR, "intra dc precision too large\n");
-        return AVERROR(EINVAL);
-    }
     m->user_specified_pts = AV_NOPTS_VALUE;
 
     if (m->gop_size <= 1) {
@@ -773,13 +754,6 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     }
 
-    if (s->c.codec_id == AV_CODEC_ID_RV10 &&
-        (avctx->width &15 ||
-         avctx->height&15 )) {
-        av_log(avctx, AV_LOG_ERROR, "width and height must be a multiple of 16\n");
-        return AVERROR(EINVAL);
-    }
-
     if ((s->c.codec_id == AV_CODEC_ID_WMV1 ||
          s->c.codec_id == AV_CODEC_ID_WMV2) &&
          avctx->width & 1) {
@@ -873,7 +847,6 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
         s->c.out_format = FMT_MPEG1;
         s->c.low_delay  = !!(avctx->flags & AV_CODEC_FLAG_LOW_DELAY);
         avctx->delay  = s->c.low_delay ? 0 : (m->max_b_frames + 1);
-        ff_mpeg1_encode_init(s);
         break;
 #endif
 #if CONFIG_MJPEG_ENCODER || CONFIG_AMV_ENCODER
@@ -936,7 +909,6 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
         break;
 #if CONFIG_RV10_ENCODER
     case AV_CODEC_ID_RV10:
-        m->encode_picture_header = ff_rv10_encode_picture_header;
         s->c.out_format = FMT_H263;
         avctx->delay  = 0;
         s->c.low_delay  = 1;
@@ -3023,7 +2995,7 @@ static int encode_thread(AVCodecContext *c, void *arg){
             mb_y = ff_speedhq_mb_y_order_to_mb(mb_y_order, s->c.mb_height, &first_in_slice);
             if (first_in_slice && mb_y_order != s->c.start_mb_y)
                 ff_speedhq_end_slice(s);
-            s->last_dc[0] = s->last_dc[1] = s->last_dc[2] = 1024 << s->c.intra_dc_precision;
+            s->last_dc[0] = s->last_dc[1] = s->last_dc[2] = 1024;
         } else {
             mb_y = mb_y_order;
         }
@@ -3881,9 +3853,8 @@ static int encode_picture(MPVMainEncContext *const m, const AVPacket *pkt)
                 s->c.       intra_matrix[j] = av_clip_uint8((  luma_matrix[i] * s->c.qscale) >> 3);
             }
             s->c.y_dc_scale_table =
-            s->c.c_dc_scale_table = ff_mpeg12_dc_scale_table[s->c.intra_dc_precision];
-            s->c.chroma_intra_matrix[0] =
-            s->c.intra_matrix[0]  = ff_mpeg12_dc_scale_table[s->c.intra_dc_precision][8];
+            s->c.c_dc_scale_table = ff_mpeg12_dc_scale_table[0];
+            s->c.chroma_intra_matrix[0] = s->c.intra_matrix[0] = 8;
         } else {
             static const uint8_t y[32] = {13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13,13};
             static const uint8_t c[32] = {14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14};

@@ -101,6 +101,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
         int ret = av_get_packet(s->pb, pkt, par->block_align);
 
         pkt->stream_index = 0;
+        pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
         pkt->duration = av_get_audio_frame_duration2(par, pkt->size);
         return ret;
     } else {

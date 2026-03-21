@@ -222,6 +222,9 @@ static const struct {
     #if CONFIG_ME_CMP
         { "motion", checkasm_check_motion },
     #endif
+    #if CONFIG_MPEG4_DECODER
+        { "mpeg4videodsp", checkasm_check_mpeg4videodsp },
+    #endif
     #if CONFIG_MPEGVIDEO
         { "mpegvideo_unquantize", checkasm_check_mpegvideo_unquantize },
     #endif
@@ -355,6 +358,9 @@ static const struct {
         { "fixed_dsp", checkasm_check_fixed_dsp },
         { "float_dsp", checkasm_check_float_dsp },
         { "lls",       checkasm_check_lls },
+#if CONFIG_PIXELUTILS
+        { "pixelutils",checkasm_check_pixelutils },
+#endif
         { "av_tx",     checkasm_check_av_tx },
 #endif
     { NULL }
@@ -376,7 +382,11 @@ static const struct {
     { "I8MM",     "i8mm",     AV_CPU_FLAG_I8MM },
     { "SVE",      "sve",      AV_CPU_FLAG_SVE },
     { "SVE2",     "sve2",     AV_CPU_FLAG_SVE2 },
+    { "SME",      "sme",      AV_CPU_FLAG_SME },
+    { "SME-I16I64", "sme_i16i64", AV_CPU_FLAG_SME_I16I64 },
     { "CRC",      "crc",      AV_CPU_FLAG_ARM_CRC },
+    { "SME2",     "sme2",      AV_CPU_FLAG_SME2 },
+    { "PMULL",    "pmull_eor3", AV_CPU_FLAG_PMULL|AV_CPU_FLAG_EOR3 },
 #elif ARCH_ARM
     { "ARMV5TE",  "armv5te",  AV_CPU_FLAG_ARMV5TE },
     { "ARMV6",    "armv6",    AV_CPU_FLAG_ARMV6 },
@@ -1055,7 +1065,13 @@ int main(int argc, char *argv[])
     if (have_sve(av_get_cpu_flags()))
         snprintf(arch_info_buf, sizeof(arch_info_buf),
                  "SVE %d bits, ", 8 * ff_aarch64_sve_length());
-#elif ARCH_RISCV && HAVE_RVV
+#endif
+#if ARCH_AARCH64 && HAVE_SME
+    if (have_sme(av_get_cpu_flags()))
+        snprintf(arch_info_buf, sizeof(arch_info_buf),
+                 "SME %d bits, ", 8 * ff_aarch64_sme_length());
+#endif
+#if ARCH_RISCV && HAVE_RVV
     if (av_get_cpu_flags() & AV_CPU_FLAG_RVV_I32)
         snprintf(arch_info_buf, sizeof (arch_info_buf),
                  "%zu-bit vectors, ", 8 * ff_get_rv_vlenb());

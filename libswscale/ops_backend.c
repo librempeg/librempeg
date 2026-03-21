@@ -69,8 +69,8 @@ static int compile(SwsContext *ctx, SwsOpList *ops, SwsCompiledOp *out)
     /* Make on-stack copy of `ops` to iterate over */
     SwsOpList rest = *ops;
     do {
-        ret = ff_sws_op_compile_tables(tables, FF_ARRAY_ELEMS(tables), &rest,
-                                       SWS_BLOCK_SIZE, chain);
+        ret = ff_sws_op_compile_tables(ctx, tables, FF_ARRAY_ELEMS(tables),
+                                       &rest, SWS_BLOCK_SIZE, chain);
     } while (ret == AVERROR(EAGAIN));
 
     if (ret < 0) {
@@ -86,6 +86,8 @@ static int compile(SwsContext *ctx, SwsOpList *ops, SwsCompiledOp *out)
         .slice_align = 1,
         .block_size  = SWS_BLOCK_SIZE,
         .cpu_flags   = chain->cpu_flags,
+        .over_read   = chain->over_read,
+        .over_write  = chain->over_write,
         .priv        = chain,
         .free        = ff_sws_op_chain_free_cb,
     };

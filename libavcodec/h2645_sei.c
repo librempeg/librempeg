@@ -102,6 +102,20 @@ static int decode_registered_user_data_dynamic_hdr_vivid(HEVCSEIDynamicHDRVivid 
 }
 #endif
 
+static int decode_registered_user_data_lcevc(HEVCSEILCEVC *s,
+                                             GetByteContext *gb)
+{
+    int size = bytestream2_get_bytes_left(gb);
+
+    av_buffer_unref(&s->info);
+    s->info = av_buffer_alloc(size);
+    if (!s->info)
+        return AVERROR(ENOMEM);
+
+    bytestream2_get_bufferu(gb, s->info->data, size);
+    return 0;
+}
+
 static int decode_registered_user_data_afd(H2645SEIAFD *h, GetByteContext *gb)
 {
     int flag;
@@ -131,7 +145,7 @@ static int decode_registered_user_data_closed_caption(H2645SEIA53Caption *h,
 static int decode_registered_user_data(H2645SEI *h, GetByteContext *gb,
                                        enum AVCodecID codec_id, void *logctx)
 {
-    int country_code, provider_code;
+    int country_code, provider_code = -1;
 
     if (bytestream2_get_bytes_left(gb) < 3)
         return AVERROR_INVALIDDATA;
@@ -145,85 +159,127 @@ static int decode_registered_user_data(H2645SEI *h, GetByteContext *gb,
     }
 
     /* itu_t_t35_payload_byte follows */
-    provider_code = bytestream2_get_be16u(gb);
 
-    if (country_code == ITU_T_T35_COUNTRY_CODE_US && provider_code == ITU_T_T35_PROVIDER_CODE_ATSC) {
-        uint32_t user_identifier;
+    switch (country_code) {
+    case ITU_T_T35_COUNTRY_CODE_US:
+        provider_code = bytestream2_get_be16u(gb);
 
-        if (bytestream2_get_bytes_left(gb) < 4)
-            return AVERROR_INVALIDDATA;
+        switch (provider_code) {
+        case ITU_T_T35_PROVIDER_CODE_ATSC: {
+            uint32_t user_identifier;
 
-        user_identifier = bytestream2_get_be32u(gb);
-        switch (user_identifier) {
-        case MKBETAG('D', 'T', 'G', '1'):       // afd_data
-            return decode_registered_user_data_afd(&h->afd, gb);
-        case MKBETAG('G', 'A', '9', '4'):       // closed captions
-            return decode_registered_user_data_closed_caption(&h->a53_caption, gb);
-        default:
-            av_log(logctx, AV_LOG_VERBOSE,
-                   "Unsupported User Data Registered ITU-T T35 SEI message (atsc user_identifier = 0x%04x)\n",
-                   user_identifier);
+            if (bytestream2_get_bytes_left(gb) < 4)
+                return AVERROR_INVALIDDATA;
+
+            user_identifier = bytestream2_get_be32u(gb);
+            switch (user_identifier) {
+            case MKBETAG('D', 'T', 'G', '1'):       // afd_data
+                return decode_registered_user_data_afd(&h->afd, gb);
+            case MKBETAG('G', 'A', '9', '4'):       // closed captions
+                return decode_registered_user_data_closed_caption(&h->a53_caption, gb);
+            default:
+                av_log(logctx, AV_LOG_VERBOSE,
+                       "Unsupported User Data Registered ITU-T T35 SEI message (atsc user_identifier = 0x%04x)\n",
+                       user_identifier);
+                break;
+            }
             break;
         }
-    }
 #if CONFIG_HEVC_SEI
-    else if (country_code == ITU_T_T35_COUNTRY_CODE_CN && provider_code == ITU_T_T35_PROVIDER_CODE_HDR_VIVID) {
+        case ITU_T_T35_PROVIDER_CODE_AOM: {
+            const uint16_t aom_grain_provider_oriented_code = 0x0001;
+            uint16_t provider_oriented_code;
+
+            if (!IS_HEVC(codec_id))
+                break;
+
+            if (bytestream2_get_bytes_left(gb) < 2)
+                return AVERROR_INVALIDDATA;
+
+            provider_oriented_code = bytestream2_get_byteu(gb);
+            if (provider_oriented_code == aom_grain_provider_oriented_code) {
+                return ff_aom_parse_film_grain_sets(&h->aom_film_grain,
+                                                    gb->buffer,
+                                                    bytestream2_get_bytes_left(gb));
+            }
+            break;
+        }
+        case ITU_T_T35_PROVIDER_CODE_SAMSUNG: {
+            // A/341 Amendment - 2094-40
+            const uint16_t smpte2094_40_provider_oriented_code = 0x0001;
+            const uint8_t smpte2094_40_application_identifier = 0x04;
+            uint16_t provider_oriented_code;
+            uint8_t application_identifier;
+
+            if (!IS_HEVC(codec_id))
+                break;
+
+            if (bytestream2_get_bytes_left(gb) < 3)
+                return AVERROR_INVALIDDATA;
+
+            provider_oriented_code = bytestream2_get_be16u(gb);
+            application_identifier = bytestream2_get_byteu(gb);
+            if (provider_oriented_code == smpte2094_40_provider_oriented_code &&
+                application_identifier == smpte2094_40_application_identifier) {
+                return decode_registered_user_data_dynamic_hdr_plus(&h->dynamic_hdr_plus, gb);
+            }
+            break;
+        }
+#endif
+        default:
+            break;
+        }
+        break;
+    case ITU_T_T35_COUNTRY_CODE_UK:
+        bytestream2_skipu(gb, 1); // t35_uk_country_code_second_octet
+        if (bytestream2_get_bytes_left(gb) < 2)
+            return AVERROR_INVALIDDATA;
+
+        provider_code = bytestream2_get_be16u(gb);
+
+        switch (provider_code) {
+        case ITU_T_T35_PROVIDER_CODE_VNOVA:
+            if (bytestream2_get_bytes_left(gb) < 2)
+                return AVERROR_INVALIDDATA;
+
+            return decode_registered_user_data_lcevc(&h->lcevc, gb);
+        default:
+            break;
+        }
+        break;
+#if CONFIG_HEVC_SEI
+    case ITU_T_T35_COUNTRY_CODE_CN: {
         const uint16_t cuva_provider_oriented_code = 0x0005;
         uint16_t provider_oriented_code;
 
-        if (!IS_HEVC(codec_id))
-            goto unsupported_provider_code;
+        provider_code = bytestream2_get_be16u(gb);
 
-        if (bytestream2_get_bytes_left(gb) < 2)
-            return AVERROR_INVALIDDATA;
+        switch (provider_code) {
+        case ITU_T_T35_PROVIDER_CODE_HDR_VIVID:
+            if (!IS_HEVC(codec_id))
+                break;
 
-        provider_oriented_code = bytestream2_get_be16u(gb);
-        if (provider_oriented_code == cuva_provider_oriented_code) {
-            return decode_registered_user_data_dynamic_hdr_vivid(&h->dynamic_hdr_vivid, gb);
+            if (bytestream2_get_bytes_left(gb) < 2)
+                return AVERROR_INVALIDDATA;
+
+            provider_oriented_code = bytestream2_get_be16u(gb);
+            if (provider_oriented_code == cuva_provider_oriented_code) {
+                return decode_registered_user_data_dynamic_hdr_vivid(&h->dynamic_hdr_vivid, gb);
+            }
+            break;
+        default:
+            break;
         }
-    } else if(country_code == ITU_T_T35_COUNTRY_CODE_US && provider_code == ITU_T_T35_PROVIDER_CODE_SAMSUNG) {
-        // A/341 Amendment - 2094-40
-        const uint16_t smpte2094_40_provider_oriented_code = 0x0001;
-        const uint8_t smpte2094_40_application_identifier = 0x04;
-        uint16_t provider_oriented_code;
-        uint8_t application_identifier;
-
-        if (!IS_HEVC(codec_id))
-            goto unsupported_provider_code;
-
-        if (bytestream2_get_bytes_left(gb) < 3)
-            return AVERROR_INVALIDDATA;
-
-        provider_oriented_code = bytestream2_get_be16u(gb);
-        application_identifier = bytestream2_get_byteu(gb);
-        if (provider_oriented_code == smpte2094_40_provider_oriented_code &&
-            application_identifier == smpte2094_40_application_identifier) {
-            return decode_registered_user_data_dynamic_hdr_plus(&h->dynamic_hdr_plus, gb);
-        }
-    } else if (country_code == ITU_T_T35_COUNTRY_CODE_US && provider_code == ITU_T_T35_PROVIDER_CODE_AOM) {
-        const uint16_t aom_grain_provider_oriented_code = 0x0001;
-        uint16_t provider_oriented_code;
-
-        if (!IS_HEVC(codec_id))
-            goto unsupported_provider_code;
-
-        if (bytestream2_get_bytes_left(gb) < 2)
-            return AVERROR_INVALIDDATA;
-
-        provider_oriented_code = bytestream2_get_byteu(gb);
-        if (provider_oriented_code == aom_grain_provider_oriented_code) {
-            return ff_aom_parse_film_grain_sets(&h->aom_film_grain,
-                                                gb->buffer,
-                                                bytestream2_get_bytes_left(gb));
-        }
+        break;
     }
 #endif
-    else {
-        unsupported_provider_code:
-        av_log(logctx, AV_LOG_VERBOSE,
-               "Unsupported User Data Registered ITU-T T35 SEI message (country_code = %d, provider_code = %d)\n",
-               country_code, provider_code);
+    default:
+        break;
     }
+
+    av_log(logctx, AV_LOG_VERBOSE,
+           "Unsupported User Data Registered ITU-T T35 SEI message (country_code = %d, provider_code = %d)\n",
+           country_code, provider_code);
 
     return 0;
 }
@@ -491,6 +547,10 @@ int ff_h2645_sei_ctx_replace(H2645SEI *dst, const H2645SEI *src)
     for (unsigned i = 0; i < dst->unregistered.nb_buf_ref; i++)
         av_buffer_unref(&dst->unregistered.buf_ref[i]);
     dst->unregistered.nb_buf_ref = 0;
+
+    ret = av_buffer_replace(&dst->lcevc.info, src->lcevc.info);
+    if (ret < 0)
+        return ret;
 
     if (src->unregistered.nb_buf_ref) {
         ret = av_reallocp_array(&dst->unregistered.buf_ref,
@@ -788,6 +848,13 @@ FF_ENABLE_DEPRECATION_WARNINGS
         }
     }
 
+    if (sei->lcevc.info) {
+        HEVCSEILCEVC *lcevc = &sei->lcevc;
+        ret = ff_frame_new_side_data_from_buf(avctx, frame, AV_FRAME_DATA_LCEVC, &lcevc->info);
+        if (ret < 0)
+            return ret;
+    }
+
     if (sei->film_grain_characteristics && sei->film_grain_characteristics->present) {
         H2645SEIFilmGrainCharacteristics *fgc = sei->film_grain_characteristics;
         AVFilmGrainParams *fgp = av_film_grain_params_create_side_data(frame);
@@ -878,6 +945,7 @@ void ff_h2645_sei_reset(H2645SEI *s)
     av_freep(&s->unregistered.buf_ref);
     av_buffer_unref(&s->dynamic_hdr_plus.info);
     av_buffer_unref(&s->dynamic_hdr_vivid.info);
+    av_buffer_unref(&s->lcevc.info);
 
     s->ambient_viewing_environment.present = 0;
     s->mastering_display.present = 0;

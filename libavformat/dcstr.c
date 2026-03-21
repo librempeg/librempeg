@@ -98,7 +98,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
 const FFInputFormat ff_dcstr_demuxer = {
     .p.name         = "dcstr",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Sega DC STR"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Sega Dreamcast STR"),
     .p.extensions   = "str",
     .p.flags        = AVFMT_GENERIC_INDEX | AVFMT_NO_BYTE_SEEK | AVFMT_NOBINSEARCH,
     .read_probe     = read_probe,

@@ -24,6 +24,7 @@
 #include "libavutil/channel_layout.h"
 #include "avformat.h"
 #include "demux.h"
+#include "internal.h"
 
 static int apc_probe(const AVProbeData *p)
 {
@@ -66,6 +67,8 @@ static int apc_read_header(AVFormatContext *s)
                           * st->codecpar->sample_rate;
     st->codecpar->block_align = 1;
 
+    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+
     return 0;
 }
 
@@ -85,6 +88,7 @@ static int apc_read_packet(AVFormatContext *s, AVPacket *pkt)
 const FFInputFormat ff_apc_demuxer = {
     .p.name         = "apc",
     .p.long_name    = NULL_IF_CONFIG_SMALL("CRYO APC"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = apc_probe,
     .read_header    = apc_read_header,
     .read_packet    = apc_read_packet,

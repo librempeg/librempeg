@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 typedef struct GCSTRContext {
     int64_t stop_offset;
@@ -36,6 +37,8 @@ static int read_probe(const AVProbeData *p)
     if (p->buf_size < 28)
         return 0;
     if (AV_RB32(p->buf+4) != 0)
+        return 0;
+    if (AV_RB32(p->buf+12) == 0)
         return 0;
     if ((int)AV_RB32(p->buf+24) <= 0)
         return 0;
@@ -92,17 +95,12 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     GCSTRContext *str = s->priv_data;
     AVIOContext *pb = s->pb;
     int64_t pos;
-    int ret;
 
     pos = avio_tell(pb);
     if (pos >= str->stop_offset)
         return AVERROR_EOF;
 
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
+    return ff_pcm_read_packet(s, pkt);
 }
 
 const FFInputFormat ff_gcstr_demuxer = {

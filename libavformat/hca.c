@@ -111,7 +111,7 @@ static int hca_read_header(AVFormatContext *s)
     if (block_size < 8)
         return AVERROR_INVALIDDATA;
     par->block_align = block_size;
-    st->duration = 1024 * block_count;
+    st->duration = 1024LL * block_count;
     st->start_time = 0;
 
     avio_seek(pb, data_offset, SEEK_SET);

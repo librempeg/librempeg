@@ -258,7 +258,7 @@ static int read_header(AVFormatContext *s)
 
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
-            ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+            ffstream(st)->need_parsing = AVSTREAM_PARSE_HEADERS;
 
             nst->start = pos + offset;
             break;

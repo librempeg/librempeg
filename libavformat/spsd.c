@@ -90,7 +90,8 @@ static int read_header(AVFormatContext *s)
         codec = AV_CODEC_ID_ADPCM_AICA;
         break;
     default:
-        return AVERROR_INVALIDDATA;
+        av_log(s, AV_LOG_ERROR, "unsupported codec: %X\n", codec);
+        return AVERROR_PATCHWELCOME;
     }
 
     st = avformat_new_stream(s, NULL);

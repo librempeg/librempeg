@@ -226,6 +226,10 @@ typedef struct UBIBNMDemuxContext {
 typedef struct BNMStream {
     int64_t start_offset;
     int64_t stop_offset;
+
+    AVFormatContext *ctx;
+
+    AVIOContext *pb;
 } BNMStream;
 
 static void config_sb_entry(ubi_sb_header *sb,
@@ -488,10 +492,10 @@ static int sort_streams(const void *a, const void *b)
     const AVStream *const *s2p = b;
     const AVStream *s1 = *s1p;
     const AVStream *s2 = *s2p;
-    const BNMStream *ks1 = s1->priv_data;
-    const BNMStream *ks2 = s2->priv_data;
+    const BNMStream *bs1 = s1->priv_data;
+    const BNMStream *bs2 = s2->priv_data;
 
-    return FFDIFFSIGN(ks1->start_offset, ks2->start_offset);
+    return FFDIFFSIGN(bs1->start_offset, bs2->start_offset);
 }
 
 static int read_probe(const AVProbeData *p)
@@ -502,6 +506,37 @@ static int read_probe(const AVProbeData *p)
         return 0;
 
     return AVPROBE_SCORE_MAX/3;
+}
+
+static int open_external(AVFormatContext *s, BNMStream *bst, const char *name)
+{
+    AVDictionary *tmp = NULL;
+    const char *dir_name;
+    char *copy_name;
+    char *name_path;
+    int ret;
+
+    copy_name = av_strdup(s->url);
+    if (!copy_name)
+        return AVERROR(ENOMEM);
+
+    dir_name = av_dirname(copy_name);
+    if (!dir_name) {
+        av_free(copy_name);
+        return AVERROR(ENOMEM);
+    }
+
+    name_path = av_append_path_component(dir_name, name);
+    if (!name_path) {
+        av_free(copy_name);
+        return AVERROR(ENOMEM);
+    }
+
+    ret = s->io_open(s, &bst->pb, name_path, AVIO_FLAG_READ, &tmp);
+    av_free(name_path);
+    av_free(copy_name);
+
+    return ret;
 }
 
 static int check_project_file(AVFormatContext *s,
@@ -2498,8 +2533,10 @@ static int parse_sb(ubi_sb_header *sb, AVFormatContext *s)
     sb->bank_streams = 0;
     for (int i = 0; i < sb->section2_num; i++) {
         int64_t offset = sb->section2_offset + sb->cfg.section2_entry_size*i;
+        int codec, is_fmt = 0, ret;
         uint32_t header_type;
-        int ret;
+        BNMStream *bst;
+        AVStream *st;
 
         avio_seek(pb, offset, SEEK_SET);
         if (avio_feof(pb))
@@ -2523,7 +2560,7 @@ static int parse_sb(ubi_sb_header *sb, AVFormatContext *s)
         if (ret < 0)
             return ret;
 
-        if (sb->type != UBI_AUDIO || sb->is_external) {
+        if (sb->type != UBI_AUDIO) {
             // TODO
             continue;
         }
@@ -2533,116 +2570,120 @@ static int parse_sb(ubi_sb_header *sb, AVFormatContext *s)
 
         build_readable_name(sb->readable_name, sizeof(sb->readable_name)-1, sb);
 
-        {
-            BNMStream *bst;
-            AVStream *st;
-            int codec;
+        st = avformat_new_stream(s, NULL);
+        if (!st)
+            return AVERROR(ENOMEM);
 
-            st = avformat_new_stream(s, NULL);
-            if (!st)
-                return AVERROR(ENOMEM);
+        bst = av_mallocz(sizeof(*bst));
+        if (!bst)
+            return AVERROR(ENOMEM);
+        st->priv_data = bst;
 
-            bst = av_mallocz(sizeof(*bst));
-            if (!bst)
-                return AVERROR(ENOMEM);
-            st->priv_data = bst;
+        if (sb->is_external) {
+            ret = open_external(s, bst, sb->resource_name);
+            if (ret < 0)
+                return ret;
+        }
 
-            switch (sb->codec) {
-            case RAW_PCM:
-                codec = (sb->cfg.audio_interleave == 2 || sb->channels == 1) ? AV_CODEC_ID_PCM_S16LE : AV_CODEC_ID_PCM_S16LE_PLANAR;
-                break;
-            case RAW_PSX:
-                if (sb->cfg.has_rs_files && sb->stream_size > 0x30)
-                    sb->stream_size -= 0x30;
+        bst->start_offset = sb->stream_offset;
+        bst->stop_offset = bst->start_offset;
+        bst->stop_offset += sb->stream_size;
 
-                if (sb->is_ps2_bnm) {
-                    sb->cfg.audio_interleave = sb->is_cd_streamed ?
-                                               sb->cfg.audio_interleave :
-                                               sb->stream_size / sb->channels;
-                } else {
-                    sb->cfg.audio_interleave = (sb->cfg.audio_interleave > 0) ?
-                                                sb->cfg.audio_interleave :
-                                                sb->stream_size / sb->channels;
-                }
+        switch (sb->codec) {
+        case RAW_PCM:
+            codec = (sb->cfg.audio_interleave == 2 || sb->channels == 1) ? AV_CODEC_ID_PCM_S16LE : AV_CODEC_ID_PCM_S16LE_PLANAR;
+            break;
+        case RAW_PSX:
+            if (sb->cfg.has_rs_files && sb->stream_size > 0x30)
+                sb->stream_size -= 0x30;
 
-                if (sb->num_samples == 0)
-                    sb->num_samples = ps_bytes_to_samples(sb->stream_size, sb->channels);
-
-                if (sb->cfg.audio_fix_psx_samples)
-                    sb->num_samples /= sb->channels;
-
-                codec = AV_CODEC_ID_ADPCM_PSX;
-                break;
-            case RAW_XBOX:
-                codec = AV_CODEC_ID_ADPCM_IMA_XBOX;
-                break;
-            case RAW_DSP:
-                ret = ff_alloc_extradata(st->codecpar, 32 * sb->channels);
-                if (ret < 0)
-                    return ret;
-
-                avio_seek(pb, sb->extra_offset + 0x10, SEEK_SET);
-                for (int ch = 0; ch < sb->channels; ch++) {
-                    avio_read(pb, st->codecpar->extradata + 32 * ch, 32);
-                    avio_skip(pb, 32);
-                }
-
-                codec = AV_CODEC_ID_ADPCM_NDSP;
-                break;
-            case FMT_VAG:
-                if (sb->stream_size > 0x30) {
-                    avio_seek(pb, sb->stream_offset, SEEK_SET);
-                    if (avio_rb32(pb) == AV_RB32("VAGp")) {
-                        sb->stream_offset += 0x30;
-                        sb->stream_size  -= 0x30;
-                    }
-                }
-
-                codec = AV_CODEC_ID_ADPCM_PSX;
-                break;
-            case FMT_CWAV:
-                if (sb->channels > 1)
-                    return AVERROR_INVALIDDATA;
-                sb->cfg.audio_interleave = 0x08;
-
-                if (sb->stream_size <= 0xe0)
-                    return AVERROR_INVALIDDATA;
-
-                ret = ff_alloc_extradata(st->codecpar, 32 * sb->channels);
-                if (ret < 0)
-                    return ret;
-
-                avio_seek(pb, sb->stream_offset + 0x7c, SEEK_SET);
-                for (int ch = 0; ch < sb->channels; ch++) {
-                    avio_read(pb, st->codecpar->extradata + 32 * ch, 32);
-                    avio_skip(pb, 32);
-                }
-                sb->stream_offset += 0xe0;
-                sb->stream_size -= 0xe0;
-
-                codec = AV_CODEC_ID_ADPCM_NDSP_LE;
-                break;
-            case FMT_APM:
-                sb->cfg.audio_interleave = 0x01;
-
-                if (sb->stream_size <= 0x64)
-                    return AVERROR_INVALIDDATA;
-
-                sb->stream_offset += 0x64;
-                sb->stream_size -= 0x64;
-
-                codec = AV_CODEC_ID_ADPCM_IMA_DVI;
-                break;
-            default:
-                codec = AV_CODEC_ID_NONE;
-                av_log(s, AV_LOG_DEBUG, "unknown codec: %x\n", sb->codec);
-                break;
+            if (sb->is_ps2_bnm) {
+                sb->cfg.audio_interleave = sb->is_cd_streamed ?
+                                           sb->cfg.audio_interleave :
+                                           sb->stream_size / sb->channels;
+            } else {
+                sb->cfg.audio_interleave = (sb->cfg.audio_interleave > 0) ?
+                                            sb->cfg.audio_interleave :
+                                            sb->stream_size / sb->channels;
             }
 
-            bst->start_offset = sb->stream_offset;
-            bst->stop_offset = bst->start_offset;
-            bst->stop_offset += sb->stream_size;
+            if (sb->num_samples == 0)
+                sb->num_samples = ps_bytes_to_samples(sb->stream_size, sb->channels);
 
+            if (sb->cfg.audio_fix_psx_samples)
+                sb->num_samples /= sb->channels;
+
+            codec = AV_CODEC_ID_ADPCM_PSX;
+            break;
+        case RAW_XBOX:
+            codec = AV_CODEC_ID_ADPCM_IMA_XBOX;
+            break;
+        case RAW_DSP:
+            ret = ff_alloc_extradata(st->codecpar, 32 * sb->channels);
+            if (ret < 0)
+                return ret;
+
+            avio_seek(pb, sb->extra_offset + 0x10, SEEK_SET);
+            for (int ch = 0; ch < sb->channels; ch++) {
+                avio_read(pb, st->codecpar->extradata + 32 * ch, 32);
+                avio_skip(pb, 32);
+            }
+
+            codec = AV_CODEC_ID_ADPCM_NDSP;
+            break;
+        case FMT_VAG:
+        case FMT_CWAV:
+        case FMT_APM:
+            if (!(bst->ctx = avformat_alloc_context()))
+                return AVERROR(ENOMEM);
+
+            if ((ret = ff_copy_whiteblacklists(bst->ctx, s)) < 0) {
+                avformat_free_context(bst->ctx);
+                bst->ctx = NULL;
+
+                return ret;
+            }
+
+            bst->ctx->flags = AVFMT_FLAG_CUSTOM_IO | AVFMT_FLAG_GENPTS;
+            bst->ctx->probesize = 0;
+            bst->ctx->max_analyze_duration = 0;
+            bst->ctx->interrupt_callback = s->interrupt_callback;
+            bst->ctx->pb = bst->pb ? bst->pb : pb;
+            bst->ctx->io_open = NULL;
+            bst->ctx->skip_initial_bytes = 0;
+
+            avio_seek(bst->ctx->pb, bst->start_offset, SEEK_SET);
+            ret = avformat_open_input(&bst->ctx, "", NULL, NULL);
+            if (ret < 0)
+                return ret;
+
+            st->id = bst->ctx->streams[0]->id;
+            st->duration = bst->ctx->streams[0]->duration;
+            st->time_base = bst->ctx->streams[0]->time_base;
+            st->start_time = bst->ctx->streams[0]->start_time;
+            st->pts_wrap_bits = bst->ctx->streams[0]->pts_wrap_bits;
+
+            ret = avcodec_parameters_copy(st->codecpar, bst->ctx->streams[0]->codecpar);
+            if (ret < 0)
+                return ret;
+
+            ret = av_dict_copy(&st->metadata, bst->ctx->streams[0]->metadata, 0);
+            if (ret < 0)
+                return ret;
+
+            ffstream(st)->request_probe = 0;
+            ffstream(st)->need_parsing = ffstream(bst->ctx->streams[0])->need_parsing;
+
+            bst->start_offset += avio_tell(bst->ctx->pb);
+            is_fmt = 1;
+            break;
+        default:
+            codec = AV_CODEC_ID_NONE;
+            av_log(s, AV_LOG_DEBUG, "unknown codec: %x\n", sb->codec);
+            break;
+        }
+
+        if (!is_fmt) {
             st->start_time = 0;
             if (sb->num_samples > 0)
                 st->duration = sb->num_samples;
@@ -2700,6 +2741,9 @@ static int read_header(AVFormatContext *s)
     if (ret < 0)
         return ret;
 
+    if (s->nb_streams <= 0)
+        return AVERROR_INVALIDDATA;
+
     qsort(s->streams, s->nb_streams, sizeof(AVStream *), sort_streams);
     for (int n = 0; n < s->nb_streams; n++) {
         AVStream *st = s->streams[n];
@@ -2720,21 +2764,21 @@ static int read_header(AVFormatContext *s)
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     UBIBNMDemuxContext *bnm = s->priv_data;
-    AVIOContext *pb = s->pb;
     int ret = AVERROR_EOF;
     int do_seek = 0;
+    AVIOContext *mpb = s->pb;
+    AVIOContext *pb;
     BNMStream *bst;
     AVStream *st;
 
 redo:
-    if (avio_feof(pb))
-        return AVERROR_EOF;
-
     if (bnm->current_stream >= s->nb_streams)
         return AVERROR_EOF;
 
     st = s->streams[bnm->current_stream];
     bst = st->priv_data;
+    pb = bst->pb ? bst->pb : mpb;
+
     if (do_seek)
         avio_seek(pb, bst->start_offset, SEEK_SET);
 
@@ -2744,7 +2788,9 @@ redo:
         goto redo;
     }
 
-    {
+    if (bst->ctx) {
+        ret = av_read_frame(bst->ctx, pkt);
+    } else {
         const int64_t pos = avio_tell(pb);
         const int block_size = ff_pcm_default_packet_size(st->codecpar);
         const int size = FFMIN(block_size, bst->stop_offset - pos);
@@ -2765,7 +2811,8 @@ static int read_seek(AVFormatContext *s, int stream_index,
                      int64_t ts, int flags)
 {
     UBIBNMDemuxContext *bnm = s->priv_data;
-    AVIOContext *pb = s->pb;
+    AVIOContext *mpb = s->pb;
+    AVIOContext *pb;
     BNMStream *bst;
     AVStream *st;
     int64_t pos;
@@ -2773,6 +2820,10 @@ static int read_seek(AVFormatContext *s, int stream_index,
     bnm->current_stream = av_clip(stream_index, 0, s->nb_streams-1);
     st = s->streams[bnm->current_stream];
     bst = st->priv_data;
+    pb = bst->pb ? bst->pb : mpb;
+
+    if (bst->ctx)
+        return av_seek_frame(bst->ctx, 0, ts, flags);
 
     pos = avio_tell(pb);
     if (pos < bst->start_offset) {
@@ -2781,6 +2832,20 @@ static int read_seek(AVFormatContext *s, int stream_index,
     }
 
     return -1;
+}
+
+static int read_close(AVFormatContext *s)
+{
+    for (int i = 0; i < s->nb_streams; i++) {
+        AVStream *st = s->streams[i];
+        BNMStream *bst = st->priv_data;
+
+        avformat_close_input(&bst->ctx);
+        s->io_close2(s, bst->pb);
+        bst->pb = NULL;
+    }
+
+    return 0;
 }
 
 const FFInputFormat ff_ubibnm_demuxer = {
@@ -2793,4 +2858,5 @@ const FFInputFormat ff_ubibnm_demuxer = {
     .read_header    = read_header,
     .read_packet    = read_packet,
     .read_seek      = read_seek,
+    .read_close     = read_close,
 };

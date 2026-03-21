@@ -48,7 +48,12 @@ static const struct {
     { AV_CPU_FLAG_I8MM,      "i8mm"       },
     { AV_CPU_FLAG_SVE,       "sve"        },
     { AV_CPU_FLAG_SVE2,      "sve2"       },
+    { AV_CPU_FLAG_SME,       "sme"        },
+    { AV_CPU_FLAG_SME_I16I64, "sme_i16i64" },
     { AV_CPU_FLAG_ARM_CRC,   "crc"        },
+    { AV_CPU_FLAG_SME2,      "sme2"       },
+    { AV_CPU_FLAG_PMULL,     "pmull"      },
+    { AV_CPU_FLAG_EOR3,      "eor3"       },
 #elif ARCH_ARM
     { AV_CPU_FLAG_ARMV5TE,   "armv5te"    },
     { AV_CPU_FLAG_ARMV6,     "armv6"      },
@@ -176,7 +181,12 @@ int main(int argc, char **argv)
 #if ARCH_AARCH64 && HAVE_SVE
     if (cpu_flags_raw & AV_CPU_FLAG_SVE)
         printf("sve_vector_length = %d\n", 8 * ff_aarch64_sve_length());
-#elif ARCH_RISCV && HAVE_RVV
+#endif
+#if ARCH_AARCH64 && HAVE_SME
+    if (cpu_flags_raw & AV_CPU_FLAG_SME)
+        printf("sme_vector_length = %d\n", 8 * ff_aarch64_sme_length());
+#endif
+#if ARCH_RISCV && HAVE_RVV
     if (cpu_flags_raw & AV_CPU_FLAG_RVV_I32) {
         size_t bytes = ff_get_rv_vlenb();
 

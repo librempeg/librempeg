@@ -64,6 +64,22 @@
 #define DISABLE_I8MM
 #endif
 
+#if HAVE_AS_ARCHEXT_AES_DIRECTIVE
+#define ENABLE_PMULL  .arch_extension aes
+#define DISABLE_PMULL .arch_extension noaes
+#else
+#define ENABLE_PMULL
+#define DISABLE_PMULL
+#endif
+
+#if HAVE_AS_ARCHEXT_SHA3_DIRECTIVE
+#define ENABLE_EOR3  .arch_extension sha3
+#define DISABLE_EOR3 .arch_extension nosha3
+#else
+#define ENABLE_EOR3
+#define DISABLE_EOR3
+#endif
+
 #if HAVE_AS_ARCHEXT_SVE_DIRECTIVE
 #define ENABLE_SVE  .arch_extension sve
 #define DISABLE_SVE .arch_extension nosve
@@ -80,11 +96,40 @@
 #define DISABLE_SVE2
 #endif
 
+#if HAVE_AS_ARCHEXT_SME_DIRECTIVE
+#define ENABLE_SME   .arch_extension sme
+#define DISABLE_SME  .arch_extension nosme
+#else
+#define ENABLE_SME
+#define DISABLE_SME
+#endif
+
+#if HAVE_AS_ARCHEXT_SME_I16I64_DIRECTIVE
+#define ENABLE_SME_I16I64  .arch_extension sme-i16i64
+#define DISABLE_SME_I16I64 .arch_extension nosme-i16i64
+#else
+#define ENABLE_SME_I16I64
+#define DISABLE_SME_I16I64
+#endif
+
+#if HAVE_AS_ARCHEXT_SME2_DIRECTIVE
+#define ENABLE_SME2   .arch_extension sme2
+#define DISABLE_SME2  .arch_extension nosme2
+#else
+#define ENABLE_SME2
+#define DISABLE_SME2
+#endif
+
 DISABLE_ARM_CRC
+DISABLE_PMULL
+DISABLE_EOR3
 DISABLE_DOTPROD
 DISABLE_I8MM
 DISABLE_SVE
 DISABLE_SVE2
+DISABLE_SME
+DISABLE_SME_I16I64
+DISABLE_SME2
 
 
 /* Support macros for
@@ -190,8 +235,14 @@ DISABLE_SVE2
 #   define AARCH64_VALIDATE_LINK_REGISTER
 #endif
 
+#if defined(__ARM_FEATURE_GCS_DEFAULT) && __ARM_FEATURE_GCS_DEFAULT == 1
+#define GNU_PROPERTY_AARCH64_GCS (1 << 2)
+#else
+#define GNU_PROPERTY_AARCH64_GCS 0 /* No GCS */
+#endif
 
-#if (GNU_PROPERTY_AARCH64_BTI != 0 || GNU_PROPERTY_AARCH64_PAC != 0) && defined(__ELF__)
+
+#if (GNU_PROPERTY_AARCH64_BTI != 0 || GNU_PROPERTY_AARCH64_PAC != 0 || GNU_PROPERTY_AARCH64_GCS != 0) && defined(__ELF__)
         .pushsection .note.gnu.property, "a"
         .balign 8
         .long 4
@@ -200,7 +251,7 @@ DISABLE_SVE2
         .asciz "GNU"
         .long 0xc0000000 /* GNU_PROPERTY_AARCH64_FEATURE_1_AND */
         .long 4
-        .long (GNU_PROPERTY_AARCH64_BTI | GNU_PROPERTY_AARCH64_PAC)
+        .long (GNU_PROPERTY_AARCH64_BTI | GNU_PROPERTY_AARCH64_PAC | GNU_PROPERTY_AARCH64_GCS)
         .long 0
         .popsection
 #endif
@@ -285,3 +336,26 @@ ELF     .size   \name, . - \name
 
 #define x18 do_not_use_x18
 #define w18 do_not_use_w18
+
+#if HAVE_SME
+.macro sme_entry
+        AARCH64_SIGN_LINK_REGISTER
+        stp             x29, x30, [sp, #-80]!
+        mov             x29, sp
+        stp             d8,  d9,  [sp, #16]
+        stp             d10, d11, [sp, #32]
+        stp             d12, d13, [sp, #48]
+        stp             d14, d15, [sp, #64]
+        smstart
+.endm
+
+.macro sme_exit
+        smstop
+        ldp             d8,  d9,  [sp, #16]
+        ldp             d10, d11, [sp, #32]
+        ldp             d12, d13, [sp, #48]
+        ldp             d14, d15, [sp, #64]
+        ldp             x29, x30, [sp], #80
+        AARCH64_VALIDATE_LINK_REGISTER
+.endm
+#endif

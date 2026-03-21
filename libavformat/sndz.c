@@ -62,15 +62,13 @@ static int sort_streams(const void *a, const void *b)
 static int read_header(AVFormatContext *s)
 {
     SNDZContext *sndz = s->priv_data;
-    int entries, entry_size, data_size;
+    int64_t offset = 0, data_size;
     AVIOContext *pb = s->pb;
+    int entries, entry_size;
     int ret, nb_streams;
-    int64_t offset = 0;
 
     avio_skip(pb, 8);
     data_size = avio_rl32(pb);
-    if (data_size <= 0)
-        return AVERROR_INVALIDDATA;
 
     avio_seek(pb, 0x70, SEEK_SET);
     avio_skip(pb, avio_rl32(pb) - 4);
@@ -129,8 +127,10 @@ static int read_header(AVFormatContext *s)
         stream_size = avio_rl32(pb);
         stream_offset = avio_rl32(pb);
 
-        if (channels <= 0 || sample_rate <= 0)
-            return AVERROR_INVALIDDATA;
+        if (channels <= 0 || sample_rate <= 0) {
+            avio_seek(pb, entry_end, SEEK_SET);
+            continue;
+        }
 
         switch (codec) {
         case 0x02:
@@ -154,6 +154,7 @@ static int read_header(AVFormatContext *s)
             align = 512;
             break;
         default:
+            avpriv_request_sample(s, "codec %X", codec);
             return AVERROR_PATCHWELCOME;
         }
 
@@ -178,7 +179,7 @@ static int read_header(AVFormatContext *s)
 
             AV_WL32(st->codecpar->extradata, 3);
             AV_WB32(st->codecpar->extradata+4, config);
-            st->codecpar->block_align = 4 * (((config >> 5) & 0x7ff) + 1);
+            st->codecpar->block_align = (1 << ((config>>3) & 3)) * (((config >> 5) & 0x7ff) + 1);
 
             ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
         }
@@ -229,6 +230,9 @@ static int read_header(AVFormatContext *s)
             return AVERROR_INVALIDDATA;
         }
     }
+
+    if (s->nb_streams <= 0)
+        return AVERROR_INVALIDDATA;
 
     qsort(s->streams, s->nb_streams, sizeof(AVStream *), sort_streams);
     for (int n = 0; n < s->nb_streams; n++) {

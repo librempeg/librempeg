@@ -83,26 +83,26 @@ static int eaac_parse_header(EAACHeader *h,
     h->nb_samples  =  (header2 >>  0) & 0x1FFFFFFF;
 
     if (h->version != 0 && h->version != 1)
-        return -1;
+        return AVERROR_INVALIDDATA;
 
     if (h->sample_rate > 200000 ||
         h->sample_rate == 0)
-        return -1;
+        return AVERROR_INVALIDDATA;
 
     h->streamed = h->type != EAAC_TYPE_RAM;
     if (h->type != EAAC_TYPE_RAM && h->type != EAAC_TYPE_STREAM && h->type != EAAC_TYPE_GIGASAMPLE)
-        return -1;
+        return AVERROR_INVALIDDATA;
 
     if (h->version == 1 && h->type == EAAC_TYPE_GIGASAMPLE)
-        return -1;
+        return AVERROR_INVALIDDATA;
 
     return 0;
 }
 
 static int snrsns_read_probe(const AVProbeData *p)
 {
+    EAACHeader h = { 0 };
     uint32_t header[2];
-    EAACHeader h;
     int ret;
 
     if (av_match_ext(p->filename, "snr") == 0)
@@ -131,7 +131,7 @@ static int snrsns_read_header(AVFormatContext *s)
 
     ret = eaac_parse_header(&h, header[0], header[1]);
     if (ret < 0)
-        return AVERROR_INVALIDDATA;
+        return ret;
 
     if (h.loop_flag)
         h.loop_start = sign_extend(avio_rb32(pb), 32);

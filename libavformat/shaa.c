@@ -26,7 +26,7 @@
 #include "internal.h"
 #include "pcm.h"
 
-static int shaa_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "SHAA", 4) || AV_RL32(p->buf + 4) != 2)
         return 0;
@@ -40,66 +40,79 @@ static int shaa_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int shaa_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
-    int ret;
-    uint8_t format;
     uint32_t start_offset, coefs_offset, loop_start, loop_end, title_length;
-    char title[1024];
-    AVStream *st;
+    char title[1024] = { 0 };
     AVIOContext *pb = s->pb;
-
-    st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
-
-    st->start_time = 0;
-    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->ch_layout.nb_channels = 1;
-    st->codecpar->block_align = 512;
+    int ret, rate, codec;
+    int64_t duration;
+    uint8_t format;
+    AVStream *st;
 
     avio_skip(pb, 8);
     start_offset = avio_rl32(pb);
     avio_skip(pb, 4);
     format = avio_r8(pb);
     avio_skip(pb, 3);
-    st->codecpar->sample_rate = avio_rl32(pb);
-    if (st->codecpar->sample_rate <= 0)
+    rate = avio_rl32(pb);
+    if (rate <= 0)
         return AVERROR_INVALIDDATA;
-    st->duration = avio_rl32(pb);
+    duration = avio_rl32(pb);
     coefs_offset = avio_tell(pb) + avio_rl32(pb);
     avio_skip(pb, 4);
 
     loop_start = avio_rl32(pb);
     loop_end = avio_rl32(pb);
-    if (loop_end > 0) {
-        av_dict_set_int(&s->metadata, "loop_start", loop_start, 0);
-        av_dict_set_int(&s->metadata, "loop_end", loop_end, 0);
-    }
-
     title_length = avio_rl32(pb);
     if (title_length > 0) {
         ret = avio_get_str(pb, title_length, title, sizeof(title));
         if (ret < 0)
             return ret;
-        av_dict_set(&s->metadata, "title", title, 0);
     }
 
-    if (format == 1) {
-        st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
-    } else if (format == 2) {
-        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP_LE;
+    switch (format) {
+    case 1:
+        codec  = AV_CODEC_ID_PCM_S16LE;
+        break;
+    case 2:
+        codec = AV_CODEC_ID_ADPCM_NDSP_LE;
+        break;
+    default:
+        avpriv_request_sample(s, "format 0x%X", format);
+        return AVERROR_PATCHWELCOME;
+    }
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
+
+    st->start_time = 0;
+    st->duration = duration;
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id = codec;
+    st->codecpar->ch_layout.nb_channels = 1;
+    st->codecpar->block_align = 512;
+    st->codecpar->sample_rate = rate;
+
+    if (loop_end > 0) {
+        av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
+        av_dict_set_int(&st->metadata, "loop_end", loop_end, 0);
+    }
+
+    if (title[0])
+        av_dict_set(&st->metadata, "title", title, 0);
+
+    if (codec == AV_CODEC_ID_ADPCM_NDSP_LE) {
         avio_seek(pb, coefs_offset, SEEK_SET);
         ret = ff_get_extradata(s, st->codecpar, pb, 0x20);
         if (ret < 0)
             return ret;
-    } else {
-        avpriv_request_sample(st, "format 0x%X", format);
-        return AVERROR_PATCHWELCOME;
     }
+
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     avio_seek(pb, start_offset, SEEK_SET);
+
     return 0;
 }
 
@@ -108,7 +121,7 @@ const FFInputFormat ff_shaa_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("SHAA/SHSA (Nintendo Alarmo)"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "shaa,shsa",
-    .read_probe     = shaa_probe,
-    .read_header    = shaa_read_header,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
 };
