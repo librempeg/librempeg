@@ -1,6 +1,6 @@
 /*
- * Ocean Games DSF demuxer
- * Copyright (c) 2025 Paul B Mahol
+ * VS STR demuxer
+ * Copyright (c) 2026 Paul B Mahol
  *
  * This file is part of Librempeg
  *
