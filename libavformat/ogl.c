@@ -31,6 +31,8 @@ typedef struct OGLContext {
 
 static int read_probe(const AVProbeData *p)
 {
+    int score = AVPROBE_SCORE_MAX;
+
     if (p->buf_size < 0x26)
         return 0;
 
@@ -39,13 +41,13 @@ static int read_probe(const AVProbeData *p)
     if (p->buf[0x21] == 0)
         return 0;
     if (AV_RL32(p->buf+0x0c) == 0)
-        return 0;
+        score -= 10;
     if (AV_RL32(p->buf+0x10) == 0)
         return 0;
     if ((int)AV_RL32(p->buf+0x22) <= 0)
         return 0;
 
-    return AVPROBE_SCORE_MAX;
+    return score;
 }
 
 static int read_header(AVFormatContext *s)
