@@ -250,6 +250,7 @@ extern const FFInputFormat  ff_g729_demuxer;
 extern const FFInputFormat  ff_gccstr_demuxer;
 extern const FFInputFormat  ff_gcstr_demuxer;
 extern const FFInputFormat  ff_gcsw_demuxer;
+extern const FFInputFormat  ff_gcub_demuxer;
 extern const FFInputFormat  ff_gdv_demuxer;
 extern const FFInputFormat  ff_genh_demuxer;
 extern const FFInputFormat  ff_gif_demuxer;
