@@ -263,6 +263,17 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
                     if (tab_entry_data->tab_entry_type & 0x80)
                         tab_entry_data->tab_entry_type ^= 0x80;
 
+                    /* HACK: due to how the tab TOC is structured, the very first tab entry present
+                     * will always be an audio track (entry type field is set to audio track for this purpose).
+                     *
+                     * consequently, from the second tab onward, said first entry
+                     * will out-and-out repeat the exact same data from the last tab entry
+                     * (whose entry type is also an audio track) from the previous tab.
+                     *
+                     * to avoid decoding this data as-is, without a second thought,
+                     * we just don't parse said first entry from the succeeding tabs.
+                     * (read: again, from the second tab onward)
+                     */
                     if ((i > 0) && (j == 0) && (tab_entry_data->tab_entry_type == 1))
                         tab_entry_data->ignore_this_chunk = 1;
 
@@ -479,18 +490,21 @@ static int read_seek(AVFormatContext *s, int stream_index, int64_t timestamp, in
             for (int j = 0; j < curr_tab_data->tab_entries; j++)
             {
                 tab_entry_data = &curr_tab_data->tab_entry_data[j];
-
-                if (stream_index == tab_entry_data->current_stream_index)
+                
+                if (!tab_entry_data->ignore_this_chunk)
                 {
-                    if (
-                        (timestamp >= tab_entry_data->starting_duration)
-                        &&
-                        (timestamp < tab_entry_data->overall_duration)
-                       )
+                    if (stream_index == tab_entry_data->current_stream_index)
                     {
-                        ctx->tab = i;
-                        curr_tab_data->tab_entry = j;
-                        exact_pos_found = 1;
+                        if (
+                            (timestamp >= tab_entry_data->starting_duration)
+                            &&
+                            (timestamp < tab_entry_data->overall_duration)
+                           )
+                        {
+                            ctx->tab = i;
+                            curr_tab_data->tab_entry = j;
+                            exact_pos_found = 1;
+                        }
                     }
                 }
 
