@@ -39,6 +39,7 @@
 #define STAB_TAG MKBETAG('S', 'T', 'A', 'B')
 #define CVID_TAG MKBETAG('c', 'v', 'i', 'd')
 #define RAW_TAG  MKBETAG('r', 'a', 'w', ' ')
+#define SEG4_TAG MKBETAG('S', 'e', 'g', '4')
 
 typedef struct film_sample {
   int stream;
@@ -143,6 +144,10 @@ static int film_read_header(AVFormatContext *s)
         film->video_type = AV_CODEC_ID_CINEPAK;
     } else if (AV_RB32(&scratch[8]) == RAW_TAG) {
         film->video_type = AV_CODEC_ID_RAWVIDEO;
+    } else if (AV_RB32(&scratch[8]) == SEG4_TAG) {
+        film->audio_type = AV_CODEC_ID_PCM_SGA;
+        film->video_type = AV_CODEC_ID_CINEPAK;
+        film->audio_samplerate = 16000;
     } else {
         film->video_type = AV_CODEC_ID_NONE;
     }
