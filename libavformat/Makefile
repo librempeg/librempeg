@@ -691,6 +691,7 @@ OBJS-$(CONFIG_SDS_DEMUXER)               += sdsdec.o
 OBJS-$(CONFIG_SDX_DEMUXER)               += sdxdec.o pcm.o
 OBJS-$(CONFIG_SEGAFILM_DEMUXER)          += segafilm.o
 OBJS-$(CONFIG_SEGAFILM_MUXER)            += segafilmenc.o
+OBJS-$(CONFIG_SEGAFILMA_DEMUXER)         += segafilma.o
 OBJS-$(CONFIG_SEGMENT_MUXER)             += segment.o
 OBJS-$(CONFIG_SER_DEMUXER)               += serdec.o
 OBJS-$(CONFIG_SGA_DEMUXER)               += sga.o
