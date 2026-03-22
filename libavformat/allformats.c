@@ -443,6 +443,7 @@ extern const FFInputFormat  ff_oceandsf_demuxer;
 extern const FFOutputFormat ff_oga_muxer;
 extern const FFInputFormat  ff_ogg_demuxer;
 extern const FFOutputFormat ff_ogg_muxer;
+extern const FFInputFormat  ff_ogl_demuxer;
 extern const FFOutputFormat ff_ogv_muxer;
 extern const FFInputFormat  ff_oma_demuxer;
 extern const FFOutputFormat ff_oma_muxer;

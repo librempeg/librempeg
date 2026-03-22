@@ -557,6 +557,7 @@ OBJS-$(CONFIG_OGA_MUXER)                 += oggenc.o \
                                             vorbiscomment.o
 OBJS-$(CONFIG_OGG_MUXER)                 += oggenc.o \
                                             vorbiscomment.o
+OBJS-$(CONFIG_OGL_DEMUXER)               += ogl.o
 OBJS-$(CONFIG_OGV_MUXER)                 += oggenc.o \
                                             vorbiscomment.o
 OBJS-$(CONFIG_OMA_DEMUXER)               += omadec.o pcm.o oma.o
