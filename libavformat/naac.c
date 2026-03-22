@@ -31,13 +31,15 @@ static int read_probe(const AVProbeData *p)
     if (AV_RB32(p->buf) != MKBETAG('A','A','C',' '))
         return 0;
 
+    if (p->buf_size < 40)
+        return 0;
     if (AV_RL32(p->buf + 4) != 1)
         return 0;
-
     if ((int)AV_RL32(p->buf + 8) <= 0)
         return 0;
-
     if ((int)AV_RL32(p->buf + 12) <= 0)
+        return 0;
+    if (AV_RL32(p->buf + 36) == 0)
         return 0;
 
     return AVPROBE_SCORE_MAX;
