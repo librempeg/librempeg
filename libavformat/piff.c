@@ -31,12 +31,20 @@ static int read_probe(const AVProbeData *p)
     if (p->buf_size < 60)
         return 0;
 
-    if (AV_RB32(p->buf)    == AV_RB32("PIFF") &&
-        AV_RB32(p->buf+8)  == AV_RB32("TPCM") &&
-        AV_RB32(p->buf+12) == AV_RB32("TADH") &&
-        AV_RB32(p->buf+56) == AV_RB32("BODY"))
-        return 50;
-    return 0;
+    if (AV_RB32(p->buf) != AV_RB32("PIFF"))
+        return 0;
+    if (AV_RB32(p->buf+8)  != AV_RB32("TPCM"))
+        return 0;
+    if (AV_RB32(p->buf+12) != AV_RB32("TADH"))
+        return 0;
+    if (AV_RL16(p->buf+22) == 0)
+        return 0;
+    if ((int)AV_RL32(p->buf+24) <= 0)
+        return 0;
+    if (AV_RB32(p->buf+56) != AV_RB32("BODY"))
+        return 0;
+
+    return AVPROBE_SCORE_MAX;
 }
 
 static int read_header(AVFormatContext *s)
