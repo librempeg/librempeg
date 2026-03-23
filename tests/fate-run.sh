@@ -499,6 +499,21 @@ lavf_image2pipe(){
     do_avconv_crc $file -auto_conversion_filters $DEC_OPTS -f image2pipe -i $target_path/$file
 }
 
+img2_update_filemtime(){
+    outdir="tests/data/lavf"
+    file=${outdir}/img2_mtime_%03d.pgm
+    cleanfiles="$cleanfiles ${outdir}/img2_mtime_001.pgm ${outdir}/img2_mtime_002.pgm ${outdir}/img2_mtime_003.pgm"
+    ffmpeg -f lavfi -i "color=c=black:s=2x2:r=1:d=3,format=gray8" \
+           -c:v pgm \
+           -metadata creation_time="2024-01-01T00:00:00.000000Z" \
+           -update_filemtime 1 \
+           -y $file || return
+    probe -f image2 -ts_from_file sec \
+          -show_entries packet=pts \
+          -of csv=p=0 \
+          -i $file
+}
+
 lavf_video(){
     t="${test#lavf-}"
     outdir="tests/data/lavf"
