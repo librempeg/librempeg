@@ -20,6 +20,7 @@
  */
 
 #include "libavutil/intreadwrite.h"
+#include "libavcodec/bytestream.h"
 
 #include "avformat.h"
 #include "demux.h"
@@ -28,6 +29,7 @@
 typedef struct MODemuxContext {
     AVPacket *audio_pkt;
     int multi_audio;
+    int is_vorbis;
     int nb_audio_tracks;
     int current_audio_track;
 } MODemuxContext;
@@ -44,7 +46,7 @@ static int mo_read_header(AVFormatContext *s)
     MODemuxContext *m = s->priv_data;
     AVIOContext *pb = s->pb;
     AVStream *vst, *ast;
-    int audio_codec;
+    int audio_codec, ret;
     int64_t offset;
     AVRational fps;
 
@@ -160,6 +162,54 @@ static int mo_read_header(AVFormatContext *s)
             avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
         }
         break;
+    case 0x6962:
+        avio_skip(pb, 3);
+        m->is_vorbis = 1;
+        ast->codecpar->ch_layout.nb_channels = avio_r8(pb);
+        ast->codecpar->sample_rate = avio_rl32(pb);
+        ast->codecpar->codec_id = AV_CODEC_ID_VORBIS;
+        ast->codecpar->block_align = 1024;
+        ffstream(ast)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+        avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
+        avio_skip(pb, -20);
+        if (avio_tell(pb) >= offset)
+            return AVERROR_INVALIDDATA;
+
+        ret = ff_alloc_extradata(ast->codecpar, offset - avio_tell(pb));
+        if (ret < 0)
+            return ret;
+        memset(ast->codecpar->extradata, 0, ast->codecpar->extradata_size);
+        {
+            PutByteContext pbyte;
+            int size;
+
+            bytestream2_init_writer(&pbyte, ast->codecpar->extradata, ast->codecpar->extradata_size);
+            size = avio_rl32(pb);
+            bytestream2_put_be16(&pbyte, size);
+            while (size > 0) {
+                if (avio_feof(pb))
+                    return AVERROR_INVALIDDATA;
+                bytestream2_put_byte(&pbyte, avio_r8(pb));
+                size--;
+            }
+            size = avio_rl32(pb);
+            bytestream2_put_be16(&pbyte, size);
+            while (size > 0) {
+                if (avio_feof(pb))
+                    return AVERROR_INVALIDDATA;
+                bytestream2_put_byte(&pbyte, avio_r8(pb));
+                size--;
+            }
+            size = avio_rl32(pb);
+            bytestream2_put_be16(&pbyte, size);
+            while (size > 0) {
+                if (avio_feof(pb))
+                    return AVERROR_INVALIDDATA;
+                bytestream2_put_byte(&pbyte, avio_r8(pb));
+                size--;
+            }
+        }
+        break;
     default:
         avpriv_request_sample(s, "codec 0x%X", audio_codec);
         return AVERROR_PATCHWELCOME;
@@ -237,6 +287,10 @@ static int mo_read_packet(AVFormatContext *s, AVPacket *pkt)
         return ret;
 
     if (size > vsize) {
+        if (m->is_vorbis && (size - vsize > 4)) {
+            avio_skip(pb, 4);
+            size -= 4;
+        }
         ret = av_get_packet(pb, m->audio_pkt, size - vsize);
         if (ret < 0)
             return ret;

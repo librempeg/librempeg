@@ -93,6 +93,9 @@ static int hvqm2_read_header(AVFormatContext *s)
     case 1:
         ast->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_HVQM2;
         break;
+    default:
+        avpriv_request_sample(s, "audio format %X", audio_format);
+        break;
     }
     avio_skip(pb, 5);
     ast->codecpar->sample_rate = avio_rb32(pb);

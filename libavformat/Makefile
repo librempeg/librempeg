@@ -308,6 +308,7 @@ OBJS-$(CONFIG_G729_DEMUXER)              += g729dec.o
 OBJS-$(CONFIG_GCCSTR_DEMUXER)            += gccstr.o pcm.o
 OBJS-$(CONFIG_GCSTR_DEMUXER)             += gcstr.o pcm.o
 OBJS-$(CONFIG_GCSW_DEMUXER)              += gcsw.o
+OBJS-$(CONFIG_GCUB_DEMUXER)              += gcub.o pcm.o
 OBJS-$(CONFIG_GDV_DEMUXER)               += gdv.o
 OBJS-$(CONFIG_GENH_DEMUXER)              += genh.o
 OBJS-$(CONFIG_H261_DEMUXER)              += h261dec.o rawdec.o
@@ -557,6 +558,7 @@ OBJS-$(CONFIG_OGA_MUXER)                 += oggenc.o \
                                             vorbiscomment.o
 OBJS-$(CONFIG_OGG_MUXER)                 += oggenc.o \
                                             vorbiscomment.o
+OBJS-$(CONFIG_OGL_DEMUXER)               += ogl.o
 OBJS-$(CONFIG_OGV_MUXER)                 += oggenc.o \
                                             vorbiscomment.o
 OBJS-$(CONFIG_OMA_DEMUXER)               += omadec.o pcm.o oma.o
