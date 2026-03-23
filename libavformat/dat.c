@@ -27,7 +27,7 @@
 #define DAT_PACKET_SIZE 5822
 #define DAT_OFFSET 5760
 
-static const uint32_t encoded_rate[] = { 48000, 44100, 32000, 0 };
+static const uint16_t encoded_rate[] = { 48000, 44100, 32000, 0 };
 static const uint16_t encoded_size[] = { 5760, 5292, 5760, 0 };
 static const uint8_t encoded_chans[] = { 2, 4, 0, 0 };
 static const enum AVCodecID encoded_codec[] = {
@@ -45,7 +45,7 @@ static int valid_subcode(const uint8_t *subcode)
     if (parity != subcode[7])
         return 0;
 
-    return 1 + (!!subcode[7]) * 7;
+    return 3 * (!!parity) + (!!subcode[7]) * 7;
 }
 
 static int valid_frame(const uint8_t *frame)
@@ -55,12 +55,14 @@ static int valid_frame(const uint8_t *frame)
     const uint8_t *mainid = subid+4;
     int chan_index = (mainid[0] >> 0) & 0x3;
     int rate_index = (mainid[0] >> 2) & 0x3;
+    int emphasis   = (mainid[0] >> 4) & 0x3;
+    int fmtid      = (mainid[0] >> 6) & 0x3;
     int enc_index  = (mainid[1] >> 6) & 0x3;
     int dataid     = (subid[0] >> 0) & 0xf;
     int ret = 0;
 
-    if (dataid != 0 || encoded_codec[enc_index] == AV_CODEC_ID_NONE ||
-        encoded_chans[chan_index] == 0 ||
+    if (fmtid != 0 || dataid != 0 || encoded_codec[enc_index] == AV_CODEC_ID_NONE ||
+        encoded_chans[chan_index] == 0 || emphasis >= 2 ||
         encoded_rate[rate_index] == 0)
         return 0;
 
