@@ -50,11 +50,10 @@ struct FFFramePool {
 
 };
 
-FFFramePool *ff_frame_pool_video_init(AVBufferRef* (*alloc)(size_t size),
-                                      int width,
-                                      int height,
-                                      enum AVPixelFormat format,
-                                      int align)
+av_cold FFFramePool *ff_frame_pool_video_init(AVBufferRef* (*alloc)(size_t size),
+                                              int width, int height,
+                                              enum AVPixelFormat format,
+                                              int align)
 {
     int i, ret;
     FFFramePool *pool;
@@ -157,11 +156,10 @@ fail:
     return ret;
 }
 
-FFFramePool *ff_frame_pool_audio_init(AVBufferRef* (*alloc)(size_t size),
-                                      int channels,
-                                      int nb_samples,
-                                      enum AVSampleFormat format,
-                                      int align)
+av_cold FFFramePool *ff_frame_pool_audio_init(AVBufferRef* (*alloc)(size_t size),
+                                              int channels, int nb_samples,
+                                              enum AVSampleFormat format,
+                                              int align)
 {
     int ret, planar;
     FFFramePool *pool;
@@ -351,7 +349,7 @@ fail:
     return NULL;
 }
 
-void ff_frame_pool_uninit(FFFramePool **pool)
+av_cold void ff_frame_pool_uninit(FFFramePool **pool)
 {
     if (!pool || !*pool)
         return;
