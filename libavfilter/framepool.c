@@ -338,7 +338,7 @@ AVFrame *ff_frame_pool_get(FFFramePool *pool, FFFilterGraph *graphi)
 
         break;
     default:
-        av_assert0(0);
+        av_unreachable("only audio and video frame pools exist");
     }
 
     ff_mutex_unlock(&pool->mutex);
