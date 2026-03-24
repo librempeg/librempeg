@@ -52,8 +52,8 @@ AVFrame *ff_default_get_audio_buffer(AVFilterLink *link, int nb_samples)
     FFFilterGraph *graphi;
 
     if (!li->frame_pool) {
-        li->frame_pool = ff_frame_pool_audio_init(av_buffer_allocz, channels,
-                                                  nb_samples, link->format, align);
+        li->frame_pool = ff_frame_pool_audio_init(channels, nb_samples,
+                                                  link->format, align);
         if (!li->frame_pool)
             return NULL;
     } else {
