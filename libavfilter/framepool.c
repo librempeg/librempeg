@@ -200,52 +200,6 @@ fail:
     return NULL;
 }
 
-int ff_frame_pool_get_video_config(FFFramePool *pool,
-                                   int *width,
-                                   int *height,
-                                   enum AVPixelFormat *format,
-                                   int *align)
-{
-    if (!pool)
-        return AVERROR(EINVAL);
-
-    ff_mutex_lock(&pool->mutex);
-
-    av_assert0(pool->type == AVMEDIA_TYPE_VIDEO);
-
-    *width = pool->width;
-    *height = pool->height;
-    *format = pool->format;
-    *align = pool->align;
-
-    ff_mutex_unlock(&pool->mutex);
-
-    return 0;
-}
-
-int ff_frame_pool_get_audio_config(FFFramePool *pool,
-                                   int *channels,
-                                   int *nb_samples,
-                                   enum AVSampleFormat *format,
-                                   int *align)
-{
-    if (!pool)
-        return AVERROR(EINVAL);
-
-    ff_mutex_lock(&pool->mutex);
-
-    av_assert0(pool->type == AVMEDIA_TYPE_AUDIO);
-
-    *channels = pool->channels;
-    *nb_samples = pool->nb_samples;
-    *format = pool->format;
-    *align = pool->align;
-
-    ff_mutex_unlock(&pool->mutex);
-
-    return 0;
-}
-
 AVFrame *ff_frame_pool_get(FFFramePool *pool, FFFilterGraph *graphi)
 {
     int i;
