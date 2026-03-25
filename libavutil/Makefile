@@ -309,6 +309,7 @@ TESTPROGS = adler32                                                     \
             twofish                                                     \
             utf8                                                        \
             uuid                                                        \
+            video_enc_params                                            \
             xtea                                                        \
             tea                                                         \
 
