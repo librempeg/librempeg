@@ -863,6 +863,7 @@ OBJS-$(CONFIG_XVAG_DEMUXER)              += xvag.o pcm.o
 OBJS-$(CONFIG_XWB_DEMUXER)               += xwb.o
 OBJS-$(CONFIG_XWC_DEMUXER)               += xwc.o pcm.o
 OBJS-$(CONFIG_XWMA_DEMUXER)              += xwma.o
+OBJS-$(CONFIG_XWV_DEMUXER)               += xwv.o
 OBJS-$(CONFIG_YDSP_DEMUXER)              += ydsp.o pcm.o
 OBJS-$(CONFIG_YOP_DEMUXER)               += yop.o
 OBJS-$(CONFIG_YUV4MPEGPIPE_DEMUXER)      += yuv4mpegdec.o
