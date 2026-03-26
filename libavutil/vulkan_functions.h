@@ -1,19 +1,19 @@
 /*
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #ifndef AVUTIL_VULKAN_FUNCTIONS_H
@@ -39,7 +39,6 @@ typedef uint64_t FFVulkanExtensions;
 #define FF_VK_EXT_EXTERNAL_WIN32_MEMORY  (1ULL <<  6) /* VK_KHR_external_memory_win32 */
 #define FF_VK_EXT_EXTERNAL_WIN32_SEM     (1ULL <<  7) /* VK_KHR_external_semaphore_win32 */
 
-#define FF_VK_EXT_DESCRIPTOR_BUFFER      (1ULL <<  8) /* VK_EXT_descriptor_buffer */
 #define FF_VK_EXT_DEVICE_DRM             (1ULL <<  9) /* VK_EXT_physical_device_drm */
 #define FF_VK_EXT_ATOMIC_FLOAT           (1ULL << 10) /* VK_EXT_shader_atomic_float */
 #define FF_VK_EXT_COOP_MATRIX            (1ULL << 11) /* VK_KHR_cooperative_matrix */
@@ -188,13 +187,6 @@ typedef uint64_t FFVulkanExtensions;
     MACRO(1, 1, FF_VK_EXT_NO_FLAG,              DestroyDescriptorPool)                   \
     MACRO(1, 1, FF_VK_EXT_NO_FLAG,              DestroyDescriptorSetLayout)              \
                                                                                          \
-    /* Descriptor buffers */                                                               \
-    MACRO(1, 1, FF_VK_EXT_DESCRIPTOR_BUFFER,    GetDescriptorSetLayoutSizeEXT)             \
-    MACRO(1, 1, FF_VK_EXT_DESCRIPTOR_BUFFER,    GetDescriptorSetLayoutBindingOffsetEXT)    \
-    MACRO(1, 1, FF_VK_EXT_DESCRIPTOR_BUFFER,    GetDescriptorEXT)                          \
-    MACRO(1, 1, FF_VK_EXT_DESCRIPTOR_BUFFER,    CmdBindDescriptorBuffersEXT)               \
-    MACRO(1, 1, FF_VK_EXT_DESCRIPTOR_BUFFER,    CmdSetDescriptorBufferOffsetsEXT)          \
-                                                                                           \
     /* DescriptorUpdateTemplate */                                                       \
     MACRO(1, 1, FF_VK_EXT_NO_FLAG,              UpdateDescriptorSetWithTemplate)         \
     MACRO(1, 1, FF_VK_EXT_NO_FLAG,              CreateDescriptorUpdateTemplate)          \

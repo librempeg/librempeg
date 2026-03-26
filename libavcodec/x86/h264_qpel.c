@@ -2,21 +2,21 @@
  * Copyright (c) 2004-2005 Michael Niedermayer, Loren Merritt
  * Copyright (c) 2011 Daniel Kang
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <stddef.h>
@@ -30,7 +30,6 @@
 #include "fpel.h"
 #include "qpel.h"
 
-#if HAVE_X86ASM
 void ff_avg_pixels4_mmxext(uint8_t *dst, const uint8_t *src, ptrdiff_t stride);
 void ff_put_pixels4x4_l2_mmxext(uint8_t *dst, const uint8_t *src1, const uint8_t *src2,
                                 ptrdiff_t stride);
@@ -344,8 +343,6 @@ LUMA_MC_816(10, mc13, sse2)
 LUMA_MC_816(10, mc23, sse2)
 LUMA_MC_816(10, mc33, sse2)
 
-#endif /* HAVE_X86ASM */
-
 #define SET_QPEL_FUNCS_1PP(PFX, IDX, SIZE, CPU, PREFIX)                      \
     do {                                                                     \
     c->PFX ## _pixels_tab[IDX][ 1] = PREFIX ## PFX ## SIZE ## _mc10_ ## CPU; \
@@ -388,7 +385,6 @@ LUMA_MC_816(10, mc33, sse2)
 
 av_cold void ff_h264qpel_init_x86(H264QpelContext *c, int bit_depth)
 {
-#if HAVE_X86ASM
     int high_bit_depth = bit_depth > 8;
     int cpu_flags = av_get_cpu_flags();
 
@@ -455,5 +451,4 @@ av_cold void ff_h264qpel_init_x86(H264QpelContext *c, int bit_depth)
             H264_QPEL_FUNCS_10(3, 0, ssse3_cache64);
         }
     }
-#endif
 }

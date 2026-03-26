@@ -3,30 +3,39 @@
  *
  * Copyright (c) 2024 Lynne <dev@lynne.ee>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+
+#pragma shader_stage(compute)
+#extension GL_GOOGLE_include_directive : require
+
+#define ENCODE
+#define SB_QUALI
+#include "common.glsl"
+#include "ffv1_common.glsl"
+
+layout (set = 1, binding = 1) uniform uimage2D src[];
 
 ivec3 load_components(ivec2 pos)
 {
     ivec3 pix = ivec3(imageLoad(src[0], pos));
-    if (planar_rgb != 0) {
+    if (planar_rgb)
         for (int i = 1; i < 3; i++)
             pix[i] = int(imageLoad(src[i], pos)[0]);
-    }
 
     return ivec3(pix[fmt_lut[0]], pix[fmt_lut[1]], pix[fmt_lut[2]]);
 }
@@ -62,7 +71,7 @@ ivec3 transform_sample(ivec3 pix, ivec2 rct_coef)
 {
     pix.b -= pix.g;
     pix.r -= pix.g;
-    pix.g += (pix.r*rct_coef.x + pix.b*rct_coef.y) >> 2;
+    pix.g += (pix.b*rct_coef.g + pix.r*rct_coef.r) >> 2;
     pix.b += rct_offset;
     pix.r += rct_offset;
     return pix;
@@ -132,8 +141,9 @@ void coeff_search(inout SliceContext sc)
 
 void main(void)
 {
-    if (force_pcm == 1)
+    if (force_pcm)
         return;
+
     const uint slice_idx = gl_WorkGroupID.y*gl_NumWorkGroups.x + gl_WorkGroupID.x;
     coeff_search(slice_ctx[slice_idx]);
 }

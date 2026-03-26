@@ -26,6 +26,7 @@
 
 #define DECODER_IS_SDR(codec_id) \
     (((codec_id) == AV_CODEC_ID_FFV1) || \
+     ((codec_id) == AV_CODEC_ID_DPX) || \
      ((codec_id) == AV_CODEC_ID_PRORESRAW) || \
      ((codec_id) == AV_CODEC_ID_PRORES))
 
@@ -44,8 +45,14 @@ extern const FFVulkanDecodeDescriptor ff_vk_dec_av1_desc;
 #if CONFIG_FFV1_VULKAN_HWACCEL
 extern const FFVulkanDecodeDescriptor ff_vk_dec_ffv1_desc;
 #endif
+#if CONFIG_PRORES_RAW_VULKAN_HWACCEL
+extern const FFVulkanDecodeDescriptor ff_vk_dec_prores_raw_desc;
+#endif
 #if CONFIG_PRORES_VULKAN_HWACCEL
 extern const FFVulkanDecodeDescriptor ff_vk_dec_prores_desc;
+#endif
+#if CONFIG_DPX_VULKAN_HWACCEL
+extern const FFVulkanDecodeDescriptor ff_vk_dec_dpx_desc;
 #endif
 
 static const FFVulkanDecodeDescriptor *dec_descs[] = {
@@ -64,8 +71,14 @@ static const FFVulkanDecodeDescriptor *dec_descs[] = {
 #if CONFIG_FFV1_VULKAN_HWACCEL
     &ff_vk_dec_ffv1_desc,
 #endif
+#if CONFIG_PRORES_RAW_VULKAN_HWACCEL
+    &ff_vk_dec_prores_raw_desc,
+#endif
 #if CONFIG_PRORES_VULKAN_HWACCEL
     &ff_vk_dec_prores_desc,
+#endif
+#if CONFIG_DPX_VULKAN_HWACCEL
+    &ff_vk_dec_dpx_desc,
 #endif
 };
 
@@ -1174,11 +1187,18 @@ int ff_vk_frame_params(AVCodecContext *avctx, AVBufferRef *hw_frames_ctx)
             /* This saves memory bandwidth when downloading */
             frames_ctx->sw_format = AV_PIX_FMT_X2BGR10;
             break;
+        case AV_PIX_FMT_RGB24:
         case AV_PIX_FMT_BGR0:
             /* mpv has issues with bgr0 mapping, so just remap it */
             frames_ctx->sw_format = AV_PIX_FMT_RGB0;
             break;
-        case AV_PIX_FMT_YUVA422P10: /* ProRes needs to clear the input image, which is not possible on YUV formats */
+        /* DPX endian mismatch remappings */
+        case AV_PIX_FMT_RGB48LE:
+        case AV_PIX_FMT_RGB48BE: frames_ctx->sw_format = AV_PIX_FMT_GBRP16; break;
+        case AV_PIX_FMT_RGBA64BE: frames_ctx->sw_format = AV_PIX_FMT_RGBA64; break;
+        case AV_PIX_FMT_GRAY16BE: frames_ctx->sw_format = AV_PIX_FMT_GRAY16; break;
+        /* ProRes needs to clear the input image, which is not possible on YUV formats */
+        case AV_PIX_FMT_YUVA422P10:
         case AV_PIX_FMT_YUVA444P10:
         case AV_PIX_FMT_YUVA422P12:
         case AV_PIX_FMT_YUVA444P12:

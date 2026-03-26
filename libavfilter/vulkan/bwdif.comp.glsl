@@ -1,22 +1,41 @@
 /*
  * Copyright (c) Lynne
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+
+#pragma shader_stage(compute)
+
+#extension GL_EXT_shader_image_load_formatted : require
+#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_scalar_block_layout : require
+
+layout (local_size_x_id = 253, local_size_y_id = 254, local_size_z_id = 255) in;
+
+layout (set = 0, binding = 0) uniform readonly  image2D prev[];
+layout (set = 0, binding = 1) uniform readonly  image2D  cur[];
+layout (set = 0, binding = 2) uniform readonly  image2D next[];
+layout (set = 0, binding = 3) uniform writeonly image2D  dst[];
+
+layout (push_constant, scalar) uniform pushConstants {
+    int parity;
+    int tff;
+    int current_field;
+};
 
 const vec4 coef_lf[2] = { vec4(4309), vec4(213), };
 const vec4 coef_hf[3] = { vec4(5570), vec4(3801), vec4(1016) };
@@ -27,8 +46,10 @@ vec4 process_intra(vec4 cur[4])
    return (coef_sp[0]*(cur[1] + cur[2]) - coef_sp[1]*(cur[0] + cur[3])) / (1 << 13);
 }
 
-void process_plane_intra(int idx, ivec2 pos)
+void process_plane_intra(ivec2 pos)
 {
+    nonuniformEXT uint idx = gl_LocalInvocationID.z;
+
     vec4 dcur[4];
     dcur[0] = imageLoad(cur[idx], pos - ivec2(0, 3));
     dcur[1] = imageLoad(cur[idx], pos - ivec2(0, 1));
@@ -72,9 +93,11 @@ vec4 process_line(vec4 prev2[5], vec4 prev1[2], vec4 cur[4], vec4 next1[2], vec4
    return mix(interpol, fd, diff_mask);
 }
 
-void process_plane(int idx, const ivec2 pos, bool filter_field,
-                   bool is_intra, bool field_parity)
+void process_plane(const ivec2 pos)
 {
+    nonuniformEXT uint idx = gl_LocalInvocationID.z;
+    bool field_parity = (parity ^ tff) != 0;
+
     vec4 dcur[4];
     vec4 prev1[2];
     vec4 next1[2];
@@ -119,4 +142,23 @@ void process_plane(int idx, const ivec2 pos, bool filter_field,
     }
 
     imageStore(dst[idx], pos, process_line(prev2, prev1, dcur, next1, next2));
+}
+
+void main()
+{
+    const ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    bool filter_field = ((pos.y ^ parity) & 1) == 1;
+    bool is_intra = filter_field && (current_field == 0);
+
+    ivec2 size = imageSize(dst[nonuniformEXT(gl_LocalInvocationID.z)]);
+    if (any(greaterThanEqual(pos, size))) {
+        return;
+    } else if (is_intra) {
+        process_plane_intra(pos);
+    } else if (filter_field) {
+        process_plane(pos);
+    } else {
+        imageStore(dst[nonuniformEXT(gl_LocalInvocationID.z)], pos,
+                   imageLoad(cur[nonuniformEXT(gl_LocalInvocationID.z)], pos));
+    }
 }

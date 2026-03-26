@@ -3,21 +3,21 @@
  * Copyright (c) 2010 Ronald S. Bultje <rsbultje@gmail.com>
  * Copyright (c) 2010 Fiona Glaser <fiona@x264.com>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "libavutil/attributes.h"
@@ -25,8 +25,6 @@
 #include "libavutil/mem_internal.h"
 #include "libavutil/x86/cpu.h"
 #include "libavcodec/vp8dsp.h"
-
-#if HAVE_X86ASM
 
 /*
  * MC functions
@@ -216,8 +214,6 @@ DECLARE_LOOP_FILTER(sse2)
 DECLARE_LOOP_FILTER(ssse3)
 DECLARE_LOOP_FILTER(sse4)
 
-#endif /* HAVE_X86ASM */
-
 #define VP8_LUMA_MC_FUNC(IDX, SIZE, OPT) \
     c->put_vp8_epel_pixels_tab[IDX][0][2] = ff_put_vp8_epel ## SIZE ## _h6_ ## OPT; \
     c->put_vp8_epel_pixels_tab[IDX][2][0] = ff_put_vp8_epel ## SIZE ## _v6_ ## OPT; \
@@ -244,7 +240,6 @@ DECLARE_LOOP_FILTER(sse4)
 
 av_cold void ff_vp78dsp_init_x86(VP8DSPContext *c)
 {
-#if HAVE_X86ASM
     int cpu_flags = av_get_cpu_flags();
 
     if (EXTERNAL_SSE(cpu_flags)) {
@@ -271,12 +266,10 @@ av_cold void ff_vp78dsp_init_x86(VP8DSPContext *c)
         VP8_BILINEAR_MC_FUNC(1, 8, ssse3);
         VP8_BILINEAR_MC_FUNC(2, 4, ssse3);
     }
-#endif /* HAVE_X86ASM */
 }
 
 av_cold void ff_vp8dsp_init_x86(VP8DSPContext *c)
 {
-#if HAVE_X86ASM
     int cpu_flags = av_get_cpu_flags();
 
     if (EXTERNAL_MMX(cpu_flags)) {
@@ -333,5 +326,4 @@ av_cold void ff_vp8dsp_init_x86(VP8DSPContext *c)
         c->vp8_h_loop_filter16y       = ff_vp8_h_loop_filter16y_mbedge_sse4;
         c->vp8_h_loop_filter8uv       = ff_vp8_h_loop_filter8uv_mbedge_sse4;
     }
-#endif /* HAVE_X86ASM */
 }

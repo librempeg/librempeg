@@ -1,19 +1,19 @@
 /*
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "config.h"
@@ -83,8 +83,8 @@ av_cold void ff_idctdsp_init_x86(IDCTDSPContext *c, AVCodecContext *avctx,
         }
 #endif
 
-        if (ARCH_X86_64 &&
-            !high_bit_depth &&
+#if ARCH_X86_64
+        if (!high_bit_depth &&
             avctx->lowres == 0 &&
             (avctx->idct_algo == FF_IDCT_AUTO ||
                 avctx->idct_algo == FF_IDCT_SIMPLEAUTO ||
@@ -95,9 +95,11 @@ av_cold void ff_idctdsp_init_x86(IDCTDSPContext *c, AVCodecContext *avctx,
                 c->idct_add  = ff_simple_idct8_add_sse2;
                 c->perm_type = FF_IDCT_PERM_TRANSPOSE;
         }
+#endif
     }
 
-    if (ARCH_X86_64 && avctx->lowres == 0) {
+#if ARCH_X86_64
+    if (avctx->lowres == 0) {
         if (EXTERNAL_AVX(cpu_flags) &&
             !high_bit_depth &&
             (avctx->idct_algo == FF_IDCT_AUTO ||
@@ -147,4 +149,5 @@ av_cold void ff_idctdsp_init_x86(IDCTDSPContext *c, AVCodecContext *avctx,
             }
         }
     }
+#endif
 }

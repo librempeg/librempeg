@@ -1,22 +1,56 @@
 /*
  * Copyright (c) 2024 Lynne <dev@lynne.ee>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+
+#ifndef VULKAN_COMMON_H
+#define VULKAN_COMMON_H
+
+#pragma use_vulkan_memory_model
+
+layout (local_size_x_id = 253, local_size_y_id = 254, local_size_z_id = 255) in;
+
+#ifdef DEBUG
+#extension GL_EXT_debug_printf : require
+#define printf debugPrintfEXT
+#endif
+
+#extension GL_EXT_shader_explicit_arithmetic_types : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int32 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float32 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float64 : require
+#extension GL_EXT_shader_8bit_storage : require
+#extension GL_EXT_shader_16bit_storage : require
+
+#extension GL_EXT_shader_image_load_formatted : require
+#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_buffer_reference2 : require
+#extension GL_KHR_memory_scope_semantics : require
+#extension GL_EXT_null_initializer : require
+
+#extension GL_EXT_expect_assume : enable
+#extension GL_EXT_control_flow_attributes : enable
 
 layout(buffer_reference, buffer_reference_align = 1) buffer u8buf {
     uint8_t v;
@@ -42,9 +76,23 @@ layout(buffer_reference, buffer_reference_align = 4) buffer u32vec2buf {
     u32vec2 v;
 };
 
+layout(buffer_reference, buffer_reference_align = 4) buffer u32vec4buf {
+    u32vec4 v;
+};
+
 layout(buffer_reference, buffer_reference_align = 8) buffer u64buf {
     uint64_t v;
 };
+
+#define U8(x)  uint8_t(x)
+#define U16(x) uint16_t(x)
+#define U32(x) uint32_t(x)
+#define U64(x) uint64_t(x)
+
+#define I8(x)  int8_t(x)
+#define I16(x) int16_t(x)
+#define I32(x) int32_t(x)
+#define I64(x) int64_t(x)
 
 #define OFFBUF(type, b, l) \
     type(uint64_t(b) + uint64_t(l))
@@ -200,9 +248,12 @@ struct GetBitContext {
 
     uint64_t bits;
     int bits_valid;
-    int size_in_bits;
+#ifdef GET_BITS_SMEM
+    int cur_smem_pos;
+#endif
 };
 
+#ifndef GET_BITS_SMEM
 #define LOAD64()                                       \
     {                                                  \
         u8vec4buf ptr = u8vec4buf(gb.buf);             \
@@ -221,12 +272,48 @@ struct GetBitContext {
         gb.bits = uint64_t(rf) << (32 - gb.bits_valid) | gb.bits; \
         gb.bits_valid += 32;                                      \
     }
+#else /* GET_BITS_SMEM */
+shared u32vec4 gb_storage[gl_WorkGroupSize.x*gl_WorkGroupSize.y*gl_WorkGroupSize.z*GET_BITS_SMEM];
+
+#define FILL_SMEM()                                                             \
+    {                                                                           \
+        u32vec4buf ptr = u32vec4buf(gb.buf);                                    \
+        [[unroll]]                                                              \
+        for (uint i = 0; i < GET_BITS_SMEM; ++i)                                \
+            gb_storage[gl_LocalInvocationIndex * GET_BITS_SMEM + i] = ptr[i].v; \
+        gb.cur_smem_pos = 0;                                                    \
+    }
+
+#define LOAD64()                                                    \
+    {                                                               \
+        gb.bits = 0;                                                \
+        gb.bits_valid = 0;                                          \
+        u8buf ptr = u8buf(gb.buf);                                  \
+        for (uint i = 0; i < ((4 - uint(gb.buf_start)) & 3); ++i) { \
+            gb.bits |= uint64_t(ptr[i].v) << (56 - i * 8);          \
+            gb.bits_valid += 8;                                     \
+            gb.buf += 1;                                            \
+        }                                                           \
+        FILL_SMEM();                                                \
+    }
+
+#define RELOAD32()                                                                                  \
+    {                                                                                               \
+        if (gb.cur_smem_pos >= 4*GET_BITS_SMEM)                                                     \
+            FILL_SMEM();                                                                            \
+        u32vec4 vec = gb_storage[gl_LocalInvocationIndex * GET_BITS_SMEM + (gb.cur_smem_pos >> 2)]; \
+        uint v = vec[gb.cur_smem_pos & 3];                                                          \
+        gb.buf += 4;                                                                                \
+        gb.bits = uint64_t(reverse4(v)) << (32 - gb.bits_valid) | gb.bits;                          \
+        gb.bits_valid += 32;                                                                        \
+        gb.cur_smem_pos += 1;                                                                       \
+    }
+#endif /* GET_BITS_SMEM */
 
 void init_get_bits(inout GetBitContext gb, u8buf data, int len)
 {
     gb.buf = gb.buf_start = uint64_t(data);
     gb.buf_end = uint64_t(data) + len;
-    gb.size_in_bits = len * 8;
 
     /* Preload */
     LOAD64()
@@ -281,5 +368,7 @@ int tell_bits(in GetBitContext gb)
 
 int left_bits(in GetBitContext gb)
 {
-    return gb.size_in_bits - int(gb.buf - gb.buf_start) * 8 + gb.bits_valid;
+    return int(gb.buf_end - gb.buf) * 8 + gb.bits_valid;
 }
+
+#endif /* VULKAN_COMMON_H */

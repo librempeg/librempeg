@@ -3,21 +3,21 @@
  * Copyright (c) 2000, 2001 Fabrice Bellard
  * Copyright (c) 2002-2004 Michael Niedermayer <michaelni@gmx.at>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <stddef.h>
@@ -79,8 +79,6 @@ void ff_avg_mpeg4_qpel8_v_lowpass_mmxext(uint8_t *dst, const uint8_t *src,
 void ff_put_no_rnd_mpeg4_qpel8_v_lowpass_mmxext(uint8_t *dst,
                                                 const uint8_t *src,
                                                 ptrdiff_t dstStride, ptrdiff_t srcStride);
-
-#if HAVE_X86ASM
 
 #define QPEL_OP(OPNAME, RND, MMX)                                       \
 static void OPNAME ## qpel8_mc10_ ## MMX(uint8_t *dst,                  \
@@ -484,8 +482,6 @@ static void OPNAME ## qpel16_mc22_ ## MMX(uint8_t *dst,                 \
 QPEL_OP(put_,        _,        mmxext)
 QPEL_OP(avg_,        _,        mmxext)
 QPEL_OP(put_no_rnd_, _no_rnd_, mmxext)
-
-#endif /* HAVE_X86ASM */
 
 #define SET_QPEL_FUNCS(PFX, IDX, SIZE, CPU, PREFIX)                          \
 do {                                                                         \

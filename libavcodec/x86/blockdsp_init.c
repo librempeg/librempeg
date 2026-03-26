@@ -1,19 +1,19 @@
 /*
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <stdint.h>
@@ -36,7 +36,6 @@ void ff_fill_block_tab_8_avx2(uint8_t *block, uint8_t value, ptrdiff_t line_size
 
 av_cold void ff_blockdsp_init_x86(BlockDSPContext *c)
 {
-#if HAVE_X86ASM
     int cpu_flags = av_get_cpu_flags();
 
     if (EXTERNAL_SSE(cpu_flags)) {
@@ -55,5 +54,4 @@ av_cold void ff_blockdsp_init_x86(BlockDSPContext *c)
         c->fill_block_tab[0] = ff_fill_block_tab_16_avx2;
         c->fill_block_tab[1] = ff_fill_block_tab_8_avx2;
     }
-#endif /* HAVE_X86ASM */
 }
