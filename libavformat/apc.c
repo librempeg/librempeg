@@ -80,6 +80,7 @@ const FFInputFormat ff_apc_demuxer = {
     .p.name         = "apc",
     .p.long_name    = NULL_IF_CONFIG_SMALL("CRYO APC"),
     .p.flags        = AVFMT_GENERIC_INDEX,
+    .p.extensions   = "apc",
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
