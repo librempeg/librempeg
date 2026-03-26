@@ -34,13 +34,16 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
+    int ret, channels, rate;
     AVIOContext *pb = s->pb;
     AVStream *st;
-    int ret;
-    int channels;
 
     avio_rb64(pb);
     avio_rl32(pb); /* 1.20 */
+    avio_rl32(pb); /* number of samples */
+    rate = avio_rl32(pb);
+    if (rate <= 0)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
@@ -48,9 +51,7 @@ static int read_header(AVFormatContext *s)
 
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_APC;
-
-    avio_rl32(pb); /* number of samples */
-    st->codecpar->sample_rate = avio_rl32(pb);
+    st->codecpar->sample_rate = rate;
 
     /* initial predictor values for adpcm decoder */
     if ((ret = ff_get_extradata(s, st->codecpar, pb, 2 * 4)) < 0)
