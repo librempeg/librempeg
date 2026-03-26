@@ -28,10 +28,10 @@
 
 static int apc_probe(const AVProbeData *p)
 {
-    if (!strncmp(p->buf, "CRYO_APC", 8))
-        return AVPROBE_SCORE_MAX;
+    if (memcmp(p->buf, "CRYO_APC", 8))
+        return 0;
 
-    return 0;
+    return AVPROBE_SCORE_MAX;
 }
 
 static int apc_read_header(AVFormatContext *s)
