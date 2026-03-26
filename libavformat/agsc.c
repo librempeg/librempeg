@@ -26,8 +26,8 @@
 #include "internal.h"
 
 typedef struct AGSCStream {
-    uint32_t start_offset;
-    uint32_t end_offset;
+    int64_t start_offset;
+    int64_t end_offset;
 } AGSCStream;
 
 static int agsc_probe(const AVProbeData *p)
@@ -77,7 +77,8 @@ static int agsc_read_header(AVFormatContext *s)
 {
     char bank_name[0x30-1];
     uint8_t version;
-    uint32_t unk1_size, unk2_size, data_size, head_size, head_offset, data_offset, loop_start, loop_end, coefs_offset, min_coefs_offset;
+    uint32_t unk1_size, unk2_size, data_size, head_size, loop_start, loop_end;
+    int64_t head_offset, data_offset, coefs_offset, min_coefs_offset;
     int64_t addr, nb_streams;
     int ret;
     AVIOContext *pb = s->pb;
@@ -201,9 +202,9 @@ static int agsc_read_header(AVFormatContext *s)
 
 static int agsc_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    int64_t pos, block_size;
     AVIOContext *pb = s->pb;
     int ret = AVERROR_EOF;
+    int64_t pos;
 
     for (int i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
@@ -214,7 +215,7 @@ static int agsc_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         pos = avio_tell(pb);
         if (pos >= ast->start_offset && pos < ast->end_offset) {
-            block_size = FFMIN(ast->end_offset - pos, st->codecpar->block_align);
+            int block_size = FFMIN(ast->end_offset - pos, st->codecpar->block_align);
             ret = av_get_packet(pb, pkt, block_size);
             pkt->pos = pos;
             pkt->stream_index = st->index;
