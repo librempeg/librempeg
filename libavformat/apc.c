@@ -41,8 +41,7 @@ static int apc_read_header(AVFormatContext *s)
     int ret;
     int channels;
 
-    avio_rl32(pb); /* CRYO */
-    avio_rl32(pb); /* _APC */
+    avio_rb64(pb);
     avio_rl32(pb); /* 1.20 */
 
     st = avformat_new_stream(s, NULL);
