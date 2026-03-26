@@ -19,6 +19,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/intreadwrite.h"
 #include "libavutil/channel_layout.h"
 #include "avformat.h"
 #include "demux.h"
@@ -30,6 +31,10 @@ static int read_probe(const AVProbeData *p)
     if (memcmp(p->buf, "CRYO_APC", 8))
         return 0;
 
+    if (p->buf_size < 20)
+        return 0;
+    if ((int)AV_RL32(p->buf + 16) <= 0)
+        return 0;
     return AVPROBE_SCORE_MAX;
 }
 
