@@ -23,6 +23,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -70,24 +71,11 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-#define MAX_READ_SIZE 4096
-
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    int ret = av_get_packet(s->pb, pkt, MAX_READ_SIZE);
-    if (ret < 0)
-        return ret;
-    else if (ret == 0)
-        return AVERROR_INVALIDDATA;
-    pkt->stream_index = 0;
-    return 0;
-}
-
 const FFInputFormat ff_apc_demuxer = {
     .p.name         = "apc",
     .p.long_name    = NULL_IF_CONFIG_SMALL("CRYO APC"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
