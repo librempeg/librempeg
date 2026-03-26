@@ -95,6 +95,7 @@ extern const FFOutputFormat ff_asf_muxer;
 extern const FFInputFormat  ff_asf_o_demuxer;
 extern const FFInputFormat  ff_ass_demuxer;
 extern const FFOutputFormat ff_ass_muxer;
+extern const FFInputFormat  ff_ast0_demuxer;
 extern const FFInputFormat  ff_ast_demuxer;
 extern const FFOutputFormat ff_ast_muxer;
 extern const FFInputFormat  ff_astb_demuxer;

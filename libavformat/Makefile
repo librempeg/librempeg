@@ -152,6 +152,7 @@ OBJS-$(CONFIG_ASF_MUXER)                 += asfenc.o asf.o asf_tags.o \
                                             avlanguage.o
 OBJS-$(CONFIG_ASS_DEMUXER)               += assdec.o subtitles.o
 OBJS-$(CONFIG_ASS_MUXER)                 += assenc.o
+OBJS-$(CONFIG_AST0_DEMUXER)              += ast0.o pcm.o
 OBJS-$(CONFIG_AST_DEMUXER)               += ast.o astdec.o
 OBJS-$(CONFIG_AST_MUXER)                 += ast.o astenc.o
 OBJS-$(CONFIG_ASTB_DEMUXER)              += astb.o pcm.o
