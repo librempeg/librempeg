@@ -19,14 +19,12 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include <string.h>
-
 #include "libavutil/channel_layout.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
 
-static int apc_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "CRYO_APC", 8))
         return 0;
@@ -34,7 +32,7 @@ static int apc_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int apc_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     AVStream *st;
@@ -73,7 +71,7 @@ static int apc_read_header(AVFormatContext *s)
 
 #define MAX_READ_SIZE 4096
 
-static int apc_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     int ret = av_get_packet(s->pb, pkt, MAX_READ_SIZE);
     if (ret < 0)
@@ -88,7 +86,7 @@ const FFInputFormat ff_apc_demuxer = {
     .p.name         = "apc",
     .p.long_name    = NULL_IF_CONFIG_SMALL("CRYO APC"),
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = apc_probe,
-    .read_header    = apc_read_header,
-    .read_packet    = apc_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
