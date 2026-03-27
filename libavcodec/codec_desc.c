@@ -2111,6 +2111,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
                      AV_CODEC_PROP_LOSSLESS,
         .mime_types= MT("image/jxs"),
     },
+    {
+        .id        = AV_CODEC_ID_ACTIMAGINE_VX,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "actimagine_vx",
+        .long_name = NULL_IF_CONFIG_SMALL("Actimagine VX Video"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
 
     /* various PCM "codecs" */
     {
