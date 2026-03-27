@@ -650,6 +650,7 @@ extern const FFInputFormat  ff_tty_demuxer;
 extern const FFInputFormat  ff_ty_demuxer;
 extern const FFInputFormat  ff_ubibao_demuxer;
 extern const FFInputFormat  ff_ubibnm_demuxer;
+extern const FFInputFormat  ff_ue3xma_demuxer;
 extern const FFInputFormat  ff_ue4opus_demuxer;
 extern const FFInputFormat  ff_ueba_demuxer;
 extern const FFInputFormat  ff_ueopus_demuxer;
