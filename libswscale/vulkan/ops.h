@@ -24,10 +24,17 @@
 #include "libavutil/vulkan.h"
 #include "../swscale.h"
 
+#if CONFIG_LIBSHADERC || CONFIG_LIBGLSLANG
+#include "libavutil/vulkan_spirv.h"
+#endif
+
 typedef struct FFVulkanOpsCtx {
     FFVulkanContext vkctx;
     AVVulkanDeviceQueueFamily *qf;
     FFVkExecPool e;
+#if CONFIG_LIBSHADERC || CONFIG_LIBGLSLANG
+    FFVkSPIRVCompiler *spvc;
+#endif
 } FFVulkanOpsCtx;
 
 int ff_sws_vk_init(SwsContext *sws, AVBufferRef *dev_ref);
