@@ -52,6 +52,7 @@
 #include "hwaccel_internal.h"
 #include "hwconfig.h"
 #include "internal.h"
+#include "lcevcdec.h"
 #include "packet_internal.h"
 #include "progressframe.h"
 #include "libavutil/refstruct.h"
@@ -92,6 +93,17 @@ typedef struct DecodeContext {
      * (global or attached to packets) side data over bytestream.
      */
     uint64_t side_data_pref_mask;
+
+#if CONFIG_LIBLCEVC_DEC
+    struct {
+        FFLCEVCContext *ctx;
+        int frame;
+        int base_width;
+        int base_height;
+        int width;
+        int height;
+    } lcevc;
+#endif
 } DecodeContext;
 
 static DecodeContext *decode_ctx(AVCodecInternal *avci)
@@ -1533,6 +1545,7 @@ int ff_decode_frame_props_from_pkt(const AVCodecContext *avctx,
         { AV_PKT_DATA_DYNAMIC_HDR10_PLUS,         AV_FRAME_DATA_DYNAMIC_HDR_PLUS },
         { AV_PKT_DATA_S12M_TIMECODE,              AV_FRAME_DATA_S12M_TIMECODE },
         { AV_PKT_DATA_SKIP_SAMPLES,               AV_FRAME_DATA_SKIP_SAMPLES },
+        { AV_PKT_DATA_LCEVC,                      AV_FRAME_DATA_LCEVC },
         { AV_PKT_DATA_NB }
     };
 
@@ -1607,6 +1620,33 @@ int ff_decode_frame_props(AVCodecContext *avctx, AVFrame *frame)
         }
         break;
     }
+
+#if CONFIG_LIBLCEVC_DEC
+    AVCodecInternal    *avci = avctx->internal;
+    DecodeContext        *dc = decode_ctx(avci);
+
+    dc->lcevc.frame = dc->lcevc.ctx && avctx->codec_type == AVMEDIA_TYPE_VIDEO &&
+                      av_frame_get_side_data(frame, AV_FRAME_DATA_LCEVC);
+
+    if (dc->lcevc.frame) {
+        int ret = ff_lcevc_parse_frame(dc->lcevc.ctx, frame,
+                                       &dc->lcevc.width, &dc->lcevc.height, avctx);
+        if (ret < 0 && (avctx->err_recognition & AV_EF_EXPLODE))
+            return ret;
+
+        // force get_buffer2() to allocate the base frame using the same dimensions
+        // as the final enhanced frame, in order to prevent reinitializing the buffer
+        // pools unnecessarely
+        if (!ret && dc->lcevc.width && dc->lcevc.height) {
+            dc->lcevc.base_width  = frame->width;
+            dc->lcevc.base_height = frame->height;
+            frame->width  = dc->lcevc.width;
+            frame->height = dc->lcevc.height;
+        } else
+            dc->lcevc.frame = 0;
+    }
+#endif
+
     return 0;
 }
 
@@ -1642,7 +1682,7 @@ static void decode_data_free(AVRefStructOpaque unused, void *obj)
         fdd->hwaccel_priv_free(fdd->hwaccel_priv);
 }
 
-int ff_attach_decode_data(AVFrame *frame)
+int ff_attach_decode_data(AVCodecContext *avctx, AVFrame *frame)
 {
     FrameDecodeData *fdd;
 
@@ -1654,6 +1694,69 @@ int ff_attach_decode_data(AVFrame *frame)
         return AVERROR(ENOMEM);
 
     frame->private_ref = fdd;
+
+#if CONFIG_LIBLCEVC_DEC
+    AVCodecInternal    *avci = avctx->internal;
+    DecodeContext        *dc = decode_ctx(avci);
+
+    if (!dc->lcevc.frame) {
+        dc->lcevc.frame = dc->lcevc.ctx && avctx->codec_type == AVMEDIA_TYPE_VIDEO &&
+                          av_frame_get_side_data(frame, AV_FRAME_DATA_LCEVC);
+
+        if (dc->lcevc.frame) {
+            int ret = ff_lcevc_parse_frame(dc->lcevc.ctx, frame,
+                                           &dc->lcevc.width, &dc->lcevc.height, avctx);
+            if (ret < 0 && (avctx->err_recognition & AV_EF_EXPLODE))
+                return ret;
+
+            if (!ret && dc->lcevc.width && dc->lcevc.height) {
+                dc->lcevc.base_width  = frame->width;
+                dc->lcevc.base_height = frame->height;
+            } else
+                dc->lcevc.frame = 0;
+        }
+    }
+    if (dc->lcevc.frame) {
+        FFLCEVCFrame *frame_ctx;
+        int ret;
+
+        if (fdd->post_process || !dc->lcevc.width || !dc->lcevc.height) {
+            dc->lcevc.frame = 0;
+            return 0;
+        }
+
+        frame_ctx = av_mallocz(sizeof(*frame_ctx));
+        if (!frame_ctx)
+            return AVERROR(ENOMEM);
+
+        frame_ctx->frame = av_frame_alloc();
+        if (!frame_ctx->frame) {
+            av_free(frame_ctx);
+            return AVERROR(ENOMEM);
+        }
+
+        frame_ctx->lcevc = av_refstruct_ref(dc->lcevc.ctx);
+        frame_ctx->frame->width  = dc->lcevc.width;
+        frame_ctx->frame->height = dc->lcevc.height;
+        frame_ctx->frame->format = frame->format;
+
+        frame->width  = dc->lcevc.base_width;
+        frame->height = dc->lcevc.base_height;
+
+        ret = avctx->get_buffer2(avctx, frame_ctx->frame, 0);
+        if (ret < 0) {
+            ff_lcevc_unref(frame_ctx);
+            return ret;
+        }
+
+        validate_avframe_allocation(avctx, frame_ctx->frame);
+
+        fdd->post_process_opaque = frame_ctx;
+        fdd->post_process_opaque_free = ff_lcevc_unref;
+        fdd->post_process = ff_lcevc_process;
+    }
+    dc->lcevc.frame = 0;
+#endif
 
     return 0;
 }
@@ -1701,8 +1804,9 @@ int ff_get_buffer(AVCodecContext *avctx, AVFrame *frame, int flags)
             ret = hwaccel->alloc_frame(avctx, frame);
             goto end;
         }
-    } else
+    } else {
         avctx->sw_pix_fmt = avctx->pix_fmt;
+    }
 
     ret = avctx->get_buffer2(avctx, frame, flags);
     if (ret < 0)
@@ -1710,7 +1814,7 @@ int ff_get_buffer(AVCodecContext *avctx, AVFrame *frame, int flags)
 
     validate_avframe_allocation(avctx, frame);
 
-    ret = ff_attach_decode_data(frame);
+    ret = ff_attach_decode_data(avctx, frame);
     if (ret < 0)
         goto fail;
 
@@ -2014,6 +2118,16 @@ av_cold int ff_decode_preinit(AVCodecContext *avctx)
     if (ret < 0)
         return ret;
 
+    if (!(avctx->export_side_data & AV_CODEC_EXPORT_DATA_ENHANCEMENTS)) {
+        if (avctx->codec_type == AVMEDIA_TYPE_VIDEO) {
+#if CONFIG_LIBLCEVC_DEC
+            ret = ff_lcevc_alloc(&dc->lcevc.ctx, avctx);
+            if (ret < 0 && (avctx->err_recognition & AV_EF_EXPLODE))
+                return ret;
+#endif
+        }
+    }
+
     return 0;
 }
 
@@ -2242,6 +2356,31 @@ av_cold void ff_decode_flush_buffers(AVCodecContext *avctx)
 av_cold AVCodecInternal *ff_decode_internal_alloc(void)
 {
     return av_mallocz(sizeof(DecodeContext));
+}
+
+av_cold void ff_decode_internal_sync(AVCodecContext *dst, const AVCodecContext *src)
+{
+    const DecodeContext *src_dc = decode_ctx(src->internal);
+    DecodeContext *dst_dc = decode_ctx(dst->internal);
+
+    dst_dc->initial_pict_type = src_dc->initial_pict_type;
+    dst_dc->intra_only_flag   = src_dc->intra_only_flag;
+    dst_dc->side_data_pref_mask = src_dc->side_data_pref_mask;
+#if CONFIG_LIBLCEVC_DEC
+    av_refstruct_replace(&dst_dc->lcevc.ctx, src_dc->lcevc.ctx);
+    dst_dc->lcevc.width = src_dc->lcevc.width;
+    dst_dc->lcevc.height = src_dc->lcevc.height;
+#endif
+}
+
+av_cold void ff_decode_internal_uninit(AVCodecContext *avctx)
+{
+#if CONFIG_LIBLCEVC_DEC
+    AVCodecInternal *avci = avctx->internal;
+    DecodeContext *dc = decode_ctx(avci);
+
+    av_refstruct_unref(&dc->lcevc.ctx);
+#endif
 }
 
 static int attach_displaymatrix(AVCodecContext *avctx, AVFrame *frame, int orientation)

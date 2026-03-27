@@ -340,6 +340,12 @@ enum AVPacketSideDataType {
     AV_PKT_DATA_FRAME_CROPPING,
 
     /**
+     * Raw LCEVC payload data, as a uint8_t array, with NAL emulation
+     * bytes intact.
+     */
+    AV_PKT_DATA_LCEVC,
+
+    /**
      * This side data contains information about the reference display width(s)
      * and reference viewing distance(s) as well as information about the
      * corresponding reference stereo pair(s), i.e., the pair(s) of views to be
