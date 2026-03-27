@@ -826,6 +826,7 @@ OBJS-$(CONFIG_WADY_DEMUXER)              += wady.o pcm.o
 OBJS-$(CONFIG_WAVARC_DEMUXER)            += wavarc.o
 OBJS-$(CONFIG_WAV_DEMUXER)               += wavdec.o pcm.o
 OBJS-$(CONFIG_WAV_MUXER)                 += wavenc.o
+OBJS-$(CONFIG_WAVE_DEMUXER)              += wave.o pcm.o
 OBJS-$(CONFIG_WBAT_DEMUXER)              += wbat.o pcm.o
 OBJS-$(CONFIG_WBK_DEMUXER)               += wbk.o pcm.o
 OBJS-$(CONFIG_WC3_DEMUXER)               += wc3movie.o
