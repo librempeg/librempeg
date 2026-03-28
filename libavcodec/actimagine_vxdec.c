@@ -141,6 +141,7 @@ static av_cold int vx_init(AVCodecContext *avctx)
     int total_coeff_y_size;
     int total_coeff_uv_size;
     VxContext *s = avctx->priv_data;
+    int ret;
 
     if (avctx->width & 15 || avctx->height & 15) {
         av_log(avctx, AV_LOG_ERROR, "width/height not multiple of 16\n");
@@ -199,12 +200,13 @@ static av_cold int vx_init(AVCodecContext *avctx)
     s->version = VX_VERSION_INVALID;
     s->quantizer = -1;
 
-    if (avctx->extradata_size == 4)
-        setup_qtables(avctx, AV_RL32(avctx->extradata));
+    if (avctx->extradata_size >= 4)
+        s->quantizer = AV_RL32(avctx->extradata);
+    ret = setup_qtables(avctx, s->quantizer);
 
     ff_h264_cavlc_data_init_vlc();
 
-    return 0;
+    return ret;
 }
 
 static void clear_total_coeff(AVCodecContext *avctx, int x, int y, int w, int h)
