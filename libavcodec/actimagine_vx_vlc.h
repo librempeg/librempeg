@@ -33,7 +33,7 @@ extern const unsigned int ff_h264_cavlc_suffix_limit[7];
 
 extern VLC ff_h264_cavlc_coeff_token_vlc[4];
 extern VLC ff_h264_cavlc_total_zeros_vlc[15];
-extern VLC ff_h264_cavlc_run_vlc[6+1];
+extern VLC ff_h264_cavlc_run_vlc[6];
 extern VLC ff_h264_cavlc_run7_vlc;
 
 int ff_h264_cavlc_data_init_vlc(void);

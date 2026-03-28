@@ -492,7 +492,7 @@ static int predict4(AVCodecContext *avctx, int x, int y, int w, int h)
 }
 
 static void decode_dct(AVCodecContext *avctx, int x, int y, int plane,
-                       const int* level)
+                       const int *level)
 {
     LOCAL_ALIGNED_16(int16_t, dct, [16]);
     VxContext *s = avctx->priv_data;
@@ -540,6 +540,9 @@ static int decode_residu_cavlc(AVCodecContext *avctx, int x, int y, int plane,
         int trailing_zeros;
         zeros_left = get_vlc2(gb, ff_h264_cavlc_total_zeros_vlc[total_coeff-1].table,
                               FF_H264_CAVLC_TOTAL_ZEROS_VLC_BITS, 2);
+        if (zeros_left < 0)
+            return AVERROR_INVALIDDATA;
+
         trailing_zeros = 16 - (total_coeff + zeros_left);
         while (trailing_zeros-- > 0)
             level[i--] = 0;
@@ -575,11 +578,14 @@ static int decode_residu_cavlc(AVCodecContext *avctx, int x, int y, int plane,
         if (--total_coeff == 0)
             break;
 
+        if (zeros_left < 0)
+            return AVERROR_INVALIDDATA;
+
         if (zeros_left == 0)
             continue;
 
-        if(zeros_left < 7)
-            run_before = get_vlc2(gb, ff_h264_cavlc_run_vlc[zeros_left].table,
+        if (zeros_left < 7)
+            run_before = get_vlc2(gb, ff_h264_cavlc_run_vlc[zeros_left-1].table,
                                   FF_H264_CAVLC_RUN_VLC_BITS, 2);
         else
             run_before = get_vlc2(gb, ff_h264_cavlc_run7_vlc.table,

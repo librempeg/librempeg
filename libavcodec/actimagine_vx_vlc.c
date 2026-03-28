@@ -158,7 +158,7 @@ VLC ff_h264_cavlc_total_zeros_vlc[15];
 static VLCElem total_zeros_vlc_tables[15][512];
 static const int total_zeros_vlc_tables_size = 512;
 
-VLC ff_h264_cavlc_run_vlc[6 + 1];
+VLC ff_h264_cavlc_run_vlc[6];
 static VLCElem run_vlc_tables[6][8];
 static const int run_vlc_tables_size = 8;
 
@@ -193,9 +193,9 @@ static av_cold void cavlc_init_vlc(void)
     }
 
     for (int i = 0; i < 6; i++) {
-        ff_h264_cavlc_run_vlc[i + 1].table = run_vlc_tables[i];
-        ff_h264_cavlc_run_vlc[i + 1].table_allocated = run_vlc_tables_size;
-        vlc_init(&ff_h264_cavlc_run_vlc[i + 1],
+        ff_h264_cavlc_run_vlc[i].table = run_vlc_tables[i];
+        ff_h264_cavlc_run_vlc[i].table_allocated = run_vlc_tables_size;
+        vlc_init(&ff_h264_cavlc_run_vlc[i],
                  FF_H264_CAVLC_RUN_VLC_BITS, 7,
                  &run_len [i][0], 1, 1,
                  &run_bits[i][0], 1, 1,
