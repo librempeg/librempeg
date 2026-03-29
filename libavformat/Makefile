@@ -694,6 +694,7 @@ OBJS-$(CONFIG_SDP_DEMUXER)               += rtsp.o
 OBJS-$(CONFIG_SDR2_DEMUXER)              += sdr2.o
 OBJS-$(CONFIG_SDS_DEMUXER)               += sdsdec.o
 OBJS-$(CONFIG_SDX_DEMUXER)               += sdxdec.o pcm.o
+OBJS-$(CONFIG_SEG_DEMUXER)               += seg.o pcm.o
 OBJS-$(CONFIG_SEGAFILM_DEMUXER)          += segafilm.o
 OBJS-$(CONFIG_SEGAFILM_MUXER)            += segafilmenc.o
 OBJS-$(CONFIG_SEGAFILMA_DEMUXER)         += segafilma.o

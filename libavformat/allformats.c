@@ -564,6 +564,7 @@ extern const FFInputFormat  ff_sdp_demuxer;
 extern const FFInputFormat  ff_sdr2_demuxer;
 extern const FFInputFormat  ff_sds_demuxer;
 extern const FFInputFormat  ff_sdx_demuxer;
+extern const FFInputFormat  ff_seg_demuxer;
 extern const FFInputFormat  ff_segafilm_demuxer;
 extern const FFOutputFormat ff_segafilm_muxer;
 extern const FFInputFormat  ff_segafilma_demuxer;
