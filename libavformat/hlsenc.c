@@ -76,8 +76,8 @@ typedef enum {
 #define POSTFIX_PATTERN "_%d"
 
 typedef struct HLSSegment {
-    char filename[MAX_URL_SIZE];
-    char sub_filename[MAX_URL_SIZE];
+    const char *filename;
+    const char *sub_filename;
     double duration; /* in seconds */
     int discont;
     int64_t pos;
@@ -86,11 +86,13 @@ typedef struct HLSSegment {
     int64_t keyframe_size;
     unsigned var_stream_idx;
 
-    char key_uri[LINE_BUFFER_SIZE + 1];
+    const char *key_uri;
     char iv_string[KEYSIZE*2 + 1];
 
     struct HLSSegment *next;
     double discont_program_date_time;
+
+    char buf[]; /* for filename, sub_filename and key_uri */
 } HLSSegment;
 
 typedef enum HLSFlags {
@@ -1149,13 +1151,12 @@ static int hls_append_segment(struct AVFormatContext *s, HLSContext *hls,
                               VariantStream *vs, double duration, int64_t pos,
                               int64_t size)
 {
-    HLSSegment *en = av_malloc(sizeof(*en));
+    HLSSegment en0 = {0};
+    HLSSegment *en = &en0;
     const char  *filename;
     int byterange_mode = (hls->flags & HLS_SINGLE_FILE) || (hls->max_seg_size > 0);
     int ret;
-
-    if (!en)
-        return AVERROR(ENOMEM);
+    AVBPrint bp;
 
     vs->total_size += size;
     vs->total_duration += duration;
@@ -1171,10 +1172,8 @@ static int hls_append_segment(struct AVFormatContext *s, HLSContext *hls,
 
     en->var_stream_idx = vs->var_stream_idx;
     ret = sls_flags_filename_process(s, hls, vs, en, duration, pos, size);
-    if (ret < 0) {
-        av_freep(&en);
+    if (ret < 0)
         return ret;
-    }
 
     filename = av_basename(vs->avf->url);
 
@@ -1185,21 +1184,16 @@ static int hls_append_segment(struct AVFormatContext *s, HLSContext *hls,
         && !byterange_mode) {
         av_log(hls, AV_LOG_WARNING, "Duplicated segment filename detected: %s\n", filename);
     }
-    av_strlcpy(en->filename, filename, sizeof(en->filename));
 
-    if (vs->has_subtitle)
-        av_strlcpy(en->sub_filename, av_basename(vs->vtt_avf->url), sizeof(en->sub_filename));
-    else
-        en->sub_filename[0] = '\0';
+    av_bprint_init(&bp, 0, AV_BPRINT_SIZE_UNLIMITED);
+    av_bprintf(&bp, "%s%c", filename, 0);
+    av_bprintf(&bp, "%s%c", vs->has_subtitle ? av_basename(vs->vtt_avf->url) : "", 0);
 
     en->duration = duration;
     en->pos      = pos;
     en->size     = size;
     en->keyframe_pos      = vs->video_keyframe_pos;
     en->keyframe_size     = vs->video_keyframe_size;
-    en->next     = NULL;
-    en->discont  = 0;
-    en->discont_program_date_time = 0;
 
     if (vs->discontinuity) {
         en->discont = 1;
@@ -1207,9 +1201,20 @@ static int hls_append_segment(struct AVFormatContext *s, HLSContext *hls,
     }
 
     if (hls->key_info_file || hls->encrypt) {
-        av_strlcpy(en->key_uri, vs->key_uri, sizeof(en->key_uri));
+        av_bprintf(&bp, "%s%c", vs->key_uri, 0);
         av_strlcpy(en->iv_string, vs->iv_string, sizeof(en->iv_string));
+    } else {
+        av_bprint_chars(&bp, 0, 1);
     }
+
+    en = ff_bprint_finalize_as_fam(&bp, &en0, sizeof(en0), en0.buf);
+    if (!en)
+        return AVERROR(ENOMEM);
+#define NEXT(s) ((s) + strlen(s) + 1)
+    en->filename = en->buf;
+    en->sub_filename = NEXT(en->filename);
+    en->key_uri = NEXT(en->sub_filename);
+#undef NEXT
 
     if (!vs->segments)
         vs->segments = en;
@@ -1644,7 +1649,7 @@ static int hls_window(AVFormatContext *s, int last, VariantStream *vs)
     int is_file_proto = proto && !strcmp(proto, "file");
     int use_temp_file = is_file_proto && ((hls->flags & HLS_TEMP_FILE) || !(hls->pl_type == PLAYLIST_TYPE_VOD));
     static unsigned warned_non_file;
-    char *key_uri = NULL;
+    const char *key_uri = NULL;
     char *iv_string = NULL;
     AVDictionary *options = NULL;
     double prog_date_time = vs->initial_prog_date_time;
