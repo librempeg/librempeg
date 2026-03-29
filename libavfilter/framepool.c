@@ -50,9 +50,9 @@ struct FFFramePool {
 
 };
 
-av_cold FFFramePool *ff_frame_pool_video_init(int width, int height,
-                                              enum AVPixelFormat format,
-                                              int align)
+static av_cold FFFramePool *frame_pool_video_init(int width, int height,
+                                                  enum AVPixelFormat format,
+                                                  int align)
 {
     int i, ret;
     FFFramePool *pool;
@@ -115,52 +115,9 @@ fail:
     return NULL;
 }
 
-int ff_frame_pool_audio_resize(FFFramePool *pool,
-                               AVBufferRef* (*alloc)(size_t size),
-                               int channels,
-                               int nb_samples,
-                               enum AVSampleFormat format,
-                               int align)
-{
-    int ret, planar;
-
-    ff_mutex_lock(&pool->mutex);
-    planar = av_sample_fmt_is_planar(format);
-
-    pool->type = AVMEDIA_TYPE_AUDIO;
-    pool->planes = planar ? channels : 1;
-    pool->channels = channels;
-    pool->nb_samples = nb_samples;
-    pool->format = format;
-    pool->align = align;
-
-    ret = av_samples_get_buffer_size(&pool->linesize[0], channels,
-                                     nb_samples, format, 0);
-    if (ret < 0)
-        goto fail;
-
-    if (pool->linesize[0] > SIZE_MAX - align) {
-        ret = AVERROR(EINVAL);
-        goto fail;
-    }
-    av_buffer_pool_uninit(&pool->pools[0]);
-    pool->pools[0] = av_buffer_pool_init(pool->linesize[0] + align, NULL);
-    if (!pool->pools[0]) {
-        ret = AVERROR(ENOMEM);
-        goto fail;
-    }
-    ff_mutex_unlock(&pool->mutex);
-
-    return 0;
-
-fail:
-    ff_mutex_unlock(&pool->mutex);
-    return ret;
-}
-
-av_cold FFFramePool *ff_frame_pool_audio_init(int channels, int nb_samples,
-                                              enum AVSampleFormat format,
-                                              int align)
+static av_cold FFFramePool *frame_pool_audio_init(int channels, int nb_samples,
+                                                  enum AVSampleFormat format,
+                                                  int align)
 {
     int ret, planar;
     FFFramePool *pool;
@@ -340,7 +297,7 @@ int ff_frame_pool_video_reinit(FFFramePool **pool,
         return 0;
     }
 
-    FFFramePool *new = ff_frame_pool_video_init(width, height, format, align);
+    FFFramePool *new = frame_pool_video_init(width, height, format, align);
     if (!new)
         return AVERROR(ENOMEM);
 
@@ -365,7 +322,7 @@ int ff_frame_pool_audio_reinit(FFFramePool **pool,
         return 0;
     }
 
-    FFFramePool *new = ff_frame_pool_audio_init(channels, nb_samples, format, align);
+    FFFramePool *new = frame_pool_audio_init(channels, nb_samples, format, align);
     if (!new)
         return AVERROR(ENOMEM);
 
