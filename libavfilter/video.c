@@ -78,7 +78,7 @@ AVFrame *ff_default_get_video_buffer2(AVFilterLink *link, int w, int h, int alig
         graphi = NULL;
     }
 
-    frame = ff_frame_pool_get(li->frame_pool, graphi);
+    frame = ff_frame_pool_get(&li->frame_pool, graphi);
     if (!frame)
         return NULL;
 

@@ -27,7 +27,6 @@
 
 #include "audio.h"
 #include "avfilter.h"
-#include "avfilter_internal.h"
 #include "filters.h"
 #include "framepool.h"
 
@@ -63,7 +62,7 @@ AVFrame *ff_default_get_audio_buffer(AVFilterLink *link, int nb_samples)
         graphi = NULL;
     }
 
-    frame = ff_frame_pool_get(li->frame_pool, graphi);
+    frame = ff_frame_pool_get(&li->frame_pool, graphi);
     if (!frame)
         return NULL;
 
