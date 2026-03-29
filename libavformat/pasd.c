@@ -129,7 +129,7 @@ static int read_header(AVFormatContext *s)
         if (ret < 0)
             return ret;
         memset(st->codecpar->extradata, 0, 34);
-        AV_WL16(st->codecpar->extradata, 1);
+        AV_WL16(st->codecpar->extradata, (st->codecpar->ch_layout.nb_channels+1)/2);
         ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
 
         avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
