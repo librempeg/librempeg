@@ -31,12 +31,9 @@ static av_cold FFFramePool *frame_pool_video_init(int width, int height,
                                                   enum AVPixelFormat format,
                                                   int align)
 {
-    int i, ret;
-    FFFramePool *pool;
-    ptrdiff_t linesizes[4];
-    size_t sizes[4];
+    int ret;
 
-    pool = av_mallocz(sizeof(FFFramePool));
+    FFFramePool *pool = av_mallocz(sizeof(FFFramePool));
     if (!pool)
         return NULL;
 
@@ -59,19 +56,21 @@ static av_cold FFFramePool *frame_pool_video_init(int width, int height,
         goto fail;
     }
 
-    for (i = 0; i < 4 && pool->linesize[i]; i++)
+    for (int i = 0; i < 4 && pool->linesize[i]; i++)
         pool->linesize[i] = FFALIGN(pool->linesize[i], pool->align);
 
-    for (i = 0; i < 4; i++)
+    ptrdiff_t linesizes[4];
+    for (int i = 0; i < 4; i++)
         linesizes[i] = pool->linesize[i];
 
+    size_t sizes[4];
     if (av_image_fill_plane_sizes(sizes, pool->pix_fmt,
                                   FFALIGN(pool->height, align),
                                   linesizes) < 0) {
         goto fail;
     }
 
-    for (i = 0; i < 4 && sizes[i]; i++) {
+    for (int i = 0; i < 4 && sizes[i]; i++) {
         if (sizes[i] > SIZE_MAX - align)
             goto fail;
         pool->pools[i] = av_buffer_pool_init(sizes[i] + align,
@@ -93,14 +92,13 @@ static av_cold FFFramePool *frame_pool_audio_init(int channels, int nb_samples,
                                                   enum AVSampleFormat format,
                                                   int align)
 {
-    int ret, planar;
-    FFFramePool *pool;
+    int ret;
 
-    pool = av_mallocz(sizeof(FFFramePool));
+    FFFramePool *pool = av_mallocz(sizeof(FFFramePool));
     if (!pool)
         return NULL;
 
-    planar = av_sample_fmt_is_planar(format);
+    int planar = av_sample_fmt_is_planar(format);
 
     if (ff_mutex_init(&pool->mutex, NULL))
         goto fail;
@@ -133,9 +131,8 @@ fail:
 
 AVFrame *ff_frame_pool_get(FFFramePool *pool, FFFilterGraph *graphi)
 {
-    int i;
-    AVFrame *frame = NULL;
     const AVPixFmtDescriptor *desc;
+    AVFrame *frame = NULL;
 
     if (graphi->fifo_empty_frames) {
         ff_mutex_lock(&graphi->fifo_lock);
@@ -161,7 +158,7 @@ AVFrame *ff_frame_pool_get(FFFramePool *pool, FFFilterGraph *graphi)
         frame->height = pool->height;
         frame->format = pool->pix_fmt;
 
-        for (i = 0; i < 4; i++) {
+        for (int i = 0; i < 4; i++) {
             frame->linesize[i] = pool->linesize[i];
             if (!pool->pools[i])
                 break;
@@ -207,14 +204,14 @@ AVFrame *ff_frame_pool_get(FFFramePool *pool, FFFilterGraph *graphi)
         if (!pool->pools[0])
             break;
 
-        for (i = 0; i < FFMIN(pool->planes, AV_NUM_DATA_POINTERS); i++) {
+        for (int i = 0; i < FFMIN(pool->planes, AV_NUM_DATA_POINTERS); i++) {
             frame->buf[i] = av_buffer_pool_get(pool->pools[0]);
             if (!frame->buf[i])
                 goto fail;
             frame->extended_data[i] = frame->data[i] =
                 (uint8_t *)FFALIGN((uintptr_t)frame->buf[i]->data, pool->align);
         }
-        for (i = 0; i < frame->nb_extended_buf; i++) {
+        for (int i = 0; i < frame->nb_extended_buf; i++) {
             frame->extended_buf[i] = av_buffer_pool_get(pool->pools[0]);
             if (!frame->extended_buf[i])
                 goto fail;
