@@ -98,7 +98,7 @@ static int read_header(AVFormatContext *s)
             return ret;
 
         memset(st->codecpar->extradata, 0, 34);
-        AV_WL16(st->codecpar->extradata, 1);
+        AV_WL16(st->codecpar->extradata, (channels+1)/2);
     }
 
     if (codec == AV_CODEC_ID_XMA2 || codec == AV_CODEC_ID_MP3)
