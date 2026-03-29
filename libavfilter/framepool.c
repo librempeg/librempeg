@@ -46,15 +46,13 @@ static av_cold FFFramePool *frame_pool_video_init(int width, int height,
     pool->pix_fmt = format;
     pool->align = align;
 
-    if ((ret = av_image_check_size2(width, height, INT64_MAX, format, 0, NULL)) < 0) {
+    if ((ret = av_image_check_size2(width, height, INT64_MAX, format, 0, NULL)) < 0)
         goto fail;
-    }
 
     ret = av_image_fill_linesizes(pool->linesize, pool->pix_fmt,
                                   FFALIGN(pool->width, align));
-    if (ret < 0) {
+    if (ret < 0)
         goto fail;
-    }
 
     for (int i = 0; i < 4 && pool->linesize[i]; i++)
         pool->linesize[i] = FFALIGN(pool->linesize[i], pool->align);
@@ -150,9 +148,8 @@ AVFrame *ff_frame_pool_get(FFFramePool *pool, FFFilterGraph *graphi)
     switch(pool->type) {
     case AVMEDIA_TYPE_VIDEO:
         desc = av_pix_fmt_desc_get(pool->pix_fmt);
-        if (!desc) {
+        if (!desc)
             goto fail;
-        }
 
         frame->width = pool->width;
         frame->height = pool->height;
