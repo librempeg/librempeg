@@ -20,6 +20,9 @@
  */
 
 #include "libavutil/intreadwrite.h"
+#include "libavcodec/bytestream.h"
+#define BITSTREAM_READER_LE
+#include "libavcodec/get_bits.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
@@ -42,13 +45,59 @@ static int read_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX/3*2;
 }
 
+static int load_header_packet(AVIOContext *pb, AVCodecParameters *par,
+                              int packet_size, int64_t *p_offset, int *e_offset)
+{
+    if (packet_size + e_offset[0] > par->extradata_size)
+        return AVERROR_INVALIDDATA;
+
+    avio_seek(pb, p_offset[0], SEEK_SET);
+    if (avio_read(pb, par->extradata + e_offset[0], packet_size) != packet_size)
+        return AVERROR_INVALIDDATA;
+
+    p_offset[0] += packet_size;
+    e_offset[0] += packet_size;
+
+    return 0;
+}
+
+static int get_packet_header(AVIOContext *pb, int64_t *offset, int *size)
+{
+    GetBitContext gbit;
+    GetBitContext *gb = &gbit;
+    uint8_t ibuf[4] = {0};
+    uint32_t size_bits;
+    int ret;
+
+    if (avio_feof(pb))
+        return AVERROR_EOF;
+
+    avio_seek(pb, offset[0], SEEK_SET);
+    if (avio_read(pb, ibuf, 4) != 4)
+        return AVERROR_INVALIDDATA;
+
+    ret = init_get_bits8(gb, ibuf, 4);
+    if (ret < 0)
+        return ret;
+
+    size_bits = get_bits(gb, 4);
+    size[0] = get_bits_long(gb, size_bits + 1);
+
+    if (size_bits == 0 && size[0] == 0 && ibuf[0] == 128)
+        size[0] = 1;
+
+    offset[0] += (get_bits_count(gb)+7)/8;
+
+    return 0;
+}
+
 static int read_header(AVFormatContext *s)
 {
     int64_t offset, start_offset, header_offset;
     unsigned (*avio_r32)(AVIOContext *pb);
     unsigned (*avio_r16)(AVIOContext *pb);
     VID1Context *vid1 = s->priv_data;
-    int codec, rate, channels;
+    int codec, rate, channels, ret;
     AVIOContext *pb = s->pb;
     uint32_t magic, chunk;
     AVStream *st;
@@ -133,7 +182,7 @@ static int read_header(AVFormatContext *s)
         st->codecpar->sample_rate = rate;
         st->codecpar->ch_layout.nb_channels = channels;
 
-        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_HEADERS;
 
         vid1->audio_stream_index = st->index;
 
@@ -142,9 +191,60 @@ static int read_header(AVFormatContext *s)
         if (codec == AV_CODEC_ID_ADPCM_NDSP) {
             avio_seek(pb, header_offset + 10, SEEK_SET);
 
-            int ret = ff_get_extradata(s, st->codecpar, pb, 32 * channels);
+            ret = ff_get_extradata(s, st->codecpar, pb, 32 * channels);
             if (ret < 0)
                 return ret;
+        } else if (codec == AV_CODEC_ID_VORBIS) {
+            int packet_size = 0, eoffset = 0;
+            int64_t offset;
+            uint8_t *buf;
+
+            avio_seek(pb, header_offset + 32, SEEK_SET);
+            st->duration = avio_r32(pb);
+
+            offset = avio_tell(pb);
+
+            ret = ff_alloc_extradata(st->codecpar, 16384);
+            if (ret < 0)
+                return ret;
+            memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
+
+            ret = get_packet_header(pb, &offset, &packet_size);
+            if (ret < 0)
+                return ret;
+
+            AV_WB16(st->codecpar->extradata + eoffset, packet_size);
+            eoffset += 2;
+
+            ret = load_header_packet(pb, st->codecpar, packet_size, &offset, &eoffset);
+            if (ret < 0)
+                return ret;
+
+            AV_WB16(st->codecpar->extradata + eoffset, 0x19);
+            eoffset += 2;
+
+            buf = st->codecpar->extradata + eoffset;
+            bytestream_put_byte(&buf, 0x03);
+            bytestream_put_buffer(&buf, "vorbis", 6);
+            bytestream_put_le32(&buf, 9);
+            bytestream_put_buffer(&buf, "librempeg", 9);
+            bytestream_put_le32(&buf, 0);
+            bytestream_put_byte(&buf, 1);
+
+            eoffset += 0x19;
+
+            ret = get_packet_header(pb, &offset, &packet_size);
+            if (ret < 0)
+                return ret;
+
+            AV_WB16(st->codecpar->extradata + eoffset, packet_size);
+            eoffset += 2;
+
+            ret = load_header_packet(pb, st->codecpar, packet_size, &offset, &eoffset);
+            if (ret < 0)
+                return ret;
+
+            st->codecpar->extradata_size = eoffset;
         }
     }
 
@@ -188,25 +288,50 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
         block_size -= 16;
         pkt_size = avio_r32(pb);
         index = vid1->audio_stream_index;
+        if (s->streams[vid1->audio_stream_index]->codecpar->codec_id == AV_CODEC_ID_VORBIS)  {
+            int64_t start = avio_tell(pb);
+            int64_t offset = start + 4;
+
+            ret = get_packet_header(pb, &offset, &pkt_size);
+            if (ret < 0)
+                return ret;
+
+            if (avio_feof(pb))
+                return AVERROR_EOF;
+            block_size = pkt_size;
+            avio_seek(pb, offset, SEEK_SET);
+        }
     } else {
-        return AVERROR_INVALIDDATA;
+        if (s->streams[vid1->audio_stream_index]->codecpar->codec_id == AV_CODEC_ID_VORBIS)  {
+            int64_t start = avio_tell(pb);
+            int64_t offset = start - 4;
+
+            ret = get_packet_header(pb, &offset, &pkt_size);
+            if (ret < 0)
+                return ret;
+
+            block_size = pkt_size;
+            avio_seek(pb, offset, SEEK_SET);
+            index = vid1->audio_stream_index;
+        } else {
+            return AVERROR_INVALIDDATA;
+        }
     }
+
+    if (pkt_size <= 0)
+        return FFERROR_REDO;
 
     ret = av_get_packet(pb, pkt, pkt_size);
     if (block_size > pkt_size)
         avio_skip(pb, block_size - pkt_size);
+    if (avio_feof(pb))
+        return AVERROR_EOF;
 
     pkt->pos = pos;
     pkt->stream_index = index;
     pkt->flags |= AV_PKT_FLAG_KEY;
 
     return ret;
-}
-
-static int read_seek(AVFormatContext *s, int stream_index,
-                     int64_t timestamp, int flags)
-{
-    return -1;
 }
 
 const FFInputFormat ff_vid1_demuxer = {
@@ -218,5 +343,4 @@ const FFInputFormat ff_vid1_demuxer = {
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
-    .read_seek      = read_seek,
 };
