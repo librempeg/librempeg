@@ -82,6 +82,10 @@ FATE_LIBAVUTIL += fate-dict
 fate-dict: libavutil/tests/dict$(EXESUF)
 fate-dict: CMD = run libavutil/tests/dict$(EXESUF)
 
+FATE_LIBAVUTIL += fate-dovi_meta
+fate-dovi_meta: libavutil/tests/dovi_meta$(EXESUF)
+fate-dovi_meta: CMD = run libavutil/tests/dovi_meta$(EXESUF)
+
 FATE_LIBAVUTIL += fate-encryption-info
 fate-encryption-info: libavutil/tests/encryption_info$(EXESUF)
 fate-encryption-info: CMD = run libavutil/tests/encryption_info$(EXESUF)
