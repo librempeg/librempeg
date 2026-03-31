@@ -859,6 +859,7 @@ OBJS-$(CONFIG_WV6_DEMUXER)               += wv6.o pcm.o
 OBJS-$(CONFIG_WVE_DEMUXER)               += wvedec.o pcm.o
 OBJS-$(CONFIG_WV_MUXER)                  += wvenc.o wv.o apetag.o img2.o
 OBJS-$(CONFIG_XA30_DEMUXER)              += xa30.o pcm.o
+OBJS-$(CONFIG_XAU_DEMUXER)               += xau.o pcm.o
 OBJS-$(CONFIG_XA_DEMUXER)                += xa.o
 OBJS-$(CONFIG_XBIN_DEMUXER)              += bintext.o sauce.o
 OBJS-$(CONFIG_XMD_DEMUXER)               += xmd.o pcm.o
