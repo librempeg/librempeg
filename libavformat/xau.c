@@ -99,7 +99,7 @@ static int read_header(AVFormatContext *s)
         return AVERROR_PATCHWELCOME;
     }
 
-    if (rate <= 0 || channels <= 0 || channels >= INT_MAX/8)
+    if (rate <= 0 || channels <= 0 || channels >= INT_MAX/align)
         return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
