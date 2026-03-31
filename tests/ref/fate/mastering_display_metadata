@@ -1,0 +1,31 @@
+Testing av_mastering_display_metadata_alloc()
+alloc: OK
+defaults: primaries[0][0]=0/1, white_point[0]=0/1
+defaults: min_lum=0/1, max_lum=0/1
+defaults: has_primaries=0, has_luminance=0
+
+Testing av_mastering_display_metadata_alloc_size()
+alloc_size: OK, size>0=yes
+defaults: primaries[0][0]=0/1
+
+Testing write/read back
+primaries[0]=(34000/50000, 16000/50000)
+white_point=(15635/50000, 16450/50000)
+luminance: min=50/10000 max=10000000/10000
+
+Testing av_mastering_display_metadata_create_side_data()
+side_data: OK, defaults: primaries[0][0]=0/1
+
+Testing av_content_light_metadata_alloc()
+alloc: OK, size>0=yes, MaxCLL=0, MaxFALL=0
+write: MaxCLL=1000, MaxFALL=400
+
+Testing av_content_light_metadata_create_side_data()
+side_data: OK, MaxCLL=0
+
+Testing OOM paths
+mastering alloc OOM: OK
+mastering alloc_size OOM: OK
+content alloc OOM: OK
+mastering side_data OOM: OK
+content side_data OOM: OK

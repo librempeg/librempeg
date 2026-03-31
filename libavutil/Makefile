@@ -298,6 +298,7 @@ TESTPROGS = adler32                                                     \
             lfg                                                         \
             lls                                                         \
             log                                                         \
+            mastering_display_metadata                                  \
             mathematics                                                 \
             md5                                                         \
             murmur3                                                     \

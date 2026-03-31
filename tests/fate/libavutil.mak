@@ -128,6 +128,10 @@ FATE_LIBAVUTIL += fate-lfg
 fate-lfg: libavutil/tests/lfg$(EXESUF)
 fate-lfg: CMD = run libavutil/tests/lfg$(EXESUF)
 
+FATE_LIBAVUTIL += fate-mastering_display_metadata
+fate-mastering_display_metadata: libavutil/tests/mastering_display_metadata$(EXESUF)
+fate-mastering_display_metadata: CMD = run libavutil/tests/mastering_display_metadata$(EXESUF)
+
 FATE_LIBAVUTIL += fate-mathematics
 fate-mathematics: libavutil/tests/mathematics$(EXESUF)
 fate-mathematics: CMD = run libavutil/tests/mathematics$(EXESUF)
