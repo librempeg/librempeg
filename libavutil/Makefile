@@ -326,6 +326,7 @@ TESTPROGS = adler32                                                     \
             utf8                                                        \
             uuid                                                        \
             video_enc_params                                            \
+            video_hint                                                  \
             xtea                                                        \
             tea                                                         \
 

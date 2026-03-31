@@ -231,6 +231,10 @@ FATE_LIBAVUTIL += fate-video_enc_params
 fate-video_enc_params: libavutil/tests/video_enc_params$(EXESUF)
 fate-video_enc_params: CMD = run libavutil/tests/video_enc_params$(EXESUF)
 
+FATE_LIBAVUTIL += fate-video_hint
+fate-video_hint: libavutil/tests/video_hint$(EXESUF)
+fate-video_hint: CMD = run libavutil/tests/video_hint$(EXESUF)
+
 FATE_LIBAVUTIL += fate-file
 fate-file: libavutil/tests/file$(EXESUF)
 fate-file: CMD = run libavutil/tests/file$(EXESUF) $(SRC_PATH)/libavutil/tests/file.c
