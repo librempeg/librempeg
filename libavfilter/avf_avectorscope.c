@@ -110,35 +110,40 @@ static const AVOption avectorscope_options[] = {
 
 AVFILTER_DEFINE_CLASS(avectorscope);
 
-static void draw_dot(AudioVectorScopeContext *s, unsigned x, unsigned y, int value)
+static void draw_dot(uint8_t *data, const ptrdiff_t linesize,
+                     const uint8_t *contrast, const double zoom,
+                     const unsigned w, const unsigned h,
+                     unsigned x, unsigned y, int value)
 {
-    const ptrdiff_t linesize = s->outpicref->linesize[0];
-    const uint8_t *contrast = s->contrast;
     uint8_t *dst;
 
-    if (s->zoom > 1) {
-        if (y >= s->h || x >= s->w)
+    if (zoom > 1) {
+        if (y >= h || x >= w)
             return;
     } else {
-        y = FFMIN(y, s->h - 1);
-        x = FFMIN(x, s->w - 1);
+        y = FFMIN(y, h - 1);
+        x = FFMIN(x, w - 1);
     }
 
-    dst = s->outpicref->data[0] + y * linesize + x * 4;
+    dst = data + y * linesize + x * 4;
     dst[0] = FFMIN(dst[0] + contrast[0], value);
     dst[1] = FFMIN(dst[1] + contrast[1], value);
     dst[2] = FFMIN(dst[2] + contrast[2], value);
     dst[3] = FFMIN(dst[3] + contrast[3], value);
 }
 
-static void draw_line(AudioVectorScopeContext *s, int x0, int y0, int x1, int y1)
+static void draw_line(uint8_t *data,
+                      const ptrdiff_t linesize,
+                      const uint8_t *contrast, const double zoom,
+                      const int w, const int h,
+                      int x0, int y0, int x1, int y1)
 {
     int dx = FFABS(x1-x0), sx = x0 < x1 ? 1 : -1;
     int dy = FFABS(y1-y0), sy = y0 < y1 ? 1 : -1;
     int err = (dx>dy ? dx : -dy) / 2, e2;
 
     for (;;) {
-        draw_dot(s, x0, y0, 255);
+        draw_dot(data, linesize, contrast, zoom, w, h, x0, y0, 255);
 
         if (x0 == x1 && y0 == y1)
             break;
@@ -157,7 +162,11 @@ static void draw_line(AudioVectorScopeContext *s, int x0, int y0, int x1, int y1
     }
 }
 
-static void draw_aaline(AudioVectorScopeContext *s, int x0, int y0, int x1, int y1)
+static void draw_aaline(uint8_t *data,
+                        const ptrdiff_t linesize,
+                        const uint8_t *contrast, const double zoom,
+                        const int w, const int h,
+                        int x0, int y0, int x1, int y1)
 {
     int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, x2;
     int dx = FFABS(x1-x0), dy = FFABS(y1-y0), err = dx * dx + dy * dy;
@@ -168,14 +177,14 @@ static void draw_aaline(AudioVectorScopeContext *s, int x0, int y0, int x1, int 
     err = dx - dy;
 
     for (;;) {
-        draw_dot(s, x0, y0, 255-(FFABS(err - dx + dy) >> 16));
+        draw_dot(data, linesize, contrast, zoom, w, h, x0, y0, 255-(FFABS(err - dx + dy) >> 16));
         e2 = err;
         x2 = x0;
         if (2 * e2 >= -dx) {
             if (x0 == x1)
                 break;
             if (e2 + dy < 0xff0000)
-                draw_dot(s, x0, y0 + sy, 255-((e2 + dy) >> 16));
+                draw_dot(data, linesize, contrast, zoom, w, h, x0, y0 + sy, 255-((e2 + dy) >> 16));
             err -= dy;
             x0 += sx;
         }
@@ -184,7 +193,7 @@ static void draw_aaline(AudioVectorScopeContext *s, int x0, int y0, int x1, int 
             if (y0 == y1)
                 break;
             if (dx - e2 < 0xff0000)
-                draw_dot(s, x2 + sx, y0, 255-((dx - e2) >> 16));
+                draw_dot(data, linesize, contrast, zoom, w, h, x2 + sx, y0, 255-((dx - e2) >> 16));
             err += dx;
             y0 += sy;
         }
@@ -290,6 +299,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     const int16_t *samples = (const int16_t *)insamples->data[0];
     const float *samplesf = (const float *)insamples->data[0];
     AudioVectorScopeContext *s = ctx->priv;
+    const int format = insamples->format;
     const int hw = s->hw;
     const int hh = s->hh;
     AVFrame *clone;
@@ -297,6 +307,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     unsigned prev_x = s->prev_x, prev_y = s->prev_y;
     double zoom = s->zoom;
     const int nb_samples = insamples->nb_samples;
+    const int mirror = s->mirror;
+    const int scale = s->scale;
+    const int mode = s->mode;
+    const int draw = s->draw;
+    const int swap = s->swap;
+    const double ozoom = s->zoom;
+    const uint8_t *contrast = s->contrast;
+    const int w = s->w;
+    const int h = s->h;
     int ret;
 
     if (!s->outpicref || s->outpicref->width  != outlink->w ||
@@ -325,7 +344,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     if (zoom < 1) {
         float max = 0;
 
-        switch (insamples->format) {
+        switch (format) {
         case AV_SAMPLE_FMT_S16:
             for (int i = 0; i < nb_samples * 2; i++) {
                 float sample = samples[i] / (float)INT16_MAX;
@@ -357,10 +376,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
             zoom = 1. / max;
     }
 
+    const ptrdiff_t linesize = s->outpicref->linesize[0];
+    uint8_t *data = s->outpicref->data[0];
+
     for (int i = 0; i < nb_samples; i++) {
         float src[2];
 
-        switch (insamples->format) {
+        switch (format) {
         case AV_SAMPLE_FMT_S16:
             src[0] = samples[i*2+0] / (float)INT16_MAX;
             src[1] = samples[i*2+1] / (float)INT16_MAX;
@@ -373,7 +395,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
             av_assert2(0);
         }
 
-        switch (s->scale) {
+        switch (scale) {
         case SQRT:
             src[0] = FFSIGN(src[0]) * sqrtf(FFABS(src[0]));
             src[1] = FFSIGN(src[1]) * sqrtf(FFABS(src[1]));
@@ -388,19 +410,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
             break;
         }
 
-        if (s->mirror & 1)
+        if (mirror & 1)
             src[0] = -src[0];
 
-        if (s->mirror & 2)
+        if (mirror & 2)
             src[1] = -src[1];
 
-        if (s->swap)
+        if (swap)
             FFSWAP(float, src[0], src[1]);
 
-        if (s->mode == LISSAJOUS) {
+        if (mode == LISSAJOUS) {
             x = ((src[1] - src[0]) * zoom / 2 + 1) * hw;
             y = (1.0 - (src[0] + src[1]) * zoom / 2) * hh;
-        } else if (s->mode == LISSAJOUS_XY) {
+        } else if (mode == LISSAJOUS_XY) {
             x = (src[1] * zoom + 1) * hw;
             y = (src[0] * zoom + 1) * hh;
         } else {
@@ -414,12 +436,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
             y = s->h - s->h * fabsf(cx + cy) * .7;
         }
 
-        if (s->draw == DOT) {
-            draw_dot(s, x, y, 255);
-        } else if (s->draw == LINE) {
-            draw_line(s, x, y, prev_x, prev_y);
+        if (draw == DOT) {
+            draw_dot(data, linesize,
+                     contrast, ozoom,
+                     w, h, x, y, 255);
+        } else if (draw == LINE) {
+            draw_line(data, linesize, contrast, zoom, w, h, x, y, prev_x, prev_y);
         } else {
-            draw_aaline(s, x, y, prev_x, prev_y);
+            draw_aaline(data, linesize, contrast, zoom, w, h, x, y, prev_x, prev_y);
         }
         prev_x = x;
         prev_y = y;
