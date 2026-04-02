@@ -143,10 +143,10 @@ static void draw_line(uint8_t *data,
     int err = (dx>dy ? dx : -dy) / 2, e2;
 
     for (;;) {
-        draw_dot(data, linesize, contrast, zoom, w, h, x0, y0, 255);
-
         if (x0 == x1 && y0 == y1)
             break;
+
+        draw_dot(data, linesize, contrast, zoom, w, h, x0, y0, 255);
 
         e2 = err;
 
