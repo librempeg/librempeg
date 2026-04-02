@@ -177,6 +177,8 @@ static void draw_aaline(uint8_t *data,
     err = dx - dy;
 
     for (;;) {
+        if (x0 == x1 && y0 == y1)
+            break;
         draw_dot(data, linesize, contrast, zoom, w, h, x0, y0, 255-(FFABS(err - dx + dy) >> 16));
         e2 = err;
         x2 = x0;
