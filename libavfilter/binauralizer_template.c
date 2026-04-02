@@ -181,9 +181,10 @@ static int fn(ba_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     const double *i_gain = s->i_gain;
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
-    const int *nb_samples_ptr = arg;
-    const int nb_samples = nb_samples_ptr[0];
     const int N = s->fft_size/2 + 1;
+    ThreadData *td = arg;
+    const int nb_samples = td->nb_samples;
+    const int doffset = td->offset;
 
     for (int ch = start; ch < end; ch++) {
         const ftype igain = i_gain[FFMIN(ch, nb_i_gain-1)];
@@ -204,7 +205,7 @@ static int fn(ba_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
         memmove(in, &in[overlap], offset * sizeof(*in));
 
         if (nb_samples > 0) {
-            const ftype *samples = (const ftype *)s->in->extended_data[ch];
+            const ftype *samples = ((const ftype *)s->in->extended_data[ch]) + doffset;
             memcpy(&in[offset], samples, nb_samples * sizeof(*in));
         }
         memset(&in[offset + nb_samples], 0, (overlap - nb_samples) * sizeof(*in));
@@ -219,7 +220,7 @@ static int fn(ba_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     return 0;
 }
 
-static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *out)
+static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
 {
     BinauralizerContext *s = ctx->priv;
     const AVChannelLayout *ch_layout = &ctx->inputs[0]->ch_layout;
@@ -229,19 +230,23 @@ static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *out)
     ftype *windowed_right  = (ftype *)s->windowed_frame->extended_data[1];
     ctype *windowed_oleft  = (ctype *)s->windowed_out->extended_data[0];
     ctype *windowed_oright = (ctype *)s->windowed_out->extended_data[1];
-    ftype *left_osamples   = (ftype *)out->extended_data[0];
-    ftype *right_osamples  = (ftype *)out->extended_data[1];
+    ftype *left_osamples   = ((ftype *)out->extended_data[0]) + doffset;
+    ftype *right_osamples  = ((ftype *)out->extended_data[1]) + doffset;
     const int nb_in_channels = ch_layout->nb_channels;
     const int overlap = s->overlap;
-    const int nb_samples = FFMIN(overlap, s->in->nb_samples);
+    const int nb_samples = FFMIN(overlap, s->in->nb_samples - doffset);
+    const int out_nb_samples = FFMIN(overlap, out->nb_samples - doffset);
     const int offset = s->fft_size - overlap;
     const int N = s->fft_size/2 + 1;
     const ftype G = s->gain;
+    ThreadData td;
 
     memset(windowed_oleft, 0, N * sizeof(*windowed_oleft));
     memset(windowed_oright, 0, N * sizeof(*windowed_oright));
 
-    ff_filter_execute(ctx, fn(ba_channels), (void *)&nb_samples, NULL,
+    td.offset = doffset;
+    td.nb_samples = nb_samples;
+    ff_filter_execute(ctx, fn(ba_channels), &td, NULL,
                       FFMIN(nb_in_channels, ff_filter_get_nb_threads(ctx)));
 
     for (int ch = 0; ch < nb_in_channels; ch++) {
@@ -267,13 +272,13 @@ static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *out)
     fn(apply_window)(s, windowed_left,  left_out,  1, G);
     fn(apply_window)(s, windowed_right, right_out, 1, G);
 
-    memcpy(left_osamples, left_out, out->nb_samples * sizeof(*left_osamples));
-    memcpy(right_osamples, right_out, out->nb_samples * sizeof(*right_osamples));
+    memcpy(left_osamples, left_out, out_nb_samples * sizeof(*left_osamples));
+    memcpy(right_osamples, right_out, out_nb_samples * sizeof(*right_osamples));
 
     return 0;
 }
 
-static int fn(ba_flush)(AVFilterContext *ctx, AVFrame *out)
+static int fn(ba_flush)(AVFilterContext *ctx, AVFrame *out, const int doffset)
 {
     BinauralizerContext *s = ctx->priv;
     const AVChannelLayout *ch_layout = &ctx->inputs[0]->ch_layout;
@@ -291,11 +296,14 @@ static int fn(ba_flush)(AVFilterContext *ctx, AVFrame *out)
     const int N = s->fft_size/2 + 1;
     const int nb_samples = 0;
     const ftype G = s->gain;
+    ThreadData td;
 
     memset(windowed_oleft, 0, N * sizeof(*windowed_oleft));
     memset(windowed_oright, 0, N * sizeof(*windowed_oright));
 
-    ff_filter_execute(ctx, fn(ba_channels), (void *)&nb_samples, NULL,
+    td.offset = doffset;
+    td.nb_samples = nb_samples;
+    ff_filter_execute(ctx, fn(ba_channels), &td, NULL,
                       FFMIN(nb_in_channels, ff_filter_get_nb_threads(ctx)));
 
     for (int ch = 0; ch < nb_in_channels; ch++) {

@@ -69,12 +69,17 @@ typedef struct BinauralizerContext {
     AVFrame *windowed_outr;
     AVFrame *windowed_out;
 
-    int (*ba_stereo)(AVFilterContext *ctx, AVFrame *out);
-    int (*ba_flush)(AVFilterContext *ctx, AVFrame *out);
+    int (*ba_stereo)(AVFilterContext *ctx, AVFrame *out, const int offset);
+    int (*ba_flush)(AVFilterContext *ctx, AVFrame *out, const int offset);
 
     AVTXContext **tx_ctx, *itx_ctx;
     av_tx_fn tx_fn, itx_fn;
 } BinauralizerContext;
+
+typedef struct ThreadData {
+    int nb_samples;
+    int offset;
+} ThreadData;
 
 #define OFFSET(x) offsetof(BinauralizerContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_RUNTIME_PARAM
@@ -202,7 +207,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     av_frame_copy_props(out, in);
 
     s->in = in;
-    s->ba_stereo(ctx, out);
+    for (int offset = 0; offset < out->nb_samples; offset += s->overlap)
+        s->ba_stereo(ctx, out, offset);
 
     out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
     out->duration = av_rescale_q(out->nb_samples,
@@ -247,7 +253,7 @@ static int flush_frame(AVFilterLink *outlink)
 
         s->flush_size -= nb_samples;
 
-        s->ba_flush(ctx, out);
+        s->ba_flush(ctx, out, 0);
 
         out->pts = s->last_pts;
         out->duration = av_rescale_q(out->nb_samples,
@@ -268,13 +274,15 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     BinauralizerContext *s = ctx->priv;
+    int ret, status, available, wanted;
     AVFrame *in = NULL;
-    int ret, status;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    ret = ff_inlink_consume_samples(inlink, s->overlap, s->overlap, &in);
+    available = ff_inlink_queued_samples(inlink);
+    wanted = FFMAX(s->overlap, (available / s->overlap) * s->overlap);
+    ret = ff_inlink_consume_samples(inlink, wanted, wanted, &in);
     if (ret < 0)
         return ret;
 
