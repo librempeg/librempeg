@@ -345,7 +345,7 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
 
     if(s->lossless && s->avctx->lowres){
         av_log(s->avctx, AV_LOG_ERROR, "lowres is not possible with lossless jpeg\n");
-        return -1;
+        return AVERROR(ENOSYS);
     }
 
     height = bytestream2_get_be16u(gB);
@@ -2768,14 +2768,14 @@ the_end:
                 dst[index] =   frame->data[index]
                              + frame->linesize[index]*i;
             }
-            for (j=0; j<w; j++) {
+            for (j = 0; j < w; j++) {
                 int k = dst[3][j];
                 int r = (255 - dst[0][j]) * k;
                 int g = (128 - dst[1][j]) * k;
                 int b = (128 - dst[2][j]) * k;
-                dst[0][j] = r*257 >> 16;
-                dst[1][j] = (g*257 >> 16) + 128;
-                dst[2][j] = (b*257 >> 16) + 128;
+                dst[0][j] = r * 257 >> 16;
+                dst[1][j] = (g * 257 >> 16) + 128;
+                dst[2][j] = (b * 257 >> 16) + 128;
             }
             memset(dst[3], 255, w);
         }
