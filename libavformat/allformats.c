@@ -631,6 +631,7 @@ extern const FFInputFormat  ff_tedcaptions_demuxer;
 extern const FFOutputFormat ff_tg2_muxer;
 extern const FFOutputFormat ff_tgp_muxer;
 extern const FFInputFormat  ff_thp_demuxer;
+extern const FFOutputFormat ff_thp_muxer;
 extern const FFInputFormat  ff_threedostr_demuxer;
 extern const FFInputFormat  ff_tiertexseq_demuxer;
 extern const FFOutputFormat ff_mkvtimestamp_v2_muxer;
