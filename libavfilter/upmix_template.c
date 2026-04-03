@@ -306,7 +306,7 @@ static int fn(upmix_in)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
         fn(ctype) *slow = plan->x_slow;
         fn(ctype) *pfast = plan->p_fast;
         fn(ctype) *pslow = plan->p_slow;
-        fn(ctype) csample = fn(polar)(src[idx], F(0.0));
+        const fn(ctype) csample = fn(polar)(src[idx], F(0.0));
 
         for (int n = start; n < end; n++) {
             fast[n] = fn(aswift_add)(fn(aswift_mul)(pfast[n], wf[n]), csample);
