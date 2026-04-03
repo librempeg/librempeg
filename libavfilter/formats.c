@@ -95,10 +95,9 @@ do {                                                                       \
 static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
                                   enum AVMediaType type, int check)
 {
-    int i, j, k = 0;
+    int i, j;
     int alpha1=0, alpha2=0;
     int chroma1=0, chroma2=0;
-    int same_params = 0;
 
     av_assert0(check || (a->refcount && b->refcount));
 
@@ -112,7 +111,7 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
        possibly causing a lossy conversion elsewhere in the graph.
        To avoid that, pretend that there are no common formats to force the
        insertion of a conversion filter. */
-    if (type == AVMEDIA_TYPE_VIDEO) {
+    if (type == AVMEDIA_TYPE_VIDEO)
         for (i = 0; i < a->nb_formats; i++) {
             const AVPixFmtDescriptor *const adesc = av_pix_fmt_desc_get(a->formats[i]);
             for (j = 0; j < b->nb_formats; j++) {
@@ -123,154 +122,14 @@ static int merge_formats_internal(AVFilterFormats *a, AVFilterFormats *b,
                     alpha1 |= adesc->flags & AV_PIX_FMT_FLAG_ALPHA;
                     chroma1|= adesc->nb_components > 1;
                 }
-                if (check && (a->flags || b->flags)) {
-                    int add_param = 1;
-
-                    if ((a->flags & FILTER_SAME_BITDEPTH) || (b->flags & FILTER_SAME_BITDEPTH)) {
-                        const int afloat = !!(adesc->flags & AV_PIX_FMT_FLAG_FLOAT);
-                        const int bfloat = !!(bdesc->flags & AV_PIX_FMT_FLAG_FLOAT);
-                        const int afactor = 1+3*(!!(adesc->flags & AV_PIX_FMT_FLAG_BAYER));
-                        const int bfactor = 1+3*(!!(bdesc->flags & AV_PIX_FMT_FLAG_BAYER));
-                        const int abits = adesc->comp[0].depth * afactor;
-                        const int bbits = bdesc->comp[0].depth * bfactor;
-                        add_param &= (abits == bbits && afloat == bfloat);
-                    }
-                    if ((a->flags & FILTER_SAME_ENDIANNESS) || (b->flags & FILTER_SAME_ENDIANNESS)) {
-                        const int abe = !!(adesc->flags & AV_PIX_FMT_FLAG_BE);
-                        const int bbe = !!(bdesc->flags & AV_PIX_FMT_FLAG_BE);
-                        add_param &= (abe == bbe);
-                    }
-                    if ((a->flags & FILTER_SAME_RGB_FLAG) || (b->flags & FILTER_SAME_RGB_FLAG)) {
-                        const int argb = !!(adesc->flags & AV_PIX_FMT_FLAG_RGB);
-                        const int brgb = !!(bdesc->flags & AV_PIX_FMT_FLAG_RGB);
-                        add_param &= (argb == brgb);
-                    }
-                    if ((a->flags & FILTER_SAME_PLANAR_FLAG) || (b->flags & FILTER_SAME_PLANAR_FLAG)) {
-                        const int aplanar = !!(adesc->flags & AV_PIX_FMT_FLAG_PLANAR);
-                        const int bplanar = !!(bdesc->flags & AV_PIX_FMT_FLAG_PLANAR);
-                        add_param &= (aplanar == bplanar);
-                    }
-                    if ((a->flags & FILTER_SAME_SUBSAMPLING) || (b->flags & FILTER_SAME_SUBSAMPLING)) {
-                        const int wsubs = adesc->log2_chroma_w == bdesc->log2_chroma_w;
-                        const int hsubs = adesc->log2_chroma_h == bdesc->log2_chroma_h;
-                        add_param &= (wsubs && hsubs);
-                    }
-
-                    same_params += add_param;
-                }
             }
         }
-
-        if (check) {
-            if (a->flags || b->flags) {
-                if (same_params == 0)
-                    return 0;
-            }
-        }
-    }
 
     // If chroma or alpha can be lost through merging then do not merge
     if (alpha2 > alpha1 || chroma2 > chroma1)
         return 0;
 
-    if (type == AVMEDIA_TYPE_VIDEO) {
-        for (i = 0; i < a->nb_formats; i++) {
-            const AVPixFmtDescriptor *const adesc = av_pix_fmt_desc_get(a->formats[i]);
-            for (j = 0; j < b->nb_formats; j++) {
-                const AVPixFmtDescriptor *bdesc = av_pix_fmt_desc_get(b->formats[j]);
-                if (a->flags || b->flags) {
-                    int add_format = 1;
-
-                    if ((a->flags & FILTER_SAME_BITDEPTH) || (b->flags & FILTER_SAME_BITDEPTH)) {
-                        const int afloat = !!(adesc->flags & AV_PIX_FMT_FLAG_FLOAT);
-                        const int bfloat = !!(bdesc->flags & AV_PIX_FMT_FLAG_FLOAT);
-                        const int abits = adesc->comp[0].depth;
-                        const int bbits = bdesc->comp[0].depth;
-
-                        add_format &= (abits == bbits && afloat == bfloat);
-                    }
-                    if ((a->flags & FILTER_SAME_ENDIANNESS) || (b->flags & FILTER_SAME_ENDIANNESS)) {
-                        const int abe = !!(adesc->flags & AV_PIX_FMT_FLAG_BE);
-                        const int bbe = !!(bdesc->flags & AV_PIX_FMT_FLAG_BE);
-
-                        add_format &= (abe == bbe);
-                    }
-                    if ((a->flags & FILTER_SAME_RGB_FLAG) || (b->flags & FILTER_SAME_RGB_FLAG)) {
-                        const int argb = !!(adesc->flags & AV_PIX_FMT_FLAG_RGB);
-                        const int brgb = !!(bdesc->flags & AV_PIX_FMT_FLAG_RGB);
-
-                        add_format &= (argb == brgb);
-                    }
-                    if ((a->flags & FILTER_SAME_PLANAR_FLAG) || (b->flags & FILTER_SAME_PLANAR_FLAG)) {
-                        const int aplanar = !!(adesc->flags & AV_PIX_FMT_FLAG_PLANAR);
-                        const int bplanar = !!(bdesc->flags & AV_PIX_FMT_FLAG_PLANAR);
-
-                        add_format &= (aplanar == bplanar);
-                    }
-                    if ((a->flags & FILTER_SAME_SUBSAMPLING) || (b->flags & FILTER_SAME_SUBSAMPLING)) {
-                        const int wsubs = adesc->log2_chroma_w == bdesc->log2_chroma_w;
-                        const int hsubs = adesc->log2_chroma_h == bdesc->log2_chroma_h;
-
-                        add_format &= (wsubs && hsubs);
-                    }
-
-                    if (add_format) {
-                        if (check)
-                            return 1;
-
-                        a->formats[k++] = a->formats[i];
-                        break;
-                    }
-                } else if (a->formats[i] == b->formats[j]) {
-                    if (check)
-                        return 1;
-
-                    a->formats[k++] = a->formats[i];
-                    break;
-                }
-            }
-        }
-    }
-
-    if (type == AVMEDIA_TYPE_AUDIO) {
-        for (int i = 0; i < a->nb_formats; i++) {
-            for (int j = 0; j < b->nb_formats; j++) {
-                if (b->flags & FILTER_SAME_BITDEPTH) {
-                    if (k > 0) {
-                        if (av_get_packed_sample_fmt(a->formats[0]) == av_get_packed_sample_fmt(b->formats[j])) {
-                            a->formats[k++] = b->formats[j];
-                            break;
-                        }
-                    } else {
-                        if (av_get_packed_sample_fmt(a->formats[i]) == av_get_packed_sample_fmt(b->formats[j])) {
-                            if (check)
-                                return 1;
-
-                            a->formats[k++] = a->formats[i];
-                            break;
-                        }
-                    }
-                } else {
-                    if (a->formats[i] == b->formats[j]) {
-                        if (check)
-                            return 1;
-
-                        a->formats[k++] = a->formats[i];
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    /* Check that there was at least one common format.
-     * Notice that both a and b are unchanged if not. */
-    if (!k)
-        return 0;
-    av_assert0(!check);
-    a->nb_formats = k;
-
-    MERGE_REF(a, b, formats, AVFilterFormats, return AVERROR(ENOMEM););
+    MERGE_FORMATS(a, b, formats, nb_formats, AVFilterFormats, check, 0);
 
     return 1;
 }
@@ -1358,11 +1217,11 @@ int ff_default_query_formats(AVFilterContext *ctx)
     switch (f->formats_state) {
     case FF_FILTER_FORMATS_PIXFMT_LIST:
         type    = AVMEDIA_TYPE_VIDEO;
-        formats = ff_make_format_list(f->formats.pixels_list);
+        formats = ff_make_pixel_format_list(f->formats.pixels_list);
         break;
     case FF_FILTER_FORMATS_SAMPLEFMTS_LIST:
         type    = AVMEDIA_TYPE_AUDIO;
-        formats = ff_make_format_list(f->formats.samples_list);
+        formats = ff_make_sample_format_list(f->formats.samples_list);
         break;
     case FF_FILTER_FORMATS_SINGLE_PIXFMT:
         type    = AVMEDIA_TYPE_VIDEO;
