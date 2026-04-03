@@ -69,6 +69,10 @@ static av_cold int thp_encode_init(AVCodecContext *avctx)
     if (avctx->frame_size <= 0)
         avctx->frame_size = BLOCK_SAMPLES;
     avctx->block_align = (avctx->frame_size / BLOCK_SAMPLES) * BLOCK_SIZE * nb_channels;
+    if (c->coded_nb_samples) {
+        avctx->frame_size = 0;
+        avctx->block_align = 0;
+    }
 
     if (!c->coded_nb_samples) {
         avctx->extradata = av_calloc(nb_channels, 32);
@@ -701,6 +705,7 @@ const FFCodec ff_adpcm_thp_encoder = {
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_ADPCM_THP,
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_SMALL_LAST_FRAME |
+                      AV_CODEC_CAP_VARIABLE_FRAME_SIZE |
                       AV_CODEC_CAP_SLICE_THREADS |
                       AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
     .priv_data_size = sizeof(THPContext),
@@ -717,6 +722,7 @@ const FFCodec ff_adpcm_thp_le_encoder = {
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_ADPCM_THP_LE,
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_SMALL_LAST_FRAME |
+                      AV_CODEC_CAP_VARIABLE_FRAME_SIZE |
                       AV_CODEC_CAP_SLICE_THREADS |
                       AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
     .priv_data_size = sizeof(THPContext),
