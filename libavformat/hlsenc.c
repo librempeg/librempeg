@@ -1014,7 +1014,7 @@ static HLSSegment *find_segment_by_filename(HLSSegment *segment, const char *fil
 }
 
 static int sls_flags_filename_process(struct AVFormatContext *s, HLSContext *hls,
-                                      VariantStream *vs, HLSSegment *en,
+                                      VariantStream *vs,
                                       double duration, int64_t pos, int64_t size)
 {
     if ((hls->flags & (HLS_SECOND_LEVEL_SEGMENT_SIZE | HLS_SECOND_LEVEL_SEGMENT_DURATION)) &&
@@ -1171,7 +1171,7 @@ static int hls_append_segment(struct AVFormatContext *s, HLSContext *hls,
         vs->avg_bitrate = (int)(8 * vs->total_size / vs->total_duration);
 
     en->var_stream_idx = vs->var_stream_idx;
-    ret = sls_flags_filename_process(s, hls, vs, en, duration, pos, size);
+    ret = sls_flags_filename_process(s, hls, vs, duration, pos, size);
     if (ret < 0)
         return ret;
 
