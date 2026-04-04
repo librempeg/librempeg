@@ -80,7 +80,7 @@ static int compile(SwsContext *ctx, SwsOpList *ops, SwsCompiledOp *out)
 
     for (int i = 0; i < ops->num_ops; i++) {
         ret = ff_sws_op_compile_tables(ctx, tables, FF_ARRAY_ELEMS(tables),
-                                       ops, i, SWS_BLOCK_SIZE, chain);
+                                       &ops->ops[i], SWS_BLOCK_SIZE, chain);
         if (ret < 0) {
             av_log(ctx, AV_LOG_TRACE, "Failed to compile op %d\n", i);
             ff_sws_op_chain_free(chain);

@@ -1016,7 +1016,7 @@ static int compile(SwsContext *ctx, SwsOpList *ops, SwsCompiledOp *out)
         }
 
         ret = ff_sws_op_compile_tables(ctx, tables, FF_ARRAY_ELEMS(tables),
-                                       ops, i, op_block_size, chain);
+                                       op, op_block_size, chain);
         if (ret < 0) {
             av_log(ctx, AV_LOG_TRACE, "Failed to compile op %d\n", i);
             ff_sws_op_chain_free(chain);

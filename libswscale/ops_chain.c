@@ -178,10 +178,9 @@ static int op_match(const SwsOp *op, const SwsOpEntry *entry)
 }
 
 int ff_sws_op_compile_tables(SwsContext *ctx, const SwsOpTable *const tables[],
-                             int num_tables, SwsOpList *ops, int ops_index,
+                             int num_tables, const SwsOp *op,
                              const int block_size, SwsOpChain *chain)
 {
-    const SwsOp *op = &ops->ops[ops_index];
     const unsigned cpu_flags = av_get_cpu_flags();
     const SwsOpEntry *best = NULL;
     const SwsOpTable *best_table = NULL;
