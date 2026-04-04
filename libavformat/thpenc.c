@@ -266,6 +266,12 @@ static int write_trailer(AVFormatContext *ctx)
                 thp->max_audio_samples = FFMAX(pkt->duration, thp->max_audio_samples);
 
             avio_wb32(pb, thp->prev_total_size);
+            if (thp->video_stream_index == -1) {
+                avio_wb32(pb, 0);
+                avio_wb32(pb, pkt->size);
+            } else {
+                avio_wb32(pb, pkt->size);
+            }
             avio_wb32(pb, pkt->size);
 
             avio_write(pb, pkt->data, pkt->size);
