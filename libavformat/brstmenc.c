@@ -20,12 +20,15 @@
  */
 
 #include "libavutil/channel_layout.h"
+#include "libavutil/fifo.h"
 #include "libavutil/intreadwrite.h"
 #include "avformat.h"
 #include "avio.h"
 #include "mux.h"
 #include "internal.h"
 #include "avio_internal.h"
+
+typedef uint16_t hist[2];
 
 typedef struct BRSTMMuxContext {
     int codec;
@@ -64,6 +67,8 @@ typedef struct BRSTMMuxContext {
     int64_t adpcm_ch_coeff_offsets[16];
 
     uint8_t table[16 * 32];
+
+    AVFifo *fifo;
 } BRSTMMuxContext;
 
 static void brstm_w8(AVIOContext *pb, uint8_t value, const int64_t off)
@@ -108,6 +113,9 @@ static int brstm_write_header(AVFormatContext *s)
         codec = 1;
         break;
     case AV_CODEC_ID_ADPCM_THP:
+        r->fifo = av_fifo_alloc2(1024, sizeof(hist), AV_FIFO_FLAG_AUTO_GROW);
+        if (!r->fifo)
+            return AVERROR(ENOMEM);
         codec = 2;
         break;
     default:
@@ -261,6 +269,14 @@ static int brstm_write_packet(AVFormatContext *s, AVPacket *avpkt)
         size -= skip;
         if (size <= 0)
             return AVERROR_INVALIDDATA;
+        for (int ch = 0; ch < r->nb_channels; ch++) {
+            hist h;
+
+            memcpy(h, avpkt->data + 8 + 32 * r->nb_channels + 4 * ch, 4);
+
+            av_fifo_write(r->fifo, &h, 1);
+        }
+
         memcpy(r->table, avpkt->data + 8, 32 * r->nb_channels);
         break;
     }
@@ -294,7 +310,16 @@ static int brstm_write_trailer(AVFormatContext *s)
             avio_wb32(pb, MKBETAG('A','D','P','C'));
             avio_wb32(pb, 0x0);
 
-            ffio_fill(pb, 0, (4LL * r->nb_channels) * r->total_blocks);
+            for (int i = 0; i < r->total_blocks; i++) {
+                for (int ch = 0; ch < r->nb_channels; ch++) {
+                    if (av_fifo_can_read(r->fifo)) {
+                        hist h;
+
+                        av_fifo_read(r->fifo, h, 1);
+                        avio_write(pb, (const char *)h, sizeof(h));
+                    }
+                }
+            }
 
             while (avio_tell(pb) & 31)
                 avio_w8(pb, 0);
@@ -349,6 +374,13 @@ static int brstm_write_trailer(AVFormatContext *s)
     return 0;
 }
 
+static void brstm_deinit(AVFormatContext *s)
+{
+    BRSTMMuxContext *r = s->priv_data;
+
+    av_fifo_freep2(&r->fifo);
+}
+
 const FFOutputFormat ff_brstm_muxer = {
     .p.name           = "brstm",
     .p.long_name      = NULL_IF_CONFIG_SMALL("BRSTM (Binary Revolution Stream)"),
@@ -361,5 +393,6 @@ const FFOutputFormat ff_brstm_muxer = {
     .write_header     = brstm_write_header,
     .write_packet     = brstm_write_packet,
     .write_trailer    = brstm_write_trailer,
+    .deinit           = brstm_deinit,
     .flags_internal   = FF_OFMT_FLAG_MAX_ONE_OF_EACH,
 };
