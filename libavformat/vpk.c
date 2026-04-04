@@ -32,7 +32,7 @@ typedef struct VPKDemuxContext {
     unsigned last_block_size;
 } VPKDemuxContext;
 
-static int vpk_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RL32(p->buf) != MKBETAG('V','P','K',' '))
         return 0;
@@ -48,7 +48,7 @@ static int vpk_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int vpk_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     VPKDemuxContext *vpk = s->priv_data;
     int align, rate, nb_channels;
@@ -93,7 +93,7 @@ static int vpk_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int vpk_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
     VPKDemuxContext *vpk = s->priv_data;
@@ -127,7 +127,7 @@ static int vpk_read_packet(AVFormatContext *s, AVPacket *pkt)
     return ret;
 }
 
-static int vpk_read_seek(AVFormatContext *s, int stream_index,
+static int read_seek(AVFormatContext *s, int stream_index,
                          int64_t timestamp, int flags)
 {
     AVStream *st = s->streams[stream_index];
@@ -155,8 +155,8 @@ const FFInputFormat ff_vpk_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sony PS2 VPK"),
     .p.extensions   = "vpk",
     .priv_data_size = sizeof(VPKDemuxContext),
-    .read_probe     = vpk_probe,
-    .read_header    = vpk_read_header,
-    .read_packet    = vpk_read_packet,
-    .read_seek      = vpk_read_seek,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
+    .read_seek      = read_seek,
 };
