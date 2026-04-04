@@ -34,6 +34,7 @@ typedef struct THPMuxContext {
     AVClass *class;
 
     int64_t start;
+    int header_len;
 
     int have_audio;
     int have_video;
@@ -112,6 +113,7 @@ static int write_header(AVFormatContext *ctx)
     }
 
     thp->first_frame_offset = avio_tell(pb);
+    thp->header_len = (thp->audio_stream_index >= 0) ? 16 : 12;
 
     return 0;
 }
@@ -130,7 +132,7 @@ static int write_packet(AVFormatContext *ctx, AVPacket *pkt)
             return avpriv_packet_list_put(&thp->queue, pkt, NULL, 0);
         }
 
-        thp->next_total_size = pkt->size + 12;
+        thp->next_total_size = pkt->size + thp->header_len;
         thp->start = avio_tell(pb);
         avio_wb32(pb, thp->next_total_size);
 
@@ -148,7 +150,12 @@ static int write_packet(AVFormatContext *ctx, AVPacket *pkt)
             thp->max_audio_samples = FFMAX(pkt->duration, thp->max_audio_samples);
 
         avio_wb32(pb, thp->prev_total_size);
-        avio_wb32(pb, pkt->size);
+        if (thp->video_stream_index == -1) {
+            avio_wb32(pb, 0);
+            avio_wb32(pb, pkt->size);
+        } else {
+            avio_wb32(pb, pkt->size);
+        }
         avio_write(pb, pkt->data, pkt->size);
 
         av_packet_unref(pkt);
@@ -200,7 +207,7 @@ static int write_packet(AVFormatContext *ctx, AVPacket *pkt)
             return ret;
 
         thp->start = avio_tell(pb);
-        avio_wb32(pb, thp->next_total_size + 16);
+        avio_wb32(pb, thp->next_total_size + thp->header_len);
         thp->next_total_size = 0;
 
         avio_wb32(pb, thp->prev_total_size);
@@ -277,7 +284,7 @@ static int write_trailer(AVFormatContext *ctx)
     avio_wb32(pb, thp->max_audio_samples);
     avio_wb32(pb, av_float2int(thp->fps));
     avio_wb32(pb, thp->num_frames);
-    avio_wb32(pb, thp->first_frame_size + 12 + 4 * (thp->first_audio && thp->first_video));
+    avio_wb32(pb, thp->first_frame_size + thp->header_len);
     avio_wb32(pb, thp->data_size);
     avio_wb32(pb, thp->component_data_offset);
     avio_wb32(pb, thp->offsets_data_offset);
