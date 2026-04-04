@@ -615,7 +615,7 @@ static int thp_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 
     if (c->coded_nb_samples) {
         if (c->le) {
-            bytestream_put_le32(&dst, nb_blocks * BLOCK_SIZE * nb_channels);
+            bytestream_put_le32(&dst, nb_blocks * BLOCK_SIZE);
             bytestream_put_le32(&dst, frame->nb_samples);
 
             for (int ch = 0; ch < nb_channels; ch++) {
@@ -624,11 +624,11 @@ static int thp_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
             }
 
             for (int ch = 0; ch < nb_channels; ch++) {
-                bytestream_put_le16(&dst, c->chs[ch].input[0]);
                 bytestream_put_le16(&dst, c->chs[ch].input[1]);
+                bytestream_put_le16(&dst, c->chs[ch].input[0]);
             }
         } else {
-            bytestream_put_be32(&dst, nb_blocks * BLOCK_SIZE * nb_channels);
+            bytestream_put_be32(&dst, nb_blocks * BLOCK_SIZE);
             bytestream_put_be32(&dst, frame->nb_samples);
 
             for (int ch = 0; ch < nb_channels; ch++) {
@@ -637,8 +637,8 @@ static int thp_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
             }
 
             for (int ch = 0; ch < nb_channels; ch++) {
-                bytestream_put_be16(&dst, c->chs[ch].input[0]);
                 bytestream_put_be16(&dst, c->chs[ch].input[1]);
+                bytestream_put_be16(&dst, c->chs[ch].input[0]);
             }
         }
     }
