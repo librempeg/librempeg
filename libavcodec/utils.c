@@ -290,6 +290,7 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
             s->codec_id == AV_CODEC_ID_LJPEG   ||
             s->codec_id == AV_CODEC_ID_SMVJPEG ||
             s->codec_id == AV_CODEC_ID_AMV     ||
+            s->codec_id == AV_CODEC_ID_THP     ||
             s->codec_id == AV_CODEC_ID_SP5X    ||
             s->codec_id == AV_CODEC_ID_JPEGLS) {
             w_align =   8;

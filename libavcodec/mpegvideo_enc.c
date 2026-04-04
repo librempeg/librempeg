@@ -821,7 +821,7 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
         //return -1;
     }
 
-    if (s->mpeg_quant || s->c.codec_id == AV_CODEC_ID_MPEG1VIDEO || s->c.codec_id == AV_CODEC_ID_MPEG2VIDEO || s->c.codec_id == AV_CODEC_ID_MJPEG || s->c.codec_id == AV_CODEC_ID_AMV || s->c.codec_id == AV_CODEC_ID_SPEEDHQ) {
+    if (s->mpeg_quant || s->c.codec_id == AV_CODEC_ID_MPEG1VIDEO || s->c.codec_id == AV_CODEC_ID_MPEG2VIDEO || s->c.codec_id == AV_CODEC_ID_MJPEG || s->c.codec_id == AV_CODEC_ID_AMV || s->c.codec_id == AV_CODEC_ID_SPEEDHQ || s->c.codec_id == AV_CODEC_ID_THP) {
         // (a + x * 3 / 8) / x
         s->intra_quant_bias = 3 << (QUANT_BIAS_SHIFT - 3);
         s->inter_quant_bias = 0;
@@ -849,7 +849,8 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
         avctx->delay  = s->c.low_delay ? 0 : (m->max_b_frames + 1);
         break;
 #endif
-#if CONFIG_MJPEG_ENCODER || CONFIG_AMV_ENCODER
+#if CONFIG_MJPEG_ENCODER || CONFIG_AMV_ENCODER || CONFIG_THP_ENCODER
+    case AV_CODEC_ID_THP:
     case AV_CODEC_ID_MJPEG:
     case AV_CODEC_ID_AMV:
         s->c.out_format = FMT_MJPEG;
@@ -1956,7 +1957,7 @@ vbv_retry:
 
         frame_end(m);
 
-       if ((CONFIG_MJPEG_ENCODER || CONFIG_AMV_ENCODER) && s->c.out_format == FMT_MJPEG)
+       if ((CONFIG_MJPEG_ENCODER || CONFIG_AMV_ENCODER || CONFIG_THP_ENCODER) && s->c.out_format == FMT_MJPEG)
             ff_mjpeg_encode_picture_trailer(&s->pb, m->header_bits);
 
         if (avctx->rc_buffer_size) {
@@ -2856,7 +2857,7 @@ static void write_slice_end(MPVEncContext *const s)
             ff_mpeg4_merge_partitions(s);
 
         ff_mpeg4_stuffing(&s->pb);
-    } else if ((CONFIG_MJPEG_ENCODER || CONFIG_AMV_ENCODER) &&
+    } else if ((CONFIG_MJPEG_ENCODER || CONFIG_AMV_ENCODER || CONFIG_THP_ENCODER) &&
                s->c.out_format == FMT_MJPEG) {
         ff_mjpeg_encode_stuffing(s);
     } else if (CONFIG_SPEEDHQ_ENCODER && s->c.out_format == FMT_SPEEDHQ) {
@@ -3062,6 +3063,7 @@ static int encode_thread(AVCodecContext *c, void *arg){
                         is_gob_start=0;
                     break;
                 case AV_CODEC_ID_MJPEG:
+                case AV_CODEC_ID_THP:
                     if (s->c.mb_x == 0 && s->c.mb_y != 0) is_gob_start = 1;
                     break;
                 }

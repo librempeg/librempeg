@@ -355,6 +355,7 @@ extern const FFCodec ff_targa_decoder;
 extern const FFCodec ff_targa_y216_decoder;
 extern const FFCodec ff_tdsc_decoder;
 extern const FFCodec ff_theora_decoder;
+extern const FFCodec ff_thp_encoder;
 extern const FFCodec ff_thp_decoder;
 extern const FFCodec ff_tiertexseqvideo_decoder;
 extern const FFCodec ff_tiff_encoder;
