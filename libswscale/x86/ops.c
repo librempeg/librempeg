@@ -186,13 +186,11 @@ static int setup_shift(const SwsImplParams *params, SwsImplResult *out)
     DECL_COMMON_PATTERNS(F32, min##EXT,                                         \
         .op = SWS_OP_MIN,                                                       \
         .setup = ff_sws_setup_clamp,                                            \
-        .flexible = true,                                                       \
     );                                                                          \
                                                                                 \
     DECL_COMMON_PATTERNS(F32, max##EXT,                                         \
         .op = SWS_OP_MAX,                                                       \
         .setup = ff_sws_setup_clamp,                                            \
-        .flexible = true,                                                       \
     );
 
 #define DECL_SCALE(EXT)                                                         \

@@ -159,8 +159,7 @@ static int op_match(const SwsOp *op, const SwsOpEntry *entry)
         return op->dither.size_log2 == entry->dither_size ? score : 0;
     case SWS_OP_MIN:
     case SWS_OP_MAX:
-        av_assert1(entry->flexible);
-        break;
+        return score;
     case SWS_OP_LINEAR:
         if (op->lin.mask != entry->linear_mask)
             return 0;

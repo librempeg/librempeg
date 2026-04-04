@@ -138,13 +138,11 @@ DECL_PATTERN(max)
 WRAP_COMMON_PATTERNS(min,
     .op = SWS_OP_MIN,
     .setup = ff_sws_setup_clamp,
-    .flexible = true,
 );
 
 WRAP_COMMON_PATTERNS(max,
     .op = SWS_OP_MAX,
     .setup = ff_sws_setup_clamp,
-    .flexible = true,
 );
 
 DECL_PATTERN(scale)
