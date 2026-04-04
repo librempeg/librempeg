@@ -24,13 +24,7 @@
 #include "avio_internal.h"
 #include "demux.h"
 #include "internal.h"
-
-typedef struct VPKDemuxContext {
-    int64_t data_start;
-    unsigned block_count;
-    unsigned current_block;
-    unsigned last_block_size;
-} VPKDemuxContext;
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -50,25 +44,17 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    VPKDemuxContext *vpk = s->priv_data;
     int align, rate, nb_channels;
-    int64_t offset, duration;
     AVIOContext *pb = s->pb;
-    int samples_per_block;
+    int64_t offset;
     AVStream *st;
 
-    vpk->current_block = 0;
-
-    avio_skip(pb, 4);
-    duration = avio_rl32(pb) * 28LL / 16;
+    avio_skip(pb, 8);
     offset = avio_rl32(pb);
     align = avio_rl32(pb);
     rate = avio_rl32(pb);
     nb_channels = avio_rl32(pb);
-    if (rate <= 0 || align <= 0 || nb_channels <= 0)
-        return AVERROR_INVALIDDATA;
-    samples_per_block = ((align / nb_channels) * 28LL) / 16;
-    if (samples_per_block <= 0)
+    if (rate <= 0 || align <= 1 || nb_channels <= 0 || align/2 > INT_MAX/nb_channels)
         return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
@@ -76,87 +62,27 @@ static int read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     st->start_time = 0;
-    st->duration = duration;
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_PSX;
-    st->codecpar->block_align = align;
+    st->codecpar->block_align = (align / 2) * nb_channels;
     st->codecpar->sample_rate = rate;
     st->codecpar->ch_layout.nb_channels = nb_channels;
-    vpk->block_count       = st->duration / samples_per_block;
-    vpk->last_block_size   = (st->duration % samples_per_block) * 16 * st->codecpar->ch_layout.nb_channels / 28;
+    st->codecpar->bit_rate = 16LL * st->codecpar->ch_layout.nb_channels * 8 *
+                                    st->codecpar->sample_rate / 28;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
-    vpk->data_start = offset;
     avio_seek(pb, offset, SEEK_SET);
 
-    return 0;
-}
-
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVCodecParameters *par = s->streams[0]->codecpar;
-    VPKDemuxContext *vpk = s->priv_data;
-    AVIOContext *pb = s->pb;
-    int ret, i;
-
-    vpk->current_block++;
-    if (vpk->current_block == vpk->block_count) {
-        unsigned size = vpk->last_block_size / par->ch_layout.nb_channels;
-        unsigned skip = (par->block_align - vpk->last_block_size) / par->ch_layout.nb_channels;
-        uint64_t pos = avio_tell(pb);
-
-        ret = av_new_packet(pkt, vpk->last_block_size);
-        if (ret < 0)
-            return ret;
-        for (i = 0; i < par->ch_layout.nb_channels; i++) {
-            ret = ffio_read_size(pb, pkt->data + i * size, size);
-            avio_skip(pb, skip);
-            if (ret < 0)
-                return ret;
-        }
-        pkt->pos = pos;
-        pkt->stream_index = 0;
-    } else if (vpk->current_block < vpk->block_count) {
-        ret = av_get_packet(pb, pkt, par->block_align);
-        pkt->stream_index = 0;
-    } else {
-        return AVERROR_EOF;
-    }
-
-    return ret;
-}
-
-static int read_seek(AVFormatContext *s, int stream_index,
-                         int64_t timestamp, int flags)
-{
-    AVStream *st = s->streams[stream_index];
-    AVCodecParameters *par = st->codecpar;
-    VPKDemuxContext *vpk = s->priv_data;
-    int samples_per_block;
-    int64_t ret = 0;
-
-    samples_per_block = av_get_audio_frame_duration2(par, par->block_align);
-    if (samples_per_block > 0)
-        timestamp /= samples_per_block;
-    else
-        return -1;
-    ret = avio_seek(s->pb, vpk->data_start + timestamp * par->block_align, SEEK_SET);
-    if (ret < 0)
-        return ret;
-
-    vpk->current_block = timestamp;
-    avpriv_update_cur_dts(s, st, timestamp * samples_per_block);
     return 0;
 }
 
 const FFInputFormat ff_vpk_demuxer = {
     .p.name         = "vpk",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sony PS2 VPK"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "vpk",
-    .priv_data_size = sizeof(VPKDemuxContext),
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
-    .read_seek      = read_seek,
+    .read_packet    = ff_pcm_read_packet,
 };
