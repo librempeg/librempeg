@@ -395,6 +395,7 @@ typedef struct ADPCMDecodeContext {
     int start_skip;
     int vqa_version;                /**< VQA version. Used for ADPCM_IMA_WS */
     int has_status;                 /**< Status flag. Reset to 0 after a flush. */
+    int block_size;                 /**< Block size for THP codecs */
 } ADPCMDecodeContext;
 
 static void adpcm_flush(AVCodecContext *avctx);
@@ -1716,7 +1717,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
         has_coded_samples = 1;
-        bytestream2_skip(gb, 4); // channel size
+        s->block_size = (avctx->codec->id == AV_CODEC_ID_ADPCM_THP_LE) ?
+                        bytestream2_get_le32(gb) :
+                        bytestream2_get_be32(gb);;
         *coded_samples  = (avctx->codec->id == AV_CODEC_ID_ADPCM_THP_LE) ?
                           bytestream2_get_le32(gb) :
                           bytestream2_get_be32(gb);
@@ -3282,25 +3285,23 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             for (int n = 0; n < 16; n++)
                 c->table[i][n] = THP_GET16(gb);
 
-        if (!c->has_status) {
-            /* Initialize the previous sample.  */
-            for (int i = 0; i < channels; i++) {
-                c->status[i].sample1 = THP_GET16(gb);
-                c->status[i].sample2 = THP_GET16(gb);
-            }
-            c->has_status = 1;
-        } else {
-            bytestream2_skip(&gb, channels * 4);
+        /* Initialize the previous sample.  */
+        for (int i = 0; i < channels; i++) {
+            c->status[i].sample1 = THP_GET16(gb);
+            c->status[i].sample2 = THP_GET16(gb);
         }
+        c->has_status = 1;
 
+        int pos = bytestream2_tell(&gb);
         for (int ch = 0; ch < channels; ch++) {
             samples = samples_p[ch];
 
+            bytestream2_seek(&gb, pos + c->block_size * ch, SEEK_SET);
             if (avpkt->pts == 0 && c->start_skip > 0)
                 bytestream2_skip(&gb, c->start_skip);
 
             /* Read in every sample for this channel.  */
-            for (int i = 0; i < (nb_samples + 13) / 14; i++) {
+            for (int i = 0; i < nb_samples; i++) {
                 int byte = bytestream2_get_byteu(&gb);
                 const int index = (byte >> 4) & 0x7;
                 const int scale = 1 << (byte & 0xF);
