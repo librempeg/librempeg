@@ -39,8 +39,9 @@ typedef struct ThpDemuxContext {
     int          audio_stream_index;
     int          compcount;
     uint8_t      components[16];
-    AVStream*    vst;
+    AVStream    *vst;
     int          has_audio;
+    int          has_video;
     AVPacket    *audio_pkt;
 } ThpDemuxContext;
 
@@ -51,9 +52,27 @@ static int thp_probe(const AVProbeData *p)
     if (AV_RL32(p->buf) != MKTAG('T', 'H', 'P', '\0'))
         return 0;
 
+    if (p->buf_size < 48)
+        return 0;
+    if (AV_RB32(p->buf + 8) == 0 &&
+        AV_RB32(p->buf + 12) == 0)
+        return 0;
+    if (AV_RB32(p->buf + 20) == 0)
+        return 0;
+    if (AV_RB32(p->buf + 24) == 0)
+        return 0;
+    if (AV_RB32(p->buf + 28) == 0)
+        return 0;
+    if (AV_RB32(p->buf + 32) == 0)
+        return 0;
+    if (AV_RB32(p->buf + 40) == 0)
+        return 0;
+    if (AV_RB32(p->buf + 44) == 0)
+        return 0;
+
     d = av_int2float(AV_RB32(p->buf + 16));
     if (d < 0.1 || d > 1000 || isnan(d))
-        return AVPROBE_SCORE_MAX/4;
+        return AVPROBE_SCORE_MAX/2;
 
     return AVPROBE_SCORE_MAX;
 }
@@ -74,8 +93,7 @@ static int thp_read_header(AVFormatContext *s)
                            avio_rb32(pb); /* Max samples.  */
 
     thp->fps             = av_d2q(av_int2float(avio_rb32(pb)), INT_MAX);
-    if (thp->fps.den <= 0 || thp->fps.num < 0)
-        return AVERROR_INVALIDDATA;
+    thp->has_video = (thp->fps.den > 0) && (thp->fps.num > 0);
     framecnt             = avio_rb32(pb);
     thp->next_framesz    =
     thp->first_framesz   = avio_rb32(pb);
@@ -150,7 +168,7 @@ static int thp_read_header(AVFormatContext *s)
         }
     }
 
-    if (!thp->vst)
+    if (thp->has_video && !thp->vst)
         return AVERROR_INVALIDDATA;
 
     thp->audio_pkt = av_packet_alloc();
@@ -202,23 +220,41 @@ static int thp_read_packet(AVFormatContext *s,
         if (thp->has_audio)
             audio_size = avio_rb32(pb);
 
-        ret = av_get_packet(pb, pkt, size);
-        if (ret < 0)
-            return ret;
-        if (ret != size)
-            return AVERROR_INVALIDDATA;
-
-        if (audio_size > 0) {
-            ret = av_get_packet(pb, thp->audio_pkt, audio_size);
+        if (thp->has_video) {
+            ret = av_get_packet(pb, pkt, size);
             if (ret < 0)
                 return ret;
-            thp->audio_pkt->pos = pos;
+            if (ret != size)
+                return AVERROR_INVALIDDATA;
+
+            if (audio_size > 0) {
+                ret = av_get_packet(pb, thp->audio_pkt, audio_size);
+                if (ret < 0)
+                    return ret;
+                thp->audio_pkt->pos = pos;
+            }
+
+            avio_skip(pb, thp->next_frame - avio_tell(pb));
+
+            pkt->pos = pos;
+            pkt->stream_index = thp->video_stream_index;
+        } else {
+            avio_skip(pb, size);
+
+            ret = av_get_packet(pb, pkt, audio_size);
+            if (ret < 0)
+                return ret;
+            if (ret != audio_size)
+                return AVERROR_INVALIDDATA;
+
+            avio_skip(pb, thp->next_frame - avio_tell(pb));
+
+            pkt->pos = pos;
+            pkt->stream_index = thp->audio_stream_index;
+
+            if (pkt->size >= 8)
+                pkt->duration = AV_RB32(&pkt->data[4]);
         }
-
-        avio_skip(pb, thp->next_frame - avio_tell(pb));
-
-        pkt->pos = pos;
-        pkt->stream_index = thp->video_stream_index;
     } else {
         av_packet_move_ref(pkt, thp->audio_pkt);
         pkt->stream_index = thp->audio_stream_index;
