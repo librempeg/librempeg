@@ -61,8 +61,8 @@ static av_cold int thp_encode_init(AVCodecContext *avctx)
     if (nb_channels > FF_ARRAY_ELEMS(c->chs))
         return AVERROR(EINVAL);
 
-    c->le = avctx->codec_id == AV_CODEC_ID_ADPCM_THP_LE || avctx->codec_id == AV_CODEC_ID_ADPCM_NDSP_LE;
-    c->coded_nb_samples = avctx->codec_id == AV_CODEC_ID_ADPCM_THP || avctx->codec_id == AV_CODEC_ID_ADPCM_THP_LE;
+    c->le = (avctx->codec_id == AV_CODEC_ID_ADPCM_THP_LE) || (avctx->codec_id == AV_CODEC_ID_ADPCM_NDSP_LE);
+    c->coded_nb_samples = (avctx->codec_id == AV_CODEC_ID_ADPCM_THP) || (avctx->codec_id == AV_CODEC_ID_ADPCM_THP_LE);
 
     if ((avctx->frame_size % BLOCK_SAMPLES) > 0)
         avctx->frame_size = ((avctx->frame_size + BLOCK_SAMPLES-1) / BLOCK_SAMPLES) * BLOCK_SAMPLES;
