@@ -27,9 +27,11 @@
 
 static int read_probe(const AVProbeData *p)
 {
-    if (AV_RL32(p->buf + 12) == 0)
+    if (p->buf_size < 26)
         return 0;
 
+    if (AV_RL32(p->buf + 12) == 0)
+        return 0;
     if (AV_RL16(p->buf + 24) == 0)
         return 0;
     if (!av_match_ext(p->filename, "snd"))
