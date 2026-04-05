@@ -230,6 +230,7 @@ extern const FFOutputFormat ff_flac_muxer;
 extern const FFInputFormat  ff_flic_demuxer;
 extern const FFInputFormat  ff_flv_demuxer;
 extern const FFOutputFormat ff_flv_muxer;
+extern const FFInputFormat  ff_fmtowns_demuxer;
 extern const FFInputFormat  ff_live_flv_demuxer;
 extern const FFInputFormat  ff_fourxm_demuxer;
 extern const FFOutputFormat ff_framecrc_muxer;
