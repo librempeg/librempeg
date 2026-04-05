@@ -337,6 +337,7 @@ extern const FFInputFormat  ff_laf_demuxer;
 extern const FFOutputFormat ff_latm_muxer;
 extern const FFInputFormat  ff_lc3_demuxer;
 extern const FFOutputFormat ff_lc3_muxer;
+extern const FFInputFormat  ff_ldac_demuxer;
 extern const FFInputFormat  ff_lmlm4_demuxer;
 extern const FFInputFormat  ff_loas_demuxer;
 extern const FFInputFormat  ff_lopu_demuxer;
