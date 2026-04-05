@@ -308,6 +308,7 @@ TESTPROGS = adler32                                                     \
             softfloat                                                   \
             spherical                                                   \
             stereo3d                                                    \
+            timecode                                                    \
             tree                                                        \
             twofish                                                     \
             utf8                                                        \
