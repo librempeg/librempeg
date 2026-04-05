@@ -272,8 +272,6 @@ static int write_trailer(AVFormatContext *ctx)
             } else {
                 avio_wb32(pb, pkt->size);
             }
-            avio_wb32(pb, pkt->size);
-
             avio_write(pb, pkt->data, pkt->size);
 
             thp->num_frames++;
