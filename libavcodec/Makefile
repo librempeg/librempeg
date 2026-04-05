@@ -528,6 +528,7 @@ OBJS-$(CONFIG_KGV1_DECODER)            += kgv1dec.o
 OBJS-$(CONFIG_KMVC_DECODER)            += kmvc.o
 OBJS-$(CONFIG_LAGARITH_DECODER)        += lagarith.o lagarithrac.o
 OBJS-$(CONFIG_LC3_DECODER)             += lc3dec.o
+OBJS-$(CONFIG_LDAC_DECODER)            += ldacdec.o
 OBJS-$(CONFIG_LEAD_DECODER)            += leaddec.o jpegquanttables.o
 OBJS-$(CONFIG_LJPEG_ENCODER)           += ljpegenc.o mjpegenc_common.o
 OBJS-$(CONFIG_LHCELP_DECODER)          += lhcelpdec.o
