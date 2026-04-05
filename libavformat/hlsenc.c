@@ -2569,13 +2569,16 @@ static int hls_write_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     if (vs->start_pts == AV_NOPTS_VALUE) {
-        vs->start_pts = pkt->pts;
+        vs->start_pts = av_rescale_q(pkt->pts, st->time_base, AV_TIME_BASE_Q);
         if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
             vs->start_pts_from_audio = 1;
     }
-    if (vs->start_pts_from_audio && st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && vs->start_pts > pkt->pts) {
-        vs->start_pts = pkt->pts;
-        vs->start_pts_from_audio = 0;
+    if (vs->start_pts_from_audio && st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+        int64_t video_start = av_rescale_q(pkt->pts, st->time_base, AV_TIME_BASE_Q);
+        if (vs->start_pts > video_start) {
+            vs->start_pts = video_start;
+            vs->start_pts_from_audio = 0;
+        }
     }
 
     if (vs->has_video) {
@@ -2606,8 +2609,8 @@ static int hls_write_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     can_split = can_split && (pkt->pts - vs->end_pts > 0);
-    if (vs->packets_written && can_split && av_compare_ts(pkt->pts - vs->start_pts, st->time_base,
-                                                          end_pts, AV_TIME_BASE_Q) >= 0) {
+    if (vs->packets_written && can_split && (av_rescale_q(pkt->pts, st->time_base, AV_TIME_BASE_Q) - vs->start_pts
+                                                          >= end_pts)) {
         int64_t new_start_pos;
         int byterange_mode = (hls->flags & HLS_SINGLE_FILE) || (hls->max_seg_size > 0);
         double cur_duration;
