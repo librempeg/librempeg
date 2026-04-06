@@ -54,6 +54,13 @@ $(FATE_G726): SRC = tests/data/asynth-8000-1.wav
 FATE_VOICE-$(call FRAMEMD5, WAV, ADPCM_G726, WAV_MUXER ADPCM_G726_ENCODER PCM_S16LE_DECODER) += $(FATE_G726)
 fate-g726: $(FATE_G726)
 
+FATE_G726LE += fate-g726le-encode
+fate-g726le-encode: tests/data/asynth-8000-1.wav
+fate-g726le-encode: CMD = transcode wav $(TARGET_PATH)/tests/data/asynth-8000-1.wav g726le "-c:a g726le -b:a 32k" "-c:a pcm_s16le" "" "" "-f g726le -code_size 4"
+
+FATE_VOICE-$(call TRANSCODE, ADPCM_G726LE, G726LE, WAV_DEMUXER PCM_S16LE_DECODER) += $(FATE_G726LE)
+fate-g726le: $(FATE_G726LE)
+
 FATE_GSM-$(call FRAMECRC, WAV, GSM) += fate-gsm-ms
 fate-gsm-ms: CMD = framecrc -i $(TARGET_SAMPLES)/gsm/ciao.wav
 
