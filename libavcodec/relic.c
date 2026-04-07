@@ -215,6 +215,9 @@ static int unpack_channel(AVCodecContext *avctx, AVPacket *avpkt, const int ch)
         } else {
             pos = 0;
             for (int i = 0; i < RELIC_MAX_FREQ; i++) {
+                if (get_bits_left(gb) <= 0)
+                    break;
+
                 move = get_bits(gb, ei_bits);
 
                 if (i > 0 && move == 0)
