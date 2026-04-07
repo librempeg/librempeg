@@ -266,8 +266,11 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
 {
     int ret;
 
-    for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++)
-        unpack_channel(avctx, avpkt, ch);
+    for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++) {
+        ret = unpack_channel(avctx, avpkt, ch);
+        if (ret < 0)
+            return ret;
+    }
 
     frame->nb_samples = 512;
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
