@@ -3891,7 +3891,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
         c->xd_off = s->nh + s->ns;
         c->xg_off = s->nh + s->ns + s->nd;
 
-        scale = -1.f / (1 << 19);
+        scale = -1.033f / (1 << 19);
         ret = av_tx_init(&c->tx_ctx, &c->tx_fn, AV_TX_FLOAT_MDCT, 1, s->ns, &scale, 0);
         if (ret < 0)
             return ret;
