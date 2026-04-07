@@ -35,9 +35,9 @@ typedef struct PDVDemuxContext {
 
 static int pdv_probe(const AVProbeData *pd)
 {
-    if (strncmp(pd->buf, PDV_MAGIC, sizeof(PDV_MAGIC) - 1) == 0)
-        return AVPROBE_SCORE_MAX;
-    return 0;
+    if (memcmp(pd->buf, PDV_MAGIC, sizeof(PDV_MAGIC) - 1))
+        return 0;
+    return AVPROBE_SCORE_MAX;
 }
 
 static int pdv_read_header(AVFormatContext *s)
