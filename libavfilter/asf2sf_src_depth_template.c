@@ -124,7 +124,7 @@ static dtype fnc(convert)(stype src)
 #define SRC_P packed
 #define SRC_p 0
 #define fn_src_ptr(x, ch, n) (((const stype *restrict)(x)->data[0]) + ((n)*nb_channels) + (ch))
-#include "asf2sf_template3.c"
+#include "asf2sf_layout_template.c"
 
 #undef spidx
 #undef SRC_P
@@ -134,4 +134,4 @@ static dtype fnc(convert)(stype src)
 #define SRC_P planar
 #define SRC_p 1
 #define fn_src_ptr(x, ch, n) ((const stype *restrict)(x)->extended_data[(ch)] + (n))
-#include "asf2sf_template3.c"
+#include "asf2sf_layout_template.c"

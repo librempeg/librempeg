@@ -81,27 +81,27 @@ typedef struct ThreadData {
 } ThreadData;
 
 #define DST_DEPTH 8
-#include "asf2sf_template.c"
+#include "asf2sf_dst_depth_template.c"
 
 #undef DST_DEPTH
 #define DST_DEPTH 16
-#include "asf2sf_template.c"
+#include "asf2sf_dst_depth_template.c"
 
 #undef DST_DEPTH
 #define DST_DEPTH 31
-#include "asf2sf_template.c"
+#include "asf2sf_dst_depth_template.c"
 
 #undef DST_DEPTH
 #define DST_DEPTH 32
-#include "asf2sf_template.c"
+#include "asf2sf_dst_depth_template.c"
 
 #undef DST_DEPTH
 #define DST_DEPTH 63
-#include "asf2sf_template.c"
+#include "asf2sf_dst_depth_template.c"
 
 #undef DST_DEPTH
 #define DST_DEPTH 64
-#include "asf2sf_template.c"
+#include "asf2sf_dst_depth_template.c"
 
 static int config_output(AVFilterLink *outlink)
 {

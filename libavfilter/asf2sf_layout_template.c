@@ -19,48 +19,26 @@
 #include "avfilter.h"
 #include "audio.h"
 
-#undef dtype
-#undef DST_F
-#if DST_DEPTH == 8
-#define dtype uint8_t
-#define DST_F u8
-#elif DST_DEPTH == 16
-#define dtype int16_t
-#define DST_F s16
-#elif DST_DEPTH == 31
-#define dtype int32_t
-#define DST_F s32
-#elif DST_DEPTH == 32
-#define dtype float
-#define DST_F flt
-#elif DST_DEPTH == 63
-#define dtype int64_t
-#define DST_F s64
-#else
-#define dtype double
-#define DST_F dbl
+#undef dpidx
+#undef DST_P
+#undef DST_p
+#undef fn_dst_ptr
+#define dpidx m
+#define DST_P packed
+#define DST_p 0
+#define fn_dst_ptr(x, ch, n) (((dtype *restrict)(x)->data[0]) + ((n)*nb_channels) + (ch))
+#if !((SRC_DEPTH == DST_DEPTH) && (SRC_p == DST_p))
+#include "asf2sf_loop_template.c"
 #endif
 
-#undef SRC_DEPTH
-#define SRC_DEPTH 8
-#include "asf2sf_template2.c"
-
-#undef SRC_DEPTH
-#define SRC_DEPTH 16
-#include "asf2sf_template2.c"
-
-#undef SRC_DEPTH
-#define SRC_DEPTH 31
-#include "asf2sf_template2.c"
-
-#undef SRC_DEPTH
-#define SRC_DEPTH 32
-#include "asf2sf_template2.c"
-
-#undef SRC_DEPTH
-#define SRC_DEPTH 63
-#include "asf2sf_template2.c"
-
-#undef SRC_DEPTH
-#define SRC_DEPTH 64
-#include "asf2sf_template2.c"
+#undef dpidx
+#undef DST_P
+#undef DST_p
+#undef fn_dst_ptr
+#define dpidx n
+#define DST_P planar
+#define DST_p 1
+#define fn_dst_ptr(x, ch, n) ((dtype *restrict)(x)->extended_data[(ch)] + (n))
+#if !((SRC_DEPTH == DST_DEPTH) && (SRC_p == DST_p))
+#include "asf2sf_loop_template.c"
+#endif
