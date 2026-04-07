@@ -76,6 +76,9 @@ static int read_header(AVFormatContext *s)
         par->codec_id = AV_CODEC_ID_ADPCM_IMA_PDA;
         par->bits_per_coded_sample = 4;
         break;
+    default:
+        avpriv_request_sample(s, "codec %d", type >> 1);
+        return AVERROR_PATCHWELCOME;
     }
 
     if (type > 3) {
