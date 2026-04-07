@@ -3725,6 +3725,7 @@ typedef struct ChannelContext {
     PLCState plc;
 
     DECLARE_ALIGNED(32, float, x)[MAX_BUFFER_SIZE];
+    DECLARE_ALIGNED(32, float, buffer)[960];
 
     unsigned xh_off, xs_off, xd_off, xg_off;
 
@@ -3941,7 +3942,7 @@ static void imdct_window(const int dt, const int sr,
 static void run_imdct(LC3Context *s, ChannelContext *c,
                       float *x, float *d, float *y)
 {
-    LOCAL_ALIGNED_32(float, buffer, [960]);
+    float *buffer = c->buffer;
     const int dt = s->dt;
     const int sr = s->sr;
 
@@ -3994,7 +3995,7 @@ static inline void accu_load(ACoder *ac)
     ac->n -= 8 * nbytes;
 
     gbcr = *gbc;
-    for (; nbytes; nbytes--) {
+    for (; nbytes > 0; nbytes--) {
         ac->v >>= 8;
         ac->read_backward++;
         bytestream2_seek(&gbcr, -ac->read_backward, SEEK_END);
@@ -4069,10 +4070,13 @@ static int resolve_lpc_weighting(const int dt, const int nbytes)
     return (nbytes * 8) < (120 * (1 + dt));
 }
 
-static void ac_renorm(ACoder *ac)
+static void ac_renorm(ACoder *ac, GetByteContext *gb)
 {
-    for (; ac->range < 0x10000; ac->range <<= 8)
-        ac->low = ((ac->low << 8) | bytestream2_get_byte(&ac->gbc)) & 0xffffff;
+    for (; ac->range < 0x10000; ac->range <<= 8) {
+        if (bytestream2_get_bytes_left(gb) < 1)
+            break;
+        ac->low = ((ac->low << 8) | bytestream2_get_byteu(gb)) & 0xffffff;
+    }
 }
 
 static inline unsigned get_symbol(ACoder *ac, const struct lc3_ac_model *model)
@@ -4097,7 +4101,7 @@ static inline unsigned get_symbol(ACoder *ac, const struct lc3_ac_model *model)
     ac->range = range * symbols[s].range;
 
     if (ac->range < 0x10000)
-        ac_renorm(ac);
+        ac_renorm(ac, &ac->gbc);
 
     return s;
 }
@@ -4339,7 +4343,7 @@ static float unquantize(int dt, int sr, int g_int, float *x, int nq)
     int ne = lc3_ne(dt, sr);
 
     for (int i = 0; i < nq; i++)
-        x[i] = x[i] * g;
+        x[i] *= g;
 
     for (int i = nq; i < ne; i++)
         x[i] = 0;
@@ -5345,7 +5349,11 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     ThreadData td;
     int ret;
 
-    frame->nb_samples = hr_frame_samples(s->hr_mode, s->us, avctx->sample_rate);
+    ret = hr_frame_samples(s->hr_mode, s->us, avctx->sample_rate);
+    if (ret < 0)
+        return ret;
+
+    frame->nb_samples = ret;
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
 
