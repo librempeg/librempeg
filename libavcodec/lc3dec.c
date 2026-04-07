@@ -3939,14 +3939,25 @@ static void imdct_window(const int dt, const int sr,
     }
 }
 
+static void rescale(float *x, int n, float f)
+{
+    for (int i = 0; i < n; i++)
+        x[i] *= f;
+}
+
 static void run_imdct(LC3Context *s, ChannelContext *c,
                       float *x, float *d, float *y)
 {
     float *buffer = c->buffer;
     const int dt = s->dt;
     const int sr = s->sr;
+    int ns_src = lc3_ns(dt, s->sr_pcm);
+    int ns = lc3_ns(dt, sr);
 
     c->tx_fn(c->tx_ctx, buffer, (void *)x, sizeof(float));
+
+    if (ns != ns_src)
+        rescale(buffer, ns, sqrtf(ns / (float)ns_src));
 
     imdct_window(dt, sr, buffer, d, y);
 }
