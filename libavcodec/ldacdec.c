@@ -462,6 +462,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
     avctx->sample_fmt = AV_SAMPLE_FMT_FLTP;
 
+    avctx->delay = 128;
+
     ff_thread_once(&static_table_init, ldac_init_static);
 
     for (int ch = 0; ch < 2; ch++) {
