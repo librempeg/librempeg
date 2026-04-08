@@ -619,6 +619,7 @@ OBJS-$(CONFIG_PCM_U8_MUXER)              += pcmenc.o rawenc.o
 OBJS-$(CONFIG_PCM_VIDC_DEMUXER)          += pcmdec.o pcm.o
 OBJS-$(CONFIG_PCM_VIDC_MUXER)            += pcmenc.o rawenc.o
 OBJS-$(CONFIG_PDA_DEMUXER)               += pdadec.o
+OBJS-$(CONFIG_PDV_MUXER)                 += pdvenc.o
 OBJS-$(CONFIG_PDV_DEMUXER)               += pdvdec.o
 OBJS-$(CONFIG_PIFF_DEMUXER)              += piff.o
 OBJS-$(CONFIG_PJS_DEMUXER)               += pjsdec.o subtitles.o
