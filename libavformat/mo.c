@@ -43,10 +43,10 @@ static int mo_probe(const AVProbeData *p)
 
 static int mo_read_header(AVFormatContext *s)
 {
+    int audio_codec, ret, align, rate, nb_channels;
     MODemuxContext *m = s->priv_data;
     AVIOContext *pb = s->pb;
     AVStream *vst, *ast;
-    int audio_codec, ret;
     int64_t offset;
     AVRational fps;
 
@@ -73,35 +73,24 @@ static int mo_read_header(AVFormatContext *s)
     if (!m->audio_pkt)
         return AVERROR(ENOMEM);
 
-    ast = avformat_new_stream(s, NULL);
-    if (!ast)
-        return AVERROR(ENOMEM);
-
     avio_seek(pb, 0xd4, SEEK_SET);
     audio_codec = avio_rl16(pb);
     avio_skip(pb, 2);
 
-    ast->start_time = 0;
-    ast->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-
     switch (audio_codec) {
     case 0x3341:
     case 0x3241:
-        ast->codecpar->sample_rate = avio_rl32(pb);
-        ast->codecpar->ch_layout.nb_channels = avio_rl32(pb);
-        ast->codecpar->codec_id = AV_CODEC_ID_FASTAUDIO;
-        ast->codecpar->block_align = 40 * ast->codecpar->ch_layout.nb_channels;
-        ffstream(ast)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
-        avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
+        rate = avio_rl32(pb);
+        nb_channels = avio_rl32(pb);
+        audio_codec = AV_CODEC_ID_FASTAUDIO;
+        align = 40;
         break;
     case 0x3941:
     case 0x3841:
-        ast->codecpar->sample_rate = avio_rl32(pb);
-        ast->codecpar->ch_layout.nb_channels = avio_rl32(pb);
-        ast->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_MO;
-        ast->codecpar->block_align = 132 * ast->codecpar->ch_layout.nb_channels;
-        ffstream(ast)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
-        avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
+        rate = avio_rl32(pb);
+        nb_channels = avio_rl32(pb);
+        audio_codec = AV_CODEC_ID_ADPCM_IMA_MO;
+        align = 132;
         break;
     case 0x4D41:
         m->multi_audio = 1;
@@ -114,63 +103,89 @@ static int mo_read_header(AVFormatContext *s)
         switch (audio_codec) {
         case 0x3341:
         case 0x3241:
-            ast->codecpar->codec_id = AV_CODEC_ID_FASTAUDIO;
-            ast->codecpar->block_align = 40 * ast->codecpar->ch_layout.nb_channels;
+            audio_codec = AV_CODEC_ID_FASTAUDIO;
+            align = 40;
             break;
         case 0x3941:
         case 0x3841:
-            ast->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_MO;
-            ast->codecpar->block_align = 132 * ast->codecpar->ch_layout.nb_channels;
+            audio_codec = AV_CODEC_ID_ADPCM_IMA_MO;
+            align = 132;
             break;
         default:
             avpriv_request_sample(s, "codec 0x%X", audio_codec);
             return AVERROR_PATCHWELCOME;
         }
 
-        ast->codecpar->sample_rate = avio_rl32(pb);
-        ast->codecpar->ch_layout.nb_channels = avio_rl32(pb);
-        ffstream(ast)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
-        avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
-
-        for (int n = 1; n < m->nb_audio_tracks; n++) {
-            ast = avformat_new_stream(s, NULL);
-            if (!ast)
-                return AVERROR(ENOMEM);
-
-            audio_codec = avio_rl16(pb);
-            switch (audio_codec) {
-            case 0x3341:
-            case 0x3241:
-                ast->codecpar->codec_id = AV_CODEC_ID_FASTAUDIO;
-                ast->codecpar->block_align = 40 * ast->codecpar->ch_layout.nb_channels;
-                break;
-            case 0x3941:
-            case 0x3841:
-                ast->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_MO;
-                ast->codecpar->block_align = 132 * ast->codecpar->ch_layout.nb_channels;
-                break;
-            default:
-                avpriv_request_sample(s, "codec 0x%X", audio_codec);
-                return AVERROR_PATCHWELCOME;
-            }
-
-            ast->start_time = 0;
-            ast->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-            ast->codecpar->sample_rate = avio_rl32(pb);
-            ast->codecpar->ch_layout.nb_channels = avio_rl32(pb);
-            ffstream(ast)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
-            avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
-        }
+        rate = avio_rl32(pb);
+        nb_channels = avio_rl32(pb);
         break;
     case 0x6962:
         avio_skip(pb, 3);
         m->is_vorbis = 1;
-        ast->codecpar->ch_layout.nb_channels = avio_r8(pb);
-        ast->codecpar->sample_rate = avio_rl32(pb);
-        ast->codecpar->codec_id = AV_CODEC_ID_VORBIS;
-        ast->codecpar->block_align = 1024;
+        nb_channels = avio_r8(pb);
+        rate = avio_rl32(pb);
+        audio_codec = AV_CODEC_ID_VORBIS;
+        align = 1024;
+        break;
+    default:
+        avpriv_request_sample(s, "codec 0x%X", audio_codec);
+        return AVERROR_PATCHWELCOME;
+    }
+
+    if (rate <= 0 || nb_channels <= 0 || align <= 0 || nb_channels > INT_MAX/align)
+        return AVERROR_INVALIDDATA;
+
+    ast = avformat_new_stream(s, NULL);
+    if (!ast)
+        return AVERROR(ENOMEM);
+
+    ast->start_time = 0;
+    ast->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    ast->codecpar->codec_id = audio_codec;
+    ast->codecpar->ch_layout.nb_channels = nb_channels;
+    ast->codecpar->sample_rate = rate;
+    ast->codecpar->block_align = align * nb_channels;
+    if (audio_codec == AV_CODEC_ID_VORBIS)
         ffstream(ast)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+    avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
+
+    for (int n = 1; n < m->nb_audio_tracks && m->multi_audio; n++) {
+        audio_codec = avio_rl16(pb);
+        switch (audio_codec) {
+        case 0x3341:
+        case 0x3241:
+            audio_codec = AV_CODEC_ID_FASTAUDIO;
+            align = 40;
+            break;
+        case 0x3941:
+        case 0x3841:
+            audio_codec = AV_CODEC_ID_ADPCM_IMA_MO;
+            align = 132;
+            break;
+        default:
+            avpriv_request_sample(s, "codec 0x%X", audio_codec);
+            return AVERROR_PATCHWELCOME;
+        }
+
+        rate = avio_rl32(pb);
+        nb_channels = avio_rl32(pb);
+        if (rate <= 0 || nb_channels <= 0 || align <= 0 || nb_channels > INT_MAX/align)
+            return AVERROR_INVALIDDATA;
+
+        ast = avformat_new_stream(s, NULL);
+        if (!ast)
+            return AVERROR(ENOMEM);
+
+        ast->start_time = 0;
+        ast->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+        ast->codecpar->codec_id = audio_codec;
+        ast->codecpar->ch_layout.nb_channels = nb_channels;
+        ast->codecpar->sample_rate = rate;
+        ast->codecpar->block_align = align * nb_channels;
         avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
+    }
+
+    if (audio_codec == AV_CODEC_ID_VORBIS) {
         avio_skip(pb, -20);
         if (avio_tell(pb) >= offset)
             return AVERROR_INVALIDDATA;
@@ -209,10 +224,6 @@ static int mo_read_header(AVFormatContext *s)
                 size--;
             }
         }
-        break;
-    default:
-        avpriv_request_sample(s, "codec 0x%X", audio_codec);
-        return AVERROR_PATCHWELCOME;
     }
 
     avio_seek(pb, offset, SEEK_SET);
