@@ -19,8 +19,9 @@
  */
 
 #include "libavutil/avassert.h"
+#include "libavutil/mem.h"
 
-#include "ops_backend.h"
+#include "ops_internal.h"
 
 typedef struct MemcpyPriv {
     int num_planes;
