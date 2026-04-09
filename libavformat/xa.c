@@ -88,8 +88,8 @@ static int xa_read_header(AVFormatContext *s)
     if (!st->codecpar->ch_layout.nb_channels || !st->codecpar->sample_rate)
         return AVERROR_INVALIDDATA;
 
-    st->codecpar->bit_rate = av_clip(15LL * st->codecpar->ch_layout.nb_channels * 8 *
-                                  st->codecpar->sample_rate / 28, 0, INT_MAX);
+    st->codecpar->bit_rate = 15LL * st->codecpar->ch_layout.nb_channels * 8 *
+                                    st->codecpar->sample_rate / 28;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
     st->start_time = 0;
