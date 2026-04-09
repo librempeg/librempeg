@@ -154,7 +154,7 @@ static int query_formats(const AVFilterContext *ctx,
         }
     };
 
-    return ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts[vol->precision]);
+    return ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts[vol->precision]);
 }
 
 static inline void scale_samples_u8(uint8_t *dst, const uint8_t *src,
