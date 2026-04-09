@@ -67,33 +67,34 @@ static int read_header(AVFormatContext *s)
 {
     MaxisXADemuxContext *xa = s->priv_data;
     AVIOContext *pb = s->pb;
+    int nb_channels, rate;
     AVStream *st;
 
-    /*Set up the XA Audio Decoder*/
+    avio_skip(pb, 4);
+    xa->stop_offset = avio_rl32(pb);
+    avio_skip(pb, 2);       /* Skip the tag */
+    nb_channels = avio_rl16(pb);
+    rate  = avio_rl32(pb);
+    avio_skip(pb, 4);       /* Skip average byte rate */
+    avio_skip(pb, 2);       /* Skip block align */
+    avio_skip(pb, 2);       /* Skip bits-per-sample */
+    if (rate <= 0 || nb_channels <= 0 || nb_channels > INT_MAX/15)
+        return AVERROR_INVALIDDATA;
+
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    st->codecpar->codec_type   = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id     = AV_CODEC_ID_ADPCM_EA_MAXIS_XA;
-    avio_skip(pb, 4);       /* Skip the XA ID */
-    xa->stop_offset            =  avio_rl32(pb);
-    avio_skip(pb, 2);       /* Skip the tag */
-    st->codecpar->ch_layout.nb_channels = avio_rl16(pb);
-    st->codecpar->sample_rate  = avio_rl32(pb);
-    st->codecpar->block_align  = 15 * st->codecpar->ch_layout.nb_channels;
-    avio_skip(pb, 4);       /* Skip average byte rate */
-    avio_skip(pb, 2);       /* Skip block align */
-    avio_skip(pb, 2);       /* Skip bits-per-sample */
-
-    if (!st->codecpar->ch_layout.nb_channels || !st->codecpar->sample_rate)
-        return AVERROR_INVALIDDATA;
-
+    st->start_time = 0;
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_EA_MAXIS_XA;
+    st->codecpar->ch_layout.nb_channels = nb_channels;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->block_align = 15 * nb_channels;
     st->codecpar->bit_rate = 15LL * st->codecpar->ch_layout.nb_channels * 8 *
                                     st->codecpar->sample_rate / 28;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
-    st->start_time = 0;
     xa->stop_offset += avio_tell(pb);
 
     return 0;
