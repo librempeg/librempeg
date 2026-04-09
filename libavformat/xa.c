@@ -31,6 +31,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 #define XA00_TAG MKTAG('X', 'A', 0, 0)
 #define XAI0_TAG MKTAG('X', 'A', 'I', 0)
@@ -80,6 +81,7 @@ static int xa_read_header(AVFormatContext *s)
     avio_skip(pb, 2);       /* Skip the tag */
     st->codecpar->ch_layout.nb_channels = avio_rl16(pb);
     st->codecpar->sample_rate  = avio_rl32(pb);
+    st->codecpar->block_align  = 15 * st->codecpar->ch_layout.nb_channels;
     avio_skip(pb, 4);       /* Skip average byte rate */
     avio_skip(pb, 2);       /* Skip block align */
     avio_skip(pb, 2);       /* Skip bits-per-sample */
@@ -103,20 +105,25 @@ static int xa_read_packet(AVFormatContext *s,
     MaxisXADemuxContext *xa = s->priv_data;
     AVStream *st = s->streams[0];
     AVIOContext *pb = s->pb;
-    unsigned int packet_size;
-    int ret;
+    int size, ret;
+    int64_t pos;
 
-    if (avio_tell(pb) >= xa->stop_offset)
+    pos = avio_tell(pb);
+    if (pos >= xa->stop_offset)
         return AVERROR_EOF;
-    /* 1 byte header and 14 bytes worth of samples * number channels per block */
-    packet_size = 15*st->codecpar->ch_layout.nb_channels;
 
-    ret = av_get_packet(pb, pkt, packet_size);
+    size = ff_pcm_default_packet_size(st->codecpar);
+    if (size < 0)
+        return size;
+
+    size = FFMIN(xa->stop_offset - pos, size);
+
+    ret = av_get_packet(pb, pkt, size);
     if(ret < 0)
         return ret;
 
     pkt->stream_index = st->index;
-    pkt->duration = 28;
+    pkt->pos = pos;
 
     return ret;
 }
