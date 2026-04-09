@@ -97,13 +97,9 @@ static int query_formats(const AVFilterContext *ctx,
         { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE },
         { AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_NONE },
     };
-    int ret;
 
-    if ((ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out,
-                                                sample_fmts[s->precision])) < 0)
-        return ret;
-
-    return 0;
+    return ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out,
+                                            sample_fmts[s->precision]);
 }
 
 static int activate(AVFilterContext *ctx)
