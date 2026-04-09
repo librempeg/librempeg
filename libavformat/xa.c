@@ -41,7 +41,7 @@ typedef struct MaxisXADemuxContext {
     int64_t stop_offset;
 } MaxisXADemuxContext;
 
-static int xa_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     int channels, srate, bits_per_sample;
     if (p->buf_size < 24)
@@ -63,7 +63,7 @@ static int xa_probe(const AVProbeData *p)
     return AVPROBE_SCORE_EXTENSION;
 }
 
-static int xa_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     MaxisXADemuxContext *xa = s->priv_data;
     AVIOContext *pb = s->pb;
@@ -99,8 +99,8 @@ static int xa_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int xa_read_packet(AVFormatContext *s,
-                          AVPacket *pkt)
+static int read_packet(AVFormatContext *s,
+                       AVPacket *pkt)
 {
     MaxisXADemuxContext *xa = s->priv_data;
     AVStream *st = s->streams[0];
@@ -136,7 +136,7 @@ const FFInputFormat ff_xa_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Maxis XA"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .priv_data_size = sizeof(MaxisXADemuxContext),
-    .read_probe     = xa_probe,
-    .read_header    = xa_read_header,
-    .read_packet    = xa_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
