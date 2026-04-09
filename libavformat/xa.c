@@ -108,6 +108,9 @@ static int xa_read_packet(AVFormatContext *s,
     int size, ret;
     int64_t pos;
 
+    if (avio_feof(pb))
+        return AVERROR_EOF;
+
     pos = avio_tell(pb);
     if (pos >= xa->stop_offset)
         return AVERROR_EOF;
