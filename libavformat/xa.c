@@ -37,8 +37,7 @@
 #define XAJ0_TAG MKTAG('X', 'A', 'J', 0)
 
 typedef struct MaxisXADemuxContext {
-    uint32_t out_size;
-    uint32_t sent_bytes;
+    int64_t stop_offset;
 } MaxisXADemuxContext;
 
 static int xa_probe(const AVProbeData *p)
@@ -77,7 +76,7 @@ static int xa_read_header(AVFormatContext *s)
     st->codecpar->codec_type   = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id     = AV_CODEC_ID_ADPCM_EA_MAXIS_XA;
     avio_skip(pb, 4);       /* Skip the XA ID */
-    xa->out_size            =  avio_rl32(pb);
+    xa->stop_offset            =  avio_rl32(pb);
     avio_skip(pb, 2);       /* Skip the tag */
     st->codecpar->ch_layout.nb_channels = avio_rl16(pb);
     st->codecpar->sample_rate  = avio_rl32(pb);
@@ -93,6 +92,7 @@ static int xa_read_header(AVFormatContext *s)
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
     st->start_time = 0;
+    xa->stop_offset += avio_tell(pb);
 
     return 0;
 }
@@ -106,7 +106,7 @@ static int xa_read_packet(AVFormatContext *s,
     unsigned int packet_size;
     int ret;
 
-    if (xa->sent_bytes >= xa->out_size)
+    if (avio_tell(pb) >= xa->stop_offset)
         return AVERROR_EOF;
     /* 1 byte header and 14 bytes worth of samples * number channels per block */
     packet_size = 15*st->codecpar->ch_layout.nb_channels;
@@ -116,7 +116,6 @@ static int xa_read_packet(AVFormatContext *s,
         return ret;
 
     pkt->stream_index = st->index;
-    xa->sent_bytes += packet_size;
     pkt->duration = 28;
 
     return ret;
