@@ -26,19 +26,18 @@
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "encode.h"
-#include "zlib_wrapper.h"
+#include "deflate.h"
 
 #include <limits.h>
-#include <zlib.h>
 
 typedef struct PDVEncContext {
-    FFZStream zstream;
     uint8_t *previous_frame;
     uint8_t *work_frame;
     int row_size;
     int frame_size;
     int frame_number;
     int last_keyframe;
+    DeflateContext dc;
 } PDVEncContext;
 
 static av_cold int encode_init(AVCodecContext *avctx)
@@ -74,14 +73,6 @@ static av_cold int encode_init(AVCodecContext *avctx)
 
     avctx->bits_per_coded_sample = 1;
 
-    ret = ff_deflate_init(&s->zstream,
-                          avctx->compression_level == FF_COMPRESSION_DEFAULT ?
-                          Z_DEFAULT_COMPRESSION :
-                          av_clip(avctx->compression_level, 0, 9),
-                          avctx);
-    if (ret < 0)
-        goto fail;
-
     return 0;
 
 fail:
@@ -96,7 +87,6 @@ static av_cold int encode_end(AVCodecContext *avctx)
 
     av_freep(&s->previous_frame);
     av_freep(&s->work_frame);
-    ff_deflate_end(&s->zstream);
 
     return 0;
 }
@@ -105,14 +95,13 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                         const AVFrame *frame, int *got_packet)
 {
     PDVEncContext *s = avctx->priv_data;
-    z_stream *const zstream = &s->zstream.zstream;
+    DeflateContext *dc = &s->dc;
     uint8_t *prev = s->previous_frame;
     uint8_t *curr = s->work_frame;
     uint8_t *payload;
     const int keyframe = s->frame_number == 0 || avctx->gop_size <= 1 ||
                          s->frame_number - s->last_keyframe >= avctx->gop_size;
     int ret;
-    int zret;
 
     if (s->frame_number == INT_MAX) {
         av_log(avctx, AV_LOG_ERROR, "Frame counter reached INT_MAX.\n");
@@ -129,7 +118,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         }
     }
 
-    ret = ff_get_encode_buffer(avctx, pkt, deflateBound(zstream, s->frame_size), 0);
+    ret = ff_get_encode_buffer(avctx, pkt, ff_deflate_bound(s->frame_size), 0);
     if (ret < 0)
         return ret;
 
@@ -141,24 +130,12 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         payload = prev;
     }
 
-    zret = deflateReset(zstream);
-    if (zret != Z_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not reset deflate: %d.\n", zret);
-        return AVERROR_EXTERNAL;
-    }
+    ret = ff_deflate(dc, pkt->data, pkt->size, payload,
+                     1, s->frame_size, s->frame_size);
+    if (ret < 0)
+        return ret;
 
-    zstream->next_in   = payload;
-    zstream->avail_in  = s->frame_size;
-    zstream->next_out  = pkt->data;
-    zstream->avail_out = pkt->size;
-
-    zret = deflate(zstream, Z_FINISH);
-    if (zret != Z_STREAM_END) {
-        av_log(avctx, AV_LOG_ERROR, "Deflate failed with return code: %d.\n", zret);
-        return AVERROR_EXTERNAL;
-    }
-
-    pkt->size = zstream->total_out;
+    pkt->size = ret;
     if (keyframe) {
         pkt->flags |= AV_PKT_FLAG_KEY;
         s->last_keyframe = s->frame_number;
