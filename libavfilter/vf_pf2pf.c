@@ -207,7 +207,7 @@ typedef struct ThreadData {
 #define DST_DEPTH 32
 #include "pf2pf_dst_endian_template.c"
 
-static pf2pf_special_fun special[2][2][26][2][2][26] = {
+static const pf2pf_special_fun special[2][2][26][2][2][26] = {
 #undef DST_DEPTH
 #define DST_DEPTH 8
 #include "pf2pf_dst_endian_entry.c"
@@ -217,7 +217,7 @@ static pf2pf_special_fun special[2][2][26][2][2][26] = {
 #include "pf2pf_dst_endian_entry.c"
 };
 
-static pf2pf_generic_fun generic[4][2][4][2] = {
+static const pf2pf_generic_fun generic[4][2][4][2] = {
 #undef DST_DEPTH
 #define DST_DEPTH 8
 #include "pf2pf_dst_endian_entry_generic.c"
