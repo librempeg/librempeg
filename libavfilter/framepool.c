@@ -238,9 +238,6 @@ fail:
 
 av_cold void ff_frame_pool_uninit(FFFramePool *pool)
 {
-    if (!pool->type)
-        return;
-
     ff_mutex_lock(&pool->mutex);
 
     for (int i = 0; i < 4; i++)
