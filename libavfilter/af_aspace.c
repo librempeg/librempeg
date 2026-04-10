@@ -33,7 +33,7 @@
 #include "formats.h"
 
 enum PrecisionType {
-    P_AUTO = -1,
+    P_AUTO = 0,
     P_SINGLE,
     P_DOUBLE,
     NB_PTYPES,
@@ -94,25 +94,17 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_out)
 {
     const AudioSpaceContext *s = ctx->priv;
-    AVFilterFormats *formats = NULL;
     AVFilterChannelLayouts *outlayouts = NULL;
     AVFilterChannelLayouts *inlayouts = NULL;
     AVChannelLayout inlayout = AV_CHANNEL_LAYOUT_MONO;
-    int ret = 0;
+    static const enum AVSampleFormat sample_fmts[3][3] = {
+       [P_AUTO]   = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_NONE },
+       [P_SINGLE] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE },
+       [P_DOUBLE] = { AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_NONE },
+    };
+    int ret;
 
-    if (s->precision == P_AUTO) {
-        ret = ff_add_format(&formats, AV_SAMPLE_FMT_FLTP);
-        if (ret)
-            return ret;
-        ret = ff_add_format(&formats, AV_SAMPLE_FMT_DBLP);
-    } else if (s->precision == P_SINGLE) {
-        ret = ff_add_format(&formats, AV_SAMPLE_FMT_FLTP);
-    } else if (s->precision == P_DOUBLE) {
-        ret = ff_add_format(&formats, AV_SAMPLE_FMT_DBLP);
-    }
-    if (ret)
-        return ret;
-    ret = ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
+    ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts[s->precision]);
     if (ret)
         return ret;
 
