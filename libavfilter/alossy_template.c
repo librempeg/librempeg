@@ -227,9 +227,11 @@ static int fn(lossy_channel)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, in
 
     for (int offset = 0; offset < out->nb_samples; offset += overlap) {
         const ftype *src = ((const ftype *)in->extended_data[ch])+offset;
+        const int nb_samples = FFMIN(out->nb_samples - offset, overlap);
         ftype *dst = ((ftype *)out->extended_data[ch])+offset;
 
-        memcpy(in_buffer, src, sizeof(*in_buffer) * overlap);
+        memcpy(in_buffer, src, sizeof(*in_buffer) * nb_samples);
+        memset(in_buffer + nb_samples, 0, sizeof(*in_buffer) * (overlap - nb_samples));
 
         fn(feed)(ctx, ch, in_buffer, dst,
                  stc->in_frame,
