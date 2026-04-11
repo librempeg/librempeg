@@ -150,7 +150,7 @@ AVFrame *ff_frame_pool_get(FFFramePool *pool, FFFilterGraph *graphi)
 
     ff_mutex_lock(&pool->mutex);
 
-    switch(pool->type) {
+    switch (pool->type) {
     case AVMEDIA_TYPE_VIDEO:
         desc = av_pix_fmt_desc_get(pool->pix_fmt);
         if (!desc)
