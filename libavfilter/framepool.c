@@ -280,7 +280,7 @@ int ff_frame_pool_audio_reinit(FFFramePool *pool,
     if (pool->type == AVMEDIA_TYPE_AUDIO &&
         pool->sample_fmt == format &&
         pool->channels == channels &&
-        pool->nb_samples == nb_samples &&
+        pool->nb_samples >= nb_samples &&
         pool->align == align)
     {
         return 0;
