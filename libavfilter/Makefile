@@ -92,6 +92,7 @@ OBJS-$(CONFIG_ALATENCY_FILTER)               += f_latency.o
 OBJS-$(CONFIG_ALIMITER_FILTER)               += af_alimiter.o
 OBJS-$(CONFIG_ALLPASS_FILTER)                += af_biquads.o
 OBJS-$(CONFIG_ALOOP_FILTER)                  += f_loop.o
+OBJS-$(CONFIG_ALOSSY_FILTER)                 += af_alossy.o
 OBJS-$(CONFIG_AMAE_FILTER)                   += af_asdr.o
 OBJS-$(CONFIG_AMAPE_FILTER)                  += af_asdr.o
 OBJS-$(CONFIG_AMBIOPHONIC_FILTER)            += af_ambiophonic.o

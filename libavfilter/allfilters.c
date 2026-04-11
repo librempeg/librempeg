@@ -75,6 +75,7 @@ extern const FFFilter ff_af_akalman;
 extern const FFFilter ff_af_alatency;
 extern const FFFilter ff_af_alimiter;
 extern const FFFilter ff_af_allpass;
+extern const FFFilter ff_af_alossy;
 extern const FFFilter ff_af_aloop;
 extern const FFFilter ff_af_amae;
 extern const FFFilter ff_af_amape;
