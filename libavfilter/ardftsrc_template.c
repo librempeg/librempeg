@@ -214,10 +214,10 @@ static int fn(src_init)(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
     taper = s->taper;
     for (int n = 0; n < taper_samples; n++) {
+        const ftype nf = n + F(0.5);
         const ftype t = taper_samples;
-        const ftype a = F(0.9);
-        const ftype zbk = t/((t-n)-F(1.0)) - t/(n+F(1.0));
-        const ftype v = F(0.5) * FTANH(-a * zbk) + F(0.5);
+        const ftype zbk = t/nf - t/(t-nf);
+        const ftype v = F(0.5) * FTANH(zbk) + F(0.5);
 
         taper[n].re = taper[n].im = isnormal(v) ? v : F(0.0);
     }
