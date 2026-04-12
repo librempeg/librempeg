@@ -128,6 +128,9 @@ skip:
         offset += entry_size;
     }
 
+    if (s->nb_streams == 0)
+        return AVERROR_INVALIDDATA;
+
     qsort(s->streams, s->nb_streams, sizeof(AVStream *), sort_streams);
     for (int n = 0; n < s->nb_streams; n++) {
         AVStream *st = s->streams[n];
