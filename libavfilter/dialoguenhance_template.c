@@ -70,7 +70,7 @@ static int fn(de_tx_init)(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
     window = s->window;
     for (int n = 0; n < s->fft_size; n++)
-        window[n] = SIN(M_PI*n/(s->fft_size-1));
+        window[n] = SIN(F(M_PI)*(n+F(0.5))/s->fft_size);
 
     ret = av_tx_init(&s->tx_ctx[0], &s->tx_fn, TX_TYPE, 0, s->fft_size, &scale, 0);
     if (ret < 0)
