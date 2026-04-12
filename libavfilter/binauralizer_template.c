@@ -61,7 +61,7 @@ static int fn(ba_tx_init)(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
     window = s->window;
     for (int n = 0; n < s->fft_size; n++)
-        window[n] = SIN(M_PI*n/(s->fft_size-1));
+        window[n] = SIN(F(M_PI)*(n+F(0.5))/s->fft_size);
 
     s->tx_ctx = av_calloc(s->nb_in_channels, sizeof(*s->tx_ctx));
     if (!s->tx_ctx)
