@@ -332,6 +332,7 @@ OBJS-$(CONFIG_HEVC_MUXER)                += rawenc.o
 OBJS-$(CONFIG_EVC_DEMUXER)               += evcdec.o rawdec.o
 OBJS-$(CONFIG_EVC_MUXER)                 += rawenc.o
 OBJS-$(CONFIG_EXAKTSC_DEMUXER)           += exaktsc.o
+OBJS-$(CONFIG_HIS0_DEMUXER)              += his0.o
 OBJS-$(CONFIG_HIS_DEMUXER)               += his.o
 OBJS-$(CONFIG_HLS_DEMUXER)               += hls.o hls_sample_encryption.o
 OBJS-$(CONFIG_HLS_MUXER)                 += hlsenc.o hlsplaylist.o
