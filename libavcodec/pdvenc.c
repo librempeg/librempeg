@@ -56,16 +56,11 @@ static av_cold int encode_init(AVCodecContext *avctx)
     s->previous_frame = av_malloc(s->frame_size);
     s->work_frame     = av_malloc(s->frame_size);
     if (!s->previous_frame || !s->work_frame)
-        goto fail;
+        return AVERROR(ENOMEM);
 
     avctx->bits_per_coded_sample = 1;
 
     return 0;
-
-fail:
-    av_freep(&s->work_frame);
-    av_freep(&s->previous_frame);
-    return ret < 0 ? ret : AVERROR(ENOMEM);
 }
 
 static av_cold int encode_end(AVCodecContext *avctx)
