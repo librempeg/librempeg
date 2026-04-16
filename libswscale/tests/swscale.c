@@ -828,7 +828,7 @@ static int parse_options(int argc, char **argv, struct options *opts, FILE **fp)
                     "   -ref <file>\n"
                     "       Uses file as reference to compare tests against. Tests that have become worse will contain the string worse or WORSE\n"
                     "   -p <number between 0.0 and 1.0>\n"
-                    "       The percentage of tests or comparisons to perform. Doing all tests will take long and generate over a hundred MB text output\n"
+                    "       The proportion of tests or comparisons to perform.\n"
                     "       It is often convenient to perform a random subset\n"
                     "   -dst <pixfmt>\n"
                     "       Only test the specified destination pixel format\n"
