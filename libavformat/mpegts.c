@@ -2265,6 +2265,7 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
                 sti->need_parsing = AVSTREAM_PARSE_FULL;
                 sti->need_context_update = 1;
             }
+            break;
         }
         if (ext_desc_tag == SUPPLEMENTARY_AUDIO_DESCRIPTOR) {
             int flags;
@@ -2302,6 +2303,7 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
                 if (language[0])
                     av_dict_set(&st->metadata, "language", language, 0);
             }
+            break;
         }
         break;
     case AC3_DESCRIPTOR:
