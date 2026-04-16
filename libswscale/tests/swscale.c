@@ -682,13 +682,12 @@ static int run_self_tests(const AVFrame *ref, const struct options *opts)
                             .dither = opts->dither >= 0 ? opts->dither : SWS_DITHER_AUTO,
                         };
 
-                        if (ff_sfc64_get(&prng_state) > UINT64_MAX * opts->prob)
-                            continue;
-
-                        ret = run_test(src_fmt, dst_fmt, dst_w[w], dst_h[h],
-                                       &mode, opts, ref, src, NULL);
-                        if (ret < 0)
-                            goto error;
+                        if (ff_sfc64_get(&prng_state) <= UINT64_MAX * opts->prob) {
+                            ret = run_test(src_fmt, dst_fmt, dst_w[w], dst_h[h],
+                                           &mode, opts, ref, src, NULL);
+                            if (ret < 0)
+                                goto error;
+                        }
 
                         if (opts->flags >= 0 || opts->unscaled)
                             break;
