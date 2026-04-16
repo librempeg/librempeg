@@ -249,6 +249,7 @@ External library support:
   --enable-libklvanc       enable Kernel Labs VANC processing [no]
   --enable-libkvazaar      enable HEVC encoding via libkvazaar [no]
   --enable-liblc3          enable LC3 de/encoding via liblc3 [no]
+  --enable-liblcevc-dec    enable LCEVC decoding via liblcevc-dec [no]
   --enable-liblensfun      enable lensfun lens correction [no]
   --enable-libmodplug      enable ModPlug via libmodplug [no]
   --enable-libmp3lame      enable MP3 encoding via libmp3lame [no]
@@ -2095,6 +2096,7 @@ EXTERNAL_LIBRARY_LIST="
     libklvanc
     libkvazaar
     liblc3
+    liblcevc_dec
     libmodplug
     libmp3lame
     libmysofa
