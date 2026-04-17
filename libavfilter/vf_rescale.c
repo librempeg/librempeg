@@ -133,6 +133,12 @@ static int config_output(AVFilterLink *outlink)
         return 0;
     }
 
+    if (inlink->sample_aspect_ratio.num) {
+        outlink->sample_aspect_ratio = av_mul_q((AVRational){outlink->h * inlink->w, outlink->w * inlink->h}, inlink->sample_aspect_ratio);
+    } else {
+        outlink->sample_aspect_ratio = inlink->sample_aspect_ratio;
+    }
+
     s->dst_desc = av_pix_fmt_desc_get(outlink->format);
     s->src_desc = av_pix_fmt_desc_get(inlink->format);
 
@@ -192,6 +198,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
         ff_graph_frame_free(ctx, &in);
     }
+
+    out->sample_aspect_ratio = outlink->sample_aspect_ratio;
 
     return ff_filter_frame(outlink, out);
 }
