@@ -76,6 +76,82 @@
 #define fn2(a,b) fn3(a,b)
 #define fn(a)    fn2(a, DEPTH)
 
+static int fn(rescale_init)(AVFilterContext *ctx)
+{
+    ReScaleContext *s = ctx->priv;
+    AVFilterLink *inlink = ctx->inputs[0];
+    const int nb_components = s->dst_desc->nb_components;
+    const int src_w = inlink->w;
+    const int src_h = inlink->h;
+    const int dst_w = s->w;
+    const int dst_h = s->h;
+
+    for (int comp = 0; comp < nb_components; comp++) {
+        const int dst_sw = (comp > 0 && comp < 3) ? s->dst_desc->log2_chroma_w : 0;
+        const int dst_sh = (comp > 0 && comp < 3) ? s->dst_desc->log2_chroma_h : 0;
+        const int src_sw = (comp > 0 && comp < 3) ? s->src_desc->log2_chroma_w : 0;
+        const int src_sh = (comp > 0 && comp < 3) ? s->src_desc->log2_chroma_h : 0;
+        const int dst_cw = AV_CEIL_RSHIFT(dst_w, dst_sw);
+        const int dst_ch = AV_CEIL_RSHIFT(dst_h, dst_sh);
+        const int src_cw = AV_CEIL_RSHIFT(src_w, src_sw);
+        const int src_ch = AV_CEIL_RSHIFT(src_h, src_sh);
+        const inc_type w_inc = FDIV(src_cw, dst_cw);
+        const inc_type h_inc = FDIV(src_ch, dst_ch);
+        im_type *coeffs_x, *coeffs_y;
+
+        s->indices_x[comp] = av_calloc(dst_cw, sizeof(int));
+        if (!s->indices_x[comp])
+            return AVERROR(ENOMEM);
+
+        s->indices_y[comp] = av_calloc(dst_ch, sizeof(int));
+        if (!s->indices_y[comp])
+            return AVERROR(ENOMEM);
+
+        s->coeffs_x[comp] = av_calloc(dst_cw, sizeof(im_type));
+        if (!s->indices_x[comp])
+            return AVERROR(ENOMEM);
+
+        s->coeffs_y[comp] = av_calloc(dst_ch, sizeof(im_type));
+        if (!s->indices_y[comp])
+            return AVERROR(ENOMEM);
+
+        coeffs_x = s->coeffs_x[comp];
+        for (int x = 0; x < dst_cw; x++) {
+            const inc_type isx = x * w_inc;
+            const int sx = SH(isx);
+            const im_type fracx = AND(isx);
+
+            s->indices_x[comp][x] = sx;
+            coeffs_x[x] = fracx;
+        }
+
+        coeffs_y = s->coeffs_y[comp];
+        for (int y = 0; y < dst_ch; y++) {
+            const inc_type isy = y * h_inc;
+            const int sy = SH(isy);
+            const im_type fracy = AND(isy);
+
+            s->indices_y[comp][y] = sy;
+            coeffs_y[y] = fracy;
+        }
+    }
+
+    return 0;
+}
+
+static void fn(rescale_uninit)(AVFilterContext *ctx)
+{
+    ReScaleContext *s = ctx->priv;
+    const int nb_components = s->dst_desc->nb_components;
+
+    for (int n = 0; n < nb_components; n++) {
+        av_freep(&s->indices_x[n]);
+        av_freep(&s->indices_y[n]);
+        av_freep(&s->coeffs_x[n]);
+        av_freep(&s->coeffs_y[n]);
+    }
+}
+
 static int fn(rescale_slice)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     ReScaleContext *s = ctx->priv;
@@ -157,29 +233,28 @@ static int fn(rescale_slice_linear)(AVFilterContext *ctx, void *arg, int jobnr, 
         const int cend = (end == dst_h) ? dst_ch : (end >> dst_sh);
         const int dst_cw = AV_CEIL_RSHIFT(dst_w, dst_sw);
         const int src_cw = AV_CEIL_RSHIFT(src_w, src_sw);
-        const inc_type w_inc = FDIV(src_cw, dst_cw);
-        const inc_type h_inc = FDIV(src_ch, dst_ch);
-        inc_type isy = cstart * h_inc;
+        const im_type *coeffs_x = s->coeffs_x[comp];
+        const im_type *coeffs_y = s->coeffs_y[comp];
+        const int *indices_x = s->indices_x[comp];
+        const int *indices_y = s->indices_y[comp];
 
         for (int y = cstart; y < cend; y++) {
             pixel_type *dst_data = (pixel_type *)(out->data[comp] + y * out_linesize);
-            const int sy = SH(isy);
+            const int sy = indices_y[y];
             const pixel_type *src_data = (const pixel_type *)(in->data[comp] + sy * in_linesize);
             const pixel_type *src_data2 = (const pixel_type *)(in->data[comp] + (sy+(sy+1<src_ch)) * in_linesize);
-            const im_type fracy = AND(isy);
+            const im_type fracy = coeffs_y[y];
             const im_type ffracy = FACTOR-fracy;
 
             if (dst_cw == src_cw && dst_ch == src_ch) {
                 memcpy(dst_data, src_data, dst_cw * sizeof(*dst_data));
-                isy += h_inc;
                 continue;
             }
 
             for (int x = 0; x < dst_cw; x++) {
-                const inc_type isx = x * w_inc;
-                const int sx = SH(isx);
+                const int sx = indices_x[x];
                 const int o = (sx+1)<src_cw;
-                const im_type fracx = AND(isx);
+                const im_type fracx = coeffs_x[x];
                 const im_type ffracx = FACTOR-fracx;
 
                 dst_data[x] = (src_data[sx+0] * ffracx * ffracy +
@@ -192,8 +267,6 @@ static int fn(rescale_slice_linear)(AVFilterContext *ctx, void *arg, int jobnr, 
                     >> (2 * SHIFT);
 #endif
             }
-
-            isy += h_inc;
         }
     }
 

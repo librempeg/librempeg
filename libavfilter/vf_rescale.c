@@ -18,6 +18,7 @@
 
 #include "libavutil/imgutils.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/pixfmt.h"
@@ -41,7 +42,15 @@ typedef struct ReScaleContext {
 
     int pass;
 
+    int *indices_x[4];
+    int *indices_y[4];
+
+    void *coeffs_x[4];
+    void *coeffs_y[4];
+
+    int (*rescale_init)(AVFilterContext *ctx);
     int (*rescale_slice[NB_INTERP])(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+    void (*rescale_uninit)(AVFilterContext *ctx);
 } ReScaleContext;
 
 #define OFFSET(x) offsetof(ReScaleContext, x)
@@ -143,22 +152,30 @@ static int config_output(AVFilterLink *outlink)
     s->src_desc = av_pix_fmt_desc_get(inlink->format);
 
     if (s->dst_desc->comp[0].depth <= 8) {
+        s->rescale_init = rescale_init_8;
+        s->rescale_uninit = rescale_uninit_8;
         s->rescale_slice[NEAREST] = rescale_slice_8;
         s->rescale_slice[LINEAR] = rescale_slice_linear_8;
     } else if (s->dst_desc->comp[0].depth <= 16) {
+        s->rescale_init = rescale_init_16;
+        s->rescale_uninit = rescale_uninit_16;
         s->rescale_slice[NEAREST] = rescale_slice_16;
         s->rescale_slice[LINEAR] = rescale_slice_linear_16;
     } else if (s->dst_desc->comp[0].depth <= 32 && !(s->dst_desc->flags & AV_PIX_FMT_FLAG_FLOAT)) {
+        s->rescale_init = rescale_init_32;
+        s->rescale_uninit = rescale_uninit_32;
         s->rescale_slice[NEAREST] = rescale_slice_32;
         s->rescale_slice[LINEAR] = rescale_slice_linear_32;
     } else if (s->dst_desc->comp[0].depth <= 32 && (s->dst_desc->flags & AV_PIX_FMT_FLAG_FLOAT)) {
+        s->rescale_init = rescale_init_33;
+        s->rescale_uninit = rescale_uninit_33;
         s->rescale_slice[NEAREST] = rescale_slice_33;
         s->rescale_slice[LINEAR] = rescale_slice_linear_33;
     } else {
         return AVERROR_BUG;
     }
 
-    return 0;
+    return s->rescale_init(ctx);
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
@@ -214,6 +231,14 @@ static AVFrame *get_in_video_buffer(AVFilterLink *inlink, int w, int h)
         ff_default_get_video_buffer(inlink, w, h);
 }
 
+static av_cold void uninit(AVFilterContext *ctx)
+{
+    ReScaleContext *s = ctx->priv;
+
+    if (s->rescale_uninit)
+        s->rescale_uninit(ctx);
+}
+
 #if CONFIG_AVFILTER_THREAD_FRAME
 static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
 {
@@ -252,6 +277,7 @@ const FFFilter ff_vf_rescale = {
     .p.description = NULL_IF_CONFIG_SMALL("Rescale Video stream."),
     .p.priv_class  = &rescale_class,
     .priv_size     = sizeof(ReScaleContext),
+    .uninit        = uninit,
 #if CONFIG_AVFILTER_THREAD_FRAME
     .transfer_state = transfer_state,
 #endif
