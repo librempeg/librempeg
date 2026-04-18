@@ -281,6 +281,7 @@ TESTPROGS = adler32                                                     \
             dict                                                        \
             display                                                     \
             dovi_meta                                                   \
+            downmix_info                                                \
             encryption_info                                             \
             error                                                       \
             eval                                                        \
