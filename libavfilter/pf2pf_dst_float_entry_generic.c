@@ -19,13 +19,12 @@
 #include "avfilter.h"
 #include "video.h"
 
-#undef SRC_F
-#if SRC_DEPTH == 8
-#define SRC_F 0
-#elif SRC_DEPTH == 16
-#define SRC_F 1
-#elif SRC_DEPTH == 32
-#define SRC_F 3
-#endif
+#undef DST_FL
+#define DST_FL 0
 
-#include "pf2pf_src_float_entry_generic.c"
+#include "pf2pf_entry_generic.c"
+
+#undef DST_FL
+#define DST_FL 1
+
+#include "pf2pf_entry_generic.c"

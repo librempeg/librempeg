@@ -19,10 +19,30 @@
 #include "avfilter.h"
 #include "video.h"
 
+#undef stype
+#undef SRCONV
+#if SRC_FL == 0
+# if DST_FL == 0
+# define stype unsigned
+# define SRCONV(x) (x)
+# else
+# define stype float
+# define SRCONV(x) ((x) / ((float)src_mask))
+# endif
+#else
+# if DST_FL == 0
+# define stype unsigned
+# define SRCONV(x) lrintf(av_int2float(x) * dst_mask)
+# else
+# define stype float
+# define SRCONV(x) av_int2float(x)
+# endif
+#endif
+
 #if SRC_DEPTH > 8 || SRC_E == 0
-#define fn3(a,b,c,d,e) a##_##b##_##c##_to_##d##_##e
-#define fn2(a,b,c,d,e) fn3(a,b,c,d,e)
-#define fn(a)          fn2(a, SRC_F, SRC_E, DST_F, DST_E)
+#define fn3(a,b,c,d,e,f,g) a##_##b##_##c##_##d##_to_##e##_##f##_##g
+#define fn2(a,b,c,d,e,f,g) fn3(a,b,c,d,e,f,g)
+#define fn(a)              fn2(a, SRC_FL, SRC_F, SRC_E, DST_FL, DST_F, DST_E)
 
 static void fn(pf2pf_generic_loop)(uint8_t **dstp,
                                    const uint8_t **srcp,
@@ -38,17 +58,32 @@ static void fn(pf2pf_generic_loop)(uint8_t **dstp,
 {
     const ptrdiff_t dst_linesize = dst_linesizep[dst_plane];
     const ptrdiff_t src_linesize = src_linesizep[src_plane];
-    const unsigned dst_mask = (1ULL << dst_depth) - 1;
+#if SRC_FL == 0
     const unsigned src_mask = (1ULL << src_depth) - 1;
+#endif
+#if DST_FL == 0
+    const unsigned dst_mask = (1ULL << dst_depth) - 1;
+#endif
+#if DST_FL == 0 && SRC_FL == 0
     const unsigned dst_rshift = FFMAX(src_depth - dst_depth, 0);
     const unsigned dst_lshift = dst_shift + FFMAX(dst_depth-src_depth, 0);
+#endif
     const uint8_t *src = srcp[src_plane];
     uint8_t *dst = dstp[dst_plane];
 
     for (int y = 0; y < h; y++) {
         for (int x = 0, i = 0, j = 0; x < w; x++) {
-            unsigned odst = DRP(dst + i + dst_offset);
-            DWP(dst + i + dst_offset, odst | (((((SRP(src + j + src_offset) >> src_shift) & src_mask) >> dst_rshift) & dst_mask) << dst_lshift));
+            dtype odst = DRCONV(DRP(dst + i + dst_offset));
+#if SRC_FL == 0
+            stype isrc = SRCONV((SRP(src + j + src_offset) >> src_shift) & src_mask);
+#else
+            stype isrc = SRCONV(SRP(src + j + src_offset));
+#endif
+#if DST_FL == 0 && SRC_FL == 0
+            DWP(dst + i + dst_offset, DWCONV(odst + (((isrc >> dst_rshift) & dst_mask) << dst_lshift)));
+#else
+            DWP(dst + i + dst_offset, DWCONV(odst + isrc));
+#endif
             i += dst_step;
             j += src_step;
         }
@@ -59,7 +94,7 @@ static void fn(pf2pf_generic_loop)(uint8_t **dstp,
 }
 #endif
 
-#if SRC_DEPTH < 32 && DST_DEPTH < 32
+#if SRC_DEPTH < 32 && DST_DEPTH < 32 && SRC_FL < 1 && DST_FL < 1
 
 #undef SRC_OFFSET_NAME
 #define SRC_OFFSET_NAME 0

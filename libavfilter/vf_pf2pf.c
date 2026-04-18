@@ -217,7 +217,7 @@ static const pf2pf_special_fun special[2][2][26][2][2][26] = {
 #include "pf2pf_dst_endian_entry.c"
 };
 
-static const pf2pf_generic_fun generic[4][2][4][2] = {
+static const pf2pf_generic_fun generic[2][4][2][2][4][2] = {
 #undef DST_DEPTH
 #define DST_DEPTH 8
 #include "pf2pf_dst_endian_entry_generic.c"
@@ -247,6 +247,8 @@ static int config_output(AVFilterLink *outlink)
     s->src_desc = av_pix_fmt_desc_get(inlink->format);
 
     for (int i = 0; i < s->dst_desc->nb_components; i++) {
+        unsigned dst_fl = !!(s->dst_desc->flags & AV_PIX_FMT_FLAG_FLOAT);
+        unsigned src_fl = !!(s->src_desc->flags & AV_PIX_FMT_FLAG_FLOAT);
         unsigned dst_be = !!(s->dst_desc->flags & AV_PIX_FMT_FLAG_BE);
         unsigned src_be = !!(s->src_desc->flags & AV_PIX_FMT_FLAG_BE);
         unsigned dst_by = ((s->dst_desc->comp[i].depth + 7) / 8) - 1;
@@ -272,9 +274,9 @@ static int config_output(AVFilterLink *outlink)
         if (src_by > 3)
             continue;
 
-        s->generic[i] = generic[src_by][src_be][dst_by][dst_be];
+        s->generic[i] = generic[src_fl][src_by][src_be][dst_fl][dst_by][dst_be];
 
-        if (src_so == UINT_MAX || dst_so == UINT_MAX)
+        if (src_so == UINT_MAX || dst_so == UINT_MAX || src_fl || dst_fl)
             continue;
 
         if (src_by > 1)

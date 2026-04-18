@@ -40,4 +40,12 @@
 #endif
 #endif
 
-#include "pf2pf_template.c"
+#undef DST_FL
+#define DST_FL 0
+
+#include "pf2pf_float_template.c"
+
+#undef DST_FL
+#define DST_FL 1
+
+#include "pf2pf_float_template.c"
