@@ -216,6 +216,7 @@ OBJS-$(CONFIG_STEREOWIDEN_FILTER)            += af_stereowiden.o
 OBJS-$(CONFIG_SUPEREQUALIZER_FILTER)         += af_superequalizer.o
 OBJS-$(CONFIG_SURROUND_FILTER)               += af_surround.o
 OBJS-$(CONFIG_TILTSHELF_FILTER)              += af_biquads.o
+OBJS-$(CONFIG_TONEDETECT_FILTER)             += af_tonedetect.o
 OBJS-$(CONFIG_TRANSFORM_FILTER)              += af_biquads.o
 OBJS-$(CONFIG_TREBLE_FILTER)                 += af_biquads.o
 OBJS-$(CONFIG_TREMOLO_FILTER)                += af_tremolo.o
