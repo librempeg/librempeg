@@ -41,7 +41,6 @@ typedef struct AUpmixContext {
     AVChannelLayout out_ch_layout;
 
     int channels;
-    int n;
 
     int aswift_size;
     float gain;
