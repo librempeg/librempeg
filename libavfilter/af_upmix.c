@@ -249,7 +249,7 @@ static const AVOption upmix_options[] = {
     { "chl_out", "set output channel layout", OFFSET(out_ch_layout), AV_OPT_TYPE_CHLAYOUT, {.str="5.1"}, 0, 0, FLAGS },
     { "size", "set swift transform size", OFFSET(aswift_size), AV_OPT_TYPE_INT, {.i64=128}, 16, 4096, FLAGS },
     { "smooth", "set swift smooth value", OFFSET(smooth), AV_OPT_TYPE_FLOAT, {.dbl=0.001}, 0, 1, TFLAGS },
-    { "gain", "set output gain value", OFFSET(gain), AV_OPT_TYPE_FLOAT, {.dbl=0.001}, 0, 32, TFLAGS },
+    { "gain", "set output gain value", OFFSET(gain), AV_OPT_TYPE_FLOAT, {.dbl=2.0}, 0, 32, TFLAGS },
     { NULL }
 };
 
