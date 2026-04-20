@@ -866,7 +866,7 @@ static int config_input(AVFilterLink *inlink)
     wscale = sqrt(8.0 / (9.0 * s->fft_length));
     sum = 0.0;
     for (int i = 0; i < s->window_length; i++) {
-        double d10 = sin(i * M_PI / s->window_length);
+        double d10 = sin((i+0.5) * M_PI / s->window_length);
         d10 *= wscale * d10;
         s->window[i] = d10;
         sum += d10 * d10;
