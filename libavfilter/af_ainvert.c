@@ -88,7 +88,7 @@ static int config_output(AVFilterLink *outlink)
         s->filter_channels = filter_channels_dblp;
         break;
     default:
-        av_assert0(0);
+        return AVERROR_BUG;
     }
 
     return 0;
