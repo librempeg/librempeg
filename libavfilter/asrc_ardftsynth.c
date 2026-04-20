@@ -88,9 +88,10 @@ typedef struct ARDFTSynth {
 
 #define OFFSET(x) offsetof(ARDFTSynth, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define TFLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 
 static const AVOption ardftsynth_options[] = {
-    { "events",       "set number of events",OFFSET(events),       AV_OPT_TYPE_INT,       {.i64 = 32},        0., MAX_EVENTS, FLAGS },
+    { "events",       "set number of events",OFFSET(events),       AV_OPT_TYPE_INT,       {.i64 = 32},        0., MAX_EVENTS,TFLAGS },
     { "sample_rate",  "set sample rate",     OFFSET(sample_rate),  AV_OPT_TYPE_INT,       {.i64 = 48000},    15,  INT_MAX,    FLAGS },
     { "duration",     "set duration",        OFFSET(duration_opt), AV_OPT_TYPE_DURATION,  {.i64 = 0},         0,  INT64_MAX,  FLAGS },
     { "channel_layout","set channel layout", OFFSET(chlayout),     AV_OPT_TYPE_CHLAYOUT,  {.str = "stereo"},  0,  0,          FLAGS },
@@ -397,4 +398,5 @@ const FFFilter ff_asrc_ardftsynth = {
     .uninit        = uninit,
     FILTER_OUTPUTS(ardftsynth_outputs),
     FILTER_QUERY_FUNC2(query_formats),
+    .process_command = ff_filter_process_command,
 };
