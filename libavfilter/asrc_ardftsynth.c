@@ -149,7 +149,7 @@ static av_cold int config_props(AVFilterLink *outlink)
         return AVERROR(ENOMEM);
 
     for (int n = 0; n < s->window_size; n++)
-        s->win[n] = sin(M_PI*n/(s->window_size-1));
+        s->win[n] = sin(M_PI*(n+0.5)/s->window_size);
 
     for (int ch = 0; ch < outlink->ch_layout.nb_channels; ch++) {
         ChannelContext *cc = &s->cc[ch];
