@@ -188,9 +188,11 @@ static int fn(upmix_init)(AVFilterContext *ctx)
             return AVERROR(ENOMEM);
 
         for (int n = 0; n < stc->plan.size; n++) {
-            stc->plan.wf[n] = fn(polar)(F(1.0), (n+1) * F(-2.0)*F(M_PI) / stc->plan.size);
+            const ftype x = F(n) * F(-2.0)*F(M_PI) / stc->plan.size;
+
+            stc->plan.wf[n] = fn(polar)(F(1.0), x);
             stc->plan.wf[n] = fn(aswift_mul_real)(stc->plan.wf[n], stc->plan.a_fast);
-            stc->plan.ws[n] = fn(polar)(F(1.0), (n+1) * F(-2.0)*F(M_PI) / stc->plan.size);
+            stc->plan.ws[n] = fn(polar)(F(1.0), x);
             stc->plan.ws[n] = fn(aswift_mul_real)(stc->plan.ws[n], stc->plan.a_slow);
         }
     }
