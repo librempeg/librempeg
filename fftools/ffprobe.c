@@ -1401,6 +1401,9 @@ static void show_subtitle(AVTextFormatContext *tfc, AVSubtitle *sub, AVStream *s
     fflush(stdout);
 }
 
+static void print_iamf_param_definition(AVTextFormatContext *tfc, const char *name,
+                                        const AVIAMFParamDefinition *param, SectionID section_id);
+
 static void print_frame_side_data(AVTextFormatContext *tfc,
                                   const AVFrame *frame,
                                   const AVStream *stream)
@@ -1463,6 +1466,11 @@ static void print_frame_side_data(AVTextFormatContext *tfc,
             print_int("view_id", *(int*)sd->data);
         } else if (sd->type == AV_FRAME_DATA_EXIF) {
             print_int("size", sd->size);
+        } else if (sd->type == AV_FRAME_DATA_IAMF_MIX_GAIN_PARAM ||
+            sd->type == AV_FRAME_DATA_IAMF_DEMIXING_INFO_PARAM ||
+            sd->type == AV_FRAME_DATA_IAMF_RECON_GAIN_INFO_PARAM) {
+            const AVIAMFParamDefinition *param = (AVIAMFParamDefinition *)sd->data;
+            print_iamf_param_definition(tfc, NULL, param, SECTION_ID_FRAME_SIDE_DATA);
         }
         avtext_print_section_footer(tfc);
     }
@@ -2154,12 +2162,21 @@ static void print_iamf_param_definition(AVTextFormatContext *tfc, const char *na
                                         const AVIAMFParamDefinition *param, SectionID section_id)
 {
     SectionID subsection_id, parameter_section_id;
-    av_assert0(sections[section_id].children_ids[0] != -1);
-    subsection_id = sections[section_id].children_ids[0];
+    if (section_id == SECTION_ID_FRAME_SIDE_DATA)
+        subsection_id = SECTION_ID_FRAME_SIDE_DATA_COMPONENT_LIST;
+    else {
+        av_assert0(sections[section_id].children_ids[0] != -1);
+        subsection_id = sections[section_id].children_ids[0];
+    }
     av_assert0(sections[subsection_id].children_ids[0] != -1);
     parameter_section_id = sections[subsection_id].children_ids[0];
-    avtext_print_section_header(tfc, "IAMF Param Definition", section_id);
-    print_str("name",           name);
+
+    // When printing as part of side-data, skip opening a section
+    if (section_id != SECTION_ID_FRAME_SIDE_DATA)
+        avtext_print_section_header(tfc, "IAMF Param Definition", section_id);
+
+    if (name)
+        print_str("name",           name);
     print_int("nb_subblocks",   param->nb_subblocks);
     print_int("type",           param->type);
     print_int("parameter_id",   param->parameter_id);
@@ -2202,7 +2219,9 @@ static void print_iamf_param_definition(AVTextFormatContext *tfc, const char *na
     }
     if (param->nb_subblocks > 0)
         avtext_print_section_footer(tfc); // subsection_id
-    avtext_print_section_footer(tfc); // section_id
+
+    if (section_id != SECTION_ID_FRAME_SIDE_DATA)
+        avtext_print_section_footer(tfc); // section_id
 }
 
 static void print_iamf_audio_element_params(AVTextFormatContext *tfc, const AVStreamGroup *stg,
