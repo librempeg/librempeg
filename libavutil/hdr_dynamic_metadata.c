@@ -438,7 +438,7 @@ int av_dynamic_hdr_smpte2094_app5_from_t35(AVDynamicHDRSmpte2094App5 *s, const u
     size_t padded_size = size + AV_INPUT_BUFFER_PADDING_SIZE;
 
     if (!s)
-        return AVERROR(ENOMEM);
+        return AVERROR(EINVAL);
 
     uint8_t *padded_data = av_mallocz(padded_size);
     if (!padded_data)
