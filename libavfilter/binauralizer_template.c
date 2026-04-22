@@ -52,7 +52,7 @@ static int fn(ba_tx_init)(AVFilterContext *ctx)
 {
     BinauralizerContext *s = ctx->priv;
     const int nb_in_channels = ctx->inputs[0]->ch_layout.nb_channels;
-    ftype scale = F(1.0), iscale = F(0.5) / (s->fft_size * nb_in_channels);
+    ftype scale = F(1.0), iscale = F(1.0) / (s->fft_size * (F(1.5 / 2.0) * nb_in_channels));
     ftype *window;
     int ret;
 
