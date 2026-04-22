@@ -1025,12 +1025,13 @@ static int enum_ops_fmt(SwsContext *ctx, void *opaque,
     ops->src.height = ops->dst.height = 16;
 
     bool incomplete = ff_infer_colors(&ops->src.color, &ops->dst.color);
-    if (ff_sws_decode_pixfmt(ops, src_fmt) < 0 ||
-        ff_sws_decode_colors(ctx, type, ops, &ops->src, &incomplete) < 0 ||
-        ff_sws_encode_colors(ctx, type, ops, &ops->src, &ops->dst, &incomplete) < 0 ||
-        ff_sws_encode_pixfmt(ops, dst_fmt) < 0)
+    if ((ret = ff_sws_decode_pixfmt(ops, src_fmt)) < 0 ||
+        (ret = ff_sws_decode_colors(ctx, type, ops, &ops->src, &incomplete)) < 0 ||
+        (ret = ff_sws_encode_colors(ctx, type, ops, &ops->src, &ops->dst, &incomplete)) < 0 ||
+        (ret = ff_sws_encode_pixfmt(ops, dst_fmt)) < 0)
     {
-        ret = 0; /* silently skip unsupported formats */
+        if (ret == AVERROR(ENOTSUP))
+            ret = 0; /* silently skip unsupported formats */
         goto fail;
     }
 
