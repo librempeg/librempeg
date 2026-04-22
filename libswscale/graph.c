@@ -574,40 +574,15 @@ static int add_convert_pass(SwsGraph *graph, const SwsFormat *src,
                             const SwsFormat *dst, SwsPass *input,
                             SwsPass **output)
 {
-    const SwsPixelType type = SWS_PIXEL_F32;
-
     SwsContext *ctx = graph->ctx;
-    SwsOpList *ops = NULL;
     int ret = AVERROR(ENOTSUP);
 
     /* Mark the entire new ops infrastructure as experimental for now */
     if (!(ctx->flags & SWS_UNSTABLE))
         goto fail;
 
-    /* The new code does not yet support alpha blending */
-    if (src->desc->flags & AV_PIX_FMT_FLAG_ALPHA &&
-        ctx->alpha_blend != SWS_ALPHA_BLEND_NONE)
-        goto fail;
-
-    ops = ff_sws_op_list_alloc();
-    if (!ops)
-        return AVERROR(ENOMEM);
-    ops->src = *src;
-    ops->dst = *dst;
-
-    ret = ff_sws_decode_pixfmt(ops, src->format);
-    if (ret < 0)
-        goto fail;
-    ret = ff_sws_decode_colors(ctx, type, ops, src, &graph->incomplete);
-    if (ret < 0)
-        goto fail;
-    ret = ff_sws_add_filters(ctx, type, ops, src, dst);
-    if (ret < 0)
-        goto fail;
-    ret = ff_sws_encode_colors(ctx, type, ops, src, dst, &graph->incomplete);
-    if (ret < 0)
-        goto fail;
-    ret = ff_sws_encode_pixfmt(ops, dst->format);
+    SwsOpList *ops;
+    ret = ff_sws_op_list_generate(ctx, src, dst, &ops, &graph->incomplete);
     if (ret < 0)
         goto fail;
 
@@ -625,7 +600,6 @@ static int add_convert_pass(SwsGraph *graph, const SwsFormat *src,
     /* fall through */
 
 fail:
-    ff_sws_op_list_free(&ops);
     if (ret == AVERROR(ENOTSUP))
         return add_legacy_sws_pass(graph, src, dst, input, output);
     return ret;

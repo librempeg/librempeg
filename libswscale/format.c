@@ -1630,4 +1630,44 @@ int ff_sws_add_filters(SwsContext *ctx, SwsPixelType type, SwsOpList *ops,
     return add_filter(ctx, type, ops, SWS_OP_FILTER_V, src->height, dst->height);
 }
 
+int ff_sws_op_list_generate(SwsContext *ctx, const SwsFormat *src,
+                            const SwsFormat *dst, SwsOpList **out_ops,
+                            bool *incomplete)
+{
+    /* The new code does not yet support alpha blending */
+    if (src->desc->flags & AV_PIX_FMT_FLAG_ALPHA &&
+        ctx->alpha_blend != SWS_ALPHA_BLEND_NONE)
+        return AVERROR(ENOTSUP);
+
+    SwsOpList *ops = ff_sws_op_list_alloc();
+    if (!ops)
+        return AVERROR(ENOMEM);
+    ops->src = *src;
+    ops->dst = *dst;
+
+    const SwsPixelType type = SWS_PIXEL_F32;
+    int ret = ff_sws_decode_pixfmt(ops, src->format);
+    if (ret < 0)
+        goto fail;
+    ret = ff_sws_decode_colors(ctx, type, ops, src, incomplete);
+    if (ret < 0)
+        goto fail;
+    ret = ff_sws_add_filters(ctx, type, ops, src, dst);
+    if (ret < 0)
+        goto fail;
+    ret = ff_sws_encode_colors(ctx, type, ops, src, dst, incomplete);
+    if (ret < 0)
+        goto fail;
+    ret = ff_sws_encode_pixfmt(ops, dst->format);
+    if (ret < 0)
+        goto fail;
+
+    *out_ops = ops;
+    return 0;
+
+fail:
+    ff_sws_op_list_free(&ops);
+    return ret;
+}
+
 #endif /* CONFIG_UNSTABLE */
