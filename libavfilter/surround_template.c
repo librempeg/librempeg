@@ -18,8 +18,6 @@
 
 #undef MPI
 #undef M_2PI
-#undef MPI4
-#undef MSQRT1_2
 #undef ftype
 #undef ctype
 #undef COPYSIGN
@@ -30,7 +28,6 @@
 #undef COS
 #undef POW
 #undef SQRT
-#undef FMIN
 #undef FMAX
 #undef LRINT
 #undef EPSILON
@@ -41,8 +38,6 @@
 #if DEPTH == 32
 #define MPI M_PIf
 #define M_2PI M_2_PIf
-#define MPI4 M_PI_4f
-#define MSQRT1_2 M_SQRT1_2f
 #define ftype float
 #define ctype AVComplexFloat
 #define COPYSIGN copysignf
@@ -53,7 +48,6 @@
 #define COS cosf
 #define POW powf
 #define SQRT sqrtf
-#define FMIN fminf
 #define FMAX fmaxf
 #define LRINT lrintf
 #define EPSILON FLT_EPSILON
@@ -63,8 +57,6 @@
 #else
 #define MPI M_PI
 #define M_2PI M_2_PI
-#define MPI4 M_PI_4
-#define MSQRT1_2 M_SQRT1_2
 #define ftype double
 #define ctype AVComplexDouble
 #define COPYSIGN copysign
@@ -75,7 +67,6 @@
 #define COS cos
 #define POW pow
 #define SQRT sqrt
-#define FMIN fmin
 #define FMAX fmax
 #define LRINT lrint
 #define EPSILON DBL_EPSILON
