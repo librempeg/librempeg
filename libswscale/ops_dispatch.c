@@ -73,10 +73,19 @@ int ff_sws_ops_compile_backend(SwsContext *ctx, const SwsOpBackend *backend,
         int msg_lev = ret == AVERROR(ENOTSUP) ? AV_LOG_TRACE : AV_LOG_ERROR;
         av_log(ctx, msg_lev, "Backend '%s' failed to compile operations: %s\n",
                backend->name, av_err2str(ret));
-    } else {
-        *out = compiled;
+        goto fail;
     }
 
+    *out = compiled;
+
+    av_log(ctx, AV_LOG_VERBOSE, "Compiled using backend '%s': "
+           "block size = %d, over-read = %d, over-write = %d, cpu flags = 0x%x\n",
+           backend->name, out->block_size, out->over_read, out->over_write,
+           out->cpu_flags);
+
+    ff_sws_op_list_print(ctx, AV_LOG_VERBOSE, AV_LOG_TRACE, ops);
+
+fail:
     ff_sws_op_list_free(&copy);
     return ret;
 }
@@ -91,12 +100,6 @@ int ff_sws_ops_compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out
         if (ff_sws_ops_compile_backend(ctx, backend, ops, out) < 0)
             continue;
 
-        av_log(ctx, AV_LOG_VERBOSE, "Compiled using backend '%s': "
-               "block size = %d, over-read = %d, over-write = %d, cpu flags = 0x%x\n",
-               backend->name, out->block_size, out->over_read, out->over_write,
-               out->cpu_flags);
-
-        ff_sws_op_list_print(ctx, AV_LOG_VERBOSE, AV_LOG_TRACE, ops);
         return 0;
     }
 
