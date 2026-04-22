@@ -297,7 +297,7 @@ static void check_ops(const char *name, const unsigned ranges[NB_PLANES],
 
     /* Always compile `ops` using the C backend as a reference */
     SwsCompiledOp comp_ref = {0};
-    int ret = ff_sws_ops_compile_backend(ctx, backend_ref, &oplist, &comp_ref);
+    int ret = ff_sws_ops_compile(ctx, backend_ref, &oplist, &comp_ref);
     if (ret < 0) {
         av_assert0(ret != AVERROR(ENOTSUP));
         fail();
@@ -316,7 +316,7 @@ static void check_ops(const char *name, const unsigned ranges[NB_PLANES],
         }
 
         SwsCompiledOp comp_new = {0};
-        int ret = ff_sws_ops_compile_backend(ctx, backend, &oplist, &comp_new);
+        int ret = ff_sws_ops_compile(ctx, backend, &oplist, &comp_new);
         if (ret == AVERROR(ENOTSUP)) {
             continue;
         } else if (ret < 0) {

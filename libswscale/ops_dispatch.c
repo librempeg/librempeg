@@ -54,8 +54,8 @@ typedef struct SwsOpPass {
     unsigned int tail_buf_size;
 } SwsOpPass;
 
-int ff_sws_ops_compile_backend(SwsContext *ctx, const SwsOpBackend *backend,
-                               const SwsOpList *ops, SwsCompiledOp *out)
+static int compile_backend(SwsContext *ctx, const SwsOpBackend *backend,
+                           const SwsOpList *ops, SwsCompiledOp *out)
 {
     SwsOpList *copy;
     SwsCompiledOp compiled = {0};
@@ -90,14 +90,18 @@ fail:
     return ret;
 }
 
-int ff_sws_ops_compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
+int ff_sws_ops_compile(SwsContext *ctx, const SwsOpBackend *backend,
+                       const SwsOpList *ops, SwsCompiledOp *out)
 {
+    if (backend)
+        return compile_backend(ctx, backend, ops, out);
+
     for (int n = 0; ff_sws_op_backends[n]; n++) {
         const SwsOpBackend *backend = ff_sws_op_backends[n];
         if (ops->src.hw_format != backend->hw_format ||
             ops->dst.hw_format != backend->hw_format)
             continue;
-        if (ff_sws_ops_compile_backend(ctx, backend, ops, out) < 0)
+        if (compile_backend(ctx, backend, ops, out) < 0)
             continue;
 
         return 0;
@@ -474,7 +478,7 @@ static int compile(SwsGraph *graph, const SwsOpList *ops, SwsPass *input,
     if (!p)
         return AVERROR(ENOMEM);
 
-    int ret = ff_sws_ops_compile(ctx, ops, &p->comp);
+    int ret = ff_sws_ops_compile(ctx, NULL, ops, &p->comp);
     if (ret < 0)
         goto fail;
 

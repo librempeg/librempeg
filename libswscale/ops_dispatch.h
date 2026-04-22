@@ -150,19 +150,13 @@ typedef struct SwsOpBackend {
 extern const SwsOpBackend *const ff_sws_op_backends[];
 
 /**
- * Attempt to compile a list of operations using a specific backend.
+ * Attempt to compile a list of operations using a specific backend, or
+ * the best available backend if `backend` is NULL.
  *
  * Returns 0 on success, or a negative error code on failure.
  */
-int ff_sws_ops_compile_backend(SwsContext *ctx, const SwsOpBackend *backend,
-                               const SwsOpList *ops, SwsCompiledOp *out);
-
-/**
- * Compile a list of operations using the best available backend.
- *
- * Returns 0 on success, or a negative error code on failure.
- */
-int ff_sws_ops_compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out);
+int ff_sws_ops_compile(SwsContext *ctx, const SwsOpBackend *backend,
+                       const SwsOpList *ops, SwsCompiledOp *out);
 
 /**
  * Resolves an operation list to a graph pass. The first and last operations
