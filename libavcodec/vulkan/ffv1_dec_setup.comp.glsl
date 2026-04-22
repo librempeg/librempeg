@@ -23,7 +23,7 @@
 #pragma shader_stage(compute)
 #extension GL_GOOGLE_include_directive : require
 
-#define NB_CONTEXTS 2
+#define NB_CONTEXTS 6
 #include "common.glsl"
 #include "ffv1_common.glsl"
 
@@ -63,42 +63,92 @@ uint get_usymbol(const uint ctx_off)
     return a;
 }
 
+int get_isymbol(const uint ctx_off)
+{
+    if (get_rac(rc_state[ctx_off]))
+        return 0;
+
+    int e = 0;
+    while (get_rac(rc_state[ctx_off + 1 + min(e, 9)])) // 1..10
+        e++;
+
+    int a = 1;
+    for (int i = e - 1; i >= 0; i--) {
+        a <<= 1;
+        a |= int(get_rac(rc_state[ctx_off + 22 + min(i, 9)]));  // 22..31
+    }
+
+    return get_rac(rc_state[ctx_off + 11 + min(e, 10)]) ? -a : a;
+}
+
+shared int mul[4096 + 1];
+
+int decode_current_mul(uint ctx_off, int mul_count, int64_t i)
+{
+    int ndx = int((i * int64_t(mul_count)) >> 32);
+    if (mul[ndx] < 0)
+        mul[ndx] = int(get_usymbol(ctx_off)) & 0x3FFFFFFF;
+    return mul[ndx];
+}
+
 void decode_remap(uint slice_idx, inout SliceContext sc)
 {
-    int end = rct_offset - 1;
-    int flip = sc.remap == 2 ? (end >> 1) : 0;
+    uint end = uint(rct_offset - 1);
+    uint flip_mask = end ^ (end >> 1);
+    uint flip = sc.remap == 2 ? (end >> 1) : 0;
 
     for (int p = 0; p < color_planes; p++) {
         int j = 0;
         int lu = 0;
 
         [[unroll]]
-        for (int i = 0; i < NB_CONTEXTS; i++)
-            rc_state[i] = uint8_t(128);
+        for (int k = 0; k < NB_CONTEXTS*CONTEXT_SIZE; k++)
+            rc_state[k] = uint8_t(128);
 
-        get_usymbol(0);
+        int mul_count = int(get_usymbol(0));
+        if (mul_count > 4096) {
+            sc.remap_count[p] = j;
+            return;
+        }
+        for (int mi = 0; mi < mul_count; mi++)
+            mul[mi] = -1;
+        mul[mul_count] = 1;
 
         [[unroll]]
-        for (int i = 0; i < NB_CONTEXTS*CONTEXT_SIZE; i++)
-            rc_state[i] = uint8_t(128);
+        for (int k = 0; k < NB_CONTEXTS*CONTEXT_SIZE; k++)
+            rc_state[k] = uint8_t(128);
 
-        for (uint i = 0; i <= end; ) {
-            uint run = get_usymbol(lu*CONTEXT_SIZE);
-            uint run0 = lu != 0 ? 0   : run;
-            uint run1 = lu != 0 ? run : 1;
+        int current_mul = 1;
+        int64_t i = 0;
+        while (i <= int64_t(end)) {
+            uint run = get_usymbol(uint(lu*3 + 0)*CONTEXT_SIZE);
+            uint run0 = lu != 0 ? 0u  : run;
+            uint run1 = lu != 0 ? run : 1u;
 
-            i += run0;
-            while (run1-- > 0) {
-                if (i - 1 >= end)
+            i += int64_t(run0) * int64_t(current_mul);
+
+            while (run1 > 0u) {
+                run1--;
+                if (current_mul > 1) {
+                    int delta = get_isymbol(uint(lu*3 + 1)*CONTEXT_SIZE);
+                    if (delta <= -current_mul || delta > current_mul/2) {
+                        sc.remap_count[p] = j;
+                        return;
+                    }
+                    i += int64_t(current_mul - 1 + delta);
+                }
+                if (i - 1 >= int64_t(end))
                     break;
-                fltmap[slice_idx][p][j++] = i ^ (((i & 0x8000) != 0) ? 0 : flip);
+                uint iv = uint(i);
+                fltmap[slice_idx][p][j++] = iv ^ (((iv & flip_mask) != 0u) ? 0u : flip);
                 i++;
+                current_mul = decode_current_mul(uint(2)*CONTEXT_SIZE, mul_count, i);
             }
-            if (lu > 0)
-                i++;
-            lu ^= int(run == 0);
+            if (lu != 0)
+                i += int64_t(current_mul);
+            lu ^= int(run == 0u);
         }
-        sc.remap_count[p] = uint16_t(j);
+        sc.remap_count[p] = j;
     }
 }
 

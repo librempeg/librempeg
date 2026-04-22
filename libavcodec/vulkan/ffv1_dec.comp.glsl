@@ -286,9 +286,12 @@ void writeout_rgb(uint slice_idx, in SliceContext sc, ivec2 sp, int w, int y,
         pix = pix.gbra;
         vec4 pd;
         for (int i = 0; i < color_planes; i++) {
-            uint v = fltmap[slice_idx][i][pix[i] & (rct_offset - 1)];
-            float16_t vf = uint16BitsToFloat16(uint16_t(v));
-            pd[i] = float(vf);
+            uint mask = (1u << ceil_log2(sc.remap_count[i])) - 1u;
+            uint v = fltmap[slice_idx][i][uint(pix[i]) & mask];
+            if (c_bits >= 32)
+                pd[i] = uintBitsToFloat(v);
+            else
+                pd[i] = float(uint16BitsToFloat16(uint16_t(v)));
         }
         pd = pd.brga;
 

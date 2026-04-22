@@ -113,7 +113,7 @@ void encode_histogram_remap(uint slice_idx, inout SliceContext sc)
 
         if (run != 0)
             put_usymbol(run, lu*CONTEXT_SIZE);
-        sc.remap_count[p] = U16(j);
+        sc.remap_count[p] = int(j);
     }
 }
 

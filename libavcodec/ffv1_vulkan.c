@@ -41,7 +41,7 @@ void ff_ffv1_vk_set_common_sl(AVCodecContext *avctx, FFV1Context *f,
     }
 
     int bits = desc->comp[0].depth;
-    SPEC_LIST_ADD(sl,  5, 32, 1 << bits);
+    SPEC_LIST_ADD(sl,  5, 32, (uint32_t)(1ULL << bits));
     SPEC_LIST_ADD(sl,  6, 32, f->colorspace);
     SPEC_LIST_ADD(sl,  7, 32, f->transparency);
     SPEC_LIST_ADD(sl,  8, 32, ff_vk_mt_is_np_rgb(sw_format) &&
