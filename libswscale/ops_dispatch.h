@@ -127,4 +127,52 @@ typedef struct SwsCompiledOp {
 
 void ff_sws_compiled_op_unref(SwsCompiledOp *comp);
 
+typedef struct SwsOpBackend {
+    const char *name; /* Descriptive name for this backend */
+
+    /**
+     * Compile an operation list to an implementation chain. May modify `ops`
+     * freely; the original list will be freed automatically by the caller.
+     *
+     * Returns 0 or a negative error code.
+     */
+    int (*compile)(SwsContext *ctx, SwsOpList *ops, SwsCompiledOp *out);
+
+    /**
+     * If NONE, backend only supports software frames.
+     * Otherwise, frame hardware format must match hw_format for the backend
+     * to be used.
+     */
+    enum AVPixelFormat hw_format;
+} SwsOpBackend;
+
+/* List of all backends, terminated by NULL */
+extern const SwsOpBackend *const ff_sws_op_backends[];
+
+/**
+ * Attempt to compile a list of operations using a specific backend.
+ *
+ * Returns 0 on success, or a negative error code on failure.
+ */
+int ff_sws_ops_compile_backend(SwsContext *ctx, const SwsOpBackend *backend,
+                               const SwsOpList *ops, SwsCompiledOp *out);
+
+/**
+ * Compile a list of operations using the best available backend.
+ *
+ * Returns 0 on success, or a negative error code on failure.
+ */
+int ff_sws_ops_compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out);
+
+/**
+ * Resolves an operation list to a graph pass. The first and last operations
+ * must be a read/write respectively. `flags` is a list of SwsOpCompileFlags.
+ *
+ * Takes over ownership of `ops` and sets it to NULL, even on failure.
+ *
+ * Note: `ops` may be modified by this function.
+ */
+int ff_sws_compile_pass(SwsGraph *graph, SwsOpList **ops, int flags,
+                        SwsPass *input, SwsPass **output);
+
 #endif /* SWSCALE_OPS_DISPATCH_H */

@@ -37,6 +37,7 @@
 #include "swscale_internal.h"
 #include "graph.h"
 #include "ops.h"
+#include "ops_dispatch.h"
 
 int ff_sws_pass_aligned_width(const SwsPass *pass, int width)
 {
