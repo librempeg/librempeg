@@ -243,16 +243,15 @@ static int fn(src_init)(AVFilterContext *ctx)
     if (!s->phase)
         return AVERROR(ENOMEM);
     phase = s->phase;
-    for (int n = 0; n < s->tr_nb_samples; n++) {
+    const int N = s->tr_nb_samples - (trim_start+trim_stop);
+    for (int n = 0; n < N; n++) {
         const ftype aphase = FABS(s->phaset);
         const ftype sgn = s->phaset < F(0.0) ? F(-1.0) : F(1.0);
-        const ftype x = F(n) / s->tr_nb_samples;
-        const ftype shift = F(-0.4);
-        const ftype z = F(M_SQRT1_2) * (FEXP((x + shift) * F(M_LN10 * M_PI)) - FEXP(shift * F(M_LN10 * M_PI)));
-        const ftype w = aphase * z * sgn;
+        const ftype x = (F(n) + F(0.5)) / N;
+        const ftype a = asin(aphase * x) * 40 * sgn;
 
-        phase[n].re = FCOS(w);
-        phase[n].im = FSIN(w);
+        phase[n].re = FCOS(a);
+        phase[n].im = FSIN(a);
     }
 
     return 0;
