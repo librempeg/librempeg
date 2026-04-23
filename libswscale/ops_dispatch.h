@@ -162,11 +162,14 @@ int ff_sws_ops_compile(SwsContext *ctx, const SwsOpBackend *backend,
  * Resolves an operation list to a graph pass. The first and last operations
  * must be a read/write respectively. `flags` is a list of SwsOpCompileFlags.
  *
+ * @param backend Force the use of a specific backend (Optional)
+ *
  * Takes over ownership of `ops` and sets it to NULL, even on failure.
  *
  * Note: `ops` may be modified by this function.
  */
-int ff_sws_compile_pass(SwsGraph *graph, SwsOpList **ops, int flags,
-                        SwsPass *input, SwsPass **output);
+int ff_sws_compile_pass(SwsGraph *graph, const SwsOpBackend *backend,
+                        SwsOpList **ops, int flags, SwsPass *input,
+                        SwsPass **output);
 
 #endif /* SWSCALE_OPS_DISPATCH_H */
