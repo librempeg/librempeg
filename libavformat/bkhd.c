@@ -125,7 +125,7 @@ static int read_header(AVFormatContext *s)
             AVStream *st;
 
             if (avio_feof(pb))
-                return AVERROR_INVALIDDATA;
+                break;
 
             bst = av_mallocz(sizeof(*bst));
             if (!bst)
@@ -191,7 +191,7 @@ static int read_header(AVFormatContext *s)
         avio_seek(pb, bst->start_offset, SEEK_SET);
         ret = avformat_open_input(&bst->xctx, "", NULL, NULL);
         if (ret < 0)
-            return ret;
+            continue;
 
         st->id = bst->xctx->streams[0]->id;
         st->duration = bst->xctx->streams[0]->duration;
@@ -253,8 +253,13 @@ redo:
         goto redo;
     }
 
-    ret = av_read_frame(bst->xctx, pkt);
-    pkt->stream_index = st->index;
+    if (bst->xctx) {
+        ret = av_read_frame(bst->xctx, pkt);
+        pkt->stream_index = st->index;
+    } else {
+        g->current_stream++;
+        goto redo;
+    }
     if (ret == AVERROR_EOF) {
         g->current_stream++;
         goto redo;
