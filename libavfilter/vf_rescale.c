@@ -48,8 +48,12 @@ typedef struct ReScaleContext {
     void *coeffs_x[4];
     void *coeffs_y[4];
 
+    void *htemp[4];
+
     int (*rescale_init)(AVFilterContext *ctx);
     int (*rescale_slice[NB_INTERP])(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+    int (*rescale_slice_h[NB_INTERP])(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
+    int (*rescale_slice_v[NB_INTERP])(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
     void (*rescale_uninit)(AVFilterContext *ctx);
 } ReScaleContext;
 
@@ -151,26 +155,37 @@ static int config_output(AVFilterLink *outlink)
     s->dst_desc = av_pix_fmt_desc_get(outlink->format);
     s->src_desc = av_pix_fmt_desc_get(inlink->format);
 
+    s->rescale_slice_h[NEAREST] = NULL;
+    s->rescale_slice_v[NEAREST] = NULL;
+
     if (s->dst_desc->comp[0].depth <= 8) {
         s->rescale_init = rescale_init_8;
         s->rescale_uninit = rescale_uninit_8;
         s->rescale_slice[NEAREST] = rescale_slice_8;
         s->rescale_slice[LINEAR] = rescale_slice_linear_8;
+        s->rescale_slice_h[LINEAR] = rescale_slice_linear_h_8;
+        s->rescale_slice_v[LINEAR] = rescale_slice_linear_v_8;
     } else if (s->dst_desc->comp[0].depth <= 16) {
         s->rescale_init = rescale_init_16;
         s->rescale_uninit = rescale_uninit_16;
         s->rescale_slice[NEAREST] = rescale_slice_16;
         s->rescale_slice[LINEAR] = rescale_slice_linear_16;
+        s->rescale_slice_h[LINEAR] = rescale_slice_linear_h_16;
+        s->rescale_slice_v[LINEAR] = rescale_slice_linear_v_16;
     } else if (s->dst_desc->comp[0].depth <= 32 && !(s->dst_desc->flags & AV_PIX_FMT_FLAG_FLOAT)) {
         s->rescale_init = rescale_init_32;
         s->rescale_uninit = rescale_uninit_32;
         s->rescale_slice[NEAREST] = rescale_slice_32;
         s->rescale_slice[LINEAR] = rescale_slice_linear_32;
+        s->rescale_slice_h[LINEAR] = rescale_slice_linear_h_32;
+        s->rescale_slice_v[LINEAR] = rescale_slice_linear_v_32;
     } else if (s->dst_desc->comp[0].depth <= 32 && (s->dst_desc->flags & AV_PIX_FMT_FLAG_FLOAT)) {
         s->rescale_init = rescale_init_33;
         s->rescale_uninit = rescale_uninit_33;
         s->rescale_slice[NEAREST] = rescale_slice_33;
         s->rescale_slice[LINEAR] = rescale_slice_linear_33;
+        s->rescale_slice_h[LINEAR] = rescale_slice_linear_h_33;
+        s->rescale_slice_v[LINEAR] = rescale_slice_linear_v_33;
     } else {
         return AVERROR_BUG;
     }
@@ -207,10 +222,20 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         td.in = in;
         td.out = out;
 
-        nb_jobs = out->height;
+        if (s->rescale_slice_h[s->interpolation] &&
+            s->rescale_slice_v[s->interpolation] && s->htemp[0]) {
+            nb_jobs = in->height;
+            ff_filter_execute(ctx, s->rescale_slice_h[s->interpolation], &td, NULL,
+                              FFMIN(nb_jobs, ff_filter_get_nb_threads(ctx)));
 
-        ff_filter_execute(ctx, s->rescale_slice[s->interpolation], &td, NULL,
-                          FFMIN(nb_jobs, ff_filter_get_nb_threads(ctx)));
+            nb_jobs = out->width;
+            ff_filter_execute(ctx, s->rescale_slice_v[s->interpolation], &td, NULL,
+                              FFMIN(nb_jobs, ff_filter_get_nb_threads(ctx)));
+        } else {
+            nb_jobs = out->height;
+            ff_filter_execute(ctx, s->rescale_slice[s->interpolation], &td, NULL,
+                              FFMIN(nb_jobs, ff_filter_get_nb_threads(ctx)));
+        }
 
         av_frame_copy_props(out, in);
         ff_graph_frame_free(ctx, &in);
