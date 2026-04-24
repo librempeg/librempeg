@@ -113,11 +113,11 @@ static int fn(rescale_init)(AVFilterContext *ctx)
             return AVERROR(ENOMEM);
 
         s->coeffs_x[comp] = av_calloc(dst_cw, sizeof(im_type));
-        if (!s->indices_x[comp])
+        if (!s->coeffs_x[comp])
             return AVERROR(ENOMEM);
 
         s->coeffs_y[comp] = av_calloc(dst_ch, sizeof(im_type));
-        if (!s->indices_y[comp])
+        if (!s->coeffs_y[comp])
             return AVERROR(ENOMEM);
 
         coeffs_x = s->coeffs_x[comp];
