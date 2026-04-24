@@ -481,6 +481,8 @@ static int compile(SwsGraph *graph, const SwsOpBackend *backend,
     int ret = ff_sws_ops_compile(ctx, backend, ops, &p->comp);
     if (ret < 0)
         goto fail;
+    else if (!output)
+        goto fail; /* nothing to do, just return */
 
     const SwsCompiledOp *comp = &p->comp;
     const SwsFormat *dst = &ops->dst;
@@ -591,7 +593,8 @@ int ff_sws_compile_pass(SwsGraph *graph, const SwsOpBackend *backend,
 
     /* Check if the whole operation graph is an end-to-end no-op */
     if (ff_sws_op_list_is_noop(ops)) {
-        *output = input;
+        if (output)
+            *output = input;
         goto out;
     }
 
@@ -618,32 +621,36 @@ int ff_sws_compile_pass(SwsGraph *graph, const SwsOpBackend *backend,
 
     av_log(ctx, AV_LOG_DEBUG, "Retrying with separated filter passes.\n");
     SwsPass *prev = input;
+    bool first = true;
     while (ops) {
         SwsOpList *rest;
         ret = ff_sws_op_list_subpass(ops, &rest);
         if (ret < 0)
             goto out;
 
-        if (prev == input && !rest) {
+        if (first && !rest) {
             /* No point in compiling an unsplit pass again */
             ret = AVERROR(ENOTSUP);
             goto out;
         }
 
-        ret = compile(graph, backend, ops, prev, &prev);
+        ret = compile(graph, backend, ops, prev, output ? &prev : NULL);
         if (ret < 0) {
             ff_sws_op_list_free(&rest);
             goto out;
         }
 
         ff_sws_op_list_free(&ops);
+        first = false;
         ops = rest;
     }
 
-    /* Return last subpass successfully compiled */
-    av_log(ctx, AV_LOG_VERBOSE, "Using %d separate passes.\n",
-           graph->num_passes - passes_orig);
-    *output = prev;
+    if (output) {
+        /* Return last subpass successfully compiled */
+        av_log(ctx, AV_LOG_VERBOSE, "Using %d separate passes.\n",
+               graph->num_passes - passes_orig);
+        *output = prev;
+    }
 
 out:
     if (ret == AVERROR(ENOTSUP)) {
