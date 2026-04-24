@@ -28,13 +28,15 @@
 #undef IFACTOR
 #undef IROUND
 #undef im_type
+#undef if_type
 #undef inc_type
 #undef pixel_type
 #if DEPTH == 8
 #define FACTOR 2048
 #define IFACTOR (FACTOR-1)
 #define IROUND (FACTOR * FACTOR / 2)
-#define im_type unsigned
+#define im_type uint16_t
+#define if_type unsigned
 #define inc_type int64_t
 #define pixel_type uint8_t
 #define SH(x) ((x) >> SHIFT)
@@ -44,7 +46,8 @@
 #define FACTOR 2048
 #define IFACTOR (FACTOR-1)
 #define IROUND (FACTOR * FACTOR / 2)
-#define im_type int64_t
+#define im_type uint16_t
+#define if_type uint64_t
 #define inc_type int64_t
 #define pixel_type uint16_t
 #define SH(x) ((x) >> SHIFT)
@@ -54,7 +57,8 @@
 #define FACTOR 2048
 #define IFACTOR (FACTOR-1)
 #define IROUND (FACTOR * FACTOR / 2)
-#define im_type int64_t
+#define im_type uint16_t
+#define if_type uint64_t
 #define inc_type int64_t
 #define pixel_type uint32_t
 #define SH(x) ((x) >> SHIFT)
@@ -65,6 +69,7 @@
 #define IFACTOR 0.f
 #define IROUND 0.f
 #define im_type float
+#define if_type float
 #define inc_type float
 #define pixel_type float
 #define SH(x) (x)
@@ -243,8 +248,8 @@ static int fn(rescale_slice_linear)(AVFilterContext *ctx, void *arg, int jobnr, 
             const int sy = indices_y[y];
             const pixel_type *src_data = (const pixel_type *)(in->data[comp] + sy * in_linesize);
             const pixel_type *src_data2 = (const pixel_type *)(in->data[comp] + (sy+(sy+1<src_ch)) * in_linesize);
-            const im_type fracy = coeffs_y[y];
-            const im_type ffracy = FACTOR-fracy;
+            const if_type fracy = coeffs_y[y];
+            const if_type ffracy = FACTOR-fracy;
 
             if (dst_cw == src_cw && dst_ch == src_ch) {
                 memcpy(dst_data, src_data, dst_cw * sizeof(*dst_data));
@@ -254,8 +259,8 @@ static int fn(rescale_slice_linear)(AVFilterContext *ctx, void *arg, int jobnr, 
             for (int x = 0; x < dst_cw; x++) {
                 const int sx = indices_x[x];
                 const int o = (sx+1)<src_cw;
-                const im_type fracx = coeffs_x[x];
-                const im_type ffracx = FACTOR-fracx;
+                const if_type fracx = coeffs_x[x];
+                const if_type ffracx = FACTOR-fracx;
 
                 dst_data[x] = (src_data[sx+0] * ffracx * ffracy +
                                src_data[sx+o] * fracx * ffracy +
