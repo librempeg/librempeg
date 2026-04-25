@@ -333,6 +333,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             return AVERROR(ENOMEM);
         }
 
+        out->format = outlink->format;
         out->nb_samples = in->nb_samples;
         ret = ff_filter_get_buffer(ctx, out);
         if (ret < 0) {
