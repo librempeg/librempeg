@@ -200,6 +200,7 @@ extern const FFFilter ff_af_stereotools;
 extern const FFFilter ff_af_stereowiden;
 extern const FFFilter ff_af_superequalizer;
 extern const FFFilter ff_af_surround;
+extern const FFFilter ff_af_thdn;
 extern const FFFilter ff_af_tiltshelf;
 extern const FFFilter ff_af_tonedetect;
 extern const FFFilter ff_af_transform;
