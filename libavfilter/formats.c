@@ -718,6 +718,14 @@ AVFilterFormats *ff_all_color_ranges(void)
     return ret;
 }
 
+AVFilterFormats *ff_alpha_mode_straight(void)
+{
+    AVFilterFormats *ret = NULL;
+    if (ff_add_format(&ret, AVALPHA_MODE_STRAIGHT) < 0)
+            return NULL;
+    return ret;
+}
+
 AVFilterFormats *ff_all_alpha_modes(void)
 {
     AVFilterFormats *ret = NULL;
@@ -945,6 +953,11 @@ int ff_set_common_alpha_modes_from_list(AVFilterContext *ctx,
                                         const int *alpha_modes)
 {
     return ff_set_common_alpha_modes(ctx, ff_make_format_list(alpha_modes));
+}
+
+int ff_set_common_alpha_mode_straight(AVFilterContext *ctx)
+{
+    return ff_set_common_alpha_modes(ctx, ff_alpha_mode_straight());
 }
 
 int ff_set_common_all_alpha_modes(AVFilterContext *ctx)
@@ -1256,7 +1269,7 @@ int ff_default_query_formats(AVFilterContext *ctx)
         ret = ff_set_common_all_color_ranges(ctx);
         if (ret < 0)
             return ret;
-        ret = ff_set_common_all_alpha_modes(ctx);
+        ret = ff_set_common_alpha_mode_straight(ctx);
         if (ret < 0)
             return ret;
     }
