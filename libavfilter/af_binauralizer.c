@@ -68,7 +68,7 @@ typedef struct BinauralizerContext {
 } BinauralizerContext;
 
 typedef struct ThreadData {
-    AVFrame *in;
+    AVFrame *in, *out;
     int nb_samples;
     int offset;
 } ThreadData;

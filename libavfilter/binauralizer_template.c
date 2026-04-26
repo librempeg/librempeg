@@ -61,8 +61,7 @@ typedef struct fn(StateInContext) {
     ftype *in_frame;
     ftype *iwindowed_frame;
     ctype *owindowed_frame;
-    ctype *windowed_outl;
-    ctype *windowed_outr;
+    ctype *windowed_out[2];
 
     AVTXContext *tx_ctx;
     av_tx_fn tx_fn;
@@ -101,10 +100,10 @@ static int fn(ba_init)(AVFilterContext *ctx)
         stc->in_frame = av_calloc(s->rdft_size + 2, sizeof(*stc->in_frame));
         stc->iwindowed_frame = av_calloc(s->rdft_size + 2, sizeof(*stc->iwindowed_frame));
         stc->owindowed_frame = av_calloc(s->rdft_size + 2, sizeof(*stc->owindowed_frame));
-        stc->windowed_outl = av_calloc(s->rdft_size + 2, sizeof(*stc->windowed_outl));
-        stc->windowed_outr = av_calloc(s->rdft_size + 2, sizeof(*stc->windowed_outr));
+        stc->windowed_out[0] = av_calloc(s->rdft_size + 2, sizeof(*stc->windowed_out[0]));
+        stc->windowed_out[1] = av_calloc(s->rdft_size + 2, sizeof(*stc->windowed_out[1]));
         if (!stc->in_frame || !stc->iwindowed_frame || !stc->owindowed_frame ||
-            !stc->windowed_outl || !stc->windowed_outr)
+            !stc->windowed_out[0] || !stc->windowed_out[1])
             return AVERROR(ENOMEM);
 
         ret = av_tx_init(&stc->tx_ctx, &stc->tx_fn, TX_TYPE, 0, s->rdft_size, &scale, 0);
@@ -211,7 +210,7 @@ static void fn(get_angle_depth)(const AVChannelLayout *ch_layout, const int ch,
     *depth = (d + y_off * F(90.0)) * F(M_PI/180.0);
 }
 
-static int fn(ba_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+static int fn(ba_in_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     BinauralizerContext *s = ctx->priv;
     fn(StateInContext) *state_in = s->state_in;
@@ -239,8 +238,8 @@ static int fn(ba_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     for (int ch = start; ch < end; ch++) {
         fn(StateInContext) *stc = &state_in[ch];
         const ftype igain = i_gain[FFMIN(ch, nb_i_gain-1)];
-        ctype *windowed_outl = stc->windowed_outl;
-        ctype *windowed_outr = stc->windowed_outr;
+        ctype *windowed_outl = stc->windowed_out[0];
+        ctype *windowed_outr = stc->windowed_out[1];
         ftype *iwindowed = stc->iwindowed_frame;
         ctype *owindowed = stc->owindowed_frame;
         ftype *in = stc->in_frame;
@@ -271,125 +270,87 @@ static int fn(ba_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     return 0;
 }
 
-static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int doffset)
+static int fn(ba_out_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     BinauralizerContext *s = ctx->priv;
-    fn(StateOutContext) *state_out = s->state_out;
     fn(StateInContext) *state_in = s->state_in;
+    fn(StateOutContext) *state_out = s->state_out;
+    ftype *ch_out = state_out[jobnr].out_dist_frame;
+    ftype *windowed = state_out[jobnr].windowed_frame;
+    ctype *windowedo = state_out[jobnr].windowed_out;
     const AVChannelLayout *ch_layout = &ctx->inputs[0]->ch_layout;
-    ftype *left_out        = state_out[0].out_dist_frame;
-    ftype *right_out       = state_out[1].out_dist_frame;
-    ftype *windowed_left   = state_out[0].windowed_frame;
-    ftype *windowed_right  = state_out[1].windowed_frame;
-    ctype *windowed_oleft  = state_out[0].windowed_out;
-    ctype *windowed_oright = state_out[1].windowed_out;
-    ftype *left_osamples   = ((ftype *)out->extended_data[0]) + doffset;
-    ftype *right_osamples  = ((ftype *)out->extended_data[1]) + doffset;
     const int nb_in_channels = ch_layout->nb_channels;
     const int overlap = s->overlap;
-    const int nb_samples = FFMIN(overlap, in->nb_samples - doffset);
-    const int out_nb_samples = FFMIN(overlap, out->nb_samples - doffset);
     const int offset = s->rdft_size - overlap;
     const int N = s->rdft_size/2 + 1;
+    ThreadData *td = arg;
+    AVFrame *out = td->out;
+    const int doffset = td->offset;
+    ftype *osamples = ((ftype *)out->extended_data[jobnr]) + doffset;
+    const int out_nb_samples = FFMIN(overlap, out->nb_samples - doffset);
     const ftype G = s->gain;
-    ThreadData td;
 
-    memset(windowed_oleft, 0, N * sizeof(*windowed_oleft));
-    memset(windowed_oright, 0, N * sizeof(*windowed_oright));
-
-    td.offset = doffset;
-    td.nb_samples = nb_samples;
-    td.in = in;
-    ff_filter_execute(ctx, fn(ba_channels), &td, NULL,
-                      FFMIN(nb_in_channels, ff_filter_get_nb_threads(ctx)));
+    memset(windowedo, 0, N * sizeof(*windowedo));
 
     for (int ch = 0; ch < nb_in_channels; ch++) {
         fn(StateInContext) *stc = &state_in[ch];
-        const ctype *windowed_outl = stc->windowed_outl;
-        const ctype *windowed_outr = stc->windowed_outr;
+        const ctype *windowed_out = stc->windowed_out[jobnr];
 
         for (int n = 0; n < N; n++) {
-            windowed_oleft[n].re  += windowed_outl[n].re;
-            windowed_oleft[n].im  += windowed_outl[n].im;
-            windowed_oright[n].re += windowed_outr[n].re;
-            windowed_oright[n].im += windowed_outr[n].im;
+            windowedo[n].re  += windowed_out[n].re;
+            windowedo[n].im  += windowed_out[n].im;
         }
     }
 
-    state_out[0].itx_fn(state_out[0].itx_ctx, windowed_left, windowed_oleft, sizeof(ctype));
-    state_out[1].itx_fn(state_out[1].itx_ctx, windowed_right, windowed_oright, sizeof(ctype));
+    state_out[jobnr].itx_fn(state_out[jobnr].itx_ctx, windowed, windowedo, sizeof(ctype));
 
-    memmove(left_out, &left_out[overlap], offset * sizeof(*left_out));
-    memmove(right_out, &right_out[overlap], offset * sizeof(*right_out));
-    memset(&left_out[offset], 0, overlap * sizeof(*left_out));
-    memset(&right_out[offset], 0, overlap * sizeof(*right_out));
+    memmove(ch_out, &ch_out[overlap], offset * sizeof(*ch_out));
+    memset(&ch_out[offset], 0, overlap * sizeof(*ch_out));
 
-    fn(apply_window)(s, windowed_left,  left_out,  1, G);
-    fn(apply_window)(s, windowed_right, right_out, 1, G);
+    fn(apply_window)(s, windowed,  ch_out,  1, G);
 
-    memcpy(left_osamples, left_out, out_nb_samples * sizeof(*left_osamples));
-    memcpy(right_osamples, right_out, out_nb_samples * sizeof(*right_osamples));
+    memcpy(osamples, ch_out, out_nb_samples * sizeof(*osamples));
+
+    return 0;
+}
+
+static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int doffset)
+{
+    BinauralizerContext *s = ctx->priv;
+    const AVChannelLayout *ch_layout = &ctx->inputs[0]->ch_layout;
+    const int nb_in_channels = ch_layout->nb_channels;
+    const int overlap = s->overlap;
+    const int nb_samples = FFMIN(overlap, in->nb_samples - doffset);
+    ThreadData td;
+
+    td.offset = doffset;
+    td.nb_samples = nb_samples;
+    td.out = out;
+    td.in = in;
+    ff_filter_execute(ctx, fn(ba_in_channels), &td, NULL,
+                      FFMIN(nb_in_channels, ff_filter_get_nb_threads(ctx)));
+
+    ff_filter_execute(ctx, fn(ba_out_channels), &td, NULL,
+                      FFMIN(2, ff_filter_get_nb_threads(ctx)));
 
     return 0;
 }
 
 static int fn(ba_flush)(AVFilterContext *ctx, AVFrame *out, const int doffset)
 {
-    BinauralizerContext *s = ctx->priv;
-    fn(StateOutContext) *state_out = s->state_out;
     const AVChannelLayout *ch_layout = &ctx->inputs[0]->ch_layout;
-    ftype *left_out        = state_out[0].out_dist_frame;
-    ftype *right_out       = state_out[1].out_dist_frame;
-    ftype *windowed_left   = state_out[0].windowed_frame;
-    ftype *windowed_right  = state_out[1].windowed_frame;
-    ctype *windowed_oleft  = state_out[0].windowed_out;
-    ctype *windowed_oright = state_out[1].windowed_out;
-    ftype *left_osamples   = (ftype *)out->extended_data[0];
-    ftype *right_osamples  = (ftype *)out->extended_data[1];
     const int nb_in_channels = ch_layout->nb_channels;
-    const int overlap = s->overlap;
-    const int offset = s->rdft_size - overlap;
-    const int N = s->rdft_size/2 + 1;
-    const int nb_samples = 0;
-    const ftype G = s->gain;
     ThreadData td;
 
-    memset(windowed_oleft, 0, N * sizeof(*windowed_oleft));
-    memset(windowed_oright, 0, N * sizeof(*windowed_oright));
-
     td.offset = doffset;
-    td.nb_samples = nb_samples;
+    td.nb_samples = 0;
+    td.out = out;
     td.in = NULL;
-    ff_filter_execute(ctx, fn(ba_channels), &td, NULL,
+    ff_filter_execute(ctx, fn(ba_in_channels), &td, NULL,
                       FFMIN(nb_in_channels, ff_filter_get_nb_threads(ctx)));
 
-    for (int ch = 0; ch < nb_in_channels; ch++) {
-        fn(StateInContext) *state_in = s->state_in;
-        fn(StateInContext) *stc = &state_in[ch];
-        const ctype *windowed_outl = stc->windowed_outl;
-        const ctype *windowed_outr = stc->windowed_outr;
-
-        for (int n = 0; n < N; n++) {
-            windowed_oleft[n].re  += windowed_outl[n].re;
-            windowed_oleft[n].im  += windowed_outl[n].im;
-            windowed_oright[n].re += windowed_outr[n].re;
-            windowed_oright[n].im += windowed_outr[n].im;
-        }
-    }
-
-    state_out[0].itx_fn(state_out[0].itx_ctx, windowed_left, windowed_oleft, sizeof(ctype));
-    state_out[1].itx_fn(state_out[1].itx_ctx, windowed_right, windowed_oright, sizeof(ctype));
-
-    memmove(left_out, &left_out[overlap], offset * sizeof(*left_out));
-    memmove(right_out, &right_out[overlap], offset * sizeof(*right_out));
-    memset(&left_out[offset], 0, overlap * sizeof(*left_out));
-    memset(&right_out[offset], 0, overlap * sizeof(*right_out));
-
-    fn(apply_window)(s, windowed_left,  left_out,  1, G);
-    fn(apply_window)(s, windowed_right, right_out, 1, G);
-
-    memcpy(left_osamples, left_out, out->nb_samples * sizeof(*left_osamples));
-    memcpy(right_osamples, right_out, out->nb_samples * sizeof(*right_osamples));
+    ff_filter_execute(ctx, fn(ba_out_channels), &td, NULL,
+                      FFMIN(2, ff_filter_get_nb_threads(ctx)));
 
     return 0;
 }
@@ -407,8 +368,8 @@ static void fn(ba_uninit)(AVFilterContext *ctx)
             av_freep(&stc->in_frame);
             av_freep(&stc->iwindowed_frame);
             av_freep(&stc->owindowed_frame);
-            av_freep(&stc->windowed_outl);
-            av_freep(&stc->windowed_outr);
+            av_freep(&stc->windowed_out[0]);
+            av_freep(&stc->windowed_out[1]);
 
             av_tx_uninit(&stc->tx_ctx);
         }
