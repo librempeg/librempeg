@@ -57,8 +57,6 @@
 #define fn(a)      fn2(a, SAMPLE_FORMAT)
 
 typedef struct fn(StateContext) {
-    AVFrame *in;
-
     ftype *prev_frame;
     ftype *lossy_frame;
     ftype *in_buffer;
