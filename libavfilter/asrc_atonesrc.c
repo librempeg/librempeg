@@ -85,7 +85,7 @@ static av_cold int query_formats(const AVFilterContext *ctx,
     int sample_rates[] = { s->sample_rate, -1 };
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_DBLP,
                                                        AV_SAMPLE_FMT_NONE };
-    int ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
+    int ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
     if (ret < 0)
         return ret;
 
