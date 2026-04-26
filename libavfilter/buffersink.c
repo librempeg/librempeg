@@ -292,7 +292,7 @@ static int vsink_query_formats(const AVFilterContext *ctx,
     const BufferSinkContext *buf = ctx->priv;
 
     if (buf->nb_pixel_formats) {
-        int ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, buf->pixel_formats);
+        int ret = ff_set_pixel_formats_from_list2(ctx, cfg_in, cfg_out, buf->pixel_formats);
         if (ret < 0)
             return ret;
     }
@@ -322,7 +322,7 @@ static int asink_query_formats(const AVFilterContext *ctx,
     const BufferSinkContext *buf = ctx->priv;
 
     if (buf->nb_sample_formats) {
-        int ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, buf->sample_formats);
+        int ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, buf->sample_formats);
         if (ret < 0)
             return ret;
     }
