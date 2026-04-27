@@ -926,6 +926,7 @@ static const AVFilterPad showinfo_inputs[] = {
         .type             = AVMEDIA_TYPE_VIDEO,
         .filter_frame     = filter_frame,
         .config_props     = config_props_in,
+        .get_buffer.video = ff_null_get_video_buffer,
     },
 };
 

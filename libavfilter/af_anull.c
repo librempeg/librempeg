@@ -27,10 +27,18 @@
 #include "filters.h"
 #include "libavutil/internal.h"
 
+static const AVFilterPad anull_inputs[] = {
+    {
+        .name             = "default",
+        .type             = AVMEDIA_TYPE_AUDIO,
+        .get_buffer.audio = ff_null_get_audio_buffer,
+    },
+};
+
 const FFFilter ff_af_anull = {
     .p.name        = "anull",
     .p.description = NULL_IF_CONFIG_SMALL("Pass the source unchanged to the output."),
     .p.flags       = AVFILTER_FLAG_METADATA_ONLY,
-    FILTER_INPUTS(ff_audio_default_filterpad),
+    FILTER_INPUTS(anull_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
 };
