@@ -18,6 +18,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/thread.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
 #include "libavutil/mem.h"
@@ -30,6 +31,7 @@ typedef struct AudioMultiplyContext {
     const AVClass *class;
 
     AVFrame *frames[2];
+
     int planes;
     int channels;
 } AudioMultiplyContext;
@@ -65,75 +67,125 @@ static int multiply_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_
     return 0;
 }
 
-static int activate(AVFilterContext *ctx)
+static int filter_prepare(AVFilterContext *ctx)
 {
+    AVFilterLink *outlink = ctx->outputs[0];
     AudioMultiplyContext *s = ctx->priv;
+    int ret;
 
-    FF_FILTER_FORWARD_STATUS_BACK_ALL(ctx->outputs[0], ctx);
+    if (s->frames[0] && s->frames[1]) {
+        ff_graph_frame_free(ctx, &s->frames[0]);
+        ff_graph_frame_free(ctx, &s->frames[1]);
+    }
+
+    ret = ff_outlink_get_status(outlink);
+    if (ret) {
+        for (int i = 0; i < 2; i++)
+            ff_inlink_set_status(ctx->inputs[i], ret);
+        return AVERROR_EOF;
+    }
 
     if (!s->frames[0]) {
-        int ret = ff_inlink_consume_frame(ctx->inputs[0], &s->frames[0]);
+        ret = ff_inlink_consume_frame(ctx->inputs[0], &s->frames[0]);
         if (ret < 0)
             return ret;
     }
 
     if (s->frames[0] && !s->frames[1]) {
-        int ret = ff_inlink_consume_samples(ctx->inputs[1],
-                                            s->frames[0]->nb_samples,
-                                            s->frames[0]->nb_samples,
-                                            &s->frames[1]);
+        ret = ff_inlink_consume_samples(ctx->inputs[1],
+                                        s->frames[0]->nb_samples,
+                                        s->frames[0]->nb_samples,
+                                        &s->frames[1]);
         if (ret < 0)
             return ret;
     }
 
-    if (s->frames[0] && s->frames[1]) {
-        AVFrame *out;
-
-        if (ff_filter_disabled(ctx)) {
-            out = s->frames[0];
-
-            s->frames[0] = NULL;
-            ff_graph_frame_free(ctx, &s->frames[1]);
-
-            return ff_filter_frame(ctx->outputs[0], out);
-        }
-
-        out = ff_get_audio_buffer(ctx->outputs[0], s->frames[0]->nb_samples);
-        if (!out) {
-            av_frame_free(&s->frames[0]);
-            av_frame_free(&s->frames[1]);
-            return AVERROR(ENOMEM);
-        }
-        av_frame_copy_props(out, s->frames[0]);
-
-        ff_filter_execute(ctx, multiply_channels, out, NULL,
-                          FFMIN(s->planes, ff_filter_get_nb_threads(ctx)));
-
-        ff_graph_frame_free(ctx, &s->frames[0]);
-        ff_graph_frame_free(ctx, &s->frames[1]);
-
-        return ff_filter_frame(ctx->outputs[0], out);
-    }
+    if (s->frames[0] && s->frames[1])
+        return 0;
 
     for (int i = 0; i < 2; i++) {
         int64_t pts;
         int status;
 
         if (ff_inlink_acknowledge_status(ctx->inputs[i], &status, &pts)) {
-            ff_outlink_set_status(ctx->outputs[0], status, pts);
-            return 0;
+            ff_outlink_set_status(outlink, status, pts);
+            return AVERROR_EOF;
         }
     }
 
-    if (ff_outlink_frame_wanted(ctx->outputs[0])) {
+    if (ff_outlink_frame_wanted(outlink)) {
         for (int i = 0; i < 2; i++) {
             if (s->frames[i])
                 continue;
+
             ff_inlink_request_frame(ctx->inputs[i]);
-            return 0;
+            return AVERROR(EAGAIN);
         }
     }
+
+    return AVERROR(EAGAIN);
+}
+
+#if CONFIG_AVFILTER_THREAD_FRAME
+static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
+{
+    const AudioMultiplyContext *s_src = src->priv;
+    AudioMultiplyContext       *s_dst = dst->priv;
+
+    if (!ff_filter_is_frame_thread(dst) || ff_filter_is_frame_thread(src))
+        return 0;
+
+    av_frame_free(&s_dst->frames[0]);
+    av_frame_free(&s_dst->frames[1]);
+
+    if (s_src->frames[0]) {
+        s_dst->frames[0] = ff_graph_frame_clone(dst, s_src->frames[0]);
+        if (!s_dst->frames[0])
+            return AVERROR(ENOMEM);
+    }
+
+    if (s_src->frames[1]) {
+        s_dst->frames[1] = ff_graph_frame_clone(dst, s_src->frames[1]);
+        if (!s_dst->frames[1])
+            return AVERROR(ENOMEM);
+    }
+
     return 0;
+}
+#endif
+
+static int activate(AVFilterContext *ctx)
+{
+    AVFilterLink *outlink = ctx->outputs[0];
+    AudioMultiplyContext *s = ctx->priv;
+    AVFrame *out;
+    int ret;
+
+    if (!s->frames[0] || !s->frames[1])
+        return AVERROR_EOF;
+
+    if (ff_filter_disabled(ctx)) {
+        out = s->frames[0];
+
+        return ff_filter_frame(outlink, out);
+    }
+
+    out = ff_graph_frame_alloc(ctx);
+    if (!out)
+        return AVERROR(ENOMEM);
+
+    out->nb_samples = s->frames[0]->nb_samples;
+    ret = ff_filter_get_buffer(ctx, out);
+    if (ret < 0) {
+        av_frame_free(&out);
+        return ret;
+    }
+    av_frame_copy_props(out, s->frames[0]);
+
+    ff_filter_execute(ctx, multiply_channels, out, NULL,
+                      FFMIN(s->planes, ff_filter_get_nb_threads(ctx)));
+
+    return ff_filter_frame(outlink, out);
 }
 
 static int config_output(AVFilterLink *outlink)
@@ -180,11 +232,16 @@ const FFFilter ff_af_amultiply = {
     .p.description  = NULL_IF_CONFIG_SMALL("Multiply two audio streams."),
     .priv_size      = sizeof(AudioMultiplyContext),
     .uninit         = uninit,
+    .filter_prepare = filter_prepare,
     .activate       = activate,
+#if CONFIG_AVFILTER_THREAD_FRAME
+    .transfer_state = transfer_state,
+#endif
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_FLTP,
                       AV_SAMPLE_FMT_DBL, AV_SAMPLE_FMT_DBLP),
     .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                      AVFILTER_FLAG_FRAME_THREADS |
                       AVFILTER_FLAG_SLICE_THREADS,
 };
