@@ -275,6 +275,7 @@ static int nuv_packet(AVFormatContext *s, AVPacket *pkt)
                 avio_skip(pb, size);
                 break;
             }
+            av_fallthrough;
         case NUV_VIDEO:
             if (ctx->v_id < 0) {
                 av_log(s, AV_LOG_ERROR, "Video packet in file without video stream!\n");
