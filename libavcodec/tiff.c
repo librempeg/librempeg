@@ -1294,6 +1294,7 @@ static int tiff_decode_tag(TiffContext *s, AVFrame *frame)
             if (count <= 4) {
                 break;
             }
+            av_fallthrough;
         default:
             value = UINT_MAX;
         }
