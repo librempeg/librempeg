@@ -1055,6 +1055,24 @@ static void id3v2_parse(AVIOContext *pb, AVDictionary **metadata,
                     pbx = &pb_local.pub; // read from sync buffer
                 }
 #endif
+            if (s && (s->debug & FF_FDEBUG_ID3V2)) {
+                int64_t pos = avio_tell(pbx);
+                uint8_t *buf = av_malloc(tlen);
+                if (buf) {
+                    AVBPrint bp;
+                    int n = avio_read(pbx, buf, tlen);
+                    av_bprint_init(&bp, 0, AV_BPRINT_SIZE_UNLIMITED);
+                    av_bprintf(&bp, "|");
+                    for (int i = 0; i < n; i++)
+                        av_bprintf(&bp, "%c", buf[i] >= 0x20 && buf[i] < 0x7f ? buf[i] : '.');
+                    av_bprintf(&bp, "|");
+                    av_log(NULL, AV_LOG_INFO, "ID3v2 frame %.4s (%d bytes):%s\n",
+                           tag, tlen, bp.str);
+                    av_bprint_finalize(&bp, NULL);
+                    av_free(buf);
+                    avio_seek(pbx, pos, SEEK_SET);
+                }
+            }
             if (tag[0] == 'T')
                 /* parse text tag */
                 read_ttag(s, pbx, tlen, metadata, tag);

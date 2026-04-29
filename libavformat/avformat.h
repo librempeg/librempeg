@@ -1539,6 +1539,7 @@ typedef struct AVFormatContext {
      */
     int debug;
 #define FF_FDEBUG_TS        0x0001
+#define FF_FDEBUG_ID3V2     0x0002
 
     /**
      * The maximum number of streams.
