@@ -243,13 +243,13 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_in,
                          AVFilterFormatsConfig **cfg_out)
 {
-    AVFilterFormats *formats = NULL;
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_NONE };
     static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_RGBA, AV_PIX_FMT_RGB0, AV_PIX_FMT_NONE };
     static const AVChannelLayout layouts[] = {
         AV_CHANNEL_LAYOUT_STEREO,
         { .nb_channels = 0 },
     };
+    AVFilterFormats *formats;
     int ret;
 
     formats = ff_make_format_list(sample_fmts);
