@@ -710,14 +710,16 @@ static int activate(AVFilterContext *ctx)
         return ret;
     if (ret > 0) {
         double *e = (double *)s->enabled->extended_data[0];
+        const double v = !ff_filter_disabled(ctx);
+        const int nb_samples = in->nb_samples;
 
         if (s->pts == AV_NOPTS_VALUE)
             s->pts = in->pts;
 
         ret = av_audio_fifo_write(s->fifo, (void **)in->extended_data,
                                   in->nb_samples);
-        for (int i = 0; i < in->nb_samples; i++)
-            e[i] = !ff_filter_disabled(ctx);
+        for (int i = 0; i < nb_samples; i++)
+            e[i] = v;
 
         av_audio_fifo_write(s->efifo, (void**)s->enabled->extended_data, in->nb_samples);
         ff_graph_frame_free(ctx, &in);
