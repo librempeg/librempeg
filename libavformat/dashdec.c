@@ -1975,7 +1975,9 @@ static int open_demux_for_component(AVFormatContext *s, struct representation *p
 
     for (i = 0; i < pls->ctx->nb_streams; i++) {
         AVStream *st = avformat_new_stream(s, NULL);
-        AVStream *ist = pls->ctx->streams[i];
+        FFStream *sti = ffstream(st);
+        const AVStream *ist = pls->ctx->streams[i];
+        const FFStream *isti = cffstream(ist);
         if (!st)
             return AVERROR(ENOMEM);
 
@@ -1989,6 +1991,7 @@ static int open_demux_for_component(AVFormatContext *s, struct representation *p
 
         // copy disposition
         st->disposition = ist->disposition;
+        sti->need_parsing = isti->need_parsing;
     }
 
     for (i = 0; i < pls->ctx->nb_stream_groups; i++) {
