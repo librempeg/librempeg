@@ -3054,6 +3054,33 @@ static int mov_parse_stsd_data(MOVContext *c, AVIOContext *pb,
                 }
             }
         }
+    } else if (st->codecpar->codec_id == AV_CODEC_ID_ITUT_T35) {
+        int t35_identifier_length = avio_r8(pb);
+
+        if (t35_identifier_length <= 0 || t35_identifier_length >= size)
+            return AVERROR_INVALIDDATA;
+
+        ret = ff_get_extradata(c->fc, st->codecpar, pb, t35_identifier_length);
+        if (ret < 0)
+            return ret;
+
+        int hrsd_len = size - t35_identifier_length - 1;
+        if (hrsd_len > 0) {
+            uint8_t *hrsd_str = av_malloc(hrsd_len + 1);
+            if (!hrsd_str)
+                return AVERROR(ENOMEM);
+
+            ret = ffio_read_size(pb, hrsd_str, hrsd_len);
+            if (ret < 0) {
+                av_free(hrsd_str);
+                return ret;
+            }
+            if (hrsd_str[0]) {
+                hrsd_str[hrsd_len] = 0;
+                ret = av_dict_set(&st->metadata, "description", hrsd_str, AV_DICT_DONT_OVERWRITE);
+            }
+            av_free(hrsd_str);
+        }
     } else {
         /* other codec type, just skip (rtp, mp4s ...) */
         avio_skip(pb, size);
