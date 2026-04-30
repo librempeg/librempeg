@@ -426,6 +426,22 @@ error:
     return ret;
 }
 
+static void print_test_params(char *buf, size_t buf_size,
+                              const AVFrame *src, const AVFrame *dst,
+                              const struct mode *mode, const struct options *opts)
+{
+    snprintf(buf, buf_size,
+             "%-*s %*dx%*d -> %-*s %*dx%*d, flags=0x%0*x dither=%u",
+             opts->pretty ? 14 : 0, av_get_pix_fmt_name(src->format),
+             opts->pretty ?  4 : 0, src->width,
+             opts->pretty ?  4 : 0, src->height,
+             opts->pretty ? 14 : 0, av_get_pix_fmt_name(dst->format),
+             opts->pretty ?  4 : 0, dst->width,
+             opts->pretty ?  4 : 0, dst->height,
+             opts->pretty ?  8 : 0, mode->flags,
+             mode->dither);
+}
+
 static void print_results(const AVFrame *ref, const AVFrame *src, const AVFrame *dst,
                           int dst_w, int dst_h,
                           const struct mode *mode, const struct options *opts,
@@ -433,16 +449,11 @@ static void print_results(const AVFrame *ref, const AVFrame *src, const AVFrame 
                           const struct test_results *ref_r,
                           float expected_loss)
 {
+    char buf[128];
+
     if (av_log_get_level() >= AV_LOG_INFO) {
-        printf("%-*s %*dx%*d -> %-*s %*dx%*d, flags=0x%0*x dither=%u",
-               opts->pretty ? 14 : 0, av_get_pix_fmt_name(src->format),
-               opts->pretty ?  4 : 0, src->width,
-               opts->pretty ?  4 : 0, src->height,
-               opts->pretty ? 14 : 0, av_get_pix_fmt_name(dst->format),
-               opts->pretty ?  4 : 0, dst->width,
-               opts->pretty ?  4 : 0, dst->height,
-               opts->pretty ?  8 : 0, mode->flags,
-               mode->dither);
+        print_test_params(buf, sizeof(buf), src, dst, mode, opts);
+        printf("%s", buf);
 
         if (!opts->bench || !ref_r) {
             printf(", SSIM={Y=%f U=%f V=%f A=%f} loss=%e",
@@ -480,6 +491,10 @@ static void print_results(const AVFrame *ref, const AVFrame *src, const AVFrame 
         const int bad = r->loss - expected_loss > 1e-2;
         const int level = bad ? AV_LOG_ERROR : AV_LOG_WARNING;
         const char *worse_str = bad ? "WORSE" : "worse";
+        if (bad) {
+            print_test_params(buf, sizeof(buf), src, dst, mode, opts);
+            av_log(NULL, level, "%s\n", buf);
+        }
         av_log(NULL, level,
                "  loss %e is %s by %e, expected loss %e\n",
                r->loss, worse_str, r->loss - expected_loss, expected_loss);
@@ -498,6 +513,10 @@ static void print_results(const AVFrame *ref, const AVFrame *src, const AVFrame 
         const int bad = r->loss - ref_r->loss > 1e-2 && dst_bits > 1;
         const int level = bad ? AV_LOG_ERROR : AV_LOG_WARNING;
         const char *worse_str = bad ? "WORSE" : "worse";
+        if (bad) {
+            print_test_params(buf, sizeof(buf), src, dst, mode, opts);
+            av_log(NULL, level, "%s\n", buf);
+        }
         av_log(NULL, level,
                "  loss %e is %s by %e, ref loss %e SSIM={Y=%f U=%f V=%f A=%f}\n",
                r->loss, worse_str, r->loss - ref_r->loss, ref_r->loss,
