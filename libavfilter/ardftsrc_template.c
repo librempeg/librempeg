@@ -243,11 +243,11 @@ static int fn(src_init)(AVFilterContext *ctx)
     if (!s->phase)
         return AVERROR(ENOMEM);
     phase = s->phase;
-    const int N = s->tr_nb_samples - (trim_start+trim_stop);
+    const int N = s->tr_nb_samples;
     for (int n = 0; n < N; n++) {
         const ftype aphase = FABS(s->phaset);
         const ftype sgn = s->phaset < F(0.0) ? F(-1.0) : F(1.0);
-        const ftype x = (F(n) + F(0.5)) / N;
+        const ftype x = F(n) / F(N);
         const ftype a = asin(aphase * x) * 40 * sgn;
 
         phase[n].re = FCOS(a);
