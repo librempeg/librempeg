@@ -31,6 +31,8 @@
 #undef FTANH
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
+#undef SCALE
+#undef OFFSET
 #if DEPTH == 8
 #define FCOS cosf
 #define FSIN sinf
@@ -43,6 +45,8 @@
 #define SAMPLE_FORMAT u8p
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
+#define SCALE (F(1.0)/F(1<<(DEPTH-1)))
+#define OFFSET(x) ((x) - 0x80)
 #elif DEPTH == 16
 #define FCOS cosf
 #define FSIN sinf
@@ -55,6 +59,8 @@
 #define SAMPLE_FORMAT s16p
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
+#define SCALE (F(1.0)/F(1<<(DEPTH-1)))
+#define OFFSET(x) (x)
 #elif DEPTH == 32
 #define FCOS cos
 #define FSIN sin
@@ -67,6 +73,8 @@
 #define SAMPLE_FORMAT s32p
 #define ttype AVComplexDouble
 #define TX_TYPE AV_TX_DOUBLE_RDFT
+#define SCALE (F(1.0)/F(1LL<<(DEPTH-1)))
+#define OFFSET(x) (x)
 #elif DEPTH == 33
 #define FCOS cosf
 #define FSIN sinf
@@ -515,15 +523,9 @@ redo:
     if (s->in_planar) {
         const itype *src = ((const itype *)in->extended_data[ch]) + soffset;
         ftype *rdft0o = rdft + in_offset;
-#if DEPTH == 8
+#if DEPTH == 8 || DEPTH == 16 || DEPTH == 32
         for (int n = 0; n < copy_samples; n++)
-            rdft0o[n] = (src[n] - 0x80) * (F(1.0)/F(1<<(DEPTH-1)));
-#elif DEPTH == 16
-        for (int n = 0; n < copy_samples; n++)
-            rdft0o[n] = src[n] * (F(1.0)/F(1<<(DEPTH-1)));
-#elif DEPTH == 32
-        for (int n = 0; n < copy_samples; n++)
-            rdft0o[n] = src[n] * (F(1.0)/F(1LL<<(DEPTH-1)));
+            rdft0o[n] = OFFSET(src[n]) * SCALE;
 #else
         memcpy(rdft0o, src, copy_samples * sizeof(*rdft));
 #endif
@@ -531,15 +533,9 @@ redo:
         const int nb_channels = ctx->inputs[0]->ch_layout.nb_channels;
         const itype *src = ((const itype *)in->data[0]) + soffset * nb_channels;
         ftype *rdft0o = rdft + in_offset;
-#if DEPTH == 8
+#if DEPTH == 8 || DEPTH == 16 || DEPTH == 32
         for (int n = 0, m = ch; n < copy_samples; n++, m += nb_channels)
-            rdft0o[n] = (src[m] - 0x80) * (F(1.0)/F(1<<(DEPTH-1)));
-#elif DEPTH == 16
-        for (int n = 0, m = ch; n < copy_samples; n++, m += nb_channels)
-            rdft0o[n] = src[m] * (F(1.0)/F(1<<(DEPTH-1)));
-#elif DEPTH == 32
-        for (int n = 0, m = ch; n < copy_samples; n++, m += nb_channels)
-            rdft0o[n] = src[m] * (F(1.0)/F(1LL<<(DEPTH-1)));
+            rdft0o[n] = OFFSET(src[m]) * SCALE;
 #else
         for (int n = 0, m = ch; n < copy_samples; n++, m += nb_channels)
             rdft0o[n] = src[m];
