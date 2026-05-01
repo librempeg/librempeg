@@ -59,7 +59,6 @@ typedef struct AudioRDFTSRCContext {
     int flush_size;
     int64_t first_pts;
     int64_t eof_in_pts;
-    int64_t eof_out_pts;
     int status;
 
     void *over;
@@ -174,7 +173,7 @@ static int config_input(AVFilterLink *inlink)
         return 0;
     }
 
-    s->first_pts = s->eof_in_pts = s->eof_out_pts = AV_NOPTS_VALUE;
+    s->first_pts = s->eof_in_pts = AV_NOPTS_VALUE;
 
     outlink->time_base = (AVRational) {1, outlink->sample_rate};
 
@@ -347,11 +346,11 @@ static int flush_frame(AVFilterLink *outlink)
                       FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
     out->sample_rate = outlink->sample_rate;
-    out->pts = s->eof_out_pts;
+    out->pts = s->last_out_pts;
     out->duration = av_rescale_q(out->nb_samples,
                                  (AVRational){1, outlink->sample_rate},
                                  outlink->time_base);
-    out->pts -= out->duration;
+    s->last_out_pts += out->duration;
 
     s->done_flush = 1;
     return ff_filter_frame(outlink, out);
@@ -493,7 +492,6 @@ static int transfer_state(AVFilterContext *dst, const AVFilterContext *src)
 
     s_dst->last_out_pts = FFMAX(s_dst->last_out_pts, s_src->last_out_pts);
     s_dst->last_in_pts = FFMAX(s_dst->last_in_pts, s_src->last_in_pts);
-    s_dst->eof_out_pts = FFMAX(s_dst->eof_out_pts, s_src->eof_out_pts);
     s_dst->eof_in_pts = FFMAX(s_dst->eof_in_pts, s_src->eof_in_pts);
     s_dst->flush_size = FFMIN(s_dst->flush_size, s_src->flush_size);
     s_dst->trim_size = FFMIN(s_dst->trim_size, s_src->trim_size);
@@ -554,8 +552,7 @@ static int filter_prepare(AVFilterContext *ctx)
     ret = ff_outlink_get_status(outlink);
     if (ret) {
         ff_inlink_set_status(inlink, ret);
-        s->eof_out_pts = s->last_out_pts;
-        ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_out_pts);
+        ff_outlink_set_status(outlink, AVERROR_EOF, s->last_out_pts);
         return AVERROR_EOF;
     }
 
@@ -584,7 +581,7 @@ static int filter_prepare(AVFilterContext *ctx)
                 return 0;
             }
 
-            ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_out_pts);
+            ff_outlink_set_status(outlink, AVERROR_EOF, s->last_out_pts);
             return AVERROR_EOF;
         }
 
@@ -597,7 +594,6 @@ static int filter_prepare(AVFilterContext *ctx)
         if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
             s->status = status;
             s->eof_in_pts = pts;
-            s->eof_out_pts = av_rescale_q(pts, inlink->time_base, outlink->time_base);
 
             if (ret == 0)
                 ff_filter_set_ready(ctx, 10);
