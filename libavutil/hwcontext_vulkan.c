@@ -3229,8 +3229,8 @@ static int vulkan_frames_init(AVHWFramesContext *hwfc)
             }
             vk->GetPhysicalDeviceFormatProperties2(dev_hwctx->phys_dev, fmt->fallback[i], &fmtp);
 
-            for (uint32_t i = 0; i < modp.drmFormatModifierCount; ++i) {
-                VkDrmFormatModifierPropertiesEXT *m = &modp.pDrmFormatModifierProperties[i];
+            for (uint32_t j = 0; j < modp.drmFormatModifierCount; ++j) {
+                VkDrmFormatModifierPropertiesEXT *m = &modp.pDrmFormatModifierProperties[j];
                 if (m->drmFormatModifier == drm_mod.drmFormatModifier) {
                     mod_props = m;
                     break;
