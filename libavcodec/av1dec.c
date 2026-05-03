@@ -1455,7 +1455,7 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
         case AV1_OBU_TEMPORAL_DELIMITER:
             s->raw_frame_header = NULL;
             raw_tile_group      = NULL;
-        // fall-through
+            break;
         case AV1_OBU_TILE_LIST:
         case AV1_OBU_PADDING:
             break;
