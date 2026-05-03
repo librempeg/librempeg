@@ -4914,6 +4914,7 @@ static int vulkan_transfer_data_to(AVHWFramesContext *hwfc, AVFrame *dst,
             (p->vkctx.extensions & FF_VK_EXT_EXTERNAL_FD_SEM))
 #endif
             return vulkan_transfer_data_from_cuda(hwfc, dst, src);
+        av_fallthrough;
 #endif
     default:
         if (src->hw_frames_ctx)
@@ -5034,6 +5035,7 @@ static int vulkan_transfer_data_from(AVHWFramesContext *hwfc, AVFrame *dst,
             (p->vkctx.extensions & FF_VK_EXT_EXTERNAL_FD_SEM))
 #endif
             return vulkan_transfer_data_to_cuda(hwfc, dst, src);
+        av_fallthrough;
 #endif
     default:
         if (dst->hw_frames_ctx)
