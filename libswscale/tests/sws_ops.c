@@ -33,9 +33,11 @@
 
 static int print_ops(SwsContext *const ctx, void *opaque, SwsOpList *ops)
 {
-    av_log(opaque, AV_LOG_INFO, "%s -> %s:\n",
+    av_log(opaque, AV_LOG_INFO, "%s %dx%d -> %s %dx%d:\n",
            av_get_pix_fmt_name(ops->src.format),
-           av_get_pix_fmt_name(ops->dst.format));
+           ops->src.width, ops->src.height,
+           av_get_pix_fmt_name(ops->dst.format),
+           ops->dst.width, ops->dst.height);
 
     if (ff_sws_op_list_is_noop(ops))
         av_log(opaque, AV_LOG_INFO, "  (no-op)\n");
@@ -183,6 +185,7 @@ bad_option:
     SwsContext *ctx = sws_alloc_context();
     if (!ctx)
         goto fail;
+    ctx->scaler = SWS_SCALE_POINT; /* reduce filter generation overhead */
 
     av_log_set_callback(log_stdout);
 
