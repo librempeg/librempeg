@@ -337,6 +337,16 @@ static bool extract_swizzle(SwsLinearOp *op, SwsComps prev, SwsSwizzleOp *out_sw
     return true;
 }
 
+static int op_result_is_exact(const SwsOp *op)
+{
+    for (int i = 0; i < 4; i++) {
+        if (SWS_OP_NEEDED(op, i) && !(op->comps.flags[i] & SWS_COMP_EXACT))
+            return false;
+    }
+
+    return true;
+}
+
 int ff_sws_op_list_optimize(SwsOpList *ops)
 {
     int ret;
@@ -769,9 +779,10 @@ retry:
         }
 
         case SWS_OP_SCALE:
-            /* Scaling by integer before conversion to int */
+            /* Exact integer multiplication */
             if (op->scale.factor.den == 1 && next->op == SWS_OP_CONVERT &&
-                ff_sws_pixel_type_is_int(next->convert.to))
+                ff_sws_pixel_type_is_int(next->convert.to) &&
+                op_result_is_exact(op))
             {
                 op->type = next->convert.to;
                 FFSWAP(SwsOp, *op, *next);
