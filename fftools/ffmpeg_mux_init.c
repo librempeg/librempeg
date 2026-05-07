@@ -1532,6 +1532,8 @@ static int ost_add(Muxer *mux, const OptionsContext *o, enum AVMediaType type,
 
     if (oc->oformat->flags & AVFMT_GLOBALHEADER && ost->enc)
         ost->enc->enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    if (oc->oformat->flags & AVFMT_FIXED_FRAMESIZE && ost->enc)
+        ost->enc->enc_ctx->flags2 |= AV_CODEC_FLAG2_FIXED_FRAME_SIZE;
 
     opt_match_per_stream_int(ost, &o->copy_initial_nonkeyframes,
                              oc, st, &ms->copy_initial_nonkeyframes);
@@ -2653,6 +2655,10 @@ static int of_parse_group_token(Muxer *mux, const char *token, char *ptr)
         ret = avformat_stream_group_add_stream(stg, oc->streams[idx]);
         if (ret < 0)
             goto end;
+        OutputStream *ost = mux->of.streams[idx];
+        if (ost->enc && (type == AV_STREAM_GROUP_PARAMS_IAMF_AUDIO_ELEMENT ||
+                         type == AV_STREAM_GROUP_PARAMS_IAMF_MIX_PRESENTATION))
+            ost->enc->enc_ctx->flags2 |= AV_CODEC_FLAG2_FIXED_FRAME_SIZE;
     }
     while (e = av_dict_get(dict, "stg", e, 0)) {
         char *endptr;
