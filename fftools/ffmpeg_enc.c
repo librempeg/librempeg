@@ -227,6 +227,9 @@ int enc_open(void *opaque, const AVFrame *frame)
                    frame->ch_layout.nb_channels > 0);
         enc_ctx->sample_fmt     = frame->format;
         enc_ctx->sample_rate    = frame->sample_rate;
+        if (!enc_ctx->frame_size && (!(enc->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE) ||
+                                      (enc_ctx->flags2 & AV_CODEC_FLAG2_FIXED_FRAME_SIZE)))
+            enc_ctx->frame_size = frame->nb_samples;
         ret = av_channel_layout_copy(&enc_ctx->ch_layout, &frame->ch_layout);
         if (ret < 0)
             return ret;

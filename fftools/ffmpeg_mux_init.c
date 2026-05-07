@@ -2128,7 +2128,8 @@ static int setup_sync_queues(Muxer *mux, AVFormatContext *oc,
         nb_interleaved += IS_INTERLEAVED(type);
         nb_av_enc      += IS_AV_ENC(ost, type);
         nb_audio_fs    += (ost->enc && type == AVMEDIA_TYPE_AUDIO &&
-                           !(ost->enc->enc_ctx->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE));
+                           (!(ost->enc->enc_ctx->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE) ||
+                            (ost->enc->enc_ctx->flags2 & AV_CODEC_FLAG2_FIXED_FRAME_SIZE)));
 
         limit_frames        |=  ms->max_frames < INT64_MAX;
         limit_frames_av_enc |= (ms->max_frames < INT64_MAX) && IS_AV_ENC(ost, type);
