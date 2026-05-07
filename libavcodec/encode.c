@@ -155,6 +155,8 @@ static int encode_make_refcounted(AVCodecContext *avctx, AVPacket *avpkt)
  */
 static int pad_last_frame(AVCodecContext *s, AVFrame *frame, const AVFrame *src, int out_samples)
 {
+    AVFrameSideData *sd;
+    int discard_padding;
     int ret;
 
     frame->format         = src->format;
@@ -178,6 +180,17 @@ static int pad_last_frame(AVCodecContext *s, AVFrame *frame, const AVFrame *src,
                                       frame->nb_samples - src->nb_samples,
                                       s->ch_layout.nb_channels, s->sample_fmt)) < 0)
         goto fail;
+
+    discard_padding = frame->nb_samples - src->nb_samples;
+    av_assert1(discard_padding > 0);
+    sd = av_frame_new_side_data(frame, AV_FRAME_DATA_SKIP_SAMPLES, 10);
+    if (!sd) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+    AV_WL32A(sd->data, 0);
+    AV_WL32A(sd->data + 4, discard_padding);
+    AV_WL16A(sd->data + 8, 0);
 
     return 0;
 
