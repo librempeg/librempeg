@@ -438,7 +438,7 @@ static int encode_send_frame_internal(AVCodecContext *avctx, const AVFrame *src)
             avctx->audio_service_type = *(enum AVAudioServiceType*)sd->data;
 
         /* check for valid frame size */
-        if (!(avctx->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)) {
+        if (avctx->frame_size) {
             /* if we already got an undersized frame, that must have been the last */
             if (ec->last_audio_frame) {
                 av_log(avctx, AV_LOG_ERROR, "frame_size (%d) was not respected for a non-last frame\n", avctx->frame_size);
@@ -450,7 +450,8 @@ static int encode_send_frame_internal(AVCodecContext *avctx, const AVFrame *src)
             }
             if (src->nb_samples < avctx->frame_size) {
                 ec->last_audio_frame = 1;
-                if (!(avctx->codec->capabilities & AV_CODEC_CAP_SMALL_LAST_FRAME)) {
+                if (!(avctx->codec->capabilities & AV_CODEC_CAP_SMALL_LAST_FRAME) ||
+                    (avctx->flags2 & AV_CODEC_FLAG2_FIXED_FRAME_SIZE)) {
                     int pad_samples = avci->pad_samples ? avci->pad_samples : avctx->frame_size;
                     int out_samples = (src->nb_samples + pad_samples - 1) / pad_samples * pad_samples;
 
