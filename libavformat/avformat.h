@@ -495,6 +495,7 @@ typedef struct AVProbeData {
                                         The user or muxer can override this through
                                         AVFormatContext.avoid_negative_ts
                                         */
+#define AVFMT_FIXED_FRAMESIZE 0x80000 /**< Format wants @ref AVCodecParameters.frame_size "fixed size audio frames." */
 
 #define AVFMT_SEEK_TO_PTS   0x4000000 /**< Seeking is based on PTS */
 
@@ -520,7 +521,7 @@ typedef struct AVOutputFormat {
      * can use flags: AVFMT_NOFILE, AVFMT_NEEDNUMBER, AVFMT_EXPERIMENTAL,
      * AVFMT_GLOBALHEADER, AVFMT_NOTIMESTAMPS, AVFMT_VARIABLE_FPS,
      * AVFMT_NODIMENSIONS, AVFMT_NOSTREAMS,
-     * AVFMT_TS_NONSTRICT, AVFMT_TS_NEGATIVE
+     * AVFMT_TS_NONSTRICT, AVFMT_TS_NEGATIVE, AVFMT_FIXED_FRAMESIZE
      */
     int flags;
 
