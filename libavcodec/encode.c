@@ -275,6 +275,20 @@ int ff_encode_encode_cb(AVCodecContext *avctx, AVPacket *avpkt,
                     avpkt->duration = ff_samples_to_time_base(avctx,
                                                               frame->nb_samples);
                 }
+                if (avctx->codec->type == AVMEDIA_TYPE_AUDIO) {
+                    AVFrameSideData *sd = av_frame_get_side_data(frame, AV_FRAME_DATA_SKIP_SAMPLES);
+                    if (sd && sd->size >= 10) {
+                        uint8_t *skip_samples = av_packet_new_side_data(avpkt, AV_PKT_DATA_SKIP_SAMPLES, 10);
+                        if (!skip_samples) {
+                            ret = AVERROR(ENOMEM);
+                            goto unref;
+                        }
+                        AV_WL32A(skip_samples + 0, AV_RL32(sd->data + 0));
+                        AV_WL32A(skip_samples + 4, AV_RL32(sd->data + 4));
+                        AV_WB8  (skip_samples + 8, AV_RB8 (sd->data + 8));
+                        AV_WB8  (skip_samples + 9, AV_RB8 (sd->data + 9));
+                    }
+                }
             }
 
             ret = ff_encode_reordered_opaque(avctx, avpkt, frame);
