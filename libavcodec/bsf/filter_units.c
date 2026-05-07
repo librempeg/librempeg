@@ -25,6 +25,7 @@
 #include "bsf.h"
 #include "bsf_internal.h"
 #include "cbs.h"
+#include "cbs_bsf.h"
 
 
 typedef struct FilterUnitsContext {
