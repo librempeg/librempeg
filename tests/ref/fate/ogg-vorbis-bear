@@ -1,6 +1,6 @@
 [PACKET]
-pts=-704
-dts=-704
+pts=-256
+dts=-256
 duration=128
 flags=K__
 TAG:encoder=Lavc52.32.0
@@ -9,14 +9,14 @@ side_data_type=Strings Metadata
 [/SIDE_DATA]
 [/PACKET]
 [PACKET]
-pts=-576
-dts=-576
+pts=-128
+dts=-128
 duration=128
 flags=K__
 [/PACKET]
 [PACKET]
-pts=-448
-dts=-448
+pts=0
+dts=0
 duration=576
 flags=K__
 [/PACKET]
@@ -92,7 +92,7 @@ nb_streams=2
 nb_programs=0
 nb_stream_groups=0
 format_name=ogg
-start_time=0.000000
+start_time=-0.005805
 duration=1.011519
 size=59943
 bit_rate=474083

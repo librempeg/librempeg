@@ -584,6 +584,9 @@ static int ogg_packet(AVFormatContext *s, int *sid, int *dstart, int *dsize,
     ogg->curidx    = idx;
     os->incomplete = 0;
 
+    // the packet started at the first segment of the page it completes on
+    os->page_start = segp == 0;
+
     if (os->header) {
         if ((ret = os->codec->header(s, idx)) < 0) {
             av_log(s, AV_LOG_ERROR, "Header processing failed: %s\n", av_err2str(ret));
