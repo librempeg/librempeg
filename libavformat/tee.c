@@ -297,7 +297,7 @@ static int open_slave(AVFormatContext *avf, char *slave, TeeSlave *tee_slave)
         ret = av_program_copy(avf2, (const AVFormatContext *)avf, avf->programs[i]->id, 0);
         if (ret < 0) {
             av_log(avf, AV_LOG_ERROR, "unable to transfer program %d to child muxer\n", avf->programs[i]->id);
-            return ret;
+            goto end;
         }
     }
 
