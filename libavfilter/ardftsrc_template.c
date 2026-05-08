@@ -102,6 +102,7 @@
 #endif
 
 #define F(x) ((ftype)(x))
+#define SQR(x) ((x)*(x))
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
@@ -224,8 +225,11 @@ static int fn(src_init)(AVFilterContext *ctx)
     for (int n = 0; n < taper_samples; n++) {
         const ftype nf = n + F(0.5);
         const ftype t = taper_samples;
-        const ftype zbk = t/nf - t/(t-nf);
-        const ftype v = F(0.5) * FTANH(zbk) + F(0.5);
+        const ftype x = nf / t;
+        const ftype a = SQR(x);
+        const ftype b = SQR(F(1.0) - x);
+        const ftype w = a / (a + b);
+        const ftype v = F(0.5) * (F(1.0) + FCOS(F(M_PI) * w));
 
         taper[n].re = taper[n].im = isnormal(v) ? v : F(0.0);
     }
