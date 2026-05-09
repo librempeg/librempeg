@@ -28,7 +28,7 @@
 #undef FEXP
 #undef FCOS
 #undef FSIN
-#undef FTANH
+#undef FMA
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
 #undef SCALE
@@ -38,7 +38,7 @@
 #define FSIN sinf
 #define FABS fabsf
 #define FEXP expf
-#define FTANH tanhf
+#define FMA fmaf
 #define ctype AVComplexFloat
 #define ftype float
 #define itype uint8_t
@@ -52,7 +52,7 @@
 #define FSIN sinf
 #define FABS fabsf
 #define FEXP expf
-#define FTANH tanhf
+#define FMA fmaf
 #define ctype AVComplexFloat
 #define ftype float
 #define itype int16_t
@@ -66,7 +66,7 @@
 #define FSIN sin
 #define FABS fabs
 #define FEXP exp
-#define FTANH tanh
+#define FMA fma
 #define ctype AVComplexDouble
 #define ftype double
 #define itype int32_t
@@ -80,7 +80,7 @@
 #define FSIN sinf
 #define FABS fabsf
 #define FEXP expf
-#define FTANH tanhf
+#define FMA fmaf
 #define ctype AVComplexFloat
 #define ftype float
 #define itype float
@@ -92,7 +92,7 @@
 #define FSIN sin
 #define FABS fabs
 #define FEXP exp
-#define FTANH tanh
+#define FMA fma
 #define ctype AVComplexDouble
 #define ftype double
 #define itype double
@@ -618,9 +618,11 @@ redo:
             const ftype im = rdftc[n].im;
             const ftype cre = phase[n].re;
             const ftype cim = phase[n].im;
+            const ftype im_cim = -im * cim;
+            const ftype im_cre =  im * cre;
 
-            rdftc[n].re = re * cre - im * cim;
-            rdftc[n].im = re * cim + im * cre;
+            rdftc[n].re = FMA(re, cre, im_cim);
+            rdftc[n].im = FMA(re, cim, im_cre);
         }
     }
 
@@ -713,9 +715,11 @@ static int fn(flush)(AVFilterContext *ctx, AVFrame *out, const int ch)
                 const ftype im = rdftc[n].im;
                 const ftype cre = phase[n].re;
                 const ftype cim = phase[n].im;
+                const ftype im_cim = -im * cim;
+                const ftype im_cre =  im * cre;
 
-                rdftc[n].re = re * cre - im * cim;
-                rdftc[n].im = re * cim + im * cre;
+                rdftc[n].re = FMA(re, cre, im_cim);
+                rdftc[n].im = FMA(re, cim, im_cre);
             }
         }
 
