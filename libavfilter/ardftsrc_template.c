@@ -25,7 +25,6 @@
 #undef ftype
 #undef ttype
 #undef FABS
-#undef FEXP
 #undef FCOS
 #undef FSIN
 #undef FMA
@@ -37,7 +36,6 @@
 #define FCOS cosf
 #define FSIN sinf
 #define FABS fabsf
-#define FEXP expf
 #define FMA fmaf
 #define ctype AVComplexFloat
 #define ftype float
@@ -51,7 +49,6 @@
 #define FCOS cosf
 #define FSIN sinf
 #define FABS fabsf
-#define FEXP expf
 #define FMA fmaf
 #define ctype AVComplexFloat
 #define ftype float
@@ -65,7 +62,6 @@
 #define FCOS cos
 #define FSIN sin
 #define FABS fabs
-#define FEXP exp
 #define FMA fma
 #define ctype AVComplexDouble
 #define ftype double
@@ -79,7 +75,6 @@
 #define FCOS cosf
 #define FSIN sinf
 #define FABS fabsf
-#define FEXP expf
 #define FMA fmaf
 #define ctype AVComplexFloat
 #define ftype float
@@ -91,7 +86,6 @@
 #define FCOS cos
 #define FSIN sin
 #define FABS fabs
-#define FEXP exp
 #define FMA fma
 #define ctype AVComplexDouble
 #define ftype double
