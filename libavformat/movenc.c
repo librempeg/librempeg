@@ -350,8 +350,10 @@ static int mov_write_iacb_tag(AVFormatContext *s, AVIOContext *pb, MOVTrack *tra
     avio_w8(pb, 1); // configurationVersion
 
     ret = ff_iamf_write_descriptors(track->iamf, dyn_bc, s);
-    if (ret < 0)
+    if (ret < 0) {
+        ffio_free_dyn_buf(&dyn_bc);
         return ret;
+    }
 
     dyn_size = avio_close_dyn_buf(dyn_bc, &dyn_buf);
     ffio_write_leb(pb, dyn_size);
@@ -4329,7 +4331,7 @@ static int mov_write_track_udta_tag(AVIOContext *pb, MOVMuxContext *mov,
 
     if (mov->mode & MODE_MP4) {
         if ((ret = mov_write_track_kinds(pb_buf, st)) < 0)
-            return ret;
+            goto end;
     }
 
     if ((size = avio_get_dyn_buf(pb_buf, &buf)) > 0) {
@@ -4337,9 +4339,10 @@ static int mov_write_track_udta_tag(AVIOContext *pb, MOVMuxContext *mov,
         ffio_wfourcc(pb, "udta");
         avio_write(pb, buf, size);
     }
+end:
     ffio_free_dyn_buf(&pb_buf);
 
-    return 0;
+    return ret;
 }
 
 static int mov_write_trak_tag(AVFormatContext *s, AVIOContext *pb, MOVMuxContext *mov,
