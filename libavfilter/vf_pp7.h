@@ -37,9 +37,8 @@ typedef struct PP7Context {
     int temp_stride;
     uint8_t *src;
 
-    int (*requantize)(struct PP7Context *p, int16_t *src, int qp);
-    void (*dctB)(int16_t *dst, int16_t *src);
-
+    int (*requantize)(const struct PP7Context *p, const int16_t *src, int qp);
+    void (*dctB)(int16_t *dst, const int16_t *src);
 } PP7Context;
 
 void ff_pp7_init_x86(PP7Context *pp7);

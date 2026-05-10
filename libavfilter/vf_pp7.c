@@ -96,7 +96,7 @@ static void init_thres2(PP7Context *p)
     }
 }
 
-static inline void dctA_c(int16_t *dst, uint8_t *src, int stride)
+static inline void dctA_c(int16_t *dst, const uint8_t *src, int stride)
 {
     int i;
 
@@ -119,7 +119,7 @@ static inline void dctA_c(int16_t *dst, uint8_t *src, int stride)
     }
 }
 
-static void dctB_c(int16_t *dst, int16_t *src)
+static void dctB_c(int16_t *dst, const int16_t *src)
 {
     int i;
 
@@ -142,7 +142,7 @@ static void dctB_c(int16_t *dst, int16_t *src)
     }
 }
 
-static int hardthresh_c(PP7Context *p, int16_t *src, int qp)
+static int hardthresh_c(const PP7Context *p, const int16_t *src, int qp)
 {
     int i;
     int a;
@@ -158,7 +158,7 @@ static int hardthresh_c(PP7Context *p, int16_t *src, int qp)
     return (a + (1 << 11)) >> 12;
 }
 
-static int mediumthresh_c(PP7Context *p, int16_t *src, int qp)
+static int mediumthresh_c(const PP7Context *p, const int16_t *src, int qp)
 {
     int i;
     int a;
@@ -182,7 +182,7 @@ static int mediumthresh_c(PP7Context *p, int16_t *src, int qp)
     return (a + (1 << 11)) >> 12;
 }
 
-static int softthresh_c(PP7Context *p, int16_t *src, int qp)
+static int softthresh_c(const PP7Context *p, const int16_t *src, int qp)
 {
     int i;
     int a;
@@ -202,10 +202,10 @@ static int softthresh_c(PP7Context *p, int16_t *src, int qp)
     return (a + (1 << 11)) >> 12;
 }
 
-static void filter(PP7Context *p, uint8_t *dst, uint8_t *src,
+static void filter(PP7Context *p, uint8_t *dst, const uint8_t *src,
                    int dst_stride, int src_stride,
                    int width, int height,
-                   uint8_t *qp_store, int qp_stride, int is_luma)
+                   const uint8_t *qp_store, int qp_stride, int is_luma)
 {
     int x, y;
     const int stride = is_luma ? p->temp_stride : ((width + 16 + 15) & (~15));
@@ -231,7 +231,7 @@ static void filter(PP7Context *p, uint8_t *dst, uint8_t *src,
     for (y = 0; y < height; y++) {
         for (x = -8; x < 0; x += 4) {
             const int index = x + y * stride + (8 - 3) * (1 + stride) + 8; //FIXME silly offset
-            uint8_t *src  = p_src + index;
+            const uint8_t *src = p_src + index;
             int16_t *tp   = temp + 4 * x;
 
             dctA_c(tp + 4 * 8, src, stride);
@@ -249,7 +249,7 @@ static void filter(PP7Context *p, uint8_t *dst, uint8_t *src,
             }
             for (; x < end; x++) {
                 const int index = x + y * stride + (8 - 3) * (1 + stride) + 8; //FIXME silly offset
-                uint8_t *src = p_src + index;
+                const uint8_t *src = p_src + index;
                 int16_t *tp  = temp + 4 * x;
                 int v;
 
