@@ -73,6 +73,20 @@
 #define SAMPLE_FORMAT dbl
 #endif
 #define EPSILON (1.0 / (1LL << 52))
+#elif DEPTH == 80
+#define ftype long double
+#define stype long double
+#define FCEIL ceill
+#define LRINT lrintl
+#define FABS fabsl
+#define FMAX fmaxl
+#define FLOG10 log10l
+#if PLANAR
+#define SAMPLE_FORMAT ldblp
+#else
+#define SAMPLE_FORMAT ldbl
+#endif
+#define EPSILON (1.0L / (1LL << 63))
 #endif
 
 #define MAX_IDX (HISTOGRAM_SIZE-1)
@@ -85,7 +99,7 @@
 
 static inline float fn(get_db)(unsigned x)
 {
-#if DEPTH == 33 || DEPTH == 65
+#if DEPTH == 33 || DEPTH == 65 || DEPTH == 80
     return x - F(16384.0);
 #else
     return 20.f * log2f(x/(float)MAX_IDX) / log2f(10.f);
@@ -94,7 +108,7 @@ static inline float fn(get_db)(unsigned x)
 
 static inline unsigned fn(get_index)(ftype x)
 {
-#if DEPTH == 33 || DEPTH == 65
+#if DEPTH == 33 || DEPTH == 65 || DEPTH == 80
     return av_clip64(16384+LRINT(FCEIL(F(20.0) * FLOG10(x+EPSILON))), 0, MAX_IDX);
 #else
     return x;
@@ -144,9 +158,9 @@ static void fn(print_stats)(AVFilterContext *ctx)
             break;
         }
     }
-#elif DEPTH == 33 || DEPTH == 65
-    av_log(ctx, AV_LOG_INFO, "mean_volume: %.1f dB\n", F(20.0) * FLOG10(sqrt(s->sum2/nb_samples)));
-    av_log(ctx, AV_LOG_INFO, "max_volume: %.1f dB\n", F(20.0) * FLOG10(s->max));
+#elif DEPTH == 33 || DEPTH == 65 || DEPTH == 80
+    av_log(ctx, AV_LOG_INFO, "mean_volume: %.1f dB\n", (double)(F(20.0) * FLOG10(sqrt(s->sum2/nb_samples))));
+    av_log(ctx, AV_LOG_INFO, "max_volume: %.1f dB\n", (double)(F(20.0) * FLOG10(s->max)));
 #endif
     for (int i = MAX_IDX; i >= 0; i--) {
         if (s->histogram[i]) {
@@ -172,7 +186,7 @@ static void fn(update_stats)(VolDetectContext *s, stype sample)
     ftype asample = FABS(sample);
     unsigned idx;
 
-#if DEPTH == 33 || DEPTH == 65
+#if DEPTH == 33 || DEPTH == 65 || DEPTH == 80
     s->max = FMAX(s->max, asample);
     s->sum2 += asample*asample;
 #endif

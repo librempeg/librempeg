@@ -68,6 +68,14 @@ typedef struct VolDetectContext {
 #define PLANAR 0
 #include "volumedetect_template.c"
 
+#undef DEPTH
+#define DEPTH 80
+#include "volumedetect_template.c"
+
+#undef PLANAR
+#define PLANAR 1
+#include "volumedetect_template.c"
+
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -84,6 +92,14 @@ static int config_output(AVFilterLink *outlink)
     VolDetectContext *s = ctx->priv;
 
     switch (outlink->format) {
+    case AV_SAMPLE_FMT_LDBL:
+        s->update_histogram = update_histogram_ldbl;
+        s->print_stats = print_stats_ldbl;
+        break;
+    case AV_SAMPLE_FMT_LDBLP:
+        s->update_histogram = update_histogram_ldblp;
+        s->print_stats = print_stats_ldblp;
+        break;
     case AV_SAMPLE_FMT_DBL:
         s->update_histogram = update_histogram_dbl;
         s->print_stats = print_stats_dbl;
@@ -163,5 +179,7 @@ const FFFilter ff_af_volumedetect = {
                       AV_SAMPLE_FMT_FLT,
                       AV_SAMPLE_FMT_FLTP,
                       AV_SAMPLE_FMT_DBL,
-                      AV_SAMPLE_FMT_DBLP),
+                      AV_SAMPLE_FMT_DBLP,
+                      AV_SAMPLE_FMT_LDBL,
+                      AV_SAMPLE_FMT_LDBLP),
 };
