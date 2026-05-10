@@ -36,9 +36,12 @@
 #elif SRC_DEPTH == 63
 #define stype int64_t
 #define SRC_F s64
-#else
+#elif SRC_DEPTH == 64
 #define stype double
 #define SRC_F dbl
+#elif SRC_DEPTH == 80
+#define stype long double
+#define SRC_F ldbl
 #endif
 
 #define fnc3(a,b,c) a##_##b##_to_##c
@@ -58,6 +61,8 @@ static dtype fnc(convert)(stype src)
     dst = (src-0x80)*(1LL<<56);
 #elif (SRC_DEPTH ==  8) && (DST_DEPTH == 64)
     dst = (src-0x80)*(1.0/(1<<7));
+#elif (SRC_DEPTH ==  8) && (DST_DEPTH == 80)
+    dst = (src-0x80)*(1.0l/(1<<7));
 #elif (SRC_DEPTH == 16) && (DST_DEPTH ==  8)
     dst = (src>>8)+0x80;
 #elif (SRC_DEPTH == 16) && (DST_DEPTH == 31)
@@ -68,6 +73,8 @@ static dtype fnc(convert)(stype src)
     dst = src*(1LL<<48);
 #elif (SRC_DEPTH == 16) && (DST_DEPTH == 64)
     dst = src*(1.0/(1<<15));
+#elif (SRC_DEPTH == 16) && (DST_DEPTH == 80)
+    dst = src*(1.0l/(1<<15));
 #elif (SRC_DEPTH == 31) && (DST_DEPTH ==  8)
     dst = (src>>24)+0x80;
 #elif (SRC_DEPTH == 31) && (DST_DEPTH == 16)
@@ -78,6 +85,8 @@ static dtype fnc(convert)(stype src)
     dst = src*(1LL<<32);
 #elif (SRC_DEPTH == 31) && (DST_DEPTH == 64)
     dst = src*(1.0/(1U<<31));
+#elif (SRC_DEPTH == 31) && (DST_DEPTH == 80)
+    dst = src*(1.0l/(1U<<31));
 #elif (SRC_DEPTH == 32) && (DST_DEPTH ==  8)
     int16_t t = lrintf(fminf(fmaxf(src,-1.f),1.f)*(1<<7));
     dst = t - (t == 128) + 0x80;
@@ -110,6 +119,19 @@ static dtype fnc(convert)(stype src)
     dst = (src/(double)(1ULL<<63));
 #elif (SRC_DEPTH == 63) && (DST_DEPTH == 64)
     dst = (src/(double)(1ULL<<63));
+#elif (SRC_DEPTH == 63) && (DST_DEPTH == 80)
+    dst = (src/(long double)(1ULL<<63));
+#elif (SRC_DEPTH == 80) && (DST_DEPTH ==  8)
+    int16_t t = lrintl(fminl(fmaxl(src,-1.0l),1.0l)*(1<<7));
+    dst = t - (t == 128) + 0x80;
+#elif (SRC_DEPTH == 80) && (DST_DEPTH == 16)
+    int32_t t = lrintl(fminl(fmaxl(src,-1.0l),1.0l)*(1<<15));
+    dst = t - (t == 32768);
+#elif (SRC_DEPTH == 80) && (DST_DEPTH == 31)
+    int64_t t = llrintl(fminl(fmaxl(src,-1.0l),1.0l)*(1U<<31));
+    dst = t - (t == 2147483648LL);
+#elif (SRC_DEPTH == 80) && (DST_DEPTH == 63)
+    dst = llrintl(fminl(fmaxl(src,-1.0l),1.0l)*((1ULL<<63)-1));
 #else
     dst = src;
 #endif

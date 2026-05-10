@@ -36,9 +36,12 @@
 #elif DST_DEPTH == 63
 #define dtype int64_t
 #define DST_F s64
-#else
+#elif DST_DEPTH == 64
 #define dtype double
 #define DST_F dbl
+#elif DST_DEPTH == 80
+#define dtype long double
+#define DST_F ldbl
 #endif
 
 #undef SRC_DEPTH
@@ -63,4 +66,8 @@
 
 #undef SRC_DEPTH
 #define SRC_DEPTH 64
+#include "asf2sf_src_depth_template.c"
+
+#undef SRC_DEPTH
+#define SRC_DEPTH 80
 #include "asf2sf_src_depth_template.c"
