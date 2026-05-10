@@ -114,6 +114,7 @@ static int query_formats(const AVFilterContext *ctx,
         AV_SAMPLE_FMT_S32, AV_SAMPLE_FMT_S32P,
         AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_FLTP,
         AV_SAMPLE_FMT_DBL, AV_SAMPLE_FMT_DBLP,
+        AV_SAMPLE_FMT_LDBL,AV_SAMPLE_FMT_LDBLP,
         AV_SAMPLE_FMT_NONE
     };
     int ret, sample_rates[] = { s->sample_rate, -1 };
@@ -157,6 +158,10 @@ static int query_formats(const AVFilterContext *ctx,
 
 #undef DEPTH
 #define DEPTH 65
+#include "ardftsrc_template.c"
+
+#undef DEPTH
+#define DEPTH 128
 #include "ardftsrc_template.c"
 
 static int config_input(AVFilterLink *inlink)
@@ -264,6 +269,16 @@ static int config_input(AVFilterLink *inlink)
         s->src_uninit = src_uninit_dblp;
         s->copy_over = copy_over_dblp;
         ret = src_init_dblp(ctx);
+        break;
+    case AV_SAMPLE_FMT_LDBL:
+    case AV_SAMPLE_FMT_LDBLP:
+        s->last_in_pts_fn = last_in_pts_ldblp;
+        s->flush_src = flush_ldblp;
+        s->do_src_in = src_in_ldblp;
+        s->do_src_out = src_out_ldblp;
+        s->src_uninit = src_uninit_ldblp;
+        s->copy_over = copy_over_ldblp;
+        ret = src_init_ldblp(ctx);
         break;
     default:
         return AVERROR_BUG;

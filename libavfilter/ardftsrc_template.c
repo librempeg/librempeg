@@ -82,7 +82,7 @@
 #define SAMPLE_FORMAT fltp
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
-#else
+#elif DEPTH == 65
 #define FCOS cos
 #define FSIN sin
 #define FABS fabs
@@ -93,6 +93,17 @@
 #define SAMPLE_FORMAT dblp
 #define ttype AVComplexDouble
 #define TX_TYPE AV_TX_DOUBLE_RDFT
+#elif DEPTH == 128
+#define FCOS cosl
+#define FSIN sinl
+#define FABS fabsl
+#define FMA fmal
+#define ctype AVComplexLongDouble
+#define ftype long double
+#define itype long double
+#define SAMPLE_FORMAT ldblp
+#define ttype AVComplexLongDouble
+#define TX_TYPE AV_TX_LONG_DOUBLE_RDFT
 #endif
 
 #define F(x) ((ftype)(x))
@@ -122,12 +133,12 @@ typedef struct fn(StateContext) {
 
 static ftype fn(get_scale)(ftype in_size, ftype out_size)
 {
-    return F(1.0);
+    return F(1.0L);
 }
 
 static ftype fn(get_iscale)(ftype in_size, ftype out_size)
 {
-    return F(1.0) / in_size;
+    return F(1.0L) / in_size;
 }
 
 static void fn(src_uninit)(AVFilterContext *ctx)
@@ -217,15 +228,15 @@ static int fn(src_init)(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
     taper = s->taper;
     for (int n = 0; n < taper_samples; n++) {
-        const ftype nf = n + F(0.5);
+        const ftype nf = n + F(0.5L);
         const ftype t = taper_samples;
         const ftype x = nf / t;
         const ftype a = SQR(x);
         const ftype b = SQR(F(1.0) - x);
         const ftype w = a / (a + b);
-        const ftype v = F(0.5) * (F(1.0) + FCOS(F(M_PI) * w));
+        const ftype v = F(0.5L) * (F(1.0) + FCOS(F(M_PIl) * w));
 
-        taper[n].re = taper[n].im = isnormal(v) ? v : F(0.0);
+        taper[n].re = taper[n].im = isnormal(v) ? v : F(0.0L);
     }
 
     trim_start = 0;
@@ -326,8 +337,12 @@ static int fn(src_out)(AVFilterContext *ctx, AVFrame *out, const int ch,
             float *dst = ((float *)out->extended_data[ch]) + doffset;
             for (int n = 0; n < write_samples; n++)
                 dst[n] = irdft[n];
-        } else {
+        } else if (s->out_depth == 65) {
             double *dst = ((double *)out->extended_data[ch]) + doffset;
+            for (int n = 0; n < write_samples; n++)
+                dst[n] = irdft[n];
+        } else if (s->out_depth == 128) {
+            long double *dst = ((long double *)out->extended_data[ch]) + doffset;
             for (int n = 0; n < write_samples; n++)
                 dst[n] = irdft[n];
         }
@@ -377,8 +392,12 @@ static int fn(src_out)(AVFilterContext *ctx, AVFrame *out, const int ch,
             float *dst = ((float *)out->data[0]) + doffset * nb_channels;
             for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
                 dst[m] = irdft[n];
-        } else {
+        } else if (s->out_depth == 65) {
             double *dst = ((double *)out->data[0]) + doffset * nb_channels;
+            for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
+                dst[m] = irdft[n];
+        } else if (s->out_depth == 128) {
+            long double *dst = ((long double *)out->data[0]) + doffset * nb_channels;
             for (int n = 0, m = ch; n < write_samples; n++, m += nb_channels)
                 dst[m] = irdft[n];
         }
@@ -745,8 +764,12 @@ static int fn(flush)(AVFilterContext *ctx, AVFrame *out, const int ch)
             float *dst = (float *)out->extended_data[ch];
             for (int n = 0; n < nb_samples; n++)
                 dst[n] = over[n];
-        } else {
+        } else if (s->out_depth == 65) {
             double *dst = (double *)out->extended_data[ch];
+            for (int n = 0; n < nb_samples; n++)
+                dst[n] = over[n];
+        } else if (s->out_depth == 128) {
+            long double *dst = (long double *)out->extended_data[ch];
             for (int n = 0; n < nb_samples; n++)
                 dst[n] = over[n];
         }
@@ -768,8 +791,12 @@ static int fn(flush)(AVFilterContext *ctx, AVFrame *out, const int ch)
             float *dst = (float *)out->data[0];
             for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
                 dst[m] = over[n];
-        } else {
+        } else if (s->out_depth == 65) {
             double *dst = (double *)out->data[0];
+            for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
+                dst[m] = over[n];
+        } else if (s->out_depth == 128) {
+            long double *dst = (long double *)out->data[0];
             for (int n = 0, m = ch; n < nb_samples; n++, m += nb_channels)
                 dst[m] = over[n];
         }
