@@ -49,6 +49,18 @@ typedef AVComplexFloat TXComplex;
 typedef double TXSample;
 typedef double TXUSample;
 typedef AVComplexDouble TXComplex;
+#elif defined(TX_LONG_DOUBLE)
+#define TX_TAB(x) x ## _long_double
+#define TX_NAME(x) x ## _long_double_c
+#define TX_NAME_STR(x) NULL_IF_CONFIG_SMALL(x "_long_double_c")
+#define TX_TYPE(x) AV_TX_LONG_DOUBLE_ ## x
+#define TX_FN_NAME(fn, suffix) ff_tx_ ## fn ## _long_double_ ## suffix
+#define TX_FN_NAME_STR(fn, suffix) NULL_IF_CONFIG_SMALL(#fn "_long_double_" #suffix)
+#define MULT(x, m) ((x) * (m))
+#define SCALE_TYPE long double
+typedef long double TXSample;
+typedef long double TXUSample;
+typedef AVComplexLongDouble TXComplex;
 #elif defined(TX_INT32)
 #define TX_TAB(x) x ## _int32
 #define TX_NAME(x) x ## _int32_c
@@ -84,7 +96,7 @@ typedef void TXComplex;
         .prio       = p,                                                       \
     }
 
-#if defined(TX_FLOAT) || defined(TX_DOUBLE)
+#if defined(TX_FLOAT) || defined(TX_DOUBLE) || defined(TX_LONG_DOUBLE)
 
 #define CMUL(dre, dim, are, aim, bre, bim)      \
     do {                                        \
@@ -264,6 +276,7 @@ struct AVTXContext {
     FFTXMapDirection   map_dir;         /* Direction of AVTXContext->map */
     float              scale_f;
     double             scale_d;
+    long double        scale_ld;
     void              *opaque;          /* Free to use by implementations */
 };
 
@@ -370,6 +383,7 @@ int ff_tx_gen_split_radix_parity_revtab(AVTXContext *s, int len, int inv,
  * for all factors of a length. */
 void ff_tx_init_tabs_float (int len);
 void ff_tx_init_tabs_double(int len);
+void ff_tx_init_tabs_long_double(int len);
 void ff_tx_init_tabs_int32 (int len);
 
 /* Typed init function to initialize an MDCT exptab in a context.
@@ -378,6 +392,7 @@ void ff_tx_init_tabs_int32 (int len);
  * being the original. */
 int ff_tx_mdct_gen_exp_float (AVTXContext *s, int *pre_tab);
 int ff_tx_mdct_gen_exp_double(AVTXContext *s, int *pre_tab);
+int ff_tx_mdct_gen_exp_long_double(AVTXContext *s, int *pre_tab);
 int ff_tx_mdct_gen_exp_int32 (AVTXContext *s, int *pre_tab);
 
 /* Lists of codelets */
@@ -386,6 +401,7 @@ extern const FFTXCodelet * const ff_tx_codelet_list_float_x86     [];
 extern const FFTXCodelet * const ff_tx_codelet_list_float_aarch64 [];
 
 extern const FFTXCodelet * const ff_tx_codelet_list_double_c      [];
+extern const FFTXCodelet * const ff_tx_codelet_list_long_double_c [];
 
 extern const FFTXCodelet * const ff_tx_codelet_list_int32_c       [];
 

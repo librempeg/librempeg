@@ -197,6 +197,7 @@ OBJS = adler32.o                                                        \
        tx.o                                                             \
        tx_float.o                                                       \
        tx_double.o                                                      \
+       tx_long_double.o                                                 \
        tx_int32.o                                                       \
        uuid.o                                                           \
        version.o                                                        \

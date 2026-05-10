@@ -28,6 +28,7 @@
 #define TYPE_IS(type, x)               \
     (((x) == AV_TX_FLOAT_ ## type)  || \
      ((x) == AV_TX_DOUBLE_ ## type) || \
+     ((x) == AV_TX_LONG_DOUBLE_ ## type) || \
      ((x) == AV_TX_INT32_ ## type))
 
 /* Calculates the modular multiplicative inverse */
@@ -362,6 +363,7 @@ static const FFTXCodelet * const ff_tx_null_list[] = {
 static const FFTXCodelet * const * const codelet_list[] = {
     ff_tx_codelet_list_float_c,
     ff_tx_codelet_list_double_c,
+    ff_tx_codelet_list_long_double_c,
     ff_tx_codelet_list_int32_c,
     ff_tx_null_list,
 #if HAVE_X86ASM
@@ -613,6 +615,9 @@ static void print_type(AVBPrint *bp, enum AVTXType type)
                type == AV_TX_INT32_RDFT  ? "rdft_int32"  :
                type == AV_TX_INT32_DCT_I ? "dctI_int32" :
                type == AV_TX_INT32_DST_I ? "dstI_int32" :
+               type == AV_TX_LONG_DOUBLE_FFT  ? "fft_long_double"  :
+               type == AV_TX_LONG_DOUBLE_MDCT ? "mdct_long_double" :
+               type == AV_TX_LONG_DOUBLE_RDFT ? "rdft_long_double" :
                "unknown");
 }
 
@@ -927,6 +932,7 @@ av_cold int av_tx_init(AVTXContext **ctx, av_tx_fn *tx, enum AVTXType type,
 {
     int ret;
     AVTXContext tmp = { 0 };
+    const long double default_scale_ld = 1.0L;
     const double default_scale_d = 1.0;
     const float  default_scale_f = 1.0f;
 
@@ -940,8 +946,11 @@ av_cold int av_tx_init(AVTXContext **ctx, av_tx_fn *tx, enum AVTXType type,
 
     if (!scale && ((type == AV_TX_DOUBLE_MDCT) || (type == AV_TX_DOUBLE_DCT) ||
                    (type == AV_TX_DOUBLE_DCT_I) || (type == AV_TX_DOUBLE_DST_I) ||
-                   (type == AV_TX_DOUBLE_RDFT)))
-        scale = &default_scale_d;
+                   (type == AV_TX_DOUBLE_RDFT) || (type == AV_TX_LONG_DOUBLE_RDFT)))
+        if (type == AV_TX_LONG_DOUBLE_RDFT)
+            scale = &default_scale_ld;
+        else
+            scale = &default_scale_d;
     else if (!scale && !TYPE_IS(FFT, type))
         scale = &default_scale_f;
 

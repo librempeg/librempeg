@@ -70,11 +70,11 @@ typedef struct FFTabInitData {
 #define SR_TABLE(len)                                              \
 static av_cold void TX_TAB(ff_tx_init_tab_ ##len)(void)            \
 {                                                                  \
-    double freq = 2*M_PI/len;                                      \
+    long double freq = 2.0L*M_PIl/len;                             \
     TXSample *tab = TX_TAB(ff_tx_tab_ ##len);                      \
                                                                    \
     for (int i = 0; i < len/4; i++)                                \
-        *tab++ = RESCALE(cos(i*freq));                             \
+        *tab++ = RESCALE(cosl(i*freq));                             \
                                                                    \
     *tab = 0;                                                      \
 }
@@ -938,22 +938,23 @@ static av_cold int TX_NAME(ff_tx_fft_init_stockham)(AVTXContext *s,
                                                     int len, int inv,
                                                     const void *scale)
 {
-    s->scale_d = *((SCALE_TYPE *)scale);
+    s->scale_ld = *((SCALE_TYPE *)scale);
+    s->scale_d = s->scale_ld;
     s->scale_f = s->scale_d;
 
     if (!(s->exp = av_mallocz(len*sizeof(TXComplex))))
         return AVERROR(ENOMEM);
 
     {
-        const double invf = s->inv ? 1.0 : -1.0;
+        const long double invf = s->inv ? 1.0L : -1.0L;
         TXComplex *exp = s->exp;
 
         for (int n = len; n > 2; n /= 2) {
-            const double w = 2.0 * M_PI * invf / n;
+            const long double w = 2.0L * M_PIl * invf / n;
 
             for (int m = 0; m < n/2; m++) {
-                exp[m].re = RESCALE(cos(w * m));
-                exp[m].im = RESCALE(sin(w * m));
+                exp[m].re = RESCALE(cosl(w * m));
+                exp[m].im = RESCALE(sinl(w * m));
             }
             exp += n/2;
         }
@@ -1958,8 +1959,8 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
     int gen, igen, ret;
     const int plen = FFALIGN(len, av_cpu_max_align());
     const int len2 = len-1;
-    const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
-    const TXSample ifactor = RESCALE(1.0 / len2);
+    const long double phase = s->inv ? 2.0*M_PIl/len : -2.0*M_PIl/len;
+    const TXSample ifactor = RESCALE(1.0l / len2);
     TXComplex *exp;
     int *imap, *map;
 
@@ -1988,7 +1989,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
     exp = s->exp + plen;
 
     for (int i = 0, gp = 1, igp = 1; i < len2; i++) {
-        double factor;
+        long double factor;
 
         map[i] = gp;
         imap[i] = igp;
@@ -1997,8 +1998,8 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
         igp = mulmod(igp, igen, len);
 
         exp[i] = (TXComplex){
-            RESCALE(cos(factor)),
-            RESCALE(sin(factor)),
+            RESCALE(cosl(factor)),
+            RESCALE(sinl(factor)),
         };
 
         exp[i].re = MULT(exp[i].re, ifactor);
@@ -2945,7 +2946,8 @@ static av_cold int TX_NAME(ff_tx_mdct_naive_init)(AVTXContext *s,
                                                   int len, int inv,
                                                   const void *scale)
 {
-    s->scale_d = *((SCALE_TYPE *)scale);
+    s->scale_ld = *((SCALE_TYPE *)scale);
+    s->scale_d = s->scale_ld;
     s->scale_f = s->scale_d;
     return 0;
 }
@@ -3415,12 +3417,13 @@ static av_cold int TX_NAME(ff_tx_rdft_init)(AVTXContext *s,
                                             const void *scale)
 {
     int ret;
-    double f, m;
+    long double f, m;
     TXSample *tab;
     uint64_t r2r = flags & AV_TX_REAL_TO_REAL;
     int len4 = FFALIGN(len, 4) / 4;
 
-    s->scale_d = *((SCALE_TYPE *)scale);
+    s->scale_ld = *((SCALE_TYPE *)scale);
+    s->scale_d = s->scale_ld;
     s->scale_f = s->scale_d;
 
     flags &= ~(AV_TX_REAL_TO_REAL | AV_TX_REAL_TO_IMAGINARY);
@@ -3433,26 +3436,26 @@ static av_cold int TX_NAME(ff_tx_rdft_init)(AVTXContext *s,
 
     tab = (TXSample *)s->exp;
 
-    f = 2*M_PI/len;
+    f = 2*M_PIl/len;
 
-    m = (inv ? 2*s->scale_d : s->scale_d);
+    m = (inv ? 2*s->scale_ld : s->scale_ld);
 
-    *tab++ = RESCALE((inv ? 0.5 : 1.0) * m);
-    *tab++ = RESCALE(inv ? 0.5*m : 1.0*m);
+    *tab++ = RESCALE((inv ? 0.5L : 1.0L) * m);
+    *tab++ = RESCALE(inv ? 0.5L*m : 1.0L*m);
     *tab++ = RESCALE( m);
     *tab++ = RESCALE(-m);
 
-    *tab++ = RESCALE( (0.5 - 0.0) * m);
+    *tab++ = RESCALE( (0.5L - 0.0L) * m);
     if (r2r)
         *tab++ = 1 / s->scale_f;
     else
-        *tab++ = RESCALE( (0.0 - 0.5) * m);
-    *tab++ = RESCALE( (0.5 - inv) * m);
-    *tab++ = RESCALE(-(0.5 - inv) * m);
+        *tab++ = RESCALE( (0.0L - 0.5L) * m);
+    *tab++ = RESCALE( (0.5L - inv) * m);
+    *tab++ = RESCALE(-(0.5L - inv) * m);
 
     for (int i = 0; i < len4; i++) {
-        *tab++ = RESCALE(cos(i*f));
-        *tab++ = RESCALE(cos(((len - i*4)/4.0)*f)) * (inv ? 1 : -1);
+        *tab++ = RESCALE(cosl(i*f));
+        *tab++ = RESCALE(sinl(i*f) * (inv ? 1 : -1));
     }
 
     return 0;
