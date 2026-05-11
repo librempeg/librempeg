@@ -3147,6 +3147,16 @@ static int set_side_data(HEVCContext *s)
             return ret;
     }
 
+    if (s->sei.common.itut_t35.hdr_smpte2094_app5) {
+        AVBufferRef *info_ref = av_buffer_ref(s->sei.common.itut_t35.hdr_smpte2094_app5);
+        if (!info_ref)
+            return AVERROR(ENOMEM);
+
+        ret = ff_frame_new_side_data_from_buf(s->avctx, out, AV_FRAME_DATA_DYNAMIC_HDR_SMPTE_2094_APP5, &info_ref);
+        if (ret < 0)
+            return ret;
+    }
+
     if (s->rpu_buf) {
         AVFrameSideData *rpu = av_frame_new_side_data_from_buf(out, AV_FRAME_DATA_DOVI_RPU_BUFFER, s->rpu_buf);
         if (!rpu)
