@@ -845,6 +845,17 @@ static void sws_graph_worker(void *priv, int jobnr, int threadnr, int nb_jobs,
     pass->run(graph->exec.output, graph->exec.input, slice_y, slice_h, pass);
 }
 
+static void graph_uninit(SwsGraph *graph)
+{
+    avpriv_slicethread_free(&graph->slicethread);
+
+    for (int i = 0; i < graph->num_passes; i++)
+        pass_free(graph->passes[i]);
+    av_free(graph->passes);
+
+    memset(graph, 0, sizeof(*graph));
+}
+
 int ff_sws_graph_create(SwsContext *ctx, const SwsFormat *dst, const SwsFormat *src,
                         int field, SwsGraph **out_graph)
 {
@@ -906,12 +917,7 @@ void ff_sws_graph_free(SwsGraph **pgraph)
     if (!graph)
         return;
 
-    avpriv_slicethread_free(&graph->slicethread);
-
-    for (int i = 0; i < graph->num_passes; i++)
-        pass_free(graph->passes[i]);
-    av_free(graph->passes);
-
+    graph_uninit(graph);
     av_free(graph);
     *pgraph = NULL;
 }
