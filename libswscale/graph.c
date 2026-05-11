@@ -845,6 +845,11 @@ static void sws_graph_worker(void *priv, int jobnr, int threadnr, int nb_jobs,
     pass->run(graph->exec.output, graph->exec.input, slice_y, slice_h, pass);
 }
 
+SwsGraph *ff_sws_graph_alloc(void)
+{
+    return av_mallocz(sizeof(SwsGraph));
+}
+
 static void graph_uninit(SwsGraph *graph)
 {
     avpriv_slicethread_free(&graph->slicethread);
@@ -856,13 +861,14 @@ static void graph_uninit(SwsGraph *graph)
     memset(graph, 0, sizeof(*graph));
 }
 
-int ff_sws_graph_create(SwsContext *ctx, const SwsFormat *dst, const SwsFormat *src,
-                        int field, SwsGraph **out_graph)
+int ff_sws_graph_init(SwsGraph *graph, SwsContext *ctx, const SwsFormat *dst,
+                      const SwsFormat *src, int field)
 {
     int ret;
-    SwsGraph *graph = av_mallocz(sizeof(*graph));
-    if (!graph)
-        return AVERROR(ENOMEM);
+    if (graph->ctx) {
+        av_log(ctx, AV_LOG_ERROR, "Graph is already initialized\n");
+        return AVERROR(EINVAL);
+    }
 
     graph->ctx = ctx;
     graph->src = *src;
@@ -896,12 +902,28 @@ int ff_sws_graph_create(SwsContext *ctx, const SwsFormat *dst, const SwsFormat *
             goto error;
     }
 
-    *out_graph = graph;
     return 0;
 
 error:
-    ff_sws_graph_free(&graph);
+    graph_uninit(graph);
     return ret;
+}
+
+int ff_sws_graph_create(SwsContext *ctx, const SwsFormat *dst, const SwsFormat *src,
+                        int field, SwsGraph **out_graph)
+{
+    SwsGraph *graph = ff_sws_graph_alloc();
+    if (!graph)
+        return AVERROR(ENOMEM);
+
+    int ret = ff_sws_graph_init(graph, ctx, dst, src, field);
+    if (ret < 0) {
+        ff_sws_graph_free(&graph);
+        return ret;
+    }
+
+    *out_graph = graph;
+    return 0;
 }
 
 void ff_sws_graph_rollback(SwsGraph *graph, int since_idx)

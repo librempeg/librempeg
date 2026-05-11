@@ -155,6 +155,18 @@ typedef struct SwsGraph {
 } SwsGraph;
 
 /**
+ * Allocate an empty SwsGraph. Returns NULL on failure.
+ */
+SwsGraph *ff_sws_graph_alloc(void);
+
+/**
+ * Initialize the filter graph for a given pair of formats. Returns 0 or a
+ * negative error.
+ */
+int ff_sws_graph_init(SwsGraph *graph, SwsContext *ctx, const SwsFormat *dst,
+                      const SwsFormat *src, int field);
+
+/**
  * Allocate and initialize the filter graph. Returns 0 or a negative error.
  */
 int ff_sws_graph_create(SwsContext *ctx, const SwsFormat *dst, const SwsFormat *src,
