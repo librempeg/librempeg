@@ -2960,7 +2960,7 @@ static int mkv_write_block(void *logctx, MatroskaMuxContext *mkv,
             if (ret < 0)
                 return ret;
 
-            mkv_write_blockadditional(&writer, t35_buf, payload_size + 5,
+            mkv_write_blockadditional(&writer, smpte_2094_app5_buf, payload_size + 5,
                                       MATROSKA_BLOCK_ADD_ID_ITU_T_T35);
             track->max_blockaddid = FFMAX(track->max_blockaddid,
                                           MATROSKA_BLOCK_ADD_ID_ITU_T_T35);
