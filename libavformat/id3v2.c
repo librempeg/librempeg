@@ -1020,40 +1020,40 @@ static void id3v2_parse(AVIOContext *pb, AVDictionary **metadata,
             }
 
 #if CONFIG_ZLIB
-                if (tcomp) {
-                    int err;
+            if (tcomp) {
+                int err;
 
-                    av_log(s, AV_LOG_DEBUG, "Compressed frame %s tlen=%d dlen=%ld\n", tag, tlen, dlen);
+                av_log(s, AV_LOG_DEBUG, "Compressed frame %s tlen=%d dlen=%ld\n", tag, tlen, dlen);
 
-                    if (tlen <= 0)
-                        goto seek;
-                    if (dlen / 32768 > tlen)
-                        goto seek;
+                if (tlen <= 0)
+                    goto seek;
+                if (dlen / 32768 > tlen)
+                    goto seek;
 
-                    av_fast_malloc(&uncompressed_buffer, &uncompressed_buffer_size, dlen);
-                    if (!uncompressed_buffer) {
-                        av_log(s, AV_LOG_ERROR, "Failed to alloc %ld bytes\n", dlen);
-                        goto seek;
-                    }
-
-                    if (!(unsync || tunsync)) {
-                        err = avio_read(pb, buffer, tlen);
-                        if (err < 0) {
-                            av_log(s, AV_LOG_ERROR, "Failed to read compressed tag\n");
-                            goto seek;
-                        }
-                        tlen = err;
-                    }
-
-                    err = uncompress(uncompressed_buffer, &dlen, buffer, tlen);
-                    if (err != Z_OK) {
-                        av_log(s, AV_LOG_ERROR, "Failed to uncompress tag: %d\n", err);
-                        goto seek;
-                    }
-                    ffio_init_read_context(&pb_local, uncompressed_buffer, dlen);
-                    tlen = dlen;
-                    pbx = &pb_local.pub; // read from sync buffer
+                av_fast_malloc(&uncompressed_buffer, &uncompressed_buffer_size, dlen);
+                if (!uncompressed_buffer) {
+                    av_log(s, AV_LOG_ERROR, "Failed to alloc %ld bytes\n", dlen);
+                    goto seek;
                 }
+
+                if (!(unsync || tunsync)) {
+                    err = avio_read(pb, buffer, tlen);
+                    if (err < 0) {
+                        av_log(s, AV_LOG_ERROR, "Failed to read compressed tag\n");
+                        goto seek;
+                    }
+                    tlen = err;
+                }
+
+                err = uncompress(uncompressed_buffer, &dlen, buffer, tlen);
+                if (err != Z_OK) {
+                    av_log(s, AV_LOG_ERROR, "Failed to uncompress tag: %d\n", err);
+                    goto seek;
+                }
+                ffio_init_read_context(&pb_local, uncompressed_buffer, dlen);
+                tlen = dlen;
+                pbx = &pb_local.pub; // read from sync buffer
+            }
 #endif
             if (s && (s->debug & FF_FDEBUG_ID3V2)) {
                 int64_t pos = avio_tell(pbx);
