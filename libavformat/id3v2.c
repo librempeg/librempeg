@@ -1057,18 +1057,19 @@ static void id3v2_parse(AVIOContext *pb, AVDictionary **metadata,
 #endif
             if (s && (s->debug & FF_FDEBUG_ID3V2)) {
                 int64_t pos = avio_tell(pbx);
-                uint8_t *buf = av_malloc(tlen);
+                uint8_t *buf = av_malloc(tlen + 3U);
                 if (buf) {
-                    AVBPrint bp;
-                    int n = avio_read(pbx, buf, tlen);
-                    av_bprint_init(&bp, 0, AV_BPRINT_SIZE_UNLIMITED);
-                    av_bprintf(&bp, "|");
-                    for (int i = 0; i < n; i++)
-                        av_bprintf(&bp, "%c", buf[i] >= 0x20 && buf[i] < 0x7f ? buf[i] : '.');
-                    av_bprintf(&bp, "|");
-                    av_log(NULL, AV_LOG_INFO, "ID3v2 frame %.4s (%d bytes):%s\n",
-                           tag, tlen, bp.str);
-                    av_bprint_finalize(&bp, NULL);
+                    int n = avio_read(pbx, buf + 1, tlen);
+                    if (n >= 0) {
+                        buf[0] = '|';
+                        for (unsigned i = 1; i <= n; i++)
+                            if (!(buf[i] >= 0x20 && buf[i] < 0x7f))
+                                buf[i] = '.';
+                        buf[n + 1] = '|';
+                        buf[n + 2] = '\0';
+                        av_log(NULL, AV_LOG_INFO, "ID3v2 frame %.4s (%d bytes):%s\n",
+                               tag, tlen, buf);
+                    }
                     av_free(buf);
                     avio_seek(pbx, pos, SEEK_SET);
                 }
