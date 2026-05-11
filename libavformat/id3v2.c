@@ -1067,7 +1067,7 @@ static void id3v2_parse(AVIOContext *pb, AVDictionary **metadata,
                                 buf[i] = '.';
                         buf[n + 1] = '|';
                         buf[n + 2] = '\0';
-                        av_log(NULL, AV_LOG_INFO, "ID3v2 frame %.4s (%d bytes):%s\n",
+                        av_log(s, AV_LOG_INFO, "ID3v2 frame %.4s (%d bytes):%s\n",
                                tag, tlen, buf);
                     }
                     av_free(buf);
