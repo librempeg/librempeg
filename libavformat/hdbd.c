@@ -187,7 +187,10 @@ static int read_header(AVFormatContext *s)
 
         len = strlen(bd_file_name);
         if (len > 3) {
-            bd_file_name[len-2] = 'b';
+            if (bd_file_name[len-2] == 'h')
+                bd_file_name[len-2] = 'b';
+            else
+                bd_file_name[len-2] = 'B';
         } else {
             return AVERROR_INVALIDDATA;
         }
