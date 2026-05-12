@@ -87,31 +87,31 @@ const int16_t ln_cb[LN_CB_MAX + 1] = {
     I16( 51)
 };
 
-int16_t get_value(int16_t codebook)
+int get_value(int16_t codebook)
 {
-    const int16_t switch_bits = codebook >> 8;
-    const int16_t rice_order  = codebook & I16(0xf);
-    const int16_t exp_order   = (codebook >> 4) & I16(0xf);
+    const int switch_bits = int(codebook >> 8);
+    const int rice_order  = int(codebook & I16(0xf));
+    const int exp_order   = int((codebook >> 4) & I16(0xf));
 
     uint32_t b = show_bits(gb, 32);
     if (expectEXT(b == 0, false))
-        return I16(0);
-    int16_t q = I16(31) - I16(findMSB(b));
+        return 0;
+    int q = 31 - findMSB(b);
 
     if ((b & 0x80000000) != 0) {
         skip_bits(gb, 1 + rice_order);
-        return I16((b & 0x7FFFFFFF) >> (31 - rice_order));
+        return int((b & 0x7FFFFFFF) >> (31 - rice_order));
     }
 
     if (q <= switch_bits) {
         skip_bits(gb, q + rice_order + 1);
-        return I16((q << rice_order) +
+        return int((q << rice_order) +
                    (((b << (q + 1)) >> 1) >> (31 - rice_order)));
     }
 
-    int16_t bits = exp_order + (q << 1) - switch_bits;
+    int bits = exp_order + (q << 1) - switch_bits;
     skip_bits(gb, bits);
-    return I16((b >> (32 - bits)) +
+    return int((b >> (32 - bits)) +
                ((switch_bits + 1) << rice_order) -
                (1 << exp_order));
 }
@@ -126,28 +126,29 @@ void store_val(ivec2 offs, int blk, int c, int16_t v)
 
 void read_dc_vals(ivec2 offs, int nb_blocks)
 {
-    int16_t dc, dc_add;
+    int dc;
+    int16_t dc_add;
     int16_t prev_dc = I16(0), sign = I16(0);
 
     /* Special handling for first block */
     dc = get_value(I16(700));
-    prev_dc = (dc >> 1) ^ -(dc & I16(1));
+    prev_dc = I16((dc >> 1) ^ -(dc & 1));
     store_val(offs, 0, 0, prev_dc);
 
     for (int n = 1; n < nb_blocks; n++) {
         if (expectEXT(left_bits(gb) <= 0, false))
             break;
 
-        uint8_t dc_codebook;
+        int16_t dc_codebook;
         if ((n & 15) == 1)
-            dc_codebook = uint8_t(100);
+            dc_codebook = I16(100);
         else
-            dc_codebook = dc_cb[min(TODCCODEBOOK(dc), 13 - 1)];
+            dc_codebook = I16(dc_cb[min(TODCCODEBOOK(dc), 13 - 1)]);
 
         dc = get_value(dc_codebook);
 
-        sign = sign ^ dc & int16_t(1);
-        dc_add = (-sign ^ I16(TODCCODEBOOK(dc))) + sign;
+        sign ^= I16(dc & 1);
+        dc_add = I16((-int(sign) ^ TODCCODEBOOK(dc)) + int(sign));
         sign = I16(dc_add < 0);
         prev_dc += dc_add;
 
@@ -161,7 +162,7 @@ void read_ac_vals(ivec2 offs, int nb_blocks)
     const int log2_nb_blocks = findMSB(nb_blocks);
     const int block_mask = (1 << log2_nb_blocks) - 1;
 
-    int16_t ac, rn, ln;
+    int ac, rn, ln;
     int16_t ac_codebook = I16(49);
     int16_t rn_codebook = I16( 0);
     int16_t ln_codebook = I16(66);
@@ -173,18 +174,16 @@ void read_ac_vals(ivec2 offs, int nb_blocks)
             break;
 
         ln = get_value(ln_codebook);
-        for (int i = 0; i < ln; i++) {
+        int loop_end = min(ln, nb_codes - n);
+        for (int i = 0; i < loop_end; i++) {
             if (expectEXT(left_bits(gb) <= 0, false))
-                break;
-
-            if (expectEXT(n >= nb_codes, false))
                 break;
 
             ac = get_value(ac_codebook);
             ac_codebook = ac_cb[min(ac, 95 - 1)];
             sign = -int16_t(get_bit(gb));
 
-            val = ((ac + I16(1)) ^ sign) - sign;
+            val = I16(((ac + 1) ^ int(sign)) - int(sign));
             store_val(offs, n & block_mask, n >> log2_nb_blocks, val);
 
             n++;
@@ -206,7 +205,7 @@ void read_ac_vals(ivec2 offs, int nb_blocks)
         ac = get_value(ac_codebook);
         sign = -int16_t(get_bit(gb));
 
-        val = ((ac + I16(1)) ^ sign) - sign;
+        val = I16(((ac + 1) ^ int(sign)) - int(sign));
         store_val(offs, n & block_mask, n >> log2_nb_blocks, val);
 
         ac_codebook = ac_cb[min(ac, 95 - 1)];
