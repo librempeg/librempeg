@@ -362,6 +362,12 @@ void skip_bits(inout GetBitContext gb, int n)
     gb.bits_valid -= n;
 }
 
+void skip_bits_unchecked(inout GetBitContext gb, int n)
+{
+    gb.bits <<= n;
+    gb.bits_valid -= n;
+}
+
 int tell_bits(in GetBitContext gb)
 {
     return int(gb.buf - gb.buf_start) * 8 - gb.bits_valid;

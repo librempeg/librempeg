@@ -99,7 +99,7 @@ int get_value(int16_t codebook)
     int q = 31 - findMSB(b);
 
     if (q <= switch_bits) {
-        skip_bits(gb, q + rice_order + 1);
+        skip_bits_unchecked(gb, q + rice_order + 1);
         return int((q << rice_order) +
                    (((b << (q + 1)) >> 1) >> (31 - rice_order)));
     }
