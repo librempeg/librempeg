@@ -23,6 +23,7 @@
 #pragma shader_stage(compute)
 #extension GL_GOOGLE_include_directive : require
 
+#define GET_BITS_SMEM 4
 #include "common.glsl"
 
 struct TileData {
