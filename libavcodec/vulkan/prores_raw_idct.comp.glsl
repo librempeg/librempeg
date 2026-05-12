@@ -66,6 +66,8 @@ const u8vec2 scan[64] = {
     u8vec2(12, 12), u8vec2( 8, 14), u8vec2(10, 14), u8vec2(14, 14),
 };
 
+shared uint8_t qmat_buf[64];
+
 void main(void)
 {
     const uint tile_idx = gl_WorkGroupID.y*gl_NumWorkGroups.x + gl_WorkGroupID.x;
@@ -83,8 +85,10 @@ void main(void)
     const uint w = min(tile_size.x, width - td.pos.x) >> 1;
     const uint nb_blocks = w >> 3;
 
-    /* We have to do non-uniform access, so copy it */
-    uint8_t qmat_buf[64] = qmat;
+    /* Copy push-constant qmat into shared memory for fast non-uniform access */
+    if (gl_LocalInvocationIndex < 64)
+        qmat_buf[gl_LocalInvocationIndex] = qmat[gl_LocalInvocationIndex];
+    barrier();
 
     [[unroll]]
     for (uint y = 0; y < 8; y++) {
