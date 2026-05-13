@@ -709,6 +709,7 @@ extern const FFInputFormat  ff_webvtt_demuxer;
 extern const FFOutputFormat ff_webvtt_muxer;
 extern const FFInputFormat  ff_wiibgm_demuxer;
 extern const FFInputFormat  ff_wiibns_demuxer;
+extern const FFInputFormat  ff_wmw_demuxer;
 extern const FFInputFormat  ff_wsaud_demuxer;
 extern const FFOutputFormat ff_wsaud_muxer;
 extern const FFInputFormat  ff_wsd_demuxer;
