@@ -228,8 +228,8 @@ static int fn(src_init)(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
     taper = s->taper;
     for (int n = 0; n < taper_samples; n++) {
-        const ftype nf = n + F(0.5L);
-        const ftype t = taper_samples;
+        const ftype nf = n;
+        const ftype t = taper_samples-1;
         const ftype x = nf / t;
         const ftype a = SQR(x);
         const ftype b = SQR(F(1.0) - x);
