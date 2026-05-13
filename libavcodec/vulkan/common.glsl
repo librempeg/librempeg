@@ -284,17 +284,18 @@ shared u32vec4 gb_storage[gl_WorkGroupSize.x*gl_WorkGroupSize.y*gl_WorkGroupSize
         gb.cur_smem_pos = 0;                                                    \
     }
 
-#define LOAD64()                                                    \
-    {                                                               \
-        gb.bits = 0;                                                \
-        gb.bits_valid = 0;                                          \
-        u8buf ptr = u8buf(gb.buf);                                  \
-        for (uint i = 0; i < ((4 - uint(gb.buf_start)) & 3); ++i) { \
-            gb.bits |= uint64_t(ptr[i].v) << (56 - i * 8);          \
-            gb.bits_valid += 8;                                     \
-            gb.buf += 1;                                            \
-        }                                                           \
-        FILL_SMEM();                                                \
+#define LOAD64()                                              \
+    {                                                         \
+        gb.bits = 0;                                          \
+        gb.bits_valid = 0;                                    \
+        u8buf ptr = u8buf(gb.buf);                            \
+        for (uint i = 0; i < ((4 - uint(gb.buf)) & 3); ++i) { \
+            gb.bits |= uint64_t(ptr[i].v) << (56 - i * 8);    \
+            gb.bits_valid += 8;                               \
+            gb.buf += 1;                                      \
+        }                                                     \
+        FILL_SMEM();                                          \
+        RELOAD32();                                           \
     }
 
 #define RELOAD32()                                                                                  \
