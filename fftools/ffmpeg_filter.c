@@ -2795,8 +2795,10 @@ static int fg_output_step(OutputFilterPriv *ofp, FilterGraphThread *fgt,
     if (!fgt->got_frame) {
         ret = clone_side_data(&fd->side_data, &fd->nb_side_data,
                               ofp->side_data, ofp->nb_side_data, 0);
-        if (ret < 0)
+        if (ret < 0) {
+            av_frame_unref(frame);
             return ret;
+        }
     }
 
     fd->wallclock[LATENCY_PROBE_FILTER_POST] = av_gettime_relative();
