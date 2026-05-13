@@ -150,7 +150,7 @@ static int audio_get_device_list(AVFormatContext *h, AVDeviceInfoList *device_li
 
 static const AVOption options[] = {
     { "sample_rate", "", offsetof(AlsaData, sample_rate), AV_OPT_TYPE_INT, {.i64 = 48000}, 1, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
-    { "ch_layout",   "", offsetof(AlsaData, ch_layout),   AV_OPT_TYPE_CHLAYOUT, {.str = "2C"}, INT_MIN, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
+    { "ch_layout",   "", offsetof(AlsaData, ch_layout),   AV_OPT_TYPE_CHLAYOUT, {.str = NULL}, INT_MIN, INT_MAX, AV_OPT_FLAG_DECODING_PARAM },
     { NULL },
 };
 
