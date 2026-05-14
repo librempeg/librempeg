@@ -289,7 +289,8 @@ shared u32vec4 gb_storage[gl_WorkGroupSize.x*gl_WorkGroupSize.y*gl_WorkGroupSize
         gb.bits = 0;                                          \
         gb.bits_valid = 0;                                    \
         u8buf ptr = u8buf(gb.buf);                            \
-        for (uint i = 0; i < ((4 - uint(gb.buf)) & 3); ++i) { \
+        uint prefix = (4 - uint(gb.buf)) & 3;                 \
+        for (uint i = 0; i < prefix; ++i) {                   \
             gb.bits |= uint64_t(ptr[i].v) << (56 - i * 8);    \
             gb.bits_valid += 8;                               \
             gb.buf += 1;                                      \
