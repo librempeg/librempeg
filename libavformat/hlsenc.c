@@ -1207,7 +1207,7 @@ static int hls_append_segment(struct AVFormatContext *s, HLSContext *hls,
         av_bprint_chars(&bp, 0, 1);
     }
 
-    en = ff_bprint_finalize_as_fam(&bp, &en0, sizeof(en0), en0.buf);
+    en = ff_bprint_finalize_as_fam(&bp, &en0, offsetof(HLSSegment, buf));
     if (!en)
         return AVERROR(ENOMEM);
 #define NEXT(s) ((s) + strlen(s) + 1)

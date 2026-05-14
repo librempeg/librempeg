@@ -706,11 +706,10 @@ int ff_make_codec_str(void *logctx, const AVCodecParameters *par,
  *
  * @param bp pointer to an AVBprint struct
  * @param struct_ptr pointer to the struct to be copied
- * @param struct_size must be sizeof(*struct_ptr)
- * @param flex_member must be struct_ptr->flexible_array_member
+ * @param fam_offset must be offsetof(StructType, flexible_array_member)
  * @return pointer to the newly allocated struct, NULL on allocation error or
  *         if the AVBPrint buffer is not complete
  */
-void *ff_bprint_finalize_as_fam(struct AVBPrint *bp, const void *struct_ptr, size_t struct_size, void *flex_member);
+void *ff_bprint_finalize_as_fam(struct AVBPrint *bp, const void *struct_ptr, size_t fam_offset);
 
 #endif /* AVFORMAT_INTERNAL_H */
