@@ -1759,7 +1759,7 @@ See also the @ref{framehash} and @ref{md5} muxers.
 Animated GIF muxer.
 
 Note that the GIF format has a very large time base: the delay between two frames can
-therefore not be smaller than one centi second.
+therefore not be smaller than one centisecond.
 
 @subsection Options
 @table @option

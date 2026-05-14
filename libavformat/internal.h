@@ -424,16 +424,16 @@ uint64_t ff_ntp_time(void);
 /**
  * Get the NTP time stamp formatted as per the RFC-5905.
  *
- * @param ntp_time NTP time in micro seconds (since NTP epoch)
+ * @param ntp_time NTP time in microseconds (since NTP epoch)
  * @return the formatted NTP time stamp
  */
 uint64_t ff_get_formatted_ntp_time(uint64_t ntp_time_us);
 
 /**
- * Parse the NTP time in micro seconds (since NTP epoch).
+ * Parse the NTP time in microseconds (since NTP epoch).
  *
  * @param ntp_ts NTP time stamp formatted as per the RFC-5905.
- * @return the time in micro seconds (since NTP epoch)
+ * @return the time in microseconds (since NTP epoch)
  */
 uint64_t ff_parse_ntp_time(uint64_t ntp_ts);
 

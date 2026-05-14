@@ -264,7 +264,7 @@ uint64_t ff_get_formatted_ntp_time(uint64_t ntp_time_us)
     uint64_t ntp_ts, frac_part, sec;
     uint32_t usec;
 
-    //current ntp time in seconds and micro seconds
+    //current ntp time in seconds and microseconds
     sec = ntp_time_us / 1000000;
     usec = ntp_time_us % 1000000;
 

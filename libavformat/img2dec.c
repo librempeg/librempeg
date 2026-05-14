@@ -544,7 +544,7 @@ const AVOption ff_img_options[] = {
     { "ts_from_file", "set frame timestamp from file's one", OFFSET(ts_from_file), AV_OPT_TYPE_INT,    {.i64 = 0   }, 0, 2,       DEC, .unit = "ts_type" },
     { "none", "none",                   0, AV_OPT_TYPE_CONST,    {.i64 = 0   }, 0, 2,       DEC, .unit = "ts_type" },
     { "sec",  "second precision",       0, AV_OPT_TYPE_CONST,    {.i64 = 1   }, 0, 2,       DEC, .unit = "ts_type" },
-    { "ns",   "nano second precision",  0, AV_OPT_TYPE_CONST,    {.i64 = 2   }, 0, 2,       DEC, .unit = "ts_type" },
+    { "ns",   "nanosecond precision",   0, AV_OPT_TYPE_CONST,    {.i64 = 2   }, 0, 2,       DEC, .unit = "ts_type" },
     { "export_path_metadata", "enable metadata containing input path information", OFFSET(export_path_metadata), AV_OPT_TYPE_BOOL,   {.i64 = 0   }, 0, 1,       DEC }, \
     COMMON_OPTIONS
 };
