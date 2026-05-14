@@ -167,6 +167,25 @@ static void fn(src_uninit)(AVFilterContext *ctx)
     av_freep(&s->phase);
 }
 
+static void fn(taper_init)(ctype *taper, ftype alpha, int N)
+{
+    long double alpha2 = 4.0L * (alpha * M_PIl / N) * (alpha * M_PIl / N);
+    long double scale = 0.0L;
+    long double sum = 0.0L;
+
+    for (int i = N-1; i >= 0; i--) {
+        long double tmp = i * (N - i) * alpha2;
+        taper[i].re = av_bessel_i0(sqrtl(tmp));
+        scale += taper[i].re;
+    }
+    scale = 1.0L/(scale+1);
+
+    for (int i = N-1; i >= 0; i--) {
+        sum += taper[i].re;
+        taper[i].re = taper[i].im = sum * scale;
+    }
+}
+
 static int fn(src_init)(AVFilterContext *ctx)
 {
     AudioRDFTSRCContext *s = ctx->priv;
@@ -227,17 +246,7 @@ static int fn(src_init)(AVFilterContext *ctx)
     if (!s->taper)
         return AVERROR(ENOMEM);
     taper = s->taper;
-    for (int n = 0; n < taper_samples; n++) {
-        const ftype nf = n;
-        const ftype t = taper_samples-1;
-        const ftype x = nf / t;
-        const ftype a = SQR(x);
-        const ftype b = SQR(F(1.0) - x);
-        const ftype w = a / (a + b);
-        const ftype v = F(0.5L) * (F(1.0) + FCOS(F(M_PIl) * w));
-
-        taper[n].re = taper[n].im = isnormal(v) ? v : F(0.0L);
-    }
+    fn(taper_init)(taper, F(6.0), taper_samples);
 
     trim_start = 0;
     for (int n = 0; n < taper_samples; n++) {
