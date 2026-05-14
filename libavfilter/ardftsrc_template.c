@@ -246,7 +246,7 @@ static int fn(src_init)(AVFilterContext *ctx)
     if (!s->taper)
         return AVERROR(ENOMEM);
     taper = s->taper;
-    fn(taper_init)(taper, F(6.0), taper_samples);
+    fn(taper_init)(taper, F(4.0), taper_samples);
 
     trim_start = 0;
     for (int n = 0; n < taper_samples; n++) {
