@@ -385,6 +385,11 @@ fate-mov-mp4-edst-remainder: CMD = stream_remux mov $(TARGET_SAMPLES)/audiomatch
 FATE_MOV_FFMPEG_FFPROBE-$(call ENCDEC, AAC AAC, NUT MOV) += fate-mov-reenc-delete-format-metadata
 fate-mov-reenc-delete-format-metadata: CMD = transcode mov $(TARGET_SAMPLES)/cover_art/Owner-iTunes_9.0.3.15.m4a nut "-map 0:a:0 -c:a aac -bitexact -t 0.1" "-c copy -t 0.1" "-show_entries format_tags" "" "" "" null
 
+# audio-only format tags (gapless_playback, iTunSMPB, iTunNORM) must survive when
+# only the cover-art video stream is re-encoded and the audio is stream-copied
+FATE_MOV_FFMPEG_FFPROBE-$(call ENCDEC, PNG, NUT MOV) += fate-mov-cover-reenc-keeps-audio-format-tags
+fate-mov-cover-reenc-keeps-audio-format-tags: CMD = transcode mov $(TARGET_SAMPLES)/cover_art/Owner-iTunes_9.0.3.15.m4a nut "-map 0:a:0 -c:a copy -map 0:v:0 -filter:v scale -c:v png -bitexact -t 0.1" "-c copy -t 0.1" "-show_entries format_tags" "" "" "" null
+
 # stream-level branding: vendor_id should be deleted on re-encode
 FATE_MOV_FFMPEG_FFPROBE-$(call ENCDEC, FLAC PCM_S16BE, NUT MOV) += fate-mov-reenc-delete-stream-metadata
 fate-mov-reenc-delete-stream-metadata: CMD = transcode mov $(TARGET_SAMPLES)/qt-surge-suite/surge-2-16-B-twos.mov nut "-c:a flac -bitexact -t 0.1" "-c copy -t 0.1" "-show_entries stream_tags" "" "" "" null

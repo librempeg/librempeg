@@ -300,6 +300,29 @@ FATE_MATROSKA_FFPROBE-$(call ALLYES, MATROSKA_DEMUXER HEVC_DECODER) += fate-matr
 FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO HEVC, NUT MATROSKA, SCALE_FILTER) += fate-matroska-reenc-delete-metadata
 fate-matroska-reenc-delete-metadata: CMD = transcode matroska $(TARGET_SAMPLES)/mkv/hdr10tags-both.mkv nut "-map 0:v:0 -vf scale=iw:ih -c:v mpeg2video -bitexact" "-c copy -t 0.1" "-show_entries format_tags:stream_tags" "" "" "" null
 
+FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO HEVC, NUT MATROSKA, SCALE_FILTER) += fate-matroska-reenc-delete-metadata-keep
+fate-matroska-reenc-delete-metadata-keep: CMD = transcode matroska $(TARGET_SAMPLES)/mkv/hdr10tags-both.mkv nut "-map 0:v:0 -vf scale=iw:ih -c:v mpeg2video -bitexact -keep_metadata NUMBER_OF_BYTES" "-c copy -t 0.1" "-show_entries format_tags:stream_tags" "" "" "" null
+
+# :s:a:0 specifier — no audio stream in output, so NUMBER_OF_BYTES should still be deleted
+FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO HEVC, NUT MATROSKA, SCALE_FILTER) += fate-matroska-reenc-delete-audio-metadata
+fate-matroska-reenc-delete-audio-metadata: CMD = transcode matroska $(TARGET_SAMPLES)/mkv/hdr10tags-both.mkv nut "-map 0:v:0 -vf scale=iw:ih -c:v mpeg2video -bitexact -keep_metadata:s:a:0 NUMBER_OF_BYTES" "-c copy -t 0.1" "-show_entries format_tags:stream_tags" "" "" "" null
+
+# :s:v specifier matches the re-encoded video stream — NUMBER_OF_BYTES should be kept
+FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO HEVC, NUT MATROSKA, SCALE_FILTER) += fate-matroska-reenc-delete-metadata-keep-stream-video
+fate-matroska-reenc-delete-metadata-keep-stream-video: CMD = transcode matroska $(TARGET_SAMPLES)/mkv/hdr10tags-both.mkv nut "-map 0:v:0 -vf scale=iw:ih -c:v mpeg2video -bitexact -keep_metadata:s:v NUMBER_OF_BYTES" "-c copy -t 0.1" "-show_entries format_tags:stream_tags" "" "" "" null
+
+# suffixed key (NUMBER_OF_BYTES-eng) as seen in metadata output must also work as a keep arg
+FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO HEVC, NUT MATROSKA, SCALE_FILTER) += fate-matroska-reenc-delete-metadata-keep-stream-video-suffix
+fate-matroska-reenc-delete-metadata-keep-stream-video-suffix: CMD = transcode matroska $(TARGET_SAMPLES)/mkv/hdr10tags-both.mkv nut "-map 0:v:0 -vf scale=iw:ih -c:v mpeg2video -bitexact -keep_metadata:s:v NUMBER_OF_BYTES-eng" "-c copy -t 0.1" "-show_entries format_tags:stream_tags" "" "" "" null
+
+# an arbitrary prefix of a family name (NUMBER) must not match NUMBER_OF_BYTES or NUMBER_OF_BYTES-eng
+FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO HEVC, NUT MATROSKA, SCALE_FILTER) += fate-matroska-reenc-delete-metadata-keep-prefix-nomatch
+fate-matroska-reenc-delete-metadata-keep-prefix-nomatch: CMD = transcode matroska $(TARGET_SAMPLES)/mkv/hdr10tags-both.mkv nut "-map 0:v:0 -vf scale=iw:ih -c:v mpeg2video -bitexact -keep_metadata:s:v NUMBER" "-c copy -t 0.1" "-show_entries format_tags:stream_tags" "" "" "" null
+
+# :s:v:1 specifier — video index 1 does not exist, so NUMBER_OF_BYTES should be deleted
+FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO HEVC, NUT MATROSKA, SCALE_FILTER) += fate-matroska-reenc-delete-metadata-keep-stream-video1
+fate-matroska-reenc-delete-metadata-keep-stream-video1: CMD = transcode matroska $(TARGET_SAMPLES)/mkv/hdr10tags-both.mkv nut "-map 0:v:0 -vf scale=iw:ih -c:v mpeg2video -bitexact -keep_metadata:s:v:1 NUMBER_OF_BYTES" "-c copy -t 0.1" "-show_entries format_tags:stream_tags" "" "" "" null
+
 # -metadata:s:a:0 specifier must not suppress deletion on a non-matching (video) stream
 FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO HEVC, NUT MATROSKA, SCALE_FILTER) += fate-matroska-reenc-delete-metadata-spec-scope
 fate-matroska-reenc-delete-metadata-spec-scope: CMD = transcode matroska $(TARGET_SAMPLES)/mkv/hdr10tags-both.mkv nut "-map 0:v:0 -vf scale=iw:ih -c:v mpeg2video -bitexact -metadata:s:a:0 NUMBER_OF_BYTES=custom" "-c copy -t 0.1" "-show_entries format_tags:stream_tags" "" "" "" null

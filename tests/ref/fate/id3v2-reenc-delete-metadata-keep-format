@@ -1,0 +1,6 @@
+805cef2308c41ebbf8e772f166aafe2e *tests/data/fate/id3v2-reenc-delete-metadata-keep-format.nut
+2524 tests/data/fate/id3v2-reenc-delete-metadata-keep-format.nut
+[FORMAT]
+TAG:title=7rk
+TAG:iTunSMPB= 00000000 00000210 0000086A 0000000000066486 00000000 0002DA9D 00000000 00000000 00000000 00000000 00000000 00000000
+[/FORMAT]

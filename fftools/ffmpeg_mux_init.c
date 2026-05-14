@@ -2962,6 +2962,150 @@ static int copy_metadata(Muxer *mux, AVFormatContext *ic,
     return 0;
 }
 
+#define REENC_MASK(type)  (1u << (type))
+#define REENC_AUDIO_ONLY  REENC_MASK(AVMEDIA_TYPE_AUDIO)
+#define REENC_VIDEO_ONLY  REENC_MASK(AVMEDIA_TYPE_VIDEO)
+#define REENC_ANY         (REENC_AUDIO_ONLY | REENC_VIDEO_ONLY)
+
+static const struct {
+    const char *key;
+    int         flags;
+    unsigned    reenc_mask; /* 0 = always delete; non-zero = bit-mask of
+                             * REENC_* values whose re-encoding triggers
+                             * deletion of this key */
+} reenc_delete_keys[] = {
+    // Note: "encoder" is intentionally absent — set_encoder_id() stamps it
+    // after copy_meta() runs, so it always reflects the current encoder.
+
+    // iTunes gapless playback: encoder-specific sample counts and padding;
+    // gapless_playback is the M4A/MOV equivalent of iTunPGAP
+    { "iTunPGAP",                     0,                     REENC_AUDIO_ONLY },
+    { "iTunSMPB",                     0,                     REENC_AUDIO_ONLY },
+    { "gapless_playback",             0,                     REENC_AUDIO_ONLY },
+    // iTunes Sound Check: peak amplitude computed from the original waveform
+    { "iTunNORM",                     0,                     REENC_AUDIO_ONLY },
+    // encoding provenance: describe the original encoder, not the new one
+    { "encoded_by",                   0,                     REENC_ANY },
+    { "encoding_tool",                0,                     REENC_ANY },
+    // MOV/MP4 stream: vendor 4CC identifies the original encoder
+    { "vendor_id",                    0,                     REENC_ANY },
+    // Matroska stream stats written by mkvmerge; all are invalidated by re-encoding
+    { "BPS",                          AV_DICT_IGNORE_SUFFIX, REENC_ANY },
+    { "DURATION",                     AV_DICT_IGNORE_SUFFIX, REENC_ANY },
+    { "NUMBER_OF_BYTES",              AV_DICT_IGNORE_SUFFIX, REENC_ANY },
+    { "NUMBER_OF_FRAMES",             AV_DICT_IGNORE_SUFFIX, REENC_ANY },
+    { "_STATISTICS_TAGS",             AV_DICT_IGNORE_SUFFIX, REENC_ANY },
+    { "_STATISTICS_WRITING_APP",      AV_DICT_IGNORE_SUFFIX, REENC_ANY },
+    { "_STATISTICS_WRITING_DATE_UTC", AV_DICT_IGNORE_SUFFIX, REENC_ANY },
+
+    // MOV/MP4: source container brand written by the demuxer; muxer ignores
+    // these keys and writes its own ftyp, so they always describe the source file
+    { "major_brand",                  0,                     0 },
+    { "minor_version",                0,                     0 },
+    { "compatible_brands",            0,                     0 },
+    { NULL }
+};
+
+static int meta_spec_matches(void *log_ctx, AVFormatContext *oc, AVStream *st,
+                             const char *spec)
+{
+    char type;
+    int index = 0;
+    const char *stream_spec = NULL;
+
+    if (parse_meta_type(log_ctx, spec, &type, &index, &stream_spec) < 0)
+        return 0;
+
+    if (*spec) {
+        if (type == 'g' && st)
+            return 0;
+        if (type == 's') {
+            int ret;
+            if (!st)
+                return 0;
+            ret = check_stream_specifier(oc, st, stream_spec);
+            return ret < 0 ? ret : ret > 0;
+        }
+        if (type == 'c' || type == 'p')
+            return 0;
+    }
+    return 1;
+}
+
+static int reenc_delete_metadata_key(const OptionsContext *o, void *log_ctx,
+                                     AVFormatContext *oc, AVStream *st,
+                                     const char *family, const char *key, int flags)
+{
+    for (int i = 0; i < o->keep_metadata.nb_opt; i++) {
+        int ret = meta_spec_matches(log_ctx, oc, st, o->keep_metadata.opt[i].specifier);
+        if (ret < 0)
+            return ret;
+        if (!ret)
+            continue;
+        const char *keep = o->keep_metadata.opt[i].u.str;
+        if (flags & AV_DICT_IGNORE_SUFFIX) {
+            /* accept the unsuffixed family name (e.g. NUMBER_OF_BYTES keeps
+             * NUMBER_OF_BYTES-eng) or the exact matched key; an arbitrary
+             * prefix like NUMBER does not match NUMBER_OF_BYTES-eng */
+            if (!strcmp(keep, family) || !strcmp(keep, key))
+                return 0;
+        } else {
+            if (!strcmp(key, keep))
+                return 0;
+        }
+    }
+    for (int i = 0; i < o->metadata.nb_opt; i++) {
+        int ret;
+        /* plain -metadata (empty specifier) applies to global metadata only,
+         * matching of_add_metadata(); don't let it suppress stream-level pruning */
+        if (!*o->metadata.opt[i].specifier && st)
+            continue;
+        ret = meta_spec_matches(log_ctx, oc, st, o->metadata.opt[i].specifier);
+        if (ret < 0)
+            return ret;
+        if (!ret)
+            continue;
+        size_t klen = strcspn(o->metadata.opt[i].u.str, "=");
+        if (!strncmp(key, o->metadata.opt[i].u.str, klen) && key[klen] == '\0')
+            return 0;
+    }
+    return 1;
+}
+
+static int reenc_delete_stale_metadata(const OptionsContext *o, void *log_ctx,
+                                       AVFormatContext *oc, AVStream *st,
+                                       AVDictionary **dict, const char *kind,
+                                       unsigned reenc_mask)
+{
+    for (int i = 0; reenc_delete_keys[i].key; i++) {
+        const char *key   = reenc_delete_keys[i].key;
+        int         flags = reenc_delete_keys[i].flags;
+        const AVDictionaryEntry *e;
+        int ret;
+
+        if (reenc_delete_keys[i].reenc_mask && !(reenc_delete_keys[i].reenc_mask & reenc_mask))
+            continue;
+
+        e = NULL;
+        while ((e = av_dict_get(*dict, key, e, flags | AV_DICT_MATCH_CASE))) {
+            ret = reenc_delete_metadata_key(o, log_ctx, oc, st, key, e->key, flags);
+            if (ret < 0)
+                return ret;
+            if (!ret)
+                continue;
+            if (reenc_mask & reenc_delete_keys[i].reenc_mask)
+                av_log(log_ctx, AV_LOG_WARNING,
+                       "Discarding %s metadata '%s' because %s stream is being "
+                       "re-encoded. Use '-keep_metadata %s' to keep it.\n",
+                       kind, e->key,
+                       !strcmp(kind, "stream") ? "the" : "a", e->key);
+            av_dict_set(dict, e->key, NULL, 0);
+            e = NULL;
+        }
+    }
+    return 0;
+}
+
 static int copy_meta(Muxer *mux, const OptionsContext *o)
 {
     OutputFile      *of = &mux->of;
@@ -3021,6 +3165,42 @@ static int copy_meta(Muxer *mux, const OptionsContext *o)
         av_dict_set(&oc->metadata, "company_name", NULL, 0);
         av_dict_set(&oc->metadata, "product_name", NULL, 0);
         av_dict_set(&oc->metadata, "product_version", NULL, 0);
+
+    }
+    for (int i = 0; i < o->keep_metadata.nb_opt; i++) {
+        char type;
+        int index = 0;
+        const char *stream_spec = NULL;
+        const char *spec = o->keep_metadata.opt[i].specifier;
+        ret = parse_meta_type(mux, spec, &type, &index, &stream_spec);
+        if (ret < 0)
+            return ret;
+        if (type == 'c' || type == 'p') {
+            av_log(mux, AV_LOG_WARNING,
+                   "-keep_metadata:%s: chapter and program metadata filtering "
+                   "is not supported and will be ignored.\n", spec);
+        } else if (type == 's') {
+            for (int j = 0; j < oc->nb_streams; j++) {
+                ret = check_stream_specifier(oc, oc->streams[j], stream_spec);
+                if (ret < 0)
+                    return ret;
+            }
+        }
+    }
+
+    /* reenc_mask keys only apply when an audio/video stream is re-encoded;
+     * subtitle/attachment re-encodes do not affect format-level tags.
+     * Runs unconditionally so -map_metadata does not bypass the pruning. */
+    {
+        unsigned reenc_mask = 0;
+        for (int i = 0; i < of->nb_streams; i++) {
+            OutputStream *ost = of->streams[i];
+            if (ost->enc)
+                reenc_mask |= REENC_MASK(ost->st->codecpar->codec_type);
+        }
+        ret = reenc_delete_stale_metadata(o, mux, oc, NULL, &oc->metadata, "format", reenc_mask);
+        if (ret < 0)
+            return ret;
     }
     if (!metadata_streams_manual)
         for (int i = 0; i < of->nb_streams; i++) {
@@ -3030,6 +3210,16 @@ static int copy_meta(Muxer *mux, const OptionsContext *o)
                 continue;
             av_dict_copy(&ost->st->metadata, ost->ist->st->metadata, AV_DICT_DONT_OVERWRITE);
         }
+    /* runs unconditionally so -map_metadata does not bypass the pruning;
+     * applies to all output streams, including filter outputs without ost->ist */
+    for (int i = 0; i < of->nb_streams; i++) {
+        OutputStream *ost = of->streams[i];
+
+        ret = reenc_delete_stale_metadata(o, ost, oc, ost->st, &ost->st->metadata, "stream",
+                                          ost->enc ? REENC_MASK(ost->st->codecpar->codec_type) : 0);
+        if (ret < 0)
+            return ret;
+    }
 
     return 0;
 }

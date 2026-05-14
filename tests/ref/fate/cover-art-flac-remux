@@ -1,5 +1,5 @@
-f41881b70a18d8405c1dd43ee8502349 *tests/data/fate/cover-art-flac-remux.flac
-964331 tests/data/fate/cover-art-flac-remux.flac
+61963e1df31cfa046f99d971a465d364 *tests/data/fate/cover-art-flac-remux.flac
+964133 tests/data/fate/cover-art-flac-remux.flac
 #extradata 0:       34, 0x8f1f0acf
 #tb 0: 1/44100
 #media_type 0: audio
@@ -92,18 +92,13 @@ TAG:comment=Publisher/Studio logotype
 TAG:title=White King Granulated Soap
 [/STREAM]
 [FORMAT]
-TAG:major_brand=M4A 
-TAG:minor_version=0
-TAG:compatible_brands=M4A mp42isom
+TAG:album=OpenMusic
+TAG:album_artist=Maxwell Strait
+TAG:artist=Maxwell Strait
 TAG:disc=1
 TAG:title=Inside
 TAG:compilation=1
-TAG:gapless_playback=0
 TAG:track=5/13
-TAG:Encoding Params=vers
-TAG:iTunNORM= 000004DF 000004C2 00001E64 00001AB3 00000FB9 00000FB9 00006480 00006480 00000FB9 00000B52
-TAG:artist=Maxwell Strait
-TAG:album_artist=Maxwell Strait
-TAG:album=OpenMusic
 TAG:genre=Rock
+TAG:Encoding Params=vers
 [/FORMAT]

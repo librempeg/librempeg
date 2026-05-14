@@ -1,15 +1,8 @@
-9a7537256acd618b31e18a3d92fc907f *tests/data/fate/matroska-reenc-delete-metadata-filter-output.nut
-28835 tests/data/fate/matroska-reenc-delete-metadata-filter-output.nut
+09fe3f3cb1d5d5c474069833bca0d97b *tests/data/fate/matroska-reenc-delete-metadata-filter-output.nut
+28543 tests/data/fate/matroska-reenc-delete-metadata-filter-output.nut
 [STREAM]
 TAG:encoder=Lavc mpeg2video
 TAG:language=spa
-TAG:BPS-eng=216040
-TAG:DURATION-eng=00:00:00.400000000
-TAG:NUMBER_OF_FRAMES-eng=10
-TAG:NUMBER_OF_BYTES-eng=10802
-TAG:_STATISTICS_WRITING_APP-eng=mkvmerge v9.0.1 ('Mask Machine') 64bit
-TAG:_STATISTICS_WRITING_DATE_UTC-eng=2019-02-14 12:53:10
-TAG:_STATISTICS_TAGS-eng=BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES
 [SIDE_DATA]
 [/SIDE_DATA]
 [/STREAM]

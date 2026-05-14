@@ -920,6 +920,46 @@ To set the language of the first audio stream:
 ffmpeg -i INPUT -metadata:s:a:0 language=eng OUTPUT
 @end example
 
+@item -keep_metadata[:@var{metadata_specifier}] @var{key} (@emph{output,per-metadata})
+When re-encoding a stream, certain metadata keys that are likely to become stale
+(such as @code{iTunSMPB} or @code{encoded_by}) are automatically discarded.
+This option prevents a specific key from being discarded, preserving its original
+value from the input.
+
+Without a specifier, the key is preserved in all metadata contexts (format and
+streams). Use @code{g} to restrict to format (global) metadata, or @code{s} with
+an optional stream specifier to restrict to matching streams only.
+
+For example, to keep @code{iTunSMPB} in format metadata only when re-encoding:
+@example
+ffmpeg -i in.mp3 -keep_metadata:g iTunSMPB out.mp3
+@end example
+
+To keep @code{NUMBER_OF_BYTES} only for the video stream:
+@example
+ffmpeg -i in.mkv -keep_metadata:s:v NUMBER_OF_BYTES out.mkv
+@end example
+
+Some keys are stored in the metadata with a suffix (e.g.
+@code{NUMBER_OF_BYTES-eng}). Specifying the unsuffixed family name (e.g.
+@code{NUMBER_OF_BYTES}) keeps all variants. To keep only a specific one,
+specify the full key explicitly:
+@example
+ffmpeg -i in.mkv -keep_metadata:s:v NUMBER_OF_BYTES-eng out.mkv
+@end example
+
+Some (such as @code{major_brand}, @code{minor_version}, and
+@code{compatible_brands}) are always removed regardless of re-encoding, because
+they describe the source container and are meaningless in the output.
+@code{-keep_metadata} applies to those keys even when stream-copying.
+
+Re-encoding-only keys (such as encoder tags and Matroska stream statistics) are
+removed from a stream's metadata only when that stream is being re-encoded, and
+from format metadata only when at least one audio or video stream is re-encoded.
+
+Only format and stream metadata are filtered. Chapter and program metadata
+are never modified by this mechanism.
+
 @item -disposition[:stream_specifier] @var{value} (@emph{output,per-stream})
 Sets the disposition flags for a stream.
 

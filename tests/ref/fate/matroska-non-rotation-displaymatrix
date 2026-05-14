@@ -1,5 +1,5 @@
-7294b73bcb1cd5059b8f413e2a4dab5b *tests/data/fate/matroska-non-rotation-displaymatrix.matroska
-7866 tests/data/fate/matroska-non-rotation-displaymatrix.matroska
+d7fdaa33d0ae71997ff4e60953741631 *tests/data/fate/matroska-non-rotation-displaymatrix.matroska
+7775 tests/data/fate/matroska-non-rotation-displaymatrix.matroska
 #extradata 0:       34, 0xc1d10b51
 #tb 0: 1/1000
 #media_type 0: video
