@@ -297,6 +297,21 @@ fate-matroska-side-data-pref-packet: CMD = run ffprobe$(PROGSSUF)$(EXESUF) $(TAR
     -select_streams v:0 -show_streams -show_frames -show_entries stream=stream_side_data:frame=frame_side_data_list -side_data_prefer_packet mastering_display_metadata,content_light_level
 FATE_MATROSKA_FFPROBE-$(call ALLYES, MATROSKA_DEMUXER HEVC_DECODER) += fate-matroska-side-data-pref-codec fate-matroska-side-data-pref-packet
 
+FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO HEVC, NUT MATROSKA, SCALE_FILTER) += fate-matroska-reenc-delete-metadata
+fate-matroska-reenc-delete-metadata: CMD = transcode matroska $(TARGET_SAMPLES)/mkv/hdr10tags-both.mkv nut "-map 0:v:0 -vf scale=iw:ih -c:v mpeg2video -bitexact" "-c copy -t 0.1" "-show_entries format_tags:stream_tags" "" "" "" null
+
+# -metadata:s:a:0 specifier must not suppress deletion on a non-matching (video) stream
+FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO HEVC, NUT MATROSKA, SCALE_FILTER) += fate-matroska-reenc-delete-metadata-spec-scope
+fate-matroska-reenc-delete-metadata-spec-scope: CMD = transcode matroska $(TARGET_SAMPLES)/mkv/hdr10tags-both.mkv nut "-map 0:v:0 -vf scale=iw:ih -c:v mpeg2video -bitexact -metadata:s:a:0 NUMBER_OF_BYTES=custom" "-c copy -t 0.1" "-show_entries format_tags:stream_tags" "" "" "" null
+
+# stale stream tags must be pruned even for filter outputs (no ost->ist)
+FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO HEVC, NUT MATROSKA, SCALE_FILTER) += fate-matroska-reenc-delete-metadata-filter-output
+fate-matroska-reenc-delete-metadata-filter-output: CMD = transcode matroska $(TARGET_SAMPLES)/mkv/hdr10tags-both.mkv nut "-filter_complex '[0:v]scale=iw:ih[v]' -map '[v]' -c:v mpeg2video -bitexact -map_metadata:s:v 0:s:v" "-c copy -t 0.1" "-show_entries stream_tags" "" "" "" null
+
+# chapter metadata is not filtered on re-encode; NUMBER_OF_FRAMES must survive
+FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO HEVC, NUT MATROSKA, SCALE_FILTER) += fate-matroska-reenc-chapter-nofilter
+fate-matroska-reenc-chapter-nofilter: CMD = transcode matroska $(TARGET_SAMPLES)/mkv/hdr10tags-both.mkv nut "-map 0:v:0 -vf scale=iw:ih -c:v mpeg2video -bitexact -metadata:c:0 NUMBER_OF_FRAMES=test" "-c copy -t 0.1" "-show_entries chapter_tags" "" "" "" null
+
 FATE_SAMPLES_AVCONV += $(FATE_MATROSKA-yes)
 FATE_SAMPLES_FFPROBE += $(FATE_MATROSKA_FFPROBE-yes)
 FATE_SAMPLES_FFMPEG_FFPROBE += $(FATE_MATROSKA_FFMPEG_FFPROBE-yes)

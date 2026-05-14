@@ -22,6 +22,16 @@ FATE_ID3V2_RAW-$(call REMUX, MP3) += fate-id3v2-txxx
 fate-id3v2-txxx: $(ID3V2_TESTBIN)
 fate-id3v2-txxx: CMD = run_with_temp "$(FFMPEG) -nostdin -hide_banner -loglevel error -i $(TARGET_SAMPLES)/id3v2/id3v2_priv.mp3 -map_metadata -1 -c copy -fflags +bitexact -metadata foobar=baz -f mp3 -y" "$(ID3V2_TESTBIN)" mp3
 
+FATE_ID3V2_FFMPEG_FFPROBE-$(call ENCDEC, AAC MP3, NUT) += fate-id3v2-reenc-delete-metadata
+fate-id3v2-reenc-delete-metadata: CMD = transcode mp3 $(TARGET_SAMPLES)/gapless/gapless-itunes.mp3 nut "-c:a aac -bitexact -t 0.1" "-c copy -t 0.1" "-show_entries format_tags" "" "" "" null
+
+# -map_metadata must not bypass stale metadata pruning
+FATE_ID3V2_FFMPEG_FFPROBE-$(call ENCDEC, AAC MP3, NUT) += fate-id3v2-reenc-delete-metadata-map-metadata
+fate-id3v2-reenc-delete-metadata-map-metadata: CMD = transcode mp3 $(TARGET_SAMPLES)/gapless/gapless-itunes.mp3 nut "-c:a aac -bitexact -map_metadata 0 -t 0.1" "-c copy -t 0.1" "-show_entries format_tags" "" "" "" null
+
+FATE_ID3V2_FFMPEG_FFPROBE-$(call REMUX, MP3) += fate-id3v2-reenc-remux-keep
+fate-id3v2-reenc-remux-keep: CMD = transcode mp3 $(TARGET_SAMPLES)/gapless/gapless-itunes.mp3 mp3 "-c copy" "-c copy -t 0.1" "-show_entries format_tags" "" "" "" null
+
 FATE_ID3V2_FFMPEG_FFPROBE-$(call REMUX, AIFF, WAV_DEMUXER) += fate-id3v2-chapters
 fate-id3v2-chapters: CMD = transcode wav $(TARGET_SAMPLES)/wav/200828-005.wav aiff "-c copy -metadata:c:0 description=foo -metadata:c:0 date=2021 -metadata:c copyright=none -metadata:c:1 genre=nonsense -write_id3v2 1" "-c copy -t 0.05" "-show_entries format_tags:chapters"
 

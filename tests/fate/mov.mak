@@ -381,6 +381,18 @@ FATE_MOV_FFMPEG_SAMPLES-$(call REMUX, MP4 MOV, AAC_PARSER) \
                           += fate-mov-mp4-edst-remainder
 fate-mov-mp4-edst-remainder: CMD = stream_remux mov $(TARGET_SAMPLES)/audiomatch/tones_fdkaac_44100_stereo_aac_lc.m4a "" mp4 "" "" "-c:a copy"
 
+# format-level branding: major_brand, minor_version, compatible_brands should be deleted on re-encode
+FATE_MOV_FFMPEG_FFPROBE-$(call ENCDEC, AAC AAC, NUT MOV) += fate-mov-reenc-delete-format-metadata
+fate-mov-reenc-delete-format-metadata: CMD = transcode mov $(TARGET_SAMPLES)/cover_art/Owner-iTunes_9.0.3.15.m4a nut "-map 0:a:0 -c:a aac -bitexact -t 0.1" "-c copy -t 0.1" "-show_entries format_tags" "" "" "" null
+
+# stream-level branding: vendor_id should be deleted on re-encode
+FATE_MOV_FFMPEG_FFPROBE-$(call ENCDEC, FLAC PCM_S16BE, NUT MOV) += fate-mov-reenc-delete-stream-metadata
+fate-mov-reenc-delete-stream-metadata: CMD = transcode mov $(TARGET_SAMPLES)/qt-surge-suite/surge-2-16-B-twos.mov nut "-c:a flac -bitexact -t 0.1" "-c copy -t 0.1" "-show_entries stream_tags" "" "" "" null
+
+# plain -metadata (global scope) must not suppress stream-level vendor_id pruning
+FATE_MOV_FFMPEG_FFPROBE-$(call ENCDEC, FLAC PCM_S16BE, NUT MOV) += fate-mov-reenc-delete-stream-metadata-global-tag
+fate-mov-reenc-delete-stream-metadata-global-tag: CMD = transcode mov $(TARGET_SAMPLES)/qt-surge-suite/surge-2-16-B-twos.mov nut "-c:a flac -bitexact -t 0.1 -metadata vendor_id=custom" "-c copy -t 0.1" "-show_entries format_tags:stream_tags" "" "" "" null
+
 FATE_FFMPEG += $(FATE_MOV_FFMPEG-yes)
 FATE_FFMPEG_FFPROBE += $(FATE_MOV_FFMPEG_FFPROBE-yes)
 
