@@ -32,10 +32,31 @@
 #include <fcntl.h>
 #endif
 
+static int pass_idx;
+
 static int print_ops(SwsContext *ctx, SwsOpList *ops, SwsCompiledOp *out)
 {
+    if (pass_idx > 0)
+        av_log(NULL, AV_LOG_INFO, " Sub-pass #%d:\n", pass_idx);
+
     ff_sws_op_list_print(NULL, AV_LOG_INFO, AV_LOG_INFO, ops);
     *out = (SwsCompiledOp) {0}; /* dummy value, will be immediately freed */
+
+    bool has_filters = false;
+    for (int i = 0; i < ops->num_ops; i++) {
+        const SwsOp *op = &ops->ops[i];
+        if (op->op == SWS_OP_FILTER_H || op->op == SWS_OP_FILTER_V) {
+            has_filters = true;
+            break;
+        }
+    }
+
+    if (has_filters) {
+        av_log(NULL, AV_LOG_INFO, " Retrying with split passes:\n");
+        return AVERROR(ENOTSUP);
+    }
+
+    pass_idx++;
     return 0;
 }
 
@@ -63,6 +84,7 @@ static int print_passes(SwsContext *ctx, void *graph, SwsOpList *ops)
     if (!copy)
         return AVERROR(ENOMEM);
 
+    pass_idx = 0;
     return ff_sws_compile_pass(graph, &backend_print, &copy, 0, NULL, NULL);
 }
 
