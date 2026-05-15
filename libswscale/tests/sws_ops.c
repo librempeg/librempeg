@@ -226,7 +226,7 @@ bad_option:
     SwsContext *ctx = sws_alloc_context();
     if (!ctx)
         goto fail;
-    ctx->scaler = SWS_SCALE_POINT; /* reduce filter generation overhead */
+    ctx->scaler = SWS_SCALE_BILINEAR; /* reduce filter generation overhead */
 
     av_log_set_callback(log_stdout);
 
