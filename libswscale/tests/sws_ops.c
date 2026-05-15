@@ -24,6 +24,7 @@
 #include "libavutil/pixdesc.h"
 #include "libavutil/tree.h"
 #include "libswscale/ops.h"
+#include "libswscale/ops_dispatch.h"
 #include "libswscale/format.h"
 
 #ifdef _WIN32
@@ -31,20 +32,38 @@
 #include <fcntl.h>
 #endif
 
-static int print_ops(SwsContext *const ctx, void *opaque, SwsOpList *ops)
+static int print_ops(SwsContext *ctx, SwsOpList *ops, SwsCompiledOp *out)
 {
-    av_log(opaque, AV_LOG_INFO, "%s %dx%d -> %s %dx%d:\n",
+    ff_sws_op_list_print(NULL, AV_LOG_INFO, AV_LOG_INFO, ops);
+    *out = (SwsCompiledOp) {0}; /* dummy value, will be immediately freed */
+    return 0;
+}
+
+/* Dummy backend that just prints all seen op lists */
+static const SwsOpBackend backend_print = {
+    .name    = "print_ops",
+    .compile = print_ops,
+};
+
+static int print_passes(SwsContext *ctx, void *graph, SwsOpList *ops)
+{
+    av_log(NULL, AV_LOG_INFO, "%s %dx%d -> %s %dx%d:\n",
            av_get_pix_fmt_name(ops->src.format),
            ops->src.width, ops->src.height,
            av_get_pix_fmt_name(ops->dst.format),
            ops->dst.width, ops->dst.height);
 
-    if (ff_sws_op_list_is_noop(ops))
-        av_log(opaque, AV_LOG_INFO, "  (no-op)\n");
-    else
-        ff_sws_op_list_print(opaque, AV_LOG_INFO, AV_LOG_INFO, ops);
+    if (ff_sws_op_list_is_noop(ops)) {
+        av_log(NULL, AV_LOG_INFO, "  (no-op)\n");
+        return 0;
+    }
 
-    return 0;
+    /* ff_sws_compile_pass() takes over ownership of `ops` */
+    SwsOpList *copy = ff_sws_op_list_duplicate(ops);
+    if (!copy)
+        return AVERROR(ENOMEM);
+
+    return ff_sws_compile_pass(graph, &backend_print, &copy, 0, NULL, NULL);
 }
 
 static int cmp_str(const void *a, const void *b)
@@ -197,7 +216,16 @@ bad_option:
         av_tree_enumerate(root, NULL, NULL, print_and_free_summary);
         av_tree_destroy(root);
     } else {
-        ret = ff_sws_enum_op_lists(ctx, NULL, src_fmt, dst_fmt, print_ops);
+        /* Allocate dummy graph and context for ff_sws_compile_pass() */
+        SwsGraph *graph = ff_sws_graph_alloc();
+        if (!graph) {
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
+        graph->ctx = ctx;
+
+        ret = ff_sws_enum_op_lists(ctx, graph, src_fmt, dst_fmt, print_passes);
+        ff_sws_graph_free(&graph);
         if (ret < 0)
             goto fail;
     }
