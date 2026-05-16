@@ -167,8 +167,9 @@ static void fn(src_uninit)(AVFilterContext *ctx)
     av_freep(&s->phase);
 }
 
-static void fn(taper_init)(ctype *taper, ftype alpha, int N)
+static void fn(taper_init)(ctype *taper, const int N, int mode)
 {
+    long double alpha = mode ? F(4.0L) : F(6.0L);
     long double alpha2 = 4.0L * (alpha * M_PIl / N) * (alpha * M_PIl / N);
     long double scale = 0.0L;
     long double sum = 0.0L;
@@ -246,7 +247,7 @@ static int fn(src_init)(AVFilterContext *ctx)
     if (!s->taper)
         return AVERROR(ENOMEM);
     taper = s->taper;
-    fn(taper_init)(taper, F(4.0), taper_samples);
+    fn(taper_init)(taper, taper_samples, s->out_rdft_size > s->in_rdft_size);
 
     trim_start = 0;
     for (int n = 0; n < taper_samples; n++) {
