@@ -106,6 +106,10 @@ void ff_free_stream_group(AVStreamGroup **pstg)
         av_opt_free(stg->params.tref);
         av_freep(&stg->params.tref);
         break;
+    case AV_STREAM_GROUP_PARAMS_DOLBY_VISION:
+        av_opt_free(stg->params.layered_video);
+        av_freep(&stg->params.layered_video);
+        break;
     default:
         break;
     }
@@ -264,6 +268,7 @@ const char *avformat_stream_group_name(enum AVStreamGroupParamsType type)
     case AV_STREAM_GROUP_PARAMS_IAMF_MIX_PRESENTATION:     return "IAMF Mix Presentation";
     case AV_STREAM_GROUP_PARAMS_TILE_GRID:                 return "Tile Grid";
     case AV_STREAM_GROUP_PARAMS_TREF:                      return "Track Reference";
+    case AV_STREAM_GROUP_PARAMS_DOLBY_VISION:              return "Dolby Vision (Split base and enhancement layer)";
     }
     return NULL;
 }
