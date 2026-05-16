@@ -1674,6 +1674,15 @@ const char *ff_vk_shader_rep_fmt(enum AVPixelFormat pix_fmt,
         };
         return rep_tab[rep_fmt];
     }
+    case AV_PIX_FMT_RGBAF16: {
+        const char *rep_tab[] = {
+            [FF_VK_REP_NATIVE] = "rgba16f",
+            [FF_VK_REP_FLOAT] = "rgba16f",
+            [FF_VK_REP_INT] = "rgba32i",
+            [FF_VK_REP_UINT] = "rgba16u",
+        };
+        return rep_tab[rep_fmt];
+    }
     case AV_PIX_FMT_RGBF32:
     case AV_PIX_FMT_RGBAF32: {
         const char *rep_tab[] = {
@@ -1878,6 +1887,12 @@ static VkFormat map_fmt_to_rep(VkFormat fmt, enum FFVkShaderRepFormat rep_fmt)
         {
             VK_FORMAT_R32G32B32_SFLOAT,
             VK_FORMAT_R32G32B32_SFLOAT,
+            VK_FORMAT_UNDEFINED,
+            VK_FORMAT_UNDEFINED,
+        },
+        {
+            VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_FORMAT_R16G16B16A16_SFLOAT,
             VK_FORMAT_UNDEFINED,
             VK_FORMAT_UNDEFINED,
         },
