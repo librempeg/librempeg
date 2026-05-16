@@ -96,40 +96,40 @@ static AVOnce sr_tabs_init_once[] = {
 static av_cold void TX_TAB(ff_tx_init_tab_53)(void)
 {
     /* 5pt, doubled to eliminate AVX lane shuffles */
-    TX_TAB(ff_tx_tab_53)[0] = RESCALE(cos(2 * M_PI /  5));
-    TX_TAB(ff_tx_tab_53)[1] = RESCALE(cos(2 * M_PI /  5));
-    TX_TAB(ff_tx_tab_53)[2] = RESCALE(cos(2 * M_PI / 10));
-    TX_TAB(ff_tx_tab_53)[3] = RESCALE(cos(2 * M_PI / 10));
-    TX_TAB(ff_tx_tab_53)[4] = RESCALE(sin(2 * M_PI /  5));
-    TX_TAB(ff_tx_tab_53)[5] = RESCALE(sin(2 * M_PI /  5));
-    TX_TAB(ff_tx_tab_53)[6] = RESCALE(sin(2 * M_PI / 10));
-    TX_TAB(ff_tx_tab_53)[7] = RESCALE(sin(2 * M_PI / 10));
+    TX_TAB(ff_tx_tab_53)[0] = RESCALE(cosl(2 * M_PIl /  5));
+    TX_TAB(ff_tx_tab_53)[1] = RESCALE(cosl(2 * M_PIl /  5));
+    TX_TAB(ff_tx_tab_53)[2] = RESCALE(cosl(2 * M_PIl / 10));
+    TX_TAB(ff_tx_tab_53)[3] = RESCALE(cosl(2 * M_PIl / 10));
+    TX_TAB(ff_tx_tab_53)[4] = RESCALE(sinl(2 * M_PIl /  5));
+    TX_TAB(ff_tx_tab_53)[5] = RESCALE(sinl(2 * M_PIl /  5));
+    TX_TAB(ff_tx_tab_53)[6] = RESCALE(sinl(2 * M_PIl / 10));
+    TX_TAB(ff_tx_tab_53)[7] = RESCALE(sinl(2 * M_PIl / 10));
 
     /* 3pt */
-    TX_TAB(ff_tx_tab_53)[ 8] = RESCALE(cos(2 * M_PI / 12));
-    TX_TAB(ff_tx_tab_53)[ 9] = RESCALE(cos(2 * M_PI / 12));
-    TX_TAB(ff_tx_tab_53)[10] = RESCALE(cos(2 * M_PI /  6));
-    TX_TAB(ff_tx_tab_53)[11] = RESCALE(cos(8 * M_PI /  6));
+    TX_TAB(ff_tx_tab_53)[ 8] = RESCALE(cosl(2 * M_PIl / 12));
+    TX_TAB(ff_tx_tab_53)[ 9] = RESCALE(cosl(2 * M_PIl / 12));
+    TX_TAB(ff_tx_tab_53)[10] = RESCALE(cosl(2 * M_PIl /  6));
+    TX_TAB(ff_tx_tab_53)[11] = RESCALE(cosl(8 * M_PIl /  6));
 }
 
 static av_cold void TX_TAB(ff_tx_init_tab_7)(void)
 {
-    TX_TAB(ff_tx_tab_7)[0] = RESCALE(cos(2 * M_PI /  7));
-    TX_TAB(ff_tx_tab_7)[1] = RESCALE(sin(2 * M_PI /  7));
-    TX_TAB(ff_tx_tab_7)[2] = RESCALE(sin(2 * M_PI / 28));
-    TX_TAB(ff_tx_tab_7)[3] = RESCALE(cos(2 * M_PI / 28));
-    TX_TAB(ff_tx_tab_7)[4] = RESCALE(cos(2 * M_PI / 14));
-    TX_TAB(ff_tx_tab_7)[5] = RESCALE(sin(2 * M_PI / 14));
+    TX_TAB(ff_tx_tab_7)[0] = RESCALE(cosl(2 * M_PIl /  7));
+    TX_TAB(ff_tx_tab_7)[1] = RESCALE(sinl(2 * M_PIl /  7));
+    TX_TAB(ff_tx_tab_7)[2] = RESCALE(sinl(2 * M_PIl / 28));
+    TX_TAB(ff_tx_tab_7)[3] = RESCALE(cosl(2 * M_PIl / 28));
+    TX_TAB(ff_tx_tab_7)[4] = RESCALE(cosl(2 * M_PIl / 14));
+    TX_TAB(ff_tx_tab_7)[5] = RESCALE(sinl(2 * M_PIl / 14));
 }
 
 static av_cold void TX_TAB(ff_tx_init_tab_9)(void)
 {
-    TX_TAB(ff_tx_tab_9)[0] = RESCALE(cos(2 * M_PI /  3));
-    TX_TAB(ff_tx_tab_9)[1] = RESCALE(sin(2 * M_PI /  3));
-    TX_TAB(ff_tx_tab_9)[2] = RESCALE(cos(2 * M_PI /  9));
-    TX_TAB(ff_tx_tab_9)[3] = RESCALE(sin(2 * M_PI /  9));
-    TX_TAB(ff_tx_tab_9)[4] = RESCALE(cos(2 * M_PI / 36));
-    TX_TAB(ff_tx_tab_9)[5] = RESCALE(sin(2 * M_PI / 36));
+    TX_TAB(ff_tx_tab_9)[0] = RESCALE(cosl(2 * M_PIl /  3));
+    TX_TAB(ff_tx_tab_9)[1] = RESCALE(sinl(2 * M_PIl /  3));
+    TX_TAB(ff_tx_tab_9)[2] = RESCALE(cosl(2 * M_PIl /  9));
+    TX_TAB(ff_tx_tab_9)[3] = RESCALE(sinl(2 * M_PIl /  9));
+    TX_TAB(ff_tx_tab_9)[4] = RESCALE(cosl(2 * M_PIl / 36));
+    TX_TAB(ff_tx_tab_9)[5] = RESCALE(sinl(2 * M_PIl / 36));
     TX_TAB(ff_tx_tab_9)[6] = TX_TAB(ff_tx_tab_9)[2] + TX_TAB(ff_tx_tab_9)[5];
     TX_TAB(ff_tx_tab_9)[7] = TX_TAB(ff_tx_tab_9)[3] - TX_TAB(ff_tx_tab_9)[4];
 }
@@ -864,17 +864,17 @@ static av_cold int TX_NAME(ff_tx_fft_init_naive_small)(AVTXContext *s,
                                                        int len, int inv,
                                                        const void *scale)
 {
-    const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
+    const long double phase = s->inv ? 2.0L*M_PIl/len : -2.0L*M_PIl/len;
 
     if (!(s->exp = av_malloc(len*len*sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     for (int i = 0; i < len; i++) {
         for (int j = 0; j < len; j++) {
-            const double factor = phase*i*j;
+            const long double factor = phase*i*j;
             s->exp[i*len+j] = (TXComplex){
-                RESCALE(cos(factor)),
-                RESCALE(sin(factor)),
+                RESCALE(cosl(factor)),
+                RESCALE(sinl(factor)),
             };
         }
     }
@@ -1666,8 +1666,8 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix3)(AVTXContext *s,
                                                   int len, int inv,
                                                   const void *scale)
 {
-    const double invf = s->inv ? 1.0 : -1.0;
-    const double phase = 2.0*M_PI * invf;
+    const long double invf = s->inv ? 1.0L : -1.0L;
+    const long double phase = 2.0L*M_PIl * invf;
     const int n = len;
     const int r = 3;
     TXComplex *exp;
@@ -1683,16 +1683,16 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix3)(AVTXContext *s,
         return AVERROR(ENOMEM);
 
     exp = s->exp;
-    exp[0] = (TXComplex){RESCALE(-0.5), RESCALE(invf * sqrt(3.0) * 0.5)};
+    exp[0] = (TXComplex){RESCALE(-0.5L), RESCALE(invf * sqrtl(3.0L) * 0.5L)};
 
     for (int m = r, z = 0; m <= n; m *= r) {
         const int mr = m/r;
 
         for (int j = 0; j < mr; j++) {
             for (int i = 1; i < r; i++) {
-                const double ww = (j*i) * phase / m;
+                const long double ww = (j*i) * phase / m;
 
-                exp[1+z++] = (TXComplex){RESCALE(cos(ww)), RESCALE(sin(ww))};
+                exp[1+z++] = (TXComplex){RESCALE(cosl(ww)), RESCALE(sinl(ww))};
             }
         }
     }
@@ -1789,8 +1789,8 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix5)(AVTXContext *s,
                                                   int len, int inv,
                                                   const void *scale)
 {
-    const double invf = s->inv ? 1.0 : -1.0;
-    const double phase = 2.0*M_PI * invf;
+    const long double invf = s->inv ? 1.0L : -1.0L;
+    const long double phase = 2.0L*M_PIl * invf;
     const int n = len;
     const int r = 5;
     TXComplex *exp;
@@ -1806,17 +1806,17 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix5)(AVTXContext *s,
         return AVERROR(ENOMEM);
 
     exp = s->exp;
-    exp[0] = (TXComplex){RESCALE(0.25), RESCALE(sqrt(5.0) * 0.25)};
-    exp[1] = (TXComplex){RESCALE(sqrt((5.0-sqrt(5.0))/(5.0+sqrt(5.0)))), RESCALE(-0.5 * invf * sqrt(2.5 + sqrt(5.0)*0.5))};
+    exp[0] = (TXComplex){RESCALE(0.25L), RESCALE(sqrtl(5.0L) * 0.25L)};
+    exp[1] = (TXComplex){RESCALE(sqrtl((5.0L-sqrtl(5.0L))/(5.0L+sqrtl(5.0L)))), RESCALE(-0.5L * invf * sqrtl(2.5L + sqrtl(5.0L)*0.5L))};
 
     for (int m = r, z = 0; m <= n; m *= r) {
         const int mr = m/r;
 
         for (int j = 0; j < mr; j++) {
             for (int i = 1; i < r; i++) {
-                const double ww = (j*i) * phase / m;
+                const long double ww = (j*i) * phase / m;
 
-                exp[2+z++] = (TXComplex){RESCALE(cos(ww)), RESCALE(sin(ww))};
+                exp[2+z++] = (TXComplex){RESCALE(cosl(ww)), RESCALE(sinl(ww))};
             }
         }
     }
@@ -2029,7 +2029,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey)(AVTXContext *s,
                                                   int len, int inv,
                                                   const void *scale)
 {
-    const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
+    const long double phase = s->inv ? 2.0L*M_PIl/len : -2.0L*M_PIl/len;
     TXComplex *exp;
     int ret, m, n;
 
@@ -2052,10 +2052,10 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey)(AVTXContext *s,
     exp = s->exp;
     for (int i = 0; i < m; i++) {
         for (int j = 0; j < n; j++) {
-            const double factor = phase*i*j;
+            const long double factor = phase*i*j;
             exp[j] = (TXComplex){
-                RESCALE(cos(factor)),
-                RESCALE(sin(factor)),
+                RESCALE(cosl(factor)),
+                RESCALE(sinl(factor)),
             };
         }
 
@@ -2072,7 +2072,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey_slow)(AVTXContext *s,
                                                        int len, int inv,
                                                        const void *scale)
 {
-    const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
+    const long double phase = s->inv ? 2.0L*M_PIl/len : -2.0L*M_PIl/len;
     TXComplex *exp;
     int ret, m, n;
 
@@ -2095,10 +2095,10 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey_slow)(AVTXContext *s,
     exp = s->exp;
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < m; j++) {
-            const double factor = phase*i*j;
+            const long double factor = phase*i*j;
             exp[j] = (TXComplex){
-                RESCALE(cos(factor)),
-                RESCALE(sin(factor)),
+                RESCALE(cosl(factor)),
+                RESCALE(sinl(factor)),
             };
         }
 
@@ -2115,7 +2115,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_bluestein)(AVTXContext *s,
                                                      int len, int inv,
                                                      const void *scale)
 {
-    const double phase = s->inv ? M_PI/len : -M_PI/len;
+    const long double phase = s->inv ? M_PIl/len : -M_PIl/len;
     const int len2 = 1 << av_ceil_log2(2*len-1);
     TXComplex *w;
     int ret;
@@ -2133,14 +2133,14 @@ static av_cold int TX_NAME(ff_tx_fft_init_bluestein)(AVTXContext *s,
         return AVERROR(ENOMEM);
 
     s->exp[0] = (TXComplex){
-        RESCALE(cos(0.0)),
-        RESCALE(sin(0.0)),
+        RESCALE(cosl(0.0L)),
+        RESCALE(sinl(0.0L)),
     };
     for (int i = 1; i < len; i++) {
-        const double factor = phase*i*i;
+        const long double factor = phase*i*i;
         s->exp[i] = (TXComplex){
-            RESCALE(cos(factor)),
-            RESCALE(sin(factor)),
+            RESCALE(cosl(factor)),
+            RESCALE(sinl(factor)),
         };
         s->exp[len2-i] = s->exp[i];
     }
@@ -2552,7 +2552,7 @@ static av_always_inline void out_pair(TXComplex *out,
 
 static int init_twiddles(AVTXContext *s, const int len)
 {
-    const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
+    const long double phase = s->inv ? 2.0L*M_PIl/len : -2.0L*M_PIl/len;
     TXComplex *exp;
 
     if (!(s->exp = av_mallocz((len/2)*(len/2)*sizeof(*s->exp))))
@@ -2561,10 +2561,10 @@ static int init_twiddles(AVTXContext *s, const int len)
     exp = s->exp;
     for (int i = 0; i < len/2; i++) {
         for (int j = 0; j < len/2; j++) {
-            const double factor = phase*(i+1)*(j+1);
+            const long double factor = phase*(i+1)*(j+1);
             exp[j] = (TXComplex){
-                RESCALE(cos(factor)),
-                RESCALE(sin(factor)),
+                RESCALE(cosl(factor)),
+                RESCALE(sinl(factor)),
             };
         }
 
