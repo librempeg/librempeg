@@ -73,7 +73,7 @@ static int read_header(AVFormatContext *s)
 
 const FFInputFormat ff_wmw_demuxer = {
     .p.name         = "wmw",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("PlayStation WMW"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("PlayStation Artoon WMW"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "wmw",
     .read_probe     = read_probe,
