@@ -886,19 +886,19 @@ static av_always_inline void stockham2(const int n, const int z, TXComplex *y, c
                                        const TXComplex **exp)
 {
     if (n <= 2) {
-        const TXComplex *xa = x + 0;
-        const TXComplex *xb = x + z;
+        const TXComplex *x0 = x + 0;
+        const TXComplex *x1 = x + z;
         TXComplex *y0 = y + 0;
-        TXComplex *yz = y + z;
+        TXComplex *y1 = y + z;
 
         for (int q = 0; q < z; q++) {
-            const TXComplex a = xa[q];
-            const TXComplex b = xb[q];
+            const TXComplex a = x0[q];
+            const TXComplex b = x1[q];
 
             y0[q].re = a.re + b.re;
             y0[q].im = a.im + b.im;
-            yz[q].re = a.re - b.re;
-            yz[q].im = a.im - b.im;
+            y1[q].re = a.re - b.re;
+            y1[q].im = a.im - b.im;
         }
     } else if (n >= 4) {
         const int m = n / 2;
@@ -908,15 +908,15 @@ static av_always_inline void stockham2(const int n, const int z, TXComplex *y, c
             const int s2p1 = z * (2 * p + 1);
             const TXComplex wp = exp[0][p];
             const int sp0 = z * (p + 0);
-            const int spm = z * (p + m);
-            const TXComplex *xa = x + sp0;
-            const TXComplex *xb = x + spm;
+            const int sp1 = z * (p + m);
+            const TXComplex *x0 = x + sp0;
+            const TXComplex *x1 = x + sp1;
             TXComplex *y0 = y + s2p0;
             TXComplex *y1 = y + s2p1;
 
             for (int q = 0; q < z; q++) {
-                const TXComplex a = xa[q];
-                const TXComplex b = xb[q];
+                const TXComplex a = x0[q];
+                const TXComplex b = x1[q];
                 TXComplex t;
 
                 t.re = a.re - b.re;
