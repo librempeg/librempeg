@@ -10878,19 +10878,73 @@ static int mov_parse_heif_items(AVFormatContext *s)
     return 0;
 }
 
-/*
-static AVStream *mov_find_reference_track(AVFormatContext *s, AVStream *st,
-                                          int first_index)
+static int mov_parse_tmcd_streams(AVFormatContext *s)
 {
-    MOVStreamContext *sc = st->priv_data;
+    int err;
 
-    if (sc->tref_id < 0)
+    for (int i = 0; i < s->nb_streams; i++) {
+        AVStreamGroup *stg;
+        const AVDictionaryEntry *tcr;
+        AVStream *st = s->streams[i];
+
+        if (st->codecpar->codec_tag != MKTAG('t','m','c','d'))
+            continue;
+
+        stg = avformat_stream_group_create(s, AV_STREAM_GROUP_PARAMS_TREF, NULL);
+        if (!stg)
+            return AVERROR(ENOMEM);
+
+        stg->id = st->id;
+        tcr = av_dict_get(st->metadata, "timecode", NULL, 0);
+
+        for (int j = 0; j < s->nb_streams; j++) {
+            AVStream *st2 = s->streams[j];
+            MOVStreamContext *sc2 = st2->priv_data;
+            MovTref *tag = mov_find_tref_tag(sc2, MKTAG('t','m','c','d'));
+
+            if (!tag)
+                continue;
+
+            for (int k = 0; k < tag->nb_id; k++) {
+                if (tag->id[k] != st->id)
+                    continue;
+
+                err = avformat_stream_group_add_stream(stg, st2);
+                if (err < 0)
+                    return err;
+
+                if (tcr)
+                    av_dict_set(&st2->metadata, "timecode", tcr->value, AV_DICT_DONT_OVERWRITE);
+            }
+        }
+
+        if (!stg->nb_streams) {
+            ff_remove_stream_group(s, stg);
+            continue;
+        }
+
+        err = avformat_stream_group_add_stream(stg, st);
+        if (err < 0)
+            return err;
+
+        stg->params.tref->metadata_index = stg->nb_streams - 1;
+    }
+    export_orphan_timecode(s);
+
+    return 0;
+}
+
+static AVStream *mov_find_reference_track(AVFormatContext *s, AVStream *st,
+                                          uint32_t *tref_id, int nb_tref_id, int first_index)
+{
+    if (!nb_tref_id)
         return NULL;
 
     for (int i = first_index; i < s->nb_streams; i++)
-        if (s->streams[i]->index != st->index &&
-            s->streams[i]->id == sc->tref_id)
-            return s->streams[i];
+        for (int j = 0; j < nb_tref_id; j++)
+            if (s->streams[i]->index != st->index &&
+                s->streams[i]->id == tref_id[j])
+                return s->streams[i];
 
     return NULL;
 }
@@ -10908,10 +10962,11 @@ static int mov_parse_lcevc_streams(AVFormatContext *s)
         AVStream *st = s->streams[i];
         AVStream *st_base;
         MOVStreamContext *sc = st->priv_data;
+        MovTref *tag = mov_find_tref_tag(sc, MKTAG('s','b','a','s'));
         int j = 0;
 
-        if (st->codecpar->codec_id != AV_CODEC_ID_LCEVC ||
-            !(sc->tref_flags & MOV_TREF_FLAG_ENHANCEMENT))
+        /* Find an enhancement stream. */
+        if (st->codecpar->codec_id != AV_CODEC_ID_LCEVC || !tag)
             continue;
 
         stg = avformat_stream_group_create(s, AV_STREAM_GROUP_PARAMS_LCEVC, NULL);
@@ -10947,7 +11002,6 @@ static int mov_parse_lcevc_streams(AVFormatContext *s)
 
     return 0;
 }
-*/
 
 static void fix_stream_ids(AVFormatContext *s)
 {
@@ -11043,59 +11097,14 @@ static int mov_read_header(AVFormatContext *s)
     }
 
     /* copy timecode metadata from tmcd tracks to the related video streams */
-    for (i = 0; i < s->nb_streams; i++) {
-        AVStreamGroup *stg;
-        const AVDictionaryEntry *tcr;
-        AVStream *st = s->streams[i];
-
-        if (st->codecpar->codec_tag != MKTAG('t','m','c','d'))
-            continue;
-
-        stg = avformat_stream_group_create(s, AV_STREAM_GROUP_PARAMS_TREF, NULL);
-        if (!stg)
-            return AVERROR(ENOMEM);
-
-        stg->id = st->id;
-        tcr = av_dict_get(st->metadata, "timecode", NULL, 0);
-
-        for (int j = 0; j < s->nb_streams; j++) {
-            AVStream *st2 = s->streams[j];
-            MOVStreamContext *sc2 = st2->priv_data;
-            MovTref *tag = mov_find_tref_tag(sc2, MKTAG('t','m','c','d'));
-
-            if (!tag)
-                continue;
-
-            for (int k = 0; k < tag->nb_id; k++) {
-                if (tag->id[k] != st->id)
-                    continue;
-
-                err = avformat_stream_group_add_stream(stg, st2);
-                if (err < 0)
-                    return err;
-
-                if (tcr)
-                    av_dict_set(&st2->metadata, "timecode", tcr->value, AV_DICT_DONT_OVERWRITE);
-            }
-        }
-
-        if (!stg->nb_streams) {
-            ff_remove_stream_group(s, stg);
-            continue;
-        }
-
-        err = avformat_stream_group_add_stream(stg, st);
-        if (err < 0)
-            return err;
-
-        stg->params.tref->metadata_index = stg->nb_streams - 1;
-    }
-    export_orphan_timecode(s);
+    err = mov_parse_tmcd_streams(s);
+    if (err < 0)
+        return err;
 
     /* Create LCEVC stream groups. */
-    /*err = mov_parse_lcevc_streams(s);
+    err = mov_parse_lcevc_streams(s);
     if (err < 0)
-        return err;*/
+        return err;
 
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
