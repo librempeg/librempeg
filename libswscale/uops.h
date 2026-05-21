@@ -289,6 +289,11 @@ void ff_sws_uop_list_free(SwsUOpList **ops);
 int ff_sws_uop_list_append(SwsUOpList *uops, SwsUOp *uop);
 
 /**
+ * Called internally by ff_sws_ops_translate().
+ */
+int ff_sws_uop_list_optimize(SwsContext *ctx, SwsUOpFlags flags, SwsUOpList *uops);
+
+/**
  * Translate a list of operations down to micro-ops, which can be further
  * optimized and then directly executed by backends.
  *

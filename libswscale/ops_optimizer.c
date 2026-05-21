@@ -948,6 +948,25 @@ int ff_sws_solve_shuffle(const SwsOpList *const ops, uint8_t shuffle[],
     return AVERROR(EINVAL);
 }
 
+int ff_sws_uop_list_optimize(SwsContext *ctx, SwsUOpFlags flags, SwsUOpList *uops)
+{
+#if 0
+    static const SwsUOp dummy = {0};
+
+retry:
+    for (int i = 0; i < uops->num_ops; i++) {
+        const SwsUOp *next = i < uops->num_ops - 1 ? &uops->ops[i + 1] : &dummy;
+        SwsUOp *op = &uops->ops[i];
+
+        switch (op->uop) {
+            /* placeholder */
+        }
+    }
+#endif
+
+    return 0;
+}
+
 /**
  * Determine a suitable intermediate buffer format for a given combination
  * of pixel types and number of planes. The exact interpretation of these

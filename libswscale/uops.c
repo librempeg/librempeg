@@ -662,5 +662,6 @@ int ff_sws_ops_translate(SwsContext *ctx, const SwsOpList *ops,
             return ret;
         input = ops->ops[i].comps;
     }
-    return 0;
+
+    return ff_sws_uop_list_optimize(ctx, flags, uops);
 }
