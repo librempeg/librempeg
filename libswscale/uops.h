@@ -284,6 +284,7 @@ typedef struct SwsUOpList {
 
 SwsUOpList *ff_sws_uop_list_alloc(void);
 void ff_sws_uop_list_free(SwsUOpList **ops);
+void ff_sws_uop_list_remove_at(SwsUOpList *uops, int index, int count);
 
 /* Takes over ownership of `uop` and sets it to {0}, even on failure. */
 int ff_sws_uop_list_append(SwsUOpList *uops, SwsUOp *uop);

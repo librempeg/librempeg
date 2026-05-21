@@ -208,6 +208,17 @@ int ff_sws_uop_list_append(SwsUOpList *uops, SwsUOp *uop)
     return 0;
 }
 
+void ff_sws_uop_list_remove_at(SwsUOpList *uops, int index, int count)
+{
+    const int end = uops->num_ops - count;
+    av_assert2(index >= 0 && count >= 0 && index + count <= uops->num_ops);
+    for (int i = 0; i < count; i++)
+        uop_uninit(&uops->ops[index + i]);
+    for (int i = index; i < end; i++)
+        uops->ops[i] = uops->ops[i + count];
+    uops->num_ops = end;
+}
+
 int ff_sws_dither_height(const SwsDitherUOp *dither)
 {
     int max_offset = 0;
