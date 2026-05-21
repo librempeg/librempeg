@@ -550,7 +550,6 @@ OBJS-$(CONFIG_OBU_DEMUXER)               += av1dec.o
 OBJS-$(CONFIG_OBU_MUXER)                 += rawenc.o
 OBJS-$(CONFIG_OCEANDSF_DEMUXER)          += oceandsf.o pcm.o
 OBJS-$(CONFIG_OGG_DEMUXER)               += oggdec.o         \
-                                            oggparsecelt.o   \
                                             oggparsedirac.o  \
                                             oggparseflac.o   \
                                             oggparseogm.o    \
@@ -715,7 +714,6 @@ OBJS-$(CONFIG_SHORTEN_DEMUXER)           += shortendec.o rawdec.o
 OBJS-$(CONFIG_SIFF_DEMUXER)              += siff.o
 OBJS-$(CONFIG_SIMBIOSIS_IMX_DEMUXER)     += imx.o
 OBJS-$(CONFIG_SK_DEMUXER)                += oggdec.o         \
-                                            oggparsecelt.o   \
                                             oggparsedirac.o  \
                                             oggparseflac.o   \
                                             oggparseogm.o    \
