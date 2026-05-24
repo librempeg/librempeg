@@ -74,7 +74,7 @@ static av_cold void TX_TAB(ff_tx_init_tab_ ##len)(void)            \
     TXSample *tab = TX_TAB(ff_tx_tab_ ##len);                      \
                                                                    \
     for (int i = 0; i < len/4; i++)                                \
-        *tab++ = RESCALE(cosl(i*freq));                             \
+        *tab++ = RESCALE(cosl(i*freq));                            \
                                                                    \
     *tab = 0;                                                      \
 }
@@ -1959,8 +1959,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
     int gen, igen, ret;
     const int plen = FFALIGN(len, av_cpu_max_align());
     const int len2 = len-1;
-    const long double phase = s->inv ? 2.0*M_PIl/len : -2.0*M_PIl/len;
-    const TXSample ifactor = RESCALE(1.0l / len2);
+    const long double phase = s->inv ? 2.0L*M_PIl/len : -2.0L*M_PIl/len;
     TXComplex *exp;
     int *imap, *map;
 
@@ -1998,12 +1997,9 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
         igp = mulmod(igp, igen, len);
 
         exp[i] = (TXComplex){
-            RESCALE(cosl(factor)),
-            RESCALE(sinl(factor)),
+            RESCALE(cosl(factor) / len2),
+            RESCALE(sinl(factor) / len2),
         };
-
-        exp[i].re = MULT(exp[i].re, ifactor);
-        exp[i].im = MULT(exp[i].im, ifactor);
     }
 
     s->fn[0](&s->sub[0], s->exp, exp, sizeof(TXComplex));
