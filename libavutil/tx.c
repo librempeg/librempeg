@@ -302,10 +302,13 @@ static void reset_ctx(AVTXContext *s, int free_sub)
     av_freep(&s->map);
     av_freep(&s->exp);
     av_freep(&s->tmp);
+    av_freep(&s->leaves);
 
     /* Nothing else needs to be reset, it gets overwritten if another
      * ff_tx_init_subtx() call is made. */
     s->nb_sub = 0;
+    s->nb_leaves = 0;
+    s->nb_schedules = 0;
     s->opaque = NULL;
     memset(s->fn, 0, sizeof(s->fn));
 }

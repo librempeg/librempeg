@@ -730,6 +730,655 @@ DECL_SR_CODELET(524288,262144,131072)
 DECL_SR_CODELET(1048576,524288,262144)
 DECL_SR_CODELET(2097152,1048576,524288)
 
+typedef struct PassEntry {
+    int offset;
+    int size;
+    int count;
+} PassEntry;
+
+static int sched_push(PassEntry **pass_ptr,
+                      int offset, int size, int *count)
+{
+    int new_count = (count[0] > 0) ? count[0] + 1 : 1;
+    pass_ptr[0] = av_realloc_f(pass_ptr[0], new_count, sizeof(PassEntry));
+    if (!pass_ptr[0])
+        return AVERROR(ENOMEM);
+
+    pass_ptr[0][count[0]].offset = offset;
+    pass_ptr[0][count[0]].size = size;
+    count[0]++;
+
+    return 0;
+}
+
+static int build_schedule(PassEntry **pass_ptr,
+                          int offset, int N, int *count)
+{
+    if (N < 8)
+        return 0;
+
+    int N2 = N/2;
+    int N8 = N/8;
+    int ret;
+
+    ret = build_schedule(pass_ptr, offset, N2, count);
+    if (ret < 0)
+        return ret;
+
+    ret = build_schedule(pass_ptr, offset + N2,        N8, count);
+    if (ret < 0)
+        return ret;
+    ret = build_schedule(pass_ptr, offset + N2 +   N8, N8, count);
+    if (ret < 0)
+        return ret;
+    ret = build_schedule(pass_ptr, offset + N2 + 2*N8, N8, count);
+    if (ret < 0)
+        return ret;
+    ret = build_schedule(pass_ptr, offset + N2 + 3*N8, N8, count);
+    if (ret < 0)
+        return ret;
+
+    return sched_push(pass_ptr, offset, N, count);
+}
+
+static int merge_schedule(PassEntry **pass_ptr, int *nb_filtered,
+                          const PassEntry *schedule, const int nb_schedules)
+{
+    int offset = schedule[0].offset;
+    int size = schedule[0].size;
+
+    int new_nb_filtered = (nb_filtered[0] > 0) ? nb_filtered[0] + 1 : 1;
+    pass_ptr[0] = av_realloc_f(pass_ptr[0], new_nb_filtered, sizeof(PassEntry));
+    if (!pass_ptr[0])
+        return AVERROR(ENOMEM);
+
+    pass_ptr[0][nb_filtered[0]].offset = offset;
+    pass_ptr[0][nb_filtered[0]].size = size;
+    pass_ptr[0][nb_filtered[0]].count = 1;
+
+    for (int i = 1; i < nb_schedules; i++) {
+        int next_offset = schedule[i].offset;
+        int next_size = schedule[i].size;
+
+        if (next_size == size && offset + size == next_offset) {
+            offset = next_offset;
+            pass_ptr[0][nb_filtered[0]].count++;
+        } else {
+            nb_filtered[0]++;
+            int new_nb_filtered = (nb_filtered[0] > 0) ? nb_filtered[0] + 1 : 1;
+            pass_ptr[0] = av_realloc_f(pass_ptr[0], new_nb_filtered, sizeof(PassEntry));
+            if (!pass_ptr[0])
+                return AVERROR(ENOMEM);
+
+            pass_ptr[0][nb_filtered[0]].offset = next_offset;
+            pass_ptr[0][nb_filtered[0]].size = next_size;
+            pass_ptr[0][nb_filtered[0]].count = 1;
+
+            offset = next_offset;
+            size = next_size;
+        }
+    }
+    nb_filtered[0]++;
+
+    return 0;
+}
+
+TXComplex *TX_TAB(ff_tx_esr_tab)[2][32] = { 0 };
+
+static void esr_map(int *map, int dst, int src, int N, int stride)
+{
+    if (N == 1) {
+        map[dst] = src;
+        return;
+    }
+
+    if (N < 8) {
+        if (N == 4) {
+            esr_map(map, dst,   src,          1, stride*4);
+            esr_map(map, dst+1, src+1*stride, 1, stride*4);
+            esr_map(map, dst+2, src+2*stride, 1, stride*4);
+            esr_map(map, dst+3, src+3*stride, 1, stride*4);
+        } else {
+            esr_map(map, dst,   src,        1, stride*2);
+            esr_map(map, dst+1, src+stride, 1, stride*2);
+        }
+
+        return;
+    }
+
+    int N2 = N/2;
+    int N8 = N/8;
+
+    esr_map(map, dst, src, N2, stride*2);
+
+    esr_map(map, dst+N2,      src+1*stride, N8, stride*8);
+    esr_map(map, dst+N2+1*N8, src+3*stride, N8, stride*8);
+    esr_map(map, dst+N2+2*N8, src+5*stride, N8, stride*8);
+    esr_map(map, dst+N2+3*N8, src+7*stride, N8, stride*8);
+}
+
+static int collect_leaves(PassEntry **leaves,
+                          int offset, int N, int *count)
+{
+    if (N <= 4) {
+        if (N > 1) {
+            int new_count = (count[0] > 0) ? count[0] + 1 : 1;
+            leaves[0] = av_realloc_f(leaves[0], new_count, sizeof(PassEntry));
+            if (!leaves[0])
+                return AVERROR(ENOMEM);
+
+            leaves[0][count[0]].offset = offset;
+            leaves[0][count[0]].size = N;
+            count[0] = new_count;
+        }
+
+        return 0;
+    }
+
+    int N2 = N/2;
+    int N8 = N/8;
+    int ret;
+
+    ret = collect_leaves(leaves, offset,         N2, count);
+    if (ret < 0)
+        return ret;
+    ret = collect_leaves(leaves, offset+N2,      N8, count);
+    if (ret < 0)
+        return ret;
+    ret = collect_leaves(leaves, offset+N2+  N8, N8, count);
+    if (ret < 0)
+        return ret;
+    ret = collect_leaves(leaves, offset+N2+2*N8, N8, count);
+    if (ret < 0)
+        return ret;
+    ret = collect_leaves(leaves, offset+N2+3*N8, N8, count);
+    if (ret < 0)
+        return ret;
+
+    return 0;
+}
+
+static inline TXComplex twiddle(int k, const long double phase)
+{
+    const long double th = phase * k;
+
+    return (TXComplex){ RESCALE(cosl(th)), RESCALE(sinl(th)) };
+}
+
+static int build_twiddles(TXComplex *tab[32], const int N, const int inv)
+{
+    if (N < 8)
+        return 0;
+
+    int N2 = N/2;
+    int N8 = N/8;
+    int idx = av_ceil_log2(N);
+    int ret;
+
+    ret = build_twiddles(tab, N2, inv);
+    if (ret < 0)
+        return ret;
+
+    if (tab[idx])
+        return 0;
+
+    tab[idx] = av_calloc(4*N8, sizeof(*tab[idx]));
+    if (!tab[idx])
+        return AVERROR(ENOMEM);
+
+    const long double dinv = inv ? 1.0L : -1.0L;
+    const long double phase = dinv * 2.0L * M_PIl / N;
+    TXComplex *exp = tab[idx];
+
+    for (int j = 0; j < 4; j++) {
+        for (int k = 1; k < N8; k++) {
+            TXComplex w = twiddle((j*2+1)*k, phase);
+
+            exp[k] = w;
+        }
+
+        exp += N8;
+    }
+
+    return 0;
+}
+
+static int sort_schedules(const void *a, const void *b)
+{
+    const PassEntry *s0p = a;
+    const PassEntry *s1p = b;
+    const PassEntry s0 = *s0p;
+    const PassEntry s1 = *s1p;
+    int64_t i0 = s0.size;
+    int64_t i1 = s1.size;
+
+    i0 = (i0 << 31) + s0.offset;
+    i1 = (i1 << 31) + s1.offset;
+
+    return FFDIFFSIGN(i0, i1);
+}
+
+static av_cold int TX_NAME(ff_tx_fft_init_esr)(AVTXContext *s,
+                                               const FFTXCodelet *cd,
+                                               uint64_t flags,
+                                               FFTXCodeletOptions *opts,
+                                               int len, int inv,
+                                               const void *scale)
+{
+    PassEntry *schedules = NULL;
+    PassEntry *leaves = NULL;
+    int nb_schedules = 0;
+    int nb_leaves = 0;
+    const int N = len;
+    int ret;
+
+    if (!(s->map = av_calloc(N, sizeof(int))))
+        return AVERROR(ENOMEM);
+    esr_map(s->map, 0, 0, N, 1);
+
+    ret = build_schedule(&schedules, 0, N, &nb_schedules);
+    if (ret < 0)
+        return ret;
+    qsort(schedules, nb_schedules, sizeof(PassEntry), sort_schedules);
+
+    ret = merge_schedule(&s->tmp, &s->nb_schedules, schedules, nb_schedules);
+    av_freep(&schedules);
+    if (ret < 0)
+        return ret;
+
+    ret = collect_leaves(&leaves, 0, N, &nb_leaves);
+    if (ret < 0)
+        return ret;
+
+    ret = merge_schedule(&s->leaves, &s->nb_leaves, leaves, nb_leaves);
+    av_freep(&leaves);
+    if (ret < 0)
+        return ret;
+
+    ret = build_twiddles(TX_TAB(ff_tx_esr_tab)[s->inv], N, s->inv);
+    if (ret < 0)
+        return ret;
+
+    return 0;
+}
+
+/* Compilers can't vectorize this anyway without assuming AVX2, which they
+ * generally don't, at least without -march=native -mtune=native */
+static void TX_NAME(ff_tx_remap)(TXComplex *dst, const TXComplex *src,
+                                 const int *map, const int len)
+{
+    for (int i = 0; i < len; i++)
+        dst[i] = src[map[i]];
+}
+
+static av_always_inline void bf2(TXComplex *p)
+{
+    TXComplex a = p[0], b = p[1];
+
+    CADD3(p[0], a, b);
+    CSUB3(p[1], a, b);
+}
+
+static void bf4_inverse(TXComplex *p)
+{
+    TXComplex s02, d02, s13, d13, d13i;
+    TXComplex x0=p[0], x1=p[1], x2=p[2], x3=p[3];
+
+    CADD3(s02, x0, x2);
+    CADD3(s13, x1, x3);
+    CSUB3(d02, x0, x2);
+    CSUB3(d13, x1, x3);
+
+    CMUL_I_INVERSE2(d13i, d13);
+
+    CADD3(p[0], s02, s13);
+    CSUB3(p[1], d02, d13i);
+    CSUB3(p[2], s02, s13);
+    CADD3(p[3], d02, d13i);
+}
+
+static void bf4_forward(TXComplex *p)
+{
+    TXComplex s02, d02, s13, d13, d13i;
+    TXComplex x0=p[0], x1=p[1], x2=p[2], x3=p[3];
+
+    CADD3(s02, x0, x2);
+    CADD3(s13, x1, x3);
+    CSUB3(d02, x0, x2);
+    CSUB3(d13, x1, x3);
+
+    CMUL_I_FORWARD2(d13i, d13);
+
+    CADD3(p[0], s02, s13);
+    CSUB3(p[1], d02, d13i);
+    CSUB3(p[2], s02, s13);
+    CADD3(p[3], d02, d13i);
+}
+
+static void apply_leaves_forward(TXComplex *x,
+                                 const PassEntry *leaves, const int nb_leaves)
+{
+    for (int i = 0; i < nb_leaves; i++) {
+        const int p = leaves[i].offset;
+        const int c = leaves[i].count;
+        const int s = leaves[i].size;
+
+        if (s == 2) {
+            for (int j = 0; j < c; j++)
+                bf2(x + p + j*2);
+        } else if (s == 4) {
+            for (int j = 0; j < c; j++)
+                bf4_forward(x + p + j*4);
+        }
+    }
+}
+
+static void apply_leaves_inverse(TXComplex *x,
+                                 const PassEntry *leaves, const int nb_leaves)
+{
+    for (int i = 0; i < nb_leaves; i++) {
+        const int p = leaves[i].offset;
+        const int c = leaves[i].count;
+        const int s = leaves[i].size;
+
+        if (s == 2) {
+            for (int j = 0; j < c; j++)
+                bf2(x + p + j*2);
+        } else if (s == 4) {
+            for (int j = 0; j < c; j++)
+                bf4_inverse(x + p + j*4);
+        }
+    }
+}
+
+static void esr_pass_forward(TXComplex *restrict X, const TXComplex *restrict exp,
+                             const TXSample factor, const int N)
+{
+    const int N2 = N>>1;
+    const int N8 = N>>3;
+    const TXComplex *restrict e0 = exp;
+    const TXComplex *restrict e1 = exp + N8;
+    const TXComplex *restrict e2 = exp + N8*2;
+    const TXComplex *restrict e3 = exp + N8*3;
+    TXComplex *restrict U  = X;
+    TXComplex *restrict U1 = U + N8;
+    TXComplex *restrict U2 = U + N8*2;
+    TXComplex *restrict U3 = U + N8*3;
+    TXComplex *restrict U4 = X + N2;
+    TXComplex *restrict U5 = X + N2 + N8;
+    TXComplex *restrict U6 = X + N2 + N8*2;
+    TXComplex *restrict U7 = X + N2 + N8*3;
+
+    {
+        TXComplex t1, t3, t3i, t5, t7, t7i;
+        TXComplex u46p, u46m, u57p, u57m;
+        TXComplex s57_m, s57_p;
+
+        CADD3(u46p, U4[0], U6[0]);
+        CSUB3(u46m, U4[0], U6[0]);
+        CADD3(u57p, U5[0], U7[0]);
+        CSUB3(u57m, U5[0], U7[0]);
+
+        CADD3(t1, u46p, u57p);
+        CSUB3(t3, u46p, u57p);
+        CMUL_I_FORWARD2(t3i, t3);
+        CSUB3(t5, u46m, u57m);
+        CADD3(t7, u46m, u57m);
+        CMUL_I_FORWARD2(t7i, t7);
+
+        CSUB3(s57_m, t5, t7i);
+        CSCALE3(s57_m, s57_m, factor);
+        CADD3(s57_p, t5, t7i);
+        CSCALE3(s57_p, s57_p, factor);
+
+        TXComplex uk0 = U [0];
+        TXComplex uk1 = U1[0];
+        TXComplex uk2 = U2[0];
+        TXComplex uk3 = U3[0];
+
+        CADD3(U [0], uk0, t1);
+        CADD3(U1[0], uk1, s57_m);
+        CSUB3(U2[0], uk2, t3i);
+        CSUB3(U3[0], uk3, s57_p);
+        CSUB3(U4[0], uk0, t1);
+        CSUB3(U5[0], uk1, s57_m);
+        CADD3(U6[0], uk2, t3i);
+        CADD3(U7[0], uk3, s57_p);
+    }
+
+    for (int k = 1; k < N8; k++) {
+        TXComplex t1, t3, t3i, t5, t7, t7i;
+        TXComplex u46p, u46m, u57p, u57m;
+        TXComplex eu4, eu5, eu6, eu7;
+        TXComplex s57_m, s57_p;
+
+        CMUL3(eu4, e0[k], U4[k]);
+        CMUL3(eu5, e1[k], U5[k]);
+        CMUL3(eu6, e2[k], U6[k]);
+        CMUL3(eu7, e3[k], U7[k]);
+
+        CADD3(u46p, eu4, eu6);
+        CSUB3(u46m, eu4, eu6);
+        CADD3(u57p, eu5, eu7);
+        CSUB3(u57m, eu5, eu7);
+
+        CADD3(t1, u46p, u57p);
+        CSUB3(t3, u46p, u57p);
+        CMUL_I_FORWARD2(t3i, t3);
+        CSUB3(t5, u46m, u57m);
+        CADD3(t7, u46m, u57m);
+        CMUL_I_FORWARD2(t7i, t7);
+
+        CSUB3(s57_m, t5, t7i);
+        CSCALE3(s57_m, s57_m, factor);
+        CADD3(s57_p, t5, t7i);
+        CSCALE3(s57_p, s57_p, factor);
+
+        TXComplex uk0 = U [k];
+        TXComplex uk1 = U1[k];
+        TXComplex uk2 = U2[k];
+        TXComplex uk3 = U3[k];
+
+        CADD3(U [k], uk0, t1);
+        CADD3(U1[k], uk1, s57_m);
+        CSUB3(U2[k], uk2, t3i);
+        CSUB3(U3[k], uk3, s57_p);
+        CSUB3(U4[k], uk0, t1);
+        CSUB3(U5[k], uk1, s57_m);
+        CADD3(U6[k], uk2, t3i);
+        CADD3(U7[k], uk3, s57_p);
+    }
+}
+
+static void esr_pass_inverse(TXComplex *restrict X, const TXComplex *restrict exp,
+                             const TXSample factor, const int N)
+{
+    const int N2 = N>>1;
+    const int N8 = N>>3;
+    const TXComplex *restrict e0 = exp;
+    const TXComplex *restrict e1 = exp + N8;
+    const TXComplex *restrict e2 = exp + N8*2;
+    const TXComplex *restrict e3 = exp + N8*3;
+    TXComplex *restrict U  = X;
+    TXComplex *restrict U1 = U + N8;
+    TXComplex *restrict U2 = U + N8*2;
+    TXComplex *restrict U3 = U + N8*3;
+    TXComplex *restrict U4 = U + N2;
+    TXComplex *restrict U5 = U4 + N8;
+    TXComplex *restrict U6 = U4 + N8*2;
+    TXComplex *restrict U7 = U4 + N8*3;
+
+    {
+        TXComplex t1, t3, t3i, t5, t7, t7i;
+        TXComplex u46p, u46m, u57p, u57m;
+        TXComplex s57_m, s57_p;
+
+        CADD3(u46p, U4[0], U6[0]);
+        CSUB3(u46m, U4[0], U6[0]);
+        CADD3(u57p, U5[0], U7[0]);
+        CSUB3(u57m, U5[0], U7[0]);
+
+        CADD3(t1, u46p, u57p);
+        CSUB3(t3, u46p, u57p);
+        CMUL_I_INVERSE2(t3i, t3);
+        CSUB3(t5, u46m, u57m);
+        CADD3(t7, u46m, u57m);
+        CMUL_I_INVERSE2(t7i, t7);
+
+        CSUB3(s57_m, t5, t7i);
+        CSCALE3(s57_m, s57_m, factor);
+        CADD3(s57_p, t5, t7i);
+        CSCALE3(s57_p, s57_p, factor);
+
+        TXComplex uk0 = U [0];
+        TXComplex uk1 = U1[0];
+        TXComplex uk2 = U2[0];
+        TXComplex uk3 = U3[0];
+
+        CADD3(U [0], uk0, t1);
+        CADD3(U1[0], uk1, s57_m);
+        CSUB3(U2[0], uk2, t3i);
+        CSUB3(U3[0], uk3, s57_p);
+        CSUB3(U4[0], uk0, t1);
+        CSUB3(U5[0], uk1, s57_m);
+        CADD3(U6[0], uk2, t3i);
+        CADD3(U7[0], uk3, s57_p);
+    }
+
+    for (int k = 1; k < N8; k++) {
+        TXComplex t1, t3, t3i, t5, t7, t7i;
+        TXComplex u46p, u46m, u57p, u57m;
+        TXComplex eu4, eu5, eu6, eu7;
+        TXComplex s57_m, s57_p;
+
+        CMUL3(eu4, e0[k], U4[k]);
+        CMUL3(eu5, e1[k], U5[k]);
+        CMUL3(eu6, e2[k], U6[k]);
+        CMUL3(eu7, e3[k], U7[k]);
+
+        CADD3(u46p, eu4, eu6);
+        CSUB3(u46m, eu4, eu6);
+        CADD3(u57p, eu5, eu7);
+        CSUB3(u57m, eu5, eu7);
+
+        CADD3(t1, u46p, u57p);
+        CSUB3(t3, u46p, u57p);
+        CMUL_I_INVERSE2(t3i, t3);
+        CSUB3(t5, u46m, u57m);
+        CADD3(t7, u46m, u57m);
+        CMUL_I_INVERSE2(t7i, t7);
+
+        CSUB3(s57_m, t5, t7i);
+        CSCALE3(s57_m, s57_m, factor);
+        CADD3(s57_p, t5, t7i);
+        CSCALE3(s57_p, s57_p, factor);
+
+        TXComplex uk0 = U [k];
+        TXComplex uk1 = U1[k];
+        TXComplex uk2 = U2[k];
+        TXComplex uk3 = U3[k];
+
+        CADD3(U [k], uk0, t1);
+        CADD3(U1[k], uk1, s57_m);
+        CSUB3(U2[k], uk2, t3i);
+        CSUB3(U3[k], uk3, s57_p);
+        CSUB3(U4[k], uk0, t1);
+        CSUB3(U5[k], uk1, s57_m);
+        CADD3(U6[k], uk2, t3i);
+        CADD3(U7[k], uk3, s57_p);
+    }
+}
+
+static void TX_NAME(ff_tx_fft_esr_forward)(AVTXContext *s, void *_dst,
+                                           void *_src, ptrdiff_t stride)
+{
+    const int nb_schedules = s->nb_schedules;
+    const int *map = s->map;
+    const int N = s->len;
+    TXComplex *src = _src;
+    TXComplex *dst = _dst;
+
+    TX_NAME(ff_tx_remap)(dst, src, map, N);
+
+    apply_leaves_forward(dst, s->leaves, s->nb_leaves);
+
+    const PassEntry *pass = s->tmp;
+    const TXSample factor = RESCALE(sqrtl(0.5L));
+    for (int i = 0; i < nb_schedules; i++) {
+        const int n = pass[i].size;
+        const int count = pass[i].count;
+        const int offset = pass[i].offset;
+        const int idx = av_ceil_log2(n);
+        const TXComplex *tw = TX_TAB(ff_tx_esr_tab)[0][idx];
+        TXComplex *dstn = dst + offset;
+
+        for (int c = 0; c < count; c++) {
+            esr_pass_forward(dstn, tw, factor, n);
+            dstn += n;
+        }
+    }
+}
+
+static void TX_NAME(ff_tx_fft_esr_inverse)(AVTXContext *s, void *_dst,
+                                           void *_src, ptrdiff_t stride)
+{
+    const int nb_schedules = s->nb_schedules;
+    const int *map = s->map;
+    const int N = s->len;
+    TXComplex *src = _src;
+    TXComplex *dst = _dst;
+
+    TX_NAME(ff_tx_remap)(dst, src, map, N);
+
+    apply_leaves_inverse(dst, s->leaves, s->nb_leaves);
+
+    const PassEntry *pass = s->tmp;
+    const TXSample factor = RESCALE(sqrtl(0.5L));
+    for (int i = 0; i < nb_schedules; i++) {
+        const int n = pass[i].size;
+        const int count = pass[i].count;
+        const int offset = pass[i].offset;
+        const int idx = av_ceil_log2(n);
+        const TXComplex *tw = TX_TAB(ff_tx_esr_tab)[1][idx];
+        TXComplex *dstn = dst + offset;
+
+        for (int c = 0; c < count; c++) {
+            esr_pass_inverse(dstn, tw, factor, n);
+            dstn += n;
+        }
+    }
+}
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_esr_forward_def) = {
+    .name       = TX_NAME_STR("fft_esr"),
+    .function   = TX_NAME(ff_tx_fft_esr_forward),
+    .type       = TX_TYPE(FFT),
+    .flags      = FF_TX_OUT_OF_PLACE | AV_TX_INPLACE | FF_TX_FORWARD_ONLY |
+                  AV_TX_UNALIGNED,
+    .factors[0] = 2,
+    .nb_factors = 1,
+    .min_len    = 2,
+    .max_len    = TX_LEN_UNLIMITED,
+    .init       = TX_NAME(ff_tx_fft_init_esr),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_BASE+1024,
+};
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_esr_inverse_def) = {
+    .name       = TX_NAME_STR("fft_esr"),
+    .function   = TX_NAME(ff_tx_fft_esr_inverse),
+    .type       = TX_TYPE(FFT),
+    .flags      = FF_TX_OUT_OF_PLACE | AV_TX_INPLACE | FF_TX_INVERSE_ONLY |
+                  AV_TX_UNALIGNED,
+    .factors[0] = 2,
+    .nb_factors = 1,
+    .min_len    = 2,
+    .max_len    = TX_LEN_UNLIMITED,
+    .init       = TX_NAME(ff_tx_fft_init_esr),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_BASE+1024,
+};
+
 static av_cold int TX_NAME(ff_tx_fft_init)(AVTXContext *s,
                                            const FFTXCodelet *cd,
                                            uint64_t flags,
@@ -767,15 +1416,6 @@ static av_cold int TX_NAME(ff_tx_fft_inplace_small_init)(AVTXContext *s,
         return AVERROR(ENOMEM);
     flags &= ~AV_TX_INPLACE;
     return TX_NAME(ff_tx_fft_init)(s, cd, flags, opts, len, inv, scale);
-}
-
-/* Compilers can't vectorize this anyway without assuming AVX2, which they
- * generally don't, at least without -march=native -mtune=native */
-static void TX_NAME(ff_tx_remap)(TXComplex *dst, const TXComplex *src,
-                                 const int *map, const int len)
-{
-    for (int i = 0; i < len; i++)
-        dst[i] = src[map[i]];
 }
 
 static void TX_NAME(ff_tx_fft)(AVTXContext *s, void *_dst,
@@ -3962,6 +4602,10 @@ const FFTXCodelet * const TX_NAME(ff_tx_codelet_list)[] = {
     &TX_NAME(ff_tx_fft524288_ns_def),
     &TX_NAME(ff_tx_fft1048576_ns_def),
     &TX_NAME(ff_tx_fft2097152_ns_def),
+
+    /* Extended-Split-Radix */
+    &TX_NAME(ff_tx_fft_esr_forward_def),
+    &TX_NAME(ff_tx_fft_esr_inverse_def),
 
     /* Stockham codelets */
     &TX_NAME(ff_tx_fft_stockham2_def),

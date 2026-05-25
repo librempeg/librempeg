@@ -159,7 +159,42 @@ typedef void TXComplex;
 
 #endif /* TX_INT32 */
 
+#define CADD(dre, dim, are, aim, bre, bim)      \
+    do {                                        \
+        (dre) = (are) + (bre);                  \
+        (dim) = (aim) + (bim);                  \
+    } while (0)
+
+#define CSUB(dre, dim, are, aim, bre, bim)      \
+    do {                                        \
+        (dre) = (are) - (bre);                  \
+        (dim) = (aim) - (bim);                  \
+    } while (0)
+
+#define CMUL_I_FORWARD(dre, dim, are, aim)      \
+    do {                                        \
+        (dre) = (-aim);                         \
+        (dim) = ( are);                         \
+    } while (0)
+
+#define CMUL_I_INVERSE(dre, dim, are, aim)      \
+    do {                                        \
+        (dre) = ( aim);                         \
+        (dim) = (-are);                         \
+    } while (0)
+
+#define CSCALE(dre, dim, are, aim, s)           \
+    do {                                        \
+        (dre) = MULT(are, s);                   \
+        (dim) = MULT(aim, s);                   \
+    } while (0)
+
+#define CADD3(c, a, b) CADD((c).re, (c).im, (a).re, (a).im, (b).re, (b).im)
+#define CSUB3(c, a, b) CSUB((c).re, (c).im, (a).re, (a).im, (b).re, (b).im)
 #define CMUL3(c, a, b) CMUL((c).re, (c).im, (a).re, (a).im, (b).re, (b).im)
+#define CMUL_I_FORWARD2(a, b) CMUL_I_FORWARD((a).re, (a).im, (b).re, (b).im)
+#define CMUL_I_INVERSE2(a, b) CMUL_I_INVERSE((a).re, (a).im, (b).re, (b).im)
+#define CSCALE3(c, a, s) CSCALE((c).re, (c).im, (a).re, (a).im, (s))
 
 /* Codelet flags, used to pick codelets. Must be a superset of enum AVTXFlags,
  * but if it runs out of bits, it can be made separate. */
@@ -278,6 +313,9 @@ struct AVTXContext {
     double             scale_d;
     long double        scale_ld;
     void              *opaque;          /* Free to use by implementations */
+    void              *leaves;
+    int                nb_leaves;
+    int                nb_schedules;
 };
 
 /* This function embeds a Ruritanian PFA input map into an existing lookup table
