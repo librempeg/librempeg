@@ -202,7 +202,7 @@ static av_cold int rdft_init(AVTXContext *s, const FFTXCodelet *cd,
 
     tab = (TXSample *)s->exp;
 
-    f = 2.0L*M_PIl/len;
+    f = 2.0L*M_PIl/len * (inv ? 1.0L : -1.0L);
 
     m = (inv ? 2*s->scale_ld : s->scale_ld);
 
