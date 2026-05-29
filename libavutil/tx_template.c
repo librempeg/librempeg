@@ -904,8 +904,8 @@ static av_always_inline void stockham2(const int n, const int z, TXComplex *y, c
         const int m = n / 2;
 
         for (int p = 0; p < m; p++) {
-            const int s2p0 = z * (2 * p + 0);
-            const int s2p1 = z * (2 * p + 1);
+            const int s2p0 = z * 2 * p;
+            const int s2p1 = s2p0 + z;
             const TXComplex wp = exp[0][p];
             const int sp0 = z * (p + 0);
             const int sp1 = z * (p + m);
