@@ -363,14 +363,24 @@ static const AVClass tref_class = {
     .option     = tref_options,
 };
 
+#if FF_API_LCEVC_STRUCT
+FF_DISABLE_DEPRECATION_WARNINGS
+#endif
 #define OFFSET(x) offsetof(AVStreamGroupLayeredVideo, x)
 static const AVOption layered_video_options[] = {
+#if FF_API_LCEVC_STRUCT
+    { "lcevc_index", "Index of the LCEVC stream within the group", OFFSET(lcevc_index),
+        AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, FLAGS | AV_OPT_FLAG_DEPRECATED },
+#endif
     { "el_index", "Index of the enhancement layer stream within the group", OFFSET(el_index),
         AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, FLAGS },
     { "video_size", "size of the final layered video presentation", OFFSET(width),
         AV_OPT_TYPE_IMAGE_SIZE, { .str = NULL }, 0, INT_MAX, FLAGS },
     { NULL },
 };
+#if FF_API_LCEVC_STRUCT
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 #undef OFFSET
 
 static const AVClass layered_video_class = {

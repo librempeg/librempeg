@@ -2034,11 +2034,6 @@ static int open_demux_for_component(AVFormatContext *s, struct representation *p
 
         switch (stg->type) {
         case AV_STREAM_GROUP_PARAMS_LCEVC: {
-            AVStreamGroupLCEVC *ilcevc = istg->params.lcevc;
-            AVStreamGroupLCEVC *lcevc = stg->params.lcevc;
-            ret = av_opt_copy(lcevc, ilcevc);
-            if (ret < 0)
-                return ret;
             break;
         }
         default:
