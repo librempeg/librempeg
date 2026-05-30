@@ -1535,10 +1535,8 @@ static av_always_inline void stockham2(const int n, const int z, TXComplex *y, c
             const TXComplex a = x0[q];
             const TXComplex b = x1[q];
 
-            y0[q].re = a.re + b.re;
-            y0[q].im = a.im + b.im;
-            y1[q].re = a.re - b.re;
-            y1[q].im = a.im - b.im;
+            CADD3(y0[q], a, b);
+            CSUB3(y1[q], a, b);
         }
     } else if (n >= 4) {
         const int m = n / 2;
@@ -1559,10 +1557,8 @@ static av_always_inline void stockham2(const int n, const int z, TXComplex *y, c
                 const TXComplex b = x1[q];
                 TXComplex t;
 
-                t.re = a.re - b.re;
-                t.im = a.im - b.im;
-                y0[q].re = a.re + b.re;
-                y0[q].im = a.im + b.im;
+                CSUB3(t, a, b);
+                CADD3(y0[q], a, b);
                 CMUL3(y1[q], t, wp);
             }
         }
@@ -2373,12 +2369,10 @@ static void TX_NAME(ff_tx_fft_radix3)(AVTXContext *s, void *_dst, void *_src,
                 s0 = srci0[j];
                 CMUL3(z1, w[idx+j*2+0], srci1[j]);
                 CMUL3(s2, w[idx+j*2+1], srci2[j]);
-                s1.re = z1.re - s2.re;
-                s1.im = z1.im - s2.im;
+                CSUB3(s1, z1, s2);
                 s2.re = 2*z1.re - s1.re;
                 s2.im = 2*z1.im - s1.im;
-                z1.re = s2.re + s0.re;
-                z1.im = s2.im + s0.im;
+                CADD3(z1, s2, s0);
                 s2.re = s0.re + MULT(w31.re, s2.re);
                 s2.im = s0.im + MULT(w31.re, s2.im);
                 s0.re = s2.re + MULT(w31.im, s1.im);
@@ -2532,8 +2526,7 @@ static void TX_NAME(ff_tx_fft_radix5)(AVTXContext *s, void *_dst, void *_src,
                 t3.im = 2*s8.im - t2.im;
                 t4.re = 2*s9.re - t1.re;
                 t4.im = 2*s9.im - t1.im;
-                t5.re = z0.re + s5.re;
-                t5.im = z0.im + s5.im;
+                CADD3(t5, z0, s5);
 
                 srci0[j] = t5;
                 srci1[j] = t1;
@@ -2812,8 +2805,7 @@ static void TX_NAME(ff_tx_fft_naive)(AVTXContext *s, void *_dst, void *_src,
             };
             TXComplex res;
             CMUL3(res, src[j], mult);
-            tmp.re += res.re;
-            tmp.im += res.im;
+            CADD3(tmp, tmp, res);
         }
         dst[i*stride] = tmp;
     }
@@ -2835,8 +2827,7 @@ static void TX_NAME(ff_tx_fft_naive_small)(AVTXContext *s, void *_dst, void *_sr
             TXComplex res;
             const TXComplex mult = exp[j];
             CMUL3(res, src[j], mult);
-            tmp.re += res.re;
-            tmp.im += res.im;
+            CADD3(tmp, tmp, res);
         }
         dst[i*stride] = tmp;
         exp += n;
@@ -3014,8 +3005,7 @@ static void TX_NAME(ff_tx_fft_rader)(AVTXContext *s, void *_dst, void *_src,
     TX_NAME(ff_tx_remap)(ww, src, map, m);
     s->fn[0](&s->sub[0], w, ww, sizeof(TXComplex));
 
-    dst[0].re = src0.re + w[0].re;
-    dst[0].im = src0.im + w[0].im;
+    CADD3(dst[0], src0, w[0]);
 
     for (int i = 0; i < m; i++) {
         const TXComplex x = w[i];
@@ -3023,8 +3013,7 @@ static void TX_NAME(ff_tx_fft_rader)(AVTXContext *s, void *_dst, void *_src,
         CMUL3(w[i], x, y[i]);
     }
 
-    w[0].re += src0.re;
-    w[0].im += src0.im;
+    CADD3(w[0], w[0], src0);
 
     s->fn[1](&s->sub[1], ww, w, sizeof(TXComplex));
 
@@ -3063,66 +3052,8 @@ static void TX_NAME(ff_tx_fft_bluestein)(AVTXContext *s, void *_dst, void *_src,
     for (int i = 0; i < n; i++) {
         TXComplex x;
         CMUL3(x, ww[i], exp[i]);
-        dst[i*stride].re = MULT(x.re, scale);
-        dst[i*stride].im = MULT(x.im, scale);
+        CSCALE3(dst[i*stride], x, scale);
     }
-}
-
-static av_always_inline void cpx_add(TXComplex *out,
-                                     const TXComplex *in1,
-                                     const TXComplex *in2)
-{
-    out->re = in1->re + in2->re;
-    out->im = in1->im + in2->im;
-}
-
-static av_always_inline void cpx_sub(TXComplex *out,
-                                     const TXComplex *in1,
-                                     const TXComplex *in2)
-{
-    out->re = in1->re - in2->re;
-    out->im = in1->im - in2->im;
-}
-
-static av_always_inline void cpx_mul_s(TXComplex *out,
-                                       const TXComplex *in,
-                                       const TXSample s)
-{
-    out->re = MULT(in->re, s);
-    out->im = MULT(in->im, s);
-}
-
-static av_always_inline void cpx_out(TXComplex *head,
-                                     TXComplex *tail,
-                                     const TXComplex *A,
-                                     const TXComplex *B)
-{
-    head->re = A->re - B->im;
-    head->im = A->im + B->re;
-    tail->re = A->re + B->im;
-    tail->im = A->im - B->re;
-}
-
-static av_always_inline void cpx_mla(TXComplex *out,
-                                     const TXComplex *in1,
-                                     const TXComplex *in2,
-                                     const TXSample s)
-{
-    out->re = in1->re + MULT(in2->re, s);
-    out->im = in1->im + MULT(in2->im, s);
-}
-
-static av_always_inline void cpx_neg(TXComplex *out,
-                                     const TXComplex *in)
-{
-    out->re = -in->re;
-    out->im = -in->im;
-}
-
-static av_always_inline void cpx_zero(TXComplex *out)
-{
-    out->re = 0;
-    out->im = 0;
 }
 
 static av_always_inline void like_terms(TXComplex *add,
@@ -3134,12 +3065,12 @@ static av_always_inline void like_terms(TXComplex *add,
 
     if (r&1) {
         add[0] = in[0];
-        cpx_neg(&sub[0], &in[0]);
+        CNEG2(sub[0], in[0]);
     }
 
     for (int h = 1, t = r-1; h <= m; h++, t--) {
-        cpx_add(&add[h], &in[h], &in[t]);
-        cpx_sub(&sub[h], &in[h], &in[t]);
+        CADD3(add[h], in[h], in[t]);
+        CSUB3(sub[h], in[h], in[t]);
     }
 }
 
@@ -3150,18 +3081,18 @@ static av_always_inline void out_special(TXComplex *out,
 {
     const int m = r/2;
 
-    cpx_zero(&out[0]);
-    cpx_zero(&out[m]);
+    CZERO1(out[0]);
+    CZERO1(out[m]);
 
     for (int i = 0; i <= m; i++)
-        cpx_add(&out[0], &out[0], &add[i]);
+        CADD3(out[0], out[0], add[i]);
 
     if (r&1)
         return;
 
     for (int i = 0; i < m; i += 2) {
-        cpx_add(&out[m], &out[m], &add[i+0]);
-        cpx_sub(&out[m], &out[m], &add[i+1]);
+        CADD3(out[m], out[m], add[i+0]);
+        CSUB3(out[m], out[m], add[i+1]);
     }
 }
 
@@ -3174,16 +3105,16 @@ static av_always_inline void out_pair(TXComplex *out,
 {
     TXComplex P, Q;
 
-    cpx_mla(&P, &add[0], &add[1], Wr[k-1].re);
-    cpx_mul_s(&Q, &sub[1], Wr[k-1].im);
+    CSCALEADD4(P, add[0], add[1], Wr[k-1].re);
+    CSCALE3(Q, sub[1], Wr[k-1].im);
 
     Wr += (r/2) * (k-1);
     for (int i = 2; i <= r/2; i++) {
-        cpx_mla(&P, &P, &add[i], Wr[i-1].re);
-        cpx_mla(&Q, &Q, &sub[i], Wr[i-1].im);
+        CSCALEADD4(P, P, add[i], Wr[i-1].re);
+        CSCALEADD4(Q, Q, sub[i], Wr[i-1].im);
     }
 
-    cpx_out(&out[k], &out[r-k], &P, &Q);
+    COUT4(out[k], out[r-k], P, Q);
 }
 
 static int init_twiddles(AVTXContext *s, const int len)

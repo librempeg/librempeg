@@ -189,12 +189,42 @@ typedef void TXComplex;
         (dim) = MULT(aim, s);                   \
     } while (0)
 
+#define CZERO(dre, dim)                         \
+    do {                                        \
+        (dre) = 0;                              \
+        (dim) = 0;                              \
+    } while (0)
+
+#define CNEG(dre, dim, are, aim)                \
+    do {                                        \
+        (dre) = -(are);                         \
+        (dim) = -(aim);                         \
+    } while (0)
+
+#define CSCALEADD(dre, dim, are, aim, bre, bim, s) \
+    do {                                           \
+        (dre) = MULT(bre, s) + are;                \
+        (dim) = MULT(bim, s) + aim;                \
+    } while (0)
+
+#define COUT(hre, him, tre, tim, are, aim, bre, bim) \
+    do {                                             \
+        hre = are - bim;                             \
+        him = aim + bre;                             \
+        tre = are + bim;                             \
+        tim = aim - bre;                             \
+    } while (0)
+
 #define CADD3(c, a, b) CADD((c).re, (c).im, (a).re, (a).im, (b).re, (b).im)
 #define CSUB3(c, a, b) CSUB((c).re, (c).im, (a).re, (a).im, (b).re, (b).im)
 #define CMUL3(c, a, b) CMUL((c).re, (c).im, (a).re, (a).im, (b).re, (b).im)
 #define CMUL_I_FORWARD2(a, b) CMUL_I_FORWARD((a).re, (a).im, (b).re, (b).im)
 #define CMUL_I_INVERSE2(a, b) CMUL_I_INVERSE((a).re, (a).im, (b).re, (b).im)
 #define CSCALE3(c, a, s) CSCALE((c).re, (c).im, (a).re, (a).im, (s))
+#define CZERO1(a) CZERO((a).re, (a).im)
+#define CNEG2(a, b) CNEG((a).re, (a).im, (b).re, (b).im)
+#define CSCALEADD4(c, a, b, s) CSCALEADD((c).re, (c).im, (a).re, (a).im, (b).re, (b).im, (s))
+#define COUT4(h, t, a, b) COUT((h).re, (h).im, (t).re, (t).im, (a).re, (a).im, (b).re, (b).im)
 
 /* Codelet flags, used to pick codelets. Must be a superset of enum AVTXFlags,
  * but if it runs out of bits, it can be made separate. */
