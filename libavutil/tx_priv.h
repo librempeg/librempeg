@@ -268,7 +268,7 @@ typedef struct FFTXCodeletOptions {
 #define TX_MAX_FACTORS 16
 
 /* Maximum amount of subtransform functions, subtransforms and factors. Arbitrary. */
-#define TX_MAX_SUB 4
+#define TX_MAX_SUB 16
 
 /* Maximum number of returned results for ff_tx_decompose_length. Arbitrary. */
 #define TX_MAX_DECOMPOSITIONS 512
