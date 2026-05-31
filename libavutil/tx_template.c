@@ -730,12 +730,6 @@ DECL_SR_CODELET(524288,262144,131072)
 DECL_SR_CODELET(1048576,524288,262144)
 DECL_SR_CODELET(2097152,1048576,524288)
 
-typedef struct PassEntry {
-    int offset;
-    int size;
-    int count;
-} PassEntry;
-
 static int sched_push(PassEntry **pass_ptr,
                       int offset, int size, int *count)
 {
@@ -983,7 +977,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_esr)(AVTXContext *s,
     if (nb_schedules > 0) {
         qsort(schedules, nb_schedules, sizeof(PassEntry), sort_schedules);
 
-        ret = merge_schedule(&s->tmp, &s->nb_schedules, schedules, nb_schedules);
+        ret = merge_schedule(&s->schedules, &s->nb_schedules, schedules, nb_schedules);
     }
 
     av_freep(&schedules);
@@ -1309,7 +1303,7 @@ static void TX_NAME(ff_tx_fft_esr_forward)(AVTXContext *s, void *_dst,
     if (!nb_schedules)
         return;
 
-    const PassEntry *pass = s->tmp;
+    const PassEntry *pass = s->schedules;
     const TXSample factor = RESCALE(sqrtl(0.5L));
     for (int i = 0; i < nb_schedules; i++) {
         const int n = pass[i].size;
@@ -1342,7 +1336,7 @@ static void TX_NAME(ff_tx_fft_esr_inverse)(AVTXContext *s, void *_dst,
     if (!nb_schedules)
         return;
 
-    const PassEntry *pass = s->tmp;
+    const PassEntry *pass = s->schedules;
     const TXSample factor = RESCALE(sqrtl(0.5L));
     for (int i = 0; i < nb_schedules; i++) {
         const int n = pass[i].size;
