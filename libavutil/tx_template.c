@@ -979,9 +979,13 @@ static av_cold int TX_NAME(ff_tx_fft_init_esr)(AVTXContext *s,
     ret = build_schedule(&schedules, 0, N, &nb_schedules);
     if (ret < 0)
         return ret;
-    qsort(schedules, nb_schedules, sizeof(PassEntry), sort_schedules);
 
-    ret = merge_schedule(&s->tmp, &s->nb_schedules, schedules, nb_schedules);
+    if (nb_schedules > 0) {
+        qsort(schedules, nb_schedules, sizeof(PassEntry), sort_schedules);
+
+        ret = merge_schedule(&s->tmp, &s->nb_schedules, schedules, nb_schedules);
+    }
+
     av_freep(&schedules);
     if (ret < 0)
         return ret;
@@ -1302,6 +1306,9 @@ static void TX_NAME(ff_tx_fft_esr_forward)(AVTXContext *s, void *_dst,
 
     apply_leaves_forward(dst, s->leaves, s->nb_leaves);
 
+    if (!nb_schedules)
+        return;
+
     const PassEntry *pass = s->tmp;
     const TXSample factor = RESCALE(sqrtl(0.5L));
     for (int i = 0; i < nb_schedules; i++) {
@@ -1331,6 +1338,9 @@ static void TX_NAME(ff_tx_fft_esr_inverse)(AVTXContext *s, void *_dst,
     TX_NAME(ff_tx_remap)(dst, src, map, N);
 
     apply_leaves_inverse(dst, s->leaves, s->nb_leaves);
+
+    if (!nb_schedules)
+        return;
 
     const PassEntry *pass = s->tmp;
     const TXSample factor = RESCALE(sqrtl(0.5L));
