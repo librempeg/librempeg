@@ -35,7 +35,7 @@
 
 static void check_dctB(const PP7DSPContext *const pp7dsp)
 {
-    declare_func_emms(AV_CPU_FLAG_MMX, void, int16_t *dst, const int16_t *src);
+    declare_func(void, int16_t *dst, const int16_t *src);
 
     if (!check_func(pp7dsp->dctB, "dctB"))
         return;

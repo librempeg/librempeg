@@ -27,16 +27,17 @@
  * project, and ported by Arwa Arif for FFmpeg.
  */
 
-#include "libavutil/emms.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/mem.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
+#include "libavutil/video_enc_params.h"
 
+#include "avfilter.h"
 #include "filters.h"
 #include "qp_table.h"
-#include "vf_pp7.h"
+#include "vf_pp7dsp.h"
 #include "video.h"
 
 enum mode {
@@ -44,6 +45,23 @@ enum mode {
     MODE_SOFT,
     MODE_MEDIUM
 };
+
+typedef struct PP7Context {
+    const AVClass *class;
+    int thres2[99][16];
+
+    int qp;
+    int mode;
+    enum AVVideoEncParamsType qscale_type;
+    int hsub;
+    int vsub;
+    int temp_stride;
+    uint8_t *src;
+
+    int (*requantize)(const struct PP7Context *p, const int16_t *src, int qp);
+
+    PP7DSPContext pp7dsp;
+} PP7Context;
 
 #define OFFSET(x) offsetof(PP7Context, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
@@ -116,29 +134,6 @@ static inline void dctA_c(int16_t *dst, const uint8_t *src, int stride)
         dst[3] =     s3 - 2 * s2;
         src++;
         dst += 4;
-    }
-}
-
-static void dctB_c(int16_t *dst, const int16_t *src)
-{
-    int i;
-
-    for (i = 0; i < 4; i++) {
-        int s0 = src[0 * 4] + src[6 * 4];
-        int s1 = src[1 * 4] + src[5 * 4];
-        int s2 = src[2 * 4] + src[4 * 4];
-        int s3 = src[3 * 4];
-        int s = s3 + s3;
-        s3 = s  - s0;
-        s0 = s  + s0;
-        s  = s2 + s1;
-        s2 = s2 - s1;
-        dst[0 * 4] = s0 + s;
-        dst[2 * 4] = s0 - s;
-        dst[1 * 4] = 2 * s3 +     s2;
-        dst[3 * 4] =     s3 - 2 * s2;
-        src++;
-        dst++;
     }
 }
 
@@ -231,10 +226,9 @@ static void filter(PP7Context *p, uint8_t *dst, const uint8_t *src,
     for (y = 0; y < height; y++) {
         for (x = -8; x < 0; x += 4) {
             const int index = x + y * stride + (8 - 3) * (1 + stride) + 8; //FIXME silly offset
-            const uint8_t *src = p_src + index;
             int16_t *tp   = temp + 4 * x;
 
-            dctA_c(tp + 4 * 8, src, stride);
+            dctA_c(tp + 4 * 8, p_src + index, stride);
         }
         for (x = 0; x < width; ) {
             const int qps = 3 + is_luma;
@@ -249,14 +243,13 @@ static void filter(PP7Context *p, uint8_t *dst, const uint8_t *src,
             }
             for (; x < end; x++) {
                 const int index = x + y * stride + (8 - 3) * (1 + stride) + 8; //FIXME silly offset
-                const uint8_t *src = p_src + index;
                 int16_t *tp  = temp + 4 * x;
                 int v;
 
                 if ((x & 3) == 0)
-                    dctA_c(tp + 4 * 8, src, stride);
+                    dctA_c(tp + 4 * 8, p_src + index, stride);
 
-                p->dctB(block, tp);
+                p->pp7dsp.dctB(block, tp);
 
                 v = p->requantize(p, block, qp);
                 v = (v + dither[y & 7][x & 7]) >> 6;
@@ -303,11 +296,7 @@ static int config_input(AVFilterLink *inlink)
         case 2: pp7->requantize = mediumthresh_c; break;
     }
 
-    pp7->dctB = dctB_c;
-
-#if ARCH_X86
-    ff_pp7_init_x86(pp7);
-#endif
+    ff_pp7dsp_init(&pp7->pp7dsp);
 
     return 0;
 }
@@ -359,7 +348,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                    cw,        ch,        qp_table, qp_stride, 0);
             filter(pp7, out->data[2], in->data[2], out->linesize[2], in->linesize[2],
                    cw,        ch,        qp_table, qp_stride, 0);
-            emms_c();
         }
     }
 
