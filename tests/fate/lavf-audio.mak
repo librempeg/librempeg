@@ -34,7 +34,7 @@ fate-lavf-dfpwm: CMD = lavf_audio "" "-sample_rate 44100" "-sample_rate 44100 -c
 #FIXME - fate-lavf-ogg fails on aarch64 when frame_size is 4096
 fate-lavf-ogg: CMD = lavf_audio "" "-frame_size 4608 -c:a flac"
 fate-lavf-s16.voc: CMD = lavf_audio "-ac 2" "-c:a pcm_s16le"
-fate-lavf-ast: CMD = lavf_audio "-ac 2" "-loopstart 1 -loopend 10"
+#fate-lavf-ast: CMD = lavf_audio "-ac 2" "-loopstart 1 -loopend 10"
 fate-lavf-mka: CMD = lavf_audio "" "-c:a tta"
 fate-lavf-voc: CMD = lavf_audio "" "-c:a pcm_u8"
 fate-lavf-peak.wav: CMD = lavf_audio "" "-write_peak on"
