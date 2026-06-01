@@ -63,7 +63,7 @@ static int hq_decode(AVCodecContext *avctx, const uint8_t *in, int16_t *out)
             if (nib & 8)
                 diff = -diff;
         }
-        out[s] = av_clip((pred[0] * 4) + (diff >> 6), -32768, 32767);
+        out[s] = av_clip_int16((pred[0] * 4) + (diff >> 6));
         pred[1] += tab[1][nib] + (-pred[1] >> 5);
         pred[1] = av_clip(pred[1], 544, 5120);
 
@@ -71,10 +71,10 @@ static int hq_decode(AVCodecContext *avctx, const uint8_t *in, int16_t *out)
             pred[i] = pred[i-1];
 
         pred[17] = diff;
-        pred[15] = av_clip(diff + (pred[2] * 256), -8388608, 8388607);
-        pred[12] = av_clip(diff + (pred[3] * 256), -8388608, 8388607);
+        pred[15] = av_clip_intp2(diff + (pred[2] * 256), 23);
+        pred[12] = av_clip_intp2(diff + (pred[3] * 256), 23);
         pred[5] = ((pred[5] * 32512 -
-                    av_clip(pred[4] * (1 << 10), -8388608, 8388607) *
+                    av_clip_intp2(pred[4] * (1 << 10), 23) *
                     ((pred[12] ^ pred[13]) >> 31 | 1)) >> 15) +
                    (((pred[12] ^ pred[14]) >> 31 | 1) * (1 << 7));
         pred[5] = av_clip(pred[5], -12288, 12288);
@@ -86,7 +86,7 @@ static int hq_decode(AVCodecContext *avctx, const uint8_t *in, int16_t *out)
             pred[i] = pred[i] * 255 >> 8;
             if (diff)
                 pred[i] += ((diff ^ pred[i+12]) >> 31 | 1) * (1 << 7);
-            pred[i] = av_clip(pred[i], -32768, 32767);
+            pred[i] = av_clip_int16(pred[i]);
         }
 
         pred[2] = pred[3] = 0;
