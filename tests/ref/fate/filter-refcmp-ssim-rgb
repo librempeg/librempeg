@@ -1,30 +1,30 @@
 frame:0    pts:0       pts_time:0
-lavfi.ssim.Y=0.808136
-lavfi.ssim.U=0.733896
-lavfi.ssim.V=0.668122
-lavfi.ssim.All=0.772427
-lavfi.ssim.dB=6.428788
+lavfi.ssim.R=0.718377
+lavfi.ssim.G=0.762703
+lavfi.ssim.B=0.886385
+lavfi.ssim.All=0.789155
+lavfi.ssim.dB=6.760360
 frame:1    pts:1       pts_time:1
-lavfi.ssim.Y=0.801664
-lavfi.ssim.U=0.703845
-lavfi.ssim.V=0.659694
-lavfi.ssim.All=0.761699
-lavfi.ssim.dB=6.228743
+lavfi.ssim.R=0.705132
+lavfi.ssim.G=0.746553
+lavfi.ssim.B=0.850161
+lavfi.ssim.All=0.767282
+lavfi.ssim.dB=6.331696
 frame:2    pts:2       pts_time:2
-lavfi.ssim.Y=0.805707
-lavfi.ssim.U=0.702330
-lavfi.ssim.V=0.663525
-lavfi.ssim.All=0.764781
-lavfi.ssim.dB=6.285269
+lavfi.ssim.R=0.707298
+lavfi.ssim.G=0.748479
+lavfi.ssim.B=0.842460
+lavfi.ssim.All=0.766079
+lavfi.ssim.dB=6.309308
 frame:3    pts:3       pts_time:3
-lavfi.ssim.Y=0.797422
-lavfi.ssim.U=0.692510
-lavfi.ssim.V=0.659360
-lavfi.ssim.All=0.756926
-lavfi.ssim.dB=6.142615
+lavfi.ssim.R=0.704271
+lavfi.ssim.G=0.735419
+lavfi.ssim.B=0.830497
+lavfi.ssim.All=0.756729
+lavfi.ssim.dB=6.139091
 frame:4    pts:4       pts_time:4
-lavfi.ssim.Y=0.799716
-lavfi.ssim.U=0.693151
-lavfi.ssim.V=0.661540
-lavfi.ssim.All=0.758926
-lavfi.ssim.dB=6.178492
+lavfi.ssim.R=0.713266
+lavfi.ssim.G=0.743084
+lavfi.ssim.B=0.802936
+lavfi.ssim.All=0.753095
+lavfi.ssim.dB=6.074705
