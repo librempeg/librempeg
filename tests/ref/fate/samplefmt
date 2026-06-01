@@ -11,6 +11,8 @@ Testing name/format round-trip
  9: name=dblp  roundtrip=OK
 10: name=s64   roundtrip=OK
 11: name=s64p  roundtrip=OK
+12: name=ldbl  roundtrip=OK
+13: name=ldblp roundtrip=OK
 NONE name: (null)
 NB name: (null)
 unknown: -1
@@ -28,6 +30,8 @@ fltp: 4
 dblp: 8
 s64: 8
 s64p: 8
+ldbl: 16
+ldblp: 16
 NONE: 0
 
 Testing av_sample_fmt_is_planar()
@@ -43,6 +47,8 @@ fltp: 1
 dblp: 1
 s64: 0
 s64p: 1
+ldbl: 0
+ldblp: 1
 NONE: 0
 
 Testing packed/planar conversions
@@ -58,6 +64,8 @@ fltp: packed=flt  planar=fltp
 dblp: packed=dbl  planar=dblp
 s64: packed=s64  planar=s64p
 s64p: packed=s64  planar=s64p
+ldbl: packed=ldbl planar=ldblp
+ldblp: packed=ldbl planar=ldblp
 
 Testing av_get_alt_sample_fmt()
 u8: alt_packed=u8   alt_planar=u8p
@@ -72,6 +80,8 @@ fltp: alt_packed=flt  alt_planar=fltp
 dblp: alt_packed=dbl  alt_planar=dblp
 s64: alt_packed=s64  alt_planar=s64p
 s64p: alt_packed=s64  alt_planar=s64p
+ldbl: alt_packed=ldbl alt_planar=ldblp
+ldblp: alt_packed=ldbl alt_planar=ldblp
 
 Testing av_get_sample_fmt_string()
 header: name   depth
@@ -87,6 +97,8 @@ fltp     32
 dblp     64 
 s64      64 
 s64p     64 
+ldbl     128 
+ldblp    128 
 
 Testing av_samples_get_buffer_size()
 2ch 1024smp s16: 4096
