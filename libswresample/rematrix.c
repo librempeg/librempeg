@@ -465,6 +465,20 @@ av_cold int swri_rematrix_init(SwrContext *s){
         int r = auto_matrix(s);
         if (r)
             return r;
+    } else {
+        char buf[128];
+        av_log(s, AV_LOG_DEBUG, "Custom matrix coefficients:\n");
+            double *matrix_param = (double*)s->matrix;
+            ptrdiff_t stride = s->matrix[1] - s->matrix[0];
+        for (i = 0; i < s->out_ch_layout.nb_channels; i++) {
+            av_channel_name(buf, sizeof(buf), av_channel_layout_channel_from_index(&s->out_ch_layout, i));
+            av_log(s, AV_LOG_DEBUG, "%s: ", buf);
+            for (j = 0; j < s->in_ch_layout.nb_channels; j++){
+                av_channel_name(buf, sizeof(buf), av_channel_layout_channel_from_index(&s->in_ch_layout, j));
+                av_log(s, AV_LOG_DEBUG, "%s:%f ", buf, matrix_param[stride*i + j]);
+            }
+            av_log(s, AV_LOG_DEBUG, "\n");
+        }
     }
     if (s->midbuf.fmt == AV_SAMPLE_FMT_S16P){
         int maxsum = 0;
