@@ -105,6 +105,42 @@ static void dump_downmix(AVFilterContext *ctx, AVFrameSideData *sd)
            di->lfe_mix_level);
 }
 
+static const int downmix_type_map[AV_DOWNMIX_TYPE_NB] = {
+    [AV_DOWNMIX_TYPE_UNKNOWN] = 0,
+    [AV_DOWNMIX_TYPE_LORO]    = 2,
+    [AV_DOWNMIX_TYPE_LTRT]    = 2,
+    [AV_DOWNMIX_TYPE_DPLII]   = 2,
+};
+
+static void dump_downmix_matrix(AVFilterContext *ctx, AVFrameSideData *sd, AVChannelLayout *ch_layout)
+{
+    AVDownmixMatrix *dm = (AVDownmixMatrix *)sd->data;
+    char buf[128];
+
+    av_log(ctx, AV_LOG_INFO, "downmix matrix: ");
+    if (dm->in_ch_count != ch_layout->nb_channels) {
+        av_log(ctx, AV_LOG_INFO, "invalid data");
+        return;
+    }
+
+    av_log(ctx, AV_LOG_INFO, "downmix type - ");
+    switch (dm->downmix_type) {
+    case AV_DOWNMIX_TYPE_LORO:    av_log(ctx, AV_LOG_INFO, "Lo/Ro\n");              break;
+    case AV_DOWNMIX_TYPE_LTRT:    av_log(ctx, AV_LOG_INFO, "Lt/Rt\n");              break;
+    case AV_DOWNMIX_TYPE_DPLII:   av_log(ctx, AV_LOG_INFO, "Dolby Pro Logic II\n"); break;
+    default:                      av_log(ctx, AV_LOG_WARNING, "invalid data");     return;
+    }
+
+    for (int i = 0; i < downmix_type_map[dm->downmix_type]; i++) {
+        av_log(ctx, AV_LOG_INFO, "[%s] = { ", i ? "FR" : "FL");
+        for (int j = 0; j < dm->in_ch_count; j++) {
+            av_channel_name(buf, sizeof(buf), av_channel_layout_channel_from_index(ch_layout, j));
+            av_log(ctx, AV_LOG_INFO, ".%s = %f, ", buf, *av_downmix_matrix_coeff(dm, i, j));
+        }
+        av_log(ctx, AV_LOG_INFO, "}%s", i == downmix_type_map[dm->downmix_type] - 1 ? "" : ",\n");
+    }
+}
+
 static void print_gain(AVFilterContext *ctx, const char *str, int32_t gain)
 {
     av_log(ctx, AV_LOG_INFO, "%s - ", str);
@@ -302,6 +338,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
         switch (sd->type) {
         case AV_FRAME_DATA_MATRIXENCODING: dump_matrixenc (ctx, sd); break;
         case AV_FRAME_DATA_DOWNMIX_INFO:   dump_downmix   (ctx, sd); break;
+        case AV_FRAME_DATA_DOWNMIX_MATRIX: dump_downmix_matrix(ctx, sd, &buf->ch_layout); break;
         case AV_FRAME_DATA_REPLAYGAIN:     dump_replaygain(ctx, sd); break;
         case AV_FRAME_DATA_AUDIO_SERVICE_TYPE: dump_audio_service_type(ctx, sd); break;
         case AV_FRAME_DATA_IAMF_DEMIXING_INFO_PARAM:
