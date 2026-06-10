@@ -1105,5 +1105,12 @@ FATE_SWR += $(FATE_SWR_AUDIOCONVERT-yes)
 #fate-swr-custom-rematrix: REF = 3c2b7e3659006224d855300a43c5ac2a
 
 FATE_SWR += $(FATE_SWR_CUSTOM_REMATRIX-yes)
+
+FATE_SWR_REALLOC-$(CONFIG_SWRESAMPLE) += fate-swr-resample-realloc
+fate-swr-resample-realloc: libswresample/tests/swresample_resample_realloc$(EXESUF)
+fate-swr-resample-realloc: CMD = run libswresample/tests/swresample_resample_realloc$(EXESUF)
+
+FATE_SWR += $(FATE_SWR_REALLOC-yes)
+
 FATE_FFMPEG += $(FATE_SWR)
 fate-swr: $(FATE_SWR)
