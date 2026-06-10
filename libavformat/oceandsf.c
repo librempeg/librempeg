@@ -50,12 +50,13 @@ static int read_header(AVFormatContext *s)
 
     if ((ret = avio_get_str(pb, 0x21, title, sizeof(title))) < 0)
         return ret;
-    if (title[0] != '\0')
-        av_dict_set(&s->metadata, "title", title, 0);
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
+
+    if (title[0] != '\0')
+        av_dict_set(&st->metadata, "title", title, 0);
 
     st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;

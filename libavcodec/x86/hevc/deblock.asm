@@ -5,14 +5,14 @@
 ;*
 ;* Authors: Seppo Tomperi <seppo.tomperi@vtt.fi>
 ;*
-;* This file is part of Librempeg.
+;* This file is part of FFmpeg.
 ;*
-;* Librempeg is free software; you can redistribute it and/or
+;* FFmpeg is free software; you can redistribute it and/or
 ;* modify it under the terms of the GNU Lesser General Public
 ;* License as published by the Free Software Foundation; either
 ;* version 2.1 of the License, or (at your option) any later version.
 ;*
-;* Librempeg is distributed in the hope that it will be useful,
+;* FFmpeg is distributed in the hope that it will be useful,
 ;* but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;* Lesser General Public License for more details.
@@ -374,19 +374,18 @@ ALIGN 16
 %if %1 > 8
     shl             r9d, %1 - 8
 %endif
-    movd             m8, r9d; tc0
+    movd             m9, r9d; tc0
     mov             r3d, [tcq+4];
 %if %1 > 8
     shl             r3d, %1 - 8
 %endif
     add             r9d, r3d; tc0 + tc1
     jz             .bypassluma
-    movd             m9, r3d; tc1
-    punpcklwd        m8, m8
+    movd             m8, r3d; tc1
     punpcklwd        m9, m9
-    shufps           m8, m9, 0; tc0, tc1
-    mova             m9, m8
-    psllw            m8, 2; tc << 2
+    punpcklwd        m8, m8
+    shufps           m9, m8, 0; tc0, tc1
+    psllw            m8, m9, 2; tc << 2
     pavgw            m8, m9; tc25 = ((tc * 5 + 1) >> 1)
     ;end tc25 calculations
 

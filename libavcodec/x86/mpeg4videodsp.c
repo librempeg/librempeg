@@ -1,19 +1,19 @@
 /*
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "config.h"
@@ -59,7 +59,6 @@ static void gmc_ssse3(uint8_t *dst, const uint8_t *src,
     const int dxys = dxy >> 4;
     const int dyxs = dyx >> 4;
     const int dyys = dyy2 >> 4;
-    uint8_t edge_buf[(MAX_H + 1) * EDGE_EMU_STRIDE];
 
     const int dxw = dxx2 * (w - 1);
     const int dyh = dyy2 * (h - 1);
@@ -73,7 +72,8 @@ static void gmc_ssse3(uint8_t *dst, const uint8_t *src,
         ((ox2 + dxw) | (ox2 + dxh) | (ox2 + dxw + dxh) |
          (oy2 + dyw) | (oy2 + dyh) | (oy2 + dyw + dyh)) >> (16 + shift) ||
         // uses more than 16 bits of subpel mv (only at huge resolution)
-        (dxx | dxy | dyx | dyy) & 15) {
+        (dxx | dxy | dyx | dyy) & 15 ||
+        (!HAVE_SSE2_EXTERNAL && need_emu)) {
         ff_gmc_c(dst, src, stride, h, ox, oy, dxx, dxy, dyx, dyy,
                  shift, r, width, height);
         return;
@@ -82,12 +82,15 @@ static void gmc_ssse3(uint8_t *dst, const uint8_t *src,
     src += ix + iy * stride;
     const ptrdiff_t dst_stride = stride;
     ptrdiff_t src_stride = stride;
+#if HAVE_SSE2_EXTERNAL
+    uint8_t edge_buf[(MAX_H + 1) * EDGE_EMU_STRIDE];
     if (need_emu) {
         ff_emulated_edge_mc_sse2(edge_buf, src, EDGE_EMU_STRIDE, src_stride,
                                  w + 1, h + 1, ix, iy, width, height);
         src        = edge_buf;
         src_stride = EDGE_EMU_STRIDE;
     }
+#endif
 
 #if ARCH_X86_32
     xmm_u16 dxy8, dyy8, r8;

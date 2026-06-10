@@ -334,22 +334,28 @@ static const struct {
     enum AVCodecID codec_id;
     const enum MovChannelLayoutTag *layouts;
 } mov_codec_ch_layouts[] = {
-    { AV_CODEC_ID_AAC,     mov_ch_layouts_aac      },
-    { AV_CODEC_ID_AC3,     mov_ch_layouts_ac3      },
-    { AV_CODEC_ID_ALAC,    mov_ch_layouts_alac     },
-    { AV_CODEC_ID_PCM_U8,    mov_ch_layouts_wav    },
-    { AV_CODEC_ID_PCM_S8,    mov_ch_layouts_wav    },
-    { AV_CODEC_ID_PCM_S16LE, mov_ch_layouts_wav    },
-    { AV_CODEC_ID_PCM_S16BE, mov_ch_layouts_wav    },
-    { AV_CODEC_ID_PCM_S24LE, mov_ch_layouts_wav    },
-    { AV_CODEC_ID_PCM_S24BE, mov_ch_layouts_wav    },
-    { AV_CODEC_ID_PCM_S32LE, mov_ch_layouts_wav    },
-    { AV_CODEC_ID_PCM_S32BE, mov_ch_layouts_wav    },
-    { AV_CODEC_ID_PCM_F32LE, mov_ch_layouts_wav    },
-    { AV_CODEC_ID_PCM_F32BE, mov_ch_layouts_wav    },
-    { AV_CODEC_ID_PCM_F64LE, mov_ch_layouts_wav    },
-    { AV_CODEC_ID_PCM_F64BE, mov_ch_layouts_wav    },
-    { AV_CODEC_ID_NONE,    NULL                    },
+    { AV_CODEC_ID_AAC,          mov_ch_layouts_aac  },
+    { AV_CODEC_ID_AC3,          mov_ch_layouts_ac3  },
+    { AV_CODEC_ID_ADPCM_IMA_QT, mov_ch_layouts_wav  },
+    { AV_CODEC_ID_ALAC,         mov_ch_layouts_alac },
+    { AV_CODEC_ID_MACE3,        mov_ch_layouts_wav  },
+    { AV_CODEC_ID_MACE6,        mov_ch_layouts_wav  },
+    { AV_CODEC_ID_PCM_ALAW,     mov_ch_layouts_wav  },
+    { AV_CODEC_ID_PCM_F32BE,    mov_ch_layouts_wav  },
+    { AV_CODEC_ID_PCM_F32LE,    mov_ch_layouts_wav  },
+    { AV_CODEC_ID_PCM_F64BE,    mov_ch_layouts_wav  },
+    { AV_CODEC_ID_PCM_F64LE,    mov_ch_layouts_wav  },
+    { AV_CODEC_ID_PCM_MULAW,    mov_ch_layouts_wav  },
+    { AV_CODEC_ID_PCM_S16BE,    mov_ch_layouts_wav  },
+    { AV_CODEC_ID_PCM_S16LE,    mov_ch_layouts_wav  },
+    { AV_CODEC_ID_PCM_S24BE,    mov_ch_layouts_wav  },
+    { AV_CODEC_ID_PCM_S24LE,    mov_ch_layouts_wav  },
+    { AV_CODEC_ID_PCM_S32BE,    mov_ch_layouts_wav  },
+    { AV_CODEC_ID_PCM_S32LE,    mov_ch_layouts_wav  },
+    { AV_CODEC_ID_PCM_S8,       mov_ch_layouts_wav  },
+    { AV_CODEC_ID_PCM_U8,       mov_ch_layouts_wav  },
+    { AV_CODEC_ID_SPEEX,        mov_ch_layouts_wav  },
+    { AV_CODEC_ID_NONE,         NULL                },
 };
 
 static const struct MovChannelLayoutMap* find_layout_map(uint32_t tag, const struct MovChannelLayoutMap *map)
@@ -493,11 +499,24 @@ int ff_mov_get_channel_layout_tag(const AVCodecParameters *par,
     /* if no tag was found, use channel bitmap or description as a backup if possible */
     if (tag == 0) {
         uint32_t *channel_desc;
-        if (par->ch_layout.order == AV_CHANNEL_ORDER_NATIVE &&
-            par->ch_layout.u.mask < 0x40000) {
-            *layout = MOV_CH_LAYOUT_USE_BITMAP;
-            *bitmap = (uint32_t)par->ch_layout.u.mask;
-            return 0;
+
+        if (par->ch_layout.order == AV_CHANNEL_ORDER_NATIVE) {
+            /* Parsers and encoders (e.g. AC3, AAC, ALAC) indicate/propagate the bitstream's
+             * channel configuration using "standard" layouts in AV_CHANNEL_ORDER_NATIVE but
+             * the encoded bitstream's channels are not actually in that order. Don't return
+             * a channel layout bitmap or description using a conflicting channel order, as
+             * some software will incorrectly override the bitstream-provided information
+             * using the chan atom's data instead (e.g. afinfo/afplay for AAC in MOV) */
+            if (layouts != mov_ch_layouts_wav) {
+                *layout = MOV_CH_LAYOUT_UNKNOWN;
+                return 0;
+            }
+
+            if (par->ch_layout.u.mask < 0x40000) {
+                *layout = MOV_CH_LAYOUT_USE_BITMAP;
+                *bitmap = (uint32_t)par->ch_layout.u.mask;
+                return 0;
+            }
         } else if (par->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC)
             return AVERROR(ENOSYS);
 
@@ -684,7 +703,14 @@ int ff_mov_get_channel_config_from_layout(const AVChannelLayout *layout, int *co
     return 0;
 }
 
-int ff_mov_get_channel_layout_from_config(int config, AVChannelLayout *layout, uint64_t omitted_channel_map)
+/**
+ * Get AVChannelLayout from ISO/IEC 23001-8 ChannelConfiguration.
+ *
+ * @return 1  if the config was unknown, layout is untouched in this case
+ *         0  if the config was found
+ *         <0 on error
+ */
+static int mov_get_channel_layout_from_config(int config, AVChannelLayout *layout, uint64_t omitted_channel_map)
 {
     if (config > 0) {
         uint32_t layout_tag;
@@ -770,7 +796,7 @@ int ff_mov_read_chnl(AVFormatContext *s, AVIOContext *pb, AVStream *st)
                 return ret;
         } else {
             uint64_t omitted_channel_map = avio_rb64(pb);
-            ret = ff_mov_get_channel_layout_from_config(layout, &st->codecpar->ch_layout, omitted_channel_map);
+            ret = mov_get_channel_layout_from_config(layout, &st->codecpar->ch_layout, omitted_channel_map);
             if (ret < 0)
                 return ret;
         }

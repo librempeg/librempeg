@@ -419,10 +419,10 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
             return ret;
         dst = pkt->data;
         if (par->codec_id == AV_CODEC_ID_ADPCM_THP_LE) {
-            bytestream_put_le32(&dst, size * channels);
+            bytestream_put_le32(&dst, size);
             bytestream_put_le32(&dst, samples);
         } else {
-            bytestream_put_be32(&dst, size * channels);
+            bytestream_put_be32(&dst, size);
             bytestream_put_be32(&dst, samples);
         }
         bytestream_put_buffer(&dst, b->table, 32 * channels);

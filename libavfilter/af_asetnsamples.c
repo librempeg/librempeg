@@ -107,9 +107,9 @@ const FFFilter ff_af_asetnsamples = {
     .p.description = NULL_IF_CONFIG_SMALL("Set the number of samples for each output audio frames."),
     .p.priv_class  = &asetnsamples_class,
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
-    .priv_size   = sizeof(ASNSContext),
+    .priv_size     = sizeof(ASNSContext),
     FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
-    .activate    = activate,
+    .activate      = activate,
     .process_command = ff_filter_process_command,
 };

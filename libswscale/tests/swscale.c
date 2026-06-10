@@ -27,6 +27,7 @@
 #include <signal.h>
 
 #undef HAVE_AV_CONFIG_H
+#include "config.h"
 #include "libavutil/cpu.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/pixdesc.h"
@@ -38,8 +39,13 @@
 #include "libavutil/pixfmt.h"
 #include "libavutil/avassert.h"
 #include "libavutil/macros.h"
+#include "libavutil/hwcontext.h"
 
 #include "libswscale/swscale.h"
+#include "libswscale/format.h"
+#if CONFIG_UNSTABLE
+#include "libswscale/ops.h"
+#endif
 
 struct options {
     enum AVPixelFormat src_fmt;
@@ -85,6 +91,9 @@ static FFSFC64 prng_state;
 static SwsContext *sws_ref_src;
 static SwsContext *sws_src_dst;
 static SwsContext *sws_dst_out;
+
+static AVBufferRef *hw_device_ctx = NULL;
+static AVHWFramesConstraints *hw_device_constr = NULL;
 
 static double speedup_logavg;
 static double speedup_min = 1e10;
@@ -221,7 +230,7 @@ static void unref_buffers(AVFrame *frame)
 static int checked_sws_scale_frame(SwsContext *c, AVFrame *dst, const AVFrame *src)
 {
     int ret = sws_scale_frame(c, dst, src);
-    if (ret < 0) {
+    if (ret < 0 && ret != AVERROR(ENOTSUP)) {
         av_log(NULL, AV_LOG_ERROR, "Failed %s ---> %s\n",
                av_get_pix_fmt_name(src->format), av_get_pix_fmt_name(dst->format));
     }
@@ -296,6 +305,148 @@ error:
     return ret;
 }
 
+static int scale_hw(AVFrame *dst, const AVFrame *src,
+                    const struct mode *mode, const struct options *opts,
+                    int64_t *out_time)
+{
+    SwsContext *sws_hw = NULL;
+    AVBufferRef *in_ref = NULL;
+    AVBufferRef *out_ref = NULL;
+    AVHWFramesContext *in_ctx = NULL;
+    AVHWFramesContext *out_ctx = NULL;
+    AVFrame *in_f = NULL;
+    AVFrame *out_f = NULL;
+    int ret;
+
+    if (src->format == dst->format)
+        return AVERROR(ENOTSUP);
+
+    sws_hw = sws_alloc_context();
+    if (!sws_hw) {
+        ret = AVERROR(ENOMEM);
+        goto error;
+    }
+
+    sws_hw->flags  = mode->flags;
+    sws_hw->dither = mode->dither;
+
+    in_ref = av_hwframe_ctx_alloc(hw_device_ctx);
+    if (!in_ref) {
+        ret = AVERROR(ENOMEM);
+        goto error;
+    }
+
+    in_ctx = (AVHWFramesContext *)in_ref->data;
+    in_ctx->format = AV_PIX_FMT_VULKAN;
+    in_ctx->sw_format = src->format;
+    in_ctx->width = src->width;
+    in_ctx->height = src->height;
+    ret = av_hwframe_ctx_init(in_ref);
+    if (ret < 0) {
+        if (ret != AVERROR(ENOTSUP))
+            av_log(NULL, AV_LOG_ERROR, "Failed to create input HW context: %s\n",
+                   av_err2str(ret));
+        goto error;
+    }
+
+    out_ref = av_hwframe_ctx_alloc(hw_device_ctx);
+    if (!out_ref) {
+        ret = AVERROR(ENOMEM);
+        goto error;
+    }
+
+    out_ctx = (AVHWFramesContext *) out_ref->data;
+    out_ctx->format = AV_PIX_FMT_VULKAN;
+    out_ctx->sw_format = dst->format;
+    out_ctx->width = dst->width;
+    out_ctx->height = dst->height;
+    ret = av_hwframe_ctx_init(out_ref);
+    if (ret < 0) {
+        if (ret != AVERROR(ENOTSUP))
+            av_log(NULL, AV_LOG_ERROR, "Failed to create output HW context: %s\n",
+                   av_err2str(ret));
+        goto error;
+    }
+
+    in_f = av_frame_alloc();
+    if (!in_f) {
+        ret = AVERROR(ENOMEM);
+        goto error;
+    }
+    in_f->width = src->width;
+    in_f->height = src->height;
+    in_f->format = AV_PIX_FMT_VULKAN;
+    ret = av_hwframe_get_buffer(in_ref, in_f, 0);
+    if (ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to allocate input HW frame\n");
+        goto error;
+    }
+
+    ret = av_hwframe_transfer_data(in_f, src, 0);
+    if (ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to upload HW frame\n");
+        goto error;
+    }
+
+    out_f = av_frame_alloc();
+    if (!out_f) {
+        ret = AVERROR(ENOMEM);
+        goto error;
+    }
+    out_f->width = dst->width;
+    out_f->height = dst->height;
+    out_f->format = AV_PIX_FMT_VULKAN;
+    ret = av_hwframe_get_buffer(out_ref, out_f, 0);
+    if (ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to allocate output HW frame\n");
+        goto error;
+    }
+
+    int64_t time = av_gettime_relative();
+    for (int i = 0; ret >= 0 && i < opts->iters; i++) {
+        ret = checked_sws_scale_frame(sws_hw, out_f, in_f);
+        if (ret < 0)
+            goto error;
+    }
+    *out_time = av_gettime_relative() - time;
+
+    ret = av_frame_get_buffer(dst, 0);
+    if (ret < 0)
+        goto error;
+
+    ret = av_hwframe_transfer_data(dst, out_f, 0);
+    if (ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to download HW frame\n");
+        goto error;
+    }
+
+    ret = 0;
+
+error:
+    av_frame_free(&in_f);
+    av_frame_free(&out_f);
+    av_buffer_unref(&in_ref);
+    av_buffer_unref(&out_ref);
+    sws_free_context(&sws_hw);
+    return ret;
+}
+
+static void print_test_params(char *buf, size_t buf_size,
+                              const AVFrame *src, const AVFrame *dst,
+                              const struct mode *mode, const struct options *opts)
+{
+    snprintf(buf, buf_size,
+             "%-*s %*dx%*d -> %-*s %*dx%*d, flags=0x%0*x dither=%u",
+             opts->pretty ? 14 : 0, av_get_pix_fmt_name(src->format),
+             opts->pretty ?  4 : 0, src->width,
+             opts->pretty ?  4 : 0, src->height,
+             opts->pretty ? 14 : 0, av_get_pix_fmt_name(dst->format),
+             opts->pretty ?  4 : 0, dst->width,
+             opts->pretty ?  4 : 0, dst->height,
+             opts->pretty ?  8 : 0, mode->flags,
+             mode->dither);
+}
+
 static void print_results(const AVFrame *ref, const AVFrame *src, const AVFrame *dst,
                           int dst_w, int dst_h,
                           const struct mode *mode, const struct options *opts,
@@ -303,16 +454,11 @@ static void print_results(const AVFrame *ref, const AVFrame *src, const AVFrame 
                           const struct test_results *ref_r,
                           float expected_loss)
 {
+    char buf[128];
+
     if (av_log_get_level() >= AV_LOG_INFO) {
-        printf("%-*s %*dx%*d -> %-*s %*dx%*d, flags=0x%0*x dither=%u",
-               opts->pretty ? 14 : 0, av_get_pix_fmt_name(src->format),
-               opts->pretty ?  4 : 0, src->width,
-               opts->pretty ?  4 : 0, src->height,
-               opts->pretty ? 14 : 0, av_get_pix_fmt_name(dst->format),
-               opts->pretty ?  4 : 0, dst->width,
-               opts->pretty ?  4 : 0, dst->height,
-               opts->pretty ?  8 : 0, mode->flags,
-               mode->dither);
+        print_test_params(buf, sizeof(buf), src, dst, mode, opts);
+        printf("%s", buf);
 
         if (!opts->bench || !ref_r) {
             printf(", SSIM={Y=%f U=%f V=%f A=%f} loss=%e",
@@ -350,15 +496,32 @@ static void print_results(const AVFrame *ref, const AVFrame *src, const AVFrame 
         const int bad = r->loss - expected_loss > 1e-2;
         const int level = bad ? AV_LOG_ERROR : AV_LOG_WARNING;
         const char *worse_str = bad ? "WORSE" : "worse";
+        if (bad) {
+            print_test_params(buf, sizeof(buf), src, dst, mode, opts);
+            av_log(NULL, level, "%s\n", buf);
+        }
         av_log(NULL, level,
                "  loss %e is %s by %e, expected loss %e\n",
                r->loss, worse_str, r->loss - expected_loss, expected_loss);
     }
 
     if (ref_r && r->loss - ref_r->loss > 1e-4) {
-        const int bad = r->loss - ref_r->loss > 1e-2;
+        /**
+         * The new scaling code does not (yet) perform error diffusion for
+         * low bit depth output, which impacts the SSIM score slightly for
+         * very low bit-depth formats (e.g. monow, monob). Since this is an
+         * expected result, drop the badness from an error to a warning for
+         * such cases. This can be removed again once error diffusion is
+         * implemented in the new ops code.
+         */
+        const int dst_bits = av_pix_fmt_desc_get(dst->format)->comp[0].depth;
+        const int bad = r->loss - ref_r->loss > 1e-2 && dst_bits > 1;
         const int level = bad ? AV_LOG_ERROR : AV_LOG_WARNING;
         const char *worse_str = bad ? "WORSE" : "worse";
+        if (bad) {
+            print_test_params(buf, sizeof(buf), src, dst, mode, opts);
+            av_log(NULL, level, "%s\n", buf);
+        }
         av_log(NULL, level,
                "  loss %e is %s by %e, ref loss %e SSIM={Y=%f U=%f V=%f A=%f}\n",
                r->loss, worse_str, r->loss - ref_r->loss, ref_r->loss,
@@ -419,10 +582,14 @@ static int run_test(enum AVPixelFormat src_fmt, enum AVPixelFormat dst_fmt,
     if (ret < 0)
         goto error;
 
-    ret = opts->legacy ? scale_legacy(dst, src, mode, opts, &r.time)
-                       : scale_new(dst, src, mode, opts, &r.time);
-    if (ret < 0)
+    ret = opts->legacy  ? scale_legacy(dst, src, mode, opts, &r.time)
+        : hw_device_ctx ? scale_hw(dst, src, mode, opts, &r.time)
+                        : scale_new(dst, src, mode, opts, &r.time);
+    if (ret < 0) {
+        if (ret == AVERROR(ENOTSUP))
+            ret = 0;
         goto error;
+    }
 
     ret = init_frame(&out, ref, ref->width, ref->height, ref->format);
     if (ret < 0)
@@ -479,6 +646,55 @@ static inline int fmt_is_subsampled(enum AVPixelFormat fmt)
            av_pix_fmt_desc_get(fmt)->log2_chroma_h != 0;
 }
 
+/* Returns 1 if the (src_fmt, dst_fmt) pair can be expressed by the new
+ * swscale ops infrastructure, 0 if it would fall back to the legacy path.
+ * Used to skip pairs that cannot run on hardware frames. */
+static int hw_pair_supported(enum AVPixelFormat src_fmt, enum AVPixelFormat dst_fmt)
+{
+#if CONFIG_UNSTABLE
+    SwsContext *ctx;
+    SwsFormat src, dst;
+    SwsOpList *ops = NULL;
+    bool incomplete = false;
+    int ret;
+
+    ctx = sws_alloc_context();
+    if (!ctx)
+        return 0;
+
+    ff_fmt_from_pixfmt(src_fmt, &src);
+    src.width = src.height = 96;
+    ff_fmt_from_pixfmt(dst_fmt, &dst);
+    dst.width = dst.height = 96;
+    ff_infer_colors(&src.color, &dst.color);
+
+    ret = ff_sws_op_list_generate(ctx, &src, &dst, &ops, &incomplete);
+    ff_sws_op_list_free(&ops);
+    sws_free_context(&ctx);
+    return ret >= 0;
+#else
+    return 1;
+#endif
+}
+
+static inline int fmt_is_supported_by_hw(enum AVPixelFormat fmt)
+{
+    if (!hw_device_constr)
+        return 1;
+
+    /* Semi-planar formats are only supported by the legacy path, which
+     * does not support hardware frames. */
+    if (fmt == AV_PIX_FMT_NV24 || fmt == AV_PIX_FMT_P410 ||
+        fmt == AV_PIX_FMT_P412 || fmt == AV_PIX_FMT_P416)
+        return 0;
+    for (int i = 0;
+         hw_device_constr->valid_sw_formats[i] != AV_PIX_FMT_NONE; i++) {
+        if (hw_device_constr->valid_sw_formats[i] == fmt)
+            return 1;
+    }
+    return 0;
+}
+
 static int run_self_tests(const AVFrame *ref, const struct options *opts)
 {
     const int dst_w[] = { opts->w, opts->w - opts->w / 3, opts->w + opts->w / 3 };
@@ -502,14 +718,18 @@ static int run_self_tests(const AVFrame *ref, const struct options *opts)
         dst_fmt_min = dst_fmt_max = opts->dst_fmt;
 
     for (src_fmt = src_fmt_min; src_fmt <= src_fmt_max; src_fmt++) {
-        if (opts->unscaled && fmt_is_subsampled(src_fmt))
+        if ((!fmt_is_supported_by_hw(src_fmt)) ||
+            (opts->unscaled && fmt_is_subsampled(src_fmt)))
             continue;
         if (!sws_test_format(src_fmt, 0) || !sws_test_format(src_fmt, 1))
             continue;
         for (dst_fmt = dst_fmt_min; dst_fmt <= dst_fmt_max; dst_fmt++) {
-            if (opts->unscaled && fmt_is_subsampled(dst_fmt))
+            if ((!fmt_is_supported_by_hw(dst_fmt)) ||
+                (opts->unscaled && fmt_is_subsampled(dst_fmt)))
                 continue;
             if (!sws_test_format(dst_fmt, 0) || !sws_test_format(dst_fmt, 1))
+                continue;
+            if (hw_device_ctx && !hw_pair_supported(src_fmt, dst_fmt))
                 continue;
             for (int h = 0; h < FF_ARRAY_ELEMS(dst_h); h++) {
                 for (int w = 0; w < FF_ARRAY_ELEMS(dst_w); w++) {
@@ -519,13 +739,12 @@ static int run_self_tests(const AVFrame *ref, const struct options *opts)
                             .dither = opts->dither >= 0 ? opts->dither : SWS_DITHER_AUTO,
                         };
 
-                        if (ff_sfc64_get(&prng_state) > UINT64_MAX * opts->prob)
-                            continue;
-
-                        ret = run_test(src_fmt, dst_fmt, dst_w[w], dst_h[h],
-                                       &mode, opts, ref, src, NULL);
-                        if (ret < 0)
-                            goto error;
+                        if (ff_sfc64_get(&prng_state) <= UINT64_MAX * opts->prob) {
+                            ret = run_test(src_fmt, dst_fmt, dst_w[w], dst_h[h],
+                                           &mode, opts, ref, src, NULL);
+                            if (ret < 0)
+                                goto error;
+                        }
 
                         if (opts->flags >= 0 || opts->unscaled)
                             break;
@@ -630,8 +849,8 @@ static int init_ref(AVFrame *ref, const struct options *opts)
     if (!ctx || !rgb)
         goto error;
 
-    rgb->width  = opts->w / 12;
-    rgb->height = opts->h / 12;
+    rgb->width  = opts->w > 32 ? opts->w / 12 : opts->w;
+    rgb->height = opts->h > 32 ? opts->h / 12 : opts->h;
     rgb->format = AV_PIX_FMT_RGBA;
     ret = av_frame_get_buffer(rgb, 32);
     if (ret < 0)
@@ -665,7 +884,7 @@ static int parse_options(int argc, char **argv, struct options *opts, FILE **fp)
                     "   -ref <file>\n"
                     "       Uses file as reference to compare tests against. Tests that have become worse will contain the string worse or WORSE\n"
                     "   -p <number between 0.0 and 1.0>\n"
-                    "       The percentage of tests or comparisons to perform. Doing all tests will take long and generate over a hundred MB text output\n"
+                    "       The proportion of tests or comparisons to perform.\n"
                     "       It is often convenient to perform a random subset\n"
                     "   -dst <pixfmt>\n"
                     "       Only test the specified destination pixel format\n"
@@ -683,6 +902,8 @@ static int parse_options(int argc, char **argv, struct options *opts, FILE **fp)
                     "       If 1, test only conversions that do not involve scaling\n"
                     "   -legacy <1 or 0>\n"
                     "       If 1, force using legacy swscale for the main conversion\n"
+                    "   -hw <device>\n"
+                    "       Use Vulkan hardware acceleration on the specified device for the main conversion\n"
                     "   -threads <threads>\n"
                     "       Use the specified number of threads\n"
                     "   -cpuflags <cpuflags>\n"
@@ -751,6 +972,22 @@ static int parse_options(int argc, char **argv, struct options *opts, FILE **fp)
             opts->unscaled = atoi(argv[i + 1]);
         } else if (!strcmp(argv[i], "-legacy")) {
             opts->legacy = atoi(argv[i + 1]);
+        } else if (!strcmp(argv[i], "-hw")) {
+            int ret = av_hwdevice_ctx_create(&hw_device_ctx,
+                                             AV_HWDEVICE_TYPE_VULKAN,
+                                             argv[i + 1], NULL, 0);
+            if (ret < 0) {
+                fprintf(stderr, "Failed to create Vulkan device '%s'\n",
+                        argv[i + 1]);
+                return -1;
+            }
+            hw_device_constr = av_hwdevice_get_hwframe_constraints(hw_device_ctx,
+                                                                   NULL);
+            if (!hw_device_constr) {
+                fprintf(stderr, "Failed to retrieve Vulkan device constraints '%s'\n",
+                        argv[i + 1]);
+                return -1;
+            }
         } else if (!strcmp(argv[i], "-threads")) {
             opts->threads = atoi(argv[i + 1]);
         } else if (!strcmp(argv[i], "-p")) {
@@ -825,6 +1062,8 @@ error:
     sws_free_context(&sws_ref_src);
     sws_free_context(&sws_src_dst);
     sws_free_context(&sws_dst_out);
+    av_buffer_unref(&hw_device_ctx);
+    av_hwframe_constraints_free(&hw_device_constr);
     av_frame_free(&ref);
     if (fp)
         fclose(fp);

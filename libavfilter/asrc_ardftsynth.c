@@ -88,9 +88,10 @@ typedef struct ARDFTSynth {
 
 #define OFFSET(x) offsetof(ARDFTSynth, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+#define TFLAGS AV_OPT_FLAG_AUDIO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 
 static const AVOption ardftsynth_options[] = {
-    { "events",       "set number of events",OFFSET(events),       AV_OPT_TYPE_INT,       {.i64 = 32},        0., MAX_EVENTS, FLAGS },
+    { "events",       "set number of events",OFFSET(events),       AV_OPT_TYPE_INT,       {.i64 = 32},        0., MAX_EVENTS,TFLAGS },
     { "sample_rate",  "set sample rate",     OFFSET(sample_rate),  AV_OPT_TYPE_INT,       {.i64 = 48000},    15,  INT_MAX,    FLAGS },
     { "duration",     "set duration",        OFFSET(duration_opt), AV_OPT_TYPE_DURATION,  {.i64 = 0},         0,  INT64_MAX,  FLAGS },
     { "channel_layout","set channel layout", OFFSET(chlayout),     AV_OPT_TYPE_CHLAYOUT,  {.str = "stereo"},  0,  0,          FLAGS },
@@ -111,7 +112,7 @@ static av_cold int query_formats(const AVFilterContext *ctx,
         AV_SAMPLE_FMT_DBLP,
         AV_SAMPLE_FMT_NONE
     };
-    int ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
+    int ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
     if (ret < 0)
         return ret;
 
@@ -148,7 +149,7 @@ static av_cold int config_props(AVFilterLink *outlink)
         return AVERROR(ENOMEM);
 
     for (int n = 0; n < s->window_size; n++)
-        s->win[n] = sin(M_PI*n/(s->window_size-1));
+        s->win[n] = sin(M_PI*(n+0.5)/s->window_size);
 
     for (int ch = 0; ch < outlink->ch_layout.nb_channels; ch++) {
         ChannelContext *cc = &s->cc[ch];
@@ -397,4 +398,5 @@ const FFFilter ff_asrc_ardftsynth = {
     .uninit        = uninit,
     FILTER_OUTPUTS(ardftsynth_outputs),
     FILTER_QUERY_FUNC2(query_formats),
+    .process_command = ff_filter_process_command,
 };

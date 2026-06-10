@@ -271,7 +271,8 @@ int ff_mjpeg_encode_stuffing(MPVEncContext *const s)
         goto fail;
     }
 
-    ff_mjpeg_escape_FF(pbc, s->esc_pos);
+    if (s->c.codec_id != AV_CODEC_ID_THP)
+        ff_mjpeg_escape_FF(pbc, s->esc_pos);
 
     if (s->c.slice_context_count > 1 && mb_y < s->c.mb_height - 1)
         put_marker(pbc, RST0 + (mb_y&7));
@@ -724,5 +725,30 @@ const FFCodec ff_amv_encoder = {
     CODEC_PIXFMTS(AV_PIX_FMT_YUVJ420P),
     .color_ranges   = AVCOL_RANGE_JPEG,
     .p.priv_class   = &amv_class,
+};
+#endif
+
+#if CONFIG_THP_ENCODER
+static const AVClass thp_class = {
+    .class_name = "thp encoder",
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
+const FFCodec ff_thp_encoder = {
+    .p.name         = "thp",
+    CODEC_LONG_NAME("Nintendo Gamecube THP video"),
+    .p.type         = AVMEDIA_TYPE_VIDEO,
+    .p.id           = AV_CODEC_ID_THP,
+    .priv_data_size = sizeof(MJPEGEncContext),
+    .init           = mjpeg_encode_init,
+    FF_CODEC_ENCODE_CB(ff_mpv_encode_picture),
+    .close          = mjpeg_encode_close,
+    .p.capabilities = AV_CODEC_CAP_DR1 |
+                      AV_CODEC_CAP_SLICE_THREADS | AV_CODEC_CAP_FRAME_THREADS |
+                      AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
+    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
+    CODEC_PIXFMTS(AV_PIX_FMT_YUVJ420P, AV_PIX_FMT_YUV420P),
+    .p.priv_class   = &thp_class,
 };
 #endif

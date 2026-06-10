@@ -4,14 +4,14 @@
 ;* Copyright (c) 2000, 2001 Fabrice Bellard
 ;* Copyright (c) 2002-2004 Michael Niedermayer <michaelni@gmx.at>
 ;*
-;* This file is part of Librempeg.
+;* This file is part of FFmpeg.
 ;*
-;* Librempeg is free software; you can redistribute it and/or
+;* FFmpeg is free software; you can redistribute it and/or
 ;* modify it under the terms of the GNU Lesser General Public
 ;* License as published by the Free Software Foundation; either
 ;* version 2.1 of the License, or (at your option) any later version.
 ;*
-;* Librempeg is distributed in the hope that it will be useful,
+;* FFmpeg is distributed in the hope that it will be useful,
 ;* but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;* Lesser General Public License for more details.
@@ -67,12 +67,21 @@ SECTION .text
 %endmacro
 
 %macro HADAMARD8 0
+%if ARCH_X86_64
+    SUMSUB_BADC       w, 0, 1, 2, 3, 8
+    SUMSUB_BADC       w, 4, 5, 6, 7, 8
+    SUMSUB_BADC       w, 0, 2, 1, 3, 8
+    SUMSUB_BADC       w, 4, 6, 5, 7, 8
+    SUMSUB_BADC       w, 0, 4, 1, 5, 8
+    SUMSUB_BADC       w, 2, 6, 3, 7, 8
+%else
     SUMSUB_BADC       w, 0, 1, 2, 3
     SUMSUB_BADC       w, 4, 5, 6, 7
     SUMSUB_BADC       w, 0, 2, 1, 3
     SUMSUB_BADC       w, 4, 6, 5, 7
     SUMSUB_BADC       w, 0, 4, 1, 5
     SUMSUB_BADC       w, 2, 6, 3, 7
+%endif
 %endmacro
 
 %macro ABS1_SUM 3

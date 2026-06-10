@@ -98,6 +98,7 @@ static int read_header(AVFormatContext *s)
             align = 0x24;
             break;
         default:
+            avpriv_request_sample(s, "codec %02x", codec);
             return AVERROR_PATCHWELCOME;
         }
         stream_stop += stream_start;
@@ -126,6 +127,9 @@ static int read_header(AVFormatContext *s)
 skip:
         offset += entry_size;
     }
+
+    if (s->nb_streams == 0)
+        return AVERROR_INVALIDDATA;
 
     qsort(s->streams, s->nb_streams, sizeof(AVStream *), sort_streams);
     for (int n = 0; n < s->nb_streams; n++) {

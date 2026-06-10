@@ -88,6 +88,7 @@ typedef struct WAVMuxContext {
     int peak_block_pos;
     int peak_ppv;
     int peak_bps;
+    int write_cue;
 } WAVMuxContext;
 
 #if CONFIG_WAV_MUXER
@@ -298,6 +299,70 @@ static int peak_write_chunk(AVFormatContext *s)
     return 0;
 }
 
+static int wav_write_cue_chunk(AVFormatContext *s, int sample_rate)
+{
+    AVIOContext *dyn_buf;
+    AVIOContext *pb = s->pb;
+    AVRational scale = {1, sample_rate};
+    int ret;
+
+    int64_t start = ff_start_tag(pb, "cue "); /* chunk ID */
+
+    avio_wl32(pb, s->nb_chapters); /* number of cue points */
+
+    /* write cue points */
+    for (int i = 0; i < s->nb_chapters; i++) {
+        AVChapter *c = s->chapters[i];
+        int64_t samples = av_rescale_q(c->start, c->time_base, scale);
+
+        avio_wl32(pb, i + 1);     /* cue point ID */
+        avio_wl32(pb, 0);         /* position, only relevant with PLST chunk */
+        ffio_wfourcc(pb, "data"); /* data chunk ID, only used with WAVL chunk */
+        avio_wl32(pb, 0);         /* chunk start, only used with WAVL chunk */
+        avio_wl32(pb, 0);         /* block start, only used with WAVL chunk*/
+        avio_wl32(pb, samples);   /* sample start (in # of samples) */
+    }
+
+    ff_end_tag(pb, start);
+
+    if ((ret = avio_open_dyn_buf(&dyn_buf)) < 0)
+        return ret;
+
+    start = ff_start_tag(pb, "LIST");
+
+    ffio_wfourcc(pb, "adtl"); /* associated data list chunk */
+
+    /* write cue point names */
+    for (int i = 0; i < s->nb_chapters; i++) {
+        uint8_t *buf;
+        int len;
+        AVChapter *c = s->chapters[i];
+        int64_t label = ff_start_tag(pb, "labl"); /* sub chunk ID */
+        AVDictionaryEntry *t = av_dict_get(c->metadata, "title", NULL, 0);
+        avio_wl32(pb, i + 1);                     /* cue point ID */
+        if (t) {
+            avio_put_str(dyn_buf, t->value);
+        } else {
+            /* no chapter title: use "Cue xyz" */
+            char *title;
+            if ((title = av_asprintf("Cue %d", i + 1)) == NULL)
+                return AVERROR(ENOMEM);
+            avio_put_str(dyn_buf, title);
+            av_free(title);
+        }
+        len = avio_get_dyn_buf(dyn_buf, &buf);
+        avio_write(pb, buf, len);                 /* title string data */
+        ffio_reset_dyn_buf(dyn_buf);
+
+        ff_end_tag(pb, label);
+    }
+
+    ff_end_tag(pb, start);
+    ffio_free_dyn_buf(&dyn_buf);
+
+    return 0;
+}
+
 static int wav_write_header(AVFormatContext *s)
 {
     WAVMuxContext *wav = s->priv_data;
@@ -314,9 +379,9 @@ static int wav_write_header(AVFormatContext *s)
 
     ffio_wfourcc(pb, "WAVE");
 
-    if (wav->rf64 != RF64_NEVER) {
-        /* write empty ds64 chunk or JUNK chunk to reserve space for ds64 */
-        ffio_wfourcc(pb, wav->rf64 == RF64_ALWAYS ? "ds64" : "JUNK");
+    if (wav->rf64 == RF64_ALWAYS) {
+        /* write empty ds64 chunk */
+        ffio_wfourcc(pb, "ds64");
         avio_wl32(pb, 28); /* chunk size */
         wav->ds64 = avio_tell(pb);
         ffio_fill(pb, 0, 28);
@@ -331,6 +396,16 @@ static int wav_write_header(AVFormatContext *s)
             return AVERROR(ENOSYS);
         }
         ff_end_tag(pb, fmt);
+
+        if (wav->rf64 == RF64_AUTO) {
+            /* reserve space for ds64 */
+            ffio_wfourcc(pb, "JUNK");
+            avio_wl32(pb, 28); /* chunk size */
+            ffio_fill(pb, 0, 28);
+
+            /* in RF64_AUTO mode, fmt + JUNK will be overwritten by ds64 + fmt */
+            wav->ds64 = fmt;
+        }
     }
 
     if (s->streams[0]->codecpar->codec_tag != 0x01 /* hence for all other than PCM */
@@ -342,6 +417,12 @@ static int wav_write_header(AVFormatContext *s)
 
     if (wav->write_bext)
         bwf_write_bext_chunk(s);
+
+    if (wav->write_cue) {
+        int ret;
+        if ((ret = wav_write_cue_chunk(s, s->streams[0]->codecpar->sample_rate)) < 0)
+            return ret;
+    }
 
     if (wav->write_peak) {
         int ret;
@@ -410,6 +491,7 @@ static int wav_write_trailer(AVFormatContext *s)
     WAVMuxContext    *wav = s->priv_data;
     int64_t file_size, data_size;
     int64_t number_of_samples = 0;
+    int64_t pos;
     int rf64 = 0;
     int ret = 0;
 
@@ -458,7 +540,7 @@ static int wav_write_trailer(AVFormatContext *s)
             ffio_wfourcc(pb, "RF64");
             avio_wl32(pb, -1);
 
-            /* write ds64 chunk (overwrite JUNK if rf64 == RF64_AUTO) */
+            /* write ds64 chunk (overwrite fmt + JUNK if rf64 == RF64_AUTO) */
             avio_seek(pb, wav->ds64 - 8, SEEK_SET);
             ffio_wfourcc(pb, "ds64");
             avio_wl32(pb, 28);                  /* ds64 chunk size */
@@ -466,6 +548,11 @@ static int wav_write_trailer(AVFormatContext *s)
             avio_wl64(pb, data_size);           /* data chunk size */
             avio_wl64(pb, number_of_samples);   /* fact chunk number of samples */
             avio_wl32(pb, 0);                   /* number of table entries for non-'data' chunks */
+
+            /* rewrite fmt in its RF64 position after ds64 */
+            pos = ff_start_tag(pb, "fmt ");
+            ret = ff_put_wav_header(s, pb, s->streams[0]->codecpar, 0);
+            ff_end_tag(pb, pos);
 
             /* write -1 in data chunk size */
             avio_seek(pb, wav->data - 4, SEEK_SET);
@@ -493,6 +580,7 @@ static const AVOption options[] = {
     { "peak_block_size", "Number of audio samples used to generate each peak frame.",   OFFSET(peak_block_size), AV_OPT_TYPE_INT, { .i64 = 256 }, 0, 65536, ENC },
     { "peak_format",     "The format of the peak envelope data (1: uint8, 2: uint16).", OFFSET(peak_format), AV_OPT_TYPE_INT,     { .i64 = PEAK_FORMAT_UINT16 }, PEAK_FORMAT_UINT8, PEAK_FORMAT_UINT16, ENC },
     { "peak_ppv",        "Number of peak points per peak value (1 or 2).",              OFFSET(peak_ppv), AV_OPT_TYPE_INT, { .i64 = 2 }, 1, 2, ENC },
+    { "write_cue",  "Write CUE/ADTL chunk.", OFFSET(write_cue),  AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, ENC },
     { NULL },
 };
 

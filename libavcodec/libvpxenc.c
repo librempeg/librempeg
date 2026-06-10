@@ -74,6 +74,7 @@ typedef struct FrameData {
     AVBufferRef *frame_opaque_ref;
 
     AVBufferRef *hdr10_plus;
+    AVBufferRef *hdr_smpte2094_app5;
 } FrameData;
 
 typedef struct VPxEncoderContext {
@@ -341,6 +342,7 @@ static void frame_data_uninit(FrameData *fd)
 {
     av_buffer_unref(&fd->frame_opaque_ref);
     av_buffer_unref(&fd->hdr10_plus);
+    av_buffer_unref(&fd->hdr_smpte2094_app5);
 }
 
 static av_cold void fifo_free(AVFifo **fifo)
@@ -359,18 +361,27 @@ static int frame_data_submit(AVCodecContext *avctx, AVFifo *fifo,
 
     FrameData fd = { .pts = frame->pts };
     int ret;
+    const AVFrameSideData *sd;
 
     if (IS_VP9(avctx) &&
         // Keep HDR10+ if it has bit depth higher than 8 and
         // it has PQ trc (SMPTE2084).
         enccfg->g_bit_depth > 8 && avctx->color_trc == AVCOL_TRC_SMPTE2084) {
-        const AVFrameSideData *sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DYNAMIC_HDR_PLUS);
+        sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DYNAMIC_HDR_PLUS);
 
         if (sd) {
             fd.hdr10_plus = av_buffer_ref(sd->buf);
             if (!fd.hdr10_plus)
                 return AVERROR(ENOMEM);
         }
+    }
+
+    // Keep SMPTE2094_APP5 metadata.
+    sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DYNAMIC_HDR_SMPTE_2094_APP5);
+    if (sd) {
+        fd.hdr_smpte2094_app5 = av_buffer_ref(sd->buf);
+        if (!fd.hdr_smpte2094_app5)
+            return AVERROR(ENOMEM);
     }
 
     fd.duration     = frame->duration;
@@ -421,6 +432,16 @@ static int frame_data_apply(AVCodecContext *avctx, AVFifo *fifo, AVPacket *pkt)
         }
 
         memcpy(data, fd.hdr10_plus->data, fd.hdr10_plus->size);
+    }
+
+    if (fd.hdr_smpte2094_app5) {
+        data = av_packet_new_side_data(pkt, AV_PKT_DATA_DYNAMIC_HDR_SMPTE_2094_APP5, fd.hdr_smpte2094_app5->size);
+        if (!data) {
+            ret = AVERROR(ENOMEM);
+            goto skip;
+        }
+
+        memcpy(data, fd.hdr_smpte2094_app5->data, fd.hdr_smpte2094_app5->size);
     }
 
 skip:
@@ -805,6 +826,7 @@ static int set_pix_fmt(AVCodecContext *avctx, vpx_codec_caps_t codec_caps,
     case AV_PIX_FMT_GBRP:
     case AV_PIX_FMT_GBRAP:
         ctx->vpx_cs = VPX_CS_SRGB;
+        av_fallthrough;
     case AV_PIX_FMT_YUV444P:
     case AV_PIX_FMT_YUVA444P:
         if (avctx->colorspace == AVCOL_SPC_RGB)
@@ -846,6 +868,7 @@ static int set_pix_fmt(AVCodecContext *avctx, vpx_codec_caps_t codec_caps,
     case AV_PIX_FMT_GBRP12:
     case AV_PIX_FMT_GBRAP12:
         ctx->vpx_cs = VPX_CS_SRGB;
+        av_fallthrough;
     case AV_PIX_FMT_YUV444P10:
     case AV_PIX_FMT_YUVA444P10:
     case AV_PIX_FMT_YUV444P12:

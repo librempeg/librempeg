@@ -49,7 +49,7 @@ typedef struct BinauralizerContext {
     double *i_gain;
     unsigned nb_i_gain;
 
-    int fft_size;
+    int rdft_size;
     int overlap;
     int nb_in_channels;
 
@@ -58,23 +58,20 @@ typedef struct BinauralizerContext {
     int64_t last_pts;
 
     void *window;
+    void *state_in;
+    void *state_out;
 
-    AVFrame *in;
-    AVFrame *in_frame;
-    AVFrame *out_dist_frame;
-    AVFrame *windowed_frame;
-    AVFrame *iwindowed_frame;
-    AVFrame *owindowed_frame;
-    AVFrame *windowed_outl;
-    AVFrame *windowed_outr;
-    AVFrame *windowed_out;
-
-    int (*ba_stereo)(AVFilterContext *ctx, AVFrame *out);
-    int (*ba_flush)(AVFilterContext *ctx, AVFrame *out);
-
-    AVTXContext **tx_ctx, *itx_ctx;
-    av_tx_fn tx_fn, itx_fn;
+    int (*init)(AVFilterContext *ctx);
+    int (*ba_stereo)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const int offset);
+    int (*ba_flush)(AVFilterContext *ctx, AVFrame *out, const int offset);
+    void (*ba_uninit)(AVFilterContext *ctx);
 } BinauralizerContext;
+
+typedef struct ThreadData {
+    AVFrame *in, *out;
+    int nb_samples;
+    int offset;
+} ThreadData;
 
 #define OFFSET(x) offsetof(BinauralizerContext, x)
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_RUNTIME_PARAM
@@ -106,7 +103,7 @@ static int query_formats(const AVFilterContext *ctx,
     AVFilterChannelLayouts *layouts = NULL;
     int ret;
 
-    ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, formats);
+    ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, formats);
     if (ret < 0)
         return ret;
 
@@ -136,39 +133,27 @@ static int query_formats(const AVFilterContext *ctx,
 static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
-    AVFilterLink *outlink = ctx->outputs[0];
     BinauralizerContext *s = ctx->priv;
     int ret;
 
     s->nb_in_channels = inlink->ch_layout.nb_channels;
-    s->fft_size = 1 << av_ceil_log2((inlink->sample_rate + 19) / 20);
-    s->overlap = (s->fft_size + 3) / 4;
-    s->trim_size = s->fft_size - s->overlap;
-    s->flush_size = s->fft_size - s->overlap;
-
-    s->in_frame       = ff_get_audio_buffer(inlink, s->fft_size + 2);
-    s->out_dist_frame = ff_get_audio_buffer(outlink, s->fft_size * 2);
-    s->windowed_frame = ff_get_audio_buffer(outlink, s->fft_size + 2);
-    s->iwindowed_frame = ff_get_audio_buffer(inlink, s->fft_size + 2);
-    s->owindowed_frame = ff_get_audio_buffer(inlink, s->fft_size + 2);
-    s->windowed_outl = ff_get_audio_buffer(inlink, s->fft_size + 2);
-    s->windowed_outr = ff_get_audio_buffer(inlink, s->fft_size + 2);
-    s->windowed_out = ff_get_audio_buffer(outlink, s->fft_size + 2);
-    if (!s->in_frame || !s->windowed_out || !s->out_dist_frame || !s->windowed_frame ||
-        !s->iwindowed_frame || !s->owindowed_frame ||
-        !s->windowed_outl || !s->windowed_outr)
-        return AVERROR(ENOMEM);
+    s->rdft_size = 1 << av_ceil_log2((inlink->sample_rate + 19) / 20);
+    s->overlap = (s->rdft_size + 3) / 4;
+    s->trim_size = s->rdft_size - s->overlap;
+    s->flush_size = s->rdft_size - s->overlap;
 
     switch (inlink->format) {
     case AV_SAMPLE_FMT_FLTP:
         s->ba_stereo = ba_stereo_float;
         s->ba_flush = ba_flush_float;
-        ret = ba_tx_init_float(ctx);
+        s->ba_uninit = ba_uninit_float;
+        ret = ba_init_float(ctx);
         break;
     case AV_SAMPLE_FMT_DBLP:
         s->ba_stereo = ba_stereo_double;
         s->ba_flush = ba_flush_double;
-        ret = ba_tx_init_double(ctx);
+        s->ba_uninit = ba_uninit_double;
+        ret = ba_init_double(ctx);
         break;
     default:
         return AVERROR_BUG;
@@ -201,10 +186,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
     av_frame_copy_props(out, in);
 
-    s->in = in;
-    s->ba_stereo(ctx, out);
+    for (int offset = 0; offset < out->nb_samples; offset += s->overlap)
+        s->ba_stereo(ctx, in, out, offset);
 
-    out->pts -= av_rescale_q(s->fft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
+    out->pts -= av_rescale_q(s->rdft_size - s->overlap, av_make_q(1, outlink->sample_rate), outlink->time_base);
     out->duration = av_rescale_q(out->nb_samples,
                                  (AVRational){1, outlink->sample_rate},
                                  outlink->time_base);
@@ -227,7 +212,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         return 0;
     }
 
-    s->in = NULL;
     ff_graph_frame_free(ctx, &in);
     return ff_filter_frame(outlink, out);
 }
@@ -247,7 +231,7 @@ static int flush_frame(AVFilterLink *outlink)
 
         s->flush_size -= nb_samples;
 
-        s->ba_flush(ctx, out);
+        s->ba_flush(ctx, out, 0);
 
         out->pts = s->last_pts;
         out->duration = av_rescale_q(out->nb_samples,
@@ -268,13 +252,15 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     BinauralizerContext *s = ctx->priv;
+    int ret, status, available, wanted;
     AVFrame *in = NULL;
-    int ret, status;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    ret = ff_inlink_consume_samples(inlink, s->overlap, s->overlap, &in);
+    available = ff_inlink_queued_samples(inlink);
+    wanted = FFMAX(s->overlap, (available / s->overlap) * s->overlap);
+    ret = ff_inlink_consume_samples(inlink, wanted, wanted, &in);
     if (ret < 0)
         return ret;
 
@@ -305,20 +291,8 @@ static av_cold void uninit(AVFilterContext *ctx)
 
     av_freep(&s->window);
 
-    av_frame_free(&s->in_frame);
-    av_frame_free(&s->out_dist_frame);
-    av_frame_free(&s->windowed_frame);
-    av_frame_free(&s->iwindowed_frame);
-    av_frame_free(&s->owindowed_frame);
-    av_frame_free(&s->windowed_outl);
-    av_frame_free(&s->windowed_outr);
-    av_frame_free(&s->windowed_out);
-
-    if (s->tx_ctx)
-        for (int ch = 0; ch < s->nb_in_channels; ch++)
-            av_tx_uninit(&s->tx_ctx[ch]);
-    av_freep(&s->tx_ctx);
-    av_tx_uninit(&s->itx_ctx);
+    if (s->ba_uninit)
+        s->ba_uninit(ctx);
 }
 
 static const AVFilterPad inputs[] = {

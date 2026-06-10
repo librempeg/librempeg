@@ -1,21 +1,21 @@
 /*
  * Copyright (C) 2001-2011 Michael Niedermayer <michaelni@gmx.at>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <stdint.h>
@@ -1324,81 +1324,5 @@ static void RENAME(yuv2yuyv422_1)(SwsInternal *c, const int16_t *buf0,
             :: "c" (buf0), "d" (buf1), "S" (ubuf0), "D" (ubuf1), "m" (dest),
                "a" (&c->redDither)
         );
-    }
-}
-static av_cold void RENAME(sws_init_swscale)(SwsInternal *c)
-{
-    enum AVPixelFormat dstFormat = c->opts.dst_format;
-
-    c->use_mmx_vfilter= 0;
-    if (!is16BPS(dstFormat) && !isNBPS(dstFormat) && !isSemiPlanarYUV(dstFormat)
-        && dstFormat != AV_PIX_FMT_GRAYF32BE && dstFormat != AV_PIX_FMT_GRAYF32LE
-        && !(c->opts.flags & SWS_BITEXACT)) {
-            if (c->opts.flags & SWS_ACCURATE_RND) {
-                if (!(c->opts.flags & SWS_FULL_CHR_H_INT)) {
-                    switch (c->opts.dst_format) {
-                    case AV_PIX_FMT_RGB32:   c->yuv2packedX = RENAME(yuv2rgb32_X_ar);   break;
-#if HAVE_6REGS
-                    case AV_PIX_FMT_BGR24:   c->yuv2packedX = RENAME(yuv2bgr24_X_ar);   break;
-#endif
-                    case AV_PIX_FMT_RGB555:  c->yuv2packedX = RENAME(yuv2rgb555_X_ar);  break;
-                    case AV_PIX_FMT_RGB565:  c->yuv2packedX = RENAME(yuv2rgb565_X_ar);  break;
-                    case AV_PIX_FMT_YUYV422: c->yuv2packedX = RENAME(yuv2yuyv422_X_ar); break;
-                    default: break;
-                    }
-                }
-            } else {
-                c->use_mmx_vfilter= 1;
-                if (!(c->opts.flags & SWS_FULL_CHR_H_INT)) {
-                    switch (c->opts.dst_format) {
-                    case AV_PIX_FMT_RGB32:   c->yuv2packedX = RENAME(yuv2rgb32_X);   break;
-                    case AV_PIX_FMT_BGR32:   c->yuv2packedX = RENAME(yuv2bgr32_X);   break;
-#if HAVE_6REGS
-                    case AV_PIX_FMT_BGR24:   c->yuv2packedX = RENAME(yuv2bgr24_X);   break;
-#endif
-                    case AV_PIX_FMT_RGB555:  c->yuv2packedX = RENAME(yuv2rgb555_X);  break;
-                    case AV_PIX_FMT_RGB565:  c->yuv2packedX = RENAME(yuv2rgb565_X);  break;
-                    case AV_PIX_FMT_YUYV422: c->yuv2packedX = RENAME(yuv2yuyv422_X); break;
-                    default: break;
-                    }
-                }
-            }
-        if (!(c->opts.flags & SWS_FULL_CHR_H_INT)) {
-            switch (c->opts.dst_format) {
-            case AV_PIX_FMT_RGB32:
-                c->yuv2packed1 = RENAME(yuv2rgb32_1);
-                c->yuv2packed2 = RENAME(yuv2rgb32_2);
-                break;
-            case AV_PIX_FMT_BGR24:
-                c->yuv2packed1 = RENAME(yuv2bgr24_1);
-                c->yuv2packed2 = RENAME(yuv2bgr24_2);
-                break;
-            case AV_PIX_FMT_RGB555:
-                c->yuv2packed1 = RENAME(yuv2rgb555_1);
-                c->yuv2packed2 = RENAME(yuv2rgb555_2);
-                break;
-            case AV_PIX_FMT_RGB565:
-                c->yuv2packed1 = RENAME(yuv2rgb565_1);
-                c->yuv2packed2 = RENAME(yuv2rgb565_2);
-                break;
-            case AV_PIX_FMT_YUYV422:
-                c->yuv2packed1 = RENAME(yuv2yuyv422_1);
-                c->yuv2packed2 = RENAME(yuv2yuyv422_2);
-                break;
-            default:
-                break;
-            }
-        }
-    }
-
-    if (c->srcBpc == 8 && c->dstBpc <= 14) {
-        // Use the new MMX scaler if the MMXEXT one can't be used (it is faster than the x86 ASM one).
-        if (c->opts.flags & SWS_FAST_BILINEAR && c->canMMXEXTBeUsed) {
-            c->hyscale_fast = ff_hyscale_fast_mmxext;
-            c->hcscale_fast = ff_hcscale_fast_mmxext;
-        } else {
-            c->hyscale_fast = NULL;
-            c->hcscale_fast = NULL;
-        }
     }
 }

@@ -756,9 +756,10 @@ retry:
                 }
             }
 
-            /* if there is non-zero auto filter, we may need another round
-             * to fully settle formats due to possible cross-incompatibilities
-             * between the auto filters themselves */
+            /* if there is an auto filter, we may need another round to fully
+             * settle formats due to possible cross-incompatibilities between
+             * the auto filters themselves, or between the auto filters and
+             * a different attribute of the filter they are modifying */
             if (num_conv > 0)
                 goto retry;
         }
@@ -919,6 +920,7 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
                 if (link->incfg.formats->flags != 0) {
                     const AVPixFmtDescriptor *a = av_pix_fmt_desc_get(p);
                     const AVPixFmtDescriptor *b = av_pix_fmt_desc_get(ref->format);
+
                     if (link->incfg.formats->flags & FILTER_SAME_BITDEPTH) {
                         const int afloat = !!(a->flags & AV_PIX_FMT_FLAG_FLOAT);
                         const int bfloat = !!(b->flags & AV_PIX_FMT_FLAG_FLOAT);
@@ -926,7 +928,7 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
                         const int bfactor = 1+3*(!!(b->flags & AV_PIX_FMT_FLAG_BAYER));
                         const int abits = a->comp[0].depth * afactor;
                         const int bbits = b->comp[0].depth * bfactor;
-                        if (abits != bbits && (abits > 8 || bbits > 8) || (afloat != bfloat))
+                        if ((abits != bbits && (abits > 8 || bbits > 8)) || (afloat != bfloat))
                             continue;
                     }
 
@@ -966,7 +968,6 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
                    av_get_pix_fmt_name(best), link->incfg.formats->nb_formats,
                    av_get_pix_fmt_name(ref->format), has_alpha);
             link->incfg.formats->formats[0] = best;
-            link->incfg.formats->nb_formats = 1;
         }
     } else if (link->type == AVMEDIA_TYPE_AUDIO) {
         if (ref && ref->type == AVMEDIA_TYPE_AUDIO) {
@@ -975,6 +976,12 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
             for (int i = 0; i < link->incfg.formats->nb_formats; i++) {
                 enum AVSampleFormat p = link->incfg.formats->formats[i];
 
+                if (link->incfg.formats->flags != 0) {
+                    if (link->incfg.formats->flags & FILTER_SAME_BITDEPTH) {
+                        if (av_get_packed_sample_fmt(p) != av_get_packed_sample_fmt(ref->format))
+                            continue;
+                    }
+                }
                 best = find_best_sample_fmt_of_2(best, p, ref->format);
             }
             if (best == AV_SAMPLE_FMT_NONE)
@@ -983,12 +990,11 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
                    av_get_sample_fmt_name(best), link->incfg.formats->nb_formats,
                    av_get_sample_fmt_name(ref->format));
             link->incfg.formats->formats[0] = best;
-            link->incfg.formats->nb_formats = 1;
         }
     }
 
-    link->format = link->incfg.formats->formats[0];
     link->incfg.formats->nb_formats = 1;
+    link->format = link->incfg.formats->formats[0];
 
     if (link->type == AVMEDIA_TYPE_VIDEO) {
         enum AVPixelFormat swfmt = link->format;
@@ -1088,10 +1094,12 @@ do {                                                                   \
     for (i = 0; i < filter->nb_inputs; i++) {                          \
         AVFilterLink *link = filter->inputs[i];                        \
         fmt_type fmt;                                                  \
+        int flags;                                                     \
                                                                        \
         if (!link->outcfg.list || link->outcfg.list->nb != 1)          \
             continue;                                                  \
         fmt = link->outcfg.list->var[0];                               \
+        flags = link->outcfg.list->flags;                              \
                                                                        \
         for (j = 0; j < filter->nb_outputs; j++) {                     \
             AVFilterLink *out_link = filter->outputs[j];               \
@@ -1105,26 +1113,9 @@ do {                                                                   \
             if (!out_link->incfg.list->nb) {                           \
                 if ((ret = add_format(&out_link->incfg.list, fmt)) < 0)\
                     return ret;                                        \
+                out_link->incfg.list->flags = flags;                   \
                 ret = 1;                                               \
                 break;                                                 \
-            }                                                          \
-                                                                       \
-            if ((out_link->incfg.list->flags & FILTER_SAME_BITDEPTH) ||\
-                (link->outcfg.list->flags & FILTER_SAME_BITDEPTH)) {   \
-                if (out_link->type == AVMEDIA_TYPE_AUDIO) {            \
-                    for (k = 0; k < out_link->incfg.list->nb; k++) {   \
-                        if (av_get_packed_sample_fmt(fmts->var[k]) ==  \
-                            av_get_packed_sample_fmt(fmt)) {           \
-                            fmts->var[0] = fmt;                        \
-                            fmts->nb = 1;                              \
-                            ret = 1;                                   \
-                            break;                                     \
-                        }                                              \
-                    }                                                  \
-                }                                                      \
-                                                                       \
-                if (ret)                                               \
-                    break;                                             \
             }                                                          \
                                                                        \
             for (k = 0; k < out_link->incfg.list->nb; k++)             \
@@ -1498,17 +1489,12 @@ static int pick_formats(AVFilterGraph *graph)
                             return ret;
                         change = 1;
                     }
-                    if (filter->outputs[j]->incfg.samplerates && filter->outputs[j]->incfg.samplerates->nb_formats == 1) {
-                        if ((ret = pick_samplerate(filter->outputs[j], NULL)) < 0)
-                            return ret;
-                        change = 1;
-                    }
                 }
             }
-            if (filter->nb_inputs && filter->nb_outputs && filter->inputs[0]->sample_rate>0) {
+            if (filter->nb_inputs && filter->nb_outputs && filter->inputs[0]->format>=0) {
                 for (int j = 0; j < filter->nb_outputs; j++) {
-                    if (filter->outputs[j]->incfg.samplerates && filter->outputs[j]->sample_rate<=0) {
-                        if ((ret = pick_samplerate(filter->outputs[j], filter->inputs[0])) < 0)
+                    if (filter->outputs[j]->format<0) {
+                        if ((ret = pick_format(filter->outputs[j], filter->inputs[0])) < 0)
                             return ret;
                         change = 1;
                     }

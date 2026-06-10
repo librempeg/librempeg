@@ -27,6 +27,7 @@
 
 #include <inttypes.h>
 
+#include "libavutil/attributes.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/opt.h"
 #include "avformat.h"
@@ -652,6 +653,7 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
                 return AVERROR_INVALIDDATA;
             avio_skip(pb, 32);
             chunk_size -= 32;
+            av_fallthrough;
         case ISNd_TAG:
         case SCDl_TAG:
         case SNDC_TAG:
@@ -779,6 +781,7 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
         case TGQs_TAG:
         case MADk_TAG:
             key = AV_PKT_FLAG_KEY;
+            av_fallthrough;
         case MVIf_TAG:
         case fVGT_TAG:
         case MADm_TAG:
@@ -802,6 +805,7 @@ static int ea_read_packet(AVFormatContext *s, AVPacket *pkt)
         case MPCh_TAG:
         case pIQT_TAG:
             key = AV_PKT_FLAG_KEY;
+            av_fallthrough;
         case MV0F_TAG:
         case AV0F_TAG:
 get_video_packet:

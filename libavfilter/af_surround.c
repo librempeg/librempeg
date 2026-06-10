@@ -152,11 +152,11 @@ typedef struct AudioSurroundContext {
     int (*filter)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
     void (*set_input_levels)(AVFilterContext *ctx);
     void (*set_output_levels)(AVFilterContext *ctx);
-    void (*upmix)(AVFilterContext *ctx, int ch);
-    int (*fft_channel)(AVFilterContext *ctx, AVFrame *out, int ch);
-    int (*ifft_channel)(AVFilterContext *ctx, AVFrame *out, int ch);
-    void (*do_transform)(AVFilterContext *ctx, int ch);
-    void (*bypass_transform)(AVFilterContext *ctx, int ch, int is_lfe);
+    void (*upmix)(AVFilterContext *ctx, const int ch);
+    int (*fft_channel)(AVFilterContext *ctx, AVFrame *out, const int ch, const int offset);
+    int (*ifft_channel)(AVFilterContext *ctx, AVFrame *out, const int ch, const int offset);
+    void (*do_transform)(AVFilterContext *ctx, const int ch);
+    void (*bypass_transform)(AVFilterContext *ctx, const int ch, int is_lfe);
     int (*transform_xy)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } AudioSurroundContext;
 
@@ -172,7 +172,7 @@ static int query_formats(const AVFilterContext *ctx,
     AVFilterChannelLayouts *layouts;
     int ret;
 
-    ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, formats);
+    ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, formats);
     if (ret)
         return ret;
 
@@ -345,15 +345,22 @@ fail:
     return 0;
 }
 
+typedef struct ThreadData {
+    AVFrame *frame;
+    int offset;
+} ThreadData;
+
 static int fft_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AudioSurroundContext *s = ctx->priv;
-    AVFrame *in = arg;
+    ThreadData *td = arg;
+    const int offset = td->offset;
+    AVFrame *in = td->frame;
     const int start = (s->in_ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (s->in_ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
 
     for (int ch = start; ch < end; ch++)
-        s->fft_channel(ctx, in, ch);
+        s->fft_channel(ctx, in, ch, offset);
 
     return 0;
 }
@@ -361,14 +368,16 @@ static int fft_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 static int ifft_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AudioSurroundContext *s = ctx->priv;
-    AVFrame *out = arg;
+    ThreadData *td = arg;
+    const int offset = td->offset;
+    AVFrame *out = td->frame;
     const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
     const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
 
     for (int ch = start; ch < end; ch++) {
         if (s->upmix)
             s->upmix(ctx, ch);
-        s->ifft_channel(ctx, out, ch);
+        s->ifft_channel(ctx, out, ch, offset);
     }
 
     return 0;
@@ -380,14 +389,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = ctx->outputs[0];
     AudioSurroundContext *s = ctx->priv;
     int nb_samples;
+    ThreadData td;
     AVFrame *out;
-
-    ff_filter_execute(ctx, fft_channels, in, NULL,
-                      FFMIN(inlink->ch_layout.nb_channels,
-                            ff_filter_get_nb_threads(ctx)));
-
-    ff_filter_execute(ctx, s->filter, NULL, NULL,
-                      FFMIN(s->rdft_size, ff_filter_get_nb_threads(ctx)));
 
     if (in) {
         int extra_samples = in->nb_samples % s->hop_size;
@@ -410,14 +413,28 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         return AVERROR(ENOMEM);
     }
 
+    for (int offset = 0; offset < out->nb_samples; offset += s->hop_size) {
+        td.frame = in;
+        td.offset = offset;
 
-    ff_filter_execute(ctx, s->transform_xy, NULL, NULL,
-                      FFMIN(s->rdft_size,
-                            ff_filter_get_nb_threads(ctx)));
+        ff_filter_execute(ctx, fft_channels, &td, NULL,
+                          FFMIN(inlink->ch_layout.nb_channels,
+                                ff_filter_get_nb_threads(ctx)));
 
-    ff_filter_execute(ctx, ifft_channels, out, NULL,
-                      FFMIN(outlink->ch_layout.nb_channels,
-                            ff_filter_get_nb_threads(ctx)));
+        ff_filter_execute(ctx, s->filter, NULL, NULL,
+                          FFMIN(s->rdft_size, ff_filter_get_nb_threads(ctx)));
+
+        ff_filter_execute(ctx, s->transform_xy, NULL, NULL,
+                          FFMIN(s->rdft_size,
+                                ff_filter_get_nb_threads(ctx)));
+
+        td.frame = out;
+        td.offset = offset;
+
+        ff_filter_execute(ctx, ifft_channels, &td, NULL,
+                          FFMIN(outlink->ch_layout.nb_channels,
+                                ff_filter_get_nb_threads(ctx)));
+    }
 
     if (in) {
         av_frame_copy_props(out, in);
@@ -471,13 +488,15 @@ static int activate(AVFilterContext *ctx)
     AVFilterLink *inlink = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
     AudioSurroundContext *s = ctx->priv;
+    int ret, status, available, wanted;
     AVFrame *in = NULL;
-    int ret, status;
     int64_t pts;
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
-    ret = ff_inlink_consume_samples(inlink, s->hop_size, s->hop_size, &in);
+    available = ff_inlink_queued_samples(inlink);
+    wanted = FFMAX(s->hop_size, (available / s->hop_size) * s->hop_size);
+    ret = ff_inlink_consume_samples(inlink, wanted, wanted, &in);
     if (ret < 0)
         return ret;
 

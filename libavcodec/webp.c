@@ -35,9 +35,9 @@
  * Exif metadata
  * ICC profile
  *
- * Unimplemented:
- *   - XMP metadata
- */
+ * @author Thilo Borgmann <thilo.borgmann _at_ mail.de>
+ * XMP metadata
+*/
 
 #include "libavutil/colorspace.h"
 #include "libavutil/imgutils.h"
@@ -213,9 +213,9 @@ typedef struct WebPContext {
     int alpha_data_size;                /* alpha chunk data size */
     int has_exif;                       /* set after an EXIF chunk has been processed */
     int has_iccp;                       /* set after an ICCP chunk has been processed */
+    int has_xmp;                        /* set after an XMP chunk has been processed */
     int width;                          /* image width */
     int height;                         /* image height */
-    int lossless;                       /* indicates lossless or lossy */
 
     int nb_transforms;                  /* number of transforms */
     enum TransformType transforms[4];   /* transformations used in the image, in order */
@@ -1121,10 +1121,8 @@ static int vp8_lossless_decode_frame(AVCodecContext *avctx, AVFrame *p,
     WebPContext *s = avctx->priv_data;
     int w, h, ret, i, used;
 
-    if (!is_alpha_chunk) {
-        s->lossless = 1;
+    if (!is_alpha_chunk)
         avctx->pix_fmt = AV_PIX_FMT_ARGB;
-    }
 
     ret = init_get_bits8(&s->gb, data_start, data_size);
     if (ret < 0)
@@ -1337,7 +1335,6 @@ static int vp8_lossy_decode_frame(AVCodecContext *avctx, AVFrame *p,
         s->v.actually_webp = 1;
     }
     avctx->pix_fmt = s->has_alpha ? AV_PIX_FMT_YUVA420P : AV_PIX_FMT_YUV420P;
-    s->lossless = 0;
 
     if (data_size > INT_MAX) {
         av_log(avctx, AV_LOG_ERROR, "unsupported chunk size\n");
@@ -1382,6 +1379,7 @@ static int webp_decode_frame(AVCodecContext *avctx, AVFrame *p,
     s->has_alpha = 0;
     s->has_exif  = 0;
     s->has_iccp  = 0;
+    s->has_xmp   = 0;
     bytestream2_init(&gb, avpkt->data, avpkt->size);
 
     if (bytestream2_get_bytes_left(&gb) < 12)
@@ -1402,8 +1400,6 @@ static int webp_decode_frame(AVCodecContext *avctx, AVFrame *p,
     }
 
     while (bytestream2_get_bytes_left(&gb) > 8) {
-        char chunk_str[5] = { 0 };
-
         chunk_type = bytestream2_get_le32(&gb);
         chunk_size = bytestream2_get_le32(&gb);
         if (chunk_size == UINT32_MAX)
@@ -1543,16 +1539,37 @@ exif_end:
         }
         case MKTAG('A', 'N', 'I', 'M'):
         case MKTAG('A', 'N', 'M', 'F'):
-        case MKTAG('X', 'M', 'P', ' '):
-            AV_WL32(chunk_str, chunk_type);
             av_log(avctx, AV_LOG_WARNING, "skipping unsupported chunk: %s\n",
-                   chunk_str);
+                   av_fourcc2str(chunk_type));
             bytestream2_skip(&gb, chunk_size);
             break;
+        case MKTAG('X', 'M', 'P', ' '): {
+            if (s->has_xmp) {
+                av_log(avctx, AV_LOG_VERBOSE, "Ignoring extra XMP chunk\n");
+                bytestream2_skip(&gb, chunk_size);
+                break;
+            }
+            if (!(vp8x_flags & VP8X_FLAG_XMP_METADATA))
+                av_log(avctx, AV_LOG_WARNING,
+                       "XMP chunk present, but XMP bit not set in the "
+                       "VP8X header\n");
+
+            s->has_xmp = 1;
+
+            // there are at least chunk_size bytes left to read
+            uint8_t *buffer = av_malloc(chunk_size + 1);
+            if (!buffer)
+                return AVERROR(ENOMEM);
+
+            bytestream2_get_buffer(&gb, buffer, chunk_size);
+            buffer[chunk_size] = '\0';
+
+            av_dict_set(&p->metadata, "xmp", buffer, AV_DICT_DONT_STRDUP_VAL);
+            break;
+        }
         default:
-            AV_WL32(chunk_str, chunk_type);
             av_log(avctx, AV_LOG_VERBOSE, "skipping unknown chunk: %s\n",
-                   chunk_str);
+                   av_fourcc2str(chunk_type));
             bytestream2_skip(&gb, chunk_size);
             break;
         }

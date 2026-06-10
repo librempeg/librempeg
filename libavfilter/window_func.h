@@ -111,7 +111,7 @@ static inline void fun(generate_window_func)(ftype *lut, int N, int win_func,
         break;
     case WFUNC_SINE:
         for (int n = 0; n < N; n++)
-            lut[n] = sin(M_PI*n/(N-1));
+            lut[n] = sin(M_PI*(n+0.5)/N);
         *overlap = 0.75;
         break;
     case WFUNC_NUTTALL:

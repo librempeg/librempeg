@@ -129,7 +129,7 @@ static int query_formats(const AVFilterContext *ctx,
         break;
     }
 
-    return ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts_list);
+    return ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts_list);
 }
 
 static int parse_splits(AVFilterContext *ctx)

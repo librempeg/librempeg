@@ -19,31 +19,37 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include <string.h>
-
+#include "libavutil/intreadwrite.h"
 #include "libavutil/channel_layout.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
-static int apc_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
-    if (!strncmp(p->buf, "CRYO_APC", 8))
-        return AVPROBE_SCORE_MAX;
+    if (memcmp(p->buf, "CRYO_APC", 8))
+        return 0;
 
-    return 0;
+    if (p->buf_size < 20)
+        return 0;
+    if ((int)AV_RL32(p->buf + 16) <= 0)
+        return 0;
+    return AVPROBE_SCORE_MAX;
 }
 
-static int apc_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
+    int ret, channels, rate;
     AVIOContext *pb = s->pb;
     AVStream *st;
-    int ret;
-    int channels;
 
-    avio_rl32(pb); /* CRYO */
-    avio_rl32(pb); /* _APC */
+    avio_rb64(pb);
     avio_rl32(pb); /* 1.20 */
+    avio_rl32(pb); /* number of samples */
+    rate = avio_rl32(pb);
+    if (rate <= 0)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
@@ -51,9 +57,7 @@ static int apc_read_header(AVFormatContext *s)
 
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_APC;
-
-    avio_rl32(pb); /* number of samples */
-    st->codecpar->sample_rate = avio_rl32(pb);
+    st->codecpar->sample_rate = rate;
 
     /* initial predictor values for adpcm decoder */
     if ((ret = ff_get_extradata(s, st->codecpar, pb, 2 * 4)) < 0)
@@ -72,24 +76,12 @@ static int apc_read_header(AVFormatContext *s)
     return 0;
 }
 
-#define MAX_READ_SIZE 4096
-
-static int apc_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    int ret = av_get_packet(s->pb, pkt, MAX_READ_SIZE);
-    if (ret < 0)
-        return ret;
-    else if (ret == 0)
-        return AVERROR_INVALIDDATA;
-    pkt->stream_index = 0;
-    return 0;
-}
-
 const FFInputFormat ff_apc_demuxer = {
     .p.name         = "apc",
     .p.long_name    = NULL_IF_CONFIG_SMALL("CRYO APC"),
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = apc_probe,
-    .read_header    = apc_read_header,
-    .read_packet    = apc_read_packet,
+    .p.extensions   = "apc",
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = ff_pcm_read_packet,
 };

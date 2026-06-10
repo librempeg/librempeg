@@ -40,7 +40,7 @@ static int tac_probe(const AVProbeData *p)
     if (AV_RL32(p->buf+0x14) < 1)
         return 0;
 
-    if (AV_RL32(p->buf+0x14) % 0x4E000 != 0)
+    if ((AV_RL32(p->buf+0x14) % BLOCK_SIZE) != 0)
         return 0;
 
     if (offset > (BLOCK_SIZE-256) ||

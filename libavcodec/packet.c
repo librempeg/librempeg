@@ -301,6 +301,7 @@ const char *av_packet_side_data_name(enum AVPacketSideDataType type)
     case AV_PKT_DATA_DOVI_CONF:                  return "DOVI configuration record";
     case AV_PKT_DATA_S12M_TIMECODE:              return "SMPTE ST 12-1:2014 timecode";
     case AV_PKT_DATA_DYNAMIC_HDR10_PLUS:         return "HDR10+ Dynamic Metadata (SMPTE 2094-40)";
+    case AV_PKT_DATA_DYNAMIC_HDR_SMPTE_2094_APP5:return "HDR Dynamic Metadata (SMPTE 2094-50)";
     case AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT:return "Ambient viewing environment";
     case AV_PKT_DATA_IAMF_MIX_GAIN_PARAM:        return "IAMF Mix Gain Parameter Data";
     case AV_PKT_DATA_IAMF_DEMIXING_INFO_PARAM:   return "IAMF Demixing Info Parameter Data";
@@ -309,6 +310,7 @@ const char *av_packet_side_data_name(enum AVPacketSideDataType type)
     case AV_PKT_DATA_3D_REFERENCE_DISPLAYS:      return "3D Reference Displays Info";
     case AV_PKT_DATA_RTCP_SR:                    return "RTCP Sender Report";
     case AV_PKT_DATA_EXIF:                       return "EXIF metadata";
+    case AV_PKT_DATA_HEVC_CONF:                  return "HEVC enhancement-layer decoder configuration";
     }
     return NULL;
 }
@@ -357,7 +359,7 @@ int av_packet_unpack_dictionary(const uint8_t *data, size_t size,
     if (!dict || !data || !size)
         return 0;
     end = data + size;
-    if (size && end[-1])
+    if (end[-1])
         return AVERROR_INVALIDDATA;
     while (data < end) {
         const uint8_t *key = data;

@@ -1,19 +1,19 @@
 /*
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #define VK_NO_PROTOTYPES
@@ -43,6 +43,7 @@
 
 #include "libavutil/bprint.h"
 #include "libavutil/mem.h"
+#include "libavutil/internal.h"
 
 #endif
 
@@ -115,14 +116,22 @@ static void hwctx_lock_queue(void *priv, uint32_t qf, uint32_t qidx)
 {
     AVHWDeviceContext *avhwctx = priv;
     const AVVulkanDeviceContext *hwctx = avhwctx->hwctx;
+#if FF_API_VULKAN_SYNC_QUEUES
+FF_DISABLE_DEPRECATION_WARNINGS
     hwctx->lock_queue(avhwctx, qf, qidx);
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 }
 
 static void hwctx_unlock_queue(void *priv, uint32_t qf, uint32_t qidx)
 {
     AVHWDeviceContext *avhwctx = priv;
     const AVVulkanDeviceContext *hwctx = avhwctx->hwctx;
+#if FF_API_VULKAN_SYNC_QUEUES
+FF_DISABLE_DEPRECATION_WARNINGS
     hwctx->unlock_queue(avhwctx, qf, qidx);
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 }
 
 static int add_instance_extension(const char **ext, unsigned num_ext,
@@ -283,7 +292,11 @@ static void placebo_lock_queue(struct AVHWDeviceContext *dev_ctx,
 {
     RendererContext *ctx = dev_ctx->user_opaque;
     pl_vulkan vk = ctx->placebo_vulkan;
+#if FF_API_VULKAN_SYNC_QUEUES
+FF_DISABLE_DEPRECATION_WARNINGS
     vk->lock_queue(vk, queue_family, index);
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 }
 
 static void placebo_unlock_queue(struct AVHWDeviceContext *dev_ctx,
@@ -292,7 +305,11 @@ static void placebo_unlock_queue(struct AVHWDeviceContext *dev_ctx,
 {
     RendererContext *ctx = dev_ctx->user_opaque;
     pl_vulkan vk = ctx->placebo_vulkan;
+#if FF_API_VULKAN_SYNC_QUEUES
+FF_DISABLE_DEPRECATION_WARNINGS
     vk->unlock_queue(vk, queue_family, index);
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 }
 
 static int get_decode_queue(VkRenderer *renderer, int *index, int *count)
@@ -386,8 +403,12 @@ static int create_vk_by_placebo(VkRenderer *renderer,
     device_ctx->user_opaque = ctx;
 
     vk_dev_ctx = device_ctx->hwctx;
+#if FF_API_VULKAN_SYNC_QUEUES
+FF_DISABLE_DEPRECATION_WARNINGS
     vk_dev_ctx->lock_queue = placebo_lock_queue;
     vk_dev_ctx->unlock_queue = placebo_unlock_queue;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
     vk_dev_ctx->get_proc_addr = ctx->placebo_instance->get_proc_addr;
 
@@ -812,6 +833,7 @@ static void destroy(VkRenderer *renderer)
 
 static const AVClass vulkan_renderer_class = {
         .class_name = "Vulkan Renderer",
+        .item_name  = av_default_item_name,
         .version    = LIBAVUTIL_VERSION_INT,
 };
 

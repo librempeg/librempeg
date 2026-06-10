@@ -26,12 +26,7 @@
 ; function is responsible for the block loop, as well as initializing the
 ; plane pointers. It will jump directly into the first operation kernel,
 ; and each operation kernel will jump directly into the next one, with the
-; final kernel jumping back into the sws_process return point. (See label
-; `sws_process.return` in ops_int.asm)
-;
-; To handle the jump back to the return point, we append an extra address
-; corresponding to the correct sws_process.return label into the SwsOpChain,
-; and have the WRITE kernel jump into it as usual. (See the FINISH macro)
+; final kernel returning back into the entry point.
 ;
 ; Inside an operation chain, we use a custom calling convention to preserve
 ; registers between kernels. The exact register allocation is found further
@@ -141,6 +136,8 @@ struc SwsOpExec
     .out_sub_y4 resb 4
     .in_sub_x4 resb 4
     .out_sub_x4 resb 4
+    .in_bump_y resq 1
+    .in_offset_x resq 1
 endstruc
 
 struc SwsOpImpl
@@ -240,28 +237,33 @@ endstruc
 %define execq   r0q
 %define implq   r1q
 %define bxd     r2d
+%define bxq     r2q
 %define yd      r3d
+%define yq      r3q
 
 ; Extra registers for free use by kernels, not saved between ops
 %define tmp0q   r4q
 %define tmp1q   r5q
+%define tmp2q   r6q
 
 %define tmp0d   r4d
 %define tmp1d   r5d
+%define tmp2d   r6d
 
 %define tmp0w   r4w
 %define tmp1w   r5w
+%define tmp2w   r6w
 
 ; Registers for plane pointers; put at the end (and in ascending plane order)
 ; so that we can avoid reserving them when not necessary
-%define out0q   r6q
-%define  in0q   r7q
-%define out1q   r8q
-%define  in1q   r9q
-%define out2q   r10q
-%define  in2q   r11q
-%define out3q   r12q
-%define  in3q   r13q
+%define out0q   r7q
+%define  in0q   r8q
+%define out1q   r9q
+%define  in1q   r10q
+%define out2q   r11q
+%define  in2q   r12q
+%define out3q   r13q
+%define  in3q   r14q
 
 ;---------------------------------------------------------
 ; Common macros for linking together different kernels
@@ -282,19 +284,6 @@ endstruc
 %macro CONTINUE 0
     LOAD_CONT tmp0q
     CONTINUE tmp0q
-%endmacro
-
-; Final macro to end the operation chain, used by WRITE kernels to jump back
-; to the process function return point. Very similar to CONTINUE, but skips
-; incrementing the implq pointer, and also clears AVX registers to avoid
-; phantom dependencies between loop iterations.
-%macro FINISH 1 ; reg
-    %if vzeroupper_required
-        ; we may jump back into an SSE read, so always zero upper regs here
-        vzeroupper
-    %endif
-    jmp %1
-    annotate_function_size
 %endmacro
 
 ; Helper for inline conditionals; used to conditionally include single lines

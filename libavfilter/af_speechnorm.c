@@ -37,8 +37,6 @@
 #include "avfilter.h"
 #include "filters.h"
 
-#define MAX_ITEMS  882000
-
 typedef struct PeriodItem {
     int size;
     int type;
@@ -49,14 +47,16 @@ typedef struct PeriodItem {
 typedef struct ChannelContext {
     int state;
     int bypass;
-    PeriodItem pi[MAX_ITEMS];
     double gain_state;
     double pi_max_peak;
     double pi_rms_sum;
-    int pi_start;
-    int pi_end;
     int pi_size;
+    int pi_type;
     int acc;
+
+    PeriodItem pend;
+
+    AVFifo *pf;
 } ChannelContext;
 
 typedef struct SpeechNormalizerContext {
@@ -72,6 +72,7 @@ typedef struct SpeechNormalizerContext {
     AVChannelLayout ch_layout;
     int invert;
     int link;
+    int nb_channels;
 
     ChannelContext *cc;
     double prev_gain;
@@ -118,16 +119,8 @@ AVFILTER_DEFINE_CLASS(speechnorm);
 
 static int get_pi_samples(ChannelContext *cc, int eof)
 {
-    if (eof) {
-        PeriodItem *pi = cc->pi;
-
-        return cc->acc + pi[cc->pi_end].size;
-    } else {
-        PeriodItem *pi = cc->pi;
-
-        if (pi[cc->pi_start].type == 0)
-            return cc->pi_size;
-    }
+    if (eof)
+        return cc->acc + cc->pend.size;
 
     return cc->acc;
 }
@@ -188,21 +181,18 @@ static void next_pi(AVFilterContext *ctx, ChannelContext *cc, int bypass)
     av_assert1(cc->pi_size >= 0);
     if (cc->pi_size == 0) {
         av_unused SpeechNormalizerContext *s = ctx->priv;
-        int start = cc->pi_start;
+        PeriodItem pi;
         double scale;
 
-        av_assert1(cc->pi[start].size > 0);
-        av_assert1(cc->pi[start].type > 0 || s->eof);
-        cc->pi_size = cc->pi[start].size;
-        cc->pi_rms_sum = cc->pi[start].rms_sum;
-        cc->pi_max_peak = cc->pi[start].max_peak;
-        av_assert1(cc->pi_start != cc->pi_end || s->eof);
-        cc->pi[start].size = 0;
-        cc->pi[start].type = 0;
-        start++;
-        if (start >= MAX_ITEMS)
-            start = 0;
-        cc->pi_start = start;
+        if (av_fifo_read(cc->pf, &pi, 1) < 0)
+            return;
+
+        av_assert1(pi->size > 0);
+        av_assert1(pi->type > 0 || s->eof);
+        cc->pi_type = pi.type;
+        cc->pi_size = pi.size;
+        cc->pi_rms_sum = pi.rms_sum;
+        cc->pi_max_peak = pi.max_peak;
         scale = fmin(1.0, cc->pi_size / (double)ctx->inputs[0]->sample_rate);
         cc->gain_state = next_gain(ctx, cc->pi_max_peak, bypass, cc->gain_state,
                                    cc->pi_rms_sum, cc->pi_size, scale);
@@ -215,21 +205,22 @@ static double min_gain(AVFilterContext *ctx, ChannelContext *cc, int max_size)
     double min_gain = s->max_expansion;
     double gain_state = cc->gain_state;
     int size = cc->pi_size;
-    int idx = cc->pi_start;
-    double scale;
+    int idx = 0;
 
     min_gain = FFMIN(min_gain, gain_state);
     while (size <= max_size) {
-        if (idx == cc->pi_end)
+        PeriodItem pi;
+
+        if (av_fifo_peek(cc->pf, &pi, 1, idx) < 0)
             break;
-        scale = fmin(1.0, cc->pi[idx].size / (double)ctx->inputs[0]->sample_rate);
-        gain_state = next_gain(ctx, cc->pi[idx].max_peak, 0, gain_state,
-                               cc->pi[idx].rms_sum, cc->pi[idx].size, scale);
+
+        av_assert1(pi.size > 0);
+        double scale = fmin(1.0, pi.size / (double)ctx->inputs[0]->sample_rate);
+        gain_state = next_gain(ctx, pi.max_peak, 0, gain_state,
+                               pi.rms_sum, pi.size, scale);
         min_gain = FFMIN(min_gain, gain_state);
-        size += cc->pi[idx].size;
+        size += pi.size;
         idx++;
-        if (idx >= MAX_ITEMS)
-            idx = 0;
     }
 
     return min_gain;
@@ -358,11 +349,16 @@ static int config_input(AVFilterLink *inlink)
     if (!s->cc)
         return AVERROR(ENOMEM);
 
+    s->nb_channels = inlink->ch_layout.nb_channels;
     for (int ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
         ChannelContext *cc = &s->cc[ch];
 
         cc->state = -2;
         cc->gain_state = s->max_expansion;
+
+        cc->pf = av_fifo_alloc2(1024, sizeof(PeriodItem), AV_FIFO_FLAG_AUTO_GROW);
+        if (!cc->pf)
+            return AVERROR(ENOMEM);
     }
 
     switch (inlink->format) {
@@ -377,7 +373,7 @@ static int config_input(AVFilterLink *inlink)
         s->filter_channels[1] = filter_link_channels_dbl;
         break;
     default:
-        av_assert1(0);
+        return AVERROR_BUG;
     }
 
     s->fifo = av_fifo_alloc2(1024, sizeof(AVFrame *), AV_FIFO_FLAG_AUTO_GROW);
@@ -407,6 +403,14 @@ static av_cold void uninit(AVFilterContext *ctx)
     SpeechNormalizerContext *s = ctx->priv;
 
     av_fifo_freep2(&s->fifo);
+    if (s->cc) {
+        for (int ch = 0; ch < s->nb_channels; ch++) {
+            ChannelContext *cc = &s->cc[ch];
+
+            av_fifo_freep2(&cc->pf);
+        }
+    }
+
     av_freep(&s->cc);
 }
 

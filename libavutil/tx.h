@@ -32,6 +32,10 @@ typedef struct AVComplexDouble {
     double re, im;
 } AVComplexDouble;
 
+typedef struct AVComplexLongDouble {
+    long double re, im;
+} AVComplexLongDouble;
+
 typedef struct AVComplexInt32 {
     int32_t re, im;
 } AVComplexInt32;
@@ -46,6 +50,7 @@ enum AVTXType {
      */
     AV_TX_FLOAT_FFT  = 0,
     AV_TX_DOUBLE_FFT = 2,
+    AV_TX_LONG_DOUBLE_FFT = 18,
     AV_TX_INT32_FFT  = 4,
 
     /**
@@ -67,6 +72,7 @@ enum AVTXType {
      */
     AV_TX_FLOAT_MDCT  = 1,
     AV_TX_DOUBLE_MDCT = 3,
+    AV_TX_LONG_DOUBLE_MDCT = 20,
     AV_TX_INT32_MDCT  = 5,
 
     /**
@@ -89,6 +95,7 @@ enum AVTXType {
      */
     AV_TX_FLOAT_RDFT  = 6,
     AV_TX_DOUBLE_RDFT = 7,
+    AV_TX_LONG_DOUBLE_RDFT = 19,
     AV_TX_INT32_RDFT  = 8,
 
     /**
@@ -103,6 +110,7 @@ enum AVTXType {
      */
     AV_TX_FLOAT_DCT  = 9,
     AV_TX_DOUBLE_DCT = 10,
+    AV_TX_LONG_DOUBLE_DCT = 21,
     AV_TX_INT32_DCT  = 11,
 
     /**
@@ -115,6 +123,7 @@ enum AVTXType {
      */
     AV_TX_FLOAT_DCT_I  = 12,
     AV_TX_DOUBLE_DCT_I = 13,
+    AV_TX_LONG_DOUBLE_DCT_I = 22,
     AV_TX_INT32_DCT_I  = 14,
 
     /**
@@ -127,10 +136,11 @@ enum AVTXType {
      */
     AV_TX_FLOAT_DST_I  = 15,
     AV_TX_DOUBLE_DST_I = 16,
+    AV_TX_LONG_DOUBLE_DST_I = 23,
     AV_TX_INT32_DST_I  = 17,
 
     /* Not part of the API, do not use */
-    AV_TX_NB,
+    AV_TX_NB = 24,
 };
 
 /**

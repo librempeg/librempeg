@@ -78,8 +78,8 @@ static av_cold int query_formats(const AVFilterContext *ctx,
     static const AVChannelLayout chlayouts[] = { AV_CHANNEL_LAYOUT_MONO, { 0 } };
     int sample_rates[] = { s->sample_rate, -1 };
     static const enum AVSampleFormat sample_fmts[] = {
-        AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_NONE };
-    int ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
+        AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_LDBLP, AV_SAMPLE_FMT_NONE };
+    int ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
     if (ret < 0)
         return ret;
 
@@ -97,6 +97,10 @@ static av_cold int query_formats(const AVFilterContext *ctx,
 #define DEPTH 64
 #include "sweep_template.c"
 
+#undef DEPTH
+#define DEPTH 80
+#include "sweep_template.c"
+
 static av_cold int config_props(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
@@ -112,6 +116,10 @@ static av_cold int config_props(AVFilterLink *outlink)
     case AV_SAMPLE_FMT_DBLP:
         s->init_state = init_state_dblp;
         s->output_samples = output_samples_dblp;
+        break;
+    case AV_SAMPLE_FMT_LDBLP:
+        s->init_state = init_state_ldblp;
+        s->output_samples = output_samples_ldblp;
         break;
     default:
         return AVERROR_BUG;

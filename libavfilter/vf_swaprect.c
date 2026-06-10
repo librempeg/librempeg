@@ -19,7 +19,6 @@
  */
 
 #include "libavutil/avassert.h"
-#include "libavutil/eval.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
@@ -31,9 +30,9 @@
 
 typedef struct SwapRectContext {
     const AVClass *class;
-    char *w, *h;
-    char *x1, *y1;
-    char *x2, *y2;
+    int w, h;
+    int x1, y1;
+    int x2, y2;
 
     int nb_planes;
     int pixsteps[4];
@@ -45,12 +44,12 @@ typedef struct SwapRectContext {
 #define OFFSET(x) offsetof(SwapRectContext, x)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_RUNTIME_PARAM
 static const AVOption swaprect_options[] = {
-    { "w",  "set rect width",                     OFFSET(w),  AV_OPT_TYPE_STRING, {.str="w/2"}, 0, 0, .flags = FLAGS },
-    { "h",  "set rect height",                    OFFSET(h),  AV_OPT_TYPE_STRING, {.str="h/2"}, 0, 0, .flags = FLAGS },
-    { "x1", "set 1st rect x top left coordinate", OFFSET(x1), AV_OPT_TYPE_STRING, {.str="w/2"}, 0, 0, .flags = FLAGS },
-    { "y1", "set 1st rect y top left coordinate", OFFSET(y1), AV_OPT_TYPE_STRING, {.str="h/2"}, 0, 0, .flags = FLAGS },
-    { "x2", "set 2nd rect x top left coordinate", OFFSET(x2), AV_OPT_TYPE_STRING, {.str="0"},   0, 0, .flags = FLAGS },
-    { "y2", "set 2nd rect y top left coordinate", OFFSET(y2), AV_OPT_TYPE_STRING, {.str="0"},   0, 0, .flags = FLAGS },
+    { "w",  "set rect width",                     OFFSET(w),  AV_OPT_TYPE_INT, {.i64=100}, 1, UINT16_MAX, .flags = FLAGS },
+    { "h",  "set rect height",                    OFFSET(h),  AV_OPT_TYPE_INT, {.i64=100}, 1, UINT16_MAX, .flags = FLAGS },
+    { "x1", "set 1st rect x top left coordinate", OFFSET(x1), AV_OPT_TYPE_INT, {.i64=100}, 0, UINT16_MAX, .flags = FLAGS },
+    { "y1", "set 1st rect y top left coordinate", OFFSET(y1), AV_OPT_TYPE_INT, {.i64=100}, 0, UINT16_MAX, .flags = FLAGS },
+    { "x2", "set 2nd rect x top left coordinate", OFFSET(x2), AV_OPT_TYPE_INT, {.i64=0},   0, UINT16_MAX, .flags = FLAGS },
+    { "y2", "set 2nd rect y top left coordinate", OFFSET(y2), AV_OPT_TYPE_INT, {.i64=0},   0, UINT16_MAX, .flags = FLAGS },
     { NULL },
 };
 
@@ -68,77 +67,19 @@ static int query_formats(const AVFilterContext *ctx,
                                   ff_formats_pixdesc_filter(0, reject_flags));
 }
 
-static const char *const var_names[] = {   "w",   "h",   "a",   "n",   "t",   "sar",   "dar",        NULL };
-enum                                   { VAR_W, VAR_H, VAR_A, VAR_N, VAR_T, VAR_SAR, VAR_DAR, VAR_VARS_NB };
-
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
-    FilterLink *inl = ff_filter_link(inlink);
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     SwapRectContext *s = ctx->priv;
-    double var_values[VAR_VARS_NB];
     int x1[4], y1[4];
     int x2[4], y2[4];
     int aw[4], ah[4];
     int lw[4], lh[4];
     int pw[4], ph[4];
-    double dw,  dh;
-    double dx1, dy1;
-    double dx2, dy2;
-    int y, p, w, h, ret;
+    int y, p, w, h;
 
-    var_values[VAR_W]   = inlink->w;
-    var_values[VAR_H]   = inlink->h;
-    var_values[VAR_A]   = (float) inlink->w / inlink->h;
-    var_values[VAR_SAR] = inlink->sample_aspect_ratio.num ? av_q2d(inlink->sample_aspect_ratio) : 1;
-    var_values[VAR_DAR] = var_values[VAR_A] * var_values[VAR_SAR];
-    var_values[VAR_N]   = inl->frame_count_out;
-    var_values[VAR_T]   = in->pts == AV_NOPTS_VALUE ? NAN : in->pts * av_q2d(inlink->time_base);
-
-    ret = av_expr_parse_and_eval(&dw, s->w,
-                                 var_names, &var_values[0],
-                                 NULL, NULL, NULL, NULL,
-                                 0, 0, ctx);
-    if (ret < 0)
-        return ret;
-
-    ret = av_expr_parse_and_eval(&dh, s->h,
-                                 var_names, &var_values[0],
-                                 NULL, NULL, NULL, NULL,
-                                 0, 0, ctx);
-    if (ret < 0)
-        return ret;
-
-    ret = av_expr_parse_and_eval(&dx1, s->x1,
-                                 var_names, &var_values[0],
-                                 NULL, NULL, NULL, NULL,
-                                 0, 0, ctx);
-    if (ret < 0)
-        return ret;
-
-    ret = av_expr_parse_and_eval(&dy1, s->y1,
-                                 var_names, &var_values[0],
-                                 NULL, NULL, NULL, NULL,
-                                 0, 0, ctx);
-    if (ret < 0)
-        return ret;
-
-    ret = av_expr_parse_and_eval(&dx2, s->x2,
-                                 var_names, &var_values[0],
-                                 NULL, NULL, NULL, NULL,
-                                 0, 0, ctx);
-    if (ret < 0)
-        return ret;
-
-    ret = av_expr_parse_and_eval(&dy2, s->y2,
-                                 var_names, &var_values[0],
-                                 NULL, NULL, NULL, NULL,
-                                 0, 0, ctx);
-    if (ret < 0)
-        return ret;
-
-    w = dw; h = dh; x1[0] = dx1; y1[0] = dy1; x2[0] = dx2; y2[0] = dy2;
+    w = s->w; h = s->h; x1[0] = s->x1; y1[0] = s->y1; x2[0] = s->x2; y2[0] = s->y2;
 
     x1[0] = av_clip(x1[0], 0, inlink->w - 1);
     y1[0] = av_clip(y1[0], 0, inlink->h - 1);
@@ -151,8 +92,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     aw[1] = aw[2] = AV_CEIL_RSHIFT(w, s->desc->log2_chroma_w);
     aw[0] = aw[3] = w;
 
-    w = FFMIN3(w, inlink->w - x1[0], inlink->w - x2[0]);
-    h = FFMIN3(h, inlink->h - y1[0], inlink->h - y2[0]);
+    w = FFMAX(0, FFMIN3(w, inlink->w - x1[0], inlink->w - x2[0]));
+    h = FFMAX(0, FFMIN3(h, inlink->h - y1[0], inlink->h - y2[0]));
 
     ph[1] = ph[2] = AV_CEIL_RSHIFT(h, s->desc->log2_chroma_h);
     ph[0] = ph[3] = h;
@@ -201,11 +142,6 @@ static int config_input(AVFilterLink *inlink)
     AVFilterContext *ctx = inlink->dst;
     SwapRectContext *s = ctx->priv;
 
-    if (!s->w  || !s->h  ||
-        !s->x1 || !s->y1 ||
-        !s->x2 || !s->y2)
-        return AVERROR(EINVAL);
-
     s->desc = av_pix_fmt_desc_get(inlink->format);
     av_image_fill_max_pixsteps(s->pixsteps, NULL, s->desc);
     s->nb_planes = av_pix_fmt_count_planes(inlink->format);
@@ -220,6 +156,7 @@ static int config_input(AVFilterLink *inlink)
 static av_cold void uninit(AVFilterContext *ctx)
 {
     SwapRectContext *s = ctx->priv;
+
     av_freep(&s->temp);
 }
 

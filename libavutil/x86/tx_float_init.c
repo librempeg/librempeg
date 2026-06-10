@@ -176,13 +176,14 @@ static av_cold int rdft_init(AVTXContext *s, const FFTXCodelet *cd,
                              int len, int inv, const void *scale)
 {
     int ret;
-    double f, m;
+    long double f, m;
     TXSample *tab;
     uint64_t r2r = flags & AV_TX_REAL_TO_REAL;
     int len4 = FFALIGN(len, 4) / 4;
     FFTXCodeletOptions sub_opts = { .map_dir = FF_TX_MAP_GATHER };
 
-    s->scale_d = *((SCALE_TYPE *)scale);
+    s->scale_ld = *((SCALE_TYPE *)scale);
+    s->scale_d = s->scale_ld;
     s->scale_f = s->scale_d;
 
     flags &= ~(AV_TX_REAL_TO_REAL | AV_TX_REAL_TO_IMAGINARY);
@@ -201,27 +202,27 @@ static av_cold int rdft_init(AVTXContext *s, const FFTXCodelet *cd,
 
     tab = (TXSample *)s->exp;
 
-    f = 2*M_PI/len;
+    f = 2.0L*M_PIl/len * (inv ? 1.0L : -1.0L);
 
-    m = (inv ? 2*s->scale_d : s->scale_d);
+    m = (inv ? 2*s->scale_ld : s->scale_ld);
 
-    *tab++ =  RESCALE((inv ? 0.5 : 1.0) * m);
-    *tab++ = -RESCALE(inv ? 0.5*m : 1.0*m);
+    *tab++ =  RESCALE((inv ? 0.5L : 1.0L) * m);
+    *tab++ = -RESCALE(inv ? 0.5L*m : 1.0L*m);
     *tab++ =  RESCALE( m);
     *tab++ =  RESCALE(-m);
 
     if (r2r)
         *tab++ = 1 / s->scale_f;
     else
-        *tab++ = RESCALE( (0.0 - 0.5) * m);
-    *tab++ = RESCALE( (0.5 - 0.0) * m);
+        *tab++ = RESCALE( (0.0L - 0.5L) * m);
+    *tab++ = RESCALE( (0.5L - 0.0L) * m);
 
-    *tab++ = RESCALE(-(0.5 - inv) * m);
-    *tab++ = RESCALE( (0.5 - inv) * m);
+    *tab++ = RESCALE(-(0.5L - inv) * m);
+    *tab++ = RESCALE( (0.5L - inv) * m);
 
     for (int i = 0; i < len4; i++) {
-        *tab++ = RESCALE(cos(i*f));
-        *tab++ = RESCALE(cos(((len - i*4)/4.0)*f)) * (inv ? 1 : -1);
+        *tab++ = RESCALE(cosl(i*f));
+        *tab++ = RESCALE(sinl(i*f));
     }
 
     return 0;

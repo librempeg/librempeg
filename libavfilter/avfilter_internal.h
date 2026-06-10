@@ -32,12 +32,16 @@
 
 #include "avfilter.h"
 #include "filters.h"
+#include "ffframepool.h"
 #include "framequeue.h"
 
 typedef struct FilterLinkInternal {
     FilterLink l;
 
-    struct FFFramePool *frame_pool;
+    /**
+     * Pool of frames used for allocations.
+     */
+    FFFramePool frame_pool;
 
     /**
      * Queue of frames waiting to be filtered.

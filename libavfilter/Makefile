@@ -92,6 +92,7 @@ OBJS-$(CONFIG_ALATENCY_FILTER)               += f_latency.o
 OBJS-$(CONFIG_ALIMITER_FILTER)               += af_alimiter.o
 OBJS-$(CONFIG_ALLPASS_FILTER)                += af_biquads.o
 OBJS-$(CONFIG_ALOOP_FILTER)                  += f_loop.o
+OBJS-$(CONFIG_ALOSSY_FILTER)                 += af_alossy.o
 OBJS-$(CONFIG_AMAE_FILTER)                   += af_asdr.o
 OBJS-$(CONFIG_AMAPE_FILTER)                  += af_asdr.o
 OBJS-$(CONFIG_AMBIOPHONIC_FILTER)            += af_ambiophonic.o
@@ -214,10 +215,13 @@ OBJS-$(CONFIG_STEREOTOOLS_FILTER)            += af_stereotools.o
 OBJS-$(CONFIG_STEREOWIDEN_FILTER)            += af_stereowiden.o
 OBJS-$(CONFIG_SUPEREQUALIZER_FILTER)         += af_superequalizer.o
 OBJS-$(CONFIG_SURROUND_FILTER)               += af_surround.o
+OBJS-$(CONFIG_THDN_FILTER)                   += af_thdn.o
 OBJS-$(CONFIG_TILTSHELF_FILTER)              += af_biquads.o
+OBJS-$(CONFIG_TONEDETECT_FILTER)             += af_tonedetect.o
 OBJS-$(CONFIG_TRANSFORM_FILTER)              += af_biquads.o
 OBJS-$(CONFIG_TREBLE_FILTER)                 += af_biquads.o
 OBJS-$(CONFIG_TREMOLO_FILTER)                += af_tremolo.o
+OBJS-$(CONFIG_UPMIX_FILTER)                  += af_upmix.o
 OBJS-$(CONFIG_VAD_FILTER)                    += af_vad.o
 OBJS-$(CONFIG_VIBRATO_FILTER)                += af_vibrato.o generate_wave_table.o
 OBJS-$(CONFIG_VIRTUALBASS_FILTER)            += af_virtualbass.o
@@ -604,6 +608,7 @@ OBJS-$(CONFIG_UNSHARP_OPENCL_FILTER)         += vf_unsharp_opencl.o opencl.o \
 OBJS-$(CONFIG_UNTILE_FILTER)                 += vf_untile.o
 OBJS-$(CONFIG_USPP_FILTER)                   += vf_uspp.o qp_table.o
 OBJS-$(CONFIG_V360_FILTER)                   += vf_v360.o
+OBJS-$(CONFIG_V360_VULKAN_FILTER)            += vf_v360_vulkan.o
 OBJS-$(CONFIG_VAGUEDENOISER_FILTER)          += vf_vaguedenoiser.o
 OBJS-$(CONFIG_VARBLUR_FILTER)                += vf_varblur.o framesync.o
 OBJS-$(CONFIG_VECTORSCOPE_FILTER)            += vf_vectorscope.o
@@ -713,8 +718,8 @@ OBJS-$(CONFIG_AMOVIE_FILTER)                 += src_movie.o
 OBJS-$(CONFIG_MOVIE_FILTER)                  += src_movie.o
 
 # vulkan libs
-OBJS-$(CONFIG_LIBGLSLANG)                    += vulkan_glslang.o
-OBJS-$(CONFIG_LIBSHADERC)                    += vulkan_shaderc.o
+OBJS-$(CONFIG_LIBGLSLANG)                    += vulkan_glslang.o vulkan.o
+OBJS-$(CONFIG_LIBSHADERC)                    += vulkan_shaderc.o vulkan.o
 
 # Objects duplicated from other libraries for shared builds
 SHLIBOBJS                                    += log2_tab.o
@@ -741,8 +746,7 @@ TOOLS-$(CONFIG_LIBZMQ) += zmqsend
 
 clean::
 	$(RM) $(CLEANSUFFIXES:%=libavfilter/dnn/%) $(CLEANSUFFIXES:%=libavfilter/opencl/%) \
-              $(CLEANSUFFIXES:%=libavfilter/metal/%) \
-              $(CLEANSUFFIXES:%=libavfilter/vulkan/%)
+              $(CLEANSUFFIXES:%=libavfilter/metal/%)
 
 OPENCL = $(subst $(SRC_PATH)/,,$(wildcard $(SRC_PATH)/libavfilter/opencl/*.cl))
 .SECONDARY: $(OPENCL:.cl=.c)

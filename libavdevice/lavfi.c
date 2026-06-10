@@ -255,8 +255,9 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx)
                 goto end;
             }
 
-            ret = av_opt_set_array(sink, "sample_formats", AV_OPT_SEARCH_CHILDREN,
-                                   0, 5, AV_OPT_TYPE_SAMPLE_FMT, sample_fmts);
+            ret = av_opt_set_array(sink, "sample_formats", AV_OPT_SEARCH_CHILDREN, 0,
+                                   FF_ARRAY_ELEMS(sample_fmts), AV_OPT_TYPE_SAMPLE_FMT,
+                                   sample_fmts);
             if (ret < 0)
                 goto end;
 

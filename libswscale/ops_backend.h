@@ -44,19 +44,19 @@
  * directly incremented by the corresponding read/write functions.
  */
 typedef struct SwsOpIter {
-    const uint8_t *in[4];
-    uint8_t *out[4];
+    uintptr_t in[4];
+    uintptr_t out[4];
     int x, y;
+
+    /* Link back to per-slice execution context */
+    const SwsOpExec *exec;
 } SwsOpIter;
 
 #ifdef __clang__
-#  define SWS_FUNC
 #  define SWS_LOOP AV_PRAGMA(clang loop vectorize(assume_safety))
 #elif defined(__GNUC__)
-#  define SWS_FUNC __attribute__((optimize("tree-vectorize")))
 #  define SWS_LOOP AV_PRAGMA(GCC ivdep)
 #else
-#  define SWS_FUNC
 #  define SWS_LOOP
 #endif
 
@@ -68,6 +68,7 @@ typedef struct SwsOpIter {
 #define fn(name)  bitfn(name, FN_SUFFIX)
 
 #define av_q2pixel(q) ((q).den ? (pixel_t) (q).num / (q).den : 0)
+#define bump_ptr(ptr, bump) ((pixel_t *) ((uintptr_t) (ptr) + (bump)))
 
 /* Helper macros to make writing common function signatures less painful */
 #define DECL_FUNC(NAME, ...)                                                    \
@@ -101,17 +102,21 @@ typedef struct SwsOpIter {
                (pixel_t *) iter->out[2], (pixel_t *) iter->out[3], __VA_ARGS__)
 
 /* Helper macros to declare continuation functions */
-#define DECL_IMPL(NAME)                                                         \
-    static SWS_FUNC void fn(NAME)(SwsOpIter *restrict iter,                     \
-                                  const SwsOpImpl *restrict impl,               \
-                                  block_t x, block_t y,                         \
-                                  block_t z, block_t w)
+#define DECL_IMPL(FUNC, NAME, ...)                                              \
+    static void av_flatten fn(NAME)(SwsOpIter *restrict iter,                   \
+                                    const SwsOpImpl *restrict impl,             \
+                                    void *restrict x, void *restrict y,         \
+                                    void *restrict z, void *restrict w)         \
+    {                                                                           \
+        CALL(FUNC, __VA_ARGS__);                                                \
+    }
 
-/* Helper macro to call into the next continuation with a given type */
-#define CONTINUE(TYPE, ...)                                                     \
+/* Helper macro to call into the next continuation */
+#define CONTINUE(X, Y, Z, W)                                                    \
     ((void (*)(SwsOpIter *, const SwsOpImpl *,                                  \
-               TYPE x, TYPE y, TYPE z, TYPE w)) impl->cont)                     \
-        (iter, &impl[1], __VA_ARGS__)
+               void *restrict, void *restrict,                                  \
+               void *restrict, void *restrict)) impl->cont)                     \
+        (iter, &impl[1], (X), (Y), (Z), (W))
 
 /* Helper macros for common op setup code */
 #define DECL_SETUP(NAME, PARAMS, OUT)                                           \
@@ -126,10 +131,11 @@ static inline int ff_setup_memdup(const void *c, size_t size, SwsImplResult *out
 }
 
 /* Helper macro for declaring op table entries */
-#define DECL_ENTRY(NAME, ...)                                                   \
+#define DECL_ENTRY(NAME, MASK, ...)                                             \
     static const SwsOpEntry fn(op_##NAME) = {                                   \
         .func = (SwsFuncPtr) fn(NAME),                                          \
         .type = PIXEL_TYPE,                                                     \
+        .mask = (MASK),                                                         \
         __VA_ARGS__                                                             \
     }
 
@@ -138,15 +144,8 @@ static inline int ff_setup_memdup(const void *c, size_t size, SwsImplResult *out
     DECL_FUNC(NAME, const bool X, const bool Y, const bool Z, const bool W)
 
 #define WRAP_PATTERN(FUNC, X, Y, Z, W, ...)                                     \
-    DECL_IMPL(FUNC##_##X##Y##Z##W)                                              \
-    {                                                                           \
-        CALL(FUNC, X, Y, Z, W);                                                 \
-    }                                                                           \
-                                                                                \
-    DECL_ENTRY(FUNC##_##X##Y##Z##W,                                             \
-        .unused = { !X, !Y, !Z, !W },                                           \
-        __VA_ARGS__                                                             \
-    )
+    DECL_IMPL(FUNC, FUNC##_##X##Y##Z##W, X, Y, Z, W)                            \
+    DECL_ENTRY(FUNC##_##X##Y##Z##W, SWS_COMP_MASK(X, Y, Z, W), __VA_ARGS__)
 
 #define WRAP_COMMON_PATTERNS(FUNC, ...)                                         \
     WRAP_PATTERN(FUNC, 1, 0, 0, 0, __VA_ARGS__);                                \

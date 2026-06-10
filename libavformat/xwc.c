@@ -158,7 +158,7 @@ static int read_header(AVFormatContext *s)
         if (ret < 0)
             return ret;
         memset(st->codecpar->extradata, 0, 34);
-        AV_WL16(st->codecpar->extradata, 1);
+        AV_WL16(st->codecpar->extradata, (nb_channels+1)/2);
         break;
     case AV_CODEC_ID_VORBIS:
         st->id = xwc->ogg_ctx->streams[0]->id;

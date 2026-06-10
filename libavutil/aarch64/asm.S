@@ -201,16 +201,18 @@ DISABLE_SME2
  *
  * References:
  * - "ELF for the Arm® 64-bit Architecture"
- *   https: *github.com/ARM-software/abi-aa/blob/master/aaelf64/aaelf64.rst
+ *   https://github.com/ARM-software/abi-aa/blob/master/aaelf64/aaelf64.rst
  * - "Providing protection for complex software"
  *   https://developer.arm.com/architectures/learn-the-architecture/providing-protection-for-complex-software
  */
 #if defined(__ARM_FEATURE_BTI_DEFAULT) && (__ARM_FEATURE_BTI_DEFAULT == 1)
 #   define GNU_PROPERTY_AARCH64_BTI (1 << 0)   // Has BTI
-#   define AARCH64_VALID_CALL_TARGET hint #34  // BTI 'c'
-#   define AARCH64_VALID_JUMP_TARGET hint #38  // BTI 'j'
+#   define AARCH64_VALID_JUMP_CALL_TARGET hint #38  // BTI 'jc'
+#   define AARCH64_VALID_CALL_TARGET      hint #34  // BTI 'c'
+#   define AARCH64_VALID_JUMP_TARGET      hint #38  // BTI 'j'
 #else
 #   define GNU_PROPERTY_AARCH64_BTI 0          // No BTI
+#   define AARCH64_VALID_JUMP_CALL_TARGET
 #   define AARCH64_VALID_CALL_TARGET
 #   define AARCH64_VALID_JUMP_TARGET
 #endif
@@ -256,7 +258,7 @@ DISABLE_SME2
         .popsection
 #endif
 
-.macro  function name, export=0, align=4
+.macro  function name, export=0, jumpable=0, align=4
     .macro endfunc
 ELF     .size   \name, . - \name
 FUNC    .endfunc
@@ -269,7 +271,11 @@ FUNC    .endfunc
 ELF     .type   EXTERN_ASM\name, %function
 FUNC    .func   EXTERN_ASM\name
 EXTERN_ASM\name:
+    .if \jumpable
+        AARCH64_VALID_JUMP_TARGET
+    .else
         AARCH64_VALID_CALL_TARGET
+    .endif
     .else
 ELF     .type   \name, %function
 FUNC    .func   \name

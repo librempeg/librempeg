@@ -49,6 +49,18 @@ typedef AVComplexFloat TXComplex;
 typedef double TXSample;
 typedef double TXUSample;
 typedef AVComplexDouble TXComplex;
+#elif defined(TX_LONG_DOUBLE)
+#define TX_TAB(x) x ## _long_double
+#define TX_NAME(x) x ## _long_double_c
+#define TX_NAME_STR(x) NULL_IF_CONFIG_SMALL(x "_long_double_c")
+#define TX_TYPE(x) AV_TX_LONG_DOUBLE_ ## x
+#define TX_FN_NAME(fn, suffix) ff_tx_ ## fn ## _long_double_ ## suffix
+#define TX_FN_NAME_STR(fn, suffix) NULL_IF_CONFIG_SMALL(#fn "_long_double_" #suffix)
+#define MULT(x, m) ((x) * (m))
+#define SCALE_TYPE long double
+typedef long double TXSample;
+typedef long double TXUSample;
+typedef AVComplexLongDouble TXComplex;
 #elif defined(TX_INT32)
 #define TX_TAB(x) x ## _int32
 #define TX_NAME(x) x ## _int32_c
@@ -84,7 +96,7 @@ typedef void TXComplex;
         .prio       = p,                                                       \
     }
 
-#if defined(TX_FLOAT) || defined(TX_DOUBLE)
+#if defined(TX_FLOAT) || defined(TX_DOUBLE) || defined(TX_LONG_DOUBLE)
 
 #define CMUL(dre, dim, are, aim, bre, bim)      \
     do {                                        \
@@ -147,7 +159,72 @@ typedef void TXComplex;
 
 #endif /* TX_INT32 */
 
+#define CADD(dre, dim, are, aim, bre, bim)      \
+    do {                                        \
+        (dre) = (are) + (bre);                  \
+        (dim) = (aim) + (bim);                  \
+    } while (0)
+
+#define CSUB(dre, dim, are, aim, bre, bim)      \
+    do {                                        \
+        (dre) = (are) - (bre);                  \
+        (dim) = (aim) - (bim);                  \
+    } while (0)
+
+#define CMUL_I_FORWARD(dre, dim, are, aim)      \
+    do {                                        \
+        (dre) = (-aim);                         \
+        (dim) = ( are);                         \
+    } while (0)
+
+#define CMUL_I_INVERSE(dre, dim, are, aim)      \
+    do {                                        \
+        (dre) = ( aim);                         \
+        (dim) = (-are);                         \
+    } while (0)
+
+#define CSCALE(dre, dim, are, aim, s)           \
+    do {                                        \
+        (dre) = MULT(are, s);                   \
+        (dim) = MULT(aim, s);                   \
+    } while (0)
+
+#define CZERO(dre, dim)                         \
+    do {                                        \
+        (dre) = 0;                              \
+        (dim) = 0;                              \
+    } while (0)
+
+#define CNEG(dre, dim, are, aim)                \
+    do {                                        \
+        (dre) = -(are);                         \
+        (dim) = -(aim);                         \
+    } while (0)
+
+#define CSCALEADD(dre, dim, are, aim, bre, bim, s) \
+    do {                                           \
+        (dre) = MULT(bre, s) + are;                \
+        (dim) = MULT(bim, s) + aim;                \
+    } while (0)
+
+#define COUT(hre, him, tre, tim, are, aim, bre, bim) \
+    do {                                             \
+        hre = are - bim;                             \
+        him = aim + bre;                             \
+        tre = are + bim;                             \
+        tim = aim - bre;                             \
+    } while (0)
+
+#define CADD3(c, a, b) CADD((c).re, (c).im, (a).re, (a).im, (b).re, (b).im)
+#define CSUB3(c, a, b) CSUB((c).re, (c).im, (a).re, (a).im, (b).re, (b).im)
 #define CMUL3(c, a, b) CMUL((c).re, (c).im, (a).re, (a).im, (b).re, (b).im)
+#define CMUL_I_FORWARD2(a, b) CMUL_I_FORWARD((a).re, (a).im, (b).re, (b).im)
+#define CMUL_I_INVERSE2(a, b) CMUL_I_INVERSE((a).re, (a).im, (b).re, (b).im)
+#define CSCALE3(c, a, s) CSCALE((c).re, (c).im, (a).re, (a).im, (s))
+#define CZERO1(a) CZERO((a).re, (a).im)
+#define CNEG2(a, b) CNEG((a).re, (a).im, (b).re, (b).im)
+#define CSCALEADD4(c, a, b, s) CSCALEADD((c).re, (c).im, (a).re, (a).im, (b).re, (b).im, (s))
+#define COUT4(h, t, a, b) COUT((h).re, (h).im, (t).re, (t).im, (a).re, (a).im, (b).re, (b).im)
 
 /* Codelet flags, used to pick codelets. Must be a superset of enum AVTXFlags,
  * but if it runs out of bits, it can be made separate. */
@@ -191,7 +268,7 @@ typedef struct FFTXCodeletOptions {
 #define TX_MAX_FACTORS 16
 
 /* Maximum amount of subtransform functions, subtransforms and factors. Arbitrary. */
-#define TX_MAX_SUB 4
+#define TX_MAX_SUB 16
 
 /* Maximum number of returned results for ff_tx_decompose_length. Arbitrary. */
 #define TX_MAX_DECOMPOSITIONS 512
@@ -236,6 +313,12 @@ typedef struct FFTXCodelet {
     int prio;                      /* < 0 = least, 0 = no pref, > 0 = prefer */
 } FFTXCodelet;
 
+typedef struct PassEntry {
+    int offset;
+    int size;
+    int count;
+} PassEntry;
+
 struct AVTXContext {
     /* Fields the root transform and subtransforms use or may use.
      * NOTE: This section is used by assembly, do not reorder or change */
@@ -264,7 +347,12 @@ struct AVTXContext {
     FFTXMapDirection   map_dir;         /* Direction of AVTXContext->map */
     float              scale_f;
     double             scale_d;
+    long double        scale_ld;
     void              *opaque;          /* Free to use by implementations */
+    PassEntry         *schedules;
+    PassEntry         *leaves;
+    int                nb_leaves;
+    int                nb_schedules;
 };
 
 /* This function embeds a Ruritanian PFA input map into an existing lookup table
@@ -370,6 +458,7 @@ int ff_tx_gen_split_radix_parity_revtab(AVTXContext *s, int len, int inv,
  * for all factors of a length. */
 void ff_tx_init_tabs_float (int len);
 void ff_tx_init_tabs_double(int len);
+void ff_tx_init_tabs_long_double(int len);
 void ff_tx_init_tabs_int32 (int len);
 
 /* Typed init function to initialize an MDCT exptab in a context.
@@ -378,6 +467,7 @@ void ff_tx_init_tabs_int32 (int len);
  * being the original. */
 int ff_tx_mdct_gen_exp_float (AVTXContext *s, int *pre_tab);
 int ff_tx_mdct_gen_exp_double(AVTXContext *s, int *pre_tab);
+int ff_tx_mdct_gen_exp_long_double(AVTXContext *s, int *pre_tab);
 int ff_tx_mdct_gen_exp_int32 (AVTXContext *s, int *pre_tab);
 
 /* Lists of codelets */
@@ -386,6 +476,7 @@ extern const FFTXCodelet * const ff_tx_codelet_list_float_x86     [];
 extern const FFTXCodelet * const ff_tx_codelet_list_float_aarch64 [];
 
 extern const FFTXCodelet * const ff_tx_codelet_list_double_c      [];
+extern const FFTXCodelet * const ff_tx_codelet_list_long_double_c [];
 
 extern const FFTXCodelet * const ff_tx_codelet_list_int32_c       [];
 

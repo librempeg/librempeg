@@ -32,6 +32,7 @@
 #  define PIXEL_MAX  0xFFFFFFFFu
 #  define SWAP_BYTES av_bswap32
 #  define pixel_t    uint32_t
+#  define inter_t    int64_t
 #  define block_t    u32block_t
 #  define px         u32
 #elif BIT_DEPTH == 16
@@ -39,12 +40,14 @@
 #  define PIXEL_MAX  0xFFFFu
 #  define SWAP_BYTES av_bswap16
 #  define pixel_t    uint16_t
+#  define inter_t    int64_t
 #  define block_t    u16block_t
 #  define px         u16
 #elif BIT_DEPTH == 8
 #  define PIXEL_TYPE SWS_PIXEL_U8
 #  define PIXEL_MAX  0xFFu
 #  define pixel_t    uint8_t
+#  define inter_t    int32_t
 #  define block_t    u8block_t
 #  define px         u8
 #else
@@ -53,7 +56,6 @@
 
 #define IS_FLOAT  0
 #define FMT_CHAR  u
-#define PIXEL_MIN 0
 #include "ops_tmpl_common.c"
 
 DECL_READ(read_planar, const int elems)
@@ -69,7 +71,7 @@ DECL_READ(read_planar, const int elems)
             w[i] = in3[i];
     }
 
-    CONTINUE(block_t, x, y, z, w);
+    CONTINUE(x, y, z, w);
 }
 
 DECL_READ(read_packed, const int elems)
@@ -85,7 +87,7 @@ DECL_READ(read_packed, const int elems)
             w[i] = in0[elems * i + 3];
     }
 
-    CONTINUE(block_t, x, y, z, w);
+    CONTINUE(x, y, z, w);
 }
 
 DECL_WRITE(write_planar, const int elems)
@@ -117,14 +119,17 @@ DECL_WRITE(write_packed, const int elems)
 }
 
 #define WRAP_READ(FUNC, ELEMS, FRAC, PACKED)                                    \
-DECL_IMPL(FUNC##ELEMS)                                                          \
+static av_flatten void fn(FUNC##ELEMS)(SwsOpIter *restrict iter,                \
+                                       const SwsOpImpl *restrict impl,          \
+                                       void *restrict x, void *restrict y,      \
+                                       void *restrict z, void *restrict w)      \
 {                                                                               \
     CALL_READ(FUNC, ELEMS);                                                     \
     for (int i = 0; i < (PACKED ? 1 : ELEMS); i++)                              \
         iter->in[i] += sizeof(block_t) * (PACKED ? ELEMS : 1) >> FRAC;          \
 }                                                                               \
                                                                                 \
-DECL_ENTRY(FUNC##ELEMS,                                                         \
+DECL_ENTRY(FUNC##ELEMS, SWS_COMP_ELEMS(ELEMS),                                  \
     .op = SWS_OP_READ,                                                          \
     .rw = {                                                                     \
         .elems  = ELEMS,                                                        \
@@ -142,14 +147,17 @@ WRAP_READ(read_packed, 3, 0, true)
 WRAP_READ(read_packed, 4, 0, true)
 
 #define WRAP_WRITE(FUNC, ELEMS, FRAC, PACKED)                                   \
-DECL_IMPL(FUNC##ELEMS)                                                          \
+static av_flatten void fn(FUNC##ELEMS)(SwsOpIter *restrict iter,                \
+                                       const SwsOpImpl *restrict impl,          \
+                                       void *restrict x, void *restrict y,      \
+                                       void *restrict z, void *restrict w)      \
 {                                                                               \
     CALL_WRITE(FUNC, ELEMS);                                                    \
     for (int i = 0; i < (PACKED ? 1 : ELEMS); i++)                              \
         iter->out[i] += sizeof(block_t) * (PACKED ? ELEMS : 1) >> FRAC;         \
 }                                                                               \
                                                                                 \
-DECL_ENTRY(FUNC##ELEMS,                                                         \
+DECL_ENTRY(FUNC##ELEMS, SWS_COMP_ALL,                                           \
     .op = SWS_OP_WRITE,                                                         \
     .rw = {                                                                     \
         .elems  = ELEMS,                                                        \
@@ -176,7 +184,7 @@ DECL_READ(read_nibbles, const int elems)
         x[i + 1] = val & 0xF; /* low nibble */
     }
 
-    CONTINUE(block_t, x, y, z, w);
+    CONTINUE(x, y, z, w);
 }
 
 DECL_READ(read_bits, const int elems)
@@ -194,7 +202,7 @@ DECL_READ(read_bits, const int elems)
         x[i + 7] = (val >> 0) & 1;
     }
 
-    CONTINUE(block_t, x, y, z, w);
+    CONTINUE(x, y, z, w);
 }
 
 WRAP_READ(read_nibbles, 1, 1, false)
@@ -241,7 +249,7 @@ DECL_PATTERN(swap_bytes)
             w[i] = SWAP_BYTES(w[i]);
     }
 
-    CONTINUE(block_t, x, y, z, w);
+    CONTINUE(x, y, z, w);
 }
 
 WRAP_COMMON_PATTERNS(swap_bytes, .op = SWS_OP_SWAP_BYTES);
@@ -264,7 +272,7 @@ DECL_PATTERN(expand16)
             w16[i] = w[i] << 8 | w[i];
     }
 
-    CONTINUE(u16block_t, x16, y16, z16, w16);
+    CONTINUE(x16, y16, z16, w16);
 }
 
 WRAP_COMMON_PATTERNS(expand16,
@@ -285,7 +293,7 @@ DECL_PATTERN(expand32)
         w32[i] = (uint32_t)w[i] << 24 | w[i] << 16 | w[i] << 8 | w[i];
     }
 
-    CONTINUE(u32block_t, x32, y32, z32, w32);
+    CONTINUE(x32, y32, z32, w32);
 }
 
 WRAP_COMMON_PATTERNS(expand32,
@@ -295,46 +303,50 @@ WRAP_COMMON_PATTERNS(expand32,
 );
 #endif
 
+DECL_FUNC(pack, const int bits0, const int bits1, const int bits2, const int bits3)
+{
+    SWS_LOOP
+    for (int i = 0; i < SWS_BLOCK_SIZE; i++) {
+        x[i] = x[i] << (bits1 + bits2 + bits3);
+        if (bits1)
+            x[i] |= y[i] << (bits2 + bits3);
+        if (bits2)
+            x[i] |= z[i] << bits3;
+        if (bits3)
+            x[i] |= w[i];
+    }
+
+    CONTINUE(x, y, z, w);
+}
+
+DECL_FUNC(unpack, const int bits0, const int bits1, const int bits2, const int bits3)
+{
+    SWS_LOOP
+    for (int i = 0; i < SWS_BLOCK_SIZE; i++) {
+        const pixel_t val = x[i];
+        x[i] = val >> (bits1 + bits2 + bits3);
+        if (bits1)
+            y[i] = (val >> (bits2 + bits3)) & ((1 << bits1) - 1);
+        if (bits2)
+            z[i] = (val >> bits3) & ((1 << bits2) - 1);
+        if (bits3)
+            w[i] = val & ((1 << bits3) - 1);
+    }
+
+    CONTINUE(x, y, z, w);
+}
+
 #define WRAP_PACK_UNPACK(X, Y, Z, W)                                            \
-inline DECL_IMPL(pack_##X##Y##Z##W)                                             \
-{                                                                               \
-    SWS_LOOP                                                                    \
-    for (int i = 0; i < SWS_BLOCK_SIZE; i++) {                                  \
-        x[i] = x[i] << (Y+Z+W);                                                 \
-        if (Y)                                                                  \
-            x[i] |= y[i] << (Z+W);                                              \
-        if (Z)                                                                  \
-            x[i] |= z[i] << W;                                                  \
-        if (W)                                                                  \
-            x[i] |= w[i];                                                       \
-    }                                                                           \
+DECL_IMPL(pack, pack_##X##Y##Z##W, X, Y, Z, W)                                  \
                                                                                 \
-    CONTINUE(block_t, x, y, z, w);                                              \
-}                                                                               \
-                                                                                \
-DECL_ENTRY(pack_##X##Y##Z##W,                                                   \
+DECL_ENTRY(pack_##X##Y##Z##W, SWS_COMP(0),                                      \
     .op = SWS_OP_PACK,                                                          \
     .pack.pattern = { X, Y, Z, W },                                             \
 );                                                                              \
                                                                                 \
-inline DECL_IMPL(unpack_##X##Y##Z##W)                                           \
-{                                                                               \
-    SWS_LOOP                                                                    \
-    for (int i = 0; i < SWS_BLOCK_SIZE; i++) {                                  \
-        const pixel_t val = x[i];                                               \
-        x[i] = val >> (Y+Z+W);                                                  \
-        if (Y)                                                                  \
-            y[i] = (val >> (Z+W)) & ((1 << Y) - 1);                             \
-        if (Z)                                                                  \
-            z[i] = (val >> W) & ((1 << Z) - 1);                                 \
-        if (W)                                                                  \
-            w[i] = val & ((1 << W) - 1);                                        \
-    }                                                                           \
+DECL_IMPL(unpack, unpack_##X##Y##Z##W, X, Y, Z, W)                              \
                                                                                 \
-    CONTINUE(block_t, x, y, z, w);                                              \
-}                                                                               \
-                                                                                \
-DECL_ENTRY(unpack_##X##Y##Z##W,                                                 \
+DECL_ENTRY(unpack_##X##Y##Z##W, SWS_COMP_MASK(X, Y, Z, W),                      \
     .op = SWS_OP_UNPACK,                                                        \
     .pack.pattern = { X, Y, Z, W },                                             \
 );
@@ -361,7 +373,7 @@ DECL_PATTERN(lshift)
         w[i] <<= amount;
     }
 
-    CONTINUE(block_t, x, y, z, w);
+    CONTINUE(x, y, z, w);
 }
 
 DECL_PATTERN(rshift)
@@ -376,18 +388,18 @@ DECL_PATTERN(rshift)
         w[i] >>= amount;
     }
 
-    CONTINUE(block_t, x, y, z, w);
+    CONTINUE(x, y, z, w);
 }
 
 WRAP_COMMON_PATTERNS(lshift,
     .op       = SWS_OP_LSHIFT,
-    .setup    = ff_sws_setup_u8,
+    .setup    = ff_sws_setup_shift,
     .flexible = true,
 );
 
 WRAP_COMMON_PATTERNS(rshift,
     .op       = SWS_OP_RSHIFT,
-    .setup    = ff_sws_setup_u8,
+    .setup    = ff_sws_setup_shift,
     .flexible = true,
 );
 #endif /* BIT_DEPTH != 8 */
@@ -404,7 +416,7 @@ DECL_PATTERN(convert_float)
         wf[i] = w[i];
     }
 
-    CONTINUE(f32block_t, xf, yf, zf, wf);
+    CONTINUE(xf, yf, zf, wf);
 }
 
 WRAP_COMMON_PATTERNS(convert_float,
@@ -417,15 +429,16 @@ WRAP_COMMON_PATTERNS(convert_float,
  * Note that this is only safe to do if no arguments are duplicated.
  */
 #define DECL_SWIZZLE(X, Y, Z, W)                                                \
-static SWS_FUNC void                                                            \
+static void                                                                     \
 fn(swizzle_##X##Y##Z##W)(SwsOpIter *restrict iter,                              \
                          const SwsOpImpl *restrict impl,                        \
-                         block_t c0, block_t c1, block_t c2, block_t c3)        \
+                         void *restrict c0, void *restrict c1,                  \
+                         void *restrict c2, void *restrict c3)                  \
 {                                                                               \
-    CONTINUE(block_t, c##X, c##Y, c##Z, c##W);                                  \
+    CONTINUE(c##X, c##Y, c##Z, c##W);                                           \
 }                                                                               \
                                                                                 \
-DECL_ENTRY(swizzle_##X##Y##Z##W,                                                \
+DECL_ENTRY(swizzle_##X##Y##Z##W, SWS_COMP_ALL,                                  \
     .op = SWS_OP_SWIZZLE,                                                       \
     .swizzle.in = { X, Y, Z, W },                                               \
 );
@@ -451,19 +464,19 @@ DECL_SWIZZLE(0, 3, 2, 1)
 
 /* Broadcast luma -> rgb (only used for y(a) -> rgb(a)) */
 #define DECL_EXPAND_LUMA(X, W, T0, T1)                                          \
-static SWS_FUNC void                                                            \
-fn(expand_luma_##X##W)(SwsOpIter *restrict iter,                                \
-                       const SwsOpImpl *restrict impl,                          \
-                       block_t c0, block_t c1,  block_t c2, block_t c3)         \
+DECL_FUNC(expand_luma_##X##W##_impl,                                            \
+          block_t c0, block_t c1, block_t c2, block_t c3)                       \
 {                                                                               \
     SWS_LOOP                                                                    \
     for (int i = 0; i < SWS_BLOCK_SIZE; i++)                                    \
         T0[i] = T1[i] = c0[i];                                                  \
                                                                                 \
-    CONTINUE(block_t, c##X, T0, T1, c##W);                                      \
+    CONTINUE(c##X, T0, T1, c##W);                                               \
 }                                                                               \
                                                                                 \
-DECL_ENTRY(expand_luma_##X##W,                                                  \
+DECL_IMPL(expand_luma_##X##W##_impl, expand_luma_##X##W, x, y, z, w)            \
+                                                                                \
+DECL_ENTRY(expand_luma_##X##W, SWS_COMP_ALL,                                    \
     .op = SWS_OP_SWIZZLE,                                                       \
     .swizzle.in = { X, 0, 0, W },                                               \
 );
@@ -491,6 +504,16 @@ static const SwsOpTable fn(op_table_int) = {
         &fn(op_write_packed2),
         &fn(op_write_packed3),
         &fn(op_write_packed4),
+
+        &fn(op_filter1_v),
+        &fn(op_filter2_v),
+        &fn(op_filter3_v),
+        &fn(op_filter4_v),
+
+        &fn(op_filter1_h),
+        &fn(op_filter2_h),
+        &fn(op_filter3_h),
+        &fn(op_filter4_h),
 
 #if BIT_DEPTH == 8
         &fn(op_read_bits1),
@@ -531,17 +554,17 @@ static const SwsOpTable fn(op_table_int) = {
         REF_COMMON_PATTERNS(scale),
         REF_COMMON_PATTERNS(convert_float),
 
-        &fn(op_clear_1110),
-        &fn(op_clear_0111),
-        &fn(op_clear_0011),
-        &fn(op_clear_1011),
-        &fn(op_clear_1001),
-        &fn(op_clear_1100),
-        &fn(op_clear_0101),
-        &fn(op_clear_1010),
+        &fn(op_clear_0001),
         &fn(op_clear_1000),
+        &fn(op_clear_1100),
         &fn(op_clear_0100),
-        &fn(op_clear_0010),
+        &fn(op_clear_0110),
+        &fn(op_clear_0011),
+        &fn(op_clear_1010),
+        &fn(op_clear_0101),
+        &fn(op_clear_0111),
+        &fn(op_clear_1011),
+        &fn(op_clear_1101),
 
         &fn(op_swizzle_3012),
         &fn(op_swizzle_3021),
@@ -586,9 +609,9 @@ static const SwsOpTable fn(op_table_int) = {
 
 #undef PIXEL_TYPE
 #undef PIXEL_MAX
-#undef PIXEL_MIN
 #undef SWAP_BYTES
 #undef pixel_t
+#undef inter_t
 #undef block_t
 #undef px
 

@@ -3,21 +3,21 @@
  *
  * Copyright (c) 2013 Ronald S. Bultje <rsbultje gmail com>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "libavutil/attributes.h"
@@ -25,8 +25,6 @@
 #include "libavutil/x86/cpu.h"
 #include "libavcodec/vp9dsp.h"
 #include "libavcodec/x86/vp9dsp_init.h"
-
-#if HAVE_X86ASM
 
 decl_fpel_func(put,  4,   , mmx);
 decl_fpel_func(put,  8,   , mmx);
@@ -211,11 +209,8 @@ ipred_func(32, v, avx2);
 #undef ipred_dir_tm_funcs
 #undef ipred_dc_funcs
 
-#endif /* HAVE_X86ASM */
-
 av_cold void ff_vp9dsp_init_x86(VP9DSPContext *dsp, int bpp, int bitexact)
 {
-#if HAVE_X86ASM
     int cpu_flags;
 
     if (bpp == 10) {
@@ -422,6 +417,4 @@ av_cold void ff_vp9dsp_init_x86(VP9DSPContext *dsp, int bpp, int bitexact)
 #undef init_subpel1
 #undef init_subpel2
 #undef init_subpel3
-
-#endif /* HAVE_X86ASM */
 }

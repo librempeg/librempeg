@@ -23,10 +23,14 @@
 #define ftype float
 #define FSIN sinf
 #define SAMPLE_FORMAT fltp
-#else
+#elif DEPTH == 64
 #define FSIN sin
 #define ftype double
 #define SAMPLE_FORMAT dblp
+#else
+#define FSIN sinl
+#define ftype long double
+#define SAMPLE_FORMAT ldblp
 #endif
 
 #define F(x) ((ftype)(x))
@@ -82,12 +86,12 @@ static void fn(output_samples)(AVFilterContext *ctx, AVFrame *frame)
             current_frequency = start_frequency * pow(stop_frequency/start_frequency, position);
             break;
         }
-        phase += F(2.0) * F(M_PI) * current_frequency;
+        phase += F(2.0) * F(M_PIl) * current_frequency;
 
-        if (phase > F(2.0) * F(M_PI))
-            phase -= F(2.0) * F(M_PI);
+        if (phase > F(2.0) * F(M_PIl))
+            phase -= F(2.0) * F(M_PIl);
         else if (phase < F(0.0))
-            phase += F(2.0) * F(M_PI);
+            phase += F(2.0) * F(M_PIl);
     }
 
     s->phase = phase;

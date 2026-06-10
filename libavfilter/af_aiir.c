@@ -86,14 +86,9 @@ static int query_formats(const AVFilterContext *ctx,
         AV_SAMPLE_FMT_DBLP,
         AV_SAMPLE_FMT_NONE
     };
-    int ret;
 
     sample_fmts[0] = s->sample_format;
-    ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
-    if (ret < 0)
-        return ret;
-
-    return 0;
+    return ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
 }
 
 #define IIR_CH(name, type, min, max, need_clipping)                     \

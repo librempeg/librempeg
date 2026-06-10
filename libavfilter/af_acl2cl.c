@@ -69,6 +69,8 @@ static int query_formats(const AVFilterContext *ctx,
         return ret;
 
     formats = ff_make_format_list(sample_fmts);
+    if (formats)
+        formats->flags = FILTER_SAME_BITDEPTH;
     if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
@@ -183,11 +185,20 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         out = in;
     } else {
         ThreadData td;
+        int ret;
 
-        out = ff_get_audio_buffer(outlink, in->nb_samples);
+        out = ff_graph_frame_alloc(ctx);
         if (!out) {
             av_frame_free(&in);
             return AVERROR(ENOMEM);
+        }
+
+        out->nb_samples = in->nb_samples;
+        ret = ff_filter_get_buffer(ctx, out);
+        if (ret < 0) {
+            av_frame_free(&out);
+            av_frame_free(&in);
+            return ret;
         }
 
         td.in = in;
@@ -204,27 +215,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
-static int activate(AVFilterContext *ctx)
-{
-    AVFilterLink *inlink = ctx->inputs[0];
-    AVFilterLink *outlink = ctx->outputs[0];
-    AVFrame *in;
-    int ret;
-
-    FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
-
-    ret = ff_inlink_consume_frame(inlink, &in);
-    if (ret < 0)
-        return ret;
-    if (ret > 0)
-        return filter_frame(inlink, in);
-
-    FF_FILTER_FORWARD_STATUS(inlink, outlink);
-    FF_FILTER_FORWARD_WANTED(outlink, inlink);
-
-    return FFERROR_NOT_READY;
-}
-
 static AVFrame *get_in_audio_buffer(AVFilterLink *inlink, int nb_samples)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -239,6 +229,7 @@ static const AVFilterPad inputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_AUDIO,
+        .filter_frame  = filter_frame,
         .config_props  = config_input,
         .get_buffer.audio = get_in_audio_buffer,
     },
@@ -248,9 +239,8 @@ const FFFilter ff_af_acl2cl = {
     .p.name        = "acl2cl",
     .p.description = NULL_IF_CONFIG_SMALL("Switch audio channel layout."),
     .p.priv_class  = &acl2cl_class,
-    .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS | AVFILTER_FLAG_FRAME_THREADS,
     .priv_size     = sizeof(AudioCL2CLContext),
-    .activate      = activate,
     FILTER_QUERY_FUNC2(query_formats),
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),

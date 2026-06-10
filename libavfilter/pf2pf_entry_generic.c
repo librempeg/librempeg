@@ -20,10 +20,10 @@
 #include "video.h"
 
 #if (SRC_DEPTH > 8 || SRC_E == 0) && (DST_DEPTH > 8 || DST_E == 0)
-#define fng3(a,b,c,d,e) a##_##b##_##c##_to_##d##_##e
-#define fng2(a,b,c,d,e) fng3(a,b,c,d,e)
-#define fng(a)          fng2(a, SRC_F, SRC_E, DST_F, DST_E)
+#define fng3(a,b,c,d,e,f,g) a##_##b##_##c##_##d##_to_##e##_##f##_##g
+#define fng2(a,b,c,d,e,f,g) fng3(a,b,c,d,e,f,g)
+#define fng(a)          fng2(a, SRC_FL, SRC_F, SRC_E, DST_FL, DST_F, DST_E)
 
-[SRC_F][SRC_E][DST_F][DST_E] = fng(pf2pf_generic_loop),
+[SRC_FL][SRC_F][SRC_E][DST_FL][DST_F][DST_E] = fng(pf2pf_generic_loop),
 
 #endif

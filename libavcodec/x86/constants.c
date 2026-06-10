@@ -1,21 +1,21 @@
 /*
  * MMX/SSE/AVX constants used across x86 dsp optimizations.
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "libavutil/mem_internal.h"
@@ -33,10 +33,8 @@ DECLARE_ASM_ALIGNED(16, const xmm_reg,  ff_pw_5)    = { 0x0005000500050005ULL, 0
 DECLARE_ASM_ALIGNED(16, const xmm_reg,  ff_pw_7)    = { 0x0007000700070007ULL, 0x0007000700070007ULL };
 DECLARE_ALIGNED(16, const xmm_reg,  ff_pw_8)    = { 0x0008000800080008ULL, 0x0008000800080008ULL };
 DECLARE_ASM_ALIGNED(16, const xmm_reg,  ff_pw_9)    = { 0x0009000900090009ULL, 0x0009000900090009ULL };
-DECLARE_ALIGNED(8,  const uint64_t, ff_pw_15)   =   0x000F000F000F000FULL;
 DECLARE_ALIGNED(16, const xmm_reg,  ff_pw_16)   = { 0x0010001000100010ULL, 0x0010001000100010ULL };
 DECLARE_ASM_ALIGNED(16, const xmm_reg,  ff_pw_18)   = { 0x0012001200120012ULL, 0x0012001200120012ULL };
-DECLARE_ALIGNED(16, const xmm_reg,  ff_pw_20)   = { 0x0014001400140014ULL, 0x0014001400140014ULL };
 DECLARE_ALIGNED(16, const xmm_reg,  ff_pw_32)   = { 0x0020002000200020ULL, 0x0020002000200020ULL };
 DECLARE_ASM_ALIGNED(8,  const uint64_t, ff_pw_53)   =   0x0035003500350035ULL;
 DECLARE_ASM_ALIGNED(16, const xmm_reg,  ff_pw_64)   = { 0x0040004000400040ULL, 0x0040004000400040ULL };
@@ -76,7 +74,6 @@ DECLARE_ALIGNED(32, const ymm_reg,  ff_pb_80)   = { 0x8080808080808080ULL, 0x808
                                                     0x8080808080808080ULL, 0x8080808080808080ULL };
 DECLARE_ALIGNED(32, const ymm_reg,  ff_pb_FE)   = { 0xFEFEFEFEFEFEFEFEULL, 0xFEFEFEFEFEFEFEFEULL,
                                                     0xFEFEFEFEFEFEFEFEULL, 0xFEFEFEFEFEFEFEFEULL };
-DECLARE_ALIGNED(16, const xmm_reg,  ff_pb_FC)   = { 0xFCFCFCFCFCFCFCFCULL, 0xFCFCFCFCFCFCFCFCULL };
 
 DECLARE_ALIGNED(16, const xmm_reg,  ff_ps_neg)  = { 0x8000000080000000ULL, 0x8000000080000000ULL };
 

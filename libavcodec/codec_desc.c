@@ -2111,6 +2111,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
                      AV_CODEC_PROP_LOSSLESS,
         .mime_types= MT("image/jxs"),
     },
+    {
+        .id        = AV_CODEC_ID_ACTIMAGINE_VX,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "actimagine_vx",
+        .long_name = NULL_IF_CONFIG_SMALL("Actimagine VX Video"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
 
     /* various PCM "codecs" */
     {
@@ -3961,6 +3968,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "relic",
         .long_name = NULL_IF_CONFIG_SMALL("Relic"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_LDAC,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "ldac",
+        .long_name = NULL_IF_CONFIG_SMALL("LDAC"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 

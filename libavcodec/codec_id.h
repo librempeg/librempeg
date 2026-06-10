@@ -347,6 +347,7 @@ enum AVCodecID {
     AV_CODEC_ID_QON,
     AV_CODEC_ID_BVC2,
     AV_CODEC_ID_JPEGXS,
+    AV_CODEC_ID_ACTIMAGINE_VX,
 
     /* various PCM "codecs" */
     AV_CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
@@ -623,6 +624,7 @@ enum AVCodecID {
     AV_CODEC_ID_NWA,
     AV_CODEC_ID_RCAVOC,
     AV_CODEC_ID_RELIC,
+    AV_CODEC_ID_LDAC,
 
     /* subtitle codecs */
     AV_CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.

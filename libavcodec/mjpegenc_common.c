@@ -302,6 +302,7 @@ void ff_mjpeg_encode_picture_header(AVCodecContext *avctx, PutBitContext *pb,
                       use_slices, chroma_matrix);
 
     switch (avctx->codec_id) {
+    case AV_CODEC_ID_THP:
     case AV_CODEC_ID_MJPEG:  put_marker(pb, SOF0 ); break;
     case AV_CODEC_ID_LJPEG:  put_marker(pb, SOF3 ); break;
     default: av_unreachable("ff_mjpeg_encode_picture_header only called by "
@@ -374,6 +375,7 @@ void ff_mjpeg_encode_picture_header(AVCodecContext *avctx, PutBitContext *pb,
     put_bits(pb, 8, pred); /* Ss (not used); pred only nonzero for LJPEG */
 
     switch (avctx->codec_id) {
+    case AV_CODEC_ID_THP:
     case AV_CODEC_ID_MJPEG:  put_bits(pb, 8, 63); break; /* Se (not used) */
     case AV_CODEC_ID_LJPEG:  put_bits(pb, 8,  0); break; /* not used */
     default: av_unreachable("Only LJPEG, MJPEG possible here");

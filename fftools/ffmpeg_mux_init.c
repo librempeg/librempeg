@@ -1532,6 +1532,8 @@ static int ost_add(Muxer *mux, const OptionsContext *o, enum AVMediaType type,
 
     if (oc->oformat->flags & AVFMT_GLOBALHEADER && ost->enc)
         ost->enc->enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    if (oc->oformat->flags & AVFMT_FIXED_FRAMESIZE && ost->enc)
+        ost->enc->enc_ctx->flags2 |= AV_CODEC_FLAG2_FIXED_FRAME_SIZE;
 
     opt_match_per_stream_int(ost, &o->copy_initial_nonkeyframes,
                              oc, st, &ms->copy_initial_nonkeyframes);
@@ -2128,7 +2130,8 @@ static int setup_sync_queues(Muxer *mux, AVFormatContext *oc,
         nb_interleaved += IS_INTERLEAVED(type);
         nb_av_enc      += IS_AV_ENC(ost, type);
         nb_audio_fs    += (ost->enc && type == AVMEDIA_TYPE_AUDIO &&
-                           !(ost->enc->enc_ctx->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE));
+                           (!(ost->enc->enc_ctx->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE) ||
+                            (ost->enc->enc_ctx->flags2 & AV_CODEC_FLAG2_FIXED_FRAME_SIZE)));
 
         limit_frames        |=  ms->max_frames < INT64_MAX;
         limit_frames_av_enc |= (ms->max_frames < INT64_MAX) && IS_AV_ENC(ost, type);
@@ -2554,6 +2557,8 @@ static int of_map_group(Muxer *mux, AVDictionary **dict, AVBPrint *bp, const cha
         break;
     }
     case AV_STREAM_GROUP_PARAMS_LCEVC:
+    case AV_STREAM_GROUP_PARAMS_TREF:
+    case AV_STREAM_GROUP_PARAMS_DOLBY_VISION:
         break;
     default:
         av_log(mux, AV_LOG_ERROR, "Unsupported mapped group type %d.\n", stg->type);
@@ -2579,6 +2584,8 @@ static int of_parse_group_token(Muxer *mux, const char *token, char *ptr)
                 { .i64 = AV_STREAM_GROUP_PARAMS_IAMF_MIX_PRESENTATION }, .unit = "type" },
             { "lcevc", NULL, 0, AV_OPT_TYPE_CONST,
                 { .i64 = AV_STREAM_GROUP_PARAMS_LCEVC }, .unit = "type" },
+            { "tref", NULL, 0, AV_OPT_TYPE_CONST,
+                { .i64 = AV_STREAM_GROUP_PARAMS_TREF }, .unit = "type" },
         { NULL },
     };
     const AVClass class = {
@@ -2652,6 +2659,10 @@ static int of_parse_group_token(Muxer *mux, const char *token, char *ptr)
         ret = avformat_stream_group_add_stream(stg, oc->streams[idx]);
         if (ret < 0)
             goto end;
+        OutputStream *ost = mux->of.streams[idx];
+        if (ost->enc && (type == AV_STREAM_GROUP_PARAMS_IAMF_AUDIO_ELEMENT ||
+                         type == AV_STREAM_GROUP_PARAMS_IAMF_MIX_PRESENTATION))
+            ost->enc->enc_ctx->flags2 |= AV_CODEC_FLAG2_FIXED_FRAME_SIZE;
     }
     while (e = av_dict_get(dict, "stg", e, 0)) {
         char *endptr;

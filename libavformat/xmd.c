@@ -26,7 +26,7 @@
 #include "internal.h"
 #include "pcm.h"
 
-static int xmd_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if ((AV_RL32(p->buf) & 0xFFFFFF) != MKTAG('x','m','d',0))
         return 0;
@@ -38,7 +38,7 @@ static int xmd_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX / 3;
 }
 
-static int xmd_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     AVCodecParameters *par;
@@ -74,7 +74,7 @@ const FFInputFormat ff_xmd_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Konami XMD"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "xmd",
-    .read_probe     = xmd_probe,
-    .read_header    = xmd_read_header,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
 };

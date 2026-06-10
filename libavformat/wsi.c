@@ -25,11 +25,6 @@
 #include "demux.h"
 #include "internal.h"
 
-typedef struct WSIDemuxContext {
-    int64_t start;
-    int16_t *coeffs;
-} WSIDemuxContext;
-
 static int read_probe(const AVProbeData *p)
 {
     int32_t channels, prev_block_size = 0;
@@ -73,13 +68,12 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    WSIDemuxContext *wsi = s->priv_data;
-    int rate, channels, block_size;
+    int rate, channels, block_size, ret;
     AVIOContext *pb = s->pb;
     int64_t start, duration;
     AVStream *st;
 
-    wsi->start = start = avio_rb32(pb);
+    start = avio_rb32(pb);
     channels = avio_rb32(pb);
     avio_seek(pb, start, SEEK_SET);
     block_size = avio_rb32(pb);
@@ -97,21 +91,22 @@ static int read_header(AVFormatContext *s)
     st->start_time = 0;
     st->duration = duration;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_THP;
+    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_NDSP;
     st->codecpar->ch_layout.nb_channels = channels;
     st->codecpar->sample_rate = rate;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     avio_seek(pb, start+0x2c, SEEK_SET);
-    wsi->coeffs = av_calloc(channels, 16 * sizeof(*wsi->coeffs));
-    if (!wsi->coeffs)
-        return AVERROR(ENOMEM);
+    ret = ff_alloc_extradata(st->codecpar, 32 * channels + 1);
+    if (ret < 0)
+        return ret;
 
     for (int ch = 0; ch < channels; ch++) {
-        avio_read(pb, (uint8_t *)(wsi->coeffs + ch * 16), 32);
+        avio_read(pb, st->codecpar->extradata + 32 * ch, 32);
         avio_skip(pb, block_size - 32);
     }
+    st->codecpar->extradata[32 * channels] = 0x60;
 
     avio_seek(pb, start, SEEK_SET);
 
@@ -121,58 +116,41 @@ static int read_header(AVFormatContext *s)
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     const int channels = s->streams[0]->codecpar->ch_layout.nb_channels;
-    WSIDemuxContext *wsi = s->priv_data;
-    int block_size, ret, skip = 16;
     AVIOContext *pb = s->pb;
+    int block_size, ret;
     int64_t pos;
 
     pos = avio_tell(pb);
-    if (pos == wsi->start)
-        skip += 0x60;
     block_size = avio_rb32(pb);
     if (avio_feof(pb))
         return AVERROR_EOF;
 
-    if (block_size <= skip + 8 || block_size > (INT_MAX - 8)/channels - 32 - 4)
+    avio_skip(pb, 12);
+    if (block_size <= 16)
         return AVERROR_INVALIDDATA;
+    block_size -= 16;
 
-    ret = av_new_packet(pkt, ((block_size - skip) + 32 + 4) * channels + 8);
+    ret = av_new_packet(pkt, block_size * channels);
     if (ret < 0)
         return ret;
-
-    AV_WB32(pkt->data, ((block_size - skip) + 32 + 4) * channels + 8);
-    AV_WB32(pkt->data + 4, ((block_size - skip) / 8) * 14);
     for (int ch = 0; ch < channels; ch++) {
-        memcpy(pkt->data + 8 + 32 * ch, wsi->coeffs + 16 * ch, 32);
-        AV_WB32(pkt->data + 8 + 32 * channels + 4 * ch, 0);
-        avio_skip(pb, 12 + 4 * (ch > 0) + skip - 16);
-        avio_read(pb, pkt->data + 8 + (32 + 4) * channels + ch * (block_size - skip), block_size - skip);
+        if (ch)
+            avio_skip(pb, 16);
+        avio_read(pb, pkt->data + block_size * ch, block_size);
     }
 
     pkt->stream_index = 0;
-    pkt->duration = ((block_size - skip) / 8) * 14;
     pkt->pos = pos;
 
     return ret;
-}
-
-static int read_close(AVFormatContext *s)
-{
-    WSIDemuxContext *wsi = s->priv_data;
-
-    av_freep(&wsi->coeffs);
-
-    return 0;
 }
 
 const FFInputFormat ff_wsi_demuxer = {
     .p.name         = "wsi",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Wii WSI"),
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .priv_data_size = sizeof(WSIDemuxContext),
     .p.extensions   = "wsi",
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
-    .read_close     = read_close,
 };

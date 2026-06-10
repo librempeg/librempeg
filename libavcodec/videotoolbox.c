@@ -23,6 +23,7 @@
 #include "config.h"
 #include "config_components.h"
 #include "videotoolbox.h"
+#include "libavutil/attributes.h"
 #include "libavutil/hwcontext_videotoolbox.h"
 #include "libavutil/mem.h"
 #include "vt_internal.h"
@@ -128,7 +129,7 @@ int ff_videotoolbox_alloc_frame(AVCodecContext *avctx, AVFrame *frame)
     size_t      size = sizeof(VTHWFrame);
     uint8_t    *data = NULL;
     AVBufferRef *buf = NULL;
-    int ret = ff_attach_decode_data(frame);
+    int ret = ff_attach_decode_data(avctx, frame);
     FrameDecodeData *fdd;
     if (ret < 0)
         return ret;
@@ -144,7 +145,7 @@ int ff_videotoolbox_alloc_frame(AVCodecContext *avctx, AVFrame *frame)
     frame->buf[0] = buf;
 
     fdd = frame->private_ref;
-    fdd->post_process = videotoolbox_postproc_frame;
+    fdd->hwaccel_priv_post_process = videotoolbox_postproc_frame;
 
     frame->width  = avctx->width;
     frame->height = avctx->height;
@@ -904,7 +905,7 @@ static int videotoolbox_start(AVCodecContext *avctx)
         switch (avctx->codec_tag) {
         default:
             av_log(avctx, AV_LOG_WARNING, "Unknown prores profile %d\n", avctx->codec_tag);
-        // fall-through
+            av_fallthrough;
         case MKTAG('a','p','c','o'): // kCMVideoCodecType_AppleProRes422Proxy
         case MKTAG('a','p','c','s'): // kCMVideoCodecType_AppleProRes422LT
         case MKTAG('a','p','c','n'): // kCMVideoCodecType_AppleProRes422

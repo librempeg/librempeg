@@ -340,6 +340,12 @@ enum AVPacketSideDataType {
     AV_PKT_DATA_FRAME_CROPPING,
 
     /**
+     * Raw LCEVC payload data, as a uint8_t array, with NAL emulation
+     * bytes intact.
+     */
+    AV_PKT_DATA_LCEVC,
+
+    /**
      * This side data contains information about the reference display width(s)
      * and reference viewing distance(s) as well as information about the
      * corresponding reference stereo pair(s), i.e., the pair(s) of views to be
@@ -361,6 +367,21 @@ enum AVPacketSideDataType {
      * EXIF metadata, starting with either 49 49 2a 00, or 4d 4d 00 2a.
      */
      AV_PKT_DATA_EXIF,
+
+    /**
+     * HDR dynamic metadata associated with a video frame. The payload is an
+     * AVDynamicHDRSmpte2094App5 type and contains information for color volume
+     * transform as specified in the SMPTE 2094-50 standard.
+     */
+    AV_PKT_DATA_DYNAMIC_HDR_SMPTE_2094_APP5,
+
+    /**
+     * Dolby Vision enhancement-layer HEVC decoder configuration.
+     * Parsed from the @c hvcE box in ISOM-based containers or the
+     * corresponding BlockAdditionMapping in Matroska. The data is a raw
+     * HEVCDecoderConfigurationRecord as defined in ISO 14496-15.
+     */
+    AV_PKT_DATA_HEVC_CONF,
 
     /**
      * The number of side data types.

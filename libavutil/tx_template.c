@@ -70,11 +70,11 @@ typedef struct FFTabInitData {
 #define SR_TABLE(len)                                              \
 static av_cold void TX_TAB(ff_tx_init_tab_ ##len)(void)            \
 {                                                                  \
-    double freq = 2*M_PI/len;                                      \
+    long double freq = 2.0L*M_PIl/len;                             \
     TXSample *tab = TX_TAB(ff_tx_tab_ ##len);                      \
                                                                    \
     for (int i = 0; i < len/4; i++)                                \
-        *tab++ = RESCALE(cos(i*freq));                             \
+        *tab++ = RESCALE(cosl(i*freq));                            \
                                                                    \
     *tab = 0;                                                      \
 }
@@ -96,40 +96,40 @@ static AVOnce sr_tabs_init_once[] = {
 static av_cold void TX_TAB(ff_tx_init_tab_53)(void)
 {
     /* 5pt, doubled to eliminate AVX lane shuffles */
-    TX_TAB(ff_tx_tab_53)[0] = RESCALE(cos(2 * M_PI /  5));
-    TX_TAB(ff_tx_tab_53)[1] = RESCALE(cos(2 * M_PI /  5));
-    TX_TAB(ff_tx_tab_53)[2] = RESCALE(cos(2 * M_PI / 10));
-    TX_TAB(ff_tx_tab_53)[3] = RESCALE(cos(2 * M_PI / 10));
-    TX_TAB(ff_tx_tab_53)[4] = RESCALE(sin(2 * M_PI /  5));
-    TX_TAB(ff_tx_tab_53)[5] = RESCALE(sin(2 * M_PI /  5));
-    TX_TAB(ff_tx_tab_53)[6] = RESCALE(sin(2 * M_PI / 10));
-    TX_TAB(ff_tx_tab_53)[7] = RESCALE(sin(2 * M_PI / 10));
+    TX_TAB(ff_tx_tab_53)[0] = RESCALE(cosl(2 * M_PIl /  5));
+    TX_TAB(ff_tx_tab_53)[1] = RESCALE(cosl(2 * M_PIl /  5));
+    TX_TAB(ff_tx_tab_53)[2] = RESCALE(cosl(2 * M_PIl / 10));
+    TX_TAB(ff_tx_tab_53)[3] = RESCALE(cosl(2 * M_PIl / 10));
+    TX_TAB(ff_tx_tab_53)[4] = RESCALE(sinl(2 * M_PIl /  5));
+    TX_TAB(ff_tx_tab_53)[5] = RESCALE(sinl(2 * M_PIl /  5));
+    TX_TAB(ff_tx_tab_53)[6] = RESCALE(sinl(2 * M_PIl / 10));
+    TX_TAB(ff_tx_tab_53)[7] = RESCALE(sinl(2 * M_PIl / 10));
 
     /* 3pt */
-    TX_TAB(ff_tx_tab_53)[ 8] = RESCALE(cos(2 * M_PI / 12));
-    TX_TAB(ff_tx_tab_53)[ 9] = RESCALE(cos(2 * M_PI / 12));
-    TX_TAB(ff_tx_tab_53)[10] = RESCALE(cos(2 * M_PI /  6));
-    TX_TAB(ff_tx_tab_53)[11] = RESCALE(cos(8 * M_PI /  6));
+    TX_TAB(ff_tx_tab_53)[ 8] = RESCALE(cosl(2 * M_PIl / 12));
+    TX_TAB(ff_tx_tab_53)[ 9] = RESCALE(cosl(2 * M_PIl / 12));
+    TX_TAB(ff_tx_tab_53)[10] = RESCALE(cosl(2 * M_PIl /  6));
+    TX_TAB(ff_tx_tab_53)[11] = RESCALE(cosl(8 * M_PIl /  6));
 }
 
 static av_cold void TX_TAB(ff_tx_init_tab_7)(void)
 {
-    TX_TAB(ff_tx_tab_7)[0] = RESCALE(cos(2 * M_PI /  7));
-    TX_TAB(ff_tx_tab_7)[1] = RESCALE(sin(2 * M_PI /  7));
-    TX_TAB(ff_tx_tab_7)[2] = RESCALE(sin(2 * M_PI / 28));
-    TX_TAB(ff_tx_tab_7)[3] = RESCALE(cos(2 * M_PI / 28));
-    TX_TAB(ff_tx_tab_7)[4] = RESCALE(cos(2 * M_PI / 14));
-    TX_TAB(ff_tx_tab_7)[5] = RESCALE(sin(2 * M_PI / 14));
+    TX_TAB(ff_tx_tab_7)[0] = RESCALE(cosl(2 * M_PIl /  7));
+    TX_TAB(ff_tx_tab_7)[1] = RESCALE(sinl(2 * M_PIl /  7));
+    TX_TAB(ff_tx_tab_7)[2] = RESCALE(sinl(2 * M_PIl / 28));
+    TX_TAB(ff_tx_tab_7)[3] = RESCALE(cosl(2 * M_PIl / 28));
+    TX_TAB(ff_tx_tab_7)[4] = RESCALE(cosl(2 * M_PIl / 14));
+    TX_TAB(ff_tx_tab_7)[5] = RESCALE(sinl(2 * M_PIl / 14));
 }
 
 static av_cold void TX_TAB(ff_tx_init_tab_9)(void)
 {
-    TX_TAB(ff_tx_tab_9)[0] = RESCALE(cos(2 * M_PI /  3));
-    TX_TAB(ff_tx_tab_9)[1] = RESCALE(sin(2 * M_PI /  3));
-    TX_TAB(ff_tx_tab_9)[2] = RESCALE(cos(2 * M_PI /  9));
-    TX_TAB(ff_tx_tab_9)[3] = RESCALE(sin(2 * M_PI /  9));
-    TX_TAB(ff_tx_tab_9)[4] = RESCALE(cos(2 * M_PI / 36));
-    TX_TAB(ff_tx_tab_9)[5] = RESCALE(sin(2 * M_PI / 36));
+    TX_TAB(ff_tx_tab_9)[0] = RESCALE(cosl(2 * M_PIl /  3));
+    TX_TAB(ff_tx_tab_9)[1] = RESCALE(sinl(2 * M_PIl /  3));
+    TX_TAB(ff_tx_tab_9)[2] = RESCALE(cosl(2 * M_PIl /  9));
+    TX_TAB(ff_tx_tab_9)[3] = RESCALE(sinl(2 * M_PIl /  9));
+    TX_TAB(ff_tx_tab_9)[4] = RESCALE(cosl(2 * M_PIl / 36));
+    TX_TAB(ff_tx_tab_9)[5] = RESCALE(sinl(2 * M_PIl / 36));
     TX_TAB(ff_tx_tab_9)[6] = TX_TAB(ff_tx_tab_9)[2] + TX_TAB(ff_tx_tab_9)[5];
     TX_TAB(ff_tx_tab_9)[7] = TX_TAB(ff_tx_tab_9)[3] - TX_TAB(ff_tx_tab_9)[4];
 }
@@ -730,6 +730,659 @@ DECL_SR_CODELET(524288,262144,131072)
 DECL_SR_CODELET(1048576,524288,262144)
 DECL_SR_CODELET(2097152,1048576,524288)
 
+static int sched_push(PassEntry **pass_ptr,
+                      int offset, int size, int *count)
+{
+    int new_count = (count[0] > 0) ? count[0] + 1 : 1;
+    pass_ptr[0] = av_realloc_f(pass_ptr[0], new_count, sizeof(PassEntry));
+    if (!pass_ptr[0])
+        return AVERROR(ENOMEM);
+
+    pass_ptr[0][count[0]].offset = offset;
+    pass_ptr[0][count[0]].size = size;
+    count[0]++;
+
+    return 0;
+}
+
+static int build_schedule(PassEntry **pass_ptr,
+                          int offset, int N, int *count)
+{
+    if (N < 8)
+        return 0;
+
+    int N2 = N/2;
+    int N8 = N/8;
+    int ret;
+
+    ret = build_schedule(pass_ptr, offset, N2, count);
+    if (ret < 0)
+        return ret;
+
+    ret = build_schedule(pass_ptr, offset + N2,        N8, count);
+    if (ret < 0)
+        return ret;
+    ret = build_schedule(pass_ptr, offset + N2 +   N8, N8, count);
+    if (ret < 0)
+        return ret;
+    ret = build_schedule(pass_ptr, offset + N2 + 2*N8, N8, count);
+    if (ret < 0)
+        return ret;
+    ret = build_schedule(pass_ptr, offset + N2 + 3*N8, N8, count);
+    if (ret < 0)
+        return ret;
+
+    return sched_push(pass_ptr, offset, N, count);
+}
+
+static int merge_schedule(PassEntry **pass_ptr, int *nb_filtered,
+                          const PassEntry *schedule, const int nb_schedules)
+{
+    int offset = schedule[0].offset;
+    int size = schedule[0].size;
+
+    int new_nb_filtered = (nb_filtered[0] > 0) ? nb_filtered[0] + 1 : 1;
+    pass_ptr[0] = av_realloc_f(pass_ptr[0], new_nb_filtered, sizeof(PassEntry));
+    if (!pass_ptr[0])
+        return AVERROR(ENOMEM);
+
+    pass_ptr[0][nb_filtered[0]].offset = offset;
+    pass_ptr[0][nb_filtered[0]].size = size;
+    pass_ptr[0][nb_filtered[0]].count = 1;
+
+    for (int i = 1; i < nb_schedules; i++) {
+        int next_offset = schedule[i].offset;
+        int next_size = schedule[i].size;
+
+        if (next_size == size && offset + size == next_offset) {
+            offset = next_offset;
+            pass_ptr[0][nb_filtered[0]].count++;
+        } else {
+            nb_filtered[0]++;
+            int new_nb_filtered = (nb_filtered[0] > 0) ? nb_filtered[0] + 1 : 1;
+            pass_ptr[0] = av_realloc_f(pass_ptr[0], new_nb_filtered, sizeof(PassEntry));
+            if (!pass_ptr[0])
+                return AVERROR(ENOMEM);
+
+            pass_ptr[0][nb_filtered[0]].offset = next_offset;
+            pass_ptr[0][nb_filtered[0]].size = next_size;
+            pass_ptr[0][nb_filtered[0]].count = 1;
+
+            offset = next_offset;
+            size = next_size;
+        }
+    }
+    nb_filtered[0]++;
+
+    return 0;
+}
+
+TXComplex *TX_TAB(ff_tx_esr_tab)[2][32] = { 0 };
+
+static void esr_map(int *map, int dst, int src, int N, int stride)
+{
+    if (N == 1) {
+        map[dst] = src;
+        return;
+    }
+
+    if (N < 8) {
+        if (N == 4) {
+            esr_map(map, dst,   src,          1, stride*4);
+            esr_map(map, dst+1, src+1*stride, 1, stride*4);
+            esr_map(map, dst+2, src+2*stride, 1, stride*4);
+            esr_map(map, dst+3, src+3*stride, 1, stride*4);
+        } else {
+            esr_map(map, dst,   src,        1, stride*2);
+            esr_map(map, dst+1, src+stride, 1, stride*2);
+        }
+
+        return;
+    }
+
+    int N2 = N/2;
+    int N8 = N/8;
+
+    esr_map(map, dst, src, N2, stride*2);
+
+    esr_map(map, dst+N2,      src+1*stride, N8, stride*8);
+    esr_map(map, dst+N2+1*N8, src+3*stride, N8, stride*8);
+    esr_map(map, dst+N2+2*N8, src+5*stride, N8, stride*8);
+    esr_map(map, dst+N2+3*N8, src+7*stride, N8, stride*8);
+}
+
+static int collect_leaves(PassEntry **leaves,
+                          int offset, int N, int *count)
+{
+    if (N <= 4) {
+        if (N > 1) {
+            int new_count = (count[0] > 0) ? count[0] + 1 : 1;
+            leaves[0] = av_realloc_f(leaves[0], new_count, sizeof(PassEntry));
+            if (!leaves[0])
+                return AVERROR(ENOMEM);
+
+            leaves[0][count[0]].offset = offset;
+            leaves[0][count[0]].size = N;
+            count[0] = new_count;
+        }
+
+        return 0;
+    }
+
+    int N2 = N/2;
+    int N8 = N/8;
+    int ret;
+
+    ret = collect_leaves(leaves, offset,         N2, count);
+    if (ret < 0)
+        return ret;
+    ret = collect_leaves(leaves, offset+N2,      N8, count);
+    if (ret < 0)
+        return ret;
+    ret = collect_leaves(leaves, offset+N2+  N8, N8, count);
+    if (ret < 0)
+        return ret;
+    ret = collect_leaves(leaves, offset+N2+2*N8, N8, count);
+    if (ret < 0)
+        return ret;
+    ret = collect_leaves(leaves, offset+N2+3*N8, N8, count);
+    if (ret < 0)
+        return ret;
+
+    return 0;
+}
+
+static inline TXComplex twiddle(int k, const long double phase)
+{
+    const long double th = phase * k;
+
+    return (TXComplex){ RESCALE(cosl(th)), RESCALE(sinl(th)) };
+}
+
+static int build_twiddles(TXComplex *tab[32], const int N, const int inv)
+{
+    if (N < 8)
+        return 0;
+
+    int N2 = N/2;
+    int N8 = N/8;
+    int idx = av_ceil_log2(N);
+    int ret;
+
+    ret = build_twiddles(tab, N2, inv);
+    if (ret < 0)
+        return ret;
+
+    if (tab[idx])
+        return 0;
+
+    tab[idx] = av_calloc(4*N8, sizeof(*tab[idx]));
+    if (!tab[idx])
+        return AVERROR(ENOMEM);
+
+    const long double dinv = inv ? 1.0L : -1.0L;
+    const long double phase = dinv * 2.0L * M_PIl / N;
+    TXComplex *exp = tab[idx];
+
+    for (int j = 0; j < 4; j++) {
+        for (int k = 1; k < N8; k++) {
+            TXComplex w = twiddle((j*2+1)*k, phase);
+
+            exp[k] = w;
+        }
+
+        exp += N8;
+    }
+
+    return 0;
+}
+
+static int sort_schedules(const void *a, const void *b)
+{
+    const PassEntry *s0p = a;
+    const PassEntry *s1p = b;
+    const PassEntry s0 = *s0p;
+    const PassEntry s1 = *s1p;
+    int64_t i0 = s0.size;
+    int64_t i1 = s1.size;
+
+    i0 = (i0 << 31) + s0.offset;
+    i1 = (i1 << 31) + s1.offset;
+
+    return FFDIFFSIGN(i0, i1);
+}
+
+static av_cold int TX_NAME(ff_tx_fft_init_esr)(AVTXContext *s,
+                                               const FFTXCodelet *cd,
+                                               uint64_t flags,
+                                               FFTXCodeletOptions *opts,
+                                               int len, int inv,
+                                               const void *scale)
+{
+    PassEntry *schedules = NULL;
+    PassEntry *leaves = NULL;
+    int nb_schedules = 0;
+    int nb_leaves = 0;
+    const int N = len;
+    int ret;
+
+    if (!(s->map = av_calloc(N, sizeof(int))))
+        return AVERROR(ENOMEM);
+    esr_map(s->map, 0, 0, N, 1);
+
+    ret = build_schedule(&schedules, 0, N, &nb_schedules);
+    if (ret < 0)
+        return ret;
+
+    if (nb_schedules > 0) {
+        qsort(schedules, nb_schedules, sizeof(PassEntry), sort_schedules);
+
+        ret = merge_schedule(&s->schedules, &s->nb_schedules, schedules, nb_schedules);
+    }
+
+    av_freep(&schedules);
+    if (ret < 0)
+        return ret;
+
+    ret = collect_leaves(&leaves, 0, N, &nb_leaves);
+    if (ret < 0)
+        return ret;
+
+    ret = merge_schedule(&s->leaves, &s->nb_leaves, leaves, nb_leaves);
+    av_freep(&leaves);
+    if (ret < 0)
+        return ret;
+
+    ret = build_twiddles(TX_TAB(ff_tx_esr_tab)[s->inv], N, s->inv);
+    if (ret < 0)
+        return ret;
+
+    return 0;
+}
+
+/* Compilers can't vectorize this anyway without assuming AVX2, which they
+ * generally don't, at least without -march=native -mtune=native */
+static void TX_NAME(ff_tx_remap)(TXComplex *dst, const TXComplex *src,
+                                 const int *map, const int len)
+{
+    for (int i = 0; i < len; i++)
+        dst[i] = src[map[i]];
+}
+
+static av_always_inline void bf2(TXComplex *p)
+{
+    TXComplex a = p[0], b = p[1];
+
+    CADD3(p[0], a, b);
+    CSUB3(p[1], a, b);
+}
+
+static void bf4_inverse(TXComplex *p)
+{
+    TXComplex s02, d02, s13, d13, d13i;
+    TXComplex x0=p[0], x1=p[1], x2=p[2], x3=p[3];
+
+    CADD3(s02, x0, x2);
+    CADD3(s13, x1, x3);
+    CSUB3(d02, x0, x2);
+    CSUB3(d13, x1, x3);
+
+    CMUL_I_INVERSE2(d13i, d13);
+
+    CADD3(p[0], s02, s13);
+    CSUB3(p[1], d02, d13i);
+    CSUB3(p[2], s02, s13);
+    CADD3(p[3], d02, d13i);
+}
+
+static void bf4_forward(TXComplex *p)
+{
+    TXComplex s02, d02, s13, d13, d13i;
+    TXComplex x0=p[0], x1=p[1], x2=p[2], x3=p[3];
+
+    CADD3(s02, x0, x2);
+    CADD3(s13, x1, x3);
+    CSUB3(d02, x0, x2);
+    CSUB3(d13, x1, x3);
+
+    CMUL_I_FORWARD2(d13i, d13);
+
+    CADD3(p[0], s02, s13);
+    CSUB3(p[1], d02, d13i);
+    CSUB3(p[2], s02, s13);
+    CADD3(p[3], d02, d13i);
+}
+
+static void apply_leaves_forward(TXComplex *x,
+                                 const PassEntry *leaves, const int nb_leaves)
+{
+    for (int i = 0; i < nb_leaves; i++) {
+        const int p = leaves[i].offset;
+        const int c = leaves[i].count;
+        const int s = leaves[i].size;
+
+        if (s == 2) {
+            for (int j = 0; j < c; j++)
+                bf2(x + p + j*2);
+        } else if (s == 4) {
+            for (int j = 0; j < c; j++)
+                bf4_forward(x + p + j*4);
+        }
+    }
+}
+
+static void apply_leaves_inverse(TXComplex *x,
+                                 const PassEntry *leaves, const int nb_leaves)
+{
+    for (int i = 0; i < nb_leaves; i++) {
+        const int p = leaves[i].offset;
+        const int c = leaves[i].count;
+        const int s = leaves[i].size;
+
+        if (s == 2) {
+            for (int j = 0; j < c; j++)
+                bf2(x + p + j*2);
+        } else if (s == 4) {
+            for (int j = 0; j < c; j++)
+                bf4_inverse(x + p + j*4);
+        }
+    }
+}
+
+static void esr_pass_forward(TXComplex *restrict X, const TXComplex *restrict exp,
+                             const TXSample factor, const int N)
+{
+    const int N2 = N>>1;
+    const int N8 = N>>3;
+    const TXComplex *restrict e0 = exp;
+    const TXComplex *restrict e1 = exp + N8;
+    const TXComplex *restrict e2 = exp + N8*2;
+    const TXComplex *restrict e3 = exp + N8*3;
+    TXComplex *restrict U  = X;
+    TXComplex *restrict U1 = U + N8;
+    TXComplex *restrict U2 = U + N8*2;
+    TXComplex *restrict U3 = U + N8*3;
+    TXComplex *restrict U4 = X + N2;
+    TXComplex *restrict U5 = X + N2 + N8;
+    TXComplex *restrict U6 = X + N2 + N8*2;
+    TXComplex *restrict U7 = X + N2 + N8*3;
+
+    {
+        TXComplex t1, t3, t3i, t5, t7, t7i;
+        TXComplex u46p, u46m, u57p, u57m;
+        TXComplex s57_m, s57_p;
+
+        CADD3(u46p, U4[0], U6[0]);
+        CSUB3(u46m, U4[0], U6[0]);
+        CADD3(u57p, U5[0], U7[0]);
+        CSUB3(u57m, U5[0], U7[0]);
+
+        CADD3(t1, u46p, u57p);
+        CSUB3(t3, u46p, u57p);
+        CMUL_I_FORWARD2(t3i, t3);
+        CSUB3(t5, u46m, u57m);
+        CADD3(t7, u46m, u57m);
+        CMUL_I_FORWARD2(t7i, t7);
+
+        CSUB3(s57_m, t5, t7i);
+        CSCALE3(s57_m, s57_m, factor);
+        CADD3(s57_p, t5, t7i);
+        CSCALE3(s57_p, s57_p, factor);
+
+        TXComplex uk0 = U [0];
+        TXComplex uk1 = U1[0];
+        TXComplex uk2 = U2[0];
+        TXComplex uk3 = U3[0];
+
+        CADD3(U [0], uk0, t1);
+        CADD3(U1[0], uk1, s57_m);
+        CSUB3(U2[0], uk2, t3i);
+        CSUB3(U3[0], uk3, s57_p);
+        CSUB3(U4[0], uk0, t1);
+        CSUB3(U5[0], uk1, s57_m);
+        CADD3(U6[0], uk2, t3i);
+        CADD3(U7[0], uk3, s57_p);
+    }
+
+    for (int k = 1; k < N8; k++) {
+        TXComplex t1, t3, t3i, t5, t7, t7i;
+        TXComplex u46p, u46m, u57p, u57m;
+        TXComplex eu4, eu5, eu6, eu7;
+        TXComplex s57_m, s57_p;
+
+        CMUL3(eu4, e0[k], U4[k]);
+        CMUL3(eu5, e1[k], U5[k]);
+        CMUL3(eu6, e2[k], U6[k]);
+        CMUL3(eu7, e3[k], U7[k]);
+
+        CADD3(u46p, eu4, eu6);
+        CSUB3(u46m, eu4, eu6);
+        CADD3(u57p, eu5, eu7);
+        CSUB3(u57m, eu5, eu7);
+
+        CADD3(t1, u46p, u57p);
+        CSUB3(t3, u46p, u57p);
+        CMUL_I_FORWARD2(t3i, t3);
+        CSUB3(t5, u46m, u57m);
+        CADD3(t7, u46m, u57m);
+        CMUL_I_FORWARD2(t7i, t7);
+
+        CSUB3(s57_m, t5, t7i);
+        CSCALE3(s57_m, s57_m, factor);
+        CADD3(s57_p, t5, t7i);
+        CSCALE3(s57_p, s57_p, factor);
+
+        TXComplex uk0 = U [k];
+        TXComplex uk1 = U1[k];
+        TXComplex uk2 = U2[k];
+        TXComplex uk3 = U3[k];
+
+        CADD3(U [k], uk0, t1);
+        CADD3(U1[k], uk1, s57_m);
+        CSUB3(U2[k], uk2, t3i);
+        CSUB3(U3[k], uk3, s57_p);
+        CSUB3(U4[k], uk0, t1);
+        CSUB3(U5[k], uk1, s57_m);
+        CADD3(U6[k], uk2, t3i);
+        CADD3(U7[k], uk3, s57_p);
+    }
+}
+
+static void esr_pass_inverse(TXComplex *restrict X, const TXComplex *restrict exp,
+                             const TXSample factor, const int N)
+{
+    const int N2 = N>>1;
+    const int N8 = N>>3;
+    const TXComplex *restrict e0 = exp;
+    const TXComplex *restrict e1 = exp + N8;
+    const TXComplex *restrict e2 = exp + N8*2;
+    const TXComplex *restrict e3 = exp + N8*3;
+    TXComplex *restrict U  = X;
+    TXComplex *restrict U1 = U + N8;
+    TXComplex *restrict U2 = U + N8*2;
+    TXComplex *restrict U3 = U + N8*3;
+    TXComplex *restrict U4 = U + N2;
+    TXComplex *restrict U5 = U4 + N8;
+    TXComplex *restrict U6 = U4 + N8*2;
+    TXComplex *restrict U7 = U4 + N8*3;
+
+    {
+        TXComplex t1, t3, t3i, t5, t7, t7i;
+        TXComplex u46p, u46m, u57p, u57m;
+        TXComplex s57_m, s57_p;
+
+        CADD3(u46p, U4[0], U6[0]);
+        CSUB3(u46m, U4[0], U6[0]);
+        CADD3(u57p, U5[0], U7[0]);
+        CSUB3(u57m, U5[0], U7[0]);
+
+        CADD3(t1, u46p, u57p);
+        CSUB3(t3, u46p, u57p);
+        CMUL_I_INVERSE2(t3i, t3);
+        CSUB3(t5, u46m, u57m);
+        CADD3(t7, u46m, u57m);
+        CMUL_I_INVERSE2(t7i, t7);
+
+        CSUB3(s57_m, t5, t7i);
+        CSCALE3(s57_m, s57_m, factor);
+        CADD3(s57_p, t5, t7i);
+        CSCALE3(s57_p, s57_p, factor);
+
+        TXComplex uk0 = U [0];
+        TXComplex uk1 = U1[0];
+        TXComplex uk2 = U2[0];
+        TXComplex uk3 = U3[0];
+
+        CADD3(U [0], uk0, t1);
+        CADD3(U1[0], uk1, s57_m);
+        CSUB3(U2[0], uk2, t3i);
+        CSUB3(U3[0], uk3, s57_p);
+        CSUB3(U4[0], uk0, t1);
+        CSUB3(U5[0], uk1, s57_m);
+        CADD3(U6[0], uk2, t3i);
+        CADD3(U7[0], uk3, s57_p);
+    }
+
+    for (int k = 1; k < N8; k++) {
+        TXComplex t1, t3, t3i, t5, t7, t7i;
+        TXComplex u46p, u46m, u57p, u57m;
+        TXComplex eu4, eu5, eu6, eu7;
+        TXComplex s57_m, s57_p;
+
+        CMUL3(eu4, e0[k], U4[k]);
+        CMUL3(eu5, e1[k], U5[k]);
+        CMUL3(eu6, e2[k], U6[k]);
+        CMUL3(eu7, e3[k], U7[k]);
+
+        CADD3(u46p, eu4, eu6);
+        CSUB3(u46m, eu4, eu6);
+        CADD3(u57p, eu5, eu7);
+        CSUB3(u57m, eu5, eu7);
+
+        CADD3(t1, u46p, u57p);
+        CSUB3(t3, u46p, u57p);
+        CMUL_I_INVERSE2(t3i, t3);
+        CSUB3(t5, u46m, u57m);
+        CADD3(t7, u46m, u57m);
+        CMUL_I_INVERSE2(t7i, t7);
+
+        CSUB3(s57_m, t5, t7i);
+        CSCALE3(s57_m, s57_m, factor);
+        CADD3(s57_p, t5, t7i);
+        CSCALE3(s57_p, s57_p, factor);
+
+        TXComplex uk0 = U [k];
+        TXComplex uk1 = U1[k];
+        TXComplex uk2 = U2[k];
+        TXComplex uk3 = U3[k];
+
+        CADD3(U [k], uk0, t1);
+        CADD3(U1[k], uk1, s57_m);
+        CSUB3(U2[k], uk2, t3i);
+        CSUB3(U3[k], uk3, s57_p);
+        CSUB3(U4[k], uk0, t1);
+        CSUB3(U5[k], uk1, s57_m);
+        CADD3(U6[k], uk2, t3i);
+        CADD3(U7[k], uk3, s57_p);
+    }
+}
+
+static void TX_NAME(ff_tx_fft_esr_forward)(AVTXContext *s, void *_dst,
+                                           void *_src, ptrdiff_t stride)
+{
+    const int nb_schedules = s->nb_schedules;
+    const int *map = s->map;
+    const int N = s->len;
+    TXComplex *src = _src;
+    TXComplex *dst = _dst;
+
+    TX_NAME(ff_tx_remap)(dst, src, map, N);
+
+    apply_leaves_forward(dst, s->leaves, s->nb_leaves);
+
+    if (!nb_schedules)
+        return;
+
+    const PassEntry *pass = s->schedules;
+    const TXSample factor = RESCALE(sqrtl(0.5L));
+    for (int i = 0; i < nb_schedules; i++) {
+        const int n = pass[i].size;
+        const int count = pass[i].count;
+        const int offset = pass[i].offset;
+        const int idx = av_ceil_log2(n);
+        const TXComplex *tw = TX_TAB(ff_tx_esr_tab)[0][idx];
+        TXComplex *dstn = dst + offset;
+
+        for (int c = 0; c < count; c++) {
+            esr_pass_forward(dstn, tw, factor, n);
+            dstn += n;
+        }
+    }
+}
+
+static void TX_NAME(ff_tx_fft_esr_inverse)(AVTXContext *s, void *_dst,
+                                           void *_src, ptrdiff_t stride)
+{
+    const int nb_schedules = s->nb_schedules;
+    const int *map = s->map;
+    const int N = s->len;
+    TXComplex *src = _src;
+    TXComplex *dst = _dst;
+
+    TX_NAME(ff_tx_remap)(dst, src, map, N);
+
+    apply_leaves_inverse(dst, s->leaves, s->nb_leaves);
+
+    if (!nb_schedules)
+        return;
+
+    const PassEntry *pass = s->schedules;
+    const TXSample factor = RESCALE(sqrtl(0.5L));
+    for (int i = 0; i < nb_schedules; i++) {
+        const int n = pass[i].size;
+        const int count = pass[i].count;
+        const int offset = pass[i].offset;
+        const int idx = av_ceil_log2(n);
+        const TXComplex *tw = TX_TAB(ff_tx_esr_tab)[1][idx];
+        TXComplex *dstn = dst + offset;
+
+        for (int c = 0; c < count; c++) {
+            esr_pass_inverse(dstn, tw, factor, n);
+            dstn += n;
+        }
+    }
+}
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_esr_forward_def) = {
+    .name       = TX_NAME_STR("fft_esr"),
+    .function   = TX_NAME(ff_tx_fft_esr_forward),
+    .type       = TX_TYPE(FFT),
+    .flags      = FF_TX_OUT_OF_PLACE | AV_TX_INPLACE | FF_TX_FORWARD_ONLY |
+                  AV_TX_UNALIGNED,
+    .factors[0] = 2,
+    .nb_factors = 1,
+    .min_len    = 2,
+    .max_len    = TX_LEN_UNLIMITED,
+    .init       = TX_NAME(ff_tx_fft_init_esr),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_BASE+130,
+};
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_esr_inverse_def) = {
+    .name       = TX_NAME_STR("fft_esr"),
+    .function   = TX_NAME(ff_tx_fft_esr_inverse),
+    .type       = TX_TYPE(FFT),
+    .flags      = FF_TX_OUT_OF_PLACE | AV_TX_INPLACE | FF_TX_INVERSE_ONLY |
+                  AV_TX_UNALIGNED,
+    .factors[0] = 2,
+    .nb_factors = 1,
+    .min_len    = 2,
+    .max_len    = TX_LEN_UNLIMITED,
+    .init       = TX_NAME(ff_tx_fft_init_esr),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_BASE+130,
+};
+
 static av_cold int TX_NAME(ff_tx_fft_init)(AVTXContext *s,
                                            const FFTXCodelet *cd,
                                            uint64_t flags,
@@ -767,15 +1420,6 @@ static av_cold int TX_NAME(ff_tx_fft_inplace_small_init)(AVTXContext *s,
         return AVERROR(ENOMEM);
     flags &= ~AV_TX_INPLACE;
     return TX_NAME(ff_tx_fft_init)(s, cd, flags, opts, len, inv, scale);
-}
-
-/* Compilers can't vectorize this anyway without assuming AVX2, which they
- * generally don't, at least without -march=native -mtune=native */
-static void TX_NAME(ff_tx_remap)(TXComplex *dst, const TXComplex *src,
-                                 const int *map, const int len)
-{
-    for (int i = 0; i < len; i++)
-        dst[i] = src[map[i]];
 }
 
 static void TX_NAME(ff_tx_fft)(AVTXContext *s, void *_dst,
@@ -864,17 +1508,17 @@ static av_cold int TX_NAME(ff_tx_fft_init_naive_small)(AVTXContext *s,
                                                        int len, int inv,
                                                        const void *scale)
 {
-    const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
+    const long double phase = s->inv ? 2.0L*M_PIl/len : -2.0L*M_PIl/len;
 
     if (!(s->exp = av_malloc(len*len*sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     for (int i = 0; i < len; i++) {
         for (int j = 0; j < len; j++) {
-            const double factor = phase*i*j;
+            const long double factor = phase*i*j;
             s->exp[i*len+j] = (TXComplex){
-                RESCALE(cos(factor)),
-                RESCALE(sin(factor)),
+                RESCALE(cosl(factor)),
+                RESCALE(sinl(factor)),
             };
         }
     }
@@ -882,47 +1526,43 @@ static av_cold int TX_NAME(ff_tx_fft_init_naive_small)(AVTXContext *s,
     return 0;
 }
 
-static av_always_inline void stockham0(const int n, const int z, TXComplex *y, const TXComplex *x,
+static av_always_inline void stockham2(const int n, const int z, TXComplex *y, const TXComplex *x,
                                        const TXComplex **exp)
 {
     if (n <= 2) {
-        const TXComplex *xa = x + 0;
-        const TXComplex *xb = x + z;
+        const TXComplex *x0 = x + 0;
+        const TXComplex *x1 = x + z;
         TXComplex *y0 = y + 0;
-        TXComplex *yz = y + z;
+        TXComplex *y1 = y + z;
 
         for (int q = 0; q < z; q++) {
-            const TXComplex a = xa[q];
-            const TXComplex b = xb[q];
+            const TXComplex a = x0[q];
+            const TXComplex b = x1[q];
 
-            y0[q].re = a.re + b.re;
-            y0[q].im = a.im + b.im;
-            yz[q].re = a.re - b.re;
-            yz[q].im = a.im - b.im;
+            CADD3(y0[q], a, b);
+            CSUB3(y1[q], a, b);
         }
     } else if (n >= 4) {
         const int m = n / 2;
 
         for (int p = 0; p < m; p++) {
-            const int s2p0 = z * (2 * p + 0);
-            const int s2p1 = z * (2 * p + 1);
+            const int s2p0 = z * 2 * p;
+            const int s2p1 = s2p0 + z;
             const TXComplex wp = exp[0][p];
             const int sp0 = z * (p + 0);
-            const int spm = z * (p + m);
-            const TXComplex *xa = x + sp0;
-            const TXComplex *xb = x + spm;
+            const int sp1 = z * (p + m);
+            const TXComplex *x0 = x + sp0;
+            const TXComplex *x1 = x + sp1;
             TXComplex *y0 = y + s2p0;
             TXComplex *y1 = y + s2p1;
 
             for (int q = 0; q < z; q++) {
-                const TXComplex a = xa[q];
-                const TXComplex b = xb[q];
+                const TXComplex a = x0[q];
+                const TXComplex b = x1[q];
                 TXComplex t;
 
-                t.re = a.re - b.re;
-                t.im = a.im - b.im;
-                y0[q].re = a.re + b.re;
-                y0[q].im = a.im + b.im;
+                CSUB3(t, a, b);
+                CADD3(y0[q], a, b);
                 CMUL3(y1[q], t, wp);
             }
         }
@@ -931,29 +1571,30 @@ static av_always_inline void stockham0(const int n, const int z, TXComplex *y, c
     }
 }
 
-static av_cold int TX_NAME(ff_tx_fft_init_stockham)(AVTXContext *s,
-                                                    const FFTXCodelet *cd,
-                                                    uint64_t flags,
-                                                    FFTXCodeletOptions *opts,
-                                                    int len, int inv,
-                                                    const void *scale)
+static av_cold int TX_NAME(ff_tx_fft_init_stockham2)(AVTXContext *s,
+                                                     const FFTXCodelet *cd,
+                                                     uint64_t flags,
+                                                     FFTXCodeletOptions *opts,
+                                                     int len, int inv,
+                                                     const void *scale)
 {
-    s->scale_d = *((SCALE_TYPE *)scale);
+    s->scale_ld = *((SCALE_TYPE *)scale);
+    s->scale_d = s->scale_ld;
     s->scale_f = s->scale_d;
 
     if (!(s->exp = av_mallocz(len*sizeof(TXComplex))))
         return AVERROR(ENOMEM);
 
     {
-        const double invf = s->inv ? 1.0 : -1.0;
+        const long double invf = s->inv ? 1.0L : -1.0L;
         TXComplex *exp = s->exp;
 
         for (int n = len; n > 2; n /= 2) {
-            const double w = 2.0 * M_PI * invf / n;
+            const long double w = 2.0L * M_PIl * invf / n;
 
             for (int m = 0; m < n/2; m++) {
-                exp[m].re = RESCALE(cos(w * m));
-                exp[m].im = RESCALE(sin(w * m));
+                exp[m].re = RESCALE(cosl(w * m));
+                exp[m].im = RESCALE(sinl(w * m));
             }
             exp += n/2;
         }
@@ -963,6 +1604,70 @@ static av_cold int TX_NAME(ff_tx_fft_init_stockham)(AVTXContext *s,
         return AVERROR(ENOMEM);
 
     return 0;
+}
+
+static void TX_NAME(ff_tx_fft_stockham2)(AVTXContext *s, void *_dst, void *_src,
+                                         ptrdiff_t stride)
+{
+    const TXComplex *exp = s->exp;
+    TXComplex *tmp = s->tmp;
+    TXComplex *src = _src;
+    TXComplex *dst = _dst;
+
+    stride /= sizeof(*dst);
+
+    if (stride == 1) {
+        stockham2(2, 1, dst, src, &exp);
+    } else {
+        stockham2(2, 1, tmp, src, &exp);
+        for (int i = 0; i < 2; i++)
+            dst[i*stride] = tmp[i];
+    }
+}
+
+static void TX_NAME(ff_tx_fft_stockham4)(AVTXContext *s, void *_dst, void *_src,
+                                         ptrdiff_t stride)
+{
+    const TXComplex *exp = s->exp;
+    TXComplex *tmp = s->tmp;
+    TXComplex *tm0 = tmp+4;
+    TXComplex *src = _src;
+    TXComplex *dst = _dst;
+
+    stride /= sizeof(*dst);
+
+    stockham2(4, 1, tmp, src, &exp);
+
+    if (stride == 1) {
+        stockham2(2, 2, dst, tmp, &exp);
+    } else {
+        stockham2(2, 2, tm0, tmp, &exp);
+        for (int i = 0; i < 4; i++)
+            dst[i*stride] = tm0[i];
+    }
+}
+
+static void TX_NAME(ff_tx_fft_stockham8)(AVTXContext *s, void *_dst, void *_src,
+                                         ptrdiff_t stride)
+{
+    const TXComplex *exp = s->exp;
+    TXComplex *tmp = s->tmp;
+    TXComplex *tm0 = tmp+8;
+    TXComplex *src = _src;
+    TXComplex *dst = _dst;
+
+    stride /= sizeof(*dst);
+
+    stockham2(8, 1, tmp, src, &exp);
+    stockham2(4, 2, tm0, tmp, &exp);
+
+    if (stride == 1) {
+        stockham2(2, 4, dst, tm0, &exp);
+    } else {
+        stockham2(2, 4, tmp, tm0, &exp);
+        for (int i = 0; i < 8; i++)
+            dst[i*stride] = tmp[i];
+    }
 }
 
 static void TX_NAME(ff_tx_fft_stockham16)(AVTXContext *s, void *_dst, void *_src,
@@ -976,14 +1681,14 @@ static void TX_NAME(ff_tx_fft_stockham16)(AVTXContext *s, void *_dst, void *_src
 
     stride /= sizeof(*dst);
 
-    stockham0(16, 1, tmp, src, &exp);
-    stockham0(8,  2, tm0, tmp, &exp);
-    stockham0(4,  4, tmp, tm0, &exp);
+    stockham2(16, 1, tmp, src, &exp);
+    stockham2(8,  2, tm0, tmp, &exp);
+    stockham2(4,  4, tmp, tm0, &exp);
 
     if (stride == 1) {
-        stockham0(2,  8, dst, tmp, &exp);
+        stockham2(2, 8, dst, tmp, &exp);
     } else {
-        stockham0(2,  8, tm0, tmp, &exp);
+        stockham2(2, 8, tm0, tmp, &exp);
         for (int i = 0; i < 16; i++)
             dst[i*stride] = tm0[i];
     }
@@ -1000,15 +1705,15 @@ static void TX_NAME(ff_tx_fft_stockham32)(AVTXContext *s, void *_dst, void *_src
 
     stride /= sizeof(*dst);
 
-    stockham0(32, 1, tmp, src, &exp);
-    stockham0(16, 2, tm0, tmp, &exp);
-    stockham0(8,  4, tmp, tm0, &exp);
-    stockham0(4,  8, tm0, tmp, &exp);
+    stockham2(32, 1, tmp, src, &exp);
+    stockham2(16, 2, tm0, tmp, &exp);
+    stockham2(8,  4, tmp, tm0, &exp);
+    stockham2(4,  8, tm0, tmp, &exp);
 
     if (stride == 1) {
-        stockham0(2, 16, dst, tm0, &exp);
+        stockham2(2, 16, dst, tm0, &exp);
     } else {
-        stockham0(2, 16, tmp, tm0, &exp);
+        stockham2(2, 16, tmp, tm0, &exp);
 
         for (int i = 0; i < 32; i++)
             dst[i*stride] = tmp[i];
@@ -1026,16 +1731,16 @@ static void TX_NAME(ff_tx_fft_stockham64)(AVTXContext *s, void *_dst, void *_src
 
     stride /= sizeof(*dst);
 
-    stockham0(64, 1, tmp, src, &exp);
-    stockham0(32, 2, tm0, tmp, &exp);
-    stockham0(16, 4, tmp, tm0, &exp);
-    stockham0(8,  8, tm0, tmp, &exp);
-    stockham0(4, 16, tmp, tm0, &exp);
+    stockham2(64, 1, tmp, src, &exp);
+    stockham2(32, 2, tm0, tmp, &exp);
+    stockham2(16, 4, tmp, tm0, &exp);
+    stockham2(8,  8, tm0, tmp, &exp);
+    stockham2(4, 16, tmp, tm0, &exp);
 
     if (stride == 1) {
-        stockham0(2, 32, dst, tmp, &exp);
+        stockham2(2, 32, dst, tmp, &exp);
     } else {
-        stockham0(2, 32, tm0, tmp, &exp);
+        stockham2(2, 32, tm0, tmp, &exp);
 
         for (int i = 0; i < 64; i++)
             dst[i*stride] = tm0[i];
@@ -1053,17 +1758,17 @@ static void TX_NAME(ff_tx_fft_stockham128)(AVTXContext *s, void *_dst, void *_sr
 
     stride /= sizeof(*dst);
 
-    stockham0(128, 1, tmp, src, &exp);
-    stockham0(64,  2, tm0, tmp, &exp);
-    stockham0(32,  4, tmp, tm0, &exp);
-    stockham0(16,  8, tm0, tmp, &exp);
-    stockham0(8,  16, tmp, tm0, &exp);
-    stockham0(4,  32, tm0, tmp, &exp);
+    stockham2(128, 1, tmp, src, &exp);
+    stockham2(64,  2, tm0, tmp, &exp);
+    stockham2(32,  4, tmp, tm0, &exp);
+    stockham2(16,  8, tm0, tmp, &exp);
+    stockham2(8,  16, tmp, tm0, &exp);
+    stockham2(4,  32, tm0, tmp, &exp);
 
     if (stride == 1) {
-        stockham0(2,  64, dst, tm0, &exp);
+        stockham2(2,  64, dst, tm0, &exp);
     } else {
-        stockham0(2,  64, tmp, tm0, &exp);
+        stockham2(2,  64, tmp, tm0, &exp);
 
         for (int i = 0; i < 128; i++)
             dst[i*stride] = tmp[i];
@@ -1081,18 +1786,18 @@ static void TX_NAME(ff_tx_fft_stockham256)(AVTXContext *s, void *_dst, void *_sr
 
     stride /= sizeof(*dst);
 
-    stockham0(256, 1, tmp, src, &exp);
-    stockham0(128, 2, tm0, tmp, &exp);
-    stockham0(64,  4, tmp, tm0, &exp);
-    stockham0(32,  8, tm0, tmp, &exp);
-    stockham0(16, 16, tmp, tm0, &exp);
-    stockham0(8,  32, tm0, tmp, &exp);
-    stockham0(4,  64, tmp, tm0, &exp);
+    stockham2(256, 1, tmp, src, &exp);
+    stockham2(128, 2, tm0, tmp, &exp);
+    stockham2(64,  4, tmp, tm0, &exp);
+    stockham2(32,  8, tm0, tmp, &exp);
+    stockham2(16, 16, tmp, tm0, &exp);
+    stockham2(8,  32, tm0, tmp, &exp);
+    stockham2(4,  64, tmp, tm0, &exp);
 
     if (stride == 1) {
-        stockham0(2, 128, dst, tmp, &exp);
+        stockham2(2, 128, dst, tmp, &exp);
     } else {
-        stockham0(2, 128, tm0, tmp, &exp);
+        stockham2(2, 128, tm0, tmp, &exp);
 
         for (int i = 0; i < 256; i++)
             dst[i*stride] = tm0[i];
@@ -1110,19 +1815,19 @@ static void TX_NAME(ff_tx_fft_stockham512)(AVTXContext *s, void *_dst, void *_sr
 
     stride /= sizeof(*dst);
 
-    stockham0(512, 1, tmp, src, &exp);
-    stockham0(256, 2, tm0, tmp, &exp);
-    stockham0(128, 4, tmp, tm0, &exp);
-    stockham0(64,  8, tm0, tmp, &exp);
-    stockham0(32, 16, tmp, tm0, &exp);
-    stockham0(16, 32, tm0, tmp, &exp);
-    stockham0(8,  64, tmp, tm0, &exp);
-    stockham0(4, 128, tm0, tmp, &exp);
+    stockham2(512, 1, tmp, src, &exp);
+    stockham2(256, 2, tm0, tmp, &exp);
+    stockham2(128, 4, tmp, tm0, &exp);
+    stockham2(64,  8, tm0, tmp, &exp);
+    stockham2(32, 16, tmp, tm0, &exp);
+    stockham2(16, 32, tm0, tmp, &exp);
+    stockham2(8,  64, tmp, tm0, &exp);
+    stockham2(4, 128, tm0, tmp, &exp);
 
     if (stride == 1) {
-        stockham0(2, 256, dst, tm0, &exp);
+        stockham2(2, 256, dst, tm0, &exp);
     } else {
-        stockham0(2, 256, tmp, tm0, &exp);
+        stockham2(2, 256, tmp, tm0, &exp);
 
         for (int i = 0; i < 512; i++)
             dst[i*stride] = tmp[i];
@@ -1140,20 +1845,20 @@ static void TX_NAME(ff_tx_fft_stockham1024)(AVTXContext *s, void *_dst, void *_s
 
     stride /= sizeof(*dst);
 
-    stockham0(1024, 1, tmp, src, &exp);
-    stockham0(512,  2, tm0, tmp, &exp);
-    stockham0(256,  4, tmp, tm0, &exp);
-    stockham0(128,  8, tm0, tmp, &exp);
-    stockham0(64,  16, tmp, tm0, &exp);
-    stockham0(32,  32, tm0, tmp, &exp);
-    stockham0(16,  64, tmp, tm0, &exp);
-    stockham0(8,  128, tm0, tmp, &exp);
-    stockham0(4,  256, tmp, tm0, &exp);
+    stockham2(1024, 1, tmp, src, &exp);
+    stockham2(512,  2, tm0, tmp, &exp);
+    stockham2(256,  4, tmp, tm0, &exp);
+    stockham2(128,  8, tm0, tmp, &exp);
+    stockham2(64,  16, tmp, tm0, &exp);
+    stockham2(32,  32, tm0, tmp, &exp);
+    stockham2(16,  64, tmp, tm0, &exp);
+    stockham2(8,  128, tm0, tmp, &exp);
+    stockham2(4,  256, tmp, tm0, &exp);
 
     if (stride == 1) {
-        stockham0(2,  512, dst, tmp, &exp);
+        stockham2(2,  512, dst, tmp, &exp);
     } else {
-        stockham0(2,  512, tm0, tmp, &exp);
+        stockham2(2,  512, tm0, tmp, &exp);
 
         for (int i = 0; i < 1024; i++)
             dst[i*stride] = tm0[i];
@@ -1171,21 +1876,21 @@ static void TX_NAME(ff_tx_fft_stockham2048)(AVTXContext *s, void *_dst, void *_s
 
     stride /= sizeof(*dst);
 
-    stockham0(2048, 1, tmp, src, &exp);
-    stockham0(1024, 2, tm0, tmp, &exp);
-    stockham0(512,  4, tmp, tm0, &exp);
-    stockham0(256,  8, tm0, tmp, &exp);
-    stockham0(128, 16, tmp, tm0, &exp);
-    stockham0(64,  32, tm0, tmp, &exp);
-    stockham0(32,  64, tmp, tm0, &exp);
-    stockham0(16, 128, tm0, tmp, &exp);
-    stockham0(8,  256, tmp, tm0, &exp);
-    stockham0(4,  512, tm0, tmp, &exp);
+    stockham2(2048, 1, tmp, src, &exp);
+    stockham2(1024, 2, tm0, tmp, &exp);
+    stockham2(512,  4, tmp, tm0, &exp);
+    stockham2(256,  8, tm0, tmp, &exp);
+    stockham2(128, 16, tmp, tm0, &exp);
+    stockham2(64,  32, tm0, tmp, &exp);
+    stockham2(32,  64, tmp, tm0, &exp);
+    stockham2(16, 128, tm0, tmp, &exp);
+    stockham2(8,  256, tmp, tm0, &exp);
+    stockham2(4,  512, tm0, tmp, &exp);
 
     if (stride == 1) {
-        stockham0(2, 1024, dst, tm0, &exp);
+        stockham2(2, 1024, dst, tm0, &exp);
     } else {
-        stockham0(2, 1024, tmp, tm0, &exp);
+        stockham2(2, 1024, tmp, tm0, &exp);
 
         for (int i = 0; i < 2048; i++)
             dst[i*stride] = tmp[i];
@@ -1203,22 +1908,22 @@ static void TX_NAME(ff_tx_fft_stockham4096)(AVTXContext *s, void *_dst, void *_s
 
     stride /= sizeof(*dst);
 
-    stockham0(4096, 1, tmp, src, &exp);
-    stockham0(2048, 2, tm0, tmp, &exp);
-    stockham0(1024, 4, tmp, tm0, &exp);
-    stockham0(512,  8, tm0, tmp, &exp);
-    stockham0(256, 16, tmp, tm0, &exp);
-    stockham0(128, 32, tm0, tmp, &exp);
-    stockham0(64,  64, tmp, tm0, &exp);
-    stockham0(32, 128, tm0, tmp, &exp);
-    stockham0(16, 256, tmp, tm0, &exp);
-    stockham0(8,  512, tm0, tmp, &exp);
-    stockham0(4, 1024, tmp, tm0, &exp);
+    stockham2(4096, 1, tmp, src, &exp);
+    stockham2(2048, 2, tm0, tmp, &exp);
+    stockham2(1024, 4, tmp, tm0, &exp);
+    stockham2(512,  8, tm0, tmp, &exp);
+    stockham2(256, 16, tmp, tm0, &exp);
+    stockham2(128, 32, tm0, tmp, &exp);
+    stockham2(64,  64, tmp, tm0, &exp);
+    stockham2(32, 128, tm0, tmp, &exp);
+    stockham2(16, 256, tmp, tm0, &exp);
+    stockham2(8,  512, tm0, tmp, &exp);
+    stockham2(4, 1024, tmp, tm0, &exp);
 
     if (stride == 1) {
-        stockham0(2, 2048, dst, tmp, &exp);
+        stockham2(2, 2048, dst, tmp, &exp);
     } else {
-        stockham0(2, 2048, tm0, tmp, &exp);
+        stockham2(2, 2048, tm0, tmp, &exp);
 
         for (int i = 0; i < 4096; i++)
             dst[i*stride] = tm0[i];
@@ -1236,28 +1941,105 @@ static void TX_NAME(ff_tx_fft_stockham8192)(AVTXContext *s, void *_dst, void *_s
 
     stride /= sizeof(*dst);
 
-    stockham0(8192, 1, tmp, src, &exp);
-    stockham0(4096, 2, tm0, tmp, &exp);
-    stockham0(2048, 4, tmp, tm0, &exp);
-    stockham0(1024, 8, tm0, tmp, &exp);
-    stockham0(512, 16, tmp, tm0, &exp);
-    stockham0(256, 32, tm0, tmp, &exp);
-    stockham0(128, 64, tmp, tm0, &exp);
-    stockham0(64, 128, tm0, tmp, &exp);
-    stockham0(32, 256, tmp, tm0, &exp);
-    stockham0(16, 512, tm0, tmp, &exp);
-    stockham0(8, 1024, tmp, tm0, &exp);
-    stockham0(4, 2048, tm0, tmp, &exp);
+    stockham2(8192, 1, tmp, src, &exp);
+    stockham2(4096, 2, tm0, tmp, &exp);
+    stockham2(2048, 4, tmp, tm0, &exp);
+    stockham2(1024, 8, tm0, tmp, &exp);
+    stockham2(512, 16, tmp, tm0, &exp);
+    stockham2(256, 32, tm0, tmp, &exp);
+    stockham2(128, 64, tmp, tm0, &exp);
+    stockham2(64, 128, tm0, tmp, &exp);
+    stockham2(32, 256, tmp, tm0, &exp);
+    stockham2(16, 512, tm0, tmp, &exp);
+    stockham2(8, 1024, tmp, tm0, &exp);
+    stockham2(4, 2048, tm0, tmp, &exp);
 
     if (stride == 1) {
-        stockham0(2, 4096, dst, tm0, &exp);
+        stockham2(2, 4096, dst, tm0, &exp);
     } else {
-        stockham0(2, 4096, tmp, tm0, &exp);
+        stockham2(2, 4096, tmp, tm0, &exp);
 
         for (int i = 0; i < 8192; i++)
             dst[i*stride] = tmp[i];
     }
 }
+
+static void TX_NAME(ff_tx_fft_stockham16384)(AVTXContext *s, void *_dst, void *_src,
+                                             ptrdiff_t stride)
+{
+    const TXComplex *exp = s->exp;
+    TXComplex *tmp = s->tmp;
+    TXComplex *tm0 = tmp+16384;
+    TXComplex *src = _src;
+    TXComplex *dst = _dst;
+
+    stride /= sizeof(*dst);
+
+    stockham2(16384, 1, tmp, src, &exp);
+    stockham2(8192,  2, tm0, tmp, &exp);
+    stockham2(4096,  4, tmp, tm0, &exp);
+    stockham2(2048,  8, tm0, tmp, &exp);
+    stockham2(1024, 16, tmp, tm0, &exp);
+    stockham2(512,  32, tm0, tmp, &exp);
+    stockham2(256,  64, tmp, tm0, &exp);
+    stockham2(128, 128, tm0, tmp, &exp);
+    stockham2(64,  256, tmp, tm0, &exp);
+    stockham2(32,  512, tm0, tmp, &exp);
+    stockham2(16, 1024, tmp, tm0, &exp);
+    stockham2(8,  2048, tm0, tmp, &exp);
+    stockham2(4,  4096, tmp, tm0, &exp);
+
+    if (stride == 1) {
+        stockham2(2, 8192, dst, tmp, &exp);
+    } else {
+        stockham2(2, 8192, tm0, tmp, &exp);
+
+        for (int i = 0; i < 16384; i++)
+            dst[i*stride] = tm0[i];
+    }
+}
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_stockham2_def) = {
+    .name       = TX_NAME_STR("fft_stockham2"),
+    .function   = TX_NAME(ff_tx_fft_stockham2),
+    .type       = TX_TYPE(FFT),
+    .flags      = AV_TX_UNALIGNED | FF_TX_OUT_OF_PLACE | AV_TX_INPLACE,
+    .factors[0] = 2,
+    .nb_factors = 1,
+    .min_len    = 2,
+    .max_len    = 2,
+    .init       = TX_NAME(ff_tx_fft_init_stockham2),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_BASE+128,
+};
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_stockham4_def) = {
+    .name       = TX_NAME_STR("fft_stockham4"),
+    .function   = TX_NAME(ff_tx_fft_stockham4),
+    .type       = TX_TYPE(FFT),
+    .flags      = AV_TX_UNALIGNED | FF_TX_OUT_OF_PLACE | AV_TX_INPLACE,
+    .factors[0] = 2,
+    .nb_factors = 1,
+    .min_len    = 4,
+    .max_len    = 4,
+    .init       = TX_NAME(ff_tx_fft_init_stockham2),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_BASE+128,
+};
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_stockham8_def) = {
+    .name       = TX_NAME_STR("fft_stockham8"),
+    .function   = TX_NAME(ff_tx_fft_stockham8),
+    .type       = TX_TYPE(FFT),
+    .flags      = AV_TX_UNALIGNED | FF_TX_OUT_OF_PLACE | AV_TX_INPLACE,
+    .factors[0] = 2,
+    .nb_factors = 1,
+    .min_len    = 8,
+    .max_len    = 8,
+    .init       = TX_NAME(ff_tx_fft_init_stockham2),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_BASE+128,
+};
 
 static const FFTXCodelet TX_NAME(ff_tx_fft_stockham16_def) = {
     .name       = TX_NAME_STR("fft_stockham16"),
@@ -1268,7 +2050,7 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_stockham16_def) = {
     .nb_factors = 1,
     .min_len    = 16,
     .max_len    = 16,
-    .init       = TX_NAME(ff_tx_fft_init_stockham),
+    .init       = TX_NAME(ff_tx_fft_init_stockham2),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_BASE+128,
 };
@@ -1282,7 +2064,7 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_stockham32_def) = {
     .nb_factors = 1,
     .min_len    = 32,
     .max_len    = 32,
-    .init       = TX_NAME(ff_tx_fft_init_stockham),
+    .init       = TX_NAME(ff_tx_fft_init_stockham2),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_BASE+128,
 };
@@ -1296,7 +2078,7 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_stockham64_def) = {
     .nb_factors = 1,
     .min_len    = 64,
     .max_len    = 64,
-    .init       = TX_NAME(ff_tx_fft_init_stockham),
+    .init       = TX_NAME(ff_tx_fft_init_stockham2),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_BASE+128,
 };
@@ -1310,7 +2092,7 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_stockham128_def) = {
     .nb_factors = 1,
     .min_len    = 128,
     .max_len    = 128,
-    .init       = TX_NAME(ff_tx_fft_init_stockham),
+    .init       = TX_NAME(ff_tx_fft_init_stockham2),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_BASE+128,
 };
@@ -1324,7 +2106,7 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_stockham256_def) = {
     .nb_factors = 1,
     .min_len    = 256,
     .max_len    = 256,
-    .init       = TX_NAME(ff_tx_fft_init_stockham),
+    .init       = TX_NAME(ff_tx_fft_init_stockham2),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_BASE+128,
 };
@@ -1338,7 +2120,7 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_stockham512_def) = {
     .nb_factors = 1,
     .min_len    = 512,
     .max_len    = 512,
-    .init       = TX_NAME(ff_tx_fft_init_stockham),
+    .init       = TX_NAME(ff_tx_fft_init_stockham2),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_BASE+128,
 };
@@ -1352,7 +2134,7 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_stockham1024_def) = {
     .nb_factors = 1,
     .min_len    = 1024,
     .max_len    = 1024,
-    .init       = TX_NAME(ff_tx_fft_init_stockham),
+    .init       = TX_NAME(ff_tx_fft_init_stockham2),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_BASE+128,
 };
@@ -1366,7 +2148,7 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_stockham2048_def) = {
     .nb_factors = 1,
     .min_len    = 2048,
     .max_len    = 2048,
-    .init       = TX_NAME(ff_tx_fft_init_stockham),
+    .init       = TX_NAME(ff_tx_fft_init_stockham2),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_BASE+128,
 };
@@ -1380,7 +2162,7 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_stockham4096_def) = {
     .nb_factors = 1,
     .min_len    = 4096,
     .max_len    = 4096,
-    .init       = TX_NAME(ff_tx_fft_init_stockham),
+    .init       = TX_NAME(ff_tx_fft_init_stockham2),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_BASE+128,
 };
@@ -1394,7 +2176,21 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_stockham8192_def) = {
     .nb_factors = 1,
     .min_len    = 8192,
     .max_len    = 8192,
-    .init       = TX_NAME(ff_tx_fft_init_stockham),
+    .init       = TX_NAME(ff_tx_fft_init_stockham2),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_BASE+128,
+};
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_stockham16384_def) = {
+    .name       = TX_NAME_STR("fft_stockham16384"),
+    .function   = TX_NAME(ff_tx_fft_stockham16384),
+    .type       = TX_TYPE(FFT),
+    .flags      = AV_TX_UNALIGNED | FF_TX_OUT_OF_PLACE | AV_TX_INPLACE,
+    .factors[0] = 2,
+    .nb_factors = 1,
+    .min_len    = 16384,
+    .max_len    = 16384,
+    .init       = TX_NAME(ff_tx_fft_init_stockham2),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_BASE+128,
 };
@@ -1510,8 +2306,8 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix3)(AVTXContext *s,
                                                   int len, int inv,
                                                   const void *scale)
 {
-    const double invf = s->inv ? 1.0 : -1.0;
-    const double phase = 2.0*M_PI * invf;
+    const long double invf = s->inv ? 1.0L : -1.0L;
+    const long double phase = 2.0L*M_PIl * invf;
     const int n = len;
     const int r = 3;
     TXComplex *exp;
@@ -1527,16 +2323,16 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix3)(AVTXContext *s,
         return AVERROR(ENOMEM);
 
     exp = s->exp;
-    exp[0] = (TXComplex){RESCALE(-0.5), RESCALE(invf * sqrt(3.0) * 0.5)};
+    exp[0] = (TXComplex){RESCALE(-0.5L), RESCALE(invf * sqrtl(3.0L) * 0.5L)};
 
     for (int m = r, z = 0; m <= n; m *= r) {
         const int mr = m/r;
 
         for (int j = 0; j < mr; j++) {
             for (int i = 1; i < r; i++) {
-                const double ww = (j*i) * phase / m;
+                const long double ww = (j*i) * phase / m;
 
-                exp[1+z++] = (TXComplex){RESCALE(cos(ww)), RESCALE(sin(ww))};
+                exp[1+z++] = (TXComplex){RESCALE(cosl(ww)), RESCALE(sinl(ww))};
             }
         }
     }
@@ -1577,12 +2373,10 @@ static void TX_NAME(ff_tx_fft_radix3)(AVTXContext *s, void *_dst, void *_src,
                 s0 = srci0[j];
                 CMUL3(z1, w[idx+j*2+0], srci1[j]);
                 CMUL3(s2, w[idx+j*2+1], srci2[j]);
-                s1.re = z1.re - s2.re;
-                s1.im = z1.im - s2.im;
+                CSUB3(s1, z1, s2);
                 s2.re = 2*z1.re - s1.re;
                 s2.im = 2*z1.im - s1.im;
-                z1.re = s2.re + s0.re;
-                z1.im = s2.im + s0.im;
+                CADD3(z1, s2, s0);
                 s2.re = s0.re + MULT(w31.re, s2.re);
                 s2.im = s0.im + MULT(w31.re, s2.im);
                 s0.re = s2.re + MULT(w31.im, s1.im);
@@ -1633,8 +2427,8 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix5)(AVTXContext *s,
                                                   int len, int inv,
                                                   const void *scale)
 {
-    const double invf = s->inv ? 1.0 : -1.0;
-    const double phase = 2.0*M_PI * invf;
+    const long double invf = s->inv ? 1.0L : -1.0L;
+    const long double phase = 2.0L*M_PIl * invf;
     const int n = len;
     const int r = 5;
     TXComplex *exp;
@@ -1650,17 +2444,17 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix5)(AVTXContext *s,
         return AVERROR(ENOMEM);
 
     exp = s->exp;
-    exp[0] = (TXComplex){RESCALE(0.25), RESCALE(sqrt(5.0) * 0.25)};
-    exp[1] = (TXComplex){RESCALE(sqrt((5.0-sqrt(5.0))/(5.0+sqrt(5.0)))), RESCALE(-0.5 * invf * sqrt(2.5 + sqrt(5.0)*0.5))};
+    exp[0] = (TXComplex){RESCALE(0.25L), RESCALE(sqrtl(5.0L) * 0.25L)};
+    exp[1] = (TXComplex){RESCALE(sqrtl((5.0L-sqrtl(5.0L))/(5.0L+sqrtl(5.0L)))), RESCALE(-0.5L * invf * sqrtl(2.5L + sqrtl(5.0L)*0.5L))};
 
     for (int m = r, z = 0; m <= n; m *= r) {
         const int mr = m/r;
 
         for (int j = 0; j < mr; j++) {
             for (int i = 1; i < r; i++) {
-                const double ww = (j*i) * phase / m;
+                const long double ww = (j*i) * phase / m;
 
-                exp[2+z++] = (TXComplex){RESCALE(cos(ww)), RESCALE(sin(ww))};
+                exp[2+z++] = (TXComplex){RESCALE(cosl(ww)), RESCALE(sinl(ww))};
             }
         }
     }
@@ -1736,8 +2530,7 @@ static void TX_NAME(ff_tx_fft_radix5)(AVTXContext *s, void *_dst, void *_src,
                 t3.im = 2*s8.im - t2.im;
                 t4.re = 2*s9.re - t1.re;
                 t4.im = 2*s9.im - t1.im;
-                t5.re = z0.re + s5.re;
-                t5.im = z0.im + s5.im;
+                CADD3(t5, z0, s5);
 
                 srci0[j] = t5;
                 srci1[j] = t1;
@@ -1803,8 +2596,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
     int gen, igen, ret;
     const int plen = FFALIGN(len, av_cpu_max_align());
     const int len2 = len-1;
-    const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
-    const TXSample ifactor = RESCALE(1.0 / len2);
+    const long double phase = s->inv ? 2.0L*M_PIl/len : -2.0L*M_PIl/len;
     TXComplex *exp;
     int *imap, *map;
 
@@ -1833,7 +2625,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
     exp = s->exp + plen;
 
     for (int i = 0, gp = 1, igp = 1; i < len2; i++) {
-        double factor;
+        long double factor;
 
         map[i] = gp;
         imap[i] = igp;
@@ -1842,12 +2634,9 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
         igp = mulmod(igp, igen, len);
 
         exp[i] = (TXComplex){
-            RESCALE(cos(factor)),
-            RESCALE(sin(factor)),
+            RESCALE(cosl(factor) / len2),
+            RESCALE(sinl(factor) / len2),
         };
-
-        exp[i].re = MULT(exp[i].re, ifactor);
-        exp[i].im = MULT(exp[i].im, ifactor);
     }
 
     s->fn[0](&s->sub[0], s->exp, exp, sizeof(TXComplex));
@@ -1873,7 +2662,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey)(AVTXContext *s,
                                                   int len, int inv,
                                                   const void *scale)
 {
-    const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
+    const long double phase = s->inv ? 2.0L*M_PIl/len : -2.0L*M_PIl/len;
     TXComplex *exp;
     int ret, m, n;
 
@@ -1896,10 +2685,10 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey)(AVTXContext *s,
     exp = s->exp;
     for (int i = 0; i < m; i++) {
         for (int j = 0; j < n; j++) {
-            const double factor = phase*i*j;
+            const long double factor = phase*i*j;
             exp[j] = (TXComplex){
-                RESCALE(cos(factor)),
-                RESCALE(sin(factor)),
+                RESCALE(cosl(factor)),
+                RESCALE(sinl(factor)),
             };
         }
 
@@ -1916,7 +2705,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey_slow)(AVTXContext *s,
                                                        int len, int inv,
                                                        const void *scale)
 {
-    const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
+    const long double phase = s->inv ? 2.0L*M_PIl/len : -2.0L*M_PIl/len;
     TXComplex *exp;
     int ret, m, n;
 
@@ -1939,10 +2728,10 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey_slow)(AVTXContext *s,
     exp = s->exp;
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < m; j++) {
-            const double factor = phase*i*j;
+            const long double factor = phase*i*j;
             exp[j] = (TXComplex){
-                RESCALE(cos(factor)),
-                RESCALE(sin(factor)),
+                RESCALE(cosl(factor)),
+                RESCALE(sinl(factor)),
             };
         }
 
@@ -1959,7 +2748,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_bluestein)(AVTXContext *s,
                                                      int len, int inv,
                                                      const void *scale)
 {
-    const double phase = s->inv ? M_PI/len : -M_PI/len;
+    const long double phase = s->inv ? M_PIl/len : -M_PIl/len;
     const int len2 = 1 << av_ceil_log2(2*len-1);
     TXComplex *w;
     int ret;
@@ -1977,14 +2766,14 @@ static av_cold int TX_NAME(ff_tx_fft_init_bluestein)(AVTXContext *s,
         return AVERROR(ENOMEM);
 
     s->exp[0] = (TXComplex){
-        RESCALE(cos(0.0)),
-        RESCALE(sin(0.0)),
+        RESCALE(cosl(0.0L)),
+        RESCALE(sinl(0.0L)),
     };
     for (int i = 1; i < len; i++) {
-        const double factor = phase*i*i;
+        const long double factor = phase*i*i;
         s->exp[i] = (TXComplex){
-            RESCALE(cos(factor)),
-            RESCALE(sin(factor)),
+            RESCALE(cosl(factor)),
+            RESCALE(sinl(factor)),
         };
         s->exp[len2-i] = s->exp[i];
     }
@@ -2020,8 +2809,7 @@ static void TX_NAME(ff_tx_fft_naive)(AVTXContext *s, void *_dst, void *_src,
             };
             TXComplex res;
             CMUL3(res, src[j], mult);
-            tmp.re += res.re;
-            tmp.im += res.im;
+            CADD3(tmp, tmp, res);
         }
         dst[i*stride] = tmp;
     }
@@ -2043,8 +2831,7 @@ static void TX_NAME(ff_tx_fft_naive_small)(AVTXContext *s, void *_dst, void *_sr
             TXComplex res;
             const TXComplex mult = exp[j];
             CMUL3(res, src[j], mult);
-            tmp.re += res.re;
-            tmp.im += res.im;
+            CADD3(tmp, tmp, res);
         }
         dst[i*stride] = tmp;
         exp += n;
@@ -2222,8 +3009,7 @@ static void TX_NAME(ff_tx_fft_rader)(AVTXContext *s, void *_dst, void *_src,
     TX_NAME(ff_tx_remap)(ww, src, map, m);
     s->fn[0](&s->sub[0], w, ww, sizeof(TXComplex));
 
-    dst[0].re = src0.re + w[0].re;
-    dst[0].im = src0.im + w[0].im;
+    CADD3(dst[0], src0, w[0]);
 
     for (int i = 0; i < m; i++) {
         const TXComplex x = w[i];
@@ -2231,8 +3017,7 @@ static void TX_NAME(ff_tx_fft_rader)(AVTXContext *s, void *_dst, void *_src,
         CMUL3(w[i], x, y[i]);
     }
 
-    w[0].re += src0.re;
-    w[0].im += src0.im;
+    CADD3(w[0], w[0], src0);
 
     s->fn[1](&s->sub[1], ww, w, sizeof(TXComplex));
 
@@ -2271,66 +3056,8 @@ static void TX_NAME(ff_tx_fft_bluestein)(AVTXContext *s, void *_dst, void *_src,
     for (int i = 0; i < n; i++) {
         TXComplex x;
         CMUL3(x, ww[i], exp[i]);
-        dst[i*stride].re = MULT(x.re, scale);
-        dst[i*stride].im = MULT(x.im, scale);
+        CSCALE3(dst[i*stride], x, scale);
     }
-}
-
-static av_always_inline void cpx_add(TXComplex *out,
-                                     const TXComplex *in1,
-                                     const TXComplex *in2)
-{
-    out->re = in1->re + in2->re;
-    out->im = in1->im + in2->im;
-}
-
-static av_always_inline void cpx_sub(TXComplex *out,
-                                     const TXComplex *in1,
-                                     const TXComplex *in2)
-{
-    out->re = in1->re - in2->re;
-    out->im = in1->im - in2->im;
-}
-
-static av_always_inline void cpx_mul_s(TXComplex *out,
-                                       const TXComplex *in,
-                                       const TXSample s)
-{
-    out->re = MULT(in->re, s);
-    out->im = MULT(in->im, s);
-}
-
-static av_always_inline void cpx_out(TXComplex *head,
-                                     TXComplex *tail,
-                                     const TXComplex *A,
-                                     const TXComplex *B)
-{
-    head->re = A->re - B->im;
-    head->im = A->im + B->re;
-    tail->re = A->re + B->im;
-    tail->im = A->im - B->re;
-}
-
-static av_always_inline void cpx_mla(TXComplex *out,
-                                     const TXComplex *in1,
-                                     const TXComplex *in2,
-                                     const TXSample s)
-{
-    out->re = in1->re + MULT(in2->re, s);
-    out->im = in1->im + MULT(in2->im, s);
-}
-
-static av_always_inline void cpx_neg(TXComplex *out,
-                                     const TXComplex *in)
-{
-    out->re = -in->re;
-    out->im = -in->im;
-}
-
-static av_always_inline void cpx_zero(TXComplex *out)
-{
-    out->re = 0;
-    out->im = 0;
 }
 
 static av_always_inline void like_terms(TXComplex *add,
@@ -2342,12 +3069,12 @@ static av_always_inline void like_terms(TXComplex *add,
 
     if (r&1) {
         add[0] = in[0];
-        cpx_neg(&sub[0], &in[0]);
+        CNEG2(sub[0], in[0]);
     }
 
     for (int h = 1, t = r-1; h <= m; h++, t--) {
-        cpx_add(&add[h], &in[h], &in[t]);
-        cpx_sub(&sub[h], &in[h], &in[t]);
+        CADD3(add[h], in[h], in[t]);
+        CSUB3(sub[h], in[h], in[t]);
     }
 }
 
@@ -2358,18 +3085,18 @@ static av_always_inline void out_special(TXComplex *out,
 {
     const int m = r/2;
 
-    cpx_zero(&out[0]);
-    cpx_zero(&out[m]);
+    CZERO1(out[0]);
+    CZERO1(out[m]);
 
     for (int i = 0; i <= m; i++)
-        cpx_add(&out[0], &out[0], &add[i]);
+        CADD3(out[0], out[0], add[i]);
 
     if (r&1)
         return;
 
     for (int i = 0; i < m; i += 2) {
-        cpx_add(&out[m], &out[m], &add[i+0]);
-        cpx_sub(&out[m], &out[m], &add[i+1]);
+        CADD3(out[m], out[m], add[i+0]);
+        CSUB3(out[m], out[m], add[i+1]);
     }
 }
 
@@ -2382,21 +3109,21 @@ static av_always_inline void out_pair(TXComplex *out,
 {
     TXComplex P, Q;
 
-    cpx_mla(&P, &add[0], &add[1], Wr[k-1].re);
-    cpx_mul_s(&Q, &sub[1], Wr[k-1].im);
+    CSCALEADD4(P, add[0], add[1], Wr[k-1].re);
+    CSCALE3(Q, sub[1], Wr[k-1].im);
 
     Wr += (r/2) * (k-1);
     for (int i = 2; i <= r/2; i++) {
-        cpx_mla(&P, &P, &add[i], Wr[i-1].re);
-        cpx_mla(&Q, &Q, &sub[i], Wr[i-1].im);
+        CSCALEADD4(P, P, add[i], Wr[i-1].re);
+        CSCALEADD4(Q, Q, sub[i], Wr[i-1].im);
     }
 
-    cpx_out(&out[k], &out[r-k], &P, &Q);
+    COUT4(out[k], out[r-k], P, Q);
 }
 
 static int init_twiddles(AVTXContext *s, const int len)
 {
-    const double phase = s->inv ? 2.0*M_PI/len : -2.0*M_PI/len;
+    const long double phase = s->inv ? 2.0L*M_PIl/len : -2.0L*M_PIl/len;
     TXComplex *exp;
 
     if (!(s->exp = av_mallocz((len/2)*(len/2)*sizeof(*s->exp))))
@@ -2405,10 +3132,10 @@ static int init_twiddles(AVTXContext *s, const int len)
     exp = s->exp;
     for (int i = 0; i < len/2; i++) {
         for (int j = 0; j < len/2; j++) {
-            const double factor = phase*(i+1)*(j+1);
+            const long double factor = phase*(i+1)*(j+1);
             exp[j] = (TXComplex){
-                RESCALE(cos(factor)),
-                RESCALE(sin(factor)),
+                RESCALE(cosl(factor)),
+                RESCALE(sinl(factor)),
             };
         }
 
@@ -2571,12 +3298,232 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_naive_def) = {
     .prio       = FF_TX_PRIO_MIN,
 };
 
+static void pfa_factors(int n, int *factors, int *nb_factors)
+{
+    nb_factors[0] = 0;
+
+    for (int p = 2; p * p <= n; p++) {
+        if (n % p == 0) {
+            int value = 1;
+            while (n % p == 0) {
+                value *= p;
+                n /= p;
+            }
+            factors[nb_factors[0]] = value;
+            nb_factors[0]++;
+        }
+    }
+
+    if (n > 1) {
+        factors[nb_factors[0]] = n;
+        nb_factors[0]++;
+    }
+}
+
+static int sort_factors(const void *a, const void *b)
+{
+    const int *i0p = a;
+    const int *i1p = b;
+    const int i0 = *i0p;
+    const int i1 = *i1p;
+
+    return FFDIFFSIGN(i0, i1);
+}
+
 static av_cold int TX_NAME(ff_tx_fft_pfa_init)(AVTXContext *s,
                                                const FFTXCodelet *cd,
                                                uint64_t flags,
                                                FFTXCodeletOptions *opts,
                                                int len, int inv,
                                                const void *scale)
+{
+    int factors[16] = { 0 };
+    int nb_factors = 0, ret;
+    const int N = len;
+    int a = 0, b;
+
+    pfa_factors(N, factors, &nb_factors);
+    qsort(factors, nb_factors, sizeof(factors[0]), sort_factors);
+
+    flags &= ~FF_TX_PRESHUFFLE;
+    flags &= ~AV_TX_INPLACE;
+
+    if (!(s->tmp = av_calloc(N*2, sizeof(TXComplex))))
+        return AVERROR(ENOMEM);
+
+    for (int i = 0; i < nb_factors; i++) {
+        const int sub_len = factors[i];
+        const int sub_count = N / sub_len;
+
+        if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, sub_len, inv, scale)))
+            return ret;
+
+        a += sub_count;
+    }
+
+    const int nb_sub = s->nb_sub;
+    if (!(s->map = av_calloc(N*(nb_sub+1), sizeof(int))))
+        return AVERROR(ENOMEM);
+
+    int *map0 = s->map;
+    int *map = map0 + N;
+
+    b = N - a;
+    int pos = 0;
+    for (int i = 0; i < N; i++) {
+        map0[pos] = i;
+
+        if (pos < b)
+            pos += a;
+        else
+            pos -= b;
+    }
+
+    for (int i = 0; i < nb_sub; i++) {
+        AVTXContext *sub = &s->sub[i];
+        const int sub_len = sub->len;
+        const int sub_count = N / sub_len;
+
+        for (int j = 0, l = 0; j < sub_count; j++) {
+            for (int k = 0; k < sub_len; k++) {
+                const int idx = (j * sub_len + k * sub_count) % N;
+                const int new_idx = map0[idx];
+
+                map[l] = new_idx;
+                map0[idx] = l++;
+            }
+        }
+
+        map += N;
+    }
+
+    for (int k = 0; k < N; k++) {
+        const int idx = (a * k) % N;
+        const int new_idx = map0[idx];
+
+        map0[idx] = new_idx;
+    }
+
+    return 0;
+}
+
+static void TX_NAME(ff_tx_fft2_repeat)(void *_dst, void *_src, const int repeat)
+{
+    TXComplex *src = _src;
+    TXComplex *dst = _dst;
+    TXComplex tmp;
+
+    for (int i = 0; i < repeat; i++) {
+        BF(tmp.re, dst[0].re, src[0].re, src[1].re);
+        BF(tmp.im, dst[0].im, src[0].im, src[1].im);
+        dst[1] = tmp;
+
+        dst += 2;
+        src += 2;
+    }
+}
+
+#define DECL_BUTTERFLY_REPEAT(n)                                    \
+static void TX_NAME(ff_tx_fft##n##_butterfly_repeat)(AVTXContext *s,\
+                                    void *_dst, void *_src,         \
+                                    const int repeat)               \
+{                                                                   \
+    TXComplex add[n], sub[n];                                       \
+    TXComplex *src = _src;                                          \
+    TXComplex *dst = _dst;                                          \
+    TXComplex *tmp = dst;                                           \
+    TXComplex *W = s->exp;                                          \
+                                                                    \
+    for (int j = 0; j < repeat; j++) {                              \
+        like_terms(add, sub, src, n);                               \
+        out_special(tmp, add, sub, n);                              \
+                                                                    \
+        for (int i = 1; i <= n/2; i++)                              \
+            out_pair(tmp, add, sub, W, i, n);                       \
+                                                                    \
+        src += n;                                                   \
+        tmp += n;                                                   \
+    }                                                               \
+}
+
+DECL_BUTTERFLY_REPEAT(3)
+DECL_BUTTERFLY_REPEAT(5)
+DECL_BUTTERFLY_REPEAT(7)
+DECL_BUTTERFLY_REPEAT(11)
+
+static void TX_NAME(ff_tx_fft_pfa)(AVTXContext *s, void *_out,
+                                   void *_in, ptrdiff_t stride)
+{
+    const int N = s->len;
+    TXComplex *in = _in, *out = _out, *tmp = s->tmp, *tmp1 = tmp + N;
+    const int nb_sub = s->nb_sub;
+    const int *map0 = s->map;
+    const int *map = map0 + N;
+
+    stride /= sizeof(*out);
+
+    for (int i = 0; i < nb_sub; i++) {
+        AVTXContext *sub = &s->sub[i];
+        const av_tx_fn fn = s->fn[i];
+        const int sub_len = sub->len;
+        const int sub_count = N / sub_len;
+        const TXComplex *src = (i == 0) ? in : tmp;
+
+        TX_NAME(ff_tx_remap)(tmp1, src, map, N);
+
+        switch (sub_len) {
+        case 2:
+            TX_NAME(ff_tx_fft2_repeat)(tmp, tmp1, sub_count);
+            break;
+        case 3:
+            TX_NAME(ff_tx_fft3_butterfly_repeat)(sub, tmp, tmp1, sub_count);
+            break;
+        case 5:
+            TX_NAME(ff_tx_fft5_butterfly_repeat)(sub, tmp, tmp1, sub_count);
+            break;
+        case 7:
+            TX_NAME(ff_tx_fft7_butterfly_repeat)(sub, tmp, tmp1, sub_count);
+            break;
+        case 11:
+            TX_NAME(ff_tx_fft11_butterfly_repeat)(sub, tmp, tmp1, sub_count);
+            break;
+        default:
+            for (int j = 0; j < sub_count; j++)
+                fn(sub, tmp + j * sub_len, tmp1 + j * sub_len, sizeof(TXComplex));
+            break;
+        }
+
+        map += N;
+    }
+
+    for (int k = 0; k < N; k++) {
+        const int idx = map0[k];
+
+        out[0] = tmp[idx];
+        out += stride;
+    }
+}
+
+static const FFTXCodelet TX_NAME(ff_tx_fft_pfa_def) = {
+    .name       = TX_NAME_STR("fft_pfa"),
+    .function   = TX_NAME(ff_tx_fft_pfa),
+    .type       = TX_TYPE(FFT),
+    .flags      = AV_TX_UNALIGNED | AV_TX_INPLACE | FF_TX_OUT_OF_PLACE,
+    .factors    = { 7, 5, 3, 2, TX_FACTOR_ANY },
+    .nb_factors = 2,
+    .min_len    = 2*3,
+    .max_len    = TX_LEN_UNLIMITED,
+    .init       = TX_NAME(ff_tx_fft_pfa_init),
+    .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
+    .prio       = FF_TX_PRIO_BASE+64,
+};
+
+static av_cold int TX_NAME(ff_tx_fft_pfa_slow_init)(AVTXContext *s,
+                                                    const FFTXCodelet *cd,
+                                                    uint64_t flags,
+                                                    FFTXCodeletOptions *opts,
+                                                    int len, int inv,
+                                                    const void *scale)
 {
     int ret, *tmp, ps = flags & FF_TX_PRESHUFFLE, nb_decomp;
     FFTXCodeletOptions sub_opts = { .map_dir = FF_TX_MAP_GATHER };
@@ -2682,8 +3629,8 @@ retry:
     return 0;
 }
 
-static void TX_NAME(ff_tx_fft_pfa)(AVTXContext *s, void *_out,
-                                   void *_in, ptrdiff_t stride)
+static void TX_NAME(ff_tx_fft_pfa_slow)(AVTXContext *s, void *_out,
+                                        void *_in, ptrdiff_t stride)
 {
     const int n = s->sub[0].len, m = s->sub[1].len, l = s->len;
     const int *in_map = s->map, *out_map = in_map + l;
@@ -2719,8 +3666,8 @@ static void TX_NAME(ff_tx_fft_pfa)(AVTXContext *s, void *_out,
     }
 }
 
-static void TX_NAME(ff_tx_fft_pfa_ns)(AVTXContext *s, void *_out,
-                                      void *_in, ptrdiff_t stride)
+static void TX_NAME(ff_tx_fft_pfa_slow_ns)(AVTXContext *s, void *_out,
+                                           void *_in, ptrdiff_t stride)
 {
     const int n = s->sub[0].len, m = s->sub[1].len, l = s->len;
     const int *in_map = s->map, *out_map = in_map + l;
@@ -2754,23 +3701,23 @@ static void TX_NAME(ff_tx_fft_pfa_ns)(AVTXContext *s, void *_out,
     }
 }
 
-static const FFTXCodelet TX_NAME(ff_tx_fft_pfa_def) = {
-    .name       = TX_NAME_STR("fft_pfa"),
-    .function   = TX_NAME(ff_tx_fft_pfa),
+static const FFTXCodelet TX_NAME(ff_tx_fft_pfa_slow_def) = {
+    .name       = TX_NAME_STR("fft_pfa_slow"),
+    .function   = TX_NAME(ff_tx_fft_pfa_slow),
     .type       = TX_TYPE(FFT),
     .flags      = AV_TX_UNALIGNED | AV_TX_INPLACE | FF_TX_OUT_OF_PLACE,
     .factors    = { 7, 5, 3, 2, TX_FACTOR_ANY },
     .nb_factors = 2,
     .min_len    = 2*3,
     .max_len    = TX_LEN_UNLIMITED,
-    .init       = TX_NAME(ff_tx_fft_pfa_init),
+    .init       = TX_NAME(ff_tx_fft_pfa_slow_init),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_BASE,
 };
 
-static const FFTXCodelet TX_NAME(ff_tx_fft_pfa_ns_def) = {
-    .name       = TX_NAME_STR("fft_pfa_ns"),
-    .function   = TX_NAME(ff_tx_fft_pfa_ns),
+static const FFTXCodelet TX_NAME(ff_tx_fft_pfa_slow_ns_def) = {
+    .name       = TX_NAME_STR("fft_pfa_slow_ns"),
+    .function   = TX_NAME(ff_tx_fft_pfa_slow_ns),
     .type       = TX_TYPE(FFT),
     .flags      = AV_TX_UNALIGNED | AV_TX_INPLACE | FF_TX_OUT_OF_PLACE |
                   FF_TX_PRESHUFFLE,
@@ -2778,7 +3725,7 @@ static const FFTXCodelet TX_NAME(ff_tx_fft_pfa_ns_def) = {
     .nb_factors = 2,
     .min_len    = 2*3,
     .max_len    = TX_LEN_UNLIMITED,
-    .init       = TX_NAME(ff_tx_fft_pfa_init),
+    .init       = TX_NAME(ff_tx_fft_pfa_slow_init),
     .cpu_flags  = FF_TX_CPU_FLAGS_ALL,
     .prio       = FF_TX_PRIO_BASE,
 };
@@ -2790,7 +3737,8 @@ static av_cold int TX_NAME(ff_tx_mdct_naive_init)(AVTXContext *s,
                                                   int len, int inv,
                                                   const void *scale)
 {
-    s->scale_d = *((SCALE_TYPE *)scale);
+    s->scale_ld = *((SCALE_TYPE *)scale);
+    s->scale_d = s->scale_ld;
     s->scale_f = s->scale_d;
     return 0;
 }
@@ -3260,12 +4208,13 @@ static av_cold int TX_NAME(ff_tx_rdft_init)(AVTXContext *s,
                                             const void *scale)
 {
     int ret;
-    double f, m;
+    long double f, m;
     TXSample *tab;
     uint64_t r2r = flags & AV_TX_REAL_TO_REAL;
     int len4 = FFALIGN(len, 4) / 4;
 
-    s->scale_d = *((SCALE_TYPE *)scale);
+    s->scale_ld = *((SCALE_TYPE *)scale);
+    s->scale_d = s->scale_ld;
     s->scale_f = s->scale_d;
 
     flags &= ~(AV_TX_REAL_TO_REAL | AV_TX_REAL_TO_IMAGINARY);
@@ -3278,26 +4227,26 @@ static av_cold int TX_NAME(ff_tx_rdft_init)(AVTXContext *s,
 
     tab = (TXSample *)s->exp;
 
-    f = 2*M_PI/len;
+    f = 2*M_PIl/len;
 
-    m = (inv ? 2*s->scale_d : s->scale_d);
+    m = (inv ? 2*s->scale_ld : s->scale_ld);
 
-    *tab++ = RESCALE((inv ? 0.5 : 1.0) * m);
-    *tab++ = RESCALE(inv ? 0.5*m : 1.0*m);
+    *tab++ = RESCALE((inv ? 0.5L : 1.0L) * m);
+    *tab++ = RESCALE(inv ? 0.5L*m : 1.0L*m);
     *tab++ = RESCALE( m);
     *tab++ = RESCALE(-m);
 
-    *tab++ = RESCALE( (0.5 - 0.0) * m);
+    *tab++ = RESCALE( (0.5L - 0.0L) * m);
     if (r2r)
         *tab++ = 1 / s->scale_f;
     else
-        *tab++ = RESCALE( (0.0 - 0.5) * m);
-    *tab++ = RESCALE( (0.5 - inv) * m);
-    *tab++ = RESCALE(-(0.5 - inv) * m);
+        *tab++ = RESCALE( (0.0L - 0.5L) * m);
+    *tab++ = RESCALE( (0.5L - inv) * m);
+    *tab++ = RESCALE(-(0.5L - inv) * m);
 
     for (int i = 0; i < len4; i++) {
-        *tab++ = RESCALE(cos(i*f));
-        *tab++ = RESCALE(cos(((len - i*4)/4.0)*f)) * (inv ? 1 : -1);
+        *tab++ = RESCALE(cosl(i*f));
+        *tab++ = RESCALE(sinl(i*f) * (inv ? 1 : -1));
     }
 
     return 0;
@@ -3809,7 +4758,14 @@ const FFTXCodelet * const TX_NAME(ff_tx_codelet_list)[] = {
     &TX_NAME(ff_tx_fft1048576_ns_def),
     &TX_NAME(ff_tx_fft2097152_ns_def),
 
+    /* Extended-Split-Radix */
+    &TX_NAME(ff_tx_fft_esr_forward_def),
+    &TX_NAME(ff_tx_fft_esr_inverse_def),
+
     /* Stockham codelets */
+    &TX_NAME(ff_tx_fft_stockham2_def),
+    &TX_NAME(ff_tx_fft_stockham4_def),
+    &TX_NAME(ff_tx_fft_stockham8_def),
     &TX_NAME(ff_tx_fft_stockham16_def),
     &TX_NAME(ff_tx_fft_stockham32_def),
     &TX_NAME(ff_tx_fft_stockham64_def),
@@ -3820,6 +4776,7 @@ const FFTXCodelet * const TX_NAME(ff_tx_codelet_list)[] = {
     &TX_NAME(ff_tx_fft_stockham2048_def),
     &TX_NAME(ff_tx_fft_stockham4096_def),
     &TX_NAME(ff_tx_fft_stockham8192_def),
+    &TX_NAME(ff_tx_fft_stockham16384_def),
 
     /* Prime factor codelets */
     &TX_NAME(ff_tx_fft3_ns_def),
@@ -3855,7 +4812,8 @@ const FFTXCodelet * const TX_NAME(ff_tx_codelet_list)[] = {
     &TX_NAME(ff_tx_fft_inplace_def),
     &TX_NAME(ff_tx_fft_inplace_small_def),
     &TX_NAME(ff_tx_fft_pfa_def),
-    &TX_NAME(ff_tx_fft_pfa_ns_def),
+    &TX_NAME(ff_tx_fft_pfa_slow_def),
+    &TX_NAME(ff_tx_fft_pfa_slow_ns_def),
     &TX_NAME(ff_tx_fft_naive_def),
     &TX_NAME(ff_tx_fft_naive_small_def),
     &TX_NAME(ff_tx_fft_bluestein_def),

@@ -2,14 +2,14 @@
 ;* VC1 loopfilter optimizations
 ;* Copyright (c) 2009 David Conrad
 ;*
-;* This file is part of Librempeg.
+;* This file is part of FFmpeg.
 ;*
-;* Librempeg is free software; you can redistribute it and/or
+;* FFmpeg is free software; you can redistribute it and/or
 ;* modify it under the terms of the GNU Lesser General Public
 ;* License as published by the Free Software Foundation; either
 ;* version 2.1 of the License, or (at your option) any later version.
 ;*
-;* Librempeg is distributed in the hope that it will be useful,
+;* FFmpeg is distributed in the hope that it will be useful,
 ;* but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;* Lesser General Public License for more details.
@@ -227,20 +227,6 @@ SECTION .text
 %endif
     imul r2, 0x01010101
 %endmacro
-
-; void ff_vc1_v_loop_filter4_mmxext(uint8_t *src, ptrdiff_t stride, int pq)
-INIT_MMX mmxext
-cglobal vc1_v_loop_filter4, 3,5,0
-    START_V_FILTER
-    VC1_V_LOOP_FILTER 4, d
-    RET
-
-; void ff_vc1_h_loop_filter4_mmxext(uint8_t *src, ptrdiff_t stride, int pq)
-INIT_MMX mmxext
-cglobal vc1_h_loop_filter4, 3,5,0
-    START_H_FILTER 4
-    VC1_H_LOOP_FILTER 4, r4
-    RET
 
 INIT_XMM sse2
 ; void ff_vc1_v_loop_filter8_sse2(uint8_t *src, ptrdiff_t stride, int pq)

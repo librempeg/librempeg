@@ -56,7 +56,7 @@ static int read_probe(const AVProbeData *p)
             return 0;
     }
 
-    return AVPROBE_SCORE_MAX;
+    return AVPROBE_SCORE_MAX-1;
 }
 
 static int read_header(AVFormatContext *s)

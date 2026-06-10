@@ -31,17 +31,17 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 #define XA00_TAG MKTAG('X', 'A', 0, 0)
 #define XAI0_TAG MKTAG('X', 'A', 'I', 0)
 #define XAJ0_TAG MKTAG('X', 'A', 'J', 0)
 
 typedef struct MaxisXADemuxContext {
-    uint32_t out_size;
-    uint32_t sent_bytes;
+    int64_t stop_offset;
 } MaxisXADemuxContext;
 
-static int xa_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     int channels, srate, bits_per_sample;
     if (p->buf_size < 24)
@@ -63,61 +63,71 @@ static int xa_probe(const AVProbeData *p)
     return AVPROBE_SCORE_EXTENSION;
 }
 
-static int xa_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     MaxisXADemuxContext *xa = s->priv_data;
     AVIOContext *pb = s->pb;
+    int nb_channels, rate;
     AVStream *st;
 
-    /*Set up the XA Audio Decoder*/
+    avio_skip(pb, 4);
+    xa->stop_offset = avio_rl32(pb);
+    avio_skip(pb, 2);       /* Skip the tag */
+    nb_channels = avio_rl16(pb);
+    rate  = avio_rl32(pb);
+    avio_skip(pb, 4);       /* Skip average byte rate */
+    avio_skip(pb, 2);       /* Skip block align */
+    avio_skip(pb, 2);       /* Skip bits-per-sample */
+    if (rate <= 0 || nb_channels <= 0 || nb_channels > INT_MAX/15)
+        return AVERROR_INVALIDDATA;
+
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
-    st->codecpar->codec_type   = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id     = AV_CODEC_ID_ADPCM_EA_MAXIS_XA;
-    avio_skip(pb, 4);       /* Skip the XA ID */
-    xa->out_size            =  avio_rl32(pb);
-    avio_skip(pb, 2);       /* Skip the tag */
-    st->codecpar->ch_layout.nb_channels = avio_rl16(pb);
-    st->codecpar->sample_rate  = avio_rl32(pb);
-    avio_skip(pb, 4);       /* Skip average byte rate */
-    avio_skip(pb, 2);       /* Skip block align */
-    avio_skip(pb, 2);       /* Skip bits-per-sample */
-
-    if (!st->codecpar->ch_layout.nb_channels || !st->codecpar->sample_rate)
-        return AVERROR_INVALIDDATA;
-
-    st->codecpar->bit_rate = av_clip(15LL * st->codecpar->ch_layout.nb_channels * 8 *
-                                  st->codecpar->sample_rate / 28, 0, INT_MAX);
+    st->start_time = 0;
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_EA_MAXIS_XA;
+    st->codecpar->ch_layout.nb_channels = nb_channels;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->block_align = 15 * nb_channels;
+    st->codecpar->bit_rate = 15LL * st->codecpar->ch_layout.nb_channels * 8 *
+                                    st->codecpar->sample_rate / 28;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
-    st->start_time = 0;
+    xa->stop_offset += avio_tell(pb);
 
     return 0;
 }
 
-static int xa_read_packet(AVFormatContext *s,
-                          AVPacket *pkt)
+static int read_packet(AVFormatContext *s,
+                       AVPacket *pkt)
 {
     MaxisXADemuxContext *xa = s->priv_data;
     AVStream *st = s->streams[0];
     AVIOContext *pb = s->pb;
-    unsigned int packet_size;
-    int ret;
+    int size, ret;
+    int64_t pos;
 
-    if (xa->sent_bytes >= xa->out_size)
+    if (avio_feof(pb))
         return AVERROR_EOF;
-    /* 1 byte header and 14 bytes worth of samples * number channels per block */
-    packet_size = 15*st->codecpar->ch_layout.nb_channels;
 
-    ret = av_get_packet(pb, pkt, packet_size);
+    pos = avio_tell(pb);
+    if (pos >= xa->stop_offset)
+        return AVERROR_EOF;
+
+    size = ff_pcm_default_packet_size(st->codecpar);
+    if (size < 0)
+        return size;
+
+    size = FFMIN(xa->stop_offset - pos, size);
+
+    ret = av_get_packet(pb, pkt, size);
     if(ret < 0)
         return ret;
 
     pkt->stream_index = st->index;
-    xa->sent_bytes += packet_size;
-    pkt->duration = 28;
+    pkt->pos = pos;
 
     return ret;
 }
@@ -127,7 +137,7 @@ const FFInputFormat ff_xa_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Maxis XA"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .priv_data_size = sizeof(MaxisXADemuxContext),
-    .read_probe     = xa_probe,
-    .read_header    = xa_read_header,
-    .read_packet    = xa_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };

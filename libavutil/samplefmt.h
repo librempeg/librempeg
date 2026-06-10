@@ -67,6 +67,8 @@ enum AVSampleFormat {
     AV_SAMPLE_FMT_DBLP,        ///< double, planar
     AV_SAMPLE_FMT_S64,         ///< signed 64 bits
     AV_SAMPLE_FMT_S64P,        ///< signed 64 bits, planar
+    AV_SAMPLE_FMT_LDBL,        ///< long double
+    AV_SAMPLE_FMT_LDBLP,       ///< long double, planar
 
     AV_SAMPLE_FMT_NB           ///< Number of sample formats. DO NOT USE if linking dynamically
 };
@@ -122,8 +124,7 @@ enum AVSampleFormat av_get_planar_sample_fmt(enum AVSampleFormat sample_fmt);
  * @param sample_fmt the number of the sample format to print the
  * corresponding info string, or a negative value to print the
  * corresponding header.
- * @return the pointer to the filled buffer or NULL if sample_fmt is
- * unknown or in case of other errors
+ * @return the pointer to the filled buffer or NULL in case of other errors
  */
 char *av_get_sample_fmt_string(char *buf, int buf_size, enum AVSampleFormat sample_fmt);
 

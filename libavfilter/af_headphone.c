@@ -271,9 +271,9 @@ static int query_formats(const AVFilterContext *ctx,
     AVFilterChannelLayouts *layouts = NULL;
     AVFilterChannelLayouts *stereo_layout = NULL;
     AVFilterChannelLayouts *hrir_layouts = NULL;
-    int ret, i;
+    int ret;
 
-    ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, formats);
+    ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, formats);
     if (ret)
         return ret;
 
@@ -300,7 +300,7 @@ static int query_formats(const AVFilterContext *ctx,
         if (ret)
             return ret;
     } else {
-        for (i = 1; i <= s->nb_hrir_inputs; i++) {
+        for (int i = 1; i <= s->nb_hrir_inputs; i++) {
             ret = ff_channel_layouts_ref(stereo_layout, &cfg_in[i]->channel_layouts);
             if (ret)
                 return ret;

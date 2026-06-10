@@ -468,7 +468,7 @@ static int try_push_frame(AVFilterContext *ctx)
         for (j = 0; j < nb_buffers; j++)
             if (s->buffers[j]->buffer == buf->buffer)
                 break;
-        if (j == i)
+        if (j == nb_buffers)
             s->buffers[nb_buffers++] = buf;
     }
 
@@ -579,11 +579,11 @@ static int activate(AVFilterContext *ctx)
         ret = ff_inlink_consume_samples(ctx->inputs[i], nb_samples, nb_samples, &s->input_frames[i]);
         if (ret < 0) {
             return ret;
-        } else if (ff_inlink_acknowledge_status(ctx->inputs[i], &status, &pts)) {
+        } else if (ret == 0 && ff_inlink_acknowledge_status(ctx->inputs[i], &status, &pts)) {
             s->eof |= status == AVERROR_EOF;
         }
 
-        if (!s->input_frames[i] && !check_input(ctx->inputs[i])) {
+        if (!s->eof && !s->input_frames[i] && !check_input(ctx->inputs[i])) {
             ff_inlink_request_frame(ctx->inputs[i]);
             return 0;
         }

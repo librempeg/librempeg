@@ -61,6 +61,10 @@ typedef struct SwsPassBuffer {
 
     int width, height; /* dimensions of this buffer */
     AVFrame *avframe;  /* backing storage for `frame` */
+
+    /* Optional allocation hints for optimal performance */
+    int width_align;   /* Align width to multiple of this */
+    int width_pad;     /* Extra padding pixels */
 } SwsPassBuffer;
 
 /**
@@ -107,6 +111,11 @@ struct SwsPass {
 };
 
 /**
+ * Align `width` to the optimal size for `pass`.
+ */
+int ff_sws_pass_aligned_width(const SwsPass *pass, int width);
+
+/**
  * Filter graph, which represents a 'baked' pixel format conversion.
  */
 typedef struct SwsGraph {
@@ -146,6 +155,18 @@ typedef struct SwsGraph {
 } SwsGraph;
 
 /**
+ * Allocate an empty SwsGraph. Returns NULL on failure.
+ */
+SwsGraph *ff_sws_graph_alloc(void);
+
+/**
+ * Initialize the filter graph for a given pair of formats. Returns 0 or a
+ * negative error.
+ */
+int ff_sws_graph_init(SwsGraph *graph, SwsContext *ctx, const SwsFormat *dst,
+                      const SwsFormat *src, int field);
+
+/**
  * Allocate and initialize the filter graph. Returns 0 or a negative error.
  */
 int ff_sws_graph_create(SwsContext *ctx, const SwsFormat *dst, const SwsFormat *src,
@@ -176,6 +197,11 @@ int ff_sws_graph_add_pass(SwsGraph *graph, enum AVPixelFormat fmt,
                           SwsPass **out_pass);
 
 /**
+ * Remove all passes added since the given index.
+ */
+void ff_sws_graph_rollback(SwsGraph *graph, int since_idx);
+
+/**
  * Uninitialize any state associate with this filter graph and free it.
  */
 void ff_sws_graph_free(SwsGraph **graph);
@@ -186,13 +212,14 @@ void ff_sws_graph_free(SwsGraph **graph);
 void ff_sws_graph_update_metadata(SwsGraph *graph, const SwsColor *color);
 
 /**
- * Wrapper around ff_sws_graph_create() that reuses the existing graph if the
+ * Wrapper around ff_sws_graph_init() that reuses the existing graph if the
  * format is compatible. This will also update dynamic per-frame metadata.
- * Must be called after changing any of the fields in `ctx`, or else they will
- * have no effect.
+ *
+ * Must also be called after changing any of the fields in `ctx`, or else they
+ * will have no effect.
  */
-int ff_sws_graph_reinit(SwsContext *ctx, const SwsFormat *dst, const SwsFormat *src,
-                        int field, SwsGraph **graph);
+int ff_sws_graph_reinit(SwsGraph *graph, SwsContext *ctx, const SwsFormat *dst,
+                        const SwsFormat *src, int field);
 
 /**
  * Dispatch the filter graph on a single field of the given frames. Internally

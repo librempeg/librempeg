@@ -680,7 +680,9 @@ static int nvenc_check_capabilities(AVCodecContext *avctx)
 
 #ifdef NVENC_HAVE_MVHEVC
     ctx->multiview_supported = nvenc_check_cap(avctx, NV_ENC_CAPS_SUPPORT_MVHEVC_ENCODE) > 0;
-    if(ctx->profile == NV_ENC_HEVC_PROFILE_MULTIVIEW_MAIN && !ctx->multiview_supported) {
+    if (avctx->codec_id == AV_CODEC_ID_HEVC &&
+        ctx->profile == NV_ENC_HEVC_PROFILE_MULTIVIEW_MAIN &&
+        !ctx->multiview_supported) {
         av_log(avctx, AV_LOG_WARNING, "Multiview not supported by the device\n");
         return AVERROR(ENOSYS);
     }
@@ -1160,6 +1162,13 @@ static av_cold int nvenc_setup_rate_control(AVCodecContext *avctx)
 #ifdef NVENC_HAVE_QP_CHROMA_OFFSETS
     ctx->encode_config.rcParams.cbQPIndexOffset = ctx->qp_cb_offset;
     ctx->encode_config.rcParams.crQPIndexOffset = ctx->qp_cr_offset;
+
+    if (avctx->codec->id == AV_CODEC_ID_AV1 &&
+        ctx->qp_cr_offset != ctx->qp_cb_offset)
+        av_log(avctx, AV_LOG_WARNING,
+               "av1_nvenc: qp_cr_offset is currently ignored by the NVENC driver "
+               "(deltaQ_v_ac is forced equal to deltaQ_u_ac); only qp_cb_offset "
+               "takes effect.\n");
 #else
     if (ctx->qp_cb_offset || ctx->qp_cr_offset)
         av_log(avctx, AV_LOG_WARNING, "Failed setting QP CB/CR offsets, SDK 11.1 or greater required at compile time.\n");
@@ -1356,6 +1365,11 @@ static av_cold int nvenc_setup_h264_config(AVCodecContext *avctx)
         case NV_ENC_H264_PROFILE_BASELINE:
             cc->profileGUID = NV_ENC_H264_PROFILE_BASELINE_GUID;
             avctx->profile = AV_PROFILE_H264_BASELINE;
+            if (cc->frameIntervalP > 1) {
+                av_log(avctx, AV_LOG_WARNING,
+                       "B-frames are not supported by H.264 Baseline profile, disabling.\n");
+                cc->frameIntervalP = 1;
+            }
             break;
         case NV_ENC_H264_PROFILE_MAIN:
             cc->profileGUID = NV_ENC_H264_PROFILE_MAIN_GUID;
@@ -2779,6 +2793,7 @@ static int process_output_surface(AVCodecContext *avctx, AVPacket *pkt, NvencSur
     switch (lock_params.pictureType) {
     case NV_ENC_PIC_TYPE_IDR:
         pkt->flags |= AV_PKT_FLAG_KEY;
+        av_fallthrough;
     case NV_ENC_PIC_TYPE_I:
         pict_type = AV_PICTURE_TYPE_I;
         break;

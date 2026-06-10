@@ -64,22 +64,14 @@ int ff_sws_op_chain_append(SwsOpChain *chain, SwsFuncPtr func,
  * Match an operation against a reference operation. Returns a score for how
  * well the reference matches the operation, or 0 if there is no match.
  *
- * If `ref->comps` has any flags set, they must be set in `op` as well.
- * Likewise, if `ref->comps` has any components marked as unused, they must be
- * marked as as unused in `ops` as well.
+ * For unfiltered SWS_OP_READ/SWS_OP_WRITE, SWS_OP_SWAP_BYTES and
+ * SWS_OP_SWIZZLE, the exact type is not checked, just the size.
  *
- * For SWS_OP_LINEAR, `ref->linear.mask` must be a strict superset of
- * `op->linear.mask`, but may not contain any columns explicitly ignored by
- * `op->comps.unused`.
- *
- * For SWS_OP_READ, SWS_OP_WRITE, SWS_OP_SWAP_BYTES and SWS_OP_SWIZZLE, the
- * exact type is not checked, just the size.
- *
- * Components set in `next.unused` are ignored when matching. If `flexible`
+ * Components marked SWS_COMP_GARBAGE are ignored when matching. If `flexible`
  * is true, the op body is ignored - only the operation, pixel type, and
  * component masks are checked.
  */
-static int op_match(const SwsOp *op, const SwsOpEntry *entry, const SwsComps next)
+static int op_match(const SwsOp *op, const SwsOpEntry *entry)
 {
     int score = 10;
     if (op->op != entry->op)
@@ -88,6 +80,9 @@ static int op_match(const SwsOp *op, const SwsOpEntry *entry, const SwsComps nex
     switch (op->op) {
     case SWS_OP_READ:
     case SWS_OP_WRITE:
+        if (op->rw.filter && op->type != entry->type)
+            return 0;
+        av_fallthrough;
     case SWS_OP_SWAP_BYTES:
     case SWS_OP_SWIZZLE:
         /* Only the size matters for these operations */
@@ -100,22 +95,12 @@ static int op_match(const SwsOp *op, const SwsOpEntry *entry, const SwsComps nex
         break;
     }
 
-    for (int i = 0; i < 4; i++) {
-        if (entry->unused[i]) {
-            if (op->comps.unused[i])
-                score += 1; /* Operating on fewer components is better .. */
-            else
-                return 0; /* .. but not too few! */
-        }
-    }
+    const SwsCompMask needed = ff_sws_comp_mask_needed(op);
+    if (needed & ~entry->mask)
+        return 0; /* Entry doesn't compute all needed components */
 
-    if (op->op == SWS_OP_CLEAR) {
-        /* Clear pattern must match exactly, regardless of `entry->flexible` */
-        for (int i = 0; i < 4; i++) {
-            if (!next.unused[i] && entry->unused[i] != !!op->c.q4[i].den)
-                return 0;
-        }
-    }
+    /* Otherwise, operating on fewer components is better */
+    score += av_popcount(SWS_COMP_INV(entry->mask));
 
     /* Flexible variants always match, but lower the score to prioritize more
      * specific implementations if they exist */
@@ -129,6 +114,7 @@ static int op_match(const SwsOp *op, const SwsOpEntry *entry, const SwsComps nex
     case SWS_OP_WRITE:
         if (op->rw.elems   != entry->rw.elems ||
             op->rw.frac    != entry->rw.frac  ||
+            op->rw.filter  != entry->rw.filter ||
             (op->rw.elems > 1 && op->rw.packed != entry->rw.packed))
             return 0;
         return score;
@@ -142,10 +128,15 @@ static int op_match(const SwsOp *op, const SwsOpEntry *entry, const SwsComps nex
         }
         return score;
     case SWS_OP_CLEAR:
+        /* Clear mask must match exactly */
+        if (op->clear.mask != entry->clear.mask)
+            return 0;
         for (int i = 0; i < 4; i++) {
-            if (!op->c.q4[i].den)
+            if (!SWS_COMP_TEST(op->clear.mask, i) || !SWS_OP_NEEDED(op, i))
                 continue;
-            if (av_cmp_q(op->c.q4[i], Q(entry->clear_value)) && !next.unused[i])
+            else if (!entry->clear.value[i].den)
+                continue; /* Any clear value supported */
+            else if (av_cmp_q(op->clear.value[i], entry->clear.value[i]))
                 return 0;
         }
         return score;
@@ -155,7 +146,7 @@ static int op_match(const SwsOp *op, const SwsOpEntry *entry, const SwsComps nex
         break;
     case SWS_OP_SWIZZLE:
         for (int i = 0; i < 4; i++) {
-            if (op->swizzle.in[i] != entry->swizzle.in[i] && !next.unused[i])
+            if (SWS_OP_NEEDED(op, i) && op->swizzle.in[i] != entry->swizzle.in[i])
                 return 0;
         }
         return score;
@@ -168,23 +159,16 @@ static int op_match(const SwsOp *op, const SwsOpEntry *entry, const SwsComps nex
         return op->dither.size_log2 == entry->dither_size ? score : 0;
     case SWS_OP_MIN:
     case SWS_OP_MAX:
-        av_assert1(entry->flexible);
-        break;
+        return score;
     case SWS_OP_LINEAR:
-        /* All required elements must be present */
-        if (op->lin.mask & ~entry->linear_mask)
+        if (op->lin.mask != entry->linear_mask)
             return 0;
-        /* To avoid operating on possibly undefined memory, filter out
-         * implementations that operate on more input components */
-        for (int i = 0; i < 4; i++) {
-            if ((entry->linear_mask & SWS_MASK_COL(i)) && op->comps.unused[i])
-                return 0;
-        }
-        /* Prioritize smaller implementations */
-        score += av_popcount(SWS_MASK_ALL ^ entry->linear_mask);
         return score;
     case SWS_OP_SCALE:
-        return av_cmp_q(op->c.q, entry->scale) ? 0 : score;
+        return av_cmp_q(op->scale.factor, entry->scale) ? 0 : score;
+    case SWS_OP_FILTER_H:
+    case SWS_OP_FILTER_V:
+        return score;
     case SWS_OP_TYPE_NB:
         break;
     }
@@ -194,16 +178,18 @@ static int op_match(const SwsOp *op, const SwsOpEntry *entry, const SwsComps nex
 }
 
 int ff_sws_op_compile_tables(SwsContext *ctx, const SwsOpTable *const tables[],
-                             int num_tables, SwsOpList *ops, const int block_size,
-                             SwsOpChain *chain)
+                             int num_tables, const SwsOp *op,
+                             const int block_size, SwsOpChain *chain)
 {
-    static const SwsOp dummy = { .comps.unused = { true, true, true, true }};
-    const SwsOp *next = ops->num_ops > 1 ? &ops->ops[1] : &dummy;
     const unsigned cpu_flags = av_get_cpu_flags();
     const SwsOpEntry *best = NULL;
     const SwsOpTable *best_table = NULL;
-    const SwsOp *op = &ops->ops[0];
     int ret, best_score = 0;
+
+    SwsImplParams params = {
+        .ctx    = ctx,
+        .op     = op
+    };
 
     for (int n = 0; n < num_tables; n++) {
         const SwsOpTable *table = tables[n];
@@ -211,28 +197,27 @@ int ff_sws_op_compile_tables(SwsContext *ctx, const SwsOpTable *const tables[],
             table->cpu_flags & ~cpu_flags)
             continue;
 
+        params.table = table;
         for (int i = 0; table->entries[i]; i++) {
             const SwsOpEntry *entry = table->entries[i];
-            int score = op_match(op, entry, next->comps);
-            if (score > best_score) {
-                best_score = score;
-                best_table = table;
-                best = entry;
-            }
+            int score = op_match(op, entry);
+            if (score <= best_score)
+                continue;
+            if (entry->check && !entry->check(&params))
+                continue;
+            best_score = score;
+            best_table = table;
+            best = entry;
         }
     }
 
     if (!best)
         return AVERROR(ENOTSUP);
 
+    params.table = best_table;
+
     SwsImplResult res = {0};
     if (best->setup) {
-        const SwsImplParams params = {
-            .ctx    = ctx,
-            .op     = op,
-            .table  = best_table,
-        };
-
         ret = best->setup(&params, &res);
         if (ret < 0)
             return ret;
@@ -249,53 +234,61 @@ int ff_sws_op_compile_tables(SwsContext *ctx, const SwsOpTable *const tables[],
     chain->cpu_flags |= best_table->cpu_flags;
     chain->over_read  = FFMAX(chain->over_read,  res.over_read);
     chain->over_write = FFMAX(chain->over_write, res.over_write);
-
-    ops->ops++;
-    ops->num_ops--;
-    return ops->num_ops ? AVERROR(EAGAIN) : 0;
+    return 0;
 }
 
 #define q2pixel(type, q) ((q).den ? (type) (q).num / (q).den : 0)
 
-int ff_sws_setup_u8(const SwsImplParams *params, SwsImplResult *out)
+int ff_sws_setup_shift(const SwsImplParams *params, SwsImplResult *out)
 {
-    out->priv.u8[0] = params->op->c.u;
+    out->priv.u8[0] = params->op->shift.amount;
     return 0;
 }
 
-int ff_sws_setup_u(const SwsImplParams *params, SwsImplResult *out)
+int ff_sws_setup_scale(const SwsImplParams *params, SwsImplResult *out)
 {
     const SwsOp *op = params->op;
+    const AVRational factor = op->scale.factor;
     switch (op->type) {
-    case SWS_PIXEL_U8:  out->priv.u8[0]  = op->c.u; return 0;
-    case SWS_PIXEL_U16: out->priv.u16[0] = op->c.u; return 0;
-    case SWS_PIXEL_U32: out->priv.u32[0] = op->c.u; return 0;
-    case SWS_PIXEL_F32: out->priv.f32[0] = op->c.u; return 0;
+    case SWS_PIXEL_U8:  out->priv.u8[0]  = q2pixel(uint8_t,  factor); break;
+    case SWS_PIXEL_U16: out->priv.u16[0] = q2pixel(uint16_t, factor); break;
+    case SWS_PIXEL_U32: out->priv.u32[0] = q2pixel(uint32_t, factor); break;
+    case SWS_PIXEL_F32: out->priv.f32[0] = q2pixel(float,    factor); break;
     default: return AVERROR(EINVAL);
     }
+
+    return 0;
 }
 
-int ff_sws_setup_q(const SwsImplParams *params, SwsImplResult *out)
-{
-    const SwsOp *op = params->op;
-    switch (op->type) {
-    case SWS_PIXEL_U8:  out->priv.u8[0]  = q2pixel(uint8_t,  op->c.q); return 0;
-    case SWS_PIXEL_U16: out->priv.u16[0] = q2pixel(uint16_t, op->c.q); return 0;
-    case SWS_PIXEL_U32: out->priv.u32[0] = q2pixel(uint32_t, op->c.q); return 0;
-    case SWS_PIXEL_F32: out->priv.f32[0] = q2pixel(float,    op->c.q); return 0;
-    default: return AVERROR(EINVAL);
-    }
-}
-
-int ff_sws_setup_q4(const SwsImplParams *params, SwsImplResult *out)
+int ff_sws_setup_clamp(const SwsImplParams *params, SwsImplResult *out)
 {
     const SwsOp *op = params->op;
     for (int i = 0; i < 4; i++) {
+        const AVRational limit = op->clamp.limit[i];
         switch (op->type) {
-        case SWS_PIXEL_U8:  out->priv.u8[i]  = q2pixel(uint8_t,  op->c.q4[i]); break;
-        case SWS_PIXEL_U16: out->priv.u16[i] = q2pixel(uint16_t, op->c.q4[i]); break;
-        case SWS_PIXEL_U32: out->priv.u32[i] = q2pixel(uint32_t, op->c.q4[i]); break;
-        case SWS_PIXEL_F32: out->priv.f32[i] = q2pixel(float,    op->c.q4[i]); break;
+        case SWS_PIXEL_U8:  out->priv.u8[i]  = q2pixel(uint8_t,  limit); break;
+        case SWS_PIXEL_U16: out->priv.u16[i] = q2pixel(uint16_t, limit); break;
+        case SWS_PIXEL_U32: out->priv.u32[i] = q2pixel(uint32_t, limit); break;
+        case SWS_PIXEL_F32: out->priv.f32[i] = q2pixel(float,    limit); break;
+        default: return AVERROR(EINVAL);
+        }
+    }
+
+    return 0;
+}
+
+int ff_sws_setup_clear(const SwsImplParams *params, SwsImplResult *out)
+{
+    const SwsOp *op = params->op;
+    for (int i = 0; i < 4; i++) {
+        const AVRational value = op->clear.value[i];
+        if (!value.den)
+            continue;
+        switch (op->type) {
+        case SWS_PIXEL_U8:  out->priv.u8[i]  = q2pixel(uint8_t,  value); break;
+        case SWS_PIXEL_U16: out->priv.u16[i] = q2pixel(uint16_t, value); break;
+        case SWS_PIXEL_U32: out->priv.u32[i] = q2pixel(uint32_t, value); break;
+        case SWS_PIXEL_F32: out->priv.f32[i] = q2pixel(float,    value); break;
         default: return AVERROR(EINVAL);
         }
     }

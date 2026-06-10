@@ -1,23 +1,23 @@
 /*
- * MPEG video MMX templates
+ * MPEG video DCT template
  *
  * Copyright (c) 2002 Michael Niedermayer <michaelni@gmx.at>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <stdint.h>
@@ -29,9 +29,9 @@
 #include "libavcodec/mpegutils.h"
 #include "libavcodec/mpegvideoenc.h"
 #include "fdct.h"
+#include "mpegvideoencdsp.h"
 
 #undef SPREADW
-#undef PMAXW
 #undef PMAX
 #undef SAVE_SIGN
 #undef RESTORE_SIGN
@@ -79,7 +79,11 @@ static int RENAME(dct_quantize)(MPVEncContext *const s,
     if (s->dct_error_sum) {
         const int intra = s->c.mb_intra;
         s->dct_count[intra]++;
+#if HAVE_SSE2_EXTERNAL
+        ff_mpv_denoise_dct_sse2(block, s->dct_error_sum[intra], s->dct_offset[intra]);
+#else
         s->mpvencdsp.denoise_dct(block, s->dct_error_sum[intra], s->dct_offset[intra]);
+#endif
     }
 
     if (s->c.mb_intra) {

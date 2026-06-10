@@ -2,21 +2,21 @@
  * Copyright (C) 2002-2012 Michael Niedermayer
  * Copyright (C) 2012 Ronald S. Bultje
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "config.h"
@@ -29,7 +29,6 @@
 #include "libavcodec/videodsp.h"
 #include "videodsp.h"
 
-#if HAVE_X86ASM
 typedef void emu_edge_vfix_func(uint8_t *dst, x86_reg dst_stride,
                                 const uint8_t *src, x86_reg src_stride,
                                 x86_reg start_y, x86_reg end_y, x86_reg bh);
@@ -214,13 +213,11 @@ static av_noinline void emulated_edge_mc_avx2(uint8_t *buf, const uint8_t *src,
                      hfixtbl_avx2, &ff_emu_edge_hvar_avx2);
 }
 #endif /* HAVE_AVX2_EXTERNAL */
-#endif /* HAVE_X86ASM */
 
 void ff_prefetch_mmxext(const uint8_t *buf, ptrdiff_t stride, int h);
 
 av_cold void ff_videodsp_init_x86(VideoDSPContext *ctx, int bpc)
 {
-#if HAVE_X86ASM
     int cpu_flags = av_get_cpu_flags();
 
     if (EXTERNAL_MMXEXT(cpu_flags)) {
@@ -234,5 +231,4 @@ av_cold void ff_videodsp_init_x86(VideoDSPContext *ctx, int bpc)
         ctx->emulated_edge_mc = emulated_edge_mc_avx2;
     }
 #endif
-#endif /* HAVE_X86ASM */
 }

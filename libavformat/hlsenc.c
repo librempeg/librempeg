@@ -76,8 +76,8 @@ typedef enum {
 #define POSTFIX_PATTERN "_%d"
 
 typedef struct HLSSegment {
-    char filename[MAX_URL_SIZE];
-    char sub_filename[MAX_URL_SIZE];
+    const char *filename;
+    const char *sub_filename;
     double duration; /* in seconds */
     int discont;
     int64_t pos;
@@ -86,11 +86,13 @@ typedef struct HLSSegment {
     int64_t keyframe_size;
     unsigned var_stream_idx;
 
-    char key_uri[LINE_BUFFER_SIZE + 1];
+    const char *key_uri;
     char iv_string[KEYSIZE*2 + 1];
 
     struct HLSSegment *next;
     double discont_program_date_time;
+
+    char buf[]; /* for filename, sub_filename and key_uri */
 } HLSSegment;
 
 typedef enum HLSFlags {
@@ -811,7 +813,7 @@ static int do_encrypt(AVFormatContext *s, VariantStream *vs)
             return ret;
         avio_seek(pb, 0, SEEK_CUR);
         avio_write(pb, key, KEYSIZE);
-        avio_close(pb);
+        ff_format_io_close(s, &pb);
     }
     return 0;
 }
@@ -938,6 +940,14 @@ static int hls_mux_init(AVFormatContext *s, VariantStream *vs)
         st->id = vs->streams[i]->id;
     }
 
+    for (i = 0; i < s->nb_programs; i++) {
+        ret = av_program_copy(oc, (const AVFormatContext *)s, s->programs[i]->id, 0);
+        if (ret < 0) {
+            av_log(s, AV_LOG_ERROR, "unable to transfer program %d to child muxer\n", s->programs[i]->id);
+            return ret;
+        }
+    }
+
     vs->start_pos = 0;
     vs->new_start = 1;
 
@@ -1004,7 +1014,7 @@ static HLSSegment *find_segment_by_filename(HLSSegment *segment, const char *fil
 }
 
 static int sls_flags_filename_process(struct AVFormatContext *s, HLSContext *hls,
-                                      VariantStream *vs, HLSSegment *en,
+                                      VariantStream *vs,
                                       double duration, int64_t pos, int64_t size)
 {
     if ((hls->flags & (HLS_SECOND_LEVEL_SEGMENT_SIZE | HLS_SECOND_LEVEL_SEGMENT_DURATION)) &&
@@ -1141,13 +1151,12 @@ static int hls_append_segment(struct AVFormatContext *s, HLSContext *hls,
                               VariantStream *vs, double duration, int64_t pos,
                               int64_t size)
 {
-    HLSSegment *en = av_malloc(sizeof(*en));
+    HLSSegment en0 = {0};
+    HLSSegment *en = &en0;
     const char  *filename;
     int byterange_mode = (hls->flags & HLS_SINGLE_FILE) || (hls->max_seg_size > 0);
     int ret;
-
-    if (!en)
-        return AVERROR(ENOMEM);
+    AVBPrint bp;
 
     vs->total_size += size;
     vs->total_duration += duration;
@@ -1162,11 +1171,9 @@ static int hls_append_segment(struct AVFormatContext *s, HLSContext *hls,
         vs->avg_bitrate = (int)(8 * vs->total_size / vs->total_duration);
 
     en->var_stream_idx = vs->var_stream_idx;
-    ret = sls_flags_filename_process(s, hls, vs, en, duration, pos, size);
-    if (ret < 0) {
-        av_freep(&en);
+    ret = sls_flags_filename_process(s, hls, vs, duration, pos, size);
+    if (ret < 0)
         return ret;
-    }
 
     filename = av_basename(vs->avf->url);
 
@@ -1177,21 +1184,16 @@ static int hls_append_segment(struct AVFormatContext *s, HLSContext *hls,
         && !byterange_mode) {
         av_log(hls, AV_LOG_WARNING, "Duplicated segment filename detected: %s\n", filename);
     }
-    av_strlcpy(en->filename, filename, sizeof(en->filename));
 
-    if (vs->has_subtitle)
-        av_strlcpy(en->sub_filename, av_basename(vs->vtt_avf->url), sizeof(en->sub_filename));
-    else
-        en->sub_filename[0] = '\0';
+    av_bprint_init(&bp, 0, AV_BPRINT_SIZE_UNLIMITED);
+    av_bprintf(&bp, "%s%c", filename, 0);
+    av_bprintf(&bp, "%s%c", vs->has_subtitle ? av_basename(vs->vtt_avf->url) : "", 0);
 
     en->duration = duration;
     en->pos      = pos;
     en->size     = size;
     en->keyframe_pos      = vs->video_keyframe_pos;
     en->keyframe_size     = vs->video_keyframe_size;
-    en->next     = NULL;
-    en->discont  = 0;
-    en->discont_program_date_time = 0;
 
     if (vs->discontinuity) {
         en->discont = 1;
@@ -1199,9 +1201,20 @@ static int hls_append_segment(struct AVFormatContext *s, HLSContext *hls,
     }
 
     if (hls->key_info_file || hls->encrypt) {
-        av_strlcpy(en->key_uri, vs->key_uri, sizeof(en->key_uri));
+        av_bprintf(&bp, "%s%c", vs->key_uri, 0);
         av_strlcpy(en->iv_string, vs->iv_string, sizeof(en->iv_string));
+    } else {
+        av_bprint_chars(&bp, 0, 1);
     }
+
+    en = ff_bprint_finalize_as_fam(&bp, &en0, offsetof(HLSSegment, buf));
+    if (!en)
+        return AVERROR(ENOMEM);
+#define NEXT(s) ((s) + strlen(s) + 1)
+    en->filename = en->buf;
+    en->sub_filename = NEXT(en->filename);
+    en->key_uri = NEXT(en->sub_filename);
+#undef NEXT
 
     if (!vs->segments)
         vs->segments = en;
@@ -1265,9 +1278,7 @@ static int parse_playlist(AVFormatContext *s, const char *url, VariantStream *vs
     const char *end;
     double discont_program_date_time = 0;
 
-    if ((ret = ffio_open_whitelist(&in, url, AVIO_FLAG_READ,
-                                   &s->interrupt_callback, NULL,
-                                   s->protocol_whitelist, s->protocol_blacklist)) < 0)
+    if ((ret = s->io_open(s, &in, url, AVIO_FLAG_READ, NULL)) < 0)
         return ret;
 
     ff_get_chomp_line(in, line, sizeof(line));
@@ -1377,7 +1388,7 @@ static int parse_playlist(AVFormatContext *s, const char *url, VariantStream *vs
     }
 
 fail:
-    avio_close(in);
+    ff_format_io_close(s, &in);
     return ret;
 }
 
@@ -1636,7 +1647,7 @@ static int hls_window(AVFormatContext *s, int last, VariantStream *vs)
     int is_file_proto = proto && !strcmp(proto, "file");
     int use_temp_file = is_file_proto && ((hls->flags & HLS_TEMP_FILE) || !(hls->pl_type == PLAYLIST_TYPE_VOD));
     static unsigned warned_non_file;
-    char *key_uri = NULL;
+    const char *key_uri = NULL;
     char *iv_string = NULL;
     AVDictionary *options = NULL;
     double prog_date_time = vs->initial_prog_date_time;
@@ -2556,13 +2567,16 @@ static int hls_write_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     if (vs->start_pts == AV_NOPTS_VALUE) {
-        vs->start_pts = pkt->pts;
+        vs->start_pts = av_rescale_q(pkt->pts, st->time_base, AV_TIME_BASE_Q);
         if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
             vs->start_pts_from_audio = 1;
     }
-    if (vs->start_pts_from_audio && st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && vs->start_pts > pkt->pts) {
-        vs->start_pts = pkt->pts;
-        vs->start_pts_from_audio = 0;
+    if (vs->start_pts_from_audio && st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+        int64_t video_start = av_rescale_q(pkt->pts, st->time_base, AV_TIME_BASE_Q);
+        if (vs->start_pts > video_start) {
+            vs->start_pts = video_start;
+            vs->start_pts_from_audio = 0;
+        }
     }
 
     if (vs->has_video) {
@@ -2593,8 +2607,8 @@ static int hls_write_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     can_split = can_split && (pkt->pts - vs->end_pts > 0);
-    if (vs->packets_written && can_split && av_compare_ts(pkt->pts - vs->start_pts, st->time_base,
-                                                          end_pts, AV_TIME_BASE_Q) >= 0) {
+    if (vs->packets_written && can_split && (av_rescale_q(pkt->pts, st->time_base, AV_TIME_BASE_Q) - vs->start_pts
+                                                          >= end_pts)) {
         int64_t new_start_pos;
         int byterange_mode = (hls->flags & HLS_SINGLE_FILE) || (hls->max_seg_size > 0);
         double cur_duration;
@@ -3079,8 +3093,12 @@ static int hls_init(AVFormatContext *s)
         if (vs->has_video > 1)
             av_log(s, AV_LOG_WARNING, "More than a single video stream present, expect issues decoding it.\n");
         if (hls->segment_type == SEGMENT_TYPE_FMP4) {
+#if CONFIG_MP4_MUXER
             EXTERN const FFOutputFormat ff_mp4_muxer;
             vs->oformat = &ff_mp4_muxer.p;
+#else
+            return AVERROR_MUXER_NOT_FOUND;
+#endif
         } else {
             EXTERN const FFOutputFormat ff_mpegts_muxer;
             vs->oformat = &ff_mpegts_muxer.p;

@@ -179,7 +179,7 @@ static int query_formats(const AVFilterContext *ctx,
 {
     AVFilterFormats *formats = NULL;
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_NONE };
-    static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_RGBA, AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE };
+    static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_RGBA, AV_PIX_FMT_RGB0, AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE };
     int ret;
 
     /* set input audio formats */
@@ -683,6 +683,7 @@ static int config_output(AVFilterLink *outlink)
         }
         s->pixstep = 1;
         break;
+    case AV_PIX_FMT_RGB0:
     case AV_PIX_FMT_RGBA:
         switch (s->mode) {
         case MODE_POINT:
@@ -761,7 +762,8 @@ static int config_output(AVFilterLink *outlink)
     } else {
         x = 255;
     }
-    if (outlink->format == AV_PIX_FMT_RGBA) {
+    if (outlink->format == AV_PIX_FMT_RGBA ||
+        outlink->format == AV_PIX_FMT_RGB0) {
         uint8_t fg[4] = { 0xff, 0xff, 0xff, 0xff };
 
         for (ch = 0; ch < nb_channels; ch++) {

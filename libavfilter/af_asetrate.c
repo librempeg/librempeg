@@ -95,6 +95,35 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     return ff_filter_frame(outlink, frame);
 }
 
+static int activate(AVFilterContext *ctx)
+{
+    AVFilterLink *outlink = ctx->outputs[0];
+    AVFilterLink *inlink = ctx->inputs[0];
+    AVFrame *frame;
+    int64_t pts;
+    int status;
+    int ret;
+
+    FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
+
+    ret = ff_inlink_consume_frame(inlink, &frame);
+    if (ret < 0)
+        return ret;
+
+    if (ret > 0)
+        return filter_frame(inlink, frame);
+
+    if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
+        pts = av_rescale(pts, inlink->sample_rate,
+                              outlink->sample_rate);
+        ff_outlink_set_status(outlink, status, pts);
+        return 0;
+    }
+    FF_FILTER_FORWARD_WANTED(outlink, inlink);
+
+    return FFERROR_NOT_READY;
+}
+
 static const AVFilterPad asetrate_inputs[] = {
     {
         .name         = "default",
@@ -118,6 +147,7 @@ const FFFilter ff_af_asetrate = {
     .p.priv_class  = &asetrate_class,
     .p.flags       = AVFILTER_FLAG_METADATA_ONLY,
     .priv_size     = sizeof(ASetRateContext),
+    .activate      = activate,
     FILTER_INPUTS(asetrate_inputs),
     FILTER_OUTPUTS(asetrate_outputs),
     FILTER_QUERY_FUNC2(query_formats),

@@ -1,21 +1,21 @@
 /*
  * Copyright (C) 2010 David Conrad
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "libavutil/x86/cpu.h"
@@ -33,8 +33,6 @@ void ff_put_signed_rect_clamped_sse2(uint8_t *dst, int dst_stride, const int16_t
 void ff_put_signed_rect_clamped_10_sse4(uint8_t *dst, int dst_stride, const uint8_t *src, int src_stride, int width, int height);
 
 void ff_dequant_subband_32_sse4(uint8_t *src, uint8_t *dst, ptrdiff_t stride, const int qf, const int qs, int tot_v, int tot_h);
-
-#if HAVE_X86ASM
 
 #define HPEL_FILTER(MMSIZE, EXT)                                                             \
     void ff_dirac_hpel_filter_v_ ## EXT(uint8_t *, const uint8_t *, int, int);               \
@@ -81,11 +79,8 @@ DIRAC_PIXOP(avg, sse2)
 
 HPEL_FILTER(16, sse2)
 
-#endif // HAVE_X86ASM
-
 void ff_diracdsp_init_x86(DiracDSPContext* c)
 {
-#if HAVE_X86ASM
     int mm_flags = av_get_cpu_flags();
 
     if (EXTERNAL_SSE2(mm_flags)) {
@@ -107,5 +102,4 @@ void ff_diracdsp_init_x86(DiracDSPContext* c)
         c->dequant_subband[1]         = ff_dequant_subband_32_sse4;
         c->put_signed_rect_clamped[1] = ff_put_signed_rect_clamped_10_sse4;
     }
-#endif // HAVE_X86ASM
 }

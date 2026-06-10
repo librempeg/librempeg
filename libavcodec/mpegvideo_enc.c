@@ -36,6 +36,7 @@
 #include <assert.h>
 #include <stdint.h>
 
+#include "libavutil/attributes.h"
 #include "libavutil/emms.h"
 #include "libavutil/internal.h"
 #include "libavutil/intmath.h"
@@ -821,7 +822,7 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
         //return -1;
     }
 
-    if (s->mpeg_quant || s->c.codec_id == AV_CODEC_ID_MPEG1VIDEO || s->c.codec_id == AV_CODEC_ID_MPEG2VIDEO || s->c.codec_id == AV_CODEC_ID_MJPEG || s->c.codec_id == AV_CODEC_ID_AMV || s->c.codec_id == AV_CODEC_ID_SPEEDHQ) {
+    if (s->mpeg_quant || s->c.codec_id == AV_CODEC_ID_MPEG1VIDEO || s->c.codec_id == AV_CODEC_ID_MPEG2VIDEO || s->c.codec_id == AV_CODEC_ID_MJPEG || s->c.codec_id == AV_CODEC_ID_AMV || s->c.codec_id == AV_CODEC_ID_SPEEDHQ || s->c.codec_id == AV_CODEC_ID_THP) {
         // (a + x * 3 / 8) / x
         s->intra_quant_bias = 3 << (QUANT_BIAS_SHIFT - 3);
         s->inter_quant_bias = 0;
@@ -842,14 +843,15 @@ av_cold int ff_mpv_encode_init(AVCodecContext *avctx)
 #if CONFIG_MPEG1VIDEO_ENCODER || CONFIG_MPEG2VIDEO_ENCODER
     case AV_CODEC_ID_MPEG2VIDEO:
         s->rtp_mode   = 1;
-        /* fallthrough */
+        av_fallthrough;
     case AV_CODEC_ID_MPEG1VIDEO:
         s->c.out_format = FMT_MPEG1;
         s->c.low_delay  = !!(avctx->flags & AV_CODEC_FLAG_LOW_DELAY);
         avctx->delay  = s->c.low_delay ? 0 : (m->max_b_frames + 1);
         break;
 #endif
-#if CONFIG_MJPEG_ENCODER || CONFIG_AMV_ENCODER
+#if CONFIG_MJPEG_ENCODER || CONFIG_AMV_ENCODER || CONFIG_THP_ENCODER
+    case AV_CODEC_ID_THP:
     case AV_CODEC_ID_MJPEG:
     case AV_CODEC_ID_AMV:
         s->c.out_format = FMT_MJPEG;
@@ -1956,7 +1958,7 @@ vbv_retry:
 
         frame_end(m);
 
-       if ((CONFIG_MJPEG_ENCODER || CONFIG_AMV_ENCODER) && s->c.out_format == FMT_MJPEG)
+       if ((CONFIG_MJPEG_ENCODER || CONFIG_AMV_ENCODER || CONFIG_THP_ENCODER) && s->c.out_format == FMT_MJPEG)
             ff_mjpeg_encode_picture_trailer(&s->pb, m->header_bits);
 
         if (avctx->rc_buffer_size) {
@@ -2856,7 +2858,7 @@ static void write_slice_end(MPVEncContext *const s)
             ff_mpeg4_merge_partitions(s);
 
         ff_mpeg4_stuffing(&s->pb);
-    } else if ((CONFIG_MJPEG_ENCODER || CONFIG_AMV_ENCODER) &&
+    } else if ((CONFIG_MJPEG_ENCODER || CONFIG_AMV_ENCODER || CONFIG_THP_ENCODER) &&
                s->c.out_format == FMT_MJPEG) {
         ff_mjpeg_encode_stuffing(s);
     } else if (CONFIG_SPEEDHQ_ENCODER && s->c.out_format == FMT_SPEEDHQ) {
@@ -3056,12 +3058,14 @@ static int encode_thread(AVCodecContext *c, void *arg){
                     break;
                 case AV_CODEC_ID_MPEG2VIDEO:
                     if (s->c.mb_x == 0 && s->c.mb_y != 0) is_gob_start = 1;
+                    av_fallthrough;
                 case AV_CODEC_ID_MPEG1VIDEO:
                     if (s->c.codec_id == AV_CODEC_ID_MPEG1VIDEO && s->c.mb_y >= 175 ||
                         s->mb_skip_run)
                         is_gob_start=0;
                     break;
                 case AV_CODEC_ID_MJPEG:
+                case AV_CODEC_ID_THP:
                     if (s->c.mb_x == 0 && s->c.mb_y != 0) is_gob_start = 1;
                     break;
                 }
@@ -3106,7 +3110,7 @@ static int encode_thread(AVCodecContext *c, void *arg){
                     case AV_CODEC_ID_H263P:
                         if (s->c.dc_val)
                             ff_h263_mpeg4_reset_dc(s);
-                        // fallthrough
+                        av_fallthrough;
 #endif
                     case AV_CODEC_ID_H263:
                         if (CONFIG_H263_ENCODER) {
@@ -3671,7 +3675,7 @@ static void set_frame_distances(MPVEncContext *const s)
 static int encode_picture(MPVMainEncContext *const m, const AVPacket *pkt)
 {
     MPVEncContext *const s = &m->s;
-    int i, ret;
+    int ret;
     int bits;
     int context_count = s->c.slice_context_count;
 
@@ -3749,9 +3753,8 @@ static int encode_picture(MPVMainEncContext *const m, const AVPacket *pkt)
                                 NULL, context_count, sizeof(void*));
         }
     }
-    for(i=1; i<context_count; i++){
+    for (int i = 1; i < context_count; i++)
         merge_context_after_me(s, s->c.enc_contexts[i]);
-    }
     m->mc_mb_var_sum = s->me.mc_mb_var_sum_temp;
     m->mb_var_sum    = s->me.   mb_var_sum_temp;
     emms_c();
@@ -3782,7 +3785,7 @@ static int encode_picture(MPVMainEncContext *const m, const AVPacket *pkt)
             ff_fix_long_mvs(s, NULL, 0, s->p_mv_table, s->f_code, CANDIDATE_MB_TYPE_INTER, !!s->intra_penalty);
             if (s->c.avctx->flags & AV_CODEC_FLAG_INTERLACED_ME) {
                 int j;
-                for(i=0; i<2; i++){
+                for (int i = 0; i < 2; i++) {
                     for(j=0; j<2; j++)
                         ff_fix_long_mvs(s, s->p_field_select_table[i], j,
                                         s->c.p_field_mv_table[i][j], s->f_code, CANDIDATE_MB_TYPE_INTER_I, !!s->intra_penalty);
@@ -3806,7 +3809,7 @@ static int encode_picture(MPVMainEncContext *const m, const AVPacket *pkt)
             if (s->c.avctx->flags & AV_CODEC_FLAG_INTERLACED_ME) {
                 int dir, j;
                 for(dir=0; dir<2; dir++){
-                    for(i=0; i<2; i++){
+                    for (int i = 0; i < 2; i++) {
                         for(j=0; j<2; j++){
                             int type= dir ? (CANDIDATE_MB_TYPE_BACKWARD_I|CANDIDATE_MB_TYPE_BIDIR_I)
                                           : (CANDIDATE_MB_TYPE_FORWARD_I |CANDIDATE_MB_TYPE_BIDIR_I);
@@ -3894,12 +3897,11 @@ static int encode_picture(MPVMainEncContext *const m, const AVPacket *pkt)
     bits= put_bits_count(&s->pb);
     m->header_bits = bits - s->last_bits;
 
-    for(i=1; i<context_count; i++){
+    for (int i = 1; i < context_count; i++)
         update_duplicate_context_after_me(s->c.enc_contexts[i], s);
-    }
     s->c.avctx->execute(s->c.avctx, encode_thread, &s->c.enc_contexts[0],
                         NULL, context_count, sizeof(void*));
-    for(i=1; i<context_count; i++){
+    for (int i = 1; i < context_count; i++) {
         if (s->pb.buf_end == s->c.enc_contexts[i]->pb.buf)
             set_put_bits_buffer_size(&s->pb, FFMIN(s->c.enc_contexts[i]->pb.buf_end - s->pb.buf, INT_MAX/8-BUF_BITS));
         merge_context_after_encode(s, s->c.enc_contexts[i]);
@@ -4547,8 +4549,7 @@ static int dct_quantize_refine(MPVEncContext *const s, //FIXME breaks denoise?
             run=0;
             rle_index=0;
             for(i=start_i; i<=last_non_zero; i++){
-                int j= perm_scantable[i];
-                const int level= block[j];
+                const int level = block[perm_scantable[i]];
 
                  if(level){
                      run_tab[rle_index++]=run;

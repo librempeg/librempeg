@@ -5,14 +5,14 @@
 ;*
 ;* Copyright (c) 2011 Ronald S. Bultje <rsbultje@gmail.com>
 ;*
-;* This file is part of Librempeg.
+;* This file is part of FFmpeg.
 ;*
-;* Librempeg is free software; you can redistribute it and/or
+;* FFmpeg is free software; you can redistribute it and/or
 ;* modify it under the terms of the GNU Lesser General Public
 ;* License as published by the Free Software Foundation; either
 ;* version 2.1 of the License, or (at your option) any later version.
 ;*
-;* Librempeg is distributed in the hope that it will be useful,
+;* FFmpeg is distributed in the hope that it will be useful,
 ;* but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ;* Lesser General Public License for more details.
@@ -53,7 +53,7 @@ SECTION .text
 define_constants _hi
 
 %macro idct_fn 0
-cglobal prores_idct_put_10, 4, 4, 15, pixels, lsize, block, qmat
+cglobal prores_idct_put_10, 4, 4, 14, pixels, lsize, block, qmat
     IDCT_FN    pw_1, 15, pw_88, 18, "put", pw_4, pw_1019, r3
     RET
 %endmacro

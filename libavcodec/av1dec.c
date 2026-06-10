@@ -99,12 +99,11 @@ static int32_t decode_signed_subexp_with_ref(uint32_t sub_exp, int low,
 
 static void read_global_param(AV1DecContext *s, int type, int ref, int idx)
 {
-    uint8_t primary_frame, prev_frame;
+    int primary_frame;
     uint32_t abs_bits, prec_bits, round, prec_diff, sub, mx;
     int32_t r, prev_gm_param;
 
     primary_frame = s->raw_frame_header->primary_ref_frame;
-    prev_frame = s->raw_frame_header->ref_frame_idx[primary_frame];
     abs_bits = AV1_GM_ABS_ALPHA_BITS;
     prec_bits = AV1_GM_ALPHA_PREC_BITS;
 
@@ -114,8 +113,10 @@ static void read_global_param(AV1DecContext *s, int type, int ref, int idx)
      */
     if (s->raw_frame_header->primary_ref_frame == AV1_PRIMARY_REF_NONE)
         prev_gm_param = s->cur_frame.gm_params[ref][idx];
-    else
+    else {
+        int prev_frame = s->raw_frame_header->ref_frame_idx[primary_frame];
         prev_gm_param = s->ref[prev_frame].gm_params[ref][idx];
+    }
 
     if (idx < 2) {
         if (type == AV1_WARP_MODEL_TRANSLATION) {
@@ -966,67 +967,106 @@ static int export_itut_t35(AVCodecContext *avctx, AVFrame *frame,
 
     bytestream2_init(&gb, itut_t35->payload, itut_t35->payload_size);
 
-    provider_code = bytestream2_get_be16(&gb);
     country_code = itut_t35->itu_t_t35_country_code ;
-    if (country_code == ITU_T_T35_COUNTRY_CODE_US && provider_code == ITU_T_T35_PROVIDER_CODE_ATSC) {
-        uint32_t user_identifier = bytestream2_get_be32(&gb);
-        switch (user_identifier) {
-        case MKBETAG('G', 'A', '9', '4'): { // closed captions
-            AVBufferRef *buf = NULL;
+    switch (country_code) {
+    case ITU_T_T35_COUNTRY_CODE_US:
+        provider_code = bytestream2_get_be16(&gb);
 
-            ret = ff_parse_a53_cc(&buf, gb.buffer, bytestream2_get_bytes_left(&gb));
-            if (ret < 0)
-                return ret;
-            if (!ret)
-                break;
+        switch (provider_code) {
+        case ITU_T_T35_PROVIDER_CODE_ATSC: {
+            uint32_t user_identifier = bytestream2_get_be32(&gb);
+            switch (user_identifier) {
+            case MKBETAG('G', 'A', '9', '4'): { // closed captions
+                AVBufferRef *buf = NULL;
 
-            ret = ff_frame_new_side_data_from_buf(avctx, frame, AV_FRAME_DATA_A53_CC, &buf);
-            if (ret < 0)
-                return ret;
+                ret = ff_parse_a53_cc(&buf, gb.buffer, bytestream2_get_bytes_left(&gb));
+                if (ret < 0)
+                    return ret;
+                if (!ret)
+                    break;
+
+                ret = ff_frame_new_side_data_from_buf(avctx, frame, AV_FRAME_DATA_A53_CC, &buf);
+                if (ret < 0)
+                    return ret;
 
 #if FF_API_CODEC_PROPS
 FF_DISABLE_DEPRECATION_WARNINGS
-            avctx->properties |= FF_CODEC_PROPERTY_CLOSED_CAPTIONS;
+                avctx->properties |= FF_CODEC_PROPERTY_CLOSED_CAPTIONS;
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
+                break;
+            }
+            default: // ignore unsupported identifiers
+                break;
+            }
             break;
         }
-        default: // ignore unsupported identifiers
+        case ITU_T_T35_PROVIDER_CODE_SAMSUNG: {
+            AVDynamicHDRPlus *hdrplus;
+            int provider_oriented_code = bytestream2_get_be16(&gb);
+            int application_identifier = bytestream2_get_byte(&gb);
+
+            if (provider_oriented_code != 1 || application_identifier != 4)
+                return 0; // ignore
+
+            hdrplus = av_dynamic_hdr_plus_create_side_data(frame);
+            if (!hdrplus)
+                return AVERROR(ENOMEM);
+
+            ret = av_dynamic_hdr_plus_from_t35(hdrplus, gb.buffer,
+                                                bytestream2_get_bytes_left(&gb));
+            if (ret < 0)
+                return ret;
             break;
         }
-    } else if (country_code == ITU_T_T35_COUNTRY_CODE_US && provider_code == ITU_T_T35_PROVIDER_CODE_SAMSUNG) {
-        AVDynamicHDRPlus *hdrplus;
-        int provider_oriented_code = bytestream2_get_be16(&gb);
-        int application_identifier = bytestream2_get_byte(&gb);
+        case ITU_T_T35_PROVIDER_CODE_DOLBY: {
+            int provider_oriented_code = bytestream2_get_be32(&gb);
+            if (provider_oriented_code != 0x800)
+                return 0; // ignore
 
-        if (provider_oriented_code != 1 || application_identifier != 4)
-            return 0; // ignore
+            ret = ff_dovi_rpu_parse(&s->dovi, gb.buffer, bytestream2_get_bytes_left(&gb),
+                                    avctx->err_recognition);
+            if (ret < 0) {
+                av_log(avctx, AV_LOG_WARNING, "Error parsing DOVI OBU.\n");
+                return 0; // ignore
+            }
 
-        hdrplus = av_dynamic_hdr_plus_create_side_data(frame);
-        if (!hdrplus)
-            return AVERROR(ENOMEM);
-
-        ret = av_dynamic_hdr_plus_from_t35(hdrplus, gb.buffer,
-                                           bytestream2_get_bytes_left(&gb));
-        if (ret < 0)
-            return ret;
-    } else if (country_code == ITU_T_T35_COUNTRY_CODE_US && provider_code == ITU_T_T35_PROVIDER_CODE_DOLBY) {
-        int provider_oriented_code = bytestream2_get_be32(&gb);
-        if (provider_oriented_code != 0x800)
-            return 0; // ignore
-
-        ret = ff_dovi_rpu_parse(&s->dovi, gb.buffer, bytestream2_get_bytes_left(&gb),
-                                avctx->err_recognition);
-        if (ret < 0) {
-            av_log(avctx, AV_LOG_WARNING, "Error parsing DOVI OBU.\n");
-            return 0; // ignore
+            ret = ff_dovi_attach_side_data(&s->dovi, frame);
+            if (ret < 0)
+                return ret;
+            break;
         }
+        default:
+            break;
+        }
+        break;
+    case ITU_T_T35_COUNTRY_CODE_UK:
+        bytestream2_skip(&gb, 1); // t35_uk_country_code_second_octet
 
-        ret = ff_dovi_attach_side_data(&s->dovi, frame);
-        if (ret < 0)
-            return ret;
-    } else {
+        provider_code = bytestream2_get_be16(&gb);
+        switch (provider_code) {
+        case ITU_T_T35_PROVIDER_CODE_VNOVA: {
+            AVFrameSideData *sd;
+            if (bytestream2_get_bytes_left(&gb) < 2)
+                return AVERROR_INVALIDDATA;
+
+            ret = ff_frame_new_side_data(avctx, frame, AV_FRAME_DATA_LCEVC,
+                                         bytestream2_get_bytes_left(&gb), &sd);
+            if (ret < 0)
+                return ret;
+            if (!sd)
+                break;
+
+            bytestream2_get_bufferu(&gb, sd->data, sd->size);
+            break;
+        }
+        default:
+            break;
+        }
+        break;
+    default:
         // ignore unsupported provider codes
+        break;
     }
 
     return 0;
@@ -1327,7 +1367,7 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
         case AV1_OBU_REDUNDANT_FRAME_HEADER:
             if (s->raw_frame_header)
                 break;
-        // fall-through
+            av_fallthrough;
         case AV1_OBU_FRAME:
         case AV1_OBU_FRAME_HEADER:
             if (!s->raw_seq) {
@@ -1385,7 +1425,7 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
             }
             if (unit->type != AV1_OBU_FRAME)
                 break;
-        // fall-through
+            av_fallthrough;
         case AV1_OBU_TILE_GROUP:
             if (!s->raw_frame_header) {
                 av_log(avctx, AV_LOG_ERROR, "Missing Frame Header.\n");
@@ -1415,7 +1455,7 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
         case AV1_OBU_TEMPORAL_DELIMITER:
             s->raw_frame_header = NULL;
             raw_tile_group      = NULL;
-        // fall-through
+            break;
         case AV1_OBU_TILE_LIST:
         case AV1_OBU_PADDING:
             break;

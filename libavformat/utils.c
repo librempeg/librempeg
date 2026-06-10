@@ -264,7 +264,7 @@ uint64_t ff_get_formatted_ntp_time(uint64_t ntp_time_us)
     uint64_t ntp_ts, frac_part, sec;
     uint32_t usec;
 
-    //current ntp time in seconds and micro seconds
+    //current ntp time in seconds and microseconds
     sec = ntp_time_us / 1000000;
     usec = ntp_time_us % 1000000;
 
@@ -683,4 +683,23 @@ int ff_parse_opts_from_query_string(void *obj, const char *str, int allow_unknow
             str++;
     }
     return 0;
+}
+
+void *ff_bprint_finalize_as_fam(struct AVBPrint *bp, const void *struct_ptr, size_t fam_offset)
+{
+    if (!av_bprint_is_complete(bp)) {
+        av_bprint_finalize(bp, NULL);
+        return NULL;
+    }
+
+    uint8_t *p = av_malloc(fam_offset + bp->len);
+    if (!p) {
+        av_bprint_finalize(bp, NULL);
+        return NULL;
+    }
+    memcpy(p, struct_ptr, fam_offset);
+    memcpy(p + fam_offset, bp->str, bp->len);
+    av_bprint_finalize(bp, NULL);
+
+    return p;
 }

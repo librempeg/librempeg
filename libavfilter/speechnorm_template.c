@@ -39,8 +39,7 @@ static void fn(analyze_channel)(AVFilterContext *ctx, ChannelContext *cc,
 {
     const ftype min_peak = F(1./32768.);
     const ftype *src = (const ftype *)srcp;
-    PeriodItem *pi = (PeriodItem *)&cc->pi;
-    int pi_end = cc->pi_end;
+    PeriodItem *pi = &cc->pend;
     int state = cc->state;
     int n = 0;
 
@@ -52,36 +51,37 @@ static void fn(analyze_channel)(AVFilterContext *ctx, ChannelContext *cc,
         ftype new_max_peak;
         ftype new_rms_sum;
 
-        split = (!state) && pi[pi_end].size >= nb_samples;
+        split = (!state) && pi->size >= nb_samples;
         if (state != DIFFSIGN(src[n], min_peak) || split) {
-            ftype max_peak = pi[pi_end].max_peak;
-            ftype rms_sum = pi[pi_end].rms_sum;
+            ftype max_peak = pi->max_peak;
+            ftype rms_sum = pi->rms_sum;
             int old_state = state;
 
             state = DIFFSIGN(src[n], min_peak);
-            av_assert1(pi[pi_end].size > 0);
+            av_assert1(pi->size > 0);
             if (max_peak >= min_peak || split) {
-                pi[pi_end].type = 1;
-                cc->acc += pi[pi_end].size;
-                pi_end++;
-                if (pi_end >= MAX_ITEMS)
-                    pi_end = 0;
+                pi->type = 1;
+                cc->acc += pi->size;
+                if (av_fifo_can_write(cc->pf) == 0)
+                    av_fifo_grow2(cc->pf, 1);
+                if (av_fifo_write(cc->pf, pi, 1) < 0)
+                    break;
+
                 if (state != old_state) {
-                    pi[pi_end].max_peak = DBL_MIN;
-                    pi[pi_end].rms_sum = F(0.0);
+                    pi->max_peak = DBL_MIN;
+                    pi->rms_sum = F(0.0);
                 } else {
-                    pi[pi_end].max_peak = max_peak;
-                    pi[pi_end].rms_sum = rms_sum;
+                    pi->max_peak = max_peak;
+                    pi->rms_sum = rms_sum;
                 }
-                pi[pi_end].type = 0;
-                pi[pi_end].size = 0;
-                av_assert1(pi_end != cc->pi_start);
+                pi->type = 0;
+                pi->size = 0;
             }
         }
 
-        new_max_peak = pi[pi_end].max_peak;
-        new_rms_sum = pi[pi_end].rms_sum;
-        new_size = pi[pi_end].size;
+        new_max_peak = pi->max_peak;
+        new_rms_sum = pi->rms_sum;
+        new_size = pi->size;
         if (state > F(0.0)) {
             while (src[n] > min_peak) {
                 new_max_peak = FFMAX(new_max_peak,  src[n]);
@@ -110,11 +110,10 @@ static void fn(analyze_channel)(AVFilterContext *ctx, ChannelContext *cc,
             }
         }
 
-        pi[pi_end].max_peak = new_max_peak;
-        pi[pi_end].rms_sum = new_rms_sum;
-        pi[pi_end].size = new_size;
+        pi->max_peak = new_max_peak;
+        pi->rms_sum = new_rms_sum;
+        pi->size = new_size;
     }
-    cc->pi_end = pi_end;
     cc->state = state;
 }
 
@@ -146,7 +145,9 @@ static void fn(filter_link_channels)(AVFilterContext *ctx,
             min_size = FFMIN(min_size, cc->pi_size);
         }
 
-        av_assert1(min_size > 0);
+        if (min_size <= 0)
+            break;
+
         for (int ch = 0; ch < inlink->ch_layout.nb_channels; ch++) {
             ChannelContext *cc = &s->cc[ch];
 
@@ -197,6 +198,9 @@ static void fn(filter_channels)(AVFilterContext *ctx,
 
             next_pi(ctx, cc, bypass);
             size = FFMIN(nb_samples - n, cc->pi_size);
+            if (!size)
+                break;
+
             av_assert1(size > 0);
             gain = cc->gain_state;
             consume_pi(cc, size);

@@ -367,7 +367,7 @@ static int str_read_packet(AVFormatContext *s,
                     st->codecpar->sample_rate = (fmt & 4) ? 18900 : 37800;
                     st->codecpar->block_align = 128;
                 }
-                st->codecpar->bit_rate = (int64_t)st->codecpar->sample_rate * st->codecpar->ch_layout.nb_channels * 128 * 8LL / 224;
+                st->codecpar->bit_rate = 128LL * st->codecpar->sample_rate * st->codecpar->ch_layout.nb_channels * 8LL / 224;
 
                 avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
             }

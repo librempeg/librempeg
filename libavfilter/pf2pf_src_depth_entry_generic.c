@@ -28,4 +28,4 @@
 #define SRC_F 3
 #endif
 
-#include "pf2pf_entry_generic.c"
+#include "pf2pf_src_float_entry_generic.c"

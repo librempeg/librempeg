@@ -2,21 +2,21 @@
  * RV40 decoder motion compensation functions x86-optimised
  * Copyright (c) 2008 Konstantin Shishkov
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 /**
@@ -39,7 +39,6 @@ static void op##_rv40_qpel##size##_mc33_##insn(uint8_t *dst, const uint8_t *src,
     ff_##op##_pixels##size##_xy2_##insn(dst, src, stride, size); \
 }
 
-#if HAVE_X86ASM
 #define DECLARE_WEIGHT(opt) \
 void ff_rv40_weight_func_rnd_16_##opt(uint8_t *dst, uint8_t *src1, uint8_t *src2, \
                                       int w1, int w2, ptrdiff_t stride); \
@@ -174,13 +173,10 @@ void ff_rv40_ ## OP ## _chroma_mc ## SIZE ## _ ## XMM(uint8_t *dst, const uint8_
                                                       ptrdiff_t stride, int h, int x, int y);\
     c->OP ## _chroma_pixels_tab[SIZE == 4] = ff_rv40_ ## OP ## _chroma_mc ## SIZE ## _ ## XMM
 
-#endif /* HAVE_X86ASM */
-
 av_cold void ff_rv40dsp_init_x86(RV34DSPContext *c)
 {
     av_unused int cpu_flags = av_get_cpu_flags();
 
-#if HAVE_X86ASM
     if (EXTERNAL_SSE2(cpu_flags)) {
         c->put_pixels_tab[0][15]        = put_rv40_qpel16_mc33_sse2;
         c->avg_pixels_tab[0][15]        = avg_rv40_qpel16_mc33_sse2;
@@ -207,5 +203,4 @@ av_cold void ff_rv40dsp_init_x86(RV34DSPContext *c)
         QPEL_MC_SET(put_, _ssse3)
         QPEL_MC_SET(avg_, _ssse3)
     }
-#endif /* HAVE_X86ASM */
 }

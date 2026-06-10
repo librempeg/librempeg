@@ -184,9 +184,9 @@ bad_header:
     return ret;
 }
 
-static int vorbis_parse_init(AVVorbisParseContext *s,
-                             const uint8_t *extradata, int extradata_size,
-                             const int expected_size)
+int ff_vorbis_parse_init(AVVorbisParseContext *s,
+                         const uint8_t *extradata, int extradata_size,
+                         const int expected_size)
 {
     const uint8_t *header_start[3];
     int header_len[3];
@@ -292,7 +292,7 @@ AVVorbisParseContext *av_vorbis_parse_init(const uint8_t *extradata,
     if (!s)
         return NULL;
 
-    ret = vorbis_parse_init(s, extradata, extradata_size, 30);
+    ret = ff_vorbis_parse_init(s, extradata, extradata_size, 30);
     if (ret < 0) {
         av_vorbis_parse_free(&s);
         return NULL;
@@ -310,7 +310,7 @@ AVVorbisParseContext *av_sk_vorbis_parse_init(const uint8_t *extradata,
     if (!s)
         return NULL;
 
-    ret = vorbis_parse_init(s, extradata, extradata_size, 26);
+    ret = ff_vorbis_parse_init(s, extradata, extradata_size, 26);
     if (ret < 0) {
         av_vorbis_parse_free(&s);
         return NULL;
@@ -321,24 +321,20 @@ AVVorbisParseContext *av_sk_vorbis_parse_init(const uint8_t *extradata,
 
 #if CONFIG_VORBIS_PARSER
 
-typedef struct VorbisParseContext {
-    AVVorbisParseContext *vp;
-} VorbisParseContext;
-
 static int vorbis_parse(AVCodecParserContext *s1, AVCodecContext *avctx,
                         const uint8_t **poutbuf, int *poutbuf_size,
                         const uint8_t *buf, int buf_size)
 {
-    VorbisParseContext *s = s1->priv_data;
+    AVVorbisParseContext *s = s1->priv_data;
     int duration;
 
-    if (!s->vp && avctx->extradata && avctx->extradata_size) {
-        s->vp = av_vorbis_parse_init(avctx->extradata, avctx->extradata_size);
+    if (!s->valid_extradata && avctx->extradata && avctx->extradata_size) {
+        ff_vorbis_parse_init(s, avctx->extradata, avctx->extradata_size, 30);
     }
-    if (!s->vp)
+    if (!s->valid_extradata)
         goto end;
 
-    if ((duration = av_vorbis_parse_frame(s->vp, buf, buf_size)) >= 0)
+    if ((duration = av_vorbis_parse_frame(s, buf, buf_size)) >= 0)
         s1->duration = duration;
 
 end:
@@ -349,16 +345,9 @@ end:
     return buf_size;
 }
 
-static av_cold void vorbis_parser_close(AVCodecParserContext *ctx)
-{
-    VorbisParseContext *s = ctx->priv_data;
-    av_vorbis_parse_free(&s->vp);
-}
-
 const FFCodecParser ff_vorbis_parser = {
     PARSER_CODEC_LIST(AV_CODEC_ID_VORBIS, AV_CODEC_ID_SKVORBIS),
-    .priv_data_size = sizeof(VorbisParseContext),
+    .priv_data_size = sizeof(AVVorbisParseContext),
     .parse          = vorbis_parse,
-    .close          = vorbis_parser_close,
 };
 #endif /* CONFIG_VORBIS_PARSER */

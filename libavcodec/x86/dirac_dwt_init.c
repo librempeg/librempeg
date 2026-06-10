@@ -3,24 +3,23 @@
  * Copyright (c) 2002-2004 Michael Niedermayer <michaelni@gmx.at>
  * Copyright (c) 2010 David Conrad
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/x86/asm.h"
 #include "libavutil/x86/cpu.h"
 #include "libavcodec/dirac_dwt.h"
 
@@ -133,9 +132,7 @@ static void horizontal_compose_haar1i##ext(uint8_t *_b, uint8_t *_tmp, int w)\
 }\
 \
 
-#if HAVE_X86ASM
 COMPOSE_VERTICAL(_sse2, 8)
-
 
 void ff_horizontal_compose_dd97i_ssse3(int16_t *_b, int16_t *_tmp, int w);
 
@@ -153,11 +150,9 @@ static void horizontal_compose_dd97i_ssse3(uint8_t *_b, uint8_t *_tmp, int w)
         b[2*x+1] = (COMPOSE_DD97iH0(tmp[x-1], tmp[x], b[x+w2], tmp[x+1], tmp[x+2]) + 1)>>1;
     }
 }
-#endif
 
 void ff_spatial_idwt_init_x86(DWTContext *d, enum dwt_type type)
 {
-#if HAVE_X86ASM
   int mm_flags = av_get_cpu_flags();
 
     if (!(mm_flags & AV_CPU_FLAG_SSE2))
@@ -194,5 +189,4 @@ void ff_spatial_idwt_init_x86(DWTContext *d, enum dwt_type type)
         d->horizontal_compose = horizontal_compose_dd97i_ssse3;
         break;
     }
-#endif // HAVE_X86ASM
 }

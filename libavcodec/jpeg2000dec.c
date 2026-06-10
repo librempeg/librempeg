@@ -147,14 +147,17 @@ static int pix_fmt_match(enum AVPixelFormat pix_fmt, int components,
         match = match && desc->comp[3].depth >= bpc &&
                          (log2_chroma_wh >> 14 & 3) == 0 &&
                          (log2_chroma_wh >> 12 & 3) == 0;
+        av_fallthrough;
     case 3:
         match = match && desc->comp[2].depth >= bpc &&
                          (log2_chroma_wh >> 10 & 3) == desc->log2_chroma_w &&
                          (log2_chroma_wh >>  8 & 3) == desc->log2_chroma_h;
+        av_fallthrough;
     case 2:
         match = match && desc->comp[1].depth >= bpc &&
                          (log2_chroma_wh >>  6 & 3) == desc->log2_chroma_w &&
                          (log2_chroma_wh >>  4 & 3) == desc->log2_chroma_h;
+        av_fallthrough;
 
     case 1:
         match = match && desc->comp[0].depth >= bpc &&
@@ -1957,7 +1960,7 @@ static void decode_clnpass(const Jpeg2000DecoderContext *s, Jpeg2000T1Context *t
                            int width, int height, int bpno, int bandno,
                            int seg_symbols, int vert_causal_ctx_csty_symbol)
 {
-    int mask = 3 << (bpno - 1), y0, x, y, runlen, dec;
+    int mask = (3u << bpno)>>1, y0, x, y, runlen, dec;
 
     for (y0 = 0; y0 < height; y0 += 4) {
         for (x = 0; x < width; x++) {
@@ -2448,8 +2451,14 @@ static void jpeg2000_dec_cleanup(Jpeg2000DecoderContext *s)
     memset(s->qntsty, 0, sizeof(s->qntsty));
     memset(s->properties, 0, sizeof(s->properties));
     memset(&s->poc  , 0, sizeof(s->poc));
+    memset(s->roi_shift, 0, sizeof(s->roi_shift));
     s->numXtiles = s->numYtiles = 0;
     s->ncomponents = 0;
+    s->has_ppm = 0;
+    s->isHT = 0;
+    s->precision = 0;
+    s->colour_space = 0;
+    s->pal8 = 0;
 }
 
 static int jpeg2000_read_main_headers(Jpeg2000DecoderContext *s)

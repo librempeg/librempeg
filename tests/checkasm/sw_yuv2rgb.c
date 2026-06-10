@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "libavutil/common.h"
+#include "libavutil/imgutils.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/pixdesc.h"
@@ -108,10 +109,9 @@ static void check_yuv2rgb(int src_pix_fmt)
 #define NUM_LINES 4
     static const int input_sizes[] = {8, 128, 1080, MAX_LINE_SIZE};
 
-    declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT,
-                      int, SwsInternal *c, const uint8_t *const src[],
-                           const int srcStride[], int srcSliceY, int srcSliceH,
-                           uint8_t *const dst[], const int dstStride[]);
+    declare_func(int, SwsInternal *c, const uint8_t *const src[],
+                      const int srcStride[], int srcSliceY, int srcSliceH,
+                      uint8_t *const dst[], const int dstStride[]);
 
     LOCAL_ALIGNED_8(uint8_t, src_y, [(MAX_LINE_SIZE + SRC_STRIDE_PAD) * NUM_LINES]);
     LOCAL_ALIGNED_8(uint8_t, src_u, [(MAX_LINE_SIZE + SRC_STRIDE_PAD) * NUM_LINES]);
@@ -145,10 +145,14 @@ static void check_yuv2rgb(int src_pix_fmt)
             int width = input_sizes[isi];
             int srcSliceY = 0;
             int srcSliceH = NUM_LINES;
+            /* Use av_image_get_linesize so that semi-planar formats (NV12,
+             * NV21) get the correct interleaved-UV stride (= width bytes),
+             * not (width >> log2_chroma_w) which would only count UV pairs. */
+            int chroma_linesize = av_image_get_linesize(src_pix_fmt, width, 1);
             int srcStride[4] = {
                 width + SRC_STRIDE_PAD,
-                (width >> src_desc->log2_chroma_w) + SRC_STRIDE_PAD,
-                (width >> src_desc->log2_chroma_w) + SRC_STRIDE_PAD,
+                chroma_linesize + SRC_STRIDE_PAD,
+                chroma_linesize + SRC_STRIDE_PAD,
                 width + SRC_STRIDE_PAD,
             };
             int dstStride[4] = {
@@ -240,4 +244,8 @@ void checkasm_check_sw_yuv2rgb(void)
     report("yuv422p");
     check_yuv2rgb(AV_PIX_FMT_YUVA420P);
     report("yuva420p");
+    check_yuv2rgb(AV_PIX_FMT_NV12);
+    report("nv12");
+    check_yuv2rgb(AV_PIX_FMT_NV21);
+    report("nv21");
 }

@@ -78,10 +78,10 @@ fate-pcm-bluray-s16-stereo: tests/data/asynth-48000-2.wav
 fate-pcm-bluray-s16-stereo: CMD = enc_dec_pcm mpegts framemd5 s16le $(TARGET_PATH)/tests/data/asynth-48000-2.wav -c:a pcm_bluray -mpegts_m2ts_mode 1 -t 0.5
 
 fate-pcm-bluray-s16-51: tests/data/asynth-48000-6.wav
-fate-pcm-bluray-s16-51: CMD = enc_dec_pcm mpegts framemd5 s16le $(TARGET_PATH)/tests/data/asynth-48000-6.wav -af "pan=0x60f|FL=FL|FR=FR|FC=FC|LFE=LFE|SL=BL|SR=BR" -c:a pcm_bluray -mpegts_m2ts_mode 1 -t 0.5
+fate-pcm-bluray-s16-51: CMD = enc_dec_pcm mpegts framemd5 s16le $(TARGET_PATH)/tests/data/asynth-48000-6.wav -af "pan=0x60f:mix=FL=FL|FR=FR|FC=FC|LFE=LFE|SL=BL|SR=BR" -c:a pcm_bluray -mpegts_m2ts_mode 1 -t 0.5
 
 fate-pcm-bluray-s16-70: tests/data/asynth-48000-8.wav
-fate-pcm-bluray-s16-70: CMD = enc_dec_pcm mpegts framemd5 s16le $(TARGET_PATH)/tests/data/asynth-48000-8.wav -af "pan=0x637|FL=FL|FR=FR|FC=FC|BL=BL|BR=BR|SL=SL|SR=SR" -c:a pcm_bluray -mpegts_m2ts_mode 1 -t 0.5
+fate-pcm-bluray-s16-70: CMD = enc_dec_pcm mpegts framemd5 s16le $(TARGET_PATH)/tests/data/asynth-48000-8.wav -af "pan=0x637:mix=FL=FL|FR=FR|FC=FC|BL=BL|BR=BR|SL=SL|SR=SR" -c:a pcm_bluray -mpegts_m2ts_mode 1 -t 0.5
 
 fate-pcm-bluray-s16-71: tests/data/asynth-48000-8.wav
 fate-pcm-bluray-s16-71: CMD = enc_dec_pcm mpegts framemd5 s16le $(TARGET_PATH)/tests/data/asynth-48000-8.wav -c:a pcm_bluray -mpegts_m2ts_mode 1 -t 0.5

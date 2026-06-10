@@ -395,6 +395,7 @@ typedef struct ADPCMDecodeContext {
     int start_skip;
     int vqa_version;                /**< VQA version. Used for ADPCM_IMA_WS */
     int has_status;                 /**< Status flag. Reset to 0 after a flush. */
+    int block_size;                 /**< Block size for THP codecs */
 } ADPCMDecodeContext;
 
 static void adpcm_flush(AVCodecContext *avctx);
@@ -1536,7 +1537,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         nb_samples     = (buf_size - (4 + 8 * ch)) * 2 / ch;
         break;
     case AV_CODEC_ID_ADPCM_EA_MAXIS_XA:
-        nb_samples = (buf_size - ch) / ch * 2;
+        nb_samples = (buf_size/block_align)*(block_align - ch) / ch * 2;
         break;
     case AV_CODEC_ID_ADPCM_IMA_MO:
         nb_samples = (buf_size / (132 * ch)) * 256;
@@ -1715,17 +1716,12 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         break;
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
-        has_coded_samples = 1;
-        bytestream2_skip(gb, 4); // channel size
-        *coded_samples  = (avctx->codec->id == AV_CODEC_ID_ADPCM_THP_LE) ?
-                          bytestream2_get_le32(gb) :
-                          bytestream2_get_be32(gb);
-        buf_size       -= 8 + 36 * ch;
-        buf_size       /= ch;
-        nb_samples      = buf_size / 8 * 14;
-        if (buf_size % 8 > 1)
-            nb_samples     += (buf_size % 8 - 1) * 2;
-        *approx_nb_samples = 1;
+        s->block_size = (avctx->codec->id == AV_CODEC_ID_ADPCM_THP_LE) ?
+                        bytestream2_get_le32(gb) :
+                        bytestream2_get_be32(gb);;
+        nb_samples = (avctx->codec->id == AV_CODEC_ID_ADPCM_THP_LE) ?
+                     bytestream2_get_le32(gb) :
+                     bytestream2_get_be32(gb);
         break;
     case AV_CODEC_ID_ADPCM_AFC:
     case AV_CODEC_ID_ADPCM_BRR:
@@ -2803,28 +2799,35 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         bytestream2_skip(&gb, channels == 2 ? 2 : 3); // Skip terminating NULs
         ) /* End of CASE */
     CASE(ADPCM_EA_MAXIS_XA,
-        int coeff[2][2], shift[2];
+        const int blocks = (avctx->block_align > 0) ? avpkt->size / avctx->block_align : 1;
+        const int block_samples = (avctx->block_align > 0) ? nb_samples / blocks : nb_samples;
 
-        for (int channel = 0; channel < channels; channel++) {
-            int byte = bytestream2_get_byteu(&gb);
-            for (int i = 0; i < 2; i++)
-                coeff[channel][i] = ea_adpcm_table[(byte >> 4) + 4*i];
-            shift[channel] = 20 - (byte & 0x0F);
-        }
-        for (int count1 = 0; count1 < nb_samples / 2; count1++) {
-            int byte[2];
+        for (int b = 0; b < blocks; b++) {
+            int coeff[2][2], shift[2];
 
-            byte[0] = bytestream2_get_byteu(&gb);
-            if (st) byte[1] = bytestream2_get_byteu(&gb);
-            for (int i = 4; i >= 0; i-=4) { /* Pairwise samples LL RR (st) or LL LL (mono) */
-                for (int channel = 0; channel < channels; channel++) {
-                    int sample = sign_extend(byte[channel] >> i, 4) * (1 << shift[channel]);
-                    sample = (sample +
-                             c->status[channel].sample1 * coeff[channel][0] +
-                             c->status[channel].sample2 * coeff[channel][1] + 0x80) >> 8;
-                    c->status[channel].sample2 = c->status[channel].sample1;
-                    c->status[channel].sample1 = av_clip_int16(sample);
-                    *samples++ = c->status[channel].sample1;
+            samples = ((int16_t *)frame->data[0]) + block_samples * b * channels;
+
+            for (int channel = 0; channel < channels; channel++) {
+                int byte = bytestream2_get_byteu(&gb);
+                for (int i = 0; i < 2; i++)
+                    coeff[channel][i] = ea_adpcm_table[(byte >> 4) + 4*i];
+                shift[channel] = 20 - (byte & 0x0F);
+            }
+            for (int count1 = 0; count1 < block_samples / 2; count1++) {
+                int byte[2];
+
+                byte[0] = bytestream2_get_byteu(&gb);
+                if (st) byte[1] = bytestream2_get_byteu(&gb);
+                for (int i = 4; i >= 0; i-=4) { /* Pairwise samples LL RR (st) or LL LL (mono) */
+                    for (int channel = 0; channel < channels; channel++) {
+                        int sample = sign_extend(byte[channel] >> i, 4) * (1 << shift[channel]);
+                        sample = (sample +
+                                 c->status[channel].sample1 * coeff[channel][0] +
+                                 c->status[channel].sample2 * coeff[channel][1] + 0x80) >> 8;
+                        c->status[channel].sample2 = c->status[channel].sample1;
+                        c->status[channel].sample1 = av_clip_int16(sample);
+                        *samples++ = c->status[channel].sample1;
+                    }
                 }
             }
         }
@@ -3282,26 +3285,24 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             for (int n = 0; n < 16; n++)
                 c->table[i][n] = THP_GET16(gb);
 
-        if (!c->has_status) {
-            /* Initialize the previous sample.  */
-            for (int i = 0; i < channels; i++) {
-                c->status[i].sample1 = THP_GET16(gb);
-                c->status[i].sample2 = THP_GET16(gb);
-            }
-            c->has_status = 1;
-        } else {
-            bytestream2_skip(&gb, channels * 4);
+        /* Initialize the previous sample.  */
+        for (int i = 0; i < channels; i++) {
+            c->status[i].sample1 = THP_GET16(gb);
+            c->status[i].sample2 = THP_GET16(gb);
         }
+        c->has_status = 1;
 
+        int pos = bytestream2_tell(&gb);
         for (int ch = 0; ch < channels; ch++) {
             samples = samples_p[ch];
 
+            bytestream2_seek(&gb, pos + c->block_size * ch, SEEK_SET);
             if (avpkt->pts == 0 && c->start_skip > 0)
                 bytestream2_skip(&gb, c->start_skip);
 
             /* Read in every sample for this channel.  */
-            for (int i = 0; i < (nb_samples + 13) / 14; i++) {
-                int byte = bytestream2_get_byteu(&gb);
+            for (int i = 0; i < nb_samples; i++) {
+                int byte = bytestream2_get_byte(&gb);
                 const int index = (byte >> 4) & 0x7;
                 const int scale = 1 << (byte & 0xF);
                 int factor1 = c->table[ch][index * 2];
@@ -3316,7 +3317,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     if (n & 1) {
                         sampledat = sign_extend(byte, 4);
                     } else {
-                        byte = bytestream2_get_byteu(&gb);
+                        byte = bytestream2_get_byte(&gb);
                         sampledat = sign_extend(byte >> 4, 4);
                     }
 
@@ -3541,7 +3542,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
                     for (int k = i-1; k > -1; k--) {
                         for (int o = 1; o < order; o++)
-                            delta += sf_codes[(i-1) - k] * coefs[(o*8) + k];
+                            delta += sf_codes[(i-1) - k] * (unsigned)coefs[(o*8) + k];
                     }
 
                     sample = sf_codes[i] * 2048;

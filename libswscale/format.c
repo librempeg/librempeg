@@ -18,6 +18,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/hdr_dynamic_metadata.h"
 #include "libavutil/mastering_display_metadata.h"
@@ -305,6 +306,42 @@ int sws_isSupportedEndiannessConversion(enum AVPixelFormat pix_fmt)
     legacy_format_entries[pix_fmt].is_supported_endianness : 0;
 }
 
+static void sanitize_fmt(SwsFormat *fmt, const AVPixFmtDescriptor *desc)
+{
+    if (desc->flags & (AV_PIX_FMT_FLAG_RGB | AV_PIX_FMT_FLAG_PAL | AV_PIX_FMT_FLAG_BAYER)) {
+        /* RGB-like family */
+        fmt->csp   = AVCOL_SPC_RGB;
+        fmt->range = AVCOL_RANGE_JPEG;
+    } else if (desc->flags & AV_PIX_FMT_FLAG_XYZ) {
+        fmt->csp   = AVCOL_SPC_UNSPECIFIED;
+        fmt->color = (SwsColor) {
+            .prim = AVCOL_PRI_BT709, /* swscale currently hard-codes this XYZ matrix */
+            .trc  = AVCOL_TRC_SMPTE428,
+        };
+    } else if (desc->nb_components < 3) {
+        /* Grayscale formats */
+        fmt->color.prim = AVCOL_PRI_UNSPECIFIED;
+        fmt->csp        = AVCOL_SPC_UNSPECIFIED;
+        if (desc->flags & AV_PIX_FMT_FLAG_FLOAT)
+            fmt->range = AVCOL_RANGE_UNSPECIFIED;
+        else
+            fmt->range = AVCOL_RANGE_JPEG; // FIXME: this restriction should be lifted
+    }
+
+    switch (av_pix_fmt_desc_get_id(desc)) {
+    case AV_PIX_FMT_YUVJ420P:
+    case AV_PIX_FMT_YUVJ411P:
+    case AV_PIX_FMT_YUVJ422P:
+    case AV_PIX_FMT_YUVJ444P:
+    case AV_PIX_FMT_YUVJ440P:
+        fmt->range = AVCOL_RANGE_JPEG;
+        break;
+    }
+
+    if (!desc->log2_chroma_w && !desc->log2_chroma_h)
+        fmt->loc = AVCHROMA_LOC_UNSPECIFIED;
+}
+
 /**
  * This function also sanitizes and strips the input data, removing irrelevant
  * fields for certain formats.
@@ -346,38 +383,7 @@ SwsFormat ff_fmt_from_frame(const AVFrame *frame, int field)
     av_assert1(fmt.height > 0);
     av_assert1(fmt.format != AV_PIX_FMT_NONE);
     av_assert0(desc);
-    if (desc->flags & (AV_PIX_FMT_FLAG_RGB | AV_PIX_FMT_FLAG_PAL | AV_PIX_FMT_FLAG_BAYER)) {
-        /* RGB-like family */
-        fmt.csp   = AVCOL_SPC_RGB;
-        fmt.range = AVCOL_RANGE_JPEG;
-    } else if (desc->flags & AV_PIX_FMT_FLAG_XYZ) {
-        fmt.csp   = AVCOL_SPC_UNSPECIFIED;
-        fmt.color = (SwsColor) {
-            .prim = AVCOL_PRI_BT709, /* swscale currently hard-codes this XYZ matrix */
-            .trc  = AVCOL_TRC_SMPTE428,
-        };
-    } else if (desc->nb_components < 3) {
-        /* Grayscale formats */
-        fmt.color.prim = AVCOL_PRI_UNSPECIFIED;
-        fmt.csp        = AVCOL_SPC_UNSPECIFIED;
-        if (desc->flags & AV_PIX_FMT_FLAG_FLOAT)
-            fmt.range = AVCOL_RANGE_UNSPECIFIED;
-        else
-            fmt.range = AVCOL_RANGE_JPEG; // FIXME: this restriction should be lifted
-    }
-
-    switch (frame->format) {
-    case AV_PIX_FMT_YUVJ420P:
-    case AV_PIX_FMT_YUVJ411P:
-    case AV_PIX_FMT_YUVJ422P:
-    case AV_PIX_FMT_YUVJ444P:
-    case AV_PIX_FMT_YUVJ440P:
-        fmt.range = AVCOL_RANGE_JPEG;
-        break;
-    }
-
-    if (!desc->log2_chroma_w && !desc->log2_chroma_h)
-        fmt.loc = AVCHROMA_LOC_UNSPECIFIED;
+    sanitize_fmt(&fmt, desc);
 
     if (frame->flags & AV_FRAME_FLAG_INTERLACED) {
         fmt.height = (fmt.height + (field == FIELD_TOP)) >> 1;
@@ -472,6 +478,14 @@ skip_hdr10:
         fmt.color.min_luma = av_make_q(0, 1);
 
     return fmt;
+}
+
+void ff_fmt_from_pixfmt(enum AVPixelFormat pixfmt, SwsFormat *fmt)
+{
+    ff_fmt_clear(fmt);
+    fmt->format = pixfmt;
+    fmt->desc = av_pix_fmt_desc_get(pixfmt);
+    sanitize_fmt(fmt, fmt->desc);
 }
 
 static int infer_prim_ref(SwsColor *csp, const SwsColor *ref)
@@ -814,7 +828,7 @@ static int cmp_comp(const void *a, const void *b) {
 }
 
 static int fmt_analyze_regular(const AVPixFmtDescriptor *desc, SwsReadWriteOp *rw_op,
-                               SwsSwizzleOp *swizzle, int *shift)
+                               SwsSwizzleOp *swizzle, SwsShiftOp *shift)
 {
     if (desc->nb_components == 2) {
         /* YA formats */
@@ -835,7 +849,7 @@ static int fmt_analyze_regular(const AVPixFmtDescriptor *desc, SwsReadWriteOp *r
         *swizzle = swiz;
     }
 
-    *shift = desc->comp[0].shift;
+    *shift = (SwsShiftOp) { desc->comp[0].shift };
     *rw_op = (SwsReadWriteOp) {
         .elems  = desc->nb_components,
         .packed = desc->nb_components > 1 && !(desc->flags & AV_PIX_FMT_FLAG_PLANAR),
@@ -844,8 +858,9 @@ static int fmt_analyze_regular(const AVPixFmtDescriptor *desc, SwsReadWriteOp *r
 }
 
 static int fmt_analyze(enum AVPixelFormat fmt, SwsReadWriteOp *rw_op,
-                       SwsPackOp *pack_op, SwsSwizzleOp *swizzle, int *shift,
-                       SwsPixelType *pixel_type, SwsPixelType *raw_type)
+                       SwsPackOp *pack_op, SwsSwizzleOp *swizzle,
+                       SwsShiftOp *shift, SwsPixelType *pixel_type,
+                       SwsPixelType *raw_type)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(fmt);
     if (!desc)
@@ -876,7 +891,7 @@ static int fmt_analyze(enum AVPixelFormat fmt, SwsReadWriteOp *rw_op,
     *rw_op   = info.rw;
     *pack_op = info.pack;
     *swizzle = info.swizzle;
-    *shift   = info.shift;
+    *shift   = (SwsShiftOp) { info.shift };
 
     if (info.pack.pattern[0]) {
         const int sum = info.pack.pattern[0] + info.pack.pattern[1] +
@@ -910,17 +925,22 @@ static SwsSwizzleOp swizzle_inv(SwsSwizzleOp swiz) {
  * it will end up getting pushed towards the output or optimized away entirely
  * by the optimization pass.
  */
-static SwsConst fmt_clear(enum AVPixelFormat fmt)
+static SwsClearOp fmt_clear(enum AVPixelFormat fmt)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(fmt);
     const bool has_chroma = desc->nb_components >= 3;
     const bool has_alpha  = desc->flags & AV_PIX_FMT_FLAG_ALPHA;
 
-    SwsConst c = {0};
-    if (!has_chroma)
-        c.q4[1] = c.q4[2] = Q0;
-    if (!has_alpha)
-        c.q4[3] = Q0;
+    SwsClearOp c = {0};
+    if (!has_chroma) {
+        c.mask |= SWS_COMP(1) | SWS_COMP(2);
+        c.value[1] = c.value[2] = Q0;
+    }
+
+    if (!has_alpha) {
+        c.mask |= SWS_COMP(3);
+        c.value[3] = Q0;
+    }
 
     return c;
 }
@@ -939,7 +959,7 @@ int ff_sws_decode_pixfmt(SwsOpList *ops, enum AVPixelFormat fmt)
     SwsSwizzleOp swizzle;
     SwsPackOp unpack;
     SwsComps *comps = &ops->comps_src;
-    int shift;
+    SwsShiftOp shift;
 
     RET(fmt_analyze(fmt, &rw_op, &unpack, &swizzle, &shift,
                     &pixel_type, &raw_type));
@@ -961,7 +981,7 @@ int ff_sws_decode_pixfmt(SwsOpList *ops, enum AVPixelFormat fmt)
          * canonical order {Y, U, V, A} */
         const int is_ya = desc->nb_components == 2;
         for (int c = 0; c < desc->nb_components; c++) {
-            const int bits   = desc->comp[c].depth + shift;
+            const int bits   = desc->comp[c].depth + shift.amount;
             const int idx    = swizzle.in[is_ya ? 3 * c : c];
             comps->min[idx]  = Q0;
             if (bits < 32) /* FIXME: AVRational is limited to INT_MAX */
@@ -1003,18 +1023,18 @@ int ff_sws_decode_pixfmt(SwsOpList *ops, enum AVPixelFormat fmt)
         .swizzle = swizzle,
     }));
 
-    if (shift) {
+    if (shift.amount) {
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
-            .op   = SWS_OP_RSHIFT,
-            .type = pixel_type,
-            .c.u  = shift,
+            .op    = SWS_OP_RSHIFT,
+            .type  = pixel_type,
+            .shift = shift,
         }));
     }
 
     RET(ff_sws_op_list_append(ops, &(SwsOp) {
-        .op   = SWS_OP_CLEAR,
-        .type = pixel_type,
-        .c    = fmt_clear(fmt),
+        .op    = SWS_OP_CLEAR,
+        .type  = pixel_type,
+        .clear = fmt_clear(fmt),
     }));
 
     return 0;
@@ -1027,16 +1047,16 @@ int ff_sws_encode_pixfmt(SwsOpList *ops, enum AVPixelFormat fmt)
     SwsReadWriteOp rw_op;
     SwsSwizzleOp swizzle;
     SwsPackOp pack;
-    int shift;
+    SwsShiftOp shift;
 
     RET(fmt_analyze(fmt, &rw_op, &pack, &swizzle, &shift,
                     &pixel_type, &raw_type));
 
-    if (shift) {
+    if (shift.amount) {
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
-            .op   = SWS_OP_LSHIFT,
-            .type = pixel_type,
-            .c.u  = shift,
+            .op    = SWS_OP_LSHIFT,
+            .type  = pixel_type,
+            .shift = shift,
         }));
     }
 
@@ -1046,7 +1066,8 @@ int ff_sws_encode_pixfmt(SwsOpList *ops, enum AVPixelFormat fmt)
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
             .op   = SWS_OP_CLEAR,
             .type = pixel_type,
-            .c.q4[3] = Q0,
+            .clear.mask = SWS_COMP(3),
+            .clear.value[3] = Q0,
         }));
     }
 
@@ -1256,6 +1277,8 @@ static int fmt_dither(SwsContext *ctx, SwsOpList *ops,
                 .op   = SWS_OP_DITHER,
                 .type = type,
                 .dither.matrix = bias,
+                .dither.min = *bias,
+                .dither.max = *bias,
             });
         } else {
             return 0; /* No-op */
@@ -1270,6 +1293,15 @@ static int fmt_dither(SwsContext *ctx, SwsOpList *ops,
         dither.matrix = generate_bayer_matrix(dither.size_log2);
         if (!dither.matrix)
             return AVERROR(ENOMEM);
+
+        const int size = 1 << dither.size_log2;
+        dither.min = dither.max = dither.matrix[0];
+        for (int i = 1; i < size * size; i++) {
+            if (av_cmp_q(dither.min, dither.matrix[i]) > 0)
+                dither.min = dither.matrix[i];
+            if (av_cmp_q(dither.matrix[i], dither.max) > 0)
+                dither.max = dither.matrix[i];
+        }
 
         /* Brute-forced offsets; minimizes quantization error across a 16x16
          * bayer dither pattern for standard RGBA and YUVA pixel formats */
@@ -1356,7 +1388,7 @@ int ff_sws_decode_colors(SwsContext *ctx, SwsPixelType type,
     case AVCOL_SPC_UNSPECIFIED:
         c = av_csp_luma_coeffs_from_avcsp(AVCOL_SPC_BT470BG);
         *incomplete = true;
-        /* fall through */
+        av_fallthrough;
     case AVCOL_SPC_FCC:
     case AVCOL_SPC_BT470BG:
     case AVCOL_SPC_SMPTE170M:
@@ -1428,7 +1460,7 @@ int ff_sws_encode_colors(SwsContext *ctx, SwsPixelType type,
     case AVCOL_SPC_UNSPECIFIED:
         c = av_csp_luma_coeffs_from_avcsp(AVCOL_SPC_BT470BG);
         *incomplete = true;
-        /* fall through */
+        av_fallthrough;
     case AVCOL_SPC_FCC:
     case AVCOL_SPC_BT470BG:
     case AVCOL_SPC_SMPTE170M:
@@ -1489,26 +1521,26 @@ int ff_sws_encode_colors(SwsContext *ctx, SwsPixelType type,
     }));
 
     if (!(dst->desc->flags & AV_PIX_FMT_FLAG_FLOAT)) {
-        SwsConst range = {0};
+        SwsClampOp range = {0};
 
         const bool is_ya = dst->desc->nb_components == 2;
         for (int i = 0; i < dst->desc->nb_components; i++) {
             /* Clamp to legal pixel range */
             const int idx = i * (is_ya ? 3 : 1);
-            range.q4[idx] = Q((1 << dst->desc->comp[i].depth) - 1);
+            range.limit[idx] = Q((1 << dst->desc->comp[i].depth) - 1);
         }
 
         RET(fmt_dither(ctx, ops, type, src, dst));
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
-            .op   = SWS_OP_MAX,
-            .type = type,
-            .c.q4 = { Q0, Q0, Q0, Q0 },
+            .op    = SWS_OP_MAX,
+            .type  = type,
+            .clamp = {{ Q0, Q0, Q0, Q0 }},
         }));
 
         RET(ff_sws_op_list_append(ops, &(SwsOp) {
-            .op   = SWS_OP_MIN,
-            .type = type,
-            .c    = range,
+            .op    = SWS_OP_MIN,
+            .type  = type,
+            .clamp = range,
         }));
     }
 
@@ -1517,6 +1549,125 @@ int ff_sws_encode_colors(SwsContext *ctx, SwsPixelType type,
         .op         = SWS_OP_CONVERT,
         .convert.to = pixel_type,
     });
+}
+
+static SwsScaler get_scaler_fallback(SwsContext *ctx)
+{
+    if (ctx->scaler != SWS_SCALE_AUTO)
+        return ctx->scaler;
+
+    /* Backwards compatibility with legacy flags API */
+    if (ctx->flags & SWS_BILINEAR) {
+        return SWS_SCALE_BILINEAR;
+    } else if (ctx->flags & (SWS_BICUBIC | SWS_BICUBLIN)) {
+        return SWS_SCALE_BICUBIC;
+    } else if (ctx->flags & SWS_POINT) {
+        return SWS_SCALE_POINT;
+    } else if (ctx->flags & SWS_AREA) {
+        return SWS_SCALE_AREA;
+    } else if (ctx->flags & SWS_GAUSS) {
+        return SWS_SCALE_GAUSSIAN;
+    } else if (ctx->flags & SWS_SINC) {
+        return SWS_SCALE_SINC;
+    } else if (ctx->flags & SWS_LANCZOS) {
+        return SWS_SCALE_LANCZOS;
+    } else if (ctx->flags & SWS_SPLINE) {
+        return SWS_SCALE_SPLINE;
+    } else {
+        return SWS_SCALE_AUTO;
+    }
+}
+
+static int add_filter(SwsContext *ctx, SwsPixelType type, SwsOpList *ops,
+                      SwsOpType filter, int src_size, int dst_size)
+{
+    if (src_size == dst_size)
+        return 0; /* no-op */
+
+    SwsFilterParams params = {
+        .scaler   = get_scaler_fallback(ctx),
+        .src_size = src_size,
+        .dst_size = dst_size,
+    };
+
+    for (int i = 0; i < SWS_NUM_SCALER_PARAMS; i++)
+        params.scaler_params[i] = ctx->scaler_params[i];
+
+    SwsFilterWeights *kernel;
+    int ret = ff_sws_filter_generate(ctx, &params, &kernel);
+    if (ret == AVERROR(ENOTSUP)) {
+        /* Filter size exceeds limit; cascade with geometric mean size */
+        int mean = sqrt((int64_t) src_size * dst_size);
+        if (mean == src_size || mean == dst_size)
+            return AVERROR_BUG; /* sanity, prevent infinite loop */
+        ret = add_filter(ctx, type, ops, filter, src_size, mean);
+        if (ret < 0)
+            return ret;
+        return add_filter(ctx, type, ops, filter, mean, dst_size);
+    } else if (ret < 0) {
+        return ret;
+    }
+
+    return ff_sws_op_list_append(ops, &(SwsOp) {
+        .type = type,
+        .op   = filter,
+        .filter.kernel = kernel,
+    });
+}
+
+int ff_sws_add_filters(SwsContext *ctx, SwsPixelType type, SwsOpList *ops,
+                       const SwsFormat *src, const SwsFormat *dst)
+{
+    /**
+     * Always perform horizontal scaling first, since it's much more likely to
+     * benefit from small integer optimizations; we should maybe flip the order
+     * here if we're downscaling the vertical resolution by a lot, though.
+     */
+    int ret = add_filter(ctx, type, ops, SWS_OP_FILTER_H, src->width, dst->width);
+    if (ret < 0)
+        return ret;
+
+    return add_filter(ctx, type, ops, SWS_OP_FILTER_V, src->height, dst->height);
+}
+
+int ff_sws_op_list_generate(SwsContext *ctx, const SwsFormat *src,
+                            const SwsFormat *dst, SwsOpList **out_ops,
+                            bool *incomplete)
+{
+    /* The new code does not yet support alpha blending */
+    if (src->desc->flags & AV_PIX_FMT_FLAG_ALPHA &&
+        ctx->alpha_blend != SWS_ALPHA_BLEND_NONE)
+        return AVERROR(ENOTSUP);
+
+    SwsOpList *ops = ff_sws_op_list_alloc();
+    if (!ops)
+        return AVERROR(ENOMEM);
+    ops->src = *src;
+    ops->dst = *dst;
+
+    const SwsPixelType type = SWS_PIXEL_F32;
+    int ret = ff_sws_decode_pixfmt(ops, src->format);
+    if (ret < 0)
+        goto fail;
+    ret = ff_sws_decode_colors(ctx, type, ops, src, incomplete);
+    if (ret < 0)
+        goto fail;
+    ret = ff_sws_add_filters(ctx, type, ops, src, dst);
+    if (ret < 0)
+        goto fail;
+    ret = ff_sws_encode_colors(ctx, type, ops, src, dst, incomplete);
+    if (ret < 0)
+        goto fail;
+    ret = ff_sws_encode_pixfmt(ops, dst->format);
+    if (ret < 0)
+        goto fail;
+
+    *out_ops = ops;
+    return 0;
+
+fail:
+    ff_sws_op_list_free(&ops);
+    return ret;
 }
 
 #endif /* CONFIG_UNSTABLE */

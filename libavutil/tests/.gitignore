@@ -7,6 +7,7 @@
 /base64
 /blowfish
 /bprint
+/buffer
 /camellia
 /cast5
 /channel_layout
@@ -15,6 +16,7 @@
 /cpu_init
 /crc
 /des
+/detection_bbox
 /dict
 /display
 /error
@@ -22,7 +24,9 @@
 /eval
 /fifo
 /file
+/film_grain_params
 /hash
+/hdr_dynamic_vivid_metadata
 /hmac
 /hwdevice
 /imgutils
@@ -31,6 +35,7 @@
 /lls
 /log
 /lzo
+/mathematics
 /md5
 /murmur3
 /opt
@@ -41,14 +46,22 @@
 /pixfmt_best
 /random_seed
 /rational
+/rc4
 /ripemd
+/samplefmt
 /sha
 /sha512
 /side_data_array
 /softfloat
+/spherical
+/stereo3d
+/tdrdi
 /tea
+/timecode
+/timestamp
 /tree
 /twofish
 /utf8
 /uuid
+/video_enc_params
 /xtea

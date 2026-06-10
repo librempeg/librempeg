@@ -215,6 +215,9 @@ static int unpack_channel(AVCodecContext *avctx, AVPacket *avpkt, const int ch)
         } else {
             pos = 0;
             for (int i = 0; i < RELIC_MAX_FREQ; i++) {
+                if (get_bits_left(gb) <= 0)
+                    break;
+
                 move = get_bits(gb, ei_bits);
 
                 if (i > 0 && move == 0)
@@ -266,8 +269,11 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
 {
     int ret;
 
-    for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++)
-        unpack_channel(avctx, avpkt, ch);
+    for (int ch = 0; ch < avctx->ch_layout.nb_channels; ch++) {
+        ret = unpack_channel(avctx, avpkt, ch);
+        if (ret < 0)
+            return ret;
+    }
 
     frame->nb_samples = 512;
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)

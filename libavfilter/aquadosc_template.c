@@ -21,30 +21,35 @@
 #undef SAMPLE_FORMAT
 #undef FIXED
 #undef MULT
+#undef CLIP
 #if DEPTH == 16
 #define stype int16_t
 #define ftype int32_t
 #define SAMPLE_FORMAT s16p
 #define FIXED(x) (lrint((x) * (1 << (DEPTH-1))))
 #define MULT(x, y) (((x) * (y)) >> (DEPTH-1))
+#define CLIP(x) av_clip_int16(x)
 #elif DEPTH == 31
 #define stype int32_t
 #define ftype int64_t
 #define SAMPLE_FORMAT s32p
 #define FIXED(x) (lrint((x) * (1U << (DEPTH))))
 #define MULT(x, y) (((x) * (y)) >> (DEPTH))
+#define CLIP(x) av_clipl_int32(x)
 #elif DEPTH == 32
 #define stype float
 #define ftype double
 #define SAMPLE_FORMAT fltp
 #define FIXED(x) (x)
 #define MULT(x, y) ((x) * (y))
+#define CLIP(x) (x)
 #else
 #define stype double
 #define ftype double
 #define SAMPLE_FORMAT dblp
 #define FIXED(x) (x)
 #define MULT(x, y) ((x) * (y))
+#define CLIP(x) (x)
 #endif
 
 #define F(x) ((ftype)(x))
@@ -106,8 +111,8 @@ static void fn(output_samples)(AVFilterContext *ctx, void *stc, AVFrame *frame)
     ftype w;
 
     for (int i = 0; i < nb_samples; i++) {
-        real[i] = MULT(u, a) + offset;
-        imag[i] = MULT(v, a) + offset;
+        real[i] = CLIP(MULT(u, a) + offset);
+        imag[i] = CLIP(MULT(v, a) + offset);
         w = u - MULT(k1, v);
         v += MULT(k2, w);
         u = w - MULT(k1, v);

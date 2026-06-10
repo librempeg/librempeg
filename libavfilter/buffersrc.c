@@ -46,6 +46,7 @@ typedef struct BufferSourceContext {
     AVRational        time_base;     ///< time_base to set in the output link
     AVRational        frame_rate;    ///< frame_rate to set in the output link
     unsigned          nb_failed_requests;
+    unsigned          warning_limit;
 
     /* video only */
     int               w, h, prev_w, prev_h;
@@ -275,6 +276,16 @@ int attribute_align_arg av_buffersrc_add_frame_flags(AVFilterContext *ctx, AVFra
             return ret;
     }
 
+    FilterLinkInternal *const li = ff_link_internal(ctx->outputs[0]);
+    if (s->warning_limit &&
+        ff_framequeue_queued_frames(&li->fifo) >= s->warning_limit) {
+        av_log(s, AV_LOG_WARNING,
+               "%d buffers queued in %s, something may be wrong.\n",
+               s->warning_limit,
+               (char *)av_x_if_null(ctx->name, ctx->filter->name));
+        s->warning_limit *= 10;
+    }
+
     return 0;
 }
 
@@ -292,6 +303,8 @@ int av_buffersrc_close(AVFilterContext *ctx, int64_t pts, unsigned flags)
 static av_cold int init_video(AVFilterContext *ctx)
 {
     BufferSourceContext *c = ctx->priv;
+
+    c->warning_limit = 100;
 
     if (c->pix_fmt == AV_PIX_FMT_NONE) {
         av_log(ctx, AV_LOG_ERROR, "Unspecified pixel format\n");
@@ -394,6 +407,8 @@ static av_cold int init_audio(AVFilterContext *ctx)
     BufferSourceContext *s = ctx->priv;
     char buf[128];
     int ret = 0;
+
+    s->warning_limit = 100;
 
     if (s->sample_fmt == AV_SAMPLE_FMT_NONE) {
         av_log(ctx, AV_LOG_ERROR, "Sample format was not set or was invalid\n");

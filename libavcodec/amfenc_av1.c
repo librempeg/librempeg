@@ -23,9 +23,6 @@
 #include "amfenc.h"
 #include "codec_internal.h"
 
-#define AMF_VIDEO_ENCODER_AV1_CAP_WIDTH_ALIGNMENT_FACTOR_LOCAL                L"Av1WidthAlignmentFactor"          // amf_int64; default = 1
-#define AMF_VIDEO_ENCODER_AV1_CAP_HEIGHT_ALIGNMENT_FACTOR_LOCAL               L"Av1HeightAlignmentFactor"         // amf_int64; default = 1
-
 #define OFFSET(x) offsetof(AMFEncoderContext, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
@@ -262,7 +259,7 @@ static av_cold int amf_encode_init_av1(AVCodecContext* avctx)
     AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_AV1_OUTPUT_COLOR_PROFILE, color_profile);
 
     // Color Range
-    // TODO
+    AMF_ASSIGN_PROPERTY_BOOL(res, ctx->encoder, AMF_VIDEO_ENCODER_AV1_OUTPUT_FULL_RANGE_COLOR, (avctx->color_range == AVCOL_RANGE_JPEG));
 
     // Color Transfer Characteristics (AMF matches ISO/IEC)
     if(avctx->color_primaries != AVCOL_PRI_UNSPECIFIED && (pix_fmt == AV_PIX_FMT_NV12 || pix_fmt == AV_PIX_FMT_P010)){
@@ -658,13 +655,13 @@ static av_cold int amf_encode_init_av1(AVCodecContext* avctx)
     var.pInterface->pVtbl->Release(var.pInterface);
 
     //processing crop information according to alignment
-    if (ctx->encoder->pVtbl->GetProperty(ctx->encoder, AMF_VIDEO_ENCODER_AV1_CAP_WIDTH_ALIGNMENT_FACTOR_LOCAL, &var) != AMF_OK)
+    if (ctx->encoder->pVtbl->GetProperty(ctx->encoder, AMF_VIDEO_ENCODER_AV1_CAP_WIDTH_ALIGNMENT_FACTOR, &var) != AMF_OK)
         // assume older driver and Navi3x
         width_alignment_factor = 64;
     else
         width_alignment_factor = (int)var.int64Value;
 
-    if (ctx->encoder->pVtbl->GetProperty(ctx->encoder, AMF_VIDEO_ENCODER_AV1_CAP_HEIGHT_ALIGNMENT_FACTOR_LOCAL, &var) != AMF_OK)
+    if (ctx->encoder->pVtbl->GetProperty(ctx->encoder, AMF_VIDEO_ENCODER_AV1_CAP_HEIGHT_ALIGNMENT_FACTOR, &var) != AMF_OK)
         // assume older driver and Navi3x
         height_alignment_factor = 16;
     else
@@ -745,7 +742,7 @@ const FFCodec ff_av1_amf_encoder = {
                       AV_CODEC_CAP_DR1,
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
     CODEC_PIXFMTS_ARRAY(ff_amf_pix_fmts),
-    .color_ranges   = AVCOL_RANGE_MPEG, /* FIXME: implement tagging */
+    .color_ranges   = AVCOL_RANGE_MPEG | AVCOL_RANGE_JPEG,
     .p.wrapper_name   = "amf",
     .hw_configs     = ff_amfenc_hw_configs,
 };

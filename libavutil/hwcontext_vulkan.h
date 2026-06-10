@@ -1,19 +1,19 @@
 /*
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #ifndef AVUTIL_HWCONTEXT_VULKAN_H
@@ -168,18 +168,26 @@ typedef struct AVVulkanDeviceContext {
     int nb_decode_queues;
 #endif
 
+#if FF_API_VULKAN_SYNC_QUEUES
     /**
      * Locks a queue, preventing other threads from submitting any command
      * buffers to this queue.
      * If set to NULL, will be set to lavu-internal functions that utilize a
      * mutex.
+     *
+     * Deprecated: use VK_KHR_internally_synchronized_queues.
      */
+    attribute_deprecated
     void (*lock_queue)(struct AVHWDeviceContext *ctx, uint32_t queue_family, uint32_t index);
 
     /**
      * Similar to lock_queue(), unlocks a queue. Must only be called after locking.
+     *
+     * Deprecated: use VK_KHR_internally_synchronized_queues.
      */
+    attribute_deprecated
     void (*unlock_queue)(struct AVHWDeviceContext *ctx, uint32_t queue_family, uint32_t index);
+#endif
 
     /**
      * Queue families used. Must be preferentially ordered. List may contain

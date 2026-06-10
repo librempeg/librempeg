@@ -10,7 +10,9 @@ OBJS = alphablend.o                                     \
        csputils.o                                       \
        hscale.o                                         \
        hscale_fast_bilinear.o                           \
+       filters.o                                        \
        format.o                                         \
+       framepool.o                                      \
        gamma.o                                          \
        graph.o                                          \
        input.o                                          \
@@ -49,3 +51,10 @@ TESTPROGS = colorspace                                                  \
             pixdesc_query                                               \
             swscale                                                     \
             sws_ops                                                     \
+            sws_ops_aarch64                                             \
+
+sws_ops_entries_aarch64: TAG = GEN
+sws_ops_entries_aarch64: $(SUBDIR)tests/sws_ops_aarch64$(EXESUF)
+	$(M)$< > $(SRC_PATH)/libswscale/aarch64/ops_entries.c.tmp
+	$(CP) $(SRC_PATH)/libswscale/aarch64/ops_entries.c.tmp $(SRC_PATH)/libswscale/aarch64/ops_entries.c
+	$(RM) $(SRC_PATH)/libswscale/aarch64/ops_entries.c.tmp

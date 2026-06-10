@@ -368,7 +368,7 @@ fail:
     ff_id3v2_free_extra_meta(&id3v2_extra_meta);
     av_dict_free(&tmp);
     if (s->pb && !(s->flags & AVFMT_FLAG_CUSTOM_IO))
-        avio_closep(&s->pb);
+        ff_format_io_close(s, &s->pb);
     avformat_free_context(s);
     *ps = NULL;
     return ret;
@@ -1092,7 +1092,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
         pkt->pts > pkt->dts)
         presentation_delayed = 1;
 
-    if (s->debug & FF_FDEBUG_TS)
+    if (s->debug & AV_FDEBUG_TS)
         av_log(s, AV_LOG_DEBUG,
             "IN delayed:%d pts:%s, dts:%s cur_dts:%s st:%d pc:%p duration:%"PRId64" delay:%d onein_oneout:%d\n",
             presentation_delayed, av_ts2str(pkt->pts), av_ts2str(pkt->dts), av_ts2str(sti->cur_dts),
@@ -1162,7 +1162,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
     if (pkt->dts > sti->cur_dts)
         sti->cur_dts = pkt->dts;
 
-    if (s->debug & FF_FDEBUG_TS)
+    if (s->debug & AV_FDEBUG_TS)
         av_log(s, AV_LOG_DEBUG, "OUTdelayed:%d/%d pts:%s, dts:%s cur_dts:%s st:%d (%d)\n",
             presentation_delayed, delay, av_ts2str(pkt->pts), av_ts2str(pkt->dts), av_ts2str(sti->cur_dts), st->index, st->id);
 
@@ -1473,7 +1473,7 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
                    av_ts2str(pkt->dts),
                    pkt->size);
         }
-        if (s->debug & FF_FDEBUG_TS)
+        if (s->debug & AV_FDEBUG_TS)
             av_log(s, AV_LOG_DEBUG,
                    "ff_read_packet stream=%d, pts=%s, dts=%s, size=%d, duration=%"PRId64", flags=%d\n",
                    pkt->stream_index,
@@ -1570,7 +1570,7 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
         fci->metafree = metaret == AVERROR_OPTION_NOT_FOUND;
     }
 
-    if (s->debug & FF_FDEBUG_TS)
+    if (s->debug & AV_FDEBUG_TS)
         av_log(s, AV_LOG_DEBUG,
                "read_frame_internal stream=%d, pts=%s, dts=%s, "
                "size=%d, duration=%"PRId64", flags=%d\n",
@@ -3168,7 +3168,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
     /* update the stream group parameters from the stream contexts if needed */
     for (unsigned i = 0; i < ic->nb_stream_groups; i++) {
         AVStreamGroup *const stg  = ic->stream_groups[i];
-        AVStreamGroupLCEVC *lcevc;
+        AVStreamGroupLayeredVideo *lcevc;
         const AVStream *st;
 
         if (stg->type != AV_STREAM_GROUP_PARAMS_LCEVC)
@@ -3176,10 +3176,10 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 
         /* For LCEVC in mpegts, the parser is needed to get the enhancement layer
          * dimensions */
-        lcevc = stg->params.lcevc;
+        lcevc = stg->params.layered_video;
         if (lcevc->width && lcevc->height)
             continue;
-        st = stg->streams[lcevc->lcevc_index];
+        st = stg->streams[lcevc->el_index];
         lcevc->width  = st->codecpar->width;
         lcevc->height = st->codecpar->height;
     }

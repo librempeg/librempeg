@@ -810,6 +810,15 @@ static void dump_stream_group(const AVFormatContext *ic, uint8_t *printed,
         }
         break;
     }
+    case AV_STREAM_GROUP_PARAMS_TREF: {
+        av_log(NULL, AV_LOG_INFO, " Track Reference:\n");
+        for (int i = 0; i < stg->nb_streams; i++) {
+            const AVStream *st = stg->streams[i];
+            dump_stream_format(ic, st->index, i, index, is_output, AV_LOG_INFO);
+            printed[st->index] = 1;
+        }
+        break;
+    }
     default:
         break;
     }
