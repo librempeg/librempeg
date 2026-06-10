@@ -972,8 +972,155 @@ int ff_sws_shuffle_mask(const SwsUOp *uop, int8_t shuffle[], int size)
     return num_groups;
 }
 
+static bool pixel_is_repeating(SwsPixelType type, SwsPixel val)
+{
+    switch (ff_sws_pixel_type_size(type)) {
+    case 1: return true;
+    case 2: return val.u16 == val.u8 * 0x101ul;
+    case 4: return val.u32 == val.u8 * 0x1010101ul;
+    default: break;
+    }
+
+    av_unreachable("Invalid pixel type!");
+    return false;
+}
+
+static int solve_shuffle(const SwsUOpList *const uops, SwsUOp *out)
+{
+    if (!uops->num_ops)
+        return AVERROR(EINVAL);
+    const SwsUOp *read = &uops->ops[0];
+    switch (read->uop) {
+    case SWS_UOP_READ_PACKED:
+        break;
+    case SWS_UOP_READ_PLANAR:
+        if (read->mask != SWS_COMP_ELEMS(1))
+             return AVERROR(ENOTSUP);
+        break;
+    default:
+        return AVERROR(ENOTSUP);
+    }
+
+    const int read_size = ff_sws_pixel_type_size(read->type);
+    uint32_t mask[4] = {0};
+    int clear_val = -1;
+    int read_elems = 0;
+    for (int i = 0; i < 4; i++) {
+        if (SWS_COMP_TEST(read->mask, i)) {
+            mask[i] = 0x01010101 * i * read_size + 0x03020100;
+            read_elems++;
+        }
+    }
+
+    for (int opidx = 1; opidx < uops->num_ops; opidx++) {
+        const SwsUOp *uop = &uops->ops[opidx];
+        const SwsUOpParams *par = &uop->par;
+        switch (uop->uop) {
+        case SWS_UOP_COPY:
+        case SWS_UOP_PERMUTE: {
+            uint32_t tmp;
+            for (int i = 0; i < par->move.num_moves; i++) {
+                const int dst_idx = par->move.dst[i];
+                const int src_idx = par->move.src[i];
+                uint32_t *src = src_idx < 0 ? &tmp : &mask[src_idx];
+                uint32_t *dst = dst_idx < 0 ? &tmp : &mask[dst_idx];
+                *dst = *src;
+            }
+            break;
+        }
+
+        case SWS_UOP_SWAP_BYTES:
+            for (int i = 0; i < 4; i++) {
+                switch (ff_sws_pixel_type_size(uop->type)) {
+                case 2: mask[i] = av_bswap16(mask[i]); break;
+                case 4: mask[i] = av_bswap32(mask[i]); break;
+                }
+            }
+            break;
+
+        case SWS_UOP_CLEAR:
+            for (int i = 0; i < 4; i++) {
+                if (!SWS_COMP_TEST(uop->mask, i))
+                    continue;
+                SwsPixel val = uop->data.vec4[i];
+                if (!pixel_is_repeating(uop->type, val) ||
+                    (clear_val >= 0 && clear_val != val.u8))
+                    return AVERROR(ENOTSUP); /* would require different bytes */
+                mask[i] = 0xFFFFFFFFul; /* (uint8_t[4]) { -1, -1, -1, -1 } */
+                clear_val = val.u8;
+            }
+            break;
+
+        case SWS_UOP_EXPAND_PAIR:
+        case SWS_UOP_EXPAND_QUAD:
+            for (int i = 0; i < 4; i++)
+                mask[i] = 0x01010101 * (mask[i] & 0xFF);
+            break;
+
+        case SWS_UOP_WRITE_PLANAR:
+            if (uop->mask != SWS_COMP_ELEMS(1))
+                return AVERROR(ENOTSUP);
+            av_fallthrough;
+        case SWS_UOP_WRITE_PACKED: {
+            const int write_elems = av_popcount(uop->mask);
+            const int write_size  = ff_sws_pixel_type_size(uop->type);
+            *out = (SwsUOp) {
+                .uop  = SWS_UOP_RW_SHUFFLE,
+                .type = SWS_PIXEL_U8,
+                .mask = SWS_COMP_ELEMS(1), /* single plane for now */
+            };
+
+            SwsShuffleUOp *par = &out->par.shuffle;
+            SwsShuffleMask *data = &out->data.shuffle;
+            *par = (SwsShuffleUOp) {
+                .read_size   = read_elems * read_size,
+                .write_size  = write_elems * write_size,
+                .clear_value = clear_val >= 0 ? clear_val : 0,
+            };
+
+            /* Generate baseline shuffle for a single pixel */
+            data->pixels = 1;
+            for (int i = 0; i < write_elems; i++) {
+                const int offset = i * write_size;
+                for (int b = 0; b < write_size; b++)
+                    data->mask[offset + b] = mask[i] >> (b * 8);
+            }
+
+            /* Expand as many times as needed to round up to the size of the
+             * shuffle uop data mask */
+            int8_t tmp[FF_ARRAY_ELEMS(data->mask)];
+            const int num_groups = ff_sws_shuffle_mask(out, tmp, sizeof(tmp));
+            if (num_groups < 0)
+                return num_groups;
+            memcpy(data->mask, tmp, sizeof(tmp));
+            par->read_size  *= num_groups;
+            par->write_size *= num_groups;
+            data->pixels = num_groups;
+            return 0;
+        }
+
+        default:
+            return AVERROR(ENOTSUP);
+        }
+    }
+
+    return AVERROR(EINVAL);
+}
+
 int ff_sws_uop_list_optimize(SwsContext *ctx, SwsUOpFlags flags, SwsUOpList *uops)
 {
+    /* Try promoting the entire uop list to a packed shuffle operation */
+    if (flags & SWS_UOP_FLAG_PSHUFB) {
+        SwsUOp shuffle;
+        int ret = solve_shuffle(uops, &shuffle);
+        if (ret >= 0) {
+            ff_sws_uop_list_remove_at(uops, 0, uops->num_ops);
+            return ff_sws_uop_list_append(uops, &shuffle);
+        } else if (ret < 0 && ret != AVERROR(ENOTSUP)) {
+            return ret;
+        }
+    }
+
 #if 0
     static const SwsUOp dummy = {0};
 

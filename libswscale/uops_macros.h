@@ -105,8 +105,52 @@
     MACRO(__VA_ARGS__, u8_write_bit_x                          , SWS_PIXEL_U8 , SWS_UOP_WRITE_BIT       , 0x1)
 #define SWS_FOR_STRUCT_U8_WRITE_BIT(MACRO, ...) \
     MACRO(__VA_ARGS__, u8_write_bit_x                          , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_WRITE_BIT       , .mask = 0x1)
-#define SWS_FOR_U8_RW_SHUFFLE(MACRO, ...)
-#define SWS_FOR_STRUCT_U8_RW_SHUFFLE(MACRO, ...)
+#define SWS_FOR_U8_RW_SHUFFLE(MACRO, ...) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_2_12                  , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 2, 12) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_4_12                  , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 4, 12) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_4_16                  , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 4, 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_5_15                  , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 5, 15) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_6_12                  , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 6, 12) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_8_12                  , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 8, 12) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_8_16                  , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 8, 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_10_15                 , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 10, 15) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_12_12                 , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 12, 12) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_12_16                 , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 12, 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_15_5                  , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 15, 5) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_15_15                 , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 15, 15) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_16_4                  , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 16, 4) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_16_8                  , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 16, 8) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_16_12                 , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 16, 12) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_16_16                 , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0x0, 16, 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_ff_2_16                 , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0xff, 2, 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_ff_4_16                 , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0xff, 4, 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_ff_6_16                 , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0xff, 6, 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_ff_8_16                 , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0xff, 8, 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_ff_12_16                , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0xff, 12, 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_ff_16_16                , SWS_PIXEL_U8 , SWS_UOP_RW_SHUFFLE      , 0x1, 0xff, 16, 16)
+#define SWS_FOR_STRUCT_U8_RW_SHUFFLE(MACRO, ...) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_2_12                  , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 2, .par.shuffle.write_size = 12) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_4_12                  , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 4, .par.shuffle.write_size = 12) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_4_16                  , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 4, .par.shuffle.write_size = 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_5_15                  , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 5, .par.shuffle.write_size = 15) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_6_12                  , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 6, .par.shuffle.write_size = 12) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_8_12                  , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 8, .par.shuffle.write_size = 12) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_8_16                  , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 8, .par.shuffle.write_size = 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_10_15                 , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 10, .par.shuffle.write_size = 15) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_12_12                 , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 12, .par.shuffle.write_size = 12) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_12_16                 , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 12, .par.shuffle.write_size = 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_15_5                  , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 15, .par.shuffle.write_size = 5) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_15_15                 , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 15, .par.shuffle.write_size = 15) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_16_4                  , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 16, .par.shuffle.write_size = 4) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_16_8                  , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 16, .par.shuffle.write_size = 8) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_16_12                 , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 16, .par.shuffle.write_size = 12) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_0_16_16                 , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0x0, .par.shuffle.read_size = 16, .par.shuffle.write_size = 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_ff_2_16                 , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0xff, .par.shuffle.read_size = 2, .par.shuffle.write_size = 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_ff_4_16                 , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0xff, .par.shuffle.read_size = 4, .par.shuffle.write_size = 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_ff_6_16                 , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0xff, .par.shuffle.read_size = 6, .par.shuffle.write_size = 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_ff_8_16                 , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0xff, .par.shuffle.read_size = 8, .par.shuffle.write_size = 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_ff_12_16                , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0xff, .par.shuffle.read_size = 12, .par.shuffle.write_size = 16) \
+    MACRO(__VA_ARGS__, u8_rw_shuffle_x_ff_16_16                , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_RW_SHUFFLE      , .mask = 0x1, .par.shuffle.clear_value = 0xff, .par.shuffle.read_size = 16, .par.shuffle.write_size = 16)
 #define SWS_FOR_U8_PERMUTE(MACRO, ...) \
     MACRO(__VA_ARGS__, u8_permute_xy_xy_zw                     , SWS_PIXEL_U8 , SWS_UOP_PERMUTE         , 0x3, 2, 0, 1, 0, 0, 0, 0, 2, 3, 0, 0, 0, 0) \
     MACRO(__VA_ARGS__, u8_permute_xyz_x_w                      , SWS_PIXEL_U8 , SWS_UOP_PERMUTE         , 0x7, 1, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0) \
