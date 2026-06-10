@@ -317,7 +317,7 @@ static av_cold int libvorbis_encode_init(AVCodecContext *avctx)
     offset += header_code.bytes;
     av_assert0(offset == avctx->extradata_size);
 
-    ret = ff_vorbis_parse_init(&s->vp, avctx->extradata, avctx->extradata_size);
+    ret = ff_vorbis_parse_init(&s->vp, avctx->extradata, avctx->extradata_size, 30);
     if (ret < 0) {
         av_log(avctx, AV_LOG_ERROR, "invalid extradata\n");
         goto error;
