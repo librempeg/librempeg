@@ -25,48 +25,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Similar to SwsPixelType */
-typedef enum SwsAArch64PixelType {
-    AARCH64_PIXEL_U8,
-    AARCH64_PIXEL_U16,
-    AARCH64_PIXEL_U32,
-    AARCH64_PIXEL_F32,
-    AARCH64_PIXEL_TYPE_NB,
-} SwsAArch64PixelType;
-
-/* Similar to SwsOpType */
-typedef enum SwsAArch64OpType {
-    AARCH64_SWS_OP_NONE = 0,
-    AARCH64_SWS_OP_READ_BIT,
-    AARCH64_SWS_OP_READ_NIBBLE,
-    AARCH64_SWS_OP_READ_PACKED,
-    AARCH64_SWS_OP_READ_PLANAR,
-    AARCH64_SWS_OP_WRITE_BIT,
-    AARCH64_SWS_OP_WRITE_NIBBLE,
-    AARCH64_SWS_OP_WRITE_PACKED,
-    AARCH64_SWS_OP_WRITE_PLANAR,
-    AARCH64_SWS_OP_SWAP_BYTES,
-    AARCH64_SWS_OP_PERMUTE,
-    AARCH64_SWS_OP_COPY,
-    AARCH64_SWS_OP_UNPACK,
-    AARCH64_SWS_OP_PACK,
-    AARCH64_SWS_OP_LSHIFT,
-    AARCH64_SWS_OP_RSHIFT,
-    AARCH64_SWS_OP_CLEAR,
-    AARCH64_SWS_OP_TO_U8,
-    AARCH64_SWS_OP_TO_U16,
-    AARCH64_SWS_OP_TO_U32,
-    AARCH64_SWS_OP_TO_F32,
-    AARCH64_SWS_OP_EXPAND_PAIR,
-    AARCH64_SWS_OP_EXPAND_QUAD,
-    AARCH64_SWS_OP_MIN,
-    AARCH64_SWS_OP_MAX,
-    AARCH64_SWS_OP_SCALE,
-    AARCH64_SWS_OP_LINEAR,
-    AARCH64_SWS_OP_LINEAR_FMA,
-    AARCH64_SWS_OP_DITHER,
-    AARCH64_SWS_OP_TYPE_NB,
-} SwsAArch64OpType;
+#include "libswscale/uops.h"
 
 /* Each nibble in the mask corresponds to one component. */
 typedef uint16_t SwsAArch64OpMask;
@@ -100,14 +59,14 @@ typedef struct SwsAArch64DitherOp {
 } SwsAArch64DitherOp;
 
 /**
- * SwsAArch64OpImplParams describes the parameters for an SwsAArch64OpType
+ * SwsAArch64OpImplParams describes the parameters for an SwsUOpType
  * operation. It consists of simplified parameters from the SwsOp structure,
  * with the purpose of being straight-forward to implement and execute.
  */
 typedef struct SwsAArch64OpImplParams {
-    SwsAArch64OpType    op;
+    SwsUOpType          uop;
     SwsAArch64OpMask    mask;
-    SwsAArch64PixelType type;
+    SwsPixelType        type;
     uint8_t block_size;
     union {
         uint8_t             shift;

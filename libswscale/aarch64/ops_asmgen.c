@@ -117,21 +117,6 @@ static const SwsAArch64OpEntry ops_entries[] = {
 };
 
 /*********************************************************************/
-static size_t aarch64_pixel_size(SwsAArch64PixelType fmt)
-{
-    switch (fmt) {
-    case AARCH64_PIXEL_U8:  return 1;
-    case AARCH64_PIXEL_U16: return 2;
-    case AARCH64_PIXEL_U32: return 4;
-    case AARCH64_PIXEL_F32: return 4;
-    default:
-        av_assert0(!"Invalid pixel type!");
-        break;
-    }
-    return 0;
-}
-
-/*********************************************************************/
 typedef struct SwsAArch64Context {
     RasmContext *rctx;
 
@@ -384,10 +369,10 @@ static void asmgen_set_load_cont_node(SwsAArch64Context *s)
 
 /*********************************************************************/
 /* gather raw pixels from planes */
-/* AARCH64_SWS_OP_READ_BIT */
-/* AARCH64_SWS_OP_READ_NIBBLE */
-/* AARCH64_SWS_OP_READ_PACKED */
-/* AARCH64_SWS_OP_READ_PLANAR */
+/* SWS_UOP_READ_BIT */
+/* SWS_UOP_READ_NIBBLE */
+/* SWS_UOP_READ_PACKED */
+/* SWS_UOP_READ_PLANAR */
 
 static void asmgen_op_read_bit(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -494,10 +479,10 @@ static void asmgen_op_read_planar(SwsAArch64Context *s, const SwsAArch64OpImplPa
 
 /*********************************************************************/
 /* write raw pixels to planes */
-/* AARCH64_SWS_OP_WRITE_BIT */
-/* AARCH64_SWS_OP_WRITE_NIBBLE */
-/* AARCH64_SWS_OP_WRITE_PACKED */
-/* AARCH64_SWS_OP_WRITE_PLANAR */
+/* SWS_UOP_WRITE_BIT */
+/* SWS_UOP_WRITE_NIBBLE */
+/* SWS_UOP_WRITE_PACKED */
+/* SWS_UOP_WRITE_PLANAR */
 
 static void asmgen_op_write_bit(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -599,7 +584,7 @@ static void asmgen_op_write_planar(SwsAArch64Context *s, const SwsAArch64OpImplP
 
 /*********************************************************************/
 /* swap byte order (for differing endianness) */
-/* AARCH64_SWS_OP_SWAP_BYTES */
+/* SWS_UOP_SWAP_BYTES */
 
 static void asmgen_op_swap_bytes(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -612,7 +597,7 @@ static void asmgen_op_swap_bytes(SwsAArch64Context *s, const SwsAArch64OpImplPar
         a64op_vec_views(s->vh[i], &vh[i]);
     }
 
-    switch (aarch64_pixel_size(p->type)) {
+    switch (ff_sws_pixel_type_size(p->type)) {
     case sizeof(uint16_t):
         LOOP_MASK      (p, i) i_rev16(r, vl[i].b16, vl[i].b16);
         LOOP_MASK_VH(s, p, i) i_rev16(r, vh[i].b16, vh[i].b16);
@@ -626,8 +611,8 @@ static void asmgen_op_swap_bytes(SwsAArch64Context *s, const SwsAArch64OpImplPar
 
 /*********************************************************************/
 /* rearrange channel order, or duplicate channels */
-/* AARCH64_SWS_OP_PERMUTE */
-/* AARCH64_SWS_OP_COPY */
+/* SWS_UOP_PERMUTE */
+/* SWS_UOP_COPY */
 
 static const char *print_swizzle_v(char buf[8], uint8_t n, uint8_t vh)
 {
@@ -672,7 +657,7 @@ static void asmgen_op_move(SwsAArch64Context *s, const SwsAArch64OpImplParams *p
 
 /*********************************************************************/
 /* split tightly packed data into components */
-/* AARCH64_SWS_OP_UNPACK */
+/* SWS_UOP_UNPACK */
 
 static void asmgen_op_unpack(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -744,7 +729,7 @@ static void asmgen_op_unpack(SwsAArch64Context *s, const SwsAArch64OpImplParams 
 
 /*********************************************************************/
 /* compress components into tightly packed data */
-/* AARCH64_SWS_OP_PACK */
+/* SWS_UOP_PACK */
 
 static void asmgen_op_pack(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -782,7 +767,7 @@ static void asmgen_op_pack(SwsAArch64Context *s, const SwsAArch64OpImplParams *p
 
 /*********************************************************************/
 /* logical left shift of raw pixel values */
-/* AARCH64_SWS_OP_LSHIFT */
+/* SWS_UOP_LSHIFT */
 
 static void asmgen_op_lshift(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -796,7 +781,7 @@ static void asmgen_op_lshift(SwsAArch64Context *s, const SwsAArch64OpImplParams 
 
 /*********************************************************************/
 /* right shift of raw pixel values */
-/* AARCH64_SWS_OP_RSHIFT */
+/* SWS_UOP_RSHIFT */
 
 static void asmgen_op_rshift(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -810,7 +795,7 @@ static void asmgen_op_rshift(SwsAArch64Context *s, const SwsAArch64OpImplParams 
 
 /*********************************************************************/
 /* clear pixel values */
-/* AARCH64_SWS_OP_CLEAR */
+/* SWS_UOP_CLEAR */
 
 static void emit_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                        RasmOp *vx, int i, const char *vx_str)
@@ -822,7 +807,7 @@ static void emit_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
         i_movi(r, vx[i], IMM(0));                   CMTF("%s[%u] = 0;", vx_str, i);
         break;
     case 1:
-        if (p->block_size * aarch64_pixel_size(p->type) == 8) {
+        if (p->block_size * ff_sws_pixel_type_size(p->type) == 8) {
             i_movi(r, v_8b (vx[i]), IMM(0xff));
         } else {
             i_movi(r, v_16b(vx[i]), IMM(0xff));
@@ -862,10 +847,10 @@ static void asmgen_op_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *
 
 /*********************************************************************/
 /* convert (cast) between formats */
-/* AARCH64_SWS_OP_TO_U8 */
-/* AARCH64_SWS_OP_TO_U16 */
-/* AARCH64_SWS_OP_TO_U32 */
-/* AARCH64_SWS_OP_TO_F32 */
+/* SWS_UOP_TO_U8 */
+/* SWS_UOP_TO_U16 */
+/* SWS_UOP_TO_U32 */
+/* SWS_UOP_TO_F32 */
 
 static void asmgen_op_convert(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -885,24 +870,24 @@ static void asmgen_op_convert(SwsAArch64Context *s, const SwsAArch64OpImplParams
     }
 
     size_t src_el_size = s->el_size;
-    SwsAArch64PixelType to_type;
-    switch (p->op) {
-    case AARCH64_SWS_OP_TO_U8:  to_type = AARCH64_PIXEL_U8;  break;
-    case AARCH64_SWS_OP_TO_U16: to_type = AARCH64_PIXEL_U16; break;
-    case AARCH64_SWS_OP_TO_U32: to_type = AARCH64_PIXEL_U32; break;
-    case AARCH64_SWS_OP_TO_F32: to_type = AARCH64_PIXEL_F32; break;
+    SwsPixelType to_type;
+    switch (p->uop) {
+    case SWS_UOP_TO_U8:  to_type = SWS_PIXEL_U8;  break;
+    case SWS_UOP_TO_U16: to_type = SWS_PIXEL_U16; break;
+    case SWS_UOP_TO_U32: to_type = SWS_PIXEL_U32; break;
+    case SWS_UOP_TO_F32: to_type = SWS_PIXEL_F32; break;
     default:
-        av_assert0(!"Invalid op!");
+        av_assert0(!"Invalid uop!");
         break;
     }
-    size_t dst_el_size = aarch64_pixel_size(to_type);
+    size_t dst_el_size = ff_sws_pixel_type_size(to_type);
 
     /**
      * This function assumes block_size is either 8 or 16, and that
      * we're always using the most amount of vector registers possible.
      * Therefore, u32 always uses the high vector bank.
      */
-    if (p->type == AARCH64_PIXEL_F32) {
+    if (p->type == SWS_PIXEL_F32) {
         rasm_add_comment(r, "f32 -> u32");
         LOOP_MASK(p, i) i_fcvtzu(r, vl[i].s4, vl[i].s4);
         LOOP_MASK(p, i) i_fcvtzu(r, vh[i].s4, vh[i].s4);
@@ -944,7 +929,7 @@ static void asmgen_op_convert(SwsAArch64Context *s, const SwsAArch64OpImplParams
     }
 
     /* See comment above for high vector bank usage for u32. */
-    if (to_type == AARCH64_PIXEL_F32) {
+    if (to_type == SWS_PIXEL_F32) {
         rasm_add_comment(r, "u32 -> f32");
         LOOP_MASK(p, i) i_ucvtf(r, vl[i].s4, vl[i].s4);
         LOOP_MASK(p, i) i_ucvtf(r, vh[i].s4, vh[i].s4);
@@ -953,8 +938,8 @@ static void asmgen_op_convert(SwsAArch64Context *s, const SwsAArch64OpImplParams
 
 /*********************************************************************/
 /* expand integers to the full range */
-/* AARCH64_SWS_OP_EXPAND_PAIR */
-/* AARCH64_SWS_OP_EXPAND_QUAD */
+/* SWS_UOP_EXPAND_PAIR */
+/* SWS_UOP_EXPAND_QUAD */
 
 static void asmgen_op_expand(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -963,15 +948,15 @@ static void asmgen_op_expand(SwsAArch64Context *s, const SwsAArch64OpImplParams 
     RasmOp *vh = s->vh;
 
     size_t src_el_size = s->el_size;
-    SwsAArch64PixelType to_type;
-    switch (p->op) {
-    case AARCH64_SWS_OP_EXPAND_PAIR: to_type = AARCH64_PIXEL_U16; break;
-    case AARCH64_SWS_OP_EXPAND_QUAD: to_type = AARCH64_PIXEL_U32; break;
+    SwsPixelType to_type;
+    switch (p->uop) {
+    case SWS_UOP_EXPAND_PAIR: to_type = SWS_PIXEL_U16; break;
+    case SWS_UOP_EXPAND_QUAD: to_type = SWS_PIXEL_U32; break;
     default:
-        av_assert0(!"Invalid op!");
+        av_assert0(!"Invalid uop!");
         break;
     }
-    size_t dst_el_size = aarch64_pixel_size(to_type);
+    size_t dst_el_size = ff_sws_pixel_type_size(to_type);
     size_t dst_total_size = p->block_size * dst_el_size;
     size_t dst_vec_size = FFMIN(dst_total_size, 16);
 
@@ -994,7 +979,7 @@ static void asmgen_op_expand(SwsAArch64Context *s, const SwsAArch64OpImplParams 
 
 /*********************************************************************/
 /* numeric minimum */
-/* AARCH64_SWS_OP_MIN */
+/* SWS_UOP_MIN */
 
 static void asmgen_op_min(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -1008,7 +993,7 @@ static void asmgen_op_min(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
     asmgen_set_load_cont_node(s);
     LOOP_MASK(p, i) { i_dup(r, vt[i], a64op_elem(min_vec, i));      CMTF("v128 vmin%u = min_vec[%u];", i, i); }
 
-    if (p->type == AARCH64_PIXEL_F32) {
+    if (p->type == SWS_PIXEL_F32) {
         LOOP_MASK      (p, i) { i_fmin(r, vl[i], vl[i], vt[i]);     CMTF("vl[%u] = min(vl[%u], vmin%u);", i, i, i); }
         LOOP_MASK_VH(s, p, i) { i_fmin(r, vh[i], vh[i], vt[i]);     CMTF("vh[%u] = min(vh[%u], vmin%u);", i, i, i); }
     } else {
@@ -1019,7 +1004,7 @@ static void asmgen_op_min(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 
 /*********************************************************************/
 /* numeric maximum */
-/* AARCH64_SWS_OP_MAX */
+/* SWS_UOP_MAX */
 
 static void asmgen_op_max(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -1033,7 +1018,7 @@ static void asmgen_op_max(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
     asmgen_set_load_cont_node(s);
     LOOP_MASK(p, i) { i_dup(r, vt[i], a64op_elem(max_vec, i));      CMTF("v128 vmax%u = max_vec[%u];", i, i); }
 
-    if (p->type == AARCH64_PIXEL_F32) {
+    if (p->type == SWS_PIXEL_F32) {
         LOOP_MASK      (p, i) { i_fmax(r, vl[i], vl[i], vt[i]);     CMTF("vl[%u] = max(vl[%u], vmax%u);", i, i, i); }
         LOOP_MASK_VH(s, p, i) { i_fmax(r, vh[i], vh[i], vt[i]);     CMTF("vh[%u] = max(vh[%u], vmax%u);", i, i, i); }
     } else {
@@ -1044,7 +1029,7 @@ static void asmgen_op_max(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 
 /*********************************************************************/
 /* multiplication by scalar */
-/* AARCH64_SWS_OP_SCALE */
+/* SWS_UOP_SCALE */
 
 static void asmgen_op_scale(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -1058,7 +1043,7 @@ static void asmgen_op_scale(SwsAArch64Context *s, const SwsAArch64OpImplParams *
     asmgen_set_load_cont_node(s);
     i_ld1r(r, vv_1(scale_vec), a64op_base(priv_ptr));               CMT("v128 scale_vec = broadcast(*scale_vec_ptr);");
 
-    if (p->type == AARCH64_PIXEL_F32) {
+    if (p->type == SWS_PIXEL_F32) {
         LOOP_MASK      (p, i) { i_fmul(r, vl[i], vl[i], scale_vec); CMTF("vl[%u] *= scale_vec;", i); }
         LOOP_MASK_VH(s, p, i) { i_fmul(r, vh[i], vh[i], scale_vec); CMTF("vh[%u] *= scale_vec;", i); }
     } else {
@@ -1069,8 +1054,8 @@ static void asmgen_op_scale(SwsAArch64Context *s, const SwsAArch64OpImplParams *
 
 /*********************************************************************/
 /* generalized linear affine transform */
-/* AARCH64_SWS_OP_LINEAR */
-/* AARCH64_SWS_OP_LINEAR_FMA */
+/* SWS_UOP_LINEAR */
+/* SWS_UOP_LINEAR_FMA */
 
 /**
  * Performs one pass of the linear transform over a single vector bank
@@ -1133,7 +1118,7 @@ static void linear_pass(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                 } else {
                     i_fmul  (r, vx[i], vsrc, vcoeff);   CMTF("v%c[%u]  = vsrc[%u] * vc[%u][%u];", cvh, i, src_j, vc_i, vc_j);
                 }
-            } else if (p->op == AARCH64_SWS_OP_LINEAR_FMA) {
+            } else if (p->uop == SWS_UOP_LINEAR_FMA) {
                 /**
                  * Most modern aarch64 cores have a fastpath for sequences
                  * of fmla instructions. This means that even if the coefficient
@@ -1205,7 +1190,7 @@ static void asmgen_op_linear(SwsAArch64Context *s, const SwsAArch64OpImplParams 
 
 /*********************************************************************/
 /* add dithering noise */
-/* AARCH64_SWS_OP_DITHER */
+/* SWS_UOP_DITHER */
 
 static void asmgen_op_dither(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -1336,17 +1321,17 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpEntry *entry)
 
     bool is_read = false;
     bool is_write = false;
-    switch (p->op) {
-    case AARCH64_SWS_OP_READ_BIT:
-    case AARCH64_SWS_OP_READ_NIBBLE:
-    case AARCH64_SWS_OP_READ_PACKED:
-    case AARCH64_SWS_OP_READ_PLANAR:
+    switch (p->uop) {
+    case SWS_UOP_READ_BIT:
+    case SWS_UOP_READ_NIBBLE:
+    case SWS_UOP_READ_PACKED:
+    case SWS_UOP_READ_PLANAR:
         is_read = true;
         break;
-    case AARCH64_SWS_OP_WRITE_BIT:
-    case AARCH64_SWS_OP_WRITE_NIBBLE:
-    case AARCH64_SWS_OP_WRITE_PACKED:
-    case AARCH64_SWS_OP_WRITE_PLANAR:
+    case SWS_UOP_WRITE_BIT:
+    case SWS_UOP_WRITE_NIBBLE:
+    case SWS_UOP_WRITE_PACKED:
+    case SWS_UOP_WRITE_PLANAR:
         is_write = true;
         break;
     default:
@@ -1359,7 +1344,7 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpEntry *entry)
      * Set up vector register dimensions and reshape all vectors
      * accordingly.
      */
-    size_t el_size = aarch64_pixel_size(p->type);
+    size_t el_size = ff_sws_pixel_type_size(p->type);
     size_t total_size = p->block_size * el_size;
 
     s->vec_size = FFMIN(total_size, 16);
@@ -1372,36 +1357,36 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpEntry *entry)
     /* Common start for continuation-passing style (CPS) functions. */
     asmgen_set_load_cont_node(s);
 
-    switch (p->op) {
-    case AARCH64_SWS_OP_READ_BIT:     asmgen_op_read_bit(s, p);     break;
-    case AARCH64_SWS_OP_READ_NIBBLE:  asmgen_op_read_nibble(s, p);  break;
-    case AARCH64_SWS_OP_READ_PACKED:  asmgen_op_read_packed(s, p);  break;
-    case AARCH64_SWS_OP_READ_PLANAR:  asmgen_op_read_planar(s, p);  break;
-    case AARCH64_SWS_OP_WRITE_BIT:    asmgen_op_write_bit(s, p);    break;
-    case AARCH64_SWS_OP_WRITE_NIBBLE: asmgen_op_write_nibble(s, p); break;
-    case AARCH64_SWS_OP_WRITE_PACKED: asmgen_op_write_packed(s, p); break;
-    case AARCH64_SWS_OP_WRITE_PLANAR: asmgen_op_write_planar(s, p); break;
-    case AARCH64_SWS_OP_SWAP_BYTES:   asmgen_op_swap_bytes(s, p);   break;
-    case AARCH64_SWS_OP_PERMUTE:      asmgen_op_move(s, p);         break;
-    case AARCH64_SWS_OP_COPY:         asmgen_op_move(s, p);         break;
-    case AARCH64_SWS_OP_UNPACK:       asmgen_op_unpack(s, p);       break;
-    case AARCH64_SWS_OP_PACK:         asmgen_op_pack(s, p);         break;
-    case AARCH64_SWS_OP_LSHIFT:       asmgen_op_lshift(s, p);       break;
-    case AARCH64_SWS_OP_RSHIFT:       asmgen_op_rshift(s, p);       break;
-    case AARCH64_SWS_OP_CLEAR:        asmgen_op_clear(s, p);        break;
-    case AARCH64_SWS_OP_TO_U8:        asmgen_op_convert(s, p);      break;
-    case AARCH64_SWS_OP_TO_U16:       asmgen_op_convert(s, p);      break;
-    case AARCH64_SWS_OP_TO_U32:       asmgen_op_convert(s, p);      break;
-    case AARCH64_SWS_OP_TO_F32:       asmgen_op_convert(s, p);      break;
-    case AARCH64_SWS_OP_EXPAND_PAIR:  asmgen_op_expand(s, p);       break;
-    case AARCH64_SWS_OP_EXPAND_QUAD:  asmgen_op_expand(s, p);       break;
-    case AARCH64_SWS_OP_MIN:          asmgen_op_min(s, p);          break;
-    case AARCH64_SWS_OP_MAX:          asmgen_op_max(s, p);          break;
-    case AARCH64_SWS_OP_SCALE:        asmgen_op_scale(s, p);        break;
-    case AARCH64_SWS_OP_LINEAR:       asmgen_op_linear(s, p);       break;
-    case AARCH64_SWS_OP_LINEAR_FMA:   asmgen_op_linear(s, p);       break;
-    case AARCH64_SWS_OP_DITHER:       asmgen_op_dither(s, p);       break;
-    /* TODO implement AARCH64_SWS_OP_SHUFFLE */
+    switch (p->uop) {
+    case SWS_UOP_READ_BIT:     asmgen_op_read_bit(s, p);     break;
+    case SWS_UOP_READ_NIBBLE:  asmgen_op_read_nibble(s, p);  break;
+    case SWS_UOP_READ_PACKED:  asmgen_op_read_packed(s, p);  break;
+    case SWS_UOP_READ_PLANAR:  asmgen_op_read_planar(s, p);  break;
+    case SWS_UOP_WRITE_BIT:    asmgen_op_write_bit(s, p);    break;
+    case SWS_UOP_WRITE_NIBBLE: asmgen_op_write_nibble(s, p); break;
+    case SWS_UOP_WRITE_PACKED: asmgen_op_write_packed(s, p); break;
+    case SWS_UOP_WRITE_PLANAR: asmgen_op_write_planar(s, p); break;
+    case SWS_UOP_SWAP_BYTES:   asmgen_op_swap_bytes(s, p);   break;
+    case SWS_UOP_PERMUTE:      asmgen_op_move(s, p);         break;
+    case SWS_UOP_COPY:         asmgen_op_move(s, p);         break;
+    case SWS_UOP_UNPACK:       asmgen_op_unpack(s, p);       break;
+    case SWS_UOP_PACK:         asmgen_op_pack(s, p);         break;
+    case SWS_UOP_LSHIFT:       asmgen_op_lshift(s, p);       break;
+    case SWS_UOP_RSHIFT:       asmgen_op_rshift(s, p);       break;
+    case SWS_UOP_CLEAR:        asmgen_op_clear(s, p);        break;
+    case SWS_UOP_TO_U8:        asmgen_op_convert(s, p);      break;
+    case SWS_UOP_TO_U16:       asmgen_op_convert(s, p);      break;
+    case SWS_UOP_TO_U32:       asmgen_op_convert(s, p);      break;
+    case SWS_UOP_TO_F32:       asmgen_op_convert(s, p);      break;
+    case SWS_UOP_EXPAND_PAIR:  asmgen_op_expand(s, p);       break;
+    case SWS_UOP_EXPAND_QUAD:  asmgen_op_expand(s, p);       break;
+    case SWS_UOP_MIN:          asmgen_op_min(s, p);          break;
+    case SWS_UOP_MAX:          asmgen_op_max(s, p);          break;
+    case SWS_UOP_SCALE:        asmgen_op_scale(s, p);        break;
+    case SWS_UOP_LINEAR:       asmgen_op_linear(s, p);       break;
+    case SWS_UOP_LINEAR_FMA:   asmgen_op_linear(s, p);       break;
+    case SWS_UOP_DITHER:       asmgen_op_dither(s, p);       break;
+    /* TODO implement SWS_UOP_SHUFFLE */
     default:
         break;
     }

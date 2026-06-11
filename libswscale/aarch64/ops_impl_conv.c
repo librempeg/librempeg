@@ -29,17 +29,6 @@
 
 #include "ops_impl.h"
 
-static uint8_t sws_pixel_to_aarch64(SwsPixelType type)
-{
-    switch (type) {
-    case SWS_PIXEL_U8:  return AARCH64_PIXEL_U8;
-    case SWS_PIXEL_U16: return AARCH64_PIXEL_U16;
-    case SWS_PIXEL_U32: return AARCH64_PIXEL_U32;
-    case SWS_PIXEL_F32: return AARCH64_PIXEL_F32;
-    }
-    return 0;
-}
-
 /**
  * The column index order for SwsLinearOp.mask follows the affine transform
  * order, where the offset is the last element. SwsAArch64LinearOpMask, on
@@ -133,25 +122,25 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
             MASK_SET(out->mask, i, 1);
     }
 
-    out->type = sws_pixel_to_aarch64(op->type);
+    out->type = op->type;
 
-    /* Map SwsOpType to SwsAArch64OpType */
+    /* Map SwsOpType to SwsUOpType */
     switch (op->op) {
     case SWS_OP_READ:
         if (op->rw.filter.op)
             return AVERROR(ENOTSUP);
         /**
          * The different types of read operations have been split into
-         * their own SwsAArch64OpType to simplify the implementation.
+         * their own SwsUOpType to simplify the implementation.
          */
         if (op->rw.frac == 1)
-            out->op = AARCH64_SWS_OP_READ_NIBBLE;
+            out->uop = SWS_UOP_READ_NIBBLE;
         else if (op->rw.frac == 3)
-            out->op = AARCH64_SWS_OP_READ_BIT;
+            out->uop = SWS_UOP_READ_BIT;
         else if (op->rw.mode == SWS_RW_PACKED && op->rw.elems > 1)
-            out->op = AARCH64_SWS_OP_READ_PACKED;
+            out->uop = SWS_UOP_READ_PACKED;
         else if (op->rw.mode == SWS_RW_PACKED || op->rw.mode == SWS_RW_PLANAR)
-            out->op = AARCH64_SWS_OP_READ_PLANAR;
+            out->uop = SWS_UOP_READ_PLANAR;
         else
             return AVERROR(ENOTSUP);
         break;
@@ -160,80 +149,80 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
             return AVERROR(ENOTSUP);
         /**
          * The different types of write operations have been split into
-         * their own SwsAArch64OpType to simplify the implementation.
+         * their own SwsUOpType to simplify the implementation.
          */
         if (op->rw.frac == 1)
-            out->op = AARCH64_SWS_OP_WRITE_NIBBLE;
+            out->uop = SWS_UOP_WRITE_NIBBLE;
         else if (op->rw.frac == 3)
-            out->op = AARCH64_SWS_OP_WRITE_BIT;
+            out->uop = SWS_UOP_WRITE_BIT;
         else if (op->rw.mode == SWS_RW_PACKED && op->rw.elems > 1)
-            out->op = AARCH64_SWS_OP_WRITE_PACKED;
+            out->uop = SWS_UOP_WRITE_PACKED;
         else if (op->rw.mode == SWS_RW_PACKED || op->rw.mode == SWS_RW_PLANAR)
-            out->op = AARCH64_SWS_OP_WRITE_PLANAR;
+            out->uop = SWS_UOP_WRITE_PLANAR;
         else
             return AVERROR(ENOTSUP);
         break;
-    case SWS_OP_SWAP_BYTES: out->op = AARCH64_SWS_OP_SWAP_BYTES; break;
+    case SWS_OP_SWAP_BYTES: out->uop = SWS_UOP_SWAP_BYTES; break;
     case SWS_OP_SWIZZLE: {
         /**
          * Detect whether copies are needed or if a simple permute is
          * enough.
          */
-        out->op = AARCH64_SWS_OP_PERMUTE;
+        out->uop = SWS_UOP_PERMUTE;
         SwsAArch64OpMask seen = 0;
         LOOP(out->mask, i) {
             uint8_t src = op->swizzle.in[i];
             if (MASK_GET(seen, src)) {
-                out->op = AARCH64_SWS_OP_COPY;
+                out->uop = SWS_UOP_COPY;
                 break;
             }
             MASK_SET(seen, src, 1);
         }
         break;
     }
-    case SWS_OP_UNPACK:     out->op = AARCH64_SWS_OP_UNPACK;     break;
-    case SWS_OP_PACK:       out->op = AARCH64_SWS_OP_PACK;       break;
-    case SWS_OP_LSHIFT:     out->op = AARCH64_SWS_OP_LSHIFT;     break;
-    case SWS_OP_RSHIFT:     out->op = AARCH64_SWS_OP_RSHIFT;     break;
-    case SWS_OP_CLEAR:      out->op = AARCH64_SWS_OP_CLEAR;      break;
+    case SWS_OP_UNPACK:     out->uop = SWS_UOP_UNPACK;     break;
+    case SWS_OP_PACK:       out->uop = SWS_UOP_PACK;       break;
+    case SWS_OP_LSHIFT:     out->uop = SWS_UOP_LSHIFT;     break;
+    case SWS_OP_RSHIFT:     out->uop = SWS_UOP_RSHIFT;     break;
+    case SWS_OP_CLEAR:      out->uop = SWS_UOP_CLEAR;      break;
     case SWS_OP_CONVERT:
         if (op->convert.expand) {
             switch (op->convert.to) {
-            case SWS_PIXEL_U16: out->op = AARCH64_SWS_OP_EXPAND_PAIR; break;
-            case SWS_PIXEL_U32: out->op = AARCH64_SWS_OP_EXPAND_QUAD; break;
+            case SWS_PIXEL_U16: out->uop = SWS_UOP_EXPAND_PAIR; break;
+            case SWS_PIXEL_U32: out->uop = SWS_UOP_EXPAND_QUAD; break;
             }
         } else {
             switch (op->convert.to) {
-            case SWS_PIXEL_U8:  out->op = AARCH64_SWS_OP_TO_U8;  break;
-            case SWS_PIXEL_U16: out->op = AARCH64_SWS_OP_TO_U16; break;
-            case SWS_PIXEL_U32: out->op = AARCH64_SWS_OP_TO_U32; break;
-            case SWS_PIXEL_F32: out->op = AARCH64_SWS_OP_TO_F32; break;
+            case SWS_PIXEL_U8:  out->uop = SWS_UOP_TO_U8;  break;
+            case SWS_PIXEL_U16: out->uop = SWS_UOP_TO_U16; break;
+            case SWS_PIXEL_U32: out->uop = SWS_UOP_TO_U32; break;
+            case SWS_PIXEL_F32: out->uop = SWS_UOP_TO_F32; break;
             }
         }
         break;
-    case SWS_OP_MIN:        out->op = AARCH64_SWS_OP_MIN;        break;
-    case SWS_OP_MAX:        out->op = AARCH64_SWS_OP_MAX;        break;
-    case SWS_OP_SCALE:      out->op = AARCH64_SWS_OP_SCALE;      break;
+    case SWS_OP_MIN:        out->uop = SWS_UOP_MIN;        break;
+    case SWS_OP_MAX:        out->uop = SWS_UOP_MAX;        break;
+    case SWS_OP_SCALE:      out->uop = SWS_UOP_SCALE;      break;
     case SWS_OP_LINEAR:
-        out->op = (ctx->flags & SWS_BITEXACT)
-                ? AARCH64_SWS_OP_LINEAR
-                : AARCH64_SWS_OP_LINEAR_FMA;
+        out->uop = (ctx->flags & SWS_BITEXACT)
+                 ? SWS_UOP_LINEAR
+                 : SWS_UOP_LINEAR_FMA;
         break;
-    case SWS_OP_DITHER:     out->op = AARCH64_SWS_OP_DITHER;     break;
+    case SWS_OP_DITHER:     out->uop = SWS_UOP_DITHER;     break;
     case SWS_OP_FILTER_H:
     case SWS_OP_FILTER_V:
         return AVERROR(ENOTSUP);
     }
 
-    switch (out->op) {
-    case AARCH64_SWS_OP_READ_BIT:
-    case AARCH64_SWS_OP_READ_NIBBLE:
-    case AARCH64_SWS_OP_READ_PACKED:
-    case AARCH64_SWS_OP_READ_PLANAR:
-    case AARCH64_SWS_OP_WRITE_BIT:
-    case AARCH64_SWS_OP_WRITE_NIBBLE:
-    case AARCH64_SWS_OP_WRITE_PACKED:
-    case AARCH64_SWS_OP_WRITE_PLANAR:
+    switch (out->uop) {
+    case SWS_UOP_READ_BIT:
+    case SWS_UOP_READ_NIBBLE:
+    case SWS_UOP_READ_PACKED:
+    case SWS_UOP_READ_PLANAR:
+    case SWS_UOP_WRITE_BIT:
+    case SWS_UOP_WRITE_NIBBLE:
+    case SWS_UOP_WRITE_PACKED:
+    case SWS_UOP_WRITE_PLANAR:
         switch (op->rw.elems) {
         case 1: out->mask = 0x0001; break;
         case 2: out->mask = 0x0011; break;
@@ -241,8 +230,8 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         case 4: out->mask = 0x1111; break;
         };
         break;
-    case AARCH64_SWS_OP_PERMUTE:
-    case AARCH64_SWS_OP_COPY:
+    case SWS_UOP_PERMUTE:
+    case SWS_UOP_COPY:
         /* Recompute mask taking identity swizzle into account */
         out->mask = 0;
         for (int i = 0; i < 4; i++) {
@@ -252,15 +241,15 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         convert_swizzle_to_moves(op, out);
         /* The element size and type don't matter. */
         out->block_size = block_size * ff_sws_pixel_type_size(op->type);
-        out->type = AARCH64_PIXEL_U8;
+        out->type = SWS_PIXEL_U8;
         break;
-    case AARCH64_SWS_OP_UNPACK:
+    case SWS_UOP_UNPACK:
         MASK_SET(out->pack, 0, op->pack.pattern[0]);
         MASK_SET(out->pack, 1, op->pack.pattern[1]);
         MASK_SET(out->pack, 2, op->pack.pattern[2]);
         MASK_SET(out->pack, 3, op->pack.pattern[3]);
         break;
-    case AARCH64_SWS_OP_PACK:
+    case SWS_UOP_PACK:
         out->mask = 0;
         for (int i = 0; i < 4 && op->pack.pattern[i]; i++)
             MASK_SET(out->mask, i, 1);
@@ -269,11 +258,11 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         MASK_SET(out->pack, 2, op->pack.pattern[2]);
         MASK_SET(out->pack, 3, op->pack.pattern[3]);
         break;
-    case AARCH64_SWS_OP_LSHIFT:
-    case AARCH64_SWS_OP_RSHIFT:
+    case SWS_UOP_LSHIFT:
+    case SWS_UOP_RSHIFT:
         out->shift = op->shift.amount;
         break;
-    case AARCH64_SWS_OP_CLEAR:
+    case SWS_UOP_CLEAR:
         out->mask = 0;
         out->clear = 0;
         for (int i = 0; i < 4; i++) {
@@ -293,8 +282,8 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
             MASK_SET(out->clear, i, mask_val);
         }
         break;
-    case AARCH64_SWS_OP_LINEAR:
-    case AARCH64_SWS_OP_LINEAR_FMA:
+    case SWS_UOP_LINEAR:
+    case SWS_UOP_LINEAR_FMA:
         /**
          * The out->linear.mask field packs the 4x5 matrix from SwsLinearOp as
          * 2 bits per element:
@@ -318,7 +307,7 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
             }
         }
         break;
-    case AARCH64_SWS_OP_DITHER:
+    case SWS_UOP_DITHER:
         out->mask = 0;
         MASK_SET(out->mask, 0, op->dither.y_offset[0] >= 0);
         MASK_SET(out->mask, 1, op->dither.y_offset[1] >= 0);
@@ -332,20 +321,20 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         break;
     }
 
-    switch (out->op) {
-    case AARCH64_SWS_OP_READ_BIT:
-    case AARCH64_SWS_OP_READ_NIBBLE:
-    case AARCH64_SWS_OP_READ_PACKED:
-    case AARCH64_SWS_OP_READ_PLANAR:
-    case AARCH64_SWS_OP_WRITE_BIT:
-    case AARCH64_SWS_OP_WRITE_NIBBLE:
-    case AARCH64_SWS_OP_WRITE_PACKED:
-    case AARCH64_SWS_OP_WRITE_PLANAR:
-    case AARCH64_SWS_OP_SWAP_BYTES:
-    case AARCH64_SWS_OP_CLEAR:
+    switch (out->uop) {
+    case SWS_UOP_READ_BIT:
+    case SWS_UOP_READ_NIBBLE:
+    case SWS_UOP_READ_PACKED:
+    case SWS_UOP_READ_PLANAR:
+    case SWS_UOP_WRITE_BIT:
+    case SWS_UOP_WRITE_NIBBLE:
+    case SWS_UOP_WRITE_PACKED:
+    case SWS_UOP_WRITE_PLANAR:
+    case SWS_UOP_SWAP_BYTES:
+    case SWS_UOP_CLEAR:
         /* Only the element size matters, not the type. */
-        if (out->type == AARCH64_PIXEL_F32)
-            out->type = AARCH64_PIXEL_U32;
+        if (out->type == SWS_PIXEL_F32)
+            out->type = SWS_PIXEL_U32;
         break;
     }
 

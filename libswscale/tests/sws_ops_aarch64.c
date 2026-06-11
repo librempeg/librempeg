@@ -43,35 +43,35 @@ static int aarch64_op_impl_cmp(const void *a, const void *b)
     const SwsAArch64OpImplParams *pa = (const SwsAArch64OpImplParams *) a;
     const SwsAArch64OpImplParams *pb = (const SwsAArch64OpImplParams *) b;
 
-    if (pa->op != pb->op)
-        return (int) pa->op - pb->op;
+    if (pa->uop != pb->uop)
+        return (int) pa->uop - pb->uop;
 
-    switch (pa->op) {
-    case AARCH64_SWS_OP_PERMUTE:
-    case AARCH64_SWS_OP_COPY:
+    switch (pa->uop) {
+    case SWS_UOP_PERMUTE:
+    case SWS_UOP_COPY:
         if (pa->move != pb->move)
             return (int64_t) (pa->move - pb->move) < 0 ? -1 : 1;
         break;
-    case AARCH64_SWS_OP_UNPACK:
-    case AARCH64_SWS_OP_PACK:
+    case SWS_UOP_UNPACK:
+    case SWS_UOP_PACK:
         if (pa->pack != pb->pack)
             return (int) pa->pack - pb->pack;
         break;
-    case AARCH64_SWS_OP_LSHIFT:
-    case AARCH64_SWS_OP_RSHIFT:
+    case SWS_UOP_LSHIFT:
+    case SWS_UOP_RSHIFT:
         if (pa->shift != pb->shift)
             return (int) pa->shift - pb->shift;
         break;
-    case AARCH64_SWS_OP_CLEAR:
+    case SWS_UOP_CLEAR:
         if (pa->clear != pb->clear)
             return (int) pa->clear - pb->clear;
         break;
-    case AARCH64_SWS_OP_LINEAR:
-    case AARCH64_SWS_OP_LINEAR_FMA:
+    case SWS_UOP_LINEAR:
+    case SWS_UOP_LINEAR_FMA:
         if (pa->linear.mask != pb->linear.mask)
             return (int64_t) (pa->linear.mask - pb->linear.mask) < 0 ? -1 : 1;
         break;
-    case AARCH64_SWS_OP_DITHER:
+    case SWS_UOP_DITHER:
         if (pa->dither.y_offset != pb->dither.y_offset)
             return (int) pa->dither.y_offset - pb->dither.y_offset;
         if (pa->dither.size_log2 != pb->dither.size_log2)
@@ -130,12 +130,12 @@ static int collect_ops_compile(SwsContext *ctx, const SwsOpList *ops,
         ret = aarch64_collect_op(&params, root);
         if (ret < 0)
             goto end;
-        if (params.op == AARCH64_SWS_OP_LINEAR_FMA) {
+        if (params.uop == SWS_UOP_LINEAR_FMA) {
             /**
              * Generate both sets of linear op functions that do use
              * and do not use fmla (selected by SWS_BITEXACT).
              */
-            params.op = AARCH64_SWS_OP_LINEAR;
+            params.uop = SWS_UOP_LINEAR;
             ret = aarch64_collect_op(&params, root);
             if (ret < 0)
                 goto end;
@@ -183,138 +183,138 @@ static int register_op(SwsContext *ctx, void *opaque, SwsOpList *ops)
 }
 
 /*********************************************************************/
-static const char op_type_names[AARCH64_SWS_OP_TYPE_NB][16] = {
-    [AARCH64_SWS_OP_READ_BIT      ] = "read_bit",
-    [AARCH64_SWS_OP_READ_NIBBLE   ] = "read_nibble",
-    [AARCH64_SWS_OP_READ_PACKED   ] = "read_packed",
-    [AARCH64_SWS_OP_READ_PLANAR   ] = "read_planar",
-    [AARCH64_SWS_OP_WRITE_BIT     ] = "write_bit",
-    [AARCH64_SWS_OP_WRITE_NIBBLE  ] = "write_nibble",
-    [AARCH64_SWS_OP_WRITE_PACKED  ] = "write_packed",
-    [AARCH64_SWS_OP_WRITE_PLANAR  ] = "write_planar",
-    [AARCH64_SWS_OP_SWAP_BYTES    ] = "swap_bytes",
-    [AARCH64_SWS_OP_PERMUTE       ] = "permute",
-    [AARCH64_SWS_OP_COPY          ] = "copy",
-    [AARCH64_SWS_OP_UNPACK        ] = "unpack",
-    [AARCH64_SWS_OP_PACK          ] = "pack",
-    [AARCH64_SWS_OP_LSHIFT        ] = "lshift",
-    [AARCH64_SWS_OP_RSHIFT        ] = "rshift",
-    [AARCH64_SWS_OP_CLEAR         ] = "clear",
-    [AARCH64_SWS_OP_TO_U8         ] = "to_u8",
-    [AARCH64_SWS_OP_TO_U16        ] = "to_u16",
-    [AARCH64_SWS_OP_TO_U32        ] = "to_u32",
-    [AARCH64_SWS_OP_TO_F32        ] = "to_f32",
-    [AARCH64_SWS_OP_EXPAND_PAIR   ] = "expand_pair",
-    [AARCH64_SWS_OP_EXPAND_QUAD   ] = "expand_quad",
-    [AARCH64_SWS_OP_MIN           ] = "min",
-    [AARCH64_SWS_OP_MAX           ] = "max",
-    [AARCH64_SWS_OP_SCALE         ] = "scale",
-    [AARCH64_SWS_OP_LINEAR        ] = "linear",
-    [AARCH64_SWS_OP_LINEAR_FMA    ] = "linear_fma",
-    [AARCH64_SWS_OP_DITHER        ] = "dither",
+static const char op_type_names[SWS_UOP_TYPE_NB][16] = {
+    [SWS_UOP_READ_BIT      ] = "read_bit",
+    [SWS_UOP_READ_NIBBLE   ] = "read_nibble",
+    [SWS_UOP_READ_PACKED   ] = "read_packed",
+    [SWS_UOP_READ_PLANAR   ] = "read_planar",
+    [SWS_UOP_WRITE_BIT     ] = "write_bit",
+    [SWS_UOP_WRITE_NIBBLE  ] = "write_nibble",
+    [SWS_UOP_WRITE_PACKED  ] = "write_packed",
+    [SWS_UOP_WRITE_PLANAR  ] = "write_planar",
+    [SWS_UOP_SWAP_BYTES    ] = "swap_bytes",
+    [SWS_UOP_PERMUTE       ] = "permute",
+    [SWS_UOP_COPY          ] = "copy",
+    [SWS_UOP_UNPACK        ] = "unpack",
+    [SWS_UOP_PACK          ] = "pack",
+    [SWS_UOP_LSHIFT        ] = "lshift",
+    [SWS_UOP_RSHIFT        ] = "rshift",
+    [SWS_UOP_CLEAR         ] = "clear",
+    [SWS_UOP_TO_U8         ] = "to_u8",
+    [SWS_UOP_TO_U16        ] = "to_u16",
+    [SWS_UOP_TO_U32        ] = "to_u32",
+    [SWS_UOP_TO_F32        ] = "to_f32",
+    [SWS_UOP_EXPAND_PAIR   ] = "expand_pair",
+    [SWS_UOP_EXPAND_QUAD   ] = "expand_quad",
+    [SWS_UOP_MIN           ] = "min",
+    [SWS_UOP_MAX           ] = "max",
+    [SWS_UOP_SCALE         ] = "scale",
+    [SWS_UOP_LINEAR        ] = "linear",
+    [SWS_UOP_LINEAR_FMA    ] = "linear_fma",
+    [SWS_UOP_DITHER        ] = "dither",
 };
 
-static const char pixel_type_names[AARCH64_PIXEL_TYPE_NB][4] = {
-    [AARCH64_PIXEL_U8 ] = "u8",
-    [AARCH64_PIXEL_U16] = "u16",
-    [AARCH64_PIXEL_U32] = "u32",
-    [AARCH64_PIXEL_F32] = "f32",
+static const char pixel_type_names[SWS_PIXEL_TYPE_NB][4] = {
+    [SWS_PIXEL_U8 ] = "u8",
+    [SWS_PIXEL_U16] = "u16",
+    [SWS_PIXEL_U32] = "u32",
+    [SWS_PIXEL_F32] = "f32",
 };
 
 static void impl_func_name(AVBPrint *bp, const SwsAArch64OpImplParams *params)
 {
-    av_bprintf(bp, "ff_sws_%s", op_type_names[params->op]);
-    switch (params->op) {
-    case AARCH64_SWS_OP_PERMUTE:
-    case AARCH64_SWS_OP_COPY:
+    av_bprintf(bp, "ff_sws_%s", op_type_names[params->uop]);
+    switch (params->uop) {
+    case SWS_UOP_PERMUTE:
+    case SWS_UOP_COPY:
         av_bprintf(bp, "_%012" PRIx64, params->move);
         break;
-    case AARCH64_SWS_OP_UNPACK:
-    case AARCH64_SWS_OP_PACK:
+    case SWS_UOP_UNPACK:
+    case SWS_UOP_PACK:
         av_bprintf(bp, "_%04x", params->pack);
         break;
-    case AARCH64_SWS_OP_LSHIFT:
-    case AARCH64_SWS_OP_RSHIFT:
+    case SWS_UOP_LSHIFT:
+    case SWS_UOP_RSHIFT:
         av_bprintf(bp, "_%u", params->shift);
         break;
-    case AARCH64_SWS_OP_CLEAR:
+    case SWS_UOP_CLEAR:
         av_bprintf(bp, "_%04x", params->clear);
         break;
-    case AARCH64_SWS_OP_LINEAR:
-    case AARCH64_SWS_OP_LINEAR_FMA:
+    case SWS_UOP_LINEAR:
+    case SWS_UOP_LINEAR_FMA:
         av_bprintf(bp, "_%010" PRIx64, params->linear.mask);
         break;
-    case AARCH64_SWS_OP_DITHER:
+    case SWS_UOP_DITHER:
         av_bprintf(bp, "_%04x_%u", params->dither.y_offset, params->dither.size_log2);
         break;
     }
     av_bprintf(bp, "_%u_%s_%04x_neon", params->block_size, pixel_type_names[params->type], params->mask);
 }
 
-static const char op_types[AARCH64_SWS_OP_TYPE_NB][32] = {
-    [AARCH64_SWS_OP_READ_BIT      ] = "AARCH64_SWS_OP_READ_BIT",
-    [AARCH64_SWS_OP_READ_NIBBLE   ] = "AARCH64_SWS_OP_READ_NIBBLE",
-    [AARCH64_SWS_OP_READ_PACKED   ] = "AARCH64_SWS_OP_READ_PACKED",
-    [AARCH64_SWS_OP_READ_PLANAR   ] = "AARCH64_SWS_OP_READ_PLANAR",
-    [AARCH64_SWS_OP_WRITE_BIT     ] = "AARCH64_SWS_OP_WRITE_BIT",
-    [AARCH64_SWS_OP_WRITE_NIBBLE  ] = "AARCH64_SWS_OP_WRITE_NIBBLE",
-    [AARCH64_SWS_OP_WRITE_PACKED  ] = "AARCH64_SWS_OP_WRITE_PACKED",
-    [AARCH64_SWS_OP_WRITE_PLANAR  ] = "AARCH64_SWS_OP_WRITE_PLANAR",
-    [AARCH64_SWS_OP_SWAP_BYTES    ] = "AARCH64_SWS_OP_SWAP_BYTES",
-    [AARCH64_SWS_OP_PERMUTE       ] = "AARCH64_SWS_OP_PERMUTE",
-    [AARCH64_SWS_OP_COPY          ] = "AARCH64_SWS_OP_COPY",
-    [AARCH64_SWS_OP_UNPACK        ] = "AARCH64_SWS_OP_UNPACK",
-    [AARCH64_SWS_OP_PACK          ] = "AARCH64_SWS_OP_PACK",
-    [AARCH64_SWS_OP_LSHIFT        ] = "AARCH64_SWS_OP_LSHIFT",
-    [AARCH64_SWS_OP_RSHIFT        ] = "AARCH64_SWS_OP_RSHIFT",
-    [AARCH64_SWS_OP_CLEAR         ] = "AARCH64_SWS_OP_CLEAR",
-    [AARCH64_SWS_OP_TO_U8         ] = "AARCH64_SWS_OP_TO_U8",
-    [AARCH64_SWS_OP_TO_U16        ] = "AARCH64_SWS_OP_TO_U16",
-    [AARCH64_SWS_OP_TO_U32        ] = "AARCH64_SWS_OP_TO_U32",
-    [AARCH64_SWS_OP_TO_F32        ] = "AARCH64_SWS_OP_TO_F32",
-    [AARCH64_SWS_OP_EXPAND_PAIR   ] = "AARCH64_SWS_OP_EXPAND_PAIR",
-    [AARCH64_SWS_OP_EXPAND_QUAD   ] = "AARCH64_SWS_OP_EXPAND_QUAD",
-    [AARCH64_SWS_OP_MIN           ] = "AARCH64_SWS_OP_MIN",
-    [AARCH64_SWS_OP_MAX           ] = "AARCH64_SWS_OP_MAX",
-    [AARCH64_SWS_OP_SCALE         ] = "AARCH64_SWS_OP_SCALE",
-    [AARCH64_SWS_OP_LINEAR        ] = "AARCH64_SWS_OP_LINEAR",
-    [AARCH64_SWS_OP_LINEAR_FMA    ] = "AARCH64_SWS_OP_LINEAR_FMA",
-    [AARCH64_SWS_OP_DITHER        ] = "AARCH64_SWS_OP_DITHER",
+static const char op_types[SWS_UOP_TYPE_NB][32] = {
+    [SWS_UOP_READ_BIT      ] = "SWS_UOP_READ_BIT",
+    [SWS_UOP_READ_NIBBLE   ] = "SWS_UOP_READ_NIBBLE",
+    [SWS_UOP_READ_PACKED   ] = "SWS_UOP_READ_PACKED",
+    [SWS_UOP_READ_PLANAR   ] = "SWS_UOP_READ_PLANAR",
+    [SWS_UOP_WRITE_BIT     ] = "SWS_UOP_WRITE_BIT",
+    [SWS_UOP_WRITE_NIBBLE  ] = "SWS_UOP_WRITE_NIBBLE",
+    [SWS_UOP_WRITE_PACKED  ] = "SWS_UOP_WRITE_PACKED",
+    [SWS_UOP_WRITE_PLANAR  ] = "SWS_UOP_WRITE_PLANAR",
+    [SWS_UOP_SWAP_BYTES    ] = "SWS_UOP_SWAP_BYTES",
+    [SWS_UOP_PERMUTE       ] = "SWS_UOP_PERMUTE",
+    [SWS_UOP_COPY          ] = "SWS_UOP_COPY",
+    [SWS_UOP_UNPACK        ] = "SWS_UOP_UNPACK",
+    [SWS_UOP_PACK          ] = "SWS_UOP_PACK",
+    [SWS_UOP_LSHIFT        ] = "SWS_UOP_LSHIFT",
+    [SWS_UOP_RSHIFT        ] = "SWS_UOP_RSHIFT",
+    [SWS_UOP_CLEAR         ] = "SWS_UOP_CLEAR",
+    [SWS_UOP_TO_U8         ] = "SWS_UOP_TO_U8",
+    [SWS_UOP_TO_U16        ] = "SWS_UOP_TO_U16",
+    [SWS_UOP_TO_U32        ] = "SWS_UOP_TO_U32",
+    [SWS_UOP_TO_F32        ] = "SWS_UOP_TO_F32",
+    [SWS_UOP_EXPAND_PAIR   ] = "SWS_UOP_EXPAND_PAIR",
+    [SWS_UOP_EXPAND_QUAD   ] = "SWS_UOP_EXPAND_QUAD",
+    [SWS_UOP_MIN           ] = "SWS_UOP_MIN",
+    [SWS_UOP_MAX           ] = "SWS_UOP_MAX",
+    [SWS_UOP_SCALE         ] = "SWS_UOP_SCALE",
+    [SWS_UOP_LINEAR        ] = "SWS_UOP_LINEAR",
+    [SWS_UOP_LINEAR_FMA    ] = "SWS_UOP_LINEAR_FMA",
+    [SWS_UOP_DITHER        ] = "SWS_UOP_DITHER",
 };
 
-static const char pixel_types[AARCH64_PIXEL_TYPE_NB][32] = {
-    [AARCH64_PIXEL_U8 ] = "AARCH64_PIXEL_U8",
-    [AARCH64_PIXEL_U16] = "AARCH64_PIXEL_U16",
-    [AARCH64_PIXEL_U32] = "AARCH64_PIXEL_U32",
-    [AARCH64_PIXEL_F32] = "AARCH64_PIXEL_F32",
+static const char pixel_types[SWS_PIXEL_TYPE_NB][32] = {
+    [SWS_PIXEL_U8 ] = "SWS_PIXEL_U8",
+    [SWS_PIXEL_U16] = "SWS_PIXEL_U16",
+    [SWS_PIXEL_U32] = "SWS_PIXEL_U32",
+    [SWS_PIXEL_F32] = "SWS_PIXEL_F32",
 };
 
 static void serialize_op(AVBPrint *bp, const SwsAArch64OpImplParams *params)
 {
     av_bprintf(bp, "ENTRY(");
     impl_func_name(bp, params);
-    av_bprintf(bp, ", { .op = %s", op_types[params->op]);
-    switch (params->op) {
-    case AARCH64_SWS_OP_PERMUTE:
-    case AARCH64_SWS_OP_COPY:
+    av_bprintf(bp, ", { .uop = %s", op_types[params->uop]);
+    switch (params->uop) {
+    case SWS_UOP_PERMUTE:
+    case SWS_UOP_COPY:
         av_bprintf(bp, ", .move = 0x%012" PRIx64 "ULL", params->move);
         break;
-    case AARCH64_SWS_OP_UNPACK:
-    case AARCH64_SWS_OP_PACK:
+    case SWS_UOP_UNPACK:
+    case SWS_UOP_PACK:
         av_bprintf(bp, ", .pack = 0x%04x", params->pack);
         break;
-    case AARCH64_SWS_OP_LSHIFT:
-    case AARCH64_SWS_OP_RSHIFT:
+    case SWS_UOP_LSHIFT:
+    case SWS_UOP_RSHIFT:
         av_bprintf(bp, ", .shift = %u", params->shift);
         break;
-    case AARCH64_SWS_OP_CLEAR:
+    case SWS_UOP_CLEAR:
         av_bprintf(bp, ", .clear = 0x%04x", params->clear);
         break;
-    case AARCH64_SWS_OP_LINEAR:
-    case AARCH64_SWS_OP_LINEAR_FMA:
+    case SWS_UOP_LINEAR:
+    case SWS_UOP_LINEAR_FMA:
         av_bprintf(bp, ", .linear.mask = 0x%010" PRIx64 "ULL", params->linear.mask);
         break;
-    case AARCH64_SWS_OP_DITHER:
+    case SWS_UOP_DITHER:
         av_bprintf(bp, ", .dither.y_offset = 0x%04x, .dither.size_log2 = %u", params->dither.y_offset, params->dither.size_log2);
         break;
     }
