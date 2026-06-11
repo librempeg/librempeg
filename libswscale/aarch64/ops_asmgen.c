@@ -845,7 +845,10 @@ static void asmgen_op_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *
 
 /*********************************************************************/
 /* convert (cast) between formats */
-/* AARCH64_SWS_OP_CONVERT */
+/* AARCH64_SWS_OP_TO_U8 */
+/* AARCH64_SWS_OP_TO_U16 */
+/* AARCH64_SWS_OP_TO_U32 */
+/* AARCH64_SWS_OP_TO_F32 */
 
 static void asmgen_op_convert(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -865,7 +868,17 @@ static void asmgen_op_convert(SwsAArch64Context *s, const SwsAArch64OpImplParams
     }
 
     size_t src_el_size = s->el_size;
-    size_t dst_el_size = aarch64_pixel_size(p->to_type);
+    SwsAArch64PixelType to_type;
+    switch (p->op) {
+    case AARCH64_SWS_OP_TO_U8:  to_type = AARCH64_PIXEL_U8;  break;
+    case AARCH64_SWS_OP_TO_U16: to_type = AARCH64_PIXEL_U16; break;
+    case AARCH64_SWS_OP_TO_U32: to_type = AARCH64_PIXEL_U32; break;
+    case AARCH64_SWS_OP_TO_F32: to_type = AARCH64_PIXEL_F32; break;
+    default:
+        av_assert0(!"Invalid op!");
+        break;
+    }
+    size_t dst_el_size = aarch64_pixel_size(to_type);
 
     /**
      * This function assumes block_size is either 8 or 16, and that
@@ -914,7 +927,7 @@ static void asmgen_op_convert(SwsAArch64Context *s, const SwsAArch64OpImplParams
     }
 
     /* See comment above for high vector bank usage for u32. */
-    if (p->to_type == AARCH64_PIXEL_F32) {
+    if (to_type == AARCH64_PIXEL_F32) {
         rasm_add_comment(r, "u32 -> f32");
         LOOP_MASK(p, i) i_ucvtf(r, vl[i].s4, vl[i].s4);
         LOOP_MASK(p, i) i_ucvtf(r, vh[i].s4, vh[i].s4);
@@ -923,7 +936,8 @@ static void asmgen_op_convert(SwsAArch64Context *s, const SwsAArch64OpImplParams
 
 /*********************************************************************/
 /* expand integers to the full range */
-/* AARCH64_SWS_OP_EXPAND */
+/* AARCH64_SWS_OP_EXPAND_PAIR */
+/* AARCH64_SWS_OP_EXPAND_QUAD */
 
 static void asmgen_op_expand(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
@@ -932,7 +946,15 @@ static void asmgen_op_expand(SwsAArch64Context *s, const SwsAArch64OpImplParams 
     RasmOp *vh = s->vh;
 
     size_t src_el_size = s->el_size;
-    size_t dst_el_size = aarch64_pixel_size(p->to_type);
+    SwsAArch64PixelType to_type;
+    switch (p->op) {
+    case AARCH64_SWS_OP_EXPAND_PAIR: to_type = AARCH64_PIXEL_U16; break;
+    case AARCH64_SWS_OP_EXPAND_QUAD: to_type = AARCH64_PIXEL_U32; break;
+    default:
+        av_assert0(!"Invalid op!");
+        break;
+    }
+    size_t dst_el_size = aarch64_pixel_size(to_type);
     size_t dst_total_size = p->block_size * dst_el_size;
     size_t dst_vec_size = FFMIN(dst_total_size, 16);
 
@@ -1350,8 +1372,12 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
     case AARCH64_SWS_OP_LSHIFT:       asmgen_op_lshift(s, p);       break;
     case AARCH64_SWS_OP_RSHIFT:       asmgen_op_rshift(s, p);       break;
     case AARCH64_SWS_OP_CLEAR:        asmgen_op_clear(s, p);        break;
-    case AARCH64_SWS_OP_CONVERT:      asmgen_op_convert(s, p);      break;
-    case AARCH64_SWS_OP_EXPAND:       asmgen_op_expand(s, p);       break;
+    case AARCH64_SWS_OP_TO_U8:        asmgen_op_convert(s, p);      break;
+    case AARCH64_SWS_OP_TO_U16:       asmgen_op_convert(s, p);      break;
+    case AARCH64_SWS_OP_TO_U32:       asmgen_op_convert(s, p);      break;
+    case AARCH64_SWS_OP_TO_F32:       asmgen_op_convert(s, p);      break;
+    case AARCH64_SWS_OP_EXPAND_PAIR:  asmgen_op_expand(s, p);       break;
+    case AARCH64_SWS_OP_EXPAND_QUAD:  asmgen_op_expand(s, p);       break;
     case AARCH64_SWS_OP_MIN:          asmgen_op_min(s, p);          break;
     case AARCH64_SWS_OP_MAX:          asmgen_op_max(s, p);          break;
     case AARCH64_SWS_OP_SCALE:        asmgen_op_scale(s, p);        break;
