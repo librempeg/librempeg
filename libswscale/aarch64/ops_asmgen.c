@@ -95,7 +95,7 @@ static void *av_dynarray2_add(void **tab_ptr, int *nb_ptr, size_t elem_size,
 /*********************************************************************/
 #include "rasm.c"
 #include "rasm_print.c"
-#include "ops_impl.c"
+#include "ops_impl.h"
 
 /**
  * Implementation parameters for all exported functions. This list is
@@ -104,9 +104,16 @@ static void *av_dynarray2_add(void **tab_ptr, int *nb_ptr, size_t elem_size,
  * by running:
  *   make fate-sws-ops-entries-aarch64 GEN=1
  */
-static const SwsAArch64OpImplParams impl_params[] = {
+typedef struct SwsAArch64OpEntry {
+    const char *name;
+    SwsAArch64OpImplParams params;
+} SwsAArch64OpEntry;
+
+static const SwsAArch64OpEntry ops_entries[] = {
+#define ENTRY(fname, ...) { .name = #fname, .params = __VA_ARGS__ },
 #include "ops_entries.c"
-    { .op = AARCH64_SWS_OP_NONE }
+#undef ENTRY
+    { NULL }
 };
 
 /*********************************************************************/
@@ -122,24 +129,6 @@ static size_t aarch64_pixel_size(SwsAArch64PixelType fmt)
         break;
     }
     return 0;
-}
-
-static void impl_func_name(char **buf, size_t *size, const SwsAArch64OpImplParams *params)
-{
-    buf_appendf(buf, size, "ff_sws");
-    const ParamField **fields = op_fields[params->op];
-    for (int i = 0; fields[i]; i++) {
-        const ParamField *field = fields[i];
-        void *p = (void *) (((uintptr_t) params) + field->offset);
-        field->print_str(buf, size, p);
-    }
-    buf_appendf(buf, size, "_neon");
-}
-
-void aarch64_op_impl_func_name(char *buf, size_t size, const SwsAArch64OpImplParams *params)
-{
-    impl_func_name(&buf, &size, params);
-    av_assert0(size && "string buffer exhausted");
 }
 
 /*********************************************************************/
@@ -1340,8 +1329,9 @@ static void asmgen_op_dither(SwsAArch64Context *s, const SwsAArch64OpImplParams 
 }
 
 /*********************************************************************/
-static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
+static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpEntry *entry)
 {
+    const SwsAArch64OpImplParams *p = &entry->params;
     RasmContext *r = s->rctx;
 
     bool is_read = false;
@@ -1363,9 +1353,7 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
         break;
     }
 
-    char func_name[128];
-    aarch64_op_impl_func_name(func_name, sizeof(func_name), p);
-    rasm_func_begin(r, func_name, true, !is_read);
+    rasm_func_begin(r, entry->name, true, !is_read);
 
     /**
      * Set up vector register dimensions and reshape all vectors
@@ -1430,112 +1418,6 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
         /* Common end for remaining CPS functions. */
         i_br (r, s->cont);                              CMT("jump to cont");
     }
-}
-
-/*********************************************************************/
-static void aarch64_op_impl_lookup_str(char *buf, size_t size, const SwsAArch64OpImplParams *params,
-                                       const SwsAArch64OpImplParams *prev, const char *p_str)
-{
-    int first_diff = 0;
-    int prev_levels = 0;
-    int levels = 0;
-
-    /* Compute number of current levels. */
-    if (params) {
-        const ParamField **fields = op_fields[params->op];
-        while (fields[levels])
-            levels++;
-    }
-
-    /* Compute number of previous levels. */
-    if (prev) {
-        const ParamField **prev_fields = op_fields[prev->op];
-        while (prev_fields[prev_levels])
-            prev_levels++;
-    }
-
-    /* Walk up and check the conditions that match. */
-    if (params && prev) {
-        const ParamField **fields = op_fields[params->op];
-        first_diff = -1;
-        for (int i = 0; fields[i]; i++) {
-            const ParamField *field = fields[i];
-            if (first_diff < 0) {
-                int diff = field->cmp_val((void  *) (((uintptr_t) params) + field->offset),
-                                          (void  *) (((uintptr_t) prev) + field->offset));
-                if (diff)
-                    first_diff = i;
-            }
-        }
-    }
-
-    /* Walk back closing conditions. */
-    if (prev) {
-        for (int i = prev_levels - 1; i > first_diff; i--) {
-            buf_appendf(&buf, &size, "%*sreturn NULL;\n", 4 * (i + 1), "");
-            buf_appendf(&buf, &size, "%*s}\n", 4 * i, "");
-        }
-    }
-
-    /* Walk up adding conditions to return current function. */
-    if (params) {
-        const ParamField **fields = op_fields[params->op];
-        for (int i = first_diff; i < levels; i++) {
-            const ParamField *field = fields[i];
-            void *p = (void *) (((uintptr_t) params) + field->offset);
-            buf_appendf(&buf, &size, "%*sif (%s%s == ", 4 * (i + 1), "", p_str, field->name);
-            field->print_val(&buf, &size, p);
-            buf_appendf(&buf, &size, ")");
-            if (i == (levels - 1)) {
-                buf_appendf(&buf, &size, " return ");
-                impl_func_name(&buf, &size, params);
-                buf_appendf(&buf, &size, ";\n");
-            } else {
-                buf_appendf(&buf, &size, " {\n");
-            }
-        }
-    }
-
-    av_assert0(size && "string buffer exhausted");
-}
-
-static int lookup_gen(void)
-{
-    char buf[1024];
-
-    /**
-     * The lookup function matches the SwsAArch64OpImplParams from
-     * ops_entries.c to the exported functions generated by asmgen_op().
-     * Each call to aarch64_op_impl_lookup_str() generates a code
-     * fragment to uniquely detect the current function, opening and/or
-     * closing conditions depending on the parameters of the previous
-     * function.
-     */
-
-    /* External function declarations. */
-    printf("#include \"libswscale/aarch64/ops_lookup.h\"\n");
-    printf("\n");
-    for (const SwsAArch64OpImplParams *p = impl_params; p->op; p++) {
-        aarch64_op_impl_func_name(buf, sizeof(buf), p);
-        printf("extern void %s(void);\n", buf);
-    }
-    printf("\n");
-
-    /* Lookup function. */
-    printf("SwsFuncPtr ff_sws_aarch64_lookup(const SwsAArch64OpImplParams *p)\n");
-    printf("{\n");
-    const SwsAArch64OpImplParams *prev = NULL;
-    for (const SwsAArch64OpImplParams *p = impl_params; p->op; p++) {
-        aarch64_op_impl_lookup_str(buf, sizeof(buf), p, prev, "p->");
-        printf("%s", buf);
-        prev = p;
-    }
-    aarch64_op_impl_lookup_str(buf, sizeof(buf), NULL, prev, "p->");
-    printf("%s", buf);
-    printf("    return NULL;\n");
-    printf("}\n");
-
-    return 0;
 }
 
 /*********************************************************************/
@@ -1633,9 +1515,9 @@ static int asmgen(void)
     asmgen_process(&s, 0x1111);
 
     /* Generate all functions from ops_entries.c using rasm. */
-    const SwsAArch64OpImplParams *params = impl_params;
-    while (params->op) {
-        asmgen_op_cps(&s, params++);
+    const SwsAArch64OpEntry *entries = ops_entries;
+    while (entries->name) {
+        asmgen_op_cps(&s, entries++);
         if (rctx->error) {
             ret = rctx->error;
             goto error;
@@ -1659,23 +1541,9 @@ error:
 /*********************************************************************/
 int main(int argc, char *argv[])
 {
-    bool lookup = false;
-    bool ops = false;
-
 #ifdef _WIN32
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
 
-    for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-ops"))
-            ops = true;
-        else if (!strcmp(argv[i], "-lookup"))
-            lookup = true;
-    }
-    if ((lookup && ops) || (!lookup && !ops)) {
-        fprintf(stderr, "Exactly one of -ops or -lookup must be specified.\n");
-        return -1;
-    }
-
-    return lookup ? lookup_gen() : asmgen();
+    return asmgen();
 }

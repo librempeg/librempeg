@@ -147,9 +147,23 @@ static int register_op(SwsContext *ctx, void *opaque, SwsOpList *ops)
 }
 
 /*********************************************************************/
+static void impl_func_name(char **buf, size_t *size, const SwsAArch64OpImplParams *params)
+{
+    buf_appendf(buf, size, "ff_sws");
+    const ParamField **fields = op_fields[params->op];
+    for (int i = 0; fields[i]; i++) {
+        const ParamField *field = fields[i];
+        void *p = (void *) (((uintptr_t) params) + field->offset);
+        field->print_str(buf, size, p);
+    }
+    buf_appendf(buf, size, "_neon");
+}
+
 static void serialize_op(char *buf, size_t size, const SwsAArch64OpImplParams *params)
 {
-    buf_appendf(&buf, &size, "{");
+    buf_appendf(&buf, &size, "ENTRY(");
+    impl_func_name(&buf, &size, params);
+    buf_appendf(&buf, &size, ", {");
     const ParamField **fields = op_fields[params->op];
     for (int i = 0; fields[i]; i++) {
         const ParamField *field = fields[i];
@@ -159,7 +173,7 @@ static void serialize_op(char *buf, size_t size, const SwsAArch64OpImplParams *p
         buf_appendf(&buf, &size, " .%s = ", field->name);
         field->print_val(&buf, &size, p);
     }
-    buf_appendf(&buf, &size, " }");
+    buf_appendf(&buf, &size, " })");
     av_assert0(size && "string buffer exhausted");
 }
 
@@ -171,7 +185,7 @@ static int print_op(void *opaque, void *elem)
 
     char buf[256];
     serialize_op(buf, sizeof(buf), params);
-    fprintf(fp, "%s,\n", buf);
+    fprintf(fp, "%s\n", buf);
 
     av_free(params);
 

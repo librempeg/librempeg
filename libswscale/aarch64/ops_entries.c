@@ -3,412 +3,412 @@
  * To regenerate, run: make fate-sws-ops-entries-aarch64 GEN=1
  */
 
-{ .op = AARCH64_SWS_OP_READ_BIT, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_READ_BIT, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_READ_NIBBLE, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_READ_NIBBLE, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_WRITE_BIT, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_WRITE_NIBBLE, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_WRITE_NIBBLE, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1001 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1001 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000001ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000002ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000003ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000003ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000003ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000010ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000010ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000010ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000013ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000013ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000013ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000020ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0100 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000020ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0100 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000030ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000030ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000030ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000031ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000130ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1001 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000310ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000310ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000320ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0101 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000001031ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1010 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000001301ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000002032ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1100 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000002032ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1100 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000002302ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0101 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000002302ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0101 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000102132ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000102132ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000102132ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000132102ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000001f01f0ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000001f01f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000001f01f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000201231ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000201231ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000231201ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000231201ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000231201ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000002f02f0ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0101 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000002f02f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0101 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000002f02f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0101 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000002f12f1ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0110 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000002f12f1ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0110 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000002f12f1ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0110 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000003f13f1ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1010 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000003f13f1ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1010 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000003f13f1ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1010 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00001f2102f0ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00001f2102f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00001f2102f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f1201f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f1201f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f12f103ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f12f103ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f12f103ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f12f130ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f12f130ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f12f130ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f3203f0ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1101 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f3203f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1101 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00003f2302f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1101 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00003f2312f1ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00003f2312f1ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x001f213203f0ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x001f213203f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x001f213203f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x002f123103f0ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x002f123103f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x003f231201f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x003f231201f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x2f12f13f03f0ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x2f12f13f03f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_PERMUTE, .move = 0x2f12f13f03f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_COPY, .move = 0x000000002010ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0110 },
-{ .op = AARCH64_SWS_OP_COPY, .move = 0x000000002010ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0110 },
-{ .op = AARCH64_SWS_OP_COPY, .move = 0x000000002010ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0110 },
-{ .op = AARCH64_SWS_OP_COPY, .move = 0x000000103120ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_COPY, .move = 0x000000103120ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_COPY, .move = 0x000000103120ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_COPY, .move = 0x000000302010ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_COPY, .move = 0x000000302010ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_COPY, .move = 0x000000302010ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_COPY, .move = 0x001f01f03020ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_COPY, .move = 0x001f01f03020ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0121, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0121, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0233, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0233, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0332, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0332, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0444, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0444, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0555, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0555, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0565, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0565, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0x2aaa, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0x2aaa, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0xaaa2, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0100 },
-{ .op = AARCH64_SWS_OP_UNPACK, .pack = 0xaaa2, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_PACK, .pack = 0x0121, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PACK, .pack = 0x0121, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PACK, .pack = 0x0233, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PACK, .pack = 0x0233, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PACK, .pack = 0x0332, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PACK, .pack = 0x0332, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PACK, .pack = 0x0444, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PACK, .pack = 0x0444, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PACK, .pack = 0x0555, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PACK, .pack = 0x0555, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PACK, .pack = 0x0565, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PACK, .pack = 0x0565, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_PACK, .pack = 0x2aaa, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_PACK, .pack = 0xaaa2, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 1, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 1, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 1, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 2, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 2, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 2, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 2, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 2, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 3, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 4, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 4, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 4, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 4, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 4, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 4, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 5, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 6, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 6, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 6, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 6, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 6, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 6, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 7, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 8, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LSHIFT, .shift = 8, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_RSHIFT, .shift = 4, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_RSHIFT, .shift = 4, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_RSHIFT, .shift = 4, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_RSHIFT, .shift = 4, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_RSHIFT, .shift = 6, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_RSHIFT, .shift = 6, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_RSHIFT, .shift = 6, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0x0fff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0x0fff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1011 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0x0fff, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0x0fff, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1101 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0x0fff, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0x0fff, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0x1fff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0x1fff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1011 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0x1fff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1101 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0x1fff, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0x1fff, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0x1fff, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xff1f, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xff1f, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xff1f, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xff1f, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff0, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff0, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1101 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1101 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0101 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1100 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1100 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0101 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1010 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1011 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1101 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0110 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_TO_U8, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_TO_U8, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_TO_U8, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_TO_U8, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 },
-{ .op = AARCH64_SWS_OP_TO_U8, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_TO_U8, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_TO_U8, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 },
-{ .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_TO_U16, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_TO_U16, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_TO_U16, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 },
-{ .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0100 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1010 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1100 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0100 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_EXPAND_PAIR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_EXPAND_PAIR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_EXPAND_PAIR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_EXPAND_PAIR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_EXPAND_PAIR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_MIN, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_MIN, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_MIN, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_MIN, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 },
-{ .op = AARCH64_SWS_OP_MIN, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_MIN, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_MAX, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_MAX, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_MAX, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_MAX, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 },
-{ .op = AARCH64_SWS_OP_MAX, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_SCALE, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_SCALE, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_SCALE, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_SCALE, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_SCALE, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_SCALE, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_SCALE, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_SCALE, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_SCALE, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_SCALE, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_SCALE, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x000000000fULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x00000000fcULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x00000000ffULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x000000c000ULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x000373dcc7ULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x0003f3fccfULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x000c00c00cULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x000c30cc0fULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x000ff3fcfcULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x000ff3fcffULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0xc000000000ULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0xc00000000fULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0xc0000000fcULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0xc003f3fccfULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0xc00c00c00cULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0xc00ff3fcffULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x000000000fULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x00000000fcULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x00000000ffULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x000000c000ULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x000373dcc7ULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x0003f3fccfULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x000c00c00cULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x000c30cc0fULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x000ff3fcfcULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x000ff3fcffULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0xc000000000ULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0xc00000000fULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0xc0000000fcULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0xc003f3fccfULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0xc00c00c00cULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0xc00ff3fcffULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x0325, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x032f, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x2305, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x230f, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x3000, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x302f, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x3ff0, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x5023, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x5032, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x5230, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x5ff0, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x5fff, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1000 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xf023, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xf032, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xf203, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xf230, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xf2f0, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0101 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xf2ff, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0100 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xf302, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xff30, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0011 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xff3f, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0010 },
-{ .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xfff0, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 },
+ENTRY(ff_sws_read_bit_8_u8_0001_neon, { .op = AARCH64_SWS_OP_READ_BIT, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_read_bit_16_u8_0001_neon, { .op = AARCH64_SWS_OP_READ_BIT, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_read_nibble_8_u8_0001_neon, { .op = AARCH64_SWS_OP_READ_NIBBLE, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_read_nibble_16_u8_0001_neon, { .op = AARCH64_SWS_OP_READ_NIBBLE, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_read_packed_8_u8_0011_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_read_packed_8_u8_0111_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_read_packed_8_u8_1111_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_read_packed_8_u16_0011_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0011 })
+ENTRY(ff_sws_read_packed_8_u16_0111_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_read_packed_8_u16_1111_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1111 })
+ENTRY(ff_sws_read_packed_8_u32_0011_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0011 })
+ENTRY(ff_sws_read_packed_8_u32_0111_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 })
+ENTRY(ff_sws_read_packed_8_u32_1111_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1111 })
+ENTRY(ff_sws_read_packed_16_u8_0011_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_read_packed_16_u8_0111_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_read_packed_16_u8_1111_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_read_packed_16_u16_0011_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0011 })
+ENTRY(ff_sws_read_packed_16_u16_0111_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_read_packed_16_u16_1111_neon, { .op = AARCH64_SWS_OP_READ_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1111 })
+ENTRY(ff_sws_read_planar_8_u8_0001_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_read_planar_8_u8_0011_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_read_planar_8_u8_0111_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_read_planar_8_u8_1111_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_read_planar_8_u16_0001_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_read_planar_8_u16_0011_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0011 })
+ENTRY(ff_sws_read_planar_8_u16_0111_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_read_planar_8_u16_1111_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1111 })
+ENTRY(ff_sws_read_planar_8_u32_0001_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0001 })
+ENTRY(ff_sws_read_planar_8_u32_0111_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 })
+ENTRY(ff_sws_read_planar_8_u32_1111_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1111 })
+ENTRY(ff_sws_read_planar_16_u8_0001_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_read_planar_16_u8_0111_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_read_planar_16_u8_1111_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_read_planar_16_u16_0001_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_read_planar_16_u16_0111_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_read_planar_16_u16_1111_neon, { .op = AARCH64_SWS_OP_READ_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1111 })
+ENTRY(ff_sws_write_bit_8_u8_0001_neon, { .op = AARCH64_SWS_OP_WRITE_BIT, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_write_nibble_8_u8_0001_neon, { .op = AARCH64_SWS_OP_WRITE_NIBBLE, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_write_nibble_16_u8_0001_neon, { .op = AARCH64_SWS_OP_WRITE_NIBBLE, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_write_packed_8_u8_0011_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_write_packed_8_u8_0111_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_write_packed_8_u8_1111_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_write_packed_8_u16_0011_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0011 })
+ENTRY(ff_sws_write_packed_8_u16_0111_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_write_packed_8_u16_1111_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1111 })
+ENTRY(ff_sws_write_packed_8_u32_0011_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0011 })
+ENTRY(ff_sws_write_packed_8_u32_0111_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 })
+ENTRY(ff_sws_write_packed_8_u32_1111_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1111 })
+ENTRY(ff_sws_write_packed_16_u8_0011_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_write_packed_16_u8_0111_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_write_packed_16_u8_1111_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_write_packed_16_u16_0011_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0011 })
+ENTRY(ff_sws_write_packed_16_u16_0111_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_write_packed_16_u16_1111_neon, { .op = AARCH64_SWS_OP_WRITE_PACKED, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1111 })
+ENTRY(ff_sws_write_planar_8_u8_0001_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_write_planar_8_u8_0011_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_write_planar_8_u8_0111_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_write_planar_8_u8_1111_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_write_planar_8_u16_0001_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_write_planar_8_u16_0011_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0011 })
+ENTRY(ff_sws_write_planar_8_u16_0111_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_write_planar_8_u16_1111_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1111 })
+ENTRY(ff_sws_write_planar_8_u32_0001_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0001 })
+ENTRY(ff_sws_write_planar_8_u32_0111_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 })
+ENTRY(ff_sws_write_planar_8_u32_1111_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1111 })
+ENTRY(ff_sws_write_planar_16_u8_0001_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_write_planar_16_u8_0011_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_write_planar_16_u8_0111_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_write_planar_16_u8_1111_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_write_planar_16_u16_0001_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_write_planar_16_u16_0011_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0011 })
+ENTRY(ff_sws_write_planar_16_u16_0111_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_write_planar_16_u16_1111_neon, { .op = AARCH64_SWS_OP_WRITE_PLANAR, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1111 })
+ENTRY(ff_sws_swap_bytes_8_u16_0001_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_swap_bytes_8_u16_0010_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0010 })
+ENTRY(ff_sws_swap_bytes_8_u16_0011_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0011 })
+ENTRY(ff_sws_swap_bytes_8_u16_0111_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_swap_bytes_8_u16_1001_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1001 })
+ENTRY(ff_sws_swap_bytes_8_u16_1110_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1110 })
+ENTRY(ff_sws_swap_bytes_8_u16_1111_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1111 })
+ENTRY(ff_sws_swap_bytes_8_u32_0001_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0001 })
+ENTRY(ff_sws_swap_bytes_8_u32_0011_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0011 })
+ENTRY(ff_sws_swap_bytes_8_u32_0111_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 })
+ENTRY(ff_sws_swap_bytes_8_u32_1001_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1001 })
+ENTRY(ff_sws_swap_bytes_8_u32_1110_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1110 })
+ENTRY(ff_sws_swap_bytes_8_u32_1111_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1111 })
+ENTRY(ff_sws_swap_bytes_16_u16_0001_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_swap_bytes_16_u16_0011_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0011 })
+ENTRY(ff_sws_swap_bytes_16_u16_0111_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_swap_bytes_16_u16_1110_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1110 })
+ENTRY(ff_sws_swap_bytes_16_u16_1111_neon, { .op = AARCH64_SWS_OP_SWAP_BYTES, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1111 })
+ENTRY(ff_sws_permute_000000000001_32_u8_0001_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000001ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_permute_000000000002_32_u8_0001_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000002ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_permute_000000000003_8_u8_0001_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000003ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_permute_000000000003_16_u8_0001_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000003ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_permute_000000000003_32_u8_0001_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000003ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_permute_000000000010_8_u8_0010_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000010ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0010 })
+ENTRY(ff_sws_permute_000000000010_16_u8_0010_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000010ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0010 })
+ENTRY(ff_sws_permute_000000000010_32_u8_0010_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000010ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0010 })
+ENTRY(ff_sws_permute_000000000013_8_u8_0010_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000013ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0010 })
+ENTRY(ff_sws_permute_000000000013_16_u8_0010_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000013ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0010 })
+ENTRY(ff_sws_permute_000000000013_32_u8_0010_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000013ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0010 })
+ENTRY(ff_sws_permute_000000000020_8_u8_0100_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000020ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0100 })
+ENTRY(ff_sws_permute_000000000020_32_u8_0100_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000020ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0100 })
+ENTRY(ff_sws_permute_000000000030_8_u8_1000_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000030ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1000 })
+ENTRY(ff_sws_permute_000000000030_16_u8_1000_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000030ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1000 })
+ENTRY(ff_sws_permute_000000000030_32_u8_1000_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000030ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1000 })
+ENTRY(ff_sws_permute_000000000031_32_u8_1000_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000031ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1000 })
+ENTRY(ff_sws_permute_000000000130_32_u8_1001_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000130ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1001 })
+ENTRY(ff_sws_permute_000000000310_8_u8_0011_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000310ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_permute_000000000310_16_u8_0011_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000310ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_permute_000000000320_32_u8_0101_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000000320ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0101 })
+ENTRY(ff_sws_permute_000000001031_32_u8_1010_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000001031ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1010 })
+ENTRY(ff_sws_permute_000000001301_8_u8_0011_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000001301ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_permute_000000002032_8_u8_1100_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000002032ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1100 })
+ENTRY(ff_sws_permute_000000002032_32_u8_1100_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000002032ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1100 })
+ENTRY(ff_sws_permute_000000002302_16_u8_0101_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000002302ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0101 })
+ENTRY(ff_sws_permute_000000002302_32_u8_0101_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000002302ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0101 })
+ENTRY(ff_sws_permute_000000102132_8_u8_1110_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000102132ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_permute_000000102132_16_u8_1110_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000102132ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_permute_000000102132_32_u8_1110_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000102132ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_permute_000000132102_32_u8_0111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000132102ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_permute_0000001f01f0_8_u8_0011_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000001f01f0ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_permute_0000001f01f0_16_u8_0011_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000001f01f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_permute_0000001f01f0_32_u8_0011_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000001f01f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_permute_000000201231_8_u8_1110_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000201231ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_permute_000000201231_32_u8_1110_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000201231ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_permute_000000231201_8_u8_0111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000231201ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_permute_000000231201_16_u8_0111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000231201ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_permute_000000231201_32_u8_0111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x000000231201ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_permute_0000002f02f0_8_u8_0101_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000002f02f0ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0101 })
+ENTRY(ff_sws_permute_0000002f02f0_16_u8_0101_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000002f02f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0101 })
+ENTRY(ff_sws_permute_0000002f02f0_32_u8_0101_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000002f02f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0101 })
+ENTRY(ff_sws_permute_0000002f12f1_8_u8_0110_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000002f12f1ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0110 })
+ENTRY(ff_sws_permute_0000002f12f1_16_u8_0110_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000002f12f1ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0110 })
+ENTRY(ff_sws_permute_0000002f12f1_32_u8_0110_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000002f12f1ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0110 })
+ENTRY(ff_sws_permute_0000003f13f1_8_u8_1010_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000003f13f1ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1010 })
+ENTRY(ff_sws_permute_0000003f13f1_16_u8_1010_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000003f13f1ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1010 })
+ENTRY(ff_sws_permute_0000003f13f1_32_u8_1010_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x0000003f13f1ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1010 })
+ENTRY(ff_sws_permute_00001f2102f0_8_u8_0111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00001f2102f0ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_permute_00001f2102f0_16_u8_0111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00001f2102f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_permute_00001f2102f0_32_u8_0111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00001f2102f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_permute_00002f1201f0_16_u8_0111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f1201f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_permute_00002f1201f0_32_u8_0111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f1201f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_permute_00002f12f103_8_u8_0111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f12f103ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_permute_00002f12f103_16_u8_0111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f12f103ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_permute_00002f12f103_32_u8_0111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f12f103ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_permute_00002f12f130_8_u8_1110_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f12f130ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_permute_00002f12f130_16_u8_1110_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f12f130ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_permute_00002f12f130_32_u8_1110_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f12f130ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_permute_00002f3203f0_8_u8_1101_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f3203f0ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1101 })
+ENTRY(ff_sws_permute_00002f3203f0_16_u8_1101_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00002f3203f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1101 })
+ENTRY(ff_sws_permute_00003f2302f0_16_u8_1101_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00003f2302f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1101 })
+ENTRY(ff_sws_permute_00003f2312f1_8_u8_1110_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00003f2312f1ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_permute_00003f2312f1_16_u8_1110_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x00003f2312f1ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_permute_001f213203f0_8_u8_1111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x001f213203f0ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_permute_001f213203f0_16_u8_1111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x001f213203f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_permute_001f213203f0_32_u8_1111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x001f213203f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_permute_002f123103f0_8_u8_1111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x002f123103f0ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_permute_002f123103f0_32_u8_1111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x002f123103f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_permute_003f231201f0_16_u8_1111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x003f231201f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_permute_003f231201f0_32_u8_1111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x003f231201f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_permute_2f12f13f03f0_8_u8_1111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x2f12f13f03f0ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_permute_2f12f13f03f0_16_u8_1111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x2f12f13f03f0ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_permute_2f12f13f03f0_32_u8_1111_neon, { .op = AARCH64_SWS_OP_PERMUTE, .move = 0x2f12f13f03f0ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_copy_000000002010_8_u8_0110_neon, { .op = AARCH64_SWS_OP_COPY, .move = 0x000000002010ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0110 })
+ENTRY(ff_sws_copy_000000002010_16_u8_0110_neon, { .op = AARCH64_SWS_OP_COPY, .move = 0x000000002010ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0110 })
+ENTRY(ff_sws_copy_000000002010_32_u8_0110_neon, { .op = AARCH64_SWS_OP_COPY, .move = 0x000000002010ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x0110 })
+ENTRY(ff_sws_copy_000000103120_8_u8_1110_neon, { .op = AARCH64_SWS_OP_COPY, .move = 0x000000103120ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_copy_000000103120_16_u8_1110_neon, { .op = AARCH64_SWS_OP_COPY, .move = 0x000000103120ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_copy_000000103120_32_u8_1110_neon, { .op = AARCH64_SWS_OP_COPY, .move = 0x000000103120ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_copy_000000302010_8_u8_1110_neon, { .op = AARCH64_SWS_OP_COPY, .move = 0x000000302010ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_copy_000000302010_16_u8_1110_neon, { .op = AARCH64_SWS_OP_COPY, .move = 0x000000302010ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_copy_000000302010_32_u8_1110_neon, { .op = AARCH64_SWS_OP_COPY, .move = 0x000000302010ULL, .block_size = 32, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_copy_001f01f03020_8_u8_1111_neon, { .op = AARCH64_SWS_OP_COPY, .move = 0x001f01f03020ULL, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_copy_001f01f03020_16_u8_1111_neon, { .op = AARCH64_SWS_OP_COPY, .move = 0x001f01f03020ULL, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_unpack_0121_8_u8_0111_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0121, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_unpack_0121_16_u8_0111_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0121, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_unpack_0233_8_u8_0111_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0233, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_unpack_0233_16_u8_0111_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0233, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_unpack_0332_8_u8_0111_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0332, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_unpack_0332_16_u8_0111_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0332, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_unpack_0444_8_u16_0111_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0444, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_unpack_0444_16_u16_0111_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0444, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_unpack_0555_8_u16_0111_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0555, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_unpack_0555_16_u16_0111_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0555, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_unpack_0565_8_u16_0111_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0565, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_unpack_0565_16_u16_0111_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0x0565, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_unpack_2aaa_8_u32_0010_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0x2aaa, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0010 })
+ENTRY(ff_sws_unpack_2aaa_8_u32_0111_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0x2aaa, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 })
+ENTRY(ff_sws_unpack_aaa2_8_u32_0100_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0xaaa2, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0100 })
+ENTRY(ff_sws_unpack_aaa2_8_u32_1110_neon, { .op = AARCH64_SWS_OP_UNPACK, .pack = 0xaaa2, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1110 })
+ENTRY(ff_sws_pack_0121_8_u8_0111_neon, { .op = AARCH64_SWS_OP_PACK, .pack = 0x0121, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_pack_0121_16_u8_0111_neon, { .op = AARCH64_SWS_OP_PACK, .pack = 0x0121, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_pack_0233_8_u8_0111_neon, { .op = AARCH64_SWS_OP_PACK, .pack = 0x0233, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_pack_0233_16_u8_0111_neon, { .op = AARCH64_SWS_OP_PACK, .pack = 0x0233, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_pack_0332_8_u8_0111_neon, { .op = AARCH64_SWS_OP_PACK, .pack = 0x0332, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_pack_0332_16_u8_0111_neon, { .op = AARCH64_SWS_OP_PACK, .pack = 0x0332, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_pack_0444_8_u16_0111_neon, { .op = AARCH64_SWS_OP_PACK, .pack = 0x0444, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_pack_0444_16_u16_0111_neon, { .op = AARCH64_SWS_OP_PACK, .pack = 0x0444, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_pack_0555_8_u16_0111_neon, { .op = AARCH64_SWS_OP_PACK, .pack = 0x0555, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_pack_0555_16_u16_0111_neon, { .op = AARCH64_SWS_OP_PACK, .pack = 0x0555, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_pack_0565_8_u16_0111_neon, { .op = AARCH64_SWS_OP_PACK, .pack = 0x0565, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_pack_0565_16_u16_0111_neon, { .op = AARCH64_SWS_OP_PACK, .pack = 0x0565, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_pack_2aaa_8_u32_1111_neon, { .op = AARCH64_SWS_OP_PACK, .pack = 0x2aaa, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1111 })
+ENTRY(ff_sws_pack_aaa2_8_u32_1111_neon, { .op = AARCH64_SWS_OP_PACK, .pack = 0xaaa2, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1111 })
+ENTRY(ff_sws_lshift_1_8_u16_0111_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 1, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_lshift_1_16_u16_0111_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 1, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_lshift_1_16_u16_1110_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 1, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1110 })
+ENTRY(ff_sws_lshift_2_8_u16_0111_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 2, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_lshift_2_8_u16_1110_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 2, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1110 })
+ENTRY(ff_sws_lshift_2_8_u32_0111_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 2, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 })
+ENTRY(ff_sws_lshift_2_16_u16_0111_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 2, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_lshift_2_16_u16_1110_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 2, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1110 })
+ENTRY(ff_sws_lshift_3_16_u16_0111_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 3, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_lshift_4_8_u16_0001_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 4, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_lshift_4_8_u16_0111_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 4, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_lshift_4_8_u16_1110_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 4, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1110 })
+ENTRY(ff_sws_lshift_4_16_u16_0001_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 4, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_lshift_4_16_u16_0111_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 4, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_lshift_4_16_u16_1110_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 4, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1110 })
+ENTRY(ff_sws_lshift_5_16_u16_0111_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 5, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_lshift_6_8_u16_0001_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 6, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_lshift_6_8_u16_0111_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 6, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_lshift_6_8_u16_1110_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 6, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1110 })
+ENTRY(ff_sws_lshift_6_16_u16_0001_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 6, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_lshift_6_16_u16_0111_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 6, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_lshift_6_16_u16_1110_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 6, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1110 })
+ENTRY(ff_sws_lshift_7_16_u16_0111_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 7, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_lshift_8_16_u16_0111_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 8, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_lshift_8_16_u16_1110_neon, { .op = AARCH64_SWS_OP_LSHIFT, .shift = 8, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1110 })
+ENTRY(ff_sws_rshift_4_8_u16_0001_neon, { .op = AARCH64_SWS_OP_RSHIFT, .shift = 4, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_rshift_4_8_u16_0010_neon, { .op = AARCH64_SWS_OP_RSHIFT, .shift = 4, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0010 })
+ENTRY(ff_sws_rshift_4_8_u16_0111_neon, { .op = AARCH64_SWS_OP_RSHIFT, .shift = 4, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_rshift_4_16_u16_0111_neon, { .op = AARCH64_SWS_OP_RSHIFT, .shift = 4, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_rshift_6_8_u16_0001_neon, { .op = AARCH64_SWS_OP_RSHIFT, .shift = 6, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_rshift_6_8_u16_0111_neon, { .op = AARCH64_SWS_OP_RSHIFT, .shift = 6, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_rshift_6_16_u16_0111_neon, { .op = AARCH64_SWS_OP_RSHIFT, .shift = 6, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_clear_0fff_8_u8_1000_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0x0fff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1000 })
+ENTRY(ff_sws_clear_0fff_8_u8_1011_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0x0fff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1011 })
+ENTRY(ff_sws_clear_0fff_8_u16_1000_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0x0fff, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1000 })
+ENTRY(ff_sws_clear_0fff_8_u16_1101_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0x0fff, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1101 })
+ENTRY(ff_sws_clear_0fff_16_u8_1000_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0x0fff, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1000 })
+ENTRY(ff_sws_clear_0fff_16_u16_1000_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0x0fff, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1000 })
+ENTRY(ff_sws_clear_1fff_8_u8_1000_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0x1fff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1000 })
+ENTRY(ff_sws_clear_1fff_8_u8_1011_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0x1fff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1011 })
+ENTRY(ff_sws_clear_1fff_8_u8_1101_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0x1fff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1101 })
+ENTRY(ff_sws_clear_1fff_8_u16_1000_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0x1fff, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1000 })
+ENTRY(ff_sws_clear_1fff_16_u8_1000_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0x1fff, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1000 })
+ENTRY(ff_sws_clear_1fff_16_u16_1000_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0x1fff, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1000 })
+ENTRY(ff_sws_clear_ff1f_8_u8_0010_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xff1f, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0010 })
+ENTRY(ff_sws_clear_ff1f_8_u16_0010_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xff1f, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0010 })
+ENTRY(ff_sws_clear_ff1f_16_u8_0010_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xff1f, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0010 })
+ENTRY(ff_sws_clear_ff1f_16_u16_0010_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xff1f, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0010 })
+ENTRY(ff_sws_clear_fff0_8_u8_0001_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff0, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_clear_fff0_16_u8_0001_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff0, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_clear_fff1_8_u8_0001_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_clear_fff1_8_u8_1101_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1101 })
+ENTRY(ff_sws_clear_fff1_8_u16_0001_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_clear_fff1_8_u16_1101_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1101 })
+ENTRY(ff_sws_clear_fff1_16_u8_0001_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_clear_fff1_16_u8_0111_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_clear_fff1_16_u16_0001_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_clear_fff1_16_u16_0111_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xfff1, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_clear_ffff_8_u8_0011_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_clear_ffff_8_u8_0101_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0101 })
+ENTRY(ff_sws_clear_ffff_8_u8_1100_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1100 })
+ENTRY(ff_sws_clear_ffff_8_u16_1100_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1100 })
+ENTRY(ff_sws_clear_ffff_8_u32_0001_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0001 })
+ENTRY(ff_sws_clear_ffff_8_u32_0010_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0010 })
+ENTRY(ff_sws_clear_ffff_8_u32_0101_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0101 })
+ENTRY(ff_sws_clear_ffff_8_u32_1000_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1000 })
+ENTRY(ff_sws_clear_ffff_8_u32_1010_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1010 })
+ENTRY(ff_sws_clear_ffff_8_u32_1011_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1011 })
+ENTRY(ff_sws_clear_ffff_8_u32_1101_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1101 })
+ENTRY(ff_sws_clear_ffff_16_u8_0011_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_clear_ffff_16_u8_0110_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0110 })
+ENTRY(ff_sws_clear_ffff_16_u16_0001_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_clear_ffff_16_u16_0011_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0011 })
+ENTRY(ff_sws_clear_ffff_16_u16_0111_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_clear_ffff_16_u16_1000_neon, { .op = AARCH64_SWS_OP_CLEAR, .clear = 0xffff, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x1000 })
+ENTRY(ff_sws_to_u8_8_f32_0001_neon, { .op = AARCH64_SWS_OP_TO_U8, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 })
+ENTRY(ff_sws_to_u8_8_f32_0011_neon, { .op = AARCH64_SWS_OP_TO_U8, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0011 })
+ENTRY(ff_sws_to_u8_8_f32_0111_neon, { .op = AARCH64_SWS_OP_TO_U8, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_to_u8_8_f32_1001_neon, { .op = AARCH64_SWS_OP_TO_U8, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 })
+ENTRY(ff_sws_to_u8_8_f32_1110_neon, { .op = AARCH64_SWS_OP_TO_U8, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 })
+ENTRY(ff_sws_to_u8_8_f32_1111_neon, { .op = AARCH64_SWS_OP_TO_U8, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_to_u8_16_u16_0111_neon, { .op = AARCH64_SWS_OP_TO_U8, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_to_u16_8_u8_0111_neon, { .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_to_u16_8_u32_0111_neon, { .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 })
+ENTRY(ff_sws_to_u16_8_u32_1110_neon, { .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1110 })
+ENTRY(ff_sws_to_u16_8_f32_0001_neon, { .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 })
+ENTRY(ff_sws_to_u16_8_f32_0011_neon, { .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0011 })
+ENTRY(ff_sws_to_u16_8_f32_0111_neon, { .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_to_u16_8_f32_1001_neon, { .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 })
+ENTRY(ff_sws_to_u16_8_f32_1110_neon, { .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 })
+ENTRY(ff_sws_to_u16_8_f32_1111_neon, { .op = AARCH64_SWS_OP_TO_U16, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_to_u16_16_u8_0001_neon, { .op = AARCH64_SWS_OP_TO_U16, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_to_u16_16_u8_0111_neon, { .op = AARCH64_SWS_OP_TO_U16, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_to_u16_16_u8_1110_neon, { .op = AARCH64_SWS_OP_TO_U16, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_to_u32_8_u8_0001_neon, { .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_to_u32_8_u8_0111_neon, { .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_to_u32_8_u16_0001_neon, { .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_to_u32_8_u16_0111_neon, { .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_to_u32_8_f32_0001_neon, { .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 })
+ENTRY(ff_sws_to_u32_8_f32_0111_neon, { .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_to_u32_8_f32_1001_neon, { .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 })
+ENTRY(ff_sws_to_u32_8_f32_1110_neon, { .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 })
+ENTRY(ff_sws_to_u32_8_f32_1111_neon, { .op = AARCH64_SWS_OP_TO_U32, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_to_f32_8_u8_0001_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_to_f32_8_u8_0010_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0010 })
+ENTRY(ff_sws_to_f32_8_u8_0011_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_to_f32_8_u8_0100_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0100 })
+ENTRY(ff_sws_to_f32_8_u8_0111_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_to_f32_8_u8_1010_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1010 })
+ENTRY(ff_sws_to_f32_8_u8_1100_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1100 })
+ENTRY(ff_sws_to_f32_8_u8_1110_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_to_f32_8_u8_1111_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_to_f32_8_u16_0001_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_to_f32_8_u16_0010_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0010 })
+ENTRY(ff_sws_to_f32_8_u16_0011_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0011 })
+ENTRY(ff_sws_to_f32_8_u16_0111_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_to_f32_8_u16_1110_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1110 })
+ENTRY(ff_sws_to_f32_8_u16_1111_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U16, .mask = 0x1111 })
+ENTRY(ff_sws_to_f32_8_u32_0010_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0010 })
+ENTRY(ff_sws_to_f32_8_u32_0100_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0100 })
+ENTRY(ff_sws_to_f32_8_u32_0111_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 })
+ENTRY(ff_sws_to_f32_8_u32_1110_neon, { .op = AARCH64_SWS_OP_TO_F32, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x1110 })
+ENTRY(ff_sws_expand_pair_16_u8_0001_neon, { .op = AARCH64_SWS_OP_EXPAND_PAIR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_expand_pair_16_u8_0011_neon, { .op = AARCH64_SWS_OP_EXPAND_PAIR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0011 })
+ENTRY(ff_sws_expand_pair_16_u8_0111_neon, { .op = AARCH64_SWS_OP_EXPAND_PAIR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_expand_pair_16_u8_1110_neon, { .op = AARCH64_SWS_OP_EXPAND_PAIR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1110 })
+ENTRY(ff_sws_expand_pair_16_u8_1111_neon, { .op = AARCH64_SWS_OP_EXPAND_PAIR, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x1111 })
+ENTRY(ff_sws_min_8_f32_0001_neon, { .op = AARCH64_SWS_OP_MIN, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 })
+ENTRY(ff_sws_min_8_f32_0011_neon, { .op = AARCH64_SWS_OP_MIN, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0011 })
+ENTRY(ff_sws_min_8_f32_0111_neon, { .op = AARCH64_SWS_OP_MIN, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_min_8_f32_1001_neon, { .op = AARCH64_SWS_OP_MIN, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 })
+ENTRY(ff_sws_min_8_f32_1110_neon, { .op = AARCH64_SWS_OP_MIN, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 })
+ENTRY(ff_sws_min_8_f32_1111_neon, { .op = AARCH64_SWS_OP_MIN, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_max_8_f32_0001_neon, { .op = AARCH64_SWS_OP_MAX, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 })
+ENTRY(ff_sws_max_8_f32_0011_neon, { .op = AARCH64_SWS_OP_MAX, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0011 })
+ENTRY(ff_sws_max_8_f32_0111_neon, { .op = AARCH64_SWS_OP_MAX, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_max_8_f32_1001_neon, { .op = AARCH64_SWS_OP_MAX, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 })
+ENTRY(ff_sws_max_8_f32_1111_neon, { .op = AARCH64_SWS_OP_MAX, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_scale_8_u32_0001_neon, { .op = AARCH64_SWS_OP_SCALE, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0001 })
+ENTRY(ff_sws_scale_8_u32_0111_neon, { .op = AARCH64_SWS_OP_SCALE, .block_size = 8, .type = AARCH64_PIXEL_U32, .mask = 0x0111 })
+ENTRY(ff_sws_scale_8_f32_0001_neon, { .op = AARCH64_SWS_OP_SCALE, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 })
+ENTRY(ff_sws_scale_8_f32_0011_neon, { .op = AARCH64_SWS_OP_SCALE, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0011 })
+ENTRY(ff_sws_scale_8_f32_0111_neon, { .op = AARCH64_SWS_OP_SCALE, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_scale_8_f32_1110_neon, { .op = AARCH64_SWS_OP_SCALE, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 })
+ENTRY(ff_sws_scale_8_f32_1111_neon, { .op = AARCH64_SWS_OP_SCALE, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_scale_16_u8_0001_neon, { .op = AARCH64_SWS_OP_SCALE, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0001 })
+ENTRY(ff_sws_scale_16_u8_0111_neon, { .op = AARCH64_SWS_OP_SCALE, .block_size = 16, .type = AARCH64_PIXEL_U8, .mask = 0x0111 })
+ENTRY(ff_sws_scale_16_u16_0001_neon, { .op = AARCH64_SWS_OP_SCALE, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0001 })
+ENTRY(ff_sws_scale_16_u16_0111_neon, { .op = AARCH64_SWS_OP_SCALE, .block_size = 16, .type = AARCH64_PIXEL_U16, .mask = 0x0111 })
+ENTRY(ff_sws_linear_000000000f_8_f32_0001_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x000000000fULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 })
+ENTRY(ff_sws_linear_00000000fc_8_f32_0001_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x00000000fcULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 })
+ENTRY(ff_sws_linear_00000000ff_8_f32_0001_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x00000000ffULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 })
+ENTRY(ff_sws_linear_000000c000_8_f32_0010_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x000000c000ULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0010 })
+ENTRY(ff_sws_linear_000373dcc7_8_f32_0111_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x000373dcc7ULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_linear_0003f3fccf_8_f32_0111_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x0003f3fccfULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_linear_000c00c00c_8_f32_0111_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x000c00c00cULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_linear_000c30cc0f_8_f32_0111_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x000c30cc0fULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_linear_000ff3fcfc_8_f32_0111_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x000ff3fcfcULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_linear_000ff3fcff_8_f32_0111_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0x000ff3fcffULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_linear_c000000000_8_f32_1000_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0xc000000000ULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1000 })
+ENTRY(ff_sws_linear_c00000000f_8_f32_1001_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0xc00000000fULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 })
+ENTRY(ff_sws_linear_c0000000fc_8_f32_1001_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0xc0000000fcULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 })
+ENTRY(ff_sws_linear_c003f3fccf_8_f32_1111_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0xc003f3fccfULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_linear_c00c00c00c_8_f32_1111_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0xc00c00c00cULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_linear_c00ff3fcff_8_f32_1111_neon, { .op = AARCH64_SWS_OP_LINEAR, .linear.mask = 0xc00ff3fcffULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_linear_fma_000000000f_8_f32_0001_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x000000000fULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 })
+ENTRY(ff_sws_linear_fma_00000000fc_8_f32_0001_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x00000000fcULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 })
+ENTRY(ff_sws_linear_fma_00000000ff_8_f32_0001_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x00000000ffULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 })
+ENTRY(ff_sws_linear_fma_000000c000_8_f32_0010_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x000000c000ULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0010 })
+ENTRY(ff_sws_linear_fma_000373dcc7_8_f32_0111_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x000373dcc7ULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_linear_fma_0003f3fccf_8_f32_0111_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x0003f3fccfULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_linear_fma_000c00c00c_8_f32_0111_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x000c00c00cULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_linear_fma_000c30cc0f_8_f32_0111_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x000c30cc0fULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_linear_fma_000ff3fcfc_8_f32_0111_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x000ff3fcfcULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_linear_fma_000ff3fcff_8_f32_0111_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0x000ff3fcffULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_linear_fma_c000000000_8_f32_1000_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0xc000000000ULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1000 })
+ENTRY(ff_sws_linear_fma_c00000000f_8_f32_1001_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0xc00000000fULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 })
+ENTRY(ff_sws_linear_fma_c0000000fc_8_f32_1001_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0xc0000000fcULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 })
+ENTRY(ff_sws_linear_fma_c003f3fccf_8_f32_1111_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0xc003f3fccfULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_linear_fma_c00c00c00c_8_f32_1111_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0xc00c00c00cULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_linear_fma_c00ff3fcff_8_f32_1111_neon, { .op = AARCH64_SWS_OP_LINEAR_FMA, .linear.mask = 0xc00ff3fcffULL, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_dither_0325_4_8_f32_1111_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x0325, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_dither_032f_4_8_f32_1110_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x032f, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 })
+ENTRY(ff_sws_dither_2305_4_8_f32_1111_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x2305, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_dither_230f_4_8_f32_1110_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x230f, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 })
+ENTRY(ff_sws_dither_3000_4_8_f32_1111_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x3000, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_dither_302f_4_8_f32_1110_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x302f, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1110 })
+ENTRY(ff_sws_dither_3ff0_4_8_f32_1001_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x3ff0, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 })
+ENTRY(ff_sws_dither_5023_4_8_f32_1111_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x5023, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_dither_5032_4_8_f32_1111_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x5032, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_dither_5230_4_8_f32_1111_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x5230, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1111 })
+ENTRY(ff_sws_dither_5ff0_4_8_f32_1001_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x5ff0, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1001 })
+ENTRY(ff_sws_dither_5fff_4_8_f32_1000_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0x5fff, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x1000 })
+ENTRY(ff_sws_dither_f023_4_8_f32_0111_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xf023, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_dither_f032_4_8_f32_0111_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xf032, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_dither_f203_4_8_f32_0111_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xf203, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_dither_f230_4_8_f32_0111_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xf230, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_dither_f2f0_4_8_f32_0101_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xf2f0, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0101 })
+ENTRY(ff_sws_dither_f2ff_4_8_f32_0100_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xf2ff, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0100 })
+ENTRY(ff_sws_dither_f302_4_8_f32_0111_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xf302, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0111 })
+ENTRY(ff_sws_dither_ff30_4_8_f32_0011_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xff30, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0011 })
+ENTRY(ff_sws_dither_ff3f_4_8_f32_0010_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xff3f, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0010 })
+ENTRY(ff_sws_dither_fff0_4_8_f32_0001_neon, { .op = AARCH64_SWS_OP_DITHER, .dither.y_offset = 0xfff0, .dither.size_log2 = 4, .block_size = 8, .type = AARCH64_PIXEL_F32, .mask = 0x0001 })

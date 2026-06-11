@@ -191,8 +191,8 @@ static void buf_appendf(char **pbuf, size_t *prem, const char *fmt, ...)
 /**
  * The following structure is used to describe one field from
  * SwsAArch64OpImplParams. This will be used to serialize the parameter
- * structure, generate function names and lookup strings, and compare
- * two sets of parameters.
+ * structure, generate function names, and compare two sets of
+ * parameters.
  */
 
 typedef struct ParamField {
