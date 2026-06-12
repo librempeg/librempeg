@@ -102,6 +102,7 @@ static const char op_types[AARCH64_SWS_OP_TYPE_NB][32] = {
     [AARCH64_SWS_OP_MAX           ] = "AARCH64_SWS_OP_MAX",
     [AARCH64_SWS_OP_SCALE         ] = "AARCH64_SWS_OP_SCALE",
     [AARCH64_SWS_OP_LINEAR        ] = "AARCH64_SWS_OP_LINEAR",
+    [AARCH64_SWS_OP_LINEAR_FMA    ] = "AARCH64_SWS_OP_LINEAR_FMA",
     [AARCH64_SWS_OP_DITHER        ] = "AARCH64_SWS_OP_DITHER",
 };
 
@@ -142,6 +143,7 @@ static const char op_type_names[AARCH64_SWS_OP_TYPE_NB][16] = {
     [AARCH64_SWS_OP_MAX           ] = "max",
     [AARCH64_SWS_OP_SCALE         ] = "scale",
     [AARCH64_SWS_OP_LINEAR        ] = "linear",
+    [AARCH64_SWS_OP_LINEAR_FMA    ] = "linear_fma",
     [AARCH64_SWS_OP_DITHER        ] = "dither",
 };
 
@@ -345,7 +347,6 @@ static const ParamField field_shift            = { PARAM_FIELD(shift),          
 static const ParamField field_move             = { PARAM_FIELD(move),             print_u48_name,   print_u48_val,   cmp_u48 };
 static const ParamField field_pack             = { PARAM_FIELD(pack),             print_u16_name,   print_u16_val,   cmp_u16 };
 static const ParamField field_linear_mask      = { PARAM_FIELD(linear.mask),      print_u40_name,   print_u40_val,   cmp_u40 };
-static const ParamField field_linear_fmla      = { PARAM_FIELD(linear.fmla),      print_u8_name,    print_u8_val,    cmp_u8 };
 static const ParamField field_dither_y_offset  = { PARAM_FIELD(dither.y_offset),  print_u16_name,   print_u16_val,   cmp_u16 };
 static const ParamField field_dither_size_log2 = { PARAM_FIELD(dither.size_log2), print_u8_name,    print_u8_val,    cmp_u8 };
 
@@ -377,6 +378,7 @@ static const ParamField *op_fields[AARCH64_SWS_OP_TYPE_NB][MAX_LEVELS] = {
     [AARCH64_SWS_OP_MIN           ] = { &field_op,                                                  &field_block_size, &field_type, &field_mask },
     [AARCH64_SWS_OP_MAX           ] = { &field_op,                                                  &field_block_size, &field_type, &field_mask },
     [AARCH64_SWS_OP_SCALE         ] = { &field_op,                                                  &field_block_size, &field_type, &field_mask },
-    [AARCH64_SWS_OP_LINEAR        ] = { &field_op, &field_linear_mask,     &field_linear_fmla,      &field_block_size, &field_type, &field_mask },
+    [AARCH64_SWS_OP_LINEAR        ] = { &field_op, &field_linear_mask,                              &field_block_size, &field_type, &field_mask },
+    [AARCH64_SWS_OP_LINEAR_FMA    ] = { &field_op, &field_linear_mask,                              &field_block_size, &field_type, &field_mask },
     [AARCH64_SWS_OP_DITHER        ] = { &field_op, &field_dither_y_offset, &field_dither_size_log2, &field_block_size, &field_type, &field_mask },
 };

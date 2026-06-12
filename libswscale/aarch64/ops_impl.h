@@ -63,6 +63,7 @@ typedef enum SwsAArch64OpType {
     AARCH64_SWS_OP_MAX,
     AARCH64_SWS_OP_SCALE,
     AARCH64_SWS_OP_LINEAR,
+    AARCH64_SWS_OP_LINEAR_FMA,
     AARCH64_SWS_OP_DITHER,
     AARCH64_SWS_OP_TYPE_NB,
 } SwsAArch64OpType;
@@ -85,7 +86,6 @@ typedef uint64_t SwsAArch64LinearOpMask;
 
 typedef struct SwsAArch64LinearOp {
     SwsAArch64LinearOpMask mask;
-    uint8_t fmla;
 } SwsAArch64LinearOp;
 
 typedef struct SwsAArch64DitherOp {

@@ -214,7 +214,11 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
     case SWS_OP_MIN:        out->op = AARCH64_SWS_OP_MIN;        break;
     case SWS_OP_MAX:        out->op = AARCH64_SWS_OP_MAX;        break;
     case SWS_OP_SCALE:      out->op = AARCH64_SWS_OP_SCALE;      break;
-    case SWS_OP_LINEAR:     out->op = AARCH64_SWS_OP_LINEAR;     break;
+    case SWS_OP_LINEAR:
+        out->op = (ctx->flags & SWS_BITEXACT)
+                ? AARCH64_SWS_OP_LINEAR
+                : AARCH64_SWS_OP_LINEAR_FMA;
+        break;
     case SWS_OP_DITHER:     out->op = AARCH64_SWS_OP_DITHER;     break;
     case SWS_OP_FILTER_H:
     case SWS_OP_FILTER_V:
@@ -277,6 +281,7 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         }
         break;
     case AARCH64_SWS_OP_LINEAR:
+    case AARCH64_SWS_OP_LINEAR_FMA:
         /**
          * The out->linear.mask field packs the 4x5 matrix from SwsLinearOp as
          * 2 bits per element:
@@ -299,7 +304,6 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
                     LINEAR_MASK_SET(out->linear.mask, i, jj, LINEAR_MASK_X);
             }
         }
-        out->linear.fmla = !(ctx->flags & SWS_BITEXACT);
         break;
     case AARCH64_SWS_OP_DITHER:
         out->mask = 0;
