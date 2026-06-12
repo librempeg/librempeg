@@ -35,6 +35,9 @@
 #define APV_MB_SIZE         (ivec2(16, 16))
 
 layout (set = 0, binding = 0) uniform writeonly uimage2D dst[];
+layout (set = 0, binding = 2, scalar) writeonly buffer coeffs_out_buf {
+    int16_t coeffs_out[];
+};
 layout (set = 0, binding = 1, scalar) readonly buffer frame_data_buf {
     uvec2 tile_offset[APV_MAX_NUM_COMP * APV_MAX_TILE_COUNT];
     uint8_t q_matrix[APV_MAX_NUM_COMP][8][8];
@@ -107,7 +110,7 @@ int prev_dc;
 int prev_k_dc;
 int prev_1st_ac_level;
 
-void decode_block(ivec2 pos, uint comp)
+void decode_block(uint cbase, int cstride, ivec2 pos, uint comp)
 {
     int dc_coeff;
     int abs_diff = apv_read_vlc(prev_k_dc);
@@ -125,7 +128,7 @@ void decode_block(ivec2 pos, uint comp)
         dc_coeff > APV_MAX_TRANS_COEFF)
         return;
 
-    imageStore(dst[comp], pos, uvec4(uint(dc_coeff) & 0xFFFFu));
+    coeffs_out[cbase + uint(pos.y * cstride + pos.x)] = int16_t(dc_coeff);
     prev_dc   = dc_coeff;
     prev_k_dc = min(abs_diff >> 1, 5);
 
@@ -165,7 +168,8 @@ void decode_block(ivec2 pos, uint comp)
                 return;
 
             int zz = int(zigzag[scan_pos]);
-            imageStore(dst[comp], pos + ivec2(zz & 7, zz >> 3), uvec4(uint(level) & 0xFFFFu));
+            coeffs_out[cbase + uint((pos.y + (zz >> 3)) * cstride +
+                                    pos.x + (zz & 7))] = int16_t(level);
 
             prev_level = abs_ac_coeff_minus1 + 1;
             if (first_ac != 0) {
@@ -194,6 +198,19 @@ void main(void)
     init_get_bits(gb, u8buf(tile_data + tile_bs.x), int(tile_bs.y));
 
     ivec2 sub_shift = comp_idx == 0 ? ivec2(0) : log2_chroma_sub;
+
+    /* This component's plane inside the flat coefficient buffer. Plane
+     * dims are the MB-aligned coded size (the closing entries of the tile
+     * col/row tables), in component resolution. */
+    const int cw0 = int(tile_col[tile_count.x]);
+    const int ch0 = int(tile_row[tile_count.y]);
+    uint cbase = 0u;
+    for (uint i = 0u; i < comp_idx; i++) {
+        ivec2 ss = i == 0u ? ivec2(0) : log2_chroma_sub;
+        cbase += uint((cw0 >> ss.x) * (ch0 >> ss.y));
+    }
+    const int cstride = cw0 >> sub_shift.x;
+
     ivec2 tile_start = ivec2(tile_col[tile_pos.x], tile_row[tile_pos.y]);
     ivec2 tile_dim = ivec2(tile_col[tile_pos.x + 1],
                            tile_row[tile_pos.y + 1]) - tile_start;
@@ -208,7 +225,7 @@ void main(void)
                     ivec2 pos = (APV_MB_SIZE*mb +
                                  APV_TR_SIZE*blk + tile_start) >> sub_shift;
 
-                    decode_block(pos, comp_idx);
+                    decode_block(cbase, cstride, pos, comp_idx);
                 }
             }
         }
