@@ -122,13 +122,14 @@ void store_val(ivec2 offs, int blk, int c, int16_t v)
 void read_dc_vals(ivec2 offs, int nb_blocks)
 {
     int dc;
-    int16_t dc_add;
-    int16_t prev_dc = I16(0), sign = I16(0);
+    int dc_add;
+    int prev_dc = 0;
+    int sign = 0;
 
     /* Special handling for first block */
     dc = get_value(I16(700));
-    prev_dc = I16((dc >> 1) ^ -(dc & 1));
-    store_val(offs, 0, 0, prev_dc);
+    prev_dc = (dc >> 1) ^ -(dc & 1);
+    store_val(offs, 0, 0, I16(prev_dc));
 
     for (int n = 1; n < nb_blocks; n++) {
         if (expectEXT(left_bits(gb) <= 0, false))
@@ -142,12 +143,12 @@ void read_dc_vals(ivec2 offs, int nb_blocks)
 
         dc = get_value(dc_codebook);
 
-        sign ^= I16(dc & 1);
-        dc_add = I16((-int(sign) ^ TODCCODEBOOK(dc)) + int(sign));
-        sign = I16(dc_add < 0);
+        sign ^= dc & 1;
+        dc_add = (-sign ^ TODCCODEBOOK(dc)) + sign;
+        sign = int(dc_add < 0);
         prev_dc += dc_add;
 
-        store_val(offs, n, 0, prev_dc);
+        store_val(offs, n, 0, I16(prev_dc));
     }
 }
 
@@ -161,7 +162,7 @@ void read_ac_vals(ivec2 offs, int nb_blocks)
     int16_t ac_codebook = I16(49);
     int16_t rn_codebook = I16( 0);
     int16_t ln_codebook = I16(66);
-    int16_t sign;
+    int sign;
     int16_t val;
 
     for (int n = nb_blocks; n <= nb_codes;) {
@@ -176,9 +177,9 @@ void read_ac_vals(ivec2 offs, int nb_blocks)
 
             ac = get_value(ac_codebook);
             ac_codebook = ac_cb[min(ac, 95 - 1)];
-            sign = -int16_t(get_bit(gb));
+            sign = -int(get_bit(gb));
 
-            val = I16(((ac + 1) ^ int(sign)) - int(sign));
+            val = I16(((ac + 1) ^ sign) - sign);
             store_val(offs, n & block_mask, n >> log2_nb_blocks, val);
 
             n++;
@@ -198,9 +199,9 @@ void read_ac_vals(ivec2 offs, int nb_blocks)
             break;
 
         ac = get_value(ac_codebook);
-        sign = -int16_t(get_bit(gb));
+        sign = -int(get_bit(gb));
 
-        val = I16(((ac + 1) ^ int(sign)) - int(sign));
+        val = I16(((ac + 1) ^ sign) - sign);
         store_val(offs, n & block_mask, n >> log2_nb_blocks, val);
 
         ac_codebook = ac_cb[min(ac, 95 - 1)];
