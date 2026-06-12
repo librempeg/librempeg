@@ -611,7 +611,7 @@ static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
 
     *out = (SwsCompiledOp) {
         /* Use at most two full YMM regs during the widest precision section */
-        .block_size  = 2 * FFMIN(mmsize, 32) / ff_sws_op_list_max_size(ops),
+        .block_size  = 2 * FFMIN(mmsize, 32) / uops->pixel_size_max,
         .slice_align = 1,
         .free        = ff_sws_op_chain_free_cb,
         .priv        = chain,
@@ -634,11 +634,7 @@ static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
             goto fail;
     }
 
-    const SwsOp *read      = ff_sws_op_list_input(ops);
-    const SwsOp *write     = ff_sws_op_list_output(ops);
-    const int read_planes  = read ? ff_sws_rw_op_planes(read) : 0;
-    const int write_planes = ff_sws_rw_op_planes(write);
-    switch (FFMAX(read_planes, write_planes)) {
+    switch (av_popcount(uops->planes_in | uops->planes_out)) {
     case 1: out->func = ff_sws_process1_x86; break;
     case 2: out->func = ff_sws_process2_x86; break;
     case 3: out->func = ff_sws_process3_x86; break;
