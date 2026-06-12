@@ -135,8 +135,7 @@ typedef struct SwsOpBackend {
     SwsBackend flags; /* Set of SWS_BACKEND_* */
 
     /**
-     * Compile an operation list to an implementation chain. May modify `ops`
-     * freely; the original list will be freed automatically by the caller.
+     * Compile an operation list to an implementation chain.
      *
      * Returns 0 or a negative error code.
      */
