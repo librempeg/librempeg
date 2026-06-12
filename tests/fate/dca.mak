@@ -64,6 +64,10 @@ $(FATE_DCADEC_LOSSY): CMP = oneoff
 $(FATE_DCADEC_LOSSY): CMP_UNIT = f32
 $(FATE_DCADEC_LOSSY): FUZZ = 9
 
+# lossless downmix tests
+FATE_DCADEC_LOSSLESS_s24le += fate-dca-xll_51_24_48_768-dmix_2_matrix
+fate-dca-xll_51_24_48_768-dmix_2_matrix: CMD = fmtstdout "streamhash -hash md5" -i $(TARGET_SAMPLES)/dts/dcadec-suite/xll_51_24_48_768.dtshd -c:a pcm_s24le -af aresample=tsf=s32p,aformat=channel_layouts=stereo
+
 FATE_DCA_FFMPEG_FFPROBE-$(call FRAMEMD5, DTSHD, DCA, ARESAMPLE_FILTER PCM_S16LE_ENCODER) += $(FATE_DCADEC_LOSSLESS_s16le)
 FATE_DCA_FFMPEG_FFPROBE-$(call FRAMEMD5, DTSHD, DCA, ARESAMPLE_FILTER PCM_S24LE_ENCODER) += $(FATE_DCADEC_LOSSLESS_s24le)
 FATE_DCA-$(call FILTERDEMDECENCMUX, ARESAMPLE, DTSHD, DCA, PCM_F32LE, PCM_F32LE, PIPE_PROTOCOL) += $(FATE_DCADEC_LOSSY)
