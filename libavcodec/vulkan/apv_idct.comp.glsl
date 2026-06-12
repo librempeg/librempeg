@@ -72,13 +72,15 @@ void main(void)
     const ivec2 sub_shift = (comp == 0u) ? ivec2(0) : log2_chroma_sub;
     const ivec2 luma_pos  = pos << sub_shift;
 
-    /* figure out the tile position */
-    int tx = 0;
-    while (tx + 1 < tile_count.x && int(tile_col[tx + 1]) <= luma_pos.x)
-        tx++;
-    int ty = 0;
-    while (ty + 1 < tile_count.y && int(tile_row[ty + 1]) <= luma_pos.y)
-        ty++;
+    /* Uniform tile grid with a remainder tail, so the tile position is a
+     * division, not a search. Single-column/row grids have no step; index 0. */
+    int tx = 0, ty = 0;
+    if (tile_count.x > 1)
+        tx = min(luma_pos.x / int(tile_col[1] - tile_col[0]),
+                 tile_count.x - 1);
+    if (tile_count.y > 1)
+        ty = min(luma_pos.y / int(tile_row[1] - tile_row[0]),
+                 tile_count.y - 1);
 
     const int tile_idx = ty * tile_count.x + tx;
     const int qp = int(tile_qp[int(comp) * APV_MAX_TILE_COUNT + tile_idx]);
