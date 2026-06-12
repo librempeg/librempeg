@@ -255,6 +255,11 @@ void ff_sws_uop_name(const SwsUOp *op, char buf[SWS_UOP_NAME_MAX]);
 typedef struct SwsUOpList {
     SwsUOp *ops;
     int num_ops;
+
+    /* Additional metadata for implementations */
+    SwsCompMask planes_in;  /* mask of planes read from */
+    SwsCompMask planes_out; /* mask of planes written to */
+    int pixel_size_max;     /* size of largest pixel type seen in any uop */
 } SwsUOpList;
 
 SwsUOpList *ff_sws_uop_list_alloc(void);

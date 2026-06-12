@@ -330,6 +330,13 @@ static int translate_rw_op(SwsContext *ctx, SwsUOpList *ops, SwsUOpFlags flags,
         uop.uop = is_read ? SWS_UOP_READ_PLANAR : SWS_UOP_WRITE_PLANAR;
     }
 
+    const int planes = ff_sws_rw_op_planes(op);
+    if (op->op == SWS_OP_READ) {
+        ops->planes_in  |= SWS_COMP_ELEMS(planes);
+    } else {
+        ops->planes_out |= SWS_COMP_ELEMS(planes);
+    }
+
     return ff_sws_uop_list_append(ops, &uop);
 }
 
@@ -687,7 +694,12 @@ int ff_sws_ops_translate(SwsContext *ctx, const SwsOpList *ops,
 {
     SwsComps input = ops->comps_src;
     for (int i = 0; i < ops->num_ops; i++) {
-        int ret = translate_op(ctx, uops, flags, &ops->ops[i], &input);
+        const SwsOp *op = &ops->ops[i];
+        const int pixel_size = ff_sws_pixel_type_size(op->type);
+        if (pixel_size > uops->pixel_size_max)
+            uops->pixel_size_max = pixel_size;
+
+        int ret = translate_op(ctx, uops, flags, op, &input);
         if (ret < 0)
             return ret;
         input = ops->ops[i].comps;
