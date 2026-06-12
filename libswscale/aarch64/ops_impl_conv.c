@@ -52,6 +52,66 @@ static int linear_index_from_sws_op(int idx)
     return reorder_col[idx];
 }
 
+static void swizzle_emit(SwsAArch64OpImplParams *out, uint8_t dst, uint8_t src, int idx)
+{
+    uint64_t pair = src | (dst << 4);
+    out->move |= pair << (idx * 8);
+}
+
+static void convert_swizzle_to_moves(const SwsOp *op, SwsAArch64OpImplParams *out)
+{
+    SwsAArch64OpMask swizzle = 0;
+    int num_moves = 0;
+
+    MASK_SET(swizzle, 0, op->swizzle.in[0]);
+    MASK_SET(swizzle, 1, op->swizzle.in[1]);
+    MASK_SET(swizzle, 2, op->swizzle.in[2]);
+    MASK_SET(swizzle, 3, op->swizzle.in[3]);
+
+    /* Compute used vectors (src and dst) */
+    uint8_t src_used[4] = { 0 };
+    bool done[4] = { true, true, true, true };
+    LOOP(out->mask, dst) {
+        uint8_t src = MASK_GET(swizzle, dst);
+        src_used[src]++;
+        done[dst] = false;
+    }
+
+    /* First perform unobstructed copies. */
+    for (bool progress = true; progress; ) {
+        progress = false;
+        for (int dst = 0; dst < 4; dst++) {
+            if (done[dst] || src_used[dst])
+                continue;
+            uint8_t src = MASK_GET(swizzle, dst);
+            swizzle_emit(out, dst, src, num_moves++);
+            src_used[src]--;
+            done[dst] = true;
+            progress = true;
+        }
+    }
+
+    /* Then swap and rotate remaining operations. */
+    for (int dst = 0; dst < 4; dst++) {
+        if (done[dst])
+            continue;
+
+        swizzle_emit(out, AARCH64_MOVE_TMP, dst, num_moves++);
+
+        uint8_t cur_dst = dst;
+        uint8_t src = MASK_GET(swizzle, cur_dst);
+        while (src != dst) {
+            swizzle_emit(out, cur_dst, src, num_moves++);
+            done[cur_dst] = true;
+            cur_dst = src;
+            src = MASK_GET(swizzle, cur_dst);
+        }
+
+        swizzle_emit(out, cur_dst, AARCH64_MOVE_TMP, num_moves++);
+        done[cur_dst] = true;
+    }
+}
+
 /**
  * Convert SwsOp to a SwsAArch64OpImplParams. Read the comments regarding
  * SwsAArch64OpImplParams in ops_impl.h for more information.
@@ -114,7 +174,23 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
             return AVERROR(ENOTSUP);
         break;
     case SWS_OP_SWAP_BYTES: out->op = AARCH64_SWS_OP_SWAP_BYTES; break;
-    case SWS_OP_SWIZZLE:    out->op = AARCH64_SWS_OP_SWIZZLE;    break;
+    case SWS_OP_SWIZZLE: {
+        /**
+         * Detect whether copies are needed or if a simple permute is
+         * enough.
+         */
+        out->op = AARCH64_SWS_OP_PERMUTE;
+        SwsAArch64OpMask seen = 0;
+        LOOP(out->mask, i) {
+            uint8_t src = op->swizzle.in[i];
+            if (MASK_GET(seen, src)) {
+                out->op = AARCH64_SWS_OP_COPY;
+                break;
+            }
+            MASK_SET(seen, src, 1);
+        }
+        break;
+    }
     case SWS_OP_UNPACK:     out->op = AARCH64_SWS_OP_UNPACK;     break;
     case SWS_OP_PACK:       out->op = AARCH64_SWS_OP_PACK;       break;
     case SWS_OP_LSHIFT:     out->op = AARCH64_SWS_OP_LSHIFT;     break;
@@ -149,17 +225,15 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         case 4: out->mask = 0x1111; break;
         };
         break;
-    case AARCH64_SWS_OP_SWIZZLE:
+    case AARCH64_SWS_OP_PERMUTE:
+    case AARCH64_SWS_OP_COPY:
         /* Recompute mask taking identity swizzle into account */
         out->mask = 0;
         for (int i = 0; i < 4; i++) {
-            if (SWS_OP_NEEDED(op, i) && op->swizzle.in[i] != i) {
+            if (SWS_OP_NEEDED(op, i) && op->swizzle.in[i] != i)
                 MASK_SET(out->mask, i, 1);
-                MASK_SET(out->swizzle, i, op->swizzle.in[i]);
-            } else {
-                MASK_SET(out->swizzle, i, 0xf);
-            }
         }
+        convert_swizzle_to_moves(op, out);
         /* The element size and type don't matter. */
         out->block_size = block_size * ff_sws_pixel_type_size(op->type);
         out->type = AARCH64_PIXEL_U8;

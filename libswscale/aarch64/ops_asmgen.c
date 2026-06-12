@@ -637,13 +637,12 @@ static void asmgen_op_swap_bytes(SwsAArch64Context *s, const SwsAArch64OpImplPar
 
 /*********************************************************************/
 /* rearrange channel order, or duplicate channels */
-/* AARCH64_SWS_OP_SWIZZLE */
-
-#define SWIZZLE_TMP 0xf
+/* AARCH64_SWS_OP_PERMUTE */
+/* AARCH64_SWS_OP_COPY */
 
 static const char *print_swizzle_v(char buf[8], uint8_t n, uint8_t vh)
 {
-    if (n == SWIZZLE_TMP)
+    if (n == AARCH64_MOVE_TMP)
         snprintf(buf, sizeof(char[8]), "vtmp%c", vh ? 'h' : 'l');
     else
         snprintf(buf, sizeof(char[8]), "v%c[%u]", vh ? 'h' : 'l', n);
@@ -653,7 +652,7 @@ static const char *print_swizzle_v(char buf[8], uint8_t n, uint8_t vh)
 
 static RasmOp swizzle_a64op(SwsAArch64Context *s, uint8_t n, uint8_t vh)
 {
-    if (n == SWIZZLE_TMP)
+    if (n == AARCH64_MOVE_TMP)
         return s->vt[vh];
     return vh ? s->vh[n] : s->vl[n];
 }
@@ -670,53 +669,17 @@ static void swizzle_emit(SwsAArch64Context *s, uint8_t dst, uint8_t src)
     }
 }
 
-static void asmgen_op_swizzle(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
+static void asmgen_op_move(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
-    /* Compute used vectors (src and dst) */
-    uint8_t src_used[4] = { 0 };
-    bool done[4] = { true, true, true, true };
-    LOOP_MASK(p, dst) {
-        uint8_t src = MASK_GET(p->swizzle, dst);
-        src_used[src]++;
-        done[dst] = false;
-    }
+    SwsAArch64MoveOp move = p->move;
 
-    /* First perform unobstructed copies. */
-    for (bool progress = true; progress; ) {
-        progress = false;
-        for (int dst = 0; dst < 4; dst++) {
-            if (done[dst] || src_used[dst])
-                continue;
-            uint8_t src = MASK_GET(p->swizzle, dst);
-            swizzle_emit(s, dst, src);
-            src_used[src]--;
-            done[dst] = true;
-            progress = true;
-        }
-    }
-
-    /* Then swap and rotate remaining operations. */
-    for (int dst = 0; dst < 4; dst++) {
-        if (done[dst])
-            continue;
-
-        swizzle_emit(s, SWIZZLE_TMP, dst);
-
-        uint8_t cur_dst = dst;
-        uint8_t src = MASK_GET(p->swizzle, cur_dst);
-        while (src != dst) {
-            swizzle_emit(s, cur_dst, src);
-            done[cur_dst] = true;
-            cur_dst = src;
-            src = MASK_GET(p->swizzle, cur_dst);
-        }
-
-        swizzle_emit(s, cur_dst, SWIZZLE_TMP);
-        done[cur_dst] = true;
+    while (move) {
+        uint8_t src = (move     ) & 0xf;
+        uint8_t dst = (move >> 4) & 0xf;
+        swizzle_emit(s, dst, src);
+        move >>= 8;
     }
 }
-
-#undef SWIZZLE_TMP
 
 /*********************************************************************/
 /* split tightly packed data into components */
@@ -1380,7 +1343,8 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
     case AARCH64_SWS_OP_WRITE_PACKED: asmgen_op_write_packed(s, p); break;
     case AARCH64_SWS_OP_WRITE_PLANAR: asmgen_op_write_planar(s, p); break;
     case AARCH64_SWS_OP_SWAP_BYTES:   asmgen_op_swap_bytes(s, p);   break;
-    case AARCH64_SWS_OP_SWIZZLE:      asmgen_op_swizzle(s, p);      break;
+    case AARCH64_SWS_OP_PERMUTE:      asmgen_op_move(s, p);         break;
+    case AARCH64_SWS_OP_COPY:         asmgen_op_move(s, p);         break;
     case AARCH64_SWS_OP_UNPACK:       asmgen_op_unpack(s, p);       break;
     case AARCH64_SWS_OP_PACK:         asmgen_op_pack(s, p);         break;
     case AARCH64_SWS_OP_LSHIFT:       asmgen_op_lshift(s, p);       break;

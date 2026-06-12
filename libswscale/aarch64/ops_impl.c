@@ -85,7 +85,8 @@ static const char op_types[AARCH64_SWS_OP_TYPE_NB][32] = {
     [AARCH64_SWS_OP_WRITE_PACKED  ] = "AARCH64_SWS_OP_WRITE_PACKED",
     [AARCH64_SWS_OP_WRITE_PLANAR  ] = "AARCH64_SWS_OP_WRITE_PLANAR",
     [AARCH64_SWS_OP_SWAP_BYTES    ] = "AARCH64_SWS_OP_SWAP_BYTES",
-    [AARCH64_SWS_OP_SWIZZLE       ] = "AARCH64_SWS_OP_SWIZZLE",
+    [AARCH64_SWS_OP_PERMUTE       ] = "AARCH64_SWS_OP_PERMUTE",
+    [AARCH64_SWS_OP_COPY          ] = "AARCH64_SWS_OP_COPY",
     [AARCH64_SWS_OP_UNPACK        ] = "AARCH64_SWS_OP_UNPACK",
     [AARCH64_SWS_OP_PACK          ] = "AARCH64_SWS_OP_PACK",
     [AARCH64_SWS_OP_LSHIFT        ] = "AARCH64_SWS_OP_LSHIFT",
@@ -120,7 +121,8 @@ static const char op_type_names[AARCH64_SWS_OP_TYPE_NB][16] = {
     [AARCH64_SWS_OP_WRITE_PACKED  ] = "write_packed",
     [AARCH64_SWS_OP_WRITE_PLANAR  ] = "write_planar",
     [AARCH64_SWS_OP_SWAP_BYTES    ] = "swap_bytes",
-    [AARCH64_SWS_OP_SWIZZLE       ] = "swizzle",
+    [AARCH64_SWS_OP_PERMUTE       ] = "permute",
+    [AARCH64_SWS_OP_COPY          ] = "copy",
     [AARCH64_SWS_OP_UNPACK        ] = "unpack",
     [AARCH64_SWS_OP_PACK          ] = "pack",
     [AARCH64_SWS_OP_LSHIFT        ] = "lshift",
@@ -282,6 +284,28 @@ static int cmp_u16(void *pa, void *pb)
     return 0;
 }
 
+static void print_u48_name(char **pbuf, size_t *prem, void *p)
+{
+    uint64_t val = *(uint64_t *) p;
+    buf_appendf(pbuf, prem, "_%012" PRIx64, val);
+}
+
+static void print_u48_val(char **pbuf, size_t *prem, void *p)
+{
+    uint64_t val = *(uint64_t *) p;
+    buf_appendf(pbuf, prem, "0x%012" PRIx64 "ULL", val);
+}
+
+static int cmp_u48(void *pa, void *pb)
+{
+    int64_t ia = (int64_t) *((uint64_t *) pa);
+    int64_t ib = (int64_t) *((uint64_t *) pb);
+    int64_t diff = ia - ib;
+    if (diff)
+        return diff < 0 ? -1 : 1;
+    return 0;
+}
+
 static void print_u40_name(char **pbuf, size_t *prem, void *p)
 {
     uint64_t val = *(uint64_t *) p;
@@ -310,7 +334,7 @@ static const ParamField field_mask             = { PARAM_FIELD(mask),           
 static const ParamField field_type             = { PARAM_FIELD(type),             print_pixel_name, print_pixel_val, cmp_pixel };
 static const ParamField field_block_size       = { PARAM_FIELD(block_size),       print_u8_name,    print_u8_val,    cmp_u8 };
 static const ParamField field_shift            = { PARAM_FIELD(shift),            print_u8_name,    print_u8_val,    cmp_u8 };
-static const ParamField field_swizzle          = { PARAM_FIELD(swizzle),          print_u16_name,   print_u16_val,   cmp_u16 };
+static const ParamField field_move             = { PARAM_FIELD(move),             print_u48_name,   print_u48_val,   cmp_u48 };
 static const ParamField field_pack             = { PARAM_FIELD(pack),             print_u16_name,   print_u16_val,   cmp_u16 };
 static const ParamField field_to_type          = { PARAM_FIELD(to_type),          print_pixel_name, print_pixel_val, cmp_pixel };
 static const ParamField field_linear_mask      = { PARAM_FIELD(linear.mask),      print_u40_name,   print_u40_val,   cmp_u40 };
@@ -330,7 +354,8 @@ static const ParamField *op_fields[AARCH64_SWS_OP_TYPE_NB][MAX_LEVELS] = {
     [AARCH64_SWS_OP_WRITE_PACKED  ] = { &field_op,                                                  &field_block_size, &field_type, &field_mask },
     [AARCH64_SWS_OP_WRITE_PLANAR  ] = { &field_op,                                                  &field_block_size, &field_type, &field_mask },
     [AARCH64_SWS_OP_SWAP_BYTES    ] = { &field_op,                                                  &field_block_size, &field_type, &field_mask },
-    [AARCH64_SWS_OP_SWIZZLE       ] = { &field_op, &field_swizzle,                                  &field_block_size, &field_type, &field_mask },
+    [AARCH64_SWS_OP_PERMUTE       ] = { &field_op, &field_move,                                     &field_block_size, &field_type, &field_mask },
+    [AARCH64_SWS_OP_COPY          ] = { &field_op, &field_move,                                     &field_block_size, &field_type, &field_mask },
     [AARCH64_SWS_OP_UNPACK        ] = { &field_op, &field_pack,                                     &field_block_size, &field_type, &field_mask },
     [AARCH64_SWS_OP_PACK          ] = { &field_op, &field_pack,                                     &field_block_size, &field_type, &field_mask },
     [AARCH64_SWS_OP_LSHIFT        ] = { &field_op, &field_shift,                                    &field_block_size, &field_type, &field_mask },

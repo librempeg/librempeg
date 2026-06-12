@@ -46,7 +46,8 @@ typedef enum SwsAArch64OpType {
     AARCH64_SWS_OP_WRITE_PACKED,
     AARCH64_SWS_OP_WRITE_PLANAR,
     AARCH64_SWS_OP_SWAP_BYTES,
-    AARCH64_SWS_OP_SWIZZLE,
+    AARCH64_SWS_OP_PERMUTE,
+    AARCH64_SWS_OP_COPY,
     AARCH64_SWS_OP_UNPACK,
     AARCH64_SWS_OP_PACK,
     AARCH64_SWS_OP_LSHIFT,
@@ -64,6 +65,10 @@ typedef enum SwsAArch64OpType {
 
 /* Each nibble in the mask corresponds to one component. */
 typedef uint16_t SwsAArch64OpMask;
+
+/* Each byte is an LSB src|dst pair until 00 is reached. */
+typedef uint64_t SwsAArch64MoveOp;
+#define AARCH64_MOVE_TMP 0xf
 
 /**
  * Affine coefficient mask for linear op. Packs a 4x5 matrix in execution
@@ -96,7 +101,7 @@ typedef struct SwsAArch64OpImplParams {
     uint8_t block_size;
     union {
         uint8_t             shift;
-        SwsAArch64OpMask    swizzle;
+        SwsAArch64MoveOp    move;
         SwsAArch64OpMask    pack;
         SwsAArch64PixelType to_type;
         SwsAArch64LinearOp  linear;
