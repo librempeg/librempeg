@@ -752,11 +752,15 @@
 #define SWS_FOR_U32_MAX(MACRO, ...)
 #define SWS_FOR_STRUCT_U32_MAX(MACRO, ...)
 #define SWS_FOR_U32_UNPACK(MACRO, ...) \
-    MACRO(__VA_ARGS__, u32_unpack_xyzw_2aaa                    , SWS_PIXEL_U32, SWS_UOP_UNPACK          , 0xf, 2, 10, 10, 10) \
-    MACRO(__VA_ARGS__, u32_unpack_xyzw_aaa2                    , SWS_PIXEL_U32, SWS_UOP_UNPACK          , 0xf, 10, 10, 10, 2)
+    MACRO(__VA_ARGS__, u32_unpack_y_aaa2                       , SWS_PIXEL_U32, SWS_UOP_UNPACK          , 0x2, 10, 10, 10, 2) \
+    MACRO(__VA_ARGS__, u32_unpack_z_2aaa                       , SWS_PIXEL_U32, SWS_UOP_UNPACK          , 0x4, 2, 10, 10, 10) \
+    MACRO(__VA_ARGS__, u32_unpack_xyz_aaa2                     , SWS_PIXEL_U32, SWS_UOP_UNPACK          , 0x7, 10, 10, 10, 2) \
+    MACRO(__VA_ARGS__, u32_unpack_yzw_2aaa                     , SWS_PIXEL_U32, SWS_UOP_UNPACK          , 0xe, 2, 10, 10, 10)
 #define SWS_FOR_STRUCT_U32_UNPACK(MACRO, ...) \
-    MACRO(__VA_ARGS__, u32_unpack_xyzw_2aaa                    , .type = SWS_PIXEL_U32, .uop = SWS_UOP_UNPACK          , .mask = 0xf, .par.pack.pattern = {2, 10, 10, 10}) \
-    MACRO(__VA_ARGS__, u32_unpack_xyzw_aaa2                    , .type = SWS_PIXEL_U32, .uop = SWS_UOP_UNPACK          , .mask = 0xf, .par.pack.pattern = {10, 10, 10, 2})
+    MACRO(__VA_ARGS__, u32_unpack_y_aaa2                       , .type = SWS_PIXEL_U32, .uop = SWS_UOP_UNPACK          , .mask = 0x2, .par.pack.pattern = {10, 10, 10, 2}) \
+    MACRO(__VA_ARGS__, u32_unpack_z_2aaa                       , .type = SWS_PIXEL_U32, .uop = SWS_UOP_UNPACK          , .mask = 0x4, .par.pack.pattern = {2, 10, 10, 10}) \
+    MACRO(__VA_ARGS__, u32_unpack_xyz_aaa2                     , .type = SWS_PIXEL_U32, .uop = SWS_UOP_UNPACK          , .mask = 0x7, .par.pack.pattern = {10, 10, 10, 2}) \
+    MACRO(__VA_ARGS__, u32_unpack_yzw_2aaa                     , .type = SWS_PIXEL_U32, .uop = SWS_UOP_UNPACK          , .mask = 0xe, .par.pack.pattern = {2, 10, 10, 10})
 #define SWS_FOR_U32_PACK(MACRO, ...) \
     MACRO(__VA_ARGS__, u32_pack_xyzw_2aaa                      , SWS_PIXEL_U32, SWS_UOP_PACK            , 0xf, 2, 10, 10, 10) \
     MACRO(__VA_ARGS__, u32_pack_xyzw_aaa2                      , SWS_PIXEL_U32, SWS_UOP_PACK            , 0xf, 10, 10, 10, 2)
