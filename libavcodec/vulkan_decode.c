@@ -255,53 +255,6 @@ int ff_vk_decode_prepare_frame(FFVulkanDecodeContext *dec, AVFrame *pic,
     return 0;
 }
 
-int ff_vk_decode_prepare_frame_sdr(FFVulkanDecodeContext *dec, AVFrame *pic,
-                                   FFVulkanDecodePicture *vkpic, int is_current,
-                                   enum FFVkShaderRepFormat rep_fmt, int alloc_dpb)
-{
-    int err;
-    FFVulkanDecodeShared *ctx = dec->shared_ctx;
-    AVHWFramesContext *frames = (AVHWFramesContext *)pic->hw_frames_ctx->data;
-
-    vkpic->slices_size = 0;
-
-    if (vkpic->view.ref[0])
-        return 0;
-
-    init_frame(dec, vkpic);
-
-    for (int i = 0; i < av_pix_fmt_count_planes(frames->sw_format); i++) {
-        if (alloc_dpb) {
-            vkpic->dpb_frame = vk_get_dpb_pool(ctx);
-            if (!vkpic->dpb_frame)
-                return AVERROR(ENOMEM);
-
-            err = ff_vk_create_imageview(&ctx->s,
-                                         &vkpic->view.ref[i], &vkpic->view.aspect_ref[i],
-                                         vkpic->dpb_frame, i, rep_fmt);
-            if (err < 0)
-                return err;
-
-            vkpic->view.dst[i] = vkpic->view.ref[i];
-        }
-
-        if (!alloc_dpb || is_current) {
-            err = ff_vk_create_imageview(&ctx->s,
-                                         &vkpic->view.out[i], &vkpic->view.aspect[i],
-                                         pic, i, rep_fmt);
-            if (err < 0)
-                return err;
-
-            if (!alloc_dpb) {
-                vkpic->view.ref[i] = vkpic->view.out[i];
-                vkpic->view.aspect_ref[i] = vkpic->view.aspect[i];
-            }
-        }
-    }
-
-    return 0;
-}
-
 int ff_vk_decode_add_slice(AVCodecContext *avctx, FFVulkanDecodePicture *vp,
                            const uint8_t *data, size_t size, int add_startcode,
                            uint32_t *nb_slices, const uint32_t **offsets)
