@@ -71,6 +71,12 @@ typedef enum SwsAArch64OpType {
 /* Each nibble in the mask corresponds to one component. */
 typedef uint16_t SwsAArch64OpMask;
 
+/**
+ * Each nibble in the mask specifies whether to clear by all 0s (0),
+ * all 1s (1), or another value (f).
+ */
+typedef uint16_t SwsAArch64ClearMask;
+
 /* Each byte is an LSB src|dst pair until 00 is reached. */
 typedef uint64_t SwsAArch64MoveOp;
 #define AARCH64_MOVE_TMP 0xf
@@ -105,6 +111,7 @@ typedef struct SwsAArch64OpImplParams {
     uint8_t block_size;
     union {
         uint8_t             shift;
+        SwsAArch64ClearMask clear;
         SwsAArch64MoveOp    move;
         SwsAArch64OpMask    pack;
         SwsAArch64LinearOp  linear;

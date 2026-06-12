@@ -823,11 +823,32 @@ static void asmgen_op_rshift(SwsAArch64Context *s, const SwsAArch64OpImplParams 
 /* clear pixel values */
 /* AARCH64_SWS_OP_CLEAR */
 
+static void emit_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                       RasmOp *vx, int i, const char *vx_str)
+{
+    RasmContext *r = s->rctx;
+    RasmOp clear_vec = s->vt[0];
+    switch (MASK_GET(p->clear, i)) {
+    case 0:
+        i_movi(r, vx[i], IMM(0));                   CMTF("%s[%u] = 0;", vx_str, i);
+        break;
+    case 1:
+        if (p->block_size * aarch64_pixel_size(p->type) == 8) {
+            i_movi(r, v_8b (vx[i]), IMM(0xff));
+        } else {
+            i_movi(r, v_16b(vx[i]), IMM(0xff));
+        }
+        CMTF("%s[%u] = UINT_MAX;", vx_str, i);
+        break;
+    default:
+        i_dup (r, vx[i], a64op_elem(clear_vec, i)); CMTF("%s[%u] = broadcast(clear_vec[%u]);", vx_str, i, i);
+        break;
+    }
+}
+
 static void asmgen_op_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
     RasmContext *r = s->rctx;
-    RasmOp *vl = s->vl;
-    RasmOp *vh = s->vh;
     RasmOp clear_vec = s->vt[0];
 
     /**
@@ -836,11 +857,18 @@ static void asmgen_op_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *
      * - if only 1 element and not vh, load directly with ld1r
      */
 
-    i_ldr(r, v_q(clear_vec), a64op_off(s->impl, offsetof_impl_priv));   CMT("v128 clear_vec = impl->priv.v128;");
-    asmgen_set_load_cont_node(s);
+    bool load_priv = false;
+    LOOP_MASK(p, i) {
+        if (MASK_GET(p->clear, i) == 0xf)
+            load_priv = true;
+    }
+    if (load_priv) {
+        i_ldr(r, v_q(clear_vec), a64op_off(s->impl, offsetof_impl_priv));   CMT("v128 clear_vec = impl->priv.v128;");
+        asmgen_set_load_cont_node(s);
+    }
 
-    LOOP_MASK      (p, i) { i_dup(r, vl[i], a64op_elem(clear_vec, i));  CMTF("vl[%u] = broadcast(clear_vec[%u])", i, i); }
-    LOOP_MASK_VH(s, p, i) { i_dup(r, vh[i], a64op_elem(clear_vec, i));  CMTF("vh[%u] = broadcast(clear_vec[%u])", i, i); }
+    LOOP_MASK      (p, i) { emit_clear(s, p, s->vl, i, "vl"); }
+    LOOP_MASK_VH(s, p, i) { emit_clear(s, p, s->vh, i, "vh"); }
 }
 
 /*********************************************************************/
