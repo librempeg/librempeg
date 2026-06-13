@@ -3,21 +3,21 @@
  *
  * copyright (c) 2022-2023 Wu Jianhua <toqsxw@outlook.com>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <string.h>
@@ -376,7 +376,7 @@ fail:
 
 int ff_d3d12va_common_frame_params(AVCodecContext *avctx, AVBufferRef *hw_frames_ctx)
 {
-    AVHWFramesContext      *frames_ctx   = (AVHWFramesContext *)hw_frames_ctx->data;
+    AVHWFramesContext *frames_ctx = (AVHWFramesContext *)hw_frames_ctx->data;
 
     frames_ctx->format    = AV_PIX_FMT_D3D12;
     frames_ctx->sw_format = avctx->sw_pix_fmt == AV_PIX_FMT_YUV420P10 ? AV_PIX_FMT_P010 : AV_PIX_FMT_NV12;
@@ -518,7 +518,7 @@ av_cold int ff_d3d12va_decode_uninit(AVCodecContext *avctx)
 static inline int d3d12va_update_reference_frames_state(AVCodecContext *avctx, D3D12_RESOURCE_BARRIER *barriers,
                                                         ID3D12Resource *current_resource, int state_before, int state_end)
 {
-    D3D12VADecodeContext   *ctx          = D3D12VA_DECODE_CONTEXT(avctx);
+    D3D12VADecodeContext *ctx = D3D12VA_DECODE_CONTEXT(avctx);
     ID3D12Resource **ref_resources = ctx->ref_only_resources ? ctx->ref_only_resources : ctx->ref_resources;
 
     int num_barrier = 0;
