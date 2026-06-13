@@ -518,6 +518,10 @@ static int config_audio_out(AVFilterLink *outlink, EBUR128Context *ebur128)
     ebur128->i400.sum = av_calloc(nb_channels, sizeof(*ebur128->i400.sum));
     ebur128->i3000.sum = av_calloc(nb_channels, sizeof(*ebur128->i3000.sum));
     /* bins buffer for the two integration window (400ms and 3s) */
+    if (ebur128->i400.cache_size > INT_MAX/nb_channels)
+        return AVERROR(EINVAL);
+    if (ebur128->i3000.cache_size > INT_MAX/nb_channels)
+        return AVERROR(EINVAL);
     ebur128->i400.cache = av_calloc(ebur128->i400.cache_size * nb_channels, sizeof(*ebur128->i400.cache));
     ebur128->i3000.cache = av_calloc(ebur128->i3000.cache_size * nb_channels, sizeof(*ebur128->i3000.cache));
     if (!ebur128->i400.sum || !ebur128->i3000.sum ||
