@@ -1,19 +1,19 @@
 /*
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #ifndef AVCODEC_H2645_SEI_H
@@ -25,12 +25,12 @@
 #include "libavutil/frame.h"
 #include "libavutil/film_grain_params.h"
 
-#include "aom_film_grain.h"
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_id.h"
 #include "get_bits.h"
 #include "h2645_vui.h"
+#include "itut35.h"
 #include "sei.h"
 
 typedef struct H2645SEIA53Caption {
@@ -126,11 +126,7 @@ typedef struct H2645SEIContentLight {
 } H2645SEIContentLight;
 
 typedef struct H2645SEI {
-    H2645SEIA53Caption a53_caption;
-    H2645SEIAFD afd;
-    HEVCSEIDynamicHDRPlus  dynamic_hdr_plus;     //< HEVC only
-    HEVCSEIDynamicHDRVivid dynamic_hdr_vivid;    //< HEVC only
-    HEVCSEILCEVC lcevc;
+    FFITUTT35Meta itut_t35;
     H2645SEIUnregistered unregistered;
     H2645SEIFramePacking frame_packing;
     H2645SEIDisplayOrientation display_orientation;
@@ -138,7 +134,6 @@ typedef struct H2645SEI {
     H2645SEIAmbientViewingEnvironment ambient_viewing_environment;
     H2645SEIMasteringDisplay mastering_display;
     H2645SEIContentLight content_light;
-    AVFilmGrainAFGS1Params aom_film_grain;
 
     // Dynamic allocations due to large size.
     H2645SEIFilmGrainCharacteristics *film_grain_characteristics;

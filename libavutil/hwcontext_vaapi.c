@@ -1,19 +1,19 @@
 /*
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "config.h"
@@ -1831,6 +1831,7 @@ static int vaapi_device_create(AVHWDeviceContext *ctx, const char *device,
                                "Failed to get DRM device info for device %d.\n", n);
                         close(priv->drm_fd);
                         priv->drm_fd = -1;
+                        drmFreeVersion(info);
                         continue;
                     }
 
@@ -1842,6 +1843,7 @@ static int vaapi_device_create(AVHWDeviceContext *ctx, const char *device,
                         drmFreeDevice(&device);
                         close(priv->drm_fd);
                         priv->drm_fd = -1;
+                        drmFreeVersion(info);
                         continue;
                     }
                     av_log(ctx, AV_LOG_VERBOSE, "Trying to use "
@@ -1849,6 +1851,7 @@ static int vaapi_device_create(AVHWDeviceContext *ctx, const char *device,
                            "with matching vendor id (%s).\n",
                            n, vendor_id->value);
                     drmFreeDevice(&device);
+                    drmFreeVersion(info);
                     break;
                 }
                 drmFreeVersion(info);

@@ -39,24 +39,25 @@
 #include "libavutil/tdrdi.h"
 #include "libavutil/threadprogress.h"
 #include "libavutil/timecode.h"
+#include "libavutil/refstruct.h"
 
-#include "aom_film_grain.h"
-#include "bswapdsp.h"
-#include "cabac_functions.h"
-#include "codec_internal.h"
-#include "decode.h"
-#include "golomb.h"
-#include "h274.h"
+#include "libavcodec/aom_film_grain.h"
+#include "libavcodec/bswapdsp.h"
+#include "libavcodec/cabac_functions.h"
+#include "libavcodec/codec_internal.h"
+#include "libavcodec/decode.h"
+#include "libavcodec/golomb.h"
+#include "libavcodec/h274.h"
+#include "libavcodec/hwaccel_internal.h"
+#include "libavcodec/hwconfig.h"
+#include "libavcodec/internal.h"
+#include "libavcodec/profiles.h"
+#include "libavcodec/progressframe.h"
+#include "libavcodec/thread.h"
+
 #include "hevc.h"
 #include "parse.h"
 #include "hevcdec.h"
-#include "hwaccel_internal.h"
-#include "hwconfig.h"
-#include "internal.h"
-#include "profiles.h"
-#include "progressframe.h"
-#include "libavutil/refstruct.h"
-#include "thread.h"
 
 static const uint8_t hevc_pel_weight[65] = { [2] = 0, [4] = 1, [6] = 2, [8] = 3, [12] = 4, [16] = 5, [24] = 6, [32] = 7, [48] = 8, [64] = 9 };
 
@@ -390,7 +391,7 @@ static int export_stream_params_from_sei(HEVCContext *s)
 
 #if FF_API_CODEC_PROPS
 FF_DISABLE_DEPRECATION_WARNINGS
-    if (s->sei.common.a53_caption.buf_ref)
+    if (s->sei.common.itut_t35.a53_cc)
         s->avctx->properties |= FF_CODEC_PROPERTY_CLOSED_CAPTIONS;
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
@@ -404,7 +405,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
 #if FF_API_CODEC_PROPS
 FF_DISABLE_DEPRECATION_WARNINGS
     if ((s->sei.common.film_grain_characteristics && s->sei.common.film_grain_characteristics->present) ||
-        s->sei.common.aom_film_grain.enable)
+        s->sei.common.itut_t35.aom_film_grain.enable)
         avctx->properties |= FF_CODEC_PROPERTY_FILM_GRAIN;
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
@@ -3132,8 +3133,8 @@ static int set_side_data(HEVCContext *s)
         s->sei.timecode.num_clock_ts = 0;
     }
 
-    if (s->sei.common.dynamic_hdr_plus.info) {
-        AVBufferRef *info_ref = av_buffer_ref(s->sei.common.dynamic_hdr_plus.info);
+    if (s->sei.common.itut_t35.hdr_plus) {
+        AVBufferRef *info_ref = av_buffer_ref(s->sei.common.itut_t35.hdr_plus);
         if (!info_ref)
             return AVERROR(ENOMEM);
 
@@ -3153,10 +3154,10 @@ static int set_side_data(HEVCContext *s)
     if ((ret = ff_dovi_attach_side_data(&s->dovi_ctx, out)) < 0)
         return ret;
 
-    if (s->sei.common.dynamic_hdr_vivid.info) {
+    if (s->sei.common.itut_t35.hdr_vivid) {
         if (!av_frame_side_data_add(&out->side_data, &out->nb_side_data,
                                     AV_FRAME_DATA_DYNAMIC_HDR_VIVID,
-                                    &s->sei.common.dynamic_hdr_vivid.info,
+                                    &s->sei.common.itut_t35.hdr_vivid,
                                     AV_FRAME_SIDE_DATA_FLAG_NEW_REF))
             return AVERROR(ENOMEM);
     }
@@ -3350,7 +3351,7 @@ static int hevc_frame_start(HEVCContext *s, HEVCLayerContext *l,
 
     s->cur_frame->needs_fg = ((s->sei.common.film_grain_characteristics &&
                                s->sei.common.film_grain_characteristics->present) ||
-                              s->sei.common.aom_film_grain.enable) &&
+                              s->sei.common.itut_t35.aom_film_grain.enable) &&
         !(s->avctx->export_side_data & AV_CODEC_EXPORT_DATA_FILM_GRAIN) &&
         !s->avctx->hwaccel;
 
@@ -4086,8 +4087,8 @@ static int hevc_update_thread_context(AVCodecContext *dst,
     if (ret < 0)
         return ret;
 
-    ret = av_buffer_replace(&s->sei.common.dynamic_hdr_plus.info,
-                            s0->sei.common.dynamic_hdr_plus.info);
+    ret = av_buffer_replace(&s->sei.common.itut_t35.hdr_plus,
+                            s0->sei.common.itut_t35.hdr_plus);
     if (ret < 0)
         return ret;
 
@@ -4097,8 +4098,8 @@ static int hevc_update_thread_context(AVCodecContext *dst,
 
     ff_dovi_ctx_replace(&s->dovi_ctx, &s0->dovi_ctx);
 
-    ret = av_buffer_replace(&s->sei.common.dynamic_hdr_vivid.info,
-                            s0->sei.common.dynamic_hdr_vivid.info);
+    ret = av_buffer_replace(&s->sei.common.itut_t35.hdr_vivid,
+                            s0->sei.common.itut_t35.hdr_vivid);
     if (ret < 0)
         return ret;
 

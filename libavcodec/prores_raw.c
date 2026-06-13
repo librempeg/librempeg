@@ -3,30 +3,34 @@
  * Copyright (c) 2023-2025 Paul B Mahol
  * Copyright (c) 2025 Lynne
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "libavutil/avassert.h"
+#include "libavutil/intfloat.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/mem.h"
+#include "libavutil/raw_color_params.h"
+#include "libavutil/rational.h"
 
 #define CACHED_BITSTREAM_READER !ARCH_X86_32
 
+#include "config_components.h"
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
@@ -407,7 +411,12 @@ static int decode_frame(AVCodecContext *avctx,
         avctx->pix_fmt = ret;
     }
 
-    bytestream2_skip(&gb_hdr, 1 * 4); /* 4 reserved bytes */
+    /* RecommendedCrop: pixel margins to discard after debayer. Order is
+     * left/right/top/bottom */
+    uint8_t crop_l = bytestream2_get_byte(&gb_hdr);
+    uint8_t crop_r = bytestream2_get_byte(&gb_hdr);
+    uint8_t crop_t = bytestream2_get_byte(&gb_hdr);
+    uint8_t crop_b = bytestream2_get_byte(&gb_hdr);
 
     /* BayerPattern: 0=RGGB, 1/2/3 = alternates */
     int bayer_pattern = bytestream2_get_be16(&gb_hdr) & 0x3;
@@ -416,12 +425,22 @@ static int decode_frame(AVCodecContext *avctx,
         return AVERROR_PATCHWELCOME;
     }
 
-    bytestream2_skip(&gb_hdr, 2); /* senselValueRange (white_level = value + 0x100, black_level = 0x100) */
-    bytestream2_skip(&gb_hdr, 4); /* WhiteBalanceRedFactor (float, pre-debayer R gain) */
-    bytestream2_skip(&gb_hdr, 4); /* WhiteBalanceBlueFactor (float, pre-debayer B gain) */
-    bytestream2_skip(&gb_hdr, 4 * 3 * 3); /* ColorMatrix (3x3 float, camera RGB -> Rec.2020 linear, row-major) */
-    bytestream2_skip(&gb_hdr, 4); /* GainFactor (float, post-matrix scene-linear scale) */
-    bytestream2_skip(&gb_hdr, 2); /* WhiteBalanceCCT (Kelvin, informational) */
+    /* senselValueRange: black_level is hardcoded to 0x100,
+     * white_level = senselValueRange + 0x100 */
+    uint16_t black_level = 0x100;
+    uint16_t white_level = bytestream2_get_be16(&gb_hdr) + 0x100;
+
+    float wb_red  = av_int2float(bytestream2_get_be32(&gb_hdr)); /* WhiteBalanceRedFactor */
+    float wb_blue = av_int2float(bytestream2_get_be32(&gb_hdr)); /* WhiteBalanceBlueFactor */
+
+    /* ColorMatrix (3x3 float, camera RGB -> CIE 1931 XYZ D65, row-major) */
+    float color_matrix[3][3];
+    for (int r = 0; r < 3; r++)
+        for (int c = 0; c < 3; c++)
+            color_matrix[r][c] = av_int2float(bytestream2_get_be32(&gb_hdr));
+
+    float gain = av_int2float(bytestream2_get_be32(&gb_hdr)); /* GainFactor (post-matrix mult) */
+    uint16_t wb_cct = bytestream2_get_be16(&gb_hdr); /* WhiteBalanceCCT (Kelvin, informational) */
 
     /* Flags */
     int flags = bytestream2_get_be16(&gb_hdr);
@@ -498,6 +517,20 @@ static int decode_frame(AVCodecContext *avctx,
     }
     av_assert1(n == s->nb_tiles);
 
+    /**
+     * Any data between last tile and frame end is vendor-specific metadata:
+     * [psim record]  4 be32 size + "psim" + pascal string + payload
+     * <more records, if any>, or:
+     * [eomd]         4 be32 size=8 + "eomd" fourcc (end of metadata)
+     * [padding]      zero-fill to next-frame alignment
+     *
+     * Known records (feel free to extend):
+     * com.panasonic.Semi-Pro.optical_correction (IEEE doubles):
+     *     R - radial polynomial? + padding: [ k0, k1, k2, k3, pad0, pad1 ]
+     *     G, B: same
+     *     Trailer: optical center in normalized frame coords: [ x, y ]
+     */
+
     ret = ff_thread_get_buffer(avctx, frame, 0);
     if (ret < 0)
         return ret;
@@ -533,8 +566,28 @@ static int decode_frame(AVCodecContext *avctx,
         avctx->execute2(avctx, decode_tiles, frame, NULL, s->nb_tiles);
     }
 
-    frame->pict_type = AV_PICTURE_TYPE_I;
-    frame->flags    |= AV_FRAME_FLAG_KEY;
+    frame->pict_type   = AV_PICTURE_TYPE_I;
+    frame->flags      |= AV_FRAME_FLAG_KEY;
+    frame->crop_left   = crop_l;
+    frame->crop_right  = crop_r;
+    frame->crop_top    = crop_t;
+    frame->crop_bottom = crop_b;
+
+    AVRawColorParams *rcp = av_raw_color_params_create_side_data(frame);
+    if (!rcp)
+        return AVERROR(ENOMEM);
+    rcp->type        = AV_RAW_COLOR_PARAMS_PRORES_RAW;
+    rcp->black_level = av_make_q(black_level, 65535);
+    rcp->white_level = av_make_q(white_level, 65535);
+    rcp->wb_cct      = wb_cct;
+
+    AVProResRawColorParams *pr = &rcp->codec.prores_raw;
+    pr->wb_red  = av_d2q(wb_red, INT_MAX);
+    pr->wb_blue = av_d2q(wb_blue, INT_MAX);
+    pr->gain    = av_d2q(gain, INT_MAX);
+    for (int r = 0; r < 3; r++)
+        for (int c = 0; c < 3; c++)
+            pr->color_matrix[r][c] = av_d2q(color_matrix[r][c], INT_MAX);
 
     *got_frame_ptr = 1;
 
@@ -562,11 +615,11 @@ static int update_thread_context(AVCodecContext *dst, const AVCodecContext *src)
 }
 #endif
 
-const FFCodec ff_proresraw_decoder = {
-    .p.name           = "proresraw",
+const FFCodec ff_prores_raw_decoder = {
+    .p.name           = "prores_raw",
     CODEC_LONG_NAME("Apple ProRes RAW"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
-    .p.id             = AV_CODEC_ID_PRORESRAW,
+    .p.id             = AV_CODEC_ID_PRORES_RAW,
     .priv_data_size   = sizeof(ProResRAWContext),
     .init             = decode_init,
     .close            = decode_end,
@@ -577,4 +630,13 @@ const FFCodec ff_proresraw_decoder = {
                         AV_CODEC_CAP_SLICE_THREADS,
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP |
                       FF_CODEC_CAP_SKIP_FRAME_FILL_PARAM,
+    .hw_configs     = (const AVCodecHWConfigInternal *const []) {
+#if CONFIG_PRORES_RAW_VULKAN_HWACCEL
+        HWACCEL_VULKAN(prores_raw),
+#endif
+#if CONFIG_PRORES_RAW_VIDEOTOOLBOX_HWACCEL
+        HWACCEL_VIDEOTOOLBOX(prores_raw),
+#endif
+        NULL
+    },
 };

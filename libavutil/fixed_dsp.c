@@ -28,21 +28,21 @@
  *
  * Author:  Nedeljko Babic (nedeljko.babic imgtec com)
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "common.h"
@@ -165,7 +165,7 @@ AVFixedDSPContext * avpriv_alloc_fixed_dsp(int bit_exact)
 
 #if ARCH_RISCV
     ff_fixed_dsp_init_riscv(fdsp);
-#elif ARCH_X86
+#elif ARCH_X86 && HAVE_X86ASM
     ff_fixed_dsp_init_x86(fdsp);
 #endif
 

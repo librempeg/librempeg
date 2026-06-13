@@ -1,21 +1,21 @@
 /*
  * AV1 video decoder
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "config_components.h"
@@ -545,6 +545,7 @@ static int get_pixel_format(AVCodecContext *avctx)
                      CONFIG_AV1_NVDEC_HWACCEL + \
                      CONFIG_AV1_VAAPI_HWACCEL + \
                      CONFIG_AV1_VDPAU_HWACCEL + \
+                     CONFIG_AV1_VIDEOTOOLBOX_HWACCEL + \
                      CONFIG_AV1_VULKAN_HWACCEL)
     enum AVPixelFormat pix_fmts[HWACCEL_MAX + 2], *fmtp = pix_fmts;
 
@@ -572,6 +573,9 @@ static int get_pixel_format(AVCodecContext *avctx)
 #if CONFIG_AV1_VDPAU_HWACCEL
         *fmtp++ = AV_PIX_FMT_VDPAU;
 #endif
+#if CONFIG_AV1_VIDEOTOOLBOX_HWACCEL
+        *fmtp++ = AV_PIX_FMT_VIDEOTOOLBOX;
+#endif
 #if CONFIG_AV1_VULKAN_HWACCEL
         *fmtp++ = AV_PIX_FMT_VULKAN;
 #endif
@@ -595,6 +599,9 @@ static int get_pixel_format(AVCodecContext *avctx)
 #endif
 #if CONFIG_AV1_VDPAU_HWACCEL
         *fmtp++ = AV_PIX_FMT_VDPAU;
+#endif
+#if CONFIG_AV1_VIDEOTOOLBOX_HWACCEL
+        *fmtp++ = AV_PIX_FMT_VIDEOTOOLBOX;
 #endif
 #if CONFIG_AV1_VULKAN_HWACCEL
         *fmtp++ = AV_PIX_FMT_VULKAN;
@@ -1402,6 +1409,10 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
 
         if (raw_tile_group && (s->tile_num == raw_tile_group->tg_end + 1)) {
             int show_frame = s->raw_frame_header->show_frame;
+            // Set nb_unit to point at the next OBU, to indicate which
+            // OBUs have been processed for this current frame. (If this
+            // frame gets output, we set nb_unit to this value later too.)
+            s->nb_unit = i + 1;
             if (avctx->hwaccel && s->cur_frame.f) {
                 ret = FF_HW_SIMPLE_CALL(avctx, end_frame);
                 if (ret < 0) {
@@ -1412,6 +1423,8 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
 
             update_reference_list(avctx);
 
+            // Set start_unit to indicate the first OBU of the next frame.
+            s->start_unit       = s->nb_unit;
             raw_tile_group      = NULL;
             s->raw_frame_header = NULL;
 
@@ -1441,7 +1454,7 @@ end:
             s->raw_frame_header = NULL;
         av_packet_unref(s->pkt);
         ff_cbs_fragment_reset(&s->current_obu);
-        s->nb_unit = 0;
+        s->nb_unit = s->start_unit = 0;
     }
     if (!ret && !frame->buf[0])
         ret = AVERROR(EAGAIN);
@@ -1468,7 +1481,7 @@ static int av1_receive_frame(AVCodecContext *avctx, AVFrame *frame)
                 return ret;
             }
 
-            s->nb_unit = 0;
+            s->nb_unit = s->start_unit = 0;
             av_log(avctx, AV_LOG_DEBUG, "Total OBUs on this packet: %d.\n",
                    s->current_obu.nb_units);
         }
@@ -1489,7 +1502,7 @@ static av_cold void av1_decode_flush(AVCodecContext *avctx)
 
     av1_frame_unref(&s->cur_frame);
     s->operating_point_idc = 0;
-    s->nb_unit = 0;
+    s->nb_unit = s->start_unit = 0;
     s->raw_frame_header = NULL;
     s->raw_seq = NULL;
     s->cll = NULL;
@@ -1514,6 +1527,7 @@ static const AVOption av1_options[] = {
 
 static const AVClass av1_class = {
     .class_name = "AV1 decoder",
+    .item_name  = av_default_item_name,
     .option     = av1_options,
     .version    = LIBAVUTIL_VERSION_INT,
 };
@@ -1555,6 +1569,9 @@ const FFCodec ff_av1_decoder = {
 #endif
 #if CONFIG_AV1_VDPAU_HWACCEL
         HWACCEL_VDPAU(av1),
+#endif
+#if CONFIG_AV1_VIDEOTOOLBOX_HWACCEL
+        HWACCEL_VIDEOTOOLBOX(av1),
 #endif
 #if CONFIG_AV1_VULKAN_HWACCEL
         HWACCEL_VULKAN(av1),

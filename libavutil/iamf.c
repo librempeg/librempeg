@@ -1,21 +1,21 @@
 /*
  * Immersive Audio Model and Formats helper functions and defines
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <limits.h>
@@ -75,6 +75,7 @@ static const AVOption mix_gain_options[] = {
 
 static const AVClass mix_gain_class = {
     .class_name     = "AVIAMFMixGain",
+    .item_name      = av_default_item_name,
     .version        = LIBAVUTIL_VERSION_INT,
     .option         = mix_gain_options,
 };
@@ -89,6 +90,7 @@ static const AVOption demixing_info_options[] = {
 
 static const AVClass demixing_info_class = {
     .class_name     = "AVIAMFDemixingInfo",
+    .item_name      = av_default_item_name,
     .version        = LIBAVUTIL_VERSION_INT,
     .option         = demixing_info_options,
 };
@@ -102,6 +104,7 @@ static const AVOption recon_gain_options[] = {
 
 static const AVClass recon_gain_class = {
     .class_name     = "AVIAMFReconGain",
+    .item_name      = av_default_item_name,
     .version        = LIBAVUTIL_VERSION_INT,
     .option         = recon_gain_options,
 };
@@ -142,6 +145,7 @@ static const AVClass *param_definition_child_iterate(void **opaque)
 
 static const AVClass param_definition_class = {
     .class_name          = "AVIAMFParamDefinition",
+    .item_name           = av_default_item_name,
     .version             = LIBAVUTIL_VERSION_INT,
     .option              = param_definition_options,
     .child_class_iterate = param_definition_child_iterate,
@@ -272,6 +276,7 @@ static const AVOption layer_options[] = {
 
 static const AVClass layer_class = {
     .class_name     = "AVIAMFLayer",
+    .item_name      = av_default_item_name,
     .version        = LIBAVUTIL_VERSION_INT,
     .option         = layer_options,
 };
@@ -305,6 +310,7 @@ static const AVClass *audio_element_child_iterate(void **opaque)
 
 static const AVClass audio_element_class = {
     .class_name          = "AVIAMFAudioElement",
+    .item_name           = av_default_item_name,
     .version             = LIBAVUTIL_VERSION_INT,
     .option              = audio_element_options,
     .child_class_iterate = audio_element_child_iterate,
@@ -391,6 +397,7 @@ static const AVClass *submix_element_child_iterate(void **opaque)
 
 static const AVClass element_class = {
     .class_name          = "AVIAMFSubmixElement",
+    .item_name           = av_default_item_name,
     .version             = LIBAVUTIL_VERSION_INT,
     .option              = submix_element_options,
     .child_next          = submix_element_child_next,
@@ -420,6 +427,7 @@ static const AVOption submix_layout_options[] = {
 
 static const AVClass layout_class = {
     .class_name     = "AVIAMFSubmixLayout",
+    .item_name      = av_default_item_name,
     .version        = LIBAVUTIL_VERSION_INT,
     .option         = submix_layout_options,
 };
@@ -468,6 +476,7 @@ static const AVClass *submix_presentation_child_iterate(void **opaque)
 
 static const AVClass submix_class = {
     .class_name          = "AVIAMFSubmix",
+    .item_name           = av_default_item_name,
     .version             = LIBAVUTIL_VERSION_INT,
     .option              = submix_presentation_options,
     .child_next          = submix_presentation_child_next,
@@ -499,6 +508,7 @@ static const AVClass *mix_presentation_child_iterate(void **opaque)
 
 static const AVClass mix_presentation_class = {
     .class_name          = "AVIAMFMixPresentation",
+    .item_name           = av_default_item_name,
     .version             = LIBAVUTIL_VERSION_INT,
     .option              = mix_presentation_options,
     .child_class_iterate = mix_presentation_child_iterate,
