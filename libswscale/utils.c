@@ -2,21 +2,21 @@
  * Copyright (C) 2024 Niklas Haas
  * Copyright (C) 2001-2003 Michael Niedermayer <michaelni@gmx.at>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "config.h"
@@ -67,6 +67,18 @@
 #if CONFIG_VULKAN
 #include "vulkan/ops.h"
 #endif
+
+SwsBackend ff_sws_enabled_backends(const SwsContext *ctx)
+{
+    if (ctx->backends)
+        return ctx->backends;
+
+    SwsBackend fallback = SWS_BACKEND_STABLE;
+    if (ctx->flags & SWS_UNSTABLE)
+        fallback |= SWS_BACKEND_UNSTABLE;
+
+    return fallback;
+}
 
 /**
  * Allocate and return an SwsContext without performing initialization.
@@ -1030,7 +1042,7 @@ int sws_getColorspaceDetails(SwsContext *sws, int **inv_table,
 
 SwsContext *sws_alloc_context(void)
 {
-    SwsInternal *c = (SwsInternal *) av_mallocz(sizeof(SwsInternal));
+    SwsInternal *c = av_mallocz(sizeof(*c) + SWSINTERNAL_ADDITIONAL_ASM_SIZE);
     if (!c)
         return NULL;
 
@@ -1769,24 +1781,9 @@ av_cold int ff_sws_init_single_context(SwsContext *sws, SwsFilter *srcFilter,
         }
 
 #if HAVE_ALTIVEC
-        c->vYCoeffsBank = av_malloc_array(sws->dst_h, c->vLumFilterSize * sizeof(*c->vYCoeffsBank));
-        c->vCCoeffsBank = av_malloc_array(c->chrDstH, c->vChrFilterSize * sizeof(*c->vCCoeffsBank));
-        if (c->vYCoeffsBank == NULL || c->vCCoeffsBank == NULL)
-            goto nomem;
-
-        for (i = 0; i < c->vLumFilterSize * sws->dst_h; i++) {
-            int j;
-            short *p = (short *)&c->vYCoeffsBank[i];
-            for (j = 0; j < 8; j++)
-                p[j] = c->vLumFilter[i];
-        }
-
-        for (i = 0; i < c->vChrFilterSize * c->chrDstH; i++) {
-            int j;
-            short *p = (short *)&c->vCCoeffsBank[i];
-            for (j = 0; j < 8; j++)
-                p[j] = c->vChrFilter[i];
-        }
+        ret = ff_sws_init_altivec_bufs(c);
+        if (ret < 0)
+            goto fail;
 #endif
     }
 
@@ -2330,8 +2327,7 @@ void sws_freeContext(SwsContext *sws)
     av_freep(&c->hLumFilter);
     av_freep(&c->hChrFilter);
 #if HAVE_ALTIVEC
-    av_freep(&c->vYCoeffsBank);
-    av_freep(&c->vCCoeffsBank);
+    ff_sws_free_altivec_bufs(c);
 #endif
 
     av_freep(&c->vLumFilterPos);

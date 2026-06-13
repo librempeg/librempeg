@@ -317,8 +317,7 @@ SWS_FOR_STRUCT(TYPE, WRITE_NIBBLE,    DECL_ENTRY, EXT, NULL, NULL)              
 SWS_FOR_STRUCT(TYPE, WRITE_BIT,       DECL_ENTRY, EXT, NULL, NULL)              \
 SWS_FOR_STRUCT(TYPE, SWAP_BYTES,      DECL_ENTRY, EXT, NULL, NULL)              \
 SWS_FOR_STRUCT(TYPE, EXPAND_BIT,      DECL_ENTRY, EXT, NULL, NULL)              \
-SWS_FOR_STRUCT(TYPE, PERMUTE,         DECL_ENTRY, EXT, NULL, NULL)              \
-SWS_FOR_STRUCT(TYPE, COPY,            DECL_ENTRY, EXT, NULL, NULL)              \
+SWS_FOR_STRUCT(TYPE, MOVE,            DECL_ENTRY, EXT, NULL, NULL)              \
 SWS_FOR_STRUCT(TYPE, SCALE,           DECL_ENTRY, EXT, NULL, setup_scale)       \
 SWS_FOR_STRUCT(TYPE, ADD,             DECL_ENTRY, EXT, NULL, ff_sws_setup_vec4) \
 SWS_FOR_STRUCT(TYPE, MIN,             DECL_ENTRY, EXT, NULL, ff_sws_setup_vec4) \
@@ -340,8 +339,7 @@ SWS_FOR_STRUCT(TYPE, DITHER,          DECL_ENTRY, EXT, NULL, setup_dither)      
     SWS_FOR(TYPE, WRITE_BIT,      REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, SWAP_BYTES,     REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, EXPAND_BIT,     REF_ENTRY, EXT)                               \
-    SWS_FOR(TYPE, PERMUTE,        REF_ENTRY, EXT)                               \
-    SWS_FOR(TYPE, COPY,           REF_ENTRY, EXT)                               \
+    SWS_FOR(TYPE, MOVE,           REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, SCALE,          REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, ADD,            REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, MIN,            REF_ENTRY, EXT)                               \
@@ -577,11 +575,11 @@ static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
 {
     const int cpu_flags = av_get_cpu_flags();
     int ret, mmsize;
-    if (X86_AVX512(cpu_flags))
+    if (EXTERNAL_AVX512(cpu_flags))
         mmsize = 64;
-    else if (X86_AVX2(cpu_flags))
+    else if (EXTERNAL_AVX2(cpu_flags))
         mmsize = 32;
-    else if (X86_SSE4(cpu_flags))
+    else if (EXTERNAL_SSE4(cpu_flags))
         mmsize = 16;
     else
         return AVERROR(ENOTSUP);
@@ -601,8 +599,8 @@ static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
         goto fail;
     }
 
-    SwsUOpFlags flags = 0;
-    if (X86_FMA4(cpu_flags))
+    SwsUOpFlags flags = SWS_UOP_FLAG_MOVE;
+    if (EXTERNAL_FMA3(cpu_flags))
         flags |= SWS_UOP_FLAG_FMA;
 
     ret = ff_sws_ops_translate(ctx, ops, flags, uops);
@@ -664,6 +662,7 @@ fail:
 
 const SwsOpBackend backend_x86 = {
     .name       = "x86",
+    .flags      = SWS_BACKEND_X86,
     .compile    = compile,
     .hw_format  = AV_PIX_FMT_NONE,
 };

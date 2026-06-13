@@ -1,21 +1,21 @@
 /*
  * Copyright (C) 2024 Niklas Haas
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "libavutil/avassert.h"
@@ -549,6 +549,9 @@ static int add_legacy_sws_pass(SwsGraph *graph, const SwsFormat *src,
 {
     int ret, warned = 0;
     SwsContext *const ctx = graph->ctx;
+    const SwsBackend backend = ff_sws_enabled_backends(ctx);
+    if (!(backend & SWS_BACKEND_LEGACY))
+        return AVERROR(ENOTSUP);
     if (src->hw_format != AV_PIX_FMT_NONE || dst->hw_format != AV_PIX_FMT_NONE)
         return AVERROR(ENOTSUP);
 
@@ -624,22 +627,25 @@ static int add_legacy_sws_pass(SwsGraph *graph, const SwsFormat *src,
  * Format conversion and scaling *
  *********************************/
 
-#if CONFIG_UNSTABLE
-static int add_convert_pass(SwsGraph *graph, const SwsFormat *src,
-                            const SwsFormat *dst, SwsPass *input,
-                            SwsPass **output)
+static int add_ops_convert_pass(SwsGraph *graph, const SwsFormat *src,
+                                const SwsFormat *dst, SwsPass *input,
+                                SwsPass **output)
 {
+#if CONFIG_UNSTABLE
     SwsContext *ctx = graph->ctx;
-    int ret = AVERROR(ENOTSUP);
 
-    /* Mark the entire new ops infrastructure as experimental for now */
-    if (!(ctx->flags & SWS_UNSTABLE))
-        goto fail;
+    /* Preemptively skip the ops list generation if the backend was
+     * constrained to the legacy implementation only. This would
+     * normally also fail in ff_sws_compile_pass() with the same
+     * error, but this way saves a bit of unnecessary overhead */
+    const SwsBackend backends = ff_sws_enabled_backends(ctx);
+    if (backends == SWS_BACKEND_LEGACY)
+        return AVERROR(ENOTSUP);
 
     SwsOpList *ops;
-    ret = ff_sws_op_list_generate(ctx, src, dst, &ops, &graph->incomplete);
+    int ret = ff_sws_op_list_generate(ctx, src, dst, &ops, &graph->incomplete);
     if (ret < 0)
-        goto fail;
+        return ret;
 
     av_log(ctx, AV_LOG_VERBOSE, "Conversion pass for %s -> %s:\n",
            av_get_pix_fmt_name(src->format), av_get_pix_fmt_name(dst->format));
@@ -647,22 +653,40 @@ static int add_convert_pass(SwsGraph *graph, const SwsFormat *src,
     av_log(ctx, AV_LOG_DEBUG, "Unoptimized operation list:\n");
     ff_sws_op_list_print(ctx, AV_LOG_DEBUG, AV_LOG_TRACE, ops);
 
-    ret = ff_sws_compile_pass(graph, NULL, &ops, SWS_OP_FLAG_OPTIMIZE, input, output);
-    if (ret < 0)
-        goto fail;
+    return ff_sws_compile_pass(graph, NULL, &ops, SWS_OP_FLAG_OPTIMIZE, input, output);
+#else
+    return AVERROR(ENOTSUP);
+#endif
+}
 
-    ret = 0;
-    /* fall through */
+static bool prefer_ops_backend(SwsContext *ctx, const SwsFormat *src, const SwsFormat *dst)
+{
+    if (ctx->flags & SWS_UNSTABLE)
+        return true;
+    if (isFloat(src->format) || isFloat(dst->format))
+        return true; /* ops backend has better support for float formats */
+    return false; /* default to legacy for stability reasons */
+}
 
-fail:
-    if (ret == AVERROR(ENOTSUP))
-        return add_legacy_sws_pass(graph, src, dst, input, output);
+static int add_convert_pass(SwsGraph *graph, const SwsFormat *src,
+                            const SwsFormat *dst, SwsPass *input,
+                            SwsPass **output)
+{
+    SwsContext *ctx = graph->ctx;
+    int ret;
+
+    if (prefer_ops_backend(ctx, src, dst)) {
+        ret = add_ops_convert_pass(graph, src, dst, input, output);
+        if (ret == AVERROR(ENOTSUP))
+            ret = add_legacy_sws_pass(graph, src, dst, input, output);
+    } else {
+        ret = add_legacy_sws_pass(graph, src, dst, input, output);
+        if (ret == AVERROR(ENOTSUP))
+            ret = add_ops_convert_pass(graph, src, dst, input, output);
+    }
+
     return ret;
 }
-#else
-#define add_convert_pass add_legacy_sws_pass
-#endif
-
 
 /**************************
  * Gamut and tone mapping *
@@ -915,6 +939,7 @@ static int opts_equal(const SwsContext *c1, const SwsContext *c2)
            c1->intent        == c2->intent        &&
            c1->scaler        == c2->scaler        &&
            c1->scaler_sub    == c2->scaler_sub    &&
+           c1->backends      == c2->backends      &&
            !memcmp(c1->scaler_params, c2->scaler_params, sizeof(c1->scaler_params));
 
 }

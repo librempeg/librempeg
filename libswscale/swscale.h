@@ -2,21 +2,21 @@
  * Copyright (C) 2024 Niklas Haas
  * Copyright (C) 2001-2011 Michael Niedermayer <michaelni@gmx.at>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #ifndef SWSCALE_SWSCALE_H
@@ -107,6 +107,29 @@ typedef enum SwsScaler {
     SWS_SCALE_MAX_ENUM = 0x7FFFFFFF, ///< force size to 32 bits, not a valid filter type
 } SwsScaler;
 
+typedef enum SwsBackend {
+    /* Stable backends */
+    SWS_BACKEND_LEGACY      = (1 << 0), ///< Legacy bespoke format-specific code
+    SWS_BACKEND_STABLE      = SWS_BACKEND_LEGACY,
+
+    /* Unstable backends (auto-selected only if SWS_UNSTABLE is enabled) */
+    SWS_BACKEND_C           = (1 << 1), ///< Template-based C reference implementation
+    SWS_BACKEND_MEMCPY      = (1 << 2), ///< Fast path using libc memcpy() / memset()
+    SWS_BACKEND_X86         = (1 << 3), ///< Chained x86 SIMD kernels
+    SWS_BACKEND_AARCH64     = (1 << 4), ///< Chained AArch64 NEON kernels
+    SWS_BACKEND_SPIRV       = (1 << 5), ///< Vulkan SPIR-V backend
+    SWS_BACKEND_GLSL        = (1 << 6), ///< Vulkan GLSL backend
+    SWS_BACKEND_UNSTABLE    = SWS_BACKEND_C |
+                              SWS_BACKEND_MEMCPY |
+                              SWS_BACKEND_X86 |
+                              SWS_BACKEND_AARCH64 |
+                              SWS_BACKEND_SPIRV |
+                              SWS_BACKEND_GLSL,
+
+    SWS_BACKEND_ALL = SWS_BACKEND_STABLE | SWS_BACKEND_UNSTABLE,
+    SWS_BACKEND_MAX_ENUM = 0x7FFFFFFF, ///< force size to 32 bits, not a valid backend
+} SwsBackend;
+
 typedef enum SwsFlags {
     /**
      * Return an error on underspecified conversions. Without this flag,
@@ -157,9 +180,9 @@ typedef enum SwsFlags {
     SWS_BITEXACT       = 1 << 19,
 
     /**
-     * Allow using experimental new code paths. This may be faster, slower,
-     * or produce different output, with semantics subject to change at any
-     * point in time. For testing and debugging purposes only.
+     * Allow/prefer using experimental new code paths. This may be faster,
+     * slower, or produce different output, with semantics subject to change
+     * at any point in time. For testing and debugging purposes only.
      */
     SWS_UNSTABLE = 1 << 20,
 
@@ -280,6 +303,16 @@ typedef struct SwsContext {
      */
     SwsScaler scaler_sub;
 
+    /**
+     * Bitmask of SWS_BACKEND_*. If non-zero, this will restrict the available
+     * backends to the specified set. If left as zero, a default set of
+     * backends will be selected automatically (based on SWS_UNSTABLE).
+     *
+     * Note: This is only relevant for the new API (sws_scale_frame()). The
+     * stateful legacy API always implies SWS_BACKEND_LEGACY.
+     */
+    SwsBackend backends;
+
     /* Remember to add new fields to graph.c:opts_equal() */
 } SwsContext;
 
@@ -299,7 +332,8 @@ void sws_free_context(SwsContext **ctx);
  ***************************/
 
 /**
- * Test if a given (software) pixel format is supported.
+ * Test if a given (software) pixel format is supported by any backend,
+ * excluding unstable backends.
  *
  * @param output  If 0, test if compatible with the source/input frame;
  *                otherwise, with the destination/output frame.
@@ -310,7 +344,8 @@ void sws_free_context(SwsContext **ctx);
 int sws_test_format(enum AVPixelFormat format, int output);
 
 /**
- * Test if a given hardware pixel format is supported.
+ * Test if a given hardware pixel format is supported by any backend,
+ * excluding unstable backends.
  *
  * @param format  The hardware format to check, or AV_PIX_FMT_NONE.
  *
