@@ -1,21 +1,21 @@
 /*
  * Copyright (C) 2001-2012 Michael Niedermayer <michaelni@gmx.at>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <math.h>
@@ -1320,7 +1320,7 @@ yuv2rgba64_1_c_template(SwsInternal *c, const int32_t *buf0,
         }
     } else {
         const int32_t *ubuf1 = ubuf[1], *vbuf1 = vbuf[1];
-        int A1 = 0xffff<<14, A2 = 0xffff<<14;
+        SUINT A1 = 0xffff<<14, A2 = 0xffff<<14;
         unsigned uvalpha1 = 4096 - uvalpha;
         av_assert2(uvalpha <= 4096U);
 
@@ -1339,8 +1339,8 @@ yuv2rgba64_1_c_template(SwsInternal *c, const int32_t *buf0,
             Y2 += (1 << 13) - (1 << 29);
 
             if (hasAlpha) {
-                A1 = abuf0[i * 2    ] * (1 << 11);
-                A2 = abuf0[i * 2 + 1] * (1 << 11);
+                A1 = abuf0[i * 2    ] * (SUINT)(1 << 11);
+                A2 = abuf0[i * 2 + 1] * (SUINT)(1 << 11);
 
                 A1 += 1 << 13;
                 A2 += 1 << 13;
@@ -1499,7 +1499,7 @@ yuv2rgba64_full_1_c_template(SwsInternal *c, const int32_t *buf0,
 {
     const int32_t *ubuf0 = ubuf[0], *vbuf0 = vbuf[0];
     int i;
-    int A = 0xffff<<14;
+    SUINT A = 0xffff<<14;
 
     if (uvalpha == 0) {
         for (i = 0; i < dstW; i++) {
@@ -1513,7 +1513,7 @@ yuv2rgba64_full_1_c_template(SwsInternal *c, const int32_t *buf0,
             Y += (1 << 13) - (1 << 29);
 
             if (hasAlpha) {
-                A = abuf0[i] * (1 << 11);
+                A = abuf0[i] * (SUINT)(1 << 11);
 
                 A += 1 << 13;
             }
@@ -1535,7 +1535,7 @@ yuv2rgba64_full_1_c_template(SwsInternal *c, const int32_t *buf0,
     } else {
         const int32_t *ubuf1 = ubuf[1], *vbuf1 = vbuf[1];
         unsigned uvalpha1 = 4096 - uvalpha;
-        int A = 0xffff<<14;
+        SUINT A = 0xffff<<14;
         av_assert2(uvalpha <= 4096U);
 
         for (i = 0; i < dstW; i++) {
@@ -1549,7 +1549,7 @@ yuv2rgba64_full_1_c_template(SwsInternal *c, const int32_t *buf0,
             Y += (1 << 13) - (1 << 29);
 
             if (hasAlpha) {
-                A = abuf0[i] * (1 << 11);
+                A = abuf0[i] * (SUINT)(1 << 11);
 
                 A += 1 << 13;
             }

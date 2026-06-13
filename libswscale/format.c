@@ -1,21 +1,21 @@
 /*
  * Copyright (C) 2024 Niklas Haas
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "libavutil/attributes.h"
@@ -554,9 +554,25 @@ bool ff_infer_colors(SwsColor *src, SwsColor *dst)
     return incomplete;
 }
 
-int sws_test_format(enum AVPixelFormat format, int output)
+/* Variant of sws_test_format() for the ops-based code */
+static int test_format_ops(enum AVPixelFormat format, int output);
+static int test_format_legacy(enum AVPixelFormat format, int output)
 {
     return output ? sws_isSupportedOutput(format) : sws_isSupportedInput(format);
+}
+
+int ff_sws_test_pixfmt_backend(const SwsBackend backends,
+                               enum AVPixelFormat format, int output)
+{
+    /* The only non-ops backend is the legacy backend */
+    const SwsBackend backends_ops = SWS_BACKEND_ALL ^ SWS_BACKEND_LEGACY;
+    return ((backends & SWS_BACKEND_LEGACY) && test_format_legacy(format, output)) ||
+           ((backends & backends_ops)       && test_format_ops(format, output));
+}
+
+int sws_test_format(enum AVPixelFormat format, int output)
+{
+    return ff_sws_test_pixfmt_backend(SWS_BACKEND_STABLE, format, output);
 }
 
 int sws_test_hw_format(enum AVPixelFormat format)
@@ -611,10 +627,10 @@ static int test_loc(enum AVChromaLocation loc)
     return (unsigned)loc < AVCHROMA_LOC_NB;
 }
 
-int ff_test_fmt(const SwsFormat *fmt, int output)
+int ff_test_fmt(const SwsBackend backends, const SwsFormat *fmt, int output)
 {
     return fmt->width > 0 && fmt->height > 0            &&
-           sws_test_format    (fmt->format,     output) &&
+           ff_sws_test_pixfmt_backend(backends, fmt->format, output) &&
            sws_test_colorspace(fmt->csp,        output) &&
            sws_test_primaries (fmt->color.prim, output) &&
            sws_test_transfer  (fmt->color.trc,  output) &&
@@ -627,7 +643,7 @@ int sws_test_frame(const AVFrame *frame, int output)
 {
     for (int field = 0; field < 2; field++) {
         const SwsFormat fmt = ff_fmt_from_frame(frame, field);
-        if (!ff_test_fmt(&fmt, output))
+        if (!ff_test_fmt(SWS_BACKEND_STABLE, &fmt, output))
             return 0;
         if (!fmt.interlaced)
             break;
@@ -718,20 +734,20 @@ typedef struct FmtInfo {
     int            shift;
 } FmtInfo;
 
-#define BITSTREAM_FMT(SWIZ, FRAC, PACKED, ...) (FmtInfo) {      \
-    .rw = { .elems = 1, .frac = FRAC, .packed = PACKED },       \
+#define BITSTREAM_FMT(SWIZ, FRAC, MODE, ...) (FmtInfo) {        \
+    .rw = { .elems = 1, .frac = FRAC, .mode = MODE },           \
     .swizzle = SWIZ,                                            \
     __VA_ARGS__                                                 \
 }
 
 #define SUBPACKED_FMT(SWIZ, ...) (FmtInfo) {                    \
-    .rw = { .elems = 1, .packed = true },                       \
+    .rw = { .elems = 1, .mode = SWS_RW_PACKED },                \
     .swizzle = SWIZ,                                            \
     .pack.pattern = {__VA_ARGS__},                              \
 }
 
 #define PACKED_FMT(SWIZ, N, ...) (FmtInfo) {                    \
-    .rw = { .elems = N, .packed = (N) > 1 },                    \
+    .rw = { .elems = N, .mode = SWS_RW_PACKED },                \
     .swizzle = SWIZ,                                            \
     __VA_ARGS__                                                 \
 }
@@ -751,9 +767,9 @@ static FmtInfo fmt_info_irregular(enum AVPixelFormat fmt)
     /* Bitstream formats */
     case AV_PIX_FMT_MONOWHITE:
     case AV_PIX_FMT_MONOBLACK:
-        return BITSTREAM_FMT(RGBA, 3, false);
-    case AV_PIX_FMT_RGB4: return BITSTREAM_FMT(RGBA, 1, true, .pack = {{ 1, 2, 1 }});
-    case AV_PIX_FMT_BGR4: return BITSTREAM_FMT(BGRA, 1, true, .pack = {{ 1, 2, 1 }});
+        return BITSTREAM_FMT(RGBA, 3, SWS_RW_PLANAR);
+    case AV_PIX_FMT_RGB4: return BITSTREAM_FMT(RGBA, 1, SWS_RW_PACKED, .pack = {{ 1, 2, 1 }});
+    case AV_PIX_FMT_BGR4: return BITSTREAM_FMT(BGRA, 1, SWS_RW_PACKED, .pack = {{ 1, 2, 1 }});
 
     /* Sub-packed 8-bit aligned formats */
     case AV_PIX_FMT_RGB4_BYTE:  return SUBPACKED_FMT(RGBA, 1, 2, 1);
@@ -849,10 +865,14 @@ static int fmt_analyze_regular(const AVPixFmtDescriptor *desc, SwsReadWriteOp *r
         *swizzle = swiz;
     }
 
+    SwsReadWriteMode mode = SWS_RW_PLANAR;
+    if (desc->nb_components > 1 && !(desc->flags & AV_PIX_FMT_FLAG_PLANAR))
+        mode = SWS_RW_PACKED;
+
     *shift = (SwsShiftOp) { desc->comp[0].shift };
     *rw_op = (SwsReadWriteOp) {
-        .elems  = desc->nb_components,
-        .packed = desc->nb_components > 1 && !(desc->flags & AV_PIX_FMT_FLAG_PLANAR),
+        .elems = desc->nb_components,
+        .mode  = mode,
     };
     return 0;
 }
@@ -905,6 +925,18 @@ static int fmt_analyze(enum AVPixelFormat fmt, SwsReadWriteOp *rw_op,
     }
 
     return 0;
+}
+
+static int test_format_ops(enum AVPixelFormat format, int output)
+{
+    SwsReadWriteOp rw;
+    SwsSwizzleOp swizzle;
+    SwsPackOp pack;
+    SwsShiftOp shift;
+    SwsPixelType pixel_type, raw_type;
+    int ret = fmt_analyze(format, &rw, &pack, &swizzle, &shift,
+                          &pixel_type, &raw_type);
+    return ret == 0;
 }
 
 static SwsSwizzleOp swizzle_inv(SwsSwizzleOp swiz) {
@@ -1612,6 +1644,7 @@ static int add_filter(SwsContext *ctx, SwsPixelType type, SwsOpList *ops,
         .type = type,
         .op   = filter,
         .filter.kernel = kernel,
+        .filter.type   = type,
     });
 }
 
@@ -1670,4 +1703,11 @@ fail:
     return ret;
 }
 
-#endif /* CONFIG_UNSTABLE */
+#else /* !CONFIG_UNSTABLE */
+
+static int test_format_ops(enum AVPixelFormat format, int output)
+{
+    return 0;
+}
+
+#endif

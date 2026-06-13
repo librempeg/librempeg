@@ -7,21 +7,21 @@
  * palette & YUV & runtime CPU stuff by Michael (michaelni@gmx.at)
  * lot of big-endian byte order fixes by Alex Beregszaszi
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <stddef.h>
@@ -406,11 +406,11 @@ static inline void yuvPlanartoyuy2_c(const uint8_t *ysrc, const uint8_t *usrc,
 
         for (i = 0; i < chromWidth; i++) {
 #if HAVE_BIGENDIAN
-            *idst++ = (yc[0] << 24) + (uc[0] << 16) +
+            *idst++ = ((unsigned)yc[0] << 24) + (uc[0] << 16) +
                       (yc[1] <<  8) + (vc[0] <<  0);
 #else
             *idst++ = yc[0] + (uc[0] << 8) +
-                      (yc[1] << 16) + (vc[0] << 24);
+                      (yc[1] << 16) + ((unsigned)vc[0] << 24);
 #endif
             yc += 2;
             uc++;

@@ -580,7 +580,9 @@ retry:
             str[str_size] = 0;
         }
         c->fc->event_flags |= AVFMT_EVENT_FLAG_METADATA_UPDATED;
-        av_dict_set(metadata, key, str, 0);
+        if (c->itunes_metadata && av_dict_get(*metadata, key, NULL, 0))
+            av_dict_set(metadata, key, ";", AV_DICT_APPEND);
+        av_dict_set(metadata, key, str, c->itunes_metadata ? AV_DICT_APPEND : 0);
         if (*language && strcmp(language, "und")) {
             snprintf(key2, sizeof(key2), "%s-%s", key, language);
             av_dict_set(metadata, key2, str, 0);
@@ -591,6 +593,18 @@ retry:
                 c->handbrake_version = 1000000*major + 1000*minor + micro;
             }
         }
+
+        atom.size -= str_size;
+        av_freep(&str);
+
+        // Read remaining data atoms for multi-valued iTunes tags (e.g. multiple
+        // artists stored as multiple data atoms within one tag atom), consistent
+        // with the existing covr path.
+        // Note: multiple sibling tag atoms with the same key (e.g. three separate
+        // ©ART atoms under ilst) are handled by the AV_DICT_APPEND logic above,
+        // since mov_read_udta_string() is called once per tag atom.
+        if (c->itunes_metadata && atom.size > 8)
+            goto retry;
     }
 
     av_freep(&str);
@@ -2144,6 +2158,12 @@ static int mov_read_colr(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                 return AVERROR(ENOMEM);
             icc_profile = sd->data;
         } else {
+            if (c->heif_icc_profile_items >= c->fc->max_streams) {
+                av_log(c->fc, AV_LOG_WARNING,
+                       "HEIF ICC profile copies exceed cap %d; ignoring further items\n",
+                       c->fc->max_streams);
+                return 0;
+            }
             av_freep(&item->icc_profile);
             icc_profile = item->icc_profile = av_malloc(atom.size - 4);
             if (!icc_profile) {
@@ -2151,6 +2171,7 @@ static int mov_read_colr(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                 return AVERROR(ENOMEM);
             }
             item->icc_profile_size = atom.size - 4;
+            c->heif_icc_profile_items++;
         }
         ret = ffio_read_size(pb, icc_profile, atom.size - 4);
         if (ret < 0)
@@ -3126,7 +3147,7 @@ static int mov_finalize_stsd_codec(MOVContext *c, AVIOContext *pb,
     case AV_CODEC_ID_VP9:
         sti->need_parsing = AVSTREAM_PARSE_FULL;
         break;
-    case AV_CODEC_ID_PRORESRAW:
+    case AV_CODEC_ID_PRORES_RAW:
     case AV_CODEC_ID_PRORES:
     case AV_CODEC_ID_APV:
     case AV_CODEC_ID_EVC:
@@ -9498,6 +9519,12 @@ static int mov_read_ispe(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     av_log(c->fc, AV_LOG_TRACE, "ispe: item_id %d, width %"PRIu32", height %"PRIu32"\n",
            c->cur_item_id, width, height);
 
+    if (!width || !height || width > INT_MAX || height > INT_MAX) {
+        av_log(c->fc, AV_LOG_ERROR, "Invalid ispe dimensions %"PRIu32"x%"PRIu32"\n",
+               width, height);
+        return AVERROR_INVALIDDATA;
+    }
+
     item = get_heif_item(c, c->cur_item_id);
     if (item) {
         item->width  = width;
@@ -10501,8 +10528,10 @@ static int read_image_grid(AVFormatContext *s, const HEIFGrid *grid,
 {
     MOVContext *c = s->priv_data;
     const HEIFItem *item = grid->item;
+    int64_t coded_width = 0, coded_height = 0;
     int64_t offset = 0, pos = avio_tell(s->pb);
-    int x = 0, y = 0, i = 0;
+    int64_t x = 0, y = 0;
+    int i = 0;
     int tile_rows, tile_cols;
     int flags, size;
 
@@ -10544,9 +10573,15 @@ static int read_image_grid(AVFormatContext *s, const HEIFGrid *grid,
         return AVERROR_INVALIDDATA;
 
     for (int i = 0; i < tile_cols; i++)
-        tile_grid->coded_width  += grid->tile_item_list[i]->width;
+        coded_width  += grid->tile_item_list[i]->width;
     for (int i = 0; i < size; i += tile_cols)
-        tile_grid->coded_height += grid->tile_item_list[i]->height;
+        coded_height += grid->tile_item_list[i]->height;
+
+    if (coded_width > INT_MAX || coded_height > INT_MAX)
+        return AVERROR_INVALIDDATA;
+
+    tile_grid->coded_width  = coded_width;
+    tile_grid->coded_height = coded_height;
 
     tile_grid->offsets = av_calloc(tile_grid->nb_tiles, sizeof(*tile_grid->offsets));
     if (!tile_grid->offsets)
@@ -11753,12 +11788,15 @@ static int mov_read_packet(AVFormatContext *s, AVPacket *pkt)
         }
 #endif
         else if (st->codecpar->codec_id == AV_CODEC_ID_APV && sample->size > 4) {
-            const uint32_t au_size = avio_rb32(sc->pb);
+            uint32_t au_size = avio_rb32(sc->pb);
+            int explode = !!(mov->fc->error_recognition & AV_EF_EXPLODE);
             if (au_size > sample->size - 4) {
-                av_log(s, AV_LOG_ERROR,
+                av_log(s, explode ? AV_LOG_ERROR : AV_LOG_WARNING,
                        "APV au_size %u exceeds sample body %d\n",
                        au_size, sample->size - 4);
-                return AVERROR_INVALIDDATA;
+                if (explode)
+                    return AVERROR_INVALIDDATA;
+                au_size = sample->size - 4;
             }
             ret = av_get_packet(sc->pb, pkt, au_size);
         } else

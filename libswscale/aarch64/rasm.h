@@ -248,6 +248,8 @@ typedef enum AArch64InsnId {
     AARCH64_INSN_ADR,
     AARCH64_INSN_AND,
     AARCH64_INSN_B,
+    AARCH64_INSN_BCOND,
+    AARCH64_INSN_BLR,
     AARCH64_INSN_BR,
     AARCH64_INSN_CMP,
     AARCH64_INSN_CSEL,
@@ -350,6 +352,7 @@ static inline uint8_t a64op_gpr_size(RasmOp op) { return op.u8[1]; }
 
 static inline RasmOp a64op_gpw(uint8_t n) { return a64op_make_gpr(n, sizeof(uint32_t)); }
 static inline RasmOp a64op_gpx(uint8_t n) { return a64op_make_gpr(n, sizeof(uint64_t)); }
+static inline RasmOp a64op_lr (void)      { return a64op_make_gpr(30, sizeof(uint64_t)); }
 static inline RasmOp a64op_sp (void)      { return a64op_make_gpr(31, sizeof(uint64_t)); }
 
 /* modifiers */
@@ -537,7 +540,9 @@ static inline RasmOp a64cond_nv(void) { return a64op_cond(AARCH64_COND_NV); }
 #define i_addv(rctx,   op0, op1          ) rasm_add_insn(rctx, AARCH64_INSN_ADDV,   op0, op1, OPN, OPN)
 #define i_adr(rctx,    op0, op1          ) rasm_add_insn(rctx, AARCH64_INSN_ADR,    op0, op1, OPN, OPN)
 #define i_and(rctx,    op0, op1, op2     ) rasm_add_insn(rctx, AARCH64_INSN_AND,    op0, op1, op2, OPN)
-#define i_b(rctx,      op0, op1          ) rasm_add_insn(rctx, AARCH64_INSN_B,      op0, op1, OPN, OPN)
+#define i_b(rctx,      op0               ) rasm_add_insn(rctx, AARCH64_INSN_B,      op0, OPN, OPN, OPN)
+#define i_bcond(rctx,  op0, op1          ) rasm_add_insn(rctx, AARCH64_INSN_BCOND,  op0, op1, OPN, OPN)
+#define i_blr(rctx,    op0               ) rasm_add_insn(rctx, AARCH64_INSN_BLR,    op0, OPN, OPN, OPN)
 #define i_br(rctx,     op0               ) rasm_add_insn(rctx, AARCH64_INSN_BR,     op0, OPN, OPN, OPN)
 #define i_cmp(rctx,    op0, op1          ) rasm_add_insn(rctx, AARCH64_INSN_CMP,    op0, op1, OPN, OPN)
 #define i_csel(rctx,   op0, op1, op2, op3) rasm_add_insn(rctx, AARCH64_INSN_CSEL,   op0, op1, op2, op3)
@@ -592,22 +597,22 @@ static inline RasmOp a64cond_nv(void) { return a64op_cond(AARCH64_COND_NV); }
 #define i_zip2(rctx,   op0, op1, op2     ) rasm_add_insn(rctx, AARCH64_INSN_ZIP2,   op0, op1, op2, OPN)
 
 /* Branch helpers. */
-#define i_beq(rctx, id) i_b(rctx, a64cond_eq(), rasm_op_label(id))
-#define i_bne(rctx, id) i_b(rctx, a64cond_ne(), rasm_op_label(id))
-#define i_bhs(rctx, id) i_b(rctx, a64cond_hs(), rasm_op_label(id))
-#define i_bcs(rctx, id) i_b(rctx, a64cond_cs(), rasm_op_label(id))
-#define i_blo(rctx, id) i_b(rctx, a64cond_lo(), rasm_op_label(id))
-#define i_bcc(rctx, id) i_b(rctx, a64cond_cc(), rasm_op_label(id))
-#define i_bmi(rctx, id) i_b(rctx, a64cond_mi(), rasm_op_label(id))
-#define i_bpl(rctx, id) i_b(rctx, a64cond_pl(), rasm_op_label(id))
-#define i_bvs(rctx, id) i_b(rctx, a64cond_vs(), rasm_op_label(id))
-#define i_bvc(rctx, id) i_b(rctx, a64cond_vc(), rasm_op_label(id))
-#define i_bhi(rctx, id) i_b(rctx, a64cond_hi(), rasm_op_label(id))
-#define i_bls(rctx, id) i_b(rctx, a64cond_ls(), rasm_op_label(id))
-#define i_bge(rctx, id) i_b(rctx, a64cond_ge(), rasm_op_label(id))
-#define i_blt(rctx, id) i_b(rctx, a64cond_lt(), rasm_op_label(id))
-#define i_bgt(rctx, id) i_b(rctx, a64cond_gt(), rasm_op_label(id))
-#define i_ble(rctx, id) i_b(rctx, a64cond_le(), rasm_op_label(id))
+#define i_beq(rctx, id) i_bcond(rctx, a64cond_eq(), rasm_op_label(id))
+#define i_bne(rctx, id) i_bcond(rctx, a64cond_ne(), rasm_op_label(id))
+#define i_bhs(rctx, id) i_bcond(rctx, a64cond_hs(), rasm_op_label(id))
+#define i_bcs(rctx, id) i_bcond(rctx, a64cond_cs(), rasm_op_label(id))
+#define i_blo(rctx, id) i_bcond(rctx, a64cond_lo(), rasm_op_label(id))
+#define i_bcc(rctx, id) i_bcond(rctx, a64cond_cc(), rasm_op_label(id))
+#define i_bmi(rctx, id) i_bcond(rctx, a64cond_mi(), rasm_op_label(id))
+#define i_bpl(rctx, id) i_bcond(rctx, a64cond_pl(), rasm_op_label(id))
+#define i_bvs(rctx, id) i_bcond(rctx, a64cond_vs(), rasm_op_label(id))
+#define i_bvc(rctx, id) i_bcond(rctx, a64cond_vc(), rasm_op_label(id))
+#define i_bhi(rctx, id) i_bcond(rctx, a64cond_hi(), rasm_op_label(id))
+#define i_bls(rctx, id) i_bcond(rctx, a64cond_ls(), rasm_op_label(id))
+#define i_bge(rctx, id) i_bcond(rctx, a64cond_ge(), rasm_op_label(id))
+#define i_blt(rctx, id) i_bcond(rctx, a64cond_lt(), rasm_op_label(id))
+#define i_bgt(rctx, id) i_bcond(rctx, a64cond_gt(), rasm_op_label(id))
+#define i_ble(rctx, id) i_bcond(rctx, a64cond_le(), rasm_op_label(id))
 
 /* Extra helpers. */
 #define i_mov16b(rctx, op0, op1) i_mov(rctx, v_16b(op0), v_16b(op1))

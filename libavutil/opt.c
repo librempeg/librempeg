@@ -2,21 +2,21 @@
  * AVOptions
  * Copyright (c) 2005 Michael Niedermayer <michaelni@gmx.at>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 /**
@@ -1495,13 +1495,9 @@ static void log_type(void *av_log_obj, const AVOption *o,
     if (o->type == AV_OPT_TYPE_CONST && (TYPE_BASE(parent_type) == AV_OPT_TYPE_INT || TYPE_BASE(parent_type) == AV_OPT_TYPE_INT64))
         av_log(av_log_obj, AV_LOG_INFO, "%-12"PRId64" ", o->default_val.i64);
     else if (type < FF_ARRAY_ELEMS(opt_type_desc) && opt_type_desc[type].name) {
-        if (o->type & AV_OPT_TYPE_FLAG_ARRAY && o->default_val.arr) {
-            const char sep = o->default_val.arr->sep;
-            char tmp[256];
-
-            snprintf(tmp, sizeof(tmp), "[%s %c]", opt_type_desc[type].name, sep ? sep : ',');
-            av_log(av_log_obj, AV_LOG_INFO, "%-12s ", tmp);
-        } else
+        if (o->type & AV_OPT_TYPE_FLAG_ARRAY)
+            av_log(av_log_obj, AV_LOG_INFO, "[%-10s]", opt_type_desc[type].name);
+        else
             av_log(av_log_obj, AV_LOG_INFO, "%-12s ", opt_type_desc[type].name);
     }
     else
@@ -1633,7 +1629,7 @@ static void opt_list(void *obj, void *av_log_obj, const char *unit,
             av_log(av_log_obj, AV_LOG_INFO, " %s", opt->help);
 
         if (av_opt_query_ranges(&r, obj, opt->name, AV_OPT_SEARCH_FAKE_OBJ) >= 0) {
-            switch (TYPE_BASE(opt->type)) {
+            switch (opt->type) {
             case AV_OPT_TYPE_INT:
             case AV_OPT_TYPE_UINT:
             case AV_OPT_TYPE_INT64:
@@ -2506,7 +2502,7 @@ int av_opt_query_ranges_default(AVOptionRanges **ranges_arg, void *obj, const ch
     range->value_min = field->min;
     range->value_max = field->max;
 
-    switch (TYPE_BASE(field->type)) {
+    switch (field->type) {
     case AV_OPT_TYPE_BOOL:
     case AV_OPT_TYPE_INT:
     case AV_OPT_TYPE_UINT:

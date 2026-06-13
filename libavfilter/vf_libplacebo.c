@@ -707,6 +707,21 @@ static void input_uninit(LibplaceboInput *input)
     av_fifo_freep2(&input->out_pts);
 }
 
+static int copy_pl_queue(const AVVulkanDeviceContext *hwctx,
+                         const AVVulkanDeviceQueueFamily *qf,
+                         struct pl_vulkan_queue *pl_qf)
+{
+    pl_qf->index = qf->idx;
+    pl_qf->count = qf->num;
+#if PL_API_VER >= 365
+    pl_qf->flags = hwctx->queue_flags;
+#else
+    if (hwctx->queue_flags != 0)
+        return AVERROR(EINVAL); // prevent undefined behavior
+#endif
+    return 0;
+}
+
 static int init_vulkan(AVFilterContext *avctx, const AVVulkanDeviceContext *hwctx)
 {
     int err = 0;
@@ -727,36 +742,20 @@ static int init_vulkan(AVFilterContext *avctx, const AVVulkanDeviceContext *hwct
             .lock_queue     = lock_queue,
             .unlock_queue   = unlock_queue,
             .queue_ctx      = avctx->hw_device_ctx->data,
-            .queue_graphics = {
-                .index = VK_QUEUE_FAMILY_IGNORED,
-                .count = 0,
-            },
-            .queue_compute = {
-                .index = VK_QUEUE_FAMILY_IGNORED,
-                .count = 0,
-            },
-            .queue_transfer = {
-                .index = VK_QUEUE_FAMILY_IGNORED,
-                .count = 0,
-            },
+            .queue_graphics = { VK_QUEUE_FAMILY_IGNORED },
+            .queue_compute  = { VK_QUEUE_FAMILY_IGNORED },
+            .queue_transfer = { VK_QUEUE_FAMILY_IGNORED },
             /* This is the highest version created by hwcontext_vulkan.c */
             .max_api_version = VK_API_VERSION_1_3,
         };
         for (int i = 0; i < hwctx->nb_qf; i++) {
             const AVVulkanDeviceQueueFamily *qf = &hwctx->qf[i];
-
-            if (qf->flags & VK_QUEUE_GRAPHICS_BIT) {
-                import_params.queue_graphics.index = qf->idx;
-                import_params.queue_graphics.count = qf->num;
-            }
-            if (qf->flags & VK_QUEUE_COMPUTE_BIT) {
-                import_params.queue_compute.index = qf->idx;
-                import_params.queue_compute.count = qf->num;
-            }
-            if (qf->flags & VK_QUEUE_TRANSFER_BIT) {
-                import_params.queue_transfer.index = qf->idx;
-                import_params.queue_transfer.count = qf->num;
-            }
+            if (qf->flags & VK_QUEUE_GRAPHICS_BIT)
+                RET(copy_pl_queue(hwctx, qf, &import_params.queue_graphics));
+            if (qf->flags & VK_QUEUE_COMPUTE_BIT)
+                RET(copy_pl_queue(hwctx, qf, &import_params.queue_compute));
+            if (qf->flags & VK_QUEUE_TRANSFER_BIT)
+                RET(copy_pl_queue(hwctx, qf, &import_params.queue_transfer));
         }
 
         /* Import libavfilter vulkan context into libplacebo */

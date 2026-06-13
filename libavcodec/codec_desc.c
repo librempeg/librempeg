@@ -2025,9 +2025,9 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .mime_types= MT("image/jxl"),
     },
     {
-        .id        = AV_CODEC_ID_PRORESRAW,
+        .id        = AV_CODEC_ID_PRORES_RAW,
         .type      = AVMEDIA_TYPE_VIDEO,
-        .name      = "proresraw",
+        .name      = "prores_raw",
         .long_name = NULL_IF_CONFIG_SMALL("ProRes RAW"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
@@ -3976,6 +3976,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "ldac",
         .long_name = NULL_IF_CONFIG_SMALL("LDAC"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_APPLE_APAC,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "apple_apac",
+        .long_name = NULL_IF_CONFIG_SMALL("Apple Positional Audio Codec"),
+        .props     = AV_CODEC_PROP_LOSSY,
     },
 
     /* subtitle codecs */

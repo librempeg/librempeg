@@ -767,7 +767,7 @@ static int check_film_grain(VVCContext *s, VVCFrameContext *fc)
 
     fc->ref->needs_fg = (fc->sei.common.film_grain_characteristics &&
         fc->sei.common.film_grain_characteristics->present ||
-        fc->sei.common.aom_film_grain.enable) &&
+        fc->sei.common.itut_t35.aom_film_grain.enable) &&
         !(s->avctx->export_side_data & AV_CODEC_EXPORT_DATA_FILM_GRAIN) &&
         !s->avctx->hwaccel;
 
@@ -877,14 +877,20 @@ static int slice_start(SliceContext *sc, VVCContext *s, VVCFrameContext *fc,
 
 static enum AVPixelFormat get_format(AVCodecContext *avctx, const VVCSPS *sps)
 {
-#define HWACCEL_MAX 0
+#define HWACCEL_MAX CONFIG_VVC_VAAPI_HWACCEL
 
     enum AVPixelFormat pix_fmts[HWACCEL_MAX + 2], *fmt = pix_fmts;
 
     switch (sps->pix_fmt) {
     case AV_PIX_FMT_YUV420P:
+#if CONFIG_VVC_VAAPI_HWACCEL
+        *fmt++ = AV_PIX_FMT_VAAPI;
+#endif
         break;
     case AV_PIX_FMT_YUV420P10:
+#if CONFIG_VVC_VAAPI_HWACCEL
+        *fmt++ = AV_PIX_FMT_VAAPI;
+#endif
         break;
     }
 
@@ -1313,6 +1319,12 @@ const FFCodec ff_vvc_decoder = {
     .caps_internal  = FF_CODEC_CAP_EXPORTS_CROPPING | FF_CODEC_CAP_INIT_CLEANUP |
                       FF_CODEC_CAP_AUTO_THREADS,
     .p.profiles     = NULL_IF_CONFIG_SMALL(ff_vvc_profiles),
+    .hw_configs     = (const AVCodecHWConfigInternal *const []) {
+#if CONFIG_VVC_VAAPI_HWACCEL
+                    HWACCEL_VAAPI(vvc),
+#endif
+    NULL
+    },
 };
 
 const FFCodec ff_bvc2_decoder = {

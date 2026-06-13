@@ -335,7 +335,7 @@ enum AVCodecID {
     AV_CODEC_ID_ILDA,
     AV_CODEC_ID_RFB,
     AV_CODEC_ID_JPEGXL_ANIM,
-    AV_CODEC_ID_PRORESRAW,
+    AV_CODEC_ID_PRORES_RAW,
     AV_CODEC_ID_BRAW,
     AV_CODEC_ID_VICAR,
     AV_CODEC_ID_APV,
@@ -625,6 +625,7 @@ enum AVCodecID {
     AV_CODEC_ID_RCAVOC,
     AV_CODEC_ID_RELIC,
     AV_CODEC_ID_LDAC,
+    AV_CODEC_ID_APPLE_APAC,
 
     /* subtitle codecs */
     AV_CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.

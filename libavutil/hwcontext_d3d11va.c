@@ -1,19 +1,19 @@
 /*
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "config.h"
@@ -41,6 +41,8 @@
 #include "pixfmt.h"
 #include "thread.h"
 #include "compat/w32dlfcn.h"
+
+#define MAX_ARRAY_SIZE 64 // Driver specification limits ArraySize to 64 for decoder-bound resources
 
 typedef HRESULT(WINAPI *PFN_CREATE_DXGI_FACTORY)(REFIID riid, void **ppFactory);
 
@@ -287,6 +289,11 @@ static int d3d11va_frames_init(AVHWFramesContext *ctx)
                av_get_pix_fmt_name(ctx->sw_format));
         return AVERROR(EINVAL);
     }
+
+    hwctx->BindFlags |= device_hwctx->BindFlags;
+    hwctx->MiscFlags |= device_hwctx->MiscFlags;
+
+    ctx->initial_pool_size = FFMIN(ctx->initial_pool_size, MAX_ARRAY_SIZE);
 
     texDesc = (D3D11_TEXTURE2D_DESC){
         .Width      = ctx->width,
@@ -566,6 +573,47 @@ static void d3d11va_device_uninit(AVHWDeviceContext *hwdev)
     }
 }
 
+static int d3d11va_device_find_adapter_by_vendor_id(AVHWDeviceContext *ctx, uint32_t flags, const char *vendor_id)
+{
+    HRESULT hr;
+    IDXGIAdapter *adapter = NULL;
+    IDXGIFactory2 *factory;
+    int adapter_id = 0;
+    long int id = strtol(vendor_id, NULL, 0);
+
+    hr = mCreateDXGIFactory(&IID_IDXGIFactory2, (void **)&factory);
+    if (FAILED(hr)) {
+        av_log(ctx, AV_LOG_ERROR, "CreateDXGIFactory returned error\n");
+        return -1;
+    }
+
+    while (IDXGIFactory2_EnumAdapters(factory, adapter_id++, &adapter) != DXGI_ERROR_NOT_FOUND) {
+        ID3D11Device* device = NULL;
+        DXGI_ADAPTER_DESC adapter_desc;
+
+        hr = mD3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN, NULL, flags, NULL, 0, D3D11_SDK_VERSION, &device, NULL, NULL);
+        if (FAILED(hr)) {
+            av_log(ctx, AV_LOG_DEBUG, "D3D11CreateDevice returned error, try next adapter\n");
+            IDXGIAdapter_Release(adapter);
+            continue;
+        }
+
+        hr = IDXGIAdapter2_GetDesc(adapter, &adapter_desc);
+        ID3D11Device_Release(device);
+        IDXGIAdapter_Release(adapter);
+        if (FAILED(hr)) {
+            av_log(ctx, AV_LOG_DEBUG, "IDXGIAdapter2_GetDesc returned error, try next adapter\n");
+            continue;
+        } else if (adapter_desc.VendorId == id) {
+            IDXGIFactory2_Release(factory);
+            return adapter_id - 1;
+        }
+    }
+
+    IDXGIFactory2_Release(factory);
+    return -1;
+}
+
 static int d3d11va_device_create(AVHWDeviceContext *ctx, const char *device,
                                  AVDictionary *opts, int flags)
 {
@@ -577,15 +625,12 @@ static int d3d11va_device_create(AVHWDeviceContext *ctx, const char *device,
     UINT creationFlags = D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
     int is_debug       = !!av_dict_get(opts, "debug", NULL, 0);
     int ret;
+    int adapter = -1;
 
-    // (On UWP we can't check this.)
-#if !HAVE_UWP
-    if (!LoadLibrary("d3d11_1sdklayers.dll"))
-        is_debug = 0;
-#endif
-
-    if (is_debug)
+    if (is_debug) {
         creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
+        av_log(ctx, AV_LOG_INFO, "Enabling d3d11 debugging.\n");
+    }
 
     if ((ret = ff_thread_once(&functions_loaded, load_functions)) != 0)
         return AVERROR_UNKNOWN;
@@ -595,10 +640,25 @@ static int d3d11va_device_create(AVHWDeviceContext *ctx, const char *device,
     }
 
     if (device) {
+        adapter = atoi(device);
+    } else {
+        AVDictionaryEntry *e = av_dict_get(opts, "vendor_id", NULL, 0);
+        if (e && e->value) {
+            adapter = d3d11va_device_find_adapter_by_vendor_id(ctx, creationFlags, e->value);
+            if (adapter < 0) {
+                av_log(ctx, AV_LOG_ERROR, "Failed to find d3d11va adapter by "
+                       "vendor id %s\n", e->value);
+                return AVERROR_UNKNOWN;
+            }
+        }
+    }
+
+    if (adapter >= 0) {
         IDXGIFactory2 *pDXGIFactory;
+
+        av_log(ctx, AV_LOG_VERBOSE, "Selecting d3d11va adapter %d\n", adapter);
         hr = mCreateDXGIFactory(&IID_IDXGIFactory2, (void **)&pDXGIFactory);
         if (SUCCEEDED(hr)) {
-            int adapter = atoi(device);
             if (FAILED(IDXGIFactory2_EnumAdapters(pDXGIFactory, adapter, &pAdapter)))
                 pAdapter = NULL;
             IDXGIFactory2_Release(pDXGIFactory);
@@ -652,6 +712,18 @@ static int d3d11va_device_create(AVHWDeviceContext *ctx, const char *device,
         }
     }
 #endif
+
+    if (av_dict_get(opts, "SHADER", NULL, 0))
+        device_hwctx->BindFlags |= D3D11_BIND_SHADER_RESOURCE;
+
+    if (av_dict_get(opts, "UAV", NULL, 0))
+        device_hwctx->BindFlags |= D3D11_BIND_UNORDERED_ACCESS;
+
+    if (av_dict_get(opts, "RTV", NULL, 0))
+        device_hwctx->BindFlags |= D3D11_BIND_RENDER_TARGET;
+
+    if (av_dict_get(opts, "SHARED", NULL, 0))
+        device_hwctx->MiscFlags |= D3D11_RESOURCE_MISC_SHARED;
 
     return 0;
 }

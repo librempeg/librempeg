@@ -54,8 +54,8 @@ typedef struct SwsOpExec {
     /* Extra metadata, may or may not be useful */
     int32_t width, height;      /* Overall output image dimensions */
     int32_t slice_y, slice_h;   /* Start and height of current slice */
-    int32_t block_size_in;      /* Size of a block of pixels in bytes */
-    int32_t block_size_out;
+    int32_t block_size_in[4];   /* Size of a block of pixels in bytes */
+    int32_t block_size_out[4];
 
     /* Subsampling factors for each plane */
     uint8_t in_sub_y[4], out_sub_y[4];
@@ -81,7 +81,7 @@ typedef struct SwsOpExec {
 } SwsOpExec;
 
 static_assert(sizeof(SwsOpExec) == 24 * sizeof(void *) +
-                                   6  * sizeof(int32_t) +
+                                   12 * sizeof(int32_t) +
                                    16 * sizeof(uint8_t) +
                                    2  * sizeof(void *),
               "SwsOpExec layout mismatch");
@@ -111,14 +111,17 @@ typedef struct SwsCompiledOp {
      */
     bool opaque;
 
+    /* Set by ff_sws_ops_compile(), informative */
+    const struct SwsOpBackend *backend;
+
     /* Execution parameters for all functions */
     int slice_align; /* slice height alignment */
     int cpu_flags;   /* active set of CPU flags (informative) */
 
     /* Execution parameters for non-opaque functions only */
-    int block_size;  /* number of pixels processed per iteration */
-    int over_read;   /* implementation over-reads input by this many bytes */
-    int over_write;  /* implementation over-writes output by this many bytes */
+    int block_size;     /* number of pixels processed per iteration */
+    int over_read[4];   /* implementation over-reads input by this many bytes */
+    int over_write[4];  /* implementation over-writes output by this many bytes */
 
     /* Arbitrary private data */
     void *priv;
@@ -129,6 +132,7 @@ void ff_sws_compiled_op_unref(SwsCompiledOp *comp);
 
 typedef struct SwsOpBackend {
     const char *name; /* Descriptive name for this backend */
+    SwsBackend flags; /* Set of SWS_BACKEND_* */
 
     /**
      * Compile an operation list to an implementation chain. May modify `ops`
@@ -136,7 +140,7 @@ typedef struct SwsOpBackend {
      *
      * Returns 0 or a negative error code.
      */
-    int (*compile)(SwsContext *ctx, SwsOpList *ops, SwsCompiledOp *out);
+    int (*compile)(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out);
 
     /**
      * If NONE, backend only supports software frames.

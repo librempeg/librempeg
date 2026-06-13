@@ -1,21 +1,21 @@
 /*
  * Copyright (C) 2001-2003 Michael Niedermayer <michaelni@gmx.at>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "libavutil/opt.h"
@@ -105,6 +105,19 @@ static const AVOption swscale_options[] = {
         { "relative_colorimetric", "relative colorimetric clipping", 0, AV_OPT_TYPE_CONST,  { .i64 = SWS_INTENT_RELATIVE_COLORIMETRIC }, .flags = VE, .unit = "intent" },
         { "saturation",            "saturation mapping",             0, AV_OPT_TYPE_CONST,  { .i64 = SWS_INTENT_SATURATION            }, .flags = VE, .unit = "intent" },
         { "absolute_colorimetric", "absolute colorimetric clipping", 0, AV_OPT_TYPE_CONST,  { .i64 = SWS_INTENT_ABSOLUTE_COLORIMETRIC }, .flags = VE, .unit = "intent" },
+
+    { "sws_backends",    "set allowed swscale backends",  OFFSET(backends),  AV_OPT_TYPE_FLAGS,  { .i64  = 0                    }, .flags = VE, .unit = "sws_backend", .max = UINT_MAX },
+        { "auto",        "automatic selection",           0,                 AV_OPT_TYPE_CONST,  { .i64  = 0                    }, .flags = VE, .unit = "sws_backend" },
+        { "stable",      "All stable backends",           0,                 AV_OPT_TYPE_CONST,  { .i64  = SWS_BACKEND_STABLE   }, .flags = VE, .unit = "sws_backend" },
+        { "unstable",    "All unstable backends",         0,                 AV_OPT_TYPE_CONST,  { .i64  = SWS_BACKEND_UNSTABLE }, .flags = VE, .unit = "sws_backend" },
+        { "all",         "All available backends",        0,                 AV_OPT_TYPE_CONST,  { .i64  = SWS_BACKEND_ALL      }, .flags = VE, .unit = "sws_backend" },
+        { "legacy",      "legacy swscale code",           0,                 AV_OPT_TYPE_CONST,  { .i64  = SWS_BACKEND_LEGACY   }, .flags = VE, .unit = "sws_backend" },
+        { "c",           "template-based reference code", 0,                 AV_OPT_TYPE_CONST,  { .i64  = SWS_BACKEND_C        }, .flags = VE, .unit = "sws_backend" },
+        { "memcpy",      "fast path using libc memcpy",   0,                 AV_OPT_TYPE_CONST,  { .i64  = SWS_BACKEND_MEMCPY   }, .flags = VE, .unit = "sws_backend" },
+        { "x86",         "x86 SIMD kernels",              0,                 AV_OPT_TYPE_CONST,  { .i64  = SWS_BACKEND_X86      }, .flags = VE, .unit = "sws_backend" },
+        { "aarch64",     "AArch64 NEON kernels",          0,                 AV_OPT_TYPE_CONST,  { .i64  = SWS_BACKEND_AARCH64  }, .flags = VE, .unit = "sws_backend" },
+        { "spirv",       "Vulkan SPIR-V backend",         0,                 AV_OPT_TYPE_CONST,  { .i64  = SWS_BACKEND_SPIRV    }, .flags = VE, .unit = "sws_backend" },
+        { "glsl",        "Vulkan GLSL backend",           0,                 AV_OPT_TYPE_CONST,  { .i64  = SWS_BACKEND_GLSL     }, .flags = VE, .unit = "sws_backend" },
 
     { NULL }
 };

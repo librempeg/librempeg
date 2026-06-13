@@ -1,21 +1,21 @@
 /*
  * AV1 video decoder
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "config_components.h"
@@ -545,6 +545,7 @@ static int get_pixel_format(AVCodecContext *avctx)
                      CONFIG_AV1_NVDEC_HWACCEL + \
                      CONFIG_AV1_VAAPI_HWACCEL + \
                      CONFIG_AV1_VDPAU_HWACCEL + \
+                     CONFIG_AV1_VIDEOTOOLBOX_HWACCEL + \
                      CONFIG_AV1_VULKAN_HWACCEL)
     enum AVPixelFormat pix_fmts[HWACCEL_MAX + 2], *fmtp = pix_fmts;
 
@@ -572,6 +573,9 @@ static int get_pixel_format(AVCodecContext *avctx)
 #if CONFIG_AV1_VDPAU_HWACCEL
         *fmtp++ = AV_PIX_FMT_VDPAU;
 #endif
+#if CONFIG_AV1_VIDEOTOOLBOX_HWACCEL
+        *fmtp++ = AV_PIX_FMT_VIDEOTOOLBOX;
+#endif
 #if CONFIG_AV1_VULKAN_HWACCEL
         *fmtp++ = AV_PIX_FMT_VULKAN;
 #endif
@@ -595,6 +599,9 @@ static int get_pixel_format(AVCodecContext *avctx)
 #endif
 #if CONFIG_AV1_VDPAU_HWACCEL
         *fmtp++ = AV_PIX_FMT_VDPAU;
+#endif
+#if CONFIG_AV1_VIDEOTOOLBOX_HWACCEL
+        *fmtp++ = AV_PIX_FMT_VIDEOTOOLBOX;
 #endif
 #if CONFIG_AV1_VULKAN_HWACCEL
         *fmtp++ = AV_PIX_FMT_VULKAN;
@@ -961,113 +968,19 @@ fail:
 static int export_itut_t35(AVCodecContext *avctx, AVFrame *frame,
                            const AV1RawMetadataITUTT35 *itut_t35)
 {
-    GetByteContext gb;
     AV1DecContext *s = avctx->priv_data;
-    int ret, provider_code, country_code;
+    FFITUTT35 itut35 = { .country_code = itut_t35->itu_t_t35_country_code };
+    FFITUTT35Aux aux = { .dovi = &s->dovi };
+    int ret;
 
-    bytestream2_init(&gb, itut_t35->payload, itut_t35->payload_size);
+    ret = ff_itut_t35_parse_buffer(&itut35, itut_t35->payload, itut_t35->payload_size,
+                                   FF_ITUT_T35_FLAG_COUNTRY_CODE);
+    if (ret <= 0)
+        return ret;
 
-    country_code = itut_t35->itu_t_t35_country_code ;
-    switch (country_code) {
-    case ITU_T_T35_COUNTRY_CODE_US:
-        provider_code = bytestream2_get_be16(&gb);
-
-        switch (provider_code) {
-        case ITU_T_T35_PROVIDER_CODE_ATSC: {
-            uint32_t user_identifier = bytestream2_get_be32(&gb);
-            switch (user_identifier) {
-            case MKBETAG('G', 'A', '9', '4'): { // closed captions
-                AVBufferRef *buf = NULL;
-
-                ret = ff_parse_a53_cc(&buf, gb.buffer, bytestream2_get_bytes_left(&gb));
-                if (ret < 0)
-                    return ret;
-                if (!ret)
-                    break;
-
-                ret = ff_frame_new_side_data_from_buf(avctx, frame, AV_FRAME_DATA_A53_CC, &buf);
-                if (ret < 0)
-                    return ret;
-
-#if FF_API_CODEC_PROPS
-FF_DISABLE_DEPRECATION_WARNINGS
-                avctx->properties |= FF_CODEC_PROPERTY_CLOSED_CAPTIONS;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
-                break;
-            }
-            default: // ignore unsupported identifiers
-                break;
-            }
-            break;
-        }
-        case ITU_T_T35_PROVIDER_CODE_SAMSUNG: {
-            AVDynamicHDRPlus *hdrplus;
-            int provider_oriented_code = bytestream2_get_be16(&gb);
-            int application_identifier = bytestream2_get_byte(&gb);
-
-            if (provider_oriented_code != 1 || application_identifier != 4)
-                return 0; // ignore
-
-            hdrplus = av_dynamic_hdr_plus_create_side_data(frame);
-            if (!hdrplus)
-                return AVERROR(ENOMEM);
-
-            ret = av_dynamic_hdr_plus_from_t35(hdrplus, gb.buffer,
-                                                bytestream2_get_bytes_left(&gb));
-            if (ret < 0)
-                return ret;
-            break;
-        }
-        case ITU_T_T35_PROVIDER_CODE_DOLBY: {
-            int provider_oriented_code = bytestream2_get_be32(&gb);
-            if (provider_oriented_code != 0x800)
-                return 0; // ignore
-
-            ret = ff_dovi_rpu_parse(&s->dovi, gb.buffer, bytestream2_get_bytes_left(&gb),
-                                    avctx->err_recognition);
-            if (ret < 0) {
-                av_log(avctx, AV_LOG_WARNING, "Error parsing DOVI OBU.\n");
-                return 0; // ignore
-            }
-
-            ret = ff_dovi_attach_side_data(&s->dovi, frame);
-            if (ret < 0)
-                return ret;
-            break;
-        }
-        default:
-            break;
-        }
-        break;
-    case ITU_T_T35_COUNTRY_CODE_UK:
-        bytestream2_skip(&gb, 1); // t35_uk_country_code_second_octet
-
-        provider_code = bytestream2_get_be16(&gb);
-        switch (provider_code) {
-        case ITU_T_T35_PROVIDER_CODE_VNOVA: {
-            AVFrameSideData *sd;
-            if (bytestream2_get_bytes_left(&gb) < 2)
-                return AVERROR_INVALIDDATA;
-
-            ret = ff_frame_new_side_data(avctx, frame, AV_FRAME_DATA_LCEVC,
-                                         bytestream2_get_bytes_left(&gb), &sd);
-            if (ret < 0)
-                return ret;
-            if (!sd)
-                break;
-
-            bytestream2_get_bufferu(&gb, sd->data, sd->size);
-            break;
-        }
-        default:
-            break;
-        }
-        break;
-    default:
-        // ignore unsupported provider codes
-        break;
-    }
+    ret = ff_itut_t35_parse_payload_to_frame(&itut35, &aux, avctx, frame);
+    if (ret < 0)
+        return ret;
 
     return 0;
 }
@@ -1496,6 +1409,10 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
 
         if (raw_tile_group && (s->tile_num == raw_tile_group->tg_end + 1)) {
             int show_frame = s->raw_frame_header->show_frame;
+            // Set nb_unit to point at the next OBU, to indicate which
+            // OBUs have been processed for this current frame. (If this
+            // frame gets output, we set nb_unit to this value later too.)
+            s->nb_unit = i + 1;
             if (avctx->hwaccel && s->cur_frame.f) {
                 ret = FF_HW_SIMPLE_CALL(avctx, end_frame);
                 if (ret < 0) {
@@ -1506,6 +1423,8 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
 
             update_reference_list(avctx);
 
+            // Set start_unit to indicate the first OBU of the next frame.
+            s->start_unit       = s->nb_unit;
             raw_tile_group      = NULL;
             s->raw_frame_header = NULL;
 
@@ -1535,7 +1454,7 @@ end:
             s->raw_frame_header = NULL;
         av_packet_unref(s->pkt);
         ff_cbs_fragment_reset(&s->current_obu);
-        s->nb_unit = 0;
+        s->nb_unit = s->start_unit = 0;
     }
     if (!ret && !frame->buf[0])
         ret = AVERROR(EAGAIN);
@@ -1562,7 +1481,7 @@ static int av1_receive_frame(AVCodecContext *avctx, AVFrame *frame)
                 return ret;
             }
 
-            s->nb_unit = 0;
+            s->nb_unit = s->start_unit = 0;
             av_log(avctx, AV_LOG_DEBUG, "Total OBUs on this packet: %d.\n",
                    s->current_obu.nb_units);
         }
@@ -1583,7 +1502,7 @@ static av_cold void av1_decode_flush(AVCodecContext *avctx)
 
     av1_frame_unref(&s->cur_frame);
     s->operating_point_idc = 0;
-    s->nb_unit = 0;
+    s->nb_unit = s->start_unit = 0;
     s->raw_frame_header = NULL;
     s->raw_seq = NULL;
     s->cll = NULL;
@@ -1608,6 +1527,7 @@ static const AVOption av1_options[] = {
 
 static const AVClass av1_class = {
     .class_name = "AV1 decoder",
+    .item_name  = av_default_item_name,
     .option     = av1_options,
     .version    = LIBAVUTIL_VERSION_INT,
 };
@@ -1649,6 +1569,9 @@ const FFCodec ff_av1_decoder = {
 #endif
 #if CONFIG_AV1_VDPAU_HWACCEL
         HWACCEL_VDPAU(av1),
+#endif
+#if CONFIG_AV1_VIDEOTOOLBOX_HWACCEL
+        HWACCEL_VIDEOTOOLBOX(av1),
 #endif
 #if CONFIG_AV1_VULKAN_HWACCEL
         HWACCEL_VULKAN(av1),

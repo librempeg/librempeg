@@ -1,21 +1,21 @@
 /*
  * copyright (c) 2010 Michael Niedermayer <michaelni@gmx.at>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 /**
@@ -34,6 +34,7 @@
 #include "attributes.h"
 #include "log.h"
 #include "macros.h"
+#include "version.h"
 
 /**
  * assert() equivalent, that is always enabled.
@@ -63,18 +64,25 @@
  */
 #if defined(ASSERT_LEVEL) && ASSERT_LEVEL > 1
 #define av_assert2(cond) av_assert0(cond)
-#define av_assert2_fpu() av_assert0_fpu()
 #else
 #define av_assert2(cond) ((void)0)
-#define av_assert2_fpu() ((void)0)
 #endif
 
+#if FF_API_ASSERT_FPU
+#if defined(ASSERT_LEVEL) && ASSERT_LEVEL > 1
+#define av_assert2_fpu() av_assert0_fpu()
+#else
+#define av_assert2_fpu() ((void)0)
+#endif
 /**
  * Assert that floating point operations can be executed.
  *
  * This will av_assert0() that the cpu is not in MMX state on X86
+ * @deprecated without replacement
  */
+attribute_deprecated
 void av_assert0_fpu(void);
+#endif
 
 /**
  * Asserts that are used as compiler optimization hints depending

@@ -51,6 +51,7 @@ HEADERS = adler32.h                                                     \
           hwcontext_qsv.h                                               \
           hwcontext_mediacodec.h                                        \
           hwcontext_opencl.h                                            \
+          hwcontext_oh.h                                                \
           hwcontext_vaapi.h                                             \
           hwcontext_videotoolbox.h                                      \
           hwcontext_vdpau.h                                             \
@@ -75,6 +76,7 @@ HEADERS = adler32.h                                                     \
           pixelutils.h                                                  \
           pixfmt.h                                                      \
           random_seed.h                                                 \
+          raw_color_params.h                                            \
           rc4.h                                                         \
           rational.h                                                    \
           refstruct.h                                                   \
@@ -169,6 +171,7 @@ OBJS = adler32.o                                                        \
        pixdesc.o                                                        \
        pixelutils.o                                                     \
        random_seed.o                                                    \
+       raw_color_params.o                                               \
        rational.o                                                       \
        refstruct.o                                                      \
        reverse.o                                                        \
@@ -213,6 +216,7 @@ OBJS-$(CONFIG_AMF)                      += hwcontext_amf.o
 OBJS-$(CONFIG_LIBDRM)                   += hwcontext_drm.o
 OBJS-$(CONFIG_MACOS_KPERF)              += macos_kperf.o
 OBJS-$(CONFIG_MEDIACODEC)               += hwcontext_mediacodec.o
+OBJS-$(CONFIG_OHCODEC)                  += hwcontext_oh.o
 OBJS-$(CONFIG_OPENCL)                   += hwcontext_opencl.o
 OBJS-$(CONFIG_QSV)                      += hwcontext_qsv.o
 OBJS-$(CONFIG_VAAPI)                    += hwcontext_vaapi.o
@@ -221,7 +225,6 @@ OBJS-$(CONFIG_VDPAU)                    += hwcontext_vdpau.o
 OBJS-$(CONFIG_VULKAN)                   += hwcontext_vulkan.o vulkan.o
 
 OBJS-$(!CONFIG_VULKAN)                  += hwcontext_stub.o
-
 OBJS-$(HAVE_THREADS)                    += thread.o
 
 OBJS += $(COMPAT_OBJS:%=../compat/%)
@@ -261,6 +264,7 @@ SKIPHEADERS-$(CONFIG_SHADER_COMPRESSION) += zlib_utils.h
 TESTPROGS = adler32                                                     \
             aes                                                         \
             aes_ctr                                                     \
+            ambient_viewing_environment                                 \
             audio_fifo                                                  \
             avstring                                                    \
             base64                                                      \
@@ -273,6 +277,7 @@ TESTPROGS = adler32                                                     \
             color_utils                                                 \
             cpu                                                         \
             crc                                                         \
+            csp                                                         \
             des                                                         \
             detection_bbox                                              \
             dict                                                        \

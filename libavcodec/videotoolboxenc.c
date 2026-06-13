@@ -1,46 +1,46 @@
 /*
  * copyright (c) 2015 Rick Kern <kernrj@gmail.com>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <VideoToolbox/VideoToolbox.h>
-#include <CoreVideo/CoreVideo.h>
-#include <CoreMedia/CoreMedia.h>
-#include <TargetConditionals.h>
 #include <Availability.h>
-#include "avcodec.h"
+#include <CoreMedia/CoreMedia.h>
+#include <CoreVideo/CoreVideo.h>
+#include <dlfcn.h>
+#include <pthread.h>
+#include <TargetConditionals.h>
+#include <VideoToolbox/VideoToolbox.h>
+
+#include "libavutil/attributes.h"
+#include "libavutil/avassert.h"
+#include "libavutil/imgutils.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
-#include "libavutil/avassert.h"
-#include "libavutil/avstring.h"
-#include "libavutil/imgutils.h"
-#include "libavcodec/avcodec.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/hwcontext_videotoolbox.h"
-#include "codec_internal.h"
-#include "internal.h"
-#include <pthread.h>
+
 #include "atsc_a53.h"
+#include "codec_internal.h"
 #include "encode.h"
 #include "h264.h"
 #include "h264_sei.h"
 #include "hwconfig.h"
-#include <dlfcn.h>
+#include "internal.h"
 
 #if !HAVE_KCMVIDEOCODECTYPE_HEVC
 enum { kCMVideoCodecType_HEVC = 'hvc1' };
@@ -549,6 +549,7 @@ static CMVideoCodecType get_cm_codec_type(AVCodecContext *avctx,
 
         default:
             av_log(avctx, AV_LOG_ERROR, "Unknown profile ID: %d, using auto\n", profile);
+            av_fallthrough;
         case AV_PROFILE_UNKNOWN:
             if (desc &&
                 ((desc->flags & AV_PIX_FMT_FLAG_ALPHA) ||
@@ -2833,8 +2834,16 @@ static const AVOption h264_options[] = {
     { NULL },
 };
 
+static const FFCodecDefault vt_defaults[] = {
+        {"b",    "0"},
+        {"qmin", "-1"},
+        {"qmax", "-1"},
+        {NULL},
+};
+
 static const AVClass h264_videotoolbox_class = {
     .class_name = "h264_videotoolbox",
+    .item_name  = av_default_item_name,
     .option     = h264_options,
     .version    = LIBAVUTIL_VERSION_INT,
 };
@@ -2844,14 +2853,17 @@ const FFCodec ff_h264_videotoolbox_encoder = {
     CODEC_LONG_NAME("VideoToolbox H.264 Encoder"),
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_H264,
-    .p.capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY,
+    .p.capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
+                        AV_CODEC_CAP_HYBRID,
     .priv_data_size   = sizeof(VTEncContext),
     CODEC_PIXFMTS_ARRAY(avc_pix_fmts),
+    .defaults         = vt_defaults,
     .init             = vtenc_init,
     FF_CODEC_ENCODE_CB(vtenc_frame),
     .close            = vtenc_close,
     .p.priv_class     = &h264_videotoolbox_class,
     .caps_internal    = FF_CODEC_CAP_INIT_CLEANUP,
+    .p.wrapper_name   = "videotoolbox",
     .hw_configs       = vt_encode_hw_configs,
 };
 
@@ -2872,6 +2884,7 @@ static const AVOption hevc_options[] = {
 
 static const AVClass hevc_videotoolbox_class = {
     .class_name = "hevc_videotoolbox",
+    .item_name  = av_default_item_name,
     .option     = hevc_options,
     .version    = LIBAVUTIL_VERSION_INT,
 };
@@ -2882,9 +2895,10 @@ const FFCodec ff_hevc_videotoolbox_encoder = {
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_HEVC,
     .p.capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
-                        AV_CODEC_CAP_HARDWARE,
+                        AV_CODEC_CAP_HYBRID,
     .priv_data_size   = sizeof(VTEncContext),
     CODEC_PIXFMTS_ARRAY(hevc_pix_fmts),
+    .defaults         = vt_defaults,
     .color_ranges     = AVCOL_RANGE_MPEG | AVCOL_RANGE_JPEG,
     .init             = vtenc_init,
     FF_CODEC_ENCODE_CB(vtenc_frame),
@@ -2911,6 +2925,7 @@ static const AVOption prores_options[] = {
 
 static const AVClass prores_videotoolbox_class = {
     .class_name = "prores_videotoolbox",
+    .item_name  = av_default_item_name,
     .option     = prores_options,
     .version    = LIBAVUTIL_VERSION_INT,
 };
@@ -2921,9 +2936,10 @@ const FFCodec ff_prores_videotoolbox_encoder = {
     .p.type           = AVMEDIA_TYPE_VIDEO,
     .p.id             = AV_CODEC_ID_PRORES,
     .p.capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
-                        AV_CODEC_CAP_HARDWARE,
+                        AV_CODEC_CAP_HYBRID,
     .priv_data_size   = sizeof(VTEncContext),
     CODEC_PIXFMTS_ARRAY(prores_pix_fmts),
+    .defaults         = vt_defaults,
     .color_ranges     = AVCOL_RANGE_MPEG | AVCOL_RANGE_JPEG,
     .init             = vtenc_init,
     FF_CODEC_ENCODE_CB(vtenc_frame),

@@ -28,6 +28,7 @@
 #include "ops.h"
 #include "ops_internal.h"
 #include "ops_dispatch.h"
+#include "swscale_internal.h"
 
 typedef struct SwsOpPass {
     SwsCompiledOp comp;
@@ -76,11 +77,16 @@ static int compile_backend(SwsContext *ctx, const SwsOpBackend *backend,
         goto fail;
     }
 
+    compiled.backend = backend;
     *out = compiled;
 
     av_log(ctx, AV_LOG_VERBOSE, "Compiled using backend '%s': "
-           "block size = %d, over-read = %d, over-write = %d, cpu flags = 0x%x\n",
-           backend->name, out->block_size, out->over_read, out->over_write,
+           "block size = %d, over-read = {%d %d %d %d}, over-write = {%d %d %d %d}, "
+           "cpu flags = 0x%x\n", backend->name, out->block_size,
+           out->over_read[0], out->over_read[1],
+           out->over_read[2], out->over_read[3],
+           out->over_write[0], out->over_write[1],
+           out->over_write[2], out->over_write[3],
            out->cpu_flags);
 
     ff_sws_op_list_print(ctx, AV_LOG_VERBOSE, AV_LOG_TRACE, ops);
@@ -96,10 +102,12 @@ int ff_sws_ops_compile(SwsContext *ctx, const SwsOpBackend *backend,
     if (backend)
         return compile_backend(ctx, backend, ops, out);
 
+    const SwsBackend enabled = ff_sws_enabled_backends(ctx);
     for (int n = 0; ff_sws_op_backends[n]; n++) {
         const SwsOpBackend *backend = ff_sws_op_backends[n];
         if (ops->src.hw_format != backend->hw_format ||
-            ops->dst.hw_format != backend->hw_format)
+            ops->dst.hw_format != backend->hw_format ||
+            !(enabled & backend->flags))
             continue;
         if (compile_backend(ctx, backend, ops, out) < 0)
             continue;
@@ -143,6 +151,18 @@ static inline void get_row_data(const SwsOpPass *p, const int y_dst,
         out[i] = base->out[i] + (y_dst >> base->out_sub_y[i]) * base->out_stride[i];
 }
 
+static inline int get_lines_in(const SwsOpPass *p, const int y, const int h,
+                               const int plane)
+{
+    const SwsOpExec *base = &p->exec_base;
+    if (!p->offsets_y)
+        return h >> base->in_sub_y[plane];
+
+    const int y0 = p->offsets_y[y] >> base->in_sub_y[plane];
+    const int y1 = p->offsets_y[y + h - 1] >> base->in_sub_y[plane];
+    return y1 - y0 + 1;
+}
+
 static inline size_t pixel_bytes(size_t pixels, int pixel_bits,
                                  enum AVRounding rounding)
 {
@@ -181,7 +201,6 @@ static int op_pass_setup(const SwsFrame *out, const SwsFrame *in,
                          const SwsPass *pass)
 {
     const AVPixFmtDescriptor *indesc  = av_pix_fmt_desc_get(in->format);
-    const AVPixFmtDescriptor *outdesc = av_pix_fmt_desc_get(out->format);
     const bool float_in = indesc->flags & AV_PIX_FMT_FLAG_FLOAT;
 
     SwsOpPass *p = pass->priv;
@@ -201,19 +220,15 @@ static int op_pass_setup(const SwsFrame *out, const SwsFrame *in,
 
     size_t safe_blocks = num_blocks;
     for (int i = 0; i < p->planes_in; i++) {
-        int idx    = p->idx_in[i];
-        int chroma = idx == 1 || idx == 2;
-        int sub_x  = chroma ? indesc->log2_chroma_w : 0;
-        int sub_y  = chroma ? indesc->log2_chroma_h : 0;
-
+        const int idx = p->idx_in[i];
         size_t input_bytes = in->linesize[idx];
         if (p->filter_size_h && float_in) {
             /* Floating point inputs may contain NaN / Infinity in the padding */
-            const int plane_w = AV_CEIL_RSHIFT(in->width, sub_x);
+            const int plane_w = AV_CEIL_RSHIFT(in->width, exec->in_sub_x[i]);
             input_bytes = pixel_bytes(plane_w, p->pixel_bits_in, AV_ROUND_UP);
         }
 
-        size_t safe_bytes = safe_bytes_pad(input_bytes, comp->over_read);
+        size_t safe_bytes = safe_bytes_pad(input_bytes, comp->over_read[i]);
         size_t safe_blocks_in;
         if (exec->in_offset_x) {
             size_t filter_size = pixel_bytes(p->filter_size_h, p->pixel_bits_in,
@@ -222,7 +237,7 @@ static int op_pass_setup(const SwsFrame *out, const SwsFrame *in,
                                                 safe_bytes - filter_size,
                                                 exec->in_offset_x);
         } else {
-            safe_blocks_in = safe_bytes / exec->block_size_in;
+            safe_blocks_in = safe_bytes / exec->block_size_in[i];
         }
 
         if (safe_blocks_in < num_blocks) {
@@ -231,32 +246,25 @@ static int op_pass_setup(const SwsFrame *out, const SwsFrame *in,
             safe_blocks = FFMIN(safe_blocks, safe_blocks_in);
         }
 
-        size_t loop_size   = num_blocks * exec->block_size_in;
+        size_t loop_size   = num_blocks * exec->block_size_in[i];
         exec->in[i]        = in->data[idx];
         exec->in_stride[i] = in->linesize[idx];
         exec->in_bump[i]   = in->linesize[idx] - loop_size;
-        exec->in_sub_y[i]  = sub_y;
-        exec->in_sub_x[i]  = sub_x;
     }
 
     for (int i = 0; i < p->planes_out; i++) {
-        int idx    = p->idx_out[i];
-        int chroma = idx == 1 || idx == 2;
-        int sub_x  = chroma ? outdesc->log2_chroma_w : 0;
-        int sub_y  = chroma ? outdesc->log2_chroma_h : 0;
-        size_t safe_bytes = safe_bytes_pad(out->linesize[idx], comp->over_write);
-        size_t safe_blocks_out = safe_bytes / exec->block_size_out;
+        const int idx = p->idx_out[i];
+        size_t safe_bytes = safe_bytes_pad(out->linesize[idx], comp->over_write[i]);
+        size_t safe_blocks_out = safe_bytes / exec->block_size_out[i];
         if (safe_blocks_out < num_blocks) {
             p->memcpy_out = true;
             safe_blocks   = FFMIN(safe_blocks, safe_blocks_out);
         }
 
-        size_t loop_size    = num_blocks * exec->block_size_out;
+        size_t loop_size    = num_blocks * exec->block_size_out[i];
         exec->out[i]        = out->data[idx];
         exec->out_stride[i] = out->linesize[idx];
         exec->out_bump[i]   = out->linesize[idx] - loop_size;
-        exec->out_sub_y[i]  = sub_y;
-        exec->out_sub_x[i]  = sub_x;
     }
 
     const bool memcpy_in = p->memcpy_first || p->memcpy_last;
@@ -297,16 +305,16 @@ static int op_pass_setup(const SwsFrame *out, const SwsFrame *in,
         } else {
             needed_size = pixel_bytes(alloc_width, p->pixel_bits_in, AV_ROUND_UP);
         }
-        size_t loop_size   = p->tail_blocks * exec->block_size_in;
-        tail->in_stride[i] = FFALIGN(needed_size + comp->over_read, align);
+        size_t loop_size   = p->tail_blocks * exec->block_size_in[i];
+        tail->in_stride[i] = FFALIGN(needed_size + comp->over_read[i], align);
         tail->in_bump[i]   = tail->in_stride[i] - loop_size;
         alloc_size += tail->in_stride[i] * in->height;
     }
 
     for (int i = 0; p->memcpy_out && i < p->planes_out; i++) {
         size_t needed_size  = pixel_bytes(alloc_width, p->pixel_bits_out, AV_ROUND_UP);
-        size_t loop_size    = p->tail_blocks * exec->block_size_out;
-        tail->out_stride[i] = FFALIGN(needed_size + comp->over_write, align);
+        size_t loop_size    = p->tail_blocks * exec->block_size_out[i];
+        tail->out_stride[i] = FFALIGN(needed_size + comp->over_write[i], align);
         tail->out_bump[i]   = tail->out_stride[i] - loop_size;
         alloc_size += tail->out_stride[i] * out->height;
     }
@@ -399,8 +407,8 @@ static void op_pass_run(const SwsFrame *out, const SwsFrame *in, const int y,
             /* We process fewer blocks, so the in_bump needs to be increased
              * to reflect that the plane pointers are left on the last block,
              * not the end of the processed line, after each loop iteration */
-            exec.in_bump[i]  += exec.block_size_in  * tail_blocks;
-            exec.out_bump[i] += exec.block_size_out * tail_blocks;
+            exec.in_bump[i]  += exec.block_size_in[i]  * tail_blocks;
+            exec.out_bump[i] += exec.block_size_out[i] * tail_blocks;
         }
 
         comp->func(&exec, comp->priv, 0, y, num_blocks - tail_blocks, y + h);
@@ -423,11 +431,12 @@ static void op_pass_run(const SwsFrame *out, const SwsFrame *in, const int y,
 
     for (int i = 0; i < p->planes_in; i++) {
         if (memcpy_in) {
+            const int lines = get_lines_in(p, y, h, i);
             copy_lines((uint8_t *) tail.in[i], tail.in_stride[i],
-                       exec.in[i], exec.in_stride[i], h, p->tail_size_in);
+                       exec.in[i], exec.in_stride[i], lines, p->tail_size_in);
         } else {
             /* Reuse input pointers directly */
-            const size_t loop_size = tail_blocks * exec.block_size_in;
+            const size_t loop_size = tail_blocks * exec.block_size_in[i];
             tail.in[i]        = exec.in[i];
             tail.in_stride[i] = exec.in_stride[i];
             tail.in_bump[i]   = exec.in_stride[i] - loop_size;
@@ -436,7 +445,7 @@ static void op_pass_run(const SwsFrame *out, const SwsFrame *in, const int y,
 
     for (int i = 0; !memcpy_out && i < p->planes_out; i++) {
         /* Reuse output pointers directly */
-        const size_t loop_size = tail_blocks * exec.block_size_out;
+        const size_t loop_size = tail_blocks * exec.block_size_out[i];
         tail.out[i]        = exec.out[i];
         tail.out_stride[i] = exec.out_stride[i];
         tail.out_bump[i]   = exec.out_stride[i] - loop_size;
@@ -447,36 +456,42 @@ static void op_pass_run(const SwsFrame *out, const SwsFrame *in, const int y,
     comp->func(&tail, comp->priv, num_blocks - tail_blocks, y, num_blocks, y + h);
 
     for (int i = 0; memcpy_out && i < p->planes_out; i++) {
+        const int lines = h >> tail.out_sub_y[i];
         copy_lines(exec.out[i], exec.out_stride[i],
-                   tail.out[i], tail.out_stride[i], h, p->tail_size_out);
+                   tail.out[i], tail.out_stride[i], lines, p->tail_size_out);
     }
-}
-
-static int rw_planes(const SwsOp *op)
-{
-    return op->rw.packed ? 1 : op->rw.elems;
 }
 
 static int rw_pixel_bits(const SwsOp *op)
 {
-    const int elems = op->rw.packed ? op->rw.elems : 1;
+    int elems = 0;
+    switch (op->rw.mode) {
+    case SWS_RW_PLANAR: elems = 1; break;
+    case SWS_RW_PACKED: elems = op->rw.elems; break;
+    }
+
     const int size  = ff_sws_pixel_type_size(op->type);
     const int bits  = 8 >> op->rw.frac;
     av_assert1(bits >= 1);
     return elems * size * bits;
 }
 
-static void align_pass(SwsPass *pass, int block_size, int over_rw, int pixel_bits)
+static void align_pass(SwsPass *pass, int block_size, const int *over_rw,
+                       int pixel_bits)
 {
     if (!pass)
         return;
 
     /* Add at least as many pixels as needed to cover the padding requirement */
-    const int pad = (over_rw * 8 + pixel_bits - 1) / pixel_bits;
+    int pad_max = 0;
+    for (int i = 0; i < 4; i++) {
+        const int pad = (over_rw[i] * 8 + pixel_bits - 1) / pixel_bits;
+        pad_max = FFMAX(pad_max, pad);
+    }
 
     SwsPassBuffer *buf = pass->output;
     buf->width_align = FFMAX(buf->width_align, block_size);
-    buf->width_pad = FFMAX(buf->width_pad, pad);
+    buf->width_pad = FFMAX(buf->width_pad, pad_max);
 }
 
 static int compile(SwsGraph *graph, const SwsOpBackend *backend,
@@ -494,19 +509,25 @@ static int compile(SwsGraph *graph, const SwsOpBackend *backend,
         goto fail; /* nothing to do, just return */
 
     const SwsCompiledOp *comp = &p->comp;
+    const SwsFormat *src = &ops->src;
     const SwsFormat *dst = &ops->dst;
     if (p->comp.opaque) {
         SwsCompiledOp c = *comp;
         av_free(p);
-        return ff_sws_graph_add_pass(graph, dst->format, dst->width, dst->height,
-                                     input, c.slice_align, c.func_opaque,
-                                     NULL, c.priv, c.free, output);
+        ret = ff_sws_graph_add_pass(graph, dst->format, dst->width, dst->height,
+                                    input, c.slice_align, c.func_opaque,
+                                    NULL, c.priv, c.free, output);
+        if (ret >= 0)
+            (*output)->backend = comp->backend->flags;
+        return ret;
     }
 
+    const AVPixFmtDescriptor *indesc  = av_pix_fmt_desc_get(src->format);
+    const AVPixFmtDescriptor *outdesc = av_pix_fmt_desc_get(dst->format);
     const SwsOp *read  = ff_sws_op_list_input(ops);
     const SwsOp *write = ff_sws_op_list_output(ops);
-    p->planes_in  = rw_planes(read);
-    p->planes_out = rw_planes(write);
+    p->planes_in  = ff_sws_rw_op_planes(read);
+    p->planes_out = ff_sws_rw_op_planes(write);
     p->pixel_bits_in  = rw_pixel_bits(read);
     p->pixel_bits_out = rw_pixel_bits(write);
     p->exec_base = (SwsOpExec) {
@@ -517,21 +538,38 @@ static int compile(SwsGraph *graph, const SwsOpBackend *backend,
     const int64_t block_bits_in  = (int64_t) comp->block_size * p->pixel_bits_in;
     const int64_t block_bits_out = (int64_t) comp->block_size * p->pixel_bits_out;
     if (block_bits_in & 0x7 || block_bits_out & 0x7) {
-        av_log(ctx, AV_LOG_ERROR, "Block size must be a multiple of the pixel size.\n");
+        av_log(ctx, AV_LOG_ERROR, "Block size must be byte-aligned.\n");
         ret = AVERROR(EINVAL);
         goto fail;
     }
 
-    p->exec_base.block_size_in  = block_bits_in  >> 3;
-    p->exec_base.block_size_out = block_bits_out >> 3;
+    for (int i = 0; i < 4; i++)
+        p->idx_in[i] = p->idx_out[i] = -1;
 
-    for (int i = 0; i < 4; i++) {
-        p->idx_in[i]  = i < p->planes_in  ? ops->plane_src[i] : -1;
-        p->idx_out[i] = i < p->planes_out ? ops->plane_dst[i] : -1;
+    for (int i = 0; i < p->planes_in; i++) {
+        const int idx = ops->plane_src[i];
+        const int chroma = idx == 1 || idx == 2;
+        const int sub_x = chroma ? indesc->log2_chroma_w : 0;
+        const int sub_y = chroma ? indesc->log2_chroma_h : 0;
+        p->exec_base.in_sub_x[i] = sub_x;
+        p->exec_base.in_sub_y[i] = sub_y;
+        p->exec_base.block_size_in[i] = block_bits_in >> 3;
+        p->idx_in[i] = idx;
     }
 
-    const SwsFilterWeights *filter = read->rw.kernel;
-    if (read->rw.filter == SWS_OP_FILTER_V) {
+    for (int i = 0; i < p->planes_out; i++) {
+        const int idx = ops->plane_dst[i];
+        const int chroma = idx == 1 || idx == 2;
+        const int sub_x = chroma ? outdesc->log2_chroma_w : 0;
+        const int sub_y = chroma ? outdesc->log2_chroma_h : 0;
+        p->exec_base.out_sub_x[i] = sub_x;
+        p->exec_base.out_sub_y[i] = sub_y;
+        p->exec_base.block_size_out[i] = block_bits_out >> 3;
+        p->idx_out[i] = idx;
+    }
+
+    const SwsFilterWeights *filter = read->rw.filter.kernel;
+    if (read->rw.filter.op == SWS_OP_FILTER_V) {
         p->offsets_y = av_refstruct_ref(filter->offsets);
 
         /* Compute relative pointer bumps for each output line */
@@ -549,7 +587,7 @@ static int compile(SwsGraph *graph, const SwsOpBackend *backend,
         }
         bump[filter->dst_size - 1] = 0;
         p->exec_base.in_bump_y = bump;
-    } else if (read->rw.filter == SWS_OP_FILTER_H) {
+    } else if (read->rw.filter.op == SWS_OP_FILTER_H) {
         /* Compute pixel offset map for each output line */
         const int pixels = FFALIGN(filter->dst_size, p->comp.block_size);
         int32_t *offset = av_malloc_array(pixels, sizeof(*offset));
@@ -572,7 +610,8 @@ static int compile(SwsGraph *graph, const SwsOpBackend *backend,
         }
         for (int x = filter->dst_size; x < pixels; x++)
             offset[x] = offset[filter->dst_size - 1];
-        p->exec_base.block_size_in = 0; /* ptr does not advance */
+        for (int i = 0; i < 4; i++)
+            p->exec_base.block_size_in[i] = 0; /* ptr does not advance */
         p->filter_size_h = filter->filter_size;
     }
 
@@ -582,6 +621,7 @@ static int compile(SwsGraph *graph, const SwsOpBackend *backend,
     if (ret < 0)
         return ret;
 
+    (*output)->backend = comp->backend->flags;
     align_pass(input,   comp->block_size, comp->over_read,  p->pixel_bits_in);
     align_pass(*output, comp->block_size, comp->over_write, p->pixel_bits_out);
     return 0;

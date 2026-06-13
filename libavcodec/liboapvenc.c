@@ -96,95 +96,65 @@ static int apv_imgb_getref(oapv_imgb_t * imgb)
  */
 static inline int get_color_format(enum AVPixelFormat pix_fmt)
 {
-    int cf = OAPV_CF_UNKNOWN;
-
     switch (pix_fmt) {
-    case AV_PIX_FMT_GRAY10:
-        cf = OAPV_CF_YCBCR400;
-        break;
-    case AV_PIX_FMT_YUV422P10:
-        cf = OAPV_CF_YCBCR422;
-        break;
-    case AV_PIX_FMT_YUV422P12:
-        cf = OAPV_CF_YCBCR422;
-        break;
-    case AV_PIX_FMT_YUV444P10:
-        cf = OAPV_CF_YCBCR444;
-        break;
-    case AV_PIX_FMT_YUV444P12:
-        cf = OAPV_CF_YCBCR444;
-        break;
-    case AV_PIX_FMT_YUVA444P10:
-        cf = OAPV_CF_YCBCR4444;
-        break;
-    case AV_PIX_FMT_YUVA444P12:
-        cf = OAPV_CF_YCBCR4444;
-        break;
     default:
-        av_assert0(cf != OAPV_CF_UNKNOWN);
+        av_unreachable("Already checked via CODEC_PIXFMTS");
+    case AV_PIX_FMT_GRAY10:
+        return OAPV_CF_YCBCR400;
+    case AV_PIX_FMT_YUV422P10:
+        return OAPV_CF_YCBCR422;
+    case AV_PIX_FMT_YUV422P12:
+        return OAPV_CF_YCBCR422;
+    case AV_PIX_FMT_YUV444P10:
+        return OAPV_CF_YCBCR444;
+    case AV_PIX_FMT_YUV444P12:
+        return OAPV_CF_YCBCR444;
+    case AV_PIX_FMT_YUVA444P10:
+        return OAPV_CF_YCBCR4444;
+    case AV_PIX_FMT_YUVA444P12:
+        return OAPV_CF_YCBCR4444;
     }
-
-    return cf;
 }
 
 static inline int get_chroma_format_idc(enum AVPixelFormat pix_fmt)
 {
-    int cfi = -1;
-
     switch (pix_fmt) {
+    default:
+        av_unreachable("Already checked via CODEC_PIXFMTS");
     case AV_PIX_FMT_GRAY10:
-        cfi = APV_CHROMA_FORMAT_400;
-        break;
+        return APV_CHROMA_FORMAT_400;
     case AV_PIX_FMT_YUV422P10:
     case AV_PIX_FMT_YUV422P12:
-        cfi = APV_CHROMA_FORMAT_422;
-        break;
+        return APV_CHROMA_FORMAT_422;
     case AV_PIX_FMT_YUV444P10:
     case AV_PIX_FMT_YUV444P12:
-        cfi = APV_CHROMA_FORMAT_444;
-        break;
+        return APV_CHROMA_FORMAT_444;
     case AV_PIX_FMT_YUVA444P10:
     case AV_PIX_FMT_YUVA444P12:
-        cfi = APV_CHROMA_FORMAT_4444;
-        break;
-    default:
-        av_assert0(cfi >= 0);
+        return APV_CHROMA_FORMAT_4444;
     }
-
-    return cfi;
 }
 
 static inline int get_min_profile(enum AVPixelFormat pix_fmt)
 {
-    int profile = AV_PROFILE_UNKNOWN;
-
     switch (pix_fmt) {
-    case AV_PIX_FMT_GRAY10:
-        profile = AV_PROFILE_APV_400_10;
-        break;
-    case AV_PIX_FMT_YUV422P10:
-        profile = AV_PROFILE_APV_422_10;
-        break;
-    case AV_PIX_FMT_YUV422P12:
-        profile = AV_PROFILE_APV_422_12;
-        break;
-    case AV_PIX_FMT_YUV444P10:
-        profile = AV_PROFILE_APV_444_10;
-        break;
-    case AV_PIX_FMT_YUV444P12:
-        profile = AV_PROFILE_APV_444_12;
-        break;
-    case AV_PIX_FMT_YUVA444P10:
-        profile = AV_PROFILE_APV_4444_10;
-        break;
-    case AV_PIX_FMT_YUVA444P12:
-        profile = AV_PROFILE_APV_4444_12;
-        break;
     default:
-        av_assert0(profile != AV_PROFILE_UNKNOWN);
+        av_unreachable("Already checked via CODEC_PIXFMTS");
+    case AV_PIX_FMT_GRAY10:
+        return AV_PROFILE_APV_400_10;
+    case AV_PIX_FMT_YUV422P10:
+        return AV_PROFILE_APV_422_10;
+    case AV_PIX_FMT_YUV422P12:
+        return AV_PROFILE_APV_422_12;
+    case AV_PIX_FMT_YUV444P10:
+        return AV_PROFILE_APV_444_10;
+    case AV_PIX_FMT_YUV444P12:
+        return AV_PROFILE_APV_444_12;
+    case AV_PIX_FMT_YUVA444P10:
+        return AV_PROFILE_APV_4444_10;
+    case AV_PIX_FMT_YUVA444P12:
+        return AV_PROFILE_APV_4444_12;
     }
-
-    return profile;
 }
 
 static int profile_is_compatible(enum AVPixelFormat pix_fmt, int profile)
@@ -317,11 +287,8 @@ static int get_conf(AVCodecContext *avctx, oapve_cdesc_t *cdsc)
     }
 
     /* read options from AVCodecContext */
-    if (avctx->width > 0)
-        cdsc->param[FRM_IDX].w = avctx->width;
-
-    if (avctx->height > 0)
-        cdsc->param[FRM_IDX].h = avctx->height;
+    cdsc->param[FRM_IDX].w = avctx->width;
+    cdsc->param[FRM_IDX].h = avctx->height;
 
     if (avctx->framerate.num > 0) {
         cdsc->param[FRM_IDX].fps_num = avctx->framerate.num;
@@ -484,13 +451,8 @@ static int liboapve_encode(AVCodecContext *avctx, AVPacket *avpkt,
     oapv_imgb_t *imgb = frm->imgb;
     int ret;
 
-    if (avctx->width != frame->width || avctx->height != frame->height || avctx->pix_fmt != frame->format) {
-        av_log(avctx, AV_LOG_ERROR, "Dimension changes are not supported\n");
-        return AVERROR(EINVAL);
-    }
-
-    av_image_copy((uint8_t **)imgb->a, imgb->s, (const uint8_t **)frame->data, frame->linesize,
-                  frame->format, frame->width, frame->height);
+    av_image_copy2((uint8_t **)imgb->a, imgb->s, frame->data, frame->linesize,
+                   frame->format, frame->width, frame->height);
 
     imgb->ts[0] = frame->pts;
 
@@ -570,17 +532,6 @@ static av_cold int liboapve_close(AVCodecContext *avctx)
 #define OFFSET(x) offsetof(ApvEncContext, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 
-static const enum AVPixelFormat supported_pixel_formats[] = {
-    AV_PIX_FMT_GRAY10,
-    AV_PIX_FMT_YUV422P10,
-    AV_PIX_FMT_YUV422P12,
-    AV_PIX_FMT_YUV444P10,
-    AV_PIX_FMT_YUV444P12,
-    AV_PIX_FMT_YUVA444P10,
-    AV_PIX_FMT_YUVA444P12,
-    AV_PIX_FMT_NONE
-};
-
 static const AVOption liboapv_options[] = {
     { "preset", "Encoding preset for setting encoding speed (optimization level control)", OFFSET(preset_id), AV_OPT_TYPE_INT, { .i64 = OAPV_PRESET_DEFAULT }, OAPV_PRESET_FASTEST, OAPV_PRESET_PLACEBO, VE, .unit = "preset" },
     { "fastest", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = OAPV_PRESET_FASTEST }, INT_MIN, INT_MAX, VE, .unit = "preset" },
@@ -620,7 +571,10 @@ const FFCodec ff_liboapv_encoder = {
     .defaults           = liboapve_defaults,
     .p.capabilities     = AV_CODEC_CAP_OTHER_THREADS | AV_CODEC_CAP_DR1,
     .p.wrapper_name     = "liboapv",
-    .p.pix_fmts         = supported_pixel_formats,
     .p.profiles         = NULL_IF_CONFIG_SMALL(ff_apv_profiles),
     .caps_internal      = FF_CODEC_CAP_INIT_CLEANUP | FF_CODEC_CAP_AUTO_THREADS | FF_CODEC_CAP_NOT_INIT_THREADSAFE,
+    CODEC_PIXFMTS(AV_PIX_FMT_GRAY10,
+                  AV_PIX_FMT_YUV422P10,  AV_PIX_FMT_YUV422P12,
+                  AV_PIX_FMT_YUV444P10,  AV_PIX_FMT_YUV444P12,
+                  AV_PIX_FMT_YUVA444P10, AV_PIX_FMT_YUVA444P12),
 };

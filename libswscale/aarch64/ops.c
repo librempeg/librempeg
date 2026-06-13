@@ -172,7 +172,8 @@ static int aarch64_optimize(SwsAArch64BackendContext *bctx, SwsOpList *ops)
 }
 
 /*********************************************************************/
-static int aarch64_compile(SwsContext *ctx, SwsOpList *ops, SwsCompiledOp *out)
+static int aarch64_compile(SwsContext *ctx, const SwsOpList *ops,
+                           SwsCompiledOp *out)
 {
     SwsAArch64BackendContext bctx;
     int ret;
@@ -220,29 +221,25 @@ static int aarch64_compile(SwsContext *ctx, SwsOpList *ops, SwsCompiledOp *out)
             goto error;
     }
 
-    /* Look up process/process_return functions. */
+    /* Look up process function. */
+    void ff_sws_process_0001_neon(void);
+    void ff_sws_process_0011_neon(void);
+    void ff_sws_process_0111_neon(void);
+    void ff_sws_process_1111_neon(void);
+
     const SwsOp *read  = ff_sws_op_list_input(&rest);
     const SwsOp *write = ff_sws_op_list_output(&rest);
-    const int read_planes  = read ? (read->rw.packed ? 1 : read->rw.elems) : 0;
-    const int write_planes = write->rw.packed ? 1 : write->rw.elems;
-    SwsAArch64OpMask mask = 0;
-    for (int i = 0; i < FFMAX(read_planes, write_planes); i++)
-        MASK_SET(mask, i, 1);
-
-    SwsAArch64OpImplParams process_params = { .op = AARCH64_SWS_OP_PROCESS,        .mask = mask };
-    SwsAArch64OpImplParams return_params  = { .op = AARCH64_SWS_OP_PROCESS_RETURN, .mask = mask };
-    SwsFuncPtr process_func = ff_sws_aarch64_lookup(&process_params);
-    SwsFuncPtr return_func  = ff_sws_aarch64_lookup(&return_params);
-    if (!process_func || !return_func) {
-        ret = AVERROR(ENOTSUP);
-        goto error;
+    const int read_planes  = read ? ff_sws_rw_op_planes(read) : 0;
+    const int write_planes = ff_sws_rw_op_planes(write);
+    SwsOpFunc process_func = NULL;
+    switch (FFMAX(read_planes, write_planes)) {
+    case 1: process_func = (SwsOpFunc) ff_sws_process_0001_neon; break;
+    case 2: process_func = (SwsOpFunc) ff_sws_process_0011_neon; break;
+    case 3: process_func = (SwsOpFunc) ff_sws_process_0111_neon; break;
+    case 4: process_func = (SwsOpFunc) ff_sws_process_1111_neon; break;
     }
 
-    ret = ff_sws_op_chain_append(chain, return_func, NULL, &(SwsOpPriv) { 0 });
-    if (ret < 0)
-        goto error;
-
-    out->func      = (SwsOpFunc) process_func;
+    out->func      = process_func;
     out->cpu_flags = chain->cpu_flags;
 
 error:
@@ -254,6 +251,7 @@ error:
 /*********************************************************************/
 const SwsOpBackend backend_aarch64 = {
     .name      = "aarch64",
+    .flags     = SWS_BACKEND_AARCH64,
     .compile   = aarch64_compile,
     .hw_format = AV_PIX_FMT_NONE,
 };

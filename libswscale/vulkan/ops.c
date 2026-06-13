@@ -251,7 +251,7 @@ fail:
     return err;
 }
 
-static int create_bufs(FFVulkanOpsCtx *s, VulkanPriv *p, SwsOpList *ops)
+static int create_bufs(FFVulkanOpsCtx *s, VulkanPriv *p, const SwsOpList *ops)
 {
     int err;
     p->nb_data_bufs = 0;
@@ -272,9 +272,9 @@ static int create_bufs(FFVulkanOpsCtx *s, VulkanPriv *p, SwsOpList *ops)
                 goto fail;
             p->nb_data_bufs++;
         } else if ((op->op == SWS_OP_READ ||
-                    op->op == SWS_OP_WRITE) && op->rw.filter) {
+                    op->op == SWS_OP_WRITE) && op->rw.filter.op) {
             av_assert0(p->nb_data_bufs + 1 <= FF_ARRAY_ELEMS(p->data_bufs));
-            err = create_filter_buf(s, p, op->rw.kernel,
+            err = create_filter_buf(s, p, op->rw.filter.kernel,
                                     &p->data_bufs[p->nb_data_bufs]);
             if (err < 0)
                 goto fail;
@@ -390,8 +390,8 @@ typedef struct SPIRVIDs {
 } SPIRVIDs;
 
 /* Section 1: Function to define all shader header data, and decorations */
-static void define_shader_header(SwsContext *sws, FFVulkanShader *shd, SwsOpList *ops,
-                                 SPICtx *spi, SPIRVIDs *id)
+static void define_shader_header(SwsContext *sws, FFVulkanShader *shd,
+                                 const SwsOpList *ops, SPICtx *spi, SPIRVIDs *id)
 {
     spi_OpCapability(spi, SpvCapabilityShader); /* Shader type */
 
@@ -492,7 +492,8 @@ static void define_shader_header(SwsContext *sws, FFVulkanShader *shd, SwsOpList
 }
 
 /* Section 2: Define all types and constants */
-static void define_shader_consts(SwsContext *sws, SwsOpList *ops, SPICtx *spi, SPIRVIDs *id)
+static void define_shader_consts(SwsContext *sws, const SwsOpList *ops,
+                                 SPICtx *spi, SPIRVIDs *id)
 {
     /* Define scalar types */
     id->void_type    = spi_OpTypeVoid(spi);
@@ -651,7 +652,7 @@ static void define_shader_consts(SwsContext *sws, SwsOpList *ops, SPICtx *spi, S
 }
 
 /* Section 3: Define bindings */
-static void define_shader_bindings(SwsOpList *ops, SPICtx *spi, SPIRVIDs *id,
+static void define_shader_bindings(const SwsOpList *ops, SPICtx *spi, SPIRVIDs *id,
                                    int in_img_count, int out_img_count)
 {
     id->dither_ptr_elem_id = spi_OpTypePointer(spi, SpvStorageClassUniform,
@@ -851,7 +852,7 @@ static int read_filtered(SPICtx *spi, SPIRVIDs *id, const SwsOpList *ops,
     /* Accumulators, initialized to zero */
     int acc_s[4] = { id->f32_0, id->f32_0, id->f32_0, id->f32_0 };
     int acc_v = id->f32_0;
-    if (op->rw.packed)
+    if (op->rw.mode == SWS_RW_PACKED)
         acc_v = spi_OpCompositeConstruct(spi, id->f32vec4_type,
                                          id->f32_0, id->f32_0,
                                          id->f32_0, id->f32_0);
@@ -876,7 +877,7 @@ static int read_filtered(SPICtx *spi, SPIRVIDs *id, const SwsOpList *ops,
             spi_OpCompositeConstruct(spi, id->i32vec2_type, c, pos_y) :
             spi_OpCompositeConstruct(spi, id->i32vec2_type, pos_x, c);
 
-        if (op->rw.packed) {
+        if (op->rw.mode == SWS_RW_PACKED) {
             int px = spi_OpImageRead(spi, read_vtype,
                                      in_img[ops->plane_src[0]], coord,
                                      SpvImageOperandsMaskNone);
@@ -901,14 +902,14 @@ static int read_filtered(SPICtx *spi, SPIRVIDs *id, const SwsOpList *ops,
         }
     }
 
-    if (op->rw.packed)
+    if (op->rw.mode == SWS_RW_PACKED)
         return acc_v;
     return spi_OpCompositeConstruct(spi, id->f32vec4_type,
                                     acc_s[0], acc_s[1], acc_s[2], acc_s[3]);
 }
 
 static int add_ops_spirv(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
-                         SwsOpList *ops, FFVulkanShader *shd)
+                         const SwsOpList *ops, FFVulkanShader *shd)
 {
     uint8_t spvbuf[1024*16];
     SPICtx spi_context = { 0 }, *spi = &spi_context;
@@ -928,11 +929,11 @@ static int add_ops_spirv(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
 
     /* Image ops, to determine types */
     const SwsOp *op_w = ff_sws_op_list_output(ops);
-    int out_img_count = op_w->rw.packed ? 1 : op_w->rw.elems;
+    int out_img_count = ff_sws_rw_op_planes(op_w);
     p->dst_rep = op_w->type == SWS_PIXEL_F32 ? FF_VK_REP_FLOAT : FF_VK_REP_UINT;
 
     const SwsOp *op_r = ff_sws_op_list_input(ops);
-    int in_img_count = op_r ? op_r->rw.packed ? 1 : op_r->rw.elems : 0;
+    int in_img_count = op_r ? ff_sws_rw_op_planes(op_r) : 0;
     if (op_r)
         p->src_rep = op_r->type == SWS_PIXEL_F32 ? FF_VK_REP_FLOAT : FF_VK_REP_UINT;
 
@@ -980,12 +981,12 @@ static int add_ops_spirv(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
             d->id        = spi_get_id(spi);
             d->binding   = nb_data_bufs;
             var_id       = d->id;
-        } else if (op->op == SWS_OP_READ && op->rw.filter) {
+        } else if (op->op == SWS_OP_READ && op->rw.filter.op) {
             if (id->nb_filter_bufs >= MAX_FILT_BUFS)
                 return AVERROR(ENOTSUP);
-            const SwsFilterWeights *wd = op->rw.kernel;
+            const SwsFilterWeights *wd = op->rw.filter.kernel;
             struct FilterData *f = &id->filt[id->nb_filter_bufs++];
-            f->filter       = op->rw.filter;
+            f->filter       = op->rw.filter.op;
             f->filter_size  = wd->filter_size;
             f->dst_size     = wd->dst_size;
             f->num_weights  = wd->num_weights;
@@ -1129,13 +1130,13 @@ static int add_ops_spirv(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
 
         switch (op->op) {
         case SWS_OP_READ:
-            if (op->rw.frac) {
+            if (op->rw.frac || op->rw.filter.op) {
                 return AVERROR(ENOTSUP);
-            } else if (op->rw.filter) {
+            } else if (op->rw.filter.op) {
                 data = read_filtered(spi, id, ops, op,
                                      &id->filt[nb_filter_used++],
                                      in_img, gid, gi2);
-            } else if (op->rw.packed) {
+            } else if (op->rw.mode == SWS_RW_PACKED) {
                 data = spi_OpImageRead(spi, type_v, in_img[ops->plane_src[0]],
                                        src_gid, SpvImageOperandsMaskNone);
             } else {
@@ -1151,9 +1152,9 @@ static int add_ops_spirv(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
             }
             break;
         case SWS_OP_WRITE:
-            if (op->rw.frac || op->rw.filter) {
+            if (op->rw.frac || op->rw.filter.op) {
                 return AVERROR(ENOTSUP);
-            } else if (op->rw.packed) {
+            } else if (op->rw.mode == SWS_RW_PACKED) {
                 spi_OpImageWrite(spi, out_img[ops->plane_dst[0]], dst_gid, data,
                                  SpvImageOperandsMaskNone);
             } else {
@@ -1311,17 +1312,17 @@ static void add_desc_read_write(FFVulkanDescriptorSetBinding *out_desc,
 #define QSTR "(%i/%i%s)"
 #define QTYPE(Q) (Q).num, (Q).den, cur_type == SWS_PIXEL_F32 ? ".0f" : ""
 
-static void read_glsl(SwsOpList *ops, const SwsOp *op, FFVulkanShader *shd,
+static void read_glsl(const SwsOpList *ops, const SwsOp *op, FFVulkanShader *shd,
                       int idx, const char *type_name,
                       const char *type_v, const char *type_s)
 {
-    const SwsFilterWeights *wd = op->rw.kernel;
+    const SwsFilterWeights *wd = op->rw.filter.kernel;
     const int interlaced = ops->src.interlaced;
-    if (op->rw.filter) {
-        const char *axis    = op->rw.filter == SWS_OP_FILTER_H ? "pos.x" : "pos.y";
-        const char *coord_x = op->rw.filter == SWS_OP_FILTER_H ? "o + i" : "pos.x";
+    if (op->rw.filter.op) {
+        const char *axis    = op->rw.filter.op == SWS_OP_FILTER_H ? "pos.x" : "pos.y";
+        const char *coord_x = op->rw.filter.op == SWS_OP_FILTER_H ? "o + i" : "pos.x";
         const char *coord_y;
-        if (op->rw.filter == SWS_OP_FILTER_H)
+        if (op->rw.filter.op == SWS_OP_FILTER_H)
             coord_y = interlaced ? "spos.y" : "pos.y";
         else
             coord_y = interlaced ? "((o + i) * 2 + int(params.field))" : "o + i";
@@ -1331,7 +1332,7 @@ static void read_glsl(SwsOpList *ops, const SwsOp *op, FFVulkanShader *shd,
                    wd->filter_size);
         av_bprintf(&shd->src, "        float w = filter_w%i[%s][i];\n",
                    idx, axis);
-        if (op->rw.packed) {
+        if (op->rw.mode == SWS_RW_PACKED) {
             GLSLF(2, tmp += w * %s(imageLoad(src_img[%i], ivec2(%s, %s)));     ,
                   type_v, ops->plane_src[0], coord_x, coord_y);
         } else {
@@ -1344,7 +1345,7 @@ static void read_glsl(SwsOpList *ops, const SwsOp *op, FFVulkanShader *shd,
         GLSLC(1, f32 = tmp;                                                   );
     } else {
         const char *src_pos = interlaced ? "spos" : "pos";
-        if (op->rw.packed) {
+        if (op->rw.mode == SWS_RW_PACKED) {
             GLSLF(1, %s = %s(imageLoad(src_img[%i], %s));                      ,
                   type_name, type_v, ops->plane_src[0], src_pos);
         } else {
@@ -1356,7 +1357,7 @@ static void read_glsl(SwsOpList *ops, const SwsOp *op, FFVulkanShader *shd,
 }
 
 static int add_ops_glsl(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
-                        SwsOpList *ops, FFVulkanShader *shd)
+                        const SwsOpList *ops, FFVulkanShader *shd)
 {
     int err;
     uint8_t *spv_data;
@@ -1410,10 +1411,10 @@ static int add_ops_glsl(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
             nb_desc++;
         } else if (op->op == SWS_OP_FILTER_H || op->op == SWS_OP_FILTER_V ||
                    ((op->op == SWS_OP_READ || op->op == SWS_OP_WRITE) &&
-                    op->rw.filter)) {
+                    op->rw.filter.op)) {
             const SwsFilterWeights *wd = (op->op == SWS_OP_READ ||
                                           op->op == SWS_OP_WRITE) ?
-                                         op->rw.kernel : op->filter.kernel;
+                                         op->rw.filter.kernel : op->filter.kernel;
             snprintf(data_buf_name[nb_desc], 256, "filter_buf%i", n);
             snprintf(data_str_name[nb_desc], 256,
                      "float filter_w%i[%i][%i];\n"
@@ -1485,9 +1486,9 @@ static int add_ops_glsl(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
         }
         case SWS_OP_WRITE: {
             const char *dst_pos = ops->dst.interlaced ? "dpos" : "pos";
-            if (op->rw.frac || op->rw.filter) {
+            if (op->rw.frac || op->rw.filter.op) {
                 return AVERROR(ENOTSUP);
-            } else if (op->rw.packed) {
+            } else if (op->rw.mode == SWS_RW_PACKED) {
                 GLSLF(1, imageStore(dst_img[%i], %s, %s(%s));                   ,
                       ops->plane_dst[0], dst_pos, type_v, type_name);
             } else {
@@ -1608,7 +1609,8 @@ static int add_ops_glsl(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
 }
 #endif
 
-static int compile(SwsContext *sws, SwsOpList *ops, SwsCompiledOp *out, int glsl)
+static int compile(SwsContext *sws, const SwsOpList *ops, SwsCompiledOp *out,
+                   int glsl)
 {
     int err;
     SwsInternal *c = sws_internal(sws);
@@ -1625,24 +1627,6 @@ static int compile(SwsContext *sws, SwsOpList *ops, SwsCompiledOp *out, int glsl
                                0, 0, 0, NULL);
     if (err < 0)
         goto fail;
-
-    if (ops->src.format == AV_PIX_FMT_BGR0 ||
-        ops->src.format == AV_PIX_FMT_BGRA ||
-        ops->dst.format == AV_PIX_FMT_BGR0 ||
-        ops->dst.format == AV_PIX_FMT_BGRA) {
-        VkFormatProperties2 prop = {
-            .sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2,
-        };
-        FFVulkanFunctions *vk = &s->vkctx.vkfn;
-        vk->GetPhysicalDeviceFormatProperties2(s->vkctx.hwctx->phys_dev,
-                                               VK_FORMAT_B8G8R8A8_UNORM,
-                                               &prop);
-        if (!(prop.formatProperties.optimalTilingFeatures &
-              VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT)) {
-            err = AVERROR(ENOTSUP);
-            goto fail;
-        }
-    }
 
     if (glsl) {
         err = AVERROR(ENOTSUP);
@@ -1682,26 +1666,30 @@ fail:
 }
 
 #if HAVE_SPIRV_HEADERS_SPIRV_H || HAVE_SPIRV_UNIFIED1_SPIRV_H
-static int compile_spirv(SwsContext *sws, SwsOpList *ops, SwsCompiledOp *out)
+static int compile_spirv(SwsContext *sws, const SwsOpList *ops,
+                         SwsCompiledOp *out)
 {
     return compile(sws, ops, out, 0);
 }
 
 const SwsOpBackend backend_spirv = {
     .name      = "spirv",
+    .flags     = SWS_BACKEND_SPIRV,
     .compile   = compile_spirv,
     .hw_format = AV_PIX_FMT_VULKAN,
 };
 #endif
 
 #if CONFIG_LIBSHADERC || CONFIG_LIBGLSLANG
-static int compile_glsl(SwsContext *sws, SwsOpList *ops, SwsCompiledOp *out)
+static int compile_glsl(SwsContext *sws, const SwsOpList *ops,
+                        SwsCompiledOp *out)
 {
     return compile(sws, ops, out, 1);
 }
 
 const SwsOpBackend backend_glsl = {
     .name      = "glsl",
+    .flags     = SWS_BACKEND_GLSL,
     .compile   = compile_glsl,
     .hw_format = AV_PIX_FMT_VULKAN,
 };

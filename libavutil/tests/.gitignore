@@ -1,6 +1,7 @@
 /adler32
 /aes
 /aes_ctr
+/ambient_viewing_environment
 /atomic
 /audio_fifo
 /avstring
@@ -15,6 +16,7 @@
 /cpu
 /cpu_init
 /crc
+/csp
 /des
 /detection_bbox
 /dict

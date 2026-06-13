@@ -6,21 +6,21 @@
  * 1,4,8bpp support and context / deglobalize stuff
  * by Michael Niedermayer (michaelni@gmx.at)
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <stddef.h>
@@ -568,6 +568,8 @@ SwsFunc ff_yuv2rgb_get_func_ptr(SwsInternal *c)
     t = ff_yuv2rgb_init_x86(c);
 #elif ARCH_LOONGARCH64
     t = ff_yuv2rgb_init_loongarch(c);
+#elif ARCH_AARCH64
+    t = ff_yuv2rgb_init_aarch64(c);
 #endif
 
     if (t)
@@ -597,11 +599,15 @@ SwsFunc ff_yuv2rgb_get_func_ptr(SwsInternal *c)
             return yuv422p_rgb24_c;
         case AV_PIX_FMT_BGR24:
             return yuv422p_bgr24_c;
-        case AV_PIX_FMT_RGB565:
-        case AV_PIX_FMT_BGR565:
+        case AV_PIX_FMT_RGB565BE:
+        case AV_PIX_FMT_BGR565BE:
+        case AV_PIX_FMT_RGB565LE:
+        case AV_PIX_FMT_BGR565LE:
             return yuv422p_bgr16;
-        case AV_PIX_FMT_RGB555:
-        case AV_PIX_FMT_BGR555:
+        case AV_PIX_FMT_RGB555BE:
+        case AV_PIX_FMT_BGR555BE:
+        case AV_PIX_FMT_RGB555LE:
+        case AV_PIX_FMT_BGR555LE:
             return yuv422p_bgr15;
         case AV_PIX_FMT_RGB444:
         case AV_PIX_FMT_BGR444:
@@ -640,11 +646,15 @@ SwsFunc ff_yuv2rgb_get_func_ptr(SwsInternal *c)
             return yuv2rgb_c_24_rgb;
         case AV_PIX_FMT_BGR24:
             return yuv2rgb_c_24_bgr;
-        case AV_PIX_FMT_RGB565:
-        case AV_PIX_FMT_BGR565:
+        case AV_PIX_FMT_RGB565BE:
+        case AV_PIX_FMT_BGR565BE:
+        case AV_PIX_FMT_RGB565LE:
+        case AV_PIX_FMT_BGR565LE:
             return yuv2rgb_c_16_ordered_dither;
-        case AV_PIX_FMT_RGB555:
-        case AV_PIX_FMT_BGR555:
+        case AV_PIX_FMT_RGB555BE:
+        case AV_PIX_FMT_BGR555BE:
+        case AV_PIX_FMT_RGB555LE:
+        case AV_PIX_FMT_BGR555LE:
             return yuv2rgb_c_15_ordered_dither;
         case AV_PIX_FMT_RGB444:
         case AV_PIX_FMT_BGR444:

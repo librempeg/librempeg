@@ -166,6 +166,18 @@ SwsCompMask ff_sws_comp_mask_needed(const SwsOp *op)
     return mask;
 }
 
+int ff_sws_rw_op_planes(const SwsOp *op)
+{
+    av_assert2(op->op == SWS_OP_READ || op->op == SWS_OP_WRITE);
+    switch (op->rw.mode) {
+    case SWS_RW_PLANAR: return op->rw.elems;
+    case SWS_RW_PACKED: return 1;
+    }
+
+    av_unreachable("Invalid read/write mode!");
+    return 0;
+}
+
 /* biased towards `a` */
 static AVRational av_min_q(AVRational a, AVRational b)
 {
@@ -370,7 +382,12 @@ void ff_sws_op_list_update_comps(SwsOpList *ops)
             /* Active components are taken from the user-provided values,
              * other components are explicitly stripped */
             for (int i = 0; i < op->rw.elems; i++) {
-                const int idx = op->rw.packed ? i : ops->plane_src[i];
+                int idx = 0;
+                switch (op->rw.mode) {
+                case SWS_RW_PACKED: idx = i; break;
+                case SWS_RW_PLANAR: idx = ops->plane_src[i]; break;
+                }
+
                 av_assert0(!(ops->comps_src.flags[idx] & SWS_COMP_GARBAGE));
                 op->comps.flags[i] = ops->comps_src.flags[idx];
                 op->comps.min[i]   = ops->comps_src.min[idx];
@@ -382,9 +399,9 @@ void ff_sws_op_list_update_comps(SwsOpList *ops)
                 op->comps.max[i]   = prev.max[i];
             }
 
-            if (op->rw.filter) {
+            if (op->rw.filter.op) {
                 const SwsComps prev = op->comps;
-                apply_filter_weights(&op->comps, &prev, op->rw.kernel);
+                apply_filter_weights(&op->comps, &prev, op->rw.filter.kernel);
             }
             break;
         case SWS_OP_SWAP_BYTES:
@@ -590,7 +607,7 @@ static void op_uninit(SwsOp *op)
 {
     switch (op->op) {
     case SWS_OP_READ:
-        av_refstruct_unref(&op->rw.kernel);
+        av_refstruct_unref(&op->rw.filter.kernel);
         break;
     case SWS_OP_DITHER:
         av_refstruct_unref(&op->dither.matrix);
@@ -652,8 +669,8 @@ SwsOpList *ff_sws_op_list_duplicate(const SwsOpList *ops)
         const SwsOp *op = &copy->ops[i];
         switch (op->op) {
         case SWS_OP_READ:
-            if (op->rw.kernel)
-                av_refstruct_ref(op->rw.kernel);
+            if (op->rw.filter.kernel)
+                av_refstruct_ref(op->rw.filter.kernel);
             break;
         case SWS_OP_DITHER:
             av_refstruct_ref(op->dither.matrix);
@@ -725,7 +742,7 @@ bool ff_sws_op_list_is_noop(const SwsOpList *ops)
     const SwsOp *write = ff_sws_op_list_output(ops);
     if (!read || !write || ops->num_ops > 2 ||
         read->type != write->type ||
-        read->rw.packed != write->rw.packed ||
+        read->rw.mode != write->rw.mode ||
         read->rw.elems != write->rw.elems ||
         read->rw.frac != write->rw.frac)
         return false;
@@ -736,7 +753,7 @@ bool ff_sws_op_list_is_noop(const SwsOpList *ops)
      * between them, e.g. rgbap <-> gbrap, which doesn't currently exist.
      * However, the check is cheap and lets me sleep at night.
      */
-    const int num_planes = read->rw.packed ? 1 : read->rw.elems;
+    const int num_planes = ff_sws_rw_op_planes(read);
     for (int i = 0; i < num_planes; i++) {
         if (ops->plane_src[i] != ops->plane_dst[i])
             return false;
@@ -851,6 +868,11 @@ static void print_q4(AVBPrint *bp, const AVRational q4[4], SwsCompMask mask)
     av_bprintf(bp, "}");
 }
 
+static const char *const rw_mode_names[] = {
+    [SWS_RW_PLANAR] = "planar",
+    [SWS_RW_PACKED] = "packed",
+};
+
 void ff_sws_op_desc(AVBPrint *bp, const SwsOp *op)
 {
     const char *name  = ff_sws_op_type_name(op->op);
@@ -864,14 +886,14 @@ void ff_sws_op_desc(AVBPrint *bp, const SwsOp *op)
     case SWS_OP_READ:
     case SWS_OP_WRITE:
         av_bprintf(bp, "%-20s: %d elem(s) %s >> %d", name,
-                   op->rw.elems,  op->rw.packed ? "packed" : "planar",
+                   op->rw.elems, rw_mode_names[op->rw.mode],
                    op->rw.frac);
-        if (!op->rw.filter)
+        if (!op->rw.filter.op)
             break;
-        const SwsFilterWeights *kernel = op->rw.kernel;
+        const SwsFilterWeights *kernel = op->rw.filter.kernel;
         av_bprintf(bp, " + %d tap %s filter (%c)",
                    kernel->filter_size, kernel->name,
-                   op->rw.filter == SWS_OP_FILTER_H ? 'H' : 'V');
+                   op->rw.filter.op == SWS_OP_FILTER_H ? 'H' : 'V');
         break;
     case SWS_OP_LSHIFT:
         av_bprintf(bp, "%-20s: << %u", name, op->shift.amount);
@@ -983,7 +1005,7 @@ void ff_sws_op_list_print(void *log, int lev, int lev_extra,
         ff_sws_op_desc(&bp, op);
 
         if (op->op == SWS_OP_READ || op->op == SWS_OP_WRITE) {
-            const int planes = op->rw.packed ? 1 : op->rw.elems;
+            const int planes = ff_sws_rw_op_planes(op);
             desc_plane_order(&bp, planes,
                 op->op == SWS_OP_READ ? ops->plane_src : ops->plane_dst);
         }
@@ -1083,28 +1105,4 @@ int ff_sws_enum_op_lists(SwsContext *ctx, void *opaque,
     }
 
     return 0;
-}
-
-struct EnumOpaque {
-    void *opaque;
-    int (*cb)(SwsContext *ctx, void *opaque, SwsOp *op);
-};
-
-static int enum_ops(SwsContext *ctx, void *opaque, SwsOpList *ops)
-{
-    struct EnumOpaque *priv = opaque;
-    for (int i = 0; i < ops->num_ops; i++) {
-        int ret = priv->cb(ctx, priv->opaque, &ops->ops[i]);
-        if (ret < 0)
-            return ret;
-    }
-    return 0;
-}
-
-int ff_sws_enum_ops(SwsContext *ctx, void *opaque,
-                    enum AVPixelFormat src_fmt, enum AVPixelFormat dst_fmt,
-                    int (*cb)(SwsContext *ctx, void *opaque, SwsOp *op))
-{
-    struct EnumOpaque priv = { opaque, cb };
-    return ff_sws_enum_op_lists(ctx, &priv, src_fmt, dst_fmt, enum_ops);
 }

@@ -72,35 +72,6 @@ error:
     return ret;
 }
 
-/* Collect the parameters for the process/process_return functions. */
-static int aarch64_collect_process(const SwsOpList *ops, struct AVTreeNode **root)
-{
-    const SwsOp *read  = ff_sws_op_list_input(ops);
-    const SwsOp *write = ff_sws_op_list_output(ops);
-    const int read_planes  = read ? (read->rw.packed ? 1 : read->rw.elems) : 0;
-    const int write_planes = write->rw.packed ? 1 : write->rw.elems;
-    int ret;
-
-    SwsAArch64OpMask mask = 0;
-    for (int i = 0; i < FFMAX(read_planes, write_planes); i++)
-        MASK_SET(mask, i, 1);
-    SwsAArch64OpImplParams params = {
-        .op   = AARCH64_SWS_OP_PROCESS,
-        .mask = mask,
-    };
-
-    ret = aarch64_collect_op(&params, root);
-    if (ret < 0)
-        return ret;
-
-    params.op = AARCH64_SWS_OP_PROCESS_RETURN;
-    ret = aarch64_collect_op(&params, root);
-    if (ret < 0)
-        return ret;
-
-    return 0;
-}
-
 static int register_op(SwsContext *ctx, void *opaque, SwsOpList *ops)
 {
     struct AVTreeNode **root = (struct AVTreeNode **) opaque;
@@ -111,13 +82,11 @@ static int register_op(SwsContext *ctx, void *opaque, SwsOpList *ops)
     /* Use at most two full vregs during the widest precision section */
     int block_size = (ff_sws_op_list_max_size(ops) == 4) ? 8 : 16;
 
-    ret = aarch64_collect_process(&rest, root);
-    if (ret < 0)
-        return ret;
-
     for (int i = 0; i < rest.num_ops; i++) {
         SwsAArch64OpImplParams params = { 0 };
         ret = convert_to_aarch64_impl(ctx, &rest, i, block_size, &params);
+        if (ret == AVERROR(ENOTSUP))
+            continue;
         if (ret < 0)
             goto end;
         ret = aarch64_collect_op(&params, root);

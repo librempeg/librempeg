@@ -1,19 +1,19 @@
 /*
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #ifndef AVCODEC_HWACCELS_H
@@ -27,7 +27,9 @@ extern const struct FFHWAccel ff_av1_dxva2_hwaccel;
 extern const struct FFHWAccel ff_av1_nvdec_hwaccel;
 extern const struct FFHWAccel ff_av1_vaapi_hwaccel;
 extern const struct FFHWAccel ff_av1_vdpau_hwaccel;
+extern const struct FFHWAccel ff_av1_videotoolbox_hwaccel;
 extern const struct FFHWAccel ff_av1_vulkan_hwaccel;
+extern const struct FFHWAccel ff_dpx_vulkan_hwaccel;
 extern const struct FFHWAccel ff_ffv1_vulkan_hwaccel;
 extern const struct FFHWAccel ff_h263_vaapi_hwaccel;
 extern const struct FFHWAccel ff_h263_videotoolbox_hwaccel;
@@ -68,6 +70,8 @@ extern const struct FFHWAccel ff_mpeg4_vdpau_hwaccel;
 extern const struct FFHWAccel ff_mpeg4_videotoolbox_hwaccel;
 extern const struct FFHWAccel ff_prores_videotoolbox_hwaccel;
 extern const struct FFHWAccel ff_prores_vulkan_hwaccel;
+extern const struct FFHWAccel ff_prores_raw_videotoolbox_hwaccel;
+extern const struct FFHWAccel ff_prores_raw_vulkan_hwaccel;
 extern const struct FFHWAccel ff_vc1_d3d11va_hwaccel;
 extern const struct FFHWAccel ff_vc1_d3d11va2_hwaccel;
 extern const struct FFHWAccel ff_vc1_d3d12va_hwaccel;
@@ -86,6 +90,7 @@ extern const struct FFHWAccel ff_vp9_vaapi_hwaccel;
 extern const struct FFHWAccel ff_vp9_vdpau_hwaccel;
 extern const struct FFHWAccel ff_vp9_videotoolbox_hwaccel;
 extern const struct FFHWAccel ff_vp9_vulkan_hwaccel;
+extern const struct FFHWAccel ff_vvc_vaapi_hwaccel;
 extern const struct FFHWAccel ff_wmv3_d3d11va_hwaccel;
 extern const struct FFHWAccel ff_wmv3_d3d11va2_hwaccel;
 extern const struct FFHWAccel ff_wmv3_d3d12va_hwaccel;

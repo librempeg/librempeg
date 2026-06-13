@@ -1,19 +1,19 @@
 /*
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 /**
@@ -35,11 +35,12 @@
 void av_image_fill_max_pixsteps(int max_pixsteps[4], int max_pixstep_comps[4],
                                 const AVPixFmtDescriptor *pixdesc)
 {
+    int i;
     memset(max_pixsteps, 0, 4*sizeof(max_pixsteps[0]));
     if (max_pixstep_comps)
         memset(max_pixstep_comps, 0, 4*sizeof(max_pixstep_comps[0]));
 
-    for (int i = 0; i < pixdesc->nb_components; i++) {
+    for (i = 0; i < 4; i++) {
         const AVComponentDescriptor *comp = &(pixdesc->comp[i]);
         if (comp->step > max_pixsteps[comp->plane]) {
             max_pixsteps[comp->plane] = comp->step;
@@ -278,6 +279,7 @@ typedef struct ImgUtils {
 
 static const AVClass imgutils_class = {
     .class_name                = "IMGUTILS",
+    .item_name                 = av_default_item_name,
     .option                    = NULL,
     .version                   = LIBAVUTIL_VERSION_INT,
     .log_level_offset_offset   = offsetof(ImgUtils, log_offset),
@@ -360,7 +362,7 @@ void av_image_copy_plane_uc_from(uint8_t *dst, ptrdiff_t dst_linesize,
 {
     int ret = -1;
 
-#if ARCH_X86
+#if ARCH_X86 && HAVE_X86ASM
     ret = ff_image_copy_plane_uc_from_x86(dst, dst_linesize, src, src_linesize,
                                           bytewidth, height);
 #endif

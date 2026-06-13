@@ -54,9 +54,11 @@ static bool op_commute_clear(SwsOp *op, SwsOp *next)
     case SWS_OP_MAX:
     case SWS_OP_SCALE:
     case SWS_OP_READ:
+        ff_sws_apply_op_q(next, op->clear.value);
+        return true;
     case SWS_OP_FILTER_H:
     case SWS_OP_FILTER_V:
-        ff_sws_apply_op_q(next, op->clear.value);
+        op->type = next->filter.type;
         return true;
     case SWS_OP_SWIZZLE:
         op->clear.mask = ff_sws_comp_mask_swizzle(op->clear.mask, next->swizzle);
@@ -115,8 +117,10 @@ static bool op_commute_swizzle(SwsOp *op, SwsOp *next)
     case SWS_OP_LSHIFT:
     case SWS_OP_RSHIFT:
     case SWS_OP_SCALE:
+        return true;
     case SWS_OP_FILTER_H:
     case SWS_OP_FILTER_V:
+        op->type = next->filter.type;
         return true;
 
     /**
@@ -183,20 +187,16 @@ static bool op_commute_swizzle(SwsOp *op, SwsOp *next)
  */
 static bool op_commute_filter(SwsOp *op, SwsOp *prev)
 {
+    av_assert0(!ff_sws_pixel_type_is_int(op->filter.type));
+
     switch (prev->op) {
     case SWS_OP_SWIZZLE:
     case SWS_OP_SCALE:
     case SWS_OP_LINEAR:
     case SWS_OP_DITHER:
-        prev->type = SWS_PIXEL_F32;
+        prev->type = op->filter.type;
         return true;
     case SWS_OP_CONVERT:
-        if (prev->convert.to == SWS_PIXEL_F32) {
-            av_assert0(!prev->convert.expand);
-            FFSWAP(SwsPixelType, op->type, prev->type);
-            return true;
-        }
-        return false;
     case SWS_OP_INVALID:
     case SWS_OP_READ:
     case SWS_OP_WRITE:
@@ -367,6 +367,18 @@ retry:
                 FFSWAP(SwsOp, *op, *prev);
                 goto retry;
             }
+
+            /* Merge filter with prior conversion */
+            if (prev->op == SWS_OP_CONVERT && !prev->convert.expand) {
+                int size_from = ff_sws_pixel_type_size(prev->type);
+                int size_to   = ff_sws_pixel_type_size(op->type);
+                av_assert1(prev->convert.to == op->type);
+                if (size_from < size_to) {
+                    op->type = prev->type;
+                    ff_sws_op_list_remove_at(ops, n - 1, 1);
+                    goto retry;
+                }
+            }
             break;
         }
     }
@@ -393,7 +405,7 @@ retry:
         switch (op->op) {
         case SWS_OP_READ:
             /* "Compress" planar reads where not all components are needed */
-            if (!op->rw.packed) {
+            if (op->rw.mode == SWS_RW_PLANAR) {
                 SwsSwizzleOp swiz = SWS_SWIZZLE(0, 1, 2, 3);
                 int nb_planes = 0;
                 for (int i = 0; i < op->rw.elems; i++) {
@@ -412,7 +424,7 @@ retry:
                     op->rw.elems = nb_planes;
                     RET(ff_sws_op_list_insert_at(ops, n + 1, &(SwsOp) {
                         .op = SWS_OP_SWIZZLE,
-                        .type = op->rw.filter ? SWS_PIXEL_F32 : op->type,
+                        .type = op->rw.filter.op ? op->rw.filter.type : op->type,
                         .swizzle = swiz,
                     }));
                     goto retry;
@@ -517,7 +529,7 @@ retry:
             }
 
             /* Swizzle planes instead of components, if possible */
-            if (prev->op == SWS_OP_READ && !prev->rw.packed) {
+            if (prev->op == SWS_OP_READ && prev->rw.mode == SWS_RW_PLANAR) {
                 for (int dst = 0; dst < prev->rw.elems; dst++) {
                     const int src = op->swizzle.in[dst];
                     if (src > dst && src < prev->rw.elems) {
@@ -533,7 +545,7 @@ retry:
                 }
             }
 
-            if (next->op == SWS_OP_WRITE && !next->rw.packed) {
+            if (next->op == SWS_OP_WRITE && next->rw.mode == SWS_RW_PLANAR) {
                 for (int dst = 0; dst < next->rw.elems; dst++) {
                     const int src = op->swizzle.in[dst];
                     if (src > dst && src < next->rw.elems) {
@@ -735,10 +747,11 @@ retry:
         case SWS_OP_FILTER_H:
         case SWS_OP_FILTER_V:
             /* Merge with prior simple planar read */
-            if (prev->op == SWS_OP_READ && !prev->rw.filter &&
-                !prev->rw.packed && !prev->rw.frac) {
-                prev->rw.filter = op->op;
-                prev->rw.kernel = av_refstruct_ref(op->filter.kernel);
+            if (prev->op == SWS_OP_READ && !prev->rw.filter.op &&
+                prev->rw.mode == SWS_RW_PLANAR && !prev->rw.frac) {
+                prev->rw.filter.op = op->op;
+                prev->rw.filter.kernel = av_refstruct_ref(op->filter.kernel);
+                prev->rw.filter.type = op->filter.type;
                 ff_sws_op_list_remove_at(ops, n, 1);
                 goto retry;
             }
@@ -803,8 +816,7 @@ int ff_sws_solve_shuffle(const SwsOpList *const ops, uint8_t shuffle[],
         return AVERROR(EINVAL);
 
     const SwsOp *read = ff_sws_op_list_input(ops);
-    if (!read || read->rw.frac || read->rw.filter ||
-        (!read->rw.packed && read->rw.elems > 1))
+    if (!read || read->rw.frac || read->rw.filter.op || ff_sws_rw_op_planes(read) > 1)
         return AVERROR(ENOTSUP);
 
     const int read_size = ff_sws_pixel_type_size(read->type);
@@ -854,8 +866,7 @@ int ff_sws_solve_shuffle(const SwsOpList *const ops, uint8_t shuffle[],
         }
 
         case SWS_OP_WRITE: {
-            if (op->rw.frac || op->rw.filter ||
-                (!op->rw.packed && op->rw.elems > 1))
+            if (op->rw.frac || op->rw.filter.op || ff_sws_rw_op_planes(op) > 1)
                 return AVERROR(ENOTSUP);
 
             /* Initialize to no-op */
@@ -938,10 +949,10 @@ static void get_input_size(const SwsOpList *ops, SwsFormat *fmt)
     fmt->height = ops->src.height;
 
     const SwsOp *read = ff_sws_op_list_input(ops);
-    if (read && read->rw.filter == SWS_OP_FILTER_V) {
-        fmt->height = read->rw.kernel->dst_size;
-    } else if (read && read->rw.filter == SWS_OP_FILTER_H) {
-        fmt->width = read->rw.kernel->dst_size;
+    if (read && read->rw.filter.op == SWS_OP_FILTER_V) {
+        fmt->height = read->rw.filter.kernel->dst_size;
+    } else if (read && read->rw.filter.op == SWS_OP_FILTER_H) {
+        fmt->width = read->rw.filter.kernel->dst_size;
     }
 }
 

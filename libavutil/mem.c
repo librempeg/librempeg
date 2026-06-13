@@ -2,21 +2,21 @@
  * default memory allocator for libavutil
  * Copyright (c) 2002 Fabrice Bellard
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 /**
@@ -444,34 +444,6 @@ static void fill32(uint8_t *dst, int len)
     }
 }
 
-static void fill64(uint8_t *dst, int len)
-{
-    uint64_t v;
-
-    if (len >= 8)
-        v = AV_RN64(dst - 8);
-
-    while (len >= 32) {
-        AV_WN64(dst   , v);
-        AV_WN64(dst+ 8, v);
-        AV_WN64(dst+16, v);
-        AV_WN64(dst+24, v);
-        dst += 32;
-        len -= 32;
-    }
-
-    while (len >= 8) {
-        AV_WN64(dst, v);
-        dst += 8;
-        len -= 8;
-    }
-
-    while (len--) {
-        *dst = dst[-8];
-        dst++;
-    }
-}
-
 void av_memcpy_backptr(uint8_t *dst, int back, int cnt)
 {
     const uint8_t *src = &dst[-back];
@@ -486,8 +458,6 @@ void av_memcpy_backptr(uint8_t *dst, int back, int cnt)
         fill24(dst, cnt);
     } else if (back == 4) {
         fill32(dst, cnt);
-    } else if (back == 8) {
-        fill64(dst, cnt);
     } else {
         if (cnt >= 16) {
             int blocklen = back;

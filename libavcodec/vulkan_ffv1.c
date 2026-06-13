@@ -54,6 +54,12 @@ extern const unsigned int ff_ffv1_dec_rgb_float_comp_spv_len;
 extern const unsigned char ff_ffv1_dec_rgb_float_golomb_comp_spv_data[];
 extern const unsigned int ff_ffv1_dec_rgb_float_golomb_comp_spv_len;
 
+extern const unsigned char ff_ffv1_dec_bayer_comp_spv_data[];
+extern const unsigned int ff_ffv1_dec_bayer_comp_spv_len;
+
+extern const unsigned char ff_ffv1_dec_bayer_golomb_comp_spv_data[];
+extern const unsigned int ff_ffv1_dec_bayer_golomb_comp_spv_len;
+
 const FFVulkanDecodeDescriptor ff_vk_dec_ffv1_desc = {
     .codec_id         = AV_CODEC_ID_FFV1,
     .queue_flags      = VK_QUEUE_COMPUTE_BIT,
@@ -163,8 +169,9 @@ static int vk_ffv1_start_frame(AVCodecContext          *avctx,
     if (err < 0)
         return err;
 
-    /* Allocate slice offsets/status buffer */
-    if (f->version >=4 && f->micro_version >= 9) {
+    /* Allocate slice offsets/status buffer (note, for integer+remap, we don't need it) */
+    if (f->version >=4 && f->micro_version >= 9 &&
+        (av_pix_fmt_desc_get(sw_format)->flags & AV_PIX_FMT_FLAG_FLOAT)) {
         err = ff_vk_get_pooled_buffer(&ctx->s, &fv->slice_fltmap_pool,
                                       &fp->slice_fltmap_buf,
                                       VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
@@ -393,7 +400,10 @@ static int vk_ffv1_end_frame(AVCodecContext *avctx)
         nb_img_bar = 0;
         nb_buf_bar = 0;
 
-        for (int i = 0; i < color_planes; i++)
+        /* The intermediate frame has 4 planes (GBRAP16/32). Clear all of
+         * them since the bayer decoder uses all four. */
+        int n_dec_planes = f->bayer ? 4 : color_planes;
+        for (int i = 0; i < n_dec_planes; i++)
             vk->CmdClearColorImage(exec->buf, vkf->img[i], VK_IMAGE_LAYOUT_GENERAL,
                                    &((VkClearColorValue) { 0 }),
                                    1, &((VkImageSubresourceRange) {
@@ -651,7 +661,8 @@ static int init_decode_shader(FFV1Context *f, FFVulkanContext *s,
                               FFVkExecPool *pool, FFVulkanShader *shd,
                               AVHWFramesContext *dec_frames_ctx,
                               AVHWFramesContext *out_frames_ctx,
-                              VkSpecializationInfo *sl, int ac, int rgb)
+                              VkSpecializationInfo *sl, int ac, int rgb,
+                              int bayer)
 {
     int err;
 
@@ -706,11 +717,28 @@ static int init_decode_shader(FFV1Context *f, FFVulkanContext *s,
             .stages = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
+    /* Detect a float output from the pixfmt descriptor instead of f->flt:
+     * the encoder side does not (yet) write f->flt to the extradata, so the
+     * parsed value is unreliable for some v4m4+ streams. The descriptor's
+     * FLOAT flag is set by the pixfmt selection logic and is accurate */
+    int is_float = !!(av_pix_fmt_desc_get(out_frames_ctx->sw_format)->flags &
+                      AV_PIX_FMT_FLAG_FLOAT);
+
+    /* Bindings 5 (dst) and 6 (fltmap_buf) are conditional */
     ff_vk_shader_add_descriptor_set(s, shd, desc_set,
-                                    5 + rgb + (f->micro_version >= 9),
+                                    5 + rgb + (is_float && !bayer),
                                     0, 0);
 
-    if (f->version >=4 && f->micro_version >= 9) {
+    if (bayer) {
+        if (ac == AC_GOLOMB_RICE)
+            ff_vk_shader_link(s, shd,
+                              ff_ffv1_dec_bayer_golomb_comp_spv_data,
+                              ff_ffv1_dec_bayer_golomb_comp_spv_len, "main");
+        else
+            ff_vk_shader_link(s, shd,
+                              ff_ffv1_dec_bayer_comp_spv_data,
+                              ff_ffv1_dec_bayer_comp_spv_len, "main");
+    } else if (is_float) {
         if (ac == AC_GOLOMB_RICE)
             ff_vk_shader_link(s, shd,
                               ff_ffv1_dec_rgb_float_golomb_comp_spv_data,
@@ -808,8 +836,7 @@ static int vk_decode_ffv1_init(AVCodecContext *avctx)
     FFVulkanDecodeShared *ctx = NULL;
     FFv1VulkanDecodeContext *fv;
 
-    if (f->version < 3 ||
-        (f->version == 4 && f->micro_version >= 10))
+    if (f->version < 3)
         return AVERROR(ENOTSUP);
 
     /* Streams with a low amount of slices will usually be much slower
@@ -861,7 +888,7 @@ static int vk_decode_ffv1_init(AVCodecContext *avctx)
 
     /* Decode shaders */
     RET(init_decode_shader(f, &ctx->s, &ctx->exec_pool, &fv->decode,
-                           dctx, hwfc, sl, f->ac, is_rgb));
+                           dctx, hwfc, sl, f->ac, is_rgb, f->bayer));
 
     /* Init static data */
     RET(ff_ffv1_vk_init_consts(&ctx->s, &fv->consts_buf, f));

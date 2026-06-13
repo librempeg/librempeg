@@ -1133,7 +1133,7 @@ static int FUNC(sps)(CodedBitstreamContext *ctx, RWContext *rw,
     max_width_minus1  = tmp_width_val - 1;
     max_height_minus1 = tmp_height_val - 1;
 
-    flag(sps_subpic_info_present_flag);
+    u(1, sps_subpic_info_present_flag, 0, !current->sps_res_change_in_clvs_allowed_flag);
     if (current->sps_subpic_info_present_flag) {
         ue(sps_num_subpics_minus1, 0, VVC_MAX_SLICES - 1);
         if (current->sps_num_subpics_minus1 > 0) {
@@ -3457,7 +3457,17 @@ static int FUNC(slice_header) (CodedBitstreamContext *ctx, RWContext *rw,
             }
 
             if (pps->pps_single_slice_per_subpic_flag) {
-                const int width_in_ctus = sps->sps_subpic_width_minus1[slice_idx] + 1;
+                int width_in_ctus, height_in_ctus;
+                if (sps->sps_subpic_info_present_flag) {
+                    width_in_ctus = sps->sps_subpic_width_minus1[slice_idx] + 1;
+                    height_in_ctus = sps->sps_subpic_height_minus1[slice_idx] + 1;
+                } else {
+                    const int log2_ctb_size = sps->sps_log2_ctu_size_minus5 + 5;
+                    const int ctb_size = 1 << log2_ctb_size;
+                    width_in_ctus = (pps->pps_pic_width_in_luma_samples + ctb_size - 1) >> log2_ctb_size;
+                    height_in_ctus = (pps->pps_pic_height_in_luma_samples + ctb_size - 1) >> log2_ctb_size;
+                }
+
                 const int subpic_l = sps->sps_subpic_ctu_top_left_x[slice_idx];
                 const int subpic_r = subpic_l + width_in_ctus;
 
@@ -3472,9 +3482,8 @@ static int FUNC(slice_header) (CodedBitstreamContext *ctx, RWContext *rw,
                 }
 
                 if (entropy_sync) {
-                    height = sps->sps_subpic_height_minus1[slice_idx] + 1;
+                    height = height_in_ctus;
                 } else {
-                    const int height_in_ctus = sps->sps_subpic_height_minus1[slice_idx] + 1;
                     const int subpic_t = sps->sps_subpic_ctu_top_left_y[slice_idx];
                     const int subpic_b = subpic_t + height_in_ctus;
 

@@ -152,6 +152,7 @@ typedef struct SwsAArch64Context {
     RasmOp op0_func;
     RasmOp op1_impl;
     RasmOp cont;
+    RasmNode *load_cont_node;
 
     /* Vector registers. Two banks (low and high) are used. */
     RasmOp vl[ 4];
@@ -259,23 +260,24 @@ static void asmgen_epilogue(SwsAArch64Context *s, const RasmOp *regs, unsigned n
 }
 
 /*********************************************************************/
-/* Callee-saved registers (r19-r28). */
-#define MAX_SAVED_REGS 10
+/* Callee-saved registers (r19-r28, fp, and lr). */
+#define MAX_SAVED_REGS 12
 
 static void clobber_gpr(RasmOp regs[MAX_SAVED_REGS], unsigned *count,
                         RasmOp gpr)
 {
     const int n = a64op_gpr_n(gpr);
-    if (n >= 19 && n <= 28)
+    if (n >= 19 && n <= 30)
         regs[(*count)++] = gpr;
 }
 
 static unsigned clobbered_gprs(const SwsAArch64Context *s,
-                               const SwsAArch64OpImplParams *p,
+                               SwsAArch64OpMask mask,
                                RasmOp regs[MAX_SAVED_REGS])
 {
     unsigned count = 0;
-    LOOP_MASK(p, i) {
+    clobber_gpr(regs, &count, a64op_lr());
+    LOOP(mask, i) {
         clobber_gpr(regs, &count, s->in[i]);
         clobber_gpr(regs, &count, s->out[i]);
         clobber_gpr(regs, &count, s->in_bump[i]);
@@ -284,25 +286,24 @@ static unsigned clobbered_gprs(const SwsAArch64Context *s,
     return count;
 }
 
-static void asmgen_process(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
+static void asmgen_process(SwsAArch64Context *s, SwsAArch64OpMask mask)
 {
     RasmContext *r = s->rctx;
     char func_name[128];
     char buf[64];
 
     /**
-     * The process/process_return functions for aarch64 work similarly
-     * to the x86 backend. The description in x86/ops_common.asm mostly
-     * holds as well here.
+     * The process function for aarch64 works similarly to the x86 backend.
+     * The description in x86/ops_include.asm mostly holds as well here.
      */
 
-    aarch64_op_impl_func_name(func_name, sizeof(func_name), p);
+    snprintf(func_name, sizeof(func_name), "ff_sws_process_%04x_neon", mask);
 
     rasm_func_begin(r, func_name, true, false);
 
     /* Function prologue */
     RasmOp saved_regs[MAX_SAVED_REGS];
-    unsigned nsaved = clobbered_gprs(s, p, saved_regs);
+    unsigned nsaved = clobbered_gprs(s, mask, saved_regs);
     if (nsaved)
         asmgen_prologue(s, saved_regs, nsaved);
 
@@ -311,70 +312,71 @@ static void asmgen_process(SwsAArch64Context *s, const SwsAArch64OpImplParams *p
     i_add(r, s->op1_impl, s->impl, IMM(sizeof_impl));               CMT("SwsOpImpl *op1_impl = impl + 1;");
 
     /* Load values from exec. */
-    LOOP_MASK(p, i) {
+    LOOP(mask, i) {
         rasm_annotate_nextf(r, buf, sizeof(buf), "in[%u] = exec->in[%u];", i, i);
         i_ldr(r, s->in[i],       a64op_off(s->exec, offsetof_exec_in       + (i * sizeof(uint8_t *))));
     }
-    LOOP_MASK(p, i) {
+    LOOP(mask, i) {
         rasm_annotate_nextf(r, buf, sizeof(buf), "out[%u] = exec->out[%u];", i, i);
         i_ldr(r, s->out[i],      a64op_off(s->exec, offsetof_exec_out      + (i * sizeof(uint8_t *))));
     }
-    LOOP_MASK(p, i) {
+    LOOP(mask, i) {
         rasm_annotate_nextf(r, buf, sizeof(buf), "in_bump[%u] = exec->in_bump[%u];", i, i);
         i_ldr(r, s->in_bump[i],  a64op_off(s->exec, offsetof_exec_in_bump  + (i * sizeof(ptrdiff_t))));
     }
-    LOOP_MASK(p, i) {
+    LOOP(mask, i) {
         rasm_annotate_nextf(r, buf, sizeof(buf), "out_bump[%u] = exec->out_bump[%u];", i, i);
         i_ldr(r, s->out_bump[i], a64op_off(s->exec, offsetof_exec_out_bump + (i * sizeof(ptrdiff_t))));
     }
 
-    /* Reset x and jump to first kernel. */
-    i_mov(r, s->bx, s->bx_start);   CMT("bx = bx_start;");
-    i_mov(r, s->impl, s->op1_impl); CMT("impl = op1_impl;");
-    i_br (r, s->op0_func);          CMT("jump to op0_func");
-}
+    int first_row  = rasm_new_label(r, NULL);
+    int next_row   = rasm_new_label(r, NULL);
+    int next_block = rasm_new_label(r, NULL);
 
-static void asmgen_process_return(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
-{
-    RasmContext *r = s->rctx;
-    char func_name[128];
+    /* Jump to first row (skips padding). */
+    i_b  (r, rasm_op_label(first_row));     CMT("goto first_row;");
 
-    aarch64_op_impl_func_name(func_name, sizeof(func_name), p);
+    /* Perform padding, preparing for next row. */
+    rasm_add_label(r, next_row);            CMT("next_row:");
+    LOOP(mask, i) { i_add(r, s->in[i],  s->in[i],  s->in_bump[i]);  CMTF("in[%u] += in_bump[%u];", i, i); }
+    LOOP(mask, i) { i_add(r, s->out[i], s->out[i], s->out_bump[i]); CMTF("out[%u] += out_bump[%u];", i, i); }
 
-    rasm_func_begin(r, func_name, true, true);
-
-    /* Reset impl to first kernel. */
-    i_mov(r, s->impl, s->op1_impl);         CMT("impl = op1_impl;");
-
-    /* Perform horizontal loop. */
-    int loop = rasm_new_label(r, NULL);
-    i_add(r, s->bx, s->bx, IMM(1));         CMT("bx += 1;");
-    i_cmp(r, s->bx, s->bx_end);             CMT("if (bx != bx_end)");
-    i_bne(r, loop);                         CMT("    goto loop;");
-
-    /* Perform vertical loop. */
-    int end = rasm_new_label(r, NULL);
-    i_add(r, s->y, s->y, IMM(1));           CMT("y += 1;");
-    i_cmp(r, s->y, s->y_end);               CMT("if (y == y_end)");
-    i_beq(r, end);                          CMT("    goto end;");
-
-    /* Perform padding and reset x, preparing for next row. */
-    LOOP_MASK(p, i) { i_add(r, s->in[i],  s->in[i],  s->in_bump[i]);  CMTF("in[%u] += in_bump[%u];", i, i); }
-    LOOP_MASK(p, i) { i_add(r, s->out[i], s->out[i], s->out_bump[i]); CMTF("out[%u] += out_bump[%u];", i, i); }
+    /* First row (reset x). */
+    rasm_add_label(r, first_row);           CMT("first_row:");
     i_mov(r, s->bx, s->bx_start);           CMT("bx = bx_start;");
 
-    /* Loop back or end of function. */
-    rasm_add_label(r, loop);                CMT("loop:");
-    i_br (r, s->op0_func);                  CMT("jump to op0_func");
-    rasm_add_label(r, end);                 CMT("end:");
+    /* Reset impl and call first kernel. */
+    rasm_add_label(r, next_block);          CMT("next_block:");
+    i_mov(r, s->impl, s->op1_impl);         CMT("impl = op1_impl;");
+    i_blr(r, s->op0_func);                  CMT("op0_func();");
+
+    /* Perform horizontal loop. */
+    i_add(r, s->bx, s->bx, IMM(1));         CMT("bx += 1;");
+    i_cmp(r, s->bx, s->bx_end);             CMT("if (bx != bx_end)");
+    i_bne(r, next_block);                   CMT("    goto next_block;");
+
+    /* Perform vertical loop. */
+    i_add(r, s->y, s->y, IMM(1));           CMT("y += 1;");
+    i_cmp(r, s->y, s->y_end);               CMT("if (y != y_end)");
+    i_bne(r, next_row);                     CMT("    goto next_row;");
 
     /* Function epilogue */
-    RasmOp saved_regs[MAX_SAVED_REGS];
-    unsigned nsaved = clobbered_gprs(s, p, saved_regs);
     if (nsaved)
         asmgen_epilogue(s, saved_regs, nsaved);
 
     i_ret(r);
+}
+
+/*********************************************************************/
+/**
+ * Set node where the continuation address will be loaded and impl will
+ * be incremented. This should be done right after impl->priv has been
+ * used.
+ */
+static void asmgen_set_load_cont_node(SwsAArch64Context *s)
+{
+    RasmContext *r = s->rctx;
+    s->load_cont_node = rasm_get_current_node(r);
 }
 
 /*********************************************************************/
@@ -401,6 +403,7 @@ static void asmgen_op_read_bit(SwsAArch64Context *s, const SwsAArch64OpImplParam
      * ushl actually performs a right shift. */
     rasm_annotate_next(r, "v128 shift_vec = impl->priv.v128;");
     i_ldr(r, shift_vec.q, a64op_off(s->impl, offsetof_impl_priv));
+    asmgen_set_load_cont_node(s);
 
     if (p->block_size == 16) {
         i_ldrh(r, wtmp,        a64op_post(s->in[0], 2));    CMT("uint16_t tmp = *in[0]++;");
@@ -528,6 +531,7 @@ static void asmgen_op_write_bit(SwsAArch64Context *s, const SwsAArch64OpImplPara
 
     rasm_annotate_next(r, "v128 shift_vec = impl->priv.v128;");
     i_ldr(r, shift_vec.q, a64op_off(s->impl, offsetof_impl_priv));
+    asmgen_set_load_cont_node(s);
 
     if (p->block_size == 8) {
         i_ushl(r, vl[0].b8,    vl[0].b8,   shift_vec.b8);   CMT("vl[0] <<= shift_vec;");
@@ -896,6 +900,7 @@ static void asmgen_op_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *
      */
 
     i_ldr(r, v_q(clear_vec), a64op_off(s->impl, offsetof_impl_priv));   CMT("v128 clear_vec = impl->priv.v128;");
+    asmgen_set_load_cont_node(s);
 
     LOOP_MASK      (p, i) { i_dup(r, vl[i], a64op_elem(clear_vec, i));  CMTF("vl[%u] = broadcast(clear_vec[%u])", i, i); }
     LOOP_MASK_VH(s, p, i) { i_dup(r, vh[i], a64op_elem(clear_vec, i));  CMTF("vh[%u] = broadcast(clear_vec[%u])", i, i); }
@@ -1024,6 +1029,7 @@ static void asmgen_op_min(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
     RasmOp min_vec = s->vt[4];
 
     i_ldr(r, v_q(min_vec), a64op_off(s->impl, offsetof_impl_priv)); CMT("v128 min_vec = impl->priv.v128;");
+    asmgen_set_load_cont_node(s);
     LOOP_MASK(p, i) { i_dup(r, vt[i], a64op_elem(min_vec, i));      CMTF("v128 vmin%u = min_vec[%u];", i, i); }
 
     if (p->type == AARCH64_PIXEL_F32) {
@@ -1048,6 +1054,7 @@ static void asmgen_op_max(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
     RasmOp max_vec = s->vt[4];
 
     i_ldr(r, v_q(max_vec), a64op_off(s->impl, offsetof_impl_priv)); CMT("v128 max_vec = impl->priv.v128;");
+    asmgen_set_load_cont_node(s);
     LOOP_MASK(p, i) { i_dup(r, vt[i], a64op_elem(max_vec, i));      CMTF("v128 vmax%u = max_vec[%u];", i, i); }
 
     if (p->type == AARCH64_PIXEL_F32) {
@@ -1072,6 +1079,7 @@ static void asmgen_op_scale(SwsAArch64Context *s, const SwsAArch64OpImplParams *
     RasmOp scale_vec = s->vt[0];
 
     i_add (r, priv_ptr, s->impl, IMM(offsetof_impl_priv));          CMT("v128 *scale_vec_ptr = &impl->priv;");
+    asmgen_set_load_cont_node(s);
     i_ld1r(r, vv_1(scale_vec), a64op_base(priv_ptr));               CMT("v128 scale_vec = broadcast(*scale_vec_ptr);");
 
     if (p->type == AARCH64_PIXEL_F32) {
@@ -1195,6 +1203,7 @@ static void asmgen_op_linear(SwsAArch64Context *s, const SwsAArch64OpImplParams 
     case 4: coeff_veclist = vv_4(vc[0], vc[1], vc[2], vc[3]); break;
     }
     i_ldr(r, ptr, a64op_off(s->impl, offsetof_impl_priv));  CMT("v128 *vcoeff_ptr = impl->priv.ptr;");
+    asmgen_set_load_cont_node(s);
     i_ld1(r, coeff_veclist, a64op_base(ptr));               CMT("coeff_veclist = *vcoeff_ptr;");
 
     /* Compute mask for rows that must be saved before being overwritten. */
@@ -1262,6 +1271,7 @@ static void asmgen_op_dither(SwsAArch64Context *s, const SwsAArch64OpImplParams 
     }
 
     i_ldr(r, ptr, a64op_off(s->impl, offsetof_impl_priv));  CMT("void *ptr = impl->priv.ptr;");
+    asmgen_set_load_cont_node(s);
 
     /**
      * We use ubfiz to mask and shift left in one single instruction:
@@ -1346,9 +1356,28 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
     RasmContext *r = s->rctx;
 
+    bool is_read = false;
+    bool is_write = false;
+    switch (p->op) {
+    case AARCH64_SWS_OP_READ_BIT:
+    case AARCH64_SWS_OP_READ_NIBBLE:
+    case AARCH64_SWS_OP_READ_PACKED:
+    case AARCH64_SWS_OP_READ_PLANAR:
+        is_read = true;
+        break;
+    case AARCH64_SWS_OP_WRITE_BIT:
+    case AARCH64_SWS_OP_WRITE_NIBBLE:
+    case AARCH64_SWS_OP_WRITE_PACKED:
+    case AARCH64_SWS_OP_WRITE_PLANAR:
+        is_write = true;
+        break;
+    default:
+        break;
+    }
+
     char func_name[128];
     aarch64_op_impl_func_name(func_name, sizeof(func_name), p);
-    rasm_func_begin(r, func_name, true, true);
+    rasm_func_begin(r, func_name, true, !is_read);
 
     /**
      * Set up vector register dimensions and reshape all vectors
@@ -1365,7 +1394,7 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
     reshape_all_vectors(s, s->el_count, el_size);
 
     /* Common start for continuation-passing style (CPS) functions. */
-    i_ldr(r, s->cont, a64op_off(s->impl, offsetof_impl_cont));  CMT("SwsFuncPtr cont = impl->cont;");
+    asmgen_set_load_cont_node(s);
 
     switch (p->op) {
     case AARCH64_SWS_OP_READ_BIT:     asmgen_op_read_bit(s, p);     break;
@@ -1395,23 +1424,17 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
         break;
     }
 
-    /* Common end for CPS functions. */
-    i_add(r, s->impl, s->impl, IMM(sizeof_impl));   CMT("impl += 1;");
-    i_br (r, s->cont);                              CMT("jump to cont");
-}
-
-static void asmgen_op(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
-{
-    switch (p->op) {
-    case AARCH64_SWS_OP_PROCESS:
-        asmgen_process(s, p);
-        break;
-    case AARCH64_SWS_OP_PROCESS_RETURN:
-        asmgen_process_return(s, p);
-        break;
-    default:
-        asmgen_op_cps(s, p);
-        break;
+    if (is_write) {
+        /* Write functions return directly. */
+        i_ret(r);
+    } else {
+        /* Load continuation address and increment impl pointer. */
+        RasmNode *node = rasm_set_current_node(r, s->load_cont_node);
+        RasmOp impl_post = a64op_post(s->impl, sizeof_impl);
+        i_ldr(r, s->cont, impl_post);                   CMT("SwsFuncPtr cont = (impl++)->cont;");
+        rasm_set_current_node(r, node);
+        /* Common end for remaining CPS functions. */
+        i_br (r, s->cont);                              CMT("jump to cont");
     }
 }
 
@@ -1535,9 +1558,11 @@ static int asmgen(void)
 
     /**
      * The entry point of the SwsOpFunc is the `process` function. The
+     * first kernel function is called from `process`, and subsequent
      * kernel functions are chained by directly branching to the next
-     * operation, using a continuation-passing style design. The exit
-     * point of the SwsOpFunc is the `process_return` function.
+     * operation, using a continuation-passing style design. The last
+     * operation must be a write operation, which returns from the call
+     * to the `process` function.
      *
      * The GPRs used by the entire call-chain are listed below.
      *
@@ -1560,6 +1585,9 @@ static int asmgen(void)
      * The read/write data pointers and padding values first use up the
      * remaining free caller-saved registers, and only then are the
      * caller-saved registers (r19-r28) used.
+     *
+     * The Link Register (r30) is used when calling the first kernel,
+     * so it must be saved.
      */
 
     /* SwsOpFunc arguments. */
@@ -1601,10 +1629,16 @@ static int asmgen(void)
     s.in_bump [3] = a64op_gpx(26);
     s.out_bump[3] = a64op_gpx(27);
 
+    /* Generate all process functions using rasm. */
+    asmgen_process(&s, 0x0001);
+    asmgen_process(&s, 0x0011);
+    asmgen_process(&s, 0x0111);
+    asmgen_process(&s, 0x1111);
+
     /* Generate all functions from ops_entries.c using rasm. */
     const SwsAArch64OpImplParams *params = impl_params;
     while (params->op) {
-        asmgen_op(&s, params++);
+        asmgen_op_cps(&s, params++);
         if (rctx->error) {
             ret = rctx->error;
             goto error;

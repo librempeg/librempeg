@@ -1,21 +1,21 @@
 /*
  * Copyright (C) 2001-2012 Michael Niedermayer <michaelni@gmx.at>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include <math.h>
@@ -1354,6 +1354,29 @@ static av_always_inline void rgbf32_to_uv_c(uint8_t *_dstU, uint8_t *_dstV, cons
     }
 }
 
+static av_always_inline void rgbf32_to_uv_half_c(uint8_t *_dstU, uint8_t *_dstV, const uint8_t *unused1,
+                                                 const uint8_t *_src, const uint8_t *unused2,
+                                                 int width, int is_be, int32_t *rgb2yuv)
+{
+    const float *src = (const float *) _src;
+    uint16_t *dstU   = (uint16_t *) _dstU;
+    uint16_t *dstV   = (uint16_t *) _dstV;
+    int32_t ru = rgb2yuv[RU_IDX], gu = rgb2yuv[GU_IDX], bu = rgb2yuv[BU_IDX];
+    int32_t rv = rgb2yuv[RV_IDX], gv = rgb2yuv[GV_IDX], bv = rgb2yuv[BV_IDX];
+
+    for (int i = 0; i < width; i++) {
+        int r = (lrintf(av_clipf(65535.0f * rdpx(&src[6 * i + 0]), 0.0f, 65535.0f)) +
+                 lrintf(av_clipf(65535.0f * rdpx(&src[6 * i + 3]), 0.0f, 65535.0f))) >> 1;
+        int g = (lrintf(av_clipf(65535.0f * rdpx(&src[6 * i + 1]), 0.0f, 65535.0f)) +
+                 lrintf(av_clipf(65535.0f * rdpx(&src[6 * i + 4]), 0.0f, 65535.0f))) >> 1;
+        int b = (lrintf(av_clipf(65535.0f * rdpx(&src[6 * i + 2]), 0.0f, 65535.0f)) +
+                 lrintf(av_clipf(65535.0f * rdpx(&src[6 * i + 5]), 0.0f, 65535.0f))) >> 1;
+
+        dstU[i] = (ru*r + gu*g + bu*b + (0x10001 << (RGB2YUV_SHIFT - 1))) >> RGB2YUV_SHIFT;
+        dstV[i] = (rv*r + gv*g + bv*b + (0x10001 << (RGB2YUV_SHIFT - 1))) >> RGB2YUV_SHIFT;
+    }
+}
+
 static av_always_inline void rgbf32_to_y_c(uint8_t *_dst, const uint8_t *_src,
                                            const uint8_t *unused1, const uint8_t *unused2,
                                            int width, int is_be, int32_t *rgb2yuv)
@@ -1501,6 +1524,14 @@ static void rgbf32##endian_name##_to_uv_c(uint8_t *dstU, uint8_t *dstV,         
                                         void *opq)                                                  \
 {                                                                                                   \
     rgbf32_to_uv_c(dstU, dstV, unused1, src, unused2, w, endian, rgb2yuv);                          \
+}                                                                                                   \
+static void rgbf32##endian_name##_to_uv_half_c(uint8_t *dstU, uint8_t *dstV,                        \
+                                               const uint8_t *unused1,                              \
+                                               const uint8_t *src, const uint8_t *unused2,          \
+                                               int w, uint32_t *rgb2yuv,                            \
+                                               void *opq)                                           \
+{                                                                                                   \
+    rgbf32_to_uv_half_c(dstU, dstV, unused1, src, unused2, w, endian, rgb2yuv);                     \
 }                                                                                                   \
 static void grayf32##endian_name##ToY16_c(uint8_t *dst, const uint8_t *src,                         \
                                           const uint8_t *unused1, const uint8_t *unused2,           \
@@ -2192,6 +2223,12 @@ av_cold void ff_sws_init_input_funcs(SwsInternal *c,
             break;
         case AV_PIX_FMT_RGBF16LE:
             *chrToYV12 = rgbf16leToUV_half_c;
+            break;
+        case AV_PIX_FMT_RGBF32BE:
+            *chrToYV12 = rgbf32be_to_uv_half_c;
+            break;
+        case AV_PIX_FMT_RGBF32LE:
+            *chrToYV12 = rgbf32le_to_uv_half_c;
             break;
         }
     } else {

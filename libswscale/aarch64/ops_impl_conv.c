@@ -78,7 +78,7 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
     /* Map SwsOpType to SwsAArch64OpType */
     switch (op->op) {
     case SWS_OP_READ:
-        if (op->rw.filter)
+        if (op->rw.filter.op)
             return AVERROR(ENOTSUP);
         /**
          * The different types of read operations have been split into
@@ -88,13 +88,15 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
             out->op = AARCH64_SWS_OP_READ_NIBBLE;
         else if (op->rw.frac == 3)
             out->op = AARCH64_SWS_OP_READ_BIT;
-        else if (op->rw.packed && op->rw.elems != 1)
+        else if (op->rw.mode == SWS_RW_PACKED)
             out->op = AARCH64_SWS_OP_READ_PACKED;
-        else
+        else if (op->rw.mode == SWS_RW_PLANAR)
             out->op = AARCH64_SWS_OP_READ_PLANAR;
+        else
+            return AVERROR(ENOTSUP);
         break;
     case SWS_OP_WRITE:
-        if (op->rw.filter)
+        if (op->rw.filter.op)
             return AVERROR(ENOTSUP);
         /**
          * The different types of write operations have been split into
@@ -104,10 +106,12 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
             out->op = AARCH64_SWS_OP_WRITE_NIBBLE;
         else if (op->rw.frac == 3)
             out->op = AARCH64_SWS_OP_WRITE_BIT;
-        else if (op->rw.packed && op->rw.elems != 1)
+        else if (op->rw.mode == SWS_RW_PACKED)
             out->op = AARCH64_SWS_OP_WRITE_PACKED;
-        else
+        else if (op->rw.mode == SWS_RW_PLANAR)
             out->op = AARCH64_SWS_OP_WRITE_PLANAR;
+        else
+            return AVERROR(ENOTSUP);
         break;
     case SWS_OP_SWAP_BYTES: out->op = AARCH64_SWS_OP_SWAP_BYTES; break;
     case SWS_OP_SWIZZLE:    out->op = AARCH64_SWS_OP_SWIZZLE;    break;
@@ -124,6 +128,9 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
     case SWS_OP_SCALE:      out->op = AARCH64_SWS_OP_SCALE;      break;
     case SWS_OP_LINEAR:     out->op = AARCH64_SWS_OP_LINEAR;     break;
     case SWS_OP_DITHER:     out->op = AARCH64_SWS_OP_DITHER;     break;
+    case SWS_OP_FILTER_H:
+    case SWS_OP_FILTER_V:
+        return AVERROR(ENOTSUP);
     }
 
     switch (out->op) {

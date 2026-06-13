@@ -30,11 +30,12 @@ OBJS = alphablend.o                                     \
 
 OBJS-$(CONFIG_UNSTABLE) +=                              \
        ops.o                                            \
-       ops_backend.o                                    \
        ops_chain.o                                      \
        ops_dispatch.o                                   \
        ops_memcpy.o                                     \
        ops_optimizer.o                                  \
+       uops.o                                           \
+       uops_backend.o                                   \
 
 ifeq ($(CONFIG_UNSTABLE),yes)
 include $(SRC_PATH)/libswscale/vulkan/Makefile
