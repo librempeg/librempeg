@@ -2800,7 +2800,7 @@ static int ipu_set_picture_type(IPUContext *s)
     IPUInstructionExecutionCommunicationContext *iec = s->iec;
     IPUControlRegister *ctrl = &iec->ctrl;
     MPVContext *const m = &s->m.c;
-    
+
     switch (ctrl->picture_type) {
         case 1:
             m->pict_type = AV_PICTURE_TYPE_I;
@@ -2865,7 +2865,7 @@ static int ipu_decode_frame_with_iec(AVCodecContext *avctx, AVFrame *frame)
     for (int i = 0; i < iec->inst; i++) {
         IPUBlockInstructionCommunicationContext *inst_d = iec->inst_d + i;
         IPUBlockCoordContext *blk_d = ie->blk_d + i;
-        
+
         if ((inst_d->cmd == IPU_CMD_IDEC) | ((inst_d->cmd == IPU_CMD_BDEC) && inst_d->ibd_args.reset_dc_pred))
             s->m.last_dc[0] = s->m.last_dc[1] = s->m.last_dc[2] = 128 << m->intra_dc_precision;
 
@@ -2889,10 +2889,10 @@ static int ipu_decode_frame_with_iec(AVCodecContext *avctx, AVFrame *frame)
                          ? ff_mpeg2_non_linear_qscale[inst_d->ibd_args.qscale_code]
                          : inst_d->ibd_args.qscale_code << 1;
         }
-        
+
         if ((inst_d->cmd == IPU_CMD_IDEC) || (inst_d->cmd == IPU_CMD_BDEC)) {
             memset(block, 0, 6 * sizeof(*block));
-        
+
             for (int n = 0; n < 6; n++) {
                 if (s->mpeg1) {
                     ret = (m->pict_type == AV_PICTURE_TYPE_I)
@@ -2907,11 +2907,11 @@ static int ipu_decode_frame_with_iec(AVCodecContext *avctx, AVFrame *frame)
                            ? mpeg2_decode_block_intra(&s->m, block[n], n)
                            : mpeg2_decode_block_non_intra(&s->m, block[n], n);
                 }
-    
+
                 if (ret < 0)
                     return ret;
             }
-    
+
             m->idsp.idct_put(frame->data[0] + blk_d->starting_y * frame->linesize[0] + blk_d->starting_x,
                              frame->linesize[0], block[0]);
             m->idsp.idct_put(frame->data[0] + blk_d->starting_y * frame->linesize[0] + blk_d->starting_x + 8,
@@ -2948,7 +2948,6 @@ static int ipu_decode_frame_without_iec(AVCodecContext *avctx, AVFrame *frame)
     m->q_scale_type = !!(s->flags & 0x40);
     m->intra_vlc_format = !!(s->flags & 0x20);
     m->alternate_scan = !!(s->flags & 0x10);
-    s->dct_type_decode = !!(s->flags & 4);
     m->intra_dc_precision = s->flags & 3;
 
     ff_permute_scantable(m->intra_scantable.permutated,
@@ -2959,7 +2958,7 @@ static int ipu_decode_frame_without_iec(AVCodecContext *avctx, AVFrame *frame)
     m->qscale = 1;
 
     for (int y = 0; y < avctx->height; y += 16) {
-        int mb_type;
+        int intraquant;
 
         for (int x = 0; x < avctx->width; x += 16) {
             if (x || y) {
@@ -2967,14 +2966,18 @@ static int ipu_decode_frame_without_iec(AVCodecContext *avctx, AVFrame *frame)
                     return AVERROR_INVALIDDATA;
             }
 
-            if ((ret = ipu_get_macroblock_type(s, x, y)) < 0)
-                return ret;
-            mb_type = ret;
+            if (get_bits1(gb)) {
+                intraquant = 0;
+            } else {
+                if (!get_bits1(gb))
+                    return AVERROR_INVALIDDATA;
+                intraquant = 1;
+            }
 
-            if (s->dct_type_decode)
+            if (s->flags & 4)
                 skip_bits1(gb);
 
-            if (IS_QUANT(mb_type))
+            if (intraquant)
                 m->qscale = mpeg_get_qscale(gb, m->q_scale_type);
 
             memset(block, 0, 6 * sizeof(*block));
