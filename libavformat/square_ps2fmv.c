@@ -21,10 +21,12 @@
 
 #include "libavutil/intreadwrite.h"
 #include "libavutil/intfloat.h"
+#include "libavutil/mem.h"
 #include "avformat.h"
 #include "avio_internal.h"
 #include "demux.h"
 #include "internal.h"
+#include "libavcodec/ipu_instructions.h"
 
 /*
  * todo list for this demuxer:
@@ -139,6 +141,7 @@ static int square_ps2fmv_read_header(AVFormatContext *s)
     AVStream *st = NULL;
     int64_t start_offset = 0;
     uint16_t nb_frames, frame_h, frame_w;
+    int ret;
 
     /* (todo) again, only the standalone v1 dat format is parsed here. */
 
@@ -187,16 +190,26 @@ static int square_ps2fmv_read_header(AVFormatContext *s)
         if (!st)
             return AVERROR(ENOMEM);
 
-        st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
-        st->codecpar->codec_id = AV_CODEC_ID_IPU;
-        st->codecpar->width    = frame_w;
-        st->codecpar->height   = frame_h;
-        st->start_time         = 0;
-        st->duration           =
-        st->nb_frames          = nb_frames;
+        st->codecpar->codec_type   = AVMEDIA_TYPE_VIDEO;
+        st->codecpar->codec_id     = AV_CODEC_ID_IPU;
+        st->codecpar->width        = frame_w;
+        st->codecpar->height       = frame_h;
+        st->start_time             = 0;
+        st->duration               =
+        st->nb_frames              = nb_frames;
         avpriv_set_pts_info(st, 64, 1, 25);
         ps2fmv->video_stream_index = st->index;
         ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+
+        if ((ret = ff_alloc_extradata(st->codecpar, sizeof(IPUInstructionExecutionCommunicationContext))) < 0)
+            return ret;
+
+        if (st->codecpar->extradata_size < sizeof(IPUInstructionExecutionCommunicationContext))
+            return AVERROR_INVALIDDATA;
+
+        ff_ipu_init_inst_exec_comm_list(
+                                        (IPUInstructionExecutionCommunicationContext*)st->codecpar->extradata,
+                                        1, (IPUControlRegister){ 0, 0, 0, 0, 0, 0, 0, 0 }, st->codecpar->width, st->codecpar->height);
     }
 
     avio_seek(pb, start_offset, SEEK_SET);
@@ -211,6 +224,7 @@ static int square_ps2fmv_read_packet(AVFormatContext *s, AVPacket *pkt)
     int64_t pos;
     int ret;
     int cannot_process_this_block;
+    AVStream *st = NULL;
 
     if (avio_feof(pb))
         return AVERROR_EOF;
@@ -241,6 +255,17 @@ static int square_ps2fmv_read_packet(AVFormatContext *s, AVPacket *pkt)
             pkt->duration = ps2fmv->block_frames;
             pkt->stream_index = ps2fmv->video_stream_index;
 
+            st = s->streams[pkt->stream_index];
+            if (st->codecpar->extradata) {
+                IPUInstructionExecutionCommunicationContext *iec = (IPUInstructionExecutionCommunicationContext*)st->codecpar->extradata;
+
+                ff_ipu_set_ctrl_from_inst_exec_comm_list(iec, (IPUControlRegister){ 0, 0, 0, 1, 0, 0, 1, 1 });
+                ff_ipu_set_inst_to_exec_from_start(iec,
+                                                   IPU_CMD_IDEC, (IPUIBDECArguments){ 1, 0, 0, 0, 0 },
+                                                   0, 0, st->codecpar->width, st->codecpar->height);
+                //ff_ipu_set_inst_to_exec_from_start(iec, IPU_CMD_BDEC, (IPUIBDECArguments){0, 0, 0, 0, 0}, 16, 0, st->codecpar->width, st->codecpar->height);
+            }
+
             avio_seek(pb, *(next_block_offset), SEEK_SET);
         } else {
             // (TODO) last block is reported as having 0 bytes and no actual frames in it
@@ -255,6 +280,22 @@ static int square_ps2fmv_read_packet(AVFormatContext *s, AVPacket *pkt)
     return 0;
 }
 
+static int square_ps2fmv_read_close(AVFormatContext *s)
+{
+    SquarePS2FMVDemuxContext *ps2fmv = s->priv_data;
+    AVStream *st = NULL;
+
+    if (s->streams) {
+        st = s->streams[ps2fmv->video_stream_index];
+        if (st->codecpar->extradata) {
+            IPUInstructionExecutionCommunicationContext *iec = (IPUInstructionExecutionCommunicationContext*)st->codecpar->extradata;
+            ff_ipu_close_block_inst_comm(iec);
+        }
+    }
+
+    return 0;
+}
+
 const FFInputFormat ff_square_ps2fmv_demuxer = {
     .p.name = "square_ps2fmv",
     .p.long_name = NULL_IF_CONFIG_SMALL("SquareSoft->SquareEnix PS2 FMV"),
@@ -263,4 +304,5 @@ const FFInputFormat ff_square_ps2fmv_demuxer = {
     .read_probe = square_ps2fmv_read_probe,
     .read_header = square_ps2fmv_read_header,
     .read_packet = square_ps2fmv_read_packet,
+    .read_close = square_ps2fmv_read_close,
 };
