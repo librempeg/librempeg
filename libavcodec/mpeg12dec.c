@@ -35,6 +35,7 @@
 #include "libavutil/emms.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
+#include "libavutil/intreadwrite.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/reverse.h"
 #include "libavutil/stereo3d.h"
@@ -2753,9 +2754,15 @@ const FFCodec ff_mpegvideo_decoder = {
 };
 
 typedef struct IPUContext {
+    size_t m_offset;
+    size_t m_size;
+    size_t ie_offset;
+    size_t ie_size;
+    size_t iqp_offset;
+    size_t iq_size;
     Mpeg12SliceContext m;
     IPUInstructionExecutionContext ie;
-    IPUInstructionExecutionCommunicationContext *iec;
+    IPUInstructionQueueContext *iq_p;
 
     int flags; // for IPU bitstream only
     int mpeg1;
@@ -2797,8 +2804,8 @@ static int ipu_get_macroblock_type(IPUContext *s, int x, int y)
 
 static int ipu_set_picture_type(IPUContext *s)
 {
-    IPUInstructionExecutionCommunicationContext *iec = s->iec;
-    IPUControlRegister *ctrl = &iec->ctrl;
+    IPUInstructionExecutionContext *ie = &s->ie;
+    IPUControlRegister *ctrl = &ie->ctrl;
     MPVContext *const m = &s->m.c;
 
     switch (ctrl->picture_type) {
@@ -2815,7 +2822,7 @@ static int ipu_set_picture_type(IPUContext *s)
             // D-picture seemingly not implemented.
             return AVERROR_INVALIDDATA;
         default:
-            // default to this for now.
+            // just default to this for now.
             m->pict_type = AV_PICTURE_TYPE_I;
             break;
     }
@@ -2826,18 +2833,18 @@ static int ipu_set_picture_type(IPUContext *s)
 static int ipu_decode_frame_with_iec(AVCodecContext *avctx, AVFrame *frame)
 {
     IPUContext *s = avctx->priv_data;
-    IPUInstructionExecutionCommunicationContext *iec = s->iec;
     IPUInstructionExecutionContext *ie = &s->ie;
-    IPUControlRegister *ctrl = &iec->ctrl;
+    IPUInstructionQueueContext *iq = s->iq_p;
+    IPUControlRegister *ctrl = &ie->ctrl;
     MPVContext *const m = &s->m.c;
     GetBitContext *const gb = &s->m.gb;
     int16_t (*const block)[64] = s->m.block;
     int ret;
 
-    if (ie->inst != iec->inst)
-        return AVERROR_INVALIDDATA;
+    ff_ipu_execute_queued_ctrl((IPUInstructionQueueType){ IPU_IQ_CTRL }, iq, ie);
+    ff_ipu_execute_queued_cmd((IPUInstructionQueueType){ IPU_IQ_CMD }, iq, ie);
 
-    if (iec->ipu_flags_exist) {
+    if (ie->ipu_flags_exist) {
         s->flags = get_bits(gb, 8);
 
         s->mpeg1 = !!(s->flags & 0x80);
@@ -2862,32 +2869,31 @@ static int ipu_decode_frame_with_iec(AVCodecContext *avctx, AVFrame *frame)
                          m->idsp.idct_permutation);
 
     int mb_type;
-    for (int i = 0; i < iec->inst; i++) {
-        IPUBlockInstructionCommunicationContext *inst_d = iec->inst_d + i;
-        IPUBlockCoordContext *blk_d = ie->blk_d + i;
+    for (int i = 0; i < ie->inst; i++) {
+        IPUBlockInstructionContext *inst_d = ie->inst_d + i;
 
-        if ((inst_d->cmd == IPU_CMD_IDEC) | ((inst_d->cmd == IPU_CMD_BDEC) && inst_d->ibd_args.reset_dc_pred))
+        if ((inst_d->cmd == IPU_CMD_IDEC) | ((inst_d->cmd == IPU_CMD_BDEC) && inst_d->args.reset_dc_pred))
             s->m.last_dc[0] = s->m.last_dc[1] = s->m.last_dc[2] = 128 << m->intra_dc_precision;
 
         if (inst_d->cmd == IPU_CMD_IDEC) {
-            m->frame_pred_frame_dct = !inst_d->ibd_args.dtd;
+            m->frame_pred_frame_dct = !inst_d->args.dtd;
 
             if (i) {
                 if (!get_bits1(gb))
                     return AVERROR_INVALIDDATA;
             }
 
-            if ((ret = ipu_get_macroblock_type(s, blk_d->starting_x, blk_d->starting_y)) == AVERROR_INVALIDDATA)
+            if ((ret = ipu_get_macroblock_type(s, inst_d->starting_x, inst_d->starting_y)) == AVERROR_INVALIDDATA)
                 return ret;
             mb_type = ret;
 
             m->qscale = IS_QUANT(mb_type)
                         ? mpeg_get_qscale(gb, m->q_scale_type)
-                        : inst_d->ibd_args.qscale_code;
+                        : inst_d->args.qscale_code;
         } else if (inst_d->cmd = IPU_CMD_BDEC) {
             m->qscale = (m->q_scale_type)
-                         ? ff_mpeg2_non_linear_qscale[inst_d->ibd_args.qscale_code]
-                         : inst_d->ibd_args.qscale_code << 1;
+                         ? ff_mpeg2_non_linear_qscale[inst_d->args.qscale_code]
+                         : inst_d->args.qscale_code << 1;
         }
 
         if ((inst_d->cmd == IPU_CMD_IDEC) || (inst_d->cmd == IPU_CMD_BDEC)) {
@@ -2912,17 +2918,17 @@ static int ipu_decode_frame_with_iec(AVCodecContext *avctx, AVFrame *frame)
                     return ret;
             }
 
-            m->idsp.idct_put(frame->data[0] + blk_d->starting_y * frame->linesize[0] + blk_d->starting_x,
+            m->idsp.idct_put(frame->data[0] + inst_d->starting_y * frame->linesize[0] + inst_d->starting_x,
                              frame->linesize[0], block[0]);
-            m->idsp.idct_put(frame->data[0] + blk_d->starting_y * frame->linesize[0] + blk_d->starting_x + 8,
+            m->idsp.idct_put(frame->data[0] + inst_d->starting_y * frame->linesize[0] + inst_d->starting_x + 8,
                              frame->linesize[0], block[1]);
-            m->idsp.idct_put(frame->data[0] + (blk_d->starting_y + 8) * frame->linesize[0] + blk_d->starting_x,
+            m->idsp.idct_put(frame->data[0] + (inst_d->starting_y + 8) * frame->linesize[0] + inst_d->starting_x,
                              frame->linesize[0], block[2]);
-            m->idsp.idct_put(frame->data[0] + (blk_d->starting_y + 8) * frame->linesize[0] + blk_d->starting_x + 8,
+            m->idsp.idct_put(frame->data[0] + (inst_d->starting_y + 8) * frame->linesize[0] + inst_d->starting_x + 8,
                              frame->linesize[0], block[3]);
-            m->idsp.idct_put(frame->data[1] + (blk_d->starting_y >> 1) * frame->linesize[1] + (blk_d->starting_x >> 1),
+            m->idsp.idct_put(frame->data[1] + (inst_d->starting_y >> 1) * frame->linesize[1] + (inst_d->starting_x >> 1),
                              frame->linesize[1], block[4]);
-            m->idsp.idct_put(frame->data[2] + (blk_d->starting_y >> 1) * frame->linesize[2] + (blk_d->starting_x >> 1),
+            m->idsp.idct_put(frame->data[2] + (inst_d->starting_y >> 1) * frame->linesize[2] + (inst_d->starting_x >> 1),
                              frame->linesize[2], block[5]);
         }
 
@@ -3019,8 +3025,10 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                             int *got_frame, AVPacket *avpkt)
 {
     IPUContext *s = avctx->priv_data;
+    MPVContext *m = &s->m.c;
     GetBitContext *const gb = &s->m.gb;
     int ret, skip = 0;
+    int has_ie = 0, has_ipu_ctrl_byte = 0, has_iq = 0;
 
     // Check for minimal intra MB size (considering mb header, luma & chroma dc VLC, ac EOB VLC)
     if (avpkt->size*8LL < (avctx->width+15)/16 * ((avctx->height+15)/16) * (2LL + 3*4 + 2*2 + 2*6))
@@ -3040,14 +3048,32 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     if (ret < 0)
         return ret;
 
-    if (avctx->extradata && avctx->extradata_size)
-        s->iec = (IPUInstructionExecutionCommunicationContext*)avctx->extradata;
+    if (avctx->extradata && (avctx->extradata_size == 2)) {
+        has_ie = AV_RB8(avctx->extradata);
+        has_ipu_ctrl_byte = AV_RB8(avctx->extradata+1);
+    } else {
+        has_ie = 0;
+        has_ipu_ctrl_byte = 1;
+    }
 
-    if (s->iec) {
-        if ((ret = ipu_decode_frame_with_iec(avctx, frame)) < 0)
+    if (avpkt->side_data && (avpkt->side_data_elems == 1)) {
+        if (avpkt->side_data->data &&
+            avpkt->side_data->type == AV_PKT_DATA_NEW_EXTRADATA &&
+            avpkt->side_data->size == s->iq_size) {
+            s->iq_p = (IPUInstructionQueueContext*)avpkt->side_data->data;
+            has_iq = 1;
+        }
+    } else {
+        has_iq = 0;
+    }
+
+    if (has_ie && has_iq) {
+        ff_ipu_ctrl_byte_signal(m->avctx, has_ipu_ctrl_byte);
+        ff_ipu_iq_comms_signal(m->avctx, has_iq);
+        if ((ret = ipu_decode_frame_with_iec(m->avctx, frame)) < 0)
             return ret;
     } else {
-        if ((ret = ipu_decode_frame_without_iec(avctx, frame)) < 0)
+        if ((ret = ipu_decode_frame_without_iec(m->avctx, frame)) < 0)
             return ret;
     }
 
@@ -3067,6 +3093,13 @@ static av_cold int ipu_decode_init(AVCodecContext *avctx)
 {
     IPUContext *s = avctx->priv_data;
     MPVContext *const m = &s->m.c;
+    
+    s->m_offset = (char*)(&s->m) - (char*)s;
+    s->m_size = sizeof(Mpeg12SliceContext);
+    s->ie_offset = (char*)(&s->ie) - (char*)s;
+    s->ie_size = sizeof(IPUInstructionExecutionContext);
+    s->iqp_offset = (char*)(&s->iq_p) - (char*)s;
+    s->iq_size = sizeof(IPUInstructionQueueContext);
 
     avctx->pix_fmt = AV_PIX_FMT_YUV420P;
     m->avctx       = avctx;
@@ -3082,22 +3115,14 @@ static av_cold int ipu_decode_init(AVCodecContext *avctx)
     }
 
     ipu_hard_reset(s);
-    ff_ipu_init_inst_exec_list(&s->ie, avctx->width, avctx->height);
+    ff_ipu_init_inst_exec_list(m->avctx, avctx->width, avctx->height);
 
     return 0;
 }
 
 static av_cold int ipu_decode_end(AVCodecContext *avctx)
 {
-    IPUContext *s = avctx->priv_data;
-
-    if (s->iec) {
-        if (s->iec->inst_d)
-            av_freep(&s->iec->inst_d);
-        s->iec = NULL;
-    }
-    if (s->ie.blk_d)
-        av_freep(&s->ie.blk_d);
+    ff_ipu_close_block_inst_comm(avctx);
 
     return ff_mpv_decode_close(avctx);
 }
