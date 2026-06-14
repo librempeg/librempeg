@@ -444,6 +444,7 @@ extern const FFInputFormat  ff_nuv_demuxer;
 extern const FFInputFormat  ff_nwa_demuxer;
 extern const FFInputFormat  ff_nwav_demuxer;
 extern const FFInputFormat  ff_nxa1_demuxer;
+extern const FFInputFormat  ff_nxms_demuxer;
 extern const FFInputFormat  ff_nxof_demuxer;
 extern const FFInputFormat  ff_obu_demuxer;
 extern const FFOutputFormat ff_obu_muxer;
