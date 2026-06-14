@@ -1,24 +1,27 @@
 /*
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/avassert.h"
+#include "libavutil/hwcontext_amf.h"
 #include "libavutil/internal.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
+#include "libavutil/pixdesc.h"
 #include "amfenc.h"
 #include "codec_internal.h"
 #include <AMF/components/PreAnalysis.h>
@@ -87,7 +90,7 @@ static const AVOption options[] = {
     { "gop",            "", 0, AV_OPT_TYPE_CONST, { .i64 = AMF_VIDEO_ENCODER_HEVC_HEADER_INSERTION_MODE_GOP_ALIGNED }, 0, 0, VE, .unit = "hdrmode" },
     { "idr",            "", 0, AV_OPT_TYPE_CONST, { .i64 = AMF_VIDEO_ENCODER_HEVC_HEADER_INSERTION_MODE_IDR_ALIGNED }, 0, 0, VE, .unit = "hdrmode" },
 
-    { "async_depth",    "Set maximum encoding parallelism. Higher values increase output latency.",             OFFSET(hwsurfaces_in_queue_max), AV_OPT_TYPE_INT, {.i64 = 16 }, 1, 16, VE },
+    { "async_depth",    "Set maximum encoding parallelism. Higher values increase output latency.",             OFFSET(hwsurfaces_in_queue_max), AV_OPT_TYPE_INT, {.i64 = 16 }, 1, MAX_LOOKAHEAD_DEPTH + 1, VE },
 
     { "high_motion_quality_boost_enable",   "Enable High motion quality boost mode",  OFFSET(hw_high_motion_quality_boost), AV_OPT_TYPE_BOOL,   {.i64 = -1 }, -1, 1, VE },
     { "gops_per_idr",   "GOPs per IDR 0-no IDR will be inserted",   OFFSET(gops_per_idr),  AV_OPT_TYPE_INT,  { .i64 = 1  },  0, INT_MAX, VE },
@@ -166,6 +169,7 @@ static av_cold int amf_encode_init_hevc(AVCodecContext *avctx)
     AMFEncoderContext  *ctx = avctx->priv_data;
     AMFVariantStruct    var = {0};
     amf_int64           profile = 0;
+    amf_int64           profile_from_bitdepth = 0;
     amf_int64           profile_level = 0;
     AMFBuffer          *buffer;
     AMFGuid             guid;
@@ -175,6 +179,7 @@ static av_cold int amf_encode_init_hevc(AVCodecContext *avctx)
     amf_int64           bit_depth;
     amf_int64           color_profile;
     enum                AVPixelFormat pix_fmt;
+    const AVPixFmtDescriptor *pix_desc;
 
     if (avctx->framerate.num > 0 && avctx->framerate.den > 0) {
         framerate = AMFConstructRate(avctx->framerate.num, avctx->framerate.den);
@@ -243,35 +248,49 @@ static av_cold int amf_encode_init_hevc(AVCodecContext *avctx)
 
     // Color bit depth
     pix_fmt = avctx->hw_frames_ctx ? ((AVHWFramesContext*)avctx->hw_frames_ctx->data)->sw_format
-                                    : avctx->pix_fmt;
-
+                                   : avctx->pix_fmt;
+    pix_desc = av_pix_fmt_desc_get(pix_fmt);
+    av_assert0(pix_desc);
     bit_depth = ctx->bit_depth;
-    if(bit_depth == AMF_COLOR_BIT_DEPTH_UNDEFINED){
-        bit_depth = pix_fmt == AV_PIX_FMT_P010 ? AMF_COLOR_BIT_DEPTH_10 : AMF_COLOR_BIT_DEPTH_8;
+    if (bit_depth == AMF_COLOR_BIT_DEPTH_UNDEFINED) {
+        bit_depth = pix_desc->comp[0].depth >= 10 ? AMF_COLOR_BIT_DEPTH_10 : AMF_COLOR_BIT_DEPTH_8;
     }
     AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_COLOR_BIT_DEPTH, bit_depth);
 
+    // HEVC profile follows target bit depth
+    profile_from_bitdepth = bit_depth == AMF_COLOR_BIT_DEPTH_10 ? AMF_VIDEO_ENCODER_HEVC_PROFILE_MAIN_10
+                                                                : AMF_VIDEO_ENCODER_HEVC_PROFILE_MAIN;
+    if (profile != profile_from_bitdepth) {
+        AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_PROFILE, profile_from_bitdepth);
+        if (profile != 0) {
+            av_log(avctx, AV_LOG_WARNING, "The video profile and bit depth did not match, but this has been corrected\n");
+        }
+    }
+    avctx->profile = bit_depth == AMF_COLOR_BIT_DEPTH_10 ? AV_PROFILE_HEVC_MAIN_10 : AV_PROFILE_HEVC_MAIN;
+
     // Color profile
-    color_profile = ff_amf_get_color_profile(avctx);
+    color_profile = av_amf_get_color_profile(avctx->color_range, avctx->colorspace);
     AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_OUTPUT_COLOR_PROFILE, color_profile);
 
     // Color Range (Support for older Drivers)
     AMF_ASSIGN_PROPERTY_BOOL(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_OUTPUT_FULL_RANGE_COLOR, (avctx->color_range == AVCOL_RANGE_JPEG));
 
-    // Color Transfer Characteristics (AMF matches ISO/IEC)
-    if(avctx->color_trc != AVCOL_TRC_UNSPECIFIED && (pix_fmt == AV_PIX_FMT_NV12 || pix_fmt == AV_PIX_FMT_P010)){
-        // if input is YUV, color_trc is for VUI only - any value
-        // AMF VCN color conversion supports only specific output transfer characteristic SMPTE2084 for 10-bit and BT709 for 8-bit
-        // vpp_amf supports more
-        AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_OUTPUT_TRANSFER_CHARACTERISTIC, avctx->color_trc);
-    }
+    if (!(pix_desc->flags & AV_PIX_FMT_FLAG_RGB)) {
+        // Color Transfer Characteristics (AMF matches ISO/IEC)
+        if (avctx->color_trc != AVCOL_TRC_UNSPECIFIED) {
+            // if input is YUV, color_trc is for VUI only - any value
+            // AMF VCN color conversion supports only specific output transfer characteristic SMPTE2084 for 10-bit and BT709 for 8-bit
+            // vpp_amf supports more
+            AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_OUTPUT_TRANSFER_CHARACTERISTIC, avctx->color_trc);
+        }
 
-    // Color Primaries (AMF matches ISO/IEC)
-    if(avctx->color_primaries != AVCOL_PRI_UNSPECIFIED && (pix_fmt == AV_PIX_FMT_NV12 || pix_fmt == AV_PIX_FMT_P010)){
-        // if input is YUV, color_primaries are for VUI only
-        // AMF VCN color conversion supports only specific output primaries BT2020 for 10-bit and BT709 for 8-bit
-        // vpp_amf supports more
-        AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_OUTPUT_COLOR_PRIMARIES, avctx->color_primaries);
+        // Color Primaries (AMF matches ISO/IEC)
+        if (avctx->color_primaries != AVCOL_PRI_UNSPECIFIED) {
+            // if input is YUV, color_primaries are for VUI only
+            // AMF VCN color conversion supports only specific output primaries BT2020 for 10-bit and BT709 for 8-bit
+            // vpp_amf supports more
+            AMF_ASSIGN_PROPERTY_INT64(res, ctx->encoder, AMF_VIDEO_ENCODER_HEVC_OUTPUT_COLOR_PRIMARIES, avctx->color_primaries);
+        }
     }
 
     // Picture control properties
@@ -550,6 +569,7 @@ static const FFCodecDefault defaults[] = {
 };
 static const AVClass hevc_amf_class = {
     .class_name = "hevc_amf",
+    .item_name = av_default_item_name,
     .option = options,
     .version = LIBAVUTIL_VERSION_INT,
 };

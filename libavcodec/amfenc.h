@@ -1,12 +1,12 @@
 /*
-* This file is part of Librempeg.
+* This file is part of FFmpeg.
 *
-* Librempeg is free software; you can redistribute it and/or
+* FFmpeg is free software; you can redistribute it and/or
 * modify it under the terms of the GNU Lesser General Public
 * License as published by the Free Software Foundation; either
 * version 2.1 of the License, or (at your option) any later version.
 *
-* Librempeg is distributed in the hope that it will be useful,
+* FFmpeg is distributed in the hope that it will be useful,
 * but WITHOUT ANY WARRANTY; without even the implied warranty of
 * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 * Lesser General Public License for more details.
@@ -46,6 +46,8 @@ typedef struct AMFEncoderContext {
     AMFComponent       *encoder; ///< AMF encoder object
     amf_bool            eof;     ///< flag indicating EOF happened
     AMF_SURFACE_FORMAT  format;  ///< AMF surface format
+    wchar_t             *pts_property_name;
+    wchar_t             *av_frame_property_name;
 
     int                 hwsurfaces_in_queue;
     int                 hwsurfaces_in_queue_max;
@@ -59,6 +61,7 @@ typedef struct AMFEncoderContext {
     int64_t             dts_delay;
     int64_t             submitted_frame;
     int64_t             encoded_frame;
+    AVFifo             *output_list;
 
     // common encoder options
 
@@ -159,8 +162,6 @@ int ff_amf_receive_packet(AVCodecContext *avctx, AVPacket *avpkt);
 * Supported formats
 */
 extern const enum AVPixelFormat ff_amf_pix_fmts[];
-
-int ff_amf_get_color_profile(AVCodecContext *avctx);
 
 /**
 * Error handling helper

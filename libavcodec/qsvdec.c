@@ -4,21 +4,21 @@
  * copyright (c) 2013 Luca Barbato
  * copyright (c) 2015 Anton Khirnov <anton@khirnov.net>
  *
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "config_components.h"
@@ -934,7 +934,8 @@ static int qsv_decode(AVCodecContext *avctx, QSVContext *q,
         frame->pict_type = ff_qsv_map_pictype(aframe.frame->dec_info.FrameType);
 
         if (avctx->codec_id == AV_CODEC_ID_H264 ||
-            avctx->codec_id == AV_CODEC_ID_HEVC) {
+            avctx->codec_id == AV_CODEC_ID_HEVC ||
+            avctx->codec_id == AV_CODEC_ID_VVC) {
             if (aframe.frame->dec_info.FrameType & MFX_FRAMETYPE_IDR)
                 frame->flags |= AV_FRAME_FLAG_KEY;
             else
@@ -1219,6 +1220,7 @@ static void qsv_decode_flush(AVCodecContext *avctx)
 #define DEFINE_QSV_DECODER_WITH_OPTION(x, X, bsf_name, opt) \
 static const AVClass x##_qsv_class = { \
     .class_name = #x "_qsv", \
+    .item_name  = av_default_item_name, \
     .option     = opt, \
     .version    = LIBAVUTIL_VERSION_INT, \
 }; \
@@ -1299,4 +1301,8 @@ DEFINE_QSV_DECODER(vp9, VP9, NULL)
 
 #if CONFIG_AV1_QSV_DECODER
 DEFINE_QSV_DECODER(av1, AV1, NULL)
+#endif
+
+#if CONFIG_VVC_QSV_DECODER
+DEFINE_QSV_DECODER(vvc, VVC, "vvc_mp4toannexb")
 #endif
