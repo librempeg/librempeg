@@ -89,6 +89,17 @@ void ff_ipu_set_ctrl(AVCodecContext *avctx, IPUControlRegister ctrl)
         IPUControlRegister *ctrl_in = &ie->ctrl;
 
         /*
+         * coded_block_pattern can range from 0 to 63, 
+         * naturally as it's a 6-bit register var from IPU_CTRL.
+         */
+        if (ctrl.coded_block_pattern < 0)
+            ctrl_in->coded_block_pattern = 0;
+        else if (ctrl.coded_block_pattern > 63)
+            ctrl_in->coded_block_pattern = 63;
+        else
+            ctrl_in->coded_block_pattern = ctrl.coded_block_pattern;
+
+        /*
          * allowed values of intra_dc_precision are as follows: 
          * 0 (8-bit), 1 (9-bit), 2 (10-bit), 3 (reserved)
          */
@@ -216,6 +227,17 @@ void ff_ipu_queue_ctrl_exec(AVPacket *avpkt, IPUControlRegister ctrl, int is_bus
         iq->busy_until_next_ctrl_execution = 1;
     else
         iq->busy_until_next_ctrl_execution = is_busy;
+
+    /*
+     * coded_block_pattern can range from 0 to 63, 
+     * naturally as it's a 6-bit register var from IPU_CTRL.
+     */
+    if (ctrl.coded_block_pattern < 0)
+        ctrl_in->coded_block_pattern = 0;
+    else if (ctrl.coded_block_pattern > 63)
+        ctrl_in->coded_block_pattern = 63;
+    else
+        ctrl_in->coded_block_pattern = ctrl.coded_block_pattern;
 
     /*
      * allowed values of intra_dc_precision are as follows: 
@@ -357,6 +379,7 @@ void ff_ipu_execute_queued_ctrl(IPUInstructionQueueType iq_type, IPUInstructionQ
 {
     if (iq && ie) {
         if ((iq_type == IPU_IQ_CTRL) && (iq->busy_until_next_ctrl_execution) && (!(ie->executing))) {
+            ie->ctrl.coded_block_pattern = iq->next_ctrl.coded_block_pattern;
             ie->ctrl.intra_dc_precision = iq->next_ctrl.intra_dc_precision;
             ie->ctrl.alternate_scan = iq->next_ctrl.alternate_scan;
             ie->ctrl.intra_vlc_format = iq->next_ctrl.intra_vlc_format;
