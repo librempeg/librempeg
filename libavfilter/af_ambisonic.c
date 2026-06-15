@@ -943,6 +943,7 @@ static void calc_fuma_scaling(AmbisonicContext *s)
         switch (i) {
         case 0:
             dst[i] *= 1. / M_SQRT2;
+            break;
         case 1:
         case 2:
         case 3:
