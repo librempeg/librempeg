@@ -327,6 +327,9 @@ fate-filter-overlays: $(FATE_FILTER_OVERLAY) $(FATE_FILTER_OVERLAY_ALPHA)
 FATE_FILTER_VSYNTH_PGMYUV-$(CONFIG_PHASE_FILTER) += fate-filter-phase
 fate-filter-phase: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf phase
 
+FATE_FILTER-$(call FILTERFRAMECRC, COLOR CONCAT FORMAT PHOTOSENSITIVITY) += fate-filter-photosensitivity-blend
+fate-filter-photosensitivity-blend: CMD = framecrc -lavfi "color=black:s=16x16:r=1:d=1[black];color=white:s=16x16:r=1:d=2[white];[black][white]concat=n=2:v=1:a=0,format=rgb24,photosensitivity=frames=2:threshold=95:blend=0.5" -pix_fmt rgb24
+
 FATE_REMOVEGRAIN := 00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 \
                     16 17 18 19 20 21 22 23 24
 FATE_REMOVEGRAIN := $(addprefix fate-filter-removegrain-mode-, $(FATE_REMOVEGRAIN))
