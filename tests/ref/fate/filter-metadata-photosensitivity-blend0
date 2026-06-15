@@ -1,0 +1,2 @@
+pts=0|tag:lavfi.photosensitivity.frame-badness=0.000000|tag:lavfi.photosensitivity.badness=0.000000|tag:lavfi.photosensitivity.fixed-badness=0.000000|tag:lavfi.photosensitivity.factor=1.000000
+pts=0|tag:lavfi.photosensitivity.frame-badness=0.000000|tag:lavfi.photosensitivity.badness=1.006579|tag:lavfi.photosensitivity.fixed-badness=0.000000|tag:lavfi.photosensitivity.factor=0.000000

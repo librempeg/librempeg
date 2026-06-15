@@ -234,18 +234,18 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         current_badness, new_badness, badness_threshold,
         100 * new_badness / badness_threshold, new_badness < badness_threshold ? "OK" : "EXCEEDED");
 
-    fixed_badness = new_badness;
     if (new_badness < badness_threshold || !s->last_frame_av || s->bypass) {
         factor = 1; /* for metadata */
         av_frame_free(&s->last_frame_av);
         s->last_frame_av = src = in;
         s->last_frame_e = ef;
-        s->history[s->history_pos] = this_badness;
+        fixed_badness = new_badness;
     } else {
         factor = (float)(badness_threshold - current_badness) / (new_badness - current_badness) * s->blend_factor;
         if (factor <= 0) {
             /* just duplicate the frame */
-            s->history[s->history_pos] = 0; /* frame was duplicated, thus, delta is zero */
+            this_badness = 0; /* frame was duplicated, thus, delta is zero */
+            fixed_badness = current_badness;
         } else {
             res = ff_inlink_make_frame_writable(inlink, &s->last_frame_av);
             if (res) {
@@ -261,11 +261,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                 current_badness, fixed_badness, badness_threshold,
                 100 * new_badness / badness_threshold, factor);
             s->last_frame_e = ef;
-            s->history[s->history_pos] = this_badness;
         }
         src = s->last_frame_av;
         free_in = 1;
     }
+    s->history[s->history_pos] = this_badness;
     s->history_pos = (s->history_pos + 1) % s->nb_frames;
     if (s->history_size < s->nb_frames)
         s->history_size++;

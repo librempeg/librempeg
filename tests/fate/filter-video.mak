@@ -330,6 +330,11 @@ fate-filter-phase: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf phase
 FATE_FILTER-$(call FILTERFRAMECRC, COLOR CONCAT FORMAT PHOTOSENSITIVITY) += fate-filter-photosensitivity-blend
 fate-filter-photosensitivity-blend: CMD = framecrc -lavfi "color=black:s=16x16:r=1:d=1[black];color=white:s=16x16:r=1:d=2[white];[black][white]concat=n=2:v=1:a=0,format=rgb24,photosensitivity=frames=2:threshold=95:blend=0.5" -pix_fmt rgb24
 
+PHOTOSENSITIVITY_METADATA_DEPS = FFPROBE LAVFI_INDEV COLOR_FILTER CONCAT_FILTER FORMAT_FILTER \
+                                 PHOTOSENSITIVITY_FILTER WRAPPED_AVFRAME_DECODER
+FATE_FILTER_FFPROBE-$(call ALLYES, $(PHOTOSENSITIVITY_METADATA_DEPS)) += fate-filter-metadata-photosensitivity-blend0
+fate-filter-metadata-photosensitivity-blend0: CMD = run $(FILTER_METADATA_COMMAND) "color=black:s=16x16:r=1:d=1[black];color=white:s=16x16:r=1:d=1[white];[black][white]concat=n=2:v=1:a=0,format=rgb24,photosensitivity=frames=2:threshold=95:blend=0"
+
 FATE_REMOVEGRAIN := 00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 \
                     16 17 18 19 20 21 22 23 24
 FATE_REMOVEGRAIN := $(addprefix fate-filter-removegrain-mode-, $(FATE_REMOVEGRAIN))
