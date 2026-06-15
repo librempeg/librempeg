@@ -201,7 +201,7 @@ static int asf_probe(const AVProbeData *pd)
         return 0;
 }
 
-static int get_value(AVIOContext *pb, int type)
+static uint64_t get_value(AVIOContext *pb, int type)
 {
     switch (type) {
     case ASF_BOOL:
@@ -213,7 +213,7 @@ static int get_value(AVIOContext *pb, int type)
     case ASF_WORD:
         return avio_rl16(pb);
     default:
-        return INT_MIN;
+        return 0;
     }
 }
 
