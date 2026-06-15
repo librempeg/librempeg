@@ -210,12 +210,6 @@ static int square_ps2fmv_read_header(AVFormatContext *s)
 
         AV_WB8(st->codecpar->extradata, 1);
         AV_WB8(st->codecpar->extradata+1, 0);
-
-        #if 0
-        ff_ipu_init_inst_exec_comm_list(
-                                        (IPUInstructionExecutionCommunicationContext*)st->codecpar->extradata,
-                                        1, (IPUControlRegister){ 0, 0, 0, 0, 0, 0, 0, 0 }, st->codecpar->width, st->codecpar->height);
-        #endif
     }
 
     avio_seek(pb, start_offset, SEEK_SET);
