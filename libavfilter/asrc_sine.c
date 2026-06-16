@@ -31,8 +31,8 @@
 #include "formats.h"
 
 typedef struct OscContext {
-    int32_t u, v;
-    int32_t k1, k2;
+    int64_t u, v;
+    int64_t k1, k2;
 } OscContext;
 
 typedef struct SineContext {
@@ -49,6 +49,9 @@ typedef struct SineContext {
     unsigned beep_index;
     unsigned beep_length;
     OscContext beep_osc;
+
+    int (*init_state)(AVFilterContext *ctx);
+    void (*output_samples)(AVFilterContext *ctx, AVFrame *frame);
 } SineContext;
 
 #define CONTEXT SineContext
@@ -102,60 +105,31 @@ enum {
 };
 
 #define DEPTH 16
-#define FIXED(x) (lrint((x) * (1 << (DEPTH-1))))
-#define MULT(x, y) (((x) * (y)) >> (DEPTH-1))
+#include "sine_template.c"
 
-static av_cold int init(AVFilterContext *ctx)
-{
-    SineContext *sine = ctx->priv;
-    double w0 = fmin(sine->frequency / (double)sine->sample_rate, 0.49999) * 2.0*M_PI;
-    OscContext *osc = &sine->osc;
-    int ret;
-
-    osc->k1 = FIXED(tan(w0*0.5));
-    osc->k2 = FIXED(sin(w0));
-    osc->u  = FIXED(cos(0));
-    osc->v  = FIXED(sin(0));
-
-    if (sine->beep_factor) {
-        OscContext *beep_osc = &sine->beep_osc;
-
-        w0 = fmin(sine->frequency * sine->beep_factor / (double)sine->sample_rate, 0.49999) * 2.0*M_PI;
-        beep_osc->k1 = FIXED(tan(w0*0.5));
-        beep_osc->k2 = FIXED(sin(w0));
-        beep_osc->u  = FIXED(cos(0));
-        beep_osc->v  = FIXED(sin(0));
-
-        sine->beep_period = sine->sample_rate;
-        sine->beep_length = sine->beep_period / 25;
-    }
-
-    ret = av_expr_parse(&sine->samples_per_frame_expr,
-                        sine->samples_per_frame, var_names,
-                        NULL, NULL, NULL, NULL, 0, sine);
-    if (ret < 0)
-        return ret;
-
-    return 0;
-}
+#undef DEPTH
+#define DEPTH 32
+#include "sine_template.c"
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
-    SineContext *sine = ctx->priv;
+    SineContext *s = ctx->priv;
 
-    av_expr_free(sine->samples_per_frame_expr);
-    sine->samples_per_frame_expr = NULL;
+    av_expr_free(s->samples_per_frame_expr);
+    s->samples_per_frame_expr = NULL;
 }
 
 static av_cold int query_formats(const AVFilterContext *ctx,
                                  AVFilterFormatsConfig **cfg_in,
                                  AVFilterFormatsConfig **cfg_out)
 {
-    const SineContext *sine = ctx->priv;
+    const SineContext *s = ctx->priv;
     static const AVChannelLayout chlayouts[] = { AV_CHANNEL_LAYOUT_MONO, { 0 } };
-    int sample_rates[] = { sine->sample_rate, -1 };
-    static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_S16,
-                                                       AV_SAMPLE_FMT_NONE };
+    int sample_rates[] = { s->sample_rate, -1 };
+    static const enum AVSampleFormat sample_fmts[] = {
+        AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_S32,
+        AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P,
+        AV_SAMPLE_FMT_NONE };
     int ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
     if (ret < 0)
         return ret;
@@ -169,25 +143,42 @@ static av_cold int query_formats(const AVFilterContext *ctx,
 
 static av_cold int config_props(AVFilterLink *outlink)
 {
-    SineContext *sine = outlink->src->priv;
-    sine->duration = av_rescale(sine->duration, sine->sample_rate, AV_TIME_BASE);
-    return 0;
+    AVFilterContext *ctx = outlink->src;
+    SineContext *s = ctx->priv;
+
+    s->duration = av_rescale(s->duration, s->sample_rate, AV_TIME_BASE);
+
+    switch (outlink->format) {
+    case AV_SAMPLE_FMT_S16:
+    case AV_SAMPLE_FMT_S16P:
+        s->init_state = init_state_s16;
+        s->output_samples = output_samples_s16;
+        break;
+    case AV_SAMPLE_FMT_S32:
+    case AV_SAMPLE_FMT_S32P:
+        s->init_state = init_state_s32;
+        s->output_samples = output_samples_s32;
+        break;
+    default:
+        return AVERROR_BUG;
+    }
+
+    return s->init_state(ctx);
 }
 
 static int activate(AVFilterContext *ctx)
 {
     AVFilterLink *outlink = ctx->outputs[0];
     FilterLink *outl = ff_filter_link(outlink);
-    SineContext *sine = ctx->priv;
+    SineContext *s = ctx->priv;
     AVFrame *frame;
     double values[VAR_VARS_NB] = {
         [VAR_N]   = outl->frame_count_in,
-        [VAR_PTS] = sine->pts,
-        [VAR_T]   = sine->pts * av_q2d(outlink->time_base),
+        [VAR_PTS] = s->pts,
+        [VAR_T]   = s->pts * av_q2d(outlink->time_base),
         [VAR_TB]  = av_q2d(outlink->time_base),
     };
-    int nb_samples = lrint(av_expr_eval(sine->samples_per_frame_expr, values, sine));
-    int16_t *samples;
+    int nb_samples = lrint(av_expr_eval(s->samples_per_frame_expr, values, s));
 
     if (!ff_outlink_frame_wanted(outlink))
         return FFERROR_NOT_READY;
@@ -197,61 +188,22 @@ static int activate(AVFilterContext *ctx)
         nb_samples = 1024;
     }
 
-    if (sine->duration) {
-        nb_samples = FFMIN(nb_samples, sine->duration - sine->pts);
+    if (s->duration) {
+        nb_samples = FFMIN(nb_samples, s->duration - s->pts);
         av_assert1(nb_samples >= 0);
         if (!nb_samples) {
-            ff_outlink_set_status(outlink, AVERROR_EOF, sine->pts);
+            ff_outlink_set_status(outlink, AVERROR_EOF, s->pts);
             return 0;
         }
     }
+
     if (!(frame = ff_get_audio_buffer(outlink, nb_samples)))
         return AVERROR(ENOMEM);
-    samples = (int16_t *)frame->data[0];
 
-    {
-        const int32_t k1 = sine->osc.k1;
-        const int32_t k2 = sine->osc.k2;
-        int32_t u = sine->osc.u;
-        int32_t v = sine->osc.v;
-        int32_t w;
+    s->output_samples(ctx, frame);
 
-        for (int i = 0; i < nb_samples; i++) {
-            samples[i] = u >> 3;
-            w = u - MULT(k1, v);
-            v += MULT(k2, w);
-            u = w - MULT(k1, v);
-        }
-
-        sine->osc.u = u;
-        sine->osc.v = v;
-
-        if (sine->beep_length > 0) {
-            OscContext *beep_osc = &sine->beep_osc;
-            const int32_t k1 = beep_osc->k1;
-            const int32_t k2 = beep_osc->k2;
-            int32_t u = beep_osc->u;
-            int32_t v = beep_osc->v;
-
-            for (int i = 0; i < nb_samples; i++) {
-                if (sine->beep_index < sine->beep_length) {
-                    samples[i] += u >> 2;
-                    w = u - MULT(k1, v);
-                    v += MULT(k2, w);
-                    u = w - MULT(k1, v);
-                }
-
-                if (++sine->beep_index == sine->beep_period)
-                    sine->beep_index = 0;
-            }
-
-            beep_osc->u = u;
-            beep_osc->v = v;
-        }
-    }
-
-    frame->pts = sine->pts;
-    sine->pts += nb_samples;
+    frame->pts = s->pts;
+    s->pts += nb_samples;
     return ff_filter_frame(outlink, frame);
 }
 
@@ -267,7 +219,6 @@ const FFFilter ff_asrc_sine = {
     .p.name        = "sine",
     .p.description = NULL_IF_CONFIG_SMALL("Generate sine wave audio signal."),
     .p.priv_class  = &sine_class,
-    .init          = init,
     .uninit        = uninit,
     .activate      = activate,
     .priv_size     = sizeof(SineContext),
