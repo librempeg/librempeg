@@ -41,16 +41,16 @@ static int linear_index_from_sws_op(int idx)
     return reorder_col[idx];
 }
 
-static void swizzle_emit(SwsAArch64OpImplParams *out, uint8_t dst, uint8_t src, int idx)
+static void swizzle_emit(SwsAArch64OpImplParams *out, uint8_t dst, uint8_t src)
 {
-    uint64_t pair = src | (dst << 4);
-    out->move |= pair << (idx * 8);
+    int idx = out->move.num_moves++;
+    out->move.dst[idx] = dst;
+    out->move.src[idx] = src;
 }
 
 static void convert_swizzle_to_moves(const SwsOp *op, SwsAArch64OpImplParams *out)
 {
     SwsAArch64OpMask swizzle = 0;
-    int num_moves = 0;
 
     MASK_SET(swizzle, 0, op->swizzle.in[0]);
     MASK_SET(swizzle, 1, op->swizzle.in[1]);
@@ -73,7 +73,7 @@ static void convert_swizzle_to_moves(const SwsOp *op, SwsAArch64OpImplParams *ou
             if (done[dst] || src_used[dst])
                 continue;
             uint8_t src = MASK_GET(swizzle, dst);
-            swizzle_emit(out, dst, src, num_moves++);
+            swizzle_emit(out, dst, src);
             src_used[src]--;
             done[dst] = true;
             progress = true;
@@ -85,18 +85,18 @@ static void convert_swizzle_to_moves(const SwsOp *op, SwsAArch64OpImplParams *ou
         if (done[dst])
             continue;
 
-        swizzle_emit(out, AARCH64_MOVE_TMP, dst, num_moves++);
+        swizzle_emit(out, -1, dst);
 
         uint8_t cur_dst = dst;
         uint8_t src = MASK_GET(swizzle, cur_dst);
         while (src != dst) {
-            swizzle_emit(out, cur_dst, src, num_moves++);
+            swizzle_emit(out, cur_dst, src);
             done[cur_dst] = true;
             cur_dst = src;
             src = MASK_GET(swizzle, cur_dst);
         }
 
-        swizzle_emit(out, cur_dst, AARCH64_MOVE_TMP, num_moves++);
+        swizzle_emit(out, cur_dst, -1);
         done[cur_dst] = true;
     }
 }

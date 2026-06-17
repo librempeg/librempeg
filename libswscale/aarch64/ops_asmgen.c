@@ -614,9 +614,9 @@ static void asmgen_op_swap_bytes(SwsAArch64Context *s, const SwsAArch64OpImplPar
 /* SWS_UOP_PERMUTE */
 /* SWS_UOP_COPY */
 
-static const char *print_swizzle_v(char buf[8], uint8_t n, uint8_t vh)
+static const char *print_swizzle_v(char buf[8], int8_t n, uint8_t vh)
 {
-    if (n == AARCH64_MOVE_TMP)
+    if (n == -1)
         snprintf(buf, sizeof(char[8]), "vtmp%c", vh ? 'h' : 'l');
     else
         snprintf(buf, sizeof(char[8]), "v%c[%u]", vh ? 'h' : 'l', n);
@@ -624,14 +624,14 @@ static const char *print_swizzle_v(char buf[8], uint8_t n, uint8_t vh)
 }
 #define PRINT_SWIZZLE_V(n, vh) print_swizzle_v((char[8]){ 0 }, n, vh)
 
-static RasmOp swizzle_a64op(SwsAArch64Context *s, uint8_t n, uint8_t vh)
+static RasmOp swizzle_a64op(SwsAArch64Context *s, int8_t n, uint8_t vh)
 {
-    if (n == AARCH64_MOVE_TMP)
+    if (n == -1)
         return s->vt[vh];
     return vh ? s->vh[n] : s->vl[n];
 }
 
-static void swizzle_emit(SwsAArch64Context *s, uint8_t dst, uint8_t src)
+static void swizzle_emit(SwsAArch64Context *s, int8_t dst, int8_t src)
 {
     RasmContext *r = s->rctx;
     RasmOp src_op[2] = { swizzle_a64op(s, src, 0), swizzle_a64op(s, src, 1) };
@@ -645,14 +645,8 @@ static void swizzle_emit(SwsAArch64Context *s, uint8_t dst, uint8_t src)
 
 static void asmgen_op_move(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
-    SwsAArch64MoveOp move = p->move;
-
-    while (move) {
-        uint8_t src = (move     ) & 0xf;
-        uint8_t dst = (move >> 4) & 0xf;
-        swizzle_emit(s, dst, src);
-        move >>= 8;
-    }
+    for (int i = 0; i < p->move.num_moves; i++)
+        swizzle_emit(s, p->move.dst[i], p->move.src[i]);
 }
 
 /*********************************************************************/

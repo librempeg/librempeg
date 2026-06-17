@@ -30,10 +30,6 @@
 /* Each nibble in the mask corresponds to one component. */
 typedef uint16_t SwsAArch64OpMask;
 
-/* Each byte is an LSB src|dst pair until 00 is reached. */
-typedef uint64_t SwsAArch64MoveOp;
-#define AARCH64_MOVE_TMP 0xf
-
 /**
  * Affine coefficient mask for linear op. Packs a 4x5 matrix in execution
  * order, where the offset is the first element, with 2 bits per element:
@@ -65,7 +61,7 @@ typedef struct SwsAArch64OpImplParams {
     union {
         SwsShiftUOp         shift;
         SwsClearUOp         clear;
-        SwsAArch64MoveOp    move;
+        SwsMoveUOp          move;
         SwsAArch64OpMask    pack;
         SwsAArch64LinearOp  linear;
         SwsAArch64DitherOp  dither;

@@ -53,6 +53,18 @@ static uint16_t clear_to_mask(const SwsClearUOp *clear)
     return mask;
 }
 
+static uint64_t move_to_mask(const SwsMoveUOp *move)
+{
+    uint64_t mask = 0;
+    for (int i = 0; i < move->num_moves; i++) {
+        uint8_t dst = move->dst[i] < 0 ? 0xf : move->dst[i];
+        uint8_t src = move->src[i] < 0 ? 0xf : move->src[i];
+        uint64_t pair = src | (dst << 4);
+        mask |= pair << (i * 8);
+    }
+    return mask;
+}
+
 static int aarch64_op_impl_cmp(const void *a, const void *b)
 {
     const SwsAArch64OpImplParams *pa = (const SwsAArch64OpImplParams *) a;
@@ -63,10 +75,13 @@ static int aarch64_op_impl_cmp(const void *a, const void *b)
 
     switch (pa->uop) {
     case SWS_UOP_PERMUTE:
-    case SWS_UOP_COPY:
-        if (pa->move != pb->move)
-            return (int64_t) (pa->move - pb->move) < 0 ? -1 : 1;
+    case SWS_UOP_COPY: {
+        uint64_t ia = move_to_mask(&pa->move);
+        uint64_t ib = move_to_mask(&pb->move);
+        if (ia != ib)
+            return (int64_t) (ia - ib) < 0 ? -1 : 1;
         break;
+    }
     case SWS_UOP_UNPACK:
     case SWS_UOP_PACK:
         if (pa->pack != pb->pack)
@@ -245,7 +260,7 @@ static void impl_func_name(AVBPrint *bp, const SwsAArch64OpImplParams *params)
     switch (params->uop) {
     case SWS_UOP_PERMUTE:
     case SWS_UOP_COPY:
-        av_bprintf(bp, "_%012" PRIx64, params->move);
+        av_bprintf(bp, "_%012" PRIx64, move_to_mask(&params->move));
         break;
     case SWS_UOP_UNPACK:
     case SWS_UOP_PACK:
@@ -315,7 +330,12 @@ static void serialize_op(AVBPrint *bp, const SwsAArch64OpImplParams *params)
     switch (params->uop) {
     case SWS_UOP_PERMUTE:
     case SWS_UOP_COPY:
-        av_bprintf(bp, ", .move = 0x%012" PRIx64 "ULL", params->move);
+        av_bprintf(bp, ", .move = { .num_moves = %d, .dst = {%d, %d, %d, %d, %d, %d}, .src = {%d, %d, %d, %d, %d, %d} }",
+                   params->move.num_moves,
+                   params->move.dst[0], params->move.dst[1], params->move.dst[2],
+                   params->move.dst[3], params->move.dst[4], params->move.dst[5],
+                   params->move.src[0], params->move.src[1], params->move.src[2],
+                   params->move.src[3], params->move.src[4], params->move.src[5]);
         break;
     case SWS_UOP_UNPACK:
     case SWS_UOP_PACK:
