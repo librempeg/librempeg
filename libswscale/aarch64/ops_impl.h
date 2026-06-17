@@ -69,7 +69,7 @@ typedef struct SwsAArch64OpImplParams {
     SwsPixelType        type;
     uint8_t block_size;
     union {
-        uint8_t             shift;
+        SwsShiftUOp         shift;
         SwsAArch64ClearMask clear;
         SwsAArch64MoveOp    move;
         SwsAArch64OpMask    pack;

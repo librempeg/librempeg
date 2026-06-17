@@ -59,8 +59,8 @@ static int aarch64_op_impl_cmp(const void *a, const void *b)
         break;
     case SWS_UOP_LSHIFT:
     case SWS_UOP_RSHIFT:
-        if (pa->shift != pb->shift)
-            return (int) pa->shift - pb->shift;
+        if (pa->shift.amount != pb->shift.amount)
+            return (int) pa->shift.amount - pb->shift.amount;
         break;
     case SWS_UOP_CLEAR:
         if (pa->clear != pb->clear)
@@ -235,7 +235,7 @@ static void impl_func_name(AVBPrint *bp, const SwsAArch64OpImplParams *params)
         break;
     case SWS_UOP_LSHIFT:
     case SWS_UOP_RSHIFT:
-        av_bprintf(bp, "_%u", params->shift);
+        av_bprintf(bp, "_%u", params->shift.amount);
         break;
     case SWS_UOP_CLEAR:
         av_bprintf(bp, "_%04x", params->clear);
@@ -305,7 +305,7 @@ static void serialize_op(AVBPrint *bp, const SwsAArch64OpImplParams *params)
         break;
     case SWS_UOP_LSHIFT:
     case SWS_UOP_RSHIFT:
-        av_bprintf(bp, ", .shift = %u", params->shift);
+        av_bprintf(bp, ", .shift = { .amount = %u }", params->shift.amount);
         break;
     case SWS_UOP_CLEAR:
         av_bprintf(bp, ", .clear = 0x%04x", params->clear);

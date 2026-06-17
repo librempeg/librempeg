@@ -260,7 +260,7 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         break;
     case SWS_UOP_LSHIFT:
     case SWS_UOP_RSHIFT:
-        out->shift = op->shift.amount;
+        out->shift.amount = op->shift.amount;
         break;
     case SWS_UOP_CLEAR:
         out->mask = 0;

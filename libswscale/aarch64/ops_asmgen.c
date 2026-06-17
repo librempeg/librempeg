@@ -771,12 +771,13 @@ static void asmgen_op_pack(SwsAArch64Context *s, const SwsAArch64OpImplParams *p
 
 static void asmgen_op_lshift(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
+    uint8_t shift = p->shift.amount;
     RasmContext *r = s->rctx;
     RasmOp *vl = s->vl;
     RasmOp *vh = s->vh;
 
-    LOOP_MASK      (p, i) { i_shl(r, vl[i], vl[i], IMM(p->shift)); CMTF("vl[%u] <<= %u;", i, p->shift); }
-    LOOP_MASK_VH(s, p, i) { i_shl(r, vh[i], vh[i], IMM(p->shift)); CMTF("vh[%u] <<= %u;", i, p->shift); }
+    LOOP_MASK      (p, i) { i_shl(r, vl[i], vl[i], IMM(shift)); CMTF("vl[%u] <<= %u;", i, shift); }
+    LOOP_MASK_VH(s, p, i) { i_shl(r, vh[i], vh[i], IMM(shift)); CMTF("vh[%u] <<= %u;", i, shift); }
 }
 
 /*********************************************************************/
@@ -785,12 +786,13 @@ static void asmgen_op_lshift(SwsAArch64Context *s, const SwsAArch64OpImplParams 
 
 static void asmgen_op_rshift(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
+    uint8_t shift = p->shift.amount;
     RasmContext *r = s->rctx;
     RasmOp *vl = s->vl;
     RasmOp *vh = s->vh;
 
-    LOOP_MASK      (p, i) { i_ushr(r, vl[i], vl[i], IMM(p->shift)); CMTF("vl[%u] >>= %u;", i, p->shift); }
-    LOOP_MASK_VH(s, p, i) { i_ushr(r, vh[i], vh[i], IMM(p->shift)); CMTF("vh[%u] >>= %u;", i, p->shift); }
+    LOOP_MASK      (p, i) { i_ushr(r, vl[i], vl[i], IMM(shift)); CMTF("vl[%u] >>= %u;", i, shift); }
+    LOOP_MASK_VH(s, p, i) { i_ushr(r, vh[i], vh[i], IMM(shift)); CMTF("vh[%u] >>= %u;", i, shift); }
 }
 
 /*********************************************************************/
