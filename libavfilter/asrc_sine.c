@@ -30,11 +30,6 @@
 #include "filters.h"
 #include "formats.h"
 
-typedef struct OscContext {
-    int64_t u, v;
-    int64_t k1, k2;
-} OscContext;
-
 typedef struct SineContext {
     const AVClass *class;
     double frequency;
@@ -44,11 +39,11 @@ typedef struct SineContext {
     int sample_rate;
     int64_t duration;
     int64_t pts;
-    OscContext osc;
+    void *osc;
     unsigned beep_period;
     unsigned beep_index;
     unsigned beep_length;
-    OscContext beep_osc;
+    void *beep_osc;
 
     int (*init_state)(AVFilterContext *ctx);
     void (*output_samples)(AVFilterContext *ctx, AVFrame *frame);
@@ -111,9 +106,20 @@ enum {
 #define DEPTH 32
 #include "sine_template.c"
 
+#undef DEPTH
+#define DEPTH 33
+#include "sine_template.c"
+
+#undef DEPTH
+#define DEPTH 64
+#include "sine_template.c"
+
 static av_cold void uninit(AVFilterContext *ctx)
 {
     SineContext *s = ctx->priv;
+
+    av_freep(&s->osc);
+    av_freep(&s->beep_osc);
 
     av_expr_free(s->samples_per_frame_expr);
     s->samples_per_frame_expr = NULL;
@@ -127,8 +133,8 @@ static av_cold int query_formats(const AVFilterContext *ctx,
     static const AVChannelLayout chlayouts[] = { AV_CHANNEL_LAYOUT_MONO, { 0 } };
     int sample_rates[] = { s->sample_rate, -1 };
     static const enum AVSampleFormat sample_fmts[] = {
-        AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_S32,
-        AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P,
+        AV_SAMPLE_FMT_S16, AV_SAMPLE_FMT_S32, AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_DBL,
+        AV_SAMPLE_FMT_S16P, AV_SAMPLE_FMT_S32P, AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP,
         AV_SAMPLE_FMT_NONE };
     int ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts);
     if (ret < 0)
@@ -158,6 +164,16 @@ static av_cold int config_props(AVFilterLink *outlink)
     case AV_SAMPLE_FMT_S32P:
         s->init_state = init_state_s32;
         s->output_samples = output_samples_s32;
+        break;
+    case AV_SAMPLE_FMT_FLT:
+    case AV_SAMPLE_FMT_FLTP:
+        s->init_state = init_state_flt;
+        s->output_samples = output_samples_flt;
+        break;
+    case AV_SAMPLE_FMT_DBL:
+    case AV_SAMPLE_FMT_DBLP:
+        s->init_state = init_state_dbl;
+        s->output_samples = output_samples_dbl;
         break;
     default:
         return AVERROR_BUG;
