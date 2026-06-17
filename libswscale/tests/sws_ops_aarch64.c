@@ -38,6 +38,21 @@
 #endif
 
 /*********************************************************************/
+static uint16_t clear_to_mask(const SwsClearUOp *clear)
+{
+    uint16_t mask = 0;
+    for (int i = 0; i < 4; i++) {
+        if (clear->zero & SWS_COMP(i)) {
+            /* no-op */
+        } else if (clear->one & SWS_COMP(i)) {
+            MASK_SET(mask, i, 1);
+        } else {
+            MASK_SET(mask, i, 0xf);
+        }
+    }
+    return mask;
+}
+
 static int aarch64_op_impl_cmp(const void *a, const void *b)
 {
     const SwsAArch64OpImplParams *pa = (const SwsAArch64OpImplParams *) a;
@@ -62,10 +77,13 @@ static int aarch64_op_impl_cmp(const void *a, const void *b)
         if (pa->shift.amount != pb->shift.amount)
             return (int) pa->shift.amount - pb->shift.amount;
         break;
-    case SWS_UOP_CLEAR:
-        if (pa->clear != pb->clear)
-            return (int) pa->clear - pb->clear;
+    case SWS_UOP_CLEAR: {
+        uint16_t ia = clear_to_mask(&pa->clear);
+        uint16_t ib = clear_to_mask(&pb->clear);
+        if (ia != ib)
+            return (int) ia - ib;
         break;
+    }
     case SWS_UOP_LINEAR:
     case SWS_UOP_LINEAR_FMA:
         if (pa->linear.mask != pb->linear.mask)
@@ -238,7 +256,7 @@ static void impl_func_name(AVBPrint *bp, const SwsAArch64OpImplParams *params)
         av_bprintf(bp, "_%u", params->shift.amount);
         break;
     case SWS_UOP_CLEAR:
-        av_bprintf(bp, "_%04x", params->clear);
+        av_bprintf(bp, "_%04x", clear_to_mask(&params->clear));
         break;
     case SWS_UOP_LINEAR:
     case SWS_UOP_LINEAR_FMA:
@@ -308,7 +326,7 @@ static void serialize_op(AVBPrint *bp, const SwsAArch64OpImplParams *params)
         av_bprintf(bp, ", .shift = { .amount = %u }", params->shift.amount);
         break;
     case SWS_UOP_CLEAR:
-        av_bprintf(bp, ", .clear = 0x%04x", params->clear);
+        av_bprintf(bp, ", .clear = { .one = 0x%0x, .zero = 0x%0x }", params->clear.one, params->clear.zero);
         break;
     case SWS_UOP_LINEAR:
     case SWS_UOP_LINEAR_FMA:

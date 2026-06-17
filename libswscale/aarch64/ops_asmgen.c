@@ -804,21 +804,17 @@ static void emit_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
 {
     RasmContext *r = s->rctx;
     RasmOp clear_vec = s->vt[0];
-    switch (MASK_GET(p->clear, i)) {
-    case 0:
+    if (p->clear.zero & SWS_COMP(i)) {
         i_movi(r, vx[i], IMM(0));                   CMTF("%s[%u] = 0;", vx_str, i);
-        break;
-    case 1:
+    } else if (p->clear.one & SWS_COMP(i)) {
         if (p->block_size * ff_sws_pixel_type_size(p->type) == 8) {
             i_movi(r, v_8b (vx[i]), IMM(0xff));
         } else {
             i_movi(r, v_16b(vx[i]), IMM(0xff));
         }
         CMTF("%s[%u] = UINT_MAX;", vx_str, i);
-        break;
-    default:
+    } else {
         i_dup (r, vx[i], a64op_elem(clear_vec, i)); CMTF("%s[%u] = broadcast(clear_vec[%u]);", vx_str, i, i);
-        break;
     }
 }
 
@@ -835,7 +831,7 @@ static void asmgen_op_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *
 
     bool load_priv = false;
     LOOP_MASK(p, i) {
-        if (MASK_GET(p->clear, i) == 0xf)
+        if (!((p->clear.zero | p->clear.one) & SWS_COMP(i)))
             load_priv = true;
     }
     if (load_priv) {

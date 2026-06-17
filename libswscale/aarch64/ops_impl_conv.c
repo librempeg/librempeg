@@ -264,22 +264,19 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         break;
     case SWS_UOP_CLEAR:
         out->mask = 0;
-        out->clear = 0;
         for (int i = 0; i < 4; i++) {
-            int mask_val = 0xf;
             if (op->clear.mask & SWS_COMP(i)) {
                 MASK_SET(out->mask, i, 1);
                 if (op->clear.value[i].num == 0) {
-                    mask_val = 0;
+                    out->clear.zero |= SWS_COMP(i);
                 } else {
                     uint32_t val = op->clear.value[i].num / op->clear.value[i].den;
                     if ((op->type == SWS_PIXEL_U8  && val == UINT8_MAX)  ||
                         (op->type == SWS_PIXEL_U16 && val == UINT16_MAX) ||
                         (op->type == SWS_PIXEL_U32 && val == UINT32_MAX))
-                        mask_val = 1;
+                        out->clear.one |= SWS_COMP(i);
                 }
             }
-            MASK_SET(out->clear, i, mask_val);
         }
         break;
     case SWS_UOP_LINEAR:
