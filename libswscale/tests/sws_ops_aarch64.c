@@ -105,6 +105,8 @@ static int aarch64_op_impl_cmp(const void *a, const void *b)
 {
     const SwsAArch64OpImplParams *pa = (const SwsAArch64OpImplParams *) a;
     const SwsAArch64OpImplParams *pb = (const SwsAArch64OpImplParams *) b;
+    const SwsUOpParams *para = &pa->par;
+    const SwsUOpParams *parb = &pb->par;
 
     if (pa->uop != pb->uop)
         return (int) pa->uop - pb->uop;
@@ -112,47 +114,47 @@ static int aarch64_op_impl_cmp(const void *a, const void *b)
     switch (pa->uop) {
     case SWS_UOP_PERMUTE:
     case SWS_UOP_COPY: {
-        uint64_t ia = move_to_mask(&pa->move);
-        uint64_t ib = move_to_mask(&pb->move);
+        uint64_t ia = move_to_mask(&para->move);
+        uint64_t ib = move_to_mask(&parb->move);
         if (ia != ib)
             return (int64_t) (ia - ib) < 0 ? -1 : 1;
         break;
     }
     case SWS_UOP_UNPACK:
     case SWS_UOP_PACK: {
-        uint16_t ia = pack_to_mask(&pa->pack);
-        uint16_t ib = pack_to_mask(&pb->pack);
+        uint16_t ia = pack_to_mask(&para->pack);
+        uint16_t ib = pack_to_mask(&parb->pack);
         if (ia != ib)
             return (int) ia - ib;
         break;
     }
     case SWS_UOP_LSHIFT:
     case SWS_UOP_RSHIFT:
-        if (pa->shift.amount != pb->shift.amount)
-            return (int) pa->shift.amount - pb->shift.amount;
+        if (para->shift.amount != parb->shift.amount)
+            return (int) para->shift.amount - parb->shift.amount;
         break;
     case SWS_UOP_CLEAR: {
-        uint16_t ia = clear_to_mask(&pa->clear);
-        uint16_t ib = clear_to_mask(&pb->clear);
+        uint16_t ia = clear_to_mask(&para->clear);
+        uint16_t ib = clear_to_mask(&parb->clear);
         if (ia != ib)
             return (int) ia - ib;
         break;
     }
     case SWS_UOP_LINEAR:
     case SWS_UOP_LINEAR_FMA: {
-        uint64_t ia = linear_to_mask(&pa->linear);
-        uint64_t ib = linear_to_mask(&pb->linear);
+        uint64_t ia = linear_to_mask(&para->lin);
+        uint64_t ib = linear_to_mask(&parb->lin);
         if (ia != ib)
             return (int64_t) (ia - ib) < 0 ? -1 : 1;
         break;
     }
     case SWS_UOP_DITHER: {
-        uint16_t ia = dither_to_mask(pa, &pa->dither);
-        uint16_t ib = dither_to_mask(pb, &pb->dither);
+        uint16_t ia = dither_to_mask(pa, &para->dither);
+        uint16_t ib = dither_to_mask(pb, &parb->dither);
         if (ia != ib)
             return (int) ia - ib;
-        if (pa->dither.size_log2 != pb->dither.size_log2)
-            return (int) pa->dither.size_log2 - pb->dither.size_log2;
+        if (para->dither.size_log2 != parb->dither.size_log2)
+            return (int) para->dither.size_log2 - parb->dither.size_log2;
         break;
     }
     }
@@ -301,29 +303,30 @@ static const char pixel_type_names[SWS_PIXEL_TYPE_NB][4] = {
 
 static void impl_func_name(AVBPrint *bp, const SwsAArch64OpImplParams *params)
 {
+    const SwsUOpParams *par = &params->par;
     av_bprintf(bp, "ff_sws_%s", op_type_names[params->uop]);
     switch (params->uop) {
     case SWS_UOP_PERMUTE:
     case SWS_UOP_COPY:
-        av_bprintf(bp, "_%012" PRIx64, move_to_mask(&params->move));
+        av_bprintf(bp, "_%012" PRIx64, move_to_mask(&par->move));
         break;
     case SWS_UOP_UNPACK:
     case SWS_UOP_PACK:
-        av_bprintf(bp, "_%04x", pack_to_mask(&params->pack));
+        av_bprintf(bp, "_%04x", pack_to_mask(&par->pack));
         break;
     case SWS_UOP_LSHIFT:
     case SWS_UOP_RSHIFT:
-        av_bprintf(bp, "_%u", params->shift.amount);
+        av_bprintf(bp, "_%u", par->shift.amount);
         break;
     case SWS_UOP_CLEAR:
-        av_bprintf(bp, "_%04x", clear_to_mask(&params->clear));
+        av_bprintf(bp, "_%04x", clear_to_mask(&par->clear));
         break;
     case SWS_UOP_LINEAR:
     case SWS_UOP_LINEAR_FMA:
-        av_bprintf(bp, "_%010" PRIx64, linear_to_mask(&params->linear));
+        av_bprintf(bp, "_%010" PRIx64, linear_to_mask(&par->lin));
         break;
     case SWS_UOP_DITHER:
-        av_bprintf(bp, "_%04x_%u", dither_to_mask(params, &params->dither), params->dither.size_log2);
+        av_bprintf(bp, "_%04x_%u", dither_to_mask(params, &par->dither), par->dither.size_log2);
         break;
     }
     av_bprintf(bp, "_%u_%s_%04x_neon", params->block_size, pixel_type_names[params->type], nibble_mask(params->mask));
@@ -369,41 +372,42 @@ static const char pixel_types[SWS_PIXEL_TYPE_NB][32] = {
 
 static void serialize_op(AVBPrint *bp, const SwsAArch64OpImplParams *params)
 {
+    const SwsUOpParams *par = &params->par;
     av_bprintf(bp, "ENTRY(");
     impl_func_name(bp, params);
     av_bprintf(bp, ", { .uop = %s", op_types[params->uop]);
     switch (params->uop) {
     case SWS_UOP_PERMUTE:
     case SWS_UOP_COPY:
-        av_bprintf(bp, ", .move = { .num_moves = %d, .dst = {%d, %d, %d, %d, %d, %d}, .src = {%d, %d, %d, %d, %d, %d} }",
-                   params->move.num_moves,
-                   params->move.dst[0], params->move.dst[1], params->move.dst[2],
-                   params->move.dst[3], params->move.dst[4], params->move.dst[5],
-                   params->move.src[0], params->move.src[1], params->move.src[2],
-                   params->move.src[3], params->move.src[4], params->move.src[5]);
+        av_bprintf(bp, ", .par.move = { .num_moves = %d, .dst = {%d, %d, %d, %d, %d, %d}, .src = {%d, %d, %d, %d, %d, %d} }",
+                   par->move.num_moves,
+                   par->move.dst[0], par->move.dst[1], par->move.dst[2],
+                   par->move.dst[3], par->move.dst[4], par->move.dst[5],
+                   par->move.src[0], par->move.src[1], par->move.src[2],
+                   par->move.src[3], par->move.src[4], par->move.src[5]);
         break;
     case SWS_UOP_UNPACK:
     case SWS_UOP_PACK:
-        av_bprintf(bp, ", .pack = { .pattern = {%d, %d, %d, %d} }",
-                   params->pack.pattern[0], params->pack.pattern[1],
-                   params->pack.pattern[2], params->pack.pattern[3]);
+        av_bprintf(bp, ", .par.pack = { .pattern = {%d, %d, %d, %d} }",
+                   par->pack.pattern[0], par->pack.pattern[1],
+                   par->pack.pattern[2], par->pack.pattern[3]);
         break;
     case SWS_UOP_LSHIFT:
     case SWS_UOP_RSHIFT:
-        av_bprintf(bp, ", .shift = { .amount = %u }", params->shift.amount);
+        av_bprintf(bp, ", .par.shift = { .amount = %u }", par->shift.amount);
         break;
     case SWS_UOP_CLEAR:
-        av_bprintf(bp, ", .clear = { .one = 0x%0x, .zero = 0x%0x }", params->clear.one, params->clear.zero);
+        av_bprintf(bp, ", .par.clear = { .one = 0x%0x, .zero = 0x%0x }", par->clear.one, par->clear.zero);
         break;
     case SWS_UOP_LINEAR:
     case SWS_UOP_LINEAR_FMA:
-        av_bprintf(bp, ", .linear = { .one = 0x%x, .zero = 0x%x }", params->linear.one, params->linear.zero);
+        av_bprintf(bp, ", .par.lin = { .one = 0x%x, .zero = 0x%x }", par->lin.one, par->lin.zero);
         break;
     case SWS_UOP_DITHER:
-        av_bprintf(bp, ", .dither = { .y_offset = {%u, %u, %u, %u}, .size_log2 = %u }",
-                   params->dither.y_offset[0], params->dither.y_offset[1],
-                   params->dither.y_offset[2], params->dither.y_offset[3],
-                   params->dither.size_log2);
+        av_bprintf(bp, ", .par.dither = { .y_offset = {%u, %u, %u, %u}, .size_log2 = %u }",
+                   par->dither.y_offset[0], par->dither.y_offset[1],
+                   par->dither.y_offset[2], par->dither.y_offset[3],
+                   par->dither.size_log2);
         break;
     }
     av_bprintf(bp, ", .block_size = %u, .type = %s, .mask = 0x%x })", params->block_size, pixel_types[params->type], params->mask);

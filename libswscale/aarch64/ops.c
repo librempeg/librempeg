@@ -86,7 +86,7 @@ static int aarch64_setup_linear(const SwsAArch64OpImplParams *p,
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 5; j++) {
             const int jj = (j == 0) ? 4 : (j - 1);
-            if (!(p->linear.zero & SWS_MASK(i, jj)))
+            if (!(p->par.lin.zero & SWS_MASK(i, jj)))
                 coeffs[i_coeff++] = (float) op->lin.m[i][jj].num / op->lin.m[i][jj].den;
         }
     }

@@ -49,14 +49,7 @@ typedef struct SwsAArch64OpImplParams {
     SwsCompMask         mask;
     SwsPixelType        type;
     uint8_t block_size;
-    union {
-        SwsShiftUOp         shift;
-        SwsClearUOp         clear;
-        SwsMoveUOp          move;
-        SwsPackUOp          pack;
-        SwsLinearUOp        linear;
-        SwsDitherUOp        dither;
-    };
+    SwsUOpParams par;
 } SwsAArch64OpImplParams;
 
 /* SwsCompMask-related helpers. */
@@ -75,7 +68,7 @@ static inline int linear_num_vregs(const SwsAArch64OpImplParams *params)
 {
     int count = 0;
     for (int i = 0; i < 4 * 5; i++)
-        if (!(params->linear.zero & (1ULL << i)))
+        if (!(params->par.lin.zero & (1ULL << i)))
             count++;
     return (count + 3) / 4;
 }

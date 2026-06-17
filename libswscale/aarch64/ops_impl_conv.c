@@ -31,9 +31,9 @@
 
 static void swizzle_emit(SwsAArch64OpImplParams *out, uint8_t dst, uint8_t src)
 {
-    int idx = out->move.num_moves++;
-    out->move.dst[idx] = dst;
-    out->move.src[idx] = src;
+    int idx = out->par.move.num_moves++;
+    out->par.move.dst[idx] = dst;
+    out->par.move.src[idx] = src;
 }
 
 static void convert_swizzle_to_moves(const SwsOp *op, SwsAArch64OpImplParams *out)
@@ -235,18 +235,18 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         break;
     case SWS_UOP_UNPACK:
         for (int i = 0; i < 4; i++)
-            out->pack.pattern[i] = op->pack.pattern[i];
+            out->par.pack.pattern[i] = op->pack.pattern[i];
         break;
     case SWS_UOP_PACK:
         out->mask = 0;
         for (int i = 0; i < 4 && op->pack.pattern[i]; i++)
             out->mask |= SWS_COMP(i);
         for (int i = 0; i < 4; i++)
-            out->pack.pattern[i] = op->pack.pattern[i];
+            out->par.pack.pattern[i] = op->pack.pattern[i];
         break;
     case SWS_UOP_LSHIFT:
     case SWS_UOP_RSHIFT:
-        out->shift.amount = op->shift.amount;
+        out->par.shift.amount = op->shift.amount;
         break;
     case SWS_UOP_CLEAR:
         out->mask = 0;
@@ -254,13 +254,13 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
             if (op->clear.mask & SWS_COMP(i)) {
                 out->mask |= SWS_COMP(i);
                 if (op->clear.value[i].num == 0) {
-                    out->clear.zero |= SWS_COMP(i);
+                    out->par.clear.zero |= SWS_COMP(i);
                 } else {
                     uint32_t val = op->clear.value[i].num / op->clear.value[i].den;
                     if ((op->type == SWS_PIXEL_U8  && val == UINT8_MAX)  ||
                         (op->type == SWS_PIXEL_U16 && val == UINT16_MAX) ||
                         (op->type == SWS_PIXEL_U32 && val == UINT32_MAX))
-                        out->clear.one |= SWS_COMP(i);
+                        out->par.clear.one |= SWS_COMP(i);
                 }
             }
         }
@@ -271,16 +271,16 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         for (int i = 0; i < 4; i++) {
             if (!SWS_OP_NEEDED(op, i) || !(op->lin.mask & SWS_MASK_ROW(i))) {
                 for (int j = 0; j < 5; j++)
-                    out->linear.zero |= SWS_MASK(i, j);
+                    out->par.lin.zero |= SWS_MASK(i, j);
                 continue;
             }
             out->mask |= SWS_COMP(i);
             for (int j = 0; j < 5; j++) {
                 const AVRational64 k = op->lin.m[i][j];
                 if (j < 4 && k.num == k.den)
-                    out->linear.one |= SWS_MASK(i, j);
+                    out->par.lin.one |= SWS_MASK(i, j);
                 else if (k.num == 0)
-                    out->linear.zero |= SWS_MASK(i, j);
+                    out->par.lin.zero |= SWS_MASK(i, j);
             }
         }
         break;
@@ -290,9 +290,9 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
                                   op->dither.y_offset[2] >= 0,
                                   op->dither.y_offset[3] >= 0);
         LOOP(out->mask, i) {
-            out->dither.y_offset[i] = op->dither.y_offset[i];
+            out->par.dither.y_offset[i] = op->dither.y_offset[i];
         }
-        out->dither.size_log2 = op->dither.size_log2;
+        out->par.dither.size_log2 = op->dither.size_log2;
         break;
     }
 
