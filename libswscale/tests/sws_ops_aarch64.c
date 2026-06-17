@@ -21,6 +21,7 @@
 #include <stdio.h>
 
 #include "libavutil/avassert.h"
+#include "libavutil/bprint.h"
 #include "libavutil/mem.h"
 #include "libavutil/tree.h"
 #include "libswscale/graph.h"
@@ -35,37 +36,6 @@
 #include <io.h>
 #include <fcntl.h>
 #endif
-
-/*********************************************************************/
-/*
- * Helper string concatenation function that does not depend on the
- * FFmpeg libraries, so it may be used standalone.
- */
-av_printf_format(3, 4)
-static void buf_appendf(char **pbuf, size_t *prem, const char *fmt, ...)
-{
-    char *buf = *pbuf;
-    size_t rem = *prem;
-    if (!rem)
-        return;
-
-    va_list ap;
-    va_start(ap, fmt);
-    int n = vsnprintf(buf, rem, fmt, ap);
-    va_end(ap);
-
-    if (n > 0) {
-        if (n < rem) {
-            buf += n;
-            rem -= n;
-        } else {
-            buf += rem - 1;
-            rem = 0;
-        }
-        *pbuf = buf;
-        *prem = rem;
-    }
-}
 
 /*********************************************************************/
 static int aarch64_op_impl_cmp(const void *a, const void *b)
@@ -251,34 +221,34 @@ static const char pixel_type_names[AARCH64_PIXEL_TYPE_NB][4] = {
     [AARCH64_PIXEL_F32] = "f32",
 };
 
-static void impl_func_name(char **buf, size_t *size, const SwsAArch64OpImplParams *params)
+static void impl_func_name(AVBPrint *bp, const SwsAArch64OpImplParams *params)
 {
-    buf_appendf(buf, size, "ff_sws_%s", op_type_names[params->op]);
+    av_bprintf(bp, "ff_sws_%s", op_type_names[params->op]);
     switch (params->op) {
     case AARCH64_SWS_OP_PERMUTE:
     case AARCH64_SWS_OP_COPY:
-        buf_appendf(buf, size, "_%012" PRIx64, params->move);
+        av_bprintf(bp, "_%012" PRIx64, params->move);
         break;
     case AARCH64_SWS_OP_UNPACK:
     case AARCH64_SWS_OP_PACK:
-        buf_appendf(buf, size, "_%04x", params->pack);
+        av_bprintf(bp, "_%04x", params->pack);
         break;
     case AARCH64_SWS_OP_LSHIFT:
     case AARCH64_SWS_OP_RSHIFT:
-        buf_appendf(buf, size, "_%u", params->shift);
+        av_bprintf(bp, "_%u", params->shift);
         break;
     case AARCH64_SWS_OP_CLEAR:
-        buf_appendf(buf, size, "_%04x", params->clear);
+        av_bprintf(bp, "_%04x", params->clear);
         break;
     case AARCH64_SWS_OP_LINEAR:
     case AARCH64_SWS_OP_LINEAR_FMA:
-        buf_appendf(buf, size, "_%010" PRIx64, params->linear.mask);
+        av_bprintf(bp, "_%010" PRIx64, params->linear.mask);
         break;
     case AARCH64_SWS_OP_DITHER:
-        buf_appendf(buf, size, "_%04x_%u", params->dither.y_offset, params->dither.size_log2);
+        av_bprintf(bp, "_%04x_%u", params->dither.y_offset, params->dither.size_log2);
         break;
     }
-    buf_appendf(buf, size, "_%u_%s_%04x_neon", params->block_size, pixel_type_names[params->type], params->mask);
+    av_bprintf(bp, "_%u_%s_%04x_neon", params->block_size, pixel_type_names[params->type], params->mask);
 }
 
 static const char op_types[AARCH64_SWS_OP_TYPE_NB][32] = {
@@ -319,37 +289,36 @@ static const char pixel_types[AARCH64_PIXEL_TYPE_NB][32] = {
     [AARCH64_PIXEL_F32] = "AARCH64_PIXEL_F32",
 };
 
-static void serialize_op(char *buf, size_t size, const SwsAArch64OpImplParams *params)
+static void serialize_op(AVBPrint *bp, const SwsAArch64OpImplParams *params)
 {
-    buf_appendf(&buf, &size, "ENTRY(");
-    impl_func_name(&buf, &size, params);
-    buf_appendf(&buf, &size, ", { .op = %s", op_types[params->op]);
+    av_bprintf(bp, "ENTRY(");
+    impl_func_name(bp, params);
+    av_bprintf(bp, ", { .op = %s", op_types[params->op]);
     switch (params->op) {
     case AARCH64_SWS_OP_PERMUTE:
     case AARCH64_SWS_OP_COPY:
-        buf_appendf(&buf, &size, ", .move = 0x%012" PRIx64 "ULL", params->move);
+        av_bprintf(bp, ", .move = 0x%012" PRIx64 "ULL", params->move);
         break;
     case AARCH64_SWS_OP_UNPACK:
     case AARCH64_SWS_OP_PACK:
-        buf_appendf(&buf, &size, ", .pack = 0x%04x", params->pack);
+        av_bprintf(bp, ", .pack = 0x%04x", params->pack);
         break;
     case AARCH64_SWS_OP_LSHIFT:
     case AARCH64_SWS_OP_RSHIFT:
-        buf_appendf(&buf, &size, ", .shift = %u", params->shift);
+        av_bprintf(bp, ", .shift = %u", params->shift);
         break;
     case AARCH64_SWS_OP_CLEAR:
-        buf_appendf(&buf, &size, ", .clear = 0x%04x", params->clear);
+        av_bprintf(bp, ", .clear = 0x%04x", params->clear);
         break;
     case AARCH64_SWS_OP_LINEAR:
     case AARCH64_SWS_OP_LINEAR_FMA:
-        buf_appendf(&buf, &size, ", .linear.mask = 0x%010" PRIx64 "ULL", params->linear.mask);
+        av_bprintf(bp, ", .linear.mask = 0x%010" PRIx64 "ULL", params->linear.mask);
         break;
     case AARCH64_SWS_OP_DITHER:
-        buf_appendf(&buf, &size, ", .dither.y_offset = 0x%04x, .dither.size_log2 = %u", params->dither.y_offset, params->dither.size_log2);
+        av_bprintf(bp, ", .dither.y_offset = 0x%04x, .dither.size_log2 = %u", params->dither.y_offset, params->dither.size_log2);
         break;
     }
-    buf_appendf(&buf, &size, ", .block_size = %u, .type = %s, .mask = 0x%04x })", params->block_size, pixel_types[params->type], params->mask);
-    av_assert0(size && "string buffer exhausted");
+    av_bprintf(bp, ", .block_size = %u, .type = %s, .mask = 0x%04x })", params->block_size, pixel_types[params->type], params->mask);
 }
 
 /* Serialize SwsAArch64OpImplParams for one function. */
@@ -358,9 +327,11 @@ static int print_op(void *opaque, void *elem)
     SwsAArch64OpImplParams *params = (SwsAArch64OpImplParams *) elem;
     FILE *fp = (FILE *) opaque;
 
-    char buf[256];
-    serialize_op(buf, sizeof(buf), params);
-    fprintf(fp, "%s\n", buf);
+    AVBPrint bp;
+    av_bprint_init(&bp, 0, AV_BPRINT_SIZE_UNLIMITED);
+    serialize_op(&bp, params);
+    fprintf(fp, "%s\n", bp.str);
+    av_bprint_finalize(&bp, NULL);
 
     av_free(params);
 
