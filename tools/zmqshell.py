@@ -57,6 +57,9 @@ def main():
     parser.add_argument('--bind-address', '-b', default='tcp://localhost:5555', help='specify bind address used to communicate with ZMQ')
 
     args = parser.parse_args()
+    if not any(host in args.bind_address for host in ('localhost', '127.0.0.1', '::1')):
+        log.warning("Connecting to a remote ZMQ endpoint. This connection is unauthenticated; "
+                    "ensure the remote host and network are fully trusted.")
     try:
         LavfiCmd(args.bind_address).cmdloop('FFmpeg libavfilter interactive shell')
     except KeyboardInterrupt:
