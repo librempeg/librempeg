@@ -260,7 +260,7 @@ static void clobber_gpr(RasmOp regs[MAX_SAVED_REGS], unsigned *count,
 }
 
 static unsigned clobbered_gprs(const SwsAArch64Context *s,
-                               SwsAArch64OpMask mask,
+                               SwsCompMask mask,
                                RasmOp regs[MAX_SAVED_REGS])
 {
     unsigned count = 0;
@@ -274,7 +274,7 @@ static unsigned clobbered_gprs(const SwsAArch64Context *s,
     return count;
 }
 
-static void asmgen_process(SwsAArch64Context *s, SwsAArch64OpMask mask)
+static void asmgen_process(SwsAArch64Context *s, SwsCompMask mask)
 {
     RasmContext *r = s->rctx;
     char func_name[128];
@@ -285,7 +285,7 @@ static void asmgen_process(SwsAArch64Context *s, SwsAArch64OpMask mask)
      * The description in x86/ops_include.asm mostly holds as well here.
      */
 
-    snprintf(func_name, sizeof(func_name), "ff_sws_process_%04x_neon", mask);
+    snprintf(func_name, sizeof(func_name), "ff_sws_process_%04x_neon", nibble_mask(mask));
 
     rasm_func_begin(r, func_name, true, false);
 
@@ -442,9 +442,9 @@ static void asmgen_op_read_packed_n(SwsAArch64Context *s, const SwsAArch64OpImpl
     RasmContext *r = s->rctx;
 
     switch (p->mask) {
-    case 0x0011: i_ld2(r, vv_2(vx[0], vx[1]),               a64op_post(s->in[0], s->vec_size * 2)); break;
-    case 0x0111: i_ld3(r, vv_3(vx[0], vx[1], vx[2]),        a64op_post(s->in[0], s->vec_size * 3)); break;
-    case 0x1111: i_ld4(r, vv_4(vx[0], vx[1], vx[2], vx[3]), a64op_post(s->in[0], s->vec_size * 4)); break;
+    case SWS_COMP_ELEMS(2): i_ld2(r, vv_2(vx[0], vx[1]),               a64op_post(s->in[0], s->vec_size * 2)); break;
+    case SWS_COMP_ELEMS(3): i_ld3(r, vv_3(vx[0], vx[1], vx[2]),        a64op_post(s->in[0], s->vec_size * 3)); break;
+    case SWS_COMP_ELEMS(4): i_ld4(r, vv_4(vx[0], vx[1], vx[2], vx[3]), a64op_post(s->in[0], s->vec_size * 4)); break;
     }
 }
 
@@ -547,9 +547,9 @@ static void asmgen_op_write_packed_n(SwsAArch64Context *s, const SwsAArch64OpImp
     RasmContext *r = s->rctx;
 
     switch (p->mask) {
-    case 0x0011: i_st2(r, vv_2(vx[0], vx[1]),               a64op_post(s->out[0], s->vec_size * 2)); break;
-    case 0x0111: i_st3(r, vv_3(vx[0], vx[1], vx[2]),        a64op_post(s->out[0], s->vec_size * 3)); break;
-    case 0x1111: i_st4(r, vv_4(vx[0], vx[1], vx[2], vx[3]), a64op_post(s->out[0], s->vec_size * 4)); break;
+    case SWS_COMP_ELEMS(2): i_st2(r, vv_2(vx[0], vx[1]),               a64op_post(s->out[0], s->vec_size * 2)); break;
+    case SWS_COMP_ELEMS(3): i_st3(r, vv_3(vx[0], vx[1], vx[2]),        a64op_post(s->out[0], s->vec_size * 3)); break;
+    case SWS_COMP_ELEMS(4): i_st4(r, vv_4(vx[0], vx[1], vx[2], vx[3]), a64op_post(s->out[0], s->vec_size * 4)); break;
     }
 }
 
@@ -737,10 +737,10 @@ static void asmgen_op_pack(SwsAArch64Context *s, const SwsAArch64OpImplParams *p
         p->pack.pattern[3],
         0
     };
-    uint16_t offset_mask = 0;
+    SwsCompMask offset_mask = 0;
     LOOP_MASK(p, i) {
         if (offsets[i])
-            MASK_SET(offset_mask, i, 1);
+            offset_mask |= SWS_COMP(i);
     }
 
     /* Perform left shift. */
@@ -1055,7 +1055,7 @@ static void asmgen_op_scale(SwsAArch64Context *s, const SwsAArch64OpImplParams *
  */
 static void linear_pass(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                         RasmOp *vt, RasmOp *vc,
-                        int save_mask, bool vh_pass)
+                        SwsCompMask save_mask, bool vh_pass)
 {
     RasmContext *r = s->rctx;
     /**
@@ -1076,7 +1076,7 @@ static void linear_pass(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
     RasmOp src_vx[4] = { vx[0], vx[1], vx[2], vx[3] };
     if (save_mask) {
         for (int i = 0; i < 4; i++) {
-            if (MASK_GET(save_mask, i)) {
+            if (save_mask & SWS_COMP(i)) {
                 src_vx[i] = vt[i];
                 i_mov16b(r, vt[i], vx[i]);  CMTF("vsrc[%u] = v%c[%u];", i, cvh, i);
             }
@@ -1161,7 +1161,7 @@ static void asmgen_op_linear(SwsAArch64Context *s, const SwsAArch64OpImplParams 
     i_ld1(r, coeff_veclist, a64op_base(ptr));               CMT("coeff_veclist = *vcoeff_ptr;");
 
     /* Compute mask for rows that must be saved before being overwritten. */
-    uint16_t save_mask = 0;
+    SwsCompMask save_mask = 0;
     bool overwritten[4] = { false, false, false, false };
     LOOP_MASK(p, i) {
         for (int j = 0; j < 5; j++) {
@@ -1170,7 +1170,7 @@ static void asmgen_op_linear(SwsAArch64Context *s, const SwsAArch64OpImplParams 
             if (p->linear.zero & SWS_MASK(i, src_j))
                 continue;
             if (!is_offset && overwritten[src_j])
-                MASK_SET(save_mask, src_j, 1);
+                save_mask |= SWS_COMP(src_j);
             overwritten[i] = true;
         }
     }
@@ -1486,10 +1486,10 @@ static int asmgen(void)
     s.out_bump[3] = a64op_gpx(27);
 
     /* Generate all process functions using rasm. */
-    asmgen_process(&s, 0x0001);
-    asmgen_process(&s, 0x0011);
-    asmgen_process(&s, 0x0111);
-    asmgen_process(&s, 0x1111);
+    asmgen_process(&s, SWS_COMP_ELEMS(1));
+    asmgen_process(&s, SWS_COMP_ELEMS(2));
+    asmgen_process(&s, SWS_COMP_ELEMS(3));
+    asmgen_process(&s, SWS_COMP_ELEMS(4));
 
     /* Generate all functions from ops_entries.c using rasm. */
     const SwsAArch64OpEntry *entries = ops_entries;

@@ -28,7 +28,16 @@
 #include "libswscale/uops.h"
 
 /* Each nibble in the mask corresponds to one component. */
-typedef uint16_t SwsAArch64OpMask;
+#define NIBBLE_GET(mask, idx) (((mask) >> ((idx) << 2)) & 0xf)
+#define NIBBLE_SET(mask, idx, val) do { (mask) |= (((val) & 0xf) << ((idx) << 2)); } while (0)
+
+static inline uint16_t nibble_mask(SwsCompMask mask)
+{
+    uint16_t ret = 0;
+    for (int i = 0; i < 4; i++)
+        NIBBLE_SET(ret, i, !!(mask & SWS_COMP(i)));
+    return ret;
+}
 
 /**
  * SwsAArch64OpImplParams describes the parameters for an SwsUOpType
@@ -37,7 +46,7 @@ typedef uint16_t SwsAArch64OpMask;
  */
 typedef struct SwsAArch64OpImplParams {
     SwsUOpType          uop;
-    SwsAArch64OpMask    mask;
+    SwsCompMask         mask;
     SwsPixelType        type;
     uint8_t block_size;
     union {
@@ -50,17 +59,13 @@ typedef struct SwsAArch64OpImplParams {
     };
 } SwsAArch64OpImplParams;
 
-/* SwsAArch64OpMask-related helpers. */
-
-#define MASK_GET(mask, idx) (((mask) >> ((idx) << 2)) & 0xf)
-#define MASK_SET(mask, idx, val) do { (mask) |= (((val) & 0xf) << ((idx) << 2)); } while (0)
-
+/* SwsCompMask-related helpers. */
 #define LOOP(mask, idx)                 \
     for (int idx = 0; idx < 4; idx++)   \
-        if (MASK_GET(mask, idx))
+        if (mask & SWS_COMP(idx))
 #define LOOP_BWD(mask, idx)             \
     for (int idx = 3; idx >= 0; idx--)  \
-        if (MASK_GET(mask, idx))
+        if (mask & SWS_COMP(idx))
 
 #define LOOP_MASK(p, idx) LOOP(p->mask, idx)
 #define LOOP_MASK_BWD(p, idx) LOOP_BWD(p->mask, idx)

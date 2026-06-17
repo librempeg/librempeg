@@ -45,9 +45,9 @@ static uint16_t clear_to_mask(const SwsClearUOp *clear)
         if (clear->zero & SWS_COMP(i)) {
             /* no-op */
         } else if (clear->one & SWS_COMP(i)) {
-            MASK_SET(mask, i, 1);
+            NIBBLE_SET(mask, i, 1);
         } else {
-            MASK_SET(mask, i, 0xf);
+            NIBBLE_SET(mask, i, 0xf);
         }
     }
     return mask;
@@ -69,7 +69,7 @@ static uint16_t pack_to_mask(const SwsPackUOp *pack)
 {
     uint16_t mask = 0;
     for (int i = 0; i < 4; i++)
-        MASK_SET(mask, i, pack->pattern[i]);
+        NIBBLE_SET(mask, i, pack->pattern[i]);
     return mask;
 }
 
@@ -93,9 +93,9 @@ static uint16_t dither_to_mask(const SwsAArch64OpImplParams *p, const SwsDitherU
     uint16_t mask = 0;
     for (int i = 0; i < 4; i++) {
         if (p->mask & SWS_COMP(i)) {
-            MASK_SET(mask, i, dither->y_offset[i]);
+            NIBBLE_SET(mask, i, dither->y_offset[i]);
         } else {
-            MASK_SET(mask, i, 0xf);
+            NIBBLE_SET(mask, i, 0xf);
         }
     }
     return mask;
@@ -326,7 +326,7 @@ static void impl_func_name(AVBPrint *bp, const SwsAArch64OpImplParams *params)
         av_bprintf(bp, "_%04x_%u", dither_to_mask(params, &params->dither), params->dither.size_log2);
         break;
     }
-    av_bprintf(bp, "_%u_%s_%04x_neon", params->block_size, pixel_type_names[params->type], params->mask);
+    av_bprintf(bp, "_%u_%s_%04x_neon", params->block_size, pixel_type_names[params->type], nibble_mask(params->mask));
 }
 
 static const char op_types[SWS_UOP_TYPE_NB][32] = {
@@ -406,7 +406,7 @@ static void serialize_op(AVBPrint *bp, const SwsAArch64OpImplParams *params)
                    params->dither.size_log2);
         break;
     }
-    av_bprintf(bp, ", .block_size = %u, .type = %s, .mask = 0x%04x })", params->block_size, pixel_types[params->type], params->mask);
+    av_bprintf(bp, ", .block_size = %u, .type = %s, .mask = 0x%x })", params->block_size, pixel_types[params->type], params->mask);
 }
 
 /* Serialize SwsAArch64OpImplParams for one function. */

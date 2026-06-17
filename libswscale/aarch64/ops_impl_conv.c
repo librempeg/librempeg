@@ -38,18 +38,20 @@ static void swizzle_emit(SwsAArch64OpImplParams *out, uint8_t dst, uint8_t src)
 
 static void convert_swizzle_to_moves(const SwsOp *op, SwsAArch64OpImplParams *out)
 {
-    SwsAArch64OpMask swizzle = 0;
-
-    MASK_SET(swizzle, 0, op->swizzle.in[0]);
-    MASK_SET(swizzle, 1, op->swizzle.in[1]);
-    MASK_SET(swizzle, 2, op->swizzle.in[2]);
-    MASK_SET(swizzle, 3, op->swizzle.in[3]);
+    SwsSwizzleOp swizzle = {
+        .in = {
+            op->swizzle.in[0],
+            op->swizzle.in[1],
+            op->swizzle.in[2],
+            op->swizzle.in[3],
+        }
+    };
 
     /* Compute used vectors (src and dst) */
     uint8_t src_used[4] = { 0 };
     bool done[4] = { true, true, true, true };
     LOOP(out->mask, dst) {
-        uint8_t src = MASK_GET(swizzle, dst);
+        uint8_t src = swizzle.in[dst];
         src_used[src]++;
         done[dst] = false;
     }
@@ -60,7 +62,7 @@ static void convert_swizzle_to_moves(const SwsOp *op, SwsAArch64OpImplParams *ou
         for (int dst = 0; dst < 4; dst++) {
             if (done[dst] || src_used[dst])
                 continue;
-            uint8_t src = MASK_GET(swizzle, dst);
+            uint8_t src = swizzle.in[dst];
             swizzle_emit(out, dst, src);
             src_used[src]--;
             done[dst] = true;
@@ -76,12 +78,12 @@ static void convert_swizzle_to_moves(const SwsOp *op, SwsAArch64OpImplParams *ou
         swizzle_emit(out, -1, dst);
 
         uint8_t cur_dst = dst;
-        uint8_t src = MASK_GET(swizzle, cur_dst);
+        uint8_t src = swizzle.in[cur_dst];
         while (src != dst) {
             swizzle_emit(out, cur_dst, src);
             done[cur_dst] = true;
             cur_dst = src;
-            src = MASK_GET(swizzle, cur_dst);
+            src = swizzle.in[cur_dst];
         }
 
         swizzle_emit(out, cur_dst, -1);
@@ -107,7 +109,7 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
     out->mask = 0;
     for (int i = 0; i < 4; i++) {
         if (SWS_OP_NEEDED(op, i))
-            MASK_SET(out->mask, i, 1);
+            out->mask |= SWS_COMP(i);
     }
 
     out->type = op->type;
@@ -157,14 +159,14 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
          * enough.
          */
         out->uop = SWS_UOP_PERMUTE;
-        SwsAArch64OpMask seen = 0;
+        SwsCompMask seen = 0;
         LOOP(out->mask, i) {
             uint8_t src = op->swizzle.in[i];
-            if (MASK_GET(seen, src)) {
+            if (seen & SWS_COMP(src)) {
                 out->uop = SWS_UOP_COPY;
                 break;
             }
-            MASK_SET(seen, src, 1);
+            seen |= SWS_COMP(src);
         }
         break;
     }
@@ -212,10 +214,10 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
     case SWS_UOP_WRITE_PACKED:
     case SWS_UOP_WRITE_PLANAR:
         switch (op->rw.elems) {
-        case 1: out->mask = 0x0001; break;
-        case 2: out->mask = 0x0011; break;
-        case 3: out->mask = 0x0111; break;
-        case 4: out->mask = 0x1111; break;
+        case 1: out->mask = SWS_COMP_ELEMS(1); break;
+        case 2: out->mask = SWS_COMP_ELEMS(2); break;
+        case 3: out->mask = SWS_COMP_ELEMS(3); break;
+        case 4: out->mask = SWS_COMP_ELEMS(4); break;
         };
         break;
     case SWS_UOP_PERMUTE:
@@ -224,7 +226,7 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         out->mask = 0;
         for (int i = 0; i < 4; i++) {
             if (SWS_OP_NEEDED(op, i) && op->swizzle.in[i] != i)
-                MASK_SET(out->mask, i, 1);
+                out->mask |= SWS_COMP(i);
         }
         convert_swizzle_to_moves(op, out);
         /* The element size and type don't matter. */
@@ -238,7 +240,7 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
     case SWS_UOP_PACK:
         out->mask = 0;
         for (int i = 0; i < 4 && op->pack.pattern[i]; i++)
-            MASK_SET(out->mask, i, 1);
+            out->mask |= SWS_COMP(i);
         for (int i = 0; i < 4; i++)
             out->pack.pattern[i] = op->pack.pattern[i];
         break;
@@ -250,7 +252,7 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         out->mask = 0;
         for (int i = 0; i < 4; i++) {
             if (op->clear.mask & SWS_COMP(i)) {
-                MASK_SET(out->mask, i, 1);
+                out->mask |= SWS_COMP(i);
                 if (op->clear.value[i].num == 0) {
                     out->clear.zero |= SWS_COMP(i);
                 } else {
@@ -272,7 +274,7 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
                     out->linear.zero |= SWS_MASK(i, j);
                 continue;
             }
-            MASK_SET(out->mask, i, 1);
+            out->mask |= SWS_COMP(i);
             for (int j = 0; j < 5; j++) {
                 const AVRational64 k = op->lin.m[i][j];
                 if (j < 4 && k.num == k.den)
@@ -283,11 +285,10 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         }
         break;
     case SWS_UOP_DITHER:
-        out->mask = 0;
-        MASK_SET(out->mask, 0, op->dither.y_offset[0] >= 0);
-        MASK_SET(out->mask, 1, op->dither.y_offset[1] >= 0);
-        MASK_SET(out->mask, 2, op->dither.y_offset[2] >= 0);
-        MASK_SET(out->mask, 3, op->dither.y_offset[3] >= 0);
+        out->mask = SWS_COMP_MASK(op->dither.y_offset[0] >= 0,
+                                  op->dither.y_offset[1] >= 0,
+                                  op->dither.y_offset[2] >= 0,
+                                  op->dither.y_offset[3] >= 0);
         LOOP(out->mask, i) {
             out->dither.y_offset[i] = op->dither.y_offset[i];
         }
