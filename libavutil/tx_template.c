@@ -3368,6 +3368,7 @@ static av_cold int TX_NAME(ff_tx_fft_pfa_init)(AVTXContext *s,
     int *map0 = s->map;
     int *map = map0 + N;
 
+    a = a % N;
     b = N - a;
     int pos = 0;
     for (int i = 0; i < N; i++) {
