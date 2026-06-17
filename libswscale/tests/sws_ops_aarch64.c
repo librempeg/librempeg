@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 
+#include "libavutil/avassert.h"
 #include "libavutil/mem.h"
 #include "libavutil/tree.h"
 #include "libswscale/graph.h"
@@ -28,7 +29,6 @@
 #include "libswscale/op_list_gen_template.c"
 #include "libswscale/ops_dispatch.h"
 
-#include "libswscale/aarch64/ops_impl.c"
 #include "libswscale/aarch64/ops_impl_conv.c"
 
 #ifdef _WIN32
@@ -37,19 +37,85 @@
 #endif
 
 /*********************************************************************/
+/*
+ * Helper string concatenation function that does not depend on the
+ * FFmpeg libraries, so it may be used standalone.
+ */
+av_printf_format(3, 4)
+static void buf_appendf(char **pbuf, size_t *prem, const char *fmt, ...)
+{
+    char *buf = *pbuf;
+    size_t rem = *prem;
+    if (!rem)
+        return;
+
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, rem, fmt, ap);
+    va_end(ap);
+
+    if (n > 0) {
+        if (n < rem) {
+            buf += n;
+            rem -= n;
+        } else {
+            buf += rem - 1;
+            rem = 0;
+        }
+        *pbuf = buf;
+        *prem = rem;
+    }
+}
+
+/*********************************************************************/
 static int aarch64_op_impl_cmp(const void *a, const void *b)
 {
     const SwsAArch64OpImplParams *pa = (const SwsAArch64OpImplParams *) a;
     const SwsAArch64OpImplParams *pb = (const SwsAArch64OpImplParams *) b;
 
-    const ParamField **fields = op_fields[pa->op];
-    for (int i = 0; fields[i]; i++) {
-        const ParamField *field = fields[i];
-        int diff = field->cmp_val((void  *) (((uintptr_t) pa) + field->offset),
-                                  (void  *) (((uintptr_t) pb) + field->offset));
-        if (diff)
-            return diff;
+    if (pa->op != pb->op)
+        return (int) pa->op - pb->op;
+
+    switch (pa->op) {
+    case AARCH64_SWS_OP_PERMUTE:
+    case AARCH64_SWS_OP_COPY:
+        if (pa->move != pb->move)
+            return (int64_t) (pa->move - pb->move) < 0 ? -1 : 1;
+        break;
+    case AARCH64_SWS_OP_UNPACK:
+    case AARCH64_SWS_OP_PACK:
+        if (pa->pack != pb->pack)
+            return (int) pa->pack - pb->pack;
+        break;
+    case AARCH64_SWS_OP_LSHIFT:
+    case AARCH64_SWS_OP_RSHIFT:
+        if (pa->shift != pb->shift)
+            return (int) pa->shift - pb->shift;
+        break;
+    case AARCH64_SWS_OP_CLEAR:
+        if (pa->clear != pb->clear)
+            return (int) pa->clear - pb->clear;
+        break;
+    case AARCH64_SWS_OP_LINEAR:
+    case AARCH64_SWS_OP_LINEAR_FMA:
+        if (pa->linear.mask != pb->linear.mask)
+            return (int64_t) (pa->linear.mask - pb->linear.mask) < 0 ? -1 : 1;
+        break;
+    case AARCH64_SWS_OP_DITHER:
+        if (pa->dither.y_offset != pb->dither.y_offset)
+            return (int) pa->dither.y_offset - pb->dither.y_offset;
+        if (pa->dither.size_log2 != pb->dither.size_log2)
+            return (int) pa->dither.size_log2 - pb->dither.size_log2;
+        break;
     }
+
+    if (pa->block_size != pb->block_size)
+        return (int) pa->block_size - pb->block_size;
+    if (pa->type != pb->type)
+        return (int) pa->type - pb->type;
+    if (pa->mask != pb->mask)
+        return (int) pa->mask - pb->mask;
+
     return 0;
 }
 
@@ -147,33 +213,142 @@ static int register_op(SwsContext *ctx, void *opaque, SwsOpList *ops)
 }
 
 /*********************************************************************/
+static const char op_type_names[AARCH64_SWS_OP_TYPE_NB][16] = {
+    [AARCH64_SWS_OP_READ_BIT      ] = "read_bit",
+    [AARCH64_SWS_OP_READ_NIBBLE   ] = "read_nibble",
+    [AARCH64_SWS_OP_READ_PACKED   ] = "read_packed",
+    [AARCH64_SWS_OP_READ_PLANAR   ] = "read_planar",
+    [AARCH64_SWS_OP_WRITE_BIT     ] = "write_bit",
+    [AARCH64_SWS_OP_WRITE_NIBBLE  ] = "write_nibble",
+    [AARCH64_SWS_OP_WRITE_PACKED  ] = "write_packed",
+    [AARCH64_SWS_OP_WRITE_PLANAR  ] = "write_planar",
+    [AARCH64_SWS_OP_SWAP_BYTES    ] = "swap_bytes",
+    [AARCH64_SWS_OP_PERMUTE       ] = "permute",
+    [AARCH64_SWS_OP_COPY          ] = "copy",
+    [AARCH64_SWS_OP_UNPACK        ] = "unpack",
+    [AARCH64_SWS_OP_PACK          ] = "pack",
+    [AARCH64_SWS_OP_LSHIFT        ] = "lshift",
+    [AARCH64_SWS_OP_RSHIFT        ] = "rshift",
+    [AARCH64_SWS_OP_CLEAR         ] = "clear",
+    [AARCH64_SWS_OP_TO_U8         ] = "to_u8",
+    [AARCH64_SWS_OP_TO_U16        ] = "to_u16",
+    [AARCH64_SWS_OP_TO_U32        ] = "to_u32",
+    [AARCH64_SWS_OP_TO_F32        ] = "to_f32",
+    [AARCH64_SWS_OP_EXPAND_PAIR   ] = "expand_pair",
+    [AARCH64_SWS_OP_EXPAND_QUAD   ] = "expand_quad",
+    [AARCH64_SWS_OP_MIN           ] = "min",
+    [AARCH64_SWS_OP_MAX           ] = "max",
+    [AARCH64_SWS_OP_SCALE         ] = "scale",
+    [AARCH64_SWS_OP_LINEAR        ] = "linear",
+    [AARCH64_SWS_OP_LINEAR_FMA    ] = "linear_fma",
+    [AARCH64_SWS_OP_DITHER        ] = "dither",
+};
+
+static const char pixel_type_names[AARCH64_PIXEL_TYPE_NB][4] = {
+    [AARCH64_PIXEL_U8 ] = "u8",
+    [AARCH64_PIXEL_U16] = "u16",
+    [AARCH64_PIXEL_U32] = "u32",
+    [AARCH64_PIXEL_F32] = "f32",
+};
+
 static void impl_func_name(char **buf, size_t *size, const SwsAArch64OpImplParams *params)
 {
-    buf_appendf(buf, size, "ff_sws");
-    const ParamField **fields = op_fields[params->op];
-    for (int i = 0; fields[i]; i++) {
-        const ParamField *field = fields[i];
-        void *p = (void *) (((uintptr_t) params) + field->offset);
-        field->print_str(buf, size, p);
+    buf_appendf(buf, size, "ff_sws_%s", op_type_names[params->op]);
+    switch (params->op) {
+    case AARCH64_SWS_OP_PERMUTE:
+    case AARCH64_SWS_OP_COPY:
+        buf_appendf(buf, size, "_%012" PRIx64, params->move);
+        break;
+    case AARCH64_SWS_OP_UNPACK:
+    case AARCH64_SWS_OP_PACK:
+        buf_appendf(buf, size, "_%04x", params->pack);
+        break;
+    case AARCH64_SWS_OP_LSHIFT:
+    case AARCH64_SWS_OP_RSHIFT:
+        buf_appendf(buf, size, "_%u", params->shift);
+        break;
+    case AARCH64_SWS_OP_CLEAR:
+        buf_appendf(buf, size, "_%04x", params->clear);
+        break;
+    case AARCH64_SWS_OP_LINEAR:
+    case AARCH64_SWS_OP_LINEAR_FMA:
+        buf_appendf(buf, size, "_%010" PRIx64, params->linear.mask);
+        break;
+    case AARCH64_SWS_OP_DITHER:
+        buf_appendf(buf, size, "_%04x_%u", params->dither.y_offset, params->dither.size_log2);
+        break;
     }
-    buf_appendf(buf, size, "_neon");
+    buf_appendf(buf, size, "_%u_%s_%04x_neon", params->block_size, pixel_type_names[params->type], params->mask);
 }
+
+static const char op_types[AARCH64_SWS_OP_TYPE_NB][32] = {
+    [AARCH64_SWS_OP_READ_BIT      ] = "AARCH64_SWS_OP_READ_BIT",
+    [AARCH64_SWS_OP_READ_NIBBLE   ] = "AARCH64_SWS_OP_READ_NIBBLE",
+    [AARCH64_SWS_OP_READ_PACKED   ] = "AARCH64_SWS_OP_READ_PACKED",
+    [AARCH64_SWS_OP_READ_PLANAR   ] = "AARCH64_SWS_OP_READ_PLANAR",
+    [AARCH64_SWS_OP_WRITE_BIT     ] = "AARCH64_SWS_OP_WRITE_BIT",
+    [AARCH64_SWS_OP_WRITE_NIBBLE  ] = "AARCH64_SWS_OP_WRITE_NIBBLE",
+    [AARCH64_SWS_OP_WRITE_PACKED  ] = "AARCH64_SWS_OP_WRITE_PACKED",
+    [AARCH64_SWS_OP_WRITE_PLANAR  ] = "AARCH64_SWS_OP_WRITE_PLANAR",
+    [AARCH64_SWS_OP_SWAP_BYTES    ] = "AARCH64_SWS_OP_SWAP_BYTES",
+    [AARCH64_SWS_OP_PERMUTE       ] = "AARCH64_SWS_OP_PERMUTE",
+    [AARCH64_SWS_OP_COPY          ] = "AARCH64_SWS_OP_COPY",
+    [AARCH64_SWS_OP_UNPACK        ] = "AARCH64_SWS_OP_UNPACK",
+    [AARCH64_SWS_OP_PACK          ] = "AARCH64_SWS_OP_PACK",
+    [AARCH64_SWS_OP_LSHIFT        ] = "AARCH64_SWS_OP_LSHIFT",
+    [AARCH64_SWS_OP_RSHIFT        ] = "AARCH64_SWS_OP_RSHIFT",
+    [AARCH64_SWS_OP_CLEAR         ] = "AARCH64_SWS_OP_CLEAR",
+    [AARCH64_SWS_OP_TO_U8         ] = "AARCH64_SWS_OP_TO_U8",
+    [AARCH64_SWS_OP_TO_U16        ] = "AARCH64_SWS_OP_TO_U16",
+    [AARCH64_SWS_OP_TO_U32        ] = "AARCH64_SWS_OP_TO_U32",
+    [AARCH64_SWS_OP_TO_F32        ] = "AARCH64_SWS_OP_TO_F32",
+    [AARCH64_SWS_OP_EXPAND_PAIR   ] = "AARCH64_SWS_OP_EXPAND_PAIR",
+    [AARCH64_SWS_OP_EXPAND_QUAD   ] = "AARCH64_SWS_OP_EXPAND_QUAD",
+    [AARCH64_SWS_OP_MIN           ] = "AARCH64_SWS_OP_MIN",
+    [AARCH64_SWS_OP_MAX           ] = "AARCH64_SWS_OP_MAX",
+    [AARCH64_SWS_OP_SCALE         ] = "AARCH64_SWS_OP_SCALE",
+    [AARCH64_SWS_OP_LINEAR        ] = "AARCH64_SWS_OP_LINEAR",
+    [AARCH64_SWS_OP_LINEAR_FMA    ] = "AARCH64_SWS_OP_LINEAR_FMA",
+    [AARCH64_SWS_OP_DITHER        ] = "AARCH64_SWS_OP_DITHER",
+};
+
+static const char pixel_types[AARCH64_PIXEL_TYPE_NB][32] = {
+    [AARCH64_PIXEL_U8 ] = "AARCH64_PIXEL_U8",
+    [AARCH64_PIXEL_U16] = "AARCH64_PIXEL_U16",
+    [AARCH64_PIXEL_U32] = "AARCH64_PIXEL_U32",
+    [AARCH64_PIXEL_F32] = "AARCH64_PIXEL_F32",
+};
 
 static void serialize_op(char *buf, size_t size, const SwsAArch64OpImplParams *params)
 {
     buf_appendf(&buf, &size, "ENTRY(");
     impl_func_name(&buf, &size, params);
-    buf_appendf(&buf, &size, ", {");
-    const ParamField **fields = op_fields[params->op];
-    for (int i = 0; fields[i]; i++) {
-        const ParamField *field = fields[i];
-        void *p = (void *) (((uintptr_t) params) + field->offset);
-        if (i)
-            buf_appendf(&buf, &size, ",");
-        buf_appendf(&buf, &size, " .%s = ", field->name);
-        field->print_val(&buf, &size, p);
+    buf_appendf(&buf, &size, ", { .op = %s", op_types[params->op]);
+    switch (params->op) {
+    case AARCH64_SWS_OP_PERMUTE:
+    case AARCH64_SWS_OP_COPY:
+        buf_appendf(&buf, &size, ", .move = 0x%012" PRIx64 "ULL", params->move);
+        break;
+    case AARCH64_SWS_OP_UNPACK:
+    case AARCH64_SWS_OP_PACK:
+        buf_appendf(&buf, &size, ", .pack = 0x%04x", params->pack);
+        break;
+    case AARCH64_SWS_OP_LSHIFT:
+    case AARCH64_SWS_OP_RSHIFT:
+        buf_appendf(&buf, &size, ", .shift = %u", params->shift);
+        break;
+    case AARCH64_SWS_OP_CLEAR:
+        buf_appendf(&buf, &size, ", .clear = 0x%04x", params->clear);
+        break;
+    case AARCH64_SWS_OP_LINEAR:
+    case AARCH64_SWS_OP_LINEAR_FMA:
+        buf_appendf(&buf, &size, ", .linear.mask = 0x%010" PRIx64 "ULL", params->linear.mask);
+        break;
+    case AARCH64_SWS_OP_DITHER:
+        buf_appendf(&buf, &size, ", .dither.y_offset = 0x%04x, .dither.size_log2 = %u", params->dither.y_offset, params->dither.size_log2);
+        break;
     }
-    buf_appendf(&buf, &size, " })");
+    buf_appendf(&buf, &size, ", .block_size = %u, .type = %s, .mask = 0x%04x })", params->block_size, pixel_types[params->type], params->mask);
     av_assert0(size && "string buffer exhausted");
 }
 
