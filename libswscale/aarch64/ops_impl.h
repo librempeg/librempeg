@@ -30,19 +30,6 @@
 /* Each nibble in the mask corresponds to one component. */
 typedef uint16_t SwsAArch64OpMask;
 
-/**
- * Affine coefficient mask for linear op. Packs a 4x5 matrix in execution
- * order, where the offset is the first element, with 2 bits per element:
- *   00: m[i][j] == 0
- *   01: m[i][j] == 1
- *   11: m[i][j] is any other coefficient
- */
-typedef uint64_t SwsAArch64LinearOpMask;
-
-typedef struct SwsAArch64LinearOp {
-    SwsAArch64LinearOpMask mask;
-} SwsAArch64LinearOp;
-
 typedef struct SwsAArch64DitherOp {
     uint16_t y_offset;
     uint8_t size_log2;
@@ -63,7 +50,7 @@ typedef struct SwsAArch64OpImplParams {
         SwsClearUOp         clear;
         SwsMoveUOp          move;
         SwsPackUOp          pack;
-        SwsAArch64LinearOp  linear;
+        SwsLinearUOp        linear;
         SwsAArch64DitherOp  dither;
     };
 } SwsAArch64OpImplParams;
@@ -83,46 +70,14 @@ typedef struct SwsAArch64OpImplParams {
 #define LOOP_MASK(p, idx) LOOP(p->mask, idx)
 #define LOOP_MASK_BWD(p, idx) LOOP_BWD(p->mask, idx)
 
-#define LINEAR_MASK_GET(mask, idx, jdx) (((mask) >> (2 * ((5 * (idx) + (jdx))))) & 3)
-#define LINEAR_MASK_SET(mask, idx, jdx, val) do {                                       \
-    (mask) |= ((((SwsAArch64LinearOpMask) (val)) & 3) << (2 * ((5 * (idx) + (jdx)))));  \
-} while (0)
-#define LINEAR_MASK_0 0
-#define LINEAR_MASK_1 1
-#define LINEAR_MASK_X 3
-
-#define LOOP_LINEAR_MASK(p, idx, jdx)       \
-    LOOP_MASK(p, idx)                       \
-        for (int jdx = 0; jdx < 5; jdx++)   \
-            if (LINEAR_MASK_GET(p->linear.mask, idx, jdx))
-
 /* Compute number of vector registers needed to store all coefficients. */
 static inline int linear_num_vregs(const SwsAArch64OpImplParams *params)
 {
     int count = 0;
-    LOOP_LINEAR_MASK(params, i, j)
-        count++;
+    for (int i = 0; i < 4 * 5; i++)
+        if (!(params->linear.zero & (1ULL << i)))
+            count++;
     return (count + 3) / 4;
-}
-
-static inline int linear_index_to_sws_op(int idx)
-{
-    const int reorder_col[5] = { 4, 0, 1, 2, 3 };
-    return reorder_col[idx];
-}
-
-static inline int linear_index_is_offset(int idx)
-{
-    return (idx == 0);
-}
-
-static inline int linear_index_to_vx(int idx)
-{
-    /* The offset shouldn't map to any vx, but to please UBSan we map
-     * it to 0. */
-    if (linear_index_is_offset(idx))
-        return 0;
-    return (idx - 1);
 }
 
 /**

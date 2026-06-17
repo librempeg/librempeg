@@ -1093,10 +1093,10 @@ static void linear_pass(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
         bool first = true;
         RasmNode *pre_mul = rasm_get_current_node(r);
         for (int j = 0; j < 5; j++) {
-            if (!LINEAR_MASK_GET(p->linear.mask, i, j))
+            bool is_offset = (j == 0);
+            int src_j = is_offset ? 4 : (j - 1);
+            if (p->linear.zero & SWS_MASK(i, src_j))
                 continue;
-            bool is_offset = linear_index_is_offset(j);
-            int  src_j     = linear_index_to_vx(j);
             RasmOp vsrc = src_vx[src_j];
             uint8_t vc_i = i_coeff / 4;
             uint8_t vc_j = i_coeff & 3;
@@ -1105,7 +1105,7 @@ static void linear_pass(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
             if (first && is_offset) {
                 i_dup (r, vx[i], vcoeff);               CMTF("v%c[%u]  = broadcast(vc[%u][%u]);", cvh, i, vc_i, vc_j);
             } else if (first && !is_offset) {
-                if (LINEAR_MASK_GET(p->linear.mask, i, j) == LINEAR_MASK_1) {
+                if (p->linear.one & SWS_MASK(i, src_j)) {
                     i_mov16b(r, vx[i], vsrc);           CMTF("v%c[%u]  = vsrc[%u];", cvh, i, src_j);
                 } else {
                     i_fmul  (r, vx[i], vsrc, vcoeff);   CMTF("v%c[%u]  = vsrc[%u] * vc[%u][%u];", cvh, i, src_j, vc_i, vc_j);
@@ -1125,7 +1125,7 @@ static void linear_pass(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                  * to reduce the dependency chain.
                  * There is no need to perform multiplications by 1.
                  */
-                if (LINEAR_MASK_GET(p->linear.mask, i, j) != LINEAR_MASK_1) {
+                if (!(p->linear.one & SWS_MASK(i, src_j))) {
                     pre_mul = rasm_set_current_node(r, pre_mul);
                     i_fmul(r, vtmp[vc_j], vsrc, vcoeff);    CMTF("vtmp[%u] = vsrc[%u] * vc[%u][%u];", vc_j, src_j, vc_i, vc_j);
                     pre_mul = rasm_set_current_node(r, pre_mul);
@@ -1165,12 +1165,12 @@ static void asmgen_op_linear(SwsAArch64Context *s, const SwsAArch64OpImplParams 
     bool overwritten[4] = { false, false, false, false };
     LOOP_MASK(p, i) {
         for (int j = 0; j < 5; j++) {
-            if (!LINEAR_MASK_GET(p->linear.mask, i, j))
+            bool is_offset = (j == 0);
+            int src_j = is_offset ? 4 : (j - 1);
+            if (p->linear.zero & SWS_MASK(i, src_j))
                 continue;
-            bool is_offset = linear_index_is_offset(j);
-            int  src_j     = linear_index_to_vx(j);
             if (!is_offset && overwritten[src_j])
-                MASK_SET(save_mask, j - 1, 1);
+                MASK_SET(save_mask, src_j, 1);
             overwritten[i] = true;
         }
     }

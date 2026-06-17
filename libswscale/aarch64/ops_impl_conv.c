@@ -29,18 +29,6 @@
 
 #include "ops_impl.h"
 
-/**
- * The column index order for SwsLinearOp.mask follows the affine transform
- * order, where the offset is the last element. SwsAArch64LinearOpMask, on
- * the other hand, follows execution order, where the offset is the first
- * element.
- */
-static int linear_index_from_sws_op(int idx)
-{
-    const int reorder_col[5] = { 1, 2, 3, 4, 0 };
-    return reorder_col[idx];
-}
-
 static void swizzle_emit(SwsAArch64OpImplParams *out, uint8_t dst, uint8_t src)
 {
     int idx = out->move.num_moves++;
@@ -277,26 +265,20 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         break;
     case SWS_UOP_LINEAR:
     case SWS_UOP_LINEAR_FMA:
-        /**
-         * The out->linear.mask field packs the 4x5 matrix from SwsLinearOp as
-         * 2 bits per element:
-         *   00: m[i][j] == 0
-         *   01: m[i][j] == 1
-         *   11: m[i][j] is any other coefficient
-         */
         out->mask = 0;
         for (int i = 0; i < 4; i++) {
-            /* Skip unused or identity rows */
-            if (!SWS_OP_NEEDED(op, i) || !(op->lin.mask & SWS_MASK_ROW(i)))
+            if (!SWS_OP_NEEDED(op, i) || !(op->lin.mask & SWS_MASK_ROW(i))) {
+                for (int j = 0; j < 5; j++)
+                    out->linear.zero |= SWS_MASK(i, j);
                 continue;
+            }
             MASK_SET(out->mask, i, 1);
             for (int j = 0; j < 5; j++) {
                 const AVRational64 k = op->lin.m[i][j];
-                int jj = linear_index_from_sws_op(j);
                 if (j < 4 && k.num == k.den)
-                    LINEAR_MASK_SET(out->linear.mask, i, jj, LINEAR_MASK_1);
-                else if (k.num != 0)
-                    LINEAR_MASK_SET(out->linear.mask, i, jj, LINEAR_MASK_X);
+                    out->linear.one |= SWS_MASK(i, j);
+                else if (k.num == 0)
+                    out->linear.zero |= SWS_MASK(i, j);
             }
         }
         break;

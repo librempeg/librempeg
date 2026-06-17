@@ -79,14 +79,16 @@ static int aarch64_setup_linear(const SwsAArch64OpImplParams *p,
         return AVERROR(ENOMEM);
 
     /**
-     * Copy non-zero coefficients, reordered to match SwsAArch64LinearOpMask.
-     * The coefficients are packed in sequential order. The same order must
-     * be followed in asmgen_op_linear().
+     * Copy non-zero coefficients, packed in sequential order, offset first.
+     * The same order must be followed in asmgen_op_linear().
      */
     int i_coeff = 0;
-    LOOP_LINEAR_MASK(p, i, j) {
-        const int jj = linear_index_to_sws_op(j);
-        coeffs[i_coeff++] = (float) op->lin.m[i][jj].num / op->lin.m[i][jj].den;
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 5; j++) {
+            const int jj = (j == 0) ? 4 : (j - 1);
+            if (!(p->linear.zero & SWS_MASK(i, jj)))
+                coeffs[i_coeff++] = (float) op->lin.m[i][jj].num / op->lin.m[i][jj].den;
+        }
     }
 
     res->priv.ptr = coeffs;
