@@ -665,16 +665,16 @@ static void asmgen_op_unpack(SwsAArch64Context *s, const SwsAArch64OpImplParams 
     uint8_t cur_vt = 0;
 
     const int offsets[4] = {
-        MASK_GET(p->pack, 3) + MASK_GET(p->pack, 2) + MASK_GET(p->pack, 1),
-        MASK_GET(p->pack, 3) + MASK_GET(p->pack, 2),
-        MASK_GET(p->pack, 3),
+        p->pack.pattern[3] + p->pack.pattern[2] + p->pack.pattern[1],
+        p->pack.pattern[3] + p->pack.pattern[2],
+        p->pack.pattern[3],
         0
     };
 
     /* Generate masks. */
     rasm_add_comment(r, "generate masks");
     LOOP_MASK(p, i) {
-        uint32_t val = (1u << MASK_GET(p->pack, i)) - 1;
+        uint32_t val = (1u << p->pack.pattern[i]) - 1;
         for (int j = 0; j < 4; j++) {
             if (mask_val[j] == val) {
                 mask_val[i] = mask_val[j];
@@ -732,9 +732,9 @@ static void asmgen_op_pack(SwsAArch64Context *s, const SwsAArch64OpImplParams *p
     RasmOp *vh = s->vh;
 
     const int offsets[4] = {
-        MASK_GET(p->pack, 3) + MASK_GET(p->pack, 2) + MASK_GET(p->pack, 1),
-        MASK_GET(p->pack, 3) + MASK_GET(p->pack, 2),
-        MASK_GET(p->pack, 3),
+        p->pack.pattern[3] + p->pack.pattern[2] + p->pack.pattern[1],
+        p->pack.pattern[3] + p->pack.pattern[2],
+        p->pack.pattern[3],
         0
     };
     uint16_t offset_mask = 0;

@@ -62,7 +62,7 @@ typedef struct SwsAArch64OpImplParams {
         SwsShiftUOp         shift;
         SwsClearUOp         clear;
         SwsMoveUOp          move;
-        SwsAArch64OpMask    pack;
+        SwsPackUOp          pack;
         SwsAArch64LinearOp  linear;
         SwsAArch64DitherOp  dither;
     };

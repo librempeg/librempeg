@@ -244,19 +244,15 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         out->type = SWS_PIXEL_U8;
         break;
     case SWS_UOP_UNPACK:
-        MASK_SET(out->pack, 0, op->pack.pattern[0]);
-        MASK_SET(out->pack, 1, op->pack.pattern[1]);
-        MASK_SET(out->pack, 2, op->pack.pattern[2]);
-        MASK_SET(out->pack, 3, op->pack.pattern[3]);
+        for (int i = 0; i < 4; i++)
+            out->pack.pattern[i] = op->pack.pattern[i];
         break;
     case SWS_UOP_PACK:
         out->mask = 0;
         for (int i = 0; i < 4 && op->pack.pattern[i]; i++)
             MASK_SET(out->mask, i, 1);
-        MASK_SET(out->pack, 0, op->pack.pattern[0]);
-        MASK_SET(out->pack, 1, op->pack.pattern[1]);
-        MASK_SET(out->pack, 2, op->pack.pattern[2]);
-        MASK_SET(out->pack, 3, op->pack.pattern[3]);
+        for (int i = 0; i < 4; i++)
+            out->pack.pattern[i] = op->pack.pattern[i];
         break;
     case SWS_UOP_LSHIFT:
     case SWS_UOP_RSHIFT:
