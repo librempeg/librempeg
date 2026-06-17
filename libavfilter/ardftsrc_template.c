@@ -169,20 +169,25 @@ static void fn(src_uninit)(AVFilterContext *ctx)
 
 static void fn(taper_init)(ctype *taper, const int N, int mode)
 {
-    long double alpha = mode ? F(4.0L) : F(6.0L);
-    long double alpha2 = 4.0L * (alpha * M_PIl / N) * (alpha * M_PIl / N);
+    long double alpha = mode ? F(4.0L) : F(8.0L);
+    long double alpha2 = 4.0L * alpha * M_PIl * alpha * M_PIl;
     long double scale = 0.0L;
     long double sum = 0.0L;
 
     for (int i = N-1; i >= 0; i--) {
-        long double tmp = i * (N - i) * alpha2;
-        taper[i].re = av_bessel_i0(sqrtl(tmp));
-        scale += taper[i].re;
+        long double tmp = ((i+1) * (N - i) / (long double)N / N) * alpha2;
+        long double v = av_bessel_i0(sqrtl(tmp));
+
+        scale += v;
     }
+
     scale = 1.0L/(scale+1);
 
     for (int i = N-1; i >= 0; i--) {
-        sum += taper[i].re;
+        long double tmp = ((i+1) * (N - i) / (long double)N / N) * alpha2;
+        long double v = av_bessel_i0(sqrtl(tmp));
+
+        sum += v;
         taper[i].re = taper[i].im = sum * scale;
     }
 }
