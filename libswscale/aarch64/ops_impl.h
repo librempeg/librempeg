@@ -30,11 +30,6 @@
 /* Each nibble in the mask corresponds to one component. */
 typedef uint16_t SwsAArch64OpMask;
 
-typedef struct SwsAArch64DitherOp {
-    uint16_t y_offset;
-    uint8_t size_log2;
-} SwsAArch64DitherOp;
-
 /**
  * SwsAArch64OpImplParams describes the parameters for an SwsUOpType
  * operation. It consists of simplified parameters from the SwsOp structure,
@@ -51,7 +46,7 @@ typedef struct SwsAArch64OpImplParams {
         SwsMoveUOp          move;
         SwsPackUOp          pack;
         SwsLinearUOp        linear;
-        SwsAArch64DitherOp  dither;
+        SwsDitherUOp        dither;
     };
 } SwsAArch64OpImplParams;
 

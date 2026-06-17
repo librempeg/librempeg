@@ -288,10 +288,9 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         MASK_SET(out->mask, 1, op->dither.y_offset[1] >= 0);
         MASK_SET(out->mask, 2, op->dither.y_offset[2] >= 0);
         MASK_SET(out->mask, 3, op->dither.y_offset[3] >= 0);
-        MASK_SET(out->dither.y_offset, 0, op->dither.y_offset[0]);
-        MASK_SET(out->dither.y_offset, 1, op->dither.y_offset[1]);
-        MASK_SET(out->dither.y_offset, 2, op->dither.y_offset[2]);
-        MASK_SET(out->dither.y_offset, 3, op->dither.y_offset[3]);
+        LOOP(out->mask, i) {
+            out->dither.y_offset[i] = op->dither.y_offset[i];
+        }
         out->dither.size_log2 = op->dither.size_log2;
         break;
     }

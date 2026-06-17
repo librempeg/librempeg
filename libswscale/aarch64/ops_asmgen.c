@@ -1216,10 +1216,10 @@ static void asmgen_op_dither(SwsAArch64Context *s, const SwsAArch64OpImplParams 
     /* Very cheap bucket sort. */
     int max_offset = 0;
     LOOP_MASK(p, i)
-        max_offset = FFMAX(max_offset, MASK_GET(p->dither.y_offset, i));
+        max_offset = FFMAX(max_offset, p->dither.y_offset[i]);
     for (int y_off = 0; y_off <= max_offset; y_off++) {
         LOOP_MASK(p, i) {
-            if (MASK_GET(p->dither.y_offset, i) == y_off)
+            if (p->dither.y_offset[i] == y_off)
                 sorted[n_comps++] = i;
         }
     }
@@ -1261,7 +1261,7 @@ static void asmgen_op_dither(SwsAArch64Context *s, const SwsAArch64OpImplParams 
     int prev_i = 0;
     for (int sorted_i = 0; sorted_i < n_comps; sorted_i++) {
         int i = sorted[sorted_i];
-        uint8_t y_off = MASK_GET(p->dither.y_offset, i);
+        uint8_t y_off = p->dither.y_offset[i];
         bool do_load = (y_off != last_y_off);
 
         if (last_y_off < 0) {
