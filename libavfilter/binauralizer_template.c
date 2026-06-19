@@ -330,8 +330,7 @@ static int fn(ba_stereo)(AVFilterContext *ctx, AVFrame *in, AVFrame *out, const 
     ff_filter_execute(ctx, fn(ba_in_channels), &td, NULL,
                       FFMIN(nb_in_channels, ff_filter_get_nb_threads(ctx)));
 
-    ff_filter_execute(ctx, fn(ba_out_channels), &td, NULL,
-                      FFMIN(2, ff_filter_get_nb_threads(ctx)));
+    ff_filter_execute(ctx, fn(ba_out_channels), &td, NULL, 2);
 
     return 0;
 }
@@ -349,8 +348,7 @@ static int fn(ba_flush)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     ff_filter_execute(ctx, fn(ba_in_channels), &td, NULL,
                       FFMIN(nb_in_channels, ff_filter_get_nb_threads(ctx)));
 
-    ff_filter_execute(ctx, fn(ba_out_channels), &td, NULL,
-                      FFMIN(2, ff_filter_get_nb_threads(ctx)));
+    ff_filter_execute(ctx, fn(ba_out_channels), &td, NULL, 2);
 
     return 0;
 }
