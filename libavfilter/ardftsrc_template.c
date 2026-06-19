@@ -16,6 +16,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <float.h>
 #include "libavutil/tx.h"
 #include "avfilter.h"
 #include "audio.h"
@@ -32,6 +33,7 @@
 #undef TX_TYPE
 #undef SCALE
 #undef OFFSET
+#undef EPS
 #if DEPTH == 8
 #define FCOS cosf
 #define FSIN sinf
@@ -45,6 +47,7 @@
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #define SCALE (F(1.0)/F(1<<(DEPTH-1)))
 #define OFFSET(x) ((x) - 0x80)
+#define EPS FLT_EPSILON
 #elif DEPTH == 16
 #define FCOS cosf
 #define FSIN sinf
@@ -58,6 +61,7 @@
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #define SCALE (F(1.0)/F(1<<(DEPTH-1)))
 #define OFFSET(x) (x)
+#define EPS FLT_EPSILON
 #elif DEPTH == 32
 #define FCOS cos
 #define FSIN sin
@@ -71,6 +75,7 @@
 #define TX_TYPE AV_TX_DOUBLE_RDFT
 #define SCALE (F(1.0)/F(1LL<<(DEPTH-1)))
 #define OFFSET(x) (x)
+#define EPS DBL_EPSILON
 #elif DEPTH == 33
 #define FCOS cosf
 #define FSIN sinf
@@ -82,6 +87,7 @@
 #define SAMPLE_FORMAT fltp
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
+#define EPS FLT_EPSILON
 #elif DEPTH == 65
 #define FCOS cos
 #define FSIN sin
@@ -93,6 +99,7 @@
 #define SAMPLE_FORMAT dblp
 #define ttype AVComplexDouble
 #define TX_TYPE AV_TX_DOUBLE_RDFT
+#define EPS DBL_EPSILON
 #elif DEPTH == 128
 #define FCOS cosl
 #define FSIN sinl
@@ -104,6 +111,7 @@
 #define SAMPLE_FORMAT ldblp
 #define ttype AVComplexLongDouble
 #define TX_TYPE AV_TX_LONG_DOUBLE_RDFT
+#define EPS DBL_EPSILON
 #endif
 
 #define F(x) ((ftype)(x))
@@ -174,9 +182,10 @@ static void fn(taper_init)(ctype *taper, const int N)
     long double sum = 0.0L;
 
     for (int i = N-1; i >= 0; i--) {
-        long double x = i;
-        long double tmp = (x+1) * (N-x);
-        long double v = av_bessel_i0(sqrtl(tmp) * factor);
+        long double x = i+0.0L;
+        long double t = x * (N-x);
+        long double s = sqrtl(t) * factor;
+        long double v = expl(s) / (4.0L * M_PIl);
 
         scale += v;
     }
@@ -184,12 +193,14 @@ static void fn(taper_init)(ctype *taper, const int N)
     scale = 1.0L/(scale+1.0L);
 
     for (int i = N-1; i >= 0; i--) {
-        long double x = i;
-        long double tmp = (x+1) * (N-x);
-        long double v = av_bessel_i0(sqrtl(tmp) * factor);
+        long double x = i+0.0L;
+        long double t = x * (N-x);
+        long double s = sqrtl(t) * factor;
+        long double v = expl(s) / (4.0L * M_PIl);
+        ftype tt = sum * scale;
 
         sum += v;
-        taper[i].re = taper[i].im = sum * scale;
+        taper[i].re = taper[i].im = (tt >= EPS) ? tt : F(0.0L);
     }
 }
 
