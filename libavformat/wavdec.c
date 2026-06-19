@@ -163,7 +163,8 @@ static int wav_probe(const AVProbeData *p)
     /* check file header */
     if (p->buf_size <= 32)
         return 0;
-    if (!memcmp(p->buf + 8, "WAVE", 4)) {
+    if (!memcmp(p->buf + 8, "WAVE", 4) ||
+        !memcmp(p->buf + 8, "WAVS", 4)) {
         if (!memcmp(p->buf, "RIFF", 4) || !memcmp(p->buf, "RIFX", 4))
             /* Since the ACT demuxer has a standard WAV header at the top of
              * its own, the returned score is decreased to avoid a probe
@@ -391,7 +392,9 @@ static int wav_read_header(AVFormatContext *s)
     avio_rl32(pb);
 
     /* read format */
-    if (avio_rl32(pb) != MKTAG('W', 'A', 'V', 'E')) {
+    uint32_t format = avio_rl32(pb);
+    if (format != MKTAG('W', 'A', 'V', 'E') &&
+        format != MKTAG('W', 'A', 'V', 'S')) {
         av_log(s, AV_LOG_ERROR, "invalid format in RIFF header\n");
         return AVERROR_INVALIDDATA;
     }
