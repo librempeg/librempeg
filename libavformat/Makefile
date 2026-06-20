@@ -659,6 +659,7 @@ OBJS-$(CONFIG_ROQ_MUXER)                 += idroqenc.o rawenc.o
 OBJS-$(CONFIG_RS03_DEMUXER)              += rs03.o
 OBJS-$(CONFIG_RSD_DEMUXER)               += rsd.o
 OBJS-$(CONFIG_RPL_DEMUXER)               += rpl.o
+OBJS-$(CONFIG_RPZA_DEMUXER)              += rpza.o
 OBJS-$(CONFIG_RSO_DEMUXER)               += rsodec.o rso.o pcm.o
 OBJS-$(CONFIG_RSO_MUXER)                 += rsoenc.o rso.o rawenc.o
 OBJS-$(CONFIG_RSTM_DEMUXER)              += rstm.o pcm.o
