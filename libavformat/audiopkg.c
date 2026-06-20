@@ -246,8 +246,10 @@ static int read_header(AVFormatContext *s)
     avio_seek(pb, offset, SEEK_SET);
 
     for (int i = 0; i < 3; i++) {
-        int header_index = avio_r16(pb);
+        if (a->sample_indices[i] <= 0)
+            continue;
 
+        int header_index = avio_r16(pb);
         for (int j = 0; j < a->sample_indices[i]; j++) {
             int next_header_index = avio_r16(pb);
 
