@@ -7659,7 +7659,7 @@ static int mov_write_packet(AVFormatContext *s, AVPacket *pkt)
 
             /* The following will reset pkt and is only allowed to be used
              * because we return immediately. afterwards. */
-            if ((ret = avpriv_packet_list_put(&trk->squashed_packet_queue,
+            if ((ret = ff_packet_list_put(&trk->squashed_packet_queue,
                                               pkt, NULL, 0)) < 0) {
                 return ret;
             }
@@ -7959,7 +7959,7 @@ static void mov_free(AVFormatContext *s)
 #endif
         ff_isom_close_apvc(&track->apv);
 
-        avpriv_packet_list_free(&track->squashed_packet_queue);
+        ff_packet_list_free(&track->squashed_packet_queue);
     }
 
     av_freep(&mov->tracks);
