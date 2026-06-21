@@ -1718,7 +1718,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_THP_LE:
         s->block_size = (avctx->codec->id == AV_CODEC_ID_ADPCM_THP_LE) ?
                         bytestream2_get_le32(gb) :
-                        bytestream2_get_be32(gb);;
+                        bytestream2_get_be32(gb);
         nb_samples = (avctx->codec->id == AV_CODEC_ID_ADPCM_THP_LE) ?
                      bytestream2_get_le32(gb) :
                      bytestream2_get_be32(gb);
