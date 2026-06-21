@@ -3287,7 +3287,7 @@ nellymoser_decoder_select="sinewin"
 nellymoser_encoder_select="audio_frame_queue sinewin"
 notchlc_decoder_select="lzf"
 nuv_decoder_select="idctdsp"
-opus_decoder_deps="swresample"
+opus_decoder_deps="avfilter"
 opus_encoder_select="audio_frame_queue"
 pca_decoder_select="pca_parser"
 png_encoder_select="deflate_wrapper llvidencdsp"
@@ -8400,7 +8400,7 @@ enabled uspp_filter         && prepend avfilter_deps "avcodec"
 
 enabled lavfi_indev         && prepend avdevice_deps "avfilter"
 
-enabled opus_decoder    && prepend avcodec_deps "swresample"
+enabled opus_decoder    && prepend avcodec_deps "avfilter"
 
 # reorder the items at var $1 to align with the items order at var $2 .
 # die if an item at $1 is not at $2 .
