@@ -260,6 +260,9 @@ static int activate(AVFilterContext *ctx)
 
     FF_FILTER_FORWARD_STATUS_BACK(outlink, inlink);
 
+    if (!ff_outlink_frame_wanted(outlink))
+        return FFERROR_NOT_READY;
+
     for (int ch = 0; ch < s->nb_channels; ch++) {
         ChannelContext *c = &s->c[ch];
         av_log(ctx, AV_LOG_DEBUG, "[%d]: out: %d | in: %d\n", ch,
@@ -267,7 +270,11 @@ static int activate(AVFilterContext *ctx)
                av_audio_fifo_size(c->in_fifo));
     }
 
-    if (min_input_fifo_samples(ctx) < s->max_period*2) {
+    if (ff_inlink_acknowledge_status(inlink, &status, &pts))
+        s->eof = 1;
+
+    if (min_input_fifo_samples(ctx) < s->max_period*2 &&
+        min_output_fifo_samples(ctx) <= 0 && !s->eof) {
         ret = ff_inlink_consume_frame(inlink, &in);
         if (ret < 0)
             return ret;
@@ -275,6 +282,9 @@ static int activate(AVFilterContext *ctx)
             ret = write_input_samples(ctx, in);
             if (ret < 0)
                 return ret;
+        } else {
+            ff_inlink_request_frame(inlink);
+            return 0;
         }
     }
 
@@ -293,14 +303,11 @@ static int activate(AVFilterContext *ctx)
         }
     }
 
-    if (min_output_fifo_samples(ctx) > 0)
-        return output_frame(ctx);
-
     if (min_input_fifo_samples(ctx) >= s->max_period*2)
         filter_frame(ctx);
 
-    if (ff_inlink_acknowledge_status(inlink, &status, &pts))
-        s->eof = 1;
+    if (min_output_fifo_samples(ctx) > 0)
+        return output_frame(ctx);
 
     if (s->eof) {
         while (min_input_fifo_samples(ctx) > 0) {
@@ -312,20 +319,17 @@ static int activate(AVFilterContext *ctx)
         }
 
         if (min_input_fifo_samples(ctx) <= 0) {
-            while (min_output_fifo_samples(ctx) > 0)
+            if (min_output_fifo_samples(ctx) > 0)
                 return output_frame(ctx);
         }
 
         ff_outlink_set_status(outlink, AVERROR_EOF, s->pts[OUT]);
         return 0;
-    } else if (min_input_fifo_samples(ctx) >= s->max_period*2) {
-        ff_filter_set_ready(ctx, 100);
-        return 0;
-    } else {
-        FF_FILTER_FORWARD_WANTED(outlink, inlink);
     }
 
-    return FFERROR_NOT_READY;
+    ff_filter_set_ready(ctx, 100);
+
+    return 0;
 }
 
 static int config_input(AVFilterLink *inlink)
