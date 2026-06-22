@@ -159,14 +159,12 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
     const ftype xx = fn(l2norm)(dptrx+n, mean.re, best_period);
     const ftype yy = fn(l2norm)(dptry, mean.im, best_period);
     const ftype xy = fn(l2norm2)(dptrx+n, dptry, mean.re, mean.im, best_period);
-    ftype mean_xcorr, best_xcorr, scale;
+    ftype best_xcorr, scale;
     const ftype num = xy;
     const ftype den = xx * yy + EPS;
 
     best_xcorr = num/den;
-    mean_xcorr = (mean.re * mean.im) / (SQRT(mean.re * mean.re + mean.im * mean.im) + EPS);
     best_xcorr = CLIP(best_xcorr, F(-0.9999), F(1.0));
-    mean_xcorr = CLIP(mean_xcorr, F(-0.9999), F(1.0));
 
     av_log(ctx, AV_LOG_DEBUG, "E: [%d] %g/%g %d/%d\n", ch, best_xcorr, best_score, best_period, best_max_period);
 
@@ -179,8 +177,8 @@ static int fn(expand_write)(AVFilterContext *ctx, const int ch)
         const ftype yf = F(1.0)-xf;
         const ftype axf = fn(get_gain)(xf, best_xcorr);
         const ftype ayf = fn(get_gain)(yf, best_xcorr);
-        const ftype mxf = fn(get_gain)(xf, mean_xcorr);
-        const ftype myf = fn(get_gain)(yf, mean_xcorr);
+        const ftype mxf = fn(get_gain)(xf, F(1.0));
+        const ftype myf = fn(get_gain)(yf, F(1.0));
         const ftype x = dptrx[n] - mean.re;
         const ftype y = dptry[n] - mean.im;
 
@@ -361,14 +359,12 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
     const ftype xx = fn(l2norm)(dptrx, mean.re, best_period);
     const ftype yy = fn(l2norm)(dptry+n, mean.im, best_period);
     const ftype xy = fn(l2norm2)(dptrx, dptry+n, mean.re, mean.im, best_period);
-    ftype mean_xcorr, best_xcorr, scale;
+    ftype best_xcorr, scale;
     const ftype num = xy;
     const ftype den = xx * yy + EPS;
 
     best_xcorr = num/den;
-    mean_xcorr = (mean.re * mean.im) / (SQRT(mean.re * mean.re + mean.im * mean.im) + EPS);
     best_xcorr = CLIP(best_xcorr, F(-0.9999), F(1.0));
-    mean_xcorr = CLIP(mean_xcorr, F(-0.9999), F(1.0));
 
     av_log(ctx, AV_LOG_DEBUG, "C: [%d] %g/%g %d/%d\n", ch, best_xcorr, best_score, best_period, best_max_period);
 
@@ -380,8 +376,8 @@ static int fn(compress_write)(AVFilterContext *ctx, const int ch)
         const ftype xf = F(1.0)-yf;
         const ftype axf = fn(get_gain)(xf, best_xcorr);
         const ftype ayf = fn(get_gain)(yf, best_xcorr);
-        const ftype mxf = fn(get_gain)(xf, mean_xcorr);
-        const ftype myf = fn(get_gain)(yf, mean_xcorr);
+        const ftype mxf = fn(get_gain)(xf, F(1.0));
+        const ftype myf = fn(get_gain)(yf, F(1.0));
         const ftype x = dptrx[n] - mean.re;
         const ftype y = dptry[n] - mean.im;
 
