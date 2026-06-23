@@ -292,7 +292,7 @@ static int fn(src_init)(AVFilterContext *ctx)
         const ftype aphase = FABS(s->phaset);
         const ftype sgn = s->phaset < F(0.0) ? F(-1.0) : F(1.0);
         const ftype x = F(n) / F(N);
-        const ftype a = asin(aphase * x) * 40 * sgn;
+        const ftype a = asin(aphase * x) * 30 * sgn;
 
         phase[n].re = FCOS(a);
         phase[n].im = FSIN(a);
