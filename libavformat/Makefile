@@ -529,6 +529,7 @@ OBJS-$(CONFIG_MUSC_DEMUXER)              += musc.o pcm.o
 OBJS-$(CONFIG_MUSX_DEMUXER)              += musx.o pcm.o
 OBJS-$(CONFIG_MV_DEMUXER)                += mvdec.o
 OBJS-$(CONFIG_MVI_DEMUXER)               += mvi.o
+OBJS-$(CONFIG_MVR_DEMUXER)               += mvrdec.o
 OBJS-$(CONFIG_MXF_DEMUXER)               += mxfdec.o mxf.o avlanguage.o
 OBJS-$(CONFIG_MXF_MUXER)                 += mxfenc.o mxf.o
 OBJS-$(CONFIG_MXG_DEMUXER)               += mxg.o

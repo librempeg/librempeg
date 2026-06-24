@@ -426,6 +426,7 @@ extern const FFInputFormat  ff_musc_demuxer;
 extern const FFInputFormat  ff_musx_demuxer;
 extern const FFInputFormat  ff_mv_demuxer;
 extern const FFInputFormat  ff_mvi_demuxer;
+extern const FFInputFormat  ff_mvr_demuxer;
 extern const FFInputFormat  ff_mxf_demuxer;
 extern const FFOutputFormat ff_mxf_muxer;
 extern const FFOutputFormat ff_mxf_d10_muxer;
