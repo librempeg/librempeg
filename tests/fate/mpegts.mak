@@ -36,17 +36,17 @@ fate-mpegts-lcevc-vvc-single-track: CMD = stream_demux mpegts $(TARGET_SAMPLES)/
 
 FATE_MPEGTS_FFMPEG_FFPROBE-$(call FRAMECRC, MOV, H264, H264_PARSER LCEVC_PARSER) += fate-mpegts-lcevc-h264-dual-track
 fate-mpegts-lcevc-h264-dual-track: CMD = stream_demux mpegts $(TARGET_SAMPLES)/lcevc/L_H264_640x360p_8bit8bit_2D_dd_dualTrack.ts \
-  "" "-c:v copy -map 0" \
+  "" "-c:v copy -map 0:1" \
   "-show_entries stream_group=index,id,nb_streams,type:stream=index,id,codec_name"
 
 FATE_MPEGTS_FFMPEG_FFPROBE-$(call FRAMECRC, MOV, HEVC, HEVC_PARSER LCEVC_PARSER) += fate-mpegts-lcevc-hevc-dual-track
 fate-mpegts-lcevc-hevc-dual-track: CMD = stream_demux mpegts $(TARGET_SAMPLES)/lcevc/L_HEVC_640x360p_8bit8bit_2D_dd_dualTrack.ts \
-  "" "-c:v copy -map 0" \
+  "" "-c:v copy -map 0:1" \
   "-show_entries stream_group=index,id,nb_streams,type:stream=index,id,codec_name"
 
 FATE_MPEGTS_FFMPEG_FFPROBE-$(call FRAMECRC, MOV, VVC, VVC_PARSER LCEVC_PARSER) += fate-mpegts-lcevc-vvc-dual-track
 fate-mpegts-lcevc-vvc-dual-track: CMD = stream_demux mpegts $(TARGET_SAMPLES)/lcevc/L_VVC_640x360p_8bit8bit_2D_dd_dualTrack.ts \
-  "" "-c:v copy -map 0" \
+  "" "-c:v copy -map 0:1" \
   "-show_entries stream_group=index,id,nb_streams,type:stream=index,id,codec_name"
 
 FATE_SAMPLES_FFPROBE += $(FATE_MPEGTS_PROBE-yes)
