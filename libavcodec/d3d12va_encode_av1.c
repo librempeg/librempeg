@@ -39,6 +39,16 @@
 #include <d3d12.h>
 #include <d3d12video.h>
 
+/* Added in Windows SDK 10.0.26100.0; define fallbacks for older SDKs. */
+#ifndef D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_UNIFORM_GRID_PARTITION
+#define D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_UNIFORM_GRID_PARTITION \
+    ((D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE)5)
+#endif
+#ifndef D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_CONFIGURABLE_GRID_PARTITION
+#define D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_CONFIGURABLE_GRID_PARTITION \
+    ((D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE)6)
+#endif
+
 #ifndef D3D12_VIDEO_ENCODER_AV1_INVALID_DPB_RESOURCE_INDEX
 #define	D3D12_VIDEO_ENCODER_AV1_INVALID_DPB_RESOURCE_INDEX	( 0xff )
 #endif
@@ -103,13 +113,22 @@ typedef struct D3D12VAEncodeAV1Context {
     CodedBitstreamFragment      current_obu;
     D3D12_VIDEO_ENCODER_AV1_POST_ENCODE_VALUES_FLAGS post_encode_values_flag;
     AVFifo             *picture_header_list;
+
+    int                   tile_cols;
+    int                   tile_rows;
+    int              tile_cols_log2;
+    int              tile_rows_log2;
+    int        uniform_tile_spacing;
+    int             tile_size_bytes;
+    uint16_t context_update_tile_id;
+    uint8_t    width_in_sbs_minus_1[AV1_MAX_TILE_COLS];
+    uint8_t   height_in_sbs_minus_1[AV1_MAX_TILE_ROWS];
 } D3D12VAEncodeAV1Context;
 
 typedef struct D3D12VAEncodeAV1Level {
     uint8_t                              level;
     D3D12_VIDEO_ENCODER_AV1_LEVELS d3d12_level;
 } D3D12VAEncodeAV1Level;
-
 
 static const D3D12VAEncodeAV1Level av1_levels[] = {
     { 0,  D3D12_VIDEO_ENCODER_AV1_LEVELS_2_0 },
@@ -137,6 +156,12 @@ static const D3D12VAEncodeAV1Level av1_levels[] = {
     { 22, D3D12_VIDEO_ENCODER_AV1_LEVELS_7_2 },
     { 23, D3D12_VIDEO_ENCODER_AV1_LEVELS_7_3 },
 };
+
+ typedef struct D3D12VAEncodeAV1TileInfo {
+    uint64_t full;
+    uint64_t prefix;
+    uint64_t data;
+} D3D12VAEncodeAV1TileInfo;
 
 static const D3D12_VIDEO_ENCODER_AV1_PROFILE         profile_main = D3D12_VIDEO_ENCODER_AV1_PROFILE_MAIN;
 static const D3D12_VIDEO_ENCODER_AV1_PROFILE         profile_high = D3D12_VIDEO_ENCODER_AV1_PROFILE_HIGH;
@@ -225,10 +250,19 @@ static int d3d12va_encode_av1_update_current_frame_picture_header(AVCodecContext
         err = AVERROR_UNKNOWN;
         return err;
     }
-    post_encode_values = (D3D12_VIDEO_ENCODER_AV1_POST_ENCODE_VALUES*) (data +
-            sizeof(D3D12_VIDEO_ENCODER_OUTPUT_METADATA) +
-            sizeof(D3D12_VIDEO_ENCODER_FRAME_SUBREGION_METADATA) +
-            sizeof(D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_TILES));
+    uint64_t nb_subregions = FFMAX(((D3D12_VIDEO_ENCODER_OUTPUT_METADATA *)data)->WrittenSubregionsCount, 1);
+    D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_TILES *tile_partition =
+                        (D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_TILES *) (data +
+                        sizeof(D3D12_VIDEO_ENCODER_OUTPUT_METADATA) +
+                        sizeof(D3D12_VIDEO_ENCODER_FRAME_SUBREGION_METADATA) * nb_subregions);
+
+    post_encode_values = (D3D12_VIDEO_ENCODER_AV1_POST_ENCODE_VALUES *) (data +
+                            sizeof(D3D12_VIDEO_ENCODER_OUTPUT_METADATA) +
+                            sizeof(D3D12_VIDEO_ENCODER_FRAME_SUBREGION_METADATA) * nb_subregions +
+                            sizeof(D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_TILES));
+
+    if (nb_subregions > 1)
+        fh->context_update_tile_id = tile_partition->ContextUpdateTileId;
 
     if (priv->post_encode_values_flag & D3D12_VIDEO_ENCODER_AV1_POST_ENCODE_VALUES_FLAG_QUANTIZATION) {
         fh->base_q_idx = post_encode_values->Quantization.BaseQIndex;
@@ -327,6 +361,10 @@ static int d3d12va_encode_av1_write_tile_group(AVCodecContext *avctx,
     AV1RawTileGroup           *tg = &tile_group_obu->obu.tile_group;
     int                       err = 0;
 
+    tg->tile_start_and_end_present_flag = 0;
+    tg->tg_start = 0;
+    tg->tg_end   = priv->tile_cols * priv->tile_rows - 1;
+
     tg->tile_data.data = tile_group;
     tg->tile_data.data_ref = NULL;
     tg->tile_data.data_size = tile_group_size;
@@ -344,100 +382,172 @@ fail:
 }
 
 static int d3d12va_encode_av1_get_buffer_size(AVCodecContext *avctx,
-                                              D3D12VAEncodePicture *pic, size_t *size)
+                                              D3D12VAEncodePicture *pic,
+                                              uint64_t tile_size_bytes,
+                                              uint64_t *nb_subregions_out,
+                                              D3D12VAEncodeAV1TileInfo **tiles_out,
+                                              size_t *tile_payload_size_out)
 {
-    D3D12_VIDEO_ENCODER_FRAME_SUBREGION_METADATA *subregion_meta = NULL;
-    uint8_t                                                *data = NULL;
-    HRESULT                                                   hr = S_OK;
-    int                                                      err = 0;
+    uint8_t *meta_data = NULL;
+    HRESULT  hr        = S_OK;
+    int      err       = 0;
 
-    hr = ID3D12Resource_Map(pic->resolved_metadata, 0, NULL, (void **)&data);
-    if (FAILED(hr)) {
-        err = AVERROR_UNKNOWN;
-        return err;
+    D3D12_VIDEO_ENCODER_OUTPUT_METADATA          *out;
+    D3D12_VIDEO_ENCODER_FRAME_SUBREGION_METADATA *subregions;
+    D3D12VAEncodeAV1TileInfo *tiles;
+    uint64_t nb_subregions;
+    size_t   tile_payload_size = 0;
+
+    hr = ID3D12Resource_Map(pic->resolved_metadata, 0, NULL, (void **)&meta_data);
+    if (FAILED(hr))
+        return AVERROR_EXTERNAL;
+
+    out        = (D3D12_VIDEO_ENCODER_OUTPUT_METADATA *)meta_data;
+    subregions = (D3D12_VIDEO_ENCODER_FRAME_SUBREGION_METADATA *) (meta_data +
+                    sizeof(D3D12_VIDEO_ENCODER_OUTPUT_METADATA));
+
+    if (out->EncodeErrorFlags != D3D12_VIDEO_ENCODER_ENCODE_ERROR_FLAG_NO_ERROR) {
+        av_log(avctx, AV_LOG_ERROR, "AV1 encode failed: error flags %#"PRIx64".\n",
+               (uint64_t)out->EncodeErrorFlags);
+        err = AVERROR_EXTERNAL;
+        goto unmap;
     }
 
-    subregion_meta = (D3D12_VIDEO_ENCODER_FRAME_SUBREGION_METADATA*)(data + sizeof(D3D12_VIDEO_ENCODER_OUTPUT_METADATA));
-    if (subregion_meta->bSize == 0) {
+    nb_subregions = out->WrittenSubregionsCount;
+    if (nb_subregions == 0 || subregions[0].bSize == 0) {
         av_log(avctx, AV_LOG_ERROR, "No subregion metadata found\n");
         err = AVERROR(EINVAL);
-        return err;
+        goto unmap;
     }
-    *size = subregion_meta->bSize;
 
+    tiles = av_malloc_array(nb_subregions, sizeof(*tiles));
+    if (!tiles) {
+        err = AVERROR(ENOMEM);
+        goto unmap;
+    }
+
+    for (uint64_t i = 0; i < nb_subregions; i++) {
+        tiles[i].full   = subregions[i].bSize;
+        tiles[i].prefix = subregions[i].bStartOffset;
+        tiles[i].data   = subregions[i].bSize - subregions[i].bStartOffset;
+        tile_payload_size += tiles[i].data;
+    }
+    /* Every tile except the last is prefixed with a tile_size_minus_1 field. */
+    if (nb_subregions > 1)
+        tile_payload_size += (nb_subregions - 1) * tile_size_bytes;
+
+    *nb_subregions_out     = nb_subregions;
+    *tiles_out             = tiles;
+    *tile_payload_size_out = tile_payload_size;
+
+unmap:
     ID3D12Resource_Unmap(pic->resolved_metadata, 0, NULL);
-
-    return 0;
+    return err;
 }
 
 static int d3d12va_encode_av1_get_coded_data(AVCodecContext *avctx,
                                              D3D12VAEncodePicture *pic, AVPacket *pkt)
 {
-    int                   err = 0;
-    uint8_t              *ptr = NULL;
-    uint8_t      *mapped_data = NULL;
-    size_t         total_size = 0;
-    HRESULT                hr = S_OK;
-    size_t    av1_pic_hd_size = 0;
-    int tile_group_extra_size = 0;
-    size_t            bit_len = 0;
+    D3D12VAEncodeAV1Context *priv = avctx->priv_data;
+    int      err                  = 0;
+    uint8_t *ptr                  = NULL;
+    uint8_t *mapped_data          = NULL;
+    uint8_t *tile_group_buf       = NULL;
+    char    *obu_buf              = NULL;
+    HRESULT  hr                   = S_OK;
+    size_t   av1_pic_hd_size      = 0;
+    size_t   bit_len              = 0;
+    size_t   obu_size             = 0;
+    size_t   tile_payload_size    = 0;
+    size_t   total_size           = 0;
+    uint64_t nb_subregions        = 0;
+    int      output_buffer_mapped = 0;
 
+    D3D12VAEncodeAV1TileInfo *tiles = NULL;
     char pic_hd_data[MAX_PARAM_BUFFER_SIZE] = { 0 };
 
-    err = d3d12va_encode_av1_get_buffer_size(avctx, pic, &total_size);
+    err = d3d12va_encode_av1_get_buffer_size(avctx, pic, priv->tile_size_bytes,
+                                             &nb_subregions, &tiles,
+                                             &tile_payload_size);
     if (err < 0)
         goto end;
-
-    // Update the picture header and calculate the picture header size
-    memset(pic_hd_data, 0, sizeof(pic_hd_data));
-    err = d3d12va_encode_av1_write_picture_header(avctx, pic, pic_hd_data, &av1_pic_hd_size);
-    if (err < 0) {
-        av_log(avctx, AV_LOG_ERROR, "Failed to write picture header: %d.\n", err);
-        return err;
-    }
-    av1_pic_hd_size /= 8;
-    av_log(avctx, AV_LOG_DEBUG, "AV1 picture header size: %zu bytes.\n", av1_pic_hd_size);
-
-
-    tile_group_extra_size = (av_log2(total_size) + 7) / 7 + 1; // 1 byte for obu header, rest for tile group LEB128 size
-    av_log(avctx, AV_LOG_DEBUG, "Tile group extra size: %d bytes.\n", tile_group_extra_size);
-
-    total_size += (pic->header_size + tile_group_extra_size + av1_pic_hd_size);
-    av_log(avctx, AV_LOG_DEBUG, "Output buffer size %zu\n", total_size);
 
     hr = ID3D12Resource_Map(pic->output_buffer, 0, NULL, (void **)&mapped_data);
     if (FAILED(hr)) {
         err = AVERROR_UNKNOWN;
         goto end;
     }
+    output_buffer_mapped = 1;
 
+    tile_group_buf = av_malloc(tile_payload_size);
+    if (!tile_group_buf) {
+        err = AVERROR(ENOMEM);
+        goto end;
+    }
+
+    uint8_t *dst = tile_group_buf;
+    uint8_t *tiles_base = mapped_data + pic->aligned_header_size;
+    uint64_t src_off = 0;
+    for (uint64_t i = 0; i < nb_subregions; i++) {
+        /* Tiles are laid out contiguously by their full size; the actual
+         * tile data starts bStartOffset bytes into each subregion. */
+        uint64_t src_pos = src_off + tiles[i].prefix;
+        src_off += tiles[i].full;
+
+        if (i != nb_subregions - 1) {
+            /* Write tile_size_minus_1 as a little-endian integer */
+            uint64_t v = tiles[i].data - 1;
+            for (uint64_t b = 0; b < priv->tile_size_bytes; b++)
+                *dst++ = (v >> (8 * b)) & 0xff;
+        }
+        memcpy(dst, tiles_base + src_pos, tiles[i].data);
+        dst += tiles[i].data;
+    }
+
+    err = d3d12va_encode_av1_write_picture_header(avctx, pic, pic_hd_data, &bit_len);
+    if (err < 0) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to write picture header: %d.\n", err);
+        goto end;
+    }
+    av1_pic_hd_size = bit_len / 8;
+
+    obu_buf = av_malloc(tile_payload_size + MAX_PARAM_BUFFER_SIZE);
+    if (!obu_buf) {
+        err = AVERROR(ENOMEM);
+        goto end;
+    }
+    err = d3d12va_encode_av1_write_tile_group(avctx, tile_group_buf,
+                                              tile_payload_size, obu_buf, &bit_len);
+    if (err < 0) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to write tile group: %d.\n", err);
+        goto end;
+    }
+    obu_size = bit_len / 8;
+
+    total_size = pic->header_size + av1_pic_hd_size + obu_size;
     err = ff_get_encode_buffer(avctx, pkt, total_size, 0);
     if (err < 0)
         goto end;
     ptr = pkt->data;
 
     memcpy(ptr, mapped_data, pic->header_size);
-
     ptr += pic->header_size;
-    mapped_data += pic->aligned_header_size;
-    total_size -= pic->header_size;
 
     memcpy(ptr, pic_hd_data, av1_pic_hd_size);
     ptr += av1_pic_hd_size;
-    total_size -= av1_pic_hd_size;
-    av_log(avctx, AV_LOG_DEBUG, "AV1 total_size after write picture header: %zu.\n", total_size);
 
-    total_size -= tile_group_extra_size;
-    err = d3d12va_encode_av1_write_tile_group(avctx, mapped_data, total_size, ptr, &bit_len);
-    if (err < 0) {
-        av_log(avctx, AV_LOG_ERROR, "Failed to write tile group: %d.\n", err);
-        goto end;
-    }
-    assert((total_size + tile_group_extra_size) * 8 == bit_len);
+    memcpy(ptr, obu_buf, obu_size);
 
-    ID3D12Resource_Unmap(pic->output_buffer, 0, NULL);
+    av_log(avctx, AV_LOG_DEBUG, "AV1 packet: %"PRIu64" tiles, header %d, "
+           "pic header %zu, tile group %zu, total %zu bytes.\n",
+           nb_subregions, pic->header_size, av1_pic_hd_size, obu_size, total_size);
 
 end:
+    if (output_buffer_mapped)
+        ID3D12Resource_Unmap(pic->output_buffer, 0, NULL);
+    av_freep(&tiles);
+    av_freep(&tile_group_buf);
+    av_freep(&obu_buf);
     av_buffer_unref(&pic->output_buffer_ref);
     pic->output_buffer = NULL;
     return err;
@@ -495,11 +605,13 @@ static int d3d12va_hw_base_encode_init_params_av1(FFHWBaseEncodeContext *base_ct
         else
             framerate = 0;
 
-        //currently only supporting 1 tile
+        D3D12VAEncodeAV1Context *priv = avctx->priv_data;
+        int tile_cols = priv->tile_cols > 0 ? priv->tile_cols : 1;
+        int tile_rows = priv->tile_rows > 0 ? priv->tile_rows : 1;
+
         level = ff_av1_guess_level(avctx->bit_rate, opts->tier,
             base_ctx->surface_width, base_ctx->surface_height,
-            /*priv->tile_rows*/1 * 1/*priv->tile_cols*/,
-            /*priv->tile_cols*/1, framerate);
+            tile_rows * tile_cols, tile_cols, framerate);
         if (level) {
             av_log(avctx, AV_LOG_VERBOSE, "Using level %s.\n", level->name);
             seq->seq_level_idx[0] = level->level_idx;
@@ -517,6 +629,7 @@ static int d3d12va_hw_base_encode_init_params_av1(FFHWBaseEncodeContext *base_ct
     seq->reduced_still_picture_header = seq->still_picture;
 
     // Feature flags
+    seq->use_128x128_superblock = opts->enable_128x128_superblock;
     seq->enable_filter_intra = opts->enable_filter_intra;
     seq->enable_intra_edge_filter = opts->enable_intra_edge_filter;
     seq->enable_interintra_compound = opts->enable_interintra_compound;
@@ -557,7 +670,7 @@ static int d3d12va_encode_av1_init_sequence_params(AVCodecContext *avctx)
         .InputFormat                      = hwctx->format,
         .RateControl                      = ctx->rc,
         .IntraRefresh                     = ctx->intra_refresh.Mode,
-        .SubregionFrameEncoding           = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME,
+        .SubregionFrameEncoding           = ctx->subregion_mode,
         .ResolutionsListCount             = 1,
         .pResolutionList                  = &ctx->resolution,
         .CodecGopSequence                 = ctx->gop,
@@ -633,6 +746,172 @@ static int d3d12va_encode_av1_init_sequence_params(AVCodecContext *avctx)
 
     if (avctx->level == AV_LEVEL_UNKNOWN)
         avctx->level = level.Level;
+
+    return 0;
+}
+
+static av_always_inline int d3d12va_encode_av1_tile_log2(int blksize, int target)
+{
+    int k;
+    for (k = 0; (blksize << k) < target; k++);
+    return k;
+}
+
+static int d3d12va_encode_av1_set_tile(AVCodecContext *avctx)
+{
+    D3D12VAEncodeContext     *ctx = avctx->priv_data;
+    D3D12VAEncodeAV1Context *priv = avctx->priv_data;
+    D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_TILES *tiles_layout;
+
+    ctx->subregions_layout.DataSize =
+        sizeof(D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_TILES);
+    tiles_layout = av_mallocz(ctx->subregions_layout.DataSize);
+    if (!tiles_layout)
+        return AVERROR(ENOMEM);
+    ctx->subregions_layout.pTilesPartition_AV1 = tiles_layout;
+
+    int use_128 = priv->unit_opts.enable_128x128_superblock;
+    int width   = ctx->resolution.Width;
+    int height  = ctx->resolution.Height;
+
+    int mi_cols = 2 * ((width  + 7) >> 3);
+    int mi_rows = 2 * ((height + 7) >> 3);
+    int sb_cols = use_128 ? ((mi_cols + 31) >> 5) : ((mi_cols + 15) >> 4);
+    int sb_rows = use_128 ? ((mi_rows + 31) >> 5) : ((mi_rows + 15) >> 4);
+    int sb_shift = use_128 ? 5 : 4;
+    int sb_size  = sb_shift + 2;
+
+    int max_tile_width_sb = AV1_MAX_TILE_WIDTH >> sb_size;
+    int max_tile_area_sb  = AV1_MAX_TILE_AREA  >> (2 * sb_size);
+
+    int min_log2_tile_cols = d3d12va_encode_av1_tile_log2(max_tile_width_sb, sb_cols);
+    int min_log2_tiles     = FFMAX(min_log2_tile_cols,
+                               d3d12va_encode_av1_tile_log2(max_tile_area_sb, sb_rows * sb_cols));
+    int max_tile_area_sb_varied;
+    int tile_width_sb, tile_height_sb, widest_tile_sb;
+    int tile_cols, tile_rows;
+    int min_tile_cols = (sb_cols + max_tile_width_sb - 1) / max_tile_width_sb;
+    int i;
+
+    if (priv->tile_cols > AV1_MAX_TILE_COLS ||
+        priv->tile_rows > AV1_MAX_TILE_ROWS) {
+        av_log(avctx, AV_LOG_ERROR, "Invalid tile number %dx%d, should be at "
+               "most %dx%d.\n", priv->tile_cols, priv->tile_rows,
+               AV1_MAX_TILE_COLS, AV1_MAX_TILE_ROWS);
+        return AVERROR(EINVAL);
+    }
+
+    /* Calculate tile columns. When the user did not set tile explicitly
+     * (tile_cols == 0) this fallback to the minimum valid number */
+    tile_cols = av_clip(priv->tile_cols, min_tile_cols, sb_cols);
+    if (!priv->tile_cols)
+        priv->tile_cols = tile_cols;
+    else if (priv->tile_cols != tile_cols) {
+        av_log(avctx, AV_LOG_ERROR, "Invalid tile cols %d, should be in range "
+               "of %d~%d.\n", priv->tile_cols, min_tile_cols, sb_cols);
+        return AVERROR(EINVAL);
+    }
+
+    priv->tile_cols_log2 = d3d12va_encode_av1_tile_log2(1, priv->tile_cols);
+    tile_width_sb = (sb_cols + (1 << priv->tile_cols_log2) - 1) >> priv->tile_cols_log2;
+
+    if (priv->tile_rows > sb_rows) {
+        av_log(avctx, AV_LOG_ERROR, "Invalid tile rows %d, should be less than "
+               "%d.\n", priv->tile_rows, sb_rows);
+        return AVERROR(EINVAL);
+    }
+
+    tile_rows = priv->tile_rows ? priv->tile_rows : 1;
+    for (; tile_rows <= sb_rows && tile_rows <= AV1_MAX_TILE_ROWS; tile_rows++) {
+        /* try uniformed tile first. */
+        priv->tile_rows_log2 = d3d12va_encode_av1_tile_log2(1, tile_rows);
+
+        if ((sb_cols + tile_width_sb - 1) / tile_width_sb == priv->tile_cols) {
+            for (i = 0; i < priv->tile_cols - 1; i++)
+                priv->width_in_sbs_minus_1[i] = tile_width_sb - 1;
+            priv->width_in_sbs_minus_1[i] = sb_cols - (priv->tile_cols - 1) * tile_width_sb - 1;
+
+            tile_height_sb = (sb_rows + (1 << priv->tile_rows_log2) - 1) >>
+                             priv->tile_rows_log2;
+
+            if ((sb_rows + tile_height_sb - 1) / tile_height_sb == tile_rows &&
+                tile_height_sb <= max_tile_area_sb / tile_width_sb) {
+                for (i = 0; i < tile_rows - 1; i++)
+                    priv->height_in_sbs_minus_1[i] = tile_height_sb - 1;
+                priv->height_in_sbs_minus_1[i] = sb_rows - (tile_rows - 1) * tile_height_sb - 1;
+
+                priv->uniform_tile_spacing = 1;
+                break;
+            }
+        }
+
+        /* Try non-uniform fallback: distribute columns/rows as evenly as possible */
+        widest_tile_sb = 0;
+        for (i = 0; i < priv->tile_cols; i++) {
+            priv->width_in_sbs_minus_1[i] =
+                (i + 1) * sb_cols / priv->tile_cols - i * sb_cols / priv->tile_cols - 1;
+            widest_tile_sb = FFMAX(widest_tile_sb, priv->width_in_sbs_minus_1[i] + 1);
+        }
+
+        if (min_log2_tiles)
+            max_tile_area_sb_varied = (sb_rows * sb_cols) >> (min_log2_tiles + 1);
+        else
+            max_tile_area_sb_varied = sb_rows * sb_cols;
+        tile_height_sb = FFMAX(1, max_tile_area_sb_varied / widest_tile_sb);
+
+        if (tile_rows == av_clip(tile_rows,
+                                 (sb_rows + tile_height_sb - 1) / tile_height_sb,
+                                 sb_rows)) {
+            for (i = 0; i < tile_rows; i++)
+                priv->height_in_sbs_minus_1[i] =
+                    (i + 1) * sb_rows / tile_rows - i * sb_rows / tile_rows - 1;
+
+            priv->uniform_tile_spacing = 0;
+            break;
+        }
+
+        if (priv->tile_rows) {
+            av_log(avctx, AV_LOG_ERROR, "Invalid tile rows %d.\n", priv->tile_rows);
+            return AVERROR(EINVAL);
+        }
+    }
+
+    priv->tile_rows = tile_rows;
+    av_log(avctx, AV_LOG_DEBUG, "Setting tile cols/rows to %d/%d.\n",
+        priv->tile_cols, priv->tile_rows);
+
+    if (priv->tile_cols > AV1_MAX_TILE_COLS || priv->tile_rows > AV1_MAX_TILE_ROWS) {
+        av_log(avctx, AV_LOG_ERROR, "Resolution %dx%d requires %dx%d tiles which "
+               "exceeds the AV1 maximum of %dx%d.\n", width, height,
+               priv->tile_cols, priv->tile_rows, AV1_MAX_TILE_COLS, AV1_MAX_TILE_ROWS);
+        return AVERROR(EINVAL);
+    }
+
+    priv->context_update_tile_id = priv->tile_cols * priv->tile_rows - 1;
+    priv->tile_size_bytes = 4;
+
+    tiles_layout->RowCount = priv->tile_rows;
+    tiles_layout->ColCount = priv->tile_cols;
+    for (i = 0; i < priv->tile_cols; i++)
+        tiles_layout->ColWidths[i] = priv->width_in_sbs_minus_1[i] + 1;
+    for (i = 0; i < priv->tile_rows; i++)
+        tiles_layout->RowHeights[i] = priv->height_in_sbs_minus_1[i] + 1;
+    tiles_layout->ContextUpdateTileId = priv->context_update_tile_id;
+
+    ctx->num_subregions = priv->tile_cols * priv->tile_rows;
+
+    if (ctx->num_subregions <= 1)
+        ctx->subregion_mode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME;
+    else if (priv->uniform_tile_spacing)
+        ctx->subregion_mode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_UNIFORM_GRID_PARTITION;
+    else
+        ctx->subregion_mode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_CONFIGURABLE_GRID_PARTITION;
+
+    av_log(avctx, AV_LOG_VERBOSE, "AV1 tile partition: %d cols x %d rows "
+           "(%s superblocks, %s).\n", priv->tile_cols, priv->tile_rows,
+           use_128 ? "128x128" : "64x64",
+           ctx->num_subregions <= 1 ? "full frame" :
+           priv->uniform_tile_spacing ? "uniform grid" : "configurable grid");
 
     return 0;
 }
@@ -848,21 +1127,6 @@ static int d3d12va_encode_av1_set_level(AVCodecContext *avctx)
     return 0;
 }
 
-static int d3d12va_encode_av1_set_tile(AVCodecContext *avctx)
-{
-    D3D12VAEncodeContext *ctx = avctx->priv_data;
-
-    ctx->subregions_layout.DataSize = sizeof(D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_TILES);
-    D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_TILES *tiles_layout = av_mallocz(ctx->subregions_layout.DataSize);
-    ctx->subregions_layout.pTilesPartition_AV1 = tiles_layout;
-
-    // Currently only support 1 tile
-    tiles_layout->RowCount = 1;
-    tiles_layout->ColCount = 1;
-
-    return 0;
-}
-
 static void d3d12va_encode_av1_free_picture_params(D3D12VAEncodePicture *pic)
 {
     if (!pic->pic_ctl.pAV1PicData)
@@ -972,9 +1236,18 @@ static int d3d12va_encode_av1_init_picture_params(AVCodecContext *avctx,
     fh->render_height_minus_1     = fh->frame_height_minus_1;
     fh->is_filter_switchable      = 1;
     fh->interpolation_filter      = AV1_INTERPOLATION_FILTER_SWITCHABLE;
-    fh->uniform_tile_spacing_flag = 1;
-    fh->width_in_sbs_minus_1[0]   = (ctx->resolution.Width  + 63 >> 6) -1; // 64x64 superblock size
-    fh->height_in_sbs_minus_1[0]  = (ctx->resolution.Height + 63 >> 6) -1; // 64x64 superblock size
+
+    fh->uniform_tile_spacing_flag = priv->uniform_tile_spacing;
+    fh->tile_cols                 = priv->tile_cols;
+    fh->tile_rows                 = priv->tile_rows;
+    fh->tile_cols_log2            = priv->tile_cols_log2;
+    fh->tile_rows_log2            = priv->tile_rows_log2;
+    fh->context_update_tile_id    = priv->context_update_tile_id;
+    fh->tile_size_bytes_minus1    = priv->tile_size_bytes - 1;
+    for (i = 0; i < priv->tile_cols; i++)
+        fh->width_in_sbs_minus_1[i]  = priv->width_in_sbs_minus_1[i];
+    for (i = 0; i < priv->tile_rows; i++)
+        fh->height_in_sbs_minus_1[i] = priv->height_in_sbs_minus_1[i];
 
     memcpy(fh->loop_filter_ref_deltas, default_loop_filter_ref_deltas,
            AV1_TOTAL_REFS_PER_FRAME * sizeof(int8_t));
@@ -1163,6 +1436,11 @@ static const AVOption d3d12va_encode_av1_options[] = {
     { LEVEL("7.2",  22) },
     { LEVEL("7.3",  23) },
 #undef LEVEL
+
+    { "tiles", "Tile columns x rows (Use minimal tile column/row number "
+      "automatically by default)",
+      OFFSET(tile_cols), AV_OPT_TYPE_IMAGE_SIZE, { .str = NULL }, 0, 0, FLAGS },
+
     { NULL },
 };
 

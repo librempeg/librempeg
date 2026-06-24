@@ -266,7 +266,9 @@ static int d3d12va_encode_create_metadata_buffers(AVCodecContext *avctx,
                                                   D3D12VAEncodePicture *pic)
 {
     D3D12VAEncodeContext *ctx = avctx->priv_data;
-    int width = sizeof(D3D12_VIDEO_ENCODER_OUTPUT_METADATA) + sizeof(D3D12_VIDEO_ENCODER_FRAME_SUBREGION_METADATA);
+    int num_subregions = ctx->num_subregions > 0 ? ctx->num_subregions : 1;
+    int width = sizeof(D3D12_VIDEO_ENCODER_OUTPUT_METADATA) +
+                sizeof(D3D12_VIDEO_ENCODER_FRAME_SUBREGION_METADATA) * num_subregions;
 #if CONFIG_AV1_D3D12VA_ENCODER
     if (ctx->codec->d3d12_codec == D3D12_VIDEO_ENCODER_CODEC_AV1) {
         width += sizeof(D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_TILES)
@@ -346,7 +348,7 @@ static int d3d12va_encode_issue(AVCodecContext *avctx,
             .IntraRefreshConfig = ctx->intra_refresh,
             .RateControl = ctx->rc,
             .PictureTargetResolution = ctx->resolution,
-            .SelectedLayoutMode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME,
+            .SelectedLayoutMode = ctx->subregion_mode,
             .FrameSubregionsLayoutData = ctx->subregions_layout,
             .CodecGopSequence = ctx->gop,
         },
@@ -1777,18 +1779,18 @@ int ff_d3d12va_encode_init(AVCodecContext *avctx)
     if (err < 0)
         goto fail;
 
-    if (ctx->codec->set_tile) {
-        err = ctx->codec->set_tile(avctx);
-        if (err < 0)
-            goto fail;
-    }
-
     err = d3d12va_encode_init_rate_control(avctx);
     if (err < 0)
         goto fail;
 
     if (ctx->codec->get_encoder_caps) {
         err = ctx->codec->get_encoder_caps(avctx);
+        if (err < 0)
+            goto fail;
+    }
+
+    if (ctx->codec->set_tile) {
+        err = ctx->codec->set_tile(avctx);
         if (err < 0)
             goto fail;
     }
