@@ -23,6 +23,7 @@
 #include "libswscale/ops.h"
 #include "libswscale/ops_dispatch.h"
 #include "libswscale/ops_internal.h"
+#include "libswscale/op_list_gen_template.c"
 #include "libswscale/format.h"
 
 #ifdef _WIN32

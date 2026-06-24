@@ -24,6 +24,7 @@
 #include "libavutil/tree.h"
 #include "libswscale/ops.h"
 #include "libswscale/ops_chain.h"
+#include "libswscale/op_list_gen_template.c"
 
 #include "libswscale/aarch64/ops_impl.c"
 #include "libswscale/aarch64/ops_impl_conv.c"

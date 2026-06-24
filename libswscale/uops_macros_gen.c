@@ -31,6 +31,7 @@
 #include "libavutil/tree.h"
 #include "ops.h"
 #include "ops_dispatch.h"
+#include "op_list_gen_template.c"
 #include "swscale.h"
 #include "uops.h"
 #include "uops_list.h"
