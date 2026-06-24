@@ -301,38 +301,7 @@ static const char pixel_type_names[SWS_PIXEL_TYPE_NB][4] = {
     [SWS_PIXEL_F32] = "f32",
 };
 
-static void impl_func_name(AVBPrint *bp, const SwsAArch64OpImplParams *params)
-{
-    const SwsUOpParams *par = &params->par;
-    av_bprintf(bp, "ff_sws_%s", op_type_names[params->uop]);
-    switch (params->uop) {
-    case SWS_UOP_PERMUTE:
-    case SWS_UOP_COPY:
-        av_bprintf(bp, "_%012" PRIx64, move_to_mask(&par->move));
-        break;
-    case SWS_UOP_UNPACK:
-    case SWS_UOP_PACK:
-        av_bprintf(bp, "_%04x", pack_to_mask(&par->pack));
-        break;
-    case SWS_UOP_LSHIFT:
-    case SWS_UOP_RSHIFT:
-        av_bprintf(bp, "_%u", par->shift.amount);
-        break;
-    case SWS_UOP_CLEAR:
-        av_bprintf(bp, "_%04x", clear_to_mask(&par->clear));
-        break;
-    case SWS_UOP_LINEAR:
-    case SWS_UOP_LINEAR_FMA:
-        av_bprintf(bp, "_%010" PRIx64, linear_to_mask(&par->lin));
-        break;
-    case SWS_UOP_DITHER:
-        av_bprintf(bp, "_%04x_%u", dither_to_mask(params, &par->dither), par->dither.size_log2);
-        break;
-    }
-    av_bprintf(bp, "_%u_%s_%04x_neon", params->block_size, pixel_type_names[params->type], nibble_mask(params->mask));
-}
-
-static const char op_types[SWS_UOP_TYPE_NB][32] = {
+static const char uop_types[SWS_UOP_TYPE_NB][32] = {
     [SWS_UOP_READ_BIT      ] = "SWS_UOP_READ_BIT",
     [SWS_UOP_READ_NIBBLE   ] = "SWS_UOP_READ_NIBBLE",
     [SWS_UOP_READ_PACKED   ] = "SWS_UOP_READ_PACKED",
@@ -372,10 +341,50 @@ static const char pixel_types[SWS_PIXEL_TYPE_NB][32] = {
 
 static void serialize_op(AVBPrint *bp, const SwsAArch64OpImplParams *params)
 {
+#define FUNC_NAME_WIDTH 45
+#define UOP_NAME_WIDTH  21
+#define TYPE_NAME_WIDTH 14
+
     const SwsUOpParams *par = &params->par;
-    av_bprintf(bp, "ENTRY(");
-    impl_func_name(bp, params);
-    av_bprintf(bp, ", { .uop = %s", op_types[params->uop]);
+
+    char func_name[FUNC_NAME_WIDTH + 2];
+    snprintf(func_name, sizeof(func_name), "ff_sws_%s", op_type_names[params->uop]);
+    switch (params->uop) {
+    case SWS_UOP_PERMUTE:
+    case SWS_UOP_COPY:
+        av_strlcatf(func_name, sizeof(func_name), "_%012" PRIx64, move_to_mask(&par->move));
+        break;
+    case SWS_UOP_UNPACK:
+    case SWS_UOP_PACK:
+        av_strlcatf(func_name, sizeof(func_name), "_%04x", pack_to_mask(&par->pack));
+        break;
+    case SWS_UOP_LSHIFT:
+    case SWS_UOP_RSHIFT:
+        av_strlcatf(func_name, sizeof(func_name), "_%u", par->shift.amount);
+        break;
+    case SWS_UOP_CLEAR:
+        av_strlcatf(func_name, sizeof(func_name), "_%04x", clear_to_mask(&par->clear));
+        break;
+    case SWS_UOP_LINEAR:
+    case SWS_UOP_LINEAR_FMA:
+        av_strlcatf(func_name, sizeof(func_name), "_%010" PRIx64, linear_to_mask(&par->lin));
+        break;
+    case SWS_UOP_DITHER:
+        av_strlcatf(func_name, sizeof(func_name), "_%04x_%u", dither_to_mask(params, &par->dither), par->dither.size_log2);
+        break;
+    }
+    av_strlcatf(func_name, sizeof(func_name), "_%u_%s_%04x_neon,",
+                params->block_size, pixel_type_names[params->type], nibble_mask(params->mask));
+
+    char uop_name[UOP_NAME_WIDTH + 2];
+    snprintf(uop_name, sizeof(uop_name), "%s,", uop_types[params->uop]);
+
+    char type_name[TYPE_NAME_WIDTH + 2];
+    snprintf(type_name, sizeof(type_name), "%s,", pixel_types[params->type]);
+
+    av_bprintf(bp, "ENTRY(%-*s { .uop = %-*s .block_size = %2u, .type = %-*s .mask = 0x%x",
+               FUNC_NAME_WIDTH, func_name, UOP_NAME_WIDTH, uop_name,
+               params->block_size, TYPE_NAME_WIDTH, type_name, params->mask);
     switch (params->uop) {
     case SWS_UOP_PERMUTE:
     case SWS_UOP_COPY:
@@ -410,7 +419,7 @@ static void serialize_op(AVBPrint *bp, const SwsAArch64OpImplParams *params)
                    par->dither.size_log2);
         break;
     }
-    av_bprintf(bp, ", .block_size = %u, .type = %s, .mask = 0x%x })", params->block_size, pixel_types[params->type], params->mask);
+    av_bprintf(bp, " })");
 }
 
 /* Serialize SwsAArch64OpImplParams for one function. */
