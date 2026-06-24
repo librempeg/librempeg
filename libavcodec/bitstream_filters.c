@@ -77,6 +77,12 @@ extern const FFBitStreamFilter ff_vvc_metadata_bsf;
 extern const FFBitStreamFilter ff_vvc_mp4toannexb_bsf;
 extern const FFBitStreamFilter ff_wwvorbis_to_vorbis_bsf;
 
+/* these filters are part of public or internal API,
+ * they are formatted to not be found by the grep
+ * as they are manually added */
+extern  const FFBitStreamFilter ff_source_bsf;
+extern  const FFBitStreamFilter ff_sink_bsf;
+
 #include "libavcodec/bsf_list.c"
 
 const AVBitStreamFilter *av_bsf_iterate(void **opaque)

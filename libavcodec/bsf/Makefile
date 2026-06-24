@@ -1,6 +1,9 @@
 clean::
 	$(RM) $(CLEANSUFFIXES:%=libavcodec/bsf/%)
 
+OBJS +=                                      bsf/sink.o       \
+                                             bsf/source.o
+
 OBJS-$(CONFIG_AAC_ADTSTOASC_BSF)          += bsf/aac_adtstoasc.o
 OBJS-$(CONFIG_AHX_TO_MP2_BSF)             += bsf/ahx_to_mp2.o
 OBJS-$(CONFIG_APV_METADATA_BSF)           += bsf/apv_metadata.o

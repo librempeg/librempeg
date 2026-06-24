@@ -4542,7 +4542,7 @@ find_things_extern(){
     pattern=$2
     file=$source_path/$3
     out=${4:-$thing}
-    sed -n "s/^[^#]*extern.*$pattern *ff_\([^ ]*\)_$thing;/\1_$out/p" "$file"
+    sed -n "s/^[^#]*extern const.*$pattern *ff_\([^ ]*\)_$thing;/\1_$out/p" "$file"
 }
 
 find_filters_extern(){
@@ -8944,6 +8944,11 @@ print_enabled_components(){
     done
     if [ "$name" = "filter_list" ]; then
         for c in asrc_abuffer vsrc_buffer asink_abuffer vsink_buffer; do
+            printf "    &ff_%s,\n" $c >> $TMPH
+        done
+    fi
+    if [ "$name" = "bitstream_filters" ]; then
+        for c in source_bsf sink_bsf; do
             printf "    &ff_%s,\n" $c >> $TMPH
         done
     fi
