@@ -1,7 +1,8 @@
 clean::
 	$(RM) $(CLEANSUFFIXES:%=libavcodec/bsf/%)
 
-OBJS +=                                      bsf/sink.o       \
+OBJS +=                                      bsf/packetsync.o \
+                                             bsf/sink.o       \
                                              bsf/source.o
 
 OBJS-$(CONFIG_AAC_ADTSTOASC_BSF)          += bsf/aac_adtstoasc.o
@@ -30,6 +31,7 @@ OBJS-$(CONFIG_DOVI_RPU_BSF)               += bsf/dovi_rpu.o
 OBJS-$(CONFIG_DOVI_SPLIT_BSF)             += bsf/dovi_split.o
 OBJS-$(CONFIG_HEVC_MP4TOANNEXB_BSF)       += bsf/hevc_mp4toannexb.o
 OBJS-$(CONFIG_IMX_DUMP_HEADER_BSF)        += bsf/imx_dump_header.o
+OBJS-$(CONFIG_LCEVC_MERGE_BSF)            += bsf/lcevc_merge.o
 OBJS-$(CONFIG_MEDIA100_TO_MJPEGB_BSF)     += bsf/media100_to_mjpegb.o
 OBJS-$(CONFIG_MJPEG2JPEG_BSF)             += bsf/mjpeg2jpeg.o
 OBJS-$(CONFIG_MJPEGA_DUMP_HEADER_BSF)     += bsf/mjpega_dump_header.o
