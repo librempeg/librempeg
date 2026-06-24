@@ -203,6 +203,8 @@ static int fn(drain_samples)(AVFilterContext *ctx, ChannelContext *c, const ftyp
     c->state[OUT] += size*fs;
     av_audio_fifo_drain(c->in_fifo, size);
 
+    av_log(ctx, AV_LOG_DEBUG, "D: %d | out: %d\n", size, av_audio_fifo_size(c->out_fifo));
+
     return 0;
 }
 
@@ -225,35 +227,34 @@ static int fn(expand_samples)(AVFilterContext *ctx, const int ch)
     ftype best_score = -MAXF;
     int size;
 
-    if (av_audio_fifo_size(c->in_fifo) <= 0)
-        return 0;
-
     if (!s->eof && av_audio_fifo_size(c->in_fifo) < max_period)
         return 0;
 
-    if (c->keep[IN] < max_period) {
-        size = max_period-c->keep[IN];
+    if (s->eof && av_audio_fifo_size(c->in_fifo) < max_period)
+        return fn(drain_samples)(ctx, c, fs);
+
+    if (av_audio_fifo_size(c->out_fifo) < max_period) {
+        size = max_period - av_audio_fifo_size(c->out_fifo);
         size = av_audio_fifo_read(c->in_fifo, datax, size);
         if (size > 0) {
             av_audio_fifo_write(c->out_fifo, datax, size);
             c->state[OUT] += size * fs;
-            c->keep[IN] += size;
         }
 
-        if (!s->eof && c->keep[IN] < max_period)
+        if (!s->eof && av_audio_fifo_size(c->out_fifo) < max_period)
             return 0;
 
         if (!s->eof && av_audio_fifo_size(c->in_fifo) < max_period)
             return 0;
     }
 
-    if (s->eof && av_audio_fifo_size(c->in_fifo) < max_period)
-        return fn(drain_samples)(ctx, c, fs);
-
     size = av_audio_fifo_peek_at(c->out_fifo, datax, max_period, FFMAX(av_audio_fifo_size(c->out_fifo)-max_period, 0));
     if (size < 0)
         size = 0;
     if (size < max_period) {
+        if (!s->eof)
+            return 0;
+
         const int offset = max_period - size;
 
         memmove(dptrx + offset, dptrx, size * sizeof(*dptrx));
@@ -570,6 +571,7 @@ static int fn(init_state)(AVFilterContext *ctx)
         int ret;
 
         c->keep[OUT] = s->max_period;
+        c->keep[IN] = s->max_period * (1 + (s->tempo > 1.0));
 
         c->r_data[0] = av_calloc(s->max_size+2, sizeof(ftype));
         if (!c->r_data[0])
