@@ -1858,6 +1858,27 @@ int ff_d3d12va_encode_init(AVCodecContext *avctx)
     if (!base_ctx->encode_fifo)
         return AVERROR(ENOMEM);
 
+    if (ctx->codec->write_sequence_header &&
+        avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER) {
+        char header_data[MAX_PARAM_BUFFER_SIZE];
+        size_t header_bit_len = 8 * sizeof(header_data);
+
+        err = ctx->codec->write_sequence_header(avctx, header_data, &header_bit_len);
+        if (err < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to write sequence header "
+                   "for global header: %d.\n", err);
+            goto fail;
+        }
+        avctx->extradata_size = (int)((header_bit_len + 7) / 8);
+        avctx->extradata = av_mallocz(avctx->extradata_size +
+                                      AV_INPUT_BUFFER_PADDING_SIZE);
+        if (!avctx->extradata) {
+            err = AVERROR(ENOMEM);
+            goto fail;
+        }
+        memcpy(avctx->extradata, header_data, avctx->extradata_size);
+    }
+
     return 0;
 
 fail:
