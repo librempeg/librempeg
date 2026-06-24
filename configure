@@ -2634,7 +2634,6 @@ TOOLCHAIN_FEATURES="
     as_object_arch
     asm_mod_q
     blocks_extension
-    ebp_available
     ebx_available
     gnu_as
     gnu_windres
@@ -2647,7 +2646,8 @@ TOOLCHAIN_FEATURES="
     symver_asm_label
     symver_gnu_asm
     vfp_args
-    x86_32_7regs
+    x86_6regs
+    x86_7regs
     xform_asm
     xmm_clobbers
 "
@@ -6825,27 +6825,13 @@ elif enabled x86; then
     check_builtin rdtsc    intrin.h   "__rdtsc()"
     check_builtin mm_empty mmintrin.h "_mm_empty()"
 
-    # check whether EBP is available on x86
-    # As 'i' is stored on the stack, this program will crash
-    # if the base pointer is used to access it because the
-    # base pointer is cleared in the inline assembly code.
-    check_exec_crash <<EOF && enable ebp_available
-volatile int i=0;
-__asm__ volatile ("xorl %%ebp, %%ebp" ::: "%ebp");
-return i;
-EOF
-
     # check whether EBX is available on x86
     check_inline_asm ebx_available '""::"b"(0)' &&
         check_inline_asm ebx_available '"":::"%ebx"'
 
-    # check whether 7 registers are available on x86-32
-    # Since https://github.com/llvm/llvm-project/commit/0d471b3f64d3116bd57c79d872f7384fff80daa5,
-    # Clang can save/restore EBP around clobber-only asm, so the EBP
-    # crash probe alone can be a false positive for 7-register asm.
-    disable x86_32_7regs
-    enabled_all x86_32 ebx_available ebp_available &&
-        check_inline_asm x86_32_7regs '"" :: "r"(0), "r"(1), "r"(2), "r"(3), "g"(4), "r"(5) : "%eax", "%edx"'
+    # check whether 6 and 7 registers are available on x86
+    check_inline_asm x86_6regs '"" :: "r"(0), "r"(1), "r"(2), "r"(3), "g"(4) : "%eax", "%edx"'
+    check_inline_asm x86_7regs '"" :: "r"(0), "r"(1), "r"(2), "r"(3), "g"(4), "r"(5) : "%eax", "%edx"'
 
     # check whether xmm clobbers are supported
     check_inline_asm xmm_clobbers '"":::"%xmm0"'
@@ -8094,8 +8080,6 @@ if enabled icc; then
     # 11030: Warning unknown option --as-needed
     # 10156: ignoring option '-export'; no argument required
     check_ldflags -wd10156,11030
-    # icc 11.0 and 11.1 work with ebp_available, but don't pass the test
-    enable ebp_available
     # The test above does not test linking
     [ -n "$lto" ] && disable symver_asm_label
     if enabled x86_32; then
@@ -8197,7 +8181,6 @@ elif enabled_any msvc icl; then
             add_cflags -Qansi-alias
         # Some inline asm is not compilable in debug
         if enabled debug; then
-            disable ebp_available
             disable ebx_available
         fi
     fi
@@ -8458,10 +8441,8 @@ if enabled x86; then
     echo "i686 features enabled     ${i686-no}"
     echo "CMOV is fast              ${fast_cmov-no}"
     echo "EBX available             ${ebx_available-no}"
-    echo "EBP available             ${ebp_available-no}"
-fi
-if enabled x86_32; then
-    echo "7 registers available     ${x86_32_7regs-no}"
+    echo "6 registers available     ${x86_6regs-no}"
+    echo "7 registers available     ${x86_7regs-no}"
 fi
 if enabled aarch64; then
     echo "NEON enabled              ${neon-no}"
