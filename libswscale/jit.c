@@ -65,11 +65,14 @@ void ff_sws_jit_free(void *ptr, size_t size)
 
 void *ff_sws_jit_alloc(size_t size)
 {
-    return VirtualAlloc(NULL, size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    return VirtualAlloc(NULL, size, MEM_COMMIT, PAGE_READWRITE);
 }
 
 int ff_sws_jit_protect(void *ptr, size_t size)
 {
+    DWORD old_protect;
+    if (!VirtualProtect(ptr, size, PAGE_EXECUTE_READ, &old_protect))
+        return AVERROR(EINVAL);
     return 0;
 }
 
