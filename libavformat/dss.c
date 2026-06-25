@@ -53,6 +53,7 @@ typedef struct DSSDemuxContext {
     int counter;
     int swap;
     int dss_sp_swap_byte;
+    int resync_pending;
 
     int packet_size;
     int dss_header_size;
@@ -171,6 +172,7 @@ static int dss_read_header(AVFormatContext *s)
 
     ctx->counter = 0;
     ctx->swap    = 0;
+    ctx->resync_pending = 0;
 
     return 0;
 }
@@ -179,8 +181,57 @@ static void dss_skip_audio_header(AVFormatContext *s, AVPacket *pkt)
 {
     DSSDemuxContext *ctx = s->priv_data;
     AVIOContext *pb = s->pb;
+    uint8_t header[DSS_AUDIO_BLOCK_HEADER_SIZE];
+    int offset, read_size;
 
-    avio_skip(pb, DSS_AUDIO_BLOCK_HEADER_SIZE);
+    /* Second half of the VOX-pause handling (see below): the frame that
+     * straddled into the empty block has now been completed from its
+     * leading bytes. Discard the rest of that block (padding) by
+     * aligning to the next 512-byte block boundary, then re-sync the
+     * frame grid at the following block's anchor 2*byte1 (+2 when
+     * byte-swapped), restarting the byte-swap parity from that block. */
+    if (ctx->audio_codec == DSS_ACODEC_DSS_SP && ctx->resync_pending) {
+        int64_t rel = avio_tell(pb) - ctx->dss_header_size;
+        int pad = (DSS_BLOCK_SIZE - (int)(rel % DSS_BLOCK_SIZE)) % DSS_BLOCK_SIZE;
+
+        ctx->resync_pending = 0;
+        avio_skip(pb, pad);
+        if (avio_read(pb, header, DSS_AUDIO_BLOCK_HEADER_SIZE) <
+            DSS_AUDIO_BLOCK_HEADER_SIZE) {
+            ctx->counter = 0;
+            return;
+        }
+        ctx->swap = !!(header[0] & 0x80);
+        offset    = 2 * header[1] + 2 * ctx->swap;
+        if (offset < DSS_AUDIO_BLOCK_HEADER_SIZE)
+            offset = DSS_AUDIO_BLOCK_HEADER_SIZE;
+        if (offset > DSS_BLOCK_SIZE)
+            offset = DSS_BLOCK_SIZE;
+        avio_skip(pb, offset - DSS_AUDIO_BLOCK_HEADER_SIZE);
+        ctx->counter          = DSS_BLOCK_SIZE - offset;
+        ctx->dss_sp_swap_byte = -1;
+        return;
+    }
+
+    if (avio_read(pb, header, DSS_AUDIO_BLOCK_HEADER_SIZE) <
+        DSS_AUDIO_BLOCK_HEADER_SIZE) {
+        ctx->counter = 0;
+        return;
+    }
+
+    /* Real Olympus dictation is voice-activated: a pause emits an empty
+     * block (frame_count == 0) that carries no fresh frames. Its leading
+     * bytes complete the frame that straddles into it (read normally by
+     * the caller); make the next call consume nothing more from this
+     * block, so the trailing padding is skipped and the grid re-syncs.
+     * On gap-free audio no block is empty and this never triggers. */
+    if (ctx->audio_codec == DSS_ACODEC_DSS_SP && header[2] == 0) {
+        read_size           = ctx->swap ? DSS_FRAME_SIZE - 2 : DSS_FRAME_SIZE;
+        ctx->counter        = read_size;
+        ctx->resync_pending = 1;
+        return;
+    }
+
     ctx->counter += DSS_BLOCK_SIZE - DSS_AUDIO_BLOCK_HEADER_SIZE;
 }
 
@@ -344,6 +395,7 @@ static int dss_read_seek(AVFormatContext *s, int stream_index,
     if (ret < 0)
         return ret;
     ctx->swap = !!(header[0] & 0x80);
+    ctx->resync_pending = 0;
     offset = 2*header[1] + 2*ctx->swap;
     if (offset < DSS_AUDIO_BLOCK_HEADER_SIZE)
         return AVERROR_INVALIDDATA;
