@@ -16,6 +16,7 @@ OBJS = alphablend.o                                     \
        gamma.o                                          \
        graph.o                                          \
        input.o                                          \
+       jit.o                                            \
        lut3d.o                                          \
        options.o                                        \
        output.o                                         \
