@@ -54,10 +54,12 @@ typedef struct THPMuxContext {
     uint32_t num_frames;
     uint32_t first_frame_size;
     uint32_t data_size;
-    uint32_t component_data_offset;
-    uint32_t offsets_data_offset;
-    uint32_t first_frame_offset;
-    uint32_t last_frame_offset;
+    int64_t component_data_offset;
+    int64_t offsets_data_offset;
+    int64_t first_frame_offset;
+    int64_t last_frame_offset;
+    int64_t audio_stream_duration_offset;
+    int64_t audio_stream_duration;
 
     PacketList queue;
 
@@ -106,6 +108,7 @@ static int write_header(AVFormatContext *ctx)
         } else if (par->codec_type == AVMEDIA_TYPE_AUDIO) {
             avio_wb32(pb, par->ch_layout.nb_channels);
             avio_wb32(pb, par->sample_rate);
+            thp->audio_stream_duration_offset = avio_tell(pb);
             avio_wb32(pb, ctx->streams[n]->duration);
         } else {
             return AVERROR(EINVAL);
@@ -146,8 +149,10 @@ static int write_packet(AVFormatContext *ctx, AVPacket *pkt)
 
         thp->last_frame_offset = thp->start;
 
-        if (pkt->stream_index == thp->audio_stream_index)
+        if (pkt->stream_index == thp->audio_stream_index) {
             thp->max_audio_samples = FFMAX(pkt->duration, thp->max_audio_samples);
+            thp->audio_stream_duration += pkt->duration;
+        }
 
         avio_wb32(pb, thp->prev_total_size);
         if (thp->video_stream_index == -1) {
@@ -226,6 +231,7 @@ static int write_packet(AVFormatContext *ctx, AVPacket *pkt)
             return ret;
 
         thp->max_audio_samples = FFMAX(pkt->duration, thp->max_audio_samples);
+        thp->audio_stream_duration += pkt->duration;
 
         avio_seek(pb, offset, SEEK_SET);
         avio_wb32(pb, pkt->size);
@@ -294,6 +300,9 @@ static int write_trailer(AVFormatContext *ctx)
     avio_wb32(pb, thp->offsets_data_offset);
     avio_wb32(pb, thp->first_frame_offset);
     avio_wb32(pb, thp->last_frame_offset);
+
+    avio_seek(pb, thp->audio_stream_duration_offset, SEEK_SET);
+    avio_wb32(pb, thp->audio_stream_duration);
 
     return 0;
 }
