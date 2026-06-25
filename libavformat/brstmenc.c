@@ -366,7 +366,7 @@ static int brstm_write_trailer(AVFormatContext *s)
         avio_wb32(pb, r->block_samples);
         avio_wb32(pb, r->final_block_size / r->nb_channels);
         avio_wb32(pb, r->final_block_samples);
-        avio_wb32(pb, r->final_block_size);
+        avio_wb32(pb, r->final_block_size / r->nb_channels);
     } else {
         return AVERROR(EINVAL);
     }
