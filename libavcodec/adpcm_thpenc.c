@@ -474,6 +474,8 @@ static int thp_encode(THPChannel *chs, uint8_t *dst,
 
     for (int n = 0; n < nb_samples; n++)
         input[n + 2] = samples[n];
+    for (int n = nb_samples; n < BLOCK_SAMPLES; n++)
+        input[n + 2] = 0;
 
     for (int i = 0; i < 8; i++) {
         const int16_t *coefs_in = coefs + i * 2;
