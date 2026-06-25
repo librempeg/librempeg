@@ -548,8 +548,8 @@ static int thp_encode(THPChannel *chs, uint8_t *dst,
     for (int y = 0; y < BLOCK_SIZE-1; y++)
         dst[y + 1] = ((out_samples[best_index][y * 2] & 0xF) << 4) | (out_samples[best_index][y * 2 + 1] & 0xF);
 
-    input[0] = input[BLOCK_SAMPLES];
-    input[1] = input[BLOCK_SAMPLES+1];
+    input[0] = input[nb_samples];
+    input[1] = input[nb_samples+1];
 
     return 0;
 }
