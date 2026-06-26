@@ -39,7 +39,8 @@ static int wve_read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     avio_skip(s->pb, 18);
-    st->duration           = avio_rb32(s->pb);
+    st->duration = avio_rl32(s->pb);
+    st->start_time = 0;
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_PCM_ALAW;
     st->codecpar->sample_rate = 8000;
