@@ -535,14 +535,39 @@ static int build_video_stream(AVFormatContext *s, int containers,
     CFDFD5Block *blocks = NULL;
     CFDFD5Stream *cs;
     AVStream *st;
-    int nb = 0, width = 0, height = 0;
+    int nb = 0, width = 0, height = 0, default_ticks = 0;
+    int64_t total = 0, last_mfrm = -1;
+
+    /* VFR based timing. The engine paces frames against a 60 Hz clock
+     * advancing by max(per-frame, default) ticks each frame.
+     * The movie default is MHED payload +0x1c; the per-frame
+     * override is the paired MFRM payload +0x1a (MFRM and STEP alternate in the
+     * container table, so the MFRM right before a STEP is its descriptor). */
+    for (int i = 0; i < containers; i++) {
+        if (coffs[i] <= 0 || coffs[i] + 0x20 > fsize)
+            continue;
+        if (is_id_at(pb, coffs[i] + 0x0C, MKTAG('M','H','E','D'))) {
+            avio_seek(pb, coffs[i] + 0x08 + 0x1c, SEEK_SET);
+            default_ticks = (int)avio_rl32(pb);
+            break;
+        }
+    }
+    if (default_ticks <= 0 || default_ticks > 0xffff)
+        default_ticks = 4;   /* ~15 fps fallback when absent/implausible */
 
     for (int i = 0; i < containers; i++) {
         uint32_t csize;
         CFDFD5Block *nbk;
         int64_t base;
+        int dur, mfrm_dur = 0;
 
-        if (coffs[i] <= 0 || coffs[i] + 0x428 > fsize ||
+        if (coffs[i] <= 0 || coffs[i] + 0x10 > fsize)
+            continue;
+        if (is_id_at(pb, coffs[i] + 0x0C, MKTAG('M','F','R','M'))) {
+            last_mfrm = coffs[i] + 0x08;   /* descriptor for the next STEP */
+            continue;
+        }
+        if (coffs[i] + 0x428 > fsize ||
             !is_id_at(pb, coffs[i] + 0x0C, MKTAG('S','T','E','P')))
             continue;
 
@@ -562,6 +587,14 @@ static int build_video_stream(AVFormatContext *s, int containers,
             }
         }
 
+        if (last_mfrm > 0 && last_mfrm + 0x1e <= fsize) {
+            avio_seek(pb, last_mfrm + 0x1a, SEEK_SET);
+            mfrm_dur = (int)avio_rl32(pb);
+            if (mfrm_dur < 0 || mfrm_dur > 0xffff)
+                mfrm_dur = 0;   /* implausible -> fall back to the default */
+        }
+        dur = mfrm_dur > default_ticks ? mfrm_dur : default_ticks;
+
         nbk = av_realloc_array(blocks, nb + 1, sizeof(*blocks));
         if (!nbk) {
             av_freep(&blocks);
@@ -570,7 +603,8 @@ static int build_video_stream(AVFormatContext *s, int containers,
         blocks = nbk;
         blocks[nb].offset     = base;
         blocks[nb].size       = csize;
-        blocks[nb].nb_samples = 1;   /* one frame */
+        blocks[nb].nb_samples = dur;   /* frame duration in 1/60 s ticks */
+        total += dur;
         nb++;
     }
 
@@ -592,12 +626,11 @@ static int build_video_stream(AVFormatContext *s, int containers,
     st->codecpar->width      = width;
     st->codecpar->height     = height;
     st->start_time           = 0;
-    st->duration             = nb;
+    st->duration             = total;
     st->nb_frames            = nb;
 
-    /* the container carries no explicit frame rate; 15 fps is the engine's
-     * usual playback cadence */
-    avpriv_set_pts_info(st, 64, 1, 15);
+    /* 60 Hz tick: durations above are in 1/60 s units */
+    avpriv_set_pts_info(st, 64, 1, 60);
 
     return 1;
 }
