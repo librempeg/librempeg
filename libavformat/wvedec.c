@@ -56,7 +56,7 @@ static int read_header(AVFormatContext *s)
 
 const FFInputFormat ff_wve_demuxer = {
     .p.name         = "wve",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Psion 3 audio"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Psion 3 ALaw audio"),
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
