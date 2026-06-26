@@ -75,6 +75,9 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     AVIOContext *pb = s->pb;
     int ret;
 
+    if (avio_feof(pb))
+        return AVERROR_EOF;
+
     ret = av_get_packet(pb, pkt, size);
     if (pkt->size != size)
         return AVERROR_EOF;
