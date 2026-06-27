@@ -80,8 +80,8 @@ static int sap_write_header(AVFormatContext *s)
     int udp_fd;
     AVDictionaryEntry* title = av_dict_get(s->metadata, "title", NULL, 0);
 
-    if (!ff_network_init())
-        return AVERROR(EIO);
+    if ((ret = ff_network_init()) < 0)
+        return ret;
 
     /* extract hostname and port */
     av_url_split(NULL, 0, NULL, 0, host, sizeof(host), &base_port,

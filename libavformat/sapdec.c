@@ -70,8 +70,8 @@ static int sap_read_header(AVFormatContext *s)
     int port;
     int ret, i;
 
-    if (!ff_network_init())
-        return AVERROR(EIO);
+    if ((ret = ff_network_init()) < 0)
+        return ret;
 
     av_url_split(NULL, 0, NULL, 0, host, sizeof(host), &port,
                  path, sizeof(path), s->url);

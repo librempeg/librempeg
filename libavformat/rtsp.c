@@ -1864,8 +1864,8 @@ int ff_rtsp_connect(AVFormatContext *s)
         return AVERROR(EINVAL);
     }
 
-    if (!ff_network_init())
-        return AVERROR(EIO);
+    if ((err = ff_network_init()) < 0)
+        return err;
 
     if (s->max_delay < 0) /* Not set by the caller */
         s->max_delay = s->iformat ? DEFAULT_REORDERING_DELAY : 0;
@@ -2532,8 +2532,8 @@ static int sdp_read_header(AVFormatContext *s)
     char url[MAX_URL_SIZE];
     AVBPrint bp;
 
-    if (!ff_network_init())
-        return AVERROR(EIO);
+    if ((err = ff_network_init()) < 0)
+        return err;
 
     if (s->max_delay < 0) /* Not set by the caller */
         s->max_delay = DEFAULT_REORDERING_DELAY;
@@ -2658,8 +2658,8 @@ static int rtp_read_header(AVFormatContext *s)
     AVBPrint sdp;
     AVDictionary *opts = NULL;
 
-    if (!ff_network_init())
-        return AVERROR(EIO);
+    if ((ret = ff_network_init()) < 0)
+        return ret;
 
     opts = map_to_opts(rt);
     ret = ffurl_open_whitelist(&in, s->url, AVIO_FLAG_READ,

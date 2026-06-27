@@ -123,8 +123,8 @@ static int url_alloc_for_protocol(URLContext **puc, const URLProtocol *up,
     int err;
 
 #if CONFIG_NETWORK
-    if (up->flags & URL_PROTOCOL_FLAG_NETWORK && !ff_network_init())
-        return AVERROR(EIO);
+    if (up->flags & URL_PROTOCOL_FLAG_NETWORK && (err = ff_network_init()) < 0)
+        return err;
 #endif
     if ((flags & AVIO_FLAG_READ) && !up->url_read) {
         av_log(NULL, AV_LOG_ERROR,
