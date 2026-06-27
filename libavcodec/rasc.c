@@ -718,6 +718,8 @@ static av_cold int decode_close(AVCodecContext *avctx)
 {
     RASCContext *s = avctx->priv_data;
 
+    avctx->coded_width = avctx->width + 4;
+
     av_freep(&s->cursor);
     s->cursor_size = 0;
     av_freep(&s->delta);
