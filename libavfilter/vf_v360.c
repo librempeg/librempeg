@@ -810,7 +810,7 @@ static inline int ereflectx(int x, int y, int w, int h)
 static inline int reflectx(int x, int y, int w, int h)
 {
     if (y < 0 || y >= h)
-        return w - 1 - x;
+        return av_clip(w - 1 - x, 0, w - 1);
 
     return mod(x, w);
 }
@@ -1871,9 +1871,14 @@ static int stereographic_to_xyz(const V360Context *s,
     const float theta = atanf(r) * 2.f;
     const float sin_theta = sinf(theta);
 
-    vec[0] = x / r * sin_theta;
-    vec[1] = y / r * sin_theta;
-    vec[2] = cosf(theta);
+    if (r > 0.f) {
+        vec[0] = x / r * sin_theta;
+        vec[1] = y / r * sin_theta;
+        vec[2] = cosf(theta);
+    } else {
+        vec[0] = vec[1] = 0.f;
+        vec[2] = 1.f;
+    }
 
     return 1;
 }
@@ -1975,9 +1980,14 @@ static int equisolid_to_xyz(const V360Context *s,
     const float theta = asinf(r) * 2.f;
     const float sin_theta = sinf(theta);
 
-    vec[0] = x / r * sin_theta;
-    vec[1] = y / r * sin_theta;
-    vec[2] = cosf(theta);
+    if (r > 0.f) {
+        vec[0] = x / r * sin_theta;
+        vec[1] = y / r * sin_theta;
+        vec[2] = cosf(theta);
+    } else {
+        vec[0] = vec[1] = 0.f;
+        vec[2] = 1.f;
+    }
 
     return 1;
 }
@@ -4487,6 +4497,10 @@ static int v360_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
                     out_mask = s->out_transform(s, j, i, height, width, vec);
                 else
                     out_mask = s->out_transform(s, i, j, width, height, vec);
+                if (!isfinite(vec[0]) || !isfinite(vec[1]) || !isfinite(vec[2])) {
+                    vec[0] = vec[1] = 0.f;
+                    vec[2] = 1.f;
+                }
                 offset_vector(vec, s->h_offset, s->v_offset);
                 normalize_vector(vec);
                 av_assert1(!isnan(vec[0]) && !isnan(vec[1]) && !isnan(vec[2]));
