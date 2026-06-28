@@ -177,7 +177,7 @@ static void fn(src_uninit)(AVFilterContext *ctx)
 
 static void fn(taper_init)(ctype *taper, const int N)
 {
-    long double factor = 1.0L / (1ULL << FFMAX(av_ceil_log2(N) - 10, 0));
+    long double factor = 1.0L / (1LL << FFMAX(av_ceil_log2(N) - 10, 0));
     long double scale = 0.0L;
     long double sum = 0.0L;
 
@@ -185,7 +185,7 @@ static void fn(taper_init)(ctype *taper, const int N)
         long double x = i+0.0L;
         long double t = x * (N-x);
         long double s = sqrtl(t) * factor;
-        long double v = expl(s) / (4.0L * M_PIl);
+        long double v = expl(s) * factor;
 
         scale += v;
     }
@@ -196,7 +196,7 @@ static void fn(taper_init)(ctype *taper, const int N)
         long double x = i+0.0L;
         long double t = x * (N-x);
         long double s = sqrtl(t) * factor;
-        long double v = expl(s) / (4.0L * M_PIl);
+        long double v = expl(s) * factor;
         ftype tt = sum * scale;
 
         sum += v;
