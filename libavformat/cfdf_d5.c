@@ -49,10 +49,14 @@
  * FFmpeg demuxer model has no first-class loop points, so that is not carried.
  */
 
+#include <limits.h>
+
 #include "libavutil/avstring.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/mathematics.h"
 #include "libavutil/mem.h"
 #include "libavutil/pixfmt.h"
+#include "libavutil/rational.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
@@ -632,6 +636,13 @@ static int build_video_stream(AVFormatContext *s, int containers,
     /* 60 Hz tick: durations above are in 1/60 s units */
     avpriv_set_pts_info(st, 64, 1, 60);
 
+    /* nominal average frame rate (VFR) = frames / seconds = nb*60 / total */
+    if (total > 0) {
+        AVRational fr;
+        av_reduce(&fr.num, &fr.den, (int64_t)nb * 60, total, INT_MAX);
+        st->avg_frame_rate = fr;
+    }
+
     return 1;
 }
 
@@ -865,25 +876,34 @@ end:
 
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    CFDFD5DemuxContext *c = s->priv_data;
     AVIOContext *pb = s->pb;
     CFDFD5Stream *cs;
     CFDFD5Block *blk;
     AVStream *st;
-    int ret;
+    int best = -1, ret;
+    double best_t = 0;
 
-redo:
-    if (c->cur_stream >= s->nb_streams)
-        return AVERROR_EOF;
+    /* Interleave: emit the stream whose next block has the smallest presentation
+     * time (compared across the streams' differing timebases). This keeps audio
+     * and video roughly PTS-ordered so players stay in sync and seeking works. */
+    for (int i = 0; i < s->nb_streams; i++) {
+        CFDFD5Stream *c = s->streams[i]->priv_data;
+        double t;
 
-    st = s->streams[c->cur_stream];
-    cs = st->priv_data;
-
-    if (cs->block_idx >= cs->nb_blocks) {
-        c->cur_stream++;
-        goto redo;
+        if (!c || c->block_idx >= c->nb_blocks)
+            continue;
+        t = c->pts * av_q2d(s->streams[i]->time_base);
+        if (best < 0 || t < best_t) {
+            best   = i;
+            best_t = t;
+        }
     }
 
+    if (best < 0)
+        return AVERROR_EOF;
+
+    st  = s->streams[best];
+    cs  = st->priv_data;
     blk = &cs->blocks[cs->block_idx];
 
     avio_seek(pb, blk->offset, SEEK_SET);
@@ -906,6 +926,50 @@ redo:
     return 0;
 }
 
+static int read_seek(AVFormatContext *s, int stream_index, int64_t ts, int flags)
+{
+    double target;
+
+    if (stream_index < 0)
+        target = ts / (double)AV_TIME_BASE;
+    else
+        target = ts * av_q2d(s->streams[stream_index]->time_base);
+    if (target < 0)
+        target = 0;
+
+    for (int i = 0; i < s->nb_streams; i++) {
+        AVStream *st = s->streams[i];
+        CFDFD5Stream *cs = st->priv_data;
+
+        if (!cs)
+            continue;
+
+        if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            /* STEP video is inter-coded with a single keyframe (frame 0). Any
+             * seek rewinds to it; the decoder rebuilds the reference frame
+             * forward and the generic seek discards output until the target. */
+            cs->block_idx = 0;
+            cs->pts       = 0;
+        } else {
+            /* Audio blocks are independent (each a keyframe): jump to the block
+             * containing the target time. */
+            double tb = av_q2d(st->time_base);
+            int64_t acc = 0;
+            int k = 0;
+
+            while (k < cs->nb_blocks &&
+                   (acc + cs->blocks[k].nb_samples) * tb <= target) {
+                acc += cs->blocks[k].nb_samples;
+                k++;
+            }
+            cs->block_idx = k;
+            cs->pts       = acc;
+        }
+    }
+
+    return 0;
+}
+
 static int read_close(AVFormatContext *s)
 {
     for (int i = 0; i < s->nb_streams; i++) {
@@ -924,6 +988,7 @@ const FFInputFormat ff_cfdf_d5_demuxer = {
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
+    .read_seek      = read_seek,
     .read_close     = read_close,
 };
 
