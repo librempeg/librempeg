@@ -152,6 +152,7 @@ typedef struct SharedContext {
     int read_only;
     int64_t timeout;
     int retry_errors;
+    int retry_corrupt;
     int verify;
 
     /* misc state */
@@ -627,6 +628,8 @@ retry:
             av_log(h, AV_LOG_ERROR, "Cache corruption detected for block 0x%"PRIx64" at "
                    "offset 0x%"PRIx64": expected CRC: 0x%08X, got: 0x%08X\n",
                    block_id, block_pos, state, crc);
+            if (s->retry_corrupt)
+                goto read_block;
             return AVERROR(EIO);
         }
 
@@ -643,9 +646,11 @@ retry:
         return size;
 
     case BLOCK_FAILED:
-        if (!s->retry_errors)
-            return AVERROR(EIO);
-        av_fallthrough;
+        if (s->retry_errors)
+            goto read_block;
+        return AVERROR(EIO);
+
+read_block:
     case BLOCK_NONE:
         if (s->read_only)
             break; /* don't mark block as pending */
@@ -874,6 +879,7 @@ static const AVOption options[] = {
     { "cache_verify",   "Verify correctness of the cache against the source",   OFFSET(verify),     AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, .flags = D },
     { "cache_timeout",  "Time in us to wait before re-fetching pending blocks", OFFSET(timeout),    AV_OPT_TYPE_INT64, {.i64 = 10000}, 0, INT64_MAX, .flags = D },
     { "retry_errors",   "Re-request blocks even if they previously failed", OFFSET(retry_errors),   AV_OPT_TYPE_BOOL, {.i64 = 1}, 0, 1, .flags = D },
+    { "retry_corrupt",  "Re-request blocks that fail the CRC check",        OFFSET(retry_corrupt),  AV_OPT_TYPE_BOOL, {.i64 = 1}, 0, 1, .flags = D },
     {0},
 };
 
