@@ -23,6 +23,7 @@
 #include "libavutil/avstring.h"
 #include "libavutil/mem.h"
 #include "avformat.h"
+#include "avio_internal.h"
 #include "demux.h"
 #include "internal.h"
 #include "pcm.h"
@@ -38,11 +39,14 @@
 
 typedef struct BAOStream {
     int64_t start_offset;
+    int64_t data_offset;
     int64_t stop_offset;
 
     AVFormatContext *ctx;
+    AVFormatContext *parent;
 
     AVIOContext *pb;
+    FFIOContext apb;
 } BAOStream;
 
 typedef struct ubi_bao_layer_t {
@@ -53,6 +57,36 @@ typedef struct ubi_bao_layer_t {
     int64_t extradata_offset;
     uint32_t extradata_size;
 } ubi_bao_layer_t;
+
+static int sort_streams(const void *a, const void *b)
+{
+    const AVStream *const *s1p = a;
+    const AVStream *const *s2p = b;
+    const AVStream *s1 = *s1p;
+    const AVStream *s2 = *s2p;
+    const BAOStream *bs1 = s1->priv_data;
+    const BAOStream *bs2 = s2->priv_data;
+
+    return FFDIFFSIGN(bs1->start_offset, bs2->start_offset);
+}
+
+static int read_data(void *opaque, uint8_t *buf, int buf_size)
+{
+    BAOStream *bst = opaque;
+    AVFormatContext *s = bst->parent;
+    AVIOContext *pb = bst->pb ? bst->pb : s->pb;
+
+    return avio_read(pb, buf, buf_size);
+}
+
+static int64_t seek_data(void *opaque, int64_t offset, int whence)
+{
+    BAOStream *bst = opaque;
+    AVFormatContext *s = bst->parent;
+    AVIOContext *pb = bst->pb ? bst->pb : s->pb;
+
+    return avio_seek(pb, offset + bst->start_offset, whence);
+}
 
 typedef enum { ARCHIVE_NONE = 0, ARCHIVE_ATOMIC, ARCHIVE_PK, ARCHIVE_SPK } ubi_bao_archive_t;
 typedef enum { TYPE_NONE = 0, TYPE_AUDIO, TYPE_SEQUENCE, TYPE_LAYER, TYPE_SILENCE, TYPE_IGNORED } ubi_bao_type_t;
@@ -197,6 +231,18 @@ static int read_probe(const AVProbeData *p)
     if (p->buf[1] < BAO_MIN_VERSION || p->buf[1] > BAO_MAX_VERSION)
         return 0;
     if (!av_match_ext(p->filename, "bao"))
+        return 0;
+
+    return AVPROBE_SCORE_MAX*5/11;
+}
+
+static int pk_read_probe(const AVProbeData *p)
+{
+    if (p->buf[0] != 0x01)
+        return 0;
+    if (p->buf[1] < BAO_MIN_VERSION || p->buf[1] > BAO_MAX_VERSION)
+        return 0;
+    if (!av_match_ext(p->filename, "pk"))
         return 0;
 
     return AVPROBE_SCORE_MAX*5/11;
@@ -1277,7 +1323,7 @@ static int parse_header(AVFormatContext *s, ubi_bao_header_t *bao, int64_t offse
         return AVERROR_INVALIDDATA;
     }
 
-    bao->header_offset  = offset;
+    bao->header_offset = offset;
 
     int ret = 0;
     switch (bao->cfg.parser) {
@@ -1338,9 +1384,6 @@ static int parse_bao(AVFormatContext *s, ubi_bao_header_t *bao, int64_t offset, 
         return 0;
 
     bao->total_streams++;
-    if (target_stream != bao->total_streams)
-        return 0;
-
     ret = parse_header(s, bao, offset);
     if (ret < 0)
         return ret;
@@ -1436,7 +1479,9 @@ static AVStream *open_streamfile_by_filename(AVFormatContext *s, const char *nam
         }
         st->priv_data = bst;
         bst->pb = pb;
+
         bst->start_offset = bao->is_stream ? bao->stream_skip : bao->memory_skip;
+        bst->data_offset = bst->start_offset;
         bst->stop_offset = bst->start_offset;
         bst->stop_offset += bao->prefetch_size + bao->stream_size;
 
@@ -1493,6 +1538,7 @@ static AVStream *open_streamfile_by_filename(AVFormatContext *s, const char *nam
             bst->ctx->pb = bst->pb;
             bst->ctx->io_open = NULL;
             bst->ctx->skip_initial_bytes = 0;
+            bst->parent = s;
 
             avio_seek(pb, bst->start_offset, SEEK_SET);
             ret = avformat_open_input(&bst->ctx, "", NULL, NULL);
@@ -1516,7 +1562,7 @@ static AVStream *open_streamfile_by_filename(AVFormatContext *s, const char *nam
             ffstream(st)->request_probe = 0;
             ffstream(st)->need_parsing = ffstream(bst->ctx->streams[0])->need_parsing;
 
-            bst->start_offset += avio_tell(pb);
+            bst->data_offset = bst->start_offset + avio_tell(pb);
             break;
         default:
             av_log(s, AV_LOG_ERROR, "unsupported codec %X\n", bao->codec);
@@ -1580,7 +1626,7 @@ fail:
 
 static AVStream *open_memory_bao_atomic(AVFormatContext *s, ubi_bao_header_t *bao)
 {
-    uint32_t memory_offset = bao->memory_skip;
+    int64_t memory_offset = bao->memory_skip;
     uint32_t memory_size = bao->is_prefetch ? bao->prefetch_size : bao->stream_size;
     uint32_t internal_id = bao->stream_id;
 
@@ -1599,6 +1645,239 @@ static AVStream *open_stream_bao_atomic(AVFormatContext *s, ubi_bao_header_t *ba
     return setup_atomic_bao_common(s, external_id, 1, stream_offset, stream_size);
 }
 
+static int find_package_bao(AVFormatContext *s, uint32_t target_id, int64_t *p_offset, uint32_t *p_size)
+{
+    AVIOContext *pb = s->pb;
+    avio_seek(pb, 4, SEEK_SET);
+    uint32_t index_size = avio_rl32(pb);
+    int index_entries = index_size / 0x08;
+    uint32_t index_header_size = 0x40;
+
+    int64_t offset = index_header_size + index_size;
+    for (int i = 0; i < index_entries; i++) {
+        uint32_t bao_id, bao_size;
+
+        avio_seek(pb, index_header_size + 0x08 * i, SEEK_SET);
+        bao_id = avio_rl32(pb);
+        bao_size = avio_rl32(pb);
+
+        if (bao_id == target_id) {
+            if (p_offset)
+                *p_offset = offset;
+            if (p_size)
+                *p_size = bao_size;
+            return 0;
+        }
+
+        offset += bao_size;
+    }
+
+    return AVERROR_INVALIDDATA;
+}
+
+static AVStream *open_memory_bao_package(AVFormatContext *s, ubi_bao_header_t *bao)
+{
+    AVStream *st = NULL;
+    AVIOContext *pb = s->pb;
+    int64_t memory_offset = bao->memory_skip;
+    uint32_t memory_size = bao->is_prefetch ? bao->prefetch_size : bao->stream_size;
+    uint32_t internal_id = bao->stream_id;
+    int64_t resource_offset = 0;
+    uint32_t resource_size = 0;
+    int ret;
+
+    ret = find_package_bao(s, internal_id, &resource_offset, &resource_size);
+    if (ret < 0) {
+        av_log(s, AV_LOG_ERROR, "expected internal id %08x not found in .pk\n", internal_id);
+        return NULL;
+    }
+
+    if (bao->is_prefetch && bao->prefetch_size + bao->memory_skip != resource_size) {
+        av_log(s, AV_LOG_ERROR, "unexpected prefetch size %lx vs %x\n", bao->prefetch_size + bao->memory_skip, resource_size);
+        return NULL;
+    }
+
+    memory_offset += resource_offset;
+
+    if (!bao->is_prefetch && bao->stream_size > resource_size - bao->memory_skip) {
+        av_log(s, AV_LOG_ERROR, "bad stream size found: %x + %lx vs %x\n", bao->stream_size, bao->memory_skip, resource_size);
+
+        if (bao->stream_size > resource_size + bao->header_size) {
+            av_log(s, AV_LOG_ERROR, "bad stream config at %lx\n", bao->header_offset);
+            return NULL;
+        }
+
+        memory_size = resource_size - bao->memory_skip;
+    }
+
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        goto fail;
+
+    BAOStream *bst;
+    bst = av_mallocz(sizeof(*bst));
+    if (!bst)
+        return NULL;
+    st->priv_data = bst;
+    bst->start_offset = memory_offset;
+    bst->data_offset = bst->start_offset;
+    bst->stop_offset = memory_offset;
+    bst->stop_offset += memory_size;
+
+    AVCodecParameters *par;
+    par = st->codecpar;
+    st->start_time = 0;
+    st->duration = bao->num_samples;
+    par->codec_type = AVMEDIA_TYPE_AUDIO;
+    par->sample_rate = bao->sample_rate;
+    par->ch_layout.nb_channels = bao->channels;
+
+    switch (bao->codec) {
+    case UBI_IMA:
+        par->codec_id = AV_CODEC_ID_PCM_U8;
+        par->block_align = 1024;
+        break;
+    case RAW_PSX:
+        par->codec_id = AV_CODEC_ID_ADPCM_PSX;
+        par->block_align = 0x10 * bao->channels;
+        break;
+    case RAW_PSX_new:
+        par->codec_id = AV_CODEC_ID_ADPCM_PSX;
+        par->block_align = memory_size;
+        break;
+    case FMT_AT3:
+        if (!(bst->ctx = avformat_alloc_context()))
+            return NULL;
+
+        if ((ret = ff_copy_whiteblacklists(bst->ctx, s)) < 0) {
+            avformat_free_context(bst->ctx);
+            bst->ctx = NULL;
+
+            return NULL;
+        }
+
+        ffio_init_context(&bst->apb, NULL, 0, 0, bst,
+                          read_data, NULL, seek_data);
+
+        bst->ctx->flags = AVFMT_FLAG_CUSTOM_IO | AVFMT_FLAG_GENPTS;
+        bst->ctx->probesize = 0;
+        bst->ctx->max_analyze_duration = 0;
+        bst->ctx->interrupt_callback = s->interrupt_callback;
+        bst->ctx->pb = &bst->apb.pub;
+        bst->ctx->io_open = NULL;
+        bst->ctx->skip_initial_bytes = 0;
+        bst->parent = s;
+
+        avio_seek(pb, bst->start_offset, SEEK_SET);
+        ret = avformat_open_input(&bst->ctx, "", NULL, NULL);
+        if (ret < 0)
+            return NULL;
+
+        st->id = bst->ctx->streams[0]->id;
+        st->duration = bst->ctx->streams[0]->duration;
+        st->time_base = bst->ctx->streams[0]->time_base;
+        st->start_time = bst->ctx->streams[0]->start_time;
+        st->pts_wrap_bits = bst->ctx->streams[0]->pts_wrap_bits;
+
+        ret = avcodec_parameters_copy(st->codecpar, bst->ctx->streams[0]->codecpar);
+        if (ret < 0)
+            return NULL;
+
+        ret = av_dict_copy(&st->metadata, bst->ctx->streams[0]->metadata, 0);
+        if (ret < 0)
+            return NULL;
+
+        ffstream(st)->request_probe = 0;
+        ffstream(st)->need_parsing = ffstream(bst->ctx->streams[0])->need_parsing;
+
+        bst->data_offset = avio_tell(pb);
+        break;
+    default:
+        av_log(s, AV_LOG_ERROR, "unsupported codec %X\n", bao->codec);
+        break;
+    }
+
+    avpriv_set_pts_info(st, 64, 1, par->sample_rate);
+
+    return st;
+fail:
+    return NULL;
+}
+
+static int find_package_external(AVFormatContext *s, uint32_t target_id, int64_t *p_offset,
+                                 uint32_t *p_size, uint8_t *external_name, int external_name_len)
+{
+    AVIOContext *pb = s->pb;
+    avio_seek(pb, 8, SEEK_SET);
+    uint32_t externals_offset = avio_rl32(pb);
+    avio_seek(pb, externals_offset, SEEK_SET);
+    int externals_count = avio_rl32(pb);
+    uint32_t strings_size = avio_rl32(pb);
+    int64_t offset = externals_offset + 4+4 + strings_size;
+
+    for (int i = 0; i < externals_count; i++) {
+        avio_seek(pb, offset, SEEK_SET);
+        uint32_t external_id = avio_rl32(pb);
+        int64_t name_offset = avio_rl32(pb);
+        int64_t external_offset = avio_rl32(pb);
+        uint32_t external_size = avio_rl32(pb);
+
+        if (external_id == target_id) {
+            avio_seek(pb, external_offset + 4 + 4 + name_offset, SEEK_SET);
+            avio_get_str(pb, 255, external_name, external_name_len);
+            if (strlen(external_name) <= 0)
+                break;
+
+            if (p_offset)
+                *p_offset = external_offset;
+            if (p_size)
+                *p_size = external_size;
+            return 0;
+        }
+
+        offset += 0x10;
+    }
+
+    return AVERROR_INVALIDDATA;
+}
+
+static AVStream *open_stream_bao_package(AVFormatContext *s, ubi_bao_header_t *bao)
+{
+    AVStream *temp_st = NULL;
+    uint32_t stream_offset = bao->stream_skip;
+    uint32_t stream_size = bao->stream_size - bao->prefetch_size;
+    uint32_t external_id = bao->stream_id;
+    uint8_t external_name[256] = {0};
+    int64_t resource_offset = 0;
+    uint32_t resource_size = 0;
+    int ret;
+
+    ret = find_package_external(s, external_id, &resource_offset, &resource_size, external_name, sizeof(external_name));
+    if (ret < 0) {
+        av_log(s, AV_LOG_ERROR, "expected resource id %08x not found in .pk\n", external_id);
+        goto fail;
+    }
+
+    if (bao->stream_size != resource_size - bao->stream_skip + bao->prefetch_size) {
+        av_log(s, AV_LOG_ERROR, "stream vs resource size mismatch (res %x vs str=%x, skip=%lx, pre=%x)\n", resource_size, bao->stream_size, bao->stream_skip, bao->prefetch_size);
+
+        if (!bao->cfg.audio_ignore_external_size && bao->prefetch_size)
+            goto fail;
+    }
+
+    temp_st = open_streamfile_by_filename(s, external_name);
+    if (!temp_st) {
+        av_log(s, AV_LOG_ERROR, "external file '%s' not found (put together)\n", external_name);
+        goto fail;
+    }
+
+    stream_offset += resource_offset;
+
+    return temp_st;
+fail:
+    return NULL;
+}
+
 static AVStream *ubi_bao_layer(AVFormatContext *s, ubi_bao_header_t *bao)
 {
     uint32_t real_stream_size = bao->stream_size - bao->prefetch_size;
@@ -1606,11 +1885,19 @@ static AVStream *ubi_bao_layer(AVFormatContext *s, ubi_bao_header_t *bao)
     int load_stream = (bao->is_stream && !bao->is_prefetch) || (bao->is_prefetch && real_stream_size != 0);
     AVStream *st = NULL;
 
-    if (bao->archive == ARCHIVE_ATOMIC) {
+    switch (bao->archive) {
+    case ARCHIVE_ATOMIC:
         if (load_memory)
             st = open_memory_bao_atomic(s, bao);
         else if (load_stream)
             st = open_stream_bao_atomic(s, bao);
+        break;
+    case ARCHIVE_PK:
+        if (load_memory)
+            st = open_memory_bao_package(s, bao);
+        else if (load_stream)
+            st = open_stream_bao_package(s, bao);
+        break;
     }
 
     if (!st)
@@ -1674,6 +1961,93 @@ static int read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 }
 
+static int parse_pk(AVFormatContext *s, ubi_bao_header_t *bao)
+{
+    uint32_t version, index_size;
+    AVIOContext *pb = s->pb;
+    int ret;
+
+    version = avio_rb32(pb) & 0x00FFFFFF;
+    index_size = avio_rl32(pb);
+
+    ret = ubi_bao_config_version(s, &bao->cfg, version);
+    if (ret < 0)
+        return ret;
+
+    int index_entries = index_size / 8;
+    uint32_t index_header_size = 0x40;
+    int64_t bao_offset;
+
+    if (index_size > 80000) {
+        av_log(s, AV_LOG_ERROR, "index too big\n");
+        return AVERROR_INVALIDDATA;
+    }
+
+    bao_offset = index_header_size + index_size;
+    for (int i = 0; i < index_entries; i++) {
+        avio_seek(pb, index_header_size + 0x08 * i + 0x04, SEEK_SET);
+        uint32_t bao_size = avio_rl32(pb);
+
+        ret = parse_bao(s, bao, bao_offset, i+1);
+        if (ret < 0)
+            return ret;
+
+        switch (bao->type) {
+        case TYPE_LAYER:
+        case TYPE_AUDIO:
+            ubi_bao_layer(s, bao);
+            break;
+        case TYPE_SEQUENCE:
+            //st = ubi_bao_sequence(s, bao);
+            //break;
+        case TYPE_SILENCE:
+            break;
+        default:
+            av_log(s, AV_LOG_DEBUG, "stream not found/parsed\n");
+        }
+
+        bao_offset += bao_size;
+    }
+
+    return 0;
+}
+
+static int pk_read_header(AVFormatContext *s)
+{
+    UBIBAODemuxContext *b = s->priv_data;
+    ubi_bao_header_t *bao = &b->bao;
+    AVIOContext *pb = s->pb;
+    int ret;
+
+    if (avio_r8(pb) != 0x01)
+        return AVERROR_INVALIDDATA;
+
+    avio_seek(pb, 0, SEEK_SET);
+    bao->archive = ARCHIVE_PK;
+
+    ret = parse_pk(s, bao);
+    if (ret < 0)
+        return ret;
+
+    if (s->nb_streams > 0) {
+        qsort(s->streams, s->nb_streams, sizeof(AVStream *), sort_streams);
+        for (int n = 0; n < s->nb_streams; n++) {
+            AVStream *st = s->streams[n];
+
+            st->index = n;
+        }
+
+        AVStream *st = s->streams[0];
+        BAOStream *bst = st->priv_data;
+
+        avio_seek(pb, bst->data_offset, SEEK_SET);
+
+        return 0;
+    }
+
+    return AVERROR_INVALIDDATA;
+}
+
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     UBIBAODemuxContext *bao = s->priv_data;
@@ -1695,7 +2069,7 @@ redo:
         return AVERROR_EOF;
 
     if (do_seek)
-        avio_seek(pb, bst->start_offset, SEEK_SET);
+        avio_seek(pb, bst->data_offset, SEEK_SET);
 
     if (avio_tell(pb) >= bst->stop_offset) {
         do_seek = 1;
@@ -1742,13 +2116,13 @@ static int read_seek(AVFormatContext *s, int stream_index,
 
     if (bst->ctx) {
         ret = av_seek_frame(bst->ctx, 0, ts, flags);
-        avio_skip(pb, bao->bao.is_stream ? bao->bao.stream_skip : bao->bao.memory_skip);
+        //avio_skip(pb, bao->bao.is_stream ? bao->bao.stream_skip : bao->bao.memory_skip);
         return ret;
     }
 
     pos = avio_tell(pb);
-    if (pos < bst->start_offset) {
-        avio_seek(pb, bst->start_offset, SEEK_SET);
+    if (pos < bst->data_offset) {
+        avio_seek(pb, bst->data_offset, SEEK_SET);
         return 0;
     }
 
@@ -1776,11 +2150,8 @@ static int read_close(AVFormatContext *s)
         AVStream *st = s->streams[i];
         BAOStream *bst = st->priv_data;
 
-        if (bst->ctx)
-            avformat_close_input(&bst->ctx);
-        else
-            s->io_close2(s, bst->pb);
-        bst->pb = NULL;
+        avformat_close_input(&bst->ctx);
+        s->io_close2(s, bst->pb);
     }
 
     return 0;
@@ -1794,6 +2165,19 @@ const FFInputFormat ff_ubibao_demuxer = {
     .priv_data_size = sizeof(UBIBAODemuxContext),
     .read_probe     = read_probe,
     .read_header    = read_header,
+    .read_packet    = read_packet,
+    .read_seek      = read_seek,
+    .read_close     = read_close,
+};
+
+const FFInputFormat ff_ubipk_demuxer = {
+    .p.name         = "ubipk",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Ubisoft PK"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
+    .p.extensions   = "pk,lpk,cpk",
+    .priv_data_size = sizeof(UBIBAODemuxContext),
+    .read_probe     = pk_read_probe,
+    .read_header    = pk_read_header,
     .read_packet    = read_packet,
     .read_seek      = read_seek,
     .read_close     = read_close,
