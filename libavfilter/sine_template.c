@@ -143,12 +143,12 @@ static void fn(output_samples)(AVFilterContext *ctx, AVFrame *frame)
             stype u = beep_osc->u;
             stype v = beep_osc->v;
 
-            for (int i = 0; i < nb_samples; i++) {
+            for (int j = 0; j < nb_samples; j++) {
                 if (s->beep_index < s->beep_length) {
 #if DEPTH == 16 || DEPTH == 32
-                    samples[i] += u >> 2;
+                    samples[j] += u >> 2;
 #else
-                    samples[i] += u * F(0.25);
+                    samples[j] += u * F(0.25);
 #endif
                     w = u - MULT(k1, v);
                     v += MULT(k2, w);
