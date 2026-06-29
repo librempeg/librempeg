@@ -68,18 +68,14 @@ $(FATE_AC3) $(FATE_EAC3): CMP = oneoff
 FATE_AC3-$(call  PCM, AC3,  AC3 AC3_FIXED, PCM_S16LE_MUXER ARESAMPLE_FILTER)  += $(FATE_AC3)
 FATE_EAC3-$(call PCM, EAC3, EAC3,          PCM_S16LE_MUXER ARESAMPLE_FILTER) += $(FATE_EAC3)
 
-FATE_AC3-$(call ENCDEC, AC3, AC3, WAV_MUXER WAV_DEMUXER ARESAMPLE_FILTER PCM_S16LE_ENCODER PIPE_PROTOCOL) += fate-ac3-encode
-fate-ac3-encode: CMD = enc_dec_pcm ac3 wav s16le $(subst $(SAMPLES),$(TARGET_SAMPLES),$(REF)) -c:a ac3 -b:a 128k
-fate-ac3-encode: CMP_SHIFT = -1024
+FATE_AC3-$(call ENCDEC, AC3, MP4 MOV, WAV_MUXER WAV_DEMUXER ARESAMPLE_FILTER PCM_S16LE_ENCODER PIPE_PROTOCOL) += fate-ac3-encode
+fate-ac3-encode: CMD = enc_dec_pcm mp4 wav s16le $(subst $(SAMPLES),$(TARGET_SAMPLES),$(REF)) -c:a ac3 -b:a 128k
 fate-ac3-encode: CMP_TARGET = 404.53
-fate-ac3-encode: SIZE_TOLERANCE = 488
 
 
-FATE_EAC3-$(call ENCDEC, EAC3, EAC3, WAV_MUXER WAV_DEMUXER ARESAMPLE_FILTER PCM_S16LE_ENCODER PIPE_PROTOCOL) += fate-eac3-encode
-fate-eac3-encode: CMD = enc_dec_pcm eac3 wav s16le $(subst $(SAMPLES),$(TARGET_SAMPLES),$(REF)) -c:a eac3 -b:a 128k
-fate-eac3-encode: CMP_SHIFT = -1024
+FATE_EAC3-$(call ENCDEC, EAC3, MP4 MOV, WAV_MUXER WAV_DEMUXER ARESAMPLE_FILTER PCM_S16LE_ENCODER PIPE_PROTOCOL) += fate-eac3-encode
+fate-eac3-encode: CMD = enc_dec_pcm mp4 wav s16le $(subst $(SAMPLES),$(TARGET_SAMPLES),$(REF)) -c:a eac3 -b:a 128k
 fate-eac3-encode: CMP_TARGET = 516.94
-fate-eac3-encode: SIZE_TOLERANCE = 488
 
 fate-ac3-encode fate-eac3-encode: CMP = stddev
 fate-ac3-encode fate-eac3-encode: REF = $(SAMPLES)/audio-reference/luckynight_2ch_44kHz_s16.wav
