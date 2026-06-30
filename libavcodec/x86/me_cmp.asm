@@ -822,7 +822,7 @@ VSAD_APPROX 16, u
 ; the subtraction.  The shifted columns are derived from the unshifted word
 ; vectors, so no out-of-bounds loads are made.
 ; %1: V columns 0-7,  %2: V columns 8-15
-; %3: V columns 1-8,  %4: V columns 9-16 (column 16 is zero)
+; %3: 0w followed by V columns 0-6,  %4: V columns 7-15
 ; %5: scratch register, its contents are irrelevant
 %macro LOAD_V16 5
     movu      %1, [pix1q]
@@ -833,19 +833,19 @@ VSAD_APPROX 16, u
     punpcklbw %3, %5
     psubw     %1, %3            ; V columns 0-7
     psubw     %2, %4            ; V columns 8-15
-    palignr   %3, %2, %1, 2     ; V columns 1-8
-    psrldq    %4, %2, 2         ; V columns 9-16
+    pslldq    %3, %1, 2         ; 0w followed by V columns 0-6
+    palignr   %4, %2, %1, 14    ; V columns 7-14
 %endmacro
 
 ; Same as LOAD_V16 for one row of 8 pixels.
-; %1: V columns 0-7, %2: V columns 1-8 (column 8 is zero), %3: scratch register
+; %1: V columns 0-7, %2: 0w followed by V columns 0-6, %3: scratch register
 %macro LOAD_V8 3
     movq      %1, [pix1q]
     movq      %2, [pix2q]
     punpcklbw %1, %3
     punpcklbw %2, %3
     psubw     %1, %2            ; V columns 0-7
-    psrldq    %2, %1, 2         ; V columns 1-8
+    pslldq    %2, %1, 2         ; 0w, V columns 0-6
 %endmacro
 
 ; Accumulate abs(%5 - mid_pred(%2, %3, %2 + %3 - %4)) into %1, using
@@ -866,30 +866,27 @@ VSAD_APPROX 16, u
 %endmacro
 
 ; Accumulate one row's cost from the previous and current row vectors.
-; %1-%4: previous row V (columns 0-7, 8-15, 1-8, 9-16)
-; %5-%8: current  row V (columns 0-7, 8-15, 1-8, 9-16), loaded here
-; m0-m2 are the accumulators, m11/m12 temporaries, m14 scratch.  The top
+; %1-%4: previous row V (columns 0-7, 8-15, 0-6, 7-14)
+; %5-%8: current  row V (columns 0-7, 8-15, 0-6, 7-14), loaded here
+; m0 is the accumulator, m11/m12 temporaries, m14 scratch.  The top
 ; predictors %3/%4 are consumed by MEDIAN_ABS_ACC, but they belong to the
 ; previous row and are reloaded before being needed again.
 %macro PROCESS_ROW16 8
     LOAD_V16  %5, %6, %7, %8, m14
     add       pix1q, strideq
     add       pix2q, strideq
-    ; column 0: abs(V(0) - V(-stride))
-    psubw     m11, %5, %1
-    pabsw     m11, m11
-    paddw     m2, m11
-    ; columns 1-8 and 9-16
-    MEDIAN_ABS_ACC m0, %3, %5, %1, %7, m11, m12
-    MEDIAN_ABS_ACC m1, %4, %6, %2, %8, m11, m12
+    ; columns 0-7; no special case for the first element lacking
+    ; left and top-left predictors is needed here: The left vectors
+    ; have 0 as first element which leads to the desired result.
+    MEDIAN_ABS_ACC m0, %1, %7, %3, %5, m11, m12
+    ; columns 8-15
+    MEDIAN_ABS_ACC m0, %2, %8, %4, %6, m11, m12
 %endmacro
 
 ; Register layout:
-;   m0  accumulator for columns 1-8
-;   m1  accumulator for columns 9-16 (the last word is discarded at the end)
-;   m2  accumulator for column 0 (only the first word is used)
-;   m3-m6   one row's V (columns 0-7, 8-15, 1-8, 9-16)
-;   m7-m10  the other row's V (columns 0-7, 8-15, 1-8, 9-16)
+;   m0  accumulator
+;   m3-m6   one row's V (columns 0-7, 8-15, 0-6, 7-14)
+;   m7-m10  the other row's V (columns 0-7, 8-15, 0-6, 7-14)
 ;   m11, m12 temporaries
 ;   m14 scratch register for LOAD_V16
 ; The loop is unrolled by two so the two register sets alternate the roles of
@@ -901,11 +898,11 @@ cglobal median_sad16, 5, 5, 15, v, pix1, pix2, stride, h
     add       pix2q, strideq
 
     ; first row: abs(V(0)) + sum of abs(V(j) - V(j-1))
-    pabsw     m2, m3
     psubw     m0, m5, m3
     pabsw     m0, m0
     psubw     m1, m6, m4
     pabsw     m1, m1
+    paddw     m0, m1
 
     sub       hd, 1
     jle       .end
@@ -917,15 +914,8 @@ cglobal median_sad16, 5, 5, 15, v, pix1, pix2, stride, h
     sub       hd, 1
     jg        .loop
 .end:
-    ; column 16 lies outside of the block and column 0 only contributes its
-    ; first word; the kept columns may end up in any lane since the final sum
-    ; is horizontal anyway
-    pslldq    m1, 2
-    pslldq    m2, 14
-    paddw     m0, m1
-    paddw     m0, m2
-    ; the per-word sums are at most 16 * 510, but their total needs more than
-    ; 16 bits: widen to dwords before the horizontal sum
+    ; the per-word sums are at most 2 * 16 * 510, but their total may need
+    ; more than 16 bits: widen to dwords before the horizontal sum
     pxor      m1, m1
     punpckhwd m12, m0, m1
     punpcklwd m0, m1
@@ -939,26 +929,23 @@ INIT_XMM ssse3
 MEDIAN_SAD16
 
 ; Accumulate one row's cost from the previous and current row vectors.
-; %1: previous row V columns 0-7, %2: previous row V columns 1-8
-; %3: current  row V columns 0-7, %4: current  row V columns 1-8 (loaded here)
-; m0/m1 are the accumulators, m7/m8 temporaries, m9 scratch.
+; %1: previous row V columns 0-7, %2: previous row V columns 0-6
+; %3: current  row V columns 0-7, %4: current  row V columns 0-6 (loaded here)
+; m0 is the accumulator, m7/m8 temporaries, m9 scratch.
 %macro PROCESS_ROW8 4
     LOAD_V8   %3, %4, m9
     add       pix1q, strideq
     add       pix2q, strideq
-    ; column 0: abs(V(0) - V(-stride))
-    psubw     m7, %3, %1
-    pabsw     m7, m7
-    paddw     m1, m7
-    ; columns 1-8
-    MEDIAN_ABS_ACC m0, %2, %3, %1, %4, m7, m8
+    ; No special case for the first element lacking left and top-left
+    ; predictors is needed here: The left vectors have 0 as first element
+    ; which leads to the desired result.
+    MEDIAN_ABS_ACC m0, %1, %4, %2, %3, m7, m8
 %endmacro
 
 ; Register layout:
-;   m0  accumulator for columns 1-8 (the last word is discarded at the end)
-;   m1  accumulator for column 0 (only the first word is used)
-;   m2, m3  one row's V (columns 0-7, 1-8)
-;   m5, m6  the other row's V (columns 0-7, 1-8)
+;   m0  accumulator for columns 0-7
+;   m2, m3  one row's V (columns 0-7, 0-6)
+;   m5, m6  the other row's V (columns 0-7, 0-6)
 ;   m7, m8 temporaries
 ;   m9  scratch register for LOAD_V8
 ; As in median_sad16 the loop is unrolled by two so the two register sets
@@ -970,8 +957,7 @@ cglobal median_sad8, 5, 5, 10, v, pix1, pix2, stride, h
     add       pix2q, strideq
 
     ; first row: abs(V(0)) + sum of abs(V(j) - V(j-1))
-    pabsw     m1, m2
-    psubw     m0, m3, m2
+    psubw     m0, m2, m3
     pabsw     m0, m0
 
     sub       hd, 1
@@ -984,12 +970,6 @@ cglobal median_sad8, 5, 5, 10, v, pix1, pix2, stride, h
     sub       hd, 1
     jg        .loop
 .end:
-    ; column 8 lies outside of the block and column 0 only contributes its
-    ; first word; the kept columns may end up in any lane since the final sum
-    ; is horizontal anyway
-    pslldq    m0, 2
-    pslldq    m1, 14
-    paddw     m0, m1
     pxor      m4, m4
     punpckhwd m7, m0, m4
     punpcklwd m0, m4
