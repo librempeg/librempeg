@@ -27,12 +27,12 @@
 
 #include "checkasm.h"
 
-static void fill_random(uint8_t *tab, int size)
+static void fill_random(uint8_t *tab, size_t size)
 {
-    int i;
-    for (i = 0; i < size; i++) {
-        tab[i] = rnd() % 256;
-    }
+    for (size_t i = 0; i < (size & ~3); i += 4)
+        AV_WN32A(tab + i, rnd());
+    for (size_t i = size & ~3; i < size; ++i)
+        tab[i] = rnd();
 }
 
 static void test_motion(const char *name, me_cmp_func test_func)
@@ -61,10 +61,10 @@ static void test_motion(const char *name, me_cmp_func test_func)
     }
 
     /* test correctness */
-    fill_random(img1, WIDTH * HEIGHT);
-    fill_random(img2, WIDTH * HEIGHT);
-
     if (check_func(test_func, "%s", name)) {
+        fill_random(img1, WIDTH * HEIGHT);
+        fill_random(img2, WIDTH * HEIGHT);
+
         for (i = 0; i < ITERATIONS; i++) {
             x = rnd() % (WIDTH - look_ahead);
             y = rnd() % (HEIGHT - look_ahead);
