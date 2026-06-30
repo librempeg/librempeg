@@ -124,11 +124,13 @@ static void check_motion(void)
             test_motion(buf, me_ctx.pix_abs[i][j]);
         }
     }
+    report("pix_abs");
 
 #define XX(me_cmp_array)                                                        \
     for (int i = 0; i < FF_ARRAY_ELEMS(me_ctx.me_cmp_array); i++) {             \
         snprintf(buf, sizeof(buf), #me_cmp_array "_%d", i);                     \
         test_motion(buf, me_ctx.me_cmp_array[i]);                               \
+        report(#me_cmp_array);                                                  \
     }
     ME_CMP_1D_ARRAYS(XX)
 #undef XX
@@ -137,5 +139,4 @@ static void check_motion(void)
 void checkasm_check_motion(void)
 {
     check_motion();
-    report("motion");
 }
