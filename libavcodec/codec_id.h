@@ -339,6 +339,7 @@ enum AVCodecID {
     AV_CODEC_ID_BVC2,
     AV_CODEC_ID_JPEGXS,
     AV_CODEC_ID_ACTIMAGINE_VX,
+    AV_CODEC_ID_CFDF_D5_VIDEO,
 
     /* various PCM "codecs" */
     AV_CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
@@ -469,6 +470,7 @@ enum AVCodecID {
     AV_CODEC_ID_ADPCM_IMA_XBOX_MONO,
     AV_CODEC_ID_ADPCM_IMA_FSB,
     AV_CODEC_ID_ADPCM_IMA_AWC,
+    AV_CODEC_ID_ADPCM_CFDF_D5,
 
     /* AMR */
     AV_CODEC_ID_AMR_NB = 0x12000,
