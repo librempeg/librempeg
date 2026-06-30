@@ -20,6 +20,7 @@
  */
 
 #include "libavutil/attributes.h"
+#include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
 #include "audio_frame_queue.h"
 #include "encode.h"
@@ -44,13 +45,23 @@ av_cold void ff_af_queue_close(AudioFrameQueue *afq)
 int ff_af_queue_add(AudioFrameQueue *afq, const AVFrame *f)
 {
     AudioFrame *new = av_fast_realloc(afq->frames, &afq->frame_alloc, sizeof(*afq->frames)*(afq->frame_count+1));
+    const AVFrameSideData *sd;
+    int nb_samples = f->nb_samples;
+
     if(!new)
         return AVERROR(ENOMEM);
     afq->frames = new;
     new += afq->frame_count;
 
+    sd = av_frame_side_data_get(f->side_data, f->nb_side_data, AV_FRAME_DATA_SKIP_SAMPLES);
+    if (sd && sd->size >= 10) {
+        int discard_padding = AV_RL32(sd->data + 4);
+        if (discard_padding > 0 && discard_padding < nb_samples)
+            nb_samples -= discard_padding;
+    }
+
     /* get frame parameters */
-    new->duration = f->nb_samples;
+    new->duration = nb_samples;
     new->duration += afq->remaining_delay;
     if (f->pts != AV_NOPTS_VALUE) {
         new->pts = av_rescale_q(f->pts,
@@ -65,7 +76,7 @@ int ff_af_queue_add(AudioFrameQueue *afq, const AVFrame *f)
     afq->remaining_delay = 0;
 
     /* add frame sample count */
-    afq->remaining_samples += f->nb_samples;
+    afq->remaining_samples += nb_samples;
 
     afq->frame_count++;
 
