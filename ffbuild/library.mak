@@ -64,13 +64,13 @@ install-libs-$(CONFIG_SHARED): install-lib$(NAME)-shared
 
 define RULES
 $(TOOLS):     THISLIB = $(FULLNAME:%=$(LD_LIB))
-$(TESTPROGS): THISLIB = $(SUBDIR)$(LIBNAME)
+$(TESTPROGS) $(DEVPROGS): THISLIB = $(SUBDIR)$(LIBNAME)
 
 $(NAME)LINK_EXE_ARGS = $(LDFLAGS) $(LDEXEFLAGS)
 $(NAME)LINK_SO_ARGS = $(SHFLAGS) $(LDFLAGS) $(LDSOFLAGS)
 $(NAME)LINK_EXTRA = $(FFEXTRALIBS)
 
-$(TESTPROGS) $(TOOLS): %$(EXESUF): %.o
+$(DEVPROGS) $(TESTPROGS) $(TOOLS): %$(EXESUF): %.o
 	$$(call LINK,$$(call $(NAME)LINK_EXE_ARGS) $$(LD_O) $$(filter %.o,$$^) $$(THISLIB) $$(call $(NAME)LINK_EXTRA) $$(EXTRALIBS-$$(*F)) $$(ELIBS))
 
 $(SUBDIR)lib$(NAME).version: $(SUBDIR)version.h $(SUBDIR)version_major.h | $(SUBDIR)
@@ -153,6 +153,6 @@ endef
 $(eval $(RULES))
 
 $(TOOLS):     $(DEP_LIBS) $(SUBDIR)$($(CONFIG_SHARED:yes=S)LIBNAME)
-$(TESTPROGS): $(DEP_LIBS) $(SUBDIR)$(LIBNAME)
+$(TESTPROGS) $(DEVPROGS): $(DEP_LIBS) $(SUBDIR)$(LIBNAME)
 
 testprogs: $(TESTPROGS)

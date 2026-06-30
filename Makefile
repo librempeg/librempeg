@@ -106,7 +106,7 @@ ffbuild/.config: $(CONFIGURABLE_COMPONENTS)
 	@-printf '\nWARNING: $(?) newer than config_components.h, rerun configure\n\n'
 	@-tput sgr0 2>/dev/null
 
-SUBDIR_VARS := CLEANFILES FFLIBS HOSTPROGS TESTPROGS TOOLS               \
+SUBDIR_VARS := CLEANFILES FFLIBS DEVPROGS HOSTPROGS TESTPROGS TOOLS      \
                HEADERS ARCH_HEADERS BUILT_HEADERS SKIPHEADERS            \
                ARMV5TE-OBJS ARMV6-OBJS ARMV8-OBJS VFP-OBJS NEON-OBJS     \
                ALTIVEC-OBJS VSX-OBJS X86ASM-OBJS                         \
@@ -204,8 +204,8 @@ endif
 config:
 	$(SRC_PATH)/configure $(value FFMPEG_CONFIGURATION)
 
-build: all alltools examples testprogs
-check: all alltools examples testprogs fate
+build: all alltools devprogs examples testprogs
+check: all alltools devprogs examples testprogs fate
 
 include $(SRC_PATH)/tests/Makefile
 
