@@ -2118,6 +2118,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("Actimagine VX Video"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_CFDF_D5_VIDEO,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "cfdf_d5_video",
+        .long_name = NULL_IF_CONFIG_SMALL("CFDF D5 (Cyberflix DreamFactory v5) video"),
+        .props     = AV_CODEC_PROP_LOSSLESS,
+    },
 
     /* various PCM "codecs" */
     {
@@ -2988,6 +2995,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "adpcm_ima_awc",
         .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA AWC"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_CFDF_D5,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_cfdf_d5",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM Cyberflix DreamFactory D5 (v5)"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 
