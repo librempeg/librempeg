@@ -45,8 +45,34 @@ typedef enum SwsPixelType {
 } SwsPixelType;
 
 const char *ff_sws_pixel_type_name(SwsPixelType type);
-int ff_sws_pixel_type_size(SwsPixelType type) av_const;
-bool ff_sws_pixel_type_is_int(SwsPixelType type) av_const;
+
+static inline av_const int ff_sws_pixel_type_size(SwsPixelType type)
+{
+    switch (type) {
+    case SWS_PIXEL_U8:  return sizeof(uint8_t);
+    case SWS_PIXEL_U16: return sizeof(uint16_t);
+    case SWS_PIXEL_U32: return sizeof(uint32_t);
+    case SWS_PIXEL_F32: return sizeof(float);
+    case SWS_PIXEL_NONE: break;
+    case SWS_PIXEL_TYPE_NB: break;
+    }
+    return 0;
+}
+
+static inline av_const bool ff_sws_pixel_type_is_int(SwsPixelType type)
+{
+    switch (type) {
+    case SWS_PIXEL_U8:
+    case SWS_PIXEL_U16:
+    case SWS_PIXEL_U32:
+        return true;
+    case SWS_PIXEL_F32:
+        return false;
+    case SWS_PIXEL_NONE:
+    case SWS_PIXEL_TYPE_NB: break;
+    }
+    return false;
+}
 
 typedef union SwsPixel {
     char data[4];

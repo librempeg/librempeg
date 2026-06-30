@@ -68,38 +68,6 @@ const char *ff_sws_pixel_type_name(SwsPixelType type)
     return "ERR";
 }
 
-int ff_sws_pixel_type_size(SwsPixelType type)
-{
-    switch (type) {
-    case SWS_PIXEL_U8:  return sizeof(uint8_t);
-    case SWS_PIXEL_U16: return sizeof(uint16_t);
-    case SWS_PIXEL_U32: return sizeof(uint32_t);
-    case SWS_PIXEL_F32: return sizeof(float);
-    case SWS_PIXEL_NONE: break;
-    case SWS_PIXEL_TYPE_NB: break;
-    }
-
-    av_unreachable("Invalid pixel type!");
-    return 0;
-}
-
-bool ff_sws_pixel_type_is_int(SwsPixelType type)
-{
-    switch (type) {
-    case SWS_PIXEL_U8:
-    case SWS_PIXEL_U16:
-    case SWS_PIXEL_U32:
-        return true;
-    case SWS_PIXEL_F32:
-        return false;
-    case SWS_PIXEL_NONE:
-    case SWS_PIXEL_TYPE_NB: break;
-    }
-
-    av_unreachable("Invalid pixel type!");
-    return false;
-}
-
 const char *ff_sws_op_type_name(SwsOpType op)
 {
     switch (op) {
