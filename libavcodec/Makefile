@@ -1413,6 +1413,7 @@ SKIPHEADERS                            += %_tablegen.h                  \
                                           %_tables.h                    \
                                           tableprint.h                  \
                                           tableprint_vlc.h              \
+                                          aaccoder_nmr.h                \
                                           aaccoder_twoloop.h            \
                                           aaccoder_trellis.h            \
                                           aacenc_quantization.h         \
