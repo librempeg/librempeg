@@ -59,6 +59,8 @@
  */
 #define HASH_METHOD    "SHA512/256"
 #define HASH_SIZE      32
+#define HEADER_MAGIC   MKTAG(u'\xFF', 'S', 'h', '$')
+#define HEADER_VERSION 3
 
 static int hash_uri(uint8_t hash[HASH_SIZE], const char *uri)
 {
@@ -67,8 +69,10 @@ static int hash_uri(uint8_t hash[HASH_SIZE], const char *uri)
     if (ret < 0)
         return ret;
 
+    const int16_t version = HEADER_VERSION;
     av_assert0(av_hash_get_size(ctx) == HASH_SIZE);
     av_hash_init(ctx);
+    av_hash_update(ctx, (const uint8_t *) &version, sizeof(version));
     av_hash_update(ctx, (const uint8_t *) uri, strlen(uri));
     av_hash_final(ctx, hash);
     av_hash_freep(&ctx);
@@ -77,9 +81,6 @@ static int hash_uri(uint8_t hash[HASH_SIZE], const char *uri)
         hash[i] = hash[i] ? hash[i] : ~hash[i]; /* prevent zero bytes */
     return 0;
 }
-
-#define HEADER_MAGIC   MKTAG(u'\xFF', 'S', 'h', '$')
-#define HEADER_VERSION 3
 
 enum BlockState {
     /* Reserved block state values */
