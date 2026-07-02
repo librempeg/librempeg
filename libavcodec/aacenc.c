@@ -1598,8 +1598,8 @@ static av_cold int aac_encode_init(AVCodecContext *avctx)
         /* For NMR, the rate to bandwidth conversion was tuned to maximize metrics
          * over a variable cutoff x bitrate combo */
         if (s->options.coder == AAC_CODER_NMR && frame_br >= 32000) {
-            static const int rates[] = { 32000, 48000, 64000, 96000 };
-            static const int bws[]   = { 14000, 15000, 16000, 18000 };
+            static const int rates[] = { 32000, 48000, 64000, 96000, 192000 };
+            static const int bws[]   = { 14000, 15000, 16000, 18000, 20000 };
             int bw_i = 0;
             for (; bw_i < FF_ARRAY_ELEMS(rates) - 2 && frame_br > rates[bw_i + 1]; bw_i++);
             s->bandwidth = bws[bw_i] + (int)((int64_t)(bws[bw_i + 1] - bws[bw_i]) *
