@@ -528,7 +528,8 @@ OBJS-$(CONFIG_INDEO5_DECODER)          += indeo5.o ivi.o
 OBJS-$(CONFIG_INTERPLAY_ACM_DECODER)   += interplayacm.o
 OBJS-$(CONFIG_INTERPLAY_DPCM_DECODER)  += dpcm.o
 OBJS-$(CONFIG_INTERPLAY_VIDEO_DECODER) += interplayvideo.o
-OBJS-$(CONFIG_IPU_DECODER)             += mpeg12dec.o mpeg12.o mpeg12data.o
+OBJS-$(CONFIG_IPU_DECODER)             += mpeg12dec.o mpeg12.o mpeg12data.o \
+                                          ipu_instructions.o
 OBJS-$(CONFIG_JACOSUB_DECODER)         += jacosubdec.o ass.o
 OBJS-$(CONFIG_JPEG2000_ENCODER)        += j2kenc.o mqcenc.o mqc.o jpeg2000.o \
                                           jpeg2000dwt.o
