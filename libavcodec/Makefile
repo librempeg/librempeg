@@ -1074,6 +1074,7 @@ OBJS-$(CONFIG_ADPCM_IMA_WV6_DECODER)      += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_XBOX_DECODER)     += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_XBOX_ENCODER)     += adpcm_ima_xboxenc.o
 OBJS-$(CONFIG_ADPCM_IMA_XBOX_MONO_DECODER)+= adpcm.o adpcm_data.o
+OBJS-$(CONFIG_ADPCM_IMA_WW_DECODER)       += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_ZMUSIC_DECODER)   += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_MPC3_DECODER)         += adpcm_mpc3.o
 OBJS-$(CONFIG_ADPCM_MS_DECODER)           += adpcm.o adpcm_data.o
