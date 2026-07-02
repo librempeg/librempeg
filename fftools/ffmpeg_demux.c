@@ -2314,6 +2314,7 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch)
 
     stdin_interaction &= strncmp(filename, "pipe:", 5) &&
                          strcmp(filename, "fd:") &&
+                         strcmp(filename, "handle:") &&
                          strcmp(filename, "/dev/stdin");
 
     /* get default parameters from command line */
