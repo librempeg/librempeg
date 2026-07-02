@@ -22,9 +22,11 @@
 
 #include "libavutil/mem.h"
 #include "libavutil/tree.h"
+#include "libswscale/graph.h"
 #include "libswscale/ops.h"
 #include "libswscale/ops_chain.h"
 #include "libswscale/op_list_gen_template.c"
+#include "libswscale/ops_dispatch.h"
 
 #include "libswscale/aarch64/ops_impl.c"
 #include "libswscale/aarch64/ops_impl_conv.c"
@@ -73,26 +75,11 @@ error:
     return ret;
 }
 
-static int register_op(SwsContext *ctx, void *opaque, SwsOpList *ops)
+static int collect_ops_compile(SwsContext *ctx, const SwsOpList *ops,
+                               SwsCompiledOp *out)
 {
-    struct AVTreeNode **root = (struct AVTreeNode **) opaque;
+    struct AVTreeNode **root = (struct AVTreeNode **) ctx->opaque;
     int ret;
-
-    /* Skip ops lists which include filtering, since this is still not
-     * supported. */
-    for (int i = 0; i < ops->num_ops; i++) {
-        const SwsOp *op = &ops->ops[i];
-        switch (op->op) {
-        case SWS_OP_READ:
-        case SWS_OP_WRITE:
-            if (op->rw.filter.op)
-                return 0;
-            break;
-        case SWS_OP_FILTER_H:
-        case SWS_OP_FILTER_V:
-            return 0;
-        }
-    }
 
     /* Use at most two full vregs during the widest precision section */
     int block_size = (ff_sws_op_list_max_size(ops) == 4) ? 8 : 16;
@@ -119,10 +106,44 @@ static int register_op(SwsContext *ctx, void *opaque, SwsOpList *ops)
         }
     }
 
+    *out = (SwsCompiledOp) { 0 };
     ret = 0;
 
 end:
     return ret;
+}
+
+static const SwsOpBackend backend_collect = {
+    .name    = "collect_ops",
+    .compile = collect_ops_compile,
+};
+
+/*********************************************************************/
+static int register_op(SwsContext *ctx, void *opaque, SwsOpList *ops)
+{
+    /* Skip ops lists which include filtering, since this is still not
+     * supported. */
+    for (int i = 0; i < ops->num_ops; i++) {
+        const SwsOp *op = &ops->ops[i];
+        switch (op->op) {
+        case SWS_OP_READ:
+        case SWS_OP_WRITE:
+            if (op->rw.filter.op)
+                return 0;
+            break;
+        case SWS_OP_FILTER_H:
+        case SWS_OP_FILTER_V:
+            return 0;
+        }
+    }
+
+    /* ff_sws_compile_pass() takes over ownership of `ops` */
+    SwsOpList *copy = ff_sws_op_list_duplicate(ops);
+    if (!copy)
+        return AVERROR(ENOMEM);
+
+    const int flags = SWS_OP_FLAG_DRY_RUN | SWS_OP_FLAG_SPLIT_MEMCPY;
+    return ff_sws_compile_pass(opaque, &backend_collect, &copy, flags, NULL, NULL);
 }
 
 /*********************************************************************/
@@ -171,7 +192,14 @@ int main(int argc, char *argv[])
     if (!ctx)
         goto fail;
 
-    ret = ff_sws_enum_op_lists(ctx, &root, AV_PIX_FMT_NONE, AV_PIX_FMT_NONE,
+    SwsGraph *graph = ff_sws_graph_alloc();
+    if (!graph)
+        goto fail;
+
+    graph->ctx = ctx;
+    ctx->opaque = &root;
+
+    ret = ff_sws_enum_op_lists(ctx, graph, AV_PIX_FMT_NONE, AV_PIX_FMT_NONE,
                                register_op);
 
     /**
@@ -184,6 +212,8 @@ int main(int argc, char *argv[])
     printf(" */\n");
     printf("\n");
     av_tree_enumerate(root, stdout, NULL, print_op);
+
+    ff_sws_graph_free(&graph);
 
 fail:
     av_tree_destroy(root);
