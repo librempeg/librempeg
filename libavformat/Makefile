@@ -692,6 +692,7 @@ OBJS-$(CONFIG_SADL_DEMUXER)              += sadl.o pcm.o
 OBJS-$(CONFIG_SAMI_DEMUXER)              += samidec.o subtitles.o
 OBJS-$(CONFIG_SAP_DEMUXER)               += sapdec.o
 OBJS-$(CONFIG_SAP_MUXER)                 += sapenc.o
+OBJS-$(CONFIG_SATSAP_DEMUXER)            += satsap.o
 OBJS-$(CONFIG_SAUD_DEMUXER)              += saud.o pcm.o
 OBJS-$(CONFIG_SBC_DEMUXER)               += sbcdec.o rawdec.o
 OBJS-$(CONFIG_SBC_MUXER)                 += rawenc.o
