@@ -45,7 +45,7 @@
  * post-quantization prediction gain clears a block-type-dependent bar (Apple RE). */
 #define TNS_PREDGAIN_GATE   1.4f    /* first gate: predicted LPC gain */
 #define TNS_PG_C1_LONG      1.4f    /* min measured gain, long blocks */
-#define TNS_PG_C1_SHORT     2.2f    /* min measured gain, short blocks */
+#define TNS_PG_C1_SHORT     3.2f    /* min measured gain, short blocks */
 #define TNS_PG_CLAMP        6.0f    /* upper bound: poles near unit circle → noise blowup */
 #define TNS_WEIGHT_FLOOR    0.01f   /* per-bin masking floor for the weighted spectrum */
 
