@@ -11777,8 +11777,11 @@ static int mov_finalize_packet(AVFormatContext *s, AVStream *st, AVIndexEntry *s
         int64_t total = av_rescale_q(st->duration, st->time_base, (AVRational){ 1, st->codecpar->sample_rate });
         int64_t duration = pkt->duration;
 
-        if (av_sat_add64(pkt->pts, pkt->duration) > st->duration)
-            duration = st->duration - pkt->pts;
+        if (st->duration < pkt->pts) {
+            duration = 0;
+        } else
+            duration = FFMIN(duration, (uint64_t)st->duration - pkt->pts);
+
         duration = av_rescale_q(duration, st->time_base, (AVRational){ 1, st->codecpar->sample_rate });
 
         if (!ffstream(st)->first_discard_sample)
