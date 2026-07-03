@@ -93,47 +93,47 @@ endconst
         sqshrn2         \dst\().8h, \tmp\().4s, #6
 .endm
 
-.macro calc_all4
-        calc            v16, v17, v18, v19
+.macro calc_all4 op=calc
+        \op             v16, v17, v18, v19
         b.eq            2f
-        calc            v17, v18, v19, v16
+        \op             v17, v18, v19, v16
         b.eq            2f
-        calc            v18, v19, v16, v17
+        \op             v18, v19, v16, v17
         b.eq            2f
-        calc            v19, v16, v17, v18
+        \op             v19, v16, v17, v18
         b.ne            1b
 .endm
 
-.macro calc_all8
-        calc            v16, v17, v18, v19, v20, v21, v22, v23
+.macro calc_all8 op=calc
+        \op             v16, v17, v18, v19, v20, v21, v22, v23
         b.eq            2f
-        calc            v18, v19, v20, v21, v22, v23, v16, v17
+        \op             v18, v19, v20, v21, v22, v23, v16, v17
         b.eq            2f
-        calc            v20, v21, v22, v23, v16, v17, v18, v19
+        \op             v20, v21, v22, v23, v16, v17, v18, v19
         b.eq            2f
-        calc            v22, v23, v16, v17, v18, v19, v20, v21
+        \op             v22, v23, v16, v17, v18, v19, v20, v21
         b.ne            1b
 .endm
 
-.macro calc_all12
-        calc            v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27
+.macro calc_all12 op=calc
+        \op             v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27
         b.eq            2f
-        calc            v19, v20, v21, v22, v23, v24, v25, v26, v27, v16, v17, v18
+        \op             v19, v20, v21, v22, v23, v24, v25, v26, v27, v16, v17, v18
         b.eq            2f
-        calc            v22, v23, v24, v25, v26, v27, v16, v17, v18, v19, v20, v21
+        \op             v22, v23, v24, v25, v26, v27, v16, v17, v18, v19, v20, v21
         b.eq            2f
-        calc            v25, v26, v27, v16, v17, v18, v19, v20, v21, v22, v23, v24
+        \op             v25, v26, v27, v16, v17, v18, v19, v20, v21, v22, v23, v24
         b.ne            1b
 .endm
 
-.macro calc_all16
-        calc            v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31
+.macro calc_all16 op=calc
+        \op             v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31
         b.eq            2f
-        calc            v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v16, v17, v18, v19
+        \op             v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v16, v17, v18, v19
         b.eq            2f
-        calc            v24, v25, v26, v27, v28, v29, v30, v31, v16, v17, v18, v19, v20, v21, v22, v23
+        \op             v24, v25, v26, v27, v28, v29, v30, v31, v16, v17, v18, v19, v20, v21, v22, v23
         b.eq            2f
-        calc            v28, v29, v30, v31, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27
+        \op             v28, v29, v30, v31, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27
         b.ne            1b
 .endm
 
