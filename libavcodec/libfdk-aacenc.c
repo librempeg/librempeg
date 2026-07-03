@@ -55,7 +55,7 @@ typedef struct AACContext {
     int prog_ref;
     int metadata_mode;
     AACENC_MetaData metaDataSetup;
-    int delay_sent;
+    int delay;
     int frame_length;
 
     AudioFrameQueue afq;
@@ -420,6 +420,7 @@ static av_cold int aac_encode_init(AVCodecContext *avctx)
     }
 
     avctx->frame_size = info.frameLength;
+    s->delay =
 #if FDKENC_VER_AT_LEAST(4, 0) // 4.0.0
     avctx->initial_padding = info.nDelay;
 #else
@@ -535,14 +536,16 @@ static int aac_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
         av_log(avctx, AV_LOG_ERROR, "discard padding overflow\n");
         return AVERROR(EINVAL);
     }
-    if ((!s->delay_sent && avctx->initial_padding > 0) || discard_padding > 0) {
+
+    if (s->delay > 0 || discard_padding > 0) {
         uint8_t *side_data =
             av_packet_new_side_data(avpkt, AV_PKT_DATA_SKIP_SAMPLES, 10);
         if (!side_data)
             return AVERROR(ENOMEM);
-        if (!s->delay_sent) {
-            AV_WL32(side_data, avctx->initial_padding);
-            s->delay_sent = 1;
+        if (s->delay) {
+            AV_WL32(side_data, FFMIN(s->delay, ff_samples_from_time_base(avctx, avpkt->duration)));
+            s->delay -= ff_samples_from_time_base(avctx, avpkt->duration);
+            s->delay = FFMAX(s->delay, 0);
         }
         AV_WL32(side_data + 4, discard_padding);
     }
