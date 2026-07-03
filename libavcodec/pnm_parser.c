@@ -96,7 +96,7 @@ retry:
             sync = bs;
             c = *bs++;
             if (c == '#')  {
-                uint8_t *match = memchr(bs, '\n', end-bs);
+                const uint8_t *match = memchr(bs, '\n', end-bs);
                 if (match)
                     bs = match + 1;
                 else

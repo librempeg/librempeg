@@ -36,7 +36,7 @@
 
 static int indexof(const char *s, int c)
 {
-    char *f = strchr(s, c);
+    const char *f = strchr(s, c);
     return f ? (f - s) : -1;
 }
 

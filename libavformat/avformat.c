@@ -680,14 +680,13 @@ static int match_stream_specifier(const AVFormatContext *s, const AVStream *st,
             return match && (stream_id == st->id);
         } else if (*spec == 'm' && *(spec + 1) == ':') {
             const AVDictionaryEntry *tag;
-            char *key, *val;
             int ret;
 
             if (match) {
                 spec += 2;
-                val = strchr(spec, ':');
+                const char *val = strchr(spec, ':');
 
-                key = val ? av_strndup(spec, val - spec) : av_strdup(spec);
+                char *key = val ? av_strndup(spec, val - spec) : av_strdup(spec);
                 if (!key)
                     return AVERROR(ENOMEM);
 

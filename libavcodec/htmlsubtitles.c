@@ -75,7 +75,7 @@ static void handle_open_brace(AVBPrint *dst, const char **inp, int *an, int *clo
     if (!*closing_brace_missing) {
         if (   (*an != 1 && in[1] == '\\')
             || (in[1] && strchr("CcFfoPSsYy", in[1]) && in[2] == ':')) {
-            char *bracep = strchr(in+2, '}');
+            const char *bracep = strchr(in+2, '}');
             if (bracep) {
                 *inp = bracep;
                 return;
@@ -204,7 +204,7 @@ int ff_htmlmarkup_to_ass(void *log_ctx, AVBPrint *dst, const char *in)
 
             if (scantag(in+tag_close+1, buffer, &len) && len > 0) {
                 const int skip = len + tag_close;
-                const char *tagname = buffer;
+                char *tagname = buffer;
                 while (*tagname == ' ') {
                     likely_a_tag = 0;
                     tagname++;
