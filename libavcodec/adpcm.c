@@ -387,6 +387,12 @@ static const float hevag_coefs[128][4] = {
     { 0.65100098f, 0.36608887f, 0.094604492f, -0.13818359f },
 };
 
+static const uint8_t adpcmb_yamaha_indexscale[16] =
+{
+    57, 57, 57, 57, 77, 102, 128, 153,
+    57, 57, 57, 57, 77, 102, 128, 153,
+};
+
 /* end of tables */
 
 typedef struct ADPCMDecodeContext {
@@ -453,6 +459,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
         break;
     case AV_CODEC_ID_ADPCM_IMA_WAV_MONO:
     case AV_CODEC_ID_ADPCM_IMA_DAT4:
+    case AV_CODEC_ID_ADPCM_NXAP:
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
     case AV_CODEC_ID_ADPCM_NDSP:
@@ -534,6 +541,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_BRR:
     case AV_CODEC_ID_ADPCM_IMA_DVI:
     case AV_CODEC_ID_ADPCM_IMA_HWAS:
+    case AV_CODEC_ID_ADPCM_NXAP:
         avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
         break;
     case AV_CODEC_ID_ADPCM_IMA_WS:
@@ -990,6 +998,25 @@ static inline int16_t adpcm_sbpro_expand_nibble(ADPCMChannelStatus *c, int8_t ni
         c->step--;
 
     return (int16_t) c->predictor;
+}
+
+static inline int16_t adpcmb_yamaha_expand_nibble(ADPCMChannelStatus *c, uint8_t nibble)
+{
+    int delta, sample;
+
+    delta = ((((nibble & 0x7) * 2) + 1) * c->step) >> 3;
+    if (nibble & 8)
+        delta = -delta;
+    sample = c->predictor + delta;
+
+    sample = av_clip_int16(sample);
+
+    c->step = (c->step * adpcmb_yamaha_indexscale[nibble]) >> 6;
+    c->step = av_clip(c->step, 127, 24576);
+
+    c->predictor = sample;
+
+    return sample;
 }
 
 static inline int16_t adpcm_yamaha_expand_nibble(ADPCMChannelStatus *c, uint8_t nibble)
@@ -1738,6 +1765,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         break;
     case AV_CODEC_ID_ADPCM_IMA_NDS:
         nb_samples = ((buf_size / ch) - 4) * 2;
+        break;
+    case AV_CODEC_ID_ADPCM_NXAP:
+        nb_samples = ((buf_size / (0x40 * ch))) * ((0x40 - 4) * 2);
         break;
     case AV_CODEC_ID_ADPCM_XA:
         nb_samples = (buf_size / 128) * 224 / ch;
@@ -3067,6 +3097,30 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             *samples++ = ff_adpcm_ima_qt_expand_nibble(&c->status[st], v & 0xf);
         }
         ) /* End of CASE */
+    CASE(ADPCM_NXAP,
+        const int nb_samples_per_block = (0x40 - 4) * 2;
+        const int nb_blocks = avpkt->size / (channels * 0x40);
+
+        for (int block = 0; block < nb_blocks; block++) {
+            for (int i = 0; i < channels; i++) {
+                ADPCMChannelStatus *cs = &c->status[i];
+                const int samples_offset = block * nb_samples_per_block;
+
+                cs->predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
+                cs->step_index = bytestream2_get_le16u(&gb) >> 1;
+                cs->step_index = av_clip(cs->step_index, 0x7f, 0x6000);
+
+                samples = samples_p[i] + samples_offset;
+                for (int n = 0; n < nb_samples_per_block; n += 2) {
+                    int v = bytestream2_get_byteu(&gb);
+
+                    samples[n+0] = adpcmb_yamaha_expand_nibble(cs, v >> 4 );
+                    samples[n+1] = adpcmb_yamaha_expand_nibble(cs, v & 0xf);
+                }
+            }
+        }
+        bytestream2_seek(&gb, 0, SEEK_END);
+        ) /* End of CASE */
     CASE(ADPCM_IMA_AWC,
         const int nb_samples_per_block = (0x800 - 4) * 2;
         const int nb_blocks = avpkt->size / channels / 0x800;
@@ -4199,6 +4253,7 @@ ADPCM_DECODER(ADPCM_NDSP,        sample_fmts_s16p, adpcm_ndsp,        "ADPCM Nin
 ADPCM_DECODER(ADPCM_NDSP_LE,     sample_fmts_s16p, adpcm_ndsp_le,     "ADPCM Nintendo DSP (little-endian)")
 ADPCM_DECODER(ADPCM_NDSP_SI,     sample_fmts_s16p, adpcm_ndsp_si,     "ADPCM Nintendo DSP (sub-interleave 2)")
 ADPCM_DECODER(ADPCM_NDSP_SI1,    sample_fmts_s16,  adpcm_ndsp_si1,    "ADPCM Nintendo DSP (sub-interleave 1)")
+ADPCM_DECODER(ADPCM_NXAP,        sample_fmts_s16p, adpcm_nxap,        "ADPCM NXAP")
 ADPCM_DECODER(ADPCM_PROCYON,     sample_fmts_s16p, adpcm_procyon,     "ADPCM Procyon")
 ADPCM_DECODER(ADPCM_PSX,         sample_fmts_s16p, adpcm_psx,         "ADPCM Playstation")
 ADPCM_DECODER(ADPCM_PSXC,        sample_fmts_s16p, adpcm_psxc,        "ADPCM Playstation C")
