@@ -326,6 +326,7 @@ OBJS-$(CONFIG_CFDF_D5_VIDEO_DECODER)   += cfdf_d5video.o
 OBJS-$(CONFIG_CFDF_DPCM_DECODER)       += dpcm.o
 OBJS-$(CONFIG_CFHD_DECODER)            += cfhd.o cfhddata.o cfhddsp.o
 OBJS-$(CONFIG_CFHD_ENCODER)            += cfhdenc.o cfhddata.o cfhdencdsp.o
+OBJS-$(CONFIG_CWV_DPCM_DECODER)        += dpcm.o
 OBJS-$(CONFIG_CINEPAK_DECODER)         += cinepak.o
 OBJS-$(CONFIG_CINEPAK_ENCODER)         += cinepakenc.o elbg.o
 OBJS-$(CONFIG_CLEARVIDEO_DECODER)      += clearvideo.o

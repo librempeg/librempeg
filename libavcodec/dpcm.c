@@ -167,6 +167,41 @@ static const uint16_t sassc_table[128] = {
     53261,  54797,  56333, 57870, 59406, 60942, 62479, 64015,
 };
 
+static const int16_t cwv_table[256] = {
+    0, 2, 4, 8, 13, 19, 27, 36,
+    47, 60, 75, 92, 112, 133, 157, 183,
+    212, 244, 278, 315, 355, 398, 444, 493,
+    546, 601, 660, 722, 788, 857, 929, 1006,
+    1086, 1169, 1257, 1348, 1443, 1542, 1645, 1753,
+    1864, 1980, 2099, 2223, 2352, 2484, 2621, 2763,
+    2909, 3060, 3215, 3375, 3539, 3709, 3883, 4062,
+    4246, 4435, 4628, 4827, 5031, 5240, 5454, 5673,
+    5897, 6127, 6362, 6602, 6848, 7099, 7356, 7618,
+    7885, 8158, 8437, 8722, 9012, 9307, 9609, 9916,
+    10229, 10548, 10873, 11204, 11541, 11884, 12233, 12587,
+    12948, 13316, 13689, 14069, 14454, 14846, 15245, 15649,
+    16061, 16478, 16902, 17332, 17769, 18213, 18663, 19119,
+    19583, 20052, 20529, 21012, 21502, 21999, 22503, 23013,
+    23531, 24055, 24586, 25124, 25670, 26222, 26781, 27347,
+    27921, 28501, 29089, 29684, 30286, 30896, 31512, 32136,
+    -32768, -32136, -31512, -30896, -30286, -29684, -29089, -28501,
+    -27921, -27347, -26781, -26222, -25670, -25124, -24586, -24055,
+    -23531, -23013, -22503, -21999, -21502, -21012, -20529, -20052,
+    -19583, -19119, -18663, -18213, -17769, -17332, -16902, -16478,
+    -16061, -15649, -15245, -14846, -14454, -14069, -13689, -13316,
+    -12948, -12587, -12233, -11884, -11541, -11204, -10873, -10548,
+    -10229, -9916, -9609, -9307, -9012, -8722, -8437, -8158,
+    -7885, -7618, -7356, -7099, -6848, -6602, -6362, -6127,
+    -5897, -5673, -5454, -5240, -5031, -4827, -4628, -4435,
+    -4246, -4062, -3883, -3709, -3539, -3375, -3215, -3060,
+    -2909, -2763, -2621, -2484, -2352, -2223, -2099, -1980,
+    -1864, -1753, -1645, -1542, -1443, -1348, -1257, -1169,
+    -1086, -1006, -929, -857, -788, -722, -660, -601,
+    -546, -493, -444, -398, -355, -315, -278, -244,
+    -212, -183, -157, -133, -112, -92, -75, -60,
+    -47, -36, -27, -19, -13, -8, -4, -2,
+};
+
 static av_cold int dpcm_decode_init(AVCodecContext *avctx)
 {
     DPCMContext *s = avctx->priv_data;
@@ -292,6 +327,7 @@ static int dpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         else
             out = buf_size;
         break;
+    case AV_CODEC_ID_CWV_DPCM:
     case AV_CODEC_ID_WADY_DPCM:
     case AV_CODEC_ID_DERF_DPCM:
     case AV_CODEC_ID_GREMLIN_DPCM:
@@ -516,6 +552,20 @@ static int dpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             *output_samples++ = s->sample[0];
         }
         break;
+
+    case AV_CODEC_ID_CWV_DPCM: {
+        int idx = 0;
+
+        while (output_samples < samples_end) {
+            const uint8_t n = bytestream2_get_byteu(&gb);
+
+            s->sample[idx] += cwv_table[n];
+            *output_samples++ = av_clip_int16(s->sample[idx]);
+            idx ^= stereo;
+        }
+        }
+        break;
+
     }
 
     *got_frame_ptr = 1;
@@ -545,6 +595,7 @@ const FFCodec ff_ ## NAME ## _decoder = {                   \
 
 DPCM_DECODER(AV_CODEC_ID_CBD2_DPCM,      cbd2_dpcm,      "DPCM Cuberoot-Delta-Exact");
 DPCM_DECODER(AV_CODEC_ID_CFDF_DPCM,      cfdf_dpcm,      "DPCM Cyberflix DreamFactory CFDF");
+DPCM_DECODER(AV_CODEC_ID_CWV_DPCM,       cwv_dpcm,       "DPCM Nintendo CWV");
 DPCM_DECODER(AV_CODEC_ID_DERF_DPCM,      derf_dpcm,      "DPCM Xilam DERF");
 DPCM_DECODER(AV_CODEC_ID_GREMLIN_DPCM,   gremlin_dpcm,   "DPCM Gremlin");
 DPCM_DECODER(AV_CODEC_ID_INTERPLAY_DPCM, interplay_dpcm, "DPCM Interplay");
