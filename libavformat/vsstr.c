@@ -27,14 +27,18 @@
 
 static int read_probe(const AVProbeData *p)
 {
-    if (AV_RB32(p->buf) != MKBETAG('S','T','R','L') &&
-        AV_RB32(p->buf) != MKBETAG('S','T','R','R') &&
-        AV_RB32(p->buf) != MKBETAG('S','T','R','M'))
-        return 0;
-    if ((int)AV_RL32(p->buf+4) <= 0)
-        return 0;
+    const int is_strm = AV_RB32(p->buf) == MKBETAG('S','T','R','M');
 
-    return AVPROBE_SCORE_MAX;
+    for (int pos = 0; pos + 8 < p->buf_size; pos += 0x800) {
+        if (AV_RB32(p->buf+pos) != MKBETAG('S','T','R','L') &&
+            AV_RB32(p->buf+pos) != MKBETAG('S','T','R','R') &&
+            AV_RB32(p->buf+pos) != MKBETAG('S','T','R','M'))
+            return 0;
+        if ((int)AV_RL32(p->buf+pos+4) <= 0)
+            return 0;
+    }
+
+    return AVPROBE_SCORE_MAX-is_strm;
 }
 
 static int read_header(AVFormatContext *s)
