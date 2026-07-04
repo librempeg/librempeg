@@ -223,6 +223,7 @@ OBJS-$(CONFIG_COVOX_DEMUXER)             += covox.o
 OBJS-$(CONFIG_CRC_MUXER)                 += crcenc.o
 OBJS-$(CONFIG_CSMP_DEMUXER)              += csmp.o pcm.o
 OBJS-$(CONFIG_CXS_DEMUXER)               += cxs.o pcm.o
+OBJS-$(CONFIG_CWV_DEMUXER)               += cwv.o
 OBJS-$(CONFIG_DAT_DEMUXER)               += dat.o pcm.o
 OBJS-$(CONFIG_DATA_DEMUXER)              += rawdec.o
 OBJS-$(CONFIG_DATA_MUXER)                += rawenc.o
