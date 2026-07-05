@@ -89,12 +89,6 @@ SECTION .text
     pcmpgtb             %1, %2
 %endmacro
 
-; %1 = abs(%2-%3) > %4
-%macro ABSSUB_GT 5-6 [pb_80]; dst, src1, src2, cmp, tmp, [pb_80]
-    ABSSUB              %1, %2, %3, %5      ; dst = abs(src1-src2)
-    CMP_GT              %1, %4, %6          ; dst > cmp
-%endmacro
-
 %macro MASK_APPLY 4 ; %1=new_data/dst %2=old_data %3=mask %4=tmp
     pand                %1, %3              ; new &= mask
     pandn               %4, %3, %2          ; tmp = ~mask & old
@@ -618,17 +612,18 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
 %define rq2 [Q2]
 %define rq3 [Q3]
 %endif
-    ABSSUB_GT           m5, rp3, rp2, m2, m7, m0        ; m5 = abs(p3-p2) <= I
-    ABSSUB_GT           m1, rp2, rp1, m2, m7, m0        ; m1 = abs(p2-p1) <= I
-    por                 m5, m1
-    ABSSUB_GT           m1, rp1, rp0, m2, m7, m0        ; m1 = abs(p1-p0) <= I
-    por                 m5, m1
-    ABSSUB_GT           m1, rq0, rq1, m2, m7, m0        ; m1 = abs(q1-q0) <= I
-    por                 m5, m1
-    ABSSUB_GT           m1, rq1, rq2, m2, m7, m0        ; m1 = abs(q2-q1) <= I
-    por                 m5, m1
-    ABSSUB_GT           m1, rq2, rq3, m2, m7, m0        ; m1 = abs(q3-q2) <= I
-    por                 m5, m1
+    ABSSUB              m5, rp3, rp2, m7                ; m5 = abs(p3-p2)
+    ABSSUB              m1, rp2, rp1, m7                ; m1 = abs(p2-p1)
+    pmaxub              m5, m1
+    ABSSUB              m1, rp1, rp0, m7                ; m1 = abs(p1-p0)
+    pmaxub              m5, m1
+    ABSSUB              m1, rq0, rq1, m7                ; m1 = abs(q1-q0)
+    pmaxub              m5, m1
+    ABSSUB              m1, rq1, rq2, m7                ; m1 = abs(q2-q1)
+    pmaxub              m5, m1
+    ABSSUB              m1, rq2, rq3, m7                ; m1 = abs(q3-q2)
+    pmaxub              m5, m1
+    CMP_GT              m5, m2, m0
     ABSSUB              m1, rp0, rq0, m7                ; abs(p0-q0)
     paddusb             m1, m1                          ; abs(p0-q0) * 2
     ABSSUB              m2, rp1, rq1, m7                ; abs(p1-q1)
@@ -641,44 +636,35 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     SWAP                 1, 3
     pxor                m3, [pb_ff]
 
-    ; (m3: fm, m8..15: p3 p2 p1 p0 q0 q1 q2 q3)
+    ; (m0: pb_80, m3: fm, m8..15: p3 p2 p1 p0 q0 q1 q2 q3)
     ; calc flat8in (if not 44_16) and hev masks
 %if %2 != 44 && %2 != 4
     mova                m6, [pb_81]                     ; [1 1 1 1 ...] ^ 0x80
-    ABSSUB_GT           m2, rp3, rp0, m6, m5            ; abs(p3 - p0) <= 1
-%ifdef m8
-    mova                m8, [pb_80]
-%define rb80 m8
-%else
-%define rb80 [pb_80]
-%endif
-    ABSSUB_GT           m1, rp2, rp0, m6, m5, rb80      ; abs(p2 - p0) <= 1
-    por                 m2, m1
-    ABSSUB              m4, rp1, rp0, m5                ; abs(p1 - p0)
+    ABSSUB              m2, rp1, rp0, m5                ; abs(p1 - p0)
 %if %2 <= 16
 %if cpuflag(ssse3)
-    pxor                m0, m0
+    pxor                m5, m5
 %endif
-    SPLATB_REG          m7, H, m0                       ; H H H H ...
+    SPLATB_REG          m7, H, m5                       ; H H H H ...
 %else
     movd                m7, Hd
     SPLATB_MIX          m7
 %endif
-    pxor                m7, rb80
-    pxor                m4, rb80
-    pcmpgtb             m0, m4, m7                      ; abs(p1 - p0) > H (1/2 hev condition)
-    CMP_GT              m4, m6                          ; abs(p1 - p0) <= 1
-    por                 m2, m4                          ; (flat8in)
-    ABSSUB              m4, rq1, rq0, m1                ; abs(q1 - q0)
-    pxor                m4, rb80
-    pcmpgtb             m5, m4, m7                      ; abs(q1 - q0) > H (2/2 hev condition)
-    por                 m0, m5                          ; hev final value
-    CMP_GT              m4, m6                          ; abs(q1 - q0) <= 1
-    por                 m2, m4                          ; (flat8in)
-    ABSSUB_GT           m1, rq2, rq0, m6, m5, rb80      ; abs(q2 - q0) <= 1
+    ABSSUB              m4, rq1, rq0, m5                ; abs(q1 - q0)
+    pmaxub              m4, m2                          ; max(abs(q1 - q0), abs(p1 - p0))
+    ABSSUB              m2, rp2, rp0, m5                ; abs(p2 - p0)
+    pxor                m7, m0
+    por                 m2, m4
+    pxor                m4, m0
+    pcmpgtb             m4, m7                          ; hev: max(abs(q1 - q0), abs(p1 - p0)) > H
+    ABSSUB              m1, rp3, rp0, m5                ; abs(p3 - p0)
     por                 m2, m1
-    ABSSUB_GT           m1, rq3, rq0, m6, m5, rb80      ; abs(q3 - q0) <= 1
-    por                 m2, m1                          ; flat8in final value
+    ABSSUB              m1, rq2, rq0, m5                ; abs(q2 - q0)
+    por                 m2, m1
+    ABSSUB              m1, rq3, rq0, m5                ; abs(q3 - q0)
+    por                 m2, m1
+    CMP_GT              m2, m6, m0                      ; flat8in
+    SWAP                0, 4
     pxor                m2, [pb_ff]
 %if %2 == 84 || %2 == 48
     pand                m2, [mask_mix%2]
@@ -695,13 +681,11 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     SPLATB_REG          m7, H, m0                       ; H H H H ...
 %endif
     pxor                m7, m6
-    ABSSUB              m4, rp1, rp0, m1                ; abs(p1 - p0)
-    pxor                m4, m6
-    pcmpgtb             m0, m4, m7                      ; abs(p1 - p0) > H (1/2 hev condition)
+    ABSSUB              m0, rp1, rp0, m1                ; abs(p1 - p0)
     ABSSUB              m4, rq1, rq0, m1                ; abs(q1 - q0)
-    pxor                m4, m6
-    pcmpgtb             m5, m4, m7                      ; abs(q1 - q0) > H (2/2 hev condition)
-    por                 m0, m5                          ; hev final value
+    pmaxub              m0, m4                          ; max(abs(p1 - p0), abs(q1 - q0))
+    pxor                m0, m6
+    pcmpgtb             m0, m7                          ; max > H; hev final value
 %endif
 
 %if %2 == 16
@@ -716,8 +700,8 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
 %define rp7 [P7]
 %define rp6 [P6]
 %endif
-    ABSSUB_GT           m1, rp7, rp0, m6, m5            ; abs(p7 - p0) <= 1
-    ABSSUB_GT           m7, rp6, rp0, m6, m5            ; abs(p6 - p0) <= 1
+    ABSSUB              m7, rp7, rp0, m5                ; abs(p7 - p0)
+    ABSSUB              m1, rp6, rp0, m5                ; abs(p6 - p0)
     por                 m1, m7
 %ifdef m8
     mova                m8, [P5]
@@ -728,9 +712,9 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
 %define rp5 [P5]
 %define rp4 [P4]
 %endif
-    ABSSUB_GT           m7, rp5, rp0, m6, m5            ; abs(p5 - p0) <= 1
+    ABSSUB              m7, rp5, rp0, m5                ; abs(p5 - p0)
     por                 m1, m7
-    ABSSUB_GT           m7, rp4, rp0, m6, m5            ; abs(p4 - p0) <= 1
+    ABSSUB              m7, rp4, rp0, m5                ; abs(p4 - p0)
     por                 m1, m7
 %ifdef m8
     mova                m14, [Q4]
@@ -741,9 +725,9 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
 %define rq4 [Q4]
 %define rq5 [Q5]
 %endif
-    ABSSUB_GT           m7, rq4, rq0, m6, m5            ; abs(q4 - q0) <= 1
+    ABSSUB              m7, rq4, rq0, m5                ; abs(q4 - q0)
     por                 m1, m7
-    ABSSUB_GT           m7, rq5, rq0, m6, m5            ; abs(q5 - q0) <= 1
+    ABSSUB              m7, rq5, rq0, m5                ; abs(q5 - q0)
     por                 m1, m7
 %ifdef m8
     mova                m14, [Q6]
@@ -754,10 +738,11 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
 %define rq6 [Q6]
 %define rq7 [Q7]
 %endif
-    ABSSUB_GT           m7, rq6, rq0, m6, m5            ; abs(q4 - q0) <= 1
+    ABSSUB              m7, rq6, rq0, m5                ; abs(q4 - q0)
     por                 m1, m7
-    ABSSUB_GT           m7, rq7, rq0, m6, m5            ; abs(q5 - q0) <= 1
+    ABSSUB              m7, rq7, rq0, m5                ; abs(q5 - q0)
     por                 m1, m7                          ; flat8out final value
+    CMP_GT              m1, m6, [pb_80]
     pxor                m1, [pb_ff]
 %endif
 
