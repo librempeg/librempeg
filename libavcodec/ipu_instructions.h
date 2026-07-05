@@ -38,29 +38,23 @@ typedef struct IPUControlRegister {
 } IPUControlRegister;
 
 /**
- * IPUBlockInstructionContext
+ * IPUMacroBlockInstructionContext
+ *
+ * Meant to represent a 16x16 macroblock.
  */
-typedef struct IPUBlockInstructionContext {
-    IPUBlockCommand cmd; // IPU block command
-    IPUIBDECArguments args; // IDEC/BDEC arguments
-    // the following 4 vars shall be divisible by 16, otherwise not happening.
-    int starting_x;
-    int starting_y;
-    int ending_x;
-    int ending_y;
-} IPUBlockInstructionContext;
+typedef struct IPUMacroBlockInstructionContext {
+    int x;
+    int y;
+} IPUMacroBlockInstructionContext;
 
 /**
  * IPUInstructionExecutionContext
  */
-typedef struct IPUInstructionExecutionContext {
-    int ipu_flags_exist; // denotes the existence of a byte consisting of IPU bitstream flags.
-    int iq_comms; // denotes the existence of an instruction queue.
-    int executing;
-    IPUControlRegister ctrl; // bitstream decoding options.
-    int inst; // how many instructions do we need from a given frame
-    IPUBlockInstructionContext *inst_d; // instruction data.
-} IPUInstructionExecutionContext;
+typedef struct IPUFrameExecutionContext {
+    int blocks; // how many macroblocks
+    
+    IPUMacroBlockInstructionContext *mcb_dt; // macroblock info data.
+} IPUFrameExecutionContext;
 
 /**
  * Fulfills the execution list of an IPU frame.
@@ -151,6 +145,9 @@ void ff_ipu_set_inst_to_exec_from_start(AVCodecContext *avctx, IPUBlockCommand c
 
 void ff_ipu_close_block_inst_comm(AVCodecContext *avctx);
 
+int IPUInstructionQueue_QueuedInst = 0;
+int IPUInstructionQueue_TotalInst = 0;
+
 /**
  * IPUInstructionQueueType
  */
@@ -162,19 +159,50 @@ typedef enum IPUInstructionQueueType {
 } IPUInstructionQueueType;
 
 /**
- * IPUInstructionExecutionContext
+ * IPUInstructionQueueCTRLExecutionContext
  */
-typedef struct IPUInstructionQueueContext {
-    IPUInstructionQueueType iq_type;
+typedef struct IPUInstructionQueueCTRLExecutionContext {
     int busy_until_next_ctrl_execution; // signals the need to wait until the entire frame is fully executed (decoded).
     IPUControlRegister next_ctrl; // bitstream decoding options.
+} IPUInstructionQueueCTRLExecutionContext;
+
+/**
+ * IPUInstructionQueueCMDExecutionContext
+ */
+typedef struct IPUInstructionQueueCMDExecutionContext {
     int busy_until_next_cmd_instruction; // signals the need to wait until the entire macroblock is fully executed (decoded).
     IPUBlockCommand next_cmd; // next IPU block command
     IPUIBDECArguments next_args; // next IDEC/BDEC arguments
-    int blk_i; // target instruction.
-    int blk_i_end; // last instruction;
+    int blk_i; // target macro block.
+    int blk_i_end; // last macro block.
+} IPUInstructionQueueCMDExecutionContext;
+
+/**
+ * IPUInstructionQueueExecutionContext
+ */
+typedef struct IPUInstructionQueueExecutionContext {
+    IPUInstructionQueueType iq_type;
+    IPUInstructionQueueCTRLExecutionContext ctrl;
+    IPUInstructionQueueCMDExecutionContext cmd;
+} IPUInstructionQueueExecutionContext;
+
+/**
+ * IPUInstructionQueueContext
+ */
+typedef struct IPUInstructionQueueContext {
+    int queues;
+    IPUInstructionQueueExecutionContext *queue;
 } IPUInstructionQueueContext;
 
+/**
+ * IPUInstructionQueueArgumentContext
+ */
+typedef struct IPUInstructionQueueArgumentContext {
+    int current_queue_number;
+    IPUInstructionQueueType queue_type;
+} IPUInstructionQueueArgumentContext;
+
+#if 0
 void ff_ipu_queue_ctrl_exec(AVPacket *avpkt, IPUControlRegister ctrl, int is_busy);
 
 void ff_ipu_queue_inst_exec_from_start(AVPacket *avpkt, IPUBlockCommand next_cmd, IPUIBDECArguments next_args, int x, int y, int max_x, int max_y, int is_busy);
@@ -182,7 +210,10 @@ void ff_ipu_queue_inst_exec_from_start(AVPacket *avpkt, IPUBlockCommand next_cmd
 void ff_ipu_execute_queued_ctrl(IPUInstructionQueueType iq_type, IPUInstructionQueueContext *iq, IPUInstructionExecutionContext *ie);
 
 void ff_ipu_execute_queued_cmd(IPUInstructionQueueType iq_type, IPUInstructionQueueContext *iq, IPUInstructionExecutionContext *ie);
+#endif
 
 size_t ff_ipu_calc_priv_data_skip_to_ipu_iec_ctx(AVCodecContext *avctx);
+
+void ff_ipu_close_ipu_context(AVCodecContext *avctx);
 
 #endif /* AVCODEC_IPU_H */

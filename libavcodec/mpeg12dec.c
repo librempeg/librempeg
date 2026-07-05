@@ -2744,16 +2744,22 @@ const FFCodec ff_mpegvideo_decoder = {
     .p.max_lowres   = 3,
 };
 
+typedef enum IPUVariantEnum {
+    IPU_DEFAULT,
+    IPU_SQUARESOFT,
+    IPU_END
+} IPUVariantEnum;
+
 typedef struct IPUContext {
     size_t m_offset;
-    size_t m_size;
-    size_t ie_offset;
-    size_t ie_size;
-    size_t iqp_offset;
-    size_t iq_size;
+    size_t ipu_inst_queue_offset;
+    size_t ipu_frame_exec_offset;
+    size_t ipu_variant_offset;
+
     Mpeg12SliceContext m;
-    IPUInstructionExecutionContext ie;
-    IPUInstructionQueueContext *iq_p;
+    IPUInstructionQueueContext *ipu_inst_queue;
+    IPUFrameExecutionContext ipu_frame_exec;
+    IPUVariantEnum ipu_v;
 
     int flags; // for IPU bitstream only
     int mpeg1;
@@ -2800,13 +2806,14 @@ static int ipu_set_picture_type(IPUContext *s)
     MPVContext *const m = &s->m.c;
 
     switch (ctrl->picture_type) {
-        case 1:
+        case 0: // reserved, but in practice, defaults to...
+        case 1: // I-picture
             m->pict_type = AV_PICTURE_TYPE_I;
             break;
-        case 2:
+        case 2: // P-picture
             m->pict_type = AV_PICTURE_TYPE_P;
             break;
-        case 3:
+        case 3: // B-picture
             m->pict_type = AV_PICTURE_TYPE_B;
             break;
         case 4:
@@ -2929,7 +2936,7 @@ static int ipu_decode_frame_with_iec(AVCodecContext *avctx, AVFrame *frame)
     return 0;
 }
 
-static int ipu_decode_frame_without_iec(AVCodecContext *avctx, AVFrame *frame)
+static int ipu_decode_frame1(AVCodecContext *avctx, AVFrame *frame)
 {
     IPUContext *s = avctx->priv_data;
     MPVContext *const m = &s->m.c;
@@ -3039,9 +3046,12 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     if (ret < 0)
         return ret;
 
-    if (avctx->extradata && (avctx->extradata_size == 2)) {
-        has_ie = AV_RB8(avctx->extradata);
-        has_ipu_ctrl_byte = AV_RB8(avctx->extradata+1);
+    if (avctx->extradata) {
+        if (avctx->extradata_size >= 3) {
+            has_ie = AV_RB8(avctx->extradata);
+            has_ipu_ctrl_byte = AV_RB8(avctx->extradata+1);
+            s->ipu_v = (IPUVariantEnum)AV_RB8(avctx->extradata+2);
+        }
     } else {
         has_ie = 0;
         has_ipu_ctrl_byte = 1;
@@ -3051,7 +3061,7 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         if (avpkt->side_data->data &&
             avpkt->side_data->type == AV_PKT_DATA_NEW_EXTRADATA &&
             avpkt->side_data->size == s->iq_size) {
-            s->iq_p = (IPUInstructionQueueContext*)avpkt->side_data->data;
+            s->ipu_inst_queue = (IPUInstructionQueueContext*)avpkt->side_data->data;
             has_iq = 1;
         }
     } else {
@@ -3064,7 +3074,7 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         if ((ret = ipu_decode_frame_with_iec(m->avctx, frame)) < 0)
             return ret;
     } else {
-        if ((ret = ipu_decode_frame_without_iec(m->avctx, frame)) < 0)
+        if ((ret = ipu_decode_frame1(m->avctx, frame)) < 0)
             return ret;
     }
 
@@ -3073,12 +3083,16 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     return avpkt->size;
 }
 
-static void ipu_hard_reset(IPUContext *s)
+#if 0
+static void ipu_reset(IPUContext *s)
 {
     MPVContext *const m = &s->m.c;
 
     m->picture_structure = PICT_FRAME;
+
+    IPUInstructionQueue_QueuedInst = 0;
 }
+#endif
 
 static av_cold int ipu_decode_init(AVCodecContext *avctx)
 {
@@ -3086,11 +3100,9 @@ static av_cold int ipu_decode_init(AVCodecContext *avctx)
     MPVContext *const m = &s->m.c;
     
     s->m_offset = (char*)(&s->m) - (char*)s;
-    s->m_size = sizeof(Mpeg12SliceContext);
-    s->ie_offset = (char*)(&s->ie) - (char*)s;
-    s->ie_size = sizeof(IPUInstructionExecutionContext);
-    s->iqp_offset = (char*)(&s->iq_p) - (char*)s;
-    s->iq_size = sizeof(IPUInstructionQueueContext);
+    s->ipu_inst_queue_offset = (char*)(&s->ipu_inst_queue) - (char*)s;
+    s->ipu_frame_exec_offset = (char*)(&s->ipu_frame_exec) - (char*)s;
+    s->ipu_variant_offset = (char*)(&s->ipu_v) - (char*)s;
 
     avctx->pix_fmt = AV_PIX_FMT_YUV420P;
     m->avctx       = avctx;
@@ -3105,15 +3117,16 @@ static av_cold int ipu_decode_init(AVCodecContext *avctx)
         m->chroma_intra_matrix[j] = v;
     }
 
-    ipu_hard_reset(s);
-    ff_ipu_init_inst_exec_list(m->avctx, avctx->width, avctx->height);
+    #if 0
+    ipu_reset(s);
+    #endif
 
     return 0;
 }
 
 static av_cold int ipu_decode_end(AVCodecContext *avctx)
 {
-    ff_ipu_close_block_inst_comm(avctx);
+    ff_ipu_close_ipu_context(avctx);
 
     return ff_mpv_decode_close(avctx);
 }

@@ -4,7 +4,7 @@
 size_t ff_ipu_calc_priv_data_skip_to_ipu_iec_ctx(AVCodecContext *avctx)
 {
     size_t ret = 0;
-    int ofst_sz_fld_sz = (sizeof(size_t)*2);
+    int ofst_sz_fld_sz = sizeof(size_t);
 
     if (avctx->priv_data) {
         if (*(size_t*)((char*)avctx->priv_data + (ofst_sz_fld_sz*1)))
@@ -14,6 +14,7 @@ size_t ff_ipu_calc_priv_data_skip_to_ipu_iec_ctx(AVCodecContext *avctx)
     return ret;
 }
 
+#if 0
 void ff_ipu_init_inst_exec_list(AVCodecContext *avctx, int x, int y)
 {
     size_t skip = ff_ipu_calc_priv_data_skip_to_ipu_iec_ctx(avctx);
@@ -420,4 +421,15 @@ void ff_ipu_execute_queued_cmd(IPUInstructionQueueType iq_type, IPUInstructionQu
             iq->busy_until_next_cmd_instruction = 0;
         }
     }
+}
+#endif
+
+int ff_ipu_new_inst_queue(IPUInstructionQueueContext *queue_store)
+{
+    return 0;
+}
+
+void ff_ipu_close_ipu_context(AVCodecContext *avctx)
+{
+    // (todo)
 }
