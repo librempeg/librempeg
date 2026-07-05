@@ -560,7 +560,7 @@ static int dpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             const uint8_t n = bytestream2_get_byteu(&gb);
 
             s->sample[idx] += cwv_table[n];
-            *output_samples++ = av_clip_int16(s->sample[idx]);
+            *output_samples++ = s->sample[idx];
             idx ^= stereo;
         }
         }
