@@ -616,9 +616,9 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     ABSSUB              m1, rp2, rp1, m7                ; m1 = abs(p2-p1)
     pmaxub              m5, m1
     ABSSUB              m1, rp1, rp0, m7                ; m1 = abs(p1-p0)
-    pmaxub              m5, m1
-    ABSSUB              m1, rq0, rq1, m7                ; m1 = abs(q1-q0)
-    pmaxub              m5, m1
+    ABSSUB              m4, rq0, rq1, m7                ; m1 = abs(q1-q0)
+    pmaxub              m4, m1
+    pmaxub              m5, m4
     ABSSUB              m1, rq1, rq2, m7                ; m1 = abs(q2-q1)
     pmaxub              m5, m1
     ABSSUB              m1, rq2, rq3, m7                ; m1 = abs(q3-q2)
@@ -636,11 +636,11 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     SWAP                 1, 3
     pxor                m3, [pb_ff]
 
-    ; (m0: pb_80, m3: fm, m8..15: p3 p2 p1 p0 q0 q1 q2 q3)
+    ; (m0: pb_80, m3: fm, m4: max(abs(q1 - q0), abs(p1 - p0))
+    ;  m8..15: p3 p2 p1 p0 q0 q1 q2 q3)
     ; calc flat8in (if not 44_16) and hev masks
 %if %2 != 44 && %2 != 4
     mova                m6, [pb_81]                     ; [1 1 1 1 ...] ^ 0x80
-    ABSSUB              m2, rp1, rp0, m5                ; abs(p1 - p0)
 %if %2 <= 16
 %if cpuflag(ssse3)
     pxor                m5, m5
@@ -650,8 +650,6 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     movd                m7, Hd
     SPLATB_MIX          m7
 %endif
-    ABSSUB              m4, rq1, rq0, m5                ; abs(q1 - q0)
-    pmaxub              m4, m2                          ; max(abs(q1 - q0), abs(p1 - p0))
     ABSSUB              m2, rp2, rp0, m5                ; abs(p2 - p0)
     pxor                m7, m0
     por                 m2, m4
@@ -664,29 +662,26 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     ABSSUB              m1, rq3, rq0, m5                ; abs(q3 - q0)
     por                 m2, m1
     CMP_GT              m2, m6, m0                      ; flat8in
-    SWAP                0, 4
     pxor                m2, [pb_ff]
 %if %2 == 84 || %2 == 48
     pand                m2, [mask_mix%2]
 %endif
 %else
-    mova                m6, [pb_80]
 %if %2 == 44
     movd                m7, Hd
     SPLATB_MIX          m7
 %else
 %if cpuflag(ssse3)
-    pxor                m0, m0
+    pxor                m5, m5
 %endif
-    SPLATB_REG          m7, H, m0                       ; H H H H ...
+    SPLATB_REG          m7, H, m5                       ; H H H H ...
 %endif
-    pxor                m7, m6
-    ABSSUB              m0, rp1, rp0, m1                ; abs(p1 - p0)
-    ABSSUB              m4, rq1, rq0, m1                ; abs(q1 - q0)
-    pmaxub              m0, m4                          ; max(abs(p1 - p0), abs(q1 - q0))
-    pxor                m0, m6
-    pcmpgtb             m0, m7                          ; max > H; hev final value
+    pxor                m4, m0
+    pxor                m7, m0
+    pcmpgtb             m4, m7                          ; max > H; hev final value
+    SWAP                0, 6
 %endif
+    SWAP                0, 4
 
 %if %2 == 16
     ; (m0: hev, m2: flat8in, m3: fm, m6: pb_81, m9..15: p2 p1 p0 q0 q1 q2 q3)
