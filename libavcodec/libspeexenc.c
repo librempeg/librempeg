@@ -296,8 +296,10 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
         speex_bits_reset(&s->bits);
 
         /* Get the next frame pts/duration */
-        ff_af_queue_remove(&s->afq, s->frames_per_packet * avctx->frame_size,
-                           &avpkt->pts, &avpkt->duration);
+        ret = ff_af_queue_remove(&s->afq, s->frames_per_packet * avctx->frame_size,
+                                 avpkt);
+        if (ret < 0)
+            return ret;
 
         avpkt->size = ret;
         *got_packet_ptr = 1;

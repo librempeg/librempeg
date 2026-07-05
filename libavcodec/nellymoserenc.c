@@ -409,8 +409,9 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     encode_block(s, avpkt->data, avpkt->size);
 
     /* Get the next frame pts/duration */
-    ff_af_queue_remove(&s->afq, avctx->frame_size, &avpkt->pts,
-                       &avpkt->duration);
+    ret = ff_af_queue_remove(&s->afq, avctx->frame_size, avpkt);
+    if (ret < 0)
+        return ret;
 
     *got_packet_ptr = 1;
     return 0;
