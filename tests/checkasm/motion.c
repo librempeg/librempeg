@@ -27,12 +27,12 @@
 
 #include "checkasm.h"
 
-static void fill_random(uint8_t *tab, int size)
+static void fill_random(uint8_t *tab, size_t size)
 {
-    int i;
-    for (i = 0; i < size; i++) {
-        tab[i] = rnd() % 256;
-    }
+    for (size_t i = 0; i < (size & ~3); i += 4)
+        AV_WN32A(tab + i, rnd());
+    for (size_t i = size & ~3; i < size; ++i)
+        tab[i] = rnd();
 }
 
 static void test_motion(const char *name, me_cmp_func test_func)
@@ -61,10 +61,10 @@ static void test_motion(const char *name, me_cmp_func test_func)
     }
 
     /* test correctness */
-    fill_random(img1, WIDTH * HEIGHT);
-    fill_random(img2, WIDTH * HEIGHT);
-
     if (check_func(test_func, "%s", name)) {
+        fill_random(img1, WIDTH * HEIGHT);
+        fill_random(img2, WIDTH * HEIGHT);
+
         for (i = 0; i < ITERATIONS; i++) {
             x = rnd() % (WIDTH - look_ahead);
             y = rnd() % (HEIGHT - look_ahead);
@@ -124,11 +124,13 @@ static void check_motion(void)
             test_motion(buf, me_ctx.pix_abs[i][j]);
         }
     }
+    report("pix_abs");
 
 #define XX(me_cmp_array)                                                        \
     for (int i = 0; i < FF_ARRAY_ELEMS(me_ctx.me_cmp_array); i++) {             \
         snprintf(buf, sizeof(buf), #me_cmp_array "_%d", i);                     \
         test_motion(buf, me_ctx.me_cmp_array[i]);                               \
+        report(#me_cmp_array);                                                  \
     }
     ME_CMP_1D_ARRAYS(XX)
 #undef XX
@@ -137,5 +139,4 @@ static void check_motion(void)
 void checkasm_check_motion(void)
 {
     check_motion();
-    report("motion");
 }

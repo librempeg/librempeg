@@ -1,0 +1,22 @@
+Testing av_dovi_alloc()
+alloc: OK, size>0=yes, dv_profile=0
+alloc (no size): OK
+
+Testing av_dovi_metadata_alloc()
+alloc: OK, size>0=yes
+num_ext_blocks=0
+header_offset>0=yes, rpu_type=0
+mapping_offset>0=yes, nlq_method_idc=0
+color_offset>0=yes, dm_metadata_id=0
+ext_block_size>0=yes
+alloc (no size): OK
+
+Testing av_dovi_find_level()
+find level 1: OK
+find level 5: OK
+find level 1 first match: OK
+find level 99 (missing): OK
+
+Testing OOM paths
+av_dovi_alloc OOM: OK
+av_dovi_metadata_alloc OOM: OK

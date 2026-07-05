@@ -68,18 +68,14 @@ $(FATE_AC3) $(FATE_EAC3): CMP = oneoff
 FATE_AC3-$(call  PCM, AC3,  AC3 AC3_FIXED, PCM_S16LE_MUXER ARESAMPLE_FILTER)  += $(FATE_AC3)
 FATE_EAC3-$(call PCM, EAC3, EAC3,          PCM_S16LE_MUXER ARESAMPLE_FILTER) += $(FATE_EAC3)
 
-FATE_AC3-$(call ENCDEC, AC3, AC3, WAV_MUXER WAV_DEMUXER ARESAMPLE_FILTER PCM_S16LE_ENCODER PIPE_PROTOCOL) += fate-ac3-encode
-fate-ac3-encode: CMD = enc_dec_pcm ac3 wav s16le $(subst $(SAMPLES),$(TARGET_SAMPLES),$(REF)) -c:a ac3 -b:a 128k
-fate-ac3-encode: CMP_SHIFT = -1024
+FATE_AC3-$(call ENCDEC, AC3, MP4 MOV, WAV_MUXER WAV_DEMUXER ARESAMPLE_FILTER PCM_S16LE_ENCODER PIPE_PROTOCOL) += fate-ac3-encode
+fate-ac3-encode: CMD = enc_dec_pcm mp4 wav s16le $(subst $(SAMPLES),$(TARGET_SAMPLES),$(REF)) -c:a ac3 -b:a 128k
 fate-ac3-encode: CMP_TARGET = 404.53
-fate-ac3-encode: SIZE_TOLERANCE = 488
 
 
-FATE_EAC3-$(call ENCDEC, EAC3, EAC3, WAV_MUXER WAV_DEMUXER ARESAMPLE_FILTER PCM_S16LE_ENCODER PIPE_PROTOCOL) += fate-eac3-encode
-fate-eac3-encode: CMD = enc_dec_pcm eac3 wav s16le $(subst $(SAMPLES),$(TARGET_SAMPLES),$(REF)) -c:a eac3 -b:a 128k
-fate-eac3-encode: CMP_SHIFT = -1024
+FATE_EAC3-$(call ENCDEC, EAC3, MP4 MOV, WAV_MUXER WAV_DEMUXER ARESAMPLE_FILTER PCM_S16LE_ENCODER PIPE_PROTOCOL) += fate-eac3-encode
+fate-eac3-encode: CMD = enc_dec_pcm mp4 wav s16le $(subst $(SAMPLES),$(TARGET_SAMPLES),$(REF)) -c:a eac3 -b:a 128k
 fate-eac3-encode: CMP_TARGET = 516.94
-fate-eac3-encode: SIZE_TOLERANCE = 488
 
 fate-ac3-encode fate-eac3-encode: CMP = stddev
 fate-ac3-encode fate-eac3-encode: REF = $(SAMPLES)/audio-reference/luckynight_2ch_44kHz_s16.wav
@@ -97,6 +93,14 @@ FATE_AC3-$(call FRAMECRC, WAV, PCM_S16LE, ARESAMPLE_FILTER AC3_FIXED_ENCODER) +=
 fate-ac3-fixed-encode-2: tests/data/asynth-44100-8.wav
 fate-ac3-fixed-encode-2: SRC = $(TARGET_PATH)/tests/data/asynth-44100-8.wav
 fate-ac3-fixed-encode-2: CMD = framecrc -i $(SRC) -c:a ac3_fixed -ab 256k -frames:a 6 -af aresample
+
+# This tests that all samples are output and that audio frame queue API
+# takes into account the padding added in the generic encode framework
+# by the fixed_frame_size flag.
+FATE_AC3-$(call FRAMECRC, WAV, PCM_S16LE, ARESAMPLE_FILTER AC3_FIXED_ENCODER) += fate-ac3-fixed-encode-3
+fate-ac3-fixed-encode-3: tests/data/asynth-44100-6.wav
+fate-ac3-fixed-encode-3: SRC = $(TARGET_PATH)/tests/data/asynth-44100-6.wav
+fate-ac3-fixed-encode-3: CMD = framecrc -i $(SRC) -c:a ac3_fixed -flags2 +fixed_frame_size -ab 256k -af aresample,atrim=start_sample=0:end_sample=12096
 
 FATE_EAC3-$(call ALLYES, EAC3_DEMUXER EAC3_MUXER EAC3_CORE_BSF) += fate-eac3-core-bsf
 fate-eac3-core-bsf: CMD = md5pipe -i $(TARGET_SAMPLES)/eac3/the_great_wall_7.1.eac3 -c:a copy -bsf:a eac3_core -fflags +bitexact -f eac3

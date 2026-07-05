@@ -89,6 +89,8 @@ typedef struct
     int             frames_captured;
     int             audio_frames_captured;
     pthread_mutex_t frame_lock;
+    pthread_cond_t  frame_wait_cond;
+    int             is_stopping;
     id              avf_delegate;
     id              avf_audio_delegate;
 
@@ -147,6 +149,7 @@ static void lock_frames(AVFContext* ctx)
 
 static void unlock_frames(AVFContext* ctx)
 {
+    pthread_cond_broadcast(&ctx->frame_wait_cond);
     pthread_mutex_unlock(&ctx->frame_lock);
 }
 
@@ -210,7 +213,12 @@ static void unlock_frames(AVFContext* ctx)
 
         if (mode != _context->observed_mode) {
             if (mode == AVCaptureDeviceTransportControlsNotPlayingMode) {
+                // Set under the lock and broadcast so a reader blocked in
+                // avf_read_packet() wakes up and returns EOF instead of
+                // hanging once the device stops delivering frames.
+                lock_frames(_context);
                 _context->observed_quit = 1;
+                unlock_frames(_context);
             }
             _context->observed_mode = mode;
         }
@@ -229,8 +237,13 @@ static void unlock_frames(AVFContext* ctx)
 {
     lock_frames(_context);
 
-    if (_context->current_frame != nil) {
-        CFRelease(_context->current_frame);
+    while ((_context->current_frame != nil) && !_context->is_stopping) {
+        pthread_cond_wait(&_context->frame_wait_cond, &_context->frame_lock);
+    }
+
+    if (_context->is_stopping) {
+        unlock_frames(_context);
+        return;
     }
 
     _context->current_frame = (CMSampleBufferRef)CFRetain(videoFrame);
@@ -273,8 +286,13 @@ static void unlock_frames(AVFContext* ctx)
 {
     lock_frames(_context);
 
-    if (_context->current_audio_frame != nil) {
-        CFRelease(_context->current_audio_frame);
+    while ((_context->current_audio_frame != nil) && !_context->is_stopping) {
+        pthread_cond_wait(&_context->frame_wait_cond, &_context->frame_lock);
+    }
+
+    if (_context->is_stopping) {
+        unlock_frames(_context);
+        return;
     }
 
     _context->current_audio_frame = (CMSampleBufferRef)CFRetain(audioFrame);
@@ -288,6 +306,12 @@ static void unlock_frames(AVFContext* ctx)
 
 static void destroy_context(AVFContext* ctx)
 {
+    // Wake any capture callback blocked waiting for the consumer and make it
+    // bail out, so stopRunning() can drain the session without a deadlock.
+    lock_frames(ctx);
+    ctx->is_stopping = 1;
+    unlock_frames(ctx);
+
     [ctx->capture_session stopRunning];
 
     [ctx->capture_session release];
@@ -305,10 +329,17 @@ static void destroy_context(AVFContext* ctx)
     av_freep(&ctx->url);
     av_freep(&ctx->audio_buffer);
 
+    pthread_cond_destroy(&ctx->frame_wait_cond);
     pthread_mutex_destroy(&ctx->frame_lock);
 
     if (ctx->current_frame) {
         CFRelease(ctx->current_frame);
+        ctx->current_frame = nil;
+    }
+
+    if (ctx->current_audio_frame) {
+        CFRelease(ctx->current_audio_frame);
+        ctx->current_audio_frame = nil;
     }
 }
 
@@ -836,6 +867,8 @@ static int avf_read_header(AVFormatContext *s)
     ctx->num_video_devices = [devices count] + [devices_muxed count];
 
     pthread_mutex_init(&ctx->frame_lock, NULL);
+    pthread_cond_init(&ctx->frame_wait_cond, NULL);
+    ctx->is_stopping = 0;
 
 #if !TARGET_OS_IPHONE && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1070
     CGGetActiveDisplayList(0, NULL, &num_screens);
@@ -1120,10 +1153,10 @@ static int avf_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVFContext* ctx = (AVFContext*)s->priv_data;
 
+    lock_frames(ctx);
     do {
         CVImageBufferRef image_buffer;
         CMBlockBufferRef block_buffer;
-        lock_frames(ctx);
 
         if (ctx->current_frame != nil) {
             int status;
@@ -1253,16 +1286,21 @@ static int avf_read_packet(AVFormatContext *s, AVPacket *pkt)
             ctx->current_audio_frame = nil;
         } else {
             pkt->data = NULL;
-            unlock_frames(ctx);
             if (ctx->observed_quit) {
+                unlock_frames(ctx);
                 return AVERROR_EOF;
-            } else {
-                return AVERROR(EAGAIN);
             }
+            // No frame available yet: wait until a capture callback delivers
+            // one (or until the device is being torn down).
+            pthread_cond_wait(&ctx->frame_wait_cond, &ctx->frame_lock);
         }
+    } while (!pkt->data && !ctx->is_stopping);
 
+    if (ctx->is_stopping) {
         unlock_frames(ctx);
-    } while (!pkt->data);
+        return AVERROR_EOF;
+    }
+    unlock_frames(ctx);
 
     return 0;
 }

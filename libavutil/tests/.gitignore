@@ -21,6 +21,7 @@
 /detection_bbox
 /dict
 /display
+/dovi_meta
 /error
 /encryption_info
 /eval
@@ -37,6 +38,7 @@
 /lls
 /log
 /lzo
+/mastering_display_metadata
 /mathematics
 /md5
 /murmur3
@@ -66,4 +68,5 @@
 /utf8
 /uuid
 /video_enc_params
+/video_hint
 /xtea

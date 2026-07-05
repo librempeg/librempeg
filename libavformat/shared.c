@@ -59,6 +59,8 @@
  */
 #define HASH_METHOD    "SHA512/256"
 #define HASH_SIZE      32
+#define HEADER_MAGIC   MKTAG(u'\xFF', 'S', 'h', '$')
+#define HEADER_VERSION 3
 
 static int hash_uri(uint8_t hash[HASH_SIZE], const char *uri)
 {
@@ -67,8 +69,10 @@ static int hash_uri(uint8_t hash[HASH_SIZE], const char *uri)
     if (ret < 0)
         return ret;
 
+    const int16_t version = HEADER_VERSION;
     av_assert0(av_hash_get_size(ctx) == HASH_SIZE);
     av_hash_init(ctx);
+    av_hash_update(ctx, (const uint8_t *) &version, sizeof(version));
     av_hash_update(ctx, (const uint8_t *) uri, strlen(uri));
     av_hash_final(ctx, hash);
     av_hash_freep(&ctx);
@@ -77,9 +81,6 @@ static int hash_uri(uint8_t hash[HASH_SIZE], const char *uri)
         hash[i] = hash[i] ? hash[i] : ~hash[i]; /* prevent zero bytes */
     return 0;
 }
-
-#define HEADER_MAGIC   MKTAG(u'\xFF', 'S', 'h', '$')
-#define HEADER_VERSION 2
 
 enum BlockState {
     /* Reserved block state values */
@@ -93,9 +94,9 @@ enum BlockState {
      */
 };
 
-static uint16_t get_block_crc(const uint8_t *block, size_t block_size)
+static uint32_t get_block_crc(const uint8_t *block, size_t block_size)
 {
-    uint16_t crc = av_crc(av_crc_get_table(AV_CRC_16_ANSI), 0, block, block_size);
+    uint32_t crc = av_crc(av_crc_get_table(AV_CRC_32_IEEE), 0, block, block_size);
     switch (crc) {
     case BLOCK_NONE:
     case BLOCK_FAILED:
@@ -107,7 +108,7 @@ static uint16_t get_block_crc(const uint8_t *block, size_t block_size)
 }
 
 typedef struct Block {
-    atomic_ushort state; /* enum BlockState */
+    atomic_uint state; /* enum BlockState */
 } Block;
 
 typedef struct Spacemap {
@@ -152,6 +153,7 @@ typedef struct SharedContext {
     int read_only;
     int64_t timeout;
     int retry_errors;
+    int retry_corrupt;
     int verify;
 
     /* misc state */
@@ -601,7 +603,7 @@ static int shared_read(URLContext *h, unsigned char *buf, int size)
         return ret;
 
     Block *const block = &s->spacemap->blocks[block_id];
-    unsigned short state = atomic_load_explicit(&block->state, memory_order_acquire);
+    unsigned state = atomic_load_explicit(&block->state, memory_order_acquire);
     int64_t pending_since = 0;
     int verify_read = 0, is_race = 0;
 
@@ -622,11 +624,13 @@ retry:
             }
         }
 
-        uint16_t crc = get_block_crc(tmp, block_size);
+        uint32_t crc = get_block_crc(tmp, block_size);
         if (crc != state) {
             av_log(h, AV_LOG_ERROR, "Cache corruption detected for block 0x%"PRIx64" at "
-                   "offset 0x%"PRIx64": expected CRC: 0x%04X, got: 0x%04X\n",
+                   "offset 0x%"PRIx64": expected CRC: 0x%08X, got: 0x%08X\n",
                    block_id, block_pos, state, crc);
+            if (s->retry_corrupt)
+                goto read_block;
             return AVERROR(EIO);
         }
 
@@ -643,9 +647,11 @@ retry:
         return size;
 
     case BLOCK_FAILED:
-        if (!s->retry_errors)
-            return AVERROR(EIO);
-        av_fallthrough;
+        if (s->retry_errors)
+            goto read_block;
+        return AVERROR(EIO);
+
+read_block:
     case BLOCK_NONE:
         if (s->read_only)
             break; /* don't mark block as pending */
@@ -786,9 +792,9 @@ retry:
                                                     memory_order_relaxed,
                                                     memory_order_relaxed);
         } else {
-            uint16_t crc = get_block_crc(tmp, bytes_read);
+            uint32_t crc = get_block_crc(tmp, bytes_read);
             av_log(h, AV_LOG_TRACE, "Cached %d bytes to block 0x%"PRIx64" at "
-                   "offset 0x%"PRIx64", CRC 0x%04X\n", bytes_read, block_id,
+                   "offset 0x%"PRIx64", CRC 0x%08X\n", bytes_read, block_id,
                    block_pos, crc);
             atomic_store_explicit(&block->state, crc, memory_order_release);
         }
@@ -874,6 +880,7 @@ static const AVOption options[] = {
     { "cache_verify",   "Verify correctness of the cache against the source",   OFFSET(verify),     AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, .flags = D },
     { "cache_timeout",  "Time in us to wait before re-fetching pending blocks", OFFSET(timeout),    AV_OPT_TYPE_INT64, {.i64 = 10000}, 0, INT64_MAX, .flags = D },
     { "retry_errors",   "Re-request blocks even if they previously failed", OFFSET(retry_errors),   AV_OPT_TYPE_BOOL, {.i64 = 1}, 0, 1, .flags = D },
+    { "retry_corrupt",  "Re-request blocks that fail the CRC check",        OFFSET(retry_corrupt),  AV_OPT_TYPE_BOOL, {.i64 = 1}, 0, 1, .flags = D },
     {0},
 };
 

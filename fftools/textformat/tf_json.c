@@ -70,7 +70,7 @@ static const char *json_escape_str(AVBPrint *dst, const char *src, void *log_ctx
     }
 
     for (p = src; *p; p++) {
-        char *s = strchr(json_escape, *p);
+        const char *s = strchr(json_escape, *p);
         if (s) {
             av_bprint_chars(dst, '\\', 1);
             av_bprint_chars(dst, json_subst[s - json_escape], 1);

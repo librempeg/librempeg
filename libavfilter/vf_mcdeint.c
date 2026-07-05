@@ -49,6 +49,7 @@
  * and almost certainly can be improved...
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/opt.h"
 #include "libavcodec/avcodec.h"
 #include "libavutil/pixdesc.h"
@@ -141,11 +142,14 @@ static int config_props(AVFilterLink *inlink)
     switch (mcdeint->mode) {
     case MODE_EXTRA_SLOW:
         enc_ctx->refs = 3;
+        av_fallthrough;
     case MODE_SLOW:
         av_dict_set(&opts, "motion_est", "iter", 0);
+        av_fallthrough;
     case MODE_MEDIUM:
         enc_ctx->flags |= AV_CODEC_FLAG_4MV;
         enc_ctx->dia_size = 2;
+        av_fallthrough;
     case MODE_FAST:
         enc_ctx->flags |= AV_CODEC_FLAG_QPEL;
     }

@@ -27,7 +27,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int mods_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "MODSN3\x0a\x00", 8))
         return 0;
@@ -40,7 +40,7 @@ static int mods_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int mods_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     AVRational fps;
@@ -74,7 +74,7 @@ static int mods_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int mods_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *pb = s->pb;
     unsigned size;
@@ -95,7 +95,7 @@ static int mods_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     pkt->pos = pos;
     pkt->stream_index = 0;
-    if (pkt->data[1] & 0x80)
+    if ((pkt->size > 0) && (pkt->data[1] & 0x80))
         pkt->flags |= AV_PKT_FLAG_KEY;
 
     return ret;
@@ -106,7 +106,7 @@ const FFInputFormat ff_mods_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("MobiClip MODS"),
     .p.extensions   = "mods",
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = mods_probe,
-    .read_header    = mods_read_header,
-    .read_packet    = mods_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };

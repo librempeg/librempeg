@@ -1050,7 +1050,7 @@ static int hvcc_write(void *logctx, AVIOContext *pb,
             hvcc->temporalIdNested);
     av_log(logctx, AV_LOG_TRACE,  "lengthSizeMinusOne:                %"PRIu8"\n",
             hvcc->lengthSizeMinusOne);
-    av_log(logctx, AV_LOG_TRACE,  "numOfArrays:                       %"PRIu8"\n",
+    av_log(logctx, AV_LOG_TRACE,  "numOfArrays:                       %d\n",
             numOfArrays);
     for (unsigned i = 0, j = 0; i < FF_ARRAY_ELEMS(hvcc->arrays); i++) {
         const HVCCNALUnitArray *const array = &hvcc->arrays[i];

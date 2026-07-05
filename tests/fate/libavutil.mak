@@ -82,6 +82,10 @@ FATE_LIBAVUTIL += fate-dict
 fate-dict: libavutil/tests/dict$(EXESUF)
 fate-dict: CMD = run libavutil/tests/dict$(EXESUF)
 
+FATE_LIBAVUTIL += fate-dovi_meta
+fate-dovi_meta: libavutil/tests/dovi_meta$(EXESUF)
+fate-dovi_meta: CMD = run libavutil/tests/dovi_meta$(EXESUF)
+
 FATE_LIBAVUTIL += fate-encryption-info
 fate-encryption-info: libavutil/tests/encryption_info$(EXESUF)
 fate-encryption-info: CMD = run libavutil/tests/encryption_info$(EXESUF)
@@ -123,6 +127,10 @@ fate-integer: CMP = null
 FATE_LIBAVUTIL += fate-lfg
 fate-lfg: libavutil/tests/lfg$(EXESUF)
 fate-lfg: CMD = run libavutil/tests/lfg$(EXESUF)
+
+FATE_LIBAVUTIL += fate-mastering_display_metadata
+fate-mastering_display_metadata: libavutil/tests/mastering_display_metadata$(EXESUF)
+fate-mastering_display_metadata: CMD = run libavutil/tests/mastering_display_metadata$(EXESUF)
 
 FATE_LIBAVUTIL += fate-mathematics
 fate-mathematics: libavutil/tests/mathematics$(EXESUF)
@@ -222,6 +230,10 @@ fate-uuid: CMP = null
 FATE_LIBAVUTIL += fate-video_enc_params
 fate-video_enc_params: libavutil/tests/video_enc_params$(EXESUF)
 fate-video_enc_params: CMD = run libavutil/tests/video_enc_params$(EXESUF)
+
+FATE_LIBAVUTIL += fate-video_hint
+fate-video_hint: libavutil/tests/video_hint$(EXESUF)
+fate-video_hint: CMD = run libavutil/tests/video_hint$(EXESUF)
 
 FATE_LIBAVUTIL += fate-file
 fate-file: libavutil/tests/file$(EXESUF)

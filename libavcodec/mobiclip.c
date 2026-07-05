@@ -1333,9 +1333,8 @@ static av_cold int mobiclip_close(AVCodecContext *avctx)
     av_freep(&s->motion);
     s->motion_size = 0;
 
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 6; i++)
         av_frame_free(&s->pic[i]);
-    }
 
     return 0;
 }

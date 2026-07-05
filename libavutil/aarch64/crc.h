@@ -52,6 +52,7 @@ enum {
     CRC_C    = 0,
     PMULL_BE,
     PMULL_LE,
+    CRC32_PMULL_LE,
 };
 
 static const AVCRC crc_table_pmull[AV_CRC_MAX][17] = {
@@ -149,6 +150,24 @@ static inline void crc_init_aarch64(AVCRC *ctx, int le, int bits, uint32_t poly,
         AV_WN64(dst + 56, poly_ | (1ULL << 32));
     }
 }
+
+#if HAVE_ARM_CRC
+FF_VISIBILITY_PUSH_HIDDEN
+uint32_t ff_crc32_pmull_eor3_aarch64(const AVCRC *ctx, uint32_t crc, const uint8_t *buffer,
+                                     size_t length);
+FF_VISIBILITY_POP_HIDDEN
+static const AVCRC crc_table_crc32_pmull[] = {
+        CRC32_PMULL_LE,
+        0x26b70c3d, 0x0, 0x3f41287a, 0x0,
+        0xae689191, 0x0, 0xccaa009e, 0x0,
+        0xf1da05aa, 0x0, 0x81256527, 0x0,
+        0x8f352d95, 0x0, 0x1d9513d7, 0x0,
+        0x54442bd4, 0x1, 0xc6e41596, 0x1,
+        0x751997d0, 0x1, 0xccaa009e, 0x0,
+        0xccaa009e, 0x0, 0x63cd6124, 0x1,
+        0xf7011640, 0x1, 0xdb710641, 0x1,
+};
+#endif
 #endif
 
 static inline av_cold int ff_crc_init_aarch64(AVCRC *ctx, int le, int bits, uint32_t poly, int ctx_size)
@@ -169,13 +188,16 @@ static inline uint32_t ff_crc_aarch64(const AVCRC *ctx, uint32_t crc,
 {
     switch (ctx[0]) {
 #if HAVE_PMULL && HAVE_EOR3
+#if HAVE_ARM_CRC
+    case CRC32_PMULL_LE: return ff_crc32_pmull_eor3_aarch64(ctx, crc, buffer, length);
+#endif
     case PMULL_BE: return ff_crc_neon_pmull(ctx, crc, buffer, length);
     case PMULL_LE: return ff_crc_le_neon_pmull(ctx, crc, buffer, length);
 #endif
 #if HAVE_ARM_CRC
     case (AV_CRC_32_IEEE_LE + 1): return ff_crc32_aarch64(ctx, crc, buffer, length);
 #endif
-    default: av_unreachable("AARCH64 has PMULL_LE, PMULL_BE and AV_CRC_32_IEEE_LE arch-specific CRC code");
+    default: av_unreachable("AARCH64 has PMULL_LE, PMULL_BE, CRC32_PMULL_LE, and AV_CRC_32_IEEE_LE arch-specific CRC code");
     }
     return 0;
 }
@@ -185,6 +207,11 @@ static inline const AVCRC *ff_crc_get_table_aarch64(AVCRCId crc_id)
     int cpu_flags = av_get_cpu_flags();
 #if HAVE_PMULL && HAVE_EOR3
     if (have_pmull(cpu_flags) && have_eor3(cpu_flags)) {
+#if HAVE_ARM_CRC
+        if (crc_id == AV_CRC_32_IEEE_LE && have_arm_crc(cpu_flags)) {
+            return crc_table_crc32_pmull;
+        }
+#endif
         return crc_table_pmull[crc_id];
     }
 #endif

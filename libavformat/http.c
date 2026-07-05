@@ -1057,7 +1057,8 @@ static int parse_cookie(HTTPContext *s, const char *p, AVDictionary **cookies)
 {
     AVDictionary *new_params = NULL;
     const AVDictionaryEntry *e, *cookie_entry;
-    char *eql, *name;
+    const char *eql;
+    char *name;
 
     // ensure the cookie is parsable
     if (parse_set_cookie(p, &new_params))

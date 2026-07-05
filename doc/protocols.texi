@@ -1616,6 +1616,11 @@ If true (the default), transient read errors from the underlying input stream
 are ignored and retried again. If false, any blocks that previously failed
 being read from will be treated as permanently inaccessible.
 
+@item retry_corrupt
+If true (the default), blocks whose contents fail the CRC integrity check are
+re-fetched from the underlying input stream, overwriting the corrupt cached
+data. If false, cache corruption is treated as a fatal read error.
+
 @end table
 
 URL Syntax is

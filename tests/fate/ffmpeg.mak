@@ -51,8 +51,8 @@ FATE_SAMPLES_FFMPEG-$(call ENCDEC, MPEG2VIDEO H264, FRAMECRC H264, H264_PARSER C
 # Tests that the video is properly autorotated using the contained
 # display matrix and that the generated file does not contain
 # a display matrix any more.
-FATE_SAMPLES_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO, MOV, H264_DECODER AAC_FIXED_DECODER AC3_FIXED_ENCODER EXTRACT_EXTRADATA_BSF) += fate-autorotate
-fate-autorotate: CMD = transcode "mov -c:a aac_fixed" $(TARGET_SAMPLES)/filter/sample-in-issue-505.mov mov "-c:v mpeg2video -c:a ac3_fixed" "-c copy -t 0.5" "-show_entries stream_side_data_list"
+FATE_SAMPLES_FFMPEG_FFPROBE-$(call TRANSCODE, MPEG2VIDEO, MOV, H264_DECODER EXTRACT_EXTRADATA_BSF) += fate-autorotate
+fate-autorotate: CMD = transcode "mov" $(TARGET_SAMPLES)/filter/sample-in-issue-505.mov mov "-c:v mpeg2video -an" "-c copy -t 0.5" "-show_entries stream_side_data_list"
 
 FATE_SAMPLES_FFMPEG-$(call FILTERDEMDEC, OVERLAY SCALE, RAWVIDEO VOBSUB, RAWVIDEO DVDSUB, DVDSUB_ENCODER) += fate-sub2video
 fate-sub2video: tests/data/vsynth_lena.yuv

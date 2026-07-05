@@ -52,9 +52,3 @@ buffer_size=49152
 vbv_delay=-1
 [/SIDE_DATA]
 [/STREAM]
-[STREAM]
-[SIDE_DATA]
-side_data_type=Audio Service Type
-service_type=0
-[/SIDE_DATA]
-[/STREAM]
