@@ -1403,7 +1403,7 @@ static av_cold int vulkan_encode_ffv1_init(AVCodecContext *avctx)
     max_host_size = 0;
     for (int i = 0; i < fv->s.mprops.memoryHeapCount; i++) {
         if (fv->s.mprops.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
-            max_heap_size = FFMAX(fv->max_heap_size,
+            max_heap_size = FFMAX(max_heap_size,
                                   fv->s.mprops.memoryHeaps[i].size);
         if (!(fv->s.mprops.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT))
             max_host_size = FFMAX(max_host_size,
