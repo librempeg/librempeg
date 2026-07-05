@@ -999,6 +999,7 @@ void ff_hevc_hls_residual_coding(HEVCLocalContext *lc, const HEVCPPS *pps,
     int greater1_ctx = 1;
 
     int num_last_subset;
+    int max_xy, col_limit, clear_rows;
     int x_cg_last_sig, y_cg_last_sig;
 
     const uint8_t *scan_x_cg, *scan_y_cg, *scan_x_off, *scan_y_off;
@@ -1021,8 +1022,6 @@ void ff_hevc_hls_residual_coding(HEVCLocalContext *lc, const HEVCPPS *pps,
     uint8_t dc_scale;
     int pred_mode_intra = (c_idx == 0) ? lc->tu.intra_pred_mode :
                                          lc->tu.intra_pred_mode_c;
-
-    memset(coeffs, 0, trafo_size * trafo_size * sizeof(int16_t));
 
     // Derive QP for dequant
     if (!lc->cu.cu_transquant_bypass_flag) {
@@ -1175,6 +1174,25 @@ void ff_hevc_hls_residual_coding(HEVCLocalContext *lc, const HEVCPPS *pps,
     }
     num_coeff++;
     num_last_subset = (num_coeff - 1) >> 4;
+
+    max_xy = FFMAX(last_significant_coeff_x, last_significant_coeff_y);
+    col_limit = last_significant_coeff_x + last_significant_coeff_y + 4;
+    if (max_xy < 4)
+        col_limit = FFMIN(4, col_limit);
+    else if (max_xy < 8)
+        col_limit = FFMIN(8, col_limit);
+    else if (max_xy < 12)
+        col_limit = FFMIN(24, col_limit);
+
+    // idct_dc reads coeffs[0] only and writes the whole block: no clear needed
+    clear_rows = trafo_size;
+    if (!lc->cu.cu_transquant_bypass_flag && !transform_skip_flag &&
+        !(lc->cu.pred_mode == MODE_INTRA && c_idx == 0 && log2_trafo_size == 2)) {
+        if (max_xy == 0)
+            clear_rows = 0;
+    }
+    if (clear_rows)
+        memset(coeffs, 0, clear_rows * trafo_size * sizeof(int16_t));
 
     for (i = num_last_subset; i >= 0; i--) {
         int n, m;
@@ -1480,19 +1498,10 @@ void ff_hevc_hls_residual_coding(HEVCLocalContext *lc, const HEVCPPS *pps,
         } else if (lc->cu.pred_mode == MODE_INTRA && c_idx == 0 && log2_trafo_size == 2) {
             s->hevcdsp.transform_4x4_luma(coeffs);
         } else {
-            int max_xy = FFMAX(last_significant_coeff_x, last_significant_coeff_y);
             if (max_xy == 0)
                 s->hevcdsp.idct_dc[log2_trafo_size - 2](coeffs);
-            else {
-                int col_limit = last_significant_coeff_x + last_significant_coeff_y + 4;
-                if (max_xy < 4)
-                    col_limit = FFMIN(4, col_limit);
-                else if (max_xy < 8)
-                    col_limit = FFMIN(8, col_limit);
-                else if (max_xy < 12)
-                    col_limit = FFMIN(24, col_limit);
+            else
                 s->hevcdsp.idct[log2_trafo_size - 2](coeffs, col_limit);
-            }
         }
     }
     if (lc->tu.cross_pf) {
