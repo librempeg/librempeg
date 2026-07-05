@@ -938,30 +938,107 @@ static av_always_inline int coeff_abs_level_greater2_flag_decode(HEVCLocalContex
     return GET_CABAC(COEFF_ABS_LEVEL_GREATER2_FLAG_OFFSET + inc);
 }
 
-static av_always_inline int coeff_abs_level_remaining_decode(HEVCLocalContext *lc, int rc_rice_param)
+/* a run of bypass bins is the quotient of the offset by range << 17 */
+static int cabac_bypass_bits(CABACContext *c, int n)
+{
+    int avail = CABAC_BITS - ff_ctz(c->low);
+    uint64_t x, r = (uint64_t)c->range << (CABAC_BITS + 1);
+    const uint8_t *bytestream = c->bytestream;
+
+    if (n < avail) {
+        x = (uint64_t)c->low << n;
+    } else {
+        int fill = (bytestream[0] << 9) + (bytestream[1] << 1) - CABAC_MASK;
+
+        x = (uint64_t)((((int64_t)c->low << avail) + fill)) << (n - avail);
+#if !UNCHECKED_BITSTREAM_READER
+        if (bytestream < c->bytestream_end)
+#endif
+            bytestream += CABAC_BITS / 8;
+    }
+
+    if (x < r << n) {
+        c->low = x % r;
+        c->bytestream = bytestream;
+        return x / r;
+    } else {
+        int ret = 0;
+
+        for (int i = 0; i < n; i++)
+            ret = (ret << 1) | get_cabac_bypass(c);
+        return ret;
+    }
+}
+
+/* leading ones of the quotient, consumed only up to the first zero */
+static int cabac_unary_prefix(CABACContext *c, int max)
 {
     int prefix = 0;
+
+    while (prefix < max) {
+        int avail = CABAC_BITS - ff_ctz(c->low);
+        int n = FFMIN(avail - 1, max - prefix);
+        uint64_t r = (uint64_t)c->range << (CABAC_BITS + 1);
+        uint64_t x = (uint64_t)c->low << n;
+        int q, t;
+
+        if (n < 1 || x >= r << n) {
+            if (!get_cabac_bypass(c))
+                return prefix;
+            prefix++;
+            continue;
+        }
+
+        q = x / r;
+        t = ~q & ((1 << n) - 1);
+        if (t) {
+            int p = n - 1 - av_log2(t);
+            int k = n - (p + 1);
+
+            c->low = (x >> k) - ((uint64_t)(q >> k) * r);
+            return prefix + p;
+        }
+        c->low = x - (uint64_t)q * r;
+        prefix += n;
+    }
+    return prefix;
+}
+
+static av_always_inline int coeff_abs_level_remaining_decode(HEVCLocalContext *lc, int rc_rice_param)
+{
+    int prefix;
     int suffix = 0;
     int last_coeff_abs_level_remaining;
     int i;
 
-    while (prefix < CABAC_MAX_BIN && get_cabac_bypass(&lc->cc))
-        prefix++;
+    prefix = cabac_unary_prefix(&lc->cc, CABAC_MAX_BIN);
 
     if (prefix < 3) {
-        for (i = 0; i < rc_rice_param; i++)
-            suffix = (suffix << 1) | get_cabac_bypass(&lc->cc);
+        if (rc_rice_param > 2)
+            suffix = cabac_bypass_bits(&lc->cc, rc_rice_param);
+        else
+            for (i = 0; i < rc_rice_param; i++)
+                suffix = (suffix << 1) | get_cabac_bypass(&lc->cc);
         last_coeff_abs_level_remaining = (prefix << rc_rice_param) + suffix;
     } else {
         int prefix_minus3 = prefix - 3;
+        int k;
 
         if (prefix == CABAC_MAX_BIN || prefix_minus3 + rc_rice_param > 16 + 6) {
             av_log(lc->logctx, AV_LOG_ERROR, "CABAC_MAX_BIN : %d\n", prefix);
             return 0;
         }
 
-        for (i = 0; i < prefix_minus3 + rc_rice_param; i++)
-            suffix = (suffix << 1) | get_cabac_bypass(&lc->cc);
+        k = prefix_minus3 + rc_rice_param;
+        if (k > 16) {
+            suffix  = cabac_bypass_bits(&lc->cc, 16) << (k - 16);
+            suffix |= cabac_bypass_bits(&lc->cc, k - 16);
+        } else if (k > 2) {
+            suffix = cabac_bypass_bits(&lc->cc, k);
+        } else {
+            for (i = 0; i < k; i++)
+                suffix = (suffix << 1) | get_cabac_bypass(&lc->cc);
+        }
         last_coeff_abs_level_remaining = (((1 << prefix_minus3) + 3 - 1)
                                               << rc_rice_param) + suffix;
     }
@@ -972,6 +1049,9 @@ static av_always_inline int coeff_sign_flag_decode(HEVCLocalContext *lc, uint8_t
 {
     int i;
     int ret = 0;
+
+    if (nb > 2)
+        return cabac_bypass_bits(&lc->cc, nb);
 
     for (i = 0; i < nb; i++)
         ret = (ret << 1) | get_cabac_bypass(&lc->cc);
