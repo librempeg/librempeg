@@ -95,7 +95,7 @@ static int mods_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     pkt->pos = pos;
     pkt->stream_index = 0;
-    if (pkt->data[1] & 0x80)
+    if ((pkt->size > 0) && (pkt->data[1] & 0x80))
         pkt->flags |= AV_PKT_FLAG_KEY;
 
     return ret;
