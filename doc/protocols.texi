@@ -453,15 +453,16 @@ string describing the libavformat build. ("Lavf/<version>")
 Set the Referer header. Include 'Referer: URL' header in HTTP request.
 
 @item multiple_requests
-Use persistent connections if set to 1, default is 0.
+Force persistent connections if set to 1, or disable if 0. Default is -1,
+which means auto (implies keep-alive when using -request_size or
+-initial_request_size).
 
 @item request_size
 Limit the size of requests made. This is useful for some pathological servers
 that throttle unbounded range requests, as well as when expecting to seek
 frequently. Disabled (set to 0) by default.
 
-Note that if enabling this option, it's strongly recommended to also enable
-the @option{multiple_requests} option, as well as setting
+Note that if enabling this option, it's strongly recommended to also set
 @option{short_seek_size} to the same value or higher. Doing so allows FFmpeg
 to reuse a single HTTP connection wherever possible.
 
@@ -1608,7 +1609,7 @@ and cache the same block at the same time. If this timeout elapses, it's
 assumed that the other process may have gotten stuck or died in the meantime.
 
 If set to zero, no waiting is done and all processes will immediately race
-to try and fetch the same missing blocks themselves. Defaults to 0.
+to try and fetch the same missing blocks themselves. Defaults to 10000 (10 ms).
 
 @item retry_errors
 If true (the default), transient read errors from the underlying input stream
@@ -2080,8 +2081,8 @@ database, but it does not validate that the certificate actually
 matches the host name we are trying to connect to. (With other backends,
 the host name is validated as well.)
 
-This is disabled by default since it requires a CA database to be
-provided by the caller in many cases.
+This is enabled by default. Verifying the peer requires a CA database,
+which in some cases has to be provided by the caller.
 
 @item cert_file, cert=@var{filename}
 A file containing a certificate to use in the handshake with the peer.
@@ -2145,8 +2146,8 @@ peer certificate is signed by one of the root certificates in the CA
 database, but it does not validate that the certificate actually
 matches the host name we are trying to connect to.
 
-This is disabled by default since it requires a CA database to be
-provided by the caller in many cases.
+This is enabled by default. Verifying the peer requires a CA database,
+which in some cases has to be provided by the caller.
 
 @item cert_file, cert=@var{filename}
 A file containing a certificate to use in the handshake with the peer.

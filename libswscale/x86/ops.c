@@ -297,10 +297,10 @@ static bool uop_is_type_invariant(const SwsUOpType uop)
     }
 }
 
-#define REF_ENTRY(EXT, NAME, ...) &op_##NAME##EXT,
+#define REF_ENTRY(EXT, NAME, ...) &uop_##NAME##EXT,
 #define DECL_ENTRY(EXT, CHECK, SETUP, NAME, ...)                                \
     void ff_##NAME##EXT(void);                                                  \
-    static const SwsOpEntry op_##NAME##EXT = {                                  \
+    static const SwsUOpEntry uop_##NAME##EXT = {                                \
         .func = (SwsFuncPtr) ff_##NAME##EXT,                                    \
         .check = CHECK,                                                         \
         .setup = SETUP,                                                         \
@@ -312,6 +312,7 @@ static bool uop_is_type_invariant(const SwsUOpType uop)
 SWS_FOR_STRUCT(TYPE, READ_PACKED,     DECL_ENTRY, EXT, NULL, setup_rw_packed)   \
 SWS_FOR_STRUCT(TYPE, READ_NIBBLE,     DECL_ENTRY, EXT, NULL, NULL)              \
 SWS_FOR_STRUCT(TYPE, READ_BIT,        DECL_ENTRY, EXT, NULL, NULL)              \
+SWS_FOR_STRUCT(TYPE, READ_PALETTE,    DECL_ENTRY, EXT, NULL, NULL)              \
 SWS_FOR_STRUCT(TYPE, WRITE_PACKED,    DECL_ENTRY, EXT, NULL, setup_rw_packed)   \
 SWS_FOR_STRUCT(TYPE, WRITE_NIBBLE,    DECL_ENTRY, EXT, NULL, NULL)              \
 SWS_FOR_STRUCT(TYPE, WRITE_BIT,       DECL_ENTRY, EXT, NULL, NULL)              \
@@ -334,6 +335,7 @@ SWS_FOR_STRUCT(TYPE, DITHER,          DECL_ENTRY, EXT, NULL, setup_dither)      
     SWS_FOR(TYPE, READ_PACKED,    REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, READ_NIBBLE,    REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, READ_BIT,       REF_ENTRY, EXT)                               \
+    SWS_FOR(TYPE, READ_PALETTE,   REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, WRITE_PACKED,   REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, WRITE_NIBBLE,   REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, WRITE_BIT,      REF_ENTRY, EXT)                               \
@@ -358,7 +360,7 @@ SWS_FOR_STRUCT(U8, READ_PLANAR,     DECL_ENTRY, EXT, NULL, NULL)                
 SWS_FOR_STRUCT(U8, WRITE_PLANAR,    DECL_ENTRY, EXT, NULL, NULL)                \
 SWS_FOR_STRUCT(U8, CLEAR,           DECL_ENTRY, EXT, NULL, setup_clear)         \
                                                                                 \
-static const SwsOpTable ops_u8##EXT = {                                         \
+static const SwsUOpTable uops_u8##EXT = {                                       \
     .cpu_flags = AV_CPU_FLAG_##FLAG,                                            \
     .block_size = SIZE,                                                         \
     .entries = {                                                                \
@@ -376,7 +378,7 @@ SWS_FOR_STRUCT(U8,  TO_U16, DECL_ENTRY, EXT, NULL, NULL)                        
 SWS_FOR_STRUCT(U16, TO_U8,  DECL_ENTRY, EXT, NULL, NULL)                        \
 SWS_FOR_STRUCT(U8,  EXPAND_PAIR, DECL_ENTRY, EXT, NULL, NULL)                   \
                                                                                 \
-static const SwsOpTable ops_u16##EXT = {                                        \
+static const SwsUOpTable uops_u16##EXT = {                                      \
     .cpu_flags = AV_CPU_FLAG_##FLAG,                                            \
     .block_size = SIZE,                                                         \
     .entries = {                                                                \
@@ -396,7 +398,7 @@ SWS_FOR_STRUCT(U16, TO_U32, DECL_ENTRY, EXT, NULL, NULL)                        
 SWS_FOR_STRUCT(U32, TO_U16, DECL_ENTRY, EXT, NULL, NULL)                        \
 SWS_FOR_STRUCT(U8,  EXPAND_QUAD, DECL_ENTRY, EXT, NULL, NULL)                   \
                                                                                 \
-static const SwsOpTable ops_u32##EXT = {                                        \
+static const SwsUOpTable uops_u32##EXT = {                                      \
     .cpu_flags = AV_CPU_FLAG_##FLAG,                                            \
     .block_size = SIZE,                                                         \
     .entries = {                                                                \
@@ -432,7 +434,7 @@ SWS_FOR_STRUCT(U8,  READ_PLANAR_FV_FMA, DECL_ENTRY, EXT, NULL, setup_filter_v)  
 SWS_FOR_STRUCT(U16, READ_PLANAR_FV_FMA, DECL_ENTRY, EXT, NULL, setup_filter_v)  \
 SWS_FOR_STRUCT(F32, READ_PLANAR_FV_FMA, DECL_ENTRY, EXT, NULL, setup_filter_v)  \
                                                                                 \
-static const SwsOpTable ops_f32##EXT = {                                        \
+static const SwsUOpTable uops_f32##EXT = {                                      \
     .cpu_flags = AV_CPU_FLAG_##FLAG,                                            \
     .block_size = SIZE,                                                         \
     .entries = {                                                                \
@@ -466,15 +468,15 @@ DECL_TABLE_U16(_m2_avx2, 32, AVX2)
 DECL_TABLE_U32(_m2_avx2, 16, AVX2)
 DECL_TABLE_F32(_m2_avx2, 16, AVX2)
 
-static const SwsOpTable *const tables[] = {
-    &ops_u8_m1_sse4,
-    &ops_u8_m1_avx2, /* order before _m2_sse4 */
-    &ops_u8_m2_sse4,
-    &ops_u8_m2_avx2,
-    &ops_u16_m1_avx2,
-    &ops_u16_m2_avx2,
-    &ops_u32_m2_avx2,
-    &ops_f32_m2_avx2,
+static const SwsUOpTable *const tables[] = {
+    &uops_u8_m1_sse4,
+    &uops_u8_m1_avx2, /* order before _m2_sse4 */
+    &uops_u8_m2_sse4,
+    &uops_u8_m2_avx2,
+    &uops_u16_m1_avx2,
+    &uops_u16_m2_avx2,
+    &uops_u32_m2_avx2,
+    &uops_f32_m2_avx2,
 };
 
 SWS_DECL_FUNC(ff_sws_process1_x86);

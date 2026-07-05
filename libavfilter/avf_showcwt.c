@@ -1291,7 +1291,7 @@ static int compute_kernel(AVFilterContext *ctx)
             }
         }
 
-        for (int n = b; n >= a; n--) {
+        for (int n = b - 1; n >= a; n--) {
             if (tkernel[n+range] != 0.f) {
                 if (tkernel[n+range] > FLT_MIN)
                     av_log(ctx, AV_LOG_DEBUG, "out of range kernel %g\n", tkernel[n+range]);
@@ -1768,7 +1768,7 @@ static int output_frame(AVFilterContext *ctx)
         case DIRECTION_RL:
             for (int p = 0; p < nb_planes; p++) {
                 ptrdiff_t linesize = s->outpicref->linesize[p];
-                const int size = s->w - s->pos;
+                const int size = FFMIN(s->pos + 1, s->sono_size);
                 const int fill = p > 0 && p < 3 ? 128 : 0;
 
                 for (int y = 0; y < s->h; y++) {
@@ -1795,7 +1795,7 @@ static int output_frame(AVFilterContext *ctx)
                 ptrdiff_t linesize = s->outpicref->linesize[p];
                 const int fill = p > 0 && p < 3 ? 128 : 0;
 
-                for (int y = s->h - s->pos; y >= 0; y--) {
+                for (int y = FFMIN(s->pos, s->sono_size - 1); y >= 0; y--) {
                     uint8_t *dst = s->outpicref->data[p] + y * linesize;
 
                     memset(dst, fill, s->w);

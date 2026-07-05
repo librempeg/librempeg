@@ -1,0 +1,11 @@
+ff3e10277c8cb7d8ea202e1e3281ce49 *tests/data/fate/hevc-bsf-mp4toannexb-new-extradata.hevc
+4254 tests/data/fate/hevc-bsf-mp4toannexb-new-extradata.hevc
+#tb 0: 1/25
+#media_type 0: video
+#codec_id 0: rawvideo
+#dimensions 0: 128x128
+#sar 0: 1/1
+0,          0,          0,        1,    24576, 0x76a8158f
+0,          1,          1,        1,    24576, 0x804e162a
+0,          2,          2,        1,    24576, 0xc1d05bea
+0,          3,          3,        1,    24576, 0xd84f5c77

@@ -60,9 +60,8 @@ static int read_header(AVFormatContext *s)
     st->codecpar->sample_rate    = av_rescale_rnd(pitch, 48000, 4096, AV_ROUND_INF);
     st->codecpar->block_align    = 32;
     st->start_time               = 0;
-    if (pb->seekable & AVIO_SEEKABLE_NORMAL)
-        st->duration = av_get_audio_frame_duration2(st->codecpar,
-                                                    avio_size(pb) - 32);
+    st->codecpar->bit_rate = 8LL * st->codecpar->ch_layout.nb_channels * 16 *
+                                   st->codecpar->sample_rate / 28;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 

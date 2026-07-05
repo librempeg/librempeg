@@ -56,6 +56,9 @@ static const char *tprintf(char buf[], size_t size, const char *fmt, ...)
 
 static int rw_pixel_bits(const SwsOp *op)
 {
+    if (op->rw.mode == SWS_RW_PALETTE)
+        return 8; /* index size */
+
     int elems = 0;
     switch (op->rw.mode) {
     case SWS_RW_PLANAR: elems = 1; break;
@@ -110,12 +113,12 @@ static void fill8(uint8_t *line, int num, unsigned range)
     }
 }
 
-static void set_range(AVRational *rangeq, unsigned range, unsigned range_def)
+static void set_range(AVRational64 *rangeq, unsigned range, unsigned range_def)
 {
     if (!range)
         range = range_def;
-    if (range && range <= INT_MAX)
-        *rangeq = (AVRational) { range, 1 };
+    if (range)
+        *rangeq = (AVRational64) { range, 1 };
 }
 
 static void check_compiled(const char *name, const SwsOpBackend *backend,
@@ -175,6 +178,11 @@ static void check_compiled(const char *name, const SwsOpBackend *backend,
         exec.out_stride[i] = sizeof(dst0[i][0]);
         exec.in_bump[i]  = exec.in_stride[i]  - read_size;
         exec.out_bump[i] = exec.out_stride[i] - write_size;
+    }
+
+    if (read_op->rw.mode == SWS_RW_PALETTE) {
+        static_assert(sizeof(src0[1]) >= sizeof(uint32_t[256]), "palette plane too small");
+        exec.in_bump[1] = exec.in_stride[1] = 0;
     }
 
     int32_t in_bump_y[LINES];
@@ -272,20 +280,20 @@ static void check_ops(const char *name, const unsigned ranges[NB_PLANES],
         switch (read_op->type) {
         case U8:
             set_range(&oplist.comps_src.max[p], ranges[p], UINT8_MAX);
-            oplist.comps_src.min[p] = (AVRational) { 0, 1 };
+            oplist.comps_src.min[p] = (AVRational64) { 0, 1 };
             break;
         case U16:
             set_range(&oplist.comps_src.max[p], ranges[p], UINT16_MAX);
-            oplist.comps_src.min[p] = (AVRational) { 0, 1 };
+            oplist.comps_src.min[p] = (AVRational64) { 0, 1 };
             break;
         case U32:
             set_range(&oplist.comps_src.max[p], ranges[p], UINT32_MAX);
-            oplist.comps_src.min[p] = (AVRational) { 0, 1 };
+            oplist.comps_src.min[p] = (AVRational64) { 0, 1 };
             break;
         case F32:
-            if (ranges[p] && ranges[p] <= INT_MAX) {
-                oplist.comps_src.max[p] = (AVRational) { ranges[p], 1 };
-                oplist.comps_src.min[p] = (AVRational) { 0, 1 };
+            if (ranges[p]) {
+                oplist.comps_src.max[p] = (AVRational64) { ranges[p], 1 };
+                oplist.comps_src.min[p] = (AVRational64) { 0, 1 };
             }
             break;
         }
@@ -384,16 +392,16 @@ do {                                                                            
     CHECK_RANGES(NAME, RANGES, 4, num, IN, OUT, __VA_ARGS__);                   \
 } while (0)
 
-static AVRational rndq(SwsPixelType t)
+static AVRational64 rndq(SwsPixelType t)
 {
     const unsigned num = rnd();
     if (ff_sws_pixel_type_is_int(t)) {
         const int bits = ff_sws_pixel_type_size(t) * 8;
         const unsigned mask = UINT_MAX >> (32 - bits);
-        return (AVRational) { num & mask, 1 };
+        return (AVRational64) { num & mask, 1 };
     } else {
         const unsigned den = rnd();
-        return (AVRational) { num, den ? den : 1 };
+        return (AVRational64) { num, den ? den : 1 };
     }
 }
 
@@ -403,8 +411,9 @@ static void check_read(const char *name, const SwsUOp *uop)
     switch (uop->uop) {
     case SWS_UOP_READ_PACKED:
     case SWS_UOP_READ_BIT:
-    case SWS_UOP_READ_NIBBLE: mode = SWS_RW_PACKED; break;
-    case SWS_UOP_READ_PLANAR: mode = SWS_RW_PLANAR; break;
+    case SWS_UOP_READ_NIBBLE:  mode = SWS_RW_PACKED; break;
+    case SWS_UOP_READ_PLANAR:  mode = SWS_RW_PLANAR; break;
+    case SWS_UOP_READ_PALETTE: mode = SWS_RW_PALETTE; break;
     default: return;
     }
 
@@ -431,8 +440,8 @@ static void check_write(const char *name, const SwsUOp *uop)
     switch (uop->uop) {
     case SWS_UOP_WRITE_BIT:
     case SWS_UOP_WRITE_NIBBLE:
-    case SWS_UOP_READ_PACKED: mode = SWS_RW_PACKED; break;
-    case SWS_UOP_READ_PLANAR: mode = SWS_RW_PLANAR; break;
+    case SWS_UOP_WRITE_PACKED: mode = SWS_RW_PACKED; break;
+    case SWS_UOP_WRITE_PLANAR: mode = SWS_RW_PLANAR; break;
     default: return;
     }
 
@@ -532,7 +541,7 @@ static void check_cast(const char *name, const SwsUOp *uop)
 
 static void check_expand_bit(const char *name, const SwsUOp *uop)
 {
-    AVRational factor = { .den = 1 };
+    AVRational64 factor = { .den = 1 };
     switch (uop->type) {
     case SWS_PIXEL_U8:  factor.num = UINT8_MAX;  break;
     case SWS_PIXEL_U16: factor.num = UINT16_MAX; break;
@@ -579,13 +588,13 @@ static void check_swizzle(const char *name, const SwsUOp *uop)
 static void check_scale(const char *name, const SwsUOp *uop)
 {
     unsigned range = 0;
-    AVRational scale;
+    AVRational64 scale;
 
     if (ff_sws_pixel_type_is_int(uop->type)) {
         /* Ensure the result won't exceed the value range */
         const int bits = ff_sws_pixel_type_size(uop->type) * 8;
         const unsigned max = UINT32_MAX >> (32 - bits);
-        scale = (AVRational) { rnd() & (max >> 1), 1 };
+        scale = (AVRational64) { rnd() & (max >> 1), 1 };
         range = max / (scale.num ? scale.num : 1);
     } else {
         scale = rndq(uop->type);
@@ -659,9 +668,9 @@ static void check_clear(const char *name, const SwsUOp *uop)
     const SwsPixelType type = uop->type;
     const int bits = ff_sws_pixel_type_size(type) * 8;
     const unsigned range  = UINT32_MAX >> (32 - bits);
-    const AVRational one  = (AVRational) { (int) range, 1};
-    const AVRational zero = (AVRational) { 0, 1};
-    const AVRational val  = { (rand() & 0x7F) | 1, 1 };
+    const AVRational64 one  = (AVRational64) { (int) range, 1};
+    const AVRational64 zero = (AVRational64) { 0, 1};
+    const AVRational64 val  = { (rand() & 0x7F) | 1, 1 };
 
     SwsClearOp clear = { .mask = uop->mask };
     for (int i = 0; i < 4; i++) {
@@ -689,15 +698,15 @@ static void check_linear(const char *name, const SwsUOp *uop)
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 5; j++) {
             if (uop->par.lin.one & SWS_MASK(i, j))
-                lin.m[i][j] = (AVRational) { 1, 1 };
+                lin.m[i][j] = (AVRational64) { 1, 1 };
             else if (uop->par.lin.zero & SWS_MASK(i, j))
-                lin.m[i][j] = (AVRational) { 0, 1 };
+                lin.m[i][j] = (AVRational64) { 0, 1 };
             else
                 lin.m[i][j] = rndq(type);
         }
     }
 
-    lin.mask = ff_sws_linear_mask(lin);
+    lin.mask = ff_sws_linear_mask(&lin);
     CHECK(name, 4, 4, type, type, {
         .op   = SWS_OP_LINEAR,
         .type = type,
@@ -764,6 +773,7 @@ void checkasm_check_sw_ops(void)
     CHECK_FOR(READ_PACKED,      check_read);
     CHECK_FOR(READ_NIBBLE,      check_read);
     CHECK_FOR(READ_BIT,         check_read);
+    CHECK_FOR(READ_PALETTE,     check_read);
     CHECK_FOR(WRITE_PLANAR,     check_write);
     CHECK_FOR(WRITE_PACKED,     check_write);
     CHECK_FOR(WRITE_NIBBLE,     check_write);

@@ -1,19 +1,19 @@
 /*
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #include "libavutil/attributes.h"
@@ -29,7 +29,7 @@
     (((codec_id) == AV_CODEC_ID_FFV1) || \
      ((codec_id) == AV_CODEC_ID_DPX) || \
      ((codec_id) == AV_CODEC_ID_APV) || \
-     ((codec_id) == AV_CODEC_ID_PRORESRAW) || \
+     ((codec_id) == AV_CODEC_ID_PRORES_RAW) || \
      ((codec_id) == AV_CODEC_ID_PRORES))
 
 #if CONFIG_H264_VULKAN_HWACCEL
@@ -249,53 +249,6 @@ int ff_vk_decode_prepare_frame(FFVulkanDecodeContext *dec, AVFrame *pic,
         if (!alloc_dpb) {
             vkpic->view.ref[0] = vkpic->view.out[0];
             vkpic->view.aspect_ref[0] = vkpic->view.aspect[0];
-        }
-    }
-
-    return 0;
-}
-
-int ff_vk_decode_prepare_frame_sdr(FFVulkanDecodeContext *dec, AVFrame *pic,
-                                   FFVulkanDecodePicture *vkpic, int is_current,
-                                   enum FFVkShaderRepFormat rep_fmt, int alloc_dpb)
-{
-    int err;
-    FFVulkanDecodeShared *ctx = dec->shared_ctx;
-    AVHWFramesContext *frames = (AVHWFramesContext *)pic->hw_frames_ctx->data;
-
-    vkpic->slices_size = 0;
-
-    if (vkpic->view.ref[0])
-        return 0;
-
-    init_frame(dec, vkpic);
-
-    for (int i = 0; i < av_pix_fmt_count_planes(frames->sw_format); i++) {
-        if (alloc_dpb) {
-            vkpic->dpb_frame = vk_get_dpb_pool(ctx);
-            if (!vkpic->dpb_frame)
-                return AVERROR(ENOMEM);
-
-            err = ff_vk_create_imageview(&ctx->s,
-                                         &vkpic->view.ref[i], &vkpic->view.aspect_ref[i],
-                                         vkpic->dpb_frame, i, rep_fmt);
-            if (err < 0)
-                return err;
-
-            vkpic->view.dst[i] = vkpic->view.ref[i];
-        }
-
-        if (!alloc_dpb || is_current) {
-            err = ff_vk_create_imageview(&ctx->s,
-                                         &vkpic->view.out[i], &vkpic->view.aspect[i],
-                                         pic, i, rep_fmt);
-            if (err < 0)
-                return err;
-
-            if (!alloc_dpb) {
-                vkpic->view.ref[i] = vkpic->view.out[i];
-                vkpic->view.aspect_ref[i] = vkpic->view.aspect[i];
-            }
         }
     }
 

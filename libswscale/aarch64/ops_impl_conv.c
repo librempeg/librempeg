@@ -88,9 +88,9 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
             out->op = AARCH64_SWS_OP_READ_NIBBLE;
         else if (op->rw.frac == 3)
             out->op = AARCH64_SWS_OP_READ_BIT;
-        else if (op->rw.mode == SWS_RW_PACKED)
+        else if (op->rw.mode == SWS_RW_PACKED && op->rw.elems > 1)
             out->op = AARCH64_SWS_OP_READ_PACKED;
-        else if (op->rw.mode == SWS_RW_PLANAR)
+        else if (op->rw.mode == SWS_RW_PACKED || op->rw.mode == SWS_RW_PLANAR)
             out->op = AARCH64_SWS_OP_READ_PLANAR;
         else
             return AVERROR(ENOTSUP);
@@ -106,9 +106,9 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
             out->op = AARCH64_SWS_OP_WRITE_NIBBLE;
         else if (op->rw.frac == 3)
             out->op = AARCH64_SWS_OP_WRITE_BIT;
-        else if (op->rw.mode == SWS_RW_PACKED)
+        else if (op->rw.mode == SWS_RW_PACKED && op->rw.elems > 1)
             out->op = AARCH64_SWS_OP_WRITE_PACKED;
-        else if (op->rw.mode == SWS_RW_PLANAR)
+        else if (op->rw.mode == SWS_RW_PACKED || op->rw.mode == SWS_RW_PLANAR)
             out->op = AARCH64_SWS_OP_WRITE_PLANAR;
         else
             return AVERROR(ENOTSUP);
@@ -149,21 +149,17 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         case 4: out->mask = 0x1111; break;
         };
         break;
-    case AARCH64_SWS_OP_SWAP_BYTES:
-        /* Only the element size matters, not the type. */
-        if (out->type == AARCH64_PIXEL_F32)
-            out->type = AARCH64_PIXEL_U32;
-        break;
     case AARCH64_SWS_OP_SWIZZLE:
+        /* Recompute mask taking identity swizzle into account */
         out->mask = 0;
-        MASK_SET(out->mask, 0, op->swizzle.in[0] != 0);
-        MASK_SET(out->mask, 1, op->swizzle.in[1] != 1);
-        MASK_SET(out->mask, 2, op->swizzle.in[2] != 2);
-        MASK_SET(out->mask, 3, op->swizzle.in[3] != 3);
-        MASK_SET(out->swizzle, 0, op->swizzle.in[0]);
-        MASK_SET(out->swizzle, 1, op->swizzle.in[1]);
-        MASK_SET(out->swizzle, 2, op->swizzle.in[2]);
-        MASK_SET(out->swizzle, 3, op->swizzle.in[3]);
+        for (int i = 0; i < 4; i++) {
+            if (SWS_OP_NEEDED(op, i) && op->swizzle.in[i] != i) {
+                MASK_SET(out->mask, i, 1);
+                MASK_SET(out->swizzle, i, op->swizzle.in[i]);
+            } else {
+                MASK_SET(out->swizzle, i, 0xf);
+            }
+        }
         /* The element size and type don't matter. */
         out->block_size = block_size * ff_sws_pixel_type_size(op->type);
         out->type = AARCH64_PIXEL_U8;
@@ -213,10 +209,11 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
                 continue;
             MASK_SET(out->mask, i, 1);
             for (int j = 0; j < 5; j++) {
+                const AVRational64 k = op->lin.m[i][j];
                 int jj = linear_index_from_sws_op(j);
-                if (!av_cmp_q(op->lin.m[i][j], av_make_q(1, 1)))
+                if (j < 4 && k.num == k.den)
                     LINEAR_MASK_SET(out->linear.mask, i, jj, LINEAR_MASK_1);
-                else if (av_cmp_q(op->lin.m[i][j], av_make_q(0, 1)))
+                else if (k.num != 0)
                     LINEAR_MASK_SET(out->linear.mask, i, jj, LINEAR_MASK_X);
             }
         }
@@ -233,6 +230,23 @@ static int convert_to_aarch64_impl(SwsContext *ctx, const SwsOpList *ops, int n,
         MASK_SET(out->dither.y_offset, 2, op->dither.y_offset[2]);
         MASK_SET(out->dither.y_offset, 3, op->dither.y_offset[3]);
         out->dither.size_log2 = op->dither.size_log2;
+        break;
+    }
+
+    switch (out->op) {
+    case AARCH64_SWS_OP_READ_BIT:
+    case AARCH64_SWS_OP_READ_NIBBLE:
+    case AARCH64_SWS_OP_READ_PACKED:
+    case AARCH64_SWS_OP_READ_PLANAR:
+    case AARCH64_SWS_OP_WRITE_BIT:
+    case AARCH64_SWS_OP_WRITE_NIBBLE:
+    case AARCH64_SWS_OP_WRITE_PACKED:
+    case AARCH64_SWS_OP_WRITE_PLANAR:
+    case AARCH64_SWS_OP_SWAP_BYTES:
+    case AARCH64_SWS_OP_CLEAR:
+        /* Only the element size matters, not the type. */
+        if (out->type == AARCH64_PIXEL_F32)
+            out->type = AARCH64_PIXEL_U32;
         break;
     }
 

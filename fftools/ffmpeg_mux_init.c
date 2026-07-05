@@ -418,45 +418,19 @@ static int ost_get_filters(const OptionsContext *o, AVFormatContext *oc,
                            OutputStream *ost, char **dst)
 {
     const char *filters = NULL;
-#if FFMPEG_OPT_FILTER_SCRIPT
-    const char *filters_script = NULL;
-
-    opt_match_per_stream_str(ost, &o->filter_scripts, oc, ost->st, &filters_script);
-#endif
     opt_match_per_stream_str(ost, &o->filters, oc, ost->st, &filters);
 
     if (!ost->ist) {
-        if (
-#if FFMPEG_OPT_FILTER_SCRIPT
-            filters_script ||
-#endif
-            filters) {
+        if (filters) {
             av_log(ost, AV_LOG_ERROR,
-                   "%s '%s' was specified for a stream fed from a complex "
+                   "Filtergraph '%s' was specified for a stream fed from a complex "
                    "filtergraph. Simple and complex filtering cannot be used "
-                   "together for the same stream.\n",
-#if FFMPEG_OPT_FILTER_SCRIPT
-                   filters ? "Filtergraph" : "Filtergraph script",
-                   filters ? filters : filters_script
-#else
-                   "Filtergraph", filters
-#endif
-                   );
+                   "together for the same stream.\n", filters);
             return AVERROR(EINVAL);
         }
         return 0;
     }
 
-#if FFMPEG_OPT_FILTER_SCRIPT
-    if (filters_script && filters) {
-        av_log(ost, AV_LOG_ERROR, "Both -filter and -filter_script set\n");
-        return AVERROR(EINVAL);
-    }
-
-    if (filters_script)
-        *dst = read_file_to_string(filters_script);
-    else
-#endif
     if (filters)
         *dst = av_strdup(filters);
     else
@@ -762,21 +736,10 @@ static int new_stream_video(Muxer *mux, const OptionsContext *o,
 
         opt_match_per_stream_int(ost, &o->force_fps, oc, st, &ms->force_fps);
 
-#if FFMPEG_OPT_TOP
-        ost->top_field_first = -1;
-        opt_match_per_stream_int(ost, &o->top_field_first, oc, st, &ost->top_field_first);
-        if (ost->top_field_first >= 0)
-            av_log(ost, AV_LOG_WARNING, "-top is deprecated, use the setfield filter instead\n");
-#endif
-
-#if FFMPEG_OPT_VSYNC
-        *vsync_method = video_sync_method;
-#else
         *vsync_method = VSYNC_AUTO;
-#endif
         opt_match_per_stream_str(ost, &o->fps_mode, oc, st, &fps_mode);
         if (fps_mode) {
-            ret = parse_and_set_vsync(fps_mode, vsync_method, ost->file->index, ost->index, 0);
+            ret = parse_and_set_vsync(fps_mode, vsync_method, ost->file->index, ost->index);
             if (ret < 0)
                 return ret;
         }
@@ -811,10 +774,6 @@ static int new_stream_video(Muxer *mux, const OptionsContext *o,
                 *vsync_method = VSYNC_VSCFR;
             }
         }
-#if FFMPEG_OPT_VSYNC_DROP
-        if (*vsync_method == VSYNC_DROP)
-            ms->ts_drop = 1;
-#endif
     }
 
     return 0;
@@ -1041,28 +1000,12 @@ static int streamcopy_init(const OptionsContext *o, const Muxer *mux,
     int ret = 0;
 
     const char *filters = NULL;
-#if FFMPEG_OPT_FILTER_SCRIPT
-    const char *filters_script = NULL;
-
-    opt_match_per_stream_str(ost, &o->filter_scripts, mux->fc, ost->st, &filters_script);
-#endif
     opt_match_per_stream_str(ost, &o->filters, mux->fc, ost->st, &filters);
 
-    if (
-#if FFMPEG_OPT_FILTER_SCRIPT
-        filters_script ||
-#endif
-        filters) {
+    if (filters) {
         av_log(ost, AV_LOG_ERROR,
-               "%s '%s' was specified, but codec copy was selected. "
-               "Filtering and streamcopy cannot be used together.\n",
-#if FFMPEG_OPT_FILTER_SCRIPT
-               filters ? "Filtergraph" : "Filtergraph script",
-               filters ? filters : filters_script
-#else
-               "Filtergraph", filters
-#endif
-               );
+               "Filtergraph '%s' was specified, but codec copy was selected. "
+               "Filtering and streamcopy cannot be used together.\n", filters);
         return AVERROR(EINVAL);
     }
 
@@ -1402,20 +1345,11 @@ static int ost_add(Muxer *mux, const OptionsContext *o, enum AVMediaType type,
                 q = (AVRational){ ENC_TIME_BASE_FILTER, 0 };
             } else {
                 ret = av_parse_ratio(&q, enc_time_base, INT_MAX, 0, NULL);
-                if (ret < 0 || q.den <= 0
-#if !FFMPEG_OPT_ENC_TIME_BASE_NUM
-                    || q.num < 0
-#endif
-                    ) {
+                if (ret < 0 || q.den <= 0 || q.num < 0) {
                     av_log(ost, AV_LOG_FATAL, "Invalid time base: %s\n", enc_time_base);
                     ret = ret < 0 ? ret : AVERROR(EINVAL);
                     goto fail;
                 }
-#if FFMPEG_OPT_ENC_TIME_BASE_NUM
-                if (q.num < 0)
-                    av_log(ost, AV_LOG_WARNING, "-enc_time_base -1 is deprecated,"
-                           " use -enc_time_base demux\n");
-#endif
             }
 
             enc_tb = q;
@@ -3293,12 +3227,6 @@ static int process_forced_keyframes(Muxer *mux, const OptionsContext *o)
             // parse it only for static kf timings
         } else if (!strcmp(forced_keyframes, "source")) {
             ost->kf.type = KF_FORCE_SOURCE;
-#if FFMPEG_OPT_FORCE_KF_SOURCE_NO_DROP
-        } else if (!strcmp(forced_keyframes, "source_no_drop")) {
-            av_log(ost, AV_LOG_WARNING, "The 'source_no_drop' value for "
-                   "-force_key_frames is deprecated, use just 'source'\n");
-            ost->kf.type = KF_FORCE_SOURCE;
-#endif
         } else if (!strcmp(forced_keyframes, "scd_metadata")) {
             ost->kf.type = KF_FORCE_SCD_METADATA;
         } else {

@@ -24,8 +24,6 @@
 #include "libavutil/avutil.h"
 #include "libavutil/samplefmt.h"
 
-#include "version_major.h"
-
 /**
  * @addtogroup lavc_core
  * @{
@@ -206,9 +204,6 @@ enum AVCodecID {
     AV_CODEC_ID_BMV_VIDEO,
     AV_CODEC_ID_VBLE,
     AV_CODEC_ID_DXTORY,
-#if FF_API_V408_CODECID
-    AV_CODEC_ID_V410,
-#endif
     AV_CODEC_ID_XWD,
     AV_CODEC_ID_CDXL,
     AV_CODEC_ID_XBM,
@@ -256,10 +251,6 @@ enum AVCodecID {
     AV_CODEC_ID_012V,
     AV_CODEC_ID_AVUI,
     AV_CODEC_ID_TARGA_Y216,
-#if FF_API_V408_CODECID
-    AV_CODEC_ID_V308,
-    AV_CODEC_ID_V408,
-#endif
     AV_CODEC_ID_YUV4,
     AV_CODEC_ID_AVRN,
     AV_CODEC_ID_CPIA,
@@ -348,6 +339,7 @@ enum AVCodecID {
     AV_CODEC_ID_BVC2,
     AV_CODEC_ID_JPEGXS,
     AV_CODEC_ID_ACTIMAGINE_VX,
+    AV_CODEC_ID_CFDF_D5_VIDEO,
 
     /* various PCM "codecs" */
     AV_CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
@@ -478,6 +470,9 @@ enum AVCodecID {
     AV_CODEC_ID_ADPCM_IMA_XBOX_MONO,
     AV_CODEC_ID_ADPCM_IMA_FSB,
     AV_CODEC_ID_ADPCM_IMA_AWC,
+    AV_CODEC_ID_ADPCM_CFDF_D5,
+    AV_CODEC_ID_ADPCM_IMA_WW,
+    AV_CODEC_ID_ADPCM_NXAP,
 
     /* AMR */
     AV_CODEC_ID_AMR_NB = 0x12000,
@@ -499,6 +494,7 @@ enum AVCodecID {
     AV_CODEC_ID_CBD2_DPCM,
     AV_CODEC_ID_SASSC_DPCM,
     AV_CODEC_ID_CFDF_DPCM,
+    AV_CODEC_ID_CWV_DPCM,
 
     /* audio codecs */
     AV_CODEC_ID_MP2 = 0x15000,

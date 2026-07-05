@@ -45,7 +45,9 @@
 #include "libavutil/mem_internal.h"
 #include "libavutil/opt.h"
 
-#include "libswresample/swresample.h"
+#include "libavfilter/avfilter.h"
+#include <libavfilter/buffersink.h>
+#include <libavfilter/buffersrc.h>
 
 #include "libavcodec/avcodec.h"
 #include "libavcodec/codec_internal.h"
@@ -64,12 +66,6 @@ static const uint16_t silk_frame_duration_ms[16] = {
     10, 20, 40, 60,
     10, 20,
     10, 20,
-};
-
-/* number of samples of silence to feed to the resampler
- * at the beginning */
-static const int silk_resample_delay[] = {
-    4, 8, 11, 11, 11
 };
 
 typedef struct OpusStreamContext {
@@ -106,7 +102,11 @@ typedef struct OpusStreamContext {
     float *out_dummy;
     int    out_dummy_allocated_size;
 
-    SwrContext *swr;
+    AVFilterGraph *graph;
+    AVFilterContext *src;
+    AVFilterContext *sink;
+    AVFrame *graph_frame;
+
     AVAudioFifo *celt_delay;
     int silk_samplerate;
     /* number of samples we still want to get from the resampler */
@@ -147,18 +147,138 @@ static void opus_fade(float *out,
         out[i] = in2[i] * window[i] + in1[i] * (1.0 - window[i]);
 }
 
+static int opus_init_resample(OpusStreamContext *s)
+{
+    AVCodecContext *avctx = s->avctx;
+    AVChannelLayout layout;
+    int ret;
+
+    s->graph_frame = av_frame_alloc();
+    if (!s->graph_frame)
+        return AVERROR(ENOMEM);
+
+    s->graph = avfilter_graph_alloc();
+    if (!s->graph)
+        return AVERROR(ENOMEM);
+
+    const AVFilter *asrc;
+    asrc = avfilter_get_by_name("abuffer");
+    if (!asrc)
+        return AVERROR_FILTER_NOT_FOUND;
+
+    s->src = avfilter_graph_alloc_filter(s->graph, asrc, "src");
+    if (!s->src)
+        return AVERROR(ENOMEM);
+
+    layout = (s->output_channels == 1) ? (AVChannelLayout)AV_CHANNEL_LAYOUT_MONO :
+        (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
+    av_opt_set_chlayout(s->src, "channel_layout", &layout, AV_OPT_SEARCH_CHILDREN);
+    av_opt_set_sample_fmt(s->src, "sample_fmt", avctx->sample_fmt, AV_OPT_SEARCH_CHILDREN);
+    av_opt_set_q(s->src, "time_base", (AVRational){ 1, s->silk_samplerate }, AV_OPT_SEARCH_CHILDREN);
+    av_opt_set_int(s->src, "sample_rate", s->silk_samplerate, AV_OPT_SEARCH_CHILDREN);
+
+    ret = avfilter_init_str(s->src, NULL);
+    if (ret < 0)
+        return ret;
+
+    const AVFilter *afilter;
+    afilter = avfilter_get_by_name("ardftsrc");
+    if (!afilter)
+        return AVERROR(EINVAL);
+
+    AVFilterContext *afilter_ctx;
+    afilter_ctx = avfilter_graph_alloc_filter(s->graph, afilter, "filter");
+    if (!afilter_ctx)
+        return AVERROR(ENOMEM);
+
+    uint8_t options_str[64];
+    snprintf(options_str, sizeof(options_str), "sample_rate=%d:quality=320", avctx->sample_rate);
+    ret = avfilter_init_str(afilter_ctx, options_str);
+    if (ret < 0)
+        return ret;
+
+    const AVFilter *asink;
+    asink = avfilter_get_by_name("abuffersink");
+    if (!asink)
+        return AVERROR(EINVAL);
+
+    s->sink = avfilter_graph_alloc_filter(s->graph, asink, "sink");
+    if (!s->sink)
+        return AVERROR(ENOMEM);
+
+    snprintf(options_str, sizeof(options_str), (layout.nb_channels == 1) ? "mono" : "stereo");
+    av_opt_set(s->sink, "channel_layouts", options_str, AV_OPT_SEARCH_CHILDREN);
+    av_opt_set(s->sink, "sample_formats", av_get_sample_fmt_name(avctx->sample_fmt), AV_OPT_SEARCH_CHILDREN);
+    snprintf(options_str, sizeof(options_str), "%d", avctx->sample_rate);
+    av_opt_set(s->sink, "sample_rates", options_str, AV_OPT_SEARCH_CHILDREN);
+
+    ret = avfilter_init_str(s->sink, NULL);
+    if (ret < 0)
+        return ret;
+
+    ret = avfilter_link(s->src, 0, afilter_ctx, 0);
+    if (ret >= 0)
+        ret = avfilter_link(afilter_ctx, 0, s->sink, 0);
+    if (ret < 0)
+        return ret;
+
+    ret = avfilter_graph_config(s->graph, NULL);
+    if (ret < 0)
+        return ret;
+
+    av_frame_unref(s->graph_frame);
+
+    s->graph_frame->sample_rate    = s->silk_samplerate;
+    s->graph_frame->format         = s->avctx->sample_fmt;
+    av_channel_layout_copy(&s->graph_frame->ch_layout, &layout);
+    s->graph_frame->nb_samples     = 320;
+    s->graph_frame->pts            = s->packet.frame_count;
+
+    ret = av_frame_get_buffer(s->graph_frame, 0);
+    if (ret < 0)
+        return ret;
+
+    for (int ch = 0; ch < s->output_channels; ch++)
+        memset(s->graph_frame->extended_data[ch], 0, sizeof(float) * 320);
+
+    ret = av_buffersrc_add_frame_flags(s->src, s->graph_frame, AV_BUFFERSRC_FLAG_PUSH);
+    if (ret < 0) {
+        av_frame_unref(s->graph_frame);
+        return ret;
+    }
+
+    return 0;
+}
+
 static int opus_flush_resample(OpusStreamContext *s, int nb_samples)
 {
     int celt_size = av_audio_fifo_size(s->celt_delay);
     int ret, i;
-    ret = swr_convert(s->swr,
-                      (uint8_t**)s->cur_out, nb_samples,
-                      NULL, 0);
+
+    ret = av_buffersrc_close(s->src, 0, 0);
+    if (ret < 0)
+        return ret;
+
+    if ((ret = av_buffersink_get_samples(s->sink, s->graph_frame, nb_samples)) >= 0) {
+        int samples = s->graph_frame->nb_samples;
+        if (samples > 0) {
+            for (int ch = 0; ch < s->output_channels; ch++)
+                memcpy(s->cur_out[ch], s->graph_frame->extended_data[ch], sizeof(*s->silk_output[0]) * samples);
+
+            ret = samples;
+        }
+
+        av_frame_unref(s->graph_frame);
+    }
+
+    if (ret == AVERROR(EAGAIN))
+        ret = 0;
+
     if (ret < 0)
         return ret;
     else if (ret != nb_samples) {
-        av_log(s->avctx, AV_LOG_ERROR, "Wrong number of flushed samples: %d\n",
-               ret);
+        av_log(s->avctx, AV_LOG_ERROR, "Wrong number of flushed samples: %d != %d\n",
+               ret, nb_samples);
         return AVERROR_BUG;
     }
 
@@ -187,32 +307,12 @@ static int opus_flush_resample(OpusStreamContext *s, int nb_samples)
     s->cur_out[1]         += nb_samples;
     s->remaining_out_size -= nb_samples * sizeof(float);
 
-    return 0;
-}
+    avfilter_graph_free(&s->graph);
+    av_frame_free(&s->graph_frame);
 
-static int opus_init_resample(OpusStreamContext *s)
-{
-    static const float delay[16] = { 0.0 };
-    const uint8_t *delayptr[2] = { (uint8_t*)delay, (uint8_t*)delay };
-    int ret;
+    ret = opus_init_resample(s);
 
-    av_opt_set_int(s->swr, "in_sample_rate", s->silk_samplerate, 0);
-    ret = swr_init(s->swr);
-    if (ret < 0) {
-        av_log(s->avctx, AV_LOG_ERROR, "Error opening the resampler.\n");
-        return ret;
-    }
-
-    ret = swr_convert(s->swr,
-                      NULL, 0,
-                      delayptr, silk_resample_delay[s->packet.bandwidth]);
-    if (ret < 0) {
-        av_log(s->avctx, AV_LOG_ERROR,
-               "Error feeding initial silence to the resampler.\n");
-        return ret;
-    }
-
-    return 0;
+    return ret;
 }
 
 static int opus_decode_redundancy(OpusStreamContext *s, const uint8_t *data, int size)
@@ -249,11 +349,9 @@ static int opus_decode_frame(OpusStreamContext *s, const uint8_t *data, int size
 
     /* decode the silk frame */
     if (s->packet.mode == OPUS_MODE_SILK || s->packet.mode == OPUS_MODE_HYBRID) {
-        if (!swr_is_initialized(s->swr)) {
-            ret = opus_init_resample(s);
-            if (ret < 0)
-                return ret;
-        }
+        AVChannelLayout layout;
+        layout = (s->output_channels == 1) ? (AVChannelLayout)AV_CHANNEL_LAYOUT_MONO :
+                                             (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
 
         samples = ff_silk_decode_superframe(s->silk, &s->rc, s->silk_output,
                                             FFMIN(s->packet.bandwidth, OPUS_BANDWIDTH_WIDEBAND),
@@ -263,15 +361,54 @@ static int opus_decode_frame(OpusStreamContext *s, const uint8_t *data, int size
             av_log(s->avctx, AV_LOG_ERROR, "Error decoding a SILK frame.\n");
             return samples;
         }
-        samples = swr_convert(s->swr,
-                              (uint8_t**)s->cur_out, s->packet.frame_duration,
-                              (const uint8_t**)s->silk_output, samples);
+
+        if (!s->graph) {
+            ret = opus_init_resample(s);
+            if (ret < 0)
+                return ret;
+        }
+
+        av_frame_unref(s->graph_frame);
+
+        s->graph_frame->sample_rate    = s->silk_samplerate;
+        s->graph_frame->format         = s->avctx->sample_fmt;
+        av_channel_layout_copy(&s->graph_frame->ch_layout, &layout);
+        s->graph_frame->nb_samples     = samples;
+        s->graph_frame->pts            = s->packet.frame_count;
+
+        ret = av_frame_get_buffer(s->graph_frame, 0);
+        if (ret < 0)
+            return ret;
+
+        for (int ch = 0; ch < s->output_channels; ch++)
+            memcpy(s->graph_frame->extended_data[ch], s->silk_output[ch], sizeof(*s->silk_output[0]) * samples);
+
+        ret = av_buffersrc_add_frame_flags(s->src, s->graph_frame, AV_BUFFERSRC_FLAG_PUSH);
+        if (ret < 0) {
+            av_frame_unref(s->graph_frame);
+            return ret;
+        }
+
+        if ((ret = av_buffersink_get_samples(s->sink, s->graph_frame, s->packet.frame_duration)) >= 0) {
+            samples = s->graph_frame->nb_samples;
+            if (samples > 0) {
+                for (int ch = 0; ch < s->output_channels; ch++)
+                    memcpy(s->cur_out[ch], s->graph_frame->extended_data[ch], sizeof(*s->silk_output[0]) * samples);
+            }
+        }
+
+        if (ret == AVERROR(EAGAIN))
+            ret = samples = 0;
+
         if (samples < 0) {
             av_log(s->avctx, AV_LOG_ERROR, "Error resampling SILK data.\n");
             return samples;
         }
         av_assert2((samples & 7) == 0);
         s->delayed_samples += s->packet.frame_duration - samples;
+
+        if (samples == 0)
+            return 0;
     } else
         ff_silk_flush(s->silk);
 
@@ -405,10 +542,10 @@ static int opus_decode_subpacket(OpusStreamContext *s, const uint8_t *buf)
     s->remaining_out_size = s->out_size;
 
     /* check if we need to flush the resampler */
-    if (swr_is_initialized(s->swr)) {
+    if (s->graph) {
         if (buf) {
             int64_t cur_samplerate;
-            av_opt_get_int(s->swr, "in_sample_rate", 0, &cur_samplerate);
+            av_opt_get_int(s->src, "sample_rate", AV_OPT_SEARCH_CHILDREN, &cur_samplerate);
             flush_needed = (s->packet.mode == OPUS_MODE_CELT) || (cur_samplerate != s->silk_samplerate);
         } else {
             flush_needed = !!s->delayed_samples;
@@ -438,7 +575,6 @@ static int opus_decode_subpacket(OpusStreamContext *s, const uint8_t *buf)
             av_log(s->avctx, AV_LOG_ERROR, "Error flushing the resampler.\n");
             return ret;
         }
-        swr_close(s->swr);
         output_samples += s->delayed_samples;
         s->delayed_samples = 0;
 
@@ -483,7 +619,7 @@ static int opus_decode_packet(AVCodecContext *avctx, AVFrame *frame,
     int coded_samples   = 0;
     int decoded_samples = INT_MAX;
     int delayed_samples = 0;
-    int i, ret;
+    int ret;
 
     /* calculate the number of delayed samples */
     for (int i = 0; i < c->p.nb_streams; i++) {
@@ -521,7 +657,7 @@ static int opus_decode_packet(AVCodecContext *avctx, AVFrame *frame,
         return ret;
     frame->nb_samples = 0;
 
-    for (i = 0; i < avctx->ch_layout.nb_channels; i++) {
+    for (int i = 0; i < avctx->ch_layout.nb_channels; i++) {
         ChannelMap *map = &c->p.channel_maps[i];
         if (!map->copy)
             c->streams[map->stream_idx].out[map->channel_idx] = (float*)frame->extended_data[i];
@@ -606,7 +742,7 @@ static int opus_decode_packet(AVCodecContext *avctx, AVFrame *frame,
         }
     }
 
-    for (i = 0; i < avctx->ch_layout.nb_channels; i++) {
+    for (int i = 0; i < avctx->ch_layout.nb_channels; i++) {
         ChannelMap *map = &c->p.channel_maps[i];
 
         /* handle copied channels */
@@ -642,9 +778,11 @@ static av_cold void opus_decode_flush(AVCodecContext *ctx)
         s->delayed_samples = 0;
 
         av_audio_fifo_reset(s->celt_delay);
-        swr_close(s->swr);
 
         av_audio_fifo_reset(s->sync_buffer);
+
+        avfilter_graph_free(&s->graph);
+        av_frame_free(&s->graph_frame);
 
         ff_silk_flush(s->silk);
         ff_celt_flush(s->celt);
@@ -666,7 +804,9 @@ static av_cold int opus_decode_close(AVCodecContext *avctx)
 
         av_audio_fifo_free(s->sync_buffer);
         av_audio_fifo_free(s->celt_delay);
-        swr_free(&s->swr);
+
+        avfilter_graph_free(&s->graph);
+        av_frame_free(&s->graph_frame);
     }
 
     av_freep(&c->streams);
@@ -707,7 +847,6 @@ static av_cold int opus_decode_init(AVCodecContext *avctx)
 
     for (int i = 0; i < c->p.nb_streams; i++) {
         OpusStreamContext *s = &c->streams[i];
-        AVChannelLayout layout;
 
         s->output_channels = (i < c->p.nb_stereo_streams) ? 2 : 1;
 
@@ -720,19 +859,6 @@ static av_cold int opus_decode_init(AVCodecContext *avctx)
         }
 
         s->fdsp = c->fdsp;
-
-        s->swr =swr_alloc();
-        if (!s->swr)
-            return AVERROR(ENOMEM);
-
-        layout = (s->output_channels == 1) ? (AVChannelLayout)AV_CHANNEL_LAYOUT_MONO :
-                                             (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
-        av_opt_set_int(s->swr, "in_sample_fmt",      avctx->sample_fmt,  0);
-        av_opt_set_int(s->swr, "out_sample_fmt",     avctx->sample_fmt,  0);
-        av_opt_set_chlayout(s->swr, "in_chlayout",   &layout,            0);
-        av_opt_set_chlayout(s->swr, "out_chlayout",  &layout,            0);
-        av_opt_set_int(s->swr, "out_sample_rate",    avctx->sample_rate, 0);
-        av_opt_set_int(s->swr, "filter_size",        16,                 0);
 
         ret = ff_silk_init(avctx, &s->silk, s->output_channels);
         if (ret < 0)

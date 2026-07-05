@@ -51,14 +51,15 @@ typedef struct ProResRAWVulkanDecodeContext {
 
 typedef struct DecodePushData {
     VkDeviceAddress pkt_data;
-    int32_t tile_size[2];
     uint8_t  qmat[64];
+    uint16_t lin_curve[8];
 } DecodePushData;
 
 typedef struct TileData {
     int32_t pos[2];
     uint32_t offset;
     uint32_t size;
+    uint32_t log2_nb_blocks;
 } TileData;
 
 static int vk_prores_raw_start_frame(AVCodecContext          *avctx,
@@ -92,12 +93,6 @@ static int vk_prores_raw_start_frame(AVCodecContext          *avctx,
     if (err < 0)
         return err;
 
-    /* Prepare frame to be used */
-    err = ff_vk_decode_prepare_frame_sdr(dec, prr->frame, vp, 1,
-                                         FF_VK_REP_NATIVE, 0);
-    if (err < 0)
-        return err;
-
     return 0;
 }
 
@@ -118,6 +113,7 @@ static int vk_prores_raw_decode_slice(AVCodecContext *avctx,
     td[pp->nb_tiles].pos[0] = prr->tiles[pp->nb_tiles].x;
     td[pp->nb_tiles].pos[1] = prr->tiles[pp->nb_tiles].y;
     td[pp->nb_tiles].size = size;
+    td[pp->nb_tiles].log2_nb_blocks = prr->tiles[pp->nb_tiles].log2_nb_blocks;
 
     if (vp->slices_buf && slices_buf->host_ref) {
         td[pp->nb_tiles].offset = data - slices_buf->mapped_mem;
@@ -161,10 +157,11 @@ static int vk_prores_raw_end_frame(AVCodecContext *avctx)
                                  VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                                  VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT));
 
-    err = ff_vk_exec_mirror_sem_value(&ctx->s, exec, &vp->sem, &vp->sem_value,
-                                      prr->frame);
-    if (err < 0)
-        return err;
+    /* Exec-owned output views: freed on exec recycle, so releasing a picture
+     * needs no blocking wait. No mirror_sem: nothing consumes vp->sem here. */
+    VkImageView views[AV_NUM_DATA_POINTERS];
+    RET(ff_vk_create_imageviews(&ctx->s, exec, views, prr->frame,
+                                FF_VK_REP_NATIVE));
 
     RET(ff_vk_exec_add_dep_buf(&ctx->s, exec, &pp->frame_data_buf, 1, 0));
     pp->frame_data_buf = NULL;
@@ -214,7 +211,7 @@ static int vk_prores_raw_end_frame(AVCodecContext *avctx)
 
     FFVulkanShader *decode_shader = &prv->decode;
     ff_vk_shader_update_img_array(&ctx->s, exec, decode_shader,
-                                  prr->frame, vp->view.out,
+                                  prr->frame, views,
                                   0, 0,
                                   VK_IMAGE_LAYOUT_GENERAL,
                                   VK_NULL_HANDLE);
@@ -229,13 +226,12 @@ static int vk_prores_raw_end_frame(AVCodecContext *avctx)
     /* Update push data */
     DecodePushData pd_decode = (DecodePushData) {
         .pkt_data = slices_buf->address,
-        .tile_size[0] = prr->tw,
-        .tile_size[1] = prr->th,
     };
     memcpy(pd_decode.qmat, prr->qmat, 64);
+    memcpy(pd_decode.lin_curve, prr->lin_curve, sizeof(pd_decode.lin_curve));
     ff_vk_shader_update_push_const(&ctx->s, exec, decode_shader,
                                    VK_SHADER_STAGE_COMPUTE_BIT,
-                                   0, sizeof(pd_decode) - 64, &pd_decode);
+                                   0, offsetof(DecodePushData, qmat), &pd_decode);
 
     vk->CmdDispatch(exec->buf, prr->nb_tw, prr->nb_th, 1);
 
@@ -249,7 +245,7 @@ static int vk_prores_raw_end_frame(AVCodecContext *avctx)
 
     FFVulkanShader *idct_shader = &prv->idct;
     ff_vk_shader_update_img_array(&ctx->s, exec, idct_shader,
-                                  prr->frame, vp->view.out,
+                                  prr->frame, views,
                                   0, 0,
                                   VK_IMAGE_LAYOUT_GENERAL,
                                   VK_NULL_HANDLE);
@@ -303,7 +299,7 @@ static int init_decode_shader(AVCodecContext *avctx, FFVulkanContext *s,
 {
     int err;
 
-    ff_vk_shader_add_push_const(shd, 0, sizeof(DecodePushData) - 64,
+    ff_vk_shader_add_push_const(shd, 0, offsetof(DecodePushData, qmat),
                                 VK_SHADER_STAGE_COMPUTE_BIT);
     ff_vk_shader_load(shd, VK_SHADER_STAGE_COMPUTE_BIT, NULL,
                       (uint32_t []) { 1, 4, 1 }, 0);
@@ -339,7 +335,7 @@ static int init_idct_shader(AVCodecContext *avctx, FFVulkanContext *s,
     };
     for (int i = 0; i < 64; i++)
         SPEC_LIST_ADD(sl, 18 + i, 32,
-                      av_float2int(idct_8_scales[i >> 3]*idct_8_scales[i & 7]));
+                      av_float2int(8*idct_8_scales[i >> 3]*idct_8_scales[i & 7]));
 
     ff_vk_shader_load(shd, VK_SHADER_STAGE_COMPUTE_BIT, sl,
                       (uint32_t []) { 8, nb_blocks, 4 }, 0);

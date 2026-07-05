@@ -54,10 +54,12 @@ typedef struct THPMuxContext {
     uint32_t num_frames;
     uint32_t first_frame_size;
     uint32_t data_size;
-    uint32_t component_data_offset;
-    uint32_t offsets_data_offset;
-    uint32_t first_frame_offset;
-    uint32_t last_frame_offset;
+    int64_t component_data_offset;
+    int64_t offsets_data_offset;
+    int64_t first_frame_offset;
+    int64_t last_frame_offset;
+    int64_t audio_stream_duration_offset;
+    int64_t audio_stream_duration;
 
     PacketList queue;
 
@@ -106,6 +108,7 @@ static int write_header(AVFormatContext *ctx)
         } else if (par->codec_type == AVMEDIA_TYPE_AUDIO) {
             avio_wb32(pb, par->ch_layout.nb_channels);
             avio_wb32(pb, par->sample_rate);
+            thp->audio_stream_duration_offset = avio_tell(pb);
             avio_wb32(pb, ctx->streams[n]->duration);
         } else {
             return AVERROR(EINVAL);
@@ -129,25 +132,27 @@ static int write_packet(AVFormatContext *ctx, AVPacket *pkt)
         if (!thp->queue.head) {
             if (thp->first_frame_size == 0)
                 thp->first_frame_size = pkt->size;
-            return avpriv_packet_list_put(&thp->queue, pkt, NULL, 0);
+            return ff_packet_list_put(&thp->queue, pkt, NULL, 0);
         }
 
         thp->next_total_size = pkt->size + thp->header_len;
         thp->start = avio_tell(pb);
         avio_wb32(pb, thp->next_total_size);
 
-        ret = avpriv_packet_list_put(&thp->queue, pkt, NULL, 0);
+        ret = ff_packet_list_put(&thp->queue, pkt, NULL, 0);
         if (ret < 0)
             return ret;
 
-        ret = avpriv_packet_list_get(&thp->queue, pkt);
+        ret = ff_packet_list_get(&thp->queue, pkt);
         if (ret < 0)
             return ret;
 
         thp->last_frame_offset = thp->start;
 
-        if (pkt->stream_index == thp->audio_stream_index)
+        if (pkt->stream_index == thp->audio_stream_index) {
             thp->max_audio_samples = FFMAX(pkt->duration, thp->max_audio_samples);
+            thp->audio_stream_duration += pkt->duration;
+        }
 
         avio_wb32(pb, thp->prev_total_size);
         if (thp->video_stream_index == -1) {
@@ -173,12 +178,12 @@ static int write_packet(AVFormatContext *ctx, AVPacket *pkt)
                     thp->first_frame_size += pkt->size;
                     thp->first_video = 1;
                 }
-                return avpriv_packet_list_put(&thp->video_queue, pkt, NULL, 0);
+                return ff_packet_list_put(&thp->video_queue, pkt, NULL, 0);
             }
 
             thp->next_total_size += pkt->size;
 
-            ret = avpriv_packet_list_put(&thp->video_queue, pkt, NULL, 0);
+            ret = ff_packet_list_put(&thp->video_queue, pkt, NULL, 0);
             if (ret < 0)
                 return ret;
             thp->have_video = 1;
@@ -188,12 +193,12 @@ static int write_packet(AVFormatContext *ctx, AVPacket *pkt)
                     thp->first_frame_size += pkt->size;
                     thp->first_audio = 1;
                 }
-                return avpriv_packet_list_put(&thp->audio_queue, pkt, NULL, 0);
+                return ff_packet_list_put(&thp->audio_queue, pkt, NULL, 0);
             }
 
             thp->next_total_size += pkt->size;
 
-            ret = avpriv_packet_list_put(&thp->audio_queue, pkt, NULL, 0);
+            ret = ff_packet_list_put(&thp->audio_queue, pkt, NULL, 0);
             if (ret < 0)
                 return ret;
             thp->have_audio = 1;
@@ -202,7 +207,7 @@ static int write_packet(AVFormatContext *ctx, AVPacket *pkt)
         if (!thp->have_audio || !thp->have_video)
             return 0;
 
-        ret = avpriv_packet_list_get(&thp->video_queue, pkt);
+        ret = ff_packet_list_get(&thp->video_queue, pkt);
         if (ret < 0)
             return ret;
 
@@ -221,11 +226,12 @@ static int write_packet(AVFormatContext *ctx, AVPacket *pkt)
 
         thp->last_frame_offset = thp->start;
 
-        ret = avpriv_packet_list_get(&thp->audio_queue, pkt);
+        ret = ff_packet_list_get(&thp->audio_queue, pkt);
         if (ret < 0)
             return ret;
 
         thp->max_audio_samples = FFMAX(pkt->duration, thp->max_audio_samples);
+        thp->audio_stream_duration += pkt->duration;
 
         avio_seek(pb, offset, SEEK_SET);
         avio_wb32(pb, pkt->size);
@@ -254,7 +260,7 @@ static int write_trailer(AVFormatContext *ctx)
         if (thp->queue.head) {
             AVPacket *const pkt = ffformatcontext(ctx)->pkt;
 
-            ret = avpriv_packet_list_get(&thp->queue, pkt);
+            ret = ff_packet_list_get(&thp->queue, pkt);
             if (ret < 0)
                 return ret;
 
@@ -295,6 +301,9 @@ static int write_trailer(AVFormatContext *ctx)
     avio_wb32(pb, thp->first_frame_offset);
     avio_wb32(pb, thp->last_frame_offset);
 
+    avio_seek(pb, thp->audio_stream_duration_offset, SEEK_SET);
+    avio_wb32(pb, thp->audio_stream_duration);
+
     return 0;
 }
 
@@ -302,9 +311,9 @@ static void deinit(AVFormatContext *s)
 {
     THPMuxContext *thp = s->priv_data;
 
-    avpriv_packet_list_free(&thp->queue);
-    avpriv_packet_list_free(&thp->audio_queue);
-    avpriv_packet_list_free(&thp->video_queue);
+    ff_packet_list_free(&thp->queue);
+    ff_packet_list_free(&thp->audio_queue);
+    ff_packet_list_free(&thp->video_queue);
 }
 
 const FFOutputFormat ff_thp_muxer = {

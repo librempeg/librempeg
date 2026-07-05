@@ -30,6 +30,12 @@
 #include "ops_dispatch.h"
 #include "swscale_internal.h"
 
+#define RET(x)                                                                 \
+    do {                                                                       \
+        if ((ret = (x)) < 0)                                                   \
+            goto fail;                                                         \
+    } while (0)
+
 typedef struct SwsOpPass {
     SwsCompiledOp comp;
     SwsOpExec exec_base;
@@ -45,6 +51,7 @@ typedef struct SwsOpPass {
     int pixel_bits_out;
     int idx_in[4];
     int idx_out[4];
+    int palette_idx;
     int *offsets_y;
     int filter_size_h;
     bool memcpy_first;
@@ -202,6 +209,7 @@ static int op_pass_setup(const SwsFrame *out, const SwsFrame *in,
 {
     const AVPixFmtDescriptor *indesc  = av_pix_fmt_desc_get(in->format);
     const bool float_in = indesc->flags & AV_PIX_FMT_FLAG_FLOAT;
+    const int width = out->width;
 
     SwsOpPass *p = pass->priv;
     SwsOpExec *exec = &p->exec_base;
@@ -209,9 +217,9 @@ static int op_pass_setup(const SwsFrame *out, const SwsFrame *in,
 
     /* Set up main loop parameters */
     const unsigned block_size = comp->block_size;
-    const size_t num_blocks   = (pass->width + block_size - 1) / block_size;
+    const size_t num_blocks   = (width + block_size - 1) / block_size;
     const size_t aligned_w    = num_blocks * block_size;
-    if (aligned_w < pass->width) /* overflow */
+    if (aligned_w < width) /* overflow */
         return AVERROR(EINVAL);
     p->num_blocks   = num_blocks;
     p->memcpy_first = false;
@@ -267,6 +275,11 @@ static int op_pass_setup(const SwsFrame *out, const SwsFrame *in,
         exec->out_bump[i]   = out->linesize[idx] - loop_size;
     }
 
+    if (p->palette_idx >= 0) {
+        exec->in[1] = in->data[p->palette_idx];
+        exec->in_stride[1] = exec->in_bump[1] = 0;
+    }
+
     const bool memcpy_in = p->memcpy_first || p->memcpy_last;
     if (!memcpy_in && !p->memcpy_out) {
         av_assert0(safe_blocks == num_blocks);
@@ -280,14 +293,14 @@ static int op_pass_setup(const SwsFrame *out, const SwsFrame *in,
     *tail = *exec;
 
     const size_t safe_width = safe_blocks * block_size;
-    const size_t tail_size  = pass->width - safe_width;
+    const size_t tail_size  = width - safe_width;
     p->tail_off_out  = pixel_bytes(safe_width, p->pixel_bits_out, AV_ROUND_DOWN);
     p->tail_size_out = pixel_bytes(tail_size,  p->pixel_bits_out, AV_ROUND_UP);
     p->tail_blocks   = num_blocks - safe_blocks;
 
     if (exec->in_offset_x) {
         p->tail_off_in  = exec->in_offset_x[safe_width];
-        p->tail_size_in = exec->in_offset_x[pass->width - 1] - p->tail_off_in;
+        p->tail_size_in = exec->in_offset_x[width - 1] - p->tail_off_in;
         p->tail_size_in += pixel_bytes(p->filter_size_h, p->pixel_bits_in, AV_ROUND_UP);
     } else {
         p->tail_off_in  = pixel_bytes(safe_width, p->pixel_bits_in, AV_ROUND_DOWN);
@@ -387,7 +400,7 @@ static void op_pass_run(const SwsFrame *out, const SwsFrame *in, const int y,
      *    memcpy the last column on the output side if unpadded.
      */
 
-    const bool memcpy_in  = p->memcpy_last && y + h == pass->height ||
+    const bool memcpy_in  = p->memcpy_last && y + h == pass->lines ||
                             p->memcpy_first && y == 0;
     const bool memcpy_out = p->memcpy_out;
     const size_t num_blocks  = p->num_blocks;
@@ -462,8 +475,18 @@ static void op_pass_run(const SwsFrame *out, const SwsFrame *in, const int y,
     }
 }
 
+static int rw_data_planes(const SwsOp *op)
+{
+    /* Exclude the palette plane from the plane count, since it does not need
+     * to be directly processed/adjusted by the dispatch layer */
+    return op->rw.mode == SWS_RW_PALETTE ? 1 : ff_sws_rw_op_planes(op);
+}
+
 static int rw_pixel_bits(const SwsOp *op)
 {
+    if (op->rw.mode == SWS_RW_PALETTE)
+        return 8; /* index size */
+
     int elems = 0;
     switch (op->rw.mode) {
     case SWS_RW_PLANAR: elems = 1; break;
@@ -479,7 +502,7 @@ static int rw_pixel_bits(const SwsOp *op)
 static void align_pass(SwsPass *pass, int block_size, const int *over_rw,
                        int pixel_bits)
 {
-    if (!pass)
+    if (!pass || pixel_bits <= 0)
         return;
 
     /* Add at least as many pixels as needed to cover the padding requirement */
@@ -494,46 +517,63 @@ static void align_pass(SwsPass *pass, int block_size, const int *over_rw,
     buf->width_pad = FFMAX(buf->width_pad, pad_max);
 }
 
-static int compile(SwsGraph *graph, const SwsOpBackend *backend,
-                   const SwsOpList *ops, SwsPass *input, SwsPass **output)
+/* Unchanging part of parameter list */
+typedef struct CompileArgs {
+    const SwsOpBackend *backend;
+    SwsGraph *graph;
+    int flags;
+} CompileArgs;
+
+static int compile_single(const CompileArgs *args, const SwsOpList *ops,
+                          SwsPass *link, SwsPass *input, SwsPass **output)
 {
+    SwsGraph *graph = args->graph;
     SwsContext *ctx = graph->ctx;
     SwsOpPass *p = av_mallocz(sizeof(*p));
     if (!p)
         return AVERROR(ENOMEM);
 
-    int ret = ff_sws_ops_compile(ctx, backend, ops, &p->comp);
+    int ret = ff_sws_ops_compile(ctx, args->backend, ops, &p->comp);
     if (ret < 0)
         goto fail;
-    else if (!output)
+    else if (args->flags & SWS_OP_FLAG_DRY_RUN)
         goto fail; /* nothing to do, just return */
 
     const SwsCompiledOp *comp = &p->comp;
     const SwsFormat *src = &ops->src;
     const SwsFormat *dst = &ops->dst;
+    av_assert0(!link || link->format == dst->format);
     if (p->comp.opaque) {
         SwsCompiledOp c = *comp;
         av_free(p);
         ret = ff_sws_graph_add_pass(graph, dst->format, dst->width, dst->height,
-                                    input, c.slice_align, c.func_opaque,
+                                    input, 0, c.slice_align, c.func_opaque,
                                     NULL, c.priv, c.free, output);
-        if (ret >= 0)
+        if (ret >= 0) {
             (*output)->backend = comp->backend->flags;
+            ff_sws_pass_link_output(*output, link);
+        }
         return ret;
     }
 
     const AVPixFmtDescriptor *indesc  = av_pix_fmt_desc_get(src->format);
     const AVPixFmtDescriptor *outdesc = av_pix_fmt_desc_get(dst->format);
-    const SwsOp *read  = ff_sws_op_list_input(ops);
     const SwsOp *write = ff_sws_op_list_output(ops);
-    p->planes_in  = ff_sws_rw_op_planes(read);
-    p->planes_out = ff_sws_rw_op_planes(write);
-    p->pixel_bits_in  = rw_pixel_bits(read);
+    p->planes_out     = rw_data_planes(write);
     p->pixel_bits_out = rw_pixel_bits(write);
+    p->palette_idx    = -1;
     p->exec_base = (SwsOpExec) {
         .width  = dst->width,
         .height = dst->height,
     };
+
+    const SwsOp *read = ff_sws_op_list_input(ops);
+    if (read) {
+        p->planes_in     = rw_data_planes(read);
+        p->pixel_bits_in = rw_pixel_bits(read);
+        if (read->rw.mode == SWS_RW_PALETTE)
+            p->palette_idx = ops->plane_src[1];
+    }
 
     const int64_t block_bits_in  = (int64_t) comp->block_size * p->pixel_bits_in;
     const int64_t block_bits_out = (int64_t) comp->block_size * p->pixel_bits_out;
@@ -568,8 +608,8 @@ static int compile(SwsGraph *graph, const SwsOpBackend *backend,
         p->idx_out[i] = idx;
     }
 
-    const SwsFilterWeights *filter = read->rw.filter.kernel;
-    if (read->rw.filter.op == SWS_OP_FILTER_V) {
+    const SwsFilterWeights *filter = read ? read->rw.filter.kernel : NULL;
+    if (read && read->rw.filter.op == SWS_OP_FILTER_V) {
         p->offsets_y = av_refstruct_ref(filter->offsets);
 
         /* Compute relative pointer bumps for each output line */
@@ -587,7 +627,7 @@ static int compile(SwsGraph *graph, const SwsOpBackend *backend,
         }
         bump[filter->dst_size - 1] = 0;
         p->exec_base.in_bump_y = bump;
-    } else if (read->rw.filter.op == SWS_OP_FILTER_H) {
+    } else if (read && read->rw.filter.op == SWS_OP_FILTER_H) {
         /* Compute pixel offset map for each output line */
         const int pixels = FFALIGN(filter->dst_size, p->comp.block_size);
         int32_t *offset = av_malloc_array(pixels, sizeof(*offset));
@@ -616,18 +656,95 @@ static int compile(SwsGraph *graph, const SwsOpBackend *backend,
     }
 
     ret = ff_sws_graph_add_pass(graph, dst->format, dst->width, dst->height,
-                                input, comp->slice_align, op_pass_run,
+                                input, 0, comp->slice_align, op_pass_run,
                                 op_pass_setup, p, op_pass_free, output);
     if (ret < 0)
         return ret;
 
     (*output)->backend = comp->backend->flags;
-    align_pass(input,   comp->block_size, comp->over_read,  p->pixel_bits_in);
+    ff_sws_pass_link_output(*output, link);
     align_pass(*output, comp->block_size, comp->over_write, p->pixel_bits_out);
+    if (read)
+        align_pass(input, comp->block_size, comp->over_read,  p->pixel_bits_in);
     return 0;
 
 fail:
     op_pass_free(p);
+    return ret;
+}
+
+/* Return a mask of all planes matching any flag in `flags` */
+static SwsCompMask plane_mask_flags(const SwsOp *op, SwsCompFlags flags)
+{
+    SwsCompMask planes = 0;
+    for (int c = 0; c < 4; c++) {
+        if (op->comps.flags[c] & flags)
+            planes |= SWS_COMP(c);
+    }
+
+    return planes;
+}
+
+/* Takes over ownership of *pops, even on failure */
+static int compile_subpass(const CompileArgs *args, SwsOpList **pops,
+                           SwsPass *link, SwsPass *input, SwsPass **output)
+{
+    int ret;
+    SwsContext *ctx = args->graph->ctx;
+    SwsOpList *ops  = *pops;
+    SwsOpList *rest = NULL;
+    SwsPass *tmp = NULL;
+    *pops = NULL;
+
+    if (args->flags & SWS_OP_FLAG_SPLIT_MEMCPY) {
+        /* Split off copied and constant planes into a separate subpass,
+         * since these are likely to be handled by the memcpy backend */
+        av_assert0(ops->num_ops >= 2);
+        const SwsOp *prev = &ops->ops[ops->num_ops - 2];
+        SwsCompMask planes = plane_mask_flags(prev, SWS_COMP_COPY | SWS_COMP_CONST);
+        RET(ff_sws_op_list_split_planes(ops, &rest, planes));
+        if (rest) {
+            /* Parallel split: share input and link all outputs together */
+            av_log(ctx, AV_LOG_DEBUG, "Splitting const/memcpy planes: %s\n",
+                   ff_sws_comp_mask_str(planes));
+            RET(compile_subpass(args, &ops,  link, input, &tmp));
+            RET(compile_subpass(args, &rest, tmp, input, output));
+            return 0;
+        }
+    }
+
+    ret = compile_single(args, ops, link, input, output);
+    if (ret != AVERROR(ENOTSUP))
+        goto fail; /* either success or a hard error */
+
+    /* Find any unresolved filter */
+    for (int idx = 1; idx < ops->num_ops - 1; idx++) {
+        const SwsOp *op = &ops->ops[idx];
+        if (op->op == SWS_OP_FILTER_H || op->op == SWS_OP_FILTER_V) {
+            RET(ff_sws_op_list_split_at(ops, &rest, idx));
+            if (ff_sws_op_list_is_noop(ops)) {
+                /* Prevent infinite recursion by avoiding splitting in a way
+                 * that does not meaningfully reduce the number of operations
+                 * performed in the second part. */
+                FFSWAP(SwsOpList *, ops, rest);
+                break;
+            }
+            /* Serial split: feed first pass into second */
+            RET(compile_subpass(args, &ops,  NULL, input, &tmp));
+            RET(compile_subpass(args, &rest, link, tmp, output));
+            return 0;
+        }
+    }
+
+    /* If we didn't find any more operations to eliminate, then this ops list
+     * is simply unsupported by any of the available backends */
+    av_log(ctx, AV_LOG_WARNING, "No backend found for operations:\n");
+    ff_sws_op_list_print(ctx, AV_LOG_WARNING, AV_LOG_TRACE, ops);
+    ret = AVERROR(ENOTSUP);
+
+fail:
+    ff_sws_op_list_free(&ops);
+    ff_sws_op_list_free(&rest);
     return ret;
 }
 
@@ -640,18 +757,9 @@ int ff_sws_compile_pass(SwsGraph *graph, const SwsOpBackend *backend,
     SwsOpList *ops = *pops;
     int ret = 0;
 
-    /* Check if the whole operation graph is an end-to-end no-op */
-    if (ff_sws_op_list_is_noop(ops)) {
-        if (output)
-            *output = input;
-        goto out;
-    }
-
-    const SwsOp *read  = ff_sws_op_list_input(ops);
     const SwsOp *write = ff_sws_op_list_output(ops);
-    if (!read || !write) {
-        av_log(ctx, AV_LOG_ERROR, "First and last operations must be a read "
-               "and write, respectively.\n");
+    if (!write) {
+        av_log(ctx, AV_LOG_ERROR, "Last operation must be SWS_OP_WRITE.\n");
         ret = AVERROR(EINVAL);
         goto out;
     }
@@ -664,48 +772,28 @@ int ff_sws_compile_pass(SwsGraph *graph, const SwsOpBackend *backend,
         ff_sws_op_list_print(ctx, AV_LOG_DEBUG, AV_LOG_TRACE, ops);
     }
 
-    ret = compile(graph, backend, ops, input, output);
-    if (ret != AVERROR(ENOTSUP))
+    /* Check if the whole operation graph is an end-to-end no-op */
+    if (ff_sws_op_list_is_noop(ops)) {
+        if (output)
+            *output = input;
+        goto out;
+    }
+
+    const CompileArgs args = {
+        .backend = backend,
+        .graph   = graph,
+        .flags   = flags,
+    };
+
+    ret = compile_subpass(&args, &ops, NULL, input, output);
+    if (ret < 0)
         goto out;
 
-    av_log(ctx, AV_LOG_DEBUG, "Retrying with separated filter passes.\n");
-    SwsPass *prev = input;
-    bool first = true;
-    while (ops) {
-        SwsOpList *rest;
-        ret = ff_sws_op_list_subpass(ops, &rest);
-        if (ret < 0)
-            goto out;
-
-        if (first && !rest) {
-            /* No point in compiling an unsplit pass again */
-            ret = AVERROR(ENOTSUP);
-            goto out;
-        }
-
-        ret = compile(graph, backend, ops, prev, output ? &prev : NULL);
-        if (ret < 0) {
-            ff_sws_op_list_free(&rest);
-            goto out;
-        }
-
-        ff_sws_op_list_free(&ops);
-        first = false;
-        ops = rest;
-    }
-
-    if (output) {
-        /* Return last subpass successfully compiled */
-        av_log(ctx, AV_LOG_VERBOSE, "Using %d separate passes.\n",
-               graph->num_passes - passes_orig);
-        *output = prev;
-    }
+    const int num_passes = graph->num_passes - passes_orig;
+    if (num_passes > 1)
+        av_log(ctx, AV_LOG_VERBOSE, "Using %d separate passes.\n", num_passes);
 
 out:
-    if (ret == AVERROR(ENOTSUP)) {
-        av_log(ctx, AV_LOG_WARNING, "No backend found for operations:\n");
-        ff_sws_op_list_print(ctx, AV_LOG_WARNING, AV_LOG_TRACE, ops);
-    }
     if (ret < 0)
         ff_sws_graph_rollback(graph, passes_orig);
     ff_sws_op_list_free(&ops);

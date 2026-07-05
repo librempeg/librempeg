@@ -393,13 +393,6 @@ static int video_frame_process(DecoderPriv *dp, AVFrame *frame,
 {
     int ret = 0;
 
-#if FFMPEG_OPT_TOP
-    if (dp->flags & DECODER_FLAG_TOP_FIELD_FIRST) {
-        av_log(dp, AV_LOG_WARNING, "-top is deprecated, use the setfield filter instead\n");
-        frame->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
-    }
-#endif
-
     if (frame->format == dp->hwaccel_pix_fmt) {
         int err = hwaccel_retrieve_data(dp->dec_ctx, frame);
         if (err < 0)

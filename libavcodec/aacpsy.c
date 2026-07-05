@@ -99,6 +99,14 @@ enum {
 #define AAC_NUM_BLOCKS_SHORT 8      ///< number of blocks in a short sequence
 #define PSY_LAME_NUM_SUBBLOCKS 2    ///< Number of sub-blocks in each short block
 
+/* Pre-echo-aware attack detection: the LAME ratio test misses gentler attacks after a quiet
+ * gap, which then stay long and pre-echo. For an isolated onset (long for PSY_LAME_PE_GAP
+ * frames) whose pre-onset is below PSY_LAME_PE_QUIET of the frame peak, scale the threshold by
+ * PSY_LAME_PE_RED so it switches short; dense-transient content never qualifies. */
+#define PSY_LAME_PE_GAP    12       ///< min consecutive long frames before the relaxation applies
+#define PSY_LAME_PE_QUIET  0.4f     ///< pre-onset must be below this fraction of the frame peak
+#define PSY_LAME_PE_RED    0.45f    ///< attack-threshold multiplier for a qualifying isolated onset
+
 /**
  * @}
  */
@@ -134,6 +142,11 @@ typedef struct AacPsyChannel{
     float prev_energy_subshort[AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS];
     int   prev_attack;                   ///< attack value for the last short block in the previous sequence
     int   next_attack0_zero;          ///< whether attack[0] of the next frame is zero
+    int   frames_since_short;            ///< consecutive long frames (pre-echo-aware isolated-onset gate)
+
+    /* rate-loop re-analysis rewind state, see psy_3gpp_analyze() */
+    int64_t    rc_frame_num;             ///< frame this channel last saved rewind state for
+    AacPsyBand rc_prev_band[128];        ///< prev_band as it was entering the frame
 }AacPsyChannel;
 
 /**
@@ -163,6 +176,12 @@ typedef struct AacPsyContext{
     AacPsyCoeffs psy_coef[2][64];
     AacPsyChannel *ch;
     float global_quality; ///< normalized global quality taken from avctx
+
+    /* rate-loop re-analysis rewind state, see psy_3gpp_analyze() */
+    int64_t rc_frame_num; ///< frame the rewind state was saved for
+    int     rc_first_ch;  ///< first channel analyzed in that frame
+    int     rc_fill_level;
+    float   rc_pe_min, rc_pe_max, rc_pe_previous;
 }AacPsyContext;
 
 /**
@@ -373,6 +392,10 @@ static av_cold int psy_3gpp_init(FFPsyContext *ctx) {
         av_freep(&ctx->model_priv_data);
         return AVERROR(ENOMEM);
     }
+
+    pctx->rc_frame_num = -1;
+    for (i = 0; i < ctx->avctx->ch_layout.nb_channels; i++)
+        pctx->ch[i].rc_frame_num = -1;
 
     lame_window_init(pctx, ctx->avctx);
 
@@ -844,9 +867,36 @@ static void psy_3gpp_analyze(FFPsyContext *ctx, int channel,
 {
     int ch;
     FFPsyChannelGroup *group = ff_psy_find_group(ctx, channel);
+    AacPsyContext *pctx = ctx->model_priv_data;
 
-    for (ch = 0; ch < group->num_ch; ch++)
+    /* The encoder's rate-control loop may re-run the analysis for the same
+     * frame; carried state (bit reservoir, PE history, previous-frame
+     * thresholds) must advance exactly once per frame, so save it on the
+     * frame's first run and rewind on re-runs. */
+    if (ctx->avctx->frame_num != pctx->rc_frame_num) {
+        pctx->rc_frame_num    = ctx->avctx->frame_num;
+        pctx->rc_first_ch     = channel;
+        pctx->rc_fill_level   = pctx->fill_level;
+        pctx->rc_pe_min       = pctx->pe.min;
+        pctx->rc_pe_max       = pctx->pe.max;
+        pctx->rc_pe_previous  = pctx->pe.previous;
+    } else if (channel == pctx->rc_first_ch) {
+        pctx->fill_level  = pctx->rc_fill_level;
+        pctx->pe.min      = pctx->rc_pe_min;
+        pctx->pe.max      = pctx->rc_pe_max;
+        pctx->pe.previous = pctx->rc_pe_previous;
+    }
+
+    for (ch = 0; ch < group->num_ch; ch++) {
+        AacPsyChannel *pch = &pctx->ch[channel + ch];
+        if (ctx->avctx->frame_num != pch->rc_frame_num) {
+            pch->rc_frame_num = ctx->avctx->frame_num;
+            memcpy(pch->rc_prev_band, pch->prev_band, sizeof(pch->prev_band));
+        } else {
+            memcpy(pch->prev_band, pch->rc_prev_band, sizeof(pch->prev_band));
+        }
         psy_3gpp_analyze_channel(ctx, channel + ch, coeffs[ch], &wi[ch]);
+    }
 }
 
 static av_cold void psy_3gpp_end(FFPsyContext *apc)
@@ -925,11 +975,21 @@ static FFPsyWindowInfo psy_lame_window(FFPsyContext *ctx, const float *audio,
             attack_intensity[i + PSY_LAME_NUM_SUBBLOCKS] = p;
         }
 
-        /* compare energy between sub-short blocks */
-        for (i = 0; i < (AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS; i++)
-            if (!attacks[i / PSY_LAME_NUM_SUBBLOCKS])
-                if (attack_intensity[i] > pch->attack_threshold)
-                    attacks[i / PSY_LAME_NUM_SUBBLOCKS] = (i % PSY_LAME_NUM_SUBBLOCKS) + 1;
+        {   /* pre-echo-aware threshold relaxation, see PSY_LAME_PE_* */
+            float frame_peak = 1.0f;
+            for (i = PSY_LAME_NUM_SUBBLOCKS; i < (AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS; i++)
+                frame_peak = FFMAX(frame_peak, energy_subshort[i]);
+            for (i = 0; i < (AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS; i++)
+                if (!attacks[i / PSY_LAME_NUM_SUBBLOCKS]) {
+                    float thr = pch->attack_threshold;
+                    if (i >= PSY_LAME_NUM_SUBBLOCKS &&
+                        pch->frames_since_short >= PSY_LAME_PE_GAP &&
+                        energy_subshort[i - PSY_LAME_NUM_SUBBLOCKS] < PSY_LAME_PE_QUIET * frame_peak)
+                        thr *= PSY_LAME_PE_RED;
+                    if (attack_intensity[i] > thr)
+                        attacks[i / PSY_LAME_NUM_SUBBLOCKS] = (i % PSY_LAME_NUM_SUBBLOCKS) + 1;
+                }
+        }
 
         /* should have energy change between short blocks, in order to avoid periodic signals */
         /* Good samples to show the effect are Trumpet test songs */
@@ -967,6 +1027,8 @@ static FFPsyWindowInfo psy_lame_window(FFPsyContext *ctx, const float *audio,
                 if (attacks[i] && attacks[i-1])
                     attacks[i] = 0;
         }
+
+        pch->frames_since_short = uselongblock ? pch->frames_since_short + 1 : 0;
     } else {
         /* We have no lookahead info, so just use same type as the previous sequence. */
         uselongblock = !(prev_type == EIGHT_SHORT_SEQUENCE);

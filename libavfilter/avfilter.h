@@ -37,7 +37,6 @@
 
 #include <stddef.h>
 
-#include "libavutil/attributes.h"
 #include "libavutil/avutil.h"
 #include "libavutil/bprint.h"
 #include "libavutil/buffer.h"
@@ -316,30 +315,7 @@ typedef struct AVFilterContext {
      */
     int nb_threads;
 
-#if FF_API_CONTEXT_PUBLIC
-    /**
-     * @deprecated unused
-     */
-    attribute_deprecated
-    struct AVFilterCommand *command_queue;
-#endif
-
     char *enable_str;               ///< enable expression string
-#if FF_API_CONTEXT_PUBLIC
-    /**
-     * @deprecated unused
-     */
-    attribute_deprecated
-    void *enable;
-    /**
-     * @deprecated unused
-     */
-    double *var_values;
-    /**
-     * @deprecated unused
-     */
-    int is_disabled;
-#endif
 
     /**
      * For filters which will create hardware frames, sets the device the
@@ -353,14 +329,6 @@ typedef struct AVFilterContext {
      * avfilter_init_dict().
      */
     AVBufferRef *hw_device_ctx;
-
-#if FF_API_CONTEXT_PUBLIC
-    /**
-     * @deprecated this field should never have been accessed by callers
-     */
-    attribute_deprecated
-    unsigned ready;
-#endif
 
     /**
      * Sets the number of extra hardware frames which the filter will

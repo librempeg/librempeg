@@ -48,6 +48,11 @@ typedef struct APVVulkanDecodeContext {
     FFVulkanShader idct;
 
     AVBufferPool *frame_data_pool;
+
+    /* Flat per-frame coefficient buffer: entropy writes it, the iDCT reads it,
+     * instead of bouncing coefficients through the output image. */
+    AVBufferPool *coeff_pool;
+    size_t        coeff_size;
 } APVVulkanDecodeContext;
 
 typedef struct DecodePushData {
@@ -118,12 +123,6 @@ static int vk_apv_start_frame(AVCodecContext          *avctx,
     fd += (APV_MAX_TILE_COLS+1)*2;
     memcpy(fd, apv->tile_info.row_starts, (APV_MAX_TILE_ROWS+1)*2);
 
-    /* Prepare frame to be used */
-    err = ff_vk_decode_prepare_frame_sdr(dec, apv->output_frame, vp, 1,
-                                         FF_VK_REP_NATIVE, 0);
-    if (err < 0)
-        return err;
-
     return 0;
 }
 
@@ -184,6 +183,8 @@ static int vk_apv_end_frame(AVCodecContext *avctx)
 
     VkImageMemoryBarrier2 img_bar[8];
     int nb_img_bar = 0;
+    VkBufferMemoryBarrier2 buf_bar[2];
+    int nb_buf_bar = 0;
 
     FFVkExecContext *exec = ff_vk_exec_get(&ctx->s, &ctx->exec_pool);
     ff_vk_exec_start(&ctx->s, exec);
@@ -196,10 +197,11 @@ static int vk_apv_end_frame(AVCodecContext *avctx)
                                  VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                                  VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT));
 
-    err = ff_vk_exec_mirror_sem_value(&ctx->s, exec, &vp->sem, &vp->sem_value,
-                                      apv->output_frame);
-    if (err < 0)
-        return err;
+    /* Exec-owned output views: freed on exec recycle, so releasing a picture
+     * needs no blocking wait. No mirror_sem: nothing consumes vp->sem here. */
+    VkImageView views[AV_NUM_DATA_POINTERS];
+    RET(ff_vk_create_imageviews(&ctx->s, exec, views, apv->output_frame,
+                                FF_VK_REP_NATIVE));
 
     RET(ff_vk_exec_add_dep_buf(&ctx->s, exec, &vp->slices_buf, 1, 0));
     vp->slices_buf = NULL;
@@ -249,6 +251,39 @@ static int vk_apv_end_frame(AVCodecContext *avctx)
     });
     nb_img_bar = 0;
 
+    /* Zero-filled first, since entropy writes only the nonzero coefficients. */
+    AVBufferRef *coeff_ref;
+    err = ff_vk_get_pooled_buffer(&ctx->s, &apvvk->coeff_pool, &coeff_ref,
+                                  VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                  NULL, apvvk->coeff_size,
+                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (err < 0)
+        return err;
+    FFVkBuffer *coeff_buf = (FFVkBuffer *)coeff_ref->data;
+    RET(ff_vk_exec_add_dep_buf(&ctx->s, exec, &coeff_ref, 1, 0));
+
+    vk->CmdFillBuffer(exec->buf, coeff_buf->buf, 0, VK_WHOLE_SIZE, 0);
+
+    buf_bar[nb_buf_bar++] = (VkBufferMemoryBarrier2) {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+        .srcStageMask  = VK_PIPELINE_STAGE_2_CLEAR_BIT,
+        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .dstStageMask  = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
+                         VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .buffer = coeff_buf->buf,
+        .size   = VK_WHOLE_SIZE,
+    };
+    vk->CmdPipelineBarrier2(exec->buf, &(VkDependencyInfo) {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .pBufferMemoryBarriers = buf_bar,
+        .bufferMemoryBarrierCount = nb_buf_bar,
+    });
+    nb_buf_bar = 0;
+
     /* Setup push data */
     DecodePushData pd = (DecodePushData) {
         .tile_data = slices_buf->address,
@@ -260,7 +295,7 @@ static int vk_apv_end_frame(AVCodecContext *avctx)
 
     /* Decoding */
     ff_vk_shader_update_img_array(&ctx->s, exec, &apvvk->decode,
-                                  apv->output_frame, vp->view.out,
+                                  apv->output_frame, views,
                                   0, 0,
                                   VK_IMAGE_LAYOUT_GENERAL,
                                   VK_NULL_HANDLE);
@@ -268,6 +303,10 @@ static int vk_apv_end_frame(AVCodecContext *avctx)
                                     0, 1, 0,
                                     frame_data_buf,
                                     0, frame_data_buf->size,
+                                    VK_FORMAT_UNDEFINED);
+    ff_vk_shader_update_desc_buffer(&ctx->s, exec, &apvvk->decode,
+                                    0, 2, 0,
+                                    coeff_buf, 0, coeff_buf->size,
                                     VK_FORMAT_UNDEFINED);
 
     ff_vk_exec_bind_shader(&ctx->s, exec, &apvvk->decode);
@@ -279,24 +318,28 @@ static int vk_apv_end_frame(AVCodecContext *avctx)
                     apv->tile_info.tile_cols, apv->tile_info.tile_rows,
                     desc->nb_components);
 
-    /* Wait for all decoding to finish */
-    ff_vk_frame_barrier(&ctx->s, exec, apv->output_frame, img_bar, &nb_img_bar,
-                        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                        VK_ACCESS_2_SHADER_STORAGE_READ_BIT |
-                        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                        VK_IMAGE_LAYOUT_GENERAL,
-                        VK_QUEUE_FAMILY_IGNORED);
+    /* Wait for the coefficient writes before the iDCT reads them */
+    buf_bar[nb_buf_bar++] = (VkBufferMemoryBarrier2) {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+        .srcStageMask  = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        .dstStageMask  = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .buffer = coeff_buf->buf,
+        .size   = VK_WHOLE_SIZE,
+    };
     vk->CmdPipelineBarrier2(exec->buf, &(VkDependencyInfo) {
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .pImageMemoryBarriers = img_bar,
-        .imageMemoryBarrierCount = nb_img_bar,
+        .pBufferMemoryBarriers = buf_bar,
+        .bufferMemoryBarrierCount = nb_buf_bar,
     });
-    nb_img_bar = 0;
+    nb_buf_bar = 0;
 
     /* iDCT */
     ff_vk_shader_update_img_array(&ctx->s, exec, &apvvk->idct,
-                                  apv->output_frame, vp->view.out,
+                                  apv->output_frame, views,
                                   0, 0,
                                   VK_IMAGE_LAYOUT_GENERAL,
                                   VK_NULL_HANDLE);
@@ -304,6 +347,10 @@ static int vk_apv_end_frame(AVCodecContext *avctx)
                                     0, 1, 0,
                                     frame_data_buf,
                                     0, frame_data_buf->size,
+                                    VK_FORMAT_UNDEFINED);
+    ff_vk_shader_update_desc_buffer(&ctx->s, exec, &apvvk->idct,
+                                    0, 2, 0,
+                                    coeff_buf, 0, coeff_buf->size,
                                     VK_FORMAT_UNDEFINED);
 
     ff_vk_exec_bind_shader(&ctx->s, exec, &apvvk->idct);
@@ -355,9 +402,14 @@ static int init_decode_shader(AVCodecContext *avctx, FFVulkanContext *s,
             .name        = "frame_data_buf",
             .type        = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             .stages      = VK_SHADER_STAGE_COMPUTE_BIT,
+        },
+        {
+            .name        = "coeffs_out_buf",
+            .type        = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .stages      = VK_SHADER_STAGE_COMPUTE_BIT,
         }
     };
-    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 2, 0, 0);
+    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 3, 0, 0);
 
     RET(ff_vk_shader_link(s, shd,
                           ff_apv_decode_comp_spv_data,
@@ -406,8 +458,13 @@ static int init_idct_shader(AVCodecContext *avctx, FFVulkanContext *s,
             .type        = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             .stages      = VK_SHADER_STAGE_COMPUTE_BIT,
         },
+        {
+            .name        = "coeffs_in_buf",
+            .type        = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .stages      = VK_SHADER_STAGE_COMPUTE_BIT,
+        },
     };
-    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 2, 0, 0);
+    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 3, 0, 0);
 
     RET(ff_vk_shader_link(s, shd,
                           ff_apv_idct_comp_spv_data,
@@ -427,6 +484,7 @@ static void vk_decode_apv_uninit(FFVulkanDecodeShared *ctx)
     ff_vk_shader_free(&ctx->s, &apvvk->idct);
 
     av_buffer_pool_uninit(&apvvk->frame_data_pool);
+    av_buffer_pool_uninit(&apvvk->coeff_pool);
 
     av_freep(&apvvk);
 }
@@ -448,6 +506,22 @@ static int vk_decode_apv_init(AVCodecContext *avctx)
     }
 
     ctx->sd_ctx_free = &vk_decode_apv_uninit;
+
+    /* Size the flat coefficient buffer: one int16 per sample of the
+     * MB-aligned coded area, summed over components. */
+    {
+        const AVPixFmtDescriptor *pd =
+            av_pix_fmt_desc_get(avctx->sw_pix_fmt);
+        int cw = FFALIGN(avctx->coded_width,  16);
+        int ch = FFALIGN(avctx->coded_height, 16);
+        apvvk->coeff_size = 0;
+        for (int i = 0; i < pd->nb_components; i++) {
+            int sx = (i == 1 || i == 2) ? pd->log2_chroma_w : 0;
+            int sy = (i == 1 || i == 2) ? pd->log2_chroma_h : 0;
+            apvvk->coeff_size += (size_t)(cw >> sx) * (ch >> sy);
+        }
+        apvvk->coeff_size *= sizeof(int16_t);
+    }
 
     RET(init_decode_shader(avctx, &ctx->s, &ctx->exec_pool,
                            &apvvk->decode));

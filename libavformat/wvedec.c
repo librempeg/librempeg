@@ -23,15 +23,14 @@
 #include "internal.h"
 #include "pcm.h"
 
-static int wve_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
-    if (memcmp(p->buf, "ALawSoundFile**\0\017\020", 18) ||
-        memcmp(p->buf + 22, "\0\0\0\1\0\0\0\0\0\0", 10))
+    if (memcmp(p->buf, "ALawSoundFile**\0\017\020", 18))
         return 0;
     return AVPROBE_SCORE_MAX;
 }
 
-static int wve_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVStream *st;
 
@@ -40,7 +39,8 @@ static int wve_read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     avio_skip(s->pb, 18);
-    st->duration           = avio_rb32(s->pb);
+    st->duration = avio_rl32(s->pb);
+    st->start_time = 0;
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_PCM_ALAW;
     st->codecpar->sample_rate = 8000;
@@ -56,9 +56,9 @@ static int wve_read_header(AVFormatContext *s)
 
 const FFInputFormat ff_wve_demuxer = {
     .p.name         = "wve",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Psion 3 audio"),
-    .read_probe     = wve_probe,
-    .read_header    = wve_read_header,
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Psion 3 ALaw audio"),
+    .read_probe     = read_probe,
+    .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
     .read_seek      = ff_pcm_read_seek,
 };

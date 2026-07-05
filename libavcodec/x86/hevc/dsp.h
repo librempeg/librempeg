@@ -41,7 +41,7 @@ bi_pel_func ff_hevc_put_bi_ ## name ## W ## _ ## D ## _##opt
 
 #define WEIGHTING_PROTOTYPE(width, bitd, opt) \
 void ff_hevc_put_uni_w##width##_##bitd##_##opt(uint8_t *dst, ptrdiff_t dststride, const int16_t *_src, int height, int denom,  int _wx, int _ox);      \
-void ff_hevc_put_bi_w##width##_##bitd##_##opt(uint8_t *dst, ptrdiff_t dststride, const int16_t *_src, const int16_t *_src2, int height, int denom,  int _wx0,  int _wx1, int _ox0, int _ox1)
+void ff_hevc_put_bi_w##width##_##bitd##_##opt(uint8_t *dst, ptrdiff_t dststride, const int16_t *_src, const int16_t *_src2, int height, int denom, int wx0, int wx1, int ox)
 
 #define WEIGHTING_PROTOTYPES(bitd, opt) \
         WEIGHTING_PROTOTYPE(4, bitd, opt); \
@@ -167,7 +167,7 @@ void ff_hevc_put_qpel_hv8_8_avx512icl(int16_t *dst, const uint8_t *_src, ptrdiff
 // TRANSFORM_ADD
 ///////////////////////////////////////////////////////////////////////////////
 
-void ff_hevc_add_residual_4_8_mmxext(uint8_t *dst, const int16_t *res, ptrdiff_t stride);
+void ff_hevc_add_residual_4_8_sse2(uint8_t *dst, const int16_t *res, ptrdiff_t stride);
 void ff_hevc_add_residual_8_8_sse2(uint8_t *dst, const int16_t *res, ptrdiff_t stride);
 void ff_hevc_add_residual_16_8_sse2(uint8_t *dst, const int16_t *res, ptrdiff_t stride);
 void ff_hevc_add_residual_32_8_sse2(uint8_t *dst, const int16_t *res, ptrdiff_t stride);

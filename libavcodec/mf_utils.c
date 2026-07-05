@@ -1,19 +1,19 @@
 /*
- * This file is part of Librempeg
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with Librempeg; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 #define COBJMACROS
@@ -240,6 +240,7 @@ static struct GUID_Entry guid_names[] = {
     GUID_ENTRY(MFMediaType_Video),
     GUID_ENTRY(MFAudioFormat_PCM),
     GUID_ENTRY(MFAudioFormat_Float),
+    GUID_ENTRY(ff_MFVideoFormat_AV1),
     GUID_ENTRY(MFVideoFormat_H264),
     GUID_ENTRY(MFVideoFormat_H264_ES),
     GUID_ENTRY(ff_MFVideoFormat_HEVC),
@@ -507,6 +508,7 @@ void ff_media_type_dump(void *log, IMFMediaType *type)
 const CLSID *ff_codec_to_mf_subtype(enum AVCodecID codec)
 {
     switch (codec) {
+    case AV_CODEC_ID_AV1:               return &ff_MFVideoFormat_AV1;
     case AV_CODEC_ID_H264:              return &MFVideoFormat_H264;
     case AV_CODEC_ID_HEVC:              return &ff_MFVideoFormat_HEVC;
     case AV_CODEC_ID_AC3:               return &MFAudioFormat_Dolby_AC3;

@@ -8579,21 +8579,24 @@ Same as the @ref{subtitles} filter, except that it doesn't require libavcodec
 and libavformat to work. On the other hand, it is limited to ASS (Advanced
 Substation Alpha) subtitles files.
 
-This filter accepts the following option in addition to the common options from
-the @ref{subtitles} filter:
+This filter accepts @option{filename}/@option{f}, @option{original_size},
+@option{fontsdir}, and @option{alpha} from the @ref{subtitles} filter, plus the
+following option:
 
 @table @option
 @item shaping
-Set the shaping engine
+Set the shaping engine.
 
 Available values are:
 @table @samp
 @item auto
 The default libass shaping engine, which is the best available.
 @item simple
-Fast, font-agnostic shaper that can do only substitutions
+Fast, font-agnostic shaper that can do only substitutions.
 @item complex
-Slower shaper using OpenType for substitutions and positioning
+Slower shaper using OpenType for substitutions and positioning. Required
+for correct rendering of complex scripts such as Arabic, Hebrew, Devanagari
+and Thai. Requires libass to be built with HarfBuzz.
 @end table
 
 The default is @code{auto}.
@@ -21299,6 +21302,12 @@ frame-consumer that exhausts the limited decoder frame pool.
 If set to 1, frames are passed through as-is if they match the desired output
 parameters. This is the default behaviour.
 
+@item use_filters
+If set to 1, filter with a generic weight LUT instead of using fixed-function
+shader kernels. May be faster or slower depending on the hardware. A value
+of @code{auto} (the default) enables this automatically when required for
+correct anti-aliasing when downscaling.
+
 @item param
 Algorithm-Specific parameter.
 
@@ -21337,7 +21346,7 @@ scale_cuda=passthrough=0
 @end example
 @end itemize
 
-@subsection thumbnail_cuda
+@section thumbnail_cuda
 
 Select the most representative frame in a given sequence of consecutive frames using CUDA.
 
@@ -21353,7 +21362,7 @@ the end. Default is @code{100}.
 Since the filter keeps track of the whole frames sequence, a bigger @var{n}
 value will result in a higher memory usage, so a high value is not recommended.
 
-@subsubsection Example
+@subsection Example
 
 @itemize
 
@@ -23174,6 +23183,23 @@ at least libass release 0.17.0 (or LIBASS_VERSION 0x01600010), @emph{and} libass
 have been built with libunibreak.
 
 The option is enabled by default except for native ASS.
+
+@item shaping
+Set the shaping engine.
+
+Available values are:
+@table @samp
+@item auto
+The default libass shaping engine, which is the best available.
+@item simple
+Fast, font-agnostic shaper that can do only substitutions.
+@item complex
+Slower shaper using OpenType for substitutions and positioning. Required
+for correct rendering of complex scripts such as Arabic, Hebrew, Devanagari
+and Thai. Requires libass to be built with HarfBuzz.
+@end table
+
+The default is @code{auto}.
 @end table
 
 If the first key is not specified, it is assumed that the first value
@@ -23542,9 +23568,9 @@ The value must be between @code{0} and @var{nb_frames - 1}. Default is @code{0}.
 @item
 Produce 8x8 PNG tiles of all keyframes (@option{-skip_frame nokey}) in a movie:
 @example
-ffmpeg -skip_frame nokey -i file.avi -vf 'scale=128:72,tile=8x8' -an -vsync 0 keyframes%03d.png
+ffmpeg -skip_frame nokey -i file.avi -vf 'scale=128:72,tile=8x8' -an -fps_mode passthrough keyframes%03d.png
 @end example
-The @option{-vsync 0} is necessary to prevent @command{ffmpeg} from
+The @option{-fps_mode passthrough} is necessary to prevent @command{ffmpeg} from
 duplicating each output frame to accommodate the originally detected frame
 rate.
 
@@ -31387,7 +31413,7 @@ select=n=2:e='mod(n, 2)+1' [odd][even]; [odd] pad=h=2*ih [tmp]; [tmp][even] over
 Select useful frames from an ffconcat file which is using inpoints and
 outpoints but where the source files are not intra frame only.
 @example
-ffmpeg -copyts -vsync 0 -segment_time_metadata 1 -i input.ffconcat -vf select=concatdec_select -af aselect=concatdec_select output.avi
+ffmpeg -copyts -segment_time_metadata 1 -i input.ffconcat -fps_mode passthrough -vf select=concatdec_select -af aselect=concatdec_select output.avi
 @end example
 @end itemize
 

@@ -33,6 +33,9 @@
 #define APV_BLOCKS_PER_WG   8
 
 layout (set = 0, binding = 0) uniform uimage2D dst[];
+layout (set = 0, binding = 2, scalar) readonly buffer coeffs_in_buf {
+    int16_t coeffs_in[];
+};
 layout (set = 0, binding = 1, scalar) readonly buffer frame_data_buf {
     uvec2 tile_offset[APV_MAX_NUM_COMP * APV_MAX_TILE_COUNT];
     uint8_t q_matrix[APV_MAX_NUM_COMP][8][8];
@@ -69,13 +72,15 @@ void main(void)
     const ivec2 sub_shift = (comp == 0u) ? ivec2(0) : log2_chroma_sub;
     const ivec2 luma_pos  = pos << sub_shift;
 
-    /* figure out the tile position */
-    int tx = 0;
-    while (tx + 1 < tile_count.x && int(tile_col[tx + 1]) <= luma_pos.x)
-        tx++;
-    int ty = 0;
-    while (ty + 1 < tile_count.y && int(tile_row[ty + 1]) <= luma_pos.y)
-        ty++;
+    /* Uniform tile grid with a remainder tail, so the tile position is a
+     * division, not a search. Single-column/row grids have no step; index 0. */
+    int tx = 0, ty = 0;
+    if (tile_count.x > 1)
+        tx = min(luma_pos.x / int(tile_col[1] - tile_col[0]),
+                 tile_count.x - 1);
+    if (tile_count.y > 1)
+        ty = min(luma_pos.y / int(tile_row[1] - tile_row[0]),
+                 tile_count.y - 1);
 
     const int tile_idx = ty * tile_count.x + tx;
     const int qp = int(tile_qp[int(comp) * APV_MAX_TILE_COUNT + tile_idx]);
@@ -87,11 +92,26 @@ void main(void)
     const float fact = float(half_range);
     const float norm = 1.0f / (1024.0f * fact); /* DCT normalization const */
 
+    /* This component's plane inside the flat coefficient buffer */
+    const int cw0 = int(tile_col[tile_count.x]);
+    const int ch0 = int(tile_row[tile_count.y]);
+    uint cbase = 0u;
+    for (uint i = 0u; i < comp; i++) {
+        ivec2 ss = i == 0u ? ivec2(0) : log2_chroma_sub;
+        cbase += uint((cw0 >> ss.x) * (ch0 >> ss.y));
+    }
+    const int cstride = cw0 >> sub_shift.x;
+    const int cheight = ch0 >> sub_shift.y;
+
+    /* blocks fully outside the coded area have nothing stored for them */
+    const bool oob = pos.x >= cstride || pos.y >= cheight;
+
     [[unroll]]
     for (uint y = 0u; y < 8u; y++) {
         /* load */
-        int   raw   = int(imageLoad(dst[comp], pos + ivec2(col, y)).x);
-        int   coeff = sign_extend(raw, 16);
+        int   coeff = oob ? 0
+                    : int(coeffs_in[cbase + uint((pos.y + int(y)) * cstride +
+                                                 pos.x + int(col))]);
         /* dequant + norm */
         int   qs    = level_scale * int(q_matrix[comp][col][y]) * (1 << qp_shift);
         float v     = float(coeff * qs) * norm;

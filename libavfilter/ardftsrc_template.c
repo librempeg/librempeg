@@ -16,6 +16,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <float.h>
 #include "libavutil/tx.h"
 #include "avfilter.h"
 #include "audio.h"
@@ -32,6 +33,7 @@
 #undef TX_TYPE
 #undef SCALE
 #undef OFFSET
+#undef EPS
 #if DEPTH == 8
 #define FCOS cosf
 #define FSIN sinf
@@ -45,6 +47,7 @@
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #define SCALE (F(1.0)/F(1<<(DEPTH-1)))
 #define OFFSET(x) ((x) - 0x80)
+#define EPS FLT_EPSILON
 #elif DEPTH == 16
 #define FCOS cosf
 #define FSIN sinf
@@ -58,6 +61,7 @@
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #define SCALE (F(1.0)/F(1<<(DEPTH-1)))
 #define OFFSET(x) (x)
+#define EPS FLT_EPSILON
 #elif DEPTH == 32
 #define FCOS cos
 #define FSIN sin
@@ -71,6 +75,7 @@
 #define TX_TYPE AV_TX_DOUBLE_RDFT
 #define SCALE (F(1.0)/F(1LL<<(DEPTH-1)))
 #define OFFSET(x) (x)
+#define EPS DBL_EPSILON
 #elif DEPTH == 33
 #define FCOS cosf
 #define FSIN sinf
@@ -82,6 +87,7 @@
 #define SAMPLE_FORMAT fltp
 #define ttype AVComplexFloat
 #define TX_TYPE AV_TX_FLOAT_RDFT
+#define EPS FLT_EPSILON
 #elif DEPTH == 65
 #define FCOS cos
 #define FSIN sin
@@ -93,6 +99,7 @@
 #define SAMPLE_FORMAT dblp
 #define ttype AVComplexDouble
 #define TX_TYPE AV_TX_DOUBLE_RDFT
+#define EPS DBL_EPSILON
 #elif DEPTH == 128
 #define FCOS cosl
 #define FSIN sinl
@@ -104,6 +111,7 @@
 #define SAMPLE_FORMAT ldblp
 #define ttype AVComplexLongDouble
 #define TX_TYPE AV_TX_LONG_DOUBLE_RDFT
+#define EPS DBL_EPSILON
 #endif
 
 #define F(x) ((ftype)(x))
@@ -167,23 +175,32 @@ static void fn(src_uninit)(AVFilterContext *ctx)
     av_freep(&s->phase);
 }
 
-static void fn(taper_init)(ctype *taper, const int N, int mode)
+static void fn(taper_init)(ctype *taper, const int N)
 {
-    long double alpha = mode ? F(4.0L) : F(6.0L);
-    long double alpha2 = 4.0L * (alpha * M_PIl / N) * (alpha * M_PIl / N);
+    long double factor = 1.0L / (1LL << FFMAX(av_ceil_log2(N) - 10, 0));
     long double scale = 0.0L;
     long double sum = 0.0L;
 
     for (int i = N-1; i >= 0; i--) {
-        long double tmp = i * (N - i) * alpha2;
-        taper[i].re = av_bessel_i0(sqrtl(tmp));
-        scale += taper[i].re;
+        long double x = i+0.0L;
+        long double t = x * (N-x);
+        long double s = sqrtl(t) * factor;
+        long double v = expl(s) * factor;
+
+        scale += v;
     }
-    scale = 1.0L/(scale+1);
+
+    scale = 1.0L/(scale+1.0L);
 
     for (int i = N-1; i >= 0; i--) {
-        sum += taper[i].re;
-        taper[i].re = taper[i].im = sum * scale;
+        long double x = i+0.0L;
+        long double t = x * (N-x);
+        long double s = sqrtl(t) * factor;
+        long double v = expl(s) * factor;
+        ftype tt = sum * scale;
+
+        sum += v;
+        taper[i].re = taper[i].im = (tt >= EPS) ? tt : F(0.0L);
     }
 }
 
@@ -247,7 +264,7 @@ static int fn(src_init)(AVFilterContext *ctx)
     if (!s->taper)
         return AVERROR(ENOMEM);
     taper = s->taper;
-    fn(taper_init)(taper, taper_samples, s->out_rdft_size > s->in_rdft_size);
+    fn(taper_init)(taper, taper_samples);
 
     trim_start = 0;
     for (int n = 0; n < taper_samples; n++) {
@@ -275,7 +292,7 @@ static int fn(src_init)(AVFilterContext *ctx)
         const ftype aphase = FABS(s->phaset);
         const ftype sgn = s->phaset < F(0.0) ? F(-1.0) : F(1.0);
         const ftype x = F(n) / F(N);
-        const ftype a = asin(aphase * x) * 40 * sgn;
+        const ftype a = asin(aphase * x) * 30 * sgn;
 
         phase[n].re = FCOS(a);
         phase[n].im = FSIN(a);

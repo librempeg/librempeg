@@ -81,8 +81,6 @@ typedef struct HLSSegment {
     int discont;
     int64_t pos;
     int64_t size;
-    int64_t keyframe_pos;
-    int64_t keyframe_size;
     unsigned var_stream_idx;
 
     const char *key_uri;
@@ -142,8 +140,6 @@ typedef struct VariantStream {
     int64_t start_pts;
     int64_t end_pts;
     int64_t video_lastpos;
-    int64_t video_keyframe_pos;
-    int64_t video_keyframe_size;
     double duration;      // last segment duration computed so far, in seconds
     int64_t start_pos;    // last segment starting position
     int64_t size;         // last segment size
@@ -796,6 +792,7 @@ static int hls_mux_init(AVFormatContext *s, VariantStream *vs)
     oc->io_open                  = s->io_open;
     oc->io_close2                = s->io_close2;
     oc->strict_std_compliance    = s->strict_std_compliance;
+    oc->flags                    = s->flags;
     av_dict_copy(&oc->metadata, s->metadata, 0);
 
     if (vs->vtt_oformat) {
@@ -803,6 +800,7 @@ static int hls_mux_init(AVFormatContext *s, VariantStream *vs)
         if (ret < 0)
             return ret;
         vtt_oc          = vs->vtt_avf;
+        vtt_oc->flags   = s->flags;
         av_dict_copy(&vtt_oc->metadata, s->metadata, 0);
     }
 
@@ -1085,8 +1083,6 @@ static int hls_append_segment(struct AVFormatContext *s, HLSContext *hls,
     en->duration = duration;
     en->pos      = pos;
     en->size     = size;
-    en->keyframe_pos      = vs->video_keyframe_pos;
-    en->keyframe_size     = vs->video_keyframe_size;
 
     if (vs->discontinuity) {
         en->discont = 1;
@@ -1476,6 +1472,7 @@ static int create_master_playlist(AVFormatContext *s,
             avg_bandwidth = vs->avg_bitrate;
         } else {
             bandwidth = 0;
+            avg_bandwidth = 0;
             if (vid_st)
                 bandwidth += get_stream_bit_rate(vid_st);
             if (aud_st)
@@ -1620,7 +1617,7 @@ static int hls_window(AVFormatContext *s, int last, VariantStream *vs)
                                       en->size, en->pos, hls->baseurl,
                                       en->filename,
                                       en->discont_program_date_time ? &en->discont_program_date_time : prog_date_time_p,
-                                      en->keyframe_size, en->keyframe_pos, hls->flags & HLS_I_FRAMES_ONLY);
+                                      hls->flags & HLS_I_FRAMES_ONLY);
         if (en->discont_program_date_time)
             en->discont_program_date_time -= en->duration;
         if (ret < 0) {
@@ -1644,7 +1641,7 @@ static int hls_window(AVFormatContext *s, int last, VariantStream *vs)
         for (en = vs->segments; en; en = en->next) {
             ret = ff_hls_write_file_entry(hls->sub_m3u8_out, en->discont, byterange_mode,
                                           en->duration, 0, en->size, en->pos,
-                                          hls->baseurl, en->sub_filename, NULL, 0, 0, 0);
+                                          hls->baseurl, en->sub_filename, NULL, 0);
             if (ret < 0) {
                 av_log(s, AV_LOG_WARNING, "ff_hls_write_file_entry get error\n");
             }
@@ -2682,12 +2679,6 @@ static int hls_write_packet(AVFormatContext *s, AVPacket *pkt)
     vs->packets_written++;
     if (oc->pb) {
         ret = ff_write_chained(oc, stream_index, pkt, s, 0);
-        vs->video_keyframe_size += pkt->size;
-        if ((st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) && (pkt->flags & AV_PKT_FLAG_KEY)) {
-            vs->video_keyframe_size = avio_tell(oc->pb);
-        } else {
-            vs->video_keyframe_pos = avio_tell(vs->out);
-        }
         if (hls->ignore_io_errors)
             ret = 0;
     }

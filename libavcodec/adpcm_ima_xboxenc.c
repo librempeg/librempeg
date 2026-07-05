@@ -34,9 +34,15 @@ typedef struct XboxState {
     int index;
     int16_t step_size;
     int predictor;
+    int last_sample;
+
+    int16_t samples[BLOCK_SAMPLES+1];
 } XboxState;
 
 typedef struct XboxContext {
+    AVClass *class;
+
+    float coeff;
     XboxState state[6];
 } XboxContext;
 
@@ -131,6 +137,7 @@ static int xbox_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 {
     const int nb_channels = avctx->ch_layout.nb_channels;
     XboxContext *c = avctx->priv_data;
+    const float coeff = c->coeff;
     PutByteContext pbc;
     PutByteContext *pb = &pbc;
     int out_size, ret, nb_blocks;
@@ -144,14 +151,20 @@ static int xbox_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 
     for (int blk = 0; blk < nb_blocks; blk++) {
         for (int ch = 0; ch < nb_channels; ch++) {
-            const int16_t *src = (const int16_t *)frame->extended_data[ch];
+            const int start = blk * BLOCK_SAMPLES;
+            const int16_t *src = ((const int16_t *)frame->extended_data[ch]) + start;
             XboxState *state = &c->state[ch];
             XboxState xenc_state;
             XboxState *enc_state = &xenc_state;
-            int start = blk * BLOCK_SAMPLES;
-            const int16_t predictor = src[start];
+            int16_t *samples = state->samples;
+            const int16_t predictor = src[0] - coeff * state->last_sample;
             double best_diff = DBL_MAX;
             int best_index = 0;
+
+            state->last_sample = src[BLOCK_SAMPLES-1];
+            samples[0] = src[1] - coeff * src[0];
+            for (int i = 1; i < BLOCK_SAMPLES-1; i++)
+                samples[i] = src[i+1] - coeff * src[i];
 
             for (int index = 0; index < 89; index++) {
                 double diff = 0.0;
@@ -162,8 +175,8 @@ static int xbox_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 
                 for (int group = 0; group < 8; group++) {
                     for (int i = 0; i < 8; i++) {
-                        int sample_index = blk * BLOCK_SAMPLES + group * 8 + i + 1;
-                        int sample = src[sample_index];
+                        int sample_index = group * 8 + i;
+                        int sample = samples[sample_index];
                         int error;
 
                         encode_nibble(enc_state, sample, &error);
@@ -192,13 +205,13 @@ static int xbox_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 
         for (int group = 0; group < 8; group++) {
             for (int ch = 0; ch < nb_channels; ch++) {
-                const int16_t *src = (const int16_t *)frame->extended_data[ch];
                 XboxState *state = &c->state[ch];
+                const int16_t *src = state->samples;
                 unsigned pack = 0;
                 int shift = 0;
 
                 for (int i = 0; i < 8; i++) {
-                    int sample_index = blk * BLOCK_SAMPLES + group * 8 + i + 1;
+                    int sample_index = group * 8 + i;
                     int sample = src[sample_index];
                     int code = encode_nibble(state, sample, NULL);
 
@@ -216,6 +229,18 @@ static int xbox_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     return 0;
 }
 
+#define FLAGS AV_OPT_FLAG_ENCODING_PARAM | AV_OPT_FLAG_AUDIO_PARAM
+static const AVOption options[] = {
+    { "coeff", "set the shelf coeff", offsetof(XboxContext, coeff), AV_OPT_TYPE_FLOAT, {.dbl = 0 }, 0, 0.7, FLAGS },
+    { NULL },
+};
+
+static const AVClass adpcm_ima_xbox_encoder_class = {
+    .class_name = "ADPCM IMA Xbox encoder",
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 const FFCodec ff_adpcm_ima_xbox_encoder = {
     .p.name         = "adpcm_ima_xbox",
     CODEC_LONG_NAME("ADPCM IMA Xbox"),
@@ -225,5 +250,6 @@ const FFCodec ff_adpcm_ima_xbox_encoder = {
     .priv_data_size = sizeof(XboxContext),
     .init           = xbox_encode_init,
     FF_CODEC_ENCODE_CB(xbox_encode_frame),
+    .p.priv_class   = &adpcm_ima_xbox_encoder_class,
     CODEC_SAMPLEFMTS(AV_SAMPLE_FMT_S16P),
 };

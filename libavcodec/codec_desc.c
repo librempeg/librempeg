@@ -1143,15 +1143,6 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("Dxtory"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
     },
-#if FF_API_V408_CODECID
-    {
-        .id        = AV_CODEC_ID_V410,
-        .type      = AVMEDIA_TYPE_VIDEO,
-        .name      = "v410",
-        .long_name = NULL_IF_CONFIG_SMALL("Uncompressed 4:4:4 10-bit"),
-        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
-    },
-#endif
     {
         .id        = AV_CODEC_ID_XWD,
         .type      = AVMEDIA_TYPE_VIDEO,
@@ -1476,22 +1467,6 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("Pinnacle TARGA CineWave YUV16"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
     },
-#if FF_API_V408_CODECID
-    {
-        .id        = AV_CODEC_ID_V308,
-        .type      = AVMEDIA_TYPE_VIDEO,
-        .name      = "v308",
-        .long_name = NULL_IF_CONFIG_SMALL("Uncompressed packed 4:4:4"),
-        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
-    },
-    {
-        .id        = AV_CODEC_ID_V408,
-        .type      = AVMEDIA_TYPE_VIDEO,
-        .name      = "v408",
-        .long_name = NULL_IF_CONFIG_SMALL("Uncompressed packed QT 4:4:4:4"),
-        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
-    },
-#endif
     {
         .id        = AV_CODEC_ID_YUV4,
         .type      = AVMEDIA_TYPE_VIDEO,
@@ -2117,6 +2092,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "actimagine_vx",
         .long_name = NULL_IF_CONFIG_SMALL("Actimagine VX Video"),
         .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_CFDF_D5_VIDEO,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "cfdf_d5_video",
+        .long_name = NULL_IF_CONFIG_SMALL("CFDF D5 (Cyberflix DreamFactory v5) video"),
+        .props     = AV_CODEC_PROP_LOSSLESS,
     },
 
     /* various PCM "codecs" */
@@ -2990,6 +2972,27 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA AWC"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_ADPCM_CFDF_D5,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_cfdf_d5",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM Cyberflix DreamFactory D5 (v5)"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_IMA_WW,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ima_ww",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA Audiokinetic Wwise"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_NXAP,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_nxap",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM NXAP"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
 
     /* AMR */
     {
@@ -3099,6 +3102,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "cfdf_dpcm",
         .long_name = NULL_IF_CONFIG_SMALL("DPCM Cyberflix DreamFactory CFDF"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_CWV_DPCM,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "cwv_dpcm",
+        .long_name = NULL_IF_CONFIG_SMALL("DPCM Nintendo CWV"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 

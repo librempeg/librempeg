@@ -75,7 +75,7 @@ static void compute_row(SwsFilterWeights *f, const SwsFilterFunction *fun,
      * the entire square from (0,0) to (1,1). When normalizing between different
      * image sizes, we therefore need to add/subtract off these 0.5 offsets.
      */
-    const double src_pos = (dst_pos + 0.5) * ratio_inv - 0.5;
+    const double src_pos = (dst_pos + 0.5) * ratio_inv - 0.5 + f->offset;
     if (f->filter_size == 1) {
         *pos = fmin(fmax(round(src_pos), 0.0), f->src_size - 1);
         *out = SWS_FILTER_SCALE;
@@ -194,7 +194,11 @@ int ff_sws_filter_generate(void *log, const SwsFilterParams *params,
     if (scaler == SWS_SCALE_AUTO)
         scaler = SWS_SCALE_BICUBIC;
 
-    const double ratio = (double) params->dst_size / params->src_size;
+    double virtual_size = params->virtual_size;
+    if (!virtual_size)
+        virtual_size = params->dst_size;
+
+    const double ratio = virtual_size / params->src_size;
     double stretch = 1.0;
     if (ratio < 1.0 && scaler != SWS_SCALE_POINT) {
         /* Widen filter for downscaling (anti-aliasing) */
@@ -257,6 +261,8 @@ int ff_sws_filter_generate(void *log, const SwsFilterParams *params,
     memcpy(filter->name, fun.name, sizeof(filter->name));
     filter->src_size = params->src_size;
     filter->dst_size = params->dst_size;
+    filter->virtual_size = virtual_size;
+    filter->offset = params->offset;
     filter->filter_size = filter_size;
     if (filter->filter_size == 1)
         filter->sum_positive = SWS_FILTER_SCALE;

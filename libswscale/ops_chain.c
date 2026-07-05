@@ -24,8 +24,6 @@
 
 #include "ops_chain.h"
 
-#define Q(N) ((AVRational) { N, 1 })
-
 SwsOpChain *ff_sws_op_chain_alloc(void)
 {
     return av_mallocz(sizeof(SwsOpChain));
@@ -62,10 +60,11 @@ int ff_sws_op_chain_append(SwsOpChain *chain, SwsFuncPtr func,
 
 #define q2pixel(type, q) ((q).den ? (type) (q).num / (q).den : 0)
 
+#if ARCH_AARCH64
 int ff_sws_setup_scale(const SwsImplParams *params, SwsImplResult *out)
 {
     const SwsOp *op = params->op;
-    const AVRational factor = op->scale.factor;
+    const AVRational64 factor = op->scale.factor;
     switch (op->type) {
     case SWS_PIXEL_U8:  out->priv.u8[0]  = q2pixel(uint8_t,  factor); break;
     case SWS_PIXEL_U16: out->priv.u16[0] = q2pixel(uint16_t, factor); break;
@@ -81,7 +80,7 @@ int ff_sws_setup_clamp(const SwsImplParams *params, SwsImplResult *out)
 {
     const SwsOp *op = params->op;
     for (int i = 0; i < 4; i++) {
-        const AVRational limit = op->clamp.limit[i];
+        const AVRational64 limit = op->clamp.limit[i];
         switch (op->type) {
         case SWS_PIXEL_U8:  out->priv.u8[i]  = q2pixel(uint8_t,  limit); break;
         case SWS_PIXEL_U16: out->priv.u16[i] = q2pixel(uint16_t, limit); break;
@@ -98,7 +97,7 @@ int ff_sws_setup_clear(const SwsImplParams *params, SwsImplResult *out)
 {
     const SwsOp *op = params->op;
     for (int i = 0; i < 4; i++) {
-        const AVRational value = op->clear.value[i];
+        const AVRational64 value = op->clear.value[i];
         if (!value.den)
             continue;
         switch (op->type) {
@@ -112,13 +111,14 @@ int ff_sws_setup_clear(const SwsImplParams *params, SwsImplResult *out)
 
     return 0;
 }
+#endif
 
-int ff_sws_uop_lookup(SwsContext *ctx, const SwsOpTable *const tables[],
+int ff_sws_uop_lookup(SwsContext *ctx, const SwsUOpTable *const tables[],
                       int num_tables, const SwsUOp *uop, const int block_size,
                       SwsOpChain *chain)
 {
     const unsigned cpu_flags = av_get_cpu_flags();
-    const SwsOpEntry *match = NULL;
+    const SwsUOpEntry *match = NULL;
     int ret;
 
     SwsImplParams params = {
@@ -127,13 +127,13 @@ int ff_sws_uop_lookup(SwsContext *ctx, const SwsOpTable *const tables[],
     };
 
     for (int n = 0; !match && n < num_tables; n++) {
-        const SwsOpTable *table = params.table = tables[n];
+        const SwsUOpTable *table = params.table = tables[n];
         if (table->block_size && table->block_size != block_size ||
             table->cpu_flags & ~cpu_flags)
             continue;
 
         for (int i = 0; table->entries[i]; i++) {
-            const SwsOpEntry *entry = table->entries[i];
+            const SwsUOpEntry *entry = table->entries[i];
             const SwsUOp entry_uop = {
                 .uop  = entry->uop,
                 .type = entry->type,

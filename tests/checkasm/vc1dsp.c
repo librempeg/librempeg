@@ -306,18 +306,18 @@ static void check_inv_trans_adding(void)
 
     ff_vc1dsp_init(&h);
 
-    for (size_t t = 0; t < FF_ARRAY_ELEMS(tests); ++t) {
-        void (*func)(uint8_t *, ptrdiff_t, int16_t *) = *(void **)((intptr_t) &h + tests[t].offset);
-        if (check_func(func, "vc1dsp.%s", tests[t].name)) {
+    for (size_t k = 0; k < FF_ARRAY_ELEMS(tests); ++k) {
+        void (*func)(uint8_t *, ptrdiff_t, int16_t *) = *(void **)((intptr_t) &h + tests[k].offset);
+        if (check_func(func, "vc1dsp.%s", tests[k].name)) {
             matrix *coeffs;
             declare_func_emms(AV_CPU_FLAG_MMX, void, uint8_t *, ptrdiff_t, int16_t *);
             RANDOMIZE_BUFFER16(inv_trans_in, 8 * 8);
             RANDOMIZE_BUFFER8(inv_trans_out, 10 * 24);
-            coeffs = generate_inverse_quantized_transform_coefficients(tests[t].width, tests[t].height);
-            for (int j = 0; j < tests[t].height; ++j)
-                for (int i = 0; i < tests[t].width; ++i) {
+            coeffs = generate_inverse_quantized_transform_coefficients(tests[k].width, tests[k].height);
+            for (int j = 0; j < tests[k].height; ++j)
+                for (int i = 0; i < tests[k].width; ++i) {
                     int idx = j * 8 + i;
-                    inv_trans_in1[idx] = inv_trans_in0[idx] = coeffs->d[j * tests[t].width + i];
+                    inv_trans_in1[idx] = inv_trans_in0[idx] = coeffs->d[j * tests[k].width + i];
                 }
             call_ref(inv_trans_out0 + 24 + 8, 24, inv_trans_in0);
             call_new(inv_trans_out1 + 24 + 8, 24, inv_trans_in1);
@@ -352,10 +352,10 @@ static void check_loop_filter(void)
 
     ff_vc1dsp_init(&h);
 
-    for (size_t t = 0; t < FF_ARRAY_ELEMS(tests); ++t) {
-        void (*func)(uint8_t *, ptrdiff_t, int) = *(void **)((intptr_t) &h + tests[t].offset);
+    for (size_t k = 0; k < FF_ARRAY_ELEMS(tests); ++k) {
+        void (*func)(uint8_t *, ptrdiff_t, int) = *(void **)((intptr_t) &h + tests[k].offset);
         declare_func_emms(AV_CPU_FLAG_MMX, void, uint8_t *, ptrdiff_t, int);
-        if (check_func(func, "vc1dsp.%s", tests[t].name)) {
+        if (check_func(func, "vc1dsp.%s", tests[k].name)) {
             for (int count = 1000; count > 0; --count) {
                 int pq = rnd() % 31 + 1;
                 RANDOMIZE_BUFFER8_MID_WEIGHTED(filter_buf, 24 * 48);
@@ -368,9 +368,9 @@ static void check_loop_filter(void)
         for (int j = 0; j < 24; ++j)
             for (int i = 0; i < 48; ++i)
                 filter_buf1[j * 48 + i] = 0x60 + 0x40 * (i >= 16 && j >= 4);
-        if (check_func(func, "vc1dsp.%s_bestcase", tests[t].name))
+        if (check_func(func, "vc1dsp.%s_bestcase", tests[k].name))
             bench_new(filter_buf1 + 4 * 48 + 16, 48, 1);
-        if (check_func(func, "vc1dsp.%s_worstcase", tests[t].name))
+        if (check_func(func, "vc1dsp.%s_worstcase", tests[k].name))
             bench_new(filter_buf1 + 4 * 48 + 16, 48, 31);
     }
 }
@@ -441,34 +441,76 @@ static void check_unescape(void)
 
 static void check_mspel_pixels(void)
 {
-    LOCAL_ALIGNED_16(uint8_t, src0, [32 * 32]);
-    LOCAL_ALIGNED_16(uint8_t, src1, [32 * 32]);
-    LOCAL_ALIGNED_16(uint8_t, dst0, [32 * 32]);
-    LOCAL_ALIGNED_16(uint8_t, dst1, [32 * 32]);
+    enum {
+        MAX_BLOCK_SIZE = 16,
+        MAX_STRIDE     = 64,
+        /// BUF_SIZE is bigger than necessary in order to test strides > block width.
+        BUF_SIZE       = (MAX_BLOCK_SIZE - 1) * MAX_STRIDE + MAX_BLOCK_SIZE,
+        /**
+         * Due to qpel interpolation the input needs one extra line at the top
+         * and two at the bottom; horizontal interpolation also needs one pixel
+         * to the left and two to the right. At least the x86 implementation
+         * actually accesses three pixels to the right.
+         * The input is not subject to alignment requirements; making the input buffer
+         * bigger (by MAX_BLOCK_SIZE - 1) allows us to use a random misalignment.
+         */
+        INPUT_BUF_SIZE = (MAX_BLOCK_SIZE - 1) + 1 +
+                         (MAX_BLOCK_SIZE + 1 + 2 - 1) * MAX_STRIDE + MAX_BLOCK_SIZE + 2 + 1,
+    };
+    DECLARE_ALIGNED(16, uint8_t, dstbuf0)[BUF_SIZE];
+    DECLARE_ALIGNED(16, uint8_t, dstbuf1)[BUF_SIZE];
+    uint8_t srcbuf0[INPUT_BUF_SIZE];
+    uint8_t srcbuf1[INPUT_BUF_SIZE];
 
     VC1DSPContext h;
 
-    const test tests[] = {
-        VC1DSP_SIZED_TEST(put_vc1_mspel_pixels_tab[0][0], 16, 16)
-        VC1DSP_SIZED_TEST(put_vc1_mspel_pixels_tab[1][0], 8, 8)
-        VC1DSP_SIZED_TEST(avg_vc1_mspel_pixels_tab[0][0], 16, 16)
-        VC1DSP_SIZED_TEST(avg_vc1_mspel_pixels_tab[1][0], 8, 8)
+    const struct MSPelTest {
+        const char *name;
+        size_t offset;
+    } tests[] = {
+#define MSPEL_TEST(elem) { .name = #elem, offsetof(VC1DSPContext, elem) }
+        MSPEL_TEST(put_vc1_mspel_pixels_tab),
+        MSPEL_TEST(avg_vc1_mspel_pixels_tab),
     };
 
     ff_vc1dsp_init(&h);
 
-    for (size_t t = 0; t < FF_ARRAY_ELEMS(tests); ++t) {
-        void (*func)(uint8_t *, const uint8_t*, ptrdiff_t, int) = *(void **)((intptr_t) &h + tests[t].offset);
-        if (check_func(func, "vc1dsp.%s", tests[t].name)) {
-            declare_func_emms(AV_CPU_FLAG_MMX, void, uint8_t *, const uint8_t*, ptrdiff_t, int);
-            RANDOMIZE_BUFFER8(dst, 32 * 32);
-            RANDOMIZE_BUFFER8(src, 32 * 32);
-            call_ref(dst0, src0, 32, 0);
-            call_new(dst1, src1, 32, 0);
-            if (memcmp(dst0, dst1, 32 * 32)) {
-                fail();
+    for (size_t k = 0; k < FF_ARRAY_ELEMS(tests); ++k) {
+        const vc1op_pixels_func (*func)[16] = (vc1op_pixels_func(*)[16])((char*)&h + tests[k].offset);
+        for (unsigned j = 0; j < 2; ++j) {
+            const unsigned blocksize = 16 >> j;
+
+            for (unsigned dxy = 0; dxy < 16; ++dxy) {
+                if (!check_func(func[j][dxy], "vc1dsp.%s_mc%u%u_%u", tests[k].name, dxy & 3, dxy >> 2, blocksize))
+                    continue;
+                declare_func_emms(AV_CPU_FLAG_MMX, void, uint8_t *, const uint8_t*, ptrdiff_t, int);
+                size_t dst_offset = (rnd() % (MAX_BLOCK_SIZE / blocksize)) * blocksize;
+                ptrdiff_t stride  = (rnd() % (MAX_STRIDE / blocksize) + 1) * blocksize;
+                size_t src_offset = 1 + stride + rnd() % MAX_BLOCK_SIZE;
+                const uint8_t *src0 = srcbuf0 + src_offset, *src1 = srcbuf1 + src_offset;
+                uint8_t *dst0 = dstbuf0 + dst_offset, *dst1 = dstbuf1 + dst_offset;
+
+                if (rnd() & 1) {
+                    // Flip stride.
+                    dst1  += (blocksize - 1) * stride;
+                    dst0  += (blocksize - 1) * stride;
+                    // We need one line above src and two lines below the block,
+                    // hence blocksize * stride.
+                    src0  += blocksize * stride;
+                    src1  += blocksize * stride;
+                    stride = -stride;
+                }
+                RANDOMIZE_BUFFER8(srcbuf, sizeof(srcbuf0));
+                for (int round = 0; round <= 1; ++round) {
+                    RANDOMIZE_BUFFER8(dstbuf, sizeof(dstbuf0));
+                    call_ref(dst0, src0, stride, round);
+                    call_new(dst1, src1, stride, round);
+                    if (memcmp(dstbuf0, dstbuf1, sizeof(dstbuf0))) {
+                        fail();
+                    }
+                }
+                bench_new(dst1, src1, stride, 0);
             }
-            bench_new(dst1, src0, 32, 0);
         }
     }
 }

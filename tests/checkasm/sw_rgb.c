@@ -38,8 +38,9 @@
     } while (0)
 
 static const uint8_t width[] = {12, 16, 20, 32, 36, 128};
-static const struct {uint8_t w, h, s;} planes[] = {
-    {12,16,12}, {16,16,16}, {20,23,25}, {32,18,48}, {8,128,16}, {128,128,128}
+static const struct {uint8_t w, h;} planes[] = {
+    {12,16}, {16,16}, {20,23}, {32,18}, {8,128}, {128,128},
+    {1,1}, {1,4}, {3,8}, {13,16}, {21,9}, {63,7}, {127,5}
 };
 
 #define MAX_STRIDE 128
@@ -71,7 +72,7 @@ static void check_shuffle_bytes(void * func, const char * report)
     }
 }
 
-static void check_uyvy_to_422p(void)
+static void check_interleaved_to_planar(void *func, const char *report, int odd_tail)
 {
     int i;
 
@@ -91,8 +92,11 @@ static void check_uyvy_to_422p(void)
     randomize_buffers(src0, MAX_STRIDE * MAX_HEIGHT * 2);
     memcpy(src1, src0, MAX_STRIDE * MAX_HEIGHT * 2);
 
-    if (check_func(uyvytoyuv422, "uyvytoyuv422")) {
-        for (i = 0; i < 6; i ++) {
+    if (check_func(func, "%s", report)) {
+        for (i = 0; i < FF_ARRAY_ELEMS(planes); i ++) {
+            int w = planes[i].w, h = planes[i].h;
+            int srcStride = 2 * w + (w & 1 ? odd_tail : 0);
+
             memset(dst_y_0, 0, MAX_STRIDE * MAX_HEIGHT);
             memset(dst_y_1, 0, MAX_STRIDE * MAX_HEIGHT);
             memset(dst_u_0, 0, (MAX_STRIDE/2) * MAX_HEIGHT);
@@ -100,17 +104,17 @@ static void check_uyvy_to_422p(void)
             memset(dst_v_0, 0, (MAX_STRIDE/2) * MAX_HEIGHT);
             memset(dst_v_1, 0, (MAX_STRIDE/2) * MAX_HEIGHT);
 
-            call_ref(dst_y_0, dst_u_0, dst_v_0, src0, planes[i].w, planes[i].h,
-                     MAX_STRIDE, MAX_STRIDE / 2, planes[i].s);
-            call_new(dst_y_1, dst_u_1, dst_v_1, src1, planes[i].w, planes[i].h,
-                     MAX_STRIDE, MAX_STRIDE / 2, planes[i].s);
+            call_ref(dst_y_0, dst_u_0, dst_v_0, src0, w, h,
+                     MAX_STRIDE, MAX_STRIDE / 2, srcStride);
+            call_new(dst_y_1, dst_u_1, dst_v_1, src1, w, h,
+                     MAX_STRIDE, MAX_STRIDE / 2, srcStride);
             if (memcmp(dst_y_0, dst_y_1, MAX_STRIDE * MAX_HEIGHT) ||
                 memcmp(dst_u_0, dst_u_1, (MAX_STRIDE/2) * MAX_HEIGHT) ||
                 memcmp(dst_v_0, dst_v_1, (MAX_STRIDE/2) * MAX_HEIGHT))
                 fail();
         }
         bench_new(dst_y_1, dst_u_1, dst_v_1, src1, planes[5].w, planes[5].h,
-                  MAX_STRIDE, MAX_STRIDE / 2, planes[5].s);
+                  MAX_STRIDE, MAX_STRIDE / 2, 2 * planes[5].w);
     }
 }
 
@@ -956,8 +960,10 @@ void checkasm_check_sw_rgb(void)
     }
     report("rgb24tobgr32");
 
-    check_uyvy_to_422p();
+    check_interleaved_to_planar(uyvytoyuv422, "uyvytoyuv422", 1);
     report("uyvytoyuv422");
+    check_interleaved_to_planar(yuyvtoyuv422, "yuyvtoyuv422", 2);
+    report("yuyvtoyuv422");
 
     check_interleave_bytes();
     report("interleave_bytes");

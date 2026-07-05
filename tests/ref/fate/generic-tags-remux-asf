@@ -29,6 +29,7 @@
 0,        928,        928,       46,      743, 0xdf740eee
 0,        975,        975,       46,      743, 0x41c84afe
 [FORMAT]
+TAG:creation_time=1970-01-01T00:00:00.000000Z
 TAG:publisher=M83 Recording Inc
 TAG:album_artist=M83
 TAG:composer=Anthony Gonzalez

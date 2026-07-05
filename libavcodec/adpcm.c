@@ -387,6 +387,12 @@ static const float hevag_coefs[128][4] = {
     { 0.65100098f, 0.36608887f, 0.094604492f, -0.13818359f },
 };
 
+static const uint8_t adpcmb_yamaha_indexscale[16] =
+{
+    57, 57, 57, 57, 77, 102, 128, 153,
+    57, 57, 57, 57, 77, 102, 128, 153,
+};
+
 /* end of tables */
 
 typedef struct ADPCMDecodeContext {
@@ -424,6 +430,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_IMA_FSB:
     case AV_CODEC_ID_ADPCM_IMA_XBOX:
     case AV_CODEC_ID_ADPCM_IMA_XBOX_MONO:
+    case AV_CODEC_ID_ADPCM_IMA_WW:
         max_channels = 6;
         break;
     case AV_CODEC_ID_ADPCM_MTAF:
@@ -452,6 +459,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
         break;
     case AV_CODEC_ID_ADPCM_IMA_WAV_MONO:
     case AV_CODEC_ID_ADPCM_IMA_DAT4:
+    case AV_CODEC_ID_ADPCM_NXAP:
     case AV_CODEC_ID_ADPCM_THP:
     case AV_CODEC_ID_ADPCM_THP_LE:
     case AV_CODEC_ID_ADPCM_NDSP:
@@ -501,6 +509,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_IMA_FSB:
     case AV_CODEC_ID_ADPCM_IMA_XBOX:
     case AV_CODEC_ID_ADPCM_IMA_XBOX_MONO:
+    case AV_CODEC_ID_ADPCM_IMA_WW:
     case AV_CODEC_ID_ADPCM_4XM:
     case AV_CODEC_ID_ADPCM_DSA:
     case AV_CODEC_ID_ADPCM_XA:
@@ -532,6 +541,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_BRR:
     case AV_CODEC_ID_ADPCM_IMA_DVI:
     case AV_CODEC_ID_ADPCM_IMA_HWAS:
+    case AV_CODEC_ID_ADPCM_NXAP:
         avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
         break;
     case AV_CODEC_ID_ADPCM_IMA_WS:
@@ -988,6 +998,25 @@ static inline int16_t adpcm_sbpro_expand_nibble(ADPCMChannelStatus *c, int8_t ni
         c->step--;
 
     return (int16_t) c->predictor;
+}
+
+static inline int16_t adpcmb_yamaha_expand_nibble(ADPCMChannelStatus *c, uint8_t nibble)
+{
+    int delta, sample;
+
+    delta = ((((nibble & 0x7) * 2) + 1) * c->step) >> 3;
+    if (nibble & 8)
+        delta = -delta;
+    sample = c->predictor + delta;
+
+    sample = av_clip_int16(sample);
+
+    c->step = (c->step * adpcmb_yamaha_indexscale[nibble]) >> 6;
+    c->step = av_clip(c->step, 127, 24576);
+
+    c->predictor = sample;
+
+    return sample;
 }
 
 static inline int16_t adpcm_yamaha_expand_nibble(ADPCMChannelStatus *c, uint8_t nibble)
@@ -1610,6 +1639,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_IMA_FSB:
     case AV_CODEC_ID_ADPCM_IMA_XBOX:
     case AV_CODEC_ID_ADPCM_IMA_XBOX_MONO:
+    case AV_CODEC_ID_ADPCM_IMA_WW:
         {
             int left = buf_size;
 
@@ -1718,7 +1748,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_THP_LE:
         s->block_size = (avctx->codec->id == AV_CODEC_ID_ADPCM_THP_LE) ?
                         bytestream2_get_le32(gb) :
-                        bytestream2_get_be32(gb);;
+                        bytestream2_get_be32(gb);
         nb_samples = (avctx->codec->id == AV_CODEC_ID_ADPCM_THP_LE) ?
                      bytestream2_get_le32(gb) :
                      bytestream2_get_be32(gb);
@@ -1735,6 +1765,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         break;
     case AV_CODEC_ID_ADPCM_IMA_NDS:
         nb_samples = ((buf_size / ch) - 4) * 2;
+        break;
+    case AV_CODEC_ID_ADPCM_NXAP:
+        nb_samples = ((buf_size / (0x40 * ch))) * ((0x40 - 4) * 2);
         break;
     case AV_CODEC_ID_ADPCM_XA:
         nb_samples = (buf_size / 128) * 224 / ch;
@@ -2071,6 +2104,45 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
                     for (int bs = 0; bs < nb_samples_per_block-1; bs += 64) {
                         cs->predictor = samples_p[ch][bs + samples_offset] = sign_extend(bytestream2_get_le16u(&gb), 16);
+                        cs->step_index = bytestream2_get_byteu(&gb);
+                        bytestream2_skipu(&gb, 1);
+                        if (cs->step_index > 88u) {
+                            av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
+                                   ch, cs->step_index);
+                            return AVERROR_INVALIDDATA;
+                        }
+
+                        samples = &samples_p[ch][1 + bs + samples_offset];
+                        for (int n = 0; n < 64; n += 2) {
+                            int v = bytestream2_get_byteu(&gb);
+                            samples[n    ] = ff_adpcm_ima_qt_expand_nibble(cs, v & 0x0F);
+                            samples[n + 1] = ff_adpcm_ima_qt_expand_nibble(cs, v >> 4  );
+                        }
+                    }
+                }
+
+                samples_offset += nb_samples_per_block-1;
+                left -= block_size;
+                frame->nb_samples--;
+            }
+        }
+        bytestream2_seek(&gb, 0, SEEK_END);
+        ) /* End of CASE */
+    CASE(ADPCM_IMA_WW,
+        {
+            int left = avpkt->size;
+            int block_align = (avctx->block_align > 0) ? avctx->block_align : left;
+            int samples_offset = 0;
+
+            while (left > 0) {
+                const int block_size = FFMIN(left, block_align);
+                const int nb_samples_per_block = 64 * (block_size / (36 * channels)) + 1;
+
+                for (int ch = 0; ch < channels; ch++) {
+                    ADPCMChannelStatus *cs = &c->status[ch];
+
+                    for (int bs = 0; bs < nb_samples_per_block-1; bs += 64) {
+                        cs->predictor = samples_p[ch][bs + samples_offset] = sign_extend(bytestream2_get_be16u(&gb), 16);
                         cs->step_index = bytestream2_get_byteu(&gb);
                         bytestream2_skipu(&gb, 1);
                         if (cs->step_index > 88u) {
@@ -3024,6 +3096,30 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             *samples++ = ff_adpcm_ima_qt_expand_nibble(&c->status[0 ], v >> 4 );
             *samples++ = ff_adpcm_ima_qt_expand_nibble(&c->status[st], v & 0xf);
         }
+        ) /* End of CASE */
+    CASE(ADPCM_NXAP,
+        const int nb_samples_per_block = (0x40 - 4) * 2;
+        const int nb_blocks = avpkt->size / (channels * 0x40);
+
+        for (int block = 0; block < nb_blocks; block++) {
+            for (int i = 0; i < channels; i++) {
+                ADPCMChannelStatus *cs = &c->status[i];
+                const int samples_offset = block * nb_samples_per_block;
+
+                cs->predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
+                cs->step_index = bytestream2_get_le16u(&gb) >> 1;
+                cs->step_index = av_clip(cs->step_index, 0x7f, 0x6000);
+
+                samples = samples_p[i] + samples_offset;
+                for (int n = 0; n < nb_samples_per_block; n += 2) {
+                    int v = bytestream2_get_byteu(&gb);
+
+                    samples[n+0] = adpcmb_yamaha_expand_nibble(cs, v >> 4 );
+                    samples[n+1] = adpcmb_yamaha_expand_nibble(cs, v & 0xf);
+                }
+            }
+        }
+        bytestream2_seek(&gb, 0, SEEK_END);
         ) /* End of CASE */
     CASE(ADPCM_IMA_AWC,
         const int nb_samples_per_block = (0x800 - 4) * 2;
@@ -4148,6 +4244,7 @@ ADPCM_DECODER(ADPCM_IMA_WS,      sample_fmts_both, adpcm_ima_ws,      "ADPCM IMA
 ADPCM_DECODER(ADPCM_IMA_WV6,     sample_fmts_s16p, adpcm_ima_wv6,     "ADPCM IMA WV6")
 ADPCM_DECODER(ADPCM_IMA_XBOX,    sample_fmts_s16p, adpcm_ima_xbox,    "ADPCM IMA Xbox")
 ADPCM_DECODER(ADPCM_IMA_XBOX_MONO,sample_fmts_s16p,adpcm_ima_xbox_mono,"ADPCM IMA Xbox (Mono)")
+ADPCM_DECODER(ADPCM_IMA_WW,      sample_fmts_s16p, adpcm_ima_ww,      "ADPCM IMA Audiokinetic Wwise")
 ADPCM_DECODER(ADPCM_IMA_ZMUSIC,  sample_fmts_s16,  adpcm_ima_zmusic,  "ADPCM IMA Z-Music")
 ADPCM_DECODER(ADPCM_MS,          sample_fmts_both, adpcm_ms,          "ADPCM Microsoft")
 ADPCM_DECODER(ADPCM_MTAF,        sample_fmts_s16p, adpcm_mtaf,        "ADPCM MTAF")
@@ -4156,6 +4253,7 @@ ADPCM_DECODER(ADPCM_NDSP,        sample_fmts_s16p, adpcm_ndsp,        "ADPCM Nin
 ADPCM_DECODER(ADPCM_NDSP_LE,     sample_fmts_s16p, adpcm_ndsp_le,     "ADPCM Nintendo DSP (little-endian)")
 ADPCM_DECODER(ADPCM_NDSP_SI,     sample_fmts_s16p, adpcm_ndsp_si,     "ADPCM Nintendo DSP (sub-interleave 2)")
 ADPCM_DECODER(ADPCM_NDSP_SI1,    sample_fmts_s16,  adpcm_ndsp_si1,    "ADPCM Nintendo DSP (sub-interleave 1)")
+ADPCM_DECODER(ADPCM_NXAP,        sample_fmts_s16p, adpcm_nxap,        "ADPCM NXAP")
 ADPCM_DECODER(ADPCM_PROCYON,     sample_fmts_s16p, adpcm_procyon,     "ADPCM Procyon")
 ADPCM_DECODER(ADPCM_PSX,         sample_fmts_s16p, adpcm_psx,         "ADPCM Playstation")
 ADPCM_DECODER(ADPCM_PSXC,        sample_fmts_s16p, adpcm_psxc,        "ADPCM Playstation C")

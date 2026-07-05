@@ -236,7 +236,7 @@ static int read_header(AVFormatContext *s)
     entries = avio_r16(pb);
     for (int n = 0; n < entries; n++) {
         int nb_channels, codec, rate, extradata_size, block_align = 0, need_parsing = 0, ret, get_extradata = 0, need_xctx = 0, extradata_id, encryption = 0, key_start = 0, header_size = 0;
-        int64_t entry_offset, stream_size, extradata_offset;
+        int64_t entry_offset, stream_size, extradata_offset, duration = 0;
         SABStream *sst;
         AVStream *st;
 
@@ -268,6 +268,8 @@ static int read_header(AVFormatContext *s)
             break;
         case 0x04:
             codec = AV_CODEC_ID_ATRAC9;
+            avio_seek(pb, extradata_offset + 16, SEEK_SET);
+            duration = avio_r32(pb);
             avio_seek(pb, extradata_offset + 4, SEEK_SET);
             block_align = avio_r16(pb);
             avio_skip(pb, 2);
@@ -314,6 +316,8 @@ static int read_header(AVFormatContext *s)
         sst->key_start = key_start;
 
         st->start_time = 0;
+        if (duration > 0)
+            st->duration = duration;
         if (need_xctx) {
             if (!(sst->xctx = avformat_alloc_context()))
                 return AVERROR(ENOMEM);

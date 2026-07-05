@@ -72,7 +72,7 @@ static void vc1_h_loop_filter16_sse4(uint8_t *src, ptrdiff_t stride, int pq)
     }
 
 DECLARE_FUNCTION(put_,  8, _sse2)
-DECLARE_FUNCTION(avg_,  8, _mmxext)
+DECLARE_FUNCTION(avg_,  8, _sse2)
 DECLARE_FUNCTION(put_, 16, _sse2)
 DECLARE_FUNCTION(avg_, 16, _sse2)
 
@@ -89,6 +89,17 @@ void ff_vc1_inv_trans_8x4_dc_mmxext(uint8_t *dest, ptrdiff_t linesize,
 void ff_vc1_inv_trans_8x8_dc_mmxext(uint8_t *dest, ptrdiff_t linesize,
                                     int16_t *block);
 
+#define MSPEL_FUNC(OP, X, Y, SIZE, XMM)                                     \
+    void ff_vc1_ ## OP ## _mspel_mc ## X ## Y ## _ ## SIZE ##_ ## XMM       \
+             (uint8_t *dst, const uint8_t *src, ptrdiff_t stride, int rnd); \
+    dsp->OP ## _vc1_mspel_pixels_tab[SIZE == 8][X + 4 * Y] =                \
+        ff_vc1_ ## OP ## _mspel_mc ## X ## Y## _ ## SIZE ##_ ## XMM
+#define MSPEL_FUNCS_SIZE(X, Y, SIZE, XMM) \
+    MSPEL_FUNC(put, X, Y, SIZE, XMM);     \
+    MSPEL_FUNC(avg, X, Y, SIZE, XMM)
+#define MSPEL_FUNCS(X, Y, XMM)            \
+    MSPEL_FUNCS_SIZE(X, Y,  8, XMM);      \
+    MSPEL_FUNCS_SIZE(X, Y, 16, XMM)
 
 av_cold void ff_vc1dsp_init_x86(VC1DSPContext *dsp)
 {
@@ -114,8 +125,6 @@ av_cold void ff_vc1dsp_init_x86(VC1DSPContext *dsp)
         dsp->vc1_h_loop_filter16 = vc1_h_loop_filter16_ ## EXT
 
     if (EXTERNAL_MMXEXT(cpu_flags)) {
-        dsp->avg_vc1_mspel_pixels_tab[1][0]      = avg_vc1_mspel_mc00_8_mmxext;
-
         dsp->vc1_inv_trans_8x8_dc                = ff_vc1_inv_trans_8x8_dc_mmxext;
         dsp->vc1_inv_trans_4x8_dc                = ff_vc1_inv_trans_4x8_dc_mmxext;
         dsp->vc1_inv_trans_8x4_dc                = ff_vc1_inv_trans_8x4_dc_mmxext;
@@ -127,12 +136,20 @@ av_cold void ff_vc1dsp_init_x86(VC1DSPContext *dsp)
         dsp->put_vc1_mspel_pixels_tab[0][0]      = put_vc1_mspel_mc00_16_sse2;
         dsp->put_vc1_mspel_pixels_tab[1][0]      = put_vc1_mspel_mc00_8_sse2;
         dsp->avg_vc1_mspel_pixels_tab[0][0]      = avg_vc1_mspel_mc00_16_sse2;
+        dsp->avg_vc1_mspel_pixels_tab[1][0]      = avg_vc1_mspel_mc00_8_sse2;
     }
     if (EXTERNAL_SSSE3(cpu_flags)) {
         ASSIGN_LF4(ssse3);
         ASSIGN_LF816(ssse3);
         dsp->put_no_rnd_vc1_chroma_pixels_tab[0] = ff_put_vc1_chroma_mc8_nornd_ssse3;
         dsp->avg_no_rnd_vc1_chroma_pixels_tab[0] = ff_avg_vc1_chroma_mc8_nornd_ssse3;
+
+        MSPEL_FUNCS(0, 1, ssse3);
+        MSPEL_FUNCS(0, 2, ssse3);
+        MSPEL_FUNCS(0, 3, ssse3);
+        MSPEL_FUNCS(1, 0, ssse3);
+        MSPEL_FUNCS(2, 0, ssse3);
+        MSPEL_FUNCS(3, 0, ssse3);
     }
     if (EXTERNAL_SSE4(cpu_flags)) {
         dsp->vc1_h_loop_filter8  = ff_vc1_h_loop_filter8_sse4;

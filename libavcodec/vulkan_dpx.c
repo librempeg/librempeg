@@ -60,7 +60,6 @@ static int vk_dpx_start_frame(AVCodecContext          *avctx,
                               av_unused const uint8_t *buffer,
                               av_unused uint32_t       size)
 {
-    int err;
     FFVulkanDecodeContext *dec = avctx->internal->hwaccel_priv_data;
     FFVulkanDecodeShared *ctx = dec->shared_ctx;
     DPXDecContext *dpx = avctx->priv_data;
@@ -74,12 +73,6 @@ static int vk_dpx_start_frame(AVCodecContext          *avctx,
         ff_vk_host_map_buffer(&ctx->s, &vp->slices_buf, (uint8_t *)buffer,
                               buffer_ref,
                               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-
-    /* Prepare frame to be used */
-    err = ff_vk_decode_prepare_frame_sdr(dec, dpx->frame, vp, 1,
-                                         FF_VK_REP_NATIVE, 0);
-    if (err < 0)
-        return err;
 
     return 0;
 }
@@ -132,10 +125,11 @@ static int vk_dpx_end_frame(AVCodecContext *avctx)
                                  VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                                  VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT));
 
-    err = ff_vk_exec_mirror_sem_value(&ctx->s, exec, &vp->sem, &vp->sem_value,
-                                      dpx->frame);
-    if (err < 0)
-        return err;
+    /* Exec-owned output views: freed on exec recycle, so releasing a picture
+     * needs no blocking wait. No mirror_sem: nothing consumes vp->sem here. */
+    VkImageView views[AV_NUM_DATA_POINTERS];
+    RET(ff_vk_create_imageviews(&ctx->s, exec, views, dpx->frame,
+                                FF_VK_REP_NATIVE));
 
     RET(ff_vk_exec_add_dep_buf(&ctx->s, exec, &vp->slices_buf, 1, 0));
     vp->slices_buf = NULL;
@@ -162,7 +156,7 @@ static int vk_dpx_end_frame(AVCodecContext *avctx)
 
     FFVulkanShader *shd = &dxv->shader;
     ff_vk_shader_update_img_array(&ctx->s, exec, shd,
-                                  dpx->frame, vp->view.out,
+                                  dpx->frame, views,
                                   0, 0,
                                   VK_IMAGE_LAYOUT_GENERAL,
                                   VK_NULL_HANDLE);

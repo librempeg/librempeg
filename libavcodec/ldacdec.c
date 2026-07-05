@@ -665,6 +665,8 @@ static void calc_precision_mask(AVCodecContext *avctx, const int ch)
     }
 }
 
+static const uint8_t wl_tab[] = { 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 16 };
+
 static int calc_precisions(AVCodecContext *avctx, const int ch)
 {
     LDACContext *s = avctx->priv_data;
@@ -708,7 +710,7 @@ static int calc_precisions(AVCodecContext *avctx, const int ch)
         if (c->precisions[i] > 15) {
             c->precisions_fine[i] = c->precisions[i] - 15;
             c->precisions[i] = 15;
-            if (c->precisions_fine[i] > 15)
+            if (c->precisions_fine[i] >= FF_ARRAY_ELEMS(wl_tab))
                 return AVERROR_INVALIDDATA;
         }
     }
@@ -727,8 +729,6 @@ static const uint8_t nsps_tab[34] = {
     4, 4, 4, 4, 8, 8, 8, 8,
     16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
 };
-
-static const uint8_t wl_tab[16] = { 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
 
 static const uint8_t decode2D_spectrum[8] = {
     0, 1, 2, 4, 6, 8, 9, 10

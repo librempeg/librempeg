@@ -309,11 +309,6 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_R210,         MKTAG('r', '2', '1', '0') },
     { AV_CODEC_ID_V210,         MKTAG('v', '2', '1', '0') },
     { AV_CODEC_ID_V210,         MKTAG('C', '2', '1', '0') },
-#if FF_API_V408_CODECID
-    { AV_CODEC_ID_V308,         MKTAG('v', '3', '0', '8') },
-    { AV_CODEC_ID_V408,         MKTAG('v', '4', '0', '8') },
-    { AV_CODEC_ID_V410,         MKTAG('v', '4', '1', '0') },
-#endif
     { AV_CODEC_ID_YUV4,         MKTAG('y', 'u', 'v', '4') },
     { AV_CODEC_ID_INDEO3,       MKTAG('I', 'V', '3', '1') },
     { AV_CODEC_ID_INDEO3,       MKTAG('I', 'V', '3', '2') },
@@ -594,6 +589,7 @@ const AVCodecTag ff_codec_wav_tags[] = {
     { AV_CODEC_ID_IAC,             0x0402 },
     { AV_CODEC_ID_ON2AVC,          0x0500 },
     { AV_CODEC_ID_ON2AVC,          0x0501 },
+    { AV_CODEC_ID_ADPCM_PSX,       0x0600 },
     { AV_CODEC_ID_GSM_MS,          0x1500 },
     { AV_CODEC_ID_TRUESPEECH,      0x1501 },
     /* ADTS AAC */

@@ -35,6 +35,9 @@
 #define APV_MB_SIZE         (ivec2(16, 16))
 
 layout (set = 0, binding = 0) uniform writeonly uimage2D dst[];
+layout (set = 0, binding = 2, scalar) writeonly buffer coeffs_out_buf {
+    int16_t coeffs_out[];
+};
 layout (set = 0, binding = 1, scalar) readonly buffer frame_data_buf {
     uvec2 tile_offset[APV_MAX_NUM_COMP * APV_MAX_TILE_COUNT];
     uint8_t q_matrix[APV_MAX_NUM_COMP][8][8];
@@ -53,34 +56,84 @@ layout (push_constant, scalar) uniform pushConstants {
 
 GetBitContext gb;
 
+/*
+ * Decode one VLC code from a single 32-bit window, branchlessly. The longest
+ * legal APV code is 18 bits (3 + 2*5 + 5), so one show + one skip covers every
+ * case. The three layouts:
+ *   1xxx          len 1+k,    val = k bits after the 1
+ *   00xxx         len 2+k,    val = (1<<k) + k bits
+ *   01 0^n 1 xxx  len 3+2n+k, val = (((1<<n)+1)<<k) + (n+k bits)
+ */
 int apv_read_vlc(int k)
 {
-    /* Top 32 bits, longest valid APV code is 1 + 2*5 + 5 = 16 bits */
+    /* Top 32 bits; the longest legal code is 31 bits */
     uint bits = show_bits(gb, 32);
     uint mask = (1u << k) - 1u;
 
-    /* 1xxx: short, length 1+k, value = next k bits */
-    if (bits >= 0x80000000u) {
-        skip_bits(gb, 1 + k);
-        return int((bits >> (31 - k)) & mask);
-    }
+    bool caseA = bits >= 0x80000000u;
+    bool caseB = bits <  0x40000000u;
 
-    /* 00xxx: short, length 2+k, value = (1<<k) + next k bits */
-    if (bits < 0x40000000u) {
-        skip_bits(gb, 2 + k);
-        return int((bits >> (30 - k)) & mask) + (1 << k);
-    }
+    int valA = int((bits >> (31 - k)) & mask);
+    int valB = int((bits >> (30 - k)) & mask) + (1 << k);
 
-    /* 01 prefix + (n leading zeros) + 1 + (n+k value bits),
-     * after shifting out the 01 prefix, findMSB tells us n */
+    /* clamp guards corrupt streams: legal codes have n <= 14 and
+     * 3 + 2n + k <= 31, so legal decodes are unaffected */
     uint suffix = bits << 2;
+    int n = clamp(31 - findMSB(suffix), 0, 14);
+    int valC = (((1 << n) + 1) << k) +
+               int((bits >> max(29 - 2 * n - k, 0)) & ((1u << (n + k)) - 1u));
     if (suffix == 0u)
-        return APV_MAX_TRANS_COEFF + 1;
+        valC = APV_MAX_TRANS_COEFF + 1;
 
-    int n = 31 - findMSB(suffix);
-    skip_bits(gb, 3 + n);
-    /* (2<<k) + ((1<<n)-1) * (1<<k) is equal to ((1<<n) + 1) << k */
-    return (((1 << n) + 1) << k) + int(get_bits(gb, n + k));
+    int lenA = 1 + k;
+    int lenB = 2 + k;
+    int lenC = min(3 + 2 * n + k, 32);
+
+    int val = caseA ? valA : (caseB ? valB : valC);
+    int len = caseA ? lenA : (caseB ? lenB : lenC);
+
+    skip_bits(gb, len);
+    return val;
+}
+
+/*
+ * As above, with the trailing sign bit folded into the same window. The caller
+ * says whether a sign bit is present (DC: when val != 0; AC levels: always);
+ * sign is only valid when it is.
+ */
+int apv_read_vlc_sign(int k, bool sign_always, out bool sign)
+{
+    /* Top 32 bits; the longest legal code is 31 bits, +1 for the sign */
+    uint bits = show_bits(gb, 32);
+    uint mask = (1u << k) - 1u;
+
+    bool caseA = bits >= 0x80000000u;
+    bool caseB = bits <  0x40000000u;
+
+    int valA = int((bits >> (31 - k)) & mask);
+    int valB = int((bits >> (30 - k)) & mask) + (1 << k);
+
+    uint suffix = bits << 2;
+    int n = clamp(31 - findMSB(suffix), 0, 14);
+    int valC = (((1 << n) + 1) << k) +
+               int((bits >> max(29 - 2 * n - k, 0)) & ((1u << (n + k)) - 1u));
+    bool badC = suffix == 0u;
+
+    int lenA = 1 + k;
+    int lenB = 2 + k;
+    int lenC = min(3 + 2 * n + k, 31);
+
+    int val = caseA ? valA : (caseB ? valB : valC);
+    int len = caseA ? lenA : (caseB ? lenB : lenC);
+
+    bool has_sign = sign_always || val != 0;
+    sign = has_sign && bool((bits >> (31 - len)) & 1u);
+    len += has_sign ? 1 : 0;
+
+    skip_bits(gb, len);
+    if (!caseA && !caseB && badC)
+        val = APV_MAX_TRANS_COEFF + 1;
+    return val;
 }
 
 /* ff_zigzag_direct, packed: each byte is the raster index (y*8 + x). */
@@ -107,25 +160,20 @@ int prev_dc;
 int prev_k_dc;
 int prev_1st_ac_level;
 
-void decode_block(ivec2 pos, uint comp)
+void decode_block(uint cbase, int cstride, ivec2 pos, uint comp)
 {
     int dc_coeff;
-    int abs_diff = apv_read_vlc(prev_k_dc);
+    bool dc_sign;
 
-    if (abs_diff != 0) {
-        if (get_bit(gb))
-            dc_coeff = prev_dc - abs_diff;
-        else
-            dc_coeff = prev_dc + abs_diff;
-    } else {
-        dc_coeff = prev_dc;
-    }
+    int abs_diff = apv_read_vlc_sign(prev_k_dc, false, dc_sign);
+
+    dc_coeff = prev_dc + (dc_sign ? -abs_diff : abs_diff);
 
     if (dc_coeff < APV_MIN_TRANS_COEFF ||
         dc_coeff > APV_MAX_TRANS_COEFF)
         return;
 
-    imageStore(dst[comp], pos, uvec4(uint(dc_coeff) & 0xFFFFu));
+    coeffs_out[cbase + uint(pos.y * cstride + pos.x)] = int16_t(dc_coeff);
     prev_dc   = dc_coeff;
     prev_k_dc = min(abs_diff >> 1, 5);
 
@@ -151,10 +199,11 @@ void decode_block(ivec2 pos, uint comp)
         if (scan_pos < APV_BLK_COEFFS) {
             int abs_ac_coeff_minus1;
             int level;
+            bool sign_ac_coeff;
 
             k_param = clamp(prev_level >> 2, 0, 4);
-            abs_ac_coeff_minus1 = apv_read_vlc(k_param);
-            bool sign_ac_coeff = get_bit(gb);
+            abs_ac_coeff_minus1 = apv_read_vlc_sign(k_param, true,
+                                                    sign_ac_coeff);
 
             if (sign_ac_coeff)
                 level = -abs_ac_coeff_minus1 - 1;
@@ -165,7 +214,8 @@ void decode_block(ivec2 pos, uint comp)
                 return;
 
             int zz = int(zigzag[scan_pos]);
-            imageStore(dst[comp], pos + ivec2(zz & 7, zz >> 3), uvec4(uint(level) & 0xFFFFu));
+            coeffs_out[cbase + uint((pos.y + (zz >> 3)) * cstride +
+                                    pos.x + (zz & 7))] = int16_t(level);
 
             prev_level = abs_ac_coeff_minus1 + 1;
             if (first_ac != 0) {
@@ -194,6 +244,19 @@ void main(void)
     init_get_bits(gb, u8buf(tile_data + tile_bs.x), int(tile_bs.y));
 
     ivec2 sub_shift = comp_idx == 0 ? ivec2(0) : log2_chroma_sub;
+
+    /* This component's plane inside the flat coefficient buffer. Plane
+     * dims are the MB-aligned coded size (the closing entries of the tile
+     * col/row tables), in component resolution. */
+    const int cw0 = int(tile_col[tile_count.x]);
+    const int ch0 = int(tile_row[tile_count.y]);
+    uint cbase = 0u;
+    for (uint i = 0u; i < comp_idx; i++) {
+        ivec2 ss = i == 0u ? ivec2(0) : log2_chroma_sub;
+        cbase += uint((cw0 >> ss.x) * (ch0 >> ss.y));
+    }
+    const int cstride = cw0 >> sub_shift.x;
+
     ivec2 tile_start = ivec2(tile_col[tile_pos.x], tile_row[tile_pos.y]);
     ivec2 tile_dim = ivec2(tile_col[tile_pos.x + 1],
                            tile_row[tile_pos.y + 1]) - tile_start;
@@ -208,7 +271,7 @@ void main(void)
                     ivec2 pos = (APV_MB_SIZE*mb +
                                  APV_TR_SIZE*blk + tile_start) >> sub_shift;
 
-                    decode_block(pos, comp_idx);
+                    decode_block(cbase, cstride, pos, comp_idx);
                 }
             }
         }

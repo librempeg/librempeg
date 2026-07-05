@@ -169,7 +169,7 @@ static int thp_read_header(AVFormatContext *s)
     }
 
     if (thp->has_video && !thp->vst)
-        return AVERROR_INVALIDDATA;
+        thp->has_video = 0;
 
     thp->audio_pkt = av_packet_alloc();
     if (!thp->audio_pkt)

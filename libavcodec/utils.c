@@ -316,6 +316,21 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
             h_align = 8;
         }
         break;
+    case AV_PIX_FMT_BAYER_BGGR8:
+    case AV_PIX_FMT_BAYER_RGGB8:
+    case AV_PIX_FMT_BAYER_GBRG8:
+    case AV_PIX_FMT_BAYER_GRBG8:
+    case AV_PIX_FMT_BAYER_BGGR16LE:
+    case AV_PIX_FMT_BAYER_BGGR16BE:
+    case AV_PIX_FMT_BAYER_RGGB16LE:
+    case AV_PIX_FMT_BAYER_RGGB16BE:
+    case AV_PIX_FMT_BAYER_GBRG16LE:
+    case AV_PIX_FMT_BAYER_GBRG16BE:
+    case AV_PIX_FMT_BAYER_GRBG16LE:
+    case AV_PIX_FMT_BAYER_GRBG16BE:
+        w_align = FFMAX(w_align, 2);
+        h_align = FFMAX(h_align, 2);
+        break;
     default:
         break;
     }
@@ -486,6 +501,7 @@ int av_get_exact_bits_per_sample(enum AVCodecID codec_id)
     case AV_CODEC_ID_SDX2_DPCM:
     case AV_CODEC_ID_CBD2_DPCM:
     case AV_CODEC_ID_CFDF_DPCM:
+    case AV_CODEC_ID_CWV_DPCM:
     case AV_CODEC_ID_DERF_DPCM:
     case AV_CODEC_ID_WADY_DPCM:
     case AV_CODEC_ID_ADPCM_CIRCUS:
@@ -678,6 +694,7 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
             case AV_CODEC_ID_ADPCM_IMA_FSB:
             case AV_CODEC_ID_ADPCM_IMA_XBOX:
             case AV_CODEC_ID_ADPCM_IMA_XBOX_MONO:
+            case AV_CODEC_ID_ADPCM_IMA_WW:
                 return (frame_bytes / (0x24 * ch)) * 64;
             case AV_CODEC_ID_ADPCM_AFC:
                 return frame_bytes / (9 * ch) * 16;
@@ -716,6 +733,8 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
                 return (frame_bytes - 8) * 2;
             case AV_CODEC_ID_ADPCM_IMA_AWC:
                 return ((frame_bytes / (0x800 * ch))) * (0x800 - 4) * 2;
+            case AV_CODEC_ID_ADPCM_NXAP:
+                return ((frame_bytes / (0x40 * ch))) * (0x40 - 4) * 2;
             case AV_CODEC_ID_ADPCM_IMA_NDS:
                 return (frame_bytes/ch-4) * 2;
             case AV_CODEC_ID_ADPCM_TANTALUS:
