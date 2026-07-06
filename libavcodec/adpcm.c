@@ -1787,7 +1787,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         nb_samples = buf_size / (16 * ch) * 30;
         break;
     case AV_CODEC_ID_ADPCM_PSXC:
-        nb_samples = ((buf_size - 1) / ch) * 2;
+        nb_samples = (buf_size / block_align) * ((block_align - 1) / ch) * 2;
         break;
     case AV_CODEC_ID_ADPCM_ARGO:
         nb_samples = buf_size / block_align * 32;
