@@ -3871,6 +3871,7 @@ static int vulkan_export_to_cuda(AVHWFramesContext *hwfc,
     CudaFunctions *cu = cu_internal->cuda_dl;
     CUarray_format cufmt = desc->comp[0].depth > 8 ? CU_AD_FORMAT_UNSIGNED_INT16 :
                                                      CU_AD_FORMAT_UNSIGNED_INT8;
+    const int elem_size = 1 + desc->comp[0].depth > 8;
 
     dst_f = (AVVkFrame *)frame->data[0];
     dst_int = dst_f->internal;
@@ -3915,7 +3916,7 @@ static int vulkan_export_to_cuda(AVHWFramesContext *hwfc,
                 .arrayDesc = {
                     .Depth = 0,
                     .Format = cufmt,
-                    .NumChannels = 1 + ((planes == 2) && i),
+                    .NumChannels = desc->comp[i].step / elem_size,
                     .Flags = 0,
                 },
                 .numLevels = 1,
