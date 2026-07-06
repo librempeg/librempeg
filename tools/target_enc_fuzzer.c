@@ -112,7 +112,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (size > 1024) {
         GetByteContext gbc;
         int flags;
-        int64_t flags64;
+        av_unused int64_t flags64;
 
         size -= 1024;
         bytestream2_init(&gbc, data + size, 1024);
