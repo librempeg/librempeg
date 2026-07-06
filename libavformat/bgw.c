@@ -59,8 +59,6 @@ static int read_header(AVFormatContext *s)
     avio_skip(pb, 2);
     channels = avio_r8(pb);
     align = avio_r8(pb);
-    if (rate <= 0 || channels <= 0 || align <= 0 || channels >= INT_MAX/align)
-        return AVERROR_INVALIDDATA;
 
     switch (codec) {
     case 0:
@@ -70,6 +68,9 @@ static int read_header(AVFormatContext *s)
         avpriv_request_sample(s, "codec %04x", codec);
         return AVERROR_PATCHWELCOME;
     }
+
+    if (rate <= 0 || channels <= 0 || align <= 0 || channels >= INT_MAX/align)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
