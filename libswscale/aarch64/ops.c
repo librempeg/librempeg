@@ -28,6 +28,20 @@
 
 #include "ops_impl_conv.c"
 
+/**
+ * Check that there is no mismatch for the SwsOpExec/SwsOpImpl offset
+ * values used by ops_asmgen.
+ * NOTE: The check is performed here since this file only ever targets
+ *       aarch64, differently from ops_asmgen which may be built on any
+ *       host.
+ */
+static_assert(offsetof_exec_in       == offsetof(SwsOpExec, in),       "SwsOpExec layout mismatch");
+static_assert(offsetof_exec_out      == offsetof(SwsOpExec, out),      "SwsOpExec layout mismatch");
+static_assert(offsetof_exec_in_bump  == offsetof(SwsOpExec, in_bump),  "SwsOpExec layout mismatch");
+static_assert(offsetof_exec_out_bump == offsetof(SwsOpExec, out_bump), "SwsOpExec layout mismatch");
+static_assert(offsetof_impl_cont     == offsetof(SwsOpImpl, cont),     "SwsOpImpl layout mismatch");
+static_assert(offsetof_impl_priv     == offsetof(SwsOpImpl, priv),     "SwsOpImpl layout mismatch");
+
 /*********************************************************************/
 static int aarch64_setup_linear(const SwsAArch64OpImplParams *p,
                                 const SwsOp *op, SwsImplResult *res)
