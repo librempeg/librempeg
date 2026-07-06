@@ -3963,6 +3963,7 @@ static int vulkan_transfer_data_from_cuda(AVHWFramesContext *hwfc,
     VulkanFramesPriv *fp = hwfc->hwctx;
     const int planes = av_pix_fmt_count_planes(hwfc->sw_format);
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwfc->sw_format);
+    int nb_images;
 
     AVHWFramesContext *cuda_fc = (AVHWFramesContext*)src->hw_frames_ctx->data;
     AVHWDeviceContext *cuda_cu = cuda_fc->device_ctx;
@@ -3973,6 +3974,7 @@ static int vulkan_transfer_data_from_cuda(AVHWFramesContext *hwfc,
     CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS s_s_par[AV_NUM_DATA_POINTERS] = { 0 };
 
     dst_f = (AVVkFrame *)dst->data[0];
+    nb_images = ff_vk_count_images(dst_f);
 
     err = prepare_frame(hwfc, &fp->upload_exec, dst_f, PREP_MODE_EXTERNAL_EXPORT);
     if (err < 0)
@@ -3990,13 +3992,13 @@ static int vulkan_transfer_data_from_cuda(AVHWFramesContext *hwfc,
 
     dst_int = dst_f->internal;
 
-    for (int i = 0; i < planes; i++) {
+    for (int i = 0; i < nb_images; i++) {
         s_w_par[i].params.fence.value = dst_f->sem_value[i] + 0;
         s_s_par[i].params.fence.value = dst_f->sem_value[i] + 1;
     }
 
     err = CHECK_CU(cu->cuWaitExternalSemaphoresAsync(dst_int->cu_sem, s_w_par,
-                                                     planes, cuda_dev->stream));
+                                                     nb_images, cuda_dev->stream));
     if (err < 0)
         goto fail;
 
@@ -4023,11 +4025,11 @@ static int vulkan_transfer_data_from_cuda(AVHWFramesContext *hwfc,
     }
 
     err = CHECK_CU(cu->cuSignalExternalSemaphoresAsync(dst_int->cu_sem, s_s_par,
-                                                       planes, cuda_dev->stream));
+                                                       nb_images, cuda_dev->stream));
     if (err < 0)
         goto fail;
 
-    for (int i = 0; i < planes; i++)
+    for (int i = 0; i < nb_images; i++)
         dst_f->sem_value[i]++;
 
     CHECK_CU(cu->cuCtxPopCurrent(&dummy));
@@ -4878,7 +4880,7 @@ static int vulkan_transfer_data_to_cuda(AVHWFramesContext *hwfc, AVFrame *dst,
 
     dst_int = dst_f->internal;
 
-    for (int i = 0; i < planes; i++) {
+    for (int i = 0; i < nb_images; i++) {
         s_w_par[i].params.fence.value = dst_f->sem_value[i] + 0;
         s_s_par[i].params.fence.value = dst_f->sem_value[i] + 1;
     }
@@ -4915,7 +4917,7 @@ static int vulkan_transfer_data_to_cuda(AVHWFramesContext *hwfc, AVFrame *dst,
     if (err < 0)
         goto fail;
 
-    for (int i = 0; i < planes; i++)
+    for (int i = 0; i < nb_images; i++)
         dst_f->sem_value[i]++;
 
     CHECK_CU(cu->cuCtxPopCurrent(&dummy));
