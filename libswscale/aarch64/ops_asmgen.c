@@ -379,13 +379,9 @@ static void asmgen_op_read_bit(SwsAArch64Context *s, const SwsAArch64OpImplParam
     RasmContext *r = s->rctx;
     RasmOp bitmask_vec = s->vt[1];
     RasmOp wtmp = a64op_w(s->tmp0);
-    AArch64VecViews vl[1];
-    AArch64VecViews vtmp;
-    AArch64VecViews shift_vec;
-
-    a64op_vec_views(s->vt[0], &shift_vec);
-    a64op_vec_views(s->vl[0], &vl[0]);
-    a64op_vec_views(s->vt[2], &vtmp);
+    AArch64VecViews vl[1]     = { a64op_vec_views(s->vl[0]) };
+    AArch64VecViews vtmp      = a64op_vec_views(s->vt[2]);
+    AArch64VecViews shift_vec = a64op_vec_views(s->vt[0]);
 
     /* Note that shift_vec has negative values, so that using it with
      * ushl actually performs a right shift. */
@@ -415,11 +411,8 @@ static void asmgen_op_read_nibble(SwsAArch64Context *s, const SwsAArch64OpImplPa
 {
     RasmContext *r = s->rctx;
     RasmOp nibble_mask = v_8b(s->vt[0]);
-    AArch64VecViews vl[1];
-    AArch64VecViews vtmp;
-
-    a64op_vec_views(s->vl[0], &vl[0]);
-    a64op_vec_views(s->vt[1], &vtmp);
+    AArch64VecViews vl[1] = { a64op_vec_views(s->vl[0]) };
+    AArch64VecViews vtmp  = a64op_vec_views(s->vt[1]);
 
     rasm_annotate_next(r, "v128 nibble_mask = {0xf <repeats 8 times>, 0x0 <repeats 8 times>};");
     i_movi(r, nibble_mask, IMM(0x0f));
@@ -459,13 +452,8 @@ static void asmgen_op_read_packed(SwsAArch64Context *s, const SwsAArch64OpImplPa
 static void asmgen_op_read_planar(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
     RasmContext *r = s->rctx;
-    AArch64VecViews vl[4];
-    AArch64VecViews vh[4];
-
-    for (int i = 0; i < 4; i++) {
-        a64op_vec_views(s->vl[i], &vl[i]);
-        a64op_vec_views(s->vh[i], &vh[i]);
-    }
+    AArch64VecViews vl[4] = A64OP_VEC_VIEWS4(s->vl);
+    AArch64VecViews vh[4] = A64OP_VEC_VIEWS4(s->vh);
 
     LOOP_MASK(p, i) {
         switch ((s->use_vh ? 0x100 : 0) | s->vec_size) {
@@ -487,15 +475,10 @@ static void asmgen_op_read_planar(SwsAArch64Context *s, const SwsAArch64OpImplPa
 static void asmgen_op_write_bit(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
     RasmContext *r = s->rctx;
-    AArch64VecViews vl[1];
-    AArch64VecViews shift_vec;
-    AArch64VecViews vtmp0;
-    AArch64VecViews vtmp1;
-
-    a64op_vec_views(s->vl[0], &vl[0]);
-    a64op_vec_views(s->vt[0], &shift_vec);
-    a64op_vec_views(s->vt[1], &vtmp0);
-    a64op_vec_views(s->vt[2], &vtmp1);
+    AArch64VecViews vl[1]     = { a64op_vec_views(s->vl[0]) };
+    AArch64VecViews shift_vec = a64op_vec_views(s->vt[0]);
+    AArch64VecViews vtmp0     = a64op_vec_views(s->vt[1]);
+    AArch64VecViews vtmp1     = a64op_vec_views(s->vt[2]);
 
     rasm_annotate_next(r, "v128 shift_vec = impl->priv.v128;");
     i_ldr(r, shift_vec.q, a64op_off(s->impl, offsetof_impl_priv));
@@ -518,14 +501,9 @@ static void asmgen_op_write_bit(SwsAArch64Context *s, const SwsAArch64OpImplPara
 static void asmgen_op_write_nibble(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
     RasmContext *r = s->rctx;
-    AArch64VecViews vl[4];
-    AArch64VecViews vtmp0;
-    AArch64VecViews vtmp1;
-
-    for (int i = 0; i < 4; i++)
-        a64op_vec_views(s->vl[i], &vl[i]);
-    a64op_vec_views(s->vt[0], &vtmp0);
-    a64op_vec_views(s->vt[1], &vtmp1);
+    AArch64VecViews vl[4] = A64OP_VEC_VIEWS4(s->vl);
+    AArch64VecViews vtmp0 = a64op_vec_views(s->vt[0]);
+    AArch64VecViews vtmp1 = a64op_vec_views(s->vt[1]);
 
     if (p->block_size == 8) {
         i_shl (r, vtmp0.h4,  vl[0].h4,  IMM(4));
@@ -564,13 +542,8 @@ static void asmgen_op_write_packed(SwsAArch64Context *s, const SwsAArch64OpImplP
 static void asmgen_op_write_planar(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
     RasmContext *r = s->rctx;
-    AArch64VecViews vl[4];
-    AArch64VecViews vh[4];
-
-    for (int i = 0; i < 4; i++) {
-        a64op_vec_views(s->vl[i], &vl[i]);
-        a64op_vec_views(s->vh[i], &vh[i]);
-    }
+    AArch64VecViews vl[4] = A64OP_VEC_VIEWS4(s->vl);
+    AArch64VecViews vh[4] = A64OP_VEC_VIEWS4(s->vh);
 
     LOOP_MASK(p, i) {
         switch ((s->use_vh ? 0x100 : 0) | s->vec_size) {
@@ -589,13 +562,8 @@ static void asmgen_op_write_planar(SwsAArch64Context *s, const SwsAArch64OpImplP
 static void asmgen_op_swap_bytes(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
     RasmContext *r = s->rctx;
-    AArch64VecViews vl[4];
-    AArch64VecViews vh[4];
-
-    for (int i = 0; i < 4; i++) {
-        a64op_vec_views(s->vl[i], &vl[i]);
-        a64op_vec_views(s->vh[i], &vh[i]);
-    }
+    AArch64VecViews vl[4] = A64OP_VEC_VIEWS4(s->vl);
+    AArch64VecViews vh[4] = A64OP_VEC_VIEWS4(s->vh);
 
     switch (ff_sws_pixel_type_size(p->type)) {
     case sizeof(uint16_t):
@@ -847,19 +815,14 @@ static void asmgen_op_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *
 static void asmgen_op_convert(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
     RasmContext *r = s->rctx;
-    AArch64VecViews vl[4];
-    AArch64VecViews vh[4];
+    AArch64VecViews vl[4] = A64OP_VEC_VIEWS4(s->vl);
+    AArch64VecViews vh[4] = A64OP_VEC_VIEWS4(s->vh);
 
     /**
      * Since each instruction in the convert operation needs specific
      * element types, it is simpler to use arrangement specifiers for
      * each operand instead of reshaping all vectors.
      */
-
-    for (int i = 0; i < 4; i++) {
-        a64op_vec_views(s->vl[i], &vl[i]);
-        a64op_vec_views(s->vh[i], &vh[i]);
-    }
 
     size_t src_el_size = s->el_size;
     SwsPixelType to_type;

@@ -474,7 +474,14 @@ typedef struct AArch64VecViews {
 } AArch64VecViews;
 
 /* Fill vector view struct for given op. */
-void a64op_vec_views(RasmOp op, AArch64VecViews *out);
+AArch64VecViews a64op_vec_views(RasmOp op);
+
+#define A64OP_VEC_VIEWS4(op) { \
+    a64op_vec_views((op)[0]),  \
+    a64op_vec_views((op)[1]),  \
+    a64op_vec_views((op)[2]),  \
+    a64op_vec_views((op)[3]),  \
+}
 
 /*********************************************************************/
 /* AARCH64_OP_BASE */
