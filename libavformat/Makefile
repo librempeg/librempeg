@@ -847,6 +847,7 @@ OBJS-$(CONFIG_VXDS_DEMUXER)              += vxds.o
 OBJS-$(CONFIG_W64_DEMUXER)               += wavdec.o w64.o pcm.o
 OBJS-$(CONFIG_W64_MUXER)                 += wavenc.o w64.o
 OBJS-$(CONFIG_WADY_DEMUXER)              += wady.o pcm.o
+OBJS-$(CONFIG_WAF_DEMUXER)               += waf.o
 OBJS-$(CONFIG_WAVARC_DEMUXER)            += wavarc.o
 OBJS-$(CONFIG_WAV_DEMUXER)               += wavdec.o pcm.o
 OBJS-$(CONFIG_WAV_MUXER)                 += wavenc.o
