@@ -28,9 +28,9 @@
 
 /**
  * Check that there is no mismatch for the SwsOpExec/SwsOpImpl offset
- * values used by ops_asmgen.
+ * values used by ops_static.
  * NOTE: The check is performed here since this file only ever targets
- *       aarch64, differently from ops_asmgen which may be built on any
+ *       aarch64, differently from ops_static which may be built on any
  *       host.
  */
 static_assert(offsetof_exec_in       == offsetof(SwsOpExec, in),       "SwsOpExec layout mismatch");
