@@ -2309,6 +2309,10 @@ static void vulkan_free_internal(VulkanDevicePriv *p, AVVkFrame *f)
 {
     av_unused AVVkFrameInternal *internal = f->internal;
 
+    // Make this function safe to call repeatedly
+    if (!internal)
+        return;
+
 #if CONFIG_CUDA
     if (internal->cuda_fc_ref) {
         AVHWFramesContext *cuda_fc = (AVHWFramesContext *)internal->cuda_fc_ref->data;
@@ -3898,6 +3902,18 @@ static int vulkan_export_to_cuda(AVHWFramesContext *hwfc,
 
         if (nb_images != planes) {
             for (int i = 0; i < planes; i++) {
+                /* Cuda now defines array formats for semi-planar, but these are
+                 * not currently supported for imported Vulkan images. */
+                if (desc->comp[i].step / elem_size > 1) {
+                    av_log(ctx, AV_LOG_ERROR,
+                           "Cannot map a multiplane Vulkan image (%d image(s) "
+                           "for %d plane(s)) to CUDA; create the Vulkan device "
+                           "with the disable_multiplane=1 option (one image per "
+                           "plane) for CUDA interop.\n", nb_images, planes);
+                    err = AVERROR(ENOSYS);
+                    goto fail;
+                }
+
                 VkImageSubresource subres = {
                     .aspectMask = i == 2 ? VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT :
                                   i == 1 ? VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT :
