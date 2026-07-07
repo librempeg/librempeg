@@ -36,7 +36,6 @@
     ENTRY(SWS_UOP_WRITE_BIT,            "write_bit")                 \
     ENTRY(SWS_UOP_PERMUTE,              "permute")                   \
     ENTRY(SWS_UOP_COPY,                 "copy")                      \
-    ENTRY(SWS_UOP_MOVE,                 "move")                      \
     ENTRY(SWS_UOP_SWAP_BYTES,           "swap_bytes")                \
     ENTRY(SWS_UOP_EXPAND_BIT,           "expand_bit")                \
     ENTRY(SWS_UOP_EXPAND_PAIR,          "expand_pair")               \

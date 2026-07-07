@@ -577,11 +577,15 @@ static void check_expand(const char *name, const SwsUOp *uop)
 
 static void check_swizzle(const char *name, const SwsUOp *uop)
 {
-    const SwsSwizzleUOp *swiz = &uop->par.swizzle;
+    const SwsMoveUOp *move = &uop->par.move;
+    int8_t idx[4 + 1] = { -1, 0, 1, 2, 3 };
+    for (int n = 0; n < move->num_moves; n++)
+        idx[move->dst[n] + 1] = idx[move->src[n] + 1];
+
     CHECK_MASK(name, uop->mask, NULL, uop->type, uop->type, {
         .op   = SWS_OP_SWIZZLE,
         .type = uop->type,
-        .swizzle.in = { swiz->in[0], swiz->in[1], swiz->in[2], swiz->in[3] },
+        .swizzle.in = { idx[1], idx[2], idx[3], idx[4] },
     });
 }
 

@@ -95,7 +95,6 @@ typedef uint32_t SwsUOpFlags;
 typedef enum SwsUOpFlagBits {
     SWS_UOP_FLAG_NONE = 0,
     SWS_UOP_FLAG_FMA  = (1 << 0), /* platform supports FMA ops */
-    SWS_UOP_FLAG_MOVE = (1 << 1), /* platform supports SWS_UOP_MOVE */
 } SwsUOpFlagBits;
 
 typedef enum SwsUOpType {
@@ -116,10 +115,9 @@ typedef enum SwsUOpType {
     SWS_UOP_WRITE_NIBBLE,    /* fractional write (4 bits) to single plane */
     SWS_UOP_WRITE_BIT,       /* fractional write (1 bit) to single plane */
 
-    /* Data rearrangement uops; mask = non-trivial and needed components */
-    SWS_UOP_PERMUTE,         /* rearrange components (no duplicates) */
-    SWS_UOP_COPY,            /* copy/duplicate components */
-    SWS_UOP_MOVE,            /* series of register-register assignments */
+    /* Data rearrangement uops; mask = needed or trivial components */
+    SWS_UOP_PERMUTE,         /* permute pointers (no duplicates) */
+    SWS_UOP_COPY,            /* permute data (may contain duplicates) */
 
     /* Data conversion / manipulation uops; mask = affected components */
     SWS_UOP_SWAP_BYTES,      /* swap byte order in components */
@@ -158,10 +156,6 @@ typedef struct SwsFilterUOp {
 typedef struct SwsShiftUOp {
     uint8_t amount;
 } SwsShiftUOp;
-
-typedef struct SwsSwizzleUOp {
-    uint8_t in[4]; /* input component for each output component */
-} SwsSwizzleUOp;
 
 typedef struct SwsMoveUOp {
     /* The worst case number of moves (for two independent cycles) */
@@ -210,8 +204,7 @@ int ff_sws_dither_height(const SwsDitherUOp *dither);
 typedef union SwsUOpParams {
     SwsFilterUOp    filter; /* for SWS_UOP_READ_*_FV/FH */
     SwsShiftUOp     shift;
-    SwsSwizzleUOp   swizzle;
-    SwsMoveUOp      move;
+    SwsMoveUOp      move; /* for SWS_UOP_PERMUTE and SWS_UOP_COPY */
     SwsPackUOp      pack;
     SwsClearUOp     clear;
     SwsLinearUOp    lin;

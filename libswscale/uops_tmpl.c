@@ -360,35 +360,53 @@ SWS_FOR_STRUCT(PX, READ_PLANAR_FH, DECL_ENTRY, .setup = fn(setup_filter_h) )
  * Permutation and copying *
  ***************************/
 
-/* Permute by directly swapping the order of arguments to the continuation. */
-#define DECL_PERMUTE(DUMMY, NAME, TYPE, UOP, MASK, IDX0, IDX1, IDX2, IDX3)      \
-    static void NAME##_c(SwsOpIter *restrict iter,                              \
-                         const SwsOpImpl *restrict impl,                        \
-                         void *restrict in0, void *restrict in1,                \
-                         void *restrict in2, void *restrict in3)                \
-    {                                                                           \
-        CONTINUE(in##IDX0, in##IDX1, in##IDX2, in##IDX3);                       \
-    }
+DECL_FUNC(permute, const SwsCompMask mask, int num_moves,
+          int8_t d0, int8_t d1, int8_t d2, int8_t d3, int8_t d4, int8_t d5,
+          int8_t s0, int8_t s1, int8_t s2, int8_t s3, int8_t s4, int8_t s5)
+{
+    const int8_t dst[SWS_UOP_MOVE_MAX] = { d0, d1, d2, d3, d4, d5 };
+    const int8_t src[SWS_UOP_MOVE_MAX] = { s0, s1, s2, s3, s4, s5 };
 
-#define DECL_COPY(DUMMY, NAME, TYPE, UOP, MASK, IDX0, IDX1, IDX2, IDX3)         \
-    static void NAME##_c(SwsOpIter *restrict iter,                              \
-                         const SwsOpImpl *restrict impl,                        \
-                         void *restrict in0, void *restrict in1,                \
-                         void *restrict in2, void *restrict in3)                \
-    {                                                                           \
-        const SwsCompMask mask = (MASK);                                        \
-        block_t x, y, z, w;                                                     \
-                                                                                \
-        if (X) memcpy(&x.px, in##IDX0, SIZEOF_BLOCK);                           \
-        if (Y) memcpy(&y.px, in##IDX1, SIZEOF_BLOCK);                           \
-        if (Z) memcpy(&z.px, in##IDX2, SIZEOF_BLOCK);                           \
-        if (W) memcpy(&w.px, in##IDX3, SIZEOF_BLOCK);                           \
-                                                                                \
-        CONTINUE(X ? &x : in0, Y ? &y : in1, Z ? &z : in2, W ? &w : in3);       \
-    }
+    pixel_t *ptr[5] = { NULL, x, y, z, w };
+    for (int n = 0; n < num_moves; n++)
+        ptr[dst[n] + 1] = ptr[src[n] + 1];
 
-SWS_FOR(PX, PERMUTE, DECL_PERMUTE)
-SWS_FOR(PX, COPY,    DECL_COPY)
+    /* The unneeded registers may still alias the used ones, so point them
+     * back at the stack to avoid collisions */
+    block_t xx, yy, zz, ww;
+    CONTINUE(X ? ptr[1] : xx.px,
+             Y ? ptr[2] : yy.px,
+             Z ? ptr[3] : zz.px,
+             W ? ptr[4] : ww.px);
+}
+
+DECL_FUNC(copy, const SwsCompMask mask, int num_moves,
+          int8_t d0, int8_t d1, int8_t d2, int8_t d3, int8_t d4, int8_t d5,
+          int8_t s0, int8_t s1, int8_t s2, int8_t s3, int8_t s4, int8_t s5)
+{
+    const size_t block_size = SWS_BLOCK_SIZE * sizeof(pixel_t);
+    const int8_t dst[SWS_UOP_MOVE_MAX] = { d0, d1, d2, d3, d4, d5 };
+    const int8_t src[SWS_UOP_MOVE_MAX] = { s0, s1, s2, s3, s4, s5 };
+
+    block_t data[5];
+    memcpy(&data[1].px, x, block_size);
+    memcpy(&data[2].px, y, block_size);
+    memcpy(&data[3].px, z, block_size);
+    memcpy(&data[4].px, w, block_size);
+
+    for (int n = 0; n < num_moves; n++)
+        data[dst[n] + 1] = data[src[n] + 1];
+
+    memcpy(x, &data[1].px, block_size);
+    memcpy(y, &data[2].px, block_size);
+    memcpy(z, &data[3].px, block_size);
+    memcpy(w, &data[4].px, block_size);
+
+    CONTINUE(x, y, z, w);
+}
+
+SWS_FOR(PX, PERMUTE, DECL_IMPL, permute)
+SWS_FOR(PX, COPY,    DECL_IMPL, copy)
 SWS_FOR_STRUCT(PX, PERMUTE, DECL_ENTRY)
 SWS_FOR_STRUCT(PX, COPY,    DECL_ENTRY)
 
