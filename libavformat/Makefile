@@ -214,6 +214,7 @@ OBJS-$(CONFIG_CDXL_DEMUXER)              += cdxl.o
 OBJS-$(CONFIG_CFAST_DEMUXER)             += cfast.o
 OBJS-$(CONFIG_CFDF_DEMUXER)              += cfdf.o
 OBJS-$(CONFIG_CFDF_D5_DEMUXER)           += cfdf_d5.o
+OBJS-$(CONFIG_CFN_DEMUXER)               += cfn.o
 OBJS-$(CONFIG_CINE_DEMUXER)              += cinedec.o
 OBJS-$(CONFIG_CODEC2_DEMUXER)            += codec2.o pcm.o
 OBJS-$(CONFIG_CODEC2_MUXER)              += codec2.o rawenc.o
