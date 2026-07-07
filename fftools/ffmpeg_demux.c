@@ -1004,6 +1004,7 @@ static void ist_free(InputStream **pist)
 
     av_frame_free(&ds->decoded_params);
 
+    av_freep(&ds->dsg);
     av_bsf_free(&ds->bsf);
 
     av_freep(pist);
