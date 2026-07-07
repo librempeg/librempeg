@@ -123,7 +123,7 @@ static int read_packet(AVFormatContext *s,
     size = FFMIN(xa->stop_offset - pos, size);
 
     ret = av_get_packet(pb, pkt, size);
-    if(ret < 0)
+    if (ret < 0)
         return ret;
 
     pkt->stream_index = st->index;
