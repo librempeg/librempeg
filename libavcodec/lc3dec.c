@@ -18,6 +18,7 @@
 
 #include <float.h>
 
+#include "libavutil/attributes.h"
 #include "libavutil/mem.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/tx.h"
@@ -3774,6 +3775,7 @@ static int resolve_dt(const int us, const int hr_mode)
     case 7500:
         if (!hr_mode)
             return LC3_DT_7M5;
+        av_fallthrough;
     default:
         return LC3_NUM_DT;
     }
