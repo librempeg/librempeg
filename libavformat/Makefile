@@ -350,6 +350,7 @@ OBJS-$(CONFIG_HVQM4_DEMUXER)             += hvqm4dec.o
 OBJS-$(CONFIG_HWAS_DEMUXER)              += hwas.o pcm.o
 OBJS-$(CONFIG_HXD_DEMUXER)               += hxd.o
 OBJS-$(CONFIG_HXVS_DEMUXER)              += hxvs.o
+OBJS-$(CONFIG_I3DS_DEMUXER)              += i3ds.o pcm.o
 OBJS-$(CONFIG_IAB_DEMUXER)               += iab.o
 OBJS-$(CONFIG_IAMF_DEMUXER)              += iamfdec.o
 OBJS-$(CONFIG_IAMF_MUXER)                += iamfenc.o
