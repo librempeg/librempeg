@@ -144,13 +144,18 @@ int av_bsf_link(AVBitStreamFilterContext *src, unsigned srcpad,
     }
 
     if (src->output_pads[srcpad].codec_ids && dst->input_pads[dstpad].codec_ids) {
-        int i;
-        for (i = 0; src->output_pads[srcpad].codec_ids[i] != AV_CODEC_ID_NONE; i++)
+        int i, found = 0;
+        for (i = 0; src->output_pads[srcpad].codec_ids[i] != AV_CODEC_ID_NONE; i++) {
             for (int j = 0; dst->input_pads[dstpad].codec_ids[j] != AV_CODEC_ID_NONE; j++)
-                if (src->output_pads[srcpad].codec_ids[i] == dst->input_pads[dstpad].codec_ids[j])
+                if (src->output_pads[srcpad].codec_ids[i] == dst->input_pads[dstpad].codec_ids[j]) {
+                    found = 1;
                     break;
+                }
+            if (found)
+                break;
+        }
 
-        if (src->output_pads->codec_ids[i] == AV_CODEC_ID_NONE) {
+        if (!found) {
             av_log(src, AV_LOG_ERROR, "No common codec id between source and dest pads\n");
 			av_log(src, AV_LOG_ERROR, "Supported input pad codecs are: ");
             for (i = 0; dst->input_pads->codec_ids[i] != AV_CODEC_ID_NONE; i++) {
