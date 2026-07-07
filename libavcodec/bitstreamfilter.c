@@ -144,8 +144,8 @@ int av_bsf_link(AVBitStreamFilterContext *src, unsigned srcpad,
     }
 
     if (src->output_pads[srcpad].codec_ids && dst->input_pads[dstpad].codec_ids) {
-        int i, found = 0;
-        for (i = 0; src->output_pads[srcpad].codec_ids[i] != AV_CODEC_ID_NONE; i++) {
+        int found = 0;
+        for (int i = 0; src->output_pads[srcpad].codec_ids[i] != AV_CODEC_ID_NONE; i++) {
             for (int j = 0; dst->input_pads[dstpad].codec_ids[j] != AV_CODEC_ID_NONE; j++)
                 if (src->output_pads[srcpad].codec_ids[i] == dst->input_pads[dstpad].codec_ids[j]) {
                     found = 1;
@@ -157,15 +157,15 @@ int av_bsf_link(AVBitStreamFilterContext *src, unsigned srcpad,
 
         if (!found) {
             av_log(src, AV_LOG_ERROR, "No common codec id between source and dest pads\n");
-			av_log(src, AV_LOG_ERROR, "Supported input pad codecs are: ");
-            for (i = 0; dst->input_pads[dstpad].codec_ids[i] != AV_CODEC_ID_NONE; i++) {
+            av_log(src, AV_LOG_ERROR, "Supported input pad codecs are: ");
+            for (int i = 0; dst->input_pads[dstpad].codec_ids[i] != AV_CODEC_ID_NONE; i++) {
                 enum AVCodecID codec_id = dst->input_pads[dstpad].codec_ids[i];
                 av_log(src, AV_LOG_ERROR, "%s (%d) ",
                        avcodec_get_name(codec_id), codec_id);
             }
             av_log(src, AV_LOG_ERROR, "\n");
-			av_log(src, AV_LOG_ERROR, "Supported output pad codecs are: ");
-            for (i = 0; src->output_pads[srcpad].codec_ids[i] != AV_CODEC_ID_NONE; i++) {
+            av_log(src, AV_LOG_ERROR, "Supported output pad codecs are: ");
+            for (int i = 0; src->output_pads[srcpad].codec_ids[i] != AV_CODEC_ID_NONE; i++) {
                 enum AVCodecID codec_id = src->output_pads[srcpad].codec_ids[i];
                 av_log(src, AV_LOG_ERROR, "%s (%d) ",
                        avcodec_get_name(codec_id), codec_id);
