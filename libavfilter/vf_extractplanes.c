@@ -558,12 +558,12 @@ const FFFilter ff_vf_extractplanes = {
     .p.name        = "extractplanes",
     .p.description = NULL_IF_CONFIG_SMALL("Extract planes as grayscale frames."),
     .p.priv_class  = &extractplanes_class,
+    .p.outputs     = NULL,
     .p.flags       = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
     .priv_size     = sizeof(ExtractPlanesContext),
     .init          = init,
     .activate      = activate,
     FILTER_INPUTS(extractplanes_inputs),
-    .p.outputs     = NULL,
     FILTER_QUERY_FUNC2(query_formats),
 };
 
