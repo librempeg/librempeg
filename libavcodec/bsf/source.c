@@ -85,8 +85,10 @@ int attribute_align_arg av_bsf_source_add_packet(AVBitStreamFilterContext *ctx, 
 
     if ((flags & AV_BSF_SOURCE_FLAG_KEEP_REF)) {
         ret = av_packet_ref(copy, pkt);
-        if (ret < 0)
+        if (ret < 0) {
+            av_packet_free(&copy);
             return ret;
+        }
     } else
         av_packet_move_ref(copy, pkt);
 
