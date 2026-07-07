@@ -198,6 +198,7 @@ static void extract_from_bayer(uint8_t *dst, int dst_linesize,
         case 1: x_off = 1; y_off = 0; break;
         case 2: x_off = 1; y_off = 1; break;
         }
+        break;
     case AV_PIX_FMT_BAYER_BGGR8:
     case AV_PIX_FMT_BAYER_BGGR16BE:
     case AV_PIX_FMT_BAYER_BGGR16LE:
@@ -206,6 +207,7 @@ static void extract_from_bayer(uint8_t *dst, int dst_linesize,
         case 1: x_off = 1; y_off = 0; break;
         case 2: x_off = 0; y_off = 0; break;
         }
+        break;
     case AV_PIX_FMT_BAYER_GRBG8:
     case AV_PIX_FMT_BAYER_GRBG16BE:
     case AV_PIX_FMT_BAYER_GRBG16LE:
@@ -214,6 +216,7 @@ static void extract_from_bayer(uint8_t *dst, int dst_linesize,
         case 1: x_off = 0; y_off = 0; break;
         case 2: x_off = 0; y_off = 1; break;
         }
+        break;
     case AV_PIX_FMT_BAYER_GBRG8:
     case AV_PIX_FMT_BAYER_GBRG16BE:
     case AV_PIX_FMT_BAYER_GBRG16LE:
@@ -222,6 +225,7 @@ static void extract_from_bayer(uint8_t *dst, int dst_linesize,
         case 1: x_off = 0; y_off = 0; break;
         case 2: x_off = 1; y_off = 0; break;
         }
+        break;
     }
 
     if (y_off)
