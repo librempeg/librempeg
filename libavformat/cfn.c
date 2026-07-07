@@ -68,7 +68,7 @@ static int read_header(AVFormatContext *s)
 
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    int ret, block_size, ch_offset, ch_size, ch_offset2;
+    int ret, block_size, ch_offset, ch_size, ch_offset2, ach_size;
     AVIOContext *pb = s->pb;
     int64_t pos;
 
@@ -83,6 +83,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     avio_skip(pb, 8);
     ch_offset = avio_rb32(pb);
     ch_size = avio_rb32(pb);
+    ach_size = FFALIGN(ch_size, 8);
     if (ch_offset <= 128 || ch_offset >= block_size)
         return AVERROR_INVALIDDATA;
     if (ch_size <= 0 || ch_size > block_size - ch_offset)
@@ -91,14 +92,14 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     if ((ch_offset2 <= 128) || (ch_offset2 >= block_size) || (ch_size > block_size - ch_offset2))
         return AVERROR_INVALIDDATA;
 
-    ret = av_new_packet(pkt, ch_size * 2);
+    ret = av_new_packet(pkt, ach_size * 2);
     if (ret < 0)
         return ret;
 
     avio_seek(pb, pos + ch_offset, SEEK_SET);
     avio_read(pb, pkt->data, ch_size);
     avio_seek(pb, pos + ch_offset2, SEEK_SET);
-    avio_read(pb, pkt->data + ch_size, ch_size);
+    avio_read(pb, pkt->data + ach_size, ch_size);
 
     avio_seek(pb, pos + block_size, SEEK_SET);
 
