@@ -484,6 +484,19 @@ SWS_DECL_FUNC(ff_sws_process2_x86);
 SWS_DECL_FUNC(ff_sws_process3_x86);
 SWS_DECL_FUNC(ff_sws_process4_x86);
 
+static int get_mmsize(void)
+{
+    const int cpu_flags = av_get_cpu_flags();
+    if (EXTERNAL_AVX512(cpu_flags))
+        return 64;
+    else if (EXTERNAL_AVX2(cpu_flags))
+        return 32;
+    else if (EXTERNAL_SSE4(cpu_flags))
+        return 16;
+    else
+        return AVERROR(ENOTSUP);
+}
+
 static int movsize(const int bytes, const int mmsize)
 {
     return bytes <= 4 ? 4 : /* movd */
@@ -491,11 +504,15 @@ static int movsize(const int bytes, const int mmsize)
            mmsize;          /* movu */
 }
 
-static int solve_shuffle(const SwsOpList *ops, int mmsize, SwsCompiledOp *out)
+static int solve_shuffle(const SwsOpList *ops, SwsCompiledOp *out)
 {
     uint8_t shuffle[16];
+    int mmsize = get_mmsize();
     int read_bytes, write_bytes;
     int pixels;
+
+    if (mmsize < 0)
+        return mmsize;
 
     /* Solve the shuffle mask for one 128-bit lane only */
     pixels = ff_sws_solve_shuffle(ops, shuffle, 16, 0x80, &read_bytes, &write_bytes);
@@ -573,41 +590,15 @@ static void normalize_clear(SwsUOp *uop)
         uop->data.vec4[i].u32 = expand32(uop->type, uop->data.vec4[i]);
 }
 
-static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
+static int compile_uops_x86(SwsContext *ctx, const SwsUOpList *uops, SwsCompiledOp *out)
 {
-    const int cpu_flags = av_get_cpu_flags();
-    int ret, mmsize;
-    if (EXTERNAL_AVX512(cpu_flags))
-        mmsize = 64;
-    else if (EXTERNAL_AVX2(cpu_flags))
-        mmsize = 32;
-    else if (EXTERNAL_SSE4(cpu_flags))
-        mmsize = 16;
-    else
-        return AVERROR(ENOTSUP);
-
-    /* Special fast path for in-place packed shuffle */
-    ret = solve_shuffle(ops, mmsize, out);
-    if (ret != AVERROR(ENOTSUP))
-        return ret;
+    int ret, mmsize = get_mmsize();
+    if (mmsize < 0)
+        return mmsize;
 
     SwsOpChain *chain = ff_sws_op_chain_alloc();
     if (!chain)
         return AVERROR(ENOMEM);
-
-    SwsUOpList *uops = ff_sws_uop_list_alloc();
-    if (!uops) {
-        ret = AVERROR(ENOMEM);
-        goto fail;
-    }
-
-    SwsUOpFlags flags = SWS_UOP_FLAG_MOVE;
-    if (EXTERNAL_FMA3(cpu_flags))
-        flags |= SWS_UOP_FLAG_FMA;
-
-    ret = ff_sws_ops_translate(ctx, ops, flags, uops);
-    if (ret < 0)
-        goto fail;
 
     *out = (SwsCompiledOp) {
         /* Use at most two full YMM regs during the widest precision section */
@@ -649,18 +640,48 @@ static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
     out->cpu_flags = chain->cpu_flags;
     memcpy(out->over_read,  chain->over_read,  sizeof(out->over_read));
     memcpy(out->over_write, chain->over_write, sizeof(out->over_write));
-    ff_sws_uop_list_free(&uops);
     return 0;
 
 fail:
-    ff_sws_uop_list_free(&uops);
     ff_sws_op_chain_free(chain);
     return ret;
 }
 
+static int compile_x86(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
+{
+    const int cpu_flags = av_get_cpu_flags();
+    const int mmsize = get_mmsize();
+    if (mmsize < 0)
+        return mmsize;
+
+    SwsUOpFlags flags = SWS_UOP_FLAG_MOVE;
+    if (EXTERNAL_FMA3(cpu_flags))
+        flags |= SWS_UOP_FLAG_FMA;
+
+    /* Special fast path for in-place packed shuffle */
+    int ret = solve_shuffle(ops, out);
+    if (ret != AVERROR(ENOTSUP))
+        return ret;
+
+    SwsUOpList *uops = ff_sws_uop_list_alloc();
+    if (!uops)
+        return AVERROR(ENOMEM);
+
+    ret = ff_sws_ops_translate(ctx, ops, flags, uops);
+    if (ret < 0)
+        goto fail;
+
+    ret = compile_uops_x86(ctx, uops, out);
+
+fail:
+    ff_sws_uop_list_free(&uops);
+    return ret;
+}
+
 const SwsOpBackend backend_x86 = {
-    .name       = "x86",
-    .flags      = SWS_BACKEND_X86,
-    .compile    = compile,
-    .hw_format  = AV_PIX_FMT_NONE,
+    .name           = "x86",
+    .flags          = SWS_BACKEND_X86,
+    .compile        = compile_x86,
+    .compile_uops   = compile_uops_x86,
+    .hw_format      = AV_PIX_FMT_NONE,
 };
