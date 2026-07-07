@@ -84,7 +84,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
         return AVERROR_EOF;
 
     ret = av_get_packet(pb, pkt, par->block_align);
-    if(ret < 0)
+    if (ret < 0)
         return ret;
 
     pkt->stream_index = 0;
