@@ -112,6 +112,7 @@ static int d3d12va_av1_decode_slice(AVCodecContext *avctx,
 
 static int update_input_arguments(AVCodecContext *avctx, D3D12_VIDEO_DECODE_INPUT_STREAM_ARGUMENTS *input_args, ID3D12Resource *buffer)
 {
+    D3D12VADecodeContext    *ctx          = D3D12VA_DECODE_CONTEXT(avctx);
     const AV1DecContext     *h            = avctx->priv_data;
     AV1DecodePictureContext *ctx_pic      = h->cur_frame.hwaccel_picture_private;
     void *mapped_data;
@@ -120,6 +121,11 @@ static int update_input_arguments(AVCodecContext *avctx, D3D12_VIDEO_DECODE_INPU
     args->Type  = D3D12_VIDEO_DECODE_ARGUMENT_TYPE_SLICE_CONTROL;
     args->Size  = sizeof(DXVA_Tile_AV1) * ctx_pic->tile_count;
     args->pData = ctx_pic->tiles;
+
+    if (ctx_pic->bitstream_size > ctx->bitstream_size) {
+        av_log(avctx, AV_LOG_ERROR, "Input frame bitstream size exceeds internal buffer!\n");
+        return AVERROR(EINVAL);
+    }
 
     input_args->CompressedBitstream = (D3D12_VIDEO_DECODE_COMPRESSED_BITSTREAM){
         .pBuffer = buffer,
