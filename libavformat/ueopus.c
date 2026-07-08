@@ -121,7 +121,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
 const FFInputFormat ff_ueopus_demuxer = {
     .p.name         = "ueopus",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("UE5 Opus"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Unreal Engine 5 Opus"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "ueopus",
     .read_probe     = read_probe,
