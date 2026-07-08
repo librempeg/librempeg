@@ -317,6 +317,7 @@ OBJS-$(CONFIG_G726LE_DEMUXER)            += g726.o
 OBJS-$(CONFIG_G726LE_MUXER)              += rawenc.o
 OBJS-$(CONFIG_G728_DEMUXER)              += g728dec.o
 OBJS-$(CONFIG_G729_DEMUXER)              += g729dec.o
+OBJS-$(CONFIG_GBTS_DEMUXER)              += gbts.o pcm.o
 OBJS-$(CONFIG_GCCSTR_DEMUXER)            += gccstr.o pcm.o
 OBJS-$(CONFIG_GCSTR_DEMUXER)             += gcstr.o pcm.o
 OBJS-$(CONFIG_GCSW_DEMUXER)              += gcsw.o

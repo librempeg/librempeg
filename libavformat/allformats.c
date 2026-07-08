@@ -255,6 +255,7 @@ extern const FFInputFormat  ff_g726le_demuxer;
 extern const FFOutputFormat ff_g726le_muxer;
 extern const FFInputFormat  ff_g728_demuxer;
 extern const FFInputFormat  ff_g729_demuxer;
+extern const FFInputFormat  ff_gbts_demuxer;
 extern const FFInputFormat  ff_gccstr_demuxer;
 extern const FFInputFormat  ff_gcstr_demuxer;
 extern const FFInputFormat  ff_gcsw_demuxer;
