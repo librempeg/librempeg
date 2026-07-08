@@ -96,7 +96,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
     av_channel_layout_default(&avctx->ch_layout, channels);
 
     s->version_b = avctx->extradata_size >= 4 && avctx->extradata[3] == 'b';
-    s->version_2 = avctx->extradata_size >= 1 && avctx->extradata[0] == '2';
+    s->version_2 = (avctx->extradata_size == 1 && avctx->extradata[0] == '2') ||
+                   (avctx->extradata_size >= 4 && avctx->extradata[3] == 'n');
 
     if (avctx->codec->id == AV_CODEC_ID_BINKAUDIO_RDFT) {
         // audio is already interleaved for the RDFT format variant

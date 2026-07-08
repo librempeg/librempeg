@@ -66,6 +66,7 @@ extern const FFCodec ff_awebp_decoder;
 extern const FFCodec ff_bethsoftvid_decoder;
 extern const FFCodec ff_bfi_decoder;
 extern const FFCodec ff_bink_decoder;
+extern const FFCodec ff_bink2_decoder;
 extern const FFCodec ff_bitpacked_decoder;
 extern const FFCodec ff_bitpacked_encoder;
 extern const FFCodec ff_bmp_encoder;

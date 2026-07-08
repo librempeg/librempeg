@@ -302,6 +302,7 @@ OBJS-$(CONFIG_AWEBP_DECODER)           += webp.o
 OBJS-$(CONFIG_BETHSOFTVID_DECODER)     += bethsoftvideo.o
 OBJS-$(CONFIG_BFI_DECODER)             += bfi.o
 OBJS-$(CONFIG_BINK_DECODER)            += bink.o binkdsp.o
+OBJS-$(CONFIG_BINK2_DECODER)           += bink2.o
 OBJS-$(CONFIG_BINKAUDIO_DCT_DECODER)   += binkaudio.o
 OBJS-$(CONFIG_BINKAUDIO_RDFT_DECODER)  += binkaudio.o
 OBJS-$(CONFIG_BINTEXT_DECODER)         += bintext.o cga_data.o
