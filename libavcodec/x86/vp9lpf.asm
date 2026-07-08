@@ -741,12 +741,11 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     pxor                m4, m0
     pxor                m7, m0
     pcmpgtb             m4, m7                          ; max > H; hev final value
-    SWAP                0, 6
 %endif
     SWAP                0, 4
 
 %if %2 == 16
-    ; (m0: hev, m2: flat8in, m3: fm, m6: pb_81, m9..15: p2 p1 p0 q0 q1 q2 q3)
+    ; (m0: hev, m2: flat8in, m3: fm, m4: pb_80, m6: pb_81, m9..15: p2 p1 p0 q0 q1 q2 q3)
     ; calc flat8out mask
     MINMAX              m1, m7, [P6], m5, [P7]           ; max(p6, p7), min(p6,p7)
     MINMAX              m1, m7, [P5], m5                 ; max(p5,p6,p7), min(p5,p6,p7)
@@ -761,7 +760,7 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     MINMAX              m5, m7, [Q6], M8                 ; max(q4,q5,q6), min(q4,q5,q6)
     MINMAX              m5, m7, [Q7], M8                 ; max(q4...q7), min(q4...q7)
     ABSDIFF_MAX         m5, m7, rq0, por, M8, m1
-    CMP_GT              m1, m6, [pb_80]
+    CMP_GT              m1, m6, m4
     pxor                m1, [pb_ff]
 %endif
 
@@ -777,10 +776,10 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     ; f2:  fm & ~f14 & ~f6 & hev => fm & ~(out & in) & ~(~out & in) & hev          => fm &  ~in &  hev
     ; f4:  fm & ~f14 & ~f6 & ~f2 => fm & ~(out & in) & ~(~out & in) & ~(~in & hev) => fm &  ~in & ~hev
 
-    ; (m0: hev, [m1: flat8out], [m2: flat8in], m3: fm, m8..15: p5 p4 p1 p0 q0 q1 q6 q7)
+    ; (m0: hev, [m1: flat8out], [m2: flat8in], m3: fm, m4: pb_80, m8..15: p5 p4 p1 p0 q0 q1 q6 q7)
     ; filter2()
+    SWAP 4, 6
 %if %2 != 44 && %2 != 4
-    mova                m6, [pb_80]                     ; already in m6 if 44_16
     SCRATCH              2, 15, rsp+%3+%4
 %if %2 == 16
     SCRATCH              1,  8, rsp+%3+%4+16
