@@ -2215,7 +2215,7 @@ static int vulkan_frames_get_constraints(AVHWDeviceContext *ctx,
                                     NULL, NULL, NULL, NULL, p->disable_multiplane, 1) >= 0;
     }
 
-    constraints->valid_sw_formats = av_malloc_array(count + 1,
+    constraints->valid_sw_formats = av_malloc_array(count + 1 + CONFIG_CUDA,
                                                     sizeof(enum AVPixelFormat));
     if (!constraints->valid_sw_formats)
         return AVERROR(ENOMEM);
@@ -2229,6 +2229,10 @@ static int vulkan_frames_get_constraints(AVHWDeviceContext *ctx,
             constraints->valid_sw_formats[count++] = vk_formats_list[i].pixfmt;
         }
     }
+
+#if CONFIG_CUDA
+    constraints->valid_sw_formats[count++] = AV_PIX_FMT_CUDA;
+#endif
 
     constraints->valid_sw_formats[count++] = AV_PIX_FMT_NONE;
 
