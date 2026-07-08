@@ -73,6 +73,7 @@
     {DEF_MACRO(TO_U32,              TYPE)}, \
     {DEF_MACRO(TO_F32,              TYPE)}, \
     {DEF_MACRO(SCALE,               TYPE)}, \
+    {DEF_MACRO(LINEAR,              TYPE)}, \
     {DEF_MACRO(LINEAR_FMA,          TYPE)}, \
     {DEF_MACRO(ADD,                 TYPE)}, \
     {DEF_MACRO(MIN,                 TYPE)}, \

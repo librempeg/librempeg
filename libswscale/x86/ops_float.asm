@@ -603,6 +603,10 @@ IF W,   mova mw2, m11
         CONTINUE tmp1q
 %endmacro
 
+%macro LINEAR 2
+        LINEAR_FMA %1, %2, 0
+%endmacro
+
 ;---------------------------------------------------------
 ; Dithering
 
@@ -687,6 +691,7 @@ IF W,   addps mw2, m11
     DECL_%1_ADD             (ADD)
     DECL_%1_MIN             (MIN)
     DECL_%1_MAX             (MAX)
+    DECL_%1_LINEAR          (LINEAR)
     DECL_%1_LINEAR_FMA      (LINEAR_FMA)
     DECL_%1_DITHER          (DITHER)
 %endmacro

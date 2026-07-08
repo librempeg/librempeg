@@ -328,6 +328,7 @@ SWS_FOR_STRUCT(TYPE, UNPACK,          DECL_ENTRY, EXT, NULL, NULL)              
 SWS_FOR_STRUCT(TYPE, PACK,            DECL_ENTRY, EXT, NULL, NULL)              \
 SWS_FOR_STRUCT(TYPE, LSHIFT,          DECL_ENTRY, EXT, NULL, NULL)              \
 SWS_FOR_STRUCT(TYPE, RSHIFT,          DECL_ENTRY, EXT, NULL, NULL)              \
+SWS_FOR_STRUCT(TYPE, LINEAR,          DECL_ENTRY, EXT, NULL, setup_linear)      \
 SWS_FOR_STRUCT(TYPE, LINEAR_FMA,      DECL_ENTRY, EXT, NULL, setup_linear)      \
 SWS_FOR_STRUCT(TYPE, DITHER,          DECL_ENTRY, EXT, NULL, setup_dither)      \
 /* end of macro */
@@ -352,6 +353,7 @@ SWS_FOR_STRUCT(TYPE, DITHER,          DECL_ENTRY, EXT, NULL, setup_dither)      
     SWS_FOR(TYPE, PACK,           REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, LSHIFT,         REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, RSHIFT,         REF_ENTRY, EXT)                               \
+    SWS_FOR(TYPE, LINEAR,         REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, LINEAR_FMA,     REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, DITHER,         REF_ENTRY, EXT)                               \
     /* end of macro */
