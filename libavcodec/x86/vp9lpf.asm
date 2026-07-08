@@ -81,6 +81,73 @@ SECTION .text
     por                 %1, %4
 %endmacro
 
+%macro MINMAX 3-5 ; maxdst, mindst, src, scratch reg, [initial value]
+%if %0 == 5
+    %ifnum sizeof%5 ; register
+        %define %%srcmax %5
+        %define %%srcmin %5
+    %else
+        mova            %2, %5
+        %define %%srcmax %2
+        %define %%srcmin %2
+    %endif
+%else
+    %define %%srcmax %1
+    %define %%srcmin %2
+%endif
+
+%ifnum sizeof%3  ; src is register
+    %define %%src %3
+%else            ; src is memory
+    %ifnidn %4, ""
+        %define %%src %4
+        mova            %4, %3
+    %else
+        %define %%src %3
+    %endif
+%endif
+
+    pmaxub              %1, %%srcmax, %%src
+    pminub              %2, %%srcmin, %%src
+%endmacro
+
+%macro ABSDIFF_MAX 5-6 ; max [dst], min, common subtrahend, combine op, scratch reg, [dst]
+%ifidn %5, ""
+    ; no spare reg; must have separate dst reg
+    %define %%sub
+    psubusb             %1, %3
+    %4                  %6, %1
+    mova                %1, %3
+    psubusb             %1, %2
+    %4                  %6, %1
+%else
+%ifnum sizeof%3
+    psubusb             %1, %3
+    %define %%sub %3
+%else
+    mova                %5, %3
+    psubusb             %1, %5
+    %define %%sub %5
+%endif
+%if avx_enabled
+    %define %%min       %2
+    psubusb             %2, %%sub, %2
+%else
+    %define %%min       %5
+    %ifnidn %%sub, %5
+        mova            %5, %%sub
+    %endif
+    psubusb             %5, %2
+%endif
+%if %0 == 6
+    %4                  %6, %1
+    %4                  %6, %%min
+%else
+    %4                  %1, %%min
+%endif
+%endif
+%endmacro
+
 ; %1 = %1>%2
 %macro CMP_GT 2-3 ; src/dst, cmp, pb_80
 %if %0 == 3
@@ -612,17 +679,14 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
 %define rq2 [Q2]
 %define rq3 [Q3]
 %endif
-    ABSSUB              m5, rp3, rp2, m7                ; m5 = abs(p3-p2)
-    ABSSUB              m1, rp2, rp1, m7                ; m1 = abs(p2-p1)
-    pmaxub              m5, m1
+    MINMAX              m5, m1, rp1, m6, rp3            ; max(p1,p3), min(p1,p3)
+    ABSDIFF_MAX         m5, m1, rp2, pmaxub, m6         ; max(abs(p3-p2),abs(p2-p1))
     ABSSUB              m1, rp1, rp0, m7                ; m1 = abs(p1-p0)
     ABSSUB              m4, rq0, rq1, m7                ; m1 = abs(q1-q0)
     pmaxub              m4, m1
+    MINMAX              m1, m6, rq3, m7, rq1            ; max(q1,q3), min(q1,q3)
     pmaxub              m5, m4
-    ABSSUB              m1, rq1, rq2, m7                ; m1 = abs(q2-q1)
-    pmaxub              m5, m1
-    ABSSUB              m1, rq2, rq3, m7                ; m1 = abs(q3-q2)
-    pmaxub              m5, m1
+    ABSDIFF_MAX         m1, m6, rq2, pmaxub, m7, m5
     CMP_GT              m5, m2, m0
     ABSSUB              m1, rp0, rq0, m7                ; abs(p0-q0)
     paddusb             m1, m1                          ; abs(p0-q0) * 2
@@ -640,6 +704,7 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     ;  m8..15: p3 p2 p1 p0 q0 q1 q2 q3)
     ; calc flat8in (if not 44_16) and hev masks
 %if %2 != 44 && %2 != 4
+    MINMAX              m2, m1, rp2, m5, rp3            ; max(p2,p3), min(p2,p3)
     mova                m6, [pb_81]                     ; [1 1 1 1 ...] ^ 0x80
 %if %2 <= 16
 %if cpuflag(ssse3)
@@ -650,17 +715,14 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     movd                m7, Hd
     SPLATB_MIX          m7
 %endif
-    ABSSUB              m2, rp2, rp0, m5                ; abs(p2 - p0)
+    ABSDIFF_MAX         m2, m1, rp0, por, m5            ; max(abs(p2-p0),abs(p3-p0))
     pxor                m7, m0
     por                 m2, m4
     pxor                m4, m0
     pcmpgtb             m4, m7                          ; hev: max(abs(q1 - q0), abs(p1 - p0)) > H
-    ABSSUB              m1, rp3, rp0, m5                ; abs(p3 - p0)
-    por                 m2, m1
-    ABSSUB              m1, rq2, rq0, m5                ; abs(q2 - q0)
-    por                 m2, m1
-    ABSSUB              m1, rq3, rq0, m5                ; abs(q3 - q0)
-    por                 m2, m1
+
+    MINMAX              m7, m1, rq3, m5, rq2            ; max(q2,q3), min(q2,q3)
+    ABSDIFF_MAX         m7, m1, rq0, por, m5, m2
     CMP_GT              m2, m6, m0                      ; flat8in
     pxor                m2, [pb_ff]
 %if %2 == 84 || %2 == 48
@@ -686,57 +748,19 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
 %if %2 == 16
     ; (m0: hev, m2: flat8in, m3: fm, m6: pb_81, m9..15: p2 p1 p0 q0 q1 q2 q3)
     ; calc flat8out mask
+    MINMAX              m1, m7, [P6], m5, [P7]           ; max(p6, p7), min(p6,p7)
+    MINMAX              m1, m7, [P5], m5                 ; max(p5,p6,p7), min(p5,p6,p7)
+    MINMAX              m1, m7, [P4], m5                 ; max(p4...p7), min(p4...p7)
+    ABSDIFF_MAX         m1, m7, rp0, por, m5
 %ifdef m8
-    mova                m8, [P7]
-    mova                m9, [P6]
-%define rp7 m8
-%define rp6 m9
+    %define M8 m8
 %else
-%define rp7 [P7]
-%define rp6 [P6]
+    %define M8 ""
 %endif
-    ABSSUB              m7, rp7, rp0, m5                ; abs(p7 - p0)
-    ABSSUB              m1, rp6, rp0, m5                ; abs(p6 - p0)
-    por                 m1, m7
-%ifdef m8
-    mova                m8, [P5]
-    mova                m9, [P4]
-%define rp5 m8
-%define rp4 m9
-%else
-%define rp5 [P5]
-%define rp4 [P4]
-%endif
-    ABSSUB              m7, rp5, rp0, m5                ; abs(p5 - p0)
-    por                 m1, m7
-    ABSSUB              m7, rp4, rp0, m5                ; abs(p4 - p0)
-    por                 m1, m7
-%ifdef m8
-    mova                m14, [Q4]
-    mova                m15, [Q5]
-%define rq4 m14
-%define rq5 m15
-%else
-%define rq4 [Q4]
-%define rq5 [Q5]
-%endif
-    ABSSUB              m7, rq4, rq0, m5                ; abs(q4 - q0)
-    por                 m1, m7
-    ABSSUB              m7, rq5, rq0, m5                ; abs(q5 - q0)
-    por                 m1, m7
-%ifdef m8
-    mova                m14, [Q6]
-    mova                m15, [Q7]
-%define rq6 m14
-%define rq7 m15
-%else
-%define rq6 [Q6]
-%define rq7 [Q7]
-%endif
-    ABSSUB              m7, rq6, rq0, m5                ; abs(q4 - q0)
-    por                 m1, m7
-    ABSSUB              m7, rq7, rq0, m5                ; abs(q5 - q0)
-    por                 m1, m7                          ; flat8out final value
+    MINMAX              m5, m7, [Q5], M8, [Q4]           ; max(q4,q5), min(q4,q5)
+    MINMAX              m5, m7, [Q6], M8                 ; max(q4,q5,q6), min(q4,q5,q6)
+    MINMAX              m5, m7, [Q7], M8                 ; max(q4...q7), min(q4...q7)
+    ABSDIFF_MAX         m5, m7, rq0, por, M8, m1
     CMP_GT              m1, m6, [pb_80]
     pxor                m1, [pb_ff]
 %endif
