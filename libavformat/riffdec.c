@@ -147,6 +147,8 @@ int ff_get_wav_header(AVFormatContext *s, AVIOContext *pb,
         if (big_endian) {
             if (id == 0xFFFE) {
                 par->codec_id = AV_CODEC_ID_PCM_S16BE;
+            } else if (id == 0xFFFF) {
+                par->codec_id = AV_CODEC_ID_WWVORBIS;
             } else if (id == 2) {
                 par->codec_id = AV_CODEC_ID_ADPCM_IMA_WW;
             } else {
