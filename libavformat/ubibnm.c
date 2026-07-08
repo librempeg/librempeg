@@ -18,6 +18,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/intfloat.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/avstring.h"
@@ -2433,7 +2434,7 @@ static int parse_header(ubi_sb_header *sb, AVFormatContext *s, int64_t offset, i
             sb->duration = 1.0f;
             break;
         }
-        // fall through
+        av_fallthrough;
     default:
         av_log(s, AV_LOG_ERROR, "unknown header type %x at %lx\n", sb->header_type, offset);
         goto fail;
