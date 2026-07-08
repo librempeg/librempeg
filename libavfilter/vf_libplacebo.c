@@ -200,6 +200,7 @@ typedef struct LibplaceboContext {
 
     pl_cache cache;
     char *shader_cache;
+    int inherit_device;
 
     int have_hwdevice;
 
@@ -512,7 +513,6 @@ static int libplacebo_init(AVFilterContext *avctx)
 {
     int err = 0;
     LibplaceboContext *s = avctx->priv;
-    const AVVulkanDeviceContext *vkhwctx = NULL;
 
     if (s->normalize_sar && s->fit_mode != FIT_FILL) {
         av_log(avctx, AV_LOG_WARNING, "normalize_sar has no effect when using "
@@ -592,13 +592,18 @@ static int libplacebo_init(AVFilterContext *avctx)
     if (strcmp(s->fps_string, "none") != 0)
         RET(av_parse_video_rate(&s->fps, s->fps_string));
 
-    if (avctx->hw_device_ctx) {
-        const AVHWDeviceContext *avhwctx = (void *) avctx->hw_device_ctx->data;
-        if (avhwctx->type == AV_HWDEVICE_TYPE_VULKAN)
-            vkhwctx = avhwctx->hwctx;
+    /* if we are told to inherit the input link's device, ignore the global
+     * hw_device_ctx even if it would be compatible. This ensure consistent
+     * behaviour when the flag is set. */
+    if (!s->inherit_device) {
+        const AVVulkanDeviceContext *vkhwctx = NULL;
+        if (avctx->hw_device_ctx) {
+            const AVHWDeviceContext *avhwctx = (void *) avctx->hw_device_ctx->data;
+            if (avhwctx->type == AV_HWDEVICE_TYPE_VULKAN)
+                vkhwctx = avhwctx->hwctx;
+        }
+        RET(init_vulkan(avctx, vkhwctx));
     }
-
-    RET(init_vulkan(avctx, vkhwctx));
 
     return 0;
 
@@ -1285,6 +1290,16 @@ static int libplacebo_query_format(const AVFilterContext *ctx,
     const AVPixFmtDescriptor *desc = NULL;
     AVFilterFormats *infmts = NULL, *outfmts = NULL;
 
+    if (!s->gpu) {
+        /* Device deferred to config_input (inherit_device): we have no GPU yet
+         * to enumerate software formats against, and this mode requires Vulkan
+         * input, so advertise Vulkan only. */
+        RET(ff_add_format(&infmts, AV_PIX_FMT_VULKAN));
+        if (s->out_format == AV_PIX_FMT_NONE || av_vkfmt_from_pixfmt(s->out_format))
+            RET(ff_add_format(&outfmts, AV_PIX_FMT_VULKAN));
+        goto done;
+    }
+
     /* List AV_PIX_FMT_VULKAN first to prefer it when possible */
     if (s->have_hwdevice) {
         RET(ff_add_format(&infmts, AV_PIX_FMT_VULKAN));
@@ -1315,6 +1330,8 @@ static int libplacebo_query_format(const AVFilterContext *ctx,
 
         RET(ff_add_format(&outfmts, pixfmt));
     }
+
+done:
 
     if (!infmts || !outfmts) {
         err = AVERROR(EINVAL);
@@ -1361,6 +1378,7 @@ static int libplacebo_config_input(AVFilterLink *inlink)
 {
     AVFilterContext *avctx = inlink->dst;
     LibplaceboContext *s   = avctx->priv;
+    FilterLink        *l   = ff_filter_link(inlink);
 
     if (s->rotation % PL_ROTATION_180 == PL_ROTATION_90) {
         /* Swap width and height for 90 degree rotations to make the size and
@@ -1368,6 +1386,27 @@ static int libplacebo_config_input(AVFilterLink *inlink)
         FFSWAP(int, inlink->w, inlink->h);
         if (inlink->sample_aspect_ratio.num)
             inlink->sample_aspect_ratio = av_inv_q(inlink->sample_aspect_ratio);
+    }
+
+    /* Deferred Vulkan setup (inherit_device): the device was not created at
+     * init; adopt the one the input frames live on. query_formats advertised
+     * Vulkan only, so a non-Vulkan input here is a configuration error. */
+    if (!s->gpu) {
+        AVHWFramesContext *hwfc;
+        int err;
+        av_assert0(s->inherit_device);
+        if (inlink->format != AV_PIX_FMT_VULKAN || !l->hw_frames_ctx) {
+            av_log(avctx, AV_LOG_ERROR, "inherit_device requires a Vulkan "
+                   "hardware frames context on the input.\n");
+            return AVERROR(EINVAL);
+        }
+        hwfc = (AVHWFramesContext *) l->hw_frames_ctx->data;
+        av_buffer_unref(&avctx->hw_device_ctx);
+        avctx->hw_device_ctx = av_buffer_ref(hwfc->device_ref);
+        if (!avctx->hw_device_ctx)
+            return AVERROR(ENOMEM);
+        if ((err = init_vulkan(avctx, hwfc->device_ctx->hwctx)) < 0)
+            return err;
     }
 
     if (inlink->format == AV_PIX_FMT_VULKAN)
@@ -1523,6 +1562,8 @@ fail:
 
 static const AVOption libplacebo_options[] = {
     { "inputs", "Number of inputs", OFFSET(nb_inputs), AV_OPT_TYPE_INT, {.i64 = 1}, 1, INT_MAX, .flags = STATIC },
+    { "inherit_device", "Inherit the Vulkan device from the input's hardware frames context",
+        OFFSET(inherit_device), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, .flags = STATIC },
     { "w", "Output video frame width",  OFFSET(w_expr), AV_OPT_TYPE_STRING, {.str = "iw"}, .flags = STATIC },
     { "h", "Output video frame height", OFFSET(h_expr), AV_OPT_TYPE_STRING, {.str = "ih"}, .flags = STATIC },
     { "fps", "Output video frame rate", OFFSET(fps_string), AV_OPT_TYPE_STRING, {.str = "none"}, .flags = STATIC },
