@@ -738,6 +738,7 @@ OBJS-$(CONFIG_SK_DEMUXER)                += oggdec.o         \
                                             replaygain.o     \
                                             vorbiscomment.o  \
                                             flac_picture.o
+OBJS-$(CONFIG_SL3_DEMUXER)               += sl3.o pcm.o
 OBJS-$(CONFIG_SLN_DEMUXER)               += pcmdec.o pcm.o
 OBJS-$(CONFIG_SMACKER_DEMUXER)           += smacker.o
 OBJS-$(CONFIG_SMJPEG_DEMUXER)            += smjpegdec.o smjpeg.o
