@@ -219,10 +219,11 @@ SECTION .text
     mova                %5, %1
 %endmacro
 
-%macro SRSHIFT3B_2X 4 ; reg1, reg2, [pb_10], tmp
-    mova                %4, [pb_f8]
-    pand                %1, %4
-    pand                %2, %4
+%macro SRSHIFT3B_2X 3 ; reg1, reg2, tmp
+    mova                %3, [pb_f8]
+    pand                %1, %3
+    pand                %2, %3
+    mova                %3, [pb_10]
     psrlq               %1, 3
     psrlq               %2, 3
     pxor                %1, %3
@@ -771,8 +772,7 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     ; if (fm) {
     ;     if (out && in) filter_14()
     ;     else if (in)   filter_6()
-    ;     else if (hev)  filter_2()
-    ;     else           filter_4()
+    ;     else           filter_2_4()
     ; }
     ;
     ; f14:                                                                            fm &  out &  in
@@ -781,86 +781,49 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     ; f4:  fm & ~f14 & ~f6 & ~f2 => fm & ~(out & in) & ~(~out & in) & ~(~in & hev) => fm &  ~in & ~hev
 
     ; (m0: hev, [m1: flat8out], [m2: flat8in], m3: fm, m4: pb_80, m8..15: p5 p4 p1 p0 q0 q1 q6 q7)
-    ; filter2()
-    SWAP 4, 6
-%if %2 != 44 && %2 != 4
-    SCRATCH              2, 15, rsp+%3+%4
+    ; filter2_4()
 %if %2 == 16
     SCRATCH              1,  8, rsp+%3+%4+16
 %endif
-%endif
-    pxor                m2, m6, rq0                     ; q0 ^ 0x80
-    pxor                m4, m6, rp0                     ; p0 ^ 0x80
-    psubsb              m2, m4                          ; (signed) q0 - p0
-    pxor                m4, m6, rp1                     ; p1 ^ 0x80
-    pxor                m5, m6, rq1                     ; q1 ^ 0x80
-    psubsb              m4, m5                          ; (signed) p1 - q1
-    paddsb              m4, m2                          ;   (q0 - p0) + (p1 - q1)
-    paddsb              m4, m2                          ; 2*(q0 - p0) + (p1 - q1)
-    paddsb              m4, m2                          ; 3*(q0 - p0) + (p1 - q1)
-    paddsb              m6, m4, [pb_4]                  ; m6: f1 = clip(f + 4, 127)
-    paddsb              m4, [pb_3]                      ; m4: f2 = clip(f + 3, 127)
-%ifdef m8
-    mova                m14, [pb_10]                    ; will be reused in filter4()
-%define rb10 m14
-%else
-%define rb10 [pb_10]
-%endif
-    SRSHIFT3B_2X        m6, m4, rb10, m7                ; f1 and f2 sign byte shift by 3
-    SIGN_SUB            m7, rq0, m6, m5                 ; m7 = q0 - f1
-    SIGN_ADD            m1, rp0, m4, m5                 ; m1 = p0 + f2
+    pxor                m5, m4, rp1                     ; p1 - 128
+    pxor                m7, m4, rq1                     ; q1 - 128
+    pxor                m6, m4, rq0                     ; q0 - 128
+    psubsb              m5, m7                          ; clip_i8(p1 - q1)
+    pxor                m7, m4, rp0                     ; p0 - 128
+    ; mask so we can treat the !hev and hev cases in parallel
+    pand                m5, m0                          ; hev ? clip_i8(p1 - q1) : 0
+    psubsb              m6, m7                          ; clip_i8(q0 - p0)
+    paddsb              m5, m6                          ;   (q0 - p0) + (p1 - q1)
+    paddsb              m5, m6                          ; 2*(q0 - p0) + (p1 - q1)
+    paddsb              m5, m6                          ; f = 3*(q0 - p0) + (p1 - q1)
+    ; zero f unless we are in filter2_4 case to ensure that p0, p1, q0, q1
+    ; are only changed if they should be
 %if %2 != 44 && %2 != 4
-%ifdef m8
-    pandn               m6, m15, m3                     ;  ~mask(in) & mask(fm)
+    pandn               m7, m2, m3
+    pand                m5, m7
 %else
-    mova                m6, [rsp+%3+%4]
-    pandn               m6, m3
+    pand                m5, m3
 %endif
-    pand                m6, m0                          ; (~mask(in) & mask(fm)) & mask(hev)
-%else
-    pand                m6, m3, m0
+    paddsb              m6, m5, [pb_4]                  ; m6: f1 = clip(f + 4, 127)
+    paddsb              m5, [pb_3]                      ; m5: f2 = clip(f + 3, 127)
+    SRSHIFT3B_2X        m6, m5, m7                      ; f1 and f2 sign byte shift by 3
+    pandn               m0, m6                          ; hev ? 0 : f1
+    SIGN_SUB            m7, rq0, m6, m1                 ; m7 = q0 - f1
+    SIGN_ADD            m6, rp0, m5, m1                 ; m6 = p0 + f2
+    mova              [Q0], m7
+    mova              [P0], m6
+    pxor                m0, m4                          ; f1 ^ 0x80
+    pxor                m5, m5
+    pavgb               m0, m5
+    psubb               m0, [pb_40]                     ; (f1 + 1) >> 1
+%if %2 == 44 || %2 == 4
+    SWAP                 1, 6                           ; m1 = p0
+    SWAP                 2, 7                           ; m2 = q0
 %endif
-    MASK_APPLY          m7, rq0, m6, m5                 ; m7 = filter2(q0) & mask / we write it in filter4()
-    MASK_APPLY          m1, rp0, m6, m5                 ; m1 = filter2(p0) & mask / we write it in filter4()
-
-    ; (m0: hev, m1: p0', m2: q0-p0, m3: fm, m7: q0', [m8: flat8out], m10..13: p1 p0 q0 q1, m14: pb_10, [m15: flat8in], )
-    ; filter4()
-    paddsb              m4, m2, m2                      ; 2 * (q0 - p0)
-    paddsb              m2, m4                          ; 3 * (q0 - p0)
-    paddsb              m6, m2, [pb_4]                  ; m6:  f1 = clip(f + 4, 127)
-    paddsb              m2, [pb_3]                      ; m2: f2 = clip(f + 3, 127)
-    SRSHIFT3B_2X        m6, m2, rb10, m4                ; f1 and f2 sign byte shift by 3
-%if %2 != 44 && %2 != 4
-%ifdef m8
-    pandn               m5, m15, m3                     ;               ~mask(in) & mask(fm)
-%else
-    mova                m5, [rsp+%3+%4]
-    pandn               m5, m3
-%endif
-    pandn               m0, m5                          ; ~mask(hev) & (~mask(in) & mask(fm))
-%else
-    pandn               m0, m3
-%endif
-    SIGN_SUB            m5, rq0, m6, m4                 ; q0 - f1
-    MASK_APPLY          m5, m7, m0, m4                  ; filter4(q0) & mask
-    mova                [Q0], m5
-    SIGN_ADD            m7, rp0, m2, m4                 ; p0 + f2
-    MASK_APPLY          m7, m1, m0, m4                  ; filter4(p0) & mask
-    mova                [P0], m7
-    paddb               m6, [pb_80]                     ;
-    pxor                m1, m1                          ;   f=(f1+1)>>1
-    pavgb               m6, m1                          ;
-    psubb               m6, [pb_40]                     ;
-    SIGN_ADD            m1, rp1, m6, m2                 ; p1 + f
-    SIGN_SUB            m4, rq1, m6, m2                 ; q1 - f
-    MASK_APPLY          m1, rp1, m0, m2                 ; m1 = filter4(p1)
-    MASK_APPLY          m4, rq1, m0, m2                 ; m4 = filter4(q1)
-    mova                [P1], m1
-    mova                [Q1], m4
-
-%if %2 != 44 && %2 != 4
-    UNSCRATCH            2, 15, rsp+%3+%4
-%endif
+    SIGN_ADD            m6, rp1, m0, m5                 ; p1 + f
+    SIGN_SUB            m7, rq1, m0, m5                 ; q1 - f
+    mova              [P1], m6
+    mova              [Q1], m7
 
     ; ([m1: flat8out], m2: flat8in, m3: fm, m10..13: p1 p0 q0 q1)
     ; filter6()
@@ -1052,10 +1015,8 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     movhps [Q7],  m7
 %endif
 %elif %2 == 44 || %2 == 4
-    SWAP 0, 1   ; m0 = p1
-    SWAP 1, 7   ; m1 = p0
-    SWAP 2, 5   ; m2 = q0
-    SWAP 3, 4   ; m3 = q1
+    SWAP 0, 6   ; m0 = p1
+    SWAP 3, 7   ; m3 = q1
     DEFINE_REAL_P7_TO_Q7 2
     SBUTTERFLY  bw, 0, 1, 4
     SBUTTERFLY  bw, 2, 3, 4
