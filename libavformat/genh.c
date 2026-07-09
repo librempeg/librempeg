@@ -64,11 +64,11 @@ static int genh_read_header(AVFormatContext *s)
         st->codecpar->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
     align                  =
     c->interleave_size     = avio_rl32(s->pb);
-    if (align < 0 || align > INT_MAX / st->codecpar->ch_layout.nb_channels)
+    if (align <= 0 || align > INT_MAX / st->codecpar->ch_layout.nb_channels)
         return AVERROR_INVALIDDATA;
     st->codecpar->block_align = align * st->codecpar->ch_layout.nb_channels;
     st->codecpar->sample_rate = avio_rl32(s->pb);
-    if (st->codecpar->sample_rate < 0)
+    if (st->codecpar->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
 
     avio_skip(s->pb, 4);
