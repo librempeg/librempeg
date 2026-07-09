@@ -232,27 +232,18 @@ SECTION .text
     psubb               %2, %3
 %endmacro
 
-%macro EXTRACT_POS_NEG 3 ; i8, neg, pos
-    pxor                %3, %3
-    pxor                %2, %2
-    pcmpgtb             %3, %1                          ; i8 < 0 mask
-    psubb               %2, %1                          ; neg values (only the originally - will be kept)
-    pand                %2, %3                          ; negative values of i8 (but stored as +)
-    pandn               %3, %1                          ; positive values of i8
-%endmacro
-
-; clip_u8(u8 + i8)
-%macro SIGN_ADD 4 ; dst, u8, i8, tmp1
-    EXTRACT_POS_NEG     %3, %4, %1
-    paddusb             %1, %2                          ; add the positives
-    psubusb             %1, %4                          ; sub the negatives
-%endmacro
-
-; clip_u8(u8 - i8)
-%macro SIGN_SUB 4 ; dst, u8, i8, tmp1
-    EXTRACT_POS_NEG     %3, %1, %4
-    paddusb             %1, %2                          ; add the negatives
-    psubusb             %1, %4                          ; sub the positives
+%macro ADD_SUB_CLIP 8; dst0, dst1, u8_0, u8_1, i8_0, i8_1, pb_80, tmp
+    pxor                m%8, %7, %3
+    paddsb              m%1, m%5, m%8
+    pxor                m%8, %7, %4
+%if avx_enabled
+    psubsb              m%2, m%8, m%6
+%else
+    psubsb              m%8, m%6
+    SWAP                %2, %8
+%endif
+    pxor                m%1, %7
+    pxor                m%2, %7
 %endmacro
 
 %macro FILTER6_INIT 4 ; %1=dst %2=h/l %3=cache, %4=stack_off
@@ -808,20 +799,18 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     paddsb              m5, [pb_3]                      ; m5: f2 = clip(f + 3, 127)
     SRSHIFT3B_2X        m6, m5, m7                      ; f1 and f2 sign byte shift by 3
     pandn               m0, m6                          ; hev ? 0 : f1
-    SIGN_SUB            m7, rq0, m6, m1                 ; m7 = q0 - f1
-    SIGN_ADD            m6, rp0, m5, m1                 ; m6 = p0 + f2
-    mova              [Q0], m7
-    mova              [P0], m6
+    ADD_SUB_CLIP         5, 6, rp0, rq0, 5, 6, m4, 7    ; m5 = p0 + f2, m6 = q0 - f1
+    mova              [Q0], m6
+    mova              [P0], m5
     pxor                m0, m4                          ; f1 ^ 0x80
-    pxor                m5, m5
-    pavgb               m0, m5
+    pxor                m7, m7
+    pavgb               m0, m7
     psubb               m0, [pb_40]                     ; (f1 + 1) >> 1
 %if %2 == 44 || %2 == 4
-    SWAP                 1, 6                           ; m1 = p0
-    SWAP                 2, 7                           ; m2 = q0
+    SWAP                 1, 5                           ; m1 = p0
+    SWAP                 2, 6                           ; m2 = q0
 %endif
-    SIGN_ADD            m6, rp1, m0, m5                 ; p1 + f
-    SIGN_SUB            m7, rq1, m0, m5                 ; q1 - f
+    ADD_SUB_CLIP         6, 7, rp1, rq1, 0, 0, m4, 5    ; m6 = p1 + f, m7 = q1 - f
     mova              [P1], m6
     mova              [Q1], m7
 
