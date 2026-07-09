@@ -55,16 +55,17 @@ static int genh_read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
-    st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->ch_layout.nb_channels    = avio_rl32(pb);
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->ch_layout.nb_channels = avio_rl32(pb);
     if (st->codecpar->ch_layout.nb_channels <= 0)
         return AVERROR_INVALIDDATA;
     if (st->codecpar->ch_layout.nb_channels == 1)
         st->codecpar->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_MONO;
     else if (st->codecpar->ch_layout.nb_channels == 2)
         st->codecpar->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
-    align                  =
-    c->interleave_size     = avio_rl32(pb);
+    align = c->interleave_size = avio_rl32(pb);
+    if (align == 0 && st->codecpar->ch_layout.nb_channels == 1)
+        align = c->interleave_size = 1024;
     if (align <= 0 || align > INT_MAX / st->codecpar->ch_layout.nb_channels)
         return AVERROR_INVALIDDATA;
     st->codecpar->block_align = align * st->codecpar->ch_layout.nb_channels;
