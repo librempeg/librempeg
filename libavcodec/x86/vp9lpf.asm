@@ -31,7 +31,7 @@ cextern pb_80
 pb_4:   times 16 db 0x04
 pb_10:  times 16 db 0x10
 pb_40:  times 16 db 0x40
-pb_81:  times 16 db 0x81
+pb_82:  times 16 db 0x82
 pb_f8:  times 16 db 0xf8
 pb_fe:  times 16 db 0xfe
 pb_ff:  times 16 db 0xff
@@ -705,7 +705,7 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     ; calc flat8in (if not 44_16) and hev masks
 %if %2 != 44 && %2 != 4
     MINMAX              m2, m1, rp2, m5, rp3            ; max(p2,p3), min(p2,p3)
-    mova                m6, [pb_81]                     ; [1 1 1 1 ...] ^ 0x80
+    mova                m6, [pb_82]                     ; [2 2 2 2 ...] ^ 0x80
 %if %2 <= 16
 %if cpuflag(ssse3)
     pxor                m5, m5
@@ -723,8 +723,15 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
 
     MINMAX              m7, m1, rq3, m5, rq2            ; max(q2,q3), min(q2,q3)
     ABSDIFF_MAX         m7, m1, rq0, por, m5, m2
-    CMP_GT              m2, m6, m0                      ; flat8in
-    pxor                m2, [pb_ff]
+    pxor                m2, m0
+%if %2 == 16
+    ; preserve pb_82 in m6
+    pcmpgtb             m5, m6, m2                      ; flat8in
+    SWAP 2,5
+%else
+    pcmpgtb             m6, m2                          ; flat8in
+    SWAP 2,6
+%endif
 %if %2 == 84 || %2 == 48
     pand                m2, [mask_mix%2]
 %endif
@@ -745,7 +752,7 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     SWAP                0, 4
 
 %if %2 == 16
-    ; (m0: hev, m2: flat8in, m3: fm, m4: pb_80, m6: pb_81, m9..15: p2 p1 p0 q0 q1 q2 q3)
+    ; (m0: hev, m2: flat8in, m3: fm, m4: pb_80, m6: pb_82, m9..15: p2 p1 p0 q0 q1 q2 q3)
     ; calc flat8out mask
     MINMAX              m1, m7, [P6], m5, [P7]           ; max(p6, p7), min(p6,p7)
     MINMAX              m1, m7, [P5], m5                 ; max(p5,p6,p7), min(p5,p6,p7)
@@ -760,8 +767,9 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     MINMAX              m5, m7, [Q6], M8                 ; max(q4,q5,q6), min(q4,q5,q6)
     MINMAX              m5, m7, [Q7], M8                 ; max(q4...q7), min(q4...q7)
     ABSDIFF_MAX         m5, m7, rq0, por, M8, m1
-    CMP_GT              m1, m6, m4
-    pxor                m1, [pb_ff]
+    pxor                m1, m4
+    pcmpgtb             m6, m1
+    SWAP                1, 6
 %endif
 
     ; if (fm) {
