@@ -35,9 +35,6 @@ static int cda_probe(const AVProbeData *p)
     int count_l = 0;
     int count_r = 0;
 
-    if (p->buf_size < 44100 * 4)
-        return 0;
-
     for (int n = 1; n < p->buf_size/4; n++) {
         const int l0 = sign_extend(AV_RL16(buf + (n-1)*4+0), 16);
         const int l1 = sign_extend(AV_RL16(buf + (n+0)*4+0), 16);
@@ -80,7 +77,7 @@ static int cda_probe(const AVProbeData *p)
     if (score_l <= 0 || score_r <= 0)
         return 0;
 
-    return FFMIN3(score_l, score_r, AVPROBE_SCORE_MAX);
+    return FFMIN3(score_l, score_r, AVPROBE_SCORE_MAX-20);
 }
 
 static int cda_read_header(AVFormatContext *s)
