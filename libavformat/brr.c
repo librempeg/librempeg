@@ -26,17 +26,21 @@
 
 static int read_probe(const AVProbeData *p)
 {
-    int score = 0;
+    int score = 0, off = 0;
 
     if (av_match_ext(p->filename, "brr") == 0)
         return 0;
 
-    for (int n = 0; n < p->buf_size - 9; n += 9) {
-        if ((p->buf[n] >> 4) > 12)
-            return 0;
+    for (int n = 0; n + off + 1 < p->buf_size; n += 9) {
+        if ((p->buf[n+off] >> 4) > 12) {
+            if (off >= 2)
+                return 0;
+            off += 2;
+            continue;
+        }
 
         if (score < AVPROBE_SCORE_MAX)
-            score += !!(p->buf[n] >> 4);
+            score += !!(p->buf[n+off] >> 4);
     }
 
     return score;
@@ -51,7 +55,7 @@ static int read_header(AVFormatContext *s)
 
     while (start < 3) {
         while (!avio_feof(pb)) {
-            if  ((avio_r8(pb) >> 4) > 12) {
+            if ((avio_r8(pb) >> 4) > 12) {
                 start += 2;
                 valid = 0;
                 avio_seek(pb, start, SEEK_SET);
