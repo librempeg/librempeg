@@ -45,17 +45,18 @@ static int genh_read_header(AVFormatContext *s)
     unsigned start_offset, header_size, codec, coef_type, coef[2];
     GENHDemuxContext *c = s->priv_data;
     av_unused unsigned coef_splitted[2];
+    AVIOContext *pb = s->pb;
     int align, ch;
     AVStream *st;
 
-    avio_skip(s->pb, 4);
+    avio_skip(pb, 4);
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->ch_layout.nb_channels    = avio_rl32(s->pb);
+    st->codecpar->ch_layout.nb_channels    = avio_rl32(pb);
     if (st->codecpar->ch_layout.nb_channels <= 0)
         return AVERROR_INVALIDDATA;
     if (st->codecpar->ch_layout.nb_channels == 1)
@@ -63,18 +64,18 @@ static int genh_read_header(AVFormatContext *s)
     else if (st->codecpar->ch_layout.nb_channels == 2)
         st->codecpar->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
     align                  =
-    c->interleave_size     = avio_rl32(s->pb);
+    c->interleave_size     = avio_rl32(pb);
     if (align <= 0 || align > INT_MAX / st->codecpar->ch_layout.nb_channels)
         return AVERROR_INVALIDDATA;
     st->codecpar->block_align = align * st->codecpar->ch_layout.nb_channels;
-    st->codecpar->sample_rate = avio_rl32(s->pb);
+    st->codecpar->sample_rate = avio_rl32(pb);
     if (st->codecpar->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
 
-    avio_skip(s->pb, 4);
-    st->duration = avio_rl32(s->pb);
+    avio_skip(pb, 4);
+    st->duration = avio_rl32(pb);
 
-    codec = avio_rl32(s->pb);
+    codec = avio_rl32(pb);
     switch (codec) {
     case  0: st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX;        break;
     case  1:
@@ -107,8 +108,8 @@ static int genh_read_header(AVFormatContext *s)
              return AVERROR_PATCHWELCOME;
     }
 
-    start_offset = avio_rl32(s->pb);
-    header_size  = avio_rl32(s->pb);
+    start_offset = avio_rl32(pb);
+    header_size  = avio_rl32(pb);
 
     if (header_size > start_offset)
         return AVERROR_INVALIDDATA;
@@ -116,12 +117,12 @@ static int genh_read_header(AVFormatContext *s)
     if (header_size == 0)
         start_offset = 0x800;
 
-    coef[0]          = avio_rl32(s->pb);
-    coef[1]          = avio_rl32(s->pb);
-    c->dsp_int_type  = avio_rl32(s->pb);
-    coef_type        = avio_rl32(s->pb);
-    coef_splitted[0] = avio_rl32(s->pb);
-    coef_splitted[1] = avio_rl32(s->pb);
+    coef[0]          = avio_rl32(pb);
+    coef[1]          = avio_rl32(pb);
+    c->dsp_int_type  = avio_rl32(pb);
+    coef_type        = avio_rl32(pb);
+    coef_splitted[0] = avio_rl32(pb);
+    coef_splitted[1] = avio_rl32(pb);
 
     if (st->codecpar->codec_id == AV_CODEC_ID_ADPCM_NDSP) {
         if (st->codecpar->ch_layout.nb_channels > 2) {
@@ -135,8 +136,8 @@ static int genh_read_header(AVFormatContext *s)
                 avpriv_request_sample(s, "coef_type & 1");
                 return AVERROR_PATCHWELCOME;
             } else {
-                avio_seek(s->pb, coef[ch], SEEK_SET);
-                avio_read(s->pb, st->codecpar->extradata + 32 * ch, 32);
+                avio_seek(pb, coef[ch], SEEK_SET);
+                avio_read(pb, st->codecpar->extradata + 32 * ch, 32);
             }
         }
 
@@ -152,7 +153,7 @@ static int genh_read_header(AVFormatContext *s)
     if (st->codecpar->block_align <= 0)
         return AVERROR_INVALIDDATA;
 
-    avio_skip(s->pb, start_offset - avio_tell(s->pb));
+    avio_skip(pb, start_offset - avio_tell(pb));
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
@@ -163,30 +164,31 @@ static int genh_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
     GENHDemuxContext *c = s->priv_data;
+    AVIOContext *pb = s->pb;
     int ret;
 
     if (c->dsp_int_type == 1 && par->codec_id == AV_CODEC_ID_ADPCM_NDSP &&
         par->ch_layout.nb_channels > 1) {
         int i, ch;
 
-        if (avio_feof(s->pb))
+        if (avio_feof(pb))
             return AVERROR_EOF;
         ret = av_new_packet(pkt, 8 * par->ch_layout.nb_channels);
         if (ret < 0)
             return ret;
         for (i = 0; i < 8 / c->interleave_size; i++) {
             for (ch = 0; ch < par->ch_layout.nb_channels; ch++) {
-                pkt->data[ch * 8 + i*c->interleave_size+0] = avio_r8(s->pb);
-                pkt->data[ch * 8 + i*c->interleave_size+1] = avio_r8(s->pb);
+                pkt->data[ch * 8 + i*c->interleave_size+0] = avio_r8(pb);
+                pkt->data[ch * 8 + i*c->interleave_size+1] = avio_r8(pb);
             }
         }
         ret = 0;
     } else if (par->codec_id == AV_CODEC_ID_SDX2_DPCM) {
-        ret = av_get_packet(s->pb, pkt, par->block_align * 1024);
+        ret = av_get_packet(pb, pkt, par->block_align * 1024);
 
     } else {
-        ret = av_get_packet(s->pb, pkt, par->block_align ? par->block_align :
-                                                           1024 * par->ch_layout.nb_channels);
+        ret = av_get_packet(pb, pkt, par->block_align ? par->block_align :
+                                                        1024 * par->ch_layout.nb_channels);
     }
 
     pkt->stream_index = 0;
