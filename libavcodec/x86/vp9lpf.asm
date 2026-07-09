@@ -519,10 +519,6 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
 %endif ; %2
     mova           [P3],  m4
     mova           [P2],  m5
-    mova           [P1],  m6
-    mova           [P0],  m7
-    mova           [Q0],  m8
-    mova           [Q1],  m9
     mova           [Q2], m10
     mova           [Q3], m11
 %if %2 == 16
