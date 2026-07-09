@@ -72,18 +72,20 @@ static int read_header(AVFormatContext *s)
 
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    AVIOContext *pb = s->pb;
     AVStream *st = s->streams[0];
+    AVIOContext *pb = s->pb;
+    int pkt_size, ret;
     int64_t pos;
-    int pkt_size;
-    int ret;
 
     if (avio_feof(pb))
         return AVERROR_EOF;
 
     pos = avio_tell(pb);
-    if (avio_rl16(pb) != 0x9999)
+    if (avio_rl16(pb) != 0x9999) {
+        if (avio_feof(pb))
+            return AVERROR_EOF;
         return AVERROR_INVALIDDATA;
+    }
     pkt_size = avio_rl16(pb) + 4;
     if (pkt_size <= 4)
         return AVERROR_INVALIDDATA;
