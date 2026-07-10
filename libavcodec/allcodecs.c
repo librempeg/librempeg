@@ -769,6 +769,7 @@ extern const FFCodec ff_adpcm_ndsp_si1_decoder;
 extern const FFCodec ff_adpcm_nxap_decoder;
 extern const FFCodec ff_adpcm_procyon_decoder;
 extern const FFCodec ff_adpcm_psx_decoder;
+extern const FFCodec ff_adpcm_psx_encoder;
 extern const FFCodec ff_adpcm_psxc_decoder;
 extern const FFCodec ff_adpcm_pt_decoder;
 extern const FFCodec ff_adpcm_sanyo_decoder;
