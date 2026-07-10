@@ -161,6 +161,7 @@ OBJS-$(CONFIG_AST_MUXER)                 += ast.o astenc.o
 OBJS-$(CONFIG_ASTB_DEMUXER)              += astb.o pcm.o
 OBJS-$(CONFIG_ASTL_DEMUXER)              += astl.o pcm.o
 OBJS-$(CONFIG_AUDIOPKG_DEMUXER)          += audiopkg.o
+OBJS-$(CONFIG_AUDV_DEMUXER)              += audv.o
 OBJS-$(CONFIG_AUS_DEMUXER)               += aus.o pcm.o
 OBJS-$(CONFIG_AU_DEMUXER)                += au.o pcm.o
 OBJS-$(CONFIG_AU_MUXER)                  += au.o rawenc.o

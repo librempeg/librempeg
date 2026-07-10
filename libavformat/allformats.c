@@ -102,6 +102,7 @@ extern const FFInputFormat  ff_astb_demuxer;
 extern const FFInputFormat  ff_astl_demuxer;
 extern const FFOutputFormat ff_asf_stream_muxer;
 extern const FFInputFormat  ff_audiopkg_demuxer;
+extern const FFInputFormat  ff_audv_demuxer;
 extern const FFInputFormat  ff_aus_demuxer;
 extern const FFInputFormat  ff_au_demuxer;
 extern const FFOutputFormat ff_au_muxer;
