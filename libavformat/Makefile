@@ -540,6 +540,7 @@ OBJS-$(CONFIG_NGCDSPSTM_DEMUXER)         += ngcdspstm.o pcm.o
 OBJS-$(CONFIG_NINETAV_DEMUXER)           += 9tav.o
 OBJS-$(CONFIG_NISTSPHERE_DEMUXER)        += nistspheredec.o pcm.o
 OBJS-$(CONFIG_NISTSPHERE_MUXER)          += nistsphereenc.o rawenc.o
+OBJS-$(CONFIG_NOP_DEMUXER)               += nop.o
 OBJS-$(CONFIG_NPSF_DEMUXER)              += npsf.o pcm.o
 OBJS-$(CONFIG_NSP_DEMUXER)               += nspdec.o pcm.o
 OBJS-$(CONFIG_NST_DEMUXER)               += nst.o pcm.o

@@ -439,6 +439,7 @@ extern const FFInputFormat  ff_ngcdspstm_demuxer;
 extern const FFInputFormat  ff_ninetav_demuxer;
 extern const FFInputFormat  ff_nistsphere_demuxer;
 extern const FFOutputFormat ff_nistsphere_muxer;
+extern const FFInputFormat  ff_nop_demuxer;
 extern const FFInputFormat  ff_npsf_demuxer;
 extern const FFInputFormat  ff_nsp_demuxer;
 extern const FFInputFormat  ff_nst_demuxer;
