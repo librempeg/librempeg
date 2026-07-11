@@ -202,8 +202,8 @@ static int smush_read_packet(AVFormatContext *ctx, AVPacket *pkt)
 {
     SMUSHContext *smush = ctx->priv_data;
     AVIOContext *pb = ctx->pb;
-    int done = 0;
-    int ret;
+    int done = 0, ret;
+    int64_t pos;
 
     while (!done) {
         uint32_t sig, size;
@@ -211,6 +211,7 @@ static int smush_read_packet(AVFormatContext *ctx, AVPacket *pkt)
         if (avio_feof(pb))
             return AVERROR_EOF;
 
+        pos  = avio_tell(pb);
         sig  = avio_rb32(pb);
         size = avio_rb32(pb);
 
@@ -222,6 +223,8 @@ static int smush_read_packet(AVFormatContext *ctx, AVPacket *pkt)
                 return ret;
 
             pkt->stream_index = smush->video_stream_index;
+            pkt->flags       |= AV_PKT_FLAG_KEY;
+            pkt->duration = 1;
             done = 1;
             break;
         case MKBETAG('B', 'l', '1', '6'):
@@ -229,6 +232,7 @@ static int smush_read_packet(AVFormatContext *ctx, AVPacket *pkt)
                 return ret;
 
             pkt->stream_index = smush->video_stream_index;
+            pkt->flags       |= AV_PKT_FLAG_KEY;
             pkt->duration = 1;
             done = 1;
             break;
@@ -251,12 +255,15 @@ static int smush_read_packet(AVFormatContext *ctx, AVPacket *pkt)
         }
     }
 
+    pkt->pos = pos;
+
     return 0;
 }
 
 const FFInputFormat ff_smush_demuxer = {
     .p.name         = "smush",
     .p.long_name    = NULL_IF_CONFIG_SMALL("LucasArts Smush"),
+    .p.flags        = AVFMT_GENERIC_INDEX,
     .priv_data_size = sizeof(SMUSHContext),
     .read_probe     = smush_read_probe,
     .read_header    = smush_read_header,
