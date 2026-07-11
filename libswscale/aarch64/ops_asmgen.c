@@ -124,6 +124,11 @@ typedef struct SwsAArch64OpRegs {
     RasmOp vh[4]; /* input/output vector registers (high bank) */
     RasmOp vt[8]; /* temp vector registers */
     RasmOp vk[4]; /* constant data (may be gprs) */
+
+    /* Op-specific registers. */
+    union {
+        RasmOp dither_ptr;
+    };
 } SwsAArch64OpRegs;
 
 /*********************************************************************/
@@ -390,25 +395,38 @@ static void asmgen_set_load_cont_node(SwsAArch64Context *s)
 /* SWS_UOP_READ_PACKED */
 /* SWS_UOP_READ_PLANAR */
 
+static void asmgen_setup_read_bit(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                                  SwsAArch64OpRegs *regs)
+{
+    RasmContext *r = s->rctx;
+    AArch64VecViews shift_vec   = a64op_vec_views(regs->vk[0]);
+    AArch64VecViews bitmask_vec = a64op_vec_views(regs->vk[1]);
+
+    rasm_annotate_next(r, "v128 shift_vec = impl->priv.v128;");
+    i_ldr(r, shift_vec.q, IMPL_PRIV(s));
+    asmgen_set_load_cont_node(s);
+    if (p->block_size == 16) {
+        i_movi(r, bitmask_vec.b16, IMM(1));                 CMT("v128 bitmask_vec = {1 <repeats 16 times>};");
+    } else {
+        i_movi(r, bitmask_vec.b8,  IMM(1));                 CMT("v128 bitmask_vec = {1 <repeats 8 times>, 0 <repeats 8 times>};");
+    }
+}
+
 static void asmgen_op_read_bit(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                                SwsAArch64OpRegs *regs)
 {
     RasmContext *r = s->rctx;
-    AArch64VecViews bitmask_vec = a64op_vec_views(regs->vk[0]);
-    RasmOp wtmp = a64op_w(s->tmp0);
-    AArch64VecViews vl[1]     = { a64op_vec_views(regs->vl[0]) };
-    AArch64VecViews vtmp      = a64op_vec_views(regs->vt[0]);
-    AArch64VecViews shift_vec = a64op_vec_views(regs->vk[1]);
+    AArch64VecViews vl[1]       = { a64op_vec_views(regs->vl[0]) };
+    AArch64VecViews shift_vec   = a64op_vec_views(regs->vk[0]);
+    AArch64VecViews bitmask_vec = a64op_vec_views(regs->vk[1]);
+
+    AArch64VecViews vtmp = a64op_vec_views(regs->vt[0]);
+    RasmOp wtmp          = a64op_w(s->tmp0);
 
     /* Note that shift_vec has negative values, so that using it with
      * ushl actually performs a right shift. */
-    rasm_annotate_next(r, "v128 shift_vec = impl->priv.v128;");
-    i_ldr(r, shift_vec.q, IMPL_PRIV(s));
-    asmgen_set_load_cont_node(s);
-
     if (p->block_size == 16) {
         i_ldrh(r, wtmp,        a64op_post(s->in[0], 2));    CMT("uint16_t tmp = *in[0]++;");
-        i_movi(r, bitmask_vec.b16, IMM(1));                 CMT("v128 bitmask_vec = {1 <repeats 16 times>};");
         i_dup (r, vl[0].b8,    wtmp);                       CMT("vl[0].lo = broadcast(tmp);");
         i_lsr (r, wtmp,        wtmp, IMM(8));               CMT("tmp >>= 8;");
         i_dup (r, vtmp.b8,     wtmp);                       CMT("vtmp.lo = broadcast(tmp);");
@@ -417,23 +435,30 @@ static void asmgen_op_read_bit(SwsAArch64Context *s, const SwsAArch64OpImplParam
         i_and (r, vl[0].b16,   vl[0].b16, bitmask_vec.b16); CMT("vl[0] &= bitmask_vec;");
     } else {
         i_ldrb(r, wtmp,        a64op_post(s->in[0], 1));    CMT("uint8_t tmp = *in[0]++;");
-        i_movi(r, bitmask_vec.b8,  IMM(1));                 CMT("v128 bitmask_vec = {1 <repeats 8 times>, 0 <repeats 8 times>};");
         i_dup (r, vl[0].b8,    wtmp);                       CMT("vl[0].lo = broadcast(tmp);");
         i_ushl(r, vl[0].b8,    vl[0].b8,  shift_vec.b8);    CMT("vl[0] <<= shift_vec;");
         i_and (r, vl[0].b8,    vl[0].b8,  bitmask_vec.b8);  CMT("vl[0] &= bitmask_vec;");
     }
 }
 
+static void asmgen_setup_read_nibble(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                                     SwsAArch64OpRegs *regs)
+{
+    RasmContext *r = s->rctx;
+    AArch64VecViews nibble_mask = a64op_vec_views(regs->vk[0]);
+
+    rasm_annotate_next(r, "v128 nibble_mask = {0xf <repeats 8 times>, 0x0 <repeats 8 times>};");
+    i_movi(r, nibble_mask.b8, IMM(0x0f));
+}
+
 static void asmgen_op_read_nibble(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                                   SwsAArch64OpRegs *regs)
 {
     RasmContext *r = s->rctx;
+    AArch64VecViews vl[1]       = { a64op_vec_views(regs->vl[0]) };
     AArch64VecViews nibble_mask = a64op_vec_views(regs->vk[0]);
-    AArch64VecViews vl[1] = { a64op_vec_views(regs->vl[0]) };
-    AArch64VecViews vtmp  = a64op_vec_views(regs->vt[0]);
 
-    rasm_annotate_next(r, "v128 nibble_mask = {0xf <repeats 8 times>, 0x0 <repeats 8 times>};");
-    i_movi(r, nibble_mask.b8, IMM(0x0f));
+    AArch64VecViews vtmp  = a64op_vec_views(regs->vt[0]);
 
     if (p->block_size == 8) {
         i_ldr (r, vl[0].s,   a64op_post(s->in[0], 4));  CMT("vl[0] = *in[0]++;");
@@ -492,18 +517,26 @@ static void asmgen_op_read_planar(SwsAArch64Context *s, const SwsAArch64OpImplPa
 /* SWS_UOP_WRITE_PACKED */
 /* SWS_UOP_WRITE_PLANAR */
 
+static void asmgen_setup_write_bit(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                                   SwsAArch64OpRegs *regs)
+{
+    RasmContext *r = s->rctx;
+    AArch64VecViews shift_vec = a64op_vec_views(regs->vk[0]);
+
+    rasm_annotate_next(r, "v128 shift_vec = impl->priv.v128;");
+    i_ldr(r, shift_vec.q, IMPL_PRIV(s));
+    asmgen_set_load_cont_node(s);
+}
+
 static void asmgen_op_write_bit(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                                 SwsAArch64OpRegs *regs)
 {
     RasmContext *r = s->rctx;
     AArch64VecViews vl[1]     = { a64op_vec_views(regs->vl[0]) };
     AArch64VecViews shift_vec = a64op_vec_views(regs->vk[0]);
-    AArch64VecViews vtmp0     = a64op_vec_views(regs->vt[0]);
-    AArch64VecViews vtmp1     = a64op_vec_views(regs->vt[1]);
 
-    rasm_annotate_next(r, "v128 shift_vec = impl->priv.v128;");
-    i_ldr(r, shift_vec.q, IMPL_PRIV(s));
-    asmgen_set_load_cont_node(s);
+    AArch64VecViews vtmp0 = a64op_vec_views(regs->vt[0]);
+    AArch64VecViews vtmp1 = a64op_vec_views(regs->vt[1]);
 
     if (p->block_size == 8) {
         i_ushl(r, vl[0].b8,    vl[0].b8,   shift_vec.b8);   CMT("vl[0] <<= shift_vec;");
@@ -648,23 +681,13 @@ static void asmgen_op_move(SwsAArch64Context *s, const SwsAArch64OpImplParams *p
 /* split tightly packed data into components */
 /* SWS_UOP_UNPACK */
 
-static void asmgen_op_unpack(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
-                             SwsAArch64OpRegs *regs)
+static void asmgen_setup_unpack(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                                SwsAArch64OpRegs *regs)
 {
     RasmContext *r = s->rctx;
-    RasmOp *vl = regs->vl;
-    RasmOp *vh = regs->vh;
     RasmOp *vmask = regs->vk;
-
     RasmOp mask_gpr = a64op_w(s->tmp0);
     uint32_t mask_val[4] = { 0 };
-
-    const int offsets[4] = {
-        p->par.pack.pattern[3] + p->par.pack.pattern[2] + p->par.pack.pattern[1],
-        p->par.pack.pattern[3] + p->par.pack.pattern[2],
-        p->par.pack.pattern[3],
-        0
-    };
 
     /* Generate masks. */
     rasm_add_comment(r, "generate masks");
@@ -693,6 +716,22 @@ static void asmgen_op_unpack(SwsAArch64Context *s, const SwsAArch64OpImplParams 
             vmask[i] = v_16b(vmask[i]);
         }
     }
+}
+
+static void asmgen_op_unpack(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                             SwsAArch64OpRegs *regs)
+{
+    RasmContext *r = s->rctx;
+    RasmOp *vl    = regs->vl;
+    RasmOp *vh    = regs->vh;
+    RasmOp *vmask = regs->vk;
+
+    const int offsets[4] = {
+        p->par.pack.pattern[3] + p->par.pack.pattern[2] + p->par.pack.pattern[1],
+        p->par.pack.pattern[3] + p->par.pack.pattern[2],
+        p->par.pack.pattern[3],
+        0
+    };
 
     /* Loop backwards to avoid clobbering component 0. */
     LOOP_MASK_BWD      (p, i) {
@@ -789,6 +828,29 @@ static void asmgen_op_rshift(SwsAArch64Context *s, const SwsAArch64OpImplParams 
 /* clear pixel values */
 /* SWS_UOP_CLEAR */
 
+static void asmgen_setup_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                               SwsAArch64OpRegs *regs)
+{
+    RasmContext *r = s->rctx;
+    RasmOp *vk = regs->vk;
+
+    /**
+     * TODO
+     * - pack elements in impl->priv and perform smaller loads
+     * - if only 1 element and not vh, load directly with ld1r
+     */
+
+    bool load_priv = false;
+    LOOP_MASK(p, i) {
+        if (!((p->par.clear.zero | p->par.clear.one) & SWS_COMP(i)))
+            load_priv = true;
+    }
+    if (load_priv) {
+        i_ldr(r, v_q(vk[0]), IMPL_PRIV(s));         CMT("v128 clear_vec = impl->priv.v128;");
+        asmgen_set_load_cont_node(s);
+    }
+}
+
 static void emit_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                        RasmOp *vx, RasmOp *vk, int i, const char *vx_str)
 {
@@ -811,27 +873,9 @@ static void emit_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
 static void asmgen_op_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                             SwsAArch64OpRegs *regs)
 {
-    RasmContext *r = s->rctx;
     RasmOp *vl = regs->vl;
     RasmOp *vh = regs->vh;
     RasmOp *vk = regs->vk;
-    RasmOp clear_vec = vk[0];
-
-    /**
-     * TODO
-     * - pack elements in impl->priv and perform smaller loads
-     * - if only 1 element and not vh, load directly with ld1r
-     */
-
-    bool load_priv = false;
-    LOOP_MASK(p, i) {
-        if (!((p->par.clear.zero | p->par.clear.one) & SWS_COMP(i)))
-            load_priv = true;
-    }
-    if (load_priv) {
-        i_ldr(r, v_q(clear_vec), IMPL_PRIV(s));     CMT("v128 clear_vec = impl->priv.v128;");
-        asmgen_set_load_cont_node(s);
-    }
 
     LOOP_MASK      (p, i) { emit_clear(s, p, vl, vk, i, "vl"); }
     LOOP_MASK_VH(s, p, i) { emit_clear(s, p, vh, vk, i, "vh"); }
@@ -970,6 +1014,18 @@ static void asmgen_op_expand(SwsAArch64Context *s, const SwsAArch64OpImplParams 
 /* numeric minimum */
 /* SWS_UOP_MIN */
 
+static void asmgen_setup_min(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                             SwsAArch64OpRegs *regs)
+{
+    RasmContext *r = s->rctx;
+    RasmOp *vk = regs->vk;
+
+    RasmOp min_vec = regs->vt[0];
+    i_ldr(r, v_q(min_vec), IMPL_PRIV(s));                           CMT("v128 min_vec = impl->priv.v128;");
+    asmgen_set_load_cont_node(s);
+    LOOP_MASK(p, i) { i_dup(r, vk[i], a64op_elem(min_vec, i));      CMTF("v128 vmin%u = min_vec[%u];", i, i); }
+}
+
 static void asmgen_op_min(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                           SwsAArch64OpRegs *regs)
 {
@@ -977,11 +1033,6 @@ static void asmgen_op_min(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
     RasmOp *vl = regs->vl;
     RasmOp *vh = regs->vh;
     RasmOp *vk = regs->vk;
-    RasmOp min_vec = regs->vt[0];
-
-    i_ldr(r, v_q(min_vec), IMPL_PRIV(s));                           CMT("v128 min_vec = impl->priv.v128;");
-    asmgen_set_load_cont_node(s);
-    LOOP_MASK(p, i) { i_dup(r, vk[i], a64op_elem(min_vec, i));      CMTF("v128 vmin%u = min_vec[%u];", i, i); }
 
     if (p->type == SWS_PIXEL_F32) {
         LOOP_MASK      (p, i) { i_fmin(r, vl[i], vl[i], vk[i]);     CMTF("vl[%u] = min(vl[%u], vmin%u);", i, i, i); }
@@ -996,6 +1047,18 @@ static void asmgen_op_min(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
 /* numeric maximum */
 /* SWS_UOP_MAX */
 
+static void asmgen_setup_max(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                             SwsAArch64OpRegs *regs)
+{
+    RasmContext *r = s->rctx;
+    RasmOp *vk = regs->vk;
+
+    RasmOp max_vec = regs->vt[0];
+    i_ldr(r, v_q(max_vec), IMPL_PRIV(s));                           CMT("v128 max_vec = impl->priv.v128;");
+    asmgen_set_load_cont_node(s);
+    LOOP_MASK(p, i) { i_dup(r, vk[i], a64op_elem(max_vec, i));      CMTF("v128 vmax%u = max_vec[%u];", i, i); }
+}
+
 static void asmgen_op_max(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                           SwsAArch64OpRegs *regs)
 {
@@ -1003,11 +1066,6 @@ static void asmgen_op_max(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
     RasmOp *vl = regs->vl;
     RasmOp *vh = regs->vh;
     RasmOp *vk = regs->vk;
-    RasmOp max_vec = regs->vt[0];
-
-    i_ldr(r, v_q(max_vec), IMPL_PRIV(s));                           CMT("v128 max_vec = impl->priv.v128;");
-    asmgen_set_load_cont_node(s);
-    LOOP_MASK(p, i) { i_dup(r, vk[i], a64op_elem(max_vec, i));      CMTF("v128 vmax%u = max_vec[%u];", i, i); }
 
     if (p->type == SWS_PIXEL_F32) {
         LOOP_MASK      (p, i) { i_fmax(r, vl[i], vl[i], vk[i]);     CMTF("vl[%u] = max(vl[%u], vmax%u);", i, i, i); }
@@ -1022,18 +1080,25 @@ static void asmgen_op_max(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
 /* multiplication by scalar */
 /* SWS_UOP_SCALE */
 
+static void asmgen_setup_scale(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                               SwsAArch64OpRegs *regs)
+{
+    RasmContext *r = s->rctx;
+    RasmOp scale_vec = regs->vk[0];
+
+    RasmOp priv_ptr = s->tmp0;
+    i_add (r, priv_ptr, s->impl, IMM(offsetof_impl_priv));          CMT("v128 *scale_vec_ptr = &impl->priv;");
+    asmgen_set_load_cont_node(s);
+    i_ld1r(r, vv_1(scale_vec), a64op_base(priv_ptr));               CMT("v128 scale_vec = broadcast(*scale_vec_ptr);");
+}
+
 static void asmgen_op_scale(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                             SwsAArch64OpRegs *regs)
 {
     RasmContext *r = s->rctx;
-    RasmOp *vl = regs->vl;
-    RasmOp *vh = regs->vh;
-    RasmOp priv_ptr = s->tmp0;
+    RasmOp *vl       = regs->vl;
+    RasmOp *vh       = regs->vh;
     RasmOp scale_vec = regs->vk[0];
-
-    i_add (r, priv_ptr, s->impl, IMM(offsetof_impl_priv));          CMT("v128 *scale_vec_ptr = &impl->priv;");
-    asmgen_set_load_cont_node(s);
-    i_ld1r(r, vv_1(scale_vec), a64op_base(priv_ptr));               CMT("v128 scale_vec = broadcast(*scale_vec_ptr);");
 
     if (p->type == SWS_PIXEL_F32) {
         LOOP_MASK      (p, i) { i_fmul(r, vl[i], vl[i], scale_vec); CMTF("vl[%u] *= scale_vec;", i); }
@@ -1048,6 +1113,29 @@ static void asmgen_op_scale(SwsAArch64Context *s, const SwsAArch64OpImplParams *
 /* generalized linear affine transform */
 /* SWS_UOP_LINEAR */
 /* SWS_UOP_LINEAR_FMA */
+
+static void asmgen_setup_linear(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                                SwsAArch64OpRegs *regs)
+{
+    RasmContext *r = s->rctx;
+    RasmOp *vc = regs->vk;
+
+    RasmOp ptr = s->tmp0;
+    RasmOp coeff_veclist;
+
+    /* Preload coefficients from impl->priv. */
+    const int num_vregs = linear_num_vregs(p);
+    av_assert0(num_vregs <= 4);
+    switch (num_vregs) {
+    case 1: coeff_veclist = vv_1(vc[0]);                      break;
+    case 2: coeff_veclist = vv_2(vc[0], vc[1]);               break;
+    case 3: coeff_veclist = vv_3(vc[0], vc[1], vc[2]);        break;
+    case 4: coeff_veclist = vv_4(vc[0], vc[1], vc[2], vc[3]); break;
+    }
+    i_ldr(r, ptr, IMPL_PRIV(s));                            CMT("v128 *vcoeff_ptr = impl->priv.ptr;");
+    asmgen_set_load_cont_node(s);
+    i_ld1(r, coeff_veclist, a64op_base(ptr));               CMT("coeff_veclist = *vcoeff_ptr;");
+}
 
 /**
  * Performs one pass of the linear transform over a single vector bank
@@ -1144,25 +1232,6 @@ static void linear_pass(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
 static void asmgen_op_linear(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                              SwsAArch64OpRegs *regs)
 {
-    RasmContext *r = s->rctx;
-    RasmOp *vc = regs->vk;
-
-    RasmOp ptr = s->tmp0;
-    RasmOp coeff_veclist;
-
-    /* Preload coefficients from impl->priv. */
-    const int num_vregs = linear_num_vregs(p);
-    av_assert0(num_vregs <= 4);
-    switch (num_vregs) {
-    case 1: coeff_veclist = vv_1(vc[0]);                      break;
-    case 2: coeff_veclist = vv_2(vc[0], vc[1]);               break;
-    case 3: coeff_veclist = vv_3(vc[0], vc[1], vc[2]);        break;
-    case 4: coeff_veclist = vv_4(vc[0], vc[1], vc[2], vc[3]); break;
-    }
-    i_ldr(r, ptr, IMPL_PRIV(s));                            CMT("v128 *vcoeff_ptr = impl->priv.ptr;");
-    asmgen_set_load_cont_node(s);
-    i_ld1(r, coeff_veclist, a64op_base(ptr));               CMT("coeff_veclist = *vcoeff_ptr;");
-
     /* Compute mask for rows that must be saved before being overwritten. */
     SwsCompMask save_mask = 0;
     bool overwritten[4] = { false, false, false, false };
@@ -1187,12 +1256,25 @@ static void asmgen_op_linear(SwsAArch64Context *s, const SwsAArch64OpImplParams 
 /* add dithering noise */
 /* SWS_UOP_DITHER */
 
+static void asmgen_setup_dither(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                                SwsAArch64OpRegs *regs)
+{
+    RasmContext *r = s->rctx;
+    RasmOp src_ptr = s->tmp0;
+
+    regs->dither_ptr = src_ptr;
+    i_ldr(r, src_ptr, IMPL_PRIV(s));                        CMT("void *ptr = impl->priv.ptr;");
+    asmgen_set_load_cont_node(s);
+}
+
 static void asmgen_op_dither(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
                              SwsAArch64OpRegs *regs)
 {
     RasmContext *r = s->rctx;
     RasmOp *vl = regs->vl;
     RasmOp *vh = regs->vh;
+    RasmOp src_ptr = regs->dither_ptr;
+
     RasmOp ptr = s->tmp0;
     RasmOp tmp1 = s->tmp1;
     RasmOp wtmp1 = a64op_w(tmp1);
@@ -1228,9 +1310,6 @@ static void asmgen_op_dither(SwsAArch64Context *s, const SwsAArch64OpImplParams 
         }
     }
 
-    i_ldr(r, ptr, IMPL_PRIV(s));                            CMT("void *ptr = impl->priv.ptr;");
-    asmgen_set_load_cont_node(s);
-
     /**
      * We use ubfiz to mask and shift left in one single instruction:
      *   ubfiz <Wd>, <Wn>, #<lsb>, #<width>
@@ -1258,7 +1337,8 @@ static void asmgen_op_dither(SwsAArch64Context *s, const SwsAArch64OpImplParams 
         RasmOp lsb   = IMM(block_size_log2 + sizeof_float_log2);
         RasmOp width = IMM(dither_size_log2 - block_size_log2);
         i_ubfiz(r, tmp1, bx64, lsb, width); CMT("tmp1 = (bx & ((dither_size / block_size) - 1)) * block_size * sizeof(float);");
-        i_add  (r, ptr,  ptr,  tmp1);       CMT("ptr += tmp1;");
+        i_add  (r, ptr,  src_ptr,  tmp1);   CMT("ptr += tmp1;");
+        src_ptr = ptr;
     }
 
     int last_y_off = -1;
@@ -1282,7 +1362,7 @@ static void asmgen_op_dither(SwsAArch64Context *s, const SwsAArch64OpImplParams 
                 i_add  (r, wtmp1, s->y, IMM(y_off));        CMTF("tmp1 = y + y_off[%u];", i);
                 i_ubfiz(r, tmp1,  tmp1, lsb, width);        CMT("tmp1 = (tmp1 & (dither_size - 1)) * dither_size * sizeof(float);");
             }
-            i_add(r, ptr, ptr, tmp1);                       CMT("ptr += tmp1;");
+            i_add(r, ptr, src_ptr, tmp1);                   CMT("ptr += tmp1;");
         } else if (do_load) {
             /**
              * On subsequent runs, just increment the pointer.
@@ -1355,6 +1435,24 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpEntry *entry)
     /* Common start for continuation-passing style (CPS) functions. */
     asmgen_set_load_cont_node(s);
 
+    /* Set up constants. */
+    switch (p->uop) {
+    case SWS_UOP_READ_BIT:     asmgen_setup_read_bit(s, p, &s->regs);     break;
+    case SWS_UOP_READ_NIBBLE:  asmgen_setup_read_nibble(s, p, &s->regs);  break;
+    case SWS_UOP_WRITE_BIT:    asmgen_setup_write_bit(s, p, &s->regs);    break;
+    case SWS_UOP_UNPACK:       asmgen_setup_unpack(s, p, &s->regs);       break;
+    case SWS_UOP_CLEAR:        asmgen_setup_clear(s, p, &s->regs);        break;
+    case SWS_UOP_MIN:          asmgen_setup_min(s, p, &s->regs);          break;
+    case SWS_UOP_MAX:          asmgen_setup_max(s, p, &s->regs);          break;
+    case SWS_UOP_SCALE:        asmgen_setup_scale(s, p, &s->regs);        break;
+    case SWS_UOP_LINEAR:       asmgen_setup_linear(s, p, &s->regs);       break;
+    case SWS_UOP_LINEAR_FMA:   asmgen_setup_linear(s, p, &s->regs);       break;
+    case SWS_UOP_DITHER:       asmgen_setup_dither(s, p, &s->regs);       break;
+    default:
+        break;
+    }
+
+    /* Emit uop kernel. */
     switch (p->uop) {
     case SWS_UOP_READ_BIT:     asmgen_op_read_bit(s, p, &s->regs);     break;
     case SWS_UOP_READ_NIBBLE:  asmgen_op_read_nibble(s, p, &s->regs);  break;
