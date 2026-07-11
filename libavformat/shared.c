@@ -547,7 +547,7 @@ static int read_cache(SharedContext *s, uint8_t *buf, size_t size, off_t offset)
     while (size) {
         ssize_t ret = pread(s->fd, buf, size, offset);
         if (ret <= 0)
-            return ret ? AVERROR(errno) : AVERROR(EIO);
+            return ret ? AVERROR(errno) : AVERROR_EOF;
         buf    += ret;
         offset += ret;
         size   -= ret;
@@ -630,6 +630,13 @@ retry:
             ret = read_cache(s, tmp, block_size, block_pos);
             if (ret < 0) {
                 av_log(h, AV_LOG_ERROR, "Failed to read from cache file: %s\n", av_err2str(ret));
+                if (ret == AVERROR_EOF) { /* e.g. cache appears truncated? */
+                    if (s->retry_corrupt) {
+                        s->num_corrupt++;
+                        goto read_block;
+                    }
+                    ret = AVERROR(EIO); /* don't propagate EOF to caller */
+                }
                 return ret;
             }
         }
