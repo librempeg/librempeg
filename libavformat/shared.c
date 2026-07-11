@@ -655,10 +655,10 @@ read_block:
     case BLOCK_NONE:
         if (s->read_only)
             break; /* don't mark block as pending */
-        if (atomic_compare_exchange_weak_explicit(&block->state, &state,
-                                                  BLOCK_PENDING,
-                                                  memory_order_acquire,
-                                                  memory_order_acquire))
+        if (atomic_compare_exchange_strong_explicit(&block->state, &state,
+                                                    BLOCK_PENDING,
+                                                    memory_order_acquire,
+                                                    memory_order_acquire))
         {
             /* Acquired pending state, proceed to fetch the block */
             state = BLOCK_PENDING;
