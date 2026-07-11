@@ -713,6 +713,7 @@ OBJS-$(CONFIG_SCD_DEMUXER)               += scd.o
 OBJS-$(CONFIG_SCDPCM_DEMUXER)            += scdpcm.o
 OBJS-$(CONFIG_SD9_DEMUXER)               += ssp_sd9.o riff.o
 OBJS-$(CONFIG_SDF_DEMUXER)               += sdf.o pcm.o
+OBJS-$(CONFIG_SDT_DEMUXER)               += sdt.o
 OBJS-$(CONFIG_SDNS_DEMUXER)              += sdns.o pcm.o
 OBJS-$(CONFIG_SDP_DEMUXER)               += rtsp.o
 OBJS-$(CONFIG_SDR2_DEMUXER)              += sdr2.o
