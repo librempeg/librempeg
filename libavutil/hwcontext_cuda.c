@@ -557,6 +557,7 @@ static int cuda_device_derive(AVHWDeviceContext *device_ctx,
 
     if (hwctx->internal->cuda_device == -1) {
         av_log(device_ctx, AV_LOG_ERROR, "Could not derive CUDA device.\n");
+        ret = AVERROR(ENODEV);
         goto error;
     }
 
