@@ -1022,6 +1022,7 @@ SKIPHEADERS-$(CONFIG_FFRTMPCRYPT_PROTOCOL) += rtmpdh.h
 SKIPHEADERS-$(CONFIG_NETWORK)            += network.h rtsp.h
 
 TESTPROGS = id3v2                                                       \
+            mkdir                                                       \
             seek                                                        \
             url                                                         \
             seek_utils

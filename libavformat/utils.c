@@ -443,6 +443,12 @@ int ff_mkdir_p(const char *path)
             tmp_ch = *pos;
             *pos = '\0';
             ret = mkdir(temp, 0755);
+            if (ret < 0 && errno != EEXIST) {
+                int err = errno;
+                av_free(temp);
+                errno = err;
+                return ret;
+            }
             *pos = tmp_ch;
         }
     }
