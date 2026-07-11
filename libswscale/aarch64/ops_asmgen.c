@@ -164,6 +164,10 @@ typedef struct SwsAArch64Context {
     RasmOp in_bump[4];
     RasmOp out_bump[4];
 
+    /* Process function. */
+    RasmNode *setup;
+    RasmNode *loop;
+
     /* Vector register dimensions. */
     size_t el_size;
     size_t el_count;
@@ -298,7 +302,6 @@ static unsigned clobbered_gprs(const SwsAArch64Context *s,
 static void asmgen_process(SwsAArch64Context *s, SwsCompMask mask)
 {
     RasmContext *r = s->rctx;
-    char func_name[128];
     char buf[64];
 
     /**
@@ -306,19 +309,14 @@ static void asmgen_process(SwsAArch64Context *s, SwsCompMask mask)
      * The description in x86/ops_include.asm mostly holds as well here.
      */
 
-    snprintf(func_name, sizeof(func_name), "ff_sws_process_%04x_neon", nibble_mask(mask));
-
-    rasm_func_begin(r, func_name, true, false);
-
     /* Function prologue */
     RasmOp saved_regs[MAX_SAVED_REGS];
     unsigned nsaved = clobbered_gprs(s, mask, saved_regs);
     if (nsaved)
         asmgen_prologue(s, saved_regs, nsaved);
 
-    /* Load values from impl. */
-    i_ldr(r, s->op0_func, a64op_off(s->impl, offsetof_impl_cont));  CMT("SwsFuncPtr op0_func = impl->cont;");
-    i_add(r, s->op1_impl, s->impl, IMM(sizeof_impl));               CMT("SwsOpImpl *op1_impl = impl + 1;");
+    /* Setup. */
+    s->setup = rasm_get_current_node(r);
 
     /* Load values from exec. */
     LOOP(mask, i) {
@@ -354,10 +352,9 @@ static void asmgen_process(SwsAArch64Context *s, SwsCompMask mask)
     rasm_add_label(r, first_row);           CMT("first_row:");
     i_mov(r, s->bx, s->bx_start);           CMT("bx = bx_start;");
 
-    /* Reset impl and call first kernel. */
+    /* Main loop. */
     rasm_add_label(r, next_block);          CMT("next_block:");
-    i_mov(r, s->impl, s->op1_impl);         CMT("impl = op1_impl;");
-    i_blr(r, s->op0_func);                  CMT("op0_func();");
+    s->loop = rasm_get_current_node(r);
 
     /* Perform horizontal loop. */
     i_add(r, s->bx, s->bx, IMM(1));         CMT("bx += 1;");
@@ -1390,6 +1387,29 @@ static void asmgen_op_dither(SwsAArch64Context *s, const SwsAArch64OpImplParams 
 }
 
 /*********************************************************************/
+static void asmgen_process_cps(SwsAArch64Context *s, SwsCompMask mask)
+{
+    RasmContext *r = s->rctx;
+    char func_name[128];
+
+    snprintf(func_name, sizeof(func_name), "ff_sws_process_%04x_neon", nibble_mask(mask));
+    rasm_func_begin(r, func_name, true, false);
+
+    asmgen_process(s, mask);
+
+    /* Load values from impl. */
+    rasm_set_current_node(r, s->setup);
+    RasmOp impl_cont = a64op_off(s->impl, offsetof_impl_cont);
+    i_ldr(r, s->op0_func, impl_cont);                   CMT("SwsFuncPtr op0_func = impl->cont;");
+    i_add(r, s->op1_impl, s->impl, IMM(sizeof_impl));   CMT("SwsOpImpl *op1_impl = impl + 1;");
+
+    /* Reset impl and call first kernel. */
+    rasm_set_current_node(r, s->loop);
+    i_mov(r, s->impl, s->op1_impl);                     CMT("impl = op1_impl;");
+    i_blr(r, s->op0_func);                              CMT("op0_func();");
+}
+
+/*********************************************************************/
 static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpEntry *entry)
 {
     const SwsAArch64OpImplParams *p = &entry->params;
@@ -1590,10 +1610,10 @@ static int asmgen(void)
     s.out_bump[3] = a64op_gpx(27);
 
     /* Generate all process functions using rasm. */
-    asmgen_process(&s, SWS_COMP_ELEMS(1));
-    asmgen_process(&s, SWS_COMP_ELEMS(2));
-    asmgen_process(&s, SWS_COMP_ELEMS(3));
-    asmgen_process(&s, SWS_COMP_ELEMS(4));
+    asmgen_process_cps(&s, SWS_COMP_ELEMS(1));
+    asmgen_process_cps(&s, SWS_COMP_ELEMS(2));
+    asmgen_process_cps(&s, SWS_COMP_ELEMS(3));
+    asmgen_process_cps(&s, SWS_COMP_ELEMS(4));
 
     /* Generate all functions from ops_entries.c using rasm. */
     const SwsAArch64OpEntry *entries = ops_entries;
