@@ -713,10 +713,6 @@ OBJS-$(CONFIG_AVSYNCTEST_FILTER)             += src_avsynctest.o
 OBJS-$(CONFIG_AMOVIE_FILTER)                 += src_movie.o
 OBJS-$(CONFIG_MOVIE_FILTER)                  += src_movie.o
 
-# vulkan libs
-OBJS-$(CONFIG_LIBGLSLANG)                    += vulkan_glslang.o vulkan.o
-OBJS-$(CONFIG_LIBSHADERC)                    += vulkan_shaderc.o vulkan.o
-
 # Objects duplicated from other libraries for shared builds
 SHLIBOBJS                                    += log2_tab.o
 

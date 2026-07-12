@@ -28418,7 +28418,8 @@ drawbox=x=-t:y=0.5*(ih-iw/2.4)-t:w=iw+t*2:h=iw/2.4+t*2:t=2:c=red
 Below is a description of the currently available Vulkan video filters.
 
 To enable compilation of these filters you need to configure FFmpeg with
-@code{--enable-vulkan} and either @code{--enable-libglslang} or @code{--enable-libshaderc}.
+@code{--enable-vulkan}, and have a SPIR-V compiler (@code{glslc} or
+@code{glslangValidator}) available at build time.
 
 Running Vulkan filters requires you to initialize a hardware device and to pass that device to all filters in any filter graph.
 @table @option
