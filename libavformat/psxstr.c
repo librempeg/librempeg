@@ -362,12 +362,15 @@ static int str_read_packet(AVFormatContext *s,
                     st->codecpar->block_align = 1680 * st->codecpar->ch_layout.nb_channels;
                     ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
                 } else {
-                    st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_XA;
+                    st->codecpar->codec_id = (fmt & 16) ? AV_CODEC_ID_ADPCM_XA8 : AV_CODEC_ID_ADPCM_XA;
                     av_channel_layout_default(&st->codecpar->ch_layout, (fmt & 1) + 1);
                     st->codecpar->sample_rate = (fmt & 4) ? 18900 : 37800;
                     st->codecpar->block_align = 128;
+                    if (fmt & 16)
+                        st->codecpar->bit_rate = 128LL * st->codecpar->sample_rate * st->codecpar->ch_layout.nb_channels * 8LL / 64;
+                    else
+                        st->codecpar->bit_rate = 128LL * st->codecpar->sample_rate * st->codecpar->ch_layout.nb_channels * 8LL / 224;
                 }
-                st->codecpar->bit_rate = 128LL * st->codecpar->sample_rate * st->codecpar->ch_layout.nb_channels * 8LL / 224;
 
                 avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
             }
