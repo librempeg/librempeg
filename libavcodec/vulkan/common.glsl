@@ -72,11 +72,11 @@ layout(buffer_reference, buffer_reference_align = 4) buffer u32buf {
     uint32_t v;
 };
 
-layout(buffer_reference, buffer_reference_align = 4) buffer u32vec2buf {
+layout(buffer_reference, buffer_reference_align = 8) buffer u32vec2buf {
     u32vec2 v;
 };
 
-layout(buffer_reference, buffer_reference_align = 4) buffer u32vec4buf {
+layout(buffer_reference, buffer_reference_align = 16) buffer u32vec4buf {
     u32vec4 v;
 };
 
