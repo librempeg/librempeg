@@ -761,7 +761,7 @@ static av_cold int ac4_decode_init(AVCodecContext *avctx)
         for (int i = 0; i < 5; i++) {
             int N_w = transf_lengths[i];
             float alpha = kbd_window_alpha[j][i];
-            float scale = 1.f / N_w;
+            float scale = -1.f / N_w;
 
             if ((ret = av_tx_init(&s->tx_ctx[j][i], &s->tx_fn[j][i],
                                   AV_TX_FLOAT_MDCT, 1, N_w, &scale, AV_TX_FULL_IMDCT)))
