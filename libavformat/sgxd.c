@@ -175,7 +175,7 @@ static int read_header(AVFormatContext *s)
             riff = 1;
             break;
         default:
-            av_log(s, AV_LOG_ERROR, "unsupported codec: %X\n", codec);
+            avpriv_request_sample(s, "codec %02x", codec);
             return AVERROR_PATCHWELCOME;
         }
 
