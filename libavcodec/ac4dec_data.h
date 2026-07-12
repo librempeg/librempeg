@@ -1284,7 +1284,7 @@ static const uint32_t acpl_hcb_gamma_fine_dt_codes[81] = {
     0x031e10,
 };
 
-DECLARE_ASM_CONST(16, float, qwin)[640] = {
+DECLARE_ASM_CONST(32, float, qwin)[640] = {
     0,
     1.990318758627504e-004,  2.494762615491542e-004,  3.021769445225078e-004,
     3.548460080857985e-004,  4.058915811480806e-004,  4.546408052001889e-004,
