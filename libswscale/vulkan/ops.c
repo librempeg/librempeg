@@ -908,6 +908,16 @@ static int read_filtered(SPICtx *spi, SPIRVIDs *id, const SwsOpList *ops,
                                     acc_s[0], acc_s[1], acc_s[2], acc_s[3]);
 }
 
+/* Plane indices refer to actual frame planes, so the image handle arrays
+ * have to cover the highest plane referenced, not just the plane count. */
+static int rw_op_img_count(const SwsOp *op, const uint8_t *planes)
+{
+    int count = 0;
+    for (int i = 0; i < ff_sws_rw_op_planes(op); i++)
+        count = FFMAX(count, planes[i] + 1);
+    return count;
+}
+
 static int add_ops_spirv(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
                          const SwsOpList *ops, FFVulkanShader *shd)
 {
@@ -929,11 +939,11 @@ static int add_ops_spirv(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
 
     /* Image ops, to determine types */
     const SwsOp *op_w = ff_sws_op_list_output(ops);
-    int out_img_count = ff_sws_rw_op_planes(op_w);
+    int out_img_count = rw_op_img_count(op_w, ops->plane_dst);
     p->dst_rep = op_w->type == SWS_PIXEL_F32 ? FF_VK_REP_FLOAT : FF_VK_REP_UINT;
 
     const SwsOp *op_r = ff_sws_op_list_input(ops);
-    int in_img_count = op_r ? ff_sws_rw_op_planes(op_r) : 0;
+    int in_img_count = op_r ? rw_op_img_count(op_r, ops->plane_src) : 0;
     if (op_r)
         p->src_rep = op_r->type == SWS_PIXEL_F32 ? FF_VK_REP_FLOAT : FF_VK_REP_UINT;
 
@@ -1038,7 +1048,7 @@ static int add_ops_spirv(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
     }
 
     /* Load output image handles */
-    int out_img[4];
+    int out_img[4] = { 0 };
     for (int i = 0; i < out_img_count; i++) {
         int img = spi_OpAccessChain(spi, id->out_img_sptr,
                                     id->in_vars[2], id->u32_cid[i]);
@@ -1171,7 +1181,7 @@ static int add_ops_spirv(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
             break;
         case SWS_OP_CLEAR:
             for (int i = 0; i < 4; i++) {
-                if (!op->clear.value[i].den)
+                if (!SWS_COMP_TEST(op->clear.mask, i))
                     continue;
                 data = spi_OpCompositeInsert(spi, type_v,
                                              id->const_ids[nb_const_ids++],
