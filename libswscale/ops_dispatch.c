@@ -550,7 +550,7 @@ static int compile_single(const CompileArgs *args, const SwsOpList *ops,
                                     input, 0, c.slice_align, c.func_opaque,
                                     NULL, c.priv, c.free, output);
         if (ret >= 0) {
-            (*output)->backend = comp->backend->flags;
+            (*output)->backend = c.backend->flags;
             ff_sws_pass_link_output(*output, link);
         }
         return ret;
