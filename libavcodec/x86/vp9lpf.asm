@@ -44,8 +44,6 @@ cextern pw_8
 mask_mix: times 8 db 0
           times 8 db 1
 
-mask_mix84: times 8 db 0xff
-            times 8 db 0x00
 mask_mix48: times 8 db 0x00
             times 8 db 0xff
 
@@ -720,8 +718,10 @@ cglobal vp9_loop_filter_%1_%2_ %+ mmsize, 2, 6, 16, %3 + %4 + %%ext, dst, stride
     pcmpgtb             m6, m2                          ; flat8in
     SWAP 2,6
 %endif
-%if %2 == 84 || %2 == 48
-    pand                m2, [mask_mix%2]
+%if %2 == 84
+    movq                m2, m2
+%elif %2 == 48
+    pand                m2, [mask_mix48]
 %endif
 %else
 %if %2 == 44
