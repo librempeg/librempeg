@@ -19,6 +19,7 @@
 #include <math.h>
 
 #include "libavutil/avassert.h"
+#include "libavutil/avstring.h"
 #include "libavutil/eval.h"
 #include "libavutil/fifo.h"
 #include "libavutil/file.h"
