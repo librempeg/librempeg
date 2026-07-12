@@ -304,7 +304,6 @@ static unsigned clobbered_gprs(const SwsAArch64Context *s,
 static void asmgen_process(SwsAArch64Context *s, SwsCompMask imask, SwsCompMask omask)
 {
     RasmContext *r = s->rctx;
-    char buf[64];
 
     /**
      * The process function for aarch64 works similarly to the x86 backend.
@@ -321,22 +320,18 @@ static void asmgen_process(SwsAArch64Context *s, SwsCompMask imask, SwsCompMask 
     s->setup = rasm_get_current_node(r);
 
     /* Load values from exec. */
-    LOOP(imask, i) {
-        rasm_annotate_nextf(r, buf, sizeof(buf), "in[%u] = exec->in[%u];", i, i);
-        i_ldr(r, s->in[i],       a64op_off(s->exec, offsetof_exec_in       + (i * sizeof(uint8_t *))));
-    }
-    LOOP(omask, i) {
-        rasm_annotate_nextf(r, buf, sizeof(buf), "out[%u] = exec->out[%u];", i, i);
-        i_ldr(r, s->out[i],      a64op_off(s->exec, offsetof_exec_out      + (i * sizeof(uint8_t *))));
-    }
-    LOOP(imask, i) {
-        rasm_annotate_nextf(r, buf, sizeof(buf), "in_bump[%u] = exec->in_bump[%u];", i, i);
-        i_ldr(r, s->in_bump[i],  a64op_off(s->exec, offsetof_exec_in_bump  + (i * sizeof(ptrdiff_t))));
-    }
-    LOOP(omask, i) {
-        rasm_annotate_nextf(r, buf, sizeof(buf), "out_bump[%u] = exec->out_bump[%u];", i, i);
-        i_ldr(r, s->out_bump[i], a64op_off(s->exec, offsetof_exec_out_bump + (i * sizeof(ptrdiff_t))));
-    }
+    RasmOp exec_in[4];
+    RasmOp exec_in_bump[4];
+    RasmOp exec_out[4];
+    RasmOp exec_out_bump[4];
+    LOOP(imask, i) { exec_in      [i] = a64op_off(s->exec, offsetof_exec_in       + (i * sizeof(uint8_t *))); }
+    LOOP(imask, i) { exec_in_bump [i] = a64op_off(s->exec, offsetof_exec_in_bump  + (i * sizeof(uint8_t *))); }
+    LOOP(omask, i) { exec_out     [i] = a64op_off(s->exec, offsetof_exec_out      + (i * sizeof(uint8_t *))); }
+    LOOP(omask, i) { exec_out_bump[i] = a64op_off(s->exec, offsetof_exec_out_bump + (i * sizeof(uint8_t *))); }
+    LOOP(imask, i) { i_ldr(r, s->in[i],       exec_in [i]);         CMTF("in[%u] = exec->in[%u];", i, i); }
+    LOOP(omask, i) { i_ldr(r, s->out[i],      exec_out[i]);         CMTF("out[%u] = exec->out[%u];", i, i); }
+    LOOP(imask, i) { i_ldr(r, s->in_bump[i],  exec_in_bump[i]);     CMTF("in_bump[%u] = exec->in_bump[%u];", i, i); }
+    LOOP(omask, i) { i_ldr(r, s->out_bump[i], exec_out_bump[i]);    CMTF("out_bump[%u] = exec->out_bump[%u];", i, i); }
 
     int first_row  = rasm_new_label(r, NULL);
     int next_row   = rasm_new_label(r, NULL);
