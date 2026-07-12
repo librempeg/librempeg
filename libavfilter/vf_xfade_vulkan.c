@@ -128,7 +128,7 @@ static av_cold int init_vulkan(AVFilterContext *avctx)
             .stages     = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc, 3, 0, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc, 3, 0);
 
     ff_vk_shader_add_push_const(&s->shd, 0, sizeof(XFadeParameters),
                                 VK_SHADER_STAGE_COMPUTE_BIT);

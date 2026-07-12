@@ -122,7 +122,7 @@ static int init_gblur_pipeline(GBlurVulkanContext *s,
         .type        = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
         .stages      = VK_SHADER_STAGE_COMPUTE_BIT,
     };
-    ff_vk_shader_add_descriptor_set(&s->vkctx, shd, &buf_desc, 1, 1, 0);
+    ff_vk_shader_add_descriptor_set(&s->vkctx, shd, &buf_desc, 1, 1);
 
     RET(ff_vk_shader_link(&s->vkctx, shd,
                           ff_gblur_comp_spv_data,
@@ -180,13 +180,13 @@ static av_cold int init_filter(AVFilterContext *ctx, AVFrame *in)
     /* Horizontal */
     ff_vk_shader_load(&s->shd_hor, VK_SHADER_STAGE_COMPUTE_BIT, NULL,
                       (uint32_t []) { 32, 1, 1 }, 0);
-    ff_vk_shader_add_descriptor_set(vkctx, &s->shd_hor, desc, 2, 0, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, &s->shd_hor, desc, 2, 0);
     RET(init_gblur_pipeline(s, &s->shd_hor, &s->params_hor, s->size, s->sigma));
 
     /* Vertical */
     ff_vk_shader_load(&s->shd_ver, VK_SHADER_STAGE_COMPUTE_BIT, NULL,
                       (uint32_t []) { 1, 32, 1 }, 0);
-    ff_vk_shader_add_descriptor_set(vkctx, &s->shd_ver, desc, 2, 0, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, &s->shd_ver, desc, 2, 0);
     RET(init_gblur_pipeline(s, &s->shd_ver, &s->params_ver, s->sizeV, s->sigmaV));
 
     s->initialized = 1;

@@ -409,7 +409,7 @@ static int init_decode_shader(AVCodecContext *avctx, FFVulkanContext *s,
             .stages      = VK_SHADER_STAGE_COMPUTE_BIT,
         }
     };
-    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 3, 0, 0);
+    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 3, 0);
 
     RET(ff_vk_shader_link(s, shd,
                           ff_apv_decode_comp_spv_data,
@@ -464,7 +464,7 @@ static int init_idct_shader(AVCodecContext *avctx, FFVulkanContext *s,
             .stages      = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 3, 0, 0);
+    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 3, 0);
 
     RET(ff_vk_shader_link(s, shd,
                           ff_apv_idct_comp_spv_data,

@@ -143,7 +143,7 @@ static av_cold int init_filter(AVFilterContext *ctx, AVFrame *in)
         },
     };
 
-    ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc, 2, 0, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc, 2, 0);
 
     ff_vk_shader_add_push_const(&s->shd, 0, sizeof(s->opts),
                                 VK_SHADER_STAGE_COMPUTE_BIT);
@@ -211,7 +211,7 @@ static av_cold int init_debayer(AVFilterContext *ctx, AVFrame *in)
             .stages     = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc, 2, 0, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc, 2, 0);
 
     RET(ff_vk_shader_link(vkctx, shd,
                           ff_debayer_comp_spv_data,

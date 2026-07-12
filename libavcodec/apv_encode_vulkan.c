@@ -258,7 +258,7 @@ static int init_dct_shader(AVCodecContext *avctx)
             .elems  = av_pix_fmt_count_planes(ev->sw_format),
         },
     };
-    RET(ff_vk_shader_add_descriptor_set(&ev->s, shd, desc_set, 2, 0, 0));
+    ff_vk_shader_add_descriptor_set(&ev->s, shd, desc_set, 2, 0);
 
     RET(ff_vk_shader_link(&ev->s, shd,
                           ff_apv_encode_dct_comp_spv_data,
@@ -299,7 +299,7 @@ static int init_entropy_shader(AVCodecContext *avctx, int blocks_per_mb,
             .stages = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    RET(ff_vk_shader_add_descriptor_set(&ev->s, shd, desc_set, 2, 0, 0));
+    ff_vk_shader_add_descriptor_set(&ev->s, shd, desc_set, 2, 0);
 
     RET(ff_vk_shader_link(&ev->s, shd,
                           ff_apv_encode_tiles_comp_spv_data,
@@ -330,7 +330,7 @@ static int init_compact_shader(AVCodecContext *avctx)
             .stages = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    RET(ff_vk_shader_add_descriptor_set(&ev->s, shd, desc_set, 1, 0, 0));
+    ff_vk_shader_add_descriptor_set(&ev->s, shd, desc_set, 1, 0);
 
     RET(ff_vk_shader_link(&ev->s, shd,
                           ff_seg_gather_comp_spv_data,

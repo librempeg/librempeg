@@ -947,7 +947,7 @@ static int add_ops_spirv(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
             .elems = 4,
         },
     };
-    ff_vk_shader_add_descriptor_set(&s->vkctx, shd, desc_set, 2, 0, 0);
+    ff_vk_shader_add_descriptor_set(&s->vkctx, shd, desc_set, 2, 0);
 
     /* Create dither buffers */
     int err = create_bufs(s, p, ops);
@@ -1007,7 +1007,7 @@ static int add_ops_spirv(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
     }
     if (nb_data_bufs)
         ff_vk_shader_add_descriptor_set(&s->vkctx, shd, desc_set,
-                                        nb_data_bufs, 1, 0);
+                                        nb_data_bufs, 1);
 
     if (id->interlaced) {
         id->push_const_struct_id = spi_get_id(spi);

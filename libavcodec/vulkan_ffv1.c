@@ -583,7 +583,7 @@ static int init_setup_shader(FFV1Context *f, FFVulkanContext *s,
             .stages = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    ff_vk_shader_add_descriptor_set(s, shd, desc_set_const, 2, 1, 0);
+    ff_vk_shader_add_descriptor_set(s, shd, desc_set_const, 2, 1);
 
     const FFVulkanDescriptorSetBinding desc_set[] = {
         { /* slice_data_buf */
@@ -603,7 +603,7 @@ static int init_setup_shader(FFV1Context *f, FFVulkanContext *s,
             .stages = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 4, 0, 0);
+    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 4, 0);
 
     RET(ff_vk_shader_link(s, shd,
                           ff_ffv1_dec_setup_comp_spv_data,
@@ -634,7 +634,7 @@ static int init_reset_shader(FFV1Context *f, FFVulkanContext *s,
             .stages = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    ff_vk_shader_add_descriptor_set(s, shd, desc_set_const, 1, 1, 0);
+    ff_vk_shader_add_descriptor_set(s, shd, desc_set_const, 1, 1);
 
     const FFVulkanDescriptorSetBinding desc_set[] = {
         { /* slice_data_buf */
@@ -646,7 +646,7 @@ static int init_reset_shader(FFV1Context *f, FFVulkanContext *s,
             .stages = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 2, 0, 0);
+    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 2, 0);
 
     if (ac == AC_GOLOMB_RICE)
         RET(ff_vk_shader_link(s, shd,
@@ -689,7 +689,7 @@ static int init_decode_shader(FFV1Context *f, FFVulkanContext *s,
             .stages = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    ff_vk_shader_add_descriptor_set(s, shd, desc_set_const, 2, 1, 0);
+    ff_vk_shader_add_descriptor_set(s, shd, desc_set_const, 2, 1);
 
     const FFVulkanDescriptorSetBinding desc_set[] = {
         { /* slice_data_buf */
@@ -733,7 +733,7 @@ static int init_decode_shader(FFV1Context *f, FFVulkanContext *s,
     /* Bindings 5 (dst) and 6 (fltmap_buf) are conditional */
     ff_vk_shader_add_descriptor_set(s, shd, desc_set,
                                     5 + rgb + (is_float && !bayer),
-                                    0, 0);
+                                    0);
 
     if (bayer) {
         if (ac == AC_GOLOMB_RICE)

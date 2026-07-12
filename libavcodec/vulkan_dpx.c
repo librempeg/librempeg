@@ -252,7 +252,7 @@ static int init_shader(AVCodecContext *avctx, FFVulkanContext *s,
             .stages = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 2 + (2*!unpack), 0, 0);
+    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 2 + (2*!unpack), 0);
 
     const unsigned char *src = ff_dpx_copy_comp_spv_data;
     size_t src_len = ff_dpx_copy_comp_spv_len;

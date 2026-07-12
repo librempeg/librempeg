@@ -93,7 +93,7 @@ static av_cold int init_filter(AVFilterContext *ctx, enum TestSrcVulkanMode mode
             .elems      = planes,
         },
     };
-    ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc_set, 1, 0, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc_set, 1, 0);
 
     if (mode == TESTSRC_COLOR) {
         double rgb2yuv[3][3];

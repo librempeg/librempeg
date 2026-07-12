@@ -290,7 +290,9 @@ static int add_desc(AVCodecContext *avctx, FFVulkanContext *s,
         },
     };
 
-    return ff_vk_shader_add_descriptor_set(s, shd, desc_set, 2, 0, 0);
+    ff_vk_shader_add_descriptor_set(s, shd, desc_set, 2, 0);
+
+    return 0;
 }
 
 static int init_decode_shader(AVCodecContext *avctx, FFVulkanContext *s,

@@ -122,7 +122,7 @@ static av_cold int init_integral_pipeline(FFVulkanContext *vkctx, FFVkExecPool *
             .elems  = planes,
         },
     };
-    ff_vk_shader_add_descriptor_set(vkctx, shd, desc_set_img, 1, 0, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, shd, desc_set_img, 1, 0);
 
     const FFVulkanDescriptorSetBinding desc_set_xyoffsets[] = {
         { /* xyoffsets_buffer */
@@ -130,7 +130,7 @@ static av_cold int init_integral_pipeline(FFVulkanContext *vkctx, FFVkExecPool *
             .stages = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    ff_vk_shader_add_descriptor_set(vkctx, shd, desc_set_xyoffsets, 1, 1, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, shd, desc_set_xyoffsets, 1, 1);
 
     RET(ff_vk_shader_link(vkctx, shd,
                           ff_nlmeans_vertical_comp_spv_data,
@@ -185,7 +185,7 @@ static av_cold int init_weights_pipeline(FFVulkanContext *vkctx, FFVkExecPool *e
             .stages = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    ff_vk_shader_add_descriptor_set(vkctx, shd, desc_set, 3, 0, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, shd, desc_set, 3, 0);
 
     const FFVulkanDescriptorSetBinding desc_set_xyoffsets[] = {
         { /* xyoffsets_buffer */
@@ -193,7 +193,7 @@ static av_cold int init_weights_pipeline(FFVulkanContext *vkctx, FFVkExecPool *e
             .stages = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    ff_vk_shader_add_descriptor_set(vkctx, shd, desc_set_xyoffsets, 1, 1, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, shd, desc_set_xyoffsets, 1, 1);
 
     RET(ff_vk_shader_link(vkctx, shd,
                           ff_nlmeans_weights_comp_spv_data,
@@ -238,7 +238,7 @@ static av_cold int init_denoise_pipeline(FFVulkanContext *vkctx, FFVkExecPool *e
             .elems  = planes,
         },
     };
-    ff_vk_shader_add_descriptor_set(vkctx, shd, desc_set_img, 2, 0, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, shd, desc_set_img, 2, 0);
 
     const FFVulkanDescriptorSetBinding desc_set_ws[] = {
         { /* weights_buffer */
@@ -250,7 +250,7 @@ static av_cold int init_denoise_pipeline(FFVulkanContext *vkctx, FFVkExecPool *e
             .stages = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    ff_vk_shader_add_descriptor_set(vkctx, shd, desc_set_ws, 2, 0, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, shd, desc_set_ws, 2, 0);
 
     RET(ff_vk_shader_link(vkctx, shd,
                           ff_nlmeans_denoise_comp_spv_data,
