@@ -513,6 +513,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_4XM:
     case AV_CODEC_ID_ADPCM_DSA:
     case AV_CODEC_ID_ADPCM_XA:
+    case AV_CODEC_ID_ADPCM_XA8:
     case AV_CODEC_ID_ADPCM_XMD:
     case AV_CODEC_ID_ADPCM_EA_R1:
     case AV_CODEC_ID_ADPCM_EA_R2:
@@ -1202,6 +1203,70 @@ static int xa_decode(AVCodecContext *avctx, int16_t *out0, int16_t *out1,
     return 0;
 }
 
+static int xa8_decode(AVCodecContext *avctx, int16_t *out0, int16_t *out1,
+                      const uint8_t *in, ADPCMChannelStatus *left,
+                      ADPCMChannelStatus *right, int channels, int sample_offset)
+{
+    int shift, filter, f0, f1;
+    int s_1, s_2;
+    int d, s;
+
+    out0 += sample_offset;
+    out1 += sample_offset;
+
+    if (channels == 2) {
+        for (int i = 0; i < 2; i++) {
+            shift  = in[i*2] & 15;
+            filter = in[i*2] >> 4;
+            shift = FFMIN(shift, 8);
+            filter = FFMIN(filter, 5);
+            f0 = xa_adpcm_table[filter][0];
+            f1 = xa_adpcm_table[filter][1];
+
+            s_1 = left->sample1;
+            s_2 = left->sample2;
+            for (int j = 0; j < 28; j++) {
+                d = in[16+i*2+j*4];
+
+                s = sign_extend((d << 8) & 0xff00, 16) >> shift;
+                s = s + ((f0 * s_1 + f1 * s_2 + 32) >> 6);
+                s = av_clip_int16(s);
+                s_2 = s_1;
+                s_1 = s;
+                out0[j] = s_1;
+            }
+            out0 += 28;
+            left->sample1 = s_1;
+            left->sample2 = s_2;
+
+            shift  = in[i*2+1] & 15;
+            filter = in[i*2+1] >> 4;
+            shift = FFMIN(shift, 8);
+            filter = FFMIN(filter, 5);
+            f0 = xa_adpcm_table[filter][0];
+            f1 = xa_adpcm_table[filter][1];
+
+            s_1 = right->sample1;
+            s_2 = right->sample2;
+            for (int j = 0; j < 28; j++) {
+                d = in[16+i*2+j*4+1];
+
+                s = sign_extend((d << 8) & 0xff00, 16) >> shift;
+                s = s + ((f0 * s_1 + f1 * s_2 + 32) >> 6);
+                s = av_clip_int16(s);
+                s_2 = s_1;
+                s_1 = s;
+                out1[j] = s_1;
+            }
+            out1 += 28;
+            right->sample1 = s_1;
+            right->sample2 = s_2;
+        }
+    }
+
+    return 0;
+}
+
 static void adpcm_swf_decode(AVCodecContext *avctx, const uint8_t *buf, int buf_size, int16_t *samples)
 {
     ADPCMDecodeContext *c = avctx->priv_data;
@@ -1771,6 +1836,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         break;
     case AV_CODEC_ID_ADPCM_XA:
         nb_samples = (buf_size / 128) * 224 / ch;
+        break;
+    case AV_CODEC_ID_ADPCM_XA8:
+        nb_samples = (buf_size / 128) * 112 / ch;
         break;
     case AV_CODEC_ID_ADPCM_XMD:
         nb_samples = buf_size / (21 * ch) * 32;
@@ -2752,6 +2820,27 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             if ((ret = xa_decode(avctx, out0, out1, buf + bytestream2_tell(&gb),
                                  &c->status[0], &c->status[1],
                                  channels, sample_offset)) < 0)
+                return ret;
+            bytestream2_skipu(&gb, 128);
+            sample_offset += samples_per_block;
+        }
+        /* Less than a full block of data left, e.g. when reading from
+         * 2324 byte per sector XA; the remainder is padding */
+        bytes_remaining = bytestream2_get_bytes_left(&gb);
+        if (bytes_remaining > 0) {
+            bytestream2_skip(&gb, bytes_remaining);
+        }
+        ) /* End of CASE */
+    CASE(ADPCM_XA8,
+        int16_t *out0 = samples_p[0];
+        int16_t *out1 = samples_p[1];
+        int samples_per_block = 28 * (3 - channels) * 2;
+        int sample_offset = 0;
+        int bytes_remaining;
+        while (bytestream2_get_bytes_left(&gb) >= 128) {
+            if ((ret = xa8_decode(avctx, out0, out1, buf + bytestream2_tell(&gb),
+                                  &c->status[0], &c->status[1],
+                                  channels, sample_offset)) < 0)
                 return ret;
             bytestream2_skipu(&gb, 128);
             sample_offset += samples_per_block;
@@ -4266,6 +4355,7 @@ ADPCM_DECODER(ADPCM_TANTALUS,    sample_fmts_s16p, adpcm_tantalus,    "ADPCM Tan
 ADPCM_DECODER(ADPCM_THP_LE,      sample_fmts_s16p, adpcm_thp_le,      "ADPCM Nintendo THP (little-endian)")
 ADPCM_DECODER(ADPCM_THP,         sample_fmts_s16p, adpcm_thp,         "ADPCM Nintendo THP")
 ADPCM_DECODER(ADPCM_XA,          sample_fmts_s16p, adpcm_xa,          "ADPCM CDROM XA")
+ADPCM_DECODER(ADPCM_XA8,         sample_fmts_s16p, adpcm_xa8,         "ADPCM CDROM XA 8-bit")
 ADPCM_DECODER(ADPCM_XMD,         sample_fmts_s16p, adpcm_xmd,         "ADPCM Konami XMD")
 ADPCM_DECODER(ADPCM_YAMAHA,      sample_fmts_s16,  adpcm_yamaha,      "ADPCM Yamaha")
 ADPCM_DECODER(ADPCM_ZORK,        sample_fmts_s16,  adpcm_zork,        "ADPCM Zork")
