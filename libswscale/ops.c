@@ -38,9 +38,6 @@ extern const SwsOpBackend backend_x86;
 #if HAVE_SPIRV_HEADERS_SPIRV_H || HAVE_SPIRV_UNIFIED1_SPIRV_H
 extern const SwsOpBackend backend_spirv;
 #endif
-#if CONFIG_LIBSHADERC || CONFIG_LIBGLSLANG
-extern const SwsOpBackend backend_glsl;
-#endif
 
 const SwsOpBackend * const ff_sws_op_backends[] = {
     &backend_murder,
@@ -52,9 +49,6 @@ const SwsOpBackend * const ff_sws_op_backends[] = {
     &backend_c,
 #if HAVE_SPIRV_HEADERS_SPIRV_H || HAVE_SPIRV_UNIFIED1_SPIRV_H
     &backend_spirv,
-#endif
-#if CONFIG_LIBSHADERC || CONFIG_LIBGLSLANG
-    &backend_glsl,
 #endif
     NULL
 };

@@ -35,10 +35,6 @@ static void ff_sws_vk_uninit(AVRefStructOpaque opaque, void *obj)
 {
     FFVulkanOpsCtx *s = obj;
 
-#if CONFIG_LIBSHADERC || CONFIG_LIBGLSLANG
-    if (s->spvc)
-        s->spvc->uninit(&s->spvc);
-#endif
     ff_vk_uninit(&s->vkctx);
 }
 
@@ -71,14 +67,6 @@ int ff_sws_vk_init(SwsContext *sws, AVBufferRef *dev_ref)
         av_log(sws, AV_LOG_ERROR, "Device has no compute queues\n");
         return AVERROR(ENOTSUP);
     }
-
-#if CONFIG_LIBSHADERC || CONFIG_LIBGLSLANG
-    if (!s->spvc) {
-        s->spvc = ff_vk_spirv_init();
-        if (!s->spvc)
-            return AVERROR(ENOMEM);
-    }
-#endif
 
     return 0;
 }
@@ -1140,7 +1128,7 @@ static int add_ops_spirv(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
 
         switch (op->op) {
         case SWS_OP_READ:
-            if (op->rw.frac || op->rw.filter.op) {
+            if (op->rw.frac) {
                 return AVERROR(ENOTSUP);
             } else if (op->rw.filter.op) {
                 av_assert0(op->rw.mode != SWS_RW_PALETTE);
@@ -1299,338 +1287,7 @@ static int add_ops_spirv(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
 }
 #endif
 
-#if CONFIG_LIBSHADERC || CONFIG_LIBGLSLANG
-static void add_desc_read_write(FFVulkanDescriptorSetBinding *out_desc,
-                                enum FFVkShaderRepFormat *out_rep,
-                                const SwsOp *op)
-{
-    const char *img_type = op->type == SWS_PIXEL_F32 ? "rgba32f"  :
-                           op->type == SWS_PIXEL_U32 ? "rgba32ui" :
-                           op->type == SWS_PIXEL_U16 ? "rgba16ui" :
-                                                       "rgba8ui";
-
-    *out_desc = (FFVulkanDescriptorSetBinding) {
-        .name = op->op == SWS_OP_WRITE ? "dst_img" : "src_img",
-        .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-        .mem_layout = img_type,
-        .mem_quali = op->op == SWS_OP_WRITE ? "writeonly" : "readonly",
-        .dimensions = 2,
-        .elems = 4,
-        .stages = VK_SHADER_STAGE_COMPUTE_BIT,
-    };
-
-    *out_rep = op->type == SWS_PIXEL_F32 ? FF_VK_REP_FLOAT : FF_VK_REP_UINT;
-}
-
-#define QSTR "(%"PRId64"/%"PRId64"%s)"
-#define QTYPE(Q) (Q).num, (Q).den, cur_type == SWS_PIXEL_F32 ? ".0f" : ""
-
-static void read_glsl(const SwsOpList *ops, const SwsOp *op, FFVulkanShader *shd,
-                      int idx, const char *type_name,
-                      const char *type_v, const char *type_s)
-{
-    const SwsFilterWeights *wd = op->rw.filter.kernel;
-    const int interlaced = ops->src.interlaced;
-    if (op->rw.filter.op) {
-        const char *axis    = op->rw.filter.op == SWS_OP_FILTER_H ? "pos.x" : "pos.y";
-        const char *coord_x = op->rw.filter.op == SWS_OP_FILTER_H ? "o + i" : "pos.x";
-        const char *coord_y;
-        if (op->rw.filter.op == SWS_OP_FILTER_H)
-            coord_y = interlaced ? "spos.y" : "pos.y";
-        else
-            coord_y = interlaced ? "((o + i) * 2 + int(params.field))" : "o + i";
-        GLSLC(1, tmp = vec4(0);                                               );
-        av_bprintf(&shd->src, "    int o = filter_o%i[%s];\n", idx, axis);
-        av_bprintf(&shd->src, "    for (int i = 0; i < %i; i++) {\n",
-                   wd->filter_size);
-        av_bprintf(&shd->src, "        float w = filter_w%i[%s][i];\n",
-                   idx, axis);
-        if (op->rw.mode == SWS_RW_PACKED) {
-            GLSLF(2, tmp += w * %s(imageLoad(src_img[%i], ivec2(%s, %s)));     ,
-                  type_v, ops->plane_src[0], coord_x, coord_y);
-        } else {
-            for (int i = 0; i < op->rw.elems; i++)
-                GLSLF(2,
-                      tmp.%c += w * %s(imageLoad(src_img[%i], ivec2(%s, %s))[0]); ,
-                      "xyzw"[i], type_s, ops->plane_src[i], coord_x, coord_y);
-        }
-        GLSLC(1, }                                                            );
-        GLSLC(1, f32 = tmp;                                                   );
-    } else {
-        const char *src_pos = interlaced ? "spos" : "pos";
-        if (op->rw.mode == SWS_RW_PACKED) {
-            GLSLF(1, %s = %s(imageLoad(src_img[%i], %s));                      ,
-                  type_name, type_v, ops->plane_src[0], src_pos);
-        } else {
-            for (int i = 0; i < op->rw.elems; i++)
-                GLSLF(1, %s.%c = %s(imageLoad(src_img[%i], %s)[0]);            ,
-                      type_name, "xyzw"[i], type_s, ops->plane_src[i], src_pos);
-        }
-    }
-}
-
-static int add_ops_glsl(SwsContext *sws, VulkanPriv *p, FFVulkanOpsCtx *s,
-                        const SwsOpList *ops, FFVulkanShader *shd)
-{
-    int err;
-    uint8_t *spv_data;
-    size_t spv_len;
-    void *spv_opaque = NULL;
-    const int interlaced = ops->src.interlaced || ops->dst.interlaced;
-
-    err = ff_vk_shader_init(&s->vkctx, shd, "sws_pass",
-                            VK_SHADER_STAGE_COMPUTE_BIT,
-                            NULL, 0, 32, 32, 1, 0);
-    if (err < 0)
-        return err;
-
-    p->interlaced = interlaced;
-    if (interlaced)
-        ff_vk_shader_add_push_const(shd, 0, sizeof(uint32_t),
-                                    VK_SHADER_STAGE_COMPUTE_BIT);
-
-    int nb_desc = 0;
-    FFVulkanDescriptorSetBinding buf_desc[8];
-
-    const SwsOp *read  = ff_sws_op_list_input(ops);
-    const SwsOp *write = ff_sws_op_list_output(ops);
-    if (read)
-        add_desc_read_write(&buf_desc[nb_desc++], &p->src_rep, read);
-    add_desc_read_write(&buf_desc[nb_desc++], &p->dst_rep, write);
-    ff_vk_shader_add_descriptor_set(&s->vkctx, shd, buf_desc, nb_desc, 0, 0);
-
-    err = create_bufs(s, p, ops);
-    if (err < 0)
-        return err;
-
-    nb_desc = 0;
-    char data_buf_name[MAX_DATA_BUFS][256];
-    char data_str_name[MAX_DATA_BUFS][256];
-    for (int n = 0; n < ops->num_ops; n++) {
-        const SwsOp *op = &ops->ops[n];
-        if (op->op == SWS_OP_DITHER) {
-            int size = (1 << op->dither.size_log2);
-            av_assert0(size < 8192);
-            snprintf(data_buf_name[nb_desc], 256, "dither_buf%i", n);
-            snprintf(data_str_name[nb_desc], 256, "float dither_mat%i[%i][%i];",
-                     n, size, size);
-            buf_desc[nb_desc] = (FFVulkanDescriptorSetBinding) {
-                .name        = data_buf_name[nb_desc],
-                .type        = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                .stages      = VK_SHADER_STAGE_COMPUTE_BIT,
-                .mem_layout  = "scalar",
-                .buf_content = data_str_name[nb_desc],
-            };
-            nb_desc++;
-        } else if (op->op == SWS_OP_FILTER_H || op->op == SWS_OP_FILTER_V ||
-                   ((op->op == SWS_OP_READ || op->op == SWS_OP_WRITE) &&
-                    op->rw.filter.op)) {
-            const SwsFilterWeights *wd = (op->op == SWS_OP_READ ||
-                                          op->op == SWS_OP_WRITE) ?
-                                         op->rw.filter.kernel : op->filter.kernel;
-            snprintf(data_buf_name[nb_desc], 256, "filter_buf%i", n);
-            snprintf(data_str_name[nb_desc], 256,
-                     "float filter_w%i[%i][%i];\n"
-                 "    int filter_o%i[%i];",
-                     n, wd->dst_size, wd->filter_size,
-                     n, wd->dst_size);
-            buf_desc[nb_desc] = (FFVulkanDescriptorSetBinding) {
-                .name        = data_buf_name[nb_desc],
-                .type        = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                .stages      = VK_SHADER_STAGE_COMPUTE_BIT,
-                .mem_layout  = "scalar",
-                .buf_content = data_str_name[nb_desc],
-            };
-            nb_desc++;
-        }
-    }
-    if (nb_desc)
-        ff_vk_shader_add_descriptor_set(&s->vkctx, shd, buf_desc,
-                                        nb_desc, 1, 0);
-
-    if (interlaced) {
-        GLSLC(0, layout(push_constant, std430) uniform pushConstants {        );
-        GLSLC(1,     uint field;                                              );
-        GLSLC(0, } params;                                                    );
-        GLSLC(0,                                                              );
-    }
-
-    GLSLC(0, void main()                                                      );
-    GLSLC(0, {                                                                );
-    GLSLC(1,     ivec2 pos = ivec2(gl_GlobalInvocationID.xy);                 );
-    GLSLC(1,     ivec2 size = imageSize(dst_img[0]);                          );
-    if (ops->src.interlaced)
-        GLSLC(1, ivec2 spos = ivec2(pos.x, pos.y * 2 + int(params.field));    );
-    if (ops->dst.interlaced)
-        GLSLC(1, ivec2 dpos = ivec2(pos.x, pos.y * 2 + int(params.field));    );
-    if (ops->dst.interlaced) {
-        GLSLC(1, if (any(greaterThanEqual(dpos, size)))                       );
-    } else {
-        GLSLC(1, if (any(greaterThanEqual(pos, size)))                        );
-    }
-    GLSLC(2,         return;                                                  );
-    GLSLC(0,                                                                  );
-    GLSLC(1,     u8vec4 u8;                                                   );
-    GLSLC(1,     u16vec4 u16;                                                 );
-    GLSLC(1,     u32vec4 u32;                                                 );
-    GLSLC(1,     precise f32vec4 f32;                                         );
-    GLSLC(1,     precise f32vec4 tmp;                                         );
-    GLSLC(0,                                                                  );
-
-    for (int n = 0; n < ops->num_ops; n++) {
-        const SwsOp *op = &ops->ops[n];
-        SwsPixelType cur_type = op->op == SWS_OP_CONVERT ? op->convert.to :
-                                op->type;
-        const char *type_name = ff_sws_pixel_type_name(cur_type);
-        const char *type_v = cur_type == SWS_PIXEL_F32 ? "f32vec4" :
-                             cur_type == SWS_PIXEL_U32 ? "u32vec4" :
-                             cur_type == SWS_PIXEL_U16 ? "u16vec4" : "u8vec4";
-        const char *type_s = cur_type == SWS_PIXEL_F32 ? "float" :
-                             cur_type == SWS_PIXEL_U32 ? "uint32_t" :
-                             cur_type == SWS_PIXEL_U16 ? "uint16_t" : "uint8_t";
-        av_bprintf(&shd->src, "    // %s\n", ff_sws_op_type_name(op->op));
-
-        switch (op->op) {
-        case SWS_OP_READ: {
-            if (op->rw.frac)
-                return AVERROR(ENOTSUP);
-            switch (op->rw.mode) {
-            case SWS_RW_PLANAR:
-            case SWS_RW_PACKED:
-                read_glsl(ops, op, shd, n, type_name, type_v, type_s);
-                break;
-            default:
-                return AVERROR(ENOTSUP);
-            }
-            break;
-        }
-        case SWS_OP_WRITE: {
-            const char *dst_pos = ops->dst.interlaced ? "dpos" : "pos";
-            if (op->rw.frac || op->rw.filter.op) {
-                return AVERROR(ENOTSUP);
-            } else if (op->rw.mode == SWS_RW_PACKED) {
-                GLSLF(1, imageStore(dst_img[%i], %s, %s(%s));                   ,
-                      ops->plane_dst[0], dst_pos, type_v, type_name);
-            } else {
-                for (int i = 0; i < op->rw.elems; i++)
-                    GLSLF(1, imageStore(dst_img[%i], %s, %s(%s[%i]));           ,
-                          ops->plane_dst[i], dst_pos, type_v, type_name, i);
-            }
-            break;
-        }
-        case SWS_OP_SWIZZLE: {
-            av_bprintf(&shd->src, "    %s = %s.", type_name, type_name);
-            for (int i = 0; i < 4; i++)
-                av_bprintf(&shd->src, "%c", "xyzw"[op->swizzle.in[i]]);
-            av_bprintf(&shd->src, ";\n");
-            break;
-        }
-        case SWS_OP_CLEAR: {
-            for (int i = 0; i < 4; i++) {
-                if (!SWS_COMP_TEST(op->clear.mask, i))
-                    continue;
-                av_bprintf(&shd->src, "    %s.%c = %s"QSTR";\n", type_name,
-                           "xyzw"[i], type_s, QTYPE(op->clear.value[i]));
-            }
-            break;
-        }
-        case SWS_OP_SCALE:
-            av_bprintf(&shd->src, "    %s = %s * "QSTR";\n",
-                       type_name, type_name, QTYPE(op->scale.factor));
-            break;
-        case SWS_OP_MIN:
-        case SWS_OP_MAX:
-            for (int i = 0; i < 4; i++) {
-                if (!op->clamp.limit[i].den)
-                    continue;
-                av_bprintf(&shd->src, "    %s.%c = %s(%s.%c, "QSTR");\n",
-                           type_name, "xyzw"[i],
-                           op->op == SWS_OP_MIN ? "min" : "max",
-                           type_name, "xyzw"[i], QTYPE(op->clamp.limit[i]));
-            }
-            break;
-        case SWS_OP_LSHIFT:
-        case SWS_OP_RSHIFT:
-            av_bprintf(&shd->src, "    %s %s= %i;\n", type_name,
-                       op->op == SWS_OP_LSHIFT ? "<<" : ">>", op->shift.amount);
-            break;
-        case SWS_OP_CONVERT:
-            if (ff_sws_pixel_type_is_int(cur_type) && op->convert.expand) {
-                const AVRational64 sc = ff_sws_pixel_expand(op->type, op->convert.to);
-                av_bprintf(&shd->src, "    %s = %s((%s*%"PRId64")/%"PRId64");\n",
-                           type_name, type_v, ff_sws_pixel_type_name(op->type),
-                           sc.num, sc.den);
-            } else {
-                av_bprintf(&shd->src, "    %s = %s(%s);\n",
-                           type_name, type_v, ff_sws_pixel_type_name(op->type));
-            }
-            break;
-        case SWS_OP_DITHER: {
-            int size = (1 << op->dither.size_log2);
-            for (int i = 0; i < 4; i++) {
-                if (op->dither.y_offset[i] < 0)
-                    continue;
-                av_bprintf(&shd->src, "    %s.%c += dither_mat%i[(pos.y + %i) & %i]"
-                                                                "[pos.x & %i];\n",
-                           type_name, "xyzw"[i], n,
-                           op->dither.y_offset[i], size - 1,
-                           size - 1);
-            }
-            break;
-        }
-        case SWS_OP_LINEAR:
-            for (int i = 0; i < 4; i++) {
-                if (op->lin.m[i][4].num)
-                    av_bprintf(&shd->src, "    tmp.%c = "QSTR";\n", "xyzw"[i],
-                               QTYPE(op->lin.m[i][4]));
-                else
-                    av_bprintf(&shd->src, "    tmp.%c = 0;\n", "xyzw"[i]);
-                for (int j = 0; j < 4; j++) {
-                    if (!op->lin.m[i][j].num)
-                        continue;
-                    av_bprintf(&shd->src, "    tmp.%c += f32.%c*"QSTR";\n",
-                               "xyzw"[i], "xyzw"[j], QTYPE(op->lin.m[i][j]));
-                }
-            }
-            av_bprintf(&shd->src, "    f32 = tmp;\n");
-            break;
-        case SWS_OP_UNPACK:
-            /* MSB->LSB indexing */
-            av_bprintf(&shd->src, "    %s = %s.%s;\n", type_name, type_name,
-                       ops->src.format == AV_PIX_FMT_X2BGR10 ? "wzyx" : "wxyz");
-            break;
-        case SWS_OP_PACK:
-            /* LSB->MSB indexing */
-            av_bprintf(&shd->src, "    %s = %s.%s;\n", type_name, type_name,
-                       ops->dst.format == AV_PIX_FMT_X2BGR10 ? "wzyx" : "yzwx");
-            break;
-        default:
-            return AVERROR(ENOTSUP);
-        }
-    }
-
-    GLSLC(0, }                                                                );
-
-    err = s->spvc->compile_shader(&s->vkctx, s->spvc, shd,
-                                  &spv_data, &spv_len, "main",
-                                  &spv_opaque);
-    if (err < 0)
-        return err;
-
-    err = ff_vk_shader_link(&s->vkctx, shd, spv_data, spv_len, "main");
-
-    if (spv_opaque)
-        s->spvc->free_shader(s->spvc, &spv_opaque);
-
-    if (err < 0)
-        return err;
-
-    return 0;
-}
-#endif
-
-static int compile(SwsContext *sws, const SwsOpList *ops, SwsCompiledOp *out,
-                   int glsl)
+static int compile(SwsContext *sws, const SwsOpList *ops, SwsCompiledOp *out)
 {
     int err;
     SwsInternal *c = sws_internal(sws);
@@ -1648,17 +1305,10 @@ static int compile(SwsContext *sws, const SwsOpList *ops, SwsCompiledOp *out,
     if (err < 0)
         goto fail;
 
-    if (glsl) {
-        err = AVERROR(ENOTSUP);
-#if CONFIG_LIBSHADERC || CONFIG_LIBGLSLANG
-        err = add_ops_glsl(sws, p, s, ops, &p->shd);
-#endif
-    } else {
-        err = AVERROR(ENOTSUP);
+    err = AVERROR(ENOTSUP);
 #if HAVE_SPIRV_HEADERS_SPIRV_H || HAVE_SPIRV_UNIFIED1_SPIRV_H
-        err = add_ops_spirv(sws, p, s, ops, &p->shd);
+    err = add_ops_spirv(sws, p, s, ops, &p->shd);
 #endif
-    }
     if (err < 0)
         goto fail;
 
@@ -1689,28 +1339,13 @@ fail:
 static int compile_spirv(SwsContext *sws, const SwsOpList *ops,
                          SwsCompiledOp *out)
 {
-    return compile(sws, ops, out, 0);
+    return compile(sws, ops, out);
 }
 
 const SwsOpBackend backend_spirv = {
     .name      = "spirv",
     .flags     = SWS_BACKEND_SPIRV,
     .compile   = compile_spirv,
-    .hw_format = AV_PIX_FMT_VULKAN,
-};
-#endif
-
-#if CONFIG_LIBSHADERC || CONFIG_LIBGLSLANG
-static int compile_glsl(SwsContext *sws, const SwsOpList *ops,
-                        SwsCompiledOp *out)
-{
-    return compile(sws, ops, out, 1);
-}
-
-const SwsOpBackend backend_glsl = {
-    .name      = "glsl",
-    .flags     = SWS_BACKEND_GLSL,
-    .compile   = compile_glsl,
     .hw_format = AV_PIX_FMT_VULKAN,
 };
 #endif
