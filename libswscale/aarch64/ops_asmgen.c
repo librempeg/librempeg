@@ -1384,6 +1384,94 @@ static void asmgen_op_dither(SwsAArch64Context *s, const SwsAArch64OpImplParams 
 }
 
 /*********************************************************************/
+/**
+ * Register assignment for CPS functions.
+ *
+ * The entry point of the SwsOpFunc is the `process` function. The
+ * first kernel function is called from `process`, and subsequent
+ * kernel functions are chained by directly branching to the next
+ * operation, using a continuation-passing style design. The last
+ * operation must be a write operation, which returns from the call
+ * to the `process` function.
+ *
+ * The GPRs used by the entire call-chain are listed below.
+ *
+ * Function arguments are passed in r0-r5. After the parameters from
+ * `exec` have been read, r0 is reused to branch to the continuation
+ * functions. After the original parameters from `impl` have been
+ * computed, r1 is reused as the `impl` pointer for each operation.
+ *
+ * Loop iterators are r6 for `bx` and r3 for `y`, reused from
+ * `y_start`, which doesn't need to be preserved.
+ *
+ * The intra-procedure-call temporary registers (r16 and r17) are used
+ * as scratch registers. They may be used by call veneers and PLT code
+ * inserted by the linker, so we cannot expect them to persist across
+ * branches between functions.
+ *
+ * The Platform Register (r18) is not used.
+ *
+ * The read/write data pointers and padding values first use up the
+ * remaining free caller-saved registers, and only then are the
+ * caller-saved registers (r19-r29) used.
+ *
+ * The Link Register (r30) is used when calling the first kernel, so it
+ * must be saved.
+ */
+
+static const int rw_gprs[] = {
+     9, 10, 11, 12,
+    13, 14, 15, 19,
+    20, 21, 22, 23,
+    24, 25, 26, 27,
+};
+
+static void asmgen_common_frame(SwsAArch64Context *s, SwsCompMask imask, SwsCompMask omask)
+{
+    /* Loop iterator variables. */
+    s->bx        = a64op_gpw(6);
+    s->y         = a64op_gpw(3);    /* Reused from SwsOpFunc.y_start argument. */
+
+    /* Scratch registers. */
+    s->tmp0      = a64op_gpx(16);   /* IP0 */
+    s->tmp1      = a64op_gpx(17);   /* IP1 */
+
+    /* Read/Write data pointers. */
+    LOOP(imask, i) { s->in [i] = a64op_gpx(rw_gprs[(i * 4) + 0]); }
+    LOOP(omask, i) { s->out[i] = a64op_gpx(rw_gprs[(i * 4) + 1]); }
+}
+
+static void asmgen_process_frame(SwsAArch64Context *s, SwsCompMask imask, SwsCompMask omask)
+{
+    asmgen_common_frame(s, imask, omask);
+
+    /* SwsOpFunc arguments. */
+    s->exec      = a64op_gpx(0);    // const SwsOpExec *exec
+    s->impl      = a64op_gpx(1);    // const void *priv
+    s->bx_start  = a64op_gpw(2);    // int bx_start
+    s->y_start   = a64op_gpw(3);    // int y_start
+    s->bx_end    = a64op_gpw(4);    // int bx_end
+    s->y_end     = a64op_gpw(5);    // int y_end
+
+    /* CPS-related variables. */
+    s->op0_func  = a64op_gpx(7);
+    s->op1_impl  = a64op_gpx(8);
+
+    /* Read/Write data pointer padding. */
+    LOOP(imask, i) { s->in_bump [i] = a64op_gpx(rw_gprs[(i * 4) + 2]); }
+    LOOP(omask, i) { s->out_bump[i] = a64op_gpx(rw_gprs[(i * 4) + 3]); }
+}
+
+static void asmgen_op_frame(SwsAArch64Context *s, SwsCompMask imask, SwsCompMask omask)
+{
+    asmgen_common_frame(s, imask, omask);
+
+    /* CPS-related variables. */
+    s->cont      = a64op_gpx(0);    /* Reused from SwsOpFunc.exec argument. */
+    s->impl      = a64op_gpx(1);    /* Same as SwsOpFunc.impl argument. */
+}
+
+/*********************************************************************/
 static void asmgen_process_cps(SwsAArch64Context *s, SwsCompMask mask)
 {
     RasmContext *r = s->rctx;
@@ -1391,6 +1479,7 @@ static void asmgen_process_cps(SwsAArch64Context *s, SwsCompMask mask)
 
     snprintf(func_name, sizeof(func_name), "ff_sws_process_%04x_neon", nibble_mask(mask));
     rasm_func_begin(r, func_name, true, false);
+    asmgen_process_frame(s, mask, mask);
 
     asmgen_process(s, mask, mask);
 
@@ -1432,6 +1521,7 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpEntry *entry)
     }
 
     rasm_func_begin(r, entry->name, true, !is_read);
+    asmgen_op_frame(s, is_read ? p->mask : 0, is_write ? p->mask : 0);
 
     /**
      * Set up vector register dimensions and reshape all vectors
@@ -1532,79 +1622,6 @@ static int asmgen(void)
     int ret;
 
     av_bprint_init(&bp, 0, AV_BPRINT_SIZE_UNLIMITED);
-
-    /**
-     * The entry point of the SwsOpFunc is the `process` function. The
-     * first kernel function is called from `process`, and subsequent
-     * kernel functions are chained by directly branching to the next
-     * operation, using a continuation-passing style design. The last
-     * operation must be a write operation, which returns from the call
-     * to the `process` function.
-     *
-     * The GPRs used by the entire call-chain are listed below.
-     *
-     * Function arguments are passed in r0-r5. After the parameters
-     * from `exec` have been read, r0 is reused to branch to the
-     * continuation functions. After the original parameters from
-     * `impl` have been computed, r1 is reused as the `impl` pointer
-     * for each operation.
-     *
-     * Loop iterators are r6 for `bx` and r3 for `y`, reused from
-     * `y_start`, which doesn't need to be preserved.
-     *
-     * The intra-procedure-call temporary registers (r16 and r17) are
-     * used as scratch registers. They may be used by call veneers and
-     * PLT code inserted by the linker, so we cannot expect them to
-     * persist across branches between functions.
-     *
-     * The Platform Register (r18) is not used.
-     *
-     * The read/write data pointers and padding values first use up the
-     * remaining free caller-saved registers, and only then are the
-     * caller-saved registers (r19-r28) used.
-     *
-     * The Link Register (r30) is used when calling the first kernel,
-     * so it must be saved.
-     */
-
-    /* SwsOpFunc arguments. */
-    s.exec      = a64op_gpx(0); // const SwsOpExec *exec
-    s.impl      = a64op_gpx(1); // const void *priv
-    s.bx_start  = a64op_gpw(2); // int bx_start
-    s.y_start   = a64op_gpw(3); // int y_start
-    s.bx_end    = a64op_gpw(4); // int bx_end
-    s.y_end     = a64op_gpw(5); // int y_end
-
-    /* Loop iterator variables. */
-    s.bx        = a64op_gpw(6);
-    s.y         = s.y_start;    /* Reused from SwsOpFunc argument. */
-
-    /* Scratch registers. */
-    s.tmp0      = a64op_gpx(16); /* IP0 */
-    s.tmp1      = a64op_gpx(17); /* IP1 */
-
-    /* CPS-related variables. */
-    s.op0_func  = a64op_gpx(7);
-    s.op1_impl  = a64op_gpx(8);
-    s.cont      = s.exec;       /* Reused from SwsOpFunc argument. */
-
-    /* Read/Write data pointers and padding. */
-    s.in      [0] = a64op_gpx(9);
-    s.out     [0] = a64op_gpx(10);
-    s.in_bump [0] = a64op_gpx(11);
-    s.out_bump[0] = a64op_gpx(12);
-    s.in      [1] = a64op_gpx(13);
-    s.out     [1] = a64op_gpx(14);
-    s.in_bump [1] = a64op_gpx(15);
-    s.out_bump[1] = a64op_gpx(19);
-    s.in      [2] = a64op_gpx(20);
-    s.out     [2] = a64op_gpx(21);
-    s.in_bump [2] = a64op_gpx(22);
-    s.out_bump[2] = a64op_gpx(23);
-    s.in      [3] = a64op_gpx(24);
-    s.out     [3] = a64op_gpx(25);
-    s.in_bump [3] = a64op_gpx(26);
-    s.out_bump[3] = a64op_gpx(27);
 
     /* Generate all process functions using rasm. */
     asmgen_process_cps(&s, SWS_COMP_ELEMS(1));
