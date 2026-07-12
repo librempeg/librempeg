@@ -137,7 +137,7 @@ static int read_header(AVFormatContext *s)
             align = stream_size;
             break;
         default:
-            av_log(s, AV_LOG_ERROR, "unknown codec: %d\n", codec);
+            avpriv_request_sample(s, "codec %02x", codec);
             return AVERROR_PATCHWELCOME;
         }
 
