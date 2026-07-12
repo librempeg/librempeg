@@ -25,7 +25,6 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/vulkan.h"
-#include "libavutil/vulkan_spirv.h"
 
 #include "avcodec.h"
 #include "codec_internal.h"

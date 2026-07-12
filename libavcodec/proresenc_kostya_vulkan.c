@@ -27,7 +27,6 @@
 #include "libavutil/mem_internal.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
-#include "libavutil/vulkan_spirv.h"
 #include "libavutil/hwcontext_vulkan.h"
 #include "libavutil/vulkan_loader.h"
 #include "libavutil/vulkan.h"
