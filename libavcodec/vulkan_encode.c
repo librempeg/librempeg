@@ -28,6 +28,27 @@ const AVCodecHWConfigInternal *const ff_vulkan_encode_hw_configs[] = {
     NULL,
 };
 
+static void vulkan_encode_free_pic(FFVulkanEncodeContext *ctx,
+                                   FFHWBaseEncodePicture *pic)
+{
+    FFVulkanFunctions *vk = &ctx->s.vkfn;
+
+    FFVulkanEncodePicture *vp = pic->priv;
+
+    if (vp->in.view)
+        vk->DestroyImageView(ctx->s.hwctx->act_dev, vp->in.view,
+                             ctx->s.hwctx->alloc);
+
+    if (!ctx->common.layered_dpb && vp->dpb.view)
+        vk->DestroyImageView(ctx->s.hwctx->act_dev, vp->dpb.view,
+                             ctx->s.hwctx->alloc);
+
+    vp->in.view = VK_NULL_HANDLE;
+    vp->dpb.view = VK_NULL_HANDLE;
+
+    ctx->slots[vp->dpb_slot.slotIndex] = NULL;
+}
+
 av_cold void ff_vulkan_encode_uninit(FFVulkanEncodeContext *ctx)
 {
     FFVulkanContext *s = &ctx->s;
@@ -42,9 +63,14 @@ av_cold void ff_vulkan_encode_uninit(FFVulkanEncodeContext *ctx)
                                              ctx->session_params,
                                              s->hwctx->alloc);
 
-    ff_hw_base_encode_close(&ctx->base);
+    /* Destroy the image views of any pictures still in the queue,
+     * as ff_hw_base_encode_close() only frees the picture structs */
+    for (FFHWBaseEncodePicture *pic = ctx->base.pic_start; pic; pic = pic->next)
+        vulkan_encode_free_pic(ctx, pic);
 
     av_buffer_pool_uninit(&ctx->buf_pool);
+
+    ff_hw_base_encode_close(&ctx->base);
 
     ff_vk_video_common_uninit(s, &ctx->common);
 
@@ -95,19 +121,8 @@ static int vulkan_encode_init(AVCodecContext *avctx, FFHWBaseEncodePicture *pic)
 static int vulkan_encode_free(AVCodecContext *avctx, FFHWBaseEncodePicture *pic)
 {
     FFVulkanEncodeContext *ctx = avctx->priv_data;
-    FFVulkanFunctions *vk = &ctx->s.vkfn;
 
-    FFVulkanEncodePicture *vp = pic->priv;
-
-    if (vp->in.view)
-        vk->DestroyImageView(ctx->s.hwctx->act_dev, vp->in.view,
-                             ctx->s.hwctx->alloc);
-
-    if (!ctx->common.layered_dpb && vp->dpb.view)
-        vk->DestroyImageView(ctx->s.hwctx->act_dev, vp->dpb.view,
-                             ctx->s.hwctx->alloc);
-
-    ctx->slots[vp->dpb_slot.slotIndex] = NULL;
+    vulkan_encode_free_pic(ctx, pic);
 
     return 0;
 }
