@@ -2,74 +2,185 @@ The last version increases of all libraries were on 2026-06-23.
 
 API changes, most recent first:
 
-2026-03-07 - xxxxxxxxxx - lavc 62.26.100 - codec_desc.h
+2026-07-11 - xxxxxxxxxxx - lavu 61.4.100 - frame.h
+  Add AV_FRAME_DATA_DOWNMIX_MATRIX.
+
+2026-07-11 - xxxxxxxxxxx - lavu 61.3.100 - downmix_info.h
+  Add AVDownmixMatrix, AVDownmixCoeff.
+  Add av_downmix_matrix_coeff(), av_downmix_matrix_alloc().
+
+2026-07-09 - xxxxxxxxxxx - lavc 63.6.100 - codec_id.h
+  Add AV_CODEC_ID_ITUT_T35.
+
+2026-07-06 - xxxxxxxxxxx - lavc 63.4.100 - bsf.h
+  Added graph based experimental bitstream filter API.
+  Add AVBitStreamFilterContext, AVBitStreamFilterGraph.
+  Add AVBitStreamFilterLink, AVBitStreamFilterPad.
+  Add av_bsf_pad_get_name(), av_bsf_pad_get_codec_ids(), av_bsf_link().
+  Add av_bsf_init_str(), av_bsf_init_dict().
+  Add av_bsf_graph_alloc(), av_bsf_graph_alloc_filter(), av_bsf_graph_create_filter().
+  Add av_bsf_graph_get_filter(), av_bsf_graph_config().
+  Add av_bsf_graph_source_needs_input(), av_bsf_graph_free().
+  Add av_bsf_source_add_packet(), av_bsf_source_close().
+  Add av_bsf_source_parameters_set(), av_bsf_source_get_status().
+  Add av_bsf_sink_get_packet(), av_bsf_sink_get_time_base(), av_bsf_sink_get_parameters().
+
+2026-06-23 - 61693f6c35f - lavu 60.34.100 - hwcontext_vulkan.h
+  Switch AVVkFrame.access to VkAccessFlagBits2.
+
+2026-06-23 - 191be14fb6d - lavc 62.37.100 - packet.h
+  av_packet_pack_dictionary() now accepts const AVDictionary*.
+
+2026-06-10 - 12dc67b6fe0 - lavu 60.33.100 - frame.h
+  Add AV_FRAME_DATA_RAW_COLOR_PARAMS.
+
+2026-06-03 - 972c0cf91f4 - lsws 9.8.100 - swscale.h
+  Add enum SwsBackend and SwsContext.backends
+
+2026-06-02 - 9fe5758da5c - lavu 60.32.100 - hwcontext_vulkan.h
+  Add AVVulkanDeviceContext.queue_flags.
+
+2026-05-31 - 1e3883df9f0 - lavf 62.19.100 - avformat.h
+  Add AVStreamGroupLayeredVideo
+  Add AVStreamGroup.params.layered_video
+  Add AV_STREAM_GROUP_PARAMS_DOLBY_VISION
+  Deprecate AVStreamGroupLCEVC
+  Deprecate AVStreamGroup.params.lcevc
+
+2026-05-30 - 5f6dff5e7db - lavc 62.35.100 - packet.h
+  Add AV_PKT_DATA_HEVC_CONF side data type.
+
+2026-05-14 - xxxxxxxxxxx - lavf 62.18.100 - avformat.h
+  Add AV_FDEBUG_ID3V2 debug flag, deprecate FF_FDEBUG_TS in favor of
+  AV_FDEBUG_TS.
+
+2026-05-17 - a5822fca94f - lavf 62.17.100 - avformat.h
+  Add AV_STREAM_GROUP_PARAMS_TREF.
+  Add AVStreamGroupTREF.
+
+2026-05-16 - c0bdc3b62a5 - lavf 62.16.100 - avformat.h
+  Add AVFMT_FIXED_FRAMESIZE.
+
+2026-05-16 - b1120b1ed80 - lavc 62.33.100 - avcodec.h
+  Add AV_CODEC_FLAG2_FIXED_FRAME_SIZE.
+
+2026-05-12 - 99908c6e05e - lavu 60.31.100 - frame.h
+Add IAMF frame side data types to enum AVFrameSideDataType:
+- AV_FRAME_DATA_IAMF_MIX_GAIN_PARAM
+- AV_FRAME_DATA_IAMF_DEMIXING_INFO_PARAM
+- AV_FRAME_DATA_IAMF_RECON_GAIN_INFO_PARAM
+
+2026-05-05 - 5c557dd5d55 - lavf 62.15.100 - avformat.h
+  Add av_program_copy().
+
+2026-05-05 - 7623379a770 - lavf 62.14.100 - avformat.h
+  Add av_program_add_stream_index2().
+
+2026-04-14 - 7faa6ee2aa - lavc 62.30.100 - packet.h
+  Add AV_PKT_DATA_DYNAMIC_HDR_SMPTE_2094_APP5 side data type.
+
+2026-04-09 - 6ba6db4f19 - lavu 60.30.100 - hdr_dynamic_metadata.h frame.h
+  Add AVDynamicHDRSmpte2094App5 struct and functions.
+  Add AV_FRAME_DATA_DYNAMIC_HDR_SMPTE_2094_APP5 side data type.
+
+2026-03-14 - c102e89448a - lavu 60.29.100 - hwcontext_vulkan.h
+  Deprecate AVVulkanDeviceContext.lock_queue and
+  AVVulkanDeviceContext.unlock_queue without replacement.
+
+2026-03-12 - 3503b19711c - lsws 9.7.100 - swscale.h
+  Add enum SwsScaler, and SwsContext.scaler/scaler_sub.
+
+2026-03-11 - 910000fe59d - lavu 60.28.100 - hwcontext_amf.h
+  Add av_amf_display_mastering_meta_to_hdrmeta(), av_amf_light_metadata_to_hdrmeta().
+  Add av_amf_extract_hdr_metadata(), av_amf_attach_hdr_metadata().
+  Add av_amf_get_color_profile().
+
+2026-03-07 - c23d56b173a - lavc 62.26.100 - codec_desc.h
   Add AV_CODEC_PROP_ENHANCEMENT.
 
-2026-03-07 - xxxxxxxxxx - lavc 62.25.100 - avcodec.h
+2026-03-07 - f37cfb370f8 - lavc 62.25.100 - avcodec.h
   Deprecate AVCodecContext.intra_dc_precision.
 
-2026-02-xx - xxxxxxxxxx - lsws 9.4.100 - swscale.h
+2026-02-26 - 26d6ac56c10 - lsws 9.4.100 - swscale.h
   Add sws_test_hw_format().
 
-2026-02-xx - xxxxxxxxxx - lavf 62.9.100 - avformat.h
+2026-02-19 - ca011ee7547 - lavf 62.10.100 - avformat.h
+  Add demuxer command API consisting of:
+    - Add avformat_send_command().
+    - Add avformat_receive_command_reply().
+    - Add enum AVFormatCommandID.
+
+2026-02-13 - 66766bb1c76 - lavu 60.25.100 - avassert.h
+  Deprecate av_assert0_fpu() and av_assert2_fpu() without replacement.
+
+2026-02-09 - f2b13f783ac - lavf 62.9.100 - avformat.h
   Add AVFormatContext.name.
 
-2026-01-04 - xxxxxxxxxx - lavu 60.23.100 - cpu.h
+2026-01-26 - 714152dd9a0 - lavu 60.24.100 - hwcontext_d3d11va.h
+  Add BindFlags and MiscFlags to AVD3D11VADeviceContext
+
+2026-01-04 - 0645c484537 - lavu 60.23.100 - cpu.h
   Add AV_CPU_FLAG_ARM_CRC.
 
-2026-01-04 - xxxxxxxxxx - lavu 60.22.100 - cpu.h
+2026-01-04 - e382772e4a1 - lavu 60.22.100 - cpu.h
   Add AV_CPU_FLAG_CLMUL.
 
-2025-12-29 - xxxxxxxxxx - lavu 60.21.100 - iamf.h
+2025-12-29 - a6e5fa3fbb5 - lavu 60.21.100 - iamf.h
   Add nb_demixing_matrix to AVIAMFLayer
 
 2025-12-13 - b8ee68cffe - lavc 62.23.100 - codec_id.h
   Add AV_CODEC_ID_JPEGXS.
 
-2025-12-xx - xxxxxxxxxx - lavf 62.x.xxx - avformat.h
+2025-12-12 - c9b5e145b71 - lavf 62.7.100 - avformat.h
   Add av_mime_codec_str
 
-2025-12-xx - xxxxxxxxxx - lavu 60.20.100 - hwcontext_vulkan.h
+2025-12-08 - 212eb8413a6 - lavu 60.20.100 - hwcontext_vulkan.h
   Add av_vk_get_optional_instance_extensions().
   Add av_vk_get_optional_device_extensions().
 
-2025-12-xx - xxxxxxxxxx - lavc 62.22.101 - avcodec.h
+2025-12-07 - 00caeba050d - lavc 62.22.101 - avcodec.h
   Add avcodec_receive_frame_flags().
   Add AV_CODEC_RECEIVE_FRAME_FLAG_SYNCHRONOUS.
 
-2025-11-16 - xxxxxxxxxx - lavu 60.18.100 - cpu.h
+2025-11-26 - 623669a02cd - lavfi 11.10.100 - buffersrc.h
+  Add av_buffersrc_get_status().
+
+2025-11-18 - 140b4f28c30 - lavu 60.19.100 - hwcontext_amf.h
+  avutil/hwcontext_amf: add lock and unlock for AVAMFDeviceContext.
+
+2025-11-16 - 643e2e10f98 - lavu 60.18.100 - cpu.h
   Deprecate AV_CPU_FLAG_FORCE without replacement.
 
-2025-11-01 - xxxxxxxxxx - lavc 62.19.100 - avcodec.h
+2025-11-01 - 8a322c956f3 - lavc 62.19.100 - avcodec.h
   Schedule AVCodecParser and av_parser_init() to use enum AVCodecID
   for codec ids on the next major version bump.
 
-2025-11-01 - xxxxxxxxxx - lavc 62.18.100 - avcodec.h
+2025-11-01 - e0b0ca81112 - lavc 62.18.100 - avcodec.h
   Deprecate AVCodecParser fields priv_data_size, parser_init,
   parser_parse, parser_close, and split with no replacement.
 
-2025-10-30 - xxxxxxxxxx - lavc 62.17.100 - packet.h
+2025-10-30 - 6879c8ee5dd - lavc 62.17.100 - packet.h
   Add av_packet_side_data_from_frame() and av_packet_side_data_to_frame().
 
-2025-10-xx - xxxxxxxxxx - lavu 60.16.100 - pixfmt.h
+2025-10-28 - 71c7b9156bd - lavu 60.16.100 - pixfmt.h
   Add AVCOL_TRC_EXT_BASE, AVCOL_TRC_V_LOG,
   AVCOL_PRI_EXT_BASE and AVCOL_PRI_V_GAMUT.
 
-2025-10-xx - xxxxxxxxxx - lavu 60.14.100 - csp.h
+2025-10-24 - 00e43619cd3 - lavu 60.14.100 - csp.h
   Add av_csp_approximate_eotf_gamma().
 
 2025-08-xx - xxxxxxxxxx - lavf 62.6.100 - oggparsevorbis.h oggparseopus.h oggparseflac.h
   Drop header packets from secondary chained ogg/{flac, opus, vorbis} streams
   from demuxer output.
 
-2025-09-xx - xxxxxxxxxx - lavu 60.13.100 - hwcontext_d3d12va.h
+2025-09-08 - 1b97966199f - lavu 60.13.100 - hwcontext_d3d12va.h
   Add resource_flags and heap_flags to AVD3D12VADeviceContext
   Add heap_flags to AVD3D12VAFramesContext
 
-2025-09-xx - xxxxxxxx - lavf 62.5.100 - avformat.h
+2025-09-05 - 9458a6f8ec2 - lavf 62.5.100 - avformat.h
   Add AV_FRAME_FILENAME_FLAGS_IGNORE_TRUNCATION
 
-2025-09-xx - xxxxxxxxxx - lavu 60.12.100 - hwcontext_d3d12va.h
+2025-09-03 - c2ce3873859 - lavu 60.12.100 - hwcontext_d3d12va.h
   Add support for texture array mode AVD3D12VAFrame.subresource_index,
   AVD3D12VAFramesContext.texture_array
   Add enum AVD3D12VAFrameFlags to define the behaviours of frame allocation.
@@ -77,30 +188,30 @@ API changes, most recent first:
   Add flags to AVD3D12VAFramesContext
   Add flags to AVD3D12VAFrame
 
-2025-09-xx - xxxxxxxxxx - lavfi 11.8.100 - buffersrc.h
+2025-09-02 - de297ae2fca - lavfi 11.8.100 - buffersrc.h
   Add AVBufferSrcParameters.alpha_mode.
 
-2025-09-xx - xxxxxxxxxx - lavfi 11.7.100 - buffersink.h
+2025-09-02 - 0fbd90d78f8 - lavfi 11.7.100 - buffersink.h
   Add av_buffersink_get_alpha_mode().
 
-2025-09-xx - xxxxxxxxxx - lavc 62.15.100 - avcodec.h codec_par.h
+2025-09-02 - ecebf9c6935 - lavc 62.15.100 - avcodec.h codec_par.h
   Add AVCodecContext.alpha_mode, AVCodecParameters.alpha_mode, and
   AV_CODEC_CONFIG_ALPHA_MODE.
 
-2025-09-xx - xxxxxxxxxx - lavfi 11.6.100 - avfilter.h
+2025-09-02 - eea99a77eda - lavfi 11.6.100 - avfilter.h
   Add AVFilterLink.alpha_mode.
 
-2025-09-xx - xxxxxxxxxx - lavu 60.11.100 - frame.h pixfmt.h
+2025-09-02 - 22929bd044c - lavu 60.11.100 - frame.h pixfmt.h
   Add AVAlphaMode, AVFrame.alpha_mode, av_alpha_mode_name() and
   av_alpha_mode_from_name().
 
-2025-09-xx - xxxxxxxxxx - lsws 9.3.100 - swscale.h
+2025-09-01 - ce0938da8cd - lsws 9.3.100 - swscale.h
   Add SWS_UNSTABLE flag.
 
-2025-09-01 - xxxxxxxx - lavc 62.14.100 - packet.h
+2025-09-01 - 4ffd621523e - lavc 62.14.100 - packet.h
   Add AV_PKT_DATA_EXIF
 
-2025-08-xx - xxxxxxxx - lavc 62.13.101 - exif.h
+2025-08-24 - 368b5e0ffc2 - lavc 62.13.101 - exif.h
   Add AV_EXIF_FLAG_RECURSIVE
 
 2025-08-19 - ad77345a5d1..fe496b0308f - lavc 62.13.100 - exif.h
@@ -120,27 +231,33 @@ API changes, most recent first:
 
 -------- 8< --------- FFmpeg 8.0 was cut here -------- 8< ---------
 
-2025-07-29 - xxxxxxxxxx - lavc 62.10.100 - smpte_436m.h
+2025-07-29 - 1c85a3832af - lavc 62.10.100 - smpte_436m.h
   Add a new public header smpte_436m.h with API for
   manipulating AV_CODEC_ID_SMPTE_436M_ANC data.
 
-2025-07-10 - xxxxxxxxxx - lavf 62.2.100
+2025-07-10 - a566fcb9dc0 - lavf 62.2.100
   mxf [de]muxer now uses AV_CODEC_ID_SMPTE_436M_ANC for
   the vbi_vanc_smpte_436M streams instead of AV_CODEC_ID_NONE.
 
-2025-07-10 - xxxxxxxxxx - lavc 62.10.100 - codec_id.h
+2025-07-10 - f4ff379baea - lavc 62.10.100 - codec_id.h
   Add AV_CODEC_ID_SMPTE_436M_ANC.
 
-2025-08-08 - xxxxxxxxxx - lavc 62.9.100 - codec_id.h
+2025-08-08 - 83b36f54108 - lavc 62.9.100 - codec_id.h
   Add AV_CODEC_ID_PRORES_RAW.
 
-2025-07-31 - xxxxxxxxxx - lavu 60.7.100 - spherical.h
+2025-07-31 - 119d127d05c - lavu 60.7.100 - spherical.h
   Add AV_SPHERICAL_PARAMETRIC_IMMERSIVE.
 
-2025-07-20 - xxxxxxxxxx - lavu 60.6.100 - attributes.h, avstring.h
+2025-07-20 - 157d3b007e9 - lavu 60.6.100 - attributes.h, avstring.h
   Add av_scanf_format() and use it on av_sscanf().
 
-2025-07-xx - xxxxxxxxxd - lavfi 11.2.100 - avfilter.h
+2025-07-18 - fbda5ffb953 - lavu 60.5.100 - pixfmt.h
+  Add AV_PIX_FMT_OHCODEC.
+
+2025-07-18 - fbda5ffb953 - lavu 60.5.100 - hwcontext.h
+  Add AV_HWDEVICE_TYPE_OHCODEC and AVOHCodecDeviceContext.
+
+2025-07-14 - b24155cae11 - lavfi 11.2.100 - avfilter.h
   Add AVFilterGraph->max_buffered_frames.
 
 2025-07-07 - eca477da52 - lavc 62.6.100 - packet.h
@@ -156,11 +273,17 @@ API changes, most recent first:
   Add AV3DReferenceDisplaysInfo and AV3DReferenceDisplay structs.
   Add av_tdrdi_alloc() and av_tdrdi_get_display().
 
-2025-05-21 - xxxxxxxxxx - lavu 60.3.100 - avassert.h
+2025-05-21 - 004cc60f0e3 - lavu 60.3.100 - avassert.h
   Add av_unreachable() and av_assume() macros.
 
-2025-04-21 - xxxxxxxxxx - lavu 60.2.100 - log.h
+2025-02-15 - e2f39671ae2 - lavfi 10.10.100 - avfilter.h
+  Add avfilter_link_get_hw_frames_ctx().
+
+2025-04-21 - bf1579c904a - lavu 60.2.100 - log.h
   Add AV_CLASS_CATEGORY_HWDEVICE.
+
+2025-04-16 - c818c67991 - libpostproc 59.1.100 - postprocess.h
+  Deprecate PP_CPU_CAPS_3DNOW.
 
 2025-04-07 - 19e9a203b7 - lavu 60.01.100 - dict.h
   Add AV_DICT_DEDUP.
@@ -321,27 +444,49 @@ API changes, most recent first:
     - sample_rates
     - ch_layouts
 
-2024-09-xx - xxxxxxxxxx - lavc 61.13.100 - avcodec.h
+-------- 8< --------- FFmpeg 7.1 was cut here -------- 8< ---------
+
+2024-09-23 - 6940a6de2f0 - lavu 59.38.100 - frame.h
+  Add AV_FRAME_DATA_VIEW_ID.
+
+2024-09-23 - 6147385393a - lavc 61.18.100 - avcodec.h
+  Add a new flag AV_CODEC_EXPORT_DATA_ENHANCEMENTS for export_side_data.
+
+2024-09-18 - df609af8e44 - lavc 61.17.100 - packet.h
+  Add AV_PKT_DATA_LCEVC.
+
+2024-09-18 - ba0ef0860f0 - lavf 61.5.100 - avformat.h
+  Add AVStreamGroupLCEVC
+  Add AV_STREAM_GROUP_PARAMS_LCEVC
+  Add AVStreamGroup.params.lcevc
+
+2024-09-18 - 58963182294 - lavc 61.16.100 - avcodec.h
+  Add AV_CODEC_ID_LCEVC.
+
+2024-09-18 - 90d12c24c51 - lavu 59.37.100 - frame.h
+  Add AV_FRAME_DATA_LCEVC.
+
+2024-09-08 - 3305767560a - lavc 61.13.100 - avcodec.h
   Add avcodec_get_supported_config() and enum AVCodecConfig; deprecate
   AVCodec.pix_fmts, AVCodec.sample_fmts, AVCodec.supported_framerates,
   AVCodec.supported_samplerates and AVCodec.ch_layouts.
 
-2024-xx-xx - xxxxxxx - lavc 61.12.100 - defs.h
+2024-09-06 - c35a51f4bb1 - lavc 61.12.100 - defs.h
   Add AV_PROFILE_HEVC_MULTIVIEW_MAIN
 
-2024-09-xx - xxxxxxxxx - lavu 59.36.100 - opt.h
+2024-09-06 - 450a3f58edb - lavu 59.36.100 - opt.h
   Add av_opt_set_array() and AV_OPT_ARRAY_REPLACE.
 
-2024-08-xx - xxxxxxxxx - lavu 59.35.100 - opt.h
+2024-08-27 - d89930f8666 - lavu 59.35.100 - opt.h
   Add av_opt_get_array_size() and av_opt_get_array().
 
-2024-08-xx - xxxxxxxxx - lavc 61.11.100- avcodec.h
+2024-08-18 - 8657eb9c3f4 - lavc 61.11.100 - avcodec.h
   Clarify the documentation for get_buffer*() functions, making it
   clear that the memory returned by them should not contain sensitive
   information. This is not a change in the API, it is how it already worked
   before.
 
-2024-08-10 - xxxxxxxxx - lavu 59.34.100 - hwcontext_vulkan.h
+2024-08-10 - 5f0f1f7b7a6 - lavu 59.34.100 - hwcontext_vulkan.h
   Add qf and nb_qf to AVVulkanDeviceContext.
   Deprecate queue_family_index, nb_graphics_queues,
   queue_family_tx_index, nb_tx_queues.
@@ -350,42 +495,42 @@ API changes, most recent first:
   queue_family_decode_index, and nb_decode_queues,
   from AVVulkanDeviceContext.
 
-2024-07-30 - xxxxxxxxx - lavu 59.32.100 - cpu.h
+2024-07-30 - e0f9f4d4915 - lavu 59.32.100 - cpu.h
   Deprecate AV_CPU_FLAG_RVF and AV_CPU_FLAG_RVD without replacement.
   Deprecate AV_CPU_FLAG_RVB_ADDR, subsumed into AV_CPU_FLAG_RVB.
 
-2024-07-29 - xxxxxxxxx - lavu 59.31.100 - intreadwrite.h
+2024-07-29 - 753f2aeed76 - lavu 59.31.100 - intreadwrite.h
   Add AV_{R,W}{L,B}{16,32}A and AV_{R,W}B64A.
 
-2024-07-28 - xxxxxxxxxx - lavu 59.30.100 - dovi_meta.h
+2024-07-28 - cbea92c84d4 - lavu 59.30.100 - dovi_meta.h
   Add AVDOVIDecoderConfigurationRecord.dv_md_compression.
 
-2024-07-25 - xxxxxxxxx - lavu 59.29.100 - cpu.h
+2024-07-25 - 45d7078a218 - lavu 59.29.100 - cpu.h
   Add AV_CPU_FLAG_RVB.
 
 2024-07-xx - xxxxxxxxxx - lavf 61 - avformat.h
   Deprecate avformat_transfer_internal_stream_timing_info()
   and av_stream_get_codec_timebase() without replacement.
 
-2024-07-08 - xxxxxxxxxx - lavc 61.10.100 - packet.h
+2024-07-08 - 1b58f3af30c - lavc 61.10.100 - packet.h
   Add AV_PKT_DATA_FRAME_CROPPING.
 
-2024-07-07 - xxxxxxxxxx - lavf 61.5.100 - avformat.h
+2024-07-07 - 46f7ea44563 - lavf 61.5.100 - avformat.h
   Add AV_DISPOSITION_MULTILAYER
 
-2024-07-02 - xxxxxxxxxx - lavu 59.28.100 - hwcontext_d3d12va.h
+2024-07-02 - d822146f4fc - lavu 59.28.100 - hwcontext_d3d12va.h
   Add AVD3D12VAFramesContext.flags
 
-2024-06-28 - xxxxxxxxxx - lavu 59.27.100 - stereo3d.h
+2024-06-28 - 8af0919cc66 - lavu 59.27.100 - stereo3d.h
   Add AV_STEREO3D_UNSPEC and AV_STEREO3D_VIEW_UNSPEC.
 
-2024-06-25 - xxxxxxxxxx - lavu 59.26.100 - stereo3d.h
+2024-06-25 - e6baf4f3841 - lavu 59.26.100 - stereo3d.h
   Add av_stereo3d_alloc_size().
 
-2024-06-19 - xxxxxxxxxx - lavu 59.25.100 - dovi_meta.h
+2024-06-19 - cc587e69c6f - lavu 59.25.100 - dovi_meta.h
   Add AVDOVIRpuDataHeader.ext_mapping_idc_0_4 and ext_mapping_idc_5_7.
 
-2024-06-18 - xxxxxxxxxx - lavu 59.24.100 - stereo3d.h
+2024-06-18 - cf2436a0b4d - lavu 59.24.100 - stereo3d.h
   Add primary_eye, baseline, horizontal_disparity_adjustment, and
   horizontal_field_of_view fields to AVStereo3D.
   Add AVStereo3DPrimaryEye.
@@ -394,65 +539,65 @@ API changes, most recent first:
   Add av_stereo3d_primary_eye_name.
   Add av_stereo3d_primary_eye_from_name.
 
-2024-06-18 - xxxxxxxxxx - lavu 59.23.100 - spherical.h
+2024-06-18 - 57bfba35d6b - lavu 59.23.100 - spherical.h
   Add AV_SPHERICAL_HALF_EQUIRECTANGULAR, AV_SPHERICAL_RECTILINEAR, and
   AV_SPHERICAL_FISHEYE values to AVSphericalProjection, and initialize
   to AV_SPHERICAL_RECTILINEAR on alloc.
 
-2024-06-13 - xxxxxxxxxx - lavu 59.22.100 - common.h
+2024-06-13 - 39c90d6466a - lavu 59.22.100 - common.h
   Deprecate av_mod_uintp2[_c]() and replace it with av_zero_extend[_c]().
 
-2024-06-08 - xxxxxxxxxx - lavc 61.7.100 - defs.h
+2024-06-08 - 91fd6ca000c - lavc 61.7.100 - defs.h
   Add AV_PROFILE_AAC_USAC.
 
-2024-06-02 - xxxxxxxxxx - lavu 59.21.100 - channel_layout.h
+2024-06-02 - 63e166d8028 - lavu 59.21.100 - channel_layout.h
   Add AV_CHAN_SIDE_SURROUND_RIGHT and AV_CH_SIDE_SURROUND_LEFT.
   Add AV_CHAN_SIDE_SURROUND_RIGHT and AV_CH_SIDE_SURROUND_RIGHT.
   Add AV_CHAN_TOP_SURROUND_LEFT and AV_CH_TOP_SURROUND_LEFT.
   Add AV_CHAN_TOP_SURROUND_RIGHT and AV_CH_TOP_SURROUND_RIGHT.
 
-2024-05-23 - xxxxxxxxxx - lavu 59.20.100 - channel_layout.h
+2024-05-23 - 8c974494822 - lavu 59.20.100 - channel_layout.h
   Add av_channel_layout_ambisonic_order().
 
-2024-05-xx - xxxxxxxxxx - lavu 59.19.100 - hwcontext_qsv.h
+2024-05-20 - 4c0bb7d4a91 - lavu 59.19.100 - hwcontext_qsv.h
   Add AVQSVFramesContext.info
 
-2024-05-10 - xxxxxxxxx - lavu 59.18.100 - cpu.h
+2024-05-10 - 01c5f4ad9fa - lavu 59.18.100 - cpu.h
   Add AV_CPU_FLAG_RV_ZVBB.
 
-2024-05-04 - xxxxxxxxxx - lavu 59.17.100 - opt.h
+2024-05-04 - d053290d8dd - lavu 59.17.100 - opt.h
   Add AV_OPT_TYPE_UINT and av_opt_eval_uint().
 
 2024-04-24 - 8616cfe0890 - lavu 59.16.100 - opt.h
   Add AV_OPT_SERIALIZE_SEARCH_CHILDREN.
 
-2024-04-11 - xxxxxxxxxx - lavc 61.5.102 - avcodec.h
+2024-04-11 - 6d0c89980c7 - lavc 61.5.102 - avcodec.h
   AVCodecContext.decoded_side_data may now be set by libavcodec after
   calling avcodec_open2().
 
-2024-04-11 - xxxxxxxxxx - lavu 59.15.100 - frame.h
+2024-04-11 - 6d760c666d5 - lavu 59.15.100 - frame.h
   Add av_mastering_display_metadata_alloc_size().
 
-2024-04-11 - xxxxxxxxxx - lavu 59.14.100 - frame.h
+2024-04-11 - adb67bba064 - lavu 59.14.100 - frame.h
   Add av_frame_side_data_add() and av_frame_side_data_remove().
   Add AV_FRAME_SIDE_DATA_FLAG_REPLACE.
 
-2024-04-03 - xxxxxxxxxx - lavu 59.13.100 - pixfmt.h
+2024-04-03 - 29561c8e2d4 - lavu 59.13.100 - pixfmt.h
   Add AVCOL_SPC_IPT_C2, AVCOL_SPC_YCGCO_RE and AVCOL_SPC_YCGCO_RO
   to map new matrix coefficients defined by H.273 v3.
 
-2024-04-xx - xxxxxxxxxx - lavu 59.12.100 - dovi_meta.h
+2024-04-03 - 4f55e16f2bc - lavu 59.12.100 - dovi_meta.h
   Add AVDOVIMetadata.ext_block_{offset,size}, AVDOVIMetadata.num_ext_blocks,
   AVDOVIDmData and AVDOVIDmLevel{1..6,8..11,254..255}, av_dovi_get_ext()
   and av_dovi_find_level().
 
-2024-04-xx - xxxxxxxxxx - lavu 59.11.100 - dovi_meta.h
+2024-04-03 - 78076ede296 - lavu 59.11.100 - dovi_meta.h
   Add AVDOVIDataMapping.nlq_pivots.
 
-2024-03-29 - xxxxxxxxxx - lavf 61.3.100 - avformat.h
+2024-03-29 - ed9363052f4 - lavf 61.3.100 - avformat.h
   Add AVFormatContext.duration_probesize.
 
-2024-03-27 - xxxxxxxxxx - lavu 59.10.100 - frame.h
+2024-03-27 - 2621be35397 - lavu 59.10.100 - frame.h
   Add AVSideDataDescriptor, enum AVSideDataProps, and
   av_frame_side_data_desc().
 
