@@ -2795,13 +2795,40 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     s->m.last_dc[0] = s->m.last_dc[1] = s->m.last_dc[2] = 128 << (s->flags & 3);
     m->qscale = 1;
 
+    int mb_skip_run = 0;
     for (int y = 0; y < avctx->height; y += 16) {
         int intraquant;
 
         for (int x = 0; x < avctx->width; x += 16) {
-            if (x || y) {
-                if (!get_bits1(gb))
+            if ((x || y) && mb_skip_run == 0) {
+                int code = get_vlc2(gb, ff_mbincr_vlc,
+                                    MBINCR_VLC_BITS, 2);
+                if (code < 0) {
+                    av_log(avctx, AV_LOG_ERROR, "mb incr damaged\n");
                     return AVERROR_INVALIDDATA;
+                }
+                if (code > 33) {
+                    if (code == 35) {
+                        if (show_bits(gb, 15) != 0)
+                            av_log(avctx, AV_LOG_ERROR, "end mismatch\n");
+                        mb_skip_run = 33;
+                    }
+                } else {
+                    mb_skip_run += code;
+                }
+            }
+            if (mb_skip_run > 0) {
+                mb_skip_run--;
+                memset(block, 0, 6 * sizeof(*block));
+
+                block[0][0] = s->m.last_dc[0];
+                block[1][0] = s->m.last_dc[0];
+                block[2][0] = s->m.last_dc[0];
+                block[3][0] = s->m.last_dc[0];
+                block[4][0] = s->m.last_dc[1];
+                block[5][0] = s->m.last_dc[2];
+
+                goto skip_mb;
             }
             if (get_bits1(gb)) {
                 intraquant = 0;
@@ -2834,6 +2861,7 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     return ret;
             }
 
+skip_mb:
             m->idsp.idct_put(frame->data[0] + y * frame->linesize[0] + x,
                              frame->linesize[0], block[0]);
             m->idsp.idct_put(frame->data[0] + y * frame->linesize[0] + x + 8,
