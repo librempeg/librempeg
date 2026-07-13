@@ -579,12 +579,10 @@
 #define SWS_FOR_STRUCT_U16_DITHER(MACRO, ...)
 #define SWS_FOR_U32_READ_PLANAR(MACRO, ...) \
     MACRO(__VA_ARGS__, u32_read_planar_x                       , SWS_PIXEL_U32, SWS_UOP_READ_PLANAR     , 0x1) \
-    MACRO(__VA_ARGS__, u32_read_planar_xy                      , SWS_PIXEL_U32, SWS_UOP_READ_PLANAR     , 0x3) \
     MACRO(__VA_ARGS__, u32_read_planar_xyz                     , SWS_PIXEL_U32, SWS_UOP_READ_PLANAR     , 0x7) \
     MACRO(__VA_ARGS__, u32_read_planar_xyzw                    , SWS_PIXEL_U32, SWS_UOP_READ_PLANAR     , 0xf)
 #define SWS_FOR_STRUCT_U32_READ_PLANAR(MACRO, ...) \
     MACRO(__VA_ARGS__, u32_read_planar_x                       , .type = SWS_PIXEL_U32, .uop = SWS_UOP_READ_PLANAR     , .mask = 0x1) \
-    MACRO(__VA_ARGS__, u32_read_planar_xy                      , .type = SWS_PIXEL_U32, .uop = SWS_UOP_READ_PLANAR     , .mask = 0x3) \
     MACRO(__VA_ARGS__, u32_read_planar_xyz                     , .type = SWS_PIXEL_U32, .uop = SWS_UOP_READ_PLANAR     , .mask = 0x7) \
     MACRO(__VA_ARGS__, u32_read_planar_xyzw                    , .type = SWS_PIXEL_U32, .uop = SWS_UOP_READ_PLANAR     , .mask = 0xf)
 #define SWS_FOR_U32_READ_PLANAR_FH(MACRO, ...)

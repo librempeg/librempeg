@@ -318,29 +318,6 @@ static int sws_uops_macros_gen(char **out_str)
             goto fail;
     }
 
-    /**
-     * Additionally make sure planar reads/writes are always available for all
-     * formats, because checkasm depends on them to be able to verify the
-     * input/output of any other operations.
-     */
-    for (enum SwsPixelType type = SWS_PIXEL_NONE+1; type < SWS_PIXEL_TYPE_NB; type++) {
-        if (!ff_sws_pixel_type_is_int(type))
-            continue;
-        for (int elems = 1; elems <= 4; elems++) {
-            for (int rw = 0; rw < 2; rw++) {
-                SwsUOp uop = {
-                    .type = type,
-                    .uop  = rw ? SWS_UOP_WRITE_PLANAR : SWS_UOP_READ_PLANAR,
-                    .mask = SWS_COMP_ELEMS(elems),
-                };
-
-                ret = register_uop(&root, &uop);
-                if (ret < 0)
-                    goto fail;
-            }
-        }
-    }
-
     #define BPRINT_STR(str) av_bprint_append_data(bp, str, strlen(str))
     BPRINT_STR(
 "/**\n"
