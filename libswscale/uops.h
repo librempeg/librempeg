@@ -71,6 +71,7 @@ enum {
 #define SWS_COMP_TEST(mask, X) (!!((mask) & SWS_COMP(X)))
 #define SWS_COMP_INV(mask) ((mask) ^ SWS_COMP_ALL)
 #define SWS_COMP_ELEMS(N) ((1 << (N)) - 1)
+#define SWS_COMP_COUNT(mask) (av_popcount((mask) & SWS_COMP_ALL))
 #define SWS_COMP_MASK(X, Y, Z, W)   \
     (((X) ? SWS_COMP(0) : 0) |      \
      ((Y) ? SWS_COMP(1) : 0) |      \
