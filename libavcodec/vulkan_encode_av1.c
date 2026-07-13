@@ -1359,6 +1359,10 @@ static av_cold int vulkan_encode_av1_init(AVCodecContext *avctx)
 static av_cold int vulkan_encode_av1_close(AVCodecContext *avctx)
 {
     VulkanEncodeAV1Context *enc = avctx->priv_data;
+
+    ff_cbs_fragment_free(&enc->current_access_unit);
+    ff_cbs_close(&enc->cbs);
+
     av_free(enc->padding_payload);
     ff_vulkan_encode_uninit(&enc->common);
     return 0;
