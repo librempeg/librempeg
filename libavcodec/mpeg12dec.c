@@ -2789,7 +2789,7 @@ static int ipu_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     m->alternate_scan = !!(s->flags & 0x10);
 
     ff_permute_scantable(m->intra_scantable.permutated,
-                         s->flags & 0x10 ? ff_alternate_vertical_scan : ff_zigzag_direct,
+                         m->alternate_scan ? ff_alternate_vertical_scan : ff_zigzag_direct,
                          m->idsp.idct_permutation);
 
     s->m.last_dc[0] = s->m.last_dc[1] = s->m.last_dc[2] = 128 << (s->flags & 3);
