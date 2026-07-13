@@ -29,12 +29,6 @@
 #include "ops_impl_conv.c"
 
 /*********************************************************************/
-typedef struct SwsAArch64BackendContext {
-    SwsContext *sws;
-    int block_size;
-} SwsAArch64BackendContext;
-
-/*********************************************************************/
 static int aarch64_setup_linear(const SwsAArch64OpImplParams *p,
                                 const SwsOp *op, SwsImplResult *res)
 {
@@ -115,10 +109,10 @@ static int aarch64_setup_dither(const SwsAArch64OpImplParams *p,
 }
 
 /*********************************************************************/
-static int aarch64_setup(SwsOpList *ops, int block_size, int n,
+static int aarch64_setup(const SwsOpList *ops, int block_size, int n,
                          const SwsAArch64OpImplParams *p, SwsImplResult *out)
 {
-    SwsOp *op = &ops->ops[n];
+    const SwsOp *op = &ops->ops[n];
     switch (op->op) {
     case SWS_OP_READ:
         /* Negative shift values to perform right shift using ushl. */
@@ -161,33 +155,17 @@ static int aarch64_setup(SwsOpList *ops, int block_size, int n,
 }
 
 /*********************************************************************/
-static int aarch64_optimize(SwsAArch64BackendContext *bctx, SwsOpList *ops)
-{
-    /* Currently, no optimization is performed. This is just a placeholder. */
-
-    /* Use at most two full vregs during the widest precision section */
-    bctx->block_size = (ff_sws_op_list_max_size(ops) == 4) ? 8 : 16;
-
-    return 0;
-}
-
-/*********************************************************************/
 static int aarch64_compile(SwsContext *ctx, const SwsOpList *ops,
                            SwsCompiledOp *out)
 {
-    SwsAArch64BackendContext bctx;
     int ret;
 
     const int cpu_flags = av_get_cpu_flags();
     if (!(cpu_flags & AV_CPU_FLAG_NEON))
         return AVERROR(ENOTSUP);
 
-    /* Make on-stack copy of `ops` to iterate over */
-    SwsOpList rest = *ops;
-    bctx.sws = ctx;
-    ret = aarch64_optimize(&bctx, &rest);
-    if (ret < 0)
-        return ret;
+    /* Use at most two full vregs during the widest precision section */
+    int block_size = (ff_sws_op_list_max_size(ops) == 4) ? 8 : 16;
 
     SwsOpChain *chain = ff_sws_op_chain_alloc();
     if (!chain)
@@ -198,13 +176,13 @@ static int aarch64_compile(SwsContext *ctx, const SwsOpList *ops,
         .priv        = chain,
         .slice_align = 1,
         .free        = ff_sws_op_chain_free_cb,
-        .block_size  = bctx.block_size,
+        .block_size  = block_size,
     };
 
     /* Look up kernel functions. */
-    for (int i = 0; i < rest.num_ops; i++) {
+    for (int i = 0; i < ops->num_ops; i++) {
         SwsAArch64OpImplParams params = { 0 };
-        ret = convert_to_aarch64_impl(ctx, &rest, i, bctx.block_size, &params);
+        ret = convert_to_aarch64_impl(ctx, ops, i, block_size, &params);
         if (ret < 0)
             goto error;
         SwsFuncPtr func = ff_sws_aarch64_lookup(&params);
@@ -213,7 +191,7 @@ static int aarch64_compile(SwsContext *ctx, const SwsOpList *ops,
             goto error;
         }
         SwsImplResult res = { 0 };
-        ret = aarch64_setup(&rest, bctx.block_size, i, &params, &res);
+        ret = aarch64_setup(ops, block_size, i, &params, &res);
         if (ret < 0)
             goto error;
         ret = ff_sws_op_chain_append(chain, func, res.free, &res.priv);
@@ -227,8 +205,8 @@ static int aarch64_compile(SwsContext *ctx, const SwsOpList *ops,
     void ff_sws_process_0111_neon(void);
     void ff_sws_process_1111_neon(void);
 
-    const SwsOp *read  = ff_sws_op_list_input(&rest);
-    const SwsOp *write = ff_sws_op_list_output(&rest);
+    const SwsOp *read  = ff_sws_op_list_input(ops);
+    const SwsOp *write = ff_sws_op_list_output(ops);
     const int read_planes  = read ? ff_sws_rw_op_planes(read) : 0;
     const int write_planes = ff_sws_rw_op_planes(write);
     SwsOpFunc process_func = NULL;
