@@ -31,6 +31,7 @@ extern "C" {
 #include "dnn_backend_common.h"
 #include "libavutil/opt.h"
 #include "libavutil/mem.h"
+#include "libavutil/cpu.h"
 #include "queue.h"
 #include "safe_queue.h"
 }
@@ -464,28 +465,34 @@ static DNNModel *dnn_load_model_th(DnnContext *ctx, DNNFunctionType func_type, A
         goto fail;
     }
 
+    if (ctx->nireq <= 0) {
+        ctx->nireq = av_cpu_count() / 2 + 1;
+    }
+
     th_model->request_queue = ff_safe_queue_create();
     if (!th_model->request_queue) {
         goto fail;
     }
 
-    item = (THRequestItem *)av_mallocz(sizeof(THRequestItem));
-    if (!item) {
-        goto fail;
-    }
-    item->infer_request = th_create_inference_request();
-    if (!item->infer_request) {
-        goto fail;
-    }
+    for (int i = 0; i < ctx->nireq; i++) {
+        item = (THRequestItem *)av_mallocz(sizeof(THRequestItem));
+        if (!item) {
+            goto fail;
+        }
+        item->infer_request = th_create_inference_request();
+        if (!item->infer_request) {
+            goto fail;
+        }
 
-    item->exec_module.start_inference = &th_start_inference;
-    item->exec_module.callback = &infer_completion_callback;
-    item->exec_module.args = item;
+        item->exec_module.start_inference = &th_start_inference;
+        item->exec_module.callback = &infer_completion_callback;
+        item->exec_module.args = item;
 
-    if (ff_safe_queue_push_back(th_model->request_queue, item) < 0) {
-        goto fail;
+        if (ff_safe_queue_push_back(th_model->request_queue, item) < 0) {
+            goto fail;
+        }
+        item = NULL;
     }
-    item = NULL;
 
     th_model->task_queue = ff_queue_create();
     th_model->lltask_queue = ff_queue_create();
