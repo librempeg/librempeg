@@ -79,7 +79,6 @@ static const enum AVPixelFormat supported_formats[] = {
 #define CHECK_CU(x) FF_CUDA_CHECK_DL(device_ctx, cu, x)
 
 static CUarray_format cuda_array_format_for_pix_fmt(enum AVPixelFormat fmt);
-static unsigned int cuda_array_numchannels_for_pix_fmt(enum AVPixelFormat fmt);
 
 static int cuda_frames_get_constraints(AVHWDeviceContext *ctx,
                                        const void *hwconfig,
@@ -110,13 +109,17 @@ static int cuda_frames_get_constraints(AVHWDeviceContext *ctx,
         constraints->valid_hw_formats[0] = req_fmt;
         constraints->valid_hw_formats[1] = AV_PIX_FMT_NONE;
     } else {
-        constraints->valid_hw_formats = av_malloc_array(3, sizeof(*constraints->valid_hw_formats));
+        constraints->valid_hw_formats = av_malloc_array(2 + HAVE_FFNVCODEC_CUARRAY, sizeof(*constraints->valid_hw_formats));
         if (!constraints->valid_hw_formats)
             return AVERROR(ENOMEM);
 
         constraints->valid_hw_formats[0] = AV_PIX_FMT_CUDA;
+#if HAVE_FFNVCODEC_CUARRAY
         constraints->valid_hw_formats[1] = AV_PIX_FMT_CUARRAY;
         constraints->valid_hw_formats[2] = AV_PIX_FMT_NONE;
+#else
+        constraints->valid_hw_formats[1] = AV_PIX_FMT_NONE;
+#endif
     }
 
     return 0;
@@ -237,6 +240,7 @@ static void cuda_frames_uninit(AVHWFramesContext *ctx)
 static CUarray_format cuda_array_format_for_pix_fmt(enum AVPixelFormat fmt)
 {
     switch (fmt) {
+#if HAVE_FFNVCODEC_CUARRAY
     case AV_PIX_FMT_NV12:      return CU_AD_FORMAT_NV12;
     case AV_PIX_FMT_P010:
     case AV_PIX_FMT_P012:
@@ -262,10 +266,12 @@ static CUarray_format cuda_array_format_for_pix_fmt(enum AVPixelFormat fmt)
     case AV_PIX_FMT_0BGR32:
     case AV_PIX_FMT_RGB32:
     case AV_PIX_FMT_BGR32:     return CU_AD_FORMAT_UNSIGNED_INT8;
+#endif
     default:                   return 0;
     }
 }
 
+#if HAVE_FFNVCODEC_CUARRAY
 static unsigned int cuda_array_numchannels_for_pix_fmt(enum AVPixelFormat fmt)
 {
     switch (fmt) {
@@ -276,6 +282,7 @@ static unsigned int cuda_array_numchannels_for_pix_fmt(enum AVPixelFormat fmt)
     default:                   return 3;
     }
 }
+#endif
 
 static int cuda_frames_init(AVHWFramesContext *ctx)
 {
@@ -284,8 +291,6 @@ static int cuda_frames_init(AVHWFramesContext *ctx)
     CUDAFramesContext       *priv = ctx->hwctx;
     CudaFunctions             *cu = hwctx->internal->cuda_dl;
     int err, i;
-
-    CUcontext dummy;
 
     for (i = 0; i < FF_ARRAY_ELEMS(supported_formats); i++) {
         if (ctx->sw_format == supported_formats[i])
@@ -297,10 +302,17 @@ static int cuda_frames_init(AVHWFramesContext *ctx)
         return AVERROR(ENOSYS);
     }
 
+#if HAVE_FFNVCODEC_CUARRAY
     if (ctx->format == AV_PIX_FMT_CUARRAY && !cu->cuArrayGetPlane) {
         av_log(ctx, AV_LOG_ERROR, "cuArrayGetPlane not available, update your driver\n");
         return AVERROR(ENOSYS);
     }
+#else
+    if (ctx->format == AV_PIX_FMT_CUARRAY) {
+        av_log(ctx, AV_LOG_ERROR, "Missing support for cuarray frames. Rebuild with newer ffnvcodec headers.\n");
+        return AVERROR(ENOSYS);
+    }
+#endif
 
     err = CHECK_CU(cu->cuDeviceGetAttribute(&priv->tex_alignment,
                                             14 /* CU_DEVICE_ATTRIBUTE_TEXTURE_ALIGNMENT */,
@@ -318,6 +330,7 @@ static int cuda_frames_init(AVHWFramesContext *ctx)
 
     av_pix_fmt_get_chroma_sub_sample(ctx->sw_format, &priv->shift_width, &priv->shift_height);
 
+#if HAVE_FFNVCODEC_CUARRAY
     if (ctx->format == AV_PIX_FMT_CUARRAY) {
         if (!priv->p.cuarray_desc.Width)
             priv->p.cuarray_desc.Width = ctx->width;
@@ -342,6 +355,8 @@ static int cuda_frames_init(AVHWFramesContext *ctx)
     }
 
     if (ctx->format == AV_PIX_FMT_CUARRAY && priv->p.cuarray_num_surfaces > 0) {
+        CUcontext dummy;
+
         priv->p.cuarray_surfaces = av_calloc(priv->p.cuarray_num_surfaces, sizeof(*priv->p.cuarray_surfaces));
         if (!priv->p.cuarray_surfaces)
             return AVERROR(ENOMEM);
@@ -371,6 +386,7 @@ static int cuda_frames_init(AVHWFramesContext *ctx)
         av_log(ctx, AV_LOG_DEBUG, "allocated %d CUarray surfaces (%zux%zu)\n",
                priv->p.cuarray_num_surfaces, priv->p.cuarray_desc.Width, priv->p.cuarray_desc.Height);
     }
+#endif
 
     if (!ctx->pool) {
         int size = av_image_get_buffer_size(ctx->sw_format, ctx->width, ctx->height, priv->tex_alignment);
@@ -396,12 +412,14 @@ fail:
 
 static int cuda_get_buffer(AVHWFramesContext *ctx, AVFrame *frame)
 {
+    CUDAFramesContext       *priv = ctx->hwctx;
+#if HAVE_FFNVCODEC_CUARRAY
     AVHWDeviceContext *device_ctx = ctx->device_ctx;
     AVCUDADeviceContext    *hwctx = device_ctx->hwctx;
-    CUDAFramesContext       *priv = ctx->hwctx;
     CudaFunctions             *cu = hwctx->internal->cuda_dl;
 
     CUcontext dummy;
+#endif
     int res;
 
     frame->buf[0] = av_buffer_pool_get(ctx->pool);
@@ -409,6 +427,7 @@ static int cuda_get_buffer(AVHWFramesContext *ctx, AVFrame *frame)
         return AVERROR(ENOMEM);
 
     if (ctx->format == AV_PIX_FMT_CUARRAY) {
+#if HAVE_FFNVCODEC_CUARRAY
         AVCUDAArrayFrameDescriptor *desc = (AVCUDAArrayFrameDescriptor*)frame->buf[0]->data;
         if (!desc) {
             frame->format = ctx->format;
@@ -460,6 +479,9 @@ static int cuda_get_buffer(AVHWFramesContext *ctx, AVFrame *frame)
         res = CHECK_CU(cu->cuCtxPopCurrent(&dummy));
         if (res < 0)
             return res;
+#else
+        return AVERROR(ENOSYS);
+#endif
     } else {
         res = av_image_fill_arrays(frame->data, frame->linesize, frame->buf[0]->data,
                                    ctx->sw_format, ctx->width, ctx->height, priv->tex_alignment);
@@ -481,9 +503,11 @@ static int cuda_get_buffer(AVHWFramesContext *ctx, AVFrame *frame)
 
     return 0;
 
+#if HAVE_FFNVCODEC_CUARRAY
 fail:
     CHECK_CU(cu->cuCtxPopCurrent(&dummy));
     return res;
+#endif
 }
 
 static enum AVPixelFormat cuda_frame_hw_format(const AVFrame *frame)
@@ -569,6 +593,7 @@ static int cuda_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
             cpy.srcMemoryType = CU_MEMORYTYPE_DEVICE;
             cpy.srcDevice     = (CUdeviceptr)src->data[i];
         } else if (src->format == AV_PIX_FMT_CUARRAY) {
+#if HAVE_FFNVCODEC_CUARRAY
             CUarray array;
             CUresult cures = cu->cuArrayGetPlane(&array, (CUarray)src->data[0], i);
             if (cures == CUDA_ERROR_INVALID_VALUE && i == 0) {
@@ -583,6 +608,10 @@ static int cuda_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
 
             cpy.srcMemoryType = CU_MEMORYTYPE_ARRAY;
             cpy.srcArray      = array;
+#else
+            ret = AVERROR(ENOSYS);
+            goto exit;
+#endif
         } else {
             cpy.srcMemoryType = CU_MEMORYTYPE_HOST;
             cpy.srcHost       = src->data[i];
@@ -592,6 +621,7 @@ static int cuda_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
             cpy.dstMemoryType = CU_MEMORYTYPE_DEVICE;
             cpy.dstDevice     = (CUdeviceptr)dst->data[i];
         } else if (dst->format == AV_PIX_FMT_CUARRAY) {
+#if HAVE_FFNVCODEC_CUARRAY
             CUarray array;
             CUresult cures = cu->cuArrayGetPlane(&array, (CUarray)dst->data[0], i);
             if (cures == CUDA_ERROR_INVALID_VALUE && i == 0) {
@@ -606,6 +636,10 @@ static int cuda_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
 
             cpy.dstMemoryType = CU_MEMORYTYPE_ARRAY;
             cpy.dstArray      = array;
+#else
+            ret = AVERROR(ENOSYS);
+            goto exit;
+#endif
         } else {
             cpy.dstMemoryType = CU_MEMORYTYPE_HOST;
             cpy.dstHost       = dst->data[i];
@@ -925,5 +959,9 @@ const HWContextType ff_hwcontext_type_cuda = {
     .transfer_data_to     = cuda_transfer_data,
     .transfer_data_from   = cuda_transfer_data,
 
-    .pix_fmts             = (const enum AVPixelFormat[]){ AV_PIX_FMT_CUDA, AV_PIX_FMT_CUARRAY, AV_PIX_FMT_NONE },
+    .pix_fmts             = (const enum AVPixelFormat[]){ AV_PIX_FMT_CUDA,
+#if HAVE_FFNVCODEC_CUARRAY
+                                                          AV_PIX_FMT_CUARRAY,
+#endif
+                                                          AV_PIX_FMT_NONE },
 };
