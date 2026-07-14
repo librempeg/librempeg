@@ -97,6 +97,10 @@ void ff_sws_uop_name(const SwsUOp *op, char buf[SWS_UOP_NAME_MAX])
     case SWS_UOP_READ_PLANAR_FV_FMA:
         av_bprintf(&bp, "_%s", ff_sws_pixel_type_name(par->filter.type));
         break;
+    case SWS_UOP_RW_SHUFFLE:
+        av_bprintf(&bp, "_%x_%u_%u", par->shuffle.clear_value,
+                   par->shuffle.read_size, par->shuffle.write_size);
+        break;
     case SWS_UOP_LSHIFT:
     case SWS_UOP_RSHIFT:
         av_bprintf(&bp, "_%u", par->shift.amount);

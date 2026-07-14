@@ -105,6 +105,8 @@
     MACRO(__VA_ARGS__, u8_write_bit_x                          , SWS_PIXEL_U8 , SWS_UOP_WRITE_BIT       , 0x1)
 #define SWS_FOR_STRUCT_U8_WRITE_BIT(MACRO, ...) \
     MACRO(__VA_ARGS__, u8_write_bit_x                          , .type = SWS_PIXEL_U8 , .uop = SWS_UOP_WRITE_BIT       , .mask = 0x1)
+#define SWS_FOR_U8_RW_SHUFFLE(MACRO, ...)
+#define SWS_FOR_STRUCT_U8_RW_SHUFFLE(MACRO, ...)
 #define SWS_FOR_U8_PERMUTE(MACRO, ...) \
     MACRO(__VA_ARGS__, u8_permute_xy_xy_zw                     , SWS_PIXEL_U8 , SWS_UOP_PERMUTE         , 0x3, 2, 0, 1, 0, 0, 0, 0, 2, 3, 0, 0, 0, 0) \
     MACRO(__VA_ARGS__, u8_permute_xyz_x_w                      , SWS_PIXEL_U8 , SWS_UOP_PERMUTE         , 0x7, 1, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0) \
@@ -373,6 +375,8 @@
 #define SWS_FOR_STRUCT_U16_WRITE_NIBBLE(MACRO, ...)
 #define SWS_FOR_U16_WRITE_BIT(MACRO, ...)
 #define SWS_FOR_STRUCT_U16_WRITE_BIT(MACRO, ...)
+#define SWS_FOR_U16_RW_SHUFFLE(MACRO, ...)
+#define SWS_FOR_STRUCT_U16_RW_SHUFFLE(MACRO, ...)
 #define SWS_FOR_U16_PERMUTE(MACRO, ...) \
     MACRO(__VA_ARGS__, u16_permute_xyz_x_w                     , SWS_PIXEL_U16, SWS_UOP_PERMUTE         , 0x7, 1, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0) \
     MACRO(__VA_ARGS__, u16_permute_xyz_y_w                     , SWS_PIXEL_U16, SWS_UOP_PERMUTE         , 0x7, 1, 1, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0) \
@@ -627,6 +631,8 @@
 #define SWS_FOR_STRUCT_U32_WRITE_NIBBLE(MACRO, ...)
 #define SWS_FOR_U32_WRITE_BIT(MACRO, ...)
 #define SWS_FOR_STRUCT_U32_WRITE_BIT(MACRO, ...)
+#define SWS_FOR_U32_RW_SHUFFLE(MACRO, ...)
+#define SWS_FOR_STRUCT_U32_RW_SHUFFLE(MACRO, ...)
 #define SWS_FOR_U32_PERMUTE(MACRO, ...) \
     MACRO(__VA_ARGS__, u32_permute_xyz_x_w                     , SWS_PIXEL_U32, SWS_UOP_PERMUTE         , 0x7, 1, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0) \
     MACRO(__VA_ARGS__, u32_permute_xyz_y_w                     , SWS_PIXEL_U32, SWS_UOP_PERMUTE         , 0x7, 1, 1, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0) \
@@ -843,6 +849,8 @@
 #define SWS_FOR_STRUCT_F32_WRITE_NIBBLE(MACRO, ...)
 #define SWS_FOR_F32_WRITE_BIT(MACRO, ...)
 #define SWS_FOR_STRUCT_F32_WRITE_BIT(MACRO, ...)
+#define SWS_FOR_F32_RW_SHUFFLE(MACRO, ...)
+#define SWS_FOR_STRUCT_F32_RW_SHUFFLE(MACRO, ...)
 #define SWS_FOR_F32_PERMUTE(MACRO, ...)
 #define SWS_FOR_STRUCT_F32_PERMUTE(MACRO, ...)
 #define SWS_FOR_F32_COPY(MACRO, ...)

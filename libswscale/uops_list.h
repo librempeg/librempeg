@@ -34,6 +34,7 @@
     ENTRY(SWS_UOP_WRITE_PACKED,         "write_packed")              \
     ENTRY(SWS_UOP_WRITE_NIBBLE,         "write_nibble")              \
     ENTRY(SWS_UOP_WRITE_BIT,            "write_bit")                 \
+    ENTRY(SWS_UOP_RW_SHUFFLE,           "rw_shuffle")                \
     ENTRY(SWS_UOP_PERMUTE,              "permute")                   \
     ENTRY(SWS_UOP_COPY,                 "copy")                      \
     ENTRY(SWS_UOP_SWAP_BYTES,           "swap_bytes")                \
