@@ -1,0 +1,22 @@
+[STREAM_GROUP]
+index=0
+id=0x2
+nb_streams=2
+type=Track Reference
+[STREAM]
+index=0
+codec_name=av1
+codec_type=video
+codec_tag_string=av01
+id=0x1
+extradata_size=17
+[/STREAM]
+[STREAM]
+index=1
+codec_name=itut_t35
+codec_type=data
+codec_tag_string=it35
+id=0x2
+extradata_size=5
+[/STREAM]
+[/STREAM_GROUP]

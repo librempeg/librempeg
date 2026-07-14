@@ -38,6 +38,7 @@ FATE_MOV_FFPROBE-$(call FRAMEMD5, MOV, H264, H264_PARSER) += fate-mov-neg-firstp
                    fate-mov-guess-delay-3 \
                    fate-mov-mp4-with-mov-in24-ver \
                    fate-mov-mime-codecstring \
+                   fate-mov-t35-cdsc-track \
 
 FATE_MOV_FFPROBE-$(call FRAMEMD5, MOV, MPEG4, H264_PARSER) += fate-mov-mp4-extended-atom \
 
@@ -164,6 +165,8 @@ fate-mov-mp4-with-mov-in24-ver: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -show_entr
 fate-mov-mp4-extended-atom: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -show_packets -print_format compact -select_streams v $(TARGET_SAMPLES)/mov/extended_atom_size_probe
 
 fate-mov-mime-codecstring: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -show_entries stream=mime_codec_string -v 0 $(TARGET_SAMPLES)/mov/mov_stream_shorter_than_movie.mov
+
+fate-mov-t35-cdsc-track: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -show_entries stream_group=index,id,nb_streams,type:stream_group_stream=index,id,codec_name,codec_type,codec_tag_string,extradata_size $(TARGET_SAMPLES)/mov/mov-t35-cdsc-track.mp4
 
 FATE_MOV_FFMPEG_FFPROBE_SAMPLES-$(call REMUX, MP4 MOV, OGG_DEMUXER VORBIS_DECODER) \
                           += fate-mov-mp4-chapters
