@@ -544,7 +544,7 @@ static int cuda_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
     CudaFunctions             *cu = hwctx->internal->cuda_dl;
 
     CUcontext dummy;
-    int i, ret;
+    int i, ret, copy_queued = 0;
 
     {
         enum AVPixelFormat src_fmt = cuda_frame_hw_format(src);
@@ -603,7 +603,7 @@ static int cuda_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
                 src_is_nonplanar_cuarray = 1;
             } else if (cures != CUDA_SUCCESS) {
                 ret = CHECK_CU(cures);
-                goto exit;
+                goto fail;
             }
 
             cpy.srcMemoryType = CU_MEMORYTYPE_ARRAY;
@@ -631,7 +631,7 @@ static int cuda_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
                 dst_is_nonplanar_cuarray = 1;
             } else if (cures != CUDA_SUCCESS) {
                 ret = CHECK_CU(cures);
-                goto exit;
+                goto fail;
             }
 
             cpy.dstMemoryType = CU_MEMORYTYPE_ARRAY;
@@ -647,7 +647,8 @@ static int cuda_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
 
         ret = CHECK_CU(cu->cuMemcpy2DAsync(&cpy, hwctx->stream));
         if (ret < 0)
-            goto exit;
+            goto fail;
+        copy_queued = 1;
 
         if (src_is_nonplanar_cuarray || dst_is_nonplanar_cuarray)
             break;
@@ -659,6 +660,9 @@ static int cuda_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
             goto exit;
     }
 
+fail:
+    if (ret < 0 && copy_queued)
+        CHECK_CU(cu->cuStreamSynchronize(hwctx->stream));
 exit:
     CHECK_CU(cu->cuCtxPopCurrent(&dummy));
 
