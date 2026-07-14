@@ -120,8 +120,9 @@ static inline char *ff_sws_comp_mask_print(SwsCompMask mask, char buf[5])
 
 typedef uint32_t SwsUOpFlags;
 typedef enum SwsUOpFlagBits {
-    SWS_UOP_FLAG_NONE = 0,
-    SWS_UOP_FLAG_FMA  = (1 << 0), /* platform supports FMA ops */
+    SWS_UOP_FLAG_NONE   = 0,
+    SWS_UOP_FLAG_FMA    = (1 << 0), /* platform supports FMA ops */
+    SWS_UOP_FLAG_PSHUFB = (1 << 1), /* platform supports pshufb equivalent */
 } SwsUOpFlagBits;
 
 typedef enum SwsUOpType {

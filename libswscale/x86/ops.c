@@ -666,7 +666,7 @@ static int compile_x86(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out
     if (mmsize < 0)
         return mmsize;
 
-    SwsUOpFlags flags = 0;
+    SwsUOpFlags flags = SWS_UOP_FLAG_PSHUFB;
     if (EXTERNAL_FMA3(cpu_flags))
         flags |= SWS_UOP_FLAG_FMA;
 
