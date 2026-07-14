@@ -489,9 +489,10 @@ SWS_DECL_FUNC(ff_sws_process3_x86);
 SWS_DECL_FUNC(ff_sws_process4_x86);
 
 /* Declare packed shuffle functions */
-SWS_FOR_STRUCT(U8, RW_SHUFFLE, DECL_ENTRY, _sse4,   NULL, NULL)
-SWS_FOR_STRUCT(U8, RW_SHUFFLE, DECL_ENTRY, _avx2,   NULL, NULL)
-SWS_FOR_STRUCT(U8, RW_SHUFFLE, DECL_ENTRY, _avx512, NULL, NULL)
+SWS_FOR_STRUCT(U8, RW_SHUFFLE, DECL_ENTRY, _sse4,       NULL, NULL)
+SWS_FOR_STRUCT(U8, RW_SHUFFLE, DECL_ENTRY, _avx2,       NULL, NULL)
+SWS_FOR_STRUCT(U8, RW_SHUFFLE, DECL_ENTRY, _avx512,     NULL, NULL)
+SWS_FOR_STRUCT(U8, RW_SHUFFLE, DECL_ENTRY, _avx512icl,  NULL, NULL)
 
 static int get_mmsize(void)
 {
@@ -508,19 +509,22 @@ static int get_mmsize(void)
 
 static int movsize(const int bytes, const int mmsize)
 {
-    return bytes <= 4 ? 4 : /* movd */
-           bytes <= 8 ? 8 : /* movq */
-           mmsize;          /* movu */
+    return bytes <= 4  ? 4  : /* movd */
+           bytes <= 8  ? 8  : /* movq */
+           bytes <= 16 ? 16 : /* xmm movu */
+           bytes <= 32 ? 32 : /* ymm movu */
+           mmsize;            /* zmm movu */
 }
 
 static int translate_shuffle(const SwsUOp *uop, int mmsize, SwsCompiledOp *out)
 {
     /* We can't shuffle across lanes, so restrict the vector size to XMM
-     * whenever the read/write size would be a subset of the full vector */
+     * whenever the read/write size would be a subset of the full vector,
+     * unless we have access to AVX-512 ICL vpermb */
     const SwsShuffleUOp *par = &uop->par.shuffle;
     const int lane_aligned = par->read_size == par->write_size &&
                              16 % par->read_size == 0;
-    if (!lane_aligned)
+    if (!lane_aligned && !EXTERNAL_AVX512ICL(av_get_cpu_flags()))
         mmsize = 16;
 
     /* Generate the shuffle mask */
@@ -547,22 +551,27 @@ static int translate_shuffle(const SwsUOp *uop, int mmsize, SwsCompiledOp *out)
         .block_size  = groups * uop->data.shuffle.pixels * num_lanes,
         .over_read   = { movsize(in_total,  mmsize) - in_total },
         .over_write  = { movsize(out_total, mmsize) - out_total },
-        .cpu_flags   = mmsize > 32 ? AV_CPU_FLAG_AVX512 :
-                       mmsize > 16 ? AV_CPU_FLAG_AVX2 :
-                                     AV_CPU_FLAG_SSE4,
     };
 
-#define ASSIGN_SHUFFLE_FUNC(EXT, NAME, ...)                                     \
+#define ASSIGN_SHUFFLE_FUNC(CPU, EXT, NAME, ...)                                \
 do {                                                                            \
     const SwsUOpEntry *entry = &uop_##NAME##EXT;                                \
-    if (!memcmp(&uop->par, &entry->par, sizeof(uop->par)))                      \
+    if (!memcmp(&uop->par, &entry->par, sizeof(uop->par))) {                    \
         out->func = (SwsOpFunc) entry->func;                                    \
+        out->cpu_flags = AV_CPU_FLAG_##CPU;                                     \
+    }                                                                           \
 } while (0);
 
     switch (mmsize) {
-    case 16: SWS_FOR(U8, RW_SHUFFLE, ASSIGN_SHUFFLE_FUNC, _sse4);   break;
-    case 32: SWS_FOR(U8, RW_SHUFFLE, ASSIGN_SHUFFLE_FUNC, _avx2);   break;
-    case 64: SWS_FOR(U8, RW_SHUFFLE, ASSIGN_SHUFFLE_FUNC, _avx512); break;
+    case 16: SWS_FOR(U8, RW_SHUFFLE, ASSIGN_SHUFFLE_FUNC, SSE4, _sse4); break;
+    case 32: SWS_FOR(U8, RW_SHUFFLE, ASSIGN_SHUFFLE_FUNC, AVX2, _avx2); break;
+    case 64:
+        if (lane_aligned) {
+            SWS_FOR(U8, RW_SHUFFLE, ASSIGN_SHUFFLE_FUNC, AVX512, _avx512);
+        } else { /* vpermb variant */
+            SWS_FOR(U8, RW_SHUFFLE, ASSIGN_SHUFFLE_FUNC, AVX512ICL, _avx512icl);
+        }
+        break;
     }
 
     if (!out->func) {

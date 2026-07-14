@@ -127,13 +127,31 @@ process_fn 4
 ; in which case we can also use `pshufb` on mmsize == 32/64. This is detected
 ; by the `LANE_ALIGNED` condition.
 
-%macro MOVSIZE 3 ; size, dst, src
-    %if %1 <= 4
-        movd %2, %3
-    %elif %1 <= 8
-        movq %2, %3
+%macro READ 2 ; dst, src
+    %if READ_SIZE <= 4
+        movd xmm%1, %2
+    %elif READ_SIZE <= 8
+        movq xmm%1, %2
+    %elif READ_SIZE <= 16
+        movu xmm%1, %2
+    %elif READ_SIZE <= 32
+        movu ymm%1, %2
     %else
-        movu %2, %3
+        movu zmm%1, %2
+    %endif
+%endmacro
+
+%macro WRITE 2 ; dst, src
+    %if WRITE_SIZE <= 4
+        movd %1, xmm%2
+    %elif WRITE_SIZE <= 8
+        movq %1, xmm%2
+    %elif WRITE_SIZE <= 16
+        movu %1, xmm%2
+    %elif WRITE_SIZE <= 32
+        movu %1, ymm%2
+    %else
+        movu %1, zmm%2
     %endif
 %endmacro
 
@@ -152,7 +170,7 @@ process_fn 4
 %assign WRITE_SIZE   (WRITE_SIZE * GROUPS)
 
 cglobal NAME, 6, 10, 3, exec, shuffle, bx, y, bxend, yend, src, dst, src_stride, dst_stride
-%if mmsize > 16 && !LANE_ALIGNED
+%if mmsize > 16 && !LANE_ALIGNED && !cpuflag(avx512icl)
             ud2 ; runtime checks should prevent this variant from being called
 %else
             mov srcq, [execq + SwsOpExec.in0]
@@ -161,9 +179,16 @@ cglobal NAME, 6, 10, 3, exec, shuffle, bx, y, bxend, yend, src, dst, src_stride,
             mov dst_strideq, [execq + SwsOpExec.out_stride0]
 
             ; setup shuffle mask
+    %if LANE_ALIGNED
             VBROADCASTI128 m0, [shuffleq]
-    %if cpuflag(avx512) && CLEAR_VALUE != 0
-            vpmovb2m k1, m0 ; needed for vpblendmb
+    %else
+            mova m0, [shuffleq]
+    %endif
+    %if cpuflag(avx512)
+            vpmovb2m k1, m0 ; needed for vpblendmb / vpermb
+        %if CLEAR_VALUE == 0
+            knotq k1, k1
+        %endif
     %endif
 
             ; setup clear value register if needed
@@ -173,7 +198,7 @@ cglobal NAME, 6, 10, 3, exec, shuffle, bx, y, bxend, yend, src, dst, src_stride,
         %else
             pcmpeqb m2, m2
         %endif
-    %elif CLEAR_VALUE != 0 ; clear-to-0 is implicitly handled by pshufb
+    %elif CLEAR_VALUE != 0 ; clear-to-0 is implicitly handled by pshufb / vpermb
             mov shuffled, CLEAR_VALUE * 0x1010101
             movd xm2, shuffled
             VPBROADCASTD m2, xm2
@@ -195,8 +220,14 @@ cglobal NAME, 6, 10, 3, exec, shuffle, bx, y, bxend, yend, src, dst, src_stride,
             sub dstq, dstidxq
 
 .loop:
-            MOVSIZE READ_SIZE, m1, [srcq + srcidxq]
+            READ m1, [srcq + srcidxq]
+    %if LANE_ALIGNED || mmsize == 16
             pshufb m1, m0
+    %elif CLEAR_VALUE == 0
+            vpermb m1{k1}{z}, m0, m1
+    %else
+            vpermb m1, m0, m1
+    %endif
 
     %if CLEAR_VALUE != 0
         %if cpuflag(avx512)
@@ -208,7 +239,7 @@ cglobal NAME, 6, 10, 3, exec, shuffle, bx, y, bxend, yend, src, dst, src_stride,
         %endif
     %endif
 
-            MOVSIZE WRITE_SIZE, [dstq + dstidxq], m1
+            WRITE [dstq + dstidxq], m1
             add srcidxq, READ_SIZE
     %if READ_SIZE != WRITE_SIZE
             add dstidxq, WRITE_SIZE
@@ -233,4 +264,7 @@ INIT_YMM avx2
 DECL_U8_RW_SHUFFLE (RW_SHUFFLE)
 
 INIT_ZMM avx512
+DECL_U8_RW_SHUFFLE (RW_SHUFFLE)
+
+INIT_ZMM avx512icl
 DECL_U8_RW_SHUFFLE (RW_SHUFFLE)
