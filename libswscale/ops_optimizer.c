@@ -948,6 +948,30 @@ int ff_sws_solve_shuffle(const SwsOpList *const ops, uint8_t shuffle[],
     return AVERROR(EINVAL);
 }
 
+int ff_sws_shuffle_mask(const SwsUOp *uop, int8_t shuffle[], int size)
+{
+    const SwsShuffleUOp *par = &uop->par.shuffle;
+    av_assert1(uop->uop == SWS_UOP_RW_SHUFFLE);
+    av_assert1(par->write_size <= sizeof(uop->data.shuffle.mask));
+    av_assert1(size <= INT8_MAX);
+
+    const int num_groups = size / FFMAX(par->read_size, par->write_size);
+    if (!num_groups)
+        return AVERROR(EINVAL);
+
+    memset(shuffle, 0, size);
+    for (int n = 0; n < num_groups; n++) {
+        const int base_in  = n * par->read_size;
+        const int base_out = n * par->write_size;
+        for (int i = 0; i < par->write_size; i++) {
+            const int8_t idx = uop->data.shuffle.mask[i];
+            shuffle[base_out + i] = idx + (idx >= 0) * base_in;
+        }
+    }
+
+    return num_groups;
+}
+
 int ff_sws_uop_list_optimize(SwsContext *ctx, SwsUOpFlags flags, SwsUOpList *uops)
 {
 #if 0

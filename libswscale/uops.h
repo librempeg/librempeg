@@ -320,4 +320,19 @@ int ff_sws_uop_list_optimize(SwsContext *ctx, SwsUOpFlags flags, SwsUOpList *uop
 int ff_sws_ops_translate(SwsContext *ctx, const SwsOpList *ops,
                          SwsUOpFlags flags, SwsUOpList *uops);
 
+/**
+ * Compute a shuffle mask for `pshufb`-style ASM functions, by repeating
+ * the shuffle pattern for as many groups as will fit.
+ *
+ * @param uop         An operation of type SWS_UOP_RW_SHUFFLE.
+ * @param shuffle     The output shuffle index mask (or -1 to clear bytes).
+ * @param size        The maximum size (in bytes) of the output shuffle mask.
+ *
+ * @return the number of groups on success, or a negative error code.
+ *
+ * @note The shuffle mask is already pre-expanded to fill up to 16 bytes,
+ *       so this is only needed for larger shuffle instructions (e.g. vpermb).
+ */
+int ff_sws_shuffle_mask(const SwsUOp *uop, int8_t shuffle[], int size);
+
 #endif
