@@ -45,6 +45,15 @@ static int read_probe(const AVProbeData *p)
 {
     if (AV_RB32(p->buf) != 0x02000)
         return 0;
+    if (p->buf_size < 16)
+        return 0;
+    if (av_int2float(AV_RL32(p->buf+4)) < 1 ||
+        av_int2float(AV_RL32(p->buf+4)) > 60)
+        return 0;
+    if ((int)AV_RL32(p->buf+8) <= 0)
+        return 0;
+    if ((int)AV_RL32(p->buf+12) <= 0)
+        return 0;
 
     return AVPROBE_SCORE_MAX;
 }
@@ -62,11 +71,12 @@ static int read_header(AVFormatContext *s)
     avio_skip(pb, 4);
     fps = avio_rl32(pb);
     frames_per_chunk = avio_rl32(pb);
-    if (frames_per_chunk <= 0)
-        return AVERROR_INVALIDDATA;
-
     nb_chunks = avio_rl32(pb);
     layers = avio_rl32(pb);
+
+    if (frames_per_chunk <= 0 || layers < 0 || nb_chunks <= 0)
+        return AVERROR_INVALIDDATA;
+
     avio_skip(pb, 4);
     size[0] = avio_rl32(pb);
     size[1] = avio_rl32(pb);
@@ -85,6 +95,9 @@ static int read_header(AVFormatContext *s)
     avio_seek(pb, offset + 0x24+0x40, SEEK_SET);
     width  = avio_rl32(pb);
     height = avio_rl32(pb);
+    if (width <= 0 || height <= 0)
+        return AVERROR_INVALIDDATA;
+
     avio_skip(pb, 8);
     nb_frames = avio_rl32(pb);
     if (nb_chunks < nb_frames/5)
