@@ -11154,7 +11154,7 @@ static int mov_parse_cdsc_streams(AVFormatContext *s)
         st_ref = mov_find_reference_track(s, st, tag->id, tag->nb_id, 0);
         if (!st_ref) {
             int loglevel = (s->error_recognition & AV_EF_EXPLODE) ? AV_LOG_ERROR : AV_LOG_WARNING;
-            av_log(s, loglevel, "Failed to referenced stream\n");
+            av_log(s, loglevel, "Failed to find referenced stream\n");
             if (s->error_recognition & AV_EF_EXPLODE)
                 return AVERROR_INVALIDDATA;
             continue;
