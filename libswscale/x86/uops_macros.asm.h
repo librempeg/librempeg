@@ -62,6 +62,7 @@
     {DEF_MACRO(WRITE_NIBBLE,        TYPE)}, \
     {DEF_MACRO(WRITE_PACKED,        TYPE)}, \
     {DEF_MACRO(WRITE_PLANAR,        TYPE)}, \
+    {DEF_MACRO(RW_SHUFFLE,          TYPE)}, \
     {DEF_MACRO(PERMUTE,             TYPE)}, \
     {DEF_MACRO(COPY,                TYPE)}, \
     {DEF_MACRO(SWAP_BYTES,          TYPE)}, \
