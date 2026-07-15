@@ -33,13 +33,20 @@
 #define TX_TYPE AV_TX_FLOAT_RDFT
 #define SIN sinf
 #define COS cosf
-#else
+#elif DEPTH == 64
 #define SAMPLE_FORMAT double
 #define ctype AVComplexDouble
 #define ftype double
 #define TX_TYPE AV_TX_DOUBLE_RDFT
 #define SIN sin
 #define COS cos
+#elif DEPTH == 128
+#define SAMPLE_FORMAT long_double
+#define ctype AVComplexLongDouble
+#define ftype long double
+#define TX_TYPE AV_TX_LONG_DOUBLE_RDFT
+#define SIN sinl
+#define COS cosl
 #endif
 
 #define F(x) ((ftype)(x))

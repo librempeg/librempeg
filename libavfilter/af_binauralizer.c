@@ -97,7 +97,7 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_out)
 {
     static const enum AVSampleFormat formats[] = {
-        AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP,
+        AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP, AV_SAMPLE_FMT_LDBLP,
         AV_SAMPLE_FMT_NONE,
     };
     AVFilterChannelLayouts *layouts = NULL;
@@ -130,6 +130,10 @@ static int query_formats(const AVFilterContext *ctx,
 #define DEPTH 64
 #include "binauralizer_template.c"
 
+#undef DEPTH
+#define DEPTH 128
+#include "binauralizer_template.c"
+
 static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -154,6 +158,12 @@ static int config_input(AVFilterLink *inlink)
         s->ba_flush = ba_flush_double;
         s->ba_uninit = ba_uninit_double;
         ret = ba_init_double(ctx);
+        break;
+    case AV_SAMPLE_FMT_LDBLP:
+        s->ba_stereo = ba_stereo_long_double;
+        s->ba_flush = ba_flush_long_double;
+        s->ba_uninit = ba_uninit_long_double;
+        ret = ba_init_long_double(ctx);
         break;
     default:
         return AVERROR_BUG;
