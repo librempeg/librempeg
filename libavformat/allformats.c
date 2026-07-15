@@ -668,6 +668,7 @@ extern const FFOutputFormat ff_truehd_muxer;
 extern const FFInputFormat  ff_tta_demuxer;
 extern const FFOutputFormat ff_tta_muxer;
 extern const FFInputFormat  ff_ttad_demuxer;
+extern const FFInputFormat  ff_ttfmv_demuxer;
 extern const FFInputFormat  ff_ttidsp_demuxer;
 extern const FFOutputFormat ff_ttml_muxer;
 extern const FFInputFormat  ff_two08_demuxer;
