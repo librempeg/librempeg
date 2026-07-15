@@ -31,6 +31,7 @@
 /hash
 /hdr_dynamic_vivid_metadata
 /hmac
+/hwcontext_cuda
 /hwdevice
 /imgutils
 /integer
