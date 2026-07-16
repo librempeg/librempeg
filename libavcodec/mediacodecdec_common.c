@@ -779,12 +779,12 @@ static int mediacodec_dec_get_video_codec(AVCodecContext *avctx, MediaCodecDecCo
 
     s->codec_name = ff_AMediaCodecList_getCodecNameByType(mime, profile, 0, avctx);
     if (!s->codec_name) {
+        av_log(avctx, AV_LOG_INFO, "Failed to getCodecNameByType(%s, %d)\n", mime, profile);
         // getCodecNameByType() can fail due to missing JVM, while NDK
         // mediacodec can be used without JVM.
         if (!s->use_ndk_codec) {
             return AVERROR_EXTERNAL;
         }
-        av_log(avctx, AV_LOG_INFO, "Failed to getCodecNameByType\n");
     } else {
         av_log(avctx, AV_LOG_DEBUG, "Found decoder %s\n", s->codec_name);
     }
