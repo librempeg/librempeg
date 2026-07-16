@@ -204,8 +204,8 @@ static void check_compiled(const char *name, const SwsOpBackend *backend,
     const SwsUOp *read_op = &test->uops[0];
     switch (read_op->uop) {
     case SWS_UOP_READ_PALETTE:
-        static_assert(sizeof(src0[1]) >= sizeof(uint32_t[256]), "palette plane too small");
         exec.in_bump[1] = exec.in_stride[1] = 0;
+        static_assert(sizeof(src0[1]) >= sizeof(uint32_t[256]), "palette plane too small");
         break;
     case SWS_UOP_READ_PLANAR_FV: {
         const int *offsets = read_op->data.kernel->offsets;
