@@ -88,6 +88,7 @@ int ff_nvdec_simple_decode_slice(AVCodecContext *avctx, const uint8_t *buffer,
                                  uint32_t size);
 int ff_nvdec_frame_params(AVCodecContext *avctx,
                           AVBufferRef *hw_frames_ctx,
+                          enum AVPixelFormat hw_format,
                           int dpb_size,
                           int supports_444);
 int ff_nvdec_get_ref_idx(AVFrame *frame);

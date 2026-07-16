@@ -96,11 +96,20 @@ static int nvdec_mpeg12_start_frame(AVCodecContext *avctx,
 }
 
 static int nvdec_mpeg12_frame_params(AVCodecContext *avctx,
-                                  AVBufferRef *hw_frames_ctx)
+                                     AVBufferRef *hw_frames_ctx,
+                                     enum AVPixelFormat hw_format)
 {
     // Each frame can at most have one P and one B reference
-    return ff_nvdec_frame_params(avctx, hw_frames_ctx, 2, 0);
+    return ff_nvdec_frame_params(avctx, hw_frames_ctx, hw_format, 2, 0);
 }
+
+#if CONFIG_MPEG1_NVDEC_HWACCEL || CONFIG_MPEG2_NVDEC_HWACCEL
+static int nvdec_mpeg12_cuda_frame_params(AVCodecContext *avctx,
+                                          AVBufferRef *hw_frames_ctx)
+{
+    return nvdec_mpeg12_frame_params(avctx, hw_frames_ctx, AV_PIX_FMT_CUDA);
+}
+#endif
 
 #if CONFIG_MPEG2_NVDEC_HWACCEL
 const FFHWAccel ff_mpeg2_nvdec_hwaccel = {
@@ -111,11 +120,19 @@ const FFHWAccel ff_mpeg2_nvdec_hwaccel = {
     .start_frame          = nvdec_mpeg12_start_frame,
     .end_frame            = ff_nvdec_simple_end_frame,
     .decode_slice         = ff_nvdec_simple_decode_slice,
-    .frame_params         = nvdec_mpeg12_frame_params,
+    .frame_params         = nvdec_mpeg12_cuda_frame_params,
     .init                 = ff_nvdec_decode_init,
     .uninit               = ff_nvdec_decode_uninit,
     .priv_data_size       = sizeof(NVDECContext),
 };
+#endif
+
+#if CONFIG_MPEG1_NVDEC_CUARRAY_HWACCEL || CONFIG_MPEG2_NVDEC_CUARRAY_HWACCEL
+static int nvdec_mpeg12_cuarray_frame_params(AVCodecContext *avctx,
+                                             AVBufferRef *hw_frames_ctx)
+{
+    return nvdec_mpeg12_frame_params(avctx, hw_frames_ctx, AV_PIX_FMT_CUARRAY);
+}
 #endif
 
 #if CONFIG_MPEG2_NVDEC_CUARRAY_HWACCEL
@@ -127,7 +144,7 @@ const FFHWAccel ff_mpeg2_nvdec_cuarray_hwaccel = {
     .start_frame          = nvdec_mpeg12_start_frame,
     .end_frame            = ff_nvdec_simple_end_frame,
     .decode_slice         = ff_nvdec_simple_decode_slice,
-    .frame_params         = nvdec_mpeg12_frame_params,
+    .frame_params         = nvdec_mpeg12_cuarray_frame_params,
     .init                 = ff_nvdec_decode_init,
     .uninit               = ff_nvdec_decode_uninit,
     .priv_data_size       = sizeof(NVDECContext),
@@ -143,7 +160,7 @@ const FFHWAccel ff_mpeg1_nvdec_hwaccel = {
     .start_frame          = nvdec_mpeg12_start_frame,
     .end_frame            = ff_nvdec_simple_end_frame,
     .decode_slice         = ff_nvdec_simple_decode_slice,
-    .frame_params         = nvdec_mpeg12_frame_params,
+    .frame_params         = nvdec_mpeg12_cuda_frame_params,
     .init                 = ff_nvdec_decode_init,
     .uninit               = ff_nvdec_decode_uninit,
     .priv_data_size       = sizeof(NVDECContext),
@@ -159,7 +176,7 @@ const FFHWAccel ff_mpeg1_nvdec_cuarray_hwaccel = {
     .start_frame          = nvdec_mpeg12_start_frame,
     .end_frame            = ff_nvdec_simple_end_frame,
     .decode_slice         = ff_nvdec_simple_decode_slice,
-    .frame_params         = nvdec_mpeg12_frame_params,
+    .frame_params         = nvdec_mpeg12_cuarray_frame_params,
     .init                 = ff_nvdec_decode_init,
     .uninit               = ff_nvdec_decode_uninit,
     .priv_data_size       = sizeof(NVDECContext),

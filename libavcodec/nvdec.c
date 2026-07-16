@@ -1082,12 +1082,20 @@ int ff_nvdec_simple_decode_slice(AVCodecContext *avctx, const uint8_t *buffer,
 
 int ff_nvdec_frame_params(AVCodecContext *avctx,
                           AVBufferRef *hw_frames_ctx,
+                          enum AVPixelFormat hw_format,
                           int dpb_size,
                           int supports_444)
 {
     AVHWFramesContext *frames_ctx = (AVHWFramesContext*)hw_frames_ctx->data;
     const AVPixFmtDescriptor *sw_desc;
     int cuvid_codec_type, cuvid_chroma_format, chroma_444;
+
+    /*
+     * This may be called from get_format() before avctx->hwaccel is set,
+     * so the selected hardware format is passed explicitly by the wrapper.
+     */
+    if (hw_format != AV_PIX_FMT_CUDA && hw_format != AV_PIX_FMT_CUARRAY)
+        return AVERROR_BUG;
 
     sw_desc = av_pix_fmt_desc_get(avctx->sw_pix_fmt);
     if (!sw_desc)
@@ -1106,8 +1114,7 @@ int ff_nvdec_frame_params(AVCodecContext *avctx,
     }
     chroma_444 = supports_444 && cuvid_chroma_format == cudaVideoChromaFormat_444;
 
-    frames_ctx->format            = (avctx->hwaccel->pix_fmt == AV_PIX_FMT_CUARRAY)
-                                    ? AV_PIX_FMT_CUARRAY : AV_PIX_FMT_CUDA;
+    frames_ctx->format            = hw_format;
     // NVDEC target dimensions must be even-aligned for internal surface allocation.
     // For chroma-subsampled formats (420/422), the output dimensions must also be
     // even. For monochrome/444, keep the original output dimensions and only
