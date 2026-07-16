@@ -175,8 +175,8 @@ typedef struct SwsAArch64Context {
 #define CMT(comment)   rasm_annotate(r, comment)
 #define CMTF(fmt, ...) rasm_annotatef(r, (char[128]){0}, 128, fmt, __VA_ARGS__)
 
-/* Reshape all vector registers for current SwsOp. */
-static void reshape_all_vectors(SwsAArch64Context *s, int el_count, int el_size)
+/* Reshape input/output vector registers for current SwsOp. */
+static void reshape_io_vectors(SwsAArch64Context *s, int el_count, int el_size)
 {
     s->vl[0] = a64op_make_vec( 0, el_count, el_size);
     s->vl[1] = a64op_make_vec( 1, el_count, el_size);
@@ -186,6 +186,11 @@ static void reshape_all_vectors(SwsAArch64Context *s, int el_count, int el_size)
     s->vh[1] = a64op_make_vec( 5, el_count, el_size);
     s->vh[2] = a64op_make_vec( 6, el_count, el_size);
     s->vh[3] = a64op_make_vec( 7, el_count, el_size);
+}
+
+/* Reshape temp vector registers for current SwsOp. */
+static void reshape_tmp_vectors(SwsAArch64Context *s, int el_count, int el_size)
+{
     s->vt[0] = a64op_make_vec(16, el_count, el_size);
     s->vt[1] = a64op_make_vec(17, el_count, el_size);
     s->vt[2] = a64op_make_vec(18, el_count, el_size);
@@ -194,6 +199,11 @@ static void reshape_all_vectors(SwsAArch64Context *s, int el_count, int el_size)
     s->vt[5] = a64op_make_vec(21, el_count, el_size);
     s->vt[6] = a64op_make_vec(22, el_count, el_size);
     s->vt[7] = a64op_make_vec(23, el_count, el_size);
+}
+
+/* Reshape const vector registers for current SwsOp. */
+static void reshape_const_vectors(SwsAArch64Context *s, int el_count, int el_size)
+{
     s->vk[0] = a64op_make_vec(24, el_count, el_size);
     s->vk[1] = a64op_make_vec(25, el_count, el_size);
     s->vk[2] = a64op_make_vec(26, el_count, el_size);
@@ -919,13 +929,13 @@ static void asmgen_op_expand(SwsAArch64Context *s, const SwsAArch64OpImplParams 
 
     if (src_el_size == 1) {
         rasm_add_comment(r, "u8 -> u16");
-        reshape_all_vectors(s, 16, 1);
+        reshape_io_vectors(s, 16, 1);
         LOOP_MASK_VH(s, p, i) i_zip2(r, vh[i], vl[i], vl[i]);
         LOOP_MASK      (p, i) i_zip1(r, vl[i], vl[i], vl[i]);
     }
     if (dst_el_size == 4) {
         rasm_add_comment(r, "u16 -> u32");
-        reshape_all_vectors(s, 8, 2);
+        reshape_io_vectors(s, 8, 2);
         LOOP_MASK_VH(s, p, i) i_zip2(r, vh[i], vl[i], vl[i]);
         LOOP_MASK      (p, i) i_zip1(r, vl[i], vl[i], vl[i]);
     }
@@ -1306,7 +1316,9 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpEntry *entry)
 
     s->el_size = el_size;
     s->el_count = s->vec_size / el_size;
-    reshape_all_vectors(s, s->el_count, el_size);
+    reshape_io_vectors(s, s->el_count, el_size);
+    reshape_tmp_vectors(s, s->el_count, el_size);
+    reshape_const_vectors(s, s->el_count, el_size);
 
     /* Common start for continuation-passing style (CPS) functions. */
     asmgen_set_load_cont_node(s);
