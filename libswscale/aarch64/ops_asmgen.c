@@ -626,11 +626,9 @@ static void asmgen_op_unpack(SwsAArch64Context *s, const SwsAArch64OpImplParams 
     RasmContext *r = s->rctx;
     RasmOp *vl = s->vl;
     RasmOp *vh = s->vh;
-    RasmOp *vt = s->vt;
+    RasmOp *vmask = s->vt;
     RasmOp mask_gpr = a64op_w(s->tmp0);
     uint32_t mask_val[4] = { 0 };
-    uint8_t mask_idx[4] = { 0 };
-    uint8_t cur_vt = 0;
 
     const int offsets[4] = {
         p->par.pack.pattern[3] + p->par.pack.pattern[2] + p->par.pack.pattern[1],
@@ -646,7 +644,7 @@ static void asmgen_op_unpack(SwsAArch64Context *s, const SwsAArch64OpImplParams 
         for (int j = 0; j < 4; j++) {
             if (mask_val[j] == val) {
                 mask_val[i] = mask_val[j];
-                mask_idx[i] = mask_idx[j];
+                vmask[i] = vmask[j];
                 break;
             }
         }
@@ -657,13 +655,13 @@ static void asmgen_op_unpack(SwsAArch64Context *s, const SwsAArch64OpImplParams 
              * like 10-bit. In those cases, we use mov + dup instead.
              */
             if (val <= 0xff || val == 0xffff) {
-                i_movi(r, vt[cur_vt], IMM(val));
+                i_movi(r, vmask[i], IMM(val));
             } else {
-                i_mov (r, mask_gpr,   IMM(val));
-                i_dup (r, vt[cur_vt], mask_gpr);
+                i_mov (r, mask_gpr, IMM(val));
+                i_dup (r, vmask[i], mask_gpr);
             }
             mask_val[i] = val;
-            mask_idx[i] = cur_vt++;
+            vmask[i] = v_16b(vmask[i]);
         }
     }
 
@@ -684,8 +682,8 @@ static void asmgen_op_unpack(SwsAArch64Context *s, const SwsAArch64OpImplParams 
     }
 
     /* Apply masks. */
-    LOOP_MASK_BWD      (p, i) { i_and16b(r, vl[i], vl[i], vt[mask_idx[i]]); CMTF("vl[%u] &= 0x%x;", i, mask_val[i]); }
-    LOOP_MASK_BWD_VH(s, p, i) { i_and16b(r, vh[i], vh[i], vt[mask_idx[i]]); CMTF("vh[%u] &= 0x%x;", i, mask_val[i]); }
+    LOOP_MASK_BWD      (p, i) { i_and16b(r, vl[i], vl[i], vmask[i]); CMTF("vl[%u] &= 0x%x;", i, (1u << p->par.pack.pattern[i]) - 1); }
+    LOOP_MASK_BWD_VH(s, p, i) { i_and16b(r, vh[i], vh[i], vmask[i]); CMTF("vh[%u] &= 0x%x;", i, (1u << p->par.pack.pattern[i]) - 1); }
 }
 
 /*********************************************************************/
