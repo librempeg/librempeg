@@ -687,6 +687,7 @@ extern const FFInputFormat  ff_ubiint_demuxer;
 extern const FFInputFormat  ff_ubipk_demuxer;
 extern const FFInputFormat  ff_ue3xma_demuxer;
 extern const FFInputFormat  ff_ue4opus_demuxer;
+extern const FFInputFormat  ff_ue5xma_demuxer;
 extern const FFInputFormat  ff_ueba_demuxer;
 extern const FFInputFormat  ff_ueopus_demuxer;
 extern const FFOutputFormat ff_uncodedframecrc_muxer;

@@ -830,6 +830,7 @@ OBJS-$(CONFIG_UBIINT_DEMUXER)            += ubiint.o
 OBJS-$(CONFIG_UBIPK_DEMUXER)             += ubibao.o
 OBJS-$(CONFIG_UE3XMA_DEMUXER)            += ue3xma.o pcm.o
 OBJS-$(CONFIG_UE4OPUS_DEMUXER)           += ue4opus.o
+OBJS-$(CONFIG_UE5XMA_DEMUXER)            += ue5xma.o pcm.o
 OBJS-$(CONFIG_UEBA_DEMUXER)              += ueba.o
 OBJS-$(CONFIG_UEOPUS_DEMUXER)            += ueopus.o
 OBJS-$(CONFIG_UNCODEDFRAMECRC_MUXER)     += uncodedframecrcenc.o framehash.o
