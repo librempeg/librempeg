@@ -63,7 +63,7 @@ static int sort_streams(const void *a, const void *b)
 
 static int read_header(AVFormatContext *s)
 {
-    int64_t start_offset[2], stream_size[2], duration[2];
+    int64_t start_offset[2], stream_size[2], bit_rate = 0;
     int rate, channels, align, codec, nb_streams;
     AVIOContext *pb = s->pb;
     AVStream *st;
@@ -78,8 +78,7 @@ static int read_header(AVFormatContext *s)
         stream_size[0] = avio_rl32(pb);
         codec = AV_CODEC_ID_ADPCM_PSX;
         nb_streams = 1;
-        if (channels > 0)
-            duration[0] = stream_size[0] / channels / 16 * 28LL;
+        bit_rate = 16LL * channels * 8 * rate / 28;
     } else if (rate >= 1) {
         channels = rate;
         rate = avio_rl32(pb);
@@ -96,8 +95,11 @@ static int read_header(AVFormatContext *s)
         case 0:
             codec = (align > 2) ? AV_CODEC_ID_PCM_S16LE_PLANAR : AV_CODEC_ID_PCM_S16LE;
             align = (align > 2) ? align : 2;
-            duration[0] = stream_size[0] / (channels * 2);
-            duration[1] = stream_size[1] / (channels * 2);
+            break;
+        case 1:
+            codec = AV_CODEC_ID_ADPCM_IMA_REF;
+            align /= channels;
+            bit_rate = 8LL * channels * rate * align / ((align - 4) * 2);
             break;
         default:
             avpriv_request_sample(s, "codec %02x", codec);
@@ -126,12 +128,13 @@ static int read_header(AVFormatContext *s)
         xst->stop_offset = xst->start_offset + stream_size[n];
 
         st->start_time = 0;
-        st->duration = duration[n];
         st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX;
+        st->codecpar->codec_id = codec;
         st->codecpar->ch_layout.nb_channels = channels;
         st->codecpar->sample_rate = rate;
         st->codecpar->block_align = align * channels;
+        if (bit_rate > 0)
+            st->codecpar->bit_rate = bit_rate;
 
         avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
     }
