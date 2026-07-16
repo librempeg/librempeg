@@ -97,6 +97,8 @@ static void *av_dynarray2_add(void **tab_ptr, int *nb_ptr, size_t elem_size,
 #include "rasm_print.c"
 #include "ops_impl.h"
 
+#define IMPL_PRIV(s) a64op_off(s->impl, offsetof_impl_priv)
+
 /**
  * Implementation parameters for all exported functions. This list is
  * compiled by performing a dummy run of all conversions in sws_ops and
@@ -386,7 +388,7 @@ static void asmgen_op_read_bit(SwsAArch64Context *s, const SwsAArch64OpImplParam
     /* Note that shift_vec has negative values, so that using it with
      * ushl actually performs a right shift. */
     rasm_annotate_next(r, "v128 shift_vec = impl->priv.v128;");
-    i_ldr(r, shift_vec.q, a64op_off(s->impl, offsetof_impl_priv));
+    i_ldr(r, shift_vec.q, IMPL_PRIV(s));
     asmgen_set_load_cont_node(s);
 
     if (p->block_size == 16) {
@@ -481,7 +483,7 @@ static void asmgen_op_write_bit(SwsAArch64Context *s, const SwsAArch64OpImplPara
     AArch64VecViews vtmp1     = a64op_vec_views(s->vt[2]);
 
     rasm_annotate_next(r, "v128 shift_vec = impl->priv.v128;");
-    i_ldr(r, shift_vec.q, a64op_off(s->impl, offsetof_impl_priv));
+    i_ldr(r, shift_vec.q, IMPL_PRIV(s));
     asmgen_set_load_cont_node(s);
 
     if (p->block_size == 8) {
@@ -793,7 +795,7 @@ static void asmgen_op_clear(SwsAArch64Context *s, const SwsAArch64OpImplParams *
             load_priv = true;
     }
     if (load_priv) {
-        i_ldr(r, v_q(clear_vec), a64op_off(s->impl, offsetof_impl_priv));   CMT("v128 clear_vec = impl->priv.v128;");
+        i_ldr(r, v_q(clear_vec), IMPL_PRIV(s));     CMT("v128 clear_vec = impl->priv.v128;");
         asmgen_set_load_cont_node(s);
     }
 
@@ -940,7 +942,7 @@ static void asmgen_op_min(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
     RasmOp *vt = s->vt;
     RasmOp min_vec = s->vt[4];
 
-    i_ldr(r, v_q(min_vec), a64op_off(s->impl, offsetof_impl_priv)); CMT("v128 min_vec = impl->priv.v128;");
+    i_ldr(r, v_q(min_vec), IMPL_PRIV(s));                           CMT("v128 min_vec = impl->priv.v128;");
     asmgen_set_load_cont_node(s);
     LOOP_MASK(p, i) { i_dup(r, vt[i], a64op_elem(min_vec, i));      CMTF("v128 vmin%u = min_vec[%u];", i, i); }
 
@@ -965,7 +967,7 @@ static void asmgen_op_max(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
     RasmOp *vt = s->vt;
     RasmOp max_vec = s->vt[4];
 
-    i_ldr(r, v_q(max_vec), a64op_off(s->impl, offsetof_impl_priv)); CMT("v128 max_vec = impl->priv.v128;");
+    i_ldr(r, v_q(max_vec), IMPL_PRIV(s));                           CMT("v128 max_vec = impl->priv.v128;");
     asmgen_set_load_cont_node(s);
     LOOP_MASK(p, i) { i_dup(r, vt[i], a64op_elem(max_vec, i));      CMTF("v128 vmax%u = max_vec[%u];", i, i); }
 
@@ -1115,7 +1117,7 @@ static void asmgen_op_linear(SwsAArch64Context *s, const SwsAArch64OpImplParams 
     case 3: coeff_veclist = vv_3(vc[0], vc[1], vc[2]);        break;
     case 4: coeff_veclist = vv_4(vc[0], vc[1], vc[2], vc[3]); break;
     }
-    i_ldr(r, ptr, a64op_off(s->impl, offsetof_impl_priv));  CMT("v128 *vcoeff_ptr = impl->priv.ptr;");
+    i_ldr(r, ptr, IMPL_PRIV(s));                            CMT("v128 *vcoeff_ptr = impl->priv.ptr;");
     asmgen_set_load_cont_node(s);
     i_ld1(r, coeff_veclist, a64op_base(ptr));               CMT("coeff_veclist = *vcoeff_ptr;");
 
@@ -1183,7 +1185,7 @@ static void asmgen_op_dither(SwsAArch64Context *s, const SwsAArch64OpImplParams 
         }
     }
 
-    i_ldr(r, ptr, a64op_off(s->impl, offsetof_impl_priv));  CMT("void *ptr = impl->priv.ptr;");
+    i_ldr(r, ptr, IMPL_PRIV(s));                            CMT("void *ptr = impl->priv.ptr;");
     asmgen_set_load_cont_node(s);
 
     /**
