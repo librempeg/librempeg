@@ -330,6 +330,7 @@ extern const FFOutputFormat ff_ircam_muxer;
 extern const FFOutputFormat ff_ismv_muxer;
 extern const FFInputFormat  ff_iss_demuxer;
 extern const FFInputFormat  ff_iv8_demuxer;
+extern const FFInputFormat  ff_ivag_demuxer;
 extern const FFInputFormat  ff_ivf_demuxer;
 extern const FFOutputFormat ff_ivf_muxer;
 extern const FFInputFormat  ff_ivr_demuxer;
