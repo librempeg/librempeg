@@ -285,21 +285,23 @@ static void clobber_gpr(RasmOp regs[MAX_SAVED_REGS], unsigned *count,
 }
 
 static unsigned clobbered_gprs(const SwsAArch64Context *s,
-                               SwsCompMask mask,
+                               SwsCompMask imask, SwsCompMask omask,
                                RasmOp regs[MAX_SAVED_REGS])
 {
     unsigned count = 0;
     clobber_gpr(regs, &count, a64op_lr());
-    LOOP(mask, i) {
+    LOOP(imask, i) {
         clobber_gpr(regs, &count, s->in[i]);
-        clobber_gpr(regs, &count, s->out[i]);
         clobber_gpr(regs, &count, s->in_bump[i]);
+    }
+    LOOP(omask, i) {
+        clobber_gpr(regs, &count, s->out[i]);
         clobber_gpr(regs, &count, s->out_bump[i]);
     }
     return count;
 }
 
-static void asmgen_process(SwsAArch64Context *s, SwsCompMask mask)
+static void asmgen_process(SwsAArch64Context *s, SwsCompMask imask, SwsCompMask omask)
 {
     RasmContext *r = s->rctx;
     char buf[64];
@@ -311,7 +313,7 @@ static void asmgen_process(SwsAArch64Context *s, SwsCompMask mask)
 
     /* Function prologue */
     RasmOp saved_regs[MAX_SAVED_REGS];
-    unsigned nsaved = clobbered_gprs(s, mask, saved_regs);
+    unsigned nsaved = clobbered_gprs(s, imask, omask, saved_regs);
     if (nsaved)
         asmgen_prologue(s, saved_regs, nsaved);
 
@@ -319,19 +321,19 @@ static void asmgen_process(SwsAArch64Context *s, SwsCompMask mask)
     s->setup = rasm_get_current_node(r);
 
     /* Load values from exec. */
-    LOOP(mask, i) {
+    LOOP(imask, i) {
         rasm_annotate_nextf(r, buf, sizeof(buf), "in[%u] = exec->in[%u];", i, i);
         i_ldr(r, s->in[i],       a64op_off(s->exec, offsetof_exec_in       + (i * sizeof(uint8_t *))));
     }
-    LOOP(mask, i) {
+    LOOP(omask, i) {
         rasm_annotate_nextf(r, buf, sizeof(buf), "out[%u] = exec->out[%u];", i, i);
         i_ldr(r, s->out[i],      a64op_off(s->exec, offsetof_exec_out      + (i * sizeof(uint8_t *))));
     }
-    LOOP(mask, i) {
+    LOOP(imask, i) {
         rasm_annotate_nextf(r, buf, sizeof(buf), "in_bump[%u] = exec->in_bump[%u];", i, i);
         i_ldr(r, s->in_bump[i],  a64op_off(s->exec, offsetof_exec_in_bump  + (i * sizeof(ptrdiff_t))));
     }
-    LOOP(mask, i) {
+    LOOP(omask, i) {
         rasm_annotate_nextf(r, buf, sizeof(buf), "out_bump[%u] = exec->out_bump[%u];", i, i);
         i_ldr(r, s->out_bump[i], a64op_off(s->exec, offsetof_exec_out_bump + (i * sizeof(ptrdiff_t))));
     }
@@ -345,8 +347,8 @@ static void asmgen_process(SwsAArch64Context *s, SwsCompMask mask)
 
     /* Perform padding, preparing for next row. */
     rasm_add_label(r, next_row);            CMT("next_row:");
-    LOOP(mask, i) { i_add(r, s->in[i],  s->in[i],  s->in_bump[i]);  CMTF("in[%u] += in_bump[%u];", i, i); }
-    LOOP(mask, i) { i_add(r, s->out[i], s->out[i], s->out_bump[i]); CMTF("out[%u] += out_bump[%u];", i, i); }
+    LOOP(imask, i) { i_add(r, s->in[i],  s->in[i],  s->in_bump[i]);  CMTF("in[%u] += in_bump[%u];", i, i); }
+    LOOP(omask, i) { i_add(r, s->out[i], s->out[i], s->out_bump[i]); CMTF("out[%u] += out_bump[%u];", i, i); }
 
     /* First row (reset x). */
     rasm_add_label(r, first_row);           CMT("first_row:");
@@ -1395,7 +1397,7 @@ static void asmgen_process_cps(SwsAArch64Context *s, SwsCompMask mask)
     snprintf(func_name, sizeof(func_name), "ff_sws_process_%04x_neon", nibble_mask(mask));
     rasm_func_begin(r, func_name, true, false);
 
-    asmgen_process(s, mask);
+    asmgen_process(s, mask, mask);
 
     /* Load values from impl. */
     rasm_set_current_node(r, s->setup);
