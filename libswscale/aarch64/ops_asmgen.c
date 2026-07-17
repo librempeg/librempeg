@@ -316,9 +316,6 @@ static void asmgen_process(SwsAArch64Context *s, SwsCompMask imask, SwsCompMask 
     if (nsaved)
         asmgen_prologue(s, saved_regs, nsaved);
 
-    /* Setup. */
-    s->setup = rasm_get_current_node(r);
-
     /* Load values from exec. */
     RasmOp exec_in[4];
     RasmOp exec_in_bump[4];
@@ -332,6 +329,9 @@ static void asmgen_process(SwsAArch64Context *s, SwsCompMask imask, SwsCompMask 
     LOOP(omask, i) { i_ldr(r, s->out[i],      exec_out[i]);         CMTF("out[%u] = exec->out[%u];", i, i); }
     LOOP(imask, i) { i_ldr(r, s->in_bump[i],  exec_in_bump[i]);     CMTF("in_bump[%u] = exec->in_bump[%u];", i, i); }
     LOOP(omask, i) { i_ldr(r, s->out_bump[i], exec_out_bump[i]);    CMTF("out_bump[%u] = exec->out_bump[%u];", i, i); }
+
+    /* Setup. */
+    s->setup = rasm_get_current_node(r);
 
     int first_row  = rasm_new_label(r, NULL);
     int next_row   = rasm_new_label(r, NULL);
