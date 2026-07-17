@@ -377,7 +377,7 @@ static void asmgen_set_load_cont_node(SwsAArch64Context *s)
 static void asmgen_op_read_bit(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
     RasmContext *r = s->rctx;
-    RasmOp bitmask_vec = s->vt[1];
+    AArch64VecViews bitmask_vec = a64op_vec_views(s->vt[1]);
     RasmOp wtmp = a64op_w(s->tmp0);
     AArch64VecViews vl[1]     = { a64op_vec_views(s->vl[0]) };
     AArch64VecViews vtmp      = a64op_vec_views(s->vt[2]);
@@ -391,41 +391,41 @@ static void asmgen_op_read_bit(SwsAArch64Context *s, const SwsAArch64OpImplParam
 
     if (p->block_size == 16) {
         i_ldrh(r, wtmp,        a64op_post(s->in[0], 2));    CMT("uint16_t tmp = *in[0]++;");
-        i_movi(r, bitmask_vec, IMM(1));                     CMT("v128 bitmask_vec = {1 <repeats 16 times>};");
+        i_movi(r, bitmask_vec.b16, IMM(1));                 CMT("v128 bitmask_vec = {1 <repeats 16 times>};");
         i_dup (r, vl[0].b8,    wtmp);                       CMT("vl[0].lo = broadcast(tmp);");
         i_lsr (r, wtmp,        wtmp, IMM(8));               CMT("tmp >>= 8;");
         i_dup (r, vtmp.b8,     wtmp);                       CMT("vtmp.lo = broadcast(tmp);");
         i_ins (r, vl[0].de[1], vtmp.de[0]);                 CMT("vl[0].hi = vtmp.lo;");
         i_ushl(r, vl[0].b16,   vl[0].b16, shift_vec.b16);   CMT("vl[0] <<= shift_vec;");
-        i_and (r, vl[0].b16,   vl[0].b16, bitmask_vec);     CMT("vl[0] &= bitmask_vec;");
+        i_and (r, vl[0].b16,   vl[0].b16, bitmask_vec.b16); CMT("vl[0] &= bitmask_vec;");
     } else {
         i_ldrb(r, wtmp,        a64op_post(s->in[0], 1));    CMT("uint8_t tmp = *in[0]++;");
-        i_movi(r, bitmask_vec, IMM(1));                     CMT("v128 bitmask_vec = {1 <repeats 8 times>, 0 <repeats 8 times>};");
+        i_movi(r, bitmask_vec.b8,  IMM(1));                 CMT("v128 bitmask_vec = {1 <repeats 8 times>, 0 <repeats 8 times>};");
         i_dup (r, vl[0].b8,    wtmp);                       CMT("vl[0].lo = broadcast(tmp);");
         i_ushl(r, vl[0].b8,    vl[0].b8,  shift_vec.b8);    CMT("vl[0] <<= shift_vec;");
-        i_and (r, vl[0].b8,    vl[0].b8,  bitmask_vec);     CMT("vl[0] &= bitmask_vec;");
+        i_and (r, vl[0].b8,    vl[0].b8,  bitmask_vec.b8);  CMT("vl[0] &= bitmask_vec;");
     }
 }
 
 static void asmgen_op_read_nibble(SwsAArch64Context *s, const SwsAArch64OpImplParams *p)
 {
     RasmContext *r = s->rctx;
-    RasmOp nibble_mask = v_8b(s->vt[0]);
+    AArch64VecViews nibble_mask = a64op_vec_views(s->vt[0]);
     AArch64VecViews vl[1] = { a64op_vec_views(s->vl[0]) };
     AArch64VecViews vtmp  = a64op_vec_views(s->vt[1]);
 
     rasm_annotate_next(r, "v128 nibble_mask = {0xf <repeats 8 times>, 0x0 <repeats 8 times>};");
-    i_movi(r, nibble_mask, IMM(0x0f));
+    i_movi(r, nibble_mask.b8, IMM(0x0f));
 
     if (p->block_size == 8) {
         i_ldr (r, vl[0].s,   a64op_post(s->in[0], 4));  CMT("vl[0] = *in[0]++;");
         i_ushr(r, vtmp.b8,   vl[0].b8, IMM(4));         CMT("vtmp.lo = vl[0] >> 4;");
-        i_and (r, vl[0].b8,  vl[0].b8, nibble_mask);    CMT("vl[0].lo &= nibble_mask;");
+        i_and (r, vl[0].b8,  vl[0].b8, nibble_mask.b8); CMT("vl[0].lo &= nibble_mask;");
         i_zip1(r, vl[0].b8,  vtmp.b8,  vl[0].b8);       CMT("interleave");
     } else {
         i_ldr (r, vl[0].d,   a64op_post(s->in[0], 8));  CMT("vl[0] = *in[0]++;");
         i_ushr(r, vtmp.b8,   vl[0].b8, IMM(4));         CMT("vtmp.lo = vl[0] >> 4;");
-        i_and (r, vl[0].b8,  vl[0].b8, nibble_mask);    CMT("vl[0].lo &= nibble_mask;");
+        i_and (r, vl[0].b8,  vl[0].b8, nibble_mask.b8); CMT("vl[0].lo &= nibble_mask;");
         i_zip1(r, vl[0].b16, vtmp.b16, vl[0].b16);      CMT("interleave");
     }
 }
