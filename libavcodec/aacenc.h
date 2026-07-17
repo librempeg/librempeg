@@ -173,9 +173,57 @@ typedef struct AACQuantizeBandCostCacheEntry {
 /**
  * NMR coder per-band candidate cost curves (~96 KiB) and rate-control carry-over
  */
+/**
+ * Per-channel trellis state for one solve. A channel pair (CPE) is solved
+ * jointly against a pooled budget: the first channel's setup is stored here
+ * and committed together with the second channel under one shared lambda.
+ */
+typedef struct NMRSlot {
+    struct SingleChannelElement *sce;
+    int   si;                                    ///< curve-bank index (nd/nb slot)
+    int   cur_ch;                                ///< encoder channel index (psy/cache context)
+    int   nbnd;                                  ///< coded-band count, 0 = nothing codeable
+    int   is8;                                   ///< EIGHT_SHORT frame
+    int   bidx[128];                             ///< sce band index (w*16+g)
+    int   bw[128], bg[128], bst[128];            ///< window group, swb, coef start
+    int   blo[128];                              ///< finest candidate scalefactor
+    int   bnc[128];                              ///< number of candidates
+    int   chosen[128];
+    int   act[128];                              ///< active (non-PNS) band coding order
+    int   nact;
+    int   minsf[128];
+    float maxvals[128];
+    float thr[128];                              ///< allocation-law effective threshold
+    float thr_real[128];                         ///< real masking threshold (PNS gates)
+    float tnsg[128];                             ///< TNS synthesis gain per band for THIS solve (1 = uncovered), M/S-aware (pair max)
+    float pener[128];                            ///< band energy (PNS noise target)
+    float pspread[128];                          ///< band tonality spread (1 = noise)
+    uint8_t is_pns[128];                         ///< band coded as noise
+} NMRSlot;
+
 typedef struct AACNMRCurves {
-    float nd[128][NMR_NCAND];                    ///< dist / threshold per candidate
-    int   nb[128][NMR_NCAND];                    ///< spectral bits per candidate
+    float nd[2][128][NMR_NCAND];                 ///< dist / threshold per candidate, per pair slot
+    int   nb[2][128][NMR_NCAND];                 ///< spectral bits per candidate, per pair slot
+    NMRSlot slot[2];                             ///< pair slots (solo solves use slot 0)
+    int   pair;                                  ///< current element is a CPE: pool the pair budget
+    int   rc_gl;                                 ///< rc_global latched at frame start: the corridor bootstrap must not flip the CPE defer logic between channels of one frame
+    int   rc_fill_seeded;                        ///< reservoir seeded full at stream start (decoder buffer starts full)
+    int   pending;                               ///< slot 0 holds a deferred first channel
+    uint8_t zero_prev[16][128];                  ///< per-channel band zero state last frame (zeroing hysteresis)
+    int     zero_nw[16];                         ///< window count zero_prev was recorded on
+    float thr_prev[16][64];                      ///< per-channel long-grid law thresholds of the previous frame
+    uint8_t thr_prev_ok[16];                     ///< thr_prev holds a long-frame measurement
+    uint8_t pns_prev[16][128];                   ///< per-channel PNS state last frame (decision hysteresis)
+    uint8_t pns_run_on[16][128];                 ///< consecutive frames the band has WANTED PNS
+    uint8_t pns_run_off[16][128];                ///< consecutive frames the band has wanted OUT
+    uint8_t smode[16][128];                      ///< per-pair previous stereo mode per band, two banks per pair (long/short grid): each grid's memory persists across the other's frames instead of being wiped at window switches
+    uint8_t smode_band[8][128];                  ///< last decided stereo mode per band index (side-band tests)
+    uint8_t tns8_prev[16];                       ///< short-TNS accepted last frame (per channel): Schmitt state for the accept bar
+    uint8_t sinit[16];                           ///< stereo state bank initialized
+    int     smode_nw[8];                         ///< window count the stored modes were decided on
+    float   sema_es[16][128];                     ///< smoothed side energy per band (stereo-decision EMA)
+    float   sema_em[16][128];                     ///< smoothed mid energy per band
+    float   sema_img[16][128];                    ///< smoothed I/S image-error/mask ratio per band
     float lam[16];                               ///< per-channel operating lambda of the previous frame, 0 = none yet
     int   counted[16];                           ///< per-channel bits the trellis accounted for in the last solve
     float side_ema;                              ///< running estimate of real-minus-counted bits per frame
@@ -187,6 +235,12 @@ typedef struct AACNMRCurves {
     int     frames_since_short;                  ///< long-block frames since the last short run (the "gap"): large = isolated transient
     int     prev_was_short;                      ///< previous frame was a short block (for run-start detection)
     float   run_burst;                           ///< transient bit-burst factor, set at run start and held across the short run
+    float   lam_slew;                            ///< final operating lambda of the previous RC frame (slew-limiter state)
+    float   nd_ema;                              ///< smoothed achieved distortion/real-mask over long-frame coded bands (1 = at threshold; >>1 flags psy-unreliable noise-class content)
+    float   press;                               ///< rate-pressure ramp [0,1]: lambda EMA against anchors that scale up when nd_ema flags noise-class content (psy masks unreliable there, lambda reads inflated)
+    float   lam_short_ema;                       ///< smoothed operating lambda of short frames
+    float   lam_long_ema;                        ///< smoothed operating lambda of long frames
+    float   lam_floor;                           ///< lambda min-tracker (snaps down, +2%/frame up): sustained-strain floor; bursty spikes at a comfortable rate cannot raise it
 } AACNMRCurves;
 
 typedef struct AACPCEInfo {
