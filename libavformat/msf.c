@@ -88,6 +88,8 @@ static int read_header(AVFormatContext *s)
     case 5:
     case 6:
         st->codecpar->block_align = (codec == 4 ? 96 : codec == 5 ? 152 : 192) * channels;
+        st->codecpar->bit_rate = 8LL * st->codecpar->block_align *
+                                       st->codecpar->sample_rate / 1024;
         if (st->codecpar->ch_layout.nb_channels > UINT16_MAX / 2048)
             return AVERROR_INVALIDDATA;
         ret = ff_alloc_extradata(st->codecpar, 14);
