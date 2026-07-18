@@ -24,7 +24,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int msf_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "MSF", 3))
         return 0;
@@ -41,7 +41,7 @@ static int msf_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int msf_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     unsigned codec;
@@ -111,7 +111,7 @@ static int msf_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int msf_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
 
@@ -123,7 +123,7 @@ const FFInputFormat ff_msf_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sony PS3 MSF (MultiStream File)"),
     .p.extensions   = "msf",
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = msf_probe,
-    .read_header    = msf_read_header,
-    .read_packet    = msf_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
