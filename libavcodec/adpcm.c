@@ -918,6 +918,29 @@ static inline int16_t adpcm_ima_oki_expand_nibble(ADPCMChannelStatus *c, int nib
     return c->predictor * 16;
 }
 
+static inline int16_t adpcm_ima_oki4_expand_nibble(ADPCMChannelStatus *c, int nibble)
+{
+    int step_index, predictor, delta, step;
+
+    step = oki_step_table[c->step_index];
+    step_index = c->step_index + ff_adpcm_index_table[(unsigned)nibble];
+    step_index = av_clip(step_index, 0, 48);
+    step <<= 4;
+
+    delta = step >> 3;
+    if (nibble & 1) delta += step >> 2;
+    if (nibble & 2) delta += step >> 1;
+    if (nibble & 4) delta += step;
+    if (nibble & 8) delta = -delta;
+    predictor = c->predictor;
+    predictor += delta;
+
+    c->predictor = av_clip_int16(predictor);
+    c->step_index = step_index;
+
+    return c->predictor;
+}
+
 static inline int16_t adpcm_ima_wv6_expand_nibble(ADPCMChannelStatus *c, int nibble)
 {
     int sample_decoded, step, delta;
@@ -1563,6 +1586,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_IMA_EA_SEAD:
     case AV_CODEC_ID_ADPCM_IMA_ESCAPE:
     case AV_CODEC_ID_ADPCM_IMA_OKI:
+    case AV_CODEC_ID_ADPCM_IMA_OKI4:
     case AV_CODEC_ID_ADPCM_IMA_WS:
     case AV_CODEC_ID_ADPCM_YAMAHA:
     case AV_CODEC_ID_ADPCM_AICA:
@@ -2689,6 +2713,13 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             int v = bytestream2_get_byteu(&gb);
             *samples++ = adpcm_ima_oki_expand_nibble(&c->status[0],  v >> 4  );
             *samples++ = adpcm_ima_oki_expand_nibble(&c->status[st], v & 0x0F);
+        }
+        ) /* End of CASE */
+    CASE(ADPCM_IMA_OKI4,
+        for (int n = nb_samples >> (1 - st); n > 0; n--) {
+            int v = bytestream2_get_byteu(&gb);
+            *samples++ = adpcm_ima_oki4_expand_nibble(&c->status[0],  v >> 4  );
+            *samples++ = adpcm_ima_oki4_expand_nibble(&c->status[st], v & 0x0F);
         }
         ) /* End of CASE */
     CASE(ADPCM_IMA_WV6,
@@ -4357,6 +4388,7 @@ ADPCM_DECODER(ADPCM_IMA_MOFLEX,  sample_fmts_s16p, adpcm_ima_moflex,  "ADPCM IMA
 ADPCM_DECODER(ADPCM_IMA_MTF,     sample_fmts_s16,  adpcm_ima_mtf,     "ADPCM IMA Capcom's MT Framework")
 ADPCM_DECODER(ADPCM_IMA_NDS,     sample_fmts_s16p, adpcm_ima_nds,     "ADPCM IMA Nintendo DS")
 ADPCM_DECODER(ADPCM_IMA_OKI,     sample_fmts_s16,  adpcm_ima_oki,     "ADPCM IMA Dialogic OKI")
+ADPCM_DECODER(ADPCM_IMA_OKI4,    sample_fmts_s16,  adpcm_ima_oki4,    "ADPCM IMA Dialogic OKI (4-shift)")
 ADPCM_DECODER(ADPCM_IMA_PDA,     sample_fmts_s16,  adpcm_ima_pda,     "ADPCM IMA PlayDate")
 ADPCM_DECODER(ADPCM_IMA_QT,      sample_fmts_s16p, adpcm_ima_qt,      "ADPCM IMA QuickTime")
 ADPCM_DECODER(ADPCM_IMA_RAD,     sample_fmts_s16,  adpcm_ima_rad,     "ADPCM IMA Radical")
