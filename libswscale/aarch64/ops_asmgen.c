@@ -1146,7 +1146,10 @@ static void asmgen_setup_linear(SwsAArch64Context *s, const SwsAArch64OpImplPara
                                 SwsAArch64OpRegs *regs)
 {
     RasmContext *r = s->rctx;
+    RasmOp *sl = regs->sl;
+    RasmOp *sh = regs->sh;
     RasmOp *vc = regs->vk;
+    RasmOp *vt = regs->vt;
 
     RasmOp ptr = s->tmp0;
     RasmOp coeff_veclist;
@@ -1163,103 +1166,7 @@ static void asmgen_setup_linear(SwsAArch64Context *s, const SwsAArch64OpImplPara
     i_ldr(r, ptr, IMPL_PRIV(s));                            CMT("v128 *vcoeff_ptr = impl->priv.ptr;");
     asmgen_set_load_cont_node(s);
     i_ld1(r, coeff_veclist, a64op_base(ptr));               CMT("coeff_veclist = *vcoeff_ptr;");
-}
 
-/**
- * Performs one pass of the linear transform over a single vector bank
- * (low or high).
- */
-static void linear_pass(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
-                        SwsAArch64OpRegs *regs,
-                        SwsCompMask save_mask, bool vh_pass)
-{
-    RasmContext *r = s->rctx;
-    /**
-     * The intermediate registers for fmul+fadd (for when SWS_BITEXACT
-     * is set) start from temp vector 4.
-     */
-    RasmOp *vt = regs->vt;
-    RasmOp *vc = regs->vk;
-    RasmOp *vtmp = &vt[4];
-    RasmOp *vx = vh_pass ? regs->dh : regs->dl;
-    char cvh = vh_pass ? 'h' : 'l';
-
-    if (vh_pass && !s->use_vh)
-        return;
-
-    /**
-     * Save rows that need to be used as input after they have been already
-     * written to.
-     */
-    RasmOp src_vx[4] = { vx[0], vx[1], vx[2], vx[3] };
-    if (save_mask) {
-        for (int i = 0; i < 4; i++) {
-            if (save_mask & SWS_COMP(i)) {
-                src_vx[i] = vt[i];
-                i_mov16b(r, vt[i], vx[i]);  CMTF("vsrc[%u] = v%c[%u];", i, cvh, i);
-            }
-        }
-    }
-
-    /**
-     * The non-zero coefficients have been packed in aarch64_setup_linear()
-     * in sequential order into the individual lanes of the coefficient
-     * vector registers. We must follow the same order of execution here.
-     */
-    int i_coeff = 0;
-    LOOP_MASK(p, i) {
-        bool first = true;
-        RasmNode *pre_mul = rasm_get_current_node(r);
-        for (int j = 0; j < 5; j++) {
-            bool is_offset = (j == 0);
-            int src_j = is_offset ? 4 : (j - 1);
-            if (p->par.lin.zero & SWS_MASK(i, src_j))
-                continue;
-            RasmOp vsrc = src_vx[src_j];
-            uint8_t vc_i = i_coeff / 4;
-            uint8_t vc_j = i_coeff & 3;
-            RasmOp vcoeff = a64op_elem(vc[vc_i], vc_j);
-            i_coeff++;
-            if (first && is_offset) {
-                i_dup (r, vx[i], vcoeff);               CMTF("v%c[%u]  = broadcast(vc[%u][%u]);", cvh, i, vc_i, vc_j);
-            } else if (first && !is_offset) {
-                if (p->par.lin.one & SWS_MASK(i, src_j)) {
-                    i_mov16b(r, vx[i], vsrc);           CMTF("v%c[%u]  = vsrc[%u];", cvh, i, src_j);
-                } else {
-                    i_fmul  (r, vx[i], vsrc, vcoeff);   CMTF("v%c[%u]  = vsrc[%u] * vc[%u][%u];", cvh, i, src_j, vc_i, vc_j);
-                }
-            } else if (p->uop == SWS_UOP_LINEAR_FMA) {
-                /**
-                 * Most modern aarch64 cores have a fastpath for sequences
-                 * of fmla instructions. This means that even if the coefficient
-                 * is 1, it is still faster to use fmla by 1 instead of fadd.
-                 */
-                i_fmla(r, vx[i], vsrc, vcoeff);         CMTF("v%c[%u] += vsrc[%u] * vc[%u][%u];", cvh, i, src_j, vc_i, vc_j);
-            } else {
-                /**
-                 * Split the multiply-accumulate into fmul+fadd. All
-                 * multiplications are performed first into temporary
-                 * registers, and only then added to the destination,
-                 * to reduce the dependency chain.
-                 * There is no need to perform multiplications by 1.
-                 */
-                if (!(p->par.lin.one & SWS_MASK(i, src_j))) {
-                    pre_mul = rasm_set_current_node(r, pre_mul);
-                    i_fmul(r, vtmp[vc_j], vsrc, vcoeff);    CMTF("vtmp[%u] = vsrc[%u] * vc[%u][%u];", vc_j, src_j, vc_i, vc_j);
-                    pre_mul = rasm_set_current_node(r, pre_mul);
-                    i_fadd(r, vx[i], vx[i], vtmp[vc_j]);    CMTF("v%c[%u] += vtmp[%u];", cvh, i, vc_j);
-                } else {
-                    i_fadd(r, vx[i], vx[i], vsrc);          CMTF("v%c[%u] += vsrc[%u];", cvh, i, vc_j);
-                }
-            }
-            first = false;
-        }
-    }
-}
-
-static void asmgen_op_linear(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
-                             SwsAArch64OpRegs *regs)
-{
     /* Compute mask for rows that must be saved before being overwritten. */
     SwsCompMask save_mask = 0;
     bool overwritten[4] = { false, false, false, false };
@@ -1275,9 +1182,102 @@ static void asmgen_op_linear(SwsAArch64Context *s, const SwsAArch64OpImplParams 
         }
     }
 
+    /**
+     * Save rows that need to be used as input after they have been already
+     * written to.
+     */
+    RasmOp *tl = &vt[0];
+    RasmOp *th = &vt[4];
+    LOOP      (save_mask, i) { i_mov16b(r, tl[i], sl[i]);  CMTF("vsrcl[%u] = vl[%u];", i, i); }
+    LOOP_VH(s, save_mask, i) { i_mov16b(r, th[i], sh[i]);  CMTF("vsrch[%u] = vh[%u];", i, i); }
+    LOOP      (save_mask, i) { sl[i] = tl[i]; }
+    LOOP_VH(s, save_mask, i) { sh[i] = th[i]; }
+}
+
+/**
+ * Performs one pass of the linear transform over a single vector bank
+ * (low or high).
+ */
+static void linear_pass(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                        SwsAArch64OpRegs *regs, bool vh_pass)
+{
+    RasmContext *r = s->rctx;
+    /**
+     * The intermediate registers for fmul+fadd (for when SWS_BITEXACT
+     * is set) start from temp vector 8.
+     */
+    RasmOp *vt = regs->vt;
+    RasmOp *vc = regs->vk;
+    RasmOp *vtmp = &vt[8];
+    RasmOp *sx = vh_pass ? regs->sh : regs->sl;
+    RasmOp *dx = vh_pass ? regs->dh : regs->dl;
+    char cvh = vh_pass ? 'h' : 'l';
+
+    if (vh_pass && !s->use_vh)
+        return;
+
+    /**
+     * The non-zero coefficients have been packed in aarch64_setup_linear()
+     * in sequential order into the individual lanes of the coefficient
+     * vector registers. We must follow the same order of execution here.
+     */
+    int i_coeff = 0;
+    LOOP_MASK(p, i) {
+        bool first = true;
+        RasmNode *pre_mul = rasm_get_current_node(r);
+        for (int j = 0; j < 5; j++) {
+            bool is_offset = (j == 0);
+            int src_j = is_offset ? 4 : (j - 1);
+            if (p->par.lin.zero & SWS_MASK(i, src_j))
+                continue;
+            RasmOp vsrc = sx[src_j];
+            uint8_t vc_i = i_coeff / 4;
+            uint8_t vc_j = i_coeff & 3;
+            RasmOp vcoeff = a64op_elem(vc[vc_i], vc_j);
+            i_coeff++;
+            if (first && is_offset) {
+                i_dup (r, dx[i], vcoeff);               CMTF("v%c[%u]  = broadcast(vc[%u][%u]);", cvh, i, vc_i, vc_j);
+            } else if (first && !is_offset) {
+                if (p->par.lin.one & SWS_MASK(i, src_j)) {
+                    i_mov16b(r, dx[i], vsrc);           CMTF("v%c[%u]  = vsrc%c[%u];", cvh, i, cvh, src_j);
+                } else {
+                    i_fmul  (r, dx[i], vsrc, vcoeff);   CMTF("v%c[%u]  = vsrc%c[%u] * vc[%u][%u];", cvh, i, cvh, src_j, vc_i, vc_j);
+                }
+            } else if (p->uop == SWS_UOP_LINEAR_FMA) {
+                /**
+                 * Most modern aarch64 cores have a fastpath for sequences
+                 * of fmla instructions. This means that even if the coefficient
+                 * is 1, it is still faster to use fmla by 1 instead of fadd.
+                 */
+                i_fmla(r, dx[i], vsrc, vcoeff);         CMTF("v%c[%u] += vsrc%c[%u] * vc[%u][%u];", cvh, i, cvh, src_j, vc_i, vc_j);
+            } else {
+                /**
+                 * Split the multiply-accumulate into fmul+fadd. All
+                 * multiplications are performed first into temporary
+                 * registers, and only then added to the destination,
+                 * to reduce the dependency chain.
+                 * There is no need to perform multiplications by 1.
+                 */
+                if (!(p->par.lin.one & SWS_MASK(i, src_j))) {
+                    pre_mul = rasm_set_current_node(r, pre_mul);
+                    i_fmul(r, vtmp[vc_j], vsrc, vcoeff);    CMTF("vtmp[%u] = vsrc%c[%u] * vc[%u][%u];", vc_j, cvh, src_j, vc_i, vc_j);
+                    pre_mul = rasm_set_current_node(r, pre_mul);
+                    i_fadd(r, dx[i], dx[i], vtmp[vc_j]);    CMTF("v%c[%u] += vtmp[%u];", cvh, i, vc_j);
+                } else {
+                    i_fadd(r, dx[i], dx[i], vsrc);          CMTF("v%c[%u] += vsrc%c[%u];", cvh, i, cvh, vc_j);
+                }
+            }
+            first = false;
+        }
+    }
+}
+
+static void asmgen_op_linear(SwsAArch64Context *s, const SwsAArch64OpImplParams *p,
+                             SwsAArch64OpRegs *regs)
+{
     /* Perform linear passes for low and high vector banks. */
-    linear_pass(s, p, regs, save_mask, false);
-    linear_pass(s, p, regs, save_mask, true);
+    linear_pass(s, p, regs, false);
+    linear_pass(s, p, regs, true);
 }
 
 /*********************************************************************/
