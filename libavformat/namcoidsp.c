@@ -28,23 +28,31 @@
 
 static int read_probe(const AVProbeData *p)
 {
-    if (AV_RB32(p->buf) != MKBETAG('I','D','S','P'))
+    int64_t offset = 0;
+
+    if (AV_RB32(p->buf) == MKBETAG('i','d','s','p')) {
+        offset = 0xbc;
+        if (p->buf_size < 4 + offset)
+            return 0;
+    }
+
+    if (AV_RB32(p->buf + offset) != MKBETAG('I','D','S','P'))
         return 0;
 
-    if (p->buf_size < 48)
+    if (p->buf_size < 48 + offset)
         return 0;
-    if (AV_RB32(p->buf + 4) != 0)
+    if (AV_RB32(p->buf + 4 + offset) != 0)
         return 0;
-    if ((int)AV_RB32(p->buf + 8) <= 0)
+    if ((int)AV_RB32(p->buf + 8 + offset) <= 0)
         return 0;
-    if ((int)AV_RB32(p->buf + 12) <= 0)
+    if ((int)AV_RB32(p->buf + 12 + offset) <= 0)
         return 0;
-    if ((int)AV_RB32(p->buf + 28) <= 0 &&
-        (int)AV_RB32(p->buf + 44) <= 0)
+    if ((int)AV_RB32(p->buf + 28 + offset) <= 0 &&
+        (int)AV_RB32(p->buf + 44 + offset) <= 0)
         return 0;
-    if (AV_RB32(p->buf + 16) == 0)
+    if (AV_RB32(p->buf + 16 + offset) == 0)
         return 0;
-    if (AV_RB32(p->buf + 40) <= 44)
+    if (AV_RB32(p->buf + 40 + offset) <= 44)
         return 0;
 
     return AVPROBE_SCORE_MAX;
@@ -52,28 +60,37 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int64_t duration, start_offset, align, header, spacing;
-    int ret, channels, rate;
+    int64_t duration, start_offset, header, spacing;
+    int ret, channels, rate, align;
     AVIOContext *pb = s->pb;
     AVStream *st;
 
-    st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
+    if (avio_rb32(pb) == MKBETAG('i','d','s','p')) {
+        avio_skip(pb, 4 + 0xbc);
+        start_offset = 0xbc;
+        header = 0xbc;
+    } else {
+        avio_skip(pb, 4);
+        start_offset = 0;
+        header = 0;
+    }
 
-    avio_skip(pb, 8);
     channels = avio_rb32(pb);
     rate = avio_rb32(pb);
     duration = avio_rb32(pb);
     avio_skip(pb, 8);
     align = avio_rb32(pb);
-    header = avio_rb32(pb);
+    header += avio_rb32(pb);
     spacing = avio_rb32(pb);
-    start_offset = avio_rb32(pb);
+    start_offset += avio_rb32(pb);
     if (align == 0)
         align = avio_rb32(pb);
     if (spacing < 32 || channels <= 0 || align <= 0 || align > INT_MAX/channels)
         return AVERROR_INVALIDDATA;
+
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
 
     st->start_time = 0;
     st->duration = duration;
@@ -99,7 +116,7 @@ static int read_header(AVFormatContext *s)
         avio_skip(pb, spacing-32);
     }
 
-    avio_seek(pb, start_offset, SEEK_SET);
+    avio_seek(pb, FFALIGN(start_offset, 16), SEEK_SET);
 
     return 0;
 }
