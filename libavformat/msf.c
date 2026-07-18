@@ -23,6 +23,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -70,13 +71,15 @@ static int read_header(AVFormatContext *s)
 
     switch (codec) {
     case 0:
+        st->codecpar->block_align = 2 * channels;
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16BE;
         break;
     case 1:
+        st->codecpar->block_align = 2 * channels;
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
         break;
     case 3:
-        st->codecpar->block_align = 16 * st->codecpar->ch_layout.nb_channels;
+        st->codecpar->block_align = 16 * channels;
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX;
         st->codecpar->bit_rate = 16LL * st->codecpar->ch_layout.nb_channels * 8 *
                                         st->codecpar->sample_rate / 28;
@@ -84,7 +87,7 @@ static int read_header(AVFormatContext *s)
     case 4:
     case 5:
     case 6:
-        st->codecpar->block_align = (codec == 4 ? 96 : codec == 5 ? 152 : 192) * st->codecpar->ch_layout.nb_channels;
+        st->codecpar->block_align = (codec == 4 ? 96 : codec == 5 ? 152 : 192) * channels;
         if (st->codecpar->ch_layout.nb_channels > UINT16_MAX / 2048)
             return AVERROR_INVALIDDATA;
         ret = ff_alloc_extradata(st->codecpar, 14);
@@ -99,8 +102,9 @@ static int read_header(AVFormatContext *s)
         st->codecpar->codec_id = AV_CODEC_ID_ATRAC3;
         break;
     case 7:
-        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+        st->codecpar->block_align = 1024;
         st->codecpar->codec_id = AV_CODEC_ID_MP3;
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
         break;
     default:
         avpriv_request_sample(s, "Codec %d", codec);
@@ -113,13 +117,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVCodecParameters *par = s->streams[0]->codecpar;
-
-    return av_get_packet(s->pb, pkt, par->block_align ? par->block_align : 1024 * par->ch_layout.nb_channels);
-}
-
 const FFInputFormat ff_msf_demuxer = {
     .p.name         = "msf",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sony PS3 MSF (MultiStream File)"),
@@ -127,5 +124,5 @@ const FFInputFormat ff_msf_demuxer = {
     .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
