@@ -95,6 +95,7 @@
 #define TAK_MIN_FRAME_HEADER_BYTES     ((TAK_MIN_FRAME_HEADER_BITS + 7) / 8)
 
 enum TAKCodecType {
+    TAK_CODEC_MONO_STEREO_OLD = 0,
     TAK_CODEC_MONO_STEREO  = 2,
     TAK_CODEC_MULTICHANNEL = 4,
 };
@@ -121,6 +122,74 @@ enum TAKFrameSizeType {
     TAK_FST_512,
     TAK_FST_1024,
     TAK_FST_2048,
+};
+
+enum TAKBitCodes {
+    BCO_SILENCE,
+
+    BCOA_1_1,
+    BCOA_2_1,
+    BCOA_3_1,
+
+    BCOB_3_A,
+    BCOB_4_A,
+    BCOB_4_B,
+    BCOB_5_A,
+    BCOB_5_B,
+    BCOB_6_A,
+    BCOB_6_B,
+    BCOB_7_A,
+    BCOB_7_B,
+    BCOB_8_A,
+    BCOB_8_B,
+    BCOB_9_A,
+    BCOB_9_B,
+    BCOB_10_A,
+    BCOB_10_B,
+    BCOB_11_A,
+    BCOB_11_B,
+    BCOB_12_A,
+    BCOB_12_B,
+    BCOB_13_A,
+    BCOB_13_B,
+    BCOB_14_A,
+    BCOB_14_B,
+    BCOB_15_A,
+    BCOB_15_B,
+    BCOB_16_A,
+    BCOB_16_B,
+    BCOB_17_A,
+    BCOB_17_B,
+    BCOB_18_A,
+    BCOB_18_B,
+    BCOB_19_A,
+    BCOB_19_B,
+    BCOB_20_A,
+    BCOB_20_B,
+    BCOB_21_A,
+    BCOB_21_B,
+    BCOB_22_A,
+    BCOB_22_B,
+    BCOB_23_A,
+    BCOB_23_B,
+    BCOB_24_A,
+    BCOB_24_B,
+    BCOB_25_A,
+    BCOB_25_B,
+    BCOB_26_A,
+    BCOB_26_B,
+
+    BCOA_FIRST = BCOA_1_1,
+    BCOA_LAST  = BCOA_3_1,
+    BCOB_FIRST = BCOB_3_A,
+    BCOB_LAST = BCOB_26_B,
+    BCO_LAST = BCOB_26_B,
+};
+
+enum TAKCodeDiffCodes {
+    BC_CDC_10,
+    BC_CDC_11,
+    BC_CDC_21
 };
 
 typedef struct TAKStreamInfo {
