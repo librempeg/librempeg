@@ -71,9 +71,6 @@ typedef int32_t x86_reg;
 typedef int x86_reg;
 #endif
 
-#define HAVE_7REGS HAVE_X86_7REGS
-#define HAVE_6REGS HAVE_X86_6REGS
-
 #if ARCH_X86_64 && defined(PIC)
 #    define BROKEN_RELOCATIONS 1
 #endif
