@@ -121,12 +121,12 @@ static const SwsAArch64OpEntry ops_entries[] = {
 
 /*********************************************************************/
 typedef struct SwsAArch64OpRegs {
-    RasmOp sl[4]; /* input vector registers (low bank) */
-    RasmOp sh[4]; /* input vector registers (high bank) */
-    RasmOp dl[4]; /* output vector registers (low bank) */
-    RasmOp dh[4]; /* output vector registers (high bank) */
-    RasmOp vt[8]; /* temp vector registers */
-    RasmOp vk[4]; /* constant data (may be gprs) */
+    RasmOp sl[ 4]; /* input vector registers (low bank) */
+    RasmOp sh[ 4]; /* input vector registers (high bank) */
+    RasmOp dl[ 4]; /* output vector registers (low bank) */
+    RasmOp dh[ 4]; /* output vector registers (high bank) */
+    RasmOp vt[12]; /* temp vector registers */
+    RasmOp vk[ 4]; /* constant data (may be gprs) */
 
     /* Op-specific registers. */
     union {
@@ -1513,34 +1513,38 @@ static void asmgen_op_frame(SwsAArch64Context *s, SwsCompMask imask, SwsCompMask
 /* Vector register assignment. */
 static void init_vectors_cps(SwsAArch64Context *s, SwsAArch64OpRegs *regs)
 {
-    regs->sl[0] = a64op_vec( 0);
-    regs->sl[1] = a64op_vec( 1);
-    regs->sl[2] = a64op_vec( 2);
-    regs->sl[3] = a64op_vec( 3);
-    regs->sh[0] = a64op_vec( 4);
-    regs->sh[1] = a64op_vec( 5);
-    regs->sh[2] = a64op_vec( 6);
-    regs->sh[3] = a64op_vec( 7);
-    regs->dl[0] = a64op_vec( 0);
-    regs->dl[1] = a64op_vec( 1);
-    regs->dl[2] = a64op_vec( 2);
-    regs->dl[3] = a64op_vec( 3);
-    regs->dh[0] = a64op_vec( 4);
-    regs->dh[1] = a64op_vec( 5);
-    regs->dh[2] = a64op_vec( 6);
-    regs->dh[3] = a64op_vec( 7);
-    regs->vt[0] = a64op_vec(16);
-    regs->vt[1] = a64op_vec(17);
-    regs->vt[2] = a64op_vec(18);
-    regs->vt[3] = a64op_vec(19);
-    regs->vt[4] = a64op_vec(20);
-    regs->vt[5] = a64op_vec(21);
-    regs->vt[6] = a64op_vec(22);
-    regs->vt[7] = a64op_vec(23);
-    regs->vk[0] = a64op_vec(24);
-    regs->vk[1] = a64op_vec(25);
-    regs->vk[2] = a64op_vec(26);
-    regs->vk[3] = a64op_vec(27);
+    regs->sl[ 0] = a64op_vec( 0);
+    regs->sl[ 1] = a64op_vec( 1);
+    regs->sl[ 2] = a64op_vec( 2);
+    regs->sl[ 3] = a64op_vec( 3);
+    regs->sh[ 0] = a64op_vec( 4);
+    regs->sh[ 1] = a64op_vec( 5);
+    regs->sh[ 2] = a64op_vec( 6);
+    regs->sh[ 3] = a64op_vec( 7);
+    regs->dl[ 0] = a64op_vec( 0);
+    regs->dl[ 1] = a64op_vec( 1);
+    regs->dl[ 2] = a64op_vec( 2);
+    regs->dl[ 3] = a64op_vec( 3);
+    regs->dh[ 0] = a64op_vec( 4);
+    regs->dh[ 1] = a64op_vec( 5);
+    regs->dh[ 2] = a64op_vec( 6);
+    regs->dh[ 3] = a64op_vec( 7);
+    regs->vt[ 0] = a64op_vec(16);
+    regs->vt[ 1] = a64op_vec(17);
+    regs->vt[ 2] = a64op_vec(18);
+    regs->vt[ 3] = a64op_vec(19);
+    regs->vt[ 4] = a64op_vec(20);
+    regs->vt[ 5] = a64op_vec(21);
+    regs->vt[ 6] = a64op_vec(22);
+    regs->vt[ 7] = a64op_vec(23);
+    regs->vt[ 8] = a64op_vec(24);
+    regs->vt[ 9] = a64op_vec(25);
+    regs->vt[10] = a64op_vec(26);
+    regs->vt[11] = a64op_vec(27);
+    regs->vk[ 0] = a64op_vec(28);
+    regs->vk[ 1] = a64op_vec(29);
+    regs->vk[ 2] = a64op_vec(30);
+    regs->vk[ 3] = a64op_vec(31);
 }
 
 /*********************************************************************/
