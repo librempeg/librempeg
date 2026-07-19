@@ -1661,12 +1661,9 @@ static av_cold int aac_encode_init(AVCodecContext *avctx)
                        (avctx->bit_rate / 2.0f * (s->lambda / 120.f) * 1.5f) :
                        (avctx->bit_rate / avctx->ch_layout.nb_channels);
 
-        /* For NMR, the rate to bandwidth conversion was tuned to maximize
-         * metrics over a variable cutoff x bitrate combo (>= 48kbps/ch tracks
-         * the bandwidth the strongest encoders deliver; wider regresses). */
-        if (s->options.coder == AAC_CODER_NMR && frame_br >= 32000) {
-            static const int rates[] = { 32000, 48000, 64000, 96000, 192000 };
-            static const int bws[]   = { 14000, 18500, 20000, 21000, 22000 };
+        if (s->options.coder == AAC_CODER_NMR && frame_br >= 24000) {
+            static const int rates[] = { 24000, 32000, 48000, 64000, 96000, 192000 };
+            static const int bws[]   = { 14000, 14000, 18500, 20000, 21000, 22000 };
             int bw_i = 0;
             for (; bw_i < FF_ARRAY_ELEMS(rates) - 2 && frame_br > rates[bw_i + 1]; bw_i++);
             s->bandwidth = bws[bw_i] + (int)((int64_t)(bws[bw_i + 1] - bws[bw_i]) *
@@ -1680,6 +1677,15 @@ static av_cold int aac_encode_init(AVCodecContext *avctx)
         }
 
         s->bandwidth = FFMIN(FFMAX(s->bandwidth, 8000), avctx->sample_rate / 2);
+    }
+
+    if (!(avctx->flags & AV_CODEC_FLAG_QSCALE) && avctx->bit_rate > 0) {
+        int bpc = avctx->bit_rate / avctx->ch_layout.nb_channels;
+        if (bpc <= 32000 && avctx->sample_rate > 32000)
+            av_log(avctx, AV_LOG_INFO,
+                   "%d kb/s per channel at %d Hz: consider resampling the "
+                   "input to 32000 Hz or lower for better quality.\n",
+                   bpc / 1000, avctx->sample_rate);
     }
 
     // Initialize static tables
