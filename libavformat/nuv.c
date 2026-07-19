@@ -390,6 +390,7 @@ static int64_t nuv_read_dts(AVFormatContext *s, int stream_index,
                     *ppos = pos;
                     return dts;
                 }
+                av_fallthrough;
             default:
                 avio_skip(pb, size);
                 break;
