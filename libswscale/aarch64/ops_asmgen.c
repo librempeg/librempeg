@@ -684,9 +684,8 @@ static void asmgen_op_unpack(SwsAArch64Context *s, const SwsAArch64OpImplParams 
     }
 
     /* Apply masks. */
-    reshape_all_vectors(s, 16, 1);
-    LOOP_MASK_BWD      (p, i) { i_and(r, vl[i], vl[i], vt[mask_idx[i]]); CMTF("vl[%u] &= 0x%x;", i, mask_val[i]); }
-    LOOP_MASK_BWD_VH(s, p, i) { i_and(r, vh[i], vh[i], vt[mask_idx[i]]); CMTF("vh[%u] &= 0x%x;", i, mask_val[i]); }
+    LOOP_MASK_BWD      (p, i) { i_and16b(r, vl[i], vl[i], vt[mask_idx[i]]); CMTF("vl[%u] &= 0x%x;", i, mask_val[i]); }
+    LOOP_MASK_BWD_VH(s, p, i) { i_and16b(r, vh[i], vh[i], vt[mask_idx[i]]); CMTF("vh[%u] &= 0x%x;", i, mask_val[i]); }
 }
 
 /*********************************************************************/
@@ -716,12 +715,11 @@ static void asmgen_op_pack(SwsAArch64Context *s, const SwsAArch64OpImplParams *p
     LOOP_VH(s, offset_mask, i) { i_shl(r, vh[i], vh[i], IMM(offsets[i])); CMTF("vh[%u] <<= %u;", i, offsets[i]); }
 
     /* Combine components. */
-    reshape_all_vectors(s, 16, 1);
     LOOP_MASK      (p, i) {
         if (i != 0) {
-            i_orr    (r, vl[0], vl[0], vl[i]); CMTF("vl[0] |= vl[%u];", i);
+            i_orr16b    (r, vl[0], vl[0], vl[i]); CMTF("vl[0] |= vl[%u];", i);
             if (s->use_vh) {
-                i_orr(r, vh[0], vh[0], vh[i]); CMTF("vh[0] |= vh[%u];", i);
+                i_orr16b(r, vh[0], vh[0], vh[i]); CMTF("vh[0] |= vh[%u];", i);
             }
         }
     }
