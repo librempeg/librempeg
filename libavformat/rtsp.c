@@ -53,6 +53,7 @@
 #include "rtpdec_formats.h"
 #include "rtpenc_chain.h"
 #include "url.h"
+#include "tls.h"
 #include "rtpenc.h"
 #include "mpegts.h"
 #include "version.h"
@@ -103,6 +104,9 @@ const AVOption ff_rtsp_options[] = {
     { "timeout", "set timeout (in microseconds) of socket I/O operations", OFFSET(stimeout), AV_OPT_TYPE_INT64, {.i64 = 0}, INT_MIN, INT64_MAX, DEC },
     COMMON_OPTS(),
     { "user_agent", "override User-Agent header", OFFSET(user_agent), AV_OPT_TYPE_STRING, {.str = LIBAVFORMAT_IDENT}, 0, 0, DEC },
+
+    // TLS options
+    FF_TLS_CLIENT_OPTIONS(RTSPState, tls_opts),
     { NULL },
 };
 
@@ -138,6 +142,29 @@ static AVDictionary *map_to_opts(RTSPState *rt)
 
     return opts;
 }
+
+#define ERR_RET(c)      \
+    do {                \
+        int ret = c;    \
+        if (ret < 0)    \
+            return ret; \
+    } while (0)
+
+/**
+ * Add the TLS options of the given RTSPState to the dict
+ */
+static int copy_tls_opts_dict(RTSPState *rt, AVDictionary **dict)
+{
+    ERR_RET(av_dict_set_int(dict, "tls_verify", rt->tls_opts.verify, 0));
+    ERR_RET(av_dict_set(dict, "ca_file", rt->tls_opts.ca_file, 0));
+    ERR_RET(av_dict_set(dict, "cert_file", rt->tls_opts.cert_file, 0));
+    ERR_RET(av_dict_set(dict, "key_file", rt->tls_opts.key_file, 0));
+    ERR_RET(av_dict_set(dict, "verifyhost", rt->tls_opts.host, 0));
+
+    return 0;
+}
+
+#undef ERR_RET
 
 static void get_word_until_chars(char *buf, int buf_size,
                                  const char *sep, const char **pp)
@@ -1342,6 +1369,18 @@ start:
     if (rt->seq != reply->seq) {
         av_log(s, AV_LOG_WARNING, "CSeq %d expected, %d received.\n",
             rt->seq, reply->seq);
+        /* At close time, drain stale async replies - e.g. queued keepalive
+         * OPTIONS or GET_PARAMETER responses - until the expected CSeq shows
+         * up.  Otherwise ff_rtsp_send_cmd("TEARDOWN") in rtsp_read_close()
+         * is satisfied by a queued keepalive reply, leaving the TEARDOWN
+         * 200 OK unread so the server never frees the session.  Only done
+         * while teardown_deadline bounds the wait; every other synchronous
+         * command keeps accepting a mismatching reply. */
+        if (rt->teardown_deadline) {
+            if (content_ptr)
+                av_freep(content_ptr);
+            goto start;
+        }
     }
 
     /* EOS */
@@ -1874,6 +1913,19 @@ static int rtsp_url_same_origin(const char *url1, const char *url2)
            port1 == port2;
 }
 
+static int rtsp_control_interrupt_cb(void *opaque)
+{
+    AVFormatContext *s = opaque;
+    RTSPState *rt = s->priv_data;
+
+    /* While closing, a pending user interrupt must not prevent TEARDOWN from
+     * being sent and its reply from being read; bound the wait instead. */
+    if (rt->teardown_deadline)
+        return av_gettime_relative() >= rt->teardown_deadline;
+
+    return ff_check_interrupt(&s->interrupt_callback);
+}
+
 int ff_rtsp_connect(AVFormatContext *s)
 {
     RTSPState *rt = s->priv_data;
@@ -1890,6 +1942,8 @@ int ff_rtsp_connect(AVFormatContext *s)
     socklen_t peer_len = sizeof(peer);
 
     rt->stored_msg.expected_seq = -1;
+    rt->control_interrupt_cb.callback = rtsp_control_interrupt_cb;
+    rt->control_interrupt_cb.opaque   = s;
     if (rt->rtp_port_max < rt->rtp_port_min) {
         av_log(s, AV_LOG_ERROR, "Invalid UDP port range, max port %d less "
                                 "than min port %d\n", rt->rtp_port_max,
@@ -1966,6 +2020,14 @@ redirect:
         AVDictionary *options = NULL;
 
         av_dict_set_int(&options, "timeout", rt->stimeout, 0);
+        if (https_tunnel) {
+            int ret = copy_tls_opts_dict(rt, &options);
+            if (ret < 0) {
+                av_dict_free(&options);
+                err = ret;
+                goto fail;
+            }
+        }
 
         ff_url_join(httpname, sizeof(httpname), https_tunnel ? "https" : "http", auth, host, port, "%s", path);
         snprintf(sessioncookie, sizeof(sessioncookie), "%08x%08x",
@@ -1973,7 +2035,7 @@ redirect:
 
         /* GET requests */
         if (ffurl_alloc(&rt->rtsp_hd, httpname, AVIO_FLAG_READ,
-                        &s->interrupt_callback) < 0) {
+                        &rt->control_interrupt_cb) < 0) {
             av_dict_free(&options);
             err = AVERROR(EIO);
             goto fail;
@@ -2015,7 +2077,7 @@ redirect:
 
         /* POST requests */
         if (ffurl_alloc(&rt->rtsp_hd_out, httpname, AVIO_FLAG_WRITE,
-                        &s->interrupt_callback) < 0 ) {
+                        &rt->control_interrupt_cb) < 0 ) {
             av_dict_free(&options);
             err = AVERROR(EIO);
             goto fail;
@@ -2062,14 +2124,26 @@ redirect:
     } else {
         int ret;
         /* open the tcp connection */
+        AVDictionary *proto_opts = NULL;
+        if (strcmp("tls", lower_rtsp_proto) == 0) {
+            ret = copy_tls_opts_dict(rt, &proto_opts);
+            if (ret < 0) {
+                av_dict_free(&proto_opts);
+                err = ret;
+                goto fail;
+            }
+        }
+
         ff_url_join(tcpname, sizeof(tcpname), lower_rtsp_proto, NULL,
                     host, port,
                     "?timeout=%"PRId64, rt->stimeout);
         if ((ret = ffurl_open_whitelist(&rt->rtsp_hd, tcpname, AVIO_FLAG_READ_WRITE,
-                       &s->interrupt_callback, NULL, s->protocol_whitelist, s->protocol_blacklist, NULL)) < 0) {
+                       &rt->control_interrupt_cb, &proto_opts, s->protocol_whitelist, s->protocol_blacklist, NULL)) < 0) {
+            av_dict_free(&proto_opts);
             err = ret;
             goto fail;
         }
+        av_dict_free(&proto_opts);
         rt->rtsp_hd_out = rt->rtsp_hd;
     }
     rt->seq = 0;
