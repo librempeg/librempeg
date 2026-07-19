@@ -48,6 +48,7 @@
 #define av_free(p)       free(p)
 #define FFMAX(a,b) ((a) > (b) ? (a) : (b))
 #define FFMIN(a,b) ((a) > (b) ? (b) : (a))
+#define FF_ARRAY_ELEMS(a) (sizeof(a) / sizeof((a)[0]))
 #define MKTAG(a,b,c,d) ((a) | ((b) << 8) | ((c) << 16) | ((unsigned)(d) << 24))
 
 static void av_freep(void *ptr)
@@ -190,36 +191,24 @@ typedef struct SwsAArch64Context {
 /* Reshape input/output vector registers for current SwsOp. */
 static void reshape_io_vectors(SwsAArch64OpRegs *regs, int el_count, int el_size)
 {
-    regs->vl[0] = a64op_make_vec( 0, el_count, el_size);
-    regs->vl[1] = a64op_make_vec( 1, el_count, el_size);
-    regs->vl[2] = a64op_make_vec( 2, el_count, el_size);
-    regs->vl[3] = a64op_make_vec( 3, el_count, el_size);
-    regs->vh[0] = a64op_make_vec( 4, el_count, el_size);
-    regs->vh[1] = a64op_make_vec( 5, el_count, el_size);
-    regs->vh[2] = a64op_make_vec( 6, el_count, el_size);
-    regs->vh[3] = a64op_make_vec( 7, el_count, el_size);
+    for (int i = 0; i < 4; i++) {
+        regs->vl[i] = a64op_make_vec(a64op_vec_n(regs->vl[i]), el_count, el_size);
+        regs->vh[i] = a64op_make_vec(a64op_vec_n(regs->vh[i]), el_count, el_size);
+    }
 }
 
 /* Reshape temp vector registers for current SwsOp. */
 static void reshape_temp_vectors(SwsAArch64OpRegs *regs, int el_count, int el_size)
 {
-    regs->vt[0] = a64op_make_vec(16, el_count, el_size);
-    regs->vt[1] = a64op_make_vec(17, el_count, el_size);
-    regs->vt[2] = a64op_make_vec(18, el_count, el_size);
-    regs->vt[3] = a64op_make_vec(19, el_count, el_size);
-    regs->vt[4] = a64op_make_vec(20, el_count, el_size);
-    regs->vt[5] = a64op_make_vec(21, el_count, el_size);
-    regs->vt[6] = a64op_make_vec(22, el_count, el_size);
-    regs->vt[7] = a64op_make_vec(23, el_count, el_size);
+    for (int i = 0; i < FF_ARRAY_ELEMS(regs->vt); i++)
+        regs->vt[i] = a64op_make_vec(a64op_vec_n(regs->vt[i]), el_count, el_size);
 }
 
 /* Reshape const vector registers for current SwsOp. */
 static void reshape_const_vectors(SwsAArch64OpRegs *regs, int el_count, int el_size)
 {
-    regs->vk[0] = a64op_make_vec(24, el_count, el_size);
-    regs->vk[1] = a64op_make_vec(25, el_count, el_size);
-    regs->vk[2] = a64op_make_vec(26, el_count, el_size);
-    regs->vk[3] = a64op_make_vec(27, el_count, el_size);
+    for (int i = 0; i < FF_ARRAY_ELEMS(regs->vk); i++)
+        regs->vk[i] = a64op_make_vec(a64op_vec_n(regs->vk[i]), el_count, el_size);
 }
 
 /*********************************************************************/
@@ -1472,6 +1461,32 @@ static void asmgen_op_frame(SwsAArch64Context *s, SwsCompMask imask, SwsCompMask
 }
 
 /*********************************************************************/
+/* Vector register assignment. */
+static void init_vectors_cps(SwsAArch64Context *s, SwsAArch64OpRegs *regs)
+{
+    regs->vl[0] = a64op_vec( 0);
+    regs->vl[1] = a64op_vec( 1);
+    regs->vl[2] = a64op_vec( 2);
+    regs->vl[3] = a64op_vec( 3);
+    regs->vh[0] = a64op_vec( 4);
+    regs->vh[1] = a64op_vec( 5);
+    regs->vh[2] = a64op_vec( 6);
+    regs->vh[3] = a64op_vec( 7);
+    regs->vt[0] = a64op_vec(16);
+    regs->vt[1] = a64op_vec(17);
+    regs->vt[2] = a64op_vec(18);
+    regs->vt[3] = a64op_vec(19);
+    regs->vt[4] = a64op_vec(20);
+    regs->vt[5] = a64op_vec(21);
+    regs->vt[6] = a64op_vec(22);
+    regs->vt[7] = a64op_vec(23);
+    regs->vk[0] = a64op_vec(24);
+    regs->vk[1] = a64op_vec(25);
+    regs->vk[2] = a64op_vec(26);
+    regs->vk[3] = a64op_vec(27);
+}
+
+/*********************************************************************/
 static void asmgen_process_cps(SwsAArch64Context *s, SwsCompMask mask)
 {
     RasmContext *r = s->rctx;
@@ -1535,6 +1550,7 @@ static void asmgen_op_cps(SwsAArch64Context *s, const SwsAArch64OpEntry *entry)
 
     s->el_size = el_size;
     s->el_count = s->vec_size / el_size;
+    init_vectors_cps(s, &s->regs);
     reshape_io_vectors(&s->regs, s->el_count, el_size);
     reshape_temp_vectors(&s->regs, s->el_count, el_size);
     reshape_const_vectors(&s->regs, s->el_count, el_size);
