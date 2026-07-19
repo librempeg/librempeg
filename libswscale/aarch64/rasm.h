@@ -623,6 +623,8 @@ static inline RasmOp a64cond_nv(void) { return a64op_cond(AARCH64_COND_NV); }
 #define i_ble(rctx, id) i_bcond(rctx, a64cond_le(), rasm_op_label(id))
 
 /* Extra helpers. */
-#define i_mov16b(rctx, op0, op1) i_mov(rctx, v_16b(op0), v_16b(op1))
+#define i_and16b(rctx, op0, op1, op2) i_and(rctx, v_16b(op0), v_16b(op1), v_16b(op2))
+#define i_mov16b(rctx, op0, op1     ) i_mov(rctx, v_16b(op0), v_16b(op1)            )
+#define i_orr16b(rctx, op0, op1, op2) i_orr(rctx, v_16b(op0), v_16b(op1), v_16b(op2))
 
 #endif /* SWSCALE_AARCH64_RASM_H */
