@@ -84,7 +84,6 @@ typedef struct OVRequestItem {
 #define OFFSET(x) offsetof(OVOptions, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption dnn_openvino_options[] = {
-    { "batch_size",  "batch size per request", OFFSET(batch_size),  AV_OPT_TYPE_INT,    { .i64 = 1 },     1, 1000, FLAGS},
     { "input_resizable", "can input be resizable or not", OFFSET(input_resizable), AV_OPT_TYPE_BOOL,   { .i64 = 0 },     0, 1, FLAGS },
     { "layout", "input layout of model", OFFSET(layout), AV_OPT_TYPE_INT, { .i64 = DL_NONE}, DL_NONE, DL_NHWC, FLAGS, .unit = "layout" },
         { "none",  "none", 0, AV_OPT_TYPE_CONST, { .i64 = DL_NONE }, 0, 0, FLAGS, .unit = "layout"},
@@ -271,7 +270,7 @@ static int fill_model_input_ov(OVModel *ov_model, OVRequestItem *request)
     input.scale = 1;
     input.mean = 0;
 
-    for (int i = 0; i < ctx->ov_option.batch_size; ++i) {
+    for (int i = 0; i < ctx->batch_size; ++i) {
         lltask = ff_queue_pop_front(ov_model->lltask_queue);
         if (!lltask) {
             break;
@@ -599,14 +598,14 @@ static int init_model_ov(OVModel *ov_model, const char *input_name, const char *
     if (fabsf(ctx->ov_option.scale) < 1e-6f)
         ctx->ov_option.scale = ov_model->model.func_type == DFT_PROCESS_FRAME ? 255 : 1;
     // batch size
-    if (ctx->ov_option.batch_size <= 0) {
-        ctx->ov_option.batch_size = 1;
+    if (ctx->batch_size <= 0) {
+        ctx->batch_size = 1;
     }
 #if HAVE_OPENVINO2
-    if (ctx->ov_option.batch_size > 1) {
+    if (ctx->batch_size > 1) {
         avpriv_report_missing_feature(ctx, "Do not support batch_size > 1 for now,"
                                            "change batch_size to 1.\n");
-        ctx->ov_option.batch_size = 1;
+        ctx->batch_size = 1;
     }
 
     status = ov_preprocess_prepostprocessor_create(ov_model->ov_model, &ov_model->preprocess);
@@ -802,7 +801,7 @@ static int init_model_ov(OVModel *ov_model, const char *input_name, const char *
     ov_layout_free(NCHW_layout);
     ov_layout_free(NHWC_layout);
 #else
-    if (ctx->ov_option.batch_size > 1) {
+    if (ctx->batch_size > 1) {
         input_shapes_t input_shapes;
         status = ie_network_get_input_shapes(ov_model->network, &input_shapes);
         if (status != OK) {
@@ -810,7 +809,7 @@ static int init_model_ov(OVModel *ov_model, const char *input_name, const char *
             goto err;
         }
         for (int i = 0; i < input_shapes.shape_num; i++)
-            input_shapes.shapes[i].shape.dims[0] = ctx->ov_option.batch_size;
+            input_shapes.shapes[i].shape.dims[0] = ctx->batch_size;
         status = ie_network_reshape(ov_model->network, input_shapes);
         ie_network_input_shapes_free(&input_shapes);
         if (status != OK) {
@@ -923,7 +922,7 @@ static int init_model_ov(OVModel *ov_model, const char *input_name, const char *
         }
 #endif
 
-        item->lltasks = av_malloc_array(ctx->ov_option.batch_size, sizeof(*item->lltasks));
+        item->lltasks = av_malloc_array(ctx->batch_size, sizeof(*item->lltasks));
         if (!item->lltasks) {
             ret = AVERROR(ENOMEM);
             goto err;
@@ -1517,7 +1516,7 @@ static int dnn_execute_model_ov(const DNNModel *model, DNNExecBaseParams *exec_p
     }
 
     if (ctx->async) {
-        while (ff_queue_size(ov_model->lltask_queue) >= ctx->ov_option.batch_size) {
+        while (ff_queue_size(ov_model->lltask_queue) >= ctx->batch_size) {
             request = ff_safe_queue_pop_front(ov_model->request_queue);
             if (!request) {
                 av_log(ctx, AV_LOG_ERROR, "unable to get infer request.\n");
@@ -1540,7 +1539,7 @@ static int dnn_execute_model_ov(const DNNModel *model, DNNExecBaseParams *exec_p
             return AVERROR(ENOSYS);
         }
 
-        if (ctx->ov_option.batch_size > 1) {
+        if (ctx->batch_size > 1) {
             avpriv_report_missing_feature(ctx, "batch mode for sync execution");
             return AVERROR(ENOSYS);
         }
