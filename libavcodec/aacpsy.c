@@ -107,6 +107,11 @@ enum {
 #define PSY_LAME_PE_QUIET  0.4f     ///< pre-onset must be below this fraction of the frame peak
 #define PSY_LAME_PE_RED    0.45f    ///< attack-threshold multiplier for a qualifying isolated onset
 
+/* The novelty check must see at least one full period of a pulse train to
+ * recognize its pulses as repeats; 30 sub-blocks reaches down to ~23Hz. */
+#define PSY_LAME_HIST      32       ///< HP sub-block peak history depth
+#define PSY_LAME_NOV_BACK  30       ///< novelty look-back in sub-blocks
+
 /**
  * @}
  */
@@ -140,6 +145,7 @@ typedef struct AacPsyChannel{
     /* LAME psy model specific members */
     float attack_threshold;              ///< attack threshold for this channel
     float prev_energy_subshort[AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS];
+    float hp_env_hist[PSY_LAME_HIST];    ///< rolling HP sub-block peak envelope
     int   prev_attack;                   ///< attack value for the last short block in the previous sequence
     int   next_attack0_zero;          ///< whether attack[0] of the next frame is zero
     int   frames_since_short;            ///< consecutive long frames (pre-echo-aware isolated-onset gate)
@@ -293,6 +299,8 @@ static av_cold void lame_window_init(AacPsyContext *ctx, AVCodecContext *avctx)
 
         for (j = 0; j < AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS; j++)
             pch->prev_energy_subshort[j] = 10.0f;
+        for (j = 0; j < PSY_LAME_HIST; j++)
+            pch->hp_env_hist[j] = 10.0f;
     }
 }
 
@@ -1001,15 +1009,14 @@ static int psy_lame_detect(AacPsyContext *pctx, AacPsyChannel *pch,
             attack_intensity[i + PSY_LAME_NUM_SUBBLOCKS] = p;
         }
 
-        {   /* pre-echo-aware threshold relaxation + periodicity/novelty veto (a
-             * pitch-pulse train repeats its peak; a real onset towers) */
+        {   /* pre-echo-aware threshold relaxation + periodicity/novelty check
+             * (a pulse train repeats its peak; a real onset towers) */
             float frame_peak = 1.0f;
-            float eh[8 + (AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS];
+            float env[PSY_LAME_HIST + AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS];
             const float nov_gate = 1.25f;
-            for (i = 0; i < 8; i++)
-                eh[i] = pch->prev_energy_subshort[8 + i];
-            for (i = 0; i < (AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS; i++)
-                eh[8 + i] = energy_subshort[i];
+            memcpy(env, pch->hp_env_hist, sizeof(pch->hp_env_hist));
+            memcpy(env + PSY_LAME_HIST, energy_subshort + PSY_LAME_NUM_SUBBLOCKS,
+                   AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS * sizeof(*env));
             for (i = PSY_LAME_NUM_SUBBLOCKS; i < (AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS; i++)
                 frame_peak = FFMAX(frame_peak, energy_subshort[i]);
             for (i = 0; i < (AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS; i++)
@@ -1020,11 +1027,21 @@ static int psy_lame_detect(AacPsyContext *pctx, AacPsyChannel *pch,
                         energy_subshort[i - PSY_LAME_NUM_SUBBLOCKS] < PSY_LAME_PE_QUIET * frame_peak)
                         thr *= PSY_LAME_PE_RED;
                     if (attack_intensity[i] > thr) {
+                        /* An attack must tower over the recent HP envelope:
+                         * within ~12ms always (pitch-rate trains), within
+                         * ~44ms only from steady long-window state (slow
+                         * pulse trains, where an isolated short excursion
+                         * is an audible click). */
                         if (nov_gate > 0.0f && i >= PSY_LAME_NUM_SUBBLOCKS) {
-                            float prevmax = 1.0f;
+                            const int pos = PSY_LAME_HIST + i - PSY_LAME_NUM_SUBBLOCKS;
+                            float nearmax = 1.0f, deepmax = 1.0f;
                             for (int k = 3; k <= 8; k++)
-                                prevmax = FFMAX(prevmax, eh[8 + i - k]);
-                            if (energy_subshort[i] < nov_gate * prevmax)
+                                nearmax = FFMAX(nearmax, env[pos - k]);
+                            for (int k = 3; k <= PSY_LAME_NOV_BACK; k++)
+                                deepmax = FFMAX(deepmax, env[pos - k]);
+                            if (energy_subshort[i] < nov_gate * nearmax ||
+                                (energy_subshort[i] < nov_gate * deepmax &&
+                                 pch->frames_since_short >= PSY_LAME_PE_GAP))
                                 continue;    /* periodic, not an onset */
                         }
                         attacks[i / PSY_LAME_NUM_SUBBLOCKS] = (i % PSY_LAME_NUM_SUBBLOCKS) + 1;
@@ -1050,25 +1067,14 @@ static int psy_lame_detect(AacPsyContext *pctx, AacPsyChannel *pch,
             att_sum += attacks[i];
         }
 
-        {   /* novelty of each attacking sub-block against the trailing HP
-             * max-envelope (~1-2 pitch periods): a periodic pulse train repeats
-             * its peak every period (novelty ~1), a genuine onset towers over
-             * the recent past. Instrumentation only. */
-            float eh[8 + (AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS];
-            float novmax = 0.0f;
-            for (i = 0; i < 8; i++)
-                eh[i] = pch->prev_energy_subshort[8 + i];
-            for (i = 0; i < (AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS; i++)
-                eh[8 + i] = energy_subshort[i];
-            for (i = PSY_LAME_NUM_SUBBLOCKS; i < (AAC_NUM_BLOCKS_SHORT + 1) * PSY_LAME_NUM_SUBBLOCKS; i++) {
-                if (attacks[i / PSY_LAME_NUM_SUBBLOCKS] == (i % PSY_LAME_NUM_SUBBLOCKS) + 1) {
-                    float prevmax = 1.0f;
-                    for (int k = 3; k <= 8; k++)
-                        prevmax = FFMAX(prevmax, eh[8 + i - k]);
-                    novmax = FFMAX(novmax, eh[8 + i] / prevmax);
-                }
-            }
-        }
+        /* roll the HP sub-block peak history */
+        memmove(pch->hp_env_hist,
+                pch->hp_env_hist + AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS,
+                (PSY_LAME_HIST - AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS) *
+                sizeof(*pch->hp_env_hist));
+        memcpy(pch->hp_env_hist + PSY_LAME_HIST - AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS,
+               energy_subshort + PSY_LAME_NUM_SUBBLOCKS,
+               AAC_NUM_BLOCKS_SHORT * PSY_LAME_NUM_SUBBLOCKS * sizeof(*pch->hp_env_hist));
 
         if (pch->next_attack0_zero)
             attacks[0] = 0;
