@@ -1693,37 +1693,6 @@ test_exec(){
     test_ld "cc" "$@" && { enabled cross_compile || $TMPE >> $logfile 2>&1; }
 }
 
-check_exec_crash(){
-    log check_exec_crash "$@"
-    code=$(cat)
-
-    # exit() is not async signal safe.  _Exit (C99) and _exit (POSIX)
-    # are safe but may not be available everywhere.  Thus we use
-    # raise(SIGTERM) instead.  The check is run in a subshell so we
-    # can redirect the "Terminated" message from the shell.  SIGBUS
-    # is not defined by standard C so it is used conditionally.
-
-    (test_exec "$@") >> $logfile 2>&1 <<EOF
-#include <signal.h>
-static void sighandler(int sig){
-    raise(SIGTERM);
-}
-int foo(void){
-    $code
-}
-int (*func_ptr)(void) = foo;
-int main(void){
-    signal(SIGILL, sighandler);
-    signal(SIGFPE, sighandler);
-    signal(SIGSEGV, sighandler);
-#ifdef SIGBUS
-    signal(SIGBUS, sighandler);
-#endif
-    return func_ptr();
-}
-EOF
-}
-
 check_type(){
     log check_type "$@"
     headers=$1
