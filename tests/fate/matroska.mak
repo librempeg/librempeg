@@ -271,6 +271,10 @@ fate-matroska-stereo_mode: CMD = transcode ogg $(TARGET_SAMPLES)/vp3/offset_test
     "-map 0 -c copy" \
     "-show_entries stream_disposition=default,original,dub:stream_tags:stream_side_data_list"
 
+# This tests that the matroska demuxer properly scales timestamps and durations using the Track Timescale element
+FATE_MATROSKA-$(call FRAMECRC, MATROSKA) += fate-matroska-track-timescale
+fate-matroska-track-timescale: CMD = framecrc -i $(TARGET_SAMPLES)/mkv/tts10.mkv -c:s copy
+
 
 # The following test tests the various flavours of WebVTT in WebM.
 # It also tests that dispositions not supported by WebM are not written
