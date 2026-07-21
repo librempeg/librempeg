@@ -1445,6 +1445,7 @@ static int wavpack_decode_block(AVCodecContext *avctx, AVFrame *frame, int block
             sample_rate = bytestream2_get_le24(&gb);
             break;
         default:
+            av_log(avctx, AV_LOG_DEBUG, "unknown block: %X\n", id & WP_IDF_MASK);
             bytestream2_skip(&gb, size);
         }
         if (id & WP_IDF_ODD)
