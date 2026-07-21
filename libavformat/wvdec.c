@@ -19,8 +19,10 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/mem.h"
 #include "libavutil/dict.h"
 #include "avformat.h"
 #include "avio_internal.h"
@@ -60,6 +62,10 @@ typedef struct WVContext {
     int64_t pos;
 
     int64_t apetag_start;
+
+    AVFormatContext *xctx;
+    FFIOContext apb;
+    AVPacket *pkt;
 } WVContext;
 
 static int wv_probe(const AVProbeData *p)
@@ -231,6 +237,49 @@ static int wv_read_block_header(AVFormatContext *ctx, AVIOContext *pb)
                rate * rate_x, wc->rate);
         return AVERROR_INVALIDDATA;
     }
+
+    if (flags & WV_HYBRID && !wc->xctx) {
+        const int len = strlen(ctx->url);
+
+        if (len <= 1)
+            return 0;
+
+        if (ctx->url[len-1] == 'c' ||
+            ctx->url[len-1] == 'C')
+            return 0;
+
+        wc->pkt = av_packet_alloc();
+        if (!wc->pkt)
+            return 0;
+
+        if (!(wc->xctx = avformat_alloc_context()))
+            return 0;
+
+        if ((ret = ff_copy_whiteblacklists(wc->xctx, ctx)) < 0) {
+            avformat_free_context(wc->xctx);
+            wc->xctx = NULL;
+
+            return 0;
+        }
+
+        const AVInputFormat *in_fmt = av_find_input_format("wv");
+        if (!in_fmt)
+            return 0;
+
+        char *wvc_file_name = av_asprintf("%sc", ctx->url);
+        if (!wvc_file_name)
+            return 0;
+
+        if ((ret = avformat_open_input(&wc->xctx, wvc_file_name, in_fmt, NULL)) < 0) {
+            av_packet_free(&wc->pkt);
+            av_freep(&wvc_file_name);
+            avformat_close_input(&wc->xctx);
+            return 0;
+        }
+
+        av_freep(&wvc_file_name);
+    }
+
     return 0;
 }
 
@@ -329,15 +378,55 @@ static int wv_read_packet(AVFormatContext *s, AVPacket *pkt)
     else
         pkt->duration = block_samples;
 
+    if (wc->xctx) {
+        ret = av_read_frame(wc->xctx, wc->pkt);
+        if (ret < 0)
+            return ret;
+
+        int offset = pkt->size;
+        ret = av_grow_packet(pkt, wc->pkt->size);
+        if (ret < 0)
+            return ret;
+
+        memcpy(pkt->data + offset, wc->pkt->data, wc->pkt->size);
+
+        av_packet_unref(wc->pkt);
+    }
+
+    return 0;
+}
+
+static int wv_read_seek(AVFormatContext *s, int stream_index,
+                        int64_t ts, int flags)
+{
+    WVContext *wc = s->priv_data;
+
+    if (wc->xctx)
+        av_seek_frame(wc->xctx, 0, ts, flags);
+
+    return -1;
+}
+
+static int wv_read_close(AVFormatContext *s)
+{
+    WVContext *wc = s->priv_data;
+
+    av_packet_free(&wc->pkt);
+    avformat_close_input(&wc->xctx);
+    avformat_free_context(wc->xctx);
+
     return 0;
 }
 
 const FFInputFormat ff_wv_demuxer = {
     .p.name         = "wv",
     .p.long_name    = NULL_IF_CONFIG_SMALL("WavPack"),
+    .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
     .p.flags        = AVFMT_GENERIC_INDEX,
     .priv_data_size = sizeof(WVContext),
     .read_probe     = wv_probe,
     .read_header    = wv_read_header,
     .read_packet    = wv_read_packet,
+    .read_seek      = wv_read_seek,
+    .read_close     = wv_read_close,
 };
