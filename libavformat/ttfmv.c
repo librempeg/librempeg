@@ -55,7 +55,7 @@ static int read_header(AVFormatContext *s)
     start_offset = avio_rl16(pb);
     vst->start_time = 0;
     vst->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
-    vst->codecpar->codec_id = AV_CODEC_ID_CINEPAK;
+    vst->codecpar->codec_id = AV_CODEC_ID_TTVIDEO;
     vst->codecpar->width = avio_rl16(pb);
     vst->codecpar->height = avio_rl16(pb);
 

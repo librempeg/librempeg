@@ -368,6 +368,7 @@ extern const FFCodec ff_truemotion2_decoder;
 extern const FFCodec ff_truemotion2rt_decoder;
 extern const FFCodec ff_tscc_decoder;
 extern const FFCodec ff_tscc2_decoder;
+extern const FFCodec ff_ttvideo_decoder;
 extern const FFCodec ff_txd_decoder;
 extern const FFCodec ff_ulti_decoder;
 extern const FFCodec ff_utvideo_encoder;
