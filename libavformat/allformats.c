@@ -764,6 +764,7 @@ extern const FFInputFormat  ff_xopus_demuxer;
 extern const FFInputFormat  ff_xpcm_demuxer;
 extern const FFInputFormat  ff_xssb_demuxer;
 extern const FFInputFormat  ff_xvag_demuxer;
+extern const FFInputFormat  ff_xwav_demuxer;
 extern const FFInputFormat  ff_xwb_demuxer;
 extern const FFInputFormat  ff_xwc_demuxer;
 extern const FFInputFormat  ff_xwma_demuxer;
