@@ -102,6 +102,9 @@ static int read_header(AVFormatContext *s)
     uint32_t magic, chunk;
     AVStream *st;
 
+    vid1->audio_stream_index = -1;
+    vid1->video_stream_index = -1;
+
     magic = avio_rb32(pb);
     switch (magic) {
     case MKBETAG('V','I','D','1'):
@@ -288,7 +291,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
         block_size -= 16;
         pkt_size = avio_r32(pb);
         index = vid1->audio_stream_index;
-        if (s->streams[vid1->audio_stream_index]->codecpar->codec_id == AV_CODEC_ID_VORBIS)  {
+        if (vid1->audio_stream_index >= 0 && s->streams[vid1->audio_stream_index]->codecpar->codec_id == AV_CODEC_ID_VORBIS)  {
             int64_t start = avio_tell(pb);
             int64_t offset = start + 4;
 
@@ -302,7 +305,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
             avio_seek(pb, offset, SEEK_SET);
         }
     } else {
-        if (s->streams[vid1->audio_stream_index]->codecpar->codec_id == AV_CODEC_ID_VORBIS)  {
+        if (vid1->audio_stream_index >= 0 && s->streams[vid1->audio_stream_index]->codecpar->codec_id == AV_CODEC_ID_VORBIS)  {
             int64_t start = avio_tell(pb);
             int64_t offset = start - 4;
 
