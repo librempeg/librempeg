@@ -45,39 +45,45 @@ static int read_probe(const AVProbeData *p)
 static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
-    int rate, fps;
+    int rate, fps, flags;
     AVStream *vst = avformat_new_stream(s, NULL);
+    int64_t start_offset;
     if (!vst)
         return AVERROR(ENOMEM);
 
-    avio_skip(pb, 8);
+    avio_skip(pb, 6);
+    start_offset = avio_rl16(pb);
     vst->start_time = 0;
     vst->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
     vst->codecpar->codec_id = AV_CODEC_ID_CINEPAK;
     vst->codecpar->width = avio_rl16(pb);
     vst->codecpar->height = avio_rl16(pb);
 
-    avio_skip(pb, 9);
-    fps = avio_r8(pb);
-    avpriv_set_pts_info(vst, 64, 1, fps);
-    avio_skip(pb, 10);
-    rate = avio_rl32(pb);
-    if (rate <= 0)
-        return AVERROR_INVALIDDATA;
+    avio_skip(pb, 8);
+    fps = avio_rl16(pb);
+    avpriv_set_pts_info(vst, 64, 256, fps);
+    flags = avio_rl32(pb);
+    if (flags & 4) {
+        start_offset += 10;
+        avio_skip(pb, 6);
+        rate = avio_rl32(pb);
+        if (rate <= 0)
+            return AVERROR_INVALIDDATA;
 
-    AVStream *ast = avformat_new_stream(s, NULL);
-    if (!ast)
-        return AVERROR(ENOMEM);
+        AVStream *ast = avformat_new_stream(s, NULL);
+        if (!ast)
+            return AVERROR(ENOMEM);
 
-    ast->start_time = 0;
-    ast->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    ast->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_SSI;
-    ast->codecpar->sample_rate = rate;
-    ast->codecpar->ch_layout.nb_channels = 2;
+        ast->start_time = 0;
+        ast->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+        ast->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_SSI;
+        ast->codecpar->sample_rate = rate;
+        ast->codecpar->ch_layout.nb_channels = 2;
 
-    avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
+        avpriv_set_pts_info(ast, 64, 1, ast->codecpar->sample_rate);
+    }
 
-    avio_seek(pb, 0x28, SEEK_SET);
+    avio_seek(pb, start_offset, SEEK_SET);
 
     return 0;
 }
@@ -103,6 +109,8 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
     switch (type) {
     case MKBETAG('F','M','A','\0'):
+        if (s->nb_streams == 1)
+            return AVERROR_INVALIDDATA;
         index = 1;
         key = 1;
         break;
