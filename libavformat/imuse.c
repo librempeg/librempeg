@@ -214,6 +214,8 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
     avio_seek(pb, e->pos, SEEK_SET);
     ret = av_new_packet(pkt, e->size+4);
+    if (ret < 0)
+        return ret;
     avio_read(pb, pkt->data + 4, e->size);
     AV_WB32(pkt->data, e->min_distance);
     pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
