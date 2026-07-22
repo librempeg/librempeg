@@ -478,12 +478,28 @@ static int read_header(AVFormatContext *s)
             AV_WL16(st->codecpar->extradata+10, 1);
             ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
-        } else if (codec == AV_CODEC_ID_XMA1 || codec == AV_CODEC_ID_XMA2) {
+        } else if (codec == AV_CODEC_ID_XMA1) {
+            int nb_streams = (channels+1)/2;
+            ret = ff_alloc_extradata(st->codecpar, 8+20*nb_streams);
+            if (ret < 0)
+                return ret;
+            memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
+            st->codecpar->extradata[4] = nb_streams;
+            int left_channels = channels;
+            for (int i = 0; i < nb_streams; i++) {
+                st->codecpar->extradata[8+20*i+17] = FFMIN(2, left_channels);
+                left_channels -= FFMIN(2, left_channels);
+            }
+            st->codecpar->block_align = 2048;
+            ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
+            avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+        } else if (codec == AV_CODEC_ID_XMA2) {
+            int nb_streams = (channels+1)/2;
             ret = ff_alloc_extradata(st->codecpar, 34);
             if (ret < 0)
                 return ret;
-            memset(st->codecpar->extradata, 0, 34);
-            AV_WL16(st->codecpar->extradata, (channels+1)/2);
+            memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
+            AV_WL16(st->codecpar->extradata, nb_streams);
             st->codecpar->block_align = 2048;
             ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
