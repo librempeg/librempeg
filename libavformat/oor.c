@@ -512,6 +512,16 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     return ret;
 }
 
+static int read_seek(AVFormatContext *s, int stream_index,
+                     int64_t ts, int flags)
+{
+    OORContext *oor = s->priv_data;
+
+    oor->data.current_packet = 0;
+
+    return -1;
+}
+
 const FFInputFormat ff_oor_demuxer = {
     .p.name         = "oor",
     .p.long_name    = NULL_IF_CONFIG_SMALL("OptimizedObsforR"),
@@ -521,4 +531,5 @@ const FFInputFormat ff_oor_demuxer = {
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
+    .read_seek      = read_seek,
 };
