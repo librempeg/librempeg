@@ -103,7 +103,7 @@ static int read_header(AVFormatContext *s)
     if (nb_chunks < nb_frames/5)
         return AVERROR_INVALIDDATA;
 
-    if (layers < 0 || layers > 5)
+    if (layers < 0 || layers > FF_ARRAY_ELEMS(ubiint->ablock))
         return AVERROR_INVALIDDATA;
 
     if (width <= 0 || height <= 0 ||
@@ -291,7 +291,7 @@ static int read_close(AVFormatContext *s)
 {
     UBIINTContext *ubiint = s->priv_data;
 
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < FF_ARRAY_ELEMS(ubiint->ablock); i++)
         av_freep(&ubiint->ablock[i]);
     av_freep(&ubiint->vblock);
     av_freep(&ubiint->chunk);
