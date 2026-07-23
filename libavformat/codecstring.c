@@ -180,7 +180,7 @@ int ff_make_codec_str(void *logctx, const AVCodecParameters *par,
         int err;
         if (!par->extradata_size)
             return AVERROR(EINVAL);
-        if ((err = ff_lcvec_parse_config_record(&lvcc, par->extradata, par->extradata_size)) < 0)
+        if ((err = ff_lcvec_parse_config_record(&lvcc, par->extradata, par->extradata_size, logctx)) < 0)
             return err;
         av_bprintf(out, "lvc1.vprf%u.vlev%u", lvcc.profile_idc, lvcc.level_idc);
     } else if (par->codec_id == AV_CODEC_ID_AV1) {

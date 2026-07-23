@@ -34,9 +34,9 @@ typedef struct LCEVCDecoderConfigurationRecord {
     uint32_t pic_height_in_luma_samples;
 } LCEVCDecoderConfigurationRecord;
 
-int ff_isom_write_lvcc(AVIOContext *pb, const uint8_t *data, int len);
+int ff_isom_write_lvcc(AVIOContext *pb, const uint8_t *data, int len, void *logctx);
 
 int ff_lcvec_parse_config_record(LCEVCDecoderConfigurationRecord *lvcc,
-                                 const uint8_t *buf, int size);
+                                 const uint8_t *buf, int size, void *logctx);
 
 #endif /* AVFORMAT_LCEVC_H */

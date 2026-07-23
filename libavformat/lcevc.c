@@ -178,7 +178,7 @@ static int write_nalu(LCEVCDecoderConfigurationRecord *lvcc, AVIOContext *pb,
 }
 
 int ff_lcvec_parse_config_record(LCEVCDecoderConfigurationRecord *lvcc,
-                                 const uint8_t *buf, int size)
+                                 const uint8_t *buf, int size, void *logctx)
 {
     H2645Packet h2645_pkt = { 0 };
     AVIOContext *pb;
@@ -217,7 +217,7 @@ int ff_lcvec_parse_config_record(LCEVCDecoderConfigurationRecord *lvcc,
     if (ret < 0)
         return ret;
 
-    ret = ff_h2645_packet_split(&h2645_pkt, buf, size, NULL, 0, AV_CODEC_ID_LCEVC, 0);
+    ret = ff_h2645_packet_split(&h2645_pkt, buf, size, logctx, 0, AV_CODEC_ID_LCEVC, 0);
     if (ret < 0)
         goto fail;
 
@@ -248,7 +248,7 @@ fail:
     return ret;
 }
 
-int ff_isom_write_lvcc(AVIOContext *pb, const uint8_t *data, int len)
+int ff_isom_write_lvcc(AVIOContext *pb, const uint8_t *data, int len, void *logctx)
 {
     LCEVCDecoderConfigurationRecord lvcc = { 0 };
     AVIOContext *idr_pb = NULL, *nidr_pb = NULL;
@@ -267,7 +267,7 @@ int ff_isom_write_lvcc(AVIOContext *pb, const uint8_t *data, int len)
         return 0;
     }
 
-    ret = ff_h2645_packet_split(&h2645_pkt, data, len, NULL, 0, AV_CODEC_ID_LCEVC, 0);
+    ret = ff_h2645_packet_split(&h2645_pkt, data, len, logctx, 0, AV_CODEC_ID_LCEVC, 0);
     if (ret < 0)
         return ret;
 

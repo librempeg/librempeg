@@ -1708,7 +1708,7 @@ static int mov_write_evcc_tag(AVIOContext *pb, MOVTrack *track)
     return update_size(pb, pos);
 }
 
-static int mov_write_lvcc_tag(AVIOContext *pb, MOVTrack *track)
+static int mov_write_lvcc_tag(AVFormatContext *s, AVIOContext *pb, MOVTrack *track)
 {
     int64_t pos = avio_tell(pb);
 
@@ -1716,7 +1716,7 @@ static int mov_write_lvcc_tag(AVIOContext *pb, MOVTrack *track)
     ffio_wfourcc(pb, "lvcC");
 
     ff_isom_write_lvcc(pb, track->extradata[track->last_stsd_index],
-                       track->extradata_size[track->last_stsd_index]);
+                       track->extradata_size[track->last_stsd_index], s);
 
     return update_size(pb, pos);
 }
@@ -2923,7 +2923,7 @@ static int mov_write_video_tag(AVFormatContext *s, AVIOContext *pb, MOVMuxContex
     else if (track->par->codec_id ==AV_CODEC_ID_EVC) {
         mov_write_evcc_tag(pb, track);
     } else if (track->par->codec_id == AV_CODEC_ID_LCEVC) {
-        mov_write_lvcc_tag(pb, track);
+        mov_write_lvcc_tag(mov->fc, pb, track);
     } else if (track->par->codec_id ==AV_CODEC_ID_APV) {
         mov_write_apvc_tag(mov->fc, pb, track);
     } else if (track->par->codec_id == AV_CODEC_ID_VP9) {
