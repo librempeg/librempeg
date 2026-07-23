@@ -36,12 +36,14 @@
 
 #define MBINCR_VLC_BITS 9
 #define MB_PAT_VLC_BITS 9
+#define MB_ITYPE_VLC_BITS 2
 #define MB_PTYPE_VLC_BITS 6
 #define MB_BTYPE_VLC_BITS 6
 
 extern VLCElem ff_dc_lum_vlc[];
 extern VLCElem ff_dc_chroma_vlc[];
 extern VLCElem ff_mbincr_vlc[];
+extern VLCElem ff_mb_itype_vlc[];
 extern VLCElem ff_mb_ptype_vlc[];
 extern VLCElem ff_mb_btype_vlc[];
 extern VLCElem ff_mb_pat_vlc[];
