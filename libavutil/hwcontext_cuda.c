@@ -273,7 +273,7 @@ static int cuda_frames_init(AVHWFramesContext *ctx)
     CUDAFramesContext       *priv = ctx->hwctx;
     CudaFunctions             *cu = hwctx->internal->cuda_dl;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(ctx->sw_format);
-    int err, i;
+    int err;
 
     if (!desc) {
         av_log(ctx, AV_LOG_ERROR, "Invalid pixel format\n");
@@ -352,7 +352,7 @@ static int cuda_frames_init(AVHWFramesContext *ctx)
             return err;
         }
 
-        for (i = 0; i < priv->p.cuarray_num_surfaces; i++) {
+        for (int i = 0; i < priv->p.cuarray_num_surfaces; i++) {
             err = CHECK_CU(cu->cuArray3DCreate(&priv->p.cuarray_surfaces[i], &priv->p.cuarray_desc));
             if (err < 0) {
                 for (i = i - 1; i >= 0; i--)
