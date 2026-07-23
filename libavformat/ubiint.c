@@ -137,7 +137,7 @@ static int read_header(AVFormatContext *s)
     vst->codecpar->codec_id = AV_CODEC_ID_IPU;
     vst->codecpar->width = width;
     vst->codecpar->height = height;
-    vst->codecpar->profile = 1;
+    vst->codecpar->profile = 0;
     vst->start_time = 0;
     vst->duration =
     vst->nb_frames = nb_frames;
@@ -256,7 +256,16 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
         return FFERROR_REDO;
     }
 
-    ret = av_get_packet(pb, pkt, size);
+    if (index == 0) {
+        ret = av_new_packet(pkt, size+1);
+        if (ret < 0)
+            return ret;
+
+        pkt->data[0] = 0;
+        avio_read(pb, pkt->data+1, size);
+    } else {
+        ret = av_get_packet(pb, pkt, size);
+    }
     pkt->stream_index = index;
     pkt->pos = pos;
 
