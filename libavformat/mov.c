@@ -1166,6 +1166,73 @@ static int mov_read_dec3(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return 0;
 }
 
+/* Maps the DTS `StreamConstruction` field (ETSI TS 102 114 Table E-2) to the
+ * coarse FFmpeg DTS profile enum. Extension-substream XLL maps to HD_MA;
+ * extension-substream XXCH, X96, or XBR maps to HD_HRA; core-substream XCH or
+ * XXCH maps to ES; core-substream X96 maps to 96/24; a core component alone
+ * maps to DTS; and extension-substream LBR maps to Express. Value 0 (undefined)
+ * and values outside 1..21 map to AV_PROFILE_UNKNOWN. */
+static int mov_dts_stream_construction_to_profile(unsigned int sc)
+{
+    static const int profile[22] = {
+        [ 1] = AV_PROFILE_DTS,            /* core Core                         */
+        [ 2] = AV_PROFILE_DTS_ES,         /* core Core + core XCH              */
+        [ 3] = AV_PROFILE_DTS_ES,         /* core Core + core XXCH             */
+        [ 4] = AV_PROFILE_DTS_96_24,      /* core Core + core X96              */
+        [ 5] = AV_PROFILE_DTS_HD_HRA,     /* core Core + ext XXCH              */
+        [ 6] = AV_PROFILE_DTS_HD_HRA,     /* core Core + ext XBR               */
+        [ 7] = AV_PROFILE_DTS_HD_HRA,     /* core Core + core XCH + ext XBR    */
+        [ 8] = AV_PROFILE_DTS_HD_HRA,     /* core Core + core XXCH + ext XBR   */
+        [ 9] = AV_PROFILE_DTS_HD_HRA,     /* core Core + ext XXCH + ext XBR    */
+        [10] = AV_PROFILE_DTS_HD_HRA,     /* core Core + ext X96               */
+        [11] = AV_PROFILE_DTS_HD_HRA,     /* core Core + core XCH + ext X96    */
+        [12] = AV_PROFILE_DTS_HD_HRA,     /* core Core + core XXCH + ext X96   */
+        [13] = AV_PROFILE_DTS_HD_HRA,     /* core Core + ext XXCH + ext X96    */
+        [14] = AV_PROFILE_DTS_HD_MA,      /* core Core + ext XLL               */
+        [15] = AV_PROFILE_DTS_HD_MA,      /* core Core + core XCH + ext XLL    */
+        [16] = AV_PROFILE_DTS_HD_MA,      /* core Core + core X96 + ext XLL    */
+        [17] = AV_PROFILE_DTS_HD_MA,      /* ext XLL                           */
+        [18] = AV_PROFILE_DTS_EXPRESS,    /* ext LBR                           */
+        [19] = AV_PROFILE_DTS,            /* ext Core                          */
+        [20] = AV_PROFILE_DTS_HD_HRA,     /* ext Core + ext XXCH               */
+        [21] = AV_PROFILE_DTS_HD_MA,      /* ext Core + ext XLL                */
+    };
+    if (!sc || sc > 21)
+        return AV_PROFILE_UNKNOWN;
+    return profile[sc];
+}
+
+/* Maps the 16-bit DTS `ChannelLayout` bitmask (ETSI TS 102 114 Table E-5) to an
+ * ffmpeg channel mask. Pair bits follow Table 7-10 / DCA_SPEAKER_PAIR_*;
+ * LwRw (0x0400) and LssRss (0x0800) must not collapse onto SIDE like LsRs. */
+static uint64_t mov_dts_channel_layout_to_mask(unsigned int code)
+{
+    static const struct { unsigned int dts; uint64_t av; } map[] = {
+        { 0x0001, AV_CH_FRONT_CENTER },
+        { 0x0002, AV_CH_FRONT_LEFT  | AV_CH_FRONT_RIGHT },
+        { 0x0004, AV_CH_SIDE_LEFT   | AV_CH_SIDE_RIGHT },
+        { 0x0008, AV_CH_LOW_FREQUENCY },
+        { 0x0010, AV_CH_BACK_CENTER },
+        { 0x0020, AV_CH_TOP_FRONT_LEFT  | AV_CH_TOP_FRONT_RIGHT },
+        { 0x0040, AV_CH_BACK_LEFT   | AV_CH_BACK_RIGHT },
+        { 0x0080, AV_CH_TOP_FRONT_CENTER },
+        { 0x0100, AV_CH_TOP_CENTER },
+        { 0x0200, AV_CH_FRONT_LEFT_OF_CENTER | AV_CH_FRONT_RIGHT_OF_CENTER },
+        { 0x0400, AV_CH_WIDE_LEFT   | AV_CH_WIDE_RIGHT },
+        { 0x0800, AV_CH_SIDE_SURROUND_LEFT | AV_CH_SIDE_SURROUND_RIGHT },
+        { 0x1000, AV_CH_LOW_FREQUENCY_2 },
+        { 0x2000, AV_CH_TOP_SIDE_LEFT    | AV_CH_TOP_SIDE_RIGHT },
+        { 0x4000, AV_CH_TOP_BACK_CENTER },
+        { 0x8000, AV_CH_TOP_BACK_LEFT    | AV_CH_TOP_BACK_RIGHT },
+    };
+    uint64_t mask = 0;
+    int i;
+    for (i = 0; i < FF_ARRAY_ELEMS(map); i++)
+        if (code & map[i].dts)
+            mask |= map[i].av;
+    return mask;
+}
+
 static int mov_read_ddts(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
 #define DDTS_SIZE 20
@@ -1173,6 +1240,9 @@ static int mov_read_ddts(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     AVStream *st = NULL;
     uint32_t frame_duration_code = 0;
     uint32_t channel_layout_code = 0;
+    uint64_t channel_layout_mask;
+    unsigned int stream_construction;
+    unsigned int representation_type;
     GetBitContext gb;
     int ret;
 
@@ -1195,7 +1265,12 @@ static int mov_read_ddts(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     st->codecpar->bit_rate = get_bits_long(&gb, 32);
     st->codecpar->bits_per_coded_sample = get_bits(&gb, 8);
     frame_duration_code = get_bits(&gb, 2);
-    skip_bits(&gb, 30); /* various fields */
+    stream_construction = get_bits(&gb, 5); /* Table E-2 - profile source */
+    skip_bits(&gb, 1);  /* CoreLFEPresent */
+    skip_bits(&gb, 6);  /* CoreLayout */
+    skip_bits(&gb, 14); /* CoreSize */
+    skip_bits(&gb, 1);  /* StereoDownmix */
+    representation_type = get_bits(&gb, 3);
     channel_layout_code = get_bits(&gb, 16);
 
     st->codecpar->frame_size =
@@ -1204,17 +1279,18 @@ static int mov_read_ddts(MOVContext *c, AVIOContext *pb, MOVAtom atom)
             (frame_duration_code == 2) ? 2048 :
             (frame_duration_code == 3) ? 4096 : 0;
 
-    if (channel_layout_code > 0xff) {
-        av_log(c->fc, AV_LOG_WARNING, "Unsupported DTS audio channel layout\n");
+    /* Publish StreamConstruction as codecpar->profile, including for encrypted
+     * tracks where frame headers cannot be inspected. */
+    st->codecpar->profile = mov_dts_stream_construction_to_profile(stream_construction);
+
+    channel_layout_mask = mov_dts_channel_layout_to_mask(channel_layout_code);
+    if (channel_layout_mask) {
+        av_channel_layout_uninit(&st->codecpar->ch_layout);
+        av_channel_layout_from_mask(&st->codecpar->ch_layout, channel_layout_mask);
+    } else if (representation_type == 2 || representation_type == 3) {
+        av_channel_layout_uninit(&st->codecpar->ch_layout);
+        st->codecpar->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
     }
-    av_channel_layout_uninit(&st->codecpar->ch_layout);
-    av_channel_layout_from_mask(&st->codecpar->ch_layout,
-            ((channel_layout_code & 0x1) ? AV_CH_FRONT_CENTER : 0) |
-            ((channel_layout_code & 0x2) ? AV_CH_FRONT_LEFT : 0) |
-            ((channel_layout_code & 0x2) ? AV_CH_FRONT_RIGHT : 0) |
-            ((channel_layout_code & 0x4) ? AV_CH_SIDE_LEFT : 0) |
-            ((channel_layout_code & 0x4) ? AV_CH_SIDE_RIGHT : 0) |
-            ((channel_layout_code & 0x8) ? AV_CH_LOW_FREQUENCY : 0));
 
     return 0;
 }
