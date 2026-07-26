@@ -35,6 +35,7 @@
  *
  * Streams expose timed themes, frame-triggered sounds, and untimed catalog
  * entries. Track playlists remain one scheduled background.
+ * A separately tagged compatibility stream supports direct playback.
  */
 
 #include <limits.h>
@@ -974,10 +975,10 @@ static int build_track_stream(AVFormatContext *s, const int64_t *coffs,
     return 1;
 }
 
-/* Build a stitched background when no authored scene theme is usable. */
+/* Keep the compatibility stream separate from timed theme nodes. */
 static int build_move_background_stream(AVFormatContext *s, int containers,
                                         const int64_t *coffs,
-                                        const char *title)
+                                        const char *title, int compatibility)
 {
     AVIOContext *pb = s->pb;
     int *seg_souns = NULL, *seq = NULL;
@@ -1032,7 +1033,20 @@ static int build_move_background_stream(AVFormatContext *s, int containers,
                                  title, 0, 0, 0, -1);
         if (ret > 0) {
             AVStream *st = s->streams[s->nb_streams - 1];
+
             av_dict_set(&st->metadata, "cfdf_d5_slot", "2", 0);
+            if (compatibility) {
+                for (unsigned i = 0; i < s->nb_streams; i++) {
+                    AVStream *other = s->streams[i];
+
+                    if (other->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+                        other->disposition &= ~AV_DISPOSITION_DEFAULT;
+                }
+                st->disposition |= AV_DISPOSITION_DEFAULT;
+                av_dict_set(&st->metadata, "timeline",
+                            "background_compat", 0);
+                av_dict_set_int(&st->metadata, "cfdf_d5_compat", 1, 0);
+            }
         }
     }
 
@@ -1544,15 +1558,18 @@ static int read_header(AVFormatContext *s)
                 goto end;
         }
     } else {
-        ret = build_move_theme_streams(s, containers, coffs, fsize, basename,
-                                       &timeline);
+        int theme_streams;
+
+        theme_streams = build_move_theme_streams(s, containers, coffs, fsize,
+                                                 basename, &timeline);
+        if (theme_streams < 0) {
+            ret = theme_streams;
+            goto end;
+        }
+        ret = build_move_background_stream(s, containers, coffs, basename,
+                                           theme_streams > 0);
         if (ret < 0)
             goto end;
-        if (ret == 0) {
-            ret = build_move_background_stream(s, containers, coffs, basename);
-            if (ret < 0)
-                goto end;
-        }
 
         ret = build_move_sfx_streams(s, containers, coffs, fsize, &timeline);
         if (ret < 0)
