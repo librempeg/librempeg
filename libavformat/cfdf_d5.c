@@ -146,11 +146,11 @@ static int count_block_samples(AVIOContext *pb, int variant, int64_t off, int si
         return size;
     if (variant == CFDF_D5_IMA) {
         int step;
-        if (size < 3)
+        if (size < 4)
             return 0;
         avio_seek(pb, off + 2, SEEK_SET);
         step = avio_r8(pb);
-        return (step > 0x58) ? 0 : (1 + 2 * (size - 3));
+        return (step > 0x58) ? 0 : 2 * (size - 3);
     }
 
     /* v4.0: walk the control stream */
