@@ -316,6 +316,18 @@ static int cfdf_d5_video_alloc(AVCodecContext *avctx, int width, int height)
     return 0;
 }
 
+static void cfdf_d5_video_reset(CFDFD5VideoContext *c)
+{
+    size_t size;
+
+    if (c->canvas) {
+        size = DF_FRONT_MARGIN +
+               (size_t)(c->height + 8) * c->stride;
+        memset(c->canvas, 0, size);
+    }
+    c->have_ref = 0;
+}
+
 static int cfdf_d5_video_decode(AVCodecContext *avctx, AVFrame *frame,
                                 int *got_frame, AVPacket *avpkt)
 {
@@ -336,6 +348,10 @@ static int cfdf_d5_video_decode(AVCodecContext *avctx, AVFrame *frame,
         if ((ret = ff_set_dimensions(avctx, width, height)) < 0)
             return ret;
     }
+
+    /* Replaying the key packet must not retain a later reference canvas. */
+    if ((avpkt->flags & AV_PKT_FLAG_KEY) && c->have_ref)
+        cfdf_d5_video_reset(c);
 
     /* zero-padded copy of the compressed stream (the original reads past the
      * end into zero-initialised memory) */
@@ -384,6 +400,13 @@ static av_cold int cfdf_d5_video_init(AVCodecContext *avctx)
     return 0;
 }
 
+static void cfdf_d5_video_flush(AVCodecContext *avctx)
+{
+    CFDFD5VideoContext *c = avctx->priv_data;
+
+    cfdf_d5_video_reset(c);
+}
+
 static av_cold int cfdf_d5_video_close(AVCodecContext *avctx)
 {
     CFDFD5VideoContext *c = avctx->priv_data;
@@ -400,6 +423,7 @@ const FFCodec ff_cfdf_d5_video_decoder = {
     .priv_data_size = sizeof(CFDFD5VideoContext),
     .init           = cfdf_d5_video_init,
     .close          = cfdf_d5_video_close,
+    .flush          = cfdf_d5_video_flush,
     FF_CODEC_DECODE_CB(cfdf_d5_video_decode),
     .p.capabilities = AV_CODEC_CAP_DR1,
 };

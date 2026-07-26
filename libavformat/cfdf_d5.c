@@ -38,6 +38,7 @@
  * A separately tagged compatibility stream supports direct playback.
  */
 
+#include <errno.h>
 #include <limits.h>
 #include <string.h>
 
@@ -1660,14 +1661,24 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
 static int read_seek(AVFormatContext *s, int stream_index, int64_t ts, int flags)
 {
-    double target;
+    AVRational target_tb;
+    int64_t target_ts;
 
-    if (stream_index < 0)
-        target = ts / (double)AV_TIME_BASE;
-    else
-        target = ts * av_q2d(s->streams[stream_index]->time_base);
-    if (target < 0)
-        target = 0;
+    /* Authored blocks support timestamp seeking only. */
+    if (flags & (AVSEEK_FLAG_BYTE | AVSEEK_FLAG_FRAME))
+        return AVERROR(ENOSYS);
+
+    if (stream_index < 0) {
+        target_ts = ts;
+        target_tb = AV_TIME_BASE_Q;
+    } else {
+        if ((unsigned)stream_index >= s->nb_streams)
+            return AVERROR(EINVAL);
+        target_ts = ts;
+        target_tb = s->streams[stream_index]->time_base;
+    }
+    if (target_ts < 0)
+        target_ts = 0;
 
     for (int i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
@@ -1685,12 +1696,12 @@ static int read_seek(AVFormatContext *s, int stream_index, int64_t ts, int flags
         } else {
             /* Audio blocks are independent (each a keyframe): jump to the block
              * containing the target time. */
-            double tb = av_q2d(st->time_base);
             int64_t acc = cs->start_pts;
             int k = 0;
 
             while (k < cs->nb_blocks &&
-                   (acc + cs->blocks[k].nb_samples) * tb <= target) {
+                   av_compare_ts(acc + cs->blocks[k].nb_samples,
+                                 st->time_base, target_ts, target_tb) <= 0) {
                 acc += cs->blocks[k].nb_samples;
                 k++;
             }
@@ -1716,6 +1727,7 @@ const FFInputFormat ff_cfdf_d5_demuxer = {
     .p.name         = "cfdf_d5",
     .p.long_name    = NULL_IF_CONFIG_SMALL("CFDF D5 (Cyberflix DreamFactory v5)"),
     .p.extensions   = "move,trak",
+    .p.flags        = AVFMT_NO_BYTE_SEEK,
     .priv_data_size = sizeof(CFDFD5DemuxContext),
     .read_probe     = read_probe,
     .read_header    = read_header,
