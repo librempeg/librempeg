@@ -216,7 +216,7 @@ static void df_decode_step(CFDFD5VideoContext *c,
         if (B == 40)
             continue;                                /* skip row */
         if (B >= 44 && B <= 72) {                   /* vertical copy */
-            static const int voff[8] = {-4,-3,-2,-1,1,2,3,4};
+            static const int8_t voff[8] = {-4,-3,-2,-1,1,2,3,4};
             memcpy(edi, edi + voff[(B - 44) >> 2] * stride, width);
             continue;
         }
