@@ -33,8 +33,8 @@
  *       accumulator reset to 0 per block, one sample per byte.
  *   2 = standard IMA ADPCM under DreamFactory framing: 3-byte block header
  *       (s16 predictor + u8 step index), nibble data follows (low nibble
- *       first); sample 0 of the block is the predictor emitted verbatim; a
- *       block whose step index exceeds 0x58 produces no samples.
+ *       first); sample 0 is the predictor and the final high nibble is
+ *       padding. A step index above 0x58 produces no samples.
  */
 
 #include <stdint.h>
@@ -108,11 +108,11 @@ static int cfdf_d5_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     switch (s->variant) {
     case CFDF_D5_IMA:
-        if (size < 3 || buf[2] > 0x58) {
+        if (size < 4 || buf[2] > 0x58) {
             *got_frame_ptr = 0;
             return size;
         }
-        nb = 1 + 2 * (size - 3);
+        nb = 2 * (size - 3);
         break;
     case CFDF_D5_V41:
         nb = size;
@@ -140,7 +140,7 @@ static int cfdf_d5_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     case CFDF_D5_IMA: {
         int hist       = (int16_t)AV_RL16(buf);
         int step_index = buf[2];
-        int nibbles    = 2 * (size - 3);
+        int nibbles    = nb - 1;
 
         dst[n++] = hist; /* sample 0: predictor verbatim */
         for (int k = 0; k < nibbles; k++) {
