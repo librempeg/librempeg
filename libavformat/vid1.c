@@ -168,6 +168,8 @@ static int read_header(AVFormatContext *s)
         next_chunk_offset = chunk_offset + chunk_size;
 
         if (chunk == AV_RB32("VIDH")) {
+            AVRational fps;
+
             st = avformat_new_stream(s, NULL);
             if (!st)
                 return AVERROR(ENOMEM);
@@ -187,10 +189,14 @@ static int read_header(AVFormatContext *s)
             st->codecpar->codec_id = AV_CODEC_ID_MPEG2VIDEO;
             st->codecpar->width = avio_r16(pb);
             st->codecpar->height = avio_r16(pb);
+            st->duration = st->nb_frames = avio_r32(pb);
+            avio_skip(pb, 6);
+            fps.num = avio_r16(pb);
+            fps.den = avio_r16(pb);
 
             ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
 
-            avpriv_set_pts_info(st, 64, 1, 24);
+            avpriv_set_pts_info(st, 64, fps.den, fps.num);
         } else if (chunk == AV_RB32("AUDH")) {
             offset = chunk_offset;
             offset += 12;
