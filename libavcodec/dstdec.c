@@ -268,10 +268,17 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
         return ret;
 
     if (!get_bits1(gb)) {
+        unsigned total = frame->nb_samples * channels;
+        unsigned n = FFMIN(avpkt->size - 1, total);
         skip_bits1(gb);
         if (get_bits(gb, 6))
             return AVERROR_INVALIDDATA;
-        memcpy(frame->data[0], avpkt->data + 1, FFMIN(avpkt->size - 1, frame->nb_samples * channels));
+        // DSD bytes are stored in every 4th byte, as expected by the
+        // in-place DSD to PCM conversion. Pad short frames with silence.
+        for (i = 0; i < n; i++)
+            dsd[i * 4] = avpkt->data[1 + i];
+        for (; i < total; i++)
+            dsd[i * 4] = 0x69;
         goto dsd;
     }
 
