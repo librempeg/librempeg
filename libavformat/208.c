@@ -25,7 +25,7 @@
 #include "internal.h"
 #include "pcm.h"
 
-static int two08_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (p->buf_size < 0xF0)
         return 0;
@@ -42,7 +42,7 @@ static int two08_probe(const AVProbeData *p)
     return 0;
 }
 
-static int two08_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     int64_t start_offset;
     uint32_t codec;
@@ -88,8 +88,8 @@ const FFInputFormat ff_two08_demuxer = {
     .p.name         = "208",
     .p.long_name    = NULL_IF_CONFIG_SMALL("208 (Ocean Games)"),
     .p.extensions   = "208",
-    .read_probe     = two08_probe,
-    .read_header    = two08_read_header,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
     .read_seek      = ff_pcm_read_seek,
 };
