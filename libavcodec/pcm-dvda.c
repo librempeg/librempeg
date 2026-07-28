@@ -19,29 +19,63 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-/**
- * @file
- * LPCM codec for PCM formats found in DVD-Audio (AOB) streams.
- *
- * Samples are grouped in sets of 2 samples over all channels. Channels are
- * split in up to two channel groups, which may use different quantization.
- * Within each set the second channel group's data comes first. A group's
- * data consists of big-endian 16-bit most significant sample parts, followed
- * by the remaining 4 or 8 bits of all samples for 20 or 24-bit quantization.
- *
- * Packets begin with the LPCM private stream header (following the substream
- * ID), which carries the audio format and the header length.
- */
+#include <assert.h>
+#include <stddef.h>
 
 #include "libavutil/channel_layout.h"
-#include "libavutil/intreadwrite.h"
 
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
 #include "decode.h"
 
-#define HEADER_SIZE 11
+/*
+ * Header of a linear PCM audio packet (A_PKT) of a DVD-Audio AOB. It
+ * follows the 0xa0 sub_stream_id byte of the MPEG private_stream_1 packet
+ * and is itself followed by 0 to 7 stuffing bytes and the audio data.
+ * Layout and semantics from US 6,580,671 (FIGS. 27 and 29, cols. 19-21).
+ */
+typedef struct PCMDVDAHeader {
+    /* reserved (4 bits), ISRC number (4 bits): position, from 1 to 12, of
+     * the isrc_data byte within the track's 12-character International
+     * Standard Recording Code, which is spread over consecutive packets */
+    uint8_t isrc_number;
+    /* the ISRC character designated by isrc_number */
+    uint8_t isrc_data;
+    /* number of header bytes following this field, including the trailing
+     * stuffing bytes; the audio data starts right after */
+    uint8_t private_header_length;
+    /* big-endian byte offset, counted from the end of this field, of the
+     * first audio frame (access unit) to be presented at the packet's PTS */
+    uint8_t first_access_unit_pointer[2];
+    /* audio emphasis flag (1 bit): high-frequency emphasis is applied,
+     * never set for a group sampled at 96 or 88.2 kHz; reserved (3 bits);
+     * downmix code (4 bits): selects which of the 16 downmix coefficient
+     * tables of the title set (ATS_DM_COEFT #0..#15 in the ATSI_MAT) to
+     * use for multichannel to 2-channel output */
+    uint8_t emphasis_downmix;
+    /* quantization word length of channel group 1 (4 bits) and group 2
+     * (4 bits): 0 = 16, 1 = 20, 2 = 24 bits per sample;
+     * 0xf in group 2 when the group does not exist */
+    uint8_t quantization;
+    /* audio sampling frequency of channel group 1 (4 bits) and group 2
+     * (4 bits): 0 = 48 kHz, 1 = 96 kHz, 2 = 192 kHz, 8 = 44.1 kHz,
+     * 9 = 88.2 kHz, 0xa = 176.4 kHz; 0xf in group 2 when the group does
+     * not exist */
+    uint8_t sampling_frequency;
+    /* reserved (4 bits), multichannel type (4 bits): 0 = type 1, the only
+     * defined sample structure; other values reserved */
+    uint8_t multichannel_type;
+    /* reserved (3 bits), channel assignment (5 bits): selects one of the
+     * 21 channel-to-group allocations, see channel_assignments[] */
+    uint8_t channel_assignment;
+    /* dynamic range control: X (3 bits), Y (5 bits); playback may scale
+     * the audio by 2^(4 - X - Y/30) with 0 <= X <= 7, 0 <= Y <= 29, so
+     * 0x80 is unity gain; not applied, as with the other PCM decoders */
+    uint8_t dynamic_range_control;
+} PCMDVDAHeader;
+
+static_assert(sizeof(PCMDVDAHeader) == 11, "unexpected header padding");
 
 typedef struct PCMDVDAContext {
     uint32_t last_header;    // Cached header to avoid reparsing
@@ -52,40 +86,49 @@ typedef struct PCMDVDAContext {
     uint8_t group_map[2][6]; // Stream channel -> native layout position
 } PCMDVDAContext;
 
-#define CH_F   AV_CH_FRONT_CENTER
+#define CH_C   AV_CH_FRONT_CENTER
 #define CH_L   AV_CH_FRONT_LEFT
 #define CH_R   AV_CH_FRONT_RIGHT
-#define CH_LF  AV_CH_LOW_FREQUENCY
+#define CH_LFE AV_CH_LOW_FREQUENCY
 #define CH_S   AV_CH_BACK_CENTER
 #define CH_LS  AV_CH_BACK_LEFT
 #define CH_RS  AV_CH_BACK_RIGHT
 
+/*
+ * Channel allocation table (US 6,580,671 FIG. 26 and cols. 18-19): the
+ * speaker fed by each audio channel, in stream order (ACH0..ACH5, first
+ * channel group first), and how many channels each group holds. Beware
+ * that the counts column of FIG. 26 misprints the group 1 size of
+ * assignments 13 (3, not 2) and 18 (4, not 3). The group boundary drawn
+ * in the figure and the enumeration in cols. 18-19 agree on the values
+ * used here.
+ */
 static const struct {
     uint8_t group1_channels;
     uint8_t group2_channels;
-    uint64_t channels[6];   // in stream order, group 1 first
+    uint64_t channels[6];
 } channel_assignments[21] = {
-    [ 0] = { 1, 0, { CH_F } },
+    [ 0] = { 1, 0, { CH_C } },
     [ 1] = { 2, 0, { CH_L, CH_R } },
     [ 2] = { 2, 1, { CH_L, CH_R, CH_S } },
     [ 3] = { 2, 2, { CH_L, CH_R, CH_LS, CH_RS } },
-    [ 4] = { 2, 1, { CH_L, CH_R, CH_LF } },
-    [ 5] = { 2, 2, { CH_L, CH_R, CH_LF, CH_S } },
-    [ 6] = { 2, 3, { CH_L, CH_R, CH_LF, CH_LS, CH_RS } },
-    [ 7] = { 2, 1, { CH_L, CH_R, CH_F } },
-    [ 8] = { 2, 2, { CH_L, CH_R, CH_F, CH_S } },
-    [ 9] = { 2, 3, { CH_L, CH_R, CH_F, CH_LS, CH_RS } },
-    [10] = { 2, 2, { CH_L, CH_R, CH_F, CH_LF } },
-    [11] = { 2, 3, { CH_L, CH_R, CH_F, CH_LF, CH_S } },
-    [12] = { 2, 4, { CH_L, CH_R, CH_F, CH_LF, CH_LS, CH_RS } },
-    [13] = { 3, 1, { CH_L, CH_R, CH_F, CH_S } },
-    [14] = { 3, 2, { CH_L, CH_R, CH_F, CH_LS, CH_RS } },
-    [15] = { 3, 1, { CH_L, CH_R, CH_F, CH_LF } },
-    [16] = { 3, 2, { CH_L, CH_R, CH_F, CH_LF, CH_S } },
-    [17] = { 3, 3, { CH_L, CH_R, CH_F, CH_LF, CH_LS, CH_RS } },
-    [18] = { 4, 1, { CH_L, CH_R, CH_LS, CH_RS, CH_LF } },
-    [19] = { 4, 1, { CH_L, CH_R, CH_LS, CH_RS, CH_F } },
-    [20] = { 4, 2, { CH_L, CH_R, CH_LS, CH_RS, CH_F, CH_LF } },
+    [ 4] = { 2, 1, { CH_L, CH_R, CH_LFE } },
+    [ 5] = { 2, 2, { CH_L, CH_R, CH_LFE, CH_S } },
+    [ 6] = { 2, 3, { CH_L, CH_R, CH_LFE, CH_LS, CH_RS } },
+    [ 7] = { 2, 1, { CH_L, CH_R, CH_C } },
+    [ 8] = { 2, 2, { CH_L, CH_R, CH_C, CH_S } },
+    [ 9] = { 2, 3, { CH_L, CH_R, CH_C, CH_LS, CH_RS } },
+    [10] = { 2, 2, { CH_L, CH_R, CH_C, CH_LFE } },
+    [11] = { 2, 3, { CH_L, CH_R, CH_C, CH_LFE, CH_S } },
+    [12] = { 2, 4, { CH_L, CH_R, CH_C, CH_LFE, CH_LS, CH_RS } },
+    [13] = { 3, 1, { CH_L, CH_R, CH_C, CH_S } },
+    [14] = { 3, 2, { CH_L, CH_R, CH_C, CH_LS, CH_RS } },
+    [15] = { 3, 1, { CH_L, CH_R, CH_C, CH_LFE } },
+    [16] = { 3, 2, { CH_L, CH_R, CH_C, CH_LFE, CH_S } },
+    [17] = { 3, 3, { CH_L, CH_R, CH_C, CH_LFE, CH_LS, CH_RS } },
+    [18] = { 4, 1, { CH_L, CH_R, CH_LS, CH_RS, CH_LFE } },
+    [19] = { 4, 1, { CH_L, CH_R, CH_LS, CH_RS, CH_C } },
+    [20] = { 4, 2, { CH_L, CH_R, CH_LS, CH_RS, CH_C, CH_LFE } },
 };
 
 static av_cold int pcm_dvda_decode_init(AVCodecContext *avctx)
@@ -98,22 +141,14 @@ static av_cold int pcm_dvda_decode_init(AVCodecContext *avctx)
     return 0;
 }
 
-static int pcm_dvda_parse_header(AVCodecContext *avctx, const uint8_t *header)
+static int pcm_dvda_parse_header(AVCodecContext *avctx,
+                                 const PCMDVDAHeader *header)
 {
     PCMDVDAContext *s = avctx->priv_data;
-    /*
-     * header[0]  continuity counter
-     * header[1]  header size (2 bytes, size following this field)
-     * header[3]  byte pointer to the start of the first audio frame (2 bytes)
-     * header[5]  unknown, observed 0x10 for stereo and 0x00 for surround
-     * header[6]  quantization, group 1 (4) / group 2 (4)
-     * header[7]  sample rate, group 1 (4) / group 2 (4)
-     * header[8]  unknown
-     * header[9]  channel group assignment
-     * header[10] unknown
-     */
-    uint32_t header_int = header[6] | header[7] << 8 | header[9] << 16;
-    int assignment = header[9];
+    uint32_t header_int = header->quantization |
+                          header->sampling_frequency << 8 |
+                          header->channel_assignment << 16;
+    int assignment = header->channel_assignment & 0x1f;
     int bits[2], rate[2];
     uint64_t mask = 0;
 
@@ -124,7 +159,8 @@ static int pcm_dvda_parse_header(AVCodecContext *avctx, const uint8_t *header)
 
     if (avctx->debug & FF_DEBUG_PICT_INFO)
         av_log(avctx, AV_LOG_DEBUG, "pcm_dvda_parse_header: header = %02x%02x%02x\n",
-               header[6], header[7], header[9]);
+               header->quantization, header->sampling_frequency,
+               header->channel_assignment);
 
     if (assignment > 20) {
         av_log(avctx, AV_LOG_ERROR, "invalid channel group assignment %d\n",
@@ -136,8 +172,8 @@ static int pcm_dvda_parse_header(AVCodecContext *avctx, const uint8_t *header)
     s->group_channels[1] = channel_assignments[assignment].group2_channels;
 
     for (int i = 0; i < 2; i++) {
-        int quant = i ? header[6] & 0xf : header[6] >> 4;
-        int freq  = i ? header[7] & 0xf : header[7] >> 4;
+        int quant = i ? header->quantization       & 0xf : header->quantization       >> 4;
+        int freq  = i ? header->sampling_frequency & 0xf : header->sampling_frequency >> 4;
 
         /* 0xf marks an absent channel group */
         if (i && (quant == 0xf || freq == 0xf))
@@ -206,6 +242,13 @@ static int pcm_dvda_parse_header(AVCodecContext *avctx, const uint8_t *header)
     return 0;
 }
 
+/*
+ * The audio data is arranged in sets of 2 samples per channel ("two-pair
+ * samples", US 6,580,671 FIG. 1B): each channel group contributes the
+ * 16-bit main words of all its channels for both samples, then, for 24-bit
+ * quantization, one low-order extra byte per channel and sample in the
+ * same order (FIG. 4B).
+ */
 static void pcm_dvda_decode_samples(AVCodecContext *avctx, GetByteContext *gb,
                                     void *dst, int blocks)
 {
@@ -214,7 +257,8 @@ static void pcm_dvda_decode_samples(AVCodecContext *avctx, GetByteContext *gb,
     int32_t *dst32    = dst;
 
     while (blocks--) {
-        /* the second channel group's data comes first in each set */
+        /* the patent leaves the order of the groups within a set open
+         * (col. 16); discs store the second channel group first */
         for (int g = 1; g >= 0; g--) {
             const int ch          = s->group_channels[g];
             const int bits        = s->group_bits[g];
@@ -247,6 +291,7 @@ static void pcm_dvda_decode_samples(AVCodecContext *avctx, GetByteContext *gb,
 static int pcm_dvda_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                                  int *got_frame_ptr, AVPacket *avpkt)
 {
+    const PCMDVDAHeader *header = (const PCMDVDAHeader *)avpkt->data;
     PCMDVDAContext *s  = avctx->priv_data;
     int buf_size       = avpkt->size;
     GetByteContext gb;
@@ -254,20 +299,22 @@ static int pcm_dvda_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     int retval;
     int blocks;
 
-    if (buf_size < HEADER_SIZE) {
+    if (buf_size < sizeof(*header)) {
         av_log(avctx, AV_LOG_ERROR, "PCM packet too small\n");
         return AVERROR_INVALIDDATA;
     }
 
-    /* skip the header including its padding */
-    header_size = 3 + AV_RB16(avpkt->data + 1);
-    if (header_size < HEADER_SIZE || header_size > buf_size) {
+    /* the private header length counts the bytes following its own field,
+     * including the stuffing bytes that precede the audio data */
+    header_size = offsetof(PCMDVDAHeader, first_access_unit_pointer) +
+                  header->private_header_length;
+    if (header_size < sizeof(*header) || header_size > buf_size) {
         av_log(avctx, AV_LOG_ERROR, "invalid PCM header size %d\n",
                header_size);
         return AVERROR_INVALIDDATA;
     }
 
-    if ((retval = pcm_dvda_parse_header(avctx, avpkt->data)))
+    if ((retval = pcm_dvda_parse_header(avctx, header)))
         return retval;
 
     buf_size -= header_size;
