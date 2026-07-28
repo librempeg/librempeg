@@ -30,7 +30,7 @@ typedef struct ThreeDOSTRContext {
     int nb_channels;
 } ThreeDOSTRContext;
 
-static int threedostr_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     for (int i = 0; i < p->buf_size;) {
         unsigned chunk = AV_RL32(p->buf + i);
@@ -80,7 +80,7 @@ static int threedostr_probe(const AVProbeData *p)
     return 0;
 }
 
-static int threedostr_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     ThreeDOSTRContext *ctx = s->priv_data;
 
@@ -92,7 +92,7 @@ static int threedostr_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int threedostr_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *pb = s->pb;
     unsigned chunk, vcodec = 0, codec = 0, size;
@@ -345,7 +345,7 @@ const FFInputFormat ff_threedostr_demuxer = {
     .p.extensions   = "str",
     .p.flags        = AVFMT_GENERIC_INDEX,
     .priv_data_size = sizeof(ThreeDOSTRContext),
-    .read_probe     = threedostr_probe,
-    .read_header    = threedostr_read_header,
-    .read_packet    = threedostr_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
