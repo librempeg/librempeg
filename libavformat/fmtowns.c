@@ -25,18 +25,34 @@
 #include "internal.h"
 #include "pcm.h"
 
+static int isansicode(int x)
+{
+    return x == 0x1B || x == 0x0A || x == 0x0D || (x >= 0x20 && x < 0x7f);
+}
+
 static int read_probe(const AVProbeData *p)
 {
+    int score = AVPROBE_SCORE_MAX/2;
+
     if (p->buf_size < 26)
         return 0;
+
+    for (int i = 0; i < 8; i++) {
+        if (!p->buf[i])
+            break;
+
+        if (!isansicode(p->buf[i]))
+            return 0;
+    }
 
     if (AV_RL32(p->buf + 12) == 0)
         return 0;
     if (AV_RL16(p->buf + 24) == 0)
         return 0;
     if (!av_match_ext(p->filename, "snd"))
-        return 0;
-    return AVPROBE_SCORE_MAX/2;
+        score /= 15;
+
+    return score;
 }
 
 static int read_header(AVFormatContext *s)
