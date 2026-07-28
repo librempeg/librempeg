@@ -45,7 +45,7 @@ static int two08_probe(const AVProbeData *p)
 static int two08_read_header(AVFormatContext *s)
 {
     int64_t start_offset;
-    uint32_t format;
+    uint32_t codec;
     AVIOContext *pb = s->pb;
     AVStream *st = avformat_new_stream(s, NULL);
     if (!st)
@@ -61,7 +61,7 @@ static int two08_read_header(AVFormatContext *s)
     st->codecpar->sample_rate = avio_rl32(pb);
     if (st->codecpar->sample_rate <= 0)
         return AVERROR_INVALIDDATA;
-    format = avio_rl32(pb);
+    codec = avio_rl32(pb);
     st->codecpar->ch_layout.nb_channels = avio_rl32(pb);
     if (st->codecpar->ch_layout.nb_channels <= 0)
         return AVERROR_INVALIDDATA;
@@ -69,12 +69,12 @@ static int two08_read_header(AVFormatContext *s)
     if (st->codecpar->block_align <= 0)
         return AVERROR_INVALIDDATA;
 
-    switch (format) {
+    switch (codec) {
     case 8:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_U8;
         break;
     default:
-        avpriv_request_sample(st, "format 0x%X", format);
+        avpriv_request_sample(st, "codec 0x%X", codec);
         return AVERROR_PATCHWELCOME;
     }
 
