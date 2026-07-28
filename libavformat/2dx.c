@@ -126,7 +126,7 @@ static int twodx9_read_stream(AVFormatContext *s, AVStream **stp, int64_t start_
     if (loop_start > 0)
         av_dict_set_int(&st->metadata, "loop_start", loop_start / 2 / par.ch_layout.nb_channels, 0);
 
-    tst = av_mallocz(sizeof(TwoDXStream));
+    tst = av_mallocz(sizeof(*tst));
     if (!tst) {
         ret = AVERROR(ENOMEM);
         goto fail;;
