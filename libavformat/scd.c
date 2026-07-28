@@ -74,8 +74,8 @@ typedef struct SCDHeader {
 
 typedef struct SCDTrackHeader {
     uint32_t length;
-    uint32_t num_channels;
-    uint32_t sample_rate;
+    int num_channels;
+    int sample_rate;
     uint32_t data_type;
     uint32_t loop_start;
     uint32_t loop_end;
