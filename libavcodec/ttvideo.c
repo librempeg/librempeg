@@ -75,43 +75,32 @@ static void gen_quant_tab(int quality, const uint8_t *base_tab, uint16_t *qtab)
 
 static int uncompress_rle(GetByteContext *gb, PutByteContext *pb, int size)
 {
-    int R5 = bytestream2_get_byte(gb);
+    const int runlen_sym = bytestream2_get_byte(gb);
 
     while (bytestream2_get_bytes_left_p(pb) > 0 &&
            bytestream2_tell(gb) < size + 2) {
-        int R12 = bytestream2_get_byte(gb);
+        int next_sym = bytestream2_get_byte(gb);
 
-        if (R12 == R5) {
-            int LR = bytestream2_get_byte(gb);
-            if (LR <= 2) {
-                for (int i = 0; i <= LR; i++) {
-                    if (bytestream2_get_bytes_left_p(pb) <= 0)
-                        return AVERROR_INVALIDDATA;
+        if (next_sym == runlen_sym) {
+            int count = bytestream2_get_byte(gb);
 
-                    bytestream2_put_byte(pb, R5);
+            if (count <= 2) {
+                bytestream2_set_buffer(pb, runlen_sym, count+1);
+            } else {
+                if (count & 0x80) {
+                    next_sym = bytestream2_get_byte(gb);
+                    count <<= 25;
+                    count = next_sym + (count >> 17);
                 }
-                continue;
+                next_sym = bytestream2_get_byte(gb);
+                bytestream2_set_buffer(pb, next_sym, count+1);
             }
+        } else {
+            if (bytestream2_get_bytes_left_p(pb) <= 0)
+                return AVERROR_INVALIDDATA;
 
-            if ((LR & 0x80) != 0) {
-                R12 = bytestream2_get_byte(gb);
-                LR <<= 25;
-                LR = R12 + (LR >> 17);
-            }
-            R12 = bytestream2_get_byte(gb);
-            for (int i = 0; i <= LR; i++) {
-                if (bytestream2_get_bytes_left_p(pb) <= 0)
-                    return AVERROR_INVALIDDATA;
-
-                bytestream2_put_byte(pb, R12);
-            }
-            continue;
+            bytestream2_put_byte(pb, next_sym);
         }
-
-        if (bytestream2_get_bytes_left_p(pb) <= 0)
-            return AVERROR_INVALIDDATA;
-
-        bytestream2_put_byte(pb, R12);
     }
 
     return 0;
