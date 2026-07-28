@@ -56,7 +56,7 @@ static int read_header(AVFormatContext *s)
     duration = avio_rb32(pb);
     avio_skip(pb, 8);
     align = avio_rb32(pb);
-    if (channels <= 0 || align <= 0 || align > INT_MAX/channels)
+    if (channels <= 0 || rate <= 0 || align <= 0 || align > INT_MAX/channels)
         return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
