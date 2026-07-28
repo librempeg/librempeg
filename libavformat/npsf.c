@@ -67,8 +67,7 @@ static int npsf_read_header(AVFormatContext *s)
     st->codecpar->ch_layout.nb_channels = channels;
     st->codecpar->block_align = 0x800 * channels;
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX;
-    st->codecpar->bit_rate = 16LL * st->codecpar->ch_layout.nb_channels * 8 *
-                                    st->codecpar->sample_rate / 28;
+    st->codecpar->bit_rate = 16LL * channels * 8 * rate / 28;
 
     if (loop_start > 0)
         av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
