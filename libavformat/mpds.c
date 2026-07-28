@@ -24,7 +24,7 @@
 #include "demux.h"
 #include "internal.h"
 
-static int mpds_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RB32(p->buf) != MKBETAG('M','P','D','S'))
         return 0;
@@ -42,7 +42,7 @@ static int mpds_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int mpds_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     int align, channels, rate, ret;
     AVIOContext *pb = s->pb;
@@ -85,7 +85,7 @@ static int mpds_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int mpds_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *pb = s->pb;
     int ret;
@@ -102,7 +102,7 @@ const FFInputFormat ff_mpds_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Paradigm Entertainment MPDS"),
     .p.extensions   = "dsp",
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = mpds_probe,
-    .read_header    = mpds_read_header,
-    .read_packet    = mpds_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
