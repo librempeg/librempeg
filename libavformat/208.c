@@ -44,43 +44,48 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int64_t start_offset;
-    uint32_t codec;
+    int64_t start_offset, nb_frames;
     AVIOContext *pb = s->pb;
-    AVStream *st = avformat_new_stream(s, NULL);
+    int rate, nb_channels;
+    uint32_t codec;
+    AVStream *st;
+
+    start_offset = avio_rl32(pb);
+    avio_skip(pb, 8);
+    nb_frames = avio_rl32(pb);
+    avio_skip(pb, 0x24);
+    rate = avio_rl32(pb);
+    codec = avio_rl32(pb);
+    nb_channels = avio_rl32(pb);
+
+    switch (codec) {
+    case 8:
+        codec = AV_CODEC_ID_PCM_U8;
+        break;
+    default:
+        avpriv_request_sample(s, "codec 0x%X", codec);
+        return AVERROR_PATCHWELCOME;
+    }
+
+    if (rate <= 0 || nb_channels <= 0)
+        return AVERROR_INVALIDDATA;
+
+    st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
     st->start_time = 0;
+    st->nb_frames = nb_frames;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-
-    start_offset = avio_rl32(pb);
-    avio_skip(pb, 8);
-    st->nb_frames = avio_rl32(pb);
-    avio_skip(pb, 0x24);
-    st->codecpar->sample_rate = avio_rl32(pb);
-    if (st->codecpar->sample_rate <= 0)
-        return AVERROR_INVALIDDATA;
-    codec = avio_rl32(pb);
-    st->codecpar->ch_layout.nb_channels = avio_rl32(pb);
-    if (st->codecpar->ch_layout.nb_channels <= 0)
-        return AVERROR_INVALIDDATA;
-    st->codecpar->block_align = avio_rl32(pb);
-    if (st->codecpar->block_align <= 0)
-        return AVERROR_INVALIDDATA;
-
-    switch (codec) {
-    case 8:
-        st->codecpar->codec_id = AV_CODEC_ID_PCM_U8;
-        break;
-    default:
-        avpriv_request_sample(st, "codec 0x%X", codec);
-        return AVERROR_PATCHWELCOME;
-    }
+    st->codecpar->codec_id = codec;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->ch_layout.nb_channels = nb_channels;
+    st->codecpar->block_align = nb_channels;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     avio_seek(pb, start_offset, SEEK_SET);
+
     return 0;
 }
 
