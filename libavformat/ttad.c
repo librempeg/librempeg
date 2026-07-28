@@ -81,7 +81,7 @@ static int read_header(AVFormatContext *s)
     rate = avio_rl32(pb);
     duration = avio_rl32(pb);
     channels = avio_r8(pb);
-    if (channels == 0)
+    if (channels == 0 || rate <= 0)
         return AVERROR_INVALIDDATA;
     avio_skip(pb, 3);
     if (codec == 0x0a) {
