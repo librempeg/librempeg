@@ -98,7 +98,8 @@ static int read_header(AVFormatContext *s)
         codec = AV_CODEC_ID_ADPCM_IMA_WAV_MONO;
         break;
     default:
-        return AVERROR_INVALIDDATA;
+        avpriv_request_sample(s, "codec %d", codec);
+        return AVERROR_PATCHWELCOME;
     }
 
     avio_seek(pb, offset, SEEK_SET);
