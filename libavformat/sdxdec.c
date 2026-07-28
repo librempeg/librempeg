@@ -64,9 +64,9 @@ static int sdx_probe(const AVProbeData *p)
 
 static int sdx_read_header(AVFormatContext *s)
 {
+    int depth, length, rate;
     AVIOContext *pb = s->pb;
     AVStream *st;
-    int depth, length;
 
     avio_skip(pb, 4);
     while (!avio_feof(pb)) {
@@ -79,6 +79,9 @@ static int sdx_read_header(AVFormatContext *s)
     avio_skip(pb, length);
     avio_skip(pb, 4);
     depth = avio_r8(pb);
+    rate = avio_rl32(pb);
+    if (rate <= 0)
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
@@ -87,7 +90,7 @@ static int sdx_read_header(AVFormatContext *s)
     st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->ch_layout.nb_channels = 1;
-    st->codecpar->sample_rate = avio_rl32(pb);
+    st->codecpar->sample_rate = rate;
     switch (depth) {
     case 8:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_U8;
