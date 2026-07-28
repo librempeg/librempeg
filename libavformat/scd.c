@@ -458,7 +458,7 @@ static int scd_read_header(AVFormatContext *s)
         return AVERROR_INVALIDDATA;
 
     if (ctx->hdr.version != 3 && ctx->hdr.version != 4) {
-        avpriv_request_sample(s, "SCD version %u", ctx->hdr.version);
+        avpriv_request_sample(s, "version %u", ctx->hdr.version);
         return AVERROR_PATCHWELCOME;
     }
 
