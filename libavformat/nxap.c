@@ -67,8 +67,7 @@ static int read_header(AVFormatContext *s)
     st->codecpar->ch_layout.nb_channels = channels;
     st->codecpar->sample_rate = rate;
     st->codecpar->block_align = 0x40 * channels;
-    st->codecpar->bit_rate = 8LL * st->codecpar->ch_layout.nb_channels * 0x40 *
-                                   st->codecpar->sample_rate / 120;
+    st->codecpar->bit_rate = 8LL * channels * 0x40 * rate / 120;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
