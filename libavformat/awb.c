@@ -208,7 +208,7 @@ static int read_header(AVFormatContext *s)
         ffstream(st)->request_probe = 0;
         ffstream(st)->need_parsing = ffstream(ast->xctx->streams[0])->need_parsing;
 
-        ast->data_offset = avio_tell(pb);
+        ast->data_offset = FFMIN(ast->data_offset, ast->stop_offset-1);
     }
 
     {
