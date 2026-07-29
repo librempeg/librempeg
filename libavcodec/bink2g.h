@@ -600,8 +600,7 @@ static int bink2g_decode_ac(GetBitContext *gb, const uint8_t scan[64],
     int idx, next, val, skip;
     VLC *skip_vlc;
 
-    for (int i = 0; i < 4; i++)
-        memset(block[i], 0, sizeof(int16_t) * 64);
+    memset(block, 0, 2 * 4 * 64);
 
     if ((cbp & 0xf) == 0)
         return 0;
