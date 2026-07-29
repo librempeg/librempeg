@@ -28,8 +28,16 @@
 
 static int read_probe(const AVProbeData *p)
 {
+    if (p->buf_size < 38)
+        return 0;
+
     if (memcmp(p->buf, "OCEAN DSA\0\0\0", 12))
         return 0;
+    if ((int)AV_RL32(p->buf+0x1e) <= 0)
+        return 0;
+    if (((int)AV_RL32(p->buf+0x22)+1) <= 0)
+        return 0;
+
     return AVPROBE_SCORE_MAX;
 }
 
