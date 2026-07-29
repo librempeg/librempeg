@@ -44,20 +44,26 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
+    int rate, fps, flags, version, ret;
     AVIOContext *pb = s->pb;
-    int rate, fps, flags;
     AVStream *vst = avformat_new_stream(s, NULL);
     int64_t start_offset;
     if (!vst)
         return AVERROR(ENOMEM);
 
-    avio_skip(pb, 6);
+    avio_skip(pb, 4);
+    version = avio_rl16(pb);
     start_offset = avio_rl16(pb);
     vst->start_time = 0;
     vst->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
     vst->codecpar->codec_id = AV_CODEC_ID_TTVIDEO;
     vst->codecpar->width = avio_rl16(pb);
     vst->codecpar->height = avio_rl16(pb);
+
+    ret = ff_alloc_extradata(vst->codecpar, 2);
+    if (ret < 0)
+        return ret;
+    AV_WL16(vst->codecpar->extradata, version);
 
     avio_skip(pb, 8);
     fps = avio_rl16(pb);
