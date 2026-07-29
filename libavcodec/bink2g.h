@@ -564,24 +564,29 @@ static void bink2g_decode_dc(Bink2Context *c, GetBitContext *gb, int *dc,
                              int is_luma, int q, int mindc, int maxdc,
                              int flags)
 {
-    const int num_dc = is_luma ? 16 : 4;
     int tdc[16];
-    int pat;
 
     q = FFMAX(q, 8);
-    pat = bink2g_dc_pat[q];
 
     memset(tdc, 0, sizeof(tdc));
 
     if (get_bits1(gb)) {
+        const int num_dc = is_luma ? 16 : 4;
+        int pat = bink2g_dc_pat[q];
+
         for (int i = 0; i < num_dc; i++) {
             int cnt = get_unary(gb, 0, 12);
 
             if (cnt > 3)
                 cnt = (1 << (cnt - 3)) + get_bits(gb, cnt - 3) + 2;
-            if (cnt && get_bits1(gb))
-                cnt = -cnt;
-            tdc[i] = (cnt * pat + 0x1FF) >> 10;
+
+            if (cnt) {
+                cnt = (cnt * pat + 0x1FF) >> 10;
+                if (get_bits1(gb))
+                    cnt = -cnt;
+            }
+
+            tdc[i] = cnt;
         }
     }
 
