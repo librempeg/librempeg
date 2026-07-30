@@ -786,6 +786,7 @@ OBJS-$(CONFIG_STHD_DEMUXER)              += sthd.o
 OBJS-$(CONFIG_STL_DEMUXER)               += stldec.o subtitles.o
 OBJS-$(CONFIG_STMA_DEMUXER)              += stma.o
 OBJS-$(CONFIG_STR_DEMUXER)               += psxstr.o
+OBJS-$(CONFIG_STR_MUXER)                 += psxstrenc.o
 OBJS-$(CONFIG_STRM_DEMUXER)              += strm.o
 OBJS-$(CONFIG_STREAMHASH_MUXER)          += hashenc.o
 OBJS-$(CONFIG_STREAM_SEGMENT_MUXER)      += segment.o

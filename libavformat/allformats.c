@@ -643,6 +643,7 @@ extern const FFInputFormat  ff_sthd_demuxer;
 extern const FFInputFormat  ff_stl_demuxer;
 extern const FFInputFormat  ff_stma_demuxer;
 extern const FFInputFormat  ff_str_demuxer;
+extern const FFOutputFormat ff_str_muxer;
 extern const FFInputFormat  ff_strm_demuxer;
 extern const FFOutputFormat ff_streamhash_muxer;
 extern const FFInputFormat  ff_subviewer1_demuxer;
