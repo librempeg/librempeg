@@ -25,6 +25,7 @@
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
 #include "libavutil/mem.h"
+#include "libavutil/thread.h"
 
 #include "avcodec.h"
 #include "blockdsp.h"
@@ -255,8 +256,30 @@ static int bink2_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                            VLC_INIT_LE | VLC_INIT_USE_STATIC);     \
     } while (0)
 
+static av_cold void bink2_init_vlcs(void)
+{
+    INIT_VLC_STATIC_LE(&bink2f_quant_vlc, 9, FF_ARRAY_ELEMS(bink2f_quant_codes),
+                       bink2f_quant_bits, 1, 1, bink2f_quant_codes, 1, 1, NULL, 0, 0, 512);
+    INIT_VLC_STATIC_LE(&bink2f_ac_val0_vlc, 9, FF_ARRAY_ELEMS(bink2f_ac_val_bits[0]),
+                       bink2f_ac_val_bits[0], 1, 1, bink2f_ac_val_codes[0], 2, 2, NULL, 0, 0, 512);
+    INIT_VLC_STATIC_LE(&bink2f_ac_val1_vlc, 9, FF_ARRAY_ELEMS(bink2f_ac_val_bits[1]),
+                       bink2f_ac_val_bits[1], 1, 1, bink2f_ac_val_codes[1], 2, 2, NULL, 0, 0, 512);
+    INIT_VLC_STATIC_LE(&bink2f_ac_skip0_vlc, 9, FF_ARRAY_ELEMS(bink2f_ac_skip_bits[0]),
+                       bink2f_ac_skip_bits[0], 1, 1, bink2f_ac_skip_codes[0], 2, 2, NULL, 0, 0, 512);
+    INIT_VLC_STATIC_LE(&bink2f_ac_skip1_vlc, 9, FF_ARRAY_ELEMS(bink2f_ac_skip_bits[1]),
+                       bink2f_ac_skip_bits[1], 1, 1, bink2f_ac_skip_codes[1], 2, 2, NULL, 0, 0, 512);
+
+    INIT_VLC_STATIC_LE(&bink2g_ac_skip0_vlc, 9, FF_ARRAY_ELEMS(bink2g_ac_skip_bits[0]),
+                       bink2g_ac_skip_bits[0], 1, 1, bink2g_ac_skip_codes[0], 2, 2, NULL, 0, 0, 512);
+    INIT_VLC_STATIC_LE(&bink2g_ac_skip1_vlc, 9, FF_ARRAY_ELEMS(bink2g_ac_skip_bits[1]),
+                       bink2g_ac_skip_bits[1], 1, 1, bink2g_ac_skip_codes[1], 2, 2, NULL, 0, 0, 512);
+    INIT_VLC_STATIC_LE(&bink2g_mv_vlc, 9, FF_ARRAY_ELEMS(bink2g_mv_bits),
+                       bink2g_mv_bits, 1, 1, bink2g_mv_codes, 1, 1, NULL, 0, 0, 512);
+}
+
 static av_cold int bink2_decode_init(AVCodecContext *avctx)
 {
+    static AVOnce init_static_once = AV_ONCE_INIT;
     Bink2Context * const c = avctx->priv_data;
     int ret;
 
@@ -280,24 +303,6 @@ static av_cold int bink2_decode_init(AVCodecContext *avctx)
     avctx->pix_fmt = c->has_alpha ? AV_PIX_FMT_YUVA420P : AV_PIX_FMT_YUV420P;
 
     ff_blockdsp_init(&c->dsp);
-
-    INIT_VLC_STATIC_LE(&bink2f_quant_vlc, 9, FF_ARRAY_ELEMS(bink2f_quant_codes),
-                       bink2f_quant_bits, 1, 1, bink2f_quant_codes, 1, 1, NULL, 0, 0, 512);
-    INIT_VLC_STATIC_LE(&bink2f_ac_val0_vlc, 9, FF_ARRAY_ELEMS(bink2f_ac_val_bits[0]),
-                       bink2f_ac_val_bits[0], 1, 1, bink2f_ac_val_codes[0], 2, 2, NULL, 0, 0, 512);
-    INIT_VLC_STATIC_LE(&bink2f_ac_val1_vlc, 9, FF_ARRAY_ELEMS(bink2f_ac_val_bits[1]),
-                       bink2f_ac_val_bits[1], 1, 1, bink2f_ac_val_codes[1], 2, 2, NULL, 0, 0, 512);
-    INIT_VLC_STATIC_LE(&bink2f_ac_skip0_vlc, 9, FF_ARRAY_ELEMS(bink2f_ac_skip_bits[0]),
-                       bink2f_ac_skip_bits[0], 1, 1, bink2f_ac_skip_codes[0], 2, 2, NULL, 0, 0, 512);
-    INIT_VLC_STATIC_LE(&bink2f_ac_skip1_vlc, 9, FF_ARRAY_ELEMS(bink2f_ac_skip_bits[1]),
-                       bink2f_ac_skip_bits[1], 1, 1, bink2f_ac_skip_codes[1], 2, 2, NULL, 0, 0, 512);
-
-    INIT_VLC_STATIC_LE(&bink2g_ac_skip0_vlc, 9, FF_ARRAY_ELEMS(bink2g_ac_skip_bits[0]),
-                       bink2g_ac_skip_bits[0], 1, 1, bink2g_ac_skip_codes[0], 2, 2, NULL, 0, 0, 512);
-    INIT_VLC_STATIC_LE(&bink2g_ac_skip1_vlc, 9, FF_ARRAY_ELEMS(bink2g_ac_skip_bits[1]),
-                       bink2g_ac_skip_bits[1], 1, 1, bink2g_ac_skip_codes[1], 2, 2, NULL, 0, 0, 512);
-    INIT_VLC_STATIC_LE(&bink2g_mv_vlc, 9, FF_ARRAY_ELEMS(bink2g_mv_bits),
-                       bink2g_mv_bits, 1, 1, bink2g_mv_codes, 1, 1, NULL, 0, 0, 512);
 
     c->current_q = av_malloc_array((avctx->width + 31) / 32, sizeof(*c->current_q));
     if (!c->current_q)
@@ -338,6 +343,8 @@ static av_cold int bink2_decode_init(AVCodecContext *avctx)
     c->row_cbp = av_calloc((((avctx->height + 31) >> 3) + 7) >> 3, sizeof(*c->row_cbp));
     if (!c->row_cbp)
         return AVERROR(ENOMEM);
+
+    ff_thread_once(&init_static_once, bink2_init_vlcs);
 
     return 0;
 }
