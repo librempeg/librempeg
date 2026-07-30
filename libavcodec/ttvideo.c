@@ -207,7 +207,7 @@ static void copy_block8_mv(uint8_t *dst, const ptrdiff_t linesize,
 {
     for (int yi = 0; yi < 8; yi++) {
         for (int xi = 0; xi < 8; xi++)
-            dst[xi] = src[av_clip(mv[1]/2+yi+y, 0, h-1) * slinesize + av_clip(mv[0]/2+xi+x, 0, w-1)];
+            dst[xi] = src[av_clip((mv[1]+y+1)/2+yi, 0, h-1) * slinesize + av_clip((mv[0]+x+1)/2+xi, 0, w-1)];
 
         dst += linesize;
     }
@@ -367,9 +367,9 @@ static int decode(AVCodecContext *avctx, GetBitContext *gb, AVFrame *frame)
                 copy_block16_mv(y + yi * ylinesize + xi, ylinesize,
                                 yp, yplinesize, mv, w, h, xi, yi);
                 copy_block8_mv(u + (yi/2) * ulinesize + xi/2, ulinesize,
-                               up, uplinesize, mv, w/2, h/2, xi/2, yi/2);
+                               up, uplinesize, mv, w/2, h/2, xi, yi);
                 copy_block8_mv(v + (yi/2) * vlinesize + xi/2, vlinesize,
-                               vp, vplinesize, mv, w/2, h/2, xi/2, yi/2);
+                               vp, vplinesize, mv, w/2, h/2, xi, yi);
                 break;
             case 2:
                 fill[0] = get_bits(gb, 8);
