@@ -116,7 +116,7 @@ typedef struct Bink2Context {
     uint8_t         *row_cbp;
 
     int             num_slices;
-    int             slice_height[4];
+    int             slice_height[8];
 
     int             comp;
     int             mb_pos;
