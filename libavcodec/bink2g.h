@@ -597,6 +597,8 @@ static int bink2g_decode_ac(GetBitContext *gb, const uint8_t scan[64],
                             int16_t block[4][64], unsigned cbp,
                             int q, const uint16_t qmat[4][64])
 {
+    const uint16_t *qqmat = qmat[q&3];
+    const int factor = 1 << (q >> 2);
     int idx, next, val, skip;
     VLC *skip_vlc;
 
@@ -635,7 +637,7 @@ static int bink2g_decode_ac(GetBitContext *gb, const uint8_t scan[64],
                 val = get_bits(gb, val - 3) + (1 << (val - 3)) + 2;
             if (get_bits1(gb))
                 val = -val;
-            block[i][scan[idx]] = ((val * qmat[q & 3][scan[idx]] * (1 << (q >> 2))) + 64) >> 7;
+            block[i][scan[idx]] = ((val * qqmat[scan[idx]] * factor) + 64) >> 7;
             idx++;
         }
     }
