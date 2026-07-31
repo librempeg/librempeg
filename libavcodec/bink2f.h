@@ -898,12 +898,12 @@ static void bink2f_y_mc(Bink2Context *c, int x, int y,
             msrc += 1;
         }
     } else if (mode == 3) {
-        uint8_t temp[21 * 16];
+        int16_t temp[21 * 16];
 
         msrc -= 2 * sstride;
         for (int i = 0; i < 21; i++) {
             for (int j = 0; j < 16; j++)
-                temp[i*16+j] = av_clip_uint8(LHFILTER(msrc + j));
+                temp[i*16+j] = LHFILTER(msrc + j);
             msrc += sstride;
         }
         for (int j = 0; j < 16; j++) {
