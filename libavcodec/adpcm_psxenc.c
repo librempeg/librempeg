@@ -28,8 +28,8 @@
 #define BLOCK_SAMPLES 28
 #define BLOCK_SIZE 16
 
-static const int8_t filter_k1[5] = {0, 60, 115, 98, 122};
-static const int8_t filter_k2[5] = {0, 0, -52, -55, -60};
+static const int8_t filter_k1[] = { 0, 60, 115, 98, 122 };
+static const int8_t filter_k2[] = { 0, 0, -52, -55, -60 };
 
 typedef struct PSXState {
     uint64_t mse;
@@ -158,7 +158,7 @@ static uint8_t encode(PSXState *state, const int16_t *samples, int sample_limit,
     int best_filter = 0;
     PSXState tmp;
 
-    for (int filter = 0; filter < 5; filter++) {
+    for (int filter = 0; filter < FF_ARRAY_ELEMS(filter_k1); filter++) {
         int true_min_shift = find_min_shift(state, samples, sample_limit, filter, 12);
         int min_shift = FFMAX(true_min_shift - search, 0);
         int max_shift = FFMIN(true_min_shift + search, 12);
