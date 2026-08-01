@@ -572,7 +572,7 @@ static void bink2g_decode_dc(Bink2Context *c, GetBitContext *gb, int *dc,
 
     if (get_bits1(gb)) {
         const int num_dc = is_luma ? 16 : 4;
-        int pat = bink2g_dc_pat[q];
+        const int pat = bink2g_dc_pat[q];
 
         for (int i = 0; i < num_dc; i++) {
             int cnt = get_unary(gb, 0, 12);
@@ -581,7 +581,7 @@ static void bink2g_decode_dc(Bink2Context *c, GetBitContext *gb, int *dc,
                 cnt = (1 << (cnt - 3)) + get_bits(gb, cnt - 3) + 2;
 
             if (cnt) {
-                cnt = (cnt * pat + 0x1FF) >> 10;
+                cnt = (cnt * pat + 0x200) >> 10;
                 if (get_bits1(gb))
                     cnt = -cnt;
             }
@@ -859,7 +859,7 @@ static int bink2g_decode_mv(Bink2Context *c, GetBitContext *gb, int x, int y,
                 int bits = get_unary(gb, 1, 12) + 4;
                 val = get_bits(gb, bits) + (1 << bits) - 1;
                 if (val & 1)
-                    val = (-(val >> 1) - 1);
+                    val = (-(val >> 1)) - 1;
                 else
                     val =    val >> 1;
             }
@@ -870,7 +870,7 @@ static int bink2g_decode_mv(Bink2Context *c, GetBitContext *gb, int x, int y,
     return 0;
 }
 
-static void update_intra_q(Bink2Context *c, int8_t *intra_q, int dq, int flags)
+static int update_intra_q(Bink2Context *c, int8_t *intra_q, int dq, int flags)
 {
     if ((flags & 0x20) && (flags & 0x80))
         *intra_q = 16 + dq;
@@ -882,9 +882,14 @@ static void update_intra_q(Bink2Context *c, int8_t *intra_q, int dq, int flags)
         *intra_q = mid_pred(c->prev_q[c->mb_pos].intra_q,
                             c->current_q[c->mb_pos - 1].intra_q,
                             c->prev_q[c->mb_pos - 1].intra_q) + dq;
+
+    if (*intra_q < 0 || *intra_q >= FF_ARRAY_ELEMS(bink2g_dc_pat))
+        return AVERROR_INVALIDDATA;
+
+    return 0;
 }
 
-static void update_inter_q(Bink2Context *c, int8_t *inter_q, int dq, int flags)
+static int update_inter_q(Bink2Context *c, int8_t *inter_q, int dq, int flags)
 {
     if ((flags & 0x20) && (flags & 0x80))
         *inter_q = 16 + dq;
@@ -896,6 +901,11 @@ static void update_inter_q(Bink2Context *c, int8_t *inter_q, int dq, int flags)
         *inter_q = mid_pred(c->prev_q[c->mb_pos].inter_q,
                             c->current_q[c->mb_pos - 1].inter_q,
                             c->prev_q[c->mb_pos - 1].inter_q) + dq;
+
+    if (*inter_q < 0 || *inter_q >= FF_ARRAY_ELEMS(bink2g_dc_pat))
+        return AVERROR_INVALIDDATA;
+
+    return 0;
 }
 
 #undef CH1FILTER
@@ -1289,43 +1299,14 @@ static int bink2g_decode_slice(Bink2Context *c,
                 flags |= 0x40;
             switch (type) {
             case INTRA_BLOCK:
-                if (!(flags & 0xA0) && c->prev_idc[c->mb_pos - 1].block_type != INTRA_BLOCK) {
-                    bink2g_average_luma  (c, x  -32, -32, dst[0], stride[0], c->prev_idc[c->mb_pos - 1].dc[0]);
-                    bink2g_average_chroma(c, x/2-16, -16, dst[2], stride[2], c->prev_idc[c->mb_pos - 1].dc[1]);
-                    bink2g_average_chroma(c, x/2-16, -16, dst[1], stride[1], c->prev_idc[c->mb_pos - 1].dc[2]);
-                    if (c->has_alpha)
-                        bink2g_average_luma(c, x-32, -32, dst[3], stride[3], c->prev_idc[c->mb_pos - 1].dc[3]);
-                }
-                if (!(flags & 0x20) && c->current_idc[c->mb_pos - 1].block_type != INTRA_BLOCK) {
-                    bink2g_average_luma  (c, x  -32, 0, dst[0], stride[0], c->current_idc[c->mb_pos - 1].dc[0]);
-                    bink2g_average_chroma(c, x/2-16, 0, dst[2], stride[2], c->current_idc[c->mb_pos - 1].dc[1]);
-                    bink2g_average_chroma(c, x/2-16, 0, dst[1], stride[1], c->current_idc[c->mb_pos - 1].dc[2]);
-                    if (c->has_alpha)
-                        bink2g_average_luma(c, x-32, 0, dst[3], stride[3], c->current_idc[c->mb_pos - 1].dc[3]);
-                }
-                if ((flags & 0x20) && !(flags & 0x80) && c->prev_idc[c->mb_pos + 1].block_type != INTRA_BLOCK) {
-                    bink2g_average_luma  (c, x  +32, -32, dst[0], stride[0], c->prev_idc[c->mb_pos + 1].dc[0]);
-                    bink2g_average_chroma(c, x/2+16, -16, dst[2], stride[2], c->prev_idc[c->mb_pos + 1].dc[1]);
-                    bink2g_average_chroma(c, x/2+16, -16, dst[1], stride[1], c->prev_idc[c->mb_pos + 1].dc[2]);
-                    if (c->has_alpha)
-                        bink2g_average_luma(c, x+32, -32, dst[3], stride[3], c->prev_idc[c->mb_pos + 1].dc[3]);
-                }
-                if (!(flags & 0x80) && c->prev_idc[c->mb_pos].block_type != INTRA_BLOCK) {
-                    bink2g_average_luma  (c, x,   -32, dst[0], stride[0], c->prev_idc[c->mb_pos].dc[0]);
-                    bink2g_average_chroma(c, x/2, -16, dst[2], stride[2], c->prev_idc[c->mb_pos].dc[1]);
-                    bink2g_average_chroma(c, x/2, -16, dst[1], stride[1], c->prev_idc[c->mb_pos].dc[2]);
-                    if (c->has_alpha)
-                        bink2g_average_luma(c, x, -32, dst[3], stride[3], c->prev_idc[c->mb_pos].dc[3]);
-                }
-
                 bink2g_predict_mv(c, x, y, flags, mv);
-                update_inter_q(c, inter_q, 0, flags);
+                ret = update_inter_q(c, inter_q, 0, flags);
+                if (ret < 0)
+                    return ret;
                 dq = bink2g_decode_dq(gb);
-                update_intra_q(c, intra_q, dq, flags);
-                if (*intra_q < 0 || *intra_q >= 37) {
-                    ret = AVERROR_INVALIDDATA;
-                    goto fail;
-                }
+                ret = update_intra_q(c, intra_q, dq, flags);
+                if (ret < 0)
+                    return ret;
                 c->comp = 0;
                 ret = bink2g_decode_intra_luma(c, gb, c->iblock, &y_cbp_intra, *intra_q, &c->dsp,
                                                dst[0] + x, stride[0], flags);
@@ -1350,8 +1331,12 @@ static int bink2g_decode_slice(Bink2Context *c,
                 }
                 break;
             case SKIP_BLOCK:
-                update_intra_q(c, intra_q, 0, flags);
-                update_inter_q(c, inter_q, 0, flags);
+                ret = update_intra_q(c, intra_q, 0, flags);
+                if (ret < 0)
+                    return ret;
+                ret = update_inter_q(c, inter_q, 0, flags);
+                if (ret < 0)
+                    return ret;
                 copy_block16(dst[0] + x, src[0] + x + sstride[0] * y,
                              stride[0], sstride[0], 32);
                 copy_block16(dst[0] + x + 16, src[0] + x + 16 + sstride[0] * y,
@@ -1368,8 +1353,12 @@ static int bink2g_decode_slice(Bink2Context *c,
                 }
                 break;
             case MOTION_BLOCK:
-                update_intra_q(c, intra_q, 0, flags);
-                update_inter_q(c, inter_q, 0, flags);
+                ret = update_intra_q(c, intra_q, 0, flags);
+                if (ret < 0)
+                    return ret;
+                ret = update_inter_q(c, inter_q, 0, flags);
+                if (ret < 0)
+                    return ret;
                 ret = bink2g_decode_mv(c, gb, x, y, &mv);
                 if (ret < 0)
                     goto fail;
@@ -1406,17 +1395,17 @@ static int bink2g_decode_slice(Bink2Context *c,
                 }
                 break;
             case RESIDUE_BLOCK:
-                update_intra_q(c, intra_q, 0, flags);
+                ret = update_intra_q(c, intra_q, 0, flags);
+                if (ret < 0)
+                    return ret;
                 ret = bink2g_decode_mv(c, gb, x, y, &mv);
                 if (ret < 0)
                     goto fail;
                 bink2g_predict_mv(c, x, y, flags, mv);
                 dq = bink2g_decode_dq(gb);
-                update_inter_q(c, inter_q, dq, flags);
-                if (*inter_q < 0 || *inter_q >= 37) {
-                    ret = AVERROR_INVALIDDATA;
-                    goto fail;
-                }
+                ret = update_inter_q(c, inter_q, dq, flags);
+                if (ret < 0)
+                    return ret;
                 c->comp = 0;
                 ret = bink2g_mcompensate_luma(c, x, y,
                                               dst[0], stride[0],
@@ -1477,6 +1466,14 @@ static int bink2g_decode_slice(Bink2Context *c,
                 break;
             default:
                 return AVERROR_INVALIDDATA;
+            }
+
+            if (c->current_idc[c->mb_pos].block_type != INTRA_BLOCK) {
+                bink2g_average_luma  (c, x, 0, dst[0], stride[0], c->current_idc[c->mb_pos].dc[0]);
+                bink2g_average_chroma(c, x/2, 0, dst[2], stride[2], c->current_idc[c->mb_pos].dc[1]);
+                bink2g_average_chroma(c, x/2, 0, dst[1], stride[1], c->current_idc[c->mb_pos].dc[2]);
+                if (c->has_alpha)
+                    bink2g_average_luma(c, x, 0, dst[3], stride[3], c->current_idc[c->mb_pos].dc[3]);
             }
         }
 

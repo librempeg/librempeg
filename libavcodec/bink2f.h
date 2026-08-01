@@ -1094,27 +1094,6 @@ static int bink2f_decode_slice(Bink2Context *c,
 
             switch (type) {
             case INTRA_BLOCK:
-                if (!(flags & 0xA0) && c->prev_dc[c->mb_pos - 1].block_type != INTRA_BLOCK) {
-                    bink2f_average_luma  (c, x  -32, -32, dst[0], stride[0], c->prev_dc[c->mb_pos - 1].dc[0]);
-                    bink2f_average_chroma(c, x/2-16, -16, dst[2], stride[2], c->prev_dc[c->mb_pos - 1].dc[1]);
-                    bink2f_average_chroma(c, x/2-16, -16, dst[1], stride[1], c->prev_dc[c->mb_pos - 1].dc[2]);
-                }
-                if (!(flags & 0x20) && c->current_dc[c->mb_pos - 1].block_type != INTRA_BLOCK) {
-                    bink2f_average_luma  (c, x  -32, 0, dst[0], stride[0], c->current_dc[c->mb_pos - 1].dc[0]);
-                    bink2f_average_chroma(c, x/2-16, 0, dst[2], stride[2], c->current_dc[c->mb_pos - 1].dc[1]);
-                    bink2f_average_chroma(c, x/2-16, 0, dst[1], stride[1], c->current_dc[c->mb_pos - 1].dc[2]);
-                }
-                if ((flags & 0x20) && !(flags & 0x80) && c->prev_dc[c->mb_pos + 1].block_type != INTRA_BLOCK) {
-                    bink2f_average_luma  (c, x  +32, -32, dst[0], stride[0], c->prev_dc[c->mb_pos + 1].dc[0]);
-                    bink2f_average_chroma(c, x/2+16, -16, dst[2], stride[2], c->prev_dc[c->mb_pos + 1].dc[1]);
-                    bink2f_average_chroma(c, x/2+16, -16, dst[1], stride[1], c->prev_dc[c->mb_pos + 1].dc[2]);
-                }
-                if (!(flags & 0x80) && c->prev_dc[c->mb_pos].block_type != INTRA_BLOCK) {
-                    bink2f_average_luma  (c, x,   -32, dst[0], stride[0], c->prev_dc[c->mb_pos].dc[0]);
-                    bink2f_average_chroma(c, x/2, -16, dst[2], stride[2], c->prev_dc[c->mb_pos].dc[1]);
-                    bink2f_average_chroma(c, x/2, -16, dst[1], stride[1], c->prev_dc[c->mb_pos].dc[2]);
-                }
-
                 bink2f_predict_mv(c, x, y, flags, mv);
                 c->comp = 0;
                 ret = bink2f_decode_intra_luma(c, c->block, &y_cbp_intra, &y_intra_q,
@@ -1226,6 +1205,14 @@ static int bink2f_decode_slice(Bink2Context *c,
                 break;
             default:
                 return AVERROR_INVALIDDATA;
+            }
+
+            if (c->current_dc[c->mb_pos].block_type != INTRA_BLOCK) {
+                bink2f_average_luma  (c, x, 0, dst[0], stride[0], c->current_dc[c->mb_pos].dc[0]);
+                bink2f_average_chroma(c, x/2, 0, dst[2], stride[2], c->current_dc[c->mb_pos].dc[1]);
+                bink2f_average_chroma(c, x/2, 0, dst[1], stride[1], c->current_dc[c->mb_pos].dc[2]);
+                if (c->has_alpha)
+                    bink2f_average_luma(c, x, 0, dst[3], stride[3], c->current_dc[c->mb_pos].dc[3]);
             }
         }
 
