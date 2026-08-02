@@ -81,10 +81,7 @@ typedef struct DNNAsyncExecModule {
      * i.e. Request item for the backend.
      */
     void *args;
-#if HAVE_PTHREAD_CANCEL
     pthread_t thread_id;
-    pthread_attr_t thread_attr;
-#endif
 } DNNAsyncExecModule;
 
 int ff_check_exec_params(void *ctx, DNNBackendType backend, DNNFunctionType func_type, DNNExecBaseParams *exec_params);
@@ -117,9 +114,6 @@ int ff_dnn_async_module_cleanup(DNNAsyncExecModule *async_module);
  * model on a detached thread. It calls the completion callback
  * after the inference completes. Completion callback and inference
  * function must be set before calling this function.
- *
- * If POSIX threads aren't supported, the execution rolls back
- * to synchronous mode, calling completion callback after inference.
  *
  * @param ctx pointer to the backend context
  * @param async_module pointer to DNNAsyncExecModule module
