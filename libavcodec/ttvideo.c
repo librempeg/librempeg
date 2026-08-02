@@ -347,6 +347,9 @@ static int decode(AVCodecContext *avctx, GetBitContext *gb, AVFrame *frame)
 
             switch (type) {
             case 0:
+                if (!yp)
+                    return AVERROR_INVALIDDATA;
+
                 copy_block16(y + yi * ylinesize + xi, ylinesize,
                              yp + yi * yplinesize + xi, yplinesize);
                 copy_block8(u + (yi/2) * ulinesize + xi/2, ulinesize,
@@ -355,6 +358,9 @@ static int decode(AVCodecContext *avctx, GetBitContext *gb, AVFrame *frame)
                             vp + (yi/2) * vplinesize + xi/2, vplinesize);
                 break;
             case 1:
+                if (!yp)
+                    return AVERROR_INVALIDDATA;
+
                 mv[0] = get_bits(gb, 5);
                 mv[1] = get_bits(gb, 5);
                 if (mv[0] > 15)
