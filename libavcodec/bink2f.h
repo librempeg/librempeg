@@ -695,8 +695,8 @@ static void bink2f_c_mc(Bink2Context *c, int x, int y,
                         int mv_x, int mv_y,
                         int mode)
 {
-    uint8_t *msrc;
     uint16_t temp[8*9];
+    uint8_t *msrc;
 
     if (mv_x < 0 || mv_x >= width ||
         mv_y < 0 || mv_y >= height)
@@ -1062,11 +1062,11 @@ static int bink2f_decode_slice(Bink2Context *c,
                                int is_kf, int start, int end)
 {
     GetBitContext *gb = &c->gb;
-    int w = c->avctx->width;
-    int h = c->avctx->height;
+    const int w = c->avctx->width;
+    const int h = c->avctx->height;
     int flags, ret = 0;
 
-    memset(c->prev_mv, 0, ((c->avctx->width + 31) / 32) * sizeof(*c->prev_mv));
+    memset(c->prev_mv, 0, ((w + 31) / 32) * sizeof(*c->prev_mv));
 
     for (int y = start; y < end; y += 32) {
         unsigned y_cbp_intra = 0, u_cbp_intra = 0, v_cbp_intra = 0, a_cbp_intra = 0;
@@ -1074,9 +1074,9 @@ static int bink2f_decode_slice(Bink2Context *c,
         int y_intra_q = 8, u_intra_q = 8, v_intra_q = 8, a_intra_q = 8;
         int y_inter_q = 8, u_inter_q = 8, v_inter_q = 8, a_inter_q = 8;
 
-        memset(c->current_mv, 0, ((c->avctx->width + 31) / 32) * sizeof(*c->current_mv));
+        memset(c->current_mv, 0, ((w + 31) / 32) * sizeof(*c->current_mv));
 
-        for (int x = 0; x < c->avctx->width; x += 32) {
+        for (int x = 0; x < w; x += 32) {
             MVectors mv = { 0 };
             int type = is_kf ? INTRA_BLOCK : get_bits(gb, 2);
 
@@ -1089,7 +1089,7 @@ static int bink2f_decode_slice(Bink2Context *c,
                 flags |= 0x20;
             if (x == 32)
                 flags |= 0x200;
-            if (x + 32 >= c->avctx->width)
+            if (x + 32 >= w)
                 flags |= 0x40;
 
             switch (type) {

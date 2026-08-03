@@ -936,8 +936,8 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
                         int mv_x, int mv_y,
                         int mode)
 {
-    uint8_t *msrc;
     uint16_t temp[8*9];
+    uint8_t *msrc;
 
     if (mv_x < 0 || mv_x >= width ||
         mv_y < 0 || mv_y >= height)
@@ -1272,22 +1272,22 @@ static int bink2g_decode_slice(Bink2Context *c,
                                int is_kf, int start, int end)
 {
     GetBitContext *gb = &c->gb;
-    int w = c->avctx->width;
-    int h = c->avctx->height;
+    const int w = c->avctx->width;
+    const int h = c->avctx->height;
     int ret = 0, dq, flags;
 
-    memset(c->prev_q, 0, ((c->avctx->width + 31) / 32) * sizeof(*c->prev_q));
-    memset(c->prev_mv, 0, ((c->avctx->width + 31) / 32) * sizeof(*c->prev_mv));
+    memset(c->prev_q, 0, ((w + 31) / 32) * sizeof(*c->prev_q));
+    memset(c->prev_mv, 0, ((w + 31) / 32) * sizeof(*c->prev_mv));
 
     for (int y = start; y < end; y += 32) {
         int types_lru[4] = { MOTION_BLOCK, RESIDUE_BLOCK, SKIP_BLOCK, INTRA_BLOCK };
         unsigned y_cbp_intra = 0, u_cbp_intra = 0, v_cbp_intra = 0, a_cbp_intra = 0;
         unsigned y_cbp_inter = 0, u_cbp_inter = 0, v_cbp_inter = 0, a_cbp_inter = 0;
 
-        memset(c->current_q, 0, ((c->avctx->width + 31) / 32) * sizeof(*c->current_q));
-        memset(c->current_mv, 0, ((c->avctx->width + 31) / 32) * sizeof(*c->current_mv));
+        memset(c->current_q, 0, ((w + 31) / 32) * sizeof(*c->current_q));
+        memset(c->current_mv, 0, ((w + 31) / 32) * sizeof(*c->current_mv));
 
-        for (int x = 0; x < c->avctx->width; x += 32) {
+        for (int x = 0; x < w; x += 32) {
             int type = is_kf ? INTRA_BLOCK : bink2g_get_type(gb, types_lru);
             int8_t *intra_q = &c->current_q[x / 32].intra_q;
             int8_t *inter_q = &c->current_q[x / 32].inter_q;
@@ -1302,7 +1302,7 @@ static int bink2g_decode_slice(Bink2Context *c,
                 flags |= 0x20;
             if (x & 63)
                 flags |= 0x200;
-            if (x + 32 < c->avctx->width)
+            if (x + 32 < w)
                 flags |= 0x40;
             switch (type) {
             case INTRA_BLOCK:
