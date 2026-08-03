@@ -416,7 +416,7 @@ static unsigned bink2g_decode_cbp_luma(Bink2Context *c,
     unsigned ones = 0, cbp, mask;
 
     for (int i = 0; i < 16; i++) {
-        if (prev_cbp & (1 << i))
+        if (prev_cbp & (1U << i))
             ones += 1;
     }
 
@@ -440,7 +440,7 @@ static unsigned bink2g_decode_cbp_luma(Bink2Context *c,
     cbp ^= mask;
     if (!(c->frame_flags & 0x40000) || cbp) {
         if (get_bits1(gb))
-            cbp = cbp | cbp << 16;
+            cbp |= cbp << 16;
     }
 
     return cbp;
@@ -450,7 +450,7 @@ static unsigned bink2g_decode_cbp_chroma(GetBitContext *gb, unsigned prev_cbp)
 {
     unsigned cbp;
 
-    cbp = prev_cbp & 0xF0000 | bink2g_chroma_cbp_pat[prev_cbp & 0xF];
+    cbp = (prev_cbp & 0xF0000) | bink2g_chroma_cbp_pat[prev_cbp & 0xF];
     if (get_bits1(gb) == 0) {
         cbp = get_bits(gb, 4);
         if (get_bits1(gb))
