@@ -137,16 +137,8 @@ static int bink2_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     int sstride[4];
     uint32_t off = 0;
     int is_kf = !!(pkt->flags & AV_PKT_FLAG_KEY);
-    int ret, w, h;
     int height_a;
-
-    w = avctx->width;
-    h = avctx->height;
-    ret = ff_set_dimensions(avctx, FFALIGN(w, 32), FFALIGN(h, 32));
-    if (ret < 0)
-        return ret;
-    avctx->width  = w;
-    avctx->height = h;
+    int ret;
 
     if ((ret = ff_get_buffer(avctx, frame, AV_GET_BUFFER_FLAG_REF)) < 0)
         return ret;
@@ -281,7 +273,15 @@ static av_cold int bink2_decode_init(AVCodecContext *avctx)
 {
     static AVOnce init_static_once = AV_ONCE_INIT;
     Bink2Context * const c = avctx->priv_data;
-    int ret;
+    int ret, w, h;
+
+    w = avctx->width;
+    h = avctx->height;
+    ret = ff_set_dimensions(avctx, FFALIGN(w, 32), FFALIGN(h, 32));
+    if (ret < 0)
+        return ret;
+    avctx->width  = w;
+    avctx->height = h;
 
     c->version = avctx->codec_tag >> 24;
     if (avctx->extradata_size < 4) {
