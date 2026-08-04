@@ -78,40 +78,40 @@ static const float bink2f_dc_quant[16] = {
 };
 
 static const float bink2f_ac_quant[16] = {
-    1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 6.0, 7.0, 8.0, 12.0, 16.0, 24.0, 32.0, 48.0, 64.0, 128.0
+    1.f, 2.f, 2.5f, 3.f, 3.5f, 4.f, 6.f, 7.f, 8.f, 12.f, 16.f, 24.f, 32.f, 48.f, 64.f, 128.f
 };
 
-static const float bink2f_luma_intra_qmat[64] = {
-    0.125,    0.190718, 0.16332,  0.235175, 0.3,      0.392847, 0.345013, 0.210373,
-    0.208056, 0.288582, 0.317145, 0.387359, 0.450788, 0.790098, 0.562995, 0.263095,
-    0.228649, 0.294491, 0.341421, 0.460907, 0.653281, 0.731424, 0.60988,  0.252336,
-    0.205778, 0.346585, 0.422498, 0.501223, 0.749621, 1.004719, 0.636379, 0.251428,
-    0.225,    0.381436, 0.604285, 0.823113, 0.85,     1.070509, 0.69679,  0.265553,
-    0.235708, 0.476783, 0.70576,  0.739104, 0.795516, 0.802512, 0.600616, 0.249289,
-    0.331483, 0.600528, 0.689429, 0.692062, 0.69679,  0.643138, 0.43934,  0.188511,
-    0.248309, 0.440086, 0.42807,  0.397419, 0.386259, 0.270966, 0.192244, 0.094199,
+static const int32_t bink2f_luma_intra_qmat[64] = {
+    0x3E000000, 0x3E550CA2, 0x3E6A22F7, 0x3E52B778, 0x3E666666, 0x3E715D70, 0x3EA9B824, 0x3E7E44B7,
+    0x3E434B94, 0x3E93C105, 0x3E96C786, 0x3EB17397, 0x3EC34B94, 0x3EF41CE7, 0x3F19BC34, 0x3EE152F4,
+    0x3E273D5C, 0x3EA260D4, 0x3EAECEBC, 0x3ED851A8, 0x3F1AB26C, 0x3F34ACB0, 0x3F307E6B, 0x3EDB2BFE,
+    0x3E70D1B7, 0x3EC653EB, 0x3EEBFC01, 0x3F005027, 0x3F52B789, 0x3F3D35EB, 0x3F312AFA, 0x3ECB7A81,
+    0x3E99999A, 0x3EE6CDAF, 0x3F273D6C, 0x3F3FE729, 0x3F59999A, 0x3F4BA6F0, 0x3F3260D4, 0x3EC5C3BD,
+    0x3EC9233E, 0x3F4A43DD, 0x3F3B3E9A, 0x3F809AA2, 0x3F890670, 0x3F4D716D, 0x3F24A4B1, 0x3E8ABC0E,
+    0x3EB0A58B, 0x3F102071, 0x3F1C2118, 0x3F22E9BC, 0x3F3260D4, 0x3F19C1F8, 0x3EE0F12C, 0x3E44DB9C,
+    0x3E576C05, 0x3E86B463, 0x3E81322F, 0x3E80BB2C, 0x3E87F690, 0x3E7F459E, 0x3E410907, 0x3DC0EB68
 };
 
-static const float bink2f_luma_inter_qmat[64] = {
-    0.125,    0.17338,  0.16332,  0.146984, 0.128475, 0.106393, 0.077046, 0.043109,
-    0.17338,  0.240485, 0.226532, 0.203873, 0.1782,   0.147571, 0.109474, 0.062454,
-    0.16332,  0.226532, 0.219321, 0.202722, 0.181465, 0.149711, 0.112943, 0.062584,
-    0.146984, 0.203873, 0.202722, 0.201647, 0.183731, 0.153976, 0.11711,  0.065335,
-    0.128475, 0.1782,   0.181465, 0.183731, 0.177088, 0.155499, 0.120267, 0.068016,
-    0.106393, 0.147571, 0.149711, 0.153976, 0.155499, 0.145756, 0.116636, 0.068495,
-    0.077046, 0.109474, 0.112943, 0.11711,  0.120267, 0.116636, 0.098646, 0.060141,
-    0.043109, 0.062454, 0.062584, 0.065335, 0.068016, 0.068495, 0.060141, 0.038853,
+static const int32_t bink2f_luma_inter_qmat[64] = {
+    0x3E000000, 0x3E318A87, 0x3E273D5C, 0x3E1682F9, 0x3E038EF3, 0x3DD9E493, 0x3D9DCA4B, 0x3D309310,
+    0x3E318A87, 0x3E7641B3, 0x3E67F801, 0x3E50C415, 0x3E367A10, 0x3E171CDA, 0x3DE033E8, 0x3D7FCFC4,
+    0x3E273D5C, 0x3E67F801, 0x3E6095AF, 0x3E4F965B, 0x3E39D1F6, 0x3E194DD7, 0x3DE74EA9, 0x3D802C0A,
+    0x3E1682F9, 0x3E50C415, 0x3E4F965B, 0x3E4E7C8D, 0x3E3C23FB, 0x3E1DABE2, 0x3DEFD75E, 0x3D85CE5B,
+    0x3E038EF3, 0x3E367A10, 0x3E39D1F6, 0x3E3C23FB, 0x3E35568F, 0x3E1F3B21, 0x3DF64E8B, 0x3D8B4BF9,
+    0x3DD9E493, 0x3E171CDA, 0x3E194DD7, 0x3E1DABE2, 0x3E1F3B21, 0x3E154110, 0x3DEEDEDB, 0x3D8C471B,
+    0x3D9DCA4B, 0x3DE033E8, 0x3DE74EA9, 0x3DEFD75E, 0x3DF64E8B, 0x3DEEDEDB, 0x3DCA06EA, 0x3D765669,
+    0x3D309310, 0x3D7FCFC4, 0x3D802C0A, 0x3D85CE5B, 0x3D8B4BF9, 0x3D8C471B, 0x3D765669, 0x3D1F2453
 };
 
-static const float bink2f_chroma_qmat[64] = {
-    0.125,      0.17338,    0.217761,   0.383793,   0.6875,     0.54016501, 0.37207201, 0.18968099,
-    0.17338,    0.28056601, 0.32721299, 0.74753499, 0.95358998, 0.74923098, 0.51607901, 0.26309499,
-    0.217761,   0.32721299, 0.66387498, 1.056244,   0.89826202, 0.70576,    0.48613599, 0.24783,
-    0.383793,   0.74753499, 1.056244,   0.95059502, 0.80841398, 0.635167,   0.437511,   0.223041,
-    0.6875,     0.95358998, 0.89826202, 0.80841398, 0.6875,     0.54016501, 0.37207201, 0.18968099,
-    0.54016501, 0.74923098, 0.70576,    0.635167,   0.54016501, 0.42440501, 0.292335,   0.149031,
-    0.37207201, 0.51607901, 0.48613599, 0.437511,   0.37207201, 0.292335,   0.201364,   0.102655,
-    0.18968099, 0.26309499, 0.24783,    0.223041,   0.18968099, 0.149031,   0.102655,   0.052333001
+static const int32_t bink2f_chroma_qmat[64] = {
+    0x3E000000, 0x3E318A87, 0x3E5EFCBD, 0x3EC48084, 0x3F300000, 0x3F0A4841, 0x3EBE8039, 0x3E423BBC,
+    0x3E318A87, 0x3E8FA659, 0x3EA78876, 0x3F3F5E74, 0x3F741E79, 0x3F3FCD9A, 0x3F041DC1, 0x3E86B463,
+    0x3E5EFCBD, 0x3EA78876, 0x3F29F3B6, 0x3F873301, 0x3F65F480, 0x3F34ACB0, 0x3EF8E6D1, 0x3E7DC726,
+    0x3EC48084, 0x3F3F5E74, 0x3F873301, 0x3F735A32, 0x3F4EF438, 0x3F229A4E, 0x3EE00171, 0x3E6464DC,
+    0x3F300000, 0x3F741E79, 0x3F65F480, 0x3F4EF438, 0x3F300000, 0x3F0A4841, 0x3EBE8039, 0x3E423BBC,
+    0x3F0A4841, 0x3F3FCD9A, 0x3F34ACB0, 0x3F229A4E, 0x3F0A4841, 0x3ED94B9D, 0x3E95ACEF, 0x3E189B95,
+    0x3EBE8039, 0x3F041DC1, 0x3EF8E6D1, 0x3EE00171, 0x3EBE8039, 0x3E95ACEF, 0x3E4E325D, 0x3DD23CC9,
+    0x3E423BBC, 0x3E86B463, 0x3E7DC726, 0x3E6464DC, 0x3E423BBC, 0x3E189B95, 0x3DD23CC9, 0x3D565B21
 };
 
 static const uint8_t bink2f_luma_scan[64] = {
@@ -138,8 +138,11 @@ static const uint8_t bink2f_chroma_scan[64] = {
 
 static inline void bink2f_idct_1d(float *blk, int step)
 {
+    const float A = av_int2float(0x3fec835e);
+    const float B = av_int2float(0x40273d75);
+    const float C = av_int2float(0x3f8a8bd4);
     float t00 =  blk[2 * step] + blk[6 * step];
-    float t01 = (blk[2 * step] - blk[6 * step]) * 1.4142135f - t00;
+    float t01 = (blk[2 * step] - blk[6 * step]) * M_SQRT2f - t00;
     float t02 =  blk[0 * step] + blk[4 * step];
     float t03 =  blk[0 * step] - blk[4 * step];
     float t04 =  blk[3 * step] + blk[5 * step];
@@ -151,11 +154,11 @@ static inline void bink2f_idct_1d(float *blk, int step)
     float t10 = t03 + t01;
     float t11 = t03 - t01;
     float t12 = t06 + t04;
-    float t13 = (t06 - t04) * 1.4142135f;
-    float t14 = (t07 - t05) * 1.847759f;
-    float t15 = t05 * 2.613126f + t14 - t12;
+    float t13 = (t06 - t04) * M_SQRT2f;
+    float t14 = (t07 - t05) * A;
+    float t15 = t05 * B + t14 - t12;
     float t16 = t13 - t15;
-    float t17 = t07 * 1.0823922f - t14 + t16;
+    float t17 = t07 * C - t14 + t16;
 
     blk[0*step] = t08 + t12;
     blk[1*step] = t10 + t15;
@@ -169,31 +172,32 @@ static inline void bink2f_idct_1d(float *blk, int step)
 
 static void bink2f_idct_put(uint8_t *dst, int stride, float *block)
 {
-    block[0] += 512.f;
+    block[0] += 512.5f;
 
     for (int i = 0; i < 8; i++)
         bink2f_idct_1d(block + i, 8);
+    for (int i = 0; i < 8; i++)
+        bink2f_idct_1d(block + i * 8, 1);
+
     for (int i = 0; i < 8; i++) {
-        bink2f_idct_1d(block, 1);
         for (int j = 0; j < 8; j++)
-            dst[j] = av_clip_uint8(lrintf(block[j] - 512.0f));
-        block += 8;
+            dst[j] = av_clip_uint8(truncf(block[i*8+j]) - 512);
         dst += stride;
     }
 }
 
-static void bink2f_idct_add(uint8_t *dst, int stride,
-                            float *block)
+static void bink2f_idct_add(uint8_t *dst, int stride, float *block)
 {
-    block[0] += 512.f;
+    block[0] += 512.5f;
 
     for (int i = 0; i < 8; i++)
         bink2f_idct_1d(block + i, 8);
+    for (int i = 0; i < 8; i++)
+        bink2f_idct_1d(block + i * 8, 1);
+
     for (int i = 0; i < 8; i++) {
-        bink2f_idct_1d(block, 1);
         for (int j = 0; j < 8; j++)
-            dst[j] = av_clip_uint8(dst[j] + lrintf(block[j] - 512.0f));
-        block += 8;
+            dst[j] = av_clip_uint8(dst[j] + truncf(block[i*8+j]) - 512);
         dst += stride;
     }
 }
@@ -296,8 +300,9 @@ static void bink2f_predict_dc(Bink2Context *c,
     float *Ldc = c->current_dc[FFMAX(c->mb_pos - 1, 0)].dc[c->comp];
     float *dc = c->current_dc[c->mb_pos].dc[c->comp];
 
+
     if (is_luma && (flags & 0x20) && (flags & 0x80)) {
-        dc[0]  = av_clipf((mindc < 0 ? 0 : 1024.f) + tdc[0], mindc, maxdc);
+        dc[0]  = av_clipf(tdc[0], mindc, maxdc);
         dc[1]  = av_clipf(dc[0] + tdc[1], mindc, maxdc);
         dc[2]  = av_clipf(DC_MPRED2(dc[0], dc[1]) + tdc[2], mindc, maxdc);
         dc[3]  = av_clipf(DC_MPRED(dc[0], dc[2], dc[1]) + tdc[3], mindc, maxdc);
@@ -365,7 +370,7 @@ static void bink2f_predict_dc(Bink2Context *c,
         dc[14] = av_clipf(DC_MPRED(dc[9], dc[11], dc[12]) + tdc[14], mindc, maxdc);
         dc[15] = av_clipf(DC_MPRED(dc[12], dc[14], dc[13]) + tdc[15], mindc, maxdc);
     } else if (!is_luma && (flags & 0x20) && (flags & 0x80)) {
-        dc[0] = av_clipf((mindc < 0 ? 0 : 1024.f) + tdc[0], mindc, maxdc);
+        dc[0] = av_clipf(tdc[0], mindc, maxdc);
         dc[1] = av_clipf(dc[0] + tdc[1], mindc, maxdc);
         dc[2] = av_clipf(DC_MPRED2(dc[0], dc[1]) + tdc[2], mindc, maxdc);
         dc[3] = av_clipf(DC_MPRED(dc[0], dc[2], dc[1]) + tdc[3], mindc, maxdc);
@@ -429,12 +434,15 @@ static void bink2f_decode_dc(Bink2Context *c, GetBitContext *gb, float *dc,
     for (int i = 0; i < num_dc; i++)
         tdc[i] *= bink2f_dc_quant[q];
 
+    if ((flags & 0x20) && (flags & 0x80) && mindc >= 0)
+        tdc[0] += 1024.f;
+
     bink2f_predict_dc(c, is_luma, mindc, maxdc, flags, tdc);
 }
 
 static int bink2f_decode_ac(GetBitContext *gb, const uint8_t *scan,
                             float block[4][64], unsigned cbp,
-                            float q, const float qmat[64])
+                            float q, const int32_t qmat[64])
 {
     int idx, next, val, skip;
     VLC *val_vlc, *skip_vlc;
@@ -468,7 +476,7 @@ static int bink2f_decode_ac(GetBitContext *gb, const uint8_t *scan,
                     val = -val;
             }
 
-            block[i][scan[idx]] = val * q * qmat[scan[idx]];
+            block[i][scan[idx]] = val * q * av_int2float(qmat[(scan[idx]/8) + (scan[idx]&7)*8]);
             if (idx > 62)
                 break;
             idx++;
@@ -610,7 +618,7 @@ static int bink2f_decode_inter_chroma(Bink2Context *c,
         return AVERROR_INVALIDDATA;
     *prev_q = q;
 
-    bink2f_decode_dc(c, gb, dc, 0, q, -1023, 1023, 0xA8);
+    bink2f_decode_dc(c, gb, dc, 0, 0, -1023, 1023, 0xA8);
 
     bink2f_decode_ac(gb, bink2f_chroma_scan, block, cbp,
                      bink2f_ac_quant[q], bink2f_chroma_qmat);
