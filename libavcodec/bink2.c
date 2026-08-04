@@ -154,7 +154,7 @@ static int bink2_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         return AVERROR_INVALIDDATA;
 
     c->frame_flags = AV_RL32(pkt->data);
-    ff_dlog(avctx, "frame flags %X\n", c->frame_flags);
+    av_log(avctx, AV_LOG_DEBUG, "frame flags %X\n", c->frame_flags);
 
     if ((ret = init_get_bits8(gb, pkt->data, pkt->size)) < 0)
         return ret;
