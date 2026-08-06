@@ -262,6 +262,9 @@ static const struct {
     #if CONFIG_TAK_DECODER
         { "takdsp", checkasm_check_takdsp },
     #endif
+    #if CONFIG_TTA_DECODER
+        { "ttadsp", checkasm_check_ttadsp },
+    #endif
     #if CONFIG_UTVIDEO_DECODER
         { "utvideodsp", checkasm_check_utvideodsp },
     #endif
