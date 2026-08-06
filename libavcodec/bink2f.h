@@ -291,15 +291,16 @@ static const uint8_t q_dc_bits[16] = {
     1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 6,
 };
 
+#undef DC_MPRED
+#undef DC_MPRED2
+#define DC_MPRED(A, B, C) av_clipf((C) + (B) - (A), FFMIN3(A, B, C), FFMAX3(A, B, C))
+#define DC_MPRED2(A, B) av_clipf(2.f * (A) - (B), fminf(A, B), fmaxf(A, B))
+
 static void bink2f_predict_dc(Bink2Context *c,
                               int is_luma, float mindc, float maxdc,
                               int flags, float tdc[16])
 {
-    float *LTdc = c->prev_dc[FFMAX(c->mb_pos - 1, 0)].dc[c->comp];
-    float *Tdc = c->prev_dc[c->mb_pos].dc[c->comp];
-    float *Ldc = c->current_dc[FFMAX(c->mb_pos - 1, 0)].dc[c->comp];
     float *dc = c->current_dc[c->mb_pos].dc[c->comp];
-
 
     if (is_luma && (flags & 0x20) && (flags & 0x80)) {
         dc[0]  = av_clipf(tdc[0], mindc, maxdc);
@@ -319,6 +320,8 @@ static void bink2f_predict_dc(Bink2Context *c,
         dc[14] = av_clipf(DC_MPRED(dc[9], dc[11], dc[12]) + tdc[14], mindc, maxdc);
         dc[15] = av_clipf(DC_MPRED(dc[12], dc[14], dc[13]) + tdc[15], mindc, maxdc);
     } else if (is_luma && (flags & 0x80)) {
+        const float *Ldc = c->current_dc[c->mb_pos - 1].dc[c->comp];
+
         dc[0]  = av_clipf(DC_MPRED2(Ldc[5], Ldc[7]) + tdc[0], mindc, maxdc);
         dc[1]  = av_clipf(dc[0] + tdc[1], mindc, maxdc);
         dc[2]  = av_clipf(DC_MPRED(Ldc[5], Ldc[7], dc[0]) + tdc[2], mindc, maxdc);
@@ -336,6 +339,8 @@ static void bink2f_predict_dc(Bink2Context *c,
         dc[14] = av_clipf(DC_MPRED(dc[9], dc[11], dc[12]) + tdc[14], mindc, maxdc);
         dc[15] = av_clipf(DC_MPRED(dc[12], dc[14], dc[13]) + tdc[15], mindc, maxdc);
     } else if (is_luma && (flags & 0x20)) {
+        const float *Tdc = c->prev_dc[c->mb_pos].dc[c->comp];
+
         dc[0]  = av_clipf(DC_MPRED2(Tdc[10], Tdc[11]) + tdc[0], mindc, maxdc);
         dc[1]  = av_clipf(DC_MPRED(Tdc[10], dc[0], Tdc[11]) + tdc[1], mindc, maxdc);
         dc[2]  = av_clipf(DC_MPRED2(dc[0], dc[1]) + tdc[2], mindc, maxdc);
@@ -353,15 +358,19 @@ static void bink2f_predict_dc(Bink2Context *c,
         dc[14] = av_clipf(DC_MPRED(dc[9], dc[11], dc[12]) + tdc[14], mindc, maxdc);
         dc[15] = av_clipf(DC_MPRED(dc[12], dc[14], dc[13]) + tdc[15], mindc, maxdc);
     } else if (is_luma) {
+        const float *LTdc = c->prev_dc[c->mb_pos - 1].dc[c->comp];
+        const float *Ldc = c->current_dc[c->mb_pos - 1].dc[c->comp];
+        const float *Tdc = c->prev_dc[c->mb_pos].dc[c->comp];
+
         dc[0]  = av_clipf(DC_MPRED(LTdc[15], Ldc[5], Tdc[10]) + tdc[0], mindc, maxdc);
-        dc[1]  = av_clipf(DC_MPRED(Tdc[10], dc[0], Tdc[11]) + tdc[1], mindc, maxdc);
+        dc[1]  = av_clipf(DC_MPRED(Tdc[10], Tdc[11], dc[0]) + tdc[1], mindc, maxdc);
         dc[2]  = av_clipf(DC_MPRED(Ldc[5], Ldc[7], dc[0]) + tdc[2], mindc, maxdc);
         dc[3]  = av_clipf(DC_MPRED(dc[0], dc[2], dc[1]) + tdc[3], mindc, maxdc);
         dc[4]  = av_clipf(DC_MPRED(Tdc[11], dc[1], Tdc[14]) + tdc[4], mindc, maxdc);
         dc[5]  = av_clipf(DC_MPRED(Tdc[14], dc[4], Tdc[15]) + tdc[5], mindc, maxdc);
         dc[6]  = av_clipf(DC_MPRED(dc[1], dc[3], dc[4]) + tdc[6], mindc, maxdc);
         dc[7]  = av_clipf(DC_MPRED(dc[4], dc[6], dc[5]) + tdc[7], mindc, maxdc);
-        dc[8]  = av_clipf(DC_MPRED(Ldc[7], Ldc[13], dc[2]) + tdc[8], mindc, maxdc);
+        dc[8]  = av_clipf(DC_MPRED(Ldc[7], dc[2], Ldc[13]) + tdc[8], mindc, maxdc);
         dc[9]  = av_clipf(DC_MPRED(dc[2], dc[8], dc[3]) + tdc[9], mindc, maxdc);
         dc[10] = av_clipf(DC_MPRED(Ldc[13], Ldc[15], dc[8]) + tdc[10], mindc, maxdc);
         dc[11] = av_clipf(DC_MPRED(dc[8], dc[10], dc[9]) + tdc[11], mindc, maxdc);
@@ -375,16 +384,24 @@ static void bink2f_predict_dc(Bink2Context *c,
         dc[2] = av_clipf(DC_MPRED2(dc[0], dc[1]) + tdc[2], mindc, maxdc);
         dc[3] = av_clipf(DC_MPRED(dc[0], dc[2], dc[1]) + tdc[3], mindc, maxdc);
     } else if (!is_luma && (flags & 0x80)) {
+        const float *Ldc = c->current_dc[c->mb_pos - 1].dc[c->comp];
+
         dc[0] = av_clipf(DC_MPRED2(Ldc[1], Ldc[3]) + tdc[0], mindc, maxdc);
         dc[1] = av_clipf(dc[0] + tdc[1], mindc, maxdc);
         dc[2] = av_clipf(DC_MPRED(Ldc[1], Ldc[3], dc[0]) + tdc[2], mindc, maxdc);
         dc[3] = av_clipf(DC_MPRED(dc[0], dc[2], dc[1]) + tdc[3], mindc, maxdc);
     } else if (!is_luma && (flags & 0x20)) {
+        const float *Tdc = c->prev_dc[c->mb_pos].dc[c->comp];
+
         dc[0] = av_clipf(DC_MPRED2(Tdc[2], Tdc[3]) + tdc[0], mindc, maxdc);
         dc[1] = av_clipf(DC_MPRED(Tdc[2], dc[0], Tdc[3]) + tdc[1], mindc, maxdc);
         dc[2] = av_clipf(DC_MPRED2(dc[0], dc[1]) + tdc[2], mindc, maxdc);
         dc[3] = av_clipf(DC_MPRED(dc[0], dc[2], dc[1]) + tdc[3], mindc, maxdc);
     } else if (!is_luma) {
+        const float *Ldc = c->current_dc[c->mb_pos - 1].dc[c->comp];
+        const float *LTdc = c->prev_dc[c->mb_pos - 1].dc[c->comp];
+        const float *Tdc = c->prev_dc[c->mb_pos].dc[c->comp];
+
         dc[0] = av_clipf(DC_MPRED(LTdc[3], Ldc[1], Tdc[2]) + tdc[0], mindc, maxdc);
         dc[1] = av_clipf(DC_MPRED(Tdc[2], dc[0], Tdc[3]) + tdc[1], mindc, maxdc);
         dc[2] = av_clipf(DC_MPRED(Ldc[1], Ldc[3], dc[0]) + tdc[2], mindc, maxdc);
@@ -635,12 +652,11 @@ static int bink2f_decode_inter_chroma(Bink2Context *c,
 static void bink2f_predict_mv(Bink2Context *c, int x, int y, int flags, MVectors mv)
 {
     MVectors *c_mv = &c->current_mv[c->mb_pos].mv;
-    MVectors *l_mv = &c->current_mv[FFMAX(c->mb_pos - 1, 0)].mv;
-    MVectors *lt_mv = &c->prev_mv[FFMAX(c->mb_pos - 1, 0)].mv;
-    MVectors *t_mv = &c->prev_mv[c->mb_pos].mv;
 
     if (!(flags & 0x80)) {
         if (flags & 0x20) {
+            const MVectors *t_mv = &c->prev_mv[c->mb_pos].mv;
+
             c_mv->v[0][0] = mv.v[0][0] + mid_pred(t_mv->v[0][0], t_mv->v[2][0], t_mv->v[3][0]);
             c_mv->v[0][1] = mv.v[0][1] + mid_pred(t_mv->v[0][1], t_mv->v[2][1], t_mv->v[3][1]);
             c_mv->v[1][0] = mv.v[1][0] + mid_pred(t_mv->v[2][0], t_mv->v[3][0], c_mv->v[0][0]);
@@ -650,6 +666,10 @@ static void bink2f_predict_mv(Bink2Context *c, int x, int y, int flags, MVectors
             c_mv->v[3][0] = mv.v[3][0] + mid_pred(c_mv->v[0][0], c_mv->v[1][0], c_mv->v[2][0]);
             c_mv->v[3][1] = mv.v[3][1] + mid_pred(c_mv->v[0][1], c_mv->v[1][1], c_mv->v[2][1]);
         } else {
+            const MVectors *l_mv = &c->current_mv[c->mb_pos - 1].mv;
+            const MVectors *lt_mv = &c->prev_mv[c->mb_pos - 1].mv;
+            const MVectors *t_mv = &c->prev_mv[c->mb_pos].mv;
+
             c_mv->v[0][0] = mv.v[0][0] + mid_pred(lt_mv->v[3][0], t_mv->v[2][0], l_mv->v[1][0]);
             c_mv->v[0][1] = mv.v[0][1] + mid_pred(lt_mv->v[3][1], t_mv->v[2][1], l_mv->v[1][1]);
             c_mv->v[1][0] = mv.v[1][0] + mid_pred( t_mv->v[2][0], t_mv->v[3][0], c_mv->v[0][0]);
@@ -670,6 +690,8 @@ static void bink2f_predict_mv(Bink2Context *c, int x, int y, int flags, MVectors
             c_mv->v[3][0] = mv.v[3][0];
             c_mv->v[3][1] = mv.v[3][1];
         } else {
+            const MVectors *l_mv = &c->current_mv[c->mb_pos - 1].mv;
+
             c_mv->v[0][0] = mv.v[0][0] + mid_pred(l_mv->v[0][0], l_mv->v[1][0], l_mv->v[3][0]);
             c_mv->v[0][1] = mv.v[0][1] + mid_pred(l_mv->v[0][1], l_mv->v[1][1], l_mv->v[3][1]);
             c_mv->v[2][0] = mv.v[2][0] + mid_pred(l_mv->v[1][0], l_mv->v[3][0], c_mv->v[0][0]);

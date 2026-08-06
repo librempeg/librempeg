@@ -460,6 +460,11 @@ static unsigned bink2g_decode_cbp_chroma(GetBitContext *gb, unsigned prev_cbp)
     return cbp;
 }
 
+#undef DC_MPRED
+#undef DC_MPRED2
+#define DC_MPRED(A, B, C) av_clip((C) + (B) - (A), FFMIN3(A, B, C), FFMAX3(A, B, C))
+#define DC_MPRED2(A, B) av_clip(2 * (A) - (B), FFMIN(A, B), FFMAX(A, B))
+
 static void bink2g_predict_dc(Bink2Context *c,
                               int is_luma, int mindc, int maxdc,
                               int flags, int tdc[16])

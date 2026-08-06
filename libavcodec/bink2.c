@@ -221,6 +221,8 @@ static int bink2_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
     if (is_kf)
         frame->flags |= AV_FRAME_FLAG_KEY;
+    else
+        frame->flags &= ~AV_FRAME_FLAG_KEY;
     frame->pict_type = is_kf ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_P;
 
     if ((ret = av_frame_replace(c->last, frame)) < 0)

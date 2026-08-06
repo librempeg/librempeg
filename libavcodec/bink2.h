@@ -57,10 +57,8 @@ static const uint8_t bink2_next_skips[] = {
 
 #define NUM_AC_SKIPS 14
 #define BINK_FLAG_ALPHA 0x00100000
-#define DC_MPRED(A, B, C) FFMIN(FFMAX((C) + (B) - (A), FFMIN3(A, B, C)), FFMAX3(A, B, C))
-#define DC_MPRED2(A, B) FFMIN(FFMAX((A), (B)), FFMAX(FFMIN((A), (B)), 2 * (A) - (B)))
-#define LHFILTER(src)    (((((src)[0]+(src)[1])*19 >> 1)-((src)[-1]+(src)[2  ])*2+(((src)[-2  ]+(src)[3  ])>>1)+8)>>4)
-#define LVFILTER(src, i) (((((src)[0]+(src)[i])*19 >> 1)-((src)[-i]+(src)[2*i])*2+(((src)[-2*i]+(src)[3*i])>>1)+8)>>4)
+#define LHFILTER(src)    ((((((src)[0]+(src)[1])*19)>> 1)-((src)[-1]+(src)[2  ])*2+(((src)[-2  ]+(src)[3  ])>>1)+8)>>4)
+#define LVFILTER(src, i) ((((((src)[0]+(src)[i])*19)>> 1)-((src)[-i]+(src)[2*i])*2+(((src)[-2*i]+(src)[3*i])>>1)+8)>>4)
 
 typedef struct QuantPredict {
     int8_t intra_q;
