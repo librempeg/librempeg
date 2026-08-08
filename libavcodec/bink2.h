@@ -49,8 +49,6 @@ static const uint8_t luma_repos[] = {
     0, 1, 4, 5, 2, 3, 6, 7, 8, 9, 12, 13, 10, 11, 14, 15,
 };
 
-static const uint8_t dq_patterns[8] = { 8, 0, 1, 0, 2, 0, 1, 0 };
-
 static const uint8_t bink2_next_skips[] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0,
 };
