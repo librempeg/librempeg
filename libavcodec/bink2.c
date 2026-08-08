@@ -189,8 +189,16 @@ static int bink2_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     if (c->frame_flags & 0x10000) {
         if (!(c->frame_flags & 0x8000))
             bink2_get_block_flags(gb, 1, (((avctx->height + 15) & ~15) >> 3) - 1, c->row_cbp);
+        else
+            memset(c->row_cbp, 0, c->row_cbp_size);
+
         if (!(c->frame_flags & 0x4000))
             bink2_get_block_flags(gb, 1, (((avctx->width + 15) & ~15) >> 3) - 1, c->col_cbp);
+        else
+            memset(c->col_cbp, 0, c->col_cbp_size);
+    } else {
+        memset(c->row_cbp, 0, c->row_cbp_size);
+        memset(c->col_cbp, 0, c->col_cbp_size);
     }
 
     for (int i = 0; i < c->num_slices; i++) {
@@ -338,11 +346,13 @@ static av_cold int bink2_decode_init(AVCodecContext *avctx)
     if (!c->prev_mv)
         return AVERROR(ENOMEM);
 
-    c->col_cbp = av_calloc((((avctx->width + 31) >> 3) + 7) >> 3, sizeof(*c->col_cbp));
+    c->col_cbp_size = (((avctx->width + 31) >> 3) + 7) >> 3;
+    c->col_cbp = av_calloc(c->col_cbp_size, sizeof(*c->col_cbp));
     if (!c->col_cbp)
         return AVERROR(ENOMEM);
 
-    c->row_cbp = av_calloc((((avctx->height + 31) >> 3) + 7) >> 3, sizeof(*c->row_cbp));
+    c->row_cbp_size = (((avctx->height + 31) >> 3) + 7) >> 3;
+    c->row_cbp = av_calloc(c->row_cbp_size, sizeof(*c->row_cbp));
     if (!c->row_cbp)
         return AVERROR(ENOMEM);
 

@@ -110,6 +110,9 @@ typedef struct Bink2Context {
     MVPredict       *current_mv;
     MVPredict       *prev_mv;
 
+    int             col_cbp_size;
+    int             row_cbp_size;
+
     uint8_t         *col_cbp;
     uint8_t         *row_cbp;
 
