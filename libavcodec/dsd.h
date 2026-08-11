@@ -27,8 +27,9 @@ struct SwrContext;
 
 /**
  * (Re)create a libswresample context converting AV_SAMPLE_FMT_DSD to
- * avctx->sample_fmt at the same sample rate.
- * Only available if CONFIG_SWRESAMPLE.
+ * avctx->sample_fmt at the same sample rate. This is a transitional helper for
+ * the deprecated in-decoder DSD to PCM conversion.
+ * Only available if CONFIG_SWRESAMPLE && FF_API_DSD_PCM.
  */
 int ff_dsd_to_pcm_init(struct AVCodecContext *avctx, struct SwrContext **swrp);
 

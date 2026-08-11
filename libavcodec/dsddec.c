@@ -37,7 +37,7 @@
 #include "decode.h"
 #include "dsd.h"
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
 #include "libswresample/swresample.h"
 
 typedef struct DSDDecContext {
@@ -58,7 +58,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
     avctx->sample_fmt = AV_SAMPLE_FMT_DSD;
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     if (avctx->request_sample_fmt != AV_SAMPLE_FMT_DSD)
         avctx->sample_fmt = AV_SAMPLE_FMT_FLTP;
 #endif
@@ -68,7 +68,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
 static av_cold int decode_close(AVCodecContext *avctx)
 {
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     DSDDecContext *s = avctx->priv_data;
 
     swr_free(&s->swr);
@@ -121,7 +121,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     DSDDecContext *s = avctx->priv_data;
     if (avctx->sample_fmt != AV_SAMPLE_FMT_DSD) {
         if (!s->swr && (ret = ff_dsd_to_pcm_init(avctx, &s->swr)) < 0)

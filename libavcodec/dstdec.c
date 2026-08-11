@@ -38,7 +38,7 @@
 #include "golomb.h"
 #include "dsd.h"
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
 #include "libswresample/swresample.h"
 #endif
 
@@ -80,7 +80,7 @@ typedef struct DSTContext {
     Table fsets, probs;
     DECLARE_ALIGNED(16, uint8_t, status)[DST_MAX_CHANNELS][16];
     DECLARE_ALIGNED(16, int16_t, filter)[DST_MAX_ELEMENTS][16][256];
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     struct SwrContext *swr;
     uint8_t *scratch;
     unsigned scratch_size;
@@ -106,7 +106,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
     avctx->sample_fmt = AV_SAMPLE_FMT_DSD;
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     if (avctx->request_sample_fmt != AV_SAMPLE_FMT_DSD)
         avctx->sample_fmt = AV_SAMPLE_FMT_FLT;
 #endif
@@ -116,7 +116,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
 static av_cold int decode_close(AVCodecContext *avctx)
 {
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     DSTContext *s = avctx->priv_data;
 
     swr_free(&s->swr);
@@ -281,7 +281,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
         return ret;
     dsd = frame->data[0];
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     if (avctx->sample_fmt != AV_SAMPLE_FMT_DSD) {
         if (!s->swr && (ret = ff_dsd_to_pcm_init(avctx, &s->swr)) < 0)
             return ret;
@@ -406,7 +406,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     }
 
 done:
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     if (s->swr) {
         ret = swr_convert(s->swr, &frame->data[0], frame->nb_samples,
                           (const uint8_t *const []){ s->scratch },

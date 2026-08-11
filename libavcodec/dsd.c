@@ -25,7 +25,7 @@
 #include "libavutil/attributes.h"
 #include "dsd.h"
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
 #include "libswresample/swresample.h"
 #include "avcodec.h"
 
@@ -47,6 +47,12 @@ av_cold int ff_dsd_to_pcm_init(AVCodecContext *avctx, struct SwrContext **swrp)
         swr_free(&swr);
         return ret;
     }
+
+    av_log(avctx, AV_LOG_WARNING,
+           "Converting DSD to PCM in the decoder is deprecated and will be "
+           "removed. Set request_sample_fmt to AV_SAMPLE_FMT_DSD to receive "
+           "the raw bitstream, and use libswresample to convert it to PCM "
+           "when needed.\n");
 
     *swrp = swr;
     return 0;

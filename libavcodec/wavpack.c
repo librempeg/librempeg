@@ -37,7 +37,7 @@
 #include "wavpack.h"
 #include "dsd.h"
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
 #include "libswresample/swresample.h"
 #endif
 
@@ -115,7 +115,7 @@ typedef struct WavpackContext {
     Modulation modulation;
     int dsd_raw;            ///< output the raw DSD bitstream instead of PCM
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     struct WvDSDSwr *dsd_swr; ///< RefStruct reference, shared between threads
     uint8_t *dsd_scratch;   ///< per-thread frame sized raw DSD buffer
     unsigned dsd_scratch_size;
@@ -125,7 +125,7 @@ typedef struct WavpackContext {
     int dsd_channels;
 } WavpackContext;
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
 typedef struct WvDSDSwr {
     struct SwrContext *swr;
 } WvDSDSwr;
@@ -1016,7 +1016,7 @@ static av_cold int wv_alloc_frame_context(WavpackContext *c)
     return 0;
 }
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
 static void wv_dsd_swr_free(AVRefStructOpaque opaque, void *obj)
 {
     WvDSDSwr *h = obj;
@@ -1030,7 +1030,7 @@ static int wv_dsd_reset(AVCodecContext *avctx, int channels)
     WavpackContext *s = avctx->priv_data;
 
     s->dsd_channels = 0;
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     av_refstruct_unref(&s->dsd_swr);
 #endif
     av_refstruct_unref(&s->curr_progress);
@@ -1039,7 +1039,7 @@ static int wv_dsd_reset(AVCodecContext *avctx, int channels)
     if (!channels)
         return 0;
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     {
         s->dsd_swr = av_refstruct_alloc_ext(sizeof(*s->dsd_swr), 0, NULL,
                                             wv_dsd_swr_free);
@@ -1066,7 +1066,7 @@ static int update_thread_context(AVCodecContext *dst, const AVCodecContext *src)
     WavpackContext *fdst = dst->priv_data;
 
     av_refstruct_replace(&fdst->curr_progress, fsrc->curr_progress);
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     av_refstruct_replace(&fdst->dsd_swr, fsrc->dsd_swr);
 #endif
     fdst->dsd_channels = fsrc->dsd_channels;
@@ -1102,7 +1102,7 @@ static av_cold int wavpack_decode_init(AVCodecContext *avctx)
     s->fdec_num = 0;
 
     s->dsd_raw = 1;
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     s->dsd_raw = avctx->request_sample_fmt == AV_SAMPLE_FMT_DSD;
 #endif
 
@@ -1132,7 +1132,7 @@ static av_cold int wavpack_decode_end(AVCodecContext *avctx)
 
     av_refstruct_pool_uninit(&s->progress_pool);
     wv_dsd_reset(avctx, 0);
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     av_freep(&s->dsd_scratch);
 #endif
 
@@ -1586,7 +1586,7 @@ static int wavpack_decode_block(AVCodecContext *avctx, AVFrame *frame, int block
         }
         av_assert1(new_ch_layout.nb_channels <= WV_MAX_CHANNELS);
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
         /* clear DSD state if stream properties change */
         int reset_dsd = !wc->dsd_raw &&
             ((wc->dsd_swr && !got_dsd) ||
@@ -1599,7 +1599,7 @@ static int wavpack_decode_block(AVCodecContext *avctx, AVFrame *frame, int block
         avctx->sample_fmt          = sample_fmt;
         avctx->bits_per_raw_sample = orig_bpp;
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
         if (reset_dsd) {
             ret = wv_dsd_reset(avctx, got_dsd ? new_ch_layout.nb_channels : 0);
             if (ret < 0) {
@@ -1638,7 +1638,7 @@ static int wavpack_decode_block(AVCodecContext *avctx, AVFrame *frame, int block
     if (got_dsd) {
         // DSD output is interleaved
         stride = avctx->ch_layout.nb_channels;
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
         if (wc->dsd_swr) {
             av_fast_malloc(&wc->dsd_scratch, &wc->dsd_scratch_size,
                            (size_t)s->samples * stride);
@@ -1761,7 +1761,7 @@ static int wavpack_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         goto error;
     }
 
-#if CONFIG_SWRESAMPLE
+#if CONFIG_SWRESAMPLE && FF_API_DSD_PCM
     if (s->dsd_swr) {
         if (s->prev_progress)
             ff_thread_progress_await(s->prev_progress, INT_MAX);
