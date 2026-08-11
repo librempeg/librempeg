@@ -25,7 +25,10 @@
  * ISO/IEC 14496-3 Part 3 Subpart 10: Technical description of lossless coding of oversampled audio
  */
 
+#include "config.h"
+
 #include "libavutil/intreadwrite.h"
+#include "libavutil/mem.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/reverse.h"
 #include "codec_internal.h"
@@ -34,6 +37,10 @@
 #include "avcodec.h"
 #include "golomb.h"
 #include "dsd.h"
+
+#if CONFIG_SWRESAMPLE
+#include "libswresample/swresample.h"
+#endif
 
 #define DST_MAX_CHANNELS 6
 #define DST_MAX_ELEMENTS (2 * DST_MAX_CHANNELS)
@@ -73,14 +80,15 @@ typedef struct DSTContext {
     Table fsets, probs;
     DECLARE_ALIGNED(16, uint8_t, status)[DST_MAX_CHANNELS][16];
     DECLARE_ALIGNED(16, int16_t, filter)[DST_MAX_ELEMENTS][16][256];
-    DSDContext dsdctx[DST_MAX_CHANNELS];
+#if CONFIG_SWRESAMPLE
+    struct SwrContext *swr;
+    uint8_t *scratch;
+    unsigned scratch_size;
+#endif
 } DSTContext;
 
 static av_cold int decode_init(AVCodecContext *avctx)
 {
-    DSTContext *s = avctx->priv_data;
-    int i;
-
     if (avctx->ch_layout.nb_channels > DST_MAX_CHANNELS) {
         avpriv_request_sample(avctx, "Channel count %d", avctx->ch_layout.nb_channels);
         return AVERROR_PATCHWELCOME;
@@ -96,14 +104,24 @@ static av_cold int decode_init(AVCodecContext *avctx)
         return AVERROR_PATCHWELCOME;
     }
 
-    avctx->sample_fmt = avctx->request_sample_fmt == AV_SAMPLE_FMT_DSD
-                        ? AV_SAMPLE_FMT_DSD : AV_SAMPLE_FMT_FLT;
+    avctx->sample_fmt = AV_SAMPLE_FMT_DSD;
 
-    for (i = 0; i < avctx->ch_layout.nb_channels; i++)
-        memset(s->dsdctx[i].buf, 0x69, sizeof(s->dsdctx[i].buf));
+#if CONFIG_SWRESAMPLE
+    if (avctx->request_sample_fmt != AV_SAMPLE_FMT_DSD)
+        avctx->sample_fmt = AV_SAMPLE_FMT_FLT;
+#endif
 
-    ff_init_dsd_data();
+    return 0;
+}
 
+static av_cold int decode_close(AVCodecContext *avctx)
+{
+#if CONFIG_SWRESAMPLE
+    DSTContext *s = avctx->priv_data;
+
+    swr_free(&s->swr);
+    av_freep(&s->scratch);
+#endif
     return 0;
 }
 
@@ -249,12 +267,10 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     unsigned i, ch, same_map, dst_x_bit;
     unsigned half_prob[DST_MAX_CHANNELS];
     const int channels = avctx->ch_layout.nb_channels;
-    const int bps = avctx->sample_fmt == AV_SAMPLE_FMT_DSD ? 1 : 4;
     DSTContext *s = avctx->priv_data;
     GetBitContext *gb = &s->gb;
     ArithCoder *ac = &s->ac;
     uint8_t *dsd;
-    float *pcm;
     int ret;
 
     if (avpkt->size <= 1)
@@ -264,7 +280,19 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
     dsd = frame->data[0];
-    pcm = (float *)frame->data[0];
+
+#if CONFIG_SWRESAMPLE
+    if (avctx->sample_fmt != AV_SAMPLE_FMT_DSD) {
+        if (!s->swr && (ret = ff_dsd_to_pcm_init(avctx, &s->swr)) < 0)
+            return ret;
+
+        av_fast_malloc(&s->scratch, &s->scratch_size,
+                       frame->nb_samples * channels);
+        if (!s->scratch)
+            return AVERROR(ENOMEM);
+        dsd = s->scratch;
+    }
+#endif
 
     if ((ret = init_get_bits8(gb, avpkt->data, avpkt->size)) < 0)
         return ret;
@@ -275,18 +303,10 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
         skip_bits1(gb);
         if (get_bits(gb, 6))
             return AVERROR_INVALIDDATA;
-        if (bps == 1) {
-            memcpy(dsd, avpkt->data + 1, n);
-            memset(dsd + n, 0x69, total - n);
-        } else {
-            // DSD bytes are stored in every 4th byte, as expected by the
-            // in-place DSD to PCM conversion. Pad short frames with silence.
-            for (i = 0; i < n; i++)
-                dsd[i * 4] = avpkt->data[1 + i];
-            for (; i < total; i++)
-                dsd[i * 4] = 0x69;
-        }
-        goto dsd;
+        // pad short frames with silence
+        memcpy(dsd, avpkt->data + 1, n);
+        memset(dsd + n, 0x69, total - n);
+        goto done;
     }
 
     /* Segmentation (10.4, 10.5, 10.6) */
@@ -350,7 +370,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
         return ret;
 
     memset(s->status, 0xAA, sizeof(s->status));
-    memset(dsd, 0, frame->nb_samples * bps * channels);
+    memset(dsd, 0, frame->nb_samples * channels);
 
     ac_get(ac, gb, prob_dst_x_bit(s->fsets.coeff[0][0]), &dst_x_bit);
 
@@ -378,21 +398,23 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
             ac_get(ac, gb, prob, &residual);
             v = ((predict >> 15) ^ residual) & 1;
-            dsd[((i >> 3) * channels + ch) * bps] |= v << (7 - (i & 0x7 ));
+            dsd[(i >> 3) * channels + ch] |= v << (7 - (i & 0x7 ));
 
             AV_WL64A(status + 8, (AV_RL64A(status + 8) << 1) | ((AV_RL64A(status) >> 63) & 1));
             AV_WL64A(status, (AV_RL64A(status) << 1) | v);
         }
     }
 
-dsd:
-    if (avctx->sample_fmt == AV_SAMPLE_FMT_FLT) {
-        for (i = 0; i < channels; i++) {
-            ff_dsd2pcm_translate(&s->dsdctx[i], frame->nb_samples, 0,
-                                 frame->data[0] + i * 4,
-                                 channels * 4, pcm + i, channels);
-        }
+done:
+#if CONFIG_SWRESAMPLE
+    if (s->swr) {
+        ret = swr_convert(s->swr, &frame->data[0], frame->nb_samples,
+                          (const uint8_t *const []){ s->scratch },
+                          frame->nb_samples);
+        if (ret != frame->nb_samples)
+            return ret < 0 ? ret : AVERROR_BUG;
     }
+#endif
 
     *got_frame_ptr = 1;
 
@@ -406,6 +428,7 @@ const FFCodec ff_dst_decoder = {
     .p.id           = AV_CODEC_ID_DST,
     .priv_data_size = sizeof(DSTContext),
     .init           = decode_init,
+    .close          = decode_close,
     FF_CODEC_DECODE_CB(decode_frame),
     .p.capabilities = AV_CODEC_CAP_DR1,
     CODEC_SAMPLEFMTS(AV_SAMPLE_FMT_FLT),
