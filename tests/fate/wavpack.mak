@@ -21,6 +21,12 @@ fate-wavpack-lossless-float: CMD = md5pipe -i $(TARGET_SAMPLES)/wavpack/lossless
 FATE_WAVPACK-$(call FILTERDEMDECENCMUX, ARESAMPLE, WV, WAVPACK, PCM_F32LE, PCM_F32LE, MD5_PROTOCOL SWRESAMPLE) += fate-wavpack-lossless-dsd
 fate-wavpack-lossless-dsd: CMD = md5pipe -i $(TARGET_SAMPLES)/wavpack/lossless/dsd.wv -f f32le -af aresample
 
+FATE_WAVPACK-$(call FRAMECRC, WV, WAVPACK, DSD_MSBF_ENCODER) += fate-wavpack-dsd
+fate-wavpack-dsd: CMD = framecrc -request_sample_fmt dsd -i $(TARGET_SAMPLES)/wavpack/lossless/dsd.wv -c:a dsd_msbf
+
+FATE_WAVPACK_F32 += fate-wavpack-dsd-pcm
+fate-wavpack-dsd-pcm: CMD = md5pipe -request_sample_fmt dsd -i $(TARGET_SAMPLES)/wavpack/lossless/dsd.wv -f f32le -af aresample
+
 # lossy
 
 FATE_WAVPACK_S8 += fate-wavpack-lossy-8bit
