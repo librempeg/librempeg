@@ -27,6 +27,7 @@
  */
 
 #include "libavutil/mem.h"
+#include "libavutil/reverse.h"
 
 #include "avcodec.h"
 #include "codec_internal.h"
@@ -49,6 +50,11 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
     if (!avctx->ch_layout.nb_channels)
         return AVERROR_INVALIDDATA;
+
+    if (avctx->request_sample_fmt == AV_SAMPLE_FMT_DSD) {
+        avctx->sample_fmt = AV_SAMPLE_FMT_DSD;
+        return 0;
+    }
 
     ff_init_dsd_data();
 
@@ -81,7 +87,6 @@ static int dsd_channel(AVCodecContext *avctx, void *tdata, int j, int threadnr)
     AVFrame *frame = td->frame;
     const AVPacket *avpkt = td->avpkt;
     int src_next, src_stride;
-    float *dst = ((float **)frame->extended_data)[j];
 
     if (avctx->codec_id == AV_CODEC_ID_DSD_LSBF_PLANAR || avctx->codec_id == AV_CODEC_ID_DSD_MSBF_PLANAR) {
         src_next   = frame->nb_samples;
@@ -91,9 +96,26 @@ static int dsd_channel(AVCodecContext *avctx, void *tdata, int j, int threadnr)
         src_stride = avctx->ch_layout.nb_channels;
     }
 
-    ff_dsd2pcm_translate(&s[j], frame->nb_samples, lsbf,
-                         avpkt->data + j * src_next, src_stride,
-                         dst, 1);
+    if (avctx->sample_fmt == AV_SAMPLE_FMT_DSD) {
+        // repack to interleaved DSD MSBF
+        const uint8_t *src = avpkt->data + j * src_next;
+        uint8_t *dst = frame->data[0] + j;
+        const int channels = avctx->ch_layout.nb_channels;
+
+        if (lsbf) {
+            for (int i = 0; i < frame->nb_samples; i++)
+                dst[i * channels] = ff_reverse[src[i * src_stride]];
+        } else {
+            for (int i = 0; i < frame->nb_samples; i++)
+                dst[i * channels] = src[i * src_stride];
+        }
+    } else {
+        float *dst = ((float **)frame->extended_data)[j];
+
+        ff_dsd2pcm_translate(&s[j], frame->nb_samples, lsbf,
+                             avpkt->data + j * src_next, src_stride,
+                             dst, 1);
+    }
 
     return 0;
 }
@@ -109,9 +131,15 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
 
-    td.frame = frame;
-    td.avpkt = avpkt;
-    avctx->execute2(avctx, dsd_channel, &td, NULL, avctx->ch_layout.nb_channels);
+    if (avctx->sample_fmt == AV_SAMPLE_FMT_DSD &&
+        avctx->codec_id == AV_CODEC_ID_DSD_MSBF) {
+        memcpy(frame->data[0], avpkt->data,
+               frame->nb_samples * avctx->ch_layout.nb_channels);
+    } else {
+        td.frame = frame;
+        td.avpkt = avpkt;
+        avctx->execute2(avctx, dsd_channel, &td, NULL, avctx->ch_layout.nb_channels);
+    }
 
     *got_frame_ptr = 1;
     return frame->nb_samples * avctx->ch_layout.nb_channels;
