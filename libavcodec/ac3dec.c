@@ -141,13 +141,19 @@ static av_cold int ac3_decode_init(AVCodecContext *avctx)
 #if USE_FIXED
     ff_ac3_init_static();
 #else
-    {
     static AVOnce init_static_once = AV_ONCE_INIT;
     ff_thread_once(&init_static_once, ac3_float_tables_init);
-    }
 #endif
 
     return 0;
+}
+
+static av_cold void ac3_decode_flush(AVCodecContext *avctx)
+{
+    AC3DecodeContext *s = avctx->priv_data;
+
+    memset(s->delay, 0, sizeof(s->delay));
+    av_lfg_init(&s->dith_state, 0);
 }
 
 /**
@@ -430,7 +436,7 @@ static void ac3_decode_transform_coeffs_ch(AC3DecodeContext *s, int ch_index, ma
         case 0:
             /* random noise with approximate range of -0.707 to 0.707 */
             if (dither) {
-                mantissa = av_lfg_get(&s->dith_state) & 0xff;
+                mantissa = (((av_lfg_get(&s->dith_state)>>8)*181)>>8) - 5931008;
 #if USE_FIXED
                 /* At dexp 24 the dither is below half a Q0 step. Keep two
                  * fractional bits so it is not truncated to -1 or 0. */
@@ -490,7 +496,7 @@ static void ac3_decode_transform_coeffs_ch(AC3DecodeContext *s, int ch_index, ma
                 av_log(s->avctx, AV_LOG_ERROR, "bap %d is invalid in plain AC-3\n", bap);
                 bap = 15;
             }
-            mantissa = get_sbits(gbc, ff_ac3_quantization_tab[bap]) * (1 << (24 - ff_ac3_quantization_tab[bap]));
+            mantissa = (unsigned)get_sbits(gbc, ff_ac3_quantization_tab[bap]) << (24 - ff_ac3_quantization_tab[bap]);
             break;
         }
         coeffs[freq] = dequantize_coeff(mantissa, exps[freq], coeff_bits);
@@ -1778,13 +1784,6 @@ skip:
         return FFMIN(full_buf_size, s->frame_size + skip);
 
     return FFMIN(full_buf_size, s->superframe_size + skip);
-}
-
-static av_cold void ac3_decode_flush(AVCodecContext *avctx)
-{
-    AC3DecodeContext *s = avctx->priv_data;
-
-    memset(s->delay, 0, sizeof(s->delay));
 }
 
 /**
