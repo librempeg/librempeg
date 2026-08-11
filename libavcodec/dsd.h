@@ -48,4 +48,15 @@ void ff_init_dsd_data(void);
 void ff_dsd2pcm_translate(DSDContext* s, size_t samples, int lsbf,
                           const uint8_t *src, ptrdiff_t src_stride,
                           float *dst, ptrdiff_t dst_stride);
+
+struct AVCodecContext;
+struct SwrContext;
+
+/**
+ * (Re)create a libswresample context converting AV_SAMPLE_FMT_DSD to
+ * avctx->sample_fmt at the same sample rate.
+ * Only available if CONFIG_SWRESAMPLE.
+ */
+int ff_dsd_to_pcm_init(struct AVCodecContext *avctx, struct SwrContext **swrp);
+
 #endif /* AVCODEC_DSD_H */

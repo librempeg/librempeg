@@ -8158,6 +8158,8 @@ enabled smartblur_filter    && prepend avfilter_deps "swscale"
 enabled sr_filter           && prepend avfilter_deps "swscale"
 enabled lavfi_indev         && prepend avdevice_deps "avfilter"
 
+enabled swresample      && enabled_any dsd_lsbf_decoder dsd_lsbf_planar_decoder dsd_msbf_decoder dsd_msbf_planar_decoder dst_decoder wavpack_decoder && prepend avcodec_deps "swresample"
+
 # reorder the items at var $1 to align with the items order at var $2 .
 # die if an item at $1 is not at $2 .
 reorder_by(){

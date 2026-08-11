@@ -21,6 +21,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "config.h"
+
 #include <string.h>
 #include "libavutil/attributes.h"
 #include "libavutil/reverse.h"
@@ -132,3 +134,31 @@ void ff_dsd2pcm_translate(DSDContext* s, size_t samples, int lsbf,
     s->pos = pos;
     memcpy(s->buf, buf, sizeof(buf));
 }
+
+#if CONFIG_SWRESAMPLE
+#include "libswresample/swresample.h"
+#include "avcodec.h"
+
+av_cold int ff_dsd_to_pcm_init(AVCodecContext *avctx, struct SwrContext **swrp)
+{
+    SwrContext *swr = NULL;
+    int ret;
+
+    swr_free(swrp);
+
+    ret = swr_alloc_set_opts2(&swr, &avctx->ch_layout, avctx->sample_fmt,
+                              avctx->sample_rate, &avctx->ch_layout,
+                              AV_SAMPLE_FMT_DSD, avctx->sample_rate, 0, avctx);
+    if (ret < 0)
+        return ret;
+
+    ret = swr_init(swr);
+    if (ret < 0) {
+        swr_free(&swr);
+        return ret;
+    }
+
+    *swrp = swr;
+    return 0;
+}
+#endif
