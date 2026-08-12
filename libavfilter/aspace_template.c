@@ -44,8 +44,8 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     AVFrame *w = td->w;
     const int nb_channels = out->ch_layout.nb_channels;
     const int nb_samples = FFALIGN(in->nb_samples, 16);
-    const int start = (nb_channels * jobnr) / nb_jobs;
-    const int end = (nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(nb_channels, jobnr+1, nb_jobs);
     AudioSpaceContext *s = ctx->priv;
 
     for (int ch = start; ch < end; ch++) {
