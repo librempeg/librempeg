@@ -44,8 +44,8 @@ static int fn(sdr)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     AVFrame *u = s->cache[0];
     AVFrame *v = s->cache[1];
     const int channels = u->ch_layout.nb_channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
     const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);
 
     for (int ch = start; ch < end; ch++) {
@@ -73,8 +73,8 @@ static int fn(sisdr)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     AVFrame *u = s->cache[0];
     AVFrame *v = s->cache[1];
     const int channels = u->ch_layout.nb_channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
     const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);
 
     for (int ch = start; ch < end; ch++) {
@@ -105,8 +105,8 @@ static int fn(psnr)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     AVFrame *u = s->cache[0];
     AVFrame *v = s->cache[1];
     const int channels = u->ch_layout.nb_channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
     const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);
 
     for (int ch = start; ch < end; ch++) {
@@ -134,8 +134,8 @@ static int fn(nrmse)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     AVFrame *u = s->cache[0];
     AVFrame *v = s->cache[1];
     const int channels = u->ch_layout.nb_channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
     const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);
     const double current_sample = s->nb_samples + 1;
 
@@ -168,8 +168,8 @@ static int fn(mae)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     AVFrame *u = s->cache[0];
     AVFrame *v = s->cache[1];
     const int channels = u->ch_layout.nb_channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
     const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);
 
     for (int ch = start; ch < end; ch++) {
@@ -193,8 +193,8 @@ static int fn(mape)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     AVFrame *u = s->cache[0];
     AVFrame *v = s->cache[1];
     const int channels = u->ch_layout.nb_channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
     const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);
 
     for (int ch = start; ch < end; ch++) {
@@ -218,8 +218,8 @@ static int fn(mda)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     AVFrame *u = s->cache[0];
     AVFrame *v = s->cache[1];
     const int channels = u->ch_layout.nb_channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
     const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);
 
     for (int ch = start; ch < end; ch++) {
@@ -251,8 +251,8 @@ static int fn(identity)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     AVFrame *u = s->cache[0];
     AVFrame *v = s->cache[1];
     const int channels = u->ch_layout.nb_channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
     const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);
 
     for (int ch = start; ch < end; ch++) {
@@ -276,8 +276,8 @@ static int fn(mse)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     AVFrame *u = s->cache[0];
     AVFrame *v = s->cache[1];
     const int channels = u->ch_layout.nb_channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
     const int nb_samples = FFMIN(u->nb_samples, v->nb_samples);
 
     for (int ch = start; ch < end; ch++) {
