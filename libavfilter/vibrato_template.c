@@ -41,8 +41,8 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     AVFrame *in = s->in;
     AVFrame *out = arg;
     const int channels = s->channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
     const int nb_samples = in->nb_samples;
     const int buf_size = s->buf_size;
     const ftype depth = s->depth;
