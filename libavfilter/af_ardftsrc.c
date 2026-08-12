@@ -291,8 +291,8 @@ static int flush_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
 {
     AudioRDFTSRCContext *s = ctx->priv;
     AVFrame *out = arg;
-    const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(out->ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(out->ch_layout.nb_channels, jobnr+1, nb_jobs);
 
     for (int ch = start; ch < end; ch++)
         s->flush_src(ctx, out, ch);
@@ -305,8 +305,8 @@ static int src_in_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     AudioRDFTSRCContext *s = ctx->priv;
     AVFrame *in = s->in;
     AVFrame *out = arg;
-    const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(in->ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(in->ch_layout.nb_channels, jobnr+1, nb_jobs);
 
     for (int ch = start; ch < end; ch++) {
         for (int soffset = 0, doffset = 0; soffset < in->nb_samples;
