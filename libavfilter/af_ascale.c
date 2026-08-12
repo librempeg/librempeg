@@ -157,8 +157,8 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
 {
     AScaleContext *s = ctx->priv;
     const int nb_channels = s->nb_channels;
-    const int start = (nb_channels * jobnr) / nb_jobs;
-    const int stop = (nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(nb_channels, jobnr, nb_jobs);
+    const int stop = ff_slice_pos(nb_channels, jobnr+1, nb_jobs);
 
     for (int ch = start; ch < stop; ch++)
         s->filter_channel(ctx, ch);

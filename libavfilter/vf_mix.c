@@ -144,8 +144,8 @@ typedef struct ThreadData {
 
 #define TMIX_SLICE(type, stype, round, fun, clip)                                               \
     for (int p = 0; p < s->nb_planes; p++) {                                                    \
-        const int slice_start = (s->height[p] * jobnr) / nb_jobs;                               \
-        const int slice_end = (s->height[p] * (jobnr+1)) / nb_jobs;                             \
+        const int slice_start = ff_slice_pos(s->height[p], jobnr, nb_jobs);                     \
+        const int slice_end = ff_slice_pos(s->height[p], jobnr + 1, nb_jobs);                   \
         const int width = s->linesizes[p] / sizeof(type);                                       \
         stype *sum = (stype *)(s->sum[p] + slice_start * s->sum_linesizes[p]);                  \
         type *dst = (type *)(out->data[p] + slice_start * out->linesize[p]);                    \
@@ -224,8 +224,8 @@ typedef struct ThreadData {
 
 #define MIX_SLICE(type, fun, clip)                                                              \
     for (int p = 0; p < s->nb_planes; p++) {                                                    \
-        const int slice_start = (s->height[p] * jobnr) / nb_jobs;                               \
-        const int slice_end = (s->height[p] * (jobnr+1)) / nb_jobs;                             \
+        const int slice_start = ff_slice_pos(s->height[p], jobnr, nb_jobs);                     \
+        const int slice_end = ff_slice_pos(s->height[p], jobnr + 1, nb_jobs);                   \
         const int width = s->linesizes[p] / sizeof(type);                                       \
         type *dst = (type *)(out->data[p] + slice_start * out->linesize[p]);                    \
         const ptrdiff_t dst_linesize = out->linesize[p] / sizeof(type);                         \

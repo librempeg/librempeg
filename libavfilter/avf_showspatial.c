@@ -145,8 +145,8 @@ static int run_channels_fft(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
 {
     AVFrame *in = arg;
     const int channels = in->ch_layout.nb_channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
 
     for (int ch = start; ch < end; ch++)
         run_channel_fft(ctx, in, ch);
@@ -334,8 +334,8 @@ static int fade(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const int rlinesize = s->outpicref->linesize[2];
     const int width = s->outpicref->width;
     const int height = s->outpicref->height;
-    const int slice_start = (height *  jobnr   ) / nb_jobs;
-    const int slice_end   = (height * (jobnr+1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(height, jobnr+1, nb_jobs);
     const float fv = s->fade;
 
     if (fv <= 0.f) {

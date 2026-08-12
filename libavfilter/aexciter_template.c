@@ -180,8 +180,8 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     const int is_disabled = ff_filter_disabled(ctx);
     const int nb_samples = in->nb_samples;
     const int nb_channels = in->ch_layout.nb_channels;
-    const int start = (nb_channels * jobnr) / nb_jobs;
-    const int end = (nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(nb_channels, jobnr+1, nb_jobs);
     fn(ChannelParams) *cps = s->cp;
     const ftype ceil = s->ceil;
 

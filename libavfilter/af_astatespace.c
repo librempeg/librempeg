@@ -124,8 +124,8 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     AVFrame *in = td->in;
     AVFrame *out = td->out;
     StateSpaceContext *s = ctx->priv;
-    const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(in->ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(in->ch_layout.nb_channels, jobnr+1, nb_jobs);
     const int disabled = ff_filter_disabled(ctx);
 
     for (int ch = start; ch < end; ch++) {
