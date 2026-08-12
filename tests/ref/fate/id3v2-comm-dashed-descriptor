@@ -1,2 +1,4 @@
-ID3v2 frame TXXX (26 bytes):|.comment-Foo-Bar-eng.test.|
+ID3v2 frame COMM (17 bytes):|.engFoo-Bar.test.|
+Deprecated: COMM descriptor 'Foo-Bar' used as metadata key. This will change in a future version.
+Foo-Bar=test
 comment-Foo-Bar-eng=test

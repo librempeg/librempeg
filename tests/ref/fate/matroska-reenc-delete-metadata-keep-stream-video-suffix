@@ -1,0 +1,13 @@
+6796b46d997552df3f92fb51a4e628c9 *tests/data/fate/matroska-reenc-delete-metadata-keep-stream-video-suffix.nut
+28591 tests/data/fate/matroska-reenc-delete-metadata-keep-stream-video-suffix.nut
+[STREAM]
+TAG:encoder=Lavc mpeg2video
+TAG:language=spa
+TAG:NUMBER_OF_BYTES-eng=10802
+[SIDE_DATA]
+[/SIDE_DATA]
+[/STREAM]
+[FORMAT]
+TAG:DESCRIPTION=Edition description
+TAG:TITLE=Edition title
+[/FORMAT]

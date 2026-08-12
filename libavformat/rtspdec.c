@@ -770,8 +770,8 @@ static int rtsp_listen(AVFormatContext *s)
     int ret;
     enum RTSPMethod methodcode;
 
-    if (!ff_network_init())
-        return AVERROR(EIO);
+    if ((ret = ff_network_init()) < 0)
+        return ret;
 
     /* extract hostname and port */
     av_url_split(proto, sizeof(proto), auth, sizeof(auth), host, sizeof(host),

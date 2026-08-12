@@ -116,85 +116,155 @@ process_fn 4
 
 ; This is a special entry point for handling a subset of operation chains
 ; that can be reduced down to a single `pshufb` shuffle mask. For more details
-; about when this works, refer to the documentation of `ff_sws_solve_shuffle`.
+; about when this works, refer to `solve_shuffle()` in ops_optimizer.c.
 ;
-; We specialize this function for every possible combination of pixel strides.
-; For example, gray -> gray16 is classified as an "8, 16" operation because it
-; takes 8 bytes and expands them out to 16 bytes in each application of the
-; 128-bit shuffle mask.
+; This macro gets instantiated for every parameter combination of
+; SWS_UOP_RW_SHUFFLE, which embeds the clear value and read and write sizes.
 ;
-; Since pshufb can't shuffle across lanes, we only instantiate SSE4 versions for
-; all shuffles that are not a clean multiple of 128 bits (e.g. rgb24 -> rgb0).
-; For the clean multiples (e.g. rgba -> argb), we also define AVX2 and AVX512
-; versions that can handle a larger number of bytes at once.
+; Since pshufb can't shuffle across lanes, we only call SSE4 versions for
+; all shuffles that are not a clean multiple of 128 bits (e.g. rgb24 -> rgb0),
+; unless we have access to AVX-512 vpermb, or if the lanes are all independent,
+; in which case we can also use `pshufb` on mmsize == 32/64. This is detected
+; by the `LANE_ALIGNED` condition.
 
-%macro MOVSIZE 3 ; size, dst, src
-    %if %1 <= 4
-        movd %2, %3
-    %elif %1 <= 8
-        movq %2, %3
+%macro READ 2 ; dst, src
+    %if READ_SIZE <= 4
+        movd xmm%1, %2
+    %elif READ_SIZE <= 8
+        movq xmm%1, %2
+    %elif READ_SIZE <= 16
+        movu xmm%1, %2
+    %elif READ_SIZE <= 32
+        movu ymm%1, %2
     %else
-        movu %2, %3
+        movu zmm%1, %2
     %endif
 %endmacro
 
-%macro packed_shuffle 2 ; size_in, size_out
-cglobal packed_shuffle%1_%2, 6, 10, 2, \
-    exec, shuffle, bx, y, bxend, yend, src, dst, src_stride, dst_stride
+%macro WRITE 2 ; dst, src
+    %if WRITE_SIZE <= 4
+        movd %1, xmm%2
+    %elif WRITE_SIZE <= 8
+        movq %1, xmm%2
+    %elif WRITE_SIZE <= 16
+        movu %1, xmm%2
+    %elif WRITE_SIZE <= 32
+        movu %1, ymm%2
+    %else
+        movu %1, zmm%2
+    %endif
+%endmacro
+
+%macro RW_SHUFFLE 3
+%assign CLEAR_VALUE %1
+%assign READ_SIZE   %2
+%assign WRITE_SIZE  %3
+
+%assign LANE_ALIGNED (READ_SIZE == WRITE_SIZE && 16 % READ_SIZE == 0)
+%assign MAX_SIZE     (READ_SIZE > WRITE_SIZE ? READ_SIZE : WRITE_SIZE)
+
+; Expand read/write sizes to the true number of groups, this matches
+; logic on the C side in `translate_shuffle` / `ff_sws_shuffle_mask`
+%assign GROUPS       (mmsize / MAX_SIZE)
+%assign READ_SIZE    (READ_SIZE * GROUPS)
+%assign WRITE_SIZE   (WRITE_SIZE * GROUPS)
+
+cglobal NAME, 6, 10, 3, exec, shuffle, bx, y, bxend, yend, src, dst, src_stride, dst_stride
+%if mmsize > 16 && !LANE_ALIGNED && !cpuflag(avx512icl)
+            ud2 ; runtime checks should prevent this variant from being called
+%else
             mov srcq, [execq + SwsOpExec.in0]
             mov dstq, [execq + SwsOpExec.out0]
             mov src_strideq, [execq + SwsOpExec.in_stride0]
             mov dst_strideq, [execq + SwsOpExec.out_stride0]
-            VBROADCASTI128 m1, [shuffleq]
+
+            ; setup shuffle mask
+    %if LANE_ALIGNED
+            VBROADCASTI128 m0, [shuffleq]
+    %else
+            mova m0, [shuffleq]
+    %endif
+    %if cpuflag(avx512)
+            vpmovb2m k1, m0 ; needed for vpblendmb / vpermb
+        %if CLEAR_VALUE == 0
+            knotq k1, k1
+        %endif
+    %endif
+
+            ; setup clear value register if needed
+    %if CLEAR_VALUE == 0xFF
+        %if cpuflag(avx512)
+            vpternlogd m2, m2, m2, 0xff
+        %else
+            pcmpeqb m2, m2
+        %endif
+    %elif CLEAR_VALUE != 0 ; clear-to-0 is implicitly handled by pshufb / vpermb
+            mov shuffled, CLEAR_VALUE * 0x1010101
+            movd xm2, shuffled
+            VPBROADCASTD m2, xm2
+    %endif
+
+            ; setup loop bounds and variables
             sub bxendd, bxd
             sub yendd, yd
             ; reuse now-unneeded regs
-    %define srcidxq execq
-            imul srcidxq, bxendq, -%1
-%if %1 = %2
-    %define dstidxq srcidxq
-%else
-    %define dstidxq shuffleq ; no longer needed reg
-            imul dstidxq, bxendq, -%2
-%endif
+            %define srcidxq execq
+            imul srcidxq, bxendq, -READ_SIZE
+    %if READ_SIZE == WRITE_SIZE
+            %define dstidxq srcidxq
+    %else
+            %define dstidxq shuffleq ; no longer needed reg
+            imul dstidxq, bxendq, -WRITE_SIZE
+    %endif
             sub srcq, srcidxq
             sub dstq, dstidxq
+
 .loop:
-            MOVSIZE %1, m0, [srcq + srcidxq]
-            pshufb m0, m1
-            MOVSIZE %2, [dstq + dstidxq], m0
-            add srcidxq, %1
-IF %1 != %2,add dstidxq, %2
+            READ m1, [srcq + srcidxq]
+    %if LANE_ALIGNED || mmsize == 16
+            pshufb m1, m0
+    %elif CLEAR_VALUE == 0
+            vpermb m1{k1}{z}, m0, m1
+    %else
+            vpermb m1, m0, m1
+    %endif
+
+    %if CLEAR_VALUE != 0
+        %if cpuflag(avx512)
+            vpblendmb m1{k1}, m1, m2
+        %elif avx_enabled
+            vpblendvb m1, m1, m2, m0
+        %else
+            pblendvb m1, m2
+        %endif
+    %endif
+
+            WRITE [dstq + dstidxq], m1
+            add srcidxq, READ_SIZE
+    %if READ_SIZE != WRITE_SIZE
+            add dstidxq, WRITE_SIZE
+    %endif
             jnz .loop
             add srcq, src_strideq
             add dstq, dst_strideq
-            imul srcidxq, bxendq, -%1
-IF %1 != %2,imul dstidxq, bxendq, -%2
+            imul srcidxq, bxendq, -READ_SIZE
+    %if READ_SIZE != WRITE_SIZE
+            imul dstidxq, bxendq, -WRITE_SIZE
+    %endif
             dec yendd
             jnz .loop
             RET
+%endif
 %endmacro
 
 INIT_XMM sse4
-packed_shuffle  5, 15 ;  8 -> 24
-packed_shuffle  4, 16 ;  8 -> 32, 16 -> 64
-packed_shuffle  2, 12 ;  8 -> 48
-packed_shuffle 16,  8 ; 16 -> 8
-packed_shuffle 10, 15 ; 16 -> 24
-packed_shuffle  8, 16 ; 16 -> 32, 32 -> 64
-packed_shuffle  4, 12 ; 16 -> 48
-packed_shuffle 15,  5 ; 24 -> 8
-packed_shuffle 15, 15 ; 24 -> 24
-packed_shuffle 12, 16 ; 24 -> 32
-packed_shuffle  6, 12 ; 24 -> 48
-packed_shuffle 16,  4 ; 32 -> 8,  64 -> 16
-packed_shuffle 16, 12 ; 32 -> 24, 64 -> 48
-packed_shuffle 16, 16 ; 32 -> 32, 64 -> 64
-packed_shuffle  8, 12 ; 32 -> 48
-packed_shuffle 12, 12 ; 48 -> 48
+DECL_U8_RW_SHUFFLE (RW_SHUFFLE)
 
 INIT_YMM avx2
-packed_shuffle 32, 32
+DECL_U8_RW_SHUFFLE (RW_SHUFFLE)
 
 INIT_ZMM avx512
-packed_shuffle 64, 64
+DECL_U8_RW_SHUFFLE (RW_SHUFFLE)
+
+INIT_ZMM avx512icl
+DECL_U8_RW_SHUFFLE (RW_SHUFFLE)

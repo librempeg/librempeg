@@ -68,6 +68,8 @@ FATE_CHECKASM = fate-checkasm-aacencdsp                                 \
                 fate-checkasm-sw_yuv2rgb                                \
                 fate-checkasm-sw_yuv2yuv                                \
                 fate-checkasm-takdsp                                    \
+                fate-checkasm-ttadsp                                    \
+                fate-checkasm-ttaencdsp                                 \
                 fate-checkasm-utvideodsp                                \
                 fate-checkasm-v210dec                                   \
                 fate-checkasm-v210enc                                   \

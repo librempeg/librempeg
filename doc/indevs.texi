@@ -58,8 +58,10 @@ For more information see:
 @item sample_rate
 Set the sample rate in Hz. Default is 48000.
 
-@item channels
-Set the number of channels. Default is 2.
+@item ch_layout
+Set the channel layout. When unset, the layout defaults to stereo, or to the
+minimum channel count supported by the device, and is filled in from the ALSA
+channel map on a best-effort basis.
 
 @end table
 

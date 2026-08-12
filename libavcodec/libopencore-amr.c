@@ -280,8 +280,9 @@ static int amr_nb_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
             written, s->enc_mode, avpkt->data[0]);
 
     /* Get the next frame pts/duration */
-    ff_af_queue_remove(&s->afq, avctx->frame_size, &avpkt->pts,
-                       &avpkt->duration);
+    ret = ff_af_queue_remove(&s->afq, avctx->frame_size, avpkt);
+    if (ret < 0)
+        return ret;
 
     avpkt->size = written;
     *got_packet_ptr = 1;

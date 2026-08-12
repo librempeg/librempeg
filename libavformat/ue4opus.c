@@ -108,7 +108,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
 const FFInputFormat ff_ue4opus_demuxer = {
     .p.name         = "ue4opus",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("UE4 Opus"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Unreal Engine 4 Opus"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "ue4opus",
     .read_probe     = read_probe,

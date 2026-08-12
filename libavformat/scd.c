@@ -74,8 +74,8 @@ typedef struct SCDHeader {
 
 typedef struct SCDTrackHeader {
     uint32_t length;
-    uint32_t num_channels;
-    uint32_t sample_rate;
+    int num_channels;
+    int sample_rate;
     uint32_t data_type;
     uint32_t loop_start;
     uint32_t loop_end;
@@ -116,10 +116,11 @@ static int scd_read_table(AVFormatContext *s, const int be, SCDOffsetTable *tabl
     if ((ret = avio_seek(pb, table->offset, SEEK_SET)) < 0)
         return ret;
 
-    if ((table->entries = av_calloc(table->count, sizeof(uint32_t))) == NULL)
-        return ret;
+    table->entries = av_calloc(table->count, sizeof(*table->entries));
+    if (!table->entries)
+        return AVERROR(ENOMEM);
 
-    if ((ret = avio_read(pb, (unsigned char*)table->entries, table->count * sizeof(uint32_t))) < 0)
+    if ((ret = avio_read(pb, (unsigned char*)table->entries, table->count * sizeof(*table->entries))) < 0)
         return ret;
 
     for (size_t i = 0; i < table->count; i++)
@@ -231,7 +232,8 @@ static int scd_read_track(AVFormatContext *s, SCDTrackHeader *track, int index, 
     if (track->data_type == SCD_TRACK_ID_DUMMY)
         return 0;
 
-    if ((st = avformat_new_stream(s, NULL)) == NULL)
+    st = avformat_new_stream(s, NULL);
+    if (!st)
         return AVERROR(ENOMEM);
 
     par               = st->codecpar;
@@ -458,7 +460,7 @@ static int scd_read_header(AVFormatContext *s)
         return AVERROR_INVALIDDATA;
 
     if (ctx->hdr.version != 3 && ctx->hdr.version != 4) {
-        avpriv_request_sample(s, "SCD version %u", ctx->hdr.version);
+        avpriv_request_sample(s, "version %u", ctx->hdr.version);
         return AVERROR_PATCHWELCOME;
     }
 
@@ -472,7 +474,7 @@ static int scd_read_header(AVFormatContext *s)
         return ret;
 
     ctx->tracks = av_calloc(ctx->hdr.table1.count, sizeof(SCDTrackHeader));
-    if (ctx->tracks == NULL)
+    if (!ctx->tracks)
         return AVERROR(ENOMEM);
 
     for (int i = 0; i < ctx->hdr.table1.count; i++) {

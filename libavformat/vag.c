@@ -124,6 +124,7 @@ static int read_header(AVFormatContext *s)
                 channels = 2;
                 break;
             }
+            av_fallthrough;
         default:
             start_offset = 0x30;
             align = 0x10;

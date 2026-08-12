@@ -22,7 +22,6 @@
 #include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
 #include "libavutil/x86/cpu.h"
-#include "libavutil/x86/asm.h"
 #include "libavfilter/vf_eq.h"
 
 extern void ff_process_one_line_sse2(const uint8_t *src, uint8_t *dst, short contrast,

@@ -28,8 +28,16 @@
 
 static int read_probe(const AVProbeData *p)
 {
+    if (p->buf_size < 38)
+        return 0;
+
     if (memcmp(p->buf, "OCEAN DSA\0\0\0", 12))
         return 0;
+    if ((int)AV_RL32(p->buf+0x1e) <= 0)
+        return 0;
+    if (((int)AV_RL32(p->buf+0x22)+1) <= 0)
+        return 0;
+
     return AVPROBE_SCORE_MAX;
 }
 
@@ -64,8 +72,7 @@ static int read_header(AVFormatContext *s)
     st->codecpar->ch_layout.nb_channels = channels;
     st->codecpar->sample_rate = rate;
     st->codecpar->block_align = 8 * channels;
-    st->codecpar->bit_rate = 8LL * st->codecpar->ch_layout.nb_channels * 8 *
-                                   st->codecpar->sample_rate / 14;
+    st->codecpar->bit_rate = 8LL * channels * 8 * rate / 14;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 

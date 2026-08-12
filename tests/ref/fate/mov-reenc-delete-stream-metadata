@@ -1,0 +1,8 @@
+5e44edd89f2f43665ff5e4e53638fdf5 *tests/data/fate/mov-reenc-delete-stream-metadata.nut
+6605 tests/data/fate/mov-reenc-delete-stream-metadata.nut
+[STREAM]
+TAG:encoder=Lavc flac
+TAG:creation_time=2002-06-02T18:38:54.000000Z
+TAG:language=eng
+TAG:handler_name=Apple Sound Media Handler
+[/STREAM]

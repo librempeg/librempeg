@@ -29,7 +29,9 @@ static int read_probe(const AVProbeData *p)
 {
     if (AV_RB32(p->buf) != MKBETAG('W','M','W',' '))
         return 0;
-    if (p->buf[4] == 0)
+    if (p->buf[4] != 2)
+        return 0;
+    if (p->buf[7] == 0)
         return 0;
     if ((int)AV_RL32(p->buf + 8) <= 0)
         return 0;
@@ -45,9 +47,8 @@ static int read_header(AVFormatContext *s)
     int64_t start;
     AVStream *st;
 
-    avio_skip(pb, 4);
+    avio_skip(pb, 7);
     channels = avio_r8(pb);
-    avio_skip(pb, 3);
     rate = avio_rl32(pb);
     start = avio_rl32(pb);
     if (rate <= 0 || channels <= 0)

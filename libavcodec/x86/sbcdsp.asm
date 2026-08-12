@@ -39,13 +39,10 @@ SECTION .text
     mov%6             %4, [inq+%5+mmsize]
 %if %5 == 0
     pcmpeqd           m0, m0
-    psrld             m0, 31
+    pslld             m0, 15         ; -1 << (SBC_PROTO_FIXED_SCALE - 1) as dword
 %endif
     pmaddwd           %3, [constsq+%5]
     pmaddwd           %4, [constsq+%5+mmsize]
-%if %5 == 0
-    pslld             m0, 15         ; 1 << (SBC_PROTO_FIXED_SCALE - 1) as dword
-%endif
     NIDN paddd,       %1, %3
     NIDN paddd,       %2, %4
 %endmacro
@@ -58,7 +55,7 @@ cglobal sbc_analyze_4, 3, 3, 5, in, out, consts
     ANALYZE_MAC       m1, m2, m1, m2,  0, u
     ANALYZE_MAC       m1, m2, m3, m4, 32, u
     movu              m3, [inq+64]
-    paddd             m1, m0
+    psubd             m1, m0
     pmaddwd           m3, [constsq+64]
     paddd             m1, m2
     paddd             m1, m3
@@ -83,10 +80,10 @@ INIT_XMM sse2
 cglobal sbc_analyze_8, 3, 3, 6, in, out, consts
     ANALYZE_MAC       m1, m2, m1, m2,   0, a
     ANALYZE_MAC       m1, m2, m3, m4,  32, a
-    paddd             m1, m0
+    psubd             m1, m0
     ANALYZE_MAC       m1, m2, m3, m4,  64, a
     ANALYZE_MAC       m1, m2, m3, m4,  96, a
-    paddd             m2, m0
+    psubd             m2, m0
     ANALYZE_MAC       m1, m2, m3, m4, 128, a
 
     psrad             m1, 16

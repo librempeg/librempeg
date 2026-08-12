@@ -240,7 +240,6 @@ External library support:
   --enable-libfreetype     enable libfreetype, needed for drawtext filter [no]
   --enable-libfribidi      enable libfribidi, improves drawtext filter [no]
   --enable-libharfbuzz     enable libharfbuzz, needed for drawtext filter [no]
-  --enable-libglslang      enable runtime GLSL->SPIRV compilation via libglslang [no]
   --enable-libgme          enable Game Music Emu via libgme [no]
   --enable-libgsm          enable GSM de/encoding via libgsm [no]
   --enable-libiec61883     enable iec61883 via libiec61883 [no]
@@ -272,7 +271,6 @@ External library support:
   --enable-librsvg         enable SVG rasterization via librsvg [no]
   --enable-librubberband   enable rubberband needed for rubberband filter [no]
   --enable-librtmp         enable RTMP[E] support via librtmp [no]
-  --enable-libshaderc      enable runtime GLSL->SPIRV compilation via libshaderc [no]
   --enable-libshine        enable fixed-point MP3 encoding via libshine [no]
   --enable-libsmbclient    enable Samba protocol via libsmbclient [no]
   --enable-libsnappy       enable Snappy compression, needed for hap encoding [no]
@@ -1695,37 +1693,6 @@ test_exec(){
     test_ld "cc" "$@" && { enabled cross_compile || $TMPE >> $logfile 2>&1; }
 }
 
-check_exec_crash(){
-    log check_exec_crash "$@"
-    code=$(cat)
-
-    # exit() is not async signal safe.  _Exit (C99) and _exit (POSIX)
-    # are safe but may not be available everywhere.  Thus we use
-    # raise(SIGTERM) instead.  The check is run in a subshell so we
-    # can redirect the "Terminated" message from the shell.  SIGBUS
-    # is not defined by standard C so it is used conditionally.
-
-    (test_exec "$@") >> $logfile 2>&1 <<EOF
-#include <signal.h>
-static void sighandler(int sig){
-    raise(SIGTERM);
-}
-int foo(void){
-    $code
-}
-int (*func_ptr)(void) = foo;
-int main(void){
-    signal(SIGILL, sighandler);
-    signal(SIGFPE, sighandler);
-    signal(SIGSEGV, sighandler);
-#ifdef SIGBUS
-    signal(SIGBUS, sighandler);
-#endif
-    return func_ptr();
-}
-EOF
-}
-
 check_type(){
     log check_type "$@"
     headers=$1
@@ -2089,7 +2056,6 @@ EXTERNAL_LIBRARY_LIST="
     libfreetype
     libfribidi
     libharfbuzz
-    libglslang
     libgme
     libgsm
     libiec61883
@@ -2116,7 +2082,6 @@ EXTERNAL_LIBRARY_LIST="
     librist
     librsvg
     librtmp
-    libshaderc
     libshine
     libsmbclient
     libsnappy
@@ -2638,7 +2603,6 @@ TOOLCHAIN_FEATURES="
     as_object_arch
     asm_mod_q
     blocks_extension
-    ebp_available
     ebx_available
     gnu_as
     gnu_windres
@@ -2651,7 +2615,8 @@ TOOLCHAIN_FEATURES="
     symver_asm_label
     symver_gnu_asm
     vfp_args
-    x86_32_7regs
+    x86_6regs
+    x86_7regs
     xform_asm
     xmm_clobbers
 "
@@ -2716,6 +2681,7 @@ HAVE_LIST="
     $THREADS_LIST
     $TOOLCHAIN_FEATURES
     $TYPES_LIST
+    ffnvcodec_cuarray
     gzip
     ioctl_posix
     libdrm_getfb2
@@ -3156,6 +3122,7 @@ atrac3p_decoder_select="sinewin"
 atrac3pal_decoder_select="sinewin"
 av1_decoder_select="cbs_av1 itut_t35"
 bink_decoder_select="blockdsp hpeldsp"
+bink2_decoder_select="blockdsp"
 binkaudio_dct_decoder_select="wma_freqs"
 binkaudio_rdft_decoder_select="wma_freqs"
 bvc2_decoder_select="cabac cbs_bvc2 golomb videodsp vvc_sei"
@@ -3403,6 +3370,8 @@ av1_dxva2_hwaccel_deps="dxva2 DXVA_PicParams_AV1"
 av1_dxva2_hwaccel_select="av1_decoder"
 av1_nvdec_hwaccel_deps="nvdec CUVIDAV1PICPARAMS"
 av1_nvdec_hwaccel_select="av1_decoder"
+av1_nvdec_cuarray_hwaccel_deps="nvdec ffnvcodec_cuarray CUVIDAV1PICPARAMS"
+av1_nvdec_cuarray_hwaccel_select="av1_decoder"
 av1_vaapi_hwaccel_deps="vaapi VADecPictureParameterBufferAV1_bit_depth_idx"
 av1_vaapi_hwaccel_select="av1_decoder"
 av1_vdpau_hwaccel_deps="vdpau VdpPictureInfoAV1"
@@ -3429,6 +3398,8 @@ h264_dxva2_hwaccel_deps="dxva2"
 h264_dxva2_hwaccel_select="h264_decoder"
 h264_nvdec_hwaccel_deps="nvdec"
 h264_nvdec_hwaccel_select="h264_decoder"
+h264_nvdec_cuarray_hwaccel_deps="nvdec ffnvcodec_cuarray"
+h264_nvdec_cuarray_hwaccel_select="h264_decoder"
 h264_vaapi_hwaccel_deps="vaapi"
 h264_vaapi_hwaccel_select="h264_decoder"
 h264_vdpau_hwaccel_deps="vdpau"
@@ -3447,6 +3418,8 @@ hevc_dxva2_hwaccel_deps="dxva2 DXVA_PicParams_HEVC"
 hevc_dxva2_hwaccel_select="hevc_decoder"
 hevc_nvdec_hwaccel_deps="nvdec"
 hevc_nvdec_hwaccel_select="hevc_decoder"
+hevc_nvdec_cuarray_hwaccel_deps="nvdec ffnvcodec_cuarray"
+hevc_nvdec_cuarray_hwaccel_select="hevc_decoder"
 hevc_vaapi_hwaccel_deps="vaapi VAPictureParameterBufferHEVC"
 hevc_vaapi_hwaccel_select="hevc_decoder"
 hevc_vdpau_hwaccel_deps="vdpau VdpPictureInfoHEVC"
@@ -3461,6 +3434,8 @@ mjpeg_vaapi_hwaccel_deps="vaapi"
 mjpeg_vaapi_hwaccel_select="mjpeg_decoder"
 mpeg1_nvdec_hwaccel_deps="nvdec"
 mpeg1_nvdec_hwaccel_select="mpeg1video_decoder"
+mpeg1_nvdec_cuarray_hwaccel_deps="nvdec ffnvcodec_cuarray"
+mpeg1_nvdec_cuarray_hwaccel_select="mpeg1video_decoder"
 mpeg1_vdpau_hwaccel_deps="vdpau"
 mpeg1_vdpau_hwaccel_select="mpeg1video_decoder"
 mpeg1_videotoolbox_hwaccel_deps="videotoolbox"
@@ -3475,6 +3450,8 @@ mpeg2_dxva2_hwaccel_deps="dxva2"
 mpeg2_dxva2_hwaccel_select="mpeg2video_decoder"
 mpeg2_nvdec_hwaccel_deps="nvdec"
 mpeg2_nvdec_hwaccel_select="mpeg2video_decoder"
+mpeg2_nvdec_cuarray_hwaccel_deps="nvdec ffnvcodec_cuarray"
+mpeg2_nvdec_cuarray_hwaccel_select="mpeg2video_decoder"
 mpeg2_vaapi_hwaccel_deps="vaapi"
 mpeg2_vaapi_hwaccel_select="mpeg2video_decoder"
 mpeg2_vdpau_hwaccel_deps="vdpau"
@@ -3483,6 +3460,8 @@ mpeg2_videotoolbox_hwaccel_deps="videotoolbox"
 mpeg2_videotoolbox_hwaccel_select="mpeg2video_decoder"
 mpeg4_nvdec_hwaccel_deps="nvdec"
 mpeg4_nvdec_hwaccel_select="mpeg4_decoder"
+mpeg4_nvdec_cuarray_hwaccel_deps="nvdec ffnvcodec_cuarray"
+mpeg4_nvdec_cuarray_hwaccel_select="mpeg4_decoder"
 mpeg4_vaapi_hwaccel_deps="vaapi"
 mpeg4_vaapi_hwaccel_select="mpeg4_decoder"
 mpeg4_vdpau_hwaccel_deps="vdpau"
@@ -3507,12 +3486,16 @@ vc1_dxva2_hwaccel_deps="dxva2"
 vc1_dxva2_hwaccel_select="vc1_decoder"
 vc1_nvdec_hwaccel_deps="nvdec"
 vc1_nvdec_hwaccel_select="vc1_decoder"
+vc1_nvdec_cuarray_hwaccel_deps="nvdec ffnvcodec_cuarray"
+vc1_nvdec_cuarray_hwaccel_select="vc1_decoder"
 vc1_vaapi_hwaccel_deps="vaapi"
 vc1_vaapi_hwaccel_select="vc1_decoder"
 vc1_vdpau_hwaccel_deps="vdpau"
 vc1_vdpau_hwaccel_select="vc1_decoder"
 vp8_nvdec_hwaccel_deps="nvdec"
 vp8_nvdec_hwaccel_select="vp8_decoder"
+vp8_nvdec_cuarray_hwaccel_deps="nvdec ffnvcodec_cuarray"
+vp8_nvdec_cuarray_hwaccel_select="vp8_decoder"
 vp8_vaapi_hwaccel_deps="vaapi"
 vp8_vaapi_hwaccel_select="vp8_decoder"
 vp9_d3d11va_hwaccel_deps="d3d11va DXVA_PicParams_VP9"
@@ -3525,6 +3508,8 @@ vp9_dxva2_hwaccel_deps="dxva2 DXVA_PicParams_VP9"
 vp9_dxva2_hwaccel_select="vp9_decoder"
 vp9_nvdec_hwaccel_deps="nvdec"
 vp9_nvdec_hwaccel_select="vp9_decoder"
+vp9_nvdec_cuarray_hwaccel_deps="nvdec ffnvcodec_cuarray"
+vp9_nvdec_cuarray_hwaccel_select="vp9_decoder"
 vp9_vaapi_hwaccel_deps="vaapi VADecPictureParameterBufferVP9_bit_depth"
 vp9_vaapi_hwaccel_select="vp9_decoder"
 vp9_vdpau_hwaccel_deps="vdpau VdpPictureInfoVP9"
@@ -3540,6 +3525,7 @@ wmv3_d3d11va2_hwaccel_select="vc1_d3d11va2_hwaccel"
 wmv3_d3d12va_hwaccel_select="vc1_d3d12va_hwaccel"
 wmv3_dxva2_hwaccel_select="vc1_dxva2_hwaccel"
 wmv3_nvdec_hwaccel_select="vc1_nvdec_hwaccel"
+wmv3_nvdec_cuarray_hwaccel_select="vc1_nvdec_cuarray_hwaccel"
 wmv3_vaapi_hwaccel_select="vc1_vaapi_hwaccel"
 wmv3_vdpau_hwaccel_select="vc1_vdpau_hwaccel"
 
@@ -4280,7 +4266,7 @@ zmq_filter_deps="libzmq"
 zscale_filter_deps="libzimg const_nan"
 scale_vaapi_filter_deps="vaapi"
 scale_vt_filter_deps="videotoolbox VTPixelTransferSessionCreate"
-scale_vulkan_filter_deps="vulkan spirv_compiler spirv_library"
+scale_vulkan_filter_deps="vulkan spirv_compiler swscale"
 vpp_qsv_filter_deps="libmfx"
 vpp_qsv_filter_select="qsvvpp"
 xfade_opencl_filter_deps="opencl"
@@ -4337,14 +4323,14 @@ avcodec_suggest="libm stdatomic"
 avdevice_deps="avformat avcodec avutil"
 avdevice_suggest="libm stdatomic"
 avfilter_deps="avutil"
-avfilter_suggest="libm stdatomic spirv_library"
+avfilter_suggest="libm stdatomic"
 avformat_deps="avcodec avutil"
 avformat_suggest="libm network zlib stdatomic"
 avutil_suggest="clock_gettime ffnvcodec gcrypt libm libdrm libmfx opencl openssl user32 vaapi vulkan videotoolbox corefoundation corevideo coremedia bcrypt stdatomic"
 swresample_deps="avutil"
 swresample_suggest="libm libsoxr stdatomic"
 swscale_deps="avutil"
-swscale_suggest="libm stdatomic spirv_library"
+swscale_suggest="libm stdatomic"
 shader_compression_suggest="zlib"
 
 avcodec_extralibs="pthreads_extralibs iconv_extralibs dxva2_extralibs liblcevc_dec_extralibs lcms2_extralibs"
@@ -4542,7 +4528,7 @@ find_things_extern(){
     pattern=$2
     file=$source_path/$3
     out=${4:-$thing}
-    sed -n "s/^[^#]*extern.*$pattern *ff_\([^ ]*\)_$thing;/\1_$out/p" "$file"
+    sed -n "s/^[^#]*extern const.*$pattern *ff_\([^ ]*\)_$thing;/\1_$out/p" "$file"
 }
 
 find_filters_extern(){
@@ -6414,8 +6400,8 @@ probe_libc(){
         if ! test_${pfx}cpp_condition crtdefs.h "defined(_UCRT)"; then
             add_${pfx}cppflags -D__USE_MINGW_ANSI_STDIO=1
         fi
-        test_${pfx}cpp_condition windows.h "!defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0600" &&
-            add_${pfx}cppflags -D_WIN32_WINNT=0x0600
+        test_${pfx}cpp_condition windows.h "!defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0601" &&
+            add_${pfx}cppflags -D_WIN32_WINNT=0x0601
         add_${pfx}cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600
     elif test_${pfx}cpp_condition _mingw.h "defined __MINGW_VERSION"  ||
          test_${pfx}cpp_condition _mingw.h "defined __MINGW32_VERSION"; then
@@ -6429,8 +6415,8 @@ probe_libc(){
         fi
         test_${pfx}cpp_condition _mingw.h "__MSVCRT_VERSION__ < 0x0700" &&
             add_${pfx}cppflags -D__MSVCRT_VERSION__=0x0700
-        test_${pfx}cpp_condition windows.h "!defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0600" &&
-            add_${pfx}cppflags -D_WIN32_WINNT=0x0600
+        test_${pfx}cpp_condition windows.h "!defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0601" &&
+            add_${pfx}cppflags -D_WIN32_WINNT=0x0601
         add_${pfx}cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600
     elif test_${pfx}cpp_condition crtversion.h "defined _VC_CRT_MAJOR_VERSION"; then
         eval ${pfx}libc_type=msvcrt
@@ -6445,18 +6431,8 @@ probe_libc(){
             fi
         fi
         add_${pfx}cppflags -D_USE_MATH_DEFINES -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_WARNINGS
-        # The MSVC 2010 headers (Win 7.0 SDK) set _WIN32_WINNT to
-        # 0x601 by default unless something else is set by the user.
-        # This can easily lead to us detecting functions only present
-        # in such new versions and producing binaries requiring windows 7.0.
-        # Therefore explicitly set the default to Vista unless the user has
-        # set something else on the command line.
-        # Don't do this if WINAPI_FAMILY is set and is set to a non-desktop
-        # family. For these cases, configure is free to use any functions
-        # found in the SDK headers by default. (Alternatively, we could force
-        # _WIN32_WINNT to 0x0602 in that case.)
-        test_${pfx}cpp_condition stdlib.h "defined(_WIN32_WINNT)" ||
-            { test_${pfx}cpp <<EOF && add_${pfx}cppflags -D_WIN32_WINNT=0x0600; }
+        test_${pfx}cpp_condition windows.h "!defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0601" &&
+            add_${pfx}cppflags -D_WIN32_WINNT=0x0601
 #ifdef WINAPI_FAMILY
 #include <winapifamily.h>
 #if !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
@@ -6808,27 +6784,13 @@ elif enabled x86; then
     check_builtin rdtsc    intrin.h   "__rdtsc()"
     check_builtin mm_empty mmintrin.h "_mm_empty()"
 
-    # check whether EBP is available on x86
-    # As 'i' is stored on the stack, this program will crash
-    # if the base pointer is used to access it because the
-    # base pointer is cleared in the inline assembly code.
-    check_exec_crash <<EOF && enable ebp_available
-volatile int i=0;
-__asm__ volatile ("xorl %%ebp, %%ebp" ::: "%ebp");
-return i;
-EOF
-
     # check whether EBX is available on x86
     check_inline_asm ebx_available '""::"b"(0)' &&
         check_inline_asm ebx_available '"":::"%ebx"'
 
-    # check whether 7 registers are available on x86-32
-    # Since https://github.com/llvm/llvm-project/commit/0d471b3f64d3116bd57c79d872f7384fff80daa5,
-    # Clang can save/restore EBP around clobber-only asm, so the EBP
-    # crash probe alone can be a false positive for 7-register asm.
-    disable x86_32_7regs
-    enabled_all x86_32 ebx_available ebp_available &&
-        check_inline_asm x86_32_7regs '"" :: "r"(0), "r"(1), "r"(2), "r"(3), "g"(4), "r"(5) : "%eax", "%edx"'
+    # check whether 6 and 7 registers are available on x86
+    check_inline_asm x86_6regs '"" :: "r"(0), "r"(1), "r"(2), "r"(3), "g"(4) : "%eax", "%edx"'
+    check_inline_asm x86_7regs '"" :: "r"(0), "r"(1), "r"(2), "r"(3), "g"(4), "r"(5) : "%eax", "%edx"'
 
     # check whether xmm clobbers are supported
     check_inline_asm xmm_clobbers '"":::"%xmm0"'
@@ -6965,15 +6927,6 @@ if test -n "$custom_allocator"; then
     add_extralibs "$custom_allocator_extralibs"
 fi
 
-# Unlike other feature flags or libraries, spirv_library is not defined
-# within any of our predefined categories of components.
-# It gets defined if either libshaderc or libglslang check succeeds.
-# As such, its in a state of neither being explicitly enabled, nor
-# explicitly disabled, but even in this state, being mentioned in
-# _deps results in it always passing.
-# Disable it explicitly to fix this.
-disable spirv_library
-
 check_func_headers malloc.h _aligned_malloc     && enable aligned_malloc
 check_func  ${malloc_prefix}memalign            && enable memalign
 check_func  ${malloc_prefix}posix_memalign      && enable posix_memalign
@@ -7049,7 +7002,7 @@ check_headers direct.h
 check_headers dirent.h
 check_headers dxgidebug.h
 check_headers dxva.h
-check_headers dxva2api.h -D_WIN32_WINNT=0x0600
+check_headers dxva2api.h
 check_headers io.h
 enabled libdrm &&
     check_headers linux/dma-buf.h
@@ -7207,8 +7160,8 @@ if ! disabled ffnvcodec; then
       check_pkg_config ffnvcodec "ffnvcodec >= 11.1.5.3 ffnvcodec < 12.0" "$ffnv_hdr_list" ""
 fi
 
-if enabled_all libglslang libshaderc; then
-    die "ERROR: libshaderc and libglslang are mutually exclusive, if in doubt, disable libglslang"
+if enabled ffnvcodec; then
+    check_cpp_condition ffnvcodec_cuarray ffnvcodec/dynlink_loader.h "defined(CUDA_ARRAY3D_VIDEO_ENCODE_DECODE)"
 fi
 
 check_cpp_condition winrt windows.h "!WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)"
@@ -7345,16 +7298,6 @@ enabled libfontconfig     && require_pkg_config libfontconfig fontconfig "fontco
 enabled libfreetype       && require_pkg_config libfreetype freetype2 "ft2build.h FT_FREETYPE_H" FT_Init_FreeType
 enabled libfribidi        && require_pkg_config libfribidi fribidi fribidi.h fribidi_version_info
 enabled libharfbuzz       && require_pkg_config libharfbuzz harfbuzz hb.h hb_buffer_create
-if enabled libglslang; then
-    spvremap="-lSPVRemapper"
-    require_headers "glslang/build_info.h" && { test_cpp_condition glslang/build_info.h "GLSLANG_VERSION_MAJOR >= 16" && spvremap="" ; }
-    check_lib spirv_library glslang/Include/glslang_c_interface.h glslang_initialize_process \
-                            -lglslang -lMachineIndependent -lGenericCodeGen \
-                            ${spvremap} -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools -lstdc++ $libm_extralibs $pthreads_extralibs ||
-                        require spirv_library glslang/Include/glslang_c_interface.h glslang_initialize_process \
-                            -lglslang -lMachineIndependent -lOSDependent -lHLSL -lOGLCompiler -lGenericCodeGen \
-                            ${spvremap} -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools -lstdc++ $libm_extralibs $pthreads_extralibs ;
-fi
 enabled libgme            && { check_pkg_config libgme libgme gme/gme.h gme_new_emu ||
                                require libgme gme/gme.h gme_new_emu -lgme -lstdc++; }
 enabled libgsm            && { for gsm_hdr in "gsm.h" "gsm/gsm.h"; do
@@ -7414,7 +7357,8 @@ enabled libopenh264       && require_pkg_config libopenh264 "openh264 >= 1.3.0" 
 enabled libopenjpeg       && { check_pkg_config libopenjpeg "libopenjp2 >= 2.1.0" openjpeg.h opj_version ||
                                { require_pkg_config libopenjpeg "libopenjp2 >= 2.1.0" openjpeg.h opj_version -DOPJ_STATIC && add_cppflags -DOPJ_STATIC; } }
 enabled libopenmpt        && require_pkg_config libopenmpt "libopenmpt >= 0.2.6557" libopenmpt/libopenmpt.h openmpt_module_create -lstdc++ && append libopenmpt_extralibs "-lstdc++"
-enabled libopenvino       && { { check_pkg_config libopenvino openvino openvino/c/openvino.h ov_core_create && enable openvino2; } ||
+enabled libopenvino       && { { { check_pkg_config libopenvino openvino openvino/c/openvino.h ov_core_create ||
+                                  require libopenvino openvino/c/openvino.h ov_core_create -lopenvino_c; } && enable openvino2; } ||
                                 { check_pkg_config libopenvino openvino c_api/ie_c_api.h ie_c_api_version ||
                                   require libopenvino c_api/ie_c_api.h ie_c_api_version -linference_engine_c_api; } }
 enabled libopus           && {
@@ -7433,7 +7377,6 @@ enabled librist           && require_pkg_config librist "librist >= 0.2.7" libri
 enabled librsvg           && require_pkg_config librsvg librsvg-2.0 librsvg-2.0/librsvg/rsvg.h rsvg_handle_new_from_data
 enabled librtmp           && require_pkg_config librtmp librtmp librtmp/rtmp.h RTMP_Socket
 enabled librubberband     && require_pkg_config librubberband "rubberband >= 1.8.1" rubberband/rubberband-c.h rubberband_new -lstdc++ && append librubberband_extralibs "-lstdc++"
-enabled libshaderc        && require_pkg_config spirv_library "shaderc >= 2019.1" shaderc/shaderc.h shaderc_compiler_initialize
 enabled libshine          && require_pkg_config libshine shine shine/layer3.h shine_encode_buffer
 enabled libsmbclient      && { check_pkg_config libsmbclient smbclient libsmbclient.h smbc_init ||
                                require libsmbclient libsmbclient.h smbc_init -lsmbclient; }
@@ -7850,7 +7793,7 @@ if enabled vulkan; then
         probe_glslc $program && break
     done
 else
-    disable libglslang libshaderc spirv_library spirv_compiler
+    disable spirv_compiler
 fi
 
 if enabled vulkan; then
@@ -8097,8 +8040,6 @@ if enabled icc; then
     # 11030: Warning unknown option --as-needed
     # 10156: ignoring option '-export'; no argument required
     check_ldflags -wd10156,11030
-    # icc 11.0 and 11.1 work with ebp_available, but don't pass the test
-    enable ebp_available
     # The test above does not test linking
     [ -n "$lto" ] && disable symver_asm_label
     if enabled x86_32; then
@@ -8200,7 +8141,6 @@ elif enabled_any msvc icl; then
             add_cflags -Qansi-alias
         # Some inline asm is not compilable in debug
         if enabled debug; then
-            disable ebp_available
             disable ebx_available
         fi
     fi
@@ -8461,10 +8401,8 @@ if enabled x86; then
     echo "i686 features enabled     ${i686-no}"
     echo "CMOV is fast              ${fast_cmov-no}"
     echo "EBX available             ${ebx_available-no}"
-    echo "EBP available             ${ebp_available-no}"
-fi
-if enabled x86_32; then
-    echo "7 registers available     ${x86_32_7regs-no}"
+    echo "6 registers available     ${x86_6regs-no}"
+    echo "7 registers available     ${x86_7regs-no}"
 fi
 if enabled aarch64; then
     echo "NEON enabled              ${neon-no}"
@@ -8944,6 +8882,11 @@ print_enabled_components(){
     done
     if [ "$name" = "filter_list" ]; then
         for c in asrc_abuffer vsrc_buffer asink_abuffer vsink_buffer; do
+            printf "    &ff_%s,\n" $c >> $TMPH
+        done
+    fi
+    if [ "$name" = "bitstream_filters" ]; then
+        for c in source_bsf sink_bsf; do
             printf "    &ff_%s,\n" $c >> $TMPH
         done
     fi

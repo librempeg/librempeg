@@ -318,7 +318,8 @@ SWS_FOR_STRUCT(TYPE, WRITE_NIBBLE,    DECL_ENTRY, EXT, NULL, NULL)              
 SWS_FOR_STRUCT(TYPE, WRITE_BIT,       DECL_ENTRY, EXT, NULL, NULL)              \
 SWS_FOR_STRUCT(TYPE, SWAP_BYTES,      DECL_ENTRY, EXT, NULL, NULL)              \
 SWS_FOR_STRUCT(TYPE, EXPAND_BIT,      DECL_ENTRY, EXT, NULL, NULL)              \
-SWS_FOR_STRUCT(TYPE, MOVE,            DECL_ENTRY, EXT, NULL, NULL)              \
+SWS_FOR_STRUCT(TYPE, PERMUTE,         DECL_ENTRY, EXT, NULL, NULL)              \
+SWS_FOR_STRUCT(TYPE, COPY,            DECL_ENTRY, EXT, NULL, NULL)              \
 SWS_FOR_STRUCT(TYPE, SCALE,           DECL_ENTRY, EXT, NULL, setup_scale)       \
 SWS_FOR_STRUCT(TYPE, ADD,             DECL_ENTRY, EXT, NULL, ff_sws_setup_vec4) \
 SWS_FOR_STRUCT(TYPE, MIN,             DECL_ENTRY, EXT, NULL, ff_sws_setup_vec4) \
@@ -327,6 +328,7 @@ SWS_FOR_STRUCT(TYPE, UNPACK,          DECL_ENTRY, EXT, NULL, NULL)              
 SWS_FOR_STRUCT(TYPE, PACK,            DECL_ENTRY, EXT, NULL, NULL)              \
 SWS_FOR_STRUCT(TYPE, LSHIFT,          DECL_ENTRY, EXT, NULL, NULL)              \
 SWS_FOR_STRUCT(TYPE, RSHIFT,          DECL_ENTRY, EXT, NULL, NULL)              \
+SWS_FOR_STRUCT(TYPE, LINEAR,          DECL_ENTRY, EXT, NULL, setup_linear)      \
 SWS_FOR_STRUCT(TYPE, LINEAR_FMA,      DECL_ENTRY, EXT, NULL, setup_linear)      \
 SWS_FOR_STRUCT(TYPE, DITHER,          DECL_ENTRY, EXT, NULL, setup_dither)      \
 /* end of macro */
@@ -341,7 +343,8 @@ SWS_FOR_STRUCT(TYPE, DITHER,          DECL_ENTRY, EXT, NULL, setup_dither)      
     SWS_FOR(TYPE, WRITE_BIT,      REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, SWAP_BYTES,     REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, EXPAND_BIT,     REF_ENTRY, EXT)                               \
-    SWS_FOR(TYPE, MOVE,           REF_ENTRY, EXT)                               \
+    SWS_FOR(TYPE, PERMUTE,        REF_ENTRY, EXT)                               \
+    SWS_FOR(TYPE, COPY,           REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, SCALE,          REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, ADD,            REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, MIN,            REF_ENTRY, EXT)                               \
@@ -350,6 +353,7 @@ SWS_FOR_STRUCT(TYPE, DITHER,          DECL_ENTRY, EXT, NULL, setup_dither)      
     SWS_FOR(TYPE, PACK,           REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, LSHIFT,         REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, RSHIFT,         REF_ENTRY, EXT)                               \
+    SWS_FOR(TYPE, LINEAR,         REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, LINEAR_FMA,     REF_ENTRY, EXT)                               \
     SWS_FOR(TYPE, DITHER,         REF_ENTRY, EXT)                               \
     /* end of macro */
@@ -484,74 +488,97 @@ SWS_DECL_FUNC(ff_sws_process2_x86);
 SWS_DECL_FUNC(ff_sws_process3_x86);
 SWS_DECL_FUNC(ff_sws_process4_x86);
 
-static int movsize(const int bytes, const int mmsize)
+/* Declare packed shuffle functions */
+SWS_FOR_STRUCT(U8, RW_SHUFFLE, DECL_ENTRY, _sse4,       NULL, NULL)
+SWS_FOR_STRUCT(U8, RW_SHUFFLE, DECL_ENTRY, _avx2,       NULL, NULL)
+SWS_FOR_STRUCT(U8, RW_SHUFFLE, DECL_ENTRY, _avx512,     NULL, NULL)
+SWS_FOR_STRUCT(U8, RW_SHUFFLE, DECL_ENTRY, _avx512icl,  NULL, NULL)
+
+static int get_mmsize(void)
 {
-    return bytes <= 4 ? 4 : /* movd */
-           bytes <= 8 ? 8 : /* movq */
-           mmsize;          /* movu */
+    const int cpu_flags = av_get_cpu_flags();
+    if (EXTERNAL_AVX512(cpu_flags))
+        return 64;
+    else if (EXTERNAL_AVX2(cpu_flags))
+        return 32;
+    else if (EXTERNAL_SSE4(cpu_flags))
+        return 16;
+    else
+        return AVERROR(ENOTSUP);
 }
 
-static int solve_shuffle(const SwsOpList *ops, int mmsize, SwsCompiledOp *out)
+static int movsize(const int bytes, const int mmsize)
 {
-    uint8_t shuffle[16];
-    int read_bytes, write_bytes;
-    int pixels;
+    return bytes <= 4  ? 4  : /* movd */
+           bytes <= 8  ? 8  : /* movq */
+           bytes <= 16 ? 16 : /* xmm movu */
+           bytes <= 32 ? 32 : /* ymm movu */
+           mmsize;            /* zmm movu */
+}
 
-    /* Solve the shuffle mask for one 128-bit lane only */
-    pixels = ff_sws_solve_shuffle(ops, shuffle, 16, 0x80, &read_bytes, &write_bytes);
-    if (pixels < 0)
-        return pixels;
-
+static int translate_shuffle(const SwsUOp *uop, int mmsize, SwsCompiledOp *out)
+{
     /* We can't shuffle across lanes, so restrict the vector size to XMM
-     * whenever the read/write size would be a subset of the full vector */
-    if (read_bytes < 16 || write_bytes < 16)
+     * whenever the read/write size would be a subset of the full vector,
+     * unless we have access to AVX-512 ICL vpermb */
+    const SwsShuffleUOp *par = &uop->par.shuffle;
+    const int lane_aligned = par->read_size == par->write_size &&
+                             16 % par->read_size == 0;
+    if (!lane_aligned && !EXTERNAL_AVX512ICL(av_get_cpu_flags()))
         mmsize = 16;
 
-    const int num_lanes = mmsize / 16;
-    const int in_total  = num_lanes * read_bytes;
-    const int out_total = num_lanes * write_bytes;
-
-    *out = (SwsCompiledOp) {
-        .priv        = av_memdup(shuffle, sizeof(shuffle)),
-        .free        = av_free,
-        .slice_align = 1,
-        .block_size  = pixels * num_lanes,
-        .over_read   = { movsize(in_total,  mmsize) - in_total },
-        .over_write  = { movsize(out_total, mmsize) - out_total },
-        .cpu_flags   = mmsize > 32 ? AV_CPU_FLAG_AVX512 :
-                       mmsize > 16 ? AV_CPU_FLAG_AVX2 :
-                                     AV_CPU_FLAG_SSE4,
-    };
-
-    if (!out->priv)
+    /* Generate the shuffle mask */
+    const int mask_size = lane_aligned ? 16 : mmsize;
+    int8_t *mask = av_malloc(mask_size);
+    if (!mask)
         return AVERROR(ENOMEM);
 
-#define ASSIGN_SHUFFLE_FUNC(IN, OUT, EXT)                                       \
-do {                                                                            \
-    SWS_DECL_FUNC(ff_packed_shuffle##IN##_##OUT##_##EXT);                       \
-    if (in_total == IN && out_total == OUT)                                     \
-        out->func = ff_packed_shuffle##IN##_##OUT##_##EXT;                      \
-} while (0)
+    const int groups = ff_sws_shuffle_mask(uop, mask, mask_size);
+    if (groups < 0) {
+        av_free(mask);
+        return groups;
+    }
 
-    ASSIGN_SHUFFLE_FUNC( 5, 15, sse4);
-    ASSIGN_SHUFFLE_FUNC( 4, 16, sse4);
-    ASSIGN_SHUFFLE_FUNC( 2, 12, sse4);
-    ASSIGN_SHUFFLE_FUNC(16,  8, sse4);
-    ASSIGN_SHUFFLE_FUNC(10, 15, sse4);
-    ASSIGN_SHUFFLE_FUNC( 8, 16, sse4);
-    ASSIGN_SHUFFLE_FUNC( 4, 12, sse4);
-    ASSIGN_SHUFFLE_FUNC(15,  5, sse4);
-    ASSIGN_SHUFFLE_FUNC(15, 15, sse4);
-    ASSIGN_SHUFFLE_FUNC(12, 16, sse4);
-    ASSIGN_SHUFFLE_FUNC( 6, 12, sse4);
-    ASSIGN_SHUFFLE_FUNC(16,  4, sse4);
-    ASSIGN_SHUFFLE_FUNC(16, 12, sse4);
-    ASSIGN_SHUFFLE_FUNC(16, 16, sse4);
-    ASSIGN_SHUFFLE_FUNC( 8, 12, sse4);
-    ASSIGN_SHUFFLE_FUNC(12, 12, sse4);
-    ASSIGN_SHUFFLE_FUNC(32, 32, avx2);
-    ASSIGN_SHUFFLE_FUNC(64, 64, avx512);
-    av_assert1(out->func);
+    const int read_chunk  = groups * par->read_size;
+    const int write_chunk = groups * par->write_size;
+    const int num_lanes   = lane_aligned ? mmsize / 16 : 1;
+    const int in_total    = num_lanes * read_chunk;
+    const int out_total   = num_lanes * write_chunk;
+    *out = (SwsCompiledOp) {
+        .priv        = mask,
+        .free        = av_free,
+        .slice_align = 1,
+        .block_size  = groups * uop->data.shuffle.pixels * num_lanes,
+        .over_read   = { movsize(in_total,  mmsize) - in_total },
+        .over_write  = { movsize(out_total, mmsize) - out_total },
+    };
+
+#define ASSIGN_SHUFFLE_FUNC(CPU, EXT, NAME, ...)                                \
+do {                                                                            \
+    const SwsUOpEntry *entry = &uop_##NAME##EXT;                                \
+    if (!memcmp(&uop->par, &entry->par, sizeof(uop->par))) {                    \
+        out->func = (SwsOpFunc) entry->func;                                    \
+        out->cpu_flags = AV_CPU_FLAG_##CPU;                                     \
+    }                                                                           \
+} while (0);
+
+    switch (mmsize) {
+    case 16: SWS_FOR(U8, RW_SHUFFLE, ASSIGN_SHUFFLE_FUNC, SSE4, _sse4); break;
+    case 32: SWS_FOR(U8, RW_SHUFFLE, ASSIGN_SHUFFLE_FUNC, AVX2, _avx2); break;
+    case 64:
+        if (lane_aligned) {
+            SWS_FOR(U8, RW_SHUFFLE, ASSIGN_SHUFFLE_FUNC, AVX512, _avx512);
+        } else { /* vpermb variant */
+            SWS_FOR(U8, RW_SHUFFLE, ASSIGN_SHUFFLE_FUNC, AVX512ICL, _avx512icl);
+        }
+        break;
+    }
+
+    if (!out->func) {
+        av_free(mask);
+        return AVERROR(ENOTSUP);
+    }
+
     return 0;
 }
 
@@ -573,45 +600,30 @@ static void normalize_clear(SwsUOp *uop)
         uop->data.vec4[i].u32 = expand32(uop->type, uop->data.vec4[i]);
 }
 
-static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
+static int compile_uops_x86(SwsContext *ctx, const SwsUOpList *uops, SwsCompiledOp *out)
 {
-    const int cpu_flags = av_get_cpu_flags();
-    int ret, mmsize;
-    if (EXTERNAL_AVX512(cpu_flags))
-        mmsize = 64;
-    else if (EXTERNAL_AVX2(cpu_flags))
-        mmsize = 32;
-    else if (EXTERNAL_SSE4(cpu_flags))
-        mmsize = 16;
-    else
-        return AVERROR(ENOTSUP);
+    int ret, mmsize = get_mmsize();
+    if (mmsize < 0)
+        return mmsize;
 
-    /* Special fast path for in-place packed shuffle */
-    ret = solve_shuffle(ops, mmsize, out);
-    if (ret != AVERROR(ENOTSUP))
+    if (uops->num_ops == 1 && uops->ops[0].uop == SWS_UOP_RW_SHUFFLE) {
+        const SwsUOp *uop = &uops->ops[0];
+        ret = translate_shuffle(uop, mmsize, out);
+        if (ret >= 0) {
+            char name[SWS_UOP_NAME_MAX];
+            ff_sws_uop_name(uop, name);
+            av_log(ctx, AV_LOG_VERBOSE, "Using x86 packed shuffle fast path: %s\n", name);
+        }
         return ret;
+    }
 
     SwsOpChain *chain = ff_sws_op_chain_alloc();
     if (!chain)
         return AVERROR(ENOMEM);
 
-    SwsUOpList *uops = ff_sws_uop_list_alloc();
-    if (!uops) {
-        ret = AVERROR(ENOMEM);
-        goto fail;
-    }
-
-    SwsUOpFlags flags = SWS_UOP_FLAG_MOVE;
-    if (EXTERNAL_FMA3(cpu_flags))
-        flags |= SWS_UOP_FLAG_FMA;
-
-    ret = ff_sws_ops_translate(ctx, ops, flags, uops);
-    if (ret < 0)
-        goto fail;
-
     *out = (SwsCompiledOp) {
         /* Use at most two full YMM regs during the widest precision section */
-        .block_size  = 2 * FFMIN(mmsize, 32) / ff_sws_op_list_max_size(ops),
+        .block_size  = 2 * FFMIN(mmsize, 32) / uops->pixel_size_max,
         .slice_align = 1,
         .free        = ff_sws_op_chain_free_cb,
         .priv        = chain,
@@ -634,11 +646,7 @@ static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
             goto fail;
     }
 
-    const SwsOp *read      = ff_sws_op_list_input(ops);
-    const SwsOp *write     = ff_sws_op_list_output(ops);
-    const int read_planes  = read ? ff_sws_rw_op_planes(read) : 0;
-    const int write_planes = ff_sws_rw_op_planes(write);
-    switch (FFMAX(read_planes, write_planes)) {
+    switch (av_popcount(uops->planes_in | uops->planes_out)) {
     case 1: out->func = ff_sws_process1_x86; break;
     case 2: out->func = ff_sws_process2_x86; break;
     case 3: out->func = ff_sws_process3_x86; break;
@@ -653,18 +661,51 @@ static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
     out->cpu_flags = chain->cpu_flags;
     memcpy(out->over_read,  chain->over_read,  sizeof(out->over_read));
     memcpy(out->over_write, chain->over_write, sizeof(out->over_write));
-    ff_sws_uop_list_free(&uops);
+
+    av_log(ctx, AV_LOG_DEBUG, "Compiled micro-ops:\n");
+    for (int i = 0; i < uops->num_ops; i++) {
+        char name[SWS_UOP_NAME_MAX];
+        ff_sws_uop_name(&uops->ops[i], name);
+        av_log(ctx, AV_LOG_DEBUG, "    %s\n", name);
+    }
+
     return 0;
 
 fail:
-    ff_sws_uop_list_free(&uops);
     ff_sws_op_chain_free(chain);
     return ret;
 }
 
+static int compile_x86(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
+{
+    const int cpu_flags = av_get_cpu_flags();
+    const int mmsize = get_mmsize();
+    if (mmsize < 0)
+        return mmsize;
+
+    SwsUOpFlags flags = SWS_UOP_FLAG_PSHUFB;
+    if (EXTERNAL_FMA3(cpu_flags))
+        flags |= SWS_UOP_FLAG_FMA;
+
+    SwsUOpList *uops = ff_sws_uop_list_alloc();
+    if (!uops)
+        return AVERROR(ENOMEM);
+
+    int ret = ff_sws_ops_translate(ctx, ops, flags, uops);
+    if (ret < 0)
+        goto fail;
+
+    ret = compile_uops_x86(ctx, uops, out);
+
+fail:
+    ff_sws_uop_list_free(&uops);
+    return ret;
+}
+
 const SwsOpBackend backend_x86 = {
-    .name       = "x86",
-    .flags      = SWS_BACKEND_X86,
-    .compile    = compile,
-    .hw_format  = AV_PIX_FMT_NONE,
+    .name           = "x86",
+    .flags          = SWS_BACKEND_X86,
+    .compile        = compile_x86,
+    .compile_uops   = compile_uops_x86,
+    .hw_format      = AV_PIX_FMT_NONE,
 };

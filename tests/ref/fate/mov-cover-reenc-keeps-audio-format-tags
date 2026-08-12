@@ -1,0 +1,18 @@
+d9b9b84a20f350bc1d59a91cbba225de *tests/data/fate/mov-cover-reenc-keeps-audio-format-tags.nut
+45776 tests/data/fate/mov-cover-reenc-keeps-audio-format-tags.nut
+[FORMAT]
+TAG:date=2010
+TAG:disc=3/5
+TAG:track=2/5
+TAG:comment=The comment... 
+TAG:title=Owner
+TAG:compilation=0
+TAG:gapless_playback=0
+TAG:genre=Rock
+TAG:iTunSMPB= 00000000 00000840 000001FD 000000000013B5C3 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+TAG:Encoding Params=vers
+TAG:iTunNORM= 0000085B 0000072C 00006BC3 0000D444 00004EBA 00004ED2 00008000 00008000 000037DF 000039C7
+TAG:artist=The Artist
+TAG:album_artist=The Album Artist
+TAG:album=The Album
+[/FORMAT]

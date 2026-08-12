@@ -97,23 +97,16 @@ void ff_sws_uop_name(const SwsUOp *op, char buf[SWS_UOP_NAME_MAX])
     case SWS_UOP_READ_PLANAR_FV_FMA:
         av_bprintf(&bp, "_%s", ff_sws_pixel_type_name(par->filter.type));
         break;
+    case SWS_UOP_RW_SHUFFLE:
+        av_bprintf(&bp, "_%x_%u_%u", par->shuffle.clear_value,
+                   par->shuffle.read_size, par->shuffle.write_size);
+        break;
     case SWS_UOP_LSHIFT:
     case SWS_UOP_RSHIFT:
         av_bprintf(&bp, "_%u", par->shift.amount);
         break;
     case SWS_UOP_PERMUTE:
-        av_bprint_chars(&bp, '_', 1);
-        for (int i = 0; i < 4; i++)
-            av_bprint_chars(&bp, "xyzw"[par->swizzle.in[i]], 1);
-        break;
     case SWS_UOP_COPY:
-        av_bprint_chars(&bp, '_', 1);
-        for (int i = 0; i < 4; i++) {
-            if (SWS_COMP_TEST(op->mask, i))
-                av_bprint_chars(&bp, "xyzw"[par->swizzle.in[i]], 1);
-        }
-        break;
-    case SWS_UOP_MOVE:
         av_bprint_chars(&bp, '_', 1);
         for (int i = 0; i < par->move.num_moves; i++)
             av_bprint_chars(&bp, "txyzw"[par->move.dst[i] + 1], 1);
@@ -166,6 +159,9 @@ void ff_sws_uop_name(const SwsUOp *op, char buf[SWS_UOP_NAME_MAX])
         const unsigned size = 1u << par->dither.size_log2;
         av_bprintf(&bp, "_%ux%u", size, size);
         break;
+    case SWS_UOP_LUT_3D:
+        av_bprintf(&bp, "_%s", par->lut3d.dynamic ? "dynamic" : "static");
+        break;
     }
 
     av_assert0(av_bprint_is_complete(&bp));
@@ -181,6 +177,9 @@ static void uop_uninit(SwsUOp *uop)
     case SWS_UOP_READ_PLANAR_FV:
     case SWS_UOP_READ_PLANAR_FV_FMA:
         av_refstruct_unref(&uop->data.kernel);
+        break;
+    case SWS_UOP_LUT_3D:
+        av_refstruct_unref(&uop->data.lut3d);
         break;
     }
 
@@ -217,6 +216,17 @@ int ff_sws_uop_list_append(SwsUOpList *uops, SwsUOp *uop)
 
     *uop = (SwsUOp) {0};
     return 0;
+}
+
+void ff_sws_uop_list_remove_at(SwsUOpList *uops, int index, int count)
+{
+    const int end = uops->num_ops - count;
+    av_assert2(index >= 0 && count >= 0 && index + count <= uops->num_ops);
+    for (int i = 0; i < count; i++)
+        uop_uninit(&uops->ops[index + i]);
+    for (int i = index; i < end; i++)
+        uops->ops[i] = uops->ops[i + count];
+    uops->num_ops = end;
 }
 
 int ff_sws_dither_height(const SwsDitherUOp *dither)
@@ -330,6 +340,13 @@ static int translate_rw_op(SwsContext *ctx, SwsUOpList *ops, SwsUOpFlags flags,
         uop.uop = is_read ? SWS_UOP_READ_PLANAR : SWS_UOP_WRITE_PLANAR;
     }
 
+    const int planes = ff_sws_rw_op_planes(op);
+    if (op->op == SWS_OP_READ) {
+        ops->planes_in  |= SWS_COMP_ELEMS(planes);
+    } else {
+        ops->planes_out |= SWS_COMP_ELEMS(planes);
+    }
+
     return ff_sws_uop_list_append(ops, &uop);
 }
 
@@ -344,16 +361,17 @@ static int count_idx(const int *arr, size_t size, int val)
     return num;
 }
 
-static int translate_move(SwsUOpList *ops, const SwsOp *op)
+static int translate_swizzle(SwsUOpList *ops, const SwsOp *op)
 {
     SwsUOp uop = {
-        .uop  = SWS_UOP_MOVE,
+        .uop  = SWS_UOP_PERMUTE,
         .type = pixel_type_to_int(op->type),
+        .mask = ff_sws_comp_mask_needed(op),
     };
     SwsMoveUOp *par = &uop.par.move;
 
     /* Mask of components that are not yet satisfied */
-    SwsCompMask todo = ff_sws_comp_mask_needed(op);
+    SwsCompMask todo = uop.mask;
     for (int i = 0; i < 4; i++) {
         if (op->swizzle.in[i] == i)
             todo &= ~SWS_COMP(i);
@@ -412,62 +430,26 @@ static int translate_move(SwsUOpList *ops, const SwsOp *op)
         idx[dst] = idx[src];
     }
 
-    return ff_sws_uop_list_append(ops, &uop);
-}
-
-static int translate_swizzle(SwsUOpList *ops, SwsUOpFlags flags, const SwsOp *op)
-{
-    if (flags & SWS_UOP_FLAG_MOVE)
-        return translate_move(ops, op);
-
-    SwsUOp uop = {
-        .type = pixel_type_to_int(op->type),
-        .uop  = SWS_UOP_PERMUTE,
-        .par.swizzle.in = {0, 1, 2, 3},
-    };
-
-    SwsCompMask needed = ff_sws_comp_mask_needed(op);
+    /* Check for duplicates in the final register map */
     SwsCompMask seen = 0;
     for (int i = 0; i < 4; i++) {
-        if (!SWS_COMP_TEST(needed, i))
+        if (!SWS_COMP_TEST(uop.mask, i))
             continue;
-        const int src = op->swizzle.in[i];
-        if (SWS_COMP_TEST(seen, src))
-            uop.uop = SWS_UOP_COPY; /* Swizzle mask contains duplicates */
-        seen |= SWS_COMP(src);
-        uop.par.swizzle.in[i] = src;
+        av_assert2(idx[i] >= 0); /* should be no tmp register */
+        const SwsCompMask bit = SWS_COMP(idx[i]);
+        if (seen & bit) {
+            uop.uop = SWS_UOP_COPY;
+            break;
+        }
+        seen |= bit;
     }
 
-    if (uop.uop == SWS_UOP_PERMUTE) {
-        /* Prevent overlap by moving unused components to unseen indices */
-        for (int i = 0; i < 4; i++) {
-            if (SWS_COMP_TEST(needed, i))
-                continue;
-
-            /* Prefer identity mapping if possible */
-            int unused = i;
-            if (SWS_COMP_TEST(seen, i)) {
-                for (int j = 0; j < 4; j++) {
-                    if (!SWS_COMP_TEST(seen, j)) {
-                        unused = j;
-                        break;
-                    }
-                }
-            }
-
-            uop.par.swizzle.in[i] = unused;
-            seen |= SWS_COMP(unused);
-        }
-    }
-
-    if (uop.uop == SWS_UOP_COPY) {
-        /* Remove remaining trivial / identity components from the mask */
-        for (int i = 0; i < 4; i++) {
-            if (uop.par.swizzle.in[i] == i)
-                needed &= ~SWS_COMP(i);
-        }
-
-        uop.mask = needed;
+    /* Add any extra unused components to the mask, to prevent generating
+     * duplicate uops like permute_xyz_txy_xyt and permute_xyzw_txy_xyt */
+    for (int i = 0; i < 4; i++) {
+        const SwsCompMask bit = SWS_COMP(i);
+        if (!(seen & bit) && idx[i] == i)
+            uop.mask |= bit;
     }
 
     return ff_sws_uop_list_append(ops, &uop);
@@ -530,12 +512,16 @@ static int translate_linear_op(SwsContext *ctx, SwsUOpList *ops,
         .uop  = SWS_UOP_LINEAR,
     };
 
+    const uint32_t mask = ff_sws_linear_mask(&op->lin);
     const bool bitexact = ctx->flags & SWS_BITEXACT;
     uint32_t exact = 0;
 
     for (int i = 0; i < 4; i++) {
-        if (SWS_OP_NEEDED(op, i) && (op->lin.mask & SWS_MASK_ROW(i)))
-            uop.mask |= SWS_COMP(i);
+        if (!SWS_OP_NEEDED(op, i) || !(mask & SWS_MASK_ROW(i))) {
+            uop.par.lin.zero |= SWS_MASK_ROW(i);
+            continue;
+        }
+        uop.mask |= SWS_COMP(i);
         bool nonzero = (op->lin.m[i][4].num != 0);
         for (int j = 0; j < 5; j++) {
             const AVRational64 k = op->lin.m[i][j];
@@ -590,7 +576,7 @@ static int translate_op(SwsContext *ctx, SwsUOpList *uops, SwsUOpFlags flags,
     case SWS_OP_WRITE:
         return translate_rw_op(ctx, uops, flags, op);
     case SWS_OP_SWIZZLE:
-        return translate_swizzle(uops, flags, op);
+        return translate_swizzle(uops, op);
     case SWS_OP_DITHER:
         return translate_dither_op(uops, op);
     case SWS_OP_LINEAR:
@@ -629,7 +615,8 @@ static int translate_op(SwsContext *ctx, SwsUOpList *uops, SwsUOpFlags flags,
         uop.mask = 0;
         for (int i = 0; i < 4 && op->pack.pattern[i]; i++) {
             uop.par.pack.pattern[i] = op->pack.pattern[i];
-            uop.mask |= SWS_COMP(i);
+            if (op->op == SWS_OP_PACK || SWS_OP_NEEDED(op, i))
+                uop.mask |= SWS_COMP(i);
         }
         break;
     case SWS_OP_LSHIFT:
@@ -674,6 +661,11 @@ static int translate_op(SwsContext *ctx, SwsUOpList *uops, SwsUOpFlags flags,
         uop.uop = SWS_UOP_SWAP_BYTES;
         uop.type = pixel_type_to_int(op->type);
         break;
+    case SWS_OP_LUT_3D:
+        uop.uop = SWS_UOP_LUT_3D;
+        uop.par.lut3d.dynamic = op->lut3d.dynamic;
+        uop.data.lut3d = av_refstruct_ref_c(op->lut3d.lut);
+        break;
     default:
         return AVERROR(ENOTSUP);
     }
@@ -687,10 +679,16 @@ int ff_sws_ops_translate(SwsContext *ctx, const SwsOpList *ops,
 {
     SwsComps input = ops->comps_src;
     for (int i = 0; i < ops->num_ops; i++) {
-        int ret = translate_op(ctx, uops, flags, &ops->ops[i], &input);
+        const SwsOp *op = &ops->ops[i];
+        const int pixel_size = ff_sws_pixel_type_size(op->type);
+        if (pixel_size > uops->pixel_size_max)
+            uops->pixel_size_max = pixel_size;
+
+        int ret = translate_op(ctx, uops, flags, op, &input);
         if (ret < 0)
             return ret;
         input = ops->ops[i].comps;
     }
-    return 0;
+
+    return ff_sws_uop_list_optimize(ctx, flags, uops);
 }

@@ -42,6 +42,8 @@ static int read_probe(const AVProbeData *p)
         return 0;
     if ((int)AV_RL32(p->buf+12) <= 0)
         return 0;
+    if (AV_RL32(p->buf+16) == 0)
+        return 0;
     if (p->buf[20] == 0)
         return 0;
 
@@ -81,7 +83,7 @@ static int read_header(AVFormatContext *s)
     rate = avio_rl32(pb);
     duration = avio_rl32(pb);
     channels = avio_r8(pb);
-    if (channels == 0)
+    if (channels == 0 || rate <= 0)
         return AVERROR_INVALIDDATA;
     avio_skip(pb, 3);
     if (codec == 0x0a) {
@@ -98,7 +100,8 @@ static int read_header(AVFormatContext *s)
         codec = AV_CODEC_ID_ADPCM_IMA_WAV_MONO;
         break;
     default:
-        return AVERROR_INVALIDDATA;
+        avpriv_request_sample(s, "codec %d", codec);
+        return AVERROR_PATCHWELCOME;
     }
 
     avio_seek(pb, offset, SEEK_SET);

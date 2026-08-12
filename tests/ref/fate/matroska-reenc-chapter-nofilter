@@ -1,0 +1,10 @@
+9cb225d7afd5aec09f3b90501f74cc0f *tests/data/fate/matroska-reenc-chapter-nofilter.nut
+28587 tests/data/fate/matroska-reenc-chapter-nofilter.nut
+[CHAPTER]
+TAG:title=Schloß
+TAG:NUMBER_OF_FRAMES=test
+[/CHAPTER]
+[CHAPTER]
+TAG:title=Carro
+TAG:DESCRIPTION=Chapter titles for regional variants of English/Spanish
+[/CHAPTER]

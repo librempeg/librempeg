@@ -57,7 +57,7 @@ static av_cold int init_filter(AVFilterContext *ctx)
         goto fail;
     }
 
-    RET(ff_vk_exec_pool_init(vkctx, s->qf, &s->e, s->qf->num*4, 0, 0, 0, NULL));
+    RET(ff_vk_exec_pool_init(vkctx, s->qf, &s->e, FF_VK_DEFAULT_EXEC_CONTEXTS, 0, 0, 0, NULL));
     RET(ff_vk_init_sampler(vkctx, &s->sampler, 1,
                            s->lowpass == VLPF_OFF ? VK_FILTER_NEAREST
                                                   : VK_FILTER_LINEAR));
@@ -88,7 +88,7 @@ static av_cold int init_filter(AVFilterContext *ctx)
             .elems  = planes,
         },
     };
-    ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc, 3, 0, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc, 3, 0);
 
     RET(ff_vk_shader_link(vkctx, &s->shd,
                           ff_interlace_comp_spv_data,

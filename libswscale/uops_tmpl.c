@@ -30,6 +30,7 @@
 #  define PIXEL_TYPE SWS_PIXEL_F32
 #  define pixel_t    float
 #  define inter_t    float
+#  define vec3_t     v3f32_t
 #  define PX         F32
 #  define px         f32
 #elif BIT_DEPTH == 32
@@ -360,35 +361,53 @@ SWS_FOR_STRUCT(PX, READ_PLANAR_FH, DECL_ENTRY, .setup = fn(setup_filter_h) )
  * Permutation and copying *
  ***************************/
 
-/* Permute by directly swapping the order of arguments to the continuation. */
-#define DECL_PERMUTE(DUMMY, NAME, TYPE, UOP, MASK, IDX0, IDX1, IDX2, IDX3)      \
-    static void NAME##_c(SwsOpIter *restrict iter,                              \
-                         const SwsOpImpl *restrict impl,                        \
-                         void *restrict in0, void *restrict in1,                \
-                         void *restrict in2, void *restrict in3)                \
-    {                                                                           \
-        CONTINUE(in##IDX0, in##IDX1, in##IDX2, in##IDX3);                       \
-    }
+DECL_FUNC(permute, const SwsCompMask mask, int num_moves,
+          int8_t d0, int8_t d1, int8_t d2, int8_t d3, int8_t d4, int8_t d5,
+          int8_t s0, int8_t s1, int8_t s2, int8_t s3, int8_t s4, int8_t s5)
+{
+    const int8_t dst[SWS_UOP_MOVE_MAX] = { d0, d1, d2, d3, d4, d5 };
+    const int8_t src[SWS_UOP_MOVE_MAX] = { s0, s1, s2, s3, s4, s5 };
 
-#define DECL_COPY(DUMMY, NAME, TYPE, UOP, MASK, IDX0, IDX1, IDX2, IDX3)         \
-    static void NAME##_c(SwsOpIter *restrict iter,                              \
-                         const SwsOpImpl *restrict impl,                        \
-                         void *restrict in0, void *restrict in1,                \
-                         void *restrict in2, void *restrict in3)                \
-    {                                                                           \
-        const SwsCompMask mask = (MASK);                                        \
-        block_t x, y, z, w;                                                     \
-                                                                                \
-        if (X) memcpy(&x.px, in##IDX0, SIZEOF_BLOCK);                           \
-        if (Y) memcpy(&y.px, in##IDX1, SIZEOF_BLOCK);                           \
-        if (Z) memcpy(&z.px, in##IDX2, SIZEOF_BLOCK);                           \
-        if (W) memcpy(&w.px, in##IDX3, SIZEOF_BLOCK);                           \
-                                                                                \
-        CONTINUE(X ? &x : in0, Y ? &y : in1, Z ? &z : in2, W ? &w : in3);       \
-    }
+    pixel_t *ptr[5] = { NULL, x, y, z, w };
+    for (int n = 0; n < num_moves; n++)
+        ptr[dst[n] + 1] = ptr[src[n] + 1];
 
-SWS_FOR(PX, PERMUTE, DECL_PERMUTE)
-SWS_FOR(PX, COPY,    DECL_COPY)
+    /* The unneeded registers may still alias the used ones, so point them
+     * back at the stack to avoid collisions */
+    block_t xx, yy, zz, ww;
+    CONTINUE(X ? ptr[1] : xx.px,
+             Y ? ptr[2] : yy.px,
+             Z ? ptr[3] : zz.px,
+             W ? ptr[4] : ww.px);
+}
+
+DECL_FUNC(copy, const SwsCompMask mask, int num_moves,
+          int8_t d0, int8_t d1, int8_t d2, int8_t d3, int8_t d4, int8_t d5,
+          int8_t s0, int8_t s1, int8_t s2, int8_t s3, int8_t s4, int8_t s5)
+{
+    const size_t block_size = SWS_BLOCK_SIZE * sizeof(pixel_t);
+    const int8_t dst[SWS_UOP_MOVE_MAX] = { d0, d1, d2, d3, d4, d5 };
+    const int8_t src[SWS_UOP_MOVE_MAX] = { s0, s1, s2, s3, s4, s5 };
+
+    block_t data[5];
+    memcpy(&data[1].px, x, block_size);
+    memcpy(&data[2].px, y, block_size);
+    memcpy(&data[3].px, z, block_size);
+    memcpy(&data[4].px, w, block_size);
+
+    for (int n = 0; n < num_moves; n++)
+        data[dst[n] + 1] = data[src[n] + 1];
+
+    memcpy(x, &data[1].px, block_size);
+    memcpy(y, &data[2].px, block_size);
+    memcpy(z, &data[3].px, block_size);
+    memcpy(w, &data[4].px, block_size);
+
+    CONTINUE(x, y, z, w);
+}
+
+SWS_FOR(PX, PERMUTE, DECL_IMPL, permute)
+SWS_FOR(PX, COPY,    DECL_IMPL, copy)
 SWS_FOR_STRUCT(PX, PERMUTE, DECL_ENTRY)
 SWS_FOR_STRUCT(PX, COPY,    DECL_ENTRY)
 
@@ -821,10 +840,166 @@ DECL_FUNC(linear, const SwsCompMask mask, const uint32_t one, const uint32_t zer
 SWS_FOR(PX, LINEAR, DECL_IMPL, linear)
 SWS_FOR_STRUCT(PX, LINEAR, DECL_ENTRY, .setup = fn(setup_linear) )
 
+/******************
+ * Look-up tables *
+ ******************/
+
+DECL_SETUP(setup_lut3d, params, out)
+{
+    const SwsLut3D *lut = params->uop->data.lut3d;
+    out->priv.ptr = (void *) av_refstruct_ref_c(lut);
+    out->free = ff_op_priv_unref;
+    return 0;
+}
+
+#if IS_FLOAT
+av_always_inline static vec3_t fn(vec3)(v3u16_t v)
+{
+    return (vec3_t) { v.x, v.y, v.z };
+}
+
+#define lerp(a, b, w) ((a) + (w) * ((pixel_t) (b) - (a)))
+
+av_always_inline static
+vec3_t fn(lerp3)(vec3_t a, vec3_t b, pixel_t w)
+{
+    return (vec3_t) {
+        lerp(a.x, b.x, w),
+        lerp(a.y, b.y, w),
+        lerp(a.z, b.z, w),
+    };
+}
+
+av_always_inline static
+vec3_t fn(lut3d_static)(const SwsLut3D *restrict lut3d, vec3_t rgb)
+{
+    const int r_base = (int) rgb.x;
+    const int g_base = (int) rgb.y;
+    const int b_base = (int) rgb.z;
+
+    int off0 = (r_base < INPUT_LUT_SIZE - 1);
+    int off1 = (g_base < INPUT_LUT_SIZE - 1) * INPUT_LUT_SIZE;
+    int off2 = (b_base < INPUT_LUT_SIZE - 1) * INPUT_LUT_SIZE * INPUT_LUT_SIZE;
+    pixel_t f0 = rgb.x - r_base;
+    pixel_t f1 = rgb.y - g_base;
+    pixel_t f2 = rgb.z - b_base;
+
+    /* Sort offsets descending by relative weight */
+    if (f0 < f1) {
+        FFSWAP(pixel_t, f0, f1);
+        FFSWAP(int, off0, off1);
+    }
+    if (f0 < f2) {
+        FFSWAP(pixel_t, f0, f2);
+        FFSWAP(int, off0, off2);
+    }
+    if (f1 < f2) {
+        FFSWAP(pixel_t, f1, f2);
+        FFSWAP(int, off1, off2);
+    }
+
+    /* Tetrahedral interpolation */
+    const pixel_t w0 = 1 - f0;
+    const pixel_t w1 = f0 - f1;
+    const pixel_t w2 = f1 - f2;
+    const pixel_t w3 = f2;
+
+    const v3u16_t *restrict base = &lut3d->input[b_base][g_base][r_base];
+    const vec3_t v0 = fn(vec3)(base[0]);
+    const vec3_t v1 = fn(vec3)(base[off0]);
+    const vec3_t v2 = fn(vec3)(base[off0 + off1]);
+    const vec3_t v3 = fn(vec3)(base[off0 + off1 + off2]);
+
+    return (vec3_t) {
+        w0 * v0.x + w1 * v1.x + w2 * v2.x + w3 * v3.x,
+        w0 * v0.y + w1 * v1.y + w2 * v2.y + w3 * v3.y,
+        w0 * v0.z + w1 * v1.z + w2 * v2.z + w3 * v3.z,
+    };
+}
+
+av_always_inline static
+vec3_t fn(lut3d_dynamic)(const SwsLut3D *restrict lut3d, vec3_t rgb)
+{
+    rgb.x *= (TONE_LUT_SIZE - 1) / (pixel_t) UINT16_MAX;
+
+    /* Linear interpolation */
+    const int     Ix = (int) rgb.x;
+    const pixel_t If = rgb.x - Ix;
+
+    const v2u16_t a = lut3d->tone_map[Ix];
+    const v2u16_t b = lut3d->tone_map[Ix + 1];
+
+    const pixel_t k     = lerp(a.y, b.y, If);
+    const pixel_t bias  = (1 << 15) - k;
+    const pixel_t scale = k / (pixel_t) (1 << 15);
+
+    rgb.x = lerp(a.x, b.x, If);
+    rgb.y = bias + scale * rgb.y;
+    rgb.z = bias + scale * rgb.z;
+
+    /* Re-scale to output LUT size */
+    rgb.x *= (OUTPUT_LUT_SIZE_I  - 1) / (pixel_t) UINT16_MAX;
+    rgb.y *= (OUTPUT_LUT_SIZE_PT - 1) / (pixel_t) UINT16_MAX;
+    rgb.z *= (OUTPUT_LUT_SIZE_PT - 1) / (pixel_t) UINT16_MAX;
+
+    /* Trilinear interpolation */
+    const int lo0 = (int) rgb.x;
+    const int lo1 = (int) rgb.y;
+    const int lo2 = (int) rgb.z;
+
+    const int hi0 = FFMIN(lo0 + 1, OUTPUT_LUT_SIZE_I  - 1);
+    const int hi1 = FFMIN(lo1 + 1, OUTPUT_LUT_SIZE_PT - 1);
+    const int hi2 = FFMIN(lo2 + 1, OUTPUT_LUT_SIZE_PT - 1);
+
+    const pixel_t w0  = rgb.x - lo0;
+    const vec3_t c000 = fn(vec3)(lut3d->output[lo2][lo1][lo0]);
+    const vec3_t c001 = fn(vec3)(lut3d->output[lo2][lo1][hi0]);
+    const vec3_t c00  = fn(lerp3)(c000, c001, w0);
+    const vec3_t c010 = fn(vec3)(lut3d->output[lo2][hi1][lo0]);
+    const vec3_t c011 = fn(vec3)(lut3d->output[lo2][hi1][hi0]);
+    const vec3_t c01  = fn(lerp3)(c010, c011, w0);
+    const vec3_t c100 = fn(vec3)(lut3d->output[hi2][lo1][lo0]);
+    const vec3_t c101 = fn(vec3)(lut3d->output[hi2][lo1][hi0]);
+    const vec3_t c10  = fn(lerp3)(c100, c101, w0);
+    const vec3_t c110 = fn(vec3)(lut3d->output[hi2][hi1][lo0]);
+    const vec3_t c111 = fn(vec3)(lut3d->output[hi2][hi1][hi0]);
+    const vec3_t c11  = fn(lerp3)(c110, c111, w0);
+
+    const pixel_t w1 = rgb.y - lo1;
+    const vec3_t c0  = fn(lerp3)(c00, c01, w1);
+    const vec3_t c1  = fn(lerp3)(c10, c11, w1);
+
+    const pixel_t w2 = rgb.z - lo2;
+    return fn(lerp3)(c0, c1, w2);
+}
+
+DECL_FUNC(lut3d, const SwsCompMask mask, const int dynamic)
+{
+    const SwsLut3D *restrict lut3d = impl->priv.ptr;
+
+    SWS_LOOP
+    for (int i = 0; i < SWS_BLOCK_SIZE; i++) {
+        vec3_t c = { x[i], y[i], z[i] };
+        c = fn(lut3d_static)(lut3d, c);
+        if (dynamic)
+            c = fn(lut3d_dynamic)(lut3d, c);
+
+        x[i] = c.x;
+        y[i] = c.y;
+        z[i] = c.z;
+    }
+
+    CONTINUE(x, y, z, w);
+}
+#endif /* IS_FLOAT */
+
+SWS_FOR(PX, LUT_3D, DECL_IMPL, lut3d)
+SWS_FOR_STRUCT(PX, LUT_3D, DECL_ENTRY, .setup = fn(setup_lut3d) )
+
 #undef PIXEL_MAX
 #undef PIXEL_SWAP
 #undef pixel_t
 #undef inter_t
-#undef block_t
+#undef vec3_t
 #undef PX
 #undef px

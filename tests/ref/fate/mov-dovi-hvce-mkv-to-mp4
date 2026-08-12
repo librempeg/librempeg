@@ -1,4 +1,4 @@
-1d9ac9b893ed7e990b06fa13ebd97901 *tests/data/fate/mov-dovi-hvce-mkv-to-mp4.mp4
+12c2837b9131bb0273c4421d03d9ad4a *tests/data/fate/mov-dovi-hvce-mkv-to-mp4.mp4
 668149 tests/data/fate/mov-dovi-hvce-mkv-to-mp4.mp4
 #extradata 0:      187, 0x34a930cb
 #tb 0: 1/16000
@@ -6,7 +6,7 @@
 #codec_id 0: hevc
 #dimensions 0: 3840x2160
 #sar 0: 1/1
-0,      -2000,          0,      656,   666936, 0x27d831d4
+0,      -2000,          0,      672,   666936, 0x27d831d4
 [STREAM]
 [SIDE_DATA]
 side_data_type=DOVI configuration record

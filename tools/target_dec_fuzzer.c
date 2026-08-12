@@ -465,7 +465,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
                 }
                 if (ctx->codec_id != AV_CODEC_ID_DTS)
                     break;
-            // fall-through
+                av_fallthrough;
             case AV_CODEC_ID_DOLBY_E:
                 av_dict_set_int(&opts, "channel_order", !!(request_channel_layout & INT64_MIN), 0);
                 break;

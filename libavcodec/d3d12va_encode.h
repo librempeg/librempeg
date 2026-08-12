@@ -271,6 +271,8 @@ typedef struct D3D12VAEncodeContext {
 
     D3D12_VIDEO_ENCODER_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA subregions_layout;
 
+    D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE subregion_mode;
+
     /**
      * Intra refresh configuration
      */
@@ -290,6 +292,8 @@ typedef struct D3D12VAEncodeContext {
      * QP map region pixel size (block size for QP map)
      */
     int qp_map_region_size;
+
+    int num_subregions;
 } D3D12VAEncodeContext;
 
 typedef struct D3D12VAEncodeType {

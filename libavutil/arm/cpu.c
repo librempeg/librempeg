@@ -46,13 +46,25 @@
 #define AT_HWCAP        16
 #endif
 
-/* Relevant HWCAP values from kernel headers */
+/* Relevant HWCAP values from <sys/auxv.h> that includes <bits/hwcap.h> */
+#ifndef HWCAP_ARM_VFP
 #define HWCAP_ARM_VFP     (1 << 6)
+#endif
+#ifndef HWCAP_ARM_EDSP
 #define HWCAP_ARM_EDSP    (1 << 7)
+#endif
+#ifndef HWCAP_ARM_THUMBEE
 #define HWCAP_ARM_THUMBEE (1 << 11)
+#endif
+#ifndef HWCAP_ARM_NEON
 #define HWCAP_ARM_NEON    (1 << 12)
+#endif
+#ifndef HWCAP_ARM_VFPv3
 #define HWCAP_ARM_VFPv3   (1 << 13)
+#endif
+#ifndef HWCAP_ARM_TLS
 #define HWCAP_ARM_TLS     (1 << 15)
+#endif
 
 static int get_auxval(uint32_t *hwcap)
 {

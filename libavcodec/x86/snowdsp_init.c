@@ -207,7 +207,7 @@ static void ff_snow_horizontal_compose97i_mmx(IDWTELEM *b, IDWTELEM *temp, int w
     }
 }
 
-#if HAVE_7REGS
+#if HAVE_X86_7REGS
 #define snow_vertical_compose_r2r_sub(s0,s1,s2,s3,t0,t1,t2,t3)\
         "psubw %%"s0", %%"t0" \n\t"\
         "psubw %%"s1", %%"t1" \n\t"\
@@ -325,7 +325,7 @@ static void ff_snow_vertical_compose97i_mmx(IDWTELEM *b0, IDWTELEM *b1, IDWTELEM
         :"+d"(i)
         :"r"(b0),"r"(b1),"r"(b2),"r"(b3),"r"(b4),"r"(b5));
 }
-#endif //HAVE_7REGS
+#endif //HAVE_X86_7REGS
 
 #endif /* HAVE_INLINE_ASM */
 
@@ -336,7 +336,7 @@ av_cold void ff_dwt_init_x86(SnowDWTContext *c)
 #if HAVE_INLINE_ASM
     if (INLINE_MMXEXT(cpuflags)) {
         c->horizontal_compose97i = ff_snow_horizontal_compose97i_mmx;
-#if HAVE_7REGS
+#if HAVE_X86_7REGS
         c->vertical_compose97i   = ff_snow_vertical_compose97i_mmx;
 #endif
     }

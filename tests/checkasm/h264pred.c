@@ -37,7 +37,7 @@ static const char * const pred4x4_modes[4][15] = {
         [DIAG_DOWN_LEFT_PRED ] = "down_left",
         [DIAG_DOWN_RIGHT_PRED] = "down_right",
         [VERT_RIGHT_PRED     ] = "vertical_right",
-        [HOR_DOWN_PRED       ] = "horizontal_right",
+        [HOR_DOWN_PRED       ] = "horizontal_down",
         [VERT_LEFT_PRED      ] = "vertical_left",
         [HOR_UP_PRED         ] = "horizontal_up",
         [LEFT_DC_PRED        ] = "left_dc",
@@ -80,6 +80,7 @@ static const char * const pred8x8_modes[4][11] = {
         [ALZHEIMER_DC_0L0_PRED8x8] = "mad_cow_dc_0l0",
     },
     { /* VP8 */
+        [DC_PRED8x8    ] = "dc_rv40",
         [PLANE_PRED8x8 ] = "tm_vp8",
         [DC_127_PRED8x8] = "dc_127_vp8",
         [DC_129_PRED8x8] = "dc_129_vp8",
@@ -145,7 +146,7 @@ static void check_pred4x4(H264PredContext *h, uint8_t *buf0, uint8_t *buf1,
     if (chroma_format == 1) {
         uint8_t *topright = buf0 + 2*16;
         int pred_mode;
-        declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT, void, uint8_t *src, const uint8_t *topright, ptrdiff_t stride);
+        declare_func(void, uint8_t *src, const uint8_t *topright, ptrdiff_t stride);
 
         for (pred_mode = 0; pred_mode < 15; pred_mode++) {
             if (check_pred_func(h->pred4x4[pred_mode], "4x4", pred4x4_modes[codec][pred_mode])) {
@@ -164,7 +165,7 @@ static void check_pred8x8(H264PredContext *h, uint8_t *buf0, uint8_t *buf1,
                           int codec, int chroma_format, int bit_depth)
 {
     int pred_mode;
-    declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT, void, uint8_t *src, ptrdiff_t stride);
+    declare_func(void, uint8_t *src, ptrdiff_t stride);
 
     for (pred_mode = 0; pred_mode < 11; pred_mode++) {
         if (check_pred_func(h->pred8x8[pred_mode], (chroma_format == 2) ? "8x16" : "8x8",
@@ -184,7 +185,7 @@ static void check_pred16x16(H264PredContext *h, uint8_t *buf0, uint8_t *buf1,
 {
     if (chroma_format == 1) {
         int pred_mode;
-        declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT, void, uint8_t *src, ptrdiff_t stride);
+        declare_func(void, uint8_t *src, ptrdiff_t stride);
 
         for (pred_mode = 0; pred_mode < 9; pred_mode++) {
             if (check_pred_func(h->pred16x16[pred_mode], "16x16", pred16x16_modes[codec][pred_mode])) {
@@ -204,7 +205,7 @@ static void check_pred8x8l(H264PredContext *h, uint8_t *buf0, uint8_t *buf1,
 {
     if (chroma_format == 1 && codec_ids[codec] == AV_CODEC_ID_H264) {
         int pred_mode;
-        declare_func_emms(AV_CPU_FLAG_MMXEXT, void, uint8_t *src, int topleft, int topright, ptrdiff_t stride);
+        declare_func(void, uint8_t *src, int topleft, int topright, ptrdiff_t stride);
 
         for (pred_mode = 0; pred_mode < 12; pred_mode++) {
             if (check_pred_func(h->pred8x8l[pred_mode], "8x8l", pred4x4_modes[codec][pred_mode])) {

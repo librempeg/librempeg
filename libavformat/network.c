@@ -55,15 +55,20 @@ void ff_tls_deinit(void)
 #endif
 }
 
+/**
+ * Initialize the network subsystem. On Windows, this calls WSAStartup().
+ *
+ * @return 0 on success, a negative AVERROR code on failure.
+ */
 int ff_network_init(void)
 {
 #if HAVE_WINSOCK2_H
     WSADATA wsaData;
 
     if (WSAStartup(MAKEWORD(1,1), &wsaData))
-        return 0;
+        return AVERROR(EIO);
 #endif
-    return 1;
+    return 0;
 }
 
 int ff_network_wait_fd(int fd, int write)

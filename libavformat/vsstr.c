@@ -103,7 +103,7 @@ static int read_packet(AVFormatContext *s, AVPacket *avpkt)
 
 const FFInputFormat ff_vsstr_demuxer = {
     .p.name         = "vsstr",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("VS STR"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Square VS STRx"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "vs,str",
     .read_probe     = read_probe,

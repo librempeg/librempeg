@@ -30,6 +30,7 @@
 
 #include "libavutil/attributes_internal.h"
 #include "libavutil/avassert.h"
+#include "libavutil/macros.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/avstring.h"
 #include "libavutil/bprint.h"
@@ -1140,20 +1141,31 @@ static int hls_append_segment(struct AVFormatContext *s, HLSContext *hls,
     return 0;
 }
 
-static int extract_segment_number(const char *filename) {
+static int extract_segment_number(const char *filename)
+{
     const char *dot = strrchr(filename, '.');
-    const char *num_start = dot - 1;
+    const char *num_start;
+    char *end;
+    long value;
 
-    while (num_start > filename && *num_start >= '0' && *num_start <= '9') {
+    if (!dot)
+        return -1;
+    if (dot == filename)
+        return -1;
+
+    num_start = dot;
+    while (num_start > filename &&
+           num_start[-1] >= '0' && num_start[-1] <= '9')
         num_start--;
-    }
-
-    num_start++;
-
     if (num_start == dot)
         return -1;
 
-    return atoi(num_start);
+    errno = 0;
+    value = strtol(num_start, &end, 10);
+    if (errno == ERANGE || end != dot || value > INT_MAX)
+        return -1;
+
+    return (int)value;
 }
 
 static int parse_playlist(AVFormatContext *s, const char *url, VariantStream *vs)
@@ -1200,11 +1212,13 @@ static int parse_playlist(AVFormatContext *s, const char *url, VariantStream *vs
             ptr = av_stristr(line, "URI=\"");
             if (ptr) {
                 ptr += strlen("URI=\"");
-                end = av_stristr(ptr, ",");
+                end = strchr(ptr, '"');
                 if (end) {
-                    av_strlcpy(vs->key_uri, ptr, end - ptr);
+                    av_strlcpy(vs->key_uri, ptr,
+                               FFMIN(end - ptr + 1, sizeof(vs->key_uri)));
                 } else {
-                    av_strlcpy(vs->key_uri, ptr, sizeof(vs->key_uri));
+                    ret = AVERROR_INVALIDDATA;
+                    goto fail;
                 }
             }
 
@@ -1213,7 +1227,7 @@ static int parse_playlist(AVFormatContext *s, const char *url, VariantStream *vs
                 ptr += strlen("IV=0x");
                 end = av_stristr(ptr, ",");
                 if (end) {
-                    av_strlcpy(vs->iv_string, ptr, end - ptr);
+                    av_strlcpy(vs->iv_string, ptr, FFMIN(end - ptr + 1, sizeof(vs->iv_string)));
                 } else {
                     av_strlcpy(vs->iv_string, ptr, sizeof(vs->iv_string));
                 }

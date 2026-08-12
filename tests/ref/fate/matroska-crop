@@ -1,5 +1,5 @@
-fc4932f90dfc955b55cfbdbb210fdd16 *tests/data/fate/matroska-crop.matroska
-355698 tests/data/fate/matroska-crop.matroska
+5e994da09d804380c7e0d7ce107e3eba *tests/data/fate/matroska-crop.matroska
+355603 tests/data/fate/matroska-crop.matroska
 #tb 0: 1/1
 #media_type 0: video
 #codec_id 0: rawvideo

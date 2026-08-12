@@ -1,0 +1,4 @@
+ID3v2 frame COMM (18 bytes):|.XXX.Dummy comment|
+ID3v2 frame USLT (17 bytes):|.XXX.Dummy lyrics|
+comment=Dummy comment
+lyrics=Dummy lyrics

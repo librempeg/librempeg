@@ -164,7 +164,7 @@ static int vk_hevc_fill_pict(AVCodecContext *avctx, HEVCFrame **ref_src,
         .codedOffset = (VkOffset2D){ 0, 0 },
         .codedExtent = (VkExtent2D){ pic->f->width, pic->f->height },
         .baseArrayLayer = ctx->common.layered_dpb ? pic_id : 0,
-        .imageViewBinding = vkpic->view.ref[0],
+        .imageViewBinding = vkpic->view.ref,
     };
 
     *ref_slot = (VkVideoReferenceSlotInfoKHR) {
@@ -620,7 +620,7 @@ static void set_vps(const HEVCVPS *vps,
     };
 }
 
-static int vk_hevc_create_params(AVCodecContext *avctx, AVBufferRef **buf)
+static int vk_hevc_create_params(AVCodecContext *avctx, VkVideoSessionParametersKHR **buf)
 {
     int err;
     const HEVCContext *h = avctx->priv_data;
@@ -818,7 +818,7 @@ static int vk_hevc_start_frame(AVCodecContext          *avctx,
             .codedOffset = (VkOffset2D){ 0, 0 },
             .codedExtent = (VkExtent2D){ pic->f->width, pic->f->height },
             .baseArrayLayer = 0,
-            .imageViewBinding = vp->view.out[0],
+            .imageViewBinding = vp->view.out,
         },
     };
 
@@ -874,6 +874,9 @@ static int vk_hevc_end_frame(AVCodecContext *avctx)
                 &vksps_p.vui, &vksps, vksps_p.nal_hdr,
                 vksps_p.vcl_hdr, &vksps_p.ptl, &vksps_p.dpbm,
                 &vksps_p.pal, vksps_p.str, &vksps_p.ltr);
+
+        if (sps->vps->vps_num_hrd_parameters > HEVC_MAX_SUB_LAYERS)
+            return AVERROR_INVALIDDATA;
 
         vkvps_p.sls = vkvps_ps;
         set_vps(sps->vps, &vkvps, &vkvps_p.ptl, &vkvps_p.dpbm,

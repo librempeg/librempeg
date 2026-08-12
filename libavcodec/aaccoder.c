@@ -664,10 +664,20 @@ static void mark_pns(AACEncContext *s, AVCodecContext *avctx, SingleChannelEleme
              * 3. on short window groups, all windows have similar energy (variations in energy would be destroyed by PNS)
              */
             sce->pns_ener[w*16+g] = sfb_energy;
-            if (sfb_energy < threshold*sqrtf(1.5f/freq_boost) || spread < spread_threshold || min_energy < pns_transient_energy_r * max_energy) {
-                sce->can_pns[w*16+g] = 0;
-            } else {
-                sce->can_pns[w*16+g] = 1;
+            {
+                /* near-mask PNS class (E in [thr/4, 2*thr]): deletion
+                 * candidates go to noise, not silence (AAC_PNSHOLE) */
+                int near = sfb_energy < 2.0f * threshold &&
+                           sfb_energy > threshold * 0.25f;
+                if (near) {
+                    /* deletion candidate: noise beats the ~silent rendition */
+                    sce->can_pns[w*16+g] = spread >= spread_threshold &&
+                                           min_energy >= 0.2f * max_energy;
+                } else if (sfb_energy < threshold*sqrtf(1.5f/freq_boost) || spread < spread_threshold || min_energy < pns_transient_energy_r * max_energy) {
+                    sce->can_pns[w*16+g] = 0;
+                } else {
+                    sce->can_pns[w*16+g] = 1;
+                }
             }
         }
     }

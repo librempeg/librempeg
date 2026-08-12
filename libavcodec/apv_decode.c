@@ -384,11 +384,15 @@ static int apv_decode(AVCodecContext *avctx, AVFrame *output,
     apv_derive_tile_info(tile_info, &input->frame_header);
 
     if (avctx->hwaccel) {
-        const FFHWAccel *hwaccel = ffhwaccel(avctx->hwaccel);
-
         err = ff_hwaccel_frame_priv_alloc(avctx, &apv->hwaccel_picture_private);
         if (err < 0)
             return err;
+    }
+
+    ff_thread_finish_setup(avctx);
+
+    if (avctx->hwaccel) {
+        const FFHWAccel *hwaccel = ffhwaccel(avctx->hwaccel);
 
         err = hwaccel->start_frame(avctx, apv->pkt->buf,
                                    apv->pkt->data, apv->pkt->size);

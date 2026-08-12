@@ -645,9 +645,9 @@ static inline int decode_residual_inter(AVSContext *h)
 
 static inline void set_mv_intra(AVSContext *h)
 {
-    h->mv[MV_FWD_X0] = ff_cavs_intra_mv;
+    h->mv[MV_FWD_X0] = CAVS_INTRA_MV;
     set_mvs(&h->mv[MV_FWD_X0], BLK_16X16);
-    h->mv[MV_BWD_X0] = ff_cavs_intra_mv;
+    h->mv[MV_BWD_X0] = CAVS_INTRA_MV;
     set_mvs(&h->mv[MV_BWD_X0], BLK_16X16);
     if (h->cur.f->pict_type != AV_PICTURE_TYPE_B)
         h->col_type_base[h->mbidx] = I_8X8;
@@ -792,9 +792,9 @@ static int decode_mb_b(AVSContext *h, enum cavs_mb mb_type)
     ff_cavs_init_mb(h);
 
     /* reset all MVs */
-    h->mv[MV_FWD_X0] = ff_cavs_dir_mv;
+    h->mv[MV_FWD_X0] = CAVS_DIR_MV;
     set_mvs(&h->mv[MV_FWD_X0], BLK_16X16);
-    h->mv[MV_BWD_X0] = ff_cavs_dir_mv;
+    h->mv[MV_BWD_X0] = CAVS_DIR_MV;
     set_mvs(&h->mv[MV_BWD_X0], BLK_16X16);
     switch (mb_type) {
     case B_SKIP:
@@ -1266,10 +1266,11 @@ static int cavs_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
                 av_log(h->avctx, AV_LOG_WARNING, "no frame decoded\n");
             return FFMAX(0, buf_ptr - buf);
         }
-        input_size = (buf_end - buf_ptr) * 8;
+        input_size = buf_end - buf_ptr;
+        if ((ret = init_get_bits8(&h->gb, buf_ptr, input_size)) < 0)
+            return ret;
         switch (stc) {
         case CAVS_START_CODE:
-            init_get_bits(&h->gb, buf_ptr, input_size);
             decode_seq_header(h);
             break;
         case PIC_I_START_CODE:
@@ -1288,7 +1289,6 @@ static int cavs_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
             *got_frame = 0;
             if (!h->got_keyframe)
                 break;
-            init_get_bits(&h->gb, buf_ptr, input_size);
             h->stc = stc;
             if (decode_pic(h))
                 break;
@@ -1312,7 +1312,6 @@ static int cavs_decode_frame(AVCodecContext *avctx, AVFrame *rframe,
             break;
         default:
             if (stc <= SLICE_MAX_START_CODE) {
-                init_get_bits(&h->gb, buf_ptr, input_size);
                 decode_slice_header(h, &h->gb);
             }
             break;

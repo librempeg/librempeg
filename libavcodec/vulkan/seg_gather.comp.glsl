@@ -21,6 +21,7 @@
 #version 460
 #pragma shader_stage(compute)
 #extension GL_GOOGLE_include_directive : require
+#extension GL_KHR_shader_subgroup_arithmetic : require
 
 #include "common.glsl"
 
@@ -31,8 +32,8 @@
  * FFv1 slice, ...) into its own fixed-stride, device-local slot, because no
  * encoder workgroup knows the others' final sizes. Run afterwards, this
  * shader prefix-sums the per-segment sizes and packs the segments back to
- * back into one contiguous, host-visible buffer -- so the device->host
- * transfer is a single coalesced stream rather than a scattered dribble.
+ * back into one contiguous buffer -- so the device->host transfer is a
+ * single coalesced stream rather than a scattered dribble.
  *
  * One workgroup per segment. Inputs: the sparse slot buffer, the per-segment
  * sizes, and the slot stride.
@@ -43,9 +44,9 @@ layout (set = 0, binding = 0, scalar) readonly buffer sizes_buf {
 };
 
 layout (push_constant, scalar) uniform pushConstants {
-    u8buf sparse;       /* device-local: one slot per segment */
-    u8buf compacted;    /* host-visible: contiguous output    */
-    uint  slot_size;    /* stride between sparse slots         */
+    u8buf sparse;       /* one slot per segment       */
+    u8buf compacted;    /* contiguous output          */
+    uint  slot_size;    /* stride between sparse slots */
 };
 
 shared uint s_dst_off;
@@ -60,17 +61,24 @@ u32vec4 funnel(u32vec4 lo, u32vec4 hi, uint sh)
     if (sh == 0u)
         return lo;
 
-    uint s[8] = uint[8](lo.x, lo.y, lo.z, lo.w, hi.x, hi.y, hi.z, hi.w);
     uint uw = sh >> 2u;             /* whole uints into the window       */
     uint bb = (sh & 3u) << 3u;      /* remaining sub-uint shift, in bits  */
 
-    if (bb == 0u)
-        return u32vec4(s[uw], s[uw + 1u], s[uw + 2u], s[uw + 3u]);
+    /* s[uw..uw+3] and s[uw+1..uw+4] of the concatenated (lo, hi) pair,
+     * selected via uniform branches; a dynamically indexed local array
+     * would get spilled to scratch memory. */
+    u32vec4 a, c;
+    switch (uw) {
+    case 0u: a = lo;                     c = u32vec4(lo.yzw, hi.x); break;
+    case 1u: a = u32vec4(lo.yzw, hi.x);  c = u32vec4(lo.zw, hi.xy); break;
+    case 2u: a = u32vec4(lo.zw, hi.xy);  c = u32vec4(lo.w, hi.xyz); break;
+    default: a = u32vec4(lo.w, hi.xyz);  c = hi;                    break;
+    }
 
-    return u32vec4((s[uw     ] >> bb) | (s[uw + 1u] << (32u - bb)),
-                   (s[uw + 1u] >> bb) | (s[uw + 2u] << (32u - bb)),
-                   (s[uw + 2u] >> bb) | (s[uw + 3u] << (32u - bb)),
-                   (s[uw + 3u] >> bb) | (s[uw + 4u] << (32u - bb)));
+    if (bb == 0u)
+        return a;
+
+    return (a >> bb) | (c << (32u - bb));
 }
 
 void main(void)
@@ -82,14 +90,19 @@ void main(void)
     /*
      * Destination offset: the sum of all preceding segment sizes. The output
      * is packed tight -- segments back to back -- so it is usable directly as
-     * the assembled bitstream.
+     * the assembled bitstream. Reduced by the whole workgroup; a serial loop
+     * on one thread leaves 255 idle and is latency-bound on the reads.
      */
-    if (b == 0u) {
-        uint o = 0u;
-        for (uint i = 0u; i < seg; i++)
-            o += seg_sizes[i];
-        s_dst_off = o;
-    }
+    if (b == 0u)
+        s_dst_off = 0u;
+    barrier();
+
+    uint acc = 0u;
+    for (uint i = b; i < seg; i += wg)
+        acc += seg_sizes[i];
+    acc = subgroupAdd(acc);
+    if (subgroupElect() && acc != 0u)
+        atomicAdd(s_dst_off, acc);
     barrier();
 
     const uint n = seg_sizes[seg];

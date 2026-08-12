@@ -1,7 +1,7 @@
 ID3v2 frame TALB (26 bytes):|.Hurry Up, We're Dreaming.|
 ID3v2 frame TPE2 (5 bytes):|.M83.|
 ID3v2 frame TPE1 (5 bytes):|.M83.|
-ID3v2 frame TXXX (20 bytes):|.comment.I love M83.|
+ID3v2 frame COMM (16 bytes):|.und.I love M83.|
 ID3v2 frame TCOM (18 bytes):|.Anthony Gonzalez.|
 ID3v2 frame TCOP (24 bytes):|.2011 M83 Recording Inc.|
 ID3v2 frame TDRC (12 bytes):|.2011-10-17.|

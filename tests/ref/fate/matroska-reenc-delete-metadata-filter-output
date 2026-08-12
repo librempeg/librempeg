@@ -1,0 +1,8 @@
+09fe3f3cb1d5d5c474069833bca0d97b *tests/data/fate/matroska-reenc-delete-metadata-filter-output.nut
+28543 tests/data/fate/matroska-reenc-delete-metadata-filter-output.nut
+[STREAM]
+TAG:encoder=Lavc mpeg2video
+TAG:language=spa
+[SIDE_DATA]
+[/SIDE_DATA]
+[/STREAM]

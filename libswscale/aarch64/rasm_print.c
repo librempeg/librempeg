@@ -19,7 +19,10 @@
  */
 
 #include <stdarg.h>
+#include <string.h>
 
+#include "libavutil/bprint.h"
+#include "libavutil/error.h"
 #include "libavutil/mem.h"
 
 #include "rasm.h"
@@ -35,50 +38,37 @@
 #define INSTR_INDENT  8
 #define COMMENT_COL  56
 
-av_printf_format(3, 4)
-static int pos_fprintf(FILE *fp, int64_t *pos, const char *fmt, ...)
+static void indent_to(AVBPrint *bp, unsigned line_start, int col)
 {
-    int ret;
-    va_list args;
-    va_start(args, fmt);
-    ret = vfprintf(fp, fmt, args);
-    va_end(args);
-    if (ret >= 0)
-        *pos += ret;
-    return ret;
-}
-
-static void indent_to(FILE *fp, int64_t *pos, int64_t line_start, int col)
-{
-    int cur_col = *pos - line_start;
-    pos_fprintf(fp, pos, "%*s", FFMAX(col - cur_col, 1), "");
+    int cur_col = bp->len - line_start;
+    av_bprintf(bp, "%*s", FFMAX(col - cur_col, 1), "");
 }
 
 /*********************************************************************/
 /* RASM_OP_IMM */
 
-static void print_op_imm(FILE *fp, int64_t *pos, RasmOp op)
+static void print_op_imm(AVBPrint *bp, RasmOp op)
 {
-    pos_fprintf(fp, pos, "#%d", rasm_op_imm_val(op));
+    av_bprintf(bp, "#%d", rasm_op_imm_val(op));
 }
 
 /*********************************************************************/
 /* RASM_OP_LABEL */
 
 static void print_op_label(const RasmContext *rctx,
-                           FILE *fp, int64_t *pos,
+                           AVBPrint *bp,
                            RasmOp op, const int *local_labels)
 {
     int id = rasm_op_label_id(op);
     av_assert0(id >= 0 && id < rctx->num_labels);
     if (rctx->labels[id]) {
-        pos_fprintf(fp, pos, "%s", rctx->labels[id]);
+        av_bprintf(bp, "%s", rctx->labels[id]);
     } else {
         int local_id = local_labels[id];
         if (local_id < 0) {
-            pos_fprintf(fp, pos, "%db", -local_id);
+            av_bprintf(bp, "%db", -local_id);
         } else {
-            pos_fprintf(fp, pos, "%df",  local_id);
+            av_bprintf(bp, "%df",  local_id);
         }
     }
 }
@@ -86,19 +76,19 @@ static void print_op_label(const RasmContext *rctx,
 /*********************************************************************/
 /* AARCH64_OP_GPR */
 
-static void print_op_gpr(FILE *fp, int64_t *pos, RasmOp op)
+static void print_op_gpr(AVBPrint *bp, RasmOp op)
 {
     uint8_t n    = a64op_gpr_n(op);
     uint8_t size = a64op_gpr_size(op);
 
     if (n == 31) {
-        pos_fprintf(fp, pos, "%s", size == sizeof(uint32_t) ? "wsp" : "sp");
+        av_bprintf(bp, "%s", size == sizeof(uint32_t) ? "wsp" : "sp");
         return;
     }
 
     switch (size) {
-    case sizeof(uint32_t): pos_fprintf(fp, pos, "w%d", n); break;
-    case sizeof(uint64_t): pos_fprintf(fp, pos, "x%d", n); break;
+    case sizeof(uint32_t): av_bprintf(bp, "w%d", n); break;
+    case sizeof(uint64_t): av_bprintf(bp, "x%d", n); break;
     default:
         av_assert0(!"Invalid GPR size!");
     }
@@ -120,21 +110,21 @@ static char elem_type_char(uint8_t elem_size)
     return '\0';
 }
 
-static void print_vec_reg(FILE *fp, int64_t *pos,
+static void print_vec_reg(AVBPrint *bp,
                           uint8_t n, uint8_t el_count, uint8_t el_size, uint8_t idx_p1)
 {
     if (el_size == 0) {
-        pos_fprintf(fp, pos, "v%u", n);
+        av_bprintf(bp, "v%u", n);
     } else if (el_count != 0) {
-        pos_fprintf(fp, pos, "v%u.%d%c", n, el_count, elem_type_char(el_size));
+        av_bprintf(bp, "v%u.%d%c", n, el_count, elem_type_char(el_size));
     } else if (idx_p1) {
-        pos_fprintf(fp, pos, "v%u.%c[%u]", n, elem_type_char(el_size), idx_p1 - 1);
+        av_bprintf(bp, "v%u.%c[%u]", n, elem_type_char(el_size), idx_p1 - 1);
     } else {
-        pos_fprintf(fp, pos, "%c%u", elem_type_char(el_size), n);
+        av_bprintf(bp, "%c%u", elem_type_char(el_size), n);
     }
 }
 
-static void print_op_vec(FILE *fp, int64_t *pos, RasmOp op)
+static void print_op_vec(AVBPrint *bp, RasmOp op)
 {
     uint8_t n        = a64op_vec_n(op);
     uint8_t el_count = a64op_vec_el_count(op);
@@ -142,31 +132,31 @@ static void print_op_vec(FILE *fp, int64_t *pos, RasmOp op)
     uint8_t num_regs = a64op_vec_num_regs(op);
 
     if (num_regs) {
-        pos_fprintf(fp, pos, "{");
+        av_bprintf(bp, "{");
         for (int i = 0; i < num_regs; i++) {
             if (i > 0)
-                pos_fprintf(fp, pos, ", ");
-            print_vec_reg(fp, pos, (n + i) & 0x1f, el_count, el_size, 0);
+                av_bprintf(bp, ", ");
+            print_vec_reg(bp, (n + i) & 0x1f, el_count, el_size, 0);
         }
-        pos_fprintf(fp, pos, "}");
+        av_bprintf(bp, "}");
     } else {
         uint8_t idx_p1 = a64op_vec_idx_p1(op);
-        print_vec_reg(fp, pos, n, el_count, el_size, idx_p1);
+        print_vec_reg(bp, n, el_count, el_size, idx_p1);
     }
 }
 
 /*********************************************************************/
 /* AARCH64_OP_BASE */
 
-static void print_base_reg(FILE *fp, int64_t *pos, uint8_t n)
+static void print_base_reg(AVBPrint *bp, uint8_t n)
 {
     if (n == 31)
-        pos_fprintf(fp, pos, "sp");
+        av_bprintf(bp, "sp");
     else
-        pos_fprintf(fp, pos, "x%d", n);
+        av_bprintf(bp, "x%d", n);
 }
 
-static void print_op_base(FILE *fp, int64_t *pos, RasmOp op)
+static void print_op_base(AVBPrint *bp, RasmOp op)
 {
     uint8_t n    = a64op_base_n(op);
     uint8_t mode = a64op_base_mode(op);
@@ -174,23 +164,23 @@ static void print_op_base(FILE *fp, int64_t *pos, RasmOp op)
 
     switch (mode) {
     case AARCH64_BASE_OFFSET: {
-        pos_fprintf(fp, pos, "[");
-        print_base_reg(fp, pos, n);
+        av_bprintf(bp, "[");
+        print_base_reg(bp, n);
         if (imm)
-            pos_fprintf(fp, pos, ", #%d]", imm);
+            av_bprintf(bp, ", #%d]", imm);
         else
-            pos_fprintf(fp, pos, "]");
+            av_bprintf(bp, "]");
         break;
     }
     case AARCH64_BASE_PRE:
-        pos_fprintf(fp, pos, "[");
-        print_base_reg(fp, pos, n);
-        pos_fprintf(fp, pos, ", #%d]!", imm);
+        av_bprintf(bp, "[");
+        print_base_reg(bp, n);
+        av_bprintf(bp, ", #%d]!", imm);
         break;
     case AARCH64_BASE_POST:
-        pos_fprintf(fp, pos, "[");
-        print_base_reg(fp, pos, n);
-        pos_fprintf(fp, pos, "], #%d", imm);
+        av_bprintf(bp, "[");
+        print_base_reg(bp, n);
+        av_bprintf(bp, "], #%d", imm);
         break;
     }
 }
@@ -226,36 +216,36 @@ static const char *cond_name(uint8_t cond)
     return cond_names[cond];
 }
 
-static void print_op_cond(FILE *fp, int64_t *pos, RasmOp op)
+static void print_op_cond(AVBPrint *bp, RasmOp op)
 {
-    pos_fprintf(fp, pos, "%s", cond_name(a64op_cond_val(op)));
+    av_bprintf(bp, "%s", cond_name(a64op_cond_val(op)));
 }
 
 /*********************************************************************/
 /* Instruction operands */
 
 static void print_op(const RasmContext *rctx,
-                     FILE *fp, int64_t *pos,
+                     AVBPrint *bp,
                      const int *local_labels, RasmOp op)
 {
     switch (rasm_op_type(op)) {
     case RASM_OP_IMM:
-        print_op_imm(fp, pos, op);
+        print_op_imm(bp, op);
         break;
     case RASM_OP_LABEL:
-        print_op_label(rctx, fp, pos, op, local_labels);
+        print_op_label(rctx, bp, op, local_labels);
         break;
     case AARCH64_OP_GPR:
-        print_op_gpr(fp, pos, op);
+        print_op_gpr(bp, op);
         break;
     case AARCH64_OP_VEC:
-        print_op_vec(fp, pos, op);
+        print_op_vec(bp, op);
         break;
     case AARCH64_OP_BASE:
-        print_op_base(fp, pos, op);
+        print_op_base(bp, op);
         break;
     case AARCH64_OP_COND:
-        print_op_cond(fp, pos, op);
+        print_op_cond(bp, op);
         break;
     default:
         av_assert0(0);
@@ -337,20 +327,20 @@ static const char *insn_name(int id)
 }
 
 static void print_node_insn(const RasmContext *rctx,
-                            FILE *fp, int64_t *pos, int64_t line_start,
+                            AVBPrint *bp, unsigned line_start,
                             const RasmNode *node,
                             const int *local_labels)
 {
-    indent_to(fp, pos, line_start, INSTR_INDENT);
+    indent_to(bp, line_start, INSTR_INDENT);
 
     int op_start = 0;
     if (node->insn.id == AARCH64_INSN_BCOND) {
-        pos_fprintf(fp, pos, "b.%-14s", cond_name(a64op_cond_val(node->insn.op[0])));
+        av_bprintf(bp, "b.%-14s", cond_name(a64op_cond_val(node->insn.op[0])));
         op_start = 1;
     } else if (rasm_op_type(node->insn.op[0]) == RASM_OP_NONE) {
-        pos_fprintf(fp, pos, "%s", insn_name(node->insn.id));
+        av_bprintf(bp, "%s", insn_name(node->insn.id));
     } else {
-        pos_fprintf(fp, pos, "%-16s", insn_name(node->insn.id));
+        av_bprintf(bp, "%-16s", insn_name(node->insn.id));
     }
 
     for (int j = op_start; j < 4; j++) {
@@ -358,8 +348,8 @@ static void print_node_insn(const RasmContext *rctx,
         if (rasm_op_type(op) == RASM_OP_NONE)
             break;
         if (j != op_start)
-            pos_fprintf(fp, pos, ", ");
-        print_op(rctx, fp, pos, local_labels, op);
+            av_bprintf(bp, ", ");
+        print_op(rctx, bp, local_labels, op);
     }
 }
 
@@ -367,31 +357,31 @@ static void print_node_insn(const RasmContext *rctx,
 /* RASM_NODE_COMMENT */
 
 static void print_node_comment(const RasmContext *rctx,
-                               FILE *fp, int64_t *pos, int64_t line_start,
+                               AVBPrint *bp, unsigned line_start,
                                const RasmNode *node)
 {
-    indent_to(fp, pos, line_start, INSTR_INDENT);
-    pos_fprintf(fp, pos, "// %s", node->comment.text);
+    indent_to(bp, line_start, INSTR_INDENT);
+    av_bprintf(bp, "// %s", node->comment.text);
 }
 
 /*********************************************************************/
 /* RASM_NODE_LABEL */
 
 static void print_node_label(const RasmContext *rctx,
-                             FILE *fp, int64_t *pos, int64_t line_start,
+                             AVBPrint *bp, unsigned line_start,
                              const RasmNode *node,
                              int *local_labels)
 {
     int id = node->label.id;
     if (rctx->labels[id]) {
-        pos_fprintf(fp, pos, "%s:", rctx->labels[id]);
+        av_bprintf(bp, "%s:", rctx->labels[id]);
     } else {
         /* Local label. */
         int local_id = local_labels[id];
         if (local_id < 0) {
-            pos_fprintf(fp, pos, "%d:", -local_id);
+            av_bprintf(bp, "%d:", -local_id);
         } else {
-            pos_fprintf(fp, pos, "%d:",  local_id);
+            av_bprintf(bp, "%d:",  local_id);
             local_labels[id] = -local_id;
         }
     }
@@ -401,35 +391,35 @@ static void print_node_label(const RasmContext *rctx,
 /* RASM_NODE_FUNCTION */
 
 static void print_node_function(const RasmContext *rctx,
-                                FILE *fp, int64_t *pos, int64_t line_start,
+                                AVBPrint *bp, unsigned line_start,
                                 const RasmNode *node)
 {
-    pos_fprintf(fp, pos, "function %s, export=%d, jumpable=%d",
-                node->func.name, node->func.export, node->func.jumpable);
+    av_bprintf(bp, "function %s, export=%d, jumpable=%d",
+               node->func.name, node->func.export, node->func.jumpable);
 }
 
 /*********************************************************************/
 /* RASM_NODE_ENDFUNC */
 
 static void print_node_endfunc(const RasmContext *rctx,
-                               FILE *fp, int64_t *pos, int64_t line_start,
+                               AVBPrint *bp, unsigned line_start,
                                const RasmNode *node)
 {
-    pos_fprintf(fp, pos, "endfunc");
+    av_bprintf(bp, "endfunc");
 }
 
 /*********************************************************************/
 /* RASM_NODE_DIRECTIVE */
 
 static void print_node_directive(const RasmContext *rctx,
-                                 FILE *fp, int64_t *pos, int64_t line_start,
+                                 AVBPrint *bp, unsigned line_start,
                                  const RasmNode *node)
 {
-    pos_fprintf(fp, pos, "%s", node->directive.text);
+    av_bprintf(bp, "%s", node->directive.text);
 }
 
 /*********************************************************************/
-int rasm_print(RasmContext *rctx, FILE *fp)
+int rasm_print(RasmContext *rctx, AVBPrint *bp)
 {
     if (rctx->error)
         return rctx->error;
@@ -442,7 +432,6 @@ int rasm_print(RasmContext *rctx, FILE *fp)
             return AVERROR(ENOMEM);
     }
 
-    int64_t pos = 0;
     for (int i = 0; i < rctx->num_entries; i++) {
         const RasmEntry *entry = &rctx->entries[i];
 
@@ -460,40 +449,40 @@ int rasm_print(RasmContext *rctx, FILE *fp)
         }
 
         for (const RasmNode *node = entry->start; node != NULL; node = node->next) {
-            int64_t line_start = pos;
+            unsigned line_start = bp->len;
 
             switch (node->type) {
             case RASM_NODE_INSN:
-                print_node_insn(rctx, fp, &pos, line_start, node, local_labels);
+                print_node_insn(rctx, bp, line_start, node, local_labels);
                 break;
             case RASM_NODE_COMMENT:
-                print_node_comment(rctx, fp, &pos, line_start, node);
+                print_node_comment(rctx, bp, line_start, node);
                 break;
             case RASM_NODE_LABEL:
-                print_node_label(rctx, fp, &pos, line_start, node, local_labels);
+                print_node_label(rctx, bp, line_start, node, local_labels);
                 break;
             case RASM_NODE_FUNCTION:
-                print_node_function(rctx, fp, &pos, line_start, node);
+                print_node_function(rctx, bp, line_start, node);
                 break;
             case RASM_NODE_ENDFUNC:
-                print_node_endfunc(rctx, fp, &pos, line_start, node);
+                print_node_endfunc(rctx, bp, line_start, node);
                 break;
             case RASM_NODE_DIRECTIVE:
-                print_node_directive(rctx, fp, &pos, line_start, node);
+                print_node_directive(rctx, bp, line_start, node);
                 break;
             default:
                 break;
             }
 
             if (node->inline_comment) {
-                indent_to(fp, &pos, line_start, COMMENT_COL);
-                pos_fprintf(fp, &pos, "// %s", node->inline_comment);
+                indent_to(bp, line_start, COMMENT_COL);
+                av_bprintf(bp, "// %s", node->inline_comment);
             }
-            pos_fprintf(fp, &pos, "\n");
+            av_bprintf(bp, "\n");
 
             /* Add extra line after end of functions. */
             if (node->type == RASM_NODE_ENDFUNC)
-                pos_fprintf(fp, &pos, "\n");
+                av_bprintf(bp, "\n");
         }
     }
 

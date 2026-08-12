@@ -25,7 +25,7 @@
 #include "libavfilter/vf_noise.h"
 
 #if HAVE_INLINE_ASM
-#if HAVE_6REGS
+#if HAVE_X86_6REGS
 static void line_noise_avg_sse2(uint8_t *dst, const uint8_t *src,
                                 int len, const int8_t * const *shift)
 {
@@ -73,7 +73,7 @@ static void line_noise_avg_sse2(uint8_t *dst, const uint8_t *src,
         ff_line_noise_avg_c(dst + xmm_len, src + xmm_len, len - xmm_len, shift2);
     }
 }
-#endif /* HAVE_6REGS */
+#endif /* HAVE_X86_6REGS */
 
 static void line_noise_sse2(uint8_t *dst, const uint8_t *src,
                             const int8_t *noise, int len, int shift)
@@ -110,7 +110,7 @@ av_cold void ff_noise_init_x86(NoiseContext *n)
     int cpu_flags = av_get_cpu_flags();
 
     if (INLINE_SSE2(cpu_flags)) {
-#if HAVE_6REGS
+#if HAVE_X86_6REGS
         n->line_noise_avg = line_noise_avg_sse2;
 #endif
         n->line_noise     = line_noise_sse2;

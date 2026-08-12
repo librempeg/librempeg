@@ -191,6 +191,7 @@ typedef struct OptionsContext {
     AVDictionary *streamid;
 
     SpecifierOptList metadata;
+    SpecifierOptList keep_metadata;
     SpecifierOptList max_frames;
     SpecifierOptList bitstream_filters;
     SpecifierOptList codec_tags;

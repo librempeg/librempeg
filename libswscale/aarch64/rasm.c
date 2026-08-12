@@ -327,23 +327,26 @@ int rasm_new_labelf(RasmContext *rctx, char *s, size_t n, const char *fmt, ...)
 /*********************************************************************/
 /* AArch64-specific */
 
-void a64op_vec_views(RasmOp op, AArch64VecViews *out)
+AArch64VecViews a64op_vec_views(RasmOp op)
 {
     uint8_t n = a64op_vec_n(op);
-    out->b   = a64op_vecb  (n);
-    out->h   = a64op_vech  (n);
-    out->s   = a64op_vecs  (n);
-    out->d   = a64op_vecd  (n);
-    out->q   = a64op_vecq  (n);
-    out->b8  = a64op_vec8b (n);
-    out->b16 = a64op_vec16b(n);
-    out->h4  = a64op_vec4h (n);
-    out->h8  = a64op_vec8h (n);
-    out->s2  = a64op_vec2s (n);
-    out->s4  = a64op_vec4s (n);
-    out->d2  = a64op_vec2d (n);
+    AArch64VecViews out = {
+        .b   = a64op_vecb  (n),
+        .h   = a64op_vech  (n),
+        .s   = a64op_vecs  (n),
+        .d   = a64op_vecd  (n),
+        .q   = a64op_vecq  (n),
+        .b8  = a64op_vec8b (n),
+        .b16 = a64op_vec16b(n),
+        .h4  = a64op_vec4h (n),
+        .h8  = a64op_vec8h (n),
+        .s2  = a64op_vec2s (n),
+        .s4  = a64op_vec4s (n),
+        .d2  = a64op_vec2d (n),
+    };
     for (int i = 0; i < 2; i++)
-        out->be[i] = a64op_elem(out->b, i);
+        out.be[i] = a64op_elem(out.b, i);
     for (int i = 0; i < 2; i++)
-        out->de[i] = a64op_elem(out->d, i);
+        out.de[i] = a64op_elem(out.d, i);
+    return out;
 }

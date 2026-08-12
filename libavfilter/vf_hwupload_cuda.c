@@ -26,9 +26,16 @@
 #include "formats.h"
 #include "video.h"
 
+enum {
+    CUDAUPLOAD_FMT_CUDA,
+    CUDAUPLOAD_FMT_CUARRAY,
+    CUDAUPLOAD_FMT_NB,
+};
+
 typedef struct CudaUploadContext {
     const AVClass *class;
     int device_idx;
+    int output_format;
 
     AVBufferRef *hwdevice;
     AVBufferRef *hwframe;
@@ -56,20 +63,30 @@ static int cudaupload_query_formats(const AVFilterContext *ctx,
                                     AVFilterFormatsConfig **cfg_in,
                                     AVFilterFormatsConfig **cfg_out)
 {
+    const CudaUploadContext *s = ctx->priv;
     int ret;
 
     static const enum AVPixelFormat input_pix_fmts[] = {
         AV_PIX_FMT_NV12, AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUVA420P, AV_PIX_FMT_NV16, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV444P,
-        AV_PIX_FMT_P010, AV_PIX_FMT_P016, AV_PIX_FMT_P210, AV_PIX_FMT_P216, AV_PIX_FMT_YUV420P10, AV_PIX_FMT_YUV422P10, AV_PIX_FMT_YUV444P10, AV_PIX_FMT_YUV444P16,
+        AV_PIX_FMT_P010, AV_PIX_FMT_P016, AV_PIX_FMT_P210, AV_PIX_FMT_P212, AV_PIX_FMT_P216,
+        AV_PIX_FMT_YUV420P10, AV_PIX_FMT_YUV422P10, AV_PIX_FMT_YUV444P10, AV_PIX_FMT_YUV444P16,
+        AV_PIX_FMT_YUV444P10MSB, AV_PIX_FMT_YUV444P12MSB,
+        AV_PIX_FMT_NV24, AV_PIX_FMT_P410, AV_PIX_FMT_P412, AV_PIX_FMT_P416,
         AV_PIX_FMT_0RGB32, AV_PIX_FMT_0BGR32, AV_PIX_FMT_RGB32, AV_PIX_FMT_BGR32,
 #if CONFIG_VULKAN
         AV_PIX_FMT_VULKAN,
 #endif
         AV_PIX_FMT_NONE,
     };
-    static const enum AVPixelFormat output_pix_fmts[] = {
+    static const enum AVPixelFormat output_cuda_fmts[] = {
         AV_PIX_FMT_CUDA, AV_PIX_FMT_NONE,
     };
+    static const enum AVPixelFormat output_cuarray_fmts[] = {
+        AV_PIX_FMT_CUARRAY, AV_PIX_FMT_NONE,
+    };
+    const enum AVPixelFormat *output_pix_fmts = s->output_format == CUDAUPLOAD_FMT_CUARRAY
+                                                ? output_cuarray_fmts
+                                                : output_cuda_fmts;
     AVFilterFormats *in_fmts  = ff_make_format_list(input_pix_fmts);
     AVFilterFormats *out_fmts;
 
@@ -103,7 +120,8 @@ static int cudaupload_config_output(AVFilterLink *outlink)
         return AVERROR(ENOMEM);
 
     hwframe_ctx            = (AVHWFramesContext*)s->hwframe->data;
-    hwframe_ctx->format    = AV_PIX_FMT_CUDA;
+    hwframe_ctx->format    = s->output_format == CUDAUPLOAD_FMT_CUARRAY
+                           ? AV_PIX_FMT_CUARRAY : AV_PIX_FMT_CUDA;
     if (inl->hw_frames_ctx) {
         AVHWFramesContext *in_hwframe_ctx = (AVHWFramesContext*)inl->hw_frames_ctx->data;
         hwframe_ctx->sw_format = in_hwframe_ctx->sw_format;
@@ -164,6 +182,9 @@ fail:
 #define FLAGS (AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_VIDEO_PARAM)
 static const AVOption cudaupload_options[] = {
     { "device", "Number of the device to use", OFFSET(device_idx), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, FLAGS },
+    { "output_format", "Output frame format", OFFSET(output_format), AV_OPT_TYPE_INT, { .i64 = CUDAUPLOAD_FMT_CUDA }, 0, CUDAUPLOAD_FMT_NB - 1, FLAGS, .unit = "output_format" },
+        { "cuda",    "Pitch-linear device memory (default)", 0, AV_OPT_TYPE_CONST, { .i64 = CUDAUPLOAD_FMT_CUDA },    .flags = FLAGS, .unit = "output_format" },
+        { "cuarray", "Block-linear CUDA array",              0, AV_OPT_TYPE_CONST, { .i64 = CUDAUPLOAD_FMT_CUARRAY }, .flags = FLAGS, .unit = "output_format" },
     { NULL },
 };
 

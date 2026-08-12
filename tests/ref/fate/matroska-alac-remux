@@ -1,5 +1,5 @@
-6075eb35f53692596194f3b0175cb184 *tests/data/fate/matroska-alac-remux.matroska
-1293794 tests/data/fate/matroska-alac-remux.matroska
+8c3da576105e9c29451855520c1c68d2 *tests/data/fate/matroska-alac-remux.matroska
+1293709 tests/data/fate/matroska-alac-remux.matroska
 #extradata 0:       36, 0x562b05d8
 #tb 0: 1/1000
 #media_type 0: audio
@@ -159,9 +159,9 @@ DISPOSITION:multilayer=0
 TAG:title=Inside
 TAG:encoder=Lavf
 TAG:creation_time=2009-01-25T16:08:26.000000Z
-TAG:MAJOR_BRAND=M4A 
-TAG:MINOR_VERSION=0
-TAG:COMPATIBLE_BRANDS=M4A mp42isom
+TAG:track=5/13
+TAG:GENRE=Rock
+TAG:ALBUM=OpenMusic
 TAG:DISC=1
 TAG:COMPILATION=1
 TAG:GAPLESS_PLAYBACK=0
@@ -169,7 +169,4 @@ TAG:ENCODING_PARAMS=vers
 TAG:ITUNNORM= 000004DF 000004C2 00001E64 00001AB3 00000FB9 00000FB9 00006480 00006480 00000FB9 00000B52
 TAG:ARTIST=Maxwell Strait
 TAG:ALBUM_ARTIST=Maxwell Strait
-TAG:ALBUM=OpenMusic
-TAG:GENRE=Rock
-TAG:track=5/13
 [/FORMAT]

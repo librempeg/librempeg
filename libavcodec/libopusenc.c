@@ -471,7 +471,6 @@ static int libopus_encode(AVCodecContext *avctx, AVPacket *avpkt,
     const int sample_size      = channels * bytes_per_sample;
     const uint8_t *audio;
     int ret;
-    int discard_padding;
 
     if (frame) {
         ret = ff_af_queue_add(&opus->afq, frame);
@@ -517,21 +516,9 @@ static int libopus_encode(AVCodecContext *avctx, AVPacket *avpkt,
 
     av_shrink_packet(avpkt, ret);
 
-    ff_af_queue_remove(&opus->afq, opus->opts.packet_size,
-                       &avpkt->pts, &avpkt->duration);
-
-    discard_padding = opus->opts.packet_size - ff_samples_from_time_base(avctx, avpkt->duration);
-    // Check if subtraction resulted in an overflow
-    if ((discard_padding < opus->opts.packet_size) != (avpkt->duration > 0))
-        return AVERROR(EINVAL);
-    if (discard_padding > 0) {
-        uint8_t* side_data = av_packet_new_side_data(avpkt,
-                                                     AV_PKT_DATA_SKIP_SAMPLES,
-                                                     10);
-        if (!side_data)
-            return AVERROR(ENOMEM);
-        AV_WL32(side_data + 4, discard_padding);
-    }
+    ret = ff_af_queue_remove(&opus->afq, opus->opts.packet_size, avpkt);
+    if (ret < 0)
+        return ret;
 
     *got_packet_ptr = 1;
 

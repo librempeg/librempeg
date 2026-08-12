@@ -21,6 +21,7 @@
 #include "config.h"
 #include "avassert.h"
 #include "mem.h"
+#include "refstruct.h"
 
 #include "vulkan.h"
 #include "libavutil/vulkan_loader.h"
@@ -144,6 +145,8 @@ static void load_enabled_qfs(FFVulkanContext *s)
     }
 }
 
+static void reset_imageviews(AVRefStructOpaque unused, void *obj);
+
 int ff_vk_load_props(FFVulkanContext *s)
 {
     FFVulkanFunctions *vk = &s->vkfn;
@@ -183,6 +186,14 @@ int ff_vk_load_props(FFVulkanContext *s)
                      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES);
     FF_VK_STRUCT_EXT(s, &s->feats, &s->atomic_float_feats, FF_VK_EXT_ATOMIC_FLOAT,
                      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT);
+
+    if (!s->imageviews_pool) {
+        s->imageviews_pool = av_refstruct_pool_alloc_ext(sizeof(FFVkImageViews), 0,
+                                                         NULL, NULL, reset_imageviews,
+                                                         NULL, NULL);
+        if (!s->imageviews_pool)
+            return AVERROR(ENOMEM);
+    }
 
     /* Try allocating 1024 layouts */
     s->host_image_copy_layouts = av_malloc(sizeof(*s->host_image_copy_layouts)*1024);
@@ -310,18 +321,7 @@ void ff_vk_exec_pool_free(FFVulkanContext *s, FFVkExecPool *pool)
         }
 
         ff_vk_exec_discard_deps(s, e);
-
-        av_free(e->frame_deps);
-        av_free(e->sw_frame_deps);
-        av_free(e->buf_deps);
-        av_free(e->queue_family_dst);
-        av_free(e->layout_dst);
-        av_free(e->access_dst);
-        av_free(e->frame_update);
-        av_free(e->frame_locked);
-        av_free(e->sem_sig);
-        av_free(e->sem_sig_val_dst);
-        av_free(e->sem_wait);
+        pthread_mutex_destroy(&e->lock);
     }
 
     /* Free shader-specific data */
@@ -477,6 +477,9 @@ int ff_vk_exec_pool_init(FFVulkanContext *s, AVVulkanDeviceQueueFamily *qf,
 
     pool->pool_size = nb_contexts;
 
+    for (int i = 0; i < pool->pool_size; i++)
+        pthread_mutex_init(&pool->contexts[i].lock, NULL);
+
 #ifdef VK_KHR_internally_synchronized_queues
     /* Check if the extension and its flag are actually enabled */
     int internal_queue_sync = 0;
@@ -567,14 +570,30 @@ VkResult ff_vk_exec_get_query(FFVulkanContext *s, FFVkExecContext *e,
 
 FFVkExecContext *ff_vk_exec_get(FFVulkanContext *s, FFVkExecPool *pool)
 {
+    FFVulkanFunctions *vk = &s->vkfn;
+
+    /* Release the dependencies of every completed context, rather than leaving them held until reuse */
+    for (int i = 0; i < pool->pool_size; i++) {
+        FFVkExecContext *e = &pool->contexts[i];
+        if (pthread_mutex_trylock(&e->lock))
+            continue; /* In use by a recording or submitting thread */
+        if ((e->nb_buf_deps || e->nb_refstruct_deps || e->nb_obj_deps ||
+             e->nb_frame_deps || e->nb_sw_frame_deps) &&
+            vk->GetFenceStatus(s->hwctx->act_dev, e->fence) == VK_SUCCESS)
+            ff_vk_exec_discard_deps(s, e);
+        pthread_mutex_unlock(&e->lock);
+    }
+
     return &pool->contexts[atomic_fetch_add(&pool->idx, 1) % pool->pool_size];
 }
 
 void ff_vk_exec_wait(FFVulkanContext *s, FFVkExecContext *e)
 {
     FFVulkanFunctions *vk = &s->vkfn;
+    pthread_mutex_lock(&e->lock);
     vk->WaitForFences(s->hwctx->act_dev, 1, &e->fence, VK_TRUE, UINT64_MAX);
     ff_vk_exec_discard_deps(s, e);
+    pthread_mutex_unlock(&e->lock);
 }
 
 int ff_vk_exec_start(FFVulkanContext *s, FFVkExecContext *e)
@@ -588,9 +607,13 @@ int ff_vk_exec_start(FFVulkanContext *s, FFVkExecContext *e)
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
 
-    /* Wait for the fence to be signalled */
+    /* Take ownership of the context; held until the end of submission */
+    pthread_mutex_lock(&e->lock);
+
+    /* Wait for the fence to be signalled. The fence is only reset once a
+     * fully recorded submission is handed to the queue, so a recording
+     * abandoned after an error leaves the context reusable. */
     vk->WaitForFences(s->hwctx->act_dev, 1, &e->fence, VK_TRUE, UINT64_MAX);
-    vk->ResetFences(s->hwctx->act_dev, 1, &e->fence);
 
     /* Discard queue dependencies */
     ff_vk_exec_discard_deps(s, e);
@@ -599,6 +622,7 @@ int ff_vk_exec_start(FFVulkanContext *s, FFVkExecContext *e)
     if (ret != VK_SUCCESS) {
         av_log(s, AV_LOG_ERROR, "Failed to start command recoding: %s\n",
                ff_vk_ret2str(ret));
+        pthread_mutex_unlock(&e->lock);
         return AVERROR_EXTERNAL;
     }
 
@@ -611,9 +635,32 @@ int ff_vk_exec_start(FFVulkanContext *s, FFVkExecContext *e)
 
 void ff_vk_exec_discard_deps(FFVulkanContext *s, FFVkExecContext *e)
 {
+    FFVulkanFunctions *vk = &s->vkfn;
+
     for (int j = 0; j < e->nb_buf_deps; j++)
         av_buffer_unref(&e->buf_deps[j]);
     e->nb_buf_deps = 0;
+
+    for (int j = 0; j < e->nb_refstruct_deps; j++)
+        av_refstruct_unref(&e->refstruct_deps[j]);
+    e->nb_refstruct_deps = 0;
+
+    for (int j = 0; j < e->nb_obj_deps; j++) {
+        FFVkExecObjDep *od = &e->obj_deps[j];
+        switch (od->type) {
+        case VK_OBJECT_TYPE_IMAGE_VIEW:
+            vk->DestroyImageView(s->hwctx->act_dev,
+                                 (VkImageView)od->obj, s->hwctx->alloc);
+            break;
+        case VK_OBJECT_TYPE_SEMAPHORE:
+            vk->DestroySemaphore(s->hwctx->act_dev,
+                                 (VkSemaphore)od->obj, s->hwctx->alloc);
+            break;
+        default:
+            av_assert1(0);
+        }
+    }
+    e->nb_obj_deps = 0;
 
     for (int j = 0; j < e->nb_sw_frame_deps; j++)
         av_frame_free(&e->sw_frame_deps[j]);
@@ -637,44 +684,42 @@ void ff_vk_exec_discard_deps(FFVulkanContext *s, FFVkExecContext *e)
     e->sem_sig_val_dst_cnt = 0;
 }
 
-int ff_vk_exec_add_dep_buf(FFVulkanContext *s, FFVkExecContext *e,
-                           AVBufferRef **deps, int nb_deps, int ref)
+void ff_vk_exec_add_dep_refstruct(FFVulkanContext *s, FFVkExecContext *e,
+                                  void *obj)
 {
-    AVBufferRef **dst = av_fast_realloc(e->buf_deps, &e->buf_deps_alloc_size,
-                                        (e->nb_buf_deps + nb_deps) * sizeof(*dst));
-    if (!dst) {
-        ff_vk_exec_discard_deps(s, e);
-        return AVERROR(ENOMEM);
-    }
+    av_assert1(e->nb_refstruct_deps < FF_VK_EXEC_MAX_BUF_DEPS);
+    e->refstruct_deps[e->nb_refstruct_deps++] = av_refstruct_ref(obj);
+}
 
-    e->buf_deps = dst;
+void ff_vk_exec_move_dep_refstruct(FFVulkanContext *s, FFVkExecContext *e,
+                                   void *obj)
+{
+    void **ptr = obj;
 
-    for (int i = 0; i < nb_deps; i++) {
-        if (!deps[i])
-            continue;
+    av_assert1(e->nb_refstruct_deps < FF_VK_EXEC_MAX_BUF_DEPS);
 
-        e->buf_deps[e->nb_buf_deps] = ref ? av_buffer_ref(deps[i]) : deps[i];
-        if (!e->buf_deps[e->nb_buf_deps]) {
-            ff_vk_exec_discard_deps(s, e);
-            return AVERROR(ENOMEM);
+    for (int i = 0; i < e->nb_refstruct_deps; i++) {
+        if (e->refstruct_deps[i] == *ptr) {
+            av_refstruct_unref(obj);
+            return;
         }
-        e->nb_buf_deps++;
     }
 
-    return 0;
+    e->refstruct_deps[e->nb_refstruct_deps++] = *ptr;
+    *ptr = NULL;
+}
+
+void ff_vk_exec_add_dep_obj(FFVulkanContext *s, FFVkExecContext *e,
+                            VkObjectType type, uint64_t obj)
+{
+    av_assert1(e->nb_obj_deps < FF_VK_EXEC_MAX_BUF_DEPS);
+    e->obj_deps[e->nb_obj_deps++] = (FFVkExecObjDep) { obj, type };
 }
 
 int ff_vk_exec_add_dep_sw_frame(FFVulkanContext *s, FFVkExecContext *e,
                                 AVFrame *f)
 {
-    AVFrame **dst = av_fast_realloc(e->sw_frame_deps, &e->sw_frame_deps_alloc_size,
-                                    (e->nb_sw_frame_deps + 1) * sizeof(*dst));
-    if (!dst) {
-        ff_vk_exec_discard_deps(s, e);
-        return AVERROR(ENOMEM);
-    }
-
-    e->sw_frame_deps = dst;
+    av_assert1(e->nb_sw_frame_deps < FF_VK_EXEC_MAX_SW_FRAME_DEPS);
 
     e->sw_frame_deps[e->nb_sw_frame_deps] = av_frame_clone(f);
     if (!e->sw_frame_deps[e->nb_sw_frame_deps]) {
@@ -687,39 +732,11 @@ int ff_vk_exec_add_dep_sw_frame(FFVulkanContext *s, FFVkExecContext *e,
     return 0;
 }
 
-#define ARR_REALLOC(str, arr, alloc_s, cnt)                               \
-    do {                                                                  \
-        arr = av_fast_realloc(str->arr, alloc_s, (cnt + 1)*sizeof(*arr)); \
-        if (!arr) {                                                       \
-            ff_vk_exec_discard_deps(s, e);                                \
-            return AVERROR(ENOMEM);                                       \
-        }                                                                 \
-        str->arr = arr;                                                   \
-    } while (0)
-
-typedef struct TempSyncCtx {
-    int nb_sem;
-    VkSemaphore sem[];
-} TempSyncCtx;
-
-static void destroy_tmp_semaphores(void *opaque, uint8_t *data)
+void ff_vk_exec_add_dep_wait_sem(FFVulkanContext *s, FFVkExecContext *e,
+                                 VkSemaphore sem, uint64_t val,
+                                 VkPipelineStageFlagBits2 stage)
 {
-    FFVulkanContext *s = opaque;
-    FFVulkanFunctions *vk = &s->vkfn;
-    TempSyncCtx *ts = (TempSyncCtx *)data;
-
-    for (int i = 0; i < ts->nb_sem; i++)
-        vk->DestroySemaphore(s->hwctx->act_dev, ts->sem[i], s->hwctx->alloc);
-
-    av_free(ts);
-}
-
-int ff_vk_exec_add_dep_wait_sem(FFVulkanContext *s, FFVkExecContext *e,
-                                VkSemaphore sem, uint64_t val,
-                                VkPipelineStageFlagBits2 stage)
-{
-    VkSemaphoreSubmitInfo *sem_wait;
-    ARR_REALLOC(e, sem_wait, &e->sem_wait_alloc, e->sem_wait_cnt);
+    av_assert1(e->sem_wait_cnt < FF_VK_EXEC_MAX_SEM_OPS);
 
     e->sem_wait[e->sem_wait_cnt++] = (VkSemaphoreSubmitInfo) {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
@@ -727,28 +744,18 @@ int ff_vk_exec_add_dep_wait_sem(FFVulkanContext *s, FFVkExecContext *e,
         .value = val,
         .stageMask = stage,
     };
-
-    return 0;
 }
 
-int ff_vk_exec_add_dep_bool_sem(FFVulkanContext *s, FFVkExecContext *e,
-                                VkSemaphore *sem, int nb,
-                                VkPipelineStageFlagBits2 stage,
-                                int wait)
+void ff_vk_exec_add_dep_bool_sem(FFVulkanContext *s, FFVkExecContext *e,
+                                 VkSemaphore *sem, int nb,
+                                 VkPipelineStageFlagBits2 stage,
+                                 int wait)
 {
-    int err;
-    size_t buf_size;
-    AVBufferRef *buf;
-    TempSyncCtx *ts;
-    FFVulkanFunctions *vk = &s->vkfn;
-
     /* Do not transfer ownership if we're signalling a binary semaphore,
      * since we're probably exporting it. */
     if (!wait) {
+        av_assert1((e->sem_sig_cnt + nb) <= FF_VK_EXEC_MAX_SEM_OPS);
         for (int i = 0; i < nb; i++) {
-            VkSemaphoreSubmitInfo *sem_sig;
-            ARR_REALLOC(e, sem_sig, &e->sem_sig_alloc, e->sem_sig_cnt);
-
             e->sem_sig[e->sem_sig_cnt++] = (VkSemaphoreSubmitInfo) {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .semaphore = sem[i],
@@ -756,59 +763,21 @@ int ff_vk_exec_add_dep_bool_sem(FFVulkanContext *s, FFVkExecContext *e,
             };
         }
 
-        return 0;
+        return;
     }
 
-    buf_size = sizeof(*ts) + sizeof(VkSemaphore)*nb;
-    ts = av_mallocz(buf_size);
-    if (!ts) {
-        err = AVERROR(ENOMEM);
-        goto fail;
-    }
-
-    memcpy(ts->sem, sem, nb*sizeof(*sem));
-    ts->nb_sem = nb;
-
-    buf = av_buffer_create((uint8_t *)ts, buf_size, destroy_tmp_semaphores, s, 0);
-    if (!buf) {
-        av_free(ts);
-        err = AVERROR(ENOMEM);
-        goto fail;
-    }
-
-    err = ff_vk_exec_add_dep_buf(s, e, &buf, 1, 0);
-    if (err < 0) {
-        av_buffer_unref(&buf);
-        return err;
-    }
-
+    /* Ownership of each semaphore passes to the execution */
     for (int i = 0; i < nb; i++) {
-        err = ff_vk_exec_add_dep_wait_sem(s, e, sem[i], 0, stage);
-        if (err < 0)
-            return err;
+        ff_vk_exec_add_dep_obj(s, e, VK_OBJECT_TYPE_SEMAPHORE,
+                               (uint64_t)sem[i]);
+        ff_vk_exec_add_dep_wait_sem(s, e, sem[i], 0, stage);
     }
-
-    return 0;
-
-fail:
-    for (int i = 0; i < nb; i++)
-        vk->DestroySemaphore(s->hwctx->act_dev, sem[i], s->hwctx->alloc);
-
-    return err;
 }
 
 int ff_vk_exec_add_dep_frame(FFVulkanContext *s, FFVkExecContext *e, AVFrame *f,
                              VkPipelineStageFlagBits2 wait_stage,
                              VkPipelineStageFlagBits2 signal_stage)
 {
-    uint8_t *frame_locked;
-    uint8_t *frame_update;
-    AVFrame **frame_deps;
-    AVBufferRef **buf_deps;
-    VkImageLayout *layout_dst;
-    uint32_t *queue_family_dst;
-    VkAccessFlagBits *access_dst;
-
     AVHWFramesContext *hwfc = (AVHWFramesContext *)f->hw_frames_ctx->data;
     AVVulkanFramesContext *vkfc = hwfc->hwctx;
     AVVkFrame *vkf = (AVVkFrame *)f->data[0];
@@ -819,19 +788,15 @@ int ff_vk_exec_add_dep_frame(FFVulkanContext *s, FFVkExecContext *e, AVFrame *f,
         if (e->frame_deps[i]->data[0] == f->data[0])
             return 1;
 
-    ARR_REALLOC(e, layout_dst,       &e->layout_dst_alloc,       e->nb_frame_deps);
-    ARR_REALLOC(e, queue_family_dst, &e->queue_family_dst_alloc, e->nb_frame_deps);
-    ARR_REALLOC(e, access_dst,       &e->access_dst_alloc,       e->nb_frame_deps);
-
-    ARR_REALLOC(e, frame_locked, &e->frame_locked_alloc_size, e->nb_frame_deps);
-    ARR_REALLOC(e, frame_update, &e->frame_update_alloc_size, e->nb_frame_deps);
-    ARR_REALLOC(e, frame_deps,   &e->frame_deps_alloc_size,   e->nb_frame_deps);
+    av_assert1(e->nb_frame_deps < FF_VK_EXEC_MAX_FRAME_DEPS);
+    av_assert1((e->sem_wait_cnt + nb_images) <= FF_VK_EXEC_MAX_SEM_OPS);
+    av_assert1((e->sem_sig_cnt + nb_images) <= FF_VK_EXEC_MAX_SEM_OPS);
 
     /* prepare_frame in hwcontext_vulkan.c uses the regular frame management
      * code but has no frame yet, and it doesn't need to actually store a ref
      * to the frame. */
     if (f->buf[0]) {
-        ARR_REALLOC(e, buf_deps, &e->buf_deps_alloc_size, e->nb_buf_deps);
+        av_assert1(e->nb_buf_deps < FF_VK_EXEC_MAX_BUF_DEPS);
         e->buf_deps[e->nb_buf_deps] = av_buffer_ref(f->buf[0]);
         if (!e->buf_deps[e->nb_buf_deps]) {
             ff_vk_exec_discard_deps(s, e);
@@ -848,14 +813,6 @@ int ff_vk_exec_add_dep_frame(FFVulkanContext *s, FFVkExecContext *e, AVFrame *f,
     e->nb_frame_deps++;
 
     for (int i = 0; i < nb_images; i++) {
-        VkSemaphoreSubmitInfo *sem_wait;
-        VkSemaphoreSubmitInfo *sem_sig;
-        uint64_t **sem_sig_val_dst;
-
-        ARR_REALLOC(e, sem_wait, &e->sem_wait_alloc, e->sem_wait_cnt);
-        ARR_REALLOC(e, sem_sig, &e->sem_sig_alloc, e->sem_sig_cnt);
-        ARR_REALLOC(e, sem_sig_val_dst, &e->sem_sig_val_dst_alloc, e->sem_sig_val_dst_cnt);
-
         e->sem_wait[e->sem_wait_cnt++] = (VkSemaphoreSubmitInfo) {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
             .semaphore = vkf->sem[i],
@@ -900,7 +857,6 @@ int ff_vk_exec_mirror_sem_value(FFVulkanContext *s, FFVkExecContext *e,
                                 VkSemaphore *dst, uint64_t *dst_val,
                                 AVFrame *f)
 {
-    uint64_t **sem_sig_val_dst;
     AVVkFrame *vkf = (AVVkFrame *)f->data[0];
 
     /* Reject unknown frames */
@@ -911,7 +867,7 @@ int ff_vk_exec_mirror_sem_value(FFVulkanContext *s, FFVkExecContext *e,
     if (i == e->nb_frame_deps)
         return AVERROR(EINVAL);
 
-    ARR_REALLOC(e, sem_sig_val_dst, &e->sem_sig_val_dst_alloc, e->sem_sig_val_dst_cnt);
+    av_assert1(e->sem_sig_val_dst_cnt < FF_VK_EXEC_MAX_SEM_OPS);
 
     *dst     = vkf->sem[0];
     *dst_val = vkf->sem_value[0];
@@ -945,8 +901,11 @@ int ff_vk_exec_submit(FFVulkanContext *s, FFVkExecContext *e)
         av_log(s, AV_LOG_ERROR, "Unable to finish command buffer: %s\n",
                ff_vk_ret2str(ret));
         ff_vk_exec_discard_deps(s, e);
+        pthread_mutex_unlock(&e->lock);
         return AVERROR_EXTERNAL;
     }
+
+    vk->ResetFences(s->hwctx->act_dev, 1, &e->fence);
 
 #if FF_API_VULKAN_SYNC_QUEUES
 FF_DISABLE_DEPRECATION_WARNINGS
@@ -954,6 +913,10 @@ FF_DISABLE_DEPRECATION_WARNINGS
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
     ret = vk->QueueSubmit2(e->queue, 1, &submit_info, e->fence);
+    if (ret != VK_SUCCESS) {
+        /* Keep the context usable, signal with an empty submission */
+        vk->QueueSubmit2(e->queue, 0, NULL, e->fence);
+    }
 #if FF_API_VULKAN_SYNC_QUEUES
 FF_DISABLE_DEPRECATION_WARNINGS
     s->hwctx->unlock_queue(s->device, e->qf, e->qi);
@@ -964,6 +927,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
         av_log(s, AV_LOG_ERROR, "Unable to submit command buffer: %s\n",
                ff_vk_ret2str(ret));
         ff_vk_exec_discard_deps(s, e);
+        pthread_mutex_unlock(&e->lock);
         return AVERROR_EXTERNAL;
     }
 
@@ -992,6 +956,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
     }
 
     e->had_submission = 1;
+
+    pthread_mutex_unlock(&e->lock);
 
     return 0;
 }
@@ -1195,7 +1161,7 @@ int ff_vk_flush_buffer(FFVulkanContext *s, FFVkBuffer *buf,
     VkResult ret;
     FFVulkanFunctions *vk = &s->vkfn;
 
-    if (buf->host_ref || buf->flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+    if (buf->flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
         return 0;
 
     const VkMappedMemoryRange flush_data = {
@@ -1282,50 +1248,30 @@ void ff_vk_free_buf(FFVulkanContext *s, FFVkBuffer *buf)
     buf->mapped_mem = NULL;
 }
 
-static void free_data_buf(void *opaque, uint8_t *data)
+static void pooled_buf_free(AVRefStructOpaque opaque, void *obj)
 {
-    FFVulkanContext *ctx = opaque;
-    FFVkBuffer *buf = (FFVkBuffer *)data;
-    ff_vk_free_buf(ctx, buf);
-    av_free(data);
+    ff_vk_free_buf(opaque.nc, obj);
 }
 
-static AVBufferRef *alloc_data_buf(void *opaque, size_t size)
-{
-    AVBufferRef *ref;
-    uint8_t *buf = av_mallocz(size);
-    if (!buf)
-        return NULL;
-
-    ref = av_buffer_create(buf, size, free_data_buf, opaque, 0);
-    if (!ref)
-        av_free(buf);
-    return ref;
-}
-
-int ff_vk_get_pooled_buffer(FFVulkanContext *ctx, AVBufferPool **buf_pool,
-                            AVBufferRef **buf, VkBufferUsageFlags usage,
+int ff_vk_get_pooled_buffer(FFVulkanContext *ctx, AVRefStructPool **buf_pool,
+                            FFVkBuffer **buf, VkBufferUsageFlags usage,
                             void *create_pNext, size_t size,
                             VkMemoryPropertyFlagBits mem_props)
 {
     int err;
-    AVBufferRef *ref;
     FFVkBuffer *data;
 
-    *buf = NULL;
-
     if (!(*buf_pool)) {
-        *buf_pool = av_buffer_pool_init2(sizeof(FFVkBuffer), ctx,
-                                         alloc_data_buf, NULL);
+        *buf_pool = av_refstruct_pool_alloc_ext(sizeof(FFVkBuffer), 0, ctx,
+                                                NULL, NULL, pooled_buf_free,
+                                                NULL);
         if (!(*buf_pool))
             return AVERROR(ENOMEM);
     }
 
-    *buf = ref = av_buffer_pool_get(*buf_pool);
-    if (!ref)
+    *buf = data = av_refstruct_pool_get(*buf_pool);
+    if (!data)
         return AVERROR(ENOMEM);
-
-    data = (FFVkBuffer *)ref->data;
 
     if (data->size >= size)
         return 0;
@@ -1337,16 +1283,14 @@ int ff_vk_get_pooled_buffer(FFVulkanContext *ctx, AVBufferPool **buf_pool,
                            create_pNext, NULL, usage,
                            mem_props);
     if (err < 0) {
-        av_buffer_unref(&ref);
-        *buf = NULL;
+        av_refstruct_unref(buf);
         return err;
     }
 
     if (mem_props & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
         err = ff_vk_map_buffer(ctx, data, &data->mapped_mem, 0);
         if (err < 0) {
-            av_buffer_unref(&ref);
-            *buf = NULL;
+            av_refstruct_unref(buf);
             return err;
         }
     }
@@ -1400,16 +1344,14 @@ static int create_mapped_buffer(FFVulkanContext *s,
     return 0;
 }
 
-static void destroy_avvkbuf(void *opaque, uint8_t *data)
+static void host_map_free(AVRefStructOpaque opaque, void *obj)
 {
-    FFVulkanContext *s = opaque;
-    FFVkBuffer *buf = (FFVkBuffer *)data;
-    ff_vk_free_buf(s, buf);
-    av_free(buf);
+    ff_vk_free_buf(opaque.nc, obj);
 }
 
-int ff_vk_host_map_buffer(FFVulkanContext *s, AVBufferRef **dst,
-                          uint8_t *src_data, const AVBufferRef *src_buf,
+int ff_vk_host_map_buffer(FFVulkanContext *s, FFVkBuffer **dst,
+                          uint8_t *src_data, VkDeviceSize size,
+                          const AVBufferRef *src_buf,
                           VkBufferUsageFlags usage)
 {
     int err;
@@ -1457,14 +1399,14 @@ int ff_vk_host_map_buffer(FFVulkanContext *s, AVBufferRef **dst,
     if (!ref)
         return AVERROR(ENOMEM);
 
-    /* Add the offset at the start, which gets ignored */
-    const ptrdiff_t src_offset = src_data - src_buf->data;
-    buffer_size = offs + (src_buf->size - src_offset);
+    /* Add the offset at the start, which gets ignored. */
+    const VkDeviceSize src_avail = src_buf->size - (src_data - src_buf->data);
+    buffer_size = offs + FFMIN(size, src_avail);
     buffer_size = FFALIGN(buffer_size, s->props.properties.limits.minMemoryMapAlignment);
     buffer_size = FFALIGN(buffer_size, s->hprops.minImportedHostPointerAlignment);
 
     /* Create a buffer struct */
-    vkb = av_mallocz(sizeof(*vkb));
+    vkb = av_refstruct_alloc_ext(sizeof(*vkb), 0, s, host_map_free);
     if (!vkb) {
         av_buffer_unref(&ref);
         return AVERROR(ENOMEM);
@@ -1475,7 +1417,7 @@ int ff_vk_host_map_buffer(FFVulkanContext *s, AVBufferRef **dst,
                                props);
     if (err < 0) {
         av_buffer_unref(&ref);
-        av_free(vkb);
+        av_refstruct_unref(&vkb);
         return err;
     }
 
@@ -1492,16 +1434,8 @@ int ff_vk_host_map_buffer(FFVulkanContext *s, AVBufferRef **dst,
     vkb->address       += offs;
     vkb->mapped_mem     = src_data;
     vkb->size           = buffer_size - offs;
-    vkb->flags         |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
-    /* Create a ref */
-    *dst = av_buffer_create((uint8_t *)vkb, sizeof(*vkb),
-                            destroy_avvkbuf, s, 0);
-    if (!(*dst)) {
-        destroy_avvkbuf(s, (uint8_t *)vkb);
-        *dst = NULL;
-        return AVERROR(ENOMEM);
-    }
+    *dst = vkb;
 
     return 0;
 }
@@ -1840,21 +1774,35 @@ const char *ff_vk_shader_rep_fmt(enum AVPixelFormat pix_fmt,
     }
 }
 
-typedef struct ImageViewCtx {
-    int nb_views;
-    VkImageView views[];
-} ImageViewCtx;
-
-static void destroy_imageviews(void *opaque, uint8_t *data)
+static void reset_imageviews(AVRefStructOpaque unused, void *obj)
 {
-    FFVulkanContext *s = opaque;
+    FFVkImageViews *iv = obj;
+
+    for (int i = 0; i < iv->nb_views; i++) {
+        if (iv->views[i])
+            iv->destroy_image_view(iv->dev, iv->views[i], iv->alloc);
+    }
+
+    memset(iv->views, 0, sizeof(iv->views));
+}
+
+FFVkImageViews *ff_vk_imageviews_alloc(FFVulkanContext *s, int nb_views)
+{
     FFVulkanFunctions *vk = &s->vkfn;
-    ImageViewCtx *iv = (ImageViewCtx *)data;
+    FFVkImageViews *iv;
 
-    for (int i = 0; i < iv->nb_views; i++)
-        vk->DestroyImageView(s->hwctx->act_dev, iv->views[i], s->hwctx->alloc);
+    av_assert1(nb_views <= AV_NUM_DATA_POINTERS);
 
-    av_free(iv);
+    iv = av_refstruct_pool_get(s->imageviews_pool);
+    if (!iv)
+        return NULL;
+
+    iv->nb_views           = nb_views;
+    iv->dev                = s->hwctx->act_dev;
+    iv->alloc              = s->hwctx->alloc;
+    iv->destroy_image_view = vk->DestroyImageView;
+
+    return iv;
 }
 
 static VkFormat map_fmt_to_rep(VkFormat fmt, enum FFVkShaderRepFormat rep_fmt)
@@ -2011,9 +1959,8 @@ int ff_vk_create_imageviews(FFVulkanContext *s, FFVkExecContext *e,
                             VkImageView views[AV_NUM_DATA_POINTERS],
                             AVFrame *f, enum FFVkShaderRepFormat rep_fmt)
 {
-    int err;
+    int err = 0;
     VkResult ret;
-    AVBufferRef *buf;
     FFVulkanFunctions *vk = &s->vkfn;
     AVHWFramesContext *hwfc = (AVHWFramesContext *)f->hw_frames_ctx->data;
     AVVulkanFramesContext *vkfc = hwfc->hwctx;
@@ -2021,12 +1968,7 @@ int ff_vk_create_imageviews(FFVulkanContext *s, FFVkExecContext *e,
     AVVkFrame *vkf = (AVVkFrame *)f->data[0];
     const int nb_images = ff_vk_count_images(vkf);
     const int nb_planes = av_pix_fmt_count_planes(hwfc->sw_format);
-
-    ImageViewCtx *iv;
-    const size_t buf_size = sizeof(*iv) + nb_planes*sizeof(VkImageView);
-    iv = av_mallocz(buf_size);
-    if (!iv)
-        return AVERROR(ENOMEM);
+    VkImageView tmp_views[AV_NUM_DATA_POINTERS] = { 0 };
 
     for (int i = 0; i < nb_planes; i++) {
         VkImageViewUsageCreateInfo view_usage_info = {
@@ -2057,36 +1999,28 @@ int ff_vk_create_imageviews(FFVulkanContext *s, FFVkExecContext *e,
         }
 
         ret = vk->CreateImageView(s->hwctx->act_dev, &view_create_info,
-                                  s->hwctx->alloc, &iv->views[i]);
+                                  s->hwctx->alloc, &tmp_views[i]);
         if (ret != VK_SUCCESS) {
             av_log(s, AV_LOG_ERROR, "Failed to create imageview: %s\n",
                    ff_vk_ret2str(ret));
             err = AVERROR_EXTERNAL;
             goto fail;
         }
-
-        iv->nb_views++;
     }
 
-    buf = av_buffer_create((uint8_t *)iv, buf_size, destroy_imageviews, s, 0);
-    if (!buf) {
-        err = AVERROR(ENOMEM);
-        goto fail;
-    }
+    /* The execution context owns the views, destroying them on completion */
+    for (int i = 0; i < nb_planes; i++)
+        ff_vk_exec_add_dep_obj(s, e, VK_OBJECT_TYPE_IMAGE_VIEW,
+                               (uint64_t)tmp_views[i]);
 
-    /* Add to queue dependencies */
-    err = ff_vk_exec_add_dep_buf(s, e, &buf, 1, 0);
-    if (err < 0)
-        av_buffer_unref(&buf);
+    memcpy(views, tmp_views, nb_planes*sizeof(*views));
 
-    memcpy(views, iv->views, nb_planes*sizeof(*views));
-
-    return err;
+    return 0;
 
 fail:
-    for (int i = 0; i < iv->nb_views; i++)
-        vk->DestroyImageView(s->hwctx->act_dev, iv->views[i], s->hwctx->alloc);
-    av_free(iv);
+    for (int i = 0; i < nb_planes; i++)
+        if (tmp_views[i])
+            vk->DestroyImageView(s->hwctx->act_dev, tmp_views[i], s->hwctx->alloc);
     return err;
 }
 
@@ -2160,92 +2094,6 @@ int ff_vk_shader_load(FFVulkanShader *shd,
     };
 
     return 0;
-}
-
-int ff_vk_shader_init(FFVulkanContext *s, FFVulkanShader *shd, const char *name,
-                      VkPipelineStageFlags stage,
-                      const char *extensions[], int nb_extensions,
-                      int lg_x, int lg_y, int lg_z,
-                      uint32_t required_subgroup_size)
-{
-    ff_vk_shader_load(shd, stage, NULL,
-                      (uint32_t []) { lg_x, lg_y, lg_z }, required_subgroup_size);
-
-    shd->name = name;
-    shd->precompiled = 0;
-    av_bprint_init(&shd->src, 0, AV_BPRINT_SIZE_UNLIMITED);
-
-    if (required_subgroup_size) {
-        shd->subgroup_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO;
-        shd->subgroup_info.requiredSubgroupSize = required_subgroup_size;
-    }
-
-    av_bprintf(&shd->src, "/* %s shader: %s */\n",
-               (stage == VK_SHADER_STAGE_TASK_BIT_EXT ||
-                stage == VK_SHADER_STAGE_MESH_BIT_EXT) ?
-               "Mesh" :
-               (shd->bind_point == VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR) ?
-               "Raytrace" :
-               (shd->bind_point == VK_PIPELINE_BIND_POINT_COMPUTE) ?
-               "Compute" : "Graphics",
-               name);
-    GLSLF(0, #version %i                                                  ,460);
-    GLSLC(0,                                                                  );
-
-    /* Common utilities */
-    GLSLC(0, #define IS_WITHIN(v1, v2) ((v1.x < v2.x) && (v1.y < v2.y))       );
-    GLSLC(0,                                                                  );
-    GLSLC(0, #extension GL_EXT_scalar_block_layout : require                  );
-    GLSLC(0, #extension GL_EXT_shader_explicit_arithmetic_types : require     );
-    GLSLC(0, #extension GL_EXT_control_flow_attributes : require              );
-    GLSLC(0, #extension GL_EXT_shader_image_load_formatted : require          );
-    if (s->extensions & FF_VK_EXT_EXPECT_ASSUME) {
-        GLSLC(0, #extension GL_EXT_expect_assume : require                    );
-    } else {
-        GLSLC(0, #define assumeEXT(x) (x)                                     );
-        GLSLC(0, #define expectEXT(x, c) (x)                                  );
-    }
-    if ((s->extensions & FF_VK_EXT_DEBUG_UTILS) &&
-        (s->extensions & FF_VK_EXT_RELAXED_EXTENDED_INSTR)) {
-        GLSLC(0, #extension GL_EXT_debug_printf : require                     );
-        GLSLC(0, #define DEBUG                                                );
-    }
-
-    if (stage == VK_SHADER_STAGE_TASK_BIT_EXT ||
-        stage == VK_SHADER_STAGE_MESH_BIT_EXT)
-        GLSLC(0, #extension GL_EXT_mesh_shader : require                      );
-
-    for (int i = 0; i < nb_extensions; i++)
-        GLSLF(0, #extension %s : %s                  ,extensions[i], "require");
-    GLSLC(0,                                                                  );
-
-    GLSLF(0, layout (local_size_x = %i, local_size_y = %i, local_size_z = %i) in;
-          , shd->lg_size[0], shd->lg_size[1], shd->lg_size[2]);
-    GLSLC(0,                                                                  );
-
-    return 0;
-}
-
-void ff_vk_shader_print(void *ctx, FFVulkanShader *shd, int prio)
-{
-    int line = 0;
-    const char *p = shd->src.str;
-    const char *start = p;
-    const size_t len = strlen(p);
-
-    AVBPrint buf;
-    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_UNLIMITED);
-
-    for (int i = 0; i < len; i++) {
-        if (p[i] == '\n') {
-            av_bprintf(&buf, "%i\t", ++line);
-            av_bprint_append_data(&buf, start, &p[i] - start + 1);
-            start = &p[i + 1];
-        }
-    }
-
-    av_log(ctx, prio, "Shader %s: \n%s", shd->name, buf.str);
-    av_bprint_finalize(&buf, NULL);
 }
 
 static int init_pipeline_layout(FFVulkanContext *s, FFVulkanShader *shd)
@@ -2507,7 +2355,7 @@ int ff_vk_shader_link(FFVulkanContext *s, FFVulkanShader *shd,
         av_log(s, AV_LOG_VERBOSE, " %zu compressed,", input_size);
     av_log(s, AV_LOG_VERBOSE, " %zu SPIR-V", spirv_len);
     if (binary_size != spirv_len)
-        av_log(s, AV_LOG_VERBOSE, ", %zu binary", spirv_len);
+        av_log(s, AV_LOG_VERBOSE, ", %zu binary", binary_size);
     av_log(s, AV_LOG_VERBOSE, "\n");
 
 end:
@@ -2522,34 +2370,10 @@ end:
     return err;
 }
 
-static const struct descriptor_props {
-    size_t struct_size; /* Size of the opaque which updates the descriptor */
-    const char *type;
-    int is_uniform;
-    int mem_quali;      /* Can use a memory qualifier */
-    int dim_needed;     /* Must indicate dimension */
-    int buf_content;    /* Must indicate buffer contents */
-} descriptor_props[] = {
-    [VK_DESCRIPTOR_TYPE_SAMPLER]                = { sizeof(VkDescriptorImageInfo),  "sampler",       1, 0, 0, 0, },
-    [VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE]          = { sizeof(VkDescriptorImageInfo),  "texture",       1, 0, 1, 0, },
-    [VK_DESCRIPTOR_TYPE_STORAGE_IMAGE]          = { sizeof(VkDescriptorImageInfo),  "image",         1, 1, 1, 0, },
-    [VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT]       = { sizeof(VkDescriptorImageInfo),  "subpassInput",  1, 0, 0, 0, },
-    [VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = { sizeof(VkDescriptorImageInfo),  "sampler",       1, 0, 1, 0, },
-    [VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER]         = { sizeof(VkDescriptorBufferInfo),  NULL,           1, 0, 0, 1, },
-    [VK_DESCRIPTOR_TYPE_STORAGE_BUFFER]         = { sizeof(VkDescriptorBufferInfo), "buffer",        0, 1, 0, 1, },
-    [VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC] = { sizeof(VkDescriptorBufferInfo),  NULL,           1, 0, 0, 1, },
-    [VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC] = { sizeof(VkDescriptorBufferInfo), "buffer",        0, 1, 0, 1, },
-    [VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER]   = { sizeof(VkBufferView),           "samplerBuffer", 1, 0, 0, 0, },
-    [VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER]   = { sizeof(VkBufferView),           "imageBuffer",   1, 0, 0, 0, },
-};
-
-int ff_vk_shader_add_descriptor_set(FFVulkanContext *s, FFVulkanShader *shd,
-                                    const FFVulkanDescriptorSetBinding *desc, int nb,
-                                    int singular, int print_to_shader_only)
+void ff_vk_shader_add_descriptor_set(FFVulkanContext *s, FFVulkanShader *shd,
+                                     const FFVulkanDescriptorSetBinding *desc, int nb,
+                                     int singular)
 {
-    if (print_to_shader_only)
-        goto print;
-
     FFVulkanDescriptorSet *set = &shd->desc_set[shd->nb_descriptor_sets++];
     av_assert1(shd->nb_descriptor_sets < FF_VK_MAX_DESCRIPTOR_SETS);
     av_assert1(nb < FF_VK_MAX_DESCRIPTOR_BINDINGS);
@@ -2578,69 +2402,6 @@ int ff_vk_shader_add_descriptor_set(FFVulkanContext *s, FFVulkanShader *shd,
 
     set->singular = singular;
     set->nb_bindings = nb;
-
-    if (shd->precompiled)
-        return 0;
-
-print:
-    /* Write shader info */
-    for (int i = 0; i < nb; i++) {
-        const struct descriptor_props *prop = &descriptor_props[desc[i].type];
-        GLSLA("layout (set = %i, binding = %i", FFMAX(shd->nb_descriptor_sets - 1, 0), i);
-
-        if (desc[i].mem_layout &&
-            (desc[i].type != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE))
-            GLSLA(", %s", desc[i].mem_layout);
-
-        GLSLA(")");
-
-        if (prop->is_uniform)
-            GLSLA(" uniform");
-
-        if (prop->mem_quali && desc[i].mem_quali)
-            GLSLA(" %s", desc[i].mem_quali);
-
-        if (prop->type) {
-            GLSLA(" ");
-            if (desc[i].type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) {
-                if (desc[i].mem_layout) {
-                    int len = strlen(desc[i].mem_layout);
-                    if (desc[i].mem_layout[len - 1] == 'i' &&
-                        desc[i].mem_layout[len - 2] == 'u') {
-                        GLSLA("u");
-                    } else if (desc[i].mem_layout[len - 1] == 'i') {
-                        GLSLA("i");
-                    }
-                }
-            }
-            GLSLA("%s", prop->type);
-        }
-
-        if (prop->dim_needed)
-            GLSLA("%iD", desc[i].dimensions);
-
-        GLSLA(" %s", desc[i].name);
-
-        if (prop->buf_content) {
-            GLSLA(" {\n    ");
-            if (desc[i].buf_elems) {
-                GLSLA("%s", desc[i].buf_content);
-                GLSLA("[%i];", desc[i].buf_elems);
-            } else {
-                GLSLA("%s", desc[i].buf_content);
-            }
-            GLSLA("\n}");
-        }
-
-        if (desc[i].elems > 0)
-            GLSLA("[%i]", desc[i].elems);
-
-        GLSLA(";");
-        GLSLA("\n");
-    }
-    GLSLA("\n");
-
-    return 0;
 }
 
 int ff_vk_shader_register_exec(FFVulkanContext *s, FFVkExecPool *pool,
@@ -2854,8 +2615,6 @@ void ff_vk_shader_free(FFVulkanContext *s, FFVulkanShader *shd)
 {
     FFVulkanFunctions *vk = &s->vkfn;
 
-    av_bprint_finalize(&shd->src, NULL);
-
 #if 0
     if (shd->shader.module)
         vk->DestroyShaderModule(s->hwctx->act_dev, shd->shader.module,
@@ -2883,6 +2642,7 @@ void ff_vk_uninit(FFVulkanContext *s)
     av_freep(&s->video_props);
     av_freep(&s->coop_mat_props);
     av_freep(&s->host_image_copy_layouts);
+    av_refstruct_pool_uninit(&s->imageviews_pool);
 
     av_buffer_unref(&s->device_ref);
     av_buffer_unref(&s->frames_ref);

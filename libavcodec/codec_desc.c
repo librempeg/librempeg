@@ -2100,6 +2100,20 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("CFDF D5 (Cyberflix DreamFactory v5) video"),
         .props     = AV_CODEC_PROP_LOSSLESS,
     },
+    {
+        .id        = AV_CODEC_ID_BINKVIDEO2,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "binkvideo2",
+        .long_name = NULL_IF_CONFIG_SMALL("Bink video 2"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_TTVIDEO,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "ttvideo",
+        .long_name = NULL_IF_CONFIG_SMALL("Traveller's Tales Video"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
 
     /* various PCM "codecs" */
     {
@@ -2232,7 +2246,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_PCM_DVD,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "pcm_dvd",
-        .long_name = NULL_IF_CONFIG_SMALL("PCM signed 20|24-bit big-endian"),
+        .long_name = NULL_IF_CONFIG_SMALL("PCM signed 16|20|24-bit big-endian for DVD-Video media"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
     },
     {
@@ -2373,6 +2387,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "pcm_sonic",
         .long_name = NULL_IF_CONFIG_SMALL("PCM Sonic"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
+    },
+    {
+        .id        = AV_CODEC_ID_PCM_DVDA,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "pcm_dvda",
+        .long_name = NULL_IF_CONFIG_SMALL("PCM signed 16|20|24-bit big-endian for DVD-Audio media"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
     },
 
@@ -2991,6 +3012,27 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "adpcm_nxap",
         .long_name = NULL_IF_CONFIG_SMALL("ADPCM NXAP"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_XA8,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_xa8",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM CDROM XA 8-bit"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_IMA_REF,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ima_ref",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA Reflections"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_IMA_OKI4,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ima_oki4",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA Dialogic OKI (4-shift)"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 
@@ -4275,6 +4317,12 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_DATA,
         .name      = "smpte_436m_anc",
         .long_name = NULL_IF_CONFIG_SMALL("MXF SMPTE-436M ANC"),
+    },
+    {
+        .id        = AV_CODEC_ID_ITUT_T35,
+        .type      = AVMEDIA_TYPE_DATA,
+        .name      = "itut_t35",
+        .long_name = NULL_IF_CONFIG_SMALL("ITU-T T.35 metadata"),
     },
     {
         .id        = AV_CODEC_ID_MPEG2TS,

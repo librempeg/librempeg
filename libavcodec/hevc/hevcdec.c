@@ -566,6 +566,7 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
                      CONFIG_HEVC_D3D11VA_HWACCEL * 2 + \
                      CONFIG_HEVC_D3D12VA_HWACCEL + \
                      CONFIG_HEVC_NVDEC_HWACCEL + \
+                     CONFIG_HEVC_NVDEC_CUARRAY_HWACCEL + \
                      CONFIG_HEVC_VAAPI_HWACCEL + \
                      CONFIG_HEVC_VIDEOTOOLBOX_HWACCEL + \
                      CONFIG_HEVC_VDPAU_HWACCEL + \
@@ -598,6 +599,9 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
 #endif
 #if CONFIG_HEVC_NVDEC_HWACCEL
         *fmt++ = AV_PIX_FMT_CUDA;
+#endif
+#if CONFIG_HEVC_NVDEC_CUARRAY_HWACCEL
+        *fmt++ = AV_PIX_FMT_CUARRAY;
 #endif
 #if CONFIG_HEVC_VIDEOTOOLBOX_HWACCEL
         *fmt++ = AV_PIX_FMT_VIDEOTOOLBOX;
@@ -632,6 +636,9 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
 #if CONFIG_HEVC_NVDEC_HWACCEL
         *fmt++ = AV_PIX_FMT_CUDA;
 #endif
+#if CONFIG_HEVC_NVDEC_CUARRAY_HWACCEL
+        *fmt++ = AV_PIX_FMT_CUARRAY;
+#endif
         break;
     case AV_PIX_FMT_YUV444P:
 #if CONFIG_HEVC_VAAPI_HWACCEL
@@ -642,6 +649,9 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
 #endif
 #if CONFIG_HEVC_NVDEC_HWACCEL
         *fmt++ = AV_PIX_FMT_CUDA;
+#endif
+#if CONFIG_HEVC_NVDEC_CUARRAY_HWACCEL
+        *fmt++ = AV_PIX_FMT_CUARRAY;
 #endif
 #if CONFIG_HEVC_VIDEOTOOLBOX_HWACCEL
         *fmt++ = AV_PIX_FMT_VIDEOTOOLBOX;
@@ -664,6 +674,9 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
 #if CONFIG_HEVC_NVDEC_HWACCEL
         *fmt++ = AV_PIX_FMT_CUDA;
 #endif
+#if CONFIG_HEVC_NVDEC_CUARRAY_HWACCEL
+        *fmt++ = AV_PIX_FMT_CUARRAY;
+#endif
         break;
     case AV_PIX_FMT_YUV444P10:
 #if CONFIG_HEVC_VIDEOTOOLBOX_HWACCEL
@@ -684,6 +697,9 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
 #if CONFIG_HEVC_NVDEC_HWACCEL
         *fmt++ = AV_PIX_FMT_CUDA;
 #endif
+#if CONFIG_HEVC_NVDEC_CUARRAY_HWACCEL
+        *fmt++ = AV_PIX_FMT_CUARRAY;
+#endif
         break;
     case AV_PIX_FMT_YUV422P12:
 #if CONFIG_HEVC_VAAPI_HWACCEL
@@ -694,6 +710,9 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
 #endif
 #if CONFIG_HEVC_NVDEC_HWACCEL
         *fmt++ = AV_PIX_FMT_CUDA;
+#endif
+#if CONFIG_HEVC_NVDEC_CUARRAY_HWACCEL
+        *fmt++ = AV_PIX_FMT_CUARRAY;
 #endif
         break;
     }
@@ -2920,7 +2939,7 @@ static int hls_slice_data_wpp(HEVCContext *s, const H2645NAL *nal)
     int64_t startheader, cmpt = 0;
     int j, res = 0;
 
-    if (s->sh.slice_ctb_addr_rs + s->sh.num_entry_point_offsets * sps->ctb_width >= sps->ctb_width * sps->ctb_height) {
+    if (s->sh.slice_ctb_addr_rs + s->sh.num_entry_point_offsets * (int64_t)sps->ctb_width >= sps->ctb_width * (int64_t)sps->ctb_height) {
         av_log(s->avctx, AV_LOG_ERROR, "WPP ctb addresses are wrong (%d %d %d %d)\n",
             s->sh.slice_ctb_addr_rs, s->sh.num_entry_point_offsets,
             sps->ctb_width, sps->ctb_height
@@ -3124,6 +3143,16 @@ static int set_side_data(HEVCContext *s)
             return AVERROR(ENOMEM);
 
         ret = ff_frame_new_side_data_from_buf(s->avctx, out, AV_FRAME_DATA_DYNAMIC_HDR_PLUS, &info_ref);
+        if (ret < 0)
+            return ret;
+    }
+
+    if (s->sei.common.itut_t35.hdr_smpte2094_app5) {
+        AVBufferRef *info_ref = av_buffer_ref(s->sei.common.itut_t35.hdr_smpte2094_app5);
+        if (!info_ref)
+            return AVERROR(ENOMEM);
+
+        ret = ff_frame_new_side_data_from_buf(s->avctx, out, AV_FRAME_DATA_DYNAMIC_HDR_SMPTE_2094_APP5, &info_ref);
         if (ret < 0)
             return ret;
     }
@@ -4260,6 +4289,9 @@ const FFCodec ff_hevc_decoder = {
 #endif
 #if CONFIG_HEVC_NVDEC_HWACCEL
                                HWACCEL_NVDEC(hevc),
+#endif
+#if CONFIG_HEVC_NVDEC_CUARRAY_HWACCEL
+                               HWACCEL_NVDEC_CUARRAY(hevc),
 #endif
 #if CONFIG_HEVC_VAAPI_HWACCEL
                                HWACCEL_VAAPI(hevc),

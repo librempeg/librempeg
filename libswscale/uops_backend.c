@@ -92,6 +92,7 @@
     SWS_FOR(TYPE, CLEAR,          REF_ENTRY)                \
     SWS_FOR(TYPE, LINEAR,         REF_ENTRY)                \
     SWS_FOR(TYPE, DITHER,         REF_ENTRY)                \
+    SWS_FOR(TYPE, LUT_3D,         REF_ENTRY)                \
     /* end of macro */
 
 static const SwsUOpTable uop_table = {
@@ -135,23 +136,13 @@ static void process(const SwsOpExec *exec, const void *priv,
     }
 }
 
-static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
+static int compile_uops_c(SwsContext *ctx, const SwsUOpList *uops, SwsCompiledOp *out)
 {
     int ret;
 
     SwsOpChain *chain = ff_sws_op_chain_alloc();
     if (!chain)
         return AVERROR(ENOMEM);
-
-    SwsUOpList *uops = ff_sws_uop_list_alloc();
-    if (!uops) {
-        ret = AVERROR(ENOMEM);
-        goto fail;
-    }
-
-    ret = ff_sws_ops_translate(ctx, ops, 0, uops);
-    if (ret < 0)
-        goto fail;
 
     av_assert0(uops->num_ops > 0);
     for (int i = 0; i < uops->num_ops; i++) {
@@ -181,18 +172,34 @@ static int compile(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
         av_log(ctx, AV_LOG_DEBUG, "    %s\n", name);
     }
 
-    ff_sws_uop_list_free(&uops);
     return 0;
 
 fail:
-    ff_sws_uop_list_free(&uops);
     ff_sws_op_chain_free(chain);
     return ret;
 }
 
+static int compile_c(SwsContext *ctx, const SwsOpList *ops, SwsCompiledOp *out)
+{
+    SwsUOpList *uops = ff_sws_uop_list_alloc();
+    if (!uops)
+        return AVERROR(ENOMEM);
+
+    int ret = ff_sws_ops_translate(ctx, ops, 0, uops);
+    if (ret < 0)
+        goto fail;
+
+    ret = compile_uops_c(ctx, uops, out);
+
+fail:
+    ff_sws_uop_list_free(&uops);
+    return ret;
+}
+
 const SwsOpBackend backend_c = {
-    .name       = "c",
-    .flags      = SWS_BACKEND_C,
-    .compile    = compile,
-    .hw_format  = AV_PIX_FMT_NONE,
+    .name           = "c",
+    .flags          = SWS_BACKEND_C,
+    .compile        = compile_c,
+    .compile_uops   = compile_uops_c,
+    .hw_format      = AV_PIX_FMT_NONE,
 };

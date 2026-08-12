@@ -62,7 +62,9 @@
     {DEF_MACRO(WRITE_NIBBLE,        TYPE)}, \
     {DEF_MACRO(WRITE_PACKED,        TYPE)}, \
     {DEF_MACRO(WRITE_PLANAR,        TYPE)}, \
-    {DEF_MACRO(MOVE,                TYPE)}, \
+    {DEF_MACRO(RW_SHUFFLE,          TYPE)}, \
+    {DEF_MACRO(PERMUTE,             TYPE)}, \
+    {DEF_MACRO(COPY,                TYPE)}, \
     {DEF_MACRO(SWAP_BYTES,          TYPE)}, \
     {DEF_MACRO(EXPAND_BIT,          TYPE)}, \
     {DEF_MACRO(EXPAND_PAIR,         TYPE)}, \
@@ -72,6 +74,7 @@
     {DEF_MACRO(TO_U32,              TYPE)}, \
     {DEF_MACRO(TO_F32,              TYPE)}, \
     {DEF_MACRO(SCALE,               TYPE)}, \
+    {DEF_MACRO(LINEAR,              TYPE)}, \
     {DEF_MACRO(LINEAR_FMA,          TYPE)}, \
     {DEF_MACRO(ADD,                 TYPE)}, \
     {DEF_MACRO(MIN,                 TYPE)}, \

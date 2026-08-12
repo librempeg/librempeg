@@ -72,7 +72,7 @@ static int probe(const AVProbeData *p)
               b[3] == 'k')) ||
              (b[0] == 'K' && b[1] == 'B' && b[2] == '2' && /* Bink 2 */
              (b[3] == 'a' || b[3] == 'd' || b[3] == 'f' || b[3] == 'g' || b[3] == 'h' ||
-              b[3] == 'i' || b[3] == 'j' || b[3] == 'k'))) &&
+              b[3] == 'i' || b[3] == 'j' || b[3] == 'k' || b[3] == 'n'))) &&
             AV_RL32(b+8) > 0 &&  // num_frames
             AV_RL32(b+20) > 0 && AV_RL32(b+20) <= BINK_MAX_WIDTH &&
             AV_RL32(b+24) > 0 && AV_RL32(b+24) <= BINK_MAX_HEIGHT &&
@@ -149,8 +149,7 @@ static int read_header(AVFormatContext *s)
     vst->codecpar->codec_id   = AV_CODEC_ID_BINKVIDEO;
 
     if ((vst->codecpar->codec_tag & 0xFFFFFF) == MKTAG('K', 'B', '2', 0)) {
-        av_log(s, AV_LOG_WARNING, "Bink 2 video is not implemented\n");
-        vst->codecpar->codec_id = AV_CODEC_ID_NONE;
+        vst->codecpar->codec_id = AV_CODEC_ID_BINKVIDEO2;
     }
 
     if ((ret = ff_get_extradata(s, vst->codecpar, pb, 4)) < 0)
@@ -169,7 +168,7 @@ static int read_header(AVFormatContext *s)
     revision = ((vst->codecpar->codec_tag >> 24) % 0xFF);
 
     if ((signature == AV_RL32("BIK") && (revision == 'k')) ||
-        (signature == AV_RL32("KB2") && (revision == 'i' || revision == 'j' || revision == 'k')))
+        (signature == AV_RL32("KB2") && (revision == 'i' || revision == 'j' || revision == 'k') || revision == 'n'))
         avio_skip(pb, 4); /* unknown new field */
 
     if (bink->num_audio_tracks) {

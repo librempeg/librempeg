@@ -1354,6 +1354,8 @@ static enum AVPixelFormat get_format(AVCodecContext *s, const enum AVPixelFormat
         return AV_PIX_FMT_NONE;
     }
 
+    dp->hwaccel_pix_fmt = AV_PIX_FMT_NONE;
+
     for (p = pix_fmts; *p != AV_PIX_FMT_NONE; p++) {
         const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(*p);
         const AVCodecHWConfig  *config = NULL;
@@ -1376,8 +1378,30 @@ static enum AVPixelFormat get_format(AVCodecContext *s, const enum AVPixelFormat
         }
         if (config && config->device_type == dp->hwaccel_device_type) {
             dp->hwaccel_pix_fmt = *p;
-            break;
+            /* Stop at the first matching hardware format unless the user
+             * explicitly requested a different *hardware* output format
+             * (e.g. CUARRAY vs CUDA, which share a device type) - in that
+             * case keep scanning for the exact match. A software
+             * hwaccel_output_format requests a download and imposes no such
+             * preference, so it must not switch us off the default (first)
+             * hardware format. */
+            if (dp->hwaccel_output_format == AV_PIX_FMT_NONE ||
+                dp->hwaccel_output_format == *p ||
+                !(av_pix_fmt_desc_get(dp->hwaccel_output_format)->flags & AV_PIX_FMT_FLAG_HWACCEL))
+                break;
         }
+    }
+
+    if (dp->hwaccel_pix_fmt != AV_PIX_FMT_NONE) {
+        if (dp->hwaccel_output_format != AV_PIX_FMT_NONE &&
+            dp->hwaccel_output_format != dp->hwaccel_pix_fmt &&
+            (av_pix_fmt_desc_get(dp->hwaccel_output_format)->flags & AV_PIX_FMT_FLAG_HWACCEL))
+            av_log(dp, AV_LOG_WARNING,
+                   "Requested hwaccel output format '%s' not available, "
+                   "falling back to '%s'\n",
+                   av_get_pix_fmt_name(dp->hwaccel_output_format),
+                   av_get_pix_fmt_name(dp->hwaccel_pix_fmt));
+        return dp->hwaccel_pix_fmt;
     }
 
     return *p;

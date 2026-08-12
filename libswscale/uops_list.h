@@ -34,9 +34,9 @@
     ENTRY(SWS_UOP_WRITE_PACKED,         "write_packed")              \
     ENTRY(SWS_UOP_WRITE_NIBBLE,         "write_nibble")              \
     ENTRY(SWS_UOP_WRITE_BIT,            "write_bit")                 \
+    ENTRY(SWS_UOP_RW_SHUFFLE,           "rw_shuffle")                \
     ENTRY(SWS_UOP_PERMUTE,              "permute")                   \
     ENTRY(SWS_UOP_COPY,                 "copy")                      \
-    ENTRY(SWS_UOP_MOVE,                 "move")                      \
     ENTRY(SWS_UOP_SWAP_BYTES,           "swap_bytes")                \
     ENTRY(SWS_UOP_EXPAND_BIT,           "expand_bit")                \
     ENTRY(SWS_UOP_EXPAND_PAIR,          "expand_pair")               \
@@ -57,5 +57,6 @@
     ENTRY(SWS_UOP_RSHIFT,               "rshift")                    \
     ENTRY(SWS_UOP_CLEAR,                "clear")                     \
     ENTRY(SWS_UOP_DITHER,               "dither")                    \
+    ENTRY(SWS_UOP_LUT_3D,               "lut_3d")                    \
 
 #endif /* SWSCALE_UOPS_LIST_H */

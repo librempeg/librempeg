@@ -70,7 +70,7 @@ static int nvdec_mjpeg_frame_params(AVCodecContext *avctx,
                                   AVBufferRef *hw_frames_ctx)
 {
     // Only need storage for the current frame
-    return ff_nvdec_frame_params(avctx, hw_frames_ctx, 1, 0);
+    return ff_nvdec_frame_params(avctx, hw_frames_ctx, AV_PIX_FMT_CUDA, 1, 0);
 }
 
 const FFHWAccel ff_mjpeg_nvdec_hwaccel = {

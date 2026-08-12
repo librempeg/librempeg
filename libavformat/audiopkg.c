@@ -351,6 +351,8 @@ static int read_header(AVFormatContext *s)
         st->codecpar->block_align = align * st->codecpar->ch_layout.nb_channels;
         st->codecpar->sample_rate = rate;
         st->codecpar->codec_id = codec;
+
+        avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
     }
 
     if (s->nb_streams > 1)

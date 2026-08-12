@@ -95,7 +95,7 @@ static int read_header(AVFormatContext *s)
 
 const FFInputFormat ff_astl_demuxer = {
     .p.name         = "astl",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("ASTL Audio"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Capcom ASTL (Audio Stream)"),
     .p.extensions   = "ast",
     .p.flags        = AVFMT_GENERIC_INDEX,
     .read_probe     = read_probe,

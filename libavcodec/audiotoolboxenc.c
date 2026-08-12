@@ -571,11 +571,12 @@ static int ffat_encode(AVCodecContext *avctx, AVPacket *avpkt,
 
     if ((!ret || ret == 1) && *got_packet_ptr) {
         avpkt->size = out_buffers.mBuffers[0].mDataByteSize;
-        ff_af_queue_remove(&at->afq, out_pkt_desc.mVariableFramesInPacket ?
+        int ret = ff_af_queue_remove(&at->afq, out_pkt_desc.mVariableFramesInPacket ?
                                      out_pkt_desc.mVariableFramesInPacket :
                                      avctx->frame_size,
-                           &avpkt->pts,
-                           &avpkt->duration);
+                                     avpkt);
+        if (ret < 0)
+            return ret;
         avpkt->flags |= AV_PKT_FLAG_KEY;
     } else if (ret && ret != 1) {
         av_log(avctx, AV_LOG_ERROR, "Encode error: %i\n", ret);

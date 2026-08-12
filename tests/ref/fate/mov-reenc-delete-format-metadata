@@ -1,0 +1,15 @@
+f63b90216e9667fa0b030aae0f808fd8 *tests/data/fate/mov-reenc-delete-format-metadata.nut
+579 tests/data/fate/mov-reenc-delete-format-metadata.nut
+[FORMAT]
+TAG:genre=Rock
+TAG:album=The Album
+TAG:album_artist=The Album Artist
+TAG:comment=The comment... 
+TAG:title=Owner
+TAG:compilation=0
+TAG:disc=3/5
+TAG:artist=The Artist
+TAG:date=2010
+TAG:Encoding Params=vers
+TAG:track=2/5
+[/FORMAT]

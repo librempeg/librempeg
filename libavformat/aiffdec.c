@@ -19,6 +19,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/dict.h"
 #include "libavutil/mem.h"
@@ -180,6 +181,7 @@ static int get_aiff_header(AVFormatContext *s, int64_t size,
             break;
         case AV_CODEC_ID_ADPCM_G726LE:
             par->bits_per_coded_sample = 5;
+            av_fallthrough;
         case AV_CODEC_ID_ADPCM_IMA_WS:
         case AV_CODEC_ID_ADPCM_G722:
         case AV_CODEC_ID_MACE6:
@@ -190,14 +192,14 @@ static int get_aiff_header(AVFormatContext *s, int64_t size,
         case AV_CODEC_ID_GSM:
             par->block_align = 33;
             break;
+        case AV_CODEC_ID_G728:
+            par->block_align = 5;
+            break;
         case AV_CODEC_ID_DWVW:
             par->block_align = 256;
             break;
         case AV_CODEC_ID_ADPCM_N64:
             par->block_align = 9;
-            break;
-        case AV_CODEC_ID_G728:
-            par->block_align = 5;
             break;
         default:
             aiff->block_duration = 1;
@@ -372,6 +374,8 @@ static int aiff_read_header(AVFormatContext *s)
             /* This field is unknown and its data seems to be irrelevant */
             avio_rb32(pb);
             st->codecpar->block_align = avio_rb32(pb);
+            if (!st->codecpar->block_align)
+                st->codecpar->block_align = 2324;
 
             goto got_sound;
             break;
@@ -404,6 +408,7 @@ static int aiff_read_header(AVFormatContext *s)
         case 0:
             if (offset > 0 && st->codecpar->block_align) // COMM && SSND
                 goto got_sound;
+            av_fallthrough;
         default: /* Jump */
             avio_skip(pb, size);
         }

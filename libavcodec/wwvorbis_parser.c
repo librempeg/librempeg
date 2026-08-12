@@ -30,6 +30,7 @@
 
 typedef struct WwVorbisParseContext {
     ParseContext pc;
+    int big_endian;
     int left;
     int size;
 } WwVorbisParseContext;
@@ -50,8 +51,10 @@ static int wwvorbis_parse(AVCodecParserContext *pc, AVCodecContext *avctx,
     } else {
         if (avctx->extradata &&
             avctx->extradata_size >= 26) {
-            if (pc->cur_offset == AV_RL64(avctx->extradata))
-                s->left = AV_RL32(avctx->extradata+22);
+            if (pc->cur_offset == AV_RL64(avctx->extradata)) {
+                s->big_endian = AV_RB32(avctx->extradata+22) < AV_RL32(avctx->extradata+22);
+                s->left = s->big_endian ? AV_RB32(avctx->extradata+22) : AV_RL32(avctx->extradata+22);
+            }
         }
 
         for (int i = 0; i < buf_size; i++) {
@@ -68,7 +71,7 @@ static int wwvorbis_parse(AVCodecParserContext *pc, AVCodecContext *avctx,
             } else if (s->size == 2) {
                 uint32_t val = state & 0xFFFF;
 
-                s->left = AV_RB16(&val);
+                s->left = s->big_endian ? AV_RL16(&val) : AV_RB16(&val);
             }
         }
 

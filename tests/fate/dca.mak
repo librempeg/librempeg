@@ -39,9 +39,12 @@ $(foreach N,$(DCADEC_SUITE_LOSSLESS_24),$(eval $(call FATE_DCADEC_LOSSLESS_SUITE
 $(foreach N,$(DCADEC_SUITE_LOSSY),$(eval $(call FATE_DCADEC_LOSSY_SUITE,$(N))))
 
 # lossy downmix tests
-FATE_DCADEC_LOSSY += fate-dca-core_51_24_48_768_1-dmix_2
+FATE_DCADEC_LOSSY += fate-dca-core_51_24_48_768_1-dmix_2 fate-dca-core_51_24_48_768_1-dmix_2_matrix
 fate-dca-core_51_24_48_768_1-dmix_2: CMD = ffmpeg -downmix stereo -flags2 skip_manual -i $(TARGET_SAMPLES)/dts/dcadec-suite/core_51_24_48_768_1.dtshd -f f32le -af aresample -
 fate-dca-core_51_24_48_768_1-dmix_2: REF = $(SAMPLES)/dts/dcadec-suite/core_51_24_48_768_1-dmix_2.f32
+
+fate-dca-core_51_24_48_768_1-dmix_2_matrix: CMD = ffmpeg -flags2 skip_manual -i $(TARGET_SAMPLES)/dts/dcadec-suite/core_51_24_48_768_1.dtshd -f f32le -af aresample,aformat=channel_layouts=stereo -
+fate-dca-core_51_24_48_768_1-dmix_2_matrix: REF = $(SAMPLES)/dts/dcadec-suite/core_51_24_48_768_1-dmix_2.f32
 
 FATE_DCADEC_LOSSY += fate-dca-x96_xxch_71_24_96_3840-dmix_2
 fate-dca-x96_xxch_71_24_96_3840-dmix_2: CMD = ffmpeg -downmix stereo -flags2 skip_manual -i $(TARGET_SAMPLES)/dts/dcadec-suite/x96_xxch_71_24_96_3840.dtshd -f f32le -af aresample -
@@ -60,6 +63,10 @@ fate-dca-xch_61_24_48_768-dmix_6: REF = $(SAMPLES)/dts/dcadec-suite/xch_61_24_48
 $(FATE_DCADEC_LOSSY): CMP = oneoff
 $(FATE_DCADEC_LOSSY): CMP_UNIT = f32
 $(FATE_DCADEC_LOSSY): FUZZ = 9
+
+# lossless downmix tests
+FATE_DCADEC_LOSSLESS_s24le += fate-dca-xll_51_24_48_768-dmix_2_matrix
+fate-dca-xll_51_24_48_768-dmix_2_matrix: CMD = fmtstdout "streamhash -hash md5" -i $(TARGET_SAMPLES)/dts/dcadec-suite/xll_51_24_48_768.dtshd -c:a pcm_s24le -af aresample=tsf=s32p,aformat=channel_layouts=stereo
 
 FATE_DCA_FFMPEG_FFPROBE-$(call FRAMEMD5, DTSHD, DCA, ARESAMPLE_FILTER PCM_S16LE_ENCODER) += $(FATE_DCADEC_LOSSLESS_s16le)
 FATE_DCA_FFMPEG_FFPROBE-$(call FRAMEMD5, DTSHD, DCA, ARESAMPLE_FILTER PCM_S24LE_ENCODER) += $(FATE_DCADEC_LOSSLESS_s24le)

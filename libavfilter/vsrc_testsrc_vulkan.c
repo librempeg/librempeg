@@ -78,7 +78,7 @@ static av_cold int init_filter(AVFilterContext *ctx, enum TestSrcVulkanMode mode
         goto fail;
     }
 
-    RET(ff_vk_exec_pool_init(vkctx, s->qf, &s->e, s->qf->num*4, 0, 0, 0, NULL));
+    RET(ff_vk_exec_pool_init(vkctx, s->qf, &s->e, FF_VK_DEFAULT_EXEC_CONTEXTS, 0, 0, 0, NULL));
 
     ff_vk_shader_load(&s->shd, VK_SHADER_STAGE_COMPUTE_BIT, NULL,
                       (uint32_t []) { 32, 32, 1 }, 0);
@@ -93,7 +93,7 @@ static av_cold int init_filter(AVFilterContext *ctx, enum TestSrcVulkanMode mode
             .elems      = planes,
         },
     };
-    ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc_set, 1, 0, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc_set, 1, 0);
 
     if (mode == TESTSRC_COLOR) {
         double rgb2yuv[3][3];

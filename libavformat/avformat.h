@@ -357,11 +357,23 @@ struct AVFrame;
  * -  Several modifiers can be applied to the tag name. This is done by
  *    appending a dash character ('-') and the modifier name in the order
  *    they appear in the list below -- e.g. foo-eng-sort, not foo-sort-eng.
+ *    -  descriptor -- some formats (e.g. ID3v2 COMM and USLT frames) attach
+ *       a free-form descriptor to a tag to distinguish multiple instances.
+ *       The full key format is "<tag>-<descriptor>-<lang>", but either
+ *       component may be absent. When writing, the last dash-separated suffix
+ *       is interpreted as a language code if it is a valid ISO 639-2/B code;
+ *       otherwise the entire portion after the first dash is treated as a
+ *       descriptor. Examples: "comment-eng" (lang only),
+ *       "comment-MusicMatch_Bio-eng" (descriptor + lang),
+ *       "comment-foobar" (descriptor only, foobar is not a valid lang code).
  *    -  language -- a tag whose value is localized for a particular language
  *       is appended with the ISO 639-2/B 3-letter language code.
  *       For example: Author-ger=Michael, Author-eng=Mike
  *       The original/default language is in the unqualified "Author" tag.
  *       A demuxer should set a default if it sets any translated tag.
+ *       When a language is required by the format but not specified in the key
+ *       (e.g. ID3v2 COMM and USLT frames), the default is left to the
+ *       underlying implementation (ID3v2 defaults to "und").
  *    -  sorting  -- a modified version of a tag that should be used for
  *       sorting will have '-sort' appended. E.g. artist="The Beatles",
  *       artist-sort="Beatles, The".
@@ -381,6 +393,9 @@ struct AVFrame;
                  e.g. "Various Artists" for compilation albums.
  artist       -- main creator of the work
  comment      -- any additional description of the file.
+                 ID3v2 COMM frames: bare "comment" has no lang or descriptor;
+                 "comment-<lang>" for lang only; "comment-<descriptor>-<lang>"
+                 for both (see descriptor modifier above).
  composer     -- who composed the work, if different from artist.
  copyright    -- name of copyright holder.
  creation_time-- date when the file was created, preferably in ISO 8601.
@@ -394,6 +409,10 @@ struct AVFrame;
  language     -- main language in which the work is performed, preferably
                  in ISO 639-2 format. Multiple languages can be specified by
                  separating them with commas.
+ lyrics       -- lyrics for the work.
+                 ID3v2 USLT frames: bare "lyrics" has no lang or descriptor;
+                 "lyrics-<lang>" for lang only; "lyrics-<descriptor>-<lang>"
+                 for both (see descriptor modifier above).
  performer    -- artist who performed the work, if different from artist.
                  E.g for "Also sprach Zarathustra", artist would be "Richard
                  Strauss" and performer "London Philharmonic Orchestra".
@@ -1944,6 +1963,15 @@ typedef struct AVFormatContext {
      * Name of this format context, only used for logging purposes.
      */
     char *name;
+
+    /**
+     * Depth recursion limit,
+     *
+     * The maximum recursion depth that a Demuxer can open a Demuxer within itself.
+     *
+     * - demuxing: Set by user
+     */
+    int recursion_limit;
 } AVFormatContext;
 
 /**

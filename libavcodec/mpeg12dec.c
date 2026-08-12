@@ -788,6 +788,9 @@ static const enum AVPixelFormat mpeg1_hwaccel_pixfmt_list_420[] = {
 #if CONFIG_MPEG1_NVDEC_HWACCEL
     AV_PIX_FMT_CUDA,
 #endif
+#if CONFIG_MPEG1_NVDEC_CUARRAY_HWACCEL
+    AV_PIX_FMT_CUARRAY,
+#endif
 #if CONFIG_MPEG1_VDPAU_HWACCEL
     AV_PIX_FMT_VDPAU,
 #endif
@@ -798,6 +801,9 @@ static const enum AVPixelFormat mpeg1_hwaccel_pixfmt_list_420[] = {
 static const enum AVPixelFormat mpeg2_hwaccel_pixfmt_list_420[] = {
 #if CONFIG_MPEG2_NVDEC_HWACCEL
     AV_PIX_FMT_CUDA,
+#endif
+#if CONFIG_MPEG2_NVDEC_CUARRAY_HWACCEL
+    AV_PIX_FMT_CUARRAY,
 #endif
 #if CONFIG_MPEG2_VDPAU_HWACCEL
     AV_PIX_FMT_VDPAU,
@@ -2643,6 +2649,9 @@ const FFCodec ff_mpeg1video_decoder = {
 #if CONFIG_MPEG1_NVDEC_HWACCEL
                                HWACCEL_NVDEC(mpeg1),
 #endif
+#if CONFIG_MPEG1_NVDEC_CUARRAY_HWACCEL
+                               HWACCEL_NVDEC_CUARRAY(mpeg1),
+#endif
 #if CONFIG_MPEG1_VDPAU_HWACCEL
                                HWACCEL_VDPAU(mpeg1),
 #endif
@@ -2713,6 +2722,9 @@ const FFCodec ff_mpeg2video_decoder = {
 #endif
 #if CONFIG_MPEG2_NVDEC_HWACCEL
                         HWACCEL_NVDEC(mpeg2),
+#endif
+#if CONFIG_MPEG2_NVDEC_CUARRAY_HWACCEL
+                        HWACCEL_NVDEC_CUARRAY(mpeg2),
 #endif
 #if CONFIG_MPEG2_VAAPI_HWACCEL
                         HWACCEL_VAAPI(mpeg2),
@@ -2955,19 +2967,46 @@ static int ipu_decode_frame1(AVCodecContext *avctx, AVFrame *frame)
     m->intra_dc_precision = s->flags & 3;
 
     ff_permute_scantable(m->intra_scantable.permutated,
-                         s->flags & 0x10 ? ff_alternate_vertical_scan : ff_zigzag_direct,
+                         m->alternate_scan ? ff_alternate_vertical_scan : ff_zigzag_direct,
                          m->idsp.idct_permutation);
 
     s->m.last_dc[0] = s->m.last_dc[1] = s->m.last_dc[2] = 128 << m->intra_dc_precision;
     m->qscale = 1;
 
+    int mb_skip_run = 0;
     for (int y = 0; y < avctx->height; y += 16) {
         int intraquant;
 
         for (int x = 0; x < avctx->width; x += 16) {
-            if (x || y) {
-                if (!get_bits1(gb))
+            if ((x || y) && mb_skip_run == 0) {
+                int code = get_vlc2(gb, ff_mbincr_vlc,
+                                    MBINCR_VLC_BITS, 2);
+                if (code < 0) {
+                    av_log(avctx, AV_LOG_ERROR, "mb incr damaged\n");
                     return AVERROR_INVALIDDATA;
+                }
+                if (code > 33) {
+                    if (code == 35) {
+                        if (show_bits(gb, 15) != 0)
+                            av_log(avctx, AV_LOG_ERROR, "end mismatch\n");
+                        mb_skip_run = 33;
+                    }
+                } else {
+                    mb_skip_run += code;
+                }
+            }
+            if (mb_skip_run > 0) {
+                mb_skip_run--;
+                memset(block, 0, 6 * sizeof(*block));
+
+                block[0][0] = s->m.last_dc[0];
+                block[1][0] = s->m.last_dc[0];
+                block[2][0] = s->m.last_dc[0];
+                block[3][0] = s->m.last_dc[0];
+                block[4][0] = s->m.last_dc[1];
+                block[5][0] = s->m.last_dc[2];
+
+                goto skip_mb;
             }
 
             if (get_bits1(gb)) {
@@ -3001,6 +3040,7 @@ static int ipu_decode_frame1(AVCodecContext *avctx, AVFrame *frame)
                     return ret;
             }
 
+skip_mb:
             m->idsp.idct_put(frame->data[0] + y * frame->linesize[0] + x,
                              frame->linesize[0], block[0]);
             m->idsp.idct_put(frame->data[0] + y * frame->linesize[0] + x + 8,

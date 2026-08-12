@@ -126,7 +126,6 @@ typedef struct TFOptions{
 typedef struct OVOptions {
     const AVClass *clazz;
 
-    int batch_size;
     int input_resizable;
     DNNLayout layout;
     float scale;

@@ -1,0 +1,12 @@
+7d3bba1fefcd3b1e4c8037b372bc7a96 *tests/data/fate/matroska-reenc-delete-audio-metadata.nut
+28564 tests/data/fate/matroska-reenc-delete-audio-metadata.nut
+[STREAM]
+TAG:encoder=Lavc mpeg2video
+TAG:language=spa
+[SIDE_DATA]
+[/SIDE_DATA]
+[/STREAM]
+[FORMAT]
+TAG:DESCRIPTION=Edition description
+TAG:TITLE=Edition title
+[/FORMAT]

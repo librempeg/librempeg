@@ -262,6 +262,12 @@ static const struct {
     #if CONFIG_TAK_DECODER
         { "takdsp", checkasm_check_takdsp },
     #endif
+    #if CONFIG_TTA_DECODER
+        { "ttadsp", checkasm_check_ttadsp },
+    #endif
+    #if CONFIG_TTA_ENCODER
+        { "ttaencdsp", checkasm_check_ttaencdsp },
+    #endif
     #if CONFIG_UTVIDEO_DECODER
         { "utvideodsp", checkasm_check_utvideodsp },
     #endif
@@ -284,11 +290,7 @@ static const struct {
         { "vp8dsp", checkasm_check_vp8dsp },
     #endif
     #if CONFIG_VP9_DECODER
-        { "vp9dsp", checkasm_check_vp9dsp }, // all of the below
-        { "vp9_ipred", checkasm_check_vp9_ipred },
-        { "vp9_itxfm", checkasm_check_vp9_itxfm },
-        { "vp9_loopfilter", checkasm_check_vp9_loopfilter },
-        { "vp9_mc", checkasm_check_vp9_mc },
+        { "vp9dsp", checkasm_check_vp9dsp },
     #endif
     #if CONFIG_VIDEODSP
         { "videodsp", checkasm_check_videodsp },

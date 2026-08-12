@@ -62,6 +62,12 @@
 #define HEADER_MAGIC   MKTAG(u'\xFF', 'S', 'h', '$')
 #define HEADER_VERSION 3
 
+/**
+ * Hard watershed of consecutive failed blocks before we give up on the cache
+ * file altogether and assume it's entirely lost to us.
+ **/
+#define MAX_CORRUPT_BLOCKS 10
+
 static int hash_uri(uint8_t hash[HASH_SIZE], const char *uri)
 {
     struct AVHashContext *ctx = NULL;
@@ -161,6 +167,7 @@ typedef struct SharedContext {
     uint8_t *tmp_buf;
     int block_size;
     int write_err; ///< write error occurred
+    int num_corrupt;
 
     /* cache file */
     uint8_t *cache_data; ///< optional mmap of the cache file
@@ -468,7 +475,7 @@ static int spacemap_grow(URLContext *h, int64_t block)
     if (s->map_size > old_size) {
         num_blocks = (s->map_size - sizeof(Spacemap)) / sizeof(Block);
         av_log(h, AV_LOG_DEBUG,
-               "%s %zu bytes, capacity: %"PRId64" blocks = %zu MB\n",
+               "%s %zu bytes, capacity: %"PRId64" blocks = %"PRId64" MB\n",
                ret ? "Resized spacemap to" : "Mapped spacemap with",
                (size_t) s->map_size, num_blocks,
                (num_blocks * (int64_t) s->block_size) >> 20);
@@ -540,7 +547,7 @@ static int read_cache(SharedContext *s, uint8_t *buf, size_t size, off_t offset)
     while (size) {
         ssize_t ret = pread(s->fd, buf, size, offset);
         if (ret <= 0)
-            return ret ? AVERROR(errno) : AVERROR(EIO);
+            return ret ? AVERROR(errno) : AVERROR_EOF;
         buf    += ret;
         offset += ret;
         size   -= ret;
@@ -610,6 +617,9 @@ static int shared_read(URLContext *h, unsigned char *buf, int size)
 retry:
     switch (state) {
     default:
+        if (s->num_corrupt >= MAX_CORRUPT_BLOCKS)
+            goto read_block; /* assume broken cache file */
+
         /* We always need to read the entire block to verify integrity */
         block_size = clamp_size(h, block_size, block_pos); /* filesize may have changed */
         if (s->cache_data) {
@@ -620,6 +630,13 @@ retry:
             ret = read_cache(s, tmp, block_size, block_pos);
             if (ret < 0) {
                 av_log(h, AV_LOG_ERROR, "Failed to read from cache file: %s\n", av_err2str(ret));
+                if (ret == AVERROR_EOF) { /* e.g. cache appears truncated? */
+                    if (s->retry_corrupt) {
+                        s->num_corrupt++;
+                        goto read_block;
+                    }
+                    ret = AVERROR(EIO); /* don't propagate EOF to caller */
+                }
                 return ret;
             }
         }
@@ -629,10 +646,13 @@ retry:
             av_log(h, AV_LOG_ERROR, "Cache corruption detected for block 0x%"PRIx64" at "
                    "offset 0x%"PRIx64": expected CRC: 0x%08X, got: 0x%08X\n",
                    block_id, block_pos, state, crc);
-            if (s->retry_corrupt)
+            if (s->retry_corrupt) {
+                s->num_corrupt++;
                 goto read_block;
+            }
             return AVERROR(EIO);
-        }
+        } else
+            s->num_corrupt = 0; /* reset corrupt block count on success */
 
         tmp += (ptrdiff_t) offset;
         size = FFMIN(size, block_size - offset);
@@ -652,13 +672,20 @@ retry:
         return AVERROR(EIO);
 
 read_block:
+        if (s->num_corrupt == MAX_CORRUPT_BLOCKS) {
+            av_log(h, AV_LOG_ERROR, "Too many consecutive corrupt blocks; "
+                   "assuming cache file is completely broken.\n");
+            s->num_corrupt++; /* silence this log on subsequent reads */
+        }
+        av_fallthrough;
+
     case BLOCK_NONE:
         if (s->read_only)
             break; /* don't mark block as pending */
-        if (atomic_compare_exchange_weak_explicit(&block->state, &state,
-                                                  BLOCK_PENDING,
-                                                  memory_order_acquire,
-                                                  memory_order_acquire))
+        if (atomic_compare_exchange_strong_explicit(&block->state, &state,
+                                                    BLOCK_PENDING,
+                                                    memory_order_acquire,
+                                                    memory_order_acquire))
         {
             /* Acquired pending state, proceed to fetch the block */
             state = BLOCK_PENDING;

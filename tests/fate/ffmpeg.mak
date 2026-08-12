@@ -244,6 +244,10 @@ fate-ffmpeg-error-rate-fail: CMD = ffmpeg -i $(TARGET_SAMPLES)/mkv/h264_tta_unde
 fate-ffmpeg-error-rate-pass: CMD = ffmpeg -i $(TARGET_SAMPLES)/mkv/h264_tta_undecodable.mkv -c:v copy -f null - -max_error_rate 1
 FATE_SAMPLES_FFMPEG-$(call ENCDEC, PCM_S16LE TTA, NULL MATROSKA) += fate-ffmpeg-error-rate-fail fate-ffmpeg-error-rate-pass
 
+fate-ffmpeg-no-overwrite: CMP = null
+fate-ffmpeg-no-overwrite: CMD = out=tests/data/fate/no-overwrite.wav; touch $$out; ffmpeg -f lavfi -i anullsrc -t 0.01 -c:a pcm_u8 -f wav -n $$out; ret=$$?; rm -f $$out; test $$ret -ne 0
+FATE_FFMPEG-$(call ALLYES, LAVFI_INDEV ANULLSRC_FILTER PCM_U8_DECODER PCM_U8_ENCODER WAV_MUXER FILE_PROTOCOL) += fate-ffmpeg-no-overwrite
+
 # test input -bsf
 # use -stream_loop, because it tests flushing bsfs
 fate-ffmpeg-bsf-input: CMD = framecrc -stream_loop 2 -bsf setts=PTS*2 -i $(TARGET_SAMPLES)/hevc/extradata-reload-multi-stsd.mov -c copy
@@ -266,6 +270,20 @@ fate-ffmpeg-streamcopy-t: CMD = ffmpeg                                          
     -stream_loop -1 -f rawvideo -s 352x288 -pix_fmt yuv420p -i $(TARGET_PATH)/tests/data/vsynth1.yuv  \
     -c copy -f null -t 1 -
 FATE_FFMPEG-$(call REMUX, RAWVIDEO, NULL_MUXER) += fate-ffmpeg-streamcopy-t
+
+fate-ffmpeg-negative-t: tests/data/vsynth1.yuv
+fate-ffmpeg-negative-t: CMP = null
+fate-ffmpeg-negative-t: CMD = ffmpeg                                                               \
+    -stream_loop -1 -f rawvideo -s 352x288 -pix_fmt yuv420p -i $(TARGET_PATH)/tests/data/vsynth1.yuv \
+    -c copy -f null -t -1 -; test $$? -ne 0
+FATE_FFMPEG-$(call REMUX, RAWVIDEO, NULL_MUXER) += fate-ffmpeg-negative-t
+
+fate-ffmpeg-negative-input-t: tests/data/vsynth1.yuv
+fate-ffmpeg-negative-input-t: CMP = null
+fate-ffmpeg-negative-input-t: CMD = ffmpeg                                                        \
+    -stream_loop -1 -f rawvideo -s 352x288 -pix_fmt yuv420p -t -1 -i $(TARGET_PATH)/tests/data/vsynth1.yuv \
+    -c copy -f null -; test $$? -ne 0
+FATE_FFMPEG-$(call REMUX, RAWVIDEO, NULL_MUXER) += fate-ffmpeg-negative-input-t
 
 # Test loopback decoding and passing the output to a complex graph.
 fate-ffmpeg-loopback-decoding: tests/data/vsynth1.yuv

@@ -826,13 +826,13 @@ int assert_file_overwrite(const char *filename)
                 signal(SIGINT, SIG_DFL);
                 if (!read_yesno()) {
                     av_log(NULL, AV_LOG_FATAL, "Not overwriting - exiting\n");
-                    return AVERROR_EXIT;
+                    return AVERROR(EEXIST);
                 }
                 term_init();
             }
             else {
                 av_log(NULL, AV_LOG_FATAL, "File '%s' already exists. Exiting.\n", filename);
-                return AVERROR_EXIT;
+                return AVERROR(EEXIST);
             }
         }
     }
@@ -1626,6 +1626,9 @@ const OptionDef options[] = {
     { "metadata",               OPT_TYPE_STRING, OPT_SPEC | OPT_OUTPUT,
         { .off = OFFSET(metadata) },
         "add metadata", "key=value" },
+    { "keep_metadata",          OPT_TYPE_STRING, OPT_SPEC | OPT_OUTPUT,
+        { .off = OFFSET(keep_metadata) },
+        "keep metadata key from input when re-encoding", "key" },
     { "program",                OPT_TYPE_STRING, OPT_SPEC | OPT_EXPERT | OPT_OUTPUT,
         { .off = OFFSET(program) },
         "add program with specified streams", "title=string:st=number..." },

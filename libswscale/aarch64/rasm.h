@@ -27,6 +27,7 @@
 #include <stdio.h>
 
 #include "libavutil/attributes.h"
+#include "libavutil/bprint.h"
 #include "libavutil/avassert.h"
 
 /**
@@ -233,8 +234,8 @@ void rasm_annotate_next(RasmContext *rctx, const char *comment);
 void rasm_annotate_nextf(RasmContext *rctx, char *s, size_t n,
                          const char *fmt, ...) av_printf_format(4, 5);
 
-/* Emit the assembled IR as GNU assembler text to fp. */
-int rasm_print(RasmContext *rctx, FILE *fp);
+/* Emit the assembled IR as GNU assembler text to bp. */
+int rasm_print(RasmContext *rctx, AVBPrint *bp);
 
 /*********************************************************************/
 /* AArch64-specific */
@@ -473,7 +474,14 @@ typedef struct AArch64VecViews {
 } AArch64VecViews;
 
 /* Fill vector view struct for given op. */
-void a64op_vec_views(RasmOp op, AArch64VecViews *out);
+AArch64VecViews a64op_vec_views(RasmOp op);
+
+#define A64OP_VEC_VIEWS4(op) { \
+    a64op_vec_views((op)[0]),  \
+    a64op_vec_views((op)[1]),  \
+    a64op_vec_views((op)[2]),  \
+    a64op_vec_views((op)[3]),  \
+}
 
 /*********************************************************************/
 /* AARCH64_OP_BASE */
@@ -615,6 +623,8 @@ static inline RasmOp a64cond_nv(void) { return a64op_cond(AARCH64_COND_NV); }
 #define i_ble(rctx, id) i_bcond(rctx, a64cond_le(), rasm_op_label(id))
 
 /* Extra helpers. */
-#define i_mov16b(rctx, op0, op1) i_mov(rctx, v_16b(op0), v_16b(op1))
+#define i_and16b(rctx, op0, op1, op2) i_and(rctx, v_16b(op0), v_16b(op1), v_16b(op2))
+#define i_mov16b(rctx, op0, op1     ) i_mov(rctx, v_16b(op0), v_16b(op1)            )
+#define i_orr16b(rctx, op0, op1, op2) i_orr(rctx, v_16b(op0), v_16b(op1), v_16b(op2))
 
 #endif /* SWSCALE_AARCH64_RASM_H */

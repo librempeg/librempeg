@@ -1196,7 +1196,9 @@ static int vorbis_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     flush_put_bits(&pb);
     avpkt->size = put_bytes_output(&pb);
 
-    ff_af_queue_remove(&venc->afq, frame_size, &avpkt->pts, &avpkt->duration);
+    ret = ff_af_queue_remove(&venc->afq, frame_size, avpkt);
+    if (ret < 0)
+        return ret;
 
     if (frame_size > avpkt->duration) {
         uint8_t *side = av_packet_new_side_data(avpkt, AV_PKT_DATA_SKIP_SAMPLES, 10);

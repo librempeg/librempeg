@@ -41,11 +41,13 @@
 #include "libavutil/mem.h"
 #include "libavcodec/png.h"
 #include "avio_internal.h"
+#include "avlanguage.h"
 #include "demux.h"
 #include "id3v1.h"
 #include "id3v2.h"
 
 const AVMetadataConv ff_id3v2_34_metadata_conv[] = {
+    { "COMM", "comment"      },
     { "TALB", "album"        },
     { "TCOM", "composer"     },
     { "TCON", "genre"        },
@@ -374,92 +376,97 @@ static void read_ttag(AVFormatContext *s, AVIOContext *pb, int taglen,
         av_dict_set(metadata, key, dst, dict_flags);
 }
 
-static void read_uslt(AVFormatContext *s, AVIOContext *pb, int taglen,
-                      AVDictionary **metadata)
-{
-    uint8_t lang[4];
-    uint8_t *descriptor = NULL; // 'Content descriptor'
-    uint8_t *text;
-    char *key;
-    int encoding;
-    int ok = 0;
-
-    if (taglen < 4)
-        goto error;
-
-    encoding = avio_r8(pb);
-    taglen--;
-
-    if (avio_read(pb, lang, 3) < 3)
-        goto error;
-    lang[3] = '\0';
-    taglen -= 3;
-
-    if (decode_str(s, pb, encoding, &descriptor, &taglen) < 0 || taglen < 0)
-        goto error;
-
-    if (decode_str(s, pb, encoding, &text, &taglen) < 0 || taglen < 0)
-        goto error;
-
-    // FFmpeg does not support hierarchical metadata, so concatenate the keys.
-    key = av_asprintf("lyrics-%s%s%s", descriptor[0] ? (char *)descriptor : "",
-                                       descriptor[0] ? "-" : "",
-                                       lang);
-    if (!key) {
-        av_free(text);
-        goto error;
-    }
-
-    av_dict_set(metadata, key, text,
-                AV_DICT_DONT_STRDUP_KEY | AV_DICT_DONT_STRDUP_VAL);
-
-    ok = 1;
-error:
-    if (!ok)
-        av_log(s, AV_LOG_ERROR, "Error reading lyrics, skipped\n");
-    av_free(descriptor);
-}
-
 /**
- * Parse a comment tag.
+ * Parse a lang descr tag such as COMM and USLT.
+ *
+ * A non-empty descriptor produces "<base>-<descriptor>-<lang>" keys.
  */
-static void read_comment(AVFormatContext *s, AVIOContext *pb, int taglen,
-                      AVDictionary **metadata)
+static void read_lang_descr_tag(AVFormatContext *s, AVIOContext *pb,
+                                const char *key, int taglen,
+                                AVDictionary **metadata)
 {
-    const char *key = "comment";
-    uint8_t *dst;
-    int encoding, dict_flags = AV_DICT_DONT_OVERWRITE | AV_DICT_DONT_STRDUP_VAL;
-    av_unused int language;
+    char *full_key = NULL;
+    uint8_t *dst, *descriptor = NULL;
+    int encoding;
+    char language[4] = {0};
+    int flags = AV_DICT_DONT_OVERWRITE | AV_DICT_DONT_STRDUP_VAL;
 
     if (taglen < 4)
         return;
 
     encoding = avio_r8(pb);
-    language = avio_rl24(pb);
+
+    if (avio_read(pb, language, 3) < 3) {
+        av_log(s, AV_LOG_ERROR, "Error reading %s frame language, skipped\n", key);
+        return;
+    }
+
+    for (char *p = language; *p; p++)
+        *p = av_tolower(*p);
+
+    // Some libraries set XXX for unknown language.
+    if (!strcmp(language, "xxx") ||
+        // By convention, "und" is represented as a key with
+        // no language, e.g. "comment" or "lyrics"
+        !strcmp(language, "und"))
+        memset(language, 0, sizeof(language));
+
     taglen -= 4;
 
-    if (decode_str(s, pb, encoding, &dst, &taglen) < 0) {
-        av_log(s, AV_LOG_ERROR, "Error reading comment frame, skipped\n");
+    if (decode_str(s, pb, encoding, &descriptor, &taglen) < 0) {
+        av_log(s, AV_LOG_ERROR, "Error reading %s frame descriptor, skipped\n", key);
         return;
     }
 
-    if (dst && !*dst)
-        av_freep(&dst);
-
-    if (dst) {
-        key = (const char *) dst;
-        dict_flags |= AV_DICT_DONT_STRDUP_KEY;
-    }
-
     if (decode_str(s, pb, encoding, &dst, &taglen) < 0) {
-        av_log(s, AV_LOG_ERROR, "Error reading comment frame, skipped\n");
-        if (dict_flags & AV_DICT_DONT_STRDUP_KEY)
-            av_freep((void*)&key);
+        av_freep(&descriptor);
+        av_log(s, AV_LOG_ERROR, "Error reading %s frame, skipped\n", key);
         return;
     }
 
-    if (dst)
-        av_dict_set(metadata, key, (const char *) dst, dict_flags);
+    if (descriptor && *descriptor) {
+#if FF_API_OLD_ID3V2_COMMENT
+        if (!strcmp(key, "comment")) {
+            av_log(s, AV_LOG_WARNING,
+                   "Deprecated: COMM descriptor '%s' used as metadata key. "
+                   "This will change in a future version.\n", descriptor);
+            av_dict_set(metadata, (const char *)descriptor, (const char *)dst,
+                        AV_DICT_DONT_OVERWRITE);
+        }
+#endif
+        int descr_len = strlen((char *)descriptor);
+        if (av_strnlen(language, 3) > 0)
+            full_key = av_asprintf("%s-%s-%s", key, descriptor, language);
+                 // descr = "eng"
+        else if ((descr_len == 3 &&
+                 ff_convert_lang_to((char *)descriptor, AV_LANG_ISO639_2_BIBL)) ||
+                 // descr = Foo-eng
+                 (descr_len > 4 && descriptor[descr_len-4] == '-' &&
+                 ff_convert_lang_to((char *)descriptor+descr_len-3, AV_LANG_ISO639_2_BIBL))) {
+            /* Descriptor looks like a lang code: add trailing lang to
+             * keep the key unambiguous on the write side. */
+            full_key = av_asprintf("%s-%s-und", key, descriptor);
+        } else
+            full_key = av_asprintf("%s-%s", key, descriptor);
+        if (!full_key) {
+            av_freep(&descriptor);
+            av_freep(&dst);
+            return;
+        }
+        key = full_key;
+    } else if (av_strnlen(language, 3) == 3) {
+        full_key = av_asprintf("%s-%s", key, language);
+        if (!full_key) {
+            av_freep(&descriptor);
+            av_freep(&dst);
+            return;
+        }
+        key = full_key;
+    }
+
+    av_freep(&descriptor);
+    av_dict_set(metadata, key, (const char *)dst, flags);
+    av_freep(&full_key);
 }
 
 typedef struct ExtraMetaList {
@@ -1079,9 +1086,9 @@ static void id3v2_parse(AVIOContext *pb, AVDictionary **metadata,
                 /* parse text tag */
                 read_ttag(s, pbx, tlen, metadata, tag);
             else if (!memcmp(tag, "USLT", 4))
-                read_uslt(s, pbx, tlen, metadata);
+                read_lang_descr_tag(s, pbx, "lyrics", tlen, metadata);
             else if (!strcmp(tag, comm_frame))
-                read_comment(s, pbx, tlen, metadata);
+                read_lang_descr_tag(s, pbx, "comment", tlen, metadata);
             else
                 /* parse special meta tag */
                 extra_func->read(s, pbx, tlen, tag, extra_meta, isv34);

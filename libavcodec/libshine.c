@@ -105,8 +105,9 @@ static int libshine_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
         s->buffer_index -= len;
         memmove(s->buffer, s->buffer + len, s->buffer_index);
 
-        ff_af_queue_remove(&s->afq, avctx->frame_size, &avpkt->pts,
-                           &avpkt->duration);
+        ret = ff_af_queue_remove(&s->afq, avctx->frame_size, avpkt);
+        if (ret < 0)
+            return ret;
 
         *got_packet_ptr = 1;
     }

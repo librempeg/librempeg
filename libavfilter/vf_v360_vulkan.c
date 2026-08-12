@@ -145,7 +145,7 @@ static av_cold int init_filter(AVFilterContext *ctx, AVFrame *in)
             .elems  = planes,
         },
     };
-    ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc_set, 2, 0, 0);
+    ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc_set, 2, 0);
 
     RET(ff_vk_shader_link(vkctx, &s->shd,
                           ff_v360_comp_spv_data,
