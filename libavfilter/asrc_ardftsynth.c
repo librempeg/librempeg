@@ -215,8 +215,8 @@ static int synth_channels(AVFilterContext *ctx, void *arg, int job, int nb_jobs)
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out = arg;
     const int nb_channels = outlink->ch_layout.nb_channels;
-    const int start = (nb_channels *  job   ) / nb_jobs;
-    const int end   = (nb_channels * (job+1)) / nb_jobs;
+    const int start = ff_slice_pos(nb_channels, job, nb_jobs);
+    const int end = ff_slice_pos(nb_channels, job+1, nb_jobs);
     const int nb_samples = s->window_size;
     const int half_size = nb_samples/2;
     const double *win = s->win;
