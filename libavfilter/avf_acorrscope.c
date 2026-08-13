@@ -141,8 +141,8 @@ static int run_channels_fft(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
 {
     AVFrame *in = arg;
     const int channels = in->ch_layout.nb_channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
 
     for (int ch = start; ch < end; ch++)
         run_channel_fft(ctx, in, ch);
