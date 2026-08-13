@@ -574,8 +574,8 @@ static int run_channel_cwt(AVFilterContext *ctx, int ch, int jobnr, int nb_jobs)
     const float scale = 1.f / input_padding_size;
     const int ihop_size = s->ihop_size;
     const int count = s->frequency_band_count;
-    const int start = (count * jobnr) / nb_jobs;
-    const int end = (count * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(count, jobnr, nb_jobs);
+    const int end = ff_slice_pos(count, jobnr+1, nb_jobs);
     const int coffset = ch * ihop_size;
 
     for (int y = start; y < end; y++) {
@@ -1003,8 +1003,8 @@ static int run_channels_cwt_prepare(AVFilterContext *ctx, void *arg, int jobnr, 
 {
     ShowFreqsContext *s = ctx->priv;
     const int count = s->nb_channels;
-    const int start = (count * jobnr) / nb_jobs;
-    const int end = (count * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(count, jobnr, nb_jobs);
+    const int end = ff_slice_pos(count, jobnr+1, nb_jobs);
 
     for (int ch = start; ch < end; ch++) {
         if (s->bypass[ch])
