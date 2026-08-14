@@ -129,15 +129,16 @@ static const AVOption blend_options[] = {
 FRAMESYNC_DEFINE_CLASS(blend, BlendContext, fs);
 
 #define DEFINE_BLEND_EXPR(type, name, div)                                     \
-static void blend_expr_## name(const uint8_t *_top, ptrdiff_t top_linesize,          \
-                               const uint8_t *_bottom, ptrdiff_t bottom_linesize,    \
-                               uint8_t *_dst, ptrdiff_t dst_linesize,                \
+static void blend_expr_## name(const uint8_t *_top, ptrdiff_t top_linesize,    \
+                               const uint8_t *_bottom, ptrdiff_t bottom_linesize, \
+                               uint8_t *_dst, ptrdiff_t dst_linesize,          \
                                ptrdiff_t width, ptrdiff_t height,              \
                                FilterParams *param, SliceParams *sliceparam)   \
 {                                                                              \
     const type *top = (const type*)_top;                                       \
     const type *bottom = (const type*)_bottom;                                 \
-    double *values = sliceparam->values;                                       \
+    double ev, *values = sliceparam->values;                                   \
+    const int depth = param->depth;                                            \
     int starty = sliceparam->starty;                                           \
     type *dst = (type*)_dst;                                                   \
     AVExpr *e = sliceparam->e;                                                 \
@@ -152,7 +153,11 @@ static void blend_expr_## name(const uint8_t *_top, ptrdiff_t top_linesize,     
             values[VAR_X]      = x;                                            \
             values[VAR_TOP]    = values[VAR_A] = top[x];                       \
             values[VAR_BOTTOM] = values[VAR_B] = bottom[x];                    \
-            dst[x] = av_expr_eval(e, values, NULL);                            \
+            ev = av_expr_eval(e, values, NULL);                                \
+            if (div != 4)                                                      \
+                dst[x] = av_clip_uintp2(ev, depth);                            \
+            else                                                               \
+                dst[x] = ev;                                                   \
         }                                                                      \
         dst    += dst_linesize;                                                \
         top    += top_linesize;                                                \
@@ -304,6 +309,8 @@ static int config_params(AVFilterContext *ctx)
 
     for (int plane = 0; plane < FF_ARRAY_ELEMS(s->params); plane++) {
         FilterParams *param = &s->params[plane];
+
+        param->depth = s->depth;
 
         if (s->all_mode >= 0)
             param->mode = s->all_mode;
