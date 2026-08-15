@@ -207,8 +207,8 @@ static int fade(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     AudioVectorScopeContext *s = ctx->priv;
     const ptrdiff_t linesize = s->outpicref->linesize[0];
     const int height = s->outpicref->height;
-    const int slice_start = (height *  jobnr   ) / nb_jobs;
-    const int slice_end   = (height * (jobnr+1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+    const int slice_end   = ff_slice_pos(height, jobnr + 1, nb_jobs);
     const uint8_t *fade = s->fade;
 
     if (fade[0] == 255 && fade[1] == 255 && fade[2] == 255) {

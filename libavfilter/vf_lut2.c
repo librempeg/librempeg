@@ -259,8 +259,8 @@ static int lut2_##zname##_##xname##_##yname(AVFilterContext *ctx,               
     const int odepth = s->odepth;                                                \
                                                                                  \
     for (int p = 0; p < s->nb_planes; p++) {                                     \
-        const int slice_start = (s->heightx[p] * jobnr) / nb_jobs;               \
-        const int slice_end = (s->heightx[p] * (jobnr+1)) / nb_jobs;             \
+        const int slice_start = ff_slice_pos(s->heightx[p], jobnr, nb_jobs);     \
+        const int slice_end = ff_slice_pos(s->heightx[p], jobnr + 1, nb_jobs);   \
         const uint16_t *lut = s->lut[p];                                         \
         const int widthx = s->widthx[p];                                         \
         const xtype *srcxx;                                                      \

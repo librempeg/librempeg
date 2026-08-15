@@ -55,8 +55,8 @@ static int fn(remap_planar)(AVFilterContext *ctx, void *arg,
     const AVFrame *xin = td->xin;
     const AVFrame *yin = td->yin;
     const AVFrame *out = td->out;
-    const int slice_start = (out->height *  jobnr   ) / nb_jobs;
-    const int slice_end   = (out->height * (jobnr+1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(out->height, jobnr  , nb_jobs);
+    const int slice_end   = ff_slice_pos(out->height, jobnr+1, nb_jobs);
     const int xlinesize = xin->linesize[0] / sizeof(map_type);
     const int ylinesize = yin->linesize[0] / sizeof(map_type);
     const int out_width = out->width;
@@ -131,8 +131,8 @@ static int fn(remap_packed)(AVFilterContext *ctx, void *arg,
     const AVFrame *xin = td->xin;
     const AVFrame *yin = td->yin;
     const AVFrame *out = td->out;
-    const int slice_start = (out->height *  jobnr   ) / nb_jobs;
-    const int slice_end   = (out->height * (jobnr+1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(out->height, jobnr  , nb_jobs);
+    const int slice_end   = ff_slice_pos(out->height, jobnr+1, nb_jobs);
     const int dlinesize  = out->linesize[0] / sizeof(pixel_type);
     const int slinesize  = in->linesize[0] / sizeof(pixel_type);
     const int xlinesize  = xin->linesize[0] / sizeof(map_type);

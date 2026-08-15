@@ -170,8 +170,8 @@ static int wiener_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     AudioWienerContext *s = ctx->priv;
     AVFrame *in = s->in;
     AVFrame *out = arg;
-    const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(out->ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(out->ch_layout.nb_channels, jobnr+1, nb_jobs);
 
     for (int ch = start; ch < end; ch++)
         s->wiener_channel(ctx, in, out, ch);
@@ -236,8 +236,8 @@ static int wiener_flush_channels(AVFilterContext *ctx, void *arg, int jobnr, int
 {
     AudioWienerContext *s = ctx->priv;
     AVFrame *out = arg;
-    const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(out->ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(out->ch_layout.nb_channels, jobnr+1, nb_jobs);
 
     for (int ch = start; ch < end; ch++)
         s->wiener_flush_channel(ctx, out, ch);

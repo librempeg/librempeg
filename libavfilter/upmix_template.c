@@ -204,8 +204,8 @@ static int fn(angle)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AUpmixContext *s = ctx->priv;
     const int N = s->aswift_size;
-    const int start = (N * jobnr) / nb_jobs;
-    const int end = (N * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(N, jobnr, nb_jobs);
+    const int end = ff_slice_pos(N, jobnr+1, nb_jobs);
     fn(StateContext) *state = s->state;
     fn(StateContext) *stc0 = &state[0];
     fn(StateContext) *stc1 = &state[1];
@@ -245,8 +245,8 @@ static int fn(upmix)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     AUpmixContext *s = ctx->priv;
     const int nb_out_channels = s->out_ch_layout.nb_channels;
     const int N = s->aswift_size;
-    const int start = (N * jobnr) / nb_jobs;
-    const int end = (N * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(N, jobnr, nb_jobs);
+    const int end = ff_slice_pos(N, jobnr+1, nb_jobs);
 
     for (int ch = 0; ch < nb_out_channels; ch++) {
         const int chan = av_channel_layout_channel_from_index(&s->out_ch_layout, ch);
@@ -293,8 +293,8 @@ static int fn(upmix_in)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const int idx = td->idx;
     const int nb_in_channels = in->ch_layout.nb_channels;
     const int N = s->aswift_size;
-    const int start = (N * jobnr) / nb_jobs;
-    const int end = (N * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(N, jobnr, nb_jobs);
+    const int end = ff_slice_pos(N, jobnr+1, nb_jobs);
     fn(StateContext) *state = s->state;
 
     for (int ch = 0; ch < nb_in_channels; ch++) {

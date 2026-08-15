@@ -596,8 +596,8 @@ static int draw(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const float log_factor = 1.f/logf(s->logarithmic_basis);
     const float *weights = s->frequency_weight;
     const int count = s->frequency_band_count;
-    const int start = (count * jobnr) / nb_jobs;
-    const int end = (count * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(count, jobnr, nb_jobs);
+    const int end = ff_slice_pos(count, jobnr+1, nb_jobs);
     const int nb_channels = s->nb_channels;
     const int iscale = s->intensity_scale;
     const int ihop_index = s->ihop_index;
@@ -969,8 +969,8 @@ static int run_channel_cwt(AVFilterContext *ctx, int ch, int jobnr, int nb_jobs)
     const float scale = 1.f / input_padding_size;
     const int ihop_size = s->ihop_size;
     const int count = s->frequency_band_count;
-    const int start = (count * jobnr) / nb_jobs;
-    const int end = (count * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(count, jobnr, nb_jobs);
+    const int end = ff_slice_pos(count, jobnr+1, nb_jobs);
     const int coffset = ch * ihop_size;
 
     for (int y = start; y < end; y++) {
@@ -1088,8 +1088,8 @@ static int run_channel_ssq(AVFilterContext *ctx, int ch, int jobnr, int nb_jobs)
     const float *freqs = s->frequency_band;
     const int count = s->frequency_band_count;
     const int ihop_size = s->ihop_size;
-    const int start = (ihop_size * jobnr) / nb_jobs;
-    const int end = (ihop_size * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(ihop_size, jobnr, nb_jobs);
+    const int end = ff_slice_pos(ihop_size, jobnr+1, nb_jobs);
     const float delta = freqs[0]*0.005f;
 
     for (int y = 0; y < count; y++) {
@@ -1156,8 +1156,8 @@ static int run_channel_sync(AVFilterContext *ctx, int ch, int jobnr, int nb_jobs
     const int count = s->frequency_band_count;
     const float *freqs = s->frequency_band;
     const int ihop_size = s->ihop_size;
-    const int start = (ihop_size * jobnr) / nb_jobs;
-    const int end = (ihop_size * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(ihop_size, jobnr, nb_jobs);
+    const int end = ff_slice_pos(ihop_size, jobnr+1, nb_jobs);
 
     for (int i = start; i < end; i++) {
         for (int y = 0; y < count; y++) {
@@ -1230,8 +1230,8 @@ static int run_channels_cepstrum(AVFilterContext *ctx, void *arg, int jobnr, int
 {
     ShowCWTContext *s = ctx->priv;
     const int nb_channels = s->nb_channels;
-    const int start = (nb_channels * jobnr) / nb_jobs;
-    const int end = (nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(nb_channels, jobnr+1, nb_jobs);
 
     for (int ch = start; ch < end; ch++)
         run_channel_cepstrum(ctx, ch, jobnr);
@@ -1841,8 +1841,8 @@ static int run_channels_cwt_prepare(AVFilterContext *ctx, void *arg, int jobnr, 
 {
     ShowCWTContext *s = ctx->priv;
     const int count = s->nb_channels;
-    const int start = (count * jobnr) / nb_jobs;
-    const int end = (count * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(count, jobnr, nb_jobs);
+    const int end = ff_slice_pos(count, jobnr + 1, nb_jobs);
 
     for (int ch = start; ch < end; ch++)
         run_channel_cwt_prepare(ctx, arg, jobnr, ch);

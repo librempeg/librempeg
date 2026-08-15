@@ -40,8 +40,8 @@ static int multiply_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_
 {
     AudioMultiplyContext *s = ctx->priv;
     AVFrame *out = arg;
-    const int start = (s->planes * jobnr) / nb_jobs;
-    const int end = (s->planes * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(s->planes, jobnr, nb_jobs);
+    const int end = ff_slice_pos(s->planes, jobnr+1, nb_jobs);
     const int plane_samples = FFMIN(s->frames[0]->nb_samples, s->frames[1]->nb_samples);
 
     if (av_get_packed_sample_fmt(ctx->inputs[0]->format) == AV_SAMPLE_FMT_FLT) {

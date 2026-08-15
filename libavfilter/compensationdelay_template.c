@@ -50,8 +50,8 @@ static int fn(delay_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb
     const unsigned b_mask = s->buf_size - 1;
     const unsigned buf_size = s->buf_size;
     const int nb_channels = in->ch_layout.nb_channels;
-    const int start = (nb_channels * jobnr) / nb_jobs;
-    const int end = (nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(nb_channels, jobnr+1, nb_jobs);
     const int nb_samples = in->nb_samples;
     const ftype dry = s->dry;
     const ftype wet = s->wet;

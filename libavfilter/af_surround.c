@@ -356,8 +356,8 @@ static int fft_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     ThreadData *td = arg;
     const int offset = td->offset;
     AVFrame *in = td->frame;
-    const int start = (s->in_ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (s->in_ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(s->in_ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(s->in_ch_layout.nb_channels, jobnr+1, nb_jobs);
 
     for (int ch = start; ch < end; ch++)
         s->fft_channel(ctx, in, ch, offset);
@@ -371,8 +371,8 @@ static int ifft_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
     ThreadData *td = arg;
     const int offset = td->offset;
     AVFrame *out = td->frame;
-    const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(out->ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(out->ch_layout.nb_channels, jobnr+1, nb_jobs);
 
     for (int ch = start; ch < end; ch++) {
         if (s->upmix)

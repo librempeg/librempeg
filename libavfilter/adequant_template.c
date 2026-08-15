@@ -188,8 +188,8 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     const ftype gain = s->gain;
     const unsigned max_size = s->max_size;
     const unsigned cur_size = s->cur_size;
-    const int start = (s->nb_channels * jobnr) / nb_jobs;
-    const int end = (s->nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(s->nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(s->nb_channels, jobnr+1, nb_jobs);
     const int nb_samples = in->nb_samples;
     const int is_disabled = ff_filter_disabled(ctx);
     fn(StateContext) *st = s->state;
@@ -278,8 +278,8 @@ static int fn(filter_block_channels)(AVFilterContext *ctx, void *arg, int jobnr,
     const ftype gain = SQRT(s->gain);
     const unsigned max_size = s->max_size;
     const unsigned cur_size = s->cur_size;
-    const int start = (s->nb_channels * jobnr) / nb_jobs;
-    const int end = (s->nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(s->nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(s->nb_channels, jobnr+1, nb_jobs);
     const int nb_samples = in->nb_samples;
     const int is_disabled = ff_filter_disabled(ctx);
     const int blocksize = s->blocksize;

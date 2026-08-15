@@ -87,7 +87,7 @@ typedef struct ShowWavesContext {
     int history_filled;
     int history_nb_samples;
     AVFrame *outpicref;
-    AVRational n, q, c;
+    AVRational n, c;
     int step_size;
     int pixstep;
     int mode;                   ///< ShowWavesMode

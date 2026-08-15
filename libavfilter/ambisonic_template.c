@@ -47,8 +47,8 @@ static int fn(scale)(AVFilterContext *ctx, void *arg,
     AmbisonicContext *s = ctx->priv;
     AVFrame *in = arg;
     const int nb_channels = in->ch_layout.nb_channels;
-    const int start = (nb_channels * jobnr) / nb_jobs;
-    const int end = (nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(nb_channels, jobnr+1, nb_jobs);
     const int nb_samples = in->nb_samples;
     AVFrame *out = s->sframe;
 
@@ -69,8 +69,8 @@ static int fn(transform)(AVFilterContext *ctx, void *arg,
     AVFrame *input = arg;
     AmbisonicContext *s = ctx->priv;
     const int nb_channels = FFMIN(input->ch_layout.nb_channels, s->max_channels);
-    const int start = (nb_channels * jobnr) / nb_jobs;
-    const int end = (nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(nb_channels, jobnr+1, nb_jobs);
     const int nb_samples = input->nb_samples;
     AVFrame *out = s->rframe;
     AVFrame *in = s->sframe;
@@ -104,8 +104,8 @@ static int fn(multiply)(AVFilterContext *ctx, void *arg,
     const int nb_channels = td->nb_channels;
     const int outputs = ambisonic_tab[s->layout].speakers;
     const int inputs = ambisonic_tab[s->layout].inputs;
-    const int start = (outputs * jobnr) / nb_jobs;
-    const int end = (outputs * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(outputs, jobnr, nb_jobs);
+    const int end = ff_slice_pos(outputs, jobnr+1, nb_jobs);
 
     for (int ch = start; ch < end; ch++) {
         ftype *dst = (ftype *)out->extended_data[ch];
@@ -201,8 +201,8 @@ static int fn(level)(AVFilterContext *ctx, void *arg,
     AmbisonicContext *s = ctx->priv;
     AVFrame *out = arg;
     const int nb_channels = out->ch_layout.nb_channels;
-    const int start = (nb_channels * jobnr) / nb_jobs;
-    const int end = (nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(nb_channels, jobnr+1, nb_jobs);
     const int nb_samples = out->nb_samples;
 
     for (int ch = start; ch < end; ch++) {

@@ -59,8 +59,8 @@ static int fn(echo_samples)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     const ftype in_gain = s->in_gain;
     const unsigned nb_decays = s->nb_decays;
     const unsigned nb_echoes = s->nb_echoes;
-    const int start = (td->in->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (td->in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(td->in->ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(td->in->ch_layout.nb_channels, jobnr+1, nb_jobs);
     const int nb_samples = td->out->nb_samples;
     const int is_disabled = ff_filter_disabled(ctx);
     const int max_samples = s->max_samples;

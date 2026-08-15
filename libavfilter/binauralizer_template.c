@@ -223,8 +223,8 @@ static int fn(ba_in_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb
     fn(StateInContext) *state_in = s->state_in;
     const AVChannelLayout *ch_layout = &ctx->inputs[0]->ch_layout;
     const int nb_in_channels = ch_layout->nb_channels;
-    const int start = (nb_in_channels * jobnr) / nb_jobs;
-    const int end = (nb_in_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(nb_in_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(nb_in_channels, jobnr + 1, nb_jobs);
     const unsigned nb_x_offset = s->nb_x_offset;
     const unsigned nb_y_offset = s->nb_y_offset;
     const unsigned nb_x_size = s->nb_x_size;

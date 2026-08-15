@@ -255,8 +255,8 @@ static int aevalsrc_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_
 {
     EvalContext *s = ctx->priv;
     AVFrame *out = arg;
-    const int start = (s->nb_channels * jobnr) / nb_jobs;
-    const int end = (s->nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(s->nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(s->nb_channels, jobnr+1, nb_jobs);
     const int nb_samples = out->nb_samples;
     const double scale = 1.0 / s->sample_rate;
     double var_values[VAR_VARS_NB];

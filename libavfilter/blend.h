@@ -77,6 +77,7 @@ typedef struct SliceParams {
 
 typedef struct FilterParams {
     enum BlendMode mode;
+    int depth;
     double opacity;
     AVExpr **e;
     char *expr_str;

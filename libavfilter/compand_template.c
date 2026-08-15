@@ -342,8 +342,8 @@ static int fn(compand_nodelay_channels)(AVFilterContext *ctx, void *arg, int job
     const int nb_samples = s->in->nb_samples;
     const int channels = in->ch_layout.nb_channels;
     const int is_disabled = ff_filter_disabled(ctx);
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
 
     for (int ch = start; ch < end; ch++) {
         const ftype *scsrc = (const ftype *)sc->extended_data[ch];
@@ -422,8 +422,8 @@ static int fn(compand_delay_channels)(AVFilterContext *ctx, void *arg, int jobnr
     const int channels = s->in->ch_layout.nb_channels;
     const int delay_samples = s->delay_samples;
     const int is_enabled = !ff_filter_disabled(ctx);
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
     const int nb_samples = s->in->nb_samples;
     AVFrame *delay_frame = s->delay_frame;
     AVFrame *sc = s->sc ? s->sc : s->in;

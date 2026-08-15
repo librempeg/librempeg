@@ -140,8 +140,8 @@ static int fn(sf2sf)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const int nb_samples = in->nb_samples;
 
     if (SRC_p == 1 && DST_p == 1) {
-        const int start = (nb_channels * jobnr) / nb_jobs;
-        const int end = (nb_channels * (jobnr+1)) / nb_jobs;
+        const int start = ff_slice_pos(nb_channels, jobnr, nb_jobs);
+        const int end = ff_slice_pos(nb_channels, jobnr+1, nb_jobs);
 
         for (int ch = start; ch < end; ch++) {
             const stype *const restrict src = fn_src_ptr(in, ch, 0);
@@ -150,8 +150,8 @@ static int fn(sf2sf)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
             fn(sf2sf_loop)(dst, src, nb_samples, nb_channels);
         }
     } else {
-        const int start = (nb_samples * jobnr) / nb_jobs;
-        const int end = (nb_samples * (jobnr+1)) / nb_jobs;
+        const int start = ff_slice_pos(nb_samples, jobnr, nb_jobs);
+        const int end = ff_slice_pos(nb_samples, jobnr+1, nb_jobs);
 
         if (nb_channels == 1) {
             const stype *const restrict src = fn_src_ptr(in, 0, start);

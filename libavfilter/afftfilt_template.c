@@ -89,8 +89,8 @@ static int fn(tx_channels)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     AFFTFiltContext *s = ctx->priv;
     AVFrame *in = arg;
     const int channels = s->channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
 
     for (int ch = start; ch < end; ch++) {
         const int offset = s->win_size - s->hop_size;
@@ -119,8 +119,8 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
     AFFTFiltContext *s = ctx->priv;
     const int win_size = s->win_size;
     const int channels = s->channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
     double values[VAR_VARS_NB];
     AVFrame *out = s->out;
 

@@ -275,11 +275,12 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr,
         int inh     = AV_CEIL_RSHIFT(in->height, vsub);
         int outw    = AV_CEIL_RSHIFT(out->width,  hsub);
         int outh    = AV_CEIL_RSHIFT(out->height, vsub);
-        int start   = (outh *  jobnr   ) / nb_jobs;
-        int x,y, end= (outh * (jobnr+1)) / nb_jobs;
+        int start   = ff_slice_pos(outh, jobnr, nb_jobs);
+        int end     = ff_slice_pos(outh, jobnr + 1, nb_jobs);
         uint8_t *dst, *src;
         ptrdiff_t dstlinesize, srclinesize;
         TransVtable *v = &s->vtables[plane];
+        int x, y;
 
         dstlinesize = out->linesize[plane];
         dst         = out->data[plane] + start * dstlinesize;

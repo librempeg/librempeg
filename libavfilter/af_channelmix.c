@@ -125,8 +125,8 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     ChannelMixContext *s = ctx->priv;
     const int in_nb_ch = ctx->inputs[0]->ch_layout.nb_channels;
     const int out_nb_ch = s->out_ch_layout.nb_channels;
-    const int start = (out_nb_ch * jobnr) / nb_jobs;
-    const int end = (out_nb_ch * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(out_nb_ch, jobnr, nb_jobs);
+    const int end = ff_slice_pos(out_nb_ch, jobnr+1, nb_jobs);
     AVFrame *out = arg;
     const int out_nb_samples = out->nb_samples;
 

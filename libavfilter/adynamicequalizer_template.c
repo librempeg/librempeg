@@ -687,8 +687,8 @@ static int fn(filter_channels)(AVFilterContext *ctx, void *arg, int jobnr, int n
 {
     AudioDynamicEqualizerContext *s = ctx->priv;
     const int nb_channels = s->nb_channels;
-    const int start = (nb_channels * jobnr) / nb_jobs;
-    const int end = (nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(nb_channels, jobnr+1, nb_jobs);
     const int max_band_idx = s->nb_active-1;
     const int nb_bands = s->nb_bands;
     const int *active = s->active;

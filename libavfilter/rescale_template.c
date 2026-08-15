@@ -175,8 +175,8 @@ static int fn(rescale_slice)(AVFilterContext *ctx, void *arg, int jobnr, int nb_
     const int dst_h = out->height;
     const int src_w = in->width;
     const int src_h = in->height;
-    const int start = (dst_h * jobnr) / nb_jobs;
-    const int end = (dst_h * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(dst_h, jobnr, nb_jobs);
+    const int end = ff_slice_pos(dst_h, jobnr+1, nb_jobs);
 
     for (int comp = 0; comp < nb_components; comp++) {
         const ptrdiff_t out_linesize = out->linesize[comp];
@@ -229,8 +229,8 @@ static int fn(rescale_slice_linear)(AVFilterContext *ctx, void *arg, int jobnr, 
     const int dst_h = out->height;
     const int src_w = in->width;
     const int src_h = in->height;
-    const int start = (dst_h * jobnr) / nb_jobs;
-    const int end = (dst_h * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(dst_h, jobnr, nb_jobs);
+    const int end = ff_slice_pos(dst_h, jobnr+1, nb_jobs);
 
     for (int comp = 0; comp < nb_components; comp++) {
         const ptrdiff_t out_linesize = out->linesize[comp];
@@ -295,8 +295,8 @@ static int fn(rescale_slice_linear_h)(AVFilterContext *ctx, void *arg, int jobnr
     const int dst_w = out->width;
     const int src_w = in->width;
     const int src_h = in->height;
-    const int start = (src_h * jobnr) / nb_jobs;
-    const int end = (src_h * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(src_h, jobnr, nb_jobs);
+    const int end = ff_slice_pos(src_h, jobnr+1, nb_jobs);
 
     for (int comp = 0; comp < nb_components; comp++) {
         const ptrdiff_t in_linesize = in->linesize[comp];
@@ -339,8 +339,8 @@ static int fn(rescale_slice_linear_v)(AVFilterContext *ctx, void *arg, int jobnr
     const int dst_w = out->width;
     const int dst_h = out->height;
     const int src_h = in->height;
-    const int start = (dst_w * jobnr) / nb_jobs;
-    const int end = (dst_w * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(dst_w, jobnr, nb_jobs);
+    const int end = ff_slice_pos(dst_w, jobnr+1, nb_jobs);
 
     for (int comp = 0; comp < nb_components; comp++) {
         const ptrdiff_t out_linesize = out->linesize[comp];

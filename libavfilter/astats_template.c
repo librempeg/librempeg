@@ -208,8 +208,8 @@ static int fn(filter_channels_planar)(AVFilterContext *ctx, void *arg, int jobnr
     const uint8_t * const * const data = (const uint8_t * const *)in->extended_data;
     const int channels = s->nb_channels;
     const int samples = in->nb_samples;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr+1, nb_jobs);
     const uint32_t mask = s->measure_overall | s->measure_perchannel;
     const int measure_denormals = mask == (mask & MEASURE_DENORMALS);
     const int measure_minmax = mask == (mask & MEASURE_MINMAX);
@@ -264,8 +264,8 @@ static int fn(filter_channels_packed)(AVFilterContext *ctx, void *arg, int jobnr
     const uint8_t * const * const data = (const uint8_t * const *)in->extended_data;
     const int channels = s->nb_channels;
     const int samples = in->nb_samples;
-    const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(in->ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(in->ch_layout.nb_channels, jobnr+1, nb_jobs);
     const uint32_t mask = s->measure_overall | s->measure_perchannel;
     const int measure_denormals = mask == (mask & MEASURE_DENORMALS);
     const int measure_minmax = mask == (mask & MEASURE_MINMAX);

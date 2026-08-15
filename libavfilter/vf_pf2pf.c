@@ -301,8 +301,8 @@ static int do_pf2pf(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     AVFrame *restrict in = td->in;
     const int w = in->width;
     const int h = in->height;
-    const int start = (h * jobnr) / nb_jobs;
-    const int end = (h * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(h, jobnr, nb_jobs);
+    const int end = ff_slice_pos(h, jobnr+1, nb_jobs);
 
     for (int comp = 0; comp < nb_components; comp++) {
         if (out->data[comp]) {

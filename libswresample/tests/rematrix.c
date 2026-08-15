@@ -28,12 +28,45 @@
 /* swr_build_matrix2() accesses an internal SWR_CH_MAX by SWR_CH_MAX matrix. */
 #define MATRIX_STRIDE 64
 
+static int channel_is_unused(const AVChannelLayout *layout, int index)
+{
+    return av_channel_layout_channel_from_index(layout, index) == AV_CHAN_UNUSED;
+}
+
+static void print_matrix_row(const double *matrix,
+                             const AVChannelLayout *in_layout,
+                             int out, const char *out_name)
+{
+    char in_name[16];
+
+    printf("[%s] = { ", out_name);
+    for (int i = 0; i < 64; i++) {
+        enum AVChannel in_ch = av_channel_layout_channel_from_index(in_layout, i);
+        if (in_ch == AV_CHAN_NONE)
+            continue;
+        av_channel_name(in_name, sizeof(in_name), in_ch);
+        if (in_ch == AV_CHAN_UNUSED)
+            printf(".UNSD%d = %f, ", i,
+                   matrix[out * MATRIX_STRIDE + i]);
+        else
+            printf(".%s = %f, ", in_name, matrix[out * MATRIX_STRIDE + i]);
+    }
+    printf("},\n");
+}
+
 static int print_matrix(const AVChannelLayout *in_layout,
                         const AVChannelLayout *out_layout)
 {
     double matrix[MATRIX_STRIDE * MATRIX_STRIDE] = { 0 };
-    char in_name[16], out_name[16];
+    char out_name[16];
     int ret;
+
+    /* ensure swr_build_matrix2() overwrites unused columns and rows with zero. */
+    for (int out = 0; out < out_layout->nb_channels; out++)
+        for (int in = 0; in < in_layout->nb_channels; in++)
+            if (channel_is_unused(in_layout, in) ||
+                channel_is_unused(out_layout, out))
+                matrix[out * MATRIX_STRIDE + in] = 1.0;
 
     /* Disable normalization so the raw downmix gains can be checked. */
     ret = swr_build_matrix2(in_layout, out_layout, M_SQRT1_2,
@@ -45,20 +78,27 @@ static int print_matrix(const AVChannelLayout *in_layout,
         return 1;
     }
 
-    for (int i = 0; i < 64; i++) {
-        int out_i = av_channel_layout_index_from_channel(out_layout, i);
-        if (out_i < 0)
-            continue;
-        av_channel_name(out_name, sizeof(out_name), i);
-        printf("[%s] = { ", out_name);
-        for (int j = 0; j < 64; j++) {
-            int in_i = av_channel_layout_index_from_channel(in_layout, j);
-            if (in_i < 0)
-                continue;
-            av_channel_name(in_name, sizeof(in_name), j);
-            printf(".%s = %f, ", in_name, matrix[out_i * MATRIX_STRIDE + in_i]);
+    for (int out = 0; out < out_layout->nb_channels; out++) {
+        for (int in = 0; in < in_layout->nb_channels; in++) {
+            if ((channel_is_unused(in_layout, in) ||
+                 channel_is_unused(out_layout, out)) &&
+                matrix[out * MATRIX_STRIDE + in] != 0.0) {
+                fprintf(stderr, "unused matrix position %d:%d is non-zero\n",
+                        out, in);
+                return 1;
+            }
         }
-        printf("},\n");
+    }
+
+    for (int i = 0; i < out_layout->nb_channels; i++) {
+        enum AVChannel out_ch = av_channel_layout_channel_from_index(out_layout, i);
+        if (out_ch == AV_CHAN_NONE)
+            continue;
+        if (out_ch == AV_CHAN_UNUSED)
+            snprintf(out_name, sizeof(out_name), "UNSD%d", i);
+        else
+            av_channel_name(out_name, sizeof(out_name), out_ch);
+        print_matrix_row(matrix, in_layout, i, out_name);
     }
 
     return 0;
@@ -82,23 +122,30 @@ int main(int argc, char **argv)
     if (ret < 0) {
         if (ret == AVERROR(EINVAL))
             fprintf(stderr, "Invalid input layout %s\n", in);
-        return 1;
+        ret = 1;
+        goto end;
     }
 
     ret = av_channel_layout_from_string(&out_layout, out);
     if (ret < 0) {
         if (ret == AVERROR(EINVAL))
             fprintf(stderr, "Invalid output layout %s\n", out);
-        return 1;
+        ret = 1;
+        goto end;
     }
 
     if (in_layout.nb_channels > MATRIX_STRIDE ||
         out_layout.nb_channels > MATRIX_STRIDE) {
         fprintf(stderr, "channel layout exceeds matrix capacity\n");
-        return 1;
+        ret = 1;
+        goto end;
     }
 
     ret = print_matrix(&in_layout, &out_layout);
+
+end:
+    av_channel_layout_uninit(&in_layout);
+    av_channel_layout_uninit(&out_layout);
 
     return ret;
 }

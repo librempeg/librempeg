@@ -162,8 +162,8 @@ static int fn(filter_stereo)(AVFilterContext *ctx, void *arg, int jobnr, int nb_
 {
     AudioSurroundContext *s = ctx->priv;
     const int rdft_size = s->rdft_size;
-    const int start = (rdft_size * jobnr) / nb_jobs;
-    const int end = (rdft_size * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(rdft_size, jobnr, nb_jobs);
+    const int end = ff_slice_pos(rdft_size, jobnr+1, nb_jobs);
     const ctype *srcl = (const ctype *)s->input->extended_data[0];
     const ctype *srcr = (const ctype *)s->input->extended_data[1];
     const int output_lfe = s->output_lfe && s->create_lfe;
@@ -208,8 +208,8 @@ static int fn(filter_2_1)(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
 {
     AudioSurroundContext *s = ctx->priv;
     const int rdft_size = s->rdft_size;
-    const int start = (rdft_size * jobnr) / nb_jobs;
-    const int end = (rdft_size * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(rdft_size, jobnr, nb_jobs);
+    const int end = ff_slice_pos(rdft_size, jobnr+1, nb_jobs);
     const ctype *srcl = (const ctype *)s->input->extended_data[0];
     const ctype *srcr = (const ctype *)s->input->extended_data[1];
     const ctype *srclfe = (const ctype *)s->input->extended_data[2];
@@ -244,8 +244,8 @@ static int fn(filter_surround)(AVFilterContext *ctx, void *arg, int jobnr, int n
 {
     AudioSurroundContext *s = ctx->priv;
     const int rdft_size = s->rdft_size;
-    const int start = (rdft_size * jobnr) / nb_jobs;
-    const int end = (rdft_size * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(rdft_size, jobnr, nb_jobs);
+    const int end = ff_slice_pos(rdft_size, jobnr+1, nb_jobs);
     const ctype *srcl = (const ctype *)s->input->extended_data[0];
     const ctype *srcr = (const ctype *)s->input->extended_data[1];
     const ctype *srcc = (const ctype *)s->input->extended_data[2];
@@ -297,8 +297,8 @@ static int fn(filter_3_1)(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
 {
     AudioSurroundContext *s = ctx->priv;
     const int rdft_size = s->rdft_size;
-    const int start = (rdft_size * jobnr) / nb_jobs;
-    const int end = (rdft_size * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(rdft_size, jobnr, nb_jobs);
+    const int end = ff_slice_pos(rdft_size, jobnr+1, nb_jobs);
     const ctype *srcl = (const ctype *)s->input->extended_data[0];
     const ctype *srcr = (const ctype *)s->input->extended_data[1];
     const ctype *srcc = (const ctype *)s->input->extended_data[2];
@@ -574,8 +574,8 @@ static int fn(transform_xy)(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
 {
     AudioSurroundContext *s = ctx->priv;
     const int rdft_size = s->rdft_size;
-    const int start = (rdft_size * jobnr) / nb_jobs;
-    const int end = (rdft_size * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(rdft_size, jobnr, nb_jobs);
+    const int end = ff_slice_pos(rdft_size, jobnr+1, nb_jobs);
     const ftype angle = s->angle;
     const ftype focus_x = s->focus[0];
     const ftype focus_y = s->focus[FFMIN(1, s->nb_focus-1)];

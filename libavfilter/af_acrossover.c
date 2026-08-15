@@ -282,8 +282,8 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     AudioCrossoverContext *s = ctx->priv;
     const double level_in = s->level_in;
     AVFrame *in = arg;
-    const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(in->ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(in->ch_layout.nb_channels, jobnr+1, nb_jobs);
     const int nb_outs = ctx->nb_outputs;
     uint8_t *dstp[MAX_BANDS];
 
