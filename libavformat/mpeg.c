@@ -354,7 +354,7 @@ redo:
     /* find matching stream */
     if (!((startcode >= 0x1c0 && startcode <= 0x1df) ||
           (startcode >= 0x1e0 && startcode <= 0x1ef) ||
-          (startcode == 0x1bd) ||
+          (startcode == PRIVATE_STREAM_1) ||
           (startcode == PRIVATE_STREAM_2) ||
           (startcode == 0x1fd)))
         goto redo;
