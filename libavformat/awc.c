@@ -40,6 +40,7 @@ typedef struct AWCBlock {
 } AWCBlock;
 
 typedef struct AWCDemuxContext {
+    int current_stream;
     int is_streamed;
     int codec;
     int channels;
@@ -671,7 +672,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     if (avio_feof(pb))
         return AVERROR_EOF;
 
-    for (int n = 0; n < s->nb_streams; n++) {
+    for (int n = awc->current_stream; n < s->nb_streams; n++) {
         AVStream *st = s->streams[n];
         AVCodecParameters *par = st->codecpar;
         AWCStream *ast = st->priv_data;
@@ -707,6 +708,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
             pkt->pos = pos;
             pkt->stream_index = st->index;
+            awc->current_stream = n;
 
             break;
         } else if (pos >= ast->stop_offset && n+1 < s->nb_streams) {
@@ -719,25 +721,34 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     if (ret == AVERROR_EOF) {
-        AVStream *st = s->streams[s->nb_streams-1];
-        AWCStream *ast = st->priv_data;
-
-        avio_seek(pb, ast->stop_offset, SEEK_SET);
+        awc->current_stream = 0;
         if ((ret = read_block(s, awc->big_endian)) < 0)
             return ret;
         return FFERROR_REDO;
     }
+
     return ret;
+}
+
+static int read_seek(AVFormatContext *s, int stream_index,
+                     int64_t ts, int flags)
+{
+    AWCDemuxContext *awc = s->priv_data;
+
+    awc->current_stream = av_clip(stream_index, 0, s->nb_streams-1);
+
+    return -1;
 }
 
 const FFInputFormat ff_awc_demuxer = {
     .p.name         = "awc",
     .p.long_name    = NULL_IF_CONFIG_SMALL("AWC (Audio Wave Container)"),
     .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
-    .p.flags        = AVFMT_GENERIC_INDEX,
+    .p.flags        = AVFMT_GENERIC_INDEX | AVFMT_NO_BYTE_SEEK,
     .p.extensions   = "awc",
     .priv_data_size = sizeof(AWCDemuxContext),
     .read_probe     = read_probe,
     .read_header    = read_header,
     .read_packet    = read_packet,
+    .read_seek      = read_seek,
 };
