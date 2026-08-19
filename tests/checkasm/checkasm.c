@@ -163,9 +163,6 @@ static const struct {
     #if CONFIG_FLAC_DECODER
         { "flacdsp", checkasm_check_flacdsp },
     #endif
-    #if CONFIG_FMTCONVERT
-        { "fmtconvert", checkasm_check_fmtconvert },
-    #endif
     #if CONFIG_G722DSP
         { "g722dsp", checkasm_check_g722dsp },
     #endif

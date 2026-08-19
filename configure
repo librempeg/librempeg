@@ -2743,7 +2743,6 @@ CONFIG_EXTRA="
     faandct
     faanidct
     fdctdsp
-    fmtconvert
     frame_thread_encoder
     g722dsp
     golomb
