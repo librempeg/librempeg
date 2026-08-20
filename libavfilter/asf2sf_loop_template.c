@@ -133,7 +133,7 @@ static void fn(sf2sf_loop8)(dtype *restrict dst0,
 
 static int fn(sf2sf)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    ThreadData *td = arg;
+    SF2SFThreadData *td = arg;
     AVFrame *restrict out = td->out;
     AVFrame *restrict in = td->in;
     const int nb_channels = in->ch_layout.nb_channels;
