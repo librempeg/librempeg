@@ -113,20 +113,32 @@ static void check_yuv2yuv1(int accurate)
     int osi, isi;
     int dstW, offset;
     size_t fail_offset;
-    const int input_sizes[] = {8, 24, 128, 144, 256, 512};
-    #define LARGEST_INPUT_SIZE 512
+    /* Add short widths that split across the SIMD vector tail paths, so that
+     * a single residual vector iteration is exercised on every platform;
+     * such residuals can underflow/overflow the destination buffer. */
+    enum {
+        LARGEST_INPUT_SIZE = 512,
+        /* Leading guard before dst: wide enough to catch a whole-vector
+         * underflow, i.e. the widest single write a current yuv2plane1 may
+         * make while tail-looping. That is the LoongArch LASX 256-bit (32B)
+         * store; LSX, NEON and x86 sse2/avx all write 16B or less. */
+        DEST_GUARD         = 32,
+        DEST_SIZE          = LARGEST_INPUT_SIZE + 2 * DEST_GUARD,
+    };
+    const int input_sizes[] = {5, 8, 9, 15, 17, 24, 128, 144, 256, 512};
 
     const int offsets[] = {0, 3, 8, 11, 16, 19};
     const int OFFSET_SIZES = sizeof(offsets)/sizeof(offsets[0]);
     const char *accurate_str = (accurate) ? "accurate" : "approximate";
+    uint8_t *dst_ref, *dst_new;
 
     declare_func(void,
                  const int16_t *src, uint8_t *dest,
                  int dstW, const uint8_t *dither, int offset);
 
     LOCAL_ALIGNED_16(int16_t, src_pixels, [LARGEST_INPUT_SIZE]);
-    LOCAL_ALIGNED_16(uint8_t, dst0, [LARGEST_INPUT_SIZE]);
-    LOCAL_ALIGNED_16(uint8_t, dst1, [LARGEST_INPUT_SIZE]);
+    LOCAL_ALIGNED_16(uint8_t, dst0, [DEST_SIZE]);
+    LOCAL_ALIGNED_16(uint8_t, dst1, [DEST_SIZE]);
     LOCAL_ALIGNED_8(uint8_t, dither, [8]);
 
     randomize_buffers((uint8_t*)dither, 8);
@@ -144,23 +156,46 @@ static void check_yuv2yuv1(int accurate)
         for (osi = 0; osi < OFFSET_SIZES; osi++) {
             offset = offsets[osi];
             if (check_func(c->yuv2plane1, "yuv2yuv1_%d_%d_%s", offset, dstW, accurate_str)){
-                memset(dst0, 0, LARGEST_INPUT_SIZE * sizeof(dst0[0]));
-                memset(dst1, 0, LARGEST_INPUT_SIZE * sizeof(dst1[0]));
+                /* dst0 and dst1 start bit-identical so that any write outside
+                 * of the dstW output window shows up as a guard mismatch. */
+                randomize_buffers(dst0, DEST_SIZE);
+                memcpy(dst1, dst0, DEST_SIZE);
+                dst_ref = dst0 + DEST_GUARD;
+                dst_new = dst1 + DEST_GUARD;
 
-                call_ref(src_pixels, dst0, dstW, dither, offset);
-                call_new(src_pixels, dst1, dstW, dither, offset);
-                if (cmp_off_by_n_8(dst0, dst1, dstW * sizeof(dst0[0]), accurate ? 0 : 2)) {
+                call_ref(src_pixels, dst_ref, dstW, dither, offset);
+                call_new(src_pixels, dst_new, dstW, dither, offset);
+
+                if (cmp_off_by_n_8(dst_ref, dst_new, dstW, accurate ? 0 : 2)) {
                     fail();
                     printf("failed: yuv2yuv1_%d_%di_%s\n", offset, dstW, accurate_str);
-                    fail_offset = show_differences_8(dst0, dst1, LARGEST_INPUT_SIZE * sizeof(dst0[0]));
+                    fail_offset = show_differences_8(dst_ref, dst_new, dstW);
                     printf("failing values: src: 0x%04x dither: 0x%02x dst-c: %02x dst-asm: %02x\n",
                             (int) src_pixels[fail_offset],
-                            (int) dither[(fail_offset + fail_offset) & 7],
-                            (int) dst0[fail_offset],
-                            (int) dst1[fail_offset]);
+                            (int) dither[(fail_offset + offset) & 7],
+                            (int) dst_ref[fail_offset],
+                            (int) dst_new[fail_offset]);
                 }
+
+                /* The guard regions on either side of the output window must
+                 * remain identical between the reference and the tested
+                 * implementation from the project-wide 16-byte alignment above
+                 * dstW, the longest whole-vector write any current yuv2plane1
+                 * may make: x86 sse2/avx store a 16-byte XMM per iteration
+                 * and do not round down the tail, so the legal output window
+                 * is dstW rounded up to 16, while LoongArch lsx/lasx write
+                 * exactly dstW bytes. */
+                const int guard_off = (dstW + 15) & ~15;
+                if (memcmp(dst0, dst1, DEST_GUARD) ||
+                    memcmp(dst_ref + guard_off, dst_new + guard_off,
+                           DEST_SIZE - DEST_GUARD - guard_off)) {
+                    fail();
+                    printf("failed: yuv2yuv1_%d_%d_%s wrote outside destination\n",
+                           offset, dstW, accurate_str);
+                }
+
                 if (dstW == LARGEST_INPUT_SIZE)
-                    bench_new(src_pixels, dst1, dstW, dither, offset);
+                    bench_new(src_pixels, dst_new, dstW, dither, offset);
             }
         }
     }
