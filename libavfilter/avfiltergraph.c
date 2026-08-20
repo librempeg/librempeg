@@ -976,12 +976,6 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
             for (int i = 0; i < link->incfg.formats->nb_formats; i++) {
                 enum AVSampleFormat p = link->incfg.formats->formats[i];
 
-                if (link->incfg.formats->flags != 0) {
-                    if (link->incfg.formats->flags & FILTER_SAME_BITDEPTH) {
-                        if (av_get_packed_sample_fmt(p) != av_get_packed_sample_fmt(ref->format))
-                            continue;
-                    }
-                }
                 best = find_best_sample_fmt_of_2(best, p, ref->format);
             }
             if (best == AV_SAMPLE_FMT_NONE)
