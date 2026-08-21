@@ -2747,6 +2747,27 @@ computer-generated compositions.
 
 This muxer accepts a single audio stream containing PCM data.
 
+@section jpeg_mpf
+JPEG Multi-Picture Format muxer.
+
+Stores multiple JPEG images in a single file using the CIPA DC-007 MP
+extensions. The first input stream is always the primary image. Every other
+stream must be specified by a stream group describing what it is; see the
+@option{-stream_group} option of the @command{ffmpeg} tool.
+
+Note: Currently, the only implemented type of stream group is @samp{gain_map},
+which may be used to store a gain map for JPEG Ultra HDR.
+
+@subsection Examples
+
+Encode an SDR tone-mapped image and an HDR gain map computed from it:
+@example
+ffmpeg -i input-hdr.png -filter_complex
+"[0:v] scale=out_transfer=srgb:out_primaries=bt709,split [base][sdr];
+[base][0:v] gainmap [gain]" -map "[sdr]" -map "[gain]" -c:v mjpeg
+-stream_group type=gain_map:st=0:st=1:el_index=1 -f jpeg_mpf output.jpg
+@end example
+
 @section ivf
 On2 IVF muxer.
 
