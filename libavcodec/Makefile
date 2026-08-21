@@ -246,7 +246,7 @@ OBJS-$(CONFIG_AMRWB_DECODER)           += amrwbdec.o celp_filters.o   \
                                           acelp_pitch_delay.o
 OBJS-$(CONFIG_AMRNB_MEDIACODEC_DECODER) += mediacodecdec.o
 OBJS-$(CONFIG_AMRWB_MEDIACODEC_DECODER) += mediacodecdec.o
-OBJS-$(CONFIG_AMV_ENCODER)             += mjpegenc.o mjpegenc_common.o
+OBJS-$(CONFIG_AMV_ENCODER)             += mjpegenc.o mjpegenc_common.o gain_map.o
 OBJS-$(CONFIG_ANM_DECODER)             += anm.o
 OBJS-$(CONFIG_ANULL_DECODER)           += null.o
 OBJS-$(CONFIG_ANULL_ENCODER)           += null.o
@@ -550,7 +550,7 @@ OBJS-$(CONFIG_LAGARITH_DECODER)        += lagarith.o lagarithrac.o
 OBJS-$(CONFIG_LC3_DECODER)             += lc3dec.o
 OBJS-$(CONFIG_LDAC_DECODER)            += ldacdec.o
 OBJS-$(CONFIG_LEAD_DECODER)            += leaddec.o jpegquanttables.o
-OBJS-$(CONFIG_LJPEG_ENCODER)           += ljpegenc.o mjpegenc_common.o
+OBJS-$(CONFIG_LJPEG_ENCODER)           += ljpegenc.o mjpegenc_common.o gain_map.o
 OBJS-$(CONFIG_LHCELP_DECODER)          += lhcelpdec.o
 OBJS-$(CONFIG_LOCO_DECODER)            += loco.o
 OBJS-$(CONFIG_LSCR_DECODER)            += lscrdec.o png.o pngdec.o pngdsp.o
@@ -569,7 +569,7 @@ OBJS-$(CONFIG_MISC4_DECODER)           += misc4.o
 OBJS-$(CONFIG_MJPEG_DECODER)           += mjpegdec.o mjpegdec_common.o
 OBJS-$(CONFIG_MJPEG_QSV_DECODER)       += qsvdec.o
 OBJS-$(CONFIG_MJPEG_ENCODER)           += mjpegenc.o mjpegenc_common.o \
-                                          mjpegenc_huffman.o
+                                          mjpegenc_huffman.o gain_map.o
 OBJS-$(CONFIG_MJPEGB_DECODER)          += mjpegbdec.o
 OBJS-$(CONFIG_MJPEG_CUVID_DECODER)     += cuviddec.o
 OBJS-$(CONFIG_MJPEG_QSV_ENCODER)       += qsvenc_jpeg.o
