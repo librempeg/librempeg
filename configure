@@ -5136,6 +5136,7 @@ armasm_flags(){
             # be passed to gas-preprocessor
             -M[TD]*)                                            ;;
             -guard:signret)                                     ;;
+            -experimental:*)                                    ;;
             *)                  echo $flag                      ;;
         esac
    done
