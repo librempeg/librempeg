@@ -2023,6 +2023,9 @@ static av_cold int TX_NAME(ff_tx_fft_pfa_init)(AVTXContext *s,
     int a = 0, b;
 
     pfa_factors(N, factors, &nb_factors);
+    if (nb_factors < 2)
+        return AVERROR(EINVAL);
+
     qsort(factors, nb_factors, sizeof(factors[0]), sort_factors);
 
     flags &= ~FF_TX_PRESHUFFLE;
