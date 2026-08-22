@@ -67,7 +67,7 @@ For information about compiling FFmpeg on OS/2 see
 
 FFmpeg can be built to run natively on Windows using the MinGW-w64
 toolchain. Install the latest versions of MSYS2 and MinGW-w64 from
-@url{http://msys2.github.io/} and/or @url{http://mingw-w64.sourceforge.net/}.
+@url{https://www.msys2.org/} and/or @url{https://www.mingw-w64.org/}.
 You can find detailed installation instructions in the download section and
 the FAQ.
 
@@ -75,10 +75,10 @@ Notes:
 
 @itemize
 
-@item Building for the MSYS environment is discouraged, MSYS2 provides a full
-MinGW-w64 environment through @file{mingw64_shell.bat} or
-@file{mingw32_shell.bat} that should be used instead of the environment
-provided by @file{msys2_shell.bat}.
+@item Building for the MSYS environment is discouraged, use one of the
+MinGW-w64 environments provided by MSYS2 instead. UCRT64 provides a GCC
+based toolchain, CLANG64 a LLVM based one and CLANGARM64 targets Windows
+on ARM64.
 
 @item Building using MSYS2 can be sped up by disabling implicit rules in the
 Makefile by calling @code{make -r} instead of plain @code{make}. This
@@ -97,22 +97,23 @@ libavformat) as DLLs.
 
 @subsection Native Windows compilation using MSYS2
 
-The MSYS2 MinGW-w64 environment provides ready to use toolchains and dependencies
-through @command{pacman}.
+The MSYS2 MinGW-w64 environments provide ready to use toolchains and
+dependencies through @command{pacman}.
 
-Make sure to use @file{mingw64_shell.bat} or @file{mingw32_shell.bat} to have
-the correct MinGW-w64 environment. The default install provides shortcuts to
-them under @command{MinGW-w64 Win64 Shell} and @command{MinGW-w64 Win32 Shell}.
+Launch the shell of the environment you want to build in using its
+launcher, for example @file{ucrt64.exe} or the corresponding start menu
+shortcut for UCRT64. Then install the toolchain and the FFmpeg
+dependencies. The @command{pacboy} wrapper from the @code{pactoys}
+package fills in the package name prefix of the current environment, so
+the same command works in every environment.
 
 @example
 # normal msys2 packages
-pacman -S make pkgconf diffutils
+pacman -S make pkgconf diffutils pactoys
 
-# mingw-w64 packages and toolchains
-pacman -S mingw-w64-x86_64-nasm mingw-w64-x86_64-gcc mingw-w64-x86_64-SDL2
+# mingw-w64 packages and toolchains for the current environment
+pacboy -S cc nasm SDL2
 @end example
-
-To target 32 bits replace @code{x86_64} with @code{i686} in the command above.
 
 @section Microsoft Visual C++ or Intel C++ Compiler for Windows
 
