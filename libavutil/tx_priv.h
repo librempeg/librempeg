@@ -349,10 +349,6 @@ struct AVTXContext {
     double             scale_d;
     long double        scale_ld;
     void              *opaque;          /* Free to use by implementations */
-    PassEntry         *schedules;
-    PassEntry         *leaves;
-    int                nb_leaves;
-    int                nb_schedules;
 };
 
 /* This function embeds a Ruritanian PFA input map into an existing lookup table
