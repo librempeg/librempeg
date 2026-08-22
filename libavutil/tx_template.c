@@ -73,10 +73,12 @@ static av_cold void TX_TAB(ff_tx_init_tab_ ##len)(void)            \
     long double freq = 2.0L*M_PIl/len;                             \
     TXSample *tab = TX_TAB(ff_tx_tab_ ##len);                      \
                                                                    \
-    for (int i = 0; i < len/4; i++)                                \
-        *tab++ = RESCALE(cosl(i*freq));                            \
+    for (int i = 0; i < len/4; i++) {                              \
+        tab[i] = RESCALE(cosl(i*freq));                            \
+        tab[i] = NORM(tab[i]);                                     \
+    }                                                              \
                                                                    \
-    *tab = 0;                                                      \
+    tab[len/4] = 0;                                                \
 }
 SR_POW2_TABLES
 #undef SR_TABLE
@@ -730,11 +732,24 @@ DECL_SR_CODELET(524288,262144,131072)
 DECL_SR_CODELET(1048576,524288,262144)
 DECL_SR_CODELET(2097152,1048576,524288)
 
-static inline TXComplex twiddle(int k, const long double phase)
+static inline
+TXComplex twiddle(const int k, const long double phase)
 {
     const long double th = phase * k;
+    long double cl = cosl(th);
+    long double sl = sinl(th);
+    TXSample re, im;
 
-    return (TXComplex){ RESCALE(cosl(th)), RESCALE(sinl(th)) };
+    cl = isnormal(cl) ? cl : 0;
+    sl = isnormal(sl) ? sl : 0;
+
+    re = RESCALE(cl);
+    im = RESCALE(sl);
+
+    re = NORM(re);
+    im = NORM(im);
+
+    return (TXComplex){ re, im };
 }
 
 /* Compilers can't vectorize this anyway without assuming AVX2, which they
@@ -1023,11 +1038,8 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix3)(AVTXContext *s,
         const int mr = m/r;
 
         for (int j = 0; j < mr; j++) {
-            for (int i = 1; i < r; i++) {
-                const long double ww = (j*i) * phase / m;
-
-                exp[1+z++] = (TXComplex){RESCALE(cosl(ww)), RESCALE(sinl(ww))};
-            }
+            for (int i = 1; i < r; i++)
+                exp[1+z++] = twiddle(j*i, phase / m);
         }
     }
 
@@ -1145,11 +1157,8 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix5)(AVTXContext *s,
         const int mr = m/r;
 
         for (int j = 0; j < mr; j++) {
-            for (int i = 1; i < r; i++) {
-                const long double ww = (j*i) * phase / m;
-
-                exp[2+z++] = (TXComplex){RESCALE(cosl(ww)), RESCALE(sinl(ww))};
-            }
+            for (int i = 1; i < r; i++)
+                exp[2+z++] = twiddle(j*i, phase / m);
         }
     }
 
@@ -1378,13 +1387,8 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey)(AVTXContext *s,
 
     exp = s->exp;
     for (int i = 0; i < m; i++) {
-        for (int j = 0; j < n; j++) {
-            const long double factor = phase*i*j;
-            exp[j] = (TXComplex){
-                RESCALE(cosl(factor)),
-                RESCALE(sinl(factor)),
-            };
-        }
+        for (int j = 0; j < n; j++)
+            exp[j] = twiddle(i*j, phase);
 
         exp += n;
     }
@@ -1421,13 +1425,8 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey_slow)(AVTXContext *s,
 
     exp = s->exp;
     for (int i = 0; i < n; i++) {
-        for (int j = 0; j < m; j++) {
-            const long double factor = phase*i*j;
-            exp[j] = (TXComplex){
-                RESCALE(cosl(factor)),
-                RESCALE(sinl(factor)),
-            };
-        }
+        for (int j = 0; j < m; j++)
+            exp[j] = twiddle(i*j, phase);
 
         exp += m;
     }
@@ -1464,11 +1463,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_bluestein)(AVTXContext *s,
         RESCALE(sinl(0.0L)),
     };
     for (int i = 1; i < len; i++) {
-        const long double factor = phase*i*i;
-        s->exp[i] = (TXComplex){
-            RESCALE(cosl(factor)),
-            RESCALE(sinl(factor)),
-        };
+        s->exp[i] = twiddle(i*i, phase);
         s->exp[len2-i] = s->exp[i];
     }
 
@@ -1815,7 +1810,13 @@ static av_always_inline void out_pair(TXComplex *out,
     COUT4(out[k], out[r-k], P, Q);
 }
 
-static int init_twiddles(AVTXContext *s, const int len)
+static av_cold int
+TX_NAME(ff_tx_fft_auto_init)(AVTXContext *s,
+                             const FFTXCodelet *cd,
+                             uint64_t flags,
+                             FFTXCodeletOptions *opts,
+                             int len, int inv,
+                             const void *scale)
 {
     const long double phase = s->inv ? 2.0L*M_PIl/len : -2.0L*M_PIl/len;
     TXComplex *exp;
@@ -1825,28 +1826,13 @@ static int init_twiddles(AVTXContext *s, const int len)
 
     exp = s->exp;
     for (int i = 0; i < len/2; i++) {
-        for (int j = 0; j < len/2; j++) {
-            const long double factor = phase*(i+1)*(j+1);
-            exp[j] = (TXComplex){
-                RESCALE(cosl(factor)),
-                RESCALE(sinl(factor)),
-            };
-        }
+        for (int j = 0; j < len/2; j++)
+            exp[j] = twiddle((i+1)*(j+1), phase);
 
         exp += len/2;
     }
 
     return 0;
-}
-
-static av_cold int TX_NAME(ff_tx_fft_auto_init)(AVTXContext *s,
-                                                const FFTXCodelet *cd,
-                                                uint64_t flags,
-                                                FFTXCodeletOptions *opts,
-                                                int len, int inv,
-                                                const void *scale)
-{
-    return init_twiddles(s, len);
 }
 
 #define DECL_BUTTERFLY_CODELET(n) \
@@ -2940,8 +2926,10 @@ static av_cold int TX_NAME(ff_tx_rdft_init)(AVTXContext *s,
     *tab++ = RESCALE(-(0.5L - inv) * m);
 
     for (int i = 0; i < len4; i++) {
-        *tab++ = RESCALE(cosl(i*f));
-        *tab++ = RESCALE(sinl(i*f) * (inv ? 1 : -1));
+        TXComplex exp = twiddle(i, f);
+
+        *tab++ = exp.re;
+        *tab++ = exp.im * (inv ? 1 : -1);
     }
 
     return 0;

@@ -19,6 +19,8 @@
 #ifndef AVUTIL_TX_PRIV_H
 #define AVUTIL_TX_PRIV_H
 
+#include <float.h>
+
 #include "tx.h"
 #include "thread.h"
 #include "mem_internal.h"
@@ -33,6 +35,7 @@
 #define TX_FN_NAME(fn, suffix) ff_tx_ ## fn ## _float_ ## suffix
 #define TX_FN_NAME_STR(fn, suffix) NULL_IF_CONFIG_SMALL(#fn "_float_" #suffix)
 #define MULT(x, m) ((x) * (m))
+#define NORM(x) ((fabsf(x) < FLT_EPSILON) ? 0.f : (x))
 #define SCALE_TYPE float
 typedef float TXSample;
 typedef float TXUSample;
@@ -45,6 +48,7 @@ typedef AVComplexFloat TXComplex;
 #define TX_FN_NAME(fn, suffix) ff_tx_ ## fn ## _double_ ## suffix
 #define TX_FN_NAME_STR(fn, suffix) NULL_IF_CONFIG_SMALL(#fn "_double_" #suffix)
 #define MULT(x, m) ((x) * (m))
+#define NORM(x) ((fabs(x) < DBL_EPSILON) ? 0.0 : (x))
 #define SCALE_TYPE double
 typedef double TXSample;
 typedef double TXUSample;
@@ -57,6 +61,7 @@ typedef AVComplexDouble TXComplex;
 #define TX_FN_NAME(fn, suffix) ff_tx_ ## fn ## _long_double_ ## suffix
 #define TX_FN_NAME_STR(fn, suffix) NULL_IF_CONFIG_SMALL(#fn "_long_double_" #suffix)
 #define MULT(x, m) ((x) * (m))
+#define NORM(x) ((fabsl(x) < LDBL_EPSILON) ? 0.0L : (x))
 #define SCALE_TYPE long double
 typedef long double TXSample;
 typedef long double TXUSample;
@@ -69,6 +74,7 @@ typedef AVComplexLongDouble TXComplex;
 #define TX_FN_NAME(fn, suffix) ff_tx_ ## fn ## _int32_ ## suffix
 #define TX_FN_NAME_STR(fn, suffix) NULL_IF_CONFIG_SMALL(#fn "_int32_" #suffix)
 #define MULT(x, m) (((((int64_t)(x)) * (int64_t)(m)) + 0x40000000) >> 31)
+#define NORM(x) (x)
 #define SCALE_TYPE float
 typedef int32_t TXSample;
 typedef uint32_t TXUSample;
