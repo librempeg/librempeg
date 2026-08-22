@@ -794,7 +794,7 @@ static av_cold int TX_NAME(ff_tx_fft_inplace_small_init)(AVTXContext *s,
                                                          int len, int inv,
                                                          const void *scale)
 {
-    if (!(s->tmp = av_malloc(len*sizeof(*s->tmp))))
+    if (!(s->tmp = av_calloc(len, sizeof(*s->tmp))))
         return AVERROR(ENOMEM);
     flags &= ~AV_TX_INPLACE;
     return TX_NAME(ff_tx_fft_init)(s, cd, flags, opts, len, inv, scale);
@@ -888,7 +888,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_naive_small)(AVTXContext *s,
 {
     const long double phase = s->inv ? 2.0L*M_PIl/len : -2.0L*M_PIl/len;
 
-    if (!(s->exp = av_malloc(len*len*sizeof(*s->exp))))
+    if (!(s->exp = av_calloc(len*len, sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     for (int i = 0; i < len; i++) {
@@ -1022,13 +1022,13 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix3)(AVTXContext *s,
     TXComplex *exp;
     int *map;
 
-    if (!(s->tmp = av_mallocz(2*n*sizeof(TXComplex))))
+    if (!(s->tmp = av_calloc(2*n, sizeof(TXComplex))))
         return AVERROR(ENOMEM);
 
     map = (int *)(s->tmp + n);
     radix_map(map, n, r);
 
-    if (!(s->exp = av_mallocz((1+n)*sizeof(*s->exp))))
+    if (!(s->exp = av_calloc(1+n, sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     exp = s->exp;
@@ -1140,13 +1140,13 @@ static av_cold int TX_NAME(ff_tx_fft_init_radix5)(AVTXContext *s,
     TXComplex *exp;
     int *map;
 
-    if (!(s->tmp = av_mallocz(2*n*sizeof(TXComplex))))
+    if (!(s->tmp = av_calloc(2*n, sizeof(TXComplex))))
         return AVERROR(ENOMEM);
 
     map = (int *)(s->tmp + n);
     radix_map(map, n, r);
 
-    if (!(s->exp = av_mallocz((2+n)*sizeof(*s->exp))))
+    if (!(s->exp = av_calloc(2+n, sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     exp = s->exp;
@@ -1315,10 +1315,10 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
     if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, len2, 1, scale)))
         return ret;
 
-    if (!(s->tmp = av_mallocz(len*2*sizeof(*map))))
+    if (!(s->tmp = av_calloc(len*2, sizeof(*map))))
         return AVERROR(ENOMEM);
 
-    if (!(s->exp = av_mallocz(plen*3*sizeof(*s->exp))))
+    if (!(s->exp = av_calloc(plen*3, sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     map = (int *)s->tmp;
@@ -1382,7 +1382,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey)(AVTXContext *s,
     if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, n, s->inv, scale)))
         return ret;
 
-    if (!(s->exp = av_mallocz(len*3*sizeof(*s->exp))))
+    if (!(s->exp = av_calloc(len*3, sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     exp = s->exp;
@@ -1420,7 +1420,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_bailey_slow)(AVTXContext *s,
     if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, n, s->inv, scale)))
         return ret;
 
-    if (!(s->exp = av_mallocz(len*3*sizeof(*s->exp))))
+    if (!(s->exp = av_calloc(len*3, sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     exp = s->exp;
@@ -1455,7 +1455,7 @@ static av_cold int TX_NAME(ff_tx_fft_init_bluestein)(AVTXContext *s,
     if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, len2, 1, scale)))
         return ret;
 
-    if (!(s->exp = av_mallocz(len2*4*sizeof(*s->exp))))
+    if (!(s->exp = av_calloc(len2*4, sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     s->exp[0] = (TXComplex){
@@ -1821,7 +1821,7 @@ TX_NAME(ff_tx_fft_auto_init)(AVTXContext *s,
     const long double phase = s->inv ? 2.0L*M_PIl/len : -2.0L*M_PIl/len;
     TXComplex *exp;
 
-    if (!(s->exp = av_mallocz((len/2)*(len/2)*sizeof(*s->exp))))
+    if (!(s->exp = av_calloc((len/2)*(len/2), sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     exp = s->exp;
@@ -2290,7 +2290,7 @@ retry:
                                           s->sub[0].len, s->sub[1].len)))
         return ret;
 
-    if (!(s->tmp = av_malloc(len*sizeof(*s->tmp))))
+    if (!(s->tmp = av_calloc(len, sizeof(*s->tmp))))
         return AVERROR(ENOMEM);
 
     /* Flatten input map */
@@ -2307,7 +2307,7 @@ retry:
     else if (!ps)
         extra_tmp_len = s->sub[0].len;
 
-    if (extra_tmp_len && !(s->exp = av_malloc(extra_tmp_len*sizeof(*s->exp))))
+    if (extra_tmp_len && !(s->exp = av_calloc(extra_tmp_len, sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     return 0;
@@ -2533,7 +2533,7 @@ static av_cold int TX_NAME(ff_tx_mdct_init)(AVTXContext *s,
             return ret;
     }
 
-    s->map = av_malloc((len >> 1)*sizeof(*s->map));
+    s->map = av_calloc(len >> 1, sizeof(*s->map));
     if (!s->map)
         return AVERROR(ENOMEM);
 
@@ -2746,7 +2746,7 @@ static av_cold int TX_NAME(ff_tx_mdct_pfa_init)(AVTXContext *s,
     for (int i = 0; i < len; i++)
         s->map[i] <<= 1;
 
-    if (!(s->tmp = av_malloc(len*sizeof(*s->tmp))))
+    if (!(s->tmp = av_calloc(len, sizeof(*s->tmp))))
         return AVERROR(ENOMEM);
 
     TX_TAB(ff_tx_init_tabs)(len / sub_len);
@@ -2906,7 +2906,7 @@ static av_cold int TX_NAME(ff_tx_rdft_init)(AVTXContext *s,
     if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, len >> 1, inv, scale)))
         return ret;
 
-    if (!(s->exp = av_mallocz((8 + 2*len4)*sizeof(*s->exp))))
+    if (!(s->exp = av_calloc(8 + 2*len4, sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     tab = (TXSample *)s->exp;
@@ -3137,7 +3137,7 @@ static av_cold int TX_NAME(ff_tx_dct_init)(AVTXContext *s,
     if ((ret = ff_tx_init_subtx(s, TX_TYPE(RDFT), flags, NULL, len, inv, &rsc)))
         return ret;
 
-    s->exp = av_malloc((len/2)*3*sizeof(TXSample));
+    s->exp = av_calloc((len/2)*3, sizeof(TXSample));
     if (!s->exp)
         return AVERROR(ENOMEM);
 
@@ -3315,7 +3315,7 @@ static av_cold int TX_NAME(ff_tx_dcstI_init)(AVTXContext *s,
                                 0, &rsc)))
         return ret;
 
-    s->tmp = av_mallocz((len + 1)*2*sizeof(TXSample));
+    s->tmp = av_calloc((len + 1)*2, sizeof(TXSample));
     if (!s->tmp)
         return AVERROR(ENOMEM);
 
@@ -3399,7 +3399,7 @@ int TX_TAB(ff_tx_mdct_gen_exp)(AVTXContext *s, int *pre_tab)
     const double theta = (scale < 0 ? len4 : 0) + 1.0/8.0;
     size_t alloc = pre_tab ? 2*len4 : len4;
 
-    if (!(s->exp = av_malloc_array(alloc, sizeof(*s->exp))))
+    if (!(s->exp = av_calloc(alloc, sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     scale = sqrt(fabs(scale));
