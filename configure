@@ -6479,7 +6479,7 @@ probe_libc(){
         add_${pfx}cppflags -D__EXTENSIONS__ -D_XOPEN_SOURCE=600
     elif test_${pfx}cpp_condition sys/version.h "defined __DJGPP__"; then
         eval ${pfx}libc_type=djgpp
-        add_cppflags -U__STRICT_ANSI__
+        add_${pfx}cppflags -U__STRICT_ANSI__
         add_allcflags "-include $source_path/compat/djgpp/math.h"
         add_compat djgpp/math.o
     fi
