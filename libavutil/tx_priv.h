@@ -323,12 +323,6 @@ typedef struct FFTXCodelet {
     int prio;                      /* < 0 = least, 0 = no pref, > 0 = prefer */
 } FFTXCodelet;
 
-typedef struct PassEntry {
-    int offset;
-    int size;
-    int count;
-} PassEntry;
-
 struct AVTXContext {
     /* Fields the root transform and subtransforms use or may use.
      * NOTE: This section is used by assembly, do not reorder or change */
