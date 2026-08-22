@@ -272,9 +272,9 @@ material, and try '-top 0/1' if the result looks really messed-up.
 
 @section How can I read DirectShow files?
 
-If you have built FFmpeg with @code{./configure --enable-avisynth}
-(only possible on MinGW/Cygwin platforms),
-then you may use any file that DirectShow can read as input.
+If you have built FFmpeg for Windows with @code{./configure --enable-avisynth}
+and your AviSynth+ installation provides @code{DirectShowSource}, then you
+may use any file that DirectShow can read as input.
 
 Just create an "input.avs" text file with this single line ...
 @example
@@ -583,7 +583,7 @@ already incorporate FFmpeg at (@url{projects.html}).
 
 @section Can you support my C compiler XXX?
 
-It depends. If your compiler is C99-compliant, then patches to support
+It depends. If your compiler is C11-compliant, then patches to support
 it are likely to be welcome if they do not pollute the source code
 with @code{#ifdef}s related to the compiler.
 
@@ -641,11 +641,6 @@ you need to explicitly state that you are using a C library. You can do this by
 encompassing your FFmpeg includes using @code{extern "C"}.
 
 See @url{http://www.parashift.com/c++-faq-lite/mixing-c-and-cpp.html#faq-32.3}
-
-@section I'm using libavutil from within my C++ application but the compiler complains about 'UINT64_C' was not declared in this scope
-
-FFmpeg is a pure C project using C99 math features, in order to enable C++
-to use them you have to append -D__STDC_CONSTANT_MACROS to your CXXFLAGS
 
 @section I have a file in memory / a API different from *open/*read/ libc how do I use it with libavformat?
 
