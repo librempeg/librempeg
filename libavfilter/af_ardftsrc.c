@@ -178,7 +178,10 @@ static int config_input(AVFilterLink *inlink)
 
     if (inlink->sample_rate == outlink->sample_rate) {
         s->pass = inlink->format == outlink->format;
-        return ff_asf2sf_setup(outlink->format, inlink->format, &s->do_sf2sf);
+        if (!s->pass)
+            return ff_asf2sf_setup(outlink->format, inlink->format, &s->do_sf2sf);
+
+        return 0;
     }
 
     s->first_pts = s->eof_in_pts = AV_NOPTS_VALUE;
