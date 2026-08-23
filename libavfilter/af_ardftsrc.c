@@ -413,6 +413,8 @@ static int filter_frame(AVFilterLink *inlink)
         sf2sf_td.in = in;
         sf2sf_td.out = out;
 
+        av_frame_copy_props(out, in);
+
         ff_filter_execute(ctx, s->do_sf2sf, &sf2sf_td, NULL,
                           FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
 
