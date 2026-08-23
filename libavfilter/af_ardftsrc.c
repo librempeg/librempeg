@@ -401,6 +401,15 @@ static int filter_frame(AVFilterLink *inlink)
     } else if (inlink->sample_rate == outlink->sample_rate) {
         SF2SFThreadData sf2sf_td;
 
+
+        out->nb_samples = in->nb_samples;
+        ret = ff_filter_get_buffer(ctx, s->out);
+        if (ret < 0) {
+            av_frame_free(&s->out);
+            av_frame_free(&s->in);
+            return ret;
+        }
+
         sf2sf_td.in = in;
         sf2sf_td.out = out;
 
@@ -606,9 +615,6 @@ static int filter_prepare(AVFilterContext *ctx)
                     s->in = NULL;
                     return AVERROR(ENOMEM);
                 }
-
-                s->out->nb_samples = s->in->nb_samples;
-                return ff_filter_get_buffer(ctx, s->out);
             }
 
             return 0;
