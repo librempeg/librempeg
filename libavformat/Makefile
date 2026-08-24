@@ -452,6 +452,7 @@ OBJS-$(CONFIG_LMLM4_DEMUXER)             += lmlm4.o
 OBJS-$(CONFIG_LOAS_DEMUXER)              += loasdec.o rawdec.o
 OBJS-$(CONFIG_LOPUS_DEMUXER)             += lopus.o
 OBJS-$(CONFIG_LOPU_DEMUXER)              += lopu.o
+OBJS-$(CONFIG_LPS_DEMUXER)               += lps.o
 OBJS-$(CONFIG_LUODAT_DEMUXER)            += luodatdec.o
 OBJS-$(CONFIG_LRC_DEMUXER)               += lrcdec.o lrc.o subtitles.o
 OBJS-$(CONFIG_LRC_MUXER)                 += lrcenc.o lrc.o
