@@ -655,6 +655,7 @@ OBJS-$(CONFIG_PP_BNK_DEMUXER)            += pp_bnk.o
 OBJS-$(CONFIG_PPHD_DEMUXER)              += pphd.o
 OBJS-$(CONFIG_PSB_DEMUXER)               += psb.o
 OBJS-$(CONFIG_PSF_DEMUXER)               += psf.o pcm.o
+OBJS-$(CONFIG_PSFB_DEMUXER)              += psfb.o
 OBJS-$(CONFIG_PSND_DEMUXER)              += psnd.o pcm.o
 OBJS-$(CONFIG_PVA_DEMUXER)               += pva.o
 OBJS-$(CONFIG_PVF_DEMUXER)               += pvfdec.o pcm.o
