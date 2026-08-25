@@ -162,6 +162,7 @@ extern const FFInputFormat  ff_cfdf_demuxer;
 extern const FFInputFormat  ff_cfdf_d5_demuxer;
 extern const FFInputFormat  ff_cfn_demuxer;
 extern const FFInputFormat  ff_cine_demuxer;
+extern const FFInputFormat  ff_cmpwave_demuxer;
 extern const FFInputFormat  ff_codec2_demuxer;
 extern const FFOutputFormat ff_codec2_muxer;
 extern const FFInputFormat  ff_codec2raw_demuxer;
