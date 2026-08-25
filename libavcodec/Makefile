@@ -337,6 +337,7 @@ OBJS-$(CONFIG_CLJR_ENCODER)            += cljrenc.o
 OBJS-$(CONFIG_CLLC_DECODER)            += cllc.o canopus.o
 OBJS-$(CONFIG_COMFORTNOISE_DECODER)    += cngdec.o celp_filters.o
 OBJS-$(CONFIG_COMFORTNOISE_ENCODER)    += cngenc.o
+OBJS-$(CONFIG_COMPRESSWAVE_DECODER)    += compresswave.o
 OBJS-$(CONFIG_COOK_DECODER)            += cook.o
 OBJS-$(CONFIG_CPIA_DECODER)            += cpia.o
 OBJS-$(CONFIG_CRI_DECODER)             += cri.o

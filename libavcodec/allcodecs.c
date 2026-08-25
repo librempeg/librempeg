@@ -476,6 +476,7 @@ extern const FFCodec ff_binkaudio_dct_decoder;
 extern const FFCodec ff_binkaudio_rdft_decoder;
 extern const FFCodec ff_bmv_audio_decoder;
 extern const FFCodec ff_bonk_decoder;
+extern const FFCodec ff_compresswave_decoder;
 extern const FFCodec ff_cook_decoder;
 extern const FFCodec ff_dca_encoder;
 extern const FFCodec ff_dca_decoder;

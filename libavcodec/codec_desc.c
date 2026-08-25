@@ -4043,6 +4043,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("RAD Audio"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_COMPRESSWAVE,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "compresswave",
+        .long_name = NULL_IF_CONFIG_SMALL("CompressWave"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
 
     /* subtitle codecs */
     {
