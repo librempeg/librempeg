@@ -46,8 +46,9 @@ static av_always_inline void opus_rc_enc_carryout(OpusRangeCoder *rc, int cbuf)
 
 static av_always_inline void opus_rc_dec_normalize(OpusRangeCoder *rc)
 {
+    GetBitContext *gb = &rc->gb;
     while (rc->range <= OPUS_RC_BOT) {
-        rc->value = ((rc->value << OPUS_RC_SYM) | (get_bits(&rc->gb, OPUS_RC_SYM) ^ OPUS_RC_CEIL)) & (OPUS_RC_TOP - 1);
+        rc->value = ((rc->value << OPUS_RC_SYM) | (get_bits(gb, OPUS_RC_SYM) ^ OPUS_RC_CEIL)) & (OPUS_RC_TOP - 1);
         rc->range     <<= OPUS_RC_SYM;
         rc->total_bits += OPUS_RC_SYM;
     }
