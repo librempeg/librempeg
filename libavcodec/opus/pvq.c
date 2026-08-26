@@ -81,22 +81,20 @@ static inline int celt_pulses2bits(const uint8_t *cache, int pulses)
    return (pulses == 0) ? 0 : cache[pulses] + 1;
 }
 
-static inline void celt_normalize_residual(const int * restrict iy, float * restrict X,
-                                           int N, float g)
+static inline void celt_normalize_residual(const int *restrict iy, float *restrict X,
+                                           const int N, float g)
 {
-    int i;
-    for (i = 0; i < N; i++)
+    for (int i = 0; i < N; i++)
         X[i] = g * iy[i];
 }
 
-static void celt_exp_rotation_impl(float *X, uint32_t len, uint32_t stride,
+static void celt_exp_rotation_impl(float *restrict X, uint32_t len, uint32_t stride,
                                    float c, float s)
 {
-    float *Xptr;
-    int i;
+    float *restrict Xptr;
 
     Xptr = X;
-    for (i = 0; i < len - stride; i++) {
+    for (int i = 0; i < len - stride; i++) {
         float x1     = Xptr[0];
         float x2     = Xptr[stride];
         Xptr[stride] = c * x2 + s * x1;
@@ -104,7 +102,7 @@ static void celt_exp_rotation_impl(float *X, uint32_t len, uint32_t stride,
     }
 
     Xptr = &X[len - 2 * stride - 1];
-    for (i = len - 2 * stride - 1; i >= 0; i--) {
+    for (int i = len - 2 * stride - 1; i >= 0; i--) {
         float x1     = Xptr[0];
         float x2     = Xptr[stride];
         Xptr[stride] = c * x2 + s * x1;
@@ -154,28 +152,32 @@ static inline void celt_exp_rotation(float *X, uint32_t len,
 
 static inline uint32_t celt_extract_collapse_mask(const int *iy, uint32_t N, uint32_t B)
 {
-    int i, j, N0 = N / B;
     uint32_t collapse_mask = 0;
 
     if (B <= 1)
         return 1;
 
-    for (i = 0; i < B; i++)
-        for (j = 0; j < N0; j++)
-            collapse_mask |= (!!iy[i*N0+j]) << i;
+    int N0 = N / B;
+    for (int i = 0; i < B; i++) {
+        for (int j = 0; j < N0; j++) {
+            collapse_mask |= (!!iy[j]) << i;
+            if (iy[j])
+                break;
+        }
+        iy += N0;
+    }
     return collapse_mask;
 }
 
-static inline void celt_stereo_merge(float *X, float *Y, float mid, int N)
+static inline void celt_stereo_merge(float *restrict X, float *restrict Y, float mid, int N)
 {
-    int i;
     float xp = 0, side = 0;
     float E[2];
     float mid2;
     float gain[2];
 
     /* Compute the norm of X+Y and X-Y as |X|^2 + |Y|^2 +/- sum(xy) */
-    for (i = 0; i < N; i++) {
+    for (int i = 0; i < N; i++) {
         xp   += X[i] * Y[i];
         side += Y[i] * Y[i];
     }
@@ -186,7 +188,7 @@ static inline void celt_stereo_merge(float *X, float *Y, float mid, int N)
     E[0] = mid2 * mid2 + side - 2 * xp;
     E[1] = mid2 * mid2 + side + 2 * xp;
     if (E[0] < 6e-4f || E[1] < 6e-4f) {
-        for (i = 0; i < N; i++)
+        for (int i = 0; i < N; i++)
             Y[i] = X[i];
         return;
     }
@@ -194,7 +196,7 @@ static inline void celt_stereo_merge(float *X, float *Y, float mid, int N)
     gain[0] = 1.0f / sqrtf(E[0]);
     gain[1] = 1.0f / sqrtf(E[1]);
 
-    for (i = 0; i < N; i++) {
+    for (int i = 0; i < N; i++) {
         float value[2];
         /* Apply mid scaling (side is already scaled) */
         value[0] = mid * X[i];
@@ -230,12 +232,11 @@ static void celt_deinterleave_hadamard(float *tmp, float *X, int N0,
     memcpy(X, tmp, N*sizeof(float));
 }
 
-static void celt_haar1(float *X, int N0, int stride)
+static void celt_haar1(float *restrict X, int N0, const int stride)
 {
-    int i, j;
     N0 >>= 1;
-    for (i = 0; i < stride; i++) {
-        for (j = 0; j < N0; j++) {
+    for (int i = 0; i < stride; i++) {
+        for (int j = 0; j < N0; j++) {
             float x0 = X[stride * (2 * j + 0) + i];
             float x1 = X[stride * (2 * j + 1) + i];
             X[stride * (2 * j + 0) + i] = (x0 + x1) * M_SQRT1_2f;
@@ -450,38 +451,38 @@ static uint32_t celt_alg_unquant(OpusRangeCoder *rc, float *X, uint32_t N, uint3
     return celt_extract_collapse_mask(y, N, blocks);
 }
 
-static int celt_calc_theta(const float *X, const float *Y, int coupling, int N)
+static int celt_calc_theta(const float *restrict X, const float *restrict Y, int coupling, const int N)
 {
-    int i;
-    float e[2] = { 0.0f, 0.0f };
+    float a = 0.f, b = 0.f;
+
     if (coupling) { /* Coupling case */
-        for (i = 0; i < N; i++) {
-            e[0] += (X[i] + Y[i])*(X[i] + Y[i]);
-            e[1] += (X[i] - Y[i])*(X[i] - Y[i]);
+        for (int i = 0; i < N; i++) {
+            float sum = X[i] + Y[i];
+            float dif = X[i] - Y[i];
+            a += sum*sum;
+            b += dif*dif;
         }
     } else {
-        for (i = 0; i < N; i++) {
-            e[0] += X[i]*X[i];
-            e[1] += Y[i]*Y[i];
+        for (int i = 0; i < N; i++) {
+            a += X[i]*X[i];
+            b += Y[i]*Y[i];
         }
     }
-    return lrintf(32768.0f*atan2f(sqrtf(e[1]), sqrtf(e[0]))/M_PIf);
+    return lrintf(32768.0f*atan2f(sqrtf(b), sqrtf(a))/M_PIf);
 }
 
-static void celt_stereo_is_decouple(float *X, float *Y, float e_l, float e_r, int N)
+static void celt_stereo_is_decouple(float *restrict X, float *restrict Y, float e_l, float e_r, const int N)
 {
-    int i;
     const float energy_n = 1.0f/(sqrtf(e_l*e_l + e_r*e_r) + FLT_EPSILON);
     e_l *= energy_n;
     e_r *= energy_n;
-    for (i = 0; i < N; i++)
+    for (int i = 0; i < N; i++)
         X[i] = e_l*X[i] + e_r*Y[i];
 }
 
-static void celt_stereo_ms_decouple(float *X, float *Y, int N)
+static void celt_stereo_ms_decouple(float *restrict X, float *restrict Y, const int N)
 {
-    int i;
-    for (i = 0; i < N; i++) {
+    for (int i = 0; i < N; i++) {
         const float Xret = X[i];
         X[i] = (X[i] + Y[i])*M_SQRT1_2f;
         Y[i] = (Y[i] - Xret)*M_SQRT1_2f;
