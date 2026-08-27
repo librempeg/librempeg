@@ -103,6 +103,13 @@ typedef struct VulkanDeviceFeatures {
     VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR maximal_reconvergence;
 #endif
 
+#ifdef VK_KHR_maintenance9
+    VkPhysicalDeviceMaintenance9FeaturesKHR maintenance_9;
+#endif
+#ifdef VK_KHR_unified_image_layouts
+    VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR unified_layouts;
+#endif
+
     VkPhysicalDeviceVideoMaintenance1FeaturesKHR video_maintenance_1;
 #ifdef VK_KHR_video_maintenance2
     VkPhysicalDeviceVideoMaintenance2FeaturesKHR video_maintenance_2;
@@ -274,6 +281,15 @@ static void device_features_init(AVHWDeviceContext *ctx, VulkanDeviceFeatures *f
                      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MAXIMAL_RECONVERGENCE_FEATURES_KHR);
 #endif
 
+#ifdef VK_KHR_maintenance9
+    FF_VK_STRUCT_EXT(s, &feats->device, &feats->maintenance_9, FF_VK_EXT_MAINTENANCE_9,
+                     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_9_FEATURES_KHR);
+#endif
+#ifdef VK_KHR_unified_image_layouts
+    FF_VK_STRUCT_EXT(s, &feats->device, &feats->unified_layouts, FF_VK_EXT_UNIFIED_IMAGE_LAYOUTS,
+                     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFIED_IMAGE_LAYOUTS_FEATURES_KHR);
+#endif
+
     FF_VK_STRUCT_EXT(s, &feats->device, &feats->video_maintenance_1, FF_VK_EXT_VIDEO_MAINTENANCE_1,
                      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_1_FEATURES_KHR);
 #ifdef VK_KHR_video_maintenance2
@@ -414,6 +430,14 @@ static void device_features_copy_needed(VulkanDeviceFeatures *dst, VulkanDeviceF
 
 #ifdef VK_KHR_shader_maximal_reconvergence
     COPY_VAL(maximal_reconvergence.shaderMaximalReconvergence);
+#endif
+
+#ifdef VK_KHR_maintenance9
+    COPY_VAL(maintenance_9.maintenance9);
+#endif
+#ifdef VK_KHR_unified_image_layouts
+    COPY_VAL(unified_layouts.unifiedImageLayouts);
+    COPY_VAL(unified_layouts.unifiedImageLayoutsVideo);
 #endif
 
 #ifdef VK_KHR_internally_synchronized_queues
@@ -738,6 +762,12 @@ static const VulkanOptExtension optional_device_exts[] = {
 #endif
 #ifdef VK_KHR_shader_maximal_reconvergence
     { VK_KHR_SHADER_MAXIMAL_RECONVERGENCE_EXTENSION_NAME,     FF_VK_EXT_MAXIMAL_RECONVERGENCE  },
+#endif
+#ifdef VK_KHR_maintenance9
+    { VK_KHR_MAINTENANCE_9_EXTENSION_NAME,                    FF_VK_EXT_MAINTENANCE_9          },
+#endif
+#ifdef VK_KHR_unified_image_layouts
+    { VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME,            FF_VK_EXT_UNIFIED_IMAGE_LAYOUTS  },
 #endif
     { VK_KHR_VIDEO_MAINTENANCE_1_EXTENSION_NAME,              FF_VK_EXT_VIDEO_MAINTENANCE_1    },
 #ifdef VK_KHR_video_maintenance2
@@ -2562,7 +2592,9 @@ static int switch_layout(AVHWFramesContext *hwfc, FFVkExecPool *ectx,
     VkCommandBuffer cmd_buf;
     FFVkExecContext *exec = ff_vk_exec_get(&p->vkctx, ectx);
     cmd_buf = exec->buf;
-    ff_vk_exec_start(&p->vkctx, exec);
+    err = ff_vk_exec_start(&p->vkctx, exec);
+    if (err < 0)
+        return err;
 
     err = ff_vk_exec_add_dep_frame(&p->vkctx, exec, &tmp_frame,
                                    VK_PIPELINE_STAGE_2_NONE,
@@ -2585,8 +2617,8 @@ static int switch_layout(AVHWFramesContext *hwfc, FFVkExecPool *ectx,
     if (err < 0)
         return err;
 
-    /* We can do this because there are no real dependencies */
-    ff_vk_exec_discard_deps(&p->vkctx, exec);
+    /* Drops the stack-based frame above from the dependency list */
+    ff_vk_exec_wait(&p->vkctx, exec);
 
     return 0;
 }
@@ -2958,6 +2990,135 @@ static void vulkan_frames_uninit(AVHWFramesContext *hwfc)
     av_refstruct_pool_uninit(&fp->tmp);
 }
 
+/* Probes whether the host transfer usage bit is actually usable in combination
+ * with the rest of the image creation parameters. Drivers may expose the
+ * format feature, yet reject the final image, or provide no memory type from
+ * which such an image can be allocated. Notably video decode/encode images
+ * are often not possible to allocate from the host visible memory type. */
+static int vulkan_host_transfer_usable(AVHWFramesContext *hwfc)
+{
+    VulkanFramesPriv *fp = hwfc->hwctx;
+    AVVulkanFramesContext *hwctx = &fp->p;
+    VulkanDevicePriv *p = hwfc->device_ctx->hwctx;
+    AVVulkanDeviceContext *dev_hwctx = &p->p;
+    FFVulkanFunctions *vk = &p->vkctx.vkfn;
+    VkResult ret;
+
+    const VkImageDrmFormatModifierListCreateInfoEXT *mod_list =
+        ff_vk_find_struct(hwctx->create_pnext,
+                          VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT);
+    int has_mods = hwctx->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
+                   mod_list && mod_list->drmFormatModifierCount;
+    int nb_mods = has_mods ? mod_list->drmFormatModifierCount : 1;
+
+    /* Without a modifier list the final modifier is not knowable here. */
+    if (hwctx->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT && !has_mods)
+        return 0;
+
+    VkPhysicalDeviceImageDrmFormatModifierInfoEXT mod_info = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT,
+        .pQueueFamilyIndices   = p->img_qfs,
+        .queueFamilyIndexCount = p->nb_img_qfs,
+        .sharingMode           = p->nb_img_qfs > 1 ? VK_SHARING_MODE_CONCURRENT :
+                                                     VK_SHARING_MODE_EXCLUSIVE,
+    };
+    VkPhysicalDeviceImageFormatInfo2 pinfo = {
+        .sType  = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
+        .type   = VK_IMAGE_TYPE_2D,
+        .tiling = hwctx->tiling,
+        .usage  = hwctx->usage,
+        .flags  = hwctx->img_flags,
+    };
+
+    if (has_mods)
+        ff_vk_link_struct(&pinfo, &mod_info);
+
+    VkVideoProfileListInfoKHR profile_list;
+    const VkVideoProfileListInfoKHR *pl =
+        ff_vk_find_struct(hwctx->create_pnext,
+                          VK_STRUCTURE_TYPE_VIDEO_PROFILE_LIST_INFO_KHR);
+    if (pl) {
+        profile_list = *pl;
+        profile_list.pNext = NULL;
+        ff_vk_link_struct(&pinfo, &profile_list);
+    }
+
+    VkImageFormatListCreateInfo format_list;
+    const VkImageFormatListCreateInfo *fl =
+        ff_vk_find_struct(hwctx->create_pnext,
+                          VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO);
+    if (fl) {
+        format_list = *fl;
+        format_list.pNext = NULL;
+        ff_vk_link_struct(&pinfo, &format_list);
+    }
+
+    /* The same usage is applied to the images of every plane, so each plane
+     * format has to support host transfers for the usage to be usable. */
+    for (int i = 0; i < AV_NUM_DATA_POINTERS &&
+                    hwctx->format[i] != VK_FORMAT_UNDEFINED; i++) {
+        pinfo.format = hwctx->format[i];
+
+        /* The driver is free to pick any modifier from the list, so all of
+         * them have to be compatible. */
+        for (int j = 0; j < nb_mods; j++) {
+            VkImageFormatProperties2 props = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2,
+            };
+
+            if (has_mods)
+                mod_info.drmFormatModifier = mod_list->pDrmFormatModifiers[j];
+
+            ret = vk->GetPhysicalDeviceImageFormatProperties2(dev_hwctx->phys_dev,
+                                                              &pinfo, &props);
+            if (ret != VK_SUCCESS) {
+                av_log(hwfc, AV_LOG_VERBOSE, "Disabling host image transfers: "
+                       "format %i is not supported: %s\n",
+                       pinfo.format, ff_vk_ret2str(ret));
+                return 0;
+            }
+        }
+    }
+
+    if (!p->vkctx.host_image_props.identicalMemoryTypeRequirements) {
+        VkImageCreateInfo create_info = {
+            .sType       = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .pNext       = hwctx->create_pnext,
+            .imageType   = VK_IMAGE_TYPE_2D,
+            .format      = hwctx->format[0],
+            .extent      = { hwfc->width, hwfc->height, 1 },
+            .mipLevels   = 1,
+            .arrayLayers = hwctx->nb_layers,
+            .flags       = hwctx->img_flags,
+            .tiling      = hwctx->tiling,
+            .usage       = hwctx->usage,
+            .samples     = VK_SAMPLE_COUNT_1_BIT,
+            .pQueueFamilyIndices   = p->img_qfs,
+            .queueFamilyIndexCount = p->nb_img_qfs,
+            .sharingMode           = p->nb_img_qfs > 1 ? VK_SHARING_MODE_CONCURRENT :
+                                                         VK_SHARING_MODE_EXCLUSIVE,
+        };
+        VkDeviceImageMemoryRequirements req_info = {
+            .sType       = VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS,
+            .pCreateInfo = &create_info,
+            .planeAspect = hwctx->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT ?
+                           VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT : 0,
+        };
+        VkMemoryRequirements2 req = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+        };
+
+        vk->GetDeviceImageMemoryRequirements(dev_hwctx->act_dev, &req_info, &req);
+        if (!req.memoryRequirements.memoryTypeBits) {
+            av_log(hwfc, AV_LOG_VERBOSE, "Disabling host image transfers: "
+                   "no compatible memory type\n");
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 static int vulkan_frames_init(AVHWFramesContext *hwfc)
 {
     int err;
@@ -3047,8 +3208,6 @@ static int vulkan_frames_init(AVHWFramesContext *hwfc)
          * layout transition cannot be synchronized against them, not even
          * by the frame lock and timeline semaphore. */
         if (p->vkctx.extensions & FF_VK_EXT_HOST_IMAGE_COPY &&
-            !(p->dprops.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY) &&
-            !(p->dprops.driverID == VK_DRIVER_ID_MOLTENVK) &&
             !(hwctx->usage & VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR))
             hwctx->usage |= supported_usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT;
 
@@ -3095,6 +3254,11 @@ static int vulkan_frames_init(AVHWFramesContext *hwfc)
                 hwctx->img_flags |= VK_IMAGE_CREATE_VIDEO_PROFILE_INDEPENDENT_BIT_KHR;
         }
     }
+
+    /* Drop the host transfer if it isn't usable for this image configuration. */
+    if ((hwctx->usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT) &&
+        !vulkan_host_transfer_usable(hwfc))
+        hwctx->usage &= ~VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT;
 
     if (!hwctx->lock_frame)
         hwctx->lock_frame = lock_frame;
@@ -3635,7 +3799,12 @@ static int vulkan_map_from_drm_frame_sync(AVHWFramesContext *hwfc, AVFrame *dst,
         exec = ff_vk_exec_get(&p->vkctx, &fp->compute_exec);
         cmd_buf = exec->buf;
 
-        ff_vk_exec_start(&p->vkctx, exec);
+        err = ff_vk_exec_start(&p->vkctx, exec);
+        if (err < 0) {
+            for (int i = 0; i < desc->nb_objects; i++)
+                vk->DestroySemaphore(hwctx->act_dev, drm_sync_sem[i], hwctx->alloc);
+            return err;
+        }
 
         /* Ownership of semaphores is passed */
         ff_vk_exec_add_dep_bool_sem(&p->vkctx, exec,
@@ -3645,8 +3814,10 @@ static int vulkan_map_from_drm_frame_sync(AVHWFramesContext *hwfc, AVFrame *dst,
         err = ff_vk_exec_add_dep_frame(&p->vkctx, exec, dst,
                                        VK_PIPELINE_STAGE_2_NONE,
                                        VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
-        if (err < 0)
+        if (err < 0) {
+            ff_vk_exec_discard(&p->vkctx, exec);
             return err;
+        }
 
         ff_vk_frame_barrier(&p->vkctx, exec, dst, img_bar, &nb_img_bar,
                             VK_PIPELINE_STAGE_2_NONE,
@@ -4207,8 +4378,6 @@ static int vulkan_drm_export_sync_fd(AVHWFramesContext *hwfc, AVVkFrame *f,
                        ff_vk_ret2str(ret));
                 sync_fd = -1;
             }
-        } else {
-            ff_vk_exec_discard_deps(&p->vkctx, exec);
         }
     }
 
@@ -4730,8 +4899,7 @@ static int vulkan_transfer_frame(AVHWFramesContext *hwfc,
     if (swf->width > hwfc->width || swf->height > hwfc->height)
         return AVERROR(EINVAL);
 
-    int host_copy = hwctx->usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT &&
-                    !(p->dprops.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY);
+    int host_copy = hwctx->usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT;
 
     /* Host layout transitions may only originate from a host-copyable layout */
     if (!upload && host_copy) {
@@ -4791,14 +4959,18 @@ static int vulkan_transfer_frame(AVHWFramesContext *hwfc,
     exec = ff_vk_exec_get(&p->vkctx, &fp->upload_exec);
     cmd_buf = exec->buf;
 
-    ff_vk_exec_start(&p->vkctx, exec);
+    err = ff_vk_exec_start(&p->vkctx, exec);
+    if (err < 0)
+        goto end;
 
     /* Prep destination Vulkan frame */
     err = ff_vk_exec_add_dep_frame(&p->vkctx, exec, hwf,
                                    VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                                    VK_PIPELINE_STAGE_2_TRANSFER_BIT);
-    if (err < 0)
+    if (err < 0) {
+        ff_vk_exec_discard(&p->vkctx, exec);
         goto end;
+    }
 
     /* No need to declare buf deps for synchronous transfers (downloads) */
     if (upload) {
@@ -4806,7 +4978,7 @@ static int vulkan_transfer_frame(AVHWFramesContext *hwfc,
         if (host_mapped) {
             err = ff_vk_exec_add_dep_sw_frame(&p->vkctx, exec, swf);
             if (err < 0) {
-                ff_vk_exec_discard_deps(&p->vkctx, exec);
+                ff_vk_exec_discard(&p->vkctx, exec);
                 goto end;
             }
         }
@@ -4855,9 +5027,7 @@ static int vulkan_transfer_frame(AVHWFramesContext *hwfc,
     }
 
     err = ff_vk_exec_submit(&p->vkctx, exec);
-    if (err < 0) {
-        ff_vk_exec_discard_deps(&p->vkctx, exec);
-    } else if (!upload) {
+    if (err >= 0 && !upload) {
         ff_vk_exec_wait(&p->vkctx, exec);
         if (!host_mapped)
             err = copy_buffer_data(hwfc, bufs[0], swf, region, planes, 0);

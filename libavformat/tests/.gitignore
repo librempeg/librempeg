@@ -2,8 +2,8 @@
 /fifo_muxer
 /imf
 /mkdir
-/movenc
 /noproxy
+/rename
 /rtmpdh
 /seek
 /srtp

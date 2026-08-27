@@ -56,6 +56,7 @@ static int query_formats(const AVFilterContext *ctx,
         AV_SAMPLE_FMT_S64, AV_SAMPLE_FMT_S64P,
         AV_SAMPLE_FMT_FLT, AV_SAMPLE_FMT_FLTP,
         AV_SAMPLE_FMT_DBL, AV_SAMPLE_FMT_DBLP,
+        AV_SAMPLE_FMT_LDBL,AV_SAMPLE_FMT_LDBLP,
         AV_SAMPLE_FMT_NONE
     };
     AVFilterChannelLayouts *layouts;
@@ -120,6 +121,10 @@ typedef struct ThreadData {
 #define DEPTH 64
 #include "acl2cl_template.c"
 
+#undef DEPTH
+#define DEPTH 80
+#include "acl2cl_template.c"
+
 static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -161,6 +166,10 @@ static int config_input(AVFilterLink *inlink)
     case AV_SAMPLE_FMT_DBL:
     case AV_SAMPLE_FMT_DBLP:
         s->do_cl2cl = do_cl2cl_dblp;
+        break;
+    case AV_SAMPLE_FMT_LDBL:
+    case AV_SAMPLE_FMT_LDBLP:
+        s->do_cl2cl = do_cl2cl_ldblp;
         break;
     default:
         return AVERROR_BUG;

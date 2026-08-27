@@ -125,7 +125,7 @@ static inline void celt_exp_rotation(float *X, uint32_t len,
         return;
 
     gain = (float)len / (len + (20 - 5*spread) * K);
-    theta = M_PI * gain * gain / 4;
+    theta = M_PIf * gain * gain / 4;
 
     c = cosf(theta);
     s = sinf(theta);
@@ -238,8 +238,8 @@ static void celt_haar1(float *X, int N0, int stride)
         for (j = 0; j < N0; j++) {
             float x0 = X[stride * (2 * j + 0) + i];
             float x1 = X[stride * (2 * j + 1) + i];
-            X[stride * (2 * j + 0) + i] = (x0 + x1) * M_SQRT1_2;
-            X[stride * (2 * j + 1) + i] = (x0 - x1) * M_SQRT1_2;
+            X[stride * (2 * j + 0) + i] = (x0 + x1) * M_SQRT1_2f;
+            X[stride * (2 * j + 1) + i] = (x0 - x1) * M_SQRT1_2f;
         }
     }
 }
@@ -465,7 +465,7 @@ static int celt_calc_theta(const float *X, const float *Y, int coupling, int N)
             e[1] += Y[i]*Y[i];
         }
     }
-    return lrintf(32768.0f*atan2f(sqrtf(e[1]), sqrtf(e[0]))/M_PI);
+    return lrintf(32768.0f*atan2f(sqrtf(e[1]), sqrtf(e[0]))/M_PIf);
 }
 
 static void celt_stereo_is_decouple(float *X, float *Y, float e_l, float e_r, int N)
@@ -483,8 +483,8 @@ static void celt_stereo_ms_decouple(float *X, float *Y, int N)
     int i;
     for (i = 0; i < N; i++) {
         const float Xret = X[i];
-        X[i] = (X[i] + Y[i])*M_SQRT1_2;
-        Y[i] = (Y[i] - Xret)*M_SQRT1_2;
+        X[i] = (X[i] + Y[i])*M_SQRT1_2f;
+        Y[i] = (Y[i] - Xret)*M_SQRT1_2f;
     }
 }
 

@@ -19,6 +19,8 @@
 #ifndef AVUTIL_TX_PRIV_H
 #define AVUTIL_TX_PRIV_H
 
+#include <float.h>
+
 #include "tx.h"
 #include "thread.h"
 #include "mem_internal.h"
@@ -33,6 +35,8 @@
 #define TX_FN_NAME(fn, suffix) ff_tx_ ## fn ## _float_ ## suffix
 #define TX_FN_NAME_STR(fn, suffix) NULL_IF_CONFIG_SMALL(#fn "_float_" #suffix)
 #define MULT(x, m) ((x) * (m))
+#define FMA(x, y, z) fmaf((x), (y), (z))
+#define NORM(x) ((fabsf(x) < FLT_EPSILON) ? 0.f : (x))
 #define SCALE_TYPE float
 typedef float TXSample;
 typedef float TXUSample;
@@ -45,6 +49,8 @@ typedef AVComplexFloat TXComplex;
 #define TX_FN_NAME(fn, suffix) ff_tx_ ## fn ## _double_ ## suffix
 #define TX_FN_NAME_STR(fn, suffix) NULL_IF_CONFIG_SMALL(#fn "_double_" #suffix)
 #define MULT(x, m) ((x) * (m))
+#define FMA(x, y, z) fma((x), (y), (z))
+#define NORM(x) ((fabs(x) < DBL_EPSILON) ? 0.0 : (x))
 #define SCALE_TYPE double
 typedef double TXSample;
 typedef double TXUSample;
@@ -57,6 +63,8 @@ typedef AVComplexDouble TXComplex;
 #define TX_FN_NAME(fn, suffix) ff_tx_ ## fn ## _long_double_ ## suffix
 #define TX_FN_NAME_STR(fn, suffix) NULL_IF_CONFIG_SMALL(#fn "_long_double_" #suffix)
 #define MULT(x, m) ((x) * (m))
+#define FMA(x, y, z) fmal((x), (y), (z))
+#define NORM(x) ((fabsl(x) < LDBL_EPSILON) ? 0.0L : (x))
 #define SCALE_TYPE long double
 typedef long double TXSample;
 typedef long double TXUSample;
@@ -69,6 +77,8 @@ typedef AVComplexLongDouble TXComplex;
 #define TX_FN_NAME(fn, suffix) ff_tx_ ## fn ## _int32_ ## suffix
 #define TX_FN_NAME_STR(fn, suffix) NULL_IF_CONFIG_SMALL(#fn "_int32_" #suffix)
 #define MULT(x, m) (((((int64_t)(x)) * (int64_t)(m)) + 0x40000000) >> 31)
+#define FMA(a,b,c)  (MULT((a), (b)) + (c))
+#define NORM(x) (x)
 #define SCALE_TYPE float
 typedef int32_t TXSample;
 typedef uint32_t TXUSample;
@@ -98,10 +108,10 @@ typedef void TXComplex;
 
 #if defined(TX_FLOAT) || defined(TX_DOUBLE) || defined(TX_LONG_DOUBLE)
 
-#define CMUL(dre, dim, are, aim, bre, bim)      \
-    do {                                        \
-        (dre) = (are) * (bre) - (aim) * (bim);  \
-        (dim) = (are) * (bim) + (aim) * (bre);  \
+#define CMUL(dre, dim, are, aim, bre, bim)         \
+    do {                                           \
+        (dre) = FMA((are), (bre), -(aim) * (bim)); \
+        (dim) = FMA((are), (bim), +(aim) * (bre)); \
     } while (0)
 
 #define SMUL(dre, dim, are, aim, bre, bim)      \
@@ -313,12 +323,6 @@ typedef struct FFTXCodelet {
     int prio;                      /* < 0 = least, 0 = no pref, > 0 = prefer */
 } FFTXCodelet;
 
-typedef struct PassEntry {
-    int offset;
-    int size;
-    int count;
-} PassEntry;
-
 struct AVTXContext {
     /* Fields the root transform and subtransforms use or may use.
      * NOTE: This section is used by assembly, do not reorder or change */
@@ -349,10 +353,6 @@ struct AVTXContext {
     double             scale_d;
     long double        scale_ld;
     void              *opaque;          /* Free to use by implementations */
-    PassEntry         *schedules;
-    PassEntry         *leaves;
-    int                nb_leaves;
-    int                nb_schedules;
 };
 
 /* This function embeds a Ruritanian PFA input map into an existing lookup table

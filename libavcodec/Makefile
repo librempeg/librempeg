@@ -111,7 +111,6 @@ OBJS-$(CONFIG_EVCPARSE)                += evc_parse.o evc_ps.o
 OBJS-$(CONFIG_FAANDCT)                 += faandct.o
 OBJS-$(CONFIG_FAANIDCT)                += faanidct.o
 OBJS-$(CONFIG_FDCTDSP)                 += fdctdsp.o jfdctfst.o jfdctint.o
-OBJS-$(CONFIG_FMTCONVERT)              += fmtconvert.o
 OBJS-$(CONFIG_GOLOMB)                  += golomb.o
 OBJS-$(CONFIG_H263DSP)                 += h263dsp.o
 OBJS-$(CONFIG_H264CHROMA)              += h264chroma.o
@@ -338,6 +337,7 @@ OBJS-$(CONFIG_CLJR_ENCODER)            += cljrenc.o
 OBJS-$(CONFIG_CLLC_DECODER)            += cllc.o canopus.o
 OBJS-$(CONFIG_COMFORTNOISE_DECODER)    += cngdec.o celp_filters.o
 OBJS-$(CONFIG_COMFORTNOISE_ENCODER)    += cngenc.o
+OBJS-$(CONFIG_COMPRESSWAVE_DECODER)    += compresswave.o
 OBJS-$(CONFIG_COOK_DECODER)            += cook.o
 OBJS-$(CONFIG_CPIA_DECODER)            += cpia.o
 OBJS-$(CONFIG_CRI_DECODER)             += cri.o
@@ -1474,7 +1474,6 @@ TESTPROGS = avcodec                                                     \
             bitstream_be                                                \
             bitstream_le                                                \
             codec_desc                                                  \
-            encinfo                                                     \
             htmlsubtitles                                               \
             jpeg2000dwt                                                 \
             mathops                                                    \

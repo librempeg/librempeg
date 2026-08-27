@@ -1,6 +1,6 @@
 [STREAM_GROUP]
 index=0
-id=0x2
+id=0x1
 nb_streams=2
 type=Track Reference
 [STREAM]

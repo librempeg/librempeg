@@ -29,6 +29,7 @@
 #include "formats.h"
 #include "avfilter.h"
 #include "filters.h"
+#include "asf2sf.h"
 
 typedef struct AudioRDFTSRCContext {
     const AVClass *class;
@@ -87,6 +88,8 @@ typedef struct AudioRDFTSRCContext {
     void (*copy_over)(AVFilterContext *ctx);
 
     void (*src_uninit)(AVFilterContext *ctx);
+
+    ff_asf2sf_fn do_sf2sf;
 } AudioRDFTSRCContext;
 
 #define OFFSET(x) offsetof(AudioRDFTSRCContext, x)
@@ -174,8 +177,11 @@ static int config_input(AVFilterLink *inlink)
     int64_t factor;
 
     if (inlink->sample_rate == outlink->sample_rate) {
-        s->pass = 1;
-        return 0;
+        s->pass = inlink->format == outlink->format;
+        if (s->pass)
+            return 0;
+
+        return ff_asf2sf_setup(outlink->format, inlink->format, &s->do_sf2sf);
     }
 
     s->first_pts = s->eof_in_pts = AV_NOPTS_VALUE;
@@ -392,6 +398,30 @@ static int filter_frame(AVFilterLink *inlink)
     if (s->pass) {
         s->in = NULL;
         return ff_filter_frame(outlink, in);
+    } else if (inlink->sample_rate == outlink->sample_rate) {
+        SF2SFThreadData sf2sf_td;
+
+
+        out->nb_samples = in->nb_samples;
+        ret = ff_filter_get_buffer(ctx, s->out);
+        if (ret < 0) {
+            av_frame_free(&s->out);
+            av_frame_free(&s->in);
+            return ret;
+        }
+
+        sf2sf_td.in = in;
+        sf2sf_td.out = out;
+
+        av_frame_copy_props(out, in);
+
+        ff_filter_execute(ctx, s->do_sf2sf, &sf2sf_td, NULL,
+                          FFMIN(outlink->ch_layout.nb_channels, ff_filter_get_nb_threads(ctx)));
+
+        ff_graph_frame_free(ctx, &in);
+        s->in = NULL;
+
+        return ff_filter_frame(outlink, out);
     }
 
     if (s->pad_size > 0) {
@@ -574,13 +604,23 @@ static int filter_prepare(AVFilterContext *ctx)
     if (!ff_outlink_frame_wanted(outlink))
         return AVERROR(EAGAIN);
 
-    if (s->pass) {
+    if (s->pass || (inlink->sample_rate == outlink->sample_rate)) {
         ret = ff_inlink_consume_frame(inlink, &s->in);
         if (ret < 0)
             return ret;
 
-        if (ret > 0)
+        if (ret > 0) {
+            if (!s->pass) {
+                s->out = ff_graph_frame_alloc(ctx);
+                if (!s->out) {
+                    av_frame_free(&in);
+                    s->in = NULL;
+                    return AVERROR(ENOMEM);
+                }
+            }
+
             return 0;
+        }
 
         if (ff_inlink_acknowledge_status(inlink, &status, &pts)) {
             ff_outlink_set_status(outlink, status, pts);

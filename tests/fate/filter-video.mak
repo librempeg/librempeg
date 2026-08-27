@@ -534,6 +534,17 @@ FATE_FILTER_VSYNTH-$(call FILTERDEMDEC, SCALE, RAWVIDEO, RAWVIDEO) += fate-filte
 fate-filter-scalechroma: tests/data/vsynth1.yuv
 fate-filter-scalechroma: CMD = framecrc -flags bitexact -s 352x288 -pix_fmt yuv444p -i $(TARGET_PATH)/tests/data/vsynth1.yuv -pix_fmt yuv420p -sws_flags +bitexact -vf scale=out_chroma_loc=bottomleft
 
+FATE_FILTER-$(call ALLYES, SCALE_FILTER TESTSRC2_FILTER LAVFI_INDEV \
+                           WRAPPED_AVFRAME_DECODER WRAPPED_AVFRAME_ENCODER \
+                           NULL_MUXER) += fate-filter-scale-print-info \
+                                          fate-filter-scale-print-info-sub
+fate-filter-scale-print-info: CMD = run $(FFMPEG) -nostdin -hide_banner -filter_threads 1 -f lavfi -i "testsrc2=s=16x16:d=0.04" -vf "scale=32:32:flags=+print_info:scaler=lanczos" -frames:v 1 -f null -
+fate-filter-scale-print-info: CMP = grep
+fate-filter-scale-print-info: REF = Lanczos scaler
+fate-filter-scale-print-info-sub: CMD = run $(FFMPEG) -nostdin -hide_banner -filter_threads 1 -f lavfi -i "testsrc2=s=16x16:d=0.04" -vf "scale=32:32:flags=bicublin+print_info:scaler_sub=lanczos" -frames:v 1 -f null -
+fate-filter-scale-print-info-sub: CMP = grep
+fate-filter-scale-print-info-sub: REF = bicubic scaler
+
 # Regression test: cascaded scale=...:-2 on extreme aspect ratios could
 # previously produce zero output dimensions, silently accepted by scale
 # filter and potentially hanging downstream encoders (issue #22817).
@@ -807,7 +818,7 @@ FATE_METADATA_FILTER-$(call ALLYES, $(EBUR128_METADATA_DEPS)) += fate-filter-met
 fate-filter-metadata-ebur128: SRC = $(TARGET_SAMPLES)/filter/seq-3341-7_seq-3342-5-24bit.flac
 fate-filter-metadata-ebur128: CMD = run $(FILTER_METADATA_COMMAND) "amovie='$(SRC)',ebur128=metadata=1"
 
-EBUR128_HEIGHT_DEPS = FFPROBE LAVFI_INDEV AEVALSRC_FILTER EBUR128_FILTER
+EBUR128_HEIGHT_DEPS = FFPROBE LAVFI_INDEV AEVALSRC_FILTER ARESAMPLE_FILTER EBUR128_FILTER
 FATE_FILTER_FFPROBE-$(call ALLYES, $(EBUR128_HEIGHT_DEPS)) += fate-filter-metadata-ebur128-height
 fate-filter-metadata-ebur128-height: CMD = run $(FILTER_METADATA_COMMAND) "aevalsrc=0.12589*sin(2*PI*997*t):channel_layout=TBL:sample_rate=48000:duration=0.4,ebur128=metadata=1"
 

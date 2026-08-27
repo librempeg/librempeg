@@ -33,6 +33,8 @@ static int read_probe(const AVProbeData *p)
 
     if (p->buf_size < 24)
         return AVERROR_INVALIDDATA;
+    if (AV_RB32(p->buf+4) == 0)
+        return 0;
     if (p->buf[16] == 0)
         return 0;
     if ((int)AV_RB32(p->buf+20) <= 0)

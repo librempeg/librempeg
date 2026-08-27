@@ -39,6 +39,7 @@ FATE_MOV_FFPROBE-$(call FRAMEMD5, MOV, H264, H264_PARSER) += fate-mov-neg-firstp
                    fate-mov-mp4-with-mov-in24-ver \
                    fate-mov-mime-codecstring \
                    fate-mov-t35-cdsc-track \
+                   fate-mov-t35-rndr-track \
 
 FATE_MOV_FFPROBE-$(call FRAMEMD5, MOV, MPEG4, H264_PARSER) += fate-mov-mp4-extended-atom \
 
@@ -169,6 +170,8 @@ fate-mov-mp4-extended-atom: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -show_packets 
 fate-mov-mime-codecstring: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -show_entries stream=mime_codec_string -v 0 $(TARGET_SAMPLES)/mov/mov_stream_shorter_than_movie.mov
 
 fate-mov-t35-cdsc-track: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -show_entries stream_group=index,id,nb_streams,type:stream_group_stream=index,id,codec_name,codec_type,codec_tag_string,extradata_size $(TARGET_SAMPLES)/mov/mov-t35-cdsc-track.mp4
+
+fate-mov-t35-rndr-track: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -show_entries stream_group=index,id,nb_streams,type:stream_group_stream=index,id,codec_name,codec_type,codec_tag_string,extradata_size $(TARGET_SAMPLES)/mov/mov-t35-rndr-track.mp4
 
 FATE_MOV_FFMPEG_FFPROBE_SAMPLES-$(call REMUX, MP4 MOV, OGG_DEMUXER VORBIS_DECODER) \
                           += fate-mov-mp4-chapters
@@ -409,7 +412,7 @@ fate-mov-reenc-delete-format-metadata: CMD = transcode mov $(TARGET_SAMPLES)/cov
 
 # audio-only format tags (gapless_playback, iTunSMPB, iTunNORM) must survive when
 # only the cover-art video stream is re-encoded and the audio is stream-copied
-FATE_MOV_FFMPEG_FFPROBE-$(call ENCDEC, PNG, NUT MOV) += fate-mov-cover-reenc-keeps-audio-format-tags
+FATE_MOV_FFMPEG_FFPROBE-$(call ENCDEC, PNG MJPEG, NUT MOV, SCALE_FILTER) += fate-mov-cover-reenc-keeps-audio-format-tags
 fate-mov-cover-reenc-keeps-audio-format-tags: CMD = transcode mov $(TARGET_SAMPLES)/cover_art/Owner-iTunes_9.0.3.15.m4a nut "-map 0:a:0 -c:a copy -map 0:v:0 -filter:v scale -c:v png -bitexact -t 0.1" "-c copy -t 0.1" "-show_entries format_tags" "" "" "" null
 
 # stream-level branding: vendor_id should be deleted on re-encode

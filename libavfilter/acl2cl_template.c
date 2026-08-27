@@ -35,22 +35,25 @@
 #elif DEPTH == 32
 #define ftype float
 #define SAMPLE_FORMAT fltp
-#else
+#elif DEPTH == 64
 #define ftype double
 #define SAMPLE_FORMAT dblp
+#else
+#define ftype long double
+#define SAMPLE_FORMAT ldblp
 #endif
 
 #define F(x) ((ftype)(x))
 
-#if DEPTH == 32 || DEPTH == 64
-#define MIX2(a, b) (((a)+(b))*F(0.5))
-#define ZERO F(0.0)
+#if DEPTH == 32 || DEPTH == 64 || DEPTH == 80
+#define MIX2(a, b) (((a)+(b))*F(0.5L))
+#define ZERO F(0.0L)
 #elif DEPTH == 8
 #define MIX2(a, b) ((((int)(a)-128)+((int)(b)-128))/2 + 128)
 #define ZERO F(128)
 #else
 #define MIX2(a, b) (((a)+(b))/2)
-#define ZERO F(0.0)
+#define ZERO F(0)
 #endif
 
 #define fn3(a,b)   a##_##b
