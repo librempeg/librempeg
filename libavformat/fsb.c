@@ -652,7 +652,7 @@ static int fsb_read_header(AVFormatContext *s)
                 par->block_align = 0x8 * channels;
                 break;
             case 0x07:
-                par->codec_id = (channels > 2) ? AV_CODEC_ID_NONE : AV_CODEC_ID_ADPCM_IMA_XBOX;
+                par->codec_id = (channels > 2) ? AV_CODEC_ID_ADPCM_IMA_FSB : AV_CODEC_ID_ADPCM_IMA_XBOX;
                 par->bits_per_coded_sample = 4;
                 par->block_align = 0x24 * channels;
                 break;
