@@ -1556,7 +1556,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     *coded_samples = 0;
     *approx_nb_samples = 0;
 
-    if(ch <= 0)
+    if (ch <= 0)
         return 0;
     if (buf_size > INT_MAX / 14)
         return 0;
@@ -1746,6 +1746,8 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
                 left -= block_size;
             }
         }
+        if (avctx->codec->id == AV_CODEC_ID_ADPCM_IMA_FSB && nb_samples == 1)
+            nb_samples = 0;
         break;
     case AV_CODEC_ID_ADPCM_MS:
         if (block_align > 0)
@@ -2096,6 +2098,9 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             while (left > 0) {
                 const int block_size = FFMIN(left, block_align);
                 const int nb_samples_per_block = 64 * (block_size / (36 * channels)) + 1;
+
+                if (nb_samples_per_block <= 1)
+                    break;
 
                 for (int bs = 0; bs < nb_samples_per_block-1; bs += 64) {
                     for (int bc = 0; bc < channels; bc++) {
@@ -4263,7 +4268,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         return AVERROR_INVALIDDATA;
     }
 
-    *got_frame_ptr = 1;
+    *got_frame_ptr = frame->nb_samples > 0;
 
     if (avpkt->size < bytestream2_tell(&gb)) {
         av_log(avctx, AV_LOG_ERROR, "Overread of %d < %d\n", avpkt->size, bytestream2_tell(&gb));
