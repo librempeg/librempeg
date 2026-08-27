@@ -802,6 +802,7 @@ OBJS-$(CONFIG_SUBVIEWER_DEMUXER)         += subviewerdec.o subtitles.o
 OBJS-$(CONFIG_SUP_DEMUXER)               += supdec.o
 OBJS-$(CONFIG_SUP_MUXER)                 += supenc.o
 OBJS-$(CONFIG_SVAG_DEMUXER)              += svag.o pcm.o
+OBJS-$(CONFIG_SVGP_DEMUXER)              += svgp.o pcm.o
 OBJS-$(CONFIG_SVS_DEMUXER)               += svs.o pcm.o
 OBJS-$(CONFIG_SWAR_DEMUXER)              += swar.o
 OBJS-$(CONFIG_SWAV_DEMUXER)              += swav.o
