@@ -19,6 +19,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <math.h>
+
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
 #include "libavutil/mem_internal.h"
@@ -33,7 +35,6 @@
 
 #define DSS_SP_FRAME_SIZE        42
 #define DSS_SP_SAMPLE_COUNT     (66 * SUBFRAMES)
-#define DSS_SP_FORMULA(a, b, c) ((int)((((a) * (1 << 15)) + (b) * (unsigned)(c)) + 0x4000) >> 15)
 
 typedef struct DssSpSubframe {
     int16_t gain;
@@ -55,13 +56,10 @@ typedef struct DssSpContext {
     int32_t history[187];
     DssSpFrame fparam;
     int32_t working_buffer[SUBFRAMES][72];
-    int32_t audio_buf[15];
-    int32_t err_buf1[15];
     int32_t lpc_filter[14];
-    int32_t filter[15];
     int32_t vector_buf[72];
-    int noise_state;
-    int32_t err_buf2[15];
+    int32_t lattice_state[14];
+    int32_t deemph_state;
 
     int pulse_dec_mode;
 
@@ -258,16 +256,6 @@ static const int16_t  dss_sp_pulse_val[8] = {
     -31182, -22273, -13364, -4455, 4455, 13364, 22273, 31182
 };
 
-static const uint16_t binary_decreasing_array[] = {
-    32767, 16384, 8192, 4096, 2048, 1024, 512, 256,
-    128, 64, 32, 16, 8, 4, 2,
-};
-
-static const uint16_t dss_sp_unc_decreasing_array[] = {
-    32767, 26214, 20972, 16777, 13422, 10737, 8590, 6872,
-    5498, 4398, 3518, 2815, 2252, 1801, 1441,
-};
-
 static const uint16_t dss_sp_adaptive_gain[] = {
      102,  231,  360,  488,  617,  746,  875, 1004,
     1133, 1261, 1390, 1519, 1648, 1777, 1905, 2034,
@@ -433,31 +421,6 @@ static void dss_sp_unpack_filter(DssSpContext *p)
         p->lpc_filter[i] = dss_sp_filter_cb[i][p->fparam.filter_idx[i]];
 }
 
-static void dss_sp_convert_coeffs(int32_t *lpc_filter, int32_t *coeffs)
-{
-    int a, a_plus, i;
-
-    coeffs[0] = 0x2000;
-    for (a = 0; a < 14; a++) {
-        a_plus         = a + 1;
-        coeffs[a_plus] = lpc_filter[a] >> 2;
-        if (a_plus / 2 >= 1) {
-            for (i = 1; i <= a_plus / 2; i++) {
-                int coeff_1, coeff_2, tmp;
-
-                coeff_1 = coeffs[i];
-                coeff_2 = coeffs[a_plus - i];
-
-                tmp = DSS_SP_FORMULA(coeff_1, lpc_filter[a], coeff_2);
-                coeffs[i] = av_clip_int16(tmp);
-
-                tmp = DSS_SP_FORMULA(coeff_2, lpc_filter[a], coeff_1);
-                coeffs[a_plus - i] = av_clip_int16(tmp);
-            }
-        }
-    }
-}
-
 static void dss_sp_add_pulses(int32_t *vector_buf,
                               const struct DssSpSubframe *sf)
 {
@@ -489,18 +452,6 @@ static void dss_sp_gen_exc(int32_t *vector, int32_t *prev_exc,
     }
 }
 
-static void dss_sp_scale_vector(int32_t *vec, int bits, int size)
-{
-    int i;
-
-    if (bits < 0)
-        for (i = 0; i < size; i++)
-            vec[i] = vec[i] >> -bits;
-    else
-        for (i = 0; i < size; i++)
-            vec[i] = vec[i] * (1 << bits);
-}
-
 static void dss_sp_update_buf(int32_t *hist, int32_t *vector)
 {
     int i;
@@ -512,156 +463,52 @@ static void dss_sp_update_buf(int32_t *hist, int32_t *vector)
         vector[72 - i] = hist[i];
 }
 
-static void dss_sp_shift_sq_sub(const int32_t *filter_buf,
-                                int32_t *error_buf, int32_t *dst)
+/**
+ * Lattice IIR synthesis filter using raw reflection coefficients (Q15).
+ *
+ * This replaces the FFmpeg polynomial-based synthesis (Levinson recursion +
+ * FIR/IIR shift_sq filters) with the lattice structure matching the Olympus
+ * DLL. The reflection coefficients from lpc_filter[] are used directly,
+ * without polynomial conversion.
+ */
+static void dss_sp_lattice_filter(const int32_t *k, int order,
+                                  int32_t *state, int32_t *buf, int size)
 {
-    int a;
+    int n, i;
+    int32_t f, f_new;
 
-    for (a = 0; a < 72; a++) {
-        int i, tmp;
-
-        tmp = dst[a] * filter_buf[0];
-
-        for (i = 14; i > 0; i--)
-            tmp -= error_buf[i] * (unsigned)filter_buf[i];
-
-        for (i = 14; i > 0; i--)
-            error_buf[i] = error_buf[i - 1];
-
-        tmp = (int)(tmp + 4096U) >> 13;
-
-        error_buf[1] = tmp;
-
-        dst[a] = av_clip_int16(tmp);
-    }
-}
-
-static void dss_sp_shift_sq_add(const int32_t *filter_buf, int32_t *audio_buf,
-                                int32_t *dst)
-{
-    int a;
-
-    for (a = 0; a < 72; a++) {
-        int i, tmp = 0;
-
-        audio_buf[0] = dst[a];
-
-        for (i = 14; i >= 0; i--)
-            tmp += audio_buf[i] * filter_buf[i];
-
-        for (i = 14; i > 0; i--)
-            audio_buf[i] = audio_buf[i - 1];
-
-        tmp = (tmp + 4096) >> 13;
-
-        dst[a] = av_clip_int16(tmp);
-    }
-}
-
-static void dss_sp_vec_mult(const int32_t *src, int32_t *dst,
-                            const int16_t *mult)
-{
-    int i;
-
-    dst[0] = src[0];
-
-    for (i = 1; i < 15; i++)
-        dst[i] = (src[i] * mult[i] + 0x4000) >> 15;
-}
-
-static int dss_sp_get_normalize_bits(int32_t *vector_buf, int16_t size)
-{
-    unsigned int val;
-    int max_val;
-    int i;
-
-    val = 1;
-    for (i = 0; i < size; i++)
-        val |= FFABS(vector_buf[i]);
-
-    for (max_val = 0; val <= 0x4000; ++max_val)
-        val *= 2;
-    return max_val;
-}
-
-static int dss_sp_vector_sum(DssSpContext *p, int size)
-{
-    int i, sum = 0;
-    for (i = 0; i < size; i++)
-        sum += FFABS(p->vector_buf[i]);
-    return sum;
-}
-
-static void dss_sp_sf_synthesis(DssSpContext *p, int32_t lpc_filter,
-                                int32_t *dst, int size)
-{
-    int32_t tmp_buf[15];
-    int32_t noise[72];
-    int bias, vsum_2 = 0, vsum_1 = 0, v36, normalize_bits;
-    int i, tmp;
-
-    if (size > 0) {
-        vsum_1 = dss_sp_vector_sum(p, size);
-
-        if (vsum_1 > 0xFFFFF)
-            vsum_1 = 0xFFFFF;
-    }
-
-    normalize_bits = dss_sp_get_normalize_bits(p->vector_buf, size);
-
-    dss_sp_scale_vector(p->vector_buf, normalize_bits - 3, size);
-    dss_sp_scale_vector(p->audio_buf, normalize_bits, 15);
-    dss_sp_scale_vector(p->err_buf1, normalize_bits, 15);
-
-    v36 = p->err_buf1[1];
-
-    dss_sp_vec_mult(p->filter, tmp_buf, binary_decreasing_array);
-    dss_sp_shift_sq_add(tmp_buf, p->audio_buf, p->vector_buf);
-
-    dss_sp_vec_mult(p->filter, tmp_buf, dss_sp_unc_decreasing_array);
-    dss_sp_shift_sq_sub(tmp_buf, p->err_buf1, p->vector_buf);
-
-    /* lpc_filter can be negative */
-    lpc_filter = lpc_filter >> 1;
-    if (lpc_filter >= 0)
-        lpc_filter = 0;
-
-    if (size > 1) {
-        for (i = size - 1; i > 0; i--) {
-            tmp = DSS_SP_FORMULA(p->vector_buf[i], lpc_filter,
-                                 p->vector_buf[i - 1]);
-            p->vector_buf[i] = av_clip_int16(tmp);
+    for (n = 0; n < size; n++) {
+        f = buf[n] - (int32_t)((k[order - 1] * (int64_t)state[order - 1]) >> 15);
+        for (i = order - 2; i >= 0; i--) {
+            f_new = f - (int32_t)((k[i] * (int64_t)state[i]) >> 15);
+            state[i + 1] = state[i] + (int32_t)((k[i] * (int64_t)f_new) >> 15);
+            f = f_new;
         }
+        state[0] = f;
+        buf[n] = f;
     }
+}
 
-    tmp              = DSS_SP_FORMULA(p->vector_buf[0], lpc_filter, v36);
-    p->vector_buf[0] = av_clip_int16(tmp);
+/**
+ * Automatic gain control to compensate for FFmpeg codebook approximation.
+ *
+ * Scales the subframe output so that its RMS does not exceed threshold 6000.
+ * This prevents clipping artifacts from the approximate fixed codebook gains.
+ */
+static void dss_sp_agc(int32_t *buf, int size)
+{
+    int64_t sum_sq = 0;
+    int i, rms, scale;
 
-    dss_sp_scale_vector(p->vector_buf, -normalize_bits, size);
-    dss_sp_scale_vector(p->audio_buf, -normalize_bits, 15);
-    dss_sp_scale_vector(p->err_buf1, -normalize_bits, 15);
+    for (i = 0; i < size; i++)
+        sum_sq += (int64_t)buf[i] * buf[i];
 
-    if (size > 0)
-        vsum_2 = dss_sp_vector_sum(p, size);
+    rms = (int)sqrt((double)sum_sq / size);
 
-    if (vsum_2 >= 0x40)
-        tmp = (vsum_1 << 11) / vsum_2;
-    else
-        tmp = 1;
-
-    bias     = 409 * tmp >> 15 << 15;
-    tmp      = (bias + 32358 * p->noise_state) >> 15;
-    noise[0] = av_clip_int16(tmp);
-
-    for (i = 1; i < size; i++) {
-        tmp      = (bias + 32358 * noise[i - 1]) >> 15;
-        noise[i] = av_clip_int16(tmp);
-    }
-
-    p->noise_state = noise[size - 1];
-    for (i = 0; i < size; i++) {
-        tmp    = (p->vector_buf[i] * noise[i]) >> 11;
-        dst[i] = av_clip_int16(tmp);
+    if (rms > 6000) {
+        scale = (6000 << 15) / rms;
+        for (i = 0; i < size; i++)
+            buf[i] = (int32_t)(((int64_t)buf[i] * scale) >> 15);
     }
 }
 
@@ -706,12 +553,13 @@ static int dss_sp_decode_one_frame(DssSpContext *p,
                                    int16_t *abuf_dst, const uint8_t *abuf_src)
 {
     int i, j;
+    int32_t tmp, *out;
 
     dss_sp_unpack_coeffs(p, abuf_src);
 
     dss_sp_unpack_filter(p);
 
-    dss_sp_convert_coeffs(p->lpc_filter, p->filter);
+    /* No polynomial conversion -- lattice uses raw reflection coefficients */
 
     for (j = 0; j < SUBFRAMES; j++) {
         dss_sp_gen_exc(p->vector_buf, p->history,
@@ -722,20 +570,35 @@ static int dss_sp_decode_one_frame(DssSpContext *p,
 
         dss_sp_update_buf(p->vector_buf, p->history);
 
+        /* Copy excitation from history into vector_buf (reversed back to
+         * chronological order -- update_buf stores it reversed) */
         for (i = 0; i < 72; i++)
             p->vector_buf[i] = p->history[72 - i];
 
-        dss_sp_shift_sq_sub(p->filter,
-                            p->err_buf2, p->vector_buf);
+        /* Lattice IIR synthesis */
+        dss_sp_lattice_filter(p->lpc_filter, 14, p->lattice_state,
+                              p->vector_buf, 72);
 
-        dss_sp_sf_synthesis(p, p->lpc_filter[0],
-                            &p->working_buffer[j][0], 72);
+        /* AGC to compensate for codebook approximation */
+        dss_sp_agc(p->vector_buf, 72);
+
+        for (i = 0; i < 72; i++)
+            p->working_buffer[j][i] = p->vector_buf[i];
     }
 
     dss_sp_update_state(p, &p->working_buffer[0][0]);
 
+    /* De-emphasis: y[n] = x[n] + (y[n-1] * 3277) >> 15
+     * alpha = 0.1 in Q15: 0.1 * 32768 = 3277 */
+    out = &p->working_buffer[0][0];
+    for (i = 0; i < DSS_SP_SAMPLE_COUNT; i++) {
+        tmp = out[i] + (int32_t)((3277 * (int64_t)p->deemph_state) >> 15);
+        out[i] = tmp;
+        p->deemph_state = av_clip_int16(tmp);
+    }
+
     dss_sp_32to16bit(abuf_dst,
-                     &p->working_buffer[0][0], 264);
+                     &p->working_buffer[0][0], DSS_SP_SAMPLE_COUNT);
     return 0;
 }
 
