@@ -216,6 +216,20 @@ static av_cold int dpcm_decode_init(AVCodecContext *avctx)
 
     switch (avctx->codec->id) {
 
+    case AV_CODEC_ID_BIS_DPCM: {
+        const float scale = logf(10.f) * log2f(M_E) / 28.12574042515172f;
+
+        for (i = 0; i < 255; i++) {
+            int8_t c = i;
+            float v = FFABS(c) * scale;
+            float r = roundf(v);
+
+            v = powf(2.f, v - r) * powf(2.f, r);
+            s->array[i] = lrintf(roundf(v) * ((c < 0) ? -1 : 1));
+        }
+        }
+        break;
+
     case AV_CODEC_ID_ROQ_DPCM:
         /* initialize square table */
         for (i = 0; i < 128; i++) {
@@ -327,6 +341,7 @@ static int dpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         else
             out = buf_size;
         break;
+    case AV_CODEC_ID_BIS_DPCM:
     case AV_CODEC_ID_CWV_DPCM:
     case AV_CODEC_ID_WADY_DPCM:
     case AV_CODEC_ID_DERF_DPCM:
@@ -566,6 +581,17 @@ static int dpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         break;
 
+    case AV_CODEC_ID_BIS_DPCM: {
+        int idx = 0;
+
+        while (output_samples < samples_end) {
+            uint8_t n = bytestream2_get_byteu(&gb);
+
+            *output_samples++ = s->sample[idx] = av_clip_int16(s->sample[idx] + s->array[n]);
+            idx ^= stereo;
+        }
+        }
+        break;
     }
 
     *got_frame_ptr = 1;
@@ -593,6 +619,7 @@ const FFCodec ff_ ## NAME ## _decoder = {                   \
     FF_CODEC_DECODE_CB(dpcm_decode_frame),                  \
 }
 
+DPCM_DECODER(AV_CODEC_ID_BIS_DPCM,       bis_dpcm,       "DPCM Bohemia Interactive");
 DPCM_DECODER(AV_CODEC_ID_CBD2_DPCM,      cbd2_dpcm,      "DPCM Cuberoot-Delta-Exact");
 DPCM_DECODER(AV_CODEC_ID_CFDF_DPCM,      cfdf_dpcm,      "DPCM Cyberflix DreamFactory CFDF");
 DPCM_DECODER(AV_CODEC_ID_CWV_DPCM,       cwv_dpcm,       "DPCM Nintendo CWV");

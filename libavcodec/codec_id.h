@@ -501,6 +501,7 @@ enum AVCodecID {
     AV_CODEC_ID_SASSC_DPCM,
     AV_CODEC_ID_CFDF_DPCM,
     AV_CODEC_ID_CWV_DPCM,
+    AV_CODEC_ID_BIS_DPCM,
 
     /* audio codecs */
     AV_CODEC_ID_MP2 = 0x15000,

@@ -668,6 +668,7 @@ extern const FFCodec ff_pcm_vidc_encoder;
 extern const FFCodec ff_pcm_vidc_decoder;
 
 /* DPCM codecs */
+extern const FFCodec ff_bis_dpcm_decoder;
 extern const FFCodec ff_cbd2_dpcm_decoder;
 extern const FFCodec ff_cfdf_dpcm_decoder;
 extern const FFCodec ff_cwv_dpcm_decoder;

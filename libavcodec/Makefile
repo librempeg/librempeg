@@ -305,6 +305,7 @@ OBJS-$(CONFIG_BINK2_DECODER)           += bink2.o
 OBJS-$(CONFIG_BINKAUDIO_DCT_DECODER)   += binkaudio.o
 OBJS-$(CONFIG_BINKAUDIO_RDFT_DECODER)  += binkaudio.o
 OBJS-$(CONFIG_BINTEXT_DECODER)         += bintext.o cga_data.o
+OBJS-$(CONFIG_BIS_DPCM_DECODER)        += dpcm.o
 OBJS-$(CONFIG_BITPACKED_DECODER)       += bitpacked_dec.o
 OBJS-$(CONFIG_BITPACKED_ENCODER)       += bitpacked_enc.o
 OBJS-$(CONFIG_BMP_DECODER)             += bmp.o msrledec.o
