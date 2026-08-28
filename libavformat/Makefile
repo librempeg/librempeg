@@ -225,6 +225,7 @@ OBJS-$(CONFIG_CODEC2RAW_DEMUXER)         += codec2.o pcm.o
 OBJS-$(CONFIG_CODEC2RAW_MUXER)           += rawenc.o
 OBJS-$(CONFIG_CONCAT_DEMUXER)            += concatdec.o
 OBJS-$(CONFIG_COVOX_DEMUXER)             += covox.o
+OBJS-$(CONFIG_CPS_DEMUXER)               += cps.o pcm.o
 OBJS-$(CONFIG_CRC_MUXER)                 += crcenc.o
 OBJS-$(CONFIG_CSMP_DEMUXER)              += csmp.o pcm.o
 OBJS-$(CONFIG_CSX2_DEMUXER)              += csx2.o pcm.o
