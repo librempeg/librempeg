@@ -219,13 +219,13 @@ static av_cold int dpcm_decode_init(AVCodecContext *avctx)
     case AV_CODEC_ID_BIS_DPCM: {
         const float scale = logf(10.f) * log2f(M_E) / 28.12574042515172f;
 
-        for (i = 0; i < 255; i++) {
+        for (i = 0; i < 256; i++) {
             int8_t c = i;
             float v = FFABS(c) * scale;
-            float r = roundf(v);
+            float r = lrintf(v);
 
             v = powf(2.f, v - r) * powf(2.f, r);
-            s->array[i] = lrintf(roundf(v) * ((c < 0) ? -1 : 1));
+            s->array[i] = lrintf(v * ((c < 0) ? -1 : 1)) * (!!c);
         }
         }
         break;
