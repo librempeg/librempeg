@@ -723,6 +723,7 @@ extern const FFOutputFormat ff_voc_muxer;
 extern const FFInputFormat  ff_vpk_demuxer;
 extern const FFInputFormat  ff_vplayer_demuxer;
 extern const FFInputFormat  ff_vqf_demuxer;
+extern const FFInputFormat  ff_vs_demuxer;
 extern const FFInputFormat  ff_vs00_demuxer;
 extern const FFInputFormat  ff_vsf_demuxer;
 extern const FFInputFormat  ff_vsstr_demuxer;
