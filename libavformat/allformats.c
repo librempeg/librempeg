@@ -707,6 +707,7 @@ extern const FFInputFormat  ff_utk_demuxer;
 extern const FFInputFormat  ff_v210_demuxer;
 extern const FFInputFormat  ff_v210x_demuxer;
 extern const FFInputFormat  ff_vag_demuxer;
+extern const FFInputFormat  ff_vas_demuxer;
 extern const FFInputFormat  ff_vc1_demuxer;
 extern const FFOutputFormat ff_vc1_muxer;
 extern const FFInputFormat  ff_vc1t_demuxer;

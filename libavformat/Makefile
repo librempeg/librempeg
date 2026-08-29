@@ -850,6 +850,7 @@ OBJS-$(CONFIG_UTK_DEMUXER)               += utkdec.o
 OBJS-$(CONFIG_V210_DEMUXER)              += rawvideodec.o
 OBJS-$(CONFIG_V210X_DEMUXER)             += rawvideodec.o
 OBJS-$(CONFIG_VAG_DEMUXER)               += vag.o pcm.o
+OBJS-$(CONFIG_VAS_DEMUXER)               += vas.o pcm.o
 OBJS-$(CONFIG_VC1_DEMUXER)               += rawdec.o vc1dec.o
 OBJS-$(CONFIG_VC1_MUXER)                 += rawenc.o
 OBJS-$(CONFIG_VC1T_DEMUXER)              += vc1test.o
