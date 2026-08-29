@@ -1315,17 +1315,20 @@ static av_cold int TX_NAME(ff_tx_fft_init_rader)(AVTXContext *s,
     if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, len2, 1, scale)))
         return ret;
 
-    if (!(s->tmp = av_calloc(len*2, sizeof(*map))))
+    if (!(s->map = av_calloc(len, 2*sizeof(*s->map))))
         return AVERROR(ENOMEM);
 
-    if (!(s->exp = av_calloc(plen*3, sizeof(*s->exp))))
+    if (!(s->tmp = av_calloc(plen, 2*sizeof(*s->tmp))))
         return AVERROR(ENOMEM);
 
-    map = (int *)s->tmp;
+    if (!(s->exp = av_calloc(plen, sizeof(*s->exp))))
+        return AVERROR(ENOMEM);
+
+    map = s->map;
     imap = map+len;
     gen = generator(len);
     igen = powmod(gen, len-2, len);
-    exp = s->exp + plen;
+    exp = s->tmp;
 
     for (int i = 0, gp = 1, igp = 1; i < len2; i++) {
         long double factor;
@@ -1687,9 +1690,9 @@ static void TX_NAME(ff_tx_fft_rader)(AVTXContext *s, void *_dst, void *_src,
     const TXComplex *y = s->exp;
     TXComplex *src = _src;
     TXComplex *dst = _dst;
-    const int *map = (const int *)s->tmp;
+    const int *map = s->map;
     const int *imap = map+n;
-    TXComplex *w = s->exp+pn;
+    TXComplex *w = s->tmp;
     TXComplex *ww = w+pn;
     TXComplex src0 = src[0];
 
