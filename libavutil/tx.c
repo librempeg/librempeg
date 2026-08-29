@@ -47,7 +47,7 @@ int ff_tx_gen_pfa_input_map(AVTXContext *s, FFTXCodeletOptions *opts,
 {
     const int sl = d1*d2;
 
-    s->map = av_malloc(s->len*sizeof(*s->map));
+    s->map = av_calloc(s->len, sizeof(*s->map));
     if (!s->map)
         return AVERROR(ENOMEM);
 
@@ -87,13 +87,13 @@ int ff_tx_gen_compound_mapping(AVTXContext *s, FFTXCodeletOptions *opts,
     m_inv = mulinv(m, n);
     n_inv = mulinv(n, m);
 
-    if (!(s->map = av_malloc(2*len*sizeof(*s->map))))
+    if (!(s->map = av_calloc(2*len, sizeof(*s->map))))
         return AVERROR(ENOMEM);
 
     in_map  = s->map;
     out_map = s->map + len;
 
-    if (!(tmp_map = av_malloc(n*sizeof(*tmp_map))))
+    if (!(tmp_map = av_calloc(n, sizeof(*tmp_map))))
         return AVERROR(ENOMEM);
 
     for (int i = 0; i < n; i++)
@@ -160,7 +160,7 @@ int ff_tx_gen_ptwo_revtab(AVTXContext *s, FFTXCodeletOptions *opts)
 {
     int len = s->len;
 
-    if (!(s->map = av_malloc(len*sizeof(*s->map))))
+    if (!(s->map = av_calloc(len, sizeof(*s->map))))
         return AVERROR(ENOMEM);
 
     if (opts && opts->map_dir == FF_TX_MAP_SCATTER) {
@@ -183,7 +183,7 @@ int ff_tx_gen_inplace_map(AVTXContext *s, int len)
     if (!s->sub || !s->sub->map)
         return AVERROR(EINVAL);
 
-    if (!(s->map = av_mallocz(len*sizeof(*s->map))))
+    if (!(s->map = av_calloc(len, sizeof(*s->map))))
         return AVERROR(ENOMEM);
 
     src_map = s->sub->map;
@@ -269,7 +269,7 @@ int ff_tx_gen_split_radix_parity_revtab(AVTXContext *s, int len, int inv,
     if (len < basis)
         return AVERROR(EINVAL);
 
-    if (!(s->map = av_mallocz(len*sizeof(*s->map))))
+    if (!(s->map = av_calloc(len, sizeof(*s->map))))
         return AVERROR(ENOMEM);
 
     av_assert0(!dual_stride || !(dual_stride & (dual_stride - 1)));
@@ -548,7 +548,7 @@ sort:
 
 int ff_tx_gen_default_map(AVTXContext *s, FFTXCodeletOptions *opts)
 {
-    s->map = av_malloc(s->len*sizeof(*s->map));
+    s->map = av_calloc(s->len, sizeof(*s->map));
     if (!s->map)
         return AVERROR(ENOMEM);
 
@@ -854,7 +854,7 @@ av_cold int ff_tx_init_subtx(AVTXContext *s, enum AVTXType type,
 #endif
 
     if (!s->sub) {
-        s->sub = sub = av_mallocz(TX_MAX_SUB*sizeof(*sub));
+        s->sub = sub = av_calloc(TX_MAX_SUB, sizeof(*sub));
         if (!sub) {
             ret = AVERROR(ENOMEM);
             goto end;
@@ -884,7 +884,7 @@ av_cold int ff_tx_init_subtx(AVTXContext *s, enum AVTXType type,
                 sctx->map_dir == FF_TX_MAP_NONE) {
                 /* If a specific map direction was requested, and it doesn't
                  * exist, create one.*/
-                sctx->map = av_malloc(len*sizeof(*sctx->map));
+                sctx->map = av_calloc(len, sizeof(*sctx->map));
                 if (!sctx->map) {
                     ret = AVERROR(ENOMEM);
                     goto end;
@@ -893,7 +893,7 @@ av_cold int ff_tx_init_subtx(AVTXContext *s, enum AVTXType type,
                 for (int i = 0; i < len; i++)
                     sctx->map[i] = i;
             } else if (opts && (opts->map_dir != sctx->map_dir)) {
-                int *tmp = av_malloc(len*sizeof(*sctx->map));
+                int *tmp = av_calloc(len, sizeof(*sctx->map));
                 if (!tmp) {
                     ret = AVERROR(ENOMEM);
                     goto end;
