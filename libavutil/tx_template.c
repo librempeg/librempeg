@@ -1458,7 +1458,10 @@ static av_cold int TX_NAME(ff_tx_fft_init_bluestein)(AVTXContext *s,
     if ((ret = ff_tx_init_subtx(s, TX_TYPE(FFT), flags, NULL, len2, 1, scale)))
         return ret;
 
-    if (!(s->exp = av_calloc(len2*4, sizeof(*s->exp))))
+    if (!(s->tmp = av_calloc(len2, 2*sizeof(*s->tmp))))
+        return AVERROR(ENOMEM);
+
+    if (!(s->exp = av_calloc(len2, 2*sizeof(*s->exp))))
         return AVERROR(ENOMEM);
 
     s->exp[0] = (TXComplex){
@@ -1470,13 +1473,13 @@ static av_cold int TX_NAME(ff_tx_fft_init_bluestein)(AVTXContext *s,
         s->exp[len2-i] = s->exp[i];
     }
 
-    w = s->exp + len2 * 2;
+    w = s->tmp;
     for (int i = 0; i < len2; i++) {
         w[i].re =  s->exp[i].re;
         w[i].im = -s->exp[i].im;
     }
 
-    s->fn[0](&s->sub[0], s->exp + len2, w, sizeof(TXComplex));
+    s->fn[0](&s->sub[0], s->exp + len2, s->tmp, sizeof(TXComplex));
 
     return 0;
 }
@@ -1725,7 +1728,7 @@ static void TX_NAME(ff_tx_fft_bluestein)(AVTXContext *s, void *_dst, void *_src,
     TXComplex *dst = _dst;
     const int m = s->sub[0].len;
     const TXComplex *y = s->exp + m;
-    TXComplex *w = s->exp + 2*m;
+    TXComplex *w = s->tmp;
     TXComplex *ww = w + m;
     const TXComplex *exp = s->exp;
     const TXSample scale = RESCALE(1.0/m);
