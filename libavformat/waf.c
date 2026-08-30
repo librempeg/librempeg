@@ -23,6 +23,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -74,24 +75,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVCodecParameters *par = s->streams[0]->codecpar;
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    if (avio_feof(pb))
-        return AVERROR_EOF;
-
-    ret = av_get_packet(pb, pkt, par->block_align);
-    if (ret < 0)
-        return ret;
-
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_waf_demuxer = {
     .p.name         = "waf",
     .p.long_name    = NULL_IF_CONFIG_SMALL("KID's WAF"),
@@ -99,5 +82,5 @@ const FFInputFormat ff_waf_demuxer = {
     .p.extensions   = "waf",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
