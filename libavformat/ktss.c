@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 typedef struct KTSSDemuxContext {
     int64_t data_end;
@@ -206,7 +207,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
         ret = av_get_packet(pb, pkt, size);
         pkt->pos = pos;
     } else {
-        ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
+        ret = ff_pcm_read_packet(s, pkt);
     }
     pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
     pkt->stream_index = 0;
