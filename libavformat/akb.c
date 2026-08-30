@@ -113,6 +113,9 @@ static int read_header(AVFormatContext *s)
     case 5:
         codec = AV_CODEC_ID_VORBIS;
         break;
+    case 6:
+        codec = AV_CODEC_ID_AAC;
+        break;
     default:
         avpriv_request_sample(s, "codec %02x", codec);
         return AVERROR_PATCHWELCOME;
@@ -136,7 +139,8 @@ static int read_header(AVFormatContext *s)
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
-    if (codec == AV_CODEC_ID_VORBIS) {
+    if (codec == AV_CODEC_ID_VORBIS ||
+        codec == AV_CODEC_ID_AAC) {
         AKBStream *ast = st->priv_data;
         int ret;
 
