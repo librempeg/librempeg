@@ -233,6 +233,7 @@ extern const FFOutputFormat ff_ffmetadata_muxer;
 extern const FFOutputFormat ff_fifo_muxer;
 extern const FFInputFormat  ff_filmstrip_demuxer;
 extern const FFOutputFormat ff_filmstrip_muxer;
+extern const FFInputFormat  ff_filp_demuxer;
 extern const FFInputFormat  ff_fits_demuxer;
 extern const FFOutputFormat ff_fits_muxer;
 extern const FFInputFormat  ff_flac_demuxer;
