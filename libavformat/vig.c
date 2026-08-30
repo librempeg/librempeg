@@ -25,7 +25,7 @@
 #include "internal.h"
 #include "pcm.h"
 
-#define PSB2SMP(s, c) (s / c / 0x10 * 28)
+#define PSB2SMP(s, c) (s / c / 0x10 * 28LL)
 
 static int read_probe(const AVProbeData *p)
 {
