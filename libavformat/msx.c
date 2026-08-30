@@ -72,14 +72,18 @@ static int sort_streams(const void *a, const void *b)
 
 static int msx_read_header(AVFormatContext *s)
 {
-    int ret;
-    int64_t pos;
-    uint32_t version, nb_streams, base_offset, size;
+    uint32_t version, base_offset, size;
     int32_t relative_offset;
     AVIOContext *pb = s->pb;
+    int ret, nb_streams;
+    int64_t pos;
 
     version = avio_rl32(pb);
-    nb_streams = avio_rl32(pb) - 1;
+    nb_streams = avio_rl32(pb);
+    nb_streams--;
+    if (nb_streams <= 0)
+        return AVERROR_INVALIDDATA;
+
     if (version == 1)
         avio_skip(pb, 0x10);
     else if (version == 2) {
@@ -143,6 +147,7 @@ static int msx_read_header(AVFormatContext *s)
 
     MSXStream *first_mst = s->streams[0]->priv_data;
     avio_seek(pb, first_mst->start_offset, SEEK_SET);
+
     return 0;
 }
 
