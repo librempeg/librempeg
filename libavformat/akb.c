@@ -56,8 +56,15 @@ static int read_data(void *opaque, uint8_t *buf, int buf_size)
     AKBStream *ast = opaque;
     AVFormatContext *s = ast->parent;
     AVIOContext *pb = s->pb;
+    int64_t pos = avio_tell(pb);
+    int size;
 
-    return avio_read(pb, buf, buf_size);
+    if (pos + buf_size <= ast->start_offset)
+        return AVERROR(EIO);
+
+    size = FFMIN3(pos + buf_size - ast->start_offset, avio_size(pb) - pos, buf_size);
+
+    return avio_read(pb, buf, size);
 }
 
 static int64_t seek_data(void *opaque, int64_t offset, int whence)
@@ -65,8 +72,33 @@ static int64_t seek_data(void *opaque, int64_t offset, int whence)
     AKBStream *ast = opaque;
     AVFormatContext *s = ast->parent;
     AVIOContext *pb = s->pb;
+    int64_t ret;
 
-    return avio_seek(pb, offset + ast->start_offset, whence);
+    if (whence == SEEK_CUR) {
+        int64_t pos = avio_tell(pb);
+        int64_t new_offset;
+
+        new_offset = av_clip64(pos + offset, ast->start_offset, avio_size(pb) - 1);
+        ret = avio_seek(pb, new_offset, whence);
+        if (ret < 0)
+            return ret;
+
+        return ret - ast->start_offset;
+    }
+
+    if (whence & AVSEEK_SIZE) {
+        ret = avio_size(pb);
+        if (ret < 0)
+            return ret;
+
+        return ret - ast->start_offset;
+    }
+
+    ret = avio_seek(pb, offset + ast->start_offset, whence);
+    if (ret < 0)
+        return ret;
+
+    return ret - ast->start_offset;
 }
 
 static int read_header(AVFormatContext *s)
@@ -193,9 +225,9 @@ static int read_header(AVFormatContext *s)
 
         ffstream(st)->request_probe = 0;
         ffstream(st)->need_parsing = ffstream(ast->xctx->streams[0])->need_parsing;
+    } else {
+        avio_seek(pb, start, SEEK_SET);
     }
-
-    avio_seek(pb, start, SEEK_SET);
 
     return 0;
 }
