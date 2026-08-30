@@ -31,9 +31,20 @@ typedef struct KTSSDemuxContext {
 
 static int read_probe(const AVProbeData *p)
 {
-    if (memcmp(p->buf, "KTSS", 4) || AV_RL32(p->buf + 4) <= 0x40 || p->buf_size <= 0x40 ||
-        AV_RL64(p->buf + 8) != 0 || AV_RL64(p->buf + 16) != 0 || AV_RL64(p->buf + 24) != 0)
+    if (AV_RB32(p->buf) != MKBETAG('K','T','S','S'))
+       return 0;
+
+    if (p->buf_size <= 0x40)
         return 0;
+    if (AV_RL32(p->buf + 4) <= 0x40)
+        return 0;
+    if (AV_RL64(p->buf + 8) != 0 ||
+        AV_RL64(p->buf + 16) != 0 ||
+        AV_RL64(p->buf + 24) != 0)
+        return 0;
+    if ((int)AV_RL32(p->buf + 0x2c) <= 0)
+        return 0;
+
     return AVPROBE_SCORE_MAX;
 }
 
