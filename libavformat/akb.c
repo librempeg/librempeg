@@ -100,6 +100,7 @@ static int read_header(AVFormatContext *s)
     switch (codec) {
     case 1:
         codec = AV_CODEC_ID_PCM_S16LE;
+        align = 2;
         break;
     case 2:
         codec = AV_CODEC_ID_ADPCM_MS;
