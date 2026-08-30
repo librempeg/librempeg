@@ -178,6 +178,8 @@ static int g1l_read_header(AVFormatContext *s)
         gst->parent = s;
 
         avio_seek(pb, gst->start_offset, SEEK_SET);
+        if (avio_feof(pb))
+            return AVERROR_INVALIDDATA;
 
         chunk = avio_rb32(pb);
         if (chunk == MKBETAG('A','T','S','L')) {
