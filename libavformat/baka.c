@@ -144,13 +144,17 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     BakaDemuxContext *bc = s->priv_data;
     AVStream *st = s->streams[0];
+    AVIOContext *pb = s->pb;
     int block_align = st->codecpar->block_align;
-    int64_t pos = avio_tell(s->pb);
 
+    if (avio_feof(pb))
+        return AVERROR_EOF;
+
+    int64_t pos = avio_tell(pb);
     if (pos >= bc->data_end)
         return AVERROR_EOF;
 
-    return av_get_packet(s->pb, pkt, FFMIN(block_align, bc->data_end - pos));
+    return av_get_packet(pb, pkt, FFMIN(block_align, bc->data_end - pos));
 }
 
 const FFInputFormat ff_baka_demuxer = {
