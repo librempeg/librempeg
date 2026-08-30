@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "riff.h"
+#include "pcm.h"
 
 typedef struct SD9Stream {
     int64_t start_offset;
@@ -216,7 +217,8 @@ static int sd9_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         pos = avio_tell(pb);
         if (pos >= sst->start_offset && pos < sst->stop_offset) {
-            block_size = FFMIN(sst->stop_offset - pos, st->codecpar->block_align);
+            block_size = ff_pcm_default_packet_size(st->codecpar);
+            block_size = FFMIN(sst->stop_offset - pos, block_size);
 
             ret = av_get_packet(pb, pkt, block_size);
             pkt->pos = pos;
