@@ -466,7 +466,7 @@ static int raki_read_nx_opus(AVFormatContext *s, AVStream *st)
     av_channel_layout_default(&par->ch_layout, channels);
     avpriv_set_pts_info(st, 64, 1, 48000);
     ffstream(st)->start_skip_samples = pre_skip;
-    ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
+    ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
 
     if (raki->adin.present) {
         unsigned samples;
