@@ -29,7 +29,7 @@ typedef struct KTSSDemuxContext {
     int64_t data_end;
 } KTSSDemuxContext;
 
-static int ktss_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "KTSS", 4) || AV_RL32(p->buf + 4) <= 0x40 || p->buf_size <= 0x40 ||
         AV_RL64(p->buf + 8) != 0 || AV_RL64(p->buf + 16) != 0 || AV_RL64(p->buf + 24) != 0)
@@ -37,7 +37,7 @@ static int ktss_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int ktss_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     uint32_t start_offset, loop_start, loop_length, coeff_skip, coeff_gap, frames;
     KTSSDemuxContext *kc = s->priv_data;
@@ -174,7 +174,7 @@ static int ktss_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int ktss_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *pb = s->pb;
     int ret;
@@ -209,7 +209,7 @@ const FFInputFormat ff_ktss_demuxer = {
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "ktss,kns,kno",
     .priv_data_size = sizeof(KTSSDemuxContext),
-    .read_probe     = ktss_probe,
-    .read_header    = ktss_read_header,
-    .read_packet    = ktss_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
