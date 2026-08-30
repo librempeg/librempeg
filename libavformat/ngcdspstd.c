@@ -44,7 +44,8 @@ do {                                            \
     }                                           \
     score++;                                    \
                                                 \
-    if (((int)R32(p->buf+8)) <= 0) {            \
+    if (((int)R32(p->buf+8)) <= 0 ||            \
+        R32(p->buf+8) > 192000) {               \
         score = 0;                              \
         break;                                  \
     }                                           \
