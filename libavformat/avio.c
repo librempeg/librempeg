@@ -34,6 +34,7 @@
 #include "url.h"
 
 #define IO_BUFFER_SIZE 32768
+#define NETWORK_IO_BUFFER_SIZE 262144
 
 /** @name Logging context. */
 /*@{*/
@@ -441,6 +442,8 @@ int ffio_fdopen(AVIOContext **sp, URLContext *h)
     max_packet_size = h->max_packet_size;
     if (max_packet_size) {
         buffer_size = max_packet_size; /* no need to bufferize more than one packet */
+    } else if (h->uses_network && !(h->flags & AVIO_FLAG_WRITE)) {
+        buffer_size = NETWORK_IO_BUFFER_SIZE;
     } else {
         buffer_size = IO_BUFFER_SIZE;
     }
