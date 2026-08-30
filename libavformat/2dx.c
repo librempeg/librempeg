@@ -74,6 +74,9 @@ static int twodx9_read_stream(AVFormatContext *s, AVStream **stp, int64_t start_
     int ret;
 
     avio_seek(pb, start_offset, SEEK_SET);
+    if (avio_feof(pb))
+        return AVERROR_INVALIDDATA;
+
     if (avio_rl32(pb) != MKTAG('2','D','X','9'))
         return AVERROR_INVALIDDATA;
 
