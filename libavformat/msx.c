@@ -99,6 +99,9 @@ static int msx_read_header(AVFormatContext *s)
     }
 
     for (int i = 0; i < nb_streams; i++) {
+        if (avio_feof(pb))
+            return AVERROR_INVALIDDATA;
+
         AVStream *st = avformat_new_stream(s, NULL);
         if (!st)
             return AVERROR(ENOMEM);
