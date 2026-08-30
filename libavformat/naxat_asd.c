@@ -75,6 +75,8 @@ static int naxat_asd_probe(const AVProbeData *p)
     if (AV_RL16(p->buf + 8) != 1)
         score -= 40;
     // channels
+    if (AV_RL16(p->buf + 10) == 0)
+        return 0;
     if (AV_RL16(p->buf + 10) <= 2)
         score += 10;
     // sample rate;
@@ -134,6 +136,8 @@ static int naxat_asd_bnk_probe(const AVProbeData *p)
     if (AV_RL16(p->buf) != 0x1001)
         return 0;
     // channels
+    if (AV_RL16(p->buf + 2) == 0)
+        return 0;
     if (AV_RL16(p->buf + 2) <= 2)
         score += 10;
     // sample rate
