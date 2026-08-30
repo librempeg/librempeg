@@ -194,7 +194,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     if (s->streams[0]->codecpar->codec_id == AV_CODEC_ID_OPUS) {
         KTSSDemuxContext *kc = s->priv_data;
         int64_t pos = avio_tell(pb);
-        uint32_t size;
+        int size;
 
         if (avio_feof(pb) || pos >= kc->data_end - 8)
             return AVERROR_EOF;
