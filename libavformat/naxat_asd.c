@@ -246,7 +246,8 @@ static int naxat_asd_bnk_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         pos = avio_tell(pb);
         if (pos >= ast->start_offset && pos < ast->end_offset) {
-            block_size = FFMIN(ast->end_offset - pos, st->codecpar->block_align);
+            block_size = ff_pcm_default_packet_size(st->codecpar);
+            block_size = FFMIN(ast->end_offset - pos, block_size);
 
             ret = av_get_packet(pb, pkt, block_size);
             pkt->pos = pos;
