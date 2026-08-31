@@ -120,6 +120,7 @@ OBJS-$(CONFIG_AIFF_DEMUXER)              += aiffdec.o aiff.o pcm.o \
 OBJS-$(CONFIG_AIFF_MUXER)                += aiffenc.o aiff.o id3v2enc.o
 OBJS-$(CONFIG_AIX_DEMUXER)               += aixdec.o
 OBJS-$(CONFIG_AKB_DEMUXER)               += akb.o
+OBJS-$(CONFIG_AKB2_DEMUXER)              += akb2.o pcm.o
 OBJS-$(CONFIG_ALP_DEMUXER)               += alp.o
 OBJS-$(CONFIG_ALP_MUXER)                 += alp.o rawenc.o
 OBJS-$(CONFIG_AMR_DEMUXER)               += amr.o rawdec.o
