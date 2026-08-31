@@ -72,8 +72,18 @@ static int read_data(void *opaque, uint8_t *buf, int buf_size)
     AWBStream *ast = opaque;
     AVFormatContext *s = ast->parent;
     AVIOContext *pb = s->pb;
+    int64_t pos = avio_tell(pb);
+    int size;
 
-    return avio_read(pb, buf, buf_size);
+    if (pos + buf_size <= ast->start_offset)
+        return AVERROR(EIO);
+
+    if (pos >= ast->stop_offset)
+        return AVERROR_EOF;
+
+    size = FFMIN3(pos + buf_size - ast->start_offset, ast->stop_offset - pos, buf_size);
+
+    return avio_read(pb, buf, size);
 }
 
 static int64_t seek_data(void *opaque, int64_t offset, int whence)
@@ -81,8 +91,29 @@ static int64_t seek_data(void *opaque, int64_t offset, int whence)
     AWBStream *ast = opaque;
     AVFormatContext *s = ast->parent;
     AVIOContext *pb = s->pb;
+    int64_t new_offset;
+    int64_t ret;
 
-    return avio_seek(pb, offset + ast->start_offset, whence);
+    if (whence == SEEK_CUR) {
+        int64_t pos = avio_tell(pb);
+
+        new_offset = av_clip64(pos + offset, ast->start_offset, ast->stop_offset-1);
+        ret = avio_seek(pb, new_offset, whence);
+        if (ret < 0)
+            return ret;
+        return ret - ast->start_offset;
+    }
+
+    if (whence & AVSEEK_SIZE)
+        return ast->stop_offset - ast->start_offset;
+
+    new_offset = av_clip64(offset + ast->start_offset, ast->start_offset, ast->stop_offset-1);
+
+    ret = avio_seek(pb, new_offset, whence);
+    if (ret < 0)
+        return ret;
+
+    return ret - ast->start_offset;
 }
 
 static int read_header(AVFormatContext *s)
@@ -208,6 +239,7 @@ static int read_header(AVFormatContext *s)
         ffstream(st)->request_probe = 0;
         ffstream(st)->need_parsing = ffstream(ast->xctx->streams[0])->need_parsing;
 
+        ast->data_offset = avio_tell(pb);
         ast->data_offset = FFMIN(ast->data_offset, ast->stop_offset-1);
     }
 
@@ -264,12 +296,17 @@ static int read_seek(AVFormatContext *s, int stream_index,
                      int64_t ts, int flags)
 {
     AWBDemuxContext *awb = s->priv_data;
+    AVIOContext *pb = s->pb;
+    int64_t pos = avio_tell(pb);
     AWBStream *ast;
     AVStream *st;
 
     awb->current_stream = av_clip(stream_index, 0, s->nb_streams-1);
     st = s->streams[awb->current_stream];
     ast = st->priv_data;
+
+    pos = av_clip64(pos, ast->start_offset, ast->stop_offset-1);
+    avio_seek(pb, pos, SEEK_SET);
 
     return av_seek_frame(ast->xctx, 0, ts, flags);
 }
