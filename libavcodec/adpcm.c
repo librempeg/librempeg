@@ -2581,7 +2581,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         ) /* End of CASE */
     CASE(ADPCM_IMA_REF,
-        const int blocks = (avctx->block_align > 0) ? avpkt->size / avctx->block_align : 1;
+        const int blocks = (avpkt->size > avctx->block_align) ? avpkt->size / avctx->block_align : 1;
         const int block_samples = (avctx->block_align > 0) ? nb_samples / blocks : nb_samples;
 
         for (int block = 0; block < blocks; block++) {
@@ -3087,7 +3087,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         bytestream2_skip(&gb, channels == 2 ? 2 : 3); // Skip terminating NULs
         ) /* End of CASE */
     CASE(ADPCM_EA_MAXIS_XA,
-        const int blocks = (avctx->block_align > 0) ? avpkt->size / avctx->block_align : 1;
+        const int blocks = (avpkt->size > avctx->block_align) ? avpkt->size / avctx->block_align : 1;
         const int block_samples = (avctx->block_align > 0) ? nb_samples / blocks : nb_samples;
 
         for (int b = 0; b < blocks; b++) {
