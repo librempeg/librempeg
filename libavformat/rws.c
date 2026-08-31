@@ -248,7 +248,8 @@ static int read_header(AVFormatContext *s)
             st = s->streams[sti];
             rst = st->priv_data;
             st->start_time = 0;
-            st->duration = duration;
+            if (duration > 0)
+                st->duration = duration;
             st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
             st->codecpar->sample_rate = sample_rate;
             st->codecpar->ch_layout.nb_channels = channels;
@@ -268,6 +269,14 @@ static int read_header(AVFormatContext *s)
                 avio_read(pb, st->codecpar->extradata, 32);
                 for (int ch = 1; ch < channels; ch++)
                     memcpy(st->codecpar->extradata + ch*32, st->codecpar->extradata, 32);
+                break;
+            case 0xD9EA9798:
+                st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PSX;
+                st->duration = (rst->stop_offset - rst->start_offset) / (16 * channels) * 28;
+                break;
+            case 0xD01BD217:
+                st->codecpar->codec_id = big_endian ? AV_CODEC_ID_PCM_S16BE : AV_CODEC_ID_PCM_S16LE;
+                st->duration = (rst->stop_offset - rst->start_offset) / (2 * channels);
                 break;
             default:
                 avpriv_request_sample(s, "codec %X", codec);
