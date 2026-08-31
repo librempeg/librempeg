@@ -278,6 +278,11 @@ static int read_header(AVFormatContext *s)
                 st->codecpar->codec_id = big_endian ? AV_CODEC_ID_PCM_S16BE : AV_CODEC_ID_PCM_S16LE;
                 st->duration = (rst->stop_offset - rst->start_offset) / (2 * channels);
                 break;
+            case 0xEF386593:
+            case 0x632FA22B:
+                st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_XBOX;
+                st->duration = (rst->stop_offset - rst->start_offset) / (36 * channels) * 64;
+                break;
             default:
                 avpriv_request_sample(s, "codec %X", codec);
                 return AVERROR_PATCHWELCOME;
