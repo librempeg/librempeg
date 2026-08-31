@@ -23,6 +23,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -84,16 +85,18 @@ static int read_header(AVFormatContext *s)
     switch (codec) {
     case 0:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S8;
-        st->codecpar->block_align = 1024 * st->codecpar->ch_layout.nb_channels;
+        st->codecpar->block_align = nb_channels;
         break;
     case 1:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
-        st->codecpar->block_align = 512 * st->codecpar->ch_layout.nb_channels;
+        st->codecpar->block_align = 2 * nb_channels;
         break;
     case 2:
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_NDS;
         avio_skip(pb, 0x30 - avio_tell(pb));
-        st->codecpar->block_align = avio_rl32(pb) * st->codecpar->ch_layout.nb_channels;
+        st->codecpar->block_align = avio_rl32(pb) * nb_channels;
+        if (st->codecpar->block_align <= 0)
+            return AVERROR_INVALIDDATA;
         break;
     default:
         avpriv_request_sample(s, "codec 0x%X", codec);
@@ -107,18 +110,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_strm_demuxer = {
     .p.name         = "strm",
     .p.long_name    = NULL_IF_CONFIG_SMALL("STRM (Nintendo DS Stream)"),
@@ -126,5 +117,5 @@ const FFInputFormat ff_strm_demuxer = {
     .p.extensions   = "strm",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
