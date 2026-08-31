@@ -269,6 +269,9 @@ static int read_header(AVFormatContext *s)
                 for (int ch = 1; ch < channels; ch++)
                     memcpy(st->codecpar->extradata + ch*32, st->codecpar->extradata, 32);
                 break;
+            default:
+                avpriv_request_sample(s, "codec %X", codec);
+                return AVERROR_PATCHWELCOME;
             }
 
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
