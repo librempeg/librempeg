@@ -29,6 +29,7 @@
 #include "avformat.h"
 #include "avio_internal.h"
 #include "demux.h"
+#include "pcm.h"
 
 #define SABF 1
 #define MABF 2
@@ -259,7 +260,7 @@ static int read_header(AVFormatContext *s)
         switch (codec) {
         case 0x01:
             codec = AV_CODEC_ID_PCM_S16LE;
-            block_align = 512 * nb_channels;
+            block_align = 2 * nb_channels;
             break;
         case 0x02:
             codec = AV_CODEC_ID_ADPCM_MS;
@@ -444,7 +445,8 @@ redo:
         }
     } else {
         const int64_t pos = avio_tell(pb);
-        const int size = FFMIN(st->codecpar->block_align, sst->stop_offset - pos);
+        int size = ff_pcm_default_packet_size(st->codecpar);
+        size = FFMIN(size, sst->stop_offset - pos);
 
         ret = av_get_packet(pb, pkt, size);
         pkt->pos = pos;
