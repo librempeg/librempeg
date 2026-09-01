@@ -35,7 +35,7 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int rate, channels = 0, codec = AV_CODEC_ID_NONE, value = 0, align = 0, profile = -1;
+    int rate, channels = 0, codec = AV_CODEC_ID_NONE, value = 0, align = 0;
     int64_t start, data_size, offset = 0, bit_rate = 0, full_size;
     AVIOContext *pb = s->pb;
     AVStream *st;
@@ -61,8 +61,7 @@ static int read_header(AVFormatContext *s)
                 codec = AV_CODEC_ID_PCM_S16LE;
                 break;
             case 2:
-                codec = AV_CODEC_ID_ADPCM_IMA_WS;
-                profile = 3;
+                codec = AV_CODEC_ID_ADPCM_IMA;
                 break;
             default:
                 codec = AV_CODEC_ID_NONE;
@@ -110,8 +109,6 @@ static int read_header(AVFormatContext *s)
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = codec;
     st->codecpar->ch_layout.nb_channels = channels;
-    if (profile >= 0)
-        st->codecpar->profile = profile;
     if (bit_rate > 0)
         st->codecpar->bit_rate = bit_rate;
     st->codecpar->sample_rate = rate;
