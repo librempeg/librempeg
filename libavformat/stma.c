@@ -76,7 +76,7 @@ static int read_header(AVFormatContext *s)
         break;
     case 16:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
-        st->codecpar->block_align = 1024 * nb_channels;
+        st->codecpar->block_align = 2 * nb_channels;
         break;
     default:
         avpriv_request_sample(s, "bps 0x%X", bps);
