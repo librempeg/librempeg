@@ -1940,9 +1940,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         nb_samples = AV_RL16(avctx->extradata);
         break;
     case AV_CODEC_ID_ADPCM_FMOD:
-        if (buf_size / ch <= 0xc)
+        if (block_align / ch <= 0xc)
             return AVERROR_INVALIDDATA;
-        nb_samples = (buf_size / ch - 0xc) * 2;
+        nb_samples = (buf_size / block_align) * (block_align / ch - 0xc) * 2;
         break;
     }
 
