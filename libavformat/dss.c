@@ -52,8 +52,9 @@ typedef struct DSSDemuxContext {
     unsigned int audio_codec;
     int counter;
     int swap;
+    int64_t block_pos;      /* offset of the current audio block header */
+    int frames_left;        /* frames still to come from that block */
     int dss_sp_swap_byte;
-    int resync_pending;
 
     int packet_size;
     int dss_header_size;
@@ -147,7 +148,7 @@ static int dss_read_header(AVFormatContext *s)
 
     if (ctx->audio_codec == DSS_ACODEC_DSS_SP) {
         st->codecpar->codec_id    = AV_CODEC_ID_DSS_SP;
-        st->codecpar->sample_rate = 11025;
+        st->codecpar->sample_rate = 11000;
         s->bit_rate = 8 * (DSS_FRAME_SIZE - 1) * st->codecpar->sample_rate
                         * 512 / (506 * 264);
     } else if (ctx->audio_codec == DSS_ACODEC_G723_1) {
@@ -171,8 +172,10 @@ static int dss_read_header(AVFormatContext *s)
         return (int)ret64;
 
     ctx->counter = 0;
-    ctx->swap    = 0;
-    ctx->resync_pending = 0;
+    ctx->swap        = 0;
+    ctx->frames_left = 0;
+    /* dss_sp_next_block steps forward first, so start one block short. */
+    ctx->block_pos   = ctx->dss_header_size - DSS_BLOCK_SIZE;
 
     return 0;
 }
@@ -181,58 +184,78 @@ static void dss_skip_audio_header(AVFormatContext *s, AVPacket *pkt)
 {
     DSSDemuxContext *ctx = s->priv_data;
     AVIOContext *pb = s->pb;
-    uint8_t header[DSS_AUDIO_BLOCK_HEADER_SIZE];
-    int offset, read_size;
 
-    /* Second half of the VOX-pause handling (see below): the frame that
-     * straddled into the empty block has now been completed from its
-     * leading bytes. Discard the rest of that block (padding) by
-     * aligning to the next 512-byte block boundary, then re-sync the
-     * frame grid at the following block's anchor 2*byte1 (+2 when
-     * byte-swapped), restarting the byte-swap parity from that block. */
-    if (ctx->audio_codec == DSS_ACODEC_DSS_SP && ctx->resync_pending) {
-        int64_t rel = avio_tell(pb) - ctx->dss_header_size;
-        int pad = (DSS_BLOCK_SIZE - (int)(rel % DSS_BLOCK_SIZE)) % DSS_BLOCK_SIZE;
-
-        ctx->resync_pending = 0;
-        avio_skip(pb, pad);
-        if (avio_read(pb, header, DSS_AUDIO_BLOCK_HEADER_SIZE) <
-            DSS_AUDIO_BLOCK_HEADER_SIZE) {
-            ctx->counter = 0;
-            return;
-        }
-        ctx->swap = !!(header[0] & 0x80);
-        offset    = 2 * header[1] + 2 * ctx->swap;
-        if (offset < DSS_AUDIO_BLOCK_HEADER_SIZE)
-            offset = DSS_AUDIO_BLOCK_HEADER_SIZE;
-        if (offset > DSS_BLOCK_SIZE)
-            offset = DSS_BLOCK_SIZE;
-        avio_skip(pb, offset - DSS_AUDIO_BLOCK_HEADER_SIZE);
-        ctx->counter          = DSS_BLOCK_SIZE - offset;
-        ctx->dss_sp_swap_byte = -1;
-        return;
-    }
-
-    if (avio_read(pb, header, DSS_AUDIO_BLOCK_HEADER_SIZE) <
-        DSS_AUDIO_BLOCK_HEADER_SIZE) {
-        ctx->counter = 0;
-        return;
-    }
-
-    /* Real Olympus dictation is voice-activated: a pause emits an empty
-     * block (frame_count == 0) that carries no fresh frames. Its leading
-     * bytes complete the frame that straddles into it (read normally by
-     * the caller); make the next call consume nothing more from this
-     * block, so the trailing padding is skipped and the grid re-syncs.
-     * On gap-free audio no block is empty and this never triggers. */
-    if (ctx->audio_codec == DSS_ACODEC_DSS_SP && header[2] == 0) {
-        read_size           = ctx->swap ? DSS_FRAME_SIZE - 2 : DSS_FRAME_SIZE;
-        ctx->counter        = read_size;
-        ctx->resync_pending = 1;
-        return;
-    }
-
+    avio_skip(pb, DSS_AUDIO_BLOCK_HEADER_SIZE);
     ctx->counter += DSS_BLOCK_SIZE - DSS_AUDIO_BLOCK_HEADER_SIZE;
+}
+
+/* Read `size` bytes of frame payload, stepping over any block header met on
+ * the way. Block payloads are contiguous as far as the frames are concerned,
+ * and a frame is short enough to straddle at most one boundary. */
+static int dss_sp_read_payload(AVFormatContext *s, uint8_t *buf, int size)
+{
+    DSSDemuxContext *ctx = s->priv_data;
+    AVIOContext *pb = s->pb;
+    int ret;
+
+    while (size > 0) {
+        int64_t off = (avio_tell(pb) - ctx->dss_header_size) % DSS_BLOCK_SIZE;
+        int chunk;
+
+        if (off < DSS_AUDIO_BLOCK_HEADER_SIZE) {
+            if (avio_skip(pb, DSS_AUDIO_BLOCK_HEADER_SIZE - off) < 0)
+                return AVERROR_EOF;
+            continue;
+        }
+        chunk = FFMIN(size, (int)(DSS_BLOCK_SIZE - off));
+        ret = ffio_read_size(pb, buf, chunk);
+        if (ret < 0)
+            return ret;
+        buf  += chunk;
+        size -= chunk;
+    }
+    return 0;
+}
+
+/* Move to the next audio block and take its framing from its header.
+ *
+ * Each block states the length of the frame fragment carried over from the
+ * previous block, the byte-swap parity of its first whole frame, and how many
+ * frames it holds. Deriving the framing by running on from the previous frame
+ * instead gives the same answer for as long as nothing disturbs the recording,
+ * which is why most files decode; but a paused or edited recording restates
+ * them, and a running walk then reads every remaining frame a byte out of
+ * phase. Believing the block keeps the walk in step, and costs nothing when
+ * the two agree. */
+static int dss_sp_next_block(AVFormatContext *s)
+{
+    DSSDemuxContext *ctx = s->priv_data;
+    AVIOContext *pb = s->pb;
+    uint8_t header[DSS_AUDIO_BLOCK_HEADER_SIZE];
+    int cont, ret;
+
+    for (;;) {
+        ctx->block_pos += DSS_BLOCK_SIZE;
+        if (avio_seek(pb, ctx->block_pos, SEEK_SET) < 0)
+            return AVERROR_EOF;
+        ret = ffio_read_size(pb, header, DSS_AUDIO_BLOCK_HEADER_SIZE);
+        if (ret < 0)
+            return ret;
+
+        ctx->swap = !!(header[0] & 0x80);
+        cont      = 2 * header[1] + 2 * ctx->swap - DSS_AUDIO_BLOCK_HEADER_SIZE;
+        if (cont < 0 || cont > DSS_BLOCK_SIZE - DSS_AUDIO_BLOCK_HEADER_SIZE)
+            cont = 0;
+
+        if (!header[2])         /* an empty block: nothing to emit, move on */
+            continue;
+
+        ctx->frames_left = header[2];
+        if (avio_seek(pb, ctx->block_pos + DSS_AUDIO_BLOCK_HEADER_SIZE + cont,
+                      SEEK_SET) < 0)
+            return AVERROR_EOF;
+        return 0;
+    }
 }
 
 static void dss_sp_byte_swap(DSSDemuxContext *ctx, uint8_t *data)
@@ -258,17 +281,22 @@ static void dss_sp_byte_swap(DSSDemuxContext *ctx, uint8_t *data)
 static int dss_sp_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     DSSDemuxContext *ctx = s->priv_data;
-    int read_size, ret, offset = 0, buff_offset = 0;
-    int64_t pos = avio_tell(s->pb);
+    int read_size, ret, buff_offset = 0;
+    int64_t pos;
 
-    if (ctx->counter == 0)
-        dss_skip_audio_header(s, pkt);
+    if (ctx->frames_left <= 0) {
+        ret = dss_sp_next_block(s);
+        if (ret < 0)
+            return ret;
+    }
+    pos = avio_tell(s->pb);
 
     if (ctx->swap) {
         read_size   = DSS_FRAME_SIZE - 2;
         buff_offset = 3;
-    } else
+    } else {
         read_size = DSS_FRAME_SIZE;
+    }
 
     ret = av_new_packet(pkt, DSS_FRAME_SIZE);
     if (ret < 0)
@@ -278,33 +306,19 @@ static int dss_sp_read_packet(AVFormatContext *s, AVPacket *pkt)
     pkt->pos = pos;
     pkt->stream_index = 0;
 
-    if (ctx->counter < read_size) {
-        ret = avio_read(s->pb, pkt->data + buff_offset,
-                        ctx->counter);
-        if (ret < ctx->counter)
-            goto error_eof;
-
-        offset = ctx->counter;
-        dss_skip_audio_header(s, pkt);
-    }
-    ctx->counter -= read_size;
-
     /* This will write one byte into pkt's padding if buff_offset == 3 */
-    ret = avio_read(s->pb, pkt->data + offset + buff_offset,
-                    read_size - offset);
-    if (ret < read_size - offset)
-        goto error_eof;
+    ret = dss_sp_read_payload(s, pkt->data + buff_offset, read_size);
+    if (ret < 0)
+        return ret == AVERROR_EOF ? ret : AVERROR_EOF;
+
+    ctx->frames_left--;
 
     dss_sp_byte_swap(ctx, pkt->data);
 
-    if (ctx->dss_sp_swap_byte < 0) {
+    if (ctx->dss_sp_swap_byte < 0)
         return AVERROR(EAGAIN);
-    }
 
     return 0;
-
-error_eof:
-    return ret < 0 ? ret : AVERROR_EOF;
 }
 
 static int dss_723_1_read_packet(AVFormatContext *s, AVPacket *pkt)
@@ -394,8 +408,14 @@ static int dss_read_seek(AVFormatContext *s, int stream_index,
     ret = ffio_read_size(s->pb, header, DSS_AUDIO_BLOCK_HEADER_SIZE);
     if (ret < 0)
         return ret;
-    ctx->swap = !!(header[0] & 0x80);
-    ctx->resync_pending = 0;
+    ctx->swap        = !!(header[0] & 0x80);
+    ctx->frames_left = 0;
+    ctx->block_pos   = seekto - DSS_BLOCK_SIZE;
+    if (ctx->audio_codec == DSS_ACODEC_DSS_SP) {
+        ctx->dss_sp_swap_byte = -1;
+        return 0;
+    }
+
     offset = 2*header[1] + 2*ctx->swap;
     if (offset < DSS_AUDIO_BLOCK_HEADER_SIZE)
         return AVERROR_INVALIDDATA;
