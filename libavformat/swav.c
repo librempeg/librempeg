@@ -23,6 +23,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -76,18 +77,17 @@ static int read_header(AVFormatContext *s)
     case 0:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S8;
         st->codecpar->bits_per_coded_sample = 8;
-        st->codecpar->block_align = 1024 * st->codecpar->ch_layout.nb_channels;
+        st->codecpar->block_align = 1 * st->codecpar->ch_layout.nb_channels;
         break;
     case 1:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
         st->codecpar->bits_per_coded_sample = 16;
-        st->codecpar->block_align = 512 * st->codecpar->ch_layout.nb_channels;
+        st->codecpar->block_align = 2 * st->codecpar->ch_layout.nb_channels;
         break;
     case 2:
-        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;
+        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA;
         st->codecpar->bits_per_coded_sample = 4;
-        st->codecpar->block_align = 0x40 * st->codecpar->ch_layout.nb_channels;
-        st->codecpar->profile = 3;
+        st->codecpar->block_align = 1 * st->codecpar->ch_layout.nb_channels;
         start += 4;
         break;
     default:
@@ -114,18 +114,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_swav_demuxer = {
     .p.name         = "swav",
     .p.long_name    = NULL_IF_CONFIG_SMALL("SWAV (Nintendo DS SWAV)"),
@@ -133,5 +121,5 @@ const FFInputFormat ff_swav_demuxer = {
     .p.extensions   = "swav",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
