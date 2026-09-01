@@ -37,9 +37,9 @@ static int read_probe(const AVProbeData *p)
 
 static int read_header(AVFormatContext *s)
 {
-    int ret, rate, channels, align, codec, be, profile = 0;
     uint32_t magic, version, loop_start, loop_stop;
     int64_t start_offset, duration, extra_offset;
+    int ret, rate, channels, align, codec, be;
     AVIOContext *pb = s->pb;
     AVStream *st;
 
@@ -77,8 +77,7 @@ static int read_header(AVFormatContext *s)
         codec = be ? AV_CODEC_ID_ADPCM_NDSP : AV_CODEC_ID_ADPCM_NDSP_LE;
         break;
     case 3:
-        codec = AV_CODEC_ID_ADPCM_IMA_WS;
-        profile = 4;
+        codec = AV_CODEC_ID_ADPCM_IMA_DVI;
         break;
     default:
         avpriv_request_sample(s, "codec %02x", codec);
@@ -94,8 +93,6 @@ static int read_header(AVFormatContext *s)
 
     if (codec == AV_CODEC_ID_MP3)
         ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
-    if (codec == AV_CODEC_ID_ADPCM_IMA_WS)
-        st->codecpar->profile = 4;
 
     st->start_time = 0;
     st->duration = duration;
@@ -104,7 +101,6 @@ static int read_header(AVFormatContext *s)
     st->codecpar->block_align = (channels > 1) ?  align * channels : FFMIN(align, 1024);
     st->codecpar->sample_rate = rate;
     st->codecpar->codec_id = codec;
-    st->codecpar->profile = profile;
 
     if (loop_start > 0)
         av_dict_set_int(&st->metadata, "loop_start", loop_start, 0);
