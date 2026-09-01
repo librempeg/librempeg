@@ -192,6 +192,13 @@ static int read_header(AVFormatContext *s)
             st->codecpar->codec_id = b->little_endian ? AV_CODEC_ID_ADPCM_NDSP_LE : AV_CODEC_ID_ADPCM_NDSP;
             st->codecpar->block_align = 8;
             break;
+        case 3:
+            st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA;
+            st->codecpar->block_align = 1;
+            break;
+        default:
+            avpriv_request_sample(s, "codec %X", codec);
+            return AVERROR_INVALIDDATA;
         }
 
         chunk_marker = read16(s);
