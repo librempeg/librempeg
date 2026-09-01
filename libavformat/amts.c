@@ -104,7 +104,7 @@ static int read_header(AVFormatContext *s)
 
 const FFInputFormat ff_amts_demuxer = {
     .p.name         = "amts",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("AMTS Audio"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Rockstar Games AMTS"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "lstm",
     .read_probe     = read_probe,
