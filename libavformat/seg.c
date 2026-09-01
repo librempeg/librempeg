@@ -60,7 +60,7 @@ static int guess_endian32(AVIOContext *pb)
 
 static int read_header(AVFormatContext *s)
 {
-    int rate, channels, ret, codec, be, align, profile = 0;
+    int rate, channels, ret, codec, be, align;
     int64_t start_offset = 0x4000, duration;
     unsigned (*avio_r32)(AVIOContext *pb);
     AVIOContext *pb = s->pb;
@@ -93,8 +93,7 @@ static int read_header(AVFormatContext *s)
         align = 0x2000 * channels;
         break;
     case MKBETAG('p','c','_','\x0'):
-        codec = AV_CODEC_ID_ADPCM_IMA_WS;
-        profile = 3;
+        codec = AV_CODEC_ID_ADPCM_IMA;
         align = 0x2000 * channels;
         break;
     case MKBETAG('x','b','3','\x0'):
@@ -122,7 +121,6 @@ static int read_header(AVFormatContext *s)
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->ch_layout.nb_channels = channels;
     st->codecpar->codec_id = codec;
-    st->codecpar->profile = profile;
     st->codecpar->sample_rate = rate;
     st->codecpar->block_align = align;
 
