@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 typedef struct BCWAVStream {
     int64_t start_offset;
@@ -181,15 +182,15 @@ static int read_header(AVFormatContext *s)
         switch (codec) {
         case 0:
             st->codecpar->codec_id = AV_CODEC_ID_PCM_S8;
-            st->codecpar->block_align = 128;
+            st->codecpar->block_align = 1;
             break;
         case 1:
             st->codecpar->codec_id = b->little_endian ? AV_CODEC_ID_PCM_S16LE : AV_CODEC_ID_PCM_S16BE;
-            st->codecpar->block_align = 128 * 2;
+            st->codecpar->block_align = 2;
             break;
         case 2:
             st->codecpar->codec_id = b->little_endian ? AV_CODEC_ID_ADPCM_NDSP_LE : AV_CODEC_ID_ADPCM_NDSP;
-            st->codecpar->block_align = 8 * 8;
+            st->codecpar->block_align = 8;
             break;
         }
 
@@ -270,7 +271,8 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
         }
 
         if (pos >= bcwav->start_offset && pos < bcwav->stop_offset) {
-            int packet_size = FFMIN(par->block_align, bcwav->stop_offset - pos);
+            int packet_size = ff_pcm_default_packet_size(par);
+            packet_size = FFMIN(packet_size, bcwav->stop_offset - pos);
 
             ret = av_get_packet(pb, pkt, packet_size);
             pkt->stream_index = st->id;
