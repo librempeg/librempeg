@@ -92,7 +92,7 @@ static int read_header(AVFormatContext *s)
 
 const FFInputFormat ff_stma_demuxer = {
     .p.name         = "stma",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("STMA Audio"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Rockstar Games STMA"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "lstm",
     .read_probe     = read_probe,
