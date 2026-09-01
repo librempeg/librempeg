@@ -28,6 +28,7 @@
 #include "demux.h"
 #include "internal.h"
 #include "fsbvorbis_data.h"
+#include "pcm.h"
 
 typedef struct FSBStream {
     int64_t name_offset;
@@ -346,9 +347,11 @@ static int fsb_read_header(AVFormatContext *s)
                 break;
             case AV_CODEC_ID_PCM_S16BE:
             case AV_CODEC_ID_PCM_S16LE:
+                par->block_align = 2 * par->ch_layout.nb_channels;
+                break;
             case AV_CODEC_ID_PCM_S8:
             case AV_CODEC_ID_PCM_U8:
-                par->block_align = 1024 * par->ch_layout.nb_channels;
+                par->block_align = 1 * par->ch_layout.nb_channels;
                 break;
             }
 
@@ -629,23 +632,23 @@ static int fsb_read_header(AVFormatContext *s)
             switch (codec) {
             case 0x01:
                 par->codec_id = AV_CODEC_ID_PCM_U8;
-                par->block_align = 1024 * channels;
+                par->block_align = 1 * channels;
                 break;
             case 0x02:
                 par->codec_id = (flags & 0x01) ? AV_CODEC_ID_PCM_S16BE : AV_CODEC_ID_PCM_S16LE;
-                par->block_align = 512 * channels;
+                par->block_align = 2 * channels;
                 break;
             case 0x03:
                 par->codec_id = (flags & 0x01) ? AV_CODEC_ID_PCM_S24BE : AV_CODEC_ID_PCM_S24LE;
-                par->block_align = 768 * channels;
+                par->block_align = 3 * channels;
                 break;
             case 0x04:
                 par->codec_id = (flags & 0x01) ? AV_CODEC_ID_PCM_S32BE : AV_CODEC_ID_PCM_S32LE;
-                par->block_align = 512 * channels;
+                par->block_align = 4 * channels;
                 break;
             case 0x05:
                 par->codec_id = (flags & 0x01) ? AV_CODEC_ID_PCM_F32BE : AV_CODEC_ID_PCM_F32LE;
-                par->block_align = 256 * channels;
+                par->block_align = 4 * channels;
                 break;
             case 0x06:
                 par->codec_id = (flags & 0x02) ? AV_CODEC_ID_ADPCM_NDSP : AV_CODEC_ID_ADPCM_NDSP_SI;
@@ -854,7 +857,8 @@ static int fsb_read_packet(AVFormatContext *s, AVPacket *pkt)
         pos = avio_tell(pb);
         if (pos >= fst->start_offset && pos < fst->stop_offset) {
             if (par->block_align > 0) {
-                const int size = FFMIN(par->block_align, fst->stop_offset - pos);
+                int size = ff_pcm_default_packet_size(par);
+                size = FFMIN(size, fst->stop_offset - pos);
 
                 ret = av_get_packet(pb, pkt, size);
             } else {
