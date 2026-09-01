@@ -21,10 +21,10 @@
 
 #include "libavutil/bswap.h"
 #include "libavutil/intreadwrite.h"
-#include "libavutil/mem.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -62,11 +62,11 @@ static int read_header(AVFormatContext *s)
     switch (codec) {
     case 0:
         codec = AV_CODEC_ID_PCM_S16LE;
-        align = 1024;
+        align = 2;
         break;
     case 2:
         codec = AV_CODEC_ID_ADPCM_CIRCUS;
-        align = 256;
+        align = 1;
         break;
     case 1:
     case 3:
@@ -96,22 +96,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    AVStream *st = s->streams[0];
-    AVCodecParameters *par = st->codecpar;
-    int ret;
-
-    if (avio_feof(pb))
-        return AVERROR_EOF;
-
-    ret = av_get_packet(pb, pkt, par->block_align);
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_xpcm_demuxer = {
     .p.name         = "xpcm",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Circus XPCM"),
@@ -119,5 +103,5 @@ const FFInputFormat ff_xpcm_demuxer = {
     .p.extensions   = "xpcm",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
