@@ -541,6 +541,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_IMA_NDS:
     case AV_CODEC_ID_ADPCM_IMA_REF:
     case AV_CODEC_ID_ADPCM_BRR:
+    case AV_CODEC_ID_ADPCM_IMA:
     case AV_CODEC_ID_ADPCM_IMA_DVI:
     case AV_CODEC_ID_ADPCM_IMA_HWAS:
     case AV_CODEC_ID_ADPCM_NXAP:
@@ -1580,6 +1581,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
     case AV_CODEC_ID_ADPCM_CT:
     case AV_CODEC_ID_ADPCM_IMA_APC:
     case AV_CODEC_ID_ADPCM_IMA_CUNNING:
+    case AV_CODEC_ID_ADPCM_IMA:
     case AV_CODEC_ID_ADPCM_IMA_DVI:
     case AV_CODEC_ID_ADPCM_IMA_HWAS:
     case AV_CODEC_ID_ADPCM_IMA_EA_SEAD:
@@ -2848,6 +2850,29 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
         }
         bytestream2_seek(&gb, 0, SEEK_END);
+        ) /* End of CASE */
+    CASE(ADPCM_IMA,
+        const int block_size = (avpkt->size > avctx->block_align) ? avctx->block_align : avpkt->size;
+        const int nb_blocks = (avpkt->size + block_size-1) / block_size;
+        const int block_samples = (block_size / channels) * 2;
+        int left_samples = nb_samples;
+
+        for (int block = 0; block < nb_blocks; block++) {
+            const int this_block_samples = FFMIN(block_samples, left_samples);
+
+            for (int channel = 0; channel < channels; channel++) {
+                ADPCMChannelStatus *cs = &c->status[channel];
+                int16_t *smp = samples_p[channel] + block * block_samples;
+
+                for (int n = this_block_samples / 2; n > 0; n--) {
+                    int v = bytestream2_get_byteu(&gb);
+                    *smp++ = adpcm_ima_expand_nibble(cs, v & 0x0F, 3);
+                    *smp++ = adpcm_ima_expand_nibble(cs, v >> 4  , 3);
+                }
+            }
+
+            left_samples -= this_block_samples;
+        }
         ) /* End of CASE */
     CASE(ADPCM_IMA_DVI,
         const int block_size = (avpkt->size > avctx->block_align) ? avctx->block_align : avpkt->size;
@@ -4422,6 +4447,7 @@ ADPCM_DECODER(ADPCM_EA_R3,       sample_fmts_s16p, adpcm_ea_r3,       "ADPCM Ele
 ADPCM_DECODER(ADPCM_EA_XAS,      sample_fmts_s16p, adpcm_ea_xas,      "ADPCM Electronic Arts XAS")
 ADPCM_DECODER(ADPCM_FMOD,        sample_fmts_s16p, adpcm_fmod,        "ADPCM FMOD")
 ADPCM_DECODER(ADPCM_HEVAG,       sample_fmts_s16p, adpcm_hevag,       "ADPCM High Efficiency VAG")
+ADPCM_DECODER(ADPCM_IMA,         sample_fmts_s16p, adpcm_ima,         "ADPCM IMA")
 ADPCM_DECODER(ADPCM_IMA_ACORN,   sample_fmts_s16,  adpcm_ima_acorn,   "ADPCM IMA Acorn Replay")
 ADPCM_DECODER(ADPCM_IMA_AMV,     sample_fmts_s16,  adpcm_ima_amv,     "ADPCM IMA AMV")
 ADPCM_DECODER(ADPCM_IMA_APC,     sample_fmts_s16,  adpcm_ima_apc,     "ADPCM IMA CRYO APC")

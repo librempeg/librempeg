@@ -468,6 +468,7 @@ int av_get_exact_bits_per_sample(enum AVCodecID codec_id)
     case AV_CODEC_ID_8SVX_FIB:
     case AV_CODEC_ID_ADPCM_ARGO:
     case AV_CODEC_ID_ADPCM_CT:
+    case AV_CODEC_ID_ADPCM_IMA:
     case AV_CODEC_ID_ADPCM_IMA_ALP:
     case AV_CODEC_ID_ADPCM_IMA_AMV:
     case AV_CODEC_ID_ADPCM_IMA_APC:
