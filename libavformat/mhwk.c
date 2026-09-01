@@ -82,7 +82,7 @@ static int read_header(AVFormatContext *s)
         align = channels;
         break;
     case 1:
-        codec = AV_CODEC_ID_ADPCM_IMA_WS;
+        codec = AV_CODEC_ID_ADPCM_IMA_DVI;
         align = 1;
         break;
     case 2:
@@ -103,8 +103,6 @@ static int read_header(AVFormatContext *s)
 
     if (codec == AV_CODEC_ID_MP3)
         ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
-    if (codec == AV_CODEC_ID_ADPCM_IMA_WS)
-        st->codecpar->profile = 4;
 
     st->start_time = 0;
     st->duration = duration;
