@@ -23,6 +23,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -50,19 +51,19 @@ static int read_header(AVFormatContext *s)
         if (rate <= 0)
             return AVERROR_INVALIDDATA;
         start_offset = 0x10;
-        codec = AV_CODEC_ID_ADPCM_IMA_WS;
+        codec = AV_CODEC_ID_ADPCM_IMA_DVI;
         break;
     case 6:
         bps = (flags & 0x20000000) ? 16 : 8;
         rate = (flags & 0x40000000) ? 22050 : 11025;
         start_offset = 0x8;
-        codec = (bps == 8) ? AV_CODEC_ID_PCM_U8 : AV_CODEC_ID_ADPCM_IMA_WS;
+        codec = (bps == 8) ? AV_CODEC_ID_PCM_U8 : AV_CODEC_ID_ADPCM_IMA_DVI;
         break;
     case 8:
         bps = (flags & 0x10000000) ? 16 : 8;
         rate = (flags & 0x20000000) ? 22050 : 11025;
         start_offset = 0x08;
-        codec = (bps == 8) ? AV_CODEC_ID_PCM_U8 : (flags & 0x80000000) ? AV_CODEC_ID_ADPCM_IMA_WS : AV_CODEC_ID_PCM_S16LE;
+        codec = (bps == 8) ? AV_CODEC_ID_PCM_U8 : (flags & 0x80000000) ? AV_CODEC_ID_ADPCM_IMA_DVI : AV_CODEC_ID_PCM_S16LE;
         break;
     default:
         return AVERROR_INVALIDDATA;
@@ -75,29 +76,15 @@ static int read_header(AVFormatContext *s)
     st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->ch_layout.nb_channels = 1;
-    st->codecpar->block_align = 1024;
+    st->codecpar->block_align = (codec == AV_CODEC_ID_PCM_S16LE) ? 2 : 1;
     st->codecpar->sample_rate = rate;
     st->codecpar->codec_id = codec;
-    if (codec == AV_CODEC_ID_ADPCM_IMA_WS)
-        st->codecpar->profile = 4;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     avio_seek(pb, start_offset, SEEK_SET);
 
     return 0;
-}
-
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
 }
 
 const FFInputFormat ff_esf_demuxer = {
@@ -107,5 +94,5 @@ const FFInputFormat ff_esf_demuxer = {
     .p.extensions   = "esf",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
