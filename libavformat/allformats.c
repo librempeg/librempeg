@@ -721,6 +721,7 @@ extern const FFInputFormat  ff_vig_demuxer;
 extern const FFInputFormat  ff_vividas_demuxer;
 extern const FFInputFormat  ff_vivo_demuxer;
 extern const FFInputFormat  ff_vmd_demuxer;
+extern const FFInputFormat  ff_vms_demuxer;
 extern const FFInputFormat  ff_vobsub_demuxer;
 extern const FFInputFormat  ff_voc_demuxer;
 extern const FFOutputFormat ff_voc_muxer;

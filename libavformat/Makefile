@@ -864,6 +864,7 @@ OBJS-$(CONFIG_VIG_DEMUXER)               += vig.o pcm.o
 OBJS-$(CONFIG_VIVIDAS_DEMUXER)           += vividas.o
 OBJS-$(CONFIG_VIVO_DEMUXER)              += vivo.o
 OBJS-$(CONFIG_VMD_DEMUXER)               += sierravmd.o
+OBJS-$(CONFIG_VMS_DEMUXER)               += vms.o pcm.o
 OBJS-$(CONFIG_VOBSUB_DEMUXER)            += subtitles.o # mpeg demuxer is in the dependencies
 OBJS-$(CONFIG_VOC_DEMUXER)               += vocdec.o voc_packet.o voc.o
 OBJS-$(CONFIG_VOC_MUXER)                 += vocenc.o voc.o
