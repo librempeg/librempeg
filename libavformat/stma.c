@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -70,13 +71,12 @@ static int read_header(AVFormatContext *s)
     st->codecpar->bits_per_coded_sample = bps;
     switch (bps) {
     case 4:
-        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;
-        st->codecpar->block_align = 0x40 * (1 + (interleave == 0xc000)) * st->codecpar->ch_layout.nb_channels;
-        st->codecpar->profile = 4;
+        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_DVI;
+        st->codecpar->block_align = 0x40 * (1 + (interleave == 0xc000)) * nb_channels;
         break;
     case 16:
         st->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
-        st->codecpar->block_align = 1024 * st->codecpar->ch_layout.nb_channels;
+        st->codecpar->block_align = 1024 * nb_channels;
         break;
     default:
         avpriv_request_sample(s, "bps 0x%X", bps);
@@ -90,18 +90,6 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, s->streams[0]->codecpar->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_stma_demuxer = {
     .p.name         = "stma",
     .p.long_name    = NULL_IF_CONFIG_SMALL("STMA Audio"),
@@ -109,5 +97,5 @@ const FFInputFormat ff_stma_demuxer = {
     .p.extensions   = "lstm",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
