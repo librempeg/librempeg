@@ -4089,8 +4089,9 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         ) /* End of CASE */
     CASE(ADPCM_DSA,
-        for (int block = 0; block < avpkt->size / avctx->block_align; block++) {
-            int nb_samples_per_block = (avctx->block_align / channels - 1) * 2;
+        int block_size = avctx->block_align > 0 ? avctx->block_align : avpkt->size;
+        for (int block = 0; block < avpkt->size / block_size; block++) {
+            int nb_samples_per_block = (block_size / channels - 1) * 2;
             for (int channel = 0; channel < channels; channel++) {
                 int index, shift, byte, hist1;
                 int32_t coef;
