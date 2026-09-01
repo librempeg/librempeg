@@ -484,7 +484,7 @@ static int fsb_read_header(AVFormatContext *s)
 
             loop_start = loop_end = 0;
             if (sample_mode & 0x01) {
-                uint32_t extraflag, extraflag_type, extraflag_size, extraflag_end;
+                uint32_t extraflag, extraflag_type, extraflag_size, extraflag_end, config;
 
                 do {
                     extraflag = avio_rl32(pb);
@@ -536,7 +536,9 @@ static int fsb_read_header(AVFormatContext *s)
                                 return ret;
                             memset(par->extradata, 0, par->extradata_size);
 
-                            avio_read(pb, par->extradata + 4, 4);
+                            config = avio_rb32(pb);
+                            AV_WB32(par->extradata + 4, config);
+                            par->block_align = (((config >> 5) & 0x7FF) + 1) * (1 << ((config >> 3) & 0x2));
                             extraflag_size -= 4;
                             if (par->extradata[4] != 0xFE && extraflag_size >= 4) {
                                 par->block_align = AV_RL16(par->extradata + 4);
@@ -690,7 +692,7 @@ static int fsb_read_header(AVFormatContext *s)
                 par->codec_id = AV_CODEC_ID_ATRAC9;
                 if (par->block_align == 0)
                     par->block_align = 1024;
-                sti->need_parsing = AVSTREAM_PARSE_FULL;
+                sti->need_parsing = AVSTREAM_PARSE_FULL_RAW;
                 break;
             case 0x0E:
                 /* XWMA */
