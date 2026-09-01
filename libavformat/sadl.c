@@ -75,14 +75,13 @@ static int read_header(AVFormatContext *s)
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->ch_layout.nb_channels = nb_channels;
     st->codecpar->sample_rate = ((flags & 6) == 4) ? 32728 : 16364;
-    st->codecpar->block_align = 0x10 * st->codecpar->ch_layout.nb_channels;
+    st->codecpar->block_align = 0x10 * nb_channels;
 
     switch (flags & 0xf0) {
     case 0x00:
     case 0x70:
-        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;
+        st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA;
         loop_start = loop_start / nb_channels * 2;
-        st->codecpar->profile = 3;
         break;
     case 0xb0:
         st->codecpar->codec_id = AV_CODEC_ID_ADPCM_PROCYON;
