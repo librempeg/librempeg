@@ -2837,16 +2837,6 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     }
                 }
             }
-        } else if (c->vqa_version == 4) {
-            for (int channel = 0; channel < channels; channel++) {
-                int16_t *smp = samples_p[channel];
-
-                for (int n = nb_samples / 2; n > 0; n--) {
-                    int v = bytestream2_get_byteu(&gb);
-                    *smp++ = adpcm_ima_expand_nibble(&c->status[channel], v >> 4  , 3);
-                    *smp++ = adpcm_ima_expand_nibble(&c->status[channel], v & 0x0F, 3);
-                }
-            }
         } else {
             for (int n = nb_samples / 2; n > 0; n--) {
                 for (int channel = 0; channel < channels; channel++) {
@@ -2860,19 +2850,26 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         bytestream2_seek(&gb, 0, SEEK_END);
         ) /* End of CASE */
     CASE(ADPCM_IMA_DVI,
-        for (int block = 0; block < avpkt->size / FFMAX(avctx->block_align, 1); block++) {
-            const int nb_samples_per_block = 2 * FFMAX(avctx->block_align, 1) / channels;
+        const int block_size = (avpkt->size > avctx->block_align) ? avctx->block_align : avpkt->size;
+        const int nb_blocks = (avpkt->size + block_size-1) / block_size;
+        const int block_samples = (block_size / channels) * 2;
+        int left_samples = nb_samples;
+
+        for (int block = 0; block < nb_blocks; block++) {
+            const int this_block_samples = FFMIN(block_samples, left_samples);
 
             for (int channel = 0; channel < channels; channel++) {
-                ADPCMChannelStatus *cs = c->status + channel;
-                int16_t *smp = samples_p[channel] + block * nb_samples_per_block;
+                ADPCMChannelStatus *cs = &c->status[channel];
+                int16_t *smp = samples_p[channel] + block * block_samples;
 
-                for (int n = nb_samples_per_block / 2; n > 0; n--) {
+                for (int n = this_block_samples / 2; n > 0; n--) {
                     int v = bytestream2_get_byteu(&gb);
                     *smp++ = adpcm_ima_expand_nibble(cs, v >> 4  , 3);
                     *smp++ = adpcm_ima_expand_nibble(cs, v & 0x0F, 3);
                 }
             }
+
+            left_samples -= this_block_samples;
         }
         ) /* End of CASE */
     CASE(ADPCM_IMA_HWAS,
