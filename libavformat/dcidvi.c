@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 static int read_probe(const AVProbeData *p)
 {
@@ -57,30 +58,16 @@ static int read_header(AVFormatContext *s)
 
     st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_WS;
+    st->codecpar->codec_id = AV_CODEC_ID_ADPCM_IMA_DVI;
     st->codecpar->ch_layout.nb_channels = nb_channels;
     st->codecpar->sample_rate = rate;
-    st->codecpar->profile = 4;
-    st->codecpar->block_align = 0x400 * st->codecpar->ch_layout.nb_channels;
+    st->codecpar->block_align = 0x400 * nb_channels;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     avio_seek(pb, 0x800, SEEK_SET);
 
     return 0;
-}
-
-static int read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVCodecParameters *par = s->streams[0]->codecpar;
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, par->block_align);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
 }
 
 const FFInputFormat ff_dcidvi_demuxer = {
@@ -90,5 +77,5 @@ const FFInputFormat ff_dcidvi_demuxer = {
     .p.extensions   = "idvi",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = read_packet,
+    .read_packet    = ff_pcm_read_packet,
 };
