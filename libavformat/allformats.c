@@ -348,6 +348,7 @@ extern const FFInputFormat  ff_jstm_demuxer;
 extern const FFInputFormat  ff_kat_demuxer;
 extern const FFInputFormat  ff_konamibmp_demuxer;
 extern const FFInputFormat  ff_kraw_demuxer;
+extern const FFInputFormat  ff_kromemus_demuxer;
 extern const FFInputFormat  ff_ktac_demuxer;
 extern const FFInputFormat  ff_ktss_demuxer;
 extern const FFInputFormat  ff_kux_demuxer;
