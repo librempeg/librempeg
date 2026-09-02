@@ -489,6 +489,7 @@ extern const FFInputFormat  ff_oor_demuxer;
 extern const FFInputFormat  ff_opns_demuxer;
 extern const FFOutputFormat ff_opus_muxer;
 extern const FFInputFormat  ff_osq_demuxer;
+extern const FFInputFormat  ff_p3d_demuxer;
 extern const FFInputFormat  ff_paf_demuxer;
 extern const FFInputFormat  ff_pamf_demuxer;
 extern const FFInputFormat  ff_pasd_demuxer;

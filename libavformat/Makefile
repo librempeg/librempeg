@@ -607,6 +607,7 @@ OBJS-$(CONFIG_OPNS_DEMUXER)              += opns.o
 OBJS-$(CONFIG_OPUS_MUXER)                += oggenc.o \
                                             vorbiscomment.o
 OBJS-$(CONFIG_OSQ_DEMUXER)               += osq.o rawdec.o
+OBJS-$(CONFIG_P3D_DEMUXER)               += p3d.o pcm.o
 OBJS-$(CONFIG_PAF_DEMUXER)               += paf.o
 OBJS-$(CONFIG_PAMF_DEMUXER)              += mpeg.o
 OBJS-$(CONFIG_PASD_DEMUXER)              += pasd.o
