@@ -719,6 +719,7 @@ extern const FFInputFormat  ff_vc1_demuxer;
 extern const FFOutputFormat ff_vc1_muxer;
 extern const FFInputFormat  ff_vc1t_demuxer;
 extern const FFOutputFormat ff_vc1t_muxer;
+extern const FFInputFormat  ff_vcmus_demuxer;
 extern const FFInputFormat  ff_vgs_demuxer;
 extern const FFInputFormat  ff_vid1_demuxer;
 extern const FFInputFormat  ff_vig_demuxer;
