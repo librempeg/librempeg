@@ -539,6 +539,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_N64:
     case AV_CODEC_ID_ADPCM_FMOD:
     case AV_CODEC_ID_ADPCM_IMA_NDS:
+    case AV_CODEC_ID_ADPCM_IMA_RAD_MONO:
     case AV_CODEC_ID_ADPCM_IMA_REF:
     case AV_CODEC_ID_ADPCM_BRR:
     case AV_CODEC_ID_ADPCM_IMA:
@@ -1700,6 +1701,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         nb_samples = 1 + (buf_size - 4 * ch) * 2 / ch;
         break;
     case AV_CODEC_ID_ADPCM_IMA_RAD:
+    case AV_CODEC_ID_ADPCM_IMA_RAD_MONO:
         if (block_align > 0)
             buf_size = FFMIN(buf_size, block_align);
         nb_samples = (buf_size - 4 * ch) * 2 / ch;
@@ -2821,6 +2823,26 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
             for (int channel = 0; channel < channels; channel++) {
                 *samples++ = adpcm_ima_expand_nibble(&c->status[channel], byte[channel] >> 4  , 3);
+            }
+        }
+        ) /* End of CASE */
+    CASE(ADPCM_IMA_RAD_MONO,
+        for (int channel = 0; channel < channels; channel++) {
+            ADPCMChannelStatus *cs = &c->status[channel];
+            cs->step_index = bytestream2_get_byteu(&gb);
+            bytestream2_skipu(&gb, 1);
+            cs->predictor  = sign_extend(bytestream2_get_le16u(&gb), 16);
+            if (cs->step_index > 88u) {
+                av_log(avctx, AV_LOG_ERROR, "ERROR: step_index[%d] = %i\n",
+                       channel, cs->step_index);
+                return AVERROR_INVALIDDATA;
+            }
+            int16_t *smp = samples_p[channel];
+            for (int n = 0; n < nb_samples / 2; n++) {
+                const int byte = bytestream2_get_byteu(&gb);
+
+                *smp++ = adpcm_ima_expand_nibble(cs, byte & 0x0F, 3);
+                *smp++ = adpcm_ima_expand_nibble(cs, byte >> 4  , 3);
             }
         }
         ) /* End of CASE */
@@ -4476,6 +4498,7 @@ ADPCM_DECODER(ADPCM_IMA_OKI4,    sample_fmts_s16,  adpcm_ima_oki4,    "ADPCM IMA
 ADPCM_DECODER(ADPCM_IMA_PDA,     sample_fmts_s16,  adpcm_ima_pda,     "ADPCM IMA PlayDate")
 ADPCM_DECODER(ADPCM_IMA_QT,      sample_fmts_s16p, adpcm_ima_qt,      "ADPCM IMA QuickTime")
 ADPCM_DECODER(ADPCM_IMA_RAD,     sample_fmts_s16,  adpcm_ima_rad,     "ADPCM IMA Radical")
+ADPCM_DECODER(ADPCM_IMA_RAD_MONO,sample_fmts_s16p, adpcm_ima_rad_mono,"ADPCM IMA Radical (Mono)")
 ADPCM_DECODER(ADPCM_IMA_REF,     sample_fmts_s16p, adpcm_ima_ref,     "ADPCM IMA Reflections")
 ADPCM_DECODER(ADPCM_IMA_SSI,     sample_fmts_s16,  adpcm_ima_ssi,     "ADPCM IMA Simon & Schuster Interactive")
 ADPCM_DECODER(ADPCM_IMA_SMJPEG,  sample_fmts_s16,  adpcm_ima_smjpeg,  "ADPCM IMA Loki SDL MJPEG")
