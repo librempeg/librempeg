@@ -560,6 +560,7 @@ extern const FFInputFormat  ff_qon_demuxer;
 extern const FFInputFormat  ff_r3d_demuxer;
 extern const FFInputFormat  ff_rada_demuxer;
 extern const FFInputFormat  ff_raki_demuxer;
+extern const FFInputFormat  ff_raud_demuxer;
 extern const FFInputFormat  ff_rawvideo_demuxer;
 extern const FFOutputFormat ff_rawvideo_muxer;
 extern const FFInputFormat  ff_rcavoc_demuxer;

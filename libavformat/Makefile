@@ -677,6 +677,7 @@ OBJS-$(CONFIG_QON_DEMUXER)               += qondec.o
 OBJS-$(CONFIG_R3D_DEMUXER)               += r3d.o
 OBJS-$(CONFIG_RADA_DEMUXER)              += rada.o
 OBJS-$(CONFIG_RAKI_DEMUXER)              += rakidec.o riffdec.o pcm.o
+OBJS-$(CONFIG_RAUD_DEMUXER)              += raud.o
 OBJS-$(CONFIG_RAWVIDEO_DEMUXER)          += rawvideodec.o
 OBJS-$(CONFIG_RAWVIDEO_MUXER)            += rawenc.o
 OBJS-$(CONFIG_RCAVOC_DEMUXER)            += rcavoc.o
