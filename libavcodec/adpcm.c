@@ -2874,7 +2874,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         bytestream2_seek(&gb, 0, SEEK_END);
         ) /* End of CASE */
     CASE(ADPCM_IMA,
-        const int block_size = (avpkt->size > avctx->block_align) ? avctx->block_align : avpkt->size;
+        const int block_align = avctx->block_align > 0 ? avctx->block_align : avpkt->size;
+        const int block_size = (avpkt->size > block_align) ? block_align : avpkt->size;
         const int nb_blocks = (avpkt->size + block_size-1) / block_size;
         const int block_samples = (block_size / channels) * 2;
         int left_samples = nb_samples;
@@ -2897,7 +2898,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         ) /* End of CASE */
     CASE(ADPCM_IMA_DVI,
-        const int block_size = (avpkt->size > avctx->block_align) ? avctx->block_align : avpkt->size;
+        const int block_align = avctx->block_align > 0 ? avctx->block_align : avpkt->size;
+        const int block_size = (avpkt->size > block_align) ? block_align : avpkt->size;
         const int nb_blocks = (avpkt->size + block_size-1) / block_size;
         const int block_samples = (block_size / channels) * 2;
         int left_samples = nb_samples;
