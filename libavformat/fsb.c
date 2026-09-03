@@ -53,7 +53,7 @@ static int load_vorbis_cb(const uint32_t setup_id, const uint8_t **buf, int *buf
     return AVERROR(EINVAL);
 }
 
-static int fsb_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "FSB", 3) || p->buf[3] - '0' < 1 || p->buf[3] - '0' > 5)
         return 0;
@@ -82,7 +82,7 @@ static int sort_streams(const void *a, const void *b)
     return FFDIFFSIGN(fs1->start_offset, fs2->start_offset);
 }
 
-static int fsb_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     unsigned format, version, nb_streams;
@@ -842,7 +842,7 @@ static int fsb_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int fsb_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVIOContext *pb = s->pb;
     int ret = AVERROR_EOF;
@@ -904,7 +904,7 @@ const FFInputFormat ff_fsb_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("FMOD Sample Bank"),
     .p.extensions   = "fsb",
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .read_probe     = fsb_probe,
-    .read_header    = fsb_read_header,
-    .read_packet    = fsb_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
