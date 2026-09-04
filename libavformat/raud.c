@@ -35,6 +35,7 @@ typedef struct RAUDContext {
 
     int block_subblocks;
     int nb_subblocks[MAX_NB_STREAMS];
+    int subblock_size[MAX_NB_STREAMS];
     int subblock_offset[MAX_NB_STREAMS];
 
     int stream_index;
@@ -219,17 +220,30 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
             return AVERROR_INVALIDDATA;
 
         memset(raud->nb_subblocks, 0, sizeof(raud->nb_subblocks));
+        memset(raud->subblock_size, 0, sizeof(raud->subblock_size));
         memset(raud->subblock_offset, 0, sizeof(raud->subblock_offset));
 
-        for (int n = 0; n < s->nb_streams; n++) {
-            if (seek_info_offset + seek_info_entry_size * n + 16 > raud->pkt->size)
-                return AVERROR_INVALIDDATA;
+        if (seek_info_offset + seek_info_entry_size * s->nb_streams + seek_info_entry_size >= raud->pkt->size)
+            return AVERROR_INVALIDDATA;
 
-            const int stream_subblock_offset = be ? AV_RB32(raud->pkt->data + seek_info_offset + seek_info_entry_size * n) : AV_RL32(raud->pkt->data + seek_info_offset + seek_info_entry_size * n);
-            const int nb_stream_subblocks = be ? AV_RB32(raud->pkt->data + seek_info_offset + 4 + seek_info_entry_size * n) : AV_RL32(raud->pkt->data + seek_info_offset + 4 + seek_info_entry_size * n);
+        for (int n = 0; n < s->nb_streams; n++) {
+            const uint8_t *entry_ptr = raud->pkt->data + seek_info_offset + seek_info_entry_size * n;
+            const int stream_subblock_offset = be ? AV_RB32(entry_ptr) : AV_RL32(entry_ptr);
+            const int nb_stream_subblocks = be ? AV_RB32(entry_ptr + 4) : AV_RL32(entry_ptr + 4);
+
+            if (stream_subblock_offset < 0 || nb_stream_subblocks <= 0)
+                return AVERROR_INVALIDDATA;
 
             raud->subblock_offset[n] = stream_subblock_offset;
             raud->nb_subblocks[n] = nb_stream_subblocks;
+            if (seek_info_entry_size >= 24) {
+                const int subblock_size = be ? AV_RB32(entry_ptr + 20) : AV_RL32(entry_ptr + 20);
+
+                if (subblock_size < 0)
+                    return AVERROR_INVALIDDATA;
+
+                raud->subblock_size[n] = subblock_size;
+            }
         }
 
         raud->pkt->pos = pos;
@@ -237,12 +251,22 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
         if (raud->subblock_offset[raud->stream_index] + raud->subblock_index >= raud->block_subblocks)
             return AVERROR_INVALIDDATA;
 
-        ret = av_new_packet(pkt, SUBBLOCK_SIZE);
-        if (ret < 0)
-            return ret;
+        int pkt_size;
+        if (raud->subblock_size[raud->stream_index] > 0) {
+            pkt_size = FFMIN(raud->subblock_size[raud->stream_index] - SUBBLOCK_SIZE * raud->subblock_index, SUBBLOCK_SIZE);
+        } else {
+            pkt_size = SUBBLOCK_SIZE;
+        }
 
-        memcpy(pkt->data, raud->pkt->data + raud->header_size + SUBBLOCK_SIZE * (raud->subblock_offset[raud->stream_index] + raud->subblock_index), SUBBLOCK_SIZE);
-        pkt->stream_index = raud->stream_index;
+        if (pkt_size > 0) {
+            ret = av_new_packet(pkt, pkt_size);
+            if (ret < 0)
+                return ret;
+
+            memcpy(pkt->data, raud->pkt->data + raud->header_size + SUBBLOCK_SIZE * (raud->subblock_offset[raud->stream_index] + raud->subblock_index), pkt_size);
+            pkt->stream_index = raud->stream_index;
+        }
+
         raud->subblock_index++;
         if (raud->subblock_index >= raud->nb_subblocks[raud->stream_index]) {
             raud->subblock_index = 0;
@@ -253,18 +277,31 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
                 raud->stream_index = 0;
             }
         }
+
+        if (pkt_size <= 0)
+            return FFERROR_REDO;
     } else {
         pos = raud->pkt->pos;
 
         if (raud->subblock_offset[raud->stream_index] + raud->subblock_index >= raud->block_subblocks)
             return AVERROR_INVALIDDATA;
 
-        ret = av_new_packet(pkt, SUBBLOCK_SIZE);
-        if (ret < 0)
-            return ret;
+        int pkt_size;
+        if (raud->subblock_size[raud->stream_index] > 0) {
+            pkt_size = FFMIN(raud->subblock_size[raud->stream_index] - SUBBLOCK_SIZE * raud->subblock_index, SUBBLOCK_SIZE);
+        } else {
+            pkt_size = SUBBLOCK_SIZE;
+        }
 
-        memcpy(pkt->data, raud->pkt->data + raud->header_size + SUBBLOCK_SIZE * (raud->subblock_offset[raud->stream_index] + raud->subblock_index), SUBBLOCK_SIZE);
-        pkt->stream_index = raud->stream_index;
+        if (pkt_size > 0) {
+            ret = av_new_packet(pkt, pkt_size);
+            if (ret < 0)
+                return ret;
+
+            memcpy(pkt->data, raud->pkt->data + raud->header_size + SUBBLOCK_SIZE * (raud->subblock_offset[raud->stream_index] + raud->subblock_index), pkt_size);
+            pkt->stream_index = raud->stream_index;
+        }
+
         raud->subblock_index++;
         if (raud->subblock_index >= raud->nb_subblocks[raud->stream_index]) {
             raud->subblock_index = 0;
@@ -275,6 +312,9 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
                 raud->stream_index = 0;
             }
         }
+
+        if (pkt_size <= 0)
+            return FFERROR_REDO;
     }
 
     pkt->pos = pos;
