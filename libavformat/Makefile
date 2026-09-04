@@ -356,6 +356,7 @@ OBJS-$(CONFIG_HIS_DEMUXER)               += his.o pcm.o
 OBJS-$(CONFIG_HLS_DEMUXER)               += hls.o hls_sample_encryption.o
 OBJS-$(CONFIG_HLS_MUXER)                 += hlsenc.o hlsplaylist.o
 OBJS-$(CONFIG_HNM_DEMUXER)               += hnm.o
+OBJS-$(CONFIG_HSF0_DEMUXER)              += hsf0.o pcm.o
 OBJS-$(CONFIG_HVQM2_DEMUXER)             += hvqm2dec.o
 OBJS-$(CONFIG_HVQM4_DEMUXER)             += hvqm4dec.o
 OBJS-$(CONFIG_HWAS_DEMUXER)              += hwas.o pcm.o
