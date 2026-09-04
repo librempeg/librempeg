@@ -671,6 +671,7 @@ OBJS-$(CONFIG_PSFB_DEMUXER)              += psfb.o
 OBJS-$(CONFIG_PSND_DEMUXER)              += psnd.o pcm.o
 OBJS-$(CONFIG_PVA_DEMUXER)               += pva.o
 OBJS-$(CONFIG_PVF_DEMUXER)               += pvfdec.o pcm.o
+OBJS-$(CONFIG_PWB_DEMUXER)               += pwb.o
 OBJS-$(CONFIG_PXND_DEMUXER)              += pxnd.o pcm.o
 OBJS-$(CONFIG_QCP_DEMUXER)               += qcp.o
 OBJS-$(CONFIG_QOA_DEMUXER)               += qoadec.o
