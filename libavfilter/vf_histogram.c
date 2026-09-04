@@ -425,29 +425,53 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             int minh = s->histogram_size - 1, maxh = 0;
 
             if (s->slide == 2) {
-                s->x_pos = out->width - 1;
+                s->x_pos = s->width - 1;
                 for (j = 0; j < outlink->h; j++) {
-                    memmove(out->data[p] + j * out->linesize[p],
-                            out->data[p] + j * out->linesize[p] + bpp,
-                            (outlink->w - 1) * bpp);
+                    if (s->display_mode == 1) {
+                        memmove(out->data[p] + j * out->linesize[p] + startx * bpp,
+                                out->data[p] + j * out->linesize[p] + startx * bpp + bpp,
+                                (s->width - 1) * bpp);
 
-                    if (s->histogram_size <= 256) {
-                        out->data[p][j * out->linesize[p] + outlink->w-1] = s->bg_color[0][p];
+                        if (s->histogram_size <= 256) {
+                            out->data[p][j * out->linesize[p] + startx + s->width-1] = s->bg_color[0][p];
+                        } else {
+                            AV_WN16(s->out->data[p] + j * s->out->linesize[p] + (startx + s->width-1) * 2, s->bg_color[0][p] * s->mult);
+                        }
                     } else {
-                        AV_WN16(s->out->data[p] + j * s->out->linesize[p] + (outlink->w-1) * 2, s->bg_color[0][p] * s->mult);
+                        memmove(out->data[p] + j * out->linesize[p],
+                                out->data[p] + j * out->linesize[p] + bpp,
+                                (outlink->w - 1) * bpp);
+
+                        if (s->histogram_size <= 256) {
+                            out->data[p][j * out->linesize[p] + outlink->w-1] = s->bg_color[0][p];
+                        } else {
+                            AV_WN16(s->out->data[p] + j * s->out->linesize[p] + (outlink->w-1) * 2, s->bg_color[0][p] * s->mult);
+                        }
                     }
                 }
             } else if (s->slide == 3) {
                 s->x_pos = 0;
                 for (j = 0; j < outlink->h; j++) {
-                    memmove(out->data[p] + j * out->linesize[p] + bpp,
-                            out->data[p] + j * out->linesize[p],
-                            (outlink->w - 1) * bpp);
+                    if (s->display_mode == 1) {
+                        memmove(out->data[p] + j * out->linesize[p] + startx * bpp + bpp,
+                                out->data[p] + j * out->linesize[p] + startx * bpp,
+                                (s->width - 1) * bpp);
 
-                    if (s->histogram_size <= 256) {
-                        out->data[p][j * out->linesize[p]] = s->bg_color[0][p];
+                        if (s->histogram_size <= 256) {
+                            out->data[p][j * out->linesize[p] + startx] = s->bg_color[0][p];
+                        } else {
+                            AV_WN16(s->out->data[p] + j * s->out->linesize[p] + startx*2, s->bg_color[0][p] * s->mult);
+                        }
                     } else {
-                        AV_WN16(s->out->data[p] + j * s->out->linesize[p], s->bg_color[0][p] * s->mult);
+                        memmove(out->data[p] + j * out->linesize[p] + bpp,
+                                out->data[p] + j * out->linesize[p],
+                                (outlink->w - 1) * bpp);
+
+                        if (s->histogram_size <= 256) {
+                            out->data[p][j * out->linesize[p]] = s->bg_color[0][p];
+                        } else {
+                            AV_WN16(s->out->data[p] + j * s->out->linesize[p], s->bg_color[0][p] * s->mult);
+                        }
                     }
                 }
             }
