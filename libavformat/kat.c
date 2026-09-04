@@ -54,7 +54,7 @@ static int read_probe(const AVProbeData *p)
     nb_streams = AV_RL32(p->buf);
     if (nb_streams <= 0)
         return 0;
-    if (p->buf_size < nb_streams * 0x2c)
+    if (p->buf_size < nb_streams * 0x2CLL)
         return 0;
     for (int n = 0; n < nb_streams; n++) {
         int depth;
