@@ -2917,8 +2917,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
                 for (int n = this_block_samples / 2; n > 0; n--) {
                     int v = bytestream2_get_byteu(&gb);
-                    *smp++ = adpcm_ima_expand_nibble(cs, v >> 4  , 3);
-                    *smp++ = adpcm_ima_expand_nibble(cs, v & 0x0F, 3);
+                    *smp++ = ff_adpcm_ima_qt_expand_nibble(cs, v >> 4);
+                    *smp++ = ff_adpcm_ima_qt_expand_nibble(cs, v & 15);
                 }
             }
 
