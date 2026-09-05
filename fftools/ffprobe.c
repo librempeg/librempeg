@@ -721,10 +721,6 @@ static void print_dynamic_hdr10_plus(AVTextFormatContext *tfc, const AVDynamicHD
                 params->window_lower_right_corner_x,'/');
         print_q("window_lower_right_corner_y",
                 params->window_lower_right_corner_y,'/');
-        print_q("window_upper_left_corner_x",
-                params->window_upper_left_corner_x,'/');
-        print_q("window_upper_left_corner_y",
-                params->window_upper_left_corner_y,'/');
         print_int("center_of_ellipse_x",
                   params->center_of_ellipse_x ) ;
         print_int("center_of_ellipse_y",
