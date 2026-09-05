@@ -749,6 +749,7 @@ extern const FFInputFormat  ff_vxds_demuxer;
 extern const FFInputFormat  ff_vxn_demuxer;
 extern const FFInputFormat  ff_w64_demuxer;
 extern const FFOutputFormat ff_w64_muxer;
+extern const FFInputFormat  ff_wadp_demuxer;
 extern const FFInputFormat  ff_wady_demuxer;
 extern const FFInputFormat  ff_waf_demuxer;
 extern const FFInputFormat  ff_wav2_demuxer;
