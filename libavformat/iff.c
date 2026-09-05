@@ -319,6 +319,7 @@ static int parse_dsd_prop(AVFormatContext *s, AVStream *st, uint64_t eof)
                        av_fourcc2str(tag));
                 return AVERROR_PATCHWELCOME;
             }
+            st->codecpar->format = AV_SAMPLE_FMT_DSD;
             break;
 
         case MKTAG('F','S',' ',' '):

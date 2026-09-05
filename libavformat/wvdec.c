@@ -310,6 +310,8 @@ static int wv_read_header(AVFormatContext *s)
     av_channel_layout_from_mask(&st->codecpar->ch_layout, wc->chmask);
     st->codecpar->sample_rate           = wc->rate;
     st->codecpar->bits_per_coded_sample = wc->bpp;
+    if (wc->header.flags & WV_DSD)
+        st->codecpar->format = AV_SAMPLE_FMT_DSD;
     avpriv_set_pts_info(st, 64, 1, wc->rate);
     st->start_time = 0;
     if (wc->header.total_samples != 0xFFFFFFFFu)

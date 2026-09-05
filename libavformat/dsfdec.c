@@ -130,6 +130,7 @@ static int dsf_read_header(AVFormatContext *s)
         avpriv_request_sample(s, "unknown most significant bit");
         return AVERROR_INVALIDDATA;
     }
+    st->codecpar->format = AV_SAMPLE_FMT_DSD;
 
     dsf->audio_size = avio_rl64(pb) / 8 * st->codecpar->ch_layout.nb_channels;
     st->codecpar->block_align = avio_rl32(pb);
