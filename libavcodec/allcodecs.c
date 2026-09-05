@@ -188,6 +188,7 @@ extern const FFCodec ff_iff_ilbm_decoder;
 extern const FFCodec ff_ilda_decoder;
 extern const FFCodec ff_imm4_decoder;
 extern const FFCodec ff_imm5_decoder;
+extern const FFCodec ff_imm6_decoder;
 extern const FFCodec ff_indeo2_decoder;
 extern const FFCodec ff_indeo3_decoder;
 extern const FFCodec ff_indeo4_decoder;
