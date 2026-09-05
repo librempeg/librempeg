@@ -505,6 +505,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_IMA_QT:
     case AV_CODEC_ID_ADPCM_IMA_WAV_MONO:
     case AV_CODEC_ID_ADPCM_IMA_WAV:
+    case AV_CODEC_ID_ADPCM_IMA_RAUD:
     case AV_CODEC_ID_ADPCM_IMA_AWC:
     case AV_CODEC_ID_ADPCM_IMA_FSB:
     case AV_CODEC_ID_ADPCM_IMA_XBOX:
@@ -1875,6 +1876,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         break;
     case AV_CODEC_ID_ADPCM_IMA_DAT4:
         nb_samples = (buf_size / block_align) * ((block_align/ch - 4) * 2);
+        break;
+    case AV_CODEC_ID_ADPCM_IMA_RAUD:
+        nb_samples = ((buf_size / (0x804 * ch))) * ((0x800) * 2);
         break;
     case AV_CODEC_ID_ADPCM_IMA_AWC:
         nb_samples = ((buf_size / (0x800 * ch))) * ((0x800 - 4) * 2);
@@ -3417,6 +3421,40 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         bytestream2_seek(&gb, 0, SEEK_END);
         ) /* End of CASE */
+    CASE(ADPCM_IMA_RAUD,
+        const int nb_samples_per_block = (0x800) * 2;
+        const int nb_blocks = avpkt->size / channels / 0x804;
+
+        for (int i = 0; i < channels; i++) {
+            int samples_offset = 0;
+            int left = nb_blocks;
+
+            while (left > 0) {
+                ADPCMChannelStatus *cs = &c->status[i];
+
+                cs->step_index = bytestream2_get_byteu(&gb);
+                bytestream2_skipu(&gb, 1);
+                cs->predictor = sign_extend(bytestream2_get_le16u(&gb), 16);
+                if (cs->step_index > 88u) {
+                    av_log(avctx, AV_LOG_ERROR, "ERROR: step_index = %i\n",
+                           cs->step_index);
+                    return AVERROR_INVALIDDATA;
+                }
+
+                samples = samples_p[i] + samples_offset;
+                for (int n = 0; n < nb_samples_per_block; n += 2) {
+                    int v = bytestream2_get_byteu(&gb);
+
+                    samples[n+0] = ff_adpcm_ima_qt_expand_nibble(cs, v & 0xf);
+                    samples[n+1] = ff_adpcm_ima_qt_expand_nibble(cs, v >> 4 );
+                }
+
+                samples_offset += nb_samples_per_block;
+                left--;
+            }
+        }
+        bytestream2_seek(&gb, 0, SEEK_END);
+        ) /* End of CASE */
     CASE(ADPCM_IMA_SMJPEG,
         for (int i = 0; i < channels; i++) {
             c->status[i].predictor = sign_extend(bytestream2_get_be16u(&gb), 16);
@@ -4501,6 +4539,7 @@ ADPCM_DECODER(ADPCM_IMA_PDA,     sample_fmts_s16,  adpcm_ima_pda,     "ADPCM IMA
 ADPCM_DECODER(ADPCM_IMA_QT,      sample_fmts_s16p, adpcm_ima_qt,      "ADPCM IMA QuickTime")
 ADPCM_DECODER(ADPCM_IMA_RAD,     sample_fmts_s16,  adpcm_ima_rad,     "ADPCM IMA Radical")
 ADPCM_DECODER(ADPCM_IMA_RAD_MONO,sample_fmts_s16p, adpcm_ima_rad_mono,"ADPCM IMA Radical (Mono)")
+ADPCM_DECODER(ADPCM_IMA_RAUD,    sample_fmts_s16p, adpcm_ima_raud,    "ADPCM IMA RAUD")
 ADPCM_DECODER(ADPCM_IMA_REF,     sample_fmts_s16p, adpcm_ima_ref,     "ADPCM IMA Reflections")
 ADPCM_DECODER(ADPCM_IMA_SSI,     sample_fmts_s16,  adpcm_ima_ssi,     "ADPCM IMA Simon & Schuster Interactive")
 ADPCM_DECODER(ADPCM_IMA_SMJPEG,  sample_fmts_s16,  adpcm_ima_smjpeg,  "ADPCM IMA Loki SDL MJPEG")

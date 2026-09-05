@@ -748,6 +748,7 @@ extern const FFCodec ff_adpcm_ima_qt_encoder;
 extern const FFCodec ff_adpcm_ima_qt_decoder;
 extern const FFCodec ff_adpcm_ima_rad_decoder;
 extern const FFCodec ff_adpcm_ima_rad_mono_decoder;
+extern const FFCodec ff_adpcm_ima_raud_decoder;
 extern const FFCodec ff_adpcm_ima_ref_decoder;
 extern const FFCodec ff_adpcm_ima_ssi_decoder;
 extern const FFCodec ff_adpcm_ima_ssi_encoder;
