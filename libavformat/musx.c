@@ -45,6 +45,47 @@ static int read_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX / 5 * 2;
 }
 
+static int psx_check(AVIOContext *pb, int64_t start, int64_t stop)
+{
+    avio_seek(pb, start, SEEK_SET);
+    while (!avio_feof(pb)) {
+        int predictor, flags;
+
+        predictor = (avio_r8(pb) >> 4) & 15;
+        flags = avio_r8(pb);
+
+        if (predictor > 5 || flags > 7)
+            return 0;
+
+        avio_skip(pb, 14);
+        if (avio_tell(pb) >= stop)
+            break;
+    }
+
+    return avio_tell(pb) != start;
+}
+
+static int xbox_check(AVIOContext *pb, int64_t start, int64_t stop, const int channels)
+{
+    avio_seek(pb, start, SEEK_SET);
+    while (!avio_feof(pb)) {
+        int step;
+
+        for (int ch = 0; ch < channels; ch++) {
+            avio_skip(pb, 2);
+            step = avio_rl16(pb);
+            if (step > 88)
+                return 0;
+        }
+
+        avio_skip(pb, 32 * channels);
+        if (avio_tell(pb) >= stop)
+            break;
+    }
+
+    return avio_tell(pb) != start;
+}
+
 static int read_header(AVFormatContext *s)
 {
     unsigned type, version, coding, offset;
@@ -69,11 +110,23 @@ static int read_header(AVFormatContext *s)
     if (version == 201 || version == 1) {
         avio_skip(pb, 8);
         offset = avio_rl32(pb);
-        codec = AV_CODEC_ID_ADPCM_PSX;
         channels = 2;
-        rate = 32000;
-        align = 0x80;
-        bit_rate = 16LL * channels * 8 * rate / 28;
+        if (psx_check(pb, offset, offset + 0x5000)) {
+            codec = AV_CODEC_ID_ADPCM_PSX;
+            rate = 32000;
+            bit_rate = 16LL * channels * 8 * rate / 28;
+            align = 0x80;
+        } else if (xbox_check(pb, offset, offset + 0x5000, channels)) {
+            codec = AV_CODEC_ID_ADPCM_IMA_XBOX;
+            rate = 44100;
+            bit_rate = 36LL * channels * 8 * rate / 64;
+            align = 0x24;
+        } else {
+            codec = AV_CODEC_ID_ADPCM_IMA_DVI;
+            rate = 32000;
+            bit_rate = 1LL * channels * 8 * rate / 2;
+            align = 1;
+        }
     } else if (version == 10) {
         type = avio_rl32(pb);
         offset = 0x800;
