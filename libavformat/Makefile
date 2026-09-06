@@ -782,6 +782,7 @@ OBJS-$(CONFIG_SMPL_DEMUXER)              += smpl.o pcm.o
 OBJS-$(CONFIG_SMSS_DEMUXER)              += smss.o pcm.o
 OBJS-$(CONFIG_SMUSH_DEMUXER)             += smush.o
 OBJS-$(CONFIG_SNDB_DEMUXER)              += sndb.o
+OBJS-$(CONFIG_SNDP_DEMUXER)              += sndp.o pcm.o
 OBJS-$(CONFIG_SNDX_DEMUXER)              += sndx.o
 OBJS-$(CONFIG_SNDZ_DEMUXER)              += sndz.o pcm.o
 OBJS-$(CONFIG_SNRSNS_DEMUXER)            += snrsns.o
