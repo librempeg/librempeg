@@ -26,7 +26,7 @@
 #include "internal.h"
 #include "pcm.h"
 
-static int xvag_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (memcmp(p->buf, "XVAG", 4) ||
         memcmp(p->buf+32, "fmat", 4))
@@ -35,7 +35,7 @@ static int xvag_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int xvag_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     unsigned offset, big_endian, codec;
     int nb_channels, rate, align;
@@ -114,7 +114,7 @@ const FFInputFormat ff_xvag_demuxer = {
     .p.long_name    = NULL_IF_CONFIG_SMALL("Sony PS3 XVAG"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "xvag",
-    .read_probe     = xvag_probe,
-    .read_header    = xvag_read_header,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
     .read_packet    = ff_pcm_read_packet,
 };
