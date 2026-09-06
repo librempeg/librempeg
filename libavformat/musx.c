@@ -78,6 +78,7 @@ static int read_header(AVFormatContext *s)
         type = avio_rl32(pb);
         offset = 0x800;
         switch (type) {
+        case MKTAG('P', 'C', '_', '_'):
         case MKTAG('P', 'S', '3', '_'):
             channels = 2;
             rate = 44100;
