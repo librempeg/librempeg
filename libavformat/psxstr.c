@@ -43,7 +43,7 @@
 #define RAW_CD_SECTOR_SIZE      2352
 #define RAW_CD_SECTOR_DATA_SIZE 2304
 #define RAW_DATA_SIZE           2048
-#define VIDEO_DATA_CHUNK_SIZE   0x7E0
+#define VIDEO_DATA_CHUNK_SIZE   2016
 #define VIDEO_DATA_HEADER_SIZE  0x38
 #define RIFF_HEADER_SIZE        0x2C
 
@@ -260,7 +260,7 @@ static int str_read_packet(AVFormatContext *s,
             if (sector[0x12] == CDXA_TYPE_AUDIO) // guess stereo
                 sector[0x13] |= 1;
             memset(sector + 0x18 + RAW_DATA_SIZE, 0, sizeof(sector) - 0x18 - RAW_DATA_SIZE);
-            audio_packet_size = (split_index > 0) ? split_index : 2304;
+            audio_packet_size = (split_index > 0) ? split_index : RAW_DATA_SIZE;
             if (split_index > 0)
                 avio_seek(pb, -(RAW_DATA_SIZE - split_index), SEEK_CUR);
         } else if (str->mode == 1 || str->mode < 0) {
