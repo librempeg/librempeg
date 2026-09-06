@@ -2722,8 +2722,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     CASE(ADPCM_IMA_APC,
         for (int n = nb_samples >> (1 - st); n > 0; n--) {
             int v = bytestream2_get_byteu(&gb);
-            *samples++ = adpcm_ima_expand_nibble(&c->status[0],  v >> 4  , 3);
-            *samples++ = adpcm_ima_expand_nibble(&c->status[st], v & 0x0F, 3);
+            *samples++ = ff_adpcm_ima_qt_expand_nibble(&c->status[0],  v >> 4);
+            *samples++ = ff_adpcm_ima_qt_expand_nibble(&c->status[st], v & 15);
         }
         ) /* End of CASE */
     CASE(ADPCM_IMA_HVQM2,
