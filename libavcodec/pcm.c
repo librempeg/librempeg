@@ -397,27 +397,35 @@ av_unused av_cold static int pcm_lut_decode_init(AVCodecContext *avctx)
         dst += size / 8;                                                       \
     }
 
-#define DECODE_PLANAR(size, endian, src, dst, n, shift, offset)                \
-    n /= channels;                                                             \
-    for (c = 0; c < avctx->ch_layout.nb_channels; c++) {                       \
-        int i;                                                                 \
-        dst = frame->extended_data[c];                                         \
-        for (i = n; i > 0; i--) {                                              \
-            uint ## size ## _t v = bytestream_get_ ## endian(&src);            \
-            AV_WN ## size ## A(dst, (uint ## size ##_t)(v - offset) << shift); \
-            dst += size / 8;                                                   \
-        }                                                                      \
+#define DECODE_PLANAR(size, endian, src, dst, n, shift, offset)                     \
+    bn /= channels;                                                                 \
+    n /= channels;                                                                  \
+    off = 0;                                                                        \
+    while (n > 0) {                                                                 \
+        int bns = FFMIN(bn, n);                                                     \
+                                                                                    \
+        for (int c = 0; c < avctx->ch_layout.nb_channels; c++) {                    \
+            dst = frame->extended_data[c] + off;                                    \
+            for (int i = bns; i > 0; i--) {                                         \
+                uint ## size ## _t v = bytestream_get_ ## endian(&src);             \
+                AV_WN ## size ## A(dst, (uint ## size ##_t)(v - offset) << shift);  \
+                dst += size / 8;                                                    \
+            }                                                                       \
+        }                                                                           \
+                                                                                    \
+        off += bns * (size/8);                                                      \
+        n -= bns;                                                                   \
     }
 
 static int pcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
-            int *got_frame_ptr, AVPacket *avpkt)
+                            int *got_frame_ptr, AVPacket *avpkt)
 {
     const uint8_t *src = avpkt->data;
     int buf_size       = avpkt->size;
     PCMDecode *s       = avctx->priv_data;
     int channels       = avctx->ch_layout.nb_channels;
     int sample_size    = s->sample_size;
-    int c, n, ret, samples_per_block;
+    int c, bn, n, ret, samples_per_block, off;
     uint8_t *samples;
     int32_t *dst_int32_t;
 
@@ -450,6 +458,7 @@ static int pcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     }
 
     n = buf_size / sample_size;
+    bn = (avctx->block_align > sample_size) ? avctx->block_align / sample_size : n;
 
     /* get output buffer */
     frame->nb_samples = n * samples_per_block / channels;
@@ -605,9 +614,18 @@ static int pcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     case AV_CODEC_ID_PCM_S32LE_PLANAR:
 #endif /* HAVE_BIGENDIAN */
         n /= avctx->ch_layout.nb_channels;
-        for (c = 0; c < avctx->ch_layout.nb_channels; c++) {
-            samples = frame->extended_data[c];
-            bytestream_get_buffer(&src, samples, n * sample_size);
+        bn /= avctx->ch_layout.nb_channels;
+        off = 0;
+        while (n > 0) {
+            int bns = FFMIN(bn, n);
+
+            for (int c = 0; c < avctx->ch_layout.nb_channels; c++) {
+                samples = frame->extended_data[c] + off;
+                bytestream_get_buffer(&src, samples, bns * sample_size);
+            }
+
+            off += bns * sample_size;
+            n -= bns;
         }
         break;
 #if CONFIG_PCM_ALAW_DECODER || CONFIG_PCM_MULAW_DECODER || \
