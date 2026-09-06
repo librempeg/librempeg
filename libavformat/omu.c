@@ -76,7 +76,7 @@ static int read_header(AVFormatContext *s)
 
 const FFInputFormat ff_omu_demuxer = {
     .p.name         = "omu",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("PS2 OMU"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Outrage PS2 OMU"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "omu",
     .read_probe     = read_probe,
