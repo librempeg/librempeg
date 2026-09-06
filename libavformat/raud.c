@@ -39,6 +39,7 @@ typedef struct SubBlocksTabEntry {
 
 typedef struct RAUDContext {
     int be;
+    int nb_blocks;
     int block_size;
     int block_subblocks;
     int header_size;
@@ -73,6 +74,10 @@ static int read_probe(const AVProbeData *p)
 
     if (p->buf_size < 20)
         return 0;
+    if ((int)AV_RB32(p->buf+8) <= 0)
+        return 0;
+    if ((int)AV_RB32(p->buf+12) <= 0)
+        return 0;
     if (AV_RB32(p->buf+16) != 0)
         return 0;
 
@@ -99,9 +104,9 @@ static int read_header(AVFormatContext *s)
     if (table_offset > 0x20000 || table_offset < 0x1c)
         return AVERROR_INVALIDDATA;
 
-    avio_skip(pb, 4);
+    raud->nb_blocks = avio_r32(pb);
     raud->block_size = avio_r32(pb);
-    if (raud->block_size <= 0)
+    if (raud->nb_blocks <= 0 || raud->block_size <= 0)
         return AVERROR_INVALIDDATA;
     raud->block_subblocks = raud->block_size / SUBBLOCK_SIZE;
     if (raud->block_subblocks <= 0)
@@ -494,6 +499,9 @@ redo:
             seek_info_offset = be ? avio_rb64(pb) : avio_rl64(pb);
             seek_info_size = be ? avio_rb64(pb) : avio_rl64(pb);
             seek_info_entry_size = (seek_info_size - seek_info_offset) / s->nb_streams;
+
+            if (avio_feof(pb))
+                return -1;
 
             if (seek_info_offset <= 0 || seek_info_size <= 0)
                 return -1;
