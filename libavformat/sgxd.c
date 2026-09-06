@@ -26,12 +26,13 @@
 #include "demux.h"
 #include "internal.h"
 #include "riff.h"
+#include "pcm.h"
 
 typedef struct SGXDStream {
     int64_t start_offset;
     int64_t stop_offset;
 
-    AVFormatContext *ctx;
+    int riff;
 } SGXDStream;
 
 typedef struct SGXDContext {
@@ -213,6 +214,7 @@ static int read_header(AVFormatContext *s)
 
         sst->start_offset = start_offset;
         sst->stop_offset = stop_offset;
+        sst->riff = riff;
 
         if (name_offset > 0) {
             char title[129] = {0};
@@ -275,7 +277,8 @@ redo:
 
     {
         const int64_t pos = avio_tell(pb);
-        const int block_size = st->codecpar->block_align;
+        const int block_align = st->codecpar->block_align;
+        const int block_size = sst->riff ? block_align : ff_pcm_default_packet_size(st->codecpar);
         const int size = FFMIN(block_size, sst->stop_offset - pos);
 
         ret = av_get_packet(pb, pkt, size);
