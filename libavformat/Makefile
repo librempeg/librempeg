@@ -683,6 +683,7 @@ OBJS-$(CONFIG_RAKI_DEMUXER)              += rakidec.o riffdec.o pcm.o
 OBJS-$(CONFIG_RAUD_DEMUXER)              += raud.o
 OBJS-$(CONFIG_RAWVIDEO_DEMUXER)          += rawvideodec.o
 OBJS-$(CONFIG_RAWVIDEO_MUXER)            += rawenc.o
+OBJS-$(CONFIG_RAWX_DEMUXER)              += rawx.o pcm.o
 OBJS-$(CONFIG_RCAVOC_DEMUXER)            += rcavoc.o
 OBJS-$(CONFIG_RCWT_DEMUXER)              += rcwtdec.o subtitles.o
 OBJS-$(CONFIG_RCWT_MUXER)                += rcwtenc.o subtitles.o
