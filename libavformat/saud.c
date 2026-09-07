@@ -45,26 +45,40 @@ static int read_probe(const AVProbeData *p)
 static int read_header(AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
+    int codec, align;
     int64_t offset;
     AVStream *st;
 
     avio_skip(pb, 12);
     offset = avio_rb32(pb);
     avio_skip(pb, offset);
-    if (avio_rb32(pb) != MKBETAG('S','D','A','T'))
-        return AVERROR_INVALIDDATA;
+    codec = avio_rb32(pb);
     avio_skip(pb, 4);
+
+    switch (codec) {
+    case MKBETAG('S','D','A','T'):
+        codec = AV_CODEC_ID_PCM_U8;
+        align = 1;
+        break;
+    case MKBETAG('S','D','6','M'):
+        codec = AV_CODEC_ID_PCM_U16LE;
+        align = 2;
+        break;
+    default:
+        avpriv_request_sample(s, "codec %X", codec);
+        return AVERROR_PATCHWELCOME;
+    }
 
     st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
 
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id = AV_CODEC_ID_PCM_U8;
+    st->codecpar->codec_id = codec;
     st->codecpar->ch_layout.nb_channels = 1;
     st->start_time = 0;
     st->codecpar->sample_rate = 22050;
-    st->codecpar->block_align = 1;
+    st->codecpar->block_align = align;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
