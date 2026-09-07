@@ -25,6 +25,7 @@
 #include "avio.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 #define HEADER_SIZE 0x3000
 #define rol(value, bits) (((value) << (bits)) | ((value) >> (32 - (bits))))
@@ -152,17 +153,20 @@ static int redspark_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
     RedSparkContext *redspark = s->priv_data;
+    AVIOContext *pb = s->pb;
+    int64_t pos;
     int ret;
 
-    if (avio_tell(s->pb) >= redspark->data_stop)
+    pos = avio_tell(pb);
+    if (pos >= redspark->data_stop)
         return AVERROR_EOF;
 
     if (avio_feof(s->pb))
         return AVERROR_EOF;
 
-    ret = av_get_packet(s->pb, pkt, par->block_align);
-    if (ret != par->block_align)
-        return AVERROR_INVALIDDATA;
+    const int block_size = ff_pcm_default_packet_size(par);
+    const int size = FFMIN(block_size, redspark->data_stop - pos);
+    ret = av_get_packet(pb, pkt, size);
     pkt->stream_index = 0;
 
     return ret;
