@@ -13,6 +13,10 @@ fate-aes_ctr: libavutil/tests/aes_ctr$(EXESUF)
 fate-aes_ctr: CMD = run libavutil/tests/aes_ctr$(EXESUF)
 fate-aes_ctr: CMP = null
 
+FATE_LIBAVUTIL += fate-atomic
+fate-atomic: libavutil/tests/atomic$(EXESUF)
+fate-atomic: CMD = run libavutil/tests/atomic$(EXESUF)
+
 FATE_LIBAVUTIL += fate-camellia
 fate-camellia: libavutil/tests/camellia$(EXESUF)
 fate-camellia: CMD = run libavutil/tests/camellia$(EXESUF)
