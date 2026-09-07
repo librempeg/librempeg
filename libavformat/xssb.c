@@ -24,6 +24,7 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
 typedef struct XSSBDemuxContext {
     int current_stream;
@@ -91,11 +92,11 @@ static int read_header(AVFormatContext *s)
         switch (codec) {
         case 0x01:
             codec = AV_CODEC_ID_PCM_S16LE;
-            align = 128;
+            align = 2;
             break;
         case 0x69:
             codec = AV_CODEC_ID_ADPCM_IMA_XBOX;
-            align = 0x24;
+            align = 36;
             break;
         default:
             avpriv_request_sample(s, "codec %02x", codec);
@@ -183,12 +184,12 @@ redo:
     }
 
     pos = avio_tell(pb);
-    size = FFMIN(par->block_align, xst->stop_offset - pos);
+    const int block_size = ff_pcm_default_packet_size(par);
+    size = FFMIN(block_size, xst->stop_offset - pos);
 
     ret = av_get_packet(pb, pkt, size);
     pkt->pos = pos;
     pkt->stream_index = st->index;
-    pkt->duration = pkt->size;
 
     return ret;
 }
