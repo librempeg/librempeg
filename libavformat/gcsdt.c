@@ -28,6 +28,8 @@
 
 static int read_probe(const AVProbeData *p)
 {
+    int score = 0;
+
     if (AV_RB32(p->buf) != 2)
         return 0;
 
@@ -38,7 +40,12 @@ static int read_probe(const AVProbeData *p)
     if (AV_RB32(p->buf+0x98) != 0x8000)
         return 0;
 
-    return AVPROBE_SCORE_MAX;
+    for (int ch = 0; ch < 2; ch++) {
+        for (int n = 0; n < 16; n++)
+            score += 3 * (AV_RN16(p->buf + 0x3c + n * 2 + (32 + 14) * ch) != 0);
+    }
+
+    return score;
 }
 
 static int read_header(AVFormatContext *s)
