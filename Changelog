@@ -4,6 +4,157 @@ releases are sorted from youngest to oldest.
 version <next>:
 
 
+version 9.0:
+- Extend AMF Color Converter (vf_vpp_amf) HDR capabilities
+- LCEVC track muxing support in MP4 muxer
+- Playdate video encoder and muxer
+- Add v360_vulkan filter
+- HE-AAC 960 decoding (DAB+)
+- SMPTE 2094-50 metadata support and passthrough
+- ProRes RAW VideoToolbox hwaccel
+- APV Vulkan hwaccel
+- Remove CELT decoding support (doesn't affect Opus CELT)
+- Remove ogg/celt parsing
+- Bitstream filter to split Dolby Vision multi-layer HEVC
+- Add AMF hardware memory mapping support.
+- Remove deprecated NVENC options and support for pre-11.1 SDK versions
+- ubibnm demuxer
+- ao demuxer
+- iab demuxer
+- bg00 demuxer
+- xssb demuxer
+- ubibao demuxer
+- sgxd demuxer
+- dcswav demuxer
+- 9tav demuxer
+- smss demuxer
+- mraw demuxer
+- dcnaomi demuxer
+- wbat demuxer
+- rcavoc demuxer
+- sndx demuxer
+- ue4opus demuxer
+- ngcdspstm demuxer
+- psnd demuxer
+- pxnd demuxer
+- ueopus demuxer
+- hxd demuxer
+- nxa1 demuxer
+- dsi demuxer
+- vsstr demuxer
+- nxof demuxer
+- xnb demuxer
+- segafilma demuxer
+- ogl demuxer
+- gcub demuxer
+- wbk demuxer
+- xwv demuxer
+- ahv demuxer
+- ast0 demuxer
+- mhwk demuxer
+- wave demuxer
+- ue3xma demuxer
+- xa30 demuxer
+- vxds demuxer
+- seg demuxer
+- vid1 demuxer
+- xau demuxer
+- thp muxer
+- fmtowns demuxer
+- ldac demuxer
+- his demuxer
+- his0 demuxer
+- wmw demuxer
+- sdf demuxer
+- nxms demuxer
+- audiopkg demuxer
+- rpza demuxer
+- ubipk demuxer
+- cfdf_d5 demuxer
+- satsap demuxer
+- nxap demuxer
+- spm demuxer
+- vs00 demuxer
+- mus demuxer
+- cwv demuxer
+- bgw demuxer
+- ymf demuxer
+- waf demuxer
+- cfn demuxer
+- i3ds demuxer
+- vxn demuxer
+- sl3 demuxer
+- gbts demuxer
+- nop demuxer
+- audv demuxer
+- akb demuxer
+- sdt demuxer
+- gcsdt demuxer
+- pphd demuxer
+- ubiint demuxer
+- ttfmv demuxer
+- ivag demuxer
+- konamibmp demuxer
+- oor demuxer
+- xwav demuxer
+- ue5xma demuxer
+- csx2 demuxer
+- opns demuxer
+- psxstr muxer
+- kraw demuxer
+- rada demuxer
+- lps demuxer
+- psf demuxer
+- psfb demuxer
+- cmpwave demuxer
+- wss demuxer
+- svgp demuxer
+- cps demuxer
+- vs demuxer
+- vas demuxer
+- raki demuxer
+- wav2 demuxer
+- akb2 demuxer
+- wms demuxer
+- hgc1 demuxer
+- msa demuxer
+- msvp demuxer
+- mcss demuxer
+- vcmus demuxer
+- kromemus demuxer
+- p3d demuxer
+- raud demuxer
+- gca1 demuxer
+- hsf0 demuxer
+- pwb demuxer
+- xa2 demuxer
+- wadp demuxer
+- sndp demuxer
+- ssnd demuxer
+- adpcm_ima_raud decoder
+- adpcm_ima_rad_mono decoder
+- adpcm_ima decoder
+- bis_dpcm decoder
+- compresswave decoder
+- adpcm_xa encoder
+- ttvideo decoder
+- adpcm_ima_oki4 decoder
+- adpcm_ima_ref decoder
+- pcm dvd-audio decoder
+- adpcm_xa8 decoder
+- adpcm_psx encodere
+- bink2 video decoder
+- cwv_dpcm decoder
+- adpcm_nxap decoder
+- adpcm_ima_ww decoder
+- ldac audio decoder
+- thp video encoder
+- relic audio decoder
+- rcavoc decoder
+- actimagine VX decoder
+- adpcm_ima_xbox encoder
+
+
 version 8.1:
 - Rockchip H.264/HEVC hardware encoder
 - bvc2 video decoder
