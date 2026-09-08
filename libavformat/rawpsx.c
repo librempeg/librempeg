@@ -1,4 +1,3 @@
-
 /*
  * Raw PSX demuxer
  * Copyright (c) 2026 Paul B Mahol
