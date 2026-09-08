@@ -231,7 +231,7 @@ static const AVClass adpcm_psx_encoder_class = {
 
 const FFCodec ff_adpcm_psx_encoder = {
     .p.name         = "adpcm_psx",
-    CODEC_LONG_NAME("ADPCM Playstation"),
+    CODEC_LONG_NAME("ADPCM PlayStation"),
     .p.type         = AVMEDIA_TYPE_AUDIO,
     .p.id           = AV_CODEC_ID_ADPCM_PSX,
     .p.capabilities = AV_CODEC_CAP_DR1,

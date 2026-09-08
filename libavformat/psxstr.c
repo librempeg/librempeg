@@ -1,5 +1,5 @@
 /*
- * Sony Playstation (PSX) STR File Demuxer
+ * Sony PlayStation (PSX) STR File Demuxer
  * Copyright (c) 2003 The FFmpeg project
  *
  * This file is part of Librempeg
@@ -23,7 +23,7 @@
  * @file
  * PSX STR file demuxer
  * by Mike Melanson (melanson@pcisys.net)
- * This module handles streams that have been ripped from Sony Playstation
+ * This module handles streams that have been ripped from Sony PlayStation
  * CD games. This demuxer can handle either raw STR files (which are just
  * concatenations of raw compact disc sectors) or STR files with 0x2C-byte
  * RIFF headers, followed by CD sectors.
@@ -417,7 +417,7 @@ static int str_read_close(AVFormatContext *s)
 
 const FFInputFormat ff_str_demuxer = {
     .p.name         = "psxstr",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Sony Playstation STR"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Sony PlayStation STR"),
     .p.flags        = AVFMT_NO_BYTE_SEEK | AVFMT_GENERIC_INDEX,
     .priv_data_size = sizeof(StrDemuxContext),
     .read_probe     = str_probe,

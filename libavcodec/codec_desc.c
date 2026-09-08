@@ -2661,7 +2661,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_ADPCM_PSX,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "adpcm_psx",
-        .long_name = NULL_IF_CONFIG_SMALL("ADPCM Playstation"),
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM PlayStation"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
     {
@@ -2815,7 +2815,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_ADPCM_PSXC,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "adpcm_psxc",
-        .long_name = NULL_IF_CONFIG_SMALL("ADPCM Playstation C"),
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM PlayStation C"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
     {
