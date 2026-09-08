@@ -34,7 +34,7 @@ static int read_probe(const AVProbeData *p)
 {
     int score = AVPROBE_SCORE_MAX/2;
 
-    if (p->buf_size < 26)
+    if (p->buf_size < 32)
         return 0;
 
     for (int i = 0; i < 8; i++) {
@@ -48,6 +48,8 @@ static int read_probe(const AVProbeData *p)
     if (AV_RL32(p->buf + 12) == 0)
         return 0;
     if (AV_RL16(p->buf + 24) == 0)
+        return 0;
+    if (AV_RL32(p->buf + 28) != 0x3c)
         return 0;
     if (!av_match_ext(p->filename, "snd"))
         score /= 15;
