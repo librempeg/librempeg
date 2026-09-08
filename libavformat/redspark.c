@@ -161,7 +161,7 @@ static int redspark_read_packet(AVFormatContext *s, AVPacket *pkt)
     if (pos >= redspark->data_stop)
         return AVERROR_EOF;
 
-    if (avio_feof(s->pb))
+    if (avio_feof(pb))
         return AVERROR_EOF;
 
     const int block_size = ff_pcm_default_packet_size(par);
