@@ -83,23 +83,24 @@ static int read_header(AVFormatContext *s)
             break;
     }
 
-    if (align <= 0)
-        return AVERROR_INVALIDDATA;
+    if (align <= 0) {
+        align = 16;
+    } else {
+        while (!avio_feof(pb)) {
+            avio_seek(pb, align * channels, SEEK_SET);
 
-    while (!avio_feof(pb)) {
-        avio_seek(pb, align * channels, SEEK_SET);
+            ret = ffio_read_size(pb, tmp, sizeof(tmp));
+            if (ret < 0)
+                return ret;
 
-        ret = ffio_read_size(pb, tmp, sizeof(tmp));
-        if (ret < 0)
-            return ret;
+            if (!memcmp(start, tmp, sizeof(start)))
+                channels++;
+            else
+                break;
 
-        if (!memcmp(start, tmp, sizeof(start)))
-            channels++;
-        else
-            break;
-
-        if (channels >= INT_MAX/align)
-            return AVERROR_INVALIDDATA;
+            if (channels >= INT_MAX/align)
+                return AVERROR_INVALIDDATA;
+        }
     }
 
     st = avformat_new_stream(s, NULL);
