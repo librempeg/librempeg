@@ -3746,49 +3746,63 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         break;
 #endif /* CONFIG_ADPCM_THP(_LE)_DECODER */
     CASE(ADPCM_NDSP_SI,
-        for (int ch = 0; ch < channels; ch++) {
-            uint8_t *src = avpkt->data;
-            samples = samples_p[ch];
+        int left = avpkt->size;
+        int block_align = (avctx->block_align > 0) ? FFMIN(avctx->block_align, left) : left;
+        int samples_offset = 0;
+        int input_offset = 0;
 
-            /* Read in every sample for this channel.  */
-            for (int i = 0; i < (nb_samples + 13) / 14; i++) {
-                int factor1, factor2, sample1, sample2;
-                int byte, index, scale;
-                uint8_t data[8];
+        while (left > 0) {
+            const int block_size = FFMIN(left, block_align);
+            const int nb_samples_per_block = 14 * (block_size / channels / 8);
 
-                for (int j = 0; j < 8; j++)
-                    data[j] = src[(j/2)*2*channels + (j&1) + 2*ch];
+            for (int ch = 0; ch < channels; ch++) {
+                uint8_t *src = avpkt->data + input_offset;
+                samples = samples_p[ch] + samples_offset;
 
-                byte = data[0];
-                index = (byte >> 4) & 0x7;
-                scale = 1 << (byte & 0xF);
-                factor1 = c->table[ch][index * 2];
-                factor2 = c->table[ch][index * 2 + 1];
-                sample1 = c->status[ch].sample1;
-                sample2 = c->status[ch].sample2;
+                /* Read in every sample for this channel.  */
+                for (int i = 0; i < (nb_samples_per_block + 13) / 14; i++) {
+                    int factor1, factor2, sample1, sample2;
+                    int byte, index, scale;
+                    uint8_t data[8];
 
-                /* Decode 14 samples.  */
-                for (int n = 0; n < 14 && (i * 14 + n < nb_samples); n++) {
-                    int32_t sampledat;
+                    for (int j = 0; j < 8; j++)
+                        data[j] = src[(j/2)*2*channels + (j&1) + 2*ch];
 
-                    if (n & 1) {
-                        sampledat = sign_extend(byte, 4);
-                    } else {
-                        byte = data[1+n/2];
-                        sampledat = sign_extend(byte >> 4, 4);
+                    byte = data[0];
+                    index = (byte >> 4) & 0x7;
+                    scale = 1 << (byte & 0xF);
+                    factor1 = c->table[ch][index * 2];
+                    factor2 = c->table[ch][index * 2 + 1];
+                    sample1 = c->status[ch].sample1;
+                    sample2 = c->status[ch].sample2;
+
+                    /* Decode 14 samples.  */
+                    for (int n = 0; n < 14 && (i * 14 + n < nb_samples_per_block); n++) {
+                        int32_t sampledat;
+
+                        if (n & 1) {
+                            sampledat = sign_extend(byte, 4);
+                        } else {
+                            byte = data[1+n/2];
+                            sampledat = sign_extend(byte >> 4, 4);
+                        }
+
+                        sampledat = (sampledat * scale) << 11;
+                        sampledat = ((sample1 * factor1 +
+                                      sample2 * factor2 + 1024 + sampledat) >> 11);
+                        *samples = av_clip_int16(sampledat);
+                        sample2 = sample1;
+                        sample1 = *samples++;
                     }
 
-                    sampledat = (sampledat * scale) << 11;
-                    sampledat = ((sample1 * factor1 +
-                                  sample2 * factor2 + 1024 + sampledat) >> 11);
-                    *samples = av_clip_int16(sampledat);
-                    sample2 = sample1;
-                    sample1 = *samples++;
+                    c->status[ch].sample1 = sample1;
+                    c->status[ch].sample2 = sample2;
                 }
-
-                c->status[ch].sample1 = sample1;
-                c->status[ch].sample2 = sample2;
             }
+
+            samples_offset += nb_samples_per_block;
+            input_offset += block_size;
+            left -= block_size;
         }
         bytestream2_seek(&gb, 0, SEEK_END);
         ) /* End of CASE */
