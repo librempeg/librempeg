@@ -26,35 +26,14 @@
 #include "demux.h"
 #include "internal.h"
 #include "pcm.h"
-
-static int psx_probe(uint8_t *buf, int offset, int size)
-{
-    int score = 0;
-
-    for (int i = offset; i < size - 2; i += 16) {
-        int predictor = (buf[i+0] >> 4) & 15;
-        int flags = buf[i+1];
-
-        if (predictor > 5 || flags > 7)
-            return 0;
-
-        for (int j = i + 2; j < FFMIN(i + 16, size); j++) {
-            if (buf[j]) {
-                score++;
-                break;
-            }
-        }
-    }
-
-    return score;
-}
+#include "psx_probe.h"
 
 static int read_probe(const AVProbeData *p)
 {
     if (p->buf_size < 0x2000)
         return 0;
 
-    return FFMIN(AVPROBE_SCORE_MAX, psx_probe(p->buf, 0, p->buf_size));
+    return FFMIN(AVPROBE_SCORE_MAX, ff_psx_probe(p->buf, 0, p->buf_size));
 }
 
 static int read_header(AVFormatContext *s)
