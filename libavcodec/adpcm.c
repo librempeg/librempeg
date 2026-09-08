@@ -89,6 +89,14 @@ static const int8_t xa_adpcm_table[5][2] = {
     { 122, -60 }
 };
 
+static const float psx_adpcm_table[5][2] = {
+    { 0.0f, 0.0f },
+    { 0.9375f, 0.0f },
+    { 1.796875f, -0.8125f },
+    { 1.53125f, -0.859375f },
+    { 1.90625f, -0.9375f },
+};
+
 static const int8_t fmod_adpcm_table[8][2] = {
     {   0,   0 },
     {  60,   0 },
@@ -4025,23 +4033,27 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
                 /* Read in every sample for this channel.  */
                 for (int i = 0; i < nb_samples_per_block / 28; i++) {
-                    int coef1, coef2, hist1, hist2;
-                    int filter, shift, flag, byte;
+                    int filter, shift, flag, byte, hist1, hist2;
+                    float coef1, coef2;
 
                     filter = bytestream2_get_byteu(&gb);
-                    shift  = filter & 0xf;
+                    shift  = filter & 15;
                     filter = filter >> 4;
-                    if (filter >= FF_ARRAY_ELEMS(xa_adpcm_table))
-                        return AVERROR_INVALIDDATA;
-                    flag   = bytestream2_get_byteu(&gb) & 0x7;
+                    flag = bytestream2_get_byteu(&gb) & 7;
 
-                    coef1 = xa_adpcm_table[filter][0];
-                    coef2 = xa_adpcm_table[filter][1];
+                    if (filter > 4)
+                        filter = 0;
+                    if (shift > 12)
+                        shift = 9;
+
+                    coef1 = psx_adpcm_table[filter][0];
+                    coef2 = psx_adpcm_table[filter][1];
 
                     hist1 = c->status[channel].sample1;
                     hist2 = c->status[channel].sample2;
 
                     /* Decode 28 samples.  */
+                    shift = 20 - shift;
                     for (int n = 0; n < 28; n++) {
                         int sample = 0, scale;
 
@@ -4052,9 +4064,10 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                             scale = sign_extend(byte & 0xF, 4);
                         }
 
-                        if (flag < 0x07) {
-                            scale  = scale * (1 << 12);
-                            sample = (int)((scale >> shift) + (hist1 * coef1 + hist2 * coef2) / 64);
+                        if (flag < 7) {
+                            scale  = scale * (1 << shift);
+                            sample = scale + (int32_t)((hist1 * coef1 + hist2 * coef2) * 256.f);
+                            sample >>= 8;
                         }
                         *samples++ = av_clip_int16(sample);
                         hist2 = hist1;
