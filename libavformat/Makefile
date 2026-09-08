@@ -755,6 +755,7 @@ OBJS-$(CONFIG_SEGAFILM_MUXER)            += segafilmenc.o
 OBJS-$(CONFIG_SEGAFILMA_DEMUXER)         += segafilma.o
 OBJS-$(CONFIG_SEGMENT_MUXER)             += segment.o
 OBJS-$(CONFIG_SER_DEMUXER)               += serdec.o
+OBJS-$(CONFIG_SFXB_DEMUXER)              += sfxb.o pcm.o
 OBJS-$(CONFIG_SGA_DEMUXER)               += sga.o
 OBJS-$(CONFIG_SGXD_DEMUXER)              += sgxd.o pcm.o
 OBJS-$(CONFIG_SHAA_DEMUXER)              += shaa.o pcm.o
