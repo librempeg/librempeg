@@ -47,20 +47,6 @@ fate-filter-w3fdif-complex: CMD = framecrc -flags bitexact -idct simple -i $(TAR
 
 FATE_FILTER_SAMPLES-$(call FILTERDEMDEC, W3FDIF, MPEGTS, MPEG2VIDEO) += $(FATE_W3FDIF)
 
-FATE_MCDEINT += fate-filter-mcdeint-fast
-fate-filter-mcdeint-fast: CMD = framecrc -flags bitexact -idct simple -i $(TARGET_SAMPLES)/mpeg2/mpeg2_field_encoding.ts -frames:v 30 -vf mcdeint=fast
-
-FATE_MCDEINT += fate-filter-mcdeint-medium
-fate-filter-mcdeint-medium: CMD = framecrc -flags bitexact -idct simple -i $(TARGET_SAMPLES)/mpeg2/mpeg2_field_encoding.ts -frames:v 30 -vf mcdeint=mode=medium
-
-FATE_FILTER_SAMPLES-$(call FILTERDEMDEC, MCDEINT, MPEGTS, MPEG2VIDEO, SNOW_ENCODER) += $(FATE_MCDEINT)
-
-FATE_FILTER-$(call FILTERFRAMECRC, MCDEINT TESTSRC, SNOW_ENCODER SCALE_FILTER) += fate-filter-mcdeint-slow-edge
-fate-filter-mcdeint-slow-edge: CMD = framecrc -auto_conversion_filters -flags bitexact -lavfi testsrc=s=5x32:r=25:d=1,mcdeint=mode=slow -frames:v 3
-
-FATE_FILTER-$(call FILTERFRAMECRC, MCDEINT TESTSRC, SNOW_ENCODER SCALE_FILTER) += fate-filter-mcdeint-slow
-fate-filter-mcdeint-slow: CMD = framecrc -auto_conversion_filters -flags bitexact -lavfi testsrc=s=128x2:r=25:d=1,mcdeint=mode=slow -frames:v 3
-
 FATE_FILTER_SAMPLES-$(call FILTERDEMDEC, CODECVIEW, RM, RV40) += fate-filter-codecview-mvs
 fate-filter-codecview-mvs: CMD = framecrc -flags2 +export_mvs -i $(TARGET_SAMPLES)/real/spygames-2MB.rmvb -vf codecview=mv=pf+bf+bb -frames:v 60 -an
 

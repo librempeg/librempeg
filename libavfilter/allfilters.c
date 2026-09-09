@@ -419,7 +419,6 @@ extern const FFFilter ff_vf_maskedmerge;
 extern const FFFilter ff_vf_maskedmin;
 extern const FFFilter ff_vf_maskedthreshold;
 extern const FFFilter ff_vf_maskfun;
-extern const FFFilter ff_vf_mcdeint;
 extern const FFFilter ff_vf_median;
 extern const FFFilter ff_vf_mergeplanes;
 extern const FFFilter ff_vf_mestimate;

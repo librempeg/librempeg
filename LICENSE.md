@@ -38,7 +38,6 @@ Specifically, the GPL parts of Librempeg are:
     - `vf_hqdn3d.c`
     - `vf_kerndeint.c`
     - `vf_lensfun.c` (GPL version 3 or later)
-    - `vf_mcdeint.c`
     - `vf_mpdecimate.c`
     - `vf_nnedi.c`
     - `vf_owdenoise.c`
