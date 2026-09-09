@@ -562,7 +562,6 @@ OBJS-$(CONFIG_SOBEL_OPENCL_FILTER)           += vf_convolution_opencl.o opencl.o
                                                 opencl/convolution.o
 OBJS-$(CONFIG_SITI_FILTER)                   += vf_siti.o
 OBJS-$(CONFIG_SPLIT_FILTER)                  += split.o
-OBJS-$(CONFIG_SPP_FILTER)                    += vf_spp.o qp_table.o
 OBJS-$(CONFIG_SR_FILTER)                     += vf_sr.o
 OBJS-$(CONFIG_SR_AMF_FILTER)                 += vf_sr_amf.o scale_eval.o vf_amf_common.o
 OBJS-$(CONFIG_SSIM_FILTER)                   += vf_ssim.o framesync.o

@@ -530,7 +530,6 @@ extern const FFFilter ff_vf_smartblur;
 extern const FFFilter ff_vf_sobel;
 extern const FFFilter ff_vf_sobel_opencl;
 extern const FFFilter ff_vf_split;
-extern const FFFilter ff_vf_spp;
 extern const FFFilter ff_vf_sr;
 extern const FFFilter ff_vf_ssim;
 extern const FFFilter ff_vf_ssim360;
