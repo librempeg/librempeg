@@ -45,11 +45,14 @@ typedef struct FormatContext {
     unsigned nb_ranges;
     char **alphamodes;
     unsigned nb_alphamodes;
+    char *chromalocations;
+    unsigned nb_chromalocations;
 
     AVFilterFormats *formats; ///< parsed from `pix_fmts`
     AVFilterFormats *color_spaces; ///< parsed from `csps`
     AVFilterFormats *color_ranges; ///< parsed from `ranges`
     AVFilterFormats *alpha_modes; ///< parsed from `alphamodes`
+    AVFilterFormats *chroma_locations; ///< parsed from `chromalocations`
 } FormatContext;
 
 static av_cold void uninit(AVFilterContext *ctx)
@@ -59,6 +62,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     ff_formats_unref(&s->color_spaces);
     ff_formats_unref(&s->color_ranges);
     ff_formats_unref(&s->alpha_modes);
+    ff_formats_unref(&s->chroma_locations);
 }
 
 static av_cold int invert_formats(AVFilterFormats **fmts,
@@ -127,10 +131,14 @@ static av_cold int init(AVFilterContext *ctx)
     }
 
     if (!strcmp(ctx->filter->name, "noformat")) {
+        if (s->chroma_locations &&
+            (ret = ff_add_format(&s->chroma_locations, AVCHROMA_LOC_UNSPECIFIED)) < 0)
+            return ret;
         if ((ret = invert_formats(&s->formats,      ff_all_formats(AVMEDIA_TYPE_VIDEO))) < 0 ||
             (ret = invert_formats(&s->color_spaces, ff_all_color_spaces())) < 0 ||
             (ret = invert_formats(&s->color_ranges, ff_all_color_ranges())) < 0 ||
-            (ret = invert_formats(&s->alpha_modes,  ff_all_alpha_modes())) < 0)
+            (ret = invert_formats(&s->alpha_modes,  ff_all_alpha_modes())) < 0 ||
+            (ret = invert_formats(&s->chroma_locations, ff_all_chroma_locations())) < 0)
             return ret;
     }
 
@@ -138,7 +146,8 @@ static av_cold int init(AVFilterContext *ctx)
     if (s->formats      && (ret = ff_formats_ref(s->formats,      &s->formats)) < 0 ||
         s->color_spaces && (ret = ff_formats_ref(s->color_spaces, &s->color_spaces)) < 0 ||
         s->color_ranges && (ret = ff_formats_ref(s->color_ranges, &s->color_ranges)) < 0 ||
-        s->alpha_modes  && (ret = ff_formats_ref(s->alpha_modes,  &s->alpha_modes)) < 0)
+        s->alpha_modes  && (ret = ff_formats_ref(s->alpha_modes,  &s->alpha_modes)) < 0 ||
+        s->chroma_locations && (ret = ff_formats_ref(s->chroma_locations, &s->chroma_locations)) < 0)
         return ret;
 
     return 0;
@@ -154,7 +163,8 @@ static int query_formats(const AVFilterContext *ctx,
     if (s->formats      && (ret = ff_set_common_formats2     (ctx, cfg_in, cfg_out, s->formats)) < 0 ||
         s->color_spaces && (ret = ff_set_common_color_spaces2(ctx, cfg_in, cfg_out, s->color_spaces)) < 0 ||
         s->color_ranges && (ret = ff_set_common_color_ranges2(ctx, cfg_in, cfg_out, s->color_ranges)) < 0 ||
-        s->alpha_modes  && (ret = ff_set_common_alpha_modes2(ctx, cfg_in, cfg_out, s->alpha_modes)) < 0)
+        s->alpha_modes  && (ret = ff_set_common_alpha_modes2(ctx, cfg_in, cfg_out, s->alpha_modes)) < 0 ||
+        s->chroma_locations && (ret = ff_set_common_chroma_locations2(ctx, cfg_in, cfg_out, s->chroma_locations)) < 0)
         return ret;
 
     return 0;
@@ -169,6 +179,7 @@ static const AVOption options[] = {
     { "color_spaces", "set the list of color spaces", OFFSET(csps), AV_OPT_TYPE_STRING|AR, {.arr=&def_array}, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { "color_ranges", "set the list of color ranges", OFFSET(ranges), AV_OPT_TYPE_STRING|AR, {.arr=&def_array}, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { "alpha_modes", "set the list of alpha modes", OFFSET(alphamodes), AV_OPT_TYPE_STRING|AR, {.arr=&def_array}, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
+    { "chroma_locations", "set the list of chroma sample locations", OFFSET(chromalocations), AV_OPT_TYPE_STRING|AR, {.arr=&def_array}, .flags = AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
     { NULL }
 };
 
