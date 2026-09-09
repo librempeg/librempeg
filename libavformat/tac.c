@@ -86,10 +86,15 @@ static int tac_read_header(AVFormatContext *s)
         return AVERROR_INVALIDDATA;
     avio_seek(pb, offset, SEEK_SET);
 
-    for (int i = 0; i < 256; i++)
-        extra += !!(avio_r8(pb) & 0x80);
+    for (int i = 0; i < 256; i++) {
+        int x = avio_r8(pb) & 0x80;
 
-    if (offset + 256+extra > BLOCK_SIZE)
+        if (!!x)
+            avio_r8(pb);
+    }
+    extra = avio_tell(pb) - offset;
+
+    if (avio_tell(pb) > BLOCK_SIZE)
         return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
@@ -97,13 +102,13 @@ static int tac_read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
     par = st->codecpar;
 
-    if ((ret = ff_alloc_extradata(par, 32+256+extra)) < 0)
+    if ((ret = ff_alloc_extradata(par, 32+extra)) < 0)
         return ret;
 
     avio_seek(pb, 0, SEEK_SET);
     avio_read(pb, par->extradata, 32);
     avio_seek(pb, offset, SEEK_SET);
-    avio_read(pb, par->extradata+32, 256+extra);
+    avio_read(pb, par->extradata+32, extra);
 
     par->codec_type = AVMEDIA_TYPE_AUDIO;
     par->codec_id = AV_CODEC_ID_TAC;
