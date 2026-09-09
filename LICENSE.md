@@ -54,7 +54,6 @@ Specifically, the GPL parts of Librempeg are:
     - `vf_stereo3d.c`
     - `vf_super2xsai.c`
     - `vf_tinterlace.c`
-    - `vf_uspp.c`
     - `vf_vaguedenoiser.c`
     - `vsrc_mptestsrc.c`
 
