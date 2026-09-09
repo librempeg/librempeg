@@ -32,7 +32,6 @@ Specifically, the GPL parts of Librempeg are:
     - `vf_cropdetect.c`
     - `vf_delogo.c`
     - `vf_eq.c`
-    - `vf_find_rect.c`
     - `vf_fspp.c`
     - `vf_histeq.c`
     - `vf_hqdn3d.c`
