@@ -292,7 +292,6 @@ extern const FFFilter ff_vf_convolve;
 extern const FFFilter ff_vf_copy;
 extern const FFFilter ff_vf_coreimage;
 extern const FFFilter ff_vf_corr;
-extern const FFFilter ff_vf_cover_rect;
 extern const FFFilter ff_vf_crop;
 extern const FFFilter ff_vf_cropdetect;
 extern const FFFilter ff_vf_cue;

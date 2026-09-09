@@ -28,7 +28,6 @@ Specifically, the GPL parts of Librempeg are:
     - `vf_blackframe.c`
     - `vf_boxblur.c`
     - `vf_colormatrix.c`
-    - `vf_cover_rect.c`
     - `vf_cropdetect.c`
     - `vf_delogo.c`
     - `vf_eq.c`
