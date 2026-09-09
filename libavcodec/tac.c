@@ -186,11 +186,9 @@ static int parse_frame_header(AVCodecContext *avctx, GetByteContext *gb)
 
     if (bytestream2_peek_le32(gb) == 0xFFFFFFFFu) {
         bytestream2_skip(gb, 4);
-        while (!bytestream2_peek_byte(gb)) {
-            bytestream2_skip(gb, 1);
-            if (bytestream2_get_bytes_left(gb) <= 0)
-                break;
-        }
+
+        if (bytestream2_peek_le32(gb) == 0)
+            return 1;
     }
 
     if (bytestream2_get_bytes_left(gb) <= 0)

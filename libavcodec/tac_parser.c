@@ -56,9 +56,14 @@ static int tac_parse(AVCodecParserContext *s1,
 
             if (s->skip > 0) {
                 s->skip--;
-            } else if (s->size == 0) {
+                if (s->skip == 0) {
+                    next = i + 1;
+                    break;
+                }
+            } else {
                 s->pos++;
                 if (s->pos >= 4) {
+                    s->pos = 0;
                     if (state == 0xFFFFFFFFu) {
                         s->skip = 0x4E000u - (s1->cur_offset%0x4E000) - 4;
                         s->size = 0;
@@ -68,20 +73,8 @@ static int tac_parse(AVCodecParserContext *s1,
                         s->key = !(s->size & 0x8000u);
                         s->size &= 0x7FFFu;
                         s->size += 8;
+                        s->skip = s->size - 4;
                     }
-                    s->pos = 0;
-                }
-            }
-
-            if (s->size > 0 && s->skip == 0) {
-                if (s->size + i - 3 < buf_size) {
-                    next = s->size + i - 3;
-                    s->size = 0;
-                    s->pos = 0;
-                    break;
-                } else {
-                    s->size -= buf_size - i;
-                    break;
                 }
             }
         }
