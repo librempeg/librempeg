@@ -203,6 +203,9 @@ static int parse_frame_header(AVCodecContext *avctx, GetByteContext *gb)
     h->huff_count = bytestream2_get_le16(gb);
     h->huff_cfg = bytestream2_get_be32(gb);
 
+    if (bytestream2_get_bytes_left(gb) + 4 < h->frame_size)
+        return AVERROR_INVALIDDATA;
+
     if (bytestream2_tell(gb) + 8 + h->frame_size > TAC_BLOCK_SIZE)
         return AVERROR_INVALIDDATA;
 
