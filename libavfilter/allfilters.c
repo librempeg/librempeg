@@ -479,7 +479,6 @@ extern const FFFilter ff_vf_realtime;
 extern const FFFilter ff_vf_remap;
 extern const FFFilter ff_vf_remap_opencl;
 extern const FFFilter ff_vf_removegrain;
-extern const FFFilter ff_vf_removelogo;
 extern const FFFilter ff_vf_repeatfields;
 extern const FFFilter ff_vf_rescale;
 extern const FFFilter ff_vf_reverse;
