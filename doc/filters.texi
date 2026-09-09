@@ -31863,8 +31863,7 @@ which makes it computed automatically. Acceptable range is @code{[0, 10]}.
 @item fontfile
 Specify font file for use with freetype to draw the axis. If not specified,
 use embedded font. Note that drawing with font file or embedded font is not
-implemented with custom @var{basefreq} and @var{endfreq}, use @var{axisfile}
-option instead.
+implemented with custom @var{basefreq} and @var{endfreq}.
 
 @item font
 Specify fontconfig pattern. This has lower priority than @var{fontfile}. The
@@ -31891,13 +31890,9 @@ Default value is @code{st(0, (midi(f)-59.5)/12);
 st(1, if(between(ld(0),0,1), 0.5-0.5*cos(2*PI*ld(0)), 0));
 r(1-ld(1)) + b(ld(1))}.
 
-@item axisfile
-Specify image file to draw the axis. This option override @var{fontfile} and
-@var{fontcolor} option.
-
 @item axis, text
 Enable/disable drawing text to the axis. If it is set to @code{0}, drawing to
-the axis is disabled, ignoring @var{fontfile} and @var{axisfile} option.
+the axis is disabled, ignoring @var{fontfile} option.
 Default value is @code{1}.
 
 @item csp
@@ -32002,12 +31997,6 @@ fontcolor='if(mod(floor(midi(f)+0.5),12), 0x0000FF, g(1))':fontfile=myfont.ttf
 Custom font using fontconfig:
 @example
 font='Courier New,Monospace,mono|bold'
-@end example
-
-@item
-Custom frequency range with custom axis using image file:
-@example
-axisfile=myaxis.png:basefreq=40:endfreq=10000
 @end example
 @end itemize
 

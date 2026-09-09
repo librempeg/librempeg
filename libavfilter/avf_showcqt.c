@@ -32,7 +32,6 @@
 #include "avfilter.h"
 #include "filters.h"
 #include "formats.h"
-#include "lavfutils.h"
 #include "lswsutils.h"
 #include "video.h"
 
@@ -91,7 +90,6 @@ static const AVOption showcqt_options[] = {
     { "fontfile", "set axis font file", OFFSET(fontfile),  AV_OPT_TYPE_STRING, { .str = NULL },      0, 0, FLAGS },
     { "font",          "set axis font", OFFSET(font),      AV_OPT_TYPE_STRING, { .str = NULL },      0, 0, FLAGS },
     { "fontcolor",    "set font color", OFFSET(fontcolor), AV_OPT_TYPE_STRING, { .str = FONTCOLOR }, 0, 0, FLAGS },
-    { "axisfile",     "set axis image", OFFSET(axisfile),  AV_OPT_TYPE_STRING, { .str = NULL },      0, 0, FLAGS },
     { "axis",              "draw axis", OFFSET(axis),        AV_OPT_TYPE_BOOL, { .i64 = 1 },                0, 1,        FLAGS },
     { "text",              "draw axis", OFFSET(axis),        AV_OPT_TYPE_BOOL, { .i64 = 1 },                0, 1,        FLAGS },
     { "csp",         "set color space", OFFSET(csp),          AV_OPT_TYPE_INT, { .i64 = AVCOL_SPC_UNSPECIFIED }, 0, INT_MAX, FLAGS, .unit = "csp" },
@@ -403,36 +401,6 @@ static int init_axis_empty(ShowCQTContext *s)
     return 0;
 }
 
-static int init_axis_from_file(ShowCQTContext *s)
-{
-    AVFrame *tmp_frame;
-    int ret = ff_load_image(&tmp_frame, s->axisfile, s->ctx);
-    if (ret < 0)
-        return ret;
-
-    ret = AVERROR(ENOMEM);
-    if (!(s->axis_frame = av_frame_alloc()))
-        goto error;
-
-    ret = ff_scale_image(s->axis_frame->data, s->axis_frame->linesize, s->width, s->axis_h,
-                         convert_axis_pixel_format(s->format),
-                         tmp_frame->data, tmp_frame->linesize, tmp_frame->width, tmp_frame->height,
-                         tmp_frame->format, s->ctx);
-    if (ret < 0) {
-        av_frame_free(&s->axis_frame);
-        goto error;
-    }
-
-    s->axis_frame->width = s->width;
-    s->axis_frame->height = s->axis_h;
-    s->axis_frame->format = convert_axis_pixel_format(s->format);
-
-    ret = 0;
-error:
-    av_frame_free(&tmp_frame);
-    return ret;
-}
-
 static double midi(void *p, double f)
 {
     return log2(f/440.0) * 12.0 + 69.0;
@@ -468,8 +436,7 @@ static int init_axis_color(ShowCQTContext *s, AVFrame *tmp, int half)
     int step = half ? 2 : 1;
 
     if (s->basefreq != (double) BASEFREQ || s->endfreq != (double) ENDFREQ) {
-        av_log(s->ctx, AV_LOG_WARNING, "font axis rendering is not implemented in non-default frequency range,"
-               " please use axisfile option instead.\n");
+        av_log(s->ctx, AV_LOG_WARNING, "font axis rendering is not implemented in non-default frequency range.\n");
         return AVERROR(EINVAL);
     }
 
@@ -1442,15 +1409,6 @@ static int config_output(AVFilterLink *outlink)
         if (!s->axis) {
             if ((ret = init_axis_empty(s)) < 0)
                 return ret;
-        } else if (s->axisfile) {
-            if (init_axis_from_file(s) < 0) {
-                av_log(ctx, AV_LOG_WARNING, "loading axis image failed, fallback to font rendering.\n");
-                if (init_axis_from_font(s) < 0) {
-                    av_log(ctx, AV_LOG_WARNING, "loading axis font failed, disable text drawing.\n");
-                    if ((ret = init_axis_empty(s)) < 0)
-                        return ret;
-                }
-            }
         } else {
             if (init_axis_from_font(s) < 0) {
                 av_log(ctx, AV_LOG_WARNING, "loading axis font failed, disable text drawing.\n");
