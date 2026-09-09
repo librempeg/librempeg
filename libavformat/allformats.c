@@ -578,6 +578,7 @@ extern const FFInputFormat  ff_realtext_demuxer;
 extern const FFInputFormat  ff_redspark_demuxer;
 extern const FFOutputFormat ff_redspark_muxer;
 extern const FFInputFormat  ff_rfb_demuxer;
+extern const FFInputFormat  ff_rfrm_demuxer;
 extern const FFInputFormat  ff_rka_demuxer;
 extern const FFInputFormat  ff_rl2_demuxer;
 extern const FFInputFormat  ff_rm_demuxer;

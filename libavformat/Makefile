@@ -695,6 +695,7 @@ OBJS-$(CONFIG_REALTEXT_DEMUXER)          += realtextdec.o subtitles.o
 OBJS-$(CONFIG_REDSPARK_DEMUXER)          += redspark.o pcm.o
 OBJS-$(CONFIG_REDSPARK_MUXER)            += redsparkenc.o
 OBJS-$(CONFIG_RFB_DEMUXER)               += rfb.o
+OBJS-$(CONFIG_RFRM_DEMUXER)              += rfrm.o pcm.o
 OBJS-$(CONFIG_RKA_DEMUXER)               += rka.o apetag.o img2.o
 OBJS-$(CONFIG_RL2_DEMUXER)               += rl2.o
 OBJS-$(CONFIG_RM_DEMUXER)                += rmdec.o rm.o rmsipr.o
