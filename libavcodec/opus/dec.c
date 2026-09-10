@@ -261,11 +261,13 @@ static int opus_flush_resample(OpusStreamContext *s, int nb_samples)
 
     if ((ret = av_buffersink_get_samples(s->sink, s->graph_frame, nb_samples)) >= 0) {
         int samples = s->graph_frame->nb_samples;
-        if (samples > 0) {
+        if (samples > 0 && nb_samples >= samples) {
             for (int ch = 0; ch < s->output_channels; ch++)
                 memcpy(s->cur_out[ch], s->graph_frame->extended_data[ch], sizeof(*s->silk_output[0]) * samples);
 
             ret = samples;
+        } else {
+            ret = nb_samples;
         }
 
         av_frame_unref(s->graph_frame);
