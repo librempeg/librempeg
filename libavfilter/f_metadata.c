@@ -33,7 +33,6 @@
 #include "libavutil/internal.h"
 #include "libavutil/opt.h"
 #include "libavutil/timestamp.h"
-#include "libavformat/avio.h"
 #include "avfilter.h"
 #include "audio.h"
 #include "filters.h"
@@ -87,14 +86,9 @@ typedef struct MetadataContext {
     AVExpr *expr;
     double var_values[VAR_VARS_NB];
 
-    AVIOContext* avio_context;
-    char *file_str;
-
     int (*compare)(struct MetadataContext *s,
                    const char *value1, const char *value2);
     void (*print)(AVFilterContext *ctx, const char *msg, ...) av_printf_format(2, 3);
-
-    int direct;    // reduces buffering when printing to user-supplied URL
 } MetadataContext;
 
 #define OFFSET(x) offsetof(MetadataContext, x)
@@ -117,8 +111,6 @@ static const AVOption filt_name##_options[] = { \
     {   "expr",        NULL, 0, AV_OPT_TYPE_CONST, {.i64 = METADATAF_EXPR    },     0, 3, FLAGS, .unit = "function" }, \
     {   "ends_with",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = METADATAF_ENDS_WITH },   0, 0, FLAGS, .unit = "function" }, \
     { "expr", "set expression for expr function", OFFSET(expr_str), AV_OPT_TYPE_STRING, {.str = NULL }, 0, 0, FLAGS }, \
-    { "file", "set file where to print metadata information", OFFSET(file_str), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, FLAGS }, \
-    { "direct", "reduce buffering when printing to user-set file or pipe", OFFSET(direct), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, FLAGS }, \
     { NULL } \
 }
 
@@ -193,20 +185,6 @@ static void print_log(AVFilterContext *ctx, const char *msg, ...)
     va_end(argument_list);
 }
 
-static void print_file(AVFilterContext *ctx, const char *msg, ...)
-{
-    MetadataContext *s = ctx->priv;
-    va_list argument_list;
-
-    va_start(argument_list, msg);
-    if (msg) {
-        char buf[128];
-        int ret = vsnprintf(buf, sizeof(buf), msg, argument_list);
-        avio_write(s->avio_context, buf, ret);
-    }
-    va_end(argument_list);
-}
-
 static av_cold int init(AVFilterContext *ctx)
 {
     MetadataContext *s = ctx->priv;
@@ -261,29 +239,7 @@ static av_cold int init(AVFilterContext *ctx)
         }
     }
 
-    if (s->mode == METADATA_PRINT && s->file_str) {
-        s->print = print_file;
-    } else {
-        s->print = print_log;
-    }
-
-    s->avio_context = NULL;
-    if (s->file_str) {
-        if (!strcmp("-", s->file_str)) {
-            ret = avio_open(&s->avio_context, "pipe:1", AVIO_FLAG_WRITE);
-        } else {
-            ret = avio_open(&s->avio_context, s->file_str, AVIO_FLAG_WRITE);
-        }
-
-        if (ret < 0) {
-            av_log(ctx, AV_LOG_ERROR, "Could not open %s: %s\n",
-                   s->file_str, av_err2str(ret));
-            return ret;
-        }
-
-        if (s->direct)
-            s->avio_context->direct = AVIO_FLAG_DIRECT;
-    }
+    s->print = print_log;
 
     return 0;
 }
@@ -294,9 +250,6 @@ static av_cold void uninit(AVFilterContext *ctx)
 
     av_expr_free(s->expr);
     s->expr = NULL;
-    if (s->avio_context) {
-        avio_closep(&s->avio_context);
-    }
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
@@ -408,9 +361,9 @@ const FFFilter ff_vf_metadata = {
     .p.priv_class  = &metadata_class,
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
                      AVFILTER_FLAG_METADATA_ONLY,
-    .priv_size   = sizeof(MetadataContext),
-    .init        = init,
-    .uninit      = uninit,
+    .priv_size     = sizeof(MetadataContext),
+    .init          = init,
+    .uninit        = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
 };

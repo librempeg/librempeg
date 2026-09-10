@@ -826,40 +826,6 @@ fate-filter-metadata-avf-aphase-meter-out-of-phase: CMD = run $(FILTER_METADATA_
 FATE_FILTER_SAMPLES-$(call TRANSCODE, RAWVIDEO H264, MOV, ARESAMPLE_FILTER  AAC_FIXED_DECODER) += fate-filter-meta-4560-rotate0
 fate-filter-meta-4560-rotate0: CMD = transcode "mov -display_rotation:v:0 0" $(TARGET_SAMPLES)/filter/sample-in-issue-505.mov mov "-c copy" "-af aresample" "" "" "-flags +bitexact -c:a aac_fixed"
 
-FATE_FILTER_CMP_METADATA-$(CONFIG_BLOCKDETECT_FILTER) += fate-filter-refcmp-blockdetect-yuv
-fate-filter-refcmp-blockdetect-yuv: CMD = cmp_metadata blockdetect yuv420p 0.015
-
-FATE_FILTER_CMP_METADATA-$(CONFIG_BLURDETECT_FILTER) += fate-filter-refcmp-blurdetect-yuv
-fate-filter-refcmp-blurdetect-yuv: CMD = cmp_metadata blurdetect yuv420p 0.015
-
-FATE_FILTER_CMP_METADATA-$(CONFIG_SITI_FILTER) += fate-filter-refcmp-siti-yuv
-fate-filter-refcmp-siti-yuv: CMD = cmp_metadata siti yuv420p 0.015
-
-FATE_FILTER-$(call ALLYES, TESTSRC2_FILTER METADATA_FILTER WRAPPED_AVFRAME_ENCODER \
-                           NULL_MUXER PIPE_PROTOCOL) += $(FATE_FILTER_CMP_METADATA-yes)
-
-FATE_FILTER_REFCMP_METADATA-$(call ALLYES, PSNR_FILTER SCALE_FILTER) += fate-filter-refcmp-psnr-rgb
-fate-filter-refcmp-psnr-rgb: CMD = refcmp_metadata psnr rgb24 0.002
-
-FATE_FILTER_REFCMP_METADATA-$(CONFIG_PSNR_FILTER) += fate-filter-refcmp-psnr-yuv
-fate-filter-refcmp-psnr-yuv: CMD = refcmp_metadata psnr yuv422p 0.0015
-
-FATE_FILTER_REFCMP_METADATA-$(call ALLYES, SSIM_FILTER SCALE_FILTER) += fate-filter-refcmp-ssim-rgb
-fate-filter-refcmp-ssim-rgb: CMD = refcmp_metadata ssim rgb24 0.015
-
-FATE_FILTER_REFCMP_METADATA-$(CONFIG_SSIM_FILTER) += fate-filter-refcmp-ssim-yuv
-fate-filter-refcmp-ssim-yuv: CMD = refcmp_metadata ssim yuv422p 0.015
-
-FATE_FILTER_REFCMP_METADATA-$(call ALLYES, XPSNR_FILTER SCALE_FILTER) += fate-filter-refcmp-xpsnr-rgb
-fate-filter-refcmp-xpsnr-rgb: CMD = refcmp_metadata xpsnr rgb24 0.002
-
-FATE_FILTER_REFCMP_METADATA-$(CONFIG_XPSNR_FILTER) += fate-filter-refcmp-xpsnr-yuv
-fate-filter-refcmp-xpsnr-yuv: CMD = refcmp_metadata xpsnr yuv422p 0.0015
-
-FATE_FILTER-$(call ALLYES, TESTSRC2_FILTER SPLIT_FILTER AVGBLUR_FILTER        \
-                           METADATA_FILTER WRAPPED_AVFRAME_ENCODER NULL_MUXER \
-                           PIPE_PROTOCOL) += $(FATE_FILTER_REFCMP_METADATA-yes)
-
 FATE_SAMPLES_FFPROBE += $(FATE_METADATA_FILTER-yes)
 FATE_SAMPLES_FFMPEG += $(FATE_FILTER_SAMPLES-yes)
 FATE_FFPROBE += $(FATE_FILTER_FFPROBE-yes)
