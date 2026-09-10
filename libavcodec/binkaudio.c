@@ -44,7 +44,7 @@
 #include "internal.h"
 #include "wma_freqs.h"
 
-#define MAX_DCT_CHANNELS 6
+#define MAX_DCT_CHANNELS 8
 #define MAX_CHANNELS 2
 #define BINK_BLOCK_MAX_SIZE (MAX_CHANNELS << 11)
 
