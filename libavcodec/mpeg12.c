@@ -35,6 +35,11 @@
 #include "mpegutils.h"
 #include "rl.h"
 
+static const uint8_t table_mb_itype[2][2] = {
+    { 1, 1 }, // 0x01 MB_INTRA
+    { 1, 2 }, // 0x11 MB_QUANT|MB_INTRA
+};
+
 static const uint8_t table_mb_ptype[7][2] = {
     { 3, 5 }, // 0x01 MB_INTRA
     { 1, 2 }, // 0x02 MB_PAT
@@ -57,6 +62,11 @@ static const uint8_t table_mb_btype[11][2] = {
     { 2, 6 }, // 0x16 MB_QUANT|MB_BACK|MB_PAT
     { 3, 6 }, // 0x1A MB_QUANT|MB_FOR|MB_PAT
     { 2, 5 }, // 0x1E MB_QUANT|MB_FOR|MB_BACK|MB_PAT
+};
+
+static const int16_t itype2mb_type[2] = {
+                    MB_TYPE_INTRA,
+    MB_TYPE_QUANT | MB_TYPE_INTRA,
 };
 
 static const int16_t ptype2mb_type[7] = {
@@ -130,6 +140,7 @@ VLCElem ff_dc_lum_vlc[512];
 VLCElem ff_dc_chroma_vlc[514];
 
 VLCElem ff_mbincr_vlc[538];
+VLCElem ff_mb_itype_vlc[4];
 VLCElem ff_mb_ptype_vlc[64];
 VLCElem ff_mb_btype_vlc[64];
 VLCElem ff_mb_pat_vlc[512];
@@ -155,6 +166,10 @@ static av_cold void mpeg12_init_vlcs(void)
                           &ff_mpeg12_mbPatTable[0][1], 2, 1,
                           &ff_mpeg12_mbPatTable[0][0], 2, 1, 0);
 
+    VLC_INIT_STATIC_SPARSE_TABLE(ff_mb_itype_vlc, MB_ITYPE_VLC_BITS, 2,
+                                 &table_mb_itype[0][1], 2, 1,
+                                 &table_mb_itype[0][0], 2, 1,
+                                 itype2mb_type, 2, 2, 0);
     VLC_INIT_STATIC_SPARSE_TABLE(ff_mb_ptype_vlc, MB_PTYPE_VLC_BITS, 7,
                                  &table_mb_ptype[0][1], 2, 1,
                                  &table_mb_ptype[0][0], 2, 1,
