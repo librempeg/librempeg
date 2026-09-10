@@ -1679,7 +1679,7 @@ static int wavpack_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         buf      += frame_size;
         buf_size -= frame_size;
 
-        if (frame->nb_samples > 0)
+        if (frame->nb_samples > 0 && s->ch_offset >= avctx->ch_layout.nb_channels)
             break;
     }
 
