@@ -127,17 +127,20 @@ static void fill8(uint8_t *line, int num, unsigned range)
     }
 }
 
-static void set_range(AVRational64 *rangeq, unsigned range, unsigned range_def)
+static SwsPixelType pixel_type_to_int(const SwsPixelType type)
 {
-    if (!range)
-        range = range_def;
-    if (range)
-        *rangeq = (AVRational64) { range, 1 };
+    switch (ff_sws_pixel_type_size(type)) {
+    case 1: return SWS_PIXEL_U8;
+    case 2: return SWS_PIXEL_U16;
+    case 4: return SWS_PIXEL_U32;
+    default: break;
+    }
+
+    av_unreachable("Invalid pixel type!");
+    return SWS_PIXEL_NONE;
 }
 
-static void check_compiled(const char *name, const SwsOpBackend *backend,
-                           const SwsOp *read_op, const SwsOp *write_op,
-                           const int ranges[NB_PLANES],
+static void check_compiled(const Test *test,
                            const SwsCompiledOp *comp_ref,
                            const SwsCompiledOp *comp_new)
 {
@@ -148,7 +151,7 @@ static void check_compiled(const char *name, const SwsOpBackend *backend,
      */
     uintptr_t id = (uintptr_t) comp_new->func;
     id ^= (id << 6) + (id >> 2) + 0x9e3779b97f4a7c15 + comp_new->cpu_flags;
-    if (!check_key((void *) id, "%s/%s", name, backend->name))
+    if (!check_key(id, "%s", test->name))
         return;
 
     declare_func(void, const SwsOpExec *, const void *, int bx, int y, int bx_end, int y_end);
@@ -315,19 +318,19 @@ static void run_test(const Test *test)
         goto done;
     }
 
+    /* Check with the C backend to establish a reference */
+    check_compiled(test, &comp_ref, &comp_ref);
+
     /* Iterate over every other backend, and test it against the C reference */
     for (int n = 0; ff_sws_op_backends[n]; n++) {
         const SwsOpBackend *backend = ff_sws_op_backends[n];
         if (backend->hw_format != AV_PIX_FMT_NONE || backend == backend_ref)
             continue;
-
-        if (!av_get_cpu_flags()) {
-            /* Also test once with the existing C reference to set the baseline */
-            check_compiled(name, backend, read_op, write_op, ranges, &comp_ref, &comp_ref);
-        }
+        if (!backend->compile_uops)
+            continue;
 
         SwsCompiledOp comp_new = {0};
-        int ret = ff_sws_ops_compile(ctx, backend, &oplist, &comp_new);
+        int ret = backend->compile_uops(ctx, &oplist, &comp_new);
         if (ret == AVERROR(ENOTSUP)) {
             continue;
         } else if (ret < 0) {
@@ -335,7 +338,9 @@ static void run_test(const Test *test)
             goto done;
         }
 
-        check_compiled(name, backend, read_op, write_op, ranges, &comp_ref, &comp_new);
+        /* Distinguish backends from each other even with same CPU flags */
+        checkasm_set_func_variant("%s_%s", backend->name, checkasm_get_cpu_suffix());
+        check_compiled(test, &comp_ref, &comp_new);
         ff_sws_compiled_op_unref(&comp_new);
     }
 

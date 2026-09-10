@@ -1,14 +1,14 @@
 /*
  * Copyright (c) 2016 Martin Storsjo
  *
- * This file is part of Librempeg.
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
+ * FFmpeg is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
@@ -309,7 +309,7 @@ static void check_mc(VP8DSPContext *d)
                         CLEAR_BUF_RECT(dst1);
                         call_ref(dst0, dst0_stride, src, SRC_BUF_STRIDE, height, mx, my);
                         call_new(dst1, dst1_stride, src, SRC_BUF_STRIDE, height, mx, my);
-                        checkasm_check_padded(uint8_t, dst0, dst0_stride, dst1, dst1_stride, size, height, "dst");
+                        checkasm_check_rect_padded(dst0, dst0_stride, dst1, dst1_stride, size, height, "dst");
                         bench_new(dst1, size, src, SRC_BUF_STRIDE, height, mx, my);
                     }
                 }

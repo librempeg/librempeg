@@ -1,12 +1,12 @@
 /*
- * This file is part of Librempeg.
+ * This file is part of FFmpeg.
  *
- * Librempeg is free software; you can redistribute it and/or modify
+ * FFmpeg is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * Librempeg is distributed in the hope that it will be useful,
+ * FFmpeg is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
@@ -44,14 +44,9 @@ static const int check_lens[] = {
     2, 4, 8, 16, 32, 64, 120, 960, 1024, 1920, 16384,
 };
 
-static const int rdft_check_lens[] = {
-    32, 1024
-};
-
 static AVTXContext *tx_refs[AV_TX_NB][2 /* Direction */][FF_ARRAY_ELEMS(check_lens)] = { 0 };
-static int init = 0;
 
-static void free_tx_refs(void)
+void checkasm_uninit_tx(void)
 {
     for (int i = 0; i < FF_ARRAY_ELEMS(tx_refs); i++)
         for (int j = 0; j < FF_ARRAY_ELEMS(*tx_refs); j++)
@@ -118,9 +113,6 @@ void checkasm_check_av_tx(void)
     CHECK_TEMPLATE("float_imdct", AV_TX_FLOAT_MDCT, 1, float, float, check_lens,
                    !float_near_abs_eps_array(out_ref, out_new, EPS, len));
 
-    CHECK_TEMPLATE("float_r2c", AV_TX_FLOAT_RDFT, 0, float, float, rdft_check_lens,
-                   !float_near_abs_eps_array(out_ref, out_new, EPS, len));
-
     randomize_complex(in, 16384, AVComplexDouble, SCALE_NOOP);
     CHECK_TEMPLATE("double_fft", AV_TX_DOUBLE_FFT, 0, AVComplexDouble, double, check_lens,
                    !double_near_abs_eps_array(out_ref, out_new, EPS, len*2));
@@ -128,9 +120,4 @@ void checkasm_check_av_tx(void)
     av_free(in);
     av_free(out_ref);
     av_free(out_new);
-
-    if (!init) {
-        init = 1;
-        atexit(free_tx_refs);
-    }
 }
