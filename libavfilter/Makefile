@@ -48,6 +48,7 @@ OBJS-$(CONFIG_ACL2CL_FILTER)                 += af_acl2cl.o
 OBJS-$(CONFIG_ACOMPRESSOR_FILTER)            += af_acompressor.o
 OBJS-$(CONFIG_ACONTRAST_FILTER)              += af_acontrast.o
 OBJS-$(CONFIG_ACOPY_FILTER)                  += af_acopy.o
+OBJS-$(CONFIG_ACORR_FILTER)                  += af_acorr.o
 OBJS-$(CONFIG_ACROSSFADE_FILTER)             += af_afade.o
 OBJS-$(CONFIG_ACROSSOVER_FILTER)             += af_acrossover.o
 OBJS-$(CONFIG_ACRUSHER_FILTER)               += af_acrusher.o

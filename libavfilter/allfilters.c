@@ -31,6 +31,7 @@ extern const FFFilter ff_af_acl2cl;
 extern const FFFilter ff_af_acompressor;
 extern const FFFilter ff_af_acontrast;
 extern const FFFilter ff_af_acopy;
+extern const FFFilter ff_af_acorr;
 extern const FFFilter ff_af_acrossfade;
 extern const FFFilter ff_af_acrossover;
 extern const FFFilter ff_af_acrusher;
