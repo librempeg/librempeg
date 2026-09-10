@@ -842,6 +842,7 @@ OBJS-$(CONFIG_THREEDOSTR_DEMUXER)        += 3dostr.o
 OBJS-$(CONFIG_TIERTEXSEQ_DEMUXER)        += tiertexseq.o
 OBJS-$(CONFIG_MKVTIMESTAMP_V2_MUXER)     += mkvtimestamp_v2.o
 OBJS-$(CONFIG_TMV_DEMUXER)               += tmv.o
+OBJS-$(CONFIG_TRA_DEMUXER)               += tra.o pcm.o
 OBJS-$(CONFIG_TRUEHD_DEMUXER)            += rawdec.o mlpdec.o
 OBJS-$(CONFIG_TRUEHD_MUXER)              += rawenc.o
 OBJS-$(CONFIG_TTA_DEMUXER)               += tta.o apetag.o img2.o

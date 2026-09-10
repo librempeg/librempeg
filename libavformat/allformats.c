@@ -699,6 +699,7 @@ extern const FFInputFormat  ff_threedostr_demuxer;
 extern const FFInputFormat  ff_tiertexseq_demuxer;
 extern const FFOutputFormat ff_mkvtimestamp_v2_muxer;
 extern const FFInputFormat  ff_tmv_demuxer;
+extern const FFInputFormat  ff_tra_demuxer;
 extern const FFInputFormat  ff_truehd_demuxer;
 extern const FFOutputFormat ff_truehd_muxer;
 extern const FFInputFormat  ff_tta_demuxer;
