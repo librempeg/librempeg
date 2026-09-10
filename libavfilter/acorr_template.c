@@ -171,7 +171,7 @@ static void fn(acorr)(AVFilterContext *ctx, AVFrame *out, const int ch)
         }
     }
 
-    av_log(ctx, AV_LOG_DEBUG, "ch%d: max: %d/%d\n", ch, index >= s->size ? S-index : index, s->size);
+    av_log(ctx, AV_LOG_DEBUG, "ch%d: max: %d/%d\n", ch, index >= s->size ? -(S-index) : index, s->size);
 
     memcpy(dst, rdft_o, sizeof(*dst) * nb_samples);
 }
