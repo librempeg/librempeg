@@ -35,23 +35,23 @@ static int cda_probe(const AVProbeData *p)
     int count_l = 0;
     int count_r = 0;
 
-    for (int n = 1; n < p->buf_size/4; n++) {
-        const int l0 = sign_extend(AV_RL16(buf + (n-1)*4+0), 16);
-        const int l1 = sign_extend(AV_RL16(buf + (n+0)*4+0), 16);
-        const int r0 = sign_extend(AV_RL16(buf + (n-1)*4+2), 16);
-        const int r1 = sign_extend(AV_RL16(buf + (n+0)*4+2), 16);
+    for (int n = 4; n < p->buf_size - 4; n += 4) {
+        const int l0 = sign_extend(AV_RL16(buf + n - 4), 16);
+        const int r0 = sign_extend(AV_RL16(buf + n - 2), 16);
+        const int l1 = sign_extend(AV_RL16(buf + n + 0), 16);
+        const int r1 = sign_extend(AV_RL16(buf + n + 2), 16);
         const int al = FFABS(l1 - l0);
         const int ar = FFABS(r1 - r0);
 
         click_l += al >= 16384;
         if (al) {
-            score_l += 256 - al;
+            score_l += 512 - al;
             count_l++;
         }
 
         click_r += ar >= 16384;
         if (ar) {
-            score_r += 256 - ar;
+            score_r += 512 - ar;
             count_r++;
         }
     }
@@ -68,8 +68,8 @@ static int cda_probe(const AVProbeData *p)
     score_l *= AVPROBE_SCORE_MAX;
     score_r *= AVPROBE_SCORE_MAX;
 
-    score_l /= 256;
-    score_r /= 256;
+    score_l /= 511;
+    score_r /= 511;
 
     score_l -= click_l;
     score_r -= click_r;
