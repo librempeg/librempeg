@@ -962,6 +962,7 @@ OBJS-$(CONFIG_YMF_DEMUXER)               += ymf.o pcm.o
 OBJS-$(CONFIG_YOP_DEMUXER)               += yop.o
 OBJS-$(CONFIG_YUV4MPEGPIPE_DEMUXER)      += yuv4mpegdec.o
 OBJS-$(CONFIG_YUV4MPEGPIPE_MUXER)        += yuv4mpegenc.o
+OBJS-$(CONFIG_ZERO4SW_DEMUXER)           += 04sw.o pcm.o
 OBJS-$(CONFIG_ZPD_DEMUXER)               += zpd.o
 OBJS-$(CONFIG_ZSD_DEMUXER)               += zsd.o pcm.o
 
