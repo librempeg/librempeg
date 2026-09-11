@@ -152,8 +152,9 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
                         int *got_frame_ptr, AVPacket *avpkt)
 {
     const int nb_channels = avctx->ch_layout.nb_channels;
-    const int blocks = avpkt->size / avctx->block_align;
-    const int block_samples = (avctx->block_align - 4) / (4 * nb_channels) * 10;
+    const int block_align = (avctx->block_align > 0) ? avctx->block_align : avpkt->size;
+    const int blocks = avpkt->size / block_align;
+    const int block_samples = (block_align - 4) / (4 * nb_channels) * 10;
     GetByteContext gbc, *gb = &gbc;
     int16_t history[2];
     int step_indexs[2];
