@@ -24,8 +24,9 @@
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
+#include "pcm.h"
 
-static int adp_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     uint8_t last = 0;
     int64_t changes = 0;
@@ -49,7 +50,7 @@ static int adp_probe(const AVProbeData *p)
     return av_clip(changes * AVPROBE_SCORE_MAX / (p->buf_size/16), 0, AVPROBE_SCORE_MAX);
 }
 
-static int adp_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     AVStream *st;
 
@@ -57,11 +58,12 @@ static int adp_read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
+    st->start_time = 0;
     st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id = AV_CODEC_ID_ADPCM_DTK;
     st->codecpar->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
     st->codecpar->sample_rate = 48000;
-    st->start_time = 0;
+    st->codecpar->block_align = 32;
     st->codecpar->bit_rate = 16LL * st->codecpar->ch_layout.nb_channels * 8 *
                                     st->codecpar->sample_rate / 28;
 
@@ -70,24 +72,12 @@ static int adp_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int adp_read_packet(AVFormatContext *s, AVPacket *pkt)
-{
-    AVIOContext *pb = s->pb;
-    int ret;
-
-    ret = av_get_packet(pb, pkt, 1024);
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
-
-    return ret;
-}
-
 const FFInputFormat ff_adp_demuxer = {
     .p.name         = "adp",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Nintendo GC DTK"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "adp,dtk",
-    .read_probe     = adp_probe,
-    .read_header    = adp_read_header,
-    .read_packet    = adp_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = ff_pcm_read_packet,
 };
