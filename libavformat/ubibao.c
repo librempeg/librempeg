@@ -85,6 +85,9 @@ static int64_t seek_data(void *opaque, int64_t offset, int whence)
     AVFormatContext *s = bst->parent;
     AVIOContext *pb = bst->pb ? bst->pb : s->pb;
 
+    if (whence & AVSEEK_SIZE)
+        return bst->stop_offset - bst->start_offset;
+
     return avio_seek(pb, offset + bst->start_offset, whence);
 }
 
