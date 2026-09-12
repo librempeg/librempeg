@@ -435,6 +435,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_EA_R3:
     case AV_CODEC_ID_ADPCM_EA_XAS:
     case AV_CODEC_ID_ADPCM_MS:
+    case AV_CODEC_ID_ADPCM_CKMK:
     case AV_CODEC_ID_ADPCM_IMA_FSB:
     case AV_CODEC_ID_ADPCM_IMA_XBOX:
     case AV_CODEC_ID_ADPCM_IMA_XBOX_MONO:
@@ -556,6 +557,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_IMA_TRA:
     case AV_CODEC_ID_ADPCM_IMA_HWAS:
     case AV_CODEC_ID_ADPCM_NXAP:
+    case AV_CODEC_ID_ADPCM_CKMK:
         avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
         break;
     case AV_CODEC_ID_ADPCM_IMA_WS:
@@ -1763,6 +1765,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         if (avctx->codec->id == AV_CODEC_ID_ADPCM_IMA_FSB && nb_samples == 1)
             nb_samples = 0;
         break;
+    case AV_CODEC_ID_ADPCM_CKMK:
     case AV_CODEC_ID_ADPCM_MS:
         {
             int left = buf_size;
@@ -2428,6 +2431,38 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     int byte = bytestream2_get_byteu(&gb);
                     *samples++ = adpcm_ms_expand_nibble(&c->status[0 ], byte >> 4  );
                     *samples++ = adpcm_ms_expand_nibble(&c->status[st], byte & 0x0F);
+                }
+            }
+        }
+        ) /* End of CASE */
+    CASE(ADPCM_CKMK,
+        const int block_size = (avctx->block_align > 0) ? FFMIN(avctx->block_align, avpkt->size) : avpkt->size;
+        const int nb_samples_per_block = (block_size - 6 * channels) / channels * 2;
+
+        for (int block = 0; block < avpkt->size / block_size; block++) {
+            int offset = block * nb_samples_per_block;
+            int block_predictor;
+
+            for (int channel = 0; channel < channels; channel++) {
+                ADPCMChannelStatus *cs = &c->status[channel];
+                samples = samples_p[channel] + offset;
+                block_predictor = bytestream2_get_byteu(&gb);
+                if (block_predictor > 6) {
+                    av_log(avctx, AV_LOG_ERROR, "ERROR: block_predictor[%d] = %d\n",
+                           channel, block_predictor);
+                    return AVERROR_INVALIDDATA;
+                }
+                cs->coeff1 = ff_adpcm_AdaptCoeff1[block_predictor];
+                cs->coeff2 = ff_adpcm_AdaptCoeff2[block_predictor];
+                cs->idelta = sign_extend(bytestream2_get_le16u(&gb), 16);
+                cs->sample2 = sign_extend(bytestream2_get_le16u(&gb), 16);
+                cs->sample1 = sign_extend(bytestream2_get_le16u(&gb), 16);
+                *samples++ = cs->sample2;
+                *samples++ = cs->sample1;
+                for (int n = (nb_samples_per_block - 2) >> 1; n > 0; n--) {
+                    int byte = bytestream2_get_byteu(&gb);
+                    *samples++ = adpcm_ms_expand_nibble(cs, byte & 15);
+                    *samples++ = adpcm_ms_expand_nibble(cs, byte >> 4);
                 }
             }
         }
@@ -4565,6 +4600,7 @@ ADPCM_DECODER(ADPCM_AICA,        sample_fmts_s16p, adpcm_aica,        "ADPCM Yam
 ADPCM_DECODER(ADPCM_ARGO,        sample_fmts_s16p, adpcm_argo,        "ADPCM Argonaut Games")
 ADPCM_DECODER(ADPCM_BRR,         sample_fmts_s16p, adpcm_brr,         "ADPCM Bit Rate Reduction")
 ADPCM_DECODER(ADPCM_CIRCUS,      sample_fmts_s16,  adpcm_circus,      "ADPCM Circus")
+ADPCM_DECODER(ADPCM_CKMK,        sample_fmts_s16p, adpcm_ckmk,        "ADPCM CKMK")
 ADPCM_DECODER(ADPCM_CT,          sample_fmts_s16,  adpcm_ct,          "ADPCM Creative Technology")
 ADPCM_DECODER(ADPCM_DSA,         sample_fmts_s16p, adpcm_dsa,         "ADPCM Ocean DSA")
 ADPCM_DECODER(ADPCM_DTK,         sample_fmts_s16p, adpcm_dtk,         "ADPCM Nintendo Gamecube DTK")

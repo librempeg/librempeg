@@ -696,6 +696,7 @@ extern const FFCodec ff_adpcm_brr_decoder;
 extern const FFCodec ff_adpcm_cfdf_decoder;
 extern const FFCodec ff_adpcm_cfdf_d5_decoder;
 extern const FFCodec ff_adpcm_circus_decoder;
+extern const FFCodec ff_adpcm_ckmk_decoder;
 extern const FFCodec ff_adpcm_ct_decoder;
 extern const FFCodec ff_adpcm_dsa_decoder;
 extern const FFCodec ff_adpcm_dtk_decoder;

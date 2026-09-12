@@ -1021,6 +1021,7 @@ OBJS-$(CONFIG_ADPCM_BRR_DECODER)          += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_CFDF_DECODER)         += adpcm_cfdf.o
 OBJS-$(CONFIG_ADPCM_CFDF_D5_DECODER)      += adpcm_cfdf_d5.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_CIRCUS_DECODER)       += adpcm.o adpcm_data.o
+OBJS-$(CONFIG_ADPCM_CKMK_DECODER)         += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_CT_DECODER)           += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_DSA_DECODER)          += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_DTK_DECODER)          += adpcm.o adpcm_data.o
