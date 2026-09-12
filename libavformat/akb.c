@@ -132,7 +132,7 @@ static int read_header(AVFormatContext *s)
     switch (codec) {
     case 1:
         codec = AV_CODEC_ID_PCM_S16LE;
-        align = 2;
+        align = 2 * channels;
         break;
     case 2:
         codec = AV_CODEC_ID_ADPCM_MS;
@@ -153,7 +153,7 @@ static int read_header(AVFormatContext *s)
         return AVERROR_PATCHWELCOME;
     }
 
-    if (rate <= 0 || channels <= 0 || (align > 0 && channels >= INT_MAX/align))
+    if (rate <= 0 || channels <= 0)
         return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
@@ -167,7 +167,7 @@ static int read_header(AVFormatContext *s)
     st->codecpar->ch_layout.nb_channels = channels;
     st->codecpar->sample_rate = rate;
     if (align > 0)
-        st->codecpar->block_align = align * channels;
+        st->codecpar->block_align = align;
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
