@@ -444,6 +444,7 @@ OBJS-$(CONFIG_JPEGXL_ANIM_DEMUXER)       += jpegxl_anim_dec.o
 OBJS-$(CONFIG_JV_DEMUXER)                += jvdec.o
 OBJS-$(CONFIG_JSTM_DEMUXER)              += jstm.o pcm.o
 OBJS-$(CONFIG_KAT_DEMUXER)               += kat.o pcm.o
+OBJS-$(CONFIG_KMA9_DEMUXER)              += kma9.o
 OBJS-$(CONFIG_KNON_DEMUXER)              += knon.o pcm.o
 OBJS-$(CONFIG_KONAMIBMP_DEMUXER)         += konamibmp.o pcm.o
 OBJS-$(CONFIG_KRAW_DEMUXER)              += kraw.o
