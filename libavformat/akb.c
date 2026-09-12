@@ -275,7 +275,8 @@ static int read_close(AVFormatContext *s)
         AVStream *st = s->streams[i];
         AKBStream *ast = st->priv_data;
 
-        avformat_close_input(&ast->xctx);
+        if (ast)
+            avformat_close_input(&ast->xctx);
     }
 
     return 0;
