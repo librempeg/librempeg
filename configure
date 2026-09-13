@@ -2466,6 +2466,7 @@ HEADERS_LIST="
     termios_h
     udplite_h
     unistd_h
+    valgrind_memcheck_h
     valgrind_valgrind_h
     windows_h
     winsock2_h
@@ -6914,6 +6915,7 @@ check_headers sys/time.h
 check_headers sys/un.h
 check_headers termios.h
 check_headers unistd.h
+check_headers valgrind/memcheck.h
 check_headers valgrind/valgrind.h
 check_func_headers VideoToolbox/VTCompressionSession.h VTCompressionSessionPrepareToEncodeFrames -framework VideoToolbox
 check_func_headers VideoToolbox/VideoToolbox.h VTDecompressionSessionDecodeFrame -framework VideoToolbox
