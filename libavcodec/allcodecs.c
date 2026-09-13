@@ -119,6 +119,7 @@ extern const FFCodec ff_eamad_decoder;
 extern const FFCodec ff_eatgq_decoder;
 extern const FFCodec ff_eatgv_decoder;
 extern const FFCodec ff_eatqi_decoder;
+extern const FFCodec ff_ecm_decoder;
 extern const FFCodec ff_eightbps_decoder;
 extern const FFCodec ff_eightsvx_exp_decoder;
 extern const FFCodec ff_eightsvx_fib_decoder;

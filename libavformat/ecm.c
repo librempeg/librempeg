@@ -42,6 +42,8 @@ static int read_header(AVFormatContext *s)
     AVIOContext *pb = s->pb;
     AVStream *ast, *vst;
 
+    avio_skip(pb, 4);
+
     ast = avformat_new_stream(s, NULL);
     if (!ast)
         return AVERROR(ENOMEM);
@@ -60,12 +62,13 @@ static int read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     vst->start_time = 0;
+    vst->nb_frames = vst->duration = avio_rl32(pb);
     vst->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
-    vst->codecpar->codec_id = AV_CODEC_ID_CINEPAK;
+    vst->codecpar->codec_id = AV_CODEC_ID_ECM;
     vst->codecpar->width = 320;
     vst->codecpar->height = 240;
 
-    avpriv_set_pts_info(vst, 64, 1, 15);
+    avpriv_set_pts_info(vst, 64, 5, 40);
 
     avio_seek(pb, 0xe18, SEEK_SET);
 
@@ -103,7 +106,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
         if (ret < 0)
             return ret;
         index = 1;
-        duration = 1;
+        duration = 15;
         break;
     default:
         return AVERROR_INVALIDDATA;
