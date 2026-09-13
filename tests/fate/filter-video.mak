@@ -177,6 +177,9 @@ fate-filter-lavd-scalenorm: CMD = framecrc -f lavfi -graph_file $(TARGET_PATH)/t
 FATE_FILTER-$(call FILTERFRAMECRC, COLOR FORMAT SCALE CROP) += fate-filter-scale-fast-bilinear-wide-edge
 fate-filter-scale-fast-bilinear-wide-edge: CMD = framecrc -flags bitexact -lavfi color=c=red:s=40000x1:r=1:d=1,format=yuv444p,scale=40032:1:flags=fast_bilinear,crop=1:1:40031:0 -frames:v 1
 
+FATE_FILTER-$(call FILTERFRAMECRC, NULLSRC GEQ FORMAT SCALE CROP) += fate-filter-scale-fast-bilinear-wide-wrap
+fate-filter-scale-fast-bilinear-wide-wrap: CMD = framecrc -flags bitexact -lavfi 'nullsrc=s=300000x1,geq=lum=X*255/W:cb=128:cr=128,format=gray,scale=300032:1:flags=fast_bilinear,crop=1:1:279000:0' -frames:v 1
+
 FATE_FILTER-$(call FILTERFRAMECRC, TESTSRC2 FEEDBACK HFLIP, LAVFI_INDEV) += fate-filter-feedback-hflip
 fate-filter-feedback-hflip: CMD = framecrc -f lavfi -i testsrc2=d=1 -vf "[in][hflipin]feedback=x=0:y=0:w=100:h=100[out][hflipout];[hflipout]hflip[hflipin]"
 
