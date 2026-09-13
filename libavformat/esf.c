@@ -30,7 +30,7 @@ static int read_probe(const AVProbeData *p)
     if (AV_RB32(p->buf) != MKBETAG('E','S','F','\x06'))
         return 0;
 
-    return AVPROBE_SCORE_MAX;
+    return AVPROBE_SCORE_MAX/2;
 }
 
 static int read_header(AVFormatContext *s)
@@ -66,7 +66,8 @@ static int read_header(AVFormatContext *s)
         codec = (bps == 8) ? AV_CODEC_ID_PCM_U8 : (flags & 0x80000000) ? AV_CODEC_ID_ADPCM_IMA_DVI : AV_CODEC_ID_PCM_S16LE;
         break;
     default:
-        return AVERROR_INVALIDDATA;
+        avpriv_request_sample(s, "version %d", version);
+        return AVERROR_PATCHWELCOME;
     }
 
     st = avformat_new_stream(s, NULL);
