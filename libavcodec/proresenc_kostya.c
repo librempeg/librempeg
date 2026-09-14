@@ -541,7 +541,7 @@ static int encode_slice(AVCodecContext *avctx, const AVFrame *pic,
     int i, xp, yp;
     int total_size = 0;
     const uint16_t *src;
-    int num_cblocks, pwidth, line_add;
+    int num_cblocks, pwidth, line_add, picture_height;
     ptrdiff_t linesize;
     int is_chroma;
     uint16_t *qmat;
@@ -551,6 +551,10 @@ static int encode_slice(AVCodecContext *avctx, const AVFrame *pic,
         line_add = 0;
     else
         line_add = ctx->cur_picture_idx ^ !(pic->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST);
+
+    if ((y << 4) * ctx->pictures_per_frame + line_add >= avctx->height)
+        line_add = 0;
+    picture_height = (avctx->height - line_add + ctx->pictures_per_frame - 1) / ctx->pictures_per_frame;
 
     if (ctx->force_quant) {
         qmat = ctx->quants[0];
@@ -587,7 +591,7 @@ static int encode_slice(AVCodecContext *avctx, const AVFrame *pic,
 
         if (i < 3) {
             get_slice_data(ctx, src, linesize, xp, yp,
-                           pwidth, avctx->height / ctx->pictures_per_frame,
+                           pwidth, picture_height,
                            ctx->blocks[0], ctx->emu_buf,
                            mbs_per_slice, num_cblocks, is_chroma);
             if (!is_chroma) {/* luma quant */
@@ -601,7 +605,7 @@ static int encode_slice(AVCodecContext *avctx, const AVFrame *pic,
             }
         } else {
             get_alpha_data(ctx, src, linesize, xp, yp,
-                           pwidth, avctx->height / ctx->pictures_per_frame,
+                           pwidth, picture_height,
                            ctx->blocks[0], mbs_per_slice, ctx->alpha_bits);
             encode_alpha_plane(ctx, pb, mbs_per_slice, ctx->blocks[0], quant);
         }
@@ -789,13 +793,17 @@ static int find_slice_quant(AVCodecContext *avctx,
     int overquant;
     uint16_t *qmat;
     uint16_t *qmat_chroma;
-    int linesize[4], line_add;
+    int linesize[4], line_add, picture_height;
     int alpha_bits = 0;
 
     if (ctx->pictures_per_frame == 1)
         line_add = 0;
     else
         line_add = ctx->cur_picture_idx ^ !(ctx->pic->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST);
+
+    if ((y << 4) * ctx->pictures_per_frame + line_add >= avctx->height)
+        line_add = 0;
+    picture_height = (avctx->height - line_add + ctx->pictures_per_frame - 1) / ctx->pictures_per_frame;
     mbs = x + mbs_per_slice;
 
     for (i = 0; i < ctx->num_planes; i++) {
@@ -818,12 +826,12 @@ static int find_slice_quant(AVCodecContext *avctx,
 
         if (i < 3) {
             get_slice_data(ctx, src, linesize[i], xp, yp,
-                           pwidth, avctx->height / ctx->pictures_per_frame,
+                           pwidth, picture_height,
                            td->blocks[i], td->emu_buf,
                            mbs_per_slice, num_cblocks[i], is_chroma[i]);
         } else {
             get_alpha_data(ctx, src, linesize[i], xp, yp,
-                           pwidth, avctx->height / ctx->pictures_per_frame,
+                           pwidth, picture_height,
                            td->blocks[i], mbs_per_slice, ctx->alpha_bits);
         }
     }
