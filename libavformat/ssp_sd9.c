@@ -73,8 +73,9 @@ static int sort_streams(const void *a, const void *b)
 static int sd9_read_stream(AVFormatContext *s, AVStream *st, int64_t start_offset)
 {
     int ret;
+    int64_t wav_offset;
     int16_t loop_count;
-    int32_t wav_offset, loop_start, loop_end;
+    int32_t loop_start, loop_end;
     AVIOContext *pb = s->pb;
     SD9Stream *sst = av_mallocz(sizeof(SD9Stream));
     if (!sst)
@@ -137,24 +138,27 @@ static int sd9_read_stream(AVFormatContext *s, AVStream *st, int64_t start_offse
 
 static int ssp_read_header(AVFormatContext *s)
 {
-    int ret;
-    uint32_t first;
-    int64_t pos;
-    char title[0x10];
     AVIOContext *pb = s->pb;
+    char title[0x11] = { 0 };
+    int64_t first, pos;
+    int ret;
 
     if ((ret = avio_get_str(pb, 0x10, title, sizeof(title))) < 0)
         return ret;
-    av_dict_set(&s->metadata, "title", title, 0);
+    if (title[0])
+        av_dict_set(&s->metadata, "title", title, 0);
     avio_seek(pb, 0x10, SEEK_SET);
 
     first = avio_rl32(pb);
 
     avio_seek(pb, 0x48, SEEK_SET);
     while (first > avio_tell(pb)) {
-        uint32_t offset = avio_rl32(pb);
+        int64_t offset = avio_rl32(pb);
         if (offset == 0)
             continue;
+
+        if (avio_feof(pb))
+            break;
 
         AVStream *st = avformat_new_stream(s, NULL);
         if (!st)
@@ -165,6 +169,9 @@ static int ssp_read_header(AVFormatContext *s)
             return ret;
         avio_seek(pb, pos, SEEK_SET);
     }
+
+    if (s->nb_streams <= 0)
+        return AVERROR_INVALIDDATA;
 
     qsort(s->streams, s->nb_streams, sizeof(AVStream *), sort_streams);
     for (int n = 0; n < s->nb_streams; n++) {
