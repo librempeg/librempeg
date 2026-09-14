@@ -95,9 +95,9 @@ static int read_header(AVFormatContext *s)
     int64_t chtb_offset;
     uint16_t nb_chunks;
 
-    avio_skip(s->pb, 4);
+    avio_skip(pb, 4);
 
-    bom = avio_rb16(s->pb);
+    bom = avio_rb16(pb);
     if (bom != 0xFEFF && bom != 0xFFFE) {
         av_log(s, AV_LOG_ERROR, "invalid byte order: %X\n", bom);
         return AVERROR_INVALIDDATA;
