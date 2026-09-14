@@ -203,6 +203,7 @@ OBJS-$(CONFIG_BONK_DEMUXER)              += bonk.o rawdec.o
 OBJS-$(CONFIG_BRR_DEMUXER)               += brr.o pcm.o
 OBJS-$(CONFIG_BRSTM_DEMUXER)             += brstm.o
 OBJS-$(CONFIG_BRSTM_MUXER)               += brstmenc.o
+OBJS-$(CONFIG_BRWAV_DEMUXER)             += brwav.o pcm.o
 OBJS-$(CONFIG_BTSND_DEMUXER)             += btsnd.o pcm.o
 OBJS-$(CONFIG_BWAV_DEMUXER)              += bwav.o pcm.o
 OBJS-$(CONFIG_C93_DEMUXER)               += c93.o voc_packet.o voc.o
