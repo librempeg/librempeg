@@ -62,7 +62,7 @@ typedef struct ELBGContext {
 
     /* Sizes for the buffers above. Pointers without such a field
      * are not allocated by us and only valid for the duration
-     * of a single call to avpriv_elbg_do(). */
+     * of a single call to ff_elbg_do(). */
     unsigned utility_allocated;
     unsigned utility_inc_allocated;
     unsigned size_part_allocated;
@@ -460,9 +460,9 @@ static void init_elbg(ELBGContext *restrict elbg, int *points, int *temp_points,
                    dim * sizeof(*elbg->codebook));
 }
 
-int avpriv_elbg_do(ELBGContext **elbgp, int *points, int dim, int numpoints,
-                   int *codebook, int num_cb, int max_steps,
-                   int *closest_cb, AVLFG *rand_state, uintptr_t flags)
+int ff_elbg_do(ELBGContext **elbgp, int *points, int dim, int numpoints,
+               int *codebook, int num_cb, int max_steps,
+               int *closest_cb, AVLFG *rand_state, uintptr_t flags)
 {
     ELBGContext *const restrict elbg = *elbgp ? *elbgp : av_mallocz(sizeof(*elbg));
 
@@ -513,7 +513,7 @@ int avpriv_elbg_do(ELBGContext **elbgp, int *points, int dim, int numpoints,
     return 0;
 }
 
-av_cold void avpriv_elbg_free(ELBGContext **elbgp)
+av_cold void ff_elbg_free(ELBGContext **elbgp)
 {
     ELBGContext *elbg = *elbgp;
     if (!elbg)

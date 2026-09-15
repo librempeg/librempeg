@@ -759,8 +759,8 @@ static int quantize(CinepakEncContext *s, int h, uint8_t *data[4],
     if (i < size)
         size = i;
 
-    ret = avpriv_elbg_do(&s->elbg, s->codebook_input, entry_size, i, codebook,
-                         size, 1, s->codebook_closest, &s->randctx, 0);
+    ret = ff_elbg_do(&s->elbg, s->codebook_input, entry_size, i, codebook,
+                     size, 1, s->codebook_closest, &s->randctx, 0);
     if (ret < 0)
         return ret;
 
@@ -1194,7 +1194,7 @@ static av_cold int cinepak_encode_end(AVCodecContext *avctx)
     CinepakEncContext *s = avctx->priv_data;
     int x;
 
-    avpriv_elbg_free(&s->elbg);
+    ff_elbg_free(&s->elbg);
     av_frame_free(&s->last_frame);
     av_frame_free(&s->best_frame);
     av_frame_free(&s->scratch_frame);
