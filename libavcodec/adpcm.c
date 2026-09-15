@@ -1803,7 +1803,11 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
                 if (block_size <= 0)
                     break;
 
-                nb_samples += (block_size - 16 * (ch / 2)) * 2 / ch;
+                const int block_samples = (block_size - 16 * (ch / 2)) * 2 / ch;
+                if (block_samples <= 0)
+                    break;
+
+                nb_samples += block_samples;
                 left -= block_size;
             }
         }
