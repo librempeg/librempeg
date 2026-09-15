@@ -2473,11 +2473,10 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         ) /* End of CASE */
     CASE(ADPCM_MTAF,
         const int block_size = (avctx->block_align > 0) ? FFMIN(avctx->block_align, avpkt->size) : avpkt->size;
-        const int nb_samples_per_block = block_size - 16 * (channels / 2) * 2 / channels;
+        const int nb_samples_per_block = (block_size - 16 * (channels / 2)) * 2 / channels;
+        int offset = 0;
 
         for (int block = 0; block < avpkt->size / block_size; block++) {
-            int offset = block * nb_samples_per_block;
-
             for (int channel = 0; channel < channels; channel += 2) {
                 ADPCMChannelStatus *cs0 = &c->status[channel + 0];
                 ADPCMChannelStatus *cs1 = &c->status[channel + 1];
@@ -2500,6 +2499,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     samples_p[channel + 1][offset + n + 1] = adpcm_mtaf_expand_nibble(cs1, v >> 4  );
                 }
             }
+
+            offset += nb_samples_per_block;
         }
         ) /* End of CASE */
     CASE(ADPCM_IMA_DK4,
