@@ -357,6 +357,17 @@ static int ubi_bao_config_version(AVFormatContext *s, ubi_bao_config_t *cfg, uin
         cfg->parser = PARSER_29;
     }
 
+    uint32_t header_subversion = 0;
+    uint32_t header_empty = 0;
+    if (cfg->version == 0x001B0100) {
+        int64_t pos = avio_tell(pb);
+        avio_seek(pb, 0x10, SEEK_SET);
+        header_empty = avio_rl32(pb);
+        avio_skip(pb, 0x10);
+        header_subversion = avio_rl32(pb);
+        avio_seek(pb, pos, SEEK_SET);
+    }
+
     if (cfg->version == 0x00220015) {
         int64_t header_size = 0x40 + avio_rl32(pb);
 
@@ -392,6 +403,9 @@ static int ubi_bao_config_version(AVFormatContext *s, ubi_bao_config_t *cfg, uin
         cfg->codec_map[0x04] = FMT_OGG;
         cfg->codec_map[0x05] = RAW_XMA1_str;
         cfg->codec_map[0x07] = RAW_AT3;
+
+        if (cfg->version == 0x001B0100 && header_empty == 0xFFFFFFFF && header_subversion == 0x10)
+            cfg->codec_map[0x00] = RAW_DSP;
 
         cfg->audio_stream_subtype = 0x78;
 
@@ -1504,6 +1518,19 @@ static AVStream *open_streamfile_by_filename(AVFormatContext *s, const char *nam
             par->codec_id = AV_CODEC_ID_ADPCM_PSX;
             par->block_align = 0x10 * bao->channels;
             break;
+        case RAW_DSP:
+            par->codec_id = AV_CODEC_ID_ADPCM_NDSP;
+            par->block_align = (bao->channels > 1) ? bao->stream_size : 8;
+            ret = ff_alloc_extradata(par, 32 * bao->channels);
+            if (ret < 0)
+                return NULL;
+
+            avio_seek(s->pb, bao->header_offset + bao->header_size + bao->extra_size + 16, SEEK_SET);
+            for (int ch = 0; ch < bao->channels; ch++) {
+                avio_read(s->pb, par->extradata + 32 * ch, 32);
+                avio_skip(s->pb, 32);
+            }
+            break;
         case RAW_AT3:
             par->codec_id = AV_CODEC_ID_ATRAC3;
 
@@ -1926,7 +1953,7 @@ static int read_header(AVFormatContext *s)
     if (ret < 0)
         return ret;
 
-    ret = parse_bao(s, bao, 0x00, 1);
+    ret = parse_bao(s, bao, 0, 1);
     if (ret < 0)
         return ret;
 
