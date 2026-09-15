@@ -401,6 +401,15 @@ static const uint8_t adpcmb_yamaha_indexscale[16] =
     57, 57, 57, 57, 77, 102, 128, 153,
 };
 
+static const float adpcm_mta2_k0[8] = { 0.0, 0.9375, 1.796875, 1.53125, 1.90625, 1.796875, 1.796875, 0.9375 };
+static const float adpcm_mta2_k1[8] = { -0.0, -0.0, -0.8125, -0.859375, -0.9375, -0.9375, -0.859375, -0.40625 };
+static const float adpcm_mta2_ranges[32] = {
+       1.0,   1.3125,    1.6875,     2.25,   2.9375,   3.8125,       5.0,   6.5625,
+    8.5625,  11.1875,    14.625,   19.125,     25.0,    32.75,   42.8125,  55.9375,
+   73.1875,  95.6875,  125.1875, 163.6875, 214.0625, 279.9375,   366.125, 478.8125,
+   626.125, 818.8125, 1070.8125, 1400.375, 1831.375,   2395.0, 3132.0625,   4096.0
+};
+
 /* end of tables */
 
 typedef struct ADPCMDecodeContext {
@@ -477,6 +486,9 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_NDSP_SI1:
         max_channels = 14;
         break;
+    case AV_CODEC_ID_ADPCM_MTA2:
+        max_channels = 16;
+        break;
     }
     if (avctx->ch_layout.nb_channels < min_channels ||
         avctx->ch_layout.nb_channels > max_channels) {
@@ -542,6 +554,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_PSX:
     case AV_CODEC_ID_ADPCM_PSXC:
     case AV_CODEC_ID_ADPCM_SANYO:
+    case AV_CODEC_ID_ADPCM_MTA2:
     case AV_CODEC_ID_ADPCM_MTAF:
     case AV_CODEC_ID_ADPCM_ARGO:
     case AV_CODEC_ID_ADPCM_IMA_MO:
@@ -1789,6 +1802,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
             }
         }
         break;
+    case AV_CODEC_ID_ADPCM_MTA2:
+        nb_samples = buf_size / (16 + ch * 0x90) * 256;
+        break;
     case AV_CODEC_ID_ADPCM_MTAF:
         {
             int left = buf_size;
@@ -2470,6 +2486,87 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                 }
             }
         }
+        ) /* End of CASE */
+    CASE(ADPCM_MTA2,
+        int track, size, layout, offset[8] = { 0 };
+        while (bytestream2_get_bytes_left(&gb) >= 16+0x90) {
+            int track_channels = 0;
+
+            track = bytestream2_get_byte(&gb);
+            bytestream2_skip(&gb, 4);
+            layout = bytestream2_get_byte(&gb);
+            size = bytestream2_get_be16(&gb);
+            bytestream2_skip(&gb, 8);
+
+            for (int i = 0; i < 8; i++) {
+                if ((layout >> i) & 1)
+                    track_channels++;
+            }
+
+            if (size == 0 || layout == 0 || track_channels == 0)
+                continue;
+
+            if (track >= FF_ARRAY_ELEMS(offset))
+                return AVERROR_INVALIDDATA;
+            if (track_channels + track * track_channels > channels)
+                return AVERROR_INVALIDDATA;
+
+            for (int channel = 0; channel < track_channels; channel++) {
+                uint32_t group_headers[4];
+                int start;
+
+                for (int group = 0; group < 4; group++)
+                    group_headers[group] = bytestream2_get_be32u(&gb);
+
+                start = bytestream2_tell(&gb);
+                if (offset[track] >= nb_samples)
+                    return AVERROR_INVALIDDATA;
+
+                samples = samples_p[channel + track * track_channels] + offset[track];
+                for (int group = 0; group < 4; group++) {
+                    uint32_t group_header = group_headers[group];
+                    int hist2, hist1, coefs, scale;
+
+                    hist2 = sign_extend((group_header >> 16) & 0xfff0, 16);
+                    hist1 = sign_extend((group_header >>  4) & 0xfff0, 16);
+                    coefs = (group_header >> 5) & 0x07;
+                    scale = (group_header >> 0) & 0x1f;
+
+                    *samples++ = hist2;
+                    *samples++ = hist1;
+
+                    for (int row = 0; row < 8; row++) {
+                        bytestream2_seek(&gb, start + group*0x4 + row*0x10, SEEK_SET);
+                        for (int col = 0; col < 4; col++) {
+                            int sample, byte = bytestream2_get_byteu(&gb);
+
+                            sample = sign_extend(byte >> 4, 4);
+                            sample = sample * adpcm_mta2_ranges[scale] + hist1 * adpcm_mta2_k0[coefs] + hist2 * adpcm_mta2_k1[coefs];
+                            sample = av_clip_int16(sample);
+
+                            if (row < 7 || col < 3)
+                                *samples++ = sample;
+
+                            hist2 = hist1;
+                            hist1 = sample;
+
+                            sample = sign_extend(byte & 15, 4);
+                            sample = sample * adpcm_mta2_ranges[scale] + hist1 * adpcm_mta2_k0[coefs] + hist2 * adpcm_mta2_k1[coefs];
+                            sample = av_clip_int16(sample);
+
+                            if (row < 7 || col < 3)
+                                *samples++ = sample;
+
+                            hist2 = hist1;
+                            hist1 = sample;
+                        }
+                    }
+                }
+            }
+
+            offset[track] += 256;
+        }
+        bytestream2_seek(&gb, 0, SEEK_END);
         ) /* End of CASE */
     CASE(ADPCM_MTAF,
         const int block_size = (avctx->block_align > 0) ? FFMIN(avctx->block_align, avpkt->size) : avpkt->size;
@@ -4662,6 +4759,7 @@ ADPCM_DECODER(ADPCM_IMA_XBOX_MONO,sample_fmts_s16p,adpcm_ima_xbox_mono,"ADPCM IM
 ADPCM_DECODER(ADPCM_IMA_WW,      sample_fmts_s16p, adpcm_ima_ww,      "ADPCM IMA Audiokinetic Wwise")
 ADPCM_DECODER(ADPCM_IMA_ZMUSIC,  sample_fmts_s16,  adpcm_ima_zmusic,  "ADPCM IMA Z-Music")
 ADPCM_DECODER(ADPCM_MS,          sample_fmts_both, adpcm_ms,          "ADPCM Microsoft")
+ADPCM_DECODER(ADPCM_MTA2,        sample_fmts_s16p, adpcm_mta2,        "ADPCM MTA2")
 ADPCM_DECODER(ADPCM_MTAF,        sample_fmts_s16p, adpcm_mtaf,        "ADPCM MTAF")
 ADPCM_DECODER(ADPCM_N64,         sample_fmts_s16p, adpcm_n64,         "ADPCM Silicon Graphics N64")
 ADPCM_DECODER(ADPCM_NDSP,        sample_fmts_s16p, adpcm_ndsp,        "ADPCM Nintendo DSP")

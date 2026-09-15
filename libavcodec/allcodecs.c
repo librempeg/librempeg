@@ -770,6 +770,7 @@ extern const FFCodec ff_adpcm_ima_zmusic_decoder;
 extern const FFCodec ff_adpcm_mpc3_decoder;
 extern const FFCodec ff_adpcm_ms_encoder;
 extern const FFCodec ff_adpcm_ms_decoder;
+extern const FFCodec ff_adpcm_mta2_decoder;
 extern const FFCodec ff_adpcm_mtaf_decoder;
 extern const FFCodec ff_adpcm_n64_decoder;
 extern const FFCodec ff_adpcm_ndsp_decoder;
