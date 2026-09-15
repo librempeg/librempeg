@@ -545,6 +545,7 @@ OBJS-$(CONFIG_MSNWC_TCP_DEMUXER)         += msnwc_tcp.o
 OBJS-$(CONFIG_MSP_DEMUXER)               += mspdec.o
 OBJS-$(CONFIG_MSVP_DEMUXER)              += msvp.o pcm.o
 OBJS-$(CONFIG_MSX_DEMUXER)               += msx.o riffdec.o
+OBJS-$(CONFIG_MTA2_DEMUXER)              += mta2.o
 OBJS-$(CONFIG_MTAF_DEMUXER)              += mtaf.o pcm.o
 OBJS-$(CONFIG_MTV_DEMUXER)               += mtv.o
 OBJS-$(CONFIG_MUS_DEMUXER)               += mus.o

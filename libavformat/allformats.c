@@ -442,6 +442,7 @@ extern const FFInputFormat  ff_msnwc_tcp_demuxer;
 extern const FFInputFormat  ff_msp_demuxer;
 extern const FFInputFormat  ff_msvp_demuxer;
 extern const FFInputFormat  ff_msx_demuxer;
+extern const FFInputFormat  ff_mta2_demuxer;
 extern const FFInputFormat  ff_mtaf_demuxer;
 extern const FFInputFormat  ff_mtv_demuxer;
 extern const FFInputFormat  ff_mus_demuxer;
