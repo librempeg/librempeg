@@ -46,6 +46,9 @@ av_unused static av_cold void ff_bitpackeddec_init(struct BitpackedContext *s)
 {
     s->unpack_yuv422p10 = bitpacked_unpack_yuv422p10_c;
 
+#if ARCH_X86 && HAVE_X86ASM
+    ff_bitpacked_init_x86(s);
+#endif
 }
 
 #endif /* AVCODEC_BITPACKED_DEC_INIT_H */
