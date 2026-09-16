@@ -31918,6 +31918,8 @@ Show cool intensity for stereo channels.
 Show colors representing auto correlation for mono channel.
 @item stereocorr
 Show colors representing cross correlation for stereo channels.
+@item stereoquad
+Show colors representing hybrid between cross correlation and L/R magnitude difference for stereo channels.
 @end table
 
 Default value is @code{magnitude}.
