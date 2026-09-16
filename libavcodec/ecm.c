@@ -22,6 +22,7 @@
 #include "libavutil/attributes.h"
 #include "libavutil/internal.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/lfg.h"
 #include "libavutil/mem.h"
 
 #include "avcodec.h"
@@ -253,9 +254,6 @@ static int decode(AVCodecContext *avctx, int frame_index, AVFrame *frame)
             bytestream2_seek(&prev_row, -SIM_TABLE_DIM, SEEK_CUR);
             out_row += SIM_TABLE_DIM;
         }
-
-        for (int i = 0; i < JITTER_CNT; i++)
-            s->jitter[i] = (random() % 5) * CANVAS_W + (random() % 5) - 0x282;
     }
 
     GetByteContext pgb = *gb;
@@ -360,6 +358,7 @@ static int receive_frame(AVCodecContext *avctx, AVFrame *frame)
 static av_cold int decode_init(AVCodecContext *avctx)
 {
     ECMContext *s = avctx->priv_data;
+    AVLFG prng;
 
     avctx->pix_fmt = AV_PIX_FMT_RGB0;
     avctx->width = CANVAS_W;
@@ -368,6 +367,10 @@ static av_cold int decode_init(AVCodecContext *avctx)
     s->last_pts = AV_NOPTS_VALUE;
     s->pkt = avctx->internal->in_pkt;
     s->frame_index = 0;
+
+    av_lfg_init(&prng, 1);
+    for (int i = 0; i < JITTER_CNT; i++)
+        s->jitter[i] = (av_lfg_get(&prng) % 5) * CANVAS_W + (av_lfg_get(&prng) % 5) - 0x282;
 
     return 0;
 }
