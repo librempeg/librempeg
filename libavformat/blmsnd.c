@@ -133,6 +133,11 @@ static int read_header(AVFormatContext *s)
         align = 2;
         bit_rate = 2LL * channels * 8 * rate;
         break;
+    case 5:
+        codec = AV_CODEC_ID_OPUS;
+        align = 1;
+        bit_rate = 0;
+        break;
     default:
         avpriv_request_sample(s, "codec %X", codec);
         return AVERROR_PATCHWELCOME;
@@ -144,7 +149,7 @@ static int read_header(AVFormatContext *s)
 
     avio_seek(pb, body_start + body_size, SEEK_SET);
     if (body_size > 0xAC && path_length > 0)
-        avio_skip(pb, path_length);
+        avio_skip(pb, path_length+1);
 
     tag = avio_rb32(pb);
     while (tag != MKTAG('t','b','f','d')) {
@@ -223,6 +228,21 @@ static int read_header(AVFormatContext *s)
 
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
+    if (st->codecpar->codec_id == AV_CODEC_ID_OPUS) {
+        int ret = ff_alloc_extradata(st->codecpar, 19 + (2 + channels) * (channels > 2));
+        if (ret < 0)
+            return ret;
+        memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
+
+        memcpy(st->codecpar->extradata, "OpusHead", 8);
+        st->codecpar->extradata[8] = 1;
+        st->codecpar->extradata[9] = channels;
+        AV_WL16(st->codecpar->extradata + 10, 0);
+        AV_WL32(st->codecpar->extradata + 12, 48000);
+
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_HEADERS;
+    }
+
     avio_seek(pb, start, SEEK_SET);
 
     return 0;
@@ -290,8 +310,15 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
         avio_seek(pb, pos, SEEK_SET);
     }
 
-    const int block_size = ff_pcm_default_packet_size(st->codecpar);
-    const int size = FFMIN(block_size, ctx->blocks[ctx->current_block].stop - pos);
+    int size;
+    if (st->codecpar->codec_id == AV_CODEC_ID_OPUS) {
+        size = avio_rl16(pb);
+        if (size <= 0)
+            return AVERROR_EOF;
+    } else {
+        const int block_size = ff_pcm_default_packet_size(st->codecpar);
+        size = FFMIN(block_size, ctx->blocks[ctx->current_block].stop - pos);
+    }
 
     ret = av_get_packet(pb, pkt, size);
     pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
