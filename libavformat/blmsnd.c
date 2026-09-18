@@ -32,6 +32,17 @@ typedef struct TBFDHeader {
     int32_t size;
 } TBFDHeader;
 
+typedef struct DataBlock {
+    int64_t start;
+    int64_t stop;
+} DataBlock;
+
+typedef struct BLMSNDContext {
+    DataBlock blocks[1024];
+    int current_block;
+    int nb_blocks;
+} BLMSNDContext;
+
 static int read_probe(const AVProbeData *p)
 {
     if (p->buf_size < 0x28)
@@ -47,6 +58,7 @@ static int read_header(AVFormatContext *s)
 {
     int align, rate, codec, channels, path_length = 0;
     int64_t start, body_start, body_size, bit_rate;
+    BLMSNDContext *ctx = s->priv_data;
     AVIOContext *pb = s->pb;
     TBFDHeader tbfd = { 0 };
     uint32_t tag;
@@ -151,6 +163,7 @@ static int read_header(AVFormatContext *s)
     }
 
     int subtype, name_size;
+    start = avio_tell(pb);
     do {
         int extra = 0;
 
@@ -173,14 +186,24 @@ static int read_header(AVFormatContext *s)
             subtype = avio_rl16(pb);
             name_size = avio_rb16(pb);
             extra += name_size;
-            avio_skip(pb, tbfd.size - 4);
+            if (subtype) {
+                avio_skip(pb, tbfd.size - 4);
+            } else {
+                ctx->blocks[0].stop = start + avio_rl32(pb) + tbfd.size + 16;
+                avio_skip(pb, tbfd.size - 8);
+            }
         }
 
         avio_skip(pb, extra);
-        if (subtype)
+        if (subtype) {
+            start = avio_tell(pb);
             tag = avio_rb32(pb);
+        }
     } while (subtype);
+
     start = avio_tell(pb);
+    ctx->blocks[0].start = start;
+    ctx->nb_blocks = 1;
 
     if (align <= 0 || rate <= 0 || channels <= 0 || channels >= INT_MAX/align)
         return AVERROR_INVALIDDATA;
@@ -204,12 +227,95 @@ static int read_header(AVFormatContext *s)
     return 0;
 }
 
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
+{
+    BLMSNDContext *ctx = s->priv_data;
+    AVStream *st = s->streams[0];
+    AVIOContext *pb = s->pb;
+    int ret;
+
+    if (avio_feof(pb))
+        return AVERROR_EOF;
+
+    int64_t pos = avio_tell(pb);
+    if (pos < ctx->blocks[ctx->current_block].start) {
+        pos = ctx->blocks[ctx->current_block].start;
+        avio_seek(pb, pos, SEEK_SET);
+    }
+
+    while (pos >= ctx->blocks[ctx->current_block].stop) {
+        if (ctx->current_block + 1 < ctx->nb_blocks) {
+            ctx->current_block++;
+        } else {
+            int64_t start = avio_tell(pb);
+            uint32_t tag = avio_rb32(pb);
+
+            if (ctx->nb_blocks >= FF_ARRAY_ELEMS(ctx->blocks))
+                return AVERROR_INVALIDDATA;
+
+            if (avio_feof(pb))
+                return AVERROR_EOF;
+
+            if (tag != MKTAG('t','b','f','d'))
+                return AVERROR_EOF;
+
+            uint32_t type = avio_rl32(pb);
+            int32_t count = avio_rl32(pb);
+            int64_t size = avio_rl32(pb);
+            int64_t stop;
+
+            if (size < 0x50 || count != 1 || type != 0)
+                return AVERROR_INVALIDDATA;
+
+            avio_skip(pb, 4);
+            stop = start + avio_rl32(pb) + size + 16;
+            if (ctx->blocks[ctx->current_block].stop >= stop)
+                return AVERROR_INVALIDDATA;
+
+            ctx->blocks[ctx->nb_blocks].stop = stop;
+            ctx->blocks[ctx->nb_blocks].start = start + size + 16;
+            avio_skip(pb, size - 8);
+            ctx->current_block++;
+            ctx->nb_blocks++;
+            break;
+        }
+    }
+
+    if (ctx->current_block >= ctx->nb_blocks)
+        return AVERROR_EOF;
+
+    if (pos < ctx->blocks[ctx->current_block].start) {
+        pos = ctx->blocks[ctx->current_block].start;
+        avio_seek(pb, pos, SEEK_SET);
+    }
+
+    const int block_size = ff_pcm_default_packet_size(st->codecpar);
+    const int size = FFMIN(block_size, ctx->blocks[ctx->current_block].stop - pos);
+
+    ret = av_get_packet(pb, pkt, size);
+    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
+    pkt->pos = pos;
+
+    return ret;
+}
+
+static int read_seek(AVFormatContext *s, int stream_index, int64_t ts, int flags)
+{
+    BLMSNDContext *ctx = s->priv_data;
+
+    ctx->current_block = 0;
+
+    return -1;
+}
+
 const FFInputFormat ff_blmsnd_demuxer = {
     .p.name         = "blmsnd",
     .p.long_name    = NULL_IF_CONFIG_SMALL("Guerilla BLM! snd!"),
-    .p.flags        = AVFMT_GENERIC_INDEX,
+    .p.flags        = AVFMT_GENERIC_INDEX | AVFMT_NO_BYTE_SEEK,
+    .priv_data_size = sizeof(BLMSNDContext),
     .p.extensions   = "sound",
     .read_probe     = read_probe,
     .read_header    = read_header,
-    .read_packet    = ff_pcm_read_packet,
+    .read_packet    = read_packet,
+    .read_seek      = read_seek,
 };
