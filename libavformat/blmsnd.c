@@ -162,10 +162,10 @@ static int read_header(AVFormatContext *s)
         }
     }
 
-    int subtype, name_size;
+    int extra, subtype, name_size;
     start = avio_tell(pb);
     do {
-        int extra = 0;
+        extra = 0;
 
         if (avio_feof(pb))
             return AVERROR_INVALIDDATA;
@@ -195,11 +195,11 @@ static int read_header(AVFormatContext *s)
         }
 
         avio_skip(pb, extra);
-        if (subtype) {
+        if (subtype || extra) {
             start = avio_tell(pb);
             tag = avio_rb32(pb);
         }
-    } while (subtype);
+    } while (subtype || extra);
 
     start = avio_tell(pb);
     ctx->blocks[0].start = start;
