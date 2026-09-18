@@ -134,6 +134,7 @@ static int read_header(AVFormatContext *s)
         bit_rate = 2LL * channels * 8 * rate;
         break;
     default:
+        avpriv_request_sample(s, "codec %X", codec);
         return AVERROR_PATCHWELCOME;
     }
     avio_skip(pb, 12+12+12+4+4+4);
