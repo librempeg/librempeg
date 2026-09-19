@@ -28,7 +28,7 @@ typedef struct LOPUDemuxContext {
     int64_t data_end;
 } LOPUDemuxContext;
 
-static int lopu_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if (AV_RL32(p->buf) != MKTAG('L','O','P','U'))
         return 0;
@@ -43,7 +43,7 @@ static int lopu_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX;
 }
 
-static int lopu_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
     LOPUDemuxContext *lc = s->priv_data;
     int ret, rate, nb_channels, skip;
@@ -93,13 +93,12 @@ static int lopu_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int lopu_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     LOPUDemuxContext *lc = s->priv_data;
     AVIOContext *pb = s->pb;
     int64_t pos = avio_tell(pb);
-    uint32_t size;
-    int ret;
+    int size, ret;
 
     if (pos >= lc->data_end)
         return AVERROR_EOF;
@@ -123,11 +122,11 @@ static int lopu_read_packet(AVFormatContext *s, AVPacket *pkt)
 
 const FFInputFormat ff_lopu_demuxer = {
     .p.name         = "lopu",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Switch LOPU"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Switch LOPU Opus"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "lopus",
     .priv_data_size = sizeof(LOPUDemuxContext),
-    .read_probe     = lopu_probe,
-    .read_header    = lopu_read_header,
-    .read_packet    = lopu_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
