@@ -110,8 +110,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
     NXOFDemuxContext *n = s->priv_data;
     AVIOContext *pb = s->pb;
     int64_t pos = avio_tell(pb);
-    uint32_t size;
-    int ret;
+    int size, ret;
 
     if (pos >= n->data_end)
         return AVERROR_EOF;
