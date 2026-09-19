@@ -8136,7 +8136,6 @@ enabled zlib && add_cppflags -DZLIB_CONST
 # conditional library dependencies, in any order
 enabled lavfi_indev         && prepend avdevice_deps "avfilter"
 enabled aresample_filter    && prepend avfilter_deps "swresample"
-enabled ebur128_filter && enabled swresample && prepend avfilter_deps "swresample"
 enabled sab_filter          && prepend avfilter_deps "swscale"
 enabled scale_filter        && prepend avfilter_deps "swscale"
 enabled scale2ref_filter    && prepend avfilter_deps "swscale"
