@@ -106,7 +106,7 @@ static int read_header(AVFormatContext *s)
 
 const FFInputFormat ff_sadl_demuxer = {
     .p.name         = "sadl",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Procyon DS SADL)"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Procyon Studio SADL"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "sad",
     .read_probe     = read_probe,
