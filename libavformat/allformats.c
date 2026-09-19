@@ -391,6 +391,7 @@ extern const FFInputFormat  ff_macbinary_demuxer;
 extern const FFInputFormat  ff_matroska_demuxer;
 extern const FFOutputFormat ff_matroska_muxer;
 extern const FFOutputFormat ff_matroska_audio_muxer;
+extern const FFInputFormat  ff_mgs2s_demuxer;
 extern const FFInputFormat  ff_mgsts_demuxer;
 extern const FFInputFormat  ff_mhwk_demuxer;
 extern const FFInputFormat  ff_microdvd_demuxer;
