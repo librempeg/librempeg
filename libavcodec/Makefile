@@ -1095,6 +1095,7 @@ OBJS-$(CONFIG_ADPCM_IMA_WW_DECODER)       += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_ZMUSIC_DECODER)   += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_MPC3_DECODER)         += adpcm_mpc3.o
 OBJS-$(CONFIG_ADPCM_MS_DECODER)           += adpcm.o adpcm_data.o
+OBJS-$(CONFIG_ADPCM_MS_MONO_DECODER)      += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_MS_ENCODER)           += adpcmenc.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_MTA2_DECODER)         += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_MTAF_DECODER)         += adpcm.o adpcm_data.o

@@ -444,6 +444,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_EA_R3:
     case AV_CODEC_ID_ADPCM_EA_XAS:
     case AV_CODEC_ID_ADPCM_MS:
+    case AV_CODEC_ID_ADPCM_MS_MONO:
     case AV_CODEC_ID_ADPCM_CKMK:
     case AV_CODEC_ID_ADPCM_IMA_FSB:
     case AV_CODEC_ID_ADPCM_IMA_XBOX:
@@ -573,6 +574,7 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     case AV_CODEC_ID_ADPCM_IMA_HWAS:
     case AV_CODEC_ID_ADPCM_NXAP:
     case AV_CODEC_ID_ADPCM_CKMK:
+    case AV_CODEC_ID_ADPCM_MS_MONO:
         avctx->sample_fmt = AV_SAMPLE_FMT_S16P;
         break;
     case AV_CODEC_ID_ADPCM_IMA_WS:
@@ -1783,6 +1785,7 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         break;
     case AV_CODEC_ID_ADPCM_CKMK:
     case AV_CODEC_ID_ADPCM_MS:
+    case AV_CODEC_ID_ADPCM_MS_MONO:
         {
             int left = buf_size;
 
@@ -2504,6 +2507,39 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     int byte = bytestream2_get_byteu(&gb);
                     *samples++ = adpcm_ms_expand_nibble(&c->status[0 ], byte >> 4  );
                     *samples++ = adpcm_ms_expand_nibble(&c->status[st], byte & 0x0F);
+                }
+            }
+        }
+        ) /* End of CASE */
+    CASE(ADPCM_MS_MONO,
+        const int block_size = (avctx->block_align > 0) ? FFMIN(avctx->block_align, avpkt->size) : avpkt->size;
+        const int nb_samples_per_block = (block_size - 6 * channels) / channels * 2;
+
+        for (int channel = 0; channel < channels; channel++) {
+            ADPCMChannelStatus *cs = &c->status[channel];
+
+            for (int block = 0; block < avpkt->size / block_size; block++) {
+                int offset = block * nb_samples_per_block;
+                int block_predictor;
+
+                samples = samples_p[channel] + offset;
+                block_predictor = bytestream2_get_byteu(&gb);
+                if (block_predictor > 6) {
+                    av_log(avctx, AV_LOG_ERROR, "ERROR: block_predictor[%d] = %d\n",
+                           channel, block_predictor);
+                    return AVERROR_INVALIDDATA;
+                }
+                cs->coeff1 = ff_adpcm_AdaptCoeff1[block_predictor];
+                cs->coeff2 = ff_adpcm_AdaptCoeff2[block_predictor];
+                cs->idelta = sign_extend(bytestream2_get_le16u(&gb), 16);
+                cs->sample1 = sign_extend(bytestream2_get_le16u(&gb), 16);
+                cs->sample2 = sign_extend(bytestream2_get_le16u(&gb), 16);
+                *samples++ = cs->sample2;
+                *samples++ = cs->sample1;
+                for (int n = (nb_samples_per_block - 2) >> 1; n > 0; n--) {
+                    int byte = bytestream2_get_byteu(&gb);
+                    *samples++ = adpcm_ms_expand_nibble(cs, byte >> 4);
+                    *samples++ = adpcm_ms_expand_nibble(cs, byte & 15);
                 }
             }
         }
@@ -4813,6 +4849,7 @@ ADPCM_DECODER(ADPCM_IMA_XBOX_MONO,sample_fmts_s16p,adpcm_ima_xbox_mono,"ADPCM IM
 ADPCM_DECODER(ADPCM_IMA_WW,      sample_fmts_s16p, adpcm_ima_ww,      "ADPCM IMA Audiokinetic Wwise")
 ADPCM_DECODER(ADPCM_IMA_ZMUSIC,  sample_fmts_s16,  adpcm_ima_zmusic,  "ADPCM IMA Z-Music")
 ADPCM_DECODER(ADPCM_MS,          sample_fmts_both, adpcm_ms,          "ADPCM Microsoft")
+ADPCM_DECODER(ADPCM_MS_MONO,     sample_fmts_s16p, adpcm_ms_mono,     "ADPCM Microsoft (Mono)")
 ADPCM_DECODER(ADPCM_MTA2,        sample_fmts_s16p, adpcm_mta2,        "ADPCM MTA2")
 ADPCM_DECODER(ADPCM_MTAF,        sample_fmts_s16p, adpcm_mtaf,        "ADPCM MTAF")
 ADPCM_DECODER(ADPCM_N64,         sample_fmts_s16p, adpcm_n64,         "ADPCM Silicon Graphics N64")
