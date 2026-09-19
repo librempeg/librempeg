@@ -174,6 +174,10 @@ static int wav_probe(const AVProbeData *p)
                   !memcmp(p->buf,      "BW64", 4)) &&
                  !memcmp(p->buf + 12, "ds64", 4))
             return AVPROBE_SCORE_MAX;
+    } else if (!memcmp(p->buf + 8, "DMSG", 4)) {
+        if (!memcmp(p->buf, "RIFF", 4) &&
+            !memcmp(p->buf + 12, "segh", 4))
+            return AVPROBE_SCORE_MAX;
     }
     return 0;
 }
@@ -364,7 +368,7 @@ static int wav_read_header(AVFormatContext *s)
 {
     int64_t size, av_uninit(data_size);
     int64_t sample_count = 0;
-    int rf64 = 0, bw64 = 0;
+    int rf64 = 0, bw64 = 0, dmsg = 0;
     uint32_t tag;
     AVIOContext *pb      = s->pb;
     AVStream *st         = NULL;
@@ -403,8 +407,10 @@ static int wav_read_header(AVFormatContext *s)
 
     /* read format */
     uint32_t format = avio_rl32(pb);
-    if (format != MKTAG('W', 'A', 'V', 'E') &&
-        format != MKTAG('W', 'A', 'V', 'S')) {
+    if (format == MKTAG('D', 'M', 'S', 'G')) {
+        dmsg = 1;
+    } else if (format != MKTAG('W', 'A', 'V', 'E') &&
+               format != MKTAG('W', 'A', 'V', 'S')) {
         av_log(s, AV_LOG_ERROR, "invalid format in RIFF header\n");
         return AVERROR_INVALIDDATA;
     }
@@ -426,8 +432,34 @@ static int wav_read_header(AVFormatContext *s)
                    data_size, sample_count);
             return AVERROR_INVALIDDATA;
         }
-        avio_skip(pb, size - 24); /* skip rest of ds64 chunk */
 
+        avio_skip(pb, size - 24); /* skip rest of ds64 chunk */
+    } else if (dmsg) {
+        if (avio_rl32(pb) != MKTAG('s', 'e', 'g', 'h'))
+            return AVERROR_INVALIDDATA;
+
+        size = avio_rl32(pb);
+        avio_skip(pb, size); /* skip segh chunk */
+
+        uint32_t tag, size;
+        do {
+            if (avio_feof(pb))
+                return AVERROR_INVALIDDATA;
+
+            tag = avio_rl32(pb);
+            size = avio_rl32(pb);
+            if (tag == MKTAG('L', 'I', 'S', 'T')) {
+                avio_skip(pb, 4);
+                continue;
+            } else if (tag == MKTAG('R', 'I', 'F', 'F')) {
+                avio_skip(pb, 4);
+                continue;
+            }
+
+            avio_skip(pb, size);
+            if (tag == MKTAG('w', 'a', 'v', 'h'))
+                break;
+        } while (1);
     }
 
     /* Create the audio stream now so that its index is always zero */
