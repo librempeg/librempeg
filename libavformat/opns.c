@@ -114,7 +114,7 @@ static int read_packet(AVFormatContext *s, AVPacket *pkt)
 
 const FFInputFormat ff_opns_demuxer = {
     .p.name         = "opns",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("Nintendo Switch Opus"),
+    .p.long_name    = NULL_IF_CONFIG_SMALL("Nintendo Switch NSW Opus"),
     .p.flags        = AVFMT_GENERIC_INDEX,
     .p.extensions   = "opusnsw",
     .read_probe     = read_probe,
