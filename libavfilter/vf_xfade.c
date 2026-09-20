@@ -471,7 +471,7 @@ static void slideleft##name##_transition(AVFilterContext *ctx,                  
         for (int y = 0; y < height; y++) {                                           \
             for (int x = 0; x < width; x++) {                                        \
                 const int zx = z + x;                                                \
-                const int zz = zx % width + width * (zx < 0);                        \
+                const int zz = zx % width + width * (zx % width < 0);                \
                 dst[x] = (zx >= 0) && (zx < width) ? xf1[zz] : xf0[zz];              \
             }                                                                        \
                                                                                      \
@@ -504,7 +504,7 @@ static void slideright##name##_transition(AVFilterContext *ctx,                 
         for (int y = 0; y < height; y++) {                                           \
             for (int x = 0; x < width; x++) {                                        \
                 const int zx = z + x;                                                \
-                const int zz = zx % width + width * (zx < 0);                        \
+                const int zz = zx % width + width * (zx % width < 0);                \
                 dst[x] = (zx >= 0) && (zx < width) ? xf1[zz] : xf0[zz];              \
             }                                                                        \
                                                                                      \
@@ -534,7 +534,7 @@ static void slideup##name##_transition(AVFilterContext *ctx,                    
                                                                                     \
         for (int y = slice_start; y < slice_end; y++) {                             \
             const int zy = z + y;                                                   \
-            const int zz = zy % height + height * (zy < 0);                         \
+            const int zz = zy % height + height * (zy % height < 0);                \
             const type *xf0 = (const type *)(a->data[p] + zz * a->linesize[p]);     \
             const type *xf1 = (const type *)(b->data[p] + zz * b->linesize[p]);     \
                                                                                     \
@@ -566,7 +566,7 @@ static void slidedown##name##_transition(AVFilterContext *ctx,                  
                                                                                     \
         for (int y = slice_start; y < slice_end; y++) {                             \
             const int zy = z + y;                                                   \
-            const int zz = zy % height + height * (zy < 0);                         \
+            const int zz = zy % height + height * (zy % height < 0);                \
             const type *xf0 = (const type *)(a->data[p] + zz * a->linesize[p]);     \
             const type *xf1 = (const type *)(b->data[p] + zz * b->linesize[p]);     \
                                                                                     \
