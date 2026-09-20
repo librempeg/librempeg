@@ -6120,7 +6120,7 @@ If the specified value is not valid, it is ignored and prior one is kept.
 
 EBU R128 loudness normalization. Includes both dynamic and linear normalization modes.
 Support for both single pass (livestreams, files) and double pass (files) modes.
-This algorithm can target IL, LRA or maximum peak.
+This algorithm can target IL, LRA, and maximum true peak.
 
 The filter accepts the following options:
 
@@ -30578,6 +30578,11 @@ Enable sample-peak mode.
 
 Simple peak mode looking for the higher sample value. It logs a message
 for sample-peak (identified by @code{SPK}).
+@item true
+Enable true-peak mode.
+
+If enabled, the true peak is estimated. It logs a message for true-peak.
+(identified by @code{TPK}) and true-peak per frame (identified by @code{FTPK}).
 @end table
 
 @item dualmono
@@ -30621,6 +30626,9 @@ Read-only exported value for measured LRA high, in LUFS.
 
 @item sample_peak
 Read-only exported value for measured sample peak, in dBFS.
+
+@item true_peak
+Read-only exported value for measured true peak, in dBFS.
 @end table
 
 @subsection Examples
