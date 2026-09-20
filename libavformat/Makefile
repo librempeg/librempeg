@@ -773,6 +773,7 @@ OBJS-$(CONFIG_SFXB_DEMUXER)              += sfxb.o pcm.o
 OBJS-$(CONFIG_SGA_DEMUXER)               += sga.o
 OBJS-$(CONFIG_SGXD_DEMUXER)              += sgxd.o pcm.o
 OBJS-$(CONFIG_SHAA_DEMUXER)              += shaa.o pcm.o
+OBJS-$(CONFIG_SHADELPCM_DEMUXER)         += shadelpcm.o pcm.o
 OBJS-$(CONFIG_SHORTEN_DEMUXER)           += shortendec.o rawdec.o
 OBJS-$(CONFIG_SIFF_DEMUXER)              += siff.o
 OBJS-$(CONFIG_SIMBIOSIS_IMX_DEMUXER)     += imx.o

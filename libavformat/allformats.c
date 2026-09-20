@@ -643,6 +643,7 @@ extern const FFInputFormat  ff_sfxb_demuxer;
 extern const FFInputFormat  ff_sga_demuxer;
 extern const FFInputFormat  ff_sgxd_demuxer;
 extern const FFInputFormat  ff_shaa_demuxer;
+extern const FFInputFormat  ff_shadelpcm_demuxer;
 extern const FFInputFormat  ff_shorten_demuxer;
 extern const FFInputFormat  ff_siff_demuxer;
 extern const FFInputFormat  ff_simbiosis_imx_demuxer;
