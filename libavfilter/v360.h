@@ -57,6 +57,7 @@ enum Projections {
     CYLINDRICALEA,
     DUAL_SQUARE,
     DUAL_STRETCH,
+    GOPROMAX,
     NB_PROJECTIONS,
 };
 
