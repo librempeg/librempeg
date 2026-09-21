@@ -29,6 +29,9 @@ static int read_probe(const AVProbeData *p)
 {
     if (AV_RB32(p->buf) != MKBETAG('S','v','a','g'))
         return 0;
+
+    if (p->buf_size < 20)
+        return 0;
     if ((int)AV_RL32(p->buf + 8) <= 0)
         return 0;
     if ((int)AV_RL32(p->buf + 12) <= 0)
@@ -58,13 +61,14 @@ static int read_header(AVFormatContext *s)
     if (!st)
         return AVERROR(ENOMEM);
 
+    st->start_time = 0;
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
     st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_PSX;
     st->codecpar->sample_rate = rate;
     st->codecpar->ch_layout.nb_channels = channels;
-    st->start_time = 0;
     st->duration = size / (16 * channels) * 28;
     st->codecpar->block_align = align * channels;
+
     avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
 
     avio_seek(pb, 0x800, SEEK_SET);
