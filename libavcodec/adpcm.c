@@ -413,7 +413,7 @@ static const float adpcm_mta2_ranges[32] = {
 /* end of tables */
 
 typedef struct ADPCMDecodeContext {
-    ADPCMChannelStatus status[14];
+    ADPCMChannelStatus status[16];
     int table[14][16];
     int start_skip;
     int vqa_version;                /**< VQA version. Used for ADPCM_IMA_WS */
