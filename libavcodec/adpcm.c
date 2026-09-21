@@ -3832,14 +3832,11 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
         ) /* End of CASE */
     CASE(ADPCM_AFC,
-        int samples_per_block;
         int blocks;
 
-        if (avctx->extradata && avctx->extradata_size == 1 && avctx->extradata[0]) {
-            samples_per_block = avctx->extradata[0] / 16;
-            blocks = nb_samples / avctx->extradata[0];
+        if (avpkt->size >= avctx->block_align && avctx->block_align > channels) {
+            blocks = avpkt->size / avctx->block_align;
         } else {
-            samples_per_block = nb_samples / 16;
             blocks = 1;
         }
 
@@ -3850,30 +3847,28 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
 
                 samples = samples_p[channel] + m * 16;
                 /* Read in every sample for this channel.  */
-                for (int i = 0; i < samples_per_block; i++) {
-                    int byte = bytestream2_get_byteu(&gb);
-                    int scale = 1 << (byte >> 4);
-                    int index = byte & 0xf;
-                    int factor1 = afc_coeffs[0][index];
-                    int factor2 = afc_coeffs[1][index];
+                int byte = bytestream2_get_byteu(&gb);
+                int scale = 1 << (byte >> 4);
+                int index = byte & 0xf;
+                int factor1 = afc_coeffs[0][index];
+                int factor2 = afc_coeffs[1][index];
 
-                    /* Decode 16 samples.  */
-                    for (int n = 0; n < 16; n++) {
-                        int32_t sampledat;
+                /* Decode 16 samples.  */
+                for (int n = 0; n < 16; n++) {
+                    int32_t sampledat;
 
-                        if (n & 1) {
-                            sampledat = sign_extend(byte, 4);
-                        } else {
-                            byte = bytestream2_get_byteu(&gb);
-                            sampledat = sign_extend(byte >> 4, 4);
-                        }
-
-                        sampledat = ((prev1 * factor1 + prev2 * factor2) >> 11) +
-                                    sampledat * scale;
-                        *samples = av_clip_int16(sampledat);
-                        prev2 = prev1;
-                        prev1 = *samples++;
+                    if (n & 1) {
+                        sampledat = sign_extend(byte, 4);
+                    } else {
+                        byte = bytestream2_get_byteu(&gb);
+                        sampledat = sign_extend(byte >> 4, 4);
                     }
+
+                    sampledat = ((prev1 * factor1 + prev2 * factor2) >> 11) +
+                                sampledat * scale;
+                    *samples = av_clip_int16(sampledat);
+                    prev2 = prev1;
+                    prev1 = *samples++;
                 }
 
                 c->status[channel].sample1 = prev1;
