@@ -50,8 +50,10 @@ static int read_probe(const AVProbeData *p)
 
     if (AV_RB32(p->buf + 0x24) != MKTAG('s','n','d','!'))
         return 0;
+    if (AV_RB32(p->buf + 0x40) != MKTAG('t','b','f','d'))
+        return 0;
 
-    return AVPROBE_SCORE_MAX/2;
+    return AVPROBE_SCORE_MAX*2/3;
 }
 
 static int read_header(AVFormatContext *s)
