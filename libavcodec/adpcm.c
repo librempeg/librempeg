@@ -417,7 +417,6 @@ typedef struct ADPCMDecodeContext {
     int table[14][16];
     int start_skip;
     int vqa_version;                /**< VQA version. Used for ADPCM_IMA_WS */
-    int has_status;                 /**< Status flag. Reset to 0 after a flush. */
     int block_size;                 /**< Block size for THP codecs */
 } ADPCMDecodeContext;
 
@@ -3955,7 +3954,6 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             c->status[i].sample1 = THP_GET16(gb);
             c->status[i].sample2 = THP_GET16(gb);
         }
-        c->has_status = 1;
 
         int pos = bytestream2_tell(&gb);
         for (int ch = 0; ch < channels; ch++) {
@@ -4739,12 +4737,8 @@ static av_cold void adpcm_flush(AVCodecContext *avctx)
         c->vqa_version = avctx->profile;
         break;
     default:
-        /* Other codecs may want to handle this during decoding. */
-        c->has_status = 0;
         return;
     }
-
-    c->has_status = 1;
 }
 
 
