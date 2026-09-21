@@ -488,6 +488,7 @@ OBJS-$(CONFIG_MATROSKA_MUXER)            += matroskaenc.o matroska.o \
 OBJS-$(CONFIG_MCA_DEMUXER)               += mca.o pcm.o
 OBJS-$(CONFIG_MCC_DEMUXER)               += mccdec.o subtitles.o
 OBJS-$(CONFIG_MCC_MUXER)                 += mccenc.o
+OBJS-$(CONFIG_MCG_DEMUXER)               += mcg.o pcm.o
 OBJS-$(CONFIG_MCRAW_DEMUXER)             += mcrawdec.o
 OBJS-$(CONFIG_MCSS_DEMUXER)              += mcss.o pcm.o
 OBJS-$(CONFIG_MD5_MUXER)                 += hashenc.o
