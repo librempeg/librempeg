@@ -489,6 +489,15 @@ FATE_FILTER_SAMPLES-$(call FILTERDEMDEC, FPS SCALE, MOV, QTRLE) += fate-filter-f
 fate-filter-fps-cfr: CMD = framecrc -auto_conversion_filters -i $(TARGET_SAMPLES)/qtrle/apple-animation-variable-fps-bug.mov -r 30 -fps_mode cfr -pix_fmt yuv420p
 fate-filter-fps:     CMD = framecrc -auto_conversion_filters -i $(TARGET_SAMPLES)/qtrle/apple-animation-variable-fps-bug.mov -vf fps=30 -pix_fmt yuv420p
 
+FATE_LIBAVFILTER-yes += fate-filter-drawutils
+fate-filter-drawutils: libavfilter/tests/drawutils$(EXESUF)
+fate-filter-drawutils: CMD = run libavfilter/tests/drawutils$(EXESUF)
+
+FATE_LIBAVFILTER-$(CONFIG_NLMEANS_FILTER) += fate-filter-nlmeans-integral
+fate-filter-nlmeans-integral: libavfilter/tests/integral$(EXESUF)
+fate-filter-nlmeans-integral: CMD = run libavfilter/tests/integral$(EXESUF)
+fate-filter-nlmeans-integral: CMP = null
+
 FATE_FILTER_ALPHAEXTRACT_ALPHAMERGE := $(addprefix fate-filter-alphaextract_alphamerge_, rgb yuv)
 FATE_FILTER_VSYNTH_PGMYUV-$(call ALLYES, SCALE_FILTER FORMAT_FILTER SPLIT_FILTER ALPHAEXTRACT_FILTER ALPHAMERGE_FILTER) += $(FATE_FILTER_ALPHAEXTRACT_ALPHAMERGE)
 $(FATE_FILTER_ALPHAEXTRACT_ALPHAMERGE): fate-filter-alphaextract_alphamerge_%: tests/data/filtergraphs/alphamerge_alphaextract_%
@@ -834,6 +843,8 @@ FATE_SAMPLES_FFMPEG += $(FATE_FILTER_SAMPLES-yes)
 FATE_FFPROBE += $(FATE_FILTER_FFPROBE-yes)
 FATE_FFMPEG += $(FATE_FILTER-yes)
 
-fate-vfilter: $(FATE_FILTER-yes) $(FATE_FILTER_SAMPLES-yes) $(FATE_FILTER_VSYNTH-yes)
+FATE-$(CONFIG_AVFILTER) += $(FATE_LIBAVFILTER-yes)
+
+fate-vfilter: $(FATE_FILTER-yes) $(FATE_FILTER_SAMPLES-yes) $(FATE_FILTER_VSYNTH-yes) $(FATE_LIBAVFILTER-yes)
 
 fate-filter: fate-afilter fate-vfilter $(FATE_METADATA_FILTER-yes) $(FATE_FILTER_FFPROBE-yes)
