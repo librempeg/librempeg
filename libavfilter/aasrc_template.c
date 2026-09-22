@@ -131,6 +131,9 @@ typedef struct fn(StateContext) {
     DECLARE_ALIGNED(32, ctype, adv)[2][MAX_NB_POLES];
     DECLARE_ALIGNED(32, ctype, h)[MAX_NB_POLES];
 
+    int   idx;
+    int   idx_inc;
+
     int   prev_index;
     ftype prev_delta_t[MAX_HISTORY];
     ctype prev_cur[MAX_HISTORY][MAX_NB_POLES];
@@ -340,18 +343,19 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     const int n_in_samples = in->nb_samples;
     fn(StateContext) *state = s->state;
     fn(StateContext) *stc = &state[ch];
+    const ctype (*adv)[MAX_NB_POLES] = stc->adv;
     const ftype t_inc_frac = stc->t_inc_frac;
     ftype reset_delta_t = stc->reset_delta_t;
     const int t_inc_int = stc->t_inc_int;
-    const int nb_poles = stc->nb_poles;
-    ftype delta_t = stc->delta_t;
-    int in_idx = stc->in_idx;
-    int reset_index = stc->reset_index;
     const ctype *p_fixed = stc->p_fixed;
-    const ctype (*adv)[MAX_NB_POLES] = stc->adv;
     const ctype *adv_ptr = stc->adv_ptr;
+    const int nb_poles = stc->nb_poles;
+    int reset_index = stc->reset_index;
+    ftype delta_t = stc->delta_t;
+    int idx_inc = stc->idx_inc;
+    int in_idx = stc->in_idx;
     ctype *cur = stc->cur;
-    int prev_in_idx = -1;
+    int idx = stc->idx;
     ctype *h = stc->h;
     ftype x;
     int n;
@@ -379,61 +383,57 @@ repeat:
         reset_index = 0;
     }
 
-    while (n < n_out_samples && in_idx < n_in_samples && reset_index < K1) {
-        int frac_carry, idx_inc;
+    while ((n < n_out_samples) && ((in_idx + idx) < n_in_samples) && (reset_index < K1)) {
         ftype delta_t_frac, y;
+        int frac_carry;
 
-        if (prev_in_idx < in_idx) {
-            x = src[in_idx];
+        if (idx_inc > 0) {
+            x = src[in_idx+idx++];
 #if DEPTH == 16 || DEPTH == 32
             x /= F(1LL<<(DEPTH-1));
 #endif
             vector_mul_complex_add(x, p_fixed, h, h, nb_poles);
-            prev_in_idx = in_idx;
         }
 
-        vector_mul_complex(cur, cur, adv_ptr, nb_poles);
+        if (idx >= idx_inc) {
+            vector_mul_complex(cur, cur, adv_ptr, nb_poles);
 
-        y = vector_mul_real(cur, h, nb_poles);
+            y = vector_mul_real(cur, h, nb_poles);
 
 #if DEPTH == 16 || DEPTH == 32
-        dst[n] = CLIP(LRINT(y * F(1LL<<(DEPTH-1))));
+            dst[n] = CLIP(LRINT(y * F(1LL<<(DEPTH-1))));
 #else
-        dst[n] = y;
+            dst[n] = y;
 #endif
 
-        reset_delta_t = delta_t;
-        reset_index++;
+            reset_delta_t = delta_t;
+            reset_index++;
 
-        delta_t += t_inc_frac;
-        delta_t_frac = delta_t - FLOOR(delta_t);
-        frac_carry = LRINT(delta_t - delta_t_frac);
-        idx_inc = frac_carry + t_inc_int;
-        delta_t = delta_t_frac;
+            in_idx += idx_inc;
+            delta_t += t_inc_frac;
+            delta_t_frac = delta_t - FLOOR(delta_t);
+            frac_carry = LRINT(delta_t - delta_t_frac);
+            idx_inc = frac_carry + t_inc_int;
+            delta_t = delta_t_frac;
 
-        adv_ptr = adv[frac_carry];
+            adv_ptr = adv[frac_carry];
 
-        for (int i = 1; i < idx_inc; i++) {
-            x = src[in_idx+i];
-#if DEPTH == 16 || DEPTH == 32
-            x /= F(1LL<<(DEPTH-1));
-#endif
-            vector_mul_complex_add(x, p_fixed, h, h, nb_poles);
+            idx = 0;
+            n++;
         }
-
-        in_idx += idx_inc;
-        n++;
     }
 
-    if (n < n_out_samples && in_idx < n_in_samples)
+    if ((n < n_out_samples) && (in_idx + idx < n_in_samples))
         goto repeat;
 
+    stc->idx = idx;
     stc->out_idx = n;
+    stc->idx_inc = idx_inc;
     stc->adv_ptr = adv_ptr;
     stc->delta_t = delta_t;
     stc->reset_index = reset_index;
     stc->reset_delta_t = reset_delta_t;
-    stc->in_idx = FFMAX(0, in_idx - n_in_samples);
+    stc->in_idx = in_idx - n_in_samples;
 }
 
 static int fn(nb_output_samples)(AVFilterContext *ctx)
