@@ -1093,25 +1093,27 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
                         int mv_x, int mv_y,
                         int mode)
 {
+    uint8_t mtemp[9*9];
     uint16_t temp[8*9];
     uint8_t *msrc;
 
-    if (mv_x < 0 || mv_x >= width ||
-        mv_y < 0 || mv_y >= height)
-        return;
+    for (int y = 0; y < 9; y++) {
+        for (int x = 0; x < 9; x++)
+            mtemp[y*9 + x] = src[av_clip(mv_x+x, 0, width-1) + av_clip(mv_y+y, 0, height-1) * sstride];
+    }
 
-    msrc = src + mv_x + mv_y * sstride;
+    msrc = mtemp;
 
     switch (mode) {
     case 0:
-        copy_block8(dst, msrc, stride, sstride, 8);
+        copy_block8(dst, msrc, stride, 9, 8);
         break;
     case 1:
         for (int j = 0; j < 8; j++) {
             for (int i = 0; i < 8; i++)
                 dst[i] = av_clip_uint8(CH1FILTER(msrc + i, 2));
             dst  += stride;
-            msrc += sstride;
+            msrc += 9;
         }
         break;
     case 2:
@@ -1119,7 +1121,7 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
             for (int i = 0; i < 8; i++)
                 dst[i] = av_clip_uint8(CH2FILTER(msrc + i, 2));
             dst  += stride;
-            msrc += sstride;
+            msrc += 9;
         }
         break;
     case 3:
@@ -1127,13 +1129,13 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
             for (int i = 0; i < 8; i++)
                 dst[i] = av_clip_uint8(CH3FILTER(msrc + i, 2));
             dst  += stride;
-            msrc += sstride;
+            msrc += 9;
         }
         break;
     case 4:
         for (int j = 0; j < 8; j++) {
             for (int i = 0; i < 8; i++)
-                dst[i*stride] = av_clip_uint8(CV1FILTER(msrc + i*sstride, sstride, 2));
+                dst[i*stride] = av_clip_uint8(CV1FILTER(msrc + i*9, 9, 2));
             dst  += 1;
             msrc += 1;
         }
@@ -1142,7 +1144,7 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
         for (int i = 0; i < 9; i++) {
             for (int j = 0; j < 8; j++)
                 temp[i*8+j] = CH1FILTER(msrc + j, 0);
-            msrc += sstride;
+            msrc += 9;
         }
         for (int j = 0; j < 8; j++) {
             for (int i = 0; i < 8; i++)
@@ -1154,7 +1156,7 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
         for (int i = 0; i < 9; i++) {
             for (int j = 0; j < 8; j++)
                 temp[i*8+j] = CH2FILTER(msrc + j, 0);
-            msrc += sstride;
+            msrc += 9;
         }
         for (int j = 0; j < 8; j++) {
             for (int i = 0; i < 8; i++)
@@ -1166,7 +1168,7 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
         for (int i = 0; i < 9; i++) {
             for (int j = 0; j < 8; j++)
                 temp[i*8+j] = CH3FILTER(msrc + j, 0);
-            msrc += sstride;
+            msrc += 9;
         }
         for (int j = 0; j < 8; j++) {
             for (int i = 0; i < 8; i++)
@@ -1177,7 +1179,7 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
     case 8:
         for (int j = 0; j < 8; j++) {
             for (int i = 0; i < 8; i++)
-                dst[i*stride] = av_clip_uint8(CV2FILTER(msrc + i*sstride, sstride, 2));
+                dst[i*stride] = av_clip_uint8(CV2FILTER(msrc + i*9, 9, 2));
             dst  += 1;
             msrc += 1;
         }
@@ -1186,7 +1188,7 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
         for (int i = 0; i < 9; i++) {
             for (int j = 0; j < 8; j++)
                 temp[i*8+j] = CH1FILTER(msrc + j, 0);
-            msrc += sstride;
+            msrc += 9;
         }
         for (int j = 0; j < 8; j++) {
             for (int i = 0; i < 8; i++)
@@ -1198,7 +1200,7 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
         for (int i = 0; i < 9; i++) {
             for (int j = 0; j < 8; j++)
                 temp[i*8+j] = CH2FILTER(msrc + j, 0);
-            msrc += sstride;
+            msrc += 9;
         }
         for (int j = 0; j < 8; j++) {
             for (int i = 0; i < 8; i++)
@@ -1210,7 +1212,7 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
         for (int i = 0; i < 9; i++) {
             for (int j = 0; j < 8; j++)
                 temp[i*8+j] = CH3FILTER(msrc + j, 0);
-            msrc += sstride;
+            msrc += 9;
         }
         for (int j = 0; j < 8; j++) {
             for (int i = 0; i < 8; i++)
@@ -1221,7 +1223,7 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
     case 12:
         for (int j = 0; j < 8; j++) {
             for (int i = 0; i < 8; i++)
-                dst[i*stride] = av_clip_uint8(CV3FILTER(msrc + i*sstride, sstride, 2));
+                dst[i*stride] = av_clip_uint8(CV3FILTER(msrc + i*9, 9, 2));
             dst  += 1;
             msrc += 1;
         }
@@ -1230,7 +1232,7 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
         for (int i = 0; i < 9; i++) {
             for (int j = 0; j < 8; j++)
                 temp[i*8+j] = CH1FILTER(msrc + j, 0);
-            msrc += sstride;
+            msrc += 9;
         }
         for (int j = 0; j < 8; j++) {
             for (int i = 0; i < 8; i++)
@@ -1242,7 +1244,7 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
         for (int i = 0; i < 9; i++) {
             for (int j = 0; j < 8; j++)
                 temp[i*8+j] = CH2FILTER(msrc + j, 0);
-            msrc += sstride;
+            msrc += 9;
         }
         for (int j = 0; j < 8; j++) {
             for (int i = 0; i < 8; i++)
@@ -1254,7 +1256,7 @@ static void bink2g_c_mc(Bink2Context *c, int x, int y,
         for (int i = 0; i < 9; i++) {
             for (int j = 0; j < 8; j++)
                 temp[i*8+j] = CH3FILTER(msrc + j, 0);
-            msrc += sstride;
+            msrc += 9;
         }
         for (int j = 0; j < 8; j++) {
             for (int i = 0; i < 8; i++)
