@@ -126,9 +126,10 @@ typedef struct fn(StateContext) {
     int   t_inc_int;
     const ctype *adv_ptr;
     ctype one[MAX_NB_POLES];
-    ctype cur[MAX_NB_POLES];
-    ctype adv[2][MAX_NB_POLES];
-    ctype h[MAX_NB_POLES];
+
+    DECLARE_ALIGNED(32, ctype, cur)[MAX_NB_POLES];
+    DECLARE_ALIGNED(32, ctype, adv)[2][MAX_NB_POLES];
+    DECLARE_ALIGNED(32, ctype, h)[MAX_NB_POLES];
 
     int   prev_index;
     ftype prev_delta_t[MAX_HISTORY];
