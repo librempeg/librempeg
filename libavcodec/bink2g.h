@@ -1306,38 +1306,40 @@ static void bink2g_y_mc(Bink2Context *c, int x, int y,
                         int width, int height,
                         int mv_x, int mv_y, int mode)
 {
+    uint8_t mtemp[21 * 21];
     uint8_t *msrc;
 
-    if (mv_x < 0 || mv_x >= width ||
-        mv_y < 0 || mv_y >= height)
-        return;
+    for (int y = 0; y < 21; y++) {
+        for (int x = 0; x < 21; x++)
+            mtemp[y*21 + x] = src[av_clip(mv_x+x-2, 0, width-1) + av_clip(mv_y+y-2, 0, height-1) * sstride];
+    }
 
-    msrc = src + mv_x + mv_y * sstride;
+    msrc = mtemp + 21 * 2 + 2;
 
     if (mode == 0) {
-        copy_block16(dst, msrc, stride, sstride, 16);
+        copy_block16(dst, msrc, stride, 21, 16);
     } else if (mode == 1) {
         for (int j = 0; j < 16; j++) {
             for (int i = 0; i < 16; i++)
                 dst[i] = av_clip_uint8(LHFILTER(msrc + i));
             dst  += stride;
-            msrc += sstride;
+            msrc += 21;
         }
     } else if (mode == 2) {
         for (int j = 0; j < 16; j++) {
             for (int i = 0; i < 16; i++)
-                dst[i*stride] = av_clip_uint8(LVFILTER(msrc + i*sstride, sstride));
+                dst[i*stride] = av_clip_uint8(LVFILTER(msrc + i*21, 21));
             dst  += 1;
             msrc += 1;
         }
     } else if (mode == 3) {
         int16_t temp[21 * 16];
 
-        msrc -= 2 * sstride;
+        msrc -= 2*21;
         for (int i = 0; i < 21; i++) {
             for (int j = 0; j < 16; j++)
                 temp[i*16+j] = LHFILTER(msrc + j);
-            msrc += sstride;
+            msrc += 21;
         }
         for (int j = 0; j < 16; j++) {
             for (int i = 0; i < 16; i++)
