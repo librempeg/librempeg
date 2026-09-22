@@ -562,7 +562,7 @@ static int read_header(AVFormatContext *s)
                                 par->block_align = avio_rb16(pb);
                                 extraflag_size -= 2;
                                 if (!par->block_align) par->block_align = 2230;
-                                par->bit_rate = avio_rb32(pb) * 8;
+                                par->bit_rate = avio_rb32(pb) * 8LL;
                                 extraflag_size -= 4;
                                 par->bits_per_coded_sample = 16;
 
