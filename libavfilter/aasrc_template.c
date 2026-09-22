@@ -385,7 +385,7 @@ repeat:
         if (prev_in_idx < in_idx) {
             x = src[in_idx];
 #if DEPTH == 16 || DEPTH == 32
-            x /= F(1<<(DEPTH-1));
+            x /= F(1LL<<(DEPTH-1));
 #endif
             vector_mul_complex_add(x, p_fixed, h, h, nb_poles);
             prev_in_idx = in_idx;
@@ -396,7 +396,7 @@ repeat:
         y = vector_mul_real(cur, h, nb_poles);
 
 #if DEPTH == 16 || DEPTH == 32
-        dst[n] = CLIP(LRINT(y * F(1<<(DEPTH-1))));
+        dst[n] = CLIP(LRINT(y * F(1LL<<(DEPTH-1))));
 #else
         dst[n] = y;
 #endif
@@ -415,7 +415,7 @@ repeat:
         for (int i = 1; i < idx_inc; i++) {
             x = src[in_idx+i];
 #if DEPTH == 16 || DEPTH == 32
-            x /= F(1<<(DEPTH-1));
+            x /= F(1LL<<(DEPTH-1));
 #endif
             vector_mul_complex_add(x, p_fixed, h, h, nb_poles);
         }
