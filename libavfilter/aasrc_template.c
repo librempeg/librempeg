@@ -54,7 +54,7 @@
 #define FCOS cos
 #define FEXP exp
 #define FLOOR floor
-#define LRINT lrint
+#define LRINT llrint
 #define CLIP av_clipl_int32
 #define dsp_vector_mul_real dsp->vector_dmul_real
 #define dsp_vector_mul_complex dsp->vector_dmul_complex
@@ -83,7 +83,7 @@
 #define FCOS cos
 #define FEXP exp
 #define FLOOR floor
-#define LRINT lrint
+#define LRINT llrint
 #define dsp_vector_mul_real dsp->vector_dmul_real
 #define dsp_vector_mul_complex dsp->vector_dmul_complex
 #define dsp_vector_mul_complex_add dsp->vector_dmul_complex_add
