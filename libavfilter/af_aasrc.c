@@ -18,6 +18,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <float.h>
+
 #include "libavutil/avassert.h"
 #include "libavutil/mem.h"
 #include "libavutil/mem_internal.h"

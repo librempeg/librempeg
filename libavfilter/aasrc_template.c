@@ -19,6 +19,8 @@
 #undef ctype
 #undef ftype
 #undef itype
+#undef EPS
+#undef FABS
 #undef FLOG
 #undef FSIN
 #undef FCOS
@@ -34,6 +36,8 @@
 #define ctype complex_float
 #define ftype float
 #define itype int16_t
+#define EPS FLT_EPSILON
+#define FABS fabsf
 #define FLOG logf
 #define FSIN sinf
 #define FCOS cosf
@@ -49,6 +53,8 @@
 #define ctype complex_double
 #define ftype double
 #define itype int32_t
+#define EPS DBL_EPSILON
+#define FABS fabs
 #define FLOG log
 #define FSIN sin
 #define FCOS cos
@@ -64,6 +70,8 @@
 #define ctype complex_float
 #define ftype float
 #define itype float
+#define EPS FLT_EPSILON
+#define FABS fabsf
 #define FLOG logf
 #define FSIN sinf
 #define FCOS cosf
@@ -78,6 +86,8 @@
 #define ctype complex_double
 #define ftype double
 #define itype double
+#define EPS DBL_EPSILON
+#define FABS fabs
 #define FLOG log
 #define FSIN sin
 #define FCOS cos
@@ -91,8 +101,7 @@
 #endif
 
 #define F(x) ((ftype)(x))
-#undef isnormal
-#define isnormal(x) (1)
+#define ISNORMAL(x) (FABS(x) >= EPS)
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
@@ -164,8 +173,8 @@ static void fn(complex_exponential)(fn(StateContext) *stc,
         re = mag * FCOS(w);
         im = mag * FSIN(w);
 
-        x[n].re = isnormal(re) ? re : F(0.0);
-        x[n].im = isnormal(im) ? im : F(0.0);
+        x[n].re = ISNORMAL(re) ? re : F(0.0);
+        x[n].im = ISNORMAL(im) ? im : F(0.0);
     }
 
     prev_delta_t[stc->prev_index] = delta_t;
@@ -189,8 +198,8 @@ static void fn(vector_mul_complex)(ctype *x,
         ftype re = are * bre - aim * bim;
         ftype im = are * bim + aim * bre;
 
-        x[n].re = isnormal(re) ? re : F(0.0);
-        x[n].im = isnormal(im) ? im : F(0.0);
+        x[n].re = re;
+        x[n].im = im;
     }
 }
 
@@ -271,16 +280,16 @@ static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         stc->angle[n] = ps[n][1];
         a = stc->log_mag[n] * stc->scale_factor;
         b = stc->angle[n] * stc->scale_factor;
-        stc->log_mag_scaled[n] = isnormal(a) ? a : F(0.0);
-        stc->angle_scaled[n] = isnormal(b) ? b : F(0.0);
+        stc->log_mag_scaled[n] = ISNORMAL(a) ? a : F(0.0);
+        stc->angle_scaled[n] = ISNORMAL(b) ? b : F(0.0);
 
         stc->one[n].re = F(1.0);
         stc->one[n].im = F(0.0);
         stc->cur[n] = stc->one[n];
         re = rs[n][0] * stc->scale_factor;
         im = rs[n][1] * stc->scale_factor;
-        stc->r_fixed[n].re = isnormal(re) ? re : F(0.0);
-        stc->r_fixed[n].im = isnormal(im) ? im : F(0.0);
+        stc->r_fixed[n].re = ISNORMAL(re) ? re : F(0.0);
+        stc->r_fixed[n].im = ISNORMAL(im) ? im : F(0.0);
 
         inv_mag = FEXP(-stc->log_mag_scaled[n]);
         p_cos = FCOS(stc->angle_scaled[n]);
@@ -290,14 +299,14 @@ static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         re = inv_mag *  p_cos;
         im = inv_mag * -p_sin;
 
-        stc->inv[n].re = isnormal(re) ? re : F(0.0);
-        stc->inv[n].im = isnormal(im) ? im : F(0.0);
+        stc->inv[n].re = ISNORMAL(re) ? re : F(0.0);
+        stc->inv[n].im = ISNORMAL(im) ? im : F(0.0);
 
         re = mag * p_cos;
         im = mag * p_sin;
 
-        stc->p_fixed[n].re = isnormal(re) ? re : F(0.0);
-        stc->p_fixed[n].im = isnormal(im) ? im : F(0.0);
+        stc->p_fixed[n].re = ISNORMAL(re) ? re : F(0.0);
+        stc->p_fixed[n].im = ISNORMAL(im) ? im : F(0.0);
     }
 
     fn(vector_mul_complex)(stc->cur, stc->cur, stc->r_fixed, stc->nb_poles);
