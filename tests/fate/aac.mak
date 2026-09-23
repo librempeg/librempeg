@@ -263,6 +263,11 @@ fate-aac-yoraw-encode: REF = $(SAMPLES)/audio-reference/yo.raw-short.wav
 fate-aac-yoraw-encode: CMP_TARGET = 226
 fate-aac-yoraw-encode: FUZZ = 17
 
+# NMR quality-target modes, per-packet sizes pinned: VBR at the finest quality
+# drives frames against the decoder-buffer limit
+FATE_AAC_ENCODE_TRANSCODE += fate-aac-nmr-vbr-encode
+fate-aac-nmr-vbr-encode: CMD = transcode wav $(TARGET_SAMPLES)/audio-reference/luckynight_2ch_44kHz_s16.wav adts "-af aresample -c:a aac -q:a 8 -t 2" "-c copy"
+
 tests/data/fate/aac-5_1_2.adts: TAG = GEN
 tests/data/fate/aac-5_1_2.adts: tests/data/asynth-44100-8.wav
 tests/data/fate/aac-5_1_2.adts: ffmpeg$(PROGSSUF)$(EXESUF) | tests/data/fate
