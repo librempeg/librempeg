@@ -21,10 +21,6 @@
 #undef itype
 #undef EPS
 #undef FABS
-#undef FLOG
-#undef FSIN
-#undef FCOS
-#undef FEXP
 #undef FLOOR
 #undef LRINT
 #undef CLIP
@@ -38,10 +34,6 @@
 #define itype int16_t
 #define EPS FLT_EPSILON
 #define FABS fabsf
-#define FLOG logf
-#define FSIN sinf
-#define FCOS cosf
-#define FEXP expf
 #define FLOOR floorf
 #define LRINT lrintf
 #define CLIP av_clip_int16
@@ -55,10 +47,6 @@
 #define itype int32_t
 #define EPS DBL_EPSILON
 #define FABS fabs
-#define FLOG log
-#define FSIN sin
-#define FCOS cos
-#define FEXP exp
 #define FLOOR floor
 #define LRINT llrint
 #define CLIP av_clipl_int32
@@ -72,10 +60,6 @@
 #define itype float
 #define EPS FLT_EPSILON
 #define FABS fabsf
-#define FLOG logf
-#define FSIN sinf
-#define FCOS cosf
-#define FEXP expf
 #define FLOOR floorf
 #define LRINT lrintf
 #define dsp_vector_mul_real dsp->vector_fmul_real
@@ -88,10 +72,6 @@
 #define itype double
 #define EPS DBL_EPSILON
 #define FABS fabs
-#define FLOG log
-#define FSIN sin
-#define FCOS cos
-#define FEXP exp
 #define FLOOR floor
 #define LRINT llrint
 #define dsp_vector_mul_real dsp->vector_dmul_real
@@ -101,7 +81,7 @@
 #endif
 
 #define F(x) ((ftype)(x))
-#define ISNORMAL(x) (FABS(x) >= EPS)
+#define ISNORMAL(x) (fabs(x) >= EPS)
 
 #define fn3(a,b)   a##_##b
 #define fn2(a,b)   fn3(a,b)
@@ -113,7 +93,7 @@
 
 #define K1 32
 #define MAX_NB_POLES 12
-#define MAX_HISTORY 4
+#define MAX_HISTORY 8
 
 typedef struct fn(StateContext) {
     ftype scale_factor;
@@ -122,8 +102,9 @@ typedef struct fn(StateContext) {
     ftype log_mag_scaled[MAX_NB_POLES];
     ftype angle_scaled[MAX_NB_POLES];
     ctype inv[MAX_NB_POLES];
-    ctype p_fixed[MAX_NB_POLES];
-    ctype r_fixed[MAX_NB_POLES];
+
+    DECLARE_ALIGNED(32, ctype, p_fixed)[MAX_NB_POLES];
+    DECLARE_ALIGNED(32, ctype, r_fixed)[MAX_NB_POLES];
 
     int   reset_index;
     int   in_idx;
@@ -144,8 +125,8 @@ typedef struct fn(StateContext) {
     int   idx_inc;
 
     int   prev_index;
-    ftype prev_delta_t[MAX_HISTORY];
-    ctype prev_cur[MAX_HISTORY][MAX_NB_POLES];
+    DECLARE_ALIGNED(32, ftype, prev_delta_t)[MAX_HISTORY];
+    DECLARE_ALIGNED(32, ctype, prev_cur)[MAX_HISTORY][MAX_NB_POLES];
 } fn(StateContext);
 
 static void fn(complex_exponential)(fn(StateContext) *stc,
@@ -158,20 +139,20 @@ static void fn(complex_exponential)(fn(StateContext) *stc,
     ftype *prev_delta_t = stc->prev_delta_t;
 
     for (int n = 0; n < MAX_HISTORY; n++) {
-        if (prev_delta_t[n] == delta_t) {
+        if (FABS(prev_delta_t[n] - delta_t) < EPS) {
             memcpy(x, stc->prev_cur[n], MAX_NB_POLES * sizeof(*x));
             return;
         }
     }
 
     for (int n = 0; n < N; n++) {
-        ftype mag = FEXP(log_mag[n] * delta_t);
-        ftype re, im, w;
+        double mag = exp(log_mag[n] * delta_t);
+        double re, im, w;
 
         w = theta[n] * delta_t;
 
-        re = mag * FCOS(w);
-        im = mag * FSIN(w);
+        re = mag * cos(w);
+        im = mag * sin(w);
 
         x[n].re = ISNORMAL(re) ? re : F(0.0);
         x[n].im = ISNORMAL(im) ? im : F(0.0);
@@ -273,10 +254,10 @@ static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         stc->prev_delta_t[n] = F(-1.0);
 
     for (int n = 0; n < stc->nb_poles; n++) {
-        ftype inv_mag, p_cos, p_sin, mag;
-        ftype re, im, a, b;
+        double inv_mag, p_cos, p_sin, mag;
+        double re, im, a, b;
 
-        stc->log_mag[n] = FLOG(ps[n][0]);
+        stc->log_mag[n] = log(ps[n][0]);
         stc->angle[n] = ps[n][1];
         a = stc->log_mag[n] * stc->scale_factor;
         b = stc->angle[n] * stc->scale_factor;
@@ -291,10 +272,10 @@ static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         stc->r_fixed[n].re = ISNORMAL(re) ? re : F(0.0);
         stc->r_fixed[n].im = ISNORMAL(im) ? im : F(0.0);
 
-        inv_mag = FEXP(-stc->log_mag_scaled[n]);
-        p_cos = FCOS(stc->angle_scaled[n]);
-        p_sin = FSIN(stc->angle_scaled[n]);
-        mag = FEXP(stc->log_mag_scaled[n]);
+        inv_mag = exp(-stc->log_mag_scaled[n]);
+        p_cos = cos(stc->angle_scaled[n]);
+        p_sin = sin(stc->angle_scaled[n]);
+        mag = exp(stc->log_mag_scaled[n]);
 
         re = inv_mag *  p_cos;
         im = inv_mag * -p_sin;
