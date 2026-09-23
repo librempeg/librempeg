@@ -102,22 +102,16 @@ static av_always_inline unsigned int read32(AVFormatContext *s)
 
 static int read_header(AVFormatContext *s)
 {
+    int bom, major = -1, minor = -1, codec, orig_codec, chunk, nb_channels, rate;
+    const int bfstm = !strcmp("bfstm", s->iformat->name);
+    int64_t duration, h1offset, pos, toffset;
     BRSTMDemuxContext *b = s->priv_data;
-    int bom, major, minor, codec, orig_codec, chunk;
-    int64_t h1offset, pos, toffset;
     uint32_t size, asize, start = 0;
     AVIOContext *pb = s->pb;
     AVStream *st;
     int loop = 0;
-    int bfstm = !strcmp("bfstm", s->iformat->name);
-
-    st = avformat_new_stream(s, NULL);
-    if (!st)
-        return AVERROR(ENOMEM);
-    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
 
     avio_skip(pb, 4);
-
     bom = avio_rb16(pb);
     if (bom != 0xFEFF && bom != 0xFFFE) {
         av_log(s, AV_LOG_ERROR, "invalid byte order: %X\n", bom);
@@ -183,44 +177,62 @@ static int read_header(AVFormatContext *s)
             return AVERROR_INVALIDDATA;
     }
 
-    size = read32(s);
-    if (size < 40)
-        return AVERROR_INVALIDDATA;
-    avio_skip(pb, 4); // unknown
-    h1offset = read32(s);
-    if (h1offset > size)
-        return AVERROR_INVALIDDATA;
-    avio_skip(pb, 12);
-    toffset = read32(s) + 16LL;
-    if (toffset > size)
-        return AVERROR_INVALIDDATA;
+    if (major == 0 && minor == 1) {
+        avio_skip(pb, 4);
+        orig_codec = codec = avio_r8(pb);
 
-    avio_skip(pb, pos + h1offset + 8 - avio_tell(pb));
-    orig_codec = codec = avio_r8(pb);
+        switch (codec) {
+        case 0: codec = AV_CODEC_ID_PCM_S8_PLANAR;    break;
+        case 1: codec = b->little_endian ?
+                        AV_CODEC_ID_PCM_S16LE_PLANAR :
+                        AV_CODEC_ID_PCM_S16BE_PLANAR; break;
+        case 2: codec = b->little_endian ?
+                        AV_CODEC_ID_ADPCM_NDSP_LE :
+                        AV_CODEC_ID_ADPCM_NDSP;       break;
+        default:
+            avpriv_request_sample(s, "codec %d", codec);
+            return AVERROR_PATCHWELCOME;
+        }
+    } else {
+        size = read32(s);
+        if (size < 40)
+            return AVERROR_INVALIDDATA;
+        avio_skip(pb, 4); // unknown
+        h1offset = read32(s);
+        if (h1offset > size)
+            return AVERROR_INVALIDDATA;
+        avio_skip(pb, 12);
+        toffset = read32(s) + 16LL;
+        if (toffset > size)
+            return AVERROR_INVALIDDATA;
 
-    switch (codec) {
-    case 0: codec = AV_CODEC_ID_PCM_S8_PLANAR;    break;
-    case 1: codec = b->little_endian ?
-                    AV_CODEC_ID_PCM_S16LE_PLANAR :
-                    AV_CODEC_ID_PCM_S16BE_PLANAR; break;
-    case 2: codec = b->little_endian ?
-                    AV_CODEC_ID_ADPCM_THP_LE :
-                    AV_CODEC_ID_ADPCM_THP;        break;
-    default:
-        avpriv_request_sample(s, "codec %d", codec);
-        return AVERROR_PATCHWELCOME;
+        avio_skip(pb, pos + h1offset + 8 - avio_tell(pb));
+
+        orig_codec = codec = avio_r8(pb);
+
+        switch (codec) {
+        case 0: codec = AV_CODEC_ID_PCM_S8_PLANAR;    break;
+        case 1: codec = b->little_endian ?
+                        AV_CODEC_ID_PCM_S16LE_PLANAR :
+                        AV_CODEC_ID_PCM_S16BE_PLANAR; break;
+        case 2: codec = b->little_endian ?
+                        AV_CODEC_ID_ADPCM_THP_LE :
+                        AV_CODEC_ID_ADPCM_THP;        break;
+        default:
+            avpriv_request_sample(s, "codec %d", codec);
+            return AVERROR_PATCHWELCOME;
+        }
     }
 
     loop = avio_r8(pb); // loop flag
-    st->codecpar->codec_id = codec;
-    st->codecpar->ch_layout.nb_channels = avio_r8(pb);
-    if (!st->codecpar->ch_layout.nb_channels)
+    nb_channels = avio_r8(pb);
+    if (nb_channels <= 0)
         return AVERROR_INVALIDDATA;
 
     avio_skip(pb, 1); // padding
 
-    st->codecpar->sample_rate = bfstm ? read32(s) : read16(s);
-    if (st->codecpar->sample_rate <= 0)
+    rate = bfstm ? read32(s) : read16(s);
+    if (rate <= 0)
         return AVERROR_INVALIDDATA;
 
     if (!bfstm)
@@ -228,17 +240,13 @@ static int read_header(AVFormatContext *s)
 
     if (loop) {
         if (av_dict_set_int(&s->metadata, "loop_start",
-                            av_rescale(read32(s), AV_TIME_BASE,
-                                       st->codecpar->sample_rate),
-                            0) < 0)
+                            av_rescale(read32(s), AV_TIME_BASE, rate), 0) < 0)
             return AVERROR(ENOMEM);
     } else {
         avio_skip(pb, 4);
     }
 
-    st->start_time = 0;
-    st->duration = read32(s);
-    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+    duration = read32(s);
 
     if (!bfstm)
         start = read32(s);
@@ -250,18 +258,17 @@ static int read_header(AVFormatContext *s)
     }
 
     b->block_size = read32(s);
-    if (b->block_size > UINT32_MAX / st->codecpar->ch_layout.nb_channels)
+    if (b->block_size > UINT32_MAX / nb_channels)
         return AVERROR_INVALIDDATA;
 
     b->samples_per_block = read32(s);
     b->last_block_used_bytes = read32(s);
     b->last_block_samples = read32(s);
     b->last_block_size = read32(s);
-    if (b->last_block_size > UINT32_MAX / st->codecpar->ch_layout.nb_channels)
+    if (b->last_block_size > UINT32_MAX / nb_channels)
         return AVERROR_INVALIDDATA;
     if (b->last_block_used_bytes > b->last_block_size)
         return AVERROR_INVALIDDATA;
-
 
     if (codec == AV_CODEC_ID_ADPCM_THP || codec == AV_CODEC_ID_ADPCM_THP_LE) {
         int ch;
@@ -270,24 +277,24 @@ static int read_header(AVFormatContext *s)
         if (!bfstm)
             toffset = read32(s) + 16LL;
         else
-            toffset = toffset + read32(s) + st->codecpar->ch_layout.nb_channels * 8 - 8;
+            toffset = toffset + read32(s) + nb_channels * 8 - 8;
         if (toffset > size)
             return AVERROR_INVALIDDATA;
 
         if (!bfstm) {
-            avio_skip(pb, pos + toffset - avio_tell(pb) - 8LL * (st->codecpar->ch_layout.nb_channels + 1));
-            for (ch = 0; ch < st->codecpar->ch_layout.nb_channels; ch++) {
+            avio_skip(pb, pos + toffset - avio_tell(pb) - 8LL * (nb_channels + 1));
+            for (ch = 0; ch < nb_channels; ch++) {
                 avio_skip(pb, 4);
                 b->offsets[ch].channel = ch;
                 b->offsets[ch].offset = read32(s);
             }
 
-            qsort(b->offsets, st->codecpar->ch_layout.nb_channels, sizeof(*b->offsets), sort_offsets);
+            qsort(b->offsets, nb_channels, sizeof(*b->offsets), sort_offsets);
         }
 
         avio_skip(pb, pos + toffset - avio_tell(pb));
 
-        for (ch = 0; ch < st->codecpar->ch_layout.nb_channels; ch++) {
+        for (ch = 0; ch < nb_channels; ch++) {
             if (!bfstm)
                 avio_skip(pb, pos + 16LL + b->offsets[ch].offset - avio_tell(pb));
 
@@ -299,75 +306,109 @@ static int read_header(AVFormatContext *s)
         }
     }
 
-    if (size < (avio_tell(pb) - pos))
-        return AVERROR_INVALIDDATA;
-
-    avio_skip(pb, size - (avio_tell(pb) - pos));
-
-    while (!avio_feof(pb)) {
-        chunk = avio_rl32(pb);
-        size  = read32(s);
-        if (size < 8)
+    if (major == 0 && minor == 1) {
+        b->data_start = start;
+    } else {
+        if (size < (avio_tell(pb) - pos))
             return AVERROR_INVALIDDATA;
-        size -= 8;
-        switch (chunk) {
-        case MKTAG('S','E','E','K'):
-        case MKTAG('A','D','P','C'):
-            if (codec != AV_CODEC_ID_ADPCM_THP &&
-                codec != AV_CODEC_ID_ADPCM_THP_LE)
-                goto skip;
 
-            asize = b->block_count * st->codecpar->ch_layout.nb_channels * 4;
-            if (size < asize)
+        avio_skip(pb, size - (avio_tell(pb) - pos));
+
+        while (!avio_feof(pb)) {
+            chunk = avio_rl32(pb);
+            size  = read32(s);
+            if (size < 8)
                 return AVERROR_INVALIDDATA;
-            if (b->adpc) {
-                av_log(s, AV_LOG_WARNING, "skipping additional ADPC chunk\n");
-                goto skip;
-            } else {
-                b->adpc = av_mallocz(asize);
-                if (!b->adpc)
-                    return AVERROR(ENOMEM);
-                avio_read(pb, b->adpc, asize);
-                if (bfstm && codec != AV_CODEC_ID_ADPCM_THP_LE) {
-                    // Big-endian BFSTMs have little-endian SEEK tables
-                    // for some strange reason.
-                    int16_t *adpc = (int16_t *)b->adpc;
+            size -= 8;
+            switch (chunk) {
+            case MKTAG('S','E','E','K'):
+            case MKTAG('A','D','P','C'):
+                if (codec != AV_CODEC_ID_ADPCM_THP &&
+                    codec != AV_CODEC_ID_ADPCM_THP_LE)
+                    goto skip;
 
-                    for (int i = 0; i < asize/2; i++) {
-                        adpc[i] = av_bswap16(adpc[i]);
+                asize = b->block_count * nb_channels * 4;
+                if (size < asize)
+                    return AVERROR_INVALIDDATA;
+                if (b->adpc) {
+                    av_log(s, AV_LOG_WARNING, "skipping additional ADPC chunk\n");
+                    goto skip;
+                } else {
+                    b->adpc = av_mallocz(asize);
+                    if (!b->adpc)
+                        return AVERROR(ENOMEM);
+                    avio_read(pb, b->adpc, asize);
+                    if (bfstm && codec != AV_CODEC_ID_ADPCM_THP_LE) {
+                        // Big-endian BFSTMs have little-endian SEEK tables
+                        // for some strange reason.
+                        int16_t *adpc = (int16_t *)b->adpc;
+
+                        for (int i = 0; i < asize/2; i++) {
+                            adpc[i] = av_bswap16(adpc[i]);
+                        }
                     }
+                    avio_skip(pb, size - asize);
                 }
-                avio_skip(pb, size - asize);
-            }
-            if (b->data_start)
-                return avio_seek(pb, b->data_start, SEEK_SET);
-            break;
-        case MKTAG('D','A','T','A'):
-            if (start < avio_tell(pb))
-                return AVERROR_INVALIDDATA;
-            avio_skip(pb, start - avio_tell(pb));
+                if (b->data_start)
+                    goto finish;
+                break;
+            case MKTAG('D','A','T','A'):
+                if (start < avio_tell(pb))
+                    return AVERROR_INVALIDDATA;
+                avio_skip(pb, start - avio_tell(pb));
 
-            if (bfstm)
-                avio_skip(pb, 24);
+                if (bfstm)
+                    avio_skip(pb, 24);
 
-            b->data_start = avio_tell(pb);
+                b->data_start = avio_tell(pb);
 
-            if (!bfstm && (major != 1 || minor))
-                avpriv_request_sample(s, "Version %d.%d", major, minor);
+                if (!bfstm && (major != 1 || minor))
+                    avpriv_request_sample(s, "Version %d.%d", major, minor);
 
-            if (b->adpc || (orig_codec != 2))
-                return 0;
+                if (b->adpc || (orig_codec != 2))
+                    goto finish;
 
-            avio_skip(pb, size);
-            break;
-        default:
-            av_log(s, AV_LOG_WARNING, "skipping unknown chunk: %X\n", chunk);
+                avio_skip(pb, size);
+                break;
+            default:
+                av_log(s, AV_LOG_WARNING, "skipping unknown chunk: %X\n", chunk);
 skip:
-            avio_skip(pb, size);
+                avio_skip(pb, size);
+            }
+        }
+
+        return AVERROR_EOF;
+    }
+
+finish:
+
+    st = avformat_new_stream(s, NULL);
+    if (!st)
+        return AVERROR(ENOMEM);
+
+    st->start_time = 0;
+    st->duration = duration;
+    st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+    st->codecpar->codec_id = codec;
+    st->codecpar->sample_rate = rate;
+    st->codecpar->ch_layout.nb_channels = nb_channels;
+
+    avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
+
+    if (codec == AV_CODEC_ID_ADPCM_NDSP || codec == AV_CODEC_ID_ADPCM_NDSP_LE) {
+        avio_skip(pb, 4);
+
+        int ret = ff_alloc_extradata(st->codecpar, nb_channels * 32);
+        if (ret < 0)
+            return AVERROR(ENOMEM);
+
+        for (int ch = 0; ch < nb_channels; ch++) {
+            avio_read(pb, st->codecpar->extradata + ch*32, 32);
+            avio_skip(pb, 16);
         }
     }
 
-    return AVERROR_EOF;
+    return avio_seek(pb, b->data_start, SEEK_SET);
 }
 
 static int read_packet(AVFormatContext *s, AVPacket *pkt)
