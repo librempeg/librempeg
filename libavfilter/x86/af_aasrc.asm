@@ -148,7 +148,9 @@ cglobal vector_fmul_complex_add, 4,4,5, fixed, in, out, N
 cglobal vector_fmul_complex_add, 5,5,5, src, fixed, in, out, N
 %endif
     shl       Nd, 3
-    vbroadcastsd m0, xm0
+    vbroadcastss m0, xm0
+    xorps     m1, m1
+    unpcklps  m0, m0, m1
     add       fixedq, Nq
     add       outq, Nq
     add       inq, Nq
