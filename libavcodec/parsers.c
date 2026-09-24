@@ -98,6 +98,7 @@ extern const FFCodecParser ff_wwvorbis_parser;
 extern const FFCodecParser ff_xbm_parser;
 extern const FFCodecParser ff_xma_parser;
 extern const FFCodecParser ff_xwd_parser;
+extern const FFCodecParser ff_wmapro_parser;
 
 #include "libavcodec/parser_list.c"
 

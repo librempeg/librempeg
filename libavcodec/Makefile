@@ -1421,6 +1421,7 @@ OBJS-$(CONFIG_WWVORBIS_PARSER)         += wwvorbis_parser.o
 OBJS-$(CONFIG_XBM_PARSER)              += xbm_parser.o
 OBJS-$(CONFIG_XMA_PARSER)              += xma_parser.o
 OBJS-$(CONFIG_XWD_PARSER)              += xwd_parser.o
+OBJS-$(CONFIG_WMAPRO_PARSER)           += wmapro_parser.o
 
 # bitstream filters
 include $(SRC_PATH)/libavcodec/bsf/Makefile
