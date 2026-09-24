@@ -135,6 +135,8 @@ static int read_header(AVFormatContext *s)
         memset(st->codecpar->extradata, 0, st->codecpar->extradata_size);
         st->codecpar->extradata[ 0] = 22;
         st->codecpar->extradata[14] = 224;
+
+        ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
     } else if (codec == AV_CODEC_ID_WMAV2) {
         if ((ret = ff_alloc_extradata(st->codecpar, 6)) < 0)
             return ret;
