@@ -1,5 +1,5 @@
-FATE_SAMPLES_EA-$(call ENCDEC, PCM_S16LE ADPCM_EA_XAS, PCM_S16LE EA_CDATA, ARESAMPLE_FILTER) += fate-ea-cdata
-fate-ea-cdata: CMD = md5 -i $(TARGET_SAMPLES)/ea-cdata/166b084d.46410f77.0009b440.24be960c.cdata -f s16le -af aresample
+FATE_SAMPLES_EA-$(call ENCDEC, PCM_S16LE ADPCM_EA_XAS, PCM_S16LE EA_CDATA, ASF2SF_FILTER) += fate-ea-cdata
+fate-ea-cdata: CMD = md5 -i $(TARGET_SAMPLES)/ea-cdata/166b084d.46410f77.0009b440.24be960c.cdata -f s16le -af asf2sf
 
 FATE_SAMPLES_EA-$(call FRAMECRC, EA, EACMV, SCALE_FILTER) += fate-ea-cmv
 fate-ea-cmv: CMD = framecrc -i $(TARGET_SAMPLES)/ea-cmv/TITLE.CMV -pix_fmt rgb24 -vf scale

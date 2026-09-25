@@ -2,12 +2,12 @@ FATE_FFMPEG-$(call FILTERFRAMECRC, COLOR) += fate-ffmpeg-filter_complex
 fate-ffmpeg-filter_complex: CMD = framecrc -filter_complex color=d=1:r=5 -fflags +bitexact
 
 # Ticket 6603
-FATE_FFMPEG-$(call FILTERFRAMECRC, AEVALSRC ASETNSAMPLES ARESAMPLE, AC3_FIXED_ENCODER) += fate-ffmpeg-filter_complex_audio
+FATE_FFMPEG-$(call FILTERFRAMECRC, AEVALSRC ASETNSAMPLES ASF2SF, AC3_FIXED_ENCODER) += fate-ffmpeg-filter_complex_audio
 fate-ffmpeg-filter_complex_audio: CMD = framecrc -auto_conversion_filters -filter_complex "aevalsrc=0:d=0.1,asetnsamples=1537" -c ac3_fixed
 
 # Ticket 6375, use case of NoX
-FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MOV, PNG ALAC, ARESAMPLE_FILTER) += fate-ffmpeg-attached_pics
-fate-ffmpeg-attached_pics: CMD = threads=2 framecrc -i $(TARGET_SAMPLES)/lossless-audio/inside.m4a -threads 1 -max_muxing_queue_size 16 -af aresample
+FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MOV, PNG ALAC, ASF2SF_FILTER) += fate-ffmpeg-attached_pics
+fate-ffmpeg-attached_pics: CMD = threads=2 framecrc -i $(TARGET_SAMPLES)/lossless-audio/inside.m4a -threads 1 -max_muxing_queue_size 16 -af asf2sf
 
 FATE_SAMPLES_FFMPEG-$(call FILTERDEMDEC, COLORKEY OVERLAY SCALE, MPEGPS IMAGE_PPM_PIPE, CAVS PPM, CAVSVIDEO_PARSER) += fate-ffmpeg-filter_colorkey
 fate-ffmpeg-filter_colorkey: tests/data/filtergraphs/colorkey
@@ -88,13 +88,13 @@ fate-unknown_layout-pcm: $(AREF)
 fate-unknown_layout-pcm: CMD = md5 \
   -guess_layout_max 0 -f s16le -ac 1 -ar 44100 -i $(TARGET_PATH)/$(AREF) -f s16le
 
-FATE_FFMPEG-$(call FILTERDEMDECENCMUX, ARESAMPLE, PCM_S32LE, PCM_S32LE, AC3_FIXED, AC3) += fate-unknown_layout-ac3
+FATE_FFMPEG-$(call FILTERDEMDECENCMUX, ASF2SF, PCM_S32LE, PCM_S32LE, AC3_FIXED, AC3) += fate-unknown_layout-ac3
 fate-unknown_layout-ac3: $(AREF)
 fate-unknown_layout-ac3: CMD = md5 -auto_conversion_filters \
   -guess_layout_max 0 -f s32le -ac 1 -ar 44100 -i $(TARGET_PATH)/$(AREF) \
   -f ac3 -flags +bitexact -c ac3_fixed
 
-FATE_FFMPEG-$(call FILTERDEMDEC, AMIX ARESAMPLE SINE, RAWVIDEO, \
+FATE_FFMPEG-$(call FILTERDEMDEC, AMIX ASF2SF SINE, RAWVIDEO, \
                            PCM_S16LE RAWVIDEO, LAVFI_INDEV  \
                            MPEG4_ENCODER AC3_FIXED_ENCODER) \
                            += fate-shortest
@@ -141,7 +141,7 @@ fate-ffmpeg-fix_sub_duration_heartbeat: CMP = null
 
 # FIXME: the integer AAC decoder does not produce the same output on all platforms
 # so until that is fixed we use the volume filter to silence the data
-FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MATROSKA, H264 AAC_FIXED, PCM_S32LE_ENCODER VOLUME_FILTER ARESAMPLE_FILTER) += fate-ffmpeg-streamloop-transcode-av
+FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MATROSKA, H264 AAC_FIXED, PCM_S32LE_ENCODER VOLUME_FILTER ASF2SF_FILTER) += fate-ffmpeg-streamloop-transcode-av
 fate-ffmpeg-streamloop-transcode-av: CMD = \
     framecrc -auto_conversion_filters -stream_loop 3 -c:a aac_fixed -i $(TARGET_SAMPLES)/mkv/1242-small.mkv \
     -af volume=0:precision=fixed -c:a pcm_s32le
@@ -154,13 +154,13 @@ FATE_STREAMCOPY-$(call TRANSCODE, RAWVIDEO DVVIDEO, MOV, PCM_S16LE_DECODER) += f
 fate-copy-trac236: CMD = transcode mov $(TARGET_SAMPLES)/mov/fcp_export8-236.mov\
                      mov "-codec copy -map 0"
 
-FATE_STREAMCOPY-$(call TRANSCODE, RAWVIDEO MPEG2VIDEO, MXF, MPEGTS_DEMUXER MPEGVIDEO_PARSER MPEGAUDIO_PARSER MP2_DECODER ARESAMPLE_FILTER PCM_S16LE_DECODER) += fate-copy-trac4914
+FATE_STREAMCOPY-$(call TRANSCODE, RAWVIDEO MPEG2VIDEO, MXF, MPEGTS_DEMUXER MPEGVIDEO_PARSER MPEGAUDIO_PARSER MP2_DECODER ASF2SF_FILTER PCM_S16LE_DECODER) += fate-copy-trac4914
 fate-copy-trac4914: CMD = transcode mpegts $(TARGET_SAMPLES)/mpeg2/xdcam8mp2-1s_small.ts\
-                      mxf "-c:a pcm_s16le -af aresample -c:v copy"
+                      mxf "-c:a pcm_s16le -af asf2sf -c:v copy"
 
-FATE_STREAMCOPY-$(call TRANSCODE, RAWVIDEO MPEG2VIDEO, AVI, MPEGTS_DEMUXER MPEGVIDEO_PARSER MPEGAUDIO_PARSER EXTRACT_EXTRADATA_BSF MP2_DECODER ARESAMPLE_FILTER) += fate-copy-trac4914-avi
+FATE_STREAMCOPY-$(call TRANSCODE, RAWVIDEO MPEG2VIDEO, AVI, MPEGTS_DEMUXER MPEGVIDEO_PARSER MPEGAUDIO_PARSER EXTRACT_EXTRADATA_BSF MP2_DECODER ASF2SF_FILTER) += fate-copy-trac4914-avi
 fate-copy-trac4914-avi: CMD = transcode mpegts $(TARGET_SAMPLES)/mpeg2/xdcam8mp2-1s_small.ts\
-                          avi "-c:a copy -c:v copy" "-af aresample"
+                          avi "-c:a copy -c:v copy" "-af asf2sf"
 
 FATE_STREAMCOPY-$(call TRANSCODE, RAWVIDEO H264, AVI, H264_DEMUXER H264_PARSER EXTRACT_EXTRADATA_BSF) += fate-copy-trac2211-avi
 fate-copy-trac2211-avi: CMD = transcode "h264 -r 14" $(TARGET_SAMPLES)/h264/bbc2.sample.h264\
@@ -196,7 +196,7 @@ tests/data/audio_shorter_than_video.nut: ffmpeg$(PROGSSUF)$(EXESUF) | tests/data
 FATE_STREAMCOPY-$(call FRAMEMD5, NUT, RAWVIDEO PCM_S16LE MPEG4,  \
                                  RAWVIDEO_DEMUXER LAVFI_INDEV    \
                                  MPEG4_ENCODER PCM_S16LE_ENCODER \
-                                 SINE_FILTER ARESAMPLE_FILTER AMIX_FILTER \
+                                 SINE_FILTER ASF2SF_FILTER AMIX_FILTER \
                                  NUT_MUXER AC3_FIXED_ENCODER)    \
                                += fate-copy-shortest1 fate-copy-shortest2
 fate-copy-shortest1 fate-copy-shortest2: tests/data/audio_shorter_than_video.nut
@@ -246,8 +246,8 @@ fate-ffmpeg-trim-bsf-untrimmed: CMD = framecrc -i $(TARGET_SAMPLES)/audiomatch/t
 
 # Both trims land on the same 1024 sample packet, 256 off each end. The composed
 # skip leaves a 512 sample frame.
-FATE_SAMPLES_FFMPEG-$(call FRAMECRC, AAC, AAC, AAC_PARSER TRIM_BSF ARESAMPLE_FILTER) += fate-ffmpeg-trim-bsf-skip-samples
-fate-ffmpeg-trim-bsf-skip-samples: CMD = framecrc -bsf:a trim=start=2257920,trim=end=3161088 -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a pcm_s16le -af aresample
+FATE_SAMPLES_FFMPEG-$(call FRAMECRC, AAC, AAC, AAC_PARSER TRIM_BSF ASF2SF_FILTER) += fate-ffmpeg-trim-bsf-skip-samples
+fate-ffmpeg-trim-bsf-skip-samples: CMD = framecrc -bsf:a trim=start=2257920,trim=end=3161088 -i $(TARGET_SAMPLES)/audiomatch/tones_afconvert_16000_mono_aac_lc.adts -c:a pcm_s16le -af asf2sf
 
 # Both bounds fall in a presentation gap the first packet's duration is stretched
 # over, where only the decoded sample count places them.

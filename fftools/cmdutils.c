@@ -604,9 +604,6 @@ int opt_default(void *optctx, const char *opt, const char *arg)
 #if CONFIG_SWSCALE
     const AVClass *sc = sws_get_class();
 #endif
-#if CONFIG_SWRESAMPLE
-    const AVClass *swr_class = swr_get_class();
-#endif
 
     if (!strcmp(opt, "debug") || !strcmp(opt, "fdebug"))
         av_log_set_level(AV_LOG_DEBUG);
@@ -645,13 +642,6 @@ int opt_default(void *optctx, const char *opt, const char *arg)
 #else
     if (!consumed && !strcmp(opt, "sws_flags")) {
         av_log(NULL, AV_LOG_WARNING, "Ignoring %s %s, due to disabled swscale\n", opt, arg);
-        consumed = 1;
-    }
-#endif
-#if CONFIG_SWRESAMPLE
-    if (!consumed && (o=opt_find(&swr_class, opt, NULL, 0,
-                                    AV_OPT_SEARCH_CHILDREN | AV_OPT_SEARCH_FAKE_OBJ))) {
-        av_dict_set(&swr_opts, opt, arg, FLAGS);
         consumed = 1;
     }
 #endif

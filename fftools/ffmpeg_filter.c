@@ -2178,15 +2178,6 @@ static int configure_filtergraph(FilterGraph *fg, FilterGraphThread *fgt)
             if (ret < 0)
                 goto fail;
         }
-
-        if (av_dict_count(ofp->swr_opts)) {
-            char *args;
-            ret = av_dict_get_string(ofp->swr_opts, &args, '=', ':');
-            if (ret < 0)
-                goto fail;
-            av_opt_set(fgt->graph, "aresample_swr_opts", args, 0);
-            av_free(args);
-        }
     } else {
         fgt->graph->nb_threads = filter_complex_nbthreads;
     }
@@ -2356,7 +2347,7 @@ static int ifilter_parameters_from_frame(InputFilter *ifilter, const AVFrame *fr
     }
 
     /* Copy downmix related side data to InputFilterPriv so it may be propagated
-     * to the filter chain even though it's not "global", as filters like aresample
+     * to the filter chain even though it's not "global", as filters may
      * require this information during init and not when remixing a frame */
     sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DOWNMIX_INFO);
     if (sd) {
@@ -3378,13 +3369,6 @@ static int prefilter_init(void *logctx, Prefilter *pf, const InputFilterPriv *if
                                      '=', ':');
             if (ret < 0)
                 return ret;
-        } else if (ifp->type == AVMEDIA_TYPE_AUDIO && av_dict_count(ofp->swr_opts)) {
-            char *args;
-            ret = av_dict_get_string(ofp->swr_opts, &args, '=', ':');
-            if (ret < 0)
-                return ret;
-            av_opt_set(pf->graph, "aresample_swr_opts", args, 0);
-            av_free(args);
         }
     }
 

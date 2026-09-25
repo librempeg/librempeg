@@ -366,7 +366,7 @@ vs. @code{HEVC_NAL_SPS}.
 @item
 Each library has its own prefix for public symbols, in addition to the
 commonly used @code{av_} (@code{avformat_} for libavformat,
-@code{avcodec_} for libavcodec, @code{swr_} for libswresample, etc).
+@code{avcodec_} for libavcodec, etc).
 Check the existing code and choose names accordingly.
 
 @item

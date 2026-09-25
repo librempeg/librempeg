@@ -8,13 +8,13 @@ OPUS_SILK_SAMPLES   = $(addprefix testvector, 02 03 04) silk-lbrr
 OPUS_OTHER_SAMPLES  = $(addprefix testvector, 07 08 09 10 12)
 
 define FATE_OPUS_TEST
-FATE_OPUS_$(1)-$(call FILTERDEMDECENCMUX, ARESAMPLE, MATROSKA, OPUS, PCM_S16LE, PCM_S16LE, PIPE_PROTOCOL) := $(addprefix fate-opus-,$(OPUS_$(1)_SAMPLES))
+FATE_OPUS_$(1)-$(call FILTERDEMDECENCMUX, ASF2SF, MATROSKA, OPUS, PCM_S16LE, PCM_S16LE, PIPE_PROTOCOL) := $(addprefix fate-opus-,$(OPUS_$(1)_SAMPLES))
 FATE_OPUS += $$(FATE_OPUS_$(1)-yes)
 endef
 
 $(foreach N, CELT HYBRID SILK OTHER, $(eval $(call FATE_OPUS_TEST,$(N))))
 
-$(FATE_OPUS): CMD = ffmpeg -i $(TARGET_SAMPLES)/opus/$(@:fate-opus-%=%).mka -f s16le -af aresample -
+$(FATE_OPUS): CMD = ffmpeg -i $(TARGET_SAMPLES)/opus/$(@:fate-opus-%=%).mka -f s16le -af asf2sf -
 $(FATE_OPUS): REF = $(SAMPLES)/opus/$(@:fate-opus-%=%).dec
 $(FATE_OPUS_HYBRID-yes): REF = $(SAMPLES)/opus/$(@:fate-opus-%=%)_v2.dec
 
@@ -22,22 +22,22 @@ $(FATE_OPUS): CMP = stddev
 $(FATE_OPUS): CMP_UNIT = s16
 $(FATE_OPUS): FUZZ = 3
 fate-opus-testvector01:      CMP_TARGET = 0
-fate-opus-testvector02:      CMP_TARGET = 191
-fate-opus-testvector03:      CMP_TARGET = 139
-fate-opus-testvector04:      CMP_TARGET = 119
-fate-opus-testvector05:      CMP_TARGET = 108
-fate-opus-testvector06:      CMP_TARGET = 106
+fate-opus-testvector02:      CMP_TARGET = 816
+fate-opus-testvector03:      CMP_TARGET = 798
+fate-opus-testvector04:      CMP_TARGET = 807
+fate-opus-testvector05:      CMP_TARGET = 742
+fate-opus-testvector06:      CMP_TARGET = 789
 fate-opus-testvector07:      CMP_TARGET = 0
 fate-opus-testvector08:      CMP_TARGET = 6
 fate-opus-testvector09:      CMP_TARGET = 0
-fate-opus-testvector10:      CMP_TARGET = 38
+fate-opus-testvector10:      CMP_TARGET = 1208
 fate-opus-testvector11:      CMP_TARGET = 0
-fate-opus-testvector12:      CMP_TARGET = 160
-fate-opus-silk-lbrr:         CMP_TARGET = 0
+fate-opus-testvector12:      CMP_TARGET = 969
+fate-opus-silk-lbrr:         CMP_TARGET = 715
 fate-opus-tron.6ch.tinypkts: CMP_SHIFT = 1440
 fate-opus-tron.6ch.tinypkts: CMP_TARGET = 0
 
-FATE_OPUS_ENC-$(call FILTERFRAMECRC, ANULLSRC ARESAMPLE, OPUS_ENCODER) += fate-opus-enc-silence
+FATE_OPUS_ENC-$(call FILTERFRAMECRC, ANULLSRC ASF2SF, OPUS_ENCODER) += fate-opus-enc-silence
 fate-opus-enc-silence: CMD = framecrc -auto_conversion_filters -filter_complex "anullsrc=r=48000:cl=stereo:d=0.021" -c:a opus -strict -2
 
 FATE_SAMPLES_FFMPEG += $(FATE_OPUS)

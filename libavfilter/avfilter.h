@@ -602,8 +602,6 @@ typedef struct AVFilterGraph {
      */
     avfilter_execute_func *execute;
 
-    char *aresample_swr_opts; ///< swr options to use for the auto-inserted aresample filters, Access ONLY through AVOptions
-
     /**
      * Sets the maximum number of buffered frames in the filtergraph combined.
      *
@@ -675,7 +673,7 @@ int avfilter_graph_create_filter(AVFilterContext **filt_ctx, const AVFilter *fil
  * Enable or disable automatic format conversion inside the graph.
  *
  * Note that format conversion can still happen inside explicitly inserted
- * scale and aresample filters.
+ * scale filter.
  *
  * @param flags  any of the AVFILTER_AUTO_CONVERT_* constants
  */

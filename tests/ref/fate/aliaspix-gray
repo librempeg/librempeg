@@ -1,14 +1,16 @@
 2d7ae310710798257ebcff8a41c646ee *tests/data/fate/aliaspix-gray.image2
 28868 tests/data/fate/aliaspix-gray.image2
-#tb 0: 1/25
-#media_type 0: video
-#codec_id 0: rawvideo
-#dimensions 0: 199x81
-#sar 0: 0/1
-#tb 1: 1/25
-#media_type 1: video
-#codec_id 1: alias_pix
-#dimensions 1: 199x81
-#sar 1: 0/1
-0,          0,          0,        1,    16119, 0x3d0785f5
-1,          0,          0,        1,    28868, 0x02523ce2
+#tb 0: 1/44100
+#media_type 0: audio
+#codec_id 0: pcm_s16le
+#sample_rate 0: 44100
+#channel_layout_name 0: stereo
+#tb 1: 1/44100
+#media_type 1: audio
+#codec_id 1: pcm_s16le
+#sample_rate 1: 44100
+#channel_layout_name 1: stereo
+0,          0,          0,     4096,    16384, 0x7e9917ef
+1,          0,          0,     4096,    16384, 0x7e9917ef
+0,       4096,       4096,     3121,    12484, 0xdb3224f3
+1,       4096,       4096,     3121,    12484, 0xdb3224f3

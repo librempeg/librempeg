@@ -32,8 +32,8 @@ fate-ansi: CMD = framecrc -chars_per_frame 44100 -i $(TARGET_SAMPLES)/ansi/TRE-I
 FATE_VIDEO-$(call FRAMECRC, TTY, ANSI, SCALE_FILTER) += fate-ansi256
 fate-ansi256: CMD = framecrc -chars_per_frame 44100 -i $(TARGET_SAMPLES)/ansi/ansi256.ans -pix_fmt rgb24 -vf scale
 
-FATE_VIDEO-$(call FRAMECRC, RPL, ESCAPE124, ARESAMPLE_FILTER SCALE_FILTER) += fate-armovie-escape124
-fate-armovie-escape124: CMD = framecrc -i $(TARGET_SAMPLES)/rpl/ESCAPE.RPL -pix_fmt rgb24 -vf scale -af aresample
+FATE_VIDEO-$(call FRAMECRC, RPL, ESCAPE124, ASF2SF_FILTER SCALE_FILTER) += fate-armovie-escape124
+fate-armovie-escape124: CMD = framecrc -i $(TARGET_SAMPLES)/rpl/ESCAPE.RPL -pix_fmt rgb24 -vf scale -af asf2sf
 
 FATE_VIDEO-$(call FRAMECRC, RPL, ESCAPE130) += fate-armovie-escape130
 fate-armovie-escape130: CMD = framecrc -i $(TARGET_SAMPLES)/rpl/landing.rpl -an
@@ -50,11 +50,11 @@ fate-avid-interlaced: CMD = framecrc -i $(TARGET_SAMPLES)/avid/avid_ntsc_interla
 FATE_VIDEO-$(call FRAMECRC, MOV, MJPEG) += fate-avid-meridian
 fate-avid-meridian: CMD = framecrc -bitexact -i $(TARGET_SAMPLES)/avid/avidmeridianntsc.mov
 
-FATE_VIDEO-$(call FRAMECRC, BETHSOFTVID, BETHSOFTVID, ARESAMPLE_FILTER SCALE_FILTER) += fate-bethsoft-vid
-fate-bethsoft-vid: CMD = framecrc -i $(TARGET_SAMPLES)/bethsoft-vid/ANIM0001.VID -t 5 -pix_fmt rgb24 -vf scale -af aresample
+FATE_VIDEO-$(call FRAMECRC, BETHSOFTVID, BETHSOFTVID, ASF2SF_FILTER SCALE_FILTER) += fate-bethsoft-vid
+fate-bethsoft-vid: CMD = framecrc -i $(TARGET_SAMPLES)/bethsoft-vid/ANIM0001.VID -t 5 -pix_fmt rgb24 -vf scale -af asf2sf
 
-FATE_VIDEO-$(call FRAMECRC, BFI, BFI, ARESAMPLE_FILTER SCALE_FILTER) += fate-bfi
-fate-bfi: CMD = framecrc -i $(TARGET_SAMPLES)/bfi/2287.bfi -pix_fmt rgb24 -vf scale -af aresample
+FATE_VIDEO-$(call FRAMECRC, BFI, BFI, ASF2SF_FILTER SCALE_FILTER) += fate-bfi
+fate-bfi: CMD = framecrc -i $(TARGET_SAMPLES)/bfi/2287.bfi -pix_fmt rgb24 -vf scale -af asf2sf
 
 FATE_BINK_VIDEO += fate-bink-video-b
 fate-bink-video-b: CMD = framecrc -i $(TARGET_SAMPLES)/bink/RISE.BIK -frames 30
@@ -91,14 +91,14 @@ fate-cfhd: $(FATE_CFHD-yes)
 FATE_VIDEO-$(call FRAMECRC, AVI, CLJR) += fate-cljr
 fate-cljr: CMD = framecrc -i $(TARGET_SAMPLES)/cljr/testcljr-partial.avi
 
-FATE_VIDEO-$(call FRAMECRC, AVI, PNG, ARESAMPLE_FILTER) += fate-corepng
-fate-corepng: CMD = framecrc -i $(TARGET_SAMPLES)/png1/corepng-partial.avi -af aresample
+FATE_VIDEO-$(call FRAMECRC, AVI, PNG, ASF2SF_FILTER) += fate-corepng
+fate-corepng: CMD = framecrc -i $(TARGET_SAMPLES)/png1/corepng-partial.avi -af asf2sf
 
 FATE_VIDEO-$(call FRAMECRC, AVI, PNG) += fate-rgbapng-4816
 fate-rgbapng-4816: CMD = framecrc -i $(TARGET_SAMPLES)/png1/55c99e750a5fd6_50314226.png
 
-FATE_VIDEO-$(call FRAMECRC, AVS, AVS, ARESAMPLE_FILTER SCALE_FILTER) += fate-creatureshock-avs
-fate-creatureshock-avs: CMD = framecrc -i $(TARGET_SAMPLES)/creatureshock-avs/OUTATIME.AVS -pix_fmt rgb24 -vf scale -af aresample
+FATE_VIDEO-$(call FRAMECRC, AVS, AVS, ASF2SF_FILTER SCALE_FILTER) += fate-creatureshock-avs
+fate-creatureshock-avs: CMD = framecrc -i $(TARGET_SAMPLES)/creatureshock-avs/OUTATIME.AVS -pix_fmt rgb24 -vf scale -af asf2sf
 
 FATE_CVID-$(call FRAMECRC, MOV, CINEPAK, SCALE_FILTER) += fate-cvid-palette
 fate-cvid-palette: CMD = framecrc -i $(TARGET_SAMPLES)/cvid/catfight-cvid-pal8-partial.mov -pix_fmt rgb24 -an -vf scale
@@ -112,8 +112,8 @@ fate-cvid-grayscale: CMD = framecrc -i $(TARGET_SAMPLES)/cvid/pcitva15.avi -an
 FATE_VIDEO += $(FATE_CVID-yes)
 fate-cvid: $(FATE_CVID-yes)
 
-FATE_VIDEO-$(call FRAMECRC, C93, C93, SCALE_FILTER ARESAMPLE_FILTER) += fate-cyberia-c93
-fate-cyberia-c93: CMD = framecrc -i $(TARGET_SAMPLES)/cyberia-c93/intro1.c93 -t 3 -pix_fmt rgb24 -vf scale -af aresample
+FATE_VIDEO-$(call FRAMECRC, C93, C93, SCALE_FILTER ASF2SF_FILTER) += fate-cyberia-c93
+fate-cyberia-c93: CMD = framecrc -i $(TARGET_SAMPLES)/cyberia-c93/intro1.c93 -t 3 -pix_fmt rgb24 -vf scale -af asf2sf
 
 FATE_VIDEO-$(call FRAMECRC, AVI, CYUV) += fate-cyuv
 fate-cyuv: CMD = framecrc -i $(TARGET_SAMPLES)/cyuv/cyuv.avi
@@ -196,8 +196,8 @@ fate-idroq-video-encode: CMD = md5 -auto_conversion_filters -f image2 -c:v pgmyu
 FATE_IFF-$(call FRAMECRC, IFF, IFF_ILBM, SCALE_FILTER) += fate-iff-byterun1
 fate-iff-byterun1: CMD = framecrc -i $(TARGET_SAMPLES)/iff/ASH.LBM -pix_fmt rgb24 -vf scale
 
-FATE_IFF-$(call ENCDEC, PCM_S16LE EIGHTSVX_FIB, PCM_S16LE IFF, ARESAMPLE_FILTER) += fate-iff-fibonacci
-fate-iff-fibonacci: CMD = md5 -i $(TARGET_SAMPLES)/iff/dasboot-in-compressed -f s16le -af aresample
+FATE_IFF-$(call ENCDEC, PCM_S16LE EIGHTSVX_FIB, PCM_S16LE IFF, ASF2SF_FILTER) += fate-iff-fibonacci
+fate-iff-fibonacci: CMD = md5 -i $(TARGET_SAMPLES)/iff/dasboot-in-compressed -f s16le -af asf2sf
 
 FATE_IFF-$(call FRAMECRC, IFF, IFF_ILBM, SCALE_FILTER) += fate-iff-ilbm
 fate-iff-ilbm: CMD = framecrc -i $(TARGET_SAMPLES)/iff/lms-matriks.ilbm -pix_fmt rgb24 -vf scale
@@ -337,8 +337,8 @@ fate-smacker-video: CMD = framecrc -i $(TARGET_SAMPLES)/smacker/wetlogo.smk -pix
 FATE_VIDEO-$(call FRAMECRC, MOV, SMC, SCALE_FILTER) += fate-smc
 fate-smc: CMD = framecrc -i $(TARGET_SAMPLES)/smc/cass_schi.qt -pix_fmt rgb24 -vf scale
 
-FATE_VIDEO-$(call FRAMECRC, AVI, SP5X, ARESAMPLE_FILTER) += fate-sp5x
-fate-sp5x: CMD = framecrc -idct simple -i $(TARGET_SAMPLES)/sp5x/sp5x_problem.avi -af aresample
+FATE_VIDEO-$(call FRAMECRC, AVI, SP5X, ASF2SF_FILTER) += fate-sp5x
+fate-sp5x: CMD = framecrc -idct simple -i $(TARGET_SAMPLES)/sp5x/sp5x_problem.avi -af asf2sf
 
 FATE_VIDEO-$(call FRAMECRC, THP, THP) += fate-thp
 fate-thp: CMD = framecrc -idct simple -i $(TARGET_SAMPLES)/thp/pikmin2-opening1-partial.thp -an
@@ -346,8 +346,8 @@ fate-thp: CMD = framecrc -idct simple -i $(TARGET_SAMPLES)/thp/pikmin2-opening1-
 FATE_VIDEO-$(call FRAMECRC, TIERTEXSEQ, TIERTEXSEQVIDEO, SCALE_FILTER) += fate-tiertex-seq
 fate-tiertex-seq: CMD = framecrc -i $(TARGET_SAMPLES)/tiertex-seq/Gameover.seq -pix_fmt rgb24 -vf scale
 
-FATE_VIDEO-$(call FRAMECRC, TMV, TMV, ARESAMPLE_FILTER SCALE_FILTER) += fate-tmv
-fate-tmv: CMD = framecrc -i $(TARGET_SAMPLES)/tmv/pop-partial.tmv -pix_fmt rgb24 -vf scale -af aresample
+FATE_VIDEO-$(call FRAMECRC, TMV, TMV, ASF2SF_FILTER SCALE_FILTER) += fate-tmv
+fate-tmv: CMD = framecrc -i $(TARGET_SAMPLES)/tmv/pop-partial.tmv -pix_fmt rgb24 -vf scale -af asf2sf
 
 FATE_TXD += fate-txd-16bpp
 fate-txd-16bpp: CMD = framecrc -i $(TARGET_SAMPLES)/txd/misc.txd -an

@@ -1,4 +1,4 @@
-FATE_SBC_TRANSCODE-$(call ENCDEC2, SBC, PCM_S16LE, SBC, SBC_PARSER ARESAMPLE_FILTER WAV_DEMUXER WAV_MUXER) += \
+FATE_SBC_TRANSCODE-$(call ENCDEC2, SBC, PCM_S16LE, SBC, SBC_PARSER ASF2SF_FILTER WAV_DEMUXER WAV_MUXER) += \
     $(addprefix fate-sbc-, 16000-1 44100-1 48000-1 44100-2-joint-stereo 44100-2-stereo-low-delay 44100-2-stereo 44100-2-joint-stereo-four-subbands)
 fate-sbc-16000-1: tests/data/asynth-16000-1.wav
 fate-sbc-16000-1: CMD = enc_dec wav $(TARGET_PATH)/tests/data/asynth-16000-1.wav \

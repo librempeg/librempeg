@@ -20,7 +20,6 @@ Specifically, the GPL parts of Librempeg are:
     - `compat/solaris/make_sunver.pl`
     - `doc/t2h.pm`
     - `doc/texi2pod.pl`
-    - `libswresample/tests/swresample.c`
     - `tests/checkasm/*`
     - `tests/tiny_ssim.c`
 - the following filters in libavfilter:

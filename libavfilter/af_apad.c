@@ -21,8 +21,6 @@
 /**
  * @file
  * audio pad filter.
- *
- * Based on af_aresample.c
  */
 
 #include "libavutil/channel_layout.h"

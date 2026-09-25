@@ -6,7 +6,7 @@ FATE_PRORES = fate-prores-422                                           \
               fate-prores-alpha_skip                                    \
               fate-prores-transparency                                  \
               fate-prores-transparency_skip                             \
-              $(if $(call ALLYES, ARESAMPLE_FILTER AAC_FIXED_DECODER),fate-prores-gray) \
+              $(if $(call ALLYES, ASF2SF_FILTER AAC_FIXED_DECODER),fate-prores-gray) \
 
 FATE_SAMPLES_FFMPEG-$(call FRAMECRC, MOV, PRORES, SCALE_FILTER) += $(FATE_PRORES)
 fate-prores: $(FATE_PRORES)
@@ -19,7 +19,7 @@ fate-prores-alpha:     CMD = framecrc -flags +bitexact -i $(TARGET_SAMPLES)/pror
 fate-prores-alpha_skip: CMD = framecrc -flags +bitexact -skip_alpha 1 -i $(TARGET_SAMPLES)/prores/Sequence_1-Apple_ProRes_with_Alpha.mov -pix_fmt yuv444p12le -vf scale
 fate-prores-transparency: CMD = framecrc -flags +bitexact -i $(TARGET_SAMPLES)/prores/prores4444_with_transparency.mov -pix_fmt yuva444p12le -vf scale
 fate-prores-transparency_skip: CMD = framecrc -flags +bitexact -skip_alpha 1 -i $(TARGET_SAMPLES)/prores/prores4444_with_transparency.mov -pix_fmt yuv444p12le -vf scale
-fate-prores-gray:      CMD = framecrc -flags +bitexact -c:a aac_fixed -i $(TARGET_SAMPLES)/prores/gray.mov -pix_fmt yuv422p10le -vf scale -af aresample
+fate-prores-gray:      CMD = framecrc -flags +bitexact -c:a aac_fixed -i $(TARGET_SAMPLES)/prores/gray.mov -pix_fmt yuv422p10le -vf scale -af asf2sf
 
 #Test bsf prores-metadata
 FATE_PRORES_METADATA_BSF += fate-prores-metadata

@@ -174,10 +174,10 @@ fate-matroska-spherical-mono-remux: CMD = transcode matroska $(TARGET_SAMPLES)/m
 # Both input audio tracks are completely zero, so the noise bsf is used
 # to make this test interesting.
 FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, FFV1 PRORES, MATROSKA, MXF_DEMUXER \
-                                               PCM_S24LE_DECODER ARESAMPLE_FILTER \
+                                               PCM_S24LE_DECODER ASF2SF_FILTER \
                                                PCM_S16BE_ENCODER NOISE_BSF)       \
                                += fate-matroska-mastering-display-metadata
-fate-matroska-mastering-display-metadata: CMD = transcode mxf $(TARGET_SAMPLES)/mxf/Meridian-Apple_ProResProxy-HDR10.mxf matroska "-map 0 -map 0:0 -c:v:0 copy -c:v:1 ffv1 -c:a:0 copy -bsf:a:0 noise=amount=3 -filter:a:1 aresample -c:a:1 pcm_s16be -bsf:a:1 noise=amount=-1:drop=-4" "-map 0 -c copy" "-show_entries stream_side_data_list:stream=index,codec_name"
+fate-matroska-mastering-display-metadata: CMD = transcode mxf $(TARGET_SAMPLES)/mxf/Meridian-Apple_ProResProxy-HDR10.mxf matroska "-map 0 -map 0:0 -c:v:0 copy -c:v:1 ffv1 -c:a:0 copy -bsf:a:0 noise=amount=3 -filter:a:1 asf2sf -c:a:1 pcm_s16be -bsf:a:1 noise=amount=-1:drop=-4" "-map 0 -c copy" "-show_entries stream_side_data_list:stream=index,codec_name"
 
 # This test tests remuxing annex B H.264 into Matroska. It also tests writing
 # the correct interlaced flags and overriding the sample aspect ratio, leading
@@ -190,10 +190,10 @@ FATE_MATROSKA_FFMPEG_FFPROBE-$(call TRANSCODE, PCM_S32LE MP2, MATROSKA,      \
                                                H264_DECODER MPEGAUDIO_PARSER \
                                                EXTRACT_EXTRADATA_BSF         \
                                                H264_METADATA_BSF             \
-                                               ARESAMPLE_FILTER              \
+                                               ASF2SF_FILTER                 \
                                                PCM_S32BE_ENCODER)            \
                                += fate-matroska-h264-remux
-fate-matroska-h264-remux: CMD = transcode mpegts $(TARGET_SAMPLES)/h264/h264_intra_first-small.ts matroska "-map 0:0 -map 0 -c:v copy -sar:0 3:4 -bsf:v:1 h264_metadata=aud=remove:delete_filler=1 -disposition:v +hearing_impaired -af aresample -c:a:0 pcm_s32le -c:a:1 pcm_s32be -disposition:a:0 original -metadata:s:a:0 title=swedish_silence -metadata:s:a:1 title=norwegian_silence -disposition:a:1 dub" "-map 0:v" "-show_entries stream=index,codec_name:stream_tags=title,language"
+fate-matroska-h264-remux: CMD = transcode mpegts $(TARGET_SAMPLES)/h264/h264_intra_first-small.ts matroska "-map 0:0 -map 0 -c:v copy -sar:0 3:4 -bsf:v:1 h264_metadata=aud=remove:delete_filler=1 -disposition:v +hearing_impaired -af asf2sf -c:a:0 pcm_s32le -c:a:1 pcm_s32be -disposition:a:0 original -metadata:s:a:0 title=swedish_silence -metadata:s:a:1 title=norwegian_silence -disposition:a:1 dub" "-map 0:v" "-show_entries stream=index,codec_name:stream_tags=title,language"
 
 # Tests writing BlockAdditional and BlockGroups with ReferenceBlock elements;
 # it also tests setting a track as suitable for hearing impaired.
@@ -222,11 +222,11 @@ fate-matroska-ogg-opus-remux: CMD = transcode ogg $(TARGET_SAMPLES)/ogg/intro-pa
 # This tests reencoding with an audio encoder that adds initial padding.
 # The initial padding is currently not maintained.
 FATE_MATROSKA_FFMPEG_FFPROBE-$(call REMUX, MATROSKA, MXF_DEMUXER PCM_S16LE_DECODER \
-                                           MP2FIXED_ENCODER ARESAMPLE_FILTER       \
+                                           MP2FIXED_ENCODER ASF2SF_FILTER          \
                                            MPEG2VIDEO_DECODER MPEGVIDEO_PARSER     \
                                            MPEGAUDIO_PARSER                        \
                                            EXTRACT_EXTRADATA_BSF) += fate-matroska-encoding-delay
-fate-matroska-encoding-delay: CMD = transcode mxf $(TARGET_SAMPLES)/mxf/Sony-00001.mxf matroska "-c:v copy -af aresample -c:a mp2fixed" "-c copy" "-show_packets -show_entries stream=codec_name,initial_padding -read_intervals %0.05"
+fate-matroska-encoding-delay: CMD = transcode mxf $(TARGET_SAMPLES)/mxf/Sony-00001.mxf matroska "-c:v copy -af asf2sf,acl2cl -c:a mp2fixed" "-c copy" "-show_packets -show_entries stream=codec_name,initial_padding -read_intervals %0.05"
 
 FATE_MATROSKA-$(call REMUX, MATROSKA, SUP_DEMUXER) += fate-matroska-pgs-remux
 fate-matroska-pgs-remux: CMD = transcode sup $(TARGET_SAMPLES)/sub/pgs_sub.sup matroska "-copyts -c:s copy" "-copyts -c:s copy"

@@ -125,7 +125,6 @@ OBJS-$(CONFIG_AQUANT_FILTER)                 += af_aquant.o
 OBJS-$(CONFIG_ARATE_FILTER)                  += af_arate.o
 OBJS-$(CONFIG_ARDFTSRC_FILTER)               += af_ardftsrc.o
 OBJS-$(CONFIG_AREALTIME_FILTER)              += f_realtime.o
-OBJS-$(CONFIG_ARESAMPLE_FILTER)              += af_aresample.o
 OBJS-$(CONFIG_AREVERSE_FILTER)               += f_reverse.o
 OBJS-$(CONFIG_ARLS_FILTER)                   += af_arls.o
 OBJS-$(CONFIG_ARNNDN_FILTER)                 += af_arnndn.o

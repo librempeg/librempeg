@@ -2798,7 +2798,6 @@ static void ffprobe_show_library_versions(AVTextFormatContext *tfc)
     SHOW_LIB_VERSION(avdevice,   AVDEVICE);
     SHOW_LIB_VERSION(avfilter,   AVFILTER);
     SHOW_LIB_VERSION(swscale,    SWSCALE);
-    SHOW_LIB_VERSION(swresample, SWRESAMPLE);
     avtext_print_section_footer(tfc);
 }
 

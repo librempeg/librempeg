@@ -1441,7 +1441,7 @@ encoded with the @samp{pcm_24daud} codec.
 Use @command{ffmpeg} to mux input audio to a @samp{5.1} channel layout
 resampled at 96000Hz:
 @example
-ffmpeg -i INPUT -af aresample=96000,pan=5.1 slow.302
+ffmpeg -i INPUT -af ardftsrc=96000,pan=5.1 slow.302
 @end example
 
 For ffmpeg versions before 7.0 you might have to use the @samp{asetnsamples}

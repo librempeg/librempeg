@@ -653,7 +653,7 @@ gaplessenc(){
     cleanfiles="$cleanfiles $file1"
 
     # test data after reencoding
-    ffmpeg -i "$sample" -bitexact -map 0:a -c:a $codec -af aresample \
+    ffmpeg -i "$sample" -bitexact -map 0:a -c:a $codec -af asf2sf \
            -f $format -y "$(target_path "$file1")" || return
     probegaplessinfo "$(target_path "$file1")"
 }

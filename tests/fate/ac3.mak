@@ -95,11 +95,11 @@ $(FATE_AC3) $(FATE_EAC3) $(FATE_EAC3_FIXED): CMP = oneoff
 fate-ac3-2.0: FUZZ = 2
 fate-ac3-5.1: FUZZ = 2
 
-FATE_AC3-$(call  PCM, AC3,  AC3 AC3_FIXED, PCM_S16LE_MUXER ARESAMPLE_FILTER)  += $(FATE_AC3)
-FATE_EAC3-$(call PCM, EAC3, EAC3,          PCM_S16LE_MUXER ARESAMPLE_FILTER) += $(FATE_EAC3)
-FATE_EAC3-$(call PCM, EAC3, EAC3 AC3_FIXED, PCM_S16LE_MUXER ARESAMPLE_FILTER) += $(FATE_EAC3_FIXED)
+FATE_AC3-$(call  PCM, AC3,  AC3 AC3_FIXED, PCM_S16LE_MUXER ASF2SF_FILTER)  += $(FATE_AC3)
+FATE_EAC3-$(call PCM, EAC3, EAC3,          PCM_S16LE_MUXER ASF2SF_FILTER) += $(FATE_EAC3)
+FATE_EAC3-$(call PCM, EAC3, EAC3 AC3_FIXED, PCM_S16LE_MUXER ASF2SF_FILTER) += $(FATE_EAC3_FIXED)
 
-FATE_AC3-$(call ENCDEC, AC3, MP4 MOV, WAV_MUXER WAV_DEMUXER ARESAMPLE_FILTER PCM_S16LE_ENCODER PIPE_PROTOCOL) += fate-ac3-encode
+FATE_AC3-$(call ENCDEC, AC3, MP4 MOV, WAV_MUXER WAV_DEMUXER ASF2SF_FILTER PCM_S16LE_ENCODER PIPE_PROTOCOL) += fate-ac3-encode
 fate-ac3-encode: CMD = enc_dec_pcm mp4 wav s16le $(subst $(SAMPLES),$(TARGET_SAMPLES),$(REF)) -c:a ac3 -b:a 128k
 fate-ac3-encode: CMP_TARGET = 404.53
 
@@ -111,7 +111,7 @@ tests/data/fate/ac3-phase.wav: ffmpeg$(PROGSSUF)$(EXESUF) | tests/data/fate
 	-i "aevalsrc=$(AC3_PHASE_EXPR)|-$(AC3_PHASE_EXPR):s=48000:d=1" \
 	-c:a pcm_s16le -y $(TARGET_PATH)/$@ 2>/dev/null
 
-AC3_PHASE_DEPS = FFMPEG LAVFI_INDEV AEVALSRC_FILTER ARESAMPLE_FILTER \
+AC3_PHASE_DEPS = FFMPEG LAVFI_INDEV AEVALSRC_FILTER ASF2SF_FILTER \
                  MP4_MUXER MOV_DEMUXER WAV_MUXER WAV_DEMUXER \
                  PCM_S16LE_ENCODER FILE_PROTOCOL PIPE_PROTOCOL
 FATE_AC3_PHASE-$(call ALLYES, $(AC3_PHASE_DEPS) AC3_ENCODER AC3_DECODER) += fate-ac3-phase
@@ -129,34 +129,34 @@ fate-ac3-phase fate-ac3-fixed-phase fate-eac3-phase: CMP = stddev
 fate-ac3-phase fate-ac3-fixed-phase fate-eac3-phase: FUZZ = 2
 fate-ac3-phase fate-ac3-fixed-phase fate-eac3-phase: REF = tests/data/fate/ac3-phase.wav
 
-FATE_EAC3-$(call ENCDEC, EAC3, MP4 MOV, WAV_MUXER WAV_DEMUXER ARESAMPLE_FILTER PCM_S16LE_ENCODER PIPE_PROTOCOL) += fate-eac3-encode
+FATE_EAC3-$(call ENCDEC, EAC3, MP4 MOV, WAV_MUXER WAV_DEMUXER ASF2SF_FILTER PCM_S16LE_ENCODER PIPE_PROTOCOL) += fate-eac3-encode
 fate-eac3-encode: CMD = enc_dec_pcm mp4 wav s16le $(subst $(SAMPLES),$(TARGET_SAMPLES),$(REF)) -c:a eac3 -b:a 128k
 fate-eac3-encode: CMP_TARGET = 516.94
 
 fate-ac3-encode fate-eac3-encode: CMP = stddev
 fate-ac3-encode fate-eac3-encode: REF = $(SAMPLES)/audio-reference/luckynight_2ch_44kHz_s16.wav
 
-FATE_AC3-$(call ENCMUX, AC3_FIXED, AC3, WAV_DEMUXER PCM_S16LE_DECODER ARESAMPLE_FILTER) += fate-ac3-fixed-encode
+FATE_AC3-$(call ENCMUX, AC3_FIXED, AC3, WAV_DEMUXER PCM_S16LE_DECODER ASF2SF_FILTER) += fate-ac3-fixed-encode
 fate-ac3-fixed-encode: tests/data/asynth-44100-2.wav
 fate-ac3-fixed-encode: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
-fate-ac3-fixed-encode: CMD = md5 -i $(SRC) -c ac3_fixed -ab 128k -f ac3 -flags +bitexact -af aresample
+fate-ac3-fixed-encode: CMD = md5 -i $(SRC) -c ac3_fixed -ab 128k -f ac3 -flags +bitexact -af asf2sf
 fate-ac3-fixed-encode: CMP = oneline
 fate-ac3-fixed-encode: REF = e9d78bca187b4bbafc4512bcea8efd3e
 
 # This tests that the LFE does not get lost when converting the input 7.1
 # to a channel layout supported by the encoder.
-FATE_AC3-$(call FRAMECRC, WAV, PCM_S16LE, ARESAMPLE_FILTER AC3_FIXED_ENCODER) += fate-ac3-fixed-encode-2
+FATE_AC3-$(call FRAMECRC, WAV, PCM_S16LE, ASF2SF_FILTER AC3_FIXED_ENCODER) += fate-ac3-fixed-encode-2
 fate-ac3-fixed-encode-2: tests/data/asynth-44100-8.wav
 fate-ac3-fixed-encode-2: SRC = $(TARGET_PATH)/tests/data/asynth-44100-8.wav
-fate-ac3-fixed-encode-2: CMD = framecrc -i $(SRC) -c:a ac3_fixed -ab 256k -frames:a 6 -af aresample
+fate-ac3-fixed-encode-2: CMD = framecrc -i $(SRC) -c:a ac3_fixed -ab 256k -frames:a 6 -af asf2sf,acl2cl
 
 # This tests that all samples are output and that audio frame queue API
 # takes into account the padding added in the generic encode framework
 # by the fixed_frame_size flag.
-FATE_AC3-$(call FRAMECRC, WAV, PCM_S16LE, ARESAMPLE_FILTER AC3_FIXED_ENCODER) += fate-ac3-fixed-encode-3
+FATE_AC3-$(call FRAMECRC, WAV, PCM_S16LE, ASF2SF_FILTER AC3_FIXED_ENCODER) += fate-ac3-fixed-encode-3
 fate-ac3-fixed-encode-3: tests/data/asynth-44100-6.wav
 fate-ac3-fixed-encode-3: SRC = $(TARGET_PATH)/tests/data/asynth-44100-6.wav
-fate-ac3-fixed-encode-3: CMD = framecrc -i $(SRC) -c:a ac3_fixed -flags2 +fixed_frame_size -ab 256k -af aresample,atrim=start_sample=0:end_sample=12096
+fate-ac3-fixed-encode-3: CMD = framecrc -i $(SRC) -c:a ac3_fixed -flags2 +fixed_frame_size -ab 256k -af asf2sf,atrim=start_sample=0:end_sample=12096
 
 # With coupling and rematrixing disabled, this produces bap=0, dexp=24 bins
 # whose dither affects the decoded output.
@@ -170,7 +170,7 @@ tests/data/fate/ac3-fixed-dexp24.ac3: ffmpeg$(PROGSSUF)$(EXESUF) | tests/data/fa
 	-channel_coupling 0 -stereo_rematrixing 0 -flags +bitexact \
 	-frames:a 173 -f ac3 -y $(TARGET_PATH)/$@
 
-FATE_AC3_FIXED_DEXP24-$(call ALLYES, FFMPEG WAV_DEMUXER ARESAMPLE_FILTER ATRIM_FILTER \
+FATE_AC3_FIXED_DEXP24-$(call ALLYES, FFMPEG WAV_DEMUXER ASF2SF_FILTER ATRIM_FILTER \
                                     AC3_FIXED_ENCODER FRAMECRC_MUXER \
                                     AC3_MUXER AC3_DEMUXER AC3_FIXED_DECODER \
                                     PCM_S16LE_DECODER PCM_S16LE_ENCODER \
@@ -198,7 +198,7 @@ tests/data/fate/ac3-silence.f32: ffmpeg$(PROGSSUF)$(EXESUF) | tests/data/fate
 	-f f32le -y $(TARGET_PATH)/$@ 2>/dev/null
 
 FATE_AC3_DITHER-$(call ALLYES, FFMPEG LAVFI_INDEV ANULLSRC_FILTER ATRIM_FILTER \
-                               ARESAMPLE_FILTER AC3_FIXED_ENCODER AC3_MUXER \
+                               ASF2SF_FILTER AC3_FIXED_ENCODER AC3_MUXER \
                                AC3_DEMUXER AC3_DECODER PCM_F32LE_ENCODER \
                                PCM_F32LE_MUXER FILE_PROTOCOL PIPE_PROTOCOL) += fate-ac3-float-dither
 fate-ac3-float-dither: tests/data/fate/ac3-silence.ac3 tests/data/fate/ac3-silence.f32

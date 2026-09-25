@@ -22,7 +22,7 @@ FATE_LAVF_CONTAINER-$(call ENCDEC,  MP2,                   WTV)                +
 
 FATE_LAVF_CONTAINER_RESAMPLE := asf avi dv_pal dv_ntsc gxf_pal gxf_ntsc  \
                                 mkv mkv_attachment mpg mxf nut rm ts wtv
-FATE_LAVF_CONTAINER-$(!CONFIG_ARESAMPLE_FILTER) := $(filter-out $(FATE_LAVF_CONTAINER_RESAMPLE),$(FATE_LAVF_CONTAINER-yes))
+FATE_LAVF_CONTAINER-$(!CONFIG_ARDFTSRC_FILTER) := $(filter-out $(FATE_LAVF_CONTAINER_RESAMPLE),$(FATE_LAVF_CONTAINER-yes))
 
 FATE_LAVF_CONTAINER_SCALE := dv dv_pal dv_ntsc flm gxf gxf_pal gxf_ntsc \
                              mxf_dv25 mxf_dvcpro50 mxf_dvcpro100 mxf_d10 \
@@ -39,13 +39,13 @@ $(FATE_LAVF_CONTAINER): $(AREF) $(VREF)
 fate-lavf-asf: CMD = lavf_container "" "-c:a mp2 -ar 44100" "-r 25"
 fate-lavf-avi fate-lavf-nut: CMD = lavf_container "" "-c:a mp2 -ar 44100 -threads 1"
 fate-lavf-dv:  CMD = lavf_container "-ar 48000 -channel_layout stereo" "-r 25 -s pal"
-fate-lavf-dv_pal:  CMD = lavf_container_timecode_nodrop "-af aresample=48000:tsf=s16p -r 25 -s pal -ac 2 -f dv"
-fate-lavf-dv_ntsc:  CMD = lavf_container_timecode_drop "-af aresample=48000:tsf=s16p -pix_fmt yuv411p -s ntsc -ac 2 -f dv"
+fate-lavf-dv_pal:  CMD = lavf_container_timecode_nodrop "-af ardftsrc=48000,asetnsamples=512:0 -r 25 -s pal -ac 2 -f dv"
+fate-lavf-dv_ntsc:  CMD = lavf_container_timecode_drop "-af ardftsrc=48000,asetnsamples=512:0 -pix_fmt yuv411p -s ntsc -ac 2 -f dv"
 fate-lavf-flv fate-lavf-swf: CMD = lavf_container "" "-an"
 fate-lavf-flm: CMD = lavf_container "" "-pix_fmt rgba"
 fate-lavf-gxf: CMD = lavf_container "-ar 48000" "-r 25 -s pal -ac 1 -threads 1"
-fate-lavf-gxf_pal: CMD = lavf_container_timecode_nodrop "-af aresample=48000:tsf=s16p -r 25 -s pal -ac 1 -threads 1 -f gxf"
-fate-lavf-gxf_ntsc: CMD = lavf_container_timecode_drop "-af aresample=48000:tsf=s16p -s ntsc -ac 1 -threads 1 -f gxf"
+fate-lavf-gxf_pal: CMD = lavf_container_timecode_nodrop "-af ardftsrc=48000,asetnsamples=512:0 -r 25 -s pal -ac 1 -threads 1 -f gxf"
+fate-lavf-gxf_ntsc: CMD = lavf_container_timecode_drop "-af ardftsrc=48000,asetnsamples=512:0 -s ntsc -ac 1 -threads 1 -f gxf"
 fate-lavf-ismv: CMD = lavf_container_timecode "-an -write_tmcd 1 -c:v mpeg4 -threads 1"
 fate-lavf-mkv: CMD = lavf_container "" "-c:a mp2 -c:v mpeg4 -ar 44100 -threads 1"
 fate-lavf-mkv_attachment: CMD = lavf_container_attach "-c:a mp2 -c:v mpeg4 -threads 1 -f matroska"
@@ -54,7 +54,7 @@ fate-lavf-mov_rtphint: CMD = lavf_container "" "-movflags +rtphint -c:a pcm_alaw
 fate-lavf-mov_hybrid_frag: CMD = lavf_container "" "-movflags +hybrid_fragmented -c:a pcm_alaw -c:v mpeg4 -threads 1 -f mov"
 fate-lavf-mp4: CMD = lavf_container_timecode "-c:v mpeg4 -an -threads 1"
 fate-lavf-mpg: CMD = lavf_container_timecode "-ar 44100 -threads 1"
-fate-lavf-mxf: CMD = lavf_container_timecode "-af aresample=48000:tsf=s16p -bf 2 -threads 1"
+fate-lavf-mxf: CMD = lavf_container_timecode "-af ardftsrc=48000,asetnsamples=512:0 -bf 2 -threads 1"
 fate-lavf-mxf_d10: CMD = lavf_container "-ar 48000 -ac 2" "-r 25 -vf scale=720:576,pad=720:608:0:32,setfield=tff -c:v mpeg2video -g 0 -flags +ildct+low_delay -intra_dc_precision 2 -non_linear_quant 1 -intra_vlc 1 -qscale 1 -ps 1 -qmin 1 -rc_max_vbv_use 1 -rc_min_vbv_use 1 -pix_fmt yuv422p -minrate 30000k -maxrate 30000k -b 30000k -bufsize 1200000 -rc_init_occupancy 1200000 -qmax 12 -f mxf_d10"
 fate-lavf-mxf_dv25: CMD = lavf_container "-ar 48000 -ac 2" "-r 25 -vf scale=720:576,setdar=4/3,setfield=bff -c:v dvvideo -pix_fmt yuv420p -b 25000k -f mxf"
 fate-lavf-mxf_dvcpro50: CMD = lavf_container "-ar 48000 -ac 2" "-r 25 -vf scale=720:576,setdar=16/9,setfield=bff -c:v dvvideo -pix_fmt yuv422p -b 50000k -f mxf"
@@ -86,8 +86,8 @@ FATE_LAVF_CONTAINER_FATE-$(call CRC, MATROSKA OGG, VP8 VORBIS, VORBIS_PARSER OGV
 FATE_LAVF_CONTAINER_FATE-$(call CRC, MOV AAC, AAC, ADTS_MUXER) += adts
 FATE_LAVF_CONTAINER_FATE-$(call CRC, MOV LOAS, AAC_LATM, LATM_MUXER) += latm
 FATE_LAVF_CONTAINER_FATE-$(call CRC, MP3,,               MP3_MUXER)  += mp3
-FATE_LAVF_CONTAINER_FATE-$(call CRC, MOV, QTRLE MACE6,         MOV_MUXER ARESAMPLE_FILTER) += qtrle_mace6.mov
-FATE_LAVF_CONTAINER_FATE-$(call CRC, AVI, MSVIDEO1 PCM_U8,     AVI_MUXER ARESAMPLE_FILTER) += cram.avi
+FATE_LAVF_CONTAINER_FATE-$(call CRC, MOV, QTRLE MACE6,         MOV_MUXER ARDFTSRC_FILTER) += qtrle_mace6.mov
+FATE_LAVF_CONTAINER_FATE-$(call CRC, AVI, MSVIDEO1 PCM_U8,     AVI_MUXER ARDFTSRC_FILTER) += cram.avi
 FATE_LAVF_CONTAINER_FATE-$(call CRC, AVI,,               FLV_DEMUXER FLV_MUXER)            += hevc.flv
 
 FATE_LAVF_CONTAINER_FATE = $(FATE_LAVF_CONTAINER_FATE-yes:%=fate-lavf-fate-%)

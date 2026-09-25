@@ -132,7 +132,6 @@ Component options:
   --disable-avdevice       disable libavdevice build
   --disable-avcodec        disable libavcodec build
   --disable-avformat       disable libavformat build
-  --disable-swresample     disable libswresample build
   --disable-swscale        disable libswscale build
   --disable-avfilter       disable libavfilter build
   --disable-pthreads       disable pthreads [autodetect]
@@ -2210,7 +2209,6 @@ LIBRARY_LIST="
     swscale
     avformat
     avcodec
-    swresample
     avutil
 "
 
@@ -4096,7 +4094,6 @@ libzmq_protocol_select="network"
 
 # filters
 amovie_filter_deps="avcodec avformat"
-aresample_filter_deps="swresample"
 asr_filter_deps="pocketsphinx"
 ass_filter_deps="libass"
 avgblur_opencl_filter_deps="opencl"
@@ -4274,10 +4271,10 @@ hw_decode_example_deps="avcodec avformat avutil"
 mux_example_deps="avcodec avformat avutil swscale"
 qsv_decode_example_deps="avcodec avutil libmfx h264_qsv_decoder"
 remux_example_deps="avcodec avformat avutil"
-resample_audio_example_deps="avutil swresample"
+resample_audio_example_deps="avutil avfilter"
 scale_video_example_deps="avutil swscale"
 show_metadata_example_deps="avformat avutil"
-transcode_aac_example_deps="avcodec avformat swresample"
+transcode_aac_example_deps="avcodec avformat avfilter"
 transcode_example_deps="avfilter avcodec avformat avutil"
 vaapi_encode_example_deps="avcodec avutil h264_vaapi_encoder"
 vaapi_transcode_example_deps="avcodec avformat avutil h264_vaapi_encoder"
@@ -4297,8 +4294,6 @@ avfilter_suggest="libm stdatomic"
 avformat_deps="avcodec avutil"
 avformat_suggest="libm network zlib stdatomic"
 avutil_suggest="clock_gettime ffnvcodec gcrypt libm libdrm libmfx opencl openssl user32 vaapi vulkan videotoolbox corefoundation corevideo coremedia bcrypt stdatomic"
-swresample_deps="avutil"
-swresample_suggest="libm libsoxr stdatomic"
 swscale_deps="avutil"
 swscale_suggest="libm stdatomic int128"
 shader_compression_suggest="zlib"
@@ -4313,7 +4308,7 @@ ffmpeg_select="aformat_filter anull_filter atrim_filter crop_filter
                format_filter hflip_filter null_filter rotate_filter
                transpose_filter trim_filter vflip_filter"
 ffmpeg_suggest="ole32 psapi shell32"
-ffplay_deps="avcodec avformat avfilter swscale swresample sdl2"
+ffplay_deps="avcodec avformat avfilter swscale sdl2"
 ffplay_select="crop_filter transpose_filter hflip_filter vflip_filter rotate_filter lcevc_merge_bsf"
 ffplay_suggest="shell32 libplacebo vulkan"
 ffprobe_deps="avcodec avformat"
@@ -7817,7 +7812,7 @@ check_disable_warning_headers -Wno-deprecated-declarations
 check_disable_warning_headers -Wno-unused-variable
 
 # add some linker flags
-check_ldflags -Wl,-rpath-link=:libswresample:libswscale:libavfilter:libavdevice:libavformat:libavcodec:libavutil
+check_ldflags -Wl,-rpath-link=:libswscale:libavfilter:libavdevice:libavformat:libavcodec:libavutil
 enabled rpath && add_ldexeflags -Wl,-rpath,$libdir && add_ldsoflags -Wl,-rpath,$libdir
 test_ldflags -Wl,-Bsymbolic && append SHFLAGS -Wl,-Bsymbolic
 
@@ -8149,7 +8144,6 @@ enabled zlib && add_cppflags -DZLIB_CONST
 
 # conditional library dependencies, in any order
 enabled lavfi_indev         && prepend avdevice_deps "avfilter"
-enabled aresample_filter    && prepend avfilter_deps "swresample"
 enabled sab_filter          && prepend avfilter_deps "swscale"
 enabled scale_filter        && prepend avfilter_deps "swscale"
 enabled scale2ref_filter    && prepend avfilter_deps "swscale"
@@ -8756,7 +8750,6 @@ extralibs_avformat="$avformat_extralibs"
 extralibs_avdevice="$avdevice_extralibs"
 extralibs_avfilter="$avfilter_extralibs"
 extralibs_swscale="$swscale_extralibs"
-extralibs_swresample="$swresample_extralibs"
 EOF
 
 for lib in $LIBRARY_LIST; do

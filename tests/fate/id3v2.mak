@@ -75,8 +75,8 @@ fate-id3v2-chapters: CMD = transcode wav $(TARGET_SAMPLES)/wav/200828-005.wav ai
 
 # Tests reading and writing UTF-16 BOM strings; also tests
 # the AIFF muxer's and demuxer's ability to preserve channel layouts.
-FATE_ID3V2_FFMPEG_FFPROBE-$(call REMUX, AIFF, WAV_DEMUXER FLAC_DEMUXER PCM_S16LE_DECODER MJPEG_DECODER ARESAMPLE_FILTER CHANNELMAP_FILTER PCM_S24BE_ENCODER) += fate-id3v2-utf16-bom
-fate-id3v2-utf16-bom: CMD = transcode wav $(TARGET_SAMPLES)/audio-reference/yo.raw-short.wav aiff "-map 0:a -map 1:v -af aresample,channelmap=channel_layout=hexagonal,aresample -c:a pcm_s24be -c:v copy -write_id3v2 1 -id3v2_version 3 -map_metadata:g:0 1:g -map_metadata:s:v 1:g" "-c copy -t 0.05" "-show_entries stream=channel_layout:stream_tags:format_tags" "-i $(TARGET_SAMPLES)/cover_art/cover_art.flac"
+FATE_ID3V2_FFMPEG_FFPROBE-$(call REMUX, AIFF, WAV_DEMUXER FLAC_DEMUXER PCM_S16LE_DECODER MJPEG_DECODER ASF2SF_FILTER CHANNELMAP_FILTER PCM_S24BE_ENCODER) += fate-id3v2-utf16-bom
+fate-id3v2-utf16-bom: CMD = transcode wav $(TARGET_SAMPLES)/audio-reference/yo.raw-short.wav aiff "-map 0:a -map 1:v -af asf2sf,channelmap=channel_layout=hexagonal,asf2sf -c:a pcm_s24be -c:v copy -write_id3v2 1 -id3v2_version 3 -map_metadata:g:0 1:g -map_metadata:s:v 1:g" "-c copy -t 0.05" "-show_entries stream=channel_layout:stream_tags:format_tags" "-i $(TARGET_SAMPLES)/cover_art/cover_art.flac"
 
 # MusicMatch tools embed artist bio etc. as COMM frames with a descriptor.
 FATE_ID3V2_FFPROBE-$(CONFIG_ASF_DEMUXER) += fate-id3v2-wma-comm
