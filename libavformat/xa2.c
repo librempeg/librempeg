@@ -33,7 +33,7 @@ static int read_probe(const AVProbeData *p)
         (int)AV_RL32(p->buf) >= INT_MAX/0x1000)
         return 0;
 
-    if (p->buf_size < 0x1000)
+    if (p->buf_size < 0x2000)
         return 0;
     return FFMIN(AVPROBE_SCORE_MAX, ff_psx_probe(p->buf, 0x800, p->buf_size));
 }
