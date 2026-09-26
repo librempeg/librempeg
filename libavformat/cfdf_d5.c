@@ -87,11 +87,20 @@ typedef struct CFDFD5MoveSound {
     int pan;
 } CFDFD5MoveSound;
 
+typedef struct CFDFD5MoveFrame {
+    int      scene_base;
+    int      scene;
+    int      mfrm_id;
+    int      step_id;
+    int64_t  scene_start;
+    int64_t  pts;
+    int      duration;
+} CFDFD5MoveFrame;
+
 typedef struct CFDFD5MoveTimeline {
     int64_t *container_pts;
-    int     *frame_duration;
-    int     *frame_nominal;
-    uint8_t *frame_flags;
+    CFDFD5MoveFrame *frames;
+    int      nb_frames;
     int64_t  total_ticks;
     int      hold_frames;
     int      max_hold_ticks;
@@ -108,7 +117,9 @@ static int read_probe(const AVProbeData *p)
 
     m20 = AV_RB32(p->buf + 0x20);
     m24 = AV_RB32(p->buf + 0x24);
-    if (!((m20 == MKTAG('M','O','V','E') && m24 == MKTAG('D','5','M','E')) ||
+    if (!((m20 == MKTAG('M','O','V','E') &&
+           (m24 == MKTAG('D','5','M','E') ||
+            m24 == MKTAG('D','F','M','E'))) ||
           (m20 == MKTAG('T','R','A','K') && m24 == MKTAG('D','5','S','T'))))
         return 0;
 
@@ -123,6 +134,12 @@ static int is_id_at(AVIOContext *pb, int64_t off, uint32_t id)
 {
     avio_seek(pb, off, SEEK_SET);
     return avio_rb32(pb) == id;
+}
+
+static int is_d5_id_at(AVIOContext *pb, int64_t off, uint32_t id)
+{
+    avio_seek(pb, off + 0x08, SEEK_SET);
+    return avio_rl32(pb) == 0x00050000 && avio_rb32(pb) == id;
 }
 
 /* All authored timing uses this frame duration. */
@@ -507,6 +524,43 @@ static int move_scene_resource(AVIOContext *pb, int64_t fsize, int containers,
     return resource;
 }
 
+static int move_scene_frame_count(AVIOContext *pb, int64_t fsize,
+                                  const int64_t *coffs, int scene_base)
+{
+    int64_t H = coffs[scene_base] + 0x08;
+    uint32_t count, size;
+
+    avio_seek(pb, coffs[scene_base] + 0x04, SEEK_SET);
+    size = avio_rl32(pb);
+    if (size < 0x7c || H + size > fsize)
+        return AVERROR_INVALIDDATA;
+
+    avio_seek(pb, H + 0x78, SEEK_SET);
+    count = avio_rl32(pb);
+    if (count > DF_MAX_CHUNKS ||
+        0x7c + (int64_t)count * 0x2e > size)
+        return AVERROR_INVALIDDATA;
+
+    return count;
+}
+
+static int move_frame_resource(AVIOContext *pb, int64_t fsize, int containers,
+                               const int64_t *coffs, int scene_base,
+                               int frame, int field, uint32_t id)
+{
+    int64_t H = coffs[scene_base] + 0x08;
+    int64_t resource;
+
+    avio_seek(pb, H + 0x7c + (int64_t)frame * 0x2e + field, SEEK_SET);
+    resource = (int64_t)scene_base + avio_rl32(pb);
+    if (resource < 0 || resource >= containers || coffs[resource] <= 0 ||
+        coffs[resource] + 0x10 > fsize ||
+        !is_d5_id_at(pb, coffs[resource], id))
+        return AVERROR_INVALIDDATA;
+
+    return resource;
+}
+
 /* Parse the authored theme order and optional tail loop. */
 static int read_theme_move(AVFormatContext *s, int containers, const int64_t *coffs,
                            int theme_id, int scene_base,
@@ -732,66 +786,40 @@ static int read_theme_trak(AVFormatContext *s, int containers, const int64_t *co
     return 0;
 }
 
-/* Scan the container table for STEP video frames and, if any, add a PAL8 video
- * stream emitting one packet per frame (payload base = container + 0x08, which
- * is the "this" structure the decoder parses). Returns 1 if a stream was added,
- * 0 if there is no video, <0 on fatal error. */
-static int build_video_stream(AVFormatContext *s, int containers,
-                              const int64_t *coffs, int64_t fsize,
+/* Add the STEP resources selected by the authored MHED frame directory. */
+static int build_video_stream(AVFormatContext *s, const int64_t *coffs,
+                              int64_t fsize,
                               const CFDFD5MoveTimeline *timeline)
 {
     AVIOContext *pb = s->pb;
     CFDFD5Block *blocks = NULL;
     CFDFD5Stream *cs;
     AVStream *st;
-    int nb = 0, width = 0, height = 0, default_ticks = 4;
-    int pending_ticks = 4, pending_is_hold = 0;
-    int pending_hold_ticks = 0;
-    int hold_frames = 0, max_hold_ticks = 0;
+    int nb = 0, width = 0, height = 0;
     int64_t total = 0;
 
-    for (int i = 0; i < containers; i++) {
+    if (!timeline)
+        return 0;
+
+    for (int frame = 0; frame < timeline->nb_frames; frame++) {
+        int i = timeline->frames[frame].step_id;
         uint32_t csize;
         CFDFD5Block *nbk;
         int64_t base;
 
-        if (coffs[i] <= 0 || coffs[i] + 0x10 > fsize)
-            continue;
-        if (is_id_at(pb, coffs[i] + 0x0C, MKTAG('M','H','E','D'))) {
-            avio_seek(pb, coffs[i] + 0x08 + 0x1c, SEEK_SET);
-            default_ticks = avio_rl32(pb);
-            if (default_ticks <= 0 || default_ticks > 0xffff)
-                default_ticks = 4;
-            pending_ticks = default_ticks;
-            pending_is_hold = 0;
-            pending_hold_ticks = 0;
-            continue;
-        }
-        if (is_id_at(pb, coffs[i] + 0x0C, MKTAG('M','F','R','M'))) {
-            int nominal = timeline && timeline->frame_nominal[i] > 0 ?
-                          timeline->frame_nominal[i] :
-                          mfrm_duration_ticks(pb, coffs[i], fsize,
-                                              default_ticks);
-
-            pending_ticks = timeline && timeline->frame_duration[i] > 0 ?
-                            timeline->frame_duration[i] : nominal;
-            pending_is_hold = timeline ?
-                              !!(timeline->frame_flags[i] &
-                                 CFDF_D5_MFRM_HOLD) :
-                              !!(mfrm_flags(pb, coffs[i], fsize) &
-                                 CFDF_D5_MFRM_HOLD);
-            pending_hold_ticks = FFMAX(0, pending_ticks - nominal);
-            continue;
-        }
         if (coffs[i] + 0x428 > fsize ||
-            !is_id_at(pb, coffs[i] + 0x0C, MKTAG('S','T','E','P')))
-            continue;
+            !is_d5_id_at(pb, coffs[i], MKTAG('S','T','E','P'))) {
+            av_freep(&blocks);
+            return AVERROR_INVALIDDATA;
+        }
 
         avio_seek(pb, coffs[i] + 0x04, SEEK_SET);
         csize = avio_rl32(pb);
         base  = coffs[i] + 0x08;
-        if (csize < 0x428 || base + csize > fsize)
-            continue;
+        if (csize < 0x428 || base + csize > fsize) {
+            av_freep(&blocks);
+            return AVERROR_INVALIDDATA;
+        }
 
         if (nb == 0) {
             avio_seek(pb, base + 0x20, SEEK_SET);
@@ -811,25 +839,13 @@ static int build_video_stream(AVFormatContext *s, int containers,
         blocks = nbk;
         blocks[nb].offset     = base;
         blocks[nb].size       = csize;
-        blocks[nb].nb_samples = pending_ticks;
-        total += pending_ticks;
+        blocks[nb].nb_samples = timeline->frames[frame].duration;
+        total += timeline->frames[frame].duration;
         nb++;
-        if (pending_is_hold && !timeline) {
-            hold_frames++;
-            max_hold_ticks = FFMAX(max_hold_ticks, pending_hold_ticks);
-        }
-        pending_ticks = default_ticks;
-        pending_is_hold = 0;
-        pending_hold_ticks = 0;
     }
 
     if (nb == 0)
         return 0;
-
-    if (timeline) {
-        hold_frames = timeline->hold_frames;
-        max_hold_ticks = timeline->max_hold_ticks;
-    }
 
     st = avformat_new_stream(s, NULL);
     if (!st) { av_freep(&blocks); return AVERROR(ENOMEM); }
@@ -850,9 +866,10 @@ static int build_video_stream(AVFormatContext *s, int containers,
     st->nb_frames            = nb;
 
     avpriv_set_pts_info(st, 64, 1, 60);
-    av_dict_set_int(&st->metadata, "cfdf_d5_hold_frames", hold_frames, 0);
+    av_dict_set_int(&st->metadata, "cfdf_d5_hold_frames",
+                    timeline->hold_frames, 0);
     av_dict_set_int(&st->metadata, "cfdf_d5_max_hold_ticks",
-                    max_hold_ticks, 0);
+                    timeline->max_hold_ticks, 0);
 
     if (total > 0) {
         AVRational fr;
@@ -1128,9 +1145,7 @@ static int find_move_sound(AVFormatContext *s, int containers,
 static void free_move_timeline(CFDFD5MoveTimeline *timeline)
 {
     av_freep(&timeline->container_pts);
-    av_freep(&timeline->frame_duration);
-    av_freep(&timeline->frame_nominal);
-    av_freep(&timeline->frame_flags);
+    av_freep(&timeline->frames);
     memset(timeline, 0, sizeof(*timeline));
 }
 
@@ -1164,61 +1179,98 @@ static int build_move_timeline(AVFormatContext *s, int containers,
                                CFDFD5MoveTimeline *timeline)
 {
     AVIOContext *pb = s->pb;
-    int scene_base = 0, msnd_id = -1, default_ticks = 4;
-    int64_t pts = 0, fixed_end = 0;
+    int scene = -1;
+    int64_t pts = 0;
 
     timeline->container_pts = av_calloc(containers,
                                         sizeof(*timeline->container_pts));
-    timeline->frame_duration = av_calloc(containers,
-                                         sizeof(*timeline->frame_duration));
-    timeline->frame_nominal = av_calloc(containers,
-                                        sizeof(*timeline->frame_nominal));
-    timeline->frame_flags = av_calloc(containers,
-                                      sizeof(*timeline->frame_flags));
-    if (!timeline->container_pts || !timeline->frame_duration ||
-        !timeline->frame_nominal || !timeline->frame_flags) {
+    if (!timeline->container_pts) {
         free_move_timeline(timeline);
         return AVERROR(ENOMEM);
     }
 
-    for (int i = 0; i < containers; i++) {
+    for (int scene_base = 0; scene_base < containers; scene_base++) {
+        CFDFD5MoveFrame *frames;
+        int64_t fixed_end = 0, scene_start;
+        int default_ticks, frame_count, msnd_id, next_scene;
         int64_t H;
 
-        timeline->container_pts[i] = pts;
-        if (coffs[i] <= 0 || coffs[i] + 0x10 > fsize)
+        timeline->container_pts[scene_base] = pts;
+        if (coffs[scene_base] <= 0 || coffs[scene_base] + 0x10 > fsize ||
+            !is_d5_id_at(pb, coffs[scene_base], MKTAG('M','H','E','D')))
             continue;
-        H = coffs[i] + 0x08;
+        H = coffs[scene_base] + 0x08;
+        scene++;
+        scene_start = pts;
+        msnd_id = move_scene_resource(pb, fsize, containers, coffs,
+                                      scene_base, 0x60,
+                                      MKTAG('M','S','N','D'));
+        avio_seek(pb, H + 0x1c, SEEK_SET);
+        default_ticks = avio_rl32(pb);
+        if (default_ticks <= 0 || default_ticks > 0xffff)
+            default_ticks = 4;
 
-        if (is_id_at(pb, coffs[i] + 0x0c, MKTAG('M','H','E','D'))) {
-            scene_base = i;
-            msnd_id = move_scene_resource(pb, fsize, containers, coffs,
-                                          scene_base, 0x60,
-                                          MKTAG('M','S','N','D'));
-            fixed_end = 0;
-            avio_seek(pb, H + 0x1c, SEEK_SET);
-            default_ticks = avio_rl32(pb);
-            if (default_ticks <= 0 || default_ticks > 0xffff)
-                default_ticks = 4;
-            continue;
+        frame_count = move_scene_frame_count(pb, fsize, coffs, scene_base);
+        if (frame_count < 0) {
+            free_move_timeline(timeline);
+            return frame_count;
         }
+        if (timeline->nb_frames > DF_MAX_CHUNKS - frame_count) {
+            free_move_timeline(timeline);
+            return AVERROR_INVALIDDATA;
+        }
+        frames = av_realloc_array(timeline->frames,
+                                  timeline->nb_frames + frame_count,
+                                  sizeof(*timeline->frames));
+        if (!frames && frame_count > 0) {
+            free_move_timeline(timeline);
+            return AVERROR(ENOMEM);
+        }
+        timeline->frames = frames;
 
-        if (is_id_at(pb, coffs[i] + 0x0c, MKTAG('M','F','R','M'))) {
+        next_scene = containers;
+        for (int i = scene_base + 1; i < containers; i++) {
+            if (coffs[i] > 0 && coffs[i] + 0x10 <= fsize &&
+                is_d5_id_at(pb, coffs[i], MKTAG('M','H','E','D'))) {
+                next_scene = i;
+                break;
+            }
+        }
+        for (int i = scene_base; i < next_scene; i++)
+            timeline->container_pts[i] = scene_start;
+
+        for (int index = 0; index < frame_count; index++) {
+            CFDFD5MoveFrame *frame;
             CFDFD5MoveSound sound;
             char name[DF_NAME_SIZE];
             uint32_t size;
+            int mfrm_id, step_id;
             int flags, nominal;
             int64_t duration, frame_end;
 
-            nominal = mfrm_duration_ticks(pb, coffs[i], fsize,
+            step_id = move_frame_resource(pb, fsize, containers, coffs,
+                                          scene_base, index, 0x10,
+                                          MKTAG('S','T','E','P'));
+            mfrm_id = move_frame_resource(pb, fsize, containers, coffs,
+                                          scene_base, index, 0x14,
+                                          MKTAG('M','F','R','M'));
+            if (step_id < 0 || mfrm_id < 0) {
+                free_move_timeline(timeline);
+                return AVERROR_INVALIDDATA;
+            }
+
+            nominal = mfrm_duration_ticks(pb, coffs[mfrm_id], fsize,
                                           default_ticks);
-            flags = mfrm_flags(pb, coffs[i], fsize);
+            flags = mfrm_flags(pb, coffs[mfrm_id], fsize);
             duration = nominal;
 
-            avio_seek(pb, coffs[i] + 0x04, SEEK_SET);
+            avio_seek(pb, coffs[mfrm_id] + 0x04, SEEK_SET);
             size = avio_rl32(pb);
             name[0] = '\0';
-            if (size >= 0x2b && H + size <= fsize)
-                read_pstring(pb, H + 0x2a, H + size, name, sizeof(name));
+            if (size >= 0x2b && coffs[mfrm_id] + 0x08 + size <= fsize)
+                read_pstring(pb, coffs[mfrm_id] + 0x08 + 0x2a,
+                             coffs[mfrm_id] + 0x08 + size,
+                             name, sizeof(name));
 
             if (name[0] && msnd_id >= 0 &&
                 find_move_sound(s, containers, coffs, msnd_id,
@@ -1254,11 +1306,20 @@ static int build_move_timeline(AVFormatContext *s, int containers,
                 return AVERROR_INVALIDDATA;
             }
 
-            timeline->frame_nominal[i] = nominal;
-            timeline->frame_duration[i] = (int)duration;
-            timeline->frame_flags[i] = flags;
+            frame = &timeline->frames[timeline->nb_frames++];
+            frame->scene_base = scene_base;
+            frame->scene = scene;
+            frame->mfrm_id = mfrm_id;
+            frame->step_id = step_id;
+            frame->scene_start = scene_start;
+            frame->pts = pts;
+            frame->duration = (int)duration;
+            timeline->container_pts[mfrm_id] = pts;
+            timeline->container_pts[step_id] = pts;
             pts += duration;
         }
+
+        scene_base = next_scene - 1;
     }
 
     timeline->total_ticks = pts;
@@ -1271,31 +1332,26 @@ static int build_move_sfx_streams(AVFormatContext *s, int containers,
                                   const CFDFD5MoveTimeline *timeline)
 {
     AVIOContext *pb = s->pb;
-    int scene_base = 0, scene = -1, msnd_id = -1;
-    int64_t scene_start = 0;
+    int scene_base = -1, msnd_id = -1;
 
-    for (int i = 0; i < containers; i++) {
+    for (int index = 0; index < timeline->nb_frames; index++) {
+        const CFDFD5MoveFrame *frame = &timeline->frames[index];
+        int i = frame->mfrm_id;
         int64_t H;
 
-        if (coffs[i] <= 0 || coffs[i] + 0x10 > fsize)
-            continue;
         H = coffs[i] + 0x08;
 
-        if (is_id_at(pb, coffs[i] + 0x0c, MKTAG('M','H','E','D'))) {
-            scene_base = i;
-            scene++;
-            scene_start = timeline->container_pts[i];
+        if (scene_base != frame->scene_base) {
+            scene_base = frame->scene_base;
             msnd_id = move_scene_resource(pb, fsize, containers, coffs,
                                           scene_base, 0x60,
                                           MKTAG('M','S','N','D'));
-            continue;
         }
-        if (is_id_at(pb, coffs[i] + 0x0c, MKTAG('M','F','R','M'))) {
+        {
             uint32_t size;
             char name[DF_NAME_SIZE];
             CFDFD5MoveSound sound;
             AVStream *st;
-            int64_t frame_pts = timeline->container_pts[i];
             int ret;
 
             avio_seek(pb, coffs[i] + 0x04, SEEK_SET);
@@ -1309,7 +1365,7 @@ static int build_move_sfx_streams(AVFormatContext *s, int containers,
                                       scene_base, fsize, name, &sound);
                 if (ret >= 0) {
                     ret = build_soun_stream(s, coffs[sound.soun_id], name,
-                                            "sfx", frame_pts);
+                                            "sfx", frame->pts);
                     if (ret < 0)
                         return ret;
                     if (ret > 0) {
@@ -1321,11 +1377,11 @@ static int build_move_sfx_streams(AVFormatContext *s, int containers,
                         av_dict_set_int(&st->metadata, "cfdf_d5_msnd_index",
                                         sound.index, 0);
                         av_dict_set_int(&st->metadata, "cfdf_d5_scene",
-                                        FFMAX(scene, 0), 0);
+                                        frame->scene, 0);
                         av_dict_set_int(&st->metadata, "cfdf_d5_scene_start",
-                                        scene_start, 0);
+                                        frame->scene_start, 0);
                         av_dict_set_int(&st->metadata, "cfdf_d5_start_ticks",
-                                        frame_pts, 0);
+                                        frame->pts, 0);
                         av_dict_set_int(&st->metadata, "cfdf_d5_pan",
                                         sound.pan, 0);
                         av_dict_set_int(&st->metadata, "cfdf_d5_loop",
@@ -1535,6 +1591,14 @@ static int read_header(AVFormatContext *s)
     avio_seek(pb, DF_HEADER_SIZE, SEEK_SET);
     for (int i = 0; i < containers; i++)
         coffs[i] = avio_rl32(pb);
+
+    if (!is_trak &&
+        (coffs[0] <= 0 || coffs[0] + 0x10 > fsize ||
+         !is_d5_id_at(pb, coffs[0], MKTAG('M','H','E','D')))) {
+        ret = AVERROR_INVALIDDATA;
+        goto end;
+    }
+
     for (int i = 0; i < containers; i++) {
         if (coffs[i] <= 0 || coffs[i] + 0x30 > fsize)
             continue;
@@ -1608,7 +1672,7 @@ static int read_header(AVFormatContext *s)
     }
 
 video:
-    ret = build_video_stream(s, containers, coffs, fsize,
+    ret = build_video_stream(s, coffs, fsize,
                              is_trak ? NULL : &timeline);
     if (ret < 0)
         goto end;
