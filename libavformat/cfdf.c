@@ -328,7 +328,7 @@ static int mov_read_early_header(AVFormatContext *s, int containers,
             palette_off = 0x22;
             frame_off   = 0x8a2;
         } else {
-            avio_seek(pb, hdr + 2, SEEK_SET);
+            avio_seek(pb, hdr + (ctx->big_endian ? 0 : 2), SEEK_SET);
             if (cfdf_r16(s) != 1) {
                 ret = AVERROR_INVALIDDATA;
                 goto fail;
@@ -629,13 +629,16 @@ static int mov_read_early_header(AVFormatContext *s, int containers,
         st->duration             = total;
         st->nb_frames            = nvb;
         st->codecpar->extradata =
-            av_mallocz(AVPALETTE_SIZE + AV_INPUT_BUFFER_PADDING_SIZE);
+            av_mallocz(AVPALETTE_SIZE + ctx->big_endian + AV_INPUT_BUFFER_PADDING_SIZE);
         if (!st->codecpar->extradata) {
             ret = AVERROR(ENOMEM);
             goto fail;
         }
         memcpy(st->codecpar->extradata, ctx->palettes, AVPALETTE_SIZE);
-        st->codecpar->extradata_size = AVPALETTE_SIZE;
+        /* Preserve the encoding of back-references inside the frame payload. */
+        if (ctx->big_endian)
+            st->codecpar->extradata[AVPALETTE_SIZE] = 1;
+        st->codecpar->extradata_size = AVPALETTE_SIZE + ctx->big_endian;
         avpriv_set_pts_info(st, 64, 1, 60);
         if (total > 0)
             av_reduce(&st->avg_frame_rate.num, &st->avg_frame_rate.den,
@@ -1662,7 +1665,7 @@ static int read_header(AVFormatContext *s)
 
             avio_seek(pb, c0 + 4, SEEK_SET);
             csize0 = cfdf_r32(s);
-            avio_seek(pb, hdr + 2, SEEK_SET);
+            avio_seek(pb, hdr + (ctx->big_endian ? 0 : 2), SEEK_SET);
             revision = cfdf_r16(s);
             avio_seek(pb, hdr + 0x18, SEEK_SET);
             count = cfdf_r16(s);

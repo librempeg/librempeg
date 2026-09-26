@@ -80,6 +80,7 @@ typedef struct CFDFVideoContext {
     int      screen_w, screen_h; /* v4: fixed output screen (segment 0 window) */
     int      have_ref;      /* a reference frame has been built (P-frames follow) */
     int      packet_mode;
+    int      big_endian;
     uint32_t pal[256];
 } CFDFVideoContext;
 
@@ -343,7 +344,7 @@ static int df_decode_step(CFDFVideoContext *c, int height, int width,
 
                 if (src_end - s < 2)
                     return AVERROR_INVALIDDATA;
-                off = (unsigned)s[0] | (s[1] << 8);
+                off = c->big_endian ? AV_RB16(s) : AV_RL16(s);
                 s += 2;
                 refp += len;
                 rem -= len;
@@ -511,8 +512,10 @@ static av_cold int cfdf_early_video_init(AVCodecContext *avctx)
      * The v4 .MOV stores them reversed (0 = white, 255 = black) as
      * placeholders that are never realised on screen, so override both:
      * index 0 is the clear/blackframe color */
-    c->pal[0]   = 0xff000000u;
-    c->pal[255] = 0xffffffffu;
+    if (!c->big_endian) {
+        c->pal[0]   = 0xff000000u;
+        c->pal[255] = 0xffffffffu;
+    }
     return 0;
 }
 
@@ -637,8 +640,10 @@ static int cfdf_early_video_decode(AVCodecContext *avctx, AVFrame *frame,
     sd = av_packet_get_side_data(avpkt, AV_PKT_DATA_PALETTE, &sd_size);
     if (sd && sd_size >= AVPALETTE_SIZE) {
         memcpy(c->pal, sd, AVPALETTE_SIZE);
-        c->pal[0]   = 0xff000000u; /* reserved black across segments */
-        c->pal[255] = 0xffffffffu; /* reserved white across segments */
+        if (!c->big_endian) {
+            c->pal[0]   = 0xff000000u; /* reserved black across segments */
+            c->pal[255] = 0xffffffffu; /* reserved white across segments */
+        }
     }
 
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
@@ -673,8 +678,17 @@ static av_cold int cfdf_video_init(AVCodecContext *avctx)
         avctx->pix_fmt = AV_PIX_FMT_PAL8;
         return 0;
     }
-    if (avctx->extradata_size != AVPALETTE_SIZE)
+    if (avctx->extradata_size != AVPALETTE_SIZE &&
+        avctx->extradata_size != AVPALETTE_SIZE + 1)
         return AVERROR_INVALIDDATA;
+
+    /* An optional byte after the palette identifies Macintosh early packets:
+     * big-endian back-references and no Windows system-palette overrides. */
+    if (avctx->extradata_size == AVPALETTE_SIZE + 1) {
+        if (avctx->extradata[AVPALETTE_SIZE] != 1)
+            return AVERROR_INVALIDDATA;
+        c->big_endian = 1;
+    }
 
     c->packet_mode = CFDF_VIDEO_PACKET_EARLY;
     return cfdf_early_video_init(avctx);
