@@ -483,6 +483,30 @@ static int valid_soun(AVIOContext *pb, int64_t fsize, int containers,
            is_id_at(pb, coffs[soun_id] + 0x0C, MKTAG('S','O','U','N'));
 }
 
+/* Scene resources are stored as directory ids relative to the MHED entry. */
+static int move_scene_resource(AVIOContext *pb, int64_t fsize, int containers,
+                               const int64_t *coffs, int scene_base,
+                               int field, uint32_t id)
+{
+    int64_t resource;
+
+    if (scene_base < 0 || scene_base >= containers ||
+        coffs[scene_base] <= 0 ||
+        coffs[scene_base] + 0x08 + field + 4 > fsize ||
+        !is_id_at(pb, coffs[scene_base] + 0x0c,
+                  MKTAG('M','H','E','D')))
+        return -1;
+
+    avio_seek(pb, coffs[scene_base] + 0x08 + field, SEEK_SET);
+    resource = (int64_t)scene_base + avio_rl32(pb);
+    if (resource < 0 || resource >= containers || coffs[resource] <= 0 ||
+        coffs[resource] + 0x10 > fsize ||
+        !is_id_at(pb, coffs[resource] + 0x0c, id))
+        return -1;
+
+    return resource;
+}
+
 /* Parse the authored theme order and optional tail loop. */
 static int read_theme_move(AVFormatContext *s, int containers, const int64_t *coffs,
                            int theme_id, int scene_base,
@@ -1167,17 +1191,14 @@ static int build_move_timeline(AVFormatContext *s, int containers,
 
         if (is_id_at(pb, coffs[i] + 0x0c, MKTAG('M','H','E','D'))) {
             scene_base = i;
-            msnd_id = -1;
+            msnd_id = move_scene_resource(pb, fsize, containers, coffs,
+                                          scene_base, 0x60,
+                                          MKTAG('M','S','N','D'));
             fixed_end = 0;
             avio_seek(pb, H + 0x1c, SEEK_SET);
             default_ticks = avio_rl32(pb);
             if (default_ticks <= 0 || default_ticks > 0xffff)
                 default_ticks = 4;
-            continue;
-        }
-
-        if (is_id_at(pb, coffs[i] + 0x0c, MKTAG('M','S','N','D'))) {
-            msnd_id = i;
             continue;
         }
 
@@ -1264,11 +1285,9 @@ static int build_move_sfx_streams(AVFormatContext *s, int containers,
             scene_base = i;
             scene++;
             scene_start = timeline->container_pts[i];
-            msnd_id = -1;
-            continue;
-        }
-        if (is_id_at(pb, coffs[i] + 0x0c, MKTAG('M','S','N','D'))) {
-            msnd_id = i;
+            msnd_id = move_scene_resource(pb, fsize, containers, coffs,
+                                          scene_base, 0x60,
+                                          MKTAG('M','S','N','D'));
             continue;
         }
         if (is_id_at(pb, coffs[i] + 0x0c, MKTAG('M','F','R','M'))) {
