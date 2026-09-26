@@ -2094,10 +2094,10 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_LOSSY,
     },
     {
-        .id        = AV_CODEC_ID_CFDF_D5_VIDEO,
+        .id        = AV_CODEC_ID_CFDF_VIDEO,
         .type      = AVMEDIA_TYPE_VIDEO,
-        .name      = "cfdf_d5_video",
-        .long_name = NULL_IF_CONFIG_SMALL("CFDF D5 (Cyberflix DreamFactory v5) video"),
+        .name      = "cfdf_video",
+        .long_name = NULL_IF_CONFIG_SMALL("CFDF (Cyberflix DreamFactory) video"),
         .props     = AV_CODEC_PROP_LOSSLESS,
     },
     {
@@ -3114,6 +3114,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
     },
 
     /* AMR */
+    {
+        .id        = AV_CODEC_ID_ADPCM_IMA_CFDF,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ima_cfdf",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA Cyberflix DreamFactory"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
     {
         .id        = AV_CODEC_ID_AMR_NB,
         .type      = AVMEDIA_TYPE_AUDIO,

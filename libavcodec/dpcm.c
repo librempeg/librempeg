@@ -264,6 +264,12 @@ static av_cold int dpcm_decode_init(AVCodecContext *avctx)
         }
         break;
 
+    case AV_CODEC_ID_CFDF_DPCM:
+        if (avctx->ch_layout.nb_channels != 1 || avctx->extradata_size > 1 ||
+            (avctx->extradata_size && avctx->extradata[0] > 1))
+            return AVERROR_INVALIDDATA;
+        break;
+
     case AV_CODEC_ID_CBD2_DPCM:
         for (i = -128; i < 128; i++) {
             int16_t cube = (i * i * i) / 64;
@@ -550,6 +556,10 @@ static int dpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         break;
 
     case AV_CODEC_ID_CFDF_DPCM:
+        /* Independent blocks start with a fresh predictor. */
+        if (avctx->extradata_size && avctx->extradata[0])
+            s->sample[0] = 0;
+
         while (output_samples < samples_end) {
             uint8_t n = bytestream2_get_byteu(&gb);
             int16_t sample = s->sample[0];
