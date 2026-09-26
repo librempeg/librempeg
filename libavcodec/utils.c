@@ -486,6 +486,7 @@ int av_get_exact_bits_per_sample(enum AVCodecID codec_id)
     case AV_CODEC_ID_ADPCM_AICA:
     case AV_CODEC_ID_ADPCM_IMA_WV6:
     case AV_CODEC_ID_ADPCM_IMA_ZMUSIC:
+    case AV_CODEC_ID_ADPCM_RHETOREX:
         return 4;
     case AV_CODEC_ID_DSD_LSBF:
     case AV_CODEC_ID_DSD_MSBF:
