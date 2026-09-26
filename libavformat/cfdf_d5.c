@@ -48,6 +48,7 @@
 #include "libavutil/mem.h"
 #include "libavutil/pixfmt.h"
 #include "libavutil/rational.h"
+#include "libavcodec/cfdf_audio.h"
 #include "avformat.h"
 #include "demux.h"
 #include "internal.h"
@@ -209,7 +210,7 @@ static void read_pstring(AVIOContext *pb, int64_t off, int64_t fsize,
 /* Count output samples of one block (sizes the packet pts/duration). */
 static int count_block_samples(AVIOContext *pb, int variant, int64_t off, int size)
 {
-    int n, p;
+    int n;
     uint8_t *buf;
 
     if (size <= 0)
@@ -235,19 +236,7 @@ static int count_block_samples(AVIOContext *pb, int variant, int64_t off, int si
         return AVERROR_INVALIDDATA;
     }
 
-    n = 0;
-    p = 1; /* skip seed */
-    while (p < size) {
-        uint8_t c = buf[p++];
-        if (!(c & 0x80))
-            n += 1;
-        else if (!(c & 0x40)) {
-            int cnt = (c & 0x3f) + 1;
-            n += 2 * cnt;
-            p += cnt;
-        } else
-            n += (c & 0x3f) + 1;
-    }
+    n = ff_cfdf_v40_count(buf, size);
     av_free(buf);
 
     return n;
@@ -865,7 +854,7 @@ static int build_video_stream(AVFormatContext *s, const int64_t *coffs,
     cs->nb_blocks = nb;
 
     st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
-    st->codecpar->codec_id   = AV_CODEC_ID_CFDF_D5_VIDEO;
+    st->codecpar->codec_id   = AV_CODEC_ID_CFDF_VIDEO;
     st->codecpar->format     = AV_PIX_FMT_PAL8;
     st->codecpar->width      = width;
     st->codecpar->height     = height;
@@ -927,7 +916,10 @@ static int add_stream_at(AVFormatContext *s, int variant, int rate,
         total += blocks[i].nb_samples;
 
     st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id    = AV_CODEC_ID_ADPCM_CFDF_D5;
+    st->codecpar->codec_id    = variant == CFDF_D5_IMA ?
+                                AV_CODEC_ID_ADPCM_IMA_CFDF :
+                                variant == CFDF_D5_V41 ? AV_CODEC_ID_CFDF_DPCM :
+                                AV_CODEC_ID_ADPCM_CFDF;
     st->codecpar->sample_rate = rate;
     st->codecpar->ch_layout   = (AVChannelLayout)AV_CHANNEL_LAYOUT_MONO;
     st->start_time            = cs->start_pts;
@@ -936,7 +928,8 @@ static int add_stream_at(AVFormatContext *s, int variant, int rate,
     st->codecpar->extradata = av_mallocz(1 + AV_INPUT_BUFFER_PADDING_SIZE);
     if (!st->codecpar->extradata)
         return AVERROR(ENOMEM);
-    st->codecpar->extradata[0]   = variant;
+    st->codecpar->extradata[0] = variant == CFDF_D5_V40 ? 2 :
+                                variant == CFDF_D5_V41 ? 1 : CFDF_D5_IMA;
     st->codecpar->extradata_size = 1;
 
     if (title && title[0])
