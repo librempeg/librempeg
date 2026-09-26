@@ -93,6 +93,7 @@ typedef struct CFDFD5MoveFrame {
     int      mfrm_id;
     int      step_id;
     int64_t  scene_start;
+    int64_t  scene_end;
     int64_t  pts;
     int      duration;
 } CFDFD5MoveFrame;
@@ -107,6 +108,7 @@ typedef struct CFDFD5MoveTimeline {
 } CFDFD5MoveTimeline;
 
 #define CFDF_D5_MFRM_HOLD 0x01
+#define CFDF_D5_MFRM_POOL_HOLD 0x10
 
 static int read_probe(const AVProbeData *p)
 {
@@ -166,7 +168,7 @@ static int mfrm_duration_ticks(AVIOContext *pb, int64_t coff, int64_t fsize,
     return FFMAX(default_ticks, (int)override);
 }
 
-/* A hold extends the frame until the active finite slot-3 sound ends. */
+/* Hold flags select completion of the fixed sound or both pooled sounds. */
 static int mfrm_flags(AVIOContext *pb, int64_t coff, int64_t fsize)
 {
     int64_t H = coff + 0x08;
@@ -1178,8 +1180,32 @@ static int soun_duration_ticks(AVFormatContext *s, int64_t coff,
     return 0;
 }
 
-/* Resolve one clock for video, triggers, scene changes, and theme replacement.
- * Holds wait only for the active finite slot-3 sound. */
+typedef struct CFDFD5SoundSlot {
+    int key;
+    int64_t end;
+} CFDFD5SoundSlot;
+
+/* Matching keys restart first; otherwise prefer a free slot, then replace
+ * the lower key only when the incoming key is greater. Ties choose slot 1. */
+static int move_pool_slot(CFDFD5SoundSlot *pool, int key, int64_t pts)
+{
+    int slot;
+
+    for (int i = 0; i < 2; i++)
+        if (pool[i].end <= pts)
+            pool[i].key = -1;
+    for (int i = 0; i < 2; i++)
+        if (pool[i].key == key)
+            return i;
+    for (int i = 0; i < 2; i++)
+        if (pool[i].key < 0)
+            return i;
+    slot = pool[0].key < pool[1].key ? 0 : 1;
+    return key > pool[slot].key ? slot : -1;
+}
+
+/* Resolve a nominal clock shared by video and audio. Device-buffer latency
+ * is not part of the authored timeline. */
 static int build_move_timeline(AVFormatContext *s, int containers,
                                const int64_t *coffs, int64_t fsize,
                                CFDFD5MoveTimeline *timeline)
@@ -1197,7 +1223,9 @@ static int build_move_timeline(AVFormatContext *s, int containers,
 
     for (int scene_base = 0; scene_base < containers; scene_base++) {
         CFDFD5MoveFrame *frames;
+        CFDFD5SoundSlot pool[2] = { { -1, 0 }, { -1, 0 } };
         int64_t fixed_end = 0, scene_start;
+        int first_frame = timeline->nb_frames;
         int default_ticks, frame_count, msnd_id, next_scene;
         int64_t H;
 
@@ -1280,26 +1308,45 @@ static int build_move_timeline(AVFormatContext *s, int containers,
 
             if (name[0] && msnd_id >= 0 &&
                 find_move_sound(s, containers, coffs, msnd_id,
-                                scene_base, fsize, name, &sound) >= 0 &&
-                !(sound.flags & 8)) {
-                /* Looped slot-3 sounds are not finite hold targets. */
-                fixed_end = pts;
+                                scene_base, fsize, name, &sound) >= 0) {
+                int64_t end = INT64_MAX;
+                int slot = sound.flags & 8 ?
+                           move_pool_slot(pool, sound.index, pts) : 2;
+
                 if (!(sound.flags & 2)) {
                     int64_t sound_ticks = 0;
                     int ret = soun_duration_ticks(s, coffs[sound.soun_id],
                                                   &sound_ticks);
-                    if (ret == AVERROR(ENOMEM)) {
+                    if (ret < 0) {
                         free_move_timeline(timeline);
                         return ret;
                     }
-                    if (ret >= 0)
-                        fixed_end = pts + sound_ticks;
+                    end = pts + sound_ticks;
+                }
+                if (slot == 2)
+                    fixed_end = end;
+                else if (slot >= 0) {
+                    pool[slot].key = sound.index;
+                    pool[slot].end = end;
                 }
             }
 
             frame_end = pts + nominal;
-            if (flags & CFDF_D5_MFRM_HOLD) {
-                int64_t extension = FFMAX(fixed_end - frame_end, 0);
+            if (flags & (CFDF_D5_MFRM_HOLD | CFDF_D5_MFRM_POOL_HOLD)) {
+                int64_t wait_end = frame_end;
+                int64_t extension;
+
+                if (flags & CFDF_D5_MFRM_HOLD)
+                    wait_end = FFMAX(wait_end, fixed_end);
+                if (flags & CFDF_D5_MFRM_POOL_HOLD)
+                    wait_end = FFMAX(wait_end, FFMAX(pool[0].end, pool[1].end));
+                if (wait_end == INT64_MAX) {
+                    av_log(s, AV_LOG_ERROR,
+                           "Cannot linearize a hold on a looping sound\n");
+                    free_move_timeline(timeline);
+                    return AVERROR_PATCHWELCOME;
+                }
+                extension = wait_end - frame_end;
 
                 timeline->hold_frames++;
                 timeline->max_hold_ticks =
@@ -1325,6 +1372,8 @@ static int build_move_timeline(AVFormatContext *s, int containers,
             pts += duration;
         }
 
+        for (int i = first_frame; i < timeline->nb_frames; i++)
+            timeline->frames[i].scene_end = pts;
         scene_base = next_scene - 1;
     }
 
@@ -1386,6 +1435,8 @@ static int build_move_sfx_streams(AVFormatContext *s, int containers,
                                         frame->scene, 0);
                         av_dict_set_int(&st->metadata, "cfdf_d5_scene_start",
                                         frame->scene_start, 0);
+                        av_dict_set_int(&st->metadata, "cfdf_d5_scene_end",
+                                        frame->scene_end, 0);
                         av_dict_set_int(&st->metadata, "cfdf_d5_start_ticks",
                                         frame->pts, 0);
                         av_dict_set_int(&st->metadata, "cfdf_d5_pan",
@@ -1639,6 +1690,7 @@ static int read_header(AVFormatContext *s)
         ret = build_move_timeline(s, containers, coffs, fsize, &timeline);
         if (ret < 0)
             goto end;
+        av_dict_set(&s->metadata, "cfdf_d5_timeline", "2", 0);
     }
 
     if (soun_count == 0)
