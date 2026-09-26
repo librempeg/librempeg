@@ -590,9 +590,7 @@ static int read_theme_move(AVFormatContext *s, int containers, const int64_t *co
         order_count > DF_MAX_CHUNKS)
         return 0;
 
-    source_count = flags & 1 ? 48 : sc;
-    if (source_count <= 0 || (uint32_t)source_count > sc)
-        return 0;
+    source_count = sc;
 
     segs = av_malloc_array(source_count, sizeof(*segs));
     if (!segs)
@@ -610,6 +608,14 @@ static int read_theme_move(AVFormatContext *s, int containers, const int64_t *co
             return 0;
         }
         segs[i] = (int)sid;
+    }
+
+    /* Disk themes continue through the segment directory. Their order table
+     * describes only the initial resident segments. */
+    if (flags & 1) {
+        *seq = segs;
+        *seq_count = source_count;
+        return 1;
     }
 
     sq = av_malloc_array(order_count, sizeof(*sq));
@@ -1418,6 +1424,29 @@ static int build_move_theme_segments(AVFormatContext *s, int containers,
                             AV_TIME_BASE_Q);
     scene_end_us = av_rescale_q(scene_end_ticks, (AVRational){ 1, 60 },
                                AV_TIME_BASE_Q);
+
+    /* A finite disk theme is one continuous track, not one stream per buffer.
+     * Keep separate nodes if their codecs or sample rates cannot be joined. */
+    if (!loop) {
+        ret = build_track_stream(s, coffs, seq, count, fallback_title,
+                                 scene_start_ticks, 0, 0, scene);
+        if (ret < 0) {
+            av_freep(&seq);
+            return ret;
+        }
+        if (ret > 0) {
+            AVStream *st = s->streams[s->nb_streams - 1];
+
+            av_dict_set_int(&st->metadata, "cfdf_d5_scene_start",
+                            scene_start_ticks, 0);
+            av_dict_set_int(&st->metadata, "cfdf_d5_end",
+                            scene_end_ticks, 0);
+            av_dict_set_int(&st->metadata, "cfdf_d5_end_us", scene_end_us, 0);
+            av_dict_set_int(&st->metadata, "cfdf_d5_start_us", cursor_us, 0);
+            av_freep(&seq);
+            return ret;
+        }
+    }
 
     /* Adjacent theme nodes may change codec or sample rate. */
     while (cursor_us < scene_end_us && emitted < DF_MAX_CHUNKS) {
