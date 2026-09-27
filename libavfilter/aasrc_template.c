@@ -96,7 +96,6 @@
 #define MAX_HISTORY 8
 
 typedef struct fn(StateContext) {
-    ftype scale_factor;
     ftype log_mag[MAX_NB_POLES];
     ftype angle[MAX_NB_POLES];
     ftype log_mag_scaled[MAX_NB_POLES];
@@ -229,10 +228,10 @@ static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
                              const double t_inc)
 {
     AASRCContext *s = ctx->priv;
+    const double scale_factor = (t_inc > 1.0) ? 1.0 / t_inc : 1.0;
     const double (*ps)[2];
     const double (*rs)[2];
 
-    stc->scale_factor = (t_inc > 1.0) ? F(1.0) / t_inc : F(1.0);
     stc->out_idx = 0;
     stc->in_idx = 0;
     stc->delta_t = F(0.0);
@@ -259,16 +258,16 @@ static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
 
         stc->log_mag[n] = log(ps[n][0]);
         stc->angle[n] = ps[n][1];
-        a = stc->log_mag[n] * stc->scale_factor;
-        b = stc->angle[n] * stc->scale_factor;
+        a = stc->log_mag[n] * scale_factor;
+        b = stc->angle[n] * scale_factor;
         stc->log_mag_scaled[n] = ISNORMAL(a) ? a : F(0.0);
         stc->angle_scaled[n] = ISNORMAL(b) ? b : F(0.0);
 
         stc->one[n].re = F(1.0);
         stc->one[n].im = F(0.0);
         stc->cur[n] = stc->one[n];
-        re = rs[n][0] * stc->scale_factor;
-        im = rs[n][1] * stc->scale_factor;
+        re = rs[n][0] * scale_factor;
+        im = rs[n][1] * scale_factor;
         stc->r_fixed[n].re = ISNORMAL(re) ? re : F(0.0);
         stc->r_fixed[n].im = ISNORMAL(im) ? im : F(0.0);
 
