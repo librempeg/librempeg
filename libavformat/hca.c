@@ -30,14 +30,7 @@
 
 #define HCA_MASK 0x7f7f7f7f
 
-typedef struct HCADemuxContext {
-    AVClass *class;
-    int64_t keyl;
-    int64_t keyh;
-    int subkey;
-} HCADemuxContext;
-
-static int hca_probe(const AVProbeData *p)
+static int read_probe(const AVProbeData *p)
 {
     if ((AV_RL32(p->buf) & HCA_MASK) != MKTAG('H', 'C', 'A', 0))
         return 0;
@@ -48,9 +41,8 @@ static int hca_probe(const AVProbeData *p)
     return AVPROBE_SCORE_MAX / 3;
 }
 
-static int hca_read_header(AVFormatContext *s)
+static int read_header(AVFormatContext *s)
 {
-    HCADemuxContext *hca = s->priv_data;
     AVCodecParameters *par;
     GetByteContext gb;
     AVIOContext *pb = s->pb;
@@ -73,19 +65,16 @@ static int hca_read_header(AVFormatContext *s)
         return AVERROR(ENOMEM);
 
     par = st->codecpar;
-    ret = ff_alloc_extradata(par, data_offset + 10);
+    ret = ff_alloc_extradata(par, data_offset);
     if (ret < 0)
         return ret;
 
-    ret = ffio_read_size(pb, par->extradata + 8, par->extradata_size - 8 - 10);
+    ret = ffio_read_size(pb, par->extradata + 8, par->extradata_size - 8);
     if (ret < 0)
         return AVERROR_INVALIDDATA;
     AV_WL32(par->extradata, MKTAG('H', 'C', 'A', 0));
     AV_WB16(par->extradata + 4, version);
     AV_WB16(par->extradata + 6, data_offset);
-    AV_WB32(par->extradata + par->extradata_size - 10, hca->keyh);
-    AV_WB32(par->extradata + par->extradata_size -  6, hca->keyl);
-    AV_WB16(par->extradata + par->extradata_size -  2, hca->subkey);
 
     bytestream2_init(&gb, par->extradata + 8, par->extradata_size - 8);
 
@@ -120,7 +109,7 @@ static int hca_read_header(AVFormatContext *s)
     return 0;
 }
 
-static int hca_read_packet(AVFormatContext *s, AVPacket *pkt)
+static int read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     AVCodecParameters *par = s->streams[0]->codecpar;
     int ret;
@@ -130,34 +119,12 @@ static int hca_read_packet(AVFormatContext *s, AVPacket *pkt)
     return ret;
 }
 
-#define OFFSET(x) offsetof(HCADemuxContext, x)
-static const AVOption hca_options[] = {
-    { "hca_lowkey",
-        "Low key used for handling CRI HCA files", OFFSET(keyl),
-        AV_OPT_TYPE_INT64, {.i64=0}, .min = 0, .max = UINT32_MAX, .flags = AV_OPT_FLAG_DECODING_PARAM, },
-    { "hca_highkey",
-        "High key used for handling CRI HCA files", OFFSET(keyh),
-        AV_OPT_TYPE_INT64, {.i64=0}, .min = 0, .max = UINT32_MAX, .flags = AV_OPT_FLAG_DECODING_PARAM, },
-    { "hca_subkey",
-        "Subkey used for handling CRI HCA files", OFFSET(subkey),
-        AV_OPT_TYPE_INT, {.i64=0}, .min = 0, .max = UINT16_MAX, .flags = AV_OPT_FLAG_DECODING_PARAM },
-    { NULL },
-};
-
-static const AVClass hca_class = {
-    .class_name = "hca",
-    .option     = hca_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
-
 const FFInputFormat ff_hca_demuxer = {
     .p.name         = "hca",
     .p.long_name    = NULL_IF_CONFIG_SMALL("CRI HCA"),
-    .p.priv_class   = &hca_class,
     .p.extensions   = "hca",
     .p.flags        = AVFMT_GENERIC_INDEX,
-    .priv_data_size = sizeof(HCADemuxContext),
-    .read_probe     = hca_probe,
-    .read_header    = hca_read_header,
-    .read_packet    = hca_read_packet,
+    .read_probe     = read_probe,
+    .read_header    = read_header,
+    .read_packet    = read_packet,
 };
