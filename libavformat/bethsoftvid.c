@@ -242,6 +242,7 @@ static int vid_read_packet(AVFormatContext *s,
         avio_rl16(pb);
         // soundblaster DAC used for sample rate, as on specification page (link above)
         vid->sample_rate = 1000000 / (256 - avio_r8(pb));
+        av_fallthrough;
     case AUDIO_BLOCK:
         if (vid->audio_index < 0) {
             AVStream *st = avformat_new_stream(s, NULL);
