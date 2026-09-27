@@ -18,6 +18,7 @@
  * High Voltage Software ALP decoder by Zane van Iperen (zane@zanevaniperen.com)
  * Cunning Developments decoder by Zane van Iperen (zane@zanevaniperen.com)
  * Sanyo LD-ADPCM decoder by Peter Ross (pross@xvid.org)
+ * Citrix ADPCM decoder by Peter Ross (pross@xvid.org)
  *
  * This file is part of Librempeg
  *
@@ -255,6 +256,10 @@ static const int8_t zork_index_table[8] = {
 static const int8_t mtf_index_table[16] = {
      8,  6,  4,  2, -1, -1, -1, -1,
     -1, -1, -1, -1,  2,  4,  6,  8,
+};
+
+static const int8_t citrix_index_table[4] = {
+    -1, 1, -1, 1,
 };
 
 static const int32_t dsa_coefs[16] = {
@@ -538,6 +543,10 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
         break;
     case AV_CODEC_ID_ADPCM_ZORK:
         if (avctx->bits_per_coded_sample != 8)
+            return AVERROR_INVALIDDATA;
+        break;
+    case AV_CODEC_ID_ADPCM_IMA_CITRIX:
+        if (avctx->bits_per_coded_sample != 2)
             return AVERROR_INVALIDDATA;
         break;
     default:
@@ -1613,6 +1622,22 @@ static int adpcm_sanyo_expand5(ADPCMChannelStatus *c, int bits)
     return c->predictor;
 }
 
+static int adpcm_citrix_expand(ADPCMChannelStatus *c, int bits)
+{
+    int step = ff_adpcm_step_table[c->step_index];
+    int add = step >> 1;
+
+    if ((bits & 1))
+        add += step;
+    if ((bits & 2))
+        add = -add;
+
+    c->step_index = av_clip(c->step_index + citrix_index_table[bits], 0, 88);
+    c->predictor = av_clip_int16(c->predictor + add);
+
+    return c->predictor;
+}
+
 /**
  * Get the number of samples (per channel) that will be decoded from the packet.
  * In one case, this is actually the maximum number of samples possible to
@@ -2040,6 +2065,9 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         if (block_align / ch <= 0xc)
             return AVERROR_INVALIDDATA;
         nb_samples = (buf_size / block_align) * (block_align / ch - 0xc) * 2;
+        break;
+    case AV_CODEC_ID_ADPCM_IMA_CITRIX:
+        nb_samples = (buf_size / block_align) * (1 + ((block_align / ch) - 4) * 4);
         break;
     }
 
@@ -4746,6 +4774,37 @@ static int adpcm_decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
         }
         ) /* End of CASE */
+    CASE(ADPCM_IMA_CITRIX,
+        while (bytestream2_get_bytes_left(&gb) >= avctx->block_align) {
+            for (int ch = 0; ch < channels; ch++) {
+                *samples++ = c->status[ch].predictor = sign_extend(bytestream2_get_le16(&gb), 16);
+                c->status[ch].step_index = bytestream2_get_byte(&gb);
+                if (c->status[ch].step_index > 88)
+                    return AVERROR_INVALIDDATA;
+                bytestream2_skip(&gb, 1);
+            }
+            if (channels == 1) {
+                for (int block = 0; block < avctx->block_align - 4; block++) {
+                    uint8_t bits = bytestream2_get_byteu(&gb);
+                    samples[0] = adpcm_citrix_expand(&c->status[0],  bits       & 3);
+                    samples[1] = adpcm_citrix_expand(&c->status[0], (bits >> 2) & 3);
+                    samples[2] = adpcm_citrix_expand(&c->status[0], (bits >> 4) & 3);
+                    samples[3] = adpcm_citrix_expand(&c->status[0], (bits >> 6) & 3);
+                    samples += 4;
+                }
+            } else { // channels == 2
+                for (int block = 0; block < (avctx->block_align - 4*channels) / (4*channels); block++) {
+                    for (int ch = 0; ch < channels; ch++) {
+                        uint32_t bits = bytestream2_get_le32(&gb);
+                        for (int j = 0; j < 16; j++)
+                            samples[j*channels + ch] = adpcm_citrix_expand(&c->status[ch], (bits >> (2*j)) & 3);
+                    }
+                    samples += 16*channels;
+                }
+            }
+        }
+        bytestream2_seek(&gb, 0, SEEK_END);
+        ) /* End of CASE */
     default:
         av_unreachable("There are cases for all codec ids using adpcm_decode_frame");
     }
@@ -4858,6 +4917,7 @@ ADPCM_DECODER(ADPCM_IMA_AMV,     sample_fmts_s16,  adpcm_ima_amv,     "ADPCM IMA
 ADPCM_DECODER(ADPCM_IMA_APC,     sample_fmts_s16,  adpcm_ima_apc,     "ADPCM IMA CRYO APC")
 ADPCM_DECODER(ADPCM_IMA_APM,     sample_fmts_s16,  adpcm_ima_apm,     "ADPCM IMA Ubisoft APM")
 ADPCM_DECODER(ADPCM_IMA_AWC,     sample_fmts_s16p, adpcm_ima_awc,     "ADPCM IMA AWC")
+ADPCM_DECODER(ADPCM_IMA_CITRIX,  sample_fmts_s16,  adpcm_ima_citrix,  "ADPCM IMA Citrix")
 ADPCM_DECODER(ADPCM_IMA_CUNNING, sample_fmts_s16p, adpcm_ima_cunning, "ADPCM IMA Cunning Developments")
 ADPCM_DECODER(ADPCM_IMA_DAT4,    sample_fmts_s16,  adpcm_ima_dat4,    "ADPCM IMA Eurocom DAT4")
 ADPCM_DECODER(ADPCM_IMA_DK3,     sample_fmts_s16,  adpcm_ima_dk3,     "ADPCM IMA Duck DK3")
