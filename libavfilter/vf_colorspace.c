@@ -316,7 +316,8 @@ static int convert(AVFilterContext *ctx, void *data, int job_nr, int n_jobs)
     uint8_t *in_data[3], *out_data[3];
     int16_t *rgb[3];
     int h_in = (td->in->height + 1) >> 1;
-    int h1 = 2 * (job_nr * h_in / n_jobs), h2 = 2 * ((job_nr + 1) * h_in / n_jobs);
+    int h1 = 2 * ff_slice_pos(h_in, job_nr, n_jobs);
+    int h2 = 2 * ff_slice_pos(h_in, job_nr+1, n_jobs);
     int w = td->in->width, h = h2 - h1;
 
     in_data[0]  = td->in->data[0]  + td->in_linesize[0]  *  h1;
