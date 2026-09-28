@@ -113,8 +113,8 @@ static int do_gamut_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     AVFrame *out = td->out;
     AVFrame *in = td->in;
     const int height = in->height;
-    const int slice_start = (height * jobnr) / nb_jobs;
-    const int slice_end = (height * (jobnr + 1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(height, jobnr+1, nb_jobs);
     const int width = in->width;
     GamutContext *s = ctx->priv;
     int (*is_inside)(float y, float u, float v) = s->is_inside;
@@ -175,8 +175,8 @@ static int do_gamut16_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     AVFrame *out = td->out;
     AVFrame *in = td->in;
     const int height = in->height;
-    const int slice_start = (height * jobnr) / nb_jobs;
-    const int slice_end = (height * (jobnr + 1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(height, jobnr+1, nb_jobs);
     const int width = in->width;
     GamutContext *s = ctx->priv;
     int (*is_inside)(float y, float u, float v) = s->is_inside;
