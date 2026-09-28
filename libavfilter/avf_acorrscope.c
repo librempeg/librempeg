@@ -238,8 +238,8 @@ static int fade(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const int rlinesize = s->out->linesize[2];
     const int width = s->out->width;
     const int height = s->out->height;
-    const int slice_start = (height *  jobnr   ) / nb_jobs;
-    const int slice_end   = (height * (jobnr+1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(height, jobnr+1, nb_jobs);
     const float fv = s->fade;
 
     if (fv <= 0.f) {
