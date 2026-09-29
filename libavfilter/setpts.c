@@ -345,6 +345,7 @@ const FFFilter ff_vf_setpts = {
     .priv_size = sizeof(SetPTSContext),
     FILTER_INPUTS(setpts_inputs),
     FILTER_OUTPUTS(outputs_video),
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_PARAMS,
 };
 #endif /* CONFIG_SETPTS_FILTER */
 

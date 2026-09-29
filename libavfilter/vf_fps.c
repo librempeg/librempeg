@@ -396,4 +396,5 @@ const FFFilter ff_vf_fps = {
     .activate    = activate,
     FILTER_INPUTS(ff_video_default_filterpad),
     FILTER_OUTPUTS(fps_outputs),
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_PARAMS,
 };
