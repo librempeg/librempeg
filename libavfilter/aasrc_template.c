@@ -28,7 +28,20 @@
 #undef dsp_vector_mul_complex
 #undef dsp_vector_mul_complex_add
 #undef SAMPLE_FORMAT
-#if DEPTH == 16
+#if DEPTH == 8
+#define ctype complex_float
+#define ftype float
+#define itype uint8_t
+#define EPS FLT_EPSILON
+#define FABS fabsf
+#define FLOOR floorf
+#define LRINT lrintf
+#define CLIP av_clip_int8
+#define dsp_vector_mul_real dsp->vector_fmul_real
+#define dsp_vector_mul_complex dsp->vector_fmul_complex
+#define dsp_vector_mul_complex_add dsp->vector_fmul_complex_add
+#define SAMPLE_FORMAT u8p
+#elif DEPTH == 16
 #define ctype complex_float
 #define ftype float
 #define itype int16_t
@@ -66,7 +79,7 @@
 #define dsp_vector_mul_complex dsp->vector_fmul_complex
 #define dsp_vector_mul_complex_add dsp->vector_fmul_complex_add
 #define SAMPLE_FORMAT fltp
-#else
+#elif DEPTH == 65
 #define ctype complex_double
 #define ftype double
 #define itype double
@@ -78,6 +91,18 @@
 #define dsp_vector_mul_complex dsp->vector_dmul_complex
 #define dsp_vector_mul_complex_add dsp->vector_dmul_complex_add
 #define SAMPLE_FORMAT dblp
+#else
+#define ctype complex_long_double
+#define ftype long double
+#define itype long double
+#define EPS LDBL_EPSILON
+#define FABS fabsl
+#define FLOOR floorl
+#define LRINT llrintl
+#define dsp_vector_mul_real dsp->vector_ldmul_real
+#define dsp_vector_mul_complex dsp->vector_ldmul_complex
+#define dsp_vector_mul_complex_add dsp->vector_ldmul_complex_add
+#define SAMPLE_FORMAT ldblp
 #endif
 
 #define F(x) ((ftype)(x))
@@ -218,7 +243,7 @@ static void fn(vector_mul_complex)(ctype *x,
     }
 }
 
-#if DEPTH == 33 || DEPTH == 65
+#if DEPTH == 33 || DEPTH == 65 || DEPTH == 128
 static ftype fn(vector_mul_real)(const ctype *cur,
                                  const ctype *h,
                                  const int N)
@@ -425,7 +450,10 @@ repeat:
 
         if (idx_inc > 0) {
             x = src[in_idx+idx++];
-#if DEPTH == 16 || DEPTH == 32
+#if DEPTH == 8
+            x -= 0x80;
+#endif
+#if DEPTH == 8 || DEPTH == 16 || DEPTH == 32
             x /= F(1LL<<(DEPTH-1));
 #endif
             vector_mul_complex_add(x, p_fixed, h, h, nb_poles);
@@ -438,6 +466,8 @@ repeat:
 
 #if DEPTH == 16 || DEPTH == 32
             dst[n] = CLIP(LRINT(y * F(1LL<<(DEPTH-1))));
+#elif DEPTH == 8
+            dst[n] = CLIP(LRINT(y * F(1LL<<(DEPTH-1)))) + 0x80;
 #else
             dst[n] = y;
 #endif

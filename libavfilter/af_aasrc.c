@@ -65,23 +65,19 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_in,
                          AVFilterFormatsConfig **cfg_out)
 {
+    static const enum AVSampleFormat formats[] = {
+        AV_SAMPLE_FMT_U8P,
+        AV_SAMPLE_FMT_S16P,
+        AV_SAMPLE_FMT_S32P,
+        AV_SAMPLE_FMT_FLTP,
+        AV_SAMPLE_FMT_DBLP,
+        AV_SAMPLE_FMT_LDBLP,
+        AV_SAMPLE_FMT_NONE
+    };
     const AASRCContext *s = ctx->priv;
-    AVFilterFormats *formats = NULL;
     int ret, sample_rates[] = { s->sample_rate, -1 };
 
-    ret = ff_add_format(&formats, AV_SAMPLE_FMT_S16P);
-    if (ret)
-        return ret;
-    ret = ff_add_format(&formats, AV_SAMPLE_FMT_S32P);
-    if (ret)
-        return ret;
-    ret = ff_add_format(&formats, AV_SAMPLE_FMT_FLTP);
-    if (ret)
-        return ret;
-    ret = ff_add_format(&formats, AV_SAMPLE_FMT_DBLP);
-    if (ret)
-        return ret;
-    ret = ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
+    ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, formats);
     if (ret)
         return ret;
 
@@ -128,6 +124,10 @@ static const double rs0[][2] = {
     { 0.609322573524028, 3.816372913788743 },
 };
 
+#define DEPTH 8
+#include "aasrc_template.c"
+
+#undef DEPTH
 #define DEPTH 16
 #include "aasrc_template.c"
 
@@ -143,16 +143,23 @@ static const double rs0[][2] = {
 #define DEPTH 65
 #include "aasrc_template.c"
 
+#undef DEPTH
+#define DEPTH 128
+#include "aasrc_template.c"
+
 void ff_aasrc_init(AudioASRCDSPContext *dsp)
 {
     dsp->vector_fmul_complex = vector_mul_complex_fltp;
     dsp->vector_dmul_complex = vector_mul_complex_dblp;
+    dsp->vector_ldmul_complex = vector_mul_complex_ldblp;
 
     dsp->vector_fmul_real = vector_mul_real_fltp;
     dsp->vector_dmul_real = vector_mul_real_dblp;
+    dsp->vector_ldmul_real = vector_mul_real_ldblp;
 
     dsp->vector_fmul_complex_add = vector_mul_complex_add_fltp;
     dsp->vector_dmul_complex_add = vector_mul_complex_add_dblp;
+    dsp->vector_ldmul_complex_add = vector_mul_complex_add_ldblp;
 
 #if ARCH_X86
     ff_aasrc_init_x86(dsp);
@@ -178,6 +185,12 @@ static int config_input(AVFilterLink *inlink)
     ff_aasrc_init(&s->dsp);
 
     switch (inlink->format) {
+    case AV_SAMPLE_FMT_U8P:
+        s->do_aasrc = aasrc_u8p;
+        s->aasrc_uninit = aasrc_uninit_u8p;
+        s->nb_output_samples = nb_output_samples_u8p;
+        ret = aasrc_init_u8p(ctx);
+        break;
     case AV_SAMPLE_FMT_S16P:
         s->do_aasrc = aasrc_s16p;
         s->aasrc_uninit = aasrc_uninit_s16p;
@@ -201,6 +214,12 @@ static int config_input(AVFilterLink *inlink)
         s->aasrc_uninit = aasrc_uninit_dblp;
         s->nb_output_samples = nb_output_samples_dblp;
         ret = aasrc_init_dblp(ctx);
+        break;
+    case AV_SAMPLE_FMT_LDBLP:
+        s->do_aasrc = aasrc_ldblp;
+        s->aasrc_uninit = aasrc_uninit_ldblp;
+        s->nb_output_samples = nb_output_samples_ldblp;
+        ret = aasrc_init_ldblp(ctx);
         break;
     default:
         return AVERROR_BUG;
