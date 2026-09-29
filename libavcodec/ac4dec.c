@@ -3411,7 +3411,7 @@ static int cmpints(const void *p1, const void *p2)
 static int aspx_elements(AC4DecodeContext *s, Substream *ss, SubstreamChannel *ssch,
                          const int iframe)
 {
-    int sb, j, sbg = 0, goal_sb, msb, usb;
+    int sb, i, j, sbg = 0, goal_sb, msb, usb;
     int source_band_low, prev_idx;
 
     ssch->master_reset = 0;
@@ -3506,6 +3506,7 @@ static int aspx_elements(AC4DecodeContext *s, Substream *ss, SubstreamChannel *s
         sbg = ssch->num_sbg_master;
     }
 
+    i = 0;
     do {
         int odd;
 
@@ -3531,7 +3532,7 @@ static int aspx_elements(AC4DecodeContext *s, Substream *ss, SubstreamChannel *s
 
         if (ssch->sbg_master[sbg] - sb < 3)
             sbg = ssch->num_sbg_master;
-    } while (sb != (ssch->sbx + ssch->num_sb_aspx) && j > 0);
+    } while (sb != (ssch->sbx + ssch->num_sb_aspx) && j > 0 && i++ < 32);
 
     if ((ssch->num_sbg_patches > 1) && (ssch->sbg_patch_num_sb[ssch->num_sbg_patches - 1] < 3))
         ssch->num_sbg_patches--;
