@@ -96,14 +96,8 @@
 #define MAX_HISTORY 8
 
 typedef struct fn(StateContext) {
-    ftype log_mag[MAX_NB_POLES];
-    ftype angle[MAX_NB_POLES];
-    ftype log_mag_scaled[MAX_NB_POLES];
-    ftype angle_scaled[MAX_NB_POLES];
-    ctype inv[MAX_NB_POLES];
-
-    DECLARE_ALIGNED(32, ctype, p_fixed)[MAX_NB_POLES];
-    DECLARE_ALIGNED(32, ctype, r_fixed)[MAX_NB_POLES];
+    double log_mag_scaled[MAX_NB_POLES];
+    double angle_scaled[MAX_NB_POLES];
 
     int   reset_index;
     int   in_idx;
@@ -115,6 +109,9 @@ typedef struct fn(StateContext) {
     int   t_inc_int;
     const ctype *adv_ptr;
     ctype one[MAX_NB_POLES];
+
+    DECLARE_ALIGNED(32, ctype, p_fixed)[MAX_NB_POLES];
+    DECLARE_ALIGNED(32, ctype, r_fixed)[MAX_NB_POLES];
 
     DECLARE_ALIGNED(32, ctype, cur)[MAX_NB_POLES];
     DECLARE_ALIGNED(32, ctype, adv)[2][MAX_NB_POLES];
@@ -128,10 +125,30 @@ typedef struct fn(StateContext) {
     DECLARE_ALIGNED(32, ctype, prev_cur)[MAX_HISTORY][MAX_NB_POLES];
 } fn(StateContext);
 
+static void fn(complex_exponential_precise)(complex_double *x,
+                                            const double *log_mag,
+                                            const double *theta,
+                                            const double delta_t,
+                                            const int N)
+{
+    for (int n = 0; n < N; n++) {
+        double mag = exp(log_mag[n] * delta_t);
+        double re, im, w;
+
+        w = theta[n] * delta_t;
+
+        re = mag * cos(w);
+        im = mag * sin(w);
+
+        x[n].re = re;
+        x[n].im = im;
+    }
+}
+
 static void fn(complex_exponential)(fn(StateContext) *stc,
                                     ctype *x,
-                                    const ftype *log_mag,
-                                    const ftype *theta,
+                                    const double *log_mag,
+                                    const double *theta,
                                     const ftype delta_t,
                                     const int N)
 {
@@ -163,6 +180,24 @@ static void fn(complex_exponential)(fn(StateContext) *stc,
     stc->prev_index++;
     if (stc->prev_index >= MAX_HISTORY)
         stc->prev_index = 0;
+}
+
+static void fn(vector_mul_complex_precise)(complex_double *x,
+                                           const complex_double *a,
+                                           const complex_double *b,
+                                           const int N)
+{
+    for (int n = 0; n < N; n++) {
+        const double are = a[n].re;
+        const double aim = a[n].im;
+        const double bre = b[n].re;
+        const double bim = b[n].im;
+        double re = are * bre - aim * bim;
+        double im = are * bim + aim * bre;
+
+        x[n].re = re;
+        x[n].im = im;
+    }
 }
 
 static void fn(vector_mul_complex)(ctype *x,
@@ -227,8 +262,11 @@ static void fn(vector_mul_complex_add)(const ftype src,
 static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
                              const double t_inc)
 {
-    AASRCContext *s = ctx->priv;
     const double scale_factor = (t_inc > 1.0) ? 1.0 / t_inc : 1.0;
+    const double t_inc_frac = t_inc - floor(t_inc);
+    complex_double adv[2][MAX_NB_POLES];
+    complex_double inv[MAX_NB_POLES];
+    AASRCContext *s = ctx->priv;
     const double (*ps)[2];
     const double (*rs)[2];
 
@@ -236,8 +274,8 @@ static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
     stc->in_idx = 0;
     stc->delta_t = F(0.0);
     stc->reset_index = 0;
-    stc->t_inc_frac = t_inc - FLOOR(t_inc);
-    stc->t_inc_int = LRINT(t_inc - stc->t_inc_frac);
+    stc->t_inc_frac = t_inc_frac;
+    stc->t_inc_int = LRINT(t_inc - t_inc_frac);
 
     switch (s->coeffs) {
     case 0:
@@ -253,15 +291,17 @@ static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         stc->prev_delta_t[n] = F(-1.0);
 
     for (int n = 0; n < stc->nb_poles; n++) {
-        double inv_mag, p_cos, p_sin, mag;
+        double inv_mag, p_cos, p_sin, mag, log_mag, angle;
+        double angle_scaled;
         double re, im, a, b;
 
-        stc->log_mag[n] = log(ps[n][0]);
-        stc->angle[n] = ps[n][1];
-        a = stc->log_mag[n] * scale_factor;
-        b = stc->angle[n] * scale_factor;
-        stc->log_mag_scaled[n] = ISNORMAL(a) ? a : F(0.0);
-        stc->angle_scaled[n] = ISNORMAL(b) ? b : F(0.0);
+        log_mag = log(ps[n][0]);
+        angle = ps[n][1];
+        a = (scale_factor < 1.0) ? log_mag * scale_factor : log_mag;
+        b = (scale_factor < 1.0) ? angle * scale_factor : angle;
+        stc->log_mag_scaled[n] = a;
+        stc->angle_scaled[n] = b;
+        angle_scaled = b;
 
         stc->one[n].re = F(1.0);
         stc->one[n].im = F(0.0);
@@ -271,16 +311,16 @@ static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
         stc->r_fixed[n].re = ISNORMAL(re) ? re : F(0.0);
         stc->r_fixed[n].im = ISNORMAL(im) ? im : F(0.0);
 
-        inv_mag = exp(-stc->log_mag_scaled[n]);
-        p_cos = cos(stc->angle_scaled[n]);
-        p_sin = sin(stc->angle_scaled[n]);
-        mag = exp(stc->log_mag_scaled[n]);
+        inv_mag = (scale_factor < 1.0) ? pow(ps[n][0], -scale_factor) : 1.0/ps[n][0];
+        p_cos = cos(angle_scaled);
+        p_sin = sin(angle_scaled);
+        mag = (scale_factor < 1.0) ? pow(ps[n][0], scale_factor) : ps[n][0];
 
         re = inv_mag *  p_cos;
         im = inv_mag * -p_sin;
 
-        stc->inv[n].re = ISNORMAL(re) ? re : F(0.0);
-        stc->inv[n].im = ISNORMAL(im) ? im : F(0.0);
+        inv[n].re = ISNORMAL(re) ? re : F(0.0);
+        inv[n].im = ISNORMAL(im) ? im : F(0.0);
 
         re = mag * p_cos;
         im = mag * p_sin;
@@ -293,8 +333,15 @@ static int fn(aasrc_prepare)(AVFilterContext *ctx, fn(StateContext) *stc,
 
     stc->adv_ptr = stc->one;
 
-    fn(complex_exponential)(stc, stc->adv[0], stc->log_mag_scaled, stc->angle_scaled, stc->t_inc_frac, stc->nb_poles);
-    fn(vector_mul_complex)(stc->adv[1], stc->adv[0], stc->inv, stc->nb_poles);
+    fn(complex_exponential_precise)(adv[0], stc->log_mag_scaled, stc->angle_scaled, t_inc_frac, stc->nb_poles);
+    fn(vector_mul_complex_precise)(adv[1], adv[0], inv, stc->nb_poles);
+
+    for (int n = 0; n < stc->nb_poles; n++) {
+        stc->adv[0][n].re = ISNORMAL(adv[0][n].re) ? adv[0][n].re : F(0.0);
+        stc->adv[0][n].im = ISNORMAL(adv[0][n].im) ? adv[0][n].im : F(0.0);
+        stc->adv[1][n].re = ISNORMAL(adv[1][n].re) ? adv[1][n].re : F(0.0);
+        stc->adv[1][n].im = ISNORMAL(adv[1][n].im) ? adv[1][n].im : F(0.0);
+    }
 
     return 0;
 }
