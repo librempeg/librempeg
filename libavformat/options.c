@@ -400,7 +400,9 @@ static void *stream_group_child_next(void *obj, void *prev)
             return stg->params.tile_grid;
         case AV_STREAM_GROUP_PARAMS_TREF:
             return stg->params.tref;
+        case AV_STREAM_GROUP_PARAMS_LCEVC:
         case AV_STREAM_GROUP_PARAMS_DOLBY_VISION:
+        case AV_STREAM_GROUP_PARAMS_GAIN_MAP:
             return stg->params.layered_video;
         default:
             break;
@@ -430,7 +432,9 @@ static const AVClass *stream_group_child_iterate(void **opaque)
     case AV_STREAM_GROUP_PARAMS_TREF:
         ret = &tref_class;
         break;
+    case AV_STREAM_GROUP_PARAMS_LCEVC:
     case AV_STREAM_GROUP_PARAMS_DOLBY_VISION:
+    case AV_STREAM_GROUP_PARAMS_GAIN_MAP:
         ret = &layered_video_class;
         break;
     default:
@@ -508,6 +512,8 @@ AVStreamGroup *avformat_stream_group_create(AVFormatContext *s,
         stg->params.tref->av_class = &tref_class;
         av_opt_set_defaults(stg->params.tref);
         break;
+    case AV_STREAM_GROUP_PARAMS_LCEVC:
+    case AV_STREAM_GROUP_PARAMS_GAIN_MAP:
     case AV_STREAM_GROUP_PARAMS_DOLBY_VISION:
         stg->params.layered_video = av_mallocz(sizeof(*stg->params.layered_video));
         if (!stg->params.layered_video)
