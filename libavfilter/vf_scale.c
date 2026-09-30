@@ -839,6 +839,7 @@ scale:
     }
 
     if (sws_is_noop(out, in)) {
+        in->chroma_location = out->chroma_location;
         av_frame_free(&out);
         in->flags = flags_orig;
         *frame_out = in;
