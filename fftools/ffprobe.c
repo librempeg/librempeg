@@ -61,8 +61,6 @@
 #include "libavdevice/version.h"
 #include "libswscale/swscale.h"
 #include "libswscale/version.h"
-#include "libswresample/swresample.h"
-#include "libswresample/version.h"
 #include "libavfilter/version.h"
 #include "textformat/avtextformat.h"
 #include "cmdutils.h"

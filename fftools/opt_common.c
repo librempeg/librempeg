@@ -58,9 +58,6 @@
 #include "libswscale/swscale.h"
 #include "libswscale/version.h"
 
-#include "libswresample/swresample.h"
-#include "libswresample/version.h"
-
 enum show_muxdemuxers {
     SHOW_DEFAULT,
     SHOW_DEMUXERS,

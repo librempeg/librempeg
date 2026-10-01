@@ -47,8 +47,6 @@
 #include "libavutil/thread.h"
 #include "libavutil/threadmessage.h"
 
-#include "libswresample/swresample.h"
-
 #define FFMPEG_ERROR_RATE_EXCEEDED FFERRTAG('E', 'R', 'E', 'D')
 
 enum VideoSyncMethod {

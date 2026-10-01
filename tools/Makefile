@@ -23,9 +23,6 @@ tools/target_io_dem_fuzzer.o: tools/target_dem_fuzzer.c | $(MSCL)
 tools/target_sws_fuzzer.o: tools/target_sws_fuzzer.c | $(MSCL)
 	$(COMPILE_C)
 
-tools/target_swr_fuzzer.o: tools/target_swr_fuzzer.c | $(MSCL)
-	$(COMPILE_C)
-
 tools/enc_recon_frame_test$(EXESUF): tools/decode_simple.o
 tools/venc_data_dump$(EXESUF): tools/decode_simple.o
 tools/scale_slice_test$(EXESUF): tools/decode_simple.o
