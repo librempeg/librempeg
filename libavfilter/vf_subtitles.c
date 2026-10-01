@@ -305,10 +305,9 @@ static av_cold int init_ass(AVFilterContext *ctx)
     return read_track(ctx);
 }
 
-static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg,
-                           char *res, int res_len, int flags)
+static int process_command(AVFilterContext *ctx, const char *cmd, const char *arg)
 {
-    int ret = ff_filter_process_command(ctx, cmd, arg, res, res_len, flags);
+    int ret = ff_filter_process_command(ctx, cmd, arg);
 
     if (ret < 0 || (ret = read_track(ctx)) < 0)
         return ret;
