@@ -73,6 +73,11 @@ static int cfdf_ima_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         int step_index = buf[2];
         int nibbles    = nb - 1;
 
+        if (step_index > 88u) {
+            av_log(avctx, AV_LOG_ERROR, "step_index[%d] = %i\n", 0, step_index);
+            return AVERROR_INVALIDDATA;
+        }
+
         dst[n++] = hist; /* sample 0: predictor verbatim */
         for (int k = 0; k < nibbles; k++) {
             int byte   = buf[3 + (k >> 1)];
