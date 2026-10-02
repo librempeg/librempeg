@@ -3112,8 +3112,6 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA Citrix"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
-
-    /* AMR */
     {
         .id        = AV_CODEC_ID_ADPCM_IMA_CFDF,
         .type      = AVMEDIA_TYPE_AUDIO,
@@ -3121,6 +3119,8 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA Cyberflix DreamFactory"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
+
+    /* AMR */
     {
         .id        = AV_CODEC_ID_AMR_NB,
         .type      = AVMEDIA_TYPE_AUDIO,
