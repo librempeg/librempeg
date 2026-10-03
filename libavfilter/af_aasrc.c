@@ -37,6 +37,7 @@ typedef struct AASRCContext {
     int pass;
     int sample_rate;
     int coeffs;
+    int max_reset;
     int channels;
     double t_inc;
 
@@ -56,6 +57,7 @@ typedef struct AASRCContext {
 
 static const AVOption aasrc_options[] = {
     { "sample_rate", "set the sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64=0}, 0, INT_MAX, FLAGS },
+    { "max_reset", "set the max_reset", OFFSET(max_reset), AV_OPT_TYPE_INT, {.i64=32}, 1, 1024, FLAGS },
     {NULL}
 };
 

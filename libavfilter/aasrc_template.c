@@ -116,7 +116,6 @@
 #define fnc2(a,b)   fn3(a, b)
 #define fnc(a)      fnc2(a, ftype)
 
-#define K1 32
 #define MAX_NB_POLES 12
 #define MAX_HISTORY 8
 
@@ -402,6 +401,7 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
     itype *dst = (itype *)out->extended_data[ch];
     const int n_out_samples = out->nb_samples;
     const int n_in_samples = in->nb_samples;
+    const int max_reset = s->max_reset;
     fn(StateContext) *state = s->state;
     fn(StateContext) *stc = &state[ch];
     const ctype (*adv)[MAX_NB_POLES] = stc->adv;
@@ -438,13 +438,13 @@ static void fn(aasrc)(AVFilterContext *ctx, AVFrame *in, AVFrame *out,
 
     n = 0;
 repeat:
-    if (reset_index >= K1) {
+    if (reset_index >= max_reset) {
         fn(complex_exponential)(stc, cur, stc->log_mag_scaled, stc->angle_scaled, reset_delta_t, nb_poles);
         vector_mul_complex(cur, stc->r_fixed, cur, nb_poles);
         reset_index = 0;
     }
 
-    while ((n < n_out_samples) && ((in_idx + idx) < n_in_samples) && (reset_index < K1)) {
+    while ((n < n_out_samples) && ((in_idx + idx) < n_in_samples) && (reset_index < max_reset)) {
         ftype delta_t_frac, y;
         int frac_carry;
 
@@ -472,9 +472,6 @@ repeat:
             dst[n] = y;
 #endif
 
-            reset_delta_t = delta_t;
-            reset_index++;
-
             in_idx += idx_inc;
             delta_t += t_inc_frac;
             delta_t_frac = delta_t - FLOOR(delta_t);
@@ -483,6 +480,8 @@ repeat:
             delta_t = delta_t_frac;
 
             adv_ptr = adv[frac_carry];
+            reset_index += frac_carry;
+            reset_delta_t = delta_t;
 
             idx = 0;
             n++;
