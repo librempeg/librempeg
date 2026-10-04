@@ -118,14 +118,15 @@ static inline struct rgbvec interp_trilinear(const LUT3DContext *lut3d,
     const int prev[] = {PREV(s->r), PREV(s->g), PREV(s->b)};
     const int next[] = {NEXT(s->r), NEXT(s->g), NEXT(s->b)};
     const struct rgbvec d = {s->r - prev[0], s->g - prev[1], s->b - prev[2]};
-    const struct rgbvec c000 = lut3d->lut[prev[0] * lutsize2 + prev[1] * lutsize + prev[2]];
-    const struct rgbvec c001 = lut3d->lut[prev[0] * lutsize2 + prev[1] * lutsize + next[2]];
-    const struct rgbvec c010 = lut3d->lut[prev[0] * lutsize2 + next[1] * lutsize + prev[2]];
-    const struct rgbvec c011 = lut3d->lut[prev[0] * lutsize2 + next[1] * lutsize + next[2]];
-    const struct rgbvec c100 = lut3d->lut[next[0] * lutsize2 + prev[1] * lutsize + prev[2]];
-    const struct rgbvec c101 = lut3d->lut[next[0] * lutsize2 + prev[1] * lutsize + next[2]];
-    const struct rgbvec c110 = lut3d->lut[next[0] * lutsize2 + next[1] * lutsize + prev[2]];
-    const struct rgbvec c111 = lut3d->lut[next[0] * lutsize2 + next[1] * lutsize + next[2]];
+    const struct rgbvec *lut = lut3d->lut;
+    const struct rgbvec c000 = lut[prev[0] * lutsize2 + prev[1] * lutsize + prev[2]];
+    const struct rgbvec c001 = lut[prev[0] * lutsize2 + prev[1] * lutsize + next[2]];
+    const struct rgbvec c010 = lut[prev[0] * lutsize2 + next[1] * lutsize + prev[2]];
+    const struct rgbvec c011 = lut[prev[0] * lutsize2 + next[1] * lutsize + next[2]];
+    const struct rgbvec c100 = lut[next[0] * lutsize2 + prev[1] * lutsize + prev[2]];
+    const struct rgbvec c101 = lut[next[0] * lutsize2 + prev[1] * lutsize + next[2]];
+    const struct rgbvec c110 = lut[next[0] * lutsize2 + next[1] * lutsize + prev[2]];
+    const struct rgbvec c111 = lut[next[0] * lutsize2 + next[1] * lutsize + next[2]];
     const struct rgbvec c00  = lerp(&c000, &c100, d.r);
     const struct rgbvec c10  = lerp(&c010, &c110, d.r);
     const struct rgbvec c01  = lerp(&c001, &c101, d.r);
@@ -141,17 +142,18 @@ static inline struct rgbvec interp_pyramid(const LUT3DContext *lut3d,
 {
     const int lutsize2 = lut3d->lutsize2;
     const int lutsize  = lut3d->lutsize;
+    const struct rgbvec *lut = lut3d->lut;
     const int prev[] = {PREV(s->r), PREV(s->g), PREV(s->b)};
     const int next[] = {NEXT(s->r), NEXT(s->g), NEXT(s->b)};
     const struct rgbvec d = {s->r - prev[0], s->g - prev[1], s->b - prev[2]};
-    const struct rgbvec c000 = lut3d->lut[prev[0] * lutsize2 + prev[1] * lutsize + prev[2]];
-    const struct rgbvec c111 = lut3d->lut[next[0] * lutsize2 + next[1] * lutsize + next[2]];
+    const struct rgbvec c000 = lut[prev[0] * lutsize2 + prev[1] * lutsize + prev[2]];
+    const struct rgbvec c111 = lut[next[0] * lutsize2 + next[1] * lutsize + next[2]];
     struct rgbvec c;
 
     if (d.g > d.r && d.b > d.r) {
-        const struct rgbvec c001 = lut3d->lut[prev[0] * lutsize2 + prev[1] * lutsize + next[2]];
-        const struct rgbvec c010 = lut3d->lut[prev[0] * lutsize2 + next[1] * lutsize + prev[2]];
-        const struct rgbvec c011 = lut3d->lut[prev[0] * lutsize2 + next[1] * lutsize + next[2]];
+        const struct rgbvec c001 = lut[prev[0] * lutsize2 + prev[1] * lutsize + next[2]];
+        const struct rgbvec c010 = lut[prev[0] * lutsize2 + next[1] * lutsize + prev[2]];
+        const struct rgbvec c011 = lut[prev[0] * lutsize2 + next[1] * lutsize + next[2]];
 
         c.r = c000.r + (c111.r - c011.r) * d.r + (c010.r - c000.r) * d.g + (c001.r - c000.r) * d.b +
               (c011.r - c001.r - c010.r + c000.r) * d.g * d.b;
@@ -160,9 +162,9 @@ static inline struct rgbvec interp_pyramid(const LUT3DContext *lut3d,
         c.b = c000.b + (c111.b - c011.b) * d.r + (c010.b - c000.b) * d.g + (c001.b - c000.b) * d.b +
               (c011.b - c001.b - c010.b + c000.b) * d.g * d.b;
     } else if (d.r > d.g && d.b > d.g) {
-        const struct rgbvec c001 = lut3d->lut[prev[0] * lutsize2 + prev[1] * lutsize + next[2]];
-        const struct rgbvec c100 = lut3d->lut[next[0] * lutsize2 + prev[1] * lutsize + prev[2]];
-        const struct rgbvec c101 = lut3d->lut[next[0] * lutsize2 + prev[1] * lutsize + next[2]];
+        const struct rgbvec c001 = lut[prev[0] * lutsize2 + prev[1] * lutsize + next[2]];
+        const struct rgbvec c100 = lut[next[0] * lutsize2 + prev[1] * lutsize + prev[2]];
+        const struct rgbvec c101 = lut[next[0] * lutsize2 + prev[1] * lutsize + next[2]];
 
         c.r = c000.r + (c100.r - c000.r) * d.r + (c111.r - c101.r) * d.g + (c001.r - c000.r) * d.b +
               (c101.r - c001.r - c100.r + c000.r) * d.r * d.b;
@@ -171,9 +173,9 @@ static inline struct rgbvec interp_pyramid(const LUT3DContext *lut3d,
         c.b = c000.b + (c100.b - c000.b) * d.r + (c111.b - c101.b) * d.g + (c001.b - c000.b) * d.b +
               (c101.b - c001.b - c100.b + c000.b) * d.r * d.b;
     } else {
-        const struct rgbvec c010 = lut3d->lut[prev[0] * lutsize2 + next[1] * lutsize + prev[2]];
-        const struct rgbvec c110 = lut3d->lut[next[0] * lutsize2 + next[1] * lutsize + prev[2]];
-        const struct rgbvec c100 = lut3d->lut[next[0] * lutsize2 + prev[1] * lutsize + prev[2]];
+        const struct rgbvec c010 = lut[prev[0] * lutsize2 + next[1] * lutsize + prev[2]];
+        const struct rgbvec c110 = lut[next[0] * lutsize2 + next[1] * lutsize + prev[2]];
+        const struct rgbvec c100 = lut[next[0] * lutsize2 + prev[1] * lutsize + prev[2]];
 
         c.r = c000.r + (c100.r - c000.r) * d.r + (c010.r - c000.r) * d.g + (c111.r - c110.r) * d.b +
               (c110.r - c100.r - c010.r + c000.r) * d.r * d.g;
@@ -191,18 +193,19 @@ static inline struct rgbvec interp_prism(const LUT3DContext *lut3d,
 {
     const int lutsize2 = lut3d->lutsize2;
     const int lutsize  = lut3d->lutsize;
+    const struct rgbvec *lut = lut3d->lut;
     const int prev[] = {PREV(s->r), PREV(s->g), PREV(s->b)};
     const int next[] = {NEXT(s->r), NEXT(s->g), NEXT(s->b)};
     const struct rgbvec d = {s->r - prev[0], s->g - prev[1], s->b - prev[2]};
-    const struct rgbvec c000 = lut3d->lut[prev[0] * lutsize2 + prev[1] * lutsize + prev[2]];
-    const struct rgbvec c010 = lut3d->lut[prev[0] * lutsize2 + next[1] * lutsize + prev[2]];
-    const struct rgbvec c101 = lut3d->lut[next[0] * lutsize2 + prev[1] * lutsize + next[2]];
-    const struct rgbvec c111 = lut3d->lut[next[0] * lutsize2 + next[1] * lutsize + next[2]];
+    const struct rgbvec c000 = lut[prev[0] * lutsize2 + prev[1] * lutsize + prev[2]];
+    const struct rgbvec c010 = lut[prev[0] * lutsize2 + next[1] * lutsize + prev[2]];
+    const struct rgbvec c101 = lut[next[0] * lutsize2 + prev[1] * lutsize + next[2]];
+    const struct rgbvec c111 = lut[next[0] * lutsize2 + next[1] * lutsize + next[2]];
     struct rgbvec c;
 
     if (d.b > d.r) {
-        const struct rgbvec c001 = lut3d->lut[prev[0] * lutsize2 + prev[1] * lutsize + next[2]];
-        const struct rgbvec c011 = lut3d->lut[prev[0] * lutsize2 + next[1] * lutsize + next[2]];
+        const struct rgbvec c001 = lut[prev[0] * lutsize2 + prev[1] * lutsize + next[2]];
+        const struct rgbvec c011 = lut[prev[0] * lutsize2 + next[1] * lutsize + next[2]];
 
         c.r = c000.r + (c001.r - c000.r) * d.b + (c101.r - c001.r) * d.r + (c010.r - c000.r) * d.g +
               (c000.r - c010.r - c001.r + c011.r) * d.b * d.g +
@@ -214,8 +217,8 @@ static inline struct rgbvec interp_prism(const LUT3DContext *lut3d,
               (c000.b - c010.b - c001.b + c011.b) * d.b * d.g +
               (c001.b - c011.b - c101.b + c111.b) * d.r * d.g;
     } else {
-        const struct rgbvec c110 = lut3d->lut[next[0] * lutsize2 + next[1] * lutsize + prev[2]];
-        const struct rgbvec c100 = lut3d->lut[next[0] * lutsize2 + prev[1] * lutsize + prev[2]];
+        const struct rgbvec c110 = lut[next[0] * lutsize2 + next[1] * lutsize + prev[2]];
+        const struct rgbvec c100 = lut[next[0] * lutsize2 + prev[1] * lutsize + prev[2]];
 
         c.r = c000.r + (c101.r - c100.r) * d.b + (c100.r - c000.r) * d.r + (c010.r - c000.r) * d.g +
               (c100.r - c110.r - c101.r + c111.r) * d.b * d.g +
@@ -240,48 +243,49 @@ static inline struct rgbvec interp_tetrahedral(const LUT3DContext *lut3d,
 {
     const int lutsize2 = lut3d->lutsize2;
     const int lutsize  = lut3d->lutsize;
+    const struct rgbvec *lut = lut3d->lut;
     const int prev[] = {PREV(s->r), PREV(s->g), PREV(s->b)};
     const int next[] = {NEXT(s->r), NEXT(s->g), NEXT(s->b)};
     const struct rgbvec d = {s->r - prev[0], s->g - prev[1], s->b - prev[2]};
-    const struct rgbvec c000 = lut3d->lut[prev[0] * lutsize2 + prev[1] * lutsize + prev[2]];
-    const struct rgbvec c111 = lut3d->lut[next[0] * lutsize2 + next[1] * lutsize + next[2]];
+    const struct rgbvec c000 = lut[prev[0] * lutsize2 + prev[1] * lutsize + prev[2]];
+    const struct rgbvec c111 = lut[next[0] * lutsize2 + next[1] * lutsize + next[2]];
     struct rgbvec c;
     if (d.r > d.g) {
         if (d.g > d.b) {
-            const struct rgbvec c100 = lut3d->lut[next[0] * lutsize2 + prev[1] * lutsize + prev[2]];
-            const struct rgbvec c110 = lut3d->lut[next[0] * lutsize2 + next[1] * lutsize + prev[2]];
+            const struct rgbvec c100 = lut[next[0] * lutsize2 + prev[1] * lutsize + prev[2]];
+            const struct rgbvec c110 = lut[next[0] * lutsize2 + next[1] * lutsize + prev[2]];
             c.r = (1-d.r) * c000.r + (d.r-d.g) * c100.r + (d.g-d.b) * c110.r + (d.b) * c111.r;
             c.g = (1-d.r) * c000.g + (d.r-d.g) * c100.g + (d.g-d.b) * c110.g + (d.b) * c111.g;
             c.b = (1-d.r) * c000.b + (d.r-d.g) * c100.b + (d.g-d.b) * c110.b + (d.b) * c111.b;
         } else if (d.r > d.b) {
-            const struct rgbvec c100 = lut3d->lut[next[0] * lutsize2 + prev[1] * lutsize + prev[2]];
-            const struct rgbvec c101 = lut3d->lut[next[0] * lutsize2 + prev[1] * lutsize + next[2]];
+            const struct rgbvec c100 = lut[next[0] * lutsize2 + prev[1] * lutsize + prev[2]];
+            const struct rgbvec c101 = lut[next[0] * lutsize2 + prev[1] * lutsize + next[2]];
             c.r = (1-d.r) * c000.r + (d.r-d.b) * c100.r + (d.b-d.g) * c101.r + (d.g) * c111.r;
             c.g = (1-d.r) * c000.g + (d.r-d.b) * c100.g + (d.b-d.g) * c101.g + (d.g) * c111.g;
             c.b = (1-d.r) * c000.b + (d.r-d.b) * c100.b + (d.b-d.g) * c101.b + (d.g) * c111.b;
         } else {
-            const struct rgbvec c001 = lut3d->lut[prev[0] * lutsize2 + prev[1] * lutsize + next[2]];
-            const struct rgbvec c101 = lut3d->lut[next[0] * lutsize2 + prev[1] * lutsize + next[2]];
+            const struct rgbvec c001 = lut[prev[0] * lutsize2 + prev[1] * lutsize + next[2]];
+            const struct rgbvec c101 = lut[next[0] * lutsize2 + prev[1] * lutsize + next[2]];
             c.r = (1-d.b) * c000.r + (d.b-d.r) * c001.r + (d.r-d.g) * c101.r + (d.g) * c111.r;
             c.g = (1-d.b) * c000.g + (d.b-d.r) * c001.g + (d.r-d.g) * c101.g + (d.g) * c111.g;
             c.b = (1-d.b) * c000.b + (d.b-d.r) * c001.b + (d.r-d.g) * c101.b + (d.g) * c111.b;
         }
     } else {
         if (d.b > d.g) {
-            const struct rgbvec c001 = lut3d->lut[prev[0] * lutsize2 + prev[1] * lutsize + next[2]];
-            const struct rgbvec c011 = lut3d->lut[prev[0] * lutsize2 + next[1] * lutsize + next[2]];
+            const struct rgbvec c001 = lut[prev[0] * lutsize2 + prev[1] * lutsize + next[2]];
+            const struct rgbvec c011 = lut[prev[0] * lutsize2 + next[1] * lutsize + next[2]];
             c.r = (1-d.b) * c000.r + (d.b-d.g) * c001.r + (d.g-d.r) * c011.r + (d.r) * c111.r;
             c.g = (1-d.b) * c000.g + (d.b-d.g) * c001.g + (d.g-d.r) * c011.g + (d.r) * c111.g;
             c.b = (1-d.b) * c000.b + (d.b-d.g) * c001.b + (d.g-d.r) * c011.b + (d.r) * c111.b;
         } else if (d.b > d.r) {
-            const struct rgbvec c010 = lut3d->lut[prev[0] * lutsize2 + next[1] * lutsize + prev[2]];
-            const struct rgbvec c011 = lut3d->lut[prev[0] * lutsize2 + next[1] * lutsize + next[2]];
+            const struct rgbvec c010 = lut[prev[0] * lutsize2 + next[1] * lutsize + prev[2]];
+            const struct rgbvec c011 = lut[prev[0] * lutsize2 + next[1] * lutsize + next[2]];
             c.r = (1-d.g) * c000.r + (d.g-d.b) * c010.r + (d.b-d.r) * c011.r + (d.r) * c111.r;
             c.g = (1-d.g) * c000.g + (d.g-d.b) * c010.g + (d.b-d.r) * c011.g + (d.r) * c111.g;
             c.b = (1-d.g) * c000.b + (d.g-d.b) * c010.b + (d.b-d.r) * c011.b + (d.r) * c111.b;
         } else {
-            const struct rgbvec c010 = lut3d->lut[prev[0] * lutsize2 + next[1] * lutsize + prev[2]];
-            const struct rgbvec c110 = lut3d->lut[next[0] * lutsize2 + next[1] * lutsize + prev[2]];
+            const struct rgbvec c010 = lut[prev[0] * lutsize2 + next[1] * lutsize + prev[2]];
+            const struct rgbvec c110 = lut[next[0] * lutsize2 + next[1] * lutsize + prev[2]];
             c.r = (1-d.g) * c000.r + (d.g-d.r) * c010.r + (d.r-d.b) * c110.r + (d.b) * c111.r;
             c.g = (1-d.g) * c000.g + (d.g-d.r) * c010.g + (d.r-d.b) * c110.g + (d.b) * c111.g;
             c.b = (1-d.g) * c000.b + (d.g-d.r) * c010.b + (d.r-d.b) * c110.b + (d.b) * c111.b;
