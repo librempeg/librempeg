@@ -263,14 +263,21 @@ fate-aac-yoraw-encode: REF = $(SAMPLES)/audio-reference/yo.raw-short.wav
 fate-aac-yoraw-encode: CMP_TARGET = 226
 fate-aac-yoraw-encode: FUZZ = 17
 
-# NMR quality-target modes, per-packet sizes pinned: VBR at the finest quality
-# drives frames against the decoder-buffer limit
-FATE_AAC_ENCODE_TRANSCODE += fate-aac-nmr-vbr-encode
-fate-aac-nmr-vbr-encode: CMD = transcode wav $(TARGET_SAMPLES)/audio-reference/luckynight_2ch_44kHz_s16.wav adts "-af aresample -c:a aac -q:a 8 -t 2" "-c copy"
+# NMR quality-target modes: VBR at the finest quality drives frames against
+# the decoder-buffer limit; ABR runs through the rate servo's boot
+FATE_AAC_ENCODE += fate-aac-nmr-vbr-encode
+fate-aac-nmr-vbr-encode: CMD = enc_dec_pcm mp4 wav s16le $(TARGET_SAMPLES)/audio-reference/luckynight_2ch_44kHz_s16.wav -c:a aac -q:a 8 -fflags +bitexact -flags +bitexact
+fate-aac-nmr-vbr-encode: CMP = stddev
+fate-aac-nmr-vbr-encode: REF = $(SAMPLES)/audio-reference/luckynight_2ch_44kHz_s16.wav
+fate-aac-nmr-vbr-encode: CMP_TARGET = 67
+fate-aac-nmr-vbr-encode: FUZZ = 5
 
-# ABR through the rate servo's boot (~2s)
-FATE_AAC_ENCODE_TRANSCODE += fate-aac-nmr-abr-encode
-fate-aac-nmr-abr-encode: CMD = transcode wav $(TARGET_SAMPLES)/audio-reference/luckynight_2ch_44kHz_s16.wav adts "-af aresample -c:a aac -aac_rc abr -b:a 96k -t 3" "-c copy"
+FATE_AAC_ENCODE += fate-aac-nmr-abr-encode
+fate-aac-nmr-abr-encode: CMD = enc_dec_pcm mp4 wav s16le $(TARGET_SAMPLES)/audio-reference/luckynight_2ch_44kHz_s16.wav -c:a aac -aac_rc abr -b:a 96k -fflags +bitexact -flags +bitexact
+fate-aac-nmr-abr-encode: CMP = stddev
+fate-aac-nmr-abr-encode: REF = $(SAMPLES)/audio-reference/luckynight_2ch_44kHz_s16.wav
+fate-aac-nmr-abr-encode: CMP_TARGET = 451
+fate-aac-nmr-abr-encode: FUZZ = 15
 
 tests/data/fate/aac-5_1_2.adts: TAG = GEN
 tests/data/fate/aac-5_1_2.adts: tests/data/asynth-44100-8.wav
