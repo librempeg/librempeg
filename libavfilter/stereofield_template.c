@@ -94,9 +94,15 @@ static void fn(apply_window)(StereoFieldContext *s,
     }
 }
 
-static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
+typedef struct fn(ThreadData) {
+    ctype *windowed_oleft;
+    ctype *windowed_oright;
+} fn(ThreadData);
+
+static void fn(stereofield)(ctype *fl, ctype *fr,
                             const ftype d, const ftype a0, const ftype a1,
-                            const ftype p, const int M)
+                            const ftype p, const int M,
+                            const int start, const int end)
 {
     const ftype lx = (p > F(0.0)) ? F(1.0)-p : F(1.0);
     const ftype rx = (p < F(0.0)) ? F(1.0)+p : F(1.0);
@@ -105,7 +111,7 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
 
     switch (M) {
     case OP_LEFT:
-        for (int i = 0; i < N; i++) {
+        for (int i = start; i < end; i++) {
             const ftype l_re = fl[i].re;
             const ftype l_im = fl[i].im;
             const ftype r_re = fr[i].re;
@@ -136,7 +142,7 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
         }
         break;
     case OP_RIGHT:
-        for (int i = 0; i < N; i++) {
+        for (int i = start; i < end; i++) {
             const ftype l_re = fl[i].re;
             const ftype l_im = fl[i].im;
             const ftype r_re = fr[i].re;
@@ -167,7 +173,7 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
         }
         break;
     case OP_STEREO:
-        for (int i = 0; i < N; i++) {
+        for (int i = start; i < end; i++) {
             const ftype l_re = fl[i].re;
             const ftype l_im = fl[i].im;
             const ftype r_re = fr[i].re;
@@ -203,6 +209,26 @@ static void fn(stereofield)(ctype *fl, ctype *fr, const int N,
     }
 }
 
+static int fn(stereofield_slice)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    StereoFieldContext *s = ctx->priv;
+    const int N = s->fft_size/2 + 1;
+    fn(ThreadData) *td = arg;
+    ctype *windowed_oleft  = td->windowed_oleft;
+    ctype *windowed_oright = td->windowed_oright;
+    const int start = ff_slice_pos(N, jobnr, nb_jobs);
+    const int end = ff_slice_pos(N, jobnr+1, nb_jobs);
+    const ftype A0 = s->A[0];
+    const ftype A1 = s->A[1];
+    const int M = s->mode;
+    const ftype D = s->D;
+    const ftype P = s->P;
+
+    fn(stereofield)(windowed_oleft, windowed_oright, D, A0, A1, P, M, start, end);
+
+    return 0;
+}
+
 static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
 {
     StereoFieldContext *s = ctx->priv;
@@ -222,11 +248,7 @@ static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     const int offset = s->fft_size - overlap;
     const int nb_samples = FFMIN(overlap, s->in->nb_samples - doffset);
     const int out_nb_samples = FFMIN(overlap, out->nb_samples - doffset);
-    const int M = s->mode;
-    const ftype A0 = s->A[0];
-    const ftype A1 = s->A[1];
-    const ftype D = s->D;
-    const ftype P = s->P;
+    fn(ThreadData) td;
 
     // shift in/out buffers
     memmove(left_in, &left_in[overlap], offset * sizeof(*left_in));
@@ -243,8 +265,10 @@ static int fn(sf_stereo)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     s->tx_fn(s->tx_ctx, windowed_oleft,  windowed_left,  sizeof(ftype));
     s->tx_fn(s->tx_ctx, windowed_oright, windowed_right, sizeof(ftype));
 
-    fn(stereofield)(windowed_oleft, windowed_oright,
-                    s->fft_size/2 + 1, D, A0, A1, P, M);
+    td.windowed_oleft = windowed_oleft;
+    td.windowed_oright = windowed_oright;
+    ff_filter_execute(ctx, fn(stereofield_slice), &td, NULL,
+                      FFMIN(s->fft_size/2+1, ff_filter_get_nb_threads(ctx)));
 
     s->itx_fn(s->itx_ctx, windowed_left, windowed_oleft, sizeof(ctype));
     s->itx_fn(s->itx_ctx, windowed_right, windowed_oright, sizeof(ctype));
@@ -284,11 +308,7 @@ static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     const int overlap = s->overlap;
     const int offset = s->fft_size - overlap;
     const int nb_samples = 0;
-    const int M = s->mode;
-    const ftype A0 = s->A[0];
-    const ftype A1 = s->A[1];
-    const ftype D = s->D;
-    const ftype P = s->P;
+    fn(ThreadData) td;
 
     // shift in/out buffers
     memmove(left_in, &left_in[overlap], offset * sizeof(*left_in));
@@ -303,8 +323,10 @@ static int fn(sf_flush)(AVFilterContext *ctx, AVFrame *out, const int doffset)
     s->tx_fn(s->tx_ctx, windowed_oleft,  windowed_left,  sizeof(ftype));
     s->tx_fn(s->tx_ctx, windowed_oright, windowed_right, sizeof(ftype));
 
-    fn(stereofield)(windowed_oleft, windowed_oright,
-                    s->fft_size/2 + 1, D, A0, A1, P, M);
+    td.windowed_oleft = windowed_oleft;
+    td.windowed_oright = windowed_oright;
+    ff_filter_execute(ctx, fn(stereofield_slice), &td, NULL,
+                      FFMIN(s->fft_size/2+1, ff_filter_get_nb_threads(ctx)));
 
     s->itx_fn(s->itx_ctx, windowed_left, windowed_oleft, sizeof(ctype));
     s->itx_fn(s->itx_ctx, windowed_right, windowed_oright, sizeof(ctype));

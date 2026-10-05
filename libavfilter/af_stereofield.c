@@ -309,7 +309,8 @@ const FFFilter ff_af_stereofield = {
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_QUERY_FUNC2(query_formats),
-    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                       AVFILTER_FLAG_SLICE_THREADS,
     .activate        = activate,
     .process_command = ff_filter_process_command,
 };
