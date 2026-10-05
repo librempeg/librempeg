@@ -210,6 +210,7 @@ const FFFilter ff_vf_format = {
     FILTER_OUTPUTS(ff_video_default_filterpad),
 
     FILTER_QUERY_FUNC2(query_formats),
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_PARAMS,
 };
 #endif /* CONFIG_FORMAT_FILTER */
 
@@ -230,5 +231,6 @@ const FFFilter ff_vf_noformat = {
     FILTER_OUTPUTS(ff_video_default_filterpad),
 
     FILTER_QUERY_FUNC2(query_formats),
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_PARAMS,
 };
 #endif /* CONFIG_NOFORMAT_FILTER */

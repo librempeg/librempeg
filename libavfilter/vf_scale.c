@@ -1126,4 +1126,5 @@ const FFFilter ff_vf_scale = {
     FILTER_QUERY_FUNC2(query_formats),
     .activate        = activate,
     .process_command = process_command,
+    .flags_internal  = FF_FILTER_FLAG_DYNAMIC_FRAME_PARAMS,
 };
