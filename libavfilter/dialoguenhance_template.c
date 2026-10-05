@@ -24,7 +24,6 @@
 #undef ctype
 #undef ftype
 #undef SQRT
-#undef HYPOT
 #undef SAMPLE_FORMAT
 #undef TX_TYPE
 #undef SIN
@@ -33,7 +32,6 @@
 #if DEPTH == 32
 #define SAMPLE_FORMAT float
 #define SQRT sqrtf
-#define HYPOT hypotf
 #define ctype AVComplexFloat
 #define ftype float
 #define TX_TYPE AV_TX_FLOAT_RDFT
@@ -43,7 +41,6 @@
 #else
 #define SAMPLE_FORMAT double
 #define SQRT sqrt
-#define HYPOT hypot
 #define ctype AVComplexDouble
 #define ftype double
 #define TX_TYPE AV_TX_DOUBLE_RDFT
@@ -135,7 +132,7 @@ static ftype fn(flux)(ftype *curf, ftype *prevf, int N)
         ftype p_re = prev[i].re;
         ftype p_im = prev[i].im;
 
-        sum += fn(sqr)(HYPOT(c_re, c_im) - HYPOT(p_re, p_im));
+        sum += fn(sqr)(SQRT(c_re * c_re + c_im * c_im) - SQRT(p_re * p_re + p_im * p_im));
     }
 
     return sum;
@@ -157,7 +154,7 @@ static ftype fn(fluxlr)(ftype *lf, ftype *lpf,
         ftype p_re = lp[i].re - rp[i].re;
         ftype p_im = lp[i].im - rp[i].im;
 
-        sum += fn(sqr)(HYPOT(c_re, c_im) - HYPOT(p_re, p_im));
+        sum += fn(sqr)(SQRT(c_re * c_re + c_im * c_im) - SQRT(p_re * p_re + p_im * p_im));
     }
 
     return sum;
