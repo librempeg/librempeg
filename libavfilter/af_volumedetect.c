@@ -36,6 +36,8 @@ typedef struct VolDetectContext {
     uint64_t histogram[HISTOGRAM_SIZE];
     float max;
     double sum2;
+    int eof;
+    int64_t eof_pts;
 
     double max_volume;
     double mean_volume;
@@ -160,21 +162,49 @@ static int config_output(AVFilterLink *outlink)
     return 0;
 }
 
-static av_cold void uninit(AVFilterContext *ctx)
+static int activate(AVFilterContext *ctx)
 {
+    AVFilterLink *outlink = ctx->outputs[0];
+    AVFilterLink *inlink = ctx->inputs[0];
     VolDetectContext *s = ctx->priv;
+    AVFrame *in = NULL;
+    int ret, status;
 
-    if (s->print_stats)
-        s->print_stats(ctx);
+    ret = ff_outlink_get_status(outlink);
+    if (ret) {
+        ff_inlink_set_status(inlink, ret);
+
+        if (s->print_stats)
+            s->print_stats(ctx);
+
+        return 0;
+    }
+
+    if (ff_inlink_acknowledge_status(inlink, &status, &s->eof_pts)) {
+        if (status == AVERROR_EOF)
+            s->eof = 1;
+    }
+
+    ret = ff_inlink_consume_frame(inlink, &in);
+    if (ret < 0)
+        return ret;
+    if (ret > 0)
+        return filter_frame(inlink, in);
+
+    if (s->eof) {
+        ff_outlink_set_status(outlink, AVERROR_EOF, s->eof_pts);
+
+        if (s->print_stats)
+            s->print_stats(ctx);
+
+        return 0;
+    }
+
+    if (!s->eof)
+        FF_FILTER_FORWARD_WANTED(outlink, inlink);
+
+    return FFERROR_NOT_READY;
 }
-
-static const AVFilterPad volumedetect_inputs[] = {
-    {
-        .name         = "default",
-        .type         = AVMEDIA_TYPE_AUDIO,
-        .filter_frame = filter_frame,
-    },
-};
 
 static const AVFilterPad volumedetect_outputs[] = {
     {
@@ -189,10 +219,10 @@ const FFFilter ff_af_volumedetect = {
     .p.description = NULL_IF_CONFIG_SMALL("Detect audio volume."),
     .p.priv_class  = &volumedetect_class,
     .priv_size     = sizeof(VolDetectContext),
-    .uninit        = uninit,
     .p.flags       = AVFILTER_FLAG_METADATA_ONLY |
                      AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
-    FILTER_INPUTS(volumedetect_inputs),
+    .activate      = activate,
+    FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(volumedetect_outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_S16,
                       AV_SAMPLE_FMT_S16P,
