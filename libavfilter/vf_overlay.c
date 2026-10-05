@@ -976,4 +976,5 @@ const FFFilter ff_vf_overlay = {
     FILTER_QUERY_FUNC2(query_formats),
     .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                      AVFILTER_FLAG_SLICE_THREADS,
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_SIZE,
 };
