@@ -1070,8 +1070,8 @@ static int mov_read_iacb(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                     }
                 av_assert0(audio_element);
 
-                for (int l = 0; l < audio_element->nb_streams; l++) {
-                    ret = avformat_stream_group_add_stream(stg, audio_element->streams[l]);
+                for (int l = 0; l < audio_element->nb_entries; l++) {
+                    ret = avformat_stream_group_add_stream(stg, audio_element->entries[l]->stream);
                     if (ret < 0 && ret != AVERROR(EEXIST))
                         goto fail;
                 }
@@ -5508,10 +5508,10 @@ static int mov_update_iamf_streams(MOVContext *c, const AVStream *st)
                 stg = c->fc->stream_groups[j];
         av_assert0(stg);
 
-        for (int j = 0; j < stg->nb_streams; j++) {
+        for (int j = 0; j < stg->nb_entries; j++) {
             const FFStream *sti = cffstream(st);
-            AVStream *out = stg->streams[j];
-            FFStream *out_sti = ffstream(stg->streams[j]);
+            AVStream *out = stg->entries[j]->stream;
+            FFStream *out_sti = ffstream(stg->entries[j]->stream);
 
             out->codecpar->bit_rate = 0;
 
@@ -11233,7 +11233,7 @@ static int mov_parse_tiles(AVFormatContext *s)
                 }
 
                 grid->tile_item_list[j] = item;
-                grid->tile_idx_list[j] = stg->nb_streams;
+                grid->tile_idx_list[j] = stg->nb_entries;
 
                 err = avformat_stream_group_add_stream(stg, st);
                 if (err < 0) {
@@ -11241,10 +11241,10 @@ static int mov_parse_tiles(AVFormatContext *s)
                     if (err != AVERROR(EEXIST))
                         return err;
 
-                    for (l = 0; l < stg->nb_streams; l++)
-                        if (stg->streams[l]->index == st->index)
+                    for (l = 0; l < stg->nb_entries; l++)
+                        if (stg->entries[l]->stream->index == st->index)
                             break;
-                    av_assert0(l < stg->nb_streams);
+                    av_assert0(l < stg->nb_entries);
                     grid->tile_idx_list[j] = l;
                 }
 
@@ -11287,8 +11287,8 @@ static int mov_parse_tiles(AVFormatContext *s)
             av_assert0(ref);
             switch(ref->type) {
             case MKTAG('E','x','i','f'):
-                err = mov_parse_exif_item(s, &tile_grid->coded_side_data,
-                                             &tile_grid->nb_coded_side_data, ref);
+                err = mov_parse_exif_item(s, &stg->coded_side_data,
+                                             &stg->nb_coded_side_data, ref);
                 if (err < 0 && (s->error_recognition & AV_EF_EXPLODE))
                     return err;
                 break;
@@ -11299,16 +11299,16 @@ static int mov_parse_tiles(AVFormatContext *s)
 
         /* rotation */
         if (grid->item->rotation || grid->item->hflip || grid->item->vflip) {
-            err = set_display_matrix_from_item(&tile_grid->coded_side_data,
-                                               &tile_grid->nb_coded_side_data, grid->item);
+            err = set_display_matrix_from_item(&stg->coded_side_data,
+                                               &stg->nb_coded_side_data, grid->item);
             if (err < 0)
                 return err;
         }
 
         /* ICC profile */
         if (grid->item->icc_profile_size) {
-            err = set_icc_profile_from_item(&tile_grid->coded_side_data,
-                                            &tile_grid->nb_coded_side_data, grid->item);
+            err = set_icc_profile_from_item(&stg->coded_side_data,
+                                            &stg->nb_coded_side_data, grid->item);
             if (err < 0)
                 return err;
         }
@@ -11441,7 +11441,7 @@ static int mov_parse_tmcd_streams(AVFormatContext *s)
             }
         }
 
-        if (!stg->nb_streams) {
+        if (!stg->nb_entries) {
             ff_remove_stream_group(s, stg);
             continue;
         }
@@ -11450,7 +11450,7 @@ static int mov_parse_tmcd_streams(AVFormatContext *s)
         if (err < 0)
             return err;
 
-        stg->params.tref->metadata_index = stg->nb_streams - 1;
+        stg->params.tref->metadata_index = stg->nb_entries - 1;
     }
     export_orphan_timecode(s);
 
@@ -11517,7 +11517,7 @@ static int mov_parse_cdsc_and_rndr_streams(AVFormatContext *s)
             if (err < 0)
                 return err;
 
-            stg->params.tref->metadata_index = stg->nb_streams - 1;
+            stg->params.tref->metadata_index = stg->nb_entries - 1;
         }
     }
 
@@ -11572,7 +11572,7 @@ static int mov_parse_lcevc_streams(AVFormatContext *s)
         if (err < 0)
             return err;
 
-        stg->params.layered_video->el_index = stg->nb_streams - 1;
+        stg->params.layered_video->el_index = stg->nb_entries - 1;
     }
 
     return 0;
@@ -11643,7 +11643,7 @@ static int mov_parse_dovi_streams(AVFormatContext *s)
         if (err < 0)
             return err;
 
-        stg->params.layered_video->el_index = stg->nb_streams - 1;
+        stg->params.layered_video->el_index = stg->nb_entries - 1;
         stg->params.layered_video->width = st_base->codecpar->width;
         stg->params.layered_video->height = st_base->codecpar->height;
     }
@@ -11666,8 +11666,8 @@ static void fix_stream_ids(AVFormatContext *s)
         AVStreamGroup *stg = s->stream_groups[i];
         if (stg->type != AV_STREAM_GROUP_PARAMS_IAMF_AUDIO_ELEMENT)
             continue;
-        for (int j = 0; j < stg->nb_streams; j++) {
-            AVStream *st = stg->streams[j];
+        for (int j = 0; j < stg->nb_entries; j++) {
+            AVStream *st = stg->entries[j]->stream;
             lowest_iamf_id = FFMIN(lowest_iamf_id, st->id);
         }
     }
@@ -11680,8 +11680,8 @@ static void fix_stream_ids(AVFormatContext *s)
         AVStreamGroup *stg = s->stream_groups[i];
         if (stg->type != AV_STREAM_GROUP_PARAMS_IAMF_AUDIO_ELEMENT)
             continue;
-        for (int j = 0; j < stg->nb_streams; j++) {
-            AVStream *st = stg->streams[j];
+        for (int j = 0; j < stg->nb_entries; j++) {
+            AVStream *st = stg->entries[j]->stream;
             MOVStreamContext *sc = st->priv_data;
             st->id += highest_id;
             sc->iamf_stream_offset = highest_id;
