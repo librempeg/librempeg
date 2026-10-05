@@ -127,7 +127,7 @@ static void fn(print_stats)(AVFilterContext *ctx)
         return;
 
     av_log(ctx, AV_LOG_INFO, "n_samples: %" PRId64 "\n", nb_samples);
-#if DEPTH == 16
+#if DEPTH == 16 || DEPTH == 32
     /*
      * If nb_samples > 1<<34, there is a risk of overflow in the
      * multiplication or the sum: shift all histogram values to avoid that.
