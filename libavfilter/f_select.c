@@ -445,6 +445,11 @@ static int activate(AVFilterContext *ctx)
     if (ret < 0)
         return ret;
     if (ret > 0) {
+        if (select->do_scene_detect &&
+            (ret = ff_inlink_check_frame_params(inlink, in, 0)) < 0) {
+            av_frame_free(&in);
+            return ret;
+        }
         select_frame(ctx, in);
         if (select->select && select->select_out >= 0 &&
             (ff_outlink_get_status(ctx->outputs[select->select_out]) == 0)) {
@@ -586,5 +591,6 @@ const FFFilter ff_vf_select = {
     FILTER_INPUTS(select_inputs),
     FILTER_QUERY_FUNC2(query_formats),
     .p.flags       = AVFILTER_FLAG_DYNAMIC_OUTPUTS | AVFILTER_FLAG_METADATA_ONLY,
+    .flags_internal = FF_FILTER_FLAG_DYNAMIC_FRAME_PARAMS,
 };
 #endif /* CONFIG_SELECT_FILTER */
