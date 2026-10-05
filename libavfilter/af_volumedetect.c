@@ -18,23 +18,44 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <float.h>
+
 #include "libavutil/channel_layout.h"
 #include "libavutil/avassert.h"
 #include "libavutil/ffmath.h"
 #include "libavutil/mem.h"
+#include "libavutil/opt.h"
 #include "audio.h"
 #include "avfilter.h"
 
 #define HISTOGRAM_SIZE 32769
 
 typedef struct VolDetectContext {
+    const AVClass *class;
+
     uint64_t histogram[HISTOGRAM_SIZE];
     float max;
     double sum2;
 
+    double max_volume;
+    double mean_volume;
+
     void (*update_histogram)(AVFilterContext *ctx, const AVFrame *in);
     void (*print_stats)(AVFilterContext *ctx);
 } VolDetectContext;
+
+#define OFFSET(x) offsetof(VolDetectContext, x)
+#define A AV_OPT_FLAG_AUDIO_PARAM
+#define FP AV_OPT_FLAG_FILTERING_PARAM
+#define X AV_OPT_FLAG_EXPORT
+#define R AV_OPT_FLAG_READONLY
+static const AVOption volumedetect_options[] = {
+    { "max_volume", "max volume (dB)", OFFSET(max_volume), AV_OPT_TYPE_DOUBLE, {.dbl = 0}, -DBL_MAX, DBL_MAX, A|FP|X|R },
+    { "mean_volume", "mean_volume (dB)", OFFSET(mean_volume), AV_OPT_TYPE_DOUBLE, {.dbl = 0}, -DBL_MAX, DBL_MAX, A|FP|X|R },
+    { NULL },
+};
+
+AVFILTER_DEFINE_CLASS(volumedetect);
 
 #define DEPTH 16
 #define PLANAR 0
@@ -166,6 +187,7 @@ static const AVFilterPad volumedetect_outputs[] = {
 const FFFilter ff_af_volumedetect = {
     .p.name        = "volumedetect",
     .p.description = NULL_IF_CONFIG_SMALL("Detect audio volume."),
+    .p.priv_class  = &volumedetect_class,
     .priv_size     = sizeof(VolDetectContext),
     .uninit        = uninit,
     .p.flags       = AVFILTER_FLAG_METADATA_ONLY |
