@@ -105,7 +105,7 @@ static ftype fn(sqr)(ftype x)
 }
 
 static void fn(get_centere)(const ctype *left, const ctype *right,
-                            ctype *center, int N)
+                            ctype *center, const int N)
 {
     for (int i = 0; i < N; i++) {
         const ftype l_re = left[i].re;
@@ -138,14 +138,14 @@ static ftype fn(flux)(ftype *curf, ftype *prevf, int N)
     return sum;
 }
 
-static ftype fn(fluxlr)(ftype *lf, ftype *lpf,
-                        ftype *rf, ftype *rpf,
-                        int N)
+static ftype fn(fluxlr)(const ftype *lf, const ftype *lpf,
+                        const ftype *rf, const ftype *rpf,
+                        const int N)
 {
-    ctype *l  = (ctype *)lf;
-    ctype *lp = (ctype *)lpf;
-    ctype *r  = (ctype *)rf;
-    ctype *rp = (ctype *)rpf;
+    const ctype *l  = (const ctype *)lf;
+    const ctype *lp = (const ctype *)lpf;
+    const ctype *r  = (const ctype *)rf;
+    const ctype *rp = (const ctype *)rpf;
     ftype sum = F(0.0);
 
     for (int i = 0; i < N; i++) {
@@ -167,13 +167,13 @@ static ftype fn(calc_vad)(ftype fc, ftype flr, ftype a)
     return CLIP(vad, F(0.0), F(1.0));
 }
 
-static void fn(get_final)(ftype *c, ftype *l,
-                          ftype *r, ftype vad, int N,
-                          ftype original, ftype enhance)
+static void fn(get_final)(ftype *c, const ftype *l,
+                          const ftype *r, ftype vad, const int N,
+                          const ftype original, const ftype enhance)
 {
+    const ctype *left  = (const ctype *)l;
+    const ctype *right = (const ctype *)r;
     ctype *center = (ctype *)c;
-    ctype *left   = (ctype *)l;
-    ctype *right  = (ctype *)r;
 
     for (int i = 0; i < N; i++) {
         ftype cP = fn(sqr)(center[i].re) + fn(sqr)(center[i].im);
