@@ -381,7 +381,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                 uint8_t *dst = out->extended_data[ch];
 
                 if (in_ch < 0) {
-                    const uint8_t fill = (bps == 8) ? 128 : 0;
+                    const uint8_t fill = (bps == 1) ? 128 : 0;
 
                     memset(dst, fill, sizeof(*dst) * n * bps);
                 } else {
