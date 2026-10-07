@@ -196,6 +196,7 @@ extern const FFFilter ff_af_silenceremove;
 extern const FFFilter ff_af_sofalizer;
 extern const FFFilter ff_af_speechnorm;
 extern const FFFilter ff_af_stereofield;
+extern const FFFilter ff_af_stereofree;
 extern const FFFilter ff_af_stereotools;
 extern const FFFilter ff_af_stereowiden;
 extern const FFFilter ff_af_superequalizer;
