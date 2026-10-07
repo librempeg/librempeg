@@ -750,7 +750,11 @@ break_loop:
     /* (todo) WavPack can support PCM of any bits, ranging from 16-24 bits *per sample*.
      * ffmpeg does not support a PCM codec where bits-per-sample value can be set;
      * what happens instead is that a codec ID must be assigned beforehand from the "fmt " chunk info. */
-    if ((st->codecpar->codec_id == AV_CODEC_ID_PCM_S16LE) || (st->codecpar->codec_id == AV_CODEC_ID_PCM_S24LE) && (avio_rl32(pb) == MKTAG('w','v','p','k'))) {
+    if ((avio_rl32(pb) == MKTAG('w','v','p','k')
+        &&
+        ((st->codecpar->codec_id == AV_CODEC_ID_PCM_S16LE) || (st->codecpar->codec_id == AV_CODEC_ID_PCM_S24LE))
+        &&
+        ((st->codecpar->ch_layout.nb_channels >= 1) && (st->codecpar->ch_layout.nb_channels <= 2)))) {
         WvHeader *hdr = &wav->wavpack_hdr;
         if (ret = ff_wv_parse_header(hdr, pb->buf_ptr) < 0)
             return ret;

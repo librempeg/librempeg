@@ -54,10 +54,10 @@ int ff_wv_parse_header(WvHeader *wv, const uint8_t *data)
         wv->crc           = AV_RL32(data + 28);
         is_v4 = 1;
     } else if ((wv->version >= 2) && (wv->version <= 3)) {
-        wv->v2_info = AV_RL16(data + 10); /* may be minimum bit depth (if present) */
+        wv->bits = AV_RL16(data + 10);
         if (wv->version == 3) {
-            wv->v3_info = AV_RL16(data + 12); /* has mono flag, precedes (and differs from) v4 flags. */
-            if ((wv->v3_info & 0xfff0) != 0)
+            wv->v3_flags = AV_RL16(data + 12);
+            if ((wv->v3_flags & 0xfff0) != 0)
                 return AVERROR_INVALIDDATA;
             /* (todo) rest of the version 3 fields */
             if (AV_RL32(data + 24))
@@ -74,8 +74,8 @@ int ff_wv_parse_header(WvHeader *wv, const uint8_t *data)
         wv->lapsed += wv->blocksize;
 
     wv->blocksize = (is_v4) ? wv->blocksize - 24 : wv->blocksize - wv->blocksize;
-    wv->initial = (wv->version >= 4) ? !!(wv->flags & WV_FLAG_INITIAL_BLOCK) : 0;
-    wv->final   = (wv->version >= 4) ? !!(wv->flags & WV_FLAG_FINAL_BLOCK) : 0;
+    wv->initial = (is_v4) ? !!(wv->flags & WV_FLAG_INITIAL_BLOCK) : 0;
+    wv->final   = (is_v4) ? !!(wv->flags & WV_FLAG_FINAL_BLOCK) : 0;
 
     return 0;
 }
