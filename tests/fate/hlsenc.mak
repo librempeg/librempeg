@@ -260,7 +260,7 @@ tests/data/hls_fmp4_big_init.m3u8: ffmpeg$(PROGSSUF)$(EXESUF) | tests/data
 	-hls_segment_filename $(TARGET_PATH)/tests/data/hls_fmp4_big_init_%d.m4s \
 	$(TARGET_PATH)/tests/data/hls_fmp4_big_init.m3u8 2>/dev/null
 
-FATE_HLSENC_LAVFI-$(call ALLYES, AEVALSRC_FILTER ASPLIT_FILTER ARESAMPLE_FILTER MP2FIXED_ENCODER HLS_MUXER MP4_MUXER HLS_DEMUXER MOV_DEMUXER FILE_PROTOCOL) += fate-hls-fmp4-big-init
+FATE_HLSENC_LAVFI-$(call ALLYES, AEVALSRC_FILTER ASPLIT_FILTER ASF2SF_FILTER MP2FIXED_ENCODER HLS_MUXER MP4_MUXER HLS_DEMUXER MOV_DEMUXER FILE_PROTOCOL) += fate-hls-fmp4-big-init
 fate-hls-fmp4-big-init: tests/data/hls_fmp4_big_init.m3u8
 fate-hls-fmp4-big-init: CLEANFILES = tests/data/hls_fmp4_big_init.m3u8 tests/data/hls_fmp4_big_init.mp4 tests/data/hls_fmp4_big_init_*.m4s
 fate-hls-fmp4-big-init: CMD = framecrc -i $(TARGET_PATH)/tests/data/hls_fmp4_big_init.m3u8 -map 0:a:99 -c copy
