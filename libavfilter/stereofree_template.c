@@ -123,6 +123,7 @@ static void fn(stereofree)(StereoFreeContext *s, ctype *fl, ctype *fr,
     const ftype center_c = s->center[1];
     const ftype center_f = s->center[2];
     const ftype size_f = s->fft_size/2+1;
+    const int type = s->type;
 
     for (int i = start; i < end; i++) {
         const ftype l_re = fl[i].re;
@@ -144,11 +145,12 @@ static void fn(stereofree)(StereoFreeContext *s, ctype *fl, ctype *fr,
         const ftype op = FEXP(F(-0.5) * ip * ip);
         const ftype of = FEXP(F(-0.5) * ff * ff);
         const ftype scale = oc * op * of;
+        const ftype g = type ? F(1.0) - scale : scale;
 
-        fl[i].re = l_re * scale;
-        fl[i].im = l_im * scale;
-        fr[i].re = r_re * scale;
-        fr[i].im = r_im * scale;
+        fl[i].re = l_re * g;
+        fl[i].im = l_im * g;
+        fr[i].re = r_re * g;
+        fr[i].im = r_im * g;
     }
 }
 
