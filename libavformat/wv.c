@@ -44,10 +44,12 @@ int ff_wv_parse_header(WvHeader *wv, const uint8_t *data)
         wv->lapsed += (4 + 4);
 
     wv->version       = AV_RL16(data + 8);
-    if (wv->version >= 4) {
+    if ((wv->version >= 0x402) && (wv->version <= 0x410)) {
         wv->total_samples = AV_RL32(data + 12);
         wv->block_idx     = AV_RL32(data + 16);
         wv->samples       = AV_RL32(data + 20);
+        if (wv->samples >= 0x30000)
+            return AVERROR_INVALIDDATA;
         wv->flags         = AV_RL32(data + 24);
         wv->crc           = AV_RL32(data + 28);
         is_v4 = 1;
@@ -57,7 +59,7 @@ int ff_wv_parse_header(WvHeader *wv, const uint8_t *data)
             wv->v3_info = AV_RL16(data + 12); /* has mono flag, precedes (and differs from) v4 flags. */
             if ((wv->v3_info & 0xfff0) != 0)
                 return AVERROR_INVALIDDATA;
-            /* (todo) rest of the version */
+            /* (todo) rest of the version 3 fields */
             if (AV_RL32(data + 24))
                 return AVERROR_INVALIDDATA;
         }
