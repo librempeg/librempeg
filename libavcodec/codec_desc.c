@@ -2121,6 +2121,14 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("Eurocom Video"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
+    {
+        .id        = AV_CODEC_ID_RW2,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "rw2",
+        .long_name = NULL_IF_CONFIG_SMALL("Panasonic RW2"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSLESS,
+        .mime_types= MT("image/x-panasonic-rw2"),
+    },
 
     /* various PCM "codecs" */
     {
