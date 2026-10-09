@@ -67,7 +67,6 @@ typedef struct WAVDemuxContext {
     int smv_given_first;
     int unaligned; // e.g. if an odd number of bytes ID3 tag was prepended
     int rifx; // RIFX: integer byte order for parameters is big endian
-    int is_wavpack;
     WvHeader wavpack_hdr;
 } WAVDemuxContext;
 
@@ -756,9 +755,11 @@ break_loop:
         &&
         ((st->codecpar->ch_layout.nb_channels >= 1) && (st->codecpar->ch_layout.nb_channels <= 2)))) {
         WvHeader *hdr = &wav->wavpack_hdr;
+        avio_seek(pb, -4, SEEK_CUR);
         if (ret = ff_wv_parse_header(hdr, pb->buf_ptr) < 0)
             return ret;
-        wav->is_wavpack = 1;
+        if ((hdr->is_v4) || ((hdr->version < 1) && (hdr->version > 4)))
+            return AVERROR_INVALIDDATA;
         avio_skip(pb, hdr->lapsed);
     }
 

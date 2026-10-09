@@ -29,8 +29,6 @@
 
 int ff_wv_parse_header(WvHeader *wv, const uint8_t *data)
 {
-    int is_v4 = 0;
-
     memset(wv, 0, sizeof(*wv));
 
     if (AV_RL32(data) != MKTAG('w', 'v', 'p', 'k'))
@@ -39,9 +37,6 @@ int ff_wv_parse_header(WvHeader *wv, const uint8_t *data)
     wv->blocksize     = AV_RL32(data + 4);
     if (wv->blocksize < 2 || wv->blocksize > WV_BLOCK_LIMIT)
         return AVERROR_INVALIDDATA;
-
-    if (!is_v4)
-        wv->lapsed += (4 + 4);
 
     wv->version       = AV_RL16(data + 8);
     if ((wv->version >= 0x402) && (wv->version <= 0x410)) {
@@ -52,7 +47,8 @@ int ff_wv_parse_header(WvHeader *wv, const uint8_t *data)
             return AVERROR_INVALIDDATA;
         wv->flags         = AV_RL32(data + 24);
         wv->crc           = AV_RL32(data + 28);
-        is_v4 = 1;
+        if (!wv->is_v4)
+            wv->is_v4 = 1;
     } else if ((wv->version >= 2) && (wv->version <= 3)) {
         wv->bits = AV_RL16(data + 10);
         if (wv->version == 3) {
@@ -70,12 +66,14 @@ int ff_wv_parse_header(WvHeader *wv, const uint8_t *data)
          * can only be done at the presence of an avctx context. */
     }
 
-    if (!is_v4)
-        wv->lapsed += wv->blocksize;
+    if (!wv->is_v4)
+        wv->lapsed += wv->blocksize + (4 + 4);
 
-    wv->blocksize = (is_v4) ? wv->blocksize - 24 : wv->blocksize - wv->blocksize;
-    wv->initial = (is_v4) ? !!(wv->flags & WV_FLAG_INITIAL_BLOCK) : 0;
-    wv->final   = (is_v4) ? !!(wv->flags & WV_FLAG_FINAL_BLOCK) : 0;
+    wv->blocksize = (wv->is_v4) ? wv->blocksize - 24 : wv->blocksize - wv->blocksize;
+    if (wv->is_v4) {
+        wv->initial = !!(wv->flags & WV_FLAG_INITIAL_BLOCK);
+        wv->final   = !!(wv->flags & WV_FLAG_FINAL_BLOCK);
+    }
 
     return 0;
 }

@@ -44,6 +44,7 @@ typedef struct WvHeader {
 
     int initial, final;
 
+    int is_v4;
     int lapsed;
 } WvHeader;
 
